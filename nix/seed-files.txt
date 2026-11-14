@@ -29,6 +29,8 @@ Base_dMonad.ml
 Base_dMonoid.ml
 Base_dNat.ml
 Base_dNum.ml
+Base_dObs.ml
+Base_dObs_dSpan.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml
@@ -133,6 +135,7 @@ Vuna_dCompiler_dNative_dModel.ml
 Vuna_dCompiler_dNative_dModule.ml
 Vuna_dCompiler_dNative_dRender.ml
 Vuna_dCompiler_dNative_dRuntime.ml
+Vuna_dCompiler_dObs.ml
 Vuna_dCompiler_dPackages_dPkg.ml
 Vuna_dCompiler_dPackages_dSource.ml
 Vuna_dCompiler_dSource.ml

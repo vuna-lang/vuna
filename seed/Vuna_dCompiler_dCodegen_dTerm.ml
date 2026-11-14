@@ -20,9 +20,9 @@ let v_Vuna_dCompiler_dCodegen_dTerm_ddtFloatRuntime = "let bi_add_float (a : flo
 let v_Vuna_dCompiler_dCodegen_dTerm_ddtTraceRuntime = "let dtp_debug_on_lazy = lazy (\n  let has f = Array.exists (fun a -> a = f) Sys.argv in\n  has \"--debug-perf\" || (try Sys.getenv \"VUNA_DEBUG_PERF\" = \"1\" with Not_found -> false))\nlet dtp_debug_on (_ : int) = Lazy.force dtp_debug_on_lazy\nlet dtp_debug_line (s : string) =\n  Printf.eprintf \"DEBUG %d %s\n%!\" (dtp_timeUs ()) s;\n  0\n"
 
 # 885 "Vuna/Compiler/Codegen/Term.vuna"
-let v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime = "(* ------------------------------------------------------------------ *)\n(* vuna observability runtime (generated; see docs/reference/          *)\n(* observability.md). Off by default: a probe pays one Lazy.force.     *)\n(* Events are Chrome Trace Event JSONL, one object per line.           *)\n(*                                                                     *)\n(* This text is embedded verbatim in Codegen.Term.dtObsRuntime. It      *)\n(* therefore contains NO backslash characters and NO line comments:    *)\n(* every quote is built from Char.chr 34 so the surrounding vuna string *)\n(* literal stays straightforward to escape.                            *)\n(* ------------------------------------------------------------------ *)\nlet dtp_obs_qc = Char.chr 34\nlet dtp_obs_bs = Char.chr 92\nlet dtp_obs_nl = Char.chr 10\nlet dtp_obs_colon = Char.chr 58\nlet dtp_obs_comma = Char.chr 44\nlet dtp_obs_lb = Char.chr 123\nlet dtp_obs_rb = Char.chr 125\nlet dtp_obs_ls = Char.chr 91\nlet dtp_obs_rs = Char.chr 93\n\nlet dtp_obs_level_lazy = lazy (\n  let env =\n    match int_of_string_opt (try Sys.getenv \"VUNA_OBS\" with Not_found -> \"\") with\n    | Some n -> n\n    | None -> 0\n  in\n  let rec scan i acc =\n    let n = Array.length Sys.argv in\n    if i >= n then acc\n    else if Sys.argv.(i) = \"--obs\" then scan (i + 1) (if acc > 2 then acc else 2)\n    else if Sys.argv.(i) = \"--obs-level\" && i + 1 < n then\n      (match int_of_string_opt Sys.argv.(i + 1) with\n       | Some v -> scan (i + 2) v\n       | None -> scan (i + 2) acc)\n    else if String.length Sys.argv.(i) > 11 && String.sub Sys.argv.(i) 0 11 = \"--obs-level\" then\n      (match int_of_string_opt (String.sub Sys.argv.(i) 12 (String.length Sys.argv.(i) - 12)) with\n       | Some v -> scan (i + 1) v\n       | None -> scan (i + 1) acc)\n    else scan (i + 1) acc\n  in\n  let l = scan 1 env in\n  if l < 0 then 0 else if l > 3 then 3 else l)\n\nlet dtp_obs_level (_ : int) = Lazy.force dtp_obs_level_lazy\nlet dtp_obs_on () = Lazy.force dtp_obs_level_lazy > 0\nlet dtp_obs_tid () = let t = !dtp_sched_current in if t < 0 then 0 else t\n\nlet dtp_obs_esc b (s : string) =\n  String.iter\n    (fun c ->\n      if Char.code c = 34 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_qc end\n      else if Char.code c = 92 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_bs end\n      else if Char.code c = 10 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 110) end\n      else if Char.code c = 13 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 114) end\n      else if Char.code c = 9 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 116) end\n      else if Char.code c < 32 then begin\n        Buffer.add_char b dtp_obs_bs;\n        Buffer.add_char b (Char.chr 117);\n        Buffer.add_string b (Printf.sprintf \"%04x\" (Char.code c))\n      end\n      else Buffer.add_char b c)\n    s\n\nlet dtp_obs_key b (k : string) =\n  Buffer.add_char b dtp_obs_qc;\n  dtp_obs_esc b k;\n  Buffer.add_char b dtp_obs_qc;\n  Buffer.add_char b dtp_obs_colon\n\nlet dtp_obs_str b (s : string) =\n  Buffer.add_char b dtp_obs_qc;\n  dtp_obs_esc b s;\n  Buffer.add_char b dtp_obs_qc\n\nlet dtp_obs_int b (n : int) = Buffer.add_string b (string_of_int n)\n\n\nlet dtp_obs_sink_path () =\n  match Sys.getenv_opt \"VUNA_OBS_FILE\" with\n  | Some p when p <> \"\" -> p\n  | _ ->\n    let d =\n      match Sys.getenv_opt \"VUNA_OBS_DIR\" with\n      | Some d when d <> \"\" -> d\n      | _ -> Filename.concat (Filename.get_temp_dir_name ()) \"vuna-obs\"\n    in\n    Filename.concat d (\"vuna-\" ^ string_of_int (Unix.getpid ()) ^ \".jsonl\")\n\nlet dtp_obs_chan : out_channel option ref = ref None\nlet dtp_obs_started = ref false\nlet dtp_obs_warned = ref false\nlet dtp_obs_count = ref 0\nlet dtp_obs_buf = Buffer.create 8192\n\nlet dtp_obs_open () =\n  match !dtp_obs_chan with\n  | Some c -> Some c\n  | None ->\n    let path = dtp_obs_sink_path () in\n    let dir = Filename.dirname path in\n    (try if not (Sys.file_exists dir) then Unix.mkdir dir 0o755 with _ -> ());\n    (match (try Some (open_out_bin path) with _ -> None) with\n     | None ->\n       if not !dtp_obs_warned then begin\n         dtp_obs_warned := true;\n         Printf.eprintf \"vuna: obs: cannot write %s, events dropped\" path;\n         output_char stderr dtp_obs_nl;\n         flush stderr\n       end;\n       None\n     | Some c ->\n       dtp_obs_chan := Some c;\n       Some c)\n\nlet dtp_obs_flush () =\n  (match !dtp_obs_chan with\n   | None -> ()\n   | Some c ->\n     if Buffer.length dtp_obs_buf > 0 then Buffer.output_buffer c dtp_obs_buf;\n     Buffer.clear dtp_obs_buf;\n     (try flush c with _ -> ()));\n  dtp_obs_count := 0;\n  0\n\nlet dtp_obs_hdr b (ph : string) (name : string) =\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"ph\";\n  dtp_obs_str b ph;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"ts\";\n  dtp_obs_int b (dtp_timeUs ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"pid\";\n  dtp_obs_int b (Unix.getpid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"tid\";\n  dtp_obs_int b (dtp_obs_tid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"name\";\n  dtp_obs_str b name\n\nlet dtp_obs_meta () =\n  let b = Buffer.create 256 in\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"ph\";\n  dtp_obs_str b \"M\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"name\";\n  dtp_obs_str b \"vuna.obs.schema\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"pid\";\n  dtp_obs_int b (Unix.getpid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"tid\";\n  dtp_obs_int b 0;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"args\";\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"schema\";\n  dtp_obs_str b \"vuna-obs 1\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"level\";\n  dtp_obs_int b (dtp_obs_level 0);\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"exec\";\n  dtp_obs_str b (try Sys.executable_name with _ -> \"\");\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"argv\";\n  Buffer.add_char b dtp_obs_ls;\n  Array.iteri\n    (fun i a ->\n      if i > 0 then Buffer.add_char b dtp_obs_comma;\n      dtp_obs_str b a)\n    Sys.argv;\n  Buffer.add_char b dtp_obs_rs;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"t0\";\n  dtp_obs_int b (dtp_timeUs ());\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_nl;\n  Buffer.contents b\n\nlet dtp_obs_emit (ev : string) =\n  match dtp_obs_open () with\n  | None -> 0\n  | Some _ ->\n    if not !dtp_obs_started then begin\n      dtp_obs_started := true;\n      Buffer.add_string dtp_obs_buf (dtp_obs_meta ())\n    end;\n    Buffer.add_string dtp_obs_buf ev;\n    incr dtp_obs_count;\n    if !dtp_obs_count >= 256 then dtp_obs_flush () else 0\n\nlet dtp_obs_shutdown () =\n  ignore (dtp_obs_flush ());\n  (match !dtp_obs_chan with\n   | Some c -> dtp_obs_chan := None; (try close_out c with _ -> ())\n   | None -> ())\n\nlet () = at_exit dtp_obs_shutdown\n\nlet dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =\n  if not (dtp_obs_on ()) then f 0\n  else begin\n    let t0 = dtp_timeUs () in\n    let s0 = Gc.quick_stat () in\n    let emit ok =\n      let t1 = dtp_timeUs () in\n      let s1 = Gc.quick_stat () in\n      let b = Buffer.create 192 in\n      dtp_obs_hdr b \"X\" name;\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"cat\";\n      dtp_obs_str b cat;\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"dur\";\n      dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"args\";\n      Buffer.add_char b dtp_obs_lb;\n      dtp_obs_key b \"allocWords\";\n      dtp_obs_int b\n        (int_of_float\n           (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"heapWords\";\n      dtp_obs_int b s1.Gc.top_heap_words;\n      if not ok then begin\n        Buffer.add_char b dtp_obs_comma;\n        dtp_obs_key b \"error\";\n        Buffer.add_string b \"true\"\n      end;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_nl;\n      ignore (dtp_obs_emit (Buffer.contents b))\n    in\n    let v = try f 0 with e -> emit false; raise e in\n    emit true;\n    v\n  end\n\nlet dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =\n  let b = Buffer.create 160 in\n  dtp_obs_hdr b ph name;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"cat\";\n  dtp_obs_str b cat;\n  (match kv with\n   | None -> ()\n   | Some put ->\n     Buffer.add_char b dtp_obs_comma;\n     dtp_obs_key b \"args\";\n     Buffer.add_char b dtp_obs_lb;\n     put b;\n     Buffer.add_char b dtp_obs_rb);\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_nl;\n  ignore (dtp_obs_emit (Buffer.contents b));\n  0\n\nlet dtp_obs_log (text : string) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    Printf.eprintf \"DEBUG %d %s\" (dtp_timeUs ()) text;\n    output_char stderr dtp_obs_nl;\n    flush stderr;\n    dtp_obs_mark_like \"i\" \"vuna.log\" \"vuna.log\"\n      (Some (fun b -> dtp_obs_key b \"text\"; dtp_obs_str b text))\n  end\n\nlet dtp_obs_counter (name : string) (v : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else dtp_obs_mark_like \"C\" name \"vuna.counter\"\n    (Some (fun b -> dtp_obs_key b \"value\"; dtp_obs_int b v))\n\nlet dtp_obs_mark (name : string) : int =\n  if not (dtp_obs_on ()) then 0\n  else dtp_obs_mark_like \"i\" name \"vuna.mark\" None\n\nlet dtp_obs_cap = 8192\nlet dtp_obs_cpu : Printexc.raw_backtrace option array = Array.make 8192 None\nlet dtp_obs_cpu_n = ref 0\nlet dtp_obs_cpu_on = ref false\n\nlet dtp_obs_cpu_tick (_ : int) =\n  if !dtp_obs_cpu_on && !dtp_obs_cpu_n < dtp_obs_cap then begin\n    dtp_obs_cpu.(!dtp_obs_cpu_n) <- Some (Printexc.get_callstack 32);\n    incr dtp_obs_cpu_n\n  end\n\nlet dtp_obs_frames b (bt : Printexc.raw_backtrace) =\n  let slots = match Printexc.backtrace_slots bt with None -> [||] | Some s -> s in\n  Buffer.add_char b dtp_obs_ls;\n  let first = ref true in\n  Array.iter\n    (fun slot ->\n      let nm = match Printexc.Slot.name slot with Some n -> n | None -> \"\" in\n      let loc =\n        match Printexc.Slot.location slot with\n        | Some l -> Printf.sprintf \"%s:%d\" l.filename l.line_number\n        | None -> \"\"\n      in\n      if !first then first := false else Buffer.add_char b dtp_obs_comma;\n      dtp_obs_str b (if loc = \"\" then nm else nm ^ \"@\" ^ loc))\n    slots;\n  Buffer.add_char b dtp_obs_rs\n\nlet dtp_obs_mem : Printexc.raw_backtrace option array = Array.make 8192 None\nlet dtp_obs_mem_n = ref 0\nlet dtp_obs_mem_run : Gc.Memprof.t option ref = ref None\n\nlet dtp_obs_mem_add (bt : Printexc.raw_backtrace) =\n  if !dtp_obs_mem_n < dtp_obs_cap then begin\n    dtp_obs_mem.(!dtp_obs_mem_n) <- Some bt;\n    incr dtp_obs_mem_n\n  end\n\nlet dtp_obs_tracker : (unit, unit) Gc.Memprof.tracker =\n  { alloc_minor =\n      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));\n    alloc_major =\n      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));\n    promote = (fun () -> None);\n    dealloc_minor = (fun () -> ());\n    dealloc_major = (fun () -> ()) }\n\nlet dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_backtrace option) =\n  for i = 0 to n - 1 do\n    match get i with\n    | None -> ()\n    | Some bt ->\n      let b = Buffer.create 256 in\n      dtp_obs_hdr b \"i\" name;\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"cat\";\n      dtp_obs_str b \"vuna.sample\";\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"args\";\n      Buffer.add_char b dtp_obs_lb;\n      dtp_obs_key b \"stack\";\n      dtp_obs_frames b bt;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_nl;\n      ignore (dtp_obs_emit (Buffer.contents b))\n  done\n\nlet dtp_obs_sample_start (mode : string) (interval_us : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    let want_cpu = mode = \"cpu\" || mode = \"both\" in\n    let want_mem = mode = \"mem\" || mode = \"both\" in\n    let iv = if interval_us <= 0 then 1000 else interval_us in\n    (if want_cpu then\n       try\n         Sys.set_signal Sys.sigprof (Sys.Signal_handle dtp_obs_cpu_tick);\n         dtp_obs_cpu_on := true;\n         ignore\n           (Unix.setitimer Unix.ITIMER_PROF\n              { Unix.it_interval = float_of_int iv /. 1000000.0;\n                it_value = float_of_int iv /. 1000000.0 })\n       with _ -> ());\n    (if want_mem then\n       try\n         dtp_obs_mem_run :=\n           Some (Gc.Memprof.start ~sampling_rate:1e-4 ~callstack_size:16 dtp_obs_tracker)\n       with _ -> ());\n    0\n  end\n\nlet dtp_obs_sample_stop (_ : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    (try\n       dtp_obs_cpu_on := false;\n       ignore (Unix.setitimer Unix.ITIMER_PROF { Unix.it_interval = 0.0; it_value = 0.0 })\n     with _ -> ());\n    (try (match !dtp_obs_mem_run with Some _ -> Gc.Memprof.stop () | None -> ()) with _ -> ());\n    dtp_obs_mem_run := None;\n    dtp_obs_emit_samples \"vuna.sample.cpu\" !dtp_obs_cpu_n (fun i -> dtp_obs_cpu.(i));\n    dtp_obs_emit_samples \"vuna.sample.mem\" !dtp_obs_mem_n (fun i -> dtp_obs_mem.(i));\n    dtp_obs_flush ()\n  end\n"
+let v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime = "(* ------------------------------------------------------------------ *)\n(* vuna observability runtime (generated; see docs/reference/          *)\n(* observability.md). Off by default: a probe pays one Lazy.force.     *)\n(* Events are Chrome Trace Event JSONL, one object per line.           *)\n(*                                                                     *)\n(* This text is embedded verbatim in Codegen.Term.dtObsRuntime. It      *)\n(* therefore contains NO backslash characters and NO line comments:    *)\n(* every quote is built from Char.chr 34 so the surrounding vuna string *)\n(* literal stays straightforward to escape.                            *)\n(* ------------------------------------------------------------------ *)\nlet dtp_obs_qc = Char.chr 34\nlet dtp_obs_bs = Char.chr 92\nlet dtp_obs_nl = Char.chr 10\nlet dtp_obs_colon = Char.chr 58\nlet dtp_obs_comma = Char.chr 44\nlet dtp_obs_lb = Char.chr 123\nlet dtp_obs_rb = Char.chr 125\nlet dtp_obs_ls = Char.chr 91\nlet dtp_obs_rs = Char.chr 93\n\nlet dtp_obs_level_lazy = lazy (\n  let env =\n    match int_of_string_opt (try Sys.getenv \"VUNA_OBS\" with Not_found -> \"\") with\n    | Some n -> n\n    | None -> 0\n  in\n  let rec scan i acc =\n    let n = Array.length Sys.argv in\n    if i >= n then acc\n    else if Sys.argv.(i) = \"--obs\" then scan (i + 1) (if acc > 2 then acc else 2)\n    else if Sys.argv.(i) = \"--obs-level\" && i + 1 < n then\n      (match int_of_string_opt Sys.argv.(i + 1) with\n       | Some v -> scan (i + 2) v\n       | None -> scan (i + 2) acc)\n    else if String.length Sys.argv.(i) > 11 && String.sub Sys.argv.(i) 0 11 = \"--obs-level\" then\n      (match int_of_string_opt (String.sub Sys.argv.(i) 12 (String.length Sys.argv.(i) - 12)) with\n       | Some v -> scan (i + 1) v\n       | None -> scan (i + 1) acc)\n    else scan (i + 1) acc\n  in\n  let l = scan 1 env in\n  if l < 0 then 0 else if l > 3 then 3 else l)\n\nlet dtp_obs_level (_ : int) = Lazy.force dtp_obs_level_lazy\nlet dtp_obs_on () = Lazy.force dtp_obs_level_lazy > 0\nlet dtp_obs_tid () = let t = !dtp_sched_current in if t < 0 then 0 else t\n\nlet dtp_obs_esc b (s : string) =\n  String.iter\n    (fun c ->\n      if Char.code c = 34 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_qc end\n      else if Char.code c = 92 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b dtp_obs_bs end\n      else if Char.code c = 10 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 110) end\n      else if Char.code c = 13 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 114) end\n      else if Char.code c = 9 then begin Buffer.add_char b dtp_obs_bs; Buffer.add_char b (Char.chr 116) end\n      else if Char.code c < 32 then begin\n        Buffer.add_char b dtp_obs_bs;\n        Buffer.add_char b (Char.chr 117);\n        Buffer.add_string b (Printf.sprintf \"%04x\" (Char.code c))\n      end\n      else Buffer.add_char b c)\n    s\n\nlet dtp_obs_key b (k : string) =\n  Buffer.add_char b dtp_obs_qc;\n  dtp_obs_esc b k;\n  Buffer.add_char b dtp_obs_qc;\n  Buffer.add_char b dtp_obs_colon\n\nlet dtp_obs_str b (s : string) =\n  Buffer.add_char b dtp_obs_qc;\n  dtp_obs_esc b s;\n  Buffer.add_char b dtp_obs_qc\n\nlet dtp_obs_int b (n : int) = Buffer.add_string b (string_of_int n)\n\n\nlet dtp_obs_sink_path () =\n  match Sys.getenv_opt \"VUNA_OBS_FILE\" with\n  | Some p when p <> \"\" -> p\n  | _ ->\n    let d =\n      match Sys.getenv_opt \"VUNA_OBS_DIR\" with\n      | Some d when d <> \"\" -> d\n      | _ -> Filename.concat (Filename.get_temp_dir_name ()) \"vuna-obs\"\n    in\n    Filename.concat d (\"vuna-\" ^ string_of_int (Unix.getpid ()) ^ \".jsonl\")\n\nlet dtp_obs_chan : out_channel option ref = ref None\nlet dtp_obs_started = ref false\nlet dtp_obs_warned = ref false\nlet dtp_obs_count = ref 0\nlet dtp_obs_buf = Buffer.create 8192\n\nlet dtp_obs_open () =\n  match !dtp_obs_chan with\n  | Some c -> Some c\n  | None ->\n    let path = dtp_obs_sink_path () in\n    let dir = Filename.dirname path in\n    (try if not (Sys.file_exists dir) then Unix.mkdir dir 0o755 with _ -> ());\n    (match (try Some (open_out_bin path) with _ -> None) with\n     | None ->\n       if not !dtp_obs_warned then begin\n         dtp_obs_warned := true;\n         Printf.eprintf \"vuna: obs: cannot write %s, events dropped\" path;\n         output_char stderr dtp_obs_nl;\n         flush stderr\n       end;\n       None\n     | Some c ->\n       dtp_obs_chan := Some c;\n       Some c)\n\nlet dtp_obs_flush () =\n  (match !dtp_obs_chan with\n   | None -> ()\n   | Some c ->\n     if Buffer.length dtp_obs_buf > 0 then Buffer.output_buffer c dtp_obs_buf;\n     Buffer.clear dtp_obs_buf;\n     (try flush c with _ -> ()));\n  dtp_obs_count := 0;\n  0\n\nlet dtp_obs_hdr b (ph : string) (name : string) (ts : int) =\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"ph\";\n  dtp_obs_str b ph;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"ts\";\n  dtp_obs_int b ts;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"pid\";\n  dtp_obs_int b (Unix.getpid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"tid\";\n  dtp_obs_int b (dtp_obs_tid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"name\";\n  dtp_obs_str b name\n\nlet dtp_obs_meta () =\n  let b = Buffer.create 256 in\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"ph\";\n  dtp_obs_str b \"M\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"name\";\n  dtp_obs_str b \"vuna.obs.schema\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"pid\";\n  dtp_obs_int b (Unix.getpid ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"tid\";\n  dtp_obs_int b 0;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"args\";\n  Buffer.add_char b dtp_obs_lb;\n  dtp_obs_key b \"schema\";\n  dtp_obs_str b \"vuna-obs 1\";\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"level\";\n  dtp_obs_int b (dtp_obs_level 0);\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"exec\";\n  dtp_obs_str b (try Sys.executable_name with _ -> \"\");\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"argv\";\n  Buffer.add_char b dtp_obs_ls;\n  Array.iteri\n    (fun i a ->\n      if i > 0 then Buffer.add_char b dtp_obs_comma;\n      dtp_obs_str b a)\n    Sys.argv;\n  Buffer.add_char b dtp_obs_rs;\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"t0\";\n  dtp_obs_int b (dtp_timeUs ());\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_nl;\n  Buffer.contents b\n\nlet dtp_obs_emit (ev : string) =\n  match dtp_obs_open () with\n  | None -> 0\n  | Some _ ->\n    if not !dtp_obs_started then begin\n      dtp_obs_started := true;\n      Buffer.add_string dtp_obs_buf (dtp_obs_meta ())\n    end;\n    Buffer.add_string dtp_obs_buf ev;\n    incr dtp_obs_count;\n    if !dtp_obs_count >= 256 then dtp_obs_flush () else 0\n\nlet dtp_obs_shutdown () =\n  ignore (dtp_obs_flush ());\n  (match !dtp_obs_chan with\n   | Some c -> dtp_obs_chan := None; (try close_out c with _ -> ())\n   | None -> ())\n\nlet () = at_exit dtp_obs_shutdown\n\nlet dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =\n  if not (dtp_obs_on ()) then f 0\n  else begin\n    let t0 = dtp_timeUs () in\n    let s0 = Gc.quick_stat () in\n    let emit ok =\n      let t1 = dtp_timeUs () in\n      let s1 = Gc.quick_stat () in\n      let b = Buffer.create 192 in\n      dtp_obs_hdr b \"X\" name t0;\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"cat\";\n      dtp_obs_str b cat;\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"dur\";\n      dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"args\";\n      Buffer.add_char b dtp_obs_lb;\n      dtp_obs_key b \"allocWords\";\n      dtp_obs_int b\n        (int_of_float\n           (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"heapWords\";\n      dtp_obs_int b s1.Gc.top_heap_words;\n      if not ok then begin\n        Buffer.add_char b dtp_obs_comma;\n        dtp_obs_key b \"error\";\n        Buffer.add_string b \"true\"\n      end;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_nl;\n      ignore (dtp_obs_emit (Buffer.contents b))\n    in\n    let v = try f 0 with e -> emit false; raise e in\n    emit true;\n    v\n  end\n\nlet dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =\n  let b = Buffer.create 160 in\n  dtp_obs_hdr b ph name (dtp_timeUs ());\n  Buffer.add_char b dtp_obs_comma;\n  dtp_obs_key b \"cat\";\n  dtp_obs_str b cat;\n  (match kv with\n   | None -> ()\n   | Some put ->\n     Buffer.add_char b dtp_obs_comma;\n     dtp_obs_key b \"args\";\n     Buffer.add_char b dtp_obs_lb;\n     put b;\n     Buffer.add_char b dtp_obs_rb);\n  Buffer.add_char b dtp_obs_rb;\n  Buffer.add_char b dtp_obs_nl;\n  ignore (dtp_obs_emit (Buffer.contents b));\n  0\n\nlet dtp_obs_log (text : string) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    Printf.eprintf \"DEBUG %d %s\" (dtp_timeUs ()) text;\n    output_char stderr dtp_obs_nl;\n    flush stderr;\n    dtp_obs_mark_like \"i\" \"vuna.log\" \"vuna.log\"\n      (Some (fun b -> dtp_obs_key b \"text\"; dtp_obs_str b text))\n  end\n\nlet dtp_obs_counter (name : string) (v : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else dtp_obs_mark_like \"C\" name \"vuna.counter\"\n    (Some (fun b -> dtp_obs_key b \"value\"; dtp_obs_int b v))\n\nlet dtp_obs_mark (name : string) : int =\n  if not (dtp_obs_on ()) then 0\n  else dtp_obs_mark_like \"i\" name \"vuna.mark\" None\n\nlet dtp_obs_cap = 8192\nlet dtp_obs_cpu : Printexc.raw_backtrace option array = Array.make 8192 None\nlet dtp_obs_cpu_n = ref 0\nlet dtp_obs_cpu_on = ref false\n\nlet dtp_obs_cpu_tick (_ : int) =\n  if !dtp_obs_cpu_on && !dtp_obs_cpu_n < dtp_obs_cap then begin\n    dtp_obs_cpu.(!dtp_obs_cpu_n) <- Some (Printexc.get_callstack 32);\n    incr dtp_obs_cpu_n\n  end\n\nlet dtp_obs_frames b (bt : Printexc.raw_backtrace) =\n  let slots = match Printexc.backtrace_slots bt with None -> [||] | Some s -> s in\n  Buffer.add_char b dtp_obs_ls;\n  let first = ref true in\n  Array.iter\n    (fun slot ->\n      let nm = match Printexc.Slot.name slot with Some n -> n | None -> \"\" in\n      let loc =\n        match Printexc.Slot.location slot with\n        | Some l -> Printf.sprintf \"%s:%d\" l.filename l.line_number\n        | None -> \"\"\n      in\n      if !first then first := false else Buffer.add_char b dtp_obs_comma;\n      dtp_obs_str b (if loc = \"\" then nm else nm ^ \"@\" ^ loc))\n    slots;\n  Buffer.add_char b dtp_obs_rs\n\nlet dtp_obs_mem : Printexc.raw_backtrace option array = Array.make 8192 None\nlet dtp_obs_mem_n = ref 0\nlet dtp_obs_mem_run : Gc.Memprof.t option ref = ref None\n\nlet dtp_obs_mem_add (bt : Printexc.raw_backtrace) =\n  if !dtp_obs_mem_n < dtp_obs_cap then begin\n    dtp_obs_mem.(!dtp_obs_mem_n) <- Some bt;\n    incr dtp_obs_mem_n\n  end\n\nlet dtp_obs_tracker : (unit, unit) Gc.Memprof.tracker =\n  { alloc_minor =\n      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));\n    alloc_major =\n      (fun (i : Gc.Memprof.allocation) -> dtp_obs_mem_add i.callstack; (None : unit option));\n    promote = (fun () -> None);\n    dealloc_minor = (fun () -> ());\n    dealloc_major = (fun () -> ()) }\n\nlet dtp_obs_emit_samples (name : string) (n : int) (get : int -> Printexc.raw_backtrace option) =\n  for i = 0 to n - 1 do\n    match get i with\n    | None -> ()\n    | Some bt ->\n      let b = Buffer.create 256 in\n      dtp_obs_hdr b \"i\" name (dtp_timeUs ());\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"cat\";\n      dtp_obs_str b \"vuna.sample\";\n      Buffer.add_char b dtp_obs_comma;\n      dtp_obs_key b \"args\";\n      Buffer.add_char b dtp_obs_lb;\n      dtp_obs_key b \"stack\";\n      dtp_obs_frames b bt;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_rb;\n      Buffer.add_char b dtp_obs_nl;\n      ignore (dtp_obs_emit (Buffer.contents b))\n  done\n\nlet dtp_obs_sample_start (mode : string) (interval_us : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    (* `mode` \228\184\186\231\169\186\228\184\178\230\151\182\230\140\137 `VUNA_OBS_SAMPLE`\239\188\136env\239\188\137\229\143\150\231\188\186\231\156\129\239\188\136`cpu`\239\188\137\239\188\155\232\191\153\230\160\183 `vuna obs run\n       --sample both` \231\154\132 env \230\179\168\229\133\165\232\131\189\231\148\159\230\149\136\239\188\140\232\128\140\229\186\147\229\177\130\232\176\131\231\148\168\230\128\187\230\152\175\230\152\190\229\188\143\231\187\153 mode\227\128\130 *)\n    let mode2 =\n      if mode <> \"\" then mode\n      else match Sys.getenv_opt \"VUNA_OBS_SAMPLE\" with\n        | Some m when m <> \"\" -> m\n        | _ -> \"cpu\"\n    in\n    let iv2 =\n      if interval_us > 0 then interval_us\n      else\n        match int_of_string_opt (match Sys.getenv_opt \"VUNA_OBS_INTERVAL\" with Some v -> v | None -> \"\") with\n        | Some v when v > 0 -> v\n        | _ -> 1000\n    in\n    let want_cpu = mode2 = \"cpu\" || mode2 = \"both\" in\n    let want_mem = mode2 = \"mem\" || mode2 = \"both\" in\n    (if want_cpu then\n       try\n         Sys.set_signal Sys.sigprof (Sys.Signal_handle dtp_obs_cpu_tick);\n         dtp_obs_cpu_on := true;\n         ignore\n           (Unix.setitimer Unix.ITIMER_PROF\n              { Unix.it_interval = float_of_int iv2 /. 1000000.0;\n                it_value = float_of_int iv2 /. 1000000.0 })\n       with _ -> ());\n    (if want_mem then\n       try\n         dtp_obs_mem_run :=\n           Some (Gc.Memprof.start ~sampling_rate:1e-4 ~callstack_size:16 dtp_obs_tracker)\n       with _ -> ());\n    0\n  end\n\nlet dtp_obs_sample_stop (_ : int) : int =\n  if not (dtp_obs_on ()) then 0\n  else begin\n    (try\n       dtp_obs_cpu_on := false;\n       ignore (Unix.setitimer Unix.ITIMER_PROF { Unix.it_interval = 0.0; it_value = 0.0 })\n     with _ -> ());\n    (try (match !dtp_obs_mem_run with Some _ -> Gc.Memprof.stop () | None -> ()) with _ -> ());\n    dtp_obs_mem_run := None;\n    dtp_obs_emit_samples \"vuna.sample.cpu\" !dtp_obs_cpu_n (fun i -> dtp_obs_cpu.(i));\n    dtp_obs_emit_samples \"vuna.sample.mem\" !dtp_obs_mem_n (fun i -> dtp_obs_mem.(i));\n    dtp_obs_flush ()\n  end\n"
 
-# 1274 "Vuna/Compiler/Codegen/Term.vuna"
+# 1288 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dinlineText = (fun mc0 mc1 -> (if (mc0 = "+") then (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (match dtb__3 with
@@ -367,106 +367,106 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dinlineText = (fun mc0 mc1 -> (if (mc0 = "+"
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 ) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))))))))))))))))))))))))))))))))))))))))
 
-# 1328 "Vuna/Compiler/Codegen/Term.vuna"
+# 1342 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntimeWith = (fun locs usesFloat usesTrace usesObs -> (String.concat "" [v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntime; (if usesFloat then v_Vuna_dCompiler_dCodegen_dTerm_ddtFloatRuntime else ""); (if (locs = "") then "let dt_def_locs = []\n" else (String.concat "" ["let dt_def_locs = [\n"; locs; "]\n"])); v_Vuna_dCompiler_dCodegen_dTerm_ddtReporterRuntime; (if usesTrace then v_Vuna_dCompiler_dCodegen_dTerm_ddtTraceRuntime else ""); (if usesObs then v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime else "")]))
 
-# 1341 "Vuna/Compiler/Codegen/Term.vuna"
+# 1355 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge = (fun mc0 -> (match mc0 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__150) -> ((fun nilMl -> ((fun consMl -> (String.concat "" ["\nlet dtp_unpack (s : string) =\n  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in\n  List.fold_right (fun x acc -> "; consMl; " (x, acc)) cs "; nilMl; "\nlet dtp_pack xs =\n  let rec to_list xs = match xs with "; nilMl; " -> [] | "; consMl; " (x, rest) -> x :: to_list rest in\n  let cs = Array.of_list (to_list xs) in\n  String.init (Array.length cs) (fun i -> Char.chr cs.(i))\n\nlet dtp_listOf xs = List.fold_right (fun x acc -> "; consMl; " (x, acc)) xs "; nilMl; "\nlet dtp_ocamlOf xs =\n  let rec go l = match l with "; nilMl; " -> [] | "; consMl; " (x, rest) -> x :: go rest in\n  go xs\n\nlet dtp_concatMany xs = String.concat \"\" (dtp_ocamlOf xs)\n\nlet dtp_substTemplate tmpl xs =\n  let args = Array.of_list (dtp_ocamlOf xs) in\n  let n = String.length tmpl and na = Array.length args in\n  let buf = Buffer.create (n + 32) in\n  let rec go i =\n    if i >= n then ()\n    else if tmpl.[i] = '<' then begin\n      let j = ref (i + 1) and k = ref 0 in\n      while !j < n && tmpl.[!j] >= '0' && tmpl.[!j] <= '9' do\n        k := !k * 10 + (Char.code tmpl.[!j] - 48); incr j\n      done;\n      if !j < n && tmpl.[!j] = '>' && !j > i + 1 then begin\n        (if !k < na then Buffer.add_string buf args.(!k)\n         else Buffer.add_string buf (String.sub tmpl i (!j - i + 1)));\n        go (!j + 1)\n      end else (Buffer.add_char buf '<'; go (i + 1))\n    end else (Buffer.add_char buf tmpl.[i]; go (i + 1))\n  in go 0; Buffer.contents buf\n"])) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirListFamilyOf dtb__150)) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirListConsOf dtb__150)))) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirListFamilyOf dtb__150)) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirListNilOf dtb__150)))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1396 "Vuna/Compiler/Codegen/Term.vuna"
+# 1410 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dinsertLocRow = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__151, dtb__152) -> (if (mc0 <= dtb__151) then (Base_dList.C_Base_dList_dList_Cons (mc0, (Base_dList.C_Base_dList_dList_Cons (dtb__151, dtb__152)))) else (Base_dList.C_Base_dList_dList_Cons (dtb__151, ((v_Vuna_dCompiler_dCodegen_dTerm_dinsertLocRow mc0) dtb__152))))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1392 "Vuna/Compiler/Codegen/Term.vuna"
+# 1406 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__153, dtb__154) -> ((v_Vuna_dCompiler_dCodegen_dTerm_dinsertLocRow dtb__153) (v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows dtb__154))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1402 "Vuna/Compiler/Codegen/Term.vuna"
+# 1416 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf = (fun norm row -> ((fun name -> ((fun file -> ((fun line -> (String.concat "" ["  ("; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dvalueName name)); ", ("; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString name); ", "; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString (String.concat "" [(norm file); ":"; (bi_strFromInt line)])); "));\n"])) (Base_dPair.v_Base_dPair_dsecondOf (Base_dPair.v_Base_dPair_dsecondOf row)))) (Base_dPair.v_Base_dPair_dfirstOf (Base_dPair.v_Base_dPair_dsecondOf row)))) (Base_dPair.v_Base_dPair_dfirstOf row)))
 
-# 1389 "Vuna/Compiler/Codegen/Term.vuna"
+# 1403 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_ddtDefLocTable = (fun norm rows -> (Base_dList.dtp_concatMany (v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf norm)) rows))))
 
-# 1432 "Vuna/Compiler/Codegen/Term.vuna"
+# 1446 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith = (fun norm qc shared -> { f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsShared = shared; f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual = qc; f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsDeps = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsNormPath = norm })
 
-# 1429 "Vuna/Compiler/Codegen/Term.vuna"
+# 1443 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt = (fun qc shared -> (((v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith (fun p -> p)) qc) shared))
 
-# 1436 "Vuna/Compiler/Codegen/Term.vuna"
+# 1450 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep = (fun st unit -> (if (if (unit = "") then true else ((Base_dList.v_Base_dList_dmemName unit) (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsDeps)) then st else { f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsShared = (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsShared; f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual = (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual; f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsDeps = (Base_dList.C_Base_dList_dList_Cons (unit, (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsDeps)); f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsNormPath = (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsNormPath }))
 
-# 1442 "Vuna/Compiler/Codegen/Term.vuna"
+# 1456 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef = (fun st name -> ((fun p -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = ((v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep st) (Base_dPair.v_Base_dPair_dsecondOf p)) }) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dqualValueText (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual) name)))
 
-# 1449 "Vuna/Compiler/Codegen/Term.vuna"
+# 1463 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef = (fun st family ctor -> ((fun p -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = ((v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep st) (Base_dPair.v_Base_dPair_dsecondOf p)) }) (((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dqualCtorText (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual) family) ctor)))
 
-# 1456 "Vuna/Compiler/Codegen/Term.vuna"
+# 1470 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily = (fun st family -> ((fun unit -> (if (if (unit = "") then true else (unit = ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then st else ((v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep st) unit))) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) family)))
 
-# 1462 "Vuna/Compiler/Codegen/Term.vuna"
+# 1476 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf = (fun st family label -> ((fun unit -> (if (if (unit = "") then true else (unit = ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then label else (String.concat "" [unit; "."; label]))) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) family)))
 
-# 1470 "Vuna/Compiler/Codegen/Term.vuna"
+# 1484 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf = (fun st -> (match ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsShared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__155) -> ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual).Vuna_dCompiler_dCodegen_dDecl.f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirListFamilyOf dtb__155))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1475 "Vuna/Compiler/Codegen/Term.vuna"
+# 1489 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll = (fun old new_ text -> ((Base_dString.v_Base_dString_djoin new_) ((Base_dString.v_Base_dString_dsplit old) text)))
 
-# 1478 "Vuna/Compiler/Codegen/Term.vuna"
+# 1492 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__156, dtb__157) -> (((v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames mc0) dtb__157) (((v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll dtb__156) (String.concat "" [mc0; "."; dtb__156])) mc2))
   | Base_dList.C_Base_dList_dList_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1483 "Vuna/Compiler/Codegen/Term.vuna"
+# 1497 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText = (fun unit text -> (if (unit = "") then text else (((v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames unit) Vuna_dCompiler_dCodegen_dRuntime.v_Vuna_dCompiler_dCodegen_dRuntime_docamlRtHelperNames) text)))
 
-# 1487 "Vuna/Compiler/Codegen/Term.vuna"
+# 1501 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenBridgeRef = (fun st text -> ((fun unit -> { Base_dPair.f_Base_dPair_dPair_first = ((v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText unit) text); Base_dPair.f_Base_dPair_dPair_second = ((v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep st) unit) }) (v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf st)))
 
-# 1500 "Vuna/Compiler/Codegen/Term.vuna"
+# 1514 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr = "Base.Eff.EffUnit"
 
-# 1494 "Vuna/Compiler/Codegen/Term.vuna"
+# 1508 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTyPair = (fun st -> ((fun p -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = ((v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep st) (Base_dPair.v_Base_dPair_dsecondOf p)) }) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText (st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual) v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr)))
 
-# 1624 "Vuna/Compiler/Codegen/Term.vuna"
+# 1638 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames = (Base_dList.C_Base_dList_dList_Cons ("dtio_0", (Base_dList.C_Base_dList_dList_Cons ("dtio_1", (Base_dList.C_Base_dList_dList_Cons ("dtio_2", (Base_dList.C_Base_dList_dList_Cons ("dtio_3", Base_dList.C_Base_dList_dList_Nil))))))))
 
-# 1627 "Vuna/Compiler/Codegen/Term.vuna"
+# 1641 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames = (fun n names -> (if (n <= 0) then Base_dList.C_Base_dList_dList_Nil else (match names with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | Base_dList.C_Base_dList_dList_Cons (dtb__158, dtb__159) -> (Base_dList.C_Base_dList_dList_Cons (dtb__158, ((v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames (n - 1)) dtb__159)))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1615 "Vuna/Compiler/Codegen/Term.vuna"
+# 1629 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_deffThunkText = (fun ctor unitTy rt arity -> ((fun argText -> (if (arity = 0) then (String.concat "" ["("; ctor; " (fun (_ : "; unitTy; ") -> "; rt; "))"]) else (String.concat "" ["(fun "; argText; " -> "; ctor; " (fun (_ : "; unitTy; ") -> "; rt; " "; argText; "))"]))) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_djoinWith " ") ((v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames arity) v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames))))
 
-# 1654 "Vuna/Compiler/Codegen/Term.vuna"
+# 1668 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText = (fun mc0 -> (match mc0 with
   | { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName = dtb__160; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased = dtb__161 } -> (if dtb__161 then "" else (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dirBinderText { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName = dtb__160; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased = false }))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1658 "Vuna/Compiler/Codegen/Term.vuna"
+# 1672 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__162, dtb__163) -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltCtorOf dtb__162) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> true
@@ -477,7 +477,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1699 "Vuna/Compiler/Codegen/Term.vuna"
+# 1713 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__165, dtb__166) -> (match mc3 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__167, dtb__168) -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" [(((v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf mc0) mc1) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldLabel mc1) (Base_dPair.v_Base_dPair_dsecondOf dtb__165))); " = "; dtb__167]), ((((v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned mc0) mc1) dtb__166) dtb__168)))
@@ -491,49 +491,49 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned = (fun mc0 mc1 mc2 mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1695 "Vuna/Compiler/Codegen/Term.vuna"
+# 1709 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_drecordPatText = (fun st family fields pats -> (String.concat "" ["{ "; ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "; ") ((((v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned st) family) fields) pats)); " }"]))
 
-# 1706 "Vuna/Compiler/Codegen/Term.vuna"
+# 1720 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> mc0
   | _ -> (String.concat "" [mc0; " ("; ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_djoinWith ", ") mc1); ")"])
 ))
 
-# 1785 "Vuna/Compiler/Codegen/Term.vuna"
+# 1799 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf = (fun group -> (if (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirGroupIsRec group) then "let rec " else "let "))
 
-# 1795 "Vuna/Compiler/Codegen/Term.vuna"
+# 1809 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf = (fun st d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefSpan d) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__169) -> ((fun file -> (if (file = "") then "" else (String.concat "" ["# "; (bi_strFromInt (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_dspanStartLine dtb__169)); " "; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString file); "\n"]))) ((st).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsNormPath (dtb__169).Vuna_dCompiler_dSource.f_Vuna_dCompiler_dSource_dSpan_spanFile))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1779 "Vuna/Compiler/Codegen/Term.vuna"
+# 1793 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf = (fun st group p -> (String.concat "" [((v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf st) (Base_dPair.v_Base_dPair_dfirstOf p)); (v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf group); (Base_dPair.v_Base_dPair_dsecondOf p)]))
 
-# 1782 "Vuna/Compiler/Codegen/Term.vuna"
+# 1796 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf = (fun st p -> (String.concat "" [((v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf st) (Base_dPair.v_Base_dPair_dfirstOf p)); "and "; (Base_dPair.v_Base_dPair_dsecondOf p)]))
 
-# 1774 "Vuna/Compiler/Codegen/Term.vuna"
+# 1788 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf = (fun st group defs -> (match ((Base_dList.v_Base_dList_dzip (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirGroupDefs group)) defs) with
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | Base_dList.C_Base_dList_dList_Cons (dtb__170, dtb__171) -> ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_djoinWith "\n") (Base_dList.C_Base_dList_dList_Cons ((((v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf st) group) dtb__170), ((Base_dList.v_Base_dList_dmap (v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf st)) dtb__171))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1860 "Vuna/Compiler/Codegen/Term.vuna"
+# 1874 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__172, dtb__173) -> ((fun p -> (((v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers (Base_dPair.v_Base_dPair_dsecondOf p)) (String.concat "" ["("; (Base_dPair.v_Base_dPair_dfirstOf p); " "; mc1; ")"])) dtb__173)) ((v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef mc0) dtb__172))
   | Base_dList.C_Base_dList_dList_Nil -> { Base_dPair.f_Base_dPair_dPair_first = mc1; Base_dPair.f_Base_dPair_dPair_second = mc0 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1867 "Vuna/Compiler/Codegen/Term.vuna"
+# 1881 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dhookText = (fun showText body printResult -> ((fun action -> (String.concat "" ["\nlet () =\n  Printexc.record_backtrace true;\n  try "; action; "\n  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"])) (if printResult then (String.concat "" ["print_endline ("; showText; " ("; body; "))"]) else (String.concat "" ["ignore ("; body; ")"]))))
 
-# 1875 "Vuna/Compiler/Codegen/Term.vuna"
+# 1889 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dconAppText = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__174, dtb__175) -> (match dtb__175 with
   | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" ["("; mc0; " ("; dtb__174; "))"])
@@ -543,9 +543,9 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dconAppText = (fun mc0 mc1 -> (match mc1 wit
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1506 "Vuna/Compiler/Codegen/Term.vuna"
+# 1520 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenIr = (fun st node -> ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode st) node))
-# 1509 "Vuna/Compiler/Codegen/Term.vuna"
+# 1523 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffBind (dtb__176, dtb__177, dtb__178) -> ((fun ctorP -> ((fun st1 -> ((fun unitText -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (String.concat "" ["(fun m k -> "; (Base_dPair.v_Base_dPair_dfirstOf ctorP); " (fun (u : "; unitText; ") -> match m with "; (Base_dPair.v_Base_dPair_dfirstOf ctorP); " f -> (match k (f u) with "; (Base_dPair.v_Base_dPair_dfirstOf ctorP); " g -> g u)))"]); Base_dPair.f_Base_dPair_dPair_second = st1 }))) ((Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dirTyText (st1).f_Vuna_dCompiler_dCodegen_dTerm_dGenSt_gsQual) dtb__178))) ((v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily (Base_dPair.v_Base_dPair_dsecondOf ctorP)) dtb__176))) (((v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef mc0) dtb__176) dtb__177))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffThunk (dtb__179, dtb__180, dtb__181, dtb__182, dtb__183) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr mc0) dtb__183)) (fun p -> (match p with
@@ -652,7 +652,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__268) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dirBinderText dtb__268); Base_dPair.f_Base_dPair_dPair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1633 "Vuna/Compiler/Codegen/Term.vuna"
+# 1647 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__269, dtb__270) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr mc0) dtb__269)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__271; Base_dPair.f_Base_dPair_dPair_second = dtb__272 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs dtb__272) dtb__270)) (fun q -> (match q with
@@ -664,7 +664,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = Base_dList.C_Base_dList_dList_Nil; Base_dPair.f_Base_dPair_dPair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1642 "Vuna/Compiler/Codegen/Term.vuna"
+# 1656 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__275, dtb__276) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr mc0) (Base_dPair.v_Base_dPair_dsecondOf dtb__275))) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__277; Base_dPair.f_Base_dPair_dPair_second = dtb__278 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields dtb__278) mc1) dtb__276)) (fun q -> (match q with
@@ -676,7 +676,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields = (fun mc0 mc1 mc2 -> (ma
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = Base_dList.C_Base_dList_dList_Nil; Base_dPair.f_Base_dPair_dPair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1664 "Vuna/Compiler/Codegen/Term.vuna"
+# 1678 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenArms = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__281, dtb__282) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenArm mc0) dtb__281)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__283; Base_dPair.f_Base_dPair_dPair_second = dtb__284 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenArms dtb__284) dtb__282)) (fun q -> (match q with
@@ -688,7 +688,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenArms = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = ""; Base_dPair.f_Base_dPair_dPair_second = mc0 }))
   | _ -> failwith "DT: impossible branch"
 ))
-# 1672 "Vuna/Compiler/Codegen/Term.vuna"
+# 1686 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenArm = (fun st alt -> ((fun envPats -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr st) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt))) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__287; Base_dPair.f_Base_dPair_dPair_second = dtb__288 } -> ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__289) -> (match dtb__289 with
@@ -707,7 +707,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenArm = (fun st alt -> ((fun envPats -> ((
 )) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltCtorOf alt))
   | _ -> failwith "DT: impossible branch"
 )))) ((Base_dList.v_Base_dList_dfilter (fun n -> (n <> ""))) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBindersOf alt)))))
-# 1713 "Vuna/Compiler/Codegen/Term.vuna"
+# 1727 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches = (fun st fresh zero succ catch -> ((fun sc -> ((fun predExpr -> ((fun impossible -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt st) zero) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)) (fun pz -> (match pz with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__295; Base_dPair.f_Base_dPair_dPair_second = dtb__296 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt dtb__296) succ) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (predExpr)))) (fun ps -> (match ps with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__297; Base_dPair.f_Base_dPair_dPair_second = dtb__298 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt dtb__298) catch) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (sc)))) (fun pc -> (match pc with
@@ -734,7 +734,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches = (fun st fresh zero succ ca
 )))
   | _ -> failwith "DT: impossible branch"
 )))) "(failwith \"DT: impossible branch\")")) (String.concat "" ["("; sc; " - 1)"]))) ("dtnat__" ^ (bi_strFromInt fresh))))
-# 1739 "Vuna/Compiler/Codegen/Term.vuna"
+# 1753 "Vuna/Compiler/Codegen/Term.vuna"
 and v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__305) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr mc0) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf dtb__305))) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__306; Base_dPair.f_Base_dPair_dPair_second = dtb__307 } -> (match ((Base_dList.v_Base_dList_dfilter (fun n -> (n <> ""))) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBindersOf dtb__305))) with
@@ -755,7 +755,7 @@ and v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt = (fun mc0 mc1 mc2 -> (match mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1811 "Vuna/Compiler/Codegen/Term.vuna"
+# 1825 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenDef = (fun st d -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC ((((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithContext (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefSpan d)) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)) (((((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_ddiagNoLoc Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dSeverity_SevError) Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dPhase_PhInternal) Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCategory_CatInternal) "IC_AxiomRuntime") "axiom reached runtime code generation (partition must erase it)"))))
@@ -772,7 +772,7 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dgenDef = (fun st d -> ((fun nd_uscrut2 -> (
   | _ -> failwith "DT: impossible branch"
 )) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefExtern d)))
 
-# 1803 "Vuna/Compiler/Codegen/Term.vuna"
+# 1817 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__317, dtb__318) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenDef mc0) dtb__317)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__319; Base_dPair.f_Base_dPair_dPair_second = dtb__320 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies dtb__320) dtb__318)) (fun q -> (match q with
@@ -785,7 +785,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies = (fun mc0 mc1 -> (match
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1763 "Vuna/Compiler/Codegen/Term.vuna"
+# 1777 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup = (fun st group -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies st) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirGroupDefs group))) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__323; Base_dPair.f_Base_dPair_dPair_second = dtb__324 } -> ((fun nd_uscrut7 -> (match nd_uscrut7 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__325, dtb__326) -> (match dtb__326 with
@@ -801,7 +801,7 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup = (fun st group -> ((Vuna_dCompile
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 1755 "Vuna/Compiler/Codegen/Term.vuna"
+# 1769 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__328, dtb__329) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup mc0) dtb__328)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__330; Base_dPair.f_Base_dPair_dPair_second = dtb__331 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups dtb__331) dtb__329)) (fun q -> (match q with
@@ -814,7 +814,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups = (fun mc0 mc1 -> (match mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1837 "Vuna/Compiler/Codegen/Term.vuna"
+# 1851 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook = (fun st entry printResult -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr st) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryShowOf entry))) (fun sp -> (match sp with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__334; Base_dPair.f_Base_dPair_dPair_second = dtb__335 } -> (if (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryIsActionOf entry) then (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryRunMainOf entry) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal "action entry has no runMain")
