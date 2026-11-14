@@ -253,41 +253,61 @@ rtShowBool c =
       ]
   in rtFunc "$rt_showBool" params [WvAnyRef] [] body
 
+-- | 单字节转义判定：置 `$esc`，并把需要改写字符的 `$c` 换成转义后的可见字符。
+-- 与 OCaml 的 `dt_show_string` 逐条对齐：`"`、`\`、换行、制表、回车。
+escapePair : Int -> Int -> List Instr
+escapePair code mapped =
+  [ ILocalGet "$c",
+    IConstI32 code,
+    IBinop "i32.eq",
+    IIf "" [IConstI32 1, ILocalSet "$esc", IConstI32 mapped, ILocalSet "$c"] []
+  ]
+
+escapeStepAll : List Instr
+escapeStepAll =
+  cat
+    [[IConstI32 0, ILocalSet "$esc"], escapePair 34 34, escapePair 92 92, escapePair 10 110, escapePair 9 116, escapePair 13 114]
+
+-- | `showStr`：`"` 包裹，按 `dt_show_string` 转义。两遍扫描：先算转义后的长度再填充，
+-- 避免预先分配过多、尾部未用字节被 `array.len` 当成内容。
 rtShowStr : WatFunc
 rtShowStr =
   let
     params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$src" (WvRef "$str"), Pair "$n" WvI32, Pair "$out" (WvRef "$str")]
-    body =
-      [ ILocalGet "$p0",
-        IRefCast "$str",
-        ILocalSet "$src",
-        ILocalGet "$src",
-        IArrayLen,
-        ILocalSet "$n",
-        ILocalGet "$n",
-        IConstI32 2,
-        IBinop "i32.add",
-        IArrayNewDefault "$str",
-        ILocalSet "$out",
-        ILocalGet "$out",
-        IConstI32 0,
-        IConstI32 34,
-        IArraySet "$str",
-        ILocalGet "$out",
-        IConstI32 1,
-        ILocalGet "$src",
-        IConstI32 0,
-        ILocalGet "$n",
-        IArrayCopy "$str" "$str",
-        ILocalGet "$out",
-        ILocalGet "$n",
-        IConstI32 1,
-        IBinop "i32.add",
-        IConstI32 34,
-        IArraySet "$str",
-        ILocalGet "$out"
+    locals =
+      [ Pair "$src" (WvRef "$str"),
+        Pair "$n" WvI32,
+        Pair "$len" WvI32,
+        Pair "$i" WvI32,
+        Pair "$o" WvI32,
+        Pair "$c" WvI32,
+        Pair "$esc" WvI32,
+        Pair "$out" (WvRef "$str")
       ]
+    loadChar = [ILocalGet "$src", ILocalGet "$i", IArrayGetU "$str", ILocalSet "$c"]
+    bumpLen =
+      [ ILocalGet "$len",
+        ILocalGet "$esc",
+        IIf "i32" [IConstI32 2] [IConstI32 1],
+        IBinop "i32.add",
+        ILocalSet "$len"
+      ]
+    bumpIdx = [ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i"]
+    lengthCond = [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$ss_len_done"]
+    lengthStep = append (cat [loadChar, escapeStepAll, bumpLen, bumpIdx]) [IBr "$ss_len_l"]
+    lengthLoop = [IBlock "$ss_len_done" "" [ILoop "$ss_len_l" "" (append lengthCond lengthStep)]]
+    writeEsc = [ILocalGet "$out", ILocalGet "$o", IConstI32 92, IArraySet "$str"]
+    bumpOut = [ILocalGet "$o", IConstI32 1, IBinop "i32.add", ILocalSet "$o"]
+    writeChar = [ILocalGet "$out", ILocalGet "$o", ILocalGet "$c", IArraySet "$str"]
+    fillCond = [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$ss_fill_done"]
+    fillStep =
+      append
+        (cat [loadChar, escapeStepAll, [ILocalGet "$esc", IIf "" (append writeEsc bumpOut) []], writeChar, bumpOut, bumpIdx])
+        [IBr "$ss_fill_l"]
+    fillLoop = [IBlock "$ss_fill_done" "" [ILoop "$ss_fill_l" "" (append fillCond fillStep)]]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$src", ILocalGet "$src", IArrayLen, ILocalSet "$n", IConstI32 2, ILocalSet "$len", IConstI32 0, ILocalSet "$i"], lengthLoop, [ILocalGet "$len", IArrayNewDefault "$str", ILocalSet "$out"], [ILocalGet "$out", IConstI32 0, IConstI32 34, IArraySet "$str", IConstI32 0, ILocalSet "$i", IConstI32 1, ILocalSet "$o"], fillLoop, [ILocalGet "$out", ILocalGet "$o", IConstI32 34, IArraySet "$str", ILocalGet "$out"]]
   in rtFunc "$rt_showStr" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------

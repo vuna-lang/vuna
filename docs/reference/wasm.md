@@ -83,7 +83,7 @@
 | --- | --- |
 | Int | `+ - * /`（63-bit wrap；除零 → `$rt_failStr` + `unreachable`）、`bitAnd/Or/Xor/Not/Shl/Shr`、`bi_eq_int` / `bi_neq_int` / `bi_lt_int` / `bi_le_int` / `bi_gt_int` / `bi_ge_int`、`&&` / `\|\|` |
 | Nat | `@ir@natSucc`（饱和）、`natAdd` / `natSub` / `natMul` / `natDiv`（饱和与截断语义）、`natToInt`（恒等）/ `natFromInt`（负数钳 0） |
-| String | `++`（`array.copy`）、`strFromInt`、`strShow`、`strLength`、`strAt`（越界 `-1`）、`strSubstring(start, len, s)`（钳位后复制）、`strHash`（`(h*33+byte)&1023`）、`bi_eq_str` / `bi_neq_str` |
+| String | `++`（`array.copy`）、`strFromInt`、`strShow`（`"` 包裹，按 `dt_show_string` 转义引号/反斜杠/换行/制表/回车；两遍扫描先定长度）、`strLength`、`strAt`（越界 `-1`）、`strSubstring(start, len, s)`（钳位后复制）、`strHash`（`(h*33+byte)&1023`）、`bi_eq_str` / `bi_neq_str` |
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on` / `@vuna@debug@line` 走常量折叠 |
 

@@ -82,6 +82,14 @@ out-equals: "bc"
 run: sh -c '"$VUNA" run "$TMPDIR/str" 2>&1 | tail -n 1'
 out-equals: "bc"
 
+# 6b) showStr 转义：与 OCaml 的 `dt_show_string` 逐字一致（`"` / `\` / 换行 / 制表）。
+run: sh -c 'd="$TMPDIR/show"; mkdir -p "$d/app"; printf "[package]\nname = \"show\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\\\\nb\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/show-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/show-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "a\nb"
+run: sh -c '"$VUNA" run "$TMPDIR/show" 2>&1 | tail -n 1'
+out-equals: "a\nb"
+
 # 7) Bool 入口、短路求值与字符串相等。
 run: sh -c 'd="$TMPDIR/bools"; mkdir -p "$d/app"; printf "[package]\nname = \"bools\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Bool\nmain = 1 > 2 && (1 / 0) == 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/bools-out" "$d"'
 exit: 0
