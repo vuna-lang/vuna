@@ -371,9 +371,10 @@ interp / compile 文案不同时用 `.compile.err`。
   必须能编译并跑出结果（用例 `103_ir_lowering.steps`）；
   `104_ir_runtime_contract.steps` 钉住 IR 运行时符号到 OCaml 文本的代表性映射
   （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。
-  `105_native_backend.steps` 覆盖 native M1：x86-64 汇编生成、静态链接、与 OCaml
-  后端的输出差分、Nat 递归、63-bit 边界、除零 trap、确定性、拒绝面与 `--no-compile`
-  （见 [native.md](native.md)）。`corpus/dt_err/*` 是对应负例
+  `105_native_backend.steps` 覆盖 native M1+M2：x86-64 汇编生成、静态链接、与 OCaml
+  后端的输出差分、Nat 递归、63-bit 边界、除零 trap、确定性、String（`++` / `strFromInt` /
+  `strLength` / `strAt` / `strSubstring` / `strHash` / `strShow` / 相等 / String 入口）、
+  bump 堆耗尽 trap、拒绝面与 `--no-compile`（见 [native.md](native.md)）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；

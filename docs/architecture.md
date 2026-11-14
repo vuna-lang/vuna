@@ -35,7 +35,7 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
 ├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
 │                           Assembly Split Runtime            Core→IR 降低 + OCaml 文本生成 + 运行时符号表
-├─ Native/                  Model Abi Runtime Module Render   native 后端（M1：x86-64 汇编文本 + 运行时模板）
+├─ Native/                  Model Abi Runtime Module Render   native 后端（M2：x86-64 汇编文本 + 字符串 / bump 堆）
 └─ Driver/                    Split Dt Compile Wasm Native
                               CompilerCli                      输出模型 / facade / 后端驱动 / CLI
   PerfCache                          codegen 单元缓存（S5）
@@ -138,10 +138,13 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
 
-**native 后端（M1）**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
+**native 后端（M2）**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
 再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
-`Vuna.Compiler.Driver.Native.compileNative`。只支持 Int/Nat/Bool 的纯切片，切片、ABI、
-运行时符号与边界见 [native.md](reference/native.md)。WAT 后端见 [wasm.md](reference/wasm.md)。
+`Vuna.Compiler.Driver.Native.compileNative`。M1 覆盖 Int/Nat/Bool 纯切片，M2 加入 String
+（字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
+`strShow` / 字符串相等 / String 入口）与 `.bss` 里的 bump 堆（无 GC/RC）；切片、ABI、
+值表示、运行时符号与边界见 [native.md](reference/native.md)。WAT 后端见
+[wasm.md](reference/wasm.md)。
 
 ## 2. 包与 workspace
 

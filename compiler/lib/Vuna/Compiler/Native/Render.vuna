@@ -6,6 +6,10 @@ module Vuna.Compiler.Native.Render where
 -- 绝对路径，同一 IR 的 `main.s` 逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
 -- 二进制只保证行为（链接工具版本由 Nix 提供）。
 --
+-- M2 版面：`.intel_syntax noprefix` → `.rodata`（运行时常量 + 带长度头的字符串
+-- 字面量）→ `.bss`（bump 堆 + 堆指针）→ `.text`（Runtime 函数 → 用户函数 → `_start`）
+-- → `.note.GNU-stack`。
+--
 -- 边界：只 import Base 与 `Native.{Model,Abi}`。
 import Base.Bool
 import Base.Int
@@ -27,13 +31,22 @@ memText base off =
   else if off < 0 then "[${regText base}-${strFromInt (0 - off)}]"
   else "[${regText base}+${strFromInt off}]"
 
+memXText : Reg -> Reg -> Int -> String
+memXText base idx off =
+  if off == 0 then "[${regText base}+${regText idx}]"
+  else if off < 0 then "[${regText base}+${regText idx}-${strFromInt (0 - off)}]"
+  else "[${regText base}+${regText idx}+${strFromInt off}]"
+
 renderOperand : Operand -> String
 renderOperand (OpReg r) = regText r
 renderOperand (OpImm n) = strFromInt n
 renderOperand (OpMem base off) = memText base off
+renderOperand (OpMemX base idx off) = memXText base idx off
+renderOperand (OpRip label) = "[rip + ${label}]"
 
 isMemOperand : Operand -> Bool
 isMemOperand (OpMem _ _) = True
+isMemOperand (OpMemX _ _ _) = True
 isMemOperand _ = False
 
 renderMov : Operand -> Operand -> String
@@ -50,9 +63,14 @@ renderBinReg op r (OpReg Rcx) =
   else "${op} ${regText r}, ${renderOperand (OpReg Rcx)}"
 renderBinReg op r operand = "${op} ${regText r}, ${renderOperand operand}"
 
+renderByteOp : Operand -> String
+renderByteOp op = "byte ptr ${renderOperand op}"
+
 renderInstr : Instr -> String
 renderInstr (IMov dst src) = renderMov dst src
-renderInstr (IMovByte base off src) = "mov byte ptr ${memText base off}, ${reg8Text src}"
+renderInstr (IMovByteOp op imm) = "mov ${renderByteOp op}, ${strFromInt imm}"
+renderInstr (IMovByteRegOp op src) = "mov ${renderByteOp op}, ${reg8Text src}"
+renderInstr (IMovzx dst src) = "movzx ${regText dst}, ${renderByteOp src}"
 renderInstr IMovzxAl = "movzx rax, al"
 renderInstr (ILea r label) = "lea ${regText r}, [rip + ${label}]"
 renderInstr (ILeaMem dst base off) = "lea ${regText dst}, ${memText base off}"
@@ -67,6 +85,8 @@ renderInstr (INeg r) = "neg ${regText r}"
 renderInstr ICqo = "cqo"
 renderInstr (IDiv r) = "idiv ${regText r}"
 renderInstr (IDivUnsigned r) = "div ${regText r}"
+renderInstr IRepMovsb = "rep movsb"
+renderInstr IRepeCmpsb = "repe cmpsb"
 renderInstr (ILabel l) = "${l}:"
 renderInstr (IJmp l) = "jmp ${l}"
 renderInstr (IJcc cond l) = "${cond} ${l}"
@@ -80,20 +100,41 @@ renderInstr INop = "nop"
 -- ---------------------------------------------------------------
 -- 字符串 -> `.ascii` 字面量
 -- ---------------------------------------------------------------
--- | 只处理 ASCII 控制字符与引号/反斜杠；M1 的常量都是 ASCII。
+-- | 转义：引号与反斜杠用 `\"` / `\\`；可打印 ASCII 原样；其余字节写成三位八进制
+-- `\NNN`（固定三位，避免与后续数字粘成一个转义序列）。
 asmEscapeChar : Int -> String
 asmEscapeChar 34 = "\\\""
 asmEscapeChar 92 = "\\\\"
-asmEscapeChar 10 = "\\n"
-asmEscapeChar 9 = "\\t"
-asmEscapeChar 13 = "\\r"
-asmEscapeChar c = strPack [c]
+asmEscapeChar c = if c >= 32 && c <= 126 then strPack [c] else "\\${padOct c}"
+
+padOct : Int -> String
+padOct c =
+  let
+    a = c / 64
+    b = c / 8 - a * 8
+    d = c - a * 64 - b * 8
+  in "${strFromInt a}${strFromInt b}${strFromInt d}"
 
 asmString : String -> String
 asmString s = strPack (concatMap (\c => strUnpack (asmEscapeChar c)) (strUnpack s))
 
 renderRodata : NativeRodata -> List String
 renderRodata d = ["${d.nrLabel}:", indent ".ascii \"${asmString d.nrText}\""]
+
+-- | 字符串字面量：长度头（`.quad` 字节数）+ `.ascii` 体；运行时值是头地址。
+renderStrLit : NativeStrLit -> List String
+renderStrLit l =
+  [ "${l.nsLabel}:",
+    indent ".quad ${strFromInt (strLength l.nsText)}",
+    indent ".ascii \"${asmString l.nsText}\""
+  ]
+
+renderBss : NativeBss -> List String
+renderBss b =
+  let
+    alignLine = if b.nbAlign > 0 then [".align ${strFromInt b.nbAlign}"] else []
+    dataLine = if b.nbSize > 0 then [indent ".zero ${strFromInt b.nbSize}"] else []
+  in append alignLine (append ["${b.nbLabel}:"] dataLine)
 
 renderFunc : NativeFunc -> List String
 renderFunc f =
@@ -107,7 +148,11 @@ renderFunc f =
 export renderProgram : NativeProgram -> String
 renderProgram p =
   let
-    rodataLines = concatMap renderRodata p.npRodata
+    rodataLines = concatMap renderStrLit p.npStrLits
+    rodataConstLines = concatMap renderRodata p.npRodata
+    bssLines = concatMap renderBss p.npBss
     funcLines = concatMap renderFunc p.npFuncs
-  in join "\n" (append [".intel_syntax noprefix", ".section .rodata"] (append rodataLines (append [".section .text"] (append funcLines [".section .note.GNU-stack,\"\",@progbits"]))))
-    ++ "\n"
+    sections =
+      append [".intel_syntax noprefix", ".section .rodata"]
+        (append rodataConstLines (append rodataLines (append [".section .bss"] (append bssLines (append [".section .text"] (append funcLines [".section .note.GNU-stack,\"\",@progbits"]))))))
+  in join "\n" sections ++ "\n"

@@ -1,8 +1,9 @@
-# 105) native 后端 M1：x86-64 汇编 -> 静态可执行，行为与 OCaml 后端差分一致。
+# 105) native 后端：x86-64 汇编 -> 静态可执行，行为与 OCaml 后端差分一致。
 #
-# 覆盖：纯值/算术/let/if、顶层饱和函数、Nat 结构递归（IrNatCase）、Bool 入口、
-# 63-bit 边界、除零 trap、确定性（两次 main.s 相同）、不支持构造的编译期拒绝、
-# `--no-compile` 只写 main.s/build.sh。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
+# 覆盖 M1（纯值/算术/let/if、顶层饱和函数、Nat 结构递归、Bool 入口、63-bit 边界、
+# 除零 trap、确定性、拒绝面、`--no-compile`）与 M2（String 字面量 / `++` / `strFromInt`
+# / strLength / strAt / strSubstring / strHash / strShow / `==` / String 入口打印 /
+# bump 堆耗尽 trap）。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
 
 # 0) 工具链探针：缺 cc 时给出明确失败，而不是让后续链接报 127。
 run: command -v cc
@@ -15,6 +16,7 @@ file-exists: $TMPDIR/min-out/main.s
 file-exists: $TMPDIR/min-out/build.sh
 file-contains: $TMPDIR/min-out/main.s .intel_syntax noprefix
 file-contains: $TMPDIR/min-out/main.s .globl _start
+file-contains: $TMPDIR/min-out/main.s .section .bss
 run: "$TMPDIR/min-out/bin/min" 2>&1
 exit: 0
 out-equals: 42
@@ -37,6 +39,12 @@ run: "$TMPDIR/shadow-out/bin/shadow" 2>&1
 out-equals: 11
 run: sh -c '"$VUNA" run "$TMPDIR/shadow" 2>&1 | tail -n 1'
 out-equals: 11
+
+# 2c) 多个函数各自的内部 label 不得撞名（label 编号跨定义累加）。
+run: sh -c 'd="$TMPDIR/labels"; mkdir -p "$d/app"; printf "[package]\nname = \"labels\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "f : Int -> Int\nf x = if x > 0 then 1 else 0\n\ng : Int -> Int\ng x = if x > 5 then 2 else 0\n\nmain : Int\nmain = f 1 + g 6\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/labels-out" "$d"'
+exit: 0
+run: "$TMPDIR/labels-out/bin/labels" 2>&1
+out-equals: 3
 
 # 3) 顶层饱和函数调用。
 run: sh -c 'd="$TMPDIR/fn"; mkdir -p "$d/app"; printf "[package]\nname = \"fn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "double : Int -> Int\ndouble x = x * 2\n\nmain : Int\nmain = double 21\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fn-out" "$d"'
@@ -81,27 +89,78 @@ run: sh -c '"$TMPDIR/dz-out/bin/dz" 2>&1'
 exit: 2
 out-contains: vuna: runtime error: division by zero
 
-# 8) 确定性：同一程序两次 compile 的 main.s 逐字节一致。
-run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 40 + 2\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; cmp "$TMPDIR/det-a/main.s" "$TMPDIR/det-b/main.s"'
+# 8) 确定性：同一程序两次 compile 的 main.s 逐字节一致（含字符串字面量池）。
+run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ strFromInt 42 ++ \"b\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; cmp "$TMPDIR/det-a/main.s" "$TMPDIR/det-b/main.s"'
 exit: 0
 
-# 9) 不支持构造：字符串入口在编译期拒绝（exit 1），不产出 main.s。
-run: sh -c 'd="$TMPDIR/str"; mkdir -p "$d/app"; printf "[package]\nname = \"str\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"x\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/str-out" "$d" 2>&1'
+# 9) String 入口：字面量 + `++` + `strFromInt`，打印与 OCaml 的 show 一致（带引号）。
+run: sh -c 'd="$TMPDIR/str"; mkdir -p "$d/app"; printf "[package]\nname = \"str\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"hi\" ++ strFromInt 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/str-out" "$d"'
+exit: 0
+run: "$TMPDIR/str-out/bin/str" 2>&1
+out-equals: "hi42"
+run: sh -c '"$VUNA" run "$TMPDIR/str" 2>&1 | tail -n 1'
+out-equals: "hi42"
+
+# 9b) 字符串内建（IrRtApp 与 IrRt-as-value 两种形态都要覆盖）。
+run: sh -c 'd="$TMPDIR/strb"; mkdir -p "$d/app"; printf "[package]\nname = \"strb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strShow (strSubstring 1 2 \"abcd\" ++ strFromInt (strLength \"xyz\") ++ strShow \"q\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/strb-out" "$d"'
+exit: 0
+run: "$TMPDIR/strb-out/bin/strb" 2>&1
+out-equals: "\"bc3\\\"q\\\"\""
+run: sh -c '"$VUNA" run "$TMPDIR/strb" 2>&1 | tail -n 1'
+out-equals: "\"bc3\\\"q\\\"\""
+
+# 9c) 字符串相等 / 字节访问 / 哈希，与 OCaml 后端逐项比较。
+run: sh -c 'd="$TMPDIR/strc"; mkdir -p "$d/app"; printf "[package]\nname = \"strc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Bool\nmain = (\"abc\" == \"abc\") && (\"ab\" /= \"abc\") && strAt \"abc\" 1 == 98 && strHash \"hello\" == 116\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/strc-out" "$d"'
+exit: 0
+run: "$TMPDIR/strc-out/bin/strc" 2>&1
+out-equals: True
+run: sh -c '"$VUNA" run "$TMPDIR/strc" 2>&1 | tail -n 1'
+out-equals: True
+
+# 9d) 递归构造字符串（每次 `++` 从 bump 堆分配新对象）。
+run: sh -c 'd="$TMPDIR/strd"; mkdir -p "$d/app"; printf "[package]\nname = \"strd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : String\nmain = rep (Succ (Succ (Succ Zero))) \"ab\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/strd-out" "$d"'
+exit: 0
+run: "$TMPDIR/strd-out/bin/strd" 2>&1
+out-equals: "ababab"
+run: sh -c '"$VUNA" run "$TMPDIR/strd" 2>&1 | tail -n 1'
+out-equals: "ababab"
+
+# 9e) 转义与 UTF-8 字节：show 的引号/反斜杠/换行转义与 OCaml 的 dt_show_string 一致。
+#     用 printf '%s\n' 逐行写源文件（格式串只认 %s，不会把 \t 变成制表符）。
+run: sh -c "d=\"\$TMPDIR/stres\"; mkdir -p \"\$d/app\"; printf '[package]\nname = \"stres\"\n\n[dependencies]\nvuna-base = \"%s\"\n' \"\$VUNA_BASE\" > \"\$d/vuna.toml\"; printf '%s\n' 'main : String' 'main = strShow \"a\tb\r\nc\\\\d\\\"e\" ++ \"|héllo|\"' > \"\$d/app/Main.vuna\"; \"\$VUNA\" build --target native --out \"\$TMPDIR/stres-out\" \"\$d\""
+exit: 0
+run: sh -c '"$TMPDIR/stres-out/bin/stres" > "$TMPDIR/stres-native.txt" 2>&1; "$VUNA" run "$TMPDIR/stres" 2>&1 | tail -n 1 > "$TMPDIR/stres-ocaml.txt"; cmp "$TMPDIR/stres-native.txt" "$TMPDIR/stres-ocaml.txt"'
+exit: 0
+
+# 10) bump 堆耗尽：字符串只增不减，堆满后 trap OOM + exit 2（不是段错误）。
+run: sh -c 'd="$TMPDIR/oom"; mkdir -p "$d/app"; printf "[package]\nname = \"oom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : String\nmain = rep (natFromInt 2000) \"0123456789abcdef\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/oom-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/oom-out/bin/oom" 2>&1'
+exit: 2
+out-contains: vuna: runtime error: out of memory
+
+# 11) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
+run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
 exit: 1
 out-contains: native target:
-file-absent: $TMPDIR/str-out/bin/str
+file-absent: $TMPDIR/fl-out/bin/fl
 
-# 10) 高阶应用在编译期拒绝。
+# 11b) 用户 data / case 在编译期拒绝。
+run: sh -c 'd="$TMPDIR/dat"; mkdir -p "$d/app"; printf "[package]\nname = \"dat\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "data Color : Type where\n  Red : Color\n  Blue : Color\n\npick : Color -> Int\npick Red = 1\npick Blue = 2\n\nmain : Int\nmain = pick Red\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dat-out" "$d" 2>&1'
+exit: 1
+out-contains: native target: case is not supported yet
+
+# 11c) 高阶应用在编译期拒绝。
 run: sh -c 'd="$TMPDIR/ho"; mkdir -p "$d/app"; printf "[package]\nname = \"ho\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "apply : (Int -> Int) -> Int -> Int\napply f x = f x\n\nmain : Int\nmain = apply (\\x => x + 1) 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/ho-out" "$d" 2>&1'
 exit: 1
 out-contains: higher-order application
 
-# 11) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
-run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
+# 12) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
+run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/nc-out/main.s
 file-exists: $TMPDIR/nc-out/build.sh
 file-absent: $TMPDIR/nc-out/bin/nc
 run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && ./bin/nc'
 exit: 0
-out-equals: 7
+out-equals: "n7"

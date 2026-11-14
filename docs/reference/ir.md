@@ -189,9 +189,9 @@ D24 的另一半）。IR 之后**后端没有预算**（每个节点一次结构
 - IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状（D-A5）。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。
 - IR 尚未内容寻址（`Canonical.Ir`）：等节点集稳定后再做，避免每次加节点都要迁移哈希。
-- 现在有三个消费者：OCaml（全量参考实现）、wasm M1、native M1。native 只覆盖
-  白名单子集（见 [native.md](native.md)），对未实现的符号在编译期报
-  `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由两条守：
+- 现在有三个消费者：OCaml（全量参考实现）、wasm M1、native M1+M2。native 只覆盖
+  白名单子集（Int/Nat/Bool + String；见 [native.md](native.md)），对未实现的符号在
+  编译期报 `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由两条守：
   `Ir.Runtime` 契约（符号面）+ `checks.ir-boundary`（IR 数据不 import 上游、`Ir/` 里没有目标
   文本、`IrRuntime`/`IrBridge` 不得复活；native 模块只 import IR/Base）。
 - 运行时实现（GC / 字符串 / I/O / 一次性续延）仍只有 OCaml 参考实现；wasm M1 与

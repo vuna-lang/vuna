@@ -132,7 +132,7 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
   [ir.md](docs/reference/ir.md)（擦除后 IR + 运行时契约：Core → IR 的决策划分、`Ir.Runtime`
   符号面与 `checks.ir-boundary`）、
   [wasm.md](docs/reference/wasm.md)（WAT 后端 M1）、
-  [native.md](docs/reference/native.md)（x86-64 汇编后端 M1：切片/ABI/栈帧/运行时符号）、
+  [native.md](docs/reference/native.md)（x86-64 汇编后端 M1+M2：切片/ABI/栈帧/字符串与 bump 堆/运行时符号）、
   [diagnostics.md](docs/reference/diagnostics.md)（诊断模型/错误码/渲染/LSP/迁移状态）、
   [core.md](docs/reference/core.md)（Core TT / NbE / 精化器）；
   缓存与增量判定：[cache.md](docs/reference/cache.md)（输入寻址对象、命中判据、roots 与 GC）

@@ -1,10 +1,13 @@
 module Vuna.Compiler.Native.Model where
 
--- Vuna.Compiler.Native.Model：native 后端的汇编数据模型（M1）。
+-- Vuna.Compiler.Native.Model：native 后端的汇编数据模型（M2）。
 --
 -- 产物是 canonical 的 Intel 语法汇编 `main.s`；本模块只描述程序结构，渲染在
--- `Native.Render`，IR -> 程序在 `Native.Module`。M1 只覆盖 x86-64 Linux 的一个
--- 最小切片（Int/Nat/Bool、let/if、顶层饱和函数、Nat case、入口打印）。
+-- `Native.Render`，IR -> 程序在 `Native.Module`。M1 覆盖 Int/Nat/Bool 的纯切片；
+-- M2 加入**字符串**（堆对象 = 长度头 + 字节）与最小 bump 堆，因此模型里有：
+--   * `.bss` 段（堆缓冲 + 堆指针）；
+--   * 带长度头的只读字符串字面量（`NativeStrLit`）；
+--   * 字节级读写、`rep movsb` / `repe cmpsb` 与 `[rip + label]` 操作数。
 --
 -- 边界：本模块只 import Base；不 import Core/Elab/Intrinsics/Codegen（由
 -- `checks.ir-boundary` 的 native 规则守护）。
@@ -27,7 +30,7 @@ nativeErrText (NativeInternal msg) = "internal native backend error: " ++ msg
 -- ---------------------------------------------------------------
 -- 寄存器与操作数
 -- ---------------------------------------------------------------
--- | x86-64 通用寄存器（M1 只需要这些；callee-saved 的 rbx/r12-r15 不使用）。
+-- | x86-64 通用寄存器（只需要这些；callee-saved 的 rbx/r12-r15 不使用）。
 export data Reg(..) : Type where
   Rax : Reg
   Rcx : Reg
@@ -68,22 +71,29 @@ reg8Text R9 = "r9b"
 reg8Text R10 = "r10b"
 reg8Text R11 = "r11b"
 
--- | 操作数：寄存器 / 立即数 / `[base + off]`（off 可为负）。
+-- | 操作数：寄存器 / 立即数 / `[base + off]` / `[base + index + off]`（scale 1）/
+-- `[rip + label]`。`off` 可为负；索引只用于字节访问（字符串数据）。
 export data Operand(..) : Type where
   OpReg : Reg -> Operand
   OpImm : Int -> Operand
   OpMem : Reg -> Int -> Operand
+  OpMemX : Reg -> Reg -> Int -> Operand
+  OpRip : String -> Operand
 
 -- ---------------------------------------------------------------
 -- 指令
 -- ---------------------------------------------------------------
 -- | M1 的指令面。所有二元运算的「左/目标」由构造子决定；`IBin` 固定以 rax 为目标，
--- `IBinReg` 显式给目标寄存器。
+-- `IBinReg` 显式给目标寄存器。M2 追加字节读写、`rep movsb` / `repe cmpsb`。
 export data Instr(..) : Type where
   -- | `mov dst, src`（dst 是内存时渲染 `qword ptr`）。
   IMov : Operand -> Operand -> Instr
-  -- | `mov byte ptr [base + off], src8`。
-  IMovByte : Reg -> Int -> Reg -> Instr
+  -- | `mov byte ptr <op>, imm8`（字符串缓冲写入）。
+  IMovByteOp : Operand -> Int -> Instr
+  -- | `mov byte ptr <op>, r8`（字符串缓冲写入）。
+  IMovByteRegOp : Operand -> Reg -> Instr
+  -- | `movzx dst, byte ptr <op>`（读字符串字节）。
+  IMovzx : Reg -> Operand -> Instr
   -- | `movzx rax, al`（`setcc` 之后把 Bool 变成 0/1）。
   IMovzxAl : Instr
   -- | `lea reg, [rip + label]`（只读数据）。
@@ -108,6 +118,10 @@ export data Instr(..) : Type where
   IDiv : Reg -> Instr
   -- | `div reg`（无符号）。
   IDivUnsigned : Reg -> Instr
+  -- | `rep movsb`（rdi=目的、rsi=源、rcx=字节数）。
+  IRepMovsb : Instr
+  -- | `repe cmpsb`（rdi/rsi 为两段字节，rcx=字节数；相等时 ZF=1）。
+  IRepeCmpsb : Instr
   -- | 标签定义。
   ILabel : String -> Instr
   -- | `jmp label`。
@@ -135,15 +149,30 @@ export record NativeFunc(..) where
   nfFrame : Int
   nfBody : List Instr
 
--- | 只读数据：标签 + 原始字节（M1 只有 ASCII）。
+-- | 只读数据：标签 + 原始文本（无长度头；M2 只用于运行时常量）。
 export record NativeRodata(..) where
   nrLabel : String
   nrText : String
+
+-- | 字符串字面量：标签 + 字节（`.quad <len>` 头 + `.ascii` 体）。运行时值是
+-- **指向长度头的指针**，数据紧跟在头之后（8 字节处）。
+export record NativeStrLit(..) where
+  nsLabel : String
+  nsText : String
+
+-- | `.bss` 条目：标签 + 字节数 + 对齐（0 表示不写 `.align`；堆缓冲与堆指针；
+-- 零填充，不占文件体积）。
+export record NativeBss(..) where
+  nbLabel : String
+  nbSize : Int
+  nbAlign : Int
 
 -- | 一个 native 程序（渲染前的结构）。
 --   `npFuncs` 的顺序固定：runtime 函数 → 用户函数（按生成顺序）→ `_start`。
 export record NativeProgram(..) where
   npRodata : List NativeRodata
+  npStrLits : List NativeStrLit
+  npBss : List NativeBss
   npFuncs : List NativeFunc
 
 export data NativeOutcome(..) : Type where

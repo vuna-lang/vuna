@@ -1,15 +1,20 @@
 module Vuna.Compiler.Native.Runtime where
 
--- Vuna.Compiler.Native.Runtime：M1 的运行时函数（汇编模板）+ IR 符号映射。
+-- Vuna.Compiler.Native.Runtime：native 运行时函数（汇编模板）+ IR 符号映射（M2）。
 --
--- 运行时按 `Ir.Runtime` 契约的符号名实现；M1 只覆盖纯子集，白名单之外的符号由
--- `Native.Module` 拒绝（编译期 `NativeUnsupported`），不做「trap 兜底」。
+-- 运行时按 `Ir.Runtime` 契约的符号名实现；白名单之外的符号由 `Native.Module` 拒绝
+-- （编译期 `NativeUnsupported`），不做「trap 兜底」。
 --
--- 语义参考实现是 `Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dt_show_*` 模板：
+-- 语义参考实现是 `Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板：
 --   * Int/Nat 是 63-bit 有符号；`+ - *` wrap，`/` 向零截断、除零 exit 2；
 --   * Bool 是 0/1；`&&`/`||` 的短路由 `Native.Module` 生成控制流，不在运行时；
 --   * Nat 的加法/乘法饱和到 max_int，减法下溢到 0；
---   * 入口打印格式与 OCaml 的 `print_endline (show main)` 一致。
+--   * String 是**指向长度头的指针**（`[p]` = 字节数，字节从 `p+8` 起），不可变，
+--     所有构造都从 bump 堆分配新对象；堆耗尽 trap `out of memory`、exit 2；
+--   * 入口打印格式与 OCaml 的 `print_endline (show main)` 一致（String 走 `show`，
+--     即带引号与转义的调试形态）。
+--
+-- M2 不做 GC/RC：字符串只增不减，堆是 `.bss` 里的固定缓冲 + bump 指针（1 MiB）。
 --
 -- 边界：只 import Base 与 `Native.{Model,Abi}`。
 import Base.Bool
@@ -31,27 +36,49 @@ nativeMaxInt = 4611686018427387903
 divZeroMessage : String
 divZeroMessage = "vuna: runtime error: division by zero\n"
 
+oomMessage : String
+oomMessage = "vuna: runtime error: out of memory\n"
+
 export nativeRodata : List NativeRodata
 nativeRodata =
   [ NativeRodata (nativeDataLabel "true") "True",
     NativeRodata (nativeDataLabel "false") "False",
     NativeRodata (nativeDataLabel "nl") "\n",
-    NativeRodata (nativeDataLabel "divzero") divZeroMessage
+    NativeRodata (nativeDataLabel "divzero") divZeroMessage,
+    NativeRodata (nativeDataLabel "oom") oomMessage
+  ]
+
+-- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
+export nativeBss : List NativeBss
+nativeBss =
+  [ NativeBss nativeHeapLabel nativeHeapBytes 16,
+    NativeBss nativeHeapEndLabel 0 0,
+    NativeBss nativeHeapPtrLabel 8 8
   ]
 
 -- ---------------------------------------------------------------
 -- 构架 helper
 -- ---------------------------------------------------------------
+-- | 有 prologue/epilogue 的运行时函数：**单出口**。函数体里出现的 `IRet` 由这里统一
+--   改写成跳到函数尾标签（`mov rsp, rbp; pop rbp; ret`），避免"带栈帧的函数提前 ret"
+--   把 rsp 留在 frame 内（那会让我们在返回地址上崩）。手写分支里的 `IRet` 因此可放心写。
 rtFunc : String -> Int -> List Instr -> NativeFunc
 rtFunc name frame body =
-  NativeFunc (nativeRtLabel name) frame (append (nativePrologue frame) (append body nativeEpilogue))
+  let
+    endLabel = "${nativeRtLabel name}_end"
+  in NativeFunc (nativeRtLabel name) frame
+    (append (nativePrologue frame) (append (mapRetTo endLabel body) (append [ILabel endLabel] nativeEpilogue)))
 
--- | 直接以 ret 结束、无 prologue 的入口/陷阱。
+-- | 把体内 `IRet` 改写成跳到 `endLabel`（单出口）。
+mapRetTo : String -> List Instr -> List Instr
+mapRetTo label [] = []
+mapRetTo label (i :: rest) = case i of
+  IRet => IJmp label :: mapRetTo label rest
+  _ => i :: mapRetTo label rest
+
+-- | 直接以 ret/exit 结束、无 prologue 的入口/陷阱。
 rtRawFunc : String -> List Instr -> NativeFunc
 rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body
-
-retInt : List Instr
-retInt = [IRet]
 
 -- | 二元 Int 运算：wrap 回 63-bit。
 intBinary : String -> String -> NativeFunc
@@ -74,22 +101,6 @@ divFn : NativeFunc
 divFn =
   rtFunc "div" 0
     [ITest Rsi Rsi, IJcc "jne" ".Lrt_div_ok", ICall (nativeRtLabel "trap_divzero"), ILabel ".Lrt_div_ok", IMov (OpReg Rax) (OpReg Rdi), ICqo, IDiv Rsi, IBin "shl" (OpImm 1), IBin "sar" (OpImm 1)]
-
-bitNotFn : NativeFunc
-bitNotFn =
-  rtFunc "bit_not" 0
-    [IMov (OpReg Rax) (OpReg Rdi), INeg Rax, IBin "sub" (OpImm 1), IBin "shl" (OpImm 1), IBin "sar" (OpImm 1)]
-
-bitShlFn : NativeFunc
-bitShlFn =
-  rtFunc "bit_shl" 0
-    [ITest Rsi Rsi, IJcc "js" ".Lrt_shl_zero", ICmp (OpReg Rsi) (OpImm 63), IJcc "jge" ".Lrt_shl_zero", IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "shl" Rax (OpReg Rcx), IBin "shl" (OpImm 1), IBin "sar" (OpImm 1), IRet, ILabel ".Lrt_shl_zero", IMov (OpReg Rax) (OpImm 0)]
-
-bitShrFn : NativeFunc
--- 先把 63-bit 值扩成无符号：shl 1 把符号位移出，shr 1 补 0。
-bitShrFn =
-  rtFunc "bit_shr" 0
-    [ITest Rsi Rsi, IJcc "js" ".Lrt_shr_zero", ICmp (OpReg Rsi) (OpImm 63), IJcc "jge" ".Lrt_shr_zero", IMov (OpReg Rax) (OpReg Rdi), IBin "shl" (OpImm 1), IBin "shr" (OpImm 1), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "shr" Rax (OpReg Rcx), IRet, ILabel ".Lrt_shr_zero", IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
 -- Nat 运算（饱和/夹取，照抄 OCaml 模板）
@@ -125,24 +136,97 @@ natSuccFn =
     [IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg R11) (OpImm nativeMaxInt), ICmp (OpReg Rax) (OpReg R11), IJcc "jge" ".Lrt_nat_succ_sat", IBin "add" (OpImm 1), IRet, ILabel ".Lrt_nat_succ_sat", IMov (OpReg Rax) (OpReg R11)]
 
 -- ---------------------------------------------------------------
+-- 字符串：堆分配与基本操作
+-- ---------------------------------------------------------------
+-- | `rdi` = 字符串**数据字节数**（不含长度头），返回 `rax` = 新对象起始地址。
+--   分配 = 数据 + 8 字节头；bump 指针超过堆尾则 trap OOM。
+--   只改 rax/rcx/rdx，不改 rdi/rsi。
+strAllocFn : NativeFunc
+strAllocFn =
+  rtRawFunc "str_alloc"
+    [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg Rdi), IBinReg "add" Rcx (OpImm nativeStrHeaderBytes), ILea Rdx nativeHeapEndLabel, ICmp (OpReg Rcx) (OpReg Rdx), IJcc "ja" (nativeRtLabel "trap_oom"), IMov (OpRip nativeHeapPtrLabel) (OpReg Rcx), IRet]
+
+-- | `rdi` = 字符串 -> rax = 字节数。
+strLengthFn : NativeFunc
+strLengthFn = rtFunc "str_length" 0 [IMov (OpReg Rax) (OpMem Rdi 0)]
+
+-- | `++`：rdi/rsi = 两个字符串 -> rax = 新字符串。
+strConcatFn : NativeFunc
+strConcatFn =
+  rtFunc "str_concat" 32
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpMem Rbp (0 - 16)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), IBin "add" (OpMem Rsi 0), IMov (OpMem Rbp (0 - 24)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (0 - 24)), IMov (OpMem R11 0) (OpReg Rax), ILeaMem Rdi R11 8, IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rsi (0 - 8)), IRepMovsb, IMov (OpReg Rsi) (OpMem Rbp (0 - 16)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rsi (0 - 8)), IRepMovsb, IMov (OpReg Rax) (OpReg R11), IRet]
+
+-- | `==`：rdi/rsi = 两个字符串 -> rax = 0/1。
+strEqFn : NativeFunc
+strEqFn =
+  rtFunc "str_eq" 0
+    [IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpMem Rsi 0), IJcc "jne" ".Lrt_seq_false", IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ITest Rcx Rcx, IJcc "jz" ".Lrt_seq_true", IRepeCmpsb, IJcc "je" ".Lrt_seq_true", IJmp ".Lrt_seq_false", ILabel ".Lrt_seq_true", IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_seq_false", IMov (OpReg Rax) (OpImm 0), IRet]
+
+-- | `!=`：`str_eq` 的结果取反。
+strNeqFn : NativeFunc
+strNeqFn = rtFunc "str_neq" 0 [ICall (nativeRtLabel "str_eq"), IBin "xor" (OpImm 1), IRet]
+
+-- | `strFromInt`：rdi = Int -> rax = 十进制字符串（含负号）。
+strFromIntFn : NativeFunc
+strFromIntFn =
+  rtFunc "str_from_int" 32
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg R9) (OpImm 0), ITest Rax Rax, IJcc "jns" ".Lrt_fi_pos", INeg Rax, IMov (OpReg R9) (OpImm 1), ILabel ".Lrt_fi_pos", IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rcx) (OpImm 1), IMov (OpReg R10) (OpImm 10), ILabel ".Lrt_fi_count", ICmp (OpReg Rax) (OpReg R10), IJcc "jb" ".Lrt_fi_count_done", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "add" Rcx (OpImm 1), IJmp ".Lrt_fi_count", ILabel ".Lrt_fi_count_done", IMov (OpReg Rax) (OpReg Rcx), ITest R9 R9, IJcc "jz" ".Lrt_fi_len_ok", IBin "add" (OpImm 1), ILabel ".Lrt_fi_len_ok", IMov (OpMem Rbp (0 - 24)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (0 - 24)), IMov (OpMem R11 0) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (0 - 16)), ILeaMem Rdi R11 8, IBinReg "add" Rdi (OpMem Rbp (0 - 24)), IMov (OpReg R10) (OpImm 10), ILabel ".Lrt_fi_fill", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "sub" Rdi (OpImm 1), IBinReg "add" Rdx (OpImm 48), IMovByteRegOp (OpMem Rdi 0) Rdx, ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_fi_fill", ITest R9 R9, IJcc "jz" ".Lrt_fi_done", IBinReg "sub" Rdi (OpImm 1), IMovByteOp (OpMem Rdi 0) 45, ILabel ".Lrt_fi_done", IMov (OpReg Rax) (OpReg R11), IRet]
+
+-- | `strAt`：rdi = 字符串、rsi = 下标 -> rax = 字节值，越界 -1（与 `dtp_strAt` 一致）。
+strAtFn : NativeFunc
+strAtFn =
+  rtFunc "str_at" 0
+    [ICmp (OpReg Rsi) (OpImm 0), IJcc "jl" ".Lrt_sat_neg", ICmp (OpReg Rsi) (OpMem Rdi 0), IJcc "jge" ".Lrt_sat_neg", ILeaMem Rdx Rdi 8, IBinReg "add" Rdx (OpReg Rsi), IMovzx Rax (OpMem Rdx 0), IRet, ILabel ".Lrt_sat_neg", IMov (OpReg Rax) (OpImm (0 - 1)), IRet]
+
+-- | `strSubstring start len s`（rdi=start、rsi=len、rdx=s）：夹取到 `[0, n]`。
+strSubstringFn : NativeFunc
+strSubstringFn =
+  rtFunc "str_substring" 32
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rdx 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rax) (OpReg Rdi), ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_ssub_st_hi", IMov (OpReg Rax) (OpImm 0), ILabel ".Lrt_ssub_st_hi", ICmp (OpReg Rax) (OpMem Rbp (0 - 16)), IJcc "jle" ".Lrt_ssub_st_ok", IMov (OpReg Rax) (OpMem Rbp (0 - 16)), ILabel ".Lrt_ssub_st_ok", IMov (OpMem Rbp (0 - 24)) (OpReg Rax), IMov (OpReg Rax) (OpReg Rsi), ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_ssub_ln_hi", IMov (OpReg Rax) (OpImm 0), ILabel ".Lrt_ssub_ln_hi", IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), IBinReg "sub" Rcx (OpMem Rbp (0 - 24)), ICmp (OpReg Rax) (OpReg Rcx), IJcc "jle" ".Lrt_ssub_ln_ok", IMov (OpReg Rax) (OpReg Rcx), ILabel ".Lrt_ssub_ln_ok", IMov (OpMem Rbp (0 - 32)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (0 - 32)), IMov (OpMem R11 0) (OpReg Rdx), ILeaMem Rdi R11 8, IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpMem Rbp (0 - 24)), IMov (OpReg Rcx) (OpMem Rbp (0 - 32)), IRepMovsb, IMov (OpReg Rax) (OpReg R11), IRet]
+
+-- | `strHash`：`((h * 33) + c) land 1023`（与 `dtp_strHash` 一致）。
+strHashFn : NativeFunc
+strHashFn =
+  rtFunc "str_hash" 0
+    [IMov (OpReg R8) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg R9) (OpImm 0), ILabel ".Lrt_hash_loop", ITest R8 R8, IJcc "jz" ".Lrt_hash_done", IMovzx Rax (OpMem Rsi 0), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" R8 (OpImm 1), IMov (OpReg Rcx) (OpImm 33), IBinReg "imul" Rcx (OpReg R9), IBinReg "add" Rcx (OpReg Rax), IBinReg "and" Rcx (OpImm 1023), IMov (OpReg R9) (OpReg Rcx), IJmp ".Lrt_hash_loop", ILabel ".Lrt_hash_done", IMov (OpReg Rax) (OpReg R9), IRet]
+
+-- | `strShow`：rdi = 字符串 -> rax = 带引号、按 `dt_show_string` 转义的新字符串。
+--   分配上界 = 2*n + 8（头）+ 2（引号）；填完再回填实际长度。
+strShowFn : NativeFunc
+strShowFn =
+  rtFunc "show_str" 32
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), IBinReg "add" Rdi (OpReg Rax), IBinReg "add" Rdi (OpImm 10), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), ILeaMem R8 R11 8, IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), ILabel ".Lrt_ss_loop", ITest Rcx Rcx, IJcc "jz" ".Lrt_ss_end", IMovzx Rax (OpMem Rsi 0), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), ICmp (OpReg Rax) (OpImm 34), IJcc "je" ".Lrt_ss_quote", ICmp (OpReg Rax) (OpImm 92), IJcc "je" ".Lrt_ss_bslash", ICmp (OpReg Rax) (OpImm 10), IJcc "je" ".Lrt_ss_nl", ICmp (OpReg Rax) (OpImm 9), IJcc "je" ".Lrt_ss_tab", ICmp (OpReg Rax) (OpImm 13), IJcc "je" ".Lrt_ss_cr", IMovByteRegOp (OpMem R8 0) Rax, IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_quote", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 34, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_bslash", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 92, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_nl", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 110, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_tab", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 116, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_cr", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 114, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_end", IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), ILeaMem Rax R11 8, IMov (OpReg Rdx) (OpReg R8), IBinReg "sub" Rdx (OpReg Rax), IMov (OpMem R11 0) (OpReg Rdx), IMov (OpReg Rax) (OpReg R11), IRet]
+
+-- ---------------------------------------------------------------
 -- 入口打印
 -- ---------------------------------------------------------------
 -- | 十进制打印 rdi（含负号）+ 换行。缓冲在 rbp-64..rbp-1。
 printIntFn : NativeFunc
 printIntFn =
   rtFunc "print_int" 64
-    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpImm 0), ITest R8 R8, IJcc "jns" ".Lrt_pi_pos", INeg R8, IMov (OpReg R9) (OpImm 1), ILabel ".Lrt_pi_pos", IMov (OpReg Rcx) (OpReg Rbp), IMov (OpReg Rax) (OpReg R8), IMov (OpReg R10) (OpImm 10), ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 48), IMovByte Rcx 0 Rdx, IJmp ".Lrt_pi_sign", ILabel ".Lrt_pi_loop", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "add" Rdx (OpImm 48), IBinReg "sub" Rcx (OpImm 1), IMovByte Rcx 0 Rdx, ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", ILabel ".Lrt_pi_sign", ITest R9 R9, IJcc "jz" ".Lrt_pi_write", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 45), IMovByte Rcx 0 Rdx, ILabel ".Lrt_pi_write", ILeaMem Rdx Rbp 0, IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rsi) (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall]
+    [IMov (OpReg R8) (OpReg Rdi), IMov (OpReg R9) (OpImm 0), ITest R8 R8, IJcc "jns" ".Lrt_pi_pos", INeg R8, IMov (OpReg R9) (OpImm 1), ILabel ".Lrt_pi_pos", IMov (OpReg Rcx) (OpReg Rbp), IMov (OpReg Rax) (OpReg R8), IMov (OpReg R10) (OpImm 10), ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 48), IMovByteRegOp (OpMem Rcx 0) Rdx, IJmp ".Lrt_pi_sign", ILabel ".Lrt_pi_loop", IBinReg "xor" Rdx (OpReg Rdx), IDivUnsigned R10, IBinReg "add" Rdx (OpImm 48), IBinReg "sub" Rcx (OpImm 1), IMovByteRegOp (OpMem Rcx 0) Rdx, ITest Rax Rax, IJcc "jne" ".Lrt_pi_loop", ILabel ".Lrt_pi_sign", ITest R9 R9, IJcc "jz" ".Lrt_pi_write", IBinReg "sub" Rcx (OpImm 1), IMov (OpReg Rdx) (OpImm 45), IMovByteRegOp (OpMem Rcx 0) Rdx, ILabel ".Lrt_pi_write", ILeaMem Rdx Rbp 0, IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rsi) (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
 -- | 打印 rdi 为 True/False + 换行。
 printBoolFn : NativeFunc
 printBoolFn =
   rtFunc "print_bool" 0
-    [ILea Rsi (nativeDataLabel "false"), IMov (OpReg Rdx) (OpImm (strLength "False")), ITest Rdi Rdi, IJcc "jz" ".Lrt_pb_write", ILea Rsi (nativeDataLabel "true"), IMov (OpReg Rdx) (OpImm (strLength "True")), ILabel ".Lrt_pb_write", IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall]
+    [ILea Rsi (nativeDataLabel "false"), IMov (OpReg Rdx) (OpImm (strLength "False")), ITest Rdi Rdi, IJcc "jz" ".Lrt_pb_write", ILea Rsi (nativeDataLabel "true"), IMov (OpReg Rdx) (OpImm (strLength "True")), ILabel ".Lrt_pb_write", IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
+
+-- | 打印 rdi 为 String（原样字节）+ 换行。
+printStrFn : NativeFunc
+printStrFn =
+  rtFunc "print_str" 0
+    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rax) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
 trapDivZeroFn : NativeFunc
 trapDivZeroFn =
   rtRawFunc "trap_divzero"
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "divzero"), IMov (OpReg Rdx) (OpImm (strLength divZeroMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
+trapOomFn : NativeFunc
+trapOomFn =
+  rtRawFunc "trap_oom"
+    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "oom"), IMov (OpReg Rdx) (OpImm (strLength oomMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 -- ---------------------------------------------------------------
 -- 函数表与 IR 符号映射
@@ -153,12 +237,6 @@ nativeRtFuncs =
     intBinary "sub" "sub",
     intBinary "mul" "imul",
     divFn,
-    intBinary "bit_and" "and",
-    intBinary "bit_or" "or",
-    intBinary "bit_xor" "xor",
-    bitNotFn,
-    bitShlFn,
-    bitShrFn,
     intCompare "eq_int" "sete",
     intCompare "neq_int" "setne",
     intCompare "lt_int" "setl",
@@ -172,24 +250,45 @@ nativeRtFuncs =
     natToIntFn,
     natFromIntFn,
     natSuccFn,
+    strAllocFn,
+    strLengthFn,
+    strConcatFn,
+    strEqFn,
+    strNeqFn,
+    strFromIntFn,
+    strAtFn,
+    strSubstringFn,
+    strHashFn,
+    strShowFn,
     printIntFn,
     printBoolFn,
-    trapDivZeroFn
+    printStrFn,
+    trapDivZeroFn,
+    trapOomFn
   ]
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
---   `&&` / `||` 由 Module 生成短路控制流；`@ir@natSucc` 由 Module 特化。
+--   `&&` / `||` 由 Module 生成短路控制流；`@ir@natSucc` 与入口 show 由 Module 特化。
 export nativeRtTarget : String -> Maybe String
 nativeRtTarget "+" = Just (nativeRtLabel "add")
 nativeRtTarget "-" = Just (nativeRtLabel "sub")
 nativeRtTarget "*" = Just (nativeRtLabel "mul")
 nativeRtTarget "/" = Just (nativeRtLabel "div")
+nativeRtTarget "++" = Just (nativeRtLabel "str_concat")
 nativeRtTarget "bi_eq_int" = Just (nativeRtLabel "eq_int")
 nativeRtTarget "bi_neq_int" = Just (nativeRtLabel "neq_int")
 nativeRtTarget "bi_lt_int" = Just (nativeRtLabel "lt_int")
 nativeRtTarget "bi_le_int" = Just (nativeRtLabel "le_int")
 nativeRtTarget "bi_gt_int" = Just (nativeRtLabel "gt_int")
 nativeRtTarget "bi_ge_int" = Just (nativeRtLabel "ge_int")
+nativeRtTarget "bi_eq_str" = Just (nativeRtLabel "str_eq")
+nativeRtTarget "bi_neq_str" = Just (nativeRtLabel "str_neq")
+nativeRtTarget "strFromInt" = Just (nativeRtLabel "str_from_int")
+nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
+nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")
+nativeRtTarget "strSubstring" = Just (nativeRtLabel "str_substring")
+nativeRtTarget "strHash" = Just (nativeRtLabel "str_hash")
+nativeRtTarget "strShow" = Just (nativeRtLabel "show_str")
 nativeRtTarget "natAdd" = Just (nativeRtLabel "nat_add")
 nativeRtTarget "natSub" = Just (nativeRtLabel "nat_sub")
 nativeRtTarget "natMul" = Just (nativeRtLabel "nat_mul")
@@ -197,3 +296,16 @@ nativeRtTarget "natDiv" = Just (nativeRtLabel "nat_div")
 nativeRtTarget "natToInt" = Just (nativeRtLabel "nat_to_int")
 nativeRtTarget "natFromInt" = Just (nativeRtLabel "nat_from_int")
 nativeRtTarget _ = Nothing
+
+-- | 以**运行时值**（非 `IrRtApp`）出现的符号的 arity（`irInlineArity` 为 0 的那些）。
+--   `IrApp (IrRt sym) args` 只有饱和到这个 arity 才生成调用；部分应用仍拒绝。
+export nativeRtValueArity : String -> Int
+nativeRtValueArity "strFromInt" = 1
+nativeRtValueArity "strLength" = 1
+nativeRtValueArity "strHash" = 1
+nativeRtValueArity "strShow" = 1
+nativeRtValueArity "strAt" = 2
+nativeRtValueArity "strSubstring" = 3
+nativeRtValueArity "bi_eq_str" = 2
+nativeRtValueArity "bi_neq_str" = 2
+nativeRtValueArity _ = 0

@@ -1,16 +1,18 @@
 module Vuna.Compiler.Native.Module where
 
--- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M1）。
+-- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M2）。
 --
--- M1 最小切片：`main` 为 Int/Nat/Bool 值，支持 let / if / 内建饱和应用 / 顶层
--- 饱和函数调用 / `IrNatCase`（Nat 的结构递归）/ 入口打印。其它构造在编译期拒绝
--- （`NativeUnsupported`）。
+-- M2 切片：M1 的 Int/Nat/Bool 纯值 + `String`（字面量、`++`、`strFromInt`、`strLength`、
+-- `strAt`、`strHash`、`strShow`、`strSubstring`、`bi_eq_str` / `bi_neq_str`、`IrConcatMany`、
+-- String 入口）。字符串是**指向长度头的指针**，由运行时从 bump 堆分配。
 --
 -- 生成策略（见 docs/reference/native.md）：
 --   * 从 entry main 沿 `irDefDeps` 收集可达定义，只生成可达函数；不可达的 base
 --     定义不检查（与 wasm M1 的 `collectNeeded` 同策略）；
 --   * 不做寄存器分配：binder 与中间值都走 `[rbp - 8*(slot+1)]`；
 --   * 调用约定在 `Native.Abi`；运行时符号在 `Native.Runtime`；
+--   * 字符串字面量按**内容去重**进 `.rodata`（首现顺序编号），`IrStr` 求值成 `lea`；
+--   * 内部 label 全程序唯一（编号跨定义累加；M1 每函数从 0 起，会让两个函数撞名）；
 --   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
 --
 -- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。
@@ -27,7 +29,7 @@ import Vuna.Compiler.Native.Runtime
 
 -- ---------------------------------------------------------------
 -- 结果类型：区分「目标不支持」与「生成器不变式破坏」
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 export data NRes a(..) : Type where
   NOk : a -> NRes a
   NFail : NativeErr -> NRes a
@@ -44,9 +46,10 @@ internal msg = NFail (NativeInternal msg)
 
 -- ---------------------------------------------------------------
 -- 生成状态与栈槽
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 record FGen where
   fgDefs : List IrDef
+  fgPool : List (Pair String String)
   fgSlots : List (Pair IrBinder Int)
   fgNextSlot : Int
   fgNextLabel : Int
@@ -76,7 +79,7 @@ loadReg r slot = [IMov (OpReg r) (OpMem Rbp (nativeSlotOff slot))]
 
 -- ---------------------------------------------------------------
 -- binder
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 bNameEq : IrBName -> IrBName -> Bool
 bNameEq (IrBUser x) (IrBUser y) = x == y
 bNameEq (IrBArm x) (IrBArm y) = x == y
@@ -107,7 +110,7 @@ runtimeBinders bs = filter (\b => not (isErasedBinder b)) bs
 
 -- ---------------------------------------------------------------
 -- 定义查找 / 可达性
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 findDef : String -> List IrDef -> Maybe IrDef
 findDef _ [] = Nothing
 findDef name (d :: rest) = if irDefName d == name then Just d else findDef name rest
@@ -126,8 +129,63 @@ else case work of
     Just d => collectNeeded (fuel - 1) (append rest (irDefDeps d)) (n :: seen) defs
 
 -- ---------------------------------------------------------------
--- 参数
+-- 字符串字面量池
+-- -----------------------------------------------------------
+-- | 收集一个 IR 项里的**全部**字符串字面量（含 `IrConcatMany` 的叶子）。
+strLitsOf : Ir -> List String
+strLitsOf (IrStr s) = [s]
+strLitsOf (IrCtor _ _ args) = concatMap strLitsOf args
+strLitsOf (IrRecord _ fields) = concatMap strLitsOfField fields
+strLitsOf (IrProj base _ _) = strLitsOf base
+strLitsOf (IrRecUpd base _ fields) = append (strLitsOf base) (concatMap strLitsOfField fields)
+strLitsOf (IrRtApp _ args) = concatMap strLitsOf args
+strLitsOf (IrCast inner) = strLitsOf inner
+strLitsOf (IrLet _ scrut body) = append (strLitsOf scrut) (strLitsOf body)
+strLitsOf (IrLam _ body) = strLitsOf body
+strLitsOf (IrApp f a) = append (strLitsOf f) (strLitsOf a)
+strLitsOf (IrIf c t e) = append (strLitsOf c) (append (strLitsOf t) (strLitsOf e))
+strLitsOf (IrCase scrut alts) = append (strLitsOf scrut) (concatMap strLitsOfAlt alts)
+strLitsOf (IrNatCase scrut _ z s c) =
+  append (strLitsOf scrut)
+    (append (strLitsOfAltMaybe z) (append (strLitsOfAltMaybe s) (strLitsOfAltMaybe c)))
+strLitsOf (IrConcatMany parts) = concatMap strLitsOf parts
+strLitsOf (IrEffThunk _ _ _ _ prim) = strLitsOf prim
+strLitsOf _ = []
+
+strLitsOfField : Pair String Ir -> List String
+strLitsOfField p = strLitsOf (secondOf p)
+
+strLitsOfAlt : IrAlt -> List String
+strLitsOfAlt alt = strLitsOf (irAltBodyOf alt)
+
+strLitsOfAltMaybe : Maybe IrAlt -> List String
+strLitsOfAltMaybe Nothing = []
+strLitsOfAltMaybe (Just alt) = strLitsOfAlt alt
+
+strLitsOfDef : IrDef -> List String
+strLitsOfDef d = case irDefBody d of
+  Nothing => []
+  Just b => strLitsOf b
+
+addLit : List (Pair String String) -> String -> List (Pair String String)
+addLit pool s =
+  if memStr s (map (\p => firstOf p) pool) then pool
+  else append pool [Pair s (nativeStrLitLabel (length pool))]
+
+poolOfDefs : List IrDef -> List (Pair String String)
+poolOfDefs defs = foldl addLit [] (concatMap strLitsOfDef defs)
+
+poolLabelOf : String -> List (Pair String String) -> Maybe String
+poolLabelOf _ [] = Nothing
+poolLabelOf s (p :: rest) = if firstOf p == s then Just (secondOf p) else poolLabelOf s rest
+
+poolItems : List (Pair String String) -> List NativeStrLit
+poolItems [] = []
+poolItems ((Pair text label) :: rest) = NativeStrLit label text :: poolItems rest
+
 -- ---------------------------------------------------------------
+-- 参数
+-- -----------------------------------------------------------
 loadArgRegs : List Reg -> List Int -> List Instr
 loadArgRegs [] _ = []
 loadArgRegs _ [] = []
@@ -142,7 +200,7 @@ argRegAtIn i (r :: rest) = if i == 0 then Just r else argRegAtIn (i - 1) rest
 
 -- ---------------------------------------------------------------
 -- 表达式
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 genArgs : Int -> FGen -> List Ir -> NRes (Pair (List Instr) (Pair (List Int) FGen))
 genArgs _ st [] = NOk (Pair [] (Pair [] st))
 genArgs fuel st (a :: rest) = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -159,6 +217,16 @@ in NOk (Pair (append (firstOf p) (append (storeSlot slot) qInstrs)) (Pair (slot 
 )
 )
 
+-- | 饱和调用：实参左→右求值到槽，再装入参数寄存器并 `call`。
+genSaturatedCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genSaturatedCall fuel st label args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else if length args > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
+else nbind (genArgs (fuel - 1) st args) (\p => let
+  slots = firstOf (secondOf p)
+  st1 = secondOf (secondOf p)
+in NOk (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall label])) st1)
+)
+
 genGlobalCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
 genGlobalCall fuel st name args = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case findDef name st.fgDefs of
@@ -166,14 +234,8 @@ else case findDef name st.fgDefs of
   Just d =>
     let
       arity = irDefArity d
-    in if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
-    else if length args /= arity then unsupported "native target: partial application is not supported yet"
-    else nbind (genArgs (fuel - 1) st args) (\p => let
-      slots = firstOf (secondOf p)
-      st1 = secondOf (secondOf p)
-    in NOk
-      (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall (nativeFuncLabel name)])) st1)
-    )
+    in if length args /= arity then unsupported "native target: partial application is not supported yet"
+    else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args
 
 genNatSuccCall : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genNatSuccCall fuel st arg =
@@ -188,12 +250,44 @@ else case sym of
   "||" => genBoolChain (fuel - 1) st args False
   _ => case nativeRtTarget sym of
     Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-    Just label => if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}"
-    else nbind (genArgs (fuel - 1) st args) (\p => let
-      slots = firstOf (secondOf p)
-      st1 = secondOf (secondOf p)
-    in NOk (Pair (append (firstOf p) (append (loadArgRegs nativeArgRegs slots) [ICall label])) st1)
-    )
+    Just label =>
+      if length args /= irInlineArity sym then internal "runtime symbol arity mismatch: ${sym}"
+      else genSaturatedCall (fuel - 1) st label args
+
+-- | `IrApp (IrRt sym) args`：运行时常量函数值的饱和应用（`irInlineArity = 0` 的那些）。
+genRtValueCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genRtValueCall fuel st sym args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else
+  let
+    arity = nativeRtValueArity sym
+  in if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
+  else if length args /= arity then unsupported "native target: partial application of runtime functions is not supported yet"
+  else case nativeRtTarget sym of
+    Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
+    Just label => genSaturatedCall (fuel - 1) st label args
+
+-- | `IrConcatMany`：左→右两两拼接（与 OCaml 的 `String.concat ""` 语义一致）。
+--   `parts` 至少 3 项（Lowering 的门槛），空/单元素的兜底只防空指针。
+genConcatMany : Int -> FGen -> List Ir -> NRes (Pair (List Instr) FGen)
+genConcatMany fuel st parts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case parts of
+  [] => internal "empty string concatenation in native codegen"
+  [one] => genExpr (fuel - 1) st one
+  first :: rest => nbind (genExpr (fuel - 1) st first) (\p => let
+    slotP = freshSlot (secondOf p)
+    slot = firstOf slotP
+    st1 = secondOf slotP
+  in nbind (genConcatRest (fuel - 1) st1 slot rest)
+    (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (secondOf q)))
+  )
+
+-- | 累加器在 `slot`；对每个后续片段求值后与累加值拼接，结果回写累加器。
+genConcatRest : Int -> FGen -> Int -> List Ir -> NRes (Pair (List Instr) FGen)
+genConcatRest _ st slot [] = NOk (Pair (loadSlot slot) st)
+genConcatRest fuel st slot (part :: rest) =
+  if fuel <= 0 then internal "native codegen fuel exhausted"
+  else nbind (genExpr (fuel - 1) st part)
+    (\p => nbind (genConcatRest (fuel - 1) (secondOf p) slot rest) (\q => NOk (Pair (append (firstOf p) (append [IMov (OpReg Rsi) (OpReg Rax)] (append (loadReg Rdi slot) (append [ICall (nativeRtLabel "str_concat"), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)] (firstOf q))))) (secondOf q))))
 
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genExpr fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -209,6 +303,9 @@ else case ir of
   IrInt n =>
     if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range"
     else NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
+  IrStr s => case poolLabelOf s st.fgPool of
+    Nothing => internal "string literal missing from native pool"
+    Just label => NOk (Pair [ILea Rax label] st)
   IrBool b => NOk (Pair [IMov (OpReg Rax) (OpImm (if b then 1 else 0))] st)
   IrCast inner => genExpr (fuel - 1) st inner
   IrLet bs scrut body => nbind (genExpr (fuel - 1) st scrut) (\p => let
@@ -244,17 +341,16 @@ else case ir of
   )
   IrApp _ _ => genApp (fuel - 1) st ir
   IrRtApp sym args => genRtApp (fuel - 1) st sym args
+  IrConcatMany parts => genConcatMany (fuel - 1) st parts
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
   IrLam _ _ => unsupported "native target: lambdas are not supported yet"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
-  IrStr _ => unsupported "native target: string literals are not supported yet"
   IrFloatLit _ => unsupported "native target: float literals are not supported yet"
   IrCtor _ _ _ => unsupported "native target: data constructors are not supported yet"
   IrRecord _ _ => unsupported "native target: records are not supported yet"
   IrProj _ _ _ => unsupported "native target: record projection is not supported yet"
   IrRecUpd _ _ _ => unsupported "native target: record update is not supported yet"
   IrCase _ _ => unsupported "native target: case is not supported yet"
-  IrConcatMany _ => unsupported "native target: string concatenation is not supported yet"
   IrEffThunk _ _ _ _ _ => unsupported "native target: effect thunks are not supported yet"
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 
@@ -272,7 +368,7 @@ else case args of
   )
   _ => internal "`&&`/`||` must have exactly two arguments"
 
--- 应用：flatten 左脊，支持饱和顶层调用与 `@ir@natSucc`。
+-- 应用：flatten 左脊，支持饱和顶层调用、`@ir@natSucc`、运行时值函数。
 flattenApp : Ir -> Pair Ir (List Ir)
 flattenApp (IrApp f a) =
   let
@@ -295,20 +391,20 @@ genApp fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case flattenApp ir of
   Pair head args => case head of
     IrGlobal name => genGlobalCall (fuel - 1) st name args
+    IrRt s => if s == irRtNatSucc then case args of
+      [a] => genNatSuccCall (fuel - 1) st a
+      _ => internal "Nat Succ must have exactly one argument"
+    else genRtValueCall (fuel - 1) st s args
     IrLam bs body => case runtimeBinders bs of
       [b] => case args of
         [a] => genLamApp (fuel - 1) st b a body
         _ => unsupported "native target: only saturated single-argument lambdas are supported yet"
       _ => unsupported "native target: lambdas are not supported yet"
-    IrRt s => if s == irRtNatSucc && length args == 1 then case args of
-      [a] => genNatSuccCall (fuel - 1) st a
-      _ => internal "Nat Succ must have exactly one argument"
-    else unsupported "native target: only saturated top-level calls are supported yet"
     _ => unsupported "native target: higher-order application is not supported yet"
 
 -- ---------------------------------------------------------------
 -- Nat case
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 genNatArm : Int -> FGen -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
 genNatArm _ st Nothing _ _ = NOk (Pair [] st)
 genNatArm fuel st (Just alt) mode srcSlot = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -373,7 +469,7 @@ in NOk (Pair body (secondOf s))
 
 -- ---------------------------------------------------------------
 -- 定义
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 bindArgs : List IrBinder -> FGen -> NRes (Pair (List Instr) FGen)
 bindArgs bs st = bindArgsGo bs 0 st
 
@@ -390,17 +486,21 @@ bindArgsGo (b :: rest) i st = case argRegAt i of
     in nbind (bindArgsGo rest (i + 1) (pushBinder b slot st1))
       (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
 
-genDefFunc : List IrDef -> IrDef -> NRes NativeFunc
-genDefFunc _defs (IrExternDef name _ _ _) =
+-- | 生成一个定义；返回函数与该定义之后**全局** label/slot 计数（label 必须跨定义
+--   累加，否则两个函数会撞同名 `.L`）。
+genDefFunc : List IrDef -> List (Pair String String) -> Int -> IrDef -> NRes (Pair NativeFunc Int)
+genDefFunc _defs _pool _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs (IrDef name arity _ body _ _ _) = if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
+genDefFunc defs pool nextLabel (IrDef name arity _ body _ _ _) = if arity > nativeMaxArgs then unsupported "native target: functions with more than 6 arguments are not supported yet"
 else
   let
-    st0 = FGen defs [] 0 0
+    st0 = FGen defs pool [] 0 nextLabel
   in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
-    frame = nativeFrameBytes (secondOf p).fgNextSlot
+    st1 = secondOf p
+    frame = nativeFrameBytes st1.fgNextSlot
     instrs = append (firstOf p) nativeEpilogue
-  in NOk (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs))
+  in NOk
+    (Pair (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)) st1.fgNextLabel)
   )
   else case body of
     IrLam bs inner =>
@@ -408,42 +508,53 @@ else
         rbs = runtimeBinders bs
       in if length rbs /= arity then internal "function body lambda arity mismatch: ${name}"
       else nbind (bindArgs rbs st0) (\bp => nbind (genExpr 100000 (secondOf bp) inner) (\q => let
-        frame = nativeFrameBytes (secondOf q).fgNextSlot
+        st1 = secondOf q
+        frame = nativeFrameBytes st1.fgNextSlot
         instrs = append (firstOf bp) (append (firstOf q) nativeEpilogue)
-      in NOk (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs))
+      in NOk
+        (Pair (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)) st1.fgNextLabel)
       )
       )
     _ => internal "function body is not a lambda: ${name}"
 
-genDefs : List IrDef -> List IrDef -> List NativeFunc -> NRes (List NativeFunc)
-genDefs _all [] acc = NOk (reverse acc)
-genDefs all (d :: rest) acc = nbind (genDefFunc all d) (\f => genDefs all rest (f :: acc))
+genDefs : List IrDef -> List (Pair String String) -> Int -> List IrDef -> List NativeFunc -> NRes (Pair (List NativeFunc) Int)
+genDefs _all _pool next [] acc = NOk (Pair (reverse acc) next)
+genDefs all pool next (d :: rest) acc =
+  nbind (genDefFunc all pool next d) (\p => genDefs all pool (secondOf p) rest (firstOf p :: acc))
 
 -- ---------------------------------------------------------------
 -- 入口
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 entryShowKind : Ir -> Maybe String
 entryShowKind (IrRt s) = case s of
   "@ir@showInt" => Just "int"
   "@ir@showNat" => Just "int"
   "@ir@showBool" => Just "bool"
+  "@ir@showStr" => Just "str"
   _ => Nothing
 entryShowKind _ = Nothing
-
-printLabelOf : String -> String
-printLabelOf kind = if kind == "bool" then nativeRtLabel "print_bool" else nativeRtLabel "print_int"
 
 startFunc : Bool -> String -> String -> NativeFunc
 startFunc printResult kind mainName =
   let
+    initHeap = [ILea Rax nativeHeapLabel, IMov (OpRip nativeHeapPtrLabel) (OpReg Rax)]
     callMain = [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)]
-    printer = if printResult then [IMov (OpReg Rdi) (OpReg Rax), ICall (printLabelOf kind)] else []
+    printer = if printResult then case kind of
+      "bool" => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_bool")]
+      "str" =>
+        [ IMov (OpReg Rdi) (OpReg Rax),
+          ICall (nativeRtLabel "show_str"),
+          IMov (OpReg Rdi) (OpReg Rax),
+          ICall (nativeRtLabel "print_str")
+        ]
+      _ => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_int")]
+    else []
     exitInstrs = [IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 0), ISyscall]
-  in NativeFunc nativeEntryLabel 0 (append callMain (append printer exitInstrs))
+  in NativeFunc nativeEntryLabel 0 (append initHeap (append callMain (append printer exitInstrs)))
 
 -- ---------------------------------------------------------------
 -- 装配
--- ---------------------------------------------------------------
+-- -----------------------------------------------------------
 export build : IrProgram -> Bool -> NativeOutcome
 build program printResult =
   let
@@ -469,10 +580,11 @@ build program printResult =
               let
                 needed = collectNeeded 100000 [mainName] [] defs
                 ordered = filter (\d => memStr (irDefName d) needed) defs
-              in case genDefs defs ordered [] of
+                pool = poolOfDefs ordered
+              in case genDefs defs pool 0 ordered [] of
                 NFail err => NativeRejected err
-                NOk funcs =>
+                NOk pair =>
                   let
                     start = startFunc printResult kind mainName
                   in NativeOk
-                    (NativeProgram nativeRodata (append nativeRtFuncs (append funcs [start])))
+                    (NativeProgram nativeRodata (poolItems pool) nativeBss (append nativeRtFuncs (append (firstOf pair) [start])))

@@ -1,13 +1,19 @@
 module Vuna.Compiler.Native.Abi where
 
--- Vuna.Compiler.Native.Abi：x86-64 SysV 的调用约定、栈帧、稳定命名（M1）。
+-- Vuna.Compiler.Native.Abi：x86-64 SysV 的调用约定、栈帧、字符串对象布局、稳定命名（M2）。
 --
--- M1 的平台契约（见 docs/reference/native.md）：
+-- 平台契约（见 docs/reference/native.md）：
 --   * 参数寄存器按序 rdi, rsi, rdx, rcx, r8, r9；返回 rax；
 --   * 每个函数 `push rbp; mov rbp, rsp; sub rsp, frame`，frame 为 16 的倍数；
 --   * 所有 binder / 中间值走 `[rbp - 8*(slot+1)]`，不做寄存器分配；
 --   * 生成代码只使用 caller-saved 寄存器，不碰 rbx/r12-r15；
 --   * 名字由 Vuna 全限定名派生，转义成 `[A-Za-z0-9_]`，不按位置编号。
+--
+-- M2 值表示：
+--   * `Int` / `Nat` 仍是 63-bit 有符号；
+--   * `String` 值是**指向长度头的指针**：`[ptr]` = 字节数（i64），`[ptr+8 ..]` = 字节；
+--     字符串不可变，所有构造都分配新对象；
+--   * 堆是 `.bss` 里的一段固定缓冲 + 一个 bump 指针（无 GC/RC；耗尽即 trap OOM）。
 --
 -- 边界：只 import Base 与 `Native.Model`。
 import Base.Bool
@@ -21,7 +27,7 @@ import Vuna.Compiler.Native.Model
 export nativeArgRegs : List Reg
 nativeArgRegs = [Rdi, Rsi, Rdx, Rcx, R8, R9]
 
--- | M1 支持的最大 arity（更多参数需要栈传参，留 M2）。
+-- | 支持的最大 arity（更多参数需要栈传参）。
 export nativeMaxArgs : Int
 nativeMaxArgs = 6
 
@@ -35,6 +41,29 @@ nativeFrameBytes slots =
   let
     raw = 8 * slots
   in if raw == 0 then 0 else (raw + 15) / 16 * 16
+
+-- ---------------------------------------------------------------
+-- 字符串对象布局与堆
+-- ---------------------------------------------------------------
+-- | 字符串长度头的大小（字节）；数据紧跟在头之后。
+export nativeStrHeaderBytes : Int
+nativeStrHeaderBytes = 8
+
+-- | bump 堆缓冲大小（1 MiB；`.bss` 零填充，不占 ELF 文件体积）。
+export nativeHeapBytes : Int
+nativeHeapBytes = 1048576
+
+-- | 堆缓冲标签（`.bss`）。
+export nativeHeapLabel : String
+nativeHeapLabel = "rt_heap"
+
+-- | 堆结束标签（`.bss` 里紧跟缓冲；分配时与它比较判 OOM）。
+export nativeHeapEndLabel : String
+nativeHeapEndLabel = "rt_heap_end"
+
+-- | 堆指针槽标签（`.bss` 里的 8 字节；运行时启动时初始化）。
+export nativeHeapPtrLabel : String
+nativeHeapPtrLabel = "rt_heap_ptr"
 
 -- ---------------------------------------------------------------
 -- 函数框架
@@ -74,10 +103,15 @@ nativeRtLabel name = "rt_${nativeName name}"
 export nativeEntryLabel : String
 nativeEntryLabel = "_start"
 
--- | 内部 label：按生成顺序编号（同一 IR 的编号稳定）。
+-- | 内部 label：按生成顺序编号（同一 IR 的编号稳定）。**全程序唯一**：运行时模板
+-- 与用户函数共享同一个编号空间（见 `Native.Module` 里 `_start` 之前的重新编号）。
 export nativeJumpLabel : Int -> String
 nativeJumpLabel n = ".L${strFromInt n}"
 
--- | 只读数据标签。
+-- | 只读数据标签（运行时常量）。
 export nativeDataLabel : String -> String
 nativeDataLabel name = "rt_data_${nativeName name}"
+
+-- | 字符串字面量标签（带长度头）。
+export nativeStrLitLabel : Int -> String
+nativeStrLitLabel n = "rt_lit_${strFromInt n}"
