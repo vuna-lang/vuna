@@ -51,12 +51,14 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    `VUNA_STORE → $XDG_DATA_HOME/vuna/store → ~/.vuna/store → $TMPDIR/vuna-store`）；只读
    HOME/沙箱下会直接 `Sys_error("...objects/lex/....tmp: Read-only file system")`。
    **不要 `unset`、不要传空值**，一律显式给空目录。
-4. **入库的增长率门禁只隔离 `TMPDIR`、复用调用方的 `VUNA_STORE`**：devShell 里本地跑时
-   各档共享热 store（对增长率影响小：冷/热交替 1000/2000/4000 = 205/326/723 vs
-   194/308/730 ms）；但**档内重复**会吃掉首批固定成本（同 store 连跑 N=2000：
-   462 → 313 → 311 ms），"每档 2 次取小"在小档会压低第一档、放大相邻比值。
-   CI 的 `mkCheck` 没有 `VUNA_STORE`、`HOME=/homeless-shelter` ⇒ 落 `$TMPDIR/vuna-store`，
-   每档天然隔离。本地复现 CI 口径：
+4. **入库的增长率门禁现在自己隔离 store，但「探针测的是不是你要守的那条路径」仍要自己验**。
+   `compiler-growth.sh` / `compiler-growth-pkg.sh` 已改为每档 `VUNA_STORE=$(mktemp -d)/store`
+   （2026-11 修复前的版本只隔离 `TMPDIR`，在 devShell 里会复用调用方的热 store）。
+   **更隐蔽的坑**：pkg 门禁原先计时「无改动的第二次 check」——子单元全命中，读数只有
+   ~20 ms 且与 N 全无关（N=1000/2000/4000 都是 20 ms），门槛永远绿但什么也守不住；
+   现在改成「冷跑一次 → **改一行定义**让本模块缓存失效 → 计时」，读数才恢复成随 N 增长
+   （231/435/1115/3116 ms）。**读数与 N 无关就是探针失效的信号，先查它，别急着调阈值。**
+   本地复现 CI 口径：
    ```console
    VUNA=$PWD/result/bin/vuna VUNA_STORE=$(mktemp -d) sh nix/checks/compiler-growth.sh _scratch/out
    ```
@@ -117,8 +119,11 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 （实测 16.0 s / 21.6 s），看不到 load/parse/iface/split；**level 3 的 CPU 采样当前拿不到
 样本**——`dtp_obs_sample_start` 在生成运行时里完整，但仓库内**没有调用点**，实测
 `vuna.sample.cpu` 为 0 条、`summarize` 打 `samples:cpu (none)`。要看阶段顺序就用
-`VUNA_DEBUG_PERF=1`（冷 `check compiler` 约 **37 万行**，其中逐 def ~1.1 万行 ×2 遍），
-它成本远高于 obs level 1，只适合回答「几遍 / 什么顺序」。
+`VUNA_DEBUG_PERF=1`（冷 `check compiler` 修后约 **18.8 万行**，其中逐 def ~1.1 万行 ×1 遍），
+它成本远高于 obs level 1，只适合回答「几遍 / 什么顺序」。判读配方：`dbg!` 行带
+`DEBUG <epoch-us> <text>`，用两行相减得到**无日志开销的净阶段时长**（首行到
+`collectSigs-done` 是 load/parse 前缀、`collectSigs-done`→`bodies-done` 是逐 def 精化）；
+这比 obs 的 `sum%` 近似更接近墙钟。
 
 判据：先算**相邻档时间比 / 规模比**。线性≈1、平方≈规模比、指数≈每档×2 以上。
 
@@ -145,6 +150,13 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
    5. **插入排序**：`Base.Sort.sortBy` 与 `Driver.Iface.insertByText` 都是插入排序（DT 只接受
       结构递归）；单模块数千项才退化（合成 2→4k def 模块 iface `compute` 376→1203 ms），
       真实包每模块几十项时收益低——改前先量折叠点。
+   6. **「集合成员」却用了线性扫描**：`memName x used` / `memList x members` 出现在
+      「对每个元素各查一次」的循环里就是 n²，即使它看着像一次比较。已修两处都属于这类：
+      `Diagnostics.Sink.dedupeWarnings`（`containsDiag` 对新诊断逐个线性扫历史；
+      16000 条未使用告警探针里占 ~3 s）与 `Driver.Dt.warnUnusedDefsGo`（逐 def `memName`
+      查 `used`）。改法统一：入口 `HashMap.ofNames` / 键表**一次建表**，逐项 `member`。
+      **注意键必须与既有等价关系等价**（`dedupeWarnings` 的键 = 码 + 消息 + 严重度 +
+      全部 label 的 span 序列），否则去重结果会变——改完用 `check --warnings` 逐字节对拍。
 5. 聚合用**具名阶段**（哪个函数/哪个 def），不要按 GC/系统时间猜。
 
 ### ③ 小到大验收
@@ -164,9 +176,10 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
   loadavg 15–18 时 512 ms 而 `user+sys` 只 0.29 s ⇒ 多出来的是**等待**）：同一张表只收
   同一窗口的读数，跨窗口先看 `user+sys` 是否漂。
 - 本机参考量级（16 核、单进程、无 debug、空 store、空闲；只判「量级对不对」，跨机不可比）：
-  `check base` 冷 ~0.40 s / 热 ~18 ms；`check compiler` 冷 ~22 s / 热 ~75 ms；
-  `check .` 21 s → 5.9 s → 5.8 s → 57 ms；单文件合成 500/1000/2000/4000/8000 def =
-  163/197/318/735/2230 ms；`map` 冷 2.2–2.5 s / 热 0.16–0.17 s。
+  `check base` 冷 ~0.40 s / 热 ~19 ms；`check compiler` 冷 ~13 s / 热 ~36 ms；
+  `check .` 18 s → 6.1 s → 6.1 s → 57 ms；单文件合成 500/1000/2000/4000/8000 def =
+  154/164/187/254/397 ms；脏模块增量探针 1000/2000/4000/8000 = 231/435/1115/3116 ms；
+  `map` 冷 2.2–2.5 s / 热 0.16–0.17 s。
 - 探针产物一律放 `_scratch/`（gitignored）；`git status` 里出现探针文件就是违反纪律。
 - 测试用 `nix run .#vuna-run-tests -- --only <章节>` 过滤，别为定位跑全量章节。
 - 大包（`compiler`）闭包远大于单模块探针；**不要拿单模块探针的绝对时间推断全包时间**，
@@ -175,6 +188,18 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
   分支 ≥150 触发），**不是**性能结论；别改探针规模「绕开」它。
 - 依赖包接口没落盘时包级探针会退回全量路径（测到的不是增量收尾）：先
   `VUNA_STORE=... vuna check <dep>` 再测。
+- **「同一份工作做两遍」的排查入口**：`iface-skip partial ... missing=<模块列表>` 一眼指出
+  入口闭包少了哪些导出模块（`compiler/app/Main.vuna` 与 `compiler/vuna.toml` 的
+  `[export].modules` 必须全覆盖）；修好后同一处会打印 `iface-write=N/N` +
+  `check-lib-skip covered=M`。包 `[export]` 少模块 ⇒ 永远跑全量（`check app/Main.vuna`
+  实测每轮 27–33 s 不收敛），这是**设计如此**，不是 bug。
+- **签名/告警不变式的验收方式**：这类「只改容器不改语义」的优化，除了增长率表，还要
+  用 `check --warnings` 对比旧/新二进制的**逐字节输出**，以及整仓
+  `build --no-compile` 的 `diff -r`（本轮的四处改动两者都通过）。
+- `nix run .#vuna-run-tests` 默认用**主仓 `.local/store`**（`run-tests.nix` 里
+  `VUNA_STORE=${VUNA_STORE:-$repo/.local/store}`）；副 worktree 里跑它会把主仓的 store
+  路径带进来，容易得出「看起来失败」的读数。要在副 worktree 干净验证就直接
+  `VUNA_STORE=$(mktemp -d) ./result/bin/vuna test --suite test/suite.toml`。
 
 ## 反模式
 
@@ -184,5 +209,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 - **只换 `TMPDIR` 就以为换了冷热**；或不给 `VUNA_STORE` 让 store 落到 `~/.vuna/store`。
 - **跨窗口比 clean vs debug 的墙钟**：负载比开关更响（§0 第 5 条）。
 - 用过期 `./result/bin/vuna` 的自检失败反推「源码坏了」：先重建二进制。
+- **拿「与规模无关」的读数当门槛通过**：探针失效（全命中/走错路径）时每档都一样快，
+  门槛永远绿。先确认读数随 N 增长，再谈阈值（§0 第 4 条）。
 - 用 `head` 截断被测命令输出；拿不同闭包的探针比较绝对值。
 - 把「这次没超时」当修好；超时/没跑完必须明说。
