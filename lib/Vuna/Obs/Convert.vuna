@@ -1,0 +1,334 @@
+module Vuna.Obs.Convert where
+
+-- Vuna.Obs.Convert：`vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE`。
+--
+-- 规范：`docs/reference/observability.md` §7 `convert`、§8 外部生态。输入只有一个
+-- trace（Chrome Trace Event JSONL，schema `vuna-obs 1`），输出按**固定键序**生成，
+-- 无时间戳、无随机数、无绝对路径（元数据里的 `exec` 不进换算产物）：同一输入两次
+-- 转换逐字节一致。
+--
+-- 采样来源只有 `vuna.sample.cpu`（level 3 的 CPU 采样；收集与折叠在 `Vuna.Obs.Flame`）。
+-- `vuna.sample.mem` 描述的是分配栈，语义与 CPU 时间轴不同，因此**不进** cpuprofile /
+-- speedscope / folded 产物（文档 §7 写明）；`--to jsonl` 是自反格式，按文件顺序重写
+-- 全部事件（含采样与元数据），给 merge / 裁剪用。
+--
+-- 帧字符串格式是运行时写出的 `Name@file:line`（`Printexc.Slot.name` / `.location`）：
+-- 第一个 `@` 之前是函数名，之后按最后一个 `:` 拆成文件与行号；拆不出来时
+-- `url=""`、`lineNumber=-1`（CDP 的未知位置约定）。行号 vuna 侧是 1-based，CDP
+-- Profile 是 0-based，因此减 1。
+--
+-- 输出位置：`--out PATH` 时静默（只打印一行 `wrote <path>`，父目录先建）；省略时把
+-- 内容打到 stdout（可被 `>` 重定向）。多行的 folded / jsonl 用一次 `print` 写出，
+-- 避免逐行拼 stdout 的额外拷贝。
+--
+-- 边界：cpu 采样为空是**语义失败**（退出码 1），不是「成功但空文件」。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Flame
+import Vuna.Obs.Read
+import Vuna.Obs.Types
+
+-- ---------------------------------------------------------------
+-- 选项
+-- ---------------------------------------------------------------
+record ConvertOpts where
+  convertFormat : String
+  convertOut : Maybe String
+
+convertOptsOf : Parsed -> Check ConvertOpts
+convertOptsOf parsed = do
+  fmt <- formatOf parsed
+  out <- outOf parsed
+  pure (ConvertOpts fmt out)
+
+formatOf : Parsed -> Check String
+formatOf parsed = case flagValue parsed "to" of
+  Nothing => err "missing required flag `--to` (cpuprofile | speedscope | folded | jsonl)"
+  Just text =>
+    if isConvertFormat text then OkC text
+    else err "unknown `--to` format `${text}` (expected cpuprofile, speedscope, folded or jsonl)"
+
+isConvertFormat : String -> Bool
+isConvertFormat text =
+  text == "cpuprofile" || text == "speedscope" || text == "folded" || text == "jsonl"
+
+outOf : Parsed -> Check (Maybe String)
+outOf parsed = case flagValue parsed "out" of
+  Nothing => OkC Nothing
+  Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+-- | `vuna obs convert` 的入口：解析 `--to` / `--out` 与单个 TRACE。
+-- 用法/读盘错误退出码 2，无 cpu 采样退出码 1。
+export runObsConvert : List String -> Eff hostRow Int
+runObsConvert args = case parseToolArgs "vuna obs convert" [ValueFlag "to", ValueFlag "out"] args of
+  ErrC e => convertFail 2 (diagText e)
+  OkC parsed => case convertOptsOf parsed of
+    ErrC e => convertFail 2 (diagText e)
+    OkC opts => case parsed.positionals of
+      [path] => convertTrace opts path
+      [] => convertFail 2 convertUsage
+      _ => convertFail 2 "${convertUsage} (exactly one TRACE)"
+
+convertUsage : String
+convertUsage = "usage: vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
+
+convertTrace : ConvertOpts -> String -> Eff hostRow Int
+convertTrace opts path = do
+  traceR <- readTraceFull path
+  case traceR of
+    ErrC e => convertFail 2 (diagText e)
+    OkC trace => case convertContent opts.convertFormat trace of
+      ErrC e => convertFail 1 (diagText e)
+      OkC content => emitContent opts.convertOut content
+
+convertFail : Int -> String -> Eff hostRow Int
+convertFail code e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure code
+
+emitContent : Maybe String -> String -> Eff hostRow Int
+emitContent Nothing content = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print content)
+  pure 0
+emitContent (Just path) content = do
+  _ <- ensureDirPath (parentOf path)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path content)
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${path}\n")
+  pure 0
+
+-- ---------------------------------------------------------------
+-- 换算分派：`jsonl` 是自反格式（不要求 cpu 采样），其余三种只吃 CPU 采样。
+convertContent : String -> ObsTrace -> Check String
+convertContent "jsonl" trace = OkC (jsonlText trace)
+convertContent fmt trace = case cpuSamplesOf trace.traceEvents of
+  ErrC e => ErrC e
+  OkC [] => err (noCpuSamplesText fmt)
+  OkC samples => OkC (sampledFormatContent fmt samples)
+
+sampledFormatContent : String -> List CpuSample -> String
+sampledFormatContent "cpuprofile" samples = renderJson (cpuProfileJson samples)
+sampledFormatContent "speedscope" samples = renderJson (speedscopeJson samples)
+sampledFormatContent _ samples = foldedTextOf (foldedRowsOf samples)
+
+noCpuSamplesText : String -> String
+noCpuSamplesText fmt =
+  "no cpu samples (`vuna.sample.cpu`) in trace: `${fmt}` needs level-3 CPU sampling (collect with `vuna obs run --level 3 --sample cpu -- ...`)"
+
+-- | `--to jsonl`：按文件顺序重写全部事件（复用 `Types.renderEventLine`，键序稳定）。
+jsonlText : ObsTrace -> String
+jsonlText trace =
+  let
+    lines0 = map renderRowLine trace.traceEvents
+  in if length lines0 == 0 then "" else join "\n" lines0 ++ "\n"
+
+renderRowLine : Pair Int ObsEvent -> String
+renderRowLine row = renderEventLine (secondOf row)
+
+-- ---------------------------------------------------------------
+-- 帧字符串 -> 位置（`Name@file:line`）
+-- ---------------------------------------------------------------
+record FrameLoc where
+  frameName : String
+  frameUrl : String
+  frameLine : Int
+
+frameLocOf : String -> FrameLoc
+frameLocOf frame = case splitFirstAt frame of
+  Nothing => FrameLoc frame "" (0 - 1)
+  Just (Pair name rest) => case splitLastColon rest of
+    Nothing => FrameLoc name "" (0 - 1)
+    Just (Pair url lineText) => case nonNegIntOf lineText of
+      Just line => FrameLoc name url (line - 1)
+      Nothing => FrameLoc name "" (0 - 1)
+
+splitFirstAt : String -> Maybe (Pair String String)
+splitFirstAt s = splitFirstAtChars (strUnpack s) []
+
+splitFirstAtChars : List Int -> List Int -> Maybe (Pair String String)
+splitFirstAtChars [] _ = Nothing
+splitFirstAtChars (c :: rest) acc =
+  if c == 64 then Just (Pair (strPack (reverse acc)) (strPack rest))
+  else splitFirstAtChars rest (c :: acc)
+
+splitLastColon : String -> Maybe (Pair String String)
+splitLastColon s = case splitFirstColon (reverseString s) of
+  Nothing => Nothing
+  Just (Pair revLine revUrl) => Just (Pair (reverseString revUrl) (reverseString revLine))
+
+splitFirstColon : String -> Maybe (Pair String String)
+splitFirstColon s = splitFirstColonChars (strUnpack s) []
+
+splitFirstColonChars : List Int -> List Int -> Maybe (Pair String String)
+splitFirstColonChars [] _ = Nothing
+splitFirstColonChars (c :: rest) acc =
+  if c == 58 then Just (Pair (strPack (reverse acc)) (strPack rest))
+  else splitFirstColonChars rest (c :: acc)
+
+reverseString : String -> String
+reverseString s = strPack (reverse (strUnpack s))
+
+nonNegIntOf : String -> Maybe Int
+nonNegIntOf s = if s == "" then Nothing else nonNegDigits (strUnpack s) 0
+
+nonNegDigits : List Int -> Int -> Maybe Int
+nonNegDigits [] acc = Just acc
+nonNegDigits (c :: rest) acc =
+  if c >= 48 && c <= 57 then nonNegDigits rest (acc * 10 + (c - 48)) else Nothing
+
+-- ---------------------------------------------------------------
+-- cpuprofile（CDP Profile：nodes / startTime / endTime / samples / timeDeltas）
+-- ---------------------------------------------------------------
+record CdpNode where
+  cdpId : Int
+  cdpName : String
+  cdpUrl : String
+  cdpLine : Int
+  cdpParent : Int
+  cdpChildrenRev : List Int
+
+record CdpTable where
+  cdpNext : Int
+  cdpNodes : List CdpNode
+
+record CdpBuild where
+  cdpTable : CdpTable
+  cdpLeavesRev : List Int
+
+cdpInitial : CdpBuild
+cdpInitial = CdpBuild (CdpTable 2 [CdpNode 1 "(root)" "" 0 0 []]) []
+
+addConvertSample : CdpBuild -> CpuSample -> CdpBuild
+addConvertSample build sample = case insertFramePath (reverse sample.cpuSampleFrames) 1 build.cdpTable of
+  Pair table leaf => CdpBuild table (leaf :: build.cdpLeavesRev)
+
+-- 栈是叶在前（运行时序），这里按 root-first 建父链；节点按首次出现顺序编号（2 起，1 = root）。
+insertFramePath : List String -> Int -> CdpTable -> Pair CdpTable Int
+insertFramePath [] parent table = Pair table parent
+insertFramePath (frame :: rest) parent table =
+  let
+    loc = frameLocOf frame
+  in case childNodeOf parent loc table.cdpNodes of
+    Just childId => insertFramePath rest childId table
+    Nothing =>
+      let
+        fresh = CdpNode table.cdpNext loc.frameName loc.frameUrl loc.frameLine parent []
+        nodes0 = append table.cdpNodes [fresh]
+        nodes1 = attachChild parent fresh.cdpId nodes0
+      in insertFramePath rest fresh.cdpId (CdpTable (table.cdpNext + 1) nodes1)
+
+childNodeOf : Int -> FrameLoc -> List CdpNode -> Maybe Int
+childNodeOf parent loc nodes = case nodeById parent nodes of
+  Nothing => Nothing
+  Just parentNode => findChildNode loc nodes parentNode.cdpChildrenRev
+
+findChildNode : FrameLoc -> List CdpNode -> List Int -> Maybe Int
+findChildNode loc nodes [] = Nothing
+findChildNode loc nodes (id :: rest) = case nodeById id nodes of
+  Just n =>
+    if n.cdpName == loc.frameName && n.cdpUrl == loc.frameUrl && n.cdpLine == loc.frameLine then Just id
+    else findChildNode loc nodes rest
+  Nothing => findChildNode loc nodes rest
+
+nodeById : Int -> List CdpNode -> Maybe CdpNode
+nodeById id [] = Nothing
+nodeById id (n :: rest) = if n.cdpId == id then Just n else nodeById id rest
+
+attachChild : Int -> Int -> List CdpNode -> List CdpNode
+attachChild id child [] = []
+attachChild id child (n :: rest) =
+  if n.cdpId == id then CdpNode n.cdpId n.cdpName n.cdpUrl n.cdpLine n.cdpParent (child :: n.cdpChildrenRev) :: rest
+  else n :: attachChild id child rest
+
+cpuProfileJson : List CpuSample -> Json
+cpuProfileJson samples =
+  let
+    build = foldl addConvertSample cdpInitial samples
+    start = case samples of
+      s :: _ => s.cpuSampleTs
+      [] => 0
+    end = case reverse samples of
+      s :: _ => s.cpuSampleTs
+      [] => 0
+    leaves = reverse build.cdpLeavesRev
+  in JObj
+    [Pair "nodes" (JArr (map cdpNodeJson build.cdpTable.cdpNodes)), Pair "startTime" (JNum start), Pair "endTime" (JNum end), Pair "samples" (JArr (map JNum leaves)), Pair "timeDeltas" (JArr (map JNum (deltasOf start samples)))]
+
+deltasOf : Int -> List CpuSample -> List Int
+deltasOf prev [] = []
+deltasOf prev (s :: rest) = s.cpuSampleTs - prev :: deltasOf s.cpuSampleTs rest
+
+cdpNodeJson : CdpNode -> Json
+cdpNodeJson n =
+  JObj
+    [Pair "id" (JNum n.cdpId), Pair "callFrame" (JObj [Pair "functionName" (JStr n.cdpName), Pair "scriptId" (JStr "0"), Pair "url" (JStr n.cdpUrl), Pair "lineNumber" (JNum n.cdpLine), Pair "columnNumber" (JNum (0 - 1))]), Pair "children" (JArr (map JNum (reverse n.cdpChildrenRev)))]
+
+-- ---------------------------------------------------------------
+-- speedscope（evented profile；每个采样一个 O 事件，帧表按首次出现去重）
+-- ---------------------------------------------------------------
+speedscopeSchema : String
+speedscopeSchema = "https://www.speedscope.app/file-format-schema.json"
+
+speedscopeJson : List CpuSample -> Json
+speedscopeJson samples =
+  let
+    frames = distinctFramesOf samples
+    start = case samples of
+      s :: _ => s.cpuSampleTs
+      [] => 0
+    end = case reverse samples of
+      s :: _ => s.cpuSampleTs
+      [] => 0
+    profile =
+      JObj
+        [Pair "type" (JStr "evented"), Pair "name" (JStr "vuna"), Pair "unit" (JStr "microseconds"), Pair "startValue" (JNum start), Pair "endValue" (JNum end), Pair "events" (JArr (map (speedscopeEvent frames) samples))]
+    shared = JObj [Pair "frames" (JArr (map frameJson frames))]
+  in JObj
+    [Pair "$schema" (JStr speedscopeSchema), Pair "shared" shared, Pair "profiles" (JArr [profile])]
+
+frameJson : String -> Json
+frameJson frame = JObj [Pair "name" (JStr frame)]
+
+-- 帧表顺序 = 采样文件顺序下第一次出现的顺序（确定性）。
+distinctFramesOf : List CpuSample -> List String
+distinctFramesOf samples = reverse (foldl addFrameNames [] samples)
+
+addFrameNames : List String -> CpuSample -> List String
+addFrameNames acc sample = foldl addFrame acc sample.cpuSampleFrames
+
+addFrame : List String -> String -> List String
+addFrame acc frame = if memName frame acc then acc else frame :: acc
+
+speedscopeEvent : List String -> CpuSample -> Json
+speedscopeEvent frames sample = case sample.cpuSampleFrames of
+  leaf :: _ =>
+    JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum (frameIndexOf leaf frames))]
+  [] => JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum 0)]
+
+frameIndexOf : String -> List String -> Int
+frameIndexOf frame [] = 0
+frameIndexOf frame (f :: rest) = if f == frame then 0 else 1 + frameIndexOf frame rest
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/` 夹具，不提交）
+--
+-- `_scratch/r6/vuna-4.jsonl`（obsapp，level 3、cpu 采样 29 条、栈 4 帧、含 `Main.v_main.(fun)@app/Main.vuna:13`）：
+--   `--to cpuprofile` → nodes = 去重帧数 + 1（root，id 1，其后按首次出现顺序 2..）；
+--   callFrame = `{functionName, scriptId:"0", url, lineNumber, columnNumber}`，
+--   lineNumber = `.vuna` 行号 − 1（`Main.v_main.(fun)@app/Main.vuna:13` → lineNumber 12）；
+--   samples 29 个叶 id，timeDeltas[0] = 0，startTime/endTime = 首/末采样 ts。
+--   `--to speedscope` → `$schema` = speedscope 官方 schema URL；shared.frames 去重；
+--   profiles[0].events 29 条 O（`at` + `frame` 下标）。
+--   `--to folded` → 首行
+--   `dtp_obs_cpu_tick@Vuna_runtime.ml:1528;...;Main.v_main.(fun)@app/Main.vuna:13<TAB>29`。
+-- `_scratch/r1/vuna-4.jsonl`（g5 夹具，level 3、只有 mem 采样）：
+--   `--to cpuprofile|speedscope|folded` → error "no cpu samples" + 退出码 1；
+--   `--to jsonl` → 186 行（与输入事件序列逐行等价），`obs validate` 通过。
+-- ---------------------------------------------------------------

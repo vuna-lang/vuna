@@ -1,0 +1,253 @@
+module Vuna.Obs.Merge where
+
+-- Vuna.Obs.Merge：`vuna obs merge [--out FILE] TRACE...`——多 trace 合并成一份 JSONL。
+--
+-- 规范：`docs/reference/observability.md` §7 `merge`。
+--
+-- 语义（本批的唯一约定，写进文档 §7）：
+--   * 输入是 N 份 trace（典型来源：workspace 多成员 / 每进程一份的 `vuna-<pid>.jsonl`）。
+--     合并顺序按每份 trace 的 **`t0`**（元数据 `args.t0`；缺失则取该文件里第一个
+--     非 `M` 事件的 `ts`；再缺则 0）稳定升序（`t0` 相同保持命令行顺序）；
+--   * 输出是**一份合法 trace**（能被 `vuna obs validate` 接受）：
+--       1. 首行 = t0 最小的那份 trace 的元数据，**逐字保留**（schema 不变）；
+--       2. 紧跟其后是每份 trace 一条**成员行**：`ph:"i"`、`ts:0`、
+--          `name:"vuna.mark.merge-member"`（`vuna.mark.*` 是 `validate` 显式放行的
+--          前缀，`M` 行只允许出现在首行，所以成员行不能写成元数据）、
+--          `args:{member, t0, pid, level, argv}`（`ts=0` 保证不干扰后续时序检查）；
+--       3. 然后按 trace **分组**输出事件（组内保持文件顺序），组间按 t0 升序。
+--
+--     这是与「按 t0 逐事件混排」的取舍：跨机器/跨进程的 `ts` 基准不可比，逐事件混排
+--     会造出假的时间轴；分组保留「哪段属于哪个进程」，且产物仍是合法 trace。
+--   * `pid` **保留原值**（不重编号）；非首份 trace 的事件加 `args.member`（值 = 成员行
+--     里同一个 `member` 键），这样即使两个进程的 pid 撞车（不同机器同 pid）也能区分。
+--     `member` = 元数据 `exec` 的 basename（缺 `exec` 时用 pid）。
+--
+-- 边界：事件分组意味着同一 `pid`/`tid` 在跨组出现时仍要求 `ts` 单调；同一台机器的
+-- 多进程 trace 满足（t0 排序 + 组内文件序），跨机器合并只看分组不保证（分组本身就
+-- 是不混排这些时钟的理由）。
+--
+-- 输出：`--out` 省略 → stdout；否则写文件 + 打印 `wrote <path>`。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Sort
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Json
+import Vuna.Obs.Read
+import Vuna.Obs.Types
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+mergeUsage : String
+mergeUsage = "usage: vuna obs merge [--out FILE] TRACE..."
+
+-- | `vuna obs merge` 的入口；参数错误 / 读盘失败 / 空 trace 文件都是退出码 2。
+export runObsMerge : List String -> Eff hostRow Int
+runObsMerge args = case parseToolArgs "vuna obs merge" [ValueFlag "out"] args of
+  ErrC e => mergeFail 2 (diagText e)
+  OkC parsed => case outOf parsed of
+    ErrC e => mergeFail 2 (diagText e)
+    OkC out => case parsed.positionals of
+      [] => mergeFail 2 mergeUsage
+      paths => mergeTraces out paths
+
+outOf : Parsed -> Check (Maybe String)
+outOf parsed = case flagValue parsed "out" of
+  Nothing => OkC Nothing
+  Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
+
+mergeFail : Int -> String -> Eff hostRow Int
+mergeFail code e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure code
+
+-- ---------------------------------------------------------------
+-- 读入 + 排序
+-- ---------------------------------------------------------------
+-- | 合并输入的一份 trace：路径 + 已读事件 + 排序键 `t0`。
+export record MergeMember(..) where
+  memberPath : String
+  memberTrace : ObsTrace
+  memberT0 : Int
+
+-- 逐份读入（任一失败即停，错误带路径前缀，不静默跳过坏 trace）。
+mergeTraces : Maybe String -> List String -> Eff hostRow Int
+mergeTraces out paths = do
+  membersR <- readMembers paths []
+  case membersR of
+    ErrC e => mergeFail 2 (diagText e)
+    OkC members => emitMerged out (sortMembers members)
+
+readMembers : List String -> List MergeMember -> Eff hostRow (Check (List MergeMember))
+readMembers [] acc = pure (OkC (reverse acc))
+readMembers (path :: rest) acc = do
+  traceR <- readTraceFull path
+  case traceR of
+    ErrC e => pure (err "${path}: ${diagText e}")
+    OkC trace =>
+      if length trace.traceEvents == 0 then pure (err "${path}: empty trace (no events)")
+      else readMembers rest (MergeMember path trace (t0Of trace) :: acc)
+
+-- `t0`：元数据 `args.t0` 优先；缺失取首个带 `ts` 的事件；都没有 = 0。
+t0Of : ObsTrace -> Int
+t0Of trace = case trace.traceEvents of
+  (Pair _ (ObsMetaEvent m)) :: rest => case m.metaT0 of
+    Just t0 => t0
+    Nothing => firstTsOf rest
+  rows => firstTsOf rows
+
+firstTsOf : List (Pair Int ObsEvent) -> Int
+firstTsOf [] = 0
+firstTsOf ((Pair _ ev) :: rest) = case eventTs ev of
+  Just ts => ts
+  Nothing => firstTsOf rest
+
+sortMembers : List MergeMember -> List MergeMember
+sortMembers members = sortBy memberLe members
+
+memberLe : MergeMember -> MergeMember -> Bool
+memberLe a b = a.memberT0 <= b.memberT0
+
+-- ---------------------------------------------------------------
+-- 产出
+-- ---------------------------------------------------------------
+emitMerged : Maybe String -> List MergeMember -> Eff hostRow Int
+emitMerged out members =
+  let
+    content = mergedText members
+  in case out of
+    Nothing => do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print content)
+      pure 0
+    Just path => do
+      _ <- ensureDirPath (parentOf path)
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path content)
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "wrote ${path} (${strFromInt (length members)} trace(s))\n")
+      pure 0
+
+-- | 合并文本（纯；键序固定、无时间戳、无绝对路径 ⇒ 同一组输入逐字节一致）。
+export mergedText : List MergeMember -> String
+mergedText members =
+  let
+    lines0 = mergeLines members
+  in if length lines0 == 0 then "" else join "\n" lines0 ++ "\n"
+
+mergeLines : List MergeMember -> List String
+mergeLines [] = []
+mergeLines (first :: rest) =
+  append [schemaLine first]
+    (append (map memberLine (first :: rest)) (append (firstMemberLines first) (memberBlockLines 1 rest)))
+
+-- 首份元数据：逐字保留（含 schema / level / argv / t0）。
+schemaLine : MergeMember -> String
+schemaLine member = case memberTraceOf member of
+  (Pair _ (ObsMetaEvent _)) :: _ => renderRowLine (headRow member)
+  _ => ""
+
+headRow : MergeMember -> Pair Int ObsEvent
+headRow member = case member.memberTrace.traceEvents of
+  row :: _ => row
+  [] =>
+    Pair 0 (ObsMetaEvent (ObsMetaData "vuna.obs.schema" obsSchemaVersion "" 0 "" [] Nothing 0 0))
+
+memberTraceOf : MergeMember -> List (Pair Int ObsEvent)
+memberTraceOf member = member.memberTrace.traceEvents
+
+-- 成员行：`ph:"i"` + `vuna.mark.merge-member`（`vuna.mark.*` 前缀 validate 放行；
+-- `M` 只允许首行，故成员信息走瞬时事件）。`ts:0` 让它们不参与时序单调检查的起点噪声。
+-- 键序：`member` / `t0` / `pid` / `level` / `argv`。
+memberLine : MergeMember -> String
+memberLine member = case memberTraceOf member of
+  (Pair _ (ObsMetaEvent m)) :: _ => renderJson (memberJson m (memberKeyOf member) member.memberT0)
+  _ => ""
+
+memberJson : ObsMetaData -> String -> Int -> Json
+memberJson m key t0 =
+  JObj
+    [Pair "ph" (JStr "i"), Pair "ts" (JNum 0), Pair "pid" (JNum m.metaPid), Pair "tid" (JNum m.metaTid), Pair "name" (JStr "vuna.mark.merge-member"), Pair "args" (JObj [Pair "member" (JStr key), Pair "t0" (JNum t0), Pair "pid" (JNum m.metaPid), Pair "level" (JNum m.metaLevel), Pair "argv" (JArr (map JStr m.metaArgv))])]
+
+-- 首份成员的事件：不加 `args.member`（它就是「本机」那一份）。
+firstMemberLines : MergeMember -> List String
+firstMemberLines member = map renderRowLine (dropMeta member.memberTrace.traceEvents)
+
+-- 其余成员的事件：组内保持文件顺序，每个事件加 `args.member`。
+memberBlockLines : Int -> List MergeMember -> List String
+memberBlockLines index members = concatMap memberBlockLinesOf (zipIndices members index)
+
+memberBlockLinesOf : Pair Int MergeMember -> List String
+memberBlockLinesOf (Pair index member) =
+  map (eventLineOf index member) (dropMeta member.memberTrace.traceEvents)
+
+-- 首份（index 1）以外的成员事件加 `args.member`。
+eventLineOf : Int -> MergeMember -> Pair Int ObsEvent -> String
+eventLineOf index member row =
+  if index <= 1 then renderRowLine row
+  else renderEventLine (withMemberArg (memberKeyOf member) (secondOf row))
+
+dropMeta : List (Pair Int ObsEvent) -> List (Pair Int ObsEvent)
+dropMeta [] = []
+dropMeta ((row@(Pair _ ev)) :: rest) = case ev of
+  ObsMetaEvent _ => dropMeta rest
+  _ => row :: dropMeta rest
+
+-- 成员标识：`args.member` 的值（exec 的 basename；`exec` 缺失用 `pid`）。
+memberKeyOf : MergeMember -> String
+memberKeyOf member = case memberTraceOf member of
+  (Pair _ (ObsMetaEvent m)) :: _ =>
+    if m.metaExec == "" then strFromInt m.metaPid else baseNameOf m.metaExec
+  _ => "0"
+
+-- 路径的最后一段（`/a/b/c` → `c`；无 `/` 时原样）。
+baseNameOf : String -> String
+baseNameOf path = strPack (reverse (lastSegment (strUnpack path) []))
+
+-- 扫描到末尾的「最后一段」：遇 `/` 就清空累积（尾递归，反向积累）。
+lastSegment : List Int -> List Int -> List Int
+lastSegment [] acc = acc
+lastSegment (c :: rest) acc = if c == 47 then lastSegment rest [] else lastSegment rest (c :: acc)
+
+-- 给单个事件加 `args.member`（已有该键则覆盖：合并产物里它只由 merge 决定）。
+withMemberArg : String -> ObsEvent -> ObsEvent
+withMemberArg key ev = case ev of
+  ObsMetaEvent m => ObsMetaEvent m
+  ObsSpanEvent base dur => ObsSpanEvent (withMemberArgs key base) dur
+  ObsCounterEvent base value => ObsCounterEvent (withMemberArgs key base) value
+  ObsInstantEvent base => ObsInstantEvent (withMemberArgs key base)
+
+withMemberArgs : String -> ObsBase -> ObsBase
+withMemberArgs key base =
+  ObsBase base.baseTs base.basePid base.baseTid base.baseName base.baseCat
+    (Pair "member" (JStr key) :: dropMemberPair base.baseArgs)
+
+dropMemberPair : List (Pair String Json) -> List (Pair String Json)
+dropMemberPair [] = []
+dropMemberPair ((kv@(Pair name _)) :: rest) =
+  if name == "member" then dropMemberPair rest else kv :: dropMemberPair rest
+
+-- `zipIndices`：给成员列表编号（从 `start` 起；首份是 1，后续从 2 起）。
+zipIndices : List MergeMember -> Int -> List (Pair Int MergeMember)
+zipIndices members start = zipIndicesGo members start []
+
+zipIndicesGo : List MergeMember -> Int -> List (Pair Int MergeMember) -> List (Pair Int MergeMember)
+zipIndicesGo [] _ acc = reverse acc
+zipIndicesGo (m :: rest) index acc = zipIndicesGo rest (index + 1) (Pair index m :: acc)
+
+renderRowLine : Pair Int ObsEvent -> String
+renderRowLine row = renderEventLine (secondOf row)
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/t/`，不提交）
+--
+-- `b.jsonl` = `_scratch/r2/vuna-6.jsonl` 的副本（pid 6→9、t0 +1000）：
+--   `merge a b --out m.jsonl` 的首行是 a 的元数据（逐字），第 2/3 行是两条
+--   `{"ph":"i","ts":0,...,"name":"vuna.mark.merge-member",...}` 成员行（t0 升序），
+--   随后 a 的 4 个事件（不加 member）与 b 的 4 个事件（`args` 里多 `"member":"vuna"`），
+--   `obs validate m.jsonl` 通过（0 error）；两次 merge md5 相同；
+--   `--out` 省略时整份内容打到 stdout；空 trace 文件 = error + 退出码 2。
+-- ---------------------------------------------------------------

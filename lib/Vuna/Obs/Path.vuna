@@ -1,0 +1,35 @@
+module Vuna.Obs.Path where
+
+-- Vuna.Obs.Path：`vuna obs` 工具侧的小型路径工具（只做「取最后一段」这一件事）。
+--
+-- 为什么单独成模块：`merge` 的 `args.member`（exec 的 basename）与 `symbols` 的
+-- `unit`（split 产物 `.ml` 文件名去扩展名）都要「路径最后一段」，而编译器侧的
+-- `Vuna.Compiler.Source.baseName` 是**按第一个 `/` 切分**（返回目录之后的剩余部分），
+-- 对多级路径不是文件名。工具侧需要最后一段的语义，因此在这里写一份并共用。
+--
+-- 纯函数，无 I/O。
+import Base.List
+import Vuna.Compiler.Common
+
+-- | 路径最后一段：`a/b/c` → `c`，`/abs/x` → `x`，无 `/` 原样，空串 → 空串。
+export baseNameOf : String -> String
+baseNameOf path = strPack (reverse (lastSegment (strUnpack path) []))
+
+-- 扫描到末尾的「最后一段」：遇 `/` 清空累积（尾递归，反向积累）。
+lastSegment : List Int -> List Int -> List Int
+lastSegment [] acc = acc
+lastSegment (c :: rest) acc = if c == 47 then lastSegment rest [] else lastSegment rest (c :: acc)
+
+-- | 去掉 `.ml` 后缀（其它后缀原样返回）。
+export dropMlSuffix : String -> String
+dropMlSuffix name =
+  if endsWith ".ml" name then substring (natFromInt 0) (natFromInt (strLength name - 3)) name
+  else name
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/`，不提交）
+--
+-- `baseNameOf "/a/b/c"` = "c"；`baseNameOf "Vuna/Compiler/Elab.vuna"` = "Elab.vuna"；
+-- `baseNameOf "Main.ml"` = "Main.ml"；`baseNameOf ""` = ""。
+-- `dropMlSuffix "Main.ml"` = "Main"；`dropMlSuffix "Main.mli"` = "Main.mli"。
+-- ---------------------------------------------------------

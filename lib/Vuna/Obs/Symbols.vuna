@@ -1,0 +1,245 @@
+module Vuna.Obs.Symbols where
+
+-- Vuna.Obs.Symbols：`vuna obs symbols [--out FILE] [OUTDIR]`——从 split 产物抽符号表。
+--
+-- 规范：`docs/reference/observability.md` §5（`#line` 注入与 DWARF）、§7 `symbols`、
+-- §8（Linux perf 的兜底路径）。
+--
+-- 输入是 `vuna build --no-compile --out OUTDIR` / `vuna compile <pkg> OUTDIR` 的 split
+-- 产物目录（每个模块一个 `<Unit>.ml`）。codegen 在每个 `let` / `let rec` / `and` /
+-- `external` 绑定前写一行 `# <line> "<包相对路径>"`，因此**纯文本扫描**即可建立
+-- 「OCaml 绑定名 → .vuna 文件:行」映射，不依赖 DWARF，也不需要编译。
+--
+-- 抽取规则（本模块的唯一约定）：
+--   * 只认**行首**的 `#` 指令（`# <line> "<file>"`），且只认紧跟在它后面的第一条
+--     绑定行；两条指令之间没有绑定的（例如 `type t_*` 数据声明组）不产出条目；
+--   * 绑定行取首个标识符：`let v_x =` / `let rec v_x =` / `and v_x =` /
+--   * `unit` = `.ml` 文件名去扩展名（`Main.ml` → `Main`），`ocaml` 是产物里的原始
+--     绑定名（mangling 后的 `v_Module_dName`，正是 `perf`/`gdb` 看到的名字）；
+--   * `file` / `line` 直接来自指令（`.vuna` 包相对路径 + 1-based 行号）；
+--   * 按 `ocaml` 升序排序，同名再按 `unit`/`file`/`line` 升序（两次运行逐字节一致）。
+--
+-- 输出：`--out` 省略时打到 stdout，给了 `--out` 时只打印 `wrote <path>`。
+import Base.HostRow
+import Base.List
+import Base.Sort
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Files
+import Vuna.Json
+import Vuna.Obs.Path
+
+-- | 一条符号定义（`vuna-symbols 1` 的 `defs` 元素）。
+export record SymbolDef(..) where
+  symbolOcaml : String
+  symbolUnit : String
+  symbolFile : String
+  symbolLine : Int
+
+-- | 符号表载荷的 schema 版本。
+export symbolsSchemaVersion : String
+symbolsSchemaVersion = "vuna-symbols 1"
+
+-- | `vuna obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
+export runObsSymbols : List String -> Eff hostRow Int
+runObsSymbols args = case parseToolArgs "vuna obs symbols" [ValueFlag "out"] args of
+  ErrC e => symbolsFail 2 (diagText e)
+  OkC parsed => case outOf parsed of
+    ErrC e => symbolsFail 2 (diagText e)
+    OkC out => case parsed.positionals of
+      [] => symbolsDir out ".output"
+      [dir] => symbolsDir out dir
+      _ => symbolsFail 2 "usage: vuna obs symbols [--out FILE] [OUTDIR]"
+
+outOf : Parsed -> Check (Maybe String)
+outOf parsed = case flagValue parsed "out" of
+  Nothing => OkC Nothing
+  Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
+
+symbolsFail : Int -> String -> Eff hostRow Int
+symbolsFail code e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure code
+
+-- ---------------------------------------------------------------
+-- 读取产物目录
+-- ---------------------------------------------------------------
+symbolsDir : Maybe String -> String -> Eff hostRow Int
+symbolsDir out dir = do
+  dirR <- requireDirectory dir
+  case dirR of
+    ErrC e => symbolsFail 2 (diagText e)
+    OkC _ => do
+      files <- collectSourceFiles dir
+      units <- mlFilesOf (filter isMlName files)
+      if length units == 0 then symbolsFail 2
+        "no .ml split artifacts under ${dir} (run `vuna build --no-compile --out ${dir} <pkg>` first)"
+      else do
+        -- 第一个缺 .ml 的目录也给出可操作提示，而不是「成功但空表」。
+        defsR <- scanUnits (sortBy unitLe units) []
+        case defsR of
+          ErrC e => symbolsFail 1 (diagText e)
+          OkC defs => emitSymbols out (sortDefs defs)
+
+isMlName : String -> Bool
+isMlName path = endsWith ".ml" path
+
+-- `Pair (unit, path)`：unit 只取决于文件名（split 产物的模块名就是文件名）。
+mlFilesOf : List String -> Eff hostRow (List (Pair String String))
+mlFilesOf paths = pure (map unitPairOf paths)
+
+unitPairOf : String -> Pair String String
+unitPairOf path = Pair (dropMlSuffix (baseNameOf path)) path
+
+unitLe : Pair String String -> Pair String String -> Bool
+unitLe a b = firstOf a <= firstOf b
+
+-- 逐文件扫描（错误只可能是读盘失败，包一层给调用方）。
+scanUnits : List (Pair String String) -> List SymbolDef -> Eff hostRow (Check (List SymbolDef))
+scanUnits [] acc = pure (OkC (reverse acc))
+scanUnits ((Pair unit path) :: rest) acc = do
+  textR <- readText path
+  case textR of
+    ErrC e => pure (ErrC e)
+    OkC text => scanUnits rest (append (defsOfUnit unit (lines text)) acc)
+
+emitSymbols : Maybe String -> List SymbolDef -> Eff hostRow Int
+emitSymbols out defs =
+  let
+    payload = renderJson (symbolsJson defs)
+  in case out of
+    Nothing => do
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "${payload}\n")
+      pure 0
+    Just path => do
+      _ <- ensureDirPath (parentOf path)
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path "${payload}\n")
+      _ <-
+        raiseToRow hostRow
+          (@vuna@prim_eff_print "wrote ${path} (${strFromInt (length defs)} defs)\n")
+      pure 0
+
+-- ---------------------------------------------------------------
+-- 文本抽取（纯）
+-- ---------------------------------------------------------------
+-- | 一个 `.ml` 文本 -> 符号定义（按文件中出现顺序）。
+export defsOfUnit : String -> List String -> List SymbolDef
+defsOfUnit unit textLines = defsOfUnitGo unit textLines Nothing []
+
+-- `pending` = 上一条行首指令的位置；它只对**紧接着的下一行**生效（中间隔了别的行
+-- 就作废），这样 `#line` 后的绑定名与行号严格配对，不会跨声明错配。
+defsOfUnitGo : String -> List String -> Maybe (Pair String Int) -> List SymbolDef -> List SymbolDef
+defsOfUnitGo unit [] pending acc = reverse acc
+defsOfUnitGo unit (line :: rest) pending acc = case directiveOf line of
+  Just position => defsOfUnitGo unit rest (Just position) acc
+  Nothing => case bindingNameOf line of
+    Just name => case pending of
+      Just (Pair file srcLine) =>
+        defsOfUnitGo unit rest Nothing (SymbolDef name unit file srcLine :: acc)
+      Nothing => defsOfUnitGo unit rest Nothing acc
+    Nothing => defsOfUnitGo unit rest Nothing acc
+
+-- | `# <line> "<file>"`（行首 `#` + 空白 + 十进制 + 空白 + 双引号字符串）。
+export directiveOf : String -> Maybe (Pair String Int)
+directiveOf line =
+  let
+    trimmed = trimLeft line
+  in case strUnpack trimmed of
+    35 :: rest => directiveTailLine rest
+    _ => Nothing
+
+directiveTailLine : List Int -> Maybe (Pair String Int)
+directiveTailLine chars = case skipBlanks chars of
+  [] => Nothing
+  c :: _ => if isDigitChar c then digitsDirective (skipBlanks chars) else Nothing
+
+digitsDirective : List Int -> Maybe (Pair String Int)
+digitsDirective chars = case takeDigits chars [] of
+  Pair n rest => case skipBlanks rest of
+    [] => Nothing
+    c :: quoteRest => if c == 34 then case takeUntilQuote quoteRest [] of
+      Nothing => Nothing
+      Just (Pair fileChars _) => Just (Pair (strPack fileChars) n)
+    else Nothing
+
+skipBlanks : List Int -> List Int
+skipBlanks (c :: rest) = if c == 32 || c == 9 then skipBlanks rest else c :: rest
+skipBlanks [] = []
+
+isDigitChar : Int -> Bool
+isDigitChar c = c >= 48 && c <= 57
+
+-- 取十进制数字（正序）。
+takeDigits : List Int -> List Int -> Pair Int (List Int)
+takeDigits (c :: rest) acc =
+  if isDigitChar c then takeDigits rest (c :: acc)
+  else Pair (digitsToInt (reverse acc) 0) (c :: rest)
+takeDigits [] acc = Pair (digitsToInt (reverse acc) 0) []
+
+digitsToInt : List Int -> Int -> Int
+digitsToInt [] acc = acc
+digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
+
+-- 取到下一个双引号为止（不含引号，正序）。
+takeUntilQuote : List Int -> List Int -> Maybe (Pair (List Int) (List Int))
+takeUntilQuote [] _ = Nothing
+takeUntilQuote (c :: rest) acc =
+  if c == 34 then Just (Pair (reverse acc) rest) else takeUntilQuote rest (c :: acc)
+
+-- | 绑定行取首个标识符：`let` / `let rec` / `and` / `external`。
+export bindingNameOf : String -> Maybe String
+bindingNameOf line =
+  let
+    trimmed = trimLeft line
+    words0 = split " " trimmed
+  in case words0 of
+    "let" :: "rec" :: name :: _ => justIdent name
+    "let" :: name :: _ => justIdent name
+    "and" :: name :: _ => justIdent name
+    "external" :: name :: _ => justIdent name
+    _ => Nothing
+
+-- 标识符必须是 `[A-Za-z_][A-Za-z0-9_']*`（排除 `=` / `:` 等混入的形态）。
+justIdent : String -> Maybe String
+justIdent s = if s == "" then Nothing else if identChars (strUnpack s) then Just s else Nothing
+
+identChars : List Int -> Bool
+identChars [] = False
+identChars (c :: rest) =
+  if isLetterChar c || c == 95 then True else if isDigitChar c || c == 39 then True else False
+
+isLetterChar : Int -> Bool
+isLetterChar c = c >= 65 && c <= 90 || c >= 97 && c <= 122
+
+-- ---------------------------------------------------------------
+-- 排序 / JSON
+-- ---------------------------------------------------------------
+sortDefs : List SymbolDef -> List SymbolDef
+sortDefs defs = sortBy defLe defs
+
+defLe : SymbolDef -> SymbolDef -> Bool
+defLe a b =
+  if a.symbolOcaml == b.symbolOcaml then if a.symbolUnit == b.symbolUnit then if a.symbolFile == b.symbolFile then a.symbolLine <= b.symbolLine
+  else a.symbolFile <= b.symbolFile
+  else a.symbolUnit <= b.symbolUnit
+  else a.symbolOcaml <= b.symbolOcaml
+
+symbolsJson : List SymbolDef -> Json
+symbolsJson defs =
+  JObj [Pair "schema" (JStr symbolsSchemaVersion), Pair "defs" (JArr (map defJson defs))]
+
+defJson : SymbolDef -> Json
+defJson d =
+  JObj
+    [Pair "ocaml" (JStr d.symbolOcaml), Pair "unit" (JStr d.symbolUnit), Pair "file" (JStr d.symbolFile), Pair "line" (JNum d.symbolLine)]
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/sw` = `vuna build --no-compile --out _scratch/sw compiler`，不提交）
+--
+-- 150 个 `.ml`、5568 条 `# <line> "<file>"` 指令；其中紧跟绑定行的 5568 条被抽成
+-- 定义（let / let rec / and；本产物没有 `external`）。`type t_*` 数据声明组没有指令，
+-- 因此不出现在符号表里。`defsOfUnit "Main" ["# 16 \"app/Main.vuna\"", "let v_main = ..."]`
+-- → `[SymbolDef "v_main" "Main" "app/Main.vuna" 16]`。
+-- 两次运行输出逐字节一致（按 ocaml 名排序 + 固定键序）。
+-- ---------------------------------------------------------

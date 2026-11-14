@@ -1,0 +1,99 @@
+module Vuna.Obs.Flame where
+
+-- Vuna.Obs.Flame：CPU 采样栈 → 火焰图折叠栈（`convert --to folded` 与 `render` 共用）。
+--
+-- 规范：`docs/reference/observability.md` §7 `convert`（folded）、§7 `render`（火焰图）。
+--
+-- 输入是 trace 里 `ph:"i"` 的 `vuna.sample.cpu` 事件（`args.stack` 叶在前）。输出是
+-- **根在前**的栈行：同名栈合并计数、按栈名升序（确定序，跨机器逐字节一致）。
+--
+-- 边界：
+--   * 只吃 CPU 采样。`vuna.sample.mem` 是分配栈（`Gc.Memprof`），与 CPU 时间轴语义
+--     不同，混进火焰图会把分配量与 CPU 时间加在一起，因此不做；
+--   * 空栈采样丢弃（没有叶子帧就无法画一条栈，不伪造根帧）；
+--   * `ts` 缺失是**语义失败**（CPU 采样是 `i` 事件，规范 §3.2 要求它带 `ts`；
+--     `validate` 会报 error）。`cpuSamplesOf` 返回 error，调用方决定退出码；
+--     `cpuSamplesLenient` 供 render 用（渲染是只读视图，先画出其余部分）。
+import Base.List
+import Base.Maybe
+import Base.Sort
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Obs.Types
+
+-- | 一条 CPU 采样：时间戳（epoch 微秒）+ 栈（叶在前）。
+export record CpuSample(..) where
+  cpuSampleTs : Int
+  cpuSampleFrames : List String
+
+-- | 折叠栈行：`stack` 是 `;` 连接的根在前栈名，`count` 是命中次数。
+export record FoldedRow(..) where
+  foldedStack : String
+  foldedCount : Int
+
+-- | 严格取 CPU 采样：任何采样缺 `ts` 或帧不是字符串 = `ErrC`（调用方映射退出码 1）。
+export cpuSamplesOf : List (Pair Int ObsEvent) -> Check (List CpuSample)
+cpuSamplesOf rows =
+  if hasCpuSampleMissingTs rows then err "cpu sample event is missing integer field `ts` (run `vuna obs validate` on the trace)"
+  else OkC (mapMaybe cpuSampleOf rows)
+
+hasCpuSampleMissingTs : List (Pair Int ObsEvent) -> Bool
+hasCpuSampleMissingTs [] = False
+hasCpuSampleMissingTs ((Pair _ ev) :: rest) =
+  if isCpuSampleWithoutTs ev then True else hasCpuSampleMissingTs rest
+
+isCpuSampleWithoutTs : ObsEvent -> Bool
+isCpuSampleWithoutTs ev = case sampleOf ev of
+  Just s => if sampleKindOfName s.sampleName == "cpu" then isNothing (eventTs ev) else False
+  Nothing => False
+
+-- | 供 render 用的宽松版本：缺 `ts` / 空栈的采样直接跳过（不报错）。
+export cpuSamplesLenient : List (Pair Int ObsEvent) -> List CpuSample
+cpuSamplesLenient rows = mapMaybe cpuSampleOf rows
+
+cpuSampleOf : Pair Int ObsEvent -> Maybe CpuSample
+cpuSampleOf (Pair _ ev) = case sampleOf ev of
+  Just s => if sampleKindOfName s.sampleName == "cpu" then case eventTs ev of
+    Just ts => if length s.sampleStack == 0 then Nothing else Just (CpuSample ts s.sampleStack)
+    Nothing => Nothing
+  else Nothing
+  Nothing => Nothing
+
+-- | 采样 -> 折叠栈行（同名栈合并、按栈名升序）。
+export foldedRowsOf : List CpuSample -> List FoldedRow
+foldedRowsOf samples = sortFoldedRows (foldl addSampleRow [] samples)
+
+addSampleRow : List FoldedRow -> CpuSample -> List FoldedRow
+addSampleRow rows sample = matchRow rows (join ";" (reverse sample.cpuSampleFrames))
+
+matchRow : List FoldedRow -> String -> List FoldedRow
+matchRow [] stack = [FoldedRow stack 1]
+matchRow (r :: rest) stack =
+  if r.foldedStack == stack then FoldedRow stack (r.foldedCount + 1) :: rest
+  else r :: matchRow rest stack
+
+sortFoldedRows : List FoldedRow -> List FoldedRow
+sortFoldedRows rows = sortBy foldedLe rows
+
+foldedLe : FoldedRow -> FoldedRow -> Bool
+foldedLe a b = a.foldedStack <= b.foldedStack
+
+-- | 火焰图折叠文本（`frame;frame<TAB>count`，行尾带换行；空列表 = 空串）。
+export foldedTextOf : List FoldedRow -> String
+foldedTextOf rows = if length rows == 0 then "" else join "\n" (map foldedLine rows) ++ "\n"
+
+-- | 折叠行（不含行尾换行），供 `render` 内嵌数据用。
+export foldedLines : List FoldedRow -> List String
+foldedLines rows = map foldedLine rows
+
+foldedLine : FoldedRow -> String
+foldedLine r = "${r.foldedStack}\t${strFromInt r.foldedCount}"
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/`，不提交）
+--
+-- `_scratch/r6/vuna-4.jsonl`（obsapp、level 3、cpu 29 条）：
+--   cpuSamplesOf = 29 条；foldedRowsOf 按栈名升序，首行
+--   `dtp_obs_cpu_tick@Vuna_runtime.ml:1528;...;Main.v_main.(fun)@app/Main.vuna:13<TAB>29`。
+-- `_scratch/r1/vuna-4.jsonl`（只有 mem 采样）：cpuSamplesOf = OkC []（不是 error）。
+-- ---------------------------------------------------------------

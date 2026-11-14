@@ -1,0 +1,264 @@
+module Vuna.Obs.Render where
+
+-- Vuna.Obs.Render：`vuna obs render [--out FILE] TRACE`——单文件可复现 HTML 报告。
+--
+-- 规范：`docs/reference/observability.md` §7 `render`、§1（O1 规范格式 = JSONL）。
+--
+-- 页面约定（沿 `Vuna.Doc.Html` 的可复现范式）：
+--   * **单文件**：内联 CSS + 内联 JS，无外链、无字体/图标/CDN（产物里不出现任何 URL）；
+--   * 数据只内嵌一次：`<script type="application/json" id="vuna-obs-data">`，内容是
+--     `Vuna.Json.renderJson` 的单行 JSON，`<` 经 `scriptSafe` 转成 `\u003c`，不会提前
+--     闭合 script；页面其余文本先 HTML 转义；
+--   * **无时间戳、无随机数**：三个视图完全由内嵌数据驱动，同一输入两次渲染逐字节一致；
+--   * `--out` **强制**：HTML 体积大、也没人把 HTML 重定向到终端，省略时退出码 2 + 用法。
+--
+-- 三个视图（客户端 JS 从内嵌数据画出来，数据本身留在 JSON 里供检查脚本 / 外部工具读）：
+--   ① 瀑布：按 `pid`/`tid` 分组、组内按 `ts` 排序的 span 条，缩进 = 嵌套深度；
+--   ② 火焰图：`convert --to folded` 等价的根在前折叠栈（只用 CPU 采样，见
+--      `Vuna.Obs.Flame`），按栈名排序后连续排布；
+--   ③ 计数器 / 采样热点表：计数器名、次数、求和、末值；CPU / 内存采样按叶子帧计数。
+--
+-- 数据里**不放** `exec`（主机绝对路径）与 `t0`（epoch 值）：页面是给人看的视图，
+-- 保留绝对路径会把「可复现产物」变成「绑定某台机器的产物」。
+import Base.HostRow
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Sort
+import Base.String
+import Vuna.Cli.Args
+import Vuna.Compiler.Common
+import Vuna.Doc.Prose
+import Vuna.Json
+import Vuna.Obs.Flame
+import Vuna.Obs.Read
+import Vuna.Obs.Summarize
+import Vuna.Obs.Types
+
+-- ---------------------------------------------------------------
+-- 入口
+-- ---------------------------------------------------------------
+renderUsage : String
+renderUsage = "usage: vuna obs render [--out FILE] TRACE"
+
+-- | `vuna obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
+export runObsRender : List String -> Eff hostRow Int
+runObsRender args = case parseToolArgs "vuna obs render" [ValueFlag "out"] args of
+  ErrC e => renderFail 2 (diagText e)
+  OkC parsed => case parsed.positionals of
+    [path] => case flagValue parsed "out" of
+      Nothing =>
+        renderFail 2
+          "missing required flag `--out` (HTML goes to a file, not stdout): ${renderUsage}"
+      Just out =>
+        if out == "" then renderFail 2 "${renderUsage} (`--out` requires a non-empty path)"
+        else renderTrace out path
+    [] => renderFail 2 renderUsage
+    _ => renderFail 2 "${renderUsage} (exactly one TRACE)"
+
+renderFail : Int -> String -> Eff hostRow Int
+renderFail code e = do
+  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  pure code
+
+renderTrace : String -> String -> Eff hostRow Int
+renderTrace out path = do
+  traceR <- readTraceFull path
+  case traceR of
+    ErrC e => renderFail 2 (diagText e)
+    OkC trace => do
+      _ <- ensureDirPath (parentOf out)
+      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile out (renderPage trace))
+      _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${out}\n")
+      pure 0
+
+-- ---------------------------------------------------------------
+-- 数据模型（内嵌 JSON；键序固定）
+-- ---------------------------------------------------------------
+record SpanRow where
+  spanRowName : String
+  spanRowCat : String
+  spanRowPid : Int
+  spanRowTid : Int
+  spanRowTs : Int
+  spanRowDur : Int
+  spanRowDepth : Int
+
+record FlameFrame where
+  flameFrameName : String
+  flameFrameCount : Int
+
+-- ---------------------------------------------------------------
+-- 内嵌数据
+-- ---------------------------------------------------------------
+-- | 页面数据：`{"schema":"vuna-obs-render 1","wallUs":N,"spans":[...],"counters":[...],
+-- "samples":{"cpu":[...],"mem":[...]},"flame":[{"frames":[...],"count":N}],"argv":[...]}`
+-- （键序固定；`spans` 按 `pid`/`tid` 首现顺序、组内 `ts` 升序）。
+export renderDataJson : ObsTrace -> Json
+renderDataJson trace =
+  let
+    summary = summarizeTrace trace
+    samples = cpuSamplesLenient trace.traceEvents
+    flameRows = foldedRowsOf samples
+    argv = case trace.traceEvents of
+      (Pair _ (ObsMetaEvent m)) :: _ => m.metaArgv
+      _ => []
+    level = case trace.traceEvents of
+      (Pair _ (ObsMetaEvent m)) :: _ => m.metaLevel
+      _ => 0
+  in JObj
+    [Pair "schema" (JStr "vuna-obs-render 1"), Pair "wallUs" (JNum summary.summaryWallUs), Pair "level" (JNum level), Pair "argv" (JArr (map JStr argv)), Pair "spans" (JArr (map spanRowJson (spanRowsOf trace.traceEvents))), Pair "counters" (JArr (map counterRowJson summary.summaryCounters)), Pair "samples" (samplesJsonOf summary.summarySamples), Pair "flame" (JArr (map flameRowJson flameRows))]
+
+spanRowJson : SpanRow -> Json
+spanRowJson r =
+  JObj
+    [Pair "name" (JStr r.spanRowName), Pair "cat" (JStr r.spanRowCat), Pair "pid" (JNum r.spanRowPid), Pair "tid" (JNum r.spanRowTid), Pair "ts" (JNum r.spanRowTs), Pair "dur" (JNum r.spanRowDur), Pair "depth" (JNum r.spanRowDepth)]
+
+counterRowJson : CounterStat -> Json
+counterRowJson c =
+  JObj
+    [Pair "name" (JStr c.counterName), Pair "count" (JNum c.counterCount), Pair "sum" (JNum c.counterSum), Pair "last" (JNum c.counterLast)]
+
+samplesJsonOf : List SampleTable -> Json
+samplesJsonOf tables =
+  JObj
+    [Pair "cpu" (JArr (map sampleEntryJsonOf (entriesOf "cpu" tables))), Pair "mem" (JArr (map sampleEntryJsonOf (entriesOf "mem" tables)))]
+
+entriesOf : String -> List SampleTable -> List SampleEntry
+entriesOf kind [] = []
+entriesOf kind (t :: rest) =
+  if t.sampleTableKind == kind then t.sampleTableEntries else entriesOf kind rest
+
+sampleEntryJsonOf : SampleEntry -> Json
+sampleEntryJsonOf e =
+  JObj [Pair "frame" (JStr e.sampleEntryFrame), Pair "count" (JNum e.sampleEntryCount)]
+
+flameRowJson : FoldedRow -> Json
+flameRowJson row =
+  JObj
+    [Pair "frames" (JArr (map JStr (split ";" row.foldedStack))), Pair "count" (JNum row.foldedCount)]
+
+-- ---------------------------------------------------------------
+-- span 行（分组 + 嵌套深度）
+-- ---------------------------------------------------------------
+record DepthFrame where
+  depthFrameTs : Int
+  depthFrameEnd : Int
+  depthFrameDepth : Int
+
+spanRowsOf : List (Pair Int ObsEvent) -> List SpanRow
+spanRowsOf rows = concatMap spansOfThread (groupByThread rows)
+
+spansOfThread : Pair (Pair Int Int) (List (Pair Int ObsEvent)) -> List SpanRow
+spansOfThread (Pair (Pair pid tid) items) =
+  let
+    spans = sortBySpanTs (mapMustSpan items)
+  in map (spanRowOf pid tid) (assignDepths spans)
+
+mapMustSpan : List (Pair Int ObsEvent) -> List ObsEvent
+mapMustSpan [] = []
+mapMustSpan ((Pair _ ev) :: rest) =
+  if eventPh ev == "X" then ev :: mapMustSpan rest else mapMustSpan rest
+
+sortBySpanTs : List ObsEvent -> List ObsEvent
+sortBySpanTs spans = sortBy leTs spans
+
+leTs : ObsEvent -> ObsEvent -> Bool
+leTs a b = tsOrZero a <= tsOrZero b
+
+tsOrZero : ObsEvent -> Int
+tsOrZero ev = fromMaybe 0 (eventTs ev)
+
+spanRowOf : Int -> Int -> Pair ObsEvent Int -> SpanRow
+spanRowOf pid tid (Pair ev depth) =
+  let
+    ts = tsOrZero ev
+    dur = fromMaybe 0 (eventDur ev)
+  in SpanRow (eventName ev) (eventCat ev) pid tid ts dur depth
+
+-- 嵌套深度：新 span 落在栈顶区间内 ⇒ 深度 = 栈顶 + 1；否则逐层弹出到包含它的那层。
+-- 弹出循环对 DT 不是结构递归，因此用显式 fuel（栈深 + 1），同 `Summarize` 的折叠。
+assignDepths : List ObsEvent -> List (Pair ObsEvent Int)
+assignDepths spans = reverse (assignGo spans [] [])
+
+assignGo : List ObsEvent -> List DepthFrame -> List (Pair ObsEvent Int) -> List (Pair ObsEvent Int)
+assignGo [] _ acc = acc
+assignGo (ev :: rest) stack acc = case spanInterval ev of
+  Nothing => assignGo rest stack acc
+  Just (Pair ts end) =>
+    let
+      popped = popUntilContained (length stack + 1) ts end stack
+      depth = case popped of
+        top :: _ => top.depthFrameDepth + 1
+        [] => 0
+    in assignGo rest (DepthFrame ts end depth :: popped) (Pair ev depth :: acc)
+
+popUntilContained : Int -> Int -> Int -> List DepthFrame -> List DepthFrame
+popUntilContained fuel ts end stack = if fuel <= 0 then stack
+else case stack of
+  [] => []
+  top :: _ =>
+    if ts >= top.depthFrameTs && end <= top.depthFrameEnd then stack
+    else popUntilContained (fuel - 1) ts end (dropTop stack)
+
+dropTop : List DepthFrame -> List DepthFrame
+dropTop [] = []
+dropTop (_ :: rest) = rest
+
+-- ---------------------------------------------------------------
+-- 页面
+-- ---------------------------------------------------------------
+-- | trace -> 完整 HTML（单文件、无外链、无时间戳）。
+export renderPage : ObsTrace -> String
+renderPage trace =
+  let
+    summary = summarizeTrace trace
+    dataJson = renderDataJson trace
+    spanCount = length (spanRowsOf trace.traceEvents)
+    wallText = strFromInt summary.summaryWallUs
+    stats =
+      "${strFromInt spanCount} spans · ${strFromInt (length summary.summaryCounters)} counters · ${strFromInt (length (cpuSamplesLenient trace.traceEvents))} cpu samples · wall ${wallText} us"
+  in strConcatMany
+    ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna obs</title>\n<style>\n", css, "</style>\n</head>\n<body>\n<header class='top'>\n<h1>vuna obs</h1>\n", "<p class='meta'>", htmlEscape stats, "</p>\n", "<p class='hint'>vuna-obs 1 trace · 瀑布 / 火焰图 / 计数器与采样 · 数据内嵌于 #vuna-obs-data</p>\n", "</header>\n<nav class='tabs'>\n", tabButton "waterfall" "瀑布 Waterfall" True, tabButton "flame" "火焰图 Flame graph" False, tabButton "tables" "计数器与采样 Counters &amp; samples" False, "</nav>\n<main>\n", "<section class='view' id='view-waterfall'>\n<h2>瀑布（span 按 ts/dur，缩进 = 嵌套深度）</h2>\n<div id='waterfall'></div>\n</section>\n", "<section class='view hidden' id='view-flame'>\n<h2>火焰图（CPU 采样折叠栈，宽度 = 命中次数）</h2>\n<div id='flame'></div>\n</section>\n", "<section class='view hidden' id='view-tables'>\n<h2>计数器</h2>\n<div id='counters'></div>\n", "<h2>采样热点</h2>\n<div id='samples'></div>\n</section>\n", "</main>\n", "<script type='application/json' id='vuna-obs-data'>", scriptSafe (renderJson dataJson), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]
+
+tabButton : String -> String -> Bool -> String
+tabButton view label active =
+  strConcatMany
+    ["<button class='tab", if active then " active" else "", "' data-view='", view, "'>", label, "</button>\n"]
+
+-- ---------------------------------------------------------------
+-- 内联 CSS（无外链）
+-- ---------------------------------------------------------------
+css : String
+css =
+  strConcatMany
+    [":root{--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d0d7de;--accent:#0969da;--bar:#0969da;--bar2:#54aeff;--code:#f6f8fa}\n", "@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--bar:#1f6feb;--bar2:#388bfd;--code:#161b22}}\n", "*{box-sizing:border-box}body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg)}\n", "header.top{padding:20px 24px 8px}h1{margin:0 0 4px;font-size:24px}.meta,.hint{color:var(--muted);margin:0}.hint{font-size:12px}\n", ".tabs{padding:0 24px;border-bottom:1px solid var(--line)}.tab{font:inherit;padding:8px 14px;border:1px solid transparent;border-bottom:none;background:none;color:var(--muted);cursor:pointer}\n", ".tab.active{color:var(--fg);border-color:var(--line);border-radius:6px 6px 0 0;background:var(--code)}\n", "main{padding:18px 24px 80px}section.view{margin:0 0 24px}section.view.hidden{display:none}h2{font-size:17px;margin:18px 0 10px}\n", ".wf-row{display:flex;align-items:center;gap:6px;height:20px}.wf-indent{flex:none}.wf-track{position:relative;flex:1;height:14px;background:var(--code);border-radius:3px;overflow:hidden}\n", ".wf-bar{position:absolute;top:0;height:14px;background:var(--bar);border-radius:3px}\n", ".wf-label{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%;color:var(--muted)}\n", ".flame{display:flex;flex-direction:column;gap:1px;font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}\n", ".flame-row{display:flex;height:16px}.flame-cell{background:var(--bar2);color:#fff;overflow:hidden;white-space:nowrap;padding:0 4px;border-radius:2px;margin-right:1px;cursor:default}\n", "table{border-collapse:collapse;width:100%;max-width:980px}th,td{text-align:left;padding:4px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}\n", "td.num{text-align:right;font-variant-numeric:tabular-nums}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}\n", ".empty{color:var(--muted)}\n"]
+
+-- ---------------------------------------------------------------
+-- 内联 JS（ES5、无模板字符串、无 Date/Math.random；只读内嵌 JSON）
+-- ---------------------------------------------------------------
+js : String
+js =
+  strConcatMany
+    ["(function(){\n", "var data=JSON.parse(document.getElementById('vuna-obs-data').textContent);\n", "var wall=data.wallUs>0?data.wallUs:1;\n", "function el(tag,cls){var n=document.createElement(tag);if(cls)n.className=cls;return n;}\n", "function text(s){return document.createTextNode(s);}\n", "function clear(node){while(node.firstChild)node.removeChild(node.firstChild);}\n", "function renderWaterfall(host){\n", "  clear(host);\n", "  var spans=data.spans;\n", "  if(!spans||spans.length===0){var p=el('p','empty');p.appendChild(text('no spans'));host.appendChild(p);return;}\n", "  var base=spans[0].ts;\n", "  for(var i=0;i<spans.length;i++){var s=spans[i];\n", "    var row=el('div','wf-row');\n", "    var indent=el('span','wf-indent');indent.style.width=(s.depth*14)+'px';row.appendChild(indent);\n", "    var label=el('span','wf-label');label.textContent=s.name;row.appendChild(label);\n", "    var track=el('div','wf-track');\n", "    var bar=el('div','wf-bar');\n", "    var left=((s.ts-base)/wall)*100;if(left<0)left=0;if(left>100)left=100;\n", "    var width=(s.dur/wall)*100;if(width<0.15)width=0.15;if(left+width>100)width=100-left;\n", "    bar.style.left=left+'%';bar.style.width=width+'%';\n", "    bar.title=s.name+' · '+s.dur+' us · pid '+s.pid+' tid '+s.tid;\n", "    track.appendChild(bar);row.appendChild(track);\n", "    host.appendChild(row);\n", "  }\n", "}\n", "function renderFlame(host){\n", "  clear(host);\n", "  var rows=data.flame;\n", "  if(!rows||rows.length===0){var p=el('p','empty');p.appendChild(text('no cpu samples (level 3 sampling needed)'));host.appendChild(p);return;}\n", "  var maxCount=0;\n", "  for(var i=0;i<rows.length;i++){if(rows[i].count>maxCount)maxCount=rows[i].count;}\n", "  var wrap=el('div','flame');\n", "  for(var r=0;r<rows.length;r++){var row=el('div','flame-row');\n", "    var frames=rows[r].frames;\n", "    for(var f=0;f<frames.length;f++){\n", "      var cell=el('div','flame-cell');\n", "      var pct=(rows[r].count/maxCount)*100;\n", "      cell.style.width=pct+'%';cell.textContent=frames[f];\n", "      cell.title=frames[f]+' · '+rows[r].count+' samples';\n", "      row.appendChild(cell);\n", "    }\n", "    wrap.appendChild(row);\n", "  }\n", "  host.appendChild(wrap);\n", "}\n", "function renderTable(host,title,heads,rows){\n", "  clear(host);\n", "  if(!rows||rows.length===0){var p=el('p','empty');p.appendChild(text('none'));host.appendChild(p);return;}\n", "  var t=el('table');var thead=el('thead');var hr=el('tr');\n", "  for(var h=0;h<heads.length;h++){var th=el('th');th.appendChild(text(heads[h]));hr.appendChild(th);}\n", "  thead.appendChild(hr);t.appendChild(thead);\n", "  var tb=el('tbody');\n", "  for(var i=0;i<rows.length;i++){var tr=el('tr');\n", "    for(var c=0;c<rows[i].length;c++){var td=el('td');\n", "      if(rows[i][c].num){td.className='num';td.appendChild(text(String(rows[i][c].v)));}\n", "      else{var code=el('code');code.appendChild(text(String(rows[i][c])));td.appendChild(code);}\n", "      tr.appendChild(td);\n", "    }\n", "    tb.appendChild(tr);\n", "  }\n", "  t.appendChild(tb);host.appendChild(t);\n", "}\n", "function renderTables(){\n", "  var cs=data.counters||[];var cRows=[];\n", "  for(var i=0;i<cs.length;i++){cRows.push([cs[i].name,{num:true,v:cs[i].count},{num:true,v:cs[i].sum},{num:true,v:cs[i].last}]);}\n", "  renderTable(document.getElementById('counters'),'counters',['counter','count','sum','last'],cRows);\n", "  var samples=data.samples||{};var cpu=samples.cpu||[];var mem=samples.mem||[];\n", "  var sRows=[];\n", "  for(var k=0;k<cpu.length;k++){sRows.push(['cpu',{num:true,v:cpu[k].count},cpu[k].frame]);}\n", "  for(var m=0;m<mem.length;m++){sRows.push(['mem',{num:true,v:mem[m].count},mem[m].frame]);}\n", "  renderTable(document.getElementById('samples'),'samples',['kind','count','frame'],sRows);\n", "}\n", "function selectView(view){\n", "  var ids=['waterfall','flame','tables'];\n", "  for(var i=0;i<ids.length;i++){\n", "    var sec=document.getElementById('view-'+ids[i]);\n", "    if(sec){if(ids[i]===view)sec.classList.remove('hidden');else sec.classList.add('hidden');}\n", "  }\n", "  var tabs=document.getElementsByClassName('tab');\n", "  for(var t=0;t<tabs.length;t++){\n", "    if(tabs[t].getAttribute('data-view')===view)tabs[t].classList.add('active');else tabs[t].classList.remove('active');\n", "  }\n", "}\n", "var tabs=document.getElementsByClassName('tab');\n", "for(var t=0;t<tabs.length;t++){(function(btn){btn.addEventListener('click',function(){selectView(btn.getAttribute('data-view'));});})(tabs[t]);}\n", "renderWaterfall(document.getElementById('waterfall'));\n", "renderFlame(document.getElementById('flame'));\n", "renderTables();\n", "})();\n"]
+
+scriptSafe : String -> String
+scriptSafe s = scriptSafeChars (strUnpack s) ""
+
+scriptSafeChars : List Int -> String -> String
+scriptSafeChars [] acc = acc
+scriptSafeChars (c :: rest) acc =
+  if c == 60 then scriptSafeChars rest (acc ++ "\\u003c")
+  else scriptSafeChars rest (acc ++ strPack [c])
+
+-- ---------------------------------------------------------------
+-- golden（`_scratch/`，不提交）
+--
+-- `_scratch/r2/vuna-6.jsonl`（check compiler level 2，含嵌套 `vuna.elab` / `vuna.codegen.check`）：
+--   renderPage 产出的 HTML 里 `grep -c 'https?://'` = 0，内嵌 JSON 解析后
+--   `spans` = 4（按 pid/tid 分组、组内 ts 升序），`depth` 能体现嵌套；
+--   两次渲染 md5 相同。
+-- `_scratch/r6/vuna-4.jsonl`（obsapp，cpu 29 条）：
+--   `flame` 有 1 条折叠栈（frames 4 层，count 29），`samples.cpu` top 帧表非空。
+-- 省略 `--out`：退出码 2，消息 `missing required flag --out` + 用法。
+-- ---------------------------------------------------------------

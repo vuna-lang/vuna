@@ -1085,44 +1085,61 @@ let dtp_obs_shutdown () =
 
 let () = at_exit dtp_obs_shutdown
 
+let dtp_obs_span_emit (name : string) (cat : string) (label_opt : string option)
+    (t0 : int) (s0 : Gc.stat) (ok : bool) =
+  let t1 = dtp_timeUs () in
+  let s1 = Gc.quick_stat () in
+  let b = Buffer.create 192 in
+  dtp_obs_hdr b \"X\" name t0;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"cat\";
+  dtp_obs_str b cat;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"dur\";
+  dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"args\";
+  Buffer.add_char b dtp_obs_lb;
+  (match label_opt with
+   | None -> ()
+   | Some label ->
+     dtp_obs_key b \"def\";
+     dtp_obs_str b label;
+     Buffer.add_char b dtp_obs_comma);
+  dtp_obs_key b \"allocWords\";
+  dtp_obs_int b
+    (int_of_float
+       (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b \"heapWords\";
+  dtp_obs_int b s1.Gc.top_heap_words;
+  if not ok then begin
+    Buffer.add_char b dtp_obs_comma;
+    dtp_obs_key b \"error\";
+    Buffer.add_string b \"true\"
+  end;
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_nl;
+  ignore (dtp_obs_emit (Buffer.contents b))
+
 let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
   if not (dtp_obs_on ()) then f 0
   else begin
     let t0 = dtp_timeUs () in
     let s0 = Gc.quick_stat () in
-    let emit ok =
-      let t1 = dtp_timeUs () in
-      let s1 = Gc.quick_stat () in
-      let b = Buffer.create 192 in
-      dtp_obs_hdr b \"X\" name t0;
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b \"cat\";
-      dtp_obs_str b cat;
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b \"dur\";
-      dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b \"args\";
-      Buffer.add_char b dtp_obs_lb;
-      dtp_obs_key b \"allocWords\";
-      dtp_obs_int b
-        (int_of_float
-           (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b \"heapWords\";
-      dtp_obs_int b s1.Gc.top_heap_words;
-      if not ok then begin
-        Buffer.add_char b dtp_obs_comma;
-        dtp_obs_key b \"error\";
-        Buffer.add_string b \"true\"
-      end;
-      Buffer.add_char b dtp_obs_rb;
-      Buffer.add_char b dtp_obs_rb;
-      Buffer.add_char b dtp_obs_nl;
-      ignore (dtp_obs_emit (Buffer.contents b))
-    in
-    let v = try f 0 with e -> emit false; raise e in
-    emit true;
+    let v = try f 0 with e -> dtp_obs_span_emit name cat None t0 s0 false; raise e in
+    dtp_obs_span_emit name cat None t0 s0 true;
+    v
+  end
+
+let dtp_obs_span_lab (name : string) (cat : string) (label : string) (f : int -> 'a) : 'a =
+  if not (dtp_obs_on ()) then f 0
+  else begin
+    let t0 = dtp_timeUs () in
+    let s0 = Gc.quick_stat () in
+    let v = try f 0 with e -> dtp_obs_span_emit name cat (Some label) t0 s0 false; raise e in
+    dtp_obs_span_emit name cat (Some label) t0 s0 true;
     v
   end
 
@@ -1782,6 +1799,7 @@ genGroup st group = Vuna.Compiler.Common.bind (genGroupBodies st (irGroupDefs gr
       Nothing => OkC (Pair (bindGroupOf st1 group defs) st1)
     _ => OkC (Pair (bindGroupOf st1 group defs) st1)
 )
+
 -- 分组装配：`#line` 指令在前（自成一行），`let` / `let rec` / `and` 关键字与绑定名
 -- 仍在同一行 —— 既有 `^let v_` 断言、快照 grep 与 `letrec` 口径都不受影响。
 bindGroupOf : GenSt -> IrGroup -> List String -> String
@@ -1825,7 +1843,7 @@ genDef : GenSt -> IrDef -> Check (Pair String GenSt)
 genDef st d = case irDefExtern d of
   Just (Pair ty cName) =>
     OkC
-      (Pair ("external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}") st)
+      (Pair "external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}" st)
   Nothing => case irDefBody d of
     Nothing =>
       ErrC
@@ -1836,7 +1854,7 @@ genDef st d = case irDefExtern d of
           finalText =
             if irDefInitGuard d then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
-        in OkC (Pair ("${valueName (irDefName d)} = ${finalText}") st1)
+        in OkC (Pair "${valueName (irDefName d)} = ${finalText}" st1)
     )
 
 -- ---------------------------------------------------------------
