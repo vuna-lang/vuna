@@ -50,6 +50,12 @@ vuna: runtime error: division by zero
   最多打印 12 条命中帧，未命中帧（如 `Stdlib.failwith`）跳过。
 - 位置是**定义级**（span 起点行），不是表达式级；路径归一成模块根/包目录下的相对路径
   （`Base/Show.vuna:42`、`app/Main.vuna:2`），保证同一输入的产物与 seed rotation 可复现。
+- **`#line` 注入**：每个绑定前写一行 `# <起始行> "<包相对路径>"`（`Codegen.Term` 的
+  `genGroup`/`genDef`），所以 `ocamlopt -g` 的 DWARF `.debug_line`、`gdb`、`perf` 以及
+  `Printexc` 回栈**原生**指向 `.vuna`，不必只靠 `dt_def_locs` 表（两者互补：裁剪掉 DWARF
+  的产物仍靠表）。位置是**文件 + 行**粒度（同一指令后连续生成的代码都归到该起始行，
+  没有表达式级定位，见 debt D80）；`ocamlopt` 单元内联仍可能把帧归到调用者（D33）。
+  规范见 [observability.md](observability.md) §5。
 - 纯 `main`（零参值绑定）在**模块初始化期**求值，早于 main 钩子：`Main.ml` 第一行
   开启回栈、并给入口 main 的绑定套同一个报告器；`main : Eff [] a` 的 thunk 在钩子的
   `try` 内执行。
@@ -62,18 +68,24 @@ vuna: runtime error: division by zero
 
 ## 3. 语言级调试构造：`dbg!` / `dbgShow` / `assert` / `todo`
 
-`dbg!` 是**唯一的内置调试宏**（不是库函数；任何包可用，不需要 import）：
+`dbg!` 是**门控调试行**的内置宏（不是库函数；任何包可用，不需要 import）。要**结构化**
+事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用语言层的可观测性 API
+（`Base.Obs` / `Base.Obs.Span` 与 `obs!` / `mark!` 宏，见
+[observability.md](observability.md)）：
 
 | 名字 | 签名 | 行为 |
 | --- | --- | --- |
 | `dbg!` | `String -> Int` | 门控调试行：`--debug-perf` / `VUNA_DEBUG_PERF=1` 打开时向 stderr 写 `DEBUG <epoch-us> <text>`，关闭时实参**不求值**；返回 `0` |
+| `obs!` | `String -> Int` | 结构化日志事件（`vuna.log`，`VUNA_OBS>=1` 时写 trace，并同格式写 stderr）；实参**总会求值** |
+| `mark!` | `String -> Int` | 瞬时标记事件（`ph:"i"`）；实参**总会求值** |
 | `dbgShow` | `DebugShow a => a -> a` | 用 `debugShow`（默认由 `show` 派生）经 `dbg!` 打印后返回原值 |
 | `assert` | `Bool -> String -> a -> a` | `True` 返回第三个实参；`False` 以 `assertion failed: <msg>` abort（debug-only） |
 | `todo` | `String -> a` | 以 `TODO: <msg>` abort（debug-only 占位） |
 
 `dbg!` 展开为隐藏 runtime 原语（`@vuna@debug@on` / `@vuna@debug@line`，见
-[primitives.md](primitives.md)），所以源码里没有“假纯值”；`vuna interp` 不执行 tracing
-（归约为 no-op），输出只发生在 compile+run 的 runtime。
+[primitives.md](primitives.md)），`obs!` / `mark!` 展开为 `@vuna@obs@log` / `@vuna@obs@mark`，
+所以源码里没有“假纯值”；`vuna interp` 不执行 tracing / 观测（都归约为 no-op），
+输出只发生在 compile+run 的 runtime。
 
 `DebugShow` 在 `Base.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
 所以**所有 `Show` 实例自动获得 `dbgShow`**；需要不同调试格式的类型可另写实例。
@@ -120,9 +132,14 @@ vuna: runtime error: assertion failed: broken invariant
 普通程序用 §3 的构造即可；需要直接调用原语时可直接引用 `prim_*` / `prim_eff_*`
 （没有 manifest 门控；用户面**应**经 `Base.Eff` + handler）。
 
-编译器的性能/诊断探针同样只用 `dbg!`（不再有独立的探针宏）：展开规则见
-[language.md](language.md)「内置宏」，用法与 `--debug-perf` 输出协议见
-[performance.md](performance.md) §2。
+编译器的性能/诊断探针分两层：
+
+- **`dbg!`**：单条门控日志行（`--debug-perf`，见 [performance.md](performance.md) §2）；
+- **观测 span / 计数**（`Vuna.Compiler.Obs` 的 `obsCheck` / `obsDefCheck` / `obsMarkEff`）：
+  结构化事件（`VUNA_OBS>=1`），阶段跨度与逐定义跨度见
+  [observability.md](observability.md) §3.3 词汇表。两者独立开关，可以只开其一。
+
+展开规则见 [language.md](language.md)「内置宏」。
 
 ## 5. 调试回路里的命令
 

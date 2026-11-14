@@ -143,7 +143,8 @@ build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` 
 - 仓库探索（按场景选工具、探索后落盘）：技能 `.agents/skills/repo-navigation/SKILL.md`
 - 自举与种子：[bootstrap.md](docs/reference/bootstrap.md)；测试与 CI：[testing.md](docs/reference/testing.md)；
   测试体系设计（共享对象库 / 隔离 / verdict / tier）：[test-architecture.md](docs/reference/test-architecture.md)；
-  性能：[performance.md](docs/reference/performance.md)
+  性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
+  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Obs` / `vuna obs` / `#line` → DWARF）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
 
 > 文档分层规则：`README.md` 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；

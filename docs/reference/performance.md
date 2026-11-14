@@ -75,34 +75,45 @@
 一致：同一份源码在逐模块 split 产物下测量；`compile` / `build` / seed 只有这一种产物，不再有
 单文件 `main.ml` 口径。
 
-## 2. 探针设施：唯一内置宏 `dbg!`
+## 2. 探针设施：`dbg!` 日志行 + `VUNA_OBS` 结构化观测
 
-开关是 CLI 参数 / 环境变量（`Vuna.Cli` 只把 `--debug-perf` 从分发参数里剥掉；runtime
-原语读原始 argv/env，任何子命令后都能加）：
+分两层，**两套独立开关**；绝对读数只用「都关闭」的口径（见 §7）：
+
+| 层 | 开关 | 输出 | 形态 |
+| --- | --- | --- | --- |
+| 日志行 | `--debug-perf` / `VUNA_DEBUG_PERF=1` | stderr | `DEBUG <epoch-us> <text>`，相邻两行相减 = 阶段耗时 |
+| 结构化观测 | `VUNA_OBS=1..3` / `--obs` / `--obs-level N` | Chrome Trace Event JSONL | `ph:"X"` 跨度（自带 `dur` 与 `args.allocWords`/`heapWords`）、`ph:"C"` 计数、`ph:"i"` 日志与采样栈 |
+
+结构化观测是**语言层**能力（任何 vuna 应用可用），完整规范见
+[observability.md](observability.md)；本页只讲「用它来量编译器」：
 
 ```console
-vuna check compiler --debug-perf
-VUNA_DEBUG_PERF=1 vuna check compiler
+VUNA_OBS=2 VUNA_OBS_DIR=$PWD/trace vuna check compiler      # 阶段跨度 + 逐定义
+VUNA_OBS=3 vuna build --no-compile --out OUT compiler       # + CPU/内存采样
+vuna obs summarize trace/vuna-*.jsonl                       # 阶段自用/总用时表
+vuna obs run --level 2 -- vuna check compiler                # 一步到位
+vuna obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 ```
 
-打开后 stderr 上出现单一格式的行（stdout 不受影响）：
-
-- `DEBUG <epoch-us> <text>`：微秒时间戳 + 文本。**相邻两行相减 = 阶段耗时**。
-
-调用点只写内置宏 `dbg!`（展开规则见 [language.md](language.md) 的「内置宏」；后端是
-隐藏 runtime 原语 `@vuna@debug@on` / `@vuna@debug@line`，不是旧的 Debug 模块）：
+`dbg!` 仍是**阶段边界的低成本日志**（展开规则见 [language.md](language.md) 的「内置宏」；
+后端是隐藏 runtime 原语 `@vuna@debug@on` / `@vuna@debug@line`）：
 
 | 用法 | 语义 | 何时用 |
 | --- | --- | --- |
-| `dbg! label` | 阶段边界的时间戳行 | 阶段边界（替旧的 `perfStamp!`） |
-| `dbg! ("x=" ++ showTerm t)` | 任意诊断文本行 | 表规模、元变量数、字典目标数（替旧的 `perfNote!`） |
+| `dbg! label` | 阶段边界的时间戳行 | 阶段边界 |
+| `dbg! ("x=" ++ showTerm t)` | 任意诊断文本行 | 表规模、元变量数、字典目标数 |
+| `obsCheck name (\_ => ...)` / `obsMarkEff name` | 结构化跨度 / 标记 | 需要归因表、嵌套、跨模块聚合时 |
 
 **关键纪律（宏已承担）**：守卫在展开里，`dbg! ("x=" ++ showTerm t)` 在关闭时**不会**
 先算字符串。表达式返回 `Int 0`，调用点写 `_ = dbg! ...`；开关是 runtime 里的 lazy CAF，
 关闭时每个探针只做一次 `Lazy.force`。**1/64 采样已删除**（逐定义探针照常打印），因此
 冷 build 的 DEBUG 输出量比旧版略增（全量精化约 15.8 万行），实测冷 build 墙钟膨胀 ~60%：
-阶段比例可用，绝对读数必须用无 `--debug-perf` 口径（§7）。`vuna interp` 不执行 tracing
-（原语归约为 no-op），输出只发生在 compile+run 的 runtime。
+阶段比例可用，**绝对读数必须用无 `--debug-perf` / `VUNA_OBS=0` 口径**（§7）。
+`vuna interp` 不执行 tracing / 观测（原语归约为 no-op），输出只发生在 compile+run 的 runtime。
+
+结构化观测的成本纪律（关闭路径、事件缓冲、采样开销的实测口径）在
+[observability.md](observability.md) §6；那里也有 `#line` 让 `perf`/`gdb` 直接看到
+`.vuna` 的配方（本仓库的 `perf`/`gdb` 不进 devShell，属于手动验证路径）。
 
 ## 3. 查找表：泛型 `Base.HashMap k v`
 

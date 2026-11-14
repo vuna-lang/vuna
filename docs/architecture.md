@@ -19,6 +19,7 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
 ├─ Intrinsics.vuna            内建语义唯一真源（名字/签名/arity/可见性；运行时文本在 Codegen.Runtime）
+├─ Obs.vuna                  观测插桩适配层（obsCheck / obsDefCheck / obsMarkEff；规范见 reference/observability.md）
 ├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
 ├─ Addr.vuna                  输入摘要（地址）唯一构造器：addrOf / header / 项目身份
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Lex / Pkg
@@ -41,6 +42,8 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
   PerfCache                          codegen 单元缓存（S5）
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
+  Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
+  [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
@@ -258,6 +261,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
+| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Obs` / `vuna obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 + `checks.vuna-package` |
 | Nix | `nix flake check` + `nix build .#vuna` |

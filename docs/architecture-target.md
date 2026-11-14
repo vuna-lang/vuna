@@ -44,6 +44,11 @@
 
 大方向粒度，每条只说明"终态有什么"，不说明"怎么做到"。
 
+- **可观测性是一等设施**（不变量 10 的落地形态）：事件模型固定为 Chrome Trace Event
+  JSONL（`vuna-obs 1`），任何 vuna 应用都能用 `Base.Obs` / `Base.Obs.Span` 埋 span、
+  计数与采样；开关分级（`VUNA_OBS=0..3`）、关闭路径零成本、产物默认带 `#line` 让
+  DWARF 直指 `.vuna`；工具是 `vuna obs`（summarize / convert / render）与外部生态
+  （perf / Chrome / speedscope / 火焰图）的换算。规范：[observability.md](reference/observability.md)。
 - **单一输入寻址对象库**：一切可复用产物按输入摘要寻址；增量、并行、
   取消、可观测性都是消费者/调度层的属性，不是额外缓存。
 - **分层表示**：无损 CST、Core、擦除后 IR、后端 IR，一种表示只服务一个抽象层。
