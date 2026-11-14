@@ -247,15 +247,15 @@ vuna obs serve --cdp ADDR [--allow-slow]
 
 | 位置 | 断言 |
 | --- | --- |
-| `nix/checks/vuna-obs-schema.sh` | `VUNA_OBS=2 vuna check compiler` 与 `base` 各一次：`vuna obs validate` 通过 + `summarize --json` 结构非空 |
-| `nix/checks/vuna-obs-dwarf.sh` | `build --no-compile --out` 后 `readelf --debug-dump=decodedline` 至少一个 `.vuna` 文件；`vuna-symbols.json` 可解析 |
-| `nix/checks/vuna-obs-overhead.sh` | 关闭口径对未插桩基线 ≤3%（合成 500/1000/2000/4000 def，独立进程、每档 3 次中位）；1/2/3 级读数只打印不设硬门槛 |
+| `nix/checks/vuna-obs-schema.sh` | `VUNA_OBS=0` 不产任何 trace；`VUNA_OBS=2` 的 `check compiler` 与 `check base` 各产出一份 trace：`vuna obs validate` 通过、首行是 `ph:"M"` + `schema:"vuna-obs 1"`、`summarize --json` 单行且含 `spans`/`wallUs`；编译器 trace 必须含 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度（插桩被搬掉会失败） |
+| `nix/checks/vuna-obs-dwarf.sh` | split 产物每个绑定前有 `# <行> "<包相对>.vuna"` 指令（不含绝对/`../` 路径）；`build` 出的可执行文件在 `readelf --debug-dump=decodedline` 里有 `.vuna` 文件且行号 > 0。**不依赖** gdb/perf（CI 里不保证有） |
+| `nix/checks/vuna-obs-overhead.sh` | `VUNA_OBS=0` 与不设观测的产物**逐字节一致**（关闭路径不得改变任何输出）；关闭时不写 trace 文件；打开时必须产出（反证）；生成运行时的 `dtp_obs_log/counter/mark/span` 都以关闭快速路径开头（不在关闭路径读时钟/分配）。**不设墙钟门槛**——绝对性能不可跨机器比，那属于 benchmark |
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |
-| suite `106_observability.steps` | 关闭零输出/产物逐字节不变、`dbg!` 协议不变、span 配对、逐定义事件、`#line` 产物与 DWARF、回栈 `.vuna`、CPU/内存采样、三种换算结构、渲染可复现、CDP 往返 |
-| `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（精确基线） |
+| `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
+| suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
 
 回归面（每次改动后）：`vuna fmt <改动>`、`vuna check .`、`sh nix/check-eff-boundary.sh`、
-`sh nix/checks/ir-boundary.sh`、`nix run .#vuna-run-tests -- --only 106/34/46/65/33/38`、
+`sh nix/checks/ir-boundary.sh`、`vuna test --suite test/suite.toml --only 90/steps_native/107_observability`、
 `checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（`sh nix/seed-rotate.sh ./result/bin/vuna`）。
 
 ## 10. 已知边界（开放项）
