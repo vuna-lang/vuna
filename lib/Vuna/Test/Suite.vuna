@@ -70,7 +70,7 @@ export record Suite(..) where
   suiteMinCases : Int
 
 -- `CGolden` 的字段：source expected interp check compile run compareInterp。
--- `CError` 的字段：source expectedErr interp check compile。
+-- `CError` 的字段：source diagPath wantInterp wantCompile（负例期望载体是结构化诊断）。
 export data CaseKind(..) : Type where
   CGolden : String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseKind
   CError : String -> String -> Bool -> Bool -> Bool -> CaseKind
@@ -307,15 +307,14 @@ isFixtureName : String -> Bool
 isFixtureName name = endsWith ".vuna" name && not (startsWith "_" name)
 
 -- ---------------------------------------------------------------
--- 阶段限定后缀：`<base>.<stage>.<artifact>` 表达阶段矩阵
+-- 期望文件：`<base>.diag.json`（负例）与 `<base>.out` 系列（正例）
 -- ---------------------------------------------------------------
--- 一个夹具扫描到的全部期望文件。阶段参与由「后缀存在性」推导，family 旗标只是
--- 上限（关掉即不跑）；矛盾组合显式 CBroken，不静默跳过。
+-- 负例的唯一期望载体是结构化诊断 `.diag.json`；文本片段（`.check.err` / `.err` /
+-- `.compile.err` / `.cerr`）已从夹具层删除。阶段参与由「后缀存在性」推导，
+-- family 旗标只是上限（关掉即不跑）；矛盾组合显式 CBroken，不静默跳过。
 record FixtureWant where
-  fwCheckErr : Maybe String
+  fwDiag : Maybe String
   fwInterpOut : Maybe String
-  fwInterpErr : Maybe String
-  fwCompileErr : Maybe String
   fwRunOut : Maybe String
   fwRunErr : Maybe String
   fwRunExit : Maybe String
@@ -333,15 +332,13 @@ orOpt Nothing b = b
 -- 共享 golden，断言两者一致）与裸 `.err`（check 负例）是兼容形态。
 parseWant : String -> Eff hostRow FixtureWant
 parseWant base = do
-  checkErr <- firstExisting ["${base}.check.err", "${base}.err"]
+  diag <- firstExisting ["${base}.diag.json"]
   interpOut <- firstExisting ["${base}.interp.out"]
-  interpErr <- firstExisting ["${base}.interp.err"]
-  compileErr <- firstExisting ["${base}.compile.err"]
   runOut <- firstExisting ["${base}.run.out"]
   runErr <- firstExisting ["${base}.run.err"]
   runExit <- firstExisting ["${base}.run.exit"]
   sharedOut <- firstExisting ["${base}.out"]
-  pure (FixtureWant checkErr interpOut interpErr compileErr runOut runErr runExit sharedOut)
+  pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
 -- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
 readExitCode : String -> Eff hostRow Int
@@ -355,17 +352,16 @@ parseExitDigits (c :: rest) acc seen =
   if c >= 48 && c <= 57 then parseExitDigits rest (acc * 10 + (c - 48)) 1
   else if seen == 0 then parseExitDigits rest acc 0 else acc
 
--- 目录型夹具的期望文件（`expected.<stage>.<artifact>`；裸 `expected.out`/`expected.err` 兼容）。
+-- 目录型夹具的期望文件（`expected.diag.json` 是负例唯一载体）。
 dirWant : String -> Eff hostRow FixtureWant
 dirWant caseDir = do
-  checkErr <- firstExisting ["${caseDir}/expected.check.err", "${caseDir}/expected.err"]
+  diag <- firstExisting ["${caseDir}/expected.diag.json"]
   interpOut <- firstExisting ["${caseDir}/expected.interp.out"]
-  compileErr <- firstExisting ["${caseDir}/expected.compile.err"]
   runOut <- firstExisting ["${caseDir}/expected.run.out"]
   runErr <- firstExisting ["${caseDir}/expected.run.err"]
   runExit <- firstExisting ["${caseDir}/expected.run.exit"]
   sharedOut <- firstExisting ["${caseDir}/expected.out"]
-  pure (FixtureWant checkErr interpOut Nothing compileErr runOut runErr runExit sharedOut)
+  pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
 firstExisting : List String -> Eff hostRow (Maybe String)
 firstExisting [] = pure Nothing
@@ -386,13 +382,9 @@ wantCaseWith : Family -> String -> String -> FixtureWant -> Int -> Check Case
 wantCaseWith family source id want exitCode =
   let
     negRun = hasOpt want.fwRunErr || hasOpt want.fwRunExit
-    negAny = hasOpt want.fwCheckErr || hasOpt want.fwInterpErr || hasOpt want.fwCompileErr || negRun
+    negAny = hasOpt want.fwDiag || negRun
     posAny = hasOpt want.fwInterpOut || hasOpt want.fwSharedOut || hasOpt want.fwRunOut
-  in if posAny && negAny then err "conflicting expect: golden (`.out`/`.interp.out`/`.run.out`) with error (`.check.err`/…)"
-  else if hasOpt want.fwCheckErr && hasOpt want.fwInterpErr then err "conflicting expect: `.check.err` with `.interp.err`"
-  else if hasOpt want.fwCompileErr && negRun then err "conflicting expect: `.compile.err` with `.run.err`/`.run.exit`"
-  else if hasOpt want.fwInterpErr && (hasOpt want.fwCheckErr || hasOpt want.fwCompileErr) then err "conflicting expect: `.interp.err` with another error stage"
-  else if hasOpt want.fwInterpErr && not family.familyInterp then err "family does not allow interp expectations"
+  in if posAny && negAny then err "conflicting expect: golden (`.out`/`.interp.out`/`.run.out`) with `.diag.json`/`.run.err`"
   else if hasOpt want.fwRunOut && negRun then err "conflicting expect: `.run.out` with `.run.err`/`.run.exit`"
   else if negRun then if not family.familyRun then err "family does not allow run expectations"
   else
@@ -404,14 +396,13 @@ wantCaseWith family source id want exitCode =
       code = if hasOpt want.fwRunExit then if exitCode == 0 then 256 else exitCode else 0
     in OkC
       (Case id family.familySection family.familyTags (CRuntime source expect code) family.familyTimeout "integration")
-  else if negAny then if hasOpt want.fwCompileErr && not family.familyCompile then err "family does not allow compile expectations"
-  else
+  else if hasOpt want.fwDiag then
     let
-      expect = fromMaybe "" (orOpt (orOpt want.fwCheckErr want.fwInterpErr) want.fwCompileErr)
-      interpOn = family.familyInterp && (hasOpt want.fwCheckErr || hasOpt want.fwInterpErr)
-      checkOn = family.familyCheck && hasOpt want.fwCheckErr
+      diagPath = fromMaybe "" want.fwDiag
+      interpOn = family.familyInterp
+      compileOn = family.familyCompile
     in OkC
-      (Case id family.familySection family.familyTags (CError source expect interpOn checkOn family.familyCompile) family.familyTimeout "fast")
+      (Case id family.familySection family.familyTags (CError source diagPath interpOn family.familyCheck family.familyCompile) family.familyTimeout "fast")
   else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then err "family does not allow compile+run"
   else OkC
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout "fast")
@@ -419,13 +410,13 @@ wantCaseWith family source id want exitCode =
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout "fast")
   else if hasOpt want.fwInterpOut then OkC
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast")
-  else err "no expect file (need one of `.out` / `.check.err` / `.run.out` / …)"
+  else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
 
--- check 负例期望路径：阶段限定优先，裸 `.err` 兼容。
+-- 负例期望路径：`.diag.json`（结构化诊断是唯一真源）。
 expectPath : String -> Eff hostRow String
 expectPath base = do
-  exists <- pathExistsFile "${base}.check.err"
-  if exists then pure "${base}.check.err" else pure "${base}.err"
+  exists <- pathExistsFile "${base}.diag.json"
+  if exists then pure "${base}.diag.json" else pure "${base}.diag.json"
 
 -- 目录型 family：entry 配置时每个子目录一个 case。
 discoverDirFamily : Suite -> Family -> String -> Eff hostRow (List Case)

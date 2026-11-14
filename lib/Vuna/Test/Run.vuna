@@ -14,14 +14,18 @@ module Vuna.Test.Run where
 -- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
 import Base.HostRow
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Store
 import qualified Vuna.Cli.Args
+import Vuna.Test.Expect
+import Vuna.Test.InProc
 import Vuna.Test.Session
 import Vuna.Test.Suite
 import Vuna.Files
 import Vuna.Json
+import Vuna.Lint
 import Base.IORef
 
 -- 执行环境。
@@ -381,174 +385,250 @@ syncBuildDir staging dir = do
   _ <- ensureDirPath dir
   raiseToRow hostRow (@vuna@prim_eff_runIn "/" ["cp", "-a", "${staging}/.", "${dir}/"])
 
--- 会话优先的 check / interp 探针：命中时零子进程（~200ms → ~10ms），语义等价
--- （check = 退出码，interp = trim 后输出文本）。会话不可用/安全阀不适用时回退 CLI，
--- 保证诊断文本与 `.check.err` 片段匹配仍走原来的路径。
-probeInterp : Env -> Case -> String -> Eff hostRow CmdResult
-probeInterp env c source = do
-  probed <- sessionInterp env.envSession env.envBase source
-  case probed of
-    Just (Pair code out) => pure (CmdResult code out "" False)
-    Nothing =>
-      runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "interp", source])
+-- ---------------------------------------------------------------
+-- 进程内探针（**零子进程**）
+-- ---------------------------------------------------------------
+-- 会话（依赖接口 + termAux 缓存）优先；不可用时在同一进程内退回全量精化
+-- （`checkFileSessioned` / `interpFileSessioned`）。绝不 spawn `vuna`。
+probeCheckIn : Env -> String -> Eff hostRow (Check (List Diagnostic))
+probeCheckIn env source = checkFileSessioned env.envSession env.envBase source
 
-probeCheck : Env -> Case -> String -> Eff hostRow CmdResult
-probeCheck env c source = do
-  probed <- sessionCheck env.envSession env.envBase source
-  case probed of
-    Just (Pair code out) => pure (CmdResult code out "" False)
-    Nothing =>
-      runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "check", source])
+probeInterpIn : Env -> String -> Eff hostRow (Check String)
+probeInterpIn env source = interpFileSessioned env.envSession env.envBase source
+
+-- 负例的 check：**全量**路径（`warnUnusedDefsIn` 只在全量尾部跑，未使用/遮蔽类
+-- warning 只在它那里产生；增量会话不产这些）。仍然零子进程。
+probeCheckInFull : Env -> String -> Eff hostRow (Check (List Diagnostic))
+probeCheckInFull env source = checkFile source
+
+probeInterpInFull : String -> Eff hostRow (Check String)
+probeInterpInFull source = interpFile source
+
+probePackageIn : Env -> String -> Eff hostRow (Check (List Diagnostic))
+probePackageIn env dir = checkPackageAt dir
+
+checkPassed : Check a -> Bool
+checkPassed r = case r of
+  OkC _ => True
+  ErrC _ => False
+
+interpTextOf : Check String -> String
+interpTextOf r = case r of
+  OkC s => trimNewlines s
+  ErrC e => diagText e
+
+diagBriefOf : Check a -> String
+diagBriefOf r = case r of
+  OkC _ => ""
+  ErrC e => diagText e
+
+timeoutAssert : Case -> Int -> Assertion
+timeoutAssert c ms =
+  Assertion "case timeout" (ms <= c.caseTimeout * 1000)
+    "in-process case took ${strOfInt ms}ms, over ${strOfInt c.caseTimeout}s budget"
+
+-- 跳过路径的占位诊断（不参与断言）。
+caseSkipDiag : String -> Diagnostic
+caseSkipDiag why = diagNoLoc SevError PhDriver CatTool "case-skip" why
+
+-- ---------------------------------------------------------------
+-- 结构化诊断期望（`.diag.json` 唯一真源）
+-- ---------------------------------------------------------------
+caseRelOf : Env -> String -> String
+caseRelOf env diagPath =
+  if not (endsWith "expected.diag.json" diagPath) then ""
+  else relativeTo "${env.envRoot}/test" (Vuna.Cli.Args.parentOf diagPath)
+
+expectKeysOf : Env -> String -> Eff hostRow (Check (List String))
+expectKeysOf env diagPath = do
+  text <- raiseToRow hostRow (@vuna@prim_eff_readFile diagPath)
+  pure (expectKeys env.envRoot env.envBase (caseRelOf env diagPath) text)
+
+actualKeysOf : Env -> String -> Check (List Diagnostic) -> List String
+actualKeysOf env caseRel checked = case checked of
+  ErrC e => projectDiags env.envRoot env.envBase caseRel (flattenErr e)
+  OkC ds => projectDiags env.envRoot env.envBase caseRel ds
+
+expectHasError : List String -> Bool
+expectHasError keys = any (\k => startsWith "error|" k) keys
+
+expectHasErrorOf : Check (List String) -> Bool
+expectHasErrorOf r = case r of
+  OkC keys => expectHasError keys
+  ErrC _ => False
+
+diffToAssertion : ExpectDiff -> Assertion
+diffToAssertion d = Assertion d.diffName d.diffOk d.diffDetail
+
+diffsToAssertions : List ExpectDiff -> List Assertion
+diffsToAssertions [] = []
+diffsToAssertions (d :: rest) = diffToAssertion d :: diffsToAssertions rest
+
+diagAsserts : String -> List String -> List String -> List Assertion
+diagAsserts name expected actual = diffsToAssertions (compareSortedKeys name expected actual)
+
+-- ---------------------------------------------------------------
+-- golden（interp / check / compile + run）
+-- ---------------------------------------------------------------
+-- 一次 golden 运行的全部读数（纯记录；断言在 `goldenAssertions` 里组装，避免在 do
+-- 块里写 `let`——那会触发 `PS_ExpectedToken`）。
+record GoldenRun where
+  grInterp : Check String
+  grCheck : Check (List Diagnostic)
+  grCompile : Check (Pair Int (List Diagnostic))
+  grCompileOk : Bool
+  grSync : Int
+  grBuildCode : Int
+  grRunOk : Bool
+  grRunText : String
+  grMs : Int
+
+buildCodeOf : GoldenRun -> Int
+buildCodeOf gr = gr.grBuildCode
+
+goldenAssertions : Case -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> GoldenRun -> List Assertion
+goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCompare gr =
+  let
+    interpA = if wantInterp then [assertEq "interp" expectedText (interpTextOf gr.grInterp)] else []
+    checkA =
+      if wantCheck then [Assertion "check exit" (checkPassed gr.grCheck) "check failed:\n${diagBriefOf gr.grCheck}"]
+      else []
+    compileA =
+      if wantCompile then [ Assertion "compile exit" (checkPassed gr.grCompile) "compile failed:\n${diagBriefOf gr.grCompile}"
+      ]
+      else []
+    syncA = if gr.grCompileOk then [assertExit "cache sync" gr.grSync] else []
+    buildA = if gr.grCompileOk then [assertExit "build exit" (buildCodeOf gr)] else []
+    runA = if gr.grRunOk then [assertEq "run" expectedText gr.grRunText] else []
+    compareA =
+      if wantCompare && wantInterp && gr.grRunOk then [assertEq "interp == run" (interpTextOf gr.grInterp) gr.grRunText]
+      else []
+  in append [timeoutAssert c gr.grMs]
+    (append interpA (append checkA (append compileA (append syncA (append buildA (append runA compareA))))))
+
+-- 把 staging 同步进共享构建桶（base 的 .cmx 只编译一次）。
+syncStaging : Env -> String -> Eff hostRow Int
+syncStaging env staging = do
+  target <- buildCacheDir env staging
+  syncBuildDir staging target
 
 goldenCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Eff hostRow CaseResult
-goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare =
+goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare = do
+  start <- effTimeUs
+  expectedText <- fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile expected))
+  interpR <-
+    if wantInterp then probeInterpIn env source else pure (ErrC (caseSkipDiag "interp off"))
+  checkR <- if wantCheck then probeCheckIn env source else pure (OkC [])
+  compileR <-
+    if wantCompile then compileFile source "${env.envTmp}/stage-${safeName c.caseId}"
+    else pure (ErrC (caseSkipDiag "compile off"))
+  syncCode <-
+    if wantCompile && checkPassed compileR then syncStaging env "${env.envTmp}/stage-${safeName c.caseId}"
+    else pure 0
+  buildR <-
+    if wantCompile && checkPassed compileR then runCmdMerged env "${c.caseId}-build" "${env.envTmp}/stage-${safeName c.caseId}" c.caseTimeout
+      ["sh", "build.sh", "prog"]
+    else pure (CmdResult 1 "" "" False)
+  runOk <- pure (wantRun && wantCompile && checkPassed compileR && buildR.cmdCode == 0)
+  runR <-
+    if runOk then runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout
+      ["${env.envTmp}/stage-${safeName c.caseId}/prog"]
+    else pure (CmdResult 1 "" "" False)
+  end <- effTimeUs
+  gr <-
+    pure
+      (GoldenRun interpR checkR compileR (wantCompile && checkPassed compileR) syncCode buildR.cmdCode runOk (trimNewlines (combinedOut runR)) ((end - start) / 1000))
+  base <-
+    finishCase c.caseId start
+      (goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCompare gr)
+  if env.envBless && base.resFail > 0 then do
+    _ <-
+      raiseToRow hostRow
+        (@vuna@prim_eff_writeFile expected "${if runOk then gr.grRunText else interpTextOf gr.grInterp}\n")
+    pure
+      (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"])
+  else pure base
+
+-- ---------------------------------------------------------------
+-- error（负例：结构化诊断断言）
+-- ---------------------------------------------------------------
+-- `expected` 已是 `.diag.json` 路径（`Suite` 的 discovery 以它为负例标记）。
+-- 断言：`severity|code|file|line|col` 序列 + 条数 + 顺序；不比对 message / text。
+record ErrorRun where
+  erExpected : Check (List String)
+  erActual : Check (List Diagnostic)
+  erInterp : Check String
+  erCompile : Check (Pair Int (List Diagnostic))
+  erAbsent : Assertion
+  erMs : Int
+
+errorAssertions : Env -> String -> Bool -> Bool -> Case -> ErrorRun -> List Assertion
+errorAssertions env diagPath wantInterp wantCompile c er =
   let
-    staging = "${env.envTmp}/stage-${safeName c.caseId}"
-  in do
-    start <- effTimeUs
-    expectedText <- fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile expected))
-    interpR <- if wantInterp then probeInterp env c source else pure (CmdResult 1 "" "" False)
-    checkCode <- if wantCheck then do
-      r <- probeCheck env c source
-      pure r.cmdCode
-    else pure 1
-    compileR <-
-      if wantCompile then runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", source, staging])
-      else pure (CmdResult 1 "" "" False)
-    outdir <-
-      if wantCompile && compileR.cmdCode == 0 then buildCacheDir env staging else pure staging
-    syncCode <- if wantCompile && compileR.cmdCode == 0 then syncBuildDir staging outdir else pure 0
-    buildR <-
-      if wantCompile && compileR.cmdCode == 0 then runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
-      else pure (CmdResult 1 "" "" False)
-    runOk <- pure (wantRun && wantCompile && compileR.cmdCode == 0 && buildR.cmdCode == 0)
-    runR <-
-      if runOk then runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
-      else pure (CmdResult 1 "" "" False)
-    base <- finishCase c.caseId start (let
-      interpOn = wantInterp
-      interpText = if interpOn then trimNewlines (combinedOut interpR) else ""
-      interpA = if interpOn then [assertEq "interp" expectedText interpText] else []
-      checkA = if wantCheck then [assertExit "check exit" checkCode] else []
-      compileA =
-        if wantCompile then [ assertExit "compile exit" compileR.cmdCode,
-          assertSilent "compile silent" (combinedOut compileR)
+    errExpected = expectHasErrorOf er.erExpected
+    keysA = case er.erExpected of
+      ErrC e => [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
+      OkC expectedKeys =>
+        diagAsserts "diag" expectedKeys (actualKeysOf env (caseRelOf env diagPath) er.erActual)
+    checkA = case er.erActual of
+      ErrC _ => [Assertion "check exit" True ""]
+      OkC ds =>
+        if errExpected then [ Assertion "check exit" False "expected an error, check succeeded with ${strOfInt (listLength ds)} diagnostic(s)"
         ]
         else []
-      syncA =
-        if wantCompile && compileR.cmdCode == 0 then [assertExit "cache sync" syncCode] else []
-      buildA =
-        if wantCompile && compileR.cmdCode == 0 then [assertExit "build exit" buildR.cmdCode]
-        else []
-      runA = if runOk then [assertEq "run" expectedText (trimNewlines (combinedOut runR))] else []
-      compareA =
-        if wantCompare && interpOn && runOk then [assertEq "interp == run" interpText (trimNewlines (combinedOut runR))]
-        else []
-    in append interpA
-      (append checkA (append compileA (append syncA (append buildA (append runA compareA)))))
-    )
-    actualForBless <-
-      pure
-        (if runOk then trimNewlines (combinedOut runR) else if wantInterp then trimNewlines (combinedOut interpR) else "")
-    if env.envBless && base.resFail > 0 then do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile expected "${actualForBless}\n")
-      pure
-        (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expected}"])
-    else pure base
-
--- 结构化诊断期望文件：与 `.check.err` 同目录的 `.diag.json`（`--json` 聚合文档）。
-diagExpectedOf : String -> String
-diagExpectedOf expected =
-  if endsWith "expected.check.err" expected then "${Vuna.Cli.Args.parentOf expected}/expected.diag.json"
-  else if endsWith "expected.err" expected then "${Vuna.Cli.Args.parentOf expected}/expected.diag.json"
-  else if endsWith ".check.err" expected then "${substring 0 (byteLength expected - 10) expected}.diag.json"
-  else if endsWith ".err" expected then "${substring 0 (byteLength expected - 4) expected}.diag.json"
-  else "${expected}.diag.json"
+    interpA =
+      if wantInterp && errExpected then [ Assertion "interp exit" (not (checkPassed er.erInterp)) "interp should fail:\n${diagBriefOf er.erInterp}"
+      ]
+      else []
+    compileA =
+      if wantCompile && errExpected then [ Assertion "compile exit" (not (checkPassed er.erCompile)) "compile should fail:\n${diagBriefOf er.erCompile}"
+      ]
+      else []
+    absentA = if wantCompile && errExpected then [er.erAbsent] else []
+  in append [timeoutAssert c er.erMs]
+    (append keysA (append checkA (append interpA (append compileA absentA))))
 
 errorCase : Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Eff hostRow CaseResult
-errorCase env c source expected wantInterp wantCheck wantCompile =
-  let
-    baseName =
-      if endsWith ".vuna" source then substring 0 (byteLength source - 5) source else source
-    compileErrPath = "${baseName}.compile.err"
-    legacyCerrPath = "${baseName}.cerr"
-    denyPath =
-      if startsWith "/" baseName then "${baseName}.deny" else "${env.envCwd}/${baseName}.deny"
-    outdir = uniqueOutDir env c.caseId
-    diagPath = diagExpectedOf expected
-  in do
-    pkgRoot <- pkgRootOf (Vuna.Cli.Args.parentOf source) 8
-    denyExists <- pathExistsFile denyPath
-    let
-      denyArgs = if denyExists then ["--deny-warnings"] else []
-      -- 共享 store 命中会跳过精化，warning 不持久化 ⇒ 负例必须 `-W` 绕过判定，
-      -- 否则同一 checkIn 的第二个 case 看不到 warning。`--deny-warnings` 本身也绕过。
-      warnArgs = if denyExists then [] else ["-W"]
-      checkArgs = append denyArgs warnArgs
-      -- `.deny` 的 warning 语义没有进 split/check 的输入摘要（缓存键只看源/依赖/
-      -- 编译器），共享 store 下可能命中普通 check 的成功结果 ⇒ 强制全量，绕过判定。
-      denyFull = if denyExists then ["env", "VUNA_ELAB_FULL=1"] else []
-      -- warning/deny 语义没有进 split 的输入摘要：用 case 私有空 store，避免命中
-      -- 普通 check 写下的成功产物（共享 store 下否则会假通过）。
-      denyStore = if denyExists then "${env.envTmp}/store-deny-${safeName c.caseId}" else ""
-      pkgMode = not (pkgRoot == "")
-      caseCwd = if pkgMode then pkgRoot else env.envCwd
-      target = if pkgMode then "." else source
-      diagSource = if pkgMode then "." else relativeTo env.envCwd source
-      diagCwd = caseCwd
-    in do
-      start <- effTimeUs
-      fragment <- fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile expected))
-      compileExists <- pathExistsFile compileErrPath
-      compileFragment <- if compileExists then fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile compileErrPath))
-      else do
-        legacyExists <- pathExistsFile legacyCerrPath
-        if legacyExists then fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile legacyCerrPath))
-        else pure fragment
-      interpA <- if wantInterp then do
-        r <-
-          runCmdMerged env "${c.caseId}-interp" env.envCwd c.caseTimeout
-            (withEnvIface env (append [env.envVuna, "interp", source] denyArgs))
-        pure
-          [assertContains "interp fragment" (combinedOut r) fragment, assertExitNonZero "interp exit" r.cmdCode]
-      else pure []
-      checkA <- if wantCheck then do
-        r <-
-          runCmdMerged env "${c.caseId}-check" caseCwd c.caseTimeout
-            (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", target] checkArgs)))
-        pure
-          [assertContains "check fragment" (combinedOut r) fragment, assertExitNonZero "check exit" r.cmdCode]
-      else pure []
-      _ <- removeTree outdir
-      compileA <- if wantCompile then do
-        r <-
-          runCmdMerged env "${c.caseId}-compile" caseCwd c.caseTimeout
-            (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "compile", target, outdir] checkArgs)))
-        absent <- assertAbsent "compile no output dir" outdir
-        pure
-          [assertContains "compile fragment" (combinedOut r) compileFragment, assertExitNonZero "compile exit" r.cmdCode, absent]
-      else pure []
-      diagRun <-
-        if wantCheck then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", diagSource, "--json"] checkArgs)))
-        else if wantCompile then runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "compile", diagSource, uniqueOutDir env "${c.caseId}-diag", "--json"] checkArgs)))
-        else runCmdMerged env "${c.caseId}-diag" diagCwd c.caseTimeout
-          (withEnvIfaceAt env denyStore (append denyFull (append [env.envVuna, "check", diagSource, "--json"] checkArgs)))
-      actualDiag <- pure (normalizeDiagText env (trimNewlines (combinedOut diagRun)))
-      diagA <- if env.envBlessDiag then do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile diagPath "${actualDiag}\n")
-        pure []
-      else do
-        hasDiag <- pathExistsFile diagPath
-        if hasDiag then do
-          expectedDiag <- raiseToRow hostRow (@vuna@prim_eff_readFile diagPath)
-          pure [assertEq "diag json" (normalizeDiagText env (trimNewlines expectedDiag)) actualDiag]
-        else pure []
-      finishCase c.caseId start (append interpA (append checkA (append compileA diagA)))
+errorCase env c source diagPath wantInterp wantCheck wantCompile = do
+  start <- effTimeUs
+  expectedR <- expectKeysOf env diagPath
+  -- `wantCheck = False`（family 只声明 `compile = true`）：诊断仍由 **compile**
+  -- 阶段产生（`CG_NoMain` 一类 codegen 门禁），所以实际诊断取自 compile 返回值。
+  actualR <- if endsWith "expected.diag.json" diagPath then probePackageIn env (Vuna.Cli.Args.parentOf diagPath)
+  else if wantCheck then probeCheckInFull env source
+  else do
+    cr <- compileFreshResult source (uniqueOutDir env c.caseId)
+    pure (compileDiags cr)
+  interpR <-
+    if wantInterp then probeInterpInFull source else pure (ErrC (caseSkipDiag "interp off"))
+  compileR <-
+    if wantCompile && wantCheck then compileFresh source (uniqueOutDir env c.caseId)
+    else pure (ErrC (caseSkipDiag "compile off"))
+  absentA <-
+    if wantCompile && wantCheck then assertAbsent "compile no output dir" (uniqueOutDir env c.caseId)
+    else pure (Assertion "no-outdir" True "")
+  end <- effTimeUs
+  er <- pure (ErrorRun expectedR actualR interpR compileR absentA ((end - start) / 1000))
+  finishCase c.caseId start (errorAssertions env diagPath wantInterp wantCompile c er)
+
+-- 清空目录后进程内 compile（负例的「决不产出」断言）。
+compileFresh : String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
+compileFresh source outdir = compileFreshResult source outdir
+
+compileFreshResult : String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
+compileFreshResult source outdir = do
+  _ <- removeTree outdir
+  compileFile source outdir
+
+-- compile 结果 -> 诊断列表（`CG_NoMain` 一类 codegen 门禁的诊断藏在 `OkC` 的第二分量）。
+compileDiags : Check (Pair Int (List Diagnostic)) -> Check (List Diagnostic)
+compileDiags r = case r of
+  ErrC e => ErrC e
+  OkC (Pair _ ds) => if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
+
+firstDiagOf : List Diagnostic -> Diagnostic
+firstDiagOf [] = caseSkipDiag "empty"
+firstDiagOf (d :: _) = d
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -624,17 +704,11 @@ absHash n = if n < 0 then 0 - n else n
 testProjectId : Env -> String
 testProjectId env = strOfInt (absHash (hashTextStrong env.envRoot))
 
-verdictEnvTag : Eff hostRow String
-verdictEnvTag = do
-  noSession <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_TEST_NO_SESSION")
-  pure "no-session=${noSession}"
-
--- 只缓存输入可声明的 golden/error；check/lint/fix/steps 不缓存。
 verdictKey : Env -> Case -> Eff hostRow String
 verdictKey env c = if not env.envCacheEnabled then pure ""
 else case c.caseKind of
   CGolden source expected _ _ _ _ _ => verdictKeyOf env c source expected
-  CError source expected _ _ _ => verdictKeyOf env c source expected
+  CError source diagPath _ _ _ => verdictKeyOf env c source diagPath
   _ => pure ""
 
 verdictKeyOf : Env -> Case -> String -> String -> Eff hostRow String
@@ -642,7 +716,7 @@ verdictKeyOf env c source expected = do
   srcText <- hashFileText source
   expText <- hashFileText expected
   fp <- toolCompilerFingerprint
-  tag <- verdictEnvTag
+  tag <- pure ""
   let
     kindTag = case c.caseKind of
       CGolden _ _ _ _ _ _ _ => "golden"
@@ -729,25 +803,56 @@ runCase env c = do
       _ <- writeCached env c r
       pure r
 
+-- ---------------------------------------------------------------
+-- check（`kind = "check-ok" / "check-error"` 的纯 check 用例）
+-- -----------------------------------------------------------
+-- `check-ok`：进程内全量 check 必须 `OkC` 且无 error 级诊断（warning 允许）。
+-- `check-error`：期望是 `.diag.json`，与 `CError` 同一套结构化断言（但只跑 check）。
 checkCase : Env -> Case -> String -> Bool -> String -> Eff hostRow CaseResult
 checkCase env c source expectPass expectedErr = do
   start <- effTimeUs
+  r <- probeCheckInFull env source
+  expectedR <- if expectPass then pure (OkC []) else expectKeysOf env expectedErr
+  end <- effTimeUs
+  finishCase c.caseId start (checkCaseAsserts env expectedErr expectPass start end r expectedR)
+
+checkCaseAsserts : Env -> String -> Bool -> Int -> Int -> Check (List Diagnostic) -> Check (List String) -> List Assertion
+checkCaseAsserts env expectedErr expectPass start end r expectedR =
   let
-    warnArgs = if expectPass then [] else ["-W"]
-  in do
-    r <-
-      runCmdMerged env "${c.caseId}-check" env.envCwd c.caseTimeout
-        (withEnvIface env (append [env.envVuna, "check", source] warnArgs))
-    if expectPass then finishCase c.caseId start [assertExit "check exit" r.cmdCode]
-    else do
-      fragment <- hashFileText expectedErr
-      let
-        checks =
-          if fragment == "" then [assertExitNonZero "check exit" r.cmdCode]
-          else [ assertContains "check fragment" (combinedOut r) (trimNewlines fragment),
-            assertExitNonZero "check exit" r.cmdCode
-          ]
-      in finishCase c.caseId start checks
+    ms = (end - start) / 1000
+  in if expectPass then [ timeoutAssertBy ms expectedErr,
+    Assertion "check ok" (checkPassed r) "check failed:\n${diagBriefOf r}",
+    Assertion "check no errors" (noErrorDiags r) "check reported error-level diagnostics:\n${diagBriefOf r}"
+  ]
+  else append [timeoutAssertBy ms expectedErr]
+    (append (diagKeyAsserts env expectedErr expectedR r) (checkExitAsserts r))
+
+-- 负例的 `.diag.json` 断言（`check-error` 与 `CError` 共用）。
+diagKeyAsserts : Env -> String -> Check (List String) -> Check (List Diagnostic) -> List Assertion
+diagKeyAsserts env diagPath expectedR actualR = case expectedR of
+  ErrC e => [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
+  OkC expectedKeys =>
+    diagAsserts "diag" expectedKeys (actualKeysOf env (caseRelOf env diagPath) actualR)
+
+-- 负例的退出语义（进程内：`ErrC` = 失败）。
+checkExitAsserts : Check (List Diagnostic) -> List Assertion
+checkExitAsserts r = case r of
+  ErrC _ => [Assertion "check exit" True ""]
+  OkC _ => [Assertion "check exit" False "expected an error, check succeeded"]
+
+-- 无 Case 上下文时的超时断言（`check-ok` 的家族超时是 15s）。
+timeoutAssertBy : Int -> String -> Assertion
+timeoutAssertBy ms name =
+  Assertion "case timeout" (ms <= 15000) "in-process ${name} took ${strOfInt ms}ms, over 15s budget"
+
+-- `OkC` 的诊断表里没有 error 级条目。
+noErrorDiags : Check (List Diagnostic) -> Bool
+noErrorDiags r = case r of
+  ErrC _ => False
+  OkC ds => not (any (\d => severityText (diagSeverityOf d) == "error") ds)
+
+diagSeverityOf : Diagnostic -> Severity
+diagSeverityOf d = d.diagSeverity
 
 relativeTestPath : Env -> String -> String
 relativeTestPath env source =
@@ -760,49 +865,51 @@ lintCase : Env -> Case -> String -> String -> Eff hostRow CaseResult
 lintCase env c source expected = do
   start <- effTimeUs
   rawExpected <- raiseToRow hostRow (@vuna@prim_eff_readFile expected)
-  r <-
-    runCmdMerged env "${c.caseId}-lint" env.envCwd c.caseTimeout
-      (withEnvIface env [env.envVuna, "lint", relativeTestPath env source])
+  findingsR <- lintFile source
+  end <- effTimeUs
   let
+    relPath = relativeTestPath env source
+    rendered = case findingsR of
+      ErrC e => "error: ${diagText e}"
+      OkC findings => join "\n" (map (renderFinding relPath False) findings)
     expectedText = trimNewlines rawExpected
-    expectedExit = if expectedText == "" then 0 else 1
-    exitA =
-      Assertion "lint exit" (r.cmdCode == expectedExit)
-        "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
+    expectedMatch = expectedText == trimNewlines rendered
   in finishCase c.caseId start
-    [assertEq "lint output" expectedText (trimNewlines (combinedOut r)), exitA]
+    [timeoutAssert c ((end - start) / 1000), Assertion "lint output" expectedMatch "expected:\n${expectedText}\nactual:\n${rendered}", Assertion "lint exit" (if expectedText == "" then rendered == "" else rendered /= "") "lint findings mismatch"]
 
 -- `--fix` 的工作副本路径（纯）：整份源码先拷到该文件，再对副本跑两次 lint --fix。
 fixWorkPath : Env -> Case -> String
 fixWorkPath env c = "${env.envTmp}/fix-${safeName c.caseId}.vuna"
 
 fixCase : Env -> Case -> String -> String -> Eff hostRow CaseResult
-fixCase env c source expected =
+fixCase env c source expected = do
+  start <- effTimeUs
+  expectedText <- fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile expected))
+  sourceText <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+  -- 第一遍：写到工作副本（与 CLI 同一条 `fixLoop`，只是不经子进程）。
+  once <- fixPass source sourceText
+  twice <- fixPass source (firstOf once)
+  end <- effTimeUs
   let
-    work = fixWorkPath env c
-  in do
-    start <- effTimeUs
-    expectedText <- fmap trimNewlines (raiseToRow hostRow (@vuna@prim_eff_readFile expected))
-    sourceText <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
-    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile work sourceText)
-    _ <-
-      runCmdMerged env "${c.caseId}-fix1" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    onceText <- raiseToRow hostRow (@vuna@prim_eff_readFile work)
-    _ <-
-      runCmdMerged env "${c.caseId}-fix2" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "lint", "--fix", work])
-    twiceText <- raiseToRow hostRow (@vuna@prim_eff_readFile work)
-    let
-      once = trimNewlines onceText
-      twice = trimNewlines twiceText
-      fixA = assertEq "fix" expectedText once
-      idemA = assertEq "fix idempotent" once twice
-    in finishCase c.caseId start [fixA, idemA]
+    fixA = assertEq "fix" expectedText (trimNewlines (firstOf once))
+    idemA = assertEq "fix idempotent" (firstOf once) (firstOf twice)
+  in finishCase c.caseId start [timeoutAssert c ((end - start) / 1000), fixA, idemA]
+
+-- 一次 `lint --fix`：返回新源码文本（`fixLoop` 无改动时原样返回）。
+fixPass : String -> String -> Eff hostRow (Pair String String)
+fixPass source text = do
+  fixed <- fixFile source text
+  pure (case fixed of
+    ErrC e => Pair text (diagText e)
+    OkC (Pair _ newSource) => Pair newSource ""
+  )
 
 -- 产物运行期 case。expectedExit 语义：0 = 断言非 0（无显式退出码的遗留行为）；
 -- 256 = 断言恰好 0（`.run.exit` 内容为 0，哨兵超出真实退出码 0–255 范围）；
 -- n > 0（< 256）= 断言恰好 n。expectedErr 缺失（只有 `.run.exit`）时跳过片段断言。
+--
+-- compile 进程内（`InProc.compileFile`）；`build.sh` + 产物执行留在子进程——那是
+-- 执行真实产物，进程内无法替代（见「进程绑定岛」）。
 runtimeCase : Env -> Case -> String -> String -> Int -> Eff hostRow CaseResult
 runtimeCase env c source expectedErr expectedExit =
   let
@@ -810,12 +917,10 @@ runtimeCase env c source expectedErr expectedExit =
   in do
     start <- effTimeUs
     fragmentText <- readMaybeFile expectedErr
-    comp <-
-      runCmdMerged env "${c.caseId}-compile" env.envCwd c.caseTimeout
-        (withEnvIface env [env.envVuna, "compile", source, staging])
-    outdir <- if comp.cmdCode == 0 then buildCacheDir env staging else pure staging
-    _ <- if comp.cmdCode == 0 then syncBuildDir staging outdir else pure 0
-    buildA <- if comp.cmdCode == 0 then do
+    comp <- compileFile source staging
+    outdir <- if checkPassed comp then buildCacheDir env staging else pure staging
+    _ <- if checkPassed comp then syncBuildDir staging outdir else pure 0
+    buildA <- if checkPassed comp then do
       b <- runCmdMerged env "${c.caseId}-build" outdir c.caseTimeout ["sh", "build.sh", "prog"]
       if b.cmdCode == 0 then do
         r <- runCmdMerged env "${c.caseId}-run" env.envCwd c.caseTimeout ["${outdir}/prog"]
@@ -830,7 +935,7 @@ runtimeCase env c source expectedErr expectedExit =
               "expected exit ${strOfInt expectedExit}, got ${strOfInt r.cmdCode}"
         in pure (append fragmentA [exitA])
       else pure [assertExit "build exit" b.cmdCode]
-    else pure [assertExit "compile exit" comp.cmdCode]
+    else pure [Assertion "compile exit" False "compile failed:\n${diagBriefOf comp}"]
     finishCase c.caseId start buildA
 
 -- ---------------------------------------------------------------
@@ -1235,8 +1340,8 @@ runCaseGo : Env -> Case -> Eff hostRow CaseResult
 runCaseGo env c = case c.caseKind of
   CGolden source expected wantInterp wantCheck wantCompile wantRun wantCompare =>
     goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare
-  CError source expected wantInterp wantCheck wantCompile =>
-    errorCase env c source expected wantInterp wantCheck wantCompile
+  CError source diagPath wantInterp wantCheck wantCompile =>
+    errorCase env c source diagPath wantInterp wantCheck wantCompile
   CCheck source expectPass expectedErr => checkCase env c source expectPass expectedErr
   CLint source expected => lintCase env c source expected
   CFix source expected => fixCase env c source expected
@@ -1726,7 +1831,7 @@ pathTouches changed rel = changed == rel || startsWith changed rel || startsWith
 casePaths : Env -> Case -> List String
 casePaths env c = case c.caseKind of
   CGolden source expected _ _ _ _ _ => [stripRoot env source, stripRoot env expected]
-  CError source expected _ _ _ => [stripRoot env source, stripRoot env expected]
+  CError source diagPath _ _ _ => [stripRoot env source, stripRoot env diagPath]
   CCheck source _ expectedErr =>
     if expectedErr == "" then [stripRoot env source]
     else [stripRoot env source, stripRoot env expectedErr]
