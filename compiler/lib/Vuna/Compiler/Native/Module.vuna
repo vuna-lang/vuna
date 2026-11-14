@@ -260,7 +260,8 @@ genRtValueCall fuel st sym args = if fuel <= 0 then internal "native codegen fue
 else
   let
     arity = nativeRtValueArity sym
-  in if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
+  in if sym == "@vuna@obs@span" then unsupported "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
+  else if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
   else if length args /= arity then unsupported "native target: partial application of runtime functions is not supported yet"
   else case nativeRtTarget sym of
     Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
@@ -344,6 +345,7 @@ else case ir of
   IrConcatMany parts => genConcatMany (fuel - 1) st parts
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
   IrLam _ _ => unsupported "native target: lambdas are not supported yet"
+  IrRt "@vuna@obs@span" => unsupported "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
   IrFloatLit _ => unsupported "native target: float literals are not supported yet"
   IrCtor _ _ _ => unsupported "native target: data constructors are not supported yet"

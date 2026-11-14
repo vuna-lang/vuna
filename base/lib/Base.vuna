@@ -27,3 +27,5 @@ export import Base.Traversable
 export import Base.Unit
 export import Base.Map
 export import Base.Monad
+export import Base.Obs
+export import Base.Obs.Span

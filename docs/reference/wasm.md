@@ -93,7 +93,12 @@
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush/Pop`、Sched 家族、
 `prim_eff_*` 宿主层原语、List 桥接 `dtp_*`。
 
-运行时函数随程序生成在同一个 `main.wat` 中（不加载外部 runtime 库），因此单个文件可审计。
+**可观测性**（规范见 [observability.md](observability.md) / O12）：`@vuna@obs@level` /
+`log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回盒装
+`Int 0`，`counter` / `sampleStart` 是 2 元桩）；`@vuna@obs@span` 是高阶原语（吃
+`Int -> a` thunk），本后端没有闭包表示，故**编译期拒绝**（`WasmUnsupported`，不给假
+数据）。因此 wasm 产物上 `VUNA_OBS` 不生效。
+
 
 ## 6. 实现约束
 

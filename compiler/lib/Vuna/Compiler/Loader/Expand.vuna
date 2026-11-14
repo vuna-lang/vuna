@@ -7,13 +7,19 @@ module Vuna.Compiler.Loader.Expand where
 -- 标记，Elab / Codegen / 接口缓存都只看到普通表达式。
 --
 -- 规则：先递归展开实参，再套用宏；插入节点的 span 一律取调用点 span（实参保留自身
--- span），满足「宏携带 span」不变量。展开结果只引用隐藏原语 `@vuna@debug@*`
---（见 `Intrinsics.internalIntrinsics`），不依赖库模块、不捕获调用方名字，任何包都可用。
+-- span），满足「宏携带 span」不变量。展开结果只引用隐藏原语 `@vuna@debug@*` /
+-- `@vuna@obs@*`（见 `Intrinsics.internalIntrinsics`），不依赖库模块、不捕获调用方名字，
+-- 任何包都可用。
 --
--- 唯一内置宏（注册表在 `expandMacro`）：
+-- 内置宏（注册表在 `expandMacro`；规范见 `docs/reference/observability.md` §4.3）：
 --   * `dbg! msg` → `if @vuna@debug@on 0 then @vuna@debug@line msg else 0`
 --     开关由 `--debug-perf` / `VUNA_DEBUG_PERF=1` 门控；行格式
---     `DEBUG <epoch-us> <text>`（stderr），关闭时实参不求值。
+--     `DEBUG <epoch-us> <text>`（stderr），关闭时实参不求值；
+--   * `obs! msg` → `@vuna@obs@log msg`：结构化日志事件（`ph:"i"` / `vuna.log`），
+--     开观测时同格式写 stderr；
+--   * `mark! name` → `@vuna@obs@mark name`：瞬时标记事件。
+-- 后两个由 `VUNA_OBS` / `--obs` 分级开关；关闭时原语直接返回 0（实参仍求值，见
+-- `Base.Obs` 的 `obsOn` 用于自行判开销）。
 -- 用户自定义宏不在范围内。
 import Base.List
 import Base.Nat
@@ -247,9 +253,23 @@ macroArityMismatch name expected args sp =
   in rnAt3 sp (MacroArity name expectedText actualText) name expectedText actualText
 
 -- | 展开一个 `name!` 调用：未知宏 / arity 不符报 `RN_UnknownMacro` / `RN_MacroArity`。
+--
+-- 内置宏清单（规范见 `docs/reference/observability.md` §4.3）：
+--   * `dbg! msg`    → 既有形态，stderr 协议逐字节不变（`--debug-perf` 门控）；
+--   * `obs! msg`    → `@vuna@obs@log msg`（结构化日志事件 + 同格式 stderr 行）；
+--   * `mark! name`  → `@vuna@obs@mark name`（瞬时标记事件）。
+-- 三个宏都不求值副作用以外的东西：`obs!` / `mark!` 的实参在关闭级别下**仍会求值**
+-- （与 `dbg!` 不同）——它们没有布尔门控形态，因为原语本身关闭时只返回 0；要避免实参
+-- 开销，用 `Base.Obs.obsOn 0` 自己判。
 expandMacro : String -> List Expr -> Span -> Check Expr
 expandMacro name args sp = if name == "dbg" then case args of
   [msg] =>
     OkC (EIf (debugOnRef sp) (EApp (internalRef debugLineIntrinsicName sp) [msg] sp) (EInt 0 sp) sp)
+  _ => macroArityMismatch name 1 args sp
+else if name == "obs" then case args of
+  [msg] => OkC (EApp (internalRef obsLogIntrinsicName sp) [msg] sp)
+  _ => macroArityMismatch name 1 args sp
+else if name == "mark" then case args of
+  [msg] => OkC (EApp (internalRef obsMarkIntrinsicName sp) [msg] sp)
   _ => macroArityMismatch name 1 args sp
 else rnAt1 sp (UnknownMacro name) name

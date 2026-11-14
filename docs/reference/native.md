@@ -127,7 +127,10 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息；由 `Native.Runtime.nativeRodata`
   提供。字符串字面量由 `Native.Module` 收集成 `NativeStrLit`（`npStrLits`）。
 
-运行时函数随程序生成在同一个 `main.s` 中（不加载外部 runtime 库），因此单个文件可审计。
+**可观测性**（规范见 [observability.md](observability.md) / O12）：`@vuna@obs@level` /
+`log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回 `Int 0`）；
+`@vuna@obs@span` 是高阶原语（吃 `Int -> a` thunk），本后端没有闭包表示，故**编译期
+拒绝**（`NativeUnsupported`，不给假数据）。因此 native 产物上 `VUNA_OBS` 不生效。
 
 ## 6. 模块布局与确定性
 

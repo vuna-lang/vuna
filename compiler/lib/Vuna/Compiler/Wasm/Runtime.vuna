@@ -617,6 +617,12 @@ rtBoxZero =
     params = [Pair "$p0" WvAnyRef]
   in rtFunc "$rt_boxZero" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
+rtBoxZero2 : WatFunc
+rtBoxZero2 =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+  in rtFunc "$rt_boxZero2" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
 rtBitNot : WatFunc
 rtBitNot =
   let
@@ -700,6 +706,7 @@ rtFunctions c =
     rtEqStr,
     rtNeqStr,
     rtBoxZero,
+    rtBoxZero2,
     rtErase,
     rtAssert,
     rtPrimFail,
@@ -710,6 +717,8 @@ rtFunctions c =
 -- 符号表
 -- ---------------------------------------------------------------
 export rtImplOf : String -> RtImpl
+-- 可观测性原语（`docs/reference/observability.md` §4.1 / O12）：wasm 后端只给**叶子**
+-- 原语 no-op 桩（返回盒装 0）；`span` 依赖闭包，本后端不支持闭包 ⇒ 引用点编译期拒绝。
 rtImplOf name =
   if name == "+" then RtFunc 2 "$rt_add"
   else if name == "-" then RtFunc 2 "$rt_sub"
@@ -742,6 +751,12 @@ rtImplOf name =
   else if name == "@ir@showStr" then RtFunc 1 "$rt_showStr"
   else if name == "@vuna@debug@on" then RtValue (boolValue False)
   else if name == "@vuna@debug@line" then RtFunc 1 "$rt_boxZero"
+  else if name == "@vuna@obs@level" then RtFunc 1 "$rt_boxZero"
+  else if name == "@vuna@obs@log" then RtFunc 1 "$rt_boxZero"
+  else if name == "@vuna@obs@counter" then RtFunc 2 "$rt_boxZero2"
+  else if name == "@vuna@obs@mark" then RtFunc 1 "$rt_boxZero"
+  else if name == "@vuna@obs@sampleStart" then RtFunc 2 "$rt_boxZero2"
+  else if name == "@vuna@obs@sampleStop" then RtFunc 1 "$rt_boxZero"
   else if name == "@ir@natSucc" then RtFunc 1 "$rt_natSucc"
   else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"]
   else if name == "natAdd" then RtFunc 2 "$rt_natAdd"

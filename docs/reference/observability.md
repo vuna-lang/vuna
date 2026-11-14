@@ -41,6 +41,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | `VUNA_OBS_FILE` | env | 精确输出文件（单进程场景） |
 | `VUNA_OBS_DIR` | env | 目录；缺省 `${TMPDIR:-/tmp}/vuna-obs`；文件名 `vuna-<pid>.jsonl` |
 | `VUNA_OBS_INTERVAL` | env | 采样间隔 µs（缺省 1000） |
+| `VUNA_OBS_SAMPLE` | env | 采样种类 `cpu` / `mem` / `both`（缺省 `cpu`）；由 `vuna obs run --sample` 设置，运行时据此调 `sampleStart` |
 | `--debug-perf` / `VUNA_DEBUG_PERF=1` | 运行时 argv/env | 既有 `dbg!` 输出开关，**独立**且优先：它只控制 stderr 行 |
 
 级别含义与成本（关闭 = `Lazy.force` + 分支）：
@@ -86,7 +87,11 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 - 逐定义：`vuna.def.elab`、`vuna.def.lower`、`vuna.def.text`（`args.def/module/file/line`）；
 - 计数（`ph:"C"`，`args.value`）：`vuna.counter.core.reduce`、`vuna.counter.core.force`、
   `vuna.counter.meta.solve`、`vuna.counter.cache.hit`、`vuna.counter.cache.miss`、
-  `vuna.counter.alloc.words`、`vuna.counter.heap.words`、`vuna.counter.steps`；
+  `vuna.counter.steps`；
+- 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords` /
+  `args.heapWords`（整数，span 期间分配/堆字数增量）；`validate` 只校验它们是整数，
+  不对 `vuna.counter.alloc.words` / `vuna.counter.heap.words` 做存在性断言（这两个名字
+  已从词汇表移除）；
 - 采样（`ph:"i"`，`args.stack`）：`vuna.sample.cpu`、`vuna.sample.mem`；
 - 日志（`ph:"i"`，`args.text`）：`vuna.log`（`dbg!` 与库层 `obsLog` 共用）；
 - 标记（`ph:"i"`）：用户/编译器自定义名字（`vuna.mark.*` 前缀可选）。
@@ -176,17 +181,42 @@ vuna obs symbols [--out FILE] [OUTDIR]
 vuna obs serve --cdp ADDR [--allow-slow]
 ```
 
-- `run`：设 `VUNA_OBS*` 后经 `@vuna@prim_eff_runIn` 跑子命令，退出码原样返回；结束后打印 trace 路径。
-- `summarize`：span 树折叠 → 自用/总用时、挂载计数与内存增量；`--json` 机器可读；`--baseline`
-  与旧 trace 做差值（回归判定）；`--threshold` 超差退出 1。
+- `run`：经 `@vuna@prim_eff_runIn` 跑子命令，退出码原样返回；结束后打印 trace 路径。
+  **env 注入用「`env` 前置命令」**（`["env", "VUNA_OBS=…", …]` ++ 用户 argv，与
+  `Vuna.Test.Run.withEnv` 同一范式）：本仓库没有 `prim_eff_setenv` 原语，所以 `run` 不改
+  自己的进程环境，只让子进程继承 `env` 设的那一组。规则：
+  - `--level N`（缺省 **2**，`run` 的默认语义就是 level 2；`--level 0` 是关闭口径对照）
+    → `VUNA_OBS`；`--sample cpu|mem|both` → `VUNA_OBS_SAMPLE`；`--interval US` →
+    `VUNA_OBS_INTERVAL`；
+  - `--out FILE` → `VUNA_OBS_FILE`（相对路径按调用方 cwd 绝对化，父目录先建）；否则本次
+    运行给一个**全新**临时目录 `${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>` 作 `VUNA_OBS_DIR`，
+    跑完列出其中的 `vuna-*.jsonl`；
+  - 用户命令在 `--` 之后原样透传（不注入 argv、不拼 shell 片段）；`--obs` / `--obs-level`
+    是运行时 argv，由子命令自己读，`run` 不代设。
+  - **本批限制**：子进程没产出 trace（level 0、或它不读 `VUNA_OBS*`）不算错误——打印
+    `no trace file produced` 并仍返回子命令退出码；`run` 不做 trace 后处理（不自动
+    validate / summarize），需要时组合子命令。
+- `summarize`：span 树折叠 → 自用/总用时、计数表、采样热点；`--json` 机器可读；`--baseline`
+  与旧 trace 做差值（回归判定）；`--threshold` 超差退出 1。**折叠简化规则**（规范未规定树
+  算法，这里定死一条，实现在 `Vuna.Obs.Summarize`）：
+  - 只折叠 `ph:"X"`；按 `pid`/`tid` 分组、组内按 `ts` 稳定排序；新 span 完全落在栈顶
+    `[ts, ts+dur]` 内 = 子 span，否则逐层弹出到包含它的那层；
+  - `args.parent`（可选）优先于时间包含：先按名字在栈里找父；
+  - `self = dur − 直接子 dur 之和`；按 `name` 聚合 `count` / `total` / `self`；
+  - 数字**一律整数微秒**（不引入 Float，跨机器逐字节可比）；`wallUs` = 最晚结束 − 最早开始；
+  - 采样热点按叶子帧 `name@file:line` 聚合，每个种类 top 20（count 降序、帧名升序）；
+  - `%self` 整数百分比；`--threshold` 只比较阶段 `total`（含子）的差值百分比。
+- `validate`：schema 版本、元数据首行、`ts` 同一 `pid`/`tid` 单调不减、`X` 的 `dur` 非负、
+  `C` 的 `args.value` 是整数、采样有 `args.stack`（字符串数组）、`vuna.log` 有 `args.text`、
+  `vuna.*` 名字在词汇表内（`vuna.mark.*` 前缀放行，非 `vuna.` 前缀一律放行）。
+  截断容错：**中间行** JSON 坏 = error（文件被外部改坏不静默跳过）；**末行**半个 JSON 行 =
+  先按括号平衡补全闭括号（补全成功仍 warning），失败则丢弃该行 + warning，绝不升级为 error。
 - `convert`：`cpuprofile`（CDP Profile：`nodes/startTime/endTime/samples/timeDeltas`，节点按
   `name@file:line` 去重）、`speedscope`（`$schema: "https://www.speedscope.app/file-format-schema.json"`
   evented profile）、`folded`（`name;name;name N` 火焰图折叠栈）、`jsonl`（重排/裁剪）。
 - `render`：单文件 HTML（内嵌 JSON，无外链、无时间戳，两次渲染逐字节一致；瀑布条 + 火焰图 +
   计数器曲线 + 采样热点表），风格沿 `Vuna.Doc.Html` 的可复现约定。
 - `merge`：多 trace（workspace 成员 / 每进程一份）按 `t0` 归并，`pid` 搬进 `args.member`。
-- `validate`：schema 版本、元数据首行、`ts` 单调、`X` 的 `dur` 非负、`vuna.*` 名字在词汇表内；
-  未闭合截断只报 warning。
 - `serve --cdp`：`Profiler.enable/start/stop/getProfile` + `Runtime.getIsolateId` 子集，传输
   `Content-Length` JSON-RPC（同 `Vuna.Json.Server`）。Chrome DevTools 需要 WebSocket：
   `nix/obs-cdp-bridge.mjs`（Node，工具侧资产）做握手桥；**vuna 侧不实现 WS**（O11）。

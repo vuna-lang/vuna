@@ -1,0 +1,32 @@
+module Base.Obs.Span where
+
+-- Base.Obs.Span：可观测性的**高阶**部分（跨度与采样配对）。
+--
+-- 单独成模块的原因：`obsSpan` 接受一个 `Int -> a` 的 thunk，是**高阶**原语。OCaml 后端
+-- 用普通闭包实现它；wasm / native 后端没有闭包表示（见 [native.md](native.md) /
+-- [wasm.md](wasm.md) 的「可观测性」段），因此它们**编译期拒绝**这个符号。把高阶部分
+-- 与叶子原语（`Base.Obs` 的 level / log / counter / mark / sampleStart / sampleStop）
+-- 分开，`import Base.Obs` 才能在两个非 OCaml 后端上照常构建。
+--
+-- 规范见 `docs/reference/observability.md`；开关与成本纪律与 `Base.Obs` 相同。
+import Base.Obs
+
+-- | 一个带分类的跨度：执行 `f 0` 并记录 `name` / `cat` 的 `ph:"X"` 事件（含耗时、分配
+-- 与堆读数）；异常路径也写出事件并原样重抛，异常不被吞。`cat` 用 `vuna.phase` /
+-- `vuna.def` / `vuna.io` / `vuna.user` 等，见规范 §3.2。
+export obsSpan : String -> String -> (Int -> a) -> a
+obsSpan name cat f = @vuna@obs@span name cat f
+
+-- | `obsSpan` 的便捷形态：分类固定 `vuna.user`（用户程序自己的跨度）。
+export obsSpanP : String -> (Int -> a) -> a
+obsSpanP name f = @vuna@obs@span name "vuna.user" f
+
+-- | 采样一段计算：开始、执行、停止（异常也保证停止）。典型用法是包住整个 `main` 热点
+-- 或一次基准循环。`mode` / `intervalUs` 语义同 `Base.Obs.obsSampleStart`。
+export obsSample : String -> Int -> (Int -> a) -> a
+obsSample mode intervalUs f =
+  let
+    _ = @vuna@obs@sampleStart mode intervalUs
+    r = f 0
+    _ = @vuna@obs@sampleStop 0
+  in r

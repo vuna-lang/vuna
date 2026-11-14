@@ -95,6 +95,19 @@ natToIntFn : NativeFunc
 natToIntFn = rtFunc "nat_to_int" 0 [IMov (OpReg Rax) (OpReg Rdi)]
 
 -- ---------------------------------------------------------------
+-- 可观测性原语桩（`docs/reference/observability.md` §4.1 / O12）
+-- ---------------------------------------------------------------
+-- native 后端只提供**叶子**原语的 no-op 桩：读级别与记事件都返回 Int 0（0 = 「没打开 /
+-- 没产生事件」）。`@vuna@obs@span` 是**高阶**原语（吃一个 `Int -> a` 的 thunk），本后端
+-- 没有闭包表示，故不在表里 —— 引用点由 `Module.genRtApp` 报
+-- `NativeUnsupported`（编译期拒绝，不给假数据）。
+obsZeroFn : String -> NativeFunc
+obsZeroFn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
+
+obsZero2Fn : String -> NativeFunc
+obsZero2Fn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
+
+-- ---------------------------------------------------------------
 -- Int 运算
 -- ---------------------------------------------------------------
 divFn : NativeFunc
@@ -250,6 +263,12 @@ nativeRtFuncs =
     natToIntFn,
     natFromIntFn,
     natSuccFn,
+    obsZeroFn "obs_level",
+    obsZeroFn "obs_log",
+    obsZero2Fn "obs_counter",
+    obsZeroFn "obs_mark",
+    obsZero2Fn "obs_sample_start",
+    obsZeroFn "obs_sample_stop",
     strAllocFn,
     strLengthFn,
     strConcatFn,
@@ -295,6 +314,13 @@ nativeRtTarget "natMul" = Just (nativeRtLabel "nat_mul")
 nativeRtTarget "natDiv" = Just (nativeRtLabel "nat_div")
 nativeRtTarget "natToInt" = Just (nativeRtLabel "nat_to_int")
 nativeRtTarget "natFromInt" = Just (nativeRtLabel "nat_from_int")
+-- 可观测性叶子原语：no-op 桩（返回 0）。`@vuna@obs@span` 故意缺席（高阶，需闭包）。
+nativeRtTarget "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
+nativeRtTarget "@vuna@obs@log" = Just (nativeRtLabel "obs_log")
+nativeRtTarget "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
+nativeRtTarget "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
+nativeRtTarget "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
+nativeRtTarget "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
 nativeRtTarget _ = Nothing
 
 -- | 以**运行时值**（非 `IrRtApp`）出现的符号的 arity（`irInlineArity` 为 0 的那些）。
@@ -308,4 +334,11 @@ nativeRtValueArity "strAt" = 2
 nativeRtValueArity "strSubstring" = 3
 nativeRtValueArity "bi_eq_str" = 2
 nativeRtValueArity "bi_neq_str" = 2
+-- 可观测性叶子原语（`irInlineArity` 为 0 ⇒ 以运行时值形态出现，`IrApp (IrRt sym) args`）。
+nativeRtValueArity "@vuna@obs@level" = 1
+nativeRtValueArity "@vuna@obs@log" = 1
+nativeRtValueArity "@vuna@obs@counter" = 2
+nativeRtValueArity "@vuna@obs@mark" = 1
+nativeRtValueArity "@vuna@obs@sampleStart" = 2
+nativeRtValueArity "@vuna@obs@sampleStop" = 1
 nativeRtValueArity _ = 0

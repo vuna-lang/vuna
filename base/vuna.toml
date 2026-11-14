@@ -57,5 +57,7 @@ modules = [
   "Base.EffRef",
   "Base.EffStdin",
   "Base.Monad",
+  "Base.Obs",
+  "Base.Obs.Span",
   "Prelude"
 ]
