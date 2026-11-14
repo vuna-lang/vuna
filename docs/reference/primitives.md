@@ -259,6 +259,13 @@
 - `@vuna@debug@on : Int -> Bool` / `@vuna@debug@line : String -> Int`：编译器 tracing 的
   **隐藏 runtime 原语**（`visible = False`，源码不可写；只由 `dbg!` 展开引用；
   `vuna interp` 归约为 no-op）；
+- 观测原语 7 条（同样是隐藏 runtime 原语，`visible = False`；只由 `obs!` / `mark!` 或
+  `Base.Obs` / `Base.Obs.Span` 引用；`vuna interp` 归约为 no-op，wasm/native 是 no-op 桩）：
+  `@vuna@obs@level`（读当前级别，`Int -> Int`）、`@vuna@obs@log`（结构化日志 →
+  `vuna.log`）、`@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
+  `@vuna@obs@mark`（瞬时标记 `ph:"i"`）、`@vuna@obs@span`（`String -> String ->
+  (Int -> a) -> a`，唯一高阶原语）、`@vuna@obs@sampleStart`（`String -> Int -> Int`）、
+  `@vuna@obs@sampleStop`。命令面与语义见 [observability.md](observability.md)；
 - `prim_eff_eprint : String -> Eff [] Int`（console 组）：写 stderr 并 flush，返回写入字节数；
 - `prim_fail : String -> a`（不在动作里）：抛 `Failure <msg>` 的底值，
   由生成的运行时报告器渲染成 `vuna: runtime error: ...` 并 exit 2。

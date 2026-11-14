@@ -70,7 +70,7 @@
 | `Codegen.Lower` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
 | `Codegen.Decl` | 纯文本叶子：OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ `IrTy` / `IrTyDecl` → OCaml 类型文本 | `irTyText`、`irTyDeclText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
 | `Codegen.Erase` | 擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、运行时依赖遍历（SCC 分组的输入） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termDepsInto`、`partitionDefs` |
-| `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook` |
+| `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
 | `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lower.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
 | `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Codegen.Lower` 出 `IrUnit`） | `generateDtSplitProgram` |
@@ -227,8 +227,13 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
 [qtt.md](qtt.md)），不依赖 multiplicity。运行时前导代码（`bi_*`、`dtp_*`、宿主原语桥接等）在
-`Codegen.Term.dtRuntime`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` / `readlink`）——
-原语语义见 [primitives.md](primitives.md)。
+`Codegen.Term.dtRuntime` / `dtRuntimeWith`，无条件依赖 Unix（`Unix.stat` / `gettimeofday` /
+`readlink`）——原语语义见 [primitives.md](primitives.md)。`dtRuntimeWith` 按程序级旗标
+（`Ir.Shared` 的 `irSharedUsesFloat` / `irSharedUsesTrace` / `irSharedUsesObs`）**按需追加**
+运行时段：不引用浮点 / tracing / 观测的程序，产物里根本没有那些代码（因此关闭口径下
+产物逐字节不变）。观测段（`Codegen.Term.dtObsRuntime`，约 390 行 OCaml）提供 `dtp_obs_*`：
+级别读取、span、计数、日志、CPU 采样（`ITIMER_PROF` + `SIGPROF`）、内存采样
+（`Gc.Memprof`）与 `at_exit` flush；规范见 [observability.md](observability.md) §3/§6。
 
 只用 OCaml 标准库 + Unix（运行时前导代码），不依赖解释循环。代码质量要点：
 
