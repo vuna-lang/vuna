@@ -1,46 +1,62 @@
 open Vuna_runtime
+# 23 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dskipSourceDir = (fun name -> (if (if (if (if (if (if (if (if (name = ".git") then true else (name = ".local")) then true else (name = ".output")) then true else (name = ".direnv")) then true else (name = "node_modules")) then true else (name = "seed")) then true else (name = "_scratch")) then true else (name = "result")) then true else (name = "corpus")))
 
+# 36 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash = (fun h -> (if ((Base_dString.v_Base_dString_dstartsWith "sha256:") h) then (((Base_dString.v_Base_dString_dsubstring 7) 64) h) else h))
 
+# 40 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dverifyHash = (fun expected actual -> ((v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash expected) = (v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash actual)))
 
+# 52 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dreadManifestFile = (fun root -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_fileExists dtio_0)) (root ^ "/vuna.toml")))) (fun exists -> (if exists then (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) (root ^ "/vuna.toml")))) (fun content -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dList.C_Base_dList_dList_Cons ({ Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfPath = "vuna.toml"; Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfContent = content }, Base_dList.C_Base_dList_dList_Nil))))) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil)))))
 
+# 60 "Vuna/Compiler/Packages/Source.vuna"
 let rec v_Vuna_dCompiler_dPackages_dSource_dcollectDirFiles = (fun fuel root rel -> (if (fuel <= 0) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else ((fun dir -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_fileExists dtio_0)) dir))) (fun exists -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (if exists then ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_isDirectory dtio_0)) dir)) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) false))) (fun isDir -> (if (if exists then isDir else false) then (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (fun p -> Base_dList.dtp_listOf (dtp_readDir p)) dtio_0)) dir))) (fun names -> ((((v_Vuna_dCompiler_dPackages_dSource_dcollectNames (fuel - 1)) root) rel) names))) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil))))))) (if (rel = "") then root else (String.concat "" [root; "/"; rel])))))
+# 73 "Vuna/Compiler/Packages/Source.vuna"
 and v_Vuna_dCompiler_dPackages_dSource_dcollectNames = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (if (mc0 <= 0) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((v_Vuna_dCompiler_dPackages_dSource_dwalkName (mc0 - 1)) mc1) mc2) dtb__0)) (fun here -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((v_Vuna_dCompiler_dPackages_dSource_dcollectNames (mc0 - 1)) mc1) mc2) dtb__1)) (fun there -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((Base_dList.v_Base_dList_dappend here) there)))))))
   | Base_dList.C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
+# 81 "Vuna/Compiler/Packages/Source.vuna"
 and v_Vuna_dCompiler_dPackages_dSource_dwalkName = (fun fuel root rel name -> (if (fuel <= 0) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else (if (name = ".") then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else (if (name = "..") then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else (if (v_Vuna_dCompiler_dPackages_dSource_dskipSourceDir name) then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil) else ((fun childRel -> ((fun childPath -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_isDirectory dtio_0)) childPath))) (fun isDir -> (if isDir then (((v_Vuna_dCompiler_dPackages_dSource_dcollectDirFiles (fuel - 1)) root) childRel) else (if ((Base_dString.v_Base_dString_dendsWith ".vuna") name) then (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dHostRow.v_Base_dHostRow_draiseToRow Base_dHostRow.v_Base_dHostRow_dhostRow) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) childPath))) (fun content -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dList.C_Base_dList_dList_Cons ({ Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfPath = childRel; Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfContent = content }, Base_dList.C_Base_dList_dList_Nil))))) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dList.C_Base_dList_dList_Nil)))))) (String.concat "" [root; "/"; childRel]))) (if (rel = "") then name else (String.concat "" [rel; "/"; name]))))))))
 
+# 99 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dfilePathLe = (fun a b -> ((a).Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfPath <= (b).Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageFile_pfPath))
 
+# 102 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dsortByPath = (fun files -> ((Base_dSort.v_Base_dSort_dsortBy v_Vuna_dCompiler_dPackages_dSource_dfilePathLe) files))
 
+# 44 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dpackageFilesEff = (fun root -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dPackages_dSource_dreadManifestFile root)) (fun manifestFiles -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dPackages_dSource_dcollectDirFiles 1048576) root) "lib")) (fun libFiles -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dPackages_dSource_dcollectDirFiles 1048576) root) "app")) (fun appFiles -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dPackages_dSource_dcollectDirFiles 1048576) root) "test")) (fun testFiles -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dPackages_dSource_dsortByPath ((Base_dList.v_Base_dList_dappend manifestFiles) ((Base_dList.v_Base_dList_dappend libFiles) ((Base_dList.v_Base_dList_dappend appFiles) testFiles))))))))))))))
 
+# 112 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dpackageNameOf = (fun manifest -> (match (manifest).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestName with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__2) -> dtb__2
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 117 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dexportsOf = (fun manifest -> (match (manifest).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestExports with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__3) -> dtb__3
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 123 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_ddepKeyOf = (fun dep -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dep); Base_dPair.f_Base_dPair_dPair_second = (match (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepHashOf dep) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> "path"
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4) -> (v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash dtb__4)
   | _ -> failwith "DT: impossible branch"
 ) })
 
+# 106 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dpackageSourceEff = (fun root manifest -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dPackages_dSource_dpackageFilesEff root)) (fun files -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) { Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psName = (v_Vuna_dCompiler_dPackages_dSource_dpackageNameOf manifest); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psExports = (v_Vuna_dCompiler_dPackages_dSource_dexportsOf manifest); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psDeps = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dPackages_dSource_ddepKeyOf) (manifest).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDependencies); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psFiles = files }))))
 
+# 130 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dcontentHashOf = (fun ps -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_dencPackageContent (ps).Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psFiles)))
 
+# 134 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_didentityHashOf = (fun ps -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_dencPackageIdentity (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_didentityOfSource ps))))

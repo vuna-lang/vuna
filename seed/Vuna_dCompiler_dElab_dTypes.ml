@@ -14,6 +14,7 @@ and t_Vuna_dCompiler_dElab_dTypes_dEc = { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNe
 and t_Vuna_dCompiler_dElab_dTypes_dCtx = { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals : (int, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList }
 and t_Vuna_dCompiler_dElab_dTypes_dDtProgram = { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas : t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs : t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals : t_Vuna_dCompiler_dElab_dTypes_dDtGoal Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols : (int, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts : t_Vuna_dCompiler_dElab_dTypes_dDtInst Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses : t_Vuna_dCompiler_dElab_dTypes_dDtClass Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext : int; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dValue) Base_dHashMap.t_Base_dHashMap_dHashMap; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths : (int, int) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings : Vuna_dCompiler_dDiag.t_Vuna_dCompiler_dDiag_dDiagnostic Base_dList.t_Base_dList_dList }
 
+# 26 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefName = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__0, dtb__1, dtb__2, dtb__3) -> dtb__0
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__4, dtb__5, dtb__6) -> dtb__4
@@ -21,6 +22,7 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtDefName = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 31 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefType = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__11, dtb__12, dtb__13, dtb__14) -> dtb__12
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__15, dtb__16, dtb__17) -> dtb__16
@@ -28,6 +30,7 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtDefType = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 36 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefBody = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__22, dtb__23, dtb__24, dtb__25) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__26, dtb__27, dtb__28) -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -35,6 +38,7 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtDefBody = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 42 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__33, dtb__34, dtb__35, dtb__36) -> true
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__37, dtb__38, dtb__39) -> false
@@ -42,11 +46,13 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtDefHasBody = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 48 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefExtern = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__44, dtb__45, dtb__46, dtb__47) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__46))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 ))
 
+# 53 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan = (fun mc0 -> (match mc0 with
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtExtern (dtb__48, dtb__49, dtb__50, dtb__51) -> dtb__51
   | C_Vuna_dCompiler_dElab_dTypes_dDtDef_DtAxiom (dtb__52, dtb__53, dtb__54) -> dtb__54
@@ -54,76 +60,91 @@ let v_Vuna_dCompiler_dElab_dTypes_ddtDefSpan = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 67 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtCtorName = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorName = dtb__59; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorFamily = dtb__60; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorTelescope = dtb__61; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorType = dtb__62; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorSpan = dtb__63 } -> dtb__59
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 70 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtCtorFamily = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorName = dtb__64; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorFamily = dtb__65; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorTelescope = dtb__66; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorType = dtb__67; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorSpan = dtb__68 } -> dtb__65
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 73 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorName = dtb__69; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorFamily = dtb__70; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorTelescope = dtb__71; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorType = dtb__72; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorSpan = dtb__73 } -> dtb__71
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 76 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtCtorType = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorName = dtb__74; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorFamily = dtb__75; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorTelescope = dtb__76; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorType = dtb__77; f_Vuna_dCompiler_dElab_dTypes_dDtCtor_dtCtorSpan = dtb__78 } -> dtb__77
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 106 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataName = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__79; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__80; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__81; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__82; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__83; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__84; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__85; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__86; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__87 } -> dtb__79
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 109 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__88; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__89; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__90; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__91; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__92; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__93; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__94; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__95; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__96 } -> dtb__90
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 112 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataKind = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__97; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__98; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__99; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__100; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__101; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__102; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__103; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__104; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__105 } -> dtb__100
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 116 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataViaClasses = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__106; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__107; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__108; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__109; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__110; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__111; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__112; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__113; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__114 } -> dtb__110
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 122 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataRepr = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__115; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__116; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__117; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__118; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__119; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__120; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__121; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__122; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__123 } -> dtb__121
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 126 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataFields = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__124; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__125; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__126; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__127; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__128; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__129; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__130; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__131; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__132 } -> dtb__131
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 130 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataIsRecord = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__133; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__134; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__135; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__136; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__137; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__138; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__139; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__140; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__141 } -> dtb__141
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 132 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtDataLinear = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataName = dtb__142; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataParams = dtb__143; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataCtors = dtb__144; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataKind = dtb__145; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataViaClasses = dtb__146; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataLinear = dtb__147; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataRepr = dtb__148; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataFields = dtb__149; f_Vuna_dCompiler_dElab_dTypes_dDtData_dtDataIsRecord = dtb__150 } -> dtb__147
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 153 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtClassName = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtClass_dtClassName = dtb__151; f_Vuna_dCompiler_dElab_dTypes_dDtClass_dtClassParams = dtb__152; f_Vuna_dCompiler_dElab_dTypes_dDtClass_dtClassMethods = dtb__153; f_Vuna_dCompiler_dElab_dTypes_dDtClass_dtClassFieldTys = dtb__154; f_Vuna_dCompiler_dElab_dTypes_dDtClass_dtClassMethodSpans = dtb__155 } -> dtb__151
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 166 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtInstName = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstName = dtb__156; f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstTele = dtb__157; f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstCtx = dtb__158; f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstHead = dtb__159; f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstSpan = dtb__160 } -> dtb__156
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 172 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dflattenTaggedApp = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__161) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__161; Base_dPair.f_Base_dPair_dPair_second = Base_dList.C_Base_dList_dList_Nil }))
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__162, dtb__163, dtb__164) -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
@@ -137,6 +158,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dflattenTaggedApp = (fun mc0 -> (match mc0
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 ))
 
+# 193 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf = (fun i -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ""
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__168) -> (match dtb__168 with
@@ -146,104 +168,125 @@ let v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf = (fun i -> ((fun nd_uscrut1 -> 
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dElab_dTypes_dflattenTaggedApp (i).f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstHead)))
 
+# 199 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dinstStoreEmpty = { f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil) }
 
+# 209 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dinstStorePush = (fun store i -> ((fun fam -> ((fun bucket -> { f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList = ((Base_dList.v_Base_dList_dappend (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList) (Base_dList.C_Base_dList_dList_Cons (i, Base_dList.C_Base_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily = ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) fam) ((Base_dList.v_Base_dList_dappend bucket) (Base_dList.C_Base_dList_dList_Cons (i, Base_dList.C_Base_dList_dList_Nil)))) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) }) (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__171) -> dtb__171
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))) (v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf i)))
 
+# 204 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dinstStoreOf = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__172, dtb__173) -> ((v_Vuna_dCompiler_dElab_dTypes_dinstStorePush (v_Vuna_dCompiler_dElab_dTypes_dinstStoreOf dtb__173)) dtb__172)
   | Base_dList.C_Base_dList_dList_Nil -> v_Vuna_dCompiler_dElab_dTypes_dinstStoreEmpty
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 221 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dinstStoreFamily = (fun store fam -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) fam) (store).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__174) -> dtb__174
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 255 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dcsEmpty = { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = 0; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = Base_dList.C_Base_dList_dList_Nil }
 
+# 295 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutNext = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__175; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__176; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__177; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__178; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__179; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__180; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__181; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__182; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__183; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__184; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__185; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__186; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__187; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__188; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__189; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__190; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__191; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__192; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__193; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__194; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__195 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__176; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__177; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__178; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__179; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__180; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__181; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__182; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__183; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__184; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__185; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__186; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__187; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__188; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__189; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__190; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__191; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__192; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__193; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__194; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__195 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 300 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutClausesTbl = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__196; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__197; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__198; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__199; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__200; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__201; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__202; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__203; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__204; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__205; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__206; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__207; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__208; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__209; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__210; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__211; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__212; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__213; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__214; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__215; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__216 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__196; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__197; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__198; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__199; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__200; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__201; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__202; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__203; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__204; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__205; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__206; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__207; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__208; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__209; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__211; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__212; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__213; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__214; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__215; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__216 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 304 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decNext = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__217; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__218; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__219; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__220; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__221; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__222; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__223; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__224; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__225; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__226; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__227; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__228; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__229; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__230; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__231; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__232; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__233; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__234; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__235; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__236; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__237 } -> dtb__217
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 308 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decSols = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__238; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__239; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__240; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__241; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__242; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__243; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__244; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__245; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__246; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__247; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__248; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__249; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__250; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__251; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__252; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__253; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__254; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__255; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__256; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__257; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__258 } -> dtb__239
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 313 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decDefs = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__259; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__260; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__261; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__262; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__263; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__264; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__265; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__266; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__267; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__268; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__269; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__270; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__271; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__272; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__273; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__274; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__275; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__276; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__277; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__278; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__279 } -> (Base_dList.v_Base_dList_dreverse dtb__261)
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 318 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decDefTbl = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__280; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__281; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__282; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__283; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__284; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__285; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__286; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__287; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__288; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__289; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__290; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__291; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__292; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__293; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__294; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__295; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__296; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__297; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__298; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__299; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__300 } -> dtb__289
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 324 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decGlobalsTbl = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__301; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__302; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__303; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__304; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__305; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__306; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__307; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__308; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__309; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__310; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__311; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__312; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__313; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__314; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__315; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__316; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__317; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__318; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__319; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__320; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__321 } -> dtb__311
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 328 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutGlobalsTbl = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__322; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__323; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__324; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__325; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__326; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__327; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__328; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__329; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__330; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__331; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__332; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__333; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__334; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__335; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__336; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__337; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__338; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__339; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__340; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__341; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__342 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__322; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__323; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__324; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__325; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__326; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__327; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__328; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__329; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__330; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__331; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__333; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__334; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__335; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__336; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__337; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__338; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__339; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__340; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__341; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__342 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 333 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decDatas = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__343; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__344; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__345; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__346; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__347; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__348; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__349; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__350; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__351; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__352; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__353; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__354; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__355; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__356; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__357; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__358; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__359; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__360; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__361; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__362; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__363 } -> dtb__346
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 337 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decDepthTbl = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__364; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__365; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__366; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__367; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__368; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__369; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__370; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__371; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__372; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__373; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__374; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__375; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__376; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__377; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__378; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__379; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__380; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__381; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__382; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__383; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__384 } -> dtb__376
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 344 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decSetGlobalsComplete = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__385; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__386; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__387; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__388; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__389; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__390; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__391; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__392; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__393; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__394; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__395; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__396; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__397; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__398; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__399; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__400; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__401; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__402; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__403; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__404; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__405 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__385; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__386; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__387; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__388; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__389; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__390; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__391; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__392; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__393; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__394; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__395; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__396; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__397; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__399; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__400; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__401; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__402; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__403; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__404; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__405 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 349 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decGoals = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__406; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__407; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__408; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__409; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__410; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__411; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__412; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__413; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__414; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__415; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__416; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__417; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__418; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__419; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__420; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__421; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__422; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__423; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__424; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__425; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__426 } -> dtb__411
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 353 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decInsts = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__427; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__428; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__429; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__430; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__431; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__432; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__433; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__434; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__435; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__436; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__437; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__438; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__439; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__440; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__441; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__442; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__443; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__444; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__445; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__446; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__447 } -> (dtb__433).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 359 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decInstsFamily = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__448; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__449; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__450; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__451; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__452; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__453; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__454; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__455; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__456; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__457; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__458; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__459; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__460; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__461; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__462; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__463; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__464; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__465; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__466; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__467; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__468 } -> ((v_Vuna_dCompiler_dElab_dTypes_dinstStoreFamily dtb__454) mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 377 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dbucketCount = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__469, dtb__470) -> ((Base_dList.v_Base_dList_dlength (Base_dPair.v_Base_dPair_dsecondOf dtb__469)) + (v_Vuna_dCompiler_dElab_dTypes_dbucketCount dtb__470))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 389 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dinstNamesEq = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__471, dtb__472) -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__473, dtb__474) -> (if (dtb__471 = dtb__473) then ((v_Vuna_dCompiler_dElab_dTypes_dinstNamesEq dtb__472) dtb__474) else false)
@@ -258,6 +301,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dinstNamesEq = (fun mc0 mc1 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 382 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dallBucketsMatch = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__477, dtb__478) -> (match dtb__477 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__479; Base_dPair.f_Base_dPair_dPair_second = dtb__480 } -> (if ((v_Vuna_dCompiler_dElab_dTypes_dinstNamesEq ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dElab_dTypes_ddtInstName) dtb__480)) ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dElab_dTypes_ddtInstName) ((Base_dList.v_Base_dList_dfilter (fun i -> ((v_Vuna_dCompiler_dElab_dTypes_dinstFamilyOf i) = dtb__479))) mc0))) then ((v_Vuna_dCompiler_dElab_dTypes_dallBucketsMatch mc0) dtb__478) else false)
@@ -267,64 +311,77 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dallBucketsMatch = (fun mc0 mc1 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 369 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decInstsAudit = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__481; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__482; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__483; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__484; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__485; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__486; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__487; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__488; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__489; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__490; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__491; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__492; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__493; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__494; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__495; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__496; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__497; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__498; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__499; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__500; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__501 } -> ((fun pairs -> ((fun list -> (if ((v_Vuna_dCompiler_dElab_dTypes_dbucketCount pairs) = (Base_dList.v_Base_dList_dlength list)) then ((v_Vuna_dCompiler_dElab_dTypes_dallBucketsMatch list) pairs) else false)) (dtb__487).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsList)) ((Base_dHashMap.v_Base_dHashMap_dtoList Base_dString.v_Eq_uString) (dtb__487).f_Vuna_dCompiler_dElab_dTypes_dInstStore_instsByFamily))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 395 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decClasses = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__502; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__503; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__504; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__505; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__506; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__507; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__508; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__509; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__510; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__511; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__512; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__513; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__514; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__515; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__516; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__517; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__518; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__519; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__520; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__521; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__522 } -> dtb__509
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 399 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddGoal = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__523; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__524; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__525; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__526; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__527; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__528; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__529; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__530; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__531; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__532; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__533; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__534; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__535; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__536; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__537; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__538; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__539; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__540; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__541; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__542; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__543 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__523; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__524; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__525; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__526; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__527; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = ((Base_dList.v_Base_dList_dappend dtb__528) (Base_dList.C_Base_dList_dList_Cons (mc1, Base_dList.C_Base_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__529; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__530; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__531; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__532; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__533; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__534; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__535; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__536; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__537; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__538; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__539; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__540; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__541; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__542; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__543 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 407 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dhasInstName = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__544, dtb__545) -> (if ((v_Vuna_dCompiler_dElab_dTypes_ddtInstName dtb__544) = mc0) then true else ((v_Vuna_dCompiler_dElab_dTypes_dhasInstName mc0) dtb__545))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 411 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddInstRaw = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__546; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__547; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__548; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__549; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__550; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__551; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__552; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__553; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__554; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__555; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__556; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__557; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__558; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__559; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__560; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__561; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__562; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__563; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__564; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__565; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__566 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__546; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__547; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__548; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__549; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__550; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__551; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = ((v_Vuna_dCompiler_dElab_dTypes_dinstStorePush dtb__552) mc1); f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__553; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__554; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__555; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__556; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__557; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__558; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__559; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__560; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__561; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__562; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__563; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__564; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__565; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__566 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 404 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddInst = (fun ec i -> (if ((v_Vuna_dCompiler_dElab_dTypes_dhasInstName (v_Vuna_dCompiler_dElab_dTypes_ddtInstName i)) (v_Vuna_dCompiler_dElab_dTypes_decInsts ec)) then ec else ((v_Vuna_dCompiler_dElab_dTypes_decAddInstRaw ec) i)))
 
+# 416 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddClass = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__567; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__568; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__569; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__570; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__571; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__572; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__573; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__574; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__575; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__576; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__577; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__578; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__579; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__580; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__581; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__582; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__583; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__584; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__585; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__586; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__587 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__567; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__568; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__569; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__570; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__571; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__572; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__573; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = ((Base_dList.v_Base_dList_dappend dtb__574) (Base_dList.C_Base_dList_dList_Cons (mc1, Base_dList.C_Base_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__575; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__576; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__577; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__578; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__579; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__580; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__581; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__582; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__583; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__584; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__585; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__586; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__587 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 423 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decConstraints = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__588; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__589; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__590; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__591; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__592; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__593; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__594; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__595; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__596; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__597; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__598; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__599; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__600; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__601; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__602; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__603; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__604; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__605; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__606; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__607; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__608 } -> dtb__596
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 428 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutConstraints = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__609; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__610; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__611; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__612; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__613; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__614; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__615; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__616; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__617; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__618; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__619; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__620; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__621; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__622; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__623; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__624; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__625; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__626; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__627; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__628; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__629 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__609; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__610; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__611; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__612; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__613; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__614; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__615; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__616; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__618; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__619; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__620; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__621; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__622; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__623; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__624; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__625; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__626; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__627; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__628; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__629 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 434 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPending = (fun ec -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__630; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__631; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__632 } -> dtb__630
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 439 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutPending = (fun ec pending2 -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__633; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__634; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__635 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = pending2; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__634; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__635 })
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 444 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddConstraint = (fun ec kind meta dom span depth -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__636; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__637; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__638 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = ((Base_dList.v_Base_dList_dappend dtb__636) (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dElab_dTypes_dConstraint_conId = dtb__637; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conKind = kind; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conMeta = meta; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conDom = dom; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conSpan = span; f_Vuna_dCompiler_dElab_dTypes_dConstraint_conDepth = depth }, Base_dList.C_Base_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = (dtb__637 + 1); f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__638 })
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 463 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dassocIntLookup = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__639, dtb__640) -> (match dtb__639 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__641; Base_dPair.f_Base_dPair_dPair_second = dtb__642 } -> (if (dtb__641 = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__642)) else ((v_Vuna_dCompiler_dElab_dTypes_dassocIntLookup mc0) dtb__640))
@@ -334,11 +391,13 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dassocIntLookup = (fun mc0 mc1 -> (match m
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 452 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decTriedAt = (fun ec cid -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__643; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__644; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__645 } -> ((v_Vuna_dCompiler_dElab_dTypes_dassocIntLookup cid) dtb__645)
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 468 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dassocIntSet = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__646, dtb__647) -> (match dtb__646 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__648; Base_dPair.f_Base_dPair_dPair_second = dtb__649 } -> (if (dtb__648 = mc0) then (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__648; Base_dPair.f_Base_dPair_dPair_second = mc1 }, dtb__647)) else (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__648; Base_dPair.f_Base_dPair_dPair_second = dtb__649 }, (((v_Vuna_dCompiler_dElab_dTypes_dassocIntSet mc0) mc1) dtb__647))))
@@ -348,23 +407,28 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dassocIntSet = (fun mc0 mc1 mc2 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 457 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decRecordTried = (fun ec cid epoch -> (match (v_Vuna_dCompiler_dElab_dTypes_decConstraints ec) with
   | { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__650; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__651; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = dtb__652 } -> ((v_Vuna_dCompiler_dElab_dTypes_decPutConstraints ec) { f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csPending = dtb__650; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csNextId = dtb__651; f_Vuna_dCompiler_dElab_dTypes_dConstraintStore_csTried = (((v_Vuna_dCompiler_dElab_dTypes_dassocIntSet cid) epoch) dtb__652) })
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 473 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decEmpty = { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = 0; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = v_Vuna_dCompiler_dElab_dTypes_dinstStoreEmpty; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = v_Vuna_dCompiler_dElab_dTypes_dcsEmpty; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dInt.v_Hashable_uInt) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dInt.v_Hashable_uInt) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = false; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil); f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = false; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = Base_dList.C_Base_dList_dList_Nil }
 
+# 481 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decSolTbl = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__653; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__654; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__655; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__656; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__657; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__658; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__659; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__660; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__661; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__662; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__663; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__664; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__665; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__666; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__667; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__668; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__669; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__670; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__671; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__672; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__673 } -> dtb__664
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 498 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw = (fun mc0 mc1 mc2 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__674; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__675; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__676; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__677; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__678; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__679; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__680; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__681; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__682; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__683; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__684; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__685; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__686; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__687; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__688; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__689; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__690; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__691; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__692; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__693; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__694 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__674; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__676; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__677; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__678; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__679; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__680; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__681; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__682; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__683; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__684; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = mc2; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__686; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__687; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__688; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__689; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__690; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__691; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__692; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__693; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__694 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 508 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__695, dtb__696) -> (match dtb__695 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__697; Base_dPair.f_Base_dPair_dPair_second = dtb__698 } -> (if (dtb__697 = mc0) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__697; Base_dPair.f_Base_dPair_dPair_second = dtb__698 }, ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId mc0) dtb__696))))
@@ -374,6 +438,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId = (fun mc0 mc1 -> (match mc
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 504 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dsolsDelta = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__699, dtb__700) -> (match dtb__699 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__701; Base_dPair.f_Base_dPair_dPair_second = dtb__702 } -> ((v_Vuna_dCompiler_dElab_dTypes_dprefixUntilId dtb__701) mc1)
@@ -383,107 +448,132 @@ let v_Vuna_dCompiler_dElab_dTypes_dsolsDelta = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 491 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutSols = (fun ec sols2 -> ((fun delta -> ((fun soltbl2 -> (((v_Vuna_dCompiler_dElab_dTypes_decPutSolsRaw ec) sols2) soltbl2)) (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dInt.v_Hashable_uInt) delta) (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)))) ((v_Vuna_dCompiler_dElab_dTypes_dsolsDelta (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) sols2)))
 
+# 514 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dmemDataNameIn = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__703, dtb__704) -> (if ((v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__703) = mc0) then true else ((v_Vuna_dCompiler_dElab_dTypes_dmemDataNameIn mc0) dtb__704))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 521 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddDef = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__705; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__706; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__707; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__708; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__709; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__710; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__711; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__712; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__713; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__714; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__715; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__716; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__717; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__718; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__719; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__720; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__721; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__722; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__723; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__724; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__725 } -> ((fun delta -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__705; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__706; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = (Base_dList.C_Base_dList_dList_Cons (mc1, dtb__707)); f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__708; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__709; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__710; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__711; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__712; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__713; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = delta; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__715; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__716; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__717; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__718; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__719; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__720; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__721; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__722; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__723; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__724; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__725 }) (if ((v_Vuna_dCompiler_dElab_dTypes_dmemDataNameIn (Base_dPair.v_Base_dPair_dfirstOf mc1)) dtb__708) then dtb__714 else ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) (Base_dPair.v_Base_dPair_dfirstOf mc1)) (Base_dPair.v_Base_dPair_dsecondOf mc1)) dtb__714)))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 530 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decRemoveDefTbl = (fun mc0 mc1 -> (match mc1 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__726; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__727; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__728; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__729; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__730; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__731; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__732; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__733; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__734; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__735; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__736; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__737; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__738; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__739; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__740; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__741; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__742; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__743; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__744; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__745; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__746 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__726; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__727; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__728; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__729; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__730; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__731; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__732; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__733; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__734; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) ((Base_dList.v_Base_dList_dfilter (fun p -> (Base_dBool.v_Base_dBool_dnot ((Base_dPair.v_Base_dPair_dfirstOf p) = mc0)))) ((Base_dHashMap.v_Base_dHashMap_dtoList Base_dString.v_Eq_uString) dtb__735))); f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__736; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__737; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__738; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__739; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__740; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__741; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__742; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__743; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__744; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__745; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__746 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 547 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs = (fun d -> ((Base_dList.v_Base_dList_dmap (fun c -> { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dPair.f_Base_dPair_dPair_second = c })) (v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)))
 
+# 536 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddData = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__747; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__748; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__749; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__750; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__751; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__752; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__753; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__754; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__755; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__756; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__757; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__758; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__759; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__760; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__761; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__762; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__763; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__764; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__765; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__766; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__767 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__747; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__748; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__749; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = ((Base_dList.v_Base_dList_dappend dtb__750) (Base_dList.C_Base_dList_dList_Cons (mc1, Base_dList.C_Base_dList_dList_Nil))); f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__751; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__752; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__753; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__754; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__755; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__756; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__757; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__758; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__759; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__760; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__761; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dString.v_Hashable_uString) (v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs mc1)) dtb__762); f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__763; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = (if (v_Vuna_dCompiler_dElab_dTypes_ddtDataLinear mc1) then true else dtb__764); f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__765; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__766; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__767 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 543 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctorTblOfDatas = (fun datas -> (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dString.v_Hashable_uString) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dElab_dTypes_ddataCtorPairs) datas)) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)))
 
+# 550 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutCtorTbl = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__768; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__769; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__770; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__771; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__772; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__773; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__774; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__775; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__776; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__777; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__778; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__779; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__780; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__781; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__782; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__783; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__784; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__785; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__786; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__787; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__788 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__768; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__769; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__770; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__771; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__772; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__773; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__774; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__775; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__776; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__777; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__778; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__779; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__780; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__781; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__782; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__784; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__785; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__786; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__787; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__788 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 556 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decDefVals = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__789; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__790; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__791; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__792; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__793; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__794; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__795; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__796; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__797; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__798; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__799; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__800; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__801; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__802; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__803; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__804; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__805; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__806; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__807; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__808; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__809 } -> dtb__805
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 489 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decSolsP = (fun ec -> ((((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsOf (v_Vuna_dCompiler_dElab_dTypes_decSolTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSols ec)) (v_Vuna_dCompiler_dElab_dTypes_decDepthTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decDefVals ec)))
 
+# 560 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decHasLinear = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__810; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__811; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__812; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__813; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__814; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__815; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__816; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__817; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__818; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__819; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__820; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__821; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__822; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__823; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__824; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__825; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__826; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__827; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__828; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__829; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__830 } -> dtb__827
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 566 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decMetaSpans = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__831; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__832; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__833; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__834; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__835; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__836; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__837; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__838; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__839; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__840; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__841; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__842; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__843; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__844; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__845; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__846; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__847; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__848; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__849; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__850; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__851 } -> dtb__849
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 571 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutMetaSpans = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__852; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__853; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__854; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__855; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__856; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__857; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__858; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__859; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__860; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__861; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__862; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__863; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__864; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__865; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__866; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__867; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__868; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__869; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__870; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__871; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__872 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__852; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__853; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__854; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__855; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__856; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__857; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__858; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__859; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__860; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__861; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__862; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__863; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__864; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__865; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__866; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__867; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__868; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__869; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__871; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__872 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 577 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decUseSpans = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__873; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__874; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__875; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__876; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__877; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__878; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__879; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__880; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__881; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__882; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__883; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__884; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__885; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__886; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__887; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__888; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__889; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__890; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__891; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__892; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__893 } -> dtb__892
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 582 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutUseSpans = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__894; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__895; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__896; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__897; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__898; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__899; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__900; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__901; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__902; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__903; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__904; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__905; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__906; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__907; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__908; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__909; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__910; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__911; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__912; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__913; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__914 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__894; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__895; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__896; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__897; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__898; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__899; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__900; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__901; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__902; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__903; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__904; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__905; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__906; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__907; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__908; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__909; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__910; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__911; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__912; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__914 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 589 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decWarnings = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__915; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__916; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__917; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__918; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__919; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__920; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__921; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__922; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__923; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__924; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__925; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__926; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__927; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__928; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__929; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__930; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__931; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__932; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__933; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__934; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__935 } -> dtb__935
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 594 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutWarnings = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__936; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__937; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__938; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__939; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__940; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__941; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__942; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__943; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__944; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__945; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__946; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__947; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__948; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__949; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__950; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__951; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__952; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__953; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__954; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__955; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__956 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__936; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__937; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__938; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__939; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__940; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__941; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__942; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__943; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__944; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__945; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__946; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__947; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__948; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__949; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__950; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__951; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__952; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__953; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__954; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__955; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = mc1 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 600 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decAddWarning = (fun ec d -> ((v_Vuna_dCompiler_dElab_dTypes_decPutWarnings ec) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dTypes_decWarnings ec)) (Base_dList.C_Base_dList_dList_Cons (d, Base_dList.C_Base_dList_dList_Nil)))))
 
+# 603 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_ddatasHaveLinear = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__957, dtb__958) -> (if (v_Vuna_dCompiler_dElab_dTypes_ddtDataLinear dtb__957) then true else (v_Vuna_dCompiler_dElab_dTypes_ddatasHaveLinear dtb__958))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 607 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutDefVals = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__959; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__960; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__961; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__962; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__963; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__964; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__965; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__966; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__967; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__968; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__969; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__970; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__971; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__972; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__973; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__974; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__975; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__976; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__977; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__978; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__979 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__959; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__960; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__961; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__962; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__963; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__964; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__965; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__966; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__967; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__968; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__969; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__970; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__971; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__972; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__973; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__974; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__976; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__977; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__978; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__979 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 619 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxDepth = (fun ctx -> (Base_dList.v_Base_dList_dlength (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems))
 
+# 622 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxBind = (fun mc0 mc1 mc2 -> (match mc2 with
   | { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__980; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__981 } -> { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }, dtb__980)); f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__981 }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 626 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxBindValue = (fun name dom ctx -> (((v_Vuna_dCompiler_dElab_dTypes_dctxBind name) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dquote (v_Vuna_dCompiler_dElab_dTypes_dctxDepth ctx)) dom)) ctx))
 
+# 630 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxRefine = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__982; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__983 } -> { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__982; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = ((Base_dList.v_Base_dList_dappend dtb__983) mc1) }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 633 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__984, dtb__985) -> (match dtb__984 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__986; Base_dPair.f_Base_dPair_dPair_second = dtb__987 } -> (if (dtb__986 = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = mc2; Base_dPair.f_Base_dPair_dPair_second = dtb__987 })) else (((v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt mc0) dtb__985) (mc2 + 1)))
@@ -493,8 +583,10 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt = (fun mc0 mc1 mc2 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 638 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxLookup = (fun name ctx -> (((v_Vuna_dCompiler_dElab_dTypes_dctxLookupAt name) (ctx).f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems) 0))
 
+# 642 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__988, dtb__989) -> (match dtb__988 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__990; Base_dPair.f_Base_dPair_dPair_second = dtb__991 } -> (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral ((Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__990, ((mc2 - mc1) - 1), Base_dList.C_Base_dList_dList_Nil)))), (((v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt dtb__989) (mc1 + 1)) mc2)))
@@ -504,11 +596,13 @@ let rec v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt = (fun mc0 mc1 mc2 -> (match mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 647 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dctxEnv = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__992; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__993 } -> (((v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt dtb__992) 0) (Base_dList.v_Base_dList_dlength dtb__992))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 672 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_drefineLookup = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__994, dtb__995) -> (match dtb__994 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__996; Base_dPair.f_Base_dPair_dPair_second = dtb__997 } -> (if (dtb__996 = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__997)) else ((v_Vuna_dCompiler_dElab_dTypes_drefineLookup mc0) dtb__995))
@@ -518,6 +612,7 @@ let rec v_Vuna_dCompiler_dElab_dTypes_drefineLookup = (fun mc0 mc1 -> (match mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 652 "Vuna/Compiler/Elab/Types.vuna"
 let rec v_Vuna_dCompiler_dElab_dTypes_drefineValue = (fun refs fuel v -> (if (fuel <= 0) then v else (match v with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VNeutral (dtb__998) -> (match dtb__998 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dNeutral_NVar (dtb__999, dtb__1000, dtb__1001) -> ((fun sp2 -> (match ((v_Vuna_dCompiler_dElab_dTypes_drefineLookup dtb__1000) refs) with
@@ -536,69 +631,85 @@ let rec v_Vuna_dCompiler_dElab_dTypes_drefineValue = (fun refs fuel v -> (if (fu
   | _ -> v
 )))
 
+# 677 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_devalCtx = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__1016; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__1017 } -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval ((Base_dList.v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue dtb__1017) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel)) (((v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt dtb__1016) 0) (Base_dList.v_Base_dList_dlength dtb__1016)))) mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 682 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dvarTypeValue = (fun mc0 mc1 mc2 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = dtb__1018; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = dtb__1019 } -> ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval ((Base_dList.v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dTypes_drefineValue dtb__1019) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel)) (((v_Vuna_dCompiler_dElab_dTypes_dctxEnvAt dtb__1018) 0) (Base_dList.v_Base_dList_dlength dtb__1018)))) (((Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dshift 0) (mc1 + 1)) mc2))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 686 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_demptyCtx = { f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxItems = Base_dList.C_Base_dList_dList_Nil; f_Vuna_dCompiler_dElab_dTypes_dCtx_ctxRefVals = Base_dList.C_Base_dList_dList_Nil }
 
+# 692 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_derrAt = (fun sp msg -> ((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_drawAt sp) msg))
 
+# 696 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dnewMeta = (fun mc0 mc1 -> (match mc1 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__1020; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__1021; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__1022; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__1023; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__1024; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__1025; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__1026; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__1027; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__1028; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__1029; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__1030; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__1031; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__1032; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__1033; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__1034; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__1035; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__1036; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__1037; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__1038; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__1039; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__1040 } -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TMeta (dtb__1020)); Base_dPair.f_Base_dPair_dPair_second = { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = (dtb__1020 + 1); f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__1021; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__1022; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__1023; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__1020; Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dTypes_dctxDepth mc0) }, dtb__1024)); f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__1025; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__1026; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__1027; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__1028; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__1029; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__1030; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__1031; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dInt.v_Hashable_uInt) dtb__1020) (v_Vuna_dCompiler_dElab_dTypes_dctxDepth mc0)) dtb__1032); f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__1033; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__1034; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__1035; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__1036; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__1037; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__1038; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__1039; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__1040 } }
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 701 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dforceVal = (fun ec v -> ((((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_dforce (v_Vuna_dCompiler_dElab_dTypes_decDefTbl ec)) (v_Vuna_dCompiler_dElab_dTypes_decSolsP ec)) Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_ddefaultFuel) v))
 
+# 722 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgDatas = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1041; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1042; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1043; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1044; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1045; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1046; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1047; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1048; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1049; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1050; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1051 } -> dtb__1041
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 726 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgDefs = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1052; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1053; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1054; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1055; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1056; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1057; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1058; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1059; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1060; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1061; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1062 } -> dtb__1053
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 731 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgGoals = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1063; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1064; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1065; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1066; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1067; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1068; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1069; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1070; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1071; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1072; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1073 } -> dtb__1065
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 735 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgSols = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1074; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1075; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1076; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1077; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1078; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1079; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1080; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1081; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1082; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1083; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1084 } -> dtb__1077
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 739 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgGlobals = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1085; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1086; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1087; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1088; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1089; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1090; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1091; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1092; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1093; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1094; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1095 } -> dtb__1089
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 743 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgInsts = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1096; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1097; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1098; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1099; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1100; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1101; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1102; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1103; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1104; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1105; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1106 } -> dtb__1101
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 747 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgClasses = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1107; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1108; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1109; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1110; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1111; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1112; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1113; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1114; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1115; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1116; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1117 } -> dtb__1113
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 752 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_ddtProgWarnings = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas = dtb__1118; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs = dtb__1119; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGoals = dtb__1120; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgSols = dtb__1121; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgGlobals = dtb__1122; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgInsts = dtb__1123; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgClasses = dtb__1124; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgNext = dtb__1125; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefVals = dtb__1126; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDepths = dtb__1127; f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgWarnings = dtb__1128 } -> dtb__1128
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 757 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_dsolsToTbl = (fun sols -> (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dInt.v_Hashable_uInt) sols) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dInt.v_Hashable_uInt) Base_dList.C_Base_dList_dList_Nil)))
 
+# 760 "Vuna/Compiler/Elab/Types.vuna"
 let v_Vuna_dCompiler_dElab_dTypes_decPutDefTbl = (fun mc0 mc1 -> (match mc0 with
   | { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__1129; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__1130; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__1131; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__1132; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__1133; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__1134; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__1135; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__1136; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__1137; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = dtb__1138; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__1139; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__1140; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__1141; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__1142; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__1143; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__1144; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__1145; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__1146; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__1147; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__1148; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__1149 } -> { f_Vuna_dCompiler_dElab_dTypes_dEc_ecNext = dtb__1129; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSols = dtb__1130; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefsRev = dtb__1131; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDatas = dtb__1132; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthOfMeta = dtb__1133; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGoals = dtb__1134; f_Vuna_dCompiler_dElab_dTypes_dEc_ecInsts = dtb__1135; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClasses = dtb__1136; f_Vuna_dCompiler_dElab_dTypes_dEc_ecConstraints = dtb__1137; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefTbl = mc1; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsTbl = dtb__1139; f_Vuna_dCompiler_dElab_dTypes_dEc_ecSolTbl = dtb__1140; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDepthTbl = dtb__1141; f_Vuna_dCompiler_dElab_dTypes_dEc_ecGlobalsComplete = dtb__1142; f_Vuna_dCompiler_dElab_dTypes_dEc_ecClausesTbl = dtb__1143; f_Vuna_dCompiler_dElab_dTypes_dEc_ecCtorTbl = dtb__1144; f_Vuna_dCompiler_dElab_dTypes_dEc_ecDefVals = dtb__1145; f_Vuna_dCompiler_dElab_dTypes_dEc_ecHasLinear = dtb__1146; f_Vuna_dCompiler_dElab_dTypes_dEc_ecMetaSpans = dtb__1147; f_Vuna_dCompiler_dElab_dTypes_dEc_ecUseSpans = dtb__1148; f_Vuna_dCompiler_dElab_dTypes_dEc_ecWarnings = dtb__1149 }
   | _ -> failwith "DT: impossible branch"

@@ -1,28 +1,40 @@
 open Vuna_runtime
 type t_Base_dEffFs_dFsOp = C_Base_dEffFs_dFsOp_ReadFile of (string) | C_Base_dEffFs_dFsOp_WriteFile of (string) * (string) | C_Base_dEffFs_dFsOp_WriteFileAtomic of (string) * (string) | C_Base_dEffFs_dFsOp_ReadDir of (string) | C_Base_dEffFs_dFsOp_IsDirectory of (string) | C_Base_dEffFs_dFsOp_MakeDir of (string) | C_Base_dEffFs_dFsOp_RemoveFile of (string) | C_Base_dEffFs_dFsOp_FileExists of (string) | C_Base_dEffFs_dFsOp_FileMtime of (string) | C_Base_dEffFs_dFsOp_FileSize of (string)
 
+# 47 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsReadFile = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_ReadFile (p))))
 
+# 51 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsWriteFile = (fun n p s -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_WriteFile (p, s))))
 
+# 55 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsWriteFileAtomic = (fun n p s -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_WriteFileAtomic (p, s))))
 
+# 59 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsReadDir = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_ReadDir (p))))
 
+# 63 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsIsDirectory = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_IsDirectory (p))))
 
+# 67 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsMakeDir = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_MakeDir (p))))
 
+# 71 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsRemoveFile = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_RemoveFile (p))))
 
+# 75 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileExists = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileExists (p))))
 
+# 79 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileMtime = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileMtime (p))))
 
+# 83 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileSize = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileSize (p))))
 
+# 87 "Base/EffFs.vuna"
 let v_Base_dEffFs_dhandleFs = (fun n ret opH comp -> (((((Base_dEff.v_Base_dEff_dhandleCore "fs") n) ret) (Obj.magic opH)) comp))
 
+# 91 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsOpHIO = (fun op k -> (match op with
   | C_Base_dEffFs_dFsOp_ReadFile (dtb__0) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) dtb__0)) (fun s -> ((Obj.magic k) s)))
   | C_Base_dEffFs_dFsOp_WriteFile (dtb__1, dtb__2) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dMonad.v_Base_dMonad_dfmap Base_dEff.v_Functor_uBase_uEff_uEff_ur) bi_natFromInt) (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) dtb__1) dtb__2))) (fun n -> ((Obj.magic k) n)))
@@ -37,6 +49,7 @@ let v_Base_dEffFs_dfsOpHIO = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 128 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsOpHIOHost = (fun op k -> (match op with
   | C_Base_dEffFs_dFsOp_ReadFile (dtb__12) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_readFile dtio_0)) dtb__12)) (fun s -> ((Obj.magic k) s)))
   | C_Base_dEffFs_dFsOp_WriteFile (dtb__13, dtb__14) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dMonad.v_Base_dMonad_dfmap Base_dEff.v_Functor_uBase_uEff_uEff_ur) bi_natFromInt) (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_writeFile dtio_0 dtio_1)) dtb__13) dtb__14))) (fun n -> ((Obj.magic k) n)))
@@ -51,6 +64,8 @@ let v_Base_dEffFs_dfsOpHIOHost = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 162 "Base/EffFs.vuna"
 let v_Base_dEffFs_dhandleFsHostHost = (fun n comp -> ((((v_Base_dEffFs_dhandleFs n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffFs_dfsOpHIOHost) comp))
 
+# 166 "Base/EffFs.vuna"
 let v_Base_dEffFs_drunFsHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff ((v_Base_dEffFs_dhandleFsHostHost "default") comp)))

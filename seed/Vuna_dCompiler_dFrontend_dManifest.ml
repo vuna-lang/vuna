@@ -4,33 +4,43 @@ and t_Vuna_dCompiler_dFrontend_dManifest_dDependency = { f_Vuna_dCompiler_dFront
 and t_Vuna_dCompiler_dFrontend_dManifest_dManifest = { f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestName : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestMembers : string Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestExports : string Base_dList.t_Base_dList_dList Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDependencies : t_Vuna_dCompiler_dFrontend_dManifest_dDependency Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestPath : string; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagFormat : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagWarnings : bool Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagMaxErrors : int Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagLang : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagDenyWarnings : bool Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestRegistryIndex : string Base_dMaybe.t_Base_dMaybe_dMaybe }
 and t_Vuna_dCompiler_dFrontend_dManifest_dDepAcc = { f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias : string; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccPath : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccGit : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccRev : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccUrl : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccHash : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccTableLine : int }
 
+# 38 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depAlias = dtb__0; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depSource = dtb__1; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depHash = dtb__2 } -> dtb__0
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 41 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_ddepSourceOf = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depAlias = dtb__3; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depSource = dtb__4; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depHash = dtb__5 } -> dtb__4
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 44 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_ddepHashOf = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depAlias = dtb__6; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depSource = dtb__7; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depHash = dtb__8 } -> dtb__8
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 72 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_demptyDepAcc = (fun alias line -> { f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias = alias; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccPath = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccGit = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccRev = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccUrl = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccHash = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccTableLine = line })
 
+# 76 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disDigitChar = (fun c -> (if (c >= 48) then (c <= 57) else false))
 
+# 79 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disUpperAlphaChar = (fun c -> (if (c >= 65) then (c <= 90) else false))
 
+# 82 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disLowerAlphaChar = (fun c -> (if (c >= 97) then (c <= 122) else false))
 
+# 85 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_datLine = (fun path line msg -> (if (path = "") then (String.concat "" ["line "; (bi_strFromInt line); ": "; msg]) else (String.concat "" [path; ":"; (bi_strFromInt line); ": "; msg])))
 
+# 88 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr = (fun path msg -> (if (path = "") then msg else (String.concat "" [path; ": "; msg])))
 
+# 91 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun _uctx0 mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__11, dtb__12) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__9) dtb__11) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection _uctx0) dtb__10) dtb__12) else false)
@@ -43,18 +53,21 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun _uctx0 mc0 mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 96 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dfieldLine = (fun path section key entries -> (match (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine section) key) entries) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__13) -> dtb__13
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> 1
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 101 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dfieldLoc = (fun path section key entries -> (match (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntryLine section) key) entries) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__14) -> (if (path = "") then (String.concat "" ["line "; (bi_strFromInt dtb__14); ": "]) else (String.concat "" [path; ":"; (bi_strFromInt dtb__14); ": "]))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (if (path = "") then "" else (path ^ ": "))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 106 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dstringField = (fun path section key entries -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__15) -> (match dtb__15 with
   | Vuna_dCompiler_dFrontend_dToml.C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TStr (dtb__16) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__16))))
@@ -64,6 +77,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dstringField = (fun path section key en
   | _ -> failwith "DT: impossible branch"
 )) (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) entries)))
 
+# 112 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dstringListField = (fun path section key entries -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__17) -> (match dtb__17 with
   | Vuna_dCompiler_dFrontend_dToml.C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TArray (dtb__18) -> (match (Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_darrayStrings dtb__18) with
@@ -77,6 +91,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dstringListField = (fun path section ke
   | _ -> failwith "DT: impossible branch"
 )) (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) entries)))
 
+# 121 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dintField = (fun path section key entries -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__20) -> (match dtb__20 with
   | Vuna_dCompiler_dFrontend_dToml.C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TInt (dtb__21) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__21))))
@@ -86,6 +101,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dintField = (fun path section key entri
   | _ -> failwith "DT: impossible branch"
 )) (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) entries)))
 
+# 127 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dboolField = (fun path section key entries -> ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__22) -> (match dtb__22 with
   | Vuna_dCompiler_dFrontend_dToml.C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TBool (dtb__23) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__23))))
@@ -95,18 +111,21 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dboolField = (fun path section key entr
   | _ -> failwith "DT: impossible branch"
 )) (((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dlookupEntry section) key) entries)))
 
+# 133 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dorEmptyList = (fun mc0 -> (match mc0 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__24) -> dtb__24
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 138 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dorFalse = (fun mc0 -> (match mc0 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__25) -> dtb__25
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 143 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disDepTableSection = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__26, dtb__27) -> (match dtb__27 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__28, dtb__29) -> (match dtb__29 with
@@ -118,6 +137,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_disDepTableSection = (fun mc0 -> (match
   | _ -> false
 ))
 
+# 147 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOfSection = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (match dtb__31 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__32, dtb__33) -> (match dtb__33 with
@@ -129,13 +149,16 @@ let v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOfSection = (fun mc0 -> (match
   | _ -> ""
 ))
 
+# 151 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disDepSourceKey = (fun key -> (if (if (if (if (key = "path") then true else (key = "git")) then true else (key = "rev")) then true else (key = "url")) then true else (key = "hash")))
 
+# 155 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dcheckOneEntry = (fun mc0 mc1 -> (match mc1 with
   | { Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntrySection = dtb__34; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryKey = dtb__35; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryValue = dtb__36; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryLine = dtb__37 } -> (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) Base_dList.C_Base_dList_dList_Nil) then ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt1 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnexpectedTopLevelKey (dtb__35))) dtb__35) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("package", Base_dList.C_Base_dList_dList_Nil))) then (if (dtb__35 = "name") then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, "package"))) dtb__35) "package")) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("workspace", Base_dList.C_Base_dList_dList_Nil))) then (if (dtb__35 = "members") then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, "workspace"))) dtb__35) "workspace")) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("export", Base_dList.C_Base_dList_dList_Nil))) then (if (dtb__35 = "modules") then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, "export"))) dtb__35) "export")) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("diagnostics", Base_dList.C_Base_dList_dList_Nil))) then (if (if (if (if (if (dtb__35 = "format") then true else (dtb__35 = "warnings")) then true else (dtb__35 = "max-errors")) then true else (dtb__35 = "lang")) then true else (dtb__35 = "deny-warnings")) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, "diagnostics"))) dtb__35) "diagnostics")) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("dependencies", Base_dList.C_Base_dList_dList_Nil))) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__34) (Base_dList.C_Base_dList_dList_Cons ("registry", Base_dList.C_Base_dList_dList_Nil))) then (if (dtb__35 = "index") then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownKey (dtb__35, "registry"))) dtb__35) "registry")) else (if (v_Vuna_dCompiler_dFrontend_dManifest_disDepTableSection dtb__34) then (if (v_Vuna_dCompiler_dFrontend_dManifest_disDepSourceKey dtb__35) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt2 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownSourceKey (dtb__35, (v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOfSection dtb__34)))) dtb__35) (v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOfSection dtb__34))) else ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt1 mc0) dtb__37) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_UnknownSection ((Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_djoinDots dtb__34)))) (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_djoinDots dtb__34))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 170 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (match ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckOneEntry mc0) dtb__38) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__40) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__40))
@@ -146,35 +169,45 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries = (fun mc0 mc1 -> (ma
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 178 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dhasAcc = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__42, dtb__43) -> (if ((dtb__42).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias = mc0) then true else ((v_Vuna_dCompiler_dFrontend_dManifest_dhasAcc mc0) dtb__43))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 182 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_densureAcc = (fun alias line acc -> (if ((v_Vuna_dCompiler_dFrontend_dManifest_dhasAcc alias) acc) then acc else ((Base_dList.v_Base_dList_dappend acc) (Base_dList.C_Base_dList_dList_Cons (((v_Vuna_dCompiler_dFrontend_dManifest_demptyDepAcc alias) line), Base_dList.C_Base_dList_dList_Nil)))))
 
+# 185 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dmapAcc = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (if ((dtb__44).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias = mc0) then (Base_dList.C_Base_dList_dList_Cons ((mc1 dtb__44), dtb__45)) else (Base_dList.C_Base_dList_dList_Cons (dtb__44, (((v_Vuna_dCompiler_dFrontend_dManifest_dmapAcc mc0) mc1) dtb__45))))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 190 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dsetAccPath = (fun s acc -> { acc with f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccPath = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (s)) })
 
+# 193 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dsetAccGit = (fun s acc -> { acc with f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccGit = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (s)) })
 
+# 196 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dsetAccRev = (fun s acc -> { acc with f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccRev = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (s)) })
 
+# 199 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dsetAccUrl = (fun s acc -> { acc with f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccUrl = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (s)) })
 
+# 202 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dsetAccHash = (fun s acc -> { acc with f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccHash = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (s)) })
 
+# 205 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dstringValueOf = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
   | Vuna_dCompiler_dFrontend_dToml.C_Vuna_dCompiler_dFrontend_dToml_dTomlValue_TStr (dtb__46) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__46))
   | _ -> ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt1 mc0) mc3) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_ExpectedString (mc1))) mc1)
 ))
 
+# 210 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dapplyDepEntry = (fun path alias key value line acc -> ((fun ensured -> (if (key = "path") then (match ((((v_Vuna_dCompiler_dFrontend_dManifest_dstringValueOf path) key) value) line) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__47) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__47))
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__48) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((((v_Vuna_dCompiler_dFrontend_dManifest_dmapAcc alias) (v_Vuna_dCompiler_dFrontend_dManifest_dsetAccPath dtb__48)) ensured)))
@@ -197,6 +230,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dapplyDepEntry = (fun path alias key va
   | _ -> failwith "DT: impossible branch"
 )))))) (((v_Vuna_dCompiler_dFrontend_dManifest_densureAcc alias) line) acc)))
 
+# 231 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectTables = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__57, dtb__58) -> (match dtb__57 with
   | { Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntrySection = dtb__59; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryKey = dtb__60; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryValue = dtb__61; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryLine = dtb__62 } -> (if (v_Vuna_dCompiler_dFrontend_dManifest_disDepTableSection dtb__59) then (match ((((((v_Vuna_dCompiler_dFrontend_dManifest_dapplyDepEntry mc0) (v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOfSection dtb__59)) dtb__60) dtb__61) dtb__62) mc2) with
@@ -210,6 +244,7 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectTables = (fun mc0 mc1 mc2 -
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 239 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectStrings = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__65, dtb__66) -> (match dtb__65 with
   | { Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntrySection = dtb__67; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryKey = dtb__68; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryValue = dtb__69; Vuna_dCompiler_dFrontend_dToml.f_Vuna_dCompiler_dFrontend_dToml_dTomlEntry_tomlEntryLine = dtb__70 } -> (if (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection Base_dString.v_Eq_uString) dtb__67) (Base_dList.C_Base_dList_dList_Cons ("dependencies", Base_dList.C_Base_dList_dList_Nil))) then (match dtb__69 with
@@ -222,6 +257,7 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dcollectStrings = (fun mc0 mc1 mc2 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 247 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dbuildDependency = (fun path acc -> (match (acc).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccPath with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__72) -> (match (acc).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccGit with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__73) -> ((((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgAt1 path) (acc).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccTableLine) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_SourceConflict ((acc).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias))) (acc).f_Vuna_dCompiler_dFrontend_dManifest_dDepAcc_depAccAlias)
@@ -252,6 +288,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dbuildDependency = (fun path acc -> (ma
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 265 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dbuildTables = (fun mc0 mc1 mc2 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__79, dtb__80) -> (match ((v_Vuna_dCompiler_dFrontend_dManifest_dbuildDependency mc0) dtb__79) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__81) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__81))
@@ -262,6 +299,7 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dbuildTables = (fun mc0 mc1 mc2 -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 271 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependencies = (fun path entries -> (match (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectStrings path) entries) Base_dList.C_Base_dList_dList_Nil) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__83) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__83))
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__84) -> (match (((v_Vuna_dCompiler_dFrontend_dManifest_dcollectTables path) entries) Base_dList.C_Base_dList_dList_Nil) with
@@ -276,22 +314,27 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dcollectDependencies = (fun path entrie
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 283 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_disHexChar = (fun c -> (if (if (v_Vuna_dCompiler_dFrontend_dManifest_disDigitChar c) then true else (if (c >= 65) then (c <= 70) else false)) then true else (if (c >= 97) then (c <= 102) else false)))
 
+# 286 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dallHex = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__89, dtb__90) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_disHexChar dtb__89) then (v_Vuna_dCompiler_dFrontend_dManifest_dallHex dtb__90) else false)
   | Base_dList.C_Base_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 291 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidHashText = (fun s -> (if ((Base_dString.v_Base_dString_dstartsWith "sha256:") s) then (if ((bi_strLength s) = 71) then (v_Vuna_dCompiler_dFrontend_dManifest_dallHex (Base_dList.dtp_unpack (((Base_dString.v_Base_dString_dsubstring 7) 64) s))) else false) else (if ((bi_strLength s) = 64) then (v_Vuna_dCompiler_dFrontend_dManifest_dallHex (Base_dList.dtp_unpack s)) else false)))
 
+# 296 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dcheckHashForm = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__91) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidHashText dtb__91) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_HashMalformed (dtb__91))) dtb__91))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 301 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependency = (fun mc0 mc1 -> (match mc1 with
   | { f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depAlias = dtb__92; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depSource = dtb__93; f_Vuna_dCompiler_dFrontend_dManifest_dDependency_depHash = dtb__94 } -> (if (dtb__92 = "") then ((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath0 mc0) Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EmptyDependencyName) else (match dtb__93 with
   | C_Vuna_dCompiler_dFrontend_dManifest_dDependencySource_DepPath (dtb__95) -> (if (dtb__95 = "") then (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EmptyDependencyPath (dtb__92))) dtb__92) else (((v_Vuna_dCompiler_dFrontend_dManifest_dcheckHashForm mc0) dtb__92) dtb__94))
@@ -310,6 +353,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependency = (fun mc0 mc1 -> (
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 319 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__101, dtb__102) -> (if ((Base_dList.v_Base_dList_dmemName (v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dtb__101)) mc1) then (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_DuplicateDependency ((v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dtb__101)))) (v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dtb__101)) else (match ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependency mc0) dtb__101) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__103) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__103))
@@ -320,97 +364,118 @@ let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen = (fun mc0 mc1 mc
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 326 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependencies = (fun path deps -> (((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDepsSeen path) Base_dList.C_Base_dList_dList_Nil) deps))
 
+# 330 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDiagFormat = (fun mc0 mc1 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__105) -> (if (if (if (if (dtb__105 = "short") then true else (dtb__105 = "human")) then true else (dtb__105 = "json")) then true else (dtb__105 = "sarif")) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidDiagFormat (dtb__105))) dtb__105))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 336 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDiagMax = (fun mc0 mc1 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__106) -> (if (dtb__106 >= 1) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidDiagMaxErrors ((bi_strFromInt dtb__106)))) (bi_strFromInt dtb__106)))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 382 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageChars = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__107, dtb__108) -> (if (if (if (v_Vuna_dCompiler_dFrontend_dManifest_disLowerAlphaChar dtb__107) then true else (v_Vuna_dCompiler_dFrontend_dManifest_disDigitChar dtb__107)) then true else (dtb__107 = 45)) then (v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageChars dtb__108) else false)
   | Base_dList.C_Base_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 379 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageName = (fun name -> (v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageChars (Base_dList.dtp_unpack name)))
 
+# 401 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleTail = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__109, dtb__110) -> (if (if (if (if (v_Vuna_dCompiler_dFrontend_dManifest_disUpperAlphaChar dtb__109) then true else (v_Vuna_dCompiler_dFrontend_dManifest_disLowerAlphaChar dtb__109)) then true else (v_Vuna_dCompiler_dFrontend_dManifest_disDigitChar dtb__109)) then true else (dtb__109 = 95)) then (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleTail dtb__110) else false)
   | Base_dList.C_Base_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 397 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegmentChars = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__111, dtb__112) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_disUpperAlphaChar dtb__111) then (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleTail dtb__112) else false)
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 394 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegment = (fun seg -> (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegmentChars (Base_dList.dtp_unpack seg)))
 
+# 390 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegments = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__113, dtb__114) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegment dtb__113) then (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegments dtb__114) else false)
   | Base_dList.C_Base_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 387 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleName = (fun name -> (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleSegments (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_dsplitOnDot name)))
 
+# 407 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateName = (fun mc0 mc1 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__115) -> (if (dtb__115 = "") then ((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath0 mc0) Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EmptyPackageName) else (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidPackageName dtb__115) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidPackageName (dtb__115))) dtb__115)))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath0 mc0) Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_MissingPackageName)
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 413 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__116, dtb__117) -> (if (dtb__116 = "") then ((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath0 mc0) Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_EmptyMember) else ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers mc0) dtb__117))
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 418 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__118, dtb__119) -> (if (v_Vuna_dCompiler_dFrontend_dManifest_dvalidModuleName dtb__118) then ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules mc0) dtb__119) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidExportModule (dtb__118))) dtb__118))
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 423 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateExports = (fun mc0 mc1 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__120) -> ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateModules mc0) dtb__120)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 427 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateManifest = (fun mc0 -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestName = dtb__121; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestMembers = dtb__122; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestExports = dtb__123; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDependencies = dtb__124; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestPath = dtb__125; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagFormat = dtb__126; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagWarnings = dtb__127; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagMaxErrors = dtb__128; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagLang = dtb__129; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagDenyWarnings = dtb__130; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestRegistryIndex = dtb__131 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateName dtb__125) dtb__121)) (fun okName -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateMembers dtb__125) dtb__122)) (fun okMembers -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateExports dtb__125) dtb__123)) (fun okExports -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDependencies dtb__125) dtb__124)) (fun okDeps -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestName = dtb__121; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestMembers = dtb__122; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestExports = dtb__123; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDependencies = dtb__124; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestPath = dtb__125; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagFormat = dtb__126; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagWarnings = dtb__127; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagMaxErrors = dtb__128; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagLang = dtb__129; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDiagDenyWarnings = dtb__130; f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestRegistryIndex = dtb__131 }))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 440 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_ddirResult = (fun dir -> (if (dir = "") then "/" else dir))
 
+# 436 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_ddirFromRev = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__132, dtb__133) -> (if (dtb__132 = 47) then (v_Vuna_dCompiler_dFrontend_dManifest_ddirResult (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse dtb__133))) else (v_Vuna_dCompiler_dFrontend_dManifest_ddirFromRev dtb__133))
   | Base_dList.C_Base_dList_dList_Nil -> "."
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 433 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir = (fun path -> (v_Vuna_dCompiler_dFrontend_dManifest_ddirFromRev (Base_dList.v_Base_dList_dreverse (Base_dList.dtp_unpack path))))
 
+# 444 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dresolveManifestPath = (fun manifest rel -> ((fun dir -> (if ((Base_dString.v_Base_dString_dstartsWith "/") rel) then rel else (if (dir = ".") then rel else (String.concat "" [dir; "/"; rel])))) (v_Vuna_dCompiler_dFrontend_dManifest_dmanifestDir (manifest).f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestPath)))
 
+# 451 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dvalidateDiagLang = (fun mc0 mc1 -> (match mc1 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__134) -> (if (if (dtb__134 = "en") then true else (dtb__134 = "zh")) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0)) else (((Vuna_dCompiler_dDiagnostics_dPkg.v_Vuna_dCompiler_dDiagnostics_dPkg_dpkgPath1 mc0) (Vuna_dCompiler_dDiagnostics_dPkg.C_Vuna_dCompiler_dDiagnostics_dPkg_dPkgErr_InvalidDiagLang (dtb__134))) dtb__134))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 341 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dbuildManifest = (fun path entries -> (match ((v_Vuna_dCompiler_dFrontend_dManifest_dcheckEntries path) entries) with
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__135) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__135))
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__136) -> (match ((((v_Vuna_dCompiler_dFrontend_dManifest_dstringField path) (Base_dList.C_Base_dList_dList_Cons ("package", Base_dList.C_Base_dList_dList_Nil))) "name") entries) with
@@ -469,4 +534,5 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dbuildManifest = (fun path entries -> (
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 374 "Vuna/Compiler/Frontend/Manifest.vuna"
 let v_Vuna_dCompiler_dFrontend_dManifest_dparseManifest = (fun path contents -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dFrontend_dToml.v_Vuna_dCompiler_dFrontend_dToml_dparseTomlAt path) contents)) (fun entries -> ((v_Vuna_dCompiler_dFrontend_dManifest_dbuildManifest path) entries))))

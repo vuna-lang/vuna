@@ -1,14 +1,19 @@
 open Vuna_runtime
 type t_Base_dEffProcess_dProcessOp = C_Base_dEffProcess_dProcessOp_Args | C_Base_dEffProcess_dProcessOp_Exit of (int) | C_Base_dEffProcess_dProcessOp_RunIn of (string) * (string Base_dList.t_Base_dList_dList)
 
+# 34 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessArgs = (fun n -> (((Base_dEff.v_Base_dEff_dsendCore "process") n) C_Base_dEffProcess_dProcessOp_Args))
 
+# 38 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessExit = (fun n c -> (((Base_dEff.v_Base_dEff_dsendCore "process") n) (C_Base_dEffProcess_dProcessOp_Exit (c))))
 
+# 42 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessRunIn = (fun n dir args -> (((Base_dEff.v_Base_dEff_dsendCore "process") n) (C_Base_dEffProcess_dProcessOp_RunIn (dir, args))))
 
+# 46 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dhandleProcess = (fun n ret opH comp -> (((((Base_dEff.v_Base_dEff_dhandleCore "process") n) ret) (Obj.magic opH)) comp))
 
+# 50 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessOpHIOWith = (fun onExit op k -> (match op with
   | C_Base_dEffProcess_dProcessOp_Args -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
   | C_Base_dEffProcess_dProcessOp_Exit (dtb__0) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (onExit dtb__0)) (fun r -> ((Obj.magic k) r)))
@@ -16,8 +21,10 @@ let v_Base_dEffProcess_dprocessOpHIOWith = (fun onExit op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 63 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dhandleProcessHostWith = (fun n onExit comp -> ((((v_Base_dEffProcess_dhandleProcess n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWith onExit)) comp))
 
+# 71 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessOpHIOWithHost = (fun onExit op k -> (match op with
   | C_Base_dEffProcess_dProcessOp_Args -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
   | C_Base_dEffProcess_dProcessOp_Exit (dtb__3) -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (onExit dtb__3)) (fun r -> ((Obj.magic k) r)))
@@ -25,6 +32,8 @@ let v_Base_dEffProcess_dprocessOpHIOWithHost = (fun onExit op k -> (match op wit
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 83 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dhandleProcessHostWithHost = (fun n onExit comp -> ((((v_Base_dEffProcess_dhandleProcess n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWithHost onExit)) comp))
 
+# 87 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_drunProcessHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff (((v_Base_dEffProcess_dhandleProcessHostWithHost "default") (fun c -> ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_exit dtio_0)) c))) comp)))
