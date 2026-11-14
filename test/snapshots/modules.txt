@@ -43,6 +43,12 @@ Vuna.Lsp.Protocol  ./lib/Vuna/Lsp/Protocol.vuna
 Vuna.Lsp.Query  ./lib/Vuna/Lsp/Query.vuna
 Vuna.Lsp.Rename  ./lib/Vuna/Lsp/Rename.vuna
 Vuna.Lsp  ./lib/Vuna/Lsp.vuna
+Vuna.Obs.Read  ./lib/Vuna/Obs/Read.vuna
+Vuna.Obs.Run  ./lib/Vuna/Obs/Run.vuna
+Vuna.Obs.Summarize  ./lib/Vuna/Obs/Summarize.vuna
+Vuna.Obs.Types  ./lib/Vuna/Obs/Types.vuna
+Vuna.Obs.Validate  ./lib/Vuna/Obs/Validate.vuna
+Vuna.Obs  ./lib/Vuna/Obs.vuna
 Vuna.PackageStore  ./lib/Vuna/PackageStore.vuna
 Vuna.Registry  ./lib/Vuna/Registry.vuna
 Vuna.Repl.Client  ./lib/Vuna/Repl/Client.vuna
@@ -161,6 +167,7 @@ Vuna.Compiler.Native.Model  compiler/lib/Vuna/Compiler/Native/Model.vuna
 Vuna.Compiler.Native.Module  compiler/lib/Vuna/Compiler/Native/Module.vuna
 Vuna.Compiler.Native.Render  compiler/lib/Vuna/Compiler/Native/Render.vuna
 Vuna.Compiler.Native.Runtime  compiler/lib/Vuna/Compiler/Native/Runtime.vuna
+Vuna.Compiler.Obs  compiler/lib/Vuna/Compiler/Obs.vuna
 Vuna.Compiler.Packages.Pkg  compiler/lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Packages.Source  compiler/lib/Vuna/Compiler/Packages/Source.vuna
 Vuna.Compiler.Source  compiler/lib/Vuna/Compiler/Source.vuna
@@ -213,6 +220,8 @@ Base.Monad  base/lib/Base/Monad.vuna
 Base.Monoid  base/lib/Base/Monoid.vuna
 Base.Nat  base/lib/Base/Nat.vuna
 Base.Num  base/lib/Base/Num.vuna
+Base.Obs.Span  base/lib/Base/Obs/Span.vuna
+Base.Obs  base/lib/Base/Obs.vuna
 Base.Ord  base/lib/Base/Ord.vuna
 Base.Pair  base/lib/Base/Pair.vuna
 Base.Reader  base/lib/Base/Reader.vuna
@@ -325,6 +334,7 @@ Vuna.Compiler.Native.Model  ./lib/Vuna/Compiler/Native/Model.vuna
 Vuna.Compiler.Native.Module  ./lib/Vuna/Compiler/Native/Module.vuna
 Vuna.Compiler.Native.Render  ./lib/Vuna/Compiler/Native/Render.vuna
 Vuna.Compiler.Native.Runtime  ./lib/Vuna/Compiler/Native/Runtime.vuna
+Vuna.Compiler.Obs  ./lib/Vuna/Compiler/Obs.vuna
 Vuna.Compiler.Packages.Pkg  ./lib/Vuna/Compiler/Packages/Pkg.vuna
 Vuna.Compiler.Packages.Source  ./lib/Vuna/Compiler/Packages/Source.vuna
 Vuna.Compiler.Source  ./lib/Vuna/Compiler/Source.vuna
@@ -380,6 +390,8 @@ Base.Monad  ./lib/Base/Monad.vuna
 Base.Monoid  ./lib/Base/Monoid.vuna
 Base.Nat  ./lib/Base/Nat.vuna
 Base.Num  ./lib/Base/Num.vuna
+Base.Obs.Span  ./lib/Base/Obs/Span.vuna
+Base.Obs  ./lib/Base/Obs.vuna
 Base.Ord  ./lib/Base/Ord.vuna
 Base.Pair  ./lib/Base/Pair.vuna
 Base.Reader  ./lib/Base/Reader.vuna
