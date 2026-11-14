@@ -3,9 +3,10 @@
 > 状态：**M1 + M2 已端到端工作**（x86-64 Linux）。M1 覆盖 Int / Nat / Bool 纯值；
 > M2 加入 `String`（字面量、`++` 及其 `IrConcatMany` 展平、`strFromInt`、`strLength`、
 > `strAt`、`strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）与
-> **bump 堆**（无 GC/RC）。用户 data / record / 通用 case、闭包值、Float、Effect、FFI
-> 仍被明确拒绝（`NativeUnsupported`）。实现入口：
-> `Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
+> **bump 堆**（无 GC/RC）；**M2 parity 面**与 wasm 对齐：六种位运算、`assert` / `todo` /
+> `prim_fail`（统一错误报告）、`dbg!` 的 `@vuna@debug@on` / `@vuna@debug@line`。用户 data /
+> record / 通用 case、闭包值、Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
+> 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。后续路线按 M3a→M3b→M3c→M3d 拆分（见 §9）。
 
 ## 1. 产物与工具链
@@ -90,19 +91,25 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
 | `IrLam` | 仅顶层函数体 / 单参立即应用 | 嵌套、作为值 → 拒绝 |
-| `IrRt` | `@ir@natSucc`（调用 head）与入口 show | 其他拒绝 |
+| `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
 | Float / 构造子 / record / 通用 `case` / Effect / extern | 拒绝 | `native target: ... not supported yet` |
 
-- 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、`++`、`bi_eq_int` /
+- 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
+  `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /
   `bi_neq_int` / `bi_lt_int` / `bi_le_int` / `bi_gt_int` / `bi_ge_int`、
   `bi_eq_str` / `bi_neq_str`、`strFromInt` / `strLength` / `strAt` / `strSubstring` /
   `strHash` / `strShow`、`natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` /
-  `natFromInt`。其余 `IrRtApp` 符号拒绝。
+  `natFromInt`、`assert` / `todo` / `prim_fail`、`@vuna@debug@on` / `@vuna@debug@line`、
+  可观测性叶子桩。其余 `IrRtApp` 符号拒绝。
 - **两种调用形态**都要覆盖：内建饱和应用走 `IrRtApp sym args`（`irInlineArity`）；
-  `strAt` / `strSubstring` 这类**多参函数值**在 IR 里是 `IrApp (IrRt sym) args` 的
-  饱和应用（`irInlineArity = 0`），由 `Native.Runtime.nativeRtValueArity` 给出 arity，
-  饱和才生成 `call`（部分应用拒绝）。
-- 位运算当前在 IR 里走普通应用（`irInlineArity` 没有对应项），M2 仍拒绝。
+  `strAt` / `strSubstring` / `assert` / `todo` / `prim_fail` 这类**多参函数值**在 IR 里是
+  `IrApp (IrRt sym) args` 的饱和应用（`irInlineArity = 0`），由
+  `Native.Runtime.nativeRtValueArity` 给出 arity，饱和才生成 `call`（部分应用拒绝）。
+- 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…，与 `+` 同一形态决策）；63-bit
+  语义与 `Codegen.Term.bi_bit*` 一致（`bitShr` 是保留 bit 62 的逻辑右移）。
+- 运行时错误报告统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
+  报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
+  `TODO: ` 前缀。
 - List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）M2 拒绝：
   它们要构造/消费 canonical `List` 族的对象表示，随 M3b 一起落地（理由见 §9.1）。
 - **零参顶层定义**编成零参函数，每次引用都 `call`。M2 仍是纯语言（无 Effect），重复
@@ -116,15 +123,21 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 `Native.Runtime` 按 `Ir.Runtime` 契约的**符号名**实现子集；语义参考实现是
 `Vuna.Compiler.Codegen.Term` 的 `bi_*` / `dt_show_*` / `dtp_*` 模板，不重新定义语义：
 
-- `Int`：`add/sub/mul/div`（63-bit wrap；除零 trap）；比较返回 0/1。
+- `Int`：`add/sub/mul/div`（63-bit wrap；除零 trap）；`bit_and/bit_or/bit_xor/bit_not/
+  bit_shl/bit_shr`（63-bit 语义；移位计数 `n < 0 || n >= 63` → 0，`bit_shr` 保留 bit 62）；比较返回 0/1。
 - `Nat`：饱和加法/乘法、下溢到 0 的减法、除零 trap、`natToInt` / `natFromInt` / `natSucc`。
 - `String`：`str_alloc`（bump 分配，含长度头）、`str_concat`、`str_eq` / `str_neq`
   （先比长度，再 `repe cmpsb`）、`str_length`、`str_at`（越界 -1，与 `dtp_strAt` 一致）、
   `str_substring`（`start`/`len` 夹取到 `[0, n]`，与 `dtp_substring` 一致）、
   `str_hash`（`((h*33)+c) land 1023`，与 `dtp_strHash` 一致）、`str_from_int`（含负号）、
   `show_str`（引号 + `\"` `\\` `\n` `\t` `\r` 转义，与 `dt_show_string` 一致）。
+- 调试/失败：`debug_on`（恒 0 = 关闭）、`debug_line`（1 参返回 0）、`assert`（成功返回
+  value，失败走 `trap_assert`）、`prim_fail` / `todo`、`trap_msg` / `trap_assert` /
+  `trap_todo`。失败路径**不分配**：前缀是 `.rodata` 裸文本，msg 是带长度头的字符串，
+  逐段 `write` 到 stderr 后 exit 2。
 - 入口打印：`print_int` / `print_bool` / `print_str`（栈上 itoa / 原样字节 + 换行）。
-- 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息；由 `Native.Runtime.nativeRodata`
+- 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
+  error: `、`assertion failed: `、`TODO: `）；由 `Native.Runtime.nativeRodata`
   提供。字符串字面量由 `Native.Module` 收集成 `NativeStrLit`（`npStrLits`）。
 
 **可观测性**（规范见 [observability.md](observability.md) / O12）：`@vuna@obs@level` /
@@ -159,12 +172,13 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 
 ## 7. 验证
 
-- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e，89 checks）：
+- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e，114 checks）：
   M1 部分（最小可执行、算术/let/if、binder 遮蔽、多函数 label 不撞名、顶层函数、Nat 递归
   fact、Bool 入口与短路、63-bit 边界、除零 trap、确定性、`--no-compile`）与 M2 部分
   （String 入口、`++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
   `strShow`、字符串相等、递归构造字符串、转义与 UTF-8 字节、bump 堆耗尽 trap、Float /
-  data / 高阶拒绝）。
+  data / 高阶拒绝）以及 parity 面（六种位运算与移位边界、`assert` 成功/失败、`prim_fail`、
+  `todo`、`dbg!`）。
 - 差分：同一程序的 native 输出与 `vuna run`（OCaml 后端）逐字比较（fact / String 用例）；
   后续加 native 专用差分 runner 时仍以 OCaml 为语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 已含

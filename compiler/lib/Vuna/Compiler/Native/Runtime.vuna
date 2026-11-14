@@ -39,13 +39,26 @@ divZeroMessage = "vuna: runtime error: division by zero\n"
 oomMessage : String
 oomMessage = "vuna: runtime error: out of memory\n"
 
+-- 运行时错误报告器的统一前缀（与 OCaml 报告器 `dt_report_exn` 的输出逐字对齐）。
+errPrefix : String
+errPrefix = "vuna: runtime error: "
+
+assertPrefix : String
+assertPrefix = "assertion failed: "
+
+todoPrefix : String
+todoPrefix = "TODO: "
+
 export nativeRodata : List NativeRodata
 nativeRodata =
   [ NativeRodata (nativeDataLabel "true") "True",
     NativeRodata (nativeDataLabel "false") "False",
     NativeRodata (nativeDataLabel "nl") "\n",
     NativeRodata (nativeDataLabel "divzero") divZeroMessage,
-    NativeRodata (nativeDataLabel "oom") oomMessage
+    NativeRodata (nativeDataLabel "oom") oomMessage,
+    NativeRodata (nativeDataLabel "err_prefix") errPrefix,
+    NativeRodata (nativeDataLabel "assert_prefix") assertPrefix,
+    NativeRodata (nativeDataLabel "todo_prefix") todoPrefix
   ]
 
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
@@ -90,6 +103,26 @@ intBinary name op =
 intCompare : String -> String -> NativeFunc
 intCompare name cond = rtFunc name 0 [ICmp (OpReg Rdi) (OpReg Rsi), ISetcc cond Rax, IMovzxAl]
 
+-- | 位运算：63-bit 二进制补码（`Codegen.Term.bi_bit*` 的汇编实现）。
+--   `and/or/xor` 复用 `intBinary` 的 wrap；`bitNot` 是 `xor -1` 再 wrap。
+bitNotFn : NativeFunc
+bitNotFn =
+  rtFunc "bit_not" 0
+    [IMov (OpReg Rax) (OpReg Rdi), IBin "xor" (OpImm (0 - 1)), IBin "shl" (OpImm 1), IBin "sar" (OpImm 1)]
+
+-- | `bitShl`：计数 `n < 0 || n >= 63` → 0；否则 `a lsl n`（再 wrap 回 63-bit）。
+bitShlFn : NativeFunc
+bitShlFn =
+  rtFunc "bit_shl" 0
+    [ITest Rsi Rsi, IJcc "js" ".Lrt_bit_shl_zero", ICmp (OpReg Rsi) (OpImm 63), IJcc "jge" ".Lrt_bit_shl_zero", IMov (OpReg Rax) (OpReg Rdi), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "shl" Rax (OpReg Rcx), IBin "shl" (OpImm 1), IBin "sar" (OpImm 1), IRet, ILabel ".Lrt_bit_shl_zero", IMov (OpReg Rax) (OpImm 0), IRet]
+
+-- | `bitShr`：计数 `n < 0 || n >= 63` → 0；否则先把值按 63-bit 无符号展开再逻辑右移。
+--   （bit 63 是 63-bit 值的符号扩展位；`shl`+`shr` 只清掉它，保留 bit 62）
+bitShrFn : NativeFunc
+bitShrFn =
+  rtFunc "bit_shr" 0
+    [ITest Rsi Rsi, IJcc "js" ".Lrt_bit_shr_zero", ICmp (OpReg Rsi) (OpImm 63), IJcc "jge" ".Lrt_bit_shr_zero", IMov (OpReg R11) (OpReg Rdi), IBinReg "shl" R11 (OpImm 1), IBinReg "shr" R11 (OpImm 1), IMov (OpReg Rax) (OpReg R11), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "shr" Rax (OpReg Rcx), IRet, ILabel ".Lrt_bit_shr_zero", IMov (OpReg Rax) (OpImm 0), IRet]
+
 -- | 把 rdi 当作 Nat 返回（恒等）。
 natToIntFn : NativeFunc
 natToIntFn = rtFunc "nat_to_int" 0 [IMov (OpReg Rax) (OpReg Rdi)]
@@ -106,6 +139,14 @@ obsZeroFn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
 
 obsZero2Fn : String -> NativeFunc
 obsZero2Fn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
+
+-- `dbg!` 展开里的两个运行时符号（与 OCaml 的 `dtp_debug_on` / `dtp_debug_line` 对齐）：
+-- 默认关闭 ⇒ `debug_on` 恒返回 0（False），`debug_line` 是 1 参恒等返回 0 的桩。
+debugOnFn : NativeFunc
+debugOnFn = rtFunc "debug_on" 0 [IMov (OpReg Rax) (OpImm 0)]
+
+debugLineFn : NativeFunc
+debugLineFn = rtFunc "debug_line" 0 [IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
 -- Int 运算
@@ -242,6 +283,84 @@ trapOomFn =
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "oom"), IMov (OpReg Rdx) (OpImm (strLength oomMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 -- ---------------------------------------------------------------
+-- 断言 / 未实现占位 / 显式失败
+-- ---------------------------------------------------------------
+-- 失败报告协议（与 OCaml 报告器 `dt_report_exn` 的第一行一致）：
+--   stderr `vuna: runtime error: <msg>\n`，exit 2。
+--
+-- 失败路径**不分配**（不走 `str_concat`）：前缀是 `.rodata` 裸文本，msg 是带长度头的
+-- 字符串。因此逐段 write syscall，避免把裸 rodata 当字符串对象传给分配器。
+-- | 写一段裸 rodata：fd=2。
+writeErrRaw : String -> Int -> List Instr
+writeErrRaw label len =
+  [ IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rdi) (OpImm 2),
+    ILea Rsi label,
+    IMov (OpReg Rdx) (OpImm len),
+    ISyscall
+  ]
+
+-- | 写 r8 指向的字符串对象（长度取自 [r8]，数据从 r8+8 起）。
+writeErrMsg : List Instr
+writeErrMsg =
+  [ IMov (OpReg Rdx) (OpMem R8 0),
+    ILeaMem Rsi R8 8,
+    IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rdi) (OpImm 2),
+    ISyscall
+  ]
+
+-- | 写报错换行 + exit 2。
+errFinish : List Instr
+errFinish =
+  [ IMov (OpReg Rax) (OpImm 1),
+    IMov (OpReg Rdi) (OpImm 2),
+    ILea Rsi (nativeDataLabel "nl"),
+    IMov (OpReg Rdx) (OpImm 1),
+    ISyscall,
+    IMov (OpReg Rax) (OpImm 60),
+    IMov (OpReg Rdi) (OpImm 2),
+    ISyscall
+  ]
+
+-- | `vuna: runtime error: ` + prefix + msg + `\n` + exit 2；`rdi` = msg（入口保存到 r8）。
+trapWithPrefix : String -> Int -> List Instr
+trapWithPrefix label len =
+  append [IMov (OpReg R8) (OpReg Rdi)]
+    (append (writeErrRaw (nativeDataLabel "err_prefix") (strLength errPrefix)) (append (writeErrRaw label len) (append writeErrMsg errFinish)))
+
+-- | `prim_fail msg`（以及无前缀的失败）：`vuna: runtime error: ` + msg + `\n` + exit 2。
+trapMsgFn : NativeFunc
+trapMsgFn =
+  rtRawFunc "trap_msg"
+    (append [IMov (OpReg R8) (OpReg Rdi)] (append (writeErrRaw (nativeDataLabel "err_prefix") (strLength errPrefix)) (append writeErrMsg errFinish)))
+
+-- | `assert False msg _` 的失败路径：`vuna: runtime error: assertion failed: msg\n` + exit 2。
+trapAssertFn : NativeFunc
+trapAssertFn =
+  rtRawFunc "trap_assert"
+    (trapWithPrefix (nativeDataLabel "assert_prefix") (strLength assertPrefix))
+
+-- | `todo msg` 的失败路径：`vuna: runtime error: TODO: msg\n` + exit 2。
+trapTodoFn : NativeFunc
+trapTodoFn =
+  rtRawFunc "trap_todo" (trapWithPrefix (nativeDataLabel "todo_prefix") (strLength todoPrefix))
+
+-- | `assert cond msg x`（rdi=cond 0/1、rsi=msg、rdx=x）→ 成功返回 x；失败跳 trap_assert。
+assertFn : NativeFunc
+assertFn =
+  rtFunc "assert" 0
+    [ICmp (OpReg Rdi) (OpImm 0), IJcc "je" ".Lrt_assert_fail", IMov (OpReg Rax) (OpReg Rdx), IRet, ILabel ".Lrt_assert_fail", IMov (OpReg Rdi) (OpReg Rsi), IJmp (nativeRtLabel "trap_assert")]
+
+-- | `prim_fail msg`：直接把 msg 交给 `trap_msg`。
+primFailFn : NativeFunc
+primFailFn = rtFunc "prim_fail" 0 [IJmp (nativeRtLabel "trap_msg")]
+
+-- | `todo msg`：直接把 msg 交给 `trap_todo`。
+todoFn : NativeFunc
+todoFn = rtFunc "todo" 0 [IJmp (nativeRtLabel "trap_todo")]
+
+-- ---------------------------------------------------------------
 -- 函数表与 IR 符号映射
 -- ---------------------------------------------------------------
 export nativeRtFuncs : List NativeFunc
@@ -250,6 +369,12 @@ nativeRtFuncs =
     intBinary "sub" "sub",
     intBinary "mul" "imul",
     divFn,
+    intBinary "bit_and" "and",
+    intBinary "bit_or" "or",
+    intBinary "bit_xor" "xor",
+    bitNotFn,
+    bitShlFn,
+    bitShrFn,
     intCompare "eq_int" "sete",
     intCompare "neq_int" "setne",
     intCompare "lt_int" "setl",
@@ -269,6 +394,8 @@ nativeRtFuncs =
     obsZeroFn "obs_mark",
     obsZero2Fn "obs_sample_start",
     obsZeroFn "obs_sample_stop",
+    debugOnFn,
+    debugLineFn,
     strAllocFn,
     strLengthFn,
     strConcatFn,
@@ -282,6 +409,12 @@ nativeRtFuncs =
     printIntFn,
     printBoolFn,
     printStrFn,
+    assertFn,
+    primFailFn,
+    todoFn,
+    trapMsgFn,
+    trapAssertFn,
+    trapTodoFn,
     trapDivZeroFn,
     trapOomFn
   ]
@@ -293,7 +426,16 @@ nativeRtTarget "+" = Just (nativeRtLabel "add")
 nativeRtTarget "-" = Just (nativeRtLabel "sub")
 nativeRtTarget "*" = Just (nativeRtLabel "mul")
 nativeRtTarget "/" = Just (nativeRtLabel "div")
+nativeRtTarget "bitAnd" = Just (nativeRtLabel "bit_and")
+nativeRtTarget "bitOr" = Just (nativeRtLabel "bit_or")
+nativeRtTarget "bitXor" = Just (nativeRtLabel "bit_xor")
+nativeRtTarget "bitNot" = Just (nativeRtLabel "bit_not")
+nativeRtTarget "bitShl" = Just (nativeRtLabel "bit_shl")
+nativeRtTarget "bitShr" = Just (nativeRtLabel "bit_shr")
 nativeRtTarget "++" = Just (nativeRtLabel "str_concat")
+nativeRtTarget "assert" = Just (nativeRtLabel "assert")
+nativeRtTarget "prim_fail" = Just (nativeRtLabel "prim_fail")
+nativeRtTarget "todo" = Just (nativeRtLabel "todo")
 nativeRtTarget "bi_eq_int" = Just (nativeRtLabel "eq_int")
 nativeRtTarget "bi_neq_int" = Just (nativeRtLabel "neq_int")
 nativeRtTarget "bi_lt_int" = Just (nativeRtLabel "lt_int")
@@ -321,6 +463,8 @@ nativeRtTarget "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
 nativeRtTarget "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
 nativeRtTarget "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
 nativeRtTarget "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
+nativeRtTarget "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
+nativeRtTarget "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
 nativeRtTarget _ = Nothing
 
 -- | 以**运行时值**（非 `IrRtApp`）出现的符号的 arity（`irInlineArity` 为 0 的那些）。
@@ -334,6 +478,11 @@ nativeRtValueArity "strAt" = 2
 nativeRtValueArity "strSubstring" = 3
 nativeRtValueArity "bi_eq_str" = 2
 nativeRtValueArity "bi_neq_str" = 2
+nativeRtValueArity "assert" = 3
+nativeRtValueArity "prim_fail" = 1
+nativeRtValueArity "todo" = 1
+nativeRtValueArity "@vuna@debug@on" = 1
+nativeRtValueArity "@vuna@debug@line" = 1
 -- 可观测性叶子原语（`irInlineArity` 为 0 ⇒ 以运行时值形态出现，`IrApp (IrRt sym) args`）。
 nativeRtValueArity "@vuna@obs@level" = 1
 nativeRtValueArity "@vuna@obs@log" = 1

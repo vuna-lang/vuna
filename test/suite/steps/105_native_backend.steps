@@ -3,7 +3,8 @@
 # 覆盖 M1（纯值/算术/let/if、顶层饱和函数、Nat 结构递归、Bool 入口、63-bit 边界、
 # 除零 trap、确定性、拒绝面、`--no-compile`）与 M2（String 字面量 / `++` / `strFromInt`
 # / strLength / strAt / strSubstring / strHash / strShow / `==` / String 入口打印 /
-# bump 堆耗尽 trap）。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
+# bump 堆耗尽 trap），以及与 wasm 的 parity 面（位运算、`assert` / `todo` / `prim_fail`
+# 的统一错误报告、`dbg!` 的 debug 原语）。依赖 PATH 里的 cc（devShell / e2e 的 ocamlTools）。
 
 # 0) 工具链探针：缺 cc 时给出明确失败，而不是让后续链接报 127。
 run: command -v cc
@@ -138,6 +139,48 @@ exit: 0
 run: sh -c '"$TMPDIR/oom-out/bin/oom" 2>&1'
 exit: 2
 out-contains: vuna: runtime error: out of memory
+
+# 10b) 位运算（wasm/native parity）：63-bit 语义，与 OCaml 的 `binIt` 逐项一致。
+run: sh -c 'd="$TMPDIR/bit"; mkdir -p "$d/app"; printf "[package]\nname = \"bit\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = bitAnd 6 3 + bitOr 6 3 + bitXor 6 3 + bitNot 0 + bitShl 1 61\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bit-out" "$d"'
+exit: 0
+run: "$TMPDIR/bit-out/bin/bit" 2>&1
+out-equals: 2305843009213693965
+run: sh -c '"$VUNA" run "$TMPDIR/bit" 2>&1 | tail -n 1'
+out-equals: 2305843009213693965
+# 移位边界：负数逻辑右移要保留 bit 62（OCaml `lsr` 语义）；越界计数得 0。
+run: sh -c 'printf "main : Int\nmain = bitShr (0 - 1) 62 + bitShr (0 - 1) 1 + bitShl 1 63 + bitShr 1 63\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bit2-out" "$TMPDIR/bit"'
+exit: 0
+run: "$TMPDIR/bit2-out/bin/bit" 2>&1
+out-equals: -4611686018427387904
+run: sh -c '"$VUNA" run "$TMPDIR/bit" 2>&1 | tail -n 1'
+out-equals: -4611686018427387904
+
+# 10c) assert / todo / prim_fail：统一走 OCaml 报告器格式（stderr + exit 2）。
+run: sh -c 'printf "main : Int\nmain = assert True \"ok\" 9\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/as-ok-out" "$TMPDIR/bit"'
+exit: 0
+run: "$TMPDIR/as-ok-out/bin/bit" 2>&1
+out-equals: 9
+run: sh -c 'printf "main : Int\nmain = assert False \"bad\" 9\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/as-fail-out" "$TMPDIR/bit"'
+exit: 0
+run: sh -c '"$TMPDIR/as-fail-out/bin/bit" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: assertion failed: bad
+run: sh -c 'printf "main : Int\nmain = prim_fail \"boom\"\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/pf-out" "$TMPDIR/bit"'
+exit: 0
+run: sh -c '"$TMPDIR/pf-out/bin/bit" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: boom
+run: sh -c 'printf "main : Int\nmain = todo \"later\"\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/todo-out" "$TMPDIR/bit"'
+exit: 0
+run: sh -c '"$TMPDIR/todo-out/bin/bit" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: TODO: later
+
+# 10d) dbg! 的运行时原语：关闭时返回 43 且不求值（wasm/native 同一展开）。
+run: sh -c 'printf "main : Int\nmain = let _ = dbg! \"x\" in 43\n" > "$TMPDIR/bit/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dbg-out" "$TMPDIR/bit"'
+exit: 0
+run: "$TMPDIR/dbg-out/bin/bit" 2>&1
+out-equals: 43
 
 # 11) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
 run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
