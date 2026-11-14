@@ -159,8 +159,11 @@ obsSampleStop  : Int -> Int
 - 边界（写进 [debugging.md](debugging.md)）：`#line` 是「文件 + 行」粒度，同一 `#line` 后连续
   生成的代码都归到同一起始行；表达式级定位不存在（debt D33 / D80）。`ocamlopt` 内联仍可能
   把帧归到调用者。
-- `OUTDIR/vuna-symbols.json`（仅 `compile` / `build` 写）：`{schema:"vuna-symbols 1","defs":[{"def","ocaml","file","line"}]}`，
-  给无 DWARF 场景做符号映射（`perf script` 后处理 / 外部采样器）。
+- `OUTDIR/vuna-symbols.json`：由 **`vuna obs symbols [--out FILE] [OUTDIR]`** 从 split 产物
+  的 `.ml` **纯文本抽取**生成（不需要 DWARF、不需要编译）：
+  `{schema:"vuna-symbols 1","defs":[{"ocaml","unit","file","line"}]}`，给无 DWARF 场景做
+  符号映射（`perf script` 后处理 / 外部采样器）。`compile` / `build` 本身**不写**这个文件
+  （产物目录里的 `.ml` 是唯一输入；抽取规则见 §7 `symbols`）。
 
 ## 6. 成本纪律
 
@@ -180,7 +183,7 @@ obsSampleStop  : Int -> Int
 vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
 vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
 vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE
-vuna obs render [--out FILE] TRACE
+vuna obs render --out FILE TRACE
 vuna obs merge [--out FILE] TRACE...
 vuna obs validate TRACE
 vuna obs symbols [--out FILE] [OUTDIR]
@@ -217,27 +220,96 @@ vuna obs serve --cdp ADDR [--allow-slow]
   `vuna.*` 名字在词汇表内（`vuna.mark.*` 前缀放行，非 `vuna.` 前缀一律放行）。
   截断容错：**中间行** JSON 坏 = error（文件被外部改坏不静默跳过）；**末行**半个 JSON 行 =
   先按括号平衡补全闭括号（补全成功仍 warning），失败则丢弃该行 + warning，绝不升级为 error。
-- `convert`：`cpuprofile`（CDP Profile：`nodes/startTime/endTime/samples/timeDeltas`，节点按
-  `name@file:line` 去重）、`speedscope`（`$schema: "https://www.speedscope.app/file-format-schema.json"`
-  evented profile）、`folded`（`name;name;name N` 火焰图折叠栈）、`jsonl`（重排/裁剪）。
-- `render`：单文件 HTML（内嵌 JSON，无外链、无时间戳，两次渲染逐字节一致；瀑布条 + 火焰图 +
-  计数器曲线 + 采样热点表），风格沿 `Vuna.Doc.Html` 的可复现约定。
-- `merge`：多 trace（workspace 成员 / 每进程一份）按 `t0` 归并，`pid` 搬进 `args.member`。
+- `convert`：`--to` 必填，缺/未知格式 = 退出码 2；`--out PATH` 省略时内容打到 **stdout**
+  （可 `>` 重定向），给了 `--out` 则静默（只打印 `wrote <path>`）。**转换产物确定性**：
+  固定键序、无时间戳、无绝对路径（元数据 `exec` 不进产物）⇒ 同一输入两次转换逐字节一致。
+  采样来源只有 `vuna.sample.cpu`（`vuna.sample.mem` 是分配栈，语义与 CPU 时间轴不同，
+  **不进任何换算产物**；`jsonl` 是自反格式，保留全部事件）。CPU 采样为空 = **退出码 1 +
+  `no cpu samples` 消息**（不产出「成功但空」的文件）。帧字符串统一是运行时写的
+  `Name@file:line`（第一个 `@` 前是函数名，其后按**最后一个** `:` 拆文件与行号；拆不出 =
+  `url:""`、行号 −1）。四种格式（实现：`Vuna.Obs.Convert` + `Vuna.Obs.Flame`）：
+  - `cpuprofile`（CDP/V8 `.cpuprofile`）：`nodes` + `startTime`/`endTime`（首/末采样 `ts`，
+    整数微秒）+ `samples`（每条采样的**叶**节点 id）+ `timeDeltas`（相邻采样差、首个相对
+    `startTime`，故 `timeDeltas[0] = 0`）。节点 1 = `(root)`，其余按去重帧
+    `{functionName, scriptId:"0", url, lineNumber, columnNumber:-1}` 首次出现顺序编号，
+    `children` 是**父链**（每条采样栈叶在前，按 root-first 插入）；`lineNumber` 是 CDP 的
+    0-based（`.vuna` 行号 − 1）；
+  - `speedscope`：`$schema` = speedscope 官方 schema URL，`shared.frames` 按首次出现去重，
+    `profiles[0]` 是 `evented`（`unit:"microseconds"`、`startValue`/`endValue` = 首/末采样
+    `ts`），`events` 是 O(采样数)：每个采样一条「进入叶帧」的 `O` 事件（不补 `C`，
+    speedscope 对 evented profile 末尾自动收尾）；
+  - `folded`（火焰图）：`frameA;frameB;leaf<TAB>count`，栈**根在前**（与采样事件的叶在前相反），
+    同名栈合并计数、按栈名字典序排序；只含 CPU 采样；
+  - `jsonl`：按文件顺序用 `Types.renderEventLine` 重写全部事件（键序固定），给 merge / 裁剪用。
+- `render`：单文件 HTML。**`--out` 强制**（HTML 体积大，省略时退出码 2 + 用法），写完打印
+  `wrote <path>`。约定（沿 `Vuna.Doc.Html`）：
+  - 数据只内嵌一次：`<script type="application/json" id="vuna-obs-data">`，内容是
+    `renderJson` 的单行 JSON，`<` 经 `scriptSafe` 转成 `\u003c`（不会提前闭合 script）；
+    页面其余文本先 HTML 转义；
+  - **无外链**（产物里不出现任何 URL；`grep -c 'https\?://'` = 0）、**无时间戳/随机数** ⇒
+    同一输入两次渲染逐字节一致；
+  - 三个视图（纯内联 CSS/JS、无依赖）：① 瀑布（`spans` 按 `pid`/`tid` 分组、组内 `ts` 升序，
+    `depth` 是嵌套深度，按 `ts/dur` 画横条）；② 火焰图（`flame` 是 folded 等价的根在前
+    折叠栈，宽度 = 命中次数）；③ 计数器与采样热点表（`counters` 的 count/sum/last，
+    `samples.cpu` / `samples.mem` 按叶子帧计数）；
+  - 内嵌数据**不放** `exec`（主机绝对路径）与 `t0`（epoch 值）：页面是视图，保留绝对路径
+    会把可复现产物变成绑定某台机器的产物；`argv` / `level` 保留。
+- `merge`：多 trace（workspace 成员 / 每进程一份）合并成一份**能通过 `validate` 的 JSONL**。
+  实现：`Vuna.Obs.Merge`。规则（本批定死）：
+  - 输入按每份 trace 的 **`t0`** 稳定升序（元数据 `args.t0`；缺失取首个带 `ts` 的事件；
+    再缺 = 0；`t0` 相同保持命令行顺序）；
+  - 输出首行 = t0 最小的那份的元数据（**逐字保留**，schema 不变）；紧随其后是每份 trace 一条
+    **成员行**：`ph:"i"`、`ts:0`、`name:"vuna.mark.merge-member"`、
+    `args:{member, t0, pid, level, argv}`。成员行**不能是 `M`**（`validate` 只允许元数据出现在
+    首行），`vuna.mark.*` 前缀是词汇表显式放行的；`ts:0` 让它们不干扰时序检查；
+  - 事件按 **trace 分组**输出（组内保持文件顺序），组间按 t0 升序：跨机器/跨进程的 `ts`
+    基准不可比，逐事件混排会造出假时间轴，分组保留「哪段属于哪个进程」；
+  - `pid` **保留原值**（不重编号）；`member` = 元数据 `exec` 的 basename（缺 `exec` 用 pid），
+    非首份 trace 的每个事件加 `args.member`（同一值），pid 撞车（不同机器同 pid）也能区分；
+  - `--out` 省略 → stdout；输出无时间戳、键序固定 ⇒ 同一组输入两次 merge 逐字节一致。
+- `symbols`：从 `OUTDIR`（缺省 `.output`，即 `vuna build` 默认产物目录；或 `--out DIR` 给的
+  目录）的 split 产物 `.ml` **纯文本抽取**符号表，不依赖 DWARF、不需要编译。实现：
+  `Vuna.Obs.Symbols`。抽取规则：
+  - 只认**行首**的 `# <line> "<file>"` 指令，且只认**紧接其后**的第一条绑定行（中间隔了
+    别的行就作废）；`type t_*` 数据声明组没有指令，不进符号表；
+  - 绑定行取首个标识符：`let v_x =` / `let rec v_x =` / `and v_x =` / `external v_x :`；
+  - `unit` = `.ml` 文件名去扩展名（`Main.ml` → `Main`），`ocaml` 是产物里的原始（mangling）
+    绑定名（正是 `perf`/`gdb` 看到的名字），`file`/`line` 直接来自指令（包相对路径 + 1-based）；
+  - 输出 `{"schema":"vuna-symbols 1","defs":[...]}`，按 `ocaml` 升序（同名再按
+    `unit`/`file`/`line`）⇒ 两次运行逐字节一致；`--out` 省略 → stdout。
 - `serve --cdp`：`Profiler.enable/start/stop/getProfile` + `Runtime.getIsolateId` 子集，传输
   `Content-Length` JSON-RPC（同 `Vuna.Json.Server`）。Chrome DevTools 需要 WebSocket：
   `nix/obs-cdp-bridge.mjs`（Node，工具侧资产）做握手桥；**vuna 侧不实现 WS**（O11）。
+  **状态**：本批未实现（`not implemented yet` + 退出码 2）。
 
 ## 8. 外部生态
 
 | 生态 | 接入 | 状态 |
 | --- | --- | --- |
 | Chrome / Perfetto | `vuna obs run` 产出的 JSONL 直接拖入 | 规范格式 |
-| `.cpuprofile` | `vuna obs convert --to cpuprofile` | 采样栈 → CDP Profile |
-| speedscope | `vuna obs convert --to speedscope` | evented profile |
-| 火焰图 | `--to folded` + `flamegraph.pl`（nixpkgs `FlameGraph`） | 手动 |
-| Linux perf | `#line` → `.debug_line` 直接指向 `.vuna`；`vuna-symbols.json` 兜底 | 手动，见 `nix/obs.sh` |
+| `.cpuprofile` | `vuna obs convert --to cpuprofile` → 拖进 Chrome DevTools / Perfetto 的 CPU Profile 视图 | 已实现（`nodes` 父链 + `samples`/`timeDeltas`，只吃 `vuna.sample.cpu`） |
+| speedscope | `vuna obs convert --to speedscope` → <https://www.speedscope.app> 打开 | 已实现（evented profile，`unit:microseconds`） |
+| 火焰图 | `--to folded` + `flamegraph.pl`（nixpkgs `FlameGraph`） | 已实现（根在前、同名栈合并、按栈名排序） |
+| 单文件 HTML 报告 | `vuna obs render --out report.html` | 已实现（内嵌 JSON + 内联 CSS/JS，无外链、可复现） |
+| 多进程 / workspace 合并 | `vuna obs merge [--out FILE] TRACE...` | 已实现（按 `t0` 分组 + `vuna.mark.merge-member` 成员行） |
+| Linux perf | `#line` → `.debug_line` 直接指向 `.vuna`；`vuna-symbols.json`（由 `vuna obs symbols` 生成）兜底 | 手动，见 `nix/obs.sh` |
 | gdb | `#line` + `-g`：`list` / `bt` 给出 `.vuna` 行 | 手动 |
 | OCaml `Runtime_events` | **不接**：GC/调度器事件与 vuna span 时间基准不同，先只做 `Gc` 计数器 | 非目标 |
+
+格式边界（本批实现定死的取舍，改实现时同步改这里）：
+
+- **只换算 CPU 采样**：`vuna.sample.mem` 是 `Gc.Memprof` 的分配栈，语义上不是时间轴，
+  混进 `.cpuprofile` / speedscope / folded 会把「分配量」与「CPU 时间」加在一起；要看内存
+  分配用 `summarize` 的 `samples.mem` 热点表（`render` 的采样表也列它）。
+- **`Name@file:line` 的拆法**：`Printexc.Slot.name` 与 `.location` 由运行时拼成
+  `<name>@<file>:<line>`；CDP 的 `url` 是文件、`lineNumber` 是 **0-based**（vuna 侧 1-based，
+  减 1）。拆不出来（无 `@` / 无 `:` / 行号非数字）⇒ `url:""`、`lineNumber:-1`。
+- **`folded` 的行序**是栈名字典序（不是计数序），这是确定性要求；火焰图渲染器自己会按宽度
+  排布，不依赖输入行序。
+- **`merge` 不做逐事件混排**（上面 §7 已说明）：不同机器的 `ts` 基准不可比；合并产物是
+  「合法 trace + 分组边界」，跨机器比较请分别 `summarize --json` 再比。
+- **`symbols` 不读 DWARF、不跑 `build --no-compile` 的编译步骤**：直接扫产物目录里的 `.ml`，
+  因此对任何能产出 split `.ml` 的目录都适用（含未知的旧产物）。
 
 `perf` / `gdb` / `valgrind` **不在**默认 devShell（避免构建图变重）；`nix/obs.sh` 在缺工具时
 给出可操作提示，`perf record` 需要 `perf_event_open` 权限，Nix 沙箱常拒 ⇒ **perf 路径不进
@@ -251,6 +323,7 @@ vuna obs serve --cdp ADDR [--allow-slow]
 | `nix/checks/vuna-obs-dwarf.sh` | split 产物每个绑定前有 `# <行> "<包相对>.vuna"` 指令（不含绝对/`../` 路径）；`build` 出的可执行文件在 `readelf --debug-dump=decodedline` 里有 `.vuna` 文件且行号 > 0。**不依赖** gdb/perf（CI 里不保证有） |
 | `nix/checks/vuna-obs-overhead.sh` | `VUNA_OBS=0` 与不设观测的产物**逐字节一致**（关闭路径不得改变任何输出）；关闭时不写 trace 文件；打开时必须产出（反证）；生成运行时的 `dtp_obs_log/counter/mark/span` 都以关闭快速路径开头（不在关闭路径读时钟/分配）。**不设墙钟门槛**——绝对性能不可跨机器比，那属于 benchmark |
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |
+| 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
 | `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
 | suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
 

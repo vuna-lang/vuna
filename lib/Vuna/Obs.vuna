@@ -7,21 +7,30 @@ module Vuna.Obs where
 --   * `Vuna.Obs.Read`     JSONL 读取（行号、空行跳过、末行截断降级为 warning）；
 --   * `Vuna.Obs.Validate` §3 字段/时序/词汇表校验（error = 退出码 1）；
 --   * `Vuna.Obs.Summarize` span 树折叠 → 阶段/计数/采样表 + `--json` + `--baseline` 差值；
---   * `Vuna.Obs.Run`      `vuna obs run`（env 注入 + 子进程 + trace 路径打印）。
+--   * `Vuna.Obs.Run`      `vuna obs run`（env 注入 + 子进程 + trace 路径打印）；
+--   * `Vuna.Obs.Flame`    CPU 采样 → 折叠栈（`convert --to folded` 与 `render` 共用）；
+--   * `Vuna.Obs.Convert`  `convert --to cpuprofile|speedscope|folded|jsonl`；
+--   * `Vuna.Obs.Render`   `render`（单文件 HTML：瀑布 / 火焰图 / 计数器与采样表）；
+--   * `Vuna.Obs.Merge`    `merge`（多 trace → 一份合法 JSONL）；
+--   * `Vuna.Obs.Symbols`  `symbols`（split 产物 `.ml` → `vuna-symbols 1` 符号表）。
 --
 -- 本模块只做**子命令分发与退出码**（0 成功 / 1 被观测内容语义失败 / 2 用法或前提不满足），
 -- 参数解析与业务实现都在各子模块。
 --
--- 第一批范围（规范 §7）：`run` / `summarize` / `validate`。`convert` / `render` / `merge` /
--- `symbols` / `serve` 是下一批：这里**保留分发位置并给出明确的可操作错误 + 退出码 2**
--- （不静默 unknown command，也不假装支持）。
+-- 第二批范围（规范 §7）：`convert` / `render` / `merge` / `symbols`。`serve --cdp` 是下一批：
+-- 这里**保留分发位置并给出明确的可操作错误 + 退出码 2**（不静默 unknown command，
+-- 也不假装支持）。
 import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Json
+import Vuna.Obs.Convert
+import Vuna.Obs.Merge
 import Vuna.Obs.Read
+import Vuna.Obs.Render
 import Vuna.Obs.Run
 import Vuna.Obs.Summarize
+import Vuna.Obs.Symbols
 import Vuna.Obs.Validate
 
 -- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
@@ -32,11 +41,10 @@ runObs args = case args of
     "run" => Vuna.Obs.Run.runObsRun rest
     "summarize" => obsSummarizeArgs rest
     "validate" => obsValidateArgs rest
-    "convert" =>
-      notYet "convert" "convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
-    "render" => notYet "render" "render [--out FILE] TRACE"
-    "merge" => notYet "merge" "merge [--out FILE] TRACE..."
-    "symbols" => notYet "symbols" "symbols [--out FILE] [OUTDIR]"
+    "convert" => Vuna.Obs.Convert.runObsConvert rest
+    "render" => Vuna.Obs.Render.runObsRender rest
+    "merge" => Vuna.Obs.Merge.runObsMerge rest
+    "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
     "serve" => notYet "serve" "serve --cdp ADDR [--allow-slow]"
     _ => do
       _ <-
@@ -49,6 +57,11 @@ obsUsageText = """usage:
   vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
   vuna obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
   vuna obs validate TRACE
+  vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE
+  vuna obs render --out FILE TRACE
+  vuna obs merge [--out FILE] TRACE...
+  vuna obs symbols [--out FILE] [OUTDIR]
+  vuna obs serve --cdp ADDR [--allow-slow]   (not implemented yet)
 """
 
 obsUsage : Eff hostRow Int

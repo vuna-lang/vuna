@@ -95,7 +95,12 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]
       span 折叠：阶段总/自用用时（整数微秒）、计数、采样热点；--baseline 差值超 --threshold 退出 1
   ${prog} obs validate TRACE              校验 vuna-obs 1 trace（字段/时序/词汇表；截断只 warning）
-  ${prog} obs convert|render|merge|symbols|serve （下一批；当前返回 not implemented + 退出码 2）
+  ${prog} obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE
+      采样栈换算为 CDP .cpuprofile / speedscope evented profile / 火焰图折叠栈 / 规范 JSONL
+  ${prog} obs render --out FILE TRACE    单文件 HTML（瀑布 + 火焰图 + 计数器/采样表；无外链、可复现）
+  ${prog} obs merge [--out FILE] TRACE...  多 trace 按 t0 合并成一份（非首份加 args.member）
+  ${prog} obs symbols [--out FILE] [OUTDIR]  从 split 产物 .ml 的 `#line` 抽 vuna-symbols 1 符号表
+  ${prog} obs serve --cdp ADDR [--allow-slow] （下一批；当前返回 not implemented + 退出码 2）
   ${prog} lsp                                  启动 LSP server（JSON-RPC over stdio）
   ${prog} version, --version                   显示版本
   ${prog} help, -h                             显示本帮助
