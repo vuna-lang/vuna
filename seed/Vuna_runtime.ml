@@ -1678,63 +1678,63 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule", ("Vuna.Compiler.Codegen.Split.splitUnitOfModule", "Vuna/Compiler/Codegen/Split.vuna:30"));
   ("v_Vuna_dCompiler_dCodegen_dSplit_dsplitWithOwnersWith", ("Vuna.Compiler.Codegen.Split.splitWithOwnersWith", "Vuna/Compiler/Codegen/Split.vuna:268"));
   ("v_Vuna_dCompiler_dCodegen_dSplit_dunitDepsOf", ("Vuna.Compiler.Codegen.Split.unitDepsOf", "Vuna/Compiler/Codegen/Split.vuna:84"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText", ("Vuna.Compiler.Codegen.Term.armPatternText", "Vuna/Compiler/Codegen/Term.vuna:1720"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf", ("Vuna.Compiler.Codegen.Term.bindAndOf", "Vuna/Compiler/Codegen/Term.vuna:1796"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf", ("Vuna.Compiler.Codegen.Term.bindFirstOf", "Vuna/Compiler/Codegen/Term.vuna:1793"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf", ("Vuna.Compiler.Codegen.Term.bindGroupOf", "Vuna/Compiler/Codegen/Term.vuna:1788"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf", ("Vuna.Compiler.Codegen.Term.bindKeywordOf", "Vuna/Compiler/Codegen/Term.vuna:1799"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf", ("Vuna.Compiler.Codegen.Term.bridgeUnitOf", "Vuna/Compiler/Codegen/Term.vuna:1484"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dconAppText", ("Vuna.Compiler.Codegen.Term.conAppText", "Vuna/Compiler/Codegen/Term.vuna:1889"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtDefLocTable", ("Vuna.Compiler.Codegen.Term.dtDefLocTable", "Vuna/Compiler/Codegen/Term.vuna:1403"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText", ("Vuna.Compiler.Codegen.Term.armPatternText", "Vuna/Compiler/Codegen/Term.vuna:1737"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf", ("Vuna.Compiler.Codegen.Term.bindAndOf", "Vuna/Compiler/Codegen/Term.vuna:1814"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf", ("Vuna.Compiler.Codegen.Term.bindFirstOf", "Vuna/Compiler/Codegen/Term.vuna:1811"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf", ("Vuna.Compiler.Codegen.Term.bindGroupOf", "Vuna/Compiler/Codegen/Term.vuna:1806"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf", ("Vuna.Compiler.Codegen.Term.bindKeywordOf", "Vuna/Compiler/Codegen/Term.vuna:1817"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf", ("Vuna.Compiler.Codegen.Term.bridgeUnitOf", "Vuna/Compiler/Codegen/Term.vuna:1501"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dconAppText", ("Vuna.Compiler.Codegen.Term.conAppText", "Vuna/Compiler/Codegen/Term.vuna:1907"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtDefLocTable", ("Vuna.Compiler.Codegen.Term.dtDefLocTable", "Vuna/Compiler/Codegen/Term.vuna:1420"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtFloatRuntime", ("Vuna.Compiler.Codegen.Term.dtFloatRuntime", "Vuna/Compiler/Codegen/Term.vuna:845"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge", ("Vuna.Compiler.Codegen.Term.dtListBridge", "Vuna/Compiler/Codegen/Term.vuna:1355"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge", ("Vuna.Compiler.Codegen.Term.dtListBridge", "Vuna/Compiler/Codegen/Term.vuna:1372"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime", ("Vuna.Compiler.Codegen.Term.dtObsRuntime", "Vuna/Compiler/Codegen/Term.vuna:885"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtPrimRuntime", ("Vuna.Compiler.Codegen.Term.dtPrimRuntime", "Vuna/Compiler/Codegen/Term.vuna:94"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtReporterRuntime", ("Vuna.Compiler.Codegen.Term.dtReporterRuntime", "Vuna/Compiler/Codegen/Term.vuna:811"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntime", ("Vuna.Compiler.Codegen.Term.dtRuntime", "Vuna/Compiler/Codegen/Term.vuna:23"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntimeWith", ("Vuna.Compiler.Codegen.Term.dtRuntimeWith", "Vuna/Compiler/Codegen/Term.vuna:1342"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntimeWith", ("Vuna.Compiler.Codegen.Term.dtRuntimeWith", "Vuna/Compiler/Codegen/Term.vuna:1359"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtSchedRuntime", ("Vuna.Compiler.Codegen.Term.dtSchedRuntime", "Vuna/Compiler/Codegen/Term.vuna:349"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtTraceRuntime", ("Vuna.Compiler.Codegen.Term.dtTraceRuntime", "Vuna/Compiler/Codegen/Term.vuna:862"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffThunkText", ("Vuna.Compiler.Codegen.Term.effThunkText", "Vuna/Compiler/Codegen/Term.vuna:1629"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTyPair", ("Vuna.Compiler.Codegen.Term.effUnitTyPair", "Vuna/Compiler/Codegen/Term.vuna:1508"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr", ("Vuna.Compiler.Codegen.Term.effUnitTypeNameIr", "Vuna/Compiler/Codegen/Term.vuna:1514"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers", ("Vuna.Compiler.Codegen.Term.foldHandlers", "Vuna/Compiler/Codegen/Term.vuna:1874"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArm", ("Vuna.Compiler.Codegen.Term.genArm", "Vuna/Compiler/Codegen/Term.vuna:1686"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArms", ("Vuna.Compiler.Codegen.Term.genArms", "Vuna/Compiler/Codegen/Term.vuna:1678"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields", ("Vuna.Compiler.Codegen.Term.genAssignedFields", "Vuna/Compiler/Codegen/Term.vuna:1656"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenBridgeRef", ("Vuna.Compiler.Codegen.Term.genBridgeRef", "Vuna/Compiler/Codegen/Term.vuna:1501"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef", ("Vuna.Compiler.Codegen.Term.genCtorRef", "Vuna/Compiler/Codegen/Term.vuna:1463"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenDef", ("Vuna.Compiler.Codegen.Term.genDef", "Vuna/Compiler/Codegen/Term.vuna:1825"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook", ("Vuna.Compiler.Codegen.Term.genEntryHook", "Vuna/Compiler/Codegen/Term.vuna:1851"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup", ("Vuna.Compiler.Codegen.Term.genGroup", "Vuna/Compiler/Codegen/Term.vuna:1777"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies", ("Vuna.Compiler.Codegen.Term.genGroupBodies", "Vuna/Compiler/Codegen/Term.vuna:1817"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups", ("Vuna.Compiler.Codegen.Term.genGroups", "Vuna/Compiler/Codegen/Term.vuna:1769"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIr", ("Vuna.Compiler.Codegen.Term.genIr", "Vuna/Compiler/Codegen/Term.vuna:1520"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs", ("Vuna.Compiler.Codegen.Term.genIrArgs", "Vuna/Compiler/Codegen/Term.vuna:1647"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode", ("Vuna.Compiler.Codegen.Term.genIrNode", "Vuna/Compiler/Codegen/Term.vuna:1523"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt", ("Vuna.Compiler.Codegen.Term.genNatAlt", "Vuna/Compiler/Codegen/Term.vuna:1753"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches", ("Vuna.Compiler.Codegen.Term.genNatBranches", "Vuna/Compiler/Codegen/Term.vuna:1727"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef", ("Vuna.Compiler.Codegen.Term.genValueRef", "Vuna/Compiler/Codegen/Term.vuna:1456"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep", ("Vuna.Compiler.Codegen.Term.gsAddDep", "Vuna/Compiler/Codegen/Term.vuna:1450"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily", ("Vuna.Compiler.Codegen.Term.gsDepOfFamily", "Vuna/Compiler/Codegen/Term.vuna:1470"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll", ("Vuna.Compiler.Codegen.Term.hasCatchAll", "Vuna/Compiler/Codegen/Term.vuna:1672"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dhookText", ("Vuna.Compiler.Codegen.Term.hookText", "Vuna/Compiler/Codegen/Term.vuna:1881"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dinlineText", ("Vuna.Compiler.Codegen.Term.inlineText", "Vuna/Compiler/Codegen/Term.vuna:1288"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dinsertLocRow", ("Vuna.Compiler.Codegen.Term.insertLocRow", "Vuna/Compiler/Codegen/Term.vuna:1410"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames", ("Vuna.Compiler.Codegen.Term.ioParamNames", "Vuna/Compiler/Codegen/Term.vuna:1638"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf", ("Vuna.Compiler.Codegen.Term.lineDirectiveOf", "Vuna/Compiler/Codegen/Term.vuna:1809"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf", ("Vuna.Compiler.Codegen.Term.locRowOf", "Vuna/Compiler/Codegen/Term.vuna:1416"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt", ("Vuna.Compiler.Codegen.Term.mkGenSt", "Vuna/Compiler/Codegen/Term.vuna:1443"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith", ("Vuna.Compiler.Codegen.Term.mkGenStWith", "Vuna/Compiler/Codegen/Term.vuna:1446"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText", ("Vuna.Compiler.Codegen.Term.nonErasedBinderText", "Vuna/Compiler/Codegen/Term.vuna:1668"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames", ("Vuna.Compiler.Codegen.Term.qualifyBridgeNames", "Vuna/Compiler/Codegen/Term.vuna:1492"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText", ("Vuna.Compiler.Codegen.Term.qualifyBridgeText", "Vuna/Compiler/Codegen/Term.vuna:1497"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf", ("Vuna.Compiler.Codegen.Term.recordLabelOf", "Vuna/Compiler/Codegen/Term.vuna:1476"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned", ("Vuna.Compiler.Codegen.Term.recordPatAssigned", "Vuna/Compiler/Codegen/Term.vuna:1713"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatText", ("Vuna.Compiler.Codegen.Term.recordPatText", "Vuna/Compiler/Codegen/Term.vuna:1709"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll", ("Vuna.Compiler.Codegen.Term.replaceAll", "Vuna/Compiler/Codegen/Term.vuna:1489"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows", ("Vuna.Compiler.Codegen.Term.sortLocRows", "Vuna/Compiler/Codegen/Term.vuna:1406"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames", ("Vuna.Compiler.Codegen.Term.takeNames", "Vuna/Compiler/Codegen/Term.vuna:1641"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffThunkText", ("Vuna.Compiler.Codegen.Term.effThunkText", "Vuna/Compiler/Codegen/Term.vuna:1646"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTyPair", ("Vuna.Compiler.Codegen.Term.effUnitTyPair", "Vuna/Compiler/Codegen/Term.vuna:1525"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr", ("Vuna.Compiler.Codegen.Term.effUnitTypeNameIr", "Vuna/Compiler/Codegen/Term.vuna:1531"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers", ("Vuna.Compiler.Codegen.Term.foldHandlers", "Vuna/Compiler/Codegen/Term.vuna:1892"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArm", ("Vuna.Compiler.Codegen.Term.genArm", "Vuna/Compiler/Codegen/Term.vuna:1703"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArms", ("Vuna.Compiler.Codegen.Term.genArms", "Vuna/Compiler/Codegen/Term.vuna:1695"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields", ("Vuna.Compiler.Codegen.Term.genAssignedFields", "Vuna/Compiler/Codegen/Term.vuna:1673"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenBridgeRef", ("Vuna.Compiler.Codegen.Term.genBridgeRef", "Vuna/Compiler/Codegen/Term.vuna:1518"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef", ("Vuna.Compiler.Codegen.Term.genCtorRef", "Vuna/Compiler/Codegen/Term.vuna:1480"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenDef", ("Vuna.Compiler.Codegen.Term.genDef", "Vuna/Compiler/Codegen/Term.vuna:1843"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook", ("Vuna.Compiler.Codegen.Term.genEntryHook", "Vuna/Compiler/Codegen/Term.vuna:1869"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup", ("Vuna.Compiler.Codegen.Term.genGroup", "Vuna/Compiler/Codegen/Term.vuna:1794"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies", ("Vuna.Compiler.Codegen.Term.genGroupBodies", "Vuna/Compiler/Codegen/Term.vuna:1835"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups", ("Vuna.Compiler.Codegen.Term.genGroups", "Vuna/Compiler/Codegen/Term.vuna:1786"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIr", ("Vuna.Compiler.Codegen.Term.genIr", "Vuna/Compiler/Codegen/Term.vuna:1537"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs", ("Vuna.Compiler.Codegen.Term.genIrArgs", "Vuna/Compiler/Codegen/Term.vuna:1664"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode", ("Vuna.Compiler.Codegen.Term.genIrNode", "Vuna/Compiler/Codegen/Term.vuna:1540"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt", ("Vuna.Compiler.Codegen.Term.genNatAlt", "Vuna/Compiler/Codegen/Term.vuna:1770"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches", ("Vuna.Compiler.Codegen.Term.genNatBranches", "Vuna/Compiler/Codegen/Term.vuna:1744"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef", ("Vuna.Compiler.Codegen.Term.genValueRef", "Vuna/Compiler/Codegen/Term.vuna:1473"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep", ("Vuna.Compiler.Codegen.Term.gsAddDep", "Vuna/Compiler/Codegen/Term.vuna:1467"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily", ("Vuna.Compiler.Codegen.Term.gsDepOfFamily", "Vuna/Compiler/Codegen/Term.vuna:1487"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll", ("Vuna.Compiler.Codegen.Term.hasCatchAll", "Vuna/Compiler/Codegen/Term.vuna:1689"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dhookText", ("Vuna.Compiler.Codegen.Term.hookText", "Vuna/Compiler/Codegen/Term.vuna:1899"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dinlineText", ("Vuna.Compiler.Codegen.Term.inlineText", "Vuna/Compiler/Codegen/Term.vuna:1305"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dinsertLocRow", ("Vuna.Compiler.Codegen.Term.insertLocRow", "Vuna/Compiler/Codegen/Term.vuna:1427"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames", ("Vuna.Compiler.Codegen.Term.ioParamNames", "Vuna/Compiler/Codegen/Term.vuna:1655"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf", ("Vuna.Compiler.Codegen.Term.lineDirectiveOf", "Vuna/Compiler/Codegen/Term.vuna:1827"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf", ("Vuna.Compiler.Codegen.Term.locRowOf", "Vuna/Compiler/Codegen/Term.vuna:1433"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt", ("Vuna.Compiler.Codegen.Term.mkGenSt", "Vuna/Compiler/Codegen/Term.vuna:1460"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith", ("Vuna.Compiler.Codegen.Term.mkGenStWith", "Vuna/Compiler/Codegen/Term.vuna:1463"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText", ("Vuna.Compiler.Codegen.Term.nonErasedBinderText", "Vuna/Compiler/Codegen/Term.vuna:1685"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames", ("Vuna.Compiler.Codegen.Term.qualifyBridgeNames", "Vuna/Compiler/Codegen/Term.vuna:1509"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText", ("Vuna.Compiler.Codegen.Term.qualifyBridgeText", "Vuna/Compiler/Codegen/Term.vuna:1514"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf", ("Vuna.Compiler.Codegen.Term.recordLabelOf", "Vuna/Compiler/Codegen/Term.vuna:1493"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned", ("Vuna.Compiler.Codegen.Term.recordPatAssigned", "Vuna/Compiler/Codegen/Term.vuna:1730"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatText", ("Vuna.Compiler.Codegen.Term.recordPatText", "Vuna/Compiler/Codegen/Term.vuna:1726"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll", ("Vuna.Compiler.Codegen.Term.replaceAll", "Vuna/Compiler/Codegen/Term.vuna:1506"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows", ("Vuna.Compiler.Codegen.Term.sortLocRows", "Vuna/Compiler/Codegen/Term.vuna:1423"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames", ("Vuna.Compiler.Codegen.Term.takeNames", "Vuna/Compiler/Codegen/Term.vuna:1658"));
   ("v_Vuna_dCompiler_dCommon_dbind", ("Vuna.Compiler.Common.bind", "Vuna/Compiler/Common.vuna:26"));
   ("v_Vuna_dCompiler_dCommon_drunEffCheck", ("Vuna.Compiler.Common.runEffCheck", "Vuna/Compiler/Common.vuna:36"));
   ("v_Vuna_dCompiler_dCommon_dstep", ("Vuna.Compiler.Common.step", "Vuna/Compiler/Common.vuna:51"));
@@ -6595,44 +6595,61 @@ let dtp_obs_shutdown () =
 
 let () = at_exit dtp_obs_shutdown
 
+let dtp_obs_span_emit (name : string) (cat : string) (label_opt : string option)
+    (t0 : int) (s0 : Gc.stat) (ok : bool) =
+  let t1 = dtp_timeUs () in
+  let s1 = Gc.quick_stat () in
+  let b = Buffer.create 192 in
+  dtp_obs_hdr b "X" name t0;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b "cat";
+  dtp_obs_str b cat;
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b "dur";
+  dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b "args";
+  Buffer.add_char b dtp_obs_lb;
+  (match label_opt with
+   | None -> ()
+   | Some label ->
+     dtp_obs_key b "def";
+     dtp_obs_str b label;
+     Buffer.add_char b dtp_obs_comma);
+  dtp_obs_key b "allocWords";
+  dtp_obs_int b
+    (int_of_float
+       (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
+  Buffer.add_char b dtp_obs_comma;
+  dtp_obs_key b "heapWords";
+  dtp_obs_int b s1.Gc.top_heap_words;
+  if not ok then begin
+    Buffer.add_char b dtp_obs_comma;
+    dtp_obs_key b "error";
+    Buffer.add_string b "true"
+  end;
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_rb;
+  Buffer.add_char b dtp_obs_nl;
+  ignore (dtp_obs_emit (Buffer.contents b))
+
 let dtp_obs_span (name : string) (cat : string) (f : int -> 'a) : 'a =
   if not (dtp_obs_on ()) then f 0
   else begin
     let t0 = dtp_timeUs () in
     let s0 = Gc.quick_stat () in
-    let emit ok =
-      let t1 = dtp_timeUs () in
-      let s1 = Gc.quick_stat () in
-      let b = Buffer.create 192 in
-      dtp_obs_hdr b "X" name t0;
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b "cat";
-      dtp_obs_str b cat;
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b "dur";
-      dtp_obs_int b (if t1 - t0 < 0 then 0 else t1 - t0);
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b "args";
-      Buffer.add_char b dtp_obs_lb;
-      dtp_obs_key b "allocWords";
-      dtp_obs_int b
-        (int_of_float
-           (s1.Gc.minor_words -. s0.Gc.minor_words +. (s1.Gc.major_words -. s0.Gc.major_words)));
-      Buffer.add_char b dtp_obs_comma;
-      dtp_obs_key b "heapWords";
-      dtp_obs_int b s1.Gc.top_heap_words;
-      if not ok then begin
-        Buffer.add_char b dtp_obs_comma;
-        dtp_obs_key b "error";
-        Buffer.add_string b "true"
-      end;
-      Buffer.add_char b dtp_obs_rb;
-      Buffer.add_char b dtp_obs_rb;
-      Buffer.add_char b dtp_obs_nl;
-      ignore (dtp_obs_emit (Buffer.contents b))
-    in
-    let v = try f 0 with e -> emit false; raise e in
-    emit true;
+    let v = try f 0 with e -> dtp_obs_span_emit name cat None t0 s0 false; raise e in
+    dtp_obs_span_emit name cat None t0 s0 true;
+    v
+  end
+
+let dtp_obs_span_lab (name : string) (cat : string) (label : string) (f : int -> 'a) : 'a =
+  if not (dtp_obs_on ()) then f 0
+  else begin
+    let t0 = dtp_timeUs () in
+    let s0 = Gc.quick_stat () in
+    let v = try f 0 with e -> dtp_obs_span_emit name cat (Some label) t0 s0 false; raise e in
+    dtp_obs_span_emit name cat (Some label) t0 s0 true;
     v
   end
 
