@@ -126,8 +126,12 @@
 
 ## 9. 后续路线（只写方向，不写排期）
 
-- **M3**：用户 `data` / record / 通用 `case`（变体 tag 分派 + 字段 struct），
-  闭包表示（`$clo` + `elem declare`）与高阶调用，`Array` 运行时。
+- **M3a**：用户 `data` / record / 通用 `case`（变体 tag 分派 + 字段 struct）、
+  `Array` 运行时。
+- **M3b**：canonical `List` 族接进 M3a 的 struct 表示，然后实现 List 桥接
+  （`dtp_unpack` / `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate`）；与 native 侧
+  同一顺序（见 [native.md](native.md) §9.1：桥接是对象表示的验收目标，不是独立切片）。
+- **M3c**：闭包表示（`$clo` + `elem declare`）与高阶调用、部分应用。
 - **M4**：Float（`$float` struct + f64 运算）、字符串与数组的更多原语。
 - **M5**：Effect 一次性续延 + 宿主层（WASI 0.2 接口）、FFI、wasm seed、增量缓存。
 

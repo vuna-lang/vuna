@@ -1,12 +1,12 @@
 # native 后端（M2）
 
 > 状态：**M1 + M2 已端到端工作**（x86-64 Linux）。M1 覆盖 Int / Nat / Bool 纯值；
-> M2 加入 `String`（字面量、`++` / `strConcatMany`、`strFromInt`、`strLength`、`strAt`、
-> `strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）与
+> M2 加入 `String`（字面量、`++` 及其 `IrConcatMany` 展平、`strFromInt`、`strLength`、
+> `strAt`、`strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）与
 > **bump 堆**（无 GC/RC）。用户 data / record / 通用 case、闭包值、Float、Effect、FFI
 > 仍被明确拒绝（`NativeUnsupported`）。实现入口：
 > `Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
-> 驱动 `Vuna.Compiler.Driver.Native`。
+> 驱动 `Vuna.Compiler.Driver.Native`。后续路线按 M3a→M3b→M3c→M3d 拆分（见 §9）。
 
 ## 1. 产物与工具链
 
@@ -103,6 +103,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
   饱和应用（`irInlineArity = 0`），由 `Native.Runtime.nativeRtValueArity` 给出 arity，
   饱和才生成 `call`（部分应用拒绝）。
 - 位运算当前在 IR 里走普通应用（`irInlineArity` 没有对应项），M2 仍拒绝。
+- List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）M2 拒绝：
+  它们要构造/消费 canonical `List` 族的对象表示，随 M3b 一起落地（理由见 §9.1）。
 - **零参顶层定义**编成零参函数，每次引用都 `call`。M2 仍是纯语言（无 Effect），重复
   求值语义安全；引入副作用/Effect 之前必须改成初始化 + memo。
 - 入口 `main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受 `@ir@showInt` /
@@ -169,6 +171,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 
 - 用户 `data` / record / 通用 `case` / 构造子；闭包值、高阶函数、部分应用；数组。
 - `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`（需要 List 桥接）。
+  **桥接不是独立切片**：它是 M3b 的验收目标，随 canonical `List` 族的对象表示一起落地；
+  单独做它收益为零（见 §9）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；长生命周期程序会耗尽 1 MiB 堆（trap 而非静默）。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（M4 的 Perceus RC 前置）。
@@ -179,10 +183,55 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 
 ## 9. 后续路线（只写方向，不写排期）
 
-- **M3**：用户 data / record / 通用 case、闭包表示（统一 closure 结构）与高阶调用、
-  栈传参（>6 arity）、栈溢出检查。
+- **M3a**：对象与标签。`IrCtor` / 最小对象头（tag + 字段）/ 通用 `IrCase` 分派 /
+  `IrProj`；栈传参（>6 arity）；栈溢出检查。验收用**用户自己的 `data`**（如
+  `data Color = Red | Blue` + `pick`），不碰 List。
+- **M3b**：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` / `strPack` /
+  `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成可增长
+  arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。`CG_ListBridgeRequired` 同义
+  门禁在 native 侧按「程序有没有 `IrListFam`」实现。
+- **M3c**：字符串 API 收口。以上到位后 `Base.String` 的 13 个导出（`split` / `join` /
+  `contains` / `startsWith` / `endsWith` / `trim*` / `lines` / `unlines` / `repeat` /
+  `substring` / `byteLength`）在 native 上全可达，用「`Base.String` 全量差分通过」当
+  里程碑门槛。
+- **M3d**：闭包表示（统一 closure 结构：code 指针 + 捕获环境，复用 M3a 的对象头）与
+  高阶调用、部分应用。
 - **M4**：Perceus 式 RC + 复用（对象头/布局冻结之后）、Float、数组。
 - **M5**：Effect 一次性续延 + 宿主层 syscalls、FFI、aarch64、对象库/增量、native 自举。
+
+### 9.1 为什么先做 ctor、而不是先做 List 桥接
+
+List 桥接看起来像「四个字符串原语」，实际牵出的是 **canonical `List` 族在 native 的
+对象表示**。把它当独立切片做的代价：
+
+| 成本项 | 内容 |
+| --- | --- |
+| 表示 | Nil/Cons 的 tag + 字段布局（cons cell ≥ 16 B）、通用 `IrCase` 分支分派、`IrCtor` 子集——约等于 M3a 的 60–70% |
+| 汇编 | 四个符号各一个模板（`strUnpack` 每字符一个 cell、`strPack` 收集 + `Char.chr` 越界、`strConcatMany` 两遍求和再拷、`strSubstTemplate` 的 `<k>` 解析），合计约 150–200 行，单独看是顺手活 |
+| 契约 | 这四个符号在 IR 里是 `IrApp (IrRt sym) args`（`irInlineArity = 0`），不是 `IrRtApp`；落地要同时扩 `nativeRtValueArity` 与 `nativeRtTarget` |
+| 堆 | `strUnpack` 是**每字符一个 cons cell**：1 MiB ≈ 65536 cell ≈ 64 KiB 源串；`split`/`lines` 反复 unpack 会很快打满 |
+
+收益侧的关键事实：**桥接单独做，用户可见收益是 0**。`Base.String` 的文本函数都建立在
+`split` 上，而 `split` 在 native 里卡的是 `case is not supported yet`（实测
+`join "," (split "," "a,b")` 报的就是它），不是桥接符号。桥接的价值只能由「已在运行的
+ctor/case」兑现——它天然属于 M3b，而不是 M2 的延伸。
+
+三个排序理由：
+
+1. **对象头只能有一个**。List / record / 用户 data 共用同一套对象布局；先为 List 定一版
+   专用布局，M3a 做 record 与用户 data 时必然返工。M4 的 Perceus RC 还要在对象头上加
+   引用计数/复用字段，布局冻结得越晚越好。
+2. **验收标准清楚**。M3a 用用户 `data` 验收（纯 ctor + case，与 List 无关）；M3b 用
+   `strUnpack`（生产 List）与 `strPack`（消费 List）做**表示层一进一出**测试。两者都能
+   独立判定通过与否，而「桥接切片」的验收标准是含糊的。
+3. **堆扩容的形态取决于 M4**。桥接一旦可用，1 MiB 立刻不够；但「可增长 arena vs 可变堆
+   vs 分代」的选择与 RC 设计绑定。M3b 只做最保守的增长（新段、旧段不回收），不在那时
+   拍板回收策略。
+
+**不建议的近路**：用索引扫描（`strAt` / `strLength` / `strSubstring` + fuel）自写
+native 友好的文本函数绕过桥接。它确实能在 M2 现状下工作（实测 `containsIdx` 与 OCaml
+后端输出一致），但等于给后端写一套平行 API、与 `Base.String` 语义分叉；只适合当 M3 之前
+的临时验证，不进终态。
 
 ## 10. 相关阅读
 
