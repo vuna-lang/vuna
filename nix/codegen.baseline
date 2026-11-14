@@ -45,9 +45,16 @@
 #       （HEAD 的 result）与 clean HEAD worktree 分别重跑夹具，产物同为 4233 bytes
 #       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
 #       bytes 重标定为 4233。
+# 重标定（2026-11-14，`#line` 注入：`Codegen.Term.genGroup/genDef` 在每个绑定前写
+#       `# <行> "<包相对路径>"`，让 DWARF 直接指向 `.vuna`）：夹具模块产物结构变化——
+#       每个绑定前多 1 行（`# <行> "<文件>"` 指令，自成一行），指令文本计入字节。
+#       按实测：bytes 4182 → 4523、lines 80 → 98、maxline 823（`let rec` 与绑定仍在同一行），
+#       longlines 6（不变）、letrec 1（口径改为行首匹配，
+#       `nix/metrics.sh` 同步）、strcat 1 / eqint 0 / zeroarg 0 / ctorcount 17（不变）。
+#       `#line` 路径是包相对（`app/Main.vuna` / `Core.vuna`），跨机器可复现。
 files =4
-bytes =4182
-lines =80
+bytes =4523
+lines =98
 maxline =823
 longlines =6
 letrec =1
@@ -55,22 +62,3 @@ strcat =1
 eqint =0
 zeroarg =0
 ctorcount =17
-# 漂移复核（2026-11-10，rotation 后收尾）：干净 HEAD（aeef0aa）之前就已漂移——把
-#       base 的 Prelude/Array 回退到 aeef0aa 后重跑夹具，产物仍为 4245 bytes（其余
-#       指标同上），说明 +12 来自 918c89c 之后的既有改动、非本次 Array 实例 /
-#       Float Prelude 引入；按实测把 bytes 4233 → 4245 重标定，其余指标不变。
-# R4（records-v2，OCaml record 表示）：多字段 record 不再生成变体构造子，改成 OCaml
-#       record（`type t_Point = { f_Point_x; f_Point_y }`），构造/模式/投影/更新都走
-#       record 语法。夹具的 Point 臂因此少一个变体构造子与 match（ctorcount 20 → 17），
-#       产物变短（bytes 4245 → 4097、lines 86 → 80），maxline/longlines 不变。
-# 漂移重标定（2026-11-11，位运算原语 + SHA-256/Bits 合并后）：夹具源码与口径未变，
-#       产物 bytes 4097 → 4083（其余指标不变；dd65112 的 Codegen.Term/Intrinsics 改动
-#       是唯一触到 codegen 的提交）。按实测精确基线重标定。
-# 漂移重标定（2026-11-12，删除 manifest privileged/capabilities/trust）：夹具源码与口径
-#       未变，但 bytes 4083 → 4169、longlines 5 → 6。复核：干净 HEAD worktree（dd9f8c9）
-#       用同一产品 CLI 重跑夹具得到同样的 4169/6 ⇒ 漂移早于本批改动、非能力/信任删除
-#       引入（候选来源是 HEAD 的 query/graph 线 codegen）；按实测精确基线重标定。
-
-# 漂移复核（2026-11-13，track-c 收尾）：用 97a9191（本批起点）的干净二进制重跑夹具，
-#       产物同为 4182 bytes（其余指标不变）⇒ 漂移早于本批改动、非身份/对象库改动引入；
-#       按实测精确基线把 bytes 4250 → 4182 重标定。

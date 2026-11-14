@@ -1761,25 +1761,35 @@ genGroups st (g :: rest) = Vuna.Compiler.Common.bind (genGroup st g) (\p => case
 
 genGroup : GenSt -> IrGroup -> Check (Pair String GenSt)
 genGroup st group = Vuna.Compiler.Common.bind (genGroupBodies st (irGroupDefs group)) (\p => case p of
-  -- 单定义 + extern：定义文本自带 `#line`，且 `external` 前不能有 `let` 头。
+  -- 单定义 + extern：`external` 前不能有 `let` 头；指令由 `genDef` 自己写在前面。
   Pair defs st1 => case irGroupDefs group of
     [d] => case irDefExtern d of
       Just _ => OkC (Pair (joinWith "\n" defs) st1)
-      Nothing => OkC (Pair (bindGroupHeader group ++ joinWith "\nand\n" defs) st1)
-    _ => OkC (Pair (bindGroupHeader group ++ joinWith "\nand\n" defs) st1)
+      Nothing => OkC (Pair (bindGroupOf st1 group defs) st1)
+    _ => OkC (Pair (bindGroupOf st1 group defs) st1)
 )
+-- 分组装配：`#line` 指令在前（自成一行），`let` / `let rec` / `and` 关键字与绑定名
+-- 仍在同一行 —— 既有 `^let v_` 断言、快照 grep 与 `letrec` 口径都不受影响。
+bindGroupOf : GenSt -> IrGroup -> List String -> String
+bindGroupOf st group defs = case Base.List.zip (irGroupDefs group) defs of
+  [] => ""
+  p :: rest => joinWith "\n" (Base.List.Cons (bindFirstOf st group p) (map (bindAndOf st) rest))
 
--- `let` / `let rec` 头 + 换行：每个绑定文本自带 `#line` 指令行，所以头必须单独占一行
--- （`let rec # 1 "x"` 是 OCaml 语法错）。
-bindGroupHeader : IrGroup -> String
-bindGroupHeader group = if irGroupIsRec group then "let rec\n" else "let\n"
+bindFirstOf : GenSt -> IrGroup -> Pair IrDef String -> String
+bindFirstOf st group p = lineDirectiveOf st (firstOf p) ++ bindKeywordOf group ++ secondOf p
+
+bindAndOf : GenSt -> Pair IrDef String -> String
+bindAndOf st p = lineDirectiveOf st (firstOf p) ++ "and " ++ secondOf p
+
+bindKeywordOf : IrGroup -> String
+bindKeywordOf group = if irGroupIsRec group then "let rec " else "let "
 
 -- `#line` 指令（`# <line> "<file>"`，`docs/reference/observability.md` §5）：让 DWARF 的
 -- `.debug_line` 直接指向 `.vuna` 源，`gdb` / `perf` / 异常回栈不必再靠 `dt_def_locs`。
 --
 -- 位置来自 IR 的 `irDefSpan`（Lowering 已保留）；路径经 `gsNormPath` 归一到包相对。
--- 形态约束（实测）：指令必须**自成一行**、且紧跟 `let` / `let rec` / `and` / `external`
--- 关键字之后（同一行内插指令是语法错）。`#line` 是「文件 + 行」粒度：同一指令后连续
+-- 返回文本以换行结尾：指令**自成一行**、放在 `let` / `let rec` / `and` / `external` 之前
+-- （指令与关键字同一行在 OCaml 里非法）。`#line` 是「文件 + 行」粒度：同一指令后连续
 -- 生成的代码都归到该起始行（表达式级定位不存在，见 debt D33/D80）。
 lineDirectiveOf : GenSt -> IrDef -> String
 lineDirectiveOf st d = case irDefSpan d of
@@ -1801,7 +1811,7 @@ genDef : GenSt -> IrDef -> Check (Pair String GenSt)
 genDef st d = case irDefExtern d of
   Just (Pair ty cName) =>
     OkC
-      (Pair (lineDirectiveOf st d ++ "external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}") st)
+      (Pair ("external ${valueName (irDefName d)} : ${irTyText st.gsQual ty} = ${ocamlString cName}") st)
   Nothing => case irDefBody d of
     Nothing =>
       ErrC
@@ -1812,7 +1822,7 @@ genDef st d = case irDefExtern d of
           finalText =
             if irDefInitGuard d then "(try ${bodyText} with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2)"
             else bodyText
-        in OkC (Pair (lineDirectiveOf st1 d ++ "${valueName (irDefName d)} = ${finalText}") st1)
+        in OkC (Pair ("${valueName (irDefName d)} = ${finalText}") st1)
     )
 
 -- ---------------------------------------------------------------

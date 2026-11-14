@@ -10,7 +10,7 @@
 # 指标语义（都是生成代码的文本计数，不是语义计数）：
 #   files      聚合的 .ml 文件数（夹具里锁模块面；seed 数由 seed-selfhost 断言）
 #   bytes/lines/maxline/longlines  产物体积与行长（longlines = >100 列的行）
-#   letrec     含 `let rec ` 的行数
+#   letrec     以 `let rec` 开头的行数（`#line` 注入后 `let rec` 自成一行，故按行首匹配）
 #   strcat     `String.concat ""` 出现次数（运行时 dtp_concatMany 的标记）
 #   eqint      `bi_eq_int` 出现次数（Int 相等快速路径的标记）
 #   zeroarg    `fun () ->` 出现次数；内嵌 runtime 文本里的同串也计入
@@ -43,7 +43,7 @@ bytes=$(wc -c <"$ALL" | tr -d ' ')
 lines=$(wc -l <"$ALL" | tr -d ' ')
 maxline=$(awk '{ if (length($0) > m) m = length($0) } END { print m + 0 }' "$ALL")
 longlines=$(awk 'length($0) > 100' "$ALL" | wc -l | tr -d ' ')
-letrec=$(grep -c 'let rec ' "$ALL" 2>/dev/null || true)
+letrec=$(grep -cE '^let rec' "$ALL" 2>/dev/null || true)
 strcat=$(grep -c 'String.concat ""' "$ALL" 2>/dev/null || true)
 eqint=$(grep -c 'bi_eq_int' "$ALL" 2>/dev/null || true)
 zeroarg=$(grep -c 'fun () ->' "$ALL" 2>/dev/null || true)
