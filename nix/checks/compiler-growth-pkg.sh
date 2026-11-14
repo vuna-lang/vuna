@@ -7,14 +7,23 @@
 # 0.49s），而单文件探针完全看不出来。
 #
 # 口径：合成「可执行包」= lib/Mod.vuna（N 个同形 `fi : Int` 定义）+ app/Main.vuna。
-# 每档先用独立空 TMPDIR 跑一次 `vuna check <pkg>` 建接口缓存，再用**独立进程 + 独立
-# TMPDIR** 计时第二次（增量路径），两次取小。相邻档（N→2N）墙钟比不得超过阈值。
-# 绝对时间跨机器不可比，增长率可比；这是对 `bench/compiler.sh --check` 的补充。
+# 每档每轮：新建**独立空 `VUNA_STORE`** → 预热依赖接口（`vuna check base`）→ 冷跑一次探针包
+# → **改一个定义**（让本模块缓存失效）→ 计时这次 check。三次取小。
+#
+# 为什么不能直接计时「无改动的第二次 check」（2026-11 复核）：那样子单元全命中，读数只有
+# ~20 ms 且与 N 无关（实测 N=1000/2000/4000 都是 20 ms），门槛永远绿、什么也守不住。
+# 改一行定义后缓存失效、本模块重精化 + 收尾重跑，读数恢复成随 N 增长的真实路径
+# （同二进制实测 N=1000/2000/4000/8000 = 215/430/1120/3100 ms，逐档 ×2.0/×2.6/×2.8）；
+# 这一段的上界仍是已知边界（接口哈希的插入排序，见 docs/reference/performance.md §4/§5.2）。
 #
 # 阈值默认 3.3×/翻倍（比单文件门槛的 2.5 宽；2026-11-13 实测 N=4000 2.49、N=8000 3.14，
 # 且同一探针本二进制 4.5s vs 旧基线 9.2s）：增量 check 里有与 N 无关的固定成本
 # （接口读取/写回、依赖摘要校验），N 小时比值噪声更大；O(n²) 回归在 N=8000 档
 # 会远超 3.3，仍会被挡住。可用 `VUNA_GROWTH_MAX_RATIO_MILLI`（千分比）临时覆盖。
+#
+# 为什么显式隔离 `VUNA_STORE`：`TMPDIR` 只影响 AST 族，接口与单元对象都在 `VUNA_STORE`；
+# devShell 里本地跑时它是已预热的 `.local/store`，各档共享 ⇒ 读数被磨平。CI 的 mkCheck
+# 没有 `VUNA_STORE`、`HOME=/homeless-shelter`，天然落 `$TMPDIR/vuna-store`。
 set -eu
 out=${1:?usage: compiler-growth-pkg.sh OUT}
 : "${VUNA:?VUNA 未设置}"
@@ -34,14 +43,21 @@ gen_mod() { # n file
   done
 }
 
-# 依赖包（vuna-base）的接口必须先落盘：否则每档探针都因「依赖接口缺失」走全量路径，
-# 测的就变成冷精化而不是增量收尾（本门槛要守的正是后者）。
-dep_cache=$(mktemp -d "$work/cache.XXXXXX")
-TMPDIR="$dep_cache" "$VUNA" check "$BASE" >/dev/null 2>&1 || {
-  echo "compiler-growth-pkg: dependency check failed for $BASE" >&2
-  exit 1
+# 依赖包（vuna-base）的接口必须先落盘：否则探针因「依赖接口缺失」走全量路径，
+# 测的就变成冷精化而不是增量收尾（本门槛要守的正是后者）。接口对象在 `VUNA_STORE`，
+# 所以这份预热**必须落在本次计时用的那个 store 里**。
+warm_dep() { # store dir
+  VUNA_STORE="$1" TMPDIR="$2" "$VUNA" check "$BASE" >/dev/null 2>&1 || {
+    echo "compiler-growth-pkg: dependency check failed for $BASE" >&2
+    exit 1
+  }
 }
-rm -rf "$dep_cache"
+
+# 让 `f1` 的定义体变成另一个合法表达式（内容变、形状不变），使本模块缓存失效。
+touch_def() { # dir value
+  sed "s/^f1 = .*/f1 = $2/" "$1/lib/Mod.vuna" >"$1/lib/Mod.vuna.new"
+  mv "$1/lib/Mod.vuna.new" "$1/lib/Mod.vuna"
+}
 
 mk_probe() { # n dir
   n=$1 dir=$2
@@ -52,21 +68,22 @@ mk_probe() { # n dir
   printf 'import Mod\n\nmain : Int\nmain = f1\n' >"$dir/app/Main.vuna"
 }
 
-# 冷跑一次（建 iface 缓存）后，独立进程计时两次取小。
 time_incremental() { # dir -> ms
   dir=$1
-  cache=$(mktemp -d "$work/cache.XXXXXX")
-  TMPDIR="$cache" "$VUNA" check "$dir" >/dev/null 2>&1 || {
-    echo "compiler-growth-pkg: cold check failed for $dir" >&2
-    exit 1
-  }
-  rm -rf "$cache"
   best=999999
-  k=0
-  while [ "$k" -lt 3 ]; do
+  k=1
+  while [ "$k" -le 3 ]; do
     cache=$(mktemp -d "$work/cache.XXXXXX")
+    warm_dep "$cache/store" "$cache"
+    # 先冷跑一次：建立包对象 + 单元/接口缓存（下一次才是增量路径）。
+    VUNA_STORE="$cache/store" TMPDIR="$cache" "$VUNA" check "$dir" >/dev/null 2>&1 || {
+      echo "compiler-growth-pkg: cold check failed for $dir" >&2
+      exit 1
+    }
+    # 改一行 → 本模块缓存失效，计时的是「重精化本模块 + 收尾」，而不是全命中。
+    touch_def "$dir" "$((k + 1))"
     t0=$(date +%s%3N)
-    TMPDIR="$cache" "$VUNA" check "$dir" >/dev/null 2>&1 || {
+    VUNA_STORE="$cache/store" TMPDIR="$cache" "$VUNA" check "$dir" >/dev/null 2>&1 || {
       echo "compiler-growth-pkg: incremental check failed for $dir" >&2
       exit 1
     }
@@ -76,6 +93,7 @@ time_incremental() { # dir -> ms
     [ "$ms" -lt "$best" ] && best=$ms
     k=$((k + 1))
   done
+  touch_def "$dir" 1
   printf '%s\n' "$best"
 }
 
