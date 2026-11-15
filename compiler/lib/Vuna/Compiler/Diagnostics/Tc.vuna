@@ -258,7 +258,7 @@ tcTemplate DataKindArrows =
   "the kind of a data declaration must be a chain of arrows ending in Type"
 tcTemplate DefMoreParams = "definition has more parameters than its signature"
 tcTemplate DefParamsMustBeVars = "definition parameters must be variables"
-tcTemplate DoUnsupported = "do blocks are not supported yet"
+tcTemplate DoUnsupported = "do block was not lowered to bind applications before elaboration"
 tcTemplate FunctionNoClauses = "function has no clauses"
 tcTemplate HoleNoExpectedType = "cannot infer the type of a hole; give it an expected type"
 tcTemplate ImplicitParamKind = "implicit parameters must be types or inductive families"
@@ -286,7 +286,8 @@ tcTemplate NatLiteralOutOfRange = "Nat literal is out of range (max is 461168601
 tcTemplate NotInductiveFamily = "case scrutinee is not an inductive family"
 tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case"
 tcTemplate PatternFuel = "pattern matrix recursion ran out of fuel"
-tcTemplate RecordsUnsupported = "records are not supported yet"
+tcTemplate RecordsUnsupported =
+  "record literal was not lowered to its constructor before elaboration"
 tcTemplate TooManyArgs = "too many arguments (not a function)"
 tcTemplate TypeLevelArg = "Type needs exactly one non-negative level (or none)"
 tcTemplate TypeMismatchCaseCount = "type mismatch: case branches differ in number"
@@ -406,7 +407,7 @@ tcChunk1 : List TcEntry
 tcChunk1 =
   [ TcEntry (tcCode DefMoreParams) (tcTemplate DefMoreParams) "定义实参多于签名",
     TcEntry (tcCode DefParamsMustBeVars) (tcTemplate DefParamsMustBeVars) "定义参数必须是变量",
-    TcEntry (tcCode DoUnsupported) (tcTemplate DoUnsupported) "do 块尚不支持",
+    TcEntry (tcCode DoUnsupported) (tcTemplate DoUnsupported) "do 块未经 bind 降级就进入精化（内部不变量）",
     TcEntry (tcCode FunctionNoClauses) (tcTemplate FunctionNoClauses) "函数没有子句",
     TcEntry (tcCode HoleNoExpectedType) (tcTemplate HoleNoExpectedType) "洞缺少期望类型",
     TcEntry (tcCode ImplicitParamKind) (tcTemplate ImplicitParamKind) "隐式参数必须是类型",
@@ -441,7 +442,7 @@ tcChunk3 =
 tcChunk4 : List TcEntry
 tcChunk4 =
   [ TcEntry (tcCode PatternFuel) (tcTemplate PatternFuel) "模式矩阵递归耗尽燃料",
-    TcEntry (tcCode RecordsUnsupported) (tcTemplate RecordsUnsupported) "record 尚不支持",
+    TcEntry (tcCode RecordsUnsupported) (tcTemplate RecordsUnsupported) "record 字面量未经构造子降级就进入精化（内部不变量）",
     TcEntry (tcCode TooManyArgs) (tcTemplate TooManyArgs) "实参过多（不是函数）",
     TcEntry (tcCode TypeLevelArg) (tcTemplate TypeLevelArg) "Type 的层级参数不合法",
     TcEntry (tcCode TypeMismatchCaseCount) (tcTemplate TypeMismatchCaseCount) "case 分支数量不同",
