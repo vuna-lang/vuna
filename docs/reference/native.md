@@ -6,8 +6,9 @@
 > 六种位运算、`assert` / `todo` / `prim_fail`（统一错误报告）、`dbg!` 的
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
-> `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用。堆是可增长 arena（`mmap`
-> 新段，不做 RC/复用）。Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
+> `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float 算术/比较/转换/abs/sqrt。
+> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。Float 展示、Effect、FFI 仍被明确拒绝
+> （`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
@@ -104,7 +105,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 | `IrLam` | 支持 | 作为值 → 闭包对象 `[code][捕获...]`；应用 `call [rdi]`（`rdi` = 闭包，实参从 `rsi` 起） |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
-| Float / Effect / extern | 拒绝 | `native target: ... not supported yet` |
+| Float | 支持（除展示） | 堆对象 `[f64]`；NaN 语义与 OCaml 一致 |
+| Effect / extern | 拒绝 | `native target: ... not supported yet` |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /
@@ -196,7 +198,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
   native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
-  Float 拒绝、`--no-compile`。
+  Float 展示拒绝、`--no-compile`。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
