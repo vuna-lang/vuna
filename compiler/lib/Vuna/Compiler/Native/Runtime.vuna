@@ -49,6 +49,9 @@ assertPrefix = "assertion failed: "
 todoPrefix : String
 todoPrefix = "TODO: "
 
+impossibleMessage : String
+impossibleMessage = "vuna: runtime error: impossible branch\n"
+
 export nativeRodata : List NativeRodata
 nativeRodata =
   [ NativeRodata (nativeDataLabel "true") "True",
@@ -58,7 +61,8 @@ nativeRodata =
     NativeRodata (nativeDataLabel "oom") oomMessage,
     NativeRodata (nativeDataLabel "err_prefix") errPrefix,
     NativeRodata (nativeDataLabel "assert_prefix") assertPrefix,
-    NativeRodata (nativeDataLabel "todo_prefix") todoPrefix
+    NativeRodata (nativeDataLabel "todo_prefix") todoPrefix,
+    NativeRodata (nativeDataLabel "impossible") impossibleMessage
   ]
 
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
@@ -272,6 +276,17 @@ printStrFn =
   rtFunc "print_str" 0
     [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm 1), IMov (OpReg Rax) (OpImm 1), ISyscall, IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 1), ILea Rsi (nativeDataLabel "nl"), IMov (OpReg Rdx) (OpImm 1), ISyscall, IRet]
 
+-- | 对象分配：`rdi` = 字节数 -> `rax` = 新对象地址；越过堆尾则 trap OOM。
+allocFn : NativeFunc
+allocFn =
+  rtRawFunc "alloc"
+    [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg Rdi), ILea Rdx nativeHeapEndLabel, ICmp (OpReg Rcx) (OpReg Rdx), IJcc "ja" (nativeRtLabel "trap_oom"), IMov (OpRip nativeHeapPtrLabel) (OpReg Rcx), IRet]
+
+trapImpossibleFn : NativeFunc
+trapImpossibleFn =
+  rtRawFunc "trap_impossible"
+    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "impossible"), IMov (OpReg Rdx) (OpImm (strLength impossibleMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
 trapDivZeroFn : NativeFunc
 trapDivZeroFn =
   rtRawFunc "trap_divzero"
@@ -415,6 +430,8 @@ nativeRtFuncs =
     trapMsgFn,
     trapAssertFn,
     trapTodoFn,
+    allocFn,
+    trapImpossibleFn,
     trapDivZeroFn,
     trapOomFn
   ]

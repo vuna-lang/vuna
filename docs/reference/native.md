@@ -1,12 +1,12 @@
-# native 后端（M2）
+# native 后端（M2 + M3a）
 
-> 状态：**M1 + M2 已端到端工作**（x86-64 Linux）。M1 覆盖 Int / Nat / Bool 纯值；
+> 状态：**M1 + M2 + M3a 已端到端工作**（x86-64 Linux）。M1 覆盖 Int / Nat / Bool 纯值；
 > M2 加入 `String`（字面量、`++` 及其 `IrConcatMany` 展平、`strFromInt`、`strLength`、
 > `strAt`、`strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）与
 > **bump 堆**（无 GC/RC）；**M2 parity 面**与 wasm 对齐：六种位运算、`assert` / `todo` /
 > `prim_fail`（统一错误报告）、`dbg!` 的 `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**
-> （arity > 6）。用户 data /
-> record / 通用 case、闭包值、Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
+> （arity > 6）。**M3a** 加入用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用
+> `case`；闭包值、Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。后续路线按 M3a→M3b→M3c→M3d 拆分（见 §9）。
 
@@ -94,8 +94,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
 | `IrLam` | 仅顶层函数体 / 单参立即应用 | 嵌套、作为值 → 拒绝 |
+| `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持（M3a） | 对象头 + 字段；§5 的「对象表示」 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
-| Float / 构造子 / record / 通用 `case` / Effect / extern | 拒绝 | `native target: ... not supported yet` |
+| Float / Effect / extern | 拒绝 | `native target: ... not supported yet` |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /
@@ -139,9 +140,13 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
   `trap_todo`。失败路径**不分配**：前缀是 `.rodata` 裸文本，msg 是带长度头的字符串，
   逐段 `write` 到 stderr 后 exit 2。
 - 入口打印：`print_int` / `print_bool` / `print_str`（栈上 itoa / 原样字节 + 换行）。
+- 对象与分配（M3a）：`alloc`（`rdi`=字节数 → `rax`，bump 堆，越界 trap OOM）；变体对象
+  `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
+  `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
-  error: `、`assertion failed: `、`TODO: `）；由 `Native.Runtime.nativeRodata`
-  提供。字符串字面量由 `Native.Module` 收集成 `NativeStrLit`（`npStrLits`）。
+  error: `、`assertion failed: `、`TODO: `、`vuna: runtime error: impossible branch`）；由
+  `Native.Runtime.nativeRodata` 提供。字符串字面量由 `Native.Module` 收集成
+  `NativeStrLit`（`npStrLits`）。
 
 **可观测性**（规范见 [observability.md](observability.md) / O12）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回 `Int 0`）；
@@ -187,9 +192,10 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 已含
   `ocamlTools`（gcc/binutils）。
 
-## 8. 已知边界（M2 明确不做）
+## 8. 已知边界（M2/M3a 明确不做）
 
-- 用户 `data` / record / 通用 `case` / 构造子；闭包值、高阶函数、部分应用；数组。
+- 闭包值、高阶函数、部分应用；数组。
+- 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`（需要 List 桥接）。
   **桥接不是独立切片**：它是 M3b 的验收目标，随 canonical `List` 族的对象表示一起落地；
   单独做它收益为零（见 §9）。
@@ -203,9 +209,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 
 ## 9. 后续路线（只写方向，不写排期）
 
-- **M3a**：对象与标签。`IrCtor` / 最小对象头（tag + 字段）/ 通用 `IrCase` 分派 /
-  `IrProj`；栈溢出检查。验收用**用户自己的 `data`**（如
-  `data Color = Red | Blue` + `pick`），不碰 List。（栈传参已在 M2 parity 完成。）
+- **M3a**（已完成）：对象与标签。`IrCtor` / 对象头（tag + 字段）/ 通用 `IrCase` 分派 /
+  `IrProj` / `IrRecord` / `IrRecUpd`。验收：用户 `data`（`Color` / `Shape`）、record 构造/投影/更新、
+  record 嵌在变体字段里，全部与 OCaml 差分一致。栈溢出检查仍未做。
 - **M3b**：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` / `strPack` /
   `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成可增长
   arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。`CG_ListBridgeRequired` 同义

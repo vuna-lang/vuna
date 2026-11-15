@@ -1,10 +1,12 @@
 module Vuna.Compiler.Native.Module where
 
--- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M2）。
+-- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M2 + M3a）。
 --
 -- M2 切片：M1 的 Int/Nat/Bool 纯值 + `String`（字面量、`++`、`strFromInt`、`strLength`、
 -- `strAt`、`strHash`、`strShow`、`strSubstring`、`bi_eq_str` / `bi_neq_str`、`IrConcatMany`、
 -- String 入口）。字符串是**指向长度头的指针**，由运行时从 bump 堆分配。
+-- M3a：用户 `data`（变体对象 `[0]`=tag + 8 字节字段）、record（纯字段对象）、
+-- 通用 `IrCase`（tag 线性分派）、`IrProj` / `IrRecUpd`。
 --
 -- 生成策略（见 docs/reference/native.md）：
 --   * 从 entry main 沿 `irDefDeps` 收集可达定义，只生成可达函数；不可达的 base
@@ -51,6 +53,7 @@ record FGen where
   fgDefs : List IrDef
   fgPool : List (Pair String String)
   fgSlots : List (Pair IrBinder Int)
+  fgFams : List IrTyDecl
   fgNextSlot : Int
   fgNextLabel : Int
 
@@ -362,10 +365,16 @@ else case ir of
   )
   )
   )
+  IrCtor family ctor args => genCtor (fuel - 1) st family ctor args
+  IrRecord family fields => genRecord (fuel - 1) st family fields
+  IrProj base family field => genProj (fuel - 1) st base family field
+  IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
+  IrCase scrut alts => genCase (fuel - 1) st scrut alts
   IrApp _ _ => genApp (fuel - 1) st ir
   IrRtApp sym args => genRtApp (fuel - 1) st sym args
   IrConcatMany parts => genConcatMany (fuel - 1) st parts
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
+  IrCase _ _ => unsupported "native target: case is not supported yet"
   IrLam _ _ => unsupported "native target: lambdas are not supported yet"
   IrRt "@vuna@obs@span" =>
     unsupported
@@ -375,11 +384,6 @@ else case ir of
       "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
   IrFloatLit _ => unsupported "native target: float literals are not supported yet"
-  IrCtor _ _ _ => unsupported "native target: data constructors are not supported yet"
-  IrRecord _ _ => unsupported "native target: records are not supported yet"
-  IrProj _ _ _ => unsupported "native target: record projection is not supported yet"
-  IrRecUpd _ _ _ => unsupported "native target: record update is not supported yet"
-  IrCase _ _ => unsupported "native target: case is not supported yet"
   IrEffThunk _ _ _ _ _ => unsupported "native target: effect thunks are not supported yet"
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 
@@ -432,8 +436,316 @@ else case flattenApp ir of
     _ => unsupported "native target: higher-order application is not supported yet"
 
 -- ---------------------------------------------------------------
--- Nat case
--- -----------------------------------------------------------
+-- data / record（M3a）
+-- ---------------------------------------------------------------
+-- 对象布局（与 wasm 侧同一表示决策）：
+--   * 变体 = 堆对象：`[obj+0]` = tag（i64），`[obj+8]` 起 = 运行时字段（i64，按最大 arity 补齐）；
+--   * record = 堆对象：`[obj+0]` 起就是字段（没有 tag）。
+-- 分配走 bump 堆（`rt_alloc`）；对象只写后读，不做初始化。
+cat : List (List Instr) -> List Instr
+cat xs = concatMap (\x => x) xs
+
+listLengthI : List a -> Int
+listLengthI [] = 0
+listLengthI (_ :: rest) = 1 + listLengthI rest
+
+setLocal : Int -> List Instr
+setLocal slot = [IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+
+getLocal : Int -> List Instr
+getLocal slot = [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot))]
+
+-- | 写对象字段：rax ← 槽 `fromSlot`，rdx ← 对象基址，`[rdx+off]` ← rax。
+setObjFromSlot : Int -> Int -> Int -> List Instr
+setObjFromSlot obj off fromSlot =
+  [ IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff fromSlot)),
+    IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff obj)),
+    IMov (OpMem Rdx off) (OpReg Rax)
+  ]
+
+setObjImm : Int -> Int -> Int -> List Instr
+setObjImm obj off imm =
+  [IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff obj)), IMov (OpMem Rdx off) (OpImm imm)]
+
+getObjField : Int -> Int -> List Instr
+getObjField obj off =
+  [IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff obj)), IMov (OpReg Rax) (OpMem Rdx off)]
+
+-- | 分配 `slots` 个 8 字节槽的对象；返回 (分配指令, 对象槽)。
+genAlloc : FGen -> Int -> Pair (List Instr) (Pair Int FGen)
+genAlloc st slots =
+  let
+    slotP = freshSlot st
+    obj = firstOf slotP
+    st1 = secondOf slotP
+    instrs =
+      [ IMov (OpReg Rdi) (OpImm (8 * slots)),
+        ICall (nativeRtLabel "alloc"),
+        IMov (OpMem Rbp (nativeSlotOff obj)) (OpReg Rax)
+      ]
+  in Pair instrs (Pair obj st1)
+
+declOf : String -> List IrTyDecl -> Maybe IrTyDecl
+declOf _ [] = Nothing
+declOf family (d :: rest) = if declName d == family then Just d else declOf family rest
+
+declName : IrTyDecl -> String
+declName (IrVariantDecl name _ _) = name
+declName (IrRecordDecl name _ _ _) = name
+declName (IrUnboxedDecl name _ _) = name
+
+ctorTagIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+ctorTagIn ctors ctor = ctorTagGo ctors ctor 0
+
+ctorTagGo : List (Pair String (List IrTy)) -> String -> Int -> Maybe Int
+ctorTagGo [] _ _ = Nothing
+ctorTagGo (p :: rest) name i = if firstOf p == name then Just i else ctorTagGo rest name (i + 1)
+
+ctorArityIn : List (Pair String (List IrTy)) -> String -> Maybe Int
+ctorArityIn [] _ = Nothing
+ctorArityIn (p :: rest) name =
+  if firstOf p == name then Just (listLengthI (secondOf p)) else ctorArityIn rest name
+
+maxArityIn : List (Pair String (List IrTy)) -> Int
+maxArityIn [] = 0
+maxArityIn (p :: rest) =
+  let
+    n = listLengthI (secondOf p)
+    m = maxArityIn rest
+  in if n > m then n else m
+
+recordPosOf : List (Pair Int String) -> String -> Maybe Int
+recordPosOf fields name = recordPosGo fields name 0
+
+recordPosGo : List (Pair Int String) -> String -> Int -> Maybe Int
+recordPosGo [] _ _ = Nothing
+recordPosGo (p :: rest) name i =
+  if secondOf p == name then Just i else recordPosGo rest name (i + 1)
+
+storeSlotFields : Int -> Int -> List Int -> List Instr
+storeSlotFields obj idx [] = []
+storeSlotFields obj idx (s :: rest) =
+  append (setObjFromSlot obj (8 * idx) s) (storeSlotFields obj (idx + 1) rest)
+
+padObjZero : Int -> Int -> Int -> List Instr
+padObjZero obj idx maxIdx = concatMap (\i => setObjImm obj (8 * i) 0) (range idx maxIdx)
+
+-- | 变体构造：分配 `1 + maxArity` 槽；写 tag，按实参顺序写字段，尾部补 0。
+genCtor : Int -> FGen -> String -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genCtor fuel st family ctor args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case declOf family st.fgFams of
+  Nothing => internal "unknown data family in native codegen: ${family}"
+  Just (IrVariantDecl _ _ ctors) => genCtorGo fuel st ctors ctor args
+  _ => internal "constructor `${ctor}` does not belong to a variant family: ${family}"
+
+genCtorGo : Int -> FGen -> List (Pair String (List IrTy)) -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genCtorGo fuel st ctors ctor args = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case ctorTagIn ctors ctor of
+  Nothing => internal "unknown constructor in native codegen: ${ctor}"
+  Just tag => case ctorArityIn ctors ctor of
+    Nothing => internal "unknown constructor in native codegen: ${ctor}"
+    Just n =>
+      if listLengthI args /= n then internal "constructor `${ctor}` applied to the wrong number of arguments"
+      else nbind (genArgs (fuel - 1) st args) (\p => genCtorFinish n tag p ctors)
+
+-- | 纯指令拼装（不再递归进 genExpr）：分配 + 写 tag + 写字段 + 补齐。
+genCtorFinish : Int -> Int -> Pair (List Instr) (Pair (List Int) FGen) -> List (Pair String (List IrTy)) -> NRes (Pair (List Instr) FGen)
+genCtorFinish n tag p ctors =
+  let
+    st = secondOf (secondOf p)
+    maxF = maxArityIn ctors
+    allocP = genAlloc st (1 + maxF)
+    obj = firstOf (secondOf allocP)
+    body =
+      cat
+        [firstOf p, firstOf allocP, setObjImm obj 0 tag, storeSlotFields obj 1 (firstOf (secondOf p)), padObjZero obj (1 + n) (1 + maxF), getLocal obj]
+  in NOk (Pair body (secondOf (secondOf allocP)))
+
+-- | record 构造：按运行时字段顺序求值后写入新对象。
+genRecord : Int -> FGen -> String -> List (Pair String Ir) -> NRes (Pair (List Instr) FGen)
+genRecord fuel st family fields = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case declOf family st.fgFams of
+  Nothing => internal "unknown record family in native codegen: ${family}"
+  Just (IrRecordDecl _ _ flds _) =>
+    if listLengthI fields /= listLengthI flds then internal "record `${family}` constructed with the wrong number of fields"
+    else nbind (genArgs (fuel - 1) st (map (\p => secondOf p) fields)) (\p => genRecordFinish p flds)
+  _ => internal "family `${family}` is not a record"
+
+genRecordFinish : Pair (List Instr) (Pair (List Int) FGen) -> List (Pair Int String) -> NRes (Pair (List Instr) FGen)
+genRecordFinish p flds =
+  let
+    st = secondOf (secondOf p)
+    slots = firstOf (secondOf p)
+    allocP = genAlloc st (listLengthI flds)
+    obj = firstOf (secondOf allocP)
+    body = cat [firstOf p, firstOf allocP, storeSlotFields obj 0 slots, getLocal obj]
+  in NOk (Pair body (secondOf (secondOf allocP)))
+
+genProj : Int -> FGen -> Ir -> String -> String -> NRes (Pair (List Instr) FGen)
+genProj fuel st base family field = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case declOf family st.fgFams of
+  Nothing => internal "unknown record family in native codegen: ${family}"
+  Just (IrRecordDecl _ _ flds _) => case recordPosOf flds field of
+    Nothing => internal "unknown record field in native codegen: `${family}.${field}`"
+    Just idx => nbind (genExpr (fuel - 1) st base) (\p => genProjFinish p idx)
+  _ => internal "family `${family}` is not a record"
+
+genProjFinish : Pair (List Instr) FGen -> Int -> NRes (Pair (List Instr) FGen)
+genProjFinish p idx =
+  let
+    slotP = freshSlot (secondOf p)
+    slot = firstOf slotP
+    body = cat [firstOf p, setLocal slot, getObjField slot (8 * idx)]
+  in NOk (Pair body (secondOf slotP))
+
+-- | record 更新：分配新对象；逐字段写（被改字段求新值，其余从旧对象复制）。
+genRecUpd : Int -> FGen -> Ir -> String -> List (Pair String Ir) -> NRes (Pair (List Instr) FGen)
+genRecUpd fuel st base family fields = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case declOf family st.fgFams of
+  Nothing => internal "unknown record family in native codegen: ${family}"
+  Just (IrRecordDecl _ _ flds _) =>
+    nbind (genExpr (fuel - 1) st base)
+      (\p => genRecUpdStart fuel (firstOf p) (secondOf p) flds fields)
+  _ => internal "family `${family}` is not a record"
+
+genRecUpdStart : Int -> List Instr -> FGen -> List (Pair Int String) -> List (Pair String Ir) -> NRes (Pair (List Instr) FGen)
+genRecUpdStart fuel baseInstrs st flds fields = if fuel <= 0 then internal "native codegen fuel exhausted"
+else
+  let
+    baseP = freshSlot st
+    baseSlot = firstOf baseP
+    allocP = genAlloc (secondOf baseP) (listLengthI flds)
+    obj = firstOf (secondOf allocP)
+  in nbind (genUpdFields (fuel - 1) (secondOf (secondOf allocP)) baseSlot obj 0 flds fields)
+    (\q => NOk (Pair (cat [baseInstrs, setLocal baseSlot, firstOf allocP, firstOf q, getLocal obj]) (secondOf q)))
+
+genUpdFields : Int -> FGen -> Int -> Int -> Int -> List (Pair Int String) -> List (Pair String Ir) -> NRes (Pair (List Instr) FGen)
+genUpdFields fuel st baseSlot obj idx flds fields = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case flds of
+  [] => NOk (Pair [] st)
+  (Pair _ name) :: rest => case lookupFieldIr name fields of
+    Just ir => nbind (genExpr (fuel - 1) st ir) (\p => let
+      valP = freshSlot (secondOf p)
+      val = firstOf valP
+    in nbind (genUpdFields (fuel - 1) (secondOf valP) baseSlot obj (idx + 1) rest fields)
+      (\q => NOk (Pair (cat [firstOf p, setLocal val, setObjFromSlot obj (8 * idx) val, firstOf q]) (secondOf q)))
+    )
+    Nothing =>
+      let
+        srcP = freshSlot st
+        src = firstOf srcP
+      in nbind (genUpdFields (fuel - 1) (secondOf srcP) baseSlot obj (idx + 1) rest fields)
+        (\q => NOk (Pair (cat [getObjField baseSlot (8 * idx), setLocal src, setObjFromSlot obj (8 * idx) src, firstOf q]) (secondOf q)))
+
+lookupFieldIr : String -> List (Pair String Ir) -> Maybe Ir
+lookupFieldIr _ [] = Nothing
+lookupFieldIr name (p :: rest) =
+  if firstOf p == name then Just (secondOf p) else lookupFieldIr name rest
+
+-- ---------------------------------------------------------------
+-- 通用 case
+-- ---------------------------------------------------------------
+-- | 变体按 tag 分派（线性 compare 链）；record 没有 tag，直接按字段序绑定。
+genCase : Int -> FGen -> Ir -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCase fuel st scrut alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else nbind (genExpr (fuel - 1) st scrut) (\p => let
+  scP = freshSlot (secondOf p)
+  sc = firstOf scP
+in nbind (genCaseAlts (fuel - 1) (secondOf scP) sc alts)
+  (\q => NOk (Pair (cat [firstOf p, setLocal sc, firstOf q]) (secondOf q)))
+)
+
+genCaseAlts : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCaseAlts fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case caseFamilyOf alts of
+  Nothing => genDefault fuel st sc alts
+  Just family => case declOf family st.fgFams of
+    Nothing => internal "unknown data family in native codegen: ${family}"
+    Just (IrVariantDecl _ _ ctors) => genVariantAlts fuel st sc ctors alts
+    Just (IrRecordDecl _ _ _ _) => genRecordAlts fuel st sc alts
+    _ => internal "case on an unboxed family is not supported yet"
+
+caseFamilyOf : List IrAlt -> Maybe String
+caseFamilyOf [] = Nothing
+caseFamilyOf (alt :: rest) = case irAltCtorOf alt of
+  Nothing => caseFamilyOf rest
+  Just p => Just (firstOf p)
+
+findCatchAll : List IrAlt -> Maybe IrAlt
+findCatchAll [] = Nothing
+findCatchAll (alt :: rest) = case irAltCtorOf alt of
+  Nothing => Just alt
+  Just _ => findCatchAll rest
+
+trapImpossible : List Instr
+trapImpossible = [ICall (nativeRtLabel "trap_impossible")]
+
+genDefault : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genDefault fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case findCatchAll alts of
+  Nothing => NOk (Pair trapImpossible st)
+  Just alt => genArm fuel st sc alt
+
+genArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
+genArm fuel st sc alt = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case runtimeBinders (irAltBindersOf alt) of
+  [] => genExpr (fuel - 1) st (irAltBodyOf alt)
+  [b] =>
+    let
+      slotP = freshSlot st
+      slot = firstOf slotP
+    in nbind (genExpr (fuel - 1) (pushBinder b slot (secondOf slotP)) (irAltBodyOf alt))
+      (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (secondOf q)))
+  _ => internal "case arm has more than one runtime binder"
+
+tagOfScrut : Int -> List Instr
+tagOfScrut sc = cat [getLocal sc, [IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rax) (OpMem Rdx 0)]]
+
+-- | 变体分支链：跳过 catch-all（它只作默认臂），其余按 tag 线性比较。
+genVariantAlts : Int -> FGen -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantAlts fuel st sc ctors alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case alts of
+  [] => genDefault (fuel - 1) st sc []
+  alt :: rest => case irAltCtorOf alt of
+    Nothing => genVariantAlts (fuel - 1) st sc ctors rest
+    Just (Pair _ ctor) => case ctorTagIn ctors ctor of
+      Nothing => internal "unknown constructor in native codegen: ${ctor}"
+      Just tag =>
+        let
+          lNextP = freshLabel st
+          lNext = firstOf lNextP
+          lEndP = freshLabel (secondOf lNextP)
+          lEnd = firstOf lEndP
+        in nbind (genVariantArm (fuel - 1) (secondOf lEndP) sc alt)
+          (\a => nbind (genVariantAlts (fuel - 1) (secondOf a) sc ctors rest) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
+
+-- | 变体分支：按 keep 形状绑定字段（tag 占 index 0），再求值分支体。
+genVariantArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantArm fuel st sc alt =
+  if fuel <= 0 then internal "native codegen fuel exhausted"
+  else nbind (bindFields st sc 1 (runtimeBinders (irAltBindersOf alt)))
+    (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (secondOf q))))
+
+bindFields : FGen -> Int -> Int -> List IrBinder -> NRes (Pair (List Instr) FGen)
+bindFields st _ _ [] = NOk (Pair [] st)
+bindFields st sc idx (b :: rest) =
+  let
+    slotP = freshSlot st
+    slot = firstOf slotP
+  in nbind (bindFields (pushBinder b slot (secondOf slotP)) sc (idx + 1) rest)
+    (\q => NOk (Pair (cat [getObjField sc (8 * idx), setLocal slot, firstOf q]) (secondOf q)))
+
+-- | record 分支只有一个（按字段序绑定）；catch-all 兜底。
+genRecordAlts : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genRecordAlts fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+else case alts of
+  [] => genDefault (fuel - 1) st sc []
+  alt :: rest => case irAltCtorOf alt of
+    Nothing => genDefault (fuel - 1) st sc alts
+    Just _ =>
+      nbind (bindFields st sc 0 (runtimeBinders (irAltBindersOf alt)))
+        (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (secondOf q))))
+
 genNatArm : Int -> FGen -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
 genNatArm _ st Nothing _ _ = NOk (Pair [] st)
 genNatArm fuel st (Just alt) mode srcSlot = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -519,12 +831,12 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**全局** label/slot 计数（label 必须跨定义
 --   累加，否则两个函数会撞同名 `.L`）。
-genDefFunc : List IrDef -> List (Pair String String) -> Int -> IrDef -> NRes (Pair NativeFunc Int)
-genDefFunc _defs _pool _nextLabel (IrExternDef name _ _ _) =
+genDefFunc : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair NativeFunc Int)
+genDefFunc _defs _pool _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pool nextLabel (IrDef name arity _ body _ _ _) =
+genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
   let
-    st0 = FGen defs pool [] 0 nextLabel
+    st0 = FGen defs pool [] fams 0 nextLabel
   in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
@@ -547,10 +859,11 @@ genDefFunc defs pool nextLabel (IrDef name arity _ body _ _ _) =
       )
     _ => internal "function body is not a lambda: ${name}"
 
-genDefs : List IrDef -> List (Pair String String) -> Int -> List IrDef -> List NativeFunc -> NRes (Pair (List NativeFunc) Int)
-genDefs _all _pool next [] acc = NOk (Pair (reverse acc) next)
-genDefs all pool next (d :: rest) acc =
-  nbind (genDefFunc all pool next d) (\p => genDefs all pool (secondOf p) rest (firstOf p :: acc))
+genDefs : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> List IrDef -> List NativeFunc -> NRes (Pair (List NativeFunc) Int)
+genDefs _all _pool _fams next [] acc = NOk (Pair (reverse acc) next)
+genDefs all pool fams next (d :: rest) acc =
+  nbind (genDefFunc all pool fams next d)
+    (\p => genDefs all pool fams (secondOf p) rest (firstOf p :: acc))
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -611,7 +924,7 @@ build program printResult =
                 needed = collectNeeded 100000 [mainName] [] defs
                 ordered = filter (\d => memStr (irDefName d) needed) defs
                 pool = poolOfDefs ordered
-              in case genDefs defs pool 0 ordered [] of
+              in case genDefs defs pool unit.irUnitTyDecls 0 ordered [] of
                 NFail err => NativeRejected err
                 NOk pair =>
                   let
