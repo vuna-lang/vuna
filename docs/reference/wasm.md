@@ -6,7 +6,8 @@
 > 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
 > 族已接进 struct 表示，四个桥接符号（`strUnpack` / `strPack` / `strConcatMany` /
 > `strSubstTemplate`）已实现；闭包值（`$clo` + `elem declare`）与高阶应用已工作）。
-> `Float` / Effect / FFI 仍被明确拒绝（`WasmUnsupported`）。实现入口：
+> `Float` 的算术/比较/转换/abs/sqrt 已工作（展示仍拒绝）；Effect / FFI 明确拒绝
+> （`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -70,7 +71,8 @@
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
 | `IrRt` | 仅 `@ir@natSucc`（调用 head）与入口 show | 其它 → 拒绝（函数值） |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
-| Float / Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
+| Float | 支持（除展示） | `$float` struct + f64 指令；比较按 IEEE 语义 |
+| Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
 
 - 入口：`main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受
   `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；
@@ -96,6 +98,8 @@
   `TODO: ` 前缀。`rt_failStr` 是唯一的失败出口（拼前缀后走 `rt_write`）。
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）：`bitShr` 按 OCaml `lsr` 语义
   （63-bit 值先 `shl`+`shr_u` 清掉符号扩展位，再逻辑右移）。
+- 浮点：`$rt_floatFromInt` / `$rt_intFromFloat`（`i64.trunc_f64_s`）/ `$rt_floatAbs` /
+  `$rt_floatSqrt`，`$rt_floatAdd/Sub/Mul/Div` 与 `$rt_floatEq/Neq/Lt/Le/Gt/Ge`（`f64.*`）。
 - 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
   `prim_fail` / `arrayLength` / `arrayGet` / `arraySet` / `arrayMake`，以及需要 canonical
   `List` 族的 `arrayFromList` / `arrayToList`；`@vuna@debug@on` 是 0 元值（`False`），
@@ -104,7 +108,7 @@
   `$rt_arrayOob`（`Invalid_argument("index out of bounds")` + exit 2）。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：
-`bi_lt_generic` 等结构化 `compare` 家族、Float 全部符号、
+`bi_lt_generic` 等结构化 `compare` 家族、`strFromFloat`（Float 展示）、
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush/Pop`、Sched 家族、
 `prim_eff_*` 宿主层原语。
 
@@ -141,7 +145,8 @@
 - 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
   应用侧按实参个数逐次 `call $rt_apply`。
 - 变体分支只按 tag 一次线性分派（不做多模式矩阵）。
-- Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
+- Float 的展示（`strFromFloat` / `main : Float` 入口）；Effect / 一次性续延、FFI / extern、
+  宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 

@@ -198,6 +198,40 @@ rtArrayOob c =
     (append (failWithConst c.rtcOobOff c.rtcOobLen) [ICall "$rt_failStr", IUnreachable])
 
 -- ---------------------------------------------------------------
+-- 浮点（IEEE-754 double）
+-- ---------------------------------------------------------------
+-- 表示沿用 `$float` struct：boxed f64；比较指令本身按 IEEE 语义处理 NaN。
+rtFloatFromInt : WatFunc
+rtFloatFromInt =
+  rtFunc "$rt_floatFromInt" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$int", IStructGet "$int" 0, IPlain "f64.convert_i64_s", IStructNew "$float"]
+
+rtIntFromFloat : WatFunc
+rtIntFromFloat =
+  rtFunc "$rt_intFromFloat" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "i64.trunc_f64_s", IStructNew "$int"]
+
+rtFloatBin : String -> String -> WatFunc
+rtFloatBin name op =
+  rtFunc name [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$p1", IRefCast "$float", IStructGet "$float" 0, IPlain op, IStructNew "$float"]
+
+rtFloatCmp : String -> String -> WatFunc
+rtFloatCmp name op =
+  rtFunc name [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$p1", IRefCast "$float", IStructGet "$float" 0, IPlain op, II31New]
+
+rtFloatAbs : WatFunc
+rtFloatAbs =
+  rtFunc "$rt_floatAbs" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "f64.abs", IStructNew "$float"]
+
+rtFloatSqrt : WatFunc
+rtFloatSqrt =
+  rtFunc "$rt_floatSqrt" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$float", IStructGet "$float" 0, IPlain "f64.sqrt", IStructNew "$float"]
+
+-- ---------------------------------------------------------------
 -- 数组（不可变、copy-on-write）
 -- ---------------------------------------------------------------
 -- 表示沿用 `$arr`（`anyref` 数组）：`array.len` 是长度，元素是任意运行时值。
@@ -720,6 +754,20 @@ rtFunctions c =
     rtPrintln,
     rtFailStr c,
     rtArrayOob c,
+    rtFloatFromInt,
+    rtIntFromFloat,
+    rtFloatBin "$rt_floatAdd" "f64.add",
+    rtFloatBin "$rt_floatSub" "f64.sub",
+    rtFloatBin "$rt_floatMul" "f64.mul",
+    rtFloatBin "$rt_floatDiv" "f64.div",
+    rtFloatCmp "$rt_floatEq" "f64.eq",
+    rtFloatCmp "$rt_floatNeq" "f64.ne",
+    rtFloatCmp "$rt_floatLt" "f64.lt",
+    rtFloatCmp "$rt_floatLe" "f64.le",
+    rtFloatCmp "$rt_floatGt" "f64.gt",
+    rtFloatCmp "$rt_floatGe" "f64.ge",
+    rtFloatAbs,
+    rtFloatSqrt,
     rtArrayLength,
     rtArrayGet,
     rtArraySet,
@@ -813,6 +861,20 @@ rtImplOf name =
   else if name == "@vuna@obs@sampleStop" then RtFunc 1 "$rt_boxZero"
   else if name == "@ir@natSucc" then RtFunc 1 "$rt_natSucc"
   else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"]
+  else if name == "floatFromInt" then RtFunc 1 "$rt_floatFromInt"
+  else if name == "intFromFloat" then RtFunc 1 "$rt_intFromFloat"
+  else if name == "floatAbs" then RtFunc 1 "$rt_floatAbs"
+  else if name == "floatSqrt" then RtFunc 1 "$rt_floatSqrt"
+  else if name == "bi_add_float" then RtFunc 2 "$rt_floatAdd"
+  else if name == "bi_sub_float" then RtFunc 2 "$rt_floatSub"
+  else if name == "bi_mul_float" then RtFunc 2 "$rt_floatMul"
+  else if name == "bi_div_float" then RtFunc 2 "$rt_floatDiv"
+  else if name == "bi_eq_float" then RtFunc 2 "$rt_floatEq"
+  else if name == "bi_neq_float" then RtFunc 2 "$rt_floatNeq"
+  else if name == "bi_lt_float" then RtFunc 2 "$rt_floatLt"
+  else if name == "bi_le_float" then RtFunc 2 "$rt_floatLe"
+  else if name == "bi_gt_float" then RtFunc 2 "$rt_floatGt"
+  else if name == "bi_ge_float" then RtFunc 2 "$rt_floatGe"
   else if name == "arrayLength" then RtFunc 1 "$rt_arrayLength"
   else if name == "arrayGet" then RtFunc 2 "$rt_arrayGet"
   else if name == "arraySet" then RtFunc 3 "$rt_arraySet"
