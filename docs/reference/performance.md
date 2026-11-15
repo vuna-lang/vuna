@@ -256,6 +256,36 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
    10–13 ms）、实例体/方法子句查找（13.5 ms）、`refsOfDef`（12–16 ms）、签名 banned 集、
    ctor/解表索引、`unsolvedFrom` 全解表扫描。
 
+### 4.1 elab 内部的结构性开销（当前处置与读数）
+
+精化器本身的耗时集中在 `conv`/`force`/`infer`，但有几处「与规模相乘的结构开销」不在这条
+热路径上，单独处置（都不改语义，诊断逐字节不变）：
+
+| 位置 | 原状 | 处置 |
+| --- | --- | --- |
+| `Sols.defVals` / `Ec.ecDefVals` / `DtProgram.dtProgDefVals` | 字段恒空（无写入点），`force` 每次 delta 展开多付一次 HashMap miss | 删除字段与查表 |
+| `Ctx.ctxDepth` | `length ctxItems`，每次变量引用/分支/隐式实参都读 | 绑定点维护 `ctxDepthF` |
+| `Elab.Usage` 零用量向量 | 每个叶子节点重建一条与上下文等长的 `Rig` 向量 | 按 depth 共享同一条不可变向量 |
+| `Elab.Data.elabCtor` | 每个构造子两次从索引表重建 globals 列表 | 每趟算一次 |
+| `Elab.Data.checkViaDataDecls` | 每条声明重算去装箱候选集（含环检测） | 每趟算一次 |
+| `Elab.Dict.isDictFamily` | 每个隐式域重建一遍类名列表 | 先做 `Dict_` 前缀 O(1) 预筛 |
+
+读数（16 核、空 store、同窗口交替、各取 4 次最小）：
+
+| | 冷 `check compiler` 墙钟 | user | 热 `check compiler` |
+| --- | --- | --- | --- |
+| 处置前 | 14.12 s | 13.85 s | 43 ms |
+| 处置后 | 14.00 s | 13.74 s | 47 ms |
+
+冷路径 **≈0.9%**（约精化段的 2%）；热路径（全命中、只重放接口摘要）绝对值多 ~4 ms，
+与上面几处改动没有已知因果，怀疑是二进制布局/记录字段数带来的固定开销，作为下一轮的
+回归项复核。增长率门槛不变（单文件 500…8000 def 每档 ≤1.6×）。
+elab 占分配 ~92% 的格局没变：**下一杠杆是 `Ctx` 的求值环境**——`ctxEnv`/`varTypeValue`
+每次查询都重建 `List Value`（`ctxEnvAt` + `refineValue` 映射 + `shift` + `eval`），
+`evalCtx` 19 处、`varTypeValue`/`ctxEnv` 27 处调用，含 `inferVarRef` 与每个隐式实参。
+把它改成「上下文里存 Value 类型（level 形态，无需 shift）+ 环境缓存」才是结构性收益；
+本条只做了 O(1) 化（深度、零向量、族名预筛）。
+
 ## 5. 增长率（合成包）
 
 ### 5.1 单文件 `check`（全量精化路径）
