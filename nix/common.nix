@@ -34,6 +34,8 @@ let
       pkgs.util-linux
       pkgs.git
       pkgs.jq
+      # `108_obs_cdp` 的客户端冒烟脚本用 node 发 CDP 请求。
+      pkgs.nodejs
     ];
 
   # 测试/基准 runner 的 PATH：OCaml 工具链 + 脚本用到的 coreutils 系。

@@ -76,7 +76,7 @@ end:
 
 | 指令 | 语义 |
 | --- | --- |
-| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_STORE` / `VUNA_REPL_HISTORY` |
+| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_STORE` / `VUNA_REPL_HISTORY` / `WASMTIME_CACHE_DIR` |
 | `read:` | 读文件内容作为该步输出（不执行命令）；文件缺失即失败 |
 | `exit:` | `0` / `nonzero` / 具体值；缺省断言 0 |
 | `out-contains:` | 合并输出必须包含该片段（可多条） |

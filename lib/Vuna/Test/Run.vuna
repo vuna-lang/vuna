@@ -281,7 +281,15 @@ withStepsEnv env caseTmp isolated argv =
   let
     store = if isolated then "${caseTmp}/store" else env.envStore
   in withEnv env
-    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_REPL_HISTORY=${caseTmp}/repl-history"] argv)
+    (append
+      [ "env",
+        "TMPDIR=${caseTmp}",
+        "VUNA_STORE=${store}",
+        "VUNA_REPL_HISTORY=${caseTmp}/repl-history",
+        -- wasmtime 默认写 `$HOME/.cache`；沙箱里 HOME 不可写，指到 case 私有目录。
+        "WASMTIME_CACHE_DIR=${caseTmp}/wasmtime-cache"
+      ]
+      argv)
 
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
