@@ -1,0 +1,4 @@
+import Base.Float
+
+main : Int
+main = intFromFloat 2.75 + floatToInt (0.0 - 1.9)
