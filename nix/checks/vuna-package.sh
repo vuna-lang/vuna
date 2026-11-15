@@ -4,7 +4,7 @@
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，
 # $VUNA / $VUNA_COMPILER 由 Nix 注入。
 #
-# M24：`build` 默认走 DT 单文件 codegen（.output/{main.ml,build.sh,bin/<pkg>}），
+# `build` 默认走 DT 单文件 codegen（.output/{main.ml,build.sh,bin/<pkg>}），
 # examples/multi 的 main 用 `exit 0` 收尾，输出与 golden 一致。
 set -eu
 

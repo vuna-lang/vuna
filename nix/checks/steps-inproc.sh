@@ -1,9 +1,9 @@
 #!/bin/sh
 # 进程绑定岛门禁：steps 用例里仍然 spawn `vuna` 的文件必须逐个登记原因。
 #
-# 背景：fixture 用例（CGolden / CError / CCheck / CLint / CFix）已经全部进程内执行
+# 背景：fixture 用例（CGolden / CError / CCheck / CLint / CFix）全部进程内执行
 # （直接调用编译器函数、断言返回值）。steps 里剩下的子进程都是**构造上不可进程内**的
-# 场景（PTY、stdio 帧、产物执行、多进程 store 互斥、CLI 渲染文本），不是「还没迁移」。
+# 场景（PTY、stdio 帧、产物执行、多进程 store 互斥、CLI 渲染文本）。
 #
 # 判据（两条）：
 #   1. 出现 `"$VUNA"` 的文件必须出现在 `test/suite/process-bound.txt`；

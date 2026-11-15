@@ -14,8 +14,8 @@
 #   strcat     `String.concat ""` 出现次数（运行时 dtp_concatMany 的标记）
 #   eqint      `bi_eq_int` 出现次数（Int 相等快速路径的标记）
 #   zeroarg    `fun () ->` 出现次数；内嵌 runtime 文本里的同串也计入
-#   ctorcount  以构造子模式开头的 match 臂行数（`^  | C_` 或 C35 后的
-#              `^  | <Unit>.C_` 全限定形态）；单行 `type t_ = C_ ...` 声明不计（名字是历史遗留）
+#   ctorcount  以构造子模式开头的 match 臂行数（`^  | C_` 或
+#              `^  | <Unit>.C_` 全限定形态）；单行 `type t_ = C_ ...` 声明不计
 set -eu
 export LC_ALL=C
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# seed rotation（M12）：用当前编译器从 compiler 包生成 seed/ 多文件文件集。
+# seed rotation：用当前编译器从 compiler 包生成 seed/ 多文件文件集。
 #
 # 前提：当前 seed 能编译当前源码（nix flake check 通过）。
 # 用法: sh nix/seed-rotate.sh [VUNA]
@@ -15,7 +15,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-# 用法里写的是位置参数，历史上漏了赋值导致 `VUNA` unbound（set -u）。
+# 用法里写的是位置参数；漏赋值会让 `VUNA` 在 set -u 下报 unbound。
 # 优先级：位置参数 > 环境变量 > 默认产品 CLI。
 VUNA=${1:-${VUNA:-./result/bin/vuna}}
 # seed rotation 必须让两遍生成走**完全相同的路径**：用各自全新的对象库（VUNA_STORE 指向
@@ -38,7 +38,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # 从仓库根以包目录 "compiler" 生成，保证嵌入的文件路径与提交后的 seed/ 一致。
-# M26：包级输出只有 split 一种模型；`--out` 只 codegen、不链接。
+# 包级输出只有 split 一种模型；`--out` 只 codegen、不链接。
 # 两遍各自全新的对象库：即使 devShell 默认了共享 VUNA_STORE，rotation 也不受影响。
 export VUNA_STORE="$tmp/store-a"
 "$VUNA" build --no-compile --out "$tmp/seed" compiler

@@ -1,5 +1,5 @@
 #!/bin/sh
-# checks.ir-boundary：IR 边界的**结构**守卫（Track A 第一步的长期不变量）。
+# checks.ir-boundary：IR 边界的**结构**守卫（长期不变量）。
 #
 # 目标链路：`Core --Codegen.Lower--> IR --Codegen.{Decl,Term,Assembly}--> OCaml 文本`
 #           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
@@ -19,7 +19,7 @@
 #      Split 仍要按声明归属切分，所以它是这条链上唯一允许 import `Elab` 的后端模块
 #      （`DtProgram` / `DtDef` / `DtData` 是切分单位）；但 `Core` / `Intrinsics` 一律不许
 #      ——擦除判据与 runtime 名映射都在 Lowering。
-#   5. 正向断言：文本生成层都消费 IR（避免留下未迁移的死路径）。
+#   5. 正向断言：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
 #   9. native 后端（`Vuna.Compiler.Native*` 与 `Driver/Native`）只吃 IR：不得 import
 #      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Native.Module` 必须 import IR。
 #  10. wasm 后端（`Vuna.Compiler.Wasm*` 与 `Driver/Wasm`）只吃 IR：不得 import
@@ -91,7 +91,7 @@ if [ -f "$SPLIT" ]; then
   check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Intrinsics)(\.|$))'
 fi
 
-# 规则 5（正向断言）：文本生成层都消费 IR（避免留下未迁移的死路径）。
+# 规则 5（正向断言）：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
 for f in \
   compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
   compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
@@ -104,7 +104,7 @@ do
   fi
 done
 
-# 规则 6（Track A 第二步）：已删除的 IR 目标文本节点不得复活——IR 只认符号契约。
+# 规则 6（IR 只认符号契约）：`IrRuntime` / `IrBridge` 这类目标文本节点不得出现。
 if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
   compiler/lib/Vuna/Compiler/Ir/Model.vuna \
   compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \

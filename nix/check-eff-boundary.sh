@@ -59,7 +59,7 @@ if [ -f "$allow" ]; then
   done <"$allow"
 fi
 
-# 阶段 5 D：宿主原语的**可见名**不得出现在源码里——base/compiler/lib 一律用
+# 宿主原语的**可见名**不得出现在源码里——base/compiler/lib 一律用
 # `@vuna@prim_eff_*` 内部名（`Intrinsics.vuna` 是定义真源，豁免；`Codegen/Runtime.vuna`
 # 与 `Ir/Runtime.vuna` 是运行时符号表，字符串里的 `prim_eff_*` 是契约数据，不是调用，
 # 也豁免）。用户源码写不出

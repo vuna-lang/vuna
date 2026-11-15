@@ -1,6 +1,6 @@
 # vuna 原生测试 runner：`nix run .#vuna-run-tests`。
 #
-# 不再有 shell 编排层：直接调用仓库里刚构建出的 `vuna test --suite test/suite.toml`。
+# 没有 shell 编排层：直接调用仓库里刚构建出的 `vuna test --suite test/suite.toml`。
 # 编译器固定为同一个 Nix 构建产物（stage 1），种子通过 VUNA_SEED 注入；case 的
 # 并行度由 runner 的 `--jobs auto` 探测全部可用核。
 { pkgs, tools, vuna, vuna-seed }:

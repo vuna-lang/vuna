@@ -176,7 +176,7 @@ if [ "$CHECK" = 1 ] && [ "$JSON_OUT" = "-" ]; then
   die "--check 不能与 --json - 组合（机器 JSON 与 WARN 行会混在一起）"
 fi
 if [ -n "$BASELINE" ]; then
-  # 基线解析只用 jq（不再 sed 正则抠 JSON 字段）。
+  # 基线解析只用 jq（sed 正则抠 JSON 字段不可靠）。
   command -v jq >/dev/null 2>&1 || die "jq not found (use: nix run .#vuna-bench)"
 fi
 
@@ -246,7 +246,7 @@ else
   cp test/corpus/vuna.toml "$WORK/src/test/corpus/"
 fi
 cd "$WORK/src"
-# M26：包上下文取代 `--root`；工作副本的 base 位置（无 manifest 的临时夹具用）。
+# 包上下文取代 `--root`；工作副本的 base 位置（无 manifest 的临时夹具用）。
 export VUNA_BASE="$WORK/src/base"
 
 log() {
@@ -338,7 +338,7 @@ cat seed/*.ml >"$WORK/seed_concat.ml"
 
 printf 'main : Int\nmain = 40 + 2\n' >tiny.vuna
 measure tiny_compile "$SELF_BIN" compile --no-print tiny.vuna "$WORK/tinyout"
-# DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；M24 起是唯一 codegen 路径）
+# DT 精化 + 擦除 codegen 基准（单文件，Pi + 类型擦除；唯一 codegen 路径）
 measure dt_elab "$SELF_BIN" compile --no-print test/corpus/dt/03_compose.vuna "$WORK/dtelab"
 
 # ---- corpus 批量编译（单次计时，内部循环） --------------------------------

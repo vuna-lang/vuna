@@ -5,53 +5,8 @@
 # 口径：`vuna build --no-compile --out` 后剔除 Base_*.ml / Prelude.ml /
 #       Vuna_runtime.ml，只量夹具自有模块——base/runtime 随功能增长，纳入会重新
 #       引入「移动靶」。指标定义见 nix/metrics.sh 头注释。
-# M37（动作类型内建化）：效果原语从 `MkIO (fun _ -> …)` 变体改为裸 thunk
-#       （`fun args -> fun (_ : int) -> …`），夹具的 Effects 模块产物变短；
-#       按实测 bytes 4295 → 4242、longlines 8 → 7，其余指标不变。
-# M38（运行时错误报告）：Main.ml 首行加 `Printexc.record_backtrace` 序言、main 钩子
-#       包 try（入口零参 main 的初始化绑定也套报告器）；夹具 Main.ml 变长，按实测
-#       bytes 4242 → 4462、lines 82 → 86、maxline 810 → 882；runtime 的位置表按口径
-#       排除（不计入本基线）。
-#
-# 2026-11-12 删除 Base.Host 后复核：codegen 夹具 `Effects.vuna` 从
-#       `import Base.Host` + `print` 改为 `import Base.Eff` + `prim_eff_print`，
-#       Effects.ml 引用的模块前缀变长 ⇒ bytes 4169 → 4250（其余指标不变：lines 80 /
-#       maxline 823 / longlines 6 / letrec 1 / strcat 1 / eqint 0 / zeroarg 0 /
-#       ctorcount 17）。属夹具源码面变化，非 codegen 膨胀。
-#
 # 规则：本文件是精确基线（`=<expected>`），不是上限；不等即失败（双向捕获膨胀与
 #       优化丢失）。种子尺寸不在这里设阈值（见 docs/reference/compiler.md）。
-# M33 codegen 优化后重标定：内建内联消除了 `bi_eq_int`（eqint 3 → 0）、`++` 链展开为
-#       `String.concat ""`（strcat 0 → 1）、多参数 lambda 链与内联让产物变小（bytes
-#       5087 → 4820、maxline 758 → 623、longlines 7 → 6）。
-# M35 Nat 表示：Base.List 依赖 Base.Nat，split 产物每个单元多一行 `open Base_dNat`；
-#       firstTwo 的 length 由 Nat 度量经隐式提升回到 Int（共享同一 int 表示）。
-#       按实测 bytes 4820 → 4880、lines 138 → 142。
-# C35 split 依赖模型（无 open 链 + 跨单元全限定）：每个单元不再 `open` 所有前序单元，
-#       lines 大幅下降（142 → 82）；跨单元引用变成 `Unit.name` 全限定，长行变长
-#       （maxline 623 → 810、longlines 6 → 8）。ctorcount 口径同步扩到 `Unit.C_`
-#       形态（nix/metrics.sh），值仍是 20——匹配臂数量不变。
-#       按实测 bytes 4880 → 4295。
-# 漂移重标定（M38 基线之后合入的 elab/instance/effect 线，2026-11-08 复核）：
-#       夹具源码（test/corpus/codegen）与 main hook 生成文本均未变，但夹具模块产物
-#       bytes 4462 → 4458、maxline 882 → 878（其余指标不变，即恰好一行少 4 字符）。
-#       复核证据：用本任务开始前的二进制（HEAD 的 result）重跑夹具，产物与本任务后的
-#       编译器逐字节一致（同为 4458/878）⇒ 漂移早于本批改动、非本批引入；夹具
-#       Core.ml 的 label 分派与 Fancy/Effects 的实例字典形态是候选来源。按实测重标定。
-# M41（构造子族限定命名 + base Nil/Cons 统一）：Row/Vec 构造子改名后 codegen
-#       的构造子 OCaml 名变短（C_Base_dEff_dRow_dCons 等），夹具模块产物的最长行
-#       与长行数下降：按实测 maxline 878 → 823、longlines 7 → 5、bytes 4458 → 4215（其余指标不变）。
-# 漂移复核（Float/FromString 分支，2026-11-09）：用本任务开始前的二进制
-#       （HEAD 的 result）与 clean HEAD worktree 分别重跑夹具，产物同为 4233 bytes
-#       （其余指标同上），即 +18 字节漂移早于本任务、非 Float 改动引入；按实测把
-#       bytes 重标定为 4233。
-# 重标定（2026-11-14，`#line` 注入：`Codegen.Term.genGroup/genDef` 在每个绑定前写
-#       `# <行> "<包相对路径>"`，让 DWARF 直接指向 `.vuna`）：夹具模块产物结构变化——
-#       每个绑定前多 1 行（`# <行> "<文件>"` 指令，自成一行），指令文本计入字节。
-#       按实测：bytes 4182 → 4523、lines 80 → 98、maxline 823（`let rec` 与绑定仍在同一行），
-#       longlines 6（不变）、letrec 1（口径改为行首匹配，
-#       `nix/metrics.sh` 同步）、strcat 1 / eqint 0 / zeroarg 0 / ctorcount 17（不变）。
-#       `#line` 路径是包相对（`app/Main.vuna` / `Core.vuna`），跨机器可复现。
 files =4
 bytes =4523
 lines =98

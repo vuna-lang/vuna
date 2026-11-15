@@ -101,7 +101,7 @@ case "$mode" in
     need readelf "Install binutils (it is in the default devShell)."
     bins=$(find "$outdir" -type f -perm -u+x -maxdepth 3 2>/dev/null | head -3 || true)
     if [ -z "$bins" ]; then
-      # `--no-compile` 不再产出可执行文件：退化成检查产物里的 `#line` 指令。
+      # `--no-compile` 只产出检查产物（无可执行文件）：退化成检查产物里的 `#line` 指令。
       mls=$(find "$outdir" -maxdepth 1 -name '*.ml' -type f | head -20)
       [ -n "$mls" ] || { echo "obs: no executable or .ml under $outdir (run 'vuna build' first)" >&2; exit 2; }
       grep -hE '^# [0-9]+ "' $mls | head -20

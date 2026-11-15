@@ -10,8 +10,8 @@
 let
   inherit (pkgs) lib;
 
-  # 所有 stage 产物共享的派生形状；build 脚本逐字保留旧的 runCommand 内容，
-  # 以便 vuna-seed / vuna-compiler / vuna 的 drvPath 与重构前一致。
+  # 所有 stage 产物共享的派生形状；build 脚本内容决定 drvPath，改动会改变
+  # vuna-seed / vuna-compiler / vuna 的派生哈希。
   mkStage =
     {
       name,
@@ -32,7 +32,7 @@ let
 
   # stage 0：提交入库的多文件信任锚点种子，用 seed/build.sh 构建。
   # base 与可执行文件按「可执行文件相对布局」安装（$out/base），无 manifest 的
-  # 单文件由 vuna-seed 直接编译时能找到 base（M26）。
+  # 单文件由 vuna-seed 直接编译时能找到 base。
   vuna-seed = mkStage {
     name = "vuna-seed-${version}";
     description = "vuna seed compiler (stage 0, multi-file seed)";
@@ -89,7 +89,7 @@ let
     tools = shellTools;
   };
 
-  # M33：生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
+  # 生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
   vuna-perf = import ./perf.nix {
     inherit pkgs;
     tools = shellTools;

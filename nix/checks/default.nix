@@ -147,7 +147,7 @@ in
   };
 
 
-  # M34.6：编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
+  # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
   vuna-compiler-growth = mkCheck {
     name = "vuna-compiler-growth";
@@ -252,7 +252,7 @@ in
     script = ./context-budget.sh;
   };
 
-  # M30：VSCode 扩展的离线自检。srcs 显式列出扩展的提交文件，避免把 dev 用
+  # VSCode 扩展的离线自检。srcs 显式列出扩展的提交文件，避免把 dev 用
   # node_modules 带进 Nix store；只校验已构建的 dist/（重新构建见 vscode/README）。
   vscode-ext = mkCheck {
     name = "vuna-vscode-ext";
@@ -301,8 +301,8 @@ in
   };
 
 
-  # 诊断位置门禁（诊断 v2 P0）：结构化诊断必须有主 span；没有源码可指的码只能
-  # 逐码登记在 nix/diag-located.allow（初始基线，只减不增）。
+  # 诊断位置门禁：结构化诊断必须有主 span；没有源码可指的码只能
+  # 逐码登记在 nix/diag-located.allow（基线，只减不增）。
   diag-located = mkCheck {
     name = "vuna-diag-located";
     srcs = [
@@ -323,7 +323,7 @@ in
     script = ./diag-located.sh;
   };
 
-  # 诊断文案规范门禁（D7.9）：消息模板风格统一（句号/大小写/空白/占位符）。
+  # 诊断文案规范门禁：消息模板风格统一（句号/大小写/空白/占位符）。
   diag-style = mkCheck {
     name = "vuna-diag-style";
     srcs = [
@@ -429,7 +429,7 @@ in
     script = ./vuna-obs-overhead.sh;
   };
 
-  # IR 边界（Track A 第一步）：Core → IR → OCaml 的单一链路。
+  # IR 边界：Core → IR → OCaml 的单一链路。
   # `Vuna.Compiler.Ir*` 不得 import Core/Elab/Intrinsics/Codegen；文本生成层
   # （Codegen 门面与 Decl/Term/Assembly）不得 import Core/Elab/Intrinsics，唯一例外是
   # `Codegen/Lower.vuna`（Core→IR 的唯一入口）；Split 必须路由到 Lower；生成层必须消费 IR。

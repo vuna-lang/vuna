@@ -7,7 +7,7 @@
 // （与 REPL server / LSP 同一套帧层）。CDP 客户端（Chrome DevTools frontend）要的是
 // HTTP `/json/version`、`/json/list` + WebSocket：握手需要 `Sec-WebSocket-Accept` =
 // base64(SHA-1(key + GUID))。vuna 语言层没有 SHA-1/base64，也不该为一个桥在 TCB 里造
-// 密码学（O11 / debt D83），所以握手与帧编解码放在这个 Node 脚本里，vuna 侧保持干净的
+// 密码学（debt D83），所以握手与帧编解码放在这个 Node 脚本里，vuna 侧保持干净的
 // JSON-RPC 传输。
 //
 // 架构（每个 WS 连接一个 vuna 进程；因为 serve 是单连接串行语义）：

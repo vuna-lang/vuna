@@ -1,5 +1,5 @@
 #!/bin/sh
-# checks.vscode-ext：VSCode 扩展的离线自检（M30）。
+# checks.vscode-ext：VSCode 扩展的离线自检。
 #
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已按 fileset 暂存的工作树，
 # $1 是输出目录，node 由 nativeBuildInputs 注入。只校验已提交的 dist/ 与清单——
