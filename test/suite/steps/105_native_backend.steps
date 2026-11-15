@@ -60,6 +60,13 @@ run: sh -c '"$TMPDIR/traps-todo/bin/traps" 2>&1'
 exit: 2
 out-equals: vuna: runtime error: TODO: later
 
+# 7) 数组越界：trap 文本与 OCaml 报告器首行一致（native 没有位置行），exit 2。
+run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/arr-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/arr-out/bin/arr" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
+
 # 7) dbg! 的运行时原语：关闭时返回 43 且不求值。
 run: sh -c 'd="$TMPDIR/dbg"; mkdir -p "$d/app"; printf "[package]\nname = \"dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let _ = dbg! \"x\" in 43\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dbg-out" "$d"'
 exit: 0

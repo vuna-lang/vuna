@@ -1,0 +1,6 @@
+import Base.Array
+import Base.List
+import Base.Nat
+
+main : Int
+main = foldl (\acc => \x => acc + x) 0 (toList (make (natFromInt 4) 7))

@@ -1,0 +1,4 @@
+import Base.Array
+
+main : Int
+main = arrayGet (arrayGet (fromList [fromList [1, 2], fromList [3, 4]]) 1) 0

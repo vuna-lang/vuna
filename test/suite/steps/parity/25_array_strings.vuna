@@ -1,0 +1,5 @@
+import Base.Array
+import Base.String
+
+main : String
+main = join "," (toList (fromList ["a", "b", "c"]))

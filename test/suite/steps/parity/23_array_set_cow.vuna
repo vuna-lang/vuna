@@ -1,0 +1,10 @@
+import Base.Array
+
+a : Array Int
+a = fromList [1, 2, 3]
+
+b : Array Int
+b = arraySet a 1 20
+
+main : Int
+main = arrayGet a 1 + arrayGet b 1 * 100

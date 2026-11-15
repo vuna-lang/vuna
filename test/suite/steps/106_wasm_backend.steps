@@ -84,7 +84,14 @@ run: sh -c 'cd "$TMPDIR/traps-todo" && wasmtime run -W gc=y -W function-referenc
 exit: 2
 out-equals: vuna: runtime error: TODO: later
 
-# 9) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
+# 9) 数组越界：trap 文本与 OCaml 报告器首行一致（wasm 没有位置行），exit 2。
+run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arr-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/arr-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
+
+# 10) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
 run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'
 exit: 2
 out-contains: --target ocaml|wasm|native
