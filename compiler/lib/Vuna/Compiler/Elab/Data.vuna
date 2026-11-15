@@ -29,7 +29,10 @@ elabCtor globals fam arity famLevel ec c = case c of
         Just k => k
         Nothing => TType levelZero
       tyExpr2 = if hasFamParams tyExpr then tyExpr else prependFamParams famKind tyExpr csp
-    in Vuna.Compiler.Common.bind (checkType (append globals (Base.HashMap.toList (ecGlobalsTbl ec))) emptyCtx ec tyExpr2) (\pk => case pk of
+      -- globals 列表在这里是只读的，一次构造给两次检查复用（原先每个构造子从索引表
+      -- 重建两遍，代价是 O(#globals)）。
+      gl = append globals (Base.HashMap.toList (ecGlobalsTbl ec))
+    in Vuna.Compiler.Common.bind (checkType gl emptyCtx ec tyExpr2) (\pk => case pk of
       Pair tyTerm0 (Pair sort ec1) =>
         let
           tyTerm = zonkTerm ec1 0 tyTerm0
@@ -38,7 +41,7 @@ elabCtor globals fam arity famLevel ec c = case c of
             if head /= fam then tcErr2 csp (CtorDoesNotReturn (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else if length args /= arity then tcErr2 csp (CtorWrongIndices (ctorDisplayName cname) fam) (ctorDisplayName cname) fam
             else Vuna.Compiler.Common.bind
-              (checkCtorFieldSorts (append globals (Base.HashMap.toList (ecGlobalsTbl ec1))) emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
+              (checkCtorFieldSorts gl emptyCtx ec1 arity famLevel cname csp (countTelePis tyTerm) tyExpr2)
               (\_ => OkC (Pair (DtCtor cname fam (teleOfType tyTerm) tyTerm (Just csp)) ec1))
     )
 
@@ -258,28 +261,33 @@ sameCtorSet expected actual = length expected == length actual && allMem expecte
 -- via-field 必须落到自动去装箱的单字段包装上（data / record 同等）。
 -- | 遍历 data 声明，校验带 `deriving via` 的声明确实是自动去装箱的单字段包装；
 -- 违规报 `DerivingViaUnboxedRequired`。
+-- 去装箱判定（候选集 + 环检测）与 datas 相关但与具体声明无关：整趟只算一次。
 checkViaDataDecls : List (Pair Decl Span) -> List DtData -> Check Int
-checkViaDataDecls [] datas = OkC 0
-checkViaDataDecls ((Pair d sp) :: rest) datas = case d of
+checkViaDataDecls decls datas =
+  checkViaDataDeclsGo decls datas (unboxedFamilySet datas) (unboxedInfoOf datas)
+
+checkViaDataDeclsGo : List (Pair Decl Span) -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Check Int
+checkViaDataDeclsGo [] datas fams info = OkC 0
+checkViaDataDeclsGo ((Pair d sp) :: rest) datas fams info = case d of
   DData dname params kind ctors derivings viaField repr lin dsp2 =>
     if viaField then tcErr0 dsp2 DerivingViaOnlyRecord
-    else if reprIsAlias repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprAliasInvalid
-    else checkViaDataDecls rest datas
+    else if reprIsAlias repr && not (memName dname fams) then tcErr0 dsp2 ReprAliasInvalid
+    else checkViaDataDeclsGo rest datas fams info
   -- record 声明不再降级成 DData，via-field / transparent 的校验在本分支完成。
   DRecord dname params fields derivings viaField repr lin dsp2 =>
-    if reprIsAlias repr && not (memName dname (unboxedFamilySet datas)) then tcErr0 dsp2 ReprAliasInvalid
-    else if viaField then if viaFieldOk repr dname datas then checkViaDataDecls rest datas
+    if reprIsAlias repr && not (memName dname fams) then tcErr0 dsp2 ReprAliasInvalid
+    else if viaField then if viaFieldOk repr dname datas fams info then checkViaDataDeclsGo rest datas fams info
     else tcErr0 dsp2 DerivingViaUnboxedRequired
-    else checkViaDataDecls rest datas
+    else checkViaDataDeclsGo rest datas fams info
   -- `transparent` 是显式声明，必须可满足（单保留字段、无环；判据与 codegen 同源）。
-  _ => checkViaDataDecls rest datas
+  _ => checkViaDataDeclsGo rest datas fams info
 
 -- | `deriving via field` 的合法性看声明档位：transparent/auto 看形状（auto 走自动推断），
 -- opaque 恒为装箱 ⇒ 直接拒绝。
-viaFieldOk : ReprTier -> String -> List DtData -> Bool
-viaFieldOk ReprAlias dname datas = viaShapeOk dname datas
-viaFieldOk ReprAuto dname datas = viaShapeOk dname datas
-viaFieldOk ReprBoxed _ _ = False
+viaFieldOk : ReprTier -> String -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Bool
+viaFieldOk ReprAlias dname datas fams info = viaShapeOkWith dname datas fams info
+viaFieldOk ReprAuto dname datas fams info = viaShapeOkWith dname datas fams info
+viaFieldOk ReprBoxed _ _ _ _ = False
 
 -- | `ReprAlias` 判定（不引入 Eq 实例）。
 reprIsAlias : ReprTier -> Bool
@@ -290,7 +298,10 @@ reprIsAlias _ = False
 -- 字典委托按 `field : F params` 替换类参数，不处理前面还有擦除字段的依赖类型。
 -- | via 是否可用：该 data 属去装箱族，且唯一保留字段紧跟族参数（下标等于参数个数）。
 viaShapeOk : String -> List DtData -> Bool
-viaShapeOk dname datas = if memName dname (unboxedFamilySet datas) then case lookupUnboxedInfo dname (unboxedInfoOf datas) of
+viaShapeOk dname datas = viaShapeOkWith dname datas (unboxedFamilySet datas) (unboxedInfoOf datas)
+
+viaShapeOkWith : String -> List DtData -> List String -> List (Pair String (Pair DtCtor Int)) -> Bool
+viaShapeOkWith dname datas fams info = if memName dname fams then case lookupUnboxedInfo dname info of
   Just (Pair c idx) => case findDtData dname datas of
     Just d => idx == length d.dtDataParams
     Nothing => False
