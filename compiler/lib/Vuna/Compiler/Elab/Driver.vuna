@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Driver where
 -- Vuna.Compiler.Elab.Driver：精化入口与程序组装：签名 → data/trait/instance → 定义体 → zonk/终止性检查 → DtProgram；
 -- 以及目标（goal）收集与未解元变量的诊断（zonkGoal/goalsOfProgram/elabProgram*）。
 -- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+import Base.Sort
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -784,7 +785,10 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
                       (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True)
                       (clausesTblOf decls)
                   _ = dbg! "sigs-elab-done"
-                in Vuna.Compiler.Common.bind (checkAllDefined sigs globals decls) (\_ => Vuna.Compiler.Common.bind (elabBodies decls globals [] [] ec2b) (\q => case q of
+                in Vuna.Compiler.Common.bind (checkAllDefined sigs globals decls) (\_ => Vuna.Compiler.Common.bind (obsCheck "vuna.elab.bodies" (\_ => elabBodies decls globals [] [] ec2b)) (\q => case q of
+                  -- 观测：逐定义精化是冷 check 的最大单项（约一半），单独包一个跨度
+                  -- （`vuna.elab` 仍覆盖整段，本 span 是它的子区间；两者并存，summarize
+                  -- 分别汇总）。`obsCheck` 关闭时只付一次 `Lazy.force` + 分支。
                   Pair defs0 ec3a =>
                     let
                       -- M23：字典目标可能在「类参数刚被解出」之后才有唯一实例，而
@@ -1235,14 +1239,10 @@ dictCandidatesOf ec shown =
 -- 诊断候选按名字排序：实例表是 HashMap 桶序，直接输出会让同一错误在不同进程/GC 后
 -- 产生不同 JSON 顺序。排序只影响展示，不影响实例搜索。
 sortCandidates : List Candidate -> List Candidate
-sortCandidates [] = []
-sortCandidates (c :: rest) = insertCandidate c (sortCandidates rest)
+sortCandidates cs = sortBy candidateLe cs
 
-insertCandidate : Candidate -> List Candidate -> List Candidate
-insertCandidate c [] = [c]
-insertCandidate (Candidate text sp reason) ((Candidate text2 sp2 reason2) :: xs) =
-  if text <= text2 then Candidate text sp reason :: Candidate text2 sp2 reason2 :: xs
-  else Candidate text2 sp2 reason2 :: insertCandidate (Candidate text sp reason) xs
+candidateLe : Candidate -> Candidate -> Bool
+candidateLe (Candidate text _ _) (Candidate text2 _ _) = text <= text2
 
 -- | 构造实例候选（带声明 span 与头/目标拒绝原因）。
 instCandidate : String -> DtInst -> Candidate

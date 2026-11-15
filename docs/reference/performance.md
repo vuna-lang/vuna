@@ -82,6 +82,14 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
    `Compile.checkPackage` 的 `check-lib-skip` 永不成立，每轮都补一遍 lib check。补两个
    import 后 `collectSigs-done` 从 2 次降到 1 次。**规则**：入口 import 集合必须覆盖
    `[export]` 全部模块，见该文件顶部注释。
+   **2026-11 追加（判据收口）**：完整性判据从「lib 根下全部 `.vuna`」改为
+   **`[export].modules`**（`Compile.exportedOwnOf`），读侧 `goPkgs` 同口径
+   （`exportedDepModsOf`：导出面 ⊆ 写侧顺序即可）。这样未导出的内部模块既不参与写侧
+   判据、也不阻塞依赖方复用；代价是不变量从「入口 == lib 根」放宽成「入口 ⊇ 导出面」，
+   仍然是硬约束（少一个导出模块，冷 check 会退回两遍，日志可见 `iface-skip partial
+   ... required=88`）。同轮删掉两处死计算：`summaryCheckExeParts` / `summaryCheckLibParts`
+   原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 忽略该参数——
+   每次 check 白跑一遍整闭包源扫描（`ifaceModsEff`）。
 2. **codegen 分组按 SCC 线性过滤全体定义**（`Codegen/Lower.appendGroups`）：每个单点 SCC
    都 `filter (memList …) env.lwDefs` ⇒ O(n²)。改为「环境里一次建 `lwDefTbl`、组内按成员名
    查表」；`recOkOfIn`/`spanOfIn` 同为逐名 `findDtDef` 线性扫，改成同一张表。
@@ -328,11 +336,16 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
   一律用无 debug 口径；单次 <50 µs 的条目仍需「同形规模合成探针」对比总时间。
   注意冷 `check compiler` 的 debug 膨胀**不是常数**（同窗口交替实测 22.2 s → 45.3 s，
   下一轮却 42.5 s → 23.0 s，loadavg 15–17），负载与开关同样重要。
-- **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 目前只有 `vuna.elab` / `vuna.codegen.check`
-  两个 span（`checks.vuna-obs-schema` 断言的是这两个），实测只覆盖 16.0 s / 21.6 s 墙钟；
-  `VUNA_OBS=3` 的 CPU 采样**没有调用点**（`dtp_obs_sample_start` 在生成运行时里完整，但
-  仓库内无人启动），trace 里 `vuna.sample.cpu` 为 0 条。阶段顺序仍只能靠
-  `--debug-perf`（冷 `check compiler` 约 37 万行）。
+- **结构化观测的覆盖与盲区**：`VUNA_OBS=1` 现在有 `vuna.elab`（含子段
+  `vuna.elab.bodies`）与 `vuna.codegen.check` 两个真实跨度，外加 `vuna.load` /
+  `vuna.resolve` / `vuna.iface.compute` / `vuna.iface.write` / `vuna.codegen.split` /
+  `vuna.cache.lookup` 六个 `Eff` 边界标记（`ph:"i"`，零宽度）与缓存三件套计数
+  （`vuna.counter.cache.hit|miss|write`，`ph:"C"`）。`checks.vuna-obs-schema` 逐项断言
+  这些名字（含计数至少一条）。**仍未接**：core 热路径计数（`vuna.counter.core.*` /
+  `vuna.counter.steps`，要改 `Core.Eval` 热路径，先量代价）与 `VUNA_OBS=3` 的 CPU 采样
+  调用点（`dtp_obs_sample_start` 在生成运行时里完整，但仓库内无人启动）。`Eff` 阶段的
+  **耗时**仍只能靠 `--debug-perf` 文本行（`iface-mods-phases` / `iface-write=…` 等），
+  trace 里只有顺序；冷 `check compiler` 的 debug 口径约 18.8 万行。
 - 用 `OCAMLRUNPARAM=s=...` 快速判断 GC 敏感性（注意：产物里 `Gc.set` 会覆盖环境变量，要
   比较不同 minor heap 大小得改代码重建）。
 - 阶段定位优先用阶段边界的 `dbg!`；逐定义观察直接看 `dbg!` 行；不要用「等大 case 跑完」

@@ -9,6 +9,7 @@ module Vuna.Compiler.Driver.Dt where
 -- base-only）；旧环境根 / 单文件原始模式的 `dtCheckFile` / `dtCompileFile` 已删除。
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
+import Base.Sort
 import Base.HostRow
 import Base.List
 import Base.String
@@ -82,21 +83,29 @@ dtLoad ctx entry =
     )
 
 -- M34.5 接口摘要（S1）：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
+--
+-- 阶段边界用**瞬时标记**（`vuna.load` / `vuna.resolve`）：`loadProject*` 是 `Eff` 动作，
+-- 不能被纯跨度包住（执行发生在 runner 里），时间轴上只能是零宽度点（规范 §2）；
+-- 与 `dbg!` 文本行并存（文本行是既有口径，steps 用例 grep 它）。
 dtLoadPartsForCheck : PackageContext -> String -> Eff hostRow (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadPartsForCheck ctx entry = do
+  _ <- obsMarkEff "vuna.load"
   projectR <- loadProject ctx entry
-  pure (case projectR of
-    ErrC e => ErrC e
-    OkC project => resolveProjectWith (contextRelease ctx) project
-  )
+  case projectR of
+    ErrC e => pure (ErrC e)
+    OkC project => do
+      _ <- obsMarkEff "vuna.resolve"
+      pure (resolveProjectWith (contextRelease ctx) project)
 
 dtLoadModulesParts : PackageContext -> List String -> Eff hostRow (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadModulesParts ctx names = do
+  _ <- obsMarkEff "vuna.load"
   projectR <- loadProjectModules ctx names
-  pure (case projectR of
-    ErrC e => ErrC e
-    OkC project => resolveProjectWith (contextRelease ctx) project
-  )
+  case projectR of
+    ErrC e => pure (ErrC e)
+    OkC project => do
+      _ <- obsMarkEff "vuna.resolve"
+      pure (resolveProjectWith (contextRelease ctx) project)
 
 -- 声明序列的 check 尾部（入口与库包同一条精化路径）。
 -- | 从已加载声明跑完整检查。
@@ -998,14 +1007,9 @@ shiftedDepPrograms ifaces =
   else shiftedDepProgramsGo (nameSlotTbl names 0) ifaces
 
 -- 模块名排序（插入排序；依赖模块数 ~几十，与哈希表相比更省常数）。
+-- 字符串升序（稳定）：与 `Driver/Compile` 的同名函数收敛到 `Base.Sort.sortBy`。
 sortNames : List String -> List String
-sortNames [] = []
-sortNames (x :: rest) = insertName x (sortNames rest)
-
-insertName : String -> List String -> List String
-insertName x [] = [x]
-insertName x (y :: rest) =
-  if x <= y then Base.List.Cons x (Base.List.Cons y rest) else Base.List.Cons y (insertName x rest)
+sortNames = sortBy (\a, b => a <= b)
 
 -- 排序后去重（重名意味着两个模块抢同一个段 ⇒ 静默撞号，调用方按内部错误拒绝）。
 -- 累加器版本：只在结构子项（列表尾）上递归，SCT 可证终止；比较「最后保留的那个名字」。
@@ -1046,13 +1050,14 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
     allIfaces = append depIfaces cleanIfaces
   in do
+    _ <- obsMarkEff "vuna.load"
     projectR <- loadProjectWithPreloaded ctx entry preloaded
-    pure (case projectR of
-      ErrC e => ErrC e
+    case projectR of
+      ErrC e => pure (ErrC e)
       OkC project => case filterProjectToImports (contextPackageName ctx) project of
-        Pair filtered mods =>
-          resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered
-    )
+        Pair filtered mods => do
+          _ <- obsMarkEff "vuna.resolve"
+          pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered)
 
 -- M34.6（5b）：termAux 的 record 降级 / deriving 展开结果可跨请求复用。
 --
@@ -1195,6 +1200,9 @@ dtFinishPackage loaderWarns depCps cleanCps prog parts next =
 -- codegen 检查只跑**本次新精化**的 datas/defs（`dtCheckScoped`）——干净模块在它们
 -- 自己的接口写回时就跑过整包检查，依赖包同理。整包 `checkDtProgramOf` 会把这 65 个
 -- 模块再检查一遍（编辑一个模块后 1.4s 里的大头），对增量路径是纯重复。
+-- 观测：整段的阶段 span 由 `dtCheckScoped` 内的 `vuna.codegen.check` 提供（组装本身
+-- 只是列表 append，不单独计时）——这里再包一层同名 span 只会让 summarize 把同一阶段
+-- 算两遍（嵌套同名的 count / total 都翻倍）。
 dtFinishPackageScoped : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next =
   let
@@ -1229,12 +1237,15 @@ dtFinishScoped depCps cleanCps prog cache =
 -- `codegen` 检查的收窄版：`allDatas` 是渲染/构造子表的完整视图（依赖 + 干净 + 本次），
 -- `unitDatas` 只生成本次精化模块的类型声明；检查链（名字护栏 / 擦除 / SCC / 生成）只跑
 -- `defs`。每个 def 的检查只看自身项与全部数据族，因此对本文件的诊断语义与整包检查一致。
+-- 观测：这是增量路径上唯一没被 `vuna.elab` / `vuna.codegen.check` 覆盖的检查段（`dbg!`
+-- 文本行在调用方），整段包进 `vuna.codegen.check`；两个调用点（`dtFinishPackageScoped` /
+-- `dtFinishScoped`）因此各得一个 span，不重复包。
 dtCheckScoped : List DtData -> List DtData -> List DtDef -> Check Int
 dtCheckScoped allDatas unitDatas defs =
   let
     env = mkLwEnv allDatas defs ""
-  in Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))
-    (\unitIr => Vuna.Compiler.Common.bind (genUnitParts noQual (lwEnvShared env) unitIr) (\_ => OkC 0))
+  in obsCheck "vuna.codegen.check"
+    (\_ => Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas)) (\unitIr => Vuna.Compiler.Common.bind (genUnitParts noQual (lwEnvShared env) unitIr) (\_ => OkC 0)))
 
 -- M34.6（5a）：单文件（LSP buffer / REPL 所在模块）的增量精化。
 --   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；
@@ -1292,7 +1303,8 @@ dtCheckSourceChecked ctx label source = do
   projectR <- loadModuleSource ctx label source
   case projectR of
     ErrC e => pure (ErrC e)
-    OkC project =>
+    OkC project => do
+      _ <- obsMarkEff "vuna.resolve"
       dtCheckPartsWithProgram (contextPackageName ctx)
         (pure (resolveProjectWith (contextRelease ctx) project))
 
@@ -1519,23 +1531,25 @@ materializedOwn pkg parts ifaces =
 
 dtLoadPartsWithIfaces : PackageContext -> String -> List ModuleIface -> Eff hostRow (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadPartsWithIfaces ctx entry ifaces = do
+  _ <- obsMarkEff "vuna.load"
   projectR <- loadProjectWithPreloaded ctx entry (modulesOfIfaces ifaces)
-  pure (case projectR of
-    ErrC e => ErrC e
+  case projectR of
+    ErrC e => pure (ErrC e)
     OkC project => case filterProjectToImports (contextPackageName ctx) project of
-      Pair filtered mods =>
-        resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered
-  )
+      Pair filtered mods => do
+        _ <- obsMarkEff "vuna.resolve"
+        pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered)
 
 dtLoadModulesPartsWithIfaces : PackageContext -> List String -> List ModuleIface -> Eff hostRow (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadModulesPartsWithIfaces ctx names ifaces = do
+  _ <- obsMarkEff "vuna.load"
   projectR <- loadProjectModulesWithPreloaded ctx names (modulesOfIfaces ifaces)
-  pure (case projectR of
-    ErrC e => ErrC e
+  case projectR of
+    ErrC e => pure (ErrC e)
     OkC project => case filterProjectToImports (contextPackageName ctx) project of
-      Pair filtered mods =>
-        resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered
-  )
+      Pair filtered mods => do
+        _ <- obsMarkEff "vuna.resolve"
+        pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf ifaces mods) filtered)
 
 export dtCheckPackageWithIfacesParts : PackageContext -> String -> List ModuleIface -> Eff hostRow (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckPackageWithIfacesParts ctx entry ifaces = do
@@ -1553,13 +1567,14 @@ dtLoadModulesPartsIncremental ctx names depIfaces cleanIfaces =
     preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
     allIfaces = append depIfaces cleanIfaces
   in do
+    _ <- obsMarkEff "vuna.load"
     projectR <- loadProjectModulesWithPreloaded ctx names preloaded
-    pure (case projectR of
-      ErrC e => ErrC e
+    case projectR of
+      ErrC e => pure (ErrC e)
       OkC project => case filterProjectToImports (contextPackageName ctx) project of
-        Pair filtered mods =>
-          resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered
-    )
+        Pair filtered mods => do
+          _ <- obsMarkEff "vuna.resolve"
+          pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered)
 
 export dtCheckLibraryPackageIncrementalParts : PackageContext -> List String -> List ModuleIface -> List ModuleIface -> Eff hostRow (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckLibraryPackageIncrementalParts ctx names depIfaces cleanIfaces = do
@@ -1583,16 +1598,20 @@ dtCheckLibraryPackageWithIfacesParts ctx names ifaces = do
 
 -- 只精化本包声明、从接口合并依赖产物，再走同一条逐模块 split；返回 codegen 文件 +
 -- CheckedPackage（构建路径也写接口摘要）。
+-- 观测：`vuna.codegen.split` 的进入/退出各一个瞬时标记（`Eff` 动作不能被纯跨度包住）。
 export dtSplitProjectWithIfaces : PackageContext -> String -> Bool -> List ModuleIface -> Eff hostRow (Check (Pair (List SplitFile) CheckedPackage))
 dtSplitProjectWithIfaces ctx entry printResult ifaces = do
+  _ <- obsMarkEff "vuna.codegen.split"
   partsR <- dtLoadPartsWithIfaces ctx entry ifaces
-  case partsR of
+  r <- case partsR of
     ErrC e => pure (ErrC e)
     OkC resolved => case shiftedDepPrograms (materializedDeps (contextPackageName ctx) (secondOf resolved) ifaces) of
       ErrC e => pure (ErrC e)
       OkC deps =>
         dtSplitPartsOursWith ctx entry (secondOf resolved) deps printResult
           (concatMap miDefLocsOf ifaces)
+  _ <- obsMarkEff "vuna.codegen.split"
+  pure r
 
 dtSplitPartsOursWith : PackageContext -> String -> Pair (List Decl) (List Module) -> List CachedProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (Pair (List SplitFile) CheckedPackage))
 
