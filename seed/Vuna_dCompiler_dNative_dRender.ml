@@ -50,51 +50,52 @@ let v_Vuna_dCompiler_dNative_dRender_drenderInstr = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IPush (dtb__15) -> ("push " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__15))
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ISyscall -> "syscall"
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRet -> "ret"
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICall (dtb__16) -> ("call " ^ dtb__16)
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJcc (dtb__17, dtb__18) -> (String.concat "" [dtb__17; " "; dtb__18])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJmp (dtb__19) -> ("jmp " ^ dtb__19)
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILabel (dtb__20) -> (dtb__20 ^ ":")
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICallReg (dtb__16) -> ("call " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__16))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICall (dtb__17) -> ("call " ^ dtb__17)
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJcc (dtb__18, dtb__19) -> (String.concat "" [dtb__18; " "; dtb__19])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJmp (dtb__20) -> ("jmp " ^ dtb__20)
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILabel (dtb__21) -> (dtb__21 ^ ":")
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRepeCmpsb -> "repe cmpsb"
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRepMovsb -> "rep movsb"
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IDivUnsigned (dtb__21) -> ("div " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__21))
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IDiv (dtb__22) -> ("idiv " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__22))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IDivUnsigned (dtb__22) -> ("div " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__22))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IDiv (dtb__23) -> ("idiv " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__23))
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICqo -> "cqo"
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_INeg (dtb__23) -> ("neg " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__23))
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ISetcc (dtb__24, dtb__25) -> (String.concat "" [dtb__24; " "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dreg8Text dtb__25)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ITest (dtb__26, dtb__27) -> (String.concat "" ["test "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__26); ", "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__27)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICmp (dtb__28, dtb__29) -> (if (v_Vuna_dCompiler_dNative_dRender_disMemOperand dtb__28) then (String.concat "" ["cmp qword ptr "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__28); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__29)]) else (String.concat "" ["cmp "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__28); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__29)]))
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IBinReg (dtb__30, dtb__31, dtb__32) -> (((v_Vuna_dCompiler_dNative_dRender_drenderBinReg dtb__30) dtb__31) dtb__32)
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IBin (dtb__33, dtb__34) -> (String.concat "" [dtb__33; " rax, "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__34)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILeaMem (dtb__35, dtb__36, dtb__37) -> (String.concat "" ["lea "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__35); ", "; ((v_Vuna_dCompiler_dNative_dRender_dmemText dtb__36) dtb__37)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILea (dtb__38, dtb__39) -> (String.concat "" ["lea "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__38); ", [rip + "; dtb__39; "]"])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_INeg (dtb__24) -> ("neg " ^ (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__24))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ISetcc (dtb__25, dtb__26) -> (String.concat "" [dtb__25; " "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dreg8Text dtb__26)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ITest (dtb__27, dtb__28) -> (String.concat "" ["test "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__27); ", "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__28)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ICmp (dtb__29, dtb__30) -> (if (v_Vuna_dCompiler_dNative_dRender_disMemOperand dtb__29) then (String.concat "" ["cmp qword ptr "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__29); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__30)]) else (String.concat "" ["cmp "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__29); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__30)]))
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IBinReg (dtb__31, dtb__32, dtb__33) -> (((v_Vuna_dCompiler_dNative_dRender_drenderBinReg dtb__31) dtb__32) dtb__33)
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IBin (dtb__34, dtb__35) -> (String.concat "" [dtb__34; " rax, "; (v_Vuna_dCompiler_dNative_dRender_drenderOperand dtb__35)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILeaMem (dtb__36, dtb__37, dtb__38) -> (String.concat "" ["lea "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__36); ", "; ((v_Vuna_dCompiler_dNative_dRender_dmemText dtb__37) dtb__38)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_ILea (dtb__39, dtb__40) -> (String.concat "" ["lea "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__39); ", [rip + "; dtb__40; "]"])
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovzxAl -> "movzx rax, al"
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovzx (dtb__40, dtb__41) -> (String.concat "" ["movzx "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__40); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__41)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovByteRegOp (dtb__42, dtb__43) -> (String.concat "" ["mov "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__42); ", "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dreg8Text dtb__43)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovByteOp (dtb__44, dtb__45) -> (String.concat "" ["mov "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__44); ", "; (bi_strFromInt dtb__45)])
-  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMov (dtb__46, dtb__47) -> ((v_Vuna_dCompiler_dNative_dRender_drenderMov dtb__46) dtb__47)
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovzx (dtb__41, dtb__42) -> (String.concat "" ["movzx "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dregText dtb__41); ", "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__42)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovByteRegOp (dtb__43, dtb__44) -> (String.concat "" ["mov "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__43); ", "; (Vuna_dCompiler_dNative_dModel.v_Vuna_dCompiler_dNative_dModel_dreg8Text dtb__44)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMovByteOp (dtb__45, dtb__46) -> (String.concat "" ["mov "; (v_Vuna_dCompiler_dNative_dRender_drenderByteOp dtb__45); ", "; (bi_strFromInt dtb__46)])
+  | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMov (dtb__47, dtb__48) -> ((v_Vuna_dCompiler_dNative_dRender_drenderMov dtb__47) dtb__48)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 111 "Vuna/Compiler/Native/Render.vuna"
+# 112 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_dpadOct = (fun c -> ((fun a -> ((fun b -> ((fun d -> (String.concat "" [(bi_strFromInt a); (bi_strFromInt b); (bi_strFromInt d)])) ((c - (a * 64)) - (b * 8)))) ((if 8 = 0 then failwith "division by zero" else c / 8) - (a * 8)))) (if 64 = 0 then failwith "division by zero" else c / 64)))
 
-# 106 "Vuna/Compiler/Native/Render.vuna"
+# 107 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_dasmEscapeChar = (fun mc0 -> (if (mc0 = 34) then "\\\"" else (if (mc0 = 92) then "\\\\" else (if (if (mc0 >= 32) then (mc0 <= 126) else false) then (Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil))) else ("\\" ^ (v_Vuna_dCompiler_dNative_dRender_dpadOct mc0))))))
 
-# 119 "Vuna/Compiler/Native/Render.vuna"
+# 120 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_dasmString = (fun s -> (Base_dList.dtp_pack ((Base_dList.v_Base_dList_dconcatMap (fun c -> (Base_dList.dtp_unpack (v_Vuna_dCompiler_dNative_dRender_dasmEscapeChar c)))) (Base_dList.dtp_unpack s))))
 
-# 122 "Vuna/Compiler/Native/Render.vuna"
+# 123 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_drenderRodata = (fun d -> (Base_dList.C_Base_dList_dList_Cons (((d).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeRodata_nrLabel ^ ":"), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dNative_dRender_dindent (String.concat "" [".ascii \""; (v_Vuna_dCompiler_dNative_dRender_dasmString (d).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeRodata_nrText); "\""])), Base_dList.C_Base_dList_dList_Nil)))))
 
-# 126 "Vuna/Compiler/Native/Render.vuna"
+# 127 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_drenderStrLit = (fun l -> (Base_dList.C_Base_dList_dList_Cons (((l).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeStrLit_nsLabel ^ ":"), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dNative_dRender_dindent (".quad " ^ (bi_strFromInt (bi_strLength (l).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeStrLit_nsText)))), (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dNative_dRender_dindent (String.concat "" [".ascii \""; (v_Vuna_dCompiler_dNative_dRender_dasmString (l).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeStrLit_nsText); "\""])), Base_dList.C_Base_dList_dList_Nil)))))))
 
-# 133 "Vuna/Compiler/Native/Render.vuna"
+# 134 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_drenderBss = (fun b -> ((fun alignLine -> ((fun dataLine -> ((Base_dList.v_Base_dList_dappend alignLine) ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList_Cons (((b).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeBss_nbLabel ^ ":"), Base_dList.C_Base_dList_dList_Nil))) dataLine))) (if ((b).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeBss_nbSize > 0) then (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dNative_dRender_dindent (".zero " ^ (bi_strFromInt (b).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeBss_nbSize))), Base_dList.C_Base_dList_dList_Nil)) else Base_dList.C_Base_dList_dList_Nil))) (if ((b).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeBss_nbAlign > 0) then (Base_dList.C_Base_dList_dList_Cons ((".align " ^ (bi_strFromInt (b).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeBss_nbAlign)), Base_dList.C_Base_dList_dList_Nil)) else Base_dList.C_Base_dList_dList_Nil)))
 
-# 140 "Vuna/Compiler/Native/Render.vuna"
+# 141 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_drenderFunc = (fun f -> ((fun global -> ((Base_dList.v_Base_dList_dappend ((Base_dList.v_Base_dList_dappend global) (Base_dList.C_Base_dList_dList_Cons (((f).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfLabel ^ ":"), Base_dList.C_Base_dList_dList_Nil)))) ((Base_dList.v_Base_dList_dmap (fun i -> (v_Vuna_dCompiler_dNative_dRender_dindent (v_Vuna_dCompiler_dNative_dRender_drenderInstr i)))) (f).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfBody))) (if ((f).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeFunc_nfLabel = Vuna_dCompiler_dNative_dAbi.v_Vuna_dCompiler_dNative_dAbi_dnativeEntryLabel) then (Base_dList.C_Base_dList_dList_Cons ((".globl " ^ Vuna_dCompiler_dNative_dAbi.v_Vuna_dCompiler_dNative_dAbi_dnativeEntryLabel), Base_dList.C_Base_dList_dList_Nil)) else Base_dList.C_Base_dList_dList_Nil)))
 
-# 149 "Vuna/Compiler/Native/Render.vuna"
+# 150 "Vuna/Compiler/Native/Render.vuna"
 let v_Vuna_dCompiler_dNative_dRender_drenderProgram = (fun p -> ((fun rodataLines -> ((fun rodataConstLines -> ((fun bssLines -> ((fun funcLines -> ((fun sections -> (((Base_dString.v_Base_dString_djoin "\n") sections) ^ "\n")) ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList_Cons (".intel_syntax noprefix", (Base_dList.C_Base_dList_dList_Cons (".section .rodata", Base_dList.C_Base_dList_dList_Nil))))) ((Base_dList.v_Base_dList_dappend rodataConstLines) ((Base_dList.v_Base_dList_dappend rodataLines) ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList_Cons (".section .bss", Base_dList.C_Base_dList_dList_Nil))) ((Base_dList.v_Base_dList_dappend bssLines) ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList_Cons (".section .text", Base_dList.C_Base_dList_dList_Nil))) ((Base_dList.v_Base_dList_dappend funcLines) (Base_dList.C_Base_dList_dList_Cons (".section .note.GNU-stack,\"\",@progbits", Base_dList.C_Base_dList_dList_Nil))))))))))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dNative_dRender_drenderFunc) (p).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeProgram_npFuncs))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dNative_dRender_drenderBss) (p).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeProgram_npBss))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dNative_dRender_drenderRodata) (p).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeProgram_npRodata))) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dNative_dRender_drenderStrLit) (p).Vuna_dCompiler_dNative_dModel.f_Vuna_dCompiler_dNative_dModel_dNativeProgram_npStrLits)))

@@ -66,17 +66,17 @@ let v_Vuna_dCompiler_dLoader_dFixity_daliasOf = (fun t op -> (match ((v_Vuna_dCo
 # 83 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dunknownFixityMsg = (fun op -> ((Vuna_dCompiler_dDiagnostics_dRn.v_Vuna_dCompiler_dDiagnostics_dRn_drnMsg (Vuna_dCompiler_dDiagnostics_dRn.C_Vuna_dCompiler_dDiagnostics_dRn_dRnErr_UnknownFixity (op))) (Base_dVec.C_Base_dVec_dVec_Cons (op, Base_dVec.C_Base_dVec_dVec_Nil))))
 
-# 89 "Vuna/Compiler/Loader/Fixity.vuna"
+# 88 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dfixityOf = (fun t c -> (match ((v_Vuna_dCompiler_dLoader_dFixity_dlookupFixity t) (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__11) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__11))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (if (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainIsBacktick then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = 9; Base_dPair.f_Base_dPair_dPair_second = 1 })) else ((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_donErrDiag (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithFallbackSpan (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainSpan)) (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC ((v_Vuna_dCompiler_dLoader_dFixity_dunknownFixityMsg (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp)))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 98 "Vuna/Compiler/Loader/Fixity.vuna"
+# 97 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dinfixTerm = (fun t c lhs rhs sp -> (if (v_Vuna_dCompiler_dLoader_dFixity_drenameMode t) then (if ((c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp = ">>") then (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("bind", sp)), (Base_dList.C_Base_dList_dList_Cons (lhs, (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_ELam ((Base_dList.C_Base_dList_dList_Cons ("_", Base_dList.C_Base_dList_dList_Nil)), rhs, sp)), Base_dList.C_Base_dList_dList_Nil)))), sp)) else (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (((v_Vuna_dCompiler_dLoader_dFixity_daliasOf t) (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp), sp)), (Base_dList.C_Base_dList_dList_Cons (lhs, (Base_dList.C_Base_dList_dList_Cons (rhs, Base_dList.C_Base_dList_dList_Nil)))), sp))) else (if (c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainIsBacktick then (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EBacktick ((c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp, lhs, rhs, sp)) else (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ((c).f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp, sp)), (Base_dList.C_Base_dList_dList_Cons (lhs, (Base_dList.C_Base_dList_dList_Cons (rhs, Base_dList.C_Base_dList_dList_Nil)))), sp)))))
 
-# 121 "Vuna/Compiler/Loader/Fixity.vuna"
+# 120 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_Vuna_dCompiler_dLoader_dFixity_dclimb = (fun fuel t minPrec lhs rest sp -> (if (fuel <= 0) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal "infix reorder fuel exhausted") else (match rest with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = lhs; Base_dPair.f_Base_dPair_dPair_second = Base_dList.C_Base_dList_dList_Nil }))
   | Base_dList.C_Base_dList_dList_Cons (dtb__12, dtb__13) -> (match ((v_Vuna_dCompiler_dLoader_dFixity_dfixityOf t) dtb__12) with
@@ -90,7 +90,7 @@ let rec v_Vuna_dCompiler_dLoader_dFixity_dclimb = (fun fuel t minPrec lhs rest s
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 251 "Vuna/Compiler/Loader/Fixity.vuna"
+# 250 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern = (fun t pat -> (match pat with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__18, dtb__19) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__18, dtb__19))))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__20) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__20))))
@@ -101,13 +101,13 @@ let rec v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern = (fun t pat -> (match 
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PRecord (dtb__31, dtb__32, dtb__33) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun p -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderRecPatField t) p))) dtb__32)) (fun fs -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PRecord (dtb__31, fs, dtb__33))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 270 "Vuna/Compiler/Loader/Fixity.vuna"
+# 269 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderRecPatField = (fun mc0 mc1 -> (match mc1 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__34; Base_dPair.f_Base_dPair_dPair_second = dtb__35 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) dtb__35)) (fun p2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = dtb__34; Base_dPair.f_Base_dPair_dPair_second = p2 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 107 "Vuna/Compiler/Loader/Fixity.vuna"
+# 106 "Vuna/Compiler/Loader/Fixity.vuna"
 let rec v_Vuna_dCompiler_dLoader_dFixity_dcollectChain = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EBacktick (dtb__36, dtb__37, dtb__38, dtb__39) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__37)) (fun l2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dcollectChain mc0) dtb__38)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__40; Base_dPair.f_Base_dPair_dPair_second = dtb__41 } -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = l2; Base_dPair.f_Base_dPair_dPair_second = (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainOp = dtb__36; f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainIsBacktick = true; f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainRhs = dtb__40; f_Vuna_dCompiler_dLoader_dFixity_dChainOp_chainSpan = dtb__39 }, dtb__41)) }))
@@ -119,7 +119,7 @@ let rec v_Vuna_dCompiler_dLoader_dFixity_dcollectChain = (fun mc0 mc1 -> (match 
 )))))
   | _ -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) mc1)) (fun e2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = e2; Base_dPair.f_Base_dPair_dPair_second = Base_dList.C_Base_dList_dList_Nil }))))
 ))
-# 139 "Vuna/Compiler/Loader/Fixity.vuna"
+# 138 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderChain = (fun t e -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dcollectChain t) e)) (fun p -> (match p with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__48; Base_dPair.f_Base_dPair_dPair_second = dtb__49 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((((((v_Vuna_dCompiler_dLoader_dFixity_dclimb ((2 * (Base_dList.v_Base_dList_dlength dtb__49)) + 2)) t) 0) dtb__48) dtb__49) (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dexprSpan e))) (fun q -> (match q with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__50; Base_dPair.f_Base_dPair_dPair_second = dtb__51 } -> (if ((Base_dList.v_Base_dList_dlength dtb__51) = 0) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__50)) else (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal "infix reorder left an operator"))
@@ -127,7 +127,7 @@ and v_Vuna_dCompiler_dLoader_dFixity_dreorderChain = (fun t e -> ((Vuna_dCompile
 )))
   | _ -> failwith "DT: impossible branch"
 ))))
-# 147 "Vuna/Compiler/Loader/Fixity.vuna"
+# 146 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInterp (dtb__52, dtb__53, dtb__54) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderInterpParts mc0) dtb__53)) (fun ps -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EInterp (dtb__52, ps, dtb__54))))))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EAnn (dtb__55, dtb__56, dtb__57) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__55)) (fun i2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__56)) (fun t2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EAnn (i2, t2, dtb__57))))))))
@@ -154,7 +154,7 @@ and v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr = (fun mc0 mc1 -> (match mc1 w
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__118, dtb__119) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__118, dtb__119))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 204 "Vuna/Compiler/Loader/Fixity.vuna"
+# 203 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderInterpParts = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__120, dtb__121) -> (match dtb__120 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPText (dtb__122) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderInterpParts mc0) dtb__121)) (fun ps -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dInterpPart_IPText (dtb__122)), ps))))))
@@ -164,74 +164,74 @@ and v_Vuna_dCompiler_dLoader_dFixity_dreorderInterpParts = (fun mc0 mc1 -> (matc
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
-# 212 "Vuna/Compiler/Loader/Fixity.vuna"
+# 211 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderBinds = (fun t binds -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderBind t) v))) binds))
-# 215 "Vuna/Compiler/Loader/Fixity.vuna"
+# 214 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderBind = (fun mc0 mc1 -> (match mc1 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__124; Base_dPair.f_Base_dPair_dPair_second = dtb__125 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) dtb__124)) (fun p2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__125)) (fun v2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = p2; Base_dPair.f_Base_dPair_dPair_second = v2 }))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 220 "Vuna/Compiler/Loader/Fixity.vuna"
+# 219 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderFields = (fun t fields -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderField t) v))) fields))
-# 223 "Vuna/Compiler/Loader/Fixity.vuna"
+# 222 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderField = (fun mc0 mc1 -> (match mc1 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__126; Base_dPair.f_Base_dPair_dPair_second = dtb__127 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__127)) (fun v2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = dtb__126; Base_dPair.f_Base_dPair_dPair_second = v2 }))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 227 "Vuna/Compiler/Loader/Fixity.vuna"
+# 226 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderClauses = (fun t clauses -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderClause t) v))) clauses))
-# 231 "Vuna/Compiler/Loader/Fixity.vuna"
+# 230 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderAlts = (fun t alts -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun a -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderAlt t) a))) alts))
-# 234 "Vuna/Compiler/Loader/Fixity.vuna"
+# 233 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderAlt = (fun mc0 mc1 -> (match mc1 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__128; Base_dPair.f_Base_dPair_dPair_second = dtb__129 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) dtb__128)) (fun p2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__129)) (fun b2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = p2; Base_dPair.f_Base_dPair_dPair_second = b2 }))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 239 "Vuna/Compiler/Loader/Fixity.vuna"
+# 238 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderClause = (fun mc0 mc1 -> (match mc1 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__130; Base_dPair.f_Base_dPair_dPair_second = dtb__131 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun pat -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) pat))) dtb__130)) (fun pats2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__131)) (fun b2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = pats2; Base_dPair.f_Base_dPair_dPair_second = b2 }))))))
   | _ -> failwith "DT: impossible branch"
 ))
-# 244 "Vuna/Compiler/Loader/Fixity.vuna"
+# 243 "Vuna/Compiler/Loader/Fixity.vuna"
 and v_Vuna_dCompiler_dLoader_dFixity_dreorderDoStmt = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DExpr (dtb__132, dtb__133) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__132)) (fun e2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DExpr (e2, dtb__133))))))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DBind (dtb__134, dtb__135, dtb__136) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) dtb__134)) (fun p2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__135)) (fun e2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDoStmt_DBind (p2, e2, dtb__136))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 300 "Vuna/Compiler/Loader/Fixity.vuna"
+# 299 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderTraitParam = (fun t p -> (match (p).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamKind with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (p))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__137) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr t) dtb__137)) (fun k2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamName = (p).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamName; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitParam_traitParamKind = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (k2)) }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 306 "Vuna/Compiler/Loader/Fixity.vuna"
+# 305 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderCtor = (fun mc0 mc1 -> (match mc1 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorName = dtb__138; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorType = dtb__139; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorArity = dtb__140; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorSpan = dtb__141 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__139)) (fun ty2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorName = dtb__138; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorType = ty2; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorArity = dtb__140; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dCtor_ctorSpan = dtb__141 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 310 "Vuna/Compiler/Loader/Fixity.vuna"
+# 309 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderRecordField = (fun mc0 mc1 -> (match mc1 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldName = dtb__142; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldType = dtb__143; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldSpan = dtb__144 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__143)) (fun ty2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldName = dtb__142; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldType = ty2; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dField_fieldSpan = dtb__144 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 314 "Vuna/Compiler/Loader/Fixity.vuna"
+# 313 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderTraitMethod = (fun mc0 mc1 -> (match mc1 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodName = dtb__145; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodType = dtb__146; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodSpan = dtb__147 } -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__146)) (fun ty2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodName = dtb__145; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodType = ty2; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dTraitMethod_traitMethodSpan = dtb__147 }))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 318 "Vuna/Compiler/Loader/Fixity.vuna"
+# 317 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderInstanceMethodDecl = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun (dtb__148, dtb__149, dtb__150, dtb__151) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun p -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderPattern mc0) p))) dtb__149)) (fun pats2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__150)) (fun b2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun (dtb__148, pats2, b2, dtb__151))))))))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DSig (dtb__152, dtb__153, dtb__154, dtb__155) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun e -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) e))) dtb__153)) (fun ctx2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__154)) (fun ty2 -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DSig (dtb__152, ctx2, ty2, dtb__155))))))))
   | _ -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (mc1))
 ))
 
-# 275 "Vuna/Compiler/Loader/Fixity.vuna"
+# 274 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderDecl = (fun mc0 mc1 -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DInstance (dtb__156, dtb__157, dtb__158, dtb__159) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun e -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) e))) dtb__156)) (fun ctx2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dFixity_dreorderExpr mc0) dtb__157)) (fun head2 -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderInstanceMethodDecl mc0) v))) dtb__158)) (fun ms -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DInstance (ctx2, head2, ms, dtb__159))))))))))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DTrait (dtb__160, dtb__161, dtb__162, dtb__163) -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun p -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderTraitParam mc0) p))) dtb__161)) (fun ps -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderTraitMethod mc0) v))) dtb__162)) (fun ms -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DTrait (dtb__160, ps, ms, dtb__163))))))))
@@ -244,5 +244,5 @@ let v_Vuna_dCompiler_dLoader_dFixity_dreorderDecl = (fun mc0 mc1 -> (match mc1 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 327 "Vuna/Compiler/Loader/Fixity.vuna"
+# 326 "Vuna/Compiler/Loader/Fixity.vuna"
 let v_Vuna_dCompiler_dLoader_dFixity_dreorderProgram = (fun t decls -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dtraverse (fun v -> ((v_Vuna_dCompiler_dLoader_dFixity_dreorderDecl t) v))) decls))
