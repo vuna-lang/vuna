@@ -1,10 +1,10 @@
 module Base.EffRef where
 
--- Base.EffRef：带内建 Ref 行的可变引用（阶段 4）。
+-- Base.EffRef：带内建 Ref 行的可变引用。
 --
 -- 操作直调带行宿主原语（`@vuna@prim_eff_*Ref_host`），不经过 sendCore/handler：Ref 是
 -- 运行时机制，不提供 mock；`RefOp` 只是行标签，让 `Eff []` 不能执行 ref 操作。
--- 旧的 `Base.IORef`（`Eff []`）保留给编译器/工具链内部。
+-- `Base.IORef`（`Eff []`）并存，保留给编译器/工具链内部。
 import Base.Eff
 
 -- | Ref 行标签（无载荷；操作直接映射到带行原语）。

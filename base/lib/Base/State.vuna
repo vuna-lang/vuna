@@ -1,6 +1,6 @@
 module Base.State where
 
--- Base.State：库级 State monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
+-- Base.State：库级 State monad（`Functor` / `Monad` 实例齐全，`do` 可用）。
 --
 -- 表示是 `s -> Pair a s` 的纯函数：没有语言级效应，handler 就是 `runState` /
 -- `evalState` / `execState`。`bind` / `pure` / `fmap` 走 Base.Monad 的 trait 实例。

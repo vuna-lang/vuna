@@ -1,10 +1,10 @@
 module Base.Show where
 
--- Base.Show：`Show` trait 与 `String` 实例（M24.7：从编译器合成迁到库）。
+-- Base.Show：`Show` trait 与 `String` 实例。
 --
 -- 方法与编译器内建 `Show` 的方法面**逐位对齐**（方法名 / 参数顺序 / 返回类型）：
--- 下一波删除 `DtDerive` 的内建 trait/实例后，`deriving (Show)` 展开出的实例体
--- （调用 `show` 方法）直接落在本 trait 上，无需改语义。
+-- `deriving (Show)` 展开出的实例体（调用 `show` 方法）直接落在本 trait 上，
+-- 无需额外语义。
 --
 -- 实例按「实例跟类型模块走」的落点规则分布：`Int` 的实例在 `Base.Int`、`Bool` 的
 -- 实例在 `Base.Bool`；`String` 例外留在本 trait 模块——`show : a -> String` 直接依赖
@@ -18,7 +18,7 @@ module Base.Show where
 export trait Show a(..) where
   show : a -> String
 
--- 与 runtime 展示共用同一实现（M27：`strShow` 是唯一转义源）。
+-- 与 runtime 展示共用同一实现（`strShow` 是唯一转义源）。
 instance Show String where
   show s = strShow s
 

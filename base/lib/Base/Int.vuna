@@ -1,10 +1,10 @@
 module Base.Int where
 
--- Base.Int：`Int` 的实例宿主（M31.1）。
+-- Base.Int：`Int` 的实例宿主。
 --
 -- `Int` 是 language primitive 类型（没有 data 声明）：类型身份、字面量、表示与
 -- 算术/比较原语都由编译器提供（唯一真源 `Vuna.Compiler.Intrinsics`）。本模块按
--- 「实例跟类型模块走」的落点规则承载 `Int` 的 Eq / Ord / Show 实例；未来 `Int` 相关的
+-- 「实例跟类型模块走」的落点规则承载 `Int` 的 Eq / Ord / Show 实例，`Int` 相关的
 -- 辅助函数也放这里。
 --
 -- primitive 类型没有构造子可模式匹配，所以实例实现走编译器内建特化：`x == y` /
@@ -14,10 +14,10 @@ import Base.Eq
 import Base.Hashable
 import Base.Num
 import Base.Ord
--- B24：`Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
+-- `Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
 import Base.Show
 
--- 数值运算符 `+ - * /` 的 fixity 与 `Num` 方法别名在 `Base.Num`（D23）；本模块
+-- 数值运算符 `+ - * /` 的 fixity 与 `Num` 方法别名在 `Base.Num`；本模块
 -- import 它既为了 `Num Int` 实例，也为了让运算符在实例体与用户代码里可见。
 instance Eq Int where
   eq x y = x == y
@@ -29,15 +29,15 @@ instance Ord Int where
   gt x y = x > y
   ge x y = x >= y
 
--- D23 Stage1：`Num` 实例。方法体写内建运算符，由精化器特化成 `bi_*_int` 原语；
--- Stage 2 把 `+` 别名到 `add` 后，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+-- `Num` 实例。方法体写内建运算符，由精化器特化成 `bi_*_int` 原语；
+-- `+` 是 `add` 的别名，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
 instance Num Int where
   add x y = x + y
   sub x y = x - y
   mul x y = x * y
   div x y = x / y
 
--- B24：`Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
+-- `Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
 instance Show Int where
   show x = strFromInt x
 

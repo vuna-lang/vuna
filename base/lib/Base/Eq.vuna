@@ -1,6 +1,6 @@
 module Base.Eq where
 
--- Base.Eq：`Eq` trait 的**声明**（M31.1：trait 声明与实例分离）。
+-- Base.Eq：`Eq` trait 的**声明**（声明与实例分离）。
 --
 -- 实例落点规则：实例跟类型模块走；唯独 `Bool` 是 `Eq` 方法签名的一部分（返回类型），
 -- 放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 ImportCycle），

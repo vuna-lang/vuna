@@ -1,6 +1,6 @@
 module Base.Ord where
 
--- Base.Ord：`Ord` trait 的**声明**（M31.1：trait 声明与实例分离），外加三值比较
+-- Base.Ord：`Ord` trait 的**声明**（声明与实例分离），外加三值比较
 -- `Ordering` / `compare` 与 `min` / `max`。
 --
 -- 实例落点规则同 `Base.Eq`：`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随

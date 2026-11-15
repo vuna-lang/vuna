@@ -1,7 +1,7 @@
 -- | 列表类型与常用操作。
 module Base.List where
 
--- Base.List：列表类型与常用操作（Base 语义迁移 + 常用补充）。
+-- Base.List：列表类型与常用操作。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
 import Base.Pair
 import Base.Maybe
@@ -11,11 +11,11 @@ import Base.Foldable
 import Base.Monad
 import Base.Monoid
 import Base.Traversable
--- M24.7：`mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
+-- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
 -- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
 import Base.Eq
 import Base.Hashable
--- M31.1：`==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
+-- `==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
 -- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
 import Base.Ord
 -- `+` / `-` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
@@ -78,8 +78,8 @@ export foldr : (a -> b -> b) -> b -> List a -> b
 foldr f acc [] = acc
 foldr f acc (x :: xs) = f x (foldr f acc xs)
 
--- M33 W2：原来的 `append (f x) (concatMap f rest)` 在「每段都较长」时是 O(n²)
--- （每层 append 复制 f x）。改成尾递归 accumulator：把每段逆序前插，最后整体 reverse，
+-- 原来的 `append (f x) (concatMap f rest)` 在「每段都较长」时是 O(n²)
+-- （每层 append 复制 f x）。所以用尾递归 accumulator：把每段逆序前插，最后整体 reverse，
 -- 总代价 O(所有段长之和)。终止性仍是结构递归（rest）。
 -- | 对每个元素执行返回列表的函数并拼接。
 export concatMap : (a -> List b) -> List a -> List b
@@ -145,9 +145,9 @@ export drop : Int -> List a -> List a
 drop n [] = []
 drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
 
--- M25.2b：原来的升序写法 `i :: range (i + 1) n` 需要「有界计数器」规则才能证明；
--- 改成对「剩余个数」倒计数（`k = n - i`，每次 `k - 1`，由 `k <= 0` 守卫），
--- 终止性由 R2 直接可证；语义与原来一致（`i >= n` 时 `k <= 0` 返回空表）。
+-- 升序写法 `i :: range (i + 1) n` 需要「有界计数器」规则才能证明终止性；
+-- 这里对「剩余个数」倒计数（`k = n - i`，每次 `k - 1`，由 `k <= 0` 守卫），
+-- 终止性由「守卫 Int」判据直接可证，语义相同（`i >= n` 时 `k <= 0` 返回空表）。
 -- | 从 0 到 `to`（不含）的整数列表。
 export range : Int -> Int -> List Int
 range i n = rangeFrom i (n - i)
@@ -163,7 +163,7 @@ mapMaybe f (x :: xs) = case f x of
   Nothing => mapMaybe f xs
   Just y => y :: mapMaybe f xs
 
--- M11-C：Functor / Monad 实例（trait 来自 Base.Monad，List 定义在本模块）。
+-- Functor / Monad 实例（trait 来自 Base.Monad，List 定义在本模块）。
 instance Functor List where
   fmap f xs = map f xs
 
@@ -175,7 +175,7 @@ instance Applicative List where
   ap mf mx = concatMap (\g => map g mx) mf
   liftA2 f xs ys = concatMap (\a => map (\b => f a b) ys) xs
 
--- B31：容器 `Show` 实例。元素用 `show`（约束实例的 ctx 字典）；拼接只用 `++`
+-- 容器 `Show` 实例。元素用 `show`（约束实例的 ctx 字典）；拼接只用 `++`
 -- intrinsic——`strConcatMany` 等带 List 桥接的 intrinsic 在「声明 List 族的单元」里
 -- 会触发 split 生成器的自依赖（bridgeUnit 固定为 List 单元），故避开。
 -- `++` 无 fixity 声明时用反引号形式（List 不能 import Base.String，避免成环）。

@@ -2,23 +2,21 @@ module Base.Applicative where
 
 -- Base.Applicative：`Applicative` trait（`pure` / `ap` / `liftA2` 三个方法）。
 --
--- M41 起 `pure` 从 `Base.Monad` 移到本模块：`do` 只依赖 `bind`，而 `pure` 是
+-- `pure` 属于本模块而不是 `Base.Monad`：`do` 只依赖 `bind`，而 `pure` 是
 -- Applicative 的能力。`Base.Monad` 为方便用户重导出本模块（`import Base.Monad`
 -- 仍能看到 `pure` / `ap` / `liftA2`）。
 --
--- M43 W1（B42 修复）起 `ap : f (a -> b) -> f a -> f b` **可以**作为实例方法：
--- 精化器现在能检查实例方法签名里「高阶类参数套函数类型」的实例体（`case` 不再
--- 误报 `TC_ImpossibleBranchIndex`）。
+-- `ap : f (a -> b) -> f a -> f b` **可以**作为实例方法：精化器能检查实例方法签名里
+-- 「高阶类参数套函数类型」的实例体（`case` 不会误报 `TC_ImpossibleBranchIndex`）。
 --
--- `liftA2` 仍是 **trait 方法**，不是由 `ap` 派生的顶层函数。原因在 codegen：字典
+-- `liftA2` 是 **trait 方法**，不是由 `ap` 派生的顶层函数。原因在 codegen：字典
 -- 投影在生成的 OCaml 里是无类型标注的元组字段，OCaml 侧推断出
 -- `val dliftA2 : ('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
 -- 这类签名——`pure` 的返回类型与 `ap` 的首参被错误统一；派生体
 -- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误
 -- （`Base_dMaybe.ml` 的 Traversable `mapM` 首当其冲：`Error: This expression
--- should not be a function, the expected type is 'a t_Base_dMaybe`）。等字典/投影
--- 带上类型标注、能在 OCaml 侧恢复 `f a` / `f (a -> b)` 的关系后，再考虑把
--- `liftA2` 改回派生。
+-- should not be a function, the expected type is 'a t_Base_dMaybe`）。派生要等字典/
+-- 投影带上类型标注、能在 OCaml 侧恢复 `f a` / `f (a -> b)` 的关系（debt D52）。
 --
 -- 没有父类（`Functor` / `Monad` 不自动提供 Applicative 实例）：每个 monad 类型
 -- 需要同时声明 `Functor` / `Applicative` / `Monad` 三个实例，并显式实现本 trait

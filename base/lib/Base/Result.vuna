@@ -1,10 +1,10 @@
 -- | 成功/失败结果类型与组合子。
 module Base.Result where
 
--- Base.Result：成功/失败结果类型与组合子（Base 语义迁移 + 常用补充）。
--- `Functor` / `Monad` 实例：组合统一用 `fmap` / `bind` / `pure` / `do`；库内不再提供
+-- Base.Result：成功/失败结果类型与组合子。
+-- `Functor` / `Monad` 实例：组合统一用 `fmap` / `bind` / `pure` / `do`；库内不提供
 -- `andThen` / `mapResult` 这类重复入口。说明：`step` 处理 `Result (Pair a b)`，额外依赖
--- Base.Pair（叶模块，无环）——它同时解构 `Pair`，不是 `bind` 的别名；B31 的 `Show`
+-- Base.Pair（叶模块，无环）——它同时解构 `Pair`，不是 `bind` 的别名；容器的 `Show`
 -- 实例依赖 Base.Show（同为叶模块）。
 import Base.Bool
 import Base.Eq
@@ -15,7 +15,7 @@ import Base.Monad
 import Base.Monoid
 import Base.Traversable
 import Base.Pair
--- B31：容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
+-- 容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
 import Base.Show
 -- `Err` 的相等要比 String：`Eq String` 实例在类型模块 Base.String（不能反向 import）。
 import Base.String
@@ -70,7 +70,7 @@ export withDefault : a -> Result a -> a
 withDefault d (Ok x) = x
 withDefault d (Err e) = d
 
--- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
 -- `Err` 里的消息是 `String`，`show e` 按 `Show String` 加引号转义（`Err "bad"`）。
 -- 拼接用 `++` 的 intrinsic（interp 可归约），与 Maybe/Pair 保持同一写法。
 instance Show a => Show (Result a) where

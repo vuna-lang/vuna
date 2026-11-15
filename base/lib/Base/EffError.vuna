@@ -1,6 +1,6 @@
 module Base.EffError where
 
--- Base.EffError：一阶 Error 效应 + 作用域 catch（Layer 2）。
+-- Base.EffError：一阶 Error 效应 + 作用域 catch。
 --
 -- `catch n comp fallback` 在 comp 内安装临时 Error handler；Throw 截获后不恢复
 -- 续延（一次性续延直接丢弃），返回 Result 给外层，再在 handler 之外执行 fallback。

@@ -12,7 +12,7 @@ import Base.Monad
 import Base.Monoid
 import Base.Traversable
 import Base.Ord
--- B31：容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
+-- 容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
 import Base.Show
 
 -- | 可选值。
@@ -42,7 +42,7 @@ export maybe : b -> (a -> b) -> Maybe a -> b
 maybe d f Nothing = d
 maybe d f (Just x) = f x
 
--- M11-C：Functor / Monad 实例。trait 来自 Base.Monad，类型 Maybe 定义在本模块，
+-- Functor / Monad 实例。trait 来自 Base.Monad，类型 Maybe 定义在本模块，
 -- 因此可以写 default（匿名）实例（孤儿规则允许）。
 instance Functor Maybe where
   fmap f m = case m of
@@ -67,7 +67,7 @@ instance Applicative Maybe where
       Nothing => Nothing
       Just b => Just (f a b)
 
--- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
 -- 这里用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
 -- `Base.List → Base.Maybe` 已存在（Maybe 不能反向 import List），名字不可见；
 -- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。

@@ -1,6 +1,6 @@
 module Base.HostRow where
 
--- Base.HostRow：工具链/编译器统一的内建效应行（阶段 5）。
+-- Base.HostRow：工具链/编译器统一的内建效应行。
 --
 -- `hostRow` / `hostTail` 是普通定义（不是公理——公理没有运行时定义，擦除会报
 -- `CG_AxiomAtRuntime`）；同时 `Core.Eval` 对这两个名字做归约，使跨模块签名比较、

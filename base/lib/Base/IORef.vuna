@@ -1,6 +1,6 @@
 module Base.IORef where
 
--- Base.IORef：`Eff []` 内的可变引用（M33 W3）。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
+-- Base.IORef：`Eff []` 内的可变引用。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
 --
 -- 所有操作返回 `Eff []`，在 `main : Eff [] a` 或 handler 里执行。
 -- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。

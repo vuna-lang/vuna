@@ -6,18 +6,18 @@ module Prelude where
 -- 宿主层（`@vuna@prim_eff_*`）是全局内建名，任何模块可直接调用，不需要也不提供别名门面。
 -- 需要效果标签 / 运行入口时显式 `import Base.Eff`。
 --
--- M24.7：Show / Eq / Ord 的 trait 声明与内建类型实例在库里（Base.Show /
+-- Show / Eq / Ord 的 trait 声明与内建类型实例在库里（Base.Show /
 -- Base.Eq / Base.Ord），因此随 Prelude 自动可见，用户程序不必显式 import。
 --
--- Base.Float（2026-11 rotation 后提升）：`FromFloat` / 转换 helper 与
--- `Eq` / `Ord` / `Show Float` 实例随 Prelude 可见；代价是 Prelude 闭包包含
--- Base.Float，所有程序的 `Vuna_runtime.ml` 都会带浮点 helper（见 floats.md）。
+-- `Base.Float` 随 Prelude 可见：`FromFloat` / 转换 helper 与
+-- `Eq` / `Ord` / `Show Float` 实例不需要显式 import；代价是 Prelude 闭包包含
+-- `Base.Float`，所有程序的 `Vuna_runtime.ml` 都会带浮点 helper（见 floats.md）。
 export import Base.Pair
 export import Base.Bool
 export import Base.Show
 export import Base.Eq
 export import Base.Ord
--- M31.1：加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
+-- 加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
 export import Base.Interp
 export import Base.Foldable
@@ -27,7 +27,7 @@ export import Base.FromString
 export import Base.Hashable
 export import Base.List
 export import Base.Monoid
--- D23：算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Num。
+-- 算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Num。
 export import Base.Num
 export import Base.Maybe
 export import Base.Result

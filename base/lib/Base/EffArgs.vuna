@@ -1,6 +1,6 @@
 module Base.EffArgs where
 
--- Base.EffArgs：一阶命令行参数效应（P2c：补 getArgs 标签，供夹具迁移 typed effects）。
+-- Base.EffArgs：一阶命令行参数效应。
 --
 -- 标签 = `ArgsOp`（实例名在行的 `Cons n ArgsOp r` 条目里）；操作只有 GetArgs，返回 `List String`。
 -- 真实 handler 用 `@vuna@prim_eff_getArgs` 实现。
@@ -33,7 +33,7 @@ argsOpHIO op k = case op of
 
 -- | 宿主 handler：结果行删除 `ArgsOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
--- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 argsOpHIOHost : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff (Cons "default" ArgsOp []) a) -> Eff (Cons "default" ArgsOp []) a
 argsOpHIOHost op k = case op of

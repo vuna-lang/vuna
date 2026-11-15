@@ -1,6 +1,6 @@
 module Base.EffNet where
 
--- Base.EffNet：带内建 Net 行的网络操作（阶段 4）。
+-- Base.EffNet：带内建 Net 行的网络操作。
 --
 -- 操作直调带行宿主原语（`@vuna@prim_eff_net*_host`），不经过 sendCore/handler：网络是
 -- 宿主机制，不提供 mock；`NetOp` 只是行标签。

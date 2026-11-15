@@ -6,7 +6,7 @@ module Base.Foldable where
 -- 短名歧义；`fold` 语义就是右折叠。
 --
 -- `foldMap` 是**顶层约束函数**而不是 trait 方法：trait 方法签名当前不能写
--- `Monoid m =>`（B29），约束放在顶层签名上；实例方法体只需要 `fold`。
+-- `Monoid m =>` 约束放在顶层签名上；实例方法体只需要 `fold`。
 import Base.Monoid
 
 -- | 可折叠容器：`fold` 是右折叠，参数顺序为 `(元素 -> 累加器 -> 累加器) -> 初始值 -> 容器`。

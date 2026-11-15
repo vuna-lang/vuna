@@ -3,7 +3,7 @@ module Base.Traversable where
 -- Base.Traversable：可遍历容器（方法 `mapM`）。
 --
 -- 用法：`mapM : (a -> f b) -> t a -> f (t b)`，其中 `f` 是 Applicative。
--- 当前 trait 方法签名不能写 `Applicative f =>`（B29），因此把 `f` 提升为 trait 的
+-- 当前 trait 方法签名不能写 `Applicative f =>`（debt B29），因此把 `f` 提升为 trait 的
 -- 第二个参数，约束落在实例 ctx 上：
 --
 --   instance Applicative f => Traversable List f where

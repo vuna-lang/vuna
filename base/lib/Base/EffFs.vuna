@@ -1,14 +1,13 @@
 module Base.EffFs where
 
--- Base.EffFs：一阶文件系统效应（Layer 1 的宿主-backed 示例；W10 扩到完整 fs 面）。
+-- Base.EffFs：一阶文件系统效应（宿主-backed 的完整 fs 面）。
 --
 -- 操作是描述；真实 handler 直调 `@vuna@prim_eff_*` 原语实现语义。answer 是 `Eff [] a`，
--- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是 W10 增加的
--- 可直接 `joinEff` 展平的宿主 handler。
+-- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是可直接 `joinEff` 展平的宿主 handler。
 --
--- W10 收尾：`Fs` 改为**命名实例**（`FsOp`，n 是 String 实例名，与 Console/Clock/Env/
--- Process 一致）。同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与
--- 真实宿主 handler（`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
+-- `Fs` 是**命名实例**（`FsOp`，n 是 String 实例名，与 Console/Clock/Env/Process 一致）。
+-- 同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实宿主 handler
+-- （`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
 import Base.Nat
@@ -46,7 +45,7 @@ resFs (FileSize p) = Nat
 export fsReadFile : Member n FsOp r => String -> Eff r String
 fsReadFile p = sendCore FsOp "fs" n (ReadFile p)
 
--- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`，D25）。
+-- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`）。
 export fsWriteFile : Member n FsOp r => String -> String -> Eff r Nat
 fsWriteFile p s = sendCore FsOp "fs" n (WriteFile p s)
 
@@ -78,7 +77,7 @@ fsFileExists p = sendCore FsOp "fs" n (FileExists p)
 export fsFileMtime : Member n FsOp r => String -> Eff r Int
 fsFileMtime p = sendCore FsOp "fs" n (FileMtime p)
 
--- | 通过命名实例取文件字节数（`Nat`，D25）；取不到时静默返回 0。
+-- | 通过命名实例取文件字节数（`Nat`）；取不到时静默返回 0。
 export fsFileSize : Member n FsOp r => String -> Eff r Nat
 fsFileSize p = sendCore FsOp "fs" n (FileSize p)
 
@@ -121,7 +120,7 @@ fsOpHIO op k = case op of
     k n
 
 -- ---------------------------------------------------------------
--- 阶段 3：带行的真实 handler（entry 自动预装用；不导出）
+-- 带行的真实 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `FsOp` 行的 op 解释：映射到对应 `@vuna@prim_eff_*_host` 原语。
 fsOpHIOHost : {a : Type} -> (o : FsOp) -> (resFs o -> Eff (Cons "default" FsOp []) a) -> Eff (Cons "default" FsOp []) a

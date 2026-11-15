@@ -1,6 +1,6 @@
 module Base.Error where
 
--- Base.Error：库级 Error monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
+-- Base.Error：库级 Error monad（`Functor` / `Monad` 实例齐全，`do` 可用）。
 --
 -- `Error e a` 是 `Ok a` / `Err e` 的和（错误类型泛型；`Base.Result` 固定 String 错误，
 -- 不在这里复用）。handler = `runError`；`catchError` 是错误恢复。

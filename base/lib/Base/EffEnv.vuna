@@ -1,6 +1,6 @@
 module Base.EffEnv where
 
--- Base.EffEnv：一阶环境效应（W10 效应标签迁移）。
+-- Base.EffEnv：一阶环境效应。
 --
 -- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 直调对应 `@vuna@prim_eff_*` 原语（`@vuna@prim_eff_getenv` / `@vuna@prim_eff_getcwd` / `@vuna@prim_eff_execPath`）。
@@ -50,7 +50,7 @@ envOpHIO op k = case op of
 
 -- | 宿主 handler：结果行删除 `EnvOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
--- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 envOpHIOHost : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff (Cons "default" EnvOp []) a) -> Eff (Cons "default" EnvOp []) a
 envOpHIOHost op k = case op of

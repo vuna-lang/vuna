@@ -1,6 +1,6 @@
 module Base.EffExn where
 
--- Base.EffExn：高阶/作用域 Error（W6）。
+-- Base.EffExn：高阶/作用域 Error。
 -- `Try` 操作携带一个子计算；handler 用嵌套的 `runExn` + `runEff` 在临时 handler
 -- 下运行子计算，实现 scoped handler（其余效应仍由外层运行时 handler 处理）。
 import Base.Eff

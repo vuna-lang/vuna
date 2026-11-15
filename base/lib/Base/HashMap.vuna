@@ -104,8 +104,8 @@ export fromList : Hashable k => List (Pair k v) -> HashMap k v
 fromList [] = HashMap arrayEmpty
 fromList ((Pair k v) :: rest) = insert k v (fromList rest)
 
--- 名字集合的成员判定表（编译器历史上叫 `tblOfNames`）。
--- | 名字集合的成员判定表：每个名字映射到 True（编译器历史上叫 `tblOfNames`）。
+-- 名字集合的成员判定表。
+-- | 名字集合的成员判定表：每个名字映射到 True。
 export ofNames : List String -> HashMap String Bool
 ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
 

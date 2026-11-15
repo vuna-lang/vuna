@@ -3,9 +3,9 @@ module Base.String where
 -- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
 -- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
 --
--- split 用显式 fuel 计步（M25.2b，M30/C26 收紧为证明界）：`splitAcc` 每次只吃一个字符，
+-- split 用显式 fuel 计步：`splitAcc` 每次只吃一个字符，
 -- 匹配到分隔符后交给 `skipSep` 逐个跳过；两段都带同一个 fuel 参数并每步 `fuel - 1`
--- （`fuel <= 0` 守卫），终止性由 R2「守卫 Int」判据证明（跨函数互调用已纳入 SCC 检查，
+-- （`fuel <= 0` 守卫），终止性由「守卫 Int」判据证明（跨函数互调用已纳入 SCC 检查，
 -- 见 docs/reference/type-system.md 的「定义与终止性」一节）。
 --
 -- **上界证明**（`fuel = 2*len(text) + len(sep) + 2` 永不耗尽）：
@@ -19,7 +19,7 @@ module Base.String where
 --   空 sep 走单独分支（不消耗 fuel），不受影响；分离器长度不进入逐字符循环的计数。
 import Base.List
 import Base.Bool
--- M31.1：`String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
+-- `String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
 import Base.Eq
 import Base.Hashable
 import Base.Ord
@@ -27,7 +27,7 @@ import Base.Ord
 -- 本模块的算术运算符需要它的声明进入 import 闭包。
 import Base.Int
 import Base.Nat
--- M36 跟进：模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
+-- 模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
 import Base.Interp
 import Base.Monoid
 import Base.Num
@@ -66,8 +66,8 @@ skipSep sep (chars@(c :: rest)) fuel n acc parts =
 export join : String -> List String -> String
 join sep xs = strConcatMany (_interleave sep xs)
 
--- M33 W2：`join` 原来用 `x ++ sep ++ join sep rest` 逐段拼接，总拷贝 O(n²)；
--- 改成一次 `strConcatMany`（runtime `String.concat ""`，单遍分配）。
+-- `join` 用一次 `strConcatMany`（runtime `String.concat ""`，单遍分配）：逐段拼接
+-- （`x ++ sep ++ join sep rest`）的总拷贝是 O(n²)。
 _interleave : String -> List String -> List String
 _interleave sep [] = []
 _interleave sep ([x]) = [x]
@@ -111,13 +111,13 @@ endsWith suffix text =
     lt = strLength text
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
--- M33 W4：`repeat` 改成一次 `strConcatMany`（原来 `s ++ repeat (n-1) s` 是 O(n²) 拷贝）。
+-- `repeat` 用一次 `strConcatMany`；逐段拼接（`s ++ repeat (n-1) s`）是 O(n²) 拷贝。
 -- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 export repeat : Nat -> String -> String
 repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
 
--- M33 W4：`substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
--- 不再走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
+-- `substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
+-- 不走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
 -- | 取子串 `(start, len)`；越界由 `strSubstring` 原语 clamp，不走 List 桥接。
 export substring : Nat -> Nat -> String -> String
 substring start len s = strSubstring (natToInt start) (natToInt len) s
@@ -141,7 +141,7 @@ else case text of
   [] => False
   c :: rest => _containsChars needle rest
 
--- M31.1：primitive 没有构造子，实例实现走编译器内建特化（`bi_eq_str` / 泛型比较运行时），
+-- primitive 没有构造子，实例实现走编译器内建特化（`bi_eq_str` / 泛型比较运行时），
 -- 不会自递归。
 instance Eq String where
   eq x y = x == y

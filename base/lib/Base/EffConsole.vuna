@@ -1,8 +1,8 @@
 module Base.EffConsole where
 
--- Base.EffConsole：一阶 console 效应（W10 效应标签迁移）。
+-- Base.EffConsole：一阶 console 效应。
 --
--- 行标签 = `ConsoleOp`（D2），实例名在行的 `Cons n ConsoleOp r` 条目里：同一程序
+-- 行标签 = `ConsoleOp`（open 行里的标签类型），实例名在行的 `Cons n ConsoleOp r` 条目里：同一程序
 -- 里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实
 -- stdout/stderr），行里按实例名区分。操作只有 Print / EPrint；真实 handler 直调
 -- `@vuna@prim_eff_print` / `@vuna@prim_eff_eprint`，`handleConsoleHost` 是可直接交给 `joinEff` 展平的
@@ -16,8 +16,8 @@ export data ConsoleOp(..) : Type where
   Print : String -> ConsoleOp
   EPrint : String -> ConsoleOp
 
--- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`，D25）；`EPrint` 仍返回 `Int`
--- （`@vuna@prim_eff_eprint` 本轮未迁移）。
+-- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`）；`EPrint` 仍返回 `Int`
+-- （`@vuna@prim_eff_eprint` 未做 Nat 归一化）。
 export resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
@@ -46,7 +46,7 @@ consoleOpHIO op k = case op of
     k r
 
 -- ---------------------------------------------------------------
--- 阶段 2：带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
+-- 带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
 -- ---------------------------------------------------------------
 -- | 带 `ConsoleOp` 行的 op 解释：真实打印后写穿继续（answer 行是 `[ConsoleOp]`）。
 consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff (Cons "default" ConsoleOp []) a) -> Eff (Cons "default" ConsoleOp []) a

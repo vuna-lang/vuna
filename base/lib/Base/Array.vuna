@@ -1,6 +1,6 @@
 module Base.Array where
 
--- Base.Array：不可变数组（M33 W3）。内建类型构造子 `Array`，OCaml 表示 `'a array`。
+-- Base.Array：不可变数组。内建类型构造子 `Array`，OCaml 表示 `'a array`。
 --
 -- 构造器不可见：只能经 `fromList` / `make` 构造；`set` 返回**新数组**（copy-on-write），
 -- 原数组不变。`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义

@@ -1,6 +1,6 @@
 module Base.EffState where
 
--- Base.EffState：一阶 State 效应（Layer 1）。
+-- Base.EffState：一阶 State 效应。
 --
 -- 标签类型 `StateOp s`；操作 `Get` / `Put`；结果族 `resState s`。
 -- handler 的 answer 类型由调用方选择：经典写法是 `b = s -> Pair a s`，

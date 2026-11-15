@@ -1,12 +1,12 @@
 module Base.EffClock where
 
--- Base.EffClock：一阶时钟效应（W10 效应标签迁移）。
+-- Base.EffClock：一阶时钟效应。
 --
 -- 标签 `ClockOp` 是命名实例；操作 `Now`（微秒时间戳）与 `SleepMicros`
 -- （睡 n 微秒）。真实 handler 直调 `effTimeUs` 与编译器原生原语 `@vuna@prim_eff_sleep`
--- 实现（W10 收尾：阻塞睡眠，不是忙等）。
+-- 实现；睡眠是阻塞睡眠，不是忙等。
 --
--- 边界：`Base.EffClock` 直调原生 `@vuna@prim_eff_sleep`；不存在忙等回退（`spinMicros` 已删除）。
+-- 边界：`Base.EffClock` 直调原生 `@vuna@prim_eff_sleep`，不存在忙等回退。
 import Base.Eff
 import Base.Monad
 
@@ -44,7 +44,7 @@ clockOpHIO op k = case op of
 
 -- | 宿主 handler：结果行删除 `ClockOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
--- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 clockOpHIOHost : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff (Cons "default" ClockOp []) a) -> Eff (Cons "default" ClockOp []) a
 clockOpHIOHost op k = case op of

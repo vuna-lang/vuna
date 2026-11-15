@@ -1,10 +1,10 @@
 module Base.Monad where
 
--- Base.Monad：Functor / Monad trait（M11-B：支持高阶 kind 与约束泛化）。
+-- Base.Monad：Functor / Monad trait（支持高阶 kind 与约束泛化）。
 -- do 语法糖在 loader 里 desugar 成 bind / lambda；fmap 是普通 trait 方法。
 -- 约定方法名固定：Functor.fmap、Monad.bind、Applicative.pure。
 --
--- M41：`pure` 从 Monad 移到 `Base.Applicative`（`do` 只需要 `bind`；`pure` 是
+-- `pure` 属于 `Base.Applicative` 而不是本模块（`do` 只需要 `bind`；`pure` 是
 -- Applicative 的能力）。本模块**重导出** `Base.Applicative`，因此既有
 -- `import Base.Monad` 的代码仍能看到 `pure` / `liftA2` / `ap`；但类型要有
 -- `Applicative` 实例才能用 `pure`（每个 monad 类型都补了）。

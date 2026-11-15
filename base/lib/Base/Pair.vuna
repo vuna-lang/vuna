@@ -23,7 +23,7 @@ firstOf (Pair a b) = a
 export secondOf : Pair a b -> b
 secondOf (Pair a b) = b
 
--- B31：容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
+-- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
 -- 用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
 -- `Base.List → Base.Pair` 已存在（Pair 不能反向 import List），名字不可见；
 -- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。

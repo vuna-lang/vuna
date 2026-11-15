@@ -1,6 +1,6 @@
 module Base.Reader where
 
--- Base.Reader：库级 Reader monad（M33 W6 落地；M35.1 补 Functor/Monad 实例，`do` 可用）。
+-- Base.Reader：库级 Reader monad（`Functor` / `Monad` 实例齐全，`do` 可用）。
 --
 -- 表示是 `e -> a` 的纯函数：handler 就是 `runReader`；`local` 在局部改写环境。
 import Base.Monad

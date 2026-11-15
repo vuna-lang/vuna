@@ -10,7 +10,7 @@ module Base.Hashable where
 -- 公开给需要采样键的工具（`Debug` / `Index.Scan`）的入口；`hashCombine` 供复合键
 -- 与 `deriving (Hashable)` 组合子哈希使用。
 --
--- 本模块从 D23 起 import `Base.Num`：`hashCombine` 的内建算术 `a * 31 + b` 经
+-- import `Base.Num` 是让 `hashCombine` 的内建算术 `a * 31 + b` 有效：它经
 -- `*` / `+` 的 `Num` 方法别名，由精化器特化成 Int 原语；`+ - * /` 的 fixity 也由
 -- `Base.Num` 提供。`Base.Num` 是叶模块（不 import 任何模块），因此不会形成
 -- `Base.Hashable ↔ Base.Int` 的环：`String` / `Int` 等实例仍在各自类型模块。

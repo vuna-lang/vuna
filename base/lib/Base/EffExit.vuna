@@ -1,6 +1,6 @@
 module Base.EffExit where
 
--- Base.EffExit：一阶进程退出效应（P2c：补 exit 标签）。
+-- Base.EffExit：一阶进程退出效应。
 --
 -- 标签 `ExitOp` 是命名实例；操作只有 ExitWith（状态码）。真实 handler 调
 -- `@vuna@prim_eff_exit` 后不会返回，`k 0` 只是类型上的兜底。
@@ -32,7 +32,7 @@ exitOpHIO op k = case op of
 
 -- | 宿主 handler：结果行删除 `ExitOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
--- 阶段 3：带行 handler（entry 自动预装用；不导出）
+-- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 exitOpHIOHost : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff (Cons "default" ExitOp []) a) -> Eff (Cons "default" ExitOp []) a
 exitOpHIOHost op k = case op of
