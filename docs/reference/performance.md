@@ -51,6 +51,10 @@
 | `map` | 2.2–2.5 s | 2.2–2.5 s | 0.16–0.17 s |
 | `build --no-compile compiler` | ~12–28 s（见下） | ~13 s | ~150 ms |
 
+2026-11 复核（本轮：导出面判据 + 去两处死扫描 + 阶段探针）：同机空 store 冷
+`check compiler` 13.0–14.2 s、热 47 ms；`collectSigs-done` = 1、`iface-write=107/107`、
+`check-lib-skip covered=88`。绝对读数只作同机同窗口参考。
+
 `check .` 不是「冷/热」两档：第一遍冷精化、第二遍重写接口/单元、第三遍才全命中
 （实测 18269 → 6141 → 6092 → 57 ms），只报其中一个数会误导。冷 `check compiler` 修前
 ~22 s 里约**一半是重复精化**：入口闭包没覆盖 `[export]` 的全部模块
