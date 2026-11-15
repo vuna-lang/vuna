@@ -1,10 +1,9 @@
 # Layer 2/3：高阶/作用域、线性续延、调度器与效应标签
 
 > 本文是 [effects.md](effects.md) §8.5/§8.6 的展开页：高阶 scoped handler、
-> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、效应标签迁移。Layer 1
+> 线性续延/一次性闭包/`bracket`（含 abort cleanup）、单线程调度器、效应标签。Layer 1
 > 核心（行/`Eff`/`Member`/运行时）见 [effects.md](effects.md) §8。
-
-### 8.5 Layer 2/3（已落地的最小实现）
+### 8.5 Layer 2/3
 
 **Layer 2（作用域/高阶组合）**：
 
@@ -25,8 +24,7 @@
 - 夹具 `dt_base/23_eff_scoped`（107：子计算里的 Reader 由外层 handler 处理）；
   负例 `dt_err/74_try_row_mismatch`（`tryWith` 要求行首 `Exn n`）。
 
-**Layer 3（并发/async）**：
-
+**Layer 3（并发/async）**
 
 - 负例 `dt_err/71_catch_row_mismatch`、`72_local_row_mismatch`、`73_async_row_not_nil`：
   catch/local 要求行首是对应效应，async 只接受 `Eff Nil`。
@@ -39,7 +37,7 @@
   `Effect.Deep.match_with` 根 handler 执行；根 handler 只拦截**调度器私有效应**
   （`SchedYield` / `SchedAwait` / `SchedWaitScope` / `SchedWaitScopeTimeout`，均为
   `Vuna_runtime` 内部 `Effect.t` 构造子，不进语言层），把续延交给纤程外部的调度循环。
-- **调度循环**在 `dtp_sched_main` 里：main 动作本身是纤程 0（生成钩子改为
+- **调度循环**在 `dtp_sched_main` 里：main 动作本身是纤程 0（生成钩子是
   `dtp_sched_main (fun () -> v_main 0)`），循环从就绪队列取任务跑一步（运行到下一个
   挂起点或结束），再按等待关系唤醒。任务之间不共享 handler 栈：用户 `Perform` 效应
   只在任务自己的纤程里被 handler 处理。
@@ -83,8 +81,8 @@ API（`base/lib/Base/EffSched.vuna`）：
   任务体内不能再有未处理干净的宿主行效应。任务体本身可以返回任意 `a`
   （包括 `Result`）；若任务体内再用 `withScope`，`awaitTask` 得到的是嵌套
   `Result (Result …)`，由调用方显式展平（库不做隐式 flatten）。
-- **句柄**：`Task`/`Scope`（legacy）不是线性数据；重复 `await` 幂等。新增线性
-  `TaskLin`：`awaitTaskLin`/`cancelTaskLin` 各消费一次，二次使用在用量检查拒绝
+- **句柄**：`Task`/`Scope` 不是线性数据；重复 `await` 幂等。线性 `TaskLin`：
+  `awaitTaskLin`/`cancelTaskLin` 各消费一次，二次使用在用量检查拒绝
   （夹具 `dt_base/38`、负例 `dt_err/77`）。
 - **Mutex/Semaphore**：`Base.EffMutex` 用 IORef + yield 忙等；`acquire/release`、
   `newSemaphore/semWait/semSignal`；夹具 `dt_base/37`（2）。
@@ -107,18 +105,18 @@ API（`base/lib/Base/EffSched.vuna`）：
   用 `yieldNow` 忙等轮询（无阻塞原语），fork 的 producer 在父纤程 yield 时入队，输出 42。
 
 **边界（仍开放）**：Mutex/Semaphore/Channel 都是 cooperative 忙等实现（无阻塞原语）；
-线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：新增 `forkTaskWith` 用显式 handler 把 effectful task 收成 Nil
-再 fork（handler 状态为任务局部）；仍无法继承父 fiber 的动态 handler 栈（D44）；
+线性 TaskLin 只保证 handle 恰好一次 await/cancel，不保证资源释放；effect-aware 并发：
+`forkTaskWith` 用显式 handler 把 effectful task 收成 Nil
+再 fork（handler 状态为任务局部）；仍无法继承父 fiber 的动态 handler 栈
+（[debt.md](debt.md) D44）；
 取消只在挂起点生效，硬中止会丢弃未执行清理的纤程；`withScope` 的 body 若以非返回方式
 中止（abort/未捕获运行时异常），scope 的等待不会执行，残留任务由 `dtp_sched_main` 在
-main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围；
-历史 Domain 实现（`Base.EffAsync`）已删除，调度器是唯一并发路径。
+main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 并行不在范围（调度器是
+唯一并发路径）。
 
-### 8.6 效应标签迁移（库层 + 一条工具链真实路径）
+### 8.6 效应标签（库层 + 一条工具链真实路径）
 
-迁移背景：唯一动作类型统一为 `Eff`；用户面 API 迁到效应标签，handler 内部用
-`prim_eff_*` 实现。迁移在**库层**完成；后续补齐了原生 sleep 原语、fs 命名实例、
-可控 `Exit` 与一条工具链真实路径。
+用户面 API 走效应标签，handler 内部用 `prim_eff_*` 实现。
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
@@ -131,14 +129,13 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
  - **命名实例**：console/clock/env/process/fs 的标签都是 op 族应用（`ConsoleOp`/`FsOp`…），
   实例名在行条目里（`Cons "mock" FsOp r` 与 `Cons "real" FsOp r` 是不同条目），因此同一个
   程序可以同时装 mock 与真实 handler（或两个 mock）；send/handler 用同一对 `(key, name)`
-  字符串。实例名由使用方自选，同一效应族同时安装的实例名必须互不相同。fs 的早期单实例 API 已迁移
-  （`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40` 已更新。
+  字符串。实例名由使用方自选，同一效应族同时安装的实例名必须互不相同。fs 的 API 是带
+  实例名的形态（`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40`。
 - **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
 - **原生 sleep**：编译器原语 `prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，interp 不归约）。
-  `Base.EffClock` 的 `SleepMicros` 直接走 `prim_eff_sleep`
-  （`spinMicros` 已删除；当前 seed 认识 `prim_eff_sleep`）。
+  `Base.EffClock` 的 `SleepMicros` 直接走 `prim_eff_sleep`。
 - **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = prim_eff_exit`，调用即
   结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能
@@ -147,20 +144,19 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **fs mock/real 并存**：`dt_base/40` 用同一个 `prog n` 在 `FsOp@mock`（纯 answer mock：固定
   内容/大小）与 `FsOp@real`（真实宿主 handler，真实目录读写）下各跑一次，mock 与 real handler
   在同一程序里并存。
-- **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出改走
+- **工具链真实路径**：`lib/Vuna/Cli.vuna` 的 `vuna version` 输出走
   console 标签——`consoleLine` 用 `consolePrint msg`（默认实例名，`Member n ConsoleOp r =>`）
-  走宿主行；只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块仍直接调用
-  `prim_eff_*`（纪律而非门控）。**编译器级强制不可行**的
-  具体位置：manifest 能力/信任门控已整体删除（旧 `checkEffectsBuiltins` 的包级能力检查
-  不复存在），类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内都可用；编译器自身
-  也在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。**最小下一步**：在 `vuna lint`
-  增加一条模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，白名单
-  `Vuna.Cli.consoleLine` 一类的迁移点），而不是改类型检查器。
+  走宿主行；只在最外层 `runPure`（工具链入口是 `main : Eff [] Int`）。工具链其余模块直接调用
+  `prim_eff_*`（纪律而非门控）。**编译器级强制不可行**：
+  没有 manifest 能力/信任门控，类型系统也没有类型级能力行，`prim_*`/`prim_eff_*` 在任何包内
+  都可用；编译器自身在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。纪律面可在
+  `vuna lint` 增加模块级规则（如禁止 `lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，
+  白名单 `Vuna.Cli.consoleLine` 一类的点），而不是改类型检查器。
 - **对拍夹具**（`.nointerp`，只 check + compile + run）：
   - `dt_base/26_eff_console`：同一 `prog n` 在 `ConsoleOp@mock`（mock，纯 answer 收集日志）
     与 `ConsoleOp@real`（real，`prim_eff_print`/`prim_eff_eprint`）下各跑一次；
   - `dt_base/27_eff_clock`：mock 固定时间 → elapsed 0；real 断言 sleep 后时间推进
-    （真实 handler 现在走 `prim_eff_sleep`）；
+    （真实 handler 走 `prim_eff_sleep`）；
   - `dt_base/28_eff_env`：mock 与 real 对「缺失变量为空 / cwd 非空 / execPath 非空」打分；
   - `dt_base/29_eff_fs_ext`：真实 fs 读写 + 原子写 + 元数据 + 目录 + 删除（`handleFsHost "real"`）；
   - `dt_base/30_eff_process`：mock 固定 args/退出码；real 用 `prim_eff_getArgs`（不含 argv[0]）
@@ -171,14 +167,13 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
     → `TC_TypeMismatch`（实例名必须一致）；
   - 原语探针夹具 `test/corpus/packages/10_prim_io`：直调 `prim_eff_sleep` 并断言真实推进时间
     （native sleep 的正向探针；没有 manifest 门控）。
-- **能力（历史）**：`base` 的 `[capabilities] effects` 曾声明 `env`/`clock`（真实 handler
-  需要）；该机制已整体删除——没有包级能力声明/检查，任何包都可直调 `prim_*` /
-  `prim_eff_*`。仍有效的边界决策：不做类型级能力行（见 [effects.md](effects.md) §8.6）。
-- **边界**（D43 已收口；manifest 门控已删除）：
-  - **宿主层可见**：宿主层就是直接调用 `prim_eff_*`（原宿主别名模块已删除），任何包都可直调 `prim_*` / `prim_eff_*`，不受
-    门控；用户面**应**经 `Eff` + handler（纪律/文档约定，不是强制）。
+- **没有包级能力声明**：`[capabilities] effects` 这类声明不存在——任何包都可直调
+  `prim_*` / `prim_eff_*`，也没有类型级能力行（见 [effects.md](effects.md) §8.6）。
+- **边界**（没有 manifest 门控）：
+  - **宿主层可见**：宿主层就是直接调用 `prim_eff_*`，任何包都可直调 `prim_*` / `prim_eff_*`；
+    用户面**应**经 `Eff` + handler（纪律/文档约定，不是强制）。
   - **内部使用**：`vuna-base` 真实 handler、`vuna-compiler` 与根工具链保留原语直调；
-    工具链只迁了一条真实 console 路径（`vuna version`），编译器不迁移（终态决策）。
+    工具链里只有 `vuna version` 的 console 路径走标签，编译器不走标签（终态决策）。
   - **`Exit` 的真实语义保留**：`handleProcessHost` 仍会结束进程；「不退出」只在 mock /
     `onExit` 参数 / `handleProcessHostObserved` 下成立；
   - 入口未处理效应是类型错误（`TC_UnhandledEffects`）；运行时 `unhandled effect` 兜底

@@ -37,7 +37,7 @@ data Term where
 - `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
   （`defVals`）；缓存是可重建的，未命中回落 `force` 的 delta 展开，不影响语义。`Ec.deftbl`
   的语义是「名字 → **定义体**」：签名项绝不能进 deftbl，否则 `force` 会把 primitive 类型
-  归约成 `Type`（接口摘要路径的 C37 根因，见 [compiler.md](compiler.md) §接口摘要）。
+  归约成 `Type`（接口摘要路径上的假歧义，见 [compiler.md](compiler.md) §接口摘要）。
 
 ## 2. NbE
 
@@ -106,7 +106,7 @@ data Term where
 - 擦除检查在 `check` 与 `compile` 都跑：运行时位置引用被擦除绑定 / 类型级定义 / `TPi`
   报错。类型族（结果以 `Type` 收尾的 Pi 链）整体擦除；`axiom` 强制进类型级分区，运行时
   使用报 `CG_AxiomAtRuntime`。
-- **表现层 cast（D27）**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
+- **表现层 cast**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
   让求值期把它归约为唯一实参；`Core.Eval.applyValueFuel` 另外在**函数位置**直接消去，
   避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / interp
   完全透明，不改变 0/1/ω 判据（应用记 `Rig1`，不放大线性用量）。

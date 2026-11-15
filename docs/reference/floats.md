@@ -34,7 +34,7 @@ floatFromInt : Int -> Float     -- 见 Base.Float.intToFloat（更可读的别�
 intFromFloat : Float -> Int     -- 向零截断
 ```
 
-`Base.Float` 随 `Prelude` 自动导出（2026-11 rotation 后提升）：`abs`、`sqrt`、
+`Base.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
 `intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
 import（显式 `import Base.Float` 仍允许）。`show` 输出 OCaml `string_of_float` 的十进制
 形式。代价见「Prelude 与产物影响」。
@@ -44,7 +44,7 @@ import（显式 `import Base.Float` 仍允许）。`show` 输出 OCaml `string_o
 
 ### interp / REPL
 
-核心求值器**支持浮点**（B44 起）：`vuna interp` 与 REPL 求值按 IEEE-754 double 归约
+核心求值器**支持浮点**：`vuna interp` 与 REPL 求值按 IEEE-754 double 归约
 全部浮点原语（`+ - * /`、`< <= > >=`、`==`、`/=`、`abs` / `sqrt` → `floatAbs` /
 `floatSqrt`、`strFromFloat` / `floatFromInt` / `intFromFloat`），语义与编译产物一致
 （除零得 `infinity`、`0.0 / 0.0` 得 `nan`、`nan == nan` 为 False、`+0.0 == -0.0` 为
@@ -72,7 +72,7 @@ REPL 的 `:type` 仍只做类型检查，不等价于求值。**类型表达式�
 
 * 找到实例：字面量降级成 `fromString "..."` / `fromInt 42` / `fromFloat 1.5`，再按普通
   方法调用精化（隐式类参、字典 binder、延迟字典目标都走既有路径）；
-* 找不到：回退到原来的推断路径并给出通常的类型错误。
+* 找不到：回退到常规推断路径并给出通常的类型错误。
 
 trait 定义：
 
@@ -127,23 +127,22 @@ main = case (MkEmail "x@y") of
 
 ## Prelude 与产物影响
 
-`Base.Float` 自 2026-11 的 rotation 起进入 `Prelude`（`module Base.Float` + `import
-Base.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
+`Base.Float` 进入 `Prelude`（`module Base.Float` + `import Base.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
 Prelude 的是 trait、实例与 helper。取舍：
 
 * `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToInt` 与 `Show/Eq/Ord Float`
   随 Prelude 自动可见；`deriving (Show, Eq, Ord)` 的包装类型字段是 Float 时也不需要
   额外 import。
 * 代价：Prelude 闭包包含 `Base.Float`，`Codegen.Split` 按**全部定义**扫描浮点用法，
-  因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；原先把 Float 当 opt-in 时的
-  「no-float 程序逐字节一致」不再成立（seed 固定点/模块缓存仍由 rotation 保证）。
+  因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；没有「no-float 程序不追加」的
+  逐字节约定（seed 固定点 / 模块缓存仍由 rotation 保证）。
 * `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「interp 见浮点就拒绝」
-  的 guard 已随 B44 删除；interp / REPL 直接按 `Core/Eval` 的浮点归约求值。
+  的 guard 不存在；interp / REPL 直接按 `Core/Eval` 的浮点归约求值。
 * `Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），不改变 Int/String 原语面。
 
 ## 测试
 
 `test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
 模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float`、Prelude 默认
-可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。B44 起
-浮点夹具不再带 `.nointerp`：interp 与 run 都与同一份 golden 逐字节比较。
+可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。浮点夹具
+不带 `.nointerp`：interp 与 run 都与同一份 golden 逐字节比较。

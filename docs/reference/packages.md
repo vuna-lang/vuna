@@ -11,7 +11,7 @@
   `[dependencies]`（依赖声明，见下节）。TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
   点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
   不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略
-  （`[capabilities]` / `[trust]` / `[privileged]` 已删除，出现即未知 section/key）。
+  （`[capabilities]` / `[trust]` / `[privileged]` 均不存在，出现即未知 section/key）。
 - **workspace 根即一个包**（Cargo 风格）：根 `vuna.toml` 同时含 `[workspace]` 与
   `[package]`；成员是子目录，各自有自己的 `vuna.toml`。本仓库 = 根包 `vuna`（产品 CLI）+
   成员包 `vuna-compiler`（编译器）+ 成员包 `vuna-base`（标准库）；依赖图
@@ -91,26 +91,20 @@
   handler 使用效果——这是约定与文档纪律，不是强制门控。`vuna interp` 是纯核心求值
   （不执行效果），效果程序用 `compile` + 运行产物。
 
-## 效应边界（manifest 门控已删除）
+## 效应边界（无 manifest 门控）
 
-- 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 不再有 `[capabilities]`、`[trust]`、
+- 没有 manifest 级能力 / 特权 / 信任机制：`vuna.toml` 没有 `[capabilities]`、`[trust]`、
   `[privileged]`；`[package]` 只接受 `name`。
 - 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` / `prim_eff_*`
-  （效果原语是 `Eff []` 叶子）。编译器不再有包级原语白名单、宿主模块 import 门控、`unsafe` 的定义级
-  审计，也没有 `REPL --privileged`。旧诊断码 `PKG_EmptyCapability`、
-  `PKG_DuplicateCapability`、`PKG_TrustNeedsUnsafe`、`PKG_EmptyTrustPoint`、
-  `PKG_DuplicateTrustPoint`、`PKG_InvalidTrustPoint`、`PKG_TrustPointMissing`、
-  `PKG_NonPrivileged`、`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、
-  `LD_HostModulePrivileged` 全部删除（未发布、无兼容义务；历史见 git）。
+  （效果原语是 `Eff []` 叶子）。编译器没有包级原语白名单、宿主模块 import 门控、`unsafe` 的
+  定义级审计，也没有 `REPL --privileged`。
 - **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Eff.*` 标签 + handler 使用效果
   （入口执行点 `runPure : Eff [] a -> a`）；`prim_*` / `prim_eff_*` 是宿主层 / 底层原语，
-  base 的 Eff handler、编译器与根工具链内部仍直接使用它们——不再由编译器强制，只是约定。
-- **显式接受的损失**（历史见 git；后续用表示层权限（N2/N3）或新模型补）：宿主层 import 门控、
+  base 的 Eff handler、编译器与根工具链内部直接使用它们——不由编译器强制，只是约定。
+- **显式接受的损失**（[debt.md](debt.md) D62）：宿主层 import 门控、
   每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
   是 `Eff r a`，入口 `main : Eff [] a`，`vuna interp` 不执行运行时效应。
-- **base 的宿主层直接使用点（只读说明）**：`base/vuna.toml` 曾用 `[trust] unsafe` 收敛
-  `unsafe` 的直接使用点，机制删除后清单见 git 历史；13 个真实使用点见
-  [effects.md](effects.md) §8.6。
+- **base 的宿主层直接使用点**：13 个真实使用点见 [effects.md](effects.md) §8.6。
 
 ## 依赖声明（源 + 摘要）
 
@@ -184,7 +178,7 @@ modules = [
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
-没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`，原宿主别名模块已删除。）
+没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`，没有别名模块。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），
@@ -232,7 +226,7 @@ modules = [
 | `vuna version`, `vuna --version` | 版本 |
 | `vuna help`, `vuna -h` | 用法 |
 
-每个命令都必须显式书写，不再支持“无子命令 = compile”的旧式回退。没有可选的检查器开关：
+每个命令都必须显式书写（没有「无子命令 = compile」的回退）。没有可选的检查器开关：
 所有编译命令都走 DT 精化 + 擦除 codegen，`vuna interp` 总是 DT 精化 + 核心求值。包目录
 入口直接作为入口文件交给 `compile` / `check`；`compile`/`build` 的产物统一是逐模块目录
 （`--out` 指定 build 的输出目录），seed rotation 用 `build --no-compile --out` +

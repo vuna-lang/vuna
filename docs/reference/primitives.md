@@ -16,7 +16,7 @@
 | intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
 | 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
-| 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；原宿主别名模块已删除，任何包都可直调，没有 manifest 门控 |
+| 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；没有别名模块，任何包都可直调，没有 manifest 门控 |
 
 ## 2. 身份与常量
 
@@ -27,7 +27,8 @@
   `Base.String` / `Base.Float`（实例跟类型模块走；primitive 无构造子，实例体走内建特化）。
   类型身份仍由本文件的内建表提供，`Base.Int` 不声明类型。**这是设计选择而非欠账**：把
   `Int`/`String`/`Float` 上移成源码 `primitive type` 声明需要两阶段 bootstrap、改大量身份
-  比较与 `Base` 叶模块拆分，功能零增益；用户自定义 primitive 类型的需求归受限 FFI（D21）。
+  比较与 `Base` 叶模块拆分，功能零增益；用户自定义 primitive 类型的需求归受限 FFI
+  （[debt.md](debt.md) D21）。
   实例落点规则见 [operators.md](operators.md)。
 - **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Eq` /
   `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
@@ -63,7 +64,7 @@
 - 表示：宿主 OCaml `int`，**固定 63 位**：`max_int = 4611686018427387903`、
   `min_int = -4611686018427387904`。类型层没有宽度 / 区间信息，`Int` 就是 `Type`。
 - 算术：`+` `-` `*` 在溢出时按**二进制补码回绕**（`max_int + 1 = min_int`），不报错、
-  不饱和、不提升为大整数。**无大整数计划**。D23 起 `+ - * /` 是 `Base.Num` 方法
+  不饱和、不提升为大整数。**无大整数计划**。`+ - * /` 是 `Base.Num` 方法
   （`add` / `sub` / `mul` / `div`）的中缀别名，Int 实例的方法体由精化器特化回
   `bi_*` 内建原语；下面的数值语义不变。
 - `/`：整数除法向零截断；`a / 0` 在产物运行期抛宿主 `Failure "division by zero"`
@@ -106,11 +107,11 @@
   `Base.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
   两侧 Nat（或 Nat 与字面量）→ Nat；出现真正的 `Int` → `Int`（Nat 侧经 `natToInt` 提升）。
   低层原语（`strLength` / `arrayLength` 等）仍是 Int，Base 负责暴露 Nat 度量。
-- **算术 = `Num` 方法（D23）**：`+ - * /` 是 `Base.Num` 方法 `add` / `sub` / `mul` / `div`
+- **算术 = `Num` 方法**：`+ - * /` 是 `Base.Num` 方法 `add` / `sub` / `mul` / `div`
   的中缀别名；`Int` / `Nat` / `Float` 实例由精化器按期望类型/实参类型特化回内建原语，
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
-- **度量返回 Nat（D25，只留在 Eff handler 的 result 族）**：`Base.EffConsole.Print` 与
+- **度量返回 Nat（只留在 Eff handler 的 result 族）**：`Base.EffConsole.Print` 与
   `Base.EffFs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）；
   直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`。
   `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
@@ -145,17 +146,17 @@
 - `main` 展示钩子（`Codegen.Term.mainShow`）：`Int` / `Nat` → `string_of_int`、
   `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
   `False`）、`Float` → `string_of_float`。
-- **其它类型走 `Show` 实例**（D17）：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
+- **其它类型走 `Show` 实例**：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
   类型（`main : Eff [] a` 先剥掉动作层取 `a`）搜索 `Dict_Show a`，合成
   `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
   `mainShow` 对它回退到这条定义名；interp（`Driver.Dt.evalDtMainCore`）对 main 值应用
   同一份定义后打印。找不到实例在**精化期**报
-  `[TC_NoInstanceFound] no instance found for <T>`（旧的 `[CG_MainReturnType]` 已随 D17
-  删除，不再产生；`@vuna@main_show` 在 split 归属里固定归入口单元 `Main`）。
-- **`vuna test` 的 main 判据不变**：`lib/Vuna/TestRunner.dtMainKind` 仍只认
+  `[TC_NoInstanceFound] no instance found for <T>`；`@vuna@main_show` 在 split 归属里固定
+  归入口单元 `Main`。
+- **`vuna test` 的 main 判据不变**：`lib/Vuna/TestRunner.dtMainKind` 只认
   `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与动作入口（退出码 0）；
-  其它类型报 `unsupported test main type`。D17 只负责**展示**，不改变测试通过判据——
-  需要按 `Show` 类型写「纯测试」暂时只能显式转成 `String` 判定。
+  其它类型报 `unsupported test main type`。展示规则不改变测试通过判据——
+  需要按 `Show` 类型写「纯测试」只能显式转成 `String` 判定。
 - interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
   同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。非内建类型经
   `@vuna@main_show` 得到的是 `String`，两侧都直接 `print_endline`（**不加引号**）。
@@ -215,9 +216,9 @@
 - **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
-- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；局部可变（region/ST、
-  可变数组、字符串缓冲）已删除，重建约束见 [debt.md](debt.md)；仍无依赖 multiplicity /
-  线性箭头（多用未禁止，见 [effects.md](effects.md)）。
+- 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；没有局部可变入口
+  （region/ST、可变数组、字符串缓冲），重建约束见 [debt.md](debt.md) D63 / D64；也没有
+  依赖 multiplicity / 线性箭头（多用未禁止，见 [effects.md](effects.md)、[debt.md](debt.md) D22）。
 
 ## 7. 效果原语、Eff 动作与宿主层
 
@@ -228,7 +229,7 @@
 
 | 表 | 名字 | 类型 | 用途 |
 | --- | --- | --- | --- |
-| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | 宿主层（原宿主别名模块已删除，直接调用） |
+| Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | 宿主层（直接调用） |
 
 原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；Int/Nat 归一化只在 `Base.Eff.*` handler
 的 result 族（`Print`、`WriteFile`/`FileSize`）里做，原语本身返回 `Int`。
@@ -236,7 +237,7 @@
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
 实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
-运行时效应核心，常规只由 `Base.Eff` 包装使用（不再有 `unsafe` 门控）。
+运行时效应核心，常规只由 `Base.Eff` 包装使用（没有 `unsafe` 门控）。
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
 （`Base.EffConsole.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
@@ -292,7 +293,7 @@
 无 DNS / TLS / 异步 / 超时（`accept`/`recv` 阻塞，见 §8）。
 
 **名字面**：效果原语只有 `prim_eff_*` 名（外加 `effTimeUs`）。唯一用法是**直接**调用
-`prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明；原宿主别名层已删除）。
+`prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明）。
 
 **执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)`。没有 main 之外的通用执行入口：
@@ -303,7 +304,7 @@
 `IntrinsicOp.OpIdentity` 让它对求值/定义性相等透明。用户源码不可引用它（不在 prelude，
 也不受任何门控）。设计见 [effects.md](effects.md) §5。
 
-以下分组只是**文档归类**（内建表不再带能力位；调用不受门控）：
+以下分组只是**文档归类**（内建表不带能力位；调用不受门控）：
 
 | 分组 | 原语 / 入口 |
 | --- | --- |
@@ -316,16 +317,14 @@
 | 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
-  `prim_eff_*`。不再有 manifest `[capabilities]` /
-  `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`；旧诊断码
-  （`PKG_EffectCapabilityRequired`、`RN_UnknownCapability`、`LD_HostModulePrivileged`、
-  `PKG_NonPrivileged` 等）已删除，历史见 git。
+  `prim_eff_*`。没有 manifest `[capabilities]` /
+  `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`。
 - **推荐用法（纪律，非强制）**：常规用户面经 `Base.Eff.*` 标签 + handler 使用效果
   （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Eff*` handler 内部（需要直调时
-  调用 `prim_eff_*`）；base 的 Eff handler、编译器与根工具链内部仍直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
+  调用 `prim_eff_*`）；base 的 Eff handler、编译器与根工具链内部直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
   只是底层叶子。
-- 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）与后续方向见
-  [effects.md](effects.md) §8.6。
+- 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）见
+  [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62。
 
 ## 8. 生成 runtime 的契约
 
@@ -341,8 +340,8 @@
 
 | 原语 | runtime 契约 |
 | --- | --- |
-| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.EffConsole.Print` 在 handler 边界转 `Nat`，D25） |
-| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.EffFs.WriteFile` 在 handler 边界转 `Nat`，D25）；写失败抛宿主异常 |
+| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.EffConsole.Print` 在 handler 边界转 `Nat`） |
+| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.EffFs.WriteFile` 在 handler 边界转 `Nat`）；写失败抛宿主异常 |
 | `prim_eff_writeFileAtomic` | 同 `prim_eff_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
 | `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常 |
 | `prim_eff_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
@@ -351,7 +350,7 @@
 | `prim_eff_makeDir` / `prim_eff_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
 | `prim_eff_fileExists` | 路径不存在时为 `False` |
 | `prim_eff_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果族是 `Nat`，D25） |
+| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果族是 `Nat`） |
 | `prim_eff_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
 | `prim_eff_getcwd` | 失败时返回 `"."` |
 | `prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |

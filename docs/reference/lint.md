@@ -64,7 +64,7 @@ lint 的 dispatch 类改写统一是：**识别一个 dispatch，把它提升进
   alt 是外层 case 的最后一个 alt。
 
 提升只发生在 clause/alt 的**直接体**。嵌套在表达式里的 dispatch（`g (if b then A else B)`、
-let 值里的 if）需要上下文分发（case-of-case），会复制代码与求值结构，本轮不做，源码保持
+let 值里的 if）需要上下文分发（case-of-case），会复制代码与求值结构，lint 不做，源码保持
 原形。Bool 变量 if 提升不了时**不回退 case**：`if b then ...` 本身就是更紧凑的形态；
 只有字面量 if 链提升不了时才回退成 case（`chainFindings`）。
 
@@ -76,9 +76,9 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
 | `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
 
-dispatch 两条规则共用同一套 lane 判定与 as-pattern 渲染；`lift-destructure` /
-`case-to-clauses` 的旧 code 已删除（判定与渲染合并进 `dispatch-lift`）。`list-literal`
-是独立的表达式遍历（不是 dispatch 提升），见 §3.3。
+dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
+渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` 是独立的表达式遍历
+（不是 dispatch 提升），见 §3.3。
 
 ### 3.1 `literal-if-chain`
 
@@ -194,7 +194,7 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   因为「应写成列表字面量」本身是确定的。
 - **`list-literal` 的模板插值洞跳过**：lint 只拿到顶层 token 列表，`EInterp` 洞内 token
   不可见，切片右边界不可靠；formatter 同样不保留洞内注释（已知边界）。
-- **提升只在直接体**：嵌套 dispatch 需要上下文分发，本轮不做；保持原形。
+- **提升只在直接体**：嵌套 dispatch 需要上下文分发，lint 不做；保持原形。
 - **子句拆分只对单 clause 函数**：多 clause 函数里拆子句可能暴露 unreachable clause，
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
   if 保持 `if`。alt 拆分 / 替换要求该 alt 是最后一个。

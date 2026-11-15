@@ -19,17 +19,17 @@
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
 | `Source` | 底层位置/路径层（无 `Result`）：`Pos`/`Span`、路径拼接、近似名建议 | `showSpanLoc`、`suggest`、`splitPath` |
-| `Diag` | 结构化诊断模型（severity/phase/category/label/field/trace/ICE）与结果通道 `Check`（`ErrC Diagnostic`）；`diagText` 是过渡期 short 渲染 | `Check`、`Diagnostic`、`diagText`、`icFuel`、`withFallbackSpan` |
+| `Diag` | 结构化诊断模型（severity/phase/category/label/field/trace/ICE）与结果通道 `Check`（`ErrC Diagnostic`）；`diagText` 是 short 渲染 | `Check`、`Diagnostic`、`diagText`、`icFuel`、`withFallbackSpan` |
 | `Diag.Format` | 诊断渲染唯一入口：short/human/JSON | `renderShort`、`renderHuman`、`renderJsonList` |
 | `Common` | 编译器门面：重导出 `Source` + `Diag`，并保留固定类型的 `bind`/`step`/`traverse` | `bind`、`showSpanLoc`、`suggest`、`splitPath` |
 | `Diagnostics`（门面） | 错误码体系入口：重导出 `Diagnostics.Tc`/`Cg`/`Ic`/`Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
-| `Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（不再有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
-| `Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / 未来 wasm / interp 同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键，取代旧 10-bit `strHash` 与 6-lane 盐）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
+| `Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
+| `Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / wasm / interp 同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
 | `Addr` | **输入摘要（地址）唯一构造器**：`addrOf`（域分隔 + 规范编码 + SHA-256）、header 地址、项目身份 `projectIdAddrOf`；所有对象路径都由这里的纯函数决定 | `addrOf`、`headerAddrOf`、`projectIdAddrOf` |
-| `Fingerprint` | 编译器指纹的唯一来源：exe 路径 + 大小 + mtime → 63-bit 键，拼成 `<版本>/<指纹>` 的 tag；iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（C48 关闭的关键：二进制换代即整套缓存换代） | `compilerFingerprintEff`、`compilerTagEff`、`textHashOf` |
+| `Fingerprint` | 编译器指纹的唯一来源：exe 路径 + 大小 + mtime → 63-bit 键，拼成 `<版本>/<指纹>` 的 tag；iface 分桶、lex/check/split/unit 的 key 与 framing tag 共用（二进制换代即整套缓存换代） | `compilerFingerprintEff`、`compilerTagEff`、`textHashOf` |
 | `Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测、对象族读写（`objects/<kind>/`）、roots 与视图锁 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeObjectWriteEff`、`storeRootAppendEff`、`storeCacheBaseEff` |
-| `Canonical`（门面） | 规范字节编码（D5 / C32 的**唯一**载荷与哈希输入格式）：自定界原子文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 游标解码器（`Cur` = 原串 + 偏移，避免 `strUnpack` 整串拷贝） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`curOf`、`thenPair` |
+| `Canonical`（门面） | 规范字节编码（唯一的载荷与哈希输入格式）：自定界原子文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 游标解码器（`Cur` = 原串 + 偏移，避免 `strUnpack` 整串拷贝） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`curOf`、`thenPair` |
 | `Canonical.Term` | Core `Term` 的规范编码 / 解析（tag = 构造子声明序；`TVar` 的 span 丢弃） | `encTerm`、`encTermBytes`、`decTermComplete` |
 | `Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入、codegen 单元 key 与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
 | `Canonical.Lex` | 词法 token 流（`List PTok`）的规范编码 / 解析：**位置逐字节保真**，只服务 lex 缓存载荷（`Store` 承载），不进任何哈希输入 | `encPTokList`、`decPTokListComplete`、`encTok`、`decTok` |
@@ -64,7 +64,7 @@
 | `Elab.Termination` | 终止性检查：调用图 + SCC，结构下降/守卫 Int 判据（无包级豁免）。`checkTerminationDeclsWith` 允许把依赖包声明只作为 SCT 上下文、只报告本包函数的失败 | `checkTerminationDecls`、`checkTerminationDeclsWith` |
 | `Elab.Prelude` | 把 `Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
-| `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不再降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
+| `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
 | `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `generateDtSplitProgram` |
 | `Codegen.Lower` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
@@ -123,7 +123,7 @@
   flatten（内部名字带模块前缀；ad-hoc 单文件自动注入 `Prelude`），随后 `Loader.Expand`
   在名字解析前展开内置宏；
 - `Loader.Resolve` 的内建 arity / prelude 放行、`Elab.Prelude` 的签名全部来自
-  `Vuna.Compiler.Intrinsics`；没有 manifest 能力/特权/信任检查（机制已删除）；
+  `Vuna.Compiler.Intrinsics`；没有 manifest 能力/特权/信任检查；
 - `Elab.Driver.elabProgramFull` 做 DT 双向精化（record 声明由 `Elab.Data` 直接精化、
   `deriving` 由 `Elab.Derive` 从字段表展开，多 clause 由 `Elab.Match` 展开），产出
   `DtProgram`（datas / defs / classes / insts）；
@@ -165,7 +165,7 @@ check / build pkg
       └─ depIfacesOf：逐依赖包按地址读 `objects/iface/`（缺任一模块 ⇒ 回退全量）
             ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
             │     → 全量回退（并重写本包接口）
-            └─ 全部可用 → 接口路径（无干净模块 = 包内全量；S4 有干净模块 = 只精化脏模块）：
+            └─ 全部可用 → 接口路径（无干净模块 = 包内全量；有干净模块 = 只精化脏模块）：
                   modulesOfIfaces + cleanModules → Loader.loadProjectWithPreloaded（依赖 + 干净模块零 parse）
                     → resolveProjectKeeping（种子模块已解析，跳过）
                     → depStartOf（起始 Ec + globals；依赖 artifacts 来自模块摘要）
@@ -184,7 +184,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 1. **`Ec.deftbl` 只能装定义体**（`DtDef` 的 body）。签名项（尤其 `Int ↦ Type`、`String ↦ Type`
    这类内建类型 global）绝不能进 deftbl：`force` 会做 delta 展开，把 primitive 类型归约成
    `Type`，进而让 `Eq String` 的类参数变成 `Type`、所有内建实例头同归约，报出
-   `TC_AmbiguousInstance (Eq Type)` 假歧义（C37 历史根因）。
+   `TC_AmbiguousInstance (Eq Type)` 假歧义。
 2. 摘要项必须**闭合、无 `TMeta`、无负 de Bruijn 索引**；已解元变量按出现点深度 quote
    （`Core.Eval.substSolvedMetasAtTbl`，`quote 0` 会把 binder 下的解拍成负/错位索引，而
    `lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
@@ -201,17 +201,17 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 已知边界
 
-- 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化已按模块增量（S4：干净模块复用、脏性沿 import 保守传播）。
+- 接口物理单位是**模块**（per-module 文件 + manifest）；包内精化按模块增量（干净模块复用、脏性沿 import 保守传播）。
 - 依赖包的实例/类仍全部并入视图（过近似，与包级摘要一致）；模块签名隔离另立项。
-- codegen 已按单元缓存（S5/S7，默认开）；纯代码生成仍整包跑（生成占冷 build ~10–20%，
+- codegen 按单元缓存（默认开）；纯代码生成仍整包跑（生成占冷 build ~10–20%，
   逐单元可并部分仅 7–8%，并行收益 <7%；见 [performance.md](performance.md) §9）。
 - LSP / REPL 消费接口默认开启（`VUNA_IFACE_TOOL=0` 关闭）：惰性闭包 + 会话缓存 + 单文件
-  增量 + 单模块写回已落地；工具写回与整包产物按 `meOrigin` 结构性隔离。残留擦除位 meta
+  增量 + 单模块写回；工具写回与整包产物按 `meOrigin` 结构性隔离。残留擦除位 meta
   靠**按模块名排序后的名次**分配段号重编号（`Driver/Cache.shiftTerm` / `Driver/Dt.shiftedDepPrograms`；
   覆盖与段确定性已修，彻底收尾需语义方案 B，见 [debt](debt.md) C37）。
 - 快判默认内容哈希，`VUNA_CACHE_MTIME=1` 可开 mtime+size 快路径（5s 安全窗）；缓存载荷是
   `Canonical.*` 显式编码 + `Store` framing（magic/tag/codec/len/内容地址），读侧坏条目
-  即 miss 并覆盖写（C32 已关闭，见 [cache.md](cache.md)）。
+  即 miss 并覆盖写（见 [cache.md](cache.md)）。
 
 ## codegen 的表示
 
@@ -222,7 +222,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（`Codegen.Lower` 过滤族、折叠 Succ 链、降级 Nat case；后端只渲染），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
-**例外（D27）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用，如 `res op`）
+**例外（`res op` 这类擦除依赖）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用）
 整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见
@@ -281,7 +281,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 编译全部源码；增量构建按依赖分层（`depth(u) = 1 + max(depth(dep))`，同层单元互不依赖），
 单单元层前台、多单元层 `&` + `wait` 并行，每单元 stamp 只含自身 `.ml/.mli` 与**直接依赖**
 的 `.stamp` 内容哈希——改一个单元只重编它的（直接/传递）依赖者。链接顺序 = 拓扑序
-（依赖在前）。依赖图是精确 DAG，旧的「全序 open 链 / 文件顺序即依赖顺序」模型已不存在。
+（依赖在前）。依赖图是精确 DAG（没有「全序 open 链 / 文件顺序即依赖顺序」模型）。
 
 命令边界：`compile` 成功静默（不写 `build-meta.json`、不调 `ocamlopt`）；`build` 默认输出到
 `<PKG-DIR>/.output`（`--out DIR` 覆盖），codegen 后执行 `build.sh` 链接，`build --no-compile`

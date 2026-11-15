@@ -69,9 +69,8 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
   在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
   `nix/seed-rotation.txt`（`nix/seed-rotate.sh`，失败不破坏工作树）；
-- 接口缓存已并入对象库（`$VUNA_STORE/objects/iface`），rotation 前不需要再清理源码旁的
-  `*.iface` / `.vuna-iface`（树内文件层已删除；历史说明 stale-ref-ok）；两遍编译共用对象库，位置表路径由包上下文
-  归一，fixed point 比较的是生成文件集；
+- 接口缓存放在对象库（`$VUNA_STORE/objects/iface`），源码旁没有接口文件；两遍编译共用
+  对象库，位置表路径由包上下文归一，fixed point 比较的是生成文件集；
 - CI 用 `checks.seed-selfhost` 守不变量 1/2：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
   `diff -r` 逐字节一致；同时报告 seed 与当前源码生成结果的滞后规模（不失败），按
@@ -106,12 +105,12 @@ git add seed/ nix/seed-count.txt nix/seed-files.txt nix/seed-rotation.txt && git
 "$tmp/seed" compiler` → 按 `nix/tcb-forbidden.txt` 断言 TCB → 用该种子构建并验证自生成
 fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.txt`，因此中间失败不会破坏
 当前信任锚点。TCB 黑名单只有 `nix/tcb-forbidden.txt` 一份（由 `nix/tcb-check.sh` 断言），
-新增工具模块时追加到那里。替换步骤先把新种子复制到同目录临时路径，再用 rename 换入
-（失败回滚旧 `seed/`），因此不再有 `rm -rf seed` 的半成品窗口。
+新增工具模块时追加到那里。替换步骤先把新种子复制到同目录临时路径，再用 rename 换入，
+失败时保留原 `seed/`。
 
 注意：种子必须从仓库根、以 `compiler` 为包目录生成（脚本已固定这一点），这样产物里嵌入的
-源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），旧种子会按旧语义编译新
-编译器，需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
+源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），种子会按旧语义编译新
+编译器，因此需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
 ## 硬不变量
 
@@ -124,24 +123,24 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
    没有可切换的检查器，也没有第二套 codegen。
 
-## 效应边界（manifest 门控已删除）
+## 效应边界（无 manifest 门控）
 
-`seed/` 里没有工具链模块，但编译器自身需要文件读写。这条边界**不再由 manifest 门控**：
-`[capabilities]` / `[trust]` / `[privileged]` 与宿主模块 import 门控已整体删除。
+`seed/` 里没有工具链模块，但编译器自身需要文件读写。这条边界**不由 manifest 门控**：
+没有 `[capabilities]` / `[trust]` / `[privileged]`，也没有宿主模块 import 门控。
 
-- **seed 闭包不变**：seed 仍只含 compiler 包入口闭包；编译器与 base 的 Eff handler 仍直调
-  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。动作类型仍是唯一的 `Eff r a`，入口 `main : Eff [] a`，
+- **seed 闭包不变**：seed 只含 compiler 包入口闭包；编译器与 base 的 Eff handler 直调
+  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。动作类型是唯一的 `Eff r a`，入口 `main : Eff [] a`，
   执行入口 `Base.Eff.runPure`。
 - **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以直接调用
   `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
-  REPL `--privileged`。编译器不再检查内建的能力位。
+  REPL `--privileged`。编译器不检查内建的能力位。
 - **用户面纪律（非门控）**：用户面**应**经 `Base.Eff.*` 标签 + handler 使用效果；宿主层
-  细节留在 `prim_eff_*` / `Base.Eff*` handler 内部（原宿主别名模块已删除）。见 [effects.md](effects.md) §8.6 与
+  细节留在 `prim_eff_*` / `Base.Eff*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
   [primitives.md](primitives.md) §7。
 - **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
-  根包可用；历史见 git，后续用表示层权限（N2/N3）或新模型补。
-- `Driver.CompilerCli.runIn`（`prim_eff_runIn`）仍是唯一的进程执行入口（代码内部约定，
-  不再是能力检查）。
+  根包可用（[debt.md](debt.md) D62）。
+- `Driver.CompilerCli.runIn`（`prim_eff_runIn`）是唯一的进程执行入口（代码内部约定，
+  不是能力检查）。
 
 ## 种子文件集（当前）
 

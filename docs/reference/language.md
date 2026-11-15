@@ -54,7 +54,7 @@
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
 - 效果原语**只有 `prim_eff_*` 名**（`prim_eff_print` / `prim_eff_readFile` / `prim_eff_getArgs` /
-  `prim_eff_getenv` / …；外加 `effTimeUs`）：宿主层直接调用这些原语（原宿主别名模块已删除），
+  `prim_eff_getenv` / …；外加 `effTimeUs`）：宿主层直接调用这些原语，
   没有 manifest 门控；见 [primitives.md](primitives.md) 的
   效果原语与宿主层一节；
 - `&&` / `||` 短路求值：先求左操作数，左侧能决定结果时不求值右侧（核心求值器与 codegen
@@ -114,9 +114,9 @@ g =
     pick (Succ _) (Succ _) = 3
   ```
 
-- **`let` 模式解构**：`let` 绑定左端可以是构造子 / 记录 / 字面量模式（不再只允许简单名 /
+- **`let` 模式解构**：`let` 绑定左端可以是构造子 / 记录 / 字面量模式（不只简单名 /
   通配）。语义等价单分支 `case`：模式必须不可失败（穷尽），否则报
-  `[TC_NotExhaustive] case is not exhaustive: missing ...`；模式绑定出的变量在后续绑定与
+  `[TC_NotExhaustive] case is not exhaustive: missing ...`；模式绑定出的变量在之后的绑定与
   `in` body 中可见。
 
   ```vuna
@@ -167,7 +167,7 @@ idT x = x
   `[CG_AxiomAtRuntime] axiom ... cannot be used at runtime (it has no runtime definition)`；
 - axiom 是普通顶层声明：名字自动 mangle、默认不导出、`export` 后可进模块导出表；同一名字不能再
   有定义体（`[TC_AxiomWithDefinition]`），也不能重复声明；
-- `axiom` 是保留关键字；当前编译器自身不用 axiom（旧 seed 必须能编译新源码）。
+- `axiom` 是保留关键字；当前编译器自身不用 axiom（seed 必须能编译当前源码）。
 
 ## `opaque` / `transparent` 定义
 
@@ -188,8 +188,8 @@ M = Int
   不可展开（seal）；`opaque` 只对下游隐藏，定义模块仍可展开。
 - 包 check/build（含增量路径）、单文件 `dtCheckSource`、REPL/表达式求值与 `dtEvalFile`
   均使用模块边界 seal；goal/tolerant 查询仍不复用模块过滤（只影响工具查询）。
-- `opaque record` 是记录表示档位的旧前缀，已退役；记录请用 `boxed record` /
-  `alias record`，见 [records-traits.md](records-traits.md)。
+- 记录表示的档位前缀只有 `boxed record` / `alias record` / 裸 `record`（见
+  [records-traits.md](records-traits.md)）；没有 `opaque record` 前缀。
 
 ## 签名的 trait 约束
 
@@ -223,11 +223,11 @@ consolePrint s = sendCore ConsoleOp "console" n (Print s)
 vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改代码沿用：
 
 - **签名不写可量化的类型参数**：自由小写名由精化器量化为隐式参数（`vhead : Vec n a -> a`
-  等价 `{a : Type} -> ...`）；纯索引写 `{n : Nat} ->`，子句与调用点不再手写该参数；
+  等价 `{a : Type} -> ...`）；纯索引写 `{n : Nat} ->`，子句与调用点不手写该参数；
 - **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`，
   不依赖 body 里 `==` 的隐式字典提升；
 - **Bool 不做字面量搬运**：`if c then True else False` 写 `c`，`if c then e else False` 写
-  `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Bool.not`，不再自建；
+  `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Bool.not`；
 - **单构造器类型用 `record` + 字段访问**：位置访问器在有高阶使用（`map acc`）或终止性
   投影处保留为函数，其余调用点写 `x.field`；
 - **模块头显式导出列表**：不写「省略 = 全导出」的 v0 形态（空导出写 `()`）。
@@ -320,9 +320,9 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - 入口文件可以在模块根外（如 `app/Main.vuna`），它本身不是模块，不能写模块头；目录入口
   （`check/build <dir>`）只认该目录自己的 `vuna.toml`，**不向上找**；
 - 包模式下模块根由 `vuna.toml` 解析：本包 `lib/` + 依赖包 `lib/`（按依赖 DAG 排序，
-  跨包只看得见依赖包 `[export]` 里的模块）；`app/` 是纯入口目录，不再作为模块根；
+  跨包只看得见依赖包 `[export]` 里的模块）；`app/` 是纯入口目录，不是模块根；
   包内每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块），
-  显式 `import Prelude` 时不再重复注入，Prelude 自身不注入；
+  显式 `import Prelude` 时不重复注入，Prelude 自身不注入；
 - `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
 - import 的四种形式：
 
@@ -335,7 +335,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
   alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，且不能
   与另一个被 import 的模块名冲突；
-- **逐定义导出（D11 终态）**：模块默认 **module-private**，只有 `export` 标在定义前的
+- **逐定义导出**：模块默认 **module-private**，只有 `export` 标在定义前的
   名字对下游可见。
 
   ```vuna
@@ -359,7 +359,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `opaque` / `transparent` 之前或之后；`export import` 直接替换同模块的普通 `import`，
   不会重复导入。导出项顺序不是语义，`vuna fmt` 会规范化。
 
-- **私有性只看 `export`**：模块默认 module-private；`_` 前缀不再有特殊私有含义，
+- **私有性只看 `export`**：模块默认 module-private；`_` 前缀没有特殊私有含义，
   `export _helper` 是合法的。裸 `_` 仍不能作顶层名（它是通配符）；
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
   要公开构造器必须写 `T(..)`；
@@ -381,7 +381,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   open import 的 data/record 构造子），多于一个候选时不立即报歧义，而是交给精化器按
   **期望类型 / scrutinee 族**选 canonical 构造子（值位置、应用实参、类型位置、`case`
   分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.List`
-  的 `Nil`/`Cons` 则默认 List（保持 `[]`/`Nil` 旧体验），否则报
+  的 `Nil`/`Cons` 则默认 List（与 `[]`/`Nil` 的写法一致），否则报
   `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
   同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
 - **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名
@@ -415,17 +415,17 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `data Pair a b where Pair : a -> b -> Pair a b` 的 `Pair` 在类型位置是族、在值位置是
   构造子；显式 `(a : Type)` 参数处的族名（`firstTy Pair ...`）作为类型层实参可用，
   导入模块的类型名同样可用（例如 `:type Maybe` 打印 `Maybe` 的 kind）。
-- **不同命名空间不互相遮蔽**：本模块声明的**类型**名不再抢走同名的导入**值**（
+- **不同命名空间不互相遮蔽**：本模块声明的**类型**名不抢走同名的导入**值**（
   `import Values (token)` + 本地 `data token : Type`：值位置的 `token` 是导入的 Int 值，
   类型位置的 `token` 是本地类型）；本模块的值定义也不进类型命名空间（除非走上面的类型层
   def 退化路径）。
 - 导出侧仍按名字各自的命名空间解析（裸 `T` 导出类型、`T(..)` 导出构造子）；解析层的三张表
-  与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不再把三者拍平，精化器也不需要靠
+  与导出 kind 的 `val` / `ctor` / `type` 一一对应，解析器不把三者拍平，精化器也不靠
   「kind 是不是宇宙」猜名字属于哪个命名空间。
 - **跨模块类型层引用**：类型层 def 退化路径只看**本模块**同名值定义；跨模块类型层定义
   （含 `axiom t : Type`）只要在本模块 import 的导出面里，类型位置的裸小写名也会解析到它
   （值 → 构造子 → 类型顺序，与限定名 `M.t` 等价）。未导入/未绑定的小写名仍是隐式类型变量；
   显式 `{a : Type}` binder 会遮蔽同名 import。
 - **同名声明**：三套命名空间互不遮蔽；同模块 `data T` 与值 `T` 同名也可用——类型位置取
-  族 kind（`DtData.dtDataKind`），值位置取值签名，精化器的 globals 单表不再互相覆盖；
+  族 kind（`DtData.dtDataKind`），值位置取值签名，精化器的 globals 单表不互相覆盖；
   与数据族同名的值定义不做 delta 展开，避免把类型位置的 `T` 归约成值。

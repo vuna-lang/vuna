@@ -1,8 +1,7 @@
-# 输入寻址对象库（缓存终态 v2）
+# 输入寻址对象库
 
-本文记录 vuna 现在**唯一的缓存形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
-命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。历史形态（`*.iface` 文件层 +
-包级 manifest + 查询图节点）在 git 历史里。
+本文记录 vuna **唯一的缓存形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
+命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。
 
 ## 三条正交的东西
 
@@ -54,7 +53,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 | 包级 `build`（快路径） | `objects/splitptr/<splitIn>` → 语义 blob | 精化一次再按语义 key 判 |
 | 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
 | 依赖模块接口 | 按地址读 `objects/iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
-| 依赖身份（D69） | `objects/pkgiface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
+| 依赖身份 | `objects/pkgiface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
 | 工具会话（LSP/REPL/`map`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
 | 模块 header | `objects/header/<addr>` 存在 | 解析源码取 header |
 
@@ -63,7 +62,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 - 包名 + kind（`exe` / `lib:<导出面摘要>` / `pr0|pr1`）；
 - `manifest` = **语义**清单投影（包名、`[export]`、依赖的 alias/source/hash）；
   `[diagnostics]`（纯显示配置）与 `[registry]`（取包位置）**不进指纹**——改诊断格式
-  或索引位置不得让整包与依赖方接口失效（D69 已收口）；
+  或索引位置不得让整包与依赖方接口失效；
 - `src` = **本包**源文件闭包摘要；
 - `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要）；
 - `ver` = 编译器版本 + 二进制指纹；
@@ -76,13 +75,13 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 ## 哈希命名（定稿）
 
-| 名称 | 输入面 | 角色 | D5 |
-| --- | --- | --- | --- |
-| `contentHash` | 文件 `(相对路径, 字节)` | 完整性、包对象地址、manifest `hash` | 内容哈希 |
-| `ifaceHash` / `miIfaceHash` / `hashOfIface` | 下游可见语义面（span/path、`opaque`/`abstract` 体排除） | 逻辑指纹：依赖失效 | 逻辑指纹（接口面） |
-| `implHash` / `miImplHash` | 产物面（含 `opaque`/`abstract` 体，不含 span） | 产物身份 | 逻辑指纹（实现面） |
-| `pkgIfaceHash` / `pkgImplHash` | 模块摘要按名排序聚合 | 包接口身份 / 包产物身份 | 身份模型 |
-| `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（不参与缓存失效） | 身份模型（源） |
+| 名称 | 输入面 | 角色 |
+| --- | --- | --- |
+| `contentHash` | 文件 `(相对路径, 字节)` | 完整性、包对象地址、manifest `hash` |
+| `ifaceHash` / `miIfaceHash` / `hashOfIface` | 下游可见语义面（span/path、`opaque`/`abstract` 体排除） | 逻辑指纹：依赖失效 |
+| `implHash` / `miImplHash` | 产物面（含 `opaque`/`abstract` 体，不含 span） | 产物身份 |
+| `pkgIfaceHash` / `pkgImplHash` | 模块摘要按名排序聚合 | 包接口身份 / 包产物身份 |
+| `identityHash` | 包名 + `[export]` + 依赖摘要 + 文件内容摘要 | 分发/pin 身份（不参与缓存失效） |
 
 ## 正确性
 
@@ -98,9 +97,8 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 - 每个项目一个目录 `roots/<项目摘要>/`，每个受保护 digest 一个空文件（项目 = 规范化绝对
   包目录的摘要）。项目**只追加**；没有读-改-写，并发 check/build 不会丢 root。
-  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧兼容旧的单文件布局；
-  写侧遇到 `roots/<项目>` 是文件时先读 digest 列表、删文件、建目录（seed rotation 里
-  stage0 用旧布局、stage1 用新布局，必须能平滑接上）。
+  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧也接受单文件布局
+  （`roots/<项目>` 是文件时先读 digest 列表），所以 stage0 / stage1 两种布局能平滑接上。
 - 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna fetch` 取到包后、
   test verdict 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
@@ -119,7 +117,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 - **views/testbin**：effect 测试二进制按 `testbin 3|指纹|rootsHash|源码` 摘要寻址；与 bin
   视图共用 scratch claim/publish（`storeView*Eff`），命中直接运行。
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
-- **units**：只做**当前 entry 桶内**的旧 key 清理；不再跨 entry 删目录。并发构建不同入口
+- **units**：只做**当前 entry 桶内**的过期 key 清理；不跨 entry 删目录。并发构建不同入口
   不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或
   `vuna clean --store` 管理；删除 unit 只是重算，不影响正确性。
 
@@ -150,15 +148,15 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 `dbg!` 标签、没有对应 span：判定的输入是地址，因此 span 只能定位到「读/写载荷」这一级
 （`vuna.cache.lookup` / `vuna.cache.write` 属规范词汇表，尚未插桩）。
 
-**已删除的观测能力**：查询图时代的节点 span / trace / 预算 / 取消（`query-span`、
-`--debug-query`）随图一起删除。现在排查「为什么 miss」靠比对地址：`addrOf` 的输入项都在
-上面的表里，逐个对即可。
+**命中路径没有 span**：判定的输入是地址，因此 span 只能定位到「读/写载荷」这一级
+（`vuna.cache.lookup` / `vuna.cache.write` 属规范词汇表，尚未插桩）。排查「为什么 miss」
+靠比对地址：`addrOf` 的输入项都在上面的表里，逐个对即可。
 
 ## 诊断载荷与重放
 
 - **载荷就是结果**：`objects/check/<checkIn>` 存 `CheckPassed ds` / `CheckFailed ds` + 诊断列表
   （`Diag.Codec` 规范编码）。命中时直接重放：Pass 返回诊断（通常是 warning），Fail 用首条
-  诊断 + children 重建错误通道。失败检查因此也是 O(读对象)，不再每次全量精化。
+  诊断 + children 重建错误通道。失败检查因此也是 O(读对象)，不是每次全量精化。
 - **载荷是输入的纯函数**：落盘前把 label 路径规范化为**包相对**路径；含绝对路径或
   `Volatile`（工具/包图/合成、无源码位置）的诊断**不落盘**，下次 miss 重算。读回时按
   当前 `contextDir` 还原路径——同一份内容在不同 checkout / 不同目录共享 store 时，
@@ -167,14 +165,14 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   checkout 复用），显示侧本来也会被 `ownedByPackage` 过滤，因此落盘前丢弃并在
   `check-store dropped=N` 里可见；Fail 则要求整条错误 Stable，否则不落盘。
 - **坏载荷只降级**：解码失败/截断按 miss 处理并重写；删除对象只是重算。
-- **trace 子帧不落盘**：当前产生侧只生成单层 trace；嵌套子帧若将来出现需 bump diag codec。
+- **trace 子帧不落盘**：产生侧只生成单层 trace；出现嵌套子帧时需要 bump diag codec。
 
 ## 已知边界
 
 - **warning 可能不完整**：诊断列表会随 Pass 一起落盘，但「干净模块复用」的那次运行只拿到
   被精化模块的 warning；`-W` / `--deny-warnings` 仍直接绕过判定（不判命中也不提交），
   以保证热缓存下告警完整。普通 `vuna check` 的命中/失败重放不受影响。
-- **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让后续阶段命中缓存而
+- **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），
   拓扑排序给不出唯一顺序 ⇒ 写侧把顺序存成 `objects/order`，读侧照它排列。

@@ -33,7 +33,6 @@ Named.vuna:6:6: goal ?goal : Int
   查询走容错入口 `goalsOfProgramTolerant`；`check` / `compile` / `build` 仍在严格收尾处报
   `TC_UnsolvedHole`（命名洞的诊断带洞名）。精化中途有硬错误（未绑定名 / 类型不匹配等）时
   仍返回错误。
-- 旧描述「被解出的洞不会出现在列表里」是错的（已解的类型实参洞仍会列出），已纠正。
 
 实现入口：`Vuna.Compiler.Elab.Driver.goalsOfProgramTolerant`（返回 `List DtGoalInfo`，含
 span、目标类型文本、上下文条目与洞名），CLI 侧在 `Vuna.Cli.goalArgs`。
@@ -58,11 +57,11 @@ $ vuna doc --check <dir>
 $ vuna search --type "a -> a"
 ```
 
-旧的 `docs/api.md` Markdown 工作流已删除；生成物改为 `docs/api.html`（gitignored）。
+生成物只有 `docs/api.html`（gitignored）。
 
 ## 3. 错误码体系
 
-> 诊断的数据模型、结构化通道、渲染视图、LSP 映射与迁移状态见
+> 诊断的数据模型、结构化通道、渲染视图、LSP 映射与能力现状见
 > [diagnostics.md](diagnostics.md)；本节只保留 CLI 侧的码/退出码语义。
 
 诊断输出带**错误码**：Elab/Codegen 为 `文件:行:列: [CODE] 消息`（Codegen 无位置则无
@@ -83,8 +82,8 @@ $ vuna search --type "a -> a"
 | `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号**语义稳定**；同语义消息**共享**一个符号；**一个码只承载一种语义**。没有
-「诊断码只增不删」约定：vuna 未发布、无兼容义务，预发布阶段允许删除/重命名码（同步目录
-与夹具，历史在 git；本次删除 manifest 能力/信任机制即移除 11 个码）。
+「诊断码只增不删」约定：vuna 未发布、无兼容义务，允许删除/重命名码（同步目录
+与夹具）。
 
 内部不变量已收进 `IC_`（`icFuel`/`icInternal`）；**工具/构建/清单错误**仍用 `err`（phase = Tool，exit 2，不进目录）。**错误包装器**
 （给下层错误加上下文，如 `in \`<def>\`: <inner>`、`json: <inner>`）、**工具链 CLI 错误**
@@ -213,7 +212,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 
 | 目标 | 行为 | 输出片段 |
 | --- | --- | --- |
-| `path/to/entry.vuna` | 整段源码替换 imports/defs（旧语义） | `已加载 …（N 个定义）` |
+| `path/to/entry.vuna` | 整段源码替换 imports/defs | `已加载 …（N 个定义）` |
 | `path/to/module.vuna`（含 `module` 头） | 拒绝，提示用模块名 | `是模块文件` |
 | `Base.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Nat` |
 | `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
@@ -237,11 +236,11 @@ Ctrl-D 空行退出。超宽行按水平窗口只显示尾部，宽度来自 `st
 **括号粘贴**：tty 下开启 bracketed paste（`\e[?2004h`，退出时 `\e[?2004l`）。
 `\e[200~` … `\e[201~` 之间的内容**原样**进编辑缓冲（Tab 不触发补全、换行不触发提交，
 `\r` 规范化为 `\n`）；按 Enter 才把整段作为一个输入单元（或按续行规则并入 pending）
-提交。不支持该模式的终端不会发送这两个序列，行为与旧版一致；非 tty 路径不进入编辑器。
+提交。不支持该模式的终端不会发送这两个序列，行为与不支持时相同；非 tty 路径不进入编辑器。
 
 **历史持久化**：`VUNA_REPL_HISTORY` > `$XDG_STATE_HOME/vuna/repl_history` >
 `$HOME/.vuna_repl_history`。文件格式 v2：首行 `vuna-repl-history 2`，其后每行一条单元
-（单元内 `\`→`\\`、换行→`\n`），因此**多行单元也会持久化**；旧 v1（无首行头、纯文本
+（单元内 `\`→`\\`、换行→`\n`），因此**多行单元也会持久化**；v1 格式（无首行头、纯文本
 一行一条）仍可读，下次写入自动升级为 v2。目录不可写时静默跳过。
 
 **非 tty / 无 stty 回退**：非交互管道、`:set editing off`、或无 POSIX `stty` 时退回
@@ -308,7 +307,7 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 `--client` 一发一收后立即断开，因此多次调用天然串行。阻塞的 `accept`/`recv` **无超时**，
 客户端崩溃会随连接关闭自动恢复，但**不要**在同一会话上并发发请求。
 
-**阶段 1 限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
+**server 的限制**：server 模式下 `:!` 与效果表达式（`main : Eff [] a` 临时编译运行）**拒绝执行**
 （子进程会写真实 stdout，污染协议通道）；需要跑程序时用 `vuna run` / `vuna build` 后直接
 执行产物。`vuna test` 的效果测试路径不受影响。
 
@@ -364,8 +363,8 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
   不覆盖索引族（parse 级拿不到索引约束）与不透明 `axiom`；构造子是 parse 级解析（依赖模块
   读盘）；`fix all` 的 command 形式依赖客户端支持 `workspace/applyEdit`；rename 由
   `textDocument/rename` 提供（解析级，见 lsp.md）（见 [debt.md](debt.md) C38）。
-- **REPL server（非目标，不是待修债务）**：无请求取消/超时、无并发连接、无断线重连；阶段 1
-  不执行 `:!` 与效果表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket）。单会话
+- **REPL server（非目标，不是待修债务）**：无请求取消/超时、无并发连接、无断线重连；server
+  模式不执行 `:!` 与效果表达式；没有 HTTP/TLS（端点只有 loopback TCP / Unix socket）。单会话
   状态机本质串行，超时/取消需要可中断求值原语；安全模型只允许 loopback，故不做并发连接与
   外部网络协议。
 

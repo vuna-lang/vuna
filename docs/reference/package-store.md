@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
 | **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
-| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（D69：`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
+| `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
 | `pkgImplHash` | 包内模块 `miImplHash` 聚合 | 产物身份（`splitIdentity`） | `opaque`/`abstract` 体变化也变 |
 
 规范编码在 `Vuna.Compiler.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
@@ -44,7 +44,7 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
   （`objects/pkg/`、`pkgs/`、`tmp/`）由 `clean --packages` 管理。包对象放在 `objects/pkg/`
   这个 kind 目录下，是为了让两族的清理/GC 作用域不互相误删。
 - **fetch 登记 roots**：`vuna fetch` 把取到的包摘要写进发起项目的 roots，`clean --packages
-  --gc` 取所有项目 roots 的并集 ⇒ 共享 store 上不会误删别的项目取过的对象（D73）。
+  --gc` 取所有项目 roots 的并集 ⇒ 共享 store 上不会误删别的项目取过的对象。
 
 ## 3. 获取（`vuna fetch`）
 
@@ -95,7 +95,7 @@ vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   # 缓存族按
 按引用计数的 GC；`--packages` 是整族清理，`--gc` 的引用集是「声明 + 所有项目 roots」，
 roots 只追加（删除依赖后旧对象仍受保护，直到显式整族清理）。
 
-## 6. 静态索引与 `vuna add`（阶段 2）
+## 6. 静态索引与 `vuna add`
 
 索引是**可选**的便利层（D14）：`name [@version] → (源, hash)`。
 
@@ -128,7 +128,7 @@ vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
   `--dry-run` 只打印。
 - **索引不可信**：写回的永远是摘要，之后 fetch/check 只认摘要。
 
-## 7. GC（阶段 3）
+## 7. GC
 
 ```console
 vuna clean --packages --gc [--dry-run] [DIR]
@@ -139,7 +139,7 @@ vuna clean --packages --gc [--dry-run] [DIR]
 `pkgs/<digest>/...` 中不被引用的文件；空目录会残留（与 `clean --store` 一致，只删文件）。
 不带 `--gc` 的 `--packages` 仍是整族清理。`--gc` 必须与 `--packages` 连用。
 `vuna fetch` 把取到的摘要登记进发起项目的 roots，因此共享 store 上 A 项目取过的包不会被
-B 项目的 `--gc` 误删（D73）；roots 只追加，删除依赖后旧对象仍受保护，直到整族清理。
+B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保护，直到整族清理。
 
 ## 8. 已知边界
 

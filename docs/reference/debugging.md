@@ -64,7 +64,7 @@ vuna: runtime error: division by zero
 
 **边界**（登记在 [debt.md](debt.md) D33）：`ocamlopt` 会内联小函数，被内联的抛错点
 会归到调用者帧；非入口单元顶层初始化的异常不在覆盖范围；没有表达式级 span / 局部
-变量值 / 断点（无 DAP，真调试器不在本阶段）。
+变量值 / 断点（无 DAP，没有真调试器）。
 
 ## 3. 语言级调试构造：`dbg!` / `dbgShow` / `assert` / `todo`
 

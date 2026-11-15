@@ -36,10 +36,10 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
 ├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
 │                           Assembly Split Runtime            Core→IR 降低 + OCaml 文本生成 + 运行时符号表
-├─ Native/                  Model Abi Runtime Module Render   native 后端（M2：x86-64 汇编文本 + 字符串 / bump 堆）
+├─ Native/                  Model Abi Runtime Module Render   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
 └─ Driver/                    Split Dt Compile Wasm Native
                               CompilerCli                      输出模型 / facade / 后端驱动 / CLI
-  PerfCache                          codegen 单元缓存（S5）
+  PerfCache                          codegen 单元缓存
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
@@ -137,18 +137,18 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
 `Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten,Expand}`；类型规则 = `Elab.*` +
 `Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
-`Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型与迁移见
+`Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
 
-**native 后端（M2）**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
+**native 后端**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
 再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
-`Vuna.Compiler.Driver.Native.compileNative`。M1 覆盖 Int/Nat/Bool 纯切片，M2 加入 String
+`Vuna.Compiler.Driver.Native.compileNative`。覆盖 Int/Nat/Bool 纯值 + String
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
-`strShow` / 字符串相等 / String 入口）与 `.bss` 里的 bump 堆（无 GC/RC）；切片、ABI、
-值表示、运行时符号与边界见 [native.md](reference/native.md)。
+`strShow` / 字符串相等 / String 入口）与 `.bss` 里的 bump 堆（无 GC/RC）；支持面、
+ABI、值表示、运行时符号与边界见 [native.md](reference/native.md)。
 
-**wasm 后端（M2）**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
+**wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->
 main.wat`，再由 CLI 的 `build` 分支调 `wasm-tools parse` 汇编成 `main.wasm`；驱动入口
 `Vuna.Compiler.Driver.Wasm.compileWasm`。支持 Int/Nat/String/Bool 纯值、`let`/`if`、
 顶层饱和调用、Nat 结构递归与 `++` 链；WasmGC 表示、WAT 稳定布局与运行时符号覆盖见
@@ -175,7 +175,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 **约束**：Toml/Manifest 不碰 I/O，Pkg 只做 lexical 规范化；**每个源文件唯一包上下文**，
 目录入口 `check/build <dir>` 直接 `loadPackage` 只认该目录 manifest（不向上找）；跨包只认
 依赖包 `[export]`，隐藏模块报错；依赖图 DAG、包名唯一；`[package]` 只接受 `name`
-（`[capabilities]` / `[trust]` / `[privileged]` 已删除）。
+（本仓库没有 `[capabilities]` / `[trust]` / `[privileged]` 段）。
 **依赖定位**：`path` 依赖 = 工作树目录（可变输入）；`git`/`url` 依赖 = 持久 store 的物化视图
 `$VUNA_STORE/pkgs/<内容摘要>`（`vuna fetch` 写入，check/build 只读）。摘要规则与 store
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
@@ -193,10 +193,10 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
   `Lint.runLint`；诊断渲染（short/human/JSON）见 `Diag.Format`（模型见
-  [diagnostics.md](reference/diagnostics.md)）；M4 效果显式化：`lib` 与 compiler 壳层都已显式
+  [diagnostics.md](reference/diagnostics.md)）；效果显式化：`lib` 与 compiler 壳层都是显式
   `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
   `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
-  `CliOpts` 已是显式参数；`Diag.Format` 语言也改为显式 `lang` 参数。
+  `CliOpts` 是显式参数；`Diag.Format` 语言也是显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`）。
@@ -208,23 +208,23 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   句柄是 Int、运行时映射 `Unix.file_descr`），见 [primitives.md](reference/primitives.md) §7。
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
   [tooling.md](reference/tooling.md) §5）。
-- **运行时效应（Layer 1–3，`runtime-effects` 分支）**：`prim_effectPerform` / `prim_effectHandle`
+- **运行时效应（Layer 1–3）**：`prim_effectPerform` / `prim_effectHandle`
   把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
   `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
-  `continue` 一次；W7 起 handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
+  `continue` 一次；handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
   每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
   `Base.Eff.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
-  W9 起运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏
+  运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏
   `prim_sched*`；`Base.EffSched` 的 fork/yield/await/取消/结构化 scope/步数超时，main
   钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；`vuna interp` 不执行运行时效应（见
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
-  `nix/tcb-forbidden.txt` 黑名单）；效应边界**不再由 manifest 门控**：没有
+  `nix/tcb-forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有
   `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `prim_*` / `prim_eff_*` 对任何包
   可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
   使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
-  钩子是 `v_main 0`）。显式接受的损失与后续方向见
-  [effects.md](reference/effects.md) §8.6。
+  钩子是 `v_main 0`）。显式接受的损失见 [effects.md](reference/effects.md) §8.6
+  （缺口编号见 [debt.md](reference/debt.md) D62）。
 
 ## 4. LSP 与索引（工具链侧，不进 seed）
 

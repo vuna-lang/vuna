@@ -162,11 +162,11 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Obs` / `Base.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`--listen`/`--client`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
 | [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`dbg!`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
-| [docs/reference/diagnostics.md](docs/reference/diagnostics.md) | 诊断系统：结构化 `Diagnostic`/`Check` 通道、错误码域、short/human/JSON 渲染、LSP 映射、迁移状态与后续路线 |
+| [docs/reference/diagnostics.md](docs/reference/diagnostics.md) | 诊断系统：结构化 `Diagnostic`/`Check` 通道、错误码域、short/human/JSON 渲染、LSP 映射 |
 | [docs/reference/compiler.md](docs/reference/compiler.md) | 编译器模块职责、codegen 表示与输出模型、接口摘要（TTC 式模块化精化）、夹具指标 |
 | [docs/reference/ir.md](docs/reference/ir.md) | 擦除后的中间表示（Track A）：IR 节点与边界、Core → IR 的决策划分、`Ir.Runtime` 运行时契约与 `checks.ir-boundary` |
-| [docs/reference/wasm.md](docs/reference/wasm.md) | wasm 后端（WAT M2）：WasmGC 表示、WAT 布局、IR 支持面、运行时符号覆盖、`--target wasm` 边界 |
-| [docs/reference/native.md](docs/reference/native.md) | native 后端（x86-64 汇编 M1+M2）：产物/ABI、值表示（含字符串对象与 bump 堆）、栈帧、运行时符号、IR 支持面与边界 |
+| [docs/reference/wasm.md](docs/reference/wasm.md) | wasm 后端（WAT）：WasmGC 表示、WAT 布局、IR 支持面、运行时符号覆盖、`--target wasm` 边界 |
+| [docs/reference/native.md](docs/reference/native.md) | native 后端（x86-64 汇编）：产物/ABI、值表示（含字符串对象与 bump 堆）、栈帧、运行时符号、IR 支持面与边界 |
 | [docs/reference/cache.md](docs/reference/cache.md) | 输入寻址对象库：对象族、命名（contentHash/ifaceHash/implHash）、命中判据、roots 与 store gc、观测标签、已知边界 |
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |

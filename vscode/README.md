@@ -123,5 +123,5 @@ Nix store 拷出的脚本 + `vscode/` 工作树运行都适用；接 Nix 时把 
   能力注册（回 `null`）但不消费 `workspace/didChangeWatchedFiles`，打开/编辑/保存的文档
   同步走 `textDocument/didOpen|didChange`，不受影响。
 - 服务器读取按 `Content-Length` 精确切字节：标准 LSP 帧的 body 后没有换行，**不能**按行读
-  （旧实现会在 `initialize` 就与客户端互等死锁：进程起来了但所有语言功能都不可用）。
+  （按行读会在 `initialize` 就与客户端互等死锁：进程起来了但所有语言功能都不可用）。
 - `Vuna: Check File` 原样运行 `vuna check <file>`；包级检查请用 `vuna check .`（终端）。

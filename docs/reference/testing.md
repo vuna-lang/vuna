@@ -5,7 +5,7 @@
 
 ## 原生测试：`vuna test --suite`
 
-repo 自测现在由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现，不再是 shell
+repo 自测由 `vuna test --suite test/suite.toml` 驱动（原生 Vuna 实现，不是 shell
 编排）。核心分层：
 
 - `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
@@ -47,13 +47,12 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 
 矛盾组合显式失败（CBroken），不静默跳过：golden（`.out`/`.interp.out`/`.run.out`）与
 `.diag.json` 并存、`.run.out` 与 `.run.err`/`.run.exit` 并存、family 关掉某阶段但夹具带
-该阶段期望。无任何期望文件也是 CBroken。原 `<base>.vuna.nointerp` 旁标记已删除——它的
-语义由「有 run 期望而无 interp 期望」自然表达。
+该阶段期望。无任何期望文件也是 CBroken。「只跑 compile+run、不跑 interp」由
+「有 run 期望而无 interp 期望」表达，没有独立的旁标记文件。
 
-文本期望（`.check.err` / `.err` / `.compile.err` / `.cerr` / `.deny`）**已从夹具层删除**：
-负例曾经靠「诊断子串」断言，现在只看结构化返回值（见下节「进程内断言」）。`warning`
-由 `.diag.json` 里 `severity = "warning"` 的条目表达；「warning 让退出码变 1」是
-`--deny-warnings` 的 CLI 语义，由 steps 覆盖，fixture 不再表达。
+负例只用结构化返回值（见下节「进程内断言」），不比对诊断文本：`warning` 由
+`.diag.json` 里 `severity = "warning"` 的条目表达；「warning 让退出码变 1」是
+`--deny-warnings` 的 CLI 语义，由 steps 覆盖，fixture 不表达。
 
 ### 声明式步进用例（`*.steps`）
 
@@ -125,7 +124,7 @@ end:
   `vuna-repl-server.XXXXXX/repl.sock` 会越界 ⇒ `bind` 失败、server 不打就绪行、等待方空转到
   10s 超时（症状是「随机失败且耗时恒为 ~11s」）。`corpus/repl-server/smoke.sh` 因此把工作
   目录放在尽量短的路径上（`vrs.XXXXXX`，过长时退到 `/tmp`）。新写 socket 用例照此办理。
-- `--fail-fast`：worker 内部失败后不再启动新 case。
+- `--fail-fast`：worker 内部失败后不启动新 case。
 - 失败行带 case id；断言失败给步骤名 / expected / actual 片段。父进程汇总也列出失败
   case id（`N checks, M failed case(s): <id>, ...`）；worker 没写出结果文件时汇总报
   `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
@@ -140,37 +139,35 @@ end:
 
 - 默认根：项目内 `.local/store`（devShell / `nix run .#vuna-run-tests` / CI check 各自导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
-- 父进程只预热一次 `vuna check base`（需要时 `check .`），worker 不再各自 warmIfaces。
+- 父进程只预热一次 `vuna check base`（需要时 `check .`），worker 不各自 warmIfaces。
 - 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
 - `--no-cache` 只影响 test verdict 对象（`objects/test`），不关闭对象库；
   `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
-- **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例现在走进程内全量精化
-  （`InProc.checkFile`），warning 必然重算，不再需要 `-W` / 私有 store；`warning`
+- **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例走进程内全量精化
+  （`InProc.checkFile`），warning 必然重算，不需要 `-W` / 私有 store；`warning`
   的「让退出码变 1」语义由 steps 的 `--deny-warnings` 覆盖。
 
-### 迁移状态
+### suite 的组成
 
 - 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_io 与 run/modules/
-  records/traits/monad/stdlib/lint/fix/term 等；对应 section 脚本早已删除）。
-- 其余工具链/包/REPL/LSP/net/缓存/iface 段全部是 `test/suite/steps/*.steps` 声明式用例；
-  `test/suite/sections/` 与 `test/suite/lib/harness.sh` 已删除，`CSection` 机制随之移除。
-- `test/run-tests.sh` 与 `nix/run-tests.sh` 已删除；suite 入口只有
-  `vuna test --suite test/suite.toml`。
+  records/traits/monad/stdlib/lint/fix/term 等）。
+- 工具链/包/REPL/LSP/net/缓存/iface 段是 `test/suite/steps/*.steps` 声明式用例。
+- suite 入口只有 `vuna test --suite test/suite.toml`。
 
 ### iface 判据回归（§44m–§44q）
 
-摘要路径的正确性不再只靠「诊断逐字节一致」的间接证据，§44 另有一组针对判据本身的回归：
+摘要路径的正确性除「诊断逐字节一致」的间接证据外，§44 另有一组针对判据本身的回归：
 
 | 断言 | 覆盖的判据 |
 | --- | --- |
 | §44m | `exports` 进 `miIfaceHash`：依赖隐藏调用方用到的导出名 ⇒ 依赖方判脏；摘要与全量给出同一诊断 |
 | §44n | `pmEnv` 包级环境指纹：改 `vuna.toml`（不进模块源哈希）⇒ `iface-reject=own-env`，重算后收敛 |
-| §44o | 镜像模式内容寻址 + 孤儿 GC：实现变化产生新 token 文件，旧 token 在 60s 窗口外被删 |
+| §44o | 镜像模式内容寻址 + 孤儿 GC：实现变化产生新 token 文件，过期 token 在 60s 窗口外被删 |
 | §44p | `meOrigin` 隔离：LSP 冷启动写回标 `tool`，命令行 check 拒绝（`iface-reject=tool-origin`），下一次整包写回归 `pkg` |
-| §44q | 闭合判定的 binder 深度口径：含 record-update（`TRecUpd.body` 在 `tele` 之下）的最小包，冷缓存下 `AUDIT+SELFTEST`、只 `SELFTEST`、只 `AUDIT`、热缓存双开关都必须 exit 0 且 `iface-selftest=ok`（C49 回归） |
+| §44q | 闭合判定的 binder 深度口径：含 record-update（`TRecUpd.body` 在 `tele` 之下）的最小包，冷缓存下 `AUDIT+SELFTEST`、只 `SELFTEST`、只 `AUDIT`、热缓存双开关都必须 exit 0 且 `iface-selftest=ok` |
 
 基础开关：`VUNA_IFACE_AUDIT=1`（同一进程跑摘要 + 全量、逐字节比较、不一致即失败且不落盘）、
 `VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。两者可以**同时**开启（CI/排障
@@ -221,7 +218,7 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 **默认护栏**（不依赖 `--audit` 手动开关，跑 suite 就生效）：
 
 - `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
-  否则注入一个失败 case。旧的 `--audit` 仍保留全 corpus 的宽松报告（steps 文件里
+  否则注入一个失败 case。`--audit` 另有全 corpus 的宽松报告（steps 文件里
   提到目录名就算认领），两者互不替代。
 - `audit/min-cases`：`[suite] min_cases = 760` 是 case 总数下限。整族从 `suite.toml`
   消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
@@ -231,7 +228,7 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 
 ### 进程内断言（fixture 用例零子进程）
 
-**fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）不再 spawn `vuna`**：
+**fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）不 spawn `vuna`**：
 runner 直接调用编译器 / 工具链的导出函数，断言它们的**返回值**。
 
 | 用例 | 进程内调用 | 断言 |
@@ -256,9 +253,8 @@ runner 直接调用编译器 / 工具链的导出函数，断言它们的**返�
 
 **没有子进程回退**：进程内只有两条路径——增量会话（`lib/Vuna/Test/Session.vuna`，依赖
 接口 + `AuxCache`）优先，不可用时**在同一进程内**退回全量精化；两条都不可用即用例失败
-（`ErrC`）。旧的 `VUNA_TEST_NO_SESSION` 开关、`-W` 绕过缓存、`--deny-warnings` 私有 store、
-`VUNA_ELAB_FULL=1` 四处 hack 全部删除（`VUNA_ELAB_FULL` 仍作为 CLI 语义保留，只出现在
-steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍）。
+（`ErrC`）。没有子进程、也没有绕过缓存的开关：`VUNA_ELAB_FULL=1` 是 CLI 语义，只出现在
+steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 
 **进程内没有 `timeout(1)`**：`elab_perf` 一族（15s 回归守卫）改用挂钟自测
 （`effTimeUs`），超 `caseTimeout` 即失败。
@@ -280,15 +276,15 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 `build/<worker 作用域>-<编译器指纹>-<base 哈希>/`：
 
 - 同 run 内：只有 `Main.ml` 变化 ⇒ `build.sh` 内容哈希 stamp 只重编它 + 链接；
-- **跨 run**：base 的 25 个单元 `.cmx` 直接复用，本地重跑不再付「每 worker 首次
+- **跨 run**：base 的 25 个单元 `.cmx` 直接复用，本地重跑不必付「每 worker 首次
   整棵 base 冷编译」；
 - 桶名含编译器指纹与 base 哈希，编译器/base 变了自动换桶（不会读到陈旧产物）；
 - 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
-实测（2026-11-13，本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
+实测（本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
 `vuna check base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
-`--cache-dir` 仍只放结果缓存与 build 桶。下一步把 build 桶迁到 `views/bin`（见
+`--cache-dir` 只放结果缓存（build 桶走 store 视图，见
 [test-architecture.md](test-architecture.md)）。
 ## corpus 的包上下文与 `VUNA_BASE`
 
@@ -316,7 +312,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
 「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
 归约的夹具：`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）用
-`<base>.run.out` 表达（原 `.nointerp` 旁标记已删除）。负例统一用
+`<base>.run.out` 表达。负例统一用
 `<base>.diag.json`（结构化诊断），interp / compile 共用同一份（实测 142 个负例里 130 个完全一致，
 12 个仅 message 不同、`(code, line)` 全同）。
 
@@ -324,7 +320,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   `.run.out`（`10_string_pack`、`16_file_exists`、`17_file_meta`）只做 compile+run；
   `18_int_overflow` / `19_string_utf8` / `20_str_hash` 是纯值语义 golden；
 - `corpus/modules/` 01–31 正例：跨模块函数 / 数据 / 嵌套 import 的 `interp` 与 `compile`
-  结果（原“多根”夹具已迁移为**同包多模块**夹具，Helper 在 `lib/`；不再有“多根”概念）；
+  结果（夹具是**同包多模块**：Helper 在 `lib/`；没有「多根」概念）；
   覆盖显式导出列表、重导出、抽象类型、空导出集、包门面、无头模块重导出、same-target
   去重、选择性重导出、两级门面、qualified import 重导出、多行模块头、私有类型封装、`_`
   私有构造器在定义模块内匹配；`31_type_as_term` 覆盖导入模块的类型名在值位置作为显式
@@ -346,7 +342,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   约束函数互调、未使用约束））；
   命名实例特性不存在。错误例 90–95、98 要求错误片段、非 0 退出、不写
   输出（重复实例 / 相干性、head 不符、缺 / 未知方法、显式只写 `Trait` 不写 `(..)`；
-  `90_orphan_default` 实际覆盖重复实例，孤儿规则已删除，见 debt）；
+  `90_orphan_default` 实际覆盖重复实例，孤儿规则不存在，见 debt D30）；
   `99_explicit_*`（约束负例：未知接口、非单参数应用、kind 不符、where / trait 方法
   位置不支持）。
   `96_named_instance_removed` / `97_instance_sel_removed` 是 `as` / `@` 语法的解析负例；
@@ -365,7 +361,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   `95_cross_dep` 覆盖依赖方向的负例（依赖包不能 import 消费包模块）；
   `07_prim_direct`（无 manifest 门控：直调 `prim_*` / `prim_eff_*`）；
   `08_module_scope`（entry 顶层小写名与同包模块签名里的类型变量同名，banned 集按模块作用域
-  计算后 base 模块不再报 `unknown name x`）；
+  计算后 base 模块不报 `unknown name x`）；
 - `corpus/err/`、`corpus/run_err/`：解析 / 求值负例，期望载体是 `.diag.json`
   （非穷尽、if 条件类型、参数过多、clause 数不匹配、let 绑定模式等）；`15_corpus_compile_neg`
   一类 `07_main_arity` 的 compile 阶段诊断与 check 同一份期望；`03_div_zero`
@@ -394,15 +390,15 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   `57_universe`、`58_case_matrix`/`58b_case_absurd`、`59_axiom`/`59_eta`/`59_let_where`、
   `60_erasure_unify`、`61_namespace_dual`、`60_ctor_eta`、`61_implicit_values`、
   `62_sigma_basic`、`63_dep_lookup` 覆盖现行类型规则。`corpus/dt_deep/` 是「深层嵌套
-  单定义体」夹具（150 层嵌套应用）：迁移前 codegen 的固定 fuel 在这里必然耗尽，IR 之后
-  必须能编译并跑出结果（用例 `103_ir_lowering.steps`）；
+  单定义体」夹具（150 层嵌套应用）：固定 fuel 的推导路径在这里会耗尽，IR 上必须能
+  编译并跑出结果（用例 `103_ir_lowering.steps`）；
   `104_ir_runtime_contract.steps` 钉住 IR 运行时符号到 OCaml 文本的代表性映射
   （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。
-  `105_native_backend.steps` 覆盖 native M1+M2：x86-64 汇编生成、静态链接、与 OCaml
+  `105_native_backend.steps` 覆盖 native 后端：x86-64 汇编生成、静态链接、与 OCaml
   后端的输出差分、Nat 递归、63-bit 边界、除零 trap、确定性、String（`++` / `strFromInt` /
   `strLength` / `strAt` / `strSubstring` / `strHash` / `strShow` / 相等 / String 入口）、
   bump 堆耗尽 trap、拒绝面与 `--no-compile`（见 [native.md](native.md)）；
-  `106_wasm_backend.steps` 覆盖 wasm M2：WAT 生成、`wasm-tools parse` + `wasmtime run`、
+  `106_wasm_backend.steps` 覆盖 wasm 后端：WAT 生成、`wasm-tools parse` + `wasmtime run`、
   与 OCaml 后端的输出差分、Nat 递归、字符串原语、63-bit 边界、除零 trap、WAT 确定性 +
   行宽、拒绝面与 `--target` 取值校验（见 [wasm.md](wasm.md)）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
@@ -421,8 +417,8 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、不向上
   找；ad-hoc 单文件自动注入 Prelude；依赖方向（`95_cross_dep`：依赖包不能 import 消费包
   模块）在所有入口上下文都被拒（`build` / `check` / `compile` 三入口）；removed-hint 非 0
-  退出 + 可操作提示，且 `vuna help` 不再宣传已删路径；无 manifest 的 ad-hoc 文件直接调用
-  effectful 原语也通过（`effect.vuna`，旧 `requires capability` 断言已删除）。
+  退出 + 可操作提示，且 `vuna help` 不宣传不存在的路径；无 manifest 的 ad-hoc 文件直接调用
+  effectful 原语也通过（`effect.vuna`；没有 `requires capability` 断言）。
 
 ## Nix checks 清单
 
@@ -525,7 +521,7 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 产物写入临时目录（`TMPDIR` 可覆盖），不写入仓库。基线在空闲机器上重跑：
 `nix run .#vuna-bench -- --quick --json nix/bench-baseline.json`（或默认 runs=3 更稳）。
 
-所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），不再有「单文件
+所有构建口径都是逐模块 split（`compile`/`build`/seed 同一种产物），没有「单文件
 `main.ml` vs 多模块」两种读数需要区分。
 
 ## 相关阅读

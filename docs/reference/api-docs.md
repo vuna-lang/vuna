@@ -120,7 +120,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 类型文本的列表语法：`Vuna.Sig` 把 parser 的保留名 `@vuna@list@nil` /
 `@vuna@list@cons` 还原成 `[]` / `[a, b]`；`a :: b` 仍打印为中缀（闭合 `::` 链**不**改写成
-`[...]`，保持 `symType` 的 parse 级形状与查询拼写一致）。因此 api/doc/search/hover 不再
+`[...]`，保持 `symType` 的 parse 级形状与查询拼写一致）。因此 api/doc/search/hover 里不会
 出现保留名或前缀形式 `(:: a b)`；源码侧的归一由 `vuna lint --fix` 的 `list-literal` 负责。
 
 匹配模式（按优先级/分数）：
@@ -147,14 +147,15 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 
 `vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引（会话载荷在
 `$VUNA_STORE/objects/tool/`，按输入摘要判定）。
-v3（本次 API 文档 + 检索）变化：
+
+索引载荷（schema `vuna-index 3`）：
 
 - `symbols.txt` 每行 8 字段：`module TAB name TAB kind TAB line TAB col TAB sig TAB doc TAB type`；
 - `doc` 用 `\\`、`\t`、`\n`、`\r` 转义保存换行（多行 docstring 经缓存命中后仍完整）；
 - `type` 是 `symType`（函数/构造子/字段/方法/axiom/extern 的显示类型；data/record/trait 为空）；
-- manifest 首行 `vuna-index 3`；旧 v2 缓存自动全量重建。
+- manifest 首行 `vuna-index 3`；不是这个 schema 的缓存一律全量重建。
 
-`vuna api` / LSP hover 只显示 `symDoc`（docstring），普通注释不再出现；多行 doc 逐行缩进。
+`vuna api` / LSP hover 只显示 `symDoc`（docstring），普通注释不出现；多行 doc 逐行缩进。
 
 `vuna api <Module>` 在标题下先输出**模块 docstring**（`ModuleInfo.modDoc`，随索引载荷一起
 缓存；`index-payload 2` 起），再列符号行。模块是否存在以索引的模块表为准：没有导出符号的

@@ -1,4 +1,4 @@
-# IR 参考：擦除后的中间表示与运行时契约（Track A）
+# IR 参考：擦除后的中间表示与运行时契约
 
 本文描述三层：`Vuna.Compiler.Ir.*`（IR 数据定义与纯分析）、`Vuna.Compiler.Ir.Runtime`
 （IR ↔ 运行时**契约**）与 `Vuna.Compiler.Codegen.Lower`（Core → IR 的唯一入口）、
@@ -6,7 +6,7 @@
 
 子系统位置见 [architecture.md](../architecture.md)，
 终态方向与「为什么先做 IR」见 [architecture-target.md](../architecture-target.md)
-（轨道 A / 门禁表），codegen 输出模型见 [compiler.md](compiler.md)。
+（门禁表），codegen 输出模型见 [compiler.md](compiler.md)。
 
 ## 位置与形状
 
@@ -17,13 +17,13 @@ Loader → Elab → Core ──Lower──> IR ──Codegen.{Decl,Term,Assembly
                               Codegen.Runtime：符号 → OCaml 运行时表达式
 ```
 
-- **IR 是后端唯一的输入面**：OCaml 后端不再 import `Core` / `Elab` / `Intrinsics`，
+- **IR 是后端唯一的输入面**：OCaml 后端不 import `Core` / `Elab` / `Intrinsics`，
   因此「后端要理解类型论」这个耦合被切断；wasm / native 只对接 IR。
-  native M1 的切片、ABI 与运行时子集见 [native.md](native.md)。
+  native 的支持面、ABI 与运行时子集见 [native.md](native.md)。
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
-- 门禁：`OCaml-via-IR` 的产物与迁移前直连 Core 的产物**逐字节一致**
-  （[architecture-target.md](../architecture-target.md) 的门禁表）。
+- 门禁：IR 路径的产物逐字节确定，且与
+  [architecture-target.md](../architecture-target.md) 门禁表里的差分口径一致。
 
 ## 三条硬边界
 
@@ -93,7 +93,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - `IrProgram`：`IrShared` + 一个 `IrUnit`（check 路径的整程序装配）。
 - `IrShared`：record 运行时字段表、canonical List 族、`usesFloat` / `usesTrace`、
   构造子 → (族, keep flags)、构造子 → 不透明 flags、去装箱族集合、族 → 类型参数槽、
-  定义位置行。它原来是后端 `GenSt` 的程序级表，是「表示决策的结果」，所以搬进 IR。
+  定义位置行。它承载的是「表示决策的结果」，所以归属 IR 而不是后端。
 
 ## 运行时契约（`Vuna.Compiler.Ir.Runtime`）
 
@@ -116,8 +116,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
    （`rtTextGaps` 空），且不得有契约外的条目（`rtTextExtras` 空）。
 2. **桥接**：`irRtBridgesList` 为真的符号，其模板里的 `dtp_*` helper 要按 List 族归属单元
    限定并把该单元记成直接依赖（机制在 `Codegen.Term.genBridgeRef`）。非 OCaml 后端要在
-   自己的对象表示上重建这套 helper（native 侧随 M3b 做，见
-   [native.md](native.md) §9.1——桥接是对象表示落地后的验收目标，不是独立切片）。
+   自己的对象表示上重建这套 helper（native 侧的设计约束见
+   [native.md](native.md) §9——桥接是对象表示落地后的验收目标，不是独立切片）。
 3. **语义参考实现**：运行时库本身（`bi_*` / `dt_*` / `dtp_*` 的定义）仍是 `Codegen.Term`
    的 runtime 模板。契约只固定「符号面」（名字 + 桥接标记；arity 由 `irInlineArity` 定），
    不固定实现；新后端要按同一组语义重实现这套符号。
@@ -138,8 +138,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
 
-从迁移前的 `Codegen.Erase` 原样搬来（Kosaraju：完成序 → 反向图收集 → 依赖就绪排序），
-语义与顺序保持不变（分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序）：
+从 `Codegen.Erase` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
+排序），语义与顺序不变（分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序）：
 
 - `groupNames : List (Pair String (List String)) -> List String -> Check (List (List String))`
   —— 纯名字级分组；依赖里不属于本单元的名字被忽略。
@@ -150,7 +150,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   护栏（`CG_RecursiveValueDefinition`；判据由 Lowering 放进 `irDefRecValueOk`）。
 - `checkUniqueDefNames` —— 单元内定义名去重（IR 层按源码名，后端再按渲染名）。
 
-## 责任分界（D-A6）
+## 责任分界
 
 | 决策 | 归属 |
 | --- | --- |
@@ -172,30 +172,29 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   `IrProgram` 后**立刻跑一次**，因此这条自证挂在 `vuna check` 的 codegen 阶段上（不是
   只写在文档里的约定）。
 - 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Codegen.Erase`，由 Lowering
-  调用），保证诊断文本与顺序不变（D-A9）。
+  调用），因此诊断文本与顺序不变。
 
-## 固定 fuel 的退场
+## 预算
 
-迁移前后端用固定 512 步的 `genTermFuel` 驱动「项 → 文本」，深层嵌套的单定义体（约
-128 层嵌套应用）会误报 `IC_FuelExhausted (codegen)` 而没有真实问题（[debt.md](debt.md)
-D24 的另一半）。IR 之后**后端没有预算**（每个节点一次结构递归），Lowering 的预算按项规模
-派生（`lowerBudgetFor size = 8 * size + 512`，只防项本身有病），这条误报路径随之消失。
-
-回归夹具：`test/corpus/dt_deep`（150 层嵌套应用）。它在旧路径上必失败、在新路径上必须
-通过；由 `test/suite/steps/103_ir_lowering.steps`（深层项）与
-`test/suite/steps/104_ir_runtime_contract.steps`（符号 → 文本映射）以及
-`checks.ir-boundary` 一起守住。
+- 后端没有固定步数预算：IR 上每个节点一次结构递归。
+- Lowering 的预算按项规模派生（`lowerBudgetFor size = 8 * size + 512`，只防项本身有病），
+  因此深层嵌套的单定义体（如 150 层嵌套应用）不会误报 `IC_FuelExhausted (codegen)`；
+  字面量展开成本见 [debt.md](debt.md) D24。
+- 回归夹具：`test/corpus/dt_deep`（150 层嵌套应用），由
+  `test/suite/steps/103_ir_lowering.steps`（深层项）与
+  `test/suite/steps/104_ir_runtime_contract.steps`（符号 → 文本映射）以及
+  `checks.ir-boundary` 一起守住。
 
 ## 已知边界 / 刻意未做
 
-- IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状（D-A5）。
+- IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。
-- IR 尚未内容寻址（`Canonical.Ir`）：等节点集稳定后再做，避免每次加节点都要迁移哈希。
-- 现在有三个消费者：OCaml（全量参考实现）、wasm M2+M3a、native M2+M3a。两个产品后端
-  覆盖白名单子集（Int/Nat/Bool + String + 用户 data/record/通用 case；见
-  [wasm.md](wasm.md)、[native.md](native.md)），对未实现的符号在编译期报
-  `WasmUnsupported` / `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由两条守：
+- IR 不做内容寻址：`Canonical.Ir` 不存在，节点集变化不需要迁移哈希。
+- 现在有三个消费者：OCaml（全量参考实现）、wasm、native。两个产品后端覆盖白名单子集
+  （Int/Nat/Bool + String + 用户 data/record/通用 case；见 [wasm.md](wasm.md)、
+  [native.md](native.md)），对未实现的符号在编译期报 `WasmUnsupported` /
+  `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由两条守：
   `Ir.Runtime` 契约（符号面）+ `checks.ir-boundary`（IR 数据不 import 上游、`Ir/` 里没有目标
   文本、`IrRuntime`/`IrBridge` 不得复活；native 模块只 import IR/Base）。
-- 运行时实现（GC / 字符串 / I/O / 一次性续延）仍只有 OCaml 参考实现；wasm 与 native
-  各自重实现了纯子集，完整运行时仍是后续轨道的输入，不是隐藏债务。
+- 运行时实现（GC / 字符串 / I/O / 一次性续延）只有 OCaml 参考实现是完整的；wasm 与 native
+  各自重实现了纯子集。

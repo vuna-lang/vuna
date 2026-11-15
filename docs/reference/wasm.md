@@ -1,10 +1,12 @@
-# wasm 后端（M2 + M3a）
+# wasm 后端
 
-> 状态：**M2 + M3a 切片已端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
+> 状态：**端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
 > 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印 /
 > 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity）；
-> **M3a** 加入用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`）。
-> 闭包值 / `Float` / Effect / FFI 仍被明确拒绝（`WasmUnsupported`）。实现入口：
+> 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
+> 族已接进 struct 表示，桥接符号 `strUnpack` / `strPack` / `strConcatMany` 已实现，
+> `strSubstTemplate` 尚未接）。闭包值 / `Float` / Effect / FFI 仍被明确拒绝
+> （`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -17,9 +19,9 @@
   并直接调用 `wasm-tools parse` 产出 `<OUT>/main.wasm`（工具缺失/失败即 exit 1，
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
-  不再静默回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262；旧版 41 需要显式开 GC）：
-  `wasmtime run main.wasm`（50 默认开 WasmGC）。跨版本写法：
+  不回落到 OCaml。
+- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：`wasmtime run main.wasm`
+  （50 默认开 WasmGC）。显式开 GC 的跨版本写法：
   `wasmtime run -W gc=y -W function-references=y main.wasm`。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
   `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
@@ -33,9 +35,9 @@
 | Int / Nat | `(struct (field i64))`，63 位语义（wrap / 逻辑移位 / 除零 trap） |
 | Bool | `i31`（`ref.i31`） |
 | String | `(array (mut i8))`；字面量 `array.new_data $str $d0` |
-| 数组 | `(array (mut anyref))`（M2 无运行时对象，仅类型表预留） |
-| 变体 / record | `(struct (field i32 tag) (field anyref ...))` / 纯字段 struct（M3） |
-| 闭包 | `(struct (field (ref $ft)) (field anyref env))`，`$ft = (func anyref anyref (result anyref))`（M3） |
+| 数组 | `(array (mut anyref))`（当前无运行时对象，仅类型表预留） |
+| 变体 / record | `(struct (field i32 tag) (field anyref ...))` / 纯字段 struct（未实现） |
+| 闭包 | `(struct (field (ref $ft)) (field anyref env))`，`$ft = (func anyref anyref (result anyref))`（未实现） |
 
 ## 3. 模块布局（稳定 diff）
 
@@ -50,12 +52,12 @@
 - 局部变量编号只在**函数内**递增（`$l<n>`）；每个函数生成前局部表清零，
   结束后恢复外层状态。
 
-## 4. IR 支持面（M2）
+## 4. IR 支持面
 
 从 `IrEntry.irEntryMain` 沿 `irDefDeps` 收集**可达**定义，只生成可达函数与可达全局；
 不可达定义即使含不支持构造也不拒绝（与 native 同策略）。
 
-| IR 节点 | M2 | 说明 |
+| IR 节点 | 当前 | 说明 |
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` / `IrStr` | 支持 | 字符串字面量进 `$d0` 池，空串走 `array.new_default` |
 | `IrGlobal` | 支持（零参引用） | arity > 0 当值引用 → 拒绝（函数值） |
@@ -67,7 +69,7 @@
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路在 Lowering 已降成 `IrIf` |
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
 | `IrRt` | 仅 `@ir@natSucc`（调用 head）与入口 show | 其它 → 拒绝（函数值） |
-| `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持（M3a） | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
+| `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float / Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
 
 - 入口：`main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受
@@ -98,12 +100,12 @@
   `prim_fail`；`@vuna@debug@on` 是 0 元值（`False`），`@vuna@debug@line` 是 1 元桩。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：
-`arrayGet` / `arraySet` / `arrayMake` / `arrayLength`（`Base.Array`，M3）、
+`arrayGet` / `arraySet` / `arrayMake` / `arrayLength`（`Base.Array`，未实现）、
 `bi_lt_generic` 等结构化 `compare` 家族、Float 全部符号、
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush/Pop`、Sched 家族、
 `prim_eff_*` 宿主层原语、List 桥接 `dtp_*`。
 
-**可观测性**（规范见 [observability.md](observability.md) / O12）：`@vuna@obs@level` /
+**可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回盒装
 `Int 0`，`counter` / `sampleStart` 是 2 元桩）；`@vuna@obs@span` 是高阶原语（吃
 `Int -> a` thunk），本后端没有闭包表示，故**编译期拒绝**（`WasmUnsupported`，不给假
@@ -131,29 +133,18 @@
 - 每个正例都做**差分**：`wasmtime run` 的输出与 `vuna run`（OCaml 后端）逐字比较，
   OCaml 始终是语义 oracle。
 
-## 8. 已知边界（M2/M3a 明确不做）
+## 8. 已知边界
 
-- 闭包值 / 高阶函数 / 部分应用（闭包表示要 `(elem declare func ...)`，已验证无 element
+- 闭包值 / 高阶函数 / 部分应用（闭包表示要 `(elem declare func ...)`；没有 element
   段时 wasmtime 报 `undeclared function reference`）。
 - `Array` 运行时；变体分支只按 tag 一次线性分派（不做多模式矩阵）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 
-## 9. 后续路线（只写方向，不写排期）
-
-- **M3a**（已完成）：用户 `data` / record / 通用 `case`（变体 tag 分派 + 字段 struct）。
-  `Array` 运行时仍是下一步。
-- **M3b**（wasm 部分完成）：canonical `List` 族已接进 M3a 的 struct 表示；桥接符号
-  `strUnpack` / `strPack` / `strConcatMany` 已实现。**`strSubstTemplate` 仍是待办**；
-  native 侧桥接同样待办（见 [native.md](native.md) §9.1）。
-- **M3c**：闭包表示（`$clo` + `elem declare`）与高阶调用、部分应用。
-- **M4**：Float（`$float` struct + f64 运算）、字符串与数组的更多原语。
-- **M5**：Effect 一次性续延 + 宿主层（WASI 0.2 接口）、FFI、wasm seed、增量缓存。
-
-## 10. 相关阅读
+## 9. 相关阅读
 
 - [ir.md](ir.md)：IR 节点、运行时契约、后端义务。
-- [native.md](native.md)：另一个产品后端的 M1+M2 切片（同样的「文本 canonical + 外部工具」策略；
-  M2 加入字符串与 bump 堆）。
+- [native.md](native.md)：另一个产品后端（同样的「文本 canonical + 外部工具」策略；
+  支持字符串与 bump 堆）。
 - [architecture.md](../architecture.md)：子系统地图与改动定位。

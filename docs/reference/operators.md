@@ -22,7 +22,7 @@
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
    `EApp` / `EPi`；同一步完成**别名替换**（`==`→`eq`、`::`→`Cons`、`>>=`→`bind`）与
    **section 展开**。
-3. **重排后 AST 不再含 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
+3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户），没有编译器
    内建运算符表。`->` 是语法而不是用户运算符，由 `Loader.Fixity.syntaxFixityDecls` 恒可见
@@ -51,7 +51,7 @@
   特化优先于字典搜索，实例体里写 `==` 不会递归。
 - 无 `Eq` 证据（具体类型无实例、`Eq` 类不在作用域）仍在 check 期报错；没有结构比较兜底。
 
-## `Num` 的唯一真源（D23）
+## `Num` 的唯一真源
 
 - 方法名是唯一真源：`Base.Num` 的 `add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/`
   只是它们的中缀别名（`Base.Num` 里声明 `infixl 6 + = add` 等）。
@@ -63,7 +63,7 @@
   精化器把它们特化回 `bi_*` / `nat*` 内建原语；其它类型回落到普通 trait 方法应用
   （`Num a =>` 泛型代码）。
 - **用户类型可重载四则**：实现 `Num`（并配 `FromInt` 让字面量在期望类型位置降级）后
-  `1 + 2 : MyNum` 可用；期望结果类型经 S2 hint 先解出类参数，实参字面量再按该类型 check
+  `1 + 2 : MyNum` 可用；期望结果类型经 hint 先解出类参数，实参字面量再按该类型 check
   （夹具 `test/corpus/traits/53_user_num`）。推断位置（没有期望类型）仍按 Int 字面量，
   与既有「字面量默认 Int」一致。
 - 终止性检查的 fuel 递减规则同时认 `-` 与 `Base.Num.sub` 投影
@@ -83,7 +83,7 @@
 | `/=` | 4 左 | `neq` | `Base.Eq` | `Eq` 方法 |
 | `<` `<=` `>` `>=` | 4 左 | `lt` `le` `gt` `ge` | `Base.Ord` | `Ord` 方法 |
 | `&&` `\|\|` | 3 / 2 左 | — | `Base.Bool` | 短路内建（不是 trait 方法） |
-| `+` `-` | 6 左 | `add` `sub` | `Base.Num` | `Num` 方法（D23；Int/Nat/Float 实例由精化器特化回内建原语） |
+| `+` `-` | 6 左 | `add` `sub` | `Base.Num` | `Num` 方法（Int/Nat/Float 实例由精化器特化回内建原语） |
 | `*` `/` | 7 左 | `mul` `div` | `Base.Num` | `Num` 方法（同上） |
 | `++` | 5 右 | — | `Base.String` | String 内建值 |
 | `::` | 5 右 | `Cons` | `Base.List` | 表达式与 pattern 都走这条声明 |
@@ -92,13 +92,13 @@
 
 `>>` 不走别名表：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**的 `bind`（模块内自定义 Monad trait 时也要绑对），所以留在 Loader 的 do 派生里；`Base.Monad` 只提供它的 fixity
 声明与 `>>=` → `bind` 别名。base 包模块**不**自动注入 Prelude，因此每个模块用到的运算符
-必须由本模块声明或 import 闭包可见（审计清单见 git 历史）。
+必须由本模块声明或 import 闭包可见。
 
 `pure` 在 `Base.Applicative`（`Base.Monad` 重导出）；`Applicative` 的三个方法 `pure` / `ap` /
 `liftA2` 都由实例显式
-实现——B42 修复后 `ap` 已可作为实例方法，但**不能**把 `liftA2` 写成从 `ap` 派生的泛型函数：
+实现——`ap` 可作为实例方法，但**不能**把 `liftA2` 写成从 `ap` 派生的泛型函数：
 codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` 与 `f (a -> b)` 错误统一（见
-debt D52）。等字典/投影带上类型标注后可以再考虑派生。
+[debt.md](debt.md) D52）。
 
 ## 反引号中缀、section、用户符号名
 
@@ -127,16 +127,16 @@ debt D52）。等字典/投影带上类型标注后可以再考虑派生。
 - 调用方（`vuna fmt` CLI 与 LSP formatting）用 `Loader.Flatten.fixitiesForSource` 取闭包；
   取不到（上下文/依赖加载失败）时 fmt 报错并**不格式化**该文件，不静默按默认优先级处理。
 
-## 算术运算符的特化（D23）
+## 算术运算符的特化
 
-`+ - * /` 是 `Base.Num` 方法别名（D23）；`Base.Int` / `Base.Nat` / `Base.Float` 的实例
+`+ - * /` 是 `Base.Num` 方法别名；`Base.Int` / `Base.Nat` / `Base.Float` 的实例
 方法体写内建运算符，精化器按期望类型/实参类型把它们特化回内建原语：
 
 - 期望类型或两侧都是 Nat（含 Nat + 整数字面量）→ `natAdd/natSub/natMul/natDiv`，结果 Nat；
 - 任一操作数是真正的 `Int` → 保持 Int intrinsic，Nat 一侧插入 `natToInt`（隐式提升）；
 - 期望 Int 而表达式推出 Nat → 整个表达式提升；期望 Nat 而操作数是 Int（非字面量）→ 类型错误；
 - 期望类型是其它类型（用户 `Num` 实例）→ 不特化，走普通 trait 方法应用；字面量实参按
-  `FromInt` 在该类型下降级（S2 期望结果 hint）；
+  `FromInt` 在该类型下降级（期望结果类型 hint）；
 - Float 的特化到 IEEE 语义（除零不失败，见 [floats.md](floats.md)），与 Int 的除零检查不同。
 
 实现入口：`Elab/Dict.numMethodOpName` + `Elab/Term/Impl.specializeArith*`（与 `==`/比较
@@ -151,12 +151,12 @@ debt D52）。等字典/投影带上类型标注后可以再考虑派生。
   直接构造 `EVar "=="` / `EVar "<"`，不经过 Loader 重排；`Elab.Dict` 的
   `isEqMethod` / `isCmpMethod` 显式接受这些内部名并把它们映射到方法短名。用户源码的 `==`
   一律在 Loader 重排里变成 `eq`，因此内部名不会泄漏到用户语义。
-- **parser 固定表已删除**：`Frontend/Parser/Support.vuna` 没有 `infixInfo`；`::` / `>>=` /
+- **parser 没有固定运算符表**：`Frontend/Parser/Support.vuna` 没有 `infixInfo`；`::` / `>>=` /
   `>>` 都由声明表的别名处理。`[]` / `[a, b]` 列表字面量与 pattern 仍以 `Cons`/`Nil`
   折叠（语法糖，不是运算符）。
-- **`&&` / `||`** 仍是短路内建（不是 trait 方法），fixity 来自 `Base.Bool` 声明。
-- **`++`** 仍是 String 内建值，fixity 来自 `Base.String` 声明；**`+` / `-` / `*` / `/`** 是
-  `Base.Num` 方法别名（D23，fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / interp
+- **`&&` / `||`** 是短路内建（不是 trait 方法），fixity 来自 `Base.Bool` 声明。
+- **`++`** 是 String 内建值，fixity 来自 `Base.String` 声明；**`+` / `-` / `*` / `/`** 是
+  `Base.Num` 方法别名（fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / interp
   的 runtime 映射（`intrinsicVisible=False`）。
 
 ## 实例落点规则

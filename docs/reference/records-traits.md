@@ -30,24 +30,24 @@ onlyX p = case p of
 - 记录可以参数化（`record Pair a b where`）；记录类型名同时是它的构造器名。
 - 字段访问写作 `p.x`，支持链式（如 `s.start.x`）。
 - **字段访问按 base 类型消歧**：`EField` / `ERecUpdate` 在精化期按 base 类型的
-  单构造子 data / telescope 找字段，不再要求字段名全局唯一；两个 record 可以有同名字段
+  单构造子 data / telescope 找字段，不要求字段名全局唯一；两个 record 可以有同名字段
   （字段类型可以不同），按标注的 base 类型选择。
 - 编译器/stdlib 内部单构造器产品类型用 `record` + 字段访问取代「data + 位置访问器」；
   只有需要作为函数值传递（`map acc`）或参与终止性投影（递归实参）的投影才保留为访问器，
   因为无签名 lambda 没有参数类型推断、字段访问在其中不可类型化。
 - 导出遵循模块规则：`T` 只导出记录类型（构造器隐藏，跨模块不能构造 / 模式匹配，即
   抽象），`T(..)` 才公开记录构造器。
-- 实现上 `DRecord` **不再降级成 `data`**：`Elab.Data` 直接精化 record 声明；内部仍保留
+- 实现上 `DRecord` **不降级成 `data`**：`Elab.Data` 直接精化 record 声明；内部保留
   一个**合成位置构造子**（名字 = 记录名）服务 `TMk` / eval / codegen。构造 / 模式匹配在
   语法降级后就是该构造子的应用，字段访问 / 更新在精化期按字段表生成 `TProj` / `TRecUpd`。
-- **R2 起字段身份是结构化元数据**（见下节）：构造子字段 binder 只带位置信息
+- **字段身份是结构化元数据**（见下节）：构造子字段 binder 只带位置信息
   （`@vuna@record@arg<i>`），字段名 / 序号 / 类型由 `RecordMeta`（iface）与
-  `DtData.dtDataFields`（Core）承载；精化期按表查字段，不再反推 binder 名。
+  `DtData.dtDataFields`（Core）承载；精化期按表查字段，不反推 binder 名。
 - 字段访问 / 更新的 base 类型必须可推断；具体类型由基类型确定；推断不出（刚性类型变量）
   时字段访问走 `HasField` 约束（见下），更新则报错提示补类型。
 - 错误：缺字段 / 重复字段 / 未知字段 / 非记录类型；记录支持 `deriving (Show, Eq, Ord, Hashable)`。
 
-### 字段表结构化（R2）
+### 字段表
 
 `record` 声明抽取成 `RecordMeta`（`Elab.Records`）：名字 / 参数 / 字段表
 （`RecordFieldMeta` = 名字 + 类型 + 声明序号）/ 派生 / 表示档位 / 构造子 / 线性标记。
@@ -57,28 +57,25 @@ onlyX p = case p of
 Core 侧每个 record 族的 `DtData.dtDataIsRecord = True`（`data` / 字典族为 `False`），
 `DtData.dtDataFields : List DtFieldMeta` 存（名字、序号、外层字段类型）；字段类型在精化
 record 体时取合成构造子 telescope 的域项并用 `shift 0 (-i)` 去掉前序字段 binder 槽位，
-因此投影只需 `eval (reverse idxs) dtFieldType`——旧的 `@vuna@record@dep` 中性占位值随之
-删除。`EField` / `ERecUpdate` 在精化期消歧后，解析计划 `FieldAccessPlan` /
-`UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段序号）标注，供 R3 的 `TProj`
-原语直接消费；AST 形状保持不变（R2 是纯行为保持步骤）。
+因此投影只需 `eval (reverse idxs) dtFieldType`。`EField` / `ERecUpdate` 在精化期消歧后，
+解析计划 `FieldAccessPlan` / `UpdateAccessPlan` 显式携带（记录名，字段序号 / 被改字段
+序号）标注，供 `TProj` 原语直接消费；AST 形状不变。
 
-R3 起 Core 侧有记录原语（行为保持：codegen 展开回原 `case`/构造子，产物逐字节一致）：
+Core 侧的记录原语（codegen 展开回普通 `case`/构造子，产物逐字节一致）：
 `TProj base ctor fieldTele absIdx fieldIdx`（字段访问，`VProj` 是卡住形态，`force` 会先
 force base 再取字段）、`TRecUpd base ctor fieldTele updatedIdxs rebuiltBody`（更新，语义 =
 单分支 `TCase`）、`TMk ctor args`（记录构造，语义 = `TCon`）。
 
-R4 起 record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordMeta`，`prepareDecls*`
+record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordMeta`，`prepareDecls*`
 返回的 decls **保留 `DRecord`**；`Elab.Data.elabDataHead`/`elabDataBodies` 直接处理 record
 （kind 固定 `{params} -> Type`，body 阶段合成位置构造子 + 字段表）；`Elab.Derive` 直接从
 字段表展开 `deriving`。`TRecord name args` 是 record 类型应用的前导（语义 = `TGlobal name`
-的应用脊，只在精化期存在，codegen 展开回 `TApp` 链，产物逐字节一致）。`data` 不再有记录
+的应用脊，只在精化期存在，codegen 展开回 `TApp` 链，产物逐字节一致）。`data` 没有记录
 语义：自动去装箱、`deriving via field`、自动 `HasField` 都只服务 record。
 
 字段表随 `miCached.cachedDatas` 跨包流动（普通 `data` 为空表），所以抽象记录
-（`07_export_abstract`）仍能字段访问 / 更新；工具面（`vuna api` / LSP hover）后续按
-`miRecords` 渲染，不再依赖前缀约定。§1.6 的语法层消歧死代码
-（`desugarRecUpdate` / `recordsWithField` / `fieldAccessExpr` / `checkProvidedFields` 等）
-与 `fieldBinderName` 前缀一并删除。
+（`07_export_abstract`）也能字段访问 / 更新；工具面（`vuna api` / LSP hover）按
+`miRecords` 渲染，不依赖前缀约定。字段名只存在于字段表，`fieldBinderName` 前缀不存在。
 
 ### 零成本表示（声明档位 + 推断回落）
 
@@ -91,11 +88,11 @@ R4 起 record 是一等声明：`Elab.Records.recordsOfDecls` 只收集 `RecordM
 | `boxed record R where ...` | `ReprBoxed` | 强制装箱（FFI / ABI 稳定）：即使形状满足去装箱判据也保留运行时包装 |
 
 档位进 `DtData` 与 iface（`recordHash` 参与失效判定），下游包与 codegen 看到的是
-**同一个**声明结论，不再各自推断。`alias` / `boxed` 只适用于 `record`
+**同一个**声明结论。`alias` / `boxed` 只适用于 `record`
 （`alias data` 是语法错误）；`lin` 可与档位组合（`alias lin record`）。
 
 `ReprAuto` 的推断判据（`Elab.Representation.unboxedCandidateOfData`，由擦除后的
-构造子形状决定，`ctorKeepFlags`）**只对 record 生效**；普通 `data` 恒装箱，不再参与
+构造子形状决定，`ctorKeepFlags`）**只对 record 生效**；普通 `data` 恒装箱，不参与
 自动去装箱推断：
 
 1. 恰好一个构造子；
@@ -127,16 +124,16 @@ getUser u = u.uid
 构造是 `{ f_Point_x = 1; f_Point_y = 2 }`、投影是 `p.f_Point_x`、更新是
 `{ p with f_Point_x = 40 }`、模式是 `{ f_Point_x = x; f_Point_y = y }`；跨单元时标签按
 `Unit.f_...` 限定。普通 `data` 仍是 OCaml 变体，两者可以共存；零运行时字段的 record
-（以及去装箱的单字段 record）沿用变体 / 类型别名。**`data` 不再自动去装箱**：即使形状
-是单构造子单保留字段，也生成自己的 OCaml 变体（`type t_W = C_W_MkWrap of int`），不再是
+（以及去装箱的单字段 record）沿用变体 / 类型别名。**`data` 不自动去装箱**：即使形状
+是单构造子单保留字段，也生成自己的 OCaml 变体（`type t_W = C_W_MkWrap of int`），不是
 类型别名。
 判定是**声明级**的，不改变语义、类型检查或 `deriving` 的结果；它只改变运行时表示。
 
 ### `deriving via field`
 
-只有 `record` 可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**
-（R1）：`alias` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
-`boxed` 恒为装箱，直接拒绝。`data` 已退役记录语义，写 `via field` 报
+只有 `record` 可以写 `deriving via field (C1, C2, ...)`：合法性**只看声明档位**：
+`alias` 直接成立；未声明（`ReprAuto`）按自动去装箱推断判定；
+`boxed` 恒为装箱，直接拒绝。`data` 没有记录语义，写 `via field` 报
 `[TC_DerivingViaOnlyRecord]`。实例不是逐方法生成的，而是在实例搜索期做 **字典委托**（GND）：
 
 ```text
@@ -273,7 +270,7 @@ main = pretty Red ++ "/" ++ show Red
 - **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
   例外（`Eq` / `Ord` 的 `eq : a -> a -> Bool` 返回 Bool，Bool 实例随 trait 留在 `Base.Eq` /
   `Base.Ord`；`Show String` 留在 `Base.Show`，因为 String 经 Interp 依赖 Show。`Show Bool`
-  的签名不依赖 Bool，按规则放 `Base.Bool`）。精化器**强制孤儿检查**（B23）：实例必须声明在
+  的签名不依赖 Bool，按规则放 `Base.Bool`）。精化器**强制孤儿检查**：实例必须声明在
   定义 trait 的文件，或定义 head 类型（任一类型参数）的文件；`Int` / `String` 是
   全局可见的内建类型，允许在任意模块声明实例（如 `Show Int`）。违反报 `TC_OrphanInstance`。
   规则与理由见 [operators.md](operators.md)。
@@ -296,7 +293,7 @@ main = pretty Red ++ "/" ++ show Red
   字典假设（隐式字典参数，`Rig` 是 `RigOmega`，运行时保留），body 的方法调用优先命中
   它；调用点仍按实例搜索补字典。
   不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码
-  统一写显式约束，不再依赖该旧形态。语法与边界见 [language.md](language.md) §签名的 trait 约束。
+  统一写显式约束。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（声明与实例分离）**：声明在
   `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
   `String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`、`Show Bool` →
@@ -331,7 +328,7 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
 - `C a` 里的 `a` 不是新参数：它是签名自由小写名的隐式类型参数（见
   [type-system.md](type-system.md)）；约束另外生成隐式**字典参数**
   `{_ctx0 : Dict_C a}`（`Rig` 为 `RigOmega`，运行时保留），插在类型参数之后、显式参数之前。
-- body 的方法调用优先命中声明的假设；签名没覆盖的刚性需求仍按旧规则提升成额外隐式
+- body 的方法调用优先命中声明的假设；签名没覆盖的刚性需求提升成额外隐式
   参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
 - 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
@@ -395,21 +392,20 @@ main = case (MkEmail "x@y") of MkEmail s => s
   参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
-  `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，不再提供 `pureX` / `bindX` / `andThen` 这类重复入口
-  （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 均已删除）。
+  `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，没有 `pureX` / `bindX` / `andThen` 这类重复入口
+  （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 不存在）。
   编译器内部 `Vuna.Compiler.Common.bind` 是固定类型的 `Result` 绑定（限定名调用，
-  不是 base 公开 API；`andThen` 已删除，固定类型是内部实现选择）。`Eff` 的 `do` 已全面可用；长 do 链的精化指数
-  已由单趟字典求解消除（20 步约 100ms）；期望类型定向与 do 块单 monad 均已落地。
+  不是 base 公开 API；固定类型是内部实现选择）。`Eff` 的 `do` 全面可用；长 do 链的精化
+  走单趟字典求解（20 步约 100ms）；期望类型定向与 do 块单 monad 都生效。
 ### Applicative / Foldable / Traversable / Monoid / Hashable
 
 - `Applicative`：三个方法 `pure : a -> f a`、`ap : f (a -> b) -> f a -> f b`、
   `liftA2 : (a -> b -> c) -> f a -> f b -> f c`，实例全部显式实现（vuna 无 default
-  method）。B42 修复后实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match
-  （此前误报 `TC_ImpossibleBranchIndex`，最小方法被迫用 `liftA2`、`ap` 只能派生）。
-  `liftA2` 仍**不**作派生顶层函数：当前 codegen 的字典投影在 OCaml 侧没有类型标注
+  method）。实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match。
+  `liftA2` **不**作派生顶层函数：当前 codegen 的字典投影在 OCaml 侧没有类型标注
   （`dliftA2` 会被推断成 `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
-  这类签名），`pure` 的返回与 `ap` 的首参被错误统一，派生体在调用点直接 OCaml 类型错误；
-  等投影带类型标注后再考虑。
+  这类签名），`pure` 的返回与 `ap` 的首参被错误统一，派生体在调用点直接 OCaml 类型错误
+  （[debt.md](debt.md) D52）。
   `Base.Monad` 重导出 `Base.Applicative`，`import Base.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 - `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
   `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。
@@ -423,7 +419,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
 
 - 效果 API 直接返回 `Eff []`：用户面经 `Base.Eff.*` 标签 + handler（如 `consolePrint` /
   `fsReadFile`）；handler 内部直接调用 `prim_eff_*` 原语（`print`/`readFile`/`writeFile`/
-  `readLine` 等别名层已随宿主别名模块删除；`println` 也不再提供，换行写
+  `readLine` 这类别名不存在；也没有 `println`，换行写
   `prim_eff_print (s ++ "\n")`），原语返回 `Eff []`（例如
   `prim_eff_getArgs : Eff [] (List String)`、`prim_eff_print : String -> Eff [] Int`）。
   宿主层对任何包可见：源码里可直接调用 `prim_*` / `prim_eff_*`（没有 manifest 能力声明；

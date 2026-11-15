@@ -1,23 +1,20 @@
 # 测试架构（test-architecture）
 
 本文是测试体系的**设计页**：测试如何消费输入寻址对象库（`cache.md`）、为什么默认共享
-一个 store、哪些用例必须隔离，以及后续的 verdict/视图/调度演进方向。操作口径与
-commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)。
+一个 store、哪些用例必须隔离。操作口径与 commands 在 [testing.md](testing.md)；
+对象库本身见 [cache.md](cache.md)。
 
-## 1. 问题：测试是最后一个自建缓存的大消费者
+## 1. 原则：测试是对象库的普通客户端
 
-对象库已经是仓库唯一的缓存形态（输入寻址、存在即命中、删除只影响命中率、roots + GC）。
-但 test runner 曾经给**每个 worker、每个 steps case** 新建一个 `VUNA_STORE`，另外还维护
-私有的 `.local/test-cache` 结果缓存与 `set-*` 构建桶。后果：
+对象库是仓库唯一的缓存形态（输入寻址、存在即命中、删除只影响命中率、roots + GC）。
+测试 runner 因此不维护第二套缓存：**一次 run 只有一个 store root**，父进程预热一次，
+worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显式隔离。
 
-- 每个 worker 各跑一次 `vuna check base`（冷 store 约 7 s）；16 个 worker ≈ 16 倍；
-- 每个 steps case 内的几十次 `check/compile` 都从冷 store 开始；
-- 同一个夹具空 store 编译 2.9–5.5 s，暖 store 只要 7 ms（2026-11-13 本机 16 核实测）；
-- section 90（74 个 steps）单段 375 s，最慢 case 276 s；全量 suite 超过 10 分钟。
+冷启动重复劳动的代价是为什么共享的根据：每个 worker 各跑一次 `vuna check base`
+（冷 store 约 7 s）会在 16 个 worker 上乘 16；同一夹具空 store 编译 2.9–5.5 s，
+暖 store 7 ms（本机 16 核实测）。所以先让测试成为对象库的普通客户端，再谈调度。
 
-结论：先让测试成为对象库的普通客户端，再谈调度；否则优化的是冷启动重复劳动的分布。
-
-## 2. 目标形态：Test-as-Store-Client
+## 2. 形态：Test-as-Store-Client
 
 ```text
                     .local/store（唯一根；VUNA_STORE 可覆盖）
@@ -39,11 +36,11 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 1. **一次 run 一个 store root**：默认项目内 `.local/store`（`nix develop` 的 shellHook、
    `nix run .#vuna-run-tests`、CI check 各自导出；`VUNA_STORE` 可覆盖）。父进程解析一次，
    所有 worker/case 继承同一路径。
-2. **父进程只预热一次**：`vuna check base`（需要时 `check .`）；worker 不再各自 warmup。
+2. **父进程只预热一次**：`vuna check base`（需要时 `check .`）；worker 不各自 warmup。
 3. **默认共享，隔离显式**：steps 文件头写 `# store-isolated` 的 case 用 `${caseTmp}/store`；
    其余共享。断言缓存布局、GC、冷命中、只读语义的用例必须隔离。
 4. **`--no-cache` 只忽略结果判定**（golden/error 的本地结果缓存），不关闭对象库；
-   真正的冷跑用 `--fresh-store`（后续）或显式空 `VUNA_STORE`。
+   真正的冷跑用显式空 `VUNA_STORE`。
 
 ### 2.2 为什么可以共用
 
@@ -54,25 +51,24 @@ commands 在 [testing.md](testing.md)；对象库本身见 [cache.md](cache.md)�
 
 ### 2.3 并发边界（`cache.md` 的补充）
 
-| 位置 | 现状 | 影响 | 计划 |
-| --- | --- | --- | --- |
-| `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不再丢 root（兼容旧单文件布局） | — |
-| `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 | — |
-| `units/<pkg>` | 写原子，按 entry 桶内 GC | 并发不同 entry 不再互相驱逐 | — |
+| 位置 | 现状 | 影响 |
+| --- | --- | --- |
+| `roots/<project>/<digest>` | 逐摘要文件，无读-改-写 | 并发追加不丢 root |
+| `views/bin/<splitIn>` | `mkdir` 构建锁 + 持锁写最终视图、`.complete` 原子提交 | 日常 build 与测试同时构建同一包会串行；显式 `--out` 不经过锁 |
+| `units/<pkg>` | 写原子，按 entry 桶内 GC | 并发不同 entry 不互相驱逐 |
 
 ### 2.4 进程内执行层（fixture 用例）
 
-fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）**不再 spawn `vuna`**：
+fixture 用例（`CGolden` / `CError` / `CCheck` / `CLint` / `CFix`）**不 spawn `vuna`**：
 runner 直接调用编译器/工具链的导出函数并断言返回值（细节见
 [testing.md](testing.md) 的「进程内断言」）。
 
 - **路径选择只在进程内**：增量会话（`Vuna.Test.Session`，依赖接口 + `AuxCache`）优先，
   不可用时同进程退回全量精化。没有「回退子进程」这一步——那会把断言退回字符串匹配。
   增量会话不覆盖的只有 `warnUnusedDefsIn`，所以负例一律走全量。
-- **verdict key 去掉 env 分量**：旧 key 含 `no-session=<env>`（`VUNA_TEST_NO_SESSION`
-  的 A/B 开关）。开关删除后 key 只剩输入摘要，旧对象自然失效（无害）。
-- **隔离只保留在 steps 岛**：`# store-isolated` 的私有 store 仍只用于断言缓存布局/GC/
-  冷命中的 steps 用例；fixture 负例不再需要私有 store 绕缓存。
+- **verdict key 只有输入摘要**（不含 env 分量），所以同一输入在不同环境共用同一裁决。
+- **隔离只保留在 steps 岛**：`# store-isolated` 的私有 store 只用于断言缓存布局/GC/
+  冷命中的 steps 用例；fixture 负例不需要私有 store 绕缓存。
 
 ## 3. 用例分层与预算
 
@@ -81,54 +77,47 @@ runner 直接调用编译器/工具链的导出函数并断言返回值（细节
 | `fast` | 进程内 check/interp 语义、诊断、term | < 10 s | 每次保存 / commit |
 | `integration` | compile+run golden、CLI/lint/fix、模块/包 | < 30 s | PR / pre-push |
 | `e2e` | `check .`、LSP/REPL、workspace/build、seed | < 60 s | 合并前 / nightly |
-| `tools` | 47c `vuna test --jobs`、54b REPL v2 缺口等 20 s 级工具 case | < 25 s | e2e check 内固定 2 worker |
+| `tools` | `vuna test --jobs`、REPL 工具 case | < 25 s | e2e check 内固定 2 worker |
 | `perf` | growth/metrics/bench | 独立机器 | nightly |
 
-tier 过滤已落地：`--tier fast|integration|e2e|tools`（可重复）；`*.steps` 默认 `e2e`，
+tier 过滤：`--tier fast|integration|e2e|tools`（可重复）；`*.steps` 默认 `e2e`，
 seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 
-调度：gate 已用 `costs.tsv` 做 LPT 分桶；e2e/tools 保持静态顺序（冷隔离
-长 case 不宜重排）。worker 仍保留 `--worker i/N` 协议；每 case 总预算待做。
+调度：LPT 只用于非 e2e tier（gate：`fast integration`）——父/worker 读
+`.local/test-suite/costs.tsv`（上次每 case 的 ms），按成本降序把重 case 放到当前负载最小
+的 worker；worker 确定性重算同一组 bins，再取自己的 bin。全量（空 tier）与 e2e tier 按
+发现顺序，避免冷隔离长 case 同时开跑。worker 协议是 `--worker i/N`。
 
-> 实测（2026-11-13）：只做“按 costs 降序 + 静态轮转”会把 44e/44g/44l2 等**冷隔离**
-> 长 case 同时压到多个 worker，全量反而 215 s（原静态顺序 144 s）。LPT 必须先有 tier
-> 与 cold-heavy 并发上限，不能只排序；当前保留静态分片。
+**冷隔离长 case 不能只靠排序**：把 e2e 长 case 同时压到多个 worker 会让全量变慢，
+必须先有 tier 与 cold-heavy 并发上限；当前就是静态分片。e2e 采用**专用串行预热**（先
+`check base` / `check compiler` / `check .`，再跑 suite），长 case 的根因是冷编译而不是
+断言数量，所以拆 case 必须共享已预热 store。
 
-## 4. 结果判定：verdict 对象（P1）
+## 4. 结果判定：verdict 对象
 
 - `objects/test/<testIn>`，`testIn = addrOf ["test", caseId, kind, srcHash, expectedHash,
   compilerFp, depsHash, toolHash]`；存在 = 上次通过。
 - 只缓存输入可声明的 golden/error/check；steps 先共享 store 但不缓存。
 - 通过后写对象并 `storeRootAppendEff` 登记；`vuna store gc` 直接复用。
-- 删除私有 `.local/test-cache/*.cache`（其 key 含 mtime/size，内容不变也会 miss）。
 
-## 5. 产物：走 store 视图（P1）
+## 5. 产物：走 store 视图
 
-- `views/bin/<splitIn>` / `units/` 替代 `buildCacheDir` + `syncBuildDir` + `cp -a`。
-- 先把 build 视图切到 `storeScratchClaimEff`/`storeViewPublishEff`，再让测试共享视图；
-  在那之前，测试对 repo 包的 build 用 `--out` 私有目录或 `store-isolated`。
-- **验收**：compile+run 的 build 复用；不再复制整棵 base。
+- `views/bin/<splitIn>` / `units/` 承担 build 产物；测试共享同一视图。
+- 包内 effect 测试有 `views/testbin/<testBin>` 产物缓存：key = 编译器指纹 + 各 context
+  root 内容 + 测试源内容；命中直接运行缓存的 `bin/vuna-test`，跳过 compile + `build.sh`。
+- repo 包的 build 可对不需要共享视图的用例用 `--out` 私有目录或 `store-isolated`。
 
-## 6. CI（P2）
+## 6. CI
 
 - build 阶段一次构建 vuna/seed 并预热 store；test 阶段 suite 与 18 个 check 共享只读
   store + 每 check 可写 overlay。
-- 取消每个 check 内部 `--jobs auto`：全局 token 池；重 check 串行/分批。
-- 去重 `check .`/fmt/package/lint（suite 与 Nix checks 重叠）。
-- **验收**：`nix flake check` ≤ 3 min；无 256 路超订。
+- 全局 token 池替代每 check 内部 `--jobs auto`；重 check 串行/分批。
+- 去掉 suite 与 Nix checks 重叠的 `check .` / fmt / package / lint 重复执行。
 
-## 7. 终态（P3，不计成本）
-
-- `vuna test --serve` 常驻 world（每包一个，JSON-RPC），语义 case 进程内；
-- 按 family 批量 link（400+ → ~20 次）或 dispatcher 单二进制；
-- 效果 handler 测试替身；interp 全量 + codegen 抽样/差分测试；
-- 远程/分布式 store 与 CI 缓存。
-
-## 8. 验收与测量
+## 7. 验收与测量
 
 - 同一 store 连续 `check compiler`：第二次 `cache-path=hit`、`iface-write=0/N`、< 100 ms。
-- 单 dt golden case：< 2 s；section 90：< 60 s；全量：< 2 min（P0），P1 < 60 s 冷 /
-  < 20 s 热。
+- 单 dt golden case：< 2 s；section 90：< 60 s；全量：< 2 min。
 - 测量必须在静默树上重录，记录 HEAD、CPU、`VUNA_STORE` 是否为空、`--cache-dir`。
 
 ## 相关阅读
@@ -136,38 +125,3 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 - 对象库：[cache.md](cache.md)；测试操作口径：[testing.md](testing.md)
 - 性能方法与读数：[performance.md](performance.md)
 - 终态方向：[../architecture-target.md](../architecture-target.md)
-### 长 case：拆分/预热实测（2026-11-13）
-
-- 把 44g（LSP+REPL）与 44l2（LSP 大闭包+REPL）拆成独立 case，fresh e2e 反而
-  **88 s**（原单 case ~54 s）：每个拆分都重复冷 `check .` / 冷 REPL 编译。
-- 父进程增加一次串行 `check .` 预热后再跑 44e/44g/44l2：wall **177 s**，其中预热本身
-  ~80 s；44g 降到 28 s、44l2 降到 9 s，但总账更差。
-- 结论：长 case 的根因是**冷编译**，不是断言数量。拆分必须满足“拆分后的子 case 共享
-  已预热 store”，预热必须在 worker 内/并发阶段完成，不能串行挡在父进程；cache 断言
-  与功能断言也要分开，功能部分才能吃预热 store。
-- 再试“父进程后台并发跑 `check compiler` / `check .`，与 worker 重叠”：e2e 变为
-  **209 s**，44e 106 s、32_fmt 86 s —— 预热进程与 worker 抢 CPU/冷编译，仍不划算。
-  结论：需要**专用预热阶段完成后**再放 worker，或让 e2e 用例共享一份已热 store；
-  “并发预热”不是免费重叠。
-- 44e（repo `check .` 冷摘要）已删除：其覆盖与 `checks.vuna-typecheck`（`vuna check .`）和
-  44b（小包冷 `cache-path=summary deps=2`）重复；删后 e2e 最长从 59.6 s 降到 56.9 s
-  （44g），不再为一条冗余断言付整仓冷编译。
-- 32_fmt 不再自编译探针包：`check.sh` 改用产品 CLI（复制+`vuna fmt`、`fmt --check`）后，
-  32_fmt 从 ~47 s 降到 **9 s**，且 63 个夹具全过；`_probe.vuna` 删除。
-- e2e 采用“专用串行预热”：CI 的 e2e check 先依次 `check base` / `check compiler` /
-  `check .`（约 23 s），再跑 suite；44g 去掉 `store-isolated` 共享这份热 store。
-  结果：e2e 最长 case 37.2 s → **29.5 s**，wall 仍约 77 s。47c/36 的进一步拆分在
-  8 worker 下因并发争用反而到 34 s，已回退。
-- 47c 再验：删掉 workspace 聚合段（test-m30）后冷跑 33.7 s、warm 35.6 s，没有收益；
-  其成本是多次 `vuna test` 子进程各自编译 effect 测试。下一步应给包内 effect 测试做
-  内容寻址的“编译产物缓存”，让 serial/parallel/overlap 复用同一份测试二进制，而不是
-  继续删断言或拆 case。
-- 包内 effect 测试增加 `views/testbin/<testBin>` 产物缓存：key = 编译器指纹 + 包源码闭包
-  内容 + 各 context root 内容 + 测试源内容；命中直接运行缓存的 `bin/vuna-test`，跳过
-  compile + build.sh。47c 因此从 ~29.5 s 降到 **23.6 s**（≤25 s），全量 789 cases 仍全绿。
-- testbin key 收敛为「编译器指纹 + context roots 内容 + 测试源内容」：roots 已含本包与
-  依赖闭包，去掉重复的 pkgHash；47c 在 e2e 下 24.96 s，54b 25.4 s（8 worker 噪声）。
-- LPT 已落地在**非 e2e tier**（gate：`fast integration`）：父/worker 读
-  `.local/test-suite/costs.tsv`（上次每 case 的 ms），按成本降序把重 case 放到当前
-  负载最小的 worker；worker 确定性重算同一组 bins，再取自己的 bin。全量（空 tier）与
-  e2e tier 仍按发现顺序，避免冷隔离长 case 同时开跑；gate 实测 ~72 s，全量不受影响。
