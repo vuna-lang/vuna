@@ -316,6 +316,33 @@ floatSqrtFn : NativeFunc
 floatSqrtFn = rtFunc "float_sqrt" 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmUnop "sqrt" 0] floatBox)
 
 -- ---------------------------------------------------------------
+-- 效应原语（宿主层叶子 + IORef）
+-- ---------------------------------------------------------------
+-- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
+-- 续延（`prim_effectPerform` / `prim_effectHandle`）需要栈捕获，仍不支持。
+-- | `IORef` 单元：一个 8 字节槽（`[value]`）。
+effNewRefFn : NativeFunc
+effNewRefFn =
+  rtFunc "prim_eff_new_ref" 8
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc"), IMov (OpReg Rdx) (OpMem Rbp (0 - 8)), IMov (OpMem Rax 0) (OpReg Rdx)]
+
+effReadRefFn : NativeFunc
+effReadRefFn = rtFunc "prim_eff_read_ref" 0 [IMov (OpReg Rax) (OpMem Rdi 0)]
+
+effWriteRefFn : NativeFunc
+effWriteRefFn =
+  rtFunc "prim_eff_write_ref" 0 [IMov (OpMem Rdi 0) (OpReg Rsi), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `print` / `eprint`：写 fd 后返回写出的字节数（OCaml 侧返回 `String.length`）。
+effPrintFn : String -> Int -> NativeFunc
+effPrintFn name fd =
+  rtFunc name 0
+    [IMov (OpReg Rdx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, IMov (OpReg Rdi) (OpImm fd), IMov (OpReg Rax) (OpImm 1), ISyscall]
+
+effExitFn : NativeFunc
+effExitFn = rtFunc "prim_eff_exit" 0 [IMov (OpReg Rax) (OpImm 60), ISyscall, IRet]
+
+-- ---------------------------------------------------------------
 -- 数组（不可变、copy-on-write）
 -- ---------------------------------------------------------------
 -- 布局与 wasm 侧同一决策：`[len][elem0][elem1]...`，每个元素一个机器字
@@ -530,6 +557,12 @@ nativeRtFuncs =
     arrayGetFn,
     arraySetFn,
     arrayMakeFn,
+    effNewRefFn,
+    effReadRefFn,
+    effWriteRefFn,
+    effPrintFn "prim_eff_print" 1,
+    effPrintFn "prim_eff_eprint" 2,
+    effExitFn,
     floatFromIntFn,
     intFromFloatFn,
     floatBinFn "float_add" "add",
@@ -576,6 +609,18 @@ nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
 nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")
 nativeRtTarget "strSubstring" = Just (nativeRtLabel "str_substring")
 nativeRtTarget "strHash" = Just (nativeRtLabel "str_hash")
+nativeRtTarget "prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTarget "@vuna@prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTarget "prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTarget "@vuna@prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTarget "prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTarget "@vuna@prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTarget "prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTarget "@vuna@prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTarget "prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
+nativeRtTarget "@vuna@prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
+nativeRtTarget "prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTarget "@vuna@prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
 nativeRtTarget "floatFromInt" = Just (nativeRtLabel "float_from_int")
 nativeRtTarget "intFromFloat" = Just (nativeRtLabel "int_from_float")
 nativeRtTarget "floatAbs" = Just (nativeRtLabel "float_abs")
@@ -630,6 +675,18 @@ nativeRtValueArity "strUnpack" = 1
 nativeRtValueArity "strPack" = 1
 nativeRtValueArity "strConcatMany" = 1
 nativeRtValueArity "strSubstTemplate" = 2
+nativeRtValueArity "prim_eff_newRef" = 1
+nativeRtValueArity "@vuna@prim_eff_newRef" = 1
+nativeRtValueArity "prim_eff_readRef" = 1
+nativeRtValueArity "@vuna@prim_eff_readRef" = 1
+nativeRtValueArity "prim_eff_writeRef" = 2
+nativeRtValueArity "@vuna@prim_eff_writeRef" = 2
+nativeRtValueArity "prim_eff_print" = 1
+nativeRtValueArity "@vuna@prim_eff_print" = 1
+nativeRtValueArity "prim_eff_eprint" = 1
+nativeRtValueArity "@vuna@prim_eff_eprint" = 1
+nativeRtValueArity "prim_eff_exit" = 1
+nativeRtValueArity "@vuna@prim_eff_exit" = 1
 nativeRtValueArity "floatFromInt" = 1
 nativeRtValueArity "intFromFloat" = 1
 nativeRtValueArity "floatAbs" = 1

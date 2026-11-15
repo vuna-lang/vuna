@@ -6,7 +6,8 @@
 > 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
 > 族已接进 struct 表示，四个桥接符号（`strUnpack` / `strPack` / `strConcatMany` /
 > `strSubstTemplate`）已实现；闭包值（`$clo` + `elem declare`）与高阶应用已工作）。
-> `Float` 的算术/比较/转换/展示已工作；Effect / FFI 明确拒绝（`WasmUnsupported`）。实现入口：
+> `Float` 的算术/比较/转换/展示已工作；`main : Eff [] a` 与 `IORef` 可用；需要 handler
+> 续延的宿主效应行与 FFI 仍明确拒绝（`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -71,11 +72,13 @@
 | `IrRt` | 仅 `@ir@natSucc`（调用 head）与入口 show | 其它 → 拒绝（函数值） |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Float.floatRender` |
-| Effect / extern | 拒绝 | `wasm target: ... not supported yet` |
+| Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
+| Effect handlers / extern | 拒绝 | `perform` / `handle` 需要栈捕获 |
 
 - 入口：`main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受
   `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；
-  `showFloat` 走 `Base.Float.floatRender`；其它自定义 Show 拒绝。`--no-print` 不打印，仍求值。
+  `showFloat` 走 `Base.Float.floatRender`；其它自定义 Show 拒绝。`main : Eff [] a` 用
+  `runMain` 执行后展示；带宿主效应行的 main 拒绝。`--no-print` 不打印，仍求值。
 - **零参定义**在 `_start` 里按依赖序初始化进全局（每次引用读全局，不重算）；
   **饱和函数**（arity > 0）生成 `$f_<name>` 并被 `call`。
 
@@ -145,7 +148,8 @@
 - 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
   应用侧按实参个数逐次 `call $rt_apply`。
 - 变体分支只按 tag 一次线性分派（不做多模式矩阵）。
-- Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
+- 效应 handler（`perform` / `handle`：wasm 需要 stack-switching 才能捕获续延）与依赖
+  handler 的宿主效应行；FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 

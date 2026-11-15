@@ -1,0 +1,6 @@
+import Base.Eff
+
+main : Eff [] Int
+main = do
+  x <- pure 40
+  pure (x + 2)

@@ -231,6 +231,29 @@ genFloatLit st raw = case Base.String.split "." raw of
           (Pair [IConstI64 den, IStructNew "$int", ICall "$rt_floatFromInt", ILocalSet l, IConstI64 num, IStructNew "$int", ICall "$rt_floatFromInt", ILocalGet l, ICall "$rt_floatDiv"] st1)
   _ => Ok (Pair [IConstI64 (floatDigitsOf raw), IStructNew "$int", ICall "$rt_floatFromInt"] st)
 
+-- ---------------------------------------------------------------
+-- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
+-- ---------------------------------------------------------------
+applyAllIr : Ir -> List Ir -> Ir
+applyAllIr f [] = f
+applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
+
+effUnitBinder : IrBinder
+effUnitBinder = IrBinder (IrBUser "effUnitArg") False
+
+effArgBinders : Int -> List IrBinder
+effArgBinders n = map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False) (range 0 n)
+
+genEffThunk : Int -> GenState -> String -> String -> Int -> Ir -> Result (Pair (List Instr) GenState)
+genEffThunk fuel st family ctor arity prim = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else
+  let
+    bs = effArgBinders arity
+    applied = applyAllIr prim (map (\b => IrVar b) bs)
+    mkEff = IrCtor family ctor [IrLam [effUnitBinder] applied]
+    outer = if arity <= 0 then mkEff else IrLam bs mkEff
+  in genExpr (fuel - 1) st outer
+
 genExpr : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
 genExpr fuel st ir = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case ir of
@@ -252,7 +275,7 @@ else case ir of
   IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
   IrCase scrut alts => genCase (fuel - 1) st scrut alts
   IrLam bs body => genLamValue (fuel - 1) st bs body
-  IrEffThunk _ _ _ _ _ => Err "wasm target: effect thunks are not supported yet"
+  IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
   IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
   IrFloatLit raw => genFloatLit st raw
   IrRt _ => Err "wasm target: runtime function values are not supported yet"
@@ -999,16 +1022,24 @@ else case entry of
   Just e =>
     let
       st1 = beginFuncScope st
-      needed = collectNeeded 100000 [irEntryMainOf e] [] st1.gsDefs
+      runSeeds = case irEntryRunMainOf e of
+        Just rm => if irEntryIsActionOf e then [rm] else []
+        Nothing => []
+      needed = collectNeeded 100000 (irEntryMainOf e :: runSeeds) [] st1.gsDefs
       ordered = filter (\d => memStr (irDefName d) needed) st1.gsDefs
+      runInstrs = case irEntryRunMainOf e of
+        Just rm => if irEntryIsActionOf e then [ICall (watFuncNameOf rm)] else []
+        Nothing => []
     in case genDefsInits (fuel - 1) st1 ordered of
       Err err => Err err
-      Ok p => if not printResult then Ok p
+      Ok p => if not printResult then if irEntryIsActionOf e then Ok
+        (Pair (append (firstOf p) (append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append runInstrs [IDrop]))) (secondOf p))
+      else Ok p
       else case entryShowFunc (irEntryShowOf e) of
         Nothing => Err "wasm target: custom Show entry is not supported yet"
         Just showFn =>
           Ok
-            (Pair (append (firstOf p) [IGlobalGet (watGlobalNameOf (irEntryMainOf e)), ICall showFn, ICall "$rt_println"]) (secondOf p))
+            (Pair (append (firstOf p) (append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append runInstrs [ICall showFn, ICall "$rt_println"]))) (secondOf p))
 
 collectNeeded : Int -> List String -> List String -> List IrDef -> List String
 collectNeeded fuel [] seen _ = reverse seen
@@ -1108,12 +1139,16 @@ build program printResult =
     st0 = GenState fams defs offsets [] [] 0 [] consts [] 0
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
-    Just e => if irEntryIsActionOf e then WasmRejected (WasmUnsupported "wasm target: effectful main is not supported yet")
+    Just e => if irEntryIsActionOf e && hasHandlers (irEntryHandlersOf e) then WasmRejected (WasmUnsupported "wasm target: host effect handlers are not supported yet")
     else
       let
+        runSeeds = case irEntryRunMainOf e of
+          Just rm => if irEntryIsActionOf e then [rm] else []
+          Nothing => []
         needed = case irEntryShowOf e of
-          IrRt "@ir@showFloat" => collectNeeded 100000 [irEntryMainOf e, floatRenderName] [] defs
-          _ => collectNeeded 100000 [irEntryMainOf e] [] defs
+          IrRt "@ir@showFloat" =>
+            collectNeeded 100000 (append [irEntryMainOf e, floatRenderName] runSeeds) [] defs
+          _ => collectNeeded 100000 (irEntryMainOf e :: runSeeds) [] defs
         ordered = filter (\d => memStr (irDefName d) needed) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
       in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
@@ -1123,6 +1158,10 @@ build program printResult =
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
 floatRenderName = "Base.Float.floatRender"
+
+hasHandlers : List String -> Bool
+hasHandlers [] = False
+hasHandlers _ = True
 
 -- | 能力限制与内部错分开：`wasm target:` 前缀是显式拒绝，其余是生成器内部错。
 classifyWasmErr : String -> WasmErr

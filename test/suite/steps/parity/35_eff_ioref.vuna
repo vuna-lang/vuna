@@ -1,0 +1,9 @@
+import Base.Eff
+import Base.IORef
+
+main : Eff [] Int
+main = do
+  r <- newRef 10
+  _ <- writeRef r 32
+  v <- readRef r
+  pure (v + 1)

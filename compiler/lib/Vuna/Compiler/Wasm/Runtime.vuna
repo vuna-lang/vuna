@@ -198,6 +198,37 @@ rtArrayOob c =
     (append (failWithConst c.rtcOobOff c.rtcOobLen) [ICall "$rt_failStr", IUnreachable])
 
 -- ---------------------------------------------------------------
+-- 效应原语（宿主层叶子 + IORef）
+-- ---------------------------------------------------------------
+-- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
+-- 续延（`prim_effectPerform` / `prim_effectHandle`）需要栈捕获，仍不支持。
+rtEffNewRef : WatFunc
+rtEffNewRef =
+  rtFunc "$rt_newRef" [Pair "$p0" WvAnyRef] [WvAnyRef] [Pair "$out" (WvRef "$arr")]
+    [IConstI32 1, IArrayNewDefault "$arr", ILocalSet "$out", ILocalGet "$out", IConstI32 0, ILocalGet "$p0", IArraySet "$arr", ILocalGet "$out"]
+
+rtEffReadRef : WatFunc
+rtEffReadRef =
+  rtFunc "$rt_readRef" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, IArrayGet "$arr"]
+
+rtEffWriteRef : WatFunc
+rtEffWriteRef =
+  rtFunc "$rt_writeRef" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$arr", IConstI32 0, ILocalGet "$p1", IArraySet "$arr", IConstI64 0, IStructNew "$int"]
+
+-- | `print` / `eprint`：写 fd 后返回写出的字节数（与 OCaml 的 `String.length` 一致）。
+rtEffPrint : String -> Int -> WatFunc
+rtEffPrint name fd =
+  rtFunc name [Pair "$p0" WvAnyRef] [WvAnyRef] [Pair "$n" WvI32]
+    [IConstI32 fd, ILocalGet "$p0", IConstI32 0, ICall "$rt_write", ILocalGet "$p0", IRefCast "$str", IArrayLen, ILocalSet "$n", ILocalGet "$n", IPlain "i64.extend_i32_u", IStructNew "$int"]
+
+rtEffExit : WatFunc
+rtEffExit =
+  rtFunc "$rt_effExit" [Pair "$p0" WvAnyRef] [] []
+    [ILocalGet "$p0", IRefCast "$int", IStructGet "$int" 0, IPlain "i32.wrap_i64", ICall "$proc_exit", IUnreachable]
+
+-- ---------------------------------------------------------------
 -- 浮点（IEEE-754 double）
 -- ---------------------------------------------------------------
 -- 表示沿用 `$float` struct：boxed f64；比较指令本身按 IEEE 语义处理 NaN。
@@ -752,6 +783,12 @@ rtFunctions c =
   [ rtApply,
     rtWrite,
     rtPrintln,
+    rtEffNewRef,
+    rtEffReadRef,
+    rtEffWriteRef,
+    rtEffPrint "$rt_effPrint" 1,
+    rtEffPrint "$rt_effEprint" 2,
+    rtEffExit,
     rtFailStr c,
     rtArrayOob c,
     rtFloatFromInt,
@@ -896,4 +933,16 @@ rtImplOf "strSubstring" = RtFunc 3 "$rt_substring"
 rtImplOf "strHash" = RtFunc 1 "$rt_strHash"
 rtImplOf "bi_eq_str" = RtFunc 2 "$rt_eqStr"
 rtImplOf "bi_neq_str" = RtFunc 2 "$rt_neqStr"
+rtImplOf "prim_eff_newRef" = RtFunc 1 "$rt_newRef"
+rtImplOf "@vuna@prim_eff_newRef" = RtFunc 1 "$rt_newRef"
+rtImplOf "prim_eff_readRef" = RtFunc 1 "$rt_readRef"
+rtImplOf "@vuna@prim_eff_readRef" = RtFunc 1 "$rt_readRef"
+rtImplOf "prim_eff_writeRef" = RtFunc 2 "$rt_writeRef"
+rtImplOf "@vuna@prim_eff_writeRef" = RtFunc 2 "$rt_writeRef"
+rtImplOf "prim_eff_print" = RtFunc 1 "$rt_effPrint"
+rtImplOf "@vuna@prim_eff_print" = RtFunc 1 "$rt_effPrint"
+rtImplOf "prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
+rtImplOf "@vuna@prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
+rtImplOf "prim_eff_exit" = RtFunc 1 "$rt_effExit"
+rtImplOf "@vuna@prim_eff_exit" = RtFunc 1 "$rt_effExit"
 rtImplOf _ = RtUnsupported

@@ -317,6 +317,14 @@ genConcatRest fuel st slot (part :: rest) =
   else nbind (genExpr (fuel - 1) st part)
     (\p => nbind (genConcatRest (fuel - 1) (secondOf p) slot rest) (\q => NOk (Pair (append (firstOf p) (append [IMov (OpReg Rsi) (OpReg Rax)] (append (loadReg Rdi slot) (append [ICall (nativeRtLabel "str_concat"), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)] (firstOf q))))) (secondOf q))))
 
+listHasStr : String -> List String -> Bool
+listHasStr _ [] = False
+listHasStr x (y :: rest) = if x == y then True else listHasStr x rest
+
+hasHandlers : List String -> Bool
+hasHandlers [] = False
+hasHandlers _ = True
+
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
 floatRenderName = "Base.Float.floatRender"
@@ -353,6 +361,29 @@ genFloatLit st raw = case Base.String.split "." raw of
   _ =>
     NOk
       (Pair [IMov (OpReg Rdi) (OpImm (floatDigitsOf raw)), ICall (nativeRtLabel "float_from_int")] st)
+
+-- ---------------------------------------------------------------
+-- Eff thunk（效应原语包装成 `MkEff (fun _ => prim args)`）
+-- ---------------------------------------------------------------
+applyAllIr : Ir -> List Ir -> Ir
+applyAllIr f [] = f
+applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
+
+effUnitBinder : IrBinder
+effUnitBinder = IrBinder (IrBUser "effUnitArg") False
+
+effArgBinders : Int -> List IrBinder
+effArgBinders n = map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False) (range 0 n)
+
+genEffThunk : Int -> FGen -> String -> String -> Int -> Ir -> NRes (Pair (List Instr) FGen)
+genEffThunk fuel st family ctor arity prim = if fuel <= 0 then internal "native codegen fuel exhausted"
+else
+  let
+    bs = effArgBinders arity
+    applied = applyAllIr prim (map (\b => IrVar b) bs)
+    mkEff = IrCtor family ctor [IrLam [effUnitBinder] applied]
+    outer = if arity <= 0 then mkEff else IrLam bs mkEff
+  in genExpr (fuel - 1) st outer
 
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genExpr fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
@@ -423,7 +454,7 @@ else case ir of
       "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
   IrFloatLit raw => genFloatLit st raw
-  IrEffThunk _ _ _ _ _ => unsupported "native target: effect thunks are not supported yet"
+  IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 
 -- `&&` / `||`：短路；a 为 0/1，b 为 Bool。
@@ -1005,8 +1036,8 @@ entryShowKind (IrRt s) = case s of
   _ => Nothing
 entryShowKind _ = Nothing
 
-startFunc : Bool -> String -> String -> NativeFunc
-startFunc printResult kind mainName =
+startFunc : Bool -> String -> String -> Maybe String -> NativeFunc
+startFunc printResult kind mainName runMainM =
   let
     initHeap =
       [ ILea Rax nativeHeapLabel,
@@ -1015,7 +1046,10 @@ startFunc printResult kind mainName =
         IBinReg "add" Rcx (OpImm nativeHeapBytes),
         IMov (OpRip nativeArenaEndLabel) (OpReg Rcx)
       ]
-    callMain = [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)]
+    runPart = case runMainM of
+      Just rm => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel rm)]
+      Nothing => []
+    callMain = append [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)] runPart
     printer = if printResult then case kind of
       "bool" => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_bool")]
       "str" =>
@@ -1185,10 +1219,11 @@ build program printResult =
     defs = concatMap irGroupDefs unit.irUnitGroups
   in case unit.irUnitEntry of
     Nothing => NativeRejected (NativeUnsupported "native target: no main definition")
-    Just e => if irEntryIsActionOf e then NativeRejected (NativeUnsupported "native target: effectful main is not supported yet")
+    Just e => if irEntryIsActionOf e && hasHandlers (irEntryHandlersOf e) then NativeRejected (NativeUnsupported "native target: host effect handlers are not supported yet")
     else
       let
         mainName = irEntryMainOf e
+        runMainM = if irEntryIsActionOf e then irEntryRunMainOf e else Nothing
       in case findDef mainName defs of
         Nothing => NativeRejected (NativeUnsupported "native target: main definition not found")
         Just mainDef => if irDefArity mainDef /= 0 then NativeRejected (NativeUnsupported "native target: main must be a zero-argument value")
@@ -1201,15 +1236,18 @@ build program printResult =
                 (NativeUnsupported "native target: custom Show entry is not supported yet")
             Just kind =>
               let
+                seeds = case runMainM of
+                  Just rm => [mainName, rm]
+                  Nothing => [mainName]
                 needed =
-                  if kind == "float" then collectNeeded 100000 [mainName, floatRenderName] [] defs
-                  else collectNeeded 100000 [mainName] [] defs
+                  if kind == "float" then collectNeeded 100000 (floatRenderName :: seeds) [] defs
+                  else collectNeeded 100000 seeds [] defs
                 ordered = filter (\d => memStr (irDefName d) needed) defs
                 pool = poolOfDefs ordered
               in case genDefs defs pool unit.irUnitTyDecls 0 ordered [] of
                 NFail err => NativeRejected err
                 NOk pair =>
                   let
-                    start = startFunc printResult kind mainName
+                    start = startFunc printResult kind mainName runMainM
                   in NativeOk
                     (NativeProgram nativeRodata (poolItems pool) nativeBss (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start]))))
