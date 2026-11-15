@@ -317,6 +317,39 @@ genConcatRest fuel st slot (part :: rest) =
   else nbind (genExpr (fuel - 1) st part)
     (\p => nbind (genConcatRest (fuel - 1) (secondOf p) slot rest) (\q => NOk (Pair (append (firstOf p) (append [IMov (OpReg Rsi) (OpReg Rax)] (append (loadReg Rdi slot) (append [ICall (nativeRtLabel "str_concat"), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)] (firstOf q))))) (secondOf q))))
 
+-- ---------------------------------------------------------------
+-- 浮点字面量
+-- ---------------------------------------------------------------
+-- 字面量原文只有数字与一个小数点（词法层保证）。用 `int / 10^k` 在运行期算成
+-- double：分子分母都 < 2^53 时与宿主解析同一舍入结果；更长的字面量按 Int 精度截断。
+floatDigitsOf : String -> Int
+floatDigitsOf s = floatDigitsGo (strUnpack s) 0
+
+floatDigitsGo : List Int -> Int -> Int
+floatDigitsGo [] acc = acc
+floatDigitsGo (c :: rest) acc =
+  if c >= 48 && c <= 57 then floatDigitsGo rest (acc * 10 + (c - 48)) else floatDigitsGo rest acc
+
+floatPow10 : Int -> Int
+floatPow10 n = if n <= 0 then 1 else 10 * floatPow10 (n - 1)
+
+genFloatLit : FGen -> String -> NRes (Pair (List Instr) FGen)
+genFloatLit st raw = case Base.String.split "." raw of
+  [ip, fp] =>
+    let
+      num = floatDigitsOf (ip ++ fp)
+      den = floatPow10 (strLength fp)
+    in if den == 1 then NOk (Pair [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int")] st)
+    else
+      let
+        slotP = freshSlot st
+        slot = firstOf slotP
+      in NOk
+        (Pair [IMov (OpReg Rdi) (OpImm num), ICall (nativeRtLabel "float_from_int"), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax), IMov (OpReg Rdi) (OpImm den), ICall (nativeRtLabel "float_from_int"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff slot)), ICall (nativeRtLabel "float_div")] (secondOf slotP))
+  _ =>
+    NOk
+      (Pair [IMov (OpReg Rdi) (OpImm (floatDigitsOf raw)), ICall (nativeRtLabel "float_from_int")] st)
+
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
 genExpr fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case ir of
@@ -385,7 +418,7 @@ else case ir of
     unsupported
       "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
-  IrFloatLit _ => unsupported "native target: float literals are not supported yet"
+  IrFloatLit raw => genFloatLit st raw
   IrEffThunk _ _ _ _ _ => unsupported "native target: effect thunks are not supported yet"
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
 

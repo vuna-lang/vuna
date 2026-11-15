@@ -132,6 +132,24 @@ export data Instr(..) : Type where
   ICall : String -> Instr
   -- | `call reg`（寄存器里的代码指针；闭包调用）。
   ICallReg : Reg -> Instr
+  -- | `movsd xmm<n>, qword ptr <op>`。
+  IXmmLoad : Int -> Operand -> Instr
+  -- | `movsd qword ptr <op>, xmm<n>`。
+  IXmmStore : Operand -> Int -> Instr
+  -- | `cvtsi2sd xmm<n>, <reg>`（Int -> double）。
+  IXmmFromInt : Int -> Reg -> Instr
+  -- | `cvttsd2si <reg>, xmm<n>`（double -> Int，向零截断）。
+  IXmmToInt : Reg -> Int -> Instr
+  -- | 双精度二元指令：`<op>sd xmm<dst>, xmm<src>`。
+  IXmmBin : String -> Int -> Int -> Instr
+  -- | 双精度一元指令：`<op>sd xmm<n>, xmm<n>`。
+  IXmmUnop : String -> Int -> Instr
+  -- | `ucomisd xmm<a>, xmm<b>`。
+  IXmmCmp : Int -> Int -> Instr
+  -- | `movq <reg>, xmm<n>`（按位搬 64 位）。
+  IXmmToReg : Reg -> Int -> Instr
+  -- | `movq xmm<n>, <reg>`（按位搬 64 位）。
+  IXmmFromReg : Int -> Reg -> Instr
   -- | `ret`。
   IRet : Instr
   -- | `syscall`。

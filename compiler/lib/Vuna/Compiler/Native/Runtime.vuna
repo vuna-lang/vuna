@@ -263,6 +263,59 @@ strShowFn =
     [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), IBinReg "add" Rdi (OpReg Rax), IBinReg "add" Rdi (OpImm 10), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), ILeaMem R8 R11 8, IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), ILabel ".Lrt_ss_loop", ITest Rcx Rcx, IJcc "jz" ".Lrt_ss_end", IMovzx Rax (OpMem Rsi 0), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), ICmp (OpReg Rax) (OpImm 34), IJcc "je" ".Lrt_ss_quote", ICmp (OpReg Rax) (OpImm 92), IJcc "je" ".Lrt_ss_bslash", ICmp (OpReg Rax) (OpImm 10), IJcc "je" ".Lrt_ss_nl", ICmp (OpReg Rax) (OpImm 9), IJcc "je" ".Lrt_ss_tab", ICmp (OpReg Rax) (OpImm 13), IJcc "je" ".Lrt_ss_cr", IMovByteRegOp (OpMem R8 0) Rax, IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_quote", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 34, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_bslash", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 92, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_nl", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 110, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_tab", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 116, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_cr", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 114, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_end", IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), ILeaMem Rax R11 8, IMov (OpReg Rdx) (OpReg R8), IBinReg "sub" Rdx (OpReg Rax), IMov (OpMem R11 0) (OpReg Rdx), IMov (OpReg Rax) (OpReg R11), IRet]
 
 -- ---------------------------------------------------------------
+-- 浮点（IEEE-754 double）
+-- ---------------------------------------------------------------
+-- 表示与 wasm 的 `$float` struct 同一决策：堆对象 `[f64]`。运算在 xmm 上做。
+floatBox : List Instr
+floatBox = [IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc"), IXmmStore (OpMem Rax 0) 0]
+
+floatFromIntFn : NativeFunc
+floatFromIntFn = rtFunc "float_from_int" 0 (append [IXmmFromInt 0 Rdi] floatBox)
+
+intFromFloatFn : NativeFunc
+intFromFloatFn = rtFunc "int_from_float" 0 [IXmmLoad 0 (OpMem Rdi 0), IXmmToInt Rax 0]
+
+floatBinFn : String -> String -> NativeFunc
+floatBinFn name op =
+  rtFunc name 0
+    (append [IXmmLoad 0 (OpMem Rdi 0), IXmmLoad 1 (OpMem Rsi 0), IXmmBin op 0 1] floatBox)
+
+-- | 有序比较：`ucomisd` 之后先看 PF（NaN ⇒ 一律 false）。
+floatCmpOrdered : String -> List Instr
+floatCmpOrdered cc =
+  [ IXmmCmp 0 1,
+    ISetcc "setnp" Rax,
+    IMovzxAl,
+    ISetcc cc Rdx,
+    IBinReg "and" Rdx (OpImm 1),
+    IBinReg "and" Rax (OpReg Rdx)
+  ]
+
+-- | `!=`：NaN 参与时结果为 true（与 OCaml `<>` 一致）。
+floatCmpNeq : List Instr
+floatCmpNeq =
+  [ IXmmCmp 0 1,
+    ISetcc "setne" Rax,
+    IMovzxAl,
+    ISetcc "setp" Rdx,
+    IBinReg "and" Rdx (OpImm 1),
+    IBinReg "or" Rax (OpReg Rdx)
+  ]
+
+floatCmpFn : String -> List Instr -> NativeFunc
+floatCmpFn name tail =
+  rtFunc name 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmLoad 1 (OpMem Rsi 0)] tail)
+
+-- | `abs`：清掉符号位（按位操作，不碰 xmm）。
+floatAbsFn : NativeFunc
+floatAbsFn =
+  rtFunc "float_abs" 8
+    [IMov (OpReg Rax) (OpMem Rdi 0), IBinReg "shl" Rax (OpImm 1), IBinReg "shr" Rax (OpImm 1), IMov (OpMem Rbp (0 - 8)) (OpReg Rax), IMov (OpReg Rdi) (OpImm 8), ICall (nativeRtLabel "alloc"), IMov (OpReg Rdx) (OpMem Rbp (0 - 8)), IMov (OpMem Rax 0) (OpReg Rdx)]
+
+floatSqrtFn : NativeFunc
+floatSqrtFn = rtFunc "float_sqrt" 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmUnop "sqrt" 0] floatBox)
+
+-- ---------------------------------------------------------------
 -- 数组（不可变、copy-on-write）
 -- ---------------------------------------------------------------
 -- 布局与 wasm 侧同一决策：`[len][elem0][elem1]...`，每个元素一个机器字
@@ -476,7 +529,21 @@ nativeRtFuncs =
     arrayLengthFn,
     arrayGetFn,
     arraySetFn,
-    arrayMakeFn
+    arrayMakeFn,
+    floatFromIntFn,
+    intFromFloatFn,
+    floatBinFn "float_add" "add",
+    floatBinFn "float_sub" "sub",
+    floatBinFn "float_mul" "mul",
+    floatBinFn "float_div" "div",
+    floatCmpFn "float_eq" (floatCmpOrdered "sete"),
+    floatCmpFn "float_neq" floatCmpNeq,
+    floatCmpFn "float_lt" (floatCmpOrdered "setb"),
+    floatCmpFn "float_le" (floatCmpOrdered "setbe"),
+    floatCmpFn "float_gt" (floatCmpOrdered "seta"),
+    floatCmpFn "float_ge" (floatCmpOrdered "setae"),
+    floatAbsFn,
+    floatSqrtFn
   ]
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -509,6 +576,20 @@ nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
 nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")
 nativeRtTarget "strSubstring" = Just (nativeRtLabel "str_substring")
 nativeRtTarget "strHash" = Just (nativeRtLabel "str_hash")
+nativeRtTarget "floatFromInt" = Just (nativeRtLabel "float_from_int")
+nativeRtTarget "intFromFloat" = Just (nativeRtLabel "int_from_float")
+nativeRtTarget "floatAbs" = Just (nativeRtLabel "float_abs")
+nativeRtTarget "floatSqrt" = Just (nativeRtLabel "float_sqrt")
+nativeRtTarget "bi_add_float" = Just (nativeRtLabel "float_add")
+nativeRtTarget "bi_sub_float" = Just (nativeRtLabel "float_sub")
+nativeRtTarget "bi_mul_float" = Just (nativeRtLabel "float_mul")
+nativeRtTarget "bi_div_float" = Just (nativeRtLabel "float_div")
+nativeRtTarget "bi_eq_float" = Just (nativeRtLabel "float_eq")
+nativeRtTarget "bi_neq_float" = Just (nativeRtLabel "float_neq")
+nativeRtTarget "bi_lt_float" = Just (nativeRtLabel "float_lt")
+nativeRtTarget "bi_le_float" = Just (nativeRtLabel "float_le")
+nativeRtTarget "bi_gt_float" = Just (nativeRtLabel "float_gt")
+nativeRtTarget "bi_ge_float" = Just (nativeRtLabel "float_ge")
 nativeRtTarget "arrayLength" = Just (nativeRtLabel "array_length")
 nativeRtTarget "arrayGet" = Just (nativeRtLabel "array_get")
 nativeRtTarget "arraySet" = Just (nativeRtLabel "array_set")
@@ -549,6 +630,10 @@ nativeRtValueArity "strUnpack" = 1
 nativeRtValueArity "strPack" = 1
 nativeRtValueArity "strConcatMany" = 1
 nativeRtValueArity "strSubstTemplate" = 2
+nativeRtValueArity "floatFromInt" = 1
+nativeRtValueArity "intFromFloat" = 1
+nativeRtValueArity "floatAbs" = 1
+nativeRtValueArity "floatSqrt" = 1
 nativeRtValueArity "arrayLength" = 1
 nativeRtValueArity "arrayGet" = 2
 nativeRtValueArity "arraySet" = 3

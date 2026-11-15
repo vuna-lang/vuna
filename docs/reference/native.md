@@ -45,6 +45,8 @@
 - 入口打印：`Int`/`Nat` 十进制 + `\n`，`Bool` 为 `True`/`False`，`String` 走
   `show`（`strShow` 带引号 + 转义）再打印，全部与 OCaml 入口钩子的
   `print_endline (show main)` 逐字一致。
+- `Float`：IEEE-754 double，堆对象 `[f64]`；运算在 `xmm` 上做，比较按 OCaml 语义
+  （NaN 参与时有序比较为 false、`!=` 为 true）。
 - `Array`：**不可变数组**，堆对象布局 = `[0]` 长度（i64）+ `[8]` 起元素，每个元素一个
   机器字（Int 未装箱；String / 对象 / 闭包是指针）。`arraySet` copy-on-write：复制整块
   再写，原数组不变。越界（读 / 写）trap `Invalid_argument("index out of bounds")` + exit 2。
@@ -150,6 +152,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 对象与分配：`alloc`（`rdi`=字节数 → `rax`，bump 堆，越界 trap OOM）；变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
+- 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
+  `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`。
 - 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
   `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
@@ -202,7 +206,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
-- Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
+- Float 的展示（`strFromFloat` / `main : Float` 入口）；Effect / 一次性续延、FFI / extern、
+  宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
