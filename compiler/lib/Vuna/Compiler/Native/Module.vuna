@@ -528,7 +528,9 @@ else
         (append (storeCloCode obj lamName) (append (storeCapsAt obj 0 caps) (getLocal obj)))
     lams = append st1.fgLams (append stF.fgLams [lamFunc])
     st3 = { st2 | fgLams = lams }
-  in NOk (Pair bodyIns st3)
+    -- 闭包函数体里用掉的内部 label 必须回写：否则父函数继续编号会撞名。
+    st4 = { st3 | fgNextLabel = stF.fgNextLabel }
+  in NOk (Pair bodyIns st4)
   )
   )
   )
