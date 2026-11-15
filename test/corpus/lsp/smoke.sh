@@ -60,6 +60,9 @@
 #      在「它自己的文件」与「引用它的文件」两处必须是同一版本（修复前一处缓冲、一处读盘）。
 #  34. 模块名本身是完整 token（`Base.Maybe Int` / `P.Sub.T`）：中间段也能 hover/definition；
 #      但名字后面的 `.` / 空格不算模块名的一部分（相邻两格不会跳变）。
+#  35. documentSymbol 节点带 `detail`（函数 / 类型头 / ctor / field 各自的签名文本）；
+#      成员（ctor/field）hover 的 docstring 不被缓冲覆盖清空。
+#  36. completion 项带 `documentation`（Markdown docstring，缓冲优先）与 `detail` 签名。
 #
 # 只依赖 POSIX sh / awk / sed 与传入的 vuna 可执行文件。
 set -u
@@ -1231,6 +1234,67 @@ check_contains "值里 Base.Maybe.Nothing 的模块段 hover 出模块名" "$t4"
 sep2=$(lsp_frame_id "$tmp/modsep.out" 2)
 check_contains "模块名后的分隔点不报模块（hover 回 null）" "$sep2" '"result":null'
 
+
+
+# ---- 26e) documentSymbol.detail：大纲里跟在名字后的签名（函数 / 类型头 / 成员）----
+# 回归点（本次新增）：documentSymbol 以前只有 name/kind/range，客户端大纲没有任何签名信息；
+# 现在 detail = `vuna api` 行的同一套文本（`Scan.declSigText`），成员节点（ctor/field）
+# 也带自己的类型。
+mkdir -p "$tmp/detailws/lib"
+printf '[package]\nname = "detailws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/detailws/vuna.toml"
+cat >"$tmp/detailws/lib/Dv.vuna" <<'VEOF'
+-- | Dv module docs.
+module Dv where
+
+-- | fn docs.
+export fn : Int -> Int
+fn n = n
+
+export data Wrap a(..) : Type where
+  -- | wrap docs.
+  Mk : a -> Wrap a
+
+export record Pt(..) where
+  -- | px docs.
+  px : Int
+VEOF
+dv_uri="file://$tmp/detailws/lib/Dv.vuna"
+dv_text='-- | Dv module docs.\nmodule Dv where\n\n-- | fn docs.\nexport fn : Int -> Int\nfn n = n\n\nexport data Wrap a(..) : Type where\n  -- | wrap docs.\n  Mk : a -> Wrap a\n\nexport record Pt(..) where\n  -- | px docs.\n  px : Int\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dv_uri"'","languageId":"vuna","version":1,"text":"'"$dv_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"'"$dv_uri"'"}}}'
+  # hover 成员（回归点：缓冲 doc 覆盖不能把 ctor/field 的 Index 文档清空）
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$dv_uri"'"},"position":{"line":9,"character":2}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$dv_uri"'"},"position":{"line":13,"character":2}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/detail.out" 2>/dev/null
+dt2=$(lsp_frame_id "$tmp/detail.out" 2)
+dt3=$(lsp_frame_id "$tmp/detail.out" 3)
+dt4=$(lsp_frame_id "$tmp/detail.out" 4)
+check_contains "documentSymbol 函数节点带 detail 签名" "$dt2" '"name":"fn","kind":12,"detail":"fn : Int -> Int"'
+check_contains "documentSymbol data 节点 detail 是声明头" "$dt2" '"name":"Wrap","kind":23,"detail":"data Wrap a"'
+check_contains "documentSymbol ctor 子节点 detail 带类型" "$dt2" '"name":"Mk","kind":22,"detail":"Mk : a -> Wrap a"'
+check_contains "documentSymbol field 子节点 detail 带类型" "$dt2" '"name":"px","kind":8,"detail":"px : Int"'
+check_contains "成员 hover（ctor）保留 docstring" "$dt3" 'wrap docs.'
+check_contains "成员 hover（field）保留 docstring" "$dt4" 'px docs.'
+
+# ---- 26f) completion.documentation：补全项带 docstring，且以打开中的缓冲为准 ----
+# 回归点（本次新增）：completion 只有 label/kind/detail，补全面板里看不到文档；现在带
+# Markdown `documentation`，文本来源与 hover 一致（缓冲优先，未保存改动立即生效）。
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$dv_uri"'","languageId":"vuna","version":1,"text":"-- | Dv module docs.\nmodule Dv where\n\n-- | disk fn docs.\nexport fn : Int -> Int\nfn n = n\n"}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"'"$dv_uri"'","version":2},"contentChanges":[{"text":"-- | Dv module docs.\nmodule Dv where\n\n-- | buffer fn docs.\nexport fn : Int -> Int\nfn n = n\n"}]}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"'"$dv_uri"'"},"position":{"line":5,"character":0}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/compl.out" 2>/dev/null
+cp2=$(lsp_frame_id "$tmp/compl.out" 2)
+check_contains "completion 项带 documentation（Markdown）" "$cp2" '"documentation":{"kind":"markdown","value":"buffer fn docs."}'
+check_contains "completion 项带 detail 签名" "$cp2" '"detail":"Int -> Int"'
+check_not_contains "completion 不回落到磁盘 docstring" "$cp2" 'disk fn docs.'
 
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"

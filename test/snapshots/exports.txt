@@ -187,8 +187,8 @@ lib/Vuna/Index.vuna: module Vuna.Index.Query, module Vuna.Index.Render, module V
 lib/Vuna/Index/Codec.vuna: decIndexComplete, encIndex, indexPayloadCodec, indexPayloadSchema
 lib/Vuna/Index/Query.vuna: findReferences, findSymbol, impactOf, listAllSymbols, referencesAt, symbolAt
 lib/Vuna/Index/Render.vuna: renderApi, renderModules, renderOverview
-lib/Vuna/Index/Scan.vuna: buildIndex, loadOrBuild, loadOrBuildCheap
-lib/Vuna/Index/Types.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), distinct, indexModules, modBytes, modDecls, modName, modPackage, modPath, refModule, refName, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType
+lib/Vuna/Index/Scan.vuna: buildIndex, declSigText, loadOrBuild, loadOrBuildCheap
+lib/Vuna/Index/Types.vuna: Index(..), ModuleInfo(..), Ref(..), Sym(..), distinct, indexModules, modBytes, modDecls, modDoc, modName, modPackage, modPath, refModule, refName, symCol, symDoc, symFullName, symKind, symLine, symModule, symName, symSig, symType
 lib/Vuna/Interp.vuna: bindingTypes, checkProgram, evalExprInfo, evalExprInfoWithAux, inferDefTypes, interpretExpr, interpretFile, runEffectProgram
 lib/Vuna/Json.vuna: Json(..), jsonAsArr, jsonAsBool, jsonAsInt, jsonAsObj, jsonAsStr, jsonBoolOr, jsonGet, jsonGetIn, jsonIntOr, jsonObjSingle, jsonStrOr, parseJson, renderJson
 lib/Vuna/Json/Frame.vuna: allDigits, contentLengthOf, digitsToInt, frameChunkSize, maxFrameBytes, readChunk, renderFrame, renderFrameBody, splitHeaderBlock
@@ -199,7 +199,7 @@ lib/Vuna/Lint/Diagnostics.vuna: LintEntry(..), LintRule(..), lintAll, lintCode, 
 lib/Vuna/Lint/Fix.vuna: fixLoop
 lib/Vuna/Lint/Rules.vuna: Edit(..), Finding(..), isNilList, joinLines, lintSourceWith, splitLines
 lib/Vuna/Lsp.vuna: runLsp, runLspTool
-lib/Vuna/Lsp/Bindings.vuna: bindingDefinitionAt, bindingHoverAt, bindingRenameOccurrences, bufferDeclDoc, localBindingAtSf, moduleSourceIn
+lib/Vuna/Lsp/Bindings.vuna: bindingDefinitionAt, bindingHoverAt, bindingRenameOccurrences, bufferSymDoc, localBindingAtSf, moduleSourceIn
 lib/Vuna/Lsp/Diagnostics.vuna: DiagCache, contextForDoc, diagReportJson, diagnosticsForCached, diagnosticsForSuggestions, findingDiagJson, publishDiagnosticsCached, publishDiagnosticsEmpty, publishDiagnosticsFor
 lib/Vuna/Lsp/Protocol.vuna: clampInt, decodeUri, dirOfPath, dropDotCodes, fileNameOf, fileScheme, findNamePos, findSubGo, findSubstring, flushLogLines, hexDigitCode, hexValue, isEmptyList, isPrefixChars, isWordCode, lastElem, lastSegment, lastSlashGo, lastSlashIndex, lineAt1, lineText, logLine, lspPosition, lspRange, maxInt, module Vuna.Json.Frame, module Vuna.Json.Rpc, nthCode, parentDir, pathToUri, percentDecode, percentDecodeChars, percentEncode, percentEncodeChars, posBeforeOrEq, qualPrefixLen, scanNameLines, spanContainsPos, spanRange, stripTrailingDots, tokenAtCursor, uriSafe, wordPrefixLen
 lib/Vuna/Lsp/Query.vuna: codeActionsFor, completionItems, definitionResult, documentSymbols, fixAllLintCommand, fixAllLintWorkspaceEdit, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols

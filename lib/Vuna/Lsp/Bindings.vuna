@@ -253,19 +253,63 @@ moduleHeaderPos sf lines name = case sf.sourceFileModDecl of
 bufferedSource : List (Pair String String) -> String -> Maybe String
 bufferedSource buffers path = if path == "" then Nothing else lookupPair path buffers
 
--- 缓冲里某顶层名字的 docstring：符号 hover 与模块 hover 共用「打开着的文件以缓冲为准」
+-- 缓冲里某个符号的 docstring：符号 hover / 补全与模块 hover 共用「打开着的文件以缓冲为准」
 -- 这条口径（否则同一模块的 docstring 在它自己的文件与引用它的文件里会出现两个版本）。
-export bufferDeclDoc : List (Pair String String) -> String -> String -> Maybe String
-bufferDeclDoc buffers path name = case bufferedSource buffers path of
+-- 只有缓冲里**确有**同名顶层声明 / 成员时才返回 `Just`（可能是空串 = doc 被删了）；
+-- 找不到这个名字返回 `Nothing`，调用方保留 Index 的 `symDoc`——否则成员（构造子 / 字段 /
+-- 方法，doc 记在 `parent\tmember` 键下）会被顶层 doc 查询覆盖成空。
+export bufferSymDoc : List (Pair String String) -> String -> String -> String -> Maybe String
+bufferSymDoc buffers path kind name = case bufferedSource buffers path of
   Nothing => Nothing
-  Just source => Just (declDocOf source name)
+  Just source => case parseSource "<lsp>" source of
+    ErrC e => Nothing
+    OkC sf => case lexComments source of
+      ErrC e => Nothing
+      OkC comments =>
+        let
+          table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
+          decls = sf.sourceFileDecls
+        in if isMemberKind kind then if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
+        else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
 
-declDocOf : String -> String -> String
-declDocOf source name = case parseSource "<lsp>" source of
-  ErrC e => ""
-  OkC sf => case lexComments source of
-    ErrC e => ""
-    OkC comments => docForDecl (docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments) name
+isMemberKind : String -> Bool
+isMemberKind kind = kind == "ctor" || kind == "field" || kind == "method"
+
+-- 成员名（构造子 / record 字段 / trait 方法）是否存在于缓冲里。
+hasMemberNamed : List Decl -> String -> Bool
+hasMemberNamed [] name = False
+hasMemberNamed (d :: rest) name =
+  if memName name (memberNames d) then True else hasMemberNamed rest name
+
+memberNames : Decl -> List String
+memberNames (DData name params kind ctors derivings viaField repr lin sp) = map ctorName ctors
+memberNames (DRecord name params fields derivings viaField repr lin sp) = map fieldName fields
+memberNames (DTrait name params methods sp) = map traitMethodName methods
+memberNames d = []
+
+-- 顶层声明名是否存在于缓冲里。
+hasDeclNamed : List Decl -> String -> Bool
+hasDeclNamed [] name = False
+hasDeclNamed (d :: rest) name = if declTopName d == name then True else hasDeclNamed rest name
+
+declTopName : Decl -> String
+declTopName (DData name params kind ctors derivings viaField repr lin sp) = name
+declTopName (DRecord name params fields derivings viaField repr lin sp) = name
+declTopName (DTrait name params methods sp) = name
+declTopName (DSig name ctx ty sp) = name
+declTopName (DFun name pats body sp) = name
+declTopName (DAxiom name ty sp) = name
+declTopName (DExtern name cName ty sp) = name
+declTopName (DInstance ctxE head methods sp) = ""
+
+-- 成员 doc：键是 `parent\tmember`，按名字后缀查（同一模块里构造子名唯一；字段/方法重名时取
+-- 第一个命中的父类型，hover/补全只需要一段说明）。
+memberDocByName : DocTable -> String -> String
+memberDocByName table name = memberDocGo ("\t" ++ name) (docTableMembers table)
+
+memberDocGo : String -> List (Pair String String) -> String
+memberDocGo suffix [] = ""
+memberDocGo suffix ((Pair k v) :: rest) = if endsWith suffix k then v else memberDocGo suffix rest
 
 -- 目标文件（或当前缓冲）的 docstring 与 module 头名字位置。文本来源优先级：
 -- 打开中的缓冲 > 当前文档 > 磁盘（避免同一模块的 docstring 在两处显示不同版本）。

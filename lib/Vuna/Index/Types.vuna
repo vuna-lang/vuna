@@ -7,28 +7,34 @@ import Vuna.Compiler.Common
 -- ---------------------------------------------------------------
 -- 数据模型
 -- ---------------------------------------------------------------
--- 模块元信息（不含 AST，可安全序列化到缓存）。
+-- 模块元信息（不含 AST，可安全序列化到缓存）。`modDoc` 是模块 docstring
+-- （`module` 头之前的 `-- |` 块，识别规则见 `Doc.Comments`），`vuna api` 用它渲染模块标题
+-- 下的说明。
 export record ModuleInfo(..) where
   modName : String
   modPackage : String
   modPath : String
   modBytes : Int
   modDecls : Int
+  modDoc : String
 
 export modName : ModuleInfo -> String
-modName (ModuleInfo m p path bytes decls) = m
+modName (ModuleInfo m p path bytes decls doc) = m
 
 export modPackage : ModuleInfo -> String
-modPackage (ModuleInfo m p path bytes decls) = p
+modPackage (ModuleInfo m p path bytes decls doc) = p
 
 export modPath : ModuleInfo -> String
-modPath (ModuleInfo m p path bytes decls) = path
+modPath (ModuleInfo m p path bytes decls doc) = path
 
 export modBytes : ModuleInfo -> Int
-modBytes (ModuleInfo m p path bytes decls) = bytes
+modBytes (ModuleInfo m p path bytes decls doc) = bytes
 
 export modDecls : ModuleInfo -> Int
-modDecls (ModuleInfo m p path bytes decls) = decls
+modDecls (ModuleInfo m p path bytes decls doc) = decls
+
+export modDoc : ModuleInfo -> String
+modDoc (ModuleInfo m p path bytes decls doc) = doc
 
 -- 符号：模块全名、名字、种类、显示签名、语法类型、docstring、起始行列。
 -- `symType` 是 `Vuna.Sig.renderType` 的**可回读**类型文本（函数/构造子/字段/

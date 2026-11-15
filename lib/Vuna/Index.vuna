@@ -8,7 +8,7 @@ module Vuna.Index where
 -- 缓存设计（`Vuna.Tool.Session` 输入寻址对象）：
 --   - 会话身份 = `(origin, bucket, nodeKey, 依赖摘要…)`，对象落在
 --     `$VUNA_STORE/objects/tool/<addr>`；命中即读载荷，未命中才重建；
---   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 1`，`Store`
+--   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 2`，`Store`
 --     framing）；
 --   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（C11：同 size + 同 mtime
 --     的内容变更也失效）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，

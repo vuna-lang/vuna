@@ -6,7 +6,7 @@
 # 缓存形状：
 #   `index:<dir>` 节点（会话索引落在 `$VUNA_STORE/objects/tool/<输入摘要>`，codec
 #   `query-index 1`），值 = 载荷内容地址（`QRef`）；载荷 = `Index.Codec.encIndex` 的规范
-#   字节，落同一个 `objects/tool/<输入摘要>`（codec `index-payload 1`，`Store` framing）。
+#   字节，落同一个 `objects/tool/<输入摘要>`（codec `index-payload 2`，`Store` framing）。
 #
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
 #   1) 首次 map：exit 0、blob 的 framing tag/codec 正确；
@@ -58,6 +58,8 @@ cat >"$ws/vuna.toml" <<'EOF'
 name = "index-ws"
 EOF
 cat >"$ws/lib/Demo/A.vuna" <<'EOF'
+-- | Demo.A module docs.
+-- | second module doc line.
 module Demo.A where
 
 -- | doc for one
@@ -89,9 +91,11 @@ check_contains "index map output" "$first" "Demo.A"
 blob=$(blobs | head -1)
 if [ -n "$blob" ]; then ok; else bad "index blob missing"; fi
 check_eq "index blob framing magic" "vuna-cache-frame 2" "$(head -c 18 "$blob" 2>/dev/null)"
-check_eq "index blob codec" "index-payload 1" "$(head -1 "$blob" 2>/dev/null | cut -d'|' -f3)"
+check_eq "index blob codec" "index-payload 2" "$(head -1 "$blob" 2>/dev/null | cut -d'|' -f3)"
 api_out=$(cd "$ws" && "$VUNA" api Demo.A 2>&1)
 check_contains "api multi-line doc" "$api_out" "second doc line"
+check_contains "api 模块 docstring（标题下）" "$api_out" "Demo.A module docs."
+check_contains "api 模块 docstring 保留多行" "$api_out" "second module doc line."
 
 # 2) 第二次 map：节点命中（读 blob 解码），blob 集合与字节数不变。
 before_count=$(blobs | wc -l | tr -d ' ')
@@ -101,10 +105,11 @@ check_eq "index second map exit" "0" "$?"
 check_contains "index cache hit" "$second" "index-path=cache"
 check_eq "index cache hit keeps blob count" "$before_count" "$(blobs | wc -l | tr -d ' ')"
 check_eq "index cache hit keeps blob bytes" "$before_size" "$(wc -c < "$blob" | tr -d ' ')"
+check_contains "模块 docstring 经 payload 编解码仍在" "$(cd "$ws" && "$VUNA" api Demo.A 2>&1)" "Demo.A module docs."
 
 # 3) 同 size + 同 mtime 的内容变更必须失效（安全窗内回落内容哈希）。
 cp -p "$ws/lib/Demo/A.vuna" "$tmp/A.bak"
-sed -i '3s/for/Xor/' "$ws/lib/Demo/A.vuna"
+sed -i '5s/for/Xor/' "$ws/lib/Demo/A.vuna"
 touch -r "$tmp/A.bak" "$ws/lib/Demo/A.vuna"
 changed=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index content-change map exit" "0" "$?"
@@ -126,7 +131,7 @@ for f in $(blobs); do head -c 64 "$f" > "$f.part"; mv "$f.part" "$f"; done
 rebuilt=$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )
 check_eq "index truncated-blob map exit" "0" "$?"
 check_contains "index truncated blob rebuild" "$rebuilt" "index-path=build"
-n_blob=$(for f in $(blobs); do [ "$(head -1 "$f" | cut -d'|' -f3)" = "index-payload 1" ] && printf '%s\n' "$f"; done | head -1)
+n_blob=$(for f in $(blobs); do [ "$(head -1 "$f" | cut -d'|' -f3)" = "index-payload 2" ] && printf '%s\n' "$f"; done | head -1)
 if [ -n "$n_blob" ]; then ok; else bad "index truncated blob not reframed (no valid index-payload blob)"; fi
 check_eq "index blob reframed magic" "vuna-cache-frame 2" "$(head -c 18 "$n_blob" 2>/dev/null)"
 check_contains "index reframed blob reusable" "$( cd "$ws" && VUNA_DEBUG_PERF=1 "$VUNA" map 2>&1 )" "index-path=cache"

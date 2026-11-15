@@ -5,7 +5,7 @@ module Vuna.Index.Codec where
 --
 -- 为什么要它：`Index` 是工具链里最大的缓存载荷（模块表 + 符号表 + 引用表，MB 级）。
 -- 载荷 = **节点 `index:<dir>` / `index-cheap:<dir>` 的值（`QRef`）+ 内容寻址 blob**
--- （`<cache>/blobs/<digest>`，codec `index-payload 1`），读写都过 `Store` 的 framing 校验。
+-- （`<cache>/blobs/<digest>`，codec `index-payload 2`），读写都过 `Store` 的 framing 校验。
 --
 -- 编码是累积器风格、字段顺序 = record 声明顺序；解码要求**恰好消费完**（尾随字节 ⇒
 -- `Nothing`，与其它载荷一致）。文本字段 (name/kind/sig/type/doc) 用 `encStr` 自定界，
@@ -19,11 +19,11 @@ import Vuna.Index.Types
 
 -- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
 export indexPayloadSchema : String
-indexPayloadSchema = "vuna-index-payload 1"
+indexPayloadSchema = "vuna-index-payload 2"
 
 -- | `Store` 载荷的 codec 段。
 export indexPayloadCodec : String
-indexPayloadCodec = "index-payload 1"
+indexPayloadCodec = "index-payload 2"
 
 -- | `Index` → 规范字节（三张表按 record 声明顺序串接）。
 export encIndex : Index -> String
@@ -37,7 +37,7 @@ encIndexPayload idx acc =
 encModuleInfo : ModuleInfo -> List String -> List String
 encModuleInfo m acc =
   encStr m.modName
-    (encStr m.modPackage (encStr m.modPath (encInt m.modBytes (encInt m.modDecls acc))))
+    (encStr m.modPackage (encStr m.modPath (encInt m.modBytes (encInt m.modDecls (encStr m.modDoc acc)))))
 
 encSym : Sym -> List String -> List String
 encSym s acc =
@@ -73,7 +73,9 @@ decModuleInfo fuel c = case decStr (fuel - 1) c of
         Nothing => Nothing
         Just (Pair bytes b4) => case decInt (fuel - 1) b4 of
           Nothing => Nothing
-          Just (Pair decls b5) => Just (Pair (ModuleInfo name pkg path bytes decls) b5)
+          Just (Pair decls b5) => case decStr (fuel - 1) b5 of
+            Nothing => Nothing
+            Just (Pair doc b6) => Just (Pair (ModuleInfo name pkg path bytes decls doc) b6)
 
 decSym : Int -> Cur -> Maybe (Pair Sym Cur)
 decSym fuel c = case decStr (fuel - 1) c of

@@ -36,12 +36,12 @@ Content-Length: <字节数>\r\n
 | `textDocument/diagnostic` | **pull diagnostics**（LSP 3.17）：`{kind:"full", items:[...]}`，与 push 同一条诊断链与 JSON 字段；不额外发通知。pull 客户端（`initialize.params.capabilities.textDocument.diagnostic` 为对象）的唯一诊断通道 |
 | `textDocument/hover` | 洞（`_` / `?name`）的目标类型与上下文（容错查询；文本里没有洞 token 时跳过精化）→ 模块引用（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring）→ 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 模式；语法级类型与值）→ 标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
-| `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点） |
+| `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点）；每个节点带 `detail`（与 `vuna api` 同源的签名文本，如 `fn : Int -> Int` / `data Wrap a`，成员节点是自己的类型），客户端大纲/面包屑据此显示签名 |
 | `textDocument/definition` | 模块引用 → 目标模块文件的 `module` 头名字；局部绑定 → 当前缓冲 binder 名字；否则 Index 符号 → 同文件兜底 |
 | `textDocument/references` | Index：token → 符号；references 用 `Ref` 的精确行 / 列 |
 | `textDocument/prepareRename` | 光标 token 的 range + placeholder；关键字 / base 标准库（`Int` 等）/ 未知符号 / 洞 / 非法新名 → `result: null`，不崩溃 |
 | `textDocument/rename` | 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 记录字段 binder，当前文档）+ 顶层符号（函数/类型/构造子/记录字段/trait 方法/axiom/extern，含导出列表）；跨文件按 Index refs 跟进直接 import 目标模块的候选模块；返回 `WorkspaceEdit {changes}`，去重、cap 1000。边界：运算符/deriving/fixity/模块名不改，类型名在其它模块**签名**里的跨文件使用不跟进 |
-| `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤 |
+| `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤；Index 项带 `detail`（签名）与 `documentation`（Markdown docstring，文本来源与 hover 一致：打开中的缓冲 > 磁盘），`label` 去重时 Index 优先 |
 | `textDocument/codeAction` | 两类动作（cap 20，case split 在前、fix all 占最后一格）：<br>(1) lint finding 的 **quick fix**：只对可自动修复（`findingEdit`）且行范围与请求 range 相交的 finding 生成 `{title:"fix: <rule>", kind:"quickfix", diagnostics:[<diagnostic>], edit:{changes}}`；内嵌诊断复用 `Vuna.Lsp.Diagnostics` 的 finding→diagnostic 转换（与 `publishDiagnostics` 同一条 JSON：`range` / `severity` / `source` / `code` / `message`），客户端可按 `code` 关联到已有诊断；另给 `fix all lint findings`（**`Command` 形式**：`{kind:"quickfix", command:{command:"vuna.fixAllLint", arguments:[uri]}}`，不内嵌 edit）。<br>(2) **case split**（核心）：光标在洞（`_` / `?name`）上时，对洞上下文里**类型头可解析到非索引 data / record** 的每个 binder 生成 `{title:"case split on <name>", kind:"refactor.rewrite", edit}`：非索引 data 的 newText 为 `case <name> of` + 每构造子一行 `<Ctor> _... => _`（构造子参数用 `_` 占位；隐式构造子参数不进模式）；record 是单构造器（构造器名 = 类型名），只生成**一条** record 模式分支 `<Type> { <field> = _, ... } => _`（字段写全）。分支缩进 = 洞所在行行首缩进 + 2。构造子来源是 parse 级：当前缓冲 AST + 按包上下文模块根读依赖模块（`import qualified` 时写限定名 `Mod.Ctor` / `Mod.Type`，open import / 经 Prelude 重导出的 base 类型写短名）；类型头的应用文本按精化器 show 的左结合全括号递归剥括号（多参数 data 的 `((Base.Pair.Pair Int) Bool)` 也能解析）。<br>`context.only`：quickfix 只在未限制或含 `quickfix` 时给；case split 只在未限制或含 `refactor` / `refactor.rewrite` 时给；不含对应 kind → 空数组。 |
 | `workspace/executeCommand` | `vuna.fixAllLint`（arguments = `[uri]`）：按当前缓冲重算 lint + `Lint.Fix.fixLoop`，回 `result: null` 并发一条**服务器 → 客户端**的 `workspace/applyEdit` 请求（整文档替换 `WorkspaceEdit`；客户端应用，服务器不写文件、不等响应）。无改动时只回 null；未知 command → `-32602`。 |
 | `workspace/symbol` | Index 符号过滤（有上限） |
@@ -153,8 +153,10 @@ shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后�
 拒绝）。`test/suite/steps/35_goal_lsp.steps` 的 LSP 段调用它。
 
 还覆盖：模块名 hover/definition（import 名字、导出项 `module B`、
-模块头、模块 docstring）、局部绑定 hover/definition（参数类型、λ、`let` 值、遮蔽：
-body 指向 `let` binder / 值指向函数参数）、未解 `_` 洞的目标+上下文（容错查询）、
+模块头、模块 docstring；同一模块在引用处与自身文件里取**同一版本**的文档）、局部绑定
+hover/definition（参数类型、λ、`let` 值、遮蔽：body 指向 `let` binder / 值指向函数参数）、
+`documentSymbol` 的 `detail`（函数/类型头/ctor/field）与成员 hover 的 docstring、
+`completion` 的 `documentation`（缓冲优先）与 `detail`、未解 `_` 洞的目标+上下文（容错查询）、
 命名洞 `?goal` 的名字/目标/上下文与 range 覆盖；传输层边界（坏 JSON 帧 / 无
 `Content-Length` / 超大帧声明 / 半帧 EOF）在第 22–25 项。CLI 侧的目标查询与 `?name` 的
 fmt/lint/check 行为在 `test/suite/steps/35_goal_lsp.steps` 的 35b 段。

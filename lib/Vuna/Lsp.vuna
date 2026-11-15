@@ -27,7 +27,7 @@ module Vuna.Lsp where
 --   - didChange 跑一次完整 DT 精化（同 uri + 内容重复请求命中进程内诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
 --   - Index 只反映磁盘内容、不随 didChange 刷新（hover 的 docstring 例外：打开着的文件以
---     缓冲为准，见 `bufferTexts` / `Bindings.bufferDeclDoc`）；构建失败则相关方法退化返回空结果；
+--     缓冲为准，见 `bufferTexts` / `Bindings.bufferSymDoc`）；构建失败则相关方法退化返回空结果；
 --   - 首次索引查找可能触发索引全量重建（会话对象未命中；仓库级秒级），期间请求排队；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
 import Base.HostRow
@@ -512,7 +512,7 @@ handleCompletion msg state =
       state1 = firstOf indexPair
       midx = secondOf indexPair
     in pure
-      (Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems text line col midx))]))
+      (Pair False (Pair state1 [responseOk (idOf msg) (JArr (completionItems (bufferTexts state) text line col midx))]))
 
 -- workspace/symbol：Index 过滤（空 query = 全部，上限 200）。
 handleWorkspaceSymbol : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))

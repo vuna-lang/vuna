@@ -170,6 +170,22 @@ typeOf name (d :: rest) = case d of
   DSig n ctx ty sp => if n == name then renderType ty else typeOf name rest
   _ => typeOf name rest
 
+-- 声明的一行显示文本（`vuna api` 的行 / LSP `documentSymbol.detail` 共用）：
+-- `fun` / `axiom` / `extern` 给「名字 : 签名」，data / record / trait 给声明头，
+-- 实例（无名字可显示）给空串。
+export declSigText : List Decl -> Decl -> String
+declSigText decls d = case d of
+  DData name params kind ctors derivings viaField repr lin sp => "data ${name}${paramSuffix params}"
+  DRecord name params fields derivings viaField repr lin sp => "record ${name}${paramSuffix params}"
+  DTrait name params methods sp => "trait ${name}${traitParamSuffix params}"
+  DAxiom name ty sp => "${name} : ${renderType ty}"
+  DExtern name cName ty sp => "${name} : ${renderType ty}"
+  DSig name ctx ty sp => "${name} : ${renderTypeInCtx ctx ty}"
+  DFun name pats body sp => case signatureOf name decls of
+    "" => name
+    sig => "${name} : ${sig}"
+  DInstance ctxE head methods sp => ""
+
 symbolsOfModule : String -> List Decl -> DocTable -> List Sym
 symbolsOfModule sMod decls table = concatMap (symbolsOfDecl sMod decls table) decls
 
@@ -403,7 +419,7 @@ indexOneExisting env dir pkgName path = do
               ErrC e => []
               OkC cs => cs
             table = docTableOf srcHdr decls comments
-            info = ModuleInfo sMod pkgName path bytes (length decls)
+            info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
             syms = symbolsOfModule sMod decls table
             refs = refsInDecls sMod decls
           in pure (Pair env2 (OkC (Built [info] syms refs)))
@@ -466,7 +482,7 @@ buildIndex repo = do
 --   会话 key：`index:<dir>`（CLI）/ `index-cheap:<dir>`（REPL），作为 `ToolSession` 的
 --   bucket + node key；
 --   载荷：`Index.Codec.encIndex` 的规范字节，落 `objects/tool/<addr>`（codec
---   `index-payload 1`，`Store` framing + SHA-256 校验）；
+--   `index-payload 2`，`Store` framing + SHA-256 校验）；
 --   依赖表：CLI 逐文件内容哈希 `f:<path>:<hash>`；REPL 用 stat 键
 --   `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内带内容哈希，窗口外留空）。
 -- 命中 ⇒ 读载荷解码；miss ⇒ 重建 + 写载荷对象（同一输入同一地址）。

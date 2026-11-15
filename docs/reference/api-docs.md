@@ -49,7 +49,7 @@ data Wrap a : Type where
   写法在 fmt 后归属会变，因此不纳入语义。同一目标同时有前置与尾随 doc 时**前置优先**。
 - 模块文档写在 `module` 头之前；尾随形式不参与模块文档。
 - 模块文档也用于 LSP hover——模块名（`import` / 导出项 `module B` / 模块头 / 限定名前缀）
-  hover 时在 `module <全名>` 之后显示该模块的 docstring；被 import 的模块读盘取 docstring。
+  hover 时在 `module <全名>` 之后显示该模块的 docstring；文本来源是**打开中的缓冲 > 磁盘**。
 - 孤儿 doc、缩进错误、普通注释都忽略（不报错）。
 - 私有名（`_` 前缀）不进入文档与 `--check`，但仍在 `vuna map` / `vuna api` 索引里。
 
@@ -156,6 +156,10 @@ v3（本次 API 文档 + 检索）变化：
 
 `vuna api` / LSP hover 只显示 `symDoc`（docstring），普通注释不再出现；多行 doc 逐行缩进。
 
+`vuna api <Module>` 在标题下先输出**模块 docstring**（`ModuleInfo.modDoc`，随索引载荷一起
+缓存；`index-payload 2` 起），再列符号行。模块是否存在以索引的模块表为准：没有导出符号的
+模块也输出标题与文档（旧版直接报 `no such module`）。
+
 ## 5. 设计参照
 
 - **Haddock**：`-- |` 前置文档、续行语义；vuna 取 `-- |` / `{- | -}` 与**同一行**的尾随
@@ -179,7 +183,7 @@ v3（本次 API 文档 + 检索）变化：
 | `Vuna.Sig` | 类型打印单一真源（api / doc / search 共用） |
 | `Vuna.Search.Query` | 名称/doc/类型匹配纯函数 |
 | `Vuna.Search.Run` | `vuna search` 参数与输出 |
-| `Vuna.Index.*` | 符号索引 v3、`symDoc` / `symType` |
+| `Vuna.Index.*` | 符号索引 v3、`symDoc` / `symType` / `modDoc`（模块文档） |
 
 测试：`test/corpus/doc/check.sh`、`test/corpus/search/check.sh`、`test/corpus/index/check.sh`；
 LSP hover 见 `test/corpus/lsp/smoke.sh`。

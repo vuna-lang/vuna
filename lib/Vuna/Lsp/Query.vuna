@@ -39,6 +39,7 @@ import Vuna.Lint.Rules
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
+import Vuna.Sig
 
 -- 结果上限：避免病态索引/大文件把单帧撑爆。
 maxCompletions : Int
@@ -210,11 +211,11 @@ symbolHoverResult buffers uri line col text (Just idx) = case tokenAtCursor text
     Nothing => JNull
     Just sym => symbolHoverJson (bufferDocOf buffers idx sym) line startCol token
 
--- 打开中的缓冲里该符号的 docstring（未打开 / 拿不到 → 保留 Index 的）。
+-- 打开中的缓冲里该符号的 docstring（未打开 / 缓冲里没有这个名字 → 保留 Index 的）。
 bufferDocOf : List (Pair String String) -> Index -> Sym -> Sym
 bufferDocOf buffers idx s = case modulePathOf idx (symModule s) of
   Nothing => s
-  Just path => case bufferDeclDoc buffers path (symName s) of
+  Just path => case bufferSymDoc buffers path (symKind s) (symName s) of
     Nothing => s
     Just doc =>
       Sym (symModule s) (symName s) (symKind s) (symSig s) (symType s) doc (symLine s) (symCol s)
@@ -838,26 +839,27 @@ declSymbolKind (DSig name ctx ty sp) = 12
 declSymbolKind (DFun name pats body sp) = 12
 declSymbolKind (DInstance ctxE head methods sp) = 12
 
-symbolJson : String -> Int -> Json -> Json -> List Json -> Json
-symbolJson name kind range sel children =
+-- `detail` 是客户端在大纲里跟在名字后面的灰字（VS Code 用它显示签名）；空串则省略。
+symbolJson : String -> Int -> String -> Json -> Json -> List Json -> Json
+symbolJson name kind detail range sel children =
   JObj
-    (append [Pair "name" (JStr name), Pair "kind" (JNum kind), Pair "range" range, Pair "selectionRange" sel] (if isEmptyList children then [] else [Pair "children" (JArr children)]))
+    (append (append [Pair "name" (JStr name), Pair "kind" (JNum kind)] (if detail == "" then [] else [Pair "detail" (JStr detail)])) (append [Pair "range" range, Pair "selectionRange" sel] (if isEmptyList children then [] else [Pair "children" (JArr children)])))
 
 ctorSymbolJson : List String -> Ctor -> Json
 ctorSymbolJson lines c =
-  symbolJson (ctorName c) 22 (spanRange (ctorSpan c)) (nameSelRange lines (ctorSpan c) (ctorName c))
-    []
+  symbolJson (ctorName c) 22 "${ctorName c} : ${renderType (ctorType c)}" (spanRange (ctorSpan c))
+    (nameSelRange lines (ctorSpan c) (ctorName c)) []
 
 fieldSymbolJson : List String -> Field -> Json
 fieldSymbolJson lines f =
-  symbolJson (fieldName f) 8 (spanRange (fieldSpan f))
-    (nameSelRange lines (fieldSpan f) (fieldName f)) []
+  symbolJson (fieldName f) 8 "${fieldName f} : ${renderType (fieldType f)}"
+    (spanRange (fieldSpan f)) (nameSelRange lines (fieldSpan f) (fieldName f)) []
 
 -- M30（B20）：方法子节点用方法签名 span（方法名到类型结束），不再复用 trait 声明 span。
 methodSymbolJson : List String -> TraitMethod -> Json
 methodSymbolJson lines m =
-  symbolJson (traitMethodName m) 6 (spanRange (traitMethodSpan m))
-    (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
+  symbolJson (traitMethodName m) 6 "${traitMethodName m} : ${renderType m.traitMethodType}"
+    (spanRange (traitMethodSpan m)) (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
 
 declChildrenJson : List String -> Decl -> List Json
 declChildrenJson lines (DData name params kind ctors derivings viaField repr lin sp) =
@@ -867,13 +869,13 @@ declChildrenJson lines (DRecord name params fields derivings viaField repr lin s
 declChildrenJson lines (DTrait name params methods sp) = map (methodSymbolJson lines) methods
 declChildrenJson lines _ = []
 
-declSymbolJson : List String -> Decl -> Json
-declSymbolJson lines d =
+declSymbolJson : List String -> List Decl -> Decl -> Json
+declSymbolJson lines decls d =
   let
     sp = declSpan d
     name = declNameOf d
-  in symbolJson name (declSymbolKind d) (spanRange sp) (nameSelRange lines sp name)
-    (declChildrenJson lines d)
+  in symbolJson name (declSymbolKind d) (declSigText decls d) (spanRange sp)
+    (nameSelRange lines sp name) (declChildrenJson lines d)
 
 export documentSymbols : String -> String -> Eff hostRow (List Json)
 documentSymbols uri text = case parseSource uri text of
@@ -884,7 +886,7 @@ documentSymbols uri text = case parseSource uri text of
       ErrC _ => []
       OkC programFixities => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => []
-        OkC decls => map (declSymbolJson (split "\n" text)) decls
+        OkC decls => map (declSymbolJson (split "\n" text) decls) decls
     )
 
 -- ---------------------------------------------------------------
@@ -936,9 +938,13 @@ record Compl where
   complLabel : String
   complKind : Int
   complDetail : String
+  complDoc : String
 
 complLabel : Compl -> String
-complLabel (Compl label kind detail) = label
+complLabel (Compl label kind detail doc) = label
+
+complDoc : Compl -> String
+complDoc (Compl label kind detail doc) = doc
 
 -- CompletionItemKind：Method=2、Function=3、Constructor=4、Field=5、Variable=6、
 -- Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22。
@@ -968,7 +974,7 @@ symSymbolKind s = case symKind s of
 complJson : Compl -> Json
 complJson c =
   JObj
-    (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum c.complKind)] (if c.complDetail == "" then [] else [Pair "detail" (JStr c.complDetail)]))
+    (append (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum c.complKind)] (if c.complDetail == "" then [] else [Pair "detail" (JStr c.complDetail)])) (if complDoc c == "" then [] else [Pair "documentation" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (complDoc c))])]))
 
 dedupeCompls : List Compl -> List Compl
 dedupeCompls xs = dedupeComplsGo xs [] []
@@ -1003,16 +1009,20 @@ lspKeywords =
     "False"
   ]
 
+-- 缓冲里未进 Index 的顶层名（未保存的新声明）：没有签名/文档，kind 按函数给。
+-- 顺序是 Index 在前（有准确 kind / 签名 / 文档）、缓冲名补 Index 没覆盖的、关键字最后。
 bufferCompls : String -> List Compl
-bufferCompls text = map (\n => Compl n 3 "") (bufferNames text)
+bufferCompls text = map (\n => Compl n 3 "" "") (bufferNames text)
 
 keywordCompls : List Compl
-keywordCompls = map (\n => Compl n 14 "") lspKeywords
+keywordCompls = map (\n => Compl n 14 "" "") lspKeywords
 
-indexCompls : Maybe Index -> List Compl
-indexCompls Nothing = []
-indexCompls (Just idx) =
-  map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) idx.indexSymbols
+indexCompls : List (Pair String String) -> Maybe Index -> List Compl
+indexCompls buffers Nothing = []
+indexCompls buffers (Just idx) =
+  map
+    (\s => Compl (symName s) (symCompletionKind s) (symSig s) (symDoc (bufferDocOf buffers idx s)))
+    idx.indexSymbols
 
 hasPrefix : String -> List Compl -> List Compl
 hasPrefix prefix items = filter (\c => startsWith prefix (complLabel c)) items
@@ -1021,9 +1031,9 @@ finishCompls : List Compl -> List Json
 finishCompls items = map complJson (take maxCompletions (dedupeCompls items))
 
 -- `.` 之后的限定补全：前缀是模块名，按 `<module>.` 过滤符号全名。
-qualifiedCompletions : String -> List Int -> Int -> String -> Maybe Index -> List Json
-qualifiedCompletions ln chars prefixStart prefix Nothing = []
-qualifiedCompletions ln chars prefixStart prefix (Just idx) =
+qualifiedCompletions : List (Pair String String) -> String -> List Int -> Int -> String -> Maybe Index -> List Json
+qualifiedCompletions buffers ln chars prefixStart prefix Nothing = []
+qualifiedCompletions buffers ln chars prefixStart prefix (Just idx) =
   let
     beforeDotChars = take (prefixStart - 1) chars
     modLen = qualPrefixLen (reverse beforeDotChars)
@@ -1033,10 +1043,11 @@ qualifiedCompletions ln chars prefixStart prefix (Just idx) =
     hits =
       filter (\s => startsWith fullPrefix (symFullName s) && startsWith prefix (symName s))
         idx.indexSymbols
-  in finishCompls (map (\s => Compl (symName s) (symCompletionKind s) (symSig s)) hits)
+  in finishCompls
+    (map (\s => Compl (symName s) (symCompletionKind s) (symSig s) (symDoc (bufferDocOf buffers idx s))) hits)
 
-export completionItems : String -> Int -> Int -> Maybe Index -> List Json
-completionItems text line0 col0 midx =
+export completionItems : List (Pair String String) -> String -> Int -> Int -> Maybe Index -> List Json
+completionItems buffers text line0 col0 midx =
   let
     ln = lineText text (line0 + 1)
     chars = strUnpack ln
@@ -1046,9 +1057,9 @@ completionItems text line0 col0 midx =
     prefixStart = p0 - prefixLen
     afterDot = prefixStart > 0 && nthCode chars (prefixStart - 1) == 46
     prefix = substring (natFromInt prefixStart) (natFromInt prefixLen) ln
-  in if afterDot then qualifiedCompletions ln chars prefixStart prefix midx
+  in if afterDot then qualifiedCompletions buffers ln chars prefixStart prefix midx
   else finishCompls
-    (append (hasPrefix prefix keywordCompls) (append (hasPrefix prefix (bufferCompls text)) (hasPrefix prefix (indexCompls midx))))
+    (append (hasPrefix prefix (indexCompls buffers midx)) (append (hasPrefix prefix (bufferCompls text)) (hasPrefix prefix keywordCompls)))
 
 -- ---------------------------------------------------------------
 -- workspace/symbol

@@ -28,13 +28,19 @@ export renderModules : Index -> String
 renderModules index =
   "${join "\n" (map (\m => "${modName m}  ${modPath m}") (indexModules index))}\n"
 
--- 某模块的 API 面（签名 + 行号 + 注释）。
+-- 某模块的 API 面（模块 docstring + 签名 + 行号 + 注释）。
+-- 模块是否存在以 `indexModules` 为准（模块没有导出符号时也给标题/文档，不再报错）。
 export renderApi : Index -> String -> Check String
-renderApi index modQuery =
-  let
-    syms = filter (\s => symModule s == modQuery) index.indexSymbols
-  in if length syms == 0 then err "no such module: ${modQuery}"
-  else OkC "## ${modQuery}\n\n${join "\n" (map apiRow syms)}"
+renderApi index modQuery = case filter (\m => modName m == modQuery) index.indexModules of
+  [] => err "no such module: ${modQuery}"
+  mi :: rest =>
+    let
+      syms = filter (\s => symModule s == modQuery) index.indexSymbols
+      docBlock = case modDoc mi of
+        "" => ""
+        d => "\n\n${join "\n" (map (\l => "  ${l}") (lines d))}"
+      symBlock = if length syms == 0 then "" else "\n\n${join "\n" (map apiRow syms)}"
+    in OkC "## ${modQuery}${docBlock}${symBlock}"
 
 apiRow : Sym -> String
 apiRow s =
