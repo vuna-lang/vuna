@@ -141,7 +141,7 @@ exit: 0
 run: sh -c 'printf "main : Float\nmain = 1.5\n" > "$TMPDIR/str-main/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/flt-out" "$TMPDIR/str-main" 2>&1'
 exit: 1
 out-contains: wasm target: float literals
-# Float 仍拒绝（data/case 已在 M3a 支持）。
+# Float 仍拒绝（data/case 已支持）。
 
 # 14) parity 面：位运算 / assert / todo / prim_fail / dbg! —— 与 native 逐字一致。
 run: sh -c 'd="$TMPDIR/parity"; mkdir -p "$d/app"; printf "[package]\nname = \"parity\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = bitAnd 6 3 + bitOr 6 3 + bitXor 6 3 + bitNot 0 + bitShl 1 61\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-w" "$d"'
@@ -176,7 +176,7 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/parity-dbg" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: 43
 
-# 15) M3a：用户 data + 通用 case + record（与 native 同一表示决策）。
+# 15) 用户 data + 通用 case + record（与 native 同一表示决策）。
 run: sh -c 'd="$TMPDIR/m3a"; mkdir -p "$d/app"; printf "[package]\nname = \"m3a\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "data Color : Type where\n  Red : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Blue => 2\n\nmain : Int\nmain = pick Red + pick Blue\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-w" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/m3a-w" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
@@ -198,7 +198,7 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/m3a-wnest" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: 42
 
-# 16) M3b（wasm 侧）：List 桥接 strUnpack / strPack / strConcatMany。
+# 16) List 桥接 strUnpack / strPack / strConcatMany（wasm 侧）。
 run: sh -c 'd="$TMPDIR/m3b"; mkdir -p "$d/app"; printf "[package]\nname = \"m3b\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strPack (strUnpack \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-pack" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/m3b-pack" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'

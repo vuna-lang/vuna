@@ -204,7 +204,7 @@ out-equals: 12
 run: sh -c '"$VUNA" run "$TMPDIR/argv" 2>&1 | tail -n 1'
 out-equals: 12
 
-# 10f) M3a：用户 data + 通用 case（变体 tag 分派），与 OCaml 差分。
+# 10f) 用户 data + 通用 case（变体 tag 分派），与 OCaml 差分。
 run: sh -c 'd="$TMPDIR/m3a"; mkdir -p "$d/app"; printf "[package]\nname = \"m3a\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "data Color : Type where\n  Red : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Blue => 2\n\nmain : Int\nmain = pick Red + pick Blue\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/m3a-out" "$d"'
 exit: 0
 run: "$TMPDIR/m3a-out/bin/m3a" 2>&1
@@ -219,7 +219,7 @@ out-equals: 12
 run: sh -c '"$VUNA" run "$TMPDIR/m3a" 2>&1 | tail -n 1'
 out-equals: 12
 
-# 10g) M3a：record 构造 / 投影 / 更新。
+# 10g) record 构造 / 投影 / 更新。
 run: sh -c 'd="$TMPDIR/m3r"; mkdir -p "$d/app"; printf "[package]\nname = \"m3r\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "record Point where\n  x : Int\n  y : Int\n\nmain : Int\nmain = let p = Point { x = 3, y = 4 } in p.x * p.x + p.y * p.y\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/m3r-out" "$d"'
 exit: 0
 run: "$TMPDIR/m3r-out/bin/m3r" 2>&1
@@ -246,7 +246,7 @@ exit: 1
 out-contains: native target:
 file-absent: $TMPDIR/fl-out/bin/fl
 
-# 11b) 高阶 lambda 值仍拒绝（data/case 已在 M3a 支持）。
+# 11b) 高阶 lambda 值仍拒绝（data/case 已支持）。
 run: sh -c 'd="$TMPDIR/dat"; mkdir -p "$d/app"; printf "[package]\nname = \"dat\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dat-out" "$d" 2>&1'
 exit: 0
 

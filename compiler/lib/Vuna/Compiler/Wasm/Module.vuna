@@ -4,7 +4,7 @@ module Vuna.Compiler.Wasm.Module where
 --
 -- 从 `main` 沿 `irDefDeps` 求可达闭包，只生成可达定义；支持 Int / Nat /
 -- String / Bool 纯值、`let` / `if`、顶层饱和调用、立即 lambda 应用、Nat 结构递归
--- （`IrNatCase`）、`IrConcatMany`、内建饱和应用、入口打印，以及 M3a 的
+-- （`IrNatCase`）、`IrConcatMany`、内建饱和应用、入口打印，以及
 -- `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase`。
 -- 表示：统一 anyref；Int/Nat 装箱 i64；Bool i31；String `(array (mut i8))`；
 -- 变体 `(struct (field i32 tag) (field anyref...))`；record 纯字段 struct；
@@ -441,7 +441,7 @@ else case genExpr (fuel - 1) st b of
     Ok q => Ok (Pair (append (firstOf p) (append [ICall "$rt_strConcat"] (firstOf q))) (secondOf q))
 
 -- ---------------------------------------------------------------
--- data / record（M3a）
+-- data / record
 -- ---------------------------------------------------------------
 famOrFail : GenState -> String -> Result WasmFam
 famOrFail st family = case wasmFamLookup st.gsFams family of
@@ -646,7 +646,7 @@ else case alts of
         Ok q => Ok (Pair (append (firstOf bp) (firstOf q)) (secondOf q))
 
 -- ---------------------------------------------------------------
--- List 桥接（M3b）：strUnpack / strPack / strConcatMany
+-- List 桥接：strUnpack / strPack / strConcatMany
 -- （strSubstTemplate 仍是待办；见 docs/reference/wasm.md §9）
 -- ---------------------------------------------------------------
 catI : List (List Instr) -> List Instr

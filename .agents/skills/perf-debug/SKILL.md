@@ -52,11 +52,11 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    HOME/沙箱下会直接 `Sys_error("...objects/lex/....tmp: Read-only file system")`。
    **不要 `unset`、不要传空值**，一律显式给空目录。
 4. **入库的增长率门禁现在自己隔离 store，但「探针测的是不是你要守的那条路径」仍要自己验**。
-   `compiler-growth.sh` / `compiler-growth-pkg.sh` 已改为每档 `VUNA_STORE=$(mktemp -d)/store`
-   （2026-11 修复前的版本只隔离 `TMPDIR`，在 devShell 里会复用调用方的热 store）。
-   **更隐蔽的坑**：pkg 门禁原先计时「无改动的第二次 check」——子单元全命中，读数只有
+   `compiler-growth.sh` / `compiler-growth-pkg.sh` 每档用 `VUNA_STORE=$(mktemp -d)/store`
+   （只隔离 `TMPDIR` 不够：devShell 里会复用调用方的热 store）。
+   **更隐蔽的坑**：pkg 门禁若计时「无改动的第二次 check」，子单元全命中，读数只有
    ~20 ms 且与 N 全无关（N=1000/2000/4000 都是 20 ms），门槛永远绿但什么也守不住；
-   现在改成「冷跑一次 → **改一行定义**让本模块缓存失效 → 计时」，读数才恢复成随 N 增长
+   门禁因此计时「冷跑一次 → **改一行定义**让本模块缓存失效 → 计时」，读数随 N 增长
    （231/435/1115/3116 ms）。**读数与 N 无关就是探针失效的信号，先查它，别急着调阈值。**
    本地复现 CI 口径：
    ```console

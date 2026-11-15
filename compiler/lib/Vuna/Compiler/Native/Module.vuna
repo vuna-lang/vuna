@@ -5,7 +5,7 @@ module Vuna.Compiler.Native.Module where
 -- 覆盖 Int/Nat/Bool 纯值与 `String`（字面量、`++`、`strFromInt`、`strLength`、
 -- `strAt`、`strHash`、`strShow`、`strSubstring`、`bi_eq_str` / `bi_neq_str`、`IrConcatMany`、
 -- String 入口）。字符串是**指向长度头的指针**，由运行时从 bump 堆分配。
--- M3a：用户 `data`（变体对象 `[0]`=tag + 8 字节字段）、record（纯字段对象）、
+-- 用户 `data`（变体对象 `[0]`=tag + 8 字节字段）、record（纯字段对象）、
 -- 通用 `IrCase`（tag 线性分派）、`IrProj` / `IrRecUpd`。
 --
 -- 生成策略（见 docs/reference/native.md）：
@@ -436,7 +436,7 @@ else case flattenApp ir of
     _ => unsupported "native target: higher-order application is not supported yet"
 
 -- ---------------------------------------------------------------
--- data / record（M3a）
+-- data / record
 -- ---------------------------------------------------------------
 -- 对象布局（与 wasm 侧同一表示决策）：
 --   * 变体 = 堆对象：`[obj+0]` = tag（i64），`[obj+8]` 起 = 运行时字段（i64，按最大 arity 补齐）；
