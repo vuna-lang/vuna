@@ -19,6 +19,7 @@ import Vuna.Compiler.Hash
 import Vuna.Compiler.Diagnostics.Warning
 import Vuna.Compiler.Diagnostics.Rn
 import Base.HashMap
+import Base.Obs.Span
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
@@ -90,7 +91,7 @@ parseFileWithPath path src = do
 -- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
 -- 与 parse 是否成功无关，错文件下次也能省掉 lex。
 lexAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Check SourceFile)
-lexAndStore addr path src = case lexSource src of
+lexAndStore addr path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
   ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
   OkC toks => do
     _ <- storeLexCache addr toks
@@ -100,7 +101,7 @@ lexAndStore addr path src = case lexSource src of
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
 parseWith : String -> List PTok -> Check SourceFile
-parseWith path toks = case parseSourceRecoveringTokens path toks of
+parseWith path toks = case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path toks) of
   ErrC e => ErrC (withSpanFileIfEmpty path e)
   OkC p =>
     let

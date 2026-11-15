@@ -90,7 +90,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 - `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度）、`vuna.elab.bodies`（逐定义精化段，
   `vuna.elab` 的子区间）、`vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
-  `dtCheckScoped` 各一处）；
+  `dtCheckScoped` 各一处）、`vuna.parse.lex`（一次全文词法）、`vuna.parse.syntax`（token 流
+  → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"i"` 阶段标记（`Eff` 边界，零宽度）：`vuna.load`、`vuna.resolve`、`vuna.iface.compute`、
   `vuna.iface.write`、`vuna.codegen.split`、`vuna.cache.lookup`；
@@ -98,8 +99,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
 - `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
 
-**保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.parse`、
-`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
+**保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.parse`（伞名：
+前端整体阶段，实际耗时由三个子跨度承担）、`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
 `vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.codegen.unit`、`vuna.cache.write`、
 `vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
 `vuna.counter.core.*` / `vuna.counter.meta.*` / `vuna.counter.alloc.words` /

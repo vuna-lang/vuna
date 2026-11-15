@@ -231,8 +231,10 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
    （旧 §1 第 3 条）。接口哈希的「排序规范化」仍是插入排序 O(d²)，单模块数千项时会退化
    （见 §9「已量化否决」）。这也是**增量探针剩下的 2.5–2.8×/翻倍**的来源（§5.2）。
 2. **load/parse 前缀 ~4.0 s（冷 store，含 iface 摘要读取）**：`check compiler` 的闭包要
-   解析 107 个模块；冷 TMPDIR 还含 AST cache 写。这一段在 `--debug-perf` 里没有细分
-   阶段（`iface-mods-phases` 只覆盖 373 ms 的 header 扫描），解析本身是真实工作量。
+   解析 107 个模块；冷 TMPDIR 还含 lex 载荷写。前端本身（lex + 语法分析）在 `VUNA_OBS=1`
+   下可单独归因：冷 `check compiler` = `vuna.parse.lex` 165 次 / **135 ms** +
+   `vuna.parse.syntax` 461 次 / **158 ms**（≈0.3 s，见 §6.1）。剩下的前缀耗时在 iface
+   摘要、地址计算与 flatten，不在词法/语法。
 3. **冷 build 的 elab bodies**：`build --package vuna .` 的 6159 def 约 3.1 s
    （`--debug-perf` 口径），集中在 `conv`/`force`/`infer` 的项重算与分配
    （`Term/Impl`、`Core/Eval|Conv`）。每 def 的 `defVals` 记忆化（安全前置检查比命中收益
@@ -311,6 +313,35 @@ O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一
 残差来自 base 自身变大、check 现在**总是**跑终止性检查与 codegen 自检、以及每份源码都要建
 defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义精化）与 load（解析）：两者
 都是真实工作量，不是退化。
+
+### 6.1 前端（lex / 语法分析）的占比与增长率
+
+`VUNA_OBS=1` 的三个 span 把前端拆开（`observability.md` §3.3）：`vuna.parse.lex` 是一次
+全文词法（命中 lex 缓存时不出现）、`vuna.parse.syntax` 是 token 流 → AST、`vuna.parse.cst`
+是无损 CST 组装（工具侧）。
+
+冷 store、`VUNA_ELAB_FULL=1` 单次采样：
+
+| 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：elab |
+| --- | --- | --- | --- |
+| `check base` | 57 次 / 12.2 ms | 114 次 / 5.5 ms | 127 ms |
+| `check compiler` | 165 次 / 135 ms | 461 次 / 158 ms | ~19.7 s（全量口径） |
+
+两条读数各说明一件事：
+
+* lex : syntax ≈ 2:1（与「lex 占 parse 86%」的旧注释一致），所以**词法**是前端里值得优化的
+  那一半；
+* `syntax` 次数 = 模块数的 **2.8 倍**（461 / 164）：同一份源码在一次 check 里被反复
+  `parseSourceRecoveringTokens`（加载、fixity 表、header 扫描各走一遍）。减少**次数**比加快
+  单次解析收益更直接。
+
+增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义，相邻档 ≤2.5×）：
+
+| N | `parse.lex` | `parse.syntax` | `fmt --check` |
+| --- | --- | --- | --- |
+| 2000 | 11.9 ms | 8.5 ms | 76 ms |
+| 4000 | 18.1 ms | 16.5 ms | 117 ms |
+| 8000 | 28.6 ms | 19.5 ms | 167 ms |
 
 ## 7. 测量规程
 

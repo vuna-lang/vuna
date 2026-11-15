@@ -23,6 +23,7 @@ module Vuna.Compiler.Frontend.Cst where
 import Base.Bool
 import Base.List
 import Base.Maybe
+import Base.Obs.Span
 import Base.Pair
 import Base.String
 import Vuna.Compiler.Common
@@ -265,7 +266,10 @@ buildTokens source rows comments prevEnd (t :: rest) =
 -- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
 -- （词法错误）时返回 `Nothing`。
 export lexCst : String -> Maybe (List CstToken)
-lexCst source = case lexSource source of
+lexCst source = obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexCstGo source)
+
+lexCstGo : String -> Maybe (List CstToken)
+lexCstGo source = case lexSource source of
   ErrC _ => Nothing
   OkC toks =>
     let
