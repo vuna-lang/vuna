@@ -240,6 +240,15 @@ out-equals: 42
 run: sh -c '"$VUNA" run "$TMPDIR/m3r" 2>&1 | tail -n 1'
 out-equals: 42
 
+# 10h) 嵌套 pattern 的 catch-all：同一头构造子下有更细的 pattern 时，外层兜底分支
+#      不能丢（缺它会在运行时掉进 `trap_impossible`）。
+run: sh -c 'd="$TMPDIR/nest"; mkdir -p "$d/app"; printf "[package]\nname = \"nest\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "il : List String -> List String\nil [] = []\nil ([x]) = [x]\nil (x :: rest) = x :: rest\n\nmain : Int\nmain = natToInt (length (il [\"a\", \"b\"]))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/nest-out" "$d"'
+exit: 0
+run: "$TMPDIR/nest-out/bin/nest" 2>&1
+out-equals: 2
+run: sh -c '"$VUNA" run "$TMPDIR/nest" 2>&1 | tail -n 1'
+out-equals: 2
+
 # 11) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
 run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
 exit: 1

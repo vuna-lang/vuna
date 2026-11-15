@@ -702,12 +702,17 @@ tagOfScrut : Int -> List Instr
 tagOfScrut sc = cat [getLocal sc, [IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rax) (OpMem Rdx 0)]]
 
 -- | 变体分支链：跳过 catch-all（它只作默认臂），其余按 tag 线性比较。
+--   `all` 是原始分支表：链尾必须回到它，才能让 catch-all 兜底（否则嵌套 pattern
+--   的兜底分支会被丢掉，运行时掉进 `trap_impossible`）。
 genVariantAlts : Int -> FGen -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genVariantAlts fuel st sc ctors alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+genVariantAlts fuel st sc ctors alts = genVariantAltsGo fuel st sc ctors alts alts
+
+genVariantAltsGo : Int -> FGen -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantAltsGo fuel st sc ctors alts all = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case alts of
-  [] => genDefault (fuel - 1) st sc []
+  [] => genDefault (fuel - 1) st sc all
   alt :: rest => case irAltCtorOf alt of
-    Nothing => genVariantAlts (fuel - 1) st sc ctors rest
+    Nothing => genVariantAltsGo (fuel - 1) st sc ctors rest all
     Just (Pair _ ctor) => case ctorTagIn ctors ctor of
       Nothing => internal "unknown constructor in native codegen: ${ctor}"
       Just tag =>
@@ -717,7 +722,7 @@ else case alts of
           lEndP = freshLabel (secondOf lNextP)
           lEnd = firstOf lEndP
         in nbind (genVariantArm (fuel - 1) (secondOf lEndP) sc alt)
-          (\a => nbind (genVariantAlts (fuel - 1) (secondOf a) sc ctors rest) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
+          (\a => nbind (genVariantAltsGo (fuel - 1) (secondOf a) sc ctors rest all) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
 
 -- | 变体分支：按 keep 形状绑定字段（tag 占 index 0），再求值分支体。
 genVariantArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
