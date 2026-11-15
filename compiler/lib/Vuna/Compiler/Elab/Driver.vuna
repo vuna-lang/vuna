@@ -26,6 +26,21 @@ import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Obs
 import Vuna.Compiler.Frontend.Ast
 
+-- 计数器渲染（仅 `--debug-perf` 的规模行使用）：稳定顺序便于逐行 diff。
+showCounters : List String -> String
+showCounters names =
+  join ","
+    (map (\p => "${firstOf p}=${secondOf p}") (Base.Sort.sortBy (\a => \b => firstOf a < firstOf b) (Base.HashMap.toList (countNames names (Base.HashMap.fromList [])))))
+
+countNames : List String -> HashMap String Int -> HashMap String Int
+countNames [] acc = acc
+countNames (n :: rest) acc =
+  let
+    cur = case Base.HashMap.lookup n acc of
+      Just v => v
+      Nothing => 0
+  in countNames rest (Base.HashMap.insert n (cur + 1) acc)
+
 export unsolvedMeta : Ec -> Maybe Int
 unsolvedMeta ec = unsolvedFromRelevant 0 (ecNext ec) (ecSolTbl ec) (relevantMetas ec) (ecGoals ec)
 
@@ -635,7 +650,7 @@ dtEvalExprInInfoCore prog expr = case prog of
         Ec next sols (reverse bodies) datas [] [] (instStoreOf insts) classes csEmpty
           (Base.HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols)
           (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas)
-          (datasHaveLinear datas) [] [] warnings
+          (datasHaveLinear datas) [] [] warnings [] (Base.HashMap.fromList [])
     in Vuna.Compiler.Common.bind (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let
@@ -799,7 +814,7 @@ in Vuna.Compiler.Common.bind (elabDatas (collectDataDecls decls []) records star
                       defs = rezonkDefs ec3 defs0
                       _ =
                         dbg!
-                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)}"
+                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
                       -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
                       -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
                       _ =
