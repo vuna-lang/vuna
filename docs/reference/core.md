@@ -106,6 +106,12 @@ data Term where
 - 擦除检查在 `check` 与 `compile` 都跑：运行时位置引用被擦除绑定 / 类型级定义 / `TPi`
   报错。类型族（结果以 `Type` 收尾的 Pi 链）整体擦除；`axiom` 强制进类型级分区，运行时
   使用报 `CG_AxiomAtRuntime`。
+- **上下文环境的两个视角**：`Ctx` 的求值环境在绑定点增量维护（level 是绝对编号，加
+  binder 不改变已有 level）。`ctxEnv` 是**未代入**索引精化的声明侧环境，
+  `ctxEnvRefined` 才是取用侧（类型求值享受分支等式）。不透明判定
+  （`isOpaqueRuntimeTyIn` / 分支 binder / 字段）必须用前者：把精化塞进 `ctxEnv` 会让
+  `res x` 在具体索引下归约成 `Int`，擦除决定与生成的 `Obj.t` 表示错配（回归夹具
+  `test/corpus/dt/74_ctor_check_index.vuna`，ocamlopt 报类型错）。
 - **表现层 cast**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
   让求值期把它归约为唯一实参；`Core.Eval.applyValueFuel` 另外在**函数位置**直接消去，
   避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / interp
