@@ -110,15 +110,12 @@ buildModuleWith pkg path source looked =
     env2 = firstOf looked
   in case secondOf looked of
     ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
-    OkC programFixities => case parseSource path source of
+    OkC programFixities => case parseSourceWithComments path source of
       ErrC e => Pair env2 (err "${path}: ${diagText e}")
-      OkC (SourceFile hdr imports fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      OkC (Pair (SourceFile hdr imports fx decls0 _ _ _) comments) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => Pair env2 (err "${path}: ${diagText e}")
         OkC decls =>
           let
-            comments = case lexComments source of
-              ErrC e => []
-              OkC cs => cs
             table = docTableOf hdr decls comments
           in Pair env2
             (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))

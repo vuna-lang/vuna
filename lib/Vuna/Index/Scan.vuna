@@ -409,19 +409,16 @@ indexOneExisting env dir pkgName path = do
     env2 = firstOf looked
   in case secondOf looked of
     ErrC e => pure (Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}"))
-    OkC programFixities => case parseSource path source of
+    OkC programFixities => case parseSourceWithComments path source of
       ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
       -- 必须按**程序级** fixity 重排（本文件声明 ++ import 闭包，
       -- 本地优先）。只用本地声明会让用到 `+`/`==`/`::` 的文件报 unknown fixity，
       -- 然后被当错误跳过 → `vuna map` 静默漏模块。
-      OkC (SourceFile srcHdr imports fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+      OkC (Pair (SourceFile srcHdr imports fx decls0 _ _ _) comments) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
         ErrC e => pure (Pair env2 (err "${path}: ${diagText e}"))
         OkC decls =>
           let
             sMod = moduleNameOf dir path srcHdr
-            comments = case lexComments source of
-              ErrC e => []
-              OkC cs => cs
             table = docTableOf srcHdr decls comments
             info = ModuleInfo sMod pkgName path bytes (length decls) (docTableModuleDoc table)
             syms = symbolsOfModule sMod decls table

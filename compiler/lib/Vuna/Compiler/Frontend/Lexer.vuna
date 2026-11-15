@@ -2,13 +2,20 @@ module Vuna.Compiler.Frontend.Lexer where
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 --
+-- 注释与 token **规则同源**：注释正文的识别/嵌套（`collectLineBody` / `collectBlockBody`）
+-- 与 trivia 判定只有一份实现，`skipTrivia`（token 路径，不分配）与
+-- `skipTriviaComments`（注释路径，收集）共用它。旧实现另有一条 `scanComments` 并行
+-- 扫描器（自己再实现一遍「字符串里不算注释」），两侧规则容易漂移，已删除。
+-- 需要注释的消费者用 `lexSourceWithComments`（一次扫描同时给出 token 与注释），
+-- 而不是 lex 之后再扫一遍。
+--
 -- 字符串字面量支持**模板插值**（`"hi ${name}"`）与**多行**（`"""..."""`）。
 -- 扫描把字面量切成 `TmplPart`：
 --   * `TPText`：文本块（转义已解）；
 --   * `TPHole`：插值洞，存**洞内 token 列表**（由 `lexHoleTokens` 原位词法得到，
 --     位置仍是绝对源码位置）——parser 直接拿这段 token 解析成表达式，无需二次词法。
 -- 洞内注释（`--` / `{- -}`）随洞 token 一起被 `skipTrivia` 跳过：插值洞里的注释
--- **不进入 AST**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
+-- **不进入 AST / 注释表**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
 import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
@@ -127,12 +134,58 @@ isKeyword s =
 export classifyIdent : String -> Tok
 classifyIdent s = if isKeyword s then TKw s else TIdent s
 
-export skipLineComment : Chars -> Chars
+-- ---------------------------------------------------------------
+-- 注释（trivia 的一部分）
+-- ---------------------------------------------------------------
+export data CKind(..) : Type where
+  CLine : CKind
+  CBlock : CKind
+
+export record Comment(..) where
+  commentKind : CKind
+  commentText : String
+  commentSpan : Span
+
+export commentSpan : Comment -> Span
+commentSpan (Comment kind text sp) = sp
+
+export trimTrailingSpace : String -> String
+trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))
+
+export dropTrailingSpace : List Int -> List Int
+dropTrailingSpace [] = []
+dropTrailingSpace (c :: rest) =
+  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Base.List.Cons c rest
+
+-- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
+export collectLineBody : Chars -> List Int -> Pos -> Pair String (Pair Chars Pos)
+collectLineBody (Chars [] p) acc endP = Pair (strPack (reverse acc)) (Pair (Chars [] p) endP)
+collectLineBody (Chars (c :: rest) p) acc endP =
+  if c == 10 then Pair (strPack (reverse acc)) (Pair (Chars (c :: rest) p) endP)
+  else collectLineBody (Chars rest (advanceChar c p)) (c :: acc) p
+
+-- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
+export collectBlockBody : Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
+collectBlockBody (Chars [] p) depth acc endP = lexErr0At (lexSpanAt p) UnterminatedBlockComment
+collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
+  c2 :: rest2 =>
+    if c == 123 && c2 == 45 then collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (c2 :: c :: acc)
+      (advanceChar c2 p)
+    else if c == 45 && c2 == 125 then if depth == 1 then OkC
+      (Pair (strPack (reverse acc)) (Pair (Chars rest2 (advanceChar c2 (advanceChar c p))) (advanceChar c2 p)))
+    else collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth - 1) (c2 :: c :: acc)
+      (advanceChar c2 p)
+    else collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
+  [] => collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
+
+-- | 跳过行注释正文（`--` 之后），返回其后位置。
+skipLineComment : Chars -> Chars
 skipLineComment (Chars [] p) = Chars [] p
 skipLineComment (Chars (c :: rest) p) =
   if c == 10 then Chars (c :: rest) p else skipLineComment (Chars rest (advanceChar c p))
 
-export skipBlockComment : Int -> Chars -> Check Chars
+-- | 跳过块注释（`{-` 之后，depth 从 1 开始；可嵌套）。
+skipBlockComment : Int -> Chars -> Check Chars
 skipBlockComment depth (Chars [] p) = lexErr0At (lexSpanAt p) UnterminatedBlockComment
 skipBlockComment depth (Chars (c :: rest) p) = case rest of
   c2 :: rest2 =>
@@ -142,8 +195,24 @@ skipBlockComment depth (Chars (c :: rest) p) = case rest of
     else skipBlockComment depth (Chars rest (advanceChar c p))
   [] => skipBlockComment depth (Chars rest (advanceChar c p))
 
--- 跳过 trivia。fuel 按字符/注释段递减（所有扫描器都不回传 fuel：
--- 主循环与各扫描器各自持有一个够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
+export commentSpanOf : Pos -> Pos -> Span
+commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
+
+-- ---------------------------------------------------------------
+-- trivia：空白 + 注释
+-- ---------------------------------------------------------------
+-- 两个入口：
+--   * `skipTrivia`：token 路径，**不分配**注释正文（编译器热路径每次词法都要过）；
+--   * `skipTriviaComments`：注释路径，用 `collectLineBody` / `collectBlockBody`
+--     收集注释（正文 + 结束位置）。
+-- 两者的「空白 / `--` / `{-` 判定」同源，但注释扫描是两份实现：token 路径的
+-- `skipLineComment` / `skipBlockComment` 只推位置、零分配（`skipBlockComment` 因此
+-- 自己写了深度计数）；把 token 路径改成返回 `Pair`（收集注释）实测让大文件
+-- `vuna.parse.lex` 慢约 20%，不值（见 performance.md §6.1）。
+-- 字符串/模板里的 `--` 不算注释这条规则只有一份：两条路径都走 `lexOneToken` /
+-- `scanTemplateText`，不再有独立的注释扫描器。
+-- fuel 按字符/注释段递减（所有扫描器都不回传 fuel：主循环与各扫描器各自持有一个
+-- 够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
 export skipTrivia : Int -> Chars -> Check Chars
 skipTrivia fuel cs = if fuel <= 0 then icFuel "lexer"
 else case cs of
@@ -157,6 +226,30 @@ else case cs of
     else OkC cs
     [] => OkC cs
 
+-- | 同 `skipTrivia`，但把注释按源码顺序收集（`lexComments` / CST trivia 用）。
+export skipTriviaComments : Int -> Chars -> Check (Pair Chars (List Comment))
+skipTriviaComments fuel cs = skipTriviaCommentsGo fuel [] cs
+
+skipTriviaCommentsGo : Int -> List Comment -> Chars -> Check (Pair Chars (List Comment))
+skipTriviaCommentsGo fuel acc cs = if fuel <= 0 then icFuel "lexer"
+else case cs of
+  Chars [] p => OkC (Pair cs (reverse acc))
+  Chars (c :: rest) p => if isSpace c then skipTriviaCommentsGo (fuel - 1) acc (Chars rest (advanceChar c p))
+  else case rest of
+    c2 :: rest2 => if c == 45 && c2 == 45 then case collectLineBody (Chars rest2 (advanceChar c2 (advanceChar c p))) [] (advanceChar c2 p) of
+      Pair text (Pair csLine endP) =>
+        skipTriviaCommentsGo (fuel - 1)
+          (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc) csLine
+    else if c == 123 && c2 == 45 then case collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) 1 [] (advanceChar c2 p) of
+      ErrC e => ErrC e
+      OkC (Pair text (Pair csBlock endP)) =>
+        skipTriviaCommentsGo (fuel - 1) (Comment CBlock text (commentSpanOf p endP) :: acc) csBlock
+    else OkC (Pair cs (reverse acc))
+    [] => OkC (Pair cs (reverse acc))
+
+-- ---------------------------------------------------------------
+-- 标识符 / 数字 / 运算符
+-- ---------------------------------------------------------------
 -- `@vuna@name` 内部名：只有 `@vuna@` 前缀且后续是标识符字符时才作为
 -- 单个标识符收集；其余 `@` 仍是操作符（保持模式 `name@pat` 的语法不变）。
 startsWithVunaAt : List Int -> Bool
@@ -239,7 +332,7 @@ collectOp (Chars (c :: rest) p) acc =
 -- 换行不计入内容**；遇 `"""` 结束；转义与插值同样生效。
 --
 -- 洞内 token 由同一套词法（`lexHoleTokens` → `lexOneToken`）原位产出，位置天然是绝对
--- 源码位置；洞里的注释随 `skipTrivia` 跳过（不进入 AST，fmt 会丢失它们——已知边界）。
+-- 源码位置；洞里的注释随 `skipTrivia` 跳过（不进入 AST / 注释表——已知边界）。
 -- ---------------------------------------------------------------
 -- 转义字符 → 实际码点（`\$` 用来写一个字面 `${`）。
 export decodeEscape : Int -> Maybe Int
@@ -310,6 +403,7 @@ export lexHoleTokens : Int -> Int -> Chars -> List PTok -> Check (Pair (List PTo
 lexHoleTokens fuel depth cs acc = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia (fuel - 1) cs of
   ErrC e => ErrC e
+  -- 洞内注释随 trivia 丢弃（不进 AST / 注释表）：已知边界，见模块头。
   OkC cs2 => case cs2 of
     Chars [] p => lexErr0At (lexSpanAt p) UnterminatedInterpolation
     Chars (c :: rest) p => if c == 125 && depth == 0 then OkC (Pair (reverse acc) cs2)
@@ -372,8 +466,26 @@ else case scanTemplateText (fuel - 1) False body [] [] of
     [TPText s] => OkC (Pair (PTok (TStr s) p) cs2)
     _ => OkC (Pair (PTok (TTmpl False parts endP) p) cs2)
 
--- 主循环：trivia 之后逐个 token，直到 EOF。每个 token 扣 1 步（各扫描器自带够用的
--- fuel：token 内的字符数 ≤ 剩余源码长度，见 `sourceFuel` 的上界说明）。
+-- ---------------------------------------------------------------
+-- 主循环
+-- ---------------------------------------------------------------
+-- trivia 之后逐个 token，直到 EOF；注释在 trivia 阶段一并收集（`lexComments` 与 CST
+-- 的 trivia 都取自这一次扫描）。每个 token 扣 1 步（各扫描器自带够用的 fuel：token
+-- 内的字符数 ≤ 剩余源码长度，见 `sourceFuel` 的上界说明）。
+export lexCharsWith : Int -> List Comment -> Chars -> Check (Pair (List PTok) (List Comment))
+lexCharsWith fuel acc cs = if fuel <= 0 then icFuel "lexer"
+else case skipTriviaComments fuel cs of
+  ErrC e => ErrC e
+  OkC (Pair cs2 comments) => case cs2 of
+    -- 末尾 trivia 里的注释也要收（否则文件尾注释会从注释表里消失）。
+    Chars [] p => OkC (Pair [PTok TEof p] (reverse (append (reverse comments) acc)))
+    _ => case lexOneToken fuel cs2 of
+      ErrC e => ErrC e
+      OkC (Pair tok cs3) => case lexCharsWith (fuel - 1) (append (reverse comments) acc) cs3 of
+        ErrC e => ErrC e
+        OkC (Pair toks allComments) => OkC (Pair (tok :: toks) allComments)
+
+-- | token 流主循环（不收集注释）：编译器热路径只走这一条。
 export lexChars : Int -> Chars -> Check (List PTok)
 lexChars fuel cs = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia fuel cs of
@@ -386,8 +498,19 @@ else case skipTrivia fuel cs of
         ErrC e => ErrC e
         OkC toks => OkC (tok :: toks)
 
+-- | 一次扫描的产物：token 流 + 注释表（源码顺序）。注释侧消费者（CST、
+-- `parseSourceWithComments`、`lexComments`）用这一份，避免第二次全量词法。
+export lexSourceWithComments : String -> Check (Pair (List PTok) (List Comment))
+lexSourceWithComments source =
+  lexCharsWith (sourceFuel source) [] (Chars (strUnpack source) (Pos 1 1))
+
 export lexSource : String -> Check (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
+
+export lexComments : String -> Check (List Comment)
+lexComments source = case lexSourceWithComments source of
+  ErrC e => ErrC e
+  OkC (Pair toks comments) => OkC comments
 
 -- 显式 fuel 的初值。
 --
@@ -397,92 +520,3 @@ lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1
 -- 取 4*len+64：任何合法输入都不会耗尽（耗尽即明确的 internal 错误，不静默半途而废）。
 export sourceFuel : String -> Int
 sourceFuel source = 4 * strLength source + 64
-
--- ---------------------------------------------------------------
--- 注释扫描（fmt 用）：注释不进入 token 流，但格式化器需要保留它们。
--- 与 skipTrivia 使用同一套规则（`--` 行注释、`{- -}` 可嵌套块注释，
--- 字符串字面量里的 `--` / `{-` 不算注释；模板字面量整体按模板扫描跳过）。
--- ---------------------------------------------------------------
-export data CKind(..) : Type where
-  CLine : CKind
-  CBlock : CKind
-
-export record Comment(..) where
-  commentKind : CKind
-  commentText : String
-  commentSpan : Span
-
-export commentSpan : Comment -> Span
-commentSpan (Comment kind text sp) = sp
-
-export trimTrailingSpace : String -> String
-trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s))))
-
-export dropTrailingSpace : List Int -> List Int
-dropTrailingSpace [] = []
-dropTrailingSpace (c :: rest) =
-  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Base.List.Cons c rest
-
--- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
-export collectLineBody : Chars -> List Int -> Pos -> Pair String (Pair Chars Pos)
-collectLineBody (Chars [] p) acc endP = Pair (strPack (reverse acc)) (Pair (Chars [] p) endP)
-collectLineBody (Chars (c :: rest) p) acc endP =
-  if c == 10 then Pair (strPack (reverse acc)) (Pair (Chars (c :: rest) p) endP)
-  else collectLineBody (Chars rest (advanceChar c p)) (c :: acc) p
-
--- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
-export collectBlockBody : Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
-collectBlockBody (Chars [] p) depth acc endP = lexErr0At (lexSpanAt p) UnterminatedBlockComment
-collectBlockBody (Chars (c :: rest) p) depth acc endP = case rest of
-  c2 :: rest2 =>
-    if c == 123 && c2 == 45 then collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth + 1) (c2 :: c :: acc)
-      (advanceChar c2 p)
-    else if c == 45 && c2 == 125 then if depth == 1 then OkC
-      (Pair (strPack (reverse acc)) (Pair (Chars rest2 (advanceChar c2 (advanceChar c p))) (advanceChar c2 p)))
-    else collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) (depth - 1) (c2 :: c :: acc)
-      (advanceChar c2 p)
-    else collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
-  [] => collectBlockBody (Chars rest (advanceChar c p)) depth (c :: acc) p
-
-export commentSpanOf : Pos -> Pos -> Span
-commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
-
--- 跳过整段字符串字面量（开引号在 `c`/`p`，`rest` 为其后）。
-export skipStringLiteral : Int -> Int -> List Int -> Pos -> Check Chars
-skipStringLiteral fuel c (rest@(c2 :: rest3)) p = case rest3 of
-  c3 :: rest4 => if c2 == 34 && c3 == 34 then
-    let
-      bodyStart = advanceChar c3 (advanceChar c2 (advanceChar c p))
-    in case scanTemplateText (fuel - 1) True (dropOpeningNewline (Chars rest4 bodyStart)) [] [] of
-      ErrC e => ErrC e
-      OkC (Pair parts (Pair cs2 endP)) => OkC cs2
-  else skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
-  [] => skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
-skipStringLiteral fuel c (rest@[]) p = skipSingleStringLiteral fuel (Chars rest (advanceChar c p))
-
-export skipSingleStringLiteral : Int -> Chars -> Check Chars
-skipSingleStringLiteral fuel body = case scanTemplateText (fuel - 1) False body [] [] of
-  ErrC e => ErrC e
-  OkC (Pair parts (Pair cs2 endP)) => OkC cs2
-
-export scanComments : Int -> Chars -> List Comment -> Check (List Comment)
-scanComments fuel (Chars [] p) acc = if fuel <= 0 then icFuel "lexer" else OkC (reverse acc)
-scanComments fuel (Chars (c :: rest) p) acc = if fuel <= 0 then icFuel "lexer"
-else if c == 34 then case skipStringLiteral (fuel - 1) c rest p of
-  ErrC e => ErrC e
-  OkC cs2 => scanComments (fuel - 1) cs2 acc
-else case rest of
-  c2 :: rest2 => if c == 45 && c2 == 45 then case collectLineBody (Chars rest2 (advanceChar c2 (advanceChar c p))) [] (advanceChar c2 p) of
-    Pair text (Pair cs2 endP) =>
-      scanComments (fuel - 1) cs2
-        (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc)
-  else if c == 123 && c2 == 45 then case collectBlockBody (Chars rest2 (advanceChar c2 (advanceChar c p))) 1 [] (advanceChar c2 p) of
-    ErrC e => ErrC e
-    OkC (Pair text (Pair cs2 endP)) =>
-      scanComments (fuel - 1) cs2 (Comment CBlock text (commentSpanOf p endP) :: acc)
-  else scanComments (fuel - 1) (Chars rest (advanceChar c p)) acc
-  [] => OkC (reverse acc)
-
--- 扫描整段源码里的注释（源码顺序），供格式化器按位置重新插入。
-export lexComments : String -> Check (List Comment)
-lexComments source = scanComments (sourceFuel source) (Chars (strUnpack source) (Pos 1 1)) []

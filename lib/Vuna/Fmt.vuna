@@ -29,24 +29,22 @@ import Vuna.Fmt.Decl
 import Vuna.Fmt.Util
 
 export formatSourceWith : List FixityDecl -> String -> Check String
-formatSourceWith programFixities source = case parseSource "<fmt>" source of
+formatSourceWith programFixities source = case parseSourceWithComments "<fmt>" source of
   ErrC e => ErrC e
-  OkC (SourceFile hdr imports fx decls0 exports reexports opacity) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
+  OkC (Pair (SourceFile hdr imports fx decls0 exports reexports opacity) comments) => case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
     ErrC e => ErrC e
-    OkC decls => case lexComments source of
-      ErrC e => ErrC e
-      OkC comments => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
-        Pair at eof =>
-          let
-            hdr2 = case hdr of
-              Just m =>
-                Just
-                  (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
-              Nothing => case exports of
-                [] => case reexports of
-                  [] => Nothing
-                  _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+    OkC decls => case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
+      Pair at eof =>
+        let
+          hdr2 = case hdr of
+            Just m =>
+              Just
+                (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+            Nothing => case exports of
+              [] => case reexports of
+                [] => Nothing
                 _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
-          in case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr2 imports fx decls at eof)) of
-            [] => OkC ""
-            lines => OkC (unlines lines)
+              _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+        in case joinSections (filterSections (renderSourceSections (append fx programFixities) hdr2 imports fx decls at eof)) of
+          [] => OkC ""
+          lines => OkC (unlines lines)

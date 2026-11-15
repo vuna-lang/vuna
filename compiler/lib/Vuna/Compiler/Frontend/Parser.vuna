@@ -22,10 +22,19 @@ ps1 st e a0 = psErr1At (tokSpan st) e a0
 psAt : PState -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
 psAt st e args = psErrAt (tokSpan st) e args
 
+-- 单次词法同时给出注释表：fmt / index / doc / LSP 都要注释，但不必为此再扫一遍源码
+-- （`lexComments` 现在是一次完整词法，投影出注释）。
+export parseSourceWithComments : String -> String -> Check (Pair SourceFile (List Comment))
+parseSourceWithComments file source = case lexSourceWithComments source of
+  ErrC e => ErrC e
+  OkC (Pair toks comments) => case parseSourceFile False (PState file toks (Pos 1 0) (length toks)) of
+    ErrC e => ErrC e
+    OkC p => OkC (Pair (firstOf (firstOf p)) comments)
+
 export parseSource : String -> String -> Check SourceFile
-parseSource file source =
-  Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => Vuna.Compiler.Common.bind (parseSourceFile False (PState file toks (Pos 1 0) (length toks))) (\p => OkC (firstOf (firstOf p))))
+parseSource file source = case parseSourceWithComments file source of
+  ErrC e => ErrC e
+  OkC (Pair sf comments) => OkC sf
 
 -- 单表达式解析（REPL / 工具用）：整段输入必须恰好是一个表达式。
 export parseExpressionSource : String -> Check Expr
@@ -1547,10 +1556,10 @@ firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
   else firstRepeatedBindingGo rest (Base.List.Cons name seen)
 
 -- | 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
--- 语法错误（带位置与名字）；合法时返回 Ok 0。
-checkNoRepeatedBinders : List Pat -> Check Int
+-- 语法错误（带位置与名字）；合法时原样返回模式列表（便于与后续解析组合）。
+checkNoRepeatedBinders : List Pat -> Check (List Pat)
 checkNoRepeatedBinders pats = case firstRepeatedBinding (concatMap patBinderBindings pats) of
-  Nothing => OkC 0
+  Nothing => OkC pats
   Just (Pair name sp) =>
     ErrC
       (withLabel (Label (Just sp) "" LabelPrimary Nothing) (appendMessage " (repeated name: `${name}`)" (psMsg RepeatedPatternBinder [])))

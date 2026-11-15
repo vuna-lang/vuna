@@ -263,16 +263,14 @@ bufferedSource buffers path = if path == "" then Nothing else lookupPair path bu
 export bufferSymDoc : List (Pair String String) -> String -> String -> String -> Maybe String
 bufferSymDoc buffers path kind name = case bufferedSource buffers path of
   Nothing => Nothing
-  Just source => case parseSource "<lsp>" source of
+  Just source => case parseSourceWithComments "<lsp>" source of
     ErrC e => Nothing
-    OkC sf => case lexComments source of
-      ErrC e => Nothing
-      OkC comments =>
-        let
-          table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
-          decls = sf.sourceFileDecls
-        in if isMemberKind kind then if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
-        else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
+    OkC (Pair sf comments) =>
+      let
+        table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
+        decls = sf.sourceFileDecls
+      in if isMemberKind kind then if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
+      else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
 
 isMemberKind : String -> Bool
 isMemberKind kind = kind == "ctor" || kind == "field" || kind == "method"
