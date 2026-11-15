@@ -52,6 +52,11 @@ todoPrefix = "TODO: "
 impossibleMessage : String
 impossibleMessage = "vuna: runtime error: impossible branch\n"
 
+-- | 数组越界：与 OCaml `Invalid_argument ("index out of bounds")` 的报告器文本一致
+--   （native 没有位置表，因此没有 OCaml 报告器那行 `at ...`）。
+arrayOobMessage : String
+arrayOobMessage = "vuna: runtime error: Invalid_argument(\"index out of bounds\")\n"
+
 export nativeRodata : List NativeRodata
 nativeRodata =
   [ NativeRodata (nativeDataLabel "true") "True",
@@ -62,7 +67,8 @@ nativeRodata =
     NativeRodata (nativeDataLabel "err_prefix") errPrefix,
     NativeRodata (nativeDataLabel "assert_prefix") assertPrefix,
     NativeRodata (nativeDataLabel "todo_prefix") todoPrefix,
-    NativeRodata (nativeDataLabel "impossible") impossibleMessage
+    NativeRodata (nativeDataLabel "impossible") impossibleMessage,
+    NativeRodata (nativeDataLabel "array_oob") arrayOobMessage
   ]
 
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
@@ -257,6 +263,32 @@ strShowFn =
     [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), IBinReg "add" Rdi (OpReg Rax), IBinReg "add" Rdi (OpImm 10), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), ILeaMem R8 R11 8, IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), IBinReg "add" Rsi (OpImm 8), IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), ILabel ".Lrt_ss_loop", ITest Rcx Rcx, IJcc "jz" ".Lrt_ss_end", IMovzx Rax (OpMem Rsi 0), IBinReg "add" Rsi (OpImm 1), IBinReg "sub" Rcx (OpImm 1), ICmp (OpReg Rax) (OpImm 34), IJcc "je" ".Lrt_ss_quote", ICmp (OpReg Rax) (OpImm 92), IJcc "je" ".Lrt_ss_bslash", ICmp (OpReg Rax) (OpImm 10), IJcc "je" ".Lrt_ss_nl", ICmp (OpReg Rax) (OpImm 9), IJcc "je" ".Lrt_ss_tab", ICmp (OpReg Rax) (OpImm 13), IJcc "je" ".Lrt_ss_cr", IMovByteRegOp (OpMem R8 0) Rax, IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_quote", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 34, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_bslash", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 92, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_nl", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 110, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_tab", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 116, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_cr", IMovByteOp (OpMem R8 0) 92, IMovByteOp (OpMem R8 1) 114, IBinReg "add" R8 (OpImm 2), IJmp ".Lrt_ss_loop", ILabel ".Lrt_ss_end", IMovByteOp (OpMem R8 0) 34, IBinReg "add" R8 (OpImm 1), ILeaMem Rax R11 8, IMov (OpReg Rdx) (OpReg R8), IBinReg "sub" Rdx (OpReg Rax), IMov (OpMem R11 0) (OpReg Rdx), IMov (OpReg Rax) (OpReg R11), IRet]
 
 -- ---------------------------------------------------------------
+-- 数组（不可变、copy-on-write）
+-- ---------------------------------------------------------------
+-- 布局与 wasm 侧同一决策：`[len][elem0][elem1]...`，每个元素一个机器字
+-- （Int 未装箱；String / 对象 / 闭包都是指针）。`arraySet` 复制整块再写，原数组不变。
+arrayLengthFn : NativeFunc
+arrayLengthFn = rtFunc "array_length" 0 [IMov (OpReg Rax) (OpMem Rdi 0)]
+
+-- | `arrayGet`：rdi = 数组、rsi = 下标 -> rax = 元素；越界 trap（exit 2）。
+arrayGetFn : NativeFunc
+arrayGetFn =
+  rtFunc "array_get" 0
+    [ICmp (OpReg Rsi) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_array_oob"), ICmp (OpReg Rsi) (OpMem Rdi 0), IJcc "jge" (nativeRtLabel "trap_array_oob"), IBinReg "shl" Rsi (OpImm 3), ILeaMem Rdx Rdi 8, IMov (OpReg Rax) (OpMemX Rdx Rsi 0)]
+
+-- | `arraySet`：rdi = 数组、rsi = 下标、rdx = 新值 -> rax = 新数组。
+arraySetFn : NativeFunc
+arraySetFn =
+  rtFunc "array_set" 64
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpMem Rbp (0 - 16)) (OpReg Rsi), IMov (OpMem Rbp (0 - 24)) (OpReg Rdx), ICmp (OpReg Rsi) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_array_oob"), ICmp (OpReg Rsi) (OpMem Rdi 0), IJcc "jge" (nativeRtLabel "trap_array_oob"), IMov (OpReg Rcx) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 32)) (OpReg Rcx), IMov (OpReg Rdi) (OpReg Rcx), IBinReg "add" Rdi (OpImm 1), IBinReg "shl" Rdi (OpImm 3), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (0 - 40)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (0 - 32)), IMov (OpMem Rax 0) (OpReg Rcx), ILeaMem Rdi Rax 8, IMov (OpReg Rsi) (OpMem Rbp (0 - 8)), ILeaMem Rsi Rsi 8, IBinReg "shl" Rcx (OpImm 3), IRepMovsb, IMov (OpReg Rax) (OpMem Rbp (0 - 40)), IMov (OpReg Rdx) (OpMem Rbp (0 - 24)), IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), IBinReg "shl" Rcx (OpImm 3), ILeaMem Rax Rax 8, IMov (OpMemX Rax Rcx 0) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (0 - 40))]
+
+-- | `arrayMake`：rdi = 长度、rsi = 初值 -> rax = 新数组。
+arrayMakeFn : NativeFunc
+arrayMakeFn =
+  rtFunc "array_make" 48
+    [IMov (OpMem Rbp (0 - 8)) (OpReg Rdi), IMov (OpMem Rbp (0 - 16)) (OpReg Rsi), IMov (OpReg Rdi) (OpReg Rdi), IBinReg "add" Rdi (OpImm 1), IBinReg "shl" Rdi (OpImm 3), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (0 - 24)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (0 - 8)), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rdx) (OpReg Rax), ILeaMem Rdx Rdx 8, IMov (OpReg Rax) (OpMem Rbp (0 - 16)), IMov (OpReg R8) (OpImm 0), ILabel ".Lrt_array_make_fill", ICmp (OpReg R8) (OpMem Rbp (0 - 8)), IJcc "jge" ".Lrt_array_make_done", IMov (OpMem Rdx 0) (OpReg Rax), IBinReg "add" Rdx (OpImm 8), IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_array_make_fill", ILabel ".Lrt_array_make_done", IMov (OpReg Rax) (OpMem Rbp (0 - 24))]
+
+-- ---------------------------------------------------------------
 -- 入口打印
 -- ---------------------------------------------------------------
 -- | 十进制打印 rdi（含负号）+ 换行。缓冲在 rbp-64..rbp-1。
@@ -292,6 +324,11 @@ trapDivZeroFn : NativeFunc
 trapDivZeroFn =
   rtRawFunc "trap_divzero"
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "divzero"), IMov (OpReg Rdx) (OpImm (strLength divZeroMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
+trapArrayOobFn : NativeFunc
+trapArrayOobFn =
+  rtRawFunc "trap_array_oob"
+    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "array_oob"), IMov (OpReg Rdx) (OpImm (strLength arrayOobMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
 trapOomFn : NativeFunc
 trapOomFn =
@@ -434,7 +471,12 @@ nativeRtFuncs =
     allocFn,
     trapImpossibleFn,
     trapDivZeroFn,
-    trapOomFn
+    trapArrayOobFn,
+    trapOomFn,
+    arrayLengthFn,
+    arrayGetFn,
+    arraySetFn,
+    arrayMakeFn
   ]
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
@@ -467,6 +509,12 @@ nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
 nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")
 nativeRtTarget "strSubstring" = Just (nativeRtLabel "str_substring")
 nativeRtTarget "strHash" = Just (nativeRtLabel "str_hash")
+nativeRtTarget "arrayLength" = Just (nativeRtLabel "array_length")
+nativeRtTarget "arrayGet" = Just (nativeRtLabel "array_get")
+nativeRtTarget "arraySet" = Just (nativeRtLabel "array_set")
+nativeRtTarget "arrayMake" = Just (nativeRtLabel "array_make")
+nativeRtTarget "arrayFromList" = Just (nativeRtLabel "arrayFromList")
+nativeRtTarget "arrayToList" = Just (nativeRtLabel "arrayToList")
 -- List 桥接（M3b）：函数体在 `Native.Module`（需要 List 族的 tag）。
 nativeRtTarget "strUnpack" = Just (nativeRtLabel "strUnpack")
 nativeRtTarget "strPack" = Just (nativeRtLabel "strPack")
@@ -501,6 +549,12 @@ nativeRtValueArity "strUnpack" = 1
 nativeRtValueArity "strPack" = 1
 nativeRtValueArity "strConcatMany" = 1
 nativeRtValueArity "strSubstTemplate" = 2
+nativeRtValueArity "arrayLength" = 1
+nativeRtValueArity "arrayGet" = 2
+nativeRtValueArity "arraySet" = 3
+nativeRtValueArity "arrayMake" = 2
+nativeRtValueArity "arrayFromList" = 1
+nativeRtValueArity "arrayToList" = 1
 nativeRtValueArity "strAt" = 2
 nativeRtValueArity "strSubstring" = 3
 nativeRtValueArity "bi_eq_str" = 2

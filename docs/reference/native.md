@@ -40,14 +40,16 @@
   字符串不可变，任何构造（`++` / `strFromInt` / `strSubstring` / `strShow`）都分配新
   对象。字符是字节（UTF-8 字面量按字节存放，`strLength` 返回**字节数**，与 OCaml
   `String.length` 一致）。
-- **堆**：`.bss` 里 1 MiB 缓冲（`rt_heap`）+ bump 指针 `rt_heap_ptr`（`_start` 初始化
-  为缓冲起点）。无 GC、无 RC、无复用；分配 = 指针前推，越过 `rt_heap_end` 就
-  trap `vuna: runtime error: out of memory\n` + `exit(2)`。
+- **堆**：`.bss` 里 1 MiB 起始段 + bump 指针 `rt_heap_ptr`（`_start` 初始化为段起点）；
+  当前段不够时 `mmap` 新段并更新 `rt_arena_end`，旧段不回收。无 GC、无 RC、无复用。
 - 入口打印：`Int`/`Nat` 十进制 + `\n`，`Bool` 为 `True`/`False`，`String` 走
   `show`（`strShow` 带引号 + 转义）再打印，全部与 OCaml 入口钩子的
   `print_endline (show main)` 逐字一致。
-- 运行时 trap（除零 / 堆耗尽）：向 stderr 写 `vuna: runtime error: ...\n`，`exit(2)`。
-  无位置表/backtrace。
+- `Array`：**不可变数组**，堆对象布局 = `[0]` 长度（i64）+ `[8]` 起元素，每个元素一个
+  机器字（Int 未装箱；String / 对象 / 闭包是指针）。`arraySet` copy-on-write：复制整块
+  再写，原数组不变。越界（读 / 写）trap `Invalid_argument("index out of bounds")` + exit 2。
+- 运行时 trap（除零 / 堆耗尽 / 数组越界）：向 stderr 写 `vuna: runtime error: ...\n`，
+  `exit(2)`。无位置表/backtrace（OCaml 报告器多一行 `at ...`，这里没有）。
 
 ## 3. ABI 与栈帧
 
@@ -148,6 +150,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 对象与分配：`alloc`（`rdi`=字节数 → `rax`，bump 堆，越界 trap OOM）；变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
+- 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
+  `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
   error: `、`assertion failed: `、`TODO: `、`vuna: runtime error: impossible branch`）；由
   `Native.Runtime.nativeRodata` 提供。字符串字面量由 `Native.Module` 收集成
@@ -196,7 +200,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 ## 8. 已知边界
 
-- 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）；数组。
+- 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），

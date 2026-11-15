@@ -1059,6 +1059,31 @@ strConcatManyFn d =
   in bridgeFn "strConcatMany" 7
     [IMov (OpMem Rbp lst) (OpReg Rdi), IMov (OpMem Rbp cur) (OpReg Rdi), IMov (OpMem Rbp total) (OpImm 0), ILabel ".Lrt_bridge_cm_count", IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_bridge_cm_counted", IMov (OpReg Rdx) (OpMem Rdx 8), IMov (OpReg Rcx) (OpMem Rbp total), IBinReg "add" Rcx (OpMem Rdx 0), IMov (OpMem Rbp total) (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rdx) (OpMem Rdx 16), IMov (OpMem Rbp cur) (OpReg Rdx), IJmp ".Lrt_bridge_cm_count", ILabel ".Lrt_bridge_cm_counted", IMov (OpReg Rdi) (OpMem Rbp total), ICall (nativeRtLabel "str_alloc"), IMov (OpMem Rbp out) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp total), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rbp idx) (OpImm 0), IMov (OpReg Rdx) (OpMem Rbp lst), IMov (OpMem Rbp cur) (OpReg Rdx), ILabel ".Lrt_bridge_cm_fill", IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_bridge_cm_done", IMov (OpReg Rdx) (OpMem Rdx 8), IMov (OpMem Rbp src) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rdx 0), IMov (OpMem Rbp len) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp out), ILeaMem Rdi Rdi 8, IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "add" Rdi (OpReg Rcx), IMov (OpReg Rsi) (OpMem Rbp src), ILeaMem Rsi Rsi 8, IMov (OpReg Rcx) (OpMem Rbp len), IRepMovsb, IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "add" Rcx (OpMem Rbp len), IMov (OpMem Rbp idx) (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rdx) (OpMem Rdx 16), IMov (OpMem Rbp cur) (OpReg Rdx), IJmp ".Lrt_bridge_cm_fill", ILabel ".Lrt_bridge_cm_done", IMov (OpReg Rax) (OpMem Rbp out)]
 
+-- | `arrayFromList`：rdi = List -> rax = 新数组 `[len][elem...]`。
+arrayFromListFn : NListDesc -> NativeFunc
+arrayFromListFn d =
+  let
+    cell = nlistCellBytes d
+    lst = nativeSlotOff 0
+    cur = nativeSlotOff 1
+    n = nativeSlotOff 2
+    arr = nativeSlotOff 3
+    idx = nativeSlotOff 4
+  in bridgeFn "arrayFromList" 5
+    [IMov (OpMem Rbp lst) (OpReg Rdi), IMov (OpMem Rbp cur) (OpReg Rdi), IMov (OpMem Rbp n) (OpImm 0), ILabel ".Lrt_bridge_afl_count", IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_bridge_afl_counted", IMov (OpReg Rcx) (OpMem Rbp n), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp n) (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rdx 16), IMov (OpMem Rbp cur) (OpReg Rdx), IJmp ".Lrt_bridge_afl_count", ILabel ".Lrt_bridge_afl_counted", IMov (OpReg Rdi) (OpMem Rbp n), IBinReg "add" Rdi (OpImm 1), IBinReg "shl" Rdi (OpImm 3), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp arr) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp n), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rbp idx) (OpImm 0), IMov (OpReg Rdx) (OpMem Rbp lst), IMov (OpMem Rbp cur) (OpReg Rdx), ILabel ".Lrt_bridge_afl_fill", IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_bridge_afl_done", IMov (OpReg Rax) (OpMem Rdx 8), IMov (OpReg Rdx) (OpMem Rbp arr), ILeaMem Rdx Rdx 8, IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "shl" Rcx (OpImm 3), IMov (OpMemX Rdx Rcx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp idx) (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp cur), IMov (OpReg Rdx) (OpMem Rdx 16), IMov (OpMem Rbp cur) (OpReg Rdx), IJmp ".Lrt_bridge_afl_fill", ILabel ".Lrt_bridge_afl_done", IMov (OpReg Rax) (OpMem Rbp arr)]
+
+-- | `arrayToList`：rdi = 数组 -> rax = List（从末元素向前构造 cons）。
+arrayToListFn : NListDesc -> NativeFunc
+arrayToListFn d =
+  let
+    cell = nlistCellBytes d
+    arr = nativeSlotOff 0
+    n = nativeSlotOff 1
+    i = nativeSlotOff 2
+    acc = nativeSlotOff 3
+  in bridgeFn "arrayToList" 4
+    [IMov (OpMem Rbp arr) (OpReg Rdi), IMov (OpReg Rcx) (OpMem Rdi 0), IMov (OpMem Rbp n) (OpReg Rcx), IMov (OpMem Rbp i) (OpReg Rcx), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rax 8) (OpImm 0), IMov (OpMem Rax 16) (OpImm 0), ILabel ".Lrt_bridge_atl_loop", IMov (OpReg Rcx) (OpMem Rbp i), ITest Rcx Rcx, IJcc "jz" ".Lrt_bridge_atl_done", IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp i) (OpReg Rcx), IBinReg "shl" Rcx (OpImm 3), IMov (OpReg Rdx) (OpMem Rbp arr), ILeaMem Rdx Rdx 8, IMov (OpReg R8) (OpMemX Rdx Rcx 0), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpMem Rax 8) (OpReg R8), IMov (OpReg Rdx) (OpMem Rbp acc), IMov (OpMem Rax 16) (OpReg Rdx), IMov (OpMem Rbp acc) (OpReg Rax), IJmp ".Lrt_bridge_atl_loop", ILabel ".Lrt_bridge_atl_done", IMov (OpReg Rax) (OpMem Rbp acc)]
+
 -- | 内部 helper：rdi = List、rsi = k -> rax = 第 k 个元素（调用方保证 k < 长度）。
 strArgAtFn : NativeFunc
 strArgAtFn =
@@ -1093,7 +1118,15 @@ strSubstTemplateFn d =
 nativeBridgeFuncs : Maybe IrListFam -> List IrTyDecl -> List NativeFunc
 nativeBridgeFuncs lfM fams = case nlistDescOf lfM fams of
   Nothing => []
-  Just d => [strUnpackFn d, strPackFn d, strConcatManyFn d, strArgAtFn, strSubstTemplateFn d]
+  Just d =>
+    [ strUnpackFn d,
+      strPackFn d,
+      strConcatManyFn d,
+      strArgAtFn,
+      strSubstTemplateFn d,
+      arrayFromListFn d,
+      arrayToListFn d
+    ]
 
 -- ---------------------------------------------------------------
 -- 装配
