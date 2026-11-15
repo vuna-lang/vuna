@@ -402,7 +402,7 @@ else
     lamName = "$lam${strFromInt n}"
     st1 = { st | gsNextLam = n + 1 }
   in case rbs of
-    [] => Err "wasm target: zero-argument closures are not supported yet"
+    [] => genExpr (fuel - 1) st body
     b :: rest => if listLengthB rest > 0 then genLamValue (fuel - 1) st [b] (IrLam rest body)
     else case bindEnvLocals (beginFuncScope st1) caps 0 of
       Err e => Err e

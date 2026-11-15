@@ -1,0 +1,4 @@
+import Base.Eff
+
+main : Int
+main = runPure (pure 1)

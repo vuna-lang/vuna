@@ -509,6 +509,7 @@ storeCapsAt obj i (p :: rest) =
 -- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。
 genLamValue : Int -> FGen -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
 genLamValue fuel st bs body = if fuel <= 0 then internal "native codegen fuel exhausted"
+else if length (runtimeBinders bs) == 0 then genExpr (fuel - 1) st body
 else
   let
     rbs = runtimeBinders bs
