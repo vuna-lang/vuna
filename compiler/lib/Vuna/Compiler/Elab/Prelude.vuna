@@ -165,8 +165,7 @@ prependParams (p :: rest) kindTerm =
 -- trait 库化后的类/方法查找辅助（放在本模块是为了压 Elab 的行数预算）
 -- ---------------------------------------------------------------
 baseNameOf : String -> String
-baseNameOf name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base
+baseNameOf name = lastSeg name
 
 -- 类方法（按短名）的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`。
 export classMethodProjection : List (Pair String Term) -> String -> String

@@ -328,7 +328,7 @@ ctorName (Ctor name ty arity _) = name
 -- `Module.Data.Ctor`（entry 文件是 `Data.Ctor`），短名用于族内查找/OCaml 名字/诊断。
 -- | 自动补注（M41 新增导出）：ctorShortName。
 export ctorShortName : String -> String
-ctorShortName name = secondOf (splitLastDot (splitOnDot name))
+ctorShortName name = lastSeg name
 
 -- 用户可见的构造子名：`FamilyShort.Ctor`（单段名原样返回）。
 -- 不用完整的 `Module.Data.Ctor`：那会把模块路径泄漏进诊断。

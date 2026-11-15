@@ -145,12 +145,7 @@ localCtorTarget prefix ns name = case localCtorTargets prefix ns name of
 
 -- M41：构造子候选 = 本模块 data/record 构造子 ∪ 所有 open import 里的
 -- data/record 构造子（trait method 不参与；本地不再无条件遮蔽 import）。
--- | 自动补注（M41 新增导出）：dedupeTargets。
-dedupeTargets : List String -> List String
-dedupeTargets [] = []
-dedupeTargets (t :: rest) =
-  if memName t rest then dedupeTargets rest else Base.List.Cons t (dedupeTargets rest)
-
+-- 候选按出现顺序去重（`Base.nubNames`）。
 -- 从 (module, ExportEntry) 取 target（lambda 里直接字段访问在 vuna 里不可用）。
 -- | 自动补注（M41 新增导出）：pairExportTarget。
 pairExportTarget : Pair String ExportEntry -> String
@@ -164,7 +159,7 @@ pairIsDataCtor modules p = isDataOrRecordCtorTarget modules (pairExportTarget p)
 importedCtorTargets : List Module -> List Import -> String -> Check (List String)
 importedCtorTargets modules imports name =
   Vuna.Compiler.Common.bind (modulesExportingCtor modules imports name)
-    (\pairs => OkC (dedupeTargets (map pairExportTarget (filter (pairIsDataCtor modules) pairs))))
+    (\pairs => OkC (nubNames (map pairExportTarget (filter (pairIsDataCtor modules) pairs))))
 
 -- | 自动补注（M41 新增导出）：ctorCandidates。
 ctorCandidates : List Module -> String -> Namespaces -> List Import -> String -> Check (List String)
@@ -173,7 +168,7 @@ ctorCandidates : List Module -> String -> Namespaces -> List Import -> String ->
 ctorCandidates modules prefix ns imports name = Vuna.Compiler.Common.bind (importedCtorTargets modules imports name) (\imp => let
   local = localCtorTargets prefix ns name
 in if notEmptyList local && name /= "Nil" && name /= "Cons" then OkC local
-else OkC (dedupeTargets (append local imp))
+else OkC (nubNames (append local imp))
 )
 
 -- | 自动补注（M41 新增导出）：notEmptyList。
@@ -287,7 +282,7 @@ uniqueCtorTarget : String -> String -> List ExportEntry -> Check String
 uniqueCtorTarget label name [] = rnNoLoc1 (UnknownConstructor name) name
 uniqueCtorTarget label name (e :: rest) =
   if allSameTarget (map exportTarget (e :: rest)) then OkC (exportTarget e)
-  else OkC (overCtorName name (dedupeTargets (map exportTarget (e :: rest))))
+  else OkC (overCtorName name (nubNames (map exportTarget (e :: rest))))
 
 -- | 自动补注（M41 新增导出）：allSameTarget。
 allSameTarget : List String -> Bool
@@ -390,7 +385,7 @@ else case localCtorTargets prefix ns name of
             Vuna.Compiler.Common.bind (unifyEntryPairs label "name" name tpairs)
               (\p => OkC (secondOf p).target)
         )
-        _ => OkC (pickCtorOrOver name (dedupeTargets (map pairExportTarget cpairs)))
+        _ => OkC (pickCtorOrOver name (nubNames (map pairExportTarget cpairs)))
       )
       _ => OkC (pickCtorOrOver name cands)
     )
@@ -398,7 +393,7 @@ else case localCtorTargets prefix ns name of
       [] =>
         Vuna.Compiler.Common.bind (unifyEntryPairs label "name" name pairs)
           (\p => OkC (secondOf p).target)
-      targets => OkC (pickCtorOrOver name (dedupeTargets targets))
+      targets => OkC (pickCtorOrOver name (nubNames targets))
   )
 
 -- | 自动补注（M41 新增导出）：pickCtorOrOver。
@@ -418,7 +413,7 @@ else Vuna.Compiler.Common.bind (ctorCandidates modules prefix ns imports name) (
   else Vuna.Compiler.Common.bind (modulesExportingCtor modules imports name) (\pairs => case pairs of
     [] =>
       onErrDiag (appendMessage (suggest name ns.nsCtors)) (rnNoLoc1 (UnknownConstructor name) name)
-    _ => OkC (pickCtorOrOver name (dedupeTargets (map pairExportTarget pairs)))
+    _ => OkC (pickCtorOrOver name (nubNames (map pairExportTarget pairs)))
   )
   _ => OkC (pickCtorOrOver name cands)
 )
@@ -976,7 +971,7 @@ implicitScopeTable [] = []
 implicitScopeTable (d :: rest) = case d of
   DSig name ctx ty sp =>
     let
-      names = dedupScopeNames (append (leadingImplicitNames ty) (concatMap exprLowerNames ctx))
+      names = nubNames (append (leadingImplicitNames ty) (concatMap exprLowerNames ctx))
     in case names of
       [] => implicitScopeTable rest
       _ => Pair name names :: implicitScopeTable rest
@@ -997,11 +992,6 @@ isLowerIdent : String -> Bool
 isLowerIdent n = case strUnpack n of
   [] => False
   c :: rest => c >= 97 && c <= 122
-
-dedupScopeNames : List String -> List String
-dedupScopeNames [] = []
-dedupScopeNames (x :: rest) =
-  if memName x rest then dedupScopeNames rest else x :: dedupScopeNames rest
 
 scopeNamesOf : String -> List (Pair String (List String)) -> List String
 scopeNamesOf n [] = []

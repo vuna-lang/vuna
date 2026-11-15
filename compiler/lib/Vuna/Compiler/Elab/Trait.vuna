@@ -507,7 +507,7 @@ isLowerStart n = case strUnpack n of
 -- tele 顺序与旧实现一致（自由小写名按出现顺序去重，保留最后一次出现的位置）。
 instanceTeleMetas : HashMap String Bool -> Expr -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
 instanceTeleMetas banned combined exprs seeds ec =
-  teleMetasInit (uniqNames (keepOutBanned banned (concatMap exprFreeLower exprs))) seeds ec
+  teleMetasInit (nubNames (keepOutBanned banned (concatMap exprFreeLower exprs))) seeds ec
 
 teleMetasInit : List String -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
 teleMetasInit [] seeds ec = Pair [] ec
@@ -570,10 +570,6 @@ exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeL
 exprFreeLower (EPi n i _ dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
 exprFreeLower (EAnn v ty sp) = append (exprFreeLower v) (exprFreeLower ty)
 exprFreeLower _ = []
-
-uniqNames : List String -> List String
-uniqNames [] = []
-uniqNames (n :: rest) = if memName n rest then uniqNames rest else Base.List.Cons n (uniqNames rest)
 
 keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []
@@ -717,10 +713,7 @@ export ctorResultType : DtClass -> List Term -> Term
 ctorResultType cls args =
   foldAppTerms (TGlobal (dictTypeName (dtClassName cls))) (map (\a => Pair a Rig0) args)
 
-export findClass : String -> List DtClass -> Maybe DtClass
-findClass name [] = Nothing
-findClass name (c :: rest) = if dtClassName c == name then Just c else findClass name rest
-
+-- 类名 → `DtClass` 的查找只有一份实现（`Elab.Dict.findClass`，层更低）；本模块直接用。
 -- 方法实现：逐个把 `m p1..pn = body` 变成一个 lambda 字段值。
 -- M29-T2b：期望类型在 bodyCtx（tele + ctx 字典 binder）下求值；方法体精化从 bodyCtx 起步，
 -- 于是方法体里对 tele 变量的字典需求能命中局部 ctx binder（`searchInstanceIn` 的 local 分支）。

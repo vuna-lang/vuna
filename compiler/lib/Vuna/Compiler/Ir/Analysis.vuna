@@ -133,15 +133,10 @@ filterNames pred (n :: rest) =
 notIn : String -> List String -> Bool
 notIn name names = not (memName name names)
 
-uniqueNames : List String -> List String
-uniqueNames [] = []
-uniqueNames (name :: rest) =
-  if name == "" then uniqueNames rest
-  else if memName name rest then uniqueNames rest else Base.List.Cons name (uniqueNames rest)
-
 groupDeps : HashMap String (List String) -> List String -> List String
 groupDeps adjT group =
-  filterNames (\n => notIn n group) (uniqueNames (concatMap (neighborsOf adjT) group))
+  filterNames (\n => notIn n group)
+    (nubNames (filter (\n => n /= "") (concatMap (neighborsOf adjT) group)))
 
 allIn : List String -> HashMap String Bool -> Bool
 allIn [] allowed = True

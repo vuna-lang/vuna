@@ -253,11 +253,7 @@ elabDataBodies decls heads globals ec acc records = case decls of
 -- canonical 族（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`）只能以固定的
 -- 构造子集合声明：伪造同名族会让精化与 codegen 的 canonical 判定失配（M27 防御）。
 sameCtorSet : List String -> List String -> Bool
-sameCtorSet expected actual = length expected == length actual && allIn expected actual
-
-allIn : List String -> List String -> Bool
-allIn [] actual = True
-allIn (e :: rest) actual = memName e actual && allIn rest actual
+sameCtorSet expected actual = length expected == length actual && allMem expected actual
 
 -- M42：via-field 必须落到自动去装箱的单字段包装上（data / record 同等）。
 -- | 遍历 data 声明，校验带 `deriving via` 的声明确实是自动去装箱的单字段包装；

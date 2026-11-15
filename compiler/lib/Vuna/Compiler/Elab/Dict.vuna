@@ -79,7 +79,9 @@ else
 -- M42：`deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
 -- ---------------------------------------------------------------
 -- | 按类名在类表里查 DtClass；找不到返回 Nothing。
-findClass : String -> List DtClass -> Maybe DtClass
+--
+-- 类名查找的**唯一实现**（`Elab.Trait` 等层直接用这份，不再各自复制一份）。
+export findClass : String -> List DtClass -> Maybe DtClass
 findClass cn [] = Nothing
 findClass cn (c :: rest) = if dtClassName c == cn then Just c else findClass cn rest
 

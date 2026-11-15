@@ -39,6 +39,7 @@ import Vuna.Compiler.Canonical.Elab
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Store
+import Base.Sort
 import Base.HashMap
 import Base.List
 import Vuna.Compiler.Core
@@ -172,17 +173,8 @@ defLocOf d = case dtDefSpan d of
 -- 位置表按 vuna 名排序：写侧（整包接口）与读侧（增量 codegen 补行）各取一次，顺序
 -- 必须与全量路径 codegen 的位置表逐字节一致（C51 的确定性要求）。无 span 的定义跳过
 -- （与 `dtDefLocTable` 的跳过语义一致）。
-insertByDefLoc : Pair String (Pair String Int) -> List (Pair String (Pair String Int)) -> List (Pair String (Pair String Int))
-insertByDefLoc p [] = [p]
-insertByDefLoc p ((Pair k v) :: rest) =
-  if firstOf p <= k then Base.List.Cons p (Base.List.Cons (Pair k v) rest)
-  else Base.List.Cons (Pair k v) (insertByDefLoc p rest)
-
 defLocsOfDefs : List DtDef -> List (Pair String (Pair String Int))
-defLocsOfDefs [] = []
-defLocsOfDefs (d :: rest) = case defLocOf d of
-  Nothing => defLocsOfDefs rest
-  Just p => insertByDefLoc p (defLocsOfDefs rest)
+defLocsOfDefs ds = sortBy (\a, b => firstOf a <= firstOf b) (mapMaybe defLocOf ds)
 
 -- 单模块的 prepared decls：aux = 同包其它模块的原始 decls + 入口声明。
 -- 只在整包写回（本包模块数 > 1）时计算：LSP/单模块写回只有部分上下文，算出的
@@ -261,15 +253,8 @@ depMissingHash = "missing"
 -- 两条路径上的列表顺序可能不同（globals 由「干净模块产物 + 本次精化产物」拼接），
 -- 接口哈希不能因此漂移。按键文本排序是确定性的，也消除「两个名字哈希碰撞 ⇒ 顺序歧义」
 -- 这一类隐患。插入排序仍是 O(d²)（已知边界：真实包每模块几十项，见 performance.md）。
-insertByText : String -> a -> List (Pair String a) -> List (Pair String a)
-insertByText k x [] = [Pair k x]
-insertByText k x ((Pair ky y) :: rest) =
-  if k <= ky then Base.List.Cons (Pair k x) (Base.List.Cons (Pair ky y) rest)
-  else Base.List.Cons (Pair ky y) (insertByText k x rest)
-
 sortTextPairs : List (Pair String a) -> List (Pair String a)
-sortTextPairs [] = []
-sortTextPairs ((Pair k x) :: rest) = insertByText k x (sortTextPairs rest)
+sortTextPairs ps = sortBy (\a, b => firstOf a <= firstOf b) ps
 
 sortByText : (a -> String) -> List a -> List a
 sortByText key xs = map secondOf (sortTextPairs (map (\x => Pair (key x) x) xs))

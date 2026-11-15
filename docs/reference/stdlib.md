@@ -81,7 +81,8 @@ module Base.Eq (Eq(..)) where
 module Base.Ord (Ord(..), Ordering(..), compare, max, min) where
 module Base.Int where
 module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap,
-                  mem, memName, lookupPair, zip, take, drop, range, mapMaybe) where
+                  mem, memName, lookupPair, zip, take, drop, range, mapMaybe,
+                  nubNames, allMem, anyMem, hasDupNames) where
 module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe) where
 module Base.Pair (Pair(..), firstOf, secondOf) where
 module Base.Field (Field(..)) where

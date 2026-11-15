@@ -354,19 +354,16 @@ isTypeName globals ec name = isTypeLevelGlobal globals ec name || isDataFamilyNa
 -- 「期望是宇宙」的位置按「类型作为项」解析（B18 双命名空间的既有行为）。
 -- | 自动补注（M41 新增导出）：dataShortNameOf。
 dataShortNameOf : String -> String
-dataShortNameOf name = secondOf (splitLastDot (splitOnDot name))
+dataShortNameOf name = lastSeg name
 
 -- | 自动补注（M41 新增导出）：typeNameOfDualCtor。
 export typeNameOfDualCtor : Ec -> String -> Maybe String
-typeNameOfDualCtor ec name = case splitLastDot (splitOnDot name) of
-  Pair revPrefix base =>
-    let
-      fam = joinDots revPrefix
-    in if fam == "" then Nothing
-    else if dataShortNameOf fam == base then case dtDataLookup fam (ecDatas ec) of
-      Just dd => Just fam
-      Nothing => Nothing
-    else Nothing
+typeNameOfDualCtor ec name = case prefixOfName name of
+  "" => Nothing
+  fam => if dataShortNameOf fam == lastSeg name then case dtDataLookup fam (ecDatas ec) of
+    Just dd => Just fam
+    Nothing => Nothing
+  else Nothing
 
 -- | 自动补注（M41 新增导出）：ctorFamilyNameOf。
 export ctorFamilyNameOf : Ec -> String -> Maybe String
@@ -537,24 +534,16 @@ else case alt0 of
   CaseAlt n bs b => CaseAlt n bs (zonkTermFuel (fuel - 1) ec (depth + length bs) b)
 
 -- quote 出来的项里出现负 index：解引用了当前项作用域外的变量，不能替换。
+-- 判据与遍历**只有一份**：`Core.Term.hasNegativeVar`（含 `TRecord`/`TProj`/`TRecUpd`
+-- 分支）。这里保留旧名作为薄转发（调用点零改动），新增核心节点时必须同步 Core 的那份。
 export hasOutOfScopeVar : Term -> Bool
-hasOutOfScopeVar (TVar name i _) = i < 0
-hasOutOfScopeVar (TPi n i r d c) = hasOutOfScopeVar d || hasOutOfScopeVar c
-hasOutOfScopeVar (TLam n r b) = hasOutOfScopeVar b
-hasOutOfScopeVar (TApp f a r) = hasOutOfScopeVar f || hasOutOfScopeVar a
-hasOutOfScopeVar (TCon c args) = hasOutOfScopeVarArgs args
-hasOutOfScopeVar (TMk c args) = hasOutOfScopeVarArgs args
-hasOutOfScopeVar (TCase s alts) = hasOutOfScopeVar s || hasOutOfScopeVarAlts alts
-hasOutOfScopeVar (TIf c th el) = hasOutOfScopeVar c || hasOutOfScopeVar th || hasOutOfScopeVar el
-hasOutOfScopeVar _ = False
+hasOutOfScopeVar t = hasNegativeVar t
 
 export hasOutOfScopeVarArgs : List (Pair Term Rig) -> Bool
-hasOutOfScopeVarArgs [] = False
-hasOutOfScopeVarArgs ((Pair a rig) :: rest) = hasOutOfScopeVar a || hasOutOfScopeVarArgs rest
+hasOutOfScopeVarArgs args = anyNegativeVarArgs args
 
 export hasOutOfScopeVarAlts : List CaseAlt -> Bool
-hasOutOfScopeVarAlts [] = False
-hasOutOfScopeVarAlts ((CaseAlt n bs b) :: rest) = hasOutOfScopeVar b || hasOutOfScopeVarAlts rest
+hasOutOfScopeVarAlts alts = anyNegativeVarAlts alts
 
 -- 族的 kind 里的**参数**（前导的宇宙域 binder，`data Foo a : ...` 的 a）补成隐式 `EPi`，
 -- 遇到第一个非宇宙域 binder（索引：`Nat` / `Row` / `a -> Type`）即停。
@@ -1226,10 +1215,9 @@ isSortExpr (EVar "Type" sp) = True
 isSortExpr (EApp (EVar "Type" sp) args sp2) = True
 isSortExpr _ = False
 
--- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）。
+-- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）；实现收敛到 `Source.lastSeg`。
 export baseNameOf : String -> String
-baseNameOf name = case splitLastDot (splitOnDot name) of
-  Pair rev base => base
+baseNameOf name = lastSeg name
 
 -- M22.2：构造子名 → 族的全部构造子（`Elab.Match` 的模式矩阵用它判断「这一列的构造子
 -- 是否已经全覆盖」——全覆盖时不再补通配兜底，避免把剩余列的匹配不全暴露成假覆盖）。

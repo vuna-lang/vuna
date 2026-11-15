@@ -54,7 +54,7 @@ export record LwEnv where
   lwDefs : List DtDef
   -- 名字 → 定义（**一次建表**，分组/单元过滤都查它；`lwDefs` 是唯一真源）。
   --
-  -- 为什么要表：`appendGroups` 过去对每个 SCC 都 `filter (memList …) lwDefs`，单点 SCC
+  -- 为什么要表：`appendGroups` 过去对每个 SCC 都 `filter (memName …) lwDefs`，单点 SCC
   -- 的合成程序是 O(n²)（N=2000/4000/8000 的 codegen 段 89/284/1083 ms，逐档 ×3.2/×3.8）。
   -- 表只替换**查找**，不参与排序：组内成员顺序仍来自 `assembleGroupNames`（源码序）。
   lwDefTbl : HashMap String DtDef
@@ -73,17 +73,10 @@ lwEnvWithUnit unit (LwEnv shared datas typs recs ctors opqs unboxed defs tbl nam
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
-memList : String -> List String -> Bool
-memList name [] = False
-memList name (x :: rest) = if x == name then True else memList name rest
-
-lookupList : String -> List (Pair String a) -> Maybe a
-lookupList name [] = Nothing
-lookupList name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupList name rest
-
+-- 名字查表直接用 `Base.List` 的单一实现（`memName` / `lookupPair`），本模块不再自建副本。
 -- 旧 `gsAddDep` 的去重（保持首现顺序；最终依赖顺序由 Split 按模块序重排）。
 pushDep : String -> List String -> List String
-pushDep dep deps = if dep == "" then deps else if memList dep deps then deps else append deps [dep]
+pushDep dep deps = if dep == "" then deps else if memName dep deps then deps else append deps [dep]
 
 -- | 列表长度（`Base.List.length` 的本地名，避免与 `Ir` 里的字段名混淆）。
 listLength : List a -> Int
@@ -461,7 +454,7 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
 recordFieldsOf datas =
   map (\d => Pair (dtDataName d) (recordRtFields d))
-    (filter hasRecordRepr (filter (\d => not (memList (dtDataName d) (unboxedFamilySet datas))) datas))
+    (filter hasRecordRepr (filter (\d => not (memName (dtDataName d) (unboxedFamilySet datas))) datas))
 
 tyDeclsOf : List DtData -> List DtData -> Check (List IrTyDecl)
 tyDeclsOf allDatas subset = tyDeclsGo (tyParamsOf allDatas) allDatas (unboxedInfoOf allDatas) subset
@@ -539,10 +532,10 @@ else case t of
     lowerTermFuel (fuel - 1) env st binders (recordTermAsAppIn (TGlobal name) args)
   TCase scrut alts => lowerCaseFuel (fuel - 1) env st binders scrut alts
   -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
-  TRecUpd base c tele idxs body => case lookupList c env.lwRecordFields of
+  TRecUpd base c tele idxs body => case lookupPair c env.lwRecordFields of
     Just fields => lowerRecordUpdateFuel (fuel - 1) env st binders base c tele fields idxs body
     Nothing => lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c tele body])
-  TProj base c tele i fi => case lookupList c env.lwRecordFields of
+  TProj base c tele i fi => case lookupPair c env.lwRecordFields of
     Just fields => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
       Pair baseIr st2 => OkC (Pair (IrProj baseIr c (recordFieldNameAt fi fields)) st2)
     )
@@ -571,7 +564,7 @@ recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) re
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
-else case lookupList name env.lwCtors of
+else case lookupPair name env.lwCtors of
   Just (Pair family keepFlags) => OkC (IrCtor family name [])
   Nothing => case findIntrinsic name of
     Just i =>
@@ -586,7 +579,7 @@ else case lookupList name env.lwCtors of
 -- 桥接标记来自契约（`Ir.Runtime`，单一来源），Lowering 不再按文本重新推断。
 lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir
 lowerBridgeGuard env name ir =
-  if irRtBridgesList name then if memList listFamilyName (map dtDataName env.lwDatas) then OkC ir
+  if irRtBridgesList name then if memName listFamilyName (map dtDataName env.lwDatas) then OkC ir
   else cgErr1 (ListBridgeRequired name) name
   else OkC ir
 
@@ -774,9 +767,9 @@ else if c == natSuccCtor then case alignCtorArgs c [True] args of
         _ => icInternal "Nat Succ must have exactly one runtime argument"
       [] => icInternal "Nat Succ must have exactly one runtime argument"
   )
-else case lookupList c env.lwCtors of
+else case lookupPair c env.lwCtors of
   Nothing => icInternal "unknown constructor ${c}"
-  Just (Pair family keepFlags) => case lookupList c env.lwOpaques of
+  Just (Pair family keepFlags) => case lookupPair c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => Vuna.Compiler.Common.bind (lowerConArgsFuel (fuel - 1) env st binders (ctorOpaqueKeptFlags keepFlags opqs) runtimeArgs) (\p => case p of
       Pair irs st2 => lowerConAppFinish env st2 family c irs
@@ -786,10 +779,10 @@ else case lookupList c env.lwCtors of
 -- 收尾：去装箱族只保留单字段（构造子不落 OCaml 变体）；record 族生成 `IrRecord`；
 -- 其余生成 `IrCtor`。族名与字段名都是源码名（文本前缀属后端）。
 lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List Ir -> Check (Pair Ir LwSt)
-lowerConAppFinish env st family c irs = if memList family env.lwUnboxed then case irs of
+lowerConAppFinish env st family c irs = if memName family env.lwUnboxed then case irs of
   [only] => OkC (Pair only st)
   _ => icInternal "unboxed constructor application does not have exactly one runtime argument"
-else case lookupList family env.lwRecordFields of
+else case lookupPair family env.lwRecordFields of
   Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
   Nothing => OkC (Pair (IrCtor family c irs) st)
 
@@ -883,9 +876,9 @@ lowerUnboxedCaseAlt : LwEnv -> List CaseAlt -> Maybe CaseAlt
 lowerUnboxedCaseAlt env [] = Nothing
 lowerUnboxedCaseAlt env (alt :: rest) = case caseAltName alt of
   "" => Nothing
-  name => case lookupList name env.lwCtors of
+  name => case lookupPair name env.lwCtors of
     Just (Pair family keepFlags) =>
-      if memList family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
+      if memName family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
       else Nothing
     Nothing => Nothing
 
@@ -893,7 +886,7 @@ lowerUnboxedCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> CaseAlt 
 lowerUnboxedCaseFuel fuel env st outer scrut alt = if fuel <= 0 then icFuel "ir-lower"
 else case caseAltName alt of
   "" => icInternal "unboxed case arm has no constructor"
-  name => case lookupList name env.lwCtors of
+  name => case lookupPair name env.lwCtors of
     Nothing => icInternal "no shape for constructor ${name}"
     Just (Pair family keepFlags) => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
       Pair scrutIr st1 => Vuna.Compiler.Common.bind (altEnvCheckedIn st1 name outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\q => case q of
@@ -911,7 +904,7 @@ else if caseAltName alt == "" then
   in Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (aePatsOf bound) bodyIr) st2)
   )
-else case lookupList (caseAltName alt) env.lwCtors of
+else case lookupPair (caseAltName alt) env.lwCtors of
   Nothing => icInternal "unknown constructor ${caseAltName alt}"
   Just (Pair family keepFlags) => Vuna.Compiler.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 =>
@@ -1066,9 +1059,9 @@ else Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st outer base) (\p 
 
 lowerRecordUpdateArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Ir -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
 lowerRecordUpdateArgsFuel fuel env st binders baseIr c fields idxs args = if fuel <= 0 then icFuel "ir-lower"
-else case lookupList c env.lwCtors of
+else case lookupPair c env.lwCtors of
   Nothing => icInternal "no shape for constructor ${c}"
-  Just (Pair family keepFlags) => case lookupList c env.lwOpaques of
+  Just (Pair family keepFlags) => case lookupPair c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => let
       positions = lookupRtPositionsIn fields idxs
@@ -1256,7 +1249,7 @@ ensureUniqueOcamlNamesIn datas defs =
     typeNames = map (\d => typeName (dtDataName d)) runtime
     ctorNames =
       concatMap
-        (\d => if memList (dtDataName d) unboxed then [] else map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
+        (\d => if memName (dtDataName d) unboxed then [] else map (\c => ctorOcamlName (dtCtorFamily c) (dtCtorName c)) (dtDataCtors d))
         runtime
   in Vuna.Compiler.Common.bind (checkNoDupOcamlNames "value" valueNames)
     (\_ => Vuna.Compiler.Common.bind (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
@@ -1275,7 +1268,7 @@ prepareProgram datas defs =
         -- B18：与数据族同名的**运行时值定义**（`data T` 与 `T : Int` 同名）在项里也
         -- 是 `TGlobal T`；这种名字属于值命名空间，不能按「类型级名字」拒绝。
         runtimeNames = map dtDefName runtime
-        familyTypeNames = filter (\n => not (memList n runtimeNames)) familyNames
+        familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
         allTypeNames = append typeNames familyTypeNames
       in Vuna.Compiler.Common.bind (checkNoAxiomRuntime axiomNames runtime)
         (\_ => Vuna.Compiler.Common.bind (checkAllDefScopes defs) (\_ => Vuna.Compiler.Common.bind (ensureUniqueOcamlNamesIn datas runtime) (\_ => Vuna.Compiler.Common.bind (checkAllErasure allTypeNames runtime) (\_ => OkC runtime))))
@@ -1389,7 +1382,7 @@ lowerUnitAfterChecks env defNames dataNames =
   let
     datas = env.lwDatas
     -- 保留 `env.lwDefs` 的**程序顺序**（分区/分组都按它），只把「是否属于本单元」的
-    -- 判定从线性 `memList` 换成一次建表（split 路径每单元一次，原来是 O(单元数×全程序)）。
+    -- 判定从线性 `memName` 换成一次建表（split 路径每单元一次，原来是 O(单元数×全程序)）。
     defNameTbl = Base.HashMap.ofNames defNames
     defs = filter (\d => Base.HashMap.member (dtDefName d) defNameTbl) env.lwDefs
     dataNameTbl = Base.HashMap.ofNames dataNames
@@ -1397,7 +1390,7 @@ lowerUnitAfterChecks env defNames dataNames =
     runtime = partitionRuntimeDefs defs
   in Vuna.Compiler.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Common.bind (tyDeclsOf datas unitDatas) (\decls => let
     groups2 = map groupOfPair groups
-    hasList = memList listFamilyName (map dtDataName unitDatas)
+    hasList = memName listFamilyName (map dtDataName unitDatas)
   in OkC (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing)
   )
   )

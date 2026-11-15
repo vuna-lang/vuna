@@ -22,9 +22,9 @@ export allSame : List Int -> Bool
 allSame [] = True
 allSame (x :: rest) = allEqTo x rest
 
+-- | 保序字符串去重（重复名只保留最后一次出现；`Base.nubNames` 的既有入口名）。
 export dedup : List String -> List String
-dedup [] = []
-dedup (x :: rest) = if memName x rest then dedup rest else x :: dedup rest
+dedup names = nubNames names
 
 export joinComma : List String -> String
 joinComma [] = ""

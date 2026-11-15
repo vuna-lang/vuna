@@ -112,6 +112,17 @@ joinDots [] = ""
 joinDots ([x]) = x
 joinDots (x :: rest) = "${x}.${joinDots rest}"
 
+-- | 名字的**末段**（`Base.Monad.fmap` → `fmap`；无点时返回原名本身）。
+-- 名字末段/前缀的唯一入口：`Elab.Meta.baseNameOf`、`Elab.Prelude` 的短名比较、
+-- `Elab.Term.Impl.shortGlobalName`、`Frontend.Ast.ctorShortName` 都转发到这里。
+export lastSeg : String -> String
+lastSeg name = secondOf (splitLastDot (splitOnDot name))
+
+-- | 名字的**模块前缀**（`Base.Monad.fmap` → `Base.Monad`；无点时返回 `""`）。
+export prefixOfName : String -> String
+prefixOfName name = case splitLastDot (splitOnDot name) of
+  Pair revSegs _ => joinDots revSegs
+
 -- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
 export joinSlashes : List String -> String
 joinSlashes [] = ""

@@ -23,9 +23,9 @@ splitNoSpan = Span "" 0 0 0 0
 export entryOwner : String
 entryOwner = "Main"
 
+-- | 名字的模块前缀（`A.B.f` → `A.B`；无点时 `""`）；实现收敛到 `Source.prefixOfName`。
 export modulePrefixOfName : String -> String
-modulePrefixOfName name = case splitLastDot (splitOnDot name) of
-  Pair rev base => joinDots rev
+modulePrefixOfName name = prefixOfName name
 
 -- ---------------------------------------------------------------
 -- 归属表：声明名 / 实例名 / 方法投影名 → 模块；data / 字典 data → 模块

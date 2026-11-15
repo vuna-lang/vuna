@@ -12,7 +12,7 @@ import Base.Bool
 -- split 单元顺序。
 import Base.Ord
 
--- | 插入步骤：按 `le`（当时的 `<=`）把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
+-- | 插入步骤：按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
 insertBy le y [] = [y]
 insertBy le y (x :: xs) = if y <= x then y :: x :: xs else x :: insertBy le y xs

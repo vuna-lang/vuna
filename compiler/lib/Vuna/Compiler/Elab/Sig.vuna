@@ -138,7 +138,7 @@ piBoundNames (EPi n implicit _ dom cod sp) = n :: piBoundNames cod
 piBoundNames _ = []
 
 lowerVarNames : Expr -> List String
-lowerVarNames e = dedupNames (exprLowerVars e)
+lowerVarNames e = nubNames (exprLowerVars e)
 
 exprLowerVars : Expr -> List String
 exprLowerVars (EVar n sp) = if isLowerIdent n then [n] else []
@@ -159,10 +159,6 @@ isLowerIdent : String -> Bool
 isLowerIdent n = case strUnpack n of
   [] => False
   c :: rest => c >= 97 && c <= 122
-
-dedupNames : List String -> List String
-dedupNames [] = []
-dedupNames (x :: rest) = if memName x rest then dedupNames rest else x :: dedupNames rest
 
 dropPiBound : List String -> List String -> List String
 dropPiBound names [] = names
@@ -235,7 +231,7 @@ quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
     -- `piBoundNames`（只看顶层 EPi 链）看不到 ty 的 binder，必须手动扣除，
     -- 否则显式 `{a : Type} -> a -> a` 里的 a 会被当成自由名再量化一次
     -- （签名变成 `{a : Type} -> {a : Type} -> a -> a`，推断位置留下无主元变量）。
-    lower = dedupNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
+    lower = nubNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
     names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
     overrides = memberDomainOverrides ctx
   in quantifyTopKindsWith (memberDomainOf overrides) names combined ty sp

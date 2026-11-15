@@ -105,6 +105,31 @@ export lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing
 lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
+-- 名字去重/包含判定（全部是字符串列表上的线性扫描）：保留结构递归吃 `rest` 的形状，
+-- 调用点分布在预精化热路径，常数比建表更重要。
+--
+-- | 保序字符串去重：重复的名字只保留**最后一次**出现（`[a, b, a]` → `[b, a]`）。
+-- 实现与编译器各处的旧 `dedup` / `uniqNames` / `dedupNames` 逐字一致（先判 `x` 是否还在
+-- `rest` 里，在就跳过），因此调用点的元素顺序/位置不变。
+export nubNames : List String -> List String
+nubNames [] = []
+nubNames (x :: rest) = if memName x rest then nubNames rest else x :: nubNames rest
+
+-- | `allMem xs ys`：`xs` 里每个名字都在 `ys` 里。
+export allMem : List String -> List String -> Bool
+allMem [] ys = True
+allMem (x :: rest) ys = memName x ys && allMem rest ys
+
+-- | `anyMem xs ys`：`xs` 里至少有一个名字在 `ys` 里。
+export anyMem : List String -> List String -> Bool
+anyMem [] ys = False
+anyMem (x :: rest) ys = memName x ys || anyMem rest ys
+
+-- | 字符串列表里是否有重复名字。
+export hasDupNames : List String -> Bool
+hasDupNames [] = False
+hasDupNames (x :: rest) = memName x rest || hasDupNames rest
+
 -- | 把两个列表逐项配对；长度取较短者。
 export zip : List a -> List b -> List (Pair a b)
 zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys

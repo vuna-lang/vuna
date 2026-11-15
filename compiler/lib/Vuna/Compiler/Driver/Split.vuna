@@ -12,6 +12,7 @@ module Vuna.Compiler.Driver.Split where
 --     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
+import Base.Sort
 import Base.HostRow
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Compiler.Common
@@ -304,15 +305,8 @@ depthEntryLess a b =
   if firstOf (firstOf a) /= firstOf (firstOf b) then firstOf (firstOf a) < firstOf (firstOf b)
   else secondOf (firstOf a) <= secondOf (firstOf b)
 
-insertDepthEntry : Pair (Pair Int Int) String -> List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
-insertDepthEntry x [] = [x]
-insertDepthEntry x (y :: rest) =
-  if depthEntryLess x y then Base.List.Cons x (Base.List.Cons y rest)
-  else Base.List.Cons y (insertDepthEntry x rest)
-
 sortDepthEntries : List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
-sortDepthEntries [] = []
-sortDepthEntries (x :: rest) = insertDepthEntry x (sortDepthEntries rest)
+sortDepthEntries xs = sortBy depthEntryLess xs
 
 -- 文件名索引：查 `${unit}.ml`；非 .ml 项与旧 `findFileNamed` 一样不参与。
 filesOfDepthEntries : HashMap String SplitFile -> List String -> List SplitFile
@@ -339,14 +333,7 @@ sortDepsByTie : HashMap String Int -> List String -> List String
 sortDepsByTie ties deps = map firstOf (sortDepEntries (map (\d => Pair d (tieOf ties d)) deps))
 
 sortDepEntries : List (Pair String Int) -> List (Pair String Int)
-sortDepEntries [] = []
-sortDepEntries (x :: rest) = insertDep x (sortDepEntries rest)
-
-insertDep : Pair String Int -> List (Pair String Int) -> List (Pair String Int)
-insertDep x [] = [x]
-insertDep x (y :: rest) =
-  if secondOf x <= secondOf y then Base.List.Cons x (Base.List.Cons y rest)
-  else Base.List.Cons y (insertDep x rest)
+sortDepEntries xs = sortBy (\a, b => secondOf a <= secondOf b) xs
 
 normalizeFileDeps : HashMap String Int -> SplitFile -> SplitFile
 normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie ties (splitDeps f))

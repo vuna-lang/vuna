@@ -11,6 +11,7 @@ module Vuna.Compiler.Codegen.Term where
 --
 -- 没有 fuel：旧实现的 `genTermFuel` 固定 512 步预算随迁移消失（正常源码的嵌套深度
 -- 不再触发 `IC_FuelExhausted (codegen)`）。
+import Base.Sort
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -1422,14 +1423,7 @@ export dtDefLocTable : (String -> String) -> List (Pair String (Pair String Int)
 dtDefLocTable norm rows = strConcatMany (sortLocRows (map (locRowOf norm) rows))
 
 sortLocRows : List String -> List String
-sortLocRows [] = []
-sortLocRows (r :: rest) = insertLocRow r (sortLocRows rest)
-
-insertLocRow : String -> List String -> List String
-insertLocRow r [] = [r]
-insertLocRow r (x :: rest) =
-  if r <= x then Base.List.Cons r (Base.List.Cons x rest)
-  else Base.List.Cons x (insertLocRow r rest)
+sortLocRows rows = sortBy (\a, b => a <= b) rows
 
 locRowOf : (String -> String) -> Pair String (Pair String Int) -> String
 locRowOf norm row =

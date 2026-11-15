@@ -370,10 +370,9 @@ perfShortOf last = if endsWith "Op" last then
 else Nothing
 
 perfFamilyOfCanonical : String -> Maybe PerfFamily
-perfFamilyOfCanonical canon = case splitLastDot (splitOnDot canon) of
-  Pair parts last => case perfShortOf last of
-    Just short => Just (PerfFamily canon (joinDots parts) short)
-    Nothing => Nothing
+perfFamilyOfCanonical canon = case perfShortOf (lastSeg canon) of
+  Just short => Just (PerfFamily canon (prefixOfName canon) short)
+  Nothing => Nothing
 
 -- op 的类型值必须是全局 data 族的应用（`Base.EffConsole.ConsoleOp`、`StateOp Nat`）；
 -- 族参数允许是中性 spine（State/Reader 的 s 由行/期望类型解），族名取 spine head。
@@ -1837,10 +1836,9 @@ effConsLabelTail (VCon consName (n :: e :: t :: _)) =
   if consName == effRowConsCtor then Just (Pair n (Pair e t)) else Nothing
 effConsLabelTail _ = Nothing
 
--- | 全局名的最后一段（诊断里不显示模块前缀）。
+-- | 全局名的最后一段（诊断里不显示模块前缀）；实现收敛到 `Source.lastSeg`。
 shortGlobalName : String -> String
-shortGlobalName g = case splitLastDot (splitOnDot g) of
-  Pair _ last => last
+shortGlobalName g = lastSeg g
 
 -- | 行条目标签的紧凑文本：`ConsoleOp`、`StateOp Nat`（head 去模块前缀，参数按值展示）。
 rowLabelText : Ec -> Value -> String
