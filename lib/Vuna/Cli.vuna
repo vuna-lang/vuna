@@ -390,14 +390,21 @@ fmtRun check [] = do
     ErrC e => toolError (diagText e)
     OkC paths => do
       expanded <- expandPaths paths
-      fmtFiles check emptyFixityEnv expanded 0
+      fmtFiles check emptyFixityEnv (filter fmtScanKeep expanded) 0 False
 fmtRun check paths = do
   missing <- firstMissingPath paths
   case missing of
     Just path => toolError "no such file: ${path}"
     Nothing => do
       expanded <- expandPaths paths
-      fmtFiles check emptyFixityEnv expanded 0
+      fmtFiles check emptyFixityEnv expanded 0 False
+
+-- | 默认扫描（无参）跳过 `test/suite/fixtures/`：那里的 `.vuna` 是 steps 拼进临时包的
+-- **片段**（例如只 import 一个同目录模块、没有自己的 manifest），用仓库根上下文解析必然
+-- 报 `LD_ModuleNotFound`，于是整条扫描在第一个片段处中止、后面的文件根本没检查。
+-- 显式传路径时不禁用（`vuna fmt test/suite/fixtures/...` 仍按上下文尽力格式化）。
+fmtScanKeep : String -> Bool
+fmtScanKeep path = not (contains "/test/suite/fixtures/" path)
 
 -- 省略 PATH 时格式化 workspace 内所有包的 lib/app/test（拆包后 compiler/ 也在内）。
 -- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不回退到相对
@@ -445,31 +452,42 @@ expandPath path = do
 -- `Vuna.FixityEnv` 按文件目录缓存「按包上下文加载的模块图」（昂贵部分），声明表逐文件
 -- 重算（不同文件 imports 不同，跨文件复用会判 unknown fixity / 打出错误括号）。
 -- 上下文/加载失败是硬错误：fixity 无法确定时**拒绝格式化该文件**，不静默改语义。
-fmtFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> Eff r Int
-fmtFiles check env [] changed = if check && changed > 0 then do
-  _ <- consolePrint "${changed} file(s) need formatting\n"
-  pure 1
-else pure 0
-fmtFiles check env (path :: rest) changed = do
+-- 单个文件出错（读盘 / fixity 上下文 / 格式化）时**报告并继续**：否则第一个坏文件之后的
+-- 一切都被跳过（本地尤其明显：一个片段夹具会让整条扫描看不到 base 的格式问题）。结束时
+-- 只要出现过错误就返回非 0，门禁照样红。
+fmtFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> Bool -> Eff r Int
+fmtFiles check env [] changed failed = do
+  _ <- if check && changed > 0 then consolePrint "${changed} file(s) need formatting\n" else pure 0
+  pure (if failed || check && changed > 0 then 1 else 0)
+
+-- | 单个文件出错时的统一出口：打印后继续扫剩下的文件，并把失败状态带下去。
+fmtFailMsg : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> String -> Eff r Int
+fmtFailMsg check env rest changed msg = do
+  _ <- consolePrint "error: ${msg}\n"
+  fmtFiles check env rest changed True
+
+fmtFiles check env (path :: rest) changed failed = do
   textR <- readText path
   case textR of
-    ErrC e => toolError (diagText e)
+    ErrC e => fmtFailMsg check env rest changed (diagText e)
     OkC original => do
       looked <- fixitiesForFile env path original
       let
         env2 = firstOf looked
       in case secondOf looked of
-        ErrC e => toolError "${path}: cannot determine fixity context: ${diagText e}"
+        ErrC e =>
+          fmtFailMsg check env rest changed
+            "${path}: cannot determine fixity context: ${diagText e}"
         OkC fixities => case formatSourceWith fixities original of
-          ErrC e => toolError "${path}: ${diagText e}"
-          OkC formatted => if formatted == original then fmtFiles check env2 rest changed
+          ErrC e => fmtFailMsg check env rest changed "${path}: ${diagText e}"
+          OkC formatted => if formatted == original then fmtFiles check env2 rest changed failed
           else if check then do
             _ <- consolePrint "would reformat: ${path}\n"
-            fmtFiles check env2 rest (changed + 1)
+            fmtFiles check env2 rest (changed + 1) failed
           else do
             _ <- fsWriteFile path formatted
             _ <- consolePrint "formatted ${path}\n"
-            fmtFiles check env2 rest (changed + 1)
+            fmtFiles check env2 rest (changed + 1) failed
 
 -- ---------------------------------------------------------------
 -- repl
