@@ -11,6 +11,7 @@ let
       pkgs = pkgsFor system;
       ocamlTools = common.ocamlTools pkgs;
       wasmTools = common.wasmTools pkgs;
+      e2eTools = common.e2eTools pkgs;
       packages = import ./packages.nix {
         inherit pkgs ocamlTools;
         shellTools = common.shellTools pkgs;
@@ -21,14 +22,14 @@ let
       inherit packages;
 
       checks = import ./checks {
-        inherit pkgs packages ocamlTools;
+        inherit pkgs packages ocamlTools e2eTools;
       };
 
       # default 是全量开发环境；ocaml 只含工具链，不依赖仓库源码，
       # 种子重建/坏掉时仍可进入（direnv 默认用 default）。
       devShells = {
         default = pkgs.mkShell {
-          packages = ocamlTools ++ wasmTools ++ [ packages.vuna-seed ];
+          packages = e2eTools ++ [ packages.vuna-seed ];
           shellHook = ''
             root=$PWD
             while [ "$root" != "/" ] && [ ! -f "$root/test/suite.toml" ]; do
@@ -41,7 +42,7 @@ let
         };
 
         ocaml = pkgs.mkShell {
-          packages = ocamlTools;
+          packages = ocamlTools ++ wasmTools;
           shellHook = ''
             echo "vuna OCaml shell — OCaml $(ocaml -version)（不含 vuna-seed；需要时用 nix develop .#default）"
           '';

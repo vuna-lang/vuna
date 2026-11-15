@@ -23,6 +23,19 @@ let
     pkgs.wasmtime
   ];
 
+  # CI e2e / 本地 `nix run .#vuna-run-tests` 的 PATH：两个后端的外部工具
+  # （native 的 cc/as/ld、wasm 的 wasm-tools/wasmtime）加上脚本用到的 git/jq。
+  # devShell 与 checks 共用这一份，避免「本地能跑、CI 缺工具」。
+  e2eTools =
+    pkgs:
+    ocamlTools pkgs
+    ++ wasmTools pkgs
+    ++ [
+      pkgs.util-linux
+      pkgs.git
+      pkgs.jq
+    ];
+
   # 测试/基准 runner 的 PATH：OCaml 工具链 + 脚本用到的 coreutils 系。
   # jq 供 bench.sh 解析基线 JSON（--baseline / --check）；sed 抠 JSON 字段不可靠。
   # 顺序与历史列表保持一致（makeBinPath 的输出会进入派生，顺序影响哈希）。
@@ -40,10 +53,11 @@ let
       pkgs.gnused
       pkgs.jq
       pkgs.util-linux
+      pkgs.git
     ];
 in
 {
-  inherit systems ocamlTools shellTools wasmTools;
+  inherit systems ocamlTools shellTools wasmTools e2eTools;
 
   forAllSystems = lib.genAttrs systems;
 
