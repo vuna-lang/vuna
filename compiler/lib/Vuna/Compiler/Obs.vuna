@@ -37,3 +37,9 @@ obsDefCheck name def f =
 -- | 带分类的 Effect 阶段标记（`Eff hostRow` 边界用；零宽度 instant）。
 export obsMarkEff : String -> Eff hostRow Int
 obsMarkEff name = raiseToRow hostRow (effPrim (\_ => obsMark name))
+
+-- | `Eff hostRow` 边界上的计数（`ph:"C"`，`args.value`）：用于缓存命中 / 落盘这类
+-- 「发生了几次」的归因。关闭时与 `obsMarkEff` 同口径（一次 `Lazy.force` + 分支）。
+-- 实参 `v` 由调用方给常量，别传 O(n) 表达式（关闭时也不会跳过实参求值）。
+export obsCountEff : String -> Int -> Eff hostRow Int
+obsCountEff name v = raiseToRow hostRow (effPrim (\_ => obsCounter name v))

@@ -88,16 +88,22 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 **已插桩**（本仓库代码真的会产出这些名字）：
 
-- `vuna.elab`（整段精化的汇总跨度）、`vuna.codegen.check`（codegen 前置校验段）；
-- `vuna.def.elab`（level ≥ 2，`args.def` = 定义名）；
+- `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度）、`vuna.elab.bodies`（逐定义精化段，
+  `vuna.elab` 的子区间）、`vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
+  `dtCheckScoped` 各一处）；
+- `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
+- `ph:"i"` 阶段标记（`Eff` 边界，零宽度）：`vuna.load`、`vuna.resolve`、`vuna.iface.compute`、
+  `vuna.iface.write`、`vuna.codegen.split`、`vuna.cache.lookup`；
+- `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
+  `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
 - `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
 
-**保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.load`、`vuna.parse`、
-`vuna.resolve`、`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
-`vuna.elab.bodies`、`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.iface.compute`、
-`vuna.iface.write`、`vuna.codegen.split`、`vuna.codegen.unit`、`vuna.cache.lookup`、
-`vuna.cache.write`、`vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
-`vuna.counter.*`（全部计数名）。加插桩时**不要**改名（工具/看板按名字聚合）。
+**保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.parse`、
+`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
+`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.codegen.unit`、`vuna.cache.write`、
+`vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
+`vuna.counter.core.*` / `vuna.counter.meta.*` / `vuna.counter.alloc.words` /
+`vuna.counter.heap.words` / `vuna.counter.steps`。加插桩时**不要**改名（工具/看板按名字聚合）。
 
 - 档次读数（在 `ph:"X"` 的 `args` 上，**不是**独立 count 事件）：`args.allocWords` /
   `args.heapWords`（整数，span 期间分配/堆字数增量）；`validate` 只校验它们是整数，
@@ -409,12 +415,13 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 ## 10. 已知边界（开放项）
 
 - 表达式级 / 分支级 span：Core 只有 `TVar` 带 span（debt D80），当前只能到「定义级 + 采样」。
-- **只有两个阶段跨度为真插桩**：`vuna.elab` / `vuna.codegen.check`（+ level 2 的
-  `vuna.def.elab`）。`vuna.load` / `vuna.iface.*` / `vuna.codegen.split` / `vuna.cache.*` 等
-  是保留名（§3.3），**没有探针点**：缓存命中判定与 split 都在 `Eff hostRow` 里，纯 `span`
-  包不住执行（需 `obsMarkEff` 这类跨效应标记，尚未接）。
-- **计数事件一个都没接**：`ph:"C"` 的构造与 `vuna obs` 的消费都就绪，但 `Core.Eval`
-  的 `force`/`primReduce` 探针会显著改热路径，待做且要先量代价（`vuna.counter.steps` 同理）。
+- **`Eff` 边界只有零宽度标记、没有跨度**：`vuna.load` / `vuna.resolve` / `vuna.iface.*` /
+  `vuna.codegen.split` / `vuna.cache.lookup` 走 `obsMarkEff`（瞬时 `ph:"i"`），因为纯
+  `span` 包不住 `Eff` 动作的执行（执行发生在 runner 里）。它们的耗时仍由 `--debug-perf`
+  文本行（`iface-mods-phases` / `iface-write=…`）承担；`vuna obs` 侧只能看到顺序。
+- **core 热路径的计数仍未接**：`vuna.counter.core.*` / `vuna.counter.meta.*` /
+  `vuna.counter.steps` 需要给 `Core.Eval.force` / `primReduce` 加探针，会显著改热路径，
+  待做且要先量代价；已接的计数只覆盖缓存三件套（hit / miss / write）。
 - 多 domain 采样（debt D41）、`Unix.getrusage`（OCaml 5.5 无，debt D81）。
 - wasm/native 的 span 与采样（O12）。
 - `serve --cdp` 是**离线**的：数据源是已有的 trace 文件，不是附加到运行中进程做 live 采样

@@ -150,7 +150,7 @@ compiler/lib/Vuna/Compiler/Native/Model.vuna: Instr(..), NativeBss(..), NativeEr
 compiler/lib/Vuna/Compiler/Native/Module.vuna: NRes(..), build
 compiler/lib/Vuna/Compiler/Native/Render.vuna: renderProgram
 compiler/lib/Vuna/Compiler/Native/Runtime.vuna: nativeBss, nativeRodata, nativeRtFuncs, nativeRtTarget, nativeRtValueArity
-compiler/lib/Vuna/Compiler/Obs.vuna: obsCheck, obsDefCheck, obsMarkEff
+compiler/lib/Vuna/Compiler/Obs.vuna: obsCheck, obsCountEff, obsDefCheck, obsMarkEff
 compiler/lib/Vuna/Compiler/Packages/Pkg.vuna: Package(..), PackageContext, Root, absolutePath, contextDir, contextForDir, contextForFile, contextPackageName, contextPackageOf, contextRelease, contextRoots, contextWithRelease, findManifestDir, findManifestDirMaybe, joinPath, loadManifestAt, loadPackage, locateBase, normalizeDir, packageContext, packageDir, packageEntry, packageExports, packageName, packageRoots, rootDir, rootName, rootPackage, workspacePackages
 compiler/lib/Vuna/Compiler/Packages/Source.vuna: contentHashOf, identityHashOf, normalizeHash, packageFilesEff, packageSourceEff, skipSourceDir, verifyHash
 compiler/lib/Vuna/Compiler/Source.vuna: Pos(..), Span(..), baseName, containsDot, joinArrows, joinDots, joinSlashes, lastSeg, module Base.Bool, module Base.List, module Base.Maybe, module Base.Pair, module Base.String, posCol, posLine, prefixOfName, showSpanLoc, spanEndCol, spanEndLine, spanFile, spanStartCol, spanStartLine, splitLastDot, splitOnChar, splitOnDot, splitPath, suggest

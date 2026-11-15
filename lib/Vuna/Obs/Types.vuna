@@ -226,6 +226,7 @@ vunaEventVocabulary =
     "vuna.counter.meta.solve",
     "vuna.counter.cache.hit",
     "vuna.counter.cache.miss",
+    "vuna.counter.cache.write",
     "vuna.counter.alloc.words",
     "vuna.counter.heap.words",
     "vuna.counter.steps",

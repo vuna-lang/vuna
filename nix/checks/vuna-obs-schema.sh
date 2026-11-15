@@ -87,5 +87,16 @@ done
 compiler_trace=$(find "$trace_root/c2" -name '*.jsonl' -type f | head -1)
 grep -q '"name":"vuna.elab"' "$compiler_trace" || fail "compiler trace misses the vuna.elab phase span"
 grep -q '"name":"vuna.codegen.check"' "$compiler_trace" || fail "compiler trace misses the vuna.codegen.check phase span"
+# 逐定义精化段（vuna.elab 的子区间）：冷全量精化必然产出。
+grep -q '"name":"vuna.elab.bodies"' "$compiler_trace" || fail "compiler trace misses the vuna.elab.bodies span"
+# `Eff` 边界的零宽度标记（ph:"i"）：load / resolve / iface 计算与写回各一次。
+for mark in vuna.load vuna.resolve vuna.iface.compute vuna.iface.write; do
+  grep -q "\"ph\":\"i\",.*\"name\":\"$mark\"" "$compiler_trace" \
+    || fail "compiler trace misses the $mark Eff-boundary mark"
+done
+# 缓存计数（ph:"C"）：空 store + 全量口径下依赖接口必然 miss 至少一次。
+grep -q '"ph":"C"' "$compiler_trace" || fail "compiler trace has no counter (ph:\"C\") events"
+grep -q '"name":"vuna.counter.cache.miss"' "$compiler_trace" \
+  || fail "compiler trace misses vuna.counter.cache.miss"
 
 echo "vuna-obs-schema: ok (traces in $OUT/traces)"
