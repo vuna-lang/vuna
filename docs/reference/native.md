@@ -114,8 +114,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 运行时错误报告统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
   报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
   `TODO: ` 前缀。
-- List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）拒绝：
-  它们要构造/消费 canonical `List` 族的对象表示（理由见 §9）。
+- List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）支持：
+  函数体在 `Native.Module` 按 List 族的 tag 生成，复用对象表示（`head` 是未装箱 Int；
+  两遍扫描：先算长度，再分配填充）。
 - **零参顶层定义**编成零参函数，每次引用都 `call`。native 仍是纯语言（无 Effect），重复
   求值语义安全；引入副作用/Effect 之前必须改成初始化 + memo。
 - 入口 `main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受 `@ir@showInt` /
@@ -194,10 +195,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 ## 8. 已知边界
 
-- 闭包值、高阶函数、部分应用；数组。
+- 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）；数组。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
-- `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`（需要 List 桥接）。
-  **桥接不是独立切片**：它需要 canonical `List` 族的对象表示（见 §9）；单独做它收益为零。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
@@ -207,38 +206,20 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - aarch64 及非 Linux 平台；寄存器分配与优化；栈溢出检查；位置表/backtrace。
 - 零参定义的重算优化（引入副作用前必须改）。
 
-## 9. 为什么对象表示必须先于 List 桥接
+## 9. 对象表示与 List 桥接
 
-List 桥接看起来像「四个字符串原语」，实际牵出的是 **canonical `List` 族在 native 的
-对象表示**。把它当独立切片做的代价：
+List / record / 用户 `data` 共用同一套对象布局（`[tag]` + 8 字节字段，按该族最大 arity
+补齐）；桥接的四个符号没有专用表示，它们只是这套对象上的生产/消费函数：
 
-| 成本项 | 内容 |
-| --- | --- |
-| 表示 | Nil/Cons 的 tag + 字段布局（cons cell ≥ 16 B）、通用 `IrCase` 分支分派、`IrCtor` 子集——约等于整套 ctor 表示工作量的 60–70% |
-| 汇编 | 四个符号各一个模板（`strUnpack` 每字符一个 cell、`strPack` 收集 + `Char.chr` 越界、`strConcatMany` 两遍求和再拷、`strSubstTemplate` 的 `<k>` 解析），合计约 150–200 行，单独看是顺手活 |
-| 契约 | 这四个符号在 IR 里是 `IrApp (IrRt sym) args`（`irInlineArity = 0`），不是 `IrRtApp`；落地要同时扩 `nativeRtValueArity` 与 `nativeRtTarget` |
-| 堆 | `strUnpack` 是**每字符一个 cons cell**：1 MiB ≈ 65536 cell ≈ 64 KiB 源串；`split`/`lines` 反复 unpack 会很快打满 |
+- 四个符号在 IR 里是 `IrApp (IrRt sym) args`（`irInlineArity = 0`），arity 由
+  `Native.Runtime.nativeRtValueArity` 给出、标签由 `nativeRtTarget` 映射。
+- `strUnpack` 每个字符一个 cons cell，`split` / `lines` 反复调用会快速消耗堆；因此堆是
+  可增长 arena（越界 `mmap` 新段，旧段不回收，回收策略属于独立的 RC 设计）。
+- 门禁在 Lowering（`CG_ListBridgeRequired`）：没有 canonical `List` 族的程序根本走不到
+  桥接符号，后端不需要再判一次。
 
-收益侧的关键事实：**桥接单独做，用户可见收益是 0**。`Base.String` 的文本函数都建立在
-`split` 上，而 `split` 在 native 里卡的是 `case is not supported yet`（实测
-`join "," (split "," "a,b")` 报的就是它），不是桥接符号。桥接的价值只能由「已在运行的
-ctor/case」兑现。
-
-三条约束：
-
-1. **对象头只能有一个**。List / record / 用户 data 共用同一套对象布局；先为 List 定一版
-   专用布局，做 record 与用户 data 时必然返工。Perceus RC 还要在对象头上加
-   引用计数/复用字段，布局冻结得越晚越好。
-2. **验收标准清楚**。ctor/case 用用户 `data` 验收（纯 ctor + case，与 List 无关）；桥接用
-   `strUnpack`（生产 List）与 `strPack`（消费 List）做**表示层一进一出**测试。两者都能
-   独立判定通过与否，而「桥接切片」的验收标准是含糊的。
-3. **堆扩容的形态取决于回收策略**。桥接一旦可用，1 MiB 立刻不够；但「可增长 arena vs
-   可变堆 vs 分代」的选择与 RC 设计绑定。桥接只做最保守的增长（新段、旧段不回收），
-   不在那时拍板回收策略。
-
-**不建议的近路**：用索引扫描（`strAt` / `strLength` / `strSubstring` + fuel）自写
-native 友好的文本函数绕过桥接。它确实能在当前现状下工作（实测 `containsIdx` 与 OCaml
-后端输出一致），但等于给后端写一套平行 API、与 `Base.String` 语义分叉，不进终态。
+**不要用索引扫描（`strAt` + fuel）自写 native 文本函数绕过桥接**：那会与 `Base.String`
+语义分叉，不进终态。
 
 ## 10. 相关阅读
 

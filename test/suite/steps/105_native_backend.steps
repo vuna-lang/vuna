@@ -249,6 +249,31 @@ out-equals: 2
 run: sh -c '"$VUNA" run "$TMPDIR/nest" 2>&1 | tail -n 1'
 out-equals: 2
 
+# 10i) M3b：List 桥接 strUnpack / strPack / strConcatMany / strSubstTemplate。
+run: sh -c 'd="$TMPDIR/lb"; mkdir -p "$d/app"; printf "[package]\nname = \"lb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strPack (strUnpack \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-out" "$d"'
+exit: 0
+run: "$TMPDIR/lb-out/bin/lb" 2>&1
+out-equals: "abc"
+run: sh -c 'd="$TMPDIR/lb"; printf "main : Int\nmain = strAt (strPack (strUnpack \"abc\")) 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-at" "$d"'
+exit: 0
+run: "$TMPDIR/lb-at/bin/lb" 2>&1
+out-equals: 98
+run: sh -c 'd="$TMPDIR/lb"; printf "main : String\nmain = strConcatMany [\"a\", \"bb\", \"ccc\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-cm" "$d"'
+exit: 0
+run: "$TMPDIR/lb-cm/bin/lb" 2>&1
+out-equals: "abbccc"
+run: sh -c 'd="$TMPDIR/lb"; printf "import Base.String\n\nmain : String\nmain = join \"-\" [\"a\", \"b\", \"c\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-join" "$d"'
+exit: 0
+run: "$TMPDIR/lb-join/bin/lb" 2>&1
+out-equals: "a-b-c"
+# 模板替换：越界序号原样保留，`<>` / 结尾 `<` 按字面处理（与 dtp_substTemplate 一致）。
+run: sh -c 'd="$TMPDIR/lb"; printf "import Base.Vec\n\nmain : String\nmain = substTemplate \"x=<0>, y=<1>, z=<9>; <>.\" [\"A\", \"B\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-st" "$d"'
+exit: 0
+run: "$TMPDIR/lb-st/bin/lb" 2>&1
+out-equals: "x=A, y=B, z=<9>; <>."
+run: sh -c '"$VUNA" run "$TMPDIR/lb" 2>&1 | tail -n 1'
+out-equals: "x=A, y=B, z=<9>; <>."
+
 # 11) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
 run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
 exit: 1
