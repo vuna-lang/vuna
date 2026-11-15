@@ -200,13 +200,24 @@ hasHole : String -> Bool
 hasHole text = holeScan (strUnpack text) (0 - 1)
 
 -- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
-export symbolHoverResult : String -> Int -> Int -> String -> Maybe Index -> Json
-symbolHoverResult uri line col text Nothing = JNull
-symbolHoverResult uri line col text (Just idx) = case tokenAtCursor text line col of
+-- `buffers` 覆盖 Index 的 docstring：Index 是磁盘快照，打开着的文件以缓冲为准，否则
+-- 同一个符号的 docstring 在「模块 hover」与「符号 hover」两处会显示成不同版本。
+export symbolHoverResult : List (Pair String String) -> String -> Int -> Int -> String -> Maybe Index -> Json
+symbolHoverResult buffers uri line col text Nothing = JNull
+symbolHoverResult buffers uri line col text (Just idx) = case tokenAtCursor text line col of
   Nothing => JNull
   Just (Pair startCol token) => case bestSymbol idx (currentModuleNameOf text) token of
     Nothing => JNull
-    Just sym => symbolHoverJson sym line startCol token
+    Just sym => symbolHoverJson (bufferDocOf buffers idx sym) line startCol token
+
+-- 打开中的缓冲里该符号的 docstring（未打开 / 拿不到 → 保留 Index 的）。
+bufferDocOf : List (Pair String String) -> Index -> Sym -> Sym
+bufferDocOf buffers idx s = case modulePathOf idx (symModule s) of
+  Nothing => s
+  Just path => case bufferDeclDoc buffers path (symName s) of
+    Nothing => s
+    Just doc =>
+      Sym (symModule s) (symName s) (symKind s) (symSig s) (symType s) doc (symLine s) (symCol s)
 
 -- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
 export definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json

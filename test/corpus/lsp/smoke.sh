@@ -56,6 +56,10 @@
 #  32. case split 的限定 import（构造子/record 类型名写 `Dep.`）与命名洞 `?goal`（编辑
 #      range 覆盖整个 token）；axiom（不透明、无右侧可展开）与索引族（parse 级不知道索引
 #      约束，枚举会生成不可达分支）不给动作（安全降级）。
+#  33. 模块 docstring 的唯一真源：打开中的缓冲优先——同一模块的模块 hover 与符号 hover
+#      在「它自己的文件」与「引用它的文件」两处必须是同一版本（修复前一处缓冲、一处读盘）。
+#  34. 模块名本身是完整 token（`Base.Maybe Int` / `P.Sub.T`）：中间段也能 hover/definition；
+#      但名字后面的 `.` / 空格不算模块名的一部分（相邻两格不会跳变）。
 #
 # 只依赖 POSIX sh / awk / sed 与传入的 vuna 可执行文件。
 set -u
@@ -472,7 +476,9 @@ check_eq "收到 shutdown 但无 exit（EOF）退出码 1" "1" "$?"
 #
 # 注意：这条流水线不能用 `awk` 生成帧——awk 的 stdout 是块缓冲，帧会等到 awk 退出
 # （6s 后）才到达服务器，测试就失去意义。用 shell 的 printf 直接写，立即可见。
-frame_line() { LC_ALL=C printf 'Content-Length: %d\r\n\r\n%s' "${#1}" "$1"; }
+# 帧长度按**字节**算：`${#1}` 在多字节 locale 下是字符数，夹具里出现中文 docstring
+# 时会让 Content-Length 偏小、帧被判 malformed（LSP 协议的长度是字节）。
+frame_line() { body=$1; n=$(printf '%s' "$body" | LC_ALL=C wc -c); LC_ALL=C printf 'Content-Length: %d\r\n\r\n%s' "$n" "$body"; }
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   sleep 6
@@ -1127,6 +1133,104 @@ qr6=$(lsp_frame_id "$tmp/splitq.out" 6)
 check_contains "同洞的 Nat binder 仍给 case split" "$qr6" '"title":"case split on n"'
 check_not_contains "索引族 binder（xs : Vec ...）不给 case split（不可达分支风险）" "$qr6" \
   '"title":"case split on xs"'
+
+# ---- 26b) 模块 docstring 的唯一真源：打开中的缓冲优先（未保存改动不再是两套文档）----
+# 回归点（本次修复）：模块 hover 原来只对「当前文件」用缓冲，引用其它已打开模块时读盘，
+# 于是同一个模块的 docstring 在它自己的文件与引用它的文件里显示成不同版本。符号 hover 也一样
+# （Index 是磁盘快照）。现在服务器把「打开中的文档」传给 Bindings/Query，两处都读缓冲。
+mkdir -p "$tmp/bufws/lib"
+printf '[package]\nname = "bufws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/bufws/vuna.toml"
+cat >"$tmp/bufws/lib/BufDoc.vuna" <<'VEOF'
+-- | 磁盘版模块文档。
+module BufDoc where
+
+-- | 磁盘版函数文档。
+export helper3 : Int -> Int
+helper3 n = n
+VEOF
+cat >"$tmp/bufws/lib/BufUse.vuna" <<'VEOF'
+module BufUse where
+
+import BufDoc
+
+useIt3 : Int
+useIt3 = BufDoc.helper3 1
+VEOF
+bufdoc_uri="file://$tmp/bufws/lib/BufDoc.vuna"
+bufuse_uri="file://$tmp/bufws/lib/BufUse.vuna"
+buf_disk='-- | 磁盘版模块文档。\nmodule BufDoc where\n\n-- | 磁盘版函数文档。\nexport helper3 : Int -> Int\nhelper3 n = n\n'
+buf_edit='-- | 缓冲版模块文档。\nmodule BufDoc where\n\n-- | 缓冲版函数文档。\nexport helper3 : Int -> Int\nhelper3 n = n\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$bufdoc_uri"'","languageId":"vuna","version":1,"text":"'"$buf_disk"'"}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"'"$bufdoc_uri"'","version":2},"contentChanges":[{"text":"'"$buf_edit"'"}]}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$bufuse_uri"'","languageId":"vuna","version":1,"text":"module BufUse where\n\nimport BufDoc\n\nuseIt3 : Int\nuseIt3 = BufDoc.helper3 1\n"}}}'
+  # 2: 模块自己的 module 头 hover（本来就该是缓冲）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$bufdoc_uri"'"},"position":{"line":1,"character":8}}}'
+  # 3: 另一个文件里 import BufDoc 的模块名 hover（回归点：修复前是「磁盘版模块文档」）
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$bufuse_uri"'"},"position":{"line":2,"character":8}}}'
+  # 4: 模块里函数的签名 hover（回归点：修复前是「磁盘版函数文档」）
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$bufdoc_uri"'"},"position":{"line":4,"character":11}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/bufdoc.out" 2>/dev/null
+buf_doc_out=$(tr -d '\r' <"$tmp/bufdoc.out")
+b2=$(lsp_frame_id "$tmp/bufdoc.out" 2)
+b3=$(lsp_frame_id "$tmp/bufdoc.out" 3)
+b4=$(lsp_frame_id "$tmp/bufdoc.out" 4)
+check_contains "模块头 hover 用缓冲 docstring" "$b2" '缓冲版模块文档'
+check_contains "引用已打开模块的 import hover 用缓冲 docstring" "$b3" '缓冲版模块文档'
+check_not_contains "引用已打开模块时不回落到磁盘 docstring" "$b3" '磁盘版模块文档'
+check_contains "打开着的模块里符号 hover 的 docstring 用缓冲" "$b4" '缓冲版函数文档'
+check_not_contains "打开着的模块里符号 hover 不回落到 Index 的磁盘 docstring" "$b4" '磁盘版函数文档'
+
+# ---- 26c) 模块名本身是完整 token（Base.Maybe Int）：中间段 / 末段都要命中 ----
+# 回归点（本次修复）：前缀候选只含「更长的 token 的前缀」，t : Base.Maybe Int 光标落在
+# Maybe 时被当成普通 token → hover/definition 都 null（而 `Base.List.map` 里的 List 正常）。
+# 修复后候选里加了整个 token，Base.Maybe 这种「token 就是模块名」的写法也能解析。
+mkdir -p "$tmp/modtokws/lib"
+printf '[package]\nname = "modtokws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/modtokws/vuna.toml"
+cat >"$tmp/modtokws/lib/Tok.vuna" <<'VEOF'
+module Tok where
+
+import Base.Maybe
+
+v : Base.Maybe.Maybe Int
+v = Base.Maybe.Nothing
+VEOF
+tokdoc_uri="file://$tmp/modtokws/lib/Tok.vuna"
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
+  # line4 char9 = `Base.Maybe.Maybe` 的 Maybe（模块名是 token 的前缀）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":5,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/modtok.out" 2>/dev/null
+t2=$(lsp_frame_id "$tmp/modtok.out" 2)
+t3=$(lsp_frame_id "$tmp/modtok.out" 3)
+t4=$(lsp_frame_id "$tmp/modtok.out" 4)
+check_contains "类型里 Base.Maybe.Maybe 的模块段 hover 出模块名" "$t2" 'module Base.Maybe'
+check_contains "类型里的模块段 hover 带模块 docstring" "$t2" '可选值类型'
+check_contains "类型里的模块段 definition 跳到 Maybe.vuna" "$t3" '/Base/Maybe.vuna'
+check_contains "值里 Base.Maybe.Nothing 的模块段 hover 出模块名" "$t4" 'module Base.Maybe'
+
+# ---- 26d) 模块名候选不吃「名字后面的分隔点」----
+# Base.Maybe Int 里 Base.Maybe 之后的空格不属于模块名；Base.List.map 的 . 也不属于
+# Base.List。光标在这些位置时不该报模块（否则同一行的 hover 在相邻两格跳变）。
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
+  # line4 char14 = Base.Maybe 后面的 `.`（属于限定名，不是模块名的最后一格）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":14}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/modsep.out" 2>/dev/null
+sep2=$(lsp_frame_id "$tmp/modsep.out" 2)
+check_contains "模块名后的分隔点不报模块（hover 回 null）" "$sep2" '"result":null'
+
 
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"

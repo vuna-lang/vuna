@@ -10,7 +10,8 @@ module Vuna.Lsp where
 --
 -- M40 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
 -- definition：Bindings → Index 符号 → 同文件缓冲兜底。Bindings 是 parse 级的，不触发
--- 索引构建；模块引用命中时 docstring 来自目标文件（当前文件用缓冲）。
+-- 索引构建；模块引用/符号的 docstring 以**打开中的缓冲**为准（`bufferTexts`），未打开的
+-- 目标才读盘——两处口径一致，同一模块不会出现两个版本的文档字符串。
 -- C38：rename / prepareRename 走 `Vuna.Lsp.Rename`（局部绑定复用 Bindings 的作用域
 -- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，新增洞的
 -- case split（`refactor.rewrite`，构造子解析在 Query）与 `vuna.fixAllLint` command
@@ -25,7 +26,8 @@ module Vuna.Lsp where
 -- 已知边界：
 --   - didChange 跑一次完整 DT 精化（同 uri + 内容重复请求命中进程内诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
---   - Index 只反映磁盘内容、不随 didChange 刷新；构建失败则相关方法退化返回空结果；
+--   - Index 只反映磁盘内容、不随 didChange 刷新（hover 的 docstring 例外：打开着的文件以
+--     缓冲为准，见 `bufferTexts` / `Bindings.bufferDeclDoc`）；构建失败则相关方法退化返回空结果；
 --   - 首次索引查找可能触发索引全量重建（会话对象未命中；仓库级秒级），期间请求排队；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
 import Base.HostRow
@@ -164,6 +166,14 @@ textForUri : String -> LspState -> String
 textForUri uri st = case docLookup uri st.stateDocs of
   Nothing => ""
   Just d => d.docText
+
+-- 打开中的文档 → (路径, 文本)：模块 hover/definition 用它们判断「模块的最新文本」，
+-- 避免同一个模块的 docstring 在它自己的文件与引用它的文件里显示成不同版本。
+bufferTexts : LspState -> List (Pair String String)
+bufferTexts st = map docToPair st.stateDocs
+
+docToPair : Doc -> Pair String String
+docToPair d = Pair (decodeUri d.docUri) d.docText
 
 -- ---------------------------------------------------------------
 -- capabilities（M30 P2：全套；C38 增加 refactor.rewrite 与 executeCommand）
@@ -308,7 +318,7 @@ handleHover msg state =
     case holeHover of
       Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
       Nothing => do
-        bindHover <- bindingHoverAt uri line col text
+        bindHover <- bindingHoverAt (bufferTexts state) uri line col text
         case bindHover of
           Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
           Nothing => do
@@ -317,7 +327,7 @@ handleHover msg state =
               state1 = firstOf indexPair
               midx = secondOf indexPair
             in pure
-              (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult uri line col text midx)]))
+              (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
 handleFormatting : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
@@ -422,7 +432,7 @@ handleDefinition msg state =
     col = colOfParams params + 1
     text = textForUri uri state
   in do
-    bindLoc <- bindingDefinitionAt uri line col text
+    bindLoc <- bindingDefinitionAt (bufferTexts state) uri line col text
     case bindLoc of
       Just loc => pure (Pair False (Pair state [responseOk (idOf msg) loc]))
       Nothing => do

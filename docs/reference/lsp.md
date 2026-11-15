@@ -54,9 +54,14 @@ Content-Length: <字节数>\r\n
 
 - **模块引用**：`import` 的模块名 / alias、导出项 `module B`（全名或 alias）、模块头自身、
   限定名的模块前缀（`Base.List.map` 光标落在 `List` ⇒ 模块 `Base.List`；落在 `map` ⇒ 不命中）。
+  token 本身也作为候选（`Base.Maybe Int` 这种「token 就是模块名」的类型/值写法，光标落在
+  `Maybe` 也命中 `Base.Maybe`）；但名字**外侧**的一格（`.` / 空格）不算模块名的一部分。
   模块名 → 文件按**包上下文模块根**探测（`Pkg.contextForFile` 的 roots：本包 `lib/` 在前、
-  依赖闭包在后，workspace 外的依赖包也能定位）；模块 docstring 走 `Doc.Comments.docTableOf`
-  （当前文件用缓冲，其他模块读盘）。找不到路径时 hover 只给 `module <全名>`，definition 为空。
+  依赖闭包在后，workspace 外的依赖包也能定位）；模块 docstring 走 `Doc.Comments.docTableOf`，
+  文本来源是**打开中的缓冲 > 磁盘**——服务器把 didOpen/didChange 维护的文档表交给 Bindings，
+  所以同一个模块的 docstring 在它自己的文件与引用它的文件里是同一版本；符号 hover 也按同一条
+  口径覆盖 Index 的 `symDoc`（Index 本身仍是磁盘快照）。找不到路径时 hover 只给
+  `module <全名>`，definition 为空。
 - **局部绑定**：顶层函数参数（类型按同名签名的箭头链）、λ 参数、`let` / `where`（签名行
   `EAnn` 给出类型；值能单行打印时同时显示 `= 值`）、`case` 分支模式、`do` 绑定、`as` 模式、
   记录模式字段。作用域是**顺序**的（后续绑定可见前面、不互递归，与精化器一致），最内层优先；
@@ -121,7 +126,9 @@ Content-Length: <字节数>\r\n
   `_`；洞在**类型位置**时生成的 `case` 不是合法表达式（goal API 不区分表达式/类型位置，
   action 只是建议）。`fix all` 的 command 形式依赖客户端支持 `workspace/applyEdit`
   （不支持的客户端不会应用修正）。
-- 模块 hover 每次读目标文件（未保存改动不反映，与依赖诊断一致，无进程内缓存）；
+- 模块 hover / 符号 hover 的 docstring 以**打开中的缓冲**为准，未打开的目标才读盘；判定仍然
+  是每次请求重算（无进程内缓存）。Index 本身不随 didChange 刷新，所以「打开文件之外」的符号
+  文档仍是磁盘版本；
   局部绑定没有推断类型（Pi binder 的类型取 domain 语法类型，λ / `let` / `case` 仍无推断类型）；
   洞查询用容错入口，跳过用量/终止性校验（只影响 hover / `goal`，不影响 `check`）；同名 `?name`
   不共享求解。Pi binder 解析与 `references` 局部名识别已支持（见上）。

@@ -199,7 +199,7 @@ lib/Vuna/Lint/Diagnostics.vuna: LintEntry(..), LintRule(..), lintAll, lintCode, 
 lib/Vuna/Lint/Fix.vuna: fixLoop
 lib/Vuna/Lint/Rules.vuna: Edit(..), Finding(..), isNilList, joinLines, lintSourceWith, splitLines
 lib/Vuna/Lsp.vuna: runLsp, runLspTool
-lib/Vuna/Lsp/Bindings.vuna: bindingDefinitionAt, bindingHoverAt, bindingRenameOccurrences, localBindingAtSf, moduleSourceIn
+lib/Vuna/Lsp/Bindings.vuna: bindingDefinitionAt, bindingHoverAt, bindingRenameOccurrences, bufferDeclDoc, localBindingAtSf, moduleSourceIn
 lib/Vuna/Lsp/Diagnostics.vuna: DiagCache, contextForDoc, diagReportJson, diagnosticsForCached, diagnosticsForSuggestions, findingDiagJson, publishDiagnosticsCached, publishDiagnosticsEmpty, publishDiagnosticsFor
 lib/Vuna/Lsp/Protocol.vuna: clampInt, decodeUri, dirOfPath, dropDotCodes, fileNameOf, fileScheme, findNamePos, findSubGo, findSubstring, flushLogLines, hexDigitCode, hexValue, isEmptyList, isPrefixChars, isWordCode, lastElem, lastSegment, lastSlashGo, lastSlashIndex, lineAt1, lineText, logLine, lspPosition, lspRange, maxInt, module Vuna.Json.Frame, module Vuna.Json.Rpc, nthCode, parentDir, pathToUri, percentDecode, percentDecodeChars, percentEncode, percentEncodeChars, posBeforeOrEq, qualPrefixLen, scanNameLines, spanContainsPos, spanRange, stripTrailingDots, tokenAtCursor, uriSafe, wordPrefixLen
 lib/Vuna/Lsp/Query.vuna: codeActionsFor, completionItems, definitionResult, documentSymbols, fixAllLintCommand, fixAllLintWorkspaceEdit, formattingEdits, holeHoverAt, referencesResult, symbolHoverResult, workspaceRoot, workspaceSymbols
