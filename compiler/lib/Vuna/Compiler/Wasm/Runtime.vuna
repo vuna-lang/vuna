@@ -769,6 +769,7 @@ rtImplOf name =
   else if name == "strUnpack" then RtFunc 1 "$rt_strUnpack"
   else if name == "strPack" then RtFunc 1 "$rt_strPack"
   else if name == "strConcatMany" then RtFunc 1 "$rt_strConcatMany"
+  else if name == "strSubstTemplate" then RtFunc 2 "$rt_strSubstTemplate"
   else if name == "strAt" then RtFunc 2 "$rt_strAt"
   else if name == "strSubstring" then RtFunc 3 "$rt_substring"
   else if name == "strHash" then RtFunc 1 "$rt_strHash"

@@ -198,7 +198,7 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/m3a-wnest" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: 42
 
-# 16) List 桥接 strUnpack / strPack / strConcatMany（wasm 侧）。
+# 16) List 桥接 strUnpack / strPack / strConcatMany / strSubstTemplate（wasm 侧）。
 run: sh -c 'd="$TMPDIR/m3b"; mkdir -p "$d/app"; printf "[package]\nname = \"m3b\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strPack (strUnpack \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-pack" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/m3b-pack" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
@@ -215,6 +215,15 @@ run: sh -c 'd="$TMPDIR/m3b"; printf "import Base.String\n\nmain : String\nmain =
 exit: 0
 run: sh -c 'cd "$TMPDIR/m3b-join" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: "a-b-c"
+# 模板替换：越界序号原样保留，`<>` / 结尾 `<` 按字面处理（与 dtp_substTemplate 一致）。
+run: sh -c 'd="$TMPDIR/m3b"; printf "import Base.Vec\n\nmain : String\nmain = substTemplate \"x=<0>, y=<1>, z=<9>; <>.\" [\"A\", \"B\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-st" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/m3b-st" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "x=A, y=B, z=<9>; <>."
+run: sh -c 'd="$TMPDIR/m3b"; printf "main : String\nmain = strSubstTemplate \"<01>|<10>|a<\" [\"A\", \"B\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-st2" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/m3b-st2" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "B|<10>|a<"
 
 # 13) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
 run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'

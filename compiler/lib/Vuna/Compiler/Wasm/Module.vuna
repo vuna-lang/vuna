@@ -646,8 +646,7 @@ else case alts of
         Ok q => Ok (Pair (append (firstOf bp) (firstOf q)) (secondOf q))
 
 -- ---------------------------------------------------------------
--- List 桥接：strUnpack / strPack / strConcatMany
--- （strSubstTemplate 仍是待办；见 docs/reference/wasm.md §9）
+-- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
 -- ---------------------------------------------------------------
 catI : List (List Instr) -> List Instr
 catI xs = concatMap (\x => x) xs
@@ -665,7 +664,8 @@ wasmNilCell lf =
 
 wasmBridgeFuncs : Maybe WasmListFam -> List WatFunc
 wasmBridgeFuncs Nothing = []
-wasmBridgeFuncs (Just lf) = [rtStrUnpackF lf, rtStrPackF lf, rtStrConcatManyF lf]
+wasmBridgeFuncs (Just lf) =
+  [rtStrUnpackF lf, rtStrPackF lf, rtStrConcatManyF lf, rtStrArgAtF lf, rtStrSubstTemplateF lf]
 
 rtStrUnpackF : WasmListFam -> WatFunc
 rtStrUnpackF lf =
@@ -711,6 +711,62 @@ rtStrConcatManyF lf =
       catI
         [[ILocalGet "$p0", ILocalSet "$cur", IConstI32 0, ILocalSet "$total"], [IBlock "$c_count_done" "" [ILoop "$c_count" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$c_count_done", ILocalGet "$total", ILocalGet "$cur", IRefCast ty, IStructGet ty 1, IRefCast "$str", IArrayLen, IBinop "i32.add", ILocalSet "$total", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$c_count"]]], [ILocalGet "$total", IArrayNewDefault "$str", ILocalSet "$out", IConstI32 0, ILocalSet "$idx", ILocalGet "$p0", ILocalSet "$cur"], [IBlock "$c_fill_done" "" [ILoop "$c_fill" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$c_fill_done", ILocalGet "$out", ILocalGet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 1, IRefCast "$str", ILocalTee "$src", IConstI32 0, ILocalGet "$src", IArrayLen, IArrayCopy "$str" "$str", ILocalGet "$idx", ILocalGet "$src", IArrayLen, IBinop "i32.add", ILocalSet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$c_fill"]]], [ILocalGet "$out"]]
   in WatFunc "$rt_strConcatMany" "" params [WvAnyRef] locals body
+
+rtStrArgAtF : WasmListFam -> WatFunc
+rtStrArgAtF lf =
+  let
+    ty = wasmListTy lf
+  in WatFunc "$rt_strArgAt" "" [Pair "$p0" WvAnyRef, Pair "$p1" WvI32] [WvAnyRef] []
+    (catI [[IBlock "$a_done" "" [ILoop "$a_l" "" [ILocalGet "$p1", IPlain "i32.eqz", IBrIf "$a_done", ILocalGet "$p0", IRefCast ty, IStructGet ty 2, ILocalSet "$p0", ILocalGet "$p1", IConstI32 1, IBinop "i32.sub", ILocalSet "$p1", IBr "$a_l"]]], [ILocalGet "$p0", IRefCast ty, IStructGet ty 1]])
+
+-- | 解析 `<digits>` 的前导（`$i` 指向 `<`）：结果在 `$j`（数字串末尾）与 `$k`（数值）。
+stDigits : List Instr
+stDigits =
+  [ ILocalGet "$i",
+    IConstI32 1,
+    IBinop "i32.add",
+    ILocalSet "$j",
+    IConstI32 0,
+    ILocalSet "$k",
+    IBlock "$d_done" "" [ILoop "$d_l" "" [ILocalGet "$j", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$d_done", ILocalGet "$t", ILocalGet "$j", IArrayGetU "$str", ILocalSet "$b", ILocalGet "$b", IConstI32 48, IBinop "i32.lt_s", IBrIf "$d_done", ILocalGet "$b", IConstI32 57, IBinop "i32.gt_s", IBrIf "$d_done", ILocalGet "$k", IConstI32 10, IBinop "i32.mul", ILocalGet "$b", IConstI32 48, IBinop "i32.sub", IBinop "i32.add", ILocalSet "$k", ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$j", IBr "$d_l"]]
+  ]
+
+-- | 占位符判定失败时跳到 `$name`：`$j >= n`、`tmpl[$j] != '>'` 或 `$j <= $i + 1`。
+stNotPlaceholder : String -> List Instr
+stNotPlaceholder name =
+  [ ILocalGet "$j",
+    ILocalGet "$n",
+    IBinop "i32.ge_s",
+    IBrIf name,
+    ILocalGet "$t",
+    ILocalGet "$j",
+    IArrayGetU "$str",
+    IConstI32 62,
+    IBinop "i32.ne",
+    IBrIf name,
+    ILocalGet "$j",
+    ILocalGet "$i",
+    IConstI32 1,
+    IBinop "i32.add",
+    IBinop "i32.le_s",
+    IBrIf name
+  ]
+
+-- | `strSubstTemplate`：`<digits>` 且下标存在则替换，否则原样保留
+--   （与 `dtp_substTemplate` 一致）。两遍扫描：先算长度，再分配填充。
+rtStrSubstTemplateF : WasmListFam -> WatFunc
+-- 初始化：模板 / 实参个数 / 累计长度 / 游标
+-- 第一遍：数长度
+-- 不是占位符：`<` 按字面处理
+-- 分配 + 重置游标（WasmGC array 自带长度，不需要写头）
+-- 第二遍：填充
+-- 不是占位符：`<` 按字面处理
+rtStrSubstTemplateF lf =
+  let
+    ty = wasmListTy lf
+  in WatFunc "$rt_strSubstTemplate" "" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef]
+    [Pair "$t" (WvRef "$str"), Pair "$args" WvAnyRef, Pair "$n" WvI32, Pair "$na" WvI32, Pair "$total" WvI32, Pair "$i" WvI32, Pair "$j" WvI32, Pair "$k" WvI32, Pair "$b" WvI32, Pair "$out" (WvRef "$str"), Pair "$oidx" WvI32, Pair "$arg" (WvRef "$str"), Pair "$cur" WvAnyRef]
+    (catI [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$t", ILocalGet "$t", IArrayLen, ILocalSet "$n", ILocalGet "$p1", ILocalSet "$args", IConstI32 0, ILocalSet "$na", ILocalGet "$args", ILocalSet "$cur", IBlock "$na_done" "" [ILoop "$na_l" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$na_done", ILocalGet "$na", IConstI32 1, IBinop "i32.add", ILocalSet "$na", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$na_l"]], IConstI32 0, ILocalSet "$total", IConstI32 0, ILocalSet "$i"], [IBlock "$c_done" "" [ILoop "$c_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$c_done", ILocalGet "$t", ILocalGet "$i", IArrayGetU "$str", IConstI32 60, IBinop "i32.ne", IIf "" [ILocalGet "$total", IConstI32 1, IBinop "i32.add", ILocalSet "$total", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$c_l"] (append [IBlock "$c_skip" "" (append stDigits (append (stNotPlaceholder "$c_skip") [ILocalGet "$k", ILocalGet "$na", IBinop "i32.lt_s", IIf "" [ILocalGet "$total", ILocalGet "$args", ILocalGet "$k", ICall "$rt_strArgAt", IRefCast "$str", IArrayLen, IBinop "i32.add", ILocalSet "$total"] [ILocalGet "$total", ILocalGet "$j", ILocalGet "$i", IBinop "i32.sub", IConstI32 1, IBinop "i32.add", IBinop "i32.add", ILocalSet "$total"], ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$c_l"]))] [ILocalGet "$total", IConstI32 1, IBinop "i32.add", ILocalSet "$total", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$c_l"])]]], [ILocalGet "$total", IArrayNewDefault "$str", ILocalSet "$out", IConstI32 0, ILocalSet "$oidx", IConstI32 0, ILocalSet "$i"], [IBlock "$f_done" "" [ILoop "$f_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$f_done", ILocalGet "$t", ILocalGet "$i", IArrayGetU "$str", IConstI32 60, IBinop "i32.ne", IIf "" [ILocalGet "$out", ILocalGet "$oidx", ILocalGet "$t", ILocalGet "$i", IArrayGetU "$str", IArraySet "$str", ILocalGet "$oidx", IConstI32 1, IBinop "i32.add", ILocalSet "$oidx", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$f_l"] (append [IBlock "$f_skip" "" (append stDigits (append (stNotPlaceholder "$f_skip") [ILocalGet "$k", ILocalGet "$na", IBinop "i32.lt_s", IIf "" [ILocalGet "$out", ILocalGet "$oidx", ILocalGet "$args", ILocalGet "$k", ICall "$rt_strArgAt", IRefCast "$str", ILocalTee "$arg", IConstI32 0, ILocalGet "$arg", IArrayLen, IArrayCopy "$str" "$str", ILocalGet "$oidx", ILocalGet "$arg", IArrayLen, IBinop "i32.add", ILocalSet "$oidx", ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$i"] [IBlock "$lit_done" "" [ILoop "$lit_l" "" [ILocalGet "$i", ILocalGet "$j", IBinop "i32.gt_s", IBrIf "$lit_done", ILocalGet "$out", ILocalGet "$oidx", ILocalGet "$t", ILocalGet "$i", IArrayGetU "$str", IArraySet "$str", ILocalGet "$oidx", IConstI32 1, IBinop "i32.add", ILocalSet "$oidx", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$lit_l"]], ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$i"], IBr "$f_l"]))] [ILocalGet "$out", ILocalGet "$oidx", ILocalGet "$t", ILocalGet "$i", IArrayGetU "$str", IArraySet "$str", ILocalGet "$oidx", IConstI32 1, IBinop "i32.add", ILocalSet "$oidx", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$f_l"])]]], [ILocalGet "$out"]])
 
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFunc fuel st d = case d of
