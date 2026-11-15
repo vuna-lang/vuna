@@ -4,7 +4,7 @@ module Vuna.Compiler.Loader.Modules where
 --
 -- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
 -- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
--- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 保持原 API。
+-- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 重导出这些入口。
 import Base.HostRow
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
@@ -18,7 +18,7 @@ import Vuna.Compiler.Packages.Pkg
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
--- M31.2：最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
+-- 最后一个字段是**可见 fixity 表**（本模块声明 + imports 闭包，查找时本模块优先；
 -- 中缀重排见 `Loader.Fixity`）。
 export record Module(..) where
   moduleNameOf : String
@@ -28,16 +28,16 @@ export record Module(..) where
   moduleDeclsOf : List Decl
   moduleExportsOf : List ExportEntry
   moduleFixitiesOf : List FixityDecl
-  -- | M45：模块头导出列表里 `module X` 重导出的 import 名（`import X` / `import X as Y`
+  -- | 模块头导出列表里 `module X` 重导出的 import 名（`import X` / `import X as Y`
   -- 统一成 `X`）。resolve 期把它们并入 used-import 集合，`UN_UnusedImport` 才不会把
   -- 「只用于重导出」的 import 报成未使用（used-set 在加载期标记、resolve 期被重置）。
   moduleReexportsOf : List String
   -- D11：本模块声明为 opaque 的定义全名（已 mangle）；下游 depStart 不把它们的体放进 deftbl。
   moduleOpaqueOf : List String
 
--- 已加载项目：入口声明/import + 依赖模块列表（M12 分离编译用；保持 flatten 前的形态）。
--- entryPkg 用于按包限制 effectful 内建（M12.6：普通包只能经 Eff + handler 使用效果）。
--- M31.2：entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
+-- 已加载项目：入口声明/import + 依赖模块列表（保持 flatten 前的形态）。
+-- entryPkg 用于按包限制 effectful 内建（普通包只能经 Eff + handler 使用效果）。
+-- entryFixities 是入口文件自己的 fixity 声明（入口 decls 的重排要用）。
 export record Project(..) where
   projectEntryDecls : List Decl
   projectEntryImports : List Import
@@ -61,7 +61,7 @@ moduleDeclsOf (Module n p is imps ds es fx _ _) = ds
 export moduleFixitiesOf : Module -> List FixityDecl
 moduleFixitiesOf (Module n p is imps ds es fx _ _) = fx
 
--- | M45：模块重导出的 import 名（见 Module 字段注释）。
+-- | 模块重导出的 import 名（见 Module 字段注释）。
 export moduleReexportsOf : Module -> List String
 moduleReexportsOf (Module n p is imps ds es fx reexports _) = reexports
 
@@ -71,7 +71,7 @@ moduleOpaqueOf (Module n p is imps ds es fx reexports opacity) = opacity
 export projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
 
--- M28（B18）：解析期的三个命名空间，与导出表 kind 一一对应，**不再拍平**。
+-- 解析期的三个命名空间，与导出表 kind 一一对应，**不拍平**。
 --   values = 值命名空间（DFun / 签名 / 实例名；导出 kind "val"）
 --   ctors  = 构造子命名空间（data 构造子 / record 名 / trait 方法；导出 kind "ctor"）
 --   types  = 类型命名空间（data / record / trait 的类型名；导出 kind "type"）
@@ -80,19 +80,19 @@ export record Namespaces(..) where
   nsValues : List String
   nsCtors : List String
   nsTypes : List String
-  -- M34：解析期查找的 O(1) 版本（每个 EVar 都会查这三个集合；list 线性查找在几十万
+  -- 解析期查找的 O(1) 版本（每个 EVar 都会查这三个集合；list 线性查找在几十万
   -- 节点上是主要 resolve 成本）。list 字段保留给错误提示的 suggest。
   nsValueSet : HashMap String Bool
   nsCtorSet : HashMap String Bool
   nsTypeSet : HashMap String Bool
-  -- M41：data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
+  -- data/record 构造子的候选表（短名 → 未加模块 prefix 的 "Data.Ctor"）。
   -- 同名构造子按族区分；trait 方法不在此表（不是族的构造子）。
   nsCtorCands : List (Pair String String)
   -- release 构建模式：Resolve 的 assert/todo 拒绝检查用（显式传入，不读进程环境）。
   nsRelease : Bool
 
 -- 字段访问按全局唯一字段名解析（Elab 降级成模式绑定）；构造用命名字段。
--- 模块导出表（M10）。每条是「本模块公开名 → 定义处带模块前缀的名字」。
+-- 模块导出表。每条是「本模块公开名 → 定义处带模块前缀的名字」。
 -- kind 用字符串区分两套命名空间：val（函数/值）、ctor（构造器）、type（类型名）。
 -- ctor 条目额外记录所属数据类型的定义名，供 `T(..)` 重导出保持源模块的抽象性。
 -- 模块导出表条目：公开名、定义处名字、所属类型（仅 ctor）。
@@ -132,9 +132,8 @@ validModuleName name = case splitOnDot name of
 export mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
 
--- M41：构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
+-- | 构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
 -- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
--- | 自动补注（M41 新增导出）：ctorCanonical。
 export ctorCanonical : String -> String -> String -> String
 ctorCanonical prefix dname cname = mangle prefix "${dname}.${cname}"
 
@@ -204,7 +203,7 @@ export findImportPrefix : List Import -> String -> Maybe String
 findImportPrefix imports prefix = findImportModule imports prefix
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
--- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合（M45）。
+-- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合。
 export reexportedImportNames : List Import -> List ExportItem -> List String
 reexportedImportNames imports items = reexportedImportNamesGo imports items []
 
@@ -228,10 +227,10 @@ _joinNames [] = ""
 _joinNames ([x]) = x
 _joinNames (x :: rest) = "${x}, ${_joinNames rest}"
 
--- M24.7：查一个**必须已加载**的模块。旧实现把「模块未加载」当成「空表」
--- （`moduleDecls` / `exportsOf` 的 `Nothing => []`）：调用方只看到「没有这个导出」，
--- 于是一个加载器状态不一致被伪装成普通的「名字不存在」，错误被静默吞掉。
--- 现在缺模块直接返回清晰的 Err（这是内部不变量，不是用户源码错误）。
+-- 查一个**必须已加载**的模块。把「模块未加载」当成「空表」（`moduleDecls` /
+-- `exportsOf` 的 `Nothing => []`）会让调用方只看到「没有这个导出」，于是一个加载器
+-- 状态不一致被伪装成普通的「名字不存在」，错误被静默吞掉。缺模块直接返回清晰的 Err
+-- （这是内部不变量，不是用户源码错误）。
 missingModule : String -> Check a
 missingModule name =
   icInternal "module ${name} is not loaded (import list and module table disagree)"
@@ -262,12 +261,11 @@ findExportValue entries name = lookupExport ["val", "ctor"] name entries
 export findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
 findExportCtor entries name = lookupExport ["ctor"] name entries
 
--- M41：同名构造子可以有多条导出（不同族、不同 target）。裸名解析要拿全集。
--- | 自动补注（M41 新增导出）：findExportCtors。
+-- | 同名构造子可以有多条导出（不同族、不同 target）。裸名解析要拿全集。
 export findExportCtors : List ExportEntry -> String -> List ExportEntry
 findExportCtors entries name = filterCtors name entries
 
--- | 自动补注（M41 新增导出）：filterCtors。
+-- | 导出表里 kind 为 ctor 且公开名匹配的全部条目。
 filterCtors : String -> List ExportEntry -> List ExportEntry
 filterCtors name [] = []
 filterCtors name (e :: rest) =
@@ -290,7 +288,7 @@ export modulesExportingValue : List Module -> List Import -> String -> Check (Li
 modulesExportingValue modules imports name =
   modulesExportingValueFrom modules (openModuleNames imports) name
 
--- | 自动补注（M41 新增导出）：modulesExportingCtorFrom。
+-- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
 modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules [] name = OkC []
 modulesExportingCtorFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => let
@@ -337,7 +335,7 @@ rootAllows importerPkg root name = case root.rootExports of
   Nothing => True
   Just mods => rootName root == importerPkg || memName name mods
 
--- M4（效果显式化）：模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
+-- 模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
 export collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff hostRow (Pair (List (Pair String Root)) (List String))
 collectModuleFiles [] name importerPkg allowed hidden =
@@ -387,16 +385,16 @@ findModule ((Module mname mpkg imports imps decls exports fx reexports opacity) 
   if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports opacity)
   else findModule rest name
 
--- M41：target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”
+-- target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”
 -- 里排除；trait method 不是族的构造子，仍按原名字解析）。
--- | 自动补注（M41 新增导出）：isDataOrRecordCtorTarget。
+-- | 任一已加载模块里是否存在以 target 为 canonical 名的 data/record 构造子。
 export isDataOrRecordCtorTarget : List Module -> String -> Bool
 isDataOrRecordCtorTarget [] target = False
 isDataOrRecordCtorTarget (m :: rest) target =
   isCtorTargetInDecls (moduleNameOf m) target (moduleDeclsOf m)
     || isDataOrRecordCtorTarget rest target
 
--- | 自动补注（M41 新增导出）：isCtorTargetInDecls。
+-- | 单模块声明里是否存在 canonical 名为 target 的 data/record 构造子。
 isCtorTargetInDecls : String -> String -> List Decl -> Bool
 isCtorTargetInDecls mname target [] = False
 isCtorTargetInDecls mname target (d :: rest) = case d of
@@ -406,7 +404,7 @@ isCtorTargetInDecls mname target (d :: rest) = case d of
     mangle mname dname == target || isCtorTargetInDecls mname target rest
   _ => isCtorTargetInDecls mname target rest
 
--- | 自动补注（M41 新增导出）：anyCtorTarget。
+-- | `data dname` 的构造子里是否有 canonical 名为 target 的。
 anyCtorTarget : String -> String -> String -> List Ctor -> Bool
 anyCtorTarget mname dname target [] = False
 anyCtorTarget mname dname target (c :: rest) =

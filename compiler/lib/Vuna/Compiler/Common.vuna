@@ -3,7 +3,7 @@ module Vuna.Compiler.Common where
 
 -- Vuna.Compiler.Common：编译器门面（诊断重设计后）。
 --
--- 拆分（M1）：`Source` 只含位置/路径/近似名工具；`Diag` 只含诊断模型与
+-- 分工：`Source` 只含位置/路径/近似名工具；`Diag` 只含诊断模型与
 -- `Check a = OkC a | ErrC Diagnostic`。本模块把两者重导出，并保留固定类型的
 -- `bind`/`step`/`traverse`——811 处 `Vuna.Compiler.Common.bind` 调用点零改动。
 --
@@ -26,7 +26,7 @@ export bind : Check a -> (a -> Check b) -> Check b
 bind (OkC x) k = k x
 bind (ErrC e) k = ErrC e
 
--- | 显式效果外壳（M4）：`EffCheck a` 是 `Eff [] a` 的 record 包装，给 shell 层用；
+-- | 显式效果外壳：`EffCheck a` 是 `Eff [] a` 的 record 包装，给 shell 层用；
 -- 纯核心继续用 `Check`，不引入效果。
 export record EffCheck a(..) where
   effCheckRun : Eff [] a

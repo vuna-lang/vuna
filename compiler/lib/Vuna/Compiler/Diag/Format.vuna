@@ -1,10 +1,10 @@
 -- | 诊断渲染：short（首行）/ human（源码片段 + notes）/ JSON。
 module Vuna.Compiler.Diag.Format where
 
--- Vuna.Compiler.Diag.Format：诊断的唯一渲染层（诊断重设计 M5/M6）。
+-- Vuna.Compiler.Diag.Format：诊断的唯一渲染层。
 --
 -- 三个视图共享同一个 `Diagnostic`：
---   * `renderShort`：`file:line:col: [CODE] 消息`（编辑器 / grep / 过渡期夹具）；
+--   * `renderShort`：`file:line:col: [CODE] 消息`（编辑器 / grep / 文本夹具）；
 --   * `renderHuman`：rustc 风格首行 + 源码片段 + note/help；
 --   * `renderJson`：版本化机器格式（LSP / CI / 测试消费）。
 -- 禁止任何下游再从文本反解析位置或错误码。
@@ -72,7 +72,7 @@ applicabilityName MaybeIncorrect = "maybe-incorrect"
 applicabilityName HasPlaceholder = "has-placeholder"
 
 -- ---------------------------------------------------------------
--- short：首行（与过渡期 CLI 逐字节兼容）
+-- short：首行（`file:line:col: [CODE] 消息`）
 -- ---------------------------------------------------------------
 export renderShort : Diagnostic -> String
 renderShort = diagText

@@ -1,7 +1,7 @@
 -- | Frontend AST（Expr / Pat / Decl 等）的规范字节编码与解析器。
 module Vuna.Compiler.Canonical.Ast where
 
--- Vuna.Compiler.Canonical.Ast：语法层 AST 的规范字节格式（C32 内容寻址的哈希输入侧）。
+-- Vuna.Compiler.Canonical.Ast：语法层 AST 的规范字节格式（内容寻址的哈希输入侧）。
 --
 -- 这个模块只负责「值 -> 字节」和「字节 -> 值」；调用方（iface / 缓存）先决定要哈希
 -- 哪些声明，再对 `Decl` / `Expr` 调 `encX`（顶层用 `Bytes.encTop` 收成单串）。
@@ -808,13 +808,12 @@ decDeclsComplete s = case decDecls (strLength s) (curOf s) of
   Just (Pair v rest) => if curAtEnd rest then Just v else Nothing
 
 -- ---------------------------------------------------------------
--- 载荷层：整文件 `SourceFile`（AST 缓存条目）
+-- 载荷层：整文件 `SourceFile`
 -- ---------------------------------------------------------------
--- 这是 **load 阶段的 parse 产物**，不是哈希输入：AST 缓存 key 已经是对「路径 + 源文本」
--- 的内容地址（见 `Loader.Flatten.astKeyOf`），载荷只需自描述、可无损还原。
--- span 仍不参与（`dec*` 只能还原 `noSpan`）：缓存命中路径的诊断位置由
--- `Loader.Flatten` 的 parse 侧 span 恢复策略处理，与 hash 输入口径一致，
--- 不会出现「缓存命中 ⇒ 诊断位置变了」的二义性（见 docs/reference/cache.md）。
+-- 这是 **load 阶段的 parse 产物**，不是哈希输入：载荷只需自描述、可无损还原。
+-- span 不参与编码（`dec*` 只能还原 `noSpan`），与 hash 输入口径一致。
+-- lex 缓存（`Loader.Flatten`）走 `Canonical.Lex` 的 token 流而非本编码：token 带位置，
+-- 重放 parse 得到的 AST 与冷路径逐字节相同，诊断位置因此保真。
 --
 -- | `ExportItem`：模块头/重导出的一条导出项（`XBare` / `XTypeAll` / `XTypeSome` / `XModule`）。
 export encExportItem : ExportItem -> List String -> List String
@@ -852,7 +851,7 @@ encSourceFile f acc =
   encMaybe encModDecl f.sourceFileModDecl
     (encList encImportLike f.sourceFileImports (encList encFixityLike f.sourceFileFixities (encList encDecl f.sourceFileDecls (encList encExportSpec f.sourceFileExports (encList encExportItem f.sourceFileReexports (encList encOpacitySpec f.sourceFileOpacity acc))))))
 
--- `Import` / `FixityDecl` 的编码原本在 `Canonical.Elab`（iface 哈希输入）。这里不能
+-- `Import` / `FixityDecl` 的编码也在 `Canonical.Elab`（iface 哈希输入）。这里不能
 -- import `Canonical.Elab`（它会 import 本模块，成环），所以载荷层自带同格式编码器：
 -- 两种口径必须逐字节一致，`examples/infra` 的 §64 断言两者输出相等。
 encImportLike : Import -> List String -> List String

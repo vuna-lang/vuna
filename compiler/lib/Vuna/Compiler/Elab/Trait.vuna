@@ -1,7 +1,7 @@
 module Vuna.Compiler.Elab.Trait where
 
 -- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查、
--- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`；拆自 M24 的 `Elab.vuna`。
+-- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`。
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -18,7 +18,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 
 -- 类参数绑成隐式 binder 后的局部上下文。
--- M19：类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法签名推断：
+-- 类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法签名推断：
 -- 参数名被应用了 k 个实参就当 `Type -> ... -> Type`（k 个箭头），从未被应用就是 `Type`。
 export bindClassParams : List (Pair String Term) -> Ctx -> Ctx
 bindClassParams [] ctx = ctx
@@ -33,7 +33,7 @@ export classFieldTysGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Stri
 classFieldTysGo globals ctx ec [] acc = OkC (Pair (reverse acc) ec)
 classFieldTysGo globals ctx ec (m :: rest) acc = case m of
   Pair mname mexpr => Vuna.Compiler.Common.bind (checkType globals ctx ec (quantifyTraitSig (\nm => isJust (ctxLookup nm ctx)) mexpr (exprSpan mexpr))) (\p => case p of
-    -- M20：trait 方法签名里的自由小写名（`fmap` 的 `a`/`b`）量化为隐式类型参数。
+    -- trait 方法签名里的自由小写名（`fmap` 的 `a`/`b`）量化为隐式类型参数。
     Pair tyTerm (Pair sort ec1) => classFieldTysGo globals ctx ec1 rest (tyTerm :: acc)
   )
 
@@ -45,7 +45,7 @@ foldlAddDef ec (d :: rest) = foldlAddDef (ecAddDef ec d) rest
 -- 字典构造子的字段 Pi 链。**每个字段的域都要按它前面已插入的字段 binder 数移位**：
 -- 字段类型是相对「类参数 binder」精化的（类参数在 index 0），第 i 个字段的域在
 -- Pi 链里已经跨过 i 个字段 binder，不移位就会把类参数指到前一个字段上
--- （`Eq` / `Ord` 的多方法签名曾因此渲染成 `unit`）。
+-- （`Eq` / `Ord` 的多方法签名会因此渲染成 `unit`）。
 export foldPiFieldTys : List Term -> Term -> Term
 foldPiFieldTys fieldTys ty = foldPiFieldTysGo fieldTys 0 ty
 
@@ -55,8 +55,8 @@ foldPiFieldTysGo (f :: rest) n ty =
   TPi "_" False RigOmega (shift 0 n f) (foldPiFieldTysGo rest (n + 1) ty)
 
 -- 精化一个 trait：字典 DtData + 方法投影（签名 + 定义体）+ 类表项。
--- M29（A14）：额外返回「投影名 → 来源 span」表，供 `extraDefsOf` 给生成定义标来源；
--- M30（B20）方法签名带 span 后，这张表用**方法签名 span**（不再粗粒度到 trait 声明行）。
+-- 额外返回「投影名 → 来源 span」表，供 `extraDefsOf` 给生成定义标来源；
+-- 这张表用**方法签名 span**（精确到方法声明行，不是 trait 声明行）。
 export elabTrait : List (Pair String Term) -> Ec -> Pair Decl Span -> Check (Pair DtData (Pair (List (Pair String Term)) (Pair DtClass (Pair (List (Pair String Span)) Ec))))
 elabTrait globals ec (Pair d dsp) = case d of
   DTrait tname params methods sp => if length params == 0 then tcErr0 sp InterfaceNoParam
@@ -91,7 +91,7 @@ elabTraitFinal globals ec tname paramNames methods methodsP pKinds fieldTys =
         (foldParamPis paramsKinds (TType levelZero)) [] False ReprAuto [] False
     projs = methodProjections tname paramNames pKinds methodsP fieldTys
     projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
-    -- D27：字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
+    -- 字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
     -- 判定与 codegen 的字段 opaque 标志同源（`Elab.Meta.isOpaqueRuntimeTyIn`），上下文是
     -- 类参数 telescope（字段类型的自由变量正好是这些类参数）。
     fieldCtx = bindClassParams paramsKinds emptyCtx
@@ -144,7 +144,7 @@ dictParamArgs : List String -> Int -> List (Pair Term Rig)
 dictParamArgs [] i = []
 dictParamArgs (p :: ps) i = Pair (TVar p i (Span "" 0 0 0 0)) Rig0 :: dictParamArgs ps (i - 1)
 
--- trait 方法列表 → 旧内部形态（名字, 类型）对。span 走 `traitMethodSpan`。
+-- trait 方法列表 →（名字, 类型）对。span 走 `traitMethodSpan`。
 traitMethodPairs : List TraitMethod -> List (Pair String Expr)
 traitMethodPairs [] = []
 traitMethodPairs (m :: rest) = Pair (traitMethodName m) m.traitMethodType :: traitMethodPairs rest
@@ -154,8 +154,8 @@ traitMethodPairs (m :: rest) = Pair (traitMethodName m) m.traitMethodType :: tra
 --   body: `\p1 => ... \pn => \d => case d of MkDict_C f0..fn => fk x1..xar`
 -- 字段 fk 对应第 k 个方法（与构造子字段声明顺序一致）。
 --
--- M19：每个参数的 kind 由 `classParamKindOf` 从方法签名推断，高阶 kind（`Functor f` 的
--- `Type -> Type`）也按真实 kind 生成 binder，不再写死 `Type`。
+-- 每个参数的 kind 由 `classParamKindOf` 从方法签名推断，高阶 kind（`Functor f` 的
+-- `Type -> Type`）也按真实 kind 生成 binder，不写死 `Type`。
 export methodProjections : String -> List String -> List Term -> List (Pair String Expr) -> List Term -> List (Pair String Term)
 methodProjections tname params pKinds methods fieldTys =
   methodProjZip tname params pKinds 0 methods fieldTys
@@ -177,15 +177,15 @@ methodProjType tname params pKinds methodTy =
 -- 投影的定义体：`\p1 .. \pn => \d => \x0 .. \x(ar-1) => case d of MkDict_C f0..fn => f_k x0..`
 -- 签名 `{p1..pn} -> {d : Dict_C p1..pn} -> <方法类型>`；de Bruijn 索引：`_d = ar`（参数
 -- binder 在 d 之外，不影响 d 的内层索引）、`f_k = n-1-k`、`x_i = n+(ar-1-i)`（最内层 = 0，
--- 分支绑定子 f 在方法参数之内）。单参数时参数 binder 仍是 `_p`，与历史生成代码逐字节一致。
--- `rigs` 是方法显式参数各自的 multiplicity（M19：从方法签名逐 binder 取，`binderRig` 判据与
+-- 分支绑定子 f 在方法参数之内）。单参数时参数 binder 是 `_p`，多参数是 `_p0 .. _p{n-1}`。
+-- `rigs` 是方法显式参数各自的 multiplicity（从方法签名逐 binder 取，`binderRig` 判据与
 -- 实例方法体一致）。**lambda 链与应用点必须用同一份 rigs**：擦除位既不生成运行时形参、也不传
 -- 实参——两侧都跳过，才能与由 `checkDef` 生成的实例方法体（同样按 rig 跳过擦除位）严格对齐。
 export projectionBody : String -> Int -> List Rig -> Int -> Int -> Term
 projectionBody ctor fieldIdx rigs nFields nParams =
   projectionBodyOpaque False ctor fieldIdx rigs nFields nParams
 
--- D27：字典字段（= 方法类型）在运行时不可表示时，字典构造子的字段在 OCaml 里被渲染成
+-- 字典字段（= 方法类型）在运行时不可表示时，字典构造子的字段在 OCaml 里被渲染成
 -- 不透明值（`Obj.t`）。源码 case 由 `Elab.Term.Impl.opaqueBranchIndices` 给分支 binder 的
 -- 每个使用点包表现层 cast；而这里生成的 `TCase` 不经过精化，所以字段变量的使用要自己包
 -- `prim_erase`，否则 OCaml 侧会对 `Obj.t` 直接应用（`This is not a function`）。
@@ -205,7 +205,7 @@ projectionBodyOpaque fieldOpaque ctor fieldIdx rigs nFields nParams =
     lamArgs = methodArgLams rigs 0 caseTerm
   in projectionParamLams (projectionParamNames nParams) (TLam "_d" RigOmega lamArgs)
 
--- 参数 lambda 链：单参数保持历史名字 `_p`，多参数用 `_p0 .. _p{n-1}`。
+-- 参数 lambda 链：单参数用 `_p`，多参数用 `_p0 .. _p{n-1}`。
 projectionParamLams : List String -> Term -> Term
 projectionParamLams [] body = body
 projectionParamLams (nm :: rest) body = TLam nm Rig0 (projectionParamLams rest body)
@@ -223,7 +223,7 @@ export projectionDefs : String -> Int -> List (Pair String Expr) -> List Term ->
 projectionDefs tname nParams methods fieldTys nFields =
   projectionDefsOpaque (map (\_ => False) fieldTys) tname nParams methods fieldTys nFields
 
--- D27：按 `opaqueFields`（与方法同序）决定每个投影体是否给字典字段变量包 cast。
+-- 按 `opaqueFields`（与方法同序）决定每个投影体是否给字典字段变量包 cast。
 projectionDefsOpaque : List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
 projectionDefsOpaque flags tname nParams methods fieldTys nFields =
   projectionDefsOpaqueGo flags (dictCtorName tname) nParams methods fieldTys 0 nFields
@@ -243,7 +243,7 @@ export projectionDefsGo : String -> Int -> List (Pair String Expr) -> List Term 
 projectionDefsGo ctor nParams methods fieldTys idx nFields =
   projectionDefsOpaqueGo (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx nFields
 
--- B23：实例落点静态检查（孤儿实例）。
+-- 实例落点静态检查（孤儿实例）。
 --
 -- 规则：实例可声明在**定义 trait 的模块**，或**定义 head 类型（任一参数）的模块**；
 -- 内建类型（Int / String）视为全局可见，允许在任意模块声明实例（`Show Int` 这类
@@ -272,7 +272,7 @@ headTypeNamesOf (e :: rest) = case headTypeNameOf e of
   Just n => n :: headTypeNamesOf rest
   Nothing => headTypeNamesOf rest
 
--- 全局可见的内建类型（没有定义模块）：`Int` / `String` 与 M33 的内建类型构造子
+-- 全局可见的内建类型（没有定义模块）：`Int` / `String` / `Float` 与内建类型构造子
 -- `Array` / `IORef`。它们的实例可以声明在任意模块，
 -- `base/lib/Base/{Array,IORef}.vuna` 是约定落点。
 isGlobalHeadType : String -> Bool
@@ -307,7 +307,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
   Just n => tcErr1 msp (InstanceUnknownMethod n) n
   Nothing => case firstMissingInstanceMethod cls methods of
     Just m => case traitMethodSpanOf cls m allDecls of
-      -- M30（B20）：缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
+      -- 缺方法指向 trait 里的**方法签名行**，而不是实例声明行。
       Just mspan => tcErr0 mspan InstanceMissingMethod
       Nothing => tcErr0 msp InstanceMissingMethod
     Nothing =>
@@ -335,7 +335,7 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
       )
 
 -- 实例体：每个方法子句按方法签名 check，再按声明顺序组成字典构造子应用。
--- M29-T2b：实例带 telescope（类型参数）与 context（字典约束）：
+-- 实例带 telescope（类型参数）与 context（字典约束）：
 --   字典类型 = `Π tele(Rig0). Π ctx(Rig1). Dict_C <arg>`；
 --   字典值   = `λ tele(Rig0). λ ctx(Rig1). TCon MkDict <fields>`；
 --   方法体里对 tele 变量的字典需求先在**声明的 ctx** 里消解，消不掉且仍是刚性 ⇒
@@ -351,7 +351,7 @@ elabInstance instDecls allDecls globals classes datas ec (Pair (DInstance ctxE h
 elabInstance instDecls allDecls globals classes datas ec (Pair d dsp) =
   errAt dsp "DT: internal: expected an instance declaration"
 
--- 实例头/上下文的语法拆分：头是 `C arg`（M29 单参数 trait），约束是 `C arg`。
+-- 实例头/上下文的语法拆分：头是 `C arg`，约束是 `C arg`。
 instanceHeadParts : Expr -> Maybe (Pair String (List Expr))
 instanceHeadParts (EVar n sp) = Just (Pair n [])
 instanceHeadParts (EApp fn args sp) = case fn of
@@ -398,7 +398,7 @@ instSigHead (InstSigInfo c tele ctxE args head) = head
 
 -- 实例头+约束的类型化：
 --   1. 自由小写名（head 实参与 ctx 实参里）→ tele，kind 按应用次数推断（Sig.arityFun）；
---   2. 单态实例（tele=[] 且 ctx=[]）走 `closedTypeTerms`，保证 head 类型项与 M15 逐字节一致；
+--   2. 单态实例（tele=[] 且 ctx=[]）走 `closedTypeTerms`（纯语法到核心项的机械转换）；
 --   3. 参数化实例在 teleCtx 下按每个类参数的 kind 检查头实参，ctx 项同法得到字典域。
 -- 实例头的实参个数必须等于 trait 声明的参数个数（N>=1）。
 elabInstanceSig : List DtClass -> List (Pair String Term) -> List String -> Ec -> Span -> Expr -> List Expr -> Check (Pair InstSigInfo Ec)
@@ -413,20 +413,19 @@ elabInstanceSig classes globals defined ec0 sp headExpr ctxE = case instanceHead
           (\ctxParts => elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts)
 
 -- 参数化/带 ctx 实例的 head 类型化（在 teleCtx 下按**类参数 kind** 检查头实参与 ctx 实参）。
--- M35.1：head 实参不再是「必须是类型」——`Monad (State s)` / `Monad (ST r)` 这类
--- 类参数 kind 为 `Type -> Type` 的实例头，旧路径用 `checkType` 会报
--- `expected a type, but this expression has type Type -> Type`。
--- 改为从字典族的参数取 kind、用 `checkTypeAtKind` 在 kind 上检查（与 ctx 实参的
+-- head 实参不要求「必须是类型」：`Monad (State s)` / `Monad (ST r)` 这类类参数 kind 为
+-- `Type -> Type` 的实例头必须按 kind 检查（`checkType` 会报
+-- `expected a type, but this expression has type Type -> Type`）。
+-- 所以从字典族的参数取 kind、用 `checkTypeAtKind` 在 kind 上检查（与 ctx 实参的
 -- `dictArgKinds` 同一来源）。
 --
--- 多参数 trait 收尾（W3）：tele 变量的 kind 不再只按「被应用次数」推断，而是**先按类参数 kind 定位、
--- 再由实参精化解出**：
+-- 多参数 trait 的 tele 变量 kind 优先**按类参数 kind 定位、再由实参精化解出**：
 --   ① head/ctx 实参里**裸 tele 变量**的位置，kind 就是该类参数的 kind（`Member e ...`
 --      的 `e` 取 `Member` 第一个参数的 kind）——单参数 trait 的 `instance Show a` 走这里；
 --   ② 其余 tele 变量先绑一只 kind 元变量，实参精化时由构造子的参数 kind 解出
 --      （`instance Member e (Cons e r)` 的 `r` 从 `Cons` 第二个参数解成 `Row`）；
---   ③ 仍解不出（元变量自由 / 解里含自由变量）⇒ 回退旧的「应用次数」启发式，
---      保证单参数 trait（Functor/Monad/Eq/Ord/MonadIO）行为不回退。
+--   ③ 仍解不出（元变量自由 / 解里含自由变量）⇒ 回退「应用次数」启发式，
+--      单参数 trait（Functor/Monad/Eq/Ord/MonadIO）走这条。
 elabInstanceConstrained : List DtClass -> List (Pair String Term) -> List String -> Ec -> Span -> DtClass -> List Expr -> List (Pair String (List Expr)) -> Check (Pair InstSigInfo Ec)
 elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
   let
@@ -466,7 +465,7 @@ checkArgsAtKinds globals ctx ec _ _ sp = tcErr0 sp InstanceHeadNotApp
 
 -- 单态实例头的类型项（`instance Eq (Box Int)` 的头实参是复合类型）。
 -- 只做语法 → 核心项的机械转换（EVar → TGlobal、应用落成 Rig0 TApp）；
--- 裸 EVar（`Color` / `Int`）与旧 `instanceHeadTerm` 逐字节一致。
+-- 裸 EVar（`Color` / `Int`）直接落成 `TGlobal`。
 closedTypeTerms : List Expr -> Maybe (List Term)
 closedTypeTerms [] = Just []
 closedTypeTerms (a :: rest) = case closedTypeTerm a of
@@ -504,7 +503,7 @@ isLowerStart n = case strUnpack n of
   c :: rest => c >= 97 && c <= 122
 
 -- 实例 tele：裸变量位置先按类参数 kind 定位（seed），其余变量绑 kind 元变量等实参精化解出。
--- tele 顺序与旧实现一致（自由小写名按出现顺序去重，保留最后一次出现的位置）。
+-- tele 顺序是自由小写名按出现顺序去重，保留最后一次出现的位置。
 instanceTeleMetas : HashMap String Bool -> Expr -> List Expr -> List (Pair String Term) -> Ec -> Pair (List (Pair String Term)) Ec
 instanceTeleMetas banned combined exprs seeds ec =
   teleMetasInit (nubNames (keepOutBanned banned (concatMap exprFreeLower exprs))) seeds ec
@@ -545,7 +544,7 @@ ctxBareTeleSeeds classes ec ((Pair cname argExprs) :: rest) = case findClass cna
     Nothing => ctxBareTeleSeeds classes ec rest
     Just kinds => append (bareTeleSeeds argExprs kinds) (ctxBareTeleSeeds classes ec rest)
 
--- 实参精化完后收束 tele 的 kind：已解的元变量换成解（必须闭），未解的回退旧启发式。
+-- 实参精化完后收束 tele 的 kind：已解的元变量换成解（必须闭），未解的回退应用次数启发式。
 resolveTeleKinds : Expr -> List (Pair String Term) -> Ec -> List (Pair String Term)
 resolveTeleKinds combined [] ec = []
 resolveTeleKinds combined ((Pair v k) :: rest) ec =
@@ -560,7 +559,7 @@ resolveTeleKind combined v (TMeta m) ec = case solsLookup m (ecSolsP ec) of
   Nothing => fallbackTeleKind combined v
 resolveTeleKind combined v k ec = k
 
--- 旧启发式（单参数 trait 的历史行为）：变量被应用 k 次就 `Type -> ... -> Type`，否则 `Type`。
+-- 应用次数启发式（单参数 trait 的兜底）：变量被应用 k 次就 `Type -> ... -> Type`，否则 `Type`。
 fallbackTeleKind : Expr -> String -> Term
 fallbackTeleKind combined v = arityFun (exprMaxAppArity v combined) (TType levelZero)
 
@@ -653,13 +652,13 @@ instTypeTele body [] = body
 instTypeTele body ((Pair n k) :: rest) = TPi n True Rig0 k (instTypeTele body rest)
 
 -- 实例头 `Show Int` 的类型项（`Dict_Show Int`）。
--- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（M15 只支持单参数接口）。
+-- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（每个类参数一个实参项）。
 export instanceHeadTerm : Expr -> Term
 instanceHeadTerm (EApp fn (a :: rest) sp) = TGlobal (argNameOf a)
 instanceHeadTerm (EVar n sp) = TGlobal n
 instanceHeadTerm _ = TGlobal "Int"
 
--- 实例里出现 trait 没声明的方法 ⇒ 硬错误（旧实现静默忽略多余方法）。
+-- 实例里出现 trait 没声明的方法 ⇒ 硬错误（不得静默忽略多余方法）。
 export firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
 firstUnknownInstanceMethod cls methods =
   firstUnknownInstanceMethodGo (map (\m => baseNameOf (firstOf m)) cls.dtClassMethods) methods
@@ -688,7 +687,7 @@ hasMethodClauses name (d :: rest) = case d of
   DFun n pats body sp => baseNameOf n == name || hasMethodClauses name rest
   _ => hasMethodClauses name rest
 
--- M30（B20）：实例缺方法时把诊断落到 trait 里的**方法签名行**——先按类全名找到
+-- 实例缺方法时把诊断落到 trait 里的**方法签名行**——先按类全名找到
 -- trait 声明，再按方法全名找到方法签名 span；找不到（如外部生成的类）返回 Nothing，
 -- 调用方回退到实例声明 span。`decls` 是已 resolve 的全程序声明，trait 名与方法名
 -- 都是 mangle 后的全名（与 `dtClassMethods` / `firstMissingInstanceMethod` 一致）。
@@ -715,7 +714,7 @@ ctorResultType cls args =
 
 -- 类名 → `DtClass` 的查找只有一份实现（`Elab.Dict.findClass`，层更低）；本模块直接用。
 -- 方法实现：逐个把 `m p1..pn = body` 变成一个 lambda 字段值。
--- M29-T2b：期望类型在 bodyCtx（tele + ctx 字典 binder）下求值；方法体精化从 bodyCtx 起步，
+-- 期望类型在 bodyCtx（tele + ctx 字典 binder）下求值；方法体精化从 bodyCtx 起步，
 -- 于是方法体里对 tele 变量的字典需求能命中局部 ctx binder（`searchInstanceIn` 的 local 分支）。
 export elabInstanceMethodsCtx : List (Pair String Term) -> DtClass -> Ctx -> Int -> List Term -> Ec -> List Decl -> Span -> Check (Pair (List Term) (Pair (List (Pair Term Rig)) Ec))
 elabInstanceMethodsCtx globals cls ctx nCtx headArgs ec methods sp =
@@ -783,7 +782,7 @@ elabInstanceMethodsGo globals ctx nCtx ec ((Pair mname fty) :: rest) headArgs de
     )
 
 -- 实例体里某个方法的**全部**子句（多 clause 方法：`fmp g (MkBox2 x) = ...` 后紧跟
--- 同名 clause）。M21 起这些子句一起走 `elabFunDef` 的模式矩阵，而不是只取第一条。
+-- 同名 clause）。这些子句一起走 `elabFunDef` 的模式矩阵，不是只取第一条。
 export methodClausesNamed : String -> List Decl -> List (Pair (List Pat) Expr)
 methodClausesNamed mname decls = methodClausesGo mname decls []
 
@@ -796,7 +795,7 @@ methodClausesGo mname (d :: rest) acc = case d of
   _ => methodClausesGo mname rest acc
 
 -- 单个方法实现：把（已实例化的）方法签名当期望类型。
--- M21：方法子句允许构造子形参（`instance FMap Box2 where fmp g (MkBox2 x) = ...`），
+-- 方法子句允许构造子形参（`instance FMap Box2 where fmp g (MkBox2 x) = ...`），
 -- 多 clause 也支持；参数全是变量/通配时直接绑定，否则与普通函数一样经 `elabFunDef`
 -- 的模式矩阵降级，实例方法因此复用同一套索引精化与覆盖判定。
 elabInstanceMethodIn : List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair (List Pat) Expr) -> Check (Pair Term Ec)
@@ -807,7 +806,7 @@ export elabInstanceMethod : List (Pair String Term) -> Ec -> Term -> List (Pair 
 elabInstanceMethod globals ec mty clauses = elabInstanceMethodIn globals emptyCtx ec mty clauses
 
 -- ---------------------------------------------------------------
--- M29-T2b：实例 context 的字典消解
+-- 实例 context 的字典消解
 -- ---------------------------------------------------------------
 -- 方法体精化时对 tele 变量的字典需求被延迟成 `Constraint CkDict m (Dict_C a …)`；这里按**声明的 context**
 -- 逐个消解：goal 域与第 i 个 ctx 字典 binder 的类型 conv 相等 ⇒ 该 goal 消解到
@@ -907,13 +906,13 @@ clauseSpanOf [] = Span "" 0 0 0 0
 clauseSpanOf (c :: rest) = exprSpan (secondOf c)
 
 -- ---------------------------------------------------------------
--- 泛型实例约束提升（M20 剩余 / M22 前置 / M29 C05）
+-- 泛型实例约束提升
 -- ---------------------------------------------------------------
 -- 定义体对刚性类参数的字典需求（如 `mem` 的 `Dict_Eq a`）被 `deferEqDict` 延迟成 `?d`+自由目标；
 -- 体精化完后 `liftFreeDictGoals` 提升成隐式字典参数：`mem : a -> L a -> Bool` →
 -- `mem : {a} -> {d : Dict_Eq a} -> a -> L a -> Bool`，体前插 `TLam d`、`?d` 换 `d`、解孤儿 `?d`。
 --
--- M29（C05）：同一 domain 的多个目标只提升成**一只**字典 binder（否则 `bind ma` / `bind mb` /
+-- 同一 domain 的多个目标只提升成**一只**字典 binder（否则 `bind ma` / `bind mb` /
 -- `pure` 各产生一只 `Dict_Monad m`，arity 膨胀且泛型调用链上继续复制）。
 record DictGoalGroup where
   dictGoalGroupRep : Int
@@ -928,7 +927,7 @@ freeDictGoalsGo ec [] acc = acc
 freeDictGoalsGo ec (g :: rest) acc = case g of
   Constraint cid kind m dom cspan cdepth => if isRigidDictArg ec dom then case metaLookup m (ecSolTbl ec) of
     -- 已提升过的目标不再重复提升（`solveLiftedMeta` 已把 ?m 解成 `d`）；否则后续每个
-    -- 定义都会被塞进一个多余的字典 binder（曾把 `xor` 的 `not b` 破坏成一次字典搜索）。
+    -- 定义都会被塞进一个多余的字典 binder（`not b` 这类会被破坏成一次字典搜索）。
     Just _ => freeDictGoalsGo ec rest acc
     Nothing => freeDictGoalsGo ec rest (addDictGoalGroup ec m dom acc)
   else freeDictGoalsGo ec rest acc
@@ -952,31 +951,31 @@ leadingImplicitCount _ = 0
 
 -- 解掉被替换出体的孤儿 `?m`（否则 `unsolvedMeta` 报未解元变量）。`level` 是该字典 binder
 -- 的 de Bruijn level（从最外层数），供后续 quote/zonk 还原正确索引。
--- M28：解的作用域在 Core.Conv 求解点就地检查，这里不再事后复核。
+-- 解的作用域在 Core.Conv 求解点就地检查，这里不再事后复核。
 export solveLiftedMeta : Ec -> String -> Int -> Int -> Ec
 solveLiftedMeta ec name level m = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar name level [])) of
   OkC sols2 => ecPutSols ec (solsList sols2)
   ErrC e => ec
 
 export liftFreeDictGoals : String -> Ec -> Term -> Term -> Pair Term (Pair Term Ec)
--- M34 冷路径：没有延迟字典目标时整段是恒等（旧实现每次都扫一遍目标表 + 求隐式前缀长）。
+-- 冷路径：没有延迟字典目标时整段是恒等（省掉扫目标表与求隐式前缀长）。
 liftFreeDictGoals defName ec ty body = case ecPending ec of
   [] => Pair ty (Pair body ec)
   _ =>
     let
       groups = freeDictGoals ec
       nGroups = length groups
-      -- M23/M29：字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
+      -- 字典 binder 插在**原始签名**的最后一个隐式 binder 之后。
       -- `insertDictBinder`/`insertLamBinder` 的 idx 语义是「插在第 idx 个 binder 之后」，
       -- 所以基准是 `隐式前缀长 - 1`，且**只在循环外算一次**：插入后 ty 的隐式前缀会变长，
-      -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（C05：第 2、3 只字典被推到
+      -- 再读 `leadingImplicitCount ty` 会把已插入的字典重复计入（否则第 2、3 只字典被推到
       -- 显式参数之后，`ma` 的引用因此错位）。
       baseIdx = maxInt 0 (leadingImplicitCount ty - 1)
     in liftFreeDictGoalsGo defName ec ty body baseIdx nGroups 0 groups
 
 export liftFreeDictGoalsGo : String -> Ec -> Term -> Term -> Int -> Int -> Int -> List DictGoalGroup -> Pair Term (Pair Term Ec)
 liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
-  -- M23：字典 binder 插在**所有隐式 binder 之后**（即第一个显式参数之前）。
+  -- 字典 binder 插在**所有隐式 binder 之后**（即第一个显式参数之前）。
   [] => Pair ty (Pair body ec)
   (DictGoalGroup m dom extras) :: rest =>
     let
@@ -992,7 +991,7 @@ liftFreeDictGoalsGo defName ec ty body baseIdx nGroups k groups = case groups of
       -- 插入瞬间该字典 binder 恰在 `baseIdx + 1`（q = baseIdx + 2）；之后只在它**外侧**
       -- 插新字典，已替换出来的内侧 index 不变。
       body2 = substMetaVar m dName (baseIdx + 2) (insertLamBinder dName baseIdx body)
-      -- M21：体是按**旧签名**（无字典 binder）精化的，自递归调用点少一个字典实参；
+      -- 体是按**提升前签名**（无字典 binder）精化的，自递归调用点少一个字典实参；
       -- 提升后按应用位置补上。字典 binder 的最终位置是 `finalPos`，但插入顺序是
       -- 「新的在外」，所以每次都在第 `baseIdx + 1` 个应用实参处插入（与 binder 同序）。
       body3 = insertDictCalls defName dName (baseIdx + 1) body2
@@ -1079,21 +1078,21 @@ else
 export insertArgAt : Int -> a -> List a -> List a
 insertArgAt n x xs = append (append (take n xs) [x]) (drop n xs)
 
--- 提升后的签名要回写 globals：后续定义调用它时按新签名（带字典 binder）走隐式实参插入。
+-- 提升后的签名要回写 globals：之后精化的定义调用它时按新签名（带字典 binder）走隐式实参插入。
 export replaceGlobalType : String -> Term -> List (Pair String Term) -> List (Pair String Term)
 replaceGlobalType name ty [] = []
 replaceGlobalType name ty (p :: rest) =
   if firstOf p == name then Base.List.Cons (Pair name ty) rest
   else Base.List.Cons p (replaceGlobalType name ty rest)
 
--- M15：批量注册实例。
+-- 批量注册实例。
 export foldlAddInst : Ec -> List DtInst -> Ec
 foldlAddInst ec [] = ec
 foldlAddInst ec (i :: rest) = foldlAddInst (ecAddInst ec i) rest
 
 -- 实例头（`Dict_C <arg>`）的签名先入 globals：实例方法体要按它 check。
--- M23：同一个 head 只允许注册一次——`deriving` 生成的实例与手写实例、两个模块各自的
--- 默认实例都会撞上；旧实现按**名字**去重且静默丢弃，重复实例被无声接受。现在按 head
+-- 同一个 head 只允许注册一次——`deriving` 生成的实例与手写实例、两个模块各自的
+-- 默认实例都会撞上；按**名字**去重会把它们静默丢弃，重复实例被无声接受。这里按 head
 -- 定义性相等判定并报 "duplicate instance"。
 export checkInstanceHeads : List (Pair Decl Span) -> List DtClass -> List (Pair String Term) -> Ec -> Check (Pair (List (Pair String Term)) Ec)
 checkInstanceHeads decls classes globals ec = checkInstanceHeadsGo decls classes globals ec [] [] []
@@ -1118,7 +1117,7 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
   _ => checkInstanceHeadsGo rest classes globals ec acc insts seen
 
 -- 实例方法体（在顶层定义之后精化）。
--- M30（B20）：入口收**全量已 resolve 声明**（Driver 传入，`List Decl`），内部自己筛出
+-- 入口收**全量已 resolve 声明**（Driver 传入，`List Decl`），内部自己筛出
 -- 实例列表；全量声明同时用于「实例缺方法」诊断反查 trait 方法签名 span（`traitMethodSpanOf`）。
 export elabInstanceBodies : List Decl -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Check (Pair (List DtDef) Ec)
 elabInstanceBodies allDecls classes datas globals ec =
@@ -1130,14 +1129,14 @@ elabInstanceBodiesGo [] allDecls classes datas globals ec acc = OkC (Pair (rever
 elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = Vuna.Compiler.Common.bind (elabInstance (d :: rest) allDecls globals classes datas ec d) (\p => case p of
   Pair gs ec1 =>
     let
-      -- M29（A14）：实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
+      -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
       newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
       ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
     in elabInstanceBodiesGo rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
 )
 
 -- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
--- M29（A14）：`srcSpan` 是该实例声明的位置（`Nothing` 时诊断保持无位置）。
+-- `srcSpan` 是该实例声明的位置（`Nothing` 时诊断保持无位置）。
 export instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter srcSpan gs =
   map
@@ -1149,7 +1148,7 @@ defBodyOf defs name = case defLookup name defs of
   Just body => body
   Nothing => TInt 0
 
--- 逐条精化 trait，收集字典 data / 投影签名 / 类表 / 投影名→声明 span（A14）。
+-- 逐条精化 trait，收集字典 data / 投影签名 / 类表 / 投影名→声明 span。
 export elabTraits : List (Pair Decl Span) -> List (Pair String Term) -> Ec -> Check (Pair (List DtData) (Pair (List (Pair String Term)) (Pair (List DtClass) (Pair (List (Pair String Span)) Ec))))
 elabTraits decls globals ec = elabTraitsGo decls globals ec [] [] [] []
 
@@ -1168,14 +1167,14 @@ elabInstances decls classes datas globals ec = elabInstancesGo decls classes dat
 
 export elabInstancesGo : List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Check (Pair (List (Pair String Term)) Ec)
 elabInstancesGo [] classes datas globals ec acc = OkC (Pair (reverse acc) ec)
--- 旧批量入口（无全量声明，方法级 span 不可用；保留签名以兼容既有导出）。
+-- 无全量声明的批量入口：方法级 span 不可用，生成的实例定义不带来源位置。
 elabInstancesGo (d :: rest) classes datas globals ec acc = Vuna.Compiler.Common.bind (elabInstance (d :: rest) [] globals classes datas ec d) (\p => case p of
   Pair gs ec1 => elabInstancesGo rest classes datas (append globals gs) ec1 (append gs acc)
 )
 
--- M15：ecDefs 里那些不是源文件 DFun 的定义（接口投影、实例字典）。
+-- ecDefs 里那些不是源文件 DFun 的定义（接口投影、实例字典）。
 -- 它们的类型从 globals 里查（投影签名 / 实例头类型都在 elabTraits/elabInstances 时入表）。
--- M29（A14）：`srcSpans` 是「名字 → 最近声明 span」表（trait 投影用 trait 声明 span；
+-- `srcSpans` 是「名字 → 最近声明 span」表（trait 投影用 trait 声明 span；
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 export extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
@@ -1224,7 +1223,7 @@ else
       Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
         (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
 
--- M32：显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
+-- 显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
 bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Check (Pair Term Ec)
 bindDictBinderFuel fuel globals ctx ec rig name dom clo pats body sp = if fuel <= 0 then icFuel "binder check"
 else
@@ -1250,7 +1249,7 @@ else
     Pair inner ec1 => OkC (Pair (TLam name rig inner) ec1)
   )
 
--- 模式用完后仍剩 Pi（M28 η 展开，决策 5 / D10）：body 是 lambda 时按 check 处理；
+-- 模式用完后仍剩 Pi 时按 η 展开：body 是 lambda 时按 check 处理；
 -- 否则按签名剩余 Pi 补 `\_arityN`（N 取当前上下文深度保证唯一），并把 body **应用**
 -- 到这些新参数，整体按原签名继续 check——`f : A -> B` 配 `f = g` 因此成立。
 -- 隐式 binder 沿用既有规则：index 域绑成擦除 λ（隐式实参由精化器插入），其它域仍是
@@ -1313,7 +1312,7 @@ else
   )
 
 -- ---------------------------------------------------------------
--- M19：多 clause 与方程左端模式
+-- 多 clause 与方程左端模式
 -- ---------------------------------------------------------------
 -- 把 `plus Zero b = b` / `plus (Succ k) b = Succ (plus k b)` 合成：`\mc0 => \mc1 => case mc0 of ...`。
 -- 两步：① 按参数个数生成 lambda 链（`mc<i>` 与签名 Pi 链对齐）；② 按**列**递归构建 case 树

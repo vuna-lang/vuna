@@ -1,10 +1,10 @@
 module Vuna.Compiler.Driver.Owner where
 
--- Vuna.Compiler.Driver.Owner：**声明归属表**——声明名 / 实例名 / 方法投影名 / 派生实例名
+-- **声明归属表**——声明名 / 实例名 / 方法投影名 / 派生实例名
 -- → 所属模块（入口声明归合成模块 `Main`）。
 --
--- M34（C35）从 `Codegen.Split` 抽出：归属不只服务 codegen 的逐单元切分，也服务
--- 模块级接口摘要（Driver.Iface 把 DtProgram 按模块切开）与后续的模块级缓存。两侧共用
+-- 归属不只服务 codegen 的逐单元切分，也服务
+-- 模块级接口摘要（Driver.Iface 把 DtProgram 按模块切开）。两侧共用
 -- 同一份推导，避免「Elab 生成的名字」与「归属表」各写一套、互相漂移。
 --
 -- 归属来源只有 Loader-resolved 的声明结构：声明名、`DInstance` 头（与 Elab 同一
@@ -135,9 +135,9 @@ export record SplitMeta(..) where
   smDefOwners : List (Pair String String)
   smDataOwners : List (Pair String String)
   smKnownModules : List String
-  -- M34.6：同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
-  -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不再线性扫清单
-  -- （旧实现 O(#def × #owner-pairs)：compiler 包一次 build 约 0.3s）。
+  -- 同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
+  -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不用线性扫清单
+  -- （那是 O(#def × #owner-pairs)）。
   smDefOwnerT : HashMap String String
   smDataOwnerT : HashMap String String
 
@@ -170,7 +170,7 @@ splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwn
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
     else icInternal "DT split: cannot determine module for data `${dtDataName d}`"
 
--- D17：Elab 收尾合成的内部名字（`@vuna@` 前缀，如 `@vuna@main_show`）不属于任何源
+-- Elab 收尾合成的内部名字（`@vuna@` 前缀，如 `@vuna@main_show`）不属于任何源
 -- 模块、也没有模块前缀；它们由入口收尾阶段产生，归入口单元 `Main`。
 -- 只放行这一族名字：普通无前缀定义仍按「无法确定模块」报错（不静默归到入口）。
 isSyntheticInternalName : String -> Bool

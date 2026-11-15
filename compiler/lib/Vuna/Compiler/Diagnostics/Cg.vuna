@@ -2,8 +2,8 @@ module Vuna.Compiler.Diagnostics.Cg where
 
 -- Vuna.Compiler.Diagnostics.Cg：CG_ 域（codegen / 驱动诊断；无位置）。
 --
--- 从 `Vuna.Compiler.Diagnostics` 拆出（M30 B19）；对外名字集合不变，门面仍是
--- `Vuna.Compiler.Diagnostics`。arity 同样由 `CgErr : Nat -> Type` 的构造子索引锁定；
+-- 对外名字集合不变，门面仍是 `Vuna.Compiler.Diagnostics`。arity 同样由
+-- `CgErr : Nat -> Type` 的构造子索引锁定；
 -- `cgAll` 是 `gen-errors` 的文档遍历源。
 import Base.HostRow
 import Vuna.Compiler.Common
@@ -48,7 +48,7 @@ cgTemplate InterpCannotExecuteEffects =
   "interp cannot execute effects (main : Eff hostRow a); compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
 cgTemplate NoMain = "no main definition"
-cgTemplate TypeUsedAtRuntime = "a type is used at runtime (M13 limitation)"
+cgTemplate TypeUsedAtRuntime = "a type is used at runtime"
 cgTemplate (AxiomAtRuntime _) =
   "axiom `<0>` cannot be used at runtime (it has no runtime definition)"
 cgTemplate (ListBridgeRequired _) =
@@ -73,7 +73,7 @@ cgChunk0 =
     CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效果",
     CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约到值",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
-    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用（M13 限制）",
+    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用",
     CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 被运行时使用（它没有运行时定义体）",
     CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 canonical Base.List.List 桥接但包没有 base 依赖"
   ]
@@ -81,7 +81,7 @@ cgChunk0 =
 cgChunk1 : List CgEntry
 cgChunk1 =
   [ CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组里的零参值定义无法安全落地",
-    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用（M13 限制）",
+    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用",
     CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字被运行时使用",
     CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码里有未解元变量"
   ]
@@ -95,11 +95,11 @@ cgMsg e args = mkDiag SevError PhCodegen CatCodegen (cgCode e) (diagBody (cgTemp
 export cgErr : {n : Nat} -> CgErr n -> Vec n String -> Check a
 cgErr e args = ErrC (cgMsg e args)
 
--- | 自动补注（M41 新增导出）：cgErr0。
+-- | 便捷入口：cgErr0。
 export cgErr0 : CgErr Zero -> Check a
 cgErr0 e = cgErr e []
 
--- | 自动补注（M41 新增导出）：cgErr1。
+-- | 便捷入口：cgErr1。
 export cgErr1 : CgErr (Succ Zero) -> String -> Check a
 cgErr1 e a0 = cgErr e [a0]
 

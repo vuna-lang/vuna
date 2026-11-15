@@ -1,9 +1,8 @@
 module Vuna.Compiler.Codegen.Lower where
 
--- Vuna.Compiler.Codegen.Lower：Core → IR 的唯一入口（Track A 第一步）。
+-- Core → IR 的唯一入口。
 --
--- 迁移前的 OCaml 后端直接吃 `DtProgram`，把「擦除 / 表示决策」与「文本渲染」揉在同一批
--- 函数里（`genTermFuel` 等）。这里把**决策**全部前置到 Lowering：
+-- 这里集中全部**决策**，后端只渲染文本：
 --   * 擦除：擦除 binder 占位、擦除实参丢弃、擦除分支 binder；
 --   * 表示：record 字段表、构造子实参对齐与不透明 cast、去装箱族、类型参数槽、
 --     Nat 字面量折回（`Core.natChainValue`）与 Nat case 降级；
@@ -14,9 +13,8 @@ module Vuna.Compiler.Codegen.Lower where
 -- （`Codegen.{Decl,Term,Assembly,Split}`）此后只消费 IR，边界由 `checks.ir-boundary`
 -- 守护；`Core` / `Elab` / `Intrinsics` 只允许出现在本模块。
 --
--- 门禁：产物与迁移前直连 Core 的产物**逐字节一致**（[architecture-target.md] 的 IR
--- 门禁）。因此本模块的遍历顺序、fresh 编号分配顺序、分支与实参顺序都必须与旧
--- `Codegen.Term` / `Codegen.Assembly` 一一对应；注释里标 `旧:` 的地方就是对照点。
+-- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、
+-- fresh 编号分配顺序、分支与实参顺序都不能随实现方式变化。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics
 import Base.HashMap
@@ -34,8 +32,8 @@ import Vuna.Compiler.Codegen.Runtime
 -- 生成环境
 -- ---------------------------------------------------------------
 --
--- 旧 `GenSt` 的「程序级表」在 N 次单元 lowering 之间是常量：放在 `LwEnv` 里只算一次
--- （split 路径每个模块都用同一份）。单元内可变量只有 fresh 计数（旧 `gsNext`）。
+-- 「程序级表」在 N 次单元 lowering 之间是常量：放在 `LwEnv` 里只算一次
+-- （split 路径每个模块都用同一份）。单元内可变量只有 fresh 计数（`LwSt`）。
 export record LwEnv where
   lwShared : IrShared
   -- 运行时族（Bool / Nat 族已被过滤，不进运行时表示）。
@@ -73,8 +71,8 @@ lwEnvWithUnit unit (LwEnv shared datas typs recs ctors opqs unboxed defs tbl nam
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
--- 名字查表直接用 `Base.List` 的单一实现（`memName` / `lookupPair`），本模块不再自建副本。
--- 旧 `gsAddDep` 的去重（保持首现顺序；最终依赖顺序由 Split 按模块序重排）。
+-- 名字查表用 `Base.List` 的单一实现（`memName` / `lookupPair`）。
+-- `gsAddDep` 去重（保持首现顺序；最终依赖顺序由 Split 按模块序重排）。
 pushDep : String -> List String -> List String
 pushDep dep deps = if dep == "" then deps else if memName dep deps then deps else append deps [dep]
 
@@ -83,7 +81,7 @@ listLength : List a -> Int
 listLength [] = 0
 listLength (x :: rest) = 1 + listLength rest
 
--- | 单元内生成状态（唯一可变量：case / Nat case 的 fresh binder 计数，旧 `gsNext`）。
+-- | 单元内生成状态（唯一可变量：case / Nat case 的 fresh binder 计数）。
 export record LwSt where
   lwNext : Int
 
@@ -112,11 +110,11 @@ memOpaqueLevel i [] = False
 memOpaqueLevel i (x :: rest) = if x == i then True else memOpaqueLevel i rest
 
 -- ---------------------------------------------------------------
--- 表示判定（从迁移前 `Codegen.Decl` 搬来）
+-- 表示判定
 -- ---------------------------------------------------------------
 --
--- 这三族判据（record 表示 / 去装箱别名 / 运行时族过滤）原本在 `Codegen.Decl` 里
--- 与渲染交织；Track A 第一步之后它们属于 Lowering（表示决策），后端只渲染 `IrTyDecl`。
+-- 这三族判据（record 表示 / 去装箱别名 / 运行时族过滤）属于 Lowering（表示决策），
+-- 后端只渲染 `IrTyDecl`。
 -- `recordFieldLabel` 留在 Decl（它是**文本**：`f_<fam>_<field>`）。
 -- | 该族是否为 record（声明来源 + 单构造子）。
 isRecordData : DtData -> Bool
@@ -189,8 +187,8 @@ locRowPair d = case dtDefSpan d of
 -- 族参数槽（不动点）与运行时类型渲染
 -- ---------------------------------------------------------------
 --
--- 这一节从迁移前的 `Codegen.Decl` 原样搬来，只把「渲染成 OCaml 文本」换成「渲染成
--- `IrTy`」：判定逻辑（哪些族参数槽要用、哪些字段不透明）必须与构造子实参对齐、
+-- 这一节产出 `IrTy`（不是 OCaml 文本）：判定逻辑（哪些族参数槽要用、哪些字段不透明）
+-- 必须与构造子实参对齐、
 -- 与 `IrShared.irSharedTyParams` 用同一份结果，否则声明与实参位置漂移。
 typeParamLevels : DtData -> List Int
 typeParamLevels d = typeParamLevelsGo d.dtDataParams 0
@@ -318,9 +316,8 @@ tyParamsOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 -- 运行时类型渲染（Value → IrTy）
 -- ---------------------------------------------------------------
 --
--- `IrTy` 是签名级运行时类型。判据（哪些字段不透明、哪些族参数槽进声明）与迁移前
--- `Codegen.Decl` 的 `renderTypeArg` / `renderFieldTy` / `ctorFieldTexts` 完全一致；
--- 区别只是产出 `IrTy` 而不是 OCaml 文本（文本在后端）。
+-- `IrTy` 是签名级运行时类型。判据（哪些字段不透明、哪些族参数槽进声明）必须与
+-- 构造子实参逐位对齐；文本渲染在后端。
 renderTyOf : List Int -> List (Pair String (List Int)) -> List DtData -> Value -> IrTy
 renderTyOf levels table datas v = renderTyFuel 256 levels table datas v
 
@@ -447,8 +444,7 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 -- 类型声明（IR）
 -- ---------------------------------------------------------------
 --
--- 三族运行时表示（去装箱别名 / OCaml record / 变体）在迁移前由
--- `Codegen.Decl.genDataDecl` 当场判定；这里前置到 Lowering，产出 `IrTyDecl`。
+-- 三族运行时表示（去装箱别名 / OCaml record / 变体）在这里判定，产出 `IrTyDecl`。
 -- `irSharedRecordFields` 与这里用同一份 `recordFieldsOf`（record field 表），
 -- `irSharedTyParams` 与 `tyParamsOf` 同一份不动点结果。
 recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
@@ -488,12 +484,11 @@ tyDeclOf table allDatas unboxed d =
 -- 项 → IR
 -- ---------------------------------------------------------------
 --
--- 遍历顺序、fresh 编号分配、分支与实参顺序都与迁移前 `genTermFuel` 一一对应
--- （门禁是逐字节一致）。
+-- 遍历顺序、fresh 编号分配、分支与实参顺序必须稳定（门禁是逐字节一致）。
 --
--- **预算**：迁移前是固定 512 步（深层合法项会误报 `IC_FuelExhausted (codegen)`）；
--- 这里改成按项规模派生（`lowerBudgetFor size = 8 * size + 512`），因此只有「项本身
--- 有病」才会耗尽，正常源码的嵌套深度不再触发。终止性检查需要这个递减参数。
+-- **预算**：固定步数会在深层合法项上误报 `IC_FuelExhausted (codegen)`；
+-- 这里按项规模派生（`lowerBudgetFor size = 8 * size + 512`），因此只有「项本身
+-- 有病」才会耗尽，正常源码的嵌套深度不触发。终止性检查需要这个递减参数。
 --
 -- binder 栈 `List IrBinder` 最近绑定在前；`IrVar` 直接携带 binder 身份（Lowering
 -- 已把 de Bruijn 下标解析掉），运行时引用擦除 binder 在这里就是错误。
@@ -552,15 +547,14 @@ recordFieldNameAt : Int -> List (Pair Int String) -> String
 recordFieldNameAt i [] = ""
 recordFieldNameAt i ((Pair n label) :: rest) = if n == i then label else recordFieldNameAt i rest
 
--- | R4：把 `TRecord name args` 展开成等价 `TApp` 链。
+-- | 把 `TRecord name args` 展开成等价 `TApp` 链。
 recordTermAsAppIn : Term -> List (Pair Term Rig) -> Term
 recordTermAsAppIn t [] = t
 recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) rest
 
 -- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
--- 旧实现 `genGlobalRef` 的分支顺序原样保留（Nat Zero → `0`；Succ → `@ir@natSucc`）。
--- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`
--- （迁移前在 codegen 生成期报，现在前置到 Lowering，诊断码与消息一致）。
+-- 分支顺序固定（Nat Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
+-- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`。
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
@@ -574,9 +568,9 @@ else case lookupPair name env.lwCtors of
       else lowerBridgeGuard env name (IrRt (intrinsicName i))
     Nothing => OkC (IrGlobal name)
 
--- 需要 List 桥接的内建：程序必须声明 canonical `Base.List.List` 族（旧
--- `memName listFamilyName st.gsFamilies`），否则报 `CG_ListBridgeRequired`。
--- 桥接标记来自契约（`Ir.Runtime`，单一来源），Lowering 不再按文本重新推断。
+-- 需要 List 桥接的内建：程序必须声明 canonical `Base.List.List` 族，
+-- 否则报 `CG_ListBridgeRequired`。
+-- 桥接标记来自契约（`Ir.Runtime`，单一来源）。
 lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir
 lowerBridgeGuard env name ir =
   if irRtBridgesList name then if memName listFamilyName (map dtDataName env.lwDatas) then OkC ir
@@ -586,7 +580,7 @@ lowerBridgeGuard env name ir =
 effUnitTyIn : IrTy
 effUnitTyIn = IrTyData effUnitTypeName []
 
--- M33 W2：多参数 lambda 链合并（旧 `collectLamChain` + `genTermLamFuel`）。
+-- 多参数 lambda 链合并。
 -- 擦除 binder 只占 de Bruijn 位置、不作为 OCaml 参数。
 record LamChainIn where
   lamChainBinders : List (Pair String Rig)
@@ -705,7 +699,7 @@ inlineArityMatchesIn name args =
 -- ---------------------------------------------------------------
 -- 构造子应用
 -- ---------------------------------------------------------------
--- 旧 `alignCtorArgs`：实参有两种合法约定（全 telescope / 仅保留字段），都归一成
+-- 实参有两种合法约定（全 telescope / 仅保留字段），都归一成
 -- 运行时实参列表（只含非擦除位）。
 alignCtorArgs : String -> List Bool -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
 alignCtorArgs label [] [] = OkC []
@@ -738,7 +732,7 @@ ctorArgIr : Bool -> Ir -> Ir
 ctorArgIr True ir = IrCast ir
 ctorArgIr False ir = ir
 
--- 旧 `ctorOpaqueKeptFlags`：只保留运行时字段位置的不透明标志。
+-- 只保留运行时字段位置的不透明标志。
 ctorOpaqueKeptFlags : List Bool -> List Bool -> List Bool
 ctorOpaqueKeptFlags [] _ = []
 ctorOpaqueKeptFlags _ [] = []
@@ -796,7 +790,7 @@ zipFieldNames (f :: fs) (ir :: irs) = Pair (secondOf f) ir :: zipFieldNames fs i
 -- case / 分支 binder
 -- ---------------------------------------------------------------
 -- binder 环境：全部 telescope binder 都进栈（擦除的用擦除占位），顺序为 telescope
--- 表面顺序的逆序；fresh 编号只给非擦除 binder（旧 `altEnvChecked` 的分配顺序）。
+-- 表面顺序的逆序；fresh 编号只给非擦除 binder。
 record AltEnvIn where
   aeEnv : List IrBinder
   aePats : List IrBinder
@@ -828,7 +822,7 @@ altEnvIn : LwSt -> List IrBinder -> List (Pair String Rig) -> AltEnvIn
 altEnvIn st outer tele = altEnvGo st outer tele []
 
 -- 构造子分支：按 keep flags 决定哪些 telescope 位置进 pattern；两种约定（全 telescope /
--- 仅保留字段）按 binders 长度选择，并逐位校验 rig（与旧实现一致）。
+-- 仅保留字段）按 binders 长度选择，并逐位校验 rig。
 altEnvCheckedIn : LwSt -> String -> List IrBinder -> List (Pair String Rig) -> List Bool -> Check AltEnvIn
 altEnvCheckedIn st label outer binders flags =
   if listLength binders == listLength flags then altEnvFullIn st label outer binders flags []
@@ -859,7 +853,7 @@ else
     b = mkIrBinderArm fresh
   in altEnvKeptIn (LwSt (fresh + 1)) label (b :: outer) rest (b :: pats)
 
--- 分支体：把分支 binder 栈接在外层上面后 lower（旧 `genArmFuel` / `genArm`）。
+-- 分支体：把分支 binder 栈接在外层上面后 lower。
 lowerArmBodyFuel : Int -> LwEnv -> AltEnvIn -> Term -> Check (Pair Ir LwSt)
 lowerArmBodyFuel fuel env bound body = lowerTermFuel fuel env (aeStOf bound) (aeEnvOf bound) body
 
@@ -995,7 +989,7 @@ else case lowerUnboxedCaseAlt env alts of
     )
   )
 
--- 非 record 族的投影仍按原 `case` 形状展开（与旧实现同形，产物逐字节一致）。
+-- 非 record 族的投影按 `case` 形状展开（产物形状逐字节确定）。
 lowerProjAsCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> String -> List (Pair String Rig) -> Int -> Int -> Check (Pair Ir LwSt)
 lowerProjAsCaseFuel fuel env st outer base c tele i fi = if fuel <= 0 then icFuel "ir-lower"
 else
@@ -1037,7 +1031,7 @@ nthOpqArgIn n (opq :: opqs) ((Pair a rig) :: rest) =
   if n <= 0 then Just a else nthOpqArgIn (n - 1) opqs rest
 
 -- 把 record 字段 binder 补进 binder 栈（被改值在 alt 上下文里精化，其 de Bruijn
--- index 含这些槽位；旧字段 binder 在本路径不生成，故标成擦除占位）。
+-- index 含这些槽位；这些字段 binder 不生成，故标成擦除占位）。
 recordAltBindersIn : List (Pair String Rig) -> List IrBinder -> List IrBinder
 recordAltBindersIn tele binders = append (reverse (map eraseTele tele)) binders
 
@@ -1087,28 +1081,27 @@ else case nthOpqArgIn (secondOf p) opqs args of
 -- ---------------------------------------------------------------
 -- 定义、分组、入口
 -- ---------------------------------------------------------------
--- 运行时参数个数（旧 `runtimeArity`）：擦除 lambda 不计入。
+-- 运行时参数个数：擦除 lambda 不计入。
 runtimeArityIn : Term -> Int
 runtimeArityIn (TLam n r b) = if rigIsErased r then runtimeArityIn b else 1 + runtimeArityIn b
 runtimeArityIn _ = 0
 
--- `let rec` 右值形状护栏（旧 `recursiveValueAllowed`）。
+-- `let rec` 右值形状护栏。
 recursiveValueAllowedIn : Term -> Bool
 recursiveValueAllowedIn (TLam n rig b) = if rigIsErased rig then recursiveValueAllowedIn b else True
 recursiveValueAllowedIn (TCon c args) = True
 recursiveValueAllowedIn _ = False
 
--- 入口单元零参 `main`：模块初始化期求值，要套运行时报告器（旧 `mainInitWrap`）。
+-- 入口单元零参 `main`：模块初始化期求值，要套运行时报告器。
 initGuardOf : LwEnv -> Bool -> String -> Term -> Bool
 initGuardOf env True name body = False
 initGuardOf env False name body =
   if env.lwUnit == "Main" && name == "main" && runtimeArityIn body == 0 then True else False
 
 -- 单个运行时定义 → `IrDef`（extern 走 `IrExternDef`）。
--- 单个运行时定义 → `IrDef`（extern 走 `IrExternDef`）。
 --
--- fresh binder 编号是**单元内**全局递增的（迁移前 `gsNext` 在整单元生成期累积，跨组
--- 也不重置），所以 `LwSt` 必须跨定义顺序传递。
+-- fresh binder 编号是**单元内**全局递增的（整单元生成期累积，跨组也不重置），
+-- 所以 `LwSt` 必须跨定义顺序传递。
 lowerDef : LwEnv -> LwSt -> DtDef -> Check (Pair IrDef LwSt)
 lowerDef env st d = case dtDefExtern d of
   Just cName => case lowerExternTy (dtDefType d) of
@@ -1124,11 +1117,11 @@ lowerDef env st d = case dtDefExtern d of
       ErrC
         (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
 
--- 依赖：运行时会用到的顶层定义（旧 `termDepsInto`；顺序=遍历顺序的首现）。
+-- 依赖：运行时会用到的顶层定义（顺序=遍历顺序的首现）。
 depsOfBody : LwEnv -> Term -> List String
 depsOfBody env body = termDepsInto env.lwRuntimeNames [] body
 
--- extern 类型 → `IrTy`（旧 `externTyText` 的判据：Int/String/Bool/Array 基本类型，
+-- extern 类型 → `IrTy`（判据：Int/String/Bool/Array 基本类型，
 -- 显式 Pi 链；隐式参数与非基本类型是内部错）。
 lowerExternTy : Term -> Check IrTy
 lowerExternTy ty = externTyIr 64 0 (eval [] ty)
@@ -1229,8 +1222,7 @@ anyDefUsesObs (d :: rest) = case dtDefBody d of
 -- ---------------------------------------------------------------
 -- 单元 lowering
 -- ---------------------------------------------------------------
--- 从 `Codegen.Erase` 搬来的 OCaml 名字单射性护栏（三族前缀 v_/t_/C_ 互不相同，
--- 只需族内校验）。迁移前它在 codegen 的 prepare 阶段跑，顺序与错误文本保持不变。
+-- OCaml 名字单射性护栏（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
 checkNoDupOcamlNames : String -> List String -> Check Int
 checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
 
@@ -1254,7 +1246,7 @@ ensureUniqueOcamlNamesIn datas defs =
   in Vuna.Compiler.Common.bind (checkNoDupOcamlNames "value" valueNames)
     (\_ => Vuna.Compiler.Common.bind (checkNoDupOcamlNames "type" typeNames) (\_ => checkNoDupOcamlNames "constructor" ctorNames))
 
--- | 分区 + 护栏 + 擦除检查（与迁移前 `prepareDtProgram` 同一顺序与同一批 stamp）。
+-- | 分区 + 护栏 + 擦除检查（顺序与诊断集合固定）。
 -- 返回运行时定义（源码顺序）与「类型级 + 族名」名字集（擦除检查的输入）。
 prepareProgram : List DtData -> List DtDef -> Check (List DtDef)
 prepareProgram datas defs =
@@ -1265,7 +1257,7 @@ prepareProgram datas defs =
   in case partitionDefs table defs of
     Pair runtime typeNames =>
       let
-        -- B18：与数据族同名的**运行时值定义**（`data T` 与 `T : Int` 同名）在项里也
+        -- 与数据族同名的**运行时值定义**（`data T` 与 `T : Int` 同名）在项里也
         -- 是 `TGlobal T`；这种名字属于值命名空间，不能按「类型级名字」拒绝。
         runtimeNames = map dtDefName runtime
         familyTypeNames = filter (\n => not (memName n runtimeNames)) familyNames
@@ -1275,13 +1267,13 @@ prepareProgram datas defs =
 
 -- | 单元内运行时定义 → 分组（SCC 序）。
 --
--- 分组必须在**生成体之前**算出来：fresh binder 编号是单元内全局递增的（迁移前
--- `gsNext` 跨组累积），所以「分组顺序」决定生成顺序。这里先用名字级分组（+ 递归组的
+-- 分组必须在**生成体之前**算出来：fresh binder 编号是单元内全局递增的（跨组累积），
+-- 所以「分组顺序」决定生成顺序。这里先用名字级分组（+ 递归组的
 -- 右值形状护栏），再按分组顺序逐组生成 `IrDef`。
 groupDefs : LwEnv -> List DtDef -> Check (List (Pair Bool (List IrDef)))
 groupDefs env defs =
   let
-    -- 依赖邻接表（旧 `depAdjacency`：运行时引用到的顶层名，遍历顺序即首现顺序）。
+    -- 依赖邻接表（运行时引用到的顶层名，遍历顺序即首现顺序）。
     adj = map (adjOfDef env) defs
     names = map dtDefName defs
     -- 递归右值判据与 span 只依赖**本单元**的 defs：一次建表，别让每个名字各扫一遍。
@@ -1335,8 +1327,8 @@ mapMaybeDef tbl (n :: rest) = case tblLookup tbl n of
 
 -- | 程序级检查（擦除、axiom 运行时使用、作用域、OCaml 名字单射、SCC 递归值形状）。
 --
--- 迁移前这一步在 split 入口对**整个程序**跑一次（`prepareDtProgram`），然后每个单元只
--- 做分组与文本生成；诊断内容与先后顺序都必须与迁移前一致。
+-- 这一步按**整个程序**跑一次，然后每个单元只做分组与文本生成；诊断内容与先后顺序
+-- 都必须稳定。
 export checkProgramOf : LwEnv -> Check Int
 checkProgramOf env =
   Vuna.Compiler.Common.bind (prepareProgram env.lwDatas env.lwDefs) (\_ => checkRuntimeContract)
@@ -1435,7 +1427,7 @@ bodyOrDummy d = case dtDefBody d of
 -- ---------------------------------------------------------------
 -- 入口（main 钩子）的已决策形态
 -- ---------------------------------------------------------------
--- 旧 `Assembly.mainHook` 的判据：main 是动作（`Eff r a`）还是普通值；动作再按行收集
+-- 判据：main 是动作（`Eff r a`）还是普通值；动作再按行收集
 -- 内建宿主 handler（行顺序：后出现的包在外层）。
 actionResultTyIn : Term -> Maybe (Pair String Term)
 actionResultTyIn (TApp (TApp fn row _) arg _) = case fn of
@@ -1463,7 +1455,7 @@ mainRowTags (TApp (TApp fn row _) _ _) = case fn of
 mainRowTags _ = []
 
 -- 展示函数：内建类型用 runtime 展示函数；其它类型用 Elab 收尾合成的
--- `@vuna@main_show : T -> String`（D17）。
+-- `@vuna@main_show : T -> String`。
 mainShowIr : Term -> Ir
 mainShowIr tyTerm = case force (Base.HashMap.fromList []) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
@@ -1492,7 +1484,7 @@ lowerEntryOf defs = case findDtDef "main" defs of
       in OkC (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers))
     Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing []))
 
--- 只保留有宿主实现的内建标签（旧 `builtinWrapTextGo` 里 `runName == ""` 的跳过）。
+-- 只保留有宿主实现的内建标签（`builtinEffectImplOf` 为空则跳过）。
 filterMapRunHost : List String -> List String
 filterMapRunHost [] = []
 filterMapRunHost (tag :: rest) =

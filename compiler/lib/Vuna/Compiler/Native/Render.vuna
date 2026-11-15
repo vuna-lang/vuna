@@ -6,7 +6,7 @@ module Vuna.Compiler.Native.Render where
 -- 绝对路径，同一 IR 的 `main.s` 逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
 -- 二进制只保证行为（链接工具版本由 Nix 提供）。
 --
--- M2 版面：`.intel_syntax noprefix` → `.rodata`（运行时常量 + 带长度头的字符串
+-- 版面：`.intel_syntax noprefix` → `.rodata`（运行时常量 + 带长度头的字符串
 -- 字面量）→ `.bss`（bump 堆 + 堆指针）→ `.text`（Runtime 函数 → 用户函数 → `_start`）
 -- → `.note.GNU-stack`。
 --

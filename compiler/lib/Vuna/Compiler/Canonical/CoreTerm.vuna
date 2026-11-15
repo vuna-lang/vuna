@@ -1,11 +1,11 @@
 -- | Core 项（`Term`）的规范编码 + 解析器（内容寻址的哈希输入格式）。
 module Vuna.Compiler.Canonical.CoreTerm where
 
--- Vuna.Compiler.Canonical.CoreTerm：Core `Term` 的规范字节编码（C32 哈希输入侧）。
+-- Vuna.Compiler.Canonical.CoreTerm：Core `Term` 的规范字节编码（哈希输入侧）。
 --
--- 关键规范化（这是换成显式编码的主要收益，见 docs/reference/cache.md）：
---   * **span 不参与编码**：`TVar` 的位置只影响诊断，不影响语义；换行/移动代码不应让
---     依赖方的接口哈希变化（旧 `prim_marshal` 路径把 `Span` 一起 Marshal 了）；
+-- 关键规范化（见 docs/reference/cache.md）：
+--   * **span 不参与编码**：`TVar` 的位置只影响诊断，不影响语义；换行/移动代码不让
+--     依赖方的接口哈希变化；
 --   * 构造子按固定 tag 编号，顺序 = `Core.Term` 的声明顺序（新增构造子必须追加）；
 --   * `TMeta` 的编号由调用方先规范化（`Driver/Iface` 的 `canonTermTop`），编码只写编号；
 --   * 编码是自定界的（`Canonical.Bytes` 的原子文法），因此不同项不会编码成同一串。

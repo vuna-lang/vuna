@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Term where
 
--- Vuna.Compiler.Elab.Term：项检查门面（M25.2c 拆分）：对外保留原名字的 wrapper（常量 fuel 入口），
+-- Vuna.Compiler.Elab.Term：项检查门面：对外暴露带常量 fuel 的 wrapper，
 -- 实现见 `.Impl`，非递归 helper 见 `.Support`。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
@@ -155,6 +155,6 @@ export elabConAlt : List (Pair String Term) -> Ctx -> Ec -> DtData -> List Value
 elabConAlt a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
   elabConAltFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11
 
--- | 自动补注（M41 新增导出）：resolveOverFunPats。
+-- | 按签名 Pi 链逐列解析多子句函数/实例方法的参数模式（重载构造子与列表字面量归一化）。
 export resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
 resolveOverFunPats a1 a2 a3 a4 = Vuna.Compiler.Elab.Term.Impl.resolveOverFunPats a1 a2 a3 a4

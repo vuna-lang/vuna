@@ -1,18 +1,16 @@
--- | 诊断告警去重（纯 helper）。进程内收集器已在 M4 删除。
+-- | 诊断告警去重（纯 helper）。
 module Vuna.Compiler.Diagnostics.Sink where
 
 -- Vuna.Compiler.Diagnostics.Sink：warning 去重。
 --
--- M4：本模块原有的三个进程内可变登记表（warnings / used-imports / parse-errors）已删除：
+-- 本模块不持有状态；诊断的来源与去向：
 --   * Elab 的 warning 经 `Ec.ecWarnings` 显式线程，精化出口挂到 `DtProgram`；
 --   * loader 的 unused-import 与 parse 恢复诊断直接作为返回值交给驱动层；
---   * 驱动层（`CompilerCli` / LSP）在输出前用本模块去重（保持旧 `takeWarnings` 的
---     「按首次出现顺序去重」语义）。
+--   * 驱动层（`CompilerCli` / LSP）在输出前用本模块去重（按首次出现顺序）。
 --
--- 复杂度：按 `sameDiag` 的等价关系建**一次**键表（`HashMap String Bool`），O(n)；
--- 旧实现用 `containsDiag` 对新项目逐个扫历史（`UN_UnusedDefinition` 一次几千条时是
--- O(n²) —— 合成 8000 定义的入口检查实测尾部 ~830 ms）。键必须与 `sameDiag` 等价：
--- 码 + 消息 + 严重度 + **全部 label 的 span 序列**（其余字段（建议/备注）不参与）。
+-- 复杂度：按 `sameDiag` 的等价关系建**一次**键表（`HashMap String Bool`），O(n)（逐项
+-- 扫历史是 O(n²)：`UN_UnusedDefinition` 一次几千条时尾部 ~830 ms）。键必须与 `sameDiag`
+-- 等价：码 + 消息 + 严重度 + **全部 label 的 span 序列**（其余字段（建议/备注）不参与）。
 import Base.HashMap
 import Vuna.Compiler.Common
 import Base.List

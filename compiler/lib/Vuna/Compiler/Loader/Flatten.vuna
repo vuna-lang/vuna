@@ -1,12 +1,11 @@
 module Vuna.Compiler.Loader.Flatten where
 
--- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten（M24 后维护（源码重组）从 Loader.vuna 拆出）。
+-- Vuna.Compiler.Loader.Flatten：模块导出表计算、加载流程与 flatten。
 --
 -- 依赖 `Loader.Modules`（模块/导出表）与 `Loader.Resolve`（名字解析）：先算每个模块的
 -- 导出表，再按 import 图递归加载（含隐式 Prelude）。
--- M26：入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；旧的
--- 旧的历史顺序拼接/flatten 死路径已删除，DT 精化由 `Driver.Dt` 按
--- 「依赖序列 + 入口声明」拼接。
+-- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
+-- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
 import Base.HostRow
 import Base.List
 import Vuna.Compiler.Addr
@@ -30,22 +29,21 @@ import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Packages.Pkg
 
--- M31.2：imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
+-- imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
--- M31.2：parse 错误带文件名（前端诊断无位置，加载器知道路径）。
+-- parse 错误带文件名（前端诊断无位置，加载器知道路径）。
 --
--- M34.5 第 4 步 / C32 收口：**lex 缓存**。parse = lex + 语法分析，lexer 占大头（实测
--- 40 KB 文件 lex 3.96 ms / 全程 4.59 ms）；缓存 token 流后命中路径只跑语法分析。
+-- **lex 缓存**。parse = lex + 语法分析，lexer 占大头（实测 40 KB 文件 lex 3.96 ms /
+-- 全程 4.59 ms）；缓存 token 流后命中路径只跑语法分析。
 --
--- 为什么不是 AST 缓存（上一版的做法，已废除）：`Canonical.Ast` 的编码口径**故意丢
--- span**（它是 iface 哈希输入，移动代码不能改依赖方摘要），于是 AST 缓存命中时进程里
--- 所有诊断位置退化成 `:0:0`、codegen 的 `dt_def_locs` 整表变成 `":0"`——缓存改变了
--- 用户可见行为，不可接受。token 流带位置，重放 parse 得到的 AST 与冷路径逐字节相同。
+-- 不做 AST 缓存：`Canonical.Ast` 的编码口径**故意丢 span**（它是 iface 哈希输入，
+-- 移动代码不能改依赖方摘要），AST 缓存命中时进程里所有诊断位置会退化成 `:0:0`、
+-- codegen 的 `dt_def_locs` 整表变成 `":0"`——缓存改变用户可见行为，不可接受。
+-- token 流带位置，重放 parse 得到的 AST 与冷路径逐字节相同。
 --
--- key = `contentAddress(schema + 编译器 tag + 路径 + 源文本)`（C48：含编译器指纹，
+-- key = `contentAddress(schema + 编译器 tag + 路径 + 源文本)`（含编译器指纹，
 -- AST/Token 布局不同的二进制各占一套 key 空间）；载荷 = `Canonical.Lex` 的显式编码 +
--- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器
--- （旧 `prim_marshal` 实现会直接崩进程）。
+-- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器。
 lexCacheSchema : String
 lexCacheSchema = "vuna-lex-cache 1"
 
@@ -53,12 +51,12 @@ lexCacheSchema = "vuna-lex-cache 1"
 lexCacheCodec : String
 lexCacheCodec = "lex-tokens 1"
 
--- M4（效果显式化）：缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff hostRow` 里；
+-- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff hostRow` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。
 --
--- 寻址（终态）：`objects/lex/<输入摘要>`，输入摘要 = schema + codec + **源内容地址**。
+-- 寻址：`objects/lex/<输入摘要>`，输入摘要 = schema + codec + **源内容地址**。
 -- 路径与编译器指纹都不进 key：同一份源在任何路径/任何二进制下都是同一份 token 流，
--- 跨项目、跨二进制自然复用（旧实现把路径与指纹拼进 key，等于放弃全部跨项目共享）。
+-- 跨项目、跨二进制自然复用。
 lexAddrOf : String -> String
 lexAddrOf src = addrOf ["lex", lexCacheSchema, lexCacheCodec, contentAddress src]
 
@@ -116,10 +114,9 @@ visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (
 ) imports
 
 -- 按运算符去重（保留第一处 = 本地声明优先，其次 import 顺序）。
--- M31.3（B26 暴露）：每个 Module 的 visible 列表原本是「本模块 ++ import 闭包」的**重复
--- 拼接**——import 图里有大量 diamond，路径数随层数指数增长；base 一旦有 `infix*` 声明，
--- 拼接出来的列表长度就爆炸（`append` 递归直接爆栈）。去重后每个模块的可见表只含
--- 不同运算符（O(运算符数)），闭包计算回到线性。
+-- 每个 Module 的 visible 列表是按 import 图拼接的，图里有大量 diamond，若不去重则
+-- 列表长度随层数指数增长（`append` 递归会爆栈）。去重后每个模块的可见表只含
+-- 不同运算符（O(运算符数)），闭包计算保持线性。
 dedupeFixities : List FixityDecl -> List FixityDecl
 dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
 
@@ -133,7 +130,7 @@ dedupeFixitiesGo (d :: rest) seen acc =
     Nothing => dedupeFixitiesGo rest (Base.HashMap.insert key 1 seen) (d :: acc)
 
 -- ---------------------------------------------------------------
--- 模块导出表计算（M10）
+-- 模块导出表计算
 -- ---------------------------------------------------------------
 isPrivateName : String -> Bool
 isPrivateName name = startsWith "_" name
@@ -170,14 +167,13 @@ findCtorNamed name [] = Nothing
 findCtorNamed name (c :: rest) =
   if ctorName c == name then Just (ctorName c) else findCtorNamed name rest
 
--- M30（B20）：trait 方法现在带 span，按 `TraitMethod` 取名字即可（不再是 Pair）。
+-- trait 方法按 `TraitMethod` 取名字（`traitMethodName`）。
 findMethodNamed : String -> List TraitMethod -> Maybe String
 findMethodNamed name [] = Nothing
 findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
   if mname == name then Just mname else findMethodNamed name rest
 
--- M41：返回**全部**同名构造子（不同族可同名）。裸名导出/重导出必须检测歧义。
--- | 自动补注（M41 新增导出）：findOwnCtorNames。
+-- | 本模块里名为 name 的**全部**构造子（不同族可同名）。裸名导出/重导出必须检测歧义。
 findOwnCtorNames : String -> List Decl -> List (Pair String String)
 findOwnCtorNames name [] = []
 findOwnCtorNames name (d :: rest) = case d of
@@ -201,8 +197,8 @@ ownCtorEntries prefix dname (cname :: rest) =
     ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
     (ownCtorEntries prefix dname rest)
 
--- M41：data 构造子的 canonical target 是 `Module.Data.Ctor`。
--- | 自动补注（M41 新增导出）：ownDataCtorEntries。
+-- data 构造子的 canonical target 是 `Module.Data.Ctor`。
+-- | 本地 data 声明的构造子导出条目（target 用族限定名）。
 ownDataCtorEntries : String -> String -> List String -> List ExportEntry
 ownDataCtorEntries prefix dname [] = []
 ownDataCtorEntries prefix dname (cname :: rest) =
@@ -210,8 +206,7 @@ ownDataCtorEntries prefix dname (cname :: rest) =
     ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
     (ownDataCtorEntries prefix dname rest)
 
--- 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
--- | 自动补注（M41 新增导出）：ownTypeEntries。
+-- | 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
 ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
 ownTypeEntries prefix [] name = Nothing
 ownTypeEntries prefix (d :: rest) name = case d of
@@ -284,7 +279,7 @@ ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name de
   Just fn => OkC (Just (ExportRef "val" (mangle prefix fn) ""))
   Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
--- | 自动补注（M41 新增导出）：ownOrImportedValueRef2。
+-- | 本模块值 / 构造子名字的导出引用（构造子走 `ownCtorEntriesNamed` 的歧义检测）。
 ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
 ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNamed prefix name decls of
   [e] => OkC (Just (ExportRef "ctor" e.target e.parent))
@@ -297,8 +292,7 @@ ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNa
     )
   )
 
--- M41：本模块里名为 name 的构造子导出条目（data 用族限定 target；record/trait 用原名）。
--- | 自动补注（M41 新增导出）：ownCtorEntriesNamed。
+-- | 本模块里名为 name 的构造子导出条目（data 用族限定 target；record/trait 用原名）。
 ownCtorEntriesNamed : String -> String -> List Decl -> List ExportEntry
 ownCtorEntriesNamed prefix name [] = []
 ownCtorEntriesNamed prefix name (d :: rest) = case d of
@@ -336,7 +330,7 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
         Nothing => rnAt1 sp (ModuleNotImported mprefix) mprefix
         Just m => exportSelective modules prefix m base name sp
 
--- | 自动补注（M41 新增导出）：exportSelective。
+-- | 从指定模块按短名选择性导出：命中多个同名构造子时报歧义。
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Check (List ExportEntry)
 exportSelective modules prefix m base name sp = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => if length (findExportCtors es base) > 1 then rnAt2 sp (AmbiguousConstructorInExport base m) base m
 else case findExportValue es base of
@@ -403,7 +397,7 @@ hasSamePublicKind e (e2 :: rest) =
 
 -- 冲突判定：同名同 kind 但**定义处不同**才算重复导出。同一个定义经两条路径重导出
 -- （同一个 `Functor(..)` 经两个门面重导出）不是冲突。
--- M41：同名不同族的构造子导出不冲突（`module M (A(..), B(..))` 两边都有 `Nil` 合法）；
+-- 同名不同族的构造子导出不冲突（`module M (A(..), B(..))` 两边都有 `Nil` 合法）；
 -- val/type 的重复导出规则不变。
 hasConflictingExport : ExportEntry -> List ExportEntry -> Bool
 hasConflictingExport e [] = False
@@ -448,7 +442,7 @@ duplicateExportItem : List ExportItem -> Maybe String
 duplicateExportItem items =
   dupItemKeys (map (\i => Pair (exportItemKey i) (exportItemName i)) items)
 
--- 键只在入口算一遍：旧实现在内层循环里对每个元素重拼 "bare:"++n（大模块头上是几千万次分配）。
+-- 键只在入口算一遍：不在内层循环里对每个元素重拼 "bare:"++n（大模块头上是几千万次分配）。
 dupItemKeys : List (Pair String String) -> Maybe String
 dupItemKeys [] = Nothing
 dupItemKeys ((Pair key name) :: rest) = if memFirstOf key rest then Just name else dupItemKeys rest
@@ -480,8 +474,8 @@ explicitExports modules prefix decls imports items =
   Vuna.Compiler.Common.bind (checkExportItems prefix items)
     (\_ => Vuna.Compiler.Common.bind (exportItemsAll modules prefix decls imports items) (\es => OkC (dedupeExportEntries es)))
 
--- 逐项解析条目。整表只做一次重复检查、最后只去重一次：旧实现在每个导出项上重查剩余
--- 列表并把 append 结果整体去重，合计 O(k³)（k=400 时约 16s）。
+-- 逐项解析条目。整表只做一次重复检查、最后只去重一次：不在每个导出项上重查剩余
+-- 列表并把 append 结果整体去重（那是 O(k³)，k=400 时约 16s）。
 exportItemsAll : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
 exportItemsAll modules prefix decls imports [] = OkC []
 exportItemsAll modules prefix decls imports (item :: rest) =
@@ -547,8 +541,8 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 自动注入的 Prelude：从导入方所在包可见的依赖包取。
 -- 显式 import Prelude 时不再重复注入；Prelude 自身不注入（避免环）；当前包自己
 -- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
--- M26：ad-hoc（importerPkg==""）不再绕过——无 manifest 的单文件同样是包上下文
--- （base-only），自动注入 base 的 Prelude；没有 base 依赖的包没有候选，于是不注入。
+-- ad-hoc（importerPkg==""）同样是包上下文（base-only）：自动注入 base 的 Prelude；
+-- 没有 base 依赖的包没有候选，于是不注入。
 export implicitPrelude : List Root -> String -> String -> List Import -> Eff hostRow (Check (List Import))
 implicitPrelude roots importerPkg currentName imports =
   if currentName == "Prelude" then pure (OkC [])
@@ -600,7 +594,6 @@ loadModule fuel roots importerPkg modules stack imp =
         ErrC e => pure (ErrC e)
         OkC found =>
           let
-            -- F3 P2：宿主层模块只允许特权包 import（base 自己/compiler/根工具链）。
             path = firstOf found
             root = secondOf found
             _ = dbg! "parse-module=${name}"
@@ -640,7 +633,7 @@ loadModule fuel roots importerPkg modules stack imp =
 export loadProject : PackageContext -> String -> Eff hostRow (Check Project)
 loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 
--- M34.5（S2）：接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
+-- 接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
 -- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
@@ -693,7 +686,7 @@ loadProjectModulesWithPreloaded ctx names preloaded =
 export loadProjectSource : PackageContext -> String -> String -> Eff hostRow (Check Project)
 loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label source []
 
--- M34.5（LSP/REPL 消费接口）：入口以源码字符串给出，依赖包模块可预置（零 parse）。
+-- | 入口以源码字符串给出，依赖包模块可预置（零 parse）。
 export loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff hostRow (Check Project)
 loadProjectSourceWithPreloaded ctx label source preloaded = do
   parsed <- parseFileWithPath label source
@@ -718,15 +711,15 @@ loadProjectSourceWithPreloaded ctx label source preloaded = do
                   OkC (Project decls imports implicit modules (contextPackageName ctx) fixities)
               )
 
--- 以**源码字符串**给出一个**库模块**（M30 · LSP）：源码允许带 `module ... where`
+-- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
 -- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
 -- 把该模块本身作为合成的 `Module` 放进 Project，再交给 `resolveProject` 做名字解析；
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
--- 入口声明保持为空：调用方（LSP）只需要逐模块已解析的声明。
+-- 入口声明保持为空：调用方只需要逐模块已解析的声明。
 export loadModuleSource : PackageContext -> String -> String -> Eff hostRow (Check Project)
 loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label source []
 
--- M34.5（LSP）：依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
+-- 依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
 export loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff hostRow (Check Project)
 loadModuleSourceWithPreloaded ctx label source preloaded = do
   parsed <- parseFileWithPath label source
@@ -756,7 +749,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
                     in pure
                       (OkC (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (reexportedImportNames imports (append items reexports)) (opaqueNamesOf name opacity) :: modules) (contextPackageName ctx) []))
 
--- M31.3（B27）：fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
+-- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
 -- **不做精化/名字解析**，因此很便宜；有/无模块头都支持。
 --
@@ -764,7 +757,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
 -- 但 fixity **声明表必须按文件重算**（local + 该文件自己的 import 闭包）——不同文件的
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
--- M4：parse 读 AST 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff hostRow`；声明表计算保持纯。
+-- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff hostRow`；声明表计算保持纯。
 export fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Eff hostRow (Check (Pair (List Module) (List FixityDecl)))
 fixitiesForSourceIn ctx modules0 label source = do
   parsed <- parseFileWithPath label source
@@ -822,7 +815,7 @@ resolveProject project = resolveProjectKeeping False [] project
 export resolveProjectWith : Bool -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectWith release project = resolveProjectKeeping release [] project
 
--- M34.5（S2）：`keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
+-- `keep` 里的模块已经解析过（来自接口文件），原样保留、不重解析。
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
@@ -849,8 +842,8 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
   let
     names0 = concatMap declGlobalNames decls
     -- 模板字符串降级会合成 `Base.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
-    -- 注入的 canonical 名，旧实现不把它算作 import 使用。源码没有显式引用 interp 时剔除
-    -- 合成名，保持旧判定（只被模板串引用的 import 仍报 unused）。
+    -- 注入的 canonical 名，不算作 import 使用。源码没有显式引用 interp 时剔除合成名，
+    -- 只被模板串引用的 import 仍报 unused。
     names =
       if interpReferencedInSource sourceDecls then names0
       else filter (\n => n /= interpMethodName) names0

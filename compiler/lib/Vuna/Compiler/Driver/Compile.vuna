@@ -2,13 +2,12 @@ module Vuna.Compiler.Driver.Compile where
 
 -- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
 -- 精化（Elab）→ 擦除检查 + 逐模块 OCaml 生成（Codegen.Split）；`check*` 只检查不产码。
--- M26：包上下文（`PackageContext`）是唯一入口形状；旧的 `effectiveRoots` /
--- 单文件 codegen（main.ml + build.sh）/ `seedSplit` 已删除——`compile` 与 `seed`
+-- 包上下文（`PackageContext`）是唯一入口形状；`compile` 与 `seed`
 -- rotation 共用 `compileToDir`（目录 + build.sh）。
--- M30：`build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），
+-- `build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），
 -- 同哈希直接跳过；`compile` / `build --no-compile` 不写 meta（seed rotation 与快照
 -- 只认 .ml/build.sh 的确定性产物）。
--- C35：codegen 改为全限定跨单元引用后，每个模块只 `open` / 依赖它真正引用的前序单元；
+-- codegen 用全限定跨单元引用，每个模块只 `open` / 依赖它真正引用的前序单元；
 -- `writeCompiledNormalized` 把 SplitFile 的直接依赖传给 `buildScript`，生成的 build.sh 按 vuna
 -- 预先算好的层**分层并行**编译 + 精确增量（每单元 stamp 只含直接依赖），依赖图不再
 -- 退化为全序链。
@@ -68,8 +67,8 @@ mapMaybeEff f (x :: rest) = do
   )
 
 -- 包级 check：可执行包检查 app/Main.vuna；库包检查 [export].modules。
--- M34.5：结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
--- M45：`wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。warning 不持久化，
+-- 结果走磁盘缓存（key = 闭包源哈希 + 依赖哈希 + manifest + 版本）。
+-- `wantWarnings` = 调用方要 warning（`-W` / `--deny-warnings`）。warning 不持久化，
 -- 缓存命中/干净模块复用都会跳过精化、丢掉 warning，所以这里跳过 check 缓存并强制本包
 -- 模块重算（依赖仍走接口摘要，不重算依赖包）。
 export checkPackage : Bool -> Bool -> Package -> Eff hostRow (Check (List Diagnostic))
@@ -94,7 +93,7 @@ checkPackage release wantWarnings pkg =
             -- （4000 定义探针上约 +0.9 s，且放大增长比）。order 只在「完整模块面」
             -- 写成功后才存在，所以「order 覆盖 names」等价于 iface 也已写全。
             -- `VUNA_ELAB_FULL=1` 的语义是「每条路径都全量」，必须照跑第二遍（也会重新
-            -- 读写 lex 对象；§52 的截断恢复用例依赖它）。
+            -- 读写 lex 对象；截断恢复的用例依赖它）。
             full <- elabFullRequested
             covered <- if full then pure False else orderCoversEff (packageName pkg) names
             if covered then do
@@ -148,7 +147,7 @@ parentOfPath path =
 
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
--- M33 W5：包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
+-- 包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
 export compileToDir : PackageContext -> String -> Bool -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
 compileToDir ctx entry printResult outDir = do
   audit <- ifaceAuditRequested
@@ -159,12 +158,12 @@ compileToDir ctx entry printResult outDir = do
 -- 否则全量。抽出来供正常路径与审计路径共用，保证两条路径的「摘要分支」完全一致。
 -- 构建路径的 codegen 口径：**只用同一套（全量）**。
 --
--- 为什么要放弃「干净模块从接口补 defloc 行」这条增量口径：`miDefLocs` 只记录
+-- 构建路径**不能**用「干净模块从接口补 defloc 行」这条增量口径：`miDefLocs` 只记录
 -- `cachedDefs` 里有 span 的定义，而全量路径的位置表由 Lowering 从完整程序算出——两者
 -- 在派生/预处理定义上不等（实测差的是一行 `Member.greet`）。于是同一个输入在「冷 store
--- → 全量」与「热 store → 增量」下产出不同字节；旧的内容寻址 blob 把它掩盖了（节点记住
--- 第一份内容），改成输入寻址后同一路径被两份内容先后覆盖（§41 回归）。
--- 现在构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
+-- → 全量」与「热 store → 增量」下会产出不同字节，而输入寻址下同一路径会被两份内容
+-- 先后覆盖。
+-- 构建一律走全量 lowering（单元缓存仍按声明哈希命中，所以热构建依然快），
 -- 产物因此是输入摘要的纯函数。
 summarySplitParts : PackageContext -> String -> Bool -> Eff hostRow (Check (Pair (List SplitFile) CheckedPackage))
 summarySplitParts ctx entry printResult = do
@@ -303,8 +302,8 @@ auditCompile ctx entry printResult outDir = do
 
 -- 把**已规范拓扑序**的 split 文件写入 outDir 并写 build.sh。
 -- 调用方保证 files 已过 `canonicalTopo`：命中路径的 blob 在写侧就规范化了，未命中路径
--- 在写 blob 前规范化。build.sh 的层/顺序因此不在热路径重算（旧实现每次命中都重跑
--- `canonicalTopo`，119 单元时占 build-warm 的 ~250 ms）。
+-- 在写 blob 前规范化。build.sh 的层/顺序因此不在热路径重算：`canonicalTopo` 只在写侧
+-- 跑一次。
 writeCompiledNormalized : PackageContext -> String -> List SplitFile -> Eff hostRow (Check Int)
 writeCompiledNormalized ctx outDir files = do
   _ <- ensureDirPath outDir
@@ -330,7 +329,7 @@ writeCompiledNormalized ctx outDir files = do
             pure (OkC n)
 
 -- 包根 `ffi/*.c` → OUTDIR/ffi/<name>.c；返回写进 build.sh 的相对路径列表。
--- 没有 ffi/ 目录时返回 []（旧包行为不变）。
+-- 没有 ffi/ 目录时返回 []。
 copyFfiFiles : String -> String -> Eff hostRow (List String)
 copyFfiFiles ctxDir outDir = do
   let
@@ -365,7 +364,7 @@ buildSplit dir outDir = do
       )
 
 -- ---------------------------------------------------------------
--- M30：build meta（确定性、无绝对路径/时间戳）
+-- build meta（确定性、无绝对路径/时间戳）
 --
 -- 目的：同输入同产物 + 依赖闭包哈希 + 同哈希跳过。meta 只记录**模块名**与内容
 -- 哈希（模块名由模块根相对路径推导，跨机器稳定）；不记录绝对路径/时间戳。
@@ -378,15 +377,15 @@ metaSchema = 1
 metaFileName : String
 metaFileName = "build-meta.json"
 
--- 内容哈希：SHA-256 的 63-bit 派生键（替代旧的「strHash 10-bit + 长度」组合）。
+-- 内容哈希：SHA-256 的 63-bit 派生键。
 textHash : String -> Int
 textHash s = Vuna.Compiler.Hash.contentKey s
 
--- M34.5：编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
--- M38：用**可执行文件自身**的路径 + 大小 + mtime，而不是 `@vuna@prim_eff_getArgs` 的第一个用户参数。
--- 旧实现把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
--- 就是最常见的情况），`@vuna@prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`——
--- `vuna test` 在包根直接崩溃即此。store 路径 + size + mtime 足以区分重新构建的编译器。
+-- 编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
+-- 必须取**可执行文件自身**的路径 + 大小 + mtime，不能取 `@vuna@prim_eff_getArgs` 的第一个用户参数：
+-- 那样会把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
+-- 就是最常见的情况），`@vuna@prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`。
+-- store 路径 + size + mtime 足以区分重新构建的编译器。
 -- env/stat 是宿主动作，显式 `Eff hostRow`。
 compilerFingerprint : Eff hostRow Int
 compilerFingerprint = compilerFingerprintEff
@@ -487,7 +486,7 @@ dependencyHashes ctx = case contextRoots ctx of
   ) deps
 
 -- ---------------------------------------------------------------
--- 依赖身份（D69）：依赖方只消费依赖包的**接口身份**，不是源字节闭包。
+-- 依赖身份：依赖方只消费依赖包的**接口身份**，不是源字节闭包。
 --
 -- 依赖包 check/build 成功后写一个稳定对象 `objects/pkgiface/<key>`，key = 包名 + 该包
 -- lib 根源闭包摘要 + 编译器 tag，载荷 = `pkgIfaceHashOfModules`。依赖方按同样的 key 读取：
@@ -611,9 +610,7 @@ runBuildScript dir out name = do
   pure
     (if code == 0 then OkC 0 else err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})")
 
--- 历史：旧实现是「拼一个复合 key 当文件名」（`check/` marker 目录），后来搬进查询图
--- 节点（`Query`），现在收敛成**输入寻址对象存在性**：`checkIn` 就是那四个摘要的哈希，
--- 存在即判过。查询图与会话索引都已删除（见 `docs/reference/cache.md`）。
+-- 判过标记是**输入寻址对象的存在性**：`checkIn` 就是那四个摘要的哈希，存在即判过。
 -- ---------------------------------------------------------------
 -- | 输入摘要的 schema（结构变化必须 bump；旧对象自然拒绝）。
 checkNodeSchema : String
@@ -627,7 +624,7 @@ hashText n = strFromInt n
 --
 -- 只含影响检查/代码生成的字段：包名、导出面、依赖的 alias/source/hash。
 -- `[diagnostics]`（纯显示配置：format/lang/max-errors/warnings）与 `[registry]`
--- （取包位置）**不进指纹**——改诊断格式不应该让整包与依赖方接口全部失效（D69）。
+-- （取包位置）**不进指纹**——改诊断格式不应该让整包与依赖方接口全部失效。
 -- 这个投影用于 check/split 的 manifest 维度与 `packageEnvHash` / `buildMetaText`。
 -- ---------------------------------------------------------------
 maybeSemanticText : Maybe String -> String
@@ -706,9 +703,9 @@ allNamesIn [] _ = True
 allNamesIn (x :: rest) ys = memName x ys && allNamesIn rest ys
 
 -- 依赖包接口哈希表：写本包接口时给 `miDepHashes` 用。
--- M34.5（S2）：依赖包**模块接口**加载（TTC 的 module 复用）。
+-- 依赖包**模块接口**加载（TTC 的 module 复用）。
 --
--- 旧路径按包读 check 缓存里的 `CachedProgram`；S2 改为读每包的 `.vuna-iface`
+-- 读每包的 `.vuna-iface`
 -- 并逐项校验：schema/编译器指纹/包名 → 每个模块的源码哈希 → 依赖接口哈希链
 -- （`miDepHashes`）→ 依赖包当前源码模块集合与接口模块集合一致。任一失败 ⇒ Nothing ⇒
 -- 调用方回退全量（宁可慢，不静默用陈旧接口）。
@@ -721,12 +718,10 @@ depPackageCount : PackageContext -> Int
 depPackageCount ctx = length (depPackageList ctx)
 
 -- ---------------------------------------------------------------
--- 输入寻址的 iface 层（终态）
+-- 输入寻址的 iface 层
 --
--- 取代原来的「per-module 文件 + 包级 manifest + `miDepHashes` 链」：模块接口的**地址**
--- 由它的输入摘要决定 —— 源码摘要 + 包身份 + 包环境 + 直接依赖模块的地址（+ 隐式 Prelude）。
--- 落盘是 `objects/iface/<地址>`，「模块干净」因此退化为一次路径存在性检查；manifest、
--- 写锁、`meOrigin`、`pmEnv` 字段全部不再需要。
+-- 模块接口的**地址**由输入摘要决定 —— 源码摘要 + 包身份 + 包环境 + 直接依赖模块的地址（+ 隐式 Prelude）。
+-- 落盘是 `objects/iface/<地址>`，「模块干净」因此退化为一次路径存在性检查。
 --
 -- 依赖图从 **header 对象**得到（按源摘要寻址，热路径只读每个模块一个几百字节的对象），
 -- 缺失时现 parse 一次并写回 —— 冷启动只付一次 parse，之后不再 parse 依赖包。
@@ -855,7 +850,7 @@ depAddrOf assign name = case lookupPair name assign of
 -- 子模块互相 import），环里永远没有「依赖都已赋值」的成员；而拓扑 DFS 的遍历顺序依赖
 -- 图规模，导致同一模块在 `check base` 与 `check .` 下算出不同地址（跨包接口永不命中）。
 -- 改按全局字典序赋值后，结果只由「模块名集合 + 各自的边」决定，与图规模/遍历顺序无关。
--- 环内被 `ext:` 挡住的那条边是已知近似（后续用 SCC 收缩成单一摘要替换）。
+-- 环内被 `ext:` 挡住的那条边是已知近似（该边不参与地址）。
 ifaceAddrIn : List (Pair String String) -> ClosureMod -> String
 ifaceAddrIn assign m =
   addrOf
@@ -915,8 +910,7 @@ ifaceModsWithEff ctx pkgs = do
     tc <- raiseToRow hostRow effTimeUs
     -- 地址表是**判定**：同样的闭包（包身份 / 模块名 / 源摘要 / 包环境 / import 名）
     -- 一定算出同样的地址表，所以按闭包摘要存一个极小对象（145 个模块 ≈ 8 KB）。
-    -- 这一步原本每次 check 都要重算 6 次以上，而 `addrOf` 走的是纯 vuna SHA-256：
-    -- 实测单次 assign ≈ 1.35 s，占冷 `check compiler`（28 s）的 ~8 s。
+    -- 这层缓存必须留着：`addrOf` 走纯 vuna SHA-256，单次 assign 在 145 个模块上 ≈ 1.35 s。
     let
       key = modsKeyOf mods
     in do
@@ -1151,7 +1145,7 @@ depModsByOrderEff ctx mods = goPkgs ctx mods (distinctPkgs (depModsOf ctx mods) 
 
 -- 依赖模块接口按**拓扑序**（依赖在前）返回：下游 `Dt`/split 期望模块串接顺序与 import
 -- 依赖一致（否则 `canonicalTopo` 报 "split dependency is not in topological order"）。
--- 旧实现直接读各包 manifest，manifest 本身按拓扑序写；对象库没有顺序，这里显式排序。
+-- 对象库按输入摘要寻址、没有顺序，所以这里显式排序。
 pickDepMods : PackageContext -> List ClosureMod -> List String -> List String -> List ClosureMod
 pickDepMods _ _ [] _ = []
 pickDepMods ctx mods (n :: rest) seen = if memName n seen then pickDepMods ctx mods rest seen
@@ -1169,7 +1163,7 @@ depModsOrdered ctx mods = pickDepMods ctx mods (topoModules (moduleGraphOf mods)
 -- 判据：接口记录的每个模块，其源文件必须仍然存在且内容未变。
 -- **不做**「磁盘模块集合 == 接口模块集合」的相等比较：可执行包的接口只覆盖入口
 -- import 闭包，磁盘上允许存在未被引用的模块（它们不参与编译，也不该进接口；
--- §64 起基础设施模块已入口导入，但工具包 / 本地夹具仍可能带未引用模块）。
+-- 工具包 / 本地夹具都可能带未引用模块）。
 -- 集合变化由其它判据覆盖：新增并 import 的模块会改使用者源码哈希、`[export]` 变化会改
 -- `pmEnv`、删除文件会让下面的 entry 查找直接失败。
 depIfaceSourcesValid : List Root -> Package -> PackageIface -> Eff hostRow Bool
@@ -1231,14 +1225,14 @@ mtimeFastPath = do
   v <- raiseToRow hostRow (@vuna@prim_eff_getenv "VUNA_CACHE_MTIME")
   pure (v == "1")
 
--- M34.5（LSP/REPL）：把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
--- 无包上下文/依赖接口不全时返回 Nothing，调用方退回不带 ifaces 的旧路径。
+-- 把「本包依赖闭包的模块接口」暴露给工具链（不暴露内部实现）。
+-- 无包上下文/依赖接口不全时返回 Nothing，调用方退回全量。
 export depIfacesForCheck : PackageContext -> Eff hostRow (Maybe (List ModuleIface))
 depIfacesForCheck ctx = depIfacesOf ctx
 
--- 工具链消费默认走接口：M34.6 起默认开启（`VUNA_IFACE_TOOL=0` 关闭做 A/B/排障）。
--- 一次性读全依赖闭包接口只用于旧调试入口；LSP/REPL 走下面的惰性闭包。
--- M34.5（S7）：工具链**按需**读依赖接口。
+-- 工具链消费默认走接口（`VUNA_IFACE_TOOL=0` 关闭做 A/B/排障）。
+-- 一次性读全依赖闭包接口只用于调试入口；LSP/REPL 走下面的惰性闭包。
+-- 工具链**按需**读依赖接口。
 importNameStr : Import -> String
 importNameStr (Import n alias q sp) = n
 
@@ -1260,7 +1254,7 @@ toolImportNamesOf ctx current imports = do
   )
 
 -- 工具链消费：默认按源码 import 闭包按需读依赖接口；`VUNA_IFACE_TOOL=0` 关闭（排障/A-B）。
--- M34.6：闭包必须含**同包模块的 import**——entry 直接 import 的模块可能再由同包模块
+-- 闭包必须含**同包模块的 import**——entry 直接 import 的模块可能再由同包模块
 -- import 别的依赖包模块；只沿 entry imports 展开会漏掉这些依赖模块（Loader 从源码加载
 -- 它们却没有 artifact 注入 ⇒ 假 `TC_UnknownName`）。同包模块名/import 从本包 manifest 取
 -- （`check`/`build` 会写）；没有本包 manifest 或闭包仍不完整时，`Dt` 侧安全阀回退全量。
@@ -1312,7 +1306,7 @@ depIfacesForTool ctx = do
   enabled <- toolEnabled
   if enabled then depIfacesOf ctx else pure Nothing
 
--- M44：base-only 上下文（无 manifest 的单文件夹具）的依赖接口 = base 包的模块接口。
+-- base-only 上下文（无 manifest 的单文件夹具）的依赖接口 = base 包的模块接口。
 -- `depIfacesOf` 需要 `ctx.contextPackage`（有 manifest 才有），单文件夹具拿不到；
 -- 这里直接读 roots 里 base 包的接口，供会话化工具（test runner 等）注入。
 -- 接口缺失 / schema / 编译器 tag 不符 ⇒ Nothing（调用方回退全量精化）。
@@ -1322,7 +1316,7 @@ baseDepIfacesOf ctx = case ctx.contextPackage of
   Nothing => ifacesForRootsEff ctx
 
 -- ---------------------------------------------------------------
--- M34.6（5a/5c）：工具链（LSP / REPL）会话上下文
+-- 工具链（LSP / REPL）会话上下文
 --
 -- 一次工具请求需要的「依赖包接口 + 依赖接口哈希表 + 本包 manifest + 本次 buffer 的 import
 -- 闭包 + 校验面」。全部由 manifest（小文件）算出来，模块接口按闭包惰性读；会话层把它按
@@ -1341,7 +1335,7 @@ export record ToolContext(..) where
   tcDepHashes : List (Pair String String)
   tcNeeded : List String
   -- 本包模块名集合。LSP 用它把闭包分成「本包模块」（可预置干净接口）与依赖模块；
-  -- 旧实现从包级 manifest 取，manifest 删除后由会话建立时直接算好。
+  -- 由会话建立时直接算好。
   tcOwnNames : List String
   tcStats : List SourceInfo
 
@@ -1392,7 +1386,7 @@ toolNeededOfImports ctx tool currentName imports = do
   importNames <- toolImportNamesOf ctx currentName imports
   pure (importClosureOf mods importNames)
 
--- 惰性工具接口 + 会话上下文（M34.6 5a）：与 `depIfacesForToolSource` 同一套校验，
+-- 惰性工具接口 + 会话上下文：与 `depIfacesForToolSource` 同一套校验，
 -- 额外返回依赖哈希表 / 本包 manifest / 闭包 / 校验面。
 export depIfacesForToolSourceDetailed : PackageContext -> String -> String -> Eff hostRow (Maybe ToolContext)
 depIfacesForToolSourceDetailed ctx label source = do
@@ -1425,10 +1419,7 @@ statOfClosureMod m = do
   size <- raiseToRow hostRow (@vuna@prim_eff_fileSize m.cmPath)
   pure (SourceInfo m.cmPath m.cmSrc mtime size)
 
--- 本包干净模块（M34.6 5a/5c）：manifest 条目里「源内容未变 + 依赖哈希链仍成立」的模块。
--- 只读 `needed` 里的模块接口文件（闭包子集）；`exclude` 是当前正在编辑的模块名（buffer
--- 可能与磁盘不同，不能复用它的 iface）。
--- 本包干净模块：manifest 删除后直接按**对象地址**读本包模块接口，再做源内容 / 依赖链校验。
+-- 本包干净模块：按**对象地址**读本包模块接口，再做源内容 / 依赖链校验。
 -- 只读 `needed` 里的模块（闭包子集）；`exclude` 是当前正在编辑的模块名（buffer 可能与
 -- 磁盘不同，不能复用它的 iface）。
 export toolCleanOwnModules : PackageContext -> ToolContext -> Int -> Maybe String -> List String -> Eff hostRow (List ModuleIface)
@@ -1459,9 +1450,8 @@ toolCleanGo builtSec depTbl (m :: rest) cleanRev = do
     if fresh && cachedProgramValid (miCachedOf m) && selfOk && not (hasMissingDep (miDepHashesOf m)) && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
     else toolCleanGo builtSec depTbl rest cleanRev
 
--- 单模块接口写回（M34.6 5a）：LSP 每次成功请求后只写「当前模块」的接口（合并进本包
--- manifest，保留其他条目）。语义与整包 ifaceOfPackage 一致（见 `Iface.ifaceOfModule`）；
--- 有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
+-- 单模块接口写回：LSP 每次成功请求后只写「当前模块」的接口对象。语义与整包 ifaceOfPackage
+-- 一致（见 `Iface.ifaceOfModule`）；有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
 export toolWriteModuleIface : PackageContext -> ToolContext -> List ModuleIface -> CheckedPackage -> String -> SourceInfo -> Eff hostRow (Check ModuleIface)
 toolWriteModuleIface ctx tool clean checked name si = do
   let
@@ -1484,8 +1474,8 @@ else do
     Nothing => pure 0
     Just m => storeObjectWriteEff "iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
 
--- 冷启动（没有工具会话 / 本包还没有 manifest）：依赖哈希从磁盘接口汇总，干净模块按
--- 现有判定重算；能写就写（LSP-only 会话逐步变热），失败不影响诊断。
+-- 冷启动（没有工具会话）：依赖哈希从磁盘接口汇总，干净模块按现有判定重算；
+-- 写回尽力而为（LSP-only 会话逐步变热），失败不影响诊断。
 export toolWriteModuleIfaceCold : PackageContext -> CheckedPackage -> String -> SourceInfo -> Eff hostRow (Check ModuleIface)
 toolWriteModuleIfaceCold ctx checked name si = do
   clean <- cleanIfacesOrEmpty ctx
@@ -1501,8 +1491,6 @@ toolWriteModuleIfaceCold ctx checked name si = do
         _ <- writeModuleIfaceGuarded ctx mi
         pure (OkC mi)
 
--- LSP 写回守卫：本包 manifest 是否已存在（冷启动写回只在没有 manifest 时做，
--- 避免把「工具接口暂时不可用」的会话写进去污染依赖哈希链）。
 export toolCompilerFingerprint : Eff hostRow Int
 toolCompilerFingerprint = compilerFingerprint
 
@@ -1590,7 +1578,7 @@ export record CheckMods(..) where
   cmSources : String
   cmDeps : String
   cmVer : String
-  -- 语义开关（当前：release/debug）。旧对象因地址多一段自然失效。
+  -- 语义开关（当前：release/debug）。多一段 ⇒ 不同 flags 得到不同地址。
   cmFlags : String
 
 -- | 拼 `CheckMods`（纯构造；摘要由调用方算好传入）。
@@ -1616,7 +1604,7 @@ rootKeepEff ctx digests = do
 --
 -- 判据就是 `checkInOf mods` 这个摘要：包名 + kind + manifest/源闭包/依赖闭包摘要 +
 -- 编译器指纹。存在 ⇒ 判过（跳过精化）；不存在 ⇒ 精化后写一个 0 字节 marker 对象。
--- 没有查询图、没有会话索引、没有依赖快照比较：跨进程天然一致，坏字节由 framing 拒绝。
+-- 没有查询图、没有会话索引：跨进程天然一致，坏字节由 framing 拒绝。
 checkViaGraph : PackageContext -> CheckMods -> Eff hostRow (Check (List Diagnostic)) -> Eff hostRow (Check (List Diagnostic))
 checkViaGraph ctx mods run = do
   full <- elabFullRequested
@@ -1713,7 +1701,7 @@ checkUncachedExe wantWarnings ctx entry = do
       summary <- summaryCheckExeParts wantWarnings ctx entry
       checkAndShadow ctx (pure summary)
 
--- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（与旧行为一致，只是不再直接写缓存）。
+-- 摘要路径（**不落盘**）：接口不可用 ⇒ 全量（只是不直接写缓存）。
 -- wantWarnings 时 clean 列表清空 ⇒ 本包模块全部重算（warning 不在缓存里）。
 summaryCheckExeParts : Bool -> PackageContext -> String -> Eff hostRow (Check (Pair (List Diagnostic) CheckedPackage))
 summaryCheckExeParts wantWarnings ctx entry = do
@@ -1779,14 +1767,14 @@ ifaceAuditRequested = do
 -- 诊断签名：`Ok`/`Err` 都参与比较（顺序敏感，逐字节）。
 -- 直接按构造子在 clause 头分派（dispatch-lift），避免再嵌一层 case。
 -- warning 不参与签名：摘要路径在 `wantWarnings=false` 时会复用干净模块（不重算 warning），
--- 全量路径会全算，二者在 warning 上不可比（warning 不进缓存，见 M45）。
+-- 全量路径会全算，二者在 warning 上不可比（warning 不进缓存）。
 checkSignatureOf : Check (Pair (List Diagnostic) CheckedPackage) -> String
 checkSignatureOf (OkC _) = "ok\n"
 checkSignatureOf (ErrC e) = "err\n${diagText e}"
 
 splitSignatureOf : Check (Pair (List SplitFile) CheckedPackage) -> String
 -- 审计签名：只用于「摘要路径与全量路径产物是否一致」的比较，不进缓存。
--- 用规范编码（C32：不再 `prim_marshal`）——同一 SplitFile 列表编码逐字节稳定。
+-- 用规范编码——同一 SplitFile 列表编码逐字节稳定。
 splitSignatureOf (OkC p) = "ok\n" ++ encTop encSplitFiles (firstOf p)
 splitSignatureOf (ErrC e) = "err\n${diagText e}"
 
@@ -1812,7 +1800,7 @@ depIfaceHashTable ctx = do
 -- 包环境指纹（`peEnv`）：本包 manifest 内容 + 依赖**接口身份** + 编译器标签。
 -- **不含目录**：目录字符串依赖入口写法（相对/绝对/`.` 分量），把它算进环境会让同一个包
 -- 「自己 check」与「被别的包当依赖」得到两套 env、进而两套接口地址（实测跨包永不命中）。
--- 依赖接口身份来自 `depIdentitiesEff`（见 D69）：注释 / 诊断配置 / opaque 体变化不脏
+-- 依赖接口身份来自 `depIdentitiesEff`：注释 / 诊断配置 / opaque 体变化不脏
 -- 依赖方；接口或声明面变化会换 env。
 packageEnvHash : PackageContext -> Eff hostRow Int
 packageEnvHash ctx = do
@@ -1825,16 +1813,16 @@ packageEnvHash ctx = do
     pure (textHash "${own}|${tag}|${joinLines (map pairText deps)}")
 
 -- ---------------------------------------------------------------
--- M34.5（S4）：包内逐模块增量的脏/净判定
+-- 包内逐模块增量的脏/净判定
 --
 -- 保守规则：模块干净 ⇔ 源内容哈希未变 ∧ 闭合产物有效 ∧ 它记录的直接依赖接口哈希全部
--- 仍然成立。依赖哈希来自：外部依赖包（当前接口表）或**同包已判定干净的模块**（旧接口
+-- 仍然成立。依赖哈希来自：外部依赖包（当前接口表）或**同包已判定干净的模块**（其接口
 -- 哈希未变）。同包依赖若是脏模块或新模块，则本模块也判脏（接口哈希可能变），不做乐观
 -- 复用；脏性沿 import 边自然传播（干净表里查不到 ⇒ 脏）。
 -- ---------------------------------------------------------------
--- 与 `ownCleanModules` 同一次读取，同时回报「旧整包接口是否可完整读回」（写侧信任旧
--- manifest 做按模块跳过的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
--- 这次结果，不再把同样的 65 个模块文件读 + unmarshal 第二遍。
+-- 与 `ownCleanModules` 同一次读取，同时回报「已有整包接口是否可完整读回」（按模块跳过
+-- 的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
+-- 这次结果，不必把同样的 65 个模块文件读 + decode 第二遍。
 readOneModIface : ClosureMod -> Eff hostRow (Pair ClosureMod (Maybe ModuleIface))
 readOneModIface m = do
   mi <- readIfaceAtEff m.cmAddr
@@ -1920,7 +1908,7 @@ cleanHashOf [] _ = Nothing
 cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
 
--- M34.5（S1/S2/S3）：接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
+-- 接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
 -- 切成每模块一份 `ModuleIface`，按地址写 `objects/iface/` + `objects/order/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
@@ -1949,8 +1937,7 @@ ownSourceInfos ctx = do
   pure (concatMap (\xs => xs) walked)
 
 -- | 干净模块的 `miSource` 来自磁盘接口记录（可能是上一次以相对/绝对不同写法 check 时写入的
--- 路径）。复用时必须换成本次上下文的路径，否则相对/绝对入口交替会算出空路径而整包跳过写
--- （§57c 覆盖）。
+-- 路径）。复用时必须换成本次上下文的路径，否则相对/绝对入口交替会算出空路径而整包跳过写。
 resyncCleanSources : List (Pair String SourceInfo) -> List ModuleIface -> List ModuleIface
 resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sources of
   Just si =>
@@ -1996,8 +1983,8 @@ else do
   let
     _ = dbg! "iface-shadow-start"
   in do
-    -- 闭包只算一次：`depIfaceHashTable` 原本自己再跑一遍 `ifaceModsEff`（那是「读全部源文件
-    -- + 算地址 + 取 header」的全量扫描），冷路径上等于把最贵的一步做了两遍。
+    -- 闭包只算一次：让 `depIfaceHashTable` 自己再跑一遍 `ifaceModsEff`（那是「读全部源文件
+    -- + 算地址 + 取 header」的全量扫描）等于把最贵的一步做两遍。
     t0 <- raiseToRow hostRow effTimeUs
     mods <- ifaceModsEff ctx
     t1 <- raiseToRow hostRow effTimeUs
@@ -2044,7 +2031,7 @@ else do
               -- 阶段拆分靠文本行，结构化只报「写发生了」。
               _ <- obsMarkEff "vuna.iface.write"
               n <- writeIfaceObjects own modules
-              -- 依赖身份摘要（D69）：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
+              -- 依赖身份摘要：依赖方按 lib 根源闭包摘要 + 编译器 tag 读。
               _ <- writePkgIfaceSummaryEff ctx modules
               t4 <- raiseToRow hostRow effTimeUs
               let
@@ -2176,8 +2163,7 @@ auditCheckLib wantWarnings ctx names = do
 -- ---------------------------------------------------------------
 -- codegen 产物的缓存判定：**输入寻址的 split blob 存在性**。
 --
--- 旧实现换过两代：`<cache>/<包桶>/split/<composite-key>` 一个文件 → 查询图节点
--- （值 = 内容地址）。现在是 `blobs/<splitIn>`：`splitIn` 由包名 + kind + 三项输入摘要 +
+-- `blobs/<splitIn>`：`splitIn` 由包名 + kind + 三项输入摘要 +
 -- 编译器指纹算出，同一输入同一路径；命中判定就是文件存在，写侧重算结果覆盖同一路径。
 -- ---------------------------------------------------------------
 -- | split 输入摘要的 schema（结构变化必须 bump；旧 blob 自然失效）。
@@ -2185,8 +2171,8 @@ splitNodeSchema : String
 splitNodeSchema = "vuna-split-node 2"
 
 -- | split 载荷的编码版本（`Store` 的 codec 段）。
--- 2：载荷是 `canonicalTopo` 后的规范拓扑序（1 是 codegen 原始顺序）。命中路径直接按
--- 载荷顺序写产物，不再重算规范化；旧 1 载荷因 codec 不符自然失效（miss 重写）。
+-- 载荷是 `canonicalTopo` 后的规范拓扑序。命中路径直接按
+-- 载荷顺序写产物，不再重算规范化。
 splitCacheCodec : String
 splitCacheCodec = "split-files 2"
 
@@ -2204,7 +2190,7 @@ splitModsOf ctx entry printResult = do
   fp <- compilerFingerprint
   -- **产物口径**必须进判定 key：摘要路径（依赖接口齐全）与全量路径产出的代码不同
   -- （实测 runtime 的 defloc 表在两条路径下长度不同）。只用源码/依赖摘要当 key 会让
-  -- 「先全量、后摘要」两次构建复用同一 blob 却覆盖不同内容（§41 回归）。
+  -- 「先全量、后摘要」两次构建复用同一 blob 却覆盖不同内容。mode 因此进 kind。
   ifaces <- depIfacesOf ctx
   let
     srcHash = closureHashOf sources 0
@@ -2316,10 +2302,10 @@ writeSplitBlob files = do
 -- | 读 blob：framing 全量校验（**重算**载荷内容地址，不只是比对头声明）+ 内容地址比对
 -- 通过才解码；任何不符 ⇒ Nothing（重算并重写同一路径）。
 --
--- C51 相邻修复：split 载荷没有 iface 那种「逐字段语义自证」，所以不能走
+-- split 载荷没有 iface 那种逐字段语义自证，所以不能走
 -- `storeReadAsEff`（只比头里的地址字符串，同长度载荷篡改会静默进入解码器 → 损坏的
 -- codegen 产物）。重算成本是 `contentAddress` 的预折叠 + SHA-256（~2.2 ms/MB），
--- 只在 split 命中路径付一次；§52c 的「载荷中部单字节篡改」因此真正被拒绝。
+-- 只在 split 命中路径付一次；载荷中部的单字节篡改因此真正被拒绝。
 readSplitBlob : String -> Eff hostRow (Maybe (List SplitFile))
 readSplitBlob digest = do
   tag <- splitBlobTag

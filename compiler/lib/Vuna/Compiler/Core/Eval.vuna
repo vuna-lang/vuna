@@ -1,13 +1,13 @@
 module Vuna.Compiler.Core.Eval where
 
--- Vuna.Compiler.Core.Eval：NbE 求值与 quote。
+-- NbE 求值与 quote。
 --
 -- 包含：beta 求值（eval/apply*）、delta 展开（force）、prelude 原语归约
 -- （primReduce）、深度正规化（normalize，interp 展示 main 用）、quote（值 → 项）
 -- 以及「已解元变量代入项」（substSolvedMetas*）。
 --
 -- 定义性相等（beta + delta + eta）在 Vuna.Compiler.Core.Conv；本模块是它的下游依赖。
--- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term 的表示层与纯数据操作。
+-- 依赖 Core.Term 的表示层与纯数据操作。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core.Term
@@ -37,7 +37,7 @@ evalFuelFor t =
 evalFuelMax : Int
 evalFuelMax = 1000000
 
--- 阶段 5：工具链统一行（Base.HostRow 的公理）在编译器里归约成具体行。
+-- 工具链统一行（Base.HostRow 的公理）在编译器里归约成具体行。
 hostTailValue : Value
 hostTailValue =
   VCon effRowConsCtor
@@ -73,7 +73,7 @@ else case t of
     evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env base) [evalAlt env (CaseAlt c tele body)]
   TInt n => VInt n
   TStr s => VStr s
-  -- B44：VFloat 载荷统一为 string_of_float 规范文本（定义性相等与展示一致）。
+  -- VFloat 载荷统一为 string_of_float 规范文本（定义性相等与展示一致）。
   TFloat raw => VFloat (showFloatRaw raw)
   TBool b => VBool b
   TIf c th el =>
@@ -162,7 +162,7 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 -- ---------------------------------------------------------------
 -- delta 展开：已解元变量 + 有定义的全局（带步数上限，避免递归定义挂死）
 -- ---------------------------------------------------------------
--- M30（D18）值共享：定义体求值结果缓存在 `Sols.defVals`。命中时**仍然**走
+-- 值共享：定义体求值结果缓存在 `Sols.defVals`。命中时**仍然**走
 -- `applySpine` 后继续 `force`（缓存的是定义体的求值结果，可能仍需要 beta/元变量
 -- 归约），并照常递减 fuel——fuel 语义与未命中路径完全一致。缓存只在
 -- `elabBodies` 的安全前缀检查后写入，因此命中值与原路径求出的值定义性相等；
@@ -170,7 +170,7 @@ applySpine v (a :: rest) = applySpine (applyValue v a) rest
 --
 -- 查找顺序是**先 defs 表、命中后再查值缓存**（而不是先查值缓存）：值缓存只对
 -- 「有定义体的全局」可能有值，而 force 的绝大多数 NGlobal 头是数据族/内建（没有
--- 定义体），先查缓存会让它们每次多付一次哈希查。实测（M30）：单次 `check compiler`
+-- 定义体），先查缓存会让它们每次多付一次哈希查。
 -- 的定义展开只有 ~700 次，而 NGlobal force ~5M 次，所以先 defs 后缓存的顺序把
 -- 「未定义全局」的成本保持为原来的一次 defLookup，缓存 hit 的收益仍保留。
 export force : HashMap String Term -> Sols -> Int -> Value -> Value
@@ -262,7 +262,7 @@ export asNat : Value -> Maybe Int
 asNat v = natValueToInt v
 
 -- ---------------------------------------------------------------
--- Float（B44）：`VFloat` 载荷保持字符串，但**一律**是宿主 `string_of_float` 的规范
+-- `VFloat` 载荷保持字符串，但**一律**是宿主 `string_of_float` 的规范
 -- 文本（字面量在 `eval` 入口规范化），这样定义性相等（`fastSame` 比字符串）、quote /
 -- 展示与编译产物三处天然一致。求值器自身没有宿主浮点类型可用，语义靠编译器的 `Float`
 -- 类型 + 内建原语（`floatFromInt`/`strFromFloat`/`/` 等）在编译期完成，因此与
@@ -339,7 +339,7 @@ intPrim2 ([a, b]) f = case asInt a of
   Nothing => Nothing
 intPrim2 sp f = Nothing
 
--- M23：除法在除数为 0 时**不归约**。核心求值器表达不了运行时异常（编译产物由 OCaml
+-- 除法在除数为 0 时**不归约**。核心求值器表达不了运行时异常（编译产物由 OCaml
 -- 抛 `Division_by_zero`），静默返回 0 会与产物/三路对照不一致；不归约让 `main` 报
 -- "does not reduce to a value"，把差异限制在「核心求值器不能表达异常」这条已知边界里。
 export intPrim2Div : List Value -> Maybe Value
@@ -440,9 +440,9 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
--- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签（M27）。
+-- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签。
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
--- 行删除（W3 表示层修复）：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
+-- 行删除：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
 -- 判断后再移除。类型族里重复变量（`rowRem e (Cons e r)`）不会强制相等，不能用于此。
 export valueEqFuel : Int -> Value -> Value -> Maybe Bool
 valueEqFuel fuel a b = if fuel <= 0 then Nothing
@@ -489,9 +489,9 @@ valueListEqFuel fuel _ _ = Just False
 
 -- 已解 meta 在值里仍以 `VMeta` 节点出现（解表不改写已经构造好的值），而 `valueEqFuel`
 -- 不做 force，于是 `rowRem` 的 name/label 参数里只要留过 meta 就永远比较不出相等
--- （`handle` 语法：名字/标签由 Member 在调用点解出，但结果行里的 value 还是旧节点）。
+-- （`handle` 语法：名字/标签由 Member 在调用点解出，但结果行里的 value 仍是同一节点）。
 -- 比较前把名字 force 一次、把标签（中性 spine 的一层实参）各 force 一次：已解 meta 变
--- 具体值，未解 meta 原样保留（随后照旧卡住）。
+-- 具体值，未解 meta 原样保留（随后照常卡住）。
 -- | 把标签值中性 spine 的一层实参 force 一次（已解 meta 变具体值，未解原样）。
 forceLabelArgs : HashMap String Term -> Sols -> Int -> Value -> Value
 forceLabelArgs defs sols fuel v = case force defs sols fuel v of
@@ -499,7 +499,7 @@ forceLabelArgs defs sols fuel v = case force defs sols fuel v of
   VNeutral (NVar name lvl sp) => VNeutral (NVar name lvl (map (\a => force defs sols fuel a) sp))
   other => other
 
--- 命名行（native-effects ND1）：`rowRem n e r` 按 (名字, 标签) 双匹配删除条目。
+-- 命名行：`rowRem n e r` 按 (名字, 标签) 双匹配删除条目。
 -- 名字或条目名字是未解 meta 时卡住（Nothing）：等名字槽求解后由 force/重推归约；
 -- 不做「只匹配标签」的贪婪删除，否则 `[ConsoleOp@mock, ConsoleOp@audit]` 会删错条目。
 rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Maybe Value
@@ -532,9 +532,9 @@ else
     else Nothing
     _ => Nothing
 
--- 行拼接（阶段 1）：`rowAppend r t` 是公理，编译器归约：
+-- 行拼接：`rowAppend r t` 是公理，编译器归约：
 --   rowAppend Nil t = t；rowAppend r Nil = r；rowAppend (Cons n h tail) t = Cons n h (rowAppend tail t)。
--- 右单位让 `joinEff (handleXHost …)`（answer 行 Nil 的旧 handler）保持原签名。
+-- 右单位让 `joinEff (handleXHost …)`（answer 行为 Nil 的 handler）保持原签名。
 appendReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
 appendReduce defs sols fuel a b = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) a of
@@ -553,7 +553,7 @@ else case force defs sols (fuel - 1) a of
 export primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
 else if g == effRowRemName then case sp of
-  -- 命名行（ND1）：`rowRem n e r` 是唯一形状；单 Cons 分支（debt D53 规避）。
+  -- 命名行：`rowRem n e r` 是唯一形状；单 Cons 分支（规避 debt D53）。
   n :: e :: r :: _ => rowRemReduce defs sols (fuel - 1) n e r
   _ => Nothing
 else if g == effRowAppendName then case sp of
@@ -593,7 +593,7 @@ else case findIntrinsic g of
     OpNatDiv => natPrim2Div sp
     OpNatToInt => natPrim1 sp (\n => VInt n)
     OpNatFromInt => intPrim1 sp (\n => natValue (natClamp n))
-    -- B44：浮点原语（IEEE-754 double，与编译产物的 OCaml 运算符/比较同语义）。
+    -- 浮点原语（IEEE-754 double，与编译产物的 OCaml 运算符/比较同语义）。
     OpAddF => floatPrim2 sp (\a, b => a + b)
     OpSubF => floatPrim2 sp (\a, b => a - b)
     OpMulF => floatPrim2 sp (\a, b => a * b)
@@ -870,7 +870,7 @@ else case n of
       (map (\a => quoteFuel (fuel - 1) depth a) sp)
   NGlobal g sp => applyTermSpine (TGlobal g) (map (\a => quoteFuel (fuel - 1) depth a) sp)
 
--- M24.6 第一级：越界的 level 以前被静默当成最外层变量（index 0），错得无声。
+-- 越界的 level 不能静默当成最外层变量（index 0），那会错得无声。
 -- quote 是纯函数、不返回 Result；这里对越界返回负 index（-1），后续
 -- `binderAt` / 擦除检查会把它报成 "unbound runtime variable" 而不是悄悄指向 0。
 -- 正常路径（level < depth）不变。
@@ -881,7 +881,7 @@ export applyTermSpine : Term -> List Term -> Term
 applyTermSpine head [] = head
 applyTermSpine head (a :: rest) = applyTermSpine (TApp head a RigOmega) rest
 
--- M22：把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
+-- 把「已解且闭」的元变量在项里替换成其实例项（`TMeta m` → `quote 0` 的解）。
 -- 字典元变量是运行时实参（Rig1），codegen 会对残留的 `TMeta` 报错；只有擦除的
 -- 类型/索引元变量（Rig0）可留在项里。字典解（实例构造子）是闭的，`quote 0` 安全；
 -- 带自由变量（非闭）的解跳过——它们只可能是擦除元变量，codegen 跳过。
@@ -914,12 +914,12 @@ substSolvedMetas sols t = t
 export substSolvedAlt : List (Pair Int Value) -> CaseAlt -> CaseAlt
 substSolvedAlt sols (CaseAlt n bs b) = CaseAlt n bs (substSolvedMetas sols b)
 
--- M20 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
+-- 字典提升：替换 `?m` 为 `TVar d (depth - q)`（`q` = 插入点外侧绑定子数，含类参数绑定子）。
 -- `depth` 是 `?m` 出现处深度（de Bruijn）；用于把延迟的字典元变量变成提升后的字典绑定子变量。
--- M22.2：和 `substSolvedMetas` 相同，但解按**给定深度** quote。字典提升要在定义体的
+-- 和 `substSolvedMetas` 相同，但解按**给定深度** quote。字典提升要在定义体的
 -- binder 上下文里重写目标类型（`?a` 已解成定义自己的刚性变量），必须按那个深度取
--- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量（`mergeSort` 的
--- 字典签名曾变成 `{d : Dict_Ord ?67}`）。
+-- de Bruijn index；深度 0 的版本会把解里的 `NVar` 拍成越界变量
+-- （字典签名会变成 `{d : Dict_Ord ?67}` 这类错形）。
 export substSolvedMetasAt : Int -> List (Pair Int Value) -> Term -> Term
 substSolvedMetasAt d [] t = t
 substSolvedMetasAt d sols t = substSolvedMetasAtGo d sols t
@@ -961,7 +961,7 @@ export showValueAt : Int -> Value -> String
 -- 快速路径：原子值直接给名字，免掉 quote+showTerm 的递归（mismatchAt 在试探路径上
 -- 每次 check 会构造 ~600 万条被丢弃的诊断消息，格式化是主要成本之一）。
 showValueAt depth v = case v of
-  -- M28：宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"
+  -- 宇宙层级参与诊断（严格分层下 `Type 0` 与 `Type 1` 不相等，只说 "Type"
   -- 会让反例无法定位）；0 层仍显示 "Type" 以保持既有文案稳定。
   VType l => if levelToInt l == 0 then "Type" else "Type ${levelToInt l}"
   VNeutral n1 => case n1 of
@@ -991,7 +991,7 @@ normalizeIf a1 a2 a3 a4 a5 a6 = normalizeIfFuel 1024 a1 a2 a3 a4 a5 a6
 
 -- 已解元变量的**深度感知**内联（接口摘要 zonk 与字典提升共用的唯一入口）。
 -- `depth` 是 `?m` 出现点的 binder 深度：解是 level 形态的 Value，必须按出现点深度 quote，
--- 否则 binder 下的解会得到错位的 de Bruijn 索引（旧实现把整项按深度 0 quote，产生
+-- 否则 binder 下的解会得到错位的 de Bruijn 索引（按深度 0 quote 整项会产生
 -- `TVar "b" (-1)` 这类越界索引；`lookupEnv` 对 `i <= 0` 取最内层变量 ⇒ 静默取错 binder）。
 -- 解 quote 后若含负索引，说明它引用了出现点作用域外的 binder（跨定义上下文），
 -- **不内联**、保留 `TMeta`，由接口摘要安全阀拒绝这份摘要（宁可回退全量，不静默错）。

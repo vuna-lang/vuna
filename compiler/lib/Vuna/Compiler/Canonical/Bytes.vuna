@@ -1,10 +1,10 @@
 -- | 规范字节编码的原子层：自定界原子 + 对应的解析器（roundtrip 与载荷解码共用）。
 module Vuna.Compiler.Canonical.Bytes where
 
--- Vuna.Compiler.Canonical.Bytes：内容寻址的**规范字节格式**（C32 哈希输入侧 + 载荷解码侧）。
+-- Vuna.Compiler.Canonical.Bytes：内容寻址的**规范字节格式**（哈希输入侧 + 载荷解码侧）。
 --
 -- 编码目标：把语义值写成一串**自定界**字节，供 SHA-256 取摘要，也可作为缓存载荷落盘。
--- 与 `prim_marshal`（已删除）的区别，这正是 C32 的缺口：
+-- 编码口径：
 --   * 显式：格式只由本模块定义，不随编译器/OCaml 运行时版本漂移；
 --   * 规范：调用方先去掉 span / 路径、按名字排序，编码本身不含任何位置信息；
 --   * 自定界：每个原子带类型前缀与长度，串接无歧义（`encConcat` 一次拼接）；

@@ -2,7 +2,7 @@ module Vuna.Compiler.Frontend.Lexer where
 
 -- vuna 源码 lexer：字符游标、token 与 pos。
 --
--- M36：字符串字面量支持**模板插值**（`"hi ${name}"`）与**多行**（`"""..."""`）。
+-- 字符串字面量支持**模板插值**（`"hi ${name}"`）与**多行**（`"""..."""`）。
 -- 扫描把字面量切成 `TmplPart`：
 --   * `TPText`：文本块（转义已解）；
 --   * `TPHole`：插值洞，存**洞内 token 列表**（由 `lexHoleTokens` 原位词法得到，
@@ -13,7 +13,7 @@ import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Diagnostics
 
--- 模板字面量的片段（M36）：文本块或插值洞（洞内 token 列表）。
+-- 模板字面量的片段：文本块或插值洞（洞内 token 列表）。
 export data TmplPart(..) : Type where
   TPText : String -> TmplPart
   TPHole : List PTok -> TmplPart
@@ -28,7 +28,7 @@ export data Tok(..) : Type where
   TTmpl : Bool -> List TmplPart -> Pos -> Tok
   TSym : String -> Tok
   TEof : Tok
-  -- `TFloat`：十进制浮点字面量的原始文本（放末尾保持 tag 顺序，bootstrap 兼容）。
+  -- `TFloat`：十进制浮点字面量的原始文本（放末尾保持 tag 顺序）。
   TFloat : String -> Tok
 
 export record PTok(..) where
@@ -87,13 +87,12 @@ isOpChar c =
     || c == 126
     || c == 58
 
--- 关键字表（M28 增 `axiom`；M31.2 增 `infixl` / `infixr` / `infix`）。
+-- 关键字表（含 `axiom`、`infixl` / `infixr` / `infix`）。
 export isKeyword : String -> Bool
--- records-v2：表示档位前缀（`alias record` / `boxed record`）与 D11 的 `export` /
--- `abstract` 是**软关键字**：只在声明位置的特定上下文识别，不进入该表，避免与用户
--- 已有的同名标识符（编译器源码里就有 `alias` 等 binder）冲突。
--- `transparent` / `opaque` 仍是硬关键字（迁移期兼作旧 record 档位词）。
--- native-effects N1：`perform op`（ND12 保留名编码）。
+-- 表示档位前缀（`alias record` / `boxed record`）与 `export` / `abstract` 是
+-- **软关键字**：只在声明位置的特定上下文识别，不进入该表，避免与用户已有的同名
+-- 标识符（编译器源码里就有 `alias` 等 binder）冲突。
+-- `transparent` / `opaque` 是硬关键字（`export` 位置紧跟 record 时也作档位前缀）。
 isKeyword s =
   s == "data"
     || s == "axiom"
@@ -143,7 +142,7 @@ skipBlockComment depth (Chars (c :: rest) p) = case rest of
     else skipBlockComment depth (Chars rest (advanceChar c p))
   [] => skipBlockComment depth (Chars rest (advanceChar c p))
 
--- 跳过 trivia。fuel 按字符/注释段递减（M36 起所有扫描器都不再回传 fuel：
+-- 跳过 trivia。fuel 按字符/注释段递减（所有扫描器都不回传 fuel：
 -- 主循环与各扫描器各自持有一个够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
 export skipTrivia : Int -> Chars -> Check Chars
 skipTrivia fuel cs = if fuel <= 0 then icFuel "lexer"
@@ -158,7 +157,7 @@ else case cs of
     else OkC cs
     [] => OkC cs
 
--- `@vuna@name` 内部名（阶段 5 D）：只有 `@vuna@` 前缀且后续是标识符字符时才作为
+-- `@vuna@name` 内部名：只有 `@vuna@` 前缀且后续是标识符字符时才作为
 -- 单个标识符收集；其余 `@` 仍是操作符（保持模式 `name@pat` 的语法不变）。
 startsWithVunaAt : List Int -> Bool
 startsWithVunaAt rest = take 5 rest == [118, 117, 110, 97, 64]
@@ -179,7 +178,7 @@ else if c == 46 then case rest of
   [] => Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
--- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：C40 起在词法期报
+-- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：在词法期报
 -- `LX_IntLiteralOutOfRange`，不再让 `acc * 10 + d` 静默回绕成小值或负数。
 export maxIntLiteral : Int
 maxIntLiteral = 4611686018427387903
@@ -198,7 +197,7 @@ else OkC (Pair acc (Chars (c :: rest) p))
 -- ---------------------------------------------------------------
 -- 浮点字面量（`digits '.' digits`）
 -- ---------------------------------------------------------------
--- 先看数字串后面是否是「`.` + 数字」，是才走浮点扫描；否则保持旧的整数扫描
+-- 先看数字串后面是否是「`.` + 数字」，是才走浮点扫描；否则走整数扫描
 -- （含 `LX_IntLiteralOutOfRange` 语义）。这样普通整数路径没有额外分配。
 -- | 数字串后面是否紧跟「`.` + 数字」：是则整段按浮点字面量扫描，否则走整数路径。
 export digitRunIsFloat : Chars -> Bool
@@ -232,17 +231,17 @@ collectOp (Chars (c :: rest) p) acc =
   else Pair (strPack (reverse acc)) (Chars (c :: rest) p)
 
 -- ---------------------------------------------------------------
--- 字符串 / 模板字面量（M36）
+-- 字符串 / 模板字面量
 --
 -- 单行 `"..."`：转义 `\n \t \r \" \\ \' \$`；`${expr}` 插值；原始换行是
--- `LX_UnterminatedString`（与旧行为一致）。
+-- `LX_UnterminatedString`。
 -- 多行 `"""..."""`：内容逐字（原始换行 / tab / `"` / `""` 都可以），**紧跟开引号的一个
 -- 换行不计入内容**；遇 `"""` 结束；转义与插值同样生效。
 --
 -- 洞内 token 由同一套词法（`lexHoleTokens` → `lexOneToken`）原位产出，位置天然是绝对
 -- 源码位置；洞里的注释随 `skipTrivia` 跳过（不进入 AST，fmt 会丢失它们——已知边界）。
 -- ---------------------------------------------------------------
--- 转义字符 → 实际码点（`\$` 是 M36 新增：用来写一个字面 `${`）。
+-- 转义字符 → 实际码点（`\$` 用来写一个字面 `${`）。
 export decodeEscape : Int -> Maybe Int
 decodeEscape 110 = Just 10
 decodeEscape 116 = Just 9
@@ -344,13 +343,13 @@ else case cs of
   else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then OkC (Pair (PTok (TSym (strPack [c])) p) (Chars rest (advanceChar c p)))
   else if c == 96 then OkC (Pair (PTok (TSym "`") p) (Chars rest (advanceChar c p)))
   else if isOpChar c then case collectOp (Chars rest (advanceChar c p)) [c] of
-    -- M31.3：反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
+    -- 反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
     -- 单独识别成 `TSym "`"`，由 parser 配对消费。
     Pair op cs2 => OkC (Pair (PTok (TSym op) p) cs2)
   else lexErr0At (lexSpanAt p) UnexpectedCharacter
 
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
--- 单行且无洞 → `TStr`（保持旧 token 形态）；其余（多行 / 含洞）→ `TTmpl`。
+-- 单行且无洞 → `TStr`；其余（多行 / 含洞）→ `TTmpl`。
 export lexStringToken : Int -> Int -> List Int -> Pos -> Check (Pair PTok Chars)
 lexStringToken fuel c rest p = if fuel <= 0 then icFuel "lexer"
 else case rest of
@@ -390,7 +389,7 @@ else case skipTrivia fuel cs of
 export lexSource : String -> Check (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars (strUnpack source) (Pos 1 1))
 
--- 显式 fuel 的初值（M36）。
+-- 显式 fuel 的初值。
 --
 -- **上界说明**：主循环每个 token 扣 1，token 数 T ≤ len；token 内部的模板/洞扫描
 -- 每个字符扣 1，且单个 token 的字符数 ≤ len，扫描起点处的存量 fuel 远大于它；

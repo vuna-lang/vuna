@@ -1,7 +1,7 @@
 module Vuna.Compiler.Elab.Prelude where
 
 -- Vuna.Compiler.Elab.Prelude：把 `Vuna.Compiler.Intrinsics` 的**唯一内建声明表**翻译成
--- DT 的 prelude globals（签名项）。M27 起这里不再有第二份名字/签名表：
+-- DT 的 prelude globals（签名项）。这里是内建名字/签名表的唯一消费点：
 --
 --   - `Int` / `String` 是语言 primitive 类型；`Bool` 是 base 的普通 data 声明
 --     （canonical `Base.Bool.Bool`，`True`/`False` 精化成 `TBool`）；
@@ -36,19 +36,19 @@ fun2 a b c = TPi "_" False RigOmega a (TPi "_" False RigOmega (shift 0 1 b) (shi
 -- ---------------------------------------------------------------
 -- `eq` / `neq` 的跨类型特化
 -- ---------------------------------------------------------------
--- M31.1：`==` / `/=` 已变成 `eq` / `neq` 的解析期别名（Loader），所以特化按**方法短名**
+-- `==` / `/=` 已变成 `eq` / `neq` 的解析期别名（Loader），所以特化按**方法短名**
 -- （`eq` / `neq`）选 runtime 函数名。特化在精化期完成，codegen 只按名字映射。
 -- 内建类型名（`VNeutral (NGlobal g [])` 形态）。
 export builtinTyName : Value -> Maybe String
 builtinTyName v = case v of
   VNeutral n => case n of
-    -- M29：用 `length`（Int 的 `==` 是特化路径），不依赖 List 的泛型结构比较兜底。
+    -- 用 `length`（Int 的 `==` 是特化路径），不依赖 List 的泛型结构比较兜底。
     NGlobal g sp => if length sp == 0 then Just g else Nothing
     _ => Nothing
   _ => Nothing
 
 -- 按实参类型 + 方法短名选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
--- | 自动补注（M41 新增导出）：eqRuntimeName。
+-- | 按实参类型与 `eq`/`neq` 方法短名选 runtime 函数名（Int / String / Float 可特化，其余报错）。
 export eqRuntimeName : String -> String -> Check String
 eqRuntimeName method "Int" = if method == "eq" then OkC "bi_eq_int" else OkC "bi_neq_int"
 eqRuntimeName method "String" = if method == "eq" then OkC "bi_eq_str" else OkC "bi_neq_str"
@@ -58,7 +58,7 @@ eqRuntimeName method tyName = ErrC (tcMsg (OpOnlyIntString method tyName) [metho
 -- ---------------------------------------------------------------
 -- IType → Core Term
 -- ---------------------------------------------------------------
--- 签名里的类型变量用名字 + binder 环境换成 de Bruijn（M33 W3：Array / IORef 等
+-- 签名里的类型变量用名字 + binder 环境换成 de Bruijn（Array / IORef 等
 -- 内建类型构造子的签名带隐式 `{a : Type}`）。所有 IType 都是闭项或无自由变量。
 indexOfNameGo : String -> List String -> Int -> Maybe Int
 indexOfNameGo name [] i = Nothing
@@ -81,7 +81,7 @@ ityToTermEnv env (IList elem) = TApp (TGlobal listFamilyName) (ityToTermEnv env 
 -- 统一动作类型入口：`Eff [] a`（行必须是 Nil；宿主原语不携带用户效应）。
 ityToTermEnv env (IEff elem) =
   TApp (TApp (TGlobal effTypeName) (TCon effRowNilCtor []) Rig0) (ityToTermEnv env elem) Rig0
--- 阶段 0 spike：内建宿主效应的行项与带行动作（构造 Core 的 `Cons name label tail`）。
+-- 内建宿主效应的行项与带行动作（构造 Core 的 `Cons name label tail`）。
 ityToTermEnv env IRowNil = TCon effRowNilCtor []
 ityToTermEnv env (IRowCons name label tail) =
   TCon effRowConsCtor
@@ -162,7 +162,7 @@ prependParams (p :: rest) kindTerm =
   TPi p False Rig0 (TType levelZero) (prependParams rest kindTerm)
 
 -- ---------------------------------------------------------------
--- trait 库化后的类/方法查找辅助（放在本模块是为了压 Elab 的行数预算）
+-- 类/方法查找辅助（放在本模块以控制 Elab 模块的行数预算）
 -- ---------------------------------------------------------------
 baseNameOf : String -> String
 baseNameOf name = lastSeg name

@@ -19,16 +19,16 @@ module Vuna.Compiler.Frontend.Toml where
 -- 宁可显式拒绝，也不做有损近似。
 --
 -- 视图：
---   * `parseToml` / `parseTomlAt` 返回**扁平条目** `List TomlEntry`（历史视图，
---     `lookupEntry` 按 section + key 查）；子表按 section 路径记录，内联表**展平**
+--   * `parseToml` / `parseTomlAt` 返回**扁平条目** `List TomlEntry`：
+--     `lookupEntry` 按 section + key 查；子表按 section 路径记录，内联表**展平**
 --     进 section 路径（`greet = { path = "x" }` 与 `[dependencies.greet] path = "x"`
 --     得到同一条目），表数组段用十进制序号（`x.0`、`x.1`）。
 --   * `parseTomlDoc` 返回**树视图**（`List (Pair String TomlValue)`），供需要空表与
 --     表数组精确语义的调用方；空内联表在扁平视图里不可见（没有叶子条目）。
 --
 -- 表定义冲突（TOML 1.0 的主要规则）：重复 `[a]`、`[a]` 之后再 `[[a]]`、点键定义过的
--- 表再 `[a]`、`[a]` 之后再 `[a.b]`（合法）等按规范处理；本轮不做 TOML 1.0 的全部
--- corner case（例如表数组元素内部再声明子表），边界见文档。
+-- 表再 `[a]`、`[a]` 之后再 `[a.b]`（合法）等按规范处理；表数组元素内部再声明子表
+-- 这类 corner case 不支持，边界见文档。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
 import Base.Bits

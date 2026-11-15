@@ -1,8 +1,8 @@
 module Vuna.Compiler.Codegen.Split where
 
--- Vuna.Compiler.Codegen.Split：逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
+-- 逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --
--- 把同一份精化结果按「声明归属」切到各模块文件。C35 后每个单元只 `open Vuna_runtime`，
+-- 把同一份精化结果按「声明归属」切到各模块文件。每个单元只 `open Vuna_runtime`，
 -- 跨单元引用（值 / 构造子 / 类型）由 `Codegen.Decl` / `Codegen.Term` 生成
 -- `Unit.name` 全限定名；每个 `SplitFile` 因此带一张**直接依赖单元**表（实际引用到的
 -- 单元，由 `Codegen.Assembly.UnitParts` 累积），文件顺序仍是拓扑序但编译不再依赖
@@ -11,7 +11,7 @@ module Vuna.Compiler.Codegen.Split where
 -- 本模块只做「归属表 + 按归属过滤 + 分文件 + 依赖序校验」。
 --
 -- 归属表**只从 Loader-resolved 的声明结构派生**（声明名、实例名、派生实例名、trait
--- 方法投影名与 `Dict_<trait>`）；不再有字符串前缀表（`Show_Show_*` / 内建方法名表）。
+-- 方法投影名与 `Dict_<trait>`）；没有按字符串前缀猜归属的表。
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Base.HostRow
 import Vuna.Compiler.Common
@@ -29,7 +29,7 @@ import Vuna.Compiler.Codegen.Term
 splitUnitOfModule : String -> String
 splitUnitOfModule modName = sanitizeName modName
 
--- M38：入口单元在定义求值**之前**就开启回栈记录（零参 `main` 在模块初始化期求值，
+-- 入口单元在定义求值**之前**就开启回栈记录（零参 `main` 在模块初始化期求值，
 -- 早于 main 钩子的 try；初始化异常靠当时已开启的回栈打印 vuna 位置帧）。
 mainInitPrologue : String
 mainInitPrologue = "let () = Printexc.record_backtrace true\n"
@@ -37,8 +37,8 @@ mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 -- ---------------------------------------------------------------
 -- 按归属过滤 + 生成
 -- ---------------------------------------------------------------
--- 名字 → 归属单元的哈希索引。旧实现对**每个**模块把全部 def/data 逐个做
--- `mapOwnerOf`（线性扫 pairs）⇒ O(#模块 × #def × #pairs)，大包上就是几秒。
+-- 名字 → 归属单元的哈希索引。对**每个**模块把全部 def/data 逐个线性扫 pairs 是
+-- O(#模块 × #def × #pairs)，大包上就是几秒。
 ownerTblOf : List (Pair String String) -> HashMap String String
 ownerTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
 
@@ -54,7 +54,7 @@ defsInUnit : HashMap String String -> String -> List DtDef -> List DtDef
 defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
 
 -- ---------------------------------------------------------------
--- 依赖序（C35）：每单元的直接依赖必须全部落在更早的模块里。
+-- 依赖序：每单元的直接依赖必须全部落在更早的模块里。
 -- 生成器累积的依赖来自**实际引用**（`QualCtx` 限定 / 类型声明 / List 桥接 / main
 -- 钩子），所以这里只需校验拓扑序并按编译顺序排列（build.sh 的分层吃这份顺序）。
 -- ---------------------------------------------------------------
@@ -103,7 +103,7 @@ mapToUnit : List (Pair String String) -> List (Pair String String)
 mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) pairs
 
 -- ---------------------------------------------------------------
--- 生成前护栏（C08）：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
+-- 生成前护栏：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
 -- ---------------------------------------------------------------
 checkModuleDeclName : List String -> String -> String -> Check Int
 checkModuleDeclName knownModules mname name =
@@ -127,7 +127,7 @@ checkModuleDecls knownModules ((Pair mname decls) :: rest) =
 
 -- 入口的**声明身份**：签名/定义同名是正常形态（DSig + 多 clause DFun），所以只看
 -- data/record/trait/sig 这些唯一标识；它们必须是裸名（入口没有模块前缀）。
--- B18：`data T` 与值 `T` 同名是允许的（两个命名空间），因此身份带命名空间标签；
+-- `data T` 与值 `T` 同名是允许的（两个命名空间），因此身份带命名空间标签；
 -- 只有同一命名空间内重名才是重复。
 entryDeclIdentities : List Decl -> List (Pair Bool String)
 entryDeclIdentities [] = []
@@ -182,7 +182,7 @@ checkResolvedModules meta modules entryDecls runtime datas =
     (\_ => Vuna.Compiler.Common.bind (checkEntryDecls entryDecls) (\_ => Vuna.Compiler.Common.bind (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
 
 -- ---------------------------------------------------------------
--- M38：定义位置表（Vuna_runtime.ml 的 dt_def_locs）的路径归一
+-- 定义位置表（Vuna_runtime.ml 的 dt_def_locs）的路径归一
 -- ---------------------------------------------------------------
 -- 定义 span 里的路径是解析时的原样：模块文件是 `<rootDir>/<模块路径>.vuna` 的绝对
 -- 路径，入口可能是绝对 `<contextDir>/app/Main.vuna` 或调用方给的相对路径。位置表按
@@ -214,19 +214,19 @@ noUnitLookup _ = pure Nothing
 noUnitStore : String -> SplitFile -> Eff hostRow Int
 noUnitStore _ _ = pure 0
 
--- M4（效果显式化）：单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
+-- 单元缓存的 lookup/store 是宿主动作，生成外壳显式在 `Eff []` 里；
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
 export generateDtSplitProgram : List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (List SplitFile))
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir extraDefLocs =
   generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
     contextDir extraDefLocs
 
--- M34.5（S5）：带**单元级缓存**的生成入口（`lookup` 按模块名，入口用 `__entry__`；
+-- 带**单元级缓存**的生成入口（`lookup` 按模块名，入口用 `__entry__`；
 -- 命中即跳过该单元的 lowering + 文本生成，`store` 只对重新生成的单元调用）。
 export generateDtSplitProgramWith : (String -> Eff hostRow (Maybe SplitFile)) -> (String -> SplitFile -> Eff hostRow Int) -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff hostRow (Check (List SplitFile))
 generateDtSplitProgramWith lookup store modules entryDecls prog printResult roots contextDir extraDefLocs =
   let
-    -- M34.6：把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
+    -- 把「精化完成 → 装配开始」之间的构建独有开销分段；stamp 关闭时只花一次分支。
     _ = dbg! "cg-splitstart"
     allDatas = rtDatasOf (dtProgDatas prog)
     allDefs = dtProgDefs prog

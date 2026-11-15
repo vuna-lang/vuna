@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Term.Impl where
 
--- Vuna.Compiler.Elab.Term.Impl（M25.2c 拆分）：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
+-- Vuna.Compiler.Elab.Term.Impl：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
 import Base.List
 import Vuna.Compiler.Common
 import Base.Nat
@@ -18,9 +18,9 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Term.Support
 import Vuna.Compiler.Frontend.Ast
 
--- M28：规范形分支的单一精化入口。分支可达性统一问 `branchAfterUnify`（与覆盖率的
+-- 规范形分支的单一精化入口。分支可达性统一问 `branchAfterUnify`（与覆盖率的
 -- `branchVerdict` 用同一个判据）：不可达分支在精化分支体**之前**就报稳定诊断；可达分支
--- 里的错误就是真错误（不再有「体检查失败就改报 impossible branch」的兜底特判）。
+-- 里的错误就是真错误（没有「体检查失败就改报 impossible branch」的兜底特判）。
 -- 构造子分支 binder 的类型不可命名时（类型族参数出现在运行时位置），分支体里对它的
 -- 每个使用包 `prim_erase`：OCaml 里同一个变量可能被不同分支/嵌套 case 推断成不同类型。
 -- 返回 body 的 de Bruijn 索引（telescope 表面顺序 → 逆序）。
@@ -92,7 +92,7 @@ else case alt of
 
 -- 兜底分支：只允许出现在最后；体在未精化的上下文里检查。
 -- 内部用空名字标记兜底分支（Core / codegen 按空名字识别）。
--- M23：变量兜底分支要把变量按 scrutinee 的**类型**绑进上下文
+-- 变量兜底分支要把变量按 scrutinee 的**类型**绑进上下文
 -- （`case xs of [] => 0; ys => length ys`），否则分支体里的变量是未知名字。
 export elabCatchAllFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> DtData -> List Value -> Value -> List (Pair Pat Expr) -> List CaseAlt -> Expr -> String -> Span -> Check (Pair (List CaseAlt) Ec)
 elabCatchAllFuel fuel globals ctx ec scrutTy dd idxs expected rest acc body pname psp = if fuel <= 0 then icFuel "inference"
@@ -104,7 +104,7 @@ else
     Pair bodyTerm ec2 =>
       let
         -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
-        -- 绑定 scrutinee（旧实现丢 binder，体里引用变量会变成自由变量）。
+        -- 绑定 scrutinee：不记这个 binder，体里对变量的引用会变成自由变量。
         binds = if pname == "_" then [] else [Pair pname (rigOfLinearValue ec scrutTy)]
         -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
         bodyTerm1 =
@@ -114,7 +114,7 @@ else
       in OkC (Pair (reverse (CaseAlt "" binds bodyTerm2 :: acc)) ec2)
   )
 
--- M28：case 的**唯一入口**，流程固定为三步：
+-- case 的**唯一入口**，流程固定为三步：
 --   ① 源级校验（`checkCaseAltsFlat`：兜底位置 / 重复构造子 / 重复字面量）——与家族无关；
 --   ② 需要模式矩阵才能表达的分支形态（嵌套模式、需矩阵消解的重复构造子）先降级成矩阵
 --      （`Elab.Match.multiToCaseExpr`）；矩阵生成的 case 天然是规范形，会再回到本入口走 ③；
@@ -136,10 +136,10 @@ needsMatrixCase : List (Pair Pat Expr) -> Bool
 needsMatrixCase alts = anyNestedPat alts || hasDupNames (altNames alts)
 
 -- 去重/嵌套降级：let 绑定 scrutinee（只求值一次）→ 模式矩阵表达式 → 按规范形重新精化。
--- M28：位置名带**上下文深度**（`nd_scrut<depth>`）。矩阵生成的新鲜绑定名以位置名为前缀，
+-- 位置名带**上下文深度**（`nd_scrut<depth>`）。矩阵生成的新鲜绑定名以位置名为前缀，
 -- 而嵌套 case 会各自降级；若两层都用固定前缀，内层生成的 `_sc_...` 会与外层分支绑定
 -- 同名（编译器源码 `binderHeadName` 的 `PTok (TIdent name) p => case ... of Just (PTok ...)`
--- 曾因此串位）。分支体在更深的作用域里检查，所以深度前缀保证不同层的名字不相交。
+-- 会因此串位）。分支体在更深的作用域里检查，所以深度前缀保证不同层的名字不相交。
 export checkCaseMatrixFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseMatrixFuel fuel globals ctx ec scrut alts expected sp = if fuel <= 0 then icFuel "inference"
 else
@@ -162,7 +162,7 @@ else case forceVal ec scrutTy of
     _ => checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
   _ => tcErr0 sp NotInductiveFamily
 
--- M19：Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
+-- Bool 上的 case 降级成 if（`True` / `False` 是零参构造子形态的模式）。
 export checkBoolCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkBoolCaseFuel fuel globals ctx ec scrutTerm alts expected sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
@@ -201,7 +201,7 @@ else case alt of
     )
     _ => tcErr0 (patSpan pat) BoolCaseRestriction
 
--- M19：Int / String 上的字面量模式降级成嵌套 if。
+-- Int / String 上的字面量模式降级成嵌套 if。
 -- `case n of 0 => a; 1 => b; x => c` 变成 `if n == 0 then a else if n == 1 then b else c`。
 export checkLitCaseFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkLitCaseFuel fuel globals ctx ec scrutTerm tyName alts expected sp = if fuel <= 0 then icFuel "inference"
@@ -247,7 +247,7 @@ export checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Ter
 checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected sp = if fuel <= 0 then icFuel "inference"
 else
   let
-    -- M23：ctxBindValue 的第二个参数是**类型值**——这里绑 scrutinee 的类型，不是值本身。
+    -- ctxBindValue 的第二个参数是**类型值**——这里绑 scrutinee 的类型，不是值本身。
     ctx2 = ctxBindValue name (VNeutral (NGlobal tyName [])) ctx
     rig = binderRig False (VNeutral (NGlobal tyName []))
   in Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\p => case p of
@@ -256,7 +256,7 @@ else
     Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig bodyTerm) scrutTerm Rig1) ec2)
   )
 
--- D24：Nat 字面量模式（`case n of 0 => ...; 1 => ...; _ => ...`）。
+-- Nat 字面量模式（`case n of 0 => ...; 1 => ...; _ => ...`）。
 -- Nat 运行时是 OCaml int，字面量列直接降成 `bi_eq_int (natToInt n) k` 的 if 链；
 -- 变量兜底绑回**原始 Nat 项**。仅当全部模式都是 字面量/变量/通配 时走此路径，
 -- 与构造子模式（`Zero` / `Succ k`）混用仍由构造子路径报限制。
@@ -321,7 +321,7 @@ else case dtDataLookup fam (ecDatas ec) of
     Pair altTerms ec2 => checkCaseDone ec2 ctx dd idxs alts expected sp scrutTerm altTerms
   )
 
--- M19：case 出现在推断位置（函数实参、if 分支、let 的 value）。做法是建一个元变量当
+-- case 出现在推断位置（函数实参、if 分支、let 的 value）。做法是建一个元变量当
 -- 期望类型，再按检查模式处理 case——分支逐个 check 会把期望写进这个元变量。
 export inferCaseEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Term (Pair Value Ec))
 inferCaseEFuel fuel globals ctx ec scrut alts sp = if fuel <= 0 then icFuel "inference"
@@ -352,10 +352,10 @@ else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
 -- 本程序数据构造子（canonical Bool 的 `Base.Bool.True/False` 精化成 `TBool`）先于全局签名。
 -- ---------------------------------------------------------------
--- native-effects N1：`perform <op>` 降级（ND8/ND9）
+-- `perform <op>` 降级
 -- ---------------------------------------------------------------
--- 族约定（D2）：op 族 `M.XxxOp`；标签 = 同族应用（按 kind 的显式参数个数 k 补洞）；res = `M.res<短名>`
--- ↔ 结果族 `M.resXxx`（本提交只做存在性协议校验）；key = op 族规范名。
+-- 族约定：op 族 `M.XxxOp`；标签 = 同族应用（按 kind 的显式参数个数 k 补洞）；res = `M.res<短名>`
+-- ↔ 结果族 `M.resXxx`（这里只做存在性协议校验）；key = op 族规范名。
 -- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (<M.Xxx> <n=洞>) <op>`；
 -- 名字洞由 `{w : Member n e r}` 隐式求解从行条目合一解出，行里没有该条目即缺实例错误。
 data PerfFamily : Type where
@@ -410,7 +410,7 @@ qualifyShort mod short = if mod == "" then short else "${mod}.${short}"
 
 -- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <op 族应用> <op>`。
 -- 标签 = op 族应用，按显式参数个数（k）补洞：`ConsoleOp` k=0、`StateOp` k=1（族参数由行解）；
--- 标签与 op 同型（D2），`performCore` 的 `o : e` 直接由 op 值约束。
+-- 标签与 op 同型，`performCore` 的 `o : e` 直接由 op 值约束。
 -- 纯函数（不递归、不调精化器），避免把大段逻辑塞进 inferEFuel 体内。
 performCallExpr : List (Pair String Term) -> Ec -> Value -> Expr -> Span -> Check Expr
 performCallExpr globals ec opTy op sp = case perfFamilyOfValue ec opTy of
@@ -453,7 +453,7 @@ handleClauseFamilyOfPat : Ec -> Pat -> Check String
 handleClauseFamilyOfPat ec (PCon cname _ psp) = handleClauseFamily ec cname psp
 handleClauseFamilyOfPat ec _ = icInternal "handle mirror case pattern is not a constructor"
 
--- | 所有 op 子句必须同族（ND10），跨族报 TC_HandleClauseFamilyMismatch。
+-- | 所有 op 子句必须同族，跨族报 TC_HandleClauseFamilyMismatch。
 handleCheckFamilies : Ec -> String -> List (Pair Pat Expr) -> Check String
 handleCheckFamilies ec fam [] = OkC fam
 handleCheckFamilies ec fam ((Pair pat _) :: rest) = case handleClauseFamilyOfPat ec pat of
@@ -471,7 +471,7 @@ handleClauseFamilies ec ((Pair pat _) :: rest) = case handleClauseFamilyOfPat ec
 
 -- | op 族 kind 的显式参数个数（链尾必须是 `Type`，且每个显式参数的域必须是宇宙）：
 -- `ConsoleOp : Type` → 0，`StateOp : Type -> Type` → 1；`ExnOp : Row -> Type -> Type`
--- 的 `Row` 域在此被拒（Nothing）→ TC_HandleFamilyUnsupported（D54）。
+-- 的 `Row` 域在此被拒（Nothing）→ TC_HandleFamilyUnsupported（规避 debt D54）。
 handleOpArity : Term -> Maybe Int
 handleOpArity (TPi name implicit rig dom cod) = if implicit then handleOpArity cod
 else if isUniverseTerm dom then case handleOpArity cod of
@@ -550,7 +550,7 @@ handleResFamilyOf globals ec canon resName k sp = case globalsLookup resName glo
     else tcErr1 sp (HandleFamilyUnsupported canon) canon
 
 -- | 族形状校验：返回 `(结果族名, op 族显式参数个数)`；形状不符报
--- TC_EffResFamilyMissing / TC_HandleFamilyUnsupported。D2 后标签 = op 族应用：
+-- TC_EffResFamilyMissing / TC_HandleFamilyUnsupported。标签 = op 族应用：
 -- `<Op> : <params…> -> Type`、`res<短名> : <params…> -> <Op> -> Type`；
 -- State/Reader 的 params 是状态/环境类型（k = 1），Console 等 k = 0；
 -- Exn 是作用域/高阶族（op 族 kind 的显式参数域不是 Type）→ TC_HandleFamilyUnsupported。
@@ -608,7 +608,7 @@ else case handleOperand expr of
             (\e2 => inferEFuel (fuel - 1) globals ctx ec e2)
         Nothing => inferEFuelCore fuel globals ctx ec expr
 
--- | 自动补注（M41 新增导出）：inferEFuelCore。
+-- | 推断方向的入口：先解释 do 标记链，其余形状交给 `inferEFuelCorePlain`。
 inferEFuelCore : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
 inferEFuelCore fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else if doMarkerHead expr then case decodeDoBlock expr of
@@ -625,7 +625,7 @@ inferEFuelCorePlain fuel globals ctx ec expr = if fuel <= 0 then icFuel "inferen
 else case expr of
   EVar name sp => case name of
     "Type" => OkC (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
-    -- M40：`_` 与 `?name` 都必须有期望类型（inference 位无法给洞定类型）。
+    -- `_` 与 `?name` 都必须有期望类型（inference 位无法给洞定类型）。
     _ =>
       if isHoleName name then tcErr0 sp HoleNoExpectedType
       else if isOverCtorName name then Vuna.Compiler.Common.bind
@@ -671,13 +671,13 @@ else case expr of
   _ => icInternal "unreordered infix/paren in elaboration"
 
 -- ---------------------------------------------------------------
--- 记录字段访问 / 更新（R2：按结构化字段表查表）
+-- 记录字段访问 / 更新（按结构化字段表查表）
 -- ---------------------------------------------------------------
--- R4（records-v2）：record 声明直接进精化器（不再降级成单构造子 data），record 身份
+-- record 声明直接进精化器（不再降级成单构造子 data），record 身份
 -- 由 `DtData.dtDataIsRecord` 判定；字段身份仍由 `DtData.dtDataFields`
 -- （名字 / 声明序号 / 外层字段类型）承载。
 -- 访问/更新留在精化期：先推断 base 类型，用字段表定位字段，再复用 case 分支精化
--- （bindCtorTele 负责隐式参数、索引合一与 M39 不透明字段的 cast）。
+-- （bindCtorTele 负责隐式参数、索引合一与不透明字段的 cast）。
 -- | 把类型值解析成单构造子 record（数据族、构造子、索引实参）；否则 Nothing。
 recordTypeOf : Ec -> Value -> Maybe (Pair DtData (Pair DtCtor (List Value)))
 recordTypeOf ec ty = case forceVal ec ty of
@@ -703,7 +703,7 @@ recordFieldPatsFrom i remaining sp =
   if remaining <= 0 then []
   else Base.List.Cons (PVar (recordFieldVarName i) sp) (recordFieldPatsFrom (i + 1) (remaining - 1) sp)
 
--- | R2：按名字在结构化字段表里查（字段序号 / 字段总数 / 外层字段类型）。
+-- | 按名字在结构化字段表里查（字段序号 / 字段总数 / 外层字段类型）。
 recordFieldLookup : String -> DtData -> Maybe (Pair Int (Pair Int Term))
 recordFieldLookup fname dd = recordFieldLookupGo fname (dtDataFields dd) (length (dtDataFields dd))
 
@@ -724,7 +724,7 @@ recordUpdateUnknownGo dd ((Pair fname e) :: rest) = case recordFieldLookup fname
 recordUpdateUnknown : DtData -> List (Pair String Expr) -> Maybe String
 recordUpdateUnknown dd fields = recordUpdateUnknownGo dd fields
 
--- | R2：在更新字段表里按 record 字段名查找对应的新值表达式。
+-- | 在更新字段表里按 record 字段名查找对应的新值表达式。
 recordUpdateValueFor : String -> List (Pair String Expr) -> Maybe Expr
 recordUpdateValueFor fname [] = Nothing
 recordUpdateValueFor fname ((Pair n e) :: rest) =
@@ -742,7 +742,7 @@ recordUpdateArgs i [] provided sp = []
 recordUpdateArgs i (f :: rest) provided sp =
   recordUpdateArg i f provided sp :: recordUpdateArgs (i + 1) rest provided sp
 
--- | R2：更新表达式涉及到的字段序号（结构化标注，供后续原语化复用）。
+-- | 更新表达式涉及到的字段序号（结构化标注，供原语化消费）。
 recordUpdatedIndices : DtData -> List (Pair String Expr) -> List Int
 recordUpdatedIndices dd [] = []
 recordUpdatedIndices dd ((Pair fname e) :: rest) = case recordFieldLookup fname dd of
@@ -751,8 +751,8 @@ recordUpdatedIndices dd ((Pair fname e) :: rest) = case recordFieldLookup fname 
 
 -- 访问/更新的解析计划：纯解析（只查 data/字段表，不递归回精化器），避免把额外 helper
 -- 拉进 SCT 递归组；组里只多 elabEFieldFuel / elabERecUpdateFuel 两个入口。
--- R2：计划携带（记录名，字段序号）标注——`EField` / `ERecUpdate` 在精化期消歧后
--- 的显式身份，后续 R3 的 `TProj` 原语直接消费它。
+-- 计划携带（记录名，字段序号）标注——`EField` / `ERecUpdate` 在精化期消歧后的
+-- 显式身份，`TProj` 原语直接消费它。
 -- | 字段访问解析结果：数据族、构造子、索引、记录名、字段序号/总数与字段类型。
 record FieldAccessPlan where
   planData : DtData
@@ -849,7 +849,7 @@ elabEFieldFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> String -
 elabEFieldFuel fuel globals ctx ec base fname sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec base) (\pb => case pb of
   Pair baseTerm (Pair baseTy ec1) => case recordTypeOf ec1 baseTy of
-    -- R3：具体 record 的字段访问直接产出 `TProj` 原语（codegen 按原 case 形状展开）；
+    -- 具体 record 的字段访问直接产出 `TProj` 原语（codegen 按原 case 形状展开）；
     -- record 族只有参数、没有索引，因此 projection 不需要再走 `elabConAltFuel` 的
     -- 索引合一 / 不透明字段 cast，字段类型直接来自结构化字段表。
     Just _ => Vuna.Compiler.Common.bind (recordFieldPlan ec1 baseTy fname sp) (\plan => let
@@ -871,7 +871,7 @@ else case fields of
     Pair baseTerm (Pair baseTy ec1) => Vuna.Compiler.Common.bind (recordUpdatePlan ec1 baseTy fields sp) (\plan => let
       body = EApp (EVar (dtCtorName plan.upCtor) sp) plan.upBodyArgs sp
     in Vuna.Compiler.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec1 plan.upData plan.upIdxs (evalCtx ctx baseTerm) baseTy (dtCtorName plan.upCtor) (recordFieldPats plan.upFieldCount sp) sp body) (\q => case q of
-      -- R3：重建体装进 `TRecUpd` 原语（带记录身份）；语义仍是单分支 case。
+      -- 重建体装进 `TRecUpd` 原语（带记录身份）；语义仍是单分支 case。
       Pair alt ec2 =>
         OkC
           (Pair (TRecUpd baseTerm alt.caseAltName alt.caseAltBinders plan.upFieldIndices alt.caseAltBody) (Pair baseTy ec2))
@@ -917,13 +917,13 @@ else Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom) (\p
     )
 )
 
--- D23：期望结果类型已知（S2 hint）且名字是 `Base.Num` 方法投影、期望类型又不是内建
+-- 期望结果类型已知（带 hint）且名字是 `Base.Num` 方法投影、期望类型又不是内建
 -- Int/Nat/Float 时，跳过运算符特化、直接走带 hint 的通用推断：hint 先解出类参数与
 -- 结果类型，实参（字面量）随后按该类型 check（可经 FromInt 降级）。否则运算符特化会
 -- 先把字面量推成 Int，`1 + 2 : MyNum` 会报 expected MyNum got Int。
 -- | 检查/推断方向的跳过判据：`name` 是 `Base.Num` 方法投影、期望类型是**刚性非内建**类型。
--- 期望是元变量（未知）时不跳过：那属于推断位置，保留旧的「先推断实参、Nat/Int 混合提升」
--- 行为（如 `length xs + maxIntList ys`：Nat + Int → Int）。
+-- 期望是元变量（未知）时不跳过：那属于推断位置，走「先推断实参、Nat/Int 混合提升」
+-- （如 `length xs + maxIntList ys`：Nat + Int → Int）。
 skipArithSpecForExpected : Ec -> String -> Value -> Bool
 skipArithSpecForExpected ec name expected = case numMethodOpName ec name of
   Just _ => if isIntTy ec expected then False
@@ -934,7 +934,7 @@ skipArithSpecForExpected ec name expected = case numMethodOpName ec name of
     _ => True
   Nothing => False
 
--- | S2 `hint` 版本的跳过判据（hint 里带期望结果类型）。
+-- | `hint` 版本的跳过判据（hint 里带期望结果类型）。
 skipArithSpecForHint : Ec -> String -> Maybe (Pair Int Value) -> Bool
 skipArithSpecForHint ec name Nothing = False
 skipArithSpecForHint ec name (Just p) = skipArithSpecForExpected ec name (secondOf p)
@@ -957,7 +957,7 @@ else case fn of
       (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args sp hint)
     else case ctxLookup name ctx of
       Just _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
-      -- M23：与类型同名的构造子（`data Pair a b where Pair : a -> b -> ...`）在
+      -- 与类型同名的构造子（`data Pair a b where Pair : a -> b -> ...`）在
       -- 推断位置按**构造子**解释（推断位置是值位置；类型位置由 checkTypeFuel (fuel - 1) / checkAppFuel (fuel - 1)
       -- 的「期望是宇宙」分支先走类型应用，不会到这里）。构造子表优先于 globals：
       -- globals 里同名项先登记的是族的 kind，直接查会拿到 `Type -> ... -> Type`。
@@ -967,7 +967,7 @@ else case fn of
             OkC (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
         )
         Nothing => case globalsLookup name globals ec of
-          -- M23：推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
+          -- 推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
           -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
           Just tyTerm => if skipArithSpecForHint ec name hint then Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
             Pair argTerms (Pair resTy ec2) =>
@@ -980,7 +980,7 @@ else case fn of
                 OkC (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
             )
           )
-          -- M31.1：`==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
+          -- `==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
           -- 别名成方法名），但 `Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量
           -- 模式）仍直接构造 `EVar "=="` 这类内部生成名，且实例方法体没有签名、走推断。
           -- 因此推断位置在没有 globals 项时也要先试运算符特化，再报 UnknownName。
@@ -1012,15 +1012,15 @@ export inferArgsFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Value -> L
 inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then icFuel "inference" else inferArgsGo 64 globals ctx ec ty args sp hint
 
--- M41：列表字面量（parser 保留名）按期望族的 Nil/Cons 通用展开；期望未知时默认
+-- 列表字面量（parser 保留名）按期望族的 Nil/Cons 通用展开；期望未知时默认
 -- `Base.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
--- | 自动补注（M41 新增导出）：listLitElems。
+-- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/Cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
 listLitElems : Expr -> Maybe (List Expr)
 listLitElems (EVar name sp) = if isListNilSyntax name then Just [] else Nothing
 listLitElems (EApp (EVar name csp) ([h, t]) sp) =
   if isListConsSyntax name then listLitConsTail h t else Nothing
 
--- | 自动补注（M41 新增导出）：listLitConsTail。
+-- | 在元素列表前插入一个元素（列表字面量拆解用）。
 listLitConsTail : Expr -> Expr -> Maybe (List Expr)
 listLitConsTail h t = case listLitElems t of
   Just rest => Just (h :: rest)
@@ -1028,26 +1028,26 @@ listLitConsTail h t = case listLitElems t of
 
 listLitElems _ = Nothing
 
--- | 自动补注（M41 新增导出）：findCtorByShort。
+-- | 在构造子列表里按短名查构造子。
 findCtorByShort : String -> List DtCtor -> Maybe DtCtor
 findCtorByShort short [] = Nothing
 findCtorByShort short (c :: rest) =
   if ctorShortName (dtCtorName c) == short then Just c else findCtorByShort short rest
 
--- | 自动补注（M41 新增导出）：litFamilyCtor。
+-- | 在给定数据族里按短名查构造子；族或构造子不存在时返回 Nothing。
 litFamilyCtor : Ec -> String -> String -> Maybe DtCtor
 litFamilyCtor ec fam short = case dtDataLookup fam (ecDatas ec) of
   Nothing => Nothing
   Just dd => findCtorByShort short (dtDataCtors dd)
 
--- | 自动补注（M41 新增导出）：expandListLitGo。
+-- | 按给定 Nil/Cons 全名把元素列表折成构造子应用表达式。
 expandListLitGo : String -> String -> List Expr -> Span -> Check Expr
 expandListLitGo nilName consName [] sp = OkC (EVar nilName sp)
 expandListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Common.bind (expandListLitGo nilName consName rest sp)
     (\t => OkC (EApp (EVar consName sp) [e, t] sp))
 
--- 命名行（D2/ND3/ND4）：行字面量的条目形状是 `Cons <name> <label> <tail>`。
+-- 命名行：行字面量的条目形状是 `Cons <name> <label> <tail>`。
 --   * 裸标签（`Fetch`、`ConsoleOp`、`StateOp Nat`）→ 名字取 `defaultInstance`；
 --   * `label@name`（`ConsoleOp@audit`、`StateOp Nat@counter`）→ 名字取 `@` 右侧；
 --     parser 已把裸标识符名字转成字符串字面量（`[Op@audit]` → 名字 "audit"），
@@ -1074,7 +1074,7 @@ applyExtra : Expr -> List Expr -> Expr
 applyExtra label [] = label
 applyExtra label args = EApp label args (exprSpan label)
 
--- 行条目标签：`X@name` 取 X，其余原样（不再把名字塞进标签）。
+-- 行条目标签：`X@name` 取 X，其余原样（名字不进标签）。
 rowLitLabel : Expr -> Expr
 rowLitLabel e = case rowEntryParts e of
   Just (Pair x _) => x
@@ -1096,7 +1096,7 @@ expandRowListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Common.bind (expandRowListLitGo nilName consName rest sp)
     (\t => OkC (EApp (EVar consName sp) [rowLitNameExpr e sp, rowLitLabel e, t] sp))
 
--- | 自动补注（M41 新增导出）：expandListLit。
+-- | 把列表字面量按目标族展开成 Nil/Cons 应用；行字面量走 `Cons` 的三实参形态。
 expandListLit : Ec -> String -> List Expr -> Span -> Check Expr
 expandListLit ec fam elems sp = if fam == effRowFamilyName then case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
@@ -1109,13 +1109,13 @@ else case litFamilyCtor ec fam "Nil" of
     Nothing => tcErr1 sp (UnknownName fam) fam
     Just consC => expandListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 
--- | 自动补注（M41 新增导出）：listLitFamily。
+-- | 列表字面量的目标族：期望类型能推出族名就用它，否则默认 `Base.List.List`。
 listLitFamily : Ec -> Value -> String
 listLitFamily ec expected = case expectedFamilyOf ec expected of
   Just fam => fam
   Nothing => listFamilyName
 
--- | 自动补注（M41 新增导出）：expandArgListLit。
+-- | 实参位置是列表字面量时按期望族展开成构造子应用；其它实参原样返回。
 expandArgListLit : Ec -> Value -> Expr -> Check Expr
 expandArgListLit ec dom a = case listLitElems a of
   Just elems => expandListLit ec (listLitFamily ec (forceVal ec dom)) elems (exprSpan a)
@@ -1148,7 +1148,7 @@ else
             (Pair (Base.List.Cons (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
       )
       MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
-      -- 命名行歧义（ND5）：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
+      -- 命名行歧义：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
       -- 报 TC_AmbiguousInstance（能拿到 span 与候选文本）。
       MemberAmbiguous _ =>
         let
@@ -1228,7 +1228,7 @@ else
         OkC (Pair (Base.List.Cons (Pair metaTerm RigOmega) argTerms) (Pair resTy ec2))
     )
 
--- 用后续显式实参约束 `Dict_C ?a` 里的类参数。M22：先取字典族的**类参数 kind**，
+-- 用后续显式实参约束 `Dict_C ?a` 里的类参数。先取字典族的**类参数 kind**，
 -- 实参头部与它 kind 不匹配（`Monad ?m` 被 `41 : Int` 解成 `?m = Int`）或头部不是
 -- 具体构造子（`?m' Int`）就不约束——类参数由字典实例 / 结果类型决定。
 export constrainDictDomFuel : Int -> List (Pair String Term) -> Ec -> Ctx -> Value -> List Expr -> Span -> Check Ec
@@ -1240,7 +1240,7 @@ else case dictClassArg ec dom of
     Just argKind => case argTy of
       -- 类参数是裸元变量：在**副本**上推断显式实参以确定它（`MkB` → `?a = B`），
       -- 但只把 `?a` 的解带回真实 ec，`inferEFuel (fuel - 1)` 新建的孤儿元变量随副本丢弃——
-      -- 否则 `bind (pure 41)` 的 `pure` 类参数（`?3`）会变成未解孤儿报 M13。
+      -- 否则 `bind (pure 41)` 的 `pure` 类参数（`?3`）会变成未解孤儿报错。
       VMeta a [] => Vuna.Compiler.Common.bind (constrainDictDomGoKFuel (fuel - 1) globals ec ctx argTy argKind args sp) (\ecProbe => case metaLookup a (ecSolTbl ecProbe) of
         Just v => case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 a [] v of
           OkC sols2 => OkC (ecPutSols ec (solsList sols2))
@@ -1275,8 +1275,8 @@ natLitTermGo n acc = if n <= 0 then acc else natLitTermGo (n - 1) (TCon natSuccC
 natLitTerm : Int -> Term
 natLitTerm n = natLitTermGo n (TCon natZeroCtor [])
 
--- C40 起十进制字面量在词法期已限定在 0..maxInt（越界报 LX_IntLiteralOutOfRange），
--- 因此这里的负数检查只是防御内部不变量（保留错误码，避免旧路径静默接受非法值）。
+-- 起十进制字面量在词法期已限定在 0..maxInt（越界报 LX_IntLiteralOutOfRange），
+-- 因此这里的负数检查只是防御内部不变量（保留错误码，避免静默接受非法值）。
 natLitResult : Span -> Int -> Check Term
 natLitResult sp n = if n < 0 then tcErr0 sp NatLiteralOutOfRange else OkC (natLitTerm n)
 
@@ -1322,10 +1322,10 @@ coerceNatOperands ec aTy bTy aTerm bTerm =
   else if isIntTy ec aTy && isNatTy ec bTy then Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
   else Nothing
 
--- D23 Stage1：算术运算符名。Stage 1 仍走内建 `+ - * /`；同时认 `Base.Num` 的
--- 方法投影（`add/sub/mul/div`），映射回规范运算符名后复用同一套特化——这样 Stage 2
--- 把 `+` 别名到 `add` 后，实例体 `add x y = x + y` 仍降级成内建原语，不会退化成
--- （自递归的）普通字典方法调用。具体类型不是 Int/Nat/Float 时特化返回 Nothing，
+-- 算术运算符名。内建 `+ - * /` 与 `Base.Num` 的方法投影（`add/sub/mul/div`）映射回
+-- 规范运算符名后复用同一套特化——`+` 在 Loader 被别名到 `add` 之后，实例体
+-- `add x y = x + y` 仍降级成内建原语，不会退化成（自递归的）普通字典方法调用。
+-- 具体类型不是 Int/Nat/Float 时特化返回 Nothing，
 -- 调用方回落到普通 trait 应用（泛型 `Num a =>` 代码走这条）。
 -- 只有限定名（方法投影 `Base.Num.add`，含 `.`）才需要查类表；裸运算符名在上面直接
 -- 返回，避免给每个普通应用都加 4 次类表扫描。
@@ -1530,7 +1530,7 @@ else case expr of
   EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
   ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
-  -- A2：防御分支——正常路径已在绑定块入口展开；普通表达式位置直接降级后重查。
+  -- 防御分支——正常路径已在绑定块入口展开；普通表达式位置直接降级后重查。
   ELocalFun clauses sp => if clausesHaveOverCtor clauses then Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx expected clauses) (\r => case r of
     Pair clauses2 ec1 =>
       Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2)
@@ -1538,7 +1538,7 @@ else case expr of
   )
   else Vuna.Compiler.Common.bind (expandLocalFuns ec (ELocalFun clauses sp))
     (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-  -- M24：`EAnn` 在 check 位等价于「按标注类型检查内部表达式」。
+  -- `EAnn` 在 check 位等价于「按标注类型检查内部表达式」。
   EAnn value ty sp => Vuna.Compiler.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec ty) (\pt => case pt of
     Pair tyTerm (Pair _ ec1) =>
       checkEFuel (fuel - 1) globals ctx ec1 value (eval (ctxEnv ctx) tyTerm)
@@ -1546,12 +1546,12 @@ else case expr of
   _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
 
 -- ---------------------------------------------------------------
--- M19：`let` 表达式
+-- `let` 表达式
 -- ---------------------------------------------------------------
 -- 逐条处理：推断绑定值 → 上下文绑名 → 处理后续与 body → `(\x => body) value`（beta 等价）。
 -- 不引入 `TLet`（`let` 是纯记法，不是类型论构造）；`rig` 由绑定值类型经 `binderRig` 决定，
 -- 与函数参数自动一致。后续绑定可见前面（顺序 let），不互递归；构造子模式 let 等价 case。
--- 统一绑定块（M28）：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
+-- 统一绑定块：`let` 与 `where` 走同一套顺序作用域；`where` 多一条记法约束
 -- （签名行必填，`checkBindingSigs`）。签名绑定在 parser 里已降级成 `EAnn value ty`，
 -- 值一律按签名以 checking 模式精化（`inferEFuel` 的 EAnn 分支），因此这里不再区分来源。
 export checkLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
@@ -1560,11 +1560,11 @@ checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
   else Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (expandBind ec) binds)
     (\binds2 => Vuna.Compiler.Common.bind (checkBindingSigs rec_ binds2) (\_ => checkLetGoFuel (fuel - 1) globals ctx ec binds2 body rec_ expected sp))
 
--- A2：把 `ELocalFun`（where/let 多 clause 函数）用 `Elab.Match.multiToExpr` 的模式矩阵
+-- 把 `ELocalFun`（where/let 多 clause 函数）用 `Elab.Match.multiToExpr` 的模式矩阵
 -- 降级成普通表达式（lambda + case/if），与顶层 DFun 的 `elabFunDef` 走同一条路径。
 -- 只展开**顶层** `ELocalFun`；结果里嵌套的 `ELocalFun` 由 `checkEFuel`/`inferEFuel` 的
 -- `ELocalFun` 分支在继续精化时再展开（结构递归只沿输入表达式的子项，SCT 可证）。
--- | 自动补注（M41 新增导出）：patHasOverCtor。
+-- | 模式里是否含重载构造子引用（Loader 的候选集编码）。
 patHasOverCtor : Pat -> Bool
 patHasOverCtor (PCon name args sp) =
   if isInternalSyntaxName name then True else anyPatHasOverCtor args
@@ -1572,22 +1572,22 @@ patHasOverCtor (PAs name inner sp) = patHasOverCtor inner
 patHasOverCtor (PRecord name fields sp) = anyFieldHasOverCtor fields
 patHasOverCtor _ = False
 
--- | 自动补注（M41 新增导出）：anyPatHasOverCtor。
+-- | 模式列表里是否有任一模式含重载构造子引用。
 anyPatHasOverCtor : List Pat -> Bool
 anyPatHasOverCtor [] = False
 anyPatHasOverCtor (p :: rest) = patHasOverCtor p || anyPatHasOverCtor rest
 
--- | 自动补注（M41 新增导出）：anyFieldHasOverCtor。
+-- | record 字段模式表里是否有任一模式含重载构造子引用。
 anyFieldHasOverCtor : List (Pair String Pat) -> Bool
 anyFieldHasOverCtor [] = False
 anyFieldHasOverCtor ((Pair f p) :: rest) = patHasOverCtor p || anyFieldHasOverCtor rest
 
--- | 自动补注（M41 新增导出）：clausesHaveOverCtor。
+-- | 子句列表里是否有任一参数模式含重载构造子引用。
 clausesHaveOverCtor : List (Pair (List Pat) Expr) -> Bool
 clausesHaveOverCtor [] = False
 clausesHaveOverCtor ((Pair pats body) :: rest) = anyPatHasOverCtor pats || clausesHaveOverCtor rest
 
--- | 自动补注（M41 新增导出）：expandLocalFuns。
+-- | 把 where/let 的多 clause 局部函数展开成 lambda + case/if；含重载构造子时留给模式解析。
 expandLocalFuns : Ec -> Expr -> Check Expr
 expandLocalFuns ec (ELocalFun clauses sp) =
   if clausesHaveOverCtor clauses then OkC (ELocalFun clauses sp)
@@ -1639,14 +1639,14 @@ expandDoStmt ec (DBind pat value sp) =
 expandDoStmt ec (DExpr value sp) =
   Vuna.Compiler.Common.bind (expandLocalFuns ec value) (\v2 => OkC (DExpr v2 sp))
 
--- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
+-- 推断位的 `let`（嵌套 let 的 value 位置就是推断位）。
 export inferLetFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetFuel fuel globals ctx ec binds body rec_ sp =
   if fuel <= 0 then icFuel "inference"
   else Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (expandBind ec) binds)
     (\binds2 => Vuna.Compiler.Common.bind (checkBindingSigs rec_ binds2) (\_ => inferLetGoFuel (fuel - 1) globals ctx ec binds2 body rec_ sp))
 
--- M24：where/let 绑定块是**顺序 let**：每个绑定只看得到它之前的绑定；递归放顶层定义组。
+-- where/let 绑定块是**顺序 let**：每个绑定只看得到它之前的绑定；递归放顶层定义组。
 export checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetGoFuel fuel globals ctx ec [] body rec_ expected sp =
   if fuel <= 0 then icFuel "inference" else checkEFuel (fuel - 1) globals ctx ec body expected
@@ -1688,7 +1688,7 @@ else case firstOf bind of
             OkC (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm Rig1) ec2)
         )
     )
-  -- A1：let 模式解构（`let (MkPoint x y) = p in ...`）等价单分支 case：
+  -- let 模式解构（`let (MkPoint x y) = p in ...`）等价单分支 case：
   -- 模式只能绑定变量/通配以外的形态时，把绑定降级成 `case value of pat => rest`，
   -- 穷尽性交给既有的 case 精化（不可失败模式通过，`Just` 这类非穷尽模式报覆盖性错误）。
   _ =>
@@ -1696,7 +1696,7 @@ else case firstOf bind of
       (ECase (secondOf bind) [Pair (firstOf bind) (ELet rest body rec_ sp)] (patSpan (firstOf bind)))
       expected
 
--- M19：推断位的 `let`（嵌套 let 的 value 位置就是推断位）；入口见上方 `inferLetFuel`。
+-- 推断位的 `let`（嵌套 let 的 value 位置就是推断位）；入口见上方 `inferLetFuel`。
 export inferLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLetGoFuel fuel globals ctx ec binds body rec_ sp = if fuel <= 0 then icFuel "inference"
 else case binds of
@@ -1704,7 +1704,7 @@ else case binds of
   (Pair pat value) :: rest => case pat of
     PVar name psp => inferLetBoundFuel (fuel - 1) globals ctx ec name value rest body rec_ sp
     PWild psp => inferLetIgnoredFuel (fuel - 1) globals ctx ec value rest body rec_ sp
-    -- A1：let 模式解构在推断位同样降级为单分支 case（见 checkLetOneFuel 的说明）。
+    -- let 模式解构在推断位同样降级为单分支 case（见 checkLetOneFuel 的说明）。
     _ =>
       inferEFuel (fuel - 1) globals ctx ec
         (ECase value [Pair pat (ELet rest body rec_ sp)] (patSpan pat))
@@ -1737,7 +1737,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv
     )
 )
 
--- S2：期望结果类型 hint。把剩余 Pi 链的每个 binder 用刚性占位变量实例化，取“残余结果
+-- 期望结果类型 hint。把剩余 Pi 链的每个 binder 用刚性占位变量实例化，取“残余结果
 -- 类型”；占位变量 level 从 depth 起递增，若结果引用它们（levelEscapes depth 0 res），
 -- 说明结果依赖显式实参，不能提前解字典类参数，调用方跳过。
 -- | 用新鲜元变量逐个实例化 Pi 链，返回残余结果类型；供字典类参数提前求解使用。
@@ -1749,10 +1749,10 @@ else case forceVal ec v of
       stripPisWithMetas (fuel - 1) ctx ec1 (applyClosure clo (eval (ctxEnv ctx) metaTerm))
   _ => OkC (Pair v ec)
 
--- | 判断值的头部是否是元变量（含裸元变量与带实参元变量）：S2 的期望结果类型 hint
--- 可以靠 conv 继续求解它。D23 起用户类型算术 `1 + 2 : MyNum` 的残余结果就是**裸**元变量
--- （`add : a -> a -> a` 的结果没有 spine）；旧实现只认带 spine 的元变量，会跳过 hint，
--- 让实参先被推断成 Int。裸元变量同样能靠后续 conv 求解，一并接受。
+-- | 判断值的头部是否是元变量（含裸元变量与带实参元变量）：期望结果类型 hint
+-- 可以靠 conv 继续求解它。用户类型算术 `1 + 2 : MyNum` 的残余结果就是**裸**元变量
+-- （`add : a -> a -> a` 的结果没有 spine）；只认带 spine 的元变量会跳过 hint，
+-- 让实参先被推断成 Int。裸元变量同样能靠 conv 求解，一并接受。
 isMetaHeadedValue : Ec -> Value -> Bool
 isMetaHeadedValue ec v = case forceVal ec v of
   VMeta _ _ => True
@@ -1784,7 +1784,7 @@ else case stripPisWithMetas 64 ctx ec piTy of
     else Nothing
     else Nothing
 
--- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走旧路径）。
+-- 与 inferEFuel 同形，只对 EApp 把期望结果类型传进 inferAppFuel（其余形状走常规推断）。
 -- 不复制 inferAppFuel 的 ctor/over-ctor/运算符分派，避免绕过分派导致的燃料问题。
 -- | 与 inferEFuel 同形，但 EApp 会把期望结果类型作为 hint 传进推断入口。
 inferEFuelHint : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term (Pair Value Ec))
@@ -1806,7 +1806,7 @@ else case handleOperand expr of
         _ => inferEFuel fuel globals ctx ec expr
 
 -- ---------------------------------------------------------------
--- F3-1：运行入口的未处理效应诊断
+-- 运行入口的未处理效应诊断
 -- ---------------------------------------------------------------
 -- 期望类型是 `Eff [] a`、实际类型是 `Eff r a`（r 为具体非空行）时，报
 -- `TC_UnhandledEffects` 并列出标签，而不是裸的 `TC_TypeMismatch`。
@@ -1830,7 +1830,7 @@ isNilRowValue ec v = case forceVal ec v of
   _ => False
 
 -- | 命名行条目的 (名字, (标签, 尾行))：`Cons n e t`（3 实参）。不是行条目返回 Nothing。
--- 单个 Cons 分支：规避旧编译器在深/浅两个 Cons 分支回退时的变量串位（debt D53）。
+-- 单个 Cons 分支：规避深/浅多个 Cons 分支回退时的变量串位（规避 debt D53）。
 effConsLabelTail : Value -> Maybe (Pair Value (Pair Value Value))
 effConsLabelTail (VCon consName (n :: e :: t :: _)) =
   if consName == effRowConsCtor then Just (Pair n (Pair e t)) else Nothing
@@ -1892,12 +1892,12 @@ unhandledEffectLabel ec expected actual = case effRowOfValue (forceVal ec expect
       Nothing => Nothing
   else Nothing
 
--- D51：自动 Effect 行 lift。conv 失配时若「期望 = `Eff (Cons e tail) a`」且「实际的行与
+-- 自动 Effect 行 lift。conv 失配时若「期望 = `Eff (Cons e tail) a`」且「实际的行与
 -- tail 相等」，就用 `Base.Eff.weaken` 把实际动作提升到更大的行（运行时是恒等，只是类型
 -- 层面的行扩宽）。**不调用 `checkEFuel`**（只构造项，避免与 checkByInferFuel 形成 SCT
--- 互递归）；weaken 不在作用域时不触发，由调用方回退旧诊断（`TC_UnhandledEffects` 或
+-- 互递归）；weaken 不在作用域时不触发，由调用方回退常规诊断（`TC_UnhandledEffects` 或
 -- 普通 mismatch）。期望是 `Eff []` 时也不触发：那是未处理效应，必须报 `TC_UnhandledEffects`。
--- 阶段 5：行包含判断（actual 行 ⊆ expected 行，按 label 值相等，无序）。
+-- 行包含判断（actual 行 ⊆ expected 行，按 label 值相等，无序）。
 -- 只在 Elab 内部用；lift 后运行时恒等（Eff 的行擦除），不插入项。
 sameLabelValue : Value -> Value -> Bool
 sameLabelValue a b = showTerm (quote 0 a) == showTerm (quote 0 b)
@@ -1924,7 +1924,7 @@ else case forceVal ec actual of
   else False
   _ => False
 
--- | D51 自动行 lift：`actual : Eff r a` 遇到期望 `Eff (Cons e r) a` 时返回插入
+-- | 自动行 lift：`actual : Eff r a` 遇到期望 `Eff (Cons e r) a` 时返回插入
 -- `Base.Eff.weaken` 的项与 conv 解出的 Ec；条件不满足 / weaken 不可见 / 期望为空行时
 -- 返回 Nothing。
 tryEffLift : Ctx -> List (Pair String Term) -> Ec -> Value -> Value -> Term -> Maybe (Pair Term Ec)
@@ -1948,7 +1948,7 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
             Nothing => Nothing
             Just actualRow => if rowSubValue ec 64 actualRow (firstOf p) then Just (Pair term ec)
             else if isNilRowValue ec actualRow then case globalsLookup "Base.Eff.raise" globals ec of
-              -- 阶段 5：行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
+              -- 行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
               Nothing => Nothing
               Just _ =>
                 Just
@@ -1991,13 +1991,13 @@ else
         ctx2 = ctxBindValue name dom ctx
         expected2 = applyClosure clo v
       in Vuna.Compiler.Common.bind (rigForLinearDomain ec sp name rig dom) (\lamRig => Vuna.Compiler.Common.bind (checkLamFuel (fuel - 1) globals ctx2 ec rest body expected2 sp) (\p => case p of
-        -- M18.5：lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
+        -- lambda 形参与定义参数同一条规则——隐式 binder 恒擦除（隐式实参由
         -- 精化器插入，运行时不传），显式 binder 只有域是宇宙才擦除。
-        -- M38：线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
+        -- 线性域的 binder 必须是 1；捕获外层线性值的 λ 不能逃逸。
         Pair inner ec1 =>
           let
             inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-            -- W7：捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
+            -- 捕获线性值的 λ 不在这里直接拒绝——标记 binder 名，由 `Elab.Usage`
             -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
             -- TC_LinearCaptureEscapes（诊断码不变）。
             binderName =
@@ -2007,7 +2007,7 @@ else
           in OkC (Pair (TLam binderName lamRig inner2) ec1)
       )
       )
-    -- B32：case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
+    -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
     -- 为 domain/codomain 各建一个元变量，把期望元变量解成 Pi，再按普通 λ 检查。
     -- 仅处理空 spine 的裸元变量；非空 spine 的应用元变量维持原诊断。
     VMeta m [] =>
@@ -2030,15 +2030,15 @@ else
 
 -- 类型位置的裸名字：与类型同名的零参构造子（`data T : Type where T : ...`）不能抢走
 -- 类型名——`inferVarRef` 在值位置优先构造子，所以 `T` 在类型位置若走推断会拿到构造子
--- 类型。M28（B18）起这里**显式查类型命名空间**（`typeLookup`：数据族 + 字典族 +
--- 类型层 def），不再把「全局项的 kind 是不是宇宙」当命名空间判据。
--- | R4：类型命名空间里的族头：record 族用 `TRecord` 前导，其余仍是 `TGlobal`。
+-- 类型。这里**显式查类型命名空间**（`typeLookup`：数据族 + 字典族 + 类型层 def），
+-- 不把「全局项的 kind 是不是宇宙」当命名空间判据。
+-- | 类型命名空间里的族头：record 族用 `TRecord` 前导，其余仍是 `TGlobal`。
 typeHeadTerm : Ec -> String -> Term
 typeHeadTerm ec name = case dtDataLookup name (ecDatas ec) of
   Just dd => if dtDataIsRecord dd then TRecord name [] else TGlobal name
   Nothing => TGlobal name
 
--- | R4：record 族的类型应用用 `TRecord`（带实参）；普通 data / 类型层 def 仍 `TApp` 链。
+-- | record 族的类型应用用 `TRecord`（带实参）；普通 data / 类型层 def 仍 `TApp` 链。
 typeAppTerm : Ec -> String -> List (Pair Term Rig) -> Term
 typeAppTerm ec name args = case dtDataLookup name (ecDatas ec) of
   Just dd => if dtDataIsRecord dd then TRecord name args else foldAppTerms (TGlobal name) args
@@ -2078,7 +2078,7 @@ else Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec expr) (\p =
           (showValueAt (ctxDepth ctx) ty)
 )
 
--- 检查方向的应用：构造子的隐式族参数/索引由期望类型反向约束（M14 的索引推断）。
+-- 检查方向的应用：构造子的隐式族参数/索引由期望类型反向约束（索引推断）。
 -- 非构造子仍走「先推断再统一」。
 export checkAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppFuel fuel globals ctx ec fn args expected sp = if fuel <= 0 then icFuel "inference"
@@ -2088,9 +2088,9 @@ else case fn of
     (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args expected sp)
   else case ctxLookup name ctx of
     Just _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
-    -- M28（B18）：**类型位置 = 期望是宇宙且名字在类型命名空间**。位置本身不能单独决定
+    -- **类型位置 = 期望是宇宙且名字在类型命名空间**。位置本身不能单独决定
     -- 命名空间（`applyTwice Box ...` 里 `Box` 在值位置、期望是 `Type -> Type`），
-    -- 所以显式问 `isTypeName`，不再只看期望类型是不是宇宙。
+    -- 所以显式问 `isTypeName`，不只靠期望类型是不是宇宙。
     -- 类型位置可能嵌套在应用实参里（`List (Pair String Int)`），所以这一步必须在
     -- checkAppFuel (fuel - 1) 里，而不只是 checkTypeFuel (fuel - 1)。
     Nothing => if isSortVal ec expected then case typeNameOfDualCtor ec name of
@@ -2102,7 +2102,7 @@ else case fn of
   _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
 
 -- 值位置的名称应用（非「类型作为项」）：构造子走 ctor 专用检查，其余走通用应用。
--- | 自动补注（M41 新增导出）：checkAppByValueFuel。
+-- | 值位置的名称应用：构造子走 `checkAppCtorFuel`，其余走 `checkAppGeneralFuel`。
 checkAppByValueFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> String -> List Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
 checkAppByValueFuel fuel globals ctx ec fn name args expected sp vsp = if fuel <= 0 then icFuel "inference"
 else case valueLookup globals ec name of
@@ -2111,7 +2111,7 @@ else case valueLookup globals ec name of
   Nothing => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
 
 -- 类型位置的应用：名字已在类型命名空间（`checkAppFuel` 的 `isTypeName` 保证），按它的
--- kind 应用；结果必须是宇宙。M28（B18）删掉了「infer 失败退回常规推断」的兜底——
+-- kind 应用；结果必须是宇宙。没有「infer 失败退回常规推断」的兜底——
 -- 进入这里就说明这是类型位置 + 类型命名空间，退化会把命名空间判断又搅混。
 export checkAppUnderTypeFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Pair Term Ec)
 checkAppUnderTypeFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then icFuel "inference"
@@ -2131,11 +2131,11 @@ else case typeHeadLookup globals ec name of
       Nothing => tcErr1 sp (AppliedNotType name) name
   )
 
--- M35.1：实例头实参按**类参数 kind** 精化，并强制走**类型命名空间**。
--- 不能直接用 checkE：值位置优先查构造子，而 record 的构造子与类型同名（M23），
+-- 实例头实参按**类参数 kind** 精化，并强制走**类型命名空间**。
+-- 不能直接用 checkE：值位置优先查构造子，而 record 的构造子与类型同名，
 -- `instance Monad (State s)` 里的 `State` 会被解析成构造子再按值应用（kind 错位，
 -- 报 `constructor State: expected Type -> Type, got State ?0 ?1`）。
--- 期望 kind 是宇宙时沿用 checkType（旧「头实参必须是类型」语义 + 宇宙检查）；
+-- 期望 kind 是宇宙时沿用 checkType（「头实参必须是类型」语义 + 宇宙检查）；
 -- 是箭头 kind 时以「类型名 + 实参」在类型的 kind 上应用实参（同 checkTypeFuel 的
 -- EApp 分支），再用 conv 把结果 kind 与期望 kind 对齐。
 export checkTypeAtKind : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Span -> Check (Pair Term Ec)
@@ -2162,10 +2162,10 @@ checkTypeAtKind globals ctx ec expr expected sp = case forceVal ec expected of
     else onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
     _ => onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
 
--- M19：`==` / `/=` 的饱和应用按实参类型特化。
+-- `==` / `/=` 的饱和应用按实参类型特化。
 -- 返回 `Nothing` 表示「不是泛化比较运算符的饱和应用」，调用方走常规路径。
 -- 特化后的项是 `bi_eq_int a b` / `bi_eq_str a b` 这类具体运行时函数应用，
--- 因此 codegen 只需要名字映射（不感知类型），M18.6 的封装不被破坏。
+-- 因此 codegen 只需要名字映射（不感知类型），擦除封装不被破坏。
 export specializeEqAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeEqAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if isEqMethod ec name then case args of
@@ -2216,8 +2216,8 @@ else Vuna.Compiler.Common.bind (specializeEqAppFuel (fuel - 1) globals ctx ec na
   )
 )
 
--- M36 跟进：模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
--- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检曾因此
+-- 模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
+-- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检会因此
 -- 退化到分钟级）：
 --   * String：具体实例 `interp s = s`（恒等）；
 --   * Int：blanket + `Show Int` ⇒ `strFromInt e`；
@@ -2254,10 +2254,10 @@ isStringTyValue (VNeutral (NGlobal g [])) = g == strTypeName
 isStringTyValue _ = False
 
 -- ---------------------------------------------------------------
--- M23：`&&` / `||` 的**短路**降级
+-- `&&` / `||` 的**短路**降级
 -- ---------------------------------------------------------------
--- 旧实现把 `&&` / `||` 当普通全局严格求值：`False && (1/0 == 0)` 会真去算右边，而编译
--- 产物（HM 的 `if`）是短路的——反复求值/异常行为三路不一致。这里在精化期把饱和应用
+-- `&&` / `||` 必须是短路的：当普通全局严格求值时 `False && (1/0 == 0)` 会真去算右边，
+-- 而编译产物（HM 的 `if`）是短路的——反复求值/异常行为三路不一致。所以精化期把饱和应用
 -- 降成 `TIf`：`a && b` ⇒ `if a then b else False`、`a || b` ⇒ `if a then True else b`。
 -- 核心求值器与 codegen 都只需处理 TIf/if，短路语义自动一致，不在 Core/Codegen
 -- 各打一份补丁。
@@ -2295,9 +2295,9 @@ else case fn of
 -- 用 `dtCtorLookup` 取**构造子类型**（不是 `globalLookup`）：名字与族同名的构造子
 -- （如 `data Pair a b where Pair : a -> b -> Pair a b`）的 `globalLookup` 会命中族 kind
 -- （`Type -> Type -> Type`）而不是构造子类型，导致隐式族参数丢失。
--- M35.1：检查方向构造子应用的**族参数反推**（只对恒等结果索引的构造子生效）。
+-- 检查方向构造子应用的**族参数反推**（只对恒等结果索引的构造子生效）。
 --
--- 旧路径先 `inferArgsFuel`（隐式族参数插元变量）再与期望类型统一。对字段类型依赖
+-- 先 `inferArgsFuel`（隐式族参数插元变量）再与期望类型统一会出问题。对字段类型依赖
 -- 族参数的构造子（CPS `Eff` 的 `(a -> ans) -> ((op : f) -> (res op -> ans) -> ans) -> ans`），
 -- 检查字段 lambda 时 `res`/`a` 还是元变量，`alg op k` 会要求解 `?a ≡ res op` 这类
 -- flex-flex 约束（`res` 在 λ 内才绑定）→
@@ -2307,7 +2307,7 @@ else case fn of
 --
 -- 只对**恒等结果索引**生效：结果 `F x1..xk` 的 xi 必须就是第 i 个 binder 本身（如 `Eff`）。
 -- `Vec (Succ n) a` 这类非恒等索引的 binder 不等于结果索引，喂进去会造出错误索引
--- （曾把 `Cons` 的 n 喂成结果长度，导致 `Nil` 期望 1 得到 0）。
+-- （会把 `Cons` 的 n 喂成结果长度，导致 `Nil` 期望 1 得到 0）。
 -- 构造子类型末尾的族应用 `F r1..rk` 的实参（跳过 Pi 链）。
 ctorResultArgs : Term -> List Term
 ctorResultArgs (TPi _ _ _ _ cod) = ctorResultArgs cod
@@ -2374,11 +2374,11 @@ ctorFamilyArgsGo ec ty (v :: vs) (r :: rs) depth acc = case forceVal ec ty of
   _ => Nothing
 
 -- ---------------------------------------------------------------
--- M41：重载构造子引用 / 列表字面量的类型导向模式归一化
+-- 重载构造子引用 / 列表字面量的类型导向模式归一化
 -- ---------------------------------------------------------------
 -- 把 `PCon` 头里的候选集（Loader 的 @vuna@ctor@... 编码）按期望类型/scrutinee 族
 -- 解析成 canonical 构造子，并递归解析嵌套模式（用 ctorFamilyArgs 实例化字段类型）。
--- | 自动补注（M41 新增导出）：resolveOverPatFuel。
+-- | 按期望类型/scrutinee 族解析模式头里的重载构造子与列表字面量，并递归解析嵌套模式。
 resolveOverPatFuel : Nat -> Ec -> Ctx -> Value -> Pat -> Check (Pair Pat Ec)
 resolveOverPatFuel Zero ec ctx expected pat = icFuel "pattern resolve"
 resolveOverPatFuel (Succ k) ec ctx expected pat = case pat of
@@ -2395,7 +2395,7 @@ resolveOverPatFuel (Succ k) ec ctx expected pat = case pat of
   PRecord name fields sp => OkC (Pair pat ec)
   _ => OkC (Pair pat ec)
 
--- | 自动补注（M41 新增导出）：resolveCtorPatFuel。
+-- | 构造子模式的解析：用构造子字段类型实例化后逐个解析实参模式。
 resolveCtorPatFuel : Nat -> Ec -> Ctx -> Value -> String -> List Pat -> Span -> Check (Pair Pat Ec)
 resolveCtorPatFuel Zero ec ctx expected cname args sp = icFuel "pattern resolve"
 resolveCtorPatFuel (Succ k) ec ctx expected cname args sp = case dtCtorLookupEc ec cname of
@@ -2406,7 +2406,7 @@ resolveCtorPatFuel (Succ k) ec ctx expected cname args sp = case dtCtorLookupEc 
       Pair args2 ec2 => OkC (Pair (PCon cname args2 sp) ec2)
     )
 
--- | 自动补注（M41 新增导出）：resolvePatArgsFuel。
+-- | 沿构造子 telescope 逐个解析实参模式（隐式 binder 直接跳过）。
 resolvePatArgsFuel : Nat -> Ec -> Ctx -> Value -> List Pat -> Check (Pair (List Pat) Ec)
 resolvePatArgsFuel Zero ec ctx ty args = icFuel "pattern resolve"
 resolvePatArgsFuel (Succ k) ec ctx ty args = case args of
@@ -2425,11 +2425,11 @@ resolvePatArgsFuel (Succ k) ec ctx ty args = case args of
       )
     _ => OkC (Pair args ec)
 
--- | 自动补注（M41 新增导出）：resolveOverAlts。
+-- | 逐条解析 case 分支模式（重载构造子与列表字面量归一化）。
 resolveOverAlts : Ec -> Ctx -> Value -> List (Pair Pat Expr) -> Check (Pair (List (Pair Pat Expr)) Ec)
 resolveOverAlts ec ctx ty alts = resolveOverAltsGo (natFromInt 512) ec ctx ty alts
 
--- | 自动补注（M41 新增导出）：resolveOverAltsGo。
+-- | resolveOverAlts 的 Nat 燃料递归实现。
 resolveOverAltsGo : Nat -> Ec -> Ctx -> Value -> List (Pair Pat Expr) -> Check (Pair (List (Pair Pat Expr)) Ec)
 resolveOverAltsGo Zero ec ctx ty alts = icFuel "pattern resolve"
 resolveOverAltsGo (Succ k) ec ctx ty alts = case alts of
@@ -2441,12 +2441,12 @@ resolveOverAltsGo (Succ k) ec ctx ty alts = case alts of
   )
 
 -- 多子句函数 / 实例方法：按签名 Pi 链逐列解析每条 clause 的参数模式。
--- | 自动补注（M41 新增导出）：resolveOverFunPats。
+-- | 按签名 Pi 链逐列解析多子句函数/实例方法的参数模式。
 export resolveOverFunPats : Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
 resolveOverFunPats ec ctx expected clauses =
   resolveOverFunPatsGo (natFromInt 512) ec ctx expected clauses
 
--- | 自动补注（M41 新增导出）：resolveOverFunPatsGo。
+-- | resolveOverFunPats 的 Nat 燃料递归实现。
 resolveOverFunPatsGo : Nat -> Ec -> Ctx -> Value -> List (Pair (List Pat) Expr) -> Check (Pair (List (Pair (List Pat) Expr)) Ec)
 resolveOverFunPatsGo Zero ec ctx ty clauses = icFuel "pattern resolve"
 resolveOverFunPatsGo (Succ k) ec ctx ty clauses = case clauses of
@@ -2507,7 +2507,7 @@ else case dtCtorLookupEc ec name of
     )
 
 -- ---------------------------------------------------------------
--- S3b：do 块的内部标记链解释（carrier C）
+-- do 块的内部标记链解释（carrier C）
 -- ---------------------------------------------------------------
 -- Loader.Resolve 把 do 降级成「语句边界全部编码在 EApp+ELam 链上」的嵌套应用，但每个非末条
 -- 节点的头部换成内部标记 `@vuna@do@bind@<canonical>` / `@vuna@do@ignore@<canonical>`
@@ -2516,10 +2516,10 @@ else case dtCtorLookupEc ec name of
 -- 这里把整条链解释成一个 do 块，按**整块一个 monad / 一个字典**精化：
 --   * 期望类型能拆成 `m a`（force 后是中性应用、末实参即 a）就直接取 m/a，否则建共享 meta；
 --   * 每条语句的 element 类型各建一个 meta，语句按 `m a_i` 检查（复用 checkEFuel）；
---   * 字典整块只建一次（延迟时是 meta + 一个 Constraint（CkDict）），装配出的每个 bind 应用与旧降级
---     逐项一致：隐式 {m}/{Monad m}/{a}/{b}、rig、λ binder 名、语句 span。
+--   * 字典整块只建一次（延迟时是 meta + 一个 Constraint（CkDict）），装配出的每个 bind 应用
+--     形状固定：隐式 {m}/{Monad m}/{a}/{b}、rig、λ binder 名、语句 span。
 -- 形状不认识（bind 不是全局 / 签名不是 `{m}{Monad m}{a}{b} -> m a -> (a -> m b) -> m b` /
--- 链形状不符）⇒ 把标记链重建为普通 bind 链交给既有路径，语义与 S3a 逐字一致。
+-- 链形状不符）⇒ 把标记链重建为普通 bind 链交给既有路径。
 -- 标记头：`EApp (EVar <do marker>) _ _`。
 -- | 判断表达式头部是否是 do 块标记（`@vuna@do@bind` / `@vuna@do@ignore`）应用。
 doMarkerHead : Expr -> Bool
@@ -2565,7 +2565,7 @@ decodeDoBlock (expr@(EApp (EVar name sp) args asp)) = case doSyntaxCanonical nam
   Nothing => Nothing
 decodeDoBlock _ = Nothing
 
--- 回退：把标记链重建为普通 bind 链（与 S3a 产出的 AST 相同），交给既有精化路径。
+-- 回退：把标记链重建为普通 bind 链（AST 形态与 Loader 直接降级的结果相同），交给既有精化路径。
 -- | 把语句序列重建成普通 bind 链：do 标记替换成 canonical bind 名。
 doChainBuild : String -> List DoChainStep -> Expr -> Span -> Expr
 doChainBuild canonical [] last lastSp = last
@@ -2681,7 +2681,7 @@ else case shape of
       _ => OkC Nothing
     _ => OkC Nothing
 
--- 组装一个 bind 应用：与旧降级逐项一致（隐式 m/dict/a/b、显式 e/λ 的 rig、λ binder 名）。
+-- 组装一个 bind 应用：隐式 m/dict/a/b、显式 e/λ 的 rig、λ binder 名。
 -- `ecLinear` 是 λ 入口的 Ec（线性捕获判据与 checkLamFuel 同点采样），`ecPaper` 是体精化后的
 -- Ec（不透明运行时类型的域判据用解完的 Ec）。
 -- | 组装 bind 应用：隐式 m/字典/a/b、显式 e/λ 的 rig 与 binder 名，

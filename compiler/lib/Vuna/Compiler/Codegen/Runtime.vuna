@@ -1,10 +1,10 @@
 module Vuna.Compiler.Codegen.Runtime where
 
--- Vuna.Compiler.Codegen.Runtime：OCaml 后端的**运行时符号表**（契约的 OCaml 实现）。
+-- OCaml 后端的**运行时符号表**（契约的 OCaml 实现）。
 --
--- 分工（Track A 第二步）：
+-- 分工：
 --   * `Ir.Runtime`：契约（符号名 + 是否桥接），目标中立、唯一真源；
---   * 本模块：契约符号 → OCaml 运行时表达式（原 `Intrinsics.intrinsicRuntime` 逐字搬来），
+--   * 本模块：契约符号 → OCaml 运行时表达式（对照 `Intrinsics` 的唯一真源），
 --     以及 List 桥接 helper 名单。表必须对契约**全覆盖**（`rtTextGaps` 空），且不得有
 --     契约之外的条目（`rtTextExtras` 空）；两者由 `Lower.checkRuntimeContract` 在每次
 --     check/build 上断言。

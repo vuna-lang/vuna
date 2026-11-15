@@ -717,7 +717,7 @@ rtFunctions c =
 -- 符号表
 -- ---------------------------------------------------------------
 export rtImplOf : String -> RtImpl
--- 可观测性原语（`docs/reference/observability.md` §4.1 / O12）：wasm 后端只给**叶子**
+-- 可观测性原语（`docs/reference/observability.md` §4.1）：wasm 后端只给**叶子**
 -- 原语 no-op 桩（返回盒装 0）；`span` 依赖闭包，本后端不支持闭包 ⇒ 引用点编译期拒绝。
 rtImplOf name =
   if name == "+" then RtFunc 2 "$rt_add"

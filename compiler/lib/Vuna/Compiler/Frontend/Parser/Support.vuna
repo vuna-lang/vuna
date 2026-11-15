@@ -14,8 +14,8 @@ export record PState(..) where
   lastPos : Pos
   toksLeft : Int
 
--- 余下 token 数（O(1) 维护）：stateFuel 旧实现 `128 * length toks + 1024` 每次调用都遍历
--- 剩余 token 列表，而它在每个声明/表达式循环入口都被调用 ⇒ 大文件解析 O(n²)。
+-- 末尾 `toksLeft` 是余下 token 数（O(1) 维护）：`stateFuel` 在每个声明/表达式循环
+-- 入口都被调用，若每次都遍历剩余 token 列表，大文件解析就退化成 O(n²)。
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
 export fileOf : PState -> String
@@ -60,10 +60,10 @@ isEof st = case peekTok st of
 
 -- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
 -- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
--- 显式 fuel（M30/C27 保留，给出证明界）：parser 的递归都经「返回新状态再递归」，
+-- 显式 fuel（给出证明界）：parser 的递归都经「返回新状态再递归」，
 -- 递归实参是**游标状态**而不是某个形参的真子项（PState 不可分解成更小的 token 列表），
 -- 所以现有 SCT 判据看不到结构下降；每个解析循环带 fuel 并在入口 `if fuel <= 0` 守卫、
--- 递归传 `fuel - 1`，R2「守卫 Int」判据直接接受。
+-- 递归传 `fuel - 1`，「守卫 Int」判据直接接受。
 --
 -- **不耗尽证明**（`stateFuel = 128 * 剩余 token 数 + 1024`）：
 --   1. 不变量：任一带 fuel 的调用点上，`fuel >= 16 * 剩余 token 数 + 1`；
@@ -93,7 +93,7 @@ atSym st s = case peekTok st of
   PTok (TSym x) p => x == s
   _ => False
 
--- 向后看第 n 个 token（0 = 当前）。M13 的 Pi binder 需要 2-token lookahead。
+-- 向后看第 n 个 token（0 = 当前）。Pi binder 需要 2-token lookahead。
 export nthTok : List PTok -> Int -> Maybe PTok
 nthTok [] n = Nothing
 nthTok (t :: rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
@@ -101,7 +101,7 @@ nthTok (t :: rest) n = if n <= 0 then Just t else nthTok rest (n - 1)
 export peekTokAt : PState -> Int -> Maybe PTok
 peekTokAt st n = nthTok st.toksOf n
 
--- M38：Pi binder 头：`标识符 :`、`0 标识符 :`、`1 标识符 :`（`(x : A) -> B` / `{x : A} -> B`）。
+-- Pi binder 头：`标识符 :`、`0 标识符 :`、`1 标识符 :`（`(x : A) -> B` / `{x : A} -> B`）。
 -- 多参数 trait 的探针还写 `{a b : Type} -> ...`：同一 binder 组可含多个名字，这里返回
 -- 名字列表，`parsePiBinder` 展开成嵌套 EPi。
 export binderHead : PState -> Maybe (Pair (Maybe Qty) (List String))
@@ -156,7 +156,7 @@ expectIdent st = case peekTok st of
   PTok (TIdent x) p => OkC (Pair x (advance st))
   _ => psErr0At (tokSpan st) ExpectedIdentifier
 
--- M31.3：值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
+-- 值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
 -- 中缀里的名字（`` a `f` b ``）。
 export expectValueName : PState -> Check (Pair String PState)
 expectValueName st = case peekTok st of
@@ -201,7 +201,7 @@ startsAtom st = case peekTok st of
     Nothing => False
   _ => False
 
--- M40：命名洞 `?name` 的原子：`?` 与紧随的标识符**同行且列号相邻**（`?h`）。
+-- 命名洞 `?name` 的原子：`?` 与紧随的标识符**同行且列号相邻**（`?h`）。
 -- 空格分隔的 `?` 仍是普通运算符（`a ? b`、`(? b)`），不受影响。
 -- 返回值 = 洞名（带 `?`）+ 覆盖 `?name` 的 span（end 到名字末字节，便于 hover 高亮整个洞）。
 export holeAtomAt : PState -> Maybe (Pair String Span)
@@ -224,7 +224,7 @@ startsPatternAtom st = case peekTok st of
   PTok (TSym "[") p => True
   _ => False
 
--- M31.2：中缀解析不再有固定优先级表——`infix*` 声明随模块进入 Loader，重排时才消费。
+-- 中缀解析没有固定优先级表——`infix*` 声明随模块进入 Loader，重排时才消费。
 -- 这里只判定「哪些符号在表达式位置属于语法、遇到就停止」，其余 TSym 都当运算符。
 export isSyntaxSym : String -> Bool
 isSyntaxSym op = case op of
@@ -249,22 +249,22 @@ isSyntaxSym op = case op of
   "}" => True
   _ => False
 
--- M31.3：保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
+-- 保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
 -- 集合 = 表达式位置的语法符号（`isSyntaxSym`）∪ {`->`, `` ` ``}。
 -- `->` 是语法而非用户运算符（fixity 由 Loader.syntaxFixityDecls 恒提供）；反引号是定界符。
 export isReservedValueName : String -> Bool
 isReservedValueName name = isSyntaxSym name || name == "->" || name == "`"
 
--- M31.3：右 section 判定——当前 token 是运算符、下一个 token 是 `)`。
+-- 右 section 判定——当前 token 是运算符、下一个 token 是 `)`。
 -- 不消费 `)`：由外层 `(` 分支统一消费。
 export closeParenNext : PState -> Bool
 closeParenNext st = case peekTokAt st 1 of
   Just (PTok (TSym ")") p) => True
   _ => False
 
--- M31.3：`(` 之后的下一个 token 若是非保留符号名，则该括号是 section
+-- `(` 之后的下一个 token 若是非保留符号名，则该括号是 section
 -- （`(+)` 或 `(+ e)`），返回该符号名；否则不是 section。
--- M40：`(?h)` 里 `?` 紧邻标识符 ⇒ 是命名洞而不是 `(? h)` section。
+-- `(?h)` 里 `?` 紧邻标识符 ⇒ 是命名洞而不是 `(? h)` section。
 export sectionOpAt : PState -> Maybe String
 sectionOpAt st = case peekTokAt st 1 of
   Just (PTok (TSym op) p) => if isReservedValueName op then Nothing

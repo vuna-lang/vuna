@@ -1,9 +1,9 @@
 -- | 编译器底层源码位置与路径工具（不含 `Result`；诊断结果类型在 `Diag`）。
 module Vuna.Compiler.Source where
 
--- Vuna.Compiler.Source：从 `Vuna.Compiler.Common` 拆出的位置/路径层。
+-- 位置/路径层。
 --
--- 拆分目的（诊断重设计 M1）：`Diag` 需要 `Span` 构造诊断，`Common` 需要 `Diag` 提供
+-- 分层原因：`Diag` 需要 `Span` 构造诊断，`Common` 需要 `Diag` 提供
 -- 结构化 `Result`；若 `Span` 与 `Result` 同处 `Common` 就会成环。这里只保留与错误
 -- 通道无关的纯数据与路径/近似名工具，供 `Diag` 与 `Common` 共用。
 --
@@ -85,7 +85,7 @@ splitOnDot s = splitCharsOnDot (strUnpack s) [] []
 export splitOnChar : Int -> String -> List String
 splitOnChar sep s = splitCharsOn sep (strUnpack s) [] []
 
--- | 自动补注（M41 新增导出）：splitCharsOn。
+-- | splitCharsOn。
 splitCharsOn : Int -> List Int -> List String -> List Int -> List String
 splitCharsOn sep [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitCharsOn sep (c :: rest) acc seg =

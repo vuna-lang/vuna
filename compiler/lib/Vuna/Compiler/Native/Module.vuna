@@ -1,8 +1,8 @@
 module Vuna.Compiler.Native.Module where
 
--- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编，M2 + M3a）。
+-- Vuna.Compiler.Native.Module：IrProgram -> NativeProgram（x86-64 汇编）。
 --
--- M2 切片：M1 的 Int/Nat/Bool 纯值 + `String`（字面量、`++`、`strFromInt`、`strLength`、
+-- 覆盖 Int/Nat/Bool 纯值与 `String`（字面量、`++`、`strFromInt`、`strLength`、
 -- `strAt`、`strHash`、`strShow`、`strSubstring`、`bi_eq_str` / `bi_neq_str`、`IrConcatMany`、
 -- String 入口）。字符串是**指向长度头的指针**，由运行时从 bump 堆分配。
 -- M3a：用户 `data`（变体对象 `[0]`=tag + 8 字节字段）、record（纯字段对象）、
@@ -10,11 +10,11 @@ module Vuna.Compiler.Native.Module where
 --
 -- 生成策略（见 docs/reference/native.md）：
 --   * 从 entry main 沿 `irDefDeps` 收集可达定义，只生成可达函数；不可达的 base
---     定义不检查（与 wasm M1 的 `collectNeeded` 同策略）；
+--     定义不检查（与 wasm 的 `collectNeeded` 同策略）；
 --   * 不做寄存器分配：binder 与中间值都走 `[rbp - 8*(slot+1)]`；
 --   * 调用约定在 `Native.Abi`；运行时符号在 `Native.Runtime`；
 --   * 字符串字面量按**内容去重**进 `.rodata`（首现顺序编号），`IrStr` 求值成 `lea`；
---   * 内部 label 全程序唯一（编号跨定义累加；M1 每函数从 0 起，会让两个函数撞名）；
+--   * 内部 label 全程序唯一（编号跨定义累加；按函数重置会让两个函数撞名）；
 --   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
 --
 -- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。

@@ -1,10 +1,10 @@
 module Vuna.Compiler.Core.Conv where
 
--- Vuna.Compiler.Core.Conv：定义性相等（beta + delta + eta）与元变量求解。
+-- 定义性相等（beta + delta + eta）与元变量求解。
 --
--- 返回更新后的元变量解表。M28：空 spine 就地检查作用域；非空 spine 走 Miller pattern
+-- 返回更新后的元变量解表。空 spine 就地检查作用域；非空 spine 走 Miller pattern
 -- unification（局部中性变量 spine → λ 抽象）；非 pattern 形状明确报错。
--- M24 后维护（源码重组）：从原 Core.vuna 拆出；依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
+-- 依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -24,8 +24,8 @@ import Vuna.Compiler.Intrinsics
 fastSame : Value -> Value -> Bool
 fastSame a b = case a of
   VType i => case b of
-    -- M29：Level 是 `Level` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
-    -- 路径上依赖泛型结构比较兜底（`==` 的兜底将在 M29 删除）。
+    -- Level 是 `Level` 数据；用 `levelEq`（内部只比 Int 字段）避免在相等
+    -- 路径上依赖泛型结构比较兜底。
     VType j => levelEq i j
     _ => False
   VInt i => case b of
@@ -393,7 +393,7 @@ mismatchAt depth a b =
   in tcTypeMismatchNoLoc sa sb
 
 -- ---------------------------------------------------------------
--- 元变量求解（M28：Miller pattern unification）
+-- 元变量求解（Miller pattern unification）
 -- ---------------------------------------------------------------
 -- 规则：
 --   * spine 为空：解 = rhs；就地检查 rhs 的自由变量都早于元变量创建深度（作用域）。
@@ -561,8 +561,8 @@ solveMetaEmptyStore sols depth m rhs =
   else tcErr1NoLoc (CannotSolveMetavar (strFromInt m)) (strFromInt m)
 
 -- 非空 spine：Miller pattern 才求解，其它形状明确拒绝。
--- 非 pattern 形状的兜底（M28）：旧 M13 扩展的「头一致」提取，仅用于 spine 不是 Miller
--- pattern 的存量场景（如 `?m (e1 e2) = head args`）。这不是合一理论的一部分，只是保守
+-- 非 pattern 形状的兜底：「头一致」提取，仅用于 spine 不是 Miller
+-- pattern 的场景（如 `?m (e1 e2) = head args`）。这不是合一理论的一部分，只是保守
 -- 近似：能提取就提取，其余仍报 CannotSolveHigherOrder；pattern 路径优先，命中时不会走到这里。
 splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
 splitAtVals 0 xs = Pair [] xs

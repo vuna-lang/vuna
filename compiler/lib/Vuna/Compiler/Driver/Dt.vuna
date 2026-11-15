@@ -1,12 +1,11 @@
 module Vuna.Compiler.Driver.Dt where
 
--- Vuna.Compiler.Driver.Dt：DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
+-- DT 路径的 facade（供 Compile / CompilerCli / Interp 使用）。
 --
--- M13 时 DT 是单文件自包含：parseSource → Elab →（check / codegen / 核心求值），
--- 不经过 Loader。**M20 起改为复用 `Loader`**：多文件、`import`、包目录都能用，
--- 名字解析完全交给既有 Loader（不新建平行 Loader）。
--- **M26**：入口统一吃 `PackageContext`（最近 vuna.toml + 依赖闭包；无 manifest 时
--- base-only）；旧环境根 / 单文件原始模式的 `dtCheckFile` / `dtCompileFile` 已删除。
+-- 加载/名字解析复用 `Loader`：多文件、`import`、包目录都能用，
+-- 不另建平行 Loader。
+-- 入口统一吃 `PackageContext`（最近 vuna.toml + 依赖闭包；无 manifest 时
+-- base-only）。
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
 import Base.Sort
@@ -43,9 +42,9 @@ import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
 import Vuna.Compiler.Driver.Split
 
--- M34.5 模块级接口（S1）：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
--- `DtProgram`，所以 check 的出口需要保留加载/解析后的模块表与入口声明（此前只返回
--- `DtProgram`，归属信息在中途被丢掉）。Loader 顺序是依赖者在前的反序。
+-- 模块级接口：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
+-- `DtProgram`，所以 check 的出口需要保留加载/解析后的模块表与入口声明。
+-- Loader 顺序是依赖者在前的反序。
 export record CheckedPackage(..) where
   checkedProgram : DtProgram
   checkedModules : List Module
@@ -53,7 +52,7 @@ export record CheckedPackage(..) where
   -- 摘要路径下由依赖包摘要注入、因而不属于本包的 artifact 名字（写本包接口时跳过覆盖检查）。
   -- 全量路径为空（依赖模块的 decls 都在，归属可从声明推导）。
   checkedInherited : List String
-  -- M4：本次检查产生的 warning（loader 的 unused-import + Elab 的 Ec.ecWarnings）。
+  -- 本次检查产生的 warning（loader 的 unused-import + Elab 的 Ec.ecWarnings）。
   checkedWarnings : List Diagnostic
 
 -- 项目声明的拼接顺序：Loader 的 modules 列表是「依赖在前」的**反序**（依赖者先
@@ -82,7 +81,7 @@ dtLoad ctx entry =
             in OkC (Pair (dtProjectDecls (secondOf resolved)) (firstOf resolved))
     )
 
--- M34.5 接口摘要（S1）：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
+-- 接口摘要：加载 + resolve 并保留模块归属（入口 / 库包两条入口）。
 --
 -- 阶段边界用**瞬时标记**（`vuna.load` / `vuna.resolve`）：`loadProject*` 是 `Eff` 动作，
 -- 不能被纯跨度包住（执行发生在 runner 里），时间轴上只能是零宽度点（规范 §2）；
@@ -136,7 +135,8 @@ checkDeclsWithWarns loaderWarns decls =
       )
   )
 
--- M34.5：与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
+-- 与 dtCheck 同一条精化路径，但把 DtProgram / 模块表 / 入口声明一并返回
+-- （检查缓存写接口摘要用）。
 -- （检查缓存写接口摘要用）。
 export dtCheckWithProgramParts : PackageContext -> String -> Eff hostRow (Check (Pair (List Diagnostic) CheckedPackage))
 dtCheckWithProgramParts ctx entry =
@@ -227,7 +227,7 @@ dtCheck ctx entry = do
       in checkDeclsWithWarns (firstOf resolved) decls
   )
 
--- M45：单文件检查的两个入口（`vuna check <file.vuna>`）。
+-- 单文件检查的两个入口（`vuna check <file.vuna>`）。
 --
 -- 带 `module` 头的文件按**库模块**语义检查：与 LSP 打开同包库文件走同一条
 -- `loadModuleSource` + `elabProgramFull` + `checkDtProgramOf` 链（含用量/遮蔽告警），
@@ -265,7 +265,7 @@ dtEvalFile ctx entry = do
       in Vuna.Compiler.Common.bind (elabProgramFull decls) evalDtMain
   )
 
--- REPL 的表达式求值（M23）：上下文 + program 源码 + 表达式源码。
+-- REPL 的表达式求值：上下文 + program 源码 + 表达式源码。
 -- program 里的定义必须有签名（REPL 用户逐行输入签名）；表达式在程序的环境
 -- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 按上下文
 -- 的 roots 从磁盘解析（`loadProjectSource`），所以 REPL 可以把 import 行一起缓冲进来。
@@ -297,7 +297,7 @@ dtEvalExpr ctx program exprSource = do
     OkC p => dtEvalExprIn (firstOf p) (secondOf p)
   )
 
--- M30 · REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `Eff [] a`（决定是否走
+-- REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `Eff [] a`（决定是否走
 -- compile+run）；类型文本经 `showTerm` 渲染 zonk 后的类型，可直接写回合成签名的
 -- `main : <type>`。
 export dtEvalExprInfo : PackageContext -> String -> String -> Eff hostRow (Check (Pair String String))
@@ -308,7 +308,7 @@ dtEvalExprInfo ctx program exprSource = do
     OkC p => dtEvalExprInInfo (firstOf p) (secondOf p)
   )
 
--- M30 · LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
+-- LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
 -- 返回空 warning 列表；错误串仍是带 `<label>:line:col` 的稳定诊断，LSP 自行解析。
 export dtCheckSource : PackageContext -> String -> String -> Eff hostRow (Check (List Diagnostic))
 dtCheckSource ctx label source = do
@@ -322,9 +322,9 @@ dtCheckSource ctx label source = do
         OkC prog => OkC (append (firstOf resolved) (dtProgWarnings prog))
   )
 
--- M34.5（LSP 消费接口）：依赖包模块从接口预置（零 parse/resolve/elab），只精化当前
+-- 依赖包模块从接口预置（零 parse/resolve/elab），只精化当前
 -- 源码文件与同包源码。接口不可用时调用方退回不带 ifaces 的版本。
--- M34.6 安全阀：同包模块自己的 import 可能带出闭包外的依赖模块（它们会被 Loader 从源码
+-- 安全阀：同包模块自己的 import 可能带出闭包外的依赖模块（它们会被 Loader 从源码
 -- 加载、却没有 artifact 注入 ⇒ 假 TC_UnknownName）。发现任何依赖模块缺 artifact 就整体
 -- 回退全量路径：宁可慢，不能静默给出错误诊断。
 missingDepModules : String -> List Module -> List String -> List String
@@ -358,14 +358,14 @@ dtCheckSourceWithIfaces ctx label source ifaces =
           )
           else dtCheckSource ctx label source
 
--- M34.5（REPL 消费接口）：REPL 程序（入口声明）在依赖接口之上精化，不再重精化依赖。
--- M34.6：
+-- REPL 程序（入口声明）在依赖接口之上精化，不再重精化依赖。
+-- 三条约束：
 --   ① **同包**源码模块（REPL 所在包里被 program import 的模块）不是依赖接口，必须与入口
 --     声明一起精化，否则表达式引用同包定义会报假 `TC_UnknownName <模块>.<定义>`；
 --   ② 组装结果必须补回依赖接口的 datas / defs（`elabProgramFullWithAux` 只返回本次新精化
 --     的 datas，表达式求值 `dtEvalExprIn` 会从 DtProgram 重建 Ec；缺依赖 datas ⇒ 依赖包
 --     构造子查不到，`[1, 2, 3]` 这类字面量在 REPL 里报 `TC_UnknownName Base.List.Cons`）；
---   ③ M34.6（5b）：termAux（依赖包 decls）跨表达式不变，record/deriving 预处理可复用。
+--   ③ termAux（依赖包 decls）跨表达式不变，record/deriving 预处理可复用。
 replCheckParts : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> Check (Pair DtProgram Expr)
 replCheckParts start pkgName deps parts =
   Vuna.Compiler.Common.bind (replCheckPartsAux start pkgName deps parts [] Nothing)
@@ -412,7 +412,7 @@ replProgramWithIfaces ctx program exprSource ifaces = do
     OkC p => OkC (firstOf p)
   )
 
--- M34.6（5b）：会话入口带 termAux 预处理缓存（同一条加载/精化路径，缓存只是省的固定开销）。
+-- 会话入口带 termAux 预处理缓存（同一条加载/精化路径，缓存只是省的固定开销）。
 replProgramWithIfacesAux : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff hostRow (Check (Pair (Pair DtProgram Expr) (Maybe AuxCache)))
 replProgramWithIfacesAux ctx program exprSource ifaces cache =
   let
@@ -445,7 +445,7 @@ replProgramWithIfacesAux ctx program exprSource ifaces cache =
               OkC p => OkC (Pair p cache)
             )
 
--- REPL 会话入口：复用 termAux 预处理缓存（5b），返回更新后的缓存。
+-- REPL 会话入口：复用 termAux 预处理缓存，返回更新后的缓存。
 export dtEvalExprInfoWithAuxCache : PackageContext -> String -> String -> List ModuleIface -> Maybe AuxCache -> Eff hostRow (Check (Pair (Pair String String) (Maybe AuxCache)))
 dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache = do
   pR <- replProgramWithIfacesAux ctx program exprSource ifaces cache
@@ -716,7 +716,7 @@ listLen : List a -> Int
 listLen [] = 0
 listLen (_ :: rest) = 1 + listLen rest
 
--- M30 · LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
+-- LSP hover：内存源码的洞目标（与 `vuna goal` 同源）。
 export dtGoalsSource : PackageContext -> String -> String -> Eff hostRow (Check (List DtGoalInfo))
 dtGoalsSource ctx label source = do
   projectR <- loadModuleSource ctx label source
@@ -727,7 +727,7 @@ dtGoalsSource ctx label source = do
       OkC resolved => goalsOfProgram (dtProjectDecls (secondOf resolved))
   )
 
--- M40 · 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文（M40 起改用这个）。
+-- 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文。
 export dtGoalsSourceTolerant : PackageContext -> String -> String -> Eff hostRow (Check (List DtGoalInfo))
 dtGoalsSourceTolerant ctx label source = do
   projectR <- loadModuleSource ctx label source
@@ -738,7 +738,7 @@ dtGoalsSourceTolerant ctx label source = do
       OkC resolved => goalsOfProgramTolerant (dtProjectDecls (secondOf resolved))
   )
 
--- M30 · `vuna test`：main 的返回类别，决定执行路径。
+-- `vuna test`：main 的返回类别，决定执行路径。
 --   "Eff"    —— 效果程序，走 compile + 运行（退出码判定）；
 --   "String" —— 纯测试，空串通过；
 --   "Int"    —— 0 通过；
@@ -781,12 +781,12 @@ splitReplExpr decls = case reverse decls of
     else icInternal "REPL expression definition is not last"
   _ => icInternal "REPL expression was not parsed as a definition"
 
--- B44：核心求值器支持浮点（`Float` 原语按 IEEE-754 double 归约，见 `Core/Eval`），
--- interp 不再需要「程序用到浮点就拒绝」的 guard。
+-- 核心求值器支持浮点（`Float` 原语按 IEEE-754 double 归约，见 `Core/Eval`），
+-- interp 因此不需要「程序用到浮点就拒绝」的 guard。
 evalDtMain : DtProgram -> Check String
 evalDtMain program = evalDtMainCore program
 
--- 核心求值器对 `main` 的求值边界（M23 终态契约，B44 起含 Float）：
+-- 核心求值器对 `main` 的求值边界（含 Float）：
 --   - 纯 `main : Int/Nat/String/Bool/Float`：核心求值并展示值（Float 用
 --     `string_of_float` 规范文本，与产物一致）；
 --   - `main : Eff [] a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
@@ -814,7 +814,7 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
         Nothing => interpMainShow table sols mainVal
       _ => interpMainShow table sols mainVal
 
--- D17：非内建 main 类型的展示。Elab 收尾已合成 `@vuna@main_show : T -> String`
+-- 非内建 main 类型的展示。Elab 收尾已合成 `@vuna@main_show : T -> String`
 -- （`Elab.Driver.synthMainShow`），这里对 main 值应用它并打印结果字符串；与编译产物的
 -- main 钩子走同一展示（Show 字典投影）。
 interpMainShow : List (Pair String Term) -> Sols -> Value -> Check String
@@ -848,10 +848,10 @@ defTableOf (d :: rest) = case dtDefBody d of
   Just body => Pair (dtDefName d) body :: defTableOf rest
   Nothing => defTableOf rest
 
--- M26：唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
+-- 唯一 codegen 入口 = 逐模块 split（`compile` / `build` / seed rotation 共用）。
 -- 与单文件路径共用同一次精化，生成器把 datas/defs 按声明归属切到各模块文件；
 -- 模块列表按依赖序（Loader 的 modules 是依赖者在前的反序，这里 reverse）。
--- M34.5 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
+-- 接口摘要：加载 + resolve 项目并保留模块归属（本包 decls 过滤用）。
 dtLoadParts : PackageContext -> String -> Eff hostRow (Check (Pair (List Diagnostic) (Pair (List Decl) (List Module))))
 dtLoadParts ctx entry = dtLoadPartsForCheck ctx entry
 
@@ -892,7 +892,7 @@ dtCheckOursParts ctx resolved deps =
 -- 依赖接口 → 精化起始状态。
 -- **硬不变量**：deftbl 只能装定义体（body）。签名项（尤其 `Int ↦ Type` 这类内建类型
 -- global）一旦进 deftbl，`force` 的 delta 展开就会把 primitive 类型归约成 `Type`
--- （`Eq String` 的类参数变成 `Type`，所有实例头同归约 ⇒ 假歧义，C37 的
+-- （`Eq String` 的类参数变成 `Type`，所有实例头同归约 ⇒ 假歧义：
 -- `TC_AmbiguousInstance (Eq Type)` 即此）。
 depStartOfAt : Int -> List CachedProgram -> Pair Ec (List (Pair String Term))
 depStartOfAt next progs =
@@ -920,7 +920,7 @@ depStartOfAt next progs =
 depStartOf : List CachedProgram -> Pair Ec (List (Pair String Term))
 depStartOf progs = depStartOfAt 0 progs
 
--- M34.5（S4）：干净模块的残 meta 不重编号（保持接口哈希稳定），新精化从它们之上编号。
+-- 干净模块的残 meta 不重编号（保持接口哈希稳定），新精化从它们之上编号。
 maxMetaList : Int -> List Int -> Int
 maxMetaList m [] = m
 maxMetaList m (x :: rest) = maxMetaList (if x > m then x else m) rest
@@ -942,10 +942,10 @@ cleanStartNext cps =
     m = maxMetaCps cps
   in if m < 0 then 0 else m + 1
 
--- 名字去重（后出现者胜、保序）：旧实现对每个元素重建 `map key rest` 再线性扫，
--- 整表 O(n²)（增量 check/build 收尾的 globals 表可达上万项；实测 16k 项 17.6s）。
+-- 名字去重（后出现者胜、保序）：对每个元素重建 `map key rest` 再线性扫是
+-- 整表 O(n²)（增量 check/build 收尾的 globals 表可达上万项）。
 -- 这里从右往左一次走完，用 `HashMap String Bool` 记已见名 ⇒ O(n)。
--- 语义与原实现逐项一致：同名只保留**最后一次**出现，其余元素相对顺序不变。
+-- 同名只保留**最后一次**出现，其余元素相对顺序不变。
 dedupKeepLast : (a -> String) -> List a -> List a
 dedupKeepLast key xs = dedupKeepLastGo key (reverse xs) (Base.HashMap.fromList []) []
 
@@ -984,7 +984,7 @@ dedupGlobals : List (Pair String Term) -> List (Pair String Term)
 dedupGlobals gs = dedupKeepLast (\g => firstOf g) gs
 
 -- ---------------------------------------------------------------
--- M34.5（S2）：依赖接口加载（TTC 的 module 复用）
+-- 依赖接口加载（TTC 的 module 复用）
 -- ---------------------------------------------------------------
 -- 依赖模块来自接口文件：`Module` 用接口里存的已解析 decls 构造，Loader 直接命中、不读
 -- 源码；起始 Ec 由模块摘要合并（`depStartOf`）。模块表顺序 = reverse(topo)，与 `loadAll`
@@ -993,9 +993,9 @@ dedupGlobals gs = dedupKeepLast (\g => firstOf g) gs
 -- （精化器不要求有解），而根包精化从 0 开始编号；不分配段会让依赖 meta 与根包 meta
 -- 编号相撞（同号被当成同一个元变量）。
 --
--- **段号只由模块名排序后的名次决定**（C37 A②）：旧实现用 iface 列表位置 `idx+1`，
--- 而该列表 = 依赖包 DFS 序 + 每包 manifest 模块序 ⇒ 换模块顺序会改变段号（并让 payload
--- 字节抖动）。现在按 `miNameOf` 排序后取名的名次，列表顺序变化不再影响任何编号。
+-- **段号只由模块名排序后的名次决定**：用 iface 列表位置会让「依赖包 DFS 序 + 每包模块序」
+-- 换顺序就改段号（并让 payload 字节抖动）；按 `miNameOf` 排序后取名次，列表顺序变化不影响
+-- 任何编号。
 -- 段号下界 = `summaryMetaSegment`（2^30）> 本包一次运行的 fresh 编号上界；因此 dep meta
 -- 既不会与 fresh/clean 撞号，也不在 `unsolvedFrom 0 (ecNext)` 的扫描范围内（不会被当成本包
 -- 未解洞报错）。移位失败（项深超 codegen guard）⇒ 内部错误，不静默用未移位的项。
@@ -1038,7 +1038,7 @@ modulesOfIfaces : List ModuleIface -> List Module
 modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
 
 -- ---------------------------------------------------------------
--- M34.5（S4）：包内逐模块增量的加载/精化
+-- 包内逐模块增量的加载/精化
 --
 -- 干净模块以「预置模块」进入 Loader（零 parse/resolve），闭合产物并入起始 Ec；只精化
 -- 脏模块 + 入口声明；然后按同样顺序把干净产物合并回 DtProgram（codegen / 接口写仍看
@@ -1059,7 +1059,7 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
           _ <- obsMarkEff "vuna.resolve"
           pure (resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered)
 
--- M34.6（5b）：termAux 的 record 降级 / deriving 展开结果可跨请求复用。
+-- termAux 的 record 降级 / deriving 展开结果可跨请求复用。
 --
 -- `elabProgramFullWithAux` 每次都会对 termAux（依赖包 + 干净同包模块的**原始 decls**）
 -- 重跑 `prepareDecls` + `expandDerivings`：工具链连续请求里 termAux 常常完全不变（只有
@@ -1071,7 +1071,7 @@ export dtPrepareTermAux : List Decl -> Check (List Decl)
 dtPrepareTermAux aux =
   Vuna.Compiler.Common.bind (prepareDecls aux) (\p => expandDerivings (secondOf p))
 
--- 终止性 SCT 的 termAux 裁剪（5b 的关键）：依赖包 / 干净模块的终止性已在写它们自己的
+-- 终止性 SCT 的 termAux 裁剪：依赖包 / 干净模块的终止性已在写它们自己的
 -- 接口时验过，本路径只报告当前模块函数的失败。import 图无环 ⇒ 调用图无跨模块环 ⇒
 -- 「含本模块函数的 SCC」只含本模块声明；因此 aux 的函数体对当前 SCC 的 size-change
 -- 判定没有贡献，SCT 只需要 aux 的**构造子**（data / record 头）与**投影**（单子句选择子）。
@@ -1094,7 +1094,7 @@ dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls = Vuna.Com
       (\ds2 => elabProgramGoWithAux startEc startGlobals records (dtAuxForTermination preparedAux) ds2)
 )
 
--- 工具链增量会话缓存（M34.6 5a/5b）：一次请求的**固定开销**按 iface 集合缓存。
+-- 工具链增量会话缓存：一次请求的**固定开销**按 iface 集合缓存。
 --   - decls：termAux（依赖包 + 干净同包模块 decls）的 record / deriving 预处理结果；
 --   - start：依赖 / 干净模块产物构造的起始 Ec + globals（`depStartOfAt` + shift 很贵）；
 --   - depCps / cleanCps：shift 后的闭合产物（组装与收窄范围检查复用）。
@@ -1151,7 +1151,7 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
     -- termAux 的 prepared 形态优先取接口里持久化的版本（每个模块自己一份，写侧算好）：
     -- 「编辑一个模块」只让该模块脏，其余干净模块的 prepared 仍有效 ⇒ 不必对整表重跑
     -- record 降级 / deriving 展开（这是编辑后重建的主要成本）。任一参与模块缺
-    -- prepared（旧 schema / LSP 单模块写回）就整体回退 `dtPrepareTermAux`。
+    -- prepared（缓存早于字段引入 / LSP 单模块写回）就整体回退 `dtPrepareTermAux`。
     ifacePrepared = concatMap miPreparedOf (append depIfaces cleanIfaces)
     missingPrepared = filter (\mi => length (miPreparedOf mi) == 0) (append depIfaces cleanIfaces)
   in Vuna.Compiler.Common.bind depCpsR (\depCps => let
@@ -1179,7 +1179,7 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
   )
   )
 
--- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查（与旧行为一致）。
+-- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查。
 dtFinishPackage : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
 dtFinishPackage loaderWarns depCps cleanCps prog parts next =
   let
@@ -1247,11 +1247,11 @@ dtCheckScoped allDatas unitDatas defs =
   in obsCheck "vuna.codegen.check"
     (\_ => Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas)) (\unitIr => Vuna.Compiler.Common.bind (genUnitParts noQual (lwEnvShared env) unitIr) (\_ => OkC 0)))
 
--- M34.6（5a）：单文件（LSP buffer / REPL 所在模块）的增量精化。
+-- 单文件（LSP buffer / REPL 所在模块）的增量精化。
 --   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；
 --   2. 由它们的 iface 产物构造起始 Ec（依赖包按段 shift 元变量、干净模块保持编号），
 --      只精化当前模块（+ 安全阀兜底：闭包外依赖缺 artifact 就返回 Nothing 让调用方全量）；
---   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用（5b）；`needPackage` =
+--   3. termAux 预处理 / 起始 Ec / 已 shift 产物都可经 `cache` 复用；`needPackage` =
 --      调用方是否需要整包 CheckedPackage（只做诊断时跳过整包组装 + 整包 codegen 检查）。
 -- 返回 `Nothing` 表示「本路径不适用」（调用方回退全量，诊断必须仍正确）。
 export dtCheckSourceIncremental : PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Eff hostRow (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
@@ -1279,7 +1279,7 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
               OkC r => OkC (Pair True r)
     )
 
--- M44：会话化 interp。与 `dtCheckSourceIncremental` 同一条增量路径（依赖包 / 干净
+-- 会话化 interp。与 `dtCheckSourceIncremental` 同一条增量路径（依赖包 / 干净
 -- 同包模块以接口预置，只精化当前入口），但需要整包组装后的 `CheckedPackage`——依赖
 -- 模块的 defs 要在场，`evalDtMain` 才能归约跨模块调用（`needPackage = True`）。
 -- 第一分量沿用后者的语义：False = 本路径不适用（调用方回退全量）。
@@ -1356,12 +1356,12 @@ topoVisitAll fuel mods (n :: rest) visited acc =
 topoModules : List Module -> List Module
 topoModules mods = secondOf (topoVisitAll 8192 mods (map moduleNameOf mods) [] [])
 
--- M34.5（S5）：codegen 单元级缓存。单元 key = 单元名 + 模块声明内容哈希 + 传递依赖
+-- codegen 单元级缓存。单元 key = 单元名 + 模块声明内容哈希 + 传递依赖
 -- 单元 key 的哈希链（与 build 系统同思路）：依赖接口变化沿链使依赖者失效，无关模块
 -- 变化不影响。生成命中缓存时直接复用 `SplitFile`，不再重跑该单元 codegen。
--- M34.6：默认开启（见 `unitCacheEnabled`），桶内 GC 只保留本次 key 集合对应的文件。
+-- 默认开启（见 `unitCacheEnabled`），桶内 GC 只保留本次 key 集合对应的文件。
 -- | 模块声明的内容摘要：显式规范编码（span / 路径不参与 ⇒ 换行、移动代码不再让单元
--- 缓存失效），不再 `prim_marshal`（C32 哈希输入侧的完整形态）。
+-- 缓存失效）。
 unitDeclsHash : Module -> String
 unitDeclsHash m = encTop encDecls (moduleDeclsOf m)
 
@@ -1400,7 +1400,7 @@ unitKeysOf modules entryDecls printResult =
         "e|${entryHash}|${if printResult then "@vuna@prim_eff_print" else "noprint"}|${concatKeys (map pairKeyValue modKeys)}"
   in Pair "__entry__" entryKey :: modKeys
 
--- M4（效果显式化）：PerfCache 的磁盘层与生成器的 lookup/store 回调都是宿主动作，
+-- PerfCache 的磁盘层与生成器的 lookup/store 回调都是宿主动作，
 -- 显式在 `Eff []` 里；单元 key / 文件名 / GC 保留集合保持纯计算。
 unitCacheLookup : String -> List (Pair String String) -> String -> Eff hostRow (Maybe SplitFile)
 unitCacheLookup dir keys name = case lookupPair name keys of
@@ -1420,10 +1420,8 @@ unitCacheStore dir keys name sf = case lookupPair name keys of
   Just k => unitCacheWrite dir name k sf
   Nothing => pure 0
 
--- M34.6：**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）。同机 A/B（预热后改入口再
--- `build --no-compile .`，workspace 双入口大包，7 轮中位数）：单元缓存 4045ms vs 关闭
--- 4430ms（-8.7%，≥ 默认开启门槛 5%）；单包 root 场景同法 -10%。缓存语义安全：单元 key
--- 含模块声明 Marshal 哈希（span 里的源路径也在内）+ 传递依赖单元 key + printResult，
+-- 单元缓存**默认开启**（`VUNA_UNIT_CACHE=0` opt-out）。缓存语义安全：单元 key
+-- 含模块声明内容哈希 + 传递依赖单元 key + printResult，
 -- 文件头 tag 含 schema/版本/编译器二进制指纹；坏文件由 framing 拒绝重算。
 unitCacheEnabled : Eff hostRow Bool
 unitCacheEnabled = do
@@ -1487,7 +1485,7 @@ moduleOfIface mi =
     (miExportsOf mi) (miFixitiesOf mi) [] (cachedOpaqueOf (miCachedOf mi))
 
 -- ---------------------------------------------------------------
--- M34.5（S6）：依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；
+-- 依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；
 -- 接口路径一次性预置整包模块，因此这里在 load 之后按闭包过滤模块表（entry imports +
 -- 传递 import），让摘要路径与全量路径看到同一组模块/实例/类，消除过近似差异。
 -- ---------------------------------------------------------------

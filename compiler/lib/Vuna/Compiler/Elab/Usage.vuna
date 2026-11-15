@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Usage where
 
--- Vuna.Compiler.Elab.Usage：M38 QTT 用量检查。
+-- Vuna.Compiler.Elab.Usage：QTT 用量检查。
 --
 -- 精化完成后、组装 `DtProgram` 之前，对每个**运行时** `DtDef` 的 body 做一次结构遍历：
 -- 每个 binder 的运行时使用次数必须满足它声明的 Rig（0 恰好 0、1 恰好 1、ω 不限）。
@@ -21,7 +21,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Diagnostics.Warning
 
 -- 类型级定义的判据：定义**类型** force 后以宇宙收尾（`Type` 或 `... -> Type` 的 Pi 链）。
--- M38 从 Codegen/Erase 上移到 Elab，成为用量检查与 codegen 分区的共同真源。
+-- 用量检查与 codegen 分区共用这一判据（唯一真源在本模块）。
 export isTypeForming : Value -> Bool
 isTypeForming v = isTypeFormingFuel 128 v
 
@@ -96,7 +96,7 @@ checkLamBinder ec sp name rig (used :: rest) =
 
 -- 外层 env 里是否有同名、且**参与运行时**的 binder 吗（UN_ShadowedBinder 的比较对象）。
 --
--- Rig0 的 binder 是擦除的：隐式类型/索引 binder（`f : a -> a` 的 `a`、实例方法签名里
+-- 的 binder 是擦除的：隐式类型/索引 binder（`f : a -> a` 的 `a`、实例方法签名里
 -- 自动量化的 `a`/`b`/`c`、`{n : Nat}`）由精化器在体前插成 `TLam Rig0`，源码里没有可供
 -- 用户引用的「外层 binder」。它们与体内同名参数相撞属于正常写法（`f a = a`、`Applicative`
 -- 实例的 `ap`/`liftA2`），不算遮蔽；只有两个运行时 binder 重名才告警。
@@ -217,7 +217,7 @@ checkDefUsage ec msp name body =
   in Vuna.Compiler.Common.step (checkTerm ec0 sp [] body) (\_rest => \ec1 => OkC ec1)
 
 -- ---------------------------------------------------------------
--- W7：线性捕获的「立即消费」规则
+-- 线性捕获的「立即消费」规则
 -- ---------------------------------------------------------------
 -- 精化期给「捕获线性值的 λ」打了 binder 名标记（`Meta.linClosureName`），因为
 -- λ 捕获线性值后，闭包一旦被复制就会复制线性值。这里按**位置**判断标记 λ 是否
@@ -232,7 +232,7 @@ checkDefUsage ec msp name body =
 capCheck : Ec -> Span -> Term -> Bool -> Check Int
 capCheck ec sp t allowed = capCheckFuel (capCheckFuelFor t) ec sp t allowed
 
--- | capture check 的 fuel 派生（D24）：固定 2048 对含深 Nat 链/大项的体不够（字面量
+-- | capture check 的 fuel 派生：固定 2048 对含深 Nat 链/大项的体不够（字面量
 -- 展开成链后逐节点遍历）。按项节点数放大（每节点最多几步递归），上限 `capCheckFuelMax`
 -- 防失控输入。
 capCheckFuelFor : Term -> Int

@@ -1,14 +1,14 @@
 module Vuna.Compiler.Wasm.Module where
 
--- Vuna.Compiler.Wasm.Module：IrProgram -> WasmModule（WAT 文本之前的结构）。
+-- IrProgram -> WasmModule（WAT 文本之前的结构）。
 --
--- M2 + M3a：从 `main` 沿 `irDefDeps` 求可达闭包，只生成可达定义；支持 Int / Nat /
+-- 从 `main` 沿 `irDefDeps` 求可达闭包，只生成可达定义；支持 Int / Nat /
 -- String / Bool 纯值、`let` / `if`、顶层饱和调用、立即 lambda 应用、Nat 结构递归
 -- （`IrNatCase`）、`IrConcatMany`、内建饱和应用、入口打印，以及 M3a 的
 -- `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase`。
 -- 表示：统一 anyref；Int/Nat 装箱 i64；Bool i31；String `(array (mut i8))`；
 -- 变体 `(struct (field i32 tag) (field anyref...))`；record 纯字段 struct；
--- 闭包 `{code,env}` 与数组类型仍留在类型表里供后续阶段使用。
+-- 闭包 `{code,env}` 与数组类型留在类型表里（当前指令面还不用它们）。
 import Base.Bool
 import Base.Int
 import Base.List
@@ -231,7 +231,7 @@ genVar st b = case lookupBinder b st.gsScope of
   Just l => Ok (Pair [ILocalGet l] st)
   Nothing => Err "unbound runtime binder in wasm codegen"
 
--- | 顶层定义引用：arity 0 读全局；arity > 0 是函数值（M2 不支持当值传递）。
+-- | 顶层定义引用：arity 0 读全局；arity > 0 是函数值（本后端不支持当值传递）。
 genGlobalRef : GenState -> String -> Result (Pair (List Instr) GenState)
 genGlobalRef st name = case findDef name st.gsDefs of
   Just d =>
@@ -259,7 +259,7 @@ else case genExpr (fuel - 1) st c of
         in Ok
           (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) merged)
 
--- | `let`：单运行时 binder；多 binder（装箱 case 降级）留给后续阶段。
+-- | `let`：单运行时 binder；装箱 case 降级的多 binder 走 `genLetBound` 的逐项分支。
 genLet : Int -> GenState -> List IrBinder -> Ir -> Ir -> Result (Pair (List Instr) GenState)
 genLet fuel st bs scrut body = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else

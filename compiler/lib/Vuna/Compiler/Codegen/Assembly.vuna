@@ -1,14 +1,14 @@
 module Vuna.Compiler.Codegen.Assembly where
 
--- Vuna.Compiler.Codegen.Assembly：split 产物的**唯一装配实现**（M26；原 Program）。
+-- split 产物的**唯一装配实现**。
 --
--- Track A 第一步之后本模块只消费 IR：`genUnitParts` 把 `IrUnit`（类型声明 + 分组 +
+-- 本模块只消费 IR：`genUnitParts` 把 `IrUnit`（类型声明 + 分组 +
 -- List 族标志）装成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与生成状态。
--- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）已前置到 `Codegen.Lower`；main 钩子
+-- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）在 `Codegen.Lower`；main 钩子
 -- 统一由 `Codegen.Term.genEntryHook` 渲染。check 路径在 `Driver.Dt` 里走
--- `Lower.lowerProgramOf` + `genUnitParts` 并丢弃文本（保留原 `buildText=False` 语义）。
+-- `Lower.lowerProgramOf` + `genUnitParts` 并丢弃文本（`buildText=False`）。
 --
--- C35：单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
+-- 单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
 -- 到的依赖单元（`unitPartsDeps`），供 `Codegen.Split` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Common
@@ -71,13 +71,13 @@ export genUnitText : UnitParts -> String
 genUnitText (UnitParts fragments bodies st deps) =
   strConcatMany (append fragments [joinWith "\n\n" bodies])
 
--- 单元文件头：只 open 运行时单元（C35：其余跨单元引用都是 `Unit.name` 全限定，没有
+-- 单元文件头：只 open 运行时单元（其余跨单元引用都是 `Unit.name` 全限定，没有
 -- open 链，因此文件顺序不再决定可见性，只看 `unitPartsDeps`）。check 路径（`noQual`，
 -- qcUnit="") 不写 open。
 export openHeader : QualCtx -> String
 openHeader qc = if qc.qcUnit == "" then "" else "open ${runtimeUnit}\n"
 
--- List 族桥接只写进声明该族的单元；其它单元通过 `Unit.dtp_*` 全限定名引用（C35）。
+-- List 族桥接只写进声明该族的单元；其它单元通过 `Unit.dtp_*` 全限定名引用。
 listBridgeFor : IrShared -> IrUnit -> String
 listBridgeFor shared unitIr =
   if unitIr.irUnitHasListFamily then dtListBridge shared.irSharedListFam else ""

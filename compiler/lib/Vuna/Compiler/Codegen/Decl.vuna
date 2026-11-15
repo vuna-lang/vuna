@@ -1,13 +1,13 @@
 module Vuna.Compiler.Codegen.Decl where
 
--- Vuna.Compiler.Codegen.Decl：OCaml 名字编码 + 跨单元限定 + IR 类型/声明渲染。
+-- OCaml 名字编码 + 跨单元限定 + IR 类型/声明渲染。
 --
--- Track A 第一步之后这里是 codegen 的最底层叶子，只有**纯文本**职责：
+-- 这里是 codegen 的最底层叶子，只有**纯文本**职责：
 --   * 标识符渲染（sanitizeName / valueName / typeName / ctorOcamlName /
 --     recordFieldLabel / ocamlString / 保留字转义 / binder 名）；
 --   * 跨单元限定（`QualCtx`：名字 → 归属单元，渲染成 `Unit.name`）；
 --   * `IrTy` / `IrTyDecl` → OCaml 类型文本。
--- 不再消费 `DtData` / `DtDef` / `Value`：表示决策（族参数槽、keep flags、不透明字段、
+-- 不消费 `DtData` / `DtDef` / `Value`：表示决策（族参数槽、keep flags、不透明字段、
 -- record 字段表、去装箱族）全部由 `Codegen.Lower` 在 IR 里定好。边界由
 -- `checks.ir-boundary` 守护。
 import Vuna.Compiler.Common
@@ -18,7 +18,7 @@ import Vuna.Compiler.Ir
 -- ---------------------------------------------------------------
 -- 名字编码
 -- ---------------------------------------------------------------
--- M31.3：除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
+-- 除 `[A-Za-z0-9]` 外的任意字符都必须转义成 `_x<code>_`——用户符号名函数
 -- （`<+>`、`>>=` 之外的声明名）会直接进 OCaml 值名，原样输出是非法标识符。
 -- 与既有编码不冲突：字面标识符里的 `_` 已映射成 `_u`，输出里除转义序列外不会出现裸 `_`，
 -- 因此不会与字面名冲突（`Codegen.Lower.ensureUniqueOcamlNamesIn` 仍是最后一道防线）。
@@ -59,20 +59,20 @@ export boolText : Bool -> String
 boolText True = "true"
 boolText False = "false"
 
--- M14：族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
+-- 族 → OCaml 变体类型名；构造子 → 带族前缀的变体构造子名（避免跨族重名）。
 export typeName : String -> String
 typeName name = "t_${sanitizeName name}"
 
--- | 自动补注（M41 新增导出）：ctorOcamlName。
+-- | 构造子的 OCaml 名（族名 + 构造子短名）。
 export ctorOcamlName : String -> String -> String
 ctorOcamlName family ctor = "C_${sanitizeName family}_${sanitizeName (ctorShortName ctor)}"
 
--- | R4：record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
+-- | record 字段的 OCaml record label（按 record 名前缀，避免不同 record 间标签撞车）。
 export recordFieldLabel : String -> String -> String
 recordFieldLabel family field = "f_${sanitizeName family}_${sanitizeName field}"
 
 -- ---------------------------------------------------------------
--- 跨单元引用限定（C35）
+-- 跨单元引用限定
 -- ---------------------------------------------------------------
 --
 -- split 产物里每个单元只 `open Vuna_runtime`（运行时 helper 是唯一共享前缀），
@@ -119,7 +119,7 @@ qualCtorText qc family ctor =
 export qualTypeText : QualCtx -> String -> Pair String String
 qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
 
--- M24.6：lambda binder 是唯一直接写裸标识符的地方（值/类型/构造子名都有 v_/t_/C_ 前缀，
+-- lambda binder 是唯一直接写裸标识符的地方（值/类型/构造子名都有 v_/t_/C_ 前缀，
 -- 不会撞 OCaml 保留字）。vuna 允许 `method` / `type` 一类标识符，OCaml 不允许，这里统一
 -- 加后缀 `_` 转义，保证「能 check 就能 compile」。
 ocamlReservedWords : List String
@@ -189,7 +189,7 @@ ocamlBinderName name =
   in if memName oc ocamlReservedWords then "${oc}_" else oc
 
 -- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
--- 旧的 `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝（build 路径曾占 ~20s）。
+-- `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝。
 export joinWith : String -> List String -> String
 joinWith sep xs = strConcatMany (interpose sep xs)
 
@@ -274,7 +274,7 @@ recordFieldDecls qc family fields [] = []
 recordFieldDecls qc family (f :: fs) (t :: ts) =
   "${recordFieldLabel family (secondOf f)} : ${irTyText qc t}" :: recordFieldDecls qc family fs ts
 
--- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行与迁移前一致）。
+-- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行固定，保证产物逐字节稳定）。
 export irTypeDeclsText : QualCtx -> List IrTyDecl -> String
 irTypeDeclsText qc [] = ""
 irTypeDeclsText qc decls = "type ${joinWith "\nand " (map (irTyDeclText qc) decls)}\n\n"

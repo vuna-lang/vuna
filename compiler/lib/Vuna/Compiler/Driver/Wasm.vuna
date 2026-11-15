@@ -1,6 +1,6 @@
 module Vuna.Compiler.Driver.Wasm where
 
--- Vuna.Compiler.Driver.Wasm：WAT 目标驱动（M1）。
+-- WAT 目标驱动。
 --
 -- 复用 DT 检查 + `Codegen.Lower.lowerProgramOf` 得到整程序 IR，再交给
 -- `Wasm.Module.build` / `Wasm.Render.render`，写到 `OUT/main.wat`。

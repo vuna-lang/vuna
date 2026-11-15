@@ -1,15 +1,15 @@
 -- | 结构化诊断模型与编译器结果通道（`Check` 的 `ErrC` 载荷是 `Diagnostic`）。
 module Vuna.Compiler.Diag where
 
--- Vuna.Compiler.Diag：诊断的唯一数据模型。
+-- 诊断的唯一数据模型。
 --
 -- 约定（诊断重设计）：
 --   * 诊断从产生到消费都是 `Diagnostic` 值；字符串只在最终渲染器里出现。
 --   * 位置只放在 `Label` 里（首端/末端 span），禁止在错误路径拼 `file:line:col`。
 --   * 无位置必须显式：构造时不给 label，而不是「忘记带」。
---   * `ErrC` 载荷即 `Diagnostic`；`OkC` 构造子名保持不变，便于逐步迁移。
+--   * `ErrC` 载荷即 `Diagnostic`；`OkC` 构造子名与 `Base.Check` 一致。
 --   * `err` 只用于工具错误（phase = Tool）；源码诊断必须走各域带 code 的构造器。
---   * `rawAt`/`rawNoLoc` 是迁移期过渡：用于尚未分类的裸消息，分类完成后删除。
+--   * `rawAt`/`rawNoLoc` 只用于尚未分类的裸消息。
 --
 -- 本模块不 import `Common`（避免 Common -> Diag -> Common 成环）：Span 来自 `Source`。
 import Vuna.Compiler.Source
@@ -79,15 +79,15 @@ export data Applicability(..) : Type where
   HasPlaceholder : Applicability
 
 -- | 无源码位置的原因。**显式**：诊断没有 span 时必须给出理由，渲染/JSON 暴露它，
--- 门禁按码审计；不再有「忘记带位置」的静默路径。`NsSynthetic` 是过渡档（合成节点 /
--- 尚未把已有 span 接到产生点），逐码 allowlist 收敛到 0。
+-- 门禁按码审计，没有「忘记带位置」的静默路径。`NsSynthetic` 用于合成节点与
+-- 尚未把已有 span 接到产生点的诊断，逐码 allowlist 收敛到 0。
 export data NoSourceReason(..) : Type where
   NsSynthetic : NoSourceReason
   NsToolUsage : NoSourceReason
   NsPackageGraph : NoSourceReason
   NsInternal : NoSourceReason
 
--- | 诊断稳定性：结果是否为输入摘要的纯函数。`Volatile` 不落盘（P3 的缓存判据）。
+-- | 诊断稳定性：结果是否为输入摘要的纯函数。`Volatile` 不落盘。
 export data Stability(..) : Type where
   Stable : Stability
   Volatile : Stability
@@ -179,7 +179,7 @@ export record Diagnostic(..) where
 -- ---------------------------------------------------------------
 -- 编译器结果通道
 -- ---------------------------------------------------------------
--- | `OkC a` 或 `ErrC Diagnostic`。构造子名与 `Base.Check` 一致，便于迁移。
+-- | `OkC a` 或 `ErrC Diagnostic`。构造子名与 `Base.Check` 一致。
 export data Check a(..) : Type where
   OkC : a -> Check a
   ErrC : Diagnostic -> Check a
@@ -187,7 +187,7 @@ export data Check a(..) : Type where
 -- ---------------------------------------------------------------
 -- 构造
 -- ---------------------------------------------------------------
--- | 无 label 的源码诊断：显式带 `NsSynthetic`（过渡档，门禁要求逐码 allowlist）。
+-- | 无 label 的源码诊断：显式带 `NsSynthetic`（门禁要求逐码 allowlist）。
 export diagNoLoc : Severity -> Phase -> Category -> String -> String -> Diagnostic
 diagNoLoc sev phase cat code msg =
   Diagnostic 0 sev phase cat code msg [] [] [] [] [] OriginDirect [] False Nothing
@@ -205,13 +205,13 @@ err msg =
   ErrC
     (Diagnostic 0 SevError PhTool CatTool "" msg [] [] [] [] [] OriginDirect [] False Nothing (Just NsToolUsage) Volatile)
 
--- | 迁移期过渡：尚未分类但带位置的裸消息。分类完成后删除。
+-- | 尚未分类但带位置的裸消息。
 export rawAt : Span -> String -> Check a
 rawAt sp msg =
   ErrC
     (Diagnostic 0 SevError PhElab CatTypes "" msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] [] OriginDirect [] False Nothing Nothing Stable)
 
--- | 迁移期过渡：尚未分类且无位置的裸消息。分类完成后删除。
+-- | 尚未分类且无位置的裸消息。
 export rawNoLoc : String -> Check a
 rawNoLoc msg =
   ErrC
@@ -307,7 +307,7 @@ withOrigin o d =
     d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions o d.diagChildren
     d.diagInternal d.diagIce d.diagAbsent d.diagStability
 
--- | 定义级诊断：主位置 + `in \`name\`` 上下文标签（替代旧字符串前缀）。
+-- | 定义级诊断：主位置 + `in \`name\`` 上下文标签。
 export withContext : Maybe Span -> String -> Diagnostic -> Diagnostic
 withContext msp name d =
   let
@@ -317,7 +317,7 @@ withContext msp name d =
     Nothing => added
 
 -- ---------------------------------------------------------------
--- 过渡渲染：与旧字符串输出逐字节一致（M2 期间 fixture 依赖；M7 换新格式）
+-- 文本渲染
 -- ---------------------------------------------------------------
 -- | 一个诊断的主 span（首个 Primary 标签）。
 primarySpanOf : List Label -> Maybe Span

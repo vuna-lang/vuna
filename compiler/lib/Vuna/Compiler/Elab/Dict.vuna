@@ -3,7 +3,7 @@ module Vuna.Compiler.Elab.Dict where
 -- Vuna.Compiler.Elab.Dict：字典编码的**表示与实例搜索**：字典类型/实例头的识别、实例搜索（conv 头匹配）、
 -- 延迟字典元变量的回填（resolveDictGoals）、运算符特化（==、<、&& 等降到内建/方法投影）。
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
--- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+-- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -31,12 +31,12 @@ isDictValue ec _ = False
 isDictFamily : Ec -> String -> Bool
 isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
--- 实例搜索（M29-T2a）：
+-- 实例搜索：
 --   1. 先查**局部上下文**里的字典 binder（实例方法体的 tele ctx 字典）；
 --   2. 刚性类参数（含结构化：`Box a`）在「全部实例都无 tele/ctx」时可直接判缺失，省掉
 --      每个隐式插入点的全实例 conv 扫描（自检热路径）；
---   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；named 实例不参与
---      自动搜索（M23 语义，T2b 删除该特性）。
+--   3. 全局候选按「分配 tele meta → conv 结果头 → 递归解 ctx」匹配；命名实例不参与
+--      自动搜索（只能用 `@name` 显式选中）。
 export searchInstanceIn : List (Pair String Term) -> Ctx -> Ec -> Value -> Span -> Check (Pair Term Ec)
 searchInstanceIn globals ctx ec dom sp = searchInstFuel globals ctx 16 ec dom sp
 
@@ -53,7 +53,7 @@ instMatchInst (InstMatch i t) = i
 
 -- 递归深度上限（实例 ctx 链）；`fuel` 在每个递归层减 1。
 --
--- M36 blanket 实例（头实参是裸类参数，见 `Elab.Meta.isBlanketInst`）是 fallback：
+-- blanket 实例（头实参是裸类参数，见 `Elab.Meta.isBlanketInst`）是 fallback：
 -- 搜索分两阶段——先只试**具体**实例；一个都没命中时才试 blanket。这样具体实例
 -- 优先（`Interp String` 覆盖 blanket `Show a => Interp a`），且 blanket 的 ctx 求解
 -- 不会污染具体候选的元变量解。
@@ -76,7 +76,7 @@ else
       Pair matches ec1 => finishInstanceSearch dom sp matches ec1
 
 -- ---------------------------------------------------------------
--- M42：`deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
+-- `deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
 -- ---------------------------------------------------------------
 -- | 按类名在类表里查 DtClass；找不到返回 Nothing。
 --
@@ -179,9 +179,9 @@ else case args of
         (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp)
         (\p => OkC (Just p))
 
--- S5a：实例搜索的候选集合——按 `dom` 的字典族**精确取桶**，不再扫全实例表。
+-- 实例搜索的候选集合——按 `dom` 的字典族**精确取桶**，不扫全实例表。
 -- 族名取 force 后的头部（`Dict_<类>`）；族名不确定时（未解元变量、非字典头）回落全表：
--- 旧行为依赖 conv 在求解过程中把 dom 解成实例头，此时注册时未知的族不能替它收敛候选。
+-- 注册时未知的族不能替 conv 把 dom 解成实例头，所以这类目标只能走全表。
 -- 建桶用注册时的实例头族名（`instFamilyOf`），与这里取的值来自同一符号，故同族必同键。
 -- | 按目标字典族精确取实例桶；族名不确定（未解元变量或非字典头）时回落全表。
 searchCandidates : Ec -> Value -> List DtInst
@@ -230,7 +230,7 @@ missingInstance ec dom sp =
 showResolvedValue : Ec -> Value -> String
 showResolvedValue ec v = showTerm (zonkTerm ec 0 (quote 0 (forceVal ec v)))
 
--- M36：未解字典目标里第一个插值目标（诊断用）——`Elab.Driver` 在报“未解元变量”之前
+-- 未解字典目标里第一个插值目标（诊断用）——`Elab.Driver` 在报“未解元变量”之前
 -- 先命中它，给出可操作的 `TC_InterpNoInstance`（类型参数已确定的那些）。
 export firstUnsolvedInterpGoal : Ec -> Maybe String
 firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecPending ec)
@@ -265,8 +265,8 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
   else localDictLookupGo ctx (i + 1) dom ec rest
 
 -- 刚性类参数快路径：只有当**同一字典族**的实例都是单态（tele/ctx 均空）时才可确定
--- 匹配不上。M36 起按类过滤：blanket 实例（如 `Interp`）只让它自己的类退回全量搜索，
--- 其余类（Eq/Ord/...）仍走快路径（自检热路径）。S5a：候选已是该族的精确桶
+-- 匹配不上。按类过滤：blanket 实例（如 `Interp`）只让它自己的类退回全量搜索，
+-- 其余类（Eq/Ord/...）仍走快路径（自检热路径）。候选已是该族的精确桶
 -- （`isRigidDictArg` 成立 ⇒ dom 的头是全局名 ⇒ 族名非空），不再需要全表族过滤。
 rigidSearchFast : Ec -> Value -> Bool
 rigidSearchFast ec dom = isRigidDictArg ec dom && allInstancesMono (searchCandidates ec dom)
@@ -278,10 +278,10 @@ valueDictFamily (VNeutral n) = case n of
   _ => ""
 valueDictFamily _ = ""
 
--- M36 跟进：primitive `interp` 快捷路径的语义护栏——若程序里存在**具体** `Interp <ty>`
+-- primitive `interp` 快捷路径的语义护栏——若程序里存在**具体** `Interp <ty>`
 -- 实例（如用户自定义 `instance Interp Int`），洞与显式 `interp` 都必须走字典路径，
 -- 不能被编译器的 String/Int/Nat 快捷降级静默覆盖。
--- S5a：候选直接取 `Dict_Interp` 的族桶（桶键即实例头族名），不再扫全表。
+-- 候选直接取 `Dict_Interp` 的族桶（桶键即实例头族名），不扫全表。
 export hasSpecificInterpInstance : Ec -> String -> Bool
 hasSpecificInterpInstance ec tyName =
   hasSpecificInterpInstanceGo tyName (ecInstsFamily ec (dictTypeName interpTypeName))
@@ -380,7 +380,7 @@ solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel glob
   ErrC e => Nothing
   OkC (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
 
--- 行成员约束（W3）：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
+-- 行成员约束：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
 -- 这些名字来自受信任的 Base.Eff（见 effects.md §8）；编译器只认这三个头名。
 data RowProofKind : Type where
   RowProofYes : RowProofKind
@@ -396,11 +396,11 @@ rowYesDomName = "Base.Eff.Yes"
 rowNoDomName : String
 rowNoDomName = "Base.Eff.No"
 
--- | 自动补注（M41 新增导出）：rowYesCtorName。
+-- | 行成员证明（`Member e r`）成立分支的构造子全名（`Base.Eff.Yes.MkYes`）。
 rowYesCtorName : String
 rowYesCtorName = "Base.Eff.Yes.MkYes"
 
--- 行成员证明（W3）：`Member e r` 是 Type-1 归纳族；精化器按行结构
+-- 行成员证明：`Member e r` 是 Type-1 归纳族；精化器按行结构
 -- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名
 -- （名字集中在 `Vuna.Compiler.Intrinsics` 的效果协议常量）。
 memberDomName : String
@@ -418,12 +418,12 @@ export data MemberLookup(..) : Type where
   MemberFound : Value -> Ec -> MemberLookup
   MemberAbsent : MemberLookup
   MemberStuck : MemberLookup
-  -- 命名行（ND6）：标签候选 ≥2，推迟到最终化报 TC_AmbiguousInstance；携带候选文本。
+  -- 命名行：标签候选 ≥2，推迟到最终化报 TC_AmbiguousInstance；携带候选文本。
   MemberAmbiguous : List String -> MemberLookup
 
 export isMemberDomain : Ec -> Value -> Bool
 isMemberDomain ec dom = case quote 0 dom of
-  -- 命名行（ND1）：`Member n e r`（实例名、标签、行）。
+  -- 命名行：`Member n e r`（实例名、标签、行）。
   TApp (TApp (TApp (TGlobal g) _ _) _ _) _ _ => g == memberDomName
   _ => False
 
@@ -433,7 +433,7 @@ data MemberDom : Type where
 
 memberSpine : Value -> Maybe MemberDom
 memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case length sp of
-  -- 3 索引用单 Cons 分支，规避旧编译器在深/浅多 Cons 分支回退时的变量串位（debt D53）。
+  -- 3 索引用单 Cons 分支，规避深/浅多 Cons 分支回退时的变量串位（规避 debt D53）。
   3 => case sp of
     n :: e :: r :: _ => Just (MemberDom3 n e r)
     _ => Nothing
@@ -453,9 +453,9 @@ else case memberSpine dom of
   Just (MemberDom3 nVal eVal rVal) => memberLookupRow fuel depth ec nVal eVal rVal
 
 -- ---------------------------------------------------------------
--- 命名行（native-effects ND1/ND6/ND7）：`Member ?n e r` 的名字槽求解
+-- 命名行：`Member ?n e r` 的名字槽求解
 -- ---------------------------------------------------------------
--- 求解规则（D6：只从行解名字、拒绝贪婪 Here）：
+-- 求解规则（只从行解名字、拒绝贪婪 Here）：
 --   1. 逐条扫描行，标签与名字各做一次**探测**（convEc 在快照上跑、丢弃结果，不提交解表）；
 --      参数化标签（`StateOp ?s` vs 行里的 `StateOp Nat`）靠标签探测匹配。
 --   2. 遇到 Nil 收束 closed；刚性开放尾收束 open（前缀候选仍有效）；行是未解 meta 时
@@ -514,7 +514,7 @@ else case forceVal ec rF of
   else icInternal "member proof target out of range"
   _ => icInternal "member proof target out of range"
 
--- 命名行求解入口（`Member n e r`，ND6 全扫描、拒绝贪婪 Here）：
+-- 命名行求解入口（`Member n e r`，全扫描、拒绝贪婪 Here）：
 --   0 候选 + 具体行尾 → 缺效应；0 候选 + 开放尾 → 推迟；
 --   ≥2 候选（名字未解，或同名重复）→ MemberAmbiguous（最终化报 TC_AmbiguousInstance）；
 --   唯一候选 → 在目标条目上提交 label/name 合一并构造 Here/There。
@@ -580,7 +580,7 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
       OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
       ErrC e => ErrC e
     MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
-    -- 命名行（ND5）：同标签多实例且名字未定 → 显式歧义诊断，不再间接退化为缺实例。
+    -- 命名行：同标签多实例且名字未定 → 显式歧义诊断，不间接退化为缺实例。
     MemberAmbiguous cands =>
       tcErr2 sp (AmbiguousInstance "effect instance" (join ", " cands)) "effect instance"
         (join ", " cands)
@@ -606,9 +606,9 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
 export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec = resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec
 
--- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（保持旧的
--- 旋转语义）。旧实现在严格求值下把“处理尾部”算两遍（keep + 成功分支再递归），
--- 目标同时可解时是 2^k；这里每个目标每趟只处理一次，指数消除。
+-- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（旋转语义：
+-- 每趟从头部取一个目标）。把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；
+-- 这里每个目标每趟只处理一次，指数消除。
 resolveDictGoalsFuel : Int -> List (Pair String Term) -> Ec -> Ec
 resolveDictGoalsFuel fuel globals ec = if fuel <= 0 then ec
 else case ecPending ec of
@@ -617,13 +617,13 @@ else case ecPending ec of
     let
       ec1 = ecPutPending ec rest
     in case metaLookup m (ecSolTbl ec1) of
-      -- C4：已解/已提升的约束直接摘除（settled），不再占用后续轮次的扫描。
+      -- 已解/已提升的约束直接摘除（settled），不再占用后续轮次的扫描。
       Just _ => resolveDictGoalsFuel (fuel - 1) globals ec1
       Nothing =>
         let
           solsNow = length (ecSols ec1)
         in case ecTriedAt ec1 cid of
-          -- C4：上次尝试后解表没增长 ⇒ 结果不会变，跳过搜索，原地保留。
+          -- 上次尝试后解表没增长 ⇒ 结果不会变，跳过搜索，原地保留。
           Just tried => if tried == solsNow then
             let
               ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
@@ -674,7 +674,7 @@ else case dictClassArgs ec forced of
       ErrC e => Nothing
     ErrC e => Nothing
 
--- M29-T2b：字典解的 term 化要**保留 multiplicity**：参数化实例的字典项形如
+-- 字典解的 term 化要**保留 multiplicity**：参数化实例的字典项形如
 -- `TApp (TApp (TGlobal inst) <typeArg>) <dictArg>`，而 Value spine 不含 rig；
 -- 直接 `quote 0` 会把 erased 类型实参渲染成运行期实参（OCaml 里出现 `v_Int`）。
 -- 这里按实例签名的 Pi 前缀（`Π tele(Rig0). Π ctx(Rig1). head`）恢复每个实参的 rig。
@@ -712,8 +712,8 @@ substDictTermAlt : Ec -> Int -> CaseAlt -> CaseAlt
 substDictTermAlt ec depth (CaseAlt n bs b) = CaseAlt n bs (substDictTermGo ec (depth + length bs) b)
 
 -- 把 Value 里的全局应用脊还原成 Term，并按全局签名恢复每个实参的 rig。
--- 实参按出现点深度 quote（旧实现按 0 quote，binder 下的解会得到负索引/错位索引）。
--- B31：单函数 + 显式 fuel 处理 Value 与 spine 的相互递归；若拆成多个互递归函数，
+-- 实参按出现点深度 quote：按 0 quote 会让 binder 下的解得到负索引/错位索引。
+-- 单函数 + 显式 fuel 处理 Value 与 spine 的相互递归；若拆成多个互递归函数，
 -- 终止性检查器无法在 Value/List 参数上建立下降环。先看**未 force** 的值：实例字典解
 -- 形如 `NGlobal <inst> [tele, ctx]`，先 forceVal 会把定义体 delta 展开成 `VCon`，
 -- 失去每个实参的 rig；spine 实参本身也可能是字典解，必须递归重建。
@@ -754,7 +754,7 @@ else case task of
 
 -- 实例字典函数的 Pi 前缀：tele 一律 Rig0（类型参数擦除）、ctx 一律 RigOmega。
 -- 先查 `ecInsts`（实例签名的真源），再回退 globals：体阶段 globals 表可能被同名项
--- 覆盖（B18）或尚未含实例头；回退顺序能避免把 tele 实参误判成运行期实参。
+-- 覆盖（同名值定义）或尚未含实例头；回退顺序能避免把 tele 实参误判成运行期实参。
 piRigsOfInst : Ec -> String -> Maybe (List Rig)
 piRigsOfInst ec g = piRigsOfInstGo g (ecInsts ec)
 
@@ -807,7 +807,7 @@ else case v of
     else reverse acc
   _ => reverse acc
 
--- 第一个类参数的 kind（单参数路径与历史诊断共用）。
+-- 第一个类参数的 kind（单参数路径与诊断共用）。
 export dictArgKind : Ec -> Value -> Maybe Value
 dictArgKind ec dom = case dictArgKinds ec dom of
   Just (k :: rest) => Just k
@@ -835,7 +835,7 @@ neutralHeadOrSelf (VNeutral (NGlobal g (_ :: _))) = VNeutral (NGlobal g [])
 neutralHeadOrSelf v = v
 
 -- 字典域的全部类参数（`Dict_C p1 .. pn` 的 spine）。单参数 trait 只有一个元素；
--- 旧入口 `dictClassArg` 仍返回第一个参数（Interp 等单参数特化路径依赖它）。
+-- 单参数入口 `dictClassArg` 仍返回第一个参数（Interp 等单参数特化路径依赖它）。
 export dictClassArgs : Ec -> Value -> List Value
 dictClassArgs ec dom = case forceVal ec dom of
   VNeutral (NGlobal g sp) => sp
@@ -847,7 +847,7 @@ dictClassArg ec dom = case dictClassArgs ec dom of
   [] => Nothing
 
 -- 字典域类参数是否依赖**刚性局部变量**（绑定于当前定义/实例 tele 的类型变量）。
--- M29-T2a：判定改为**结构化**——`a`、`Box a`、`List (Box a)` 都算刚性（旧实现只看裸 NVar，
+-- 判定是**结构化**的——`a`、`Box a`、`List (Box a)` 都算刚性（只看裸 NVar
 -- 导致 `mem (Box a)` 这类泛型调用点既搜不到实例、也不提升成隐式字典参数）。
 -- 多参数：任一参数含刚性变量，具体实例头就必然匹配不上（全单态实例时）。
 export isRigidDictArg : Ec -> Value -> Bool
@@ -881,9 +881,9 @@ anyValueHasRigidNVar ec fuel [] = False
 anyValueHasRigidNVar ec fuel (v :: rest) =
   valueHasRigidNVar ec fuel v || anyValueHasRigidNVar ec fuel rest
 
--- M31.1：`==` / `/=` / `<` 等已由 Loader 解析成 Eq / Ord 的**方法名**，Elab 看到的
+-- `==` / `/=` / `<` 等已由 Loader 解析成 Eq / Ord 的**方法名**，Elab 看到的
 -- 是方法投影的完整名（如 `Base.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
--- 判定（从类表取投影名，不硬编码模块前缀），不再有运算符名判断。
+-- 判定（从类表取投影名，不硬编码模块前缀），没有运算符名判断。
 classHasProjection : String -> String -> String -> Ec -> Bool
 classHasProjection className short name ec = case findClassByShortName className (ecClasses ec) of
   Nothing => False
@@ -910,9 +910,9 @@ isCmpMethod ec name =
     || name == ">"
     || name == ">="
 
--- D23 Stage1：`Base.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
+-- `Base.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
--- 返回规范运算符名（`+` / `-` / `*` / `/`）：Stage 2 把 `+` 别名到 `add` 后，精化器的
+-- 返回规范运算符名（`+` / `-` / `*` / `/`）：`+` 在 Loader 被别名到 `add` 之后，精化器的
 -- 算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>` 代码在具体类型未知时由
 -- 调用方回落到普通 trait 应用。
 -- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
@@ -940,15 +940,15 @@ cmpMethodShortOf ">" = "gt"
 cmpMethodShortOf ">=" = "ge"
 cmpMethodShortOf name = methodShortOf name
 
--- `eq` / `neq` 的饱和应用（M19/M29，M31.1 运算符改为方法别名）：`Int` / `String`
+-- `eq` / `neq` 的饱和应用（运算符是方法别名）：`Int` / `String`
 -- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
 -- 约束实例都算证据）。
--- M24.7：方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
--- M31.1：`name` 已是被解析成方法投影的完整名（`Base.Eq.eq` / `.neq`），因此字典分支
--- 直接用它，不再有 `==` → `eq` 的映射。
+-- 方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
+-- `name` 已是被解析成方法投影的完整名（`Base.Eq.eq` / `.neq`），因此字典分支
+-- 直接用它，没有 `==` → `eq` 的映射。
 --
--- M29（决策 A）：**删除泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
--- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不再退回
+-- **没有泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
+-- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不退回
 -- `bi_eq_generic`（OCaml 多态相等）或 interp 的另一套 `valueEqDeep`。
 export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
@@ -990,12 +990,12 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
         (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
 
 -- ---------------------------------------------------------------
--- M22.2 / M31.1：`lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
+-- `lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
 -- ---------------------------------------------------------------
 -- 与 `eq` / `neq` 同构：`Int` 走具体运行时函数；`String` / `Bool` 走 OCaml `compare`
 -- 的泛型运行时；其它类型解析成 `Ord` 字典的方法投影（`deriving (Ord)` 生效），
 -- 刚性类参数延迟提升成 `{d : Dict_Ord a}`。
--- M31.1：`name` 是方法投影完整名（`Base.Ord.lt` 等），特化只按短名选 runtime 名。
+-- `name` 是方法投影完整名（`Base.Ord.lt` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Check String
 cmpRuntimeName sp method "Int" = case method of
   "lt" => OkC "bi_lt_int"
@@ -1026,7 +1026,7 @@ export dictArgUnsolvedMeta : Ec -> Value -> Bool
 dictArgUnsolvedMeta ec dom = anyUnsolvedMetaArg ec (dictClassArgs ec dom)
 
 -- 结构判定：类参数里**嵌套**的未解 meta 也算未解（`Eff ?r` 的行 meta 是典型）。
--- 旧实现只看裸 `VMeta`，会让 `Monad (Eff ?r)` 在行 meta 解出前就搜索实例，拿到带 meta
+-- 只看裸 `VMeta` 会让 `Monad (Eff ?r)` 在行 meta 解出前就搜索实例，拿到带 meta
 -- 的字典项/提升成隐式参数（codegen 阶段单态化失败）。
 anyUnsolvedMetaArg : Ec -> List Value -> Bool
 anyUnsolvedMetaArg ec [] = False
@@ -1034,10 +1034,10 @@ anyUnsolvedMetaArg ec (arg :: rest) =
   hasUnsolvedMetaValue (ecSolsP ec) (forceVal ec arg) || anyUnsolvedMetaArg ec rest
 
 export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
--- M24.7：`Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
--- M31.1：`name` 是方法投影完整名（`Base.Ord.lt` 等），字典分支直接使用。
--- M29：**删除「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
--- （`Ord instance required`），不再生成 `bi_lt_generic` 等对用户 data 的 `compare`。
+-- `Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
+-- `name` 是方法投影完整名（`Base.Ord.lt` 等），字典分支直接使用。
+-- **没有「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
+-- （`Ord instance required`），不生成 `bi_lt_generic` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
     Vuna.Compiler.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
@@ -1066,7 +1066,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
 export boolShortCircuit : String -> Term -> Term -> Term
 boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf a (TBool True) b
 
--- W3：收尾检查——仍未解的行成员证明（缺效应，或推断不足）。
+-- 收尾检查——仍未解的行成员证明（缺效应，或推断不足）。
 export firstUnsolvedMemberGoal : Ec -> Maybe String
 firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecPending ec)
 
@@ -1077,8 +1077,8 @@ firstUnsolvedMemberGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) 
   Just _ => firstUnsolvedMemberGoalGo ec rest
 else firstUnsolvedMemberGoalGo ec rest
 
--- C42：收尾检查——类参数**已解出**但实例搜索确实失败的延迟字典目标。这类目标在收尾时
--- 只剩一个未解 meta，旧实现混在 `unsolved metavariable` 里；这里把它识别成「缺实例」。
+-- 收尾检查——类参数**已解出**但实例搜索确实失败的延迟字典目标。这类目标在收尾时
+-- 只剩一个未解 meta，混在 `unsolved metavariable` 里分不出来；这里把它识别成「缺实例」。
 -- 跳过三类：Interp/Member 有专门诊断；类参数仍含未解 meta 时保持原 unsolved 文案；
 -- 刚性类参数可能是待泛化的延迟目标，不能误报成缺实例。
 export firstUnsolvedDictGoal : Ec -> Maybe String
@@ -1097,9 +1097,9 @@ firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = 
     else if isRigidDictArg ec forced then firstUnsolvedDictGoalGo ec rest
     else Just (showResolvedValue ec forced)
 
--- C5：第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
+-- 第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
--- D51②：按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
+-- 按目标类别精确取第一条未解约束的 span（与 `firstUnsolved*` 选中同一条）。
 -- | 第一条未解 Interp 目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 export firstUnsolvedInterpGoalSpan : Ec -> Maybe Span
 firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)

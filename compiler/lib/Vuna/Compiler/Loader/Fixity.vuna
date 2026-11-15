@@ -1,13 +1,13 @@
 module Vuna.Compiler.Loader.Fixity where
 
--- Vuna.Compiler.Loader.Fixity：中缀重排（M31.2/M31.3）。
+-- Vuna.Compiler.Loader.Fixity：中缀重排。
 --
 -- parser 不做优先级判断：中缀链统一收成右嵌套的 `EInfix` / `EBacktick`，括号收成
 -- `EParen`（括号是重排的边界，必须显式保留）。本模块按模块可见的 `infix*` 声明
 -- （`FixityDecl`：优先级 0–9、结合性 0/1/2、可选别名）把链重排成 `EApp`，并**在这一步**
 -- 完成运算符别名替换（`==` → `eq`、`::` → `Cons`、`>>=` → `bind`）与 section 展开。
 --
--- 表来源（M31.3 起）：**唯一来源是源码声明**（库或用户）。`->` 是语法而不是用户运算符，
+-- 表来源：**唯一来源是源码声明**（库或用户）。`->` 是语法而不是用户运算符，
 -- 由 `syntaxFixityDecls` 恒可见。表里没有声明的**符号**运算符在中缀位置一律报错（不静默
 -- 默认优先级，否则 `a + b * c` 会静默变成 `(a + b) * c`）；fmt 宁可拒绝格式化也不按错
 -- 优先级重排。反引号名字（`a `f` b`）是普通函数的中缀写法，没声明时按 9 左结合
@@ -83,8 +83,7 @@ unknownFixityMsg : String -> Diagnostic
 unknownFixityMsg op = rnMsg (UnknownFixity op) [op]
 
 -- 运算符优先级：查表；反引号名字没声明时按 9 左结合（Haskell 默认）；未知**符号**运算符
--- 一律报错（严格表与宽松表同判据）——fmt 宁可拒绝格式化也不按错优先级重排改变语义
--- （宽松表只保证「不因缺声明而崩溃」这件事已经不需要了）。
+-- 一律报错——fmt 宁可拒绝格式化也不按错优先级重排改变语义。
 fixityOf : FixityTable -> ChainOp -> Check (Pair Int Int)
 fixityOf t c = case lookupFixity t c.chainOp of
   Just p => OkC p
@@ -115,8 +114,8 @@ collectChain t (EBacktick name l r sp) = Vuna.Compiler.Common.bind (reorderExpr 
 collectChain t e = Vuna.Compiler.Common.bind (reorderExpr t e) (\e2 => OkC (Pair e2 []))
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
--- 显式 fuel 计步（M31.2：`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
--- 不闭合；按 R2「守卫 Int」判据给上界，每次递归消费一个运算符）。
+-- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
+-- 不闭合；按「守卫 Int」判据给上界，每次递归消费一个运算符）。
 climb : Int -> FixityTable -> Int -> Expr -> List ChainOp -> Span -> Check (Pair Expr (List ChainOp))
 climb fuel t minPrec lhs rest sp = if fuel <= 0 then icInternal "infix reorder fuel exhausted"
 else case rest of
@@ -193,7 +192,7 @@ reorderExpr t (EDo stmts sp) =
 reorderExpr t (EAnn inner ty sp) =
   Vuna.Compiler.Common.bind (reorderExpr t inner)
     (\i2 => Vuna.Compiler.Common.bind (reorderExpr t ty) (\t2 => OkC (EAnn i2 t2 sp)))
--- M36：模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
+-- 模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderExpr t (EInterp multi parts sp) =
   Vuna.Compiler.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
@@ -255,11 +254,11 @@ reorderPattern t pat = case pat of
   PStr s sp => OkC (PStr s sp)
   PCon name pats sp =>
     let
-      -- M31.2：中缀构造子（`::`）按别名表换成 canonical 名（`Cons`）。
+      -- 中缀构造子（`::`）按别名表换成 canonical 名（`Cons`）。
       name2 = if name == "::" && renameMode t then aliasOf t "::" else name
     in Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderPattern t p) pats)
       (\pats2 => OkC (PCon name2 pats2 sp))
-  -- M30（main）：as-pattern `x@pat` 只递归内层模式。
+  -- as-pattern `x@pat` 只递归内层模式。
   PAs name inner sp =>
     Vuna.Compiler.Common.bind (reorderPattern t inner) (\inner2 => OkC (PAs name inner2 sp))
   PRecord rname fields sp =>

@@ -1,10 +1,9 @@
 module Vuna.Compiler.Loader.Resolve where
 
--- Vuna.Compiler.Loader.Resolve：名字解析（M24 后维护（源码重组）从 Loader.vuna 拆出）。
+-- Vuna.Compiler.Loader.Resolve：名字解析。
 --
 -- 从模块/导出表查询（`Loader.Modules`）出发，把 parse 后的声明与表达式解析成带模块前缀
--- 的名字；同时负责 DT prelude 名字放行（原 `Vuna.Compiler.Loader.Builtins` 的
--- `builtinArity` 已按源码重组计划合并进来）。
+-- 的名字；同时负责 DT prelude 名字放行（`builtinArity` 也在这里）。
 -- 导出表计算、加载流程与 flatten 在 `Loader.Flatten`。
 import Base.List
 import Vuna.Compiler.Frontend.Diagnostics
@@ -18,12 +17,12 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Intrinsics
 
--- 解析器递归的显式 fuel（M30/C27：保留 1G，逐点写清楚 measure 与上界）。
+-- 解析器递归的显式 fuel（保留 1G，逐点写清楚 measure 与上界）。
 --
 -- **为什么不是结构递归**：这里的递归原则上沿 AST 的真子项下降（表达式子项、模式
 -- 子项、绑定列表的 tail），但实现经 `Vuna.Compiler.Common.bind` 闭包转发，SCT 判据看不到「同一形参
 -- 位置严格递减」；且入口函数在 Decl / Expr / Pat 三种类型间互递归，不存在单一形参
--- 测度。因此保留显式 fuel + 递减（R2「守卫 Int」判据）。
+-- 测度。因此保留显式 fuel + 递减（「守卫 Int」判据）。
 --
 -- **measure**：每个带 fuel 的入口在 `if fuel <= 0` 守卫下、每次递归传 `fuel - 1`；
 -- 沿任一条调用路径（同一次种子内）步数 ≤ 该路径消费的 AST 节点数 × 小常数
@@ -38,7 +37,7 @@ import Vuna.Compiler.Intrinsics
 resolveFuelBound : Int
 resolveFuelBound = 1073741824
 
--- 内建函数的名字与元数：唯一真源是 `Vuna.Compiler.Intrinsics`（M27）。
+-- 内建函数的名字与元数：唯一真源是 `Vuna.Compiler.Intrinsics`。
 builtinArity : String -> Maybe Int
 builtinArity name = case findIntrinsic name of
   Just i => if intrinsicVisible i then Just (intrinsicArity i) else Nothing
@@ -49,23 +48,22 @@ isBuiltinName name = case builtinArity name of
   Just arity => True
   Nothing => False
 
--- DT prelude 里在 Loader 阶段必须放行的名字（M20）。
+-- DT prelude 里在 Loader 阶段必须放行的名字。
 --
--- DT 单文件时这些名字由 `Elab.Prelude.preludeGlobals` 直接提供，Loader 不参与；M20 起
--- `--dt` 复用 Loader，于是 `Int` / `String` / `Bool` / 运算符号 / `str*` 都要能被解析。
--- 这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
+-- 经 Loader 加载的 DT 程序里，`Int` / `String` / `Bool` / 运算符号 / `str*` 都要能被
+-- 解析。这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
 --
--- M24.7：`show` / `eq` / `neq` / `lt` / `le` / `gt` / `ge` 已从放行表移除——trait 与
--- 实例迁到库（`Base.Show` / `Base.Eq` / `Base.Ord`），裸名必须经 import 的导出表解析。
+-- `show` / `eq` / `neq` / `lt` / `le` / `gt` / `ge` 不在放行表里：trait 与
+-- 实例在库（`Base.Show` / `Base.Eq` / `Base.Ord`），裸名必须经 import 的导出表解析。
 isDtPreludeName : String -> Bool
 isDtPreludeName name = memName name dtPreludeNames
 
 dtPreludeNames : List String
 dtPreludeNames = append ["Type", "->", "_"] (append preludeTypeNames preludeValueNames)
 
--- M31.2：运算符别名替换与中缀重排已由 `Loader.Fixity` 在 resolve **之前**完成
--- （`==` 等已变成 `eq` 等名字），这里不再有运算符别名表。
--- M24.7：trait 迁到库后，缺 import 是最常见的错误来源。除了常规的
+-- 运算符别名替换与中缀重排已由 `Loader.Fixity` 在 resolve **之前**完成
+-- （`==` 等已变成 `eq` 等名字），这里没有运算符别名表。
+-- trait 在库里定义，缺 import 是最常见的错误来源。除了常规的
 -- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
 traitImportHint : String -> String
 traitImportHint "Show" = " (trait Show is not in scope; add `import Base.Show`)"
@@ -81,12 +79,11 @@ traitImportHint "ge" = " (trait method ge; add `import Base.Ord`)"
 traitImportHint _ = ""
 
 -- ---------------------------------------------------------------
--- M28（B18）：type / value / ctor 三个命名空间（不再拍平成一个表）
+-- type / value / ctor 三个命名空间（不拍平成一个表）
 -- ---------------------------------------------------------------
--- 本模块声明按 decl 形状归入各自命名空间。旧实现把 `own` 写成
--- 「topNames ++ typeNamesOf」、把 `ownTypes` 写成「ctors ++ 全部名字」，三者混用，
--- 于是类型名在值位置、值名在类型位置都能命中，Elab 再靠「kind 是不是宇宙」兜住。
--- 现在每个解析入口只查与自己位置对应的表（见 `Namespaces`）。
+-- 本模块声明按 decl 形状归入各自命名空间。若把三者混用（把类型名也放进值表、
+-- 把构造子名也放进类型表），类型名在值位置、值名在类型位置都会命中，Elab 只能靠
+-- 「kind 是不是宇宙」兜住。每个解析入口只查与自己位置对应的表（见 `Namespaces`）。
 --
 -- 注意 trait 方法按**构造子**命名空间处理，与导出表把方法记成 "ctor" kind 一致；
 -- record 名同时是类型名与构造子（两处都登记）。
@@ -94,7 +91,7 @@ declValueNames : Decl -> List String
 declValueNames d = case d of
   DFun name pats body sp => [name]
   DSig name ctx ty sp => [name]
-  -- M28：axiom 是无体的值命名空间条目（类型层使用；运行时使用由 Elab/Codegen 拒绝）。
+  -- axiom 是无体的值命名空间条目（类型层使用；运行时使用由 Elab/Codegen 拒绝）。
   DAxiom name ty sp => [name]
   DExtern name cName ty sp => [name]
   DInstance ctxE head methods sp => []
@@ -105,10 +102,10 @@ valueNamesOf : List Decl -> List String
 valueNamesOf decls = concatMap declValueNames decls
 
 -- 从声明列表算出三个命名空间（Loader 入口与 Flatten 的分离编译入口共用）。
--- M41：data/record 构造子的候选表。第二段是**未加模块 prefix**的族限定名：
+-- data/record 构造子的候选表。第二段是**未加模块 prefix**的族限定名：
 --   data 构造子 -> "Data.Ctor"；record 构造子 -> "Record"（构造子名 = 类型名）。
 -- trait 方法不在其中（不是族的构造子，仍按原名字解析）。
--- | 自动补注（M41 新增导出）：ctorCandsOf。
+-- | 从声明列表收集构造子候选（短名 → 族限定名）。
 ctorCandsOf : List Decl -> List (Pair String String)
 ctorCandsOf [] = []
 ctorCandsOf (d :: rest) = case d of
@@ -132,36 +129,36 @@ export namespacesOf : List Decl -> Namespaces
 namespacesOf = namespacesOfWith False
 
 -- 本模块内某个短名的构造子 canonical 目标（含 record）。
--- | 自动补注（M41 新增导出）：localCtorTargets。
+-- | 本模块里短名对应的全部构造子 canonical target（含 record）。
 localCtorTargets : String -> Namespaces -> String -> List String
 localCtorTargets prefix ns name =
   map (\p => mangle prefix (secondOf p)) (filter (\p => firstOf p == name) ns.nsCtorCands)
 
--- | 自动补注（M41 新增导出）：localCtorTarget。
+-- | 本模块里短名的唯一构造子 target；0 个或多于 1 个都返回 `Nothing`。
 localCtorTarget : String -> Namespaces -> String -> Maybe String
 localCtorTarget prefix ns name = case localCtorTargets prefix ns name of
   [t] => Just t
   _ => Nothing
 
--- M41：构造子候选 = 本模块 data/record 构造子 ∪ 所有 open import 里的
+-- 构造子候选 = 本模块 data/record 构造子 ∪ 所有 open import 里的
 -- data/record 构造子（trait method 不参与；本地不再无条件遮蔽 import）。
 -- 候选按出现顺序去重（`Base.nubNames`）。
 -- 从 (module, ExportEntry) 取 target（lambda 里直接字段访问在 vuna 里不可用）。
--- | 自动补注（M41 新增导出）：pairExportTarget。
+-- | `(module, ExportEntry)` 里的 target（lambda 里不能直接字段访问）。
 pairExportTarget : Pair String ExportEntry -> String
 pairExportTarget p = (secondOf p).target
 
--- | 自动补注（M41 新增导出）：pairIsDataCtor。
+-- | 该导出条目是否指向 data/record 构造子。
 pairIsDataCtor : List Module -> Pair String ExportEntry -> Bool
 pairIsDataCtor modules p = isDataOrRecordCtorTarget modules (pairExportTarget p)
 
--- | 自动补注（M41 新增导出）：importedCtorTargets。
+-- | open import 里同名 data/record 构造子的 target 集合（去重）。
 importedCtorTargets : List Module -> List Import -> String -> Check (List String)
 importedCtorTargets modules imports name =
   Vuna.Compiler.Common.bind (modulesExportingCtor modules imports name)
     (\pairs => OkC (nubNames (map pairExportTarget (filter (pairIsDataCtor modules) pairs))))
 
--- | 自动补注（M41 新增导出）：ctorCandidates。
+-- | 构造子候选 = 本地候选 ∪ import 候选（本地候选优先的规则见函数内注释）。
 ctorCandidates : List Module -> String -> Namespaces -> List Import -> String -> Check (List String)
 -- 与本地**类型名**同名的构造子（record 构造子 / `data Pair where Pair` 的双命名空间）
 -- 保持词法遮蔽：本地优先，不并入 import 候选。纯构造子名（`Nil` 等）才做 union。
@@ -171,7 +168,7 @@ in if notEmptyList local && name /= "Nil" && name /= "Cons" then OkC local
 else OkC (nubNames (append local imp))
 )
 
--- | 自动补注（M41 新增导出）：notEmptyList。
+-- | 列表是否非空。
 notEmptyList : List a -> Bool
 notEmptyList [] = False
 notEmptyList (_ :: rest) = True
@@ -194,9 +191,9 @@ resolveQualified modules label imports name = case splitLastDot (splitOnDot name
             Nothing => rnNoLoc2 (ValueNotExported base m) base m
       )
 
--- M41：`Family.Ctor` / `Module.Data.Ctor`：前缀先按类型命名空间解析，再在族里找短名。
+-- `Family.Ctor` / `Module.Data.Ctor`：前缀先按类型命名空间解析，再在族里找短名。
 -- 本地族从 `nsCtorCands` 直接匹配（entry 文件也适用）；导入族扫描已加载模块的声明。
--- | 自动补注（M41 新增导出）：ctorTargetInDecls。
+-- | 在 `mname` 的声明里找族 `famTarget` 下短名 `base` 的 canonical target。
 ctorTargetInDecls : String -> String -> String -> List Decl -> Maybe String
 ctorTargetInDecls mname famTarget base [] = Nothing
 ctorTargetInDecls mname famTarget base (d :: rest) = case d of
@@ -208,24 +205,24 @@ ctorTargetInDecls mname famTarget base (d :: rest) = case d of
     else ctorTargetInDecls mname famTarget base rest
   _ => ctorTargetInDecls mname famTarget base rest
 
--- | 自动补注（M41 新增导出）：anyCtorNamed。
+-- | 构造子列表里是否有该短名。
 anyCtorNamed : String -> List Ctor -> Bool
 anyCtorNamed name [] = False
 anyCtorNamed name (c :: rest) = ctorName c == name || anyCtorNamed name rest
 
--- | 自动补注（M41 新增导出）：findFamilyCtorInModules。
+-- | 在已加载模块里找族 `famTarget` 下的短名构造子。
 findFamilyCtorInModules : List Module -> String -> String -> Maybe String
 findFamilyCtorInModules [] famTarget base = Nothing
 findFamilyCtorInModules (m :: rest) famTarget base = case ctorTargetInDecls (moduleNameOf m) famTarget base (moduleDeclsOf m) of
   Just t => Just t
   Nothing => findFamilyCtorInModules rest famTarget base
 
--- | 自动补注（M41 新增导出）：ctorRelFamily。
+-- | 把候选表里的族限定名补上模块前缀。
 ctorRelFamily : String -> String -> String
 ctorRelFamily prefix rel = case splitLastDot (splitOnDot rel) of
   Pair revFam ctor => mangle prefix (joinDots revFam)
 
--- | 自动补注（M41 新增导出）：ctorTargetInFamily。
+-- | 族 `famTarget` 下短名 `base` 的 canonical target（本地候选优先，再查已加载模块）。
 ctorTargetInFamily : List Module -> String -> Namespaces -> String -> String -> Maybe String
 ctorTargetInFamily modules prefix ns famTarget base = case filter (\p => firstOf p == base && ctorRelFamily prefix (secondOf p) == famTarget) ns.nsCtorCands of
   [Pair _ rel] => Just (mangle prefix rel)
@@ -233,7 +230,7 @@ ctorTargetInFamily modules prefix ns famTarget base = case filter (\p => firstOf
 
 -- 族前缀只按**类型命名空间**解析（不回头做构造子退化），避免与 resolveTypeName 形成
 -- 终止性上无法证明的互递归。
--- | 自动补注（M41 新增导出）：resolveTypeTarget。
+-- | 解析类型位置的 target（本模块类型、内建类型、限定名、import 导出的类型）。
 resolveTypeTarget : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveTypeTarget modules label prefix ns imports name = if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
 else if isIntrinsicTypeName name then OkC name
@@ -246,7 +243,7 @@ else Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pai
       (\p => OkC (secondOf p).target)
 )
 
--- | 自动补注（M41 新增导出）：resolveDottedTypeTargetOnly。
+-- | 只按模块限定的类型名解析（不走构造子退化）。
 resolveDottedTypeTargetOnly : List Module -> String -> List Import -> String -> Check String
 resolveDottedTypeTargetOnly modules label imports name = case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -261,7 +258,7 @@ resolveDottedTypeTargetOnly modules label imports name = case splitLastDot (spli
           Nothing => rnNoLoc2 (TypeNotExported base m) base m
       )
 
--- | 自动补注（M41 新增导出）：resolveFamilyQualifiedCtor。
+-- | 解析 `Family.Ctor`：先解析族名，再在族里找短名。
 resolveFamilyQualifiedCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveFamilyQualifiedCtor modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -273,29 +270,29 @@ resolveFamilyQualifiedCtor modules label prefix ns imports name = case splitLast
     )
 
 -- 模块限定名里的构造子条目可能有多个同名（不同族）；这时必须用 Family.Ctor 消歧。
--- | 自动补注（M41 新增导出）：exportTarget。
+-- | 导出条目的 canonical target。
 exportTarget : ExportEntry -> String
 exportTarget e = e.target
 
--- | 自动补注（M41 新增导出）：uniqueCtorTarget。
+-- | 多个同名导出条目：target 全相同取该 target，否则编码成重载候选名；空表报未知构造子。
 uniqueCtorTarget : String -> String -> List ExportEntry -> Check String
 uniqueCtorTarget label name [] = rnNoLoc1 (UnknownConstructor name) name
 uniqueCtorTarget label name (e :: rest) =
   if allSameTarget (map exportTarget (e :: rest)) then OkC (exportTarget e)
   else OkC (overCtorName name (nubNames (map exportTarget (e :: rest))))
 
--- | 自动补注（M41 新增导出）：allSameTarget。
+-- | 字符串列表是否全部相同。
 allSameTarget : List String -> Bool
 allSameTarget [] = True
 allSameTarget (x :: rest) = allEq x rest
 
--- | 自动补注（M41 新增导出）：allEq。
+-- | 列表元素是否都等于给定值。
 allEq : String -> List String -> Bool
 allEq x [] = True
 allEq x (y :: rest) = x == y && allEq x rest
 
 -- 模式里的限定名：import 模块前缀优先，其次 data family 前缀。
--- | 自动补注（M41 新增导出）：resolveCtorDotted。
+-- | 模式里的限定构造子：import 模块前缀优先，其次 data family 前缀。
 resolveCtorDotted : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveCtorDotted modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -308,7 +305,7 @@ resolveCtorDotted modules label prefix ns imports name = case splitLastDot (spli
       )
       Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
 
--- 带点表达式的解析（M10.5）：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
+-- 带点表达式的解析：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
 -- 否则按「变量/顶层名 + 字段链」处理。`p.x`、`M.point.x`、`Vuna.Compiler.Frontend.Parser.parseSource` 都走这里。
 resolveDottedExpr : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Span -> Check Expr
 resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDot name of
@@ -396,15 +393,15 @@ else case localCtorTargets prefix ns name of
       targets => OkC (pickCtorOrOver name (nubNames targets))
   )
 
--- | 自动补注（M41 新增导出）：pickCtorOrOver。
+-- | 从候选 target 里选唯一名；0 个或多个都编码成重载候选名。
 pickCtorOrOver : String -> List String -> String
 pickCtorOrOver name [] = overCtorName name []
 pickCtorOrOver name ([t]) = t
 pickCtorOrOver name cands = overCtorName name cands
 
 -- 构造子位置（模式、record 构造、以及类型位置的索引构造子退化）：候选集 = 本地
--- data/record 构造子 ∪ open import 的 data/record 构造子；trait method 仍按旧名字解析。
--- | 自动补注（M41 新增导出）：resolveCtor。
+-- data/record 构造子 ∪ open import 的 data/record 构造子；trait method 按原名解析。
+-- | 构造子位置的名字解析（模式、record 构造、类型位置的索引构造子退化）。
 resolveCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveCtor modules label prefix ns imports name = if containsDot name then resolveCtorDotted modules label prefix ns imports name
 else Vuna.Compiler.Common.bind (ctorCandidates modules prefix ns imports name) (\cands => case cands of
@@ -470,7 +467,7 @@ else Vuna.Compiler.Common.bind (resolvePattern resolveFuelBound modules label pr
       (\body2 => OkC (Pair pat2 body2))
 )
 
--- A2：局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
+-- 局部函数的一个 clause（参数模式列表 + body）；参数绑定累加到 body 的作用域。
 resolveLocalClause : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
 resolveLocalClause fuel modules label prefix ns imports scope (Pair pats body) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports pats) (\p => case p of
@@ -537,7 +534,7 @@ resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) ::
   else Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\value2 => Vuna.Compiler.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC (Base.List.Cons (Pair pat value2) tail)))
 
--- M36：模板字符串降级（rename 之后、Elab 之前）。
+-- 模板字符串降级（rename 之后、Elab 之前）。
 --
 --   * 文本块 → `EStr`（空文本块跳过）；
 --   * 洞 → `EApp (EVar "Base.Interp.interp") [e]`：转换语义**完全由 base 的 `Interp`
@@ -564,7 +561,7 @@ concatLeft : Span -> Expr -> List Expr -> Expr
 concatLeft sp acc [] = acc
 concatLeft sp acc (e :: rest) = concatLeft sp (EApp (EVar "++" sp) [acc, e] sp) rest
 
--- F3 B：release 构建拒绝 debug-only 构造（`assert` / `todo`）。局部同名 binder 由
+-- release 构建拒绝 debug-only 构造（`assert` / `todo`）。局部同名 binder 由
 -- scope 放行（`resolveGlobal` 对局部名返回原名）；顶层同名定义会 mangle 成
 -- `Module.name`，不会命中这个检查。
 -- | release 构建里拒绝 debug-only 构造（`assert`/`todo`）；局部同名 binder 由 scope 放行。
@@ -592,7 +589,7 @@ isParserSyntaxName name =
 resolveExpr : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
 resolveExpr fuel modules label prefix ns imports scope expr = if fuel <= 0 then icFuel "resolver"
 else case expr of
-  -- M40：`_` / `?name` 是洞，不是可解析的名字（`_` 也走 `dtPreludeNames`，命名洞必须
+  -- `_` / `?name` 是洞，不是可解析的名字（`_` 也走 `dtPreludeNames`，命名洞必须
   -- 在这里直接放行，否则会报 unbound variable）。
   EVar name sp =>
     if isHoleName name then OkC (EVar name sp)
@@ -606,11 +603,11 @@ else case expr of
       (\n => checkDebugConstruct ns.nsRelease sp name n scope)
   -- 内置宏标记必须在 `Loader.Expand` 里展开；走到这里说明展开漏了（internal error，
   -- 不静默透传成普通内部名）。
-  -- M31.2：`EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
+  -- `EInfix` / `EParen` 是 parser 的中间产物，正常路径在 Loader 重排里已消除；
   -- 走到这里说明重排漏了（internal error，不静默透传）。
   EInfix op lhs rhs sp => icInternal "unreordered infix operator ${op}"
-  -- M31.3：同上——反引号中缀与 section 也必须在 Loader.Fixity 重排里消除（严格执行
-  -- 契约「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
+  -- 反引号中缀与 section 同样必须在 Loader.Fixity 重排里消除（严格执行契约
+  -- 「rename 后不存在」），走到这里说明重排漏了，显式 internal error 不静默透传。
   EBacktick name lhs rhs sp => icInternal "unreordered backtick infix operator ${name}"
   ESectOp op sp => icInternal "unreordered operator section (${op})"
   ESectL op rhs sp => icInternal "unreordered left operator section (${op})"
@@ -619,7 +616,7 @@ else case expr of
   EInt n sp => OkC (EInt n sp)
   EStr s sp => OkC (EStr s sp)
   EFloat raw sp => OkC (EFloat raw sp)
-  -- M36：模板字面量在 rename 之后降级为纯表达式（文本块 → `EStr`，洞 → `interp e`），
+  -- 模板字面量在 rename 之后降级为纯表达式（文本块 → `EStr`，洞 → `interp e`），
   -- 于是 Elab / codegen 永远看不到 `EInterp`；fmt / lint / index / doc 只做 parse，仍看原形。
   EInterp multi parts sp =>
     Vuna.Compiler.Common.bind
@@ -632,17 +629,15 @@ else case expr of
   EApp fn args sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope fn)
       (\fn2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\a => resolveExpr (fuel - 1) modules label prefix ns imports scope a) args) (\args2 => OkC (EApp fn2 args2 sp)))
-  -- M20：`EPi` 只做**结构递归解析**，不在这里判定「是否允许」。M13–M19 的 DT 是单文件、
-  -- 不经 Loader，所以这条以前直接拒绝；M20 起 `--dt` 复用 Loader，而依赖类型是 DT 的
-  -- 核心语法。放行判定的责任交给下游检查器：早期 HM 的 `Typecheck`（已删除）曾报
-  -- `dependent function type requires --dt`（既有行为不变），DT 的 `Elab` 正常精化。
+  -- `EPi` 只做**结构递归解析**，不在这里判定「是否允许」：依赖类型是 DT 的核心语法，
+  -- 放行判定的责任交给下游检查器（`Elab` 精化）。
   EPi name implicit qty dom cod sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope dom)
       (\dom2 => Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append [name] scope) cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
   ELet binds body rec_ sp => Vuna.Compiler.Common.bind (resolveLet (fuel - 1) modules label prefix ns imports scope rec_ binds body) (\r => case r of
     Pair binds2 body2 => OkC (ELet binds2 body2 rec_ sp)
   )
-  -- A2：where/let 多 clause 局部函数：逐 clause 解析参数模式并累加作用域。
+  -- where/let 多 clause 局部函数：逐 clause 解析参数模式并累加作用域。
   ELocalFun clauses sp =>
     Vuna.Compiler.Common.bind
       (Vuna.Compiler.Common.traverse (\dtv => resolveLocalClause (fuel - 1) modules label prefix ns imports scope dtv) clauses)
@@ -664,12 +659,12 @@ else case expr of
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope base)
       (\b => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveFieldValue (fuel - 1) modules label prefix ns imports scope dtv) fields) (\fs => OkC (ERecUpdate b fs sp)))
   EDo stmts sp => resolveDo (fuel - 1) modules label prefix ns imports scope stmts sp
-  -- M24：where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
+  -- where 绑定签名（`g : Int -> Int`）降级成 `EAnn value ty`；值与类型都做名字解析。
   EAnn value ty sp =>
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
       (\v2 => Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope ty) (\t2 => OkC (EAnn v2 t2 sp)))
 
--- M36：模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
+-- 模板片段的名字解析（洞内表达式按普通作用域解析；文本块原样）。
 resolveInterpParts : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List InterpPart -> Check (List InterpPart)
 resolveInterpParts fuel modules label prefix ns imports scope parts = if fuel <= 0 then icFuel "resolver"
 else case parts of
@@ -682,14 +677,14 @@ else case parts of
     Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
       (\e2 => Vuna.Compiler.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => OkC (Base.List.Cons (IPHole e2) ps)))
 
--- do（M11）在这里降级成 bind 的普通应用，后续类型检查与 codegen 无需认识 do。
+-- do 块在这里降级成 bind 的普通应用，类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
 --
--- S3：`bind` 只在**块作用域**解析一次（`resolveDoBind`，进入任何 do-binder 之前），
--- 之后每一步都用同一个 canonical 名构造 `EVar`。旧实现先把整块降级成带裸名 `bind` 的
--- 链、再交给 `resolveExpr` 解析，于是链上每个 `bind` 都在各自的 lambda 作用域里重新解析：
--- 块里出现名为 `bind` 的 do-binder 时，后续步骤的 bind 会被错误地解析到该 binder。
--- 现在降级与解析合并成一次遍历，链头直接使用块作用域解析好的名字。
+-- `bind` 只在**块作用域**解析一次（`resolveDoBind`，进入任何 do-binder 之前），
+-- 之后每一步都用同一个 canonical 名构造 `EVar`：若把整块先降级成带裸名 `bind` 的链、
+-- 再交给 `resolveExpr` 解析，链上每个 `bind` 都会在各自的 lambda 作用域里重新解析，
+-- 块里出现名为 `bind` 的 do-binder 时，后续步骤的 bind 就会被错误地解析到该 binder。
+-- 降级与解析因此合并成一次遍历，链头直接使用块作用域解析好的名字。
 -- | 把 do 块降级成 bind 应用：空块报错，单条裸表达式即块结果，其余走 `resolveDoChain`。
 resolveDo : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> List DoStmt -> Span -> Check Expr
 resolveDo fuel modules label prefix ns imports scope stmts blockSpan = if fuel <= 0 then icFuel "resolver"
@@ -708,13 +703,13 @@ resolveDoBind modules label prefix ns imports scope =
   resolveGlobal modules label prefix ns imports scope "bind"
 
 -- 非末条语句的链式降级：`bind` 已解析好，逐条解析语句表达式（do-binder 对后续语句可见，
--- 与旧实现的 lambda 作用域一致；`_` binder 不引入可见名字）。
+-- 与被降级的 lambda 作用域一致；`_` binder 不引入可见名字）。
 --
--- S3b：每个节点的头部不是裸 canonical 名，而是携带 canonical 的内部标记
+-- 每个节点的头部不是裸 canonical 名，而是携带 canonical 的内部标记
 -- `@vuna@do@bind@<canonical>` / `@vuna@do@ignore@<canonical>`（`Ast.doBindSyntaxName` /
 -- `doIgnoreSyntaxName`）。标记只由 Loader 在 rename 后产生，用户源码写不出来；Elab 据此把
 -- 整块按「一个 monad / 一个字典」精化（`Elab.Term.Impl` 的 do 链解释），不认识的形状则
--- 剥标记回退成普通 bind 应用——与 S3a 的语义完全一致。
+-- 剥标记回退成普通 bind 应用——语义与带标记的降级完全一致。
 -- | 非末条语句的链式降级：逐条解析语句，按 `@vuna@do@bind@...` / `@vuna@do@ignore@...`
 -- 内部标记构造 bind 应用（do-binder 对后续语句可见）。
 resolveDoChain : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> List DoStmt -> Span -> Check Expr
@@ -739,7 +734,7 @@ resolveFieldValue fuel modules label prefix ns imports scope (Pair fname value) 
   else Vuna.Compiler.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
     (\v => OkC (Pair fname v))
 
--- | 自动补注（M41 新增导出）：resolveCtorDecl。
+-- | 声明处构造子的 canonical 名（`Module.Data.Ctor`）。
 resolveCtorDecl : String -> String -> String -> String -> Check String
 resolveCtorDecl label prefix dname ctor =
   Vuna.Compiler.Common.bind (checkTopName label ctor) (\_ => OkC (ctorCanonical prefix dname ctor))
@@ -754,7 +749,7 @@ startsUpperName name = case strUnpack name of
   [] => False
   c :: rest => c >= 65 && c <= 90
 
--- 类型名解析（M20：本模块声明的类型名**优先于**内建名；M28 起只查类型命名空间）。
+-- 类型名解析（本模块声明的类型名**优先于**内建名；只查类型命名空间）。
 --
 -- `Base.Bool` 会重新声明 `data Bool`，此时 `Bool` 应解析成 `Base.Bool.Bool`（mangled），
 -- 而不是内建 `Bool`——否则构造子检查会报 `constructor False does not return
@@ -762,11 +757,11 @@ startsUpperName name = case strUnpack name of
 --
 -- 类型位置**只查类型命名空间**；找不到时按既有约定退化：
 --   1. 小写名是类型变量（隐式量化），但本模块同名的**值定义**（类型层 def，
---      如 `sel : Nat -> Type`）与同名的本地构造子仍按旧行为 mangle——这是「值推断」
+--      如 `sel : Nat -> Type`）与同名的本地构造子仍按既有约定 mangle——这是「值推断」
 --      的退化路径，不是把值命名空间并进类型命名空间；
 --   2. 非小写名找不到类型时，退化为**索引构造子**（本地构造子 + 跨模块 import 的构造子），
 --      最后才是本模块的值定义（大写类型层 def，少见）。
--- | 自动补注（M41 新增导出）：resolveTypeName。
+-- | 类型名解析：本模块类型 → 内建类型 → 小写（类型变量/退化）→ 非小写（索引构造子等）。
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveTypeName modules label prefix ns imports name =
   if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
@@ -776,14 +771,14 @@ resolveTypeName modules label prefix ns imports name =
   else resolveNonLowerTypeName modules label prefix ns imports name
 
 -- 本地构造子（索引）候选：0 = 继续按导入面找；1 = 命中；>1 = 同名不同族，必须限定。
--- | 自动补注（M41 新增导出）：localCtorResult。
+-- | 本地构造子（索引）候选：`Nothing` = 继续按导入面找；`Just` = 命中；多个直接报歧义。
 localCtorResult : String -> String -> Namespaces -> String -> Check (Maybe String)
 localCtorResult label prefix ns name = case localCtorTargets prefix ns name of
   [t] => OkC (Just t)
   [] => OkC Nothing
   _ => rnNoLoc2 (AmbiguousConstructor name "Data.${name}") name "Data.${name}"
 
--- | 自动补注（M41 新增导出）：resolveLowerTypeName。
+-- | 小写名的类型位置解析（隐式量化的类型变量 / 值定义 / 构造子 / 导入类型）。
 resolveLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveLowerTypeName modules label prefix ns imports name = if Base.HashMap.member name ns.nsValueSet then OkC (mangle prefix name)
 else Vuna.Compiler.Common.bind (localCtorResult label prefix ns name) (\mc => case mc of
@@ -806,13 +801,13 @@ else Vuna.Compiler.Common.bind (localCtorResult label prefix ns name) (\mc => ca
   )
 )
 
--- | 自动补注（M41 新增导出）：resolveNonLowerTypeName。
+-- | 非小写名的类型位置解析（本地构造子 / 限定名 / 导入类型 / 构造子退化）。
 resolveNonLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Common.bind (localCtorResult label prefix ns name) (\mc => case mc of
   Just t => OkC t
   Nothing => if containsDot name then resolveDottedTypeName modules label prefix ns imports name
   else Vuna.Compiler.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-    -- M30：类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
+    -- 类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
     -- 后 `Vec Zero a` 的 `Zero`）。`modulesExportingType` 只查 `"type"` entry，找不到构造子，
     -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子已在上面处理）。
     [] => case resolveCtor modules label prefix ns imports name of
@@ -824,7 +819,7 @@ resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Com
   )
 )
 
--- | 自动补注（M41 新增导出）：resolveDottedTypeName。
+-- | 限定名（`M.T` / `Family.Ctor`）的类型位置解析。
 resolveDottedTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (splitOnDot name) of
   Pair revPrefix base =>
@@ -836,13 +831,13 @@ resolveDottedTypeName modules label prefix ns imports name = case splitLastDot (
         ErrC _ => rnNoLoc1 (ModuleNotImported typePrefix) typePrefix
       Just m => Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es base of
         Just e => OkC e.target
-        -- M28：类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
+        -- 类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
         Nothing => case findExportValue es base of
           Just e => OkC e.target
           Nothing => rnNoLoc2 (TypeNotExported base m) base m
       )
 
--- M32：约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走
+-- 约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走
 -- `resolveTypeExpr`，类型位置会退化成构造子解析并报 "unknown constructor C"——对约束语义
 -- 是误导。这里先解析头名，未绑定即报 `unknown interface`；头名合法时其余实参仍按类型解析。
 resolveConstraintExpr : List Module -> String -> String -> Namespaces -> List Import -> Expr -> Check Expr
@@ -861,12 +856,12 @@ resolveTypeExpr : Int -> List Module -> String -> String -> Namespaces -> List I
 resolveTypeExpr fuel modules label prefix ns imports ty =
   resolveTypeExprScoped fuel modules label prefix ns imports [] ty
 
--- B33：类型表达式里的显式 Pi binder 必须遮蔽同名 import；`bound` 只含 binder 名，
+-- 类型表达式里的显式 Pi binder 必须遮蔽同名 import；`bound` 只含 binder 名，
 -- 未绑定的名字才交给 resolveTypeName（本地值定义优先，其次 import 的导出面）。
 resolveTypeExprScoped : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Expr -> Check Expr
 resolveTypeExprScoped fuel modules label prefix ns imports bound ty = if fuel <= 0 then icFuel "resolver"
 else case ty of
-  -- M20：DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
+  -- DT 的层级（`Type 1`）与洞（`_`）在这里只做结构放行，语义由下游检查器决定。
   EApp (EVar "Type" _) args _ => OkC ty
   -- 类型表达式里的字面量：Int / String 都放行（`Vec 3 a` / `Reader "books" Int`）；
   -- 其它字面量仍报 invalid type expression。
@@ -883,7 +878,7 @@ else case ty of
     Vuna.Compiler.Common.bind
       (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound fn)
       (\fn2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\dtv => resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dtv) args) (\args2 => OkC (EApp fn2 args2 sp)))
-  -- M20：同上——只做结构递归，允许与否交给下游检查器。
+  -- 同上——只做结构递归，允许与否交给下游检查器。
   EPi name implicit qty dom cod sp =>
     Vuna.Compiler.Common.bind
       (resolveTypeExprScoped (fuel - 1) modules label prefix ns imports bound dom)
@@ -896,7 +891,7 @@ resolveTypeTopName : String -> String -> String -> Check String
 resolveTypeTopName label prefix name =
   Vuna.Compiler.Common.bind (checkTopName label name) (\_ => OkC (mangle prefix name))
 
--- | 自动补注（M41 新增导出）：resolveCtorSpec。
+-- | 解析构造子声明：构造子名与类型表达式都做名字解析。
 resolveCtorSpec : List Module -> String -> String -> Namespaces -> List Import -> String -> Ctor -> Check Ctor
 resolveCtorSpec modules label prefix ns imports dname (Ctor ctor ty arity sp) =
   Vuna.Compiler.Common.bind
@@ -924,7 +919,7 @@ resolveDecl modules label prefix ns imports d = case d of
   DSig name ctx ty sp =>
     Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctx) (\ctx2 => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DSig n ctx2 ty2 sp))))
-  -- M28：axiom 与签名一样解析类型表达式；名字按顶层名 mangle。
+  -- axiom 与签名一样解析类型表达式；名字按顶层名 mangle。
   DAxiom name ty sp =>
     Vuna.Compiler.Common.bind (onErrDiag (withFallbackSpan sp) (resolveTopName label prefix name))
       (\n => Vuna.Compiler.Common.bind (resolveTypeExpr resolveFuelBound modules label prefix ns imports ty) (\ty2 => OkC (DAxiom n ty2 sp)))
@@ -1004,8 +999,7 @@ resolveDeclWithImplicitScopes scopes modules label prefix ns imports (DFun name 
 resolveDeclWithImplicitScopes scopes modules label prefix ns imports d =
   resolveDecl modules label prefix ns imports d
 
--- M41：entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子不再互相覆盖；
--- 原先的「entry 构造子共享一个全局命名空间」防御随 canonical 命名一并删除。
+-- entry 文件的构造子也按族限定（`Data.Ctor`），同名构造子互不覆盖。
 export resolveEntry : Bool -> List Module -> String -> List Import -> List Decl -> Check (List Decl)
 resolveEntry release modules entryPkg imports decls =
   resolveProgram modules "<entry>" "" (namespacesOfWith release decls) imports decls
@@ -1032,7 +1026,7 @@ tyShape _ = "other"
 
 -- 值命名空间命中里混入的同名构造子条目（含 module 重导出/iface 缓存）：
 -- 取 kind=ctor 或 target 是 data/record 构造子的条目，按重载候选处理。
--- | 自动补注（M41 新增导出）：ctorPairTargets。
+-- | 值命名空间命中里混入的构造子条目的 target（按重载候选处理）。
 ctorPairTargets : List Module -> List (Pair String ExportEntry) -> List String
 ctorPairTargets modules [] = []
 ctorPairTargets modules ((Pair m e) :: rest) =

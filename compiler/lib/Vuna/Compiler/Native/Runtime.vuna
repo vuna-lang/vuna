@@ -1,6 +1,6 @@
 module Vuna.Compiler.Native.Runtime where
 
--- Vuna.Compiler.Native.Runtime：native 运行时函数（汇编模板）+ IR 符号映射（M2）。
+-- native 运行时函数（汇编模板）+ IR 符号映射。
 --
 -- 运行时按 `Ir.Runtime` 契约的符号名实现；白名单之外的符号由 `Native.Module` 拒绝
 -- （编译期 `NativeUnsupported`），不做「trap 兜底」。
@@ -14,7 +14,7 @@ module Vuna.Compiler.Native.Runtime where
 --   * 入口打印格式与 OCaml 的 `print_endline (show main)` 一致（String 走 `show`，
 --     即带引号与转义的调试形态）。
 --
--- M2 不做 GC/RC：字符串只增不减，堆是 `.bss` 里的固定缓冲 + bump 指针（1 MiB）。
+-- 不做 GC/RC：字符串只增不减，堆是 `.bss` 里的固定缓冲 + bump 指针（1 MiB）。
 --
 -- 边界：只 import Base 与 `Native.{Model,Abi}`。
 import Base.Bool
@@ -133,7 +133,7 @@ natToIntFn : NativeFunc
 natToIntFn = rtFunc "nat_to_int" 0 [IMov (OpReg Rax) (OpReg Rdi)]
 
 -- ---------------------------------------------------------------
--- 可观测性原语桩（`docs/reference/observability.md` §4.1 / O12）
+-- 可观测性原语桩（`docs/reference/observability.md` §4.1）
 -- ---------------------------------------------------------------
 -- native 后端只提供**叶子**原语的 no-op 桩：读级别与记事件都返回 Int 0（0 = 「没打开 /
 -- 没产生事件」）。`@vuna@obs@span` 是**高阶**原语（吃一个 `Int -> a` 的 thunk），本后端

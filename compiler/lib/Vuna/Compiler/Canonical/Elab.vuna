@@ -1,20 +1,18 @@
 -- | 精化产物 / 接口字段的规范编码（iface 哈希输入）。
 module Vuna.Compiler.Canonical.Elab where
 
--- Vuna.Compiler.Canonical.Elab：`Driver/Iface` 接口哈希的输入域（C32 哈希输入侧）。
+-- Vuna.Compiler.Canonical.Elab：`Driver/Iface` 接口哈希的输入域。
 --
 -- 覆盖：`DtDef` / `DtData` / `DtInst` / `DtClass`（`Elab.Types`）、`RecordMeta`
 -- （`Elab.Records`）、`ExportEntry`（`Loader.Modules`）、`FixityDecl` / `Import`
--- （`Frontend.Ast`）。全部走 `Canonical.Bytes` 的原子文法，不再 `prim_marshal`。
+-- （`Frontend.Ast`）。全部走 `Canonical.Bytes` 的原子文法。
 --
--- 相对旧实现（`prim_marshal`）的语义修正：
+-- 编码口径由 invariant「哈希必须覆盖读方消费的全部语义字段」决定：
 --   * **span / 路径不参与编码**：`DtCtor`/`DtInst` 的 span、`Import`/`FixityDecl` 的 span
---     都丢弃；换行、移动代码不再改变依赖方的接口哈希。
+--     都丢弃；换行、移动代码不改变依赖方的接口哈希。
 --   * **覆盖读方真正消费的字段**：`ExportEntry.parent`（ctor 重导出保持源模块抽象性）
---     与 `FixityDecl.fixityTarget`（`infixr 5 :: = Cons` 的别名目标）旧版没进哈希，
---     属于 invariant「哈希必须覆盖读方消费的全部语义字段」的缺口，本版一并纳入。
---   * `RecordMeta` 的字段**类型表达式**纳入编码（旧版只哈希名字+序号）：字段类型变化
---     会让依赖方判脏，收窄 C47 的残余面。
+--     与 `FixityDecl.fixityTarget`（`infixr 5 :: = Cons` 的别名目标）都进哈希。
+--   * `RecordMeta` 的字段**类型表达式**纳入编码：字段类型变化会让依赖方判脏。
 --
 -- 解码器只服务 roundtrip 自检/测试（`decXComplete` 入口）；生产写侧只编码。
 import Base.Bool
@@ -115,7 +113,7 @@ encReprTier ReprBoxed = encTag 2
 -- ---------------------------------------------------------------
 -- 编码：接口元数据
 -- ---------------------------------------------------------------
--- | `ExportEntry`：kind / public / target / **parent**（ctor 所属类型，旧哈希漏了）。
+-- | `ExportEntry`：kind / public / target / **parent**（ctor 所属类型）。
 export encExportEntry : ExportEntry -> List String -> List String
 encExportEntry e acc = encStr e.kind (encStr e.public (encStr e.target (encStr e.parent acc)))
 
@@ -142,7 +140,7 @@ encImport i acc =
 export encImports : List Import -> List String -> List String
 encImports is acc = encList encImport is acc
 
--- | record 字段元数据：字段名 / 声明序号 / **字段类型表达式**（旧哈希只取名字+序号）。
+-- | record 字段元数据：字段名 / 声明序号 / **字段类型表达式**。
 encRecordFieldMeta : RecordFieldMeta -> List String -> List String
 encRecordFieldMeta f acc =
   encStr f.recordFieldName (encInt f.recordFieldIndex (encExpr f.recordFieldType acc))

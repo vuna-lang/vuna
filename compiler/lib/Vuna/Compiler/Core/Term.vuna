@@ -1,25 +1,25 @@
 module Vuna.Compiler.Core.Term where
 
--- Vuna.Compiler.Core.Term：core 类型论的表示层与纯数据操作。
+-- core 类型论的表示层与纯数据操作。
 --
 -- 这里定义 Term/Value/Neutral/Closure/CaseAlt/VCaseAlt/Rig/Level 等数据（唯一
 -- 真源），以及不涉及求值/quote/conv 的项变换（shift/subst/显示/自由变量检查）。
 --
--- **表示层定型（M18.6）**：擦除标志用三值 `Rig`（QTT 预留），宇宙层级用不透明
+-- **表示层定型**：擦除标志用三值 `Rig`（QTT 预留），宇宙层级用不透明
 -- `Level`。`Vuna.Compiler.Core` 之外**禁止**解构 `Rig` / `Level`，只能走字段/访问器；
 -- 详见 docs/reference/core.md 的映射表与不变量。
 --
--- M24 后维护（源码重组）：从原 1227 行 Core.vuna 拆出；本模块是 Core 的叶子，只依赖 Common。
+-- 本模块是 Core 的叶子，只依赖 Common。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Intrinsics
 export import Base.Bool (not)
 
 -- ---------------------------------------------------------------
--- M18.6：表示层定型（QTT 预留）
+-- 表示层定型（QTT 预留）
 -- ---------------------------------------------------------------
 --
--- Rig 是「这个 binder 在运行时用几次」的三值格子。M38 起精化器三值都产生（Rig0 / Rig1 / RigOmega）；
+-- Rig 是「这个 binder 在运行时用几次」的三值格子。精化器三值都产生（Rig0 / Rig1 / RigOmega）；
 -- 擦除与用量判据只读 Rig（`rigIsErased`），codegen 的下游
 -- 逻辑（判「是否擦除」）不变。
 export data Rig(..) : Type where
@@ -45,7 +45,7 @@ rigIsOmega RigOmega = True
 rigIsOmega _ = False
 
 -- 精化器的判据：隐式 binder 恒 Rig0；显式 binder 只有域是宇宙才 Rig0；
--- 其余显式值 binder 默认 ω（M38：不再默认 Rig1；1 是显式线性标注）。
+-- 其余显式值 binder 默认 ω（1 只来自显式线性标注）。
 -- 注意这是**默认构造**入口；带源码 quantity 的路径走 Elab 的 `rigForPi`。
 export rigOfBinder : Bool -> Bool -> Rig
 rigOfBinder True isTypeDom = Rig0
@@ -55,7 +55,7 @@ rigOfBinder False False = RigOmega
 export defaultExplicitRig : Rig
 defaultExplicitRig = RigOmega
 
--- M38：Rig 三值半环。唯一实现；Elab/Usage 不自己写三值分支。
+-- Rig 三值半环。唯一实现；Elab/Usage 不自己写三值分支。
 --   add   ：同一变量多次出现 / 顺序组合
 --   scale ：把一段 usage 按 binder quantity 放大
 --   join  ：分支合并（0∨1 = ω：线性值必须在每条路径上都被消费）
@@ -128,11 +128,11 @@ export data Term(..) : Type where
   TPi : String -> Bool -> Rig -> Term -> Term -> Term
   TLam : String -> Rig -> Term -> Term
   TApp : Term -> Term -> Rig -> Term
-  -- M14：构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
+  -- 构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
   TCon : String -> List (Pair Term Rig) -> Term
   -- R3：record 构造原语（记录构造子名 + 实参）：语义与 TCon 相同，codegen 扩展回 TCon。
   TMk : String -> List (Pair Term Rig) -> Term
-  -- M14：依赖模式匹配。CaseAlt 的名字是构造子名（case 已按分支顺序排列）。
+  -- 依赖模式匹配。CaseAlt 的名字是构造子名（case 已按分支顺序排列）。
   TCase : Term -> List CaseAlt -> Term
   -- R3（records-v2）：记录字段投影原语（base、构造子/记录名、字段序号、字段数）。
   -- 精化期把 `p.x` 从生成的 `case` 改为这个原语；codegen 再按同一形状展开成
@@ -182,9 +182,9 @@ export data Value(..) : Type where
   VMeta : Int -> List Value -> Value
   -- 卡住的应用（头部既不是 lambda 也不是中性 spines 时保留实参，禁止静默丢弃）。
   VApp : Value -> Value -> Value
-  -- M14：构造子值（已应用全部参数）。
+  -- 构造子值（已应用全部参数）。
   VCon : String -> List Value -> Value
-  -- M14：卡住的 case（scrutinee 是中性值）。
+  -- 卡住的 case（scrutinee 是中性值）。
   VCase : Value -> List VCaseAlt -> Value
   -- R3：卡住的记录投影（base 是中性值）；base 为 VCon 时 eval 直接取字段（iota）。
   VProj : Value -> String -> List (Pair String Rig) -> Int -> Int -> Value
@@ -289,7 +289,7 @@ termSizeAlts [] = 0
 termSizeAlts (alt :: rest) = termSize (caseAltBody alt) + termSizeAlts rest
 
 -- ---------------------------------------------------------------
--- 元变量 / 定义表（M14：解是 level 形态的 Value，可以提到当前上下文里的局部变量）
+-- 元变量 / 定义表（解是 level 形态的 Value，可以提到当前上下文里的局部变量）
 -- ---------------------------------------------------------------
 -- 热路径入口：查解表的 HashMap Int 索引（O(1)、无 strFromInt 分配）。
 export metaLookup : Int -> HashMap Int Value -> Maybe Value
@@ -301,17 +301,17 @@ metaLookupList i [] = Nothing
 metaLookupList i ((Pair j t) :: rest) = if i == j then Just t else metaLookupList i rest
 
 -- ---------------------------------------------------------------
--- Sols：解表 + 其哈希索引（M25 性能）。
+-- Sols：解表 + 其哈希索引。
 -- ---------------------------------------------------------------
 -- 解表是权威数据（前插新解），但**线性查找**在大程序上是 O(#元变量)/次：签名期的元变量
 -- （隐式参数）在 bodies 阶段每次 force/conv 都要查，逐定义成本随元变量数增长 ⇒ check 超线性。
 -- 这里把「list（权威）+ HashMap（索引）+ 元变量创建深度索引」打包成一个值沿调用链传递；
 -- 前插新解时同时插入索引，因此查找恒为 O(1)。
 --
--- M28：元变量创建深度进入 Sols（`solsDepth`），求解点**就地**检查作用域；不再有
--- 「先存解、事后扫解表」的两段式复核（旧 `checkSolsDelta`）。
+-- 元变量创建深度进入 Sols（`solsDepth`），求解点**就地**检查作用域——
+-- 不存「先存解、事后扫解表」的两段式复核。
 --
--- M30（D18）：第 4 个字段 `defVals` 是**定义体求值结果的值共享缓存**（键 = 全局名）。
+-- 第 4 个字段 `defVals` 是**定义体求值结果的值共享缓存**（键 = 全局名）。
 -- 它是可重建缓存：未命中一律回落 `force` 原来的 defs 表 delta 展开，所以缓存内容
 -- 少一点只影响速度、不影响语义。缓存写入只发生在 `Elab.Driver.elabBodies` 的安全
 -- 前缀检查之后（闭项、无未解元变量、可达全局名全部已缓存或永不定义），见那里的证明。
@@ -352,8 +352,8 @@ solsLookup i (Sols t xs d dv) = Base.HashMap.lookup i t
 export solsCons : Int -> Value -> Sols -> Sols
 solsCons i v (Sols t xs d dv) = Sols (Base.HashMap.insert i v t) (Pair i v :: xs) d dv
 
--- 项里是否有**未解**元变量（D18 的值共享安全条件之一：含未解 meta 的体不缓存）。
--- 已解的 TMeta 不算：缓存里留下的是已解值，后续求解不会改写既有解。
+-- 项里是否有**未解**元变量（值共享的安全条件之一：含未解 meta 的体不缓存）。
+-- 已解的 TMeta 不算：缓存里留下的是已解值，再求解也不会改写既有解。
 export termHasUnsolvedMeta : Sols -> Term -> Bool
 termHasUnsolvedMeta sols (TMeta m) = case solsLookup m sols of
   Just _ => False
@@ -647,7 +647,7 @@ export substMetaVarAlt : Int -> String -> Int -> Int -> CaseAlt -> CaseAlt
 substMetaVarAlt m name q depth (CaseAlt bn bs b) =
   CaseAlt bn bs (substMetaVarGo m name q (depth + length bs) b)
 
--- M20 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
+-- 字典提升：在 `TPi` 链索引 `idx` 的绑定子后插入 `{d : Dict_C a}`（隐式运行时字典）。
 -- `dictDom` 里类参数引用插入后索引 +1（`d` 落在类参数绑定子之内）。
 export insertDictBinder : String -> Int -> Term -> Term -> Term
 insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
@@ -671,7 +671,7 @@ insertImplicitBinderGo name idx rig dom depth (TPi n i r d c) =
   else TPi n i r d (insertImplicitBinderGo name idx rig dom (depth + 1) c)
 insertImplicitBinderGo name idx rig dom depth t = t
 
--- M29：保留给旧调用面的纯 helper（本模块不再用；导出名保持稳定以免动导出面快照）。
+-- 导出面快照仍引用该名字，故保留导出（本模块自己不用）。
 export cutoffOf : Int -> Int -> Int
 cutoffOf total idx = if total - (idx + 1) <= 0 then 0 else total - (idx + 1)
 
@@ -679,11 +679,11 @@ export countPis : Term -> Int
 countPis (TPi n i r d c) = 1 + countPis c
 countPis _ = 0
 
--- M20 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
--- M29（C05）：插入点之后的体 `b` 的自由变量全部位于插入点**外侧**，因此 shift 的 cutoff
--- 必须是 0（`shift` 下钻 binder 时会自动抬高 cutoff，正好保持体内层变量不变）。旧实现
--- 传 `total - (idx + 1)`，导致第 `idx` 个 binder 及一部分外侧变量少移一位——被提升的
--- 字典变量因此可能退化成显式参数（`ma` → `d114` 自应用）。
+-- 字典提升：在 `TLam` 链索引 `idx` 的绑定子后插入 `TLam d`。
+-- 插入点之后的体 `b` 的自由变量全部位于插入点**外侧**，因此 shift 的 cutoff
+-- 必须是 0（`shift` 下钻 binder 时会自动抬高 cutoff，正好保持体内层变量不变）。
+-- 传 `total - (idx + 1)` 会让第 `idx` 个 binder 及一部分外侧变量少移一位，被提升的
+-- 字典变量因此退化成显式参数（`ma` → `d114` 自应用）。
 export insertLamBinder : String -> Int -> Term -> Term
 insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
@@ -748,7 +748,7 @@ export anyNegativeVarAlts : List CaseAlt -> Bool
 anyNegativeVarAlts [] = False
 anyNegativeVarAlts ((CaseAlt n bs b) :: rest) = hasNegativeVar b || anyNegativeVarAlts rest
 
--- M20：值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
+-- 值里是否还有未解元变量（`VMeta m` 未解，或解里仍有未解）。
 export hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
 

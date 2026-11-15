@@ -1,10 +1,9 @@
 module Vuna.Compiler.Driver.Iface where
 
--- Vuna.Compiler.Driver.Iface：**模块级接口摘要**（TTC 思路）的载体与读写。
+-- **模块级接口摘要**（TTC 思路）的载体与读写。
 --
--- M34.5 已落地包级摘要（`Driver.Cache.CachedProgram`）：一个包一份闭合结果，依赖包整体
--- 复用。本模块把粒度降到模块：每个模块一份 `ModuleIface`，包级 manifest 是
--- `PackageIface`（模块按拓扑序）。
+-- 粒度是模块：每个模块一份 `ModuleIface`，包级 manifest 是
+-- `PackageIface`（模块按拓扑序）。`Driver.Cache.CachedProgram` 保留包级闭合结果。
 --
 -- 字段设计（对照 Idris2 TTC）：
 --   - `miCached`：模块自己的闭合精化产物（datas / defs 含 body / globals / insts /
@@ -22,10 +21,10 @@ module Vuna.Compiler.Driver.Iface where
 --     只排除 span / 源路径与 `opaque`/`abstract` 体，因此换行/注释/路径变化不会误失效；
 --     `miImplHash` 覆盖**产物面**（含 `opaque`/`abstract` 体，仍排除 span），只用于产物
 --     身份，不进依赖失效。读方实际消费的任何字段都必须参与对应摘要，否则会出现
---     「载荷变了、哈希没变」的陈旧复用（§44m/§44n）。摘要算法是 **SHA-256**（D5）；
+--     「载荷变了、哈希没变」的陈旧复用。摘要算法是 **SHA-256**（D5）；
 --     `siHash` 是源内容摘要，同一函数。
 --
--- 物理布局（S3/S8 / 对象库 v2）：每模块一个对象 `objects/iface/<地址>`
+-- 物理布局：每模块一个对象 `objects/iface/<地址>`
 -- （`Store` framing + `Canonical.*` 显式编码；schema 见 `ifaceSchema`，布局/字段语义变化
 -- 必须 bump），模块顺序单独存 `objects/order/<包摘要>`。写侧只写内容变化的模块；读侧
 -- 按地址逐模块读并校验（语义自证 + 调用方哈希链）。
@@ -91,10 +90,10 @@ export record ModuleIface(..) where
   miPrepared : List Decl
   miCached : CachedProgram
   -- 本模块每个定义的位置表（vuna 全名 → (spanFile, spanStartLine)），**不进
-  -- `miIfaceHash`**：span 不是语义面，移动代码不能失效依赖方（见 §不变量第 3 条）。
+  -- `miIfaceHash`**：span 不是语义面，移动代码不能失效依赖方。
   -- 只服务 codegen 的 `dt_def_locs`（运行时错误回溯）：增量路径从接口复用干净模块时，
-  -- `DtDef` 的 span 不在载荷里，必须用本表把干净模块的行补回位置表，否则「首次全量
-  -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不可逐字节一致（C51）。
+  -- `DtDef` 的 span 不在载荷里，必须用本表把干净模块的行补回位置表；否则「首次全量
+  -- 构建」与「后续增量构建」的 `Vuna_runtime.ml` 不一致，产物身份就破了。
   miDefLocs : List (Pair String (Pair String Int))
 
 export record PackageIface(..) where
@@ -171,7 +170,7 @@ defLocOf d = case dtDefSpan d of
   Just sp => Just (Pair (dtDefName d) (Pair sp.spanFile sp.spanStartLine))
 
 -- 位置表按 vuna 名排序：写侧（整包接口）与读侧（增量 codegen 补行）各取一次，顺序
--- 必须与全量路径 codegen 的位置表逐字节一致（C51 的确定性要求）。无 span 的定义跳过
+-- 必须与全量路径 codegen 的位置表逐字节一致（产物是输入摘要的纯函数）。无 span 的定义跳过
 -- （与 `dtDefLocTable` 的跳过语义一致）。
 defLocsOfDefs : List DtDef -> List (Pair String (Pair String Int))
 defLocsOfDefs ds = sortBy (\a, b => firstOf a <= firstOf b) (mapMaybe defLocOf ds)
@@ -198,17 +197,7 @@ setPrepared prepared mi =
     mi.miImports mi.miImplicitImports mi.miExports mi.miFixities mi.miDecls mi.miRecords prepared
     mi.miCached mi.miDefLocs
 
--- 接口格式版本：Marshal 布局或字段语义变化必须 bump（旧缓存自然失效）。
--- R1（records-v2）：DRecord/DData/DtData 增加 ReprTier 槽位，Marshal 布局变化 ⇒ bump。
--- R2：ModuleIface.miRecords / DtData.dtDataFields 新增字段表，布局再变 ⇒ bump（13 → 14）。
--- R3：Term/Value 新增 TProj/VProj 构造子，Marshal 布局变化 ⇒ 15。
--- R4（records-v2）：DtData 新增 `dtDataIsRecord`，`miPrepared` 中的 DRecord 保留（不再
--- 降级成 DData），布局与语义变化 ⇒ 17。`Term` 新增 `TRecord` 类型前导 ⇒ 18。
--- D5：接口哈希改为 SHA-256（`shaText` 内容摘要），`SourceInfo.siHash` / `miIfaceHash` /
--- `miDepHashes` 由 Int 变 String ⇒ Marshal 布局变化 ⇒ 19。
--- C32：接口载荷改为 `Canonical.*` 显式编码 + `Store` framing（Marshal 彻底退出缓存面），
--- manifest 增加 `mePayloadDigest`，布局变化 ⇒ 20。
--- C51：`ModuleIface.miDefLocs`（定义位置表，不进接口哈希）随载荷持久化，布局变化 ⇒ 22。
+-- 接口格式版本：载荷布局或字段语义变化必须 bump（地址随之换代，旧载荷自然失效）。
 export ifaceSchema : String
 ifaceSchema = "vuna-iface 27"
 
@@ -221,14 +210,13 @@ ifaceHashVersion = "vuna-iface-hash 7 (opaque/abstract bodies excluded)"
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
 -- ---------------------------------------------------------------
 -- `strHash` 是 0..1023 的 10 bit 哈希；接口哈希用它单发会在几百个模块上有可观测的碰撞
--- 概率，碰撞会直接导致「错误复用」。D5 起接口哈希改用 SHA-256（`shaText`）；
+-- 概率，碰撞会直接导致「错误复用」。接口哈希用 SHA-256（`shaText`）；
 -- `hashTextStrong` 是「必须落成 Int」位置（排序键 / 工具缓存 / codegen unit key）的统一
--- 强哈希：SHA-256 的 63-bit 派生键（`Hash.contentKey`），不再是 6-lane 盐折叠。
+-- 强哈希：SHA-256 的 63-bit 派生键（`Hash.contentKey`），不做多 lane 盐折叠。
 export hashTextStrong : String -> Int
 hashTextStrong s = Vuna.Compiler.Hash.contentKey s
 
--- | 内容摘要（SHA-256，64 位小写十六进制）。接口哈希用它替换旧的 6-lane strHash 折叠
--- （后者只有约 60 bit，碰撞面在几百模块规模上不可忽略）。
+-- | 内容摘要（SHA-256，64 位小写十六进制）：碰撞面在几百模块规模上必须可忽略。
 export shaText : String -> String
 shaText s = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString s)
 
@@ -259,8 +247,8 @@ sortTextPairs ps = sortBy (\a, b => firstOf a <= firstOf b) ps
 sortByText : (a -> String) -> List a -> List a
 sortByText key xs = map secondOf (sortTextPairs (map (\x => Pair (key x) x) xs))
 
--- C32 方向：接口哈希里的项要**规范化**。增量路径与全量路径的擦除位残 meta 编号不同
--- （增量从干净模块 meta 之上开始编号），直接 Marshal 会让同一模块的哈希随路径漂移；
+-- 接口哈希里的项要**规范化**。增量路径与全量路径的擦除位残 meta 编号不同
+-- （增量从干净模块 meta 之上开始编号），按原始编号哈希会让同一模块的哈希随路径漂移；
 -- 这里把每个定义里的 TMeta 按首次出现顺序重编号为 0,1,2,...（只影响擦除位、无解）。
 record CanonState where
   csNext : Int
@@ -342,7 +330,7 @@ defView : DtDef -> Pair String (Pair Term (Maybe Term))
 defView d = Pair (dtDefName d) (Pair (canonTermTop (dtDefType d)) (canonMaybe (dtDefBody d)))
 
 -- ---------------------------------------------------------------
--- 接口哈希的各段（C32 哈希输入侧：显式规范编码，不再 `prim_marshal`）
+-- 接口哈希的各段（显式规范编码）
 -- ---------------------------------------------------------------
 -- 段输入先规范化顺序（`sortByText`），再由 `Canonical.*` 编码：span / 路径不参与，
 -- 读方消费的字段全部覆盖（含 `ExportEntry.parent`、fixity 别名目标、record 字段类型）。
@@ -382,7 +370,7 @@ encGlobal (Pair n t) acc = encStr n (encTerm t acc)
 hashGlobals : List (Pair String Term) -> String
 hashGlobals gs = payloadDigest (encTop (encList encGlobal) (sortByText (\p => firstOf p) gs))
 
--- 导出条目：ctor 条目的 `parent`（所属类型）也参与键与编码（旧版漏了 → §44m 类缺口）。
+-- 导出条目：ctor 条目的 `parent`（所属类型）也参与键与编码。
 exportKeyOf : ExportEntry -> String
 exportKeyOf e = "${e.public}|${e.kind}|${e.target}|${e.parent}"
 
@@ -393,7 +381,7 @@ hashExports es = payloadDigest (encTop (encList encExportEntry) (sortByText expo
 hashFixities : List FixityDecl -> String
 hashFixities fs = payloadDigest (encTop (encList encFixity) fs)
 
--- record 头：结构化 `RecordMeta`（字段类型表达式也进编码，旧版只覆盖名字+序号 = C47 残余）。
+-- record 头：结构化 `RecordMeta`（字段类型表达式也进编码；只覆盖名字+序号会漏失效）。
 hashRecords : List RecordMeta -> String
 hashRecords recs = payloadDigest (encTop (encList encRecordMeta) recs)
 
@@ -402,8 +390,8 @@ hashImports : List Import -> String
 hashImports is = payloadDigest (encTop (encList encImport) is)
 
 -- | 已解析源码声明（`miDecls`）的内容摘要：显式规范编码（span / 路径不参与）。
--- 旧实现完全不哈希 decls（只靠 record 头兜底），「模式形状/子句结构变了但 datas/defs
--- 没变」会漏失效（C47）；这里把它作为独立段整段纳入。
+-- 必须作为独立段整段纳入：只靠 record 头兜底时，「模式形状/子句结构变了但 datas/defs
+-- 没变」会漏失效。
 hashDecls : List Decl -> String
 hashDecls ds = payloadDigest (encTop encDecls ds)
 
@@ -504,11 +492,11 @@ ownerIndexOf meta datas =
   OwnerIndex (Base.HashMap.fromList meta.smDefOwners) (Base.HashMap.fromList meta.smDataOwners)
     (Base.HashMap.fromList (ctorFamilyPairs datas)) meta.smKnownModules
 
--- M34.6：按 owner **一次分桶**。旧实现每个模块对整包 datas/defs/globals/insts/classes
--- 各做一遍 `filter`（O(#模块 × #程序项)，接口阶段 ~457ms）；这里整包扫一遍建五张
+-- 按 owner **一次分桶**。让每个模块对整包 datas/defs/globals/insts/classes
+-- 各做一遍 `filter` 是 O(#模块 × #程序项)；这里整包扫一遍建五张
 -- owner → 项表，逐模块 O(1) 取桶。桶内保持程序原顺序（前插后统一 reverse）。
--- 整包 sols 的 HashMap Int 也只建一次：旧实现每个模块切片后 `cachedOfProgram` 都
--- `HashMap.fromList (dtProgSols prog)`（O(#模块 × #sols)，本机 compiler 包接口阶段 ~40ms）。
+-- 整包 sols 的 HashMap Int 也只建一次：逐模块切片后重建
+-- `HashMap.fromList (dtProgSols prog)` 是 O(#模块 × #sols)。
 record ProgParts where
   ppSols : HashMap Int Value
   ppDatas : HashMap String (List DtData)
@@ -632,8 +620,7 @@ ifacesGo pkg parts prog sources knownDeps clean modules =
 -- ---------------------------------------------------------------
 -- 覆盖性检查：本包模块拥有的 def/data/inst/class/global 必须全部出现在某个模块摘要里
 -- （归属表漏项会让依赖方静默拿到不完整接口，所以写侧宁可失败，不写缓存）。
--- M34.6：四个成员判断改用 HashMap String Bool（旧实现对每个 artifact 名线性扫 merged
--- ~数千项，接口阶段 ~473ms）。
+-- 四个成员判断用 `HashMap String Bool`：对每个 artifact 名线性扫 merged 是 O(n²)。
 -- ---------------------------------------------------------------
 ownerOfAny : OwnerIndex -> String -> Maybe String
 ownerOfAny oi name = case defOwnerOf oi name of
@@ -696,8 +683,7 @@ firstCoverageIssue oi ourNames inherited ifaces prog =
 -- 包接口构造
 -- ---------------------------------------------------------------
 -- 本包模块 → `PackageIface` 的模块列表（拓扑序：Loader 的列表是依赖者在前的反序）。
--- 入口声明（合成模块 `Main`）暂不写接口：它没有导出面、加载侧永远从源码进；模块级
--- 增量（S4）需要时再补。
+-- 入口声明（合成模块 `Main`）不写接口：它没有导出面、加载侧永远从源码进；
 coverageResult : OwnerIndex -> List String -> List String -> List ModuleIface -> DtProgram -> Check (List ModuleIface)
 coverageResult oi ourNames inherited ifaces prog = case firstCoverageIssue oi ourNames inherited ifaces prog of
   Just issue => icInternal "iface: ${issue}"
@@ -716,7 +702,7 @@ ifaceOfPackage pkg sources knownDeps inherited clean modules entryDecls prog =
     Pair ifaces _ => coverageResult oi ourNames inherited ifaces prog
 
 -- ---------------------------------------------------------------
--- 单模块接口（M34.6 5a：LSP 增量写回）
+-- 单模块接口（LSP 增量写回）
 -- ---------------------------------------------------------------
 -- 与 `ifaceOfPackage` 同一套归属 / 接口哈希 / 覆盖性语义，只构造 `name` 这一个模块的
 -- 摘要（LSP 每次请求只精化当前模块，写回也只写它）。

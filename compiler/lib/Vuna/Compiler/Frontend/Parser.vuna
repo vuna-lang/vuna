@@ -33,7 +33,7 @@ parseExpressionSource source =
   Vuna.Compiler.Common.bind (lexSource source)
     (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0 0) (\e, st => if isEof st then OkC e else ps0 st ExpectedEndOfExpr))
 
--- D11：解析器累加器（导出/重导出/归约修饰符与声明一起收集）。
+-- 解析器累加器（导出/重导出/归约修饰符与声明一起收集）。
 record DeclAcc where
   declAccFixities : List FixityDecl
   declAccDecls : List Decl
@@ -53,7 +53,7 @@ emptyParsedDecl : ParsedDecl
 emptyParsedDecl = ParsedDecl Nothing Nothing Nothing Nothing
 
 -- 把逐定义导出/重导出/归约修饰符挂到模块头上；入口文件没有模块头（这些信息也无下游）。
--- 可选模块头（M10）：`module M (导出项, ...) where`；列表省略 = 导出全部。
+-- 可选模块头：`module M (导出项, ...) where`；列表省略 = 导出全部。
 parseSourceFile : Bool -> PState -> Check (Pair (Pair SourceFile PState) (List Diagnostic))
 parseSourceFile recover st = Vuna.Compiler.Common.step (parseModDecl st) (\hdr, st1 => Vuna.Compiler.Common.step (parseImports (stateFuel st1) st1) (\imp, st2 => case imp of
   Pair imports reexports => if isEof st2 then OkC (Pair (Pair (SourceFile hdr imports [] [] [] reexports []) st2) [])
@@ -96,7 +96,7 @@ parseExportItem st = case peekTok st of
     in if atSym st1 "(" then Vuna.Compiler.Common.step (parseExportMembers st1)
       (\members, st2 => OkC (Pair (exportItemOf name members (spanOf st st2)) st2))
     else OkC (Pair (XBare name (spanOf st st1)) st1)
-  -- M31.3：导出用户符号名函数（`(<+>)`）。保留符号不可导出。
+  -- 导出用户符号名函数（`(<+>)`）。保留符号不可导出。
   PTok (TSym op) p =>
     if isReservedValueName op then ps0 st ExpectedExportItem
     else OkC (Pair (XBare op (spanOf st (advance st))) (advance st))
@@ -160,7 +160,7 @@ parseImportAlias st isQualified =
   Vuna.Compiler.Common.step (expectIdent st)
     (\name, st1 => if atKw st1 "as" then Vuna.Compiler.Common.step (expectKw st1 "as") (\_, st2 => Vuna.Compiler.Common.step (expectIdent st2) (\alias, st3 => OkC (Pair (Import name isQualified (Just alias) (spanOf st st3)) st3))) else OkC (Pair (Import name isQualified Nothing (spanOf st st1)) st1))
 
--- D11：import 区同时收 `export import` 的重导出项；列表顺序无语义。
+-- import 区同时收 `export import` 的重导出项；列表顺序无语义。
 parseImports : Int -> PState -> Check (Pair (Pair (List Import) (List ExportItem)) PState)
 parseImports fuel st = if fuel <= 0 then icFuel "parser"
 else if atKw st "import" then Vuna.Compiler.Common.step (parseImportSpec st) (\imp, st1 => Vuna.Compiler.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
@@ -175,9 +175,9 @@ else if atIdentName st "export" && atKw (advance st) "import" then Vuna.Compiler
 )
 else OkC (Pair (Pair [] []) st)
 
--- M31.2：`infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
+-- `infixl` / `infixr` / `infix` 声明与顶层声明穿插收集（声明本身不进入 Decl，
 -- 由 Loader 在中缀重排时消费；见 `SourceFile.fixities`）。
--- D11：累加器定义在文件前部（`DeclAcc` / `ParsedDecl`）。
+-- 累加器定义在文件前部（`DeclAcc` / `ParsedDecl`）。
 parseDecls : Bool -> Int -> PState -> Int -> DeclAcc -> Check (Pair DeclAcc (Pair PState (List Diagnostic)))
 parseDecls recover fuel st blockCol acc = if fuel <= 0 then icFuel "parser"
 else if isEof st then OkC (Pair (reverseDeclAcc acc) (Pair st []))
@@ -279,8 +279,8 @@ exportMarkerFollows st = case peekTok st of
   PTok (TKw "import") _ => True
   _ => False
 
--- `opaque` / `transparent` 在声明开头：后跟 record/linear record 时是旧档位词，
--- 否则是定义归约修饰符。
+-- `opaque` / `transparent` 在声明开头是定义归约修饰符；后跟 record/linear record 时
+-- 不算修饰符（档位前缀写法只出现在 `export` 位置，声明位置给出明确诊断）。
 opacityStart : PState -> Bool
 opacityStart st = case peekTok st of
   PTok (TKw "opaque") _ => not (tierFollows st)
@@ -406,7 +406,7 @@ parseOpacityValue kind st blockCol kwSpan = case peekTok st of
     else ps1 st (ExpectedToken "value signature") "value signature"
   _ => ps1 st (ExpectedToken "value signature") "value signature"
 
--- | `export alias record` / `export boxed record`（迁移期也接受旧档位词）。
+-- | `export alias record` / `export boxed record`。
 parseTieredExport : ReprTier -> PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
 parseTieredExport tier st blockCol kwPos = case peekTok (advance st) of
   PTok (TKw "linear") _ => case peekTok (advance (advance st)) of
@@ -491,7 +491,7 @@ parseTraitParamGroup st =
     (\_, st1 => Vuna.Compiler.Common.step (parsePiNames (stateFuel st1) st1) (\names, st2 => Vuna.Compiler.Common.step (expectSym st2 ":") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 0 0) (\kind, st4 => Vuna.Compiler.Common.step (expectSym st4 ")") (\_, st5 => OkC (Pair (map (\n => TraitParam n (Just kind)) names) st5))))))
 
 -- 只看括号组里第一个 token：`..` / `)` / `ident ,` / `ident )` 是成员列表；
--- `ident ident :` / `ident :` 是 kind 参数（trait 的旧语法）。
+-- `ident ident :` / `ident :` 是显式 kind 参数。
 parenIsMemberList : PState -> Bool
 parenIsMemberList st = case peekTok (advance st) of
   PTok (TSym "..") _ => True
@@ -532,9 +532,8 @@ parseDecl : PState -> Int -> Check (Pair Decl PState)
 parseDecl st blockCol = case peekTok st of
   PTok (TKw "data") p => parseData False st blockCol p
   PTok (TKw "linear") p => parseLinearDecl st blockCol p
-  -- records-v2：表示档位前缀只允许 record（A2：data 收归位置/求和类型）。
-  -- D11：`alias` / `boxed` 是软关键字（只在紧跟 record/linear record 时生效）；
-  -- 记录表示档位不再接受退役的 `transparent record` / `opaque record`。
+  -- 表示档位前缀只允许 record（data 收归位置/求和类型）。
+  -- `alias` / `boxed` 是软关键字（只在紧跟 record/linear record 时生效）。
   PTok (TKw "axiom") p => parseAxiom st blockCol p
   PTok (TKw "extern") p => parseExtern st blockCol p
   PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
@@ -547,7 +546,7 @@ parseDecl st blockCol = case peekTok st of
       st1 = advance st
     in if atSym st1 ":" then parseSignature st1 blockCol True name p
     else parseClause st1 blockCol name p
-  -- M31.3：用户符号名函数（`<+> a b = a + b`）与签名（`<+> : ...`）。
+  -- 用户符号名函数（`<+> a b = a + b`）与签名（`<+> : ...`）。
   -- 保留符号（`->` / 反引号 / 语法符号）不是可定义名。
   PTok (TSym op) p => if isReservedValueName op then ps0 st ExpectedTopLevelDecl
   else
@@ -556,14 +555,14 @@ parseDecl st blockCol = case peekTok st of
     in if atSym st1 ":" then parseSignature st1 blockCol True op p else parseClause st1 blockCol op p
   _ => ps0 st ExpectedTopLevelDecl
 
--- M28 axiom 声明（决策 5 / D10）：`axiom name : Ty`，无 `=` 体。
+-- axiom 声明（D10）：`axiom name : Ty`，无 `=` 体。
 -- 它是无体的可擦除顶层，只在类型层可用（运行时使用由擦除检查拒绝）。
 parseAxiom : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseAxiom st blockCol kwPos =
   Vuna.Compiler.Common.step (expectKw st "axiom")
     (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (expectSym st2 ":") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 blockCol 0) (\ty, st4 => Vuna.Compiler.Common.step (rejectCtxSuffix st4) (\_, st5 => OkC (Pair (DAxiom name ty (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
 
--- M33 W5：受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
+-- 受限 FFI 声明 `extern name "c_name" : Ty`（无体）。类型只允许基本类型，
 -- 由 Elab 检查；运行时由包根 `ffi/*.c` 提供，codegen 生成 OCaml `external`。
 parseExtern : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseExtern st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "extern") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => case peekTok st2 of
@@ -574,7 +573,7 @@ parseExtern st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "extern")
 )
 )
 
--- M32：只有顶层签名允许 trait 约束 `C a =>`。其它签名位置（axiom / where / let /
+-- 只有顶层签名允许 trait 约束 `C a =>`。其它签名位置（axiom / where / let /
 -- trait 方法 / 构造子 / 记录字段）见到 `=>` 时直接给出明确诊断，而不是让 `=>` 作为
 -- 残留 token 触发难懂的收尾错误。
 rejectCtxSuffix : PState -> Check (Pair Int PState)
@@ -611,7 +610,7 @@ in OkC
 -- where 块：`body where\n  <bindings>`，解析后 desugar 成 ELet（绑定对 body 可见）。
 --
 -- ---------------------------------------------------------------
--- 绑定块（M28 统一作用域模型，决策 5）：`where` 与 `let` 共用同一套绑定块解析：
+-- 绑定块（统一作用域模型）：`where` 与 `let` 共用同一套绑定块解析：
 --   * 每个绑定可先写一行签名 `name : Ty`（必须写在同名子句**之前**）；
 --   * 子句可以是 `pat = expr` 或函数子句 `name pats = expr`（降级成 λ）。
 -- 有签名的绑定把签名贴到紧随其后的同名子句值上（`EAnn value ty`，span 指向签名行），
@@ -704,9 +703,9 @@ bindingBindsGo (Base.List.Cons item rest) sigs bound acc = case item of
         else bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat (EAnn value ty sp) :: acc)
       Nothing => bindingBindsGo rest sigs (patBoundName pat :: bound) (Pair pat value :: acc)
 
--- A2：把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
+-- 把相邻同名函数子句合并成一个 `ELocalFun` 绑定（where/let 多 clause）。
 -- 签名保留在合并后的条目上（`EAnn` 只包裹第一条的 `ELocalFun`）；不连续的同名子句
--- 不合并，仍按旧的 `WhereSigMultiClause` 报错。
+-- 不合并，按 `WhereSigMultiClause` 报错。
 localFunMerge : String -> Expr -> List (Pair Pat Expr) -> Maybe (List (Pair Pat Expr))
 localFunMerge name value ((Pair (PVar n nsp) (ELocalFun cs0 sp0)) :: rest) = if n == name then case value of
   ELocalFun cs1 sp1 =>
@@ -739,7 +738,7 @@ firstDanglingSig [] bound = Nothing
 firstDanglingSig ((Pair name (Pair ty sp)) :: rest) bound =
   if memName name bound then firstDanglingSig rest bound else Just (Pair name sp)
 
--- λ 参数名：绑定块里的函数子句参数必须是简单变量名（A2 起保留模式，见 parseBindingDef）。
+-- λ 参数名：绑定块里的函数子句参数必须是简单变量名（模式版本见 parseBindingDef）。
 parseClausePatterns : Int -> PState -> Int -> Check (Pair (List Pat) PState)
 parseClausePatterns fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
@@ -747,7 +746,7 @@ parseClausePatterns fuel st blockCol =
     (\pat, st1 => Vuna.Compiler.Common.step (parseClausePatterns (fuel - 1) st1 blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons pat rest) st2)))
   else OkC (Pair [] st)
 
--- M38：`lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
+-- `lin data ...` / `lin record ...`。kwPos 指向 `linear`，声明 span 从这里开始。
 parseLinearDecl : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseLinearDecl st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "linear") (\_, st1 => case peekTok st1 of
   PTok (TKw "data") _ => parseData True st1 blockCol kwPos
@@ -765,7 +764,7 @@ tierFollows st = case peekTok (advance st) of
     _ => False
   _ => False
 
--- | R1（records-v2）：`alias record ...` / `boxed record ...`（可再带 `lin`；迁移期也接受旧词）。
+-- | `alias record ...` / `boxed record ...`（可再带 `lin`）。
 -- kwPos 指向档位前缀，声明 span 从这里开始；档位只对 record 有意义（对 data 报错）。
 parseTieredDecl : ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
 parseTieredDecl tier st blockCol kwPos = case peekTok (advance st) of
@@ -792,8 +791,8 @@ parseData lin st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "data")
 )
 )
 
--- 记录声明（M10.5）：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
--- 第二参数是表示档位（`alias`/`boxed` 前缀给出，缺省 `ReprAuto`；迁移期也接受旧词）。
+-- 记录声明：`record Name params where` + 缩进字段 `f : Ty`，可跟 deriving。
+-- 第二参数是表示档位（`alias`/`boxed` 前缀给出，缺省 `ReprAuto`）。
 parseRecord : Bool -> ReprTier -> PState -> Int -> Pos -> Check (Pair Decl PState)
 parseRecord lin tier st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "record") (\_, st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.step (expectKw st3 "where") (\_, st4 => Vuna.Compiler.Common.step (parseFields st4 blockCol) (\fields, st5 => Vuna.Compiler.Common.step (parseDeriving st5) (\dv, st6 => case dv of
   Pair derivings via =>
@@ -820,7 +819,7 @@ else case peekPos st of
       (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 ":") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 fieldCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st3b => Vuna.Compiler.Common.step (parseFieldList (fuel - 1) st3b fieldCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Field name ty (spanOf st st3)) rest) st4))))))
     else if col > fieldCol then ps0 st UnexpectedIndentInRecord else OkC (Pair [] st)
 
--- M42：`deriving via field (C...)` 的 `via`/`field` 是上下文标识符，不进关键字表。
+-- `deriving via field (C...)` 的 `via`/`field` 是上下文标识符，不进关键字表。
 -- | 当前 token 是否是指定名字的标识符（`via`/`field` 等上下文关键字用）。
 atIdentName : PState -> String -> Bool
 atIdentName st name = case peekTok st of
@@ -847,7 +846,7 @@ parseDerivingNames fuel st =
   else Vuna.Compiler.Common.step (expectIdent st)
     (\name, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons name rest) st2)) else Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair [name] st2)))
 
--- trait 声明（M10.5）：`trait Name params where` + 缩进方法签名 `m : Ty`。
+-- trait 声明：`trait Name params where` + 缩进方法签名 `m : Ty`。
 -- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
 parseTrait : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseTrait st blockCol kwPos =
@@ -881,10 +880,9 @@ else case peekPos st of
       (\name, st1 => Vuna.Compiler.Common.step (expectSym st1 ":") (\_, st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 methodCol 0) (\ty, st3 => Vuna.Compiler.Common.step (rejectCtxSuffix st3) (\_, st3b => Vuna.Compiler.Common.step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => OkC (Pair (Base.List.Cons (TraitMethod name ty (spanOf st st3)) rest) st4))))))
     else if col > methodCol then ps0 st UnexpectedIndentInTrait else OkC (Pair [] st)
 
--- instance 声明（M10.5 / M29）：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
--- ctx 是逗号分隔的字典约束（每个形如 `C arg`；M29 只支持单参数 trait）。
--- M29-T2b：命名实例（`as name`）已删除。
--- M32：实例头与顶层签名共用「[ctx , ... =>] expr」解析（ctx 为空 = 无约束）。
+-- instance 声明：`instance [<ctx> ,... =>] Head where` + 缩进方法定义。
+-- ctx 是逗号分隔的字典约束（每个形如 `C arg`；只支持单参数 trait）。
+-- 实例头与顶层签名共用「[ctx , ... =>] expr」解析（ctx 为空 = 无约束）。
 parseInstance : PState -> Int -> Pos -> Check (Pair Decl PState)
 parseInstance st blockCol kwPos = Vuna.Compiler.Common.step (expectKw st "instance") (\_, st1 => Vuna.Compiler.Common.step (parseCtxThenExpr (stateFuel st1) st1 blockCol) (\hc, st2 => case hc of
   Pair ctxE head => parseInstanceTail ctxE head st blockCol kwPos st2
@@ -981,12 +979,13 @@ parseExpr fuel st blockCol minPrec =
     (\lhs, st1 => parseInfix (fuel - 1) st1 blockCol minPrec lhs)
   else ps0 st ExprNotIndented
 
--- M31.2：优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套，保留
--- 括号边界用 `EParen`），Loader 按 `infix*` 声明重排。`minPrec` 参数保留只为少改调用点。
+-- 优先级/结合性不在 parser 决定——中缀链原样收成 `EInfix`（右嵌套，保留
+-- 括号边界用 `EParen`），Loader 按 `infix*` 声明重排。`minPrec` 由所有调用点传 0，
+-- 解析本身不使用它。
 parseInfix : Int -> PState -> Int -> Int -> Expr -> Check (Pair Expr PState)
 parseInfix fuel st blockCol minPrec lhs = if fuel <= 0 then icFuel "parser"
 else case peekTok st of
-  -- M31.3：反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
+  -- 反引号中缀 `` a `f` b ``。名字是普通值名或符号名（expectValueName）；
   -- rhs 用 parseExpr（与普通中缀一致，会继续吞后续中缀），形成右嵌套链交给 Loader 重排。
   PTok (TSym "`") p =>
     if canContinue st blockCol then Vuna.Compiler.Common.step (expectValueName (advance st))
@@ -997,7 +996,7 @@ else case peekTok st of
     else Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st) blockCol 0)
       (\rhs, st2 => parseInfix (fuel - 1) st2 blockCol minPrec (EInfix op lhs rhs (spanOf st st2)))
     else OkC (Pair lhs st)
-  -- M31.3：右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
+  -- 右 section `(e op)`。只消费 op；`)` 由外层 `(` 分支消费。
   _ => OkC (Pair lhs st)
 
 parseLhs : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1093,14 +1092,14 @@ else case peekTok st of
   PTok (TKw "Type") p => OkC (Pair (EVar "Type" (spanOf st (advance st))) (advance st))
   PTok (TSym "(") p => case binderHead (advance st) of
     Just qn => parsePiBinder (fuel - 1) st blockCol (firstOf qn) (secondOf qn) False "(" ")"
-    -- M31.3：`(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
+    -- `(+)` / `(+ e)` section。`(e op)` 由 parseInfix 的右 section 分支处理。
     Nothing => case sectionOpAt st of
       Just op => parseSectionAtom (fuel - 1) st blockCol op
       Nothing =>
         Vuna.Compiler.Common.step (parseExpr (fuel - 1) (advance st) blockCol 0)
           (\inner, st1 => Vuna.Compiler.Common.step (expectSym st1 ")") (\_, st2 => OkC (Pair (EParen inner (spanOf st st2)) st2)))
   PTok (TSym "[") p => parseListExpr (fuel - 1) st blockCol
-  -- M40：命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
+  -- 命名洞 `?name`（`?` 与标识符紧邻）。编码成 `EVar "?name"`（不新增 AST 构造子），
   -- span 覆盖整个 `?name`；精化器据 `isHoleName` 把它当洞。
   PTok (TSym "?") p => case holeAtomAt st of
     Just h => OkC (Pair (EVar (firstOf h) (secondOf h)) (advance (advance st)))
@@ -1112,7 +1111,7 @@ else case peekTok st of
         (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\base, st2 => Vuna.Compiler.Common.step (expectSym st2 "|") (\_, st3 => Vuna.Compiler.Common.step (parseRecordAssignments (fuel - 1) st3 blockCol) (\fields, st4 => OkC (Pair (ERecUpdate base fields (spanOf st st4)) st4)))))
   _ => ps0 st ExpectedExpression
 
--- M36：模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
+-- 模板字符串原子。文本块直接成为 `IPText`；插值洞用**洞内 token** 现场解析
 -- （token 位置由 lexer 原位给出，仍是绝对源码位置），再组装成 `EInterp`。
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
 parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Check (Pair Expr PState)
@@ -1167,7 +1166,7 @@ textPartsOf ((TPText s) :: rest) = case textPartsOf rest of
   Just t => Just (s ++ t)
 textPartsOf ((TPHole toks) :: rest) = Nothing
 
--- M31.3：section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
+-- section 的 op 值 / 左 section 形态：`(op)` 与 `(op e)`。
 -- 进入时已在 `(`，op 已由 sectionOpAt 确认（TSym 且非保留名）。
 parseSectionAtom : Int -> PState -> Int -> String -> Check (Pair Expr PState)
 parseSectionAtom fuel st blockCol op =
@@ -1175,7 +1174,7 @@ parseSectionAtom fuel st blockCol op =
   else Vuna.Compiler.Common.step (expectSym st "(")
     (\_, st1 => Vuna.Compiler.Common.step (expectSym st1 op) (\_, st2 => if atSym st2 ")" then OkC (Pair (ESectOp op (spanOf st (advance st2))) (advance st2)) else Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 blockCol 0) (\rhs, st3 => Vuna.Compiler.Common.step (expectSym st3 ")") (\_, st4 => OkC (Pair (ESectL op rhs (spanOf st st4)) st4)))))
 
--- M38：Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
+-- Pi binder：`(x : A) -> B`、`{x : A} -> B`，以及带 quantity 的 `(0 x : A)` / `(1 x : A)`。
 -- 多参数 trait 探针的 `{a b : Type} -> ...` 支持同一 binder 组写多个名字（展开成嵌套 EPi）。
 -- 进入时已在开括号处；binder 头（可选 quantity + 名 + `:`）先由 lookahead 确认，再要求 `->`。
 parsePiBinder : Int -> PState -> Int -> Maybe Qty -> List String -> Bool -> String -> String -> Check (Pair Expr PState)
@@ -1241,7 +1240,7 @@ parseListExprElems fuel st blockCol =
   else Vuna.Compiler.Common.step (parseExpr (fuel - 1) st blockCol 0)
     (\e0, st0 => Vuna.Compiler.Common.step (parseListElemAt (fuel - 1) e0 st0) (\e, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseListExprElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons e rest) st2)) else if atSym st1 "]" then OkC (Pair [e] (advance st1)) else ps0 st1 ExpectedCommaOrBracket))
 
--- 列表字面量元素里的 `X@name`（native-effects ND4）：`@` 在 vuna 里也是模式的
+-- 列表字面量元素里的 `X@name`：`@` 在 vuna 里也是模式的
 -- as-pattern，所以只在列表元素位置接受它，不做全局后缀。
 parseListElemAt : Int -> Expr -> PState -> Check (Pair Expr PState)
 parseListElemAt fuel e st =
@@ -1250,7 +1249,7 @@ parseListElemAt fuel e st =
     (\_, st1 => Vuna.Compiler.Common.step (parseAtom (fuel - 1) st1 0) (\nm, st2 => OkC (Pair (EApp (EVar rowAtSyntax (spanFromExpr e st2)) [e, rowAtNameExpr nm] (spanFromExpr e st2)) st2)))
   else OkC (Pair e st)
 
--- | 自动补注（M41 新增导出）：foldCons。
+-- | 把元素列表折叠成 `cons` 保留名的右嵌套链（空表是 `nil` 保留名）。
 foldCons : Span -> List Expr -> Expr
 foldCons sp [] = EVar listNilSyntax sp
 foldCons sp (e :: rest) = EApp (EVar listConsSyntax sp) [e, foldCons sp rest] sp
@@ -1317,7 +1316,7 @@ rowAtNameExpr : Expr -> Expr
 rowAtNameExpr (EVar nm sp) = EStr nm sp
 rowAtNameExpr e = e
 
--- `perform <expr>`（native-effects N1 / ND12）：保留名单实参应用；Elab 侧按 op 族
+-- `perform <expr>`：保留名单实参应用；Elab 侧按 op 族
 -- 推导 key / 实例名 / res 族后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
 parsePerform : Int -> PState -> Int -> Check (Pair Expr PState)
 parsePerform fuel st blockCol =
@@ -1326,13 +1325,13 @@ parsePerform fuel st blockCol =
     (\_, st1 => Vuna.Compiler.Common.step (parseApplication (fuel - 1) st1 blockCol) (\operand, st2 => OkC (Pair (EApp (EVar performSyntax (spanOf st st2)) [operand] (spanOf st st2)) st2)))
 
 -- ---------------------------------------------------------------
--- native-effects N1（提交 4b）：`handle <comp> { ... }`
+-- `handle <comp> { ... }`
 -- ---------------------------------------------------------------
 -- 表面语法：
 --   handle <comp> { return x -> <expr>
 --                   C p1 .. pn k -> <expr>
 --                   ... }
--- 编码（ND12，不新增 Expr 构造子）：`EApp (EVar "@vuna@handle") [comp, ret, opH]`
+-- 编码（不新增 Expr 构造子）：`EApp (EVar "@vuna@handle") [comp, ret, opH]`
 --   * ret = `ELam [x] body`；缺 return 子句时是哨兵 `EVar "@vuna@handle@noret"`；
 --   * opH = `ELam [o, k] (ECase (EVar o) alts)`：alt pattern 只含构造子实参（续延 binder
 --     是 λ 的第二个参数）；op 族、实例名、结果族全部由 Elab 从 clause 构造子推导。
@@ -1474,7 +1473,7 @@ parseIf fuel st blockCol =
   else Vuna.Compiler.Common.step (expectKw st "if")
     (\_, st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol 0) (\cond, st2 => Vuna.Compiler.Common.step (expectKw st2 "then") (\_, st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 blockCol 0) (\yes, st4 => Vuna.Compiler.Common.step (expectKw st4 "else") (\_, st5 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st5 blockCol 0) (\no, st6 => OkC (Pair (EIf cond yes no (spanOf st st6)) st6)))))))
 
--- do 块（M11）：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
+-- do 块：`do` + 缩进对齐的语句，语句是 `pat <- expr` 或裸表达式；
 -- 最后一条必须是裸表达式（do 本身不引入 pure，最后表达式即块结果）。
 parseDo : Int -> PState -> Int -> Check (Pair Expr PState)
 parseDo fuel st blockCol = if fuel <= 0 then icFuel "parser"
@@ -1517,7 +1516,7 @@ parseDoExprStmt fuel st stmtCol =
     (\e, st1 => OkC (Pair (DExpr e (spanOf st st1)) st1))
 
 -- ---------------------------------------------------------------
--- D40：非线性格检查（模式绑定名唯一性）
+-- 非线性格检查（模式绑定名唯一性）
 -- ---------------------------------------------------------------
 -- 同一个绑定作用域（一条函数子句的**全部**参数模式 / 一个 case 分支 / 一条 let(where)
 -- 绑定 / 一条 do-bind）里，一个名字只能绑定一次。当前不实现相等约束：重复绑定名在
@@ -1525,7 +1524,7 @@ parseDoExprStmt fuel st stmtCol =
 -- case 分支的 as-pattern、let 的嵌套模式等都在模式解析完成后走同一检查；不同子句 /
 -- 分支 / 绑定是不同作用域，复用同名 binder 合法。
 -- | 模式里按从左到右出现顺序的 (绑定名, span)：PVar 与 as 名算绑定，构造子 / 记录
--- 模式递归，通配与字面量不绑定（D40）。
+-- 模式递归，通配与字面量不绑定。
 patBinderBindings : Pat -> List (Pair String Span)
 patBinderBindings (PVar name sp) = [Pair name sp]
 patBinderBindings (PAs name inner sp) = Base.List.Cons (Pair name sp) (patBinderBindings inner)
@@ -1547,7 +1546,7 @@ firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
   if memName name seen then Just (Pair name sp)
   else firstRepeatedBindingGo rest (Base.List.Cons name seen)
 
--- | D40 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
+-- | 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
 -- 语法错误（带位置与名字）；合法时返回 Ok 0。
 checkNoRepeatedBinders : List Pat -> Check Int
 checkNoRepeatedBinders pats = case firstRepeatedBinding (concatMap patBinderBindings pats) of
@@ -1561,7 +1560,7 @@ parsePatternSingle fuel st blockCol =
   if fuel <= 0 then icFuel "parser" else parsePatternCons (fuel - 1) st blockCol
 
 parsePatternCons : Int -> PState -> Int -> Check (Pair Pat PState)
--- M31.2：pattern 里的 `::` 保留符号原形，由 Loader 按 fixity/别名声明换成
+-- pattern 里的 `::` 保留符号原形，由 Loader 按 fixity/别名声明换成
 -- canonical `Cons`（base 声明 `infixr 5 :: = Cons`）。
 parsePatternCons fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
@@ -1650,7 +1649,7 @@ else case peekTok st of
     else OkC (Pair (PVar name (spanOf st (advance st))) (advance st))
   PTok (TInt n) p => OkC (Pair (PInt n (spanOf st (advance st))) (advance st))
   PTok (TStr s) p => OkC (Pair (PStr s (spanOf st (advance st))) (advance st))
-  -- M36：多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
+  -- 多行字面量模式只允许**无洞**（等价于普通字符串字面量模式）；带洞不支持。
   PTok (TTmpl multi parts endP) p => case textPartsOf parts of
     Just s =>
       let
@@ -1676,7 +1675,7 @@ parseListPatternElems fuel st blockCol =
   else Vuna.Compiler.Common.step (parsePatternSingle (fuel - 1) st blockCol)
     (\pat, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseListPatternElems (fuel - 1) (advance st1) blockCol) (\rest, st2 => OkC (Pair (Base.List.Cons pat rest) st2)) else if atSym st1 "]" then OkC (Pair [pat] (advance st1)) else ps0 st1 ExpectedCommaOrBracket)
 
--- | 自动补注（M41 新增导出）：foldPCon。
+-- | 把模式列表折叠成 `cons` 保留名的右嵌套链（空表是 `nil` 保留名）。
 foldPCon : Span -> List Pat -> Pat
 foldPCon sp [] = PCon listNilSyntax [] sp
 foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp

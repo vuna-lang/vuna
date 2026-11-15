@@ -7,7 +7,7 @@ module Vuna.Compiler.Elab.MetaSpans where
 -- （纯合成项）返回 Nothing，诊断不伪造位置。
 --
 -- 依赖方向：`Ec` 定义在 `Elab.Types`（叶子模块），本模块在它之上做纯状态操作，
--- 因此不再有进程内可变登记表；调用方通过 Ec 把登记表穿起来。
+-- 因此没有进程内可变登记表；调用方通过 Ec 把登记表穿起来。
 import Base.List
 import Base.Pair
 import Vuna.Compiler.Common
@@ -34,8 +34,8 @@ newMetaAt sp ctx ec =
     p = newMeta ctx ec
   in Pair (firstOf p) (recordMetaSpan (secondOf p) (ecNext ec) sp)
 
--- M15：新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
--- M40：`name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
+-- 新建一个「洞」元变量：除创建深度外还记下目标类型与上下文快照（供 goal 显示）。
+-- `name` 是洞的显示名（`_` 传 `""`，`?name` 传 `"?name"`）。
 export newHoleMeta : Ctx -> Ec -> Span -> Value -> String -> Pair Term Ec
 newHoleMeta ctx ec sp ty name =
   let

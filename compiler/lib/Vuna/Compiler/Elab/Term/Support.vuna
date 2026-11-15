@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Term.Support where
 
--- Vuna.Compiler.Elab.Term.Support（M25.2c 拆分）：Term 的非递归叶子 helper（无组内递归）。
+-- Vuna.Compiler.Elab.Term.Support：Term 的非递归叶子 helper（无组内递归）。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -12,14 +12,14 @@ import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 
--- M28（B18）：值位置只查值命名空间（`valueLookup`：构造子优先，再全局定义）。
+-- 值位置只查值命名空间（`valueLookup`：构造子优先，再全局定义）。
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
 export inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
 inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
   Just (Pair idx tyTerm) => OkC (Pair (TVar name idx sp) (Pair (varTypeValue ctx idx tyTerm) ec))
   Nothing => case valueLookup globals ec name of
     Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
-    -- M23：全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
+    -- 全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
     -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
     -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
     Just (VEDef tyTerm) => if allImplicitPrefix tyTerm then

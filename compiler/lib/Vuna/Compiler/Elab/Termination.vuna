@@ -1,7 +1,7 @@
 module Vuna.Compiler.Elab.Termination where
 
--- Vuna.Compiler.Elab.Termination：DT 终止性检查入口（M16 → M25.2a → M25.2b → M25.2c）。
--- 判据细节见 `.Measure`（size/R2/投影/关系/弱环）与 `.Scc`（size-change）。
+-- Vuna.Compiler.Elab.Termination：DT 终止性检查入口。
+-- 判据细节见 `.Measure`（size/守卫正事实/投影/关系/弱环）与 `.Scc`（size-change）。
 import Base.List
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -52,7 +52,7 @@ exprRefsB bound e = case e of
     append (exprRefsB bound base) (concatMap (\q => exprRefsB bound (secondOf q)) fields)
   EDo stmts sp => secondOf (refsOfStmts bound stmts)
   EAnn value ty sp => append (exprRefsB bound value) (exprRefsB bound ty)
-  -- A2：局部函数组：每个 clause 的参数模式绑定在其体内可见。
+  -- 局部函数组：每个 clause 的参数模式绑定在其体内可见。
   ELocalFun clauses sp =>
     concatMap (\c => exprRefsB (append (patsNames (firstOf c)) bound) (secondOf c)) clauses
   _ => []
@@ -77,7 +77,7 @@ adjOf n g = case Base.HashMap.lookup n g of
 adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
 adjTblOf g = Base.HashMap.insertAll g (Base.HashMap.fromList [])
 
--- 反向邻接表：一次遍历建哈希表（旧 transpose 逐边 lookup/replace 是 O(#边 × #节点)）。
+-- 反向邻接表：一次遍历建哈希表（逐边 lookup/replace 转置是 O(#边 × #节点)）。
 reverseAdjOf : List (Pair String (List String)) -> HashMap String (List String)
 reverseAdjOf [] = Base.HashMap.fromList []
 reverseAdjOf ((Pair src dsts) :: rest) = addSrcs src dsts (reverseAdjOf rest)
@@ -197,8 +197,8 @@ else case e of
   EAnn value ty sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region ty
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region value acc)
-  -- A2：where/let 多 clause 局部函数的每个 clause body 都要进 STR 遍历（body 里可能
-  -- 调用外层递归函数，旧 `_ => acc` 会漏检）。借用 `strWalkBinds`（参数表与 `strWalk`
+  -- where/let 多 clause 局部函数的每个 clause body 都要进 STR 遍历（body 里可能
+  -- 调用外层递归函数，兜底跳过会漏检）。借用 `strWalkBinds`（参数表与 `strWalk`
   -- 完全一致，SCT 可证下降）；模式列表只用来定位，不参与 STR。
   ELocalFun clauses sp =>
     strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region (localClauseBinds clauses)
@@ -314,7 +314,7 @@ strClause comp ctors projs p caller facts clause =
     (secondOf clause) (Pair True [])
 
 -- 终止性失败的描述（<0>）：两种措辞（单函数 / 递归组）统一到 arity 1 的
--- `CannotProveTermination`，描述里保留原来的区分信息。
+-- `CannotProveTermination`，描述里保留单函数 / 递归组的区分信息。
 groupMessage : List String -> String
 groupMessage ([f]) = "${f} (recursive call does not structurally decrease)"
 groupMessage comp =
@@ -394,8 +394,8 @@ checkComp (comp@([f])) defTbl ctors projs g facts =
   if memName f (adjOf f g) then checkStrictGroup comp defTbl ctors projs facts else OkC 0
 checkComp comp defTbl ctors projs g facts = checkStrictGroup comp defTbl ctors projs facts
 
--- M34：worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
--- callers」；旧实现每轮全量扫描所有 defs（16 轮 × posWalk），是 check 的最大热点。
+-- worklist 不动点——首轮扫所有有出边的 caller，之后只重扫「新 facts 的 callee 的
+-- callers」；每轮全量扫描所有 defs 是 check 的最大热点。
 computePosFactsWork : List String -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List String) -> Int -> List (Pair String Int) -> List String -> List (Pair String Int)
 computePosFactsWork names defTbl rgT fuel facts work = if fuel <= 0 then facts
 else
@@ -434,7 +434,7 @@ checkTerminationDeclsWith own decls =
     rgT = reverseAdjOf g
     callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
-    -- O(n²)→O(n)：own 只建一次哈希表，逐 SCC 的 own 判定从线性扫改成 O(1) 查表。
+    -- own 只建一次哈希表，逐 SCC 的 own 判定是 O(1) 查表（逐 SCC 线性扫是 O(n²)）。
     ownTbl = Base.HashMap.ofNames own
     _ = dbg! "term-facts"
     fuel = graphFuel g nodes

@@ -4,12 +4,12 @@ module Vuna.Compiler.Elab.Case where
 -- 模式 telescope 绑定（bindCtorTele）、分支可达性（BranchVerdict + allCtorsUnsatisfiable）、
 -- 覆盖率、以及 case 分支的源级校验（兜底位置 / 重复构造子 / 重复字面量）。
 -- case 的检查规则本身与 `checkE` 互递归，留在 `Elab.Term`。
--- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+-- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 --
--- M28（B08）：分支可达性只有**一个**判据 —— `BranchVerdict`。省略一个分支（覆盖率）
+-- 分支可达性只有**一个**判据 —— `BranchVerdict`。省略一个分支（覆盖率）
 -- 与写出一个分支（elabConAlt）都跑同一套「索引合一 + 上下文空族」判定；上下文空族又
--- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。三条精化路径
--- （直接 / 去重降级 / 嵌套模式折叠）也收敛成「先降级成模式矩阵，或直接走规范形」。
+-- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。精化路径只有两条：
+-- 先降级成模式矩阵，或直接走规范形。
 import Base.List
 import Vuna.Compiler.Common
 import Vuna.Compiler.Core
@@ -22,14 +22,14 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Intrinsics
 
 -- ---------------------------------------------------------------
--- M14：索引合一（unifyIdx）
+-- 索引合一（unifyIdx）
 -- ---------------------------------------------------------------
 -- 只做索引层面的一阶合一：把 case 分支构造子的结果索引与 scrutinee 的索引对齐。
 -- 可合一 ⇒ 产出精化表（level ↦ Value），分支体内所有类型求值都带上它；
 -- 不可合一 ⇒ 该分支不可达：省略即合法（覆盖率跳过），写出即报错。
 -- 方向约定：优先精化 **level 更大**（更内层）的变量，于是 ctor 一侧的新鲜变量精化成
 -- scrutinee 的真实变量（`m ↦ n`），不会把真实变量解到分支作用域外（level 形态，无需 de Bruijn）。
--- | 自动补注（M41 新增导出）：unifyErr。
+-- | 索引合一失败的统一错误（`TC_ImpossibleBranchIndex`）。
 export unifyErr : Check a
 unifyErr = ErrC (tcMsg ImpossibleBranchIndex [])
 
@@ -45,7 +45,7 @@ unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
 -- ---------------------------------------------------------------
--- D24：索引合一入口的 fuel 派生
+-- 索引合一入口的 fuel 派生
 -- ---------------------------------------------------------------
 -- Vec 字面量把长度索引展开成 `Succ` 链；入口固定 512 对 ≥64 层的索引不够（逐层
 -- unifyIdx 大约消耗 4 步）。入口按两侧值里的 Nat 链前缀深度派生燃料（上限 `idxFuelMax`
@@ -121,7 +121,7 @@ idxIsNatSuccHead (VNeutral n) = case n of
   _ => False
 idxIsNatSuccHead _ = False
 
--- | 自动补注（M41 新增导出）：unifyIdx。
+-- | 把 case 分支构造子的结果索引与 scrutinee 的索引一阶合一，返回精化表（level ↦ Value）。
 export unifyIdx : Ec -> List (Pair Int Value) -> Int -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdx ec acc depth fuel a b = if fuel <= 0 then ErrC (tcMsg IndexFuel [])
 else
@@ -149,7 +149,7 @@ else
 -- `depth` 是当前上下文深度：Pi/Lam 的闭包必须用**新鲜变量**实例化后扫描，不能扫
 -- `Closure.env`——env 里恰好包含被合一分支的局部 ctx（例如 `Wrap (Int -> Int)` 的构造子
 -- tele 变量被精化成捕获局部变量的 Pi），按 env 扫会把「引用了分支作用域内的变量」误判成
--- 「引用了 lvl」，于是索引合一失败、合法分支被报 `TC_ImpossibleBranchIndex`（B42）。
+-- 「引用了 lvl」，于是索引合一失败、合法分支被报 `TC_ImpossibleBranchIndex`。
 -- 实例化变量用 `_occurs` 这个名字 + 不与 `lvl` 相同的 level（见 occursFreshLevel）。
 -- 扫描带 fuel：实例化闭包后递归不再沿值结构下降（SCT 无法证明终止），用递减 fuel 兜底；
 -- true 才是真 occurs，fuel 耗尽的 False 只会因为值异常巨大而发生（实际扫描深度 = 值大小）。
@@ -224,14 +224,14 @@ else case a of
     _ => unifyErr
   _ => unifyIdxConv ec acc depth a b
 
--- conv 回落：只判定相等（索引里的 meta 求解读 M15）。
+-- conv 回落：只判定相等（索引里的 meta 求解读由 conv 的解表负责）。
 export unifyIdxConv : Ec -> List (Pair Int Value) -> Int -> Value -> Value -> Check (List (Pair Int Value))
 unifyIdxConv ec acc depth a b = case conv (ecDefTbl ec) (ecSolsP ec) depth a b of
   OkC sols2 => OkC acc
   ErrC e => unifyErr
 
 -- ---------------------------------------------------------------
--- M28：分支可达性 —— 唯一判据（省略/写出共用）
+-- 分支可达性 —— 唯一判据（省略/写出共用）
 -- ---------------------------------------------------------------
 -- 一个分支不可达只有两种来源，且都产自同一套计算：
 --   ① 构造子结果索引与 scrutinee 索引一阶合一失败（`BranchImpossibleIndex`）；
@@ -322,9 +322,9 @@ allCtorsUnsatisfiableGo ec (ctor :: rest) idxs depth = case unifyIdxListSized ec
   ErrC e => allCtorsUnsatisfiableGo ec rest idxs depth
 
 -- ---------------------------------------------------------------
--- M14/M19：构造子 telescope 绑定 + 构造子结果值
+-- 构造子 telescope 绑定 + 构造子结果值
 -- ---------------------------------------------------------------
--- M28：这条路径只服务**规范形** case（每个构造子一个分支、子模式全是变量/通配）。
+-- 这条路径只服务**规范形** case（每个构造子一个分支、子模式全是变量/通配）。
 -- 嵌套模式在 `checkCase` 里先降级成模式矩阵（`Elab.Match.multiToCaseExpr`），因此这里
 -- 遇到非变量子模式只可能是内部错误，报 `NestedPatterns`。
 export bindCtorTele : Ctx -> Term -> List Pat -> Check (Pair Ctx (Pair (List (Pair String Rig)) (List Pat)))
@@ -378,7 +378,7 @@ export ctorResultTerms : DtCtor -> List Term
 ctorResultTerms c = case resultSpine (dtCtorType c) of
   Pair head args => args
 
--- M24.5：分支里构造子的**值** `VCon c [telescope 各 binder 的值]`。
+-- 分支里构造子的**值** `VCon c [telescope 各 binder 的值]`。
 -- bindCtorTele 刚把 telescope 绑到分支上下文末尾，binder i（telescope 顺序）的 level 是
 -- `depth - n + i`，按该顺序排列即 VCon 实参顺序（与求值器 / TCon 实参对齐约定一致）。
 export ctorValueIn : Ctx -> DtCtor -> Value
@@ -391,13 +391,13 @@ teleValsFrom low k =
   if k <= 0 then []
   else Base.List.Cons (VNeutral (NVar "_tele" low [])) (teleValsFrom (low + 1) (k - 1))
 
--- M24.5：**scrutinee 反射**。旧实现只把构造子的结果**索引**与 scrutinee 的索引合一，
--- 于是 `case n of ...`（n 是裸 Nat 形参、族没有索引）或「包装族」上完全拿不到等式，
--- goal 里的 n 不会被精化成 `Zero` / `Succ k`。这里在索引合一之后，再把 scrutinee 的
+-- **scrutinee 反射**。只把构造子的结果**索引**与 scrutinee 的索引合一是不够的：
+-- `case n of ...`（n 是裸 Nat 形参、族没有索引）或「包装族」上完全拿不到等式，
+-- goal 里的 n 不会被精化成 `Zero` / `Succ k`。所以在索引合一之后，再把 scrutinee 的
 -- **值**（`evalCtx ctx scrutTerm`）与构造子结果值（`ctorValueIn`）合一，得到的 refs 同时
 -- 用于 `refineValue expected` 与 `ctxRefine`。
 -- 只对**中性变量**（`NVar` 且 spine 为空）反射：非变量 scrutinee（`f x`、字面量、别的
--- 分支绑定子……）拿不到等式，保持旧行为；Bool/Int/String 的 case 走各自的专用路径，
+-- 分支绑定子……）拿不到等式，不做反射；Bool/Int/String 的 case 走各自的专用路径，
 -- 不会到这里。
 export reflectScrutinee : Ec -> Int -> List (Pair Int Value) -> Value -> Value -> Check (List (Pair Int Value))
 reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSolsP ec) defaultFuel (refineValue refs defaultFuel scrutVal) of
@@ -407,7 +407,7 @@ reflectScrutinee ec depth refs ctorVal scrutVal = case force (ecDefTbl ec) (ecSo
   _ => OkC refs
 
 -- ---------------------------------------------------------------
--- M28/B15：case 分支的源级校验（唯一入口 `checkCase` 先跑它）
+-- case 分支的源级校验（唯一入口 `checkCase` 先跑它）
 -- ---------------------------------------------------------------
 -- 校验是**家族无关**的：兜底位置 + 重复构造子分支 + 重复字面量分支。
 -- 家族相关限制（Bool 只认 True/False、Int/String 只认字面量、归纳族只认构造子）
@@ -457,12 +457,12 @@ stripAsPat : Pat -> Pat
 stripAsPat (PAs name inner sp) = stripAsPat inner
 stripAsPat pat = pat
 
--- | 自动补注（M41 新增导出）：stripAsPats。
+-- | 剥掉每条分支 head 位置的 as-pattern（覆盖性按内层模式判定）。
 stripAsPats : List (Pair Pat Expr) -> List (Pair Pat Expr)
 stripAsPats [] = []
 stripAsPats ((Pair pat body) :: rest) = Pair (stripAsPat pat) body :: stripAsPats rest
 
--- | 自动补注（M41 新增导出）：checkCaseAltsFlat。
+-- | case 分支的源级校验入口：兜底位置、重复构造子与重复字面量分支。
 export checkCaseAltsFlat : Ec -> List (Pair Pat Expr) -> Check (Pair Int Ec)
 checkCaseAltsFlat ec alts = checkCaseAltsGo ec [] (stripAsPats alts)
 
@@ -497,8 +497,8 @@ checkCaseAltsGo ec prevs alts = case alts of
     PWild psp => checkCatchAll ec prevs (Pair pat body) rest psp
     PRecord rn fields psp => checkCaseAltsGo ec (Pair pat body :: prevs) rest
 
--- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`（B15 新诊断），
--- 其它分支沿用既有 `CatchAllNotLast`。
+-- 兜底分支只能最后；后面的字面量分支报 `BranchAfterCatchAll`，
+-- 其它分支报 `CatchAllNotLast`。
 checkCatchAll : Ec -> List (Pair Pat Expr) -> Pair Pat Expr -> List (Pair Pat Expr) -> Span -> Check (Pair Int Ec)
 checkCatchAll ec prevs alt [] sp = OkC (Pair 0 ec)
 checkCatchAll ec prevs alt rest sp = if hasLitHead rest then
@@ -517,7 +517,7 @@ hasLitHead ((Pair pat body) :: rest) = case pat of
   _ => hasLitHead rest
 
 -- ---------------------------------------------------------------
--- M19：模式辅助（覆盖面 / 矩阵降级判定）
+-- 模式辅助（覆盖面 / 矩阵降级判定）
 -- ---------------------------------------------------------------
 export altNames : List (Pair Pat Expr) -> List String
 altNames [] = []
@@ -552,7 +552,7 @@ anyNestedArg (a :: rest) = case a of
   _ => True
 
 -- ---------------------------------------------------------------
--- M14：覆盖率
+-- 覆盖率
 -- ---------------------------------------------------------------
 -- 覆盖率：可达的构造子必须都出现；不可达的可以省略（写了会被 elabConAlt 拒）。
 -- 性能：**已写出的分支直接跳过**（不跑可达性），只有「没写的构造子」才需要判可达性——

@@ -1,6 +1,6 @@
 module Vuna.Compiler.Driver.Native where
 
--- Vuna.Compiler.Driver.Native：native 目标驱动（M1）。
+-- native 目标驱动。
 --
 -- 复用 DT 检查 + `Codegen.Lower.lowerProgramOf` 得到整程序 IR，再交给
 -- `Native.Module.build` / `Native.Render.renderProgram`，写到 `OUT/main.s`。

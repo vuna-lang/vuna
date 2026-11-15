@@ -2,8 +2,7 @@ module Vuna.Compiler.Diagnostics.Tc where
 
 -- Vuna.Compiler.Diagnostics.Tc：TC_ 域（精化 / 终止性 / 覆盖性诊断）。
 --
--- 从 `Vuna.Compiler.Diagnostics` 拆出（M30 B19）；对外名字集合不变，门面仍是
--- `Vuna.Compiler.Diagnostics`（选择性重导出，调用点零改动）。
+-- 对外名字集合不变，门面仍是 `Vuna.Compiler.Diagnostics`（选择性重导出，调用点零改动）。
 -- arity 由 `TcErr : Nat -> Type` 的构造子索引在编译期锁定（`UnknownName : String ->
 -- TcErr (Succ Zero)`），throw 点给 `Vec n String`——arity 拼错**编译失败**。
 -- 模板/说明/码的派生都在本模块；`tcAll` 是 `gen-errors` 的文档遍历源。
@@ -71,13 +70,13 @@ export data TcErr(..) : Nat -> Type where
   DuplicateSignature : String -> TcErr (Succ Zero)
   ExpectedSignature : String -> TcErr (Succ Zero)
   ExpectedType : String -> TcErr (Succ Zero)
-  -- M33 W5：extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
+  -- extern 签名超出受限 FFI 子集（基本类型 + 简单 Array）。
   FfiTypeUnsupported : String -> TcErr (Succ Zero)
   EqRequiresEvidence : String -> TcErr (Succ Zero)
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
-  -- M36：模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
+  -- 模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
   InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
   SignatureNoDef : String -> TcErr (Succ Zero)
@@ -85,7 +84,7 @@ export data TcErr(..) : Nat -> Type where
   UnknownName : String -> TcErr (Succ Zero)
   UnsolvedHole : String -> TcErr (Succ Zero)
   UnsolvedMetavarInfer : String -> TcErr (Succ Zero)
-  -- M38（QTT）：用量检查。
+  -- QTT 用量检查。
   LinearUnused : String -> TcErr (Succ Zero)
   LinearOverused : String -> TcErr (Succ Zero)
   ErasedBinderUsed : String -> TcErr (Succ Zero)
@@ -101,15 +100,15 @@ export data TcErr(..) : Nat -> Type where
   DebugConstructInRelease : String -> TcErr (Succ Zero)
   -- D17：入口 `main` 不能带参数（结果类型拆掉动作层后是函数类型即 arity 错误）。
   MainArity : String -> TcErr (Succ Zero)
-  -- native-effects N1（ND9）：`perform` 找不到 res 族（`res<族短名>`）。
+  -- `perform` 找不到 res 族（`res<族短名>`）。
   EffResFamilyMissing : String -> TcErr (Succ Zero)
-  -- native-effects N1（提交 4b）：`handle` 的 op 族不满足降级协议（nullary op 族 +
+  -- `handle` 的 op 族不满足降级协议（nullary op 族 +
   -- `<Label> : String -> Type` + `res<Label> : Op -> Type`；State/Reader/Exn 等参数化族）。
   HandleFamilyUnsupported : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
-  -- native-effects N1（提交 4b）：同一个 `handle` 块的 clause 构造子跨 op 族（ND10）。
+  -- 同一个 `handle` 块的 clause 构造子跨 op 族。
   HandleClauseFamilyMismatch : String -> String -> TcErr (Succ (Succ Zero))
   AppliedNotType : String -> TcErr (Succ Zero)
   CtorDoesNotReturn : String -> String -> TcErr (Succ (Succ Zero))
@@ -123,7 +122,7 @@ export data TcErr(..) : Nat -> Type where
   TypeMismatch : String -> String -> TcErr (Succ (Succ Zero))
   TypeMismatchCaseBranch : String -> String -> TcErr (Succ (Succ Zero))
   WhereNeedsSig : String -> String -> TcErr (Succ (Succ Zero))
-  -- M42：`deriving via field` 只允许自动去装箱的单字段包装。
+  -- `deriving via field` 只允许自动去装箱的单字段包装。
   DerivingViaUnboxedRequired : TcErr Zero
   -- R4（records-v2）：`deriving via field` 只允许 `record`（`data` 已退役记录语义）。
   DerivingViaOnlyRecord : TcErr Zero
@@ -141,7 +140,7 @@ export data TcErr(..) : Nat -> Type where
 -- ---------------------------------------------------------------
 -- code 派生（唯一真源；`gen-errors` 与 throw 都用它）
 -- ---------------------------------------------------------------
--- | 自动补注（M41 新增导出）：tcCode。
+-- | 诊断码派生：tcCode。
 export tcCode : {n : Nat} -> TcErr n -> String
 tcCode BoolCaseRestriction = "TC_BoolCaseRestriction"
 tcCode CaseBranchTooFewArgs = "TC_CaseBranchTooFewArgs"
@@ -247,22 +246,22 @@ tcCode (DeriveSingleCtor _) = "TC_DeriveSingleCtor"
 tcCode (DeriveUnsupportedKind _) = "TC_DeriveUnsupportedKind"
 
 -- ---------------------------------------------------------------
--- 模板（构造子 payload，占位符 `<0>`/`<1>`；已去掉旧 `DT: ` 前缀）
+-- 模板（构造子 payload，占位符 `<0>`/`<1>`）
 -- ---------------------------------------------------------------
--- | 自动补注（M41 新增导出）：tcTemplate。
+-- | 消息模板：tcTemplate。
 export tcTemplate : {n : Nat} -> TcErr n -> String
-tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns (M19)"
+tcTemplate BoolCaseRestriction = "case on Bool only accepts True / False / variable patterns"
 tcTemplate CaseBranchTooFewArgs = "case branch has too few arguments for its constructor"
 tcTemplate CatchAllNotLast = "the catch-all branch must be the last one"
 tcTemplate ClauseTooManyPatterns = "clause has more patterns than the function arity"
 tcTemplate DataKindArrows =
   "the kind of a data declaration must be a chain of arrows ending in Type"
 tcTemplate DefMoreParams = "definition has more parameters than its signature"
-tcTemplate DefParamsMustBeVars = "definition parameters must be variables (M13)"
-tcTemplate DoUnsupported = "do blocks are not supported yet (M19)"
+tcTemplate DefParamsMustBeVars = "definition parameters must be variables"
+tcTemplate DoUnsupported = "do blocks are not supported yet"
 tcTemplate FunctionNoClauses = "function has no clauses"
 tcTemplate HoleNoExpectedType = "cannot infer the type of a hole; give it an expected type"
-tcTemplate ImplicitParamKind = "implicit parameters must be types or inductive families (M15)"
+tcTemplate ImplicitParamKind = "implicit parameters must be types or inductive families"
 tcTemplate ImpossibleBranchEmptyCtx =
   "this branch is impossible (its context contains an empty inductive family)"
 tcTemplate ImpossibleBranchIndex = "this branch is impossible (index constraints are unsatisfiable)"
@@ -276,18 +275,18 @@ tcTemplate OrphanInstance =
 tcTemplate InterfaceNoParam = "interfaces must have at least one parameter"
 tcTemplate NoInstParam = "`@` override requires an implicit String instance parameter"
 tcTemplate IntStringCaseNeedsFallback =
-  "case on Int / String / Nat needs a variable or wildcard branch as fallback (M19)"
+  "case on Int / String / Nat needs a variable or wildcard branch as fallback"
 tcTemplate IntStringCaseRestriction =
-  "case on Int / String / Nat only accepts literals / variable patterns (M19)"
+  "case on Int / String / Nat only accepts literals / variable patterns"
 tcTemplate InvalidArrowType = "invalid arrow type"
 tcTemplate LambdaNoSignature = "cannot infer the type of a lambda; add a signature"
 tcTemplate LambdaTooManyParams = "lambda has more parameters than the expected function type"
-tcTemplate NestedPatterns = "nested patterns must be constructor patterns (M19)"
+tcTemplate NestedPatterns = "nested patterns must be constructor patterns"
 tcTemplate NatLiteralOutOfRange = "Nat literal is out of range (max is 4611686018427387903)"
 tcTemplate NotInductiveFamily = "case scrutinee is not an inductive family"
-tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case (M14)"
+tcTemplate OnlyCtorPatterns = "only constructor patterns are supported in case"
 tcTemplate PatternFuel = "pattern matrix recursion ran out of fuel"
-tcTemplate RecordsUnsupported = "records are not supported yet (M15)"
+tcTemplate RecordsUnsupported = "records are not supported yet"
 tcTemplate TooManyArgs = "too many arguments (not a function)"
 tcTemplate TypeLevelArg = "Type needs exactly one non-negative level (or none)"
 tcTemplate TypeMismatchCaseCount = "type mismatch: case branches differ in number"
@@ -299,8 +298,7 @@ tcTemplate (CannotProveTermination _) = "cannot prove termination of <0>"
 tcTemplate (CannotRedefineBuiltin _) = "cannot redefine builtin <0>"
 tcTemplate (CannotSolveMetavar _) =
   "cannot solve metavariable ?<0> (solution would escape its scope)"
-tcTemplate (CannotSolveHigherOrder _) =
-  "cannot solve higher-order metavariable ?<0> (M15 limitation)"
+tcTemplate (CannotSolveHigherOrder _) = "cannot solve higher-order metavariable ?<0>"
 tcTemplate (CannotSolveOccurs _) = "cannot solve metavariable ?<0> (occurs check)"
 tcTemplate (TypeMismatchCaseVars _) =
   "type mismatch: case branch <0> binds a different number of variables"
@@ -340,7 +338,7 @@ tcTemplate (CtorError _ _) = "constructor <0>: <1>"
 tcTemplate (CtorWrongIndices _ _) = "constructor <0> has the wrong number of indices for <1>"
 tcTemplate (NotTraitMethod _ _) = "`<0>` is not a method of trait <1>"
 tcTemplate (OpNotDefinedFor _ _) = "`<0>` is not defined for <1> (Ord instance required)"
-tcTemplate (OpOnlyIntString _ _) = "`<0>` is only defined for Int and String (found <1>; M19)"
+tcTemplate (OpOnlyIntString _ _) = "`<0>` is only defined for Int and String (found <1>)"
 tcTemplate (UnknownConstructorInCase _ _) = "unknown constructor <0> in case <1>"
 tcTemplate (UnsolvedMetavar _ _) = "unsolved metavariable ?<0><1>"
 tcTemplate (TypeMismatch _ _) = "type mismatch: expected <0>, got <1>"
@@ -390,9 +388,9 @@ export record TcEntry(..) where
   tcEntryDesc : String
 
 -- ---------------------------------------------------------------
--- 文档遍历源：**按 ≤8 项分块**（M30 B19）。split codegen 会把单个列表字面量打成一行，
--- 81 项一张表曾产生 ~39 KB 的行；块内顺序 = 文档顺序，拼接保持元素顺序与内容不变
--- （gen-errors 输出因此逐字节不变）。新增构造子必须登记到对应块末尾。
+-- 文档遍历源：**按 ≤8 项分块**。split codegen 会把单个列表字面量打成一行，分块
+-- 把每行宽度控制在可读范围；块内顺序 = 文档顺序，拼接保持元素顺序与内容不变。
+-- 新增构造子必须登记到对应块末尾。
 -- ---------------------------------------------------------------
 tcChunk0 : List TcEntry
 tcChunk0 =
@@ -457,7 +455,7 @@ tcChunk5 =
     TcEntry (tcCode (CannotProveTermination "")) (tcTemplate (CannotProveTermination "")) "无法证明终止性",
     TcEntry (tcCode (CannotRedefineBuiltin "")) (tcTemplate (CannotRedefineBuiltin "")) "不能重定义内建名",
     TcEntry (tcCode (CannotSolveMetavar "")) (tcTemplate (CannotSolveMetavar "")) "元变量解会逃逸作用域",
-    TcEntry (tcCode (CannotSolveHigherOrder "")) (tcTemplate (CannotSolveHigherOrder "")) "高阶元变量无法求解（M15 限制）",
+    TcEntry (tcCode (CannotSolveHigherOrder "")) (tcTemplate (CannotSolveHigherOrder "")) "高阶元变量无法求解",
     TcEntry (tcCode (CannotSolveOccurs "")) (tcTemplate (CannotSolveOccurs "")) "解里出现自身（occurs check）",
     TcEntry (tcCode (TypeMismatchCaseVars "")) (tcTemplate (TypeMismatchCaseVars "")) "case 分支绑定变量数不同"
   ]
@@ -568,15 +566,15 @@ tcErr sp e args = ErrC (withDiagSpan sp (tcMsg e args))
 -- ---------------------------------------------------------------
 -- 人体工学：按 arity 分档的 throw（调用点不必手搓 Vec）
 -- ---------------------------------------------------------------
--- | 自动补注（M41 新增导出）：tcErr0。
+-- | 便捷入口：tcErr0。
 export tcErr0 : Span -> TcErr Zero -> Check a
 tcErr0 sp e = tcErr sp e []
 
--- | 自动补注（M41 新增导出）：tcErr1。
+-- | 便捷入口：tcErr1。
 export tcErr1 : Span -> TcErr (Succ Zero) -> String -> Check a
 tcErr1 sp e a0 = tcErr sp e [a0]
 
--- | 自动补注（M41 新增导出）：tcErr2。
+-- | 便捷入口：tcErr2。
 export tcErr2 : Span -> TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 
@@ -584,15 +582,15 @@ tcErr2 sp e a0 a1 = tcErr sp e [a0, a1]
 -- 无位置版本：Core（Conv/Eval）等底层诊断拿不到 Span，但仍要走同一套码与模板。
 -- 输出形态是无前缀的 `[CODE] 消息`（与带位置的 `文件:行:列: [CODE] 消息` 区分）。
 -- ---------------------------------------------------------------
--- | 自动补注（M41 新增导出）：tcErr0NoLoc。
+-- | 便捷入口：tcErr0NoLoc。
 export tcErr0NoLoc : TcErr Zero -> Check a
 tcErr0NoLoc e = ErrC (tcMsg e [])
 
--- | 自动补注（M41 新增导出）：tcErr1NoLoc。
+-- | 便捷入口：tcErr1NoLoc。
 export tcErr1NoLoc : TcErr (Succ Zero) -> String -> Check a
 tcErr1NoLoc e a0 = ErrC (tcMsg e [a0])
 
--- | 自动补注（M41 新增导出）：tcErr2NoLoc。
+-- | 便捷入口：tcErr2NoLoc。
 export tcErr2NoLoc : TcErr (Succ (Succ Zero)) -> String -> String -> Check a
 tcErr2NoLoc e a0 a1 = ErrC (tcMsg e [a0, a1])
 

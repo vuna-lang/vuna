@@ -1,12 +1,12 @@
 module Vuna.Compiler.Elab.Records where
 
--- Vuna.Compiler.Elab.Records：`record` 的**语法**与结构化元数据（M19 提取成共享模块）。
+-- Vuna.Compiler.Elab.Records：`record` 的**语法**与结构化元数据。
 --
--- R2（records-v2）：字段名不再是构造子 binder 名里编码的字符串，而是下面
+-- 字段名不是构造子 binder 名里编码的字符串，而是下面
 -- `RecordFieldMeta` 的（名字 / 类型 / 声明序号）三元组；`RecordMeta` 是跨包的
 -- 结构化字段表，进 iface（`miRecords`）。
 --
--- R4（records-v2）：**DRecord 不再降级成 DData**。本模块只收集 `RecordMeta`，并把
+-- **DRecord 不降级成 DData**。本模块只收集 `RecordMeta`，并把
 -- record 表达式/模式降级成对**合成位置构造子**的引用（构造子名 = record 名）；合成构造子
 -- 由 `Elab.Data.elabDataBodies` 在精化期直接建立（服务 TMk/eval/codegen）。
 import Vuna.Compiler.Common
@@ -14,14 +14,14 @@ import Vuna.Compiler.Diagnostics.Tc
 import Vuna.Compiler.Diagnostics.Common
 import Vuna.Compiler.Frontend.Ast
 
--- | R2：一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
+-- | 一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
 -- 构造子里的位置参数序号）；`recordFieldType` 仍带源码 span，供 `HasField` 实例生成。
 export record RecordFieldMeta(..) where
   recordFieldName : String
   recordFieldType : Expr
   recordFieldIndex : Int
 
--- | R2：一条 record 声明的结构化元数据（名字 / 参数 / 字段表 / 派生 / 表示档位 / 构造子 /
+-- | 一条 record 声明的结构化元数据（名字 / 参数 / 字段表 / 派生 / 表示档位 / 构造子 /
 -- 线性标记）。进 iface 后工具与下游包按字段表查表，不再依赖前缀约定或重跑源码解析。
 export record RecordMeta(..) where
   recordMetaName : String
@@ -29,22 +29,22 @@ export record RecordMeta(..) where
   recordMetaFields : List RecordFieldMeta
   recordMetaDerivings : List String
   recordMetaDerivingVia : Bool
-  -- R1：表示档位（`transparent`/`opaque` 声明；`ReprAuto` = 未声明）。
+  -- 表示档位（`transparent`/`opaque` 声明；`ReprAuto` = 未声明）。
   recordMetaRepr : ReprTier
   recordMetaCtor : String
   recordMetaLinear : Bool
 
--- | R2：字段表 → （名字，类型）对（只用于仍需该形状的旧 helper）。
+-- | 字段表 → （名字，类型）对（供仍需要这种形状的调用方使用）。
 export recordFieldPairs : List RecordFieldMeta -> List (Pair String Expr)
 recordFieldPairs [] = []
 recordFieldPairs (f :: rest) = Pair f.recordFieldName f.recordFieldType :: recordFieldPairs rest
 
--- | R2：字段表 → 字段名列表。
+-- | 字段表 → 字段名列表。
 recordFieldNames : List RecordFieldMeta -> List String
 recordFieldNames [] = []
 recordFieldNames (f :: rest) = f.recordFieldName :: recordFieldNames rest
 
--- | R2：按名字查 record 元数据。
+-- | 按名字查 record 元数据。
 export lookupRecord : String -> List RecordMeta -> Maybe RecordMeta
 lookupRecord name [] = Nothing
 lookupRecord name (r :: rest) = if r.recordMetaName == name then Just r else lookupRecord name rest
@@ -82,7 +82,7 @@ firstUnknownFieldMsg sp fieldNames [] = unknownFieldMsg sp ""
 firstUnknownFieldMsg sp fieldNames ((Pair n v) :: rest) =
   if memName n fieldNames then firstUnknownFieldMsg sp fieldNames rest else unknownFieldMsg sp n
 
--- R4：收集 record 声明的结构化元数据（**不降级**；DRecord 原样留在 decls 里）。
+-- 收集 record 声明的结构化元数据（**不降级**；DRecord 原样留在 decls 里）。
 export recordsOfDecls : List Decl -> List RecordMeta
 recordsOfDecls [] = []
 recordsOfDecls (d :: rest) = case d of
@@ -91,14 +91,13 @@ recordsOfDecls (d :: rest) = case d of
       :: recordsOfDecls rest
   _ => recordsOfDecls rest
 
--- | R2：给字段表标注声明序号（字段名/类型的唯一真源）。
+-- | 给字段表标注声明序号（字段名/类型的唯一真源）。
 recordFieldsOf : List Field -> Int -> List RecordFieldMeta
 recordFieldsOf [] i = []
 recordFieldsOf (f :: rest) i =
   RecordFieldMeta (fieldName f) (fieldType f) i :: recordFieldsOf rest (i + 1)
 
--- 记录的构造子名：`Mk<R>`。
--- 记录声明降级：单构造子 DData。构造子名由 `ctor` 参数给出（见上面的策略说明）。
+-- 族参数变量表达式：每个族参数引用一次（构造子返回类型用）。
 recordParamVarExprs : List String -> Span -> List Expr
 recordParamVarExprs params sp = map (\p => EVar p sp) params
 
@@ -107,7 +106,7 @@ recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params
 
 -- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
--- R2：binder 名只带**位置**信息（`@vuna@record@arg<i>`），不再编码字段名——字段身份
+-- binder 名只带**位置**信息（`@vuna@record@arg<i>`），不编码字段名——字段身份
 -- 由 `RecordMeta` / `DtData.dtDataFields` 的结构化字段表承载。
 export recordArrowType : List Field -> Expr -> Span -> Expr
 recordArrowType fields ret sp = recordArrowTypeGo 0 fields ret sp
@@ -118,13 +117,13 @@ recordArrowTypeGo i (f :: fs) ret sp =
   EPi "@vuna@record@arg${i}" False Nothing (fieldType f) (recordArrowTypeGo (i + 1) fs ret sp) sp
 
 -- 记录构造子类型显式带族参数（`elabCtor` 用首 binder 名判断，字段 binder 已不是 `_`）。
--- | R4：把记录族参数包成显式 Pi（implicit=True），供精化期合成构造子/派生使用。
+-- | 把记录族参数包成显式 Pi（implicit=True），供精化期合成构造子/派生使用。
 export recordParamPis : List String -> Expr -> Span -> Expr
 recordParamPis [] ret sp = ret
 recordParamPis (p :: rest) ret sp =
   EPi p True Nothing (EVar "Type" sp) (recordParamPis rest ret sp) sp
 
--- | R4：组装记录合成构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
+-- | 组装记录合成构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
 export recordCtorType : List String -> List Field -> Expr -> Span -> Expr
 recordCtorType params fields ret sp = recordParamPis params (recordArrowType fields ret sp) sp
 
@@ -144,7 +143,7 @@ desugarRecordDecl records d = case d of
     Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarRecordDecl records) methods)
       (\ms => OkC (DInstance ctxE head ms sp))
   DSig name ctx ty sp => OkC d
-  -- M28：axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
+  -- axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
   -- （record 是值层记法），原样返回。
   DAxiom name ty sp => OkC d
   DExtern name cName ty sp => OkC d
@@ -202,7 +201,7 @@ else case e of
     Vuna.Compiler.Common.bind
       (Vuna.Compiler.Common.traverse (desugarBindFuel (fuel - 1) records) binds)
       (\b2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records body) (\body2 => OkC (ELet b2 body2 rec_ sp)))
-  -- A2：where/let 多 clause 局部函数：逐 clause 消解记录模式与 body。
+  -- where/let 多 clause 局部函数：逐 clause 消解记录模式与 body。
   ELocalFun clauses sp =>
     Vuna.Compiler.Common.bind
       (Vuna.Compiler.Common.traverse (desugarLocalClauseFuel (fuel - 1) records) clauses)
@@ -236,7 +235,7 @@ else case e of
   EPi name implicit qty dom cod sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records dom)
       (\d2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records cod) (\c2 => OkC (EPi name implicit qty d2 c2 sp)))
-  -- M24：where 绑定签名（`EAnn value ty`）两边都做结构递归（record 可出现在值里）。
+  -- where 绑定签名（`EAnn value ty`）两边都做结构递归（record 可出现在值里）。
   EAnn value ty sp =>
     Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value)
       (\v2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records ty) (\t2 => OkC (EAnn v2 t2 sp)))
@@ -272,7 +271,7 @@ desugarBindFuel fuel records (Pair pat value) =
   else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
     (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (Pair p2 v2)))
 
--- A2：局部函数 clause（参数模式列表 + body）。
+-- 局部函数 clause（参数模式列表 + body）。
 desugarLocalClauseFuel : Int -> List RecordMeta -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
 desugarLocalClauseFuel fuel records clause =
   if fuel <= 0 then icFuel "record desugar"
@@ -336,13 +335,13 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
   in DInstance [] head [meth] fsp
 
 -- DT 的一步式入口：收集 record 元数据并完成 record 表达式/模式的语法降级。
--- R2：同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
--- R4：返回的 decls **保留 DRecord**（不再降级成 DData）；依赖包的 record 头只贡献
+-- 同时返回本包/依赖包的 `RecordMeta` 表，供 `elabDatas` 把字段表写进 `DtData`。
+-- 返回的 decls **保留 DRecord**（不再降级成 DData）；依赖包的 record 头只贡献
 -- 元数据，供本包字段访问/更新/模式与 `HasField` 实例生成使用。
 export prepareDecls : List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDecls decls0 = prepareDeclsWith [] decls0
 
--- M34.5 接口摘要路径：本包的 record 语法降级需要**依赖包 record 头**参与字段访问/
+-- 接口摘要路径：本包的 record 语法降级需要**依赖包 record 头**参与字段访问/
 -- record 更新/模式降级的消解（依赖包只提供语法头，不精化）；auxDecls 是依赖模块的原始 decls。
 export prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta) (List Decl))
 prepareDeclsWith auxDecls decls0 =
@@ -350,11 +349,10 @@ prepareDeclsWith auxDecls decls0 =
     records = append (recordsOfDecls auxDecls) (recordsOfDecls decls0)
   in Vuna.Compiler.Common.bind (desugarRecords records decls0) (\ds => OkC (Pair records ds))
 
--- 记录的构造子名：记录名本身。
--- M23：旧实现用 `Mk<R>` 前缀，避免「类型名与构造子同名」被当成「把类型当函数应用」。
--- 现在 Elab 在值位置先查构造子表、类型位置走 globals（`checkType` / `checkAppUnderType`），
--- 同名不再冲突（`data Pair where Pair : ...` 的写法本身也被支持），所以恢复同名——
--- 派生 `Show` 才能输出 `(Point 1 2)` 而不是泄漏内部名 `(MkPoint 1 2)`。
+-- 记录的构造子名：记录名本身。Elab 在值位置先查构造子表、类型位置走 globals
+-- （`checkType` / `checkAppUnderType`），所以「类型名与构造子同名」不冲突
+-- （`data Pair where Pair : ...` 本身也被支持）；派生 `Show` 因此输出 `(Point 1 2)`
+-- 而不是泄漏内部名 `(MkPoint 1 2)`。
 ctorName : String -> String
 ctorName dname = dname
 

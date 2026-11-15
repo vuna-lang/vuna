@@ -6,12 +6,12 @@ module Vuna.Compiler.Hash where
 -- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途的密钥派生。
 --
 -- * 摘要 = **SHA-256**（FIPS 180-4），在本模块用 `Base.Bits` 的 32-bit 包装实现：
---   因此 OCaml 后端、将来的 wasm 后端与 `interp` 都能算出同一份内容地址——这是
+--   因此 OCaml 后端、wasm 后端与 `interp` 都能算出同一份内容地址——这是
 --   D2（两端语义一致）与 D5（内容寻址）共同要求的。
 -- * `Digest` 的 8 条 lane 就是 SHA-256 的 8 个 32-bit 大端字；`digestHex` 渲染成
 --   标准的小写 64 位十六进制，`digestInt` 提供「必须落成 Int」位置的 63-bit 派生键。
 -- * 本模块只做**摘要与预哈希**；规范编码（自定界原子文法 + 解码器 roundtrip）在
---   `Vuna.Compiler.Canonical`（D5：格式层，不随编译器/Marshal 漂移）。
+--   `Vuna.Compiler.Canonical`（D5：格式层，不随编译器或宿主序列化漂移）。
 import Base.Bits
 import Base.List
 import Base.String
@@ -43,8 +43,8 @@ digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
 -- | 摘要 → 63-bit 派生键（`Int`）：8 条 lane 依次滚动折叠后掩到 `Int` 正区间。
 --
 -- 用途：必须落成 `Int` 的位置（排序键、缓存目录/文件名里的短 key、测试 runner 的
--- 分桶）。它是 SHA-256 的派生量，碰撞面约 2^-62，取代旧的 10-bit `strHash` 折叠与
--- 6-lane 盐（60-bit）实现；需要可移植/可展示的内容地址仍用 `digestHex`。
+-- 分桶）。它是 SHA-256 的派生量，碰撞面约 2^-62；需要可移植/可展示的内容地址
+-- 仍用 `digestHex`。
 export digestInt : Digest -> Int
 digestInt (Digest lanes) = band (foldl (\h, lane => h * 1000003 + lane) 0 lanes) 4611686018427387903
 
@@ -218,7 +218,7 @@ bigSigma1 : Int -> Int
 bigSigma1 x = bxor (rotr32 x 6) (bxor (rotr32 x 11) (rotr32 x 25))
 
 -- 消息表扩展：维护「最近 16 字」的滑动窗口（最新在前），避免对增长中的列表做
--- 远端下标访问——旧实现的 `atIdx` 让 iface 哈希成为 check 的新热点。
+-- 远端下标访问（下标访问在这里是热点）。
 -- | 窗口下标访问（窗口固定 16 项；越界返回 0）。
 atWindow : Int -> List Int -> Int
 atWindow i [] = 0
@@ -328,11 +328,11 @@ sha256OfString s =
 -- ---------------------------------------------------------------
 -- | 4 lane 63-bit wrapping 多项式预哈希（每字节 O(1)、零分配）。
 --
--- 用途：接口哈希的输入里有 MB 级的 Marshal 载荷（defs / datas / globals / …）。
--- 对这类载荷逐字节跑 SHA-256 会把 iface 阶段变成 check 的新热点（实测 +1.1 s）；
+-- 用途：接口哈希的输入里有 MB 级的规范编码载荷（defs / datas / globals / …）。
+-- 对这类载荷逐字节跑 SHA-256 会把 iface 阶段变成 check 的新热点；
 -- 这里先用 4 条独立 lane 把载荷折叠成 64 字节的确定性串，再对它做 SHA-256。
 -- 顶层摘要仍是 SHA-256；预哈希是 252-bit 的**非密码学**多项式（无对手模型，
--- 与 CacheFormat 的威胁模型一致；accidental 碰撞面 2^-252 量级已足够）。
+-- 与缓存层的威胁模型一致；accidental 碰撞面 2^-252 量级已足够）。
 --
 -- OCaml `Int` 溢出按 63-bit 二进制补码回绕（§primitives），因此乘法天然 mod 2^63，
 -- 不需要取模运算；跨机器、跨进程确定。

@@ -1,8 +1,8 @@
 module Vuna.Compiler.Ir where
 
--- Vuna.Compiler.Ir：擦除后中间表示（IR）门面。
+-- 擦除后中间表示（IR）门面。
 --
--- 分层（Track A 第一/二步）：
+-- 分层：
 --   - `Ir.Model`   ：IR 数据定义（唯一真源）：节点、`IrTy`、binder、共享元数据、单元/程序；
 --   - `Ir.Analysis`：IR 上的纯分析：Kosaraju SCC 分组（决定 `let` / `let rec` 顺序）、
 --                    递归值形状护栏、定义名去重；

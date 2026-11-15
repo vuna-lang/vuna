@@ -1,16 +1,16 @@
 module Vuna.Compiler.Codegen.Term where
 
--- Vuna.Compiler.Codegen.Term：IR → OCaml 文本 + DT 运行时前缀。
+-- IR → OCaml 文本 + DT 运行时前缀。
 --
--- Track A 第一步之后本模块**只消费 IR**（`Vuna.Compiler.Ir`）：擦除判定、表示决策、
--- Nat 折回、内联形态、入口分类都已在 `Codegen.Lower` 完成。这里只剩：
+-- 本模块**只消费 IR**（`Vuna.Compiler.Ir`）：擦除判定、表示决策、
+-- Nat 折回、内联形态、入口分类都在 `Codegen.Lower` 完成。这里只剩：
 --   * 运行时文本常量（`dtRuntime` / 报告器 / 浮点与 tracing helper / List 桥接）；
 --   * `Ir` 节点 → OCaml 文本（含跨单元限定与依赖累积）；
 --   * 分组 → `let` / `let rec ... and ...` 文本；
 --   * main 钩子文本。
 --
--- 没有 fuel：旧实现的 `genTermFuel` 固定 512 步预算随迁移消失（正常源码的嵌套深度
--- 不再触发 `IC_FuelExhausted (codegen)`）。
+-- 没有 fuel：codegen 不按嵌套深度消耗预算（正常源码不会触发
+-- `IC_FuelExhausted (codegen)`）。
 import Base.Sort
 import Base.List
 import Vuna.Compiler.Common
@@ -85,7 +85,7 @@ let dt_show_string s =
   Buffer.contents buf
 ${dtPrimRuntime}"""
 
--- M21：effectful 内建（`prim_*`）的 DT 运行时实现。
+-- effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
 -- `Codegen.Runtime` 的符号表）；`@vuna@prim_eff_getArgs` / `@vuna@prim_eff_readLine` 是零参**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
@@ -94,7 +94,7 @@ ${dtPrimRuntime}"""
 dtPrimRuntime : String
 dtPrimRuntime = ("""type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t
 
-(* W7：bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
+(* bracket 的 abort cleanup 登记表（每纤程一份，LIFO）。
    `prim_effectHandle` 在安装 handler 时记下当前深度 mark；handler 正常返回 /
    抛异常 / 丢弃续延（abort）时，把 mark 之上仍未弹出的 cleanup 逐个执行——这些
    正是被丢弃的续延里打开的 bracket。纤程用 `dtp_cleanup_fiber` 区分（调度器在
@@ -342,13 +342,13 @@ let dtp_net_connect (addr : string) : int =
 """
 ) ++ dtSchedRuntime
 
--- W9：单线程协作式 fiber 调度器（Layer 3）运行时。
+-- 单线程协作式 fiber 调度器运行时。
 -- 纤程 = OCaml 5 一次性续延；调度器在纤程外的循环里决定下一步跑谁，
 -- 挂起经私有运行时效应（SchedYield/SchedAwait/SchedWaitScope*）。任务体是
 -- `Eff Nil a`；Base.EffSched 经隐藏 intrinsic 调用 dtp_sched_* 原语。
 dtSchedRuntime : String
 dtSchedRuntime = """(* ------------------------------------------------------------------ *)
-(* W9: single-threaded cooperative fiber scheduler (Layer 3).          *)
+(* Single-threaded cooperative fiber scheduler.                        *)
 (*                                                                     *)
 (* Fibers are one-shot OCaml 5 continuations captured by the root      *)
 (* Effect.Deep handler installed for every fiber. The scheduler loop   *)
@@ -804,7 +804,7 @@ let dtp_sched_scope_count (id : int) : int =
   (dtp_sched_scope id).sched_completed
 """
 
--- M38：运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
+-- 运行时错误报告器。位置表的键是 OCaml 值名（如 `v_main`）；回栈帧名形如
 -- `Main.v_main`（跨单元调用）或 `Main.v_main.(fun)`（lambda 内联后）。报告器取帧名
 -- 最后一个**非 `(fun)`** 的 '.' 分量查表，渲染成 `main (app/Main.vuna:12)`。
 -- 命中帧最多打印 12 条，未命中帧（如 `Stdlib.failwith`）跳过。
@@ -841,7 +841,7 @@ let dt_report_exn e bt =
 """
 
 -- | 浮点 runtime helper（仅在程序使用 Float 时追加；见 `dtRuntimeWith`）。单独的文本块
--- 保证 no-float 程序的 `Vuna_runtime.ml` 与加 Float 之前逐字节一致（bootstrap/缓存）。
+-- 让不用 Float 的程序 `Vuna_runtime.ml` 逐字节稳定（bootstrap 固定点与缓存都依赖这一点）。
 dtFloatRuntime : String
 dtFloatRuntime = """let bi_add_float (a : float) (b : float) = a +. b
 let bi_sub_float (a : float) (b : float) = a -. b
@@ -1350,14 +1350,10 @@ inlineText "natMul" ([a, b]) = Just "(bi_natMul ${a} ${b})"
 inlineText "natDiv" ([a, b]) = Just "(bi_natDiv ${a} ${b})"
 inlineText _ _ = Nothing
 
--- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器。
--- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
--- `usesFloat` / `usesTrace` 为 False 时对应 helper 不出现：不用 Float/tracing 的程序
--- runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
 -- 运行时文本 = 既有常量部分（`dtRuntime`） + 注入的定义位置表 + 报告器 + 按需 helper。
 -- `dt_def_locs` 必须定义在报告器之前（报告器读它）；空表写成 `[]`。
 -- `usesFloat` / `usesTrace` / `usesObs` 为 False 时对应 helper 不出现：不用 Float /
--- tracing / 观测的程序 runtime 与引入该功能前**逐字节一致**（旧 seed 固定点/缓存关键）。
+-- tracing / 观测的程序 runtime 逐字节稳定（产物身份与缓存都依赖这一点）。
 export dtRuntimeWith : String -> Bool -> Bool -> Bool -> String
 dtRuntimeWith locs usesFloat usesTrace usesObs =
   dtRuntime
@@ -1367,7 +1363,7 @@ dtRuntimeWith locs usesFloat usesTrace usesObs =
     ++ (if usesTrace then dtTraceRuntime else "")
     ++ (if usesObs then dtObsRuntime else "")
 
--- M19 / M22.2：`strUnpack` / `strPack` 的运行时桥接。
+-- `strUnpack` / `strPack` 的运行时桥接。
 -- Core 的 `strUnpack` 语义是「OCaml int list」，而 DT 路径里 `List` 是程序自己声明的
 -- 归纳族。这些 helper 按实际族名生成，把 int list ↔ 族构造子互转；Lowering 把
 -- `strUnpack`/`strPack` 的契约条目带 `irRtBridgesList = True`（桥接只服务 Int 元素）。
@@ -1416,7 +1412,7 @@ let dtp_substTemplate tmpl xs =
 
 -- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。
 -- `norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见 `Codegen.Split`）。
--- C51（确定性）：增量路径的干净模块从接口复用，位置行来自接口里持久化的
+-- 确定性：增量路径的干净模块从接口复用，位置行来自接口里持久化的
 -- `miDefLocs`；两条路径的拼接顺序不同，所以这里把行**按文本排序**再拼接——
 -- 全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。
 export dtDefLocTable : (String -> String) -> List (Pair String (Pair String Int)) -> String
@@ -1858,7 +1854,7 @@ genDef st d = case irDefExtern d of
 -- ---------------------------------------------------------------
 -- main 的类型拆解（动作 vs 普通值）、展示函数、动作行 handler 列表都在 Lowering 决策；
 -- 这里只按固定模板把名字渲染进文本。返回文本以换行开头，调用方直接接在正文之后。
--- M38：动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
+-- 动作整体包进 `try`——未捕获异常交给运行时报告器（dt_report_exn）打印
 -- "vuna: runtime error: ..." + 命中的 vuna 位置帧，然后 exit 2（不再是 OCaml 的
 -- Fatal error 形态）。try 只包 main 这一处，不碰 lambda，尾调不受影响。
 export genEntryHook : GenSt -> IrEntry -> Bool -> Check (Pair String (List String))

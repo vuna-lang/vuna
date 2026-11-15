@@ -2,13 +2,11 @@ module Vuna.Compiler.Elab.InstCoherence where
 
 -- Vuna.Compiler.Elab.InstCoherence：实例的一致性（coherence）判定。
 --
--- 从 `Elab/Trait.vuna` 抽出：实例头判重（duplicate / overlap）与重叠判定所需的
--- α-等价 / 头合一工具。抽取动机有两条：
---   1. `Elab/Trait.vuna` 已顶到 `nix/context.budget` 的 max_module_lines，新规则
---      （blanket fallback）需要独立落点；
---   2. coherence 规则本身是一个完整主题，独立模块便于与 `Elab/Dict` 的实例搜索对照阅读。
+-- 实例头判重（duplicate / overlap）与重叠判定所需的 α-等价 / 头合一工具。
+-- coherence 规则独立成模块：`Elab.Trait` 不承担这部分，也便于与 `Elab.Dict` 的实例
+-- 搜索对照阅读。
 --
--- **blanket 实例**（M36）：头实参是裸类参数的实例，例如
+-- **blanket 实例**：头实参是裸类参数的实例，例如
 --
 --   instance Show a => Interp a where interp x = show x
 --
@@ -23,7 +21,7 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types
 
 -- 实例冲突：精确重复（同 head，modulo tele 改名）优先，其次“可合一但不同”= 重叠。
--- M30（B22）：名字 = 单类前缀 + **完整 head 名**，所以不同 head（含不同模块的同名 data）
+-- 名字 = 单类前缀 + **完整 head 名**，所以不同 head（含不同模块的同名 data）
 -- 必然得到不同名字；名字判重只可能命中「同类同 head」或「不同类恰好同短名 + 同 head」
 -- （后者本就无法生成两个不同的 dict 符号，显式报 duplicate 比静默丢一个更好）。
 -- coherence 的语义真源仍是下面的 head 判定（`anyInstanceExact`/`anyInstanceOverlap`）。

@@ -1,17 +1,16 @@
 -- | 编译器身份：二进制指纹与缓存 tag 的唯一来源。
 module Vuna.Compiler.Fingerprint where
 
--- Vuna.Compiler.Fingerprint：编译器缓存键里的「编译器身份」段。
+-- 编译器缓存键里的「编译器身份」段。
 --
--- 为什么需要单独一个模块：`check` 缓存、`split` 缓存、codegen 单元缓存、AST 缓存、
--- iface 目录分桶都需要同一段身份，而它们分布在 `Driver.Compile` / `Driver.PerfCache` /
--- `Loader.Flatten` 三个模块里。此前 `Compile` 与 `PerfCache` 各自复制了一份实现，
--- `Flatten` 干脆没有（AST key 不含编译器指纹 ⇒ 换编译器后仍读旧 AST，debt C48）。
--- 现在只有一个实现，任何新增缓存都必须用它。
+-- `check` 缓存、`split` 缓存、codegen 单元缓存、AST 缓存与
+-- iface 目录分桶都要求同一段身份，且消费方分布在 `Driver.Compile` / `Driver.PerfCache` /
+-- `Loader.Flatten`。这里只有一个实现，任何新增缓存都必须用它
+-- （AST key 不含编译器指纹时，换编译器后会读到不符的 AST）。
 --
--- 口径：**可执行文件自身**的路径 + 大小 + mtime（M38）。不用 `getArgs` 的第一个参数：
--- 旧实现把子命令名（如 `test`）当路径，cwd 里恰好有同名目录时 `readFile` 会抛
--- `Failure("readFile: ...")`——`vuna test` 在包根直接崩溃即此。store 路径 + size + mtime
+-- 口径：**可执行文件自身**的路径 + 大小 + mtime。不能用 `getArgs` 的第一个参数：
+-- 那样会把子命令名（如 `test`）当路径，cwd 里恰好有同名目录时 `readFile` 会抛
+-- `Failure("readFile: ...")`。store 路径 + size + mtime
 -- 足以区分重新构建的编译器。
 --
 -- env/stat 是宿主动作，显式 `Eff []`。

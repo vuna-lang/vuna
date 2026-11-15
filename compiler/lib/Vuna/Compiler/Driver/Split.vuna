@@ -1,14 +1,14 @@
 module Vuna.Compiler.Driver.Split where
 
--- Vuna.Compiler.Driver.Split：分离编译的输出文件模型与构建脚本生成。
+-- 分离编译的输出文件模型与构建脚本生成。
 --
 -- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容 +
 -- 该单元的直接依赖单元名）；本模块负责落盘并生成**分层并行**的增量构建脚本：
---   - C35：跨单元引用改为全限定 OCaml 名字后，每个单元只依赖它真正引用的前序单元，
---     依赖图不再退化为「open 全部前序」的全序链；
+--   - 跨单元引用用全限定 OCaml 名字，每个单元只依赖它真正引用的前序单元，
+--     依赖图不退化为「open 全部前序」的全序链；
 --   - 分层由 vuna 侧预先算好（splitLayers：depth(u) = 1 + max(depth(dep))，无依赖
 --     depth = 0）：同层单元互不依赖，脚本逐层编译、层内多单元用后台任务并行；
---   - 增量判据 = 本单元 .ml/.mli + **直接依赖** 的 .stamp 内容哈希（M30/D15：同输入
+--   - 增量判据 = 本单元 .ml/.mli + **直接依赖** 的 .stamp 内容哈希（同输入
 --     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
@@ -35,7 +35,7 @@ splitText (SplitFile name text deps) = text
 splitDeps : SplitFile -> List String
 splitDeps (SplitFile name text deps) = deps
 
--- M4（效果显式化）：落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
+-- 落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
 export writeSplitFiles : String -> List SplitFile -> Eff hostRow (Check Int)
 writeSplitFiles dir [] = pure (OkC 0)
 writeSplitFiles dir (f :: rest) = do
@@ -46,7 +46,7 @@ writeSplitFiles dir (f :: rest) = do
       _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile "${dir}/${splitName f}" (splitText f))
       pure (OkC (n + 1))
 
--- M30：只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
+-- 只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
 export writeSplitFilesIfChanged : String -> List SplitFile -> Eff hostRow (Check Int)
 writeSplitFilesIfChanged dir [] = pure (OkC 0)
 writeSplitFilesIfChanged dir (f :: rest) = do
@@ -118,8 +118,8 @@ maxInt : Int -> Int -> Int
 maxInt a b = if a > b then a else b
 
 -- 构建脚本；graph 是 (单元名, 直接依赖单元名) 的拓扑序（依赖在前，链接顺序即 graph 顺序）。
--- M33 W5：cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），
--- 由 ocamlopt 编译成 .o 并参与链接；空列表时行为与旧版一致。
+-- cFiles 是包根 `ffi/*.c` 复制到 OUTDIR 后的相对路径（如 `ffi/add.c`），
+-- 由 ocamlopt 编译成 .o 并参与链接；空列表时不编译任何 C 文件。
 -- 并行度由 `$JOBS` 决定（`VUNA_BUILD_JOBS` > `NIX_BUILD_CORES` > `nproc`）：
 --   * 干净构建（没有 .cmx，例如 Nix 构建 seed / stage1）**且 JOBS ≤ 1**：一次 ocamlopt
 --     调用，避免几十次进程启动（单核下分层并行的进程/I/O 开销反而更慢）；
@@ -127,7 +127,7 @@ maxInt a b = if a > b then a else b
 --     .stamp）逐单元编译，单单元层前台、多单元层 `&` 并行 + 逐个 `wait` 收尾。
 export buildScript : List (Pair String (List String)) -> List String -> String
 buildScript graph cFiles = """#!/bin/sh
-# 由 vuna 生成：分离编译构建脚本（C35：按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
+# 由 vuna 生成：分离编译构建脚本（按直接依赖分层并行 + 内容哈希增量）。用法: ./build.sh [OUT]
 # 干净构建且 JOBS<=1：一次 ocamlopt 编译全部 .mli/.ml 并链接；
 # 增量构建：每单元 .ml/.mli 与直接依赖 .stamp 的内容哈希写 $base.stamp，命中即跳过；
 # 同层单元互不依赖：多单元层用后台任务并行编译，层间用 wait 串行。
@@ -234,17 +234,16 @@ joinCmxs [] = ""
 joinCmxs ([name]) = "${name}.cmx"
 joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 
--- M34.5（S5）：把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
--- 排序）。单元缓存复用旧 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
+-- 把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
+-- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。
 --
--- 性能（2026-11）：旧实现在 119 单元的 `compiler` 包上占 `build-warm` 的 ~254 ms/次，
--- 三处叠加的 O(n²)：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 插入排序每次比较重算
--- SHA-256 的 `unitTieKey`；③ 排序结果按名在 `files` 里线性找文件。现在：
+-- 三处叠加的 O(n²) 必须避开：① 迭代松弛每轮对每个依赖线性扫 memo 表；② 插入排序每次
+-- 比较重算 SHA-256 的 `unitTieKey`；③ 排序结果按名在 `files` 里线性找文件。做法：
 --   ① 迭代松弛改用 `HashMap String Int` memo（每轮查找 O(1)，缺失键按 0）；
 --   ② graph 单元 + 全部依赖去重成表，每个名字只算一次 tie key；
 --   ③ `HashMap String SplitFile` 文件名索引。
--- 输出与旧实现一致：depth 是最长路径的同一不动点、稳定插入排序、同 depth 内按
+-- 不变量：depth 是最长路径的不动点、稳定插入排序、同 depth 内按
 -- `unitTieKey` 升序（`<=`）。
 unitTieKey : String -> Int
 unitTieKey name = Vuna.Compiler.Hash.contentKey "t:${name}"
@@ -270,7 +269,7 @@ tieOf ties name = case Base.HashMap.lookup name ties of
   Nothing => 0
 
 -- 迭代松弛到不动点：depth(u) = 1 + max(depth(dep))（无依赖 = 0；dep 不在 graph 按 0）。
--- 每轮用上一轮的 depth 同步更新，与旧实现同一语义；HashMap 让每轮查找 O(1)。
+-- 每轮用上一轮的 depth 同步更新；HashMap 让每轮查找 O(1)。
 maxDepth : HashMap String Int -> List String -> Int
 maxDepth memo [] = 0 - 1
 maxDepth memo (d :: rest) =
@@ -286,7 +285,7 @@ stepDepths memo (p :: rest) =
     md = maxDepth memo (secondOf p)
   in Pair (firstOf p) (if md < 0 then 0 else md + 1) :: stepDepths memo rest
 
--- 与旧 `sameDepthValue next memo` 等价：层表键集固定（graph 的单元名），逐项比同值。
+-- 层表键集固定（graph 的单元名），逐项比同值。
 sameDepthTable : HashMap String Int -> List (Pair String Int) -> Bool
 sameDepthTable memo [] = True
 sameDepthTable memo (p :: rest) =
@@ -299,7 +298,7 @@ else
     next = stepDepths memo graph
   in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (Base.HashMap.fromList next)
 
--- 排序键 = (depth, tieKey)；预计算后比较只碰 Int（旧实现在每次比较里跑 SHA-256）。
+-- 排序键 = (depth, tieKey)；预计算后比较只碰 Int。
 depthEntryLess : Pair (Pair Int Int) String -> Pair (Pair Int Int) String -> Bool
 depthEntryLess a b =
   if firstOf (firstOf a) /= firstOf (firstOf b) then firstOf (firstOf a) < firstOf (firstOf b)
@@ -308,7 +307,7 @@ depthEntryLess a b =
 sortDepthEntries : List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
 sortDepthEntries xs = sortBy depthEntryLess xs
 
--- 文件名索引：查 `${unit}.ml`；非 .ml 项与旧 `findFileNamed` 一样不参与。
+-- 文件名索引：查 `${unit}.ml`；非 .ml 项不参与。
 filesOfDepthEntries : HashMap String SplitFile -> List String -> List SplitFile
 filesOfDepthEntries table [] = []
 filesOfDepthEntries table (unit :: rest) = case Base.HashMap.lookup "${unit}.ml" table of
@@ -339,10 +338,10 @@ normalizeFileDeps : HashMap String Int -> SplitFile -> SplitFile
 normalizeFileDeps ties f = SplitFile (splitName f) (splitText f) (sortDepsByTie ties (splitDeps f))
 
 -- ---------------------------------------------------------------
--- 载荷编码（split 缓存 / 单元缓存共用，C32 收口）
+-- 载荷编码（split 缓存 / 单元缓存共用）
 -- ---------------------------------------------------------------
--- `SplitFile` 是 codegen 的输出模型（文件名 + 文本 + 直接依赖单元名）。落盘走这里，
--- 不再是 `prim_marshal`：文本本身就是产物，显式编码后逐字节稳定，且能被 `Store` 的
+-- `SplitFile` 是 codegen 的输出模型（文件名 + 文本 + 直接依赖单元名）。落盘走这里：
+-- 文本本身就是产物，显式编码后逐字节稳定，且能被 `Store` 的
 -- 内容地址覆盖。
 --
 -- | `SplitFile` 的规范编码：名字 / 文本 / 依赖表。

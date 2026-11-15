@@ -1,7 +1,7 @@
 module Vuna.Compiler.Elab.Termination.Measure where
 
--- Vuna.Compiler.Elab.Termination.Measure（M25.2c 拆分）：DT 终止性判据的共享底座——
--- 基础工具、定义分组、构造子名、size 表、R2 守卫 Int 的正事实、投影分析、调用点关系、
+-- Vuna.Compiler.Elab.Termination.Measure：DT 终止性判据的共享底座——
+-- 基础工具、定义分组、构造子名、size 表、守卫 Int 的正事实、投影分析、调用点关系、
 -- 以及弱边/环检测。入口与 SCC 判定在 `Vuna.Compiler.Elab.Termination`，SCT 在 `.Scc`。
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -37,8 +37,8 @@ posHas f i [] = False
 posHas f i ((Pair g j) :: rest) =
   if f == g then if i == j then True else posHas f i rest else posHas f i rest
 
--- facts 的 O(1) 查找：name → 正位置列表。不动点每轮建一次表（M34：posWalk 逐节点查 facts，
--- 旧实现对每个实参位置线性扫整个 facts 列表，随 def 数增长呈 n²）。
+-- facts 的 O(1) 查找：name → 正位置列表。不动点每轮建一次表（posWalk 逐节点查 facts）；
+-- 逐实参位置线性扫整个 facts 列表会随 def 数增长呈 n²。
 export posTblOf : List (Pair String Int) -> HashMap String (List Int)
 posTblOf xs = posTblOfGo xs (Base.HashMap.fromList [])
 
@@ -76,8 +76,8 @@ export posUnion : List (Pair String Int) -> List (Pair String Int) -> List (Pair
 posUnion [] b = b
 posUnion ((Pair f i) :: rest) b = posUnion rest (posAdd f i b)
 
--- 表版集合操作（M34）：不动点每轮的 filter / 并集 / 相等比较用 name→位置表，
--- 旧实现对每个候选线性扫另一个集合（facts 千级 ⇒ 每轮 O(n²)）。
+-- 表版集合操作：不动点每轮的 filter / 并集 / 相等比较用 name→位置表；
+-- 逐候选线性扫另一个集合在 facts 千级时每轮是 O(n²)。
 export posFilterTbl : List (Pair String Int) -> HashMap String (List Int) -> List (Pair String Int)
 posFilterTbl [] neg = []
 posFilterTbl ((Pair f i) :: rest) neg =
@@ -90,7 +90,7 @@ posSubsetTbl ((Pair f i) :: rest) b = posHasTbl f i b && posSubsetTbl rest b
 posSetEqTbl : List (Pair String Int) -> List (Pair String Int) -> Bool
 posSetEqTbl a b = length a == length b && posSubsetTbl a (posTblOf b) && posSubsetTbl b (posTblOf a)
 
--- 并集：fresh 在前，facts 中不在 fresh 的在后（集合语义与旧 `posUnion facts fresh` 一致）。
+-- 并集：fresh 在前，facts 中不在 fresh 的在后（集合语义与 `posUnion facts fresh` 一致）。
 export posUnionTbl : List (Pair String Int) -> List (Pair String Int) -> List (Pair String Int)
 posUnionTbl facts fresh = append fresh (posFilterTbl facts (posTblOf fresh))
 
@@ -135,7 +135,7 @@ export clausesOfDef : String -> List (Pair String (List (Pair (List Pat) Expr)))
 clausesOfDef name [] = []
 clausesOfDef name ((Pair n cls) :: rest) = if n == name then cls else clausesOfDef name rest
 
--- O(1) 版：终止性检查（SCC / measure）用 name→clauses 表，避免逐 SCC 线性扫全部 defs（M34）。
+-- O(1) 版：终止性检查（SCC / measure）用 name→clauses 表，避免逐 SCC 线性扫全部 defs。
 export clausesOfDefTbl : String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (List Pat) Expr)
 clausesOfDefTbl name tbl = case Base.HashMap.lookup name tbl of
   Just cls => cls
@@ -205,11 +205,11 @@ sizeOfVarStrict name ((Pair n sz) :: rest) =
 
 -- `map (\v => body) lst`：lambda 绑定 v 视为 lst 的元素（更深的子项），
 -- 让 map 回调里的递归/投影参与下降判定。
--- ==== 以下为 2c 恢复的检查器实现（R2 正事实 / 投影 / 调用点关系 / 遍历辅助）====
+-- ==== 检查器实现（正事实 / 投影 / 调用点关系 / 遍历辅助）====
 export guardPosVar : Expr -> Maybe String
 guardPosVar e = case e of
   EApp (EVar op osp) args sp => case opBaseName op of
-    -- M31.1：`<=` / `>=` / `<` 在 Loader 被解析成 `le` / `ge` / `lt` 方法调用，
+    -- `<=` / `>=` / `<` 在 Loader 被解析成 `le` / `ge` / `lt` 方法调用，
     -- 终止性守卫按方法短名识别；裸运算符名保留（Loader 之前的内部生成物）。
     "le" => guardLE args
     "ge" => guardGE args
@@ -260,8 +260,8 @@ argPositive args i sizes caller facts region = case nthExpr args i of
     _ => False
 
 -- 扫描一遍：收集「正规实参」与「非正实参」的 (callee, argIndex) 候选。
--- 扫阶段的累积只做 O(1) 前插，**去重推迟到一轮扫描结束**（M34 冷路径）：
--- 旧实现每标记一个 (callee, argIndex) 就对已累积的整表线性扫一遍（`posAdd`），
+-- 扫阶段的累积只做 O(1) 前插，**去重推迟到一轮扫描结束**（冷路径）：
+-- 每标记一个 (callee, argIndex) 就对已累积的整表线性扫一遍（`posAdd`），
 -- 一轮扫描内累积到数千条 ⇒ O(#标记 × #事实)，是 check 冷路径的最大热点。
 export posMarkPos : String -> Int -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posMarkPos f i st = Pair (Pair f i :: firstOf st) (secondOf st)
@@ -390,7 +390,7 @@ posScanDefs namesTbl defs facts (d :: rest) st =
   posScanDefs namesTbl defs facts rest
     (posScanClauses namesTbl defs facts (firstOf d) (secondOf d) st)
 
--- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs（M34）。
+-- 按名字列表扫描（worklist 不动点用）：只扫受影响的 caller，而不是每轮全量 defs。
 export posScanNames : HashMap String Bool -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List Int) -> List String -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posScanNames namesTbl defTbl factsTbl work st =
   let
@@ -483,9 +483,9 @@ arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
   if isSubOpName op then arithMinus p args sizes caller facts region else Nothing
 arithRel p _ sizes caller facts region = Nothing
 
--- D23：`-` 在 Stage2b 起是 `Base.Num.sub` 的方法别名（Loader 在名字解析前替换），
+-- `-` 是 `Base.Num.sub` 的方法别名（Loader 在名字解析前替换），
 -- 终止性检查里「fuel 递减」只看减法语义，因此两种写法都认。
--- | `-` 的两种写法：内建运算符名与 `Base.Num.sub` 方法投影（D23 别名替换后）。
+-- | `-` 的两种写法：内建运算符名与 `Base.Num.sub` 方法投影（别名替换后）。
 export isSubOpName : String -> Bool
 isSubOpName op = op == "-" || op == "Base.Num.sub"
 

@@ -1,10 +1,9 @@
 module Vuna.Compiler.Driver.CompilerCli where
 
--- Vuna.Compiler.Driver.CompilerCli：编译器自己的 CLI（vuna-compiler）。
+-- 编译器自己的 CLI（vuna-compiler）。
 --
--- M24 起唯一路径是 DT（精化 + 逐模块擦除 codegen）：compile / check / build。
--- M26：包上下文统一——`compile` 与 `build` 都产**目录**（split + build.sh），
--- 不再有 seed 子命令、split 开关与环境根 flag（移除时给出可操作提示）。
+-- 唯一路径是 DT（精化 + 逐模块擦除 codegen）：compile / check / build。
+-- 包上下文统一——`compile` 与 `build` 都产**目录**（split + build.sh）。
 -- 工具命令（lint / interp / test / fmt / repl / doc）在 Vuna.Cli。
 --
 -- 效果显式化：命令分发后的执行、打印/诊断/警告、workspace 并行 spawn/wait、recovery
@@ -57,7 +56,7 @@ mapEff f (x :: rest) = do
 export runCompilerCli : List String -> Eff hostRow Int
 runCompilerCli args = runCompilerCliFor "vuna-compiler" args
 
--- CLI 选项集中状态：入口构造一次，命令链显式传递（M4：不再有 ambient 存储）。
+-- CLI 选项集中状态：入口构造一次，命令链显式传递（没有 ambient 存储）。
 record CliOpts where
   optDiagFormat : String
   optDiagLang : String
@@ -85,7 +84,7 @@ defaultCliOpts =
 markRelease : CliOpts -> CliOpts
 markRelease o = { o | optRelease = True }
 
--- | 选择后端目标；M1 只允许 ocaml | wasm。
+-- | 选择后端目标：ocaml | wasm | native。
 markTarget : String -> CliOpts -> CliOpts
 markTarget t o =
   CliOpts o.optDiagFormat o.optDiagLang o.optLangExplicit o.optDenyWarnings o.optShowWarnings
@@ -478,8 +477,7 @@ removedCommand prog cmd hint = do
   pure 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
--- flag 名用「两条横线 + 名字」拼接：M26 验收要求源码中不再出现已删除 flag 的字面量
--- （尤其环境根 flag），同时保留可操作提示。
+-- flag 名用「两条横线 + 名字」拼接，源码里不出现这些 flag 的字面量。
 dashFlag : String -> String
 dashFlag name = "--${name}"
 
@@ -539,9 +537,8 @@ else do
 collectSarifIn : CliOpts -> Diagnostic -> CliOpts
 collectSarifIn o d = { o | optSarifItems = append o.optSarifItems [d] }
 
--- 从尾到头逐条输出诊断（丢弃退出码），累积更新后的 opts。旧代码里的
--- `_ = map f xs` 依赖 `f x :: map f rest` 的右侧优先求值，打印/收集顺序是从尾到头；
--- 这里保持逐字不变。
+-- 从尾到头逐条输出诊断（丢弃退出码），累积更新后的 opts。`_ = map f xs` 依赖
+-- `f x :: map f rest` 的右侧优先求值，打印/收集顺序是从尾到头；这里保持该顺序。
 emitDiagRevSeq : CliOpts -> String -> List Diagnostic -> Eff hostRow CliOpts
 emitDiagRevSeq o extra [] = pure o
 emitDiagRevSeq o extra (d :: rest) = do
@@ -724,9 +721,9 @@ checkPkgDir dir o = do
     ErrC e => printDiag o e
     OkC pkgs => checkPackages pkgs 0 o
 
--- M30：workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不再被
+-- workspace 是检查单元——根包 + [workspace].members 逐个检查，成员错误不被
 -- 根 check 忽略。错误带 `[包名]` 前缀；全部跑完再汇总退出码。
--- M34.4：多包 workspace 并行（成员包各一个 `vuna check <dir>` 子进程；根包在当前进程
+-- 多包 workspace 并行（成员包各一个 `vuna check <dir>` 子进程；根包在当前进程
 -- 串行）。根包目录就是 workspace 根，spawn 它会再展开整个 workspace ⇒ 递归，所以按
 -- `workspacePackages <dir>` 是否返回多包区分根 / 成员；单包目录的子进程只查自己。
 -- 子进程继承 stdout/stderr（错误可能交错），退出码按失败汇总。
@@ -813,7 +810,7 @@ checkPackageSeq : Package -> Int -> CliOpts -> Eff hostRow (Pair Int CliOpts)
 checkPackageSeq pkg code o =
   let
     o1 = applyDiagConfig (Just pkg) o
-    -- M45：warning 需要本包模块重新精化（warning 不持久化）；-W / --deny-warnings 时
+    -- warning 需要本包模块重新精化（warning 不持久化）；-W / --deny-warnings 时
     -- 跳过 check 缓存与干净模块复用（依赖仍走接口摘要）。
     wantWarnings = o1.optShowWarnings || o1.optDenyWarnings
   in do
@@ -851,7 +848,7 @@ checkFileEntry path o = do
         moduleEntry <- isModuleFileEntry ctx path
         if moduleEntry then checkModuleFileEntry ctx path o1 else checkEntryFile ctx path o1
 
--- M45：带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
+-- 带 `module` 头、且**不是**当前包入口的文件按库模块检查。包入口保持入口语义
 -- （它的 module 头仍报 `LD_ModuleHeaderInEntryFile`，与包级 check 一致）；无头文件走入口。
 isModuleFileEntry : PackageContext -> String -> Eff hostRow Bool
 isModuleFileEntry ctx path = do
@@ -907,7 +904,7 @@ checkEntryFile ctx path o = do
 -- ---------------------------------------------------------------
 -- build：包级逐模块 codegen 到 DIR（默认 <PKG-DIR>/.output），再跑 build.sh 链接到
 -- DIR/bin/<包名>；--no-compile 只做 codegen 不链接。
--- M30：workspace 根 = 构建单元（所有可执行成员各建到自己的 .output 或 DIR/<包名>；
+-- workspace 根 = 构建单元（所有可执行成员各建到自己的 .output 或 DIR/<包名>；
 -- 库成员只检查）；--package NAME 只建指定包（Nix 构建根包用，避免重复构建成员）。
 -- build meta（同哈希跳过）见 Vuna.Compiler.Driver.Compile。
 -- ---------------------------------------------------------------

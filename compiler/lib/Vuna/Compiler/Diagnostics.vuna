@@ -1,6 +1,6 @@
 module Vuna.Compiler.Diagnostics where
 
--- Vuna.Compiler.Diagnostics：错误码体系门面（M30 B19 拆分后保留原名字集合）。
+-- 错误码体系门面。
 --
 -- 把诊断的「标识 + 模板 + arity」从「字符串字面量 + 就近 `-- @code` 注释」收拢为
 -- **域枚举 + 构造子携带模板**。三个不变量：
@@ -16,17 +16,17 @@ module Vuna.Compiler.Diagnostics where
 --
 -- 约定：
 -- - 符号语义稳定、**只增不删**；同语义多处共享一个构造子（不再「同规则不同码」）。
--- - 一个码只承载**一种**语义。旧 `TC_OpOnlyIntString` / `TC_CtorError` 各自混了两种消息，
---   已拆开（`OpOnlyIntString` / `NotTraitMethod` / `OpNotDefinedFor`；
---   `CtorWrongIndices` / `CtorError`）。
+-- - 一个码只承载**一种**语义：混了两种消息时就拆码
+--   （`OpOnlyIntString` / `NotTraitMethod` / `OpNotDefinedFor`；
+--   `CtorWrongIndices` / `CtorError` 各自独立）。
 -- - 占位符 `<k>` 每个只出现一次（`substTemplate` 按序号单次替换）；需要同一实参出现两处时
 --   用两个序号并传两次（如 `WhereNeedsSig`）。
 -- - `DT: internal:`（编译器内部不变量）不占符号，仍走裸字符串，不经本模块。
--- - 旧 `DT: ` 消息前缀已删除（`[CODE]` 已承载阶段信息）。
+-- - 消息不带 `DT: ` 前缀：`[CODE]` 已承载阶段信息。
 --
--- 分层（M30 B19）：本门面只做**整模块重导出**，实现按域拆到
+-- 分层：本门面只做**整模块重导出**，实现按域拆到
 -- `Diagnostics.Common`（共享拼装 helper）、`Diagnostics.Tc`（TC_）、`Diagnostics.Cg`（CG_）；
--- 对外名字集合与拆分前逐项一致，调用点零改动。
+-- 对外名字集合是下面三个模块的并集，调用点只认本门面。
 -- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
 -- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
 export import Vuna.Compiler.Common

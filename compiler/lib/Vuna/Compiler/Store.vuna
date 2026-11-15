@@ -1,26 +1,25 @@
 -- | 缓存载荷的**唯一存储层**：自描述 framing v2 + 原子写 + 目录布局。
 module Vuna.Compiler.Store where
 
--- Vuna.Compiler.Store：磁盘缓存载荷的统一存储层（C32 收口 / D-Q2）。
+-- 磁盘缓存载荷的统一存储层。
 --
--- 背景：`check` / `split` / `split-units` / `ast` / `iface` 五类载荷过去各自
--- `prim_marshal` + 裸写盘，再在 `CacheFormat` 外层套一层 framing。Marshal 的字节是
--- 「本编译器内存表示」的函数（随字段顺序 / OCaml 版本漂移），且损坏时只能靠
--- `Marshal.from_string` 抛异常——语言里没有 try/catch，进程只能崩。
+-- 缓存字节不能是「本编译器内存表示」的函数（随字段顺序 / 运行时版本漂移），
+-- 损坏时也不能只能靠宿主异常——语言里没有 try/catch，进程只能崩。
+-- 因此 `check` / `split` / `split-units` / `ast` / `iface` 五类载荷一律走这一层：
 --
--- 现在的格式（framing v2）：
+-- 格式（framing v2）：
 --
 --   vuna-cache-frame 2|<tag>|<codec>|<payload 字节数>|<payload 内容地址>\n<payload>
 --
---   - magic   : 格式版本（本模块变更即 bump；旧文件自然拒绝）
---   - tag     : 各缓存自己的 schema / 编译器指纹；版本不符即拒绝旧缓存（无兼容义务）
+--   - magic   : 格式版本（本模块变更即 bump；版本不符即拒绝）
+--   - tag     : 各缓存自己的 schema / 编译器指纹；版本不符即拒绝（无兼容义务）
 --   - codec   : `<名字> <版本>`，声明载荷的编码族与版本；读侧按它选解码器，
---               不匹配即拒绝（杜绝「用旧布局解新载荷」）
+--               不匹配即拒绝（不会用一套布局去解另一套载荷）
 --   - 长度    : 精确字节数（截断 / 追加都拒绝）
 --   - 内容地址: `Hash.contentAddress payload`（4-lane 预折叠 + SHA-256，64 位十六进制）。
 --               任意单字节改动都会改变它；构造性「同长同地址」不可行。
 --
--- 载荷本身是 `Payload.*` 的**显式规范编码**（自定界原子文法，见 `Canonical.Bytes`），
+-- 载荷本身是**显式规范编码**（自定界原子文法，见 `Canonical.Bytes` / `Canonical.*`），
 -- 不随编译器 / OCaml 运行时版本漂移。读侧只在 framing 全部通过后才解码。
 --
 -- 读侧校验强度分两档（`storeDecode` / `storeDecodeFast`）：
@@ -39,7 +38,7 @@ import Base.List
 import Base.String
 import Base.HostRow
 
--- | framing 版本串；格式变更即 bump（旧文件自然拒绝，不做迁移）。
+-- | framing 版本串；格式变更即 bump（版本不符即拒绝，不做迁移）。
 export storeMagic : String
 storeMagic = "vuna-cache-frame 2"
 
@@ -176,9 +175,8 @@ storeDataRootEff = do
         tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
         pure (if tmp == "" then "/tmp/vuna-store" else "${tmp}/vuna-store")
 
--- | 缓存根 = **对象库根**。历史上是独立的临时缓存根（`$TMPDIR/vuna-cache`，
--- `VUNA_CACHE_DIR` 可覆盖）；合并后只有一棵树：包对象、header、lex、split/unit、
--- 会话索引都在 `$VUNA_STORE` 下，GC 与 roots 才有唯一口径。
+-- | 缓存根 = **对象库根**：包对象、header、lex、split/unit 与 roots
+-- 都在 `$VUNA_STORE` 下，GC 与 roots 只有唯一口径。
 export storeCacheBaseEff : Eff hostRow String
 storeCacheBaseEff = storeRootReadyEff
 
@@ -510,8 +508,8 @@ mergeRootLines lines [] = lines
 mergeRootLines lines (d :: rest) = mergeRootLines (insertRootLine d lines) rest
 
 -- | 追加受保护摘要。布局 = `roots/<project>/<digest>`，每个摘要一个文件：
--- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。旧布局
--- `roots/<project>`（单文件）在读取侧兼容，写侧只写新布局。
+-- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。读取侧同时接受
+-- `roots/<project>` 单文件布局，写侧只写目录布局。
 export storeRootAppendEff : String -> List String -> Eff hostRow Int
 storeRootAppendEff projectId digests = do
   dir <- storeRootsPathEff projectId
@@ -520,7 +518,7 @@ storeRootAppendEff projectId digests = do
     isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory dir)
     if isDir then writeRootFiles dir digests
     else do
-      -- 旧布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
+      -- 单文件布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
       text <- raiseToRow hostRow (@vuna@prim_eff_readFile dir)
       _ <- raiseToRow hostRow (@vuna@prim_eff_removeFile dir)
       _ <- storeEnsureDirEff dir
@@ -538,7 +536,7 @@ writeRootFiles dir (d :: rest) = do
   n <- writeRootFiles dir rest
   pure (n + 1)
 
--- | 读一个项目的 root 摘要：新布局（目录）逐文件读；旧布局（单文件）逐行读。
+-- | 读一个项目的 root 摘要：目录布局逐文件读；单文件布局逐行读。
 export storeRootLoadEff : String -> Eff hostRow (List String)
 storeRootLoadEff projectId = do
   path <- storeRootsPathEff projectId
@@ -561,7 +559,7 @@ storeRootProjectListEff = do
     isDir <- dirReady dir
     if isDir then raiseToRow hostRow (@vuna@prim_eff_readDir dir) else pure []
 
--- | 删除一个项目的 roots（新布局目录 / 旧布局文件都清）。
+-- | 删除一个项目的 roots（目录布局与单文件布局都清）。
 export storeRootRemoveEff : String -> Eff hostRow Int
 storeRootRemoveEff projectId = do
   path <- storeRootsPathEff projectId

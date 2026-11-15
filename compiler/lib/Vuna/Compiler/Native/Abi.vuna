@@ -1,6 +1,6 @@
 module Vuna.Compiler.Native.Abi where
 
--- Vuna.Compiler.Native.Abi：x86-64 SysV 的调用约定、栈帧、字符串对象布局、稳定命名（M2）。
+-- x86-64 SysV 的调用约定、栈帧、字符串对象布局、稳定命名。
 --
 -- 平台契约（见 docs/reference/native.md）：
 --   * 参数寄存器按序 rdi, rsi, rdx, rcx, r8, r9；返回 rax；
@@ -9,8 +9,8 @@ module Vuna.Compiler.Native.Abi where
 --   * 生成代码只使用 caller-saved 寄存器，不碰 rbx/r12-r15；
 --   * 名字由 Vuna 全限定名派生，转义成 `[A-Za-z0-9_]`，不按位置编号。
 --
--- M2 值表示：
---   * `Int` / `Nat` 仍是 63-bit 有符号；
+-- 值表示：
+--   * `Int` / `Nat` 是 63-bit 有符号；
 --   * `String` 值是**指向长度头的指针**：`[ptr]` = 字节数（i64），`[ptr+8 ..]` = 字节；
 --     字符串不可变，所有构造都分配新对象；
 --   * 堆是 `.bss` 里的一段固定缓冲 + 一个 bump 指针（无 GC/RC；耗尽即 trap OOM）。

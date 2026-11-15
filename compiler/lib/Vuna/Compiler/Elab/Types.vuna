@@ -3,23 +3,23 @@ module Vuna.Compiler.Elab.Types where
 -- Vuna.Compiler.Elab.Types：Elab 的数据定义与共享状态：DtDef/DtCtor/DtData/DtGoal/DtClass/DtInst/Constraint/DtProgram
 -- 等精化结果、Ec 环境与 Ctx 局部上下文、以及「上下文环境求值 / 索引精化代入」的基础设施。
 -- 数据定义只在这里（叶子模块），其余模块只做模式匹配与访问器调用。
--- 拆自 M24 的单一 `Elab.vuna`（按真实调用图切；门面仍是 `Vuna.Compiler.Elab`）。
+-- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
 import Vuna.Compiler.Frontend.Ast
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
--- M28：`DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有
--- 运行时定义体（决策 5 / D10）。类型层引用合法；运行时位置的使用由擦除检查报
+-- `DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有
+-- 运行时定义体。类型层引用合法；运行时位置的使用由擦除检查报
 -- `CG_AxiomAtRuntime`。`dtDefBody` 因此返回 `Maybe Term`。
--- M29（A14）：末位带**来源 span**——顶层 DFun/DAxiom 用子句 span；instance 生成的
+-- 末位带**来源 span**——顶层 DFun/DAxiom 用子句 span；instance 生成的
 -- 字典定义用 instance 声明 span；trait 方法投影用 trait 声明 span；其它生成项（无来源）
 -- 给 `Nothing`。codegen/擦除诊断据此把 `file:line:col:` 前缀补上。
 export data DtDef(..) : Type where
   DtDef : String -> Term -> Term -> Maybe Span -> DtDef
   DtAxiom : String -> Term -> Maybe Span -> DtDef
-  -- M33 W5：受限 FFI：签名 + C 符号名，运行时由生成代码的 OCaml `external` 提供。
+  -- 受限 FFI：签名 + C 符号名，运行时由生成代码的 OCaml `external` 提供。
   DtExtern : String -> Term -> String -> Maybe Span -> DtDef
 
 export dtDefName : DtDef -> String
@@ -48,13 +48,13 @@ export dtDefExtern : DtDef -> Maybe String
 dtDefExtern (DtExtern name ty cName span) = Just cName
 dtDefExtern _ = Nothing
 
--- 来源 span（A14 唯一读入口）：诊断在 def 粒度补 `file:line:col:` 前缀；`Nothing` 时保持无位置。
+-- 来源 span（唯一读入口）：诊断在 def 粒度补 `file:line:col:` 前缀；`Nothing` 时保持无位置。
 export dtDefSpan : DtDef -> Maybe Span
 dtDefSpan (DtDef name ty body span) = span
 dtDefSpan (DtAxiom name ty span) = span
 dtDefSpan (DtExtern name ty cName span) = span
 
--- M14：一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
+-- 一个构造子。telescope 是「族参数 + 字段」的完整 binder 表（名字 / 擦除标志），
 -- 类型项是闭合的（`{n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a` 形态）。
 export record DtCtor(..) where
   dtCtorName : String
@@ -75,7 +75,7 @@ dtCtorTelescope (DtCtor name family tele ty sp) = tele
 export dtCtorType : DtCtor -> Term
 dtCtorType (DtCtor name family tele ty sp) = ty
 
--- | R2（records-v2）：一条 record 字段的 Core 元数据（名字 / 声明序号 / 字段类型）。
+-- | 一条 record 字段的 Core 元数据（名字 / 声明序号 / 字段类型）。
 -- `dtFieldType` 处在**外层上下文**（只剩族参数）里：构造子 telescope 的字段域已按
 -- 序号 shift 掉前序字段 binder（record 字段类型不能引用前序字段），因此投影时
 -- `eval (reverse idxs) dtFieldType` 即可，无需 `@vuna@record@dep` 占位值。
@@ -84,20 +84,20 @@ export record DtFieldMeta(..) where
   dtFieldIndex : Int
   dtFieldType : Term
 
--- M14：一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
+-- 一个归纳族（索引族）。params 来自 kind 的 Pi binder（域是宇宙的擦除）。
 export record DtData(..) where
   dtDataName : String
   dtDataParams : List (Pair String Rig)
   dtDataCtors : List DtCtor
   dtDataKind : Term
-  -- M42：`deriving via field` 列出的类（canonical 名）；空 = 普通 data。
+  -- `deriving via field` 列出的类（canonical 名）；空 = 普通 data。
   dtDataViaClasses : List String
-  -- M38：`lin data` / `lin record` 声明；线性族的值必须由 quantity 1 的 binder 绑定。
+  -- `lin data` / `lin record` 声明；线性族的值必须由 quantity 1 的 binder 绑定。
   dtDataLinear : Bool
   dtDataRepr : ReprTier
-  -- R2：record 字段表（名字 → 序号 → 外层字段类型）；普通 data 为空表。
+  -- record 字段表（名字 → 序号 → 外层字段类型）；普通 data 为空表。
   dtDataFields : List DtFieldMeta
-  -- R4（records-v2）：该族是否由 `record` 声明。record 在 Core 仍带合成位置构造子
+  -- 该族是否由 `record` 声明。record 在 Core 仍带合成位置构造子
   -- （服务 TMk/eval/codegen），但表示推断 / via-field / HasField / OCaml record 判定
   -- 都按这个标记区分，不再靠 `dtDataFields` 非空猜（零字段 record 也有独立身份）。
   dtDataIsRecord : Bool
@@ -117,22 +117,22 @@ dtDataViaClasses (DtData name params ctors kind viaClasses lin repr fields isRec
 
 export dtDataLinear : DtData -> Bool
 
--- | R1（records-v2）：表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
+-- | 表示档位（`ReprAuto` = 未声明，回落自动去装箱推断；档位进 iface，下游与 FFI 可依赖）。
 export dtDataRepr : DtData -> ReprTier
 dtDataRepr (DtData name params ctors kind viaClasses lin repr fields isRec) = repr
 
--- | R2：record 字段表（普通 data 为空）。进 iface（`miCached`），跨包字段访问据此查表。
+-- | record 字段表（普通 data 为空）。进 iface（`miCached`），跨包字段访问据此查表。
 export dtDataFields : DtData -> List DtFieldMeta
 dtDataFields (DtData name params ctors kind viaClasses lin repr fields isRec) = fields
 
--- | R4：该族是否由 `record` 声明（`data` 与字典族为 False）。
+-- | 该族是否由 `record` 声明（`data` 与字典族为 False）。
 export dtDataIsRecord : DtData -> Bool
 dtDataIsRecord (DtData name params ctors kind viaClasses lin repr fields isRec) = isRec
 
 dtDataLinear (DtData name params ctors kind viaClasses lin repr fields isRec) = lin
 
--- M15：一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
--- M40：`dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。
+-- 一个洞的目标。编号、位置、目标类型（level 形态）、绑定时上下文快照。
+-- `dtGoalName` 是洞的显示名（`_` = 匿名 → `""`；`?name` → `"?name"`）。
 export record DtGoal(..) where
   dtGoalMeta : Int
   dtGoalSpan : Span
@@ -140,7 +140,7 @@ export record DtGoal(..) where
   dtGoalCtx : List (Pair String Term)
   dtGoalName : String
 
--- M15：接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
+-- 接口（trait）声明。参数名表、方法（名字 + 完整投影类型项）。
 export record DtClass(..) where
   dtClassName : String
   dtClassParams : List String
@@ -152,8 +152,8 @@ export record DtClass(..) where
 export dtClassName : DtClass -> String
 dtClassName (DtClass name params projs fieldTys spans) = name
 
--- M15：已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
--- M23：`as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
+-- 已注册实例：定义名 + 实例头类型项（`Show Int` 这类闭合项）+ 是否命名实例。
+-- `as name` 的命名实例**不参与**自动实例搜索（只能 `@name` 选中，与 HM 一致），
 -- 否则 `instance Pretty Color` 与 `instance Pretty Color as fancy` 会撞成歧义。
 export record DtInst(..) where
   dtInstName : String
@@ -175,7 +175,7 @@ flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
 flattenTaggedApp (TGlobal g) = Just (Pair g [])
 flattenTaggedApp _ = Nothing
 
--- S5a：实例登记表（`Ec.ecInsts` 的字段类型）。
+-- 实例登记表（`Ec.ecInsts` 的字段类型）。
 --   - `instsList` 是**权威**表：登记序，实例搜索按此序做 specific→blanket 两阶段；
 --   - `instsByFamily` 是**派生索引**：键 = 实例头族名（`Dict_<类>`），桶内保登记序；
 --     只用来把「搜索某个字典族的实例」的候选从全表缩到同族。
@@ -223,11 +223,11 @@ instStoreFamily store fam = case Base.HashMap.lookup fam store.instsByFamily of
   Nothing => []
 
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
--- 已声明的归纳族（M14：case 精化需要知道族的构造子 telescope）。
--- M22：`dgoals` 是延迟的字典约束——类参数未解时延迟成裸元变量，解后由 `resolveDictGoals` 回填。
--- S4：统一约束存储。`Constraint` 同时承载字典目标与行成员目标（kind 区分），带稳定 id、
--- 延迟点 span 与创建深度（诊断/作用域检查用；C3 起由延迟点填）。`csPending` 保持旧
--- 旧 `ecDictGoals` 的列表顺序语义（尾部 append、旋转），`csNextId` 只用于分配 id。
+-- 已声明的归纳族（case 精化需要知道族的构造子 telescope）。
+-- `dgoals` 是延迟的字典约束——类参数未解时延迟成裸元变量，解后由 `resolveDictGoals` 回填。
+-- 统一约束存储。`Constraint` 同时承载字典目标与行成员目标（kind 区分），带稳定 id、
+-- 延迟点 span 与创建深度（诊断/作用域检查用；由延迟点填）。`csPending` 保持
+-- 字典目标的列表顺序语义（尾部 append、旋转），`csNextId` 只用于分配 id。
 -- | 延迟约束的类别：`CkDict` 是字典目标，`CkRow` 是行成员（效应）目标。
 export data ConstraintKind(..) : Type where
   CkDict : ConstraintKind
@@ -242,11 +242,11 @@ export record Constraint(..) where
   conSpan : Maybe Span
   conDepth : Int
 
--- | 统一约束存储：待处理约束列表（保持旧字典目标的顺序语义）、下一个 id、id 到尝试 epoch 的记录。
+-- | 统一约束存储：待处理约束列表（保持字典目标的顺序语义）、下一个 id、id 到尝试 epoch 的记录。
 export record ConstraintStore where
   csPending : List Constraint
   csNextId : Int
-  -- C4（epoch）：conId ↦ 上次尝试时的解表长度。只有解表增长才值得重试；没有进展的
+  -- conId ↦ 上次尝试时的解表长度。只有解表增长才值得重试；没有进展的
   -- 目标在 program-level 每轮被跳过（仍留在 pending 里，供定义收尾 lift 用）。
   csTried : List (Pair Int Int)
 
@@ -254,7 +254,7 @@ export record ConstraintStore where
 export csEmpty : ConstraintStore
 csEmpty = ConstraintStore [] 0 []
 
--- M30（D18）末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
+-- 末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
 --   - `ecCtorTbl : HashMap String DtCtor`：构造子名 → DtCtor。`elabDatas` 之后建一次
 --     （`ctorTblOfDatas`），`ecAddData` 增量插入；查不到时 `dtCtorLookupEc` 回落
 --     `dtCtorLookup name (ecDatas ec)`，所以任何阶段的表不完整都只影响速度；
@@ -268,10 +268,10 @@ export record Ec(..) where
   ecDatas : List DtData
   ecDepthOfMeta : List (Pair Int Int)
   ecGoals : List DtGoal
-  -- S5a：实例表是 `InstStore`（权威列表 + 按头族索引），字段数不变 ⇒ 位置模式无需改动。
+  -- 实例表是 `InstStore`（权威列表 + 按头族索引）。
   ecInsts : InstStore
   ecClasses : List DtClass
-  -- S4：统一约束存储（字段数不变 ⇒ 31 处位置模式不动）。
+  -- 统一约束存储：字典目标与行成员目标共用一张待处理表。
   ecConstraints : ConstraintStore
   ecDefTbl : HashMap String Term
   ecGlobalsTbl : HashMap String Term
@@ -281,12 +281,12 @@ export record Ec(..) where
   ecClausesTbl : HashMap String (List (Pair (List Pat) Expr))
   ecCtorTbl : HashMap String DtCtor
   ecDefVals : HashMap String Value
-  -- M38：是否含线性数据族（O(1) 早退，避免每个 Pi 都线性扫 ecdatas）。
+  -- 是否含线性数据族（O(1) 早退，避免每个 Pi 都线性扫 ecdatas）。
   ecHasLinear : Bool
-  -- M4：元变量创建点 / QTT 使用点登记表（显式状态，替代进程内 IORef）。
+  -- 元变量创建点 / QTT 使用点登记表（显式状态，替代进程内 IORef）。
   ecMetaSpans : List (Pair Int Span)
   ecUseSpans : List (Pair String Span)
-  -- M4：本次精化发射的 warning（按发射顺序；由 Elab 显式线程，精化出口挂到 DtProgram）。
+  -- 本次精化发射的 warning（按发射顺序；由 Elab 显式线程，精化出口挂到 DtProgram）。
   ecWarnings : List Diagnostic
 
 export ecNext : Ec -> Int
@@ -353,13 +353,13 @@ export ecInsts : Ec -> List DtInst
 ecInsts (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   insts.instsList
 
--- S5a：实例表的**族桶**读入口（精确匹配，`fam` 未知 = 空表）。
+-- 实例表的**族桶**读入口（精确匹配，`fam` 未知 = 空表）。
 -- | 读取实例表中某个头族的实例桶（精确匹配；未知族返回空表）。
 export ecInstsFamily : Ec -> String -> List DtInst
 ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) fam =
   instStoreFamily insts fam
 
--- S5a：索引自检（**只**在 `--debug-perf` 下由 `Elab.Driver` 调用；调用方负责先判
+-- 索引自检（**只**在 `--debug-perf` 下由 `Elab.Driver` 调用；调用方负责先判
 -- `perfEnabled`，因为这里会扫全表）。两个判据：
 --   1) 所有桶的条目总数 == 权威表长度（没漏、没重）；
 --   2) 每个桶逐项等于「按该族过滤权威表」的结果（桶内容与族键一致，且桶内保序）。
@@ -417,7 +417,7 @@ ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtb
   Ec next sols defs datas depths goals insts (append classes [c]) dgoals deftbl gtbl soltbl dptbl
     gcomp ctbl ctortbl defvals haslin mspans uspans warnings
 
--- S4：约束存储读写（所有入口直接使用）。
+-- 约束存储读写（所有入口直接使用）。
 -- | 读取当前统一约束存储。
 export ecConstraints : Ec -> ConstraintStore
 ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
@@ -446,7 +446,7 @@ ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
     ecPutConstraints ec
       (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried)
 
--- C4：已尝试记录（epoch = 解表长度）。
+-- 已尝试记录（epoch = 解表长度）。
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 export ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
@@ -483,8 +483,8 @@ ecSolTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
 
 export ecPutSols : Ec -> List (Pair Int Value) -> Ec
 
--- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）+ 元变量创建深度索引（M28：
--- 求解点就地检查解的作用域）。
+-- force/conv 的解表包装：list（权威）+ 哈希索引（O(1) 查）+ 元变量创建深度索引
+-- （求解点就地检查解的作用域）。
 export ecSolsP : Ec -> Sols
 ecSolsP ec = solsOf (ecSolTbl ec) (ecSols ec) (ecDepthTbl ec) (ecDefVals ec)
 
@@ -509,7 +509,7 @@ prefixUntilId pid [] = []
 prefixUntilId pid ((Pair cid cv) :: rest) =
   if cid == pid then [] else Pair cid cv :: prefixUntilId pid rest
 
--- 数据族名在 `ecDatas` 里（B18：`data T` 与值 `T` 同名时，类型位置必须保持族身份）。
+-- 数据族名在 `ecDatas` 里（`data T` 与值 `T` 同名时，类型位置必须保持族身份）。
 memDataNameIn : String -> List DtData -> Bool
 memDataNameIn name [] = False
 memDataNameIn name (d :: rest) = if dtDataName d == name then True else memDataNameIn name rest
@@ -560,7 +560,7 @@ export ecHasLinear : Ec -> Bool
 ecHasLinear (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   haslin
 
--- M4：元变量创建点登记表的读写（纯状态；调用方通过 Ec 线程）。
+-- 元变量创建点登记表的读写（纯状态；调用方通过 Ec 线程）。
 -- | 读取元变量创建点登记表。
 export ecMetaSpans : Ec -> List (Pair Int Span)
 ecMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
@@ -583,7 +583,7 @@ ecPutUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl 
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
     ctortbl defvals haslin mspans uspans2 warnings
 
--- M4：warning 列表的读写（精化期就地追加；精化出口把最终列表挂到 DtProgram）。
+-- warning 列表的读写（精化期就地追加；精化出口把最终列表挂到 DtProgram）。
 -- | 读取本次精化已发射的 warning（发射顺序）。
 export ecWarnings : Ec -> List Diagnostic
 ecWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
@@ -609,7 +609,7 @@ ecPutDefVals (Ec next sols defs datas depths goals insts classes dgoals deftbl g
     ctortbl defvals2 haslin mspans uspans warnings
 
 -- 局部上下文：最近绑定的在前（名字 + 类型项；类型项在当前上下文里有效）。
--- refinements 是 M14 的索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
+-- refinements 是索引精化：level ↦ Value（level 形态，可提到更新的 binder，无需 de Bruijn
 -- 搬运）。求值环境构造时代入，于是所有类型的求值/相等检查自动享受精化。
 export record Ctx(..) where
   ctxItems : List (Pair String Term)
@@ -646,7 +646,7 @@ ctxEnvAt ((Pair name ty) :: rest) idx depth =
 export ctxEnv : Ctx -> List Value
 ctxEnv (Ctx items refs) = ctxEnvAt items 0 (length items)
 
--- M14：把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
+-- 把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
 -- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
 export refineValue : List (Pair Int Value) -> Int -> Value -> Value
 refineValue refs fuel v = if fuel <= 0 then v
@@ -691,7 +691,7 @@ emptyCtx = Ctx [] []
 export errAt : Span -> String -> Check a
 errAt sp msg = rawAt sp msg
 
--- M15：新建元变量并记录创建深度（求解时的作用域检查用）。
+-- 新建元变量并记录创建深度（求解时的作用域检查用）。
 export newMeta : Ctx -> Ec -> Pair Term Ec
 newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl defvals haslin mspans uspans warnings) =
   Pair (TMeta next)
@@ -700,8 +700,8 @@ newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gt
 export forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefTbl ec) (ecSolsP ec) defaultFuel v
 
--- M15：完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
--- M23：还带上收尾时的 globals / 实例表 / 类表 / 元变量游标——REPL 的表达式求值要在
+-- 完整精化，额外返回洞目标与最终状态（供 `vuna goal` / LSP 的洞显示）。
+-- 还带上收尾时的 globals / 实例表 / 类表 / 元变量游标——REPL 的表达式求值要在
 -- 与程序相同的环境里精化一条表达式（`dtEvalExprIn`），这些状态不属于「定义」但对
 -- 精化是必需的。
 export record DtProgram(..) where
@@ -715,7 +715,7 @@ export record DtProgram(..) where
   dtProgNext : Int
   dtProgDefVals : HashMap String Value
   dtProgDepths : List (Pair Int Int)
-  -- M4：本次精化发射的 warning（诊断出口；驱动层按检查单元过滤）。
+  -- 本次精化发射的 warning（诊断出口；驱动层按检查单元过滤）。
   dtProgWarnings : List Diagnostic
 
 export dtProgDatas : DtProgram -> List DtData
@@ -726,7 +726,7 @@ export dtProgDefs : DtProgram -> List DtDef
 dtProgDefs (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   defs
 
--- M30（D18）：定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `(Base.HashMap.fromList [])`。
+-- 定义体求值结果的共享缓存（`Ec.ecDefVals` 的收尾快照）；「没有」= `(Base.HashMap.fromList [])`。
 export dtProgGoals : DtProgram -> List DtGoal
 dtProgGoals (DtProgram datas defs goals sols globals insts classes next defvals depths warnings) =
   goals

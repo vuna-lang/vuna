@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Termination.Scc where
 
--- Vuna.Compiler.Elab.Termination.Scc（M25.2c 拆分）：size-change termination 引擎——
+-- Vuna.Compiler.Elab.Termination.Scc：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Common
 import Base.HashMap
@@ -96,7 +96,7 @@ else case e of
   EAnn value ty sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region ty
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region value acc)
-  -- A2：where/let 多 clause 局部函数：各 clause body 的调用点同样要收集
+  -- where/let 多 clause 局部函数：各 clause body 的调用点同样要收集
   -- （否则 `where` 绑定体里调外层递归函数会漏检）。
   ELocalFun clauses sp =>
     siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region
@@ -104,7 +104,7 @@ else case e of
   EVar n sp => if memName n comp then Site caller n [] sizes region :: acc else acc
   _ => acc
 
--- A2：把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
+-- 把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
 localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
 localClauseBinds [] = []
 localClauseBinds ((Pair pats body) :: rest) =
@@ -416,7 +416,7 @@ sctCheck comp defTbl ctors projs facts msg =
     Pair table1 False => ErrC msg
 
 -- ===============================================================
--- 12. fuel 线程判据（M25.2c）：整组函数的第 0 个形参是 Int fuel，函数体以
+-- 12. fuel 线程判据：整组函数的第 0 个形参是 Int fuel，函数体以
 -- `if fuel <= 0 then <基例> else <body>` 守卫；每条组内调用把 callee 的 fuel
 -- 传成 caller 的 fuel（`=`）或 `fuel - k`（k>0，严格下降）；每个环至少一条严格边。
 -- 则任意调用链的 fuel 严格下降，触底即返回基例 ⇒ 终止（Int 可负也安全：

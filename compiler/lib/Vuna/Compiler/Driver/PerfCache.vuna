@@ -1,6 +1,6 @@
 module Vuna.Compiler.Driver.PerfCache where
 
--- Vuna.Compiler.Driver.PerfCache：codegen **单元级**缓存（M34.5 S5）的磁盘层。
+-- codegen **单元级**缓存的磁盘层。
 --
 -- 与包级 split 缓存（`List SplitFile` 一把存）不同，这里按**单元**存生成结果：
 -- 包内一个模块改动时，其余单元（源码/依赖哈希都没变）直接复用上次生成的 `SplitFile`
@@ -36,8 +36,8 @@ unitCacheTag = do
   tag <- compilerTagEff
   pure "${unitCacheSchema}/${tag}"
 
--- split-unit 缓存目录：与对象库同一棵树（`$VUNA_STORE/units/<包哈希>/`）。
--- 历史实现自己拼 `${TMPDIR}/vuna-cache/...`，与对象库分家后 GC 要认识两个根。
+-- split-unit 缓存目录：与对象库同一棵树（`$VUNA_STORE/units/<包哈希>/`），
+-- 这样 GC 只需要认识一个根。
 export unitCacheDir : String -> Eff hostRow String
 unitCacheDir pkg = do
   root <- storeRootReadyEff
@@ -64,9 +64,9 @@ unitNameSafe s = strPack (map charSafe (strUnpack s))
 charSafe : Int -> Int
 charSafe c = if c == 46 then 95 else c
 
--- M34.5（S7）：单元缓存按 **entry 分桶**。同一包在不同工具/入口下共用包名 key 会让
+-- 单元缓存按 **entry 分桶**。同一包在不同工具/入口下共用包名 key 会让
 -- 不同入口的单元互相污染（entry key 已含声明哈希，但桶隔离才是清理与命中的边界）。
--- 目录名带 entry key 的两个哈希；GC 只保留当前 entry 桶（旧 layout 的散落文件一并清）。
+-- 目录名带 entry key 的两个哈希；GC 只保留当前 entry 桶。
 export unitCacheEntryDir : String -> String -> String
 unitCacheEntryDir base entryKey =
   "${base}/e-${textHashOf "entry:${entryKey}"}-${textHashOf "entry2:${entryKey}"}"
@@ -120,7 +120,7 @@ dropFiles dir (f :: rest) = do
   _ <- safeRemoveFile "${dir}/${f}"
   dropFiles dir rest
 
--- M34.6（S7 补完）：**桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
+-- **桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
 -- 的旧条目：`keepNames` = 本次全部单元 key（含 entry）算出的文件名，所以即将查询/命中的
 -- 单元一定在保留集合里（不会删掉马上要命中的），而同一入口反复编辑累积下来的旧 key 文件
 -- 全部清掉 ⇒ 桶内文件数有界（≤ 单元数 + 1）。

@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab where
 
--- Vuna.Compiler.Elab：DT 精化器门面（双向检查 + 一阶元变量 + 类型级隐式插入 + M14 索引族）。
+-- DT 精化器门面（双向检查 + 一阶元变量 + 类型级隐式插入 + 索引族）。
 -- 输入是 parser 的原始声明（不经 Loader）：名字解析在精化器里完成。
 -- 状态 Ec 保存下一个元变量编号、已解元变量（含创建深度，zonk 用）与已精化的定义体
 -- （供 Core.force 的 delta 展开）；定义体按源顺序精化，delta 只对已精化定义可见。
