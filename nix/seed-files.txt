@@ -43,6 +43,7 @@ Base_dVec.ml
 Main.ml
 Prelude.ml
 Vuna_dCompiler_dAddr.ml
+Vuna_dCompiler_dCanonical.ml
 Vuna_dCompiler_dCanonical_dAst.ml
 Vuna_dCompiler_dCanonical_dBytes.ml
 Vuna_dCompiler_dCanonical_dCoreTerm.ml
@@ -83,6 +84,7 @@ Vuna_dCompiler_dDriver_dNative.ml
 Vuna_dCompiler_dDriver_dOwner.ml
 Vuna_dCompiler_dDriver_dPerfCache.ml
 Vuna_dCompiler_dDriver_dSplit.ml
+Vuna_dCompiler_dDriver_dToolPayload.ml
 Vuna_dCompiler_dDriver_dWasm.ml
 Vuna_dCompiler_dElab.ml
 Vuna_dCompiler_dElab_dCase.ml

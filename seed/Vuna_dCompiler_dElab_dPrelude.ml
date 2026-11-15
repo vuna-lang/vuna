@@ -106,17 +106,14 @@ let rec v_Vuna_dCompiler_dElab_dPrelude_dprependParams = (fun mc0 mc1 -> (match 
 ))
 
 # 168 "Vuna/Compiler/Elab/Prelude.vuna"
-let v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf = (fun name -> (match (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_dsplitLastDot (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_dsplitOnDot name)) with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__27; Base_dPair.f_Base_dPair_dPair_second = dtb__28 } -> dtb__28
-  | _ -> failwith "DT: impossible branch"
-))
+let v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf = (fun name -> (Vuna_dCompiler_dSource.v_Vuna_dCompiler_dSource_dlastSeg name))
 
-# 176 "Vuna/Compiler/Elab/Prelude.vuna"
+# 175 "Vuna/Compiler/Elab/Prelude.vuna"
 let rec v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo = (fun mc0 mc1 mc2 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__29, dtb__30) -> (if ((v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf (Base_dPair.v_Base_dPair_dfirstOf dtb__29)) = mc0) then (Base_dPair.v_Base_dPair_dfirstOf dtb__29) else (((v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo mc0) dtb__30) mc2))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (if ((v_Vuna_dCompiler_dElab_dPrelude_dbaseNameOf (Base_dPair.v_Base_dPair_dfirstOf dtb__27)) = mc0) then (Base_dPair.v_Base_dPair_dfirstOf dtb__27) else (((v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo mc0) dtb__28) mc2))
   | Base_dList.C_Base_dList_dList_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 173 "Vuna/Compiler/Elab/Prelude.vuna"
+# 172 "Vuna/Compiler/Elab/Prelude.vuna"
 let v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjection = (fun methods short -> (((v_Vuna_dCompiler_dElab_dPrelude_dclassMethodProjectionGo short) methods) short))

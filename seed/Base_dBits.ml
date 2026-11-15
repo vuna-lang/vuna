@@ -1,21 +1,21 @@
 open Vuna_runtime
 # 17 "Base/Bits.vuna"
-let v_Base_dBits_dband = (fun a b -> ((bi_bitAnd a) b))
+let v_Base_dBits_dband = (fun a b -> (a land b))
 
 # 21 "Base/Bits.vuna"
-let v_Base_dBits_dbor = (fun a b -> ((bi_bitOr a) b))
+let v_Base_dBits_dbor = (fun a b -> (a lor b))
 
 # 25 "Base/Bits.vuna"
-let v_Base_dBits_dbxor = (fun a b -> ((bi_bitXor a) b))
+let v_Base_dBits_dbxor = (fun a b -> (a lxor b))
 
 # 29 "Base/Bits.vuna"
-let v_Base_dBits_dbnot = (fun a -> (bi_bitNot a))
+let v_Base_dBits_dbnot = (fun a -> (lnot a))
 
 # 33 "Base/Bits.vuna"
-let v_Base_dBits_dshl = (fun a n -> ((bi_bitShl a) n))
+let v_Base_dBits_dshl = (fun a n -> (if n < 0 || n >= 63 then 0 else a lsl n))
 
 # 37 "Base/Bits.vuna"
-let v_Base_dBits_dshr = (fun a n -> ((bi_bitShr a) n))
+let v_Base_dBits_dshr = (fun a n -> (if n < 0 || n >= 63 then 0 else a lsr n))
 
 # 41 "Base/Bits.vuna"
 let v_Base_dBits_dmask32 = (fun x -> ((v_Base_dBits_dband x) 4294967295))

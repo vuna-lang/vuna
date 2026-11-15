@@ -35,7 +35,7 @@ let dtp_substTemplate tmpl xs =
       end else (Buffer.add_char buf '<'; go (i + 1))
     end else (Buffer.add_char buf tmpl.[i]; go (i + 1))
   in go 0; Buffer.contents buf
-# 171 "Base/List.vuna"
+# 196 "Base/List.vuna"
 let rec v_Eq_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__0) dtb__2) then (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uList_uList_ua _uctx0)) dtb__1) dtb__3) else false)
@@ -48,7 +48,7 @@ let rec v_Eq_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dE
   | _ -> failwith "DT: impossible branch"
 )), (fun xs ys -> (if (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uList_uList_ua _uctx0)) xs) ys) then false else true)))))
 
-# 178 "Base/List.vuna"
+# 203 "Base/List.vuna"
 let rec v_Ord_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (match mc1 with
   | C_Base_dList_dList_Cons (dtb__6, dtb__7) -> (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__4) dtb__6) then true else (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__6) dtb__4) then false else (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) dtb__5) dtb__7)))
@@ -63,17 +63,17 @@ let rec v_Ord_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dOrd
   | _ -> failwith "DT: impossible branch"
 )), (fun xs ys -> (if (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) xs) ys) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_dle (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))))
 
-# 188 "Base/List.vuna"
+# 213 "Base/List.vuna"
 let rec v_Hashable_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun xs -> (match xs with
   | C_Base_dList_dList_Nil -> 0
   | C_Base_dList_dList_Cons (dtb__10, dtb__11) -> ((Base_dHashable.v_Base_dHashable_dhashCombine ((Base_dHashable.v_Base_dHashable_dhash _uctx0) dtb__10)) ((Base_dHashable.v_Base_dHashable_dhash (v_Hashable_uBase_uList_uList_ua _uctx0)) dtb__11))
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 197 "Base/List.vuna"
+# 222 "Base/List.vuna"
 let v_Monoid_uBase_uList_uList_ua = (Base_dMonoid.C_Dict_uBase_dMonoid_dMonoid_Monoid (C_Base_dList_dList_Nil))
 
-# 204 "Base/List.vuna"
+# 229 "Base/List.vuna"
 let rec v_Traversable_uBase_uList_uList_uf = (fun _uctx0 -> (Base_dTraversable.C_Dict_uBase_dTraversable_dTraversable_Traversable ((fun fun_ xs -> (match xs with
   | C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure _uctx0) C_Base_dList_dList_Nil)
   | C_Base_dList_dList_Cons (dtb__12, dtb__13) -> ((((Base_dApplicative.v_Base_dApplicative_dliftA2 _uctx0) (fun y ys -> (C_Base_dList_dList_Cons (y, ys)))) (fun_ dtb__12)) (((Base_dTraversable.v_Base_dTraversable_dmapM (v_Traversable_uBase_uList_uList_uf _uctx0)) fun_) dtb__13))
@@ -87,7 +87,7 @@ let rec v_Base_dList_dappend = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 194 "Base/List.vuna"
+# 219 "Base/List.vuna"
 let v_Semigroup_uBase_uList_uList_ua = (Base_dMonoid.C_Dict_uBase_dMonoid_dSemigroup_Semigroup ((fun _uarity1 _uarity2 -> ((v_Base_dList_dappend _uarity1) _uarity2))))
 
 # 44 "Base/List.vuna"
@@ -117,7 +117,7 @@ let rec v_Base_dList_dmap = (fun mc0 mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 142 "Base/List.vuna"
+# 167 "Base/List.vuna"
 let v_Functor_uBase_uList_uList = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun f xs -> ((v_Base_dList_dmap f) xs))))
 
 # 68 "Base/List.vuna"
@@ -141,7 +141,7 @@ let rec v_Base_dList_dfoldr = (fun mc0 mc1 mc2 -> (match mc2 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 201 "Base/List.vuna"
+# 226 "Base/List.vuna"
 let v_Foldable_uBase_uList_uList = (Base_dFoldable.C_Dict_uBase_dFoldable_dFoldable_Foldable ((fun f z xs -> (((v_Base_dList_dfoldr f) z) xs))))
 
 # 90 "Base/List.vuna"
@@ -154,10 +154,10 @@ let rec v_Base_dList_dconcatMapGo = (fun mc0 mc1 mc2 -> (match mc1 with
 # 86 "Base/List.vuna"
 let v_Base_dList_dconcatMap = (fun f xs -> (((v_Base_dList_dconcatMapGo f) xs) C_Base_dList_dList_Nil))
 
-# 145 "Base/List.vuna"
+# 170 "Base/List.vuna"
 let v_Monad_uBase_uList_uList = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun xs f -> ((v_Base_dList_dconcatMap f) xs))))
 
-# 148 "Base/List.vuna"
+# 173 "Base/List.vuna"
 let v_Applicative_uBase_uList_uList = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dList_dList_Cons (x, C_Base_dList_dList_Nil))), (fun mf mx -> ((v_Base_dList_dconcatMap (fun g -> ((v_Base_dList_dmap g) mx))) mf)), (fun f xs ys -> ((v_Base_dList_dconcatMap (fun a -> ((v_Base_dList_dmap (fun b -> ((f a) b))) ys))) xs))))
 
 # 95 "Base/List.vuna"
@@ -181,59 +181,87 @@ let rec v_Base_dList_dlookupPair = (fun mc0 mc1 -> (match mc1 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 110 "Base/List.vuna"
-let rec v_Base_dList_dzip = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__36; Base_dPair.f_Base_dPair_dPair_second = dtb__38 }, ((v_Base_dList_dzip dtb__37) dtb__39)))
-  | _ -> C_Base_dList_dList_Nil
-)
-  | _ -> C_Base_dList_dList_Nil
-))
-
 # 115 "Base/List.vuna"
-let rec v_Base_dList_dtake = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (if (mc0 <= 0) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (dtb__40, ((v_Base_dList_dtake (mc0 - 1)) dtb__41))))
+let rec v_Base_dList_dnubNames = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__36, dtb__37) -> (if ((v_Base_dList_dmemName dtb__36) dtb__37) then (v_Base_dList_dnubNames dtb__37) else (C_Base_dList_dList_Cons (dtb__36, (v_Base_dList_dnubNames dtb__37))))
   | C_Base_dList_dList_Nil -> C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 120 "Base/List.vuna"
-let rec v_Base_dList_ddrop = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__42, dtb__43) -> (if (mc0 <= 0) then (C_Base_dList_dList_Cons (dtb__42, dtb__43)) else ((v_Base_dList_ddrop (mc0 - 1)) dtb__43))
+let rec v_Base_dList_dallMem = (fun mc0 mc1 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__38, dtb__39) -> (if ((v_Base_dList_dmemName dtb__38) mc1) then ((v_Base_dList_dallMem dtb__39) mc1) else false)
+  | C_Base_dList_dList_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 125 "Base/List.vuna"
+let rec v_Base_dList_danyMem = (fun mc0 mc1 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__40, dtb__41) -> (if ((v_Base_dList_dmemName dtb__40) mc1) then true else ((v_Base_dList_danyMem dtb__41) mc1))
+  | C_Base_dList_dList_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 130 "Base/List.vuna"
+let rec v_Base_dList_dhasDupNames = (fun mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__42, dtb__43) -> (if ((v_Base_dList_dmemName dtb__42) dtb__43) then true else (v_Base_dList_dhasDupNames dtb__43))
+  | C_Base_dList_dList_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 135 "Base/List.vuna"
+let rec v_Base_dList_dzip = (fun mc0 mc1 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__46, dtb__47) -> (C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__44; Base_dPair.f_Base_dPair_dPair_second = dtb__46 }, ((v_Base_dList_dzip dtb__45) dtb__47)))
+  | _ -> C_Base_dList_dList_Nil
+)
+  | _ -> C_Base_dList_dList_Nil
+))
+
+# 140 "Base/List.vuna"
+let rec v_Base_dList_dtake = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__48, dtb__49) -> (if (mc0 <= 0) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (dtb__48, ((v_Base_dList_dtake (mc0 - 1)) dtb__49))))
   | C_Base_dList_dList_Nil -> C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 132 "Base/List.vuna"
+# 145 "Base/List.vuna"
+let rec v_Base_dList_ddrop = (fun mc0 mc1 -> (match mc1 with
+  | C_Base_dList_dList_Cons (dtb__50, dtb__51) -> (if (mc0 <= 0) then (C_Base_dList_dList_Cons (dtb__50, dtb__51)) else ((v_Base_dList_ddrop (mc0 - 1)) dtb__51))
+  | C_Base_dList_dList_Nil -> C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 157 "Base/List.vuna"
 let rec v_Base_dList_drangeFrom = (fun i k -> (if (k <= 0) then C_Base_dList_dList_Nil else (C_Base_dList_dList_Cons (i, ((v_Base_dList_drangeFrom (i + 1)) (k - 1))))))
 
-# 128 "Base/List.vuna"
+# 153 "Base/List.vuna"
 let v_Base_dList_drange = (fun i n -> ((v_Base_dList_drangeFrom i) (n - i)))
 
-# 136 "Base/List.vuna"
+# 161 "Base/List.vuna"
 let rec v_Base_dList_dmapMaybe = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (match (mc0 dtb__44) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Base_dList_dmapMaybe mc0) dtb__45)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__46) -> (C_Base_dList_dList_Cons (dtb__46, ((v_Base_dList_dmapMaybe mc0) dtb__45)))
+  | C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (match (mc0 dtb__52) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Base_dList_dmapMaybe mc0) dtb__53)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__54) -> (C_Base_dList_dList_Cons (dtb__54, ((v_Base_dList_dmapMaybe mc0) dtb__53)))
   | _ -> failwith "DT: impossible branch"
 )
   | C_Base_dList_dList_Nil -> C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 164 "Base/List.vuna"
+# 189 "Base/List.vuna"
 let rec v_Base_dList_dshowElemsTail = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__47, dtb__48) -> (String.concat "" [", "; dtb__47; (v_Base_dList_dshowElemsTail dtb__48)])
+  | C_Base_dList_dList_Cons (dtb__55, dtb__56) -> (String.concat "" [", "; dtb__55; (v_Base_dList_dshowElemsTail dtb__56)])
   | C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 159 "Base/List.vuna"
+# 184 "Base/List.vuna"
 let v_Base_dList_dshowElems = (fun mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__49, dtb__50) -> (dtb__49 ^ (v_Base_dList_dshowElemsTail dtb__50))
+  | C_Base_dList_dList_Cons (dtb__57, dtb__58) -> (dtb__57 ^ (v_Base_dList_dshowElemsTail dtb__58))
   | C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 167 "Base/List.vuna"
+# 192 "Base/List.vuna"
 let v_Show_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fun xs -> (String.concat "" ["["; (v_Base_dList_dshowElems ((v_Base_dList_dmap (fun x -> ((Base_dShow.v_Base_dShow_dshow _uctx0) x))) xs)); "]"])))))
