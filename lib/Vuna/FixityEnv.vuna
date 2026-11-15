@@ -1,6 +1,6 @@
 module Vuna.FixityEnv where
 
--- Vuna.FixityEnv：工具链（fmt / lint / LSP）的 per-file **程序级 fixity** 解析器（M31.3 / B27）。
+-- Vuna.FixityEnv：工具链（fmt / lint / LSP）的 per-file **程序级 fixity** 解析器。
 --
 -- parser 只产出中缀链，Loader 重排需要「本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明」。
 -- 昂贵部分是**按包上下文加载模块图**（每个文件重复加载会退化成 O(#文件 × #模块)）；声明表
@@ -32,8 +32,8 @@ emptyFixityEnv = FixityEnv [] []
 
 -- 缓存键：文件所在**目录**（无 `/` 时用 "."）。同一目录的文件共享上下文；
 -- 相对/绝对路径写法不同只会造成一次缓存 miss，不影响正确性。
--- 必须按**最后一个** `/` 拆：workspace 根包的一级目录恰好等于包目录，旧实现
--- （取首个路径段）在嵌套包目录下会把不同包的文件并到同一个键，串用首个文件的包
+-- 必须按**最后一个** `/` 拆：workspace 根包的一级目录恰好等于包目录，按首个路径段
+-- 取键会在嵌套包目录下把不同包的文件并到同一个键，串用首个文件的包
 -- 上下文（examples/ 下出现第二个包时 `vuna fmt --check examples` 就报 LD_ModuleNotFound）。
 dirKey : String -> String
 dirKey path = parentOf path
@@ -52,7 +52,7 @@ cachePut key value entries = Pair key value :: cacheForget key entries
 
 -- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
 -- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
--- M4：上下文解析 / 模块图加载是宿主动作，显式 `Eff hostRow`；缓存推进仍是纯数据。
+-- 上下文解析 / 模块图加载是宿主动作，显式 `Eff hostRow`；缓存推进仍是纯数据。
 export fixitiesForFile : FixityEnv -> String -> String -> Eff hostRow (Pair FixityEnv (Check (List FixityDecl)))
 fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let

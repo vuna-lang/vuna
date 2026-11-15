@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# vuna-compiler-perf：M34 编译器自身端到端基准（`sh bench/compiler.sh`）。
+# vuna-compiler-perf：编译器自身端到端基准（`sh bench/compiler.sh`）。
 #
 # 与 bench/run.sh 的分工：run.sh 测**生成程序运行时**（vuna 产物 vs 手写 OCaml）；
 # 本脚本测**编译器/工具链自己的墙钟**（check / build --no-compile / map / fmt）。
 #
 # 口径：每项先 warmup 再跑 --runs 次取中位数；只有绝对 ms（跨机器不可比，**同一台机器**
 # 上做回归对比）。`--check` 与 `bench/compiler-baseline.txt` 比，超过 --threshold% 打 WARN、
-# 超过 --fail-threshold%（默认 50%）直接 exit 1（M34.6 起硬门槛）；`--save-baseline` 重写
+# 超过 --fail-threshold%（默认 50%）直接 exit 1；`--save-baseline` 重写
 # 基线（复核读数后手动执行）。跨机器/跨输入规模的可比口径是 `nix/checks/compiler-growth.sh`
 # 的增长率门槛。
 #
@@ -19,7 +19,7 @@
 #   build-warm           同 build-compiler，但 split 缓存已预热
 #   map-cold / map-hot   `vuna map` 索引冷（清 query store）/ 热
 #   fmt-check            `vuna fmt --check`
-# 冷/热语义（M34.5 缓存落地后）：
+# 冷/热语义：
 #   check-all / check-compiler / build-all / build-compiler 先清 query store（冷，代表首次构建）
 #   check-warm / build-warm 先预热一次再计时（热，代表缓存命中）
 #   map-cold 同样先清 query store；map-hot 直接复用上一次留下的索引

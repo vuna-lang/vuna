@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vuna-perf：M33 的生成程序 + 编译器运行基准（`nix run .#vuna-perf`）。
+# vuna-perf：生成程序 + 编译器运行基准（`nix run .#vuna-perf`）。
 #
 # 与 nix/bench.sh 的分工：bench.sh 测**构建/编译**的墙钟与产物尺寸；本脚本测
 # **生成程序运行时**（vuna 产物 vs 手写 OCaml 等价实现）与编译器的运行期负载。
@@ -221,7 +221,7 @@ run_bench() { # name
   VUNA_RSS[$name]=$(rss_of "$vprog")
   OCAML_RSS[$name]=$(rss_of "$oprog")
   RATIO[$name]=$(awk -v a="${VUNA_MED[$name]}" -v b="${OCAML_MED[$name]}" 'BEGIN { if (b <= 0) print "0"; else printf "%.2f", a / b }')
-  # 分配 / GC 统计：生成 runtime 在 VN_PERF_STATS=1 时退出打印（M33 W2）。
+  # 分配 / GC 统计：生成 runtime 在 VN_PERF_STATS=1 时退出打印。
   # 放在计时之后，不影响墙钟读数。
   local gc_line
   gc_line=$(VN_PERF_STATS=1 "$vprog" 2>&1 >/dev/null | grep '^VN_PERF ' | tail -n 1 || true)

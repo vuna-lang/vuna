@@ -9,7 +9,7 @@ module Vuna.Obs.Serve where
 -- 用临时端口）或 `unix:PATH`：能连上端点就等于能驱动这个进程，任意地址 = 任意代码执行
 -- （规则与 `Vuna.Repl.Server.checkReplAddr` 同一套，文案按 serve 说）。
 -- **vuna 侧不做 WebSocket**：CDP 需要的握手（`Sec-WebSocket-Accept` 的 SHA-1 + base64）
--- 在语言层没有现成能力，桥是工具侧资产 `nix/obs-cdp-bridge.mjs`（Node）——见 O11 / debt D83。
+-- 在语言层没有现成能力，桥是工具侧资产 `nix/obs-cdp-bridge.mjs`（Node）——见 debt D83。
 --
 -- 语义（**离线**，必须与文档一致）：数据源是启动时读入的 TRACE 文件（0..N 份），
 -- `Profiler.start` 只记一个 `startTimestamp`（进程内记账，不进响应体，更不采样正在运行

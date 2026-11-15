@@ -1,6 +1,6 @@
 module Vuna.Lsp.Bindings where
 
--- Vuna.Lsp.Bindings：光标处「绑定」的解析（M40；工具链模块，**永不进 seed 闭包**）。
+-- Vuna.Lsp.Bindings：光标处「绑定」的解析（工具链模块，**永不进 seed 闭包**）。
 --
 -- 覆盖两类绑定，都是 parse 级（不跑精化、不依赖 Index）：
 --
@@ -132,7 +132,7 @@ bindingDefinitionAt buffers uri line col text = case parseSource "<lsp>" text of
           Just lb => pure (Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]]))
 
 -- ---------------------------------------------------------------
--- rename（C38）：局部绑定的身份与全部出现位置
+-- rename：局部绑定的身份与全部出现位置
 -- ---------------------------------------------------------------
 -- 光标处局部绑定的身份 = binder 定义位置（1-based line/col）；`Nothing` = 光标不在任何
 -- 可改名的局部绑定上（调用方继续走顶层符号）。解析失败也返回 Nothing，不抛错。
@@ -677,9 +677,9 @@ signatureOfDecl (d :: rest) name = case d of
   _ => signatureOfDecl rest name
 
 -- 顶层函数的**完整签名类型表达式**（区别于 `signatureOfDecl` 的 `arrowDomains`——后者只取参数
--- domain 给 pattern 当签名、丢掉了 binder 名）。C45：Pi / 类型级 binder 可解析——签名
+-- domain 给 pattern 当签名、丢掉了 binder 名）。Pi / 类型级 binder 可解析——签名
 -- `apply : (f : Int -> Int) -> Int` 里的 `(f : Int -> Int)` 是 EPi，binder 名 `f` 只有 walk 这个
--- 类型表达式才可达（`findDeclBind` 原本只 walk pats + body，签名 Pi 是死代码）。hover 时把
+-- 类型表达式才可达（只 walk pats + body 会让签名 Pi 成死代码）。hover 时把
 -- 签名类型喂给 `walkExpr`，其 `EPi` 分支即可按 `piNamePos` 命中 binder 名、类型取 domain。
 declSigType : List Decl -> String -> Maybe Expr
 declSigType [] name = Nothing
@@ -879,7 +879,7 @@ evarCovers n sp line col =
 -- 再收集连续 ident 字符（含 `'`/`_`）定出名字左界，最后取该段文本与 binder 名**比对**（避免把
 -- domain 里碰巧紧邻的 token 误判成名字）。`(x : A) -> B` 里 domain `A` 左边扫到的就是 `x`。
 -- 匿名箭头（`A -> B`，名字是 `_`）回扫先遇 `-` 就停、得空段 ⇒ 返回零位，调用方据此跳过。
--- C45：让 Pi / 类型级 binder 可解析（hover / definition / references）。
+-- 让 Pi / 类型级 binder 可解析（hover / definition / references）。
 piNamePos : WalkEnv -> Expr -> String -> Pair Int Int
 piNamePos env dom name = if name == "" || name == "_" then Pair 0 0
 else
@@ -937,7 +937,7 @@ else case e of
     Nothing => walkArgs (fuel - 1) env scope line col name args
   EPi n implicit qty dom cod sp =>
     let
-      -- C45：Pi / 类型级 binder 可解析——光标落在 binder 名（domain 左侧隔着 ` : `）上时，把该
+      -- Pi / 类型级 binder 可解析——光标落在 binder 名（domain 左侧隔着 ` : `）上时，把该
       -- binder 当局部绑定返回，类型 = domain 的语法类型（`renderType dom`）。否则按原样走
       -- domain（binder 尚不可见）/ codomain（binder 已入 scope，故 cod 里引用它也能解析）。
       -- `piNamePos` 对匿名 binder（`_` / `A -> B`）返回零位 ⇒ `nl == 0` 不等于任何真实行（1-based），
@@ -996,10 +996,10 @@ bindersOfBinds env kind binds = concatMap (bindBinders env kind) binds
 -- 声明级：顶层函数参数 + 函数体（实例方法也要进）
 -- ---------------------------------------------------------------
 -- 签名里的 Pi binder（`apply : (f : Int -> Int) -> Int` 的 `f`）只有 walk **签名类型表达式**
--- 才可达——`findDeclBind` 原本只 walk pats + body，签名 Pi 是死代码。这里把 `declSigType` 拿到的
+-- 才可达——只 walk pats + body 会让签名 Pi 成死代码。这里把 `declSigType` 拿到的
 -- 完整签名喂给 `walkExpr`（空 scope 起，沿 arrow / Pi 链递归），其 `EPi` 分支按 `piNamePos`
 -- 命中 binder 名、类型取 domain。签名类型里的 `EVar`（`Int` 等）在空 scope 下不命中局部名，
--- 不会误报。C45。
+-- 不会误报。
 sigPiBind : WalkEnv -> Int -> Int -> String -> Expr -> Maybe LocalBind
 sigPiBind env line col name sigTy = walkExpr walkFuelBound env [] line col name sigTy
 
@@ -1008,7 +1008,7 @@ findDeclBind env line col name (DFun fn pats body sp) =
   let
     sigSig = signatureOfDecl env.weDecls fn
     paramBinds = patBindersWithSig env "parameter" sigSig pats
-    -- C45：先试签名 Pi binder（光标在签名 `(f : ...)` 上时命中），再回落 pattern 参数 / body。
+    -- 先试签名 Pi binder（光标在签名 `(f : ...)` 上时命中），再回落 pattern 参数 / body。
     sigHit = case declSigType env.weDecls fn of
       Just sigTy => sigPiBind env line col name sigTy
       Nothing => Nothing

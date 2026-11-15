@@ -11,7 +11,7 @@ module Vuna.Repl.Paste where
 --
 -- 语义：粘贴内容**原样**进入编辑缓冲（换行保留），Tab / Enter 都不触发按键语义；用户按
 -- Enter 才提交整段（整段作为一个输入单元或多行 pending，交给 Repl 的既有输入逻辑）。
--- 不支持该模式的终端不会发 `\e[200~`，行为与旧版完全一致（只多输出一对被忽略的转义）；
+-- 不支持该模式的终端不会发 `\e[200~`，只多输出一对被忽略的转义；
 -- 非 tty 路径根本不进入编辑器。
 import Base.HostRow
 import Vuna.Compiler.Common

@@ -1,6 +1,6 @@
 module Vuna.Cli.Args where
 
--- Vuna.Cli.Args：工具命令的统一参数解析与输入/输出路径守卫（M30 · CLI 错误层）。
+-- Vuna.Cli.Args：工具命令的统一参数解析与输入/输出路径守卫。
 --
 -- 为什么在这里（而不是 Vuna.Cli）：`Vuna.Cli` 要 import `Vuna.Lint` / `Vuna.Doc`
 -- 等工具模块（分发），这些模块无法反向 import `Vuna.Cli`（循环）。统一入口必须
@@ -17,7 +17,7 @@ module Vuna.Cli.Args where
 -- 读盘守卫：内建 `@vuna@prim_eff_isDirectory` 对不存在的路径会抛宿主异常，所以所有来自
 -- 用户的路径都必须先 `@vuna@prim_eff_fileExists` 再 `@vuna@prim_eff_isDirectory`；`readText` /
 -- `requireExists` / `requireDirectory` 是唯一入口。
--- M4：这些守卫与目录创建显式在 `Eff hostRow` 里（错误仍用 `Check` 携带，文案不变）；
+-- 这些守卫与目录创建显式在 `Eff hostRow` 里（错误仍用 `Check` 携带）；
 -- 纯 flag 解析 API 保持纯函数。
 import Base.HostRow
 import Vuna.Compiler.Common

@@ -1,7 +1,6 @@
 module Vuna.Fmt.Decl where
 
--- Vuna.Fmt.Decl：声明 / 模块头 / import / `infix*` 声明的打印与文件组装（M24 后维护·源码
--- 重组，从 Vuna.Fmt 拆出；M31.3 加 fixity 声明打印与程序级 fixity 参数）。
+-- Vuna.Fmt.Decl：声明 / 模块头 / import / `infix*` 声明的打印与文件组装。
 --
 -- 布局约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 -- `infix*` 声明放在 imports 之后、第一个声明之前（源码顺序，每行一条），单独成一个
@@ -20,12 +19,12 @@ import Base.Sort
 import Base.String
 
 -- ---------------------------------------------------------------
--- M38：线性声明前缀。
+-- 线性声明前缀。
 linearPrefix : Bool -> String
 linearPrefix True = "linear "
 linearPrefix False = ""
 
--- R1（records-v2）：声明前缀 = 表示档位前缀 + 线性前缀（`alias record` / `lin record`）。
+-- 声明前缀 = 表示档位前缀 + 线性前缀（`alias record` / `lin record`）。
 declPrefix : ReprTier -> Bool -> String
 declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
 
@@ -199,7 +198,7 @@ renderTraitDecl env at name params methods =
     methodLines = concatMap (\m => renderMethodSig env at m) methods
   in append [header] methodLines
 
--- M30（B20）：注释锚点用方法签名 span（方法名到类型结束），不再用类型表达式 span。
+-- 注释锚点用方法签名 span（方法名到类型结束），不用类型表达式 span。
 traitParamText : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitParam -> String
 traitParamText env at (TraitParam n Nothing) = n
 traitParamText env at (TraitParam n (Just k)) = "(${n} : ${join " " (renderTypeExpr env at 0 k)})"
@@ -220,7 +219,7 @@ renderInstanceDecl env at ctxE head methods =
     methodLines = concatMap (\d => renderDeclAt env at 2 d) methods
   in append headLine methodLines
 
--- 实例上下文：`C a, C b => `（M29 起实例可带 ctx；空 ctx 与旧输出逐字一致）。
+-- 实例上下文：`C a, C b => `（实例可带 ctx；空 ctx 输出空串）。
 renderInstanceCtx : List FixityDecl -> List Expr -> String
 renderInstanceCtx env [] = ""
 renderInstanceCtx env ctxE = "${joinTexts ", " (map (renderOneCtx env) ctxE)} => "
@@ -267,7 +266,7 @@ renderWhereBindings env at lineInd binds =
 
 renderWhereBinding : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
 renderWhereBinding env at lineInd (Pair pat value) = case value of
-  -- M24：带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
+  -- 带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
   EAnn inner ty annSp =>
     append (attachAt at annSp lineInd (renderWhereSigLine env at lineInd pat ty))
       (attachAt at (patSpan pat) lineInd (renderWhereBindingBody env at lineInd pat inner))
@@ -288,7 +287,7 @@ renderWhereBindingBody env at lineInd (PVar name psp) value = case value of
 renderWhereBindingBody env at lineInd pat value =
   renderBindingValue env at lineInd "${renderPat pat} =" value
 
--- A2：where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
+-- where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
 renderLocalFunClauses : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
 renderLocalFunClauses env at lineInd name [] = []
 renderLocalFunClauses env at lineInd name ((Pair pats body) :: rest) =

@@ -1,8 +1,7 @@
 module Vuna.Index.Query where
 
 -- Vuna.Index.Query：符号查找（全名/裸名/后缀）、位置查询（`referencesAt`）与改动
--- 影响面（M24 后维护·源码重组；M30 refs 带位置）。
--- 影响面来自 Scan 预先算好的 refs 反向边，不重新解析源码。
+-- 影响面。影响面来自 Scan 预先算好的 refs 反向边，不重新解析源码。
 import Vuna.Compiler.Common
 import Vuna.Index.Types
 

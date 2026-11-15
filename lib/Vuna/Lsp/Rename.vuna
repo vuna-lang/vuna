@@ -1,6 +1,6 @@
 module Vuna.Lsp.Rename where
 
--- Vuna.Lsp.Rename：LSP rename（C38；工具链模块，**永不进 seed 闭包**）。
+-- Vuna.Lsp.Rename：LSP rename（工具链模块，**永不进 seed 闭包**）。
 --
 -- 两条路径，都只做 parse 级定位（不跑精化）：
 --

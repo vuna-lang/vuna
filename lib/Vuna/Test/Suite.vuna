@@ -89,7 +89,7 @@ export record Case(..) where
   caseTags : List String
   caseKind : CaseKind
   caseTimeout : Int
-  -- fast | integration | e2e（P1：用于 --tier 过滤与 CI 分层）。
+  -- fast | integration | e2e（用于 --tier 过滤与 CI 分层）。
   caseTier : String
 
 -- ---------------------------------------------------------------
@@ -200,7 +200,7 @@ checkFamilyKeysGo section (e :: rest) =
   else err "${sectionText section}: unknown key `${e.tomlEntryKey}`"
   else checkFamilyKeysGo section rest
 
--- buildFamily 的 option 读取拆成两段：单条 `>>=` 链过长会触发 D48 的推断 fuel /
+-- buildFamily 的 option 读取拆成两段：单条 `>>=` 链过长会触发推断 fuel /
 -- 指数级问题（Result 管道每层 bind 都带字典插入）。拆分后每段 ≤7 层。
 record FamilyOpts where
   familyOptKind : Maybe String
@@ -225,7 +225,7 @@ readFamilyFlags section entries =
   getBool section "interp" entries
     >>= (\interpOpt => getBool section "check" entries >>= (\checkOpt => getBool section "compile" entries >>= (\compileOpt => getBool section "run" entries >>= (\runOpt => getBool section "compare_interp" entries >>= (\compareOpt => getList section "tags" entries >>= (\tagsOpt => getInt section "timeout" entries >>= (\timeoutOpt => OkC (FamilyFlags interpOpt checkOpt compileOpt runOpt compareOpt tagsOpt timeoutOpt))))))))
 
--- 长 `>>=` 链在 Result 管道上会触发 D48 的推断 fuel 问题；这里用显式 case 展开。
+-- 长 `>>=` 链在 Result 管道上会触发推断 fuel 问题；这里用显式 case 展开。
 buildFamily : Suite -> List TomlEntry -> String -> Check Family
 buildFamily suite entries name =
   let

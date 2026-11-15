@@ -1,6 +1,6 @@
 module Vuna.Lint.Fix where
 
--- Vuna.Lint.Fix：把 lint 规则给出的编辑描述应用到源码（M24 后维护·源码重组，从 Vuna.Lint 拆出）。
+-- Vuna.Lint.Fix：把 lint 规则给出的编辑描述应用到源码。
 --
 -- 编辑按起点排序、从后往前应用（避免行号漂移），每次修复后用 parseSource 复验，
 -- 不合法就当作不可修复。门面的 --fix 循环调用本模块的 fixLoop。

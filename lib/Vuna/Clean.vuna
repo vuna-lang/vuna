@@ -46,7 +46,7 @@ runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "s
         else cleanTargets wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
--- 接口缓存已并入对象库（`$VUNA_STORE/objects/iface`），不再有树内 `*.iface`；
+-- 接口缓存在对象库（`$VUNA_STORE/objects/iface`），没有树内 `*.iface`；
 -- 因此没有 `--iface`：清缓存 = 清缓存族（`--store`）或包对象族（`--packages`）。
 cleanTargets : Bool -> Bool -> Bool -> Bool -> String -> Eff hostRow Int
 cleanTargets wantStore wantPackages wantGc dry dir = do

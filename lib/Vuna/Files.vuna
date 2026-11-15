@@ -8,12 +8,12 @@ module Vuna.Files where
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
 -- 不要直接调用 `@vuna@prim_eff_isDirectory`。
 --
--- M4（效果显式化）：目录遍历、存在性判定与读文件全部显式在 `Eff hostRow` 里，
+-- 目录遍历、存在性判定与读文件全部显式在 `Eff hostRow` 里，
 -- 纯过滤/路径/名称逻辑（`skipGenerated` 等）保持纯函数。
 import Base.HostRow
 import Vuna.Compiler.Common
 
--- C41：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
+-- 工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 toolFuelExhausted : String -> a
 toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 

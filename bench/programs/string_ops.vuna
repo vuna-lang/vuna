@@ -1,4 +1,4 @@
--- M33 W4：字符串基准：一次 `strConcatMany` 批拼 + 库 repeat / substring（后者走新原语）。
+-- 字符串基准：一次 `strConcatMany` 批拼 + 库 repeat / substring（后者走 `strSubstring` 原语）。
 -- 手写 OCaml 对照见 string_ops.ml（同算法：String.concat / String.sub）。
 import Base.String
 import Base.List

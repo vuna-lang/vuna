@@ -17,7 +17,7 @@ import Base.String
 import Vuna.Compiler.Canonical.Bytes
 import Vuna.Index.Types
 
--- | 载荷 schema（字段集变化必须 bump；旧 blob 自然拒绝）。
+-- | 载荷 schema（字段集变化必须 bump；其他版本的载荷自然拒绝）。
 export indexPayloadSchema : String
 indexPayloadSchema = "vuna-index-payload 2"
 

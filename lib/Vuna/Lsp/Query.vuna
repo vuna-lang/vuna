@@ -6,7 +6,7 @@ module Vuna.Lsp.Query where
 -- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
 --
 -- 方法：
---   hover             先 DT 洞目标（`_` / `?name`；文本里无洞 token 时跳过精化；M40 起走
+--   hover             先 DT 洞目标（`_` / `?name`；文本里无洞 token 时跳过精化；走
 --                     容错查询，未解洞也给目标+上下文），未命中再看 Bindings（模块名/局部
 --                     绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
 --                     range 落在光标 token 上（不是定义位置）；
@@ -15,7 +15,7 @@ module Vuna.Lsp.Query where
 --                     range/severity/source/code/message，与 publishDiagnostics 同源）；全文档
 --                     fix all 走 `Command`（`vuna.fixAllLint` + workspace/executeCommand）；
 --                     光标在洞上时按上下文 data / record binder 生成 `case split on <name>`
---                     （`refactor.rewrite`，C38；构造子解析是 parse 级，见下方 case split 段）；
+--                     （`refactor.rewrite`；构造子解析是 parse 级，见下方 case split 段）；
 --   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
 --   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
 --                     同文件缓冲兜底；
@@ -91,7 +91,7 @@ ${join "" (map ctxLine ctx)}"""
 goalContents : DtGoalInfo -> Json
 goalContents g =
   let
-    -- M40：命名洞显示 `?name : <目标类型>`；匿名洞保持只显示目标类型（与旧输出一致）。
+    -- 命名洞显示 `?name : <目标类型>`；匿名洞只显示目标类型。
     label =
       if g.dtGoalInfoName == "" then g.dtGoalInfoGoal
       else "${g.dtGoalInfoName} : ${g.dtGoalInfoGoal}"
@@ -147,7 +147,7 @@ currentModuleNameOf text = case parseSource "<lsp>" text of
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
 -- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
 -- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
--- M40：用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
+-- 用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
 export holeHoverAt : String -> Int -> Int -> String -> Eff hostRow (Maybe Json)
 holeHoverAt uri line col text =
   if hasHole text then holeHoverChecked uri line col text else pure Nothing
@@ -167,7 +167,7 @@ holeHoverChecked uri line col text = do
       )
 
 -- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）；`?name` 是 `?` 紧邻标识符
--- 起始字符（M40）。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
+-- 起始字符。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
 -- 精化，不影响正确性。
 holeJoinCode : Int -> Bool
 holeJoinCode c =
@@ -233,7 +233,7 @@ definitionResult uri line col text (Just idx) = case tokenAtCursor text line col
       Just loc => JArr [loc]
 
 -- references：定义位置 + Index refs 的出现位置。
--- C45：`references` 识别局部名——光标落在局部绑定上时，返回该 binder 在当前文档作用域内的
+-- `references` 识别局部名——光标落在局部绑定上时，返回该 binder 在当前文档作用域内的
 -- 全部出现位置（定义 + 使用，遮蔽同源，复用 `Vuna.Lsp.Bindings.bindingRenameOccurrences`），
 -- 而不是按名字全局匹配（那会把同名顶层符号 / 其它作用域的同名局部混进来）。
 -- 局部未命中（顶层符号 / 模块名 / 洞 / 关键字 ⇒ `bindingRenameOccurrences` 返回 Nothing）才回落
@@ -267,7 +267,7 @@ localRefLocation uri text line col =
   in JObj [Pair "uri" (JStr uri), Pair "range" (lspRange line col line (col + width))]
 
 -- formatting：formatSourceWith 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
--- M31.3（B27）：fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
+-- fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
 -- 声明表逐文件重算 local + import 闭包）。上下文/加载失败或未知运算符 ⇒ 返回空 edits
 -- （不让 LSP 请求失败，也不静默改语义）。
 export formattingEdits : String -> String -> Eff hostRow (List Json)
@@ -292,7 +292,7 @@ formattingFixities uri text =
     pure (secondOf looked)
 
 -- ---------------------------------------------------------------
--- codeAction：lint quick fix（M38 P1c）+ fix all 的 Command 形式 + 洞 case split（C38）
+-- codeAction：lint quick fix + fix all 的 Command 形式 + 洞 case split
 -- ---------------------------------------------------------------
 -- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；
 -- 只取**可自动修复**（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）
@@ -300,7 +300,7 @@ formattingFixities uri text =
 --   LSP range = (editStart - 1, 0) .. (editStop, 0)（末端取下一行行首，不吞掉下一行）；
 --   newText = `joinLines editLines`。
 -- 另加一条 "fix all lint findings"：`Vuna.Lint.Fix.fixLoop` 跑到收敛（与 CLI `--fix`
--- 同一条路径）；C38 起该动作走 **`Command` 形式**（`vuna.fixAllLint`），客户端执行后由
+-- 同一条路径）；该动作走 **`Command` 形式**（`vuna.fixAllLint`），客户端执行后由
 -- `workspace/executeCommand` → `workspace/applyEdit` 推送整文档替换（见 Vuna.Lsp）。
 -- 请求 range 附近没有可修复 finding 时不给 fix all，避免每一行都冒出全文档 fix。
 -- 总条数上限 20；fix all 占最后一格，case split 动作排在最前。
@@ -387,7 +387,7 @@ findingQuickFix uri f = case f.findingEdit of
 export fixAllLintCommand : String
 fixAllLintCommand = "vuna.fixAllLint"
 
--- C38：fix all 走 `Command`（不内嵌 WorkspaceEdit）：客户端选中后发
+-- fix all 走 `Command`（不内嵌 WorkspaceEdit）：客户端选中后发
 -- `workspace/executeCommand`，服务器再以 `workspace/applyEdit` 推送整文档替换。
 -- 好处是 codeAction 结果不带大段 newText，且 command 通道可被客户端/脚本单独触发。
 fixAllActionJson : String -> Json
@@ -428,7 +428,7 @@ fixAllLintWorkspaceEdit uri text = do
       )
 
 -- ---------------------------------------------------------------
--- case split（C38）：洞 → 上下文 binder 的 data 构造子 / record 分支
+-- case split：洞 → 上下文 binder 的 data 构造子 / record 分支
 -- ---------------------------------------------------------------
 -- 触发链（便宜 → 贵）：
 --   1. 文本级扫描请求 range 里的 `_` / `?name` token（不跑精化；没有就不查洞）；
@@ -855,7 +855,7 @@ fieldSymbolJson lines f =
   symbolJson (fieldName f) 8 "${fieldName f} : ${renderType (fieldType f)}"
     (spanRange (fieldSpan f)) (nameSelRange lines (fieldSpan f) (fieldName f)) []
 
--- M30（B20）：方法子节点用方法签名 span（方法名到类型结束），不再复用 trait 声明 span。
+-- 方法子节点用方法签名 span（方法名到类型结束），不复用 trait 声明 span。
 methodSymbolJson : List String -> TraitMethod -> Json
 methodSymbolJson lines m =
   symbolJson (traitMethodName m) 6 "${traitMethodName m} : ${renderType m.traitMethodType}"

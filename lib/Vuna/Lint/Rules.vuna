@@ -2,8 +2,7 @@ module Vuna.Lint.Rules where
 
 -- Vuna.Lint.Rules：lint 的 dispatch 规则 + 列表字面量规则（AST 驱动）+ 源码切片工具。
 --
--- M31 重写：旧实现是纯 token 行扫描（按缩进猜结构），规范格式下几乎不触发。
--- 现在 `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
+-- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
 -- （字面量、模式、分支体）时再用 span + token 边界从源码切片，绝不重新渲染
 -- 字符串字面量。Edit 用行范围表示（`Edit start stop lines`），由 Vuna.Lint.Fix 应用。
 --
@@ -12,7 +11,6 @@ module Vuna.Lint.Rules where
 --     变量分派）。scrutinee 是外层 clause/alt 模式变量时提升成多条 clause / 更细的
 --     alt；字面量链提升不了时回退成 case（`chainFindings`）；
 --   * dispatch-lift：case / let dispatch。单 alt 替换外层变量；多 alt 拆 clause / alt。
---     （原 lift-destructure 与 case-to-clauses 合并而来，两个旧 code 不再产生。）
 --   * list-literal：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸
 --     `Nil` 改写为 `[a, b]` / `[]`；模式匹配不动（独立遍历 `walkListLiteral`）。
 --
@@ -28,7 +26,7 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Diagnostics
 
--- C41：工具链 fuel 耗尽不是「部分结果」，而是内部不变量被破坏；与编译器一致硬失败。
+-- 工具链 fuel 耗尽不是「部分结果」，而是内部不变量被破坏；与编译器一致硬失败。
 lintFuelExhausted : String -> a
 lintFuelExhausted what = prim_fail "vuna: internal: lint ${what} fuel exhausted"
 
@@ -114,7 +112,7 @@ splitLinesFrom (c :: rest) acc cur =
 
 export joinLines : List String -> String
 joinLines [] = ""
--- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，旧实现
+-- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，逐段拼接
 -- （`line ++ "\n" ++ joinLines rest`）会让 --fix 每次多写一个行尾换行。
 joinLines ([line]) = line
 joinLines (line :: rest) = "${line}\n${joinLines rest}"
@@ -337,14 +335,14 @@ else case e of
   EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
   EAnn value ty sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
-  -- M31.3：keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
+  -- keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
   -- 起始位置要递归到操作数（中缀 span 从运算符开始，lhs 可能更靠前）。
   EBacktick nm l r sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
   ESectOp op sp => startFromSpan sp
   ESectL op rhs sp => minPair (startFromSpan sp) (startExpr (fuel - 1) rhs)
   ESectR lhs op sp => minPair (startFromSpan sp) (startExpr (fuel - 1) lhs)
-  -- M31.2：中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
+  -- 中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
   EInfix op l r sp =>
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
   EParen inner sp => minPair (startFromSpan sp) (startExpr (fuel - 1) inner)
@@ -584,16 +582,16 @@ else case e of
     mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
   EDo stmts sp => mentionsStmts (fuel - 1) name stmts
   EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
-  -- M31.2：中缀链与括号（parser 中间产物）：操作数继续递归。
+  -- 中缀链与括号（parser 中间产物）：操作数继续递归。
   EInfix op l r sp => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
   EParen inner sp => mentionsExpr (fuel - 1) name inner
-  -- M31.3：反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
+  -- 反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
   EBacktick nm l r sp =>
     nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
   ESectOp op sp => op == name
   ESectL op rhs sp => op == name || mentionsExpr (fuel - 1) name rhs
   ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
-  -- M36：模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
+  -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
   EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
 
 mentionsInterpParts : Int -> String -> List InterpPart -> Bool
@@ -1101,7 +1099,7 @@ else case maybeLane of
     in if not (isNilList lifted) then append lifted (liftFindings lines toks lane expr)
     else append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
 
--- native-effects N1（提交 4b）：handle 标记载荷识别（编码见 `Frontend/Ast.handleSyntax`）。
+-- `handle` 标记载荷识别（编码见 `Frontend/Ast.handleSyntax`）。
 handlePartsOf : Expr -> Maybe (Pair Expr (Pair Expr Expr))
 handlePartsOf (EApp (EVar name _) ([comp, ret, opH]) _) =
   if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
@@ -1136,7 +1134,7 @@ else case e of
   EStr s sp => []
   EFloat raw sp => []
   ELam ps body sp => walkExpr (fuel - 1) lines toks body
-  -- native-effects N1（提交 4b）：`handle` 标记的载荷是 parser 合成的 λ + case；合成 case
+  -- `handle` 标记的载荷是 parser 合成的 λ + case；合成 case
   -- 不能当 dispatch-lift 的 lane 来源，否则会给出改写子句头的错误建议。只遍历用户写的
   -- comp、return 体和各 op 子句体。
   EApp fn args sp => case handlePartsOf (EApp fn args sp) of
@@ -1157,16 +1155,16 @@ else case e of
   EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
   EAnn value ty sp =>
     append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
-  -- M31.2：parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
+  -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
   EInfix op l r sp => append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
   EParen inner sp => walkExpr (fuel - 1) lines toks inner
-  -- M31.3：keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
+  -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
   EBacktick nm l r sp =>
     append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
   ESectOp op sp => []
   ESectL op rhs sp => walkExpr (fuel - 1) lines toks rhs
   ESectR lhs op sp => walkExpr (fuel - 1) lines toks lhs
-  -- M36：模板字面量：洞内表达式同样参与规则遍历。
+  -- 模板字面量：洞内表达式同样参与规则遍历。
   EInterp multi parts sp => walkInterpParts (fuel - 1) lines toks parts
 
 walkInterpParts : Int -> List String -> List PTok -> List InterpPart -> List Finding
@@ -1589,7 +1587,7 @@ dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
 
--- M31.3（B26/B27）：lint 的规则看 AST 中缀结构，所以重排必须与程序级 fixity 一致。
+-- lint 的规则看 AST 中缀结构，所以重排必须与程序级 fixity 一致。
 -- `programFixities` = 本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明（调用方算）；
 -- 这里再把它放在本文件声明（parse 得到的 env）之前——本地优先，与 Loader 一致。
 -- 缺声明时严格报 unknown fixity（不静默按默认优先级重排）。

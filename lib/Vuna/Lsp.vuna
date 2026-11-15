@@ -8,12 +8,12 @@ module Vuna.Lsp where
 --   （Full 同步，kind = 1）、capabilities、请求分发与 stdin 字节帧循环。
 -- `runLsp` / `runLspTool` 是 CLI 入口（由 Vuna.Cli 插入分发）。
 --
--- M40 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
+-- 查询管线（hover）：洞目标 → Bindings（模块引用 / 局部绑定）→ Index 符号；
 -- definition：Bindings → Index 符号 → 同文件缓冲兜底。Bindings 是 parse 级的，不触发
 -- 索引构建；模块引用/符号的 docstring 以**打开中的缓冲**为准（`bufferTexts`），未打开的
 -- 目标才读盘——两处口径一致，同一模块不会出现两个版本的文档字符串。
--- C38：rename / prepareRename 走 `Vuna.Lsp.Rename`（局部绑定复用 Bindings 的作用域
--- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，新增洞的
+-- rename / prepareRename 走 `Vuna.Lsp.Rename`（局部绑定复用 Bindings 的作用域
+-- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，还包括洞的
 -- case split（`refactor.rewrite`，构造子解析在 Query）与 `vuna.fixAllLint` command
 -- （`workspace/executeCommand` → 服务器发 `workspace/applyEdit`）。
 --
@@ -126,7 +126,7 @@ setDiagSession : Maybe DiagCache -> LspState -> LspState
 setDiagSession dsess (LspState docs s pull idx tried hint logs dc _) =
   LspState docs s pull idx tried hint logs dc dsess
 
--- M34.4：LSP 进程内诊断帧缓存（上限 32 条，前插）。
+-- LSP 进程内诊断帧缓存（上限 32 条，前插）。
 pushDiag : Int -> Json -> LspState -> LspState
 pushDiag key frame (LspState docs s pull idx tried hint logs dc dsess) =
   LspState docs s pull idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
@@ -176,7 +176,7 @@ docToPair : Doc -> Pair String String
 docToPair d = Pair (decodeUri d.docUri) d.docText
 
 -- ---------------------------------------------------------------
--- capabilities（M30 P2：全套；C38 增加 refactor.rewrite 与 executeCommand）
+-- capabilities（全套；含 refactor.rewrite 与 executeCommand）
 -- ---------------------------------------------------------------
 serverCapabilities : Json
 serverCapabilities =
@@ -227,7 +227,7 @@ clientSupportsPull msg = case jsonGetIn ["params", "capabilities", "textDocument
   Just (JObj _) => True
   _ => False
 
--- didOpen：登记文档并推诊断（M34.4：同一 uri + 文本内容的诊断帧进程内缓存，重复请求
+-- didOpen：登记文档并推诊断（同一 uri + 文本内容的诊断帧进程内缓存，重复请求
 -- 不重复精化）。声明 pull 能力的客户端不 push（见 stateClientPull）。
 handleDidOpen : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleDidOpen msg state =
@@ -261,7 +261,7 @@ handleDidChange msg state =
     pair <- diagnoseCached uri version text state
     pure (Pair False (Pair (setDocs docs (firstOf pair)) [secondOf pair]))
 
--- M34.4：诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
+-- 诊断帧缓存查询（key = uri + 文本内容哈希；未命中才跑完整精化并写缓存）。
 diagnoseCached : String -> Int -> String -> LspState -> Eff hostRow (Pair LspState Json)
 diagnoseCached uri version text state =
   let
@@ -329,7 +329,7 @@ handleHover msg state =
             in pure
               (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
 
--- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（M31.3：程序级 fixity）。
+-- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（fixity 是程序级的）。
 handleFormatting : Json -> LspState -> Eff hostRow (Pair Bool (Pair LspState (List Json)))
 handleFormatting msg state =
   let
@@ -341,7 +341,7 @@ handleFormatting msg state =
     pure (Pair False (Pair state [responseOk (idOf msg) (JArr edits)]))
 
 -- ---------------------------------------------------------------
--- codeAction（M38 P1c：lint quick fix；C38：洞 case split + fix all 的 Command 形式）
+-- codeAction（lint quick fix；洞 case split + fix all 的 Command 形式）
 -- ---------------------------------------------------------------
 -- 请求 range 是 0-based；Query 侧用 1-based 行/列。`context.only` 是客户端想要的
 -- CodeActionKind 列表（Nothing = 不限制）：Query 按 quickfix / refactor.rewrite 分别过滤。
@@ -372,7 +372,7 @@ handleCodeAction msg state =
     pure (Pair False (Pair state [responseOk (idOf msg) (JArr actions)]))
 
 -- ---------------------------------------------------------------
--- workspace/executeCommand（C38：fix all 的 command 形式）
+-- workspace/executeCommand（fix all 的 command 形式）
 -- ---------------------------------------------------------------
 -- codeAction 里的 `vuna.fixAllLint` 被客户端执行后到达这里：按当前缓冲重算整文档修正，
 -- 用**服务器 → 客户端**的 `workspace/applyEdit` 请求把 WorkspaceEdit 推给客户端
@@ -597,9 +597,9 @@ abnormalExit state = do
   _ <- flushLogs state
   pure 1
 
--- A05：零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
+-- 零参顶层定义在模块初始化时求值，所以「动作」必须函数化。
 -- runLsp 是读 stdin 的 LSP 帧循环：若留成零参值，任何子命令启动都会跑它。
--- M4：整个入口显式 `Eff hostRow`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
+-- 整个入口显式 `Eff hostRow`（帧处理/诊断/索引都已在 Eff 里），由 CLI 运行时执行。
 export runLsp : Int -> Eff hostRow Int
 runLsp _ = do
   outcome <-

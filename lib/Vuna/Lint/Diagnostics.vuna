@@ -1,17 +1,9 @@
 module Vuna.Lint.Diagnostics where
 
--- Vuna.Lint.Diagnostics：lint 规则的单一真源（M30 重构）。
+-- Vuna.Lint.Diagnostics：lint 规则的单一真源。
 --
--- 旧形态是每个规则在 `Rules.vuna` 里就近写 5 行注释：
---   -- @code LN_LiteralIfChain
---   -- @rule literal-if-chain
---   -- @fixable
---   -- @msg  ...
---   -- @edit ...
---   -- @desc ...
--- 其中 code（`LN_LiteralIfChain`）与 rule（`literal-if-chain`）是**同一规则的两个名字**，
--- 手写两遍必然漂移。现在收拢为 `LintRule` 枚举：code 是符号（文档/索引的稳定键），
--- rule 是 CLI/输出用的 kebab 短名，两者都在此一处声明。
+-- 每条规则只需一个枚举构造子：code 是符号（文档/索引的稳定键），rule 是 CLI/输出用的
+-- kebab 短名，两者都在此一处声明——同一规则的名字不手写两遍，避免漂移。
 --
 -- 分层：本模块在**根包**（`vuna`），不属于 compiler 包 —— 工具链永不进 TCB
 -- （`nix/tcb-forbidden.txt`）。`Vuna.Compiler.Diagnostics` 承载编译期诊断（TC_/CG_），
@@ -22,14 +14,12 @@ import Base.String
 
 -- 规则枚举：新增规则在此加构造子，并登记到 `lintAll`。
 --
--- M31：规则按“dispatch 源”划分，而不是按改写阶段划分：
+-- 规则按“dispatch 源”划分，而不是按改写阶段划分：
 --   * `literal-if-chain`：if dispatch（字面量链 / Bool 变量）→ 提升进外层模式；
 --     字面量链提升失败时回退成 case；
 --   * `dispatch-lift`：case / let dispatch → 提升进外层模式（单 alt 替换、多 alt 拆分）。
--- 旧 `lift-destructure` / `case-to-clauses` 的判定与渲染已合并进同一个 lift 内核，
--- 两个旧 code 不再产生。
 --
--- M41：新增 `list-literal`：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `Nil`/`[]`）
+-- `list-literal`：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `Nil`/`[]`）
 -- 以及裸 `Nil` 构造应写成列表字面量；模式匹配里的 `::`/`Cons` 不在规则范围。
 export data LintRule(..) : Type where
   LiteralIfChain : LintRule

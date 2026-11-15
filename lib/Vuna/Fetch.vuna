@@ -1,7 +1,7 @@
 -- | `vuna fetch`：显式取包到持久 store（git / url），path 依赖只校验摘要。
 module Vuna.Fetch where
 
--- Vuna.Fetch：包获取（阶段 1）。纪律（D15）：
+-- Vuna.Fetch：包获取。纪律（D15）：
 --   * **只有 fetch 联网**；check/build/test 只读 store，缺对象报 `PKG_NotMaterialized`。
 --   * `path` 依赖是可变输入（D12）：不复制进 store，只按声明摘要校验（无摘要则跳过）。
 --   * `git` 依赖：clone → checkout rev → 收集内容 → 校验声明摘要 → 写对象 + 物化。

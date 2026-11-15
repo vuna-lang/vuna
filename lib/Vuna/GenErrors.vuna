@@ -2,11 +2,10 @@ module Vuna.GenErrors where
 
 -- Vuna.GenErrors：从**枚举真源**生成错误码文档。
 --
--- M30 重构后不再扫源码 `-- @code` 注释：code、模板、说明、规则名、修复动作
--- 全部来自三个枚举表——
+-- code、模板、说明、规则名、修复动作全部来自三个枚举表——
 --   Vuna.Compiler.Diagnostics 的 `tcAll` / `cgAll`（TC_/CG_），
 --   Vuna.Lint.Diagnostics 的 `lintAll`（LN_），
--- 由此消除了旧实现「扫注释 + 从消息字面量反推前缀」的双重真源（findMsg 已删除）。
+-- 单一真源，不需要扫源码注释、也不必从消息字面量反推前缀。
 -- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
 -- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
 import Base.HostRow

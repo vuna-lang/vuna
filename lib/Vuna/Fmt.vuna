@@ -3,17 +3,17 @@ module Vuna.Fmt where
 -- Vuna.Fmt：vuna 源码格式化器门面（parse → 规范打印）。
 -- 输出约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 -- format(parse(x)) 可重新 parse 且幂等（format(format(x)) == format(x)）。
--- 导出列表（M10 模块头）：导出项按字面文本的 ASCII 字典序排序，`module B` 整模块
+-- 导出列表：导出项按字面文本的 ASCII 字典序排序，`module B` 整模块
 -- 重导出统一排最后；单行超过 maxWidth 或列表内含注释时逐项一行（逗号前置），
 -- 否则保持单行。项级注释随项移动。
--- 注释保留（M11.6）：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置
+-- 注释保留：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置
 -- 挂到最近的「条目」（顶部声明/import/`infix*` 声明/构造器/记录字段/trait 方法/
 -- let 与 where 绑定/case 分支/do 语句）；实现见 Vuna.Fmt.Comment。
 --
--- M24 后维护·源码重组后本模块只是门面：表达式/模式打印在 Vuna.Fmt.Expr，声明/模块头在
+-- 本模块只是门面：表达式/模式打印在 Vuna.Fmt.Expr，声明/模块头在
 -- Vuna.Fmt.Decl，注释挂载在 Vuna.Fmt.Comment，共用小工具在 Vuna.Fmt.Util。
 --
--- M31.3（B27）：fixity 是**程序级**属性——同一个运算符在 A 模块的优先级可能来自它 import
+-- fixity 是**程序级**属性——同一个运算符在 A 模块的优先级可能来自它 import
 -- 的库模块，因此调用方必须给出「程序可见的 fixity 闭包」（`formatSourceWith` 的第一个
 -- 参数，见 `Vuna.Compiler.Loader.Flatten.fixitiesForSource`）。fmt 内部把本文件的本地
 -- `infix*` 声明放在最前（本地优先），并用 keep 表（`tableOfKeepOps`）重排/打印：

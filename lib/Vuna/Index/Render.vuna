@@ -1,8 +1,7 @@
 module Vuna.Index.Render where
 
--- Vuna.Index.Render：`vuna map` / `vuna api` 的文本渲染（M24 后维护·源码重组）。
--- 纯字符串拼装，不读源码。M30 删除 `renderDocWithComments`：`vuna doc --with-comments`
--- 从未实现（flag 已删），doc 现在由 Vuna.Doc 直接按源码 + `[export]` 渲染。
+-- Vuna.Index.Render：`vuna map` / `vuna api` 的文本渲染。
+-- 纯字符串拼装，不读源码；doc 由 Vuna.Doc 直接按源码 + `[export]` 渲染。
 import Vuna.Compiler.Common
 import Vuna.Index.Types
 

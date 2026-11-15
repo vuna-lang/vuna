@@ -1,6 +1,6 @@
 module Vuna.Repl where
 
--- Vuna.Repl：交互式 REPL（M11.5；M23 起底层是 DT 精化 + 核心求值；REPL v2 重写）。
+-- Vuna.Repl：交互式 REPL（底层是 DT 精化 + 核心求值）。
 --
 -- 状态：包上下文 + import 缓冲 + 定义块列表 + 待续输入（pending）+ `:{ ... :}` 块 +
 -- 上次加载目标 + Index 缓存 + 设置 + 历史 + termAux 缓存。定义按「块」记录，块内
@@ -13,7 +13,7 @@ module Vuna.Repl where
 --   * 重定义（同名 DFun）移除旧块后重新推断；`:delete NAME` 删除 REPL 内定义；
 --     `:load` 文件来源的块拒绝重定义/删除（改文件后 `:reload`）。
 --
--- 输入：非 tty 走 `@vuna@prim_eff_readLine`（与旧版语义一致，管道测试不感知行编辑）；tty 且
+-- 输入：非 tty 走 `@vuna@prim_eff_readLine`（管道测试不感知行编辑）；tty 且
 -- `:set editing` 未关闭时走 `Vuna.Repl.Edit`（原始模式行编辑、方向键、Ctrl-R、括号粘贴、
 -- resize 重绘；历史文件的单行/多行单元编码在 `Vuna.Repl.History`）。
 --
@@ -26,17 +26,17 @@ module Vuna.Repl where
 --
 -- `:load` 接受三种形式（存在性优先）：
 --   1. 目录 → 切换包上下文（重置缓冲/索引，保留设置与历史）；
---   2. 文件 → 旧语义：整段源码替换 imports/defs；带 `module ... where` 头拒绝；
+--   2. 文件 → 整段源码替换 imports/defs；带 `module ... where` 头拒绝；
 --   3. 模块名（如 `Base.Nat`）→ 立即校验后追加 `import`。
 --
 -- 实现结构：只有 `replLoop` 与 `editLoop`（在 Edit 模块）递归；其余步骤函数返回新
 -- 状态（`ReplState` / `ReplOutcome`）。REPL 主循环用显式 fuel（1G 行守卫）。
 --
--- 会话缓存（M34.6 5c / 对象库 v2）：
+-- 会话缓存（工具会话对象 + 源码索引对象）：
 --   * 工具接口会话（`stateToolSession`）：`depIfacesForToolSourceDetailed` 的结果（依赖
 --     接口 + 依赖哈希表 + 本包 manifest + import 闭包 + 校验面）提交成
 --     `Vuna.Tool.Session` 的输入寻址对象；每条表达式先 `toolHitValue` 判命中；
---     miss 才整条重建。不再每条表达式重读 manifest / iface（C37③）。
+--     miss 才整条重建。不用每条表达式重读 manifest / iface。
 --   * 源码索引（`stateBrowseIndex`）：索引入口自身也是工具会话客户端（对象载荷 = 索引
 --     编码），命中就从载荷解码、未命中才扫描重建；REPL 只额外在会话内记住解出来的 `Index`。
 import Base.HostRow
@@ -323,7 +323,7 @@ replEmitErr st s = case st.stateSink of
     _ <- writeRef errRef (cur ++ s)
     pure (strLength s)
 
--- capture 汇（server 模式）：子进程类效果（`:!` / 效果表达式）在阶段 1 拒绝执行。
+-- capture 汇（server 模式）：子进程类效果（`:!` / 效果表达式）在 server 模式下拒绝执行。
 captureMode : ReplState -> Bool
 captureMode st = case st.stateSink of
   SinkStdout => False
@@ -831,7 +831,7 @@ sigLine : Pair String String -> String
 sigLine p = "${firstOf p} : ${secondOf p}\n"
 
 -- ---------------------------------------------------------------
--- 工具接口会话（M34.6 5c）
+-- 工具接口会话
 -- ---------------------------------------------------------------
 -- `depIfacesForToolSourceDetailed` 每条表达式跑一遍：重读本包 + 各依赖包 manifest、按 import
 -- 闭包重读依赖 iface（166 模块 ≈0.5–1.5s/条）。这里把结果按「编译器指纹 + 包名 + 包目录」
@@ -877,7 +877,7 @@ replImportName : Import -> String
 replImportName (Import n _ _ _) = n
 
 -- 重建会话：跑一次 `depIfacesForToolSourceDetailed`，把结果写进工具会话对象。
--- 返回 `Nothing` = 依赖接口不全（base-only / 依赖包没 check），本次求值走无 iface 旧路径。
+-- 返回 `Nothing` = 依赖接口不全（base-only / 依赖包没 check），本次求值走无 iface 路径。
 replToolSession : PackageContext -> String -> Eff hostRow (Maybe ReplToolSession)
 replToolSession ctx program = do
   toolR <- depIfacesForToolSourceDetailed ctx "<repl>" program
@@ -908,7 +908,7 @@ sessionUsable st program = case st.stateToolSession of
       )
 
 -- 会话可用就复用依赖接口；否则（一次）重建；都不可能时（base-only / 依赖接口不全）走
--- 不带 iface 的旧求值路径，且不记住会话（下次求值再试一次，成本是零：直接返回 Nothing）。
+-- 不带 iface 的求值路径，且不记住会话（下次求值再试一次，成本是零：直接返回 Nothing）。
 -- 返回值带上「本次实际用的会话」，由调用方写回状态。
 evalExprInfoWithSession : ReplState -> String -> String -> Eff hostRow (Pair (Maybe ReplToolSession) (Check (Pair (Pair String String) (Maybe AuxCache))))
 evalExprInfoWithSession st program expr = case st.stateToolSession of
@@ -1017,7 +1017,7 @@ else
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
 
--- D25：动作结果类型可能是 `Base.Nat.Nat` 这类跨模块 canonical 名（`Base.EffConsole.Print`
+-- 动作结果类型可能是 `Base.Nat.Nat` 这类跨模块 canonical 名（`Base.EffConsole.Print`
 -- 在 result 族里返回 `Nat`）；生成的入口文件要补对应 `import` 才能解析限定名。用户已显式 import 时不
 -- 重复（重复 import 是硬错误）。
 ioTypeImports : ReplState -> String -> String
@@ -2025,7 +2025,7 @@ expandAlias cmd =
     Just full => if trim rest == "" then full else "${full} ${rest}"
 
 -- ---------------------------------------------------------------
--- 续行判定（与旧版一致，尾部 token 增加 `<-` / `=>`）
+-- 续行判定（尾部 token 含 `<-` / `=>`）
 -- ---------------------------------------------------------------
 record ScanState where
   scanStateOf : Int

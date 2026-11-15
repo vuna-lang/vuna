@@ -90,7 +90,7 @@ envOr name fallback = do
 strOfInt : Int -> String
 strOfInt n = strFromInt n
 
--- 去掉结尾换行（命令替换语义；旧套件用 $(...) 会吃掉尾随换行）。
+-- 去掉结尾换行（命令替换语义；`$(...)` 会吃掉尾随换行）。
 trimNewlines : String -> String
 trimNewlines s =
   let
@@ -259,7 +259,7 @@ withEnv env argv =
 withEnvIface : Env -> List String -> List String
 withEnvIface env argv = withEnvIfaceAt env "" argv
 
--- 兼容旧签名（seed 等调用点历史上传 iface 目录）；对象库统一由 env.envStore 决定。
+-- 显式 store 覆盖（`store-isolated` 一类 case 需要私有 store）；默认由 env.envStore 决定。
 withEnvIfaceAt : Env -> String -> List String -> List String
 withEnvIfaceAt env storeOverride argv =
   let
@@ -351,7 +351,7 @@ removeTree path = @vuna@prim_eff_runIn "/" ["rm", "-rf", path]
 -- 增量构建缓存：按「生成模块集」复用 ocamlopt 产物
 -- ---------------------------------------------------------------
 -- 每个 case 的 codegen 都产出「整棵 base + 自己的 Main.ml」；base 部分对同一模块集
--- 逐字节一致，但旧实现每个 case 用独立目录 ⇒ 每次从零 ocamlopt 编译 ~25 个单元
+-- 逐字节一致，但每个 case 用独立目录会让每次从零 ocamlopt 编译 ~25 个单元
 -- （~650ms）。这里先 codegen 到 case 私有 staging，再按 staging 里的模块集取
 -- **每 worker 共享**的构建目录，整份拷进去后跑 build.sh：内容哈希 stamp 让 base 单元
 -- 全部命中，只重编 Main.ml 并链接（~250ms）。模块集相同的 case 互相加速，模块集变
@@ -1209,7 +1209,7 @@ fileContainsAssert env caseTmp (Pair path frag) = do
     (Assertion "file" (contains frag text) "file ${path} missing fragment: ${frag}\nactual:\n${text}")
 
 -- 断言列表：纯片段（out-contains / file-exists 等）照旧现算；只有读文件的两类
--- （out-equals-file / file-contains）走效果遍历，顺序与旧的 let 求值一致。
+-- （out-equals-file / file-contains）走效果遍历，顺序与 let 求值一致。
 outAsserts : Env -> String -> String -> Step -> Eff hostRow (List Assertion)
 outAsserts env caseTmp out st = do
   equalsFileA <- mapEff (\path => do
@@ -1391,7 +1391,7 @@ filterCases opts cases = filter (caseMatches opts) cases
 -- ---------------------------------------------------------------
 -- 打印与汇总
 -- ---------------------------------------------------------------
--- D25：`@vuna@prim_eff_print` 返回 `Int` 字节数；`Nat` 归一化只在 Eff handler 的 result 族。
+-- `@vuna@prim_eff_print` 返回 `Int` 字节数；`Nat` 归一化只在 Eff handler 的 result 族。
 -- 工具链这里按 Int 使用（丢弃/比较都按 Int）。
 printLine : String -> Eff hostRow Int
 printLine s = @vuna@prim_eff_print "${s}\n"
@@ -1478,8 +1478,8 @@ not False = True
 -- ---------------------------------------------------------------
 -- LPT 调度（仅用于非 e2e tier）
 --
--- e2e 的冷隔离长 case 对顺序敏感，仍按发现顺序；gate（fast/integration）用历史
--- `.local/test-suite/costs.tsv` 做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
+-- e2e 的冷隔离长 case 对顺序敏感，仍按发现顺序；gate（fast/integration）按
+-- `.local/test-suite/costs.tsv` 的实测耗时做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
 -- worker 各自读同一份 costs，确定性地算出同一组 bins，再取自己的 bin。
 -- ---------------------------------------------------------------
 costsPath : Env -> String
@@ -1614,7 +1614,7 @@ detectJobs env = do
     r <- runCmd env "jobs-probe" "." 10 ["nproc"]
     pure (positiveOrOne (parseLeadingInt (trim r.cmdOut)))
 
--- 探测结果 -> 并发数：缺失/非正数一律回落 1（与旧行为一致）。
+-- 探测结果 -> 并发数：缺失/非正数一律回落 1。
 positiveOrOne : Maybe Int -> Int
 positiveOrOne Nothing = 1
 positiveOrOne (Just n) = if n > 0 then n else 1
@@ -1677,7 +1677,7 @@ collectResults : String -> Int -> List (Pair Int Case) -> Eff hostRow (List Case
 collectResults dir count indexed = collectResultsGo (count + 1) dir count 0 indexed []
 
 -- 缺结果文件 ⇒ worker 没跑完/被杀（崩溃、OOM、超时被外层杀），不是 case 断言失败。
--- 用 index → case id 还原真实用例名；旧行为只报 `unknown-<index>`，线上失败完全无法定位。
+-- 用 index → case id 还原真实用例名；只报 `unknown-<index>` 时线上失败无法定位。
 caseIdAt : Int -> List (Pair Int Case) -> String
 caseIdAt i [] = "unknown-${strOfInt i}"
 caseIdAt i ((Pair j c) :: rest) = if j == i then c.caseId else caseIdAt i rest
@@ -1978,8 +1978,8 @@ noSectionTexts = []
 familyOrphan : Env -> List Case -> String -> Bool
 familyOrphan env cases rel = not (auditClaimed env cases noSectionTexts rel)
 
--- 精确护栏：不用 section 脚本文本做模糊认领（旧 audit 只要脚本里提到目录名就
--- 算认领，整个 family 从 suite.toml 消失时也报 0 orphan）。
+-- 精确护栏：不用 section 脚本文本做模糊认领（只看目录名会让整个 family 从 suite.toml
+-- 消失时也报 0 orphan）。
 familyOrphans : Suite -> Eff hostRow (List String)
 familyOrphans suite =
   let

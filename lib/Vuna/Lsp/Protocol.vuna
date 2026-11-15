@@ -184,7 +184,7 @@ tokenAtCursor text line col =
     in if token == "" then Nothing else Just (Pair (startP + 1) token)
 
 -- ---------------------------------------------------------------
--- span / 文本定位小工具（Bindings / Query 共用；M40 从 Query 上移）
+-- span / 文本定位小工具（Bindings / Query 共用）
 -- ---------------------------------------------------------------
 export posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
 posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2

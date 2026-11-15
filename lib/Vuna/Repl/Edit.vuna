@@ -122,7 +122,7 @@ outcomeOf ECancel = EditCancel
 outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
 -- 主循环：读一键 → 处理 → 重绘；`KIdle` 每 20 tick（≈2s）查一次终端宽度，
--- 变化时按新宽度重绘。`width` 是本轮使用的列数（初值来自 Repl 的 `stty size`）。
+-- 变化时按新宽度重绘。`width` 是本次使用的列数（初值来自 Repl 的 `stty size`）。
 editLoop : Int -> EditConfig -> Int -> Int -> EditState -> Eff hostRow EditResult
 editLoop fuel cfg width tick st = if fuel <= 0 then pure ECancel
 else do

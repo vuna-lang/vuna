@@ -279,13 +279,13 @@ defsRT = case decDtDefsComplete (encTop encDtDefs defFixtures) of
   Nothing => False
   Just ds2 => encTop encDtDefs ds2 == encTop encDtDefs defFixtures
 
--- | 导出条目的 `parent` 必须进哈希（旧实现漏了 → 依赖方可能不判脏）。
+-- | 导出条目的 `parent` 必须进哈希（不进则依赖方可能不判脏）。
 parentCovered : Bool
 parentCovered =
   not
     (encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "") == encTop encExportEntry (ExportEntry "ctor" "C" "M.C" "M.T"))
 
--- | fixity 的别名目标必须进哈希（旧实现漏了）。
+-- | fixity 的别名目标必须进哈希。
 fixityCovered : Bool
 fixityCovered =
   not

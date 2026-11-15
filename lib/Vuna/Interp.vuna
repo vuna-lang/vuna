@@ -2,19 +2,19 @@ module Vuna.Interp where
 
 -- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
 --
--- M23 起 `vuna interp` 的语义是**精化后的核心求值**：按包上下文（最近 vuna.toml
+-- `vuna interp` 的语义是**精化后的核心求值**：按包上下文（最近 vuna.toml
 -- 的依赖闭包；无 manifest 时 base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求
--- `main` 的值。「不检查直接执行」的调试语义已取消；因此子句元数、
+-- `main` 的值。因此子句元数、
 -- 类型、覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
 --
--- M26：入口吃 `PackageContext`（不再有环境根 / `List Root`）；调用方（CLI / REPL /
+-- 入口吃 `PackageContext`（没有环境根 / `List Root`）；调用方（CLI / REPL /
 -- test runner）负责从文件、cwd 或包构造上下文。
 --
 -- 求值是**纯**的：不执行效果。`main : Eff hostRow a` 一律报错；
 -- 真正带 `@vuna@prim_eff_print` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
 -- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
 --
--- M30：新增两条工具链能力（仍然不属于编译器 seed 闭包）：
+-- 两条工具链能力（都不属于编译器 seed 闭包）：
 --   - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
 --   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
 --     `compileToDir` + `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test`
@@ -52,9 +52,9 @@ interpretExpr ctx program expr = do
         OkC output => output
       )
 
--- M30 · REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
+-- REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
 -- 类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
--- M34.6（5b）：REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
+-- REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
 -- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
 export evalExprInfoWithAux : PackageContext -> String -> String -> Maybe AuxCache -> Eff hostRow (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoWithAux ctx program expr aux = do
@@ -111,7 +111,7 @@ effectBinaryName : String
 effectBinaryName = "vuna-effect"
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
--- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
+-- 读环境是启动期动作，函数化（零参顶层值会在模块初始化时求值）。
 mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -120,7 +120,7 @@ mapEff f (x :: rest) = do
   pure (y :: ys)
 
 -- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
--- 读环境是启动期动作，函数化（A05：零参顶层值会在模块初始化时求值）。
+-- 读环境是启动期动作，函数化（零参顶层值会在模块初始化时求值）。
 tempBase : Int -> Eff hostRow String
 tempBase _ = do
   env <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")

@@ -281,8 +281,8 @@ pickTarget comments ((Pair idx t) :: rest) used b =
   else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then Just (Pair idx t)
   else pickTarget comments rest used b
 
--- 尾随 doc（`-- ^`）在这之后单独关联：只取**前置目标**（模块头不参与），已用过的目标
--- 不再复用；同一目标两种位置都有时前置优先（insertDoc 先到先得）。
+-- 尾随 doc（`-- ^`）在这之后单独关联：只取**前置目标**（模块头不参与），被前置占用的目标
+-- 不复用；同一目标两种位置都有时前置优先（insertDoc 先到先得）。
 assignTrailBlocks : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
 assignTrailBlocks comments targets blocks acc = assignTrailBlocksGo comments targets blocks acc
 

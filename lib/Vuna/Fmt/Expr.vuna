@@ -1,6 +1,6 @@
 module Vuna.Fmt.Expr where
 
--- Vuna.Fmt.Expr：表达式 / 模式 / 块级布局的打印（M24 后维护·源码重组，从 Vuna.Fmt 拆出）。
+-- Vuna.Fmt.Expr：表达式 / 模式 / 块级布局的打印。
 --
 -- 单行形式（inlinePrecGo，按运算符优先级补括号；case/let/do 返回 Nothing）与块级形式
 -- （renderExprGo → renderBlockGo/renderWideGo，按 maxWidth 折行）共用同一份模式与中缀表。
@@ -27,7 +27,7 @@ renderStr : String -> String
 renderStr s = "\"${renderTemplateText False s}\""
 
 -- ---------------------------------------------------------------
--- 模板 / 多行字面量（M36）
+-- 模板 / 多行字面量
 --
 -- 规范形：
 --   * 单行形式（`multi = False`、以及普通 `EStr`）：`"..."`，换行/制表转义；
@@ -80,9 +80,9 @@ joinHoleLines lineInd [] = ""
 joinHoleLines lineInd (first :: rest) =
   first ++ concatStrings (map (\l => "\n${spaces (lineInd + 2)}${l}") rest)
 
--- 单个模板片段的字符串（M36）：文本块转义；洞单行可渲则 `${...}`，否则：
+-- 单个模板片段的字符串：文本块转义；洞单行可渲则 `${...}`，否则：
 --   * 单行渲染用哨兵 `interpBlockMarker` 表示「这个字面量必须走块布局」；
--- 模板片段逐个渲染成字符串（M36），拼接交给调用方。
+-- 模板片段逐个渲染成字符串，拼接交给调用方。
 -- 自递归只在 `parts` 上、fuel 严格递减；洞的递归仍走格式化器的递归组。
 interpPiecesInline : Int -> List FixityDecl -> Bool -> List InterpPart -> List String
 interpPiecesInline fuel env multi parts = if fuel <= 0 then []
@@ -122,7 +122,7 @@ interpBlockMarker = strPack [0]
 -- ---------------------------------------------------------------
 -- 模式（模式没有块结构，统一输出单行，必要时加括号）
 -- ---------------------------------------------------------------
--- M31.3：keep 模式下 parser 的两种 cons 拼写都保留（中缀 `::` 与列表语法的 `Cons`；
+-- keep 模式下 parser 的两种 cons 拼写都保留（中缀 `::` 与列表语法的 `Cons`；
 -- `[..]` 列表模式构造的是 canonical 的 `Cons`/`Nil`）。
 consPatName : String -> Bool
 consPatName name = name == "Cons" || name == "::" || isListConsSyntax name
@@ -303,12 +303,12 @@ opText env op = case symbolOfTargetIn env op of
 backtickLabel : String -> String
 backtickLabel name = "`${name}`"
 
--- native-effects N1（ND12）：`perform <op>` 的保留名编码回渲染。
+-- `perform <op>` 的保留名编码回渲染。
 performOperand : Expr -> Maybe Expr
 performOperand (EApp (EVar name _) ([op]) _) = if isPerformSyntax name then Just op else Nothing
 performOperand _ = Nothing
 
--- native-effects N1（ND4）：行字面量的显式实例名 `X@name` 回渲染。
+-- 行字面量的显式实例名 `X@name` 回渲染。
 -- 实例名文本：字符串字面量去掉引号（`@"audit"` ↔ `@audit` 同义）。
 rowAtNameText : Expr -> Maybe String
 rowAtNameText (EStr s _) = Just s
@@ -325,7 +325,7 @@ appAtParts (EApp (EVar name _) (f :: nm :: rest) _) =
   if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
 appAtParts _ = Nothing
 
--- native-effects N1（提交 4b）：`handle` 标记回渲染。编码见 `Frontend/Ast.handleSyntax`：
+-- `handle` 标记回渲染。编码见 `Frontend/Ast.handleSyntax`：
 -- `EApp (EVar "@vuna@handle") [comp, ret, opH]`；ret 缺失时是哨兵。
 handleParts : Expr -> Maybe (Pair Expr (Pair Expr Expr))
 handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
@@ -433,7 +433,7 @@ else case e of
   EInt n sp => Just (strFromInt n)
   EStr s sp => Just (renderStr s)
   EFloat raw sp => Just raw
-  -- M36：模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
+  -- 模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
   EInterp multi parts sp =>
     let
       body = concatStrings (interpPiecesInline (fuel - 1) env multi parts)
@@ -506,12 +506,12 @@ else case e of
         [] => Just "{ ${b} }"
         _ => Just "{ ${b} | ${joinComma ss} }"
   EDo stmts sp => Nothing
-  -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
+  -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
   ELocalFun clauses sp => Nothing
-  -- M24：非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
+  -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
   -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
   EAnn value ty sp => inlinePrecGo (fuel - 1) env minPrec value
-  -- M31.3：反引号中缀 / section 是 parse 后中间产物；keep 模式保留原形按此打印。
+  -- 反引号中缀 / section 是 parse 后中间产物；keep 模式保留原形按此打印。
   EBacktick name l r sp => inlineBacktickGo (fuel - 1) env minPrec name l r
   ESectOp op sp => Just "(${op})"
   ESectL op inner sp => case inlinePrecGo (fuel - 1) env 0 inner of
@@ -538,7 +538,7 @@ else case fields of
       Nothing => Nothing
       Just ss => Just ("${fname} = ${v}" :: ss)
 
--- DT（M13）命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
+-- DT 命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；`->` 右结合。
 inlinePiGo : Int -> List FixityDecl -> Int -> Maybe Qty -> String -> Bool -> Expr -> Expr -> Maybe String
 inlinePiGo fuel env minPrec qty name implicit dom cod = if fuel <= 0 then Nothing
 else case inlinePrecGo (fuel - 1) env 0 dom of
@@ -552,7 +552,7 @@ else case inlinePrecGo (fuel - 1) env 0 dom of
           else "(${qtyPrefix qty}${name} : ${d})"
       in Just (wrapPrec (minPrec > 1) "${binder} -> ${c}")
 
--- M38：quantity 前缀（`0 ` / `1 `）；缺省不打印。
+-- quantity 前缀（`0 ` / `1 `）；缺省不打印。
 qtyPrefix : Maybe Qty -> String
 qtyPrefix Nothing = ""
 qtyPrefix (Just Q0) = "0 "
@@ -637,7 +637,7 @@ atomForm (ERecUpdate base fields sp) = True
 atomForm (EApp fn args sp) = case listExprElems (EApp fn args sp) of
   Just elems => True
   Nothing => False
--- M31.3：section 自带括号，永远是原子；反引号中缀是运算符形式（最低优先级）。
+-- section 自带括号，永远是原子；反引号中缀是运算符形式（最低优先级）。
 atomForm (ESectOp op sp) = True
 atomForm (ESectL op inner sp) = True
 atomForm (ESectR inner op sp) = True
@@ -749,7 +749,7 @@ else case e of
   ERecord name fields sp => renderRecordBlockGo (fuel - 1) env at lineInd name fields
   ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) env at lineInd base fields
   EDo stmts sp => renderDoGo (fuel - 1) env at lineInd stmts
-  -- A2：局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
+  -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
   ELocalFun clauses sp => []
   EAnn value ty sp => renderExprGo (fuel - 1) env at lineInd value
   EVar name sp => case macroNameOf name of
@@ -758,12 +758,12 @@ else case e of
   EInt n sp => [strFromInt n]
   EStr s sp => [renderStr s]
   EFloat raw sp => [raw]
-  -- M36：模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
+  -- 模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
   EInterp multi parts sp =>
     let
       body = concatStrings (interpPiecesBlock (fuel - 1) env lineInd multi parts)
     in splitOnNewline (interpOpen multi parts ++ body ++ interpClose multi)
-  -- M31.3：反引号中缀沿用中缀折行布局；section 自带宽括号，尽量单行。
+  -- 反引号中缀沿用中缀折行布局；section 自带宽括号，尽量单行。
   EBacktick name l r sp =>
     let
       fx = backtickPrec env name
@@ -850,7 +850,7 @@ else case binds of
     in append ("let" :: bindingLines)
       (prefixFirst "${spaces lineInd}in " (renderExprGo (fuel - 1) env at lineInd body))
 
--- M28：`let` 绑定也支持可选签名行（与 where 共用绑定块模型）；解析器把签名降级成
+-- `let` 绑定支持可选签名行（与 where 共用绑定块模型）；解析器把签名降级成
 -- `EAnn value ty`，这里按「签名行 + 绑定」还原，否则 fmt 产物会丢掉类型标注。
 renderLetBindingGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
 renderLetBindingGo fuel env at bindInd (Pair pat value) = if fuel <= 0 then []
@@ -880,7 +880,7 @@ else case value of
     attachAt at (patSpan pat) bindInd
       (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" value)
 
--- A2：where/let 多 clause 局部函数：`name p1 p2 = body` 逐 clause 渲染。
+-- where/let 多 clause 局部函数：`name p1 p2 = body` 逐 clause 渲染。
 renderLocalFunGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> List (Pair (List Pat) Expr) -> List String
 renderLocalFunGo fuel env at bindInd pat clauses = if fuel <= 0 then []
 else case clauses of

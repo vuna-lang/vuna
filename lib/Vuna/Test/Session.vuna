@@ -11,7 +11,7 @@ module Vuna.Test.Session where
 --   * 接口读不到 / `applied = False` ⇒ 返回 `Nothing`，调用方
 --     （`Vuna.Test.InProc`）在同一进程内改走全量 `dtCheck` / `dtEvalFile`；
 --   * 两条进程内路径都不可用 ⇒ 用例失败（`inprocess-unavailable`），
---     不再 spawn `vuna check`——那会把断言退回字符串匹配。
+--     spawn `vuna check` 会把断言退回字符串匹配。
 --
 -- 返回值刻意**不用** `Maybe (Check a)`：该形状（把 `Check` 放进 `Maybe` 后由别的
 -- 模块解构）会触发精化器的一条 `TC_UnknownConstructorInCase` 误报。这里改用普通

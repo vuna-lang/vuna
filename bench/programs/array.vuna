@@ -1,4 +1,4 @@
--- M33 W3：不可变 Array 基准（fromList / get / set 返回新数组 / length）。
+-- 不可变 Array 基准（fromList / get / set 返回新数组 / length）。
 -- 手写 OCaml 对照见 array.ml（同算法：Array.of_list / Array.get / Array.copy+set）。
 import Base.Array
 import Base.List

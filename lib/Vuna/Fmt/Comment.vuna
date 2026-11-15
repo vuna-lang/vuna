@@ -1,6 +1,6 @@
 module Vuna.Fmt.Comment where
 
--- Vuna.Fmt.Comment：注释保留（M11.6）。
+-- Vuna.Fmt.Comment：注释保留。
 --
 -- 注释不在 AST 里，格式化器单独 lex 出注释，按源码位置挂到最近的「条目」
 -- （顶部声明/import/`infix*` 声明/构造器/记录字段/trait 方法/let 与 where 绑定/case 分支/
@@ -9,8 +9,7 @@ module Vuna.Fmt.Comment where
 -- 表达式内部的注释前移到最内层包含它的条目（没有则前移到下一条目；文件末尾的注释
 -- 保留在文件末尾）。
 --
--- M24 后维护·源码重组：从 Vuna.Fmt 拆出；暴露 anchorSpans / assignComments / attachAt 给
--- 门面与 Expr / Decl。
+-- 暴露 anchorSpans / assignComments / attachAt 给门面与 Expr / Decl。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -229,7 +228,7 @@ nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
       else Just enc
 
 -- 条目定位：收集所有可挂注释的语法条目 span（源码顺序）。
--- M30（B20）：trait 方法用方法签名 span（方法名到类型结束）。
+-- trait 方法用方法签名 span（方法名到类型结束）。
 traitMethodAnchor : TraitMethod -> Span
 traitMethodAnchor m = traitMethodSpan m
 
@@ -292,18 +291,18 @@ exprAnchors e = case e of
   ERecord name fields sp => concatMap fieldExprAnchors fields
   ERecUpdate base fields sp => append (exprAnchors base) (concatMap fieldExprAnchors fields)
   EDo stmts sp => concatMap doStmtAnchors stmts
-  -- M24：where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
+  -- where 绑定签名行（`g : Int -> Int`）本身是注释锚点（前置/行尾注释挂签名行）。
   EAnn value ty sp => sp :: exprAnchors value
-  -- A2：where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
+  -- where/let 多 clause 局部函数：每个 clause body 的表达式锚点。
   ELocalFun clauses sp => concatMap localClauseAnchors clauses
   EInfix op l r sp => append (exprAnchors l) (exprAnchors r)
   EParen inner sp => exprAnchors inner
-  -- M31.3：反引号中缀 / section 是 parse 后中间产物；子表达式里的注释仍要前移。
+  -- 反引号中缀 / section 是 parse 后中间产物；子表达式里的注释仍要前移。
   EBacktick name l r sp => append (exprAnchors l) (exprAnchors r)
   ESectOp op sp => []
   ESectL op inner sp => exprAnchors inner
   ESectR inner op sp => exprAnchors inner
-  -- M36：模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
+  -- 模板字面量：洞内表达式的注释锚点照常收集（注释仍在字面量内，但会被提升到
   -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
   EInterp multi parts sp => concatMap interpPartAnchors parts
 
@@ -314,7 +313,7 @@ interpPartAnchors (IPHole e) = exprAnchors e
 localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body
 
--- M31.3：`infix*` 声明的 span 也是注释锚点（前置/行尾注释随声明保留）。
+-- `infix*` 声明的 span 也是注释锚点（前置/行尾注释随声明保留）。
 export anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
 anchorSpans hdr imports fixities decls =
   append (headerAnchors hdr)

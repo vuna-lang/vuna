@@ -1,6 +1,6 @@
 module Vuna.TestRunner where
 
--- Vuna.TestRunner：包内测试运行器（M11.5；M30 起支持效果测试与 workspace 聚合）。
+-- Vuna.TestRunner：包内测试运行器（支持效果测试与 workspace 聚合）。
 --
 -- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；
 --   - `main : String`：核心求值，返回空串通过（历史约定，`interpretFile` 展示成 `""`）；
@@ -12,26 +12,26 @@ module Vuna.TestRunner where
 -- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
 -- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
 --
--- W1（测试基建硬化）：`main : Eff hostRow a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
+-- `main : Eff hostRow a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
 -- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：效果测试直接在临时目录里
 -- `compileToDir` 测试入口，再用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
 -- 产物」两步；任一步超时记 FAIL（"timed out after Ns"）并清理，不会让 `vuna test` 永久
--- 挂起。没有 `timeout` 命令的环境优雅降级到 `runEffectProgram`（无外部超时，行为与旧版
--- 一致，不算 FAIL 也不崩）。纯测试（`interpretFile`）不需要外部超时：其终止性由核心
+-- 挂起。没有 `timeout` 命令的环境降级到 `runEffectProgram`（无外部超时，不算 FAIL 也不崩）。
+-- 纯测试（`interpretFile`）不需要外部超时：其终止性由核心
 -- 求值器的 fuel 守卫保证（与 `vuna interp` 同一路径）。
 --
--- M26：入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（不再有环境根 flag）；
+-- 入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（没有环境根 flag）；
 -- 测试模块与包内模块走同一套模块可见性规则。
--- M30：`vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
+-- `vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
 -- `[workspace].members`），按包名分组汇总，任一失败总退出码 1；单包（只含自己的
 -- 目录，或它是 workspace 成员被直接指定）行为不变。
--- M38：选项收进 `TestOpts`（默认值 = M30 行为，输出逐字不变）：
+-- 选项收进 `TestOpts`：
 --   - `--filter PAT`（可重复，多值 OR）：对 `<包名>/<文件名>` 与 `<文件名>` 做子串匹配，
 --     未匹配的包整组跳过；
 --   - `--list`：只列分组（workspace）与文件名，不执行，exit 0（单包缺 `test/` 仍 exit 2）；
 --   - `--verbose`：`ok` / `FAIL` 行尾追加 ` (Nms)`，末尾打印总耗时；
 --   - `--fail-fast`：首个失败即停止（跨包生效），已跑部分的汇总照常打印。
--- C23/C39：`--jobs N` 包内测试**进程级并行**（默认 1 = 上面全部行为、输出逐字不变）。
+-- `--jobs N` 包内测试**进程级并行**（默认 1 = 串行、输出不变）。
 --   N>1 时每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 --   `test <包目录> --only-file <文件名> --jobs 1`（`--verbose` 时追加 `--verbose`）；
 --   子进程继承 stdout/stderr，**行内容完整但行与行之间可能交错**。父进程用
@@ -51,7 +51,7 @@ import Vuna.Files
 import Vuna.Interp
 
 -- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
--- M30 的固定行为。
+-- 串行单包行为。
 export record TestOpts(..) where
   testFilter : List String
   testListOnly : Bool
@@ -107,7 +107,7 @@ printLines (line :: rest) = do
   printLines rest
 
 -- ---------------------------------------------------------------
--- 单包（行为与 M11.5 一致：没有 test/ 是输入错误，退出码 2）
+-- 单包（没有 test/ 是输入错误，退出码 2）
 -- ---------------------------------------------------------------
 runPackageTests : TestOpts -> Package -> Eff hostRow Int
 runPackageTests opts pkg = do
@@ -128,7 +128,7 @@ runPackageTests opts pkg = do
     pure 2
 
 -- ---------------------------------------------------------------
--- 隐藏的 `--only-file <name>`：父进程 spawn 出来的**子进程模式**（C23/C39）。
+-- 隐藏的 `--only-file <name>`：父进程 spawn 出来的**子进程模式**。
 -- 只跑一个测试文件，打印该文件的 ok/FAIL 行（--verbose 带行尾耗时），不打印汇总；
 -- 退出码 0/1 供父进程计数。此模式由 CLI 强制 jobs=1，不会再并行 / 递归 spawn。
 -- ---------------------------------------------------------------
@@ -263,7 +263,7 @@ runTestFiles opts ctx dir (name :: rest) pass fail = do
     else runTestFiles opts ctx dir rest pass (fail + 1)
 
 -- ---------------------------------------------------------------
--- C23/C39：进程级并行（jobs > 1）
+-- 进程级并行（jobs > 1）
 --
 -- 每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
 -- `test <包目录> --only-file <文件名> --jobs 1`（父进程 --verbose 时追加 --verbose）。
@@ -316,7 +316,7 @@ spawnTestArgs opts pkgDir name =
     verbose = if opts.testVerbose then ["--verbose"] else []
   in append ["test", pkgDir, "--only-file", name, "--jobs", "1"] verbose
 
--- 单测结果行：默认与 M30 逐字一致；--verbose 时行尾追加耗时。
+-- 单测结果行：默认串行输出逐字一致；--verbose 时行尾追加耗时。
 printOutcome : TestOpts -> String -> TestOutcome -> Int -> Eff hostRow Int
 printOutcome opts name TestPassed us =
   raiseToRow hostRow (@vuna@prim_eff_print "ok   ${name}${timingText opts us}\n")
@@ -356,14 +356,14 @@ pureTest name output expected =
   if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
 
 -- 效果测试：退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
--- 有 `timeout` 命令时走 runIOTestTimed（单测超时，W1），否则退回 runEffectProgram。
+-- 有 `timeout` 命令时走 runIOTestTimed（单测超时），否则退回 runEffectProgram。
 runIOTest : PackageContext -> String -> String -> Eff hostRow TestOutcome
 runIOTest ctx path name = do
   secs <- testTimeoutSecs 0
   has <- hasTimeoutCmd 0
   if secs <= 0 || not has then runIOTestLegacy ctx path name else runIOTestTimed ctx path name secs
 
--- 无外部超时的旧路径：临时包编译 + 运行（效果输出直接写终端，只看进程退出码）。
+-- 无外部超时的路径：临时包编译 + 运行（效果输出直接写终端，只看进程退出码）。
 runIOTestLegacy : PackageContext -> String -> String -> Eff hostRow TestOutcome
 runIOTestLegacy ctx path name = do
   source <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
@@ -375,7 +375,7 @@ runIOTestLegacy ctx path name = do
   )
 
 -- ---------------------------------------------------------------
--- W1：效果测试的超时执行
+-- 效果测试的超时执行
 -- ---------------------------------------------------------------
 -- 一条子进程命令的结果：正常退出码 / 被超时杀掉。
 data CmdOutcome : Type where
@@ -399,7 +399,7 @@ parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
--- `timeout`（coreutils）在 PATH 里吗？不在时优雅降级为旧路径（不算 FAIL）。
+-- `timeout`（coreutils）在 PATH 里吗？不在时降级为无外部超时路径（不算 FAIL）。
 hasTimeoutCmd : Int -> Eff hostRow Bool
 hasTimeoutCmd _ = do
   code <-
