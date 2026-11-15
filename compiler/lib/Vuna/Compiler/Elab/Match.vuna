@@ -74,10 +74,7 @@ litAltExprGo table clauses pos restParams fb fuel = if fuel <= 0 then icFuel "pa
 else case clauses of
   [] => tcErr0 fb IntStringCaseNeedsFallback
   (Pair (p :: ps) body) :: rest => case p of
-    PVar pname psp =>
-      Vuna.Compiler.Common.bind
-        (buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1))
-        (\inner => OkC (renameExpr pname pos inner))
+    PVar pname psp => buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
     PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
     _ =>
       Vuna.Compiler.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1))
@@ -133,9 +130,7 @@ else case params of
   [] => tcErr0 fb ClauseTooManyPatterns
   pos :: restParams =>
     if hasAsHead clauses then asColumn table clauses pos restParams fb fuel
-    else if allVarHeads clauses then Vuna.Compiler.Common.bind
-      (buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1))
-      (\inner => OkC (renameFirstVars clauses pos inner))
+    else if allVarHeads clauses then buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
     else if allCtorHeads clauses then ctorColumn table clauses pos restParams fb fuel
     else if hasCtorHead clauses then ctorColumn table clauses pos restParams fb fuel
     else litAltExpr table clauses pos restParams fb (fuel - 1)
@@ -246,14 +241,17 @@ stripFirstCol (c :: rest) = case c of
   Pair [] body => c :: stripFirstCol rest
   Pair (p :: ps) body => Pair ps body :: stripFirstCol rest
 
--- 整列都是变量：把该列用户写的名字改写成位置名，再继续处理剩余列。
--- 每 clause 的体各自改名（不同 clause 可以用不同的变量名）。
-renameFirstVars : List (Pair (List Pat) Expr) -> String -> Expr -> Expr
-renameFirstVars [] pos inner = inner
-renameFirstVars ((Pair (p :: ps) body) :: rest) pos inner = case p of
-  PVar nm psp => renameFirstVars rest pos (renameExpr nm pos inner)
-  _ => renameFirstVars rest pos inner
-renameFirstVars ((Pair [] body) :: rest) pos inner = renameFirstVars rest pos inner
+-- | 整列都是变量：剥掉该列，并把**每个 clause 自己**的 head 变量改名成位置名。
+--   只改本 clause 的体：把改名推迟到整个内层表达式建好之后会误捕获其它 clause 里
+--   同名的更深子模式（`n :: e :: r :: _` 与 `e :: r :: _` 两条分支会串位）。
+prepVarColumn : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+prepVarColumn pos [] = []
+prepVarColumn pos (c :: rest) = case c of
+  Pair (p :: ps) body => case p of
+    PVar nm psp => Pair ps (renameExpr nm pos body) :: prepVarColumn pos rest
+    PWild psp => Pair ps body :: prepVarColumn pos rest
+    _ => Pair ps body :: prepVarColumn pos rest
+  Pair [] body => c :: prepVarColumn pos rest
 
 renameExpr : String -> String -> Expr -> Expr
 renameExpr oldName newName e = case e of
@@ -372,7 +370,7 @@ ctorSubPatCount (c :: rest) cname = case c of
   Pair [] body => ctorSubPatCount rest cname
 
 -- 新鲜子模式名必须带**所在列的**位置名：不同层 `ctorAltList` 递归会各自生成 `_sc0/_sc1`，
--- 若同名则内层 case 的 binder 遮蔽外层，且外层 `renameFirstVars` 会把外层变量改写成
+-- 若同名则内层 case 的 binder 遮蔽外层，且外层变量改名会把外层变量改写成
 -- 内层 binder（如 `zip` 的 `y` 被改写成外层第一列的 `_sc1`），造成 a/b 串位。
 subNamesFor : String -> Int -> List String
 subNamesFor pos n = subNamesForGo pos 0 n []

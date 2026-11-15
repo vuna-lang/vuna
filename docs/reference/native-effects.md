@@ -262,13 +262,13 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   `StateOp Nat@counter`）；`vuna api`/`doc`/LSP hover 仍是通用类型展示。
 - **宿主 op 不导出的粒度**：按 op 类型整体不导出，库侧提供 mock 构造器（mock op 独立
   类型或同名 mock 模块）。
-- **多深度 `Cons` 分支的 codegen 变量串位（[debt.md](debt.md) D53）**：同一 `case` 里深
-  `Cons` 分支在前、浅 `Cons` 分支在后时，深分支部分匹配失败回退到浅分支，浅分支变量会绑
-  到深分支的部分绑定上（`case sp of n :: e :: r :: _ => 0 | e :: r :: _ => length e` 对 2
-  元素列表返回 2 而非 1）。`interp` 路径不复现（是 codegen 匹配器生成的问题）。
-  **规避**：所有按实参个数分派的地方一律用「`length` 判别 + 每臂单 `Cons` 分支」
-  （`Core/Eval.rowRemReduceDispatch`、`Elab/Dict.memberSpine`、
-  `Elab/Term/Impl.effConsLabelTail`）。这是 debt D53 的规避形态。
+- **多深度 `Cons` 分支**：同一 `case` 里深 `Cons` 分支在前、浅 `Cons` 分支在后时，深分支
+  部分匹配失败会回退到浅分支，浅分支的变量绑到自己那一层的元素
+  （`case sp of n :: e :: r :: _ => 0 | e :: r :: _ => length e` 对 2 元素列表返回 1）。
+  匹配器按 clause 各自改名（`Elab/Match.prepVarColumn`），不会把另一个 clause 的同名更深
+  子模式当成自己的 binder。按实参个数分派的地方仍可写「`length` 判别 + 每臂单 `Cons`
+  分支」（`Core/Eval.rowRemReduceDispatch`、`Elab/Dict.memberSpine`、
+  `Elab/Term/Impl.effConsLabelTail`），读起来更直接。
 - **开放行与全扫描的边界**：`{r : Row}` 这种刚性开放尾行下，「数完全部标签候选」永远无法
   结束，会让所有带开放行的 wrapper 报 `TC_NoInstanceFound`。规则：扫描到未知尾部即收束为
   「具体前缀的候选 + open 标记」——0 候选 + 具体 `Nil` → 缺效应，0 候选 + 开放尾 → 推迟；

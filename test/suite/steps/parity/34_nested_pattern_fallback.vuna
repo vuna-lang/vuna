@@ -1,0 +1,25 @@
+import Base.List
+import Base.Nat
+
+-- 同一 case 里深度不同的 Cons 分支：深分支部分匹配失败时要回退到浅分支，
+-- 且浅分支的变量绑到自己那一层的元素（不是深分支已匹配的部分）。
+pickA : List (List Int) -> Nat
+pickA sp = case sp of
+  n :: e :: r :: _ => 0
+  e :: r :: _ => length e
+  _ => 99
+
+pickD : List (List Int) -> Nat
+pickD sp = case sp of
+  x :: y :: z :: _ => length x
+  y :: z :: _ => length y
+  _ => 0
+
+pickB : List Int -> Int
+pickB ([a, b]) = a + b
+pickB (a :: b :: _) = 0 - (a + b)
+pickB _ = 0
+
+main : Int
+main =
+  natToInt (pickA [[7], [8, 9]]) * 1000 + natToInt (pickD [[1, 2, 3], [4]]) * 100 + pickB [1, 2]
