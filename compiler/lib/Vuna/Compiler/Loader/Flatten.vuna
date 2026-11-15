@@ -23,6 +23,7 @@ import Base.Obs.Span
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Compiler.Frontend.Parser.Support
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
@@ -78,30 +79,35 @@ storeLexCache : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessO
 storeLexCache addr toks = storeObjectWriteEff "lex" lexCacheCodec addr (encTop encPTokList toks)
 
 -- | 解析一个源文件（带 lex 缓存）。所有加载路径都走这里。
+-- 编译器路径用 `PmStrict`（语义级语法错误致命）；只需要 AST 的工具（fixity 解析）用
+-- `parseFileWithPathMode PmTool`，别让「重复 binder」把整个文件挡在门外。
 export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check SourceFile)
-parseFileWithPath path src = do
+parseFileWithPath = parseFileWithPathMode PmStrict
+
+export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check SourceFile)
+parseFileWithPathMode mode path src = do
   let
     addr = lexAddrOf src
   in do
     cached <- readLexCache addr
     case cached of
-      Just toks => pure (parseWith path toks)
-      Nothing => lexAndStore addr path src
+      Just toks => pure (parseWith mode path toks)
+      Nothing => lexAndStore mode addr path src
 
 -- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
 -- 与 parse 是否成功无关，错文件下次也能省掉 lex。
-lexAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Check SourceFile)
-lexAndStore addr path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
+lexAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> String -> Eff r (Check SourceFile)
+lexAndStore mode addr path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
   ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
   OkC toks => do
     _ <- storeLexCache addr toks
-    pure (parseWith path toks)
+    pure (parseWith mode path toks)
 
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
-parseWith : String -> List PTok -> Check SourceFile
-parseWith path toks = case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path toks) of
+parseWith : ParseMode -> String -> List PTok -> Check SourceFile
+parseWith mode path toks = case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path mode toks) of
   ErrC e => ErrC (withSpanFileIfEmpty path e)
   OkC p =>
     let
@@ -693,7 +699,7 @@ loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label so
 -- | 入口以源码字符串给出，依赖包模块可预置（零 parse）。
 export loadProjectSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
 loadProjectSourceWithPreloaded ctx label source preloaded = do
-  parsed <- parseFileWithPath label source
+  parsed <- parseFileWithPathMode PmTool label source
   case parsed of
     ErrC e => pure (ErrC e)
     OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of
@@ -726,7 +732,7 @@ loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label sour
 -- 依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
 export loadModuleSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
 loadModuleSourceWithPreloaded ctx label source preloaded = do
-  parsed <- parseFileWithPath label source
+  parsed <- parseFileWithPathMode PmTool label source
   case parsed of
     ErrC e => pure (ErrC e)
     OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of
@@ -764,7 +770,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
 -- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff r`；声明表计算保持纯。
 export fixitiesForSourceIn : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> String -> Eff r (Check (Pair (List Module) (List FixityDecl)))
 fixitiesForSourceIn ctx modules0 label source = do
-  parsed <- parseFileWithPath label source
+  parsed <- parseFileWithPathMode PmTool label source
   case parsed of
     ErrC e => pure (ErrC e)
     OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of

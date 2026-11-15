@@ -1,0 +1,4 @@
+module Dup where
+
+f : Int -> Int -> Int
+f x x = x

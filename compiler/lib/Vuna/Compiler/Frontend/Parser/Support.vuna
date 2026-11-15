@@ -8,18 +8,40 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Diagnostics
 
+-- | 解析模式。决定「语义级语法错误」是否致命：
+--   * `PmStrict`：编译器路径。非线性格（重复 binder）等**语法层被借用的语义检查**
+--     直接失败——没有相等约束，放过去会让精化器静默改名；
+--   * `PmTool`：fmt / lint / index / doc / LSP 这类只读工具。它们要的是「语法完好
+--     就能拿到 AST」，语义问题留给诊断，不该让整个文件不可用。
+export data ParseMode(..) : Type where
+  PmStrict : ParseMode
+  PmTool : ParseMode
+
 export record PState(..) where
   fileOf : String
   toksOf : List PTok
   lastPos : Pos
   toksLeft : Int
+  pmodeOf : ParseMode
 
 -- 末尾 `toksLeft` 是余下 token 数（O(1) 维护）：`stateFuel` 在每个声明/表达式循环
 -- 入口都被调用，若每次都遍历剩余 token 列表，大文件解析就退化成 O(n²)。
 -- vuna 源码 parser（offside layout）
 -- ---------------------------------------------------------------
 export fileOf : PState -> String
-fileOf (PState file toks last count) = file
+fileOf (PState file toks last count mode) = file
+
+-- | 解析模式（`PmStrict` / `PmTool`），见 `ParseMode`。
+export pmodeOf : PState -> ParseMode
+pmodeOf (PState file toks last count mode) = mode
+
+-- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
+export mkState : String -> List PTok -> ParseMode -> PState
+mkState file toks mode = PState file toks (Pos 1 0) (length toks) mode
+
+-- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
+export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
+mkStateAt file toks last count mode = PState file toks last count mode
 
 -- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
 export spanOf : PState -> PState -> Span
@@ -28,8 +50,8 @@ spanOf st st2 =
     (posCol (lastPos st2))
 
 export peekTok : PState -> PTok
-peekTok (PState file (t :: rest) last count) = t
-peekTok (PState file [] last count) = PTok TEof (Pos 1 1)
+peekTok (PState file (t :: rest) last count mode) = t
+peekTok (PState file [] last count mode) = PTok TEof (Pos 1 1)
 
 export peekPos : PState -> Pos
 peekPos st = (peekTok st).ptokPos
@@ -45,13 +67,13 @@ tokSpan st = case peekTok st of
   PTok _ p => Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)
 
 export lastPos : PState -> Pos
-lastPos (PState file toks last count) = last
+lastPos (PState file toks last count mode) = last
 
 export advance : PState -> PState
-advance (PState file (toks@(t :: rest)) last count) = case t of
-  PTok TEof p => PState file toks last count
-  _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0)
-advance (PState file (toks@[]) last count) = PState file toks last count
+advance (PState file (toks@(t :: rest)) last count mode) = case t of
+  PTok TEof p => PState file toks last count mode
+  _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0) mode
+advance (PState file (toks@[]) last count mode) = PState file toks last count mode
 
 export isEof : PState -> Bool
 isEof st = case peekTok st of
@@ -86,7 +108,7 @@ stateFuel st = 128 * st.toksLeft + 1024
 
 export sameLineState : PState -> PState
 sameLineState st = case peekPos st of
-  Pos line col => PState (fileOf st) st.toksOf (Pos line 0) st.toksLeft
+  Pos line col => PState (fileOf st) st.toksOf (Pos line 0) st.toksLeft (pmodeOf st)
 
 export atSym : PState -> String -> Bool
 atSym st s = case peekTok st of

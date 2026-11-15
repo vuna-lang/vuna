@@ -27,7 +27,7 @@ psAt st e args = psErrAt (tokSpan st) e args
 export parseSourceWithComments : String -> String -> Check (Pair SourceFile (List Comment))
 parseSourceWithComments file source = case lexSourceWithComments source of
   ErrC e => ErrC e
-  OkC (Pair toks comments) => case parseSourceFile False (PState file toks (Pos 1 0) (length toks)) of
+  OkC (Pair toks comments) => case parseSourceFile False (mkState file toks PmTool) of
     ErrC e => ErrC e
     OkC p => OkC (Pair (firstOf (firstOf p)) comments)
 
@@ -40,7 +40,7 @@ parseSource file source = case parseSourceWithComments file source of
 export parseExpressionSource : String -> Check Expr
 parseExpressionSource source =
   Vuna.Compiler.Common.bind (lexSource source)
-    (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (PState "<expr>" toks (Pos 1 0) (length toks))) (PState "<expr>" toks (Pos 1 0) (length toks)) 0) (\e, st => if isEof st then OkC e else ps0 st ExpectedEndOfExpr))
+    (\toks => Vuna.Compiler.Common.step (parseExpr (stateFuel (mkState "<expr>" toks PmStrict)) (mkState "<expr>" toks PmStrict) 0) (\e, st => if isEof st then OkC e else ps0 st ExpectedEndOfExpr))
 
 -- 解析器累加器（导出/重导出/归约修饰符与声明一起收集）。
 record DeclAcc where
@@ -230,10 +230,10 @@ reverseDeclAcc (DeclAcc fixities decls exports opacity) =
 
 -- 解析恢复：跳过一个坏声明，停在下一个「与块首同列」的 token（无则到 EOF）。
 recoverDecl : PState -> Int -> PState
-recoverDecl (PState file toks last count) blockCol =
+recoverDecl (PState file toks last count mode) blockCol =
   let
     rest = skipToDeclLine toks blockCol
-  in PState file rest last (length rest)
+  in PState file rest last (length rest) mode
 
 skipToDeclLine : List PTok -> Int -> List PTok
 skipToDeclLine [] blockCol = []
@@ -604,7 +604,7 @@ parseSignature st blockCol allowCtx name namePos = Vuna.Compiler.Common.bind (ex
 )
 
 parseClause : PState -> Int -> String -> Pos -> Check (Pair Decl PState)
-parseClause st blockCol name namePos = Vuna.Compiler.Common.step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => Vuna.Compiler.Common.bind (expectSym st1 "=") (\st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 blockCol) (\body, st3 => Vuna.Compiler.Common.step (parseWhere st3 blockCol) (\wheres, st4 => let
+parseClause st blockCol name namePos = Vuna.Compiler.Common.step (parseClausePatterns (stateFuel st) st blockCol) (\pats, st1 => Vuna.Compiler.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Common.bind (expectSym st1 "=") (\st2 => Vuna.Compiler.Common.step (parseExpr (stateFuel st2) st2 blockCol) (\body, st3 => Vuna.Compiler.Common.step (parseWhere st3 blockCol) (\wheres, st4 => let
   body2 = case wheres of
     [] => body
     _ :: _ => ELet wheres body True (spanOf st st4)
@@ -673,7 +673,7 @@ parseBindingDef fuel stStart st bindCol pat = if fuel <= 0 then icFuel "parser"
 else case pat of
   PVar name _ =>
     if startsPatternAtom st && canContinue st bindCol then Vuna.Compiler.Common.step (parseClausePatterns (stateFuel st) st bindCol)
-      (\pats, st2 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders pats) (\_ => Vuna.Compiler.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
+      (\pats, st2 => Vuna.Compiler.Common.bind (checkBindersAt st pats) (\_ => Vuna.Compiler.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st3 bindCol) (\value, st4 => OkC (Pair (BIBind (Pair (PVar name (patSpan pat)) (ELocalFun [Pair pats value] (spanOf stStart st4)))) st4)))))
     else Vuna.Compiler.Common.step (parseBindingValue (fuel - 1) st pat bindCol)
       (\b, st2 => OkC (Pair (BIBind b) st2))
   _ =>
@@ -683,7 +683,7 @@ else case pat of
 parseBindingValue : Int -> PState -> Pat -> Int -> Check (Pair (Pair Pat Expr) PState)
 parseBindingValue fuel st pat blockCol =
   if fuel <= 0 then icFuel "parser"
-  else Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
+  else Vuna.Compiler.Common.bind (checkBindersAt st [pat])
     (\_ => Vuna.Compiler.Common.bind (expectSym st "=") (\st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 blockCol) (\value, st2 => OkC (Pair (Pair pat value) st2))))
 
 -- 条目 → ELet 绑定：把签名贴到同名定义的值上（`EAnn value ty`），并校验布局约束：
@@ -1124,33 +1124,33 @@ else case peekTok st of
 -- 字面量结束位置写入 `lastPos`：多行字面量之后的布局判定与 decl span 都依赖它。
 parseTemplateAtom : Int -> PState -> Bool -> List TmplPart -> Pos -> Check (Pair Expr PState)
 parseTemplateAtom fuel st multi parts endP = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) (tokSpan st) parts) (\ps => let
+else Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) (fileOf st) (pmodeOf st) (tokSpan st) parts) (\ps => let
   advanced = advance st
-  st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
+  st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
 in OkC (Pair (EInterp multi ps (spanOf st st2)) st2)
 )
 
-parseTemplateParts : Int -> String -> Span -> List TmplPart -> Check (List InterpPart)
-parseTemplateParts fuel file fallback parts = if fuel <= 0 then icFuel "parser"
+parseTemplateParts : Int -> String -> ParseMode -> Span -> List TmplPart -> Check (List InterpPart)
+parseTemplateParts fuel file mode fallback parts = if fuel <= 0 then icFuel "parser"
 else case parts of
   [] => OkC []
   (TPText s) :: rest =>
-    Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file fallback rest)
+    Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest)
       (\ps => OkC (Base.List.Cons (IPText s) ps))
   (TPHole toks) :: rest =>
-    Vuna.Compiler.Common.bind (parseTemplateHole (toksFuel toks) file fallback toks)
-      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file fallback rest) (\ps => OkC (Base.List.Cons (IPHole e) ps)))
+    Vuna.Compiler.Common.bind (parseTemplateHole (toksFuel toks) file mode fallback toks)
+      (\e => Vuna.Compiler.Common.bind (parseTemplateParts (fuel - 1) file mode fallback rest) (\ps => OkC (Base.List.Cons (IPHole e) ps)))
 
 -- 一个插值洞：空 token → `TemplateHoleEmpty`（指向字面量起点的兜底 span）；否则必须
 -- 恰好解析成一个表达式。洞内错误自带精确 span，兜底只为「无位置」的诊断补洞位置。
-parseTemplateHole : Int -> String -> Span -> List PTok -> Check Expr
-parseTemplateHole fuel file fallback toks = if fuel <= 0 then icFuel "parser"
+parseTemplateHole : Int -> String -> ParseMode -> Span -> List PTok -> Check Expr
+parseTemplateHole fuel file mode fallback toks = if fuel <= 0 then icFuel "parser"
 else case toks of
   [] => psErr0At fallback TemplateHoleEmpty
   first :: _ =>
     let
       pos = first.ptokPos
-      subState = PState file toks pos (length toks)
+      subState = mkStateAt file toks pos (length toks) mode
     in case parseExpr (fuel - 1) subState 0 of
       ErrC e => ErrC (withFallbackSpan (holeSpan file pos) e)
       OkC (Pair e st2) =>
@@ -1316,7 +1316,7 @@ else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
     if col == altCol then Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st altCol)
-      (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => Vuna.Compiler.Common.bind (expectSym st1 "=>") (\st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 altCol) (\body, st3 => Vuna.Compiler.Common.step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
+      (\pat, st1 => Vuna.Compiler.Common.bind (checkBindersAt st [pat]) (\_ => Vuna.Compiler.Common.bind (expectSym st1 "=>") (\st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 altCol) (\body, st3 => Vuna.Compiler.Common.step (parseAltList (fuel - 1) st3 altCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Pair pat body) rest) st4))))))
     else OkC (Pair [] st)
 
 -- `@` 后面的裸标识符是实例名**字面量**（`[Console@audit]` → 名字 "audit"）；字符串原样。
@@ -1421,7 +1421,7 @@ parseHandleRetClause fuel st clauseCol =
 -- | 解析一个 op 子句头：构造子模式 + 尾部续延 binder（`_` 允许，统一成 `_`）。
 parseHandleOpClause : Int -> PState -> Int -> Check (Pair HandleOp PState)
 parseHandleOpClause fuel st clauseCol = if fuel <= 0 then icFuel "parser"
-else Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (\pat, st1 => Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat]) (\_ => case pat of
+else Vuna.Compiler.Common.step (parsePatternSingle (stateFuel st) st clauseCol) (\pat, st1 => Vuna.Compiler.Common.bind (checkBindersAt st [pat]) (\_ => case pat of
   PCon cname args psp => case reverse args of
     [] => psErr0At psp HandleClauseNeedsCtor
     last :: revRest => case last of
@@ -1512,7 +1512,7 @@ parseDoStmt : Int -> PState -> Int -> Check (Pair DoStmt PState)
 parseDoStmt fuel st stmtCol = if fuel <= 0 then icFuel "parser"
 else case parsePatternSingle (stateFuel st) st stmtCol of
   OkC (Pair pat st1) =>
-    if atSym st1 "<-" then Vuna.Compiler.Common.bind (checkNoRepeatedBinders [pat])
+    if atSym st1 "<-" then Vuna.Compiler.Common.bind (checkBindersAt st [pat])
       (\_ => Vuna.Compiler.Common.bind (expectSym st1 "<-") (\st2 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st2 stmtCol) (\e, st3 => OkC (Pair (DBind pat e (spanOf st st3)) st3))))
     else parseDoExprStmt (fuel - 1) st stmtCol
   ErrC _ => parseDoExprStmt (fuel - 1) st stmtCol
@@ -1556,6 +1556,13 @@ firstRepeatedBindingGo ((Pair name sp) :: rest) seen =
 
 -- | 非线性格检查：一个绑定作用域的模式列表里出现重复绑定名 → 在第二次出现处报
 -- 语法错误（带位置与名字）；合法时原样返回模式列表（便于与后续解析组合）。
+-- | 非线性格检查的入口：工具模式（fmt/lint/index/doc/LSP）跳过。
+-- 编译器路径仍然拒绝——精化器没有相等约束，放过去会静默改名。
+checkBindersAt : PState -> List Pat -> Check (List Pat)
+checkBindersAt st pats = case pmodeOf st of
+  PmTool => OkC pats
+  PmStrict => checkNoRepeatedBinders pats
+
 checkNoRepeatedBinders : List Pat -> Check (List Pat)
 checkNoRepeatedBinders pats = case firstRepeatedBinding (concatMap patBinderBindings pats) of
   Nothing => OkC pats
@@ -1662,7 +1669,7 @@ else case peekTok st of
     Just s =>
       let
         advanced = advance st
-        st2 = PState (fileOf st) advanced.toksOf endP advanced.toksLeft
+        st2 = mkStateAt (fileOf st) advanced.toksOf endP advanced.toksLeft (pmodeOf st)
       in OkC (Pair (PStr s (spanOf st st2)) st2)
     Nothing => ps0 st TemplateInPattern
   PTok (TSym "(") p =>
@@ -1693,11 +1700,12 @@ foldPCon sp (p :: rest) = PCon listConsSyntax [p, foldPCon sp rest] sp
 -- | 文件加载专用：开启解析恢复并显式返回多条语法错误。
 export parseSourceRecovering : String -> String -> Check (Pair SourceFile (List Diagnostic))
 parseSourceRecovering file source =
-  Vuna.Compiler.Common.bind (lexSource source) (\toks => parseSourceRecoveringTokens file toks)
+  Vuna.Compiler.Common.bind (lexSource source)
+    (\toks => parseSourceRecoveringTokens file PmStrict toks)
 
 -- 从**已有 token 流**解析（AST 缓存命中路径）：与 `parseSourceRecovering` 逐字节等价，
 -- 只是跳过 lex。位置全部来自 token 自身，因此诊断 span 与冷路径一致。
-export parseSourceRecoveringTokens : String -> List PTok -> Check (Pair SourceFile (List Diagnostic))
-parseSourceRecoveringTokens file toks =
-  Vuna.Compiler.Common.bind (parseSourceFile True (PState file toks (Pos 1 0) (length toks)))
+export parseSourceRecoveringTokens : String -> ParseMode -> List PTok -> Check (Pair SourceFile (List Diagnostic))
+parseSourceRecoveringTokens file mode toks =
+  Vuna.Compiler.Common.bind (parseSourceFile True (mkState file toks mode))
     (\p => OkC (Pair (firstOf (firstOf p)) (secondOf p)))

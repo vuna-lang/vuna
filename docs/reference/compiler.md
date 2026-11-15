@@ -37,7 +37,7 @@
 | `Frontend.Ast` | 语法类型与 AST helper（`Expr`/`Decl`/`Pat`/`Ctor`/`Import`/`ModDecl`/`TraitMethod`） | `clausesFor`、`funArity`、`declNames` |
 | `Frontend.Lexer` | 字符游标、token 与位置。token 路径（`lexChars`，不分配注释）与注释路径（`lexSourceWithComments`：一次扫描同时给 token 与注释）分开；注释正文规则（`collectLineBody` / `collectBlockBody`）只有一份 | `lexSource`、`lexSourceWithComments`、`lexComments` |
 | `Frontend.Cst` | 无损 CST 词法层：token 携带前置 trivia（空白 / 行注释 / 块注释）与 span，`renderCst` 逐字节还原源码；位置由一条**单调前进**的行/列游标给出（O(bytes)，不再按 token 走行表） | `lexCst`、`renderCst`、`roundtripOk` |
-| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C a =>`）。需要注释的工具用 `parseSourceWithComments`（与解析同一次词法） | `parseSource`、`parseSourceWithComments`、`parseExpressionSource` |
+| `Frontend.Parser` | offside layout parser → AST + imports；`where` 块与绑定签名行；方法签名带 span；顶层签名可带约束 ctx（`C a =>`）。需要注释的工具用 `parseSourceWithComments`（与解析同一次词法）；`ParseMode` 分档：编译器路径 `PmStrict` 拒绝非线性格（重复 binder），只读工具 `PmTool` 只报语法、把语义留给诊断 | `parseSource`、`parseSourceWithComments`、`parseExpressionSource` |
 | `Frontend.Toml` | TOML 子集解析器 | `parseToml`、`lookupEntry` |
 | `Frontend.Manifest` | `vuna.toml` 的语义模型与结构校验（`[package]` 只有 `name`；不做 I/O） | `parseManifest`、`validateManifest` |
 | `Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
