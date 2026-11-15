@@ -402,7 +402,7 @@ replCheckPartsAux start pkgName deps parts ifaces cache =
     assembled =
       DtProgram (append depDatas (dtProgDatas prog)) (append depDefs (dtProgDefs prog))
         (dtProgGoals prog) (dtProgSols prog) (dedupGlobals (append depGlobals (dtProgGlobals prog)))
-        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDepths
         (dtProgWarnings prog)
   in OkC
     (Pair (Pair assembled (secondOf p)) (if cacheable then Just (AuxCache key preparedAux (Pair ecEmpty []) [] []) else Nothing))
@@ -806,7 +806,7 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
   Just mainDef =>
     let
       table = defTableOf (dtProgDefs program)
-      sols = solsPutDefVals solsEmpty program.dtProgDefVals
+      sols = solsEmpty
       mainVal =
         normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
     in if not (mainActionKind (dtDefType mainDef) == "") then cgErr0 InterpCannotExecuteEffects
@@ -1195,7 +1195,7 @@ dtFinishPackage loaderWarns depCps cleanCps prog parts next =
         (append (concatMap cachedDefs depCps) (append (concatMap cachedDefs cleanCps) (dtProgDefs prog)))
         (dtProgGoals prog) (dtProgSols prog)
         (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
-        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDepths
         (dtProgWarnings prog)
     warns = append loaderWarns (dtProgWarnings prog)
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
@@ -1218,7 +1218,7 @@ dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next =
         (append (concatMap cachedDefs depCps) (append (concatMap cachedDefs cleanCps) (dtProgDefs prog)))
         (dtProgGoals prog) (dtProgSols prog)
         (dedupGlobals (append (concatMap cachedGlobals cleanCps) (dtProgGlobals prog)))
-        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths
+        (dtProgInsts prog) (dtProgClasses prog) prog.dtProgNext prog.dtProgDepths
         (dtProgWarnings prog)
     warns = append loaderWarns (dtProgWarnings prog)
     checked = CheckedPackage assembled (secondOf parts) (firstOf parts) (cachedNamesOf depCps) warns
@@ -1640,7 +1640,7 @@ dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
           DtProgram (append (concatMap cachedDatas deps) (dtProgDatas prog))
             (append (concatMap cachedDefs deps) (dtProgDefs prog)) (dtProgGoals prog)
             (dtProgSols prog) (dtProgGlobals prog) (dtProgInsts prog) (dtProgClasses prog)
-            prog.dtProgNext prog.dtProgDefVals prog.dtProgDepths (dtProgWarnings prog)
+            prog.dtProgNext prog.dtProgDepths (dtProgWarnings prog)
         moduleParts = map (\m => Pair (moduleNameOf m) (moduleDeclsOf m)) modules
         checked =
           CheckedPackage prog (secondOf parts) (firstOf parts) (cachedNamesOf deps)

@@ -34,8 +34,7 @@ data Term where
   `Rig`。
 - `Level` 不透明：内部是 `Level Int`（字段 `levelToInt`），外部只能经 `levelZero` / `levelSucc` /
   `levelMax` / `levelToInt` / `levelEq` / `levelLt` 访问，不得自行做 Int 算术。
-- `Sols` 携带解表（list 权威 + 哈希索引）、元变量创建深度索引与定义值缓存
-  （`defVals`）；缓存是可重建的，未命中回落 `force` 的 delta 展开，不影响语义。`Ec.deftbl`
+- `Sols` 携带解表（list 权威 + 哈希索引）与元变量创建深度索引。`Ec.deftbl`
   的语义是「名字 → **定义体**」：签名项绝不能进 deftbl，否则 `force` 会把 primitive 类型
   归约成 `Type`（接口摘要路径上的假歧义，见 [compiler.md](compiler.md) §接口摘要）。
 
@@ -45,8 +44,9 @@ data Term where
   neutral；`applyClosure` 把实参压入闭包环境。
 - `force`：展开已解元变量，并按需 **delta 展开**有定义的全局；步数上限
   `defaultFuel = 512`，到限返回 stuck（不 panic）。`primReduce` 在 force 内做内建归约
-  （`IntrinsicOp` 分派）。定义值缓存 `Sols.defVals` 在安全前缀检查后写入。delta 只认
-  deftbl 里的定义体（签名表 `ecGlobalsTbl` 不参与展开）。
+  （`IntrinsicOp` 分派）。delta 每次重新求值定义体，没有求值缓存（按定义记忆化的前置
+  安全检查比命中收益更贵，见 [performance.md](performance.md)）。delta 只认 deftbl 里的
+  定义体（签名表 `ecGlobalsTbl` 不参与展开）。
 - `quote` / `normalize`：值 → 项；深度正规化用于显示与终止性检查。
 - 类型级 `Vec n a` 是 `VNeutral (NGlobal "Vec" ...)`，因此两个族应用相等当且仅当参数
   定义性相等或可被元变量统一——这就是索引 unification 的用武之地。

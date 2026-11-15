@@ -1,7 +1,7 @@
 module Vuna.Compiler.Driver.Cache where
 
 -- 接口摘要（依赖包 elab 复用）的载体——参考 Idris2 的 TTC：
--- **只含闭合结果，不携带任何 elab 状态**（sols / next / dict goals / defVals）。
+-- **只含闭合结果，不携带任何 elab 状态**（sols / next / dict goals）。
 --
 -- 写摘要（`cachedOfProgram`）：把 DtProgram 的项按**出现点深度**内联已解元变量
 -- （`substSolvedMetasAtTbl`）。深度 0 的 quote 会把 binder 下的解拍成错位/负索引

@@ -626,7 +626,7 @@ dtEvalExprInInfo prog expr = dtEvalExprInInfoCore prog expr
 -- | 在程序环境里精化并求值一条表达式，同时返回结果文本与 zonk 后的类型文本。
 dtEvalExprInInfoCore : DtProgram -> Expr -> Check (Pair String String)
 dtEvalExprInInfoCore prog expr = case prog of
-  DtProgram datas defs goals sols globals insts classes next defvals depths warnings =>
+  DtProgram datas defs goals sols globals insts classes next depths warnings =>
     let
       -- axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
       bodies = defBodyPairs defs
@@ -634,7 +634,7 @@ dtEvalExprInInfoCore prog expr = case prog of
       ec0 =
         Ec next sols (reverse bodies) datas [] [] (instStoreOf insts) classes csEmpty
           (Base.HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols)
-          (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas) defvals
+          (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas)
           (datasHaveLinear datas) [] [] warnings
     in Vuna.Compiler.Common.bind (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
@@ -1019,7 +1019,7 @@ finishCore termAux decls core =
             -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
             _ = dbg! "termination-done"
           in OkC
-            (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (ecDefVals ec5) (Base.HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
+            (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (Base.HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
           )
           )
           )

@@ -546,9 +546,7 @@ cpOfModule parts prog mod opaqueNames =
     globals = bucketOf mod parts.ppGlobals
     insts = bucketOf mod parts.ppInsts
     classes = bucketOf mod parts.ppClasses
-    slice =
-      DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 (Base.HashMap.fromList [])
-        [] []
+    slice = DtProgram datas defs [] (dtProgSols prog) globals insts classes 0 [] []
   in withCachedOpaque opaqueNames (cachedOfProgramWith parts.ppSols slice)
 
 sourceOf : List (Pair String SourceInfo) -> String -> SourceInfo
