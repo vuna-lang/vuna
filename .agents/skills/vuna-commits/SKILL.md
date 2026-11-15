@@ -44,7 +44,7 @@ description: 写或校验 vuna 仓库的提交信息——Conventional Commits �
 ## 示例
 
 ```text
-feat(wasm): M2 局部绑定/顶层函数/Nat 递归与运行时补全（--target wasm 可用）
+feat(wasm): 局部绑定/顶层函数/Nat 递归与运行时补全（--target wasm 可用）
 fix(obs): 三个门禁脚本的 OUT 解析不再拼出两行
 docs(agents): 技能与规则归位到 .agents/（rules/ + skills/）
 test(obs): suite 段 108 —— `vuna obs serve --cdp` + WS 桥

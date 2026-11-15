@@ -12,6 +12,7 @@
 | [rules/workflow.md](rules/workflow.md) | 开工 / 提交 / 收尾的固定流程：rebase、线性历史、格式化、生成物 |
 | [rules/verification.md](rules/verification.md) | 改完跑什么：本地口径 vs CI 口径、按改动面选测试、seed/effect 门禁 |
 | [rules/docs.md](rules/docs.md) | 写完或探索完：文档落点、导航同步、哪些是生成物不能读/写 |
+| [rules/comments.md](rules/comments.md) | 写/改注释与说明文字：只写当下成立的事实，不写阶段编号、实现史与未来计划 |
 
 ## 技能（按场景）
 

@@ -138,13 +138,13 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 3. **只在能完成的最大档**上二分：缩入口（更小包/更小 N），不要等大 case。
 4. 找死循环式重算，重点五类：
    1. **同一子表达式在 `case` 各分支各写一次**：精化逐分支展开 ⇒ 分支数相乘，指数
-      （历史上 `patClauseConOrder`、嵌套字面量模式踩过）。
+      （`patClauseConOrder` 与嵌套字面量模式是这类放大的常见来源）。
    2. **`let` 是否被重新求值**：vuna 的 `let` 是记法，落成 lambda 应用；DT 精化按出现次数
       展开，塞进 `let` 只是语法糖。
    3. **元变量/字典回填的整表扫描**：`solveMeta`、`resolveDictGoals*`、`relevantMetas`
       一类「每次调用都扫全表」的函数，在 O(def 数) 层调用就是 n²。
    4. **按名字逐个线性查表**：`findDtDef` / `findDefByName` / `memName` / `memList` 放在
-      「每个 def 各调一次」的循环里就是 n²（codegen 分组 `Lower.appendGroups` 曾对每级 SCC
+      「每个 def 各调一次」的循环里就是 n²（codegen 分组 `Lower.appendGroups` 对每级 SCC
       线性过滤全体定义：同一探针 `termination-done → cg-typedecls-done` = 89/284/1083 ms
       （N=2000/4000/8000，逐档 ×3.2/×3.8），而 `bodies` 段是 75/89/127 ms 的线性）。
    5. **插入排序**：`Base.Sort.sortBy` 与 `Driver.Iface.insertByText` 都是插入排序（DT 只接受

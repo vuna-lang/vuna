@@ -45,7 +45,7 @@
 4. **工具链不进 TCB**：整个 `lib/` 与 `app/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
    obs/package manager 等都在 `lib/`）；黑名单与断言见 `nix/tcb-forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
-   Nil，入口处未处理效应是类型错误；阶段 0 起也允许内建宿主效应行，见 debt D65），
+   Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
    执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
    宿主层 = 直接调用 `prim_eff_*`（`Base.Host` 已删除）；Int/Nat 归一化只在
    `Base.Eff.*` handler 的 result 族（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
@@ -79,6 +79,9 @@
   `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
   不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外与长 do 链性能边界见
   [records-traits.md](docs/reference/records-traits.md)、[effects.md](docs/reference/effects.md) §8.4。
+- **注释与说明文字只写当下**：源码 / 夹具 / 脚本 / 主题页的注释不写阶段编号、里程碑、
+  实现史（「旧实现如何」）与未来计划；能靠测试锁行为就不靠注释叙述
+  （[comments.md](.agents/rules/comments.md)）。
 - **提交信息**用 `type(scope): 中文描述`（技能 `vuna-commits`）；一次提交只做一件事。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
 
