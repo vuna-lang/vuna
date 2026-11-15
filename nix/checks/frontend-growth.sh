@@ -23,6 +23,8 @@ trap 'rm -rf "$work"' EXIT INT TERM
 mkdir -p "$out"
 out=$(CDPATH= cd -- "$out" && pwd)
 
+# 探针自带 manifest：否则会按 cwd 的 /build/vuna.toml（workspace）解析，沙箱里
+# 缺少 workspace 成员目录时会报 PKG_MissingManifest（与 compiler-growth 同一做法）。
 probe="$work/probe"
 mkdir -p "$probe"
 printf '[package]\nname = "frontend-probe"\n\n[dependencies]\nvuna-base = "%s"\n' "$BASE" >"$probe/vuna.toml"
@@ -120,7 +122,7 @@ prev_lex=0
 prev_syn=0
 prev_fmt=0
 for n in 2000 4000 8000; do
-  f="$work/probe-$n.vuna"
+  f="$probe/p$n.vuna"
   gen_probe "$n" "$f"
   read -r lex syn <<EOF
 $(best_us "$f")
