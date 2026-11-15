@@ -139,16 +139,16 @@ canContinue st blockCol = case peekPos st of
   Pos line col => case lastPos st of
     Pos lastLine lastCol => line == lastLine || col > blockCol
 
-export expectSym : PState -> String -> Check (Pair Int PState)
+-- | 消费一个符号。返回后的状态即可继续解析（旧实现返回 `Pair Int PState` 的幽灵
+-- `Int`，恒为 0，已删）。
+export expectSym : PState -> String -> Check PState
 expectSym st s = case peekTok st of
-  PTok (TSym x) p =>
-    if x == s then OkC (Pair 0 (advance st)) else psErr1At (tokSpan st) (ExpectedToken s) s
+  PTok (TSym x) p => if x == s then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken s) s
   _ => psErr1At (tokSpan st) (ExpectedToken s) s
 
-export expectKw : PState -> String -> Check (Pair Int PState)
+export expectKw : PState -> String -> Check PState
 expectKw st k = case peekTok st of
-  PTok (TKw x) p =>
-    if x == k then OkC (Pair 0 (advance st)) else psErr1At (tokSpan st) (ExpectedToken k) k
+  PTok (TKw x) p => if x == k then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken k) k
   _ => psErr1At (tokSpan st) (ExpectedToken k) k
 
 export expectIdent : PState -> Check (Pair String PState)
