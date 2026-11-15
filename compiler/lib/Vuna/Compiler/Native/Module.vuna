@@ -56,6 +56,8 @@ record FGen where
   fgFams : List IrTyDecl
   fgNextSlot : Int
   fgNextLabel : Int
+  -- | 本次生成中遇到的闭包函数（每个 `IrLam` 值一个），最后并入 `npFuncs`。
+  fgLams : List NativeFunc
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -375,7 +377,7 @@ else case ir of
   IrConcatMany parts => genConcatMany (fuel - 1) st parts
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
   IrCase _ _ => unsupported "native target: case is not supported yet"
-  IrLam _ _ => unsupported "native target: lambdas are not supported yet"
+  IrLam bs body => genLamValue (fuel - 1) st bs body
   IrRt "@vuna@obs@span" =>
     unsupported
       "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
@@ -428,12 +430,92 @@ else case flattenApp ir of
       [a] => genNatSuccCall (fuel - 1) st a
       _ => internal "Nat Succ must have exactly one argument"
     else genRtValueCall (fuel - 1) st s args
-    IrLam bs body => case runtimeBinders bs of
-      [b] => case args of
-        [a] => genLamApp (fuel - 1) st b a body
-        _ => unsupported "native target: only saturated single-argument lambdas are supported yet"
-      _ => unsupported "native target: lambdas are not supported yet"
-    _ => unsupported "native target: higher-order application is not supported yet"
+    -- 闭包应用：`f` 求值成 `[code][env...]` 对象，rdi = 闭包、实参从 rsi 起。
+    _ => nbind (genExpr (fuel - 1) st head) (\p => let
+      cloP = freshSlot (secondOf p)
+      clo = firstOf cloP
+    in nbind (genArgs (fuel - 1) (secondOf cloP) args)
+      (\q => nbind (genClosureCall st clo (firstOf (secondOf q))) (\r => NOk (Pair (cat [firstOf p, storeSlot clo, firstOf q, firstOf r]) (secondOf (secondOf q)))))
+    )
+
+-- ---------------------------------------------------------------
+-- 闭包（M3c）
+-- ---------------------------------------------------------------
+-- 表示（与 wasm 侧同一决策）：闭包 = 堆对象 `[code ptr][captured...]`。
+-- 调用约定：`rdi` = 闭包自身（env 基址），实参从 `rsi` 起（第 6 个起压栈）。
+-- 捕获策略：创建时把**当前作用域里的全部 binder** 拷进闭包；函数入口再拷回本帧的槽。
+-- 这样不需要单独的 free-variable 分析，语义正确；代价是闭包体积随作用域大小增长。
+closureArgRegs : List Reg
+closureArgRegs = [Rsi, Rdx, Rcx, R8, R9]
+
+-- | 闭包函数入口：把捕获值从 `[rdi + 8 + 8*i]` 拷进本帧槽并绑定 binder。
+bindCaptures : FGen -> List (Pair IrBinder Int) -> Int -> NRes (Pair (List Instr) FGen)
+bindCaptures st [] _ = NOk (Pair [] st)
+bindCaptures st ((Pair b src) :: rest) i =
+  let
+    slotP = freshSlot st
+    slot = firstOf slotP
+    st1 = pushBinder b slot (secondOf slotP)
+    ins =
+      [IMov (OpReg Rax) (OpMem Rdi (8 + 8 * i)), IMov (OpMem Rbp (nativeSlotOff slot)) (OpReg Rax)]
+  in nbind (bindCaptures st1 rest (i + 1)) (\q => NOk (Pair (append ins (firstOf q)) (secondOf q)))
+
+storeCloCode : Int -> String -> List Instr
+storeCloCode obj label =
+  [ILea Rax label, IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff obj)), IMov (OpMem Rdx 0) (OpReg Rax)]
+
+storeCapsAt : Int -> Int -> List (Pair IrBinder Int) -> List Instr
+storeCapsAt obj i [] = []
+storeCapsAt obj i (p :: rest) =
+  append (setObjFromSlot obj (8 + 8 * i) (secondOf p)) (storeCapsAt obj (i + 1) rest)
+
+-- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。
+genLamValue : Int -> FGen -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
+genLamValue fuel st bs body = if fuel <= 0 then internal "native codegen fuel exhausted"
+else
+  let
+    rbs = runtimeBinders bs
+    caps = st.fgSlots
+    ncap = length caps
+    idx = st.fgNextLabel
+    lamName = "vuna_lam_${strFromInt idx}"
+    st1 = { st | fgNextLabel = idx + 1 }
+    stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel []
+  in nbind (bindCaptures stBody caps 0) (\cp => nbind (bindArgsGo rbs 1 (secondOf cp)) (\bp => nbind (genExpr (fuel - 1) (secondOf bp) body) (\q => let
+    stF = secondOf q
+    frame = nativeFrameBytes stF.fgNextSlot
+    lamFunc =
+      NativeFunc lamName frame
+        (append (nativePrologue frame) (append (firstOf cp) (append (firstOf bp) (append (firstOf q) nativeEpilogue))))
+    allocP = genAlloc st1 (1 + ncap)
+    obj = firstOf (secondOf allocP)
+    st2 = secondOf (secondOf allocP)
+    bodyIns =
+      append (firstOf allocP)
+        (append (storeCloCode obj lamName) (append (storeCapsAt obj 0 caps) (getLocal obj)))
+    lams = append st1.fgLams (append stF.fgLams [lamFunc])
+    st3 = { st2 | fgLams = lams }
+  in NOk (Pair bodyIns st3)
+  )
+  )
+  )
+
+-- | 闭包应用：`clo` = 闭包槽、`args` = 实参槽（按顺序）。
+genClosureCall : FGen -> Int -> List Int -> NRes (Pair (List Instr) FGen)
+genClosureCall st clo args =
+  let
+    regSlots = take (length closureArgRegs) args
+    stackSlots = drop (length closureArgRegs) args
+    k = length stackSlots
+    pad = if k - k / 2 * 2 == 1 then 8 else 0
+    popped = 8 * k + pad
+    callPart =
+      append [IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11]
+        (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])
+    body =
+      append (pushStackArgs stackSlots)
+        (append (loadArgRegs closureArgRegs regSlots) (append (loadReg Rdi clo) callPart))
+  in NOk (Pair body st)
 
 -- ---------------------------------------------------------------
 -- data / record
@@ -836,18 +918,18 @@ bindArgsGo (b :: rest) i st =
 
 -- | 生成一个定义；返回函数与该定义之后**全局** label/slot 计数（label 必须跨定义
 --   累加，否则两个函数会撞同名 `.L`）。
-genDefFunc : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair NativeFunc Int)
+genDefFunc : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) Int)
 genDefFunc _defs _pool _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
 genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
   let
-    st0 = FGen defs pool [] fams 0 nextLabel
+    st0 = FGen defs pool [] fams 0 nextLabel []
   in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
     instrs = append (firstOf p) nativeEpilogue
-  in NOk
-    (Pair (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)) st1.fgNextLabel)
+    mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)
+  in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
   )
   else case body of
     IrLam bs inner =>
@@ -858,14 +940,14 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
         st1 = secondOf q
         frame = nativeFrameBytes st1.fgNextSlot
         instrs = append (firstOf bp) (append (firstOf q) nativeEpilogue)
-      in NOk
-        (Pair (NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)) st1.fgNextLabel)
+        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)
+      in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
       )
       )
     _ => internal "function body is not a lambda: ${name}"
 
-genDefs : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> List IrDef -> List NativeFunc -> NRes (Pair (List NativeFunc) Int)
-genDefs _all _pool _fams next [] acc = NOk (Pair (reverse acc) next)
+genDefs : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> List IrDef -> List (List NativeFunc) -> NRes (Pair (List NativeFunc) Int)
+genDefs _all _pool _fams next [] acc = NOk (Pair (concatMap (\x => x) (reverse acc)) next)
 genDefs all pool fams next (d :: rest) acc =
   nbind (genDefFunc all pool fams next d)
     (\p => genDefs all pool fams (secondOf p) rest (firstOf p :: acc))

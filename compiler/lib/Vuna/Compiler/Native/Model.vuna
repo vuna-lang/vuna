@@ -130,6 +130,8 @@ export data Instr(..) : Type where
   IJcc : String -> String -> Instr
   -- | `call label`。
   ICall : String -> Instr
+  -- | `call reg`（寄存器里的代码指针；闭包调用）。
+  ICallReg : Reg -> Instr
   -- | `ret`。
   IRet : Instr
   -- | `syscall`。

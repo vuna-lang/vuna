@@ -249,7 +249,7 @@ out-equals: 2
 run: sh -c '"$VUNA" run "$TMPDIR/nest" 2>&1 | tail -n 1'
 out-equals: 2
 
-# 10i) M3b：List 桥接 strUnpack / strPack / strConcatMany / strSubstTemplate。
+# 10i) List 桥接 strUnpack / strPack / strConcatMany / strSubstTemplate。
 run: sh -c 'd="$TMPDIR/lb"; mkdir -p "$d/app"; printf "[package]\nname = \"lb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strPack (strUnpack \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/lb-out" "$d"'
 exit: 0
 run: "$TMPDIR/lb-out/bin/lb" 2>&1
@@ -280,14 +280,43 @@ exit: 1
 out-contains: native target:
 file-absent: $TMPDIR/fl-out/bin/fl
 
-# 11b) 高阶 lambda 值仍拒绝（data/case 已支持）。
-run: sh -c 'd="$TMPDIR/dat"; mkdir -p "$d/app"; printf "[package]\nname = \"dat\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/dat-out" "$d" 2>&1'
+# 11b) 闭包作为值 + 高阶应用（lambda / map / foldl），与 OCaml 差分。
+run: sh -c 'd="$TMPDIR/clo"; mkdir -p "$d/app"; printf "[package]\nname = \"clo\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "apply : (Int -> Int) -> Int -> Int" "apply f x = f x" "" "main : Int" "main = apply (\x => x + 1) 41" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/clo-out" "$d"'
 exit: 0
+run: "$TMPDIR/clo-out/bin/clo" 2>&1
+out-equals: 42
+run: sh -c '"$VUNA" run "$TMPDIR/clo" 2>&1 | tail -n 1'
+out-equals: 42
+# 多参 lambda 以柯里化 / higher-order 形式穿过 map / foldl。
+run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "" "main : Int" "main = foldl (\a => \x => a + x) 0 (map (\x => x * 2) [1, 2, 3])" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/clo-sum" "$d"'
+exit: 0
+run: "$TMPDIR/clo-sum/bin/clo" 2>&1
+out-equals: 12
+run: sh -c '"$VUNA" run "$TMPDIR/clo" 2>&1 | tail -n 1'
+out-equals: 12
+# 闭包捕获外层 binder：map 的 lambda 里用到 let 绑定的 k。
+run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "import Base.String" "" "main : String" "main = let k = 10 in join \",\" (map (\x => strFromInt (x + k)) [1, 2])" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/clo-cap" "$d"'
+exit: 0
+run: "$TMPDIR/clo-cap/bin/clo" 2>&1
+out-equals: "11,12"
+run: sh -c '"$VUNA" run "$TMPDIR/clo" 2>&1 | tail -n 1'
+out-equals: "11,12"
 
-# 11c) 高阶应用在编译期拒绝。
-run: sh -c 'd="$TMPDIR/ho"; mkdir -p "$d/app"; printf "[package]\nname = \"ho\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "apply : (Int -> Int) -> Int -> Int\napply f x = f x\n\nmain : Int\nmain = apply (\\x => x + 1) 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/ho-out" "$d" 2>&1'
-exit: 1
-out-contains: higher-order application
+# 11c) `Base.String` 的高阶 API（闭包验收）（split / join / unlines / trim / repeat）。
+run: sh -c 'd="$TMPDIR/sapi"; mkdir -p "$d/app"; printf "[package]\nname = \"sapi\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "import Base.String" "" "main : String" "main = join \"|\" (split \",\" \"a,b,,c\")" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/sapi-out" "$d"'
+exit: 0
+run: "$TMPDIR/sapi-out/bin/sapi" 2>&1
+out-equals: "a|b||c"
+run: sh -c 'd="$TMPDIR/sapi"; printf "import Base.String\n\nmain : String\nmain = unlines [\"a\", \"b\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/sapi-ul" "$d"'
+exit: 0
+run: "$TMPDIR/sapi-ul/bin/sapi" 2>&1
+out-equals: "a\nb\n"
+run: sh -c 'd="$TMPDIR/sapi"; printf "import Base.String\n\nmain : String\nmain = repeat 3 \"ab\" ++ \"[\" ++ trim \"  hi \" ++ \"]\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/sapi-rep" "$d"'
+exit: 0
+run: "$TMPDIR/sapi-rep/bin/sapi" 2>&1
+out-equals: "ababab[hi]"
+run: sh -c '"$VUNA" run "$TMPDIR/sapi" 2>&1 | tail -n 1'
+out-equals: "ababab[hi]"
 
 # 12) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'

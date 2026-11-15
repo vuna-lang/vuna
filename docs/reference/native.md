@@ -5,9 +5,10 @@
 > `strSubstring`、`strHash`、`strShow`、`bi_eq_str` / `bi_neq_str`、String 入口）+
 > 六种位运算、`assert` / `todo` / `prim_fail`（统一错误报告）、`dbg!` 的
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
-> 分派）、record 构造/投影/更新与通用 `case`。堆是可增长 arena（`mmap` 新段，不做
-> RC/复用）。闭包值、Float、Effect、FFI 与 List 桥接符号仍被明确拒绝
-> （`NativeUnsupported`）。实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
+> 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
+> `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用。堆是可增长 arena（`mmap`
+> 新段，不做 RC/复用）。Float、Effect、FFI 仍被明确拒绝（`NativeUnsupported`）。
+> 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
 ## 1. 产物与工具链
@@ -68,6 +69,9 @@
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
   另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。
+- **闭包调用**：`rdi` = 闭包对象（其第 0 槽是代码指针、其后是捕获值），实参从 `rsi`
+  起（第 6 个实参起压栈），调用点 `mov r11, [rdi]; call r11`。闭包函数入口先把捕获值
+  拷进本帧槽，再按常规绑定形参。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
   `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
@@ -93,7 +97,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路 |
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
-| `IrLam` | 仅顶层函数体 / 单参立即应用 | 嵌套、作为值 → 拒绝 |
+| `IrLam` | 支持 | 作为值 → 闭包对象 `[code][捕获...]`；应用 `call [rdi]`（`rdi` = 闭包，实参从 `rsi` 起） |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
 | Float / Effect / extern | 拒绝 | `native target: ... not supported yet` |
