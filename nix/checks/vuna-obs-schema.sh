@@ -7,7 +7,8 @@
 #      `vuna obs validate` 退出码 0、事件数 > 0、元数据 schema 正确；
 #   3. `vuna obs summarize --json` 输出单行 JSON 且含 `spans` / `wallUs`；
 #   4. 编译器自观测至少产出 `vuna.elab` + `vuna.codegen.check` 两个阶段跨度
-#      （证明插桩没有被搬掉；名字是规范 §3.3 词汇表条目）。
+#      （证明插桩没有被搬掉；名字是规范 §3.3 词汇表条目），以及前端的两段
+#      `vuna.parse.lex` / `vuna.parse.syntax`（证明 lex 与语法分析可分别归因）。
 #
 # 由 nix/checks/default.nix 的 mkCheck 调用：cwd 是已暂存的工作树，$1 是输出目录，
 # $VUNA 由 Nix 注入。
@@ -89,6 +90,9 @@ grep -q '"name":"vuna.elab"' "$compiler_trace" || fail "compiler trace misses th
 grep -q '"name":"vuna.codegen.check"' "$compiler_trace" || fail "compiler trace misses the vuna.codegen.check phase span"
 # 逐定义精化段（vuna.elab 的子区间）：冷全量精化必然产出。
 grep -q '"name":"vuna.elab.bodies"' "$compiler_trace" || fail "compiler trace misses the vuna.elab.bodies span"
+# 前端两段：冷 store 下每个模块都要过 lex + 语法分析。
+grep -q '"name":"vuna.parse.lex"' "$compiler_trace" || fail "compiler trace misses the vuna.parse.lex span"
+grep -q '"name":"vuna.parse.syntax"' "$compiler_trace" || fail "compiler trace misses the vuna.parse.syntax span"
 # `Eff` 边界的零宽度标记（ph:"i"）：load / resolve / iface 计算与写回各一次。
 for mark in vuna.load vuna.resolve vuna.iface.compute vuna.iface.write; do
   grep -q "\"ph\":\"i\",.*\"name\":\"$mark\"" "$compiler_trace" \

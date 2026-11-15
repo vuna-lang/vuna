@@ -421,10 +421,11 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **24 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 21 个 check 语义项（`context-budget`、`diag-coverage`、
+`nix flake check` 实测 **25 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 22 个 check 语义项（`context-budget`、`diag-coverage`、
 `diag-raw`、`diag-style`、`eff-boundary`、`ir-boundary`、`seed-selfhost`、
 `steps-inproc`、`vuna-compiler-growth`、`vuna-compiler-growth-incremental`、
+`vuna-frontend-growth`、
 `vuna-fmt`、`vuna-lint`、`vuna-metrics`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`diag-located`、`vuna-tests-gate`、`vuna-tests-e2e`、
 `vuna-typecheck`、`vscode-ext`；主体是 `nix/checks/<name>.sh`）。语义项：
@@ -471,6 +472,10 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   先落依赖接口、再以独立进程计时**第二次 check**（包路径增量收尾），1000/2000/4000/8000
   相邻档 ≤2.6；单文件探针走全量精化，覆盖不到 `dedup*`/`anyOwn`/写接口这类收尾热点
   （见 [performance.md](performance.md) §5.2）；
+- `vuna-frontend-growth`：合成 2000/4000/8000 个同形定义，从 trace 取 `vuna.parse.lex` /
+  `vuna.parse.syntax` 的 `totalUs`，再加 `fmt --check` 墙钟，相邻档 ≤2.5×；与
+  `vuna-compiler-growth` 互补（整条 check 里前端只占几个百分点，n² 会被精化成本掩盖）。
+  读数见 [performance.md](performance.md) §6.1；
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
   `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；

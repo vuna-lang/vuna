@@ -109,7 +109,13 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq pkgs.wasm-tools pkgs.wasmtime ];
+    nativeBuildInputs = ocamlTools ++ [
+      pkgs.util-linux
+      pkgs.git
+      pkgs.jq
+      pkgs.wasm-tools
+      pkgs.wasmtime
+    ];
     script = ./vuna-tests.sh;
   };
 
@@ -129,7 +135,13 @@ in
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.util-linux pkgs.git pkgs.jq pkgs.wasm-tools pkgs.wasmtime ];
+    nativeBuildInputs = ocamlTools ++ [
+      pkgs.util-linux
+      pkgs.git
+      pkgs.jq
+      pkgs.wasm-tools
+      pkgs.wasmtime
+    ];
     script = ./vuna-tests.sh;
   };
   vuna-metrics = mkCheck {
@@ -145,7 +157,6 @@ in
     };
     script = ./vuna-metrics.sh;
   };
-
 
   # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
@@ -183,6 +194,26 @@ in
       pkgs.coreutils
     ];
     script = ./compiler-growth-pkg.sh;
+  };
+
+  # 前端增长率门槛：合成 2000/4000/8000 个同形定义，相邻档的
+  # `vuna.parse.lex` / `vuna.parse.syntax`（来自 trace）与 `fmt --check` 墙钟比有上界。
+  # 与 compiler-growth 互补：那边看整条 check（前端只占几个百分点），这边直接看前端读数。
+  vuna-frontend-growth = mkCheck {
+    name = "vuna-frontend-growth";
+    srcs = [
+      ../../base
+      ../../nix/checks/frontend-growth.sh
+      ../../vuna.toml
+    ];
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+    };
+    nativeBuildInputs = [
+      pkgs.bash
+      pkgs.coreutils
+    ];
+    script = ./frontend-growth.sh;
   };
 
   vuna-typecheck = mkCheck {
@@ -230,7 +261,6 @@ in
     };
     script = ./vuna-fmt.sh;
   };
-
 
   context-budget = mkCheck {
     name = "vuna-context-budget";
@@ -299,7 +329,6 @@ in
     ];
     script = ./diag-coverage.sh;
   };
-
 
   # 诊断位置门禁：结构化诊断必须有主 span；没有源码可指的码只能
   # 逐码登记在 nix/diag-located.allow（基线，只减不增）。
@@ -408,7 +437,13 @@ in
       VUNA = "${vuna}/bin/vuna";
       VUNA_BASE = "${repo}/base";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.binutils pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep ];
+    nativeBuildInputs = ocamlTools ++ [
+      pkgs.binutils
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+    ];
     script = ./vuna-obs-dwarf.sh;
   };
 
@@ -425,7 +460,12 @@ in
       VUNA = "${vuna}/bin/vuna";
       VUNA_BASE = "${repo}/base";
     };
-    nativeBuildInputs = ocamlTools ++ [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep ];
+    nativeBuildInputs = ocamlTools ++ [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+    ];
     script = ./vuna-obs-overhead.sh;
   };
 
