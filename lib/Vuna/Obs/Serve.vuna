@@ -149,9 +149,8 @@ traceRowsOf trace = trace.traceEvents
 -- `Runtime.getIsolateId` 的 `<pid>`：数据源 trace 元数据里的 `pid`（产生这份 profile 的
 -- 进程）。多份 trace 取第一份的（profile 时间轴用的也是第一份的起点）；没有 trace = 0。
 targetPidOf : List ObsTrace -> Int
-targetPidOf traces = case traces of
-  first :: _ => eventPidOf first.traceEvents
-  [] => 0
+targetPidOf (first :: _) = eventPidOf first.traceEvents
+targetPidOf [] = 0
 
 eventPidOf : List (Pair Int ObsEvent) -> Int
 eventPidOf [] = 0

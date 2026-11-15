@@ -116,12 +116,13 @@ checkFields [] = []
 checkFields ((Pair line ev) :: rest) = append (fieldIssuesOf line ev) (checkFields rest)
 
 fieldIssuesOf : Int -> ObsEvent -> List ValidateIssue
-fieldIssuesOf line ev = case ev of
-  ObsMetaEvent _ => []
-  ObsSpanEvent _ dur =>
-    append (tsRequired line ev) (append (durRequired line dur) (allocWordsIssue line ev))
-  ObsCounterEvent _ value => append (tsRequired line ev) (counterValueIssue line value)
-  ObsInstantEvent _ => append (tsRequired line ev) (instantArgsIssues line ev)
+fieldIssuesOf line (ObsMetaEvent _) = []
+fieldIssuesOf line (ev@(ObsSpanEvent _ dur)) =
+  append (tsRequired line ev) (append (durRequired line dur) (allocWordsIssue line ev))
+fieldIssuesOf line (ev@(ObsCounterEvent _ value)) =
+  append (tsRequired line ev) (counterValueIssue line value)
+fieldIssuesOf line (ev@(ObsInstantEvent _)) =
+  append (tsRequired line ev) (instantArgsIssues line ev)
 
 tsRequired : Int -> ObsEvent -> List ValidateIssue
 tsRequired line ev = case eventTs ev of
@@ -129,9 +130,9 @@ tsRequired line ev = case eventTs ev of
   Nothing => [errorAt line "event is missing integer field `ts`"]
 
 durRequired : Int -> Maybe Int -> List ValidateIssue
-durRequired line dur = case dur of
-  Just d => if d < 0 then [errorAt line "span `dur` must be >= 0, got ${strFromInt d}"] else []
-  Nothing => [errorAt line "span (ph:\"X\") is missing integer field `dur`"]
+durRequired line (Just d) =
+  if d < 0 then [errorAt line "span `dur` must be >= 0, got ${strFromInt d}"] else []
+durRequired line Nothing = [errorAt line "span (ph:\"X\") is missing integer field `dur`"]
 
 allocWordsIssue : Int -> ObsEvent -> List ValidateIssue
 allocWordsIssue line ev =
@@ -144,9 +145,9 @@ intArgIssue line key ev = case argJson key ev of
   Just _ => [errorAt line "`args.${key}` must be an integer"]
 
 counterValueIssue : Int -> Maybe Int -> List ValidateIssue
-counterValueIssue line value = case value of
-  Just _ => []
-  Nothing => [errorAt line "counter (ph:\"C\") is missing integer field `args.value`"]
+counterValueIssue line (Just _) = []
+counterValueIssue line Nothing =
+  [errorAt line "counter (ph:\"C\") is missing integer field `args.value`"]
 
 instantArgsIssues : Int -> ObsEvent -> List ValidateIssue
 instantArgsIssues line ev =

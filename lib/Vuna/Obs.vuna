@@ -43,20 +43,19 @@ import Base.EffProcess
 
 -- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
 export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
-runObs args = case args of
-  [] => obsUsage
-  sub :: rest => case sub of
-    "run" => Vuna.Obs.Run.runObsRun rest
-    "summarize" => obsSummarizeArgs rest
-    "validate" => obsValidateArgs rest
-    "convert" => Vuna.Obs.Convert.runObsConvert rest
-    "render" => Vuna.Obs.Render.runObsRender rest
-    "merge" => Vuna.Obs.Merge.runObsMerge rest
-    "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
-    "serve" => Vuna.Obs.Serve.runObsServe rest
-    _ => do
-      _ <- consolePrint "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}"
-      pure 2
+runObs [] = obsUsage
+runObs (sub :: rest) = case sub of
+  "run" => Vuna.Obs.Run.runObsRun rest
+  "summarize" => obsSummarizeArgs rest
+  "validate" => obsValidateArgs rest
+  "convert" => Vuna.Obs.Convert.runObsConvert rest
+  "render" => Vuna.Obs.Render.runObsRender rest
+  "merge" => Vuna.Obs.Merge.runObsMerge rest
+  "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
+  "serve" => Vuna.Obs.Serve.runObsServe rest
+  _ => do
+    _ <- consolePrint "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}"
+    pure 2
 
 obsUsageText : String
 obsUsageText = """usage:
@@ -166,17 +165,17 @@ summarizeTraces parsed threshold base (path :: rest) = do
       if code /= 0 then pure code else summarizeTraces parsed threshold base rest
 
 emitSummary : Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff r Int
-emitSummary parsed threshold base path summary = case base of
-  Nothing => if flagSet parsed "json" then do
-    _ <- obsLine (renderJson (summaryJson summary))
-    pure 0
-  else do
-    rows <-
-      pure
-        (append (append ["trace: ${path}"] (renderStageTable summary)) (append (renderCounterTable summary) (renderSampleSection summary)))
-    _ <- printRows rows
-    pure 0
-  Just baseSummary => emitDelta parsed threshold baseSummary path summary
+emitSummary parsed threshold Nothing path summary = if flagSet parsed "json" then do
+  _ <- obsLine (renderJson (summaryJson summary))
+  pure 0
+else do
+  rows <-
+    pure
+      (append (append ["trace: ${path}"] (renderStageTable summary)) (append (renderCounterTable summary) (renderSampleSection summary)))
+  _ <- printRows rows
+  pure 0
+emitSummary parsed threshold (Just baseSummary) path summary =
+  emitDelta parsed threshold baseSummary path summary
 
 emitDelta : Member nConsole ConsoleOp r => Parsed -> Int -> ObsSummary -> String -> ObsSummary -> Eff r Int
 emitDelta parsed threshold baseSummary path summary =

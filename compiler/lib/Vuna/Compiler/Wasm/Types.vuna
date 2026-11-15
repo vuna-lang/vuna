@@ -87,13 +87,12 @@ maxCtorFields (c :: rest) =
   if c.wasmCtorFields > maxCtorFields rest then c.wasmCtorFields else maxCtorFields rest
 
 famOfDecl : IrTyDecl -> WasmFam
-famOfDecl decl = case decl of
-  IrVariantDecl name _params ctors =>
-    let
-      cs = ctorEntriesOf ctors
-    in WasmFam name FamVariant (maxCtorFields cs) cs []
-  IrRecordDecl name _params fields _tys => WasmFam name FamRecord (length fields) [] fields
-  IrUnboxedDecl name _params _ty => WasmFam name FamUnboxed 0 [] []
+famOfDecl (IrVariantDecl name _params ctors) =
+  let
+    cs = ctorEntriesOf ctors
+  in WasmFam name FamVariant (maxCtorFields cs) cs []
+famOfDecl (IrRecordDecl name _params fields _tys) = WasmFam name FamRecord (length fields) [] fields
+famOfDecl (IrUnboxedDecl name _params _ty) = WasmFam name FamUnboxed 0 [] []
 
 -- | 程序顺序的族表。
 export wasmFamsOf : List IrTyDecl -> List WasmFam

@@ -47,19 +47,18 @@ binderErasedOf : IrBinder -> Bool
 binderErasedOf (IrBinder _ erased) = erased
 
 bNameEq : IrBName -> IrBName -> Bool
-bNameEq a b = case a of
-  IrBUser x => case b of
-    IrBUser y => x == y
-    _ => False
-  IrBArm x => case b of
-    IrBArm y => x == y
-    _ => False
-  IrBNat x => case b of
-    IrBNat y => x == y
-    _ => False
-  IrBWild => case b of
-    IrBWild => True
-    _ => False
+bNameEq (IrBUser x) b = case b of
+  IrBUser y => x == y
+  _ => False
+bNameEq (IrBArm x) b = case b of
+  IrBArm y => x == y
+  _ => False
+bNameEq (IrBNat x) b = case b of
+  IrBNat y => x == y
+  _ => False
+bNameEq IrBWild b = case b of
+  IrBWild => True
+  _ => False
 
 binderEq : IrBinder -> IrBinder -> Bool
 binderEq a b = bNameEq (binderNameOf a) (binderNameOf b) && binderErasedOf a == binderErasedOf b
@@ -168,7 +167,7 @@ else case ir of
       (append (strLitsOfFuel (fuel - 1) t) (strLitsOfFuel (fuel - 1) e))
   IrCase s alts => append (strLitsOfFuel (fuel - 1) s) (strLitsAltFuel (fuel - 1) alts)
   IrNatCase s _ z su c =>
-    append (strLitsOfFuel (fuel - 1) s) (strLitsAltMaybeFuel (fuel - 1) (z :: su :: c :: []))
+    append (strLitsOfFuel (fuel - 1) s) (strLitsAltMaybeFuel (fuel - 1) [z, su, c])
   IrRtApp _ args => strLitsArgsFuel (fuel - 1) args
   IrConcatMany parts => strLitsArgsFuel (fuel - 1) parts
   IrCtor _ _ args => strLitsArgsFuel (fuel - 1) args
@@ -179,9 +178,8 @@ else case ir of
   IrEffBind _ _ _ => []
 
 strLitsDef : IrDef -> List String
-strLitsDef d = case d of
-  IrDef _ _ _ b _ _ _ => strLitsOfFuel 100000 b
-  IrExternDef _ _ _ _ => []
+strLitsDef (IrDef _ _ _ b _ _ _) = strLitsOfFuel 100000 b
+strLitsDef (IrExternDef _ _ _ _) = []
 
 poolOffsets : List String -> Int -> List (Pair String (Pair Int Int))
 poolOffsets [] _ = []
@@ -692,9 +690,8 @@ ensureLocal name ty st =
   else { st | gsLocals = append st.gsLocals [Pair name ty] }
 
 prepend : List Instr -> Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
-prepend ins r = case r of
-  Err e => Err e
-  Ok q => Ok (Pair (append ins (firstOf q)) (secondOf q))
+prepend ins (Err e) = Err e
+prepend ins (Ok q) = Ok (Pair (append ins (firstOf q)) (secondOf q))
 
 caseFamilyOf : List IrAlt -> Maybe String
 caseFamilyOf [] = Nothing
@@ -920,10 +917,10 @@ rtArrayToListF lf =
     (catI [[ILocalGet "$p0", IRefCast "$arr", ILocalSet "$arr", ILocalGet "$arr", IArrayLen, ILocalSet "$n", ILocalGet "$n", ILocalSet "$i"], wasmNilCell lf, [ILocalSet "$acc", IBlock "$atl_done" "" [ILoop "$atl_l" "" [ILocalGet "$i", IPlain "i32.eqz", IBrIf "$atl_done", ILocalGet "$i", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", IConstI32 lf.wasmListConsTag, ILocalGet "$arr", ILocalGet "$i", IArrayGet "$arr", ILocalGet "$acc", IStructNew ty, ILocalSet "$acc", IBr "$atl_l"]]], [ILocalGet "$acc"]])
 
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
-genDefFunc fuel st d = case d of
-  IrExternDef name _ _ _ => Err "wasm target: extern definition `${name}` is not supported yet"
-  IrDef name arity _deps body _recOk _initGuard _span =>
-    if arity == 0 then Ok (Pair [] st) else genDefFuncBody fuel st name arity body
+genDefFunc fuel st (IrExternDef name _ _ _) =
+  Err "wasm target: extern definition `${name}` is not supported yet"
+genDefFunc fuel st (IrDef name arity _deps body _recOk _initGuard _span) =
+  if arity == 0 then Ok (Pair [] st) else genDefFuncBody fuel st name arity body
 
 genDefFuncBody : Int -> GenState -> String -> Int -> Ir -> Result (Pair (List WatFunc) GenState)
 genDefFuncBody fuel st name arity body =
@@ -967,15 +964,14 @@ else case genDefFunc fuel st d of
 -- 顶层初始化（`_start`）
 -- ---------------------------------------------------------------
 genDefInit : Int -> GenState -> IrDef -> Result (Pair (List Instr) GenState)
-genDefInit fuel st d = case d of
-  IrExternDef _ _ _ _ => Err "extern definition reached wasm codegen"
-  IrDef name arity _deps body _recOk _initGuard _span => if arity /= 0 then Ok (Pair [] st)
-  else
-    let
-      st1 = restoreScope [] st
-    in case genExpr (fuel - 1) st1 body of
-      Err e => Err e
-      Ok p => Ok (Pair (append (firstOf p) [IGlobalSet (watGlobalNameOf name)]) (secondOf p))
+genDefInit fuel st (IrExternDef _ _ _ _) = Err "extern definition reached wasm codegen"
+genDefInit fuel st (IrDef name arity _deps body _recOk _initGuard _span) = if arity /= 0 then Ok (Pair [] st)
+else
+  let
+    st1 = restoreScope [] st
+  in case genExpr (fuel - 1) st1 body of
+    Err e => Err e
+    Ok p => Ok (Pair (append (firstOf p) [IGlobalSet (watGlobalNameOf name)]) (secondOf p))
 
 genDefsInits : Int -> GenState -> List IrDef -> Result (Pair (List Instr) GenState)
 genDefsInits fuel st [] = Ok (Pair [] st)
@@ -987,13 +983,13 @@ else case genDefInit (fuel - 1) st d of
     Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
 
 entryShowFunc : Ir -> Maybe String
-entryShowFunc ir = case ir of
-  IrRt s =>
-    if s == "@ir@showInt" then Just "$rt_strFromInt"
-    else if s == "@ir@showNat" then Just "$rt_strFromInt"
-    else if s == "@ir@showBool" then Just "$rt_showBool"
-    else if s == "@ir@showStr" then Just "$rt_showStr" else Nothing
+entryShowFunc (IrRt s) = case s of
+  "@ir@showInt" => Just "$rt_strFromInt"
+  "@ir@showNat" => Just "$rt_strFromInt"
+  "@ir@showBool" => Just "$rt_showBool"
+  "@ir@showStr" => Just "$rt_showStr"
   _ => Nothing
+entryShowFunc _ = Nothing
 
 genStartBody : Int -> GenState -> Maybe IrEntry -> Bool -> Result (Pair (List Instr) GenState)
 genStartBody fuel st entry printResult = if fuel <= 0 then Err "wasm codegen fuel exhausted"

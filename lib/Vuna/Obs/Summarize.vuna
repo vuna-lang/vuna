@@ -178,11 +178,10 @@ attachSpan ev ts end st =
 -- 先按 `args.parent` 名字找父，再按时间包含弹出；两步都只弹不 push。
 -- 两个弹出循环都沿「关闭栈顶」前进，对 DT 不是结构递归，因此用显式 fuel（栈深 + 1）。
 popForParent : Maybe String -> Int -> Int -> FoldState -> FoldState
-popForParent parentName ts end st = case parentName of
-  Just name =>
-    if hasOpenName name st.foldStack then popUntilName (stackFuel st) name st
-    else popUntilContains (stackFuel st) ts end st
-  Nothing => popUntilContains (stackFuel st) ts end st
+popForParent (Just name) ts end st =
+  if hasOpenName name st.foldStack then popUntilName (stackFuel st) name st
+  else popUntilContains (stackFuel st) ts end st
+popForParent Nothing ts end st = popUntilContains (stackFuel st) ts end st
 
 stackFuel : FoldState -> Int
 stackFuel st = length st.foldStack + 1

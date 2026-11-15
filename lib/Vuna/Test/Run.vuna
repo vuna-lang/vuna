@@ -424,19 +424,16 @@ probePackageIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r
 probePackageIn env dir = checkPackageAt dir
 
 checkPassed : Check a -> Bool
-checkPassed r = case r of
-  OkC _ => True
-  ErrC _ => False
+checkPassed (OkC _) = True
+checkPassed (ErrC _) = False
 
 interpTextOf : Check String -> String
-interpTextOf r = case r of
-  OkC s => trimNewlines s
-  ErrC e => diagText e
+interpTextOf (OkC s) = trimNewlines s
+interpTextOf (ErrC e) = diagText e
 
 diagBriefOf : Check a -> String
-diagBriefOf r = case r of
-  OkC _ => ""
-  ErrC e => diagText e
+diagBriefOf (OkC _) = ""
+diagBriefOf (ErrC e) = diagText e
 
 timeoutAssert : Case -> Int -> Assertion
 timeoutAssert c ms =
@@ -461,17 +458,15 @@ expectKeysOf env diagPath = do
   pure (expectKeys env.envRoot env.envBase (caseRelOf env diagPath) text)
 
 actualKeysOf : Env -> String -> Check (List Diagnostic) -> List String
-actualKeysOf env caseRel checked = case checked of
-  ErrC e => projectDiags env.envRoot env.envBase caseRel (flattenErr e)
-  OkC ds => projectDiags env.envRoot env.envBase caseRel ds
+actualKeysOf env caseRel (ErrC e) = projectDiags env.envRoot env.envBase caseRel (flattenErr e)
+actualKeysOf env caseRel (OkC ds) = projectDiags env.envRoot env.envBase caseRel ds
 
 expectHasError : List String -> Bool
 expectHasError keys = any (\k => startsWith "error|" k) keys
 
 expectHasErrorOf : Check (List String) -> Bool
-expectHasErrorOf r = case r of
-  OkC keys => expectHasError keys
-  ErrC _ => False
+expectHasErrorOf (OkC keys) = expectHasError keys
+expectHasErrorOf (ErrC _) = False
 
 diffToAssertion : ExpectDiff -> Assertion
 diffToAssertion d = Assertion d.diffName d.diffOk d.diffDetail
@@ -636,9 +631,8 @@ compileFreshResult source outdir = do
 
 -- compile 结果 -> 诊断列表（`CG_NoMain` 一类 codegen 门禁的诊断藏在 `OkC` 的第二分量）。
 compileDiags : Check (Pair Int (List Diagnostic)) -> Check (List Diagnostic)
-compileDiags r = case r of
-  ErrC e => ErrC e
-  OkC (Pair _ ds) => if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
+compileDiags (ErrC e) = ErrC e
+compileDiags (OkC (Pair _ ds)) = if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
 
 firstDiagOf : List Diagnostic -> Diagnostic
 firstDiagOf [] = caseSkipDiag "empty"
@@ -843,16 +837,15 @@ checkCaseAsserts env expectedErr expectPass start end r expectedR =
 
 -- 负例的 `.diag.json` 断言（`check-error` 与 `CError` 共用）。
 diagKeyAsserts : Env -> String -> Check (List String) -> Check (List Diagnostic) -> List Assertion
-diagKeyAsserts env diagPath expectedR actualR = case expectedR of
-  ErrC e => [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
-  OkC expectedKeys =>
-    diagAsserts "diag" expectedKeys (actualKeysOf env (caseRelOf env diagPath) actualR)
+diagKeyAsserts env diagPath (ErrC e) actualR =
+  [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
+diagKeyAsserts env diagPath (OkC expectedKeys) actualR =
+  diagAsserts "diag" expectedKeys (actualKeysOf env (caseRelOf env diagPath) actualR)
 
 -- 负例的退出语义（进程内：`ErrC` = 失败）。
 checkExitAsserts : Check (List Diagnostic) -> List Assertion
-checkExitAsserts r = case r of
-  ErrC _ => [Assertion "check exit" True ""]
-  OkC _ => [Assertion "check exit" False "expected an error, check succeeded"]
+checkExitAsserts (ErrC _) = [Assertion "check exit" True ""]
+checkExitAsserts (OkC _) = [Assertion "check exit" False "expected an error, check succeeded"]
 
 -- 无 Case 上下文时的超时断言（`check-ok` 的家族超时是 15s）。
 timeoutAssertBy : Int -> String -> Assertion
@@ -861,9 +854,8 @@ timeoutAssertBy ms name =
 
 -- `OkC` 的诊断表里没有 error 级条目。
 noErrorDiags : Check (List Diagnostic) -> Bool
-noErrorDiags r = case r of
-  ErrC _ => False
-  OkC ds => not (any (\d => severityText (diagSeverityOf d) == "error") ds)
+noErrorDiags (ErrC _) = False
+noErrorDiags (OkC ds) = not (any (\d => severityText (diagSeverityOf d) == "error") ds)
 
 diagSeverityOf : Diagnostic -> Severity
 diagSeverityOf d = d.diagSeverity

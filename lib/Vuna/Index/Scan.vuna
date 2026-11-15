@@ -178,17 +178,18 @@ typeOf name (d :: rest) = case d of
 -- `fun` / `axiom` / `extern` 给「名字 : 签名」，data / record / trait 给声明头，
 -- 实例（无名字可显示）给空串。
 export declSigText : List Decl -> Decl -> String
-declSigText decls d = case d of
-  DData name params kind ctors derivings viaField repr lin sp => "data ${name}${paramSuffix params}"
-  DRecord name params fields derivings viaField repr lin sp => "record ${name}${paramSuffix params}"
-  DTrait name params methods sp => "trait ${name}${traitParamSuffix params}"
-  DAxiom name ty sp => "${name} : ${renderType ty}"
-  DExtern name cName ty sp => "${name} : ${renderType ty}"
-  DSig name ctx ty sp => "${name} : ${renderTypeInCtx ctx ty}"
-  DFun name pats body sp => case signatureOf name decls of
-    "" => name
-    sig => "${name} : ${sig}"
-  DInstance ctxE head methods sp => ""
+declSigText decls (DData name params kind ctors derivings viaField repr lin sp) =
+  "data ${name}${paramSuffix params}"
+declSigText decls (DRecord name params fields derivings viaField repr lin sp) =
+  "record ${name}${paramSuffix params}"
+declSigText decls (DTrait name params methods sp) = "trait ${name}${traitParamSuffix params}"
+declSigText decls (DAxiom name ty sp) = "${name} : ${renderType ty}"
+declSigText decls (DExtern name cName ty sp) = "${name} : ${renderType ty}"
+declSigText decls (DSig name ctx ty sp) = "${name} : ${renderTypeInCtx ctx ty}"
+declSigText decls (DFun name pats body sp) = case signatureOf name decls of
+  "" => name
+  sig => "${name} : ${sig}"
+declSigText decls (DInstance ctxE head methods sp) = ""
 
 symbolsOfModule : String -> List Decl -> DocTable -> List Sym
 symbolsOfModule sMod decls table = concatMap (symbolsOfDecl sMod decls table) decls

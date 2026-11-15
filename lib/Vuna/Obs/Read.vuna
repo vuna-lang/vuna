@@ -120,8 +120,10 @@ scanGo : List Int -> BracketScan -> BracketScan
 scanGo [] scan = scan
 scanGo (c :: rest) scan = if scan.scanBroken then scan
 else if scan.scanEscaped then scanGo rest (BracketScan scan.scanOpen scan.scanInString False False)
-else if scan.scanInString then if c == 92 then scanGo rest (BracketScan scan.scanOpen True True False)
-else if c == 34 then scanGo rest (BracketScan scan.scanOpen False False False) else scanGo rest scan
+else if scan.scanInString then case c of
+  92 => scanGo rest (BracketScan scan.scanOpen True True False)
+  34 => scanGo rest (BracketScan scan.scanOpen False False False)
+  _ => scanGo rest scan
 else if c == 34 then scanGo rest (BracketScan scan.scanOpen True False False)
 else if c == 123 || c == 91 then scanGo rest (BracketScan (c :: scan.scanOpen) False False False)
 else if c == 125 || c == 93 then case scan.scanOpen of

@@ -171,8 +171,9 @@ isSampleName name = name == "vuna.sample.cpu" || name == "vuna.sample.mem"
 
 -- | 采样事件名 -> 采样种类（`cpu` / `mem`；其它 = ""）。
 export sampleKindOfName : String -> String
-sampleKindOfName name =
-  if name == "vuna.sample.cpu" then "cpu" else if name == "vuna.sample.mem" then "mem" else ""
+sampleKindOfName "vuna.sample.cpu" = "cpu"
+sampleKindOfName "vuna.sample.mem" = "mem"
+sampleKindOfName _ = ""
 
 -- | 一条采样事件：种类 + 栈（叶在前）。
 export record ObsSample(..) where
@@ -390,9 +391,8 @@ catPairs : ObsBase -> List (Pair String Json)
 catPairs base = if base.baseCat == "" then [] else [Pair "cat" (JStr base.baseCat)]
 
 durPairs : Maybe Int -> List (Pair String Json)
-durPairs dur = case dur of
-  Just d => [Pair "dur" (JNum d)]
-  Nothing => []
+durPairs (Just d) = [Pair "dur" (JNum d)]
+durPairs Nothing = []
 
 argsPairs : ObsBase -> List (Pair String Json)
 argsPairs base = if length base.baseArgs == 0 then [] else [Pair "args" (JObj base.baseArgs)]

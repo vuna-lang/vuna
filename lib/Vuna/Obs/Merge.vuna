@@ -215,11 +215,10 @@ lastSegment (c :: rest) acc = if c == 47 then lastSegment rest [] else lastSegme
 
 -- 给单个事件加 `args.member`（已有该键则覆盖：合并产物里它只由 merge 决定）。
 withMemberArg : String -> ObsEvent -> ObsEvent
-withMemberArg key ev = case ev of
-  ObsMetaEvent m => ObsMetaEvent m
-  ObsSpanEvent base dur => ObsSpanEvent (withMemberArgs key base) dur
-  ObsCounterEvent base value => ObsCounterEvent (withMemberArgs key base) value
-  ObsInstantEvent base => ObsInstantEvent (withMemberArgs key base)
+withMemberArg key (ObsMetaEvent m) = ObsMetaEvent m
+withMemberArg key (ObsSpanEvent base dur) = ObsSpanEvent (withMemberArgs key base) dur
+withMemberArg key (ObsCounterEvent base value) = ObsCounterEvent (withMemberArgs key base) value
+withMemberArg key (ObsInstantEvent base) = ObsInstantEvent (withMemberArgs key base)
 
 withMemberArgs : String -> ObsBase -> ObsBase
 withMemberArgs key base =
