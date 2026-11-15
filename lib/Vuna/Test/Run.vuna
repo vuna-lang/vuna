@@ -276,21 +276,14 @@ withEnvIfaceAt env storeOverride argv =
 -- steps case 的进程环境：TMPDIR/REPL 历史按 **case** 隔离（同一 worker 内多个 steps
 -- case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。对象库默认与 suite
 -- 共用；只有 store-isolated case 用 `${caseTmp}/store`。
+-- wasmtime 的编译缓存走 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；
+-- 沙箱里 HOME 是 /homeless-shelter，因此每个 case 指到自己的 XDG 缓存根。
 withStepsEnv : Env -> String -> Bool -> List String -> List String
 withStepsEnv env caseTmp isolated argv =
   let
     store = if isolated then "${caseTmp}/store" else env.envStore
   in withEnv env
-    (append
-      [ "env",
-        "TMPDIR=${caseTmp}",
-        "VUNA_STORE=${store}",
-        "VUNA_REPL_HISTORY=${caseTmp}/repl-history",
-        -- wasmtime 的编译缓存走 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；
-        -- 沙箱里 HOME 是 /homeless-shelter，指到 case 私有的 XDG 缓存根。
-        "XDG_CACHE_HOME=${caseTmp}/cache"
-      ]
-      argv)
+    (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_REPL_HISTORY=${caseTmp}/repl-history", "XDG_CACHE_HOME=${caseTmp}/cache"] argv)
 
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
