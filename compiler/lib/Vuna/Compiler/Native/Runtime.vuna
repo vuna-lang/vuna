@@ -70,7 +70,8 @@ export nativeBss : List NativeBss
 nativeBss =
   [ NativeBss nativeHeapLabel nativeHeapBytes 16,
     NativeBss nativeHeapEndLabel 0 0,
-    NativeBss nativeHeapPtrLabel 8 8
+    NativeBss nativeHeapPtrLabel 8 8,
+    NativeBss nativeArenaEndLabel 8 8
   ]
 
 -- ---------------------------------------------------------------
@@ -201,8 +202,8 @@ natSuccFn =
 --   只改 rax/rcx/rdx，不改 rdi/rsi。
 strAllocFn : NativeFunc
 strAllocFn =
-  rtRawFunc "str_alloc"
-    [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg Rdi), IBinReg "add" Rcx (OpImm nativeStrHeaderBytes), ILea Rdx nativeHeapEndLabel, ICmp (OpReg Rcx) (OpReg Rdx), IJcc "ja" (nativeRtLabel "trap_oom"), IMov (OpRip nativeHeapPtrLabel) (OpReg Rcx), IRet]
+  rtFunc "str_alloc" 0
+    [IBinReg "add" Rdi (OpImm nativeStrHeaderBytes), ICall (nativeRtLabel "alloc"), IRet]
 
 -- | `rdi` = 字符串 -> rax = 字节数。
 strLengthFn : NativeFunc
@@ -280,7 +281,7 @@ printStrFn =
 allocFn : NativeFunc
 allocFn =
   rtRawFunc "alloc"
-    [IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg Rdi), ILea Rdx nativeHeapEndLabel, ICmp (OpReg Rcx) (OpReg Rdx), IJcc "ja" (nativeRtLabel "trap_oom"), IMov (OpRip nativeHeapPtrLabel) (OpReg Rcx), IRet]
+    [IMov (OpReg R11) (OpReg Rdi), IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg R11), IMov (OpReg Rdx) (OpRip nativeArenaEndLabel), ICmp (OpReg Rcx) (OpReg Rdx), IJcc "jbe" ".Lrt_alloc_ok", IMov (OpReg Rax) (OpImm 9), IMov (OpReg Rdi) (OpImm 0), IMov (OpReg Rsi) (OpImm nativeHeapBytes), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IMov (OpReg R9) (OpImm 0), ISyscall, IMov (OpRip nativeHeapPtrLabel) (OpReg Rax), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpImm nativeHeapBytes), IMov (OpRip nativeArenaEndLabel) (OpReg Rcx), IMov (OpReg Rax) (OpRip nativeHeapPtrLabel), IMov (OpReg Rcx) (OpReg Rax), IBinReg "add" Rcx (OpReg R11), ILabel ".Lrt_alloc_ok", IMov (OpRip nativeHeapPtrLabel) (OpReg Rcx), IRet]
 
 trapImpossibleFn : NativeFunc
 trapImpossibleFn =

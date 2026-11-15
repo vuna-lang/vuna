@@ -134,12 +134,13 @@ exit: 0
 run: sh -c '"$TMPDIR/stres-out/bin/stres" > "$TMPDIR/stres-native.txt" 2>&1; "$VUNA" run "$TMPDIR/stres" 2>&1 | tail -n 1 > "$TMPDIR/stres-ocaml.txt"; cmp "$TMPDIR/stres-native.txt" "$TMPDIR/stres-ocaml.txt"'
 exit: 0
 
-# 10) bump 堆耗尽：字符串只增不减，堆满后 trap OOM + exit 2（不是段错误）。
-run: sh -c 'd="$TMPDIR/oom"; mkdir -p "$d/app"; printf "[package]\nname = \"oom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : String\nmain = rep (natFromInt 2000) \"0123456789abcdef\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/oom-out" "$d"'
+# 10) 可增长 arena：超过初始 1 MiB 时 mmap 新段，不再 OOM。
+run: sh -c 'd="$TMPDIR/oom"; mkdir -p "$d/app"; printf "[package]\nname = \"oom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : Int\nmain = strLength (rep (natFromInt 5000) \"0123456789abcdef\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/oom-out" "$d"'
 exit: 0
-run: sh -c '"$TMPDIR/oom-out/bin/oom" 2>&1'
-exit: 2
-out-contains: vuna: runtime error: out of memory
+run: "$TMPDIR/oom-out/bin/oom" 2>&1
+out-equals: 80000
+run: sh -c '"$VUNA" run "$TMPDIR/oom" 2>&1 | tail -n 1'
+out-equals: 80000
 
 # 10b) 位运算（wasm/native parity）：63-bit 语义，与 OCaml 的 `binIt` 逐项一致。
 run: sh -c 'd="$TMPDIR/bit"; mkdir -p "$d/app"; printf "[package]\nname = \"bit\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = bitAnd 6 3 + bitOr 6 3 + bitXor 6 3 + bitNot 0 + bitShl 1 61\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bit-out" "$d"'

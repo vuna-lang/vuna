@@ -880,7 +880,13 @@ entryShowKind _ = Nothing
 startFunc : Bool -> String -> String -> NativeFunc
 startFunc printResult kind mainName =
   let
-    initHeap = [ILea Rax nativeHeapLabel, IMov (OpRip nativeHeapPtrLabel) (OpReg Rax)]
+    initHeap =
+      [ ILea Rax nativeHeapLabel,
+        IMov (OpRip nativeHeapPtrLabel) (OpReg Rax),
+        IMov (OpReg Rcx) (OpReg Rax),
+        IBinReg "add" Rcx (OpImm nativeHeapBytes),
+        IMov (OpRip nativeArenaEndLabel) (OpReg Rcx)
+      ]
     callMain = [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)]
     printer = if printResult then case kind of
       "bool" => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_bool")]

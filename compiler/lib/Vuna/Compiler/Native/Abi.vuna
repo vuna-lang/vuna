@@ -71,6 +71,10 @@ nativeHeapEndLabel = "rt_heap_end"
 export nativeHeapPtrLabel : String
 nativeHeapPtrLabel = "rt_heap_ptr"
 
+-- | 当前 arena 段的结束地址（越界时 `rt_alloc` 用 `mmap` 开新段并更新它）。
+export nativeArenaEndLabel : String
+nativeArenaEndLabel = "rt_arena_end"
+
 -- ---------------------------------------------------------------
 -- 函数框架
 -- ---------------------------------------------------------------

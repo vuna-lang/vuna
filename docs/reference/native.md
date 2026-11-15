@@ -200,7 +200,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
   **桥接不是独立切片**：它是 M3b 的验收目标，随 canonical `List` 族的对象表示一起落地；
   单独做它收益为零（见 §9）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
-- 无 GC/RC：字符串只增不减；长生命周期程序会耗尽 1 MiB 堆（trap 而非静默）。
+- 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
+  段不回收——回收策略留给 M4。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（M4 的 Perceus RC 前置）。
 - 多文件目标链接/对象文件：IR 已经是整程序单单元；不需要独立目标文件。
 - 对象库/增量缓存、`vuna run --target`、`--target native` 的 release 差异。
@@ -212,9 +213,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 - **M3a**（已完成）：对象与标签。`IrCtor` / 对象头（tag + 字段）/ 通用 `IrCase` 分派 /
   `IrProj` / `IrRecord` / `IrRecUpd`。验收：用户 `data`（`Color` / `Shape`）、record 构造/投影/更新、
   record 嵌在变体字段里，全部与 OCaml 差分一致。栈溢出检查仍未做。
-- **M3b**（待办）：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` /
-  `strPack` / `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成
-  可增长 arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。wasm 侧已完成前三个。
+- **M3b**（arena 已完成，桥接待办）：canonical `List` 族接进 M3a 的对象表示，然后实现
+  `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` 四个桥接符号。native 的堆
+  已换成可增长 arena（`mmap` 新段，不做 RC/复用——回收策略留给 M4）。wasm 侧已完成前三个。
   `CG_ListBridgeRequired` 同义
   门禁在 native 侧按「程序有没有 `IrListFam`」实现。
 - **M3c**：字符串 API 收口。以上到位后 `Base.String` 的 13 个导出（`split` / `join` /
