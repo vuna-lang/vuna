@@ -4,9 +4,9 @@
 > 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印 /
 > 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity）；
 > 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
-> 族已接进 struct 表示，桥接符号 `strUnpack` / `strPack` / `strConcatMany` 已实现，
-> `strSubstTemplate` 尚未接）。闭包值 / `Float` / Effect / FFI 仍被明确拒绝
-> （`WasmUnsupported`）。实现入口：
+> 族已接进 struct 表示，四个桥接符号（`strUnpack` / `strPack` / `strConcatMany` /
+> `strSubstTemplate`）已实现；闭包值（`$clo` + `elem declare`）与高阶应用已工作）。
+> `Float` / Effect / FFI 仍被明确拒绝（`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -64,7 +64,7 @@
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝 |
 | `IrIf` | 支持 | 条件 `ref.cast i31` + `i31.get_u`；两臂局部表合并 |
 | `IrApp` | 支持饱和顶层调用、单参立即 lambda 应用 | 后者覆盖 `let` 的脱糖；部分应用/高阶/函数值拒绝 |
-| `IrLam` | 仅作函数体 / 单参立即应用 | 嵌套、作为值 → 拒绝 |
+| `IrLam` | 支持 | 作为值 → `$clo`（code + 捕获 env）；多参 lambda 创建时柯里化为嵌套单参闭包；应用逐实参 `call $rt_apply` |
 | `IrNatCase` | 支持 | `sc == 0` 二选一；succ binder = `sc - 1`（重新装箱），catch binder = `sc` |
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路在 Lowering 已降成 `IrIf` |
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
@@ -135,8 +135,8 @@
 
 ## 8. 已知边界
 
-- 闭包值 / 高阶函数 / 部分应用（闭包表示要 `(elem declare func ...)`；没有 element
-  段时 wasmtime 报 `undeclared function reference`）。
+- 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
+  应用侧按实参个数逐次 `call $rt_apply`。
 - `Array` 运行时；变体分支只按 tag 一次线性分派（不做多模式矩阵）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、

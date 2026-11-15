@@ -225,6 +225,35 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/m3b-st2" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: "B|<10>|a<"
 
+# 17) 闭包（`$clo` + `elem declare` + `ref.func`/`call_ref`）与高阶应用。
+run: sh -c 'd="$TMPDIR/clo"; mkdir -p "$d/app"; printf "[package]\nname = \"clo\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "apply : (Int -> Int) -> Int -> Int" "apply f x = f x" "" "main : Int" "main = apply (\x => x + 1) 41" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: 42
+# 多参 lambda 柯里化后穿过 map / foldl。
+run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "" "main : Int" "main = foldl (\a => \x => a + x) 0 (map (\x => x * 2) [1, 2, 3])" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-sum" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-sum" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: 12
+# 闭包捕获外层 binder。
+run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "import Base.String" "" "main : String" "main = let k = 10 in join \",\" (map (\x => strFromInt (x + k)) [1, 2])" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-cap" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-cap" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "11,12"
+# `Base.String` 的高阶 API（闭包验收）。
+run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.String" "" "main : String" "main = join \"|\" (split \",\" \"a,b,,c\")" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-split" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-split" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "a|b||c"
+run: sh -c 'd="$TMPDIR/clo"; printf "import Base.String\n\nmain : String\nmain = unlines [\"a\", \"b\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-ul" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-ul" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "a\nb\n"
+run: sh -c 'd="$TMPDIR/clo"; printf "import Base.String\n\nmain : String\nmain = repeat 3 \"ab\" ++ \"[\" ++ trim \"  hi \" ++ \"]\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-rep" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/clo-rep" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: "ababab[hi]"
+
 # 13) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
 run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'
 exit: 2

@@ -439,7 +439,7 @@ else case flattenApp ir of
     )
 
 -- ---------------------------------------------------------------
--- 闭包（M3c）
+-- 闭包
 -- ---------------------------------------------------------------
 -- 表示（与 wasm 侧同一决策）：闭包 = 堆对象 `[code ptr][captured...]`。
 -- 调用约定：`rdi` = 闭包自身（env 基址），实参从 `rsi` 起（第 6 个起压栈）。
@@ -989,9 +989,9 @@ startFunc printResult kind mainName =
   in NativeFunc nativeEntryLabel 0 (append initHeap (append callMain (append printer exitInstrs)))
 
 -- ---------------------------------------------------------------
--- List 桥接（M3b）：strUnpack / strPack / strConcatMany / strSubstTemplate
+-- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
 -- ---------------------------------------------------------------
--- 复用 M3a 的对象表示：变体对象 = `[tag]` + 8 字节字段，按该族最大 arity 补齐。
+-- 复用变体对象表示：`[tag]` + 8 字节字段，按该族最大 arity 补齐。
 -- List 的 `head` 是**未装箱**的 Int（native 的 63-bit 立即数）。
 record NListDesc where
   nlNilTag : Int

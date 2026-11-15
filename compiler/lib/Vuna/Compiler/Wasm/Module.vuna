@@ -35,6 +35,10 @@ record GenState where
   gsNextLocal : Int
   gsScope : List (Pair IrBinder String)
   gsConsts : RtConsts
+  -- | `(elem declare func ...)` 的名字表（`ref.func` 需要）。
+  gsElems : List String
+  -- | 下一个闭包函数编号。
+  gsNextLam : Int
 
 binderNameOf : IrBinder -> IrBName
 binderNameOf (IrBinder nm _) = nm
@@ -220,7 +224,7 @@ else case ir of
   IrProj base family field => genProj (fuel - 1) st base family field
   IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
   IrCase scrut alts => genCase (fuel - 1) st scrut alts
-  IrLam _ _ => Err "wasm target: lambda values are not supported yet"
+  IrLam bs body => genLamValue (fuel - 1) st bs body
   IrEffThunk _ _ _ _ _ => Err "wasm target: effect thunks are not supported yet"
   IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
   IrFloatLit _ => Err "wasm target: float literals are not supported yet"
@@ -305,9 +309,13 @@ genApp fuel st ir = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case flattenApp ir of
   Pair head args => case head of
     IrGlobal name => genGlobalCall (fuel - 1) st name args
-    IrLam bs body => genLamApp (fuel - 1) st bs body args
+    IrLam bs body => case runtimeBinders bs of
+      [b] => case args of
+        [a] => genLamApp (fuel - 1) st [b] body [a]
+        _ => genApplyValue (fuel - 1) st head args
+      _ => genApplyValue (fuel - 1) st head args
     IrRt s => genRtApp (fuel - 1) st s args
-    _ => Err "wasm target: higher-order application is not supported yet"
+    _ => genApplyValue (fuel - 1) st head args
 
 genGlobalCall : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
 genGlobalCall fuel st name args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
@@ -316,6 +324,95 @@ else case findDef name st.gsDefs of
   Just d =>
     if irDefArity d /= listLengthB args then Err "wasm target: call to `${name}` is not saturated"
     else genArgsThen (fuel - 1) st args (ICall (watFuncNameOf name))
+
+-- ---------------------------------------------------------------
+-- 闭包
+-- ---------------------------------------------------------------
+-- 表示沿用 `$clo = { code: (ref $ft), env: anyref }`：`$ft` 是 (env, arg) -> anyref，
+-- 因此闭包是**单参**的（多参 `IrLam` 作为值暂不支持）。env 是 `$env`（anyref 数组）。
+-- 捕获策略与 native 侧一致：创建时把当前作用域里的全部 binder 拷进 env。
+-- 闭包应用走 `$rt_apply`（逐实参左结合，天然支持柯里化）。
+-- | 捕获值的取值指令（按作用域顺序）。
+capGetInstrs : List (Pair IrBinder String) -> List Instr
+capGetInstrs [] = []
+capGetInstrs (p :: rest) = ILocalGet (secondOf p) :: capGetInstrs rest
+
+-- | 把 env 数组里的捕获值拷进本帧局部，并绑定 binder。
+bindEnvLocals : GenState -> List (Pair IrBinder String) -> Int -> Result (Pair (List Instr) GenState)
+bindEnvLocals st [] _ = Ok (Pair [] st)
+bindEnvLocals st ((Pair b _) :: rest) i = case freshLocal st WvAnyRef of
+  Pair l st1 => case bindEnvLocals (pushBinder b l st1) rest (i + 1) of
+    Err e => Err e
+    Ok q =>
+      Ok
+        (Pair (append [ILocalGet "$p0", IRefCast "$env", IConstI32 i, IArrayGet "$env", ILocalSet l] (firstOf q)) (secondOf q))
+
+-- | `IrLam` 作为值：生成单参闭包函数并构造 `$clo`。
+addLamFunc : WatFunc -> GenState -> GenState
+addLamFunc f st = { st | gsFuncs = append st.gsFuncs [f] }
+
+addElemName : String -> GenState -> GenState
+addElemName n st = { st | gsElems = append st.gsElems [n] }
+
+restoreFuncScope : GenState -> GenState -> GenState
+restoreFuncScope outer inner =
+  let
+    a = { inner | gsScope = outer.gsScope }
+    b = { a | gsLocals = outer.gsLocals }
+  in { b | gsNextLocal = outer.gsNextLocal }
+
+-- | `IrLam` 作为值：生成单参闭包函数并构造 `$clo`。
+--   多参 lambda 在创建时柯里化成嵌套的单参闭包（与 `$ft` / `$rt_apply` 的单参形状一致）；
+--   应用侧逐实参左结合，因此 `\x => \y => ...` 与多 binder lambda 都成立。
+genLamValue : Int -> GenState -> List IrBinder -> Ir -> Result (Pair (List Instr) GenState)
+genLamValue fuel st bs body = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else
+  let
+    rbs = runtimeBinders bs
+    caps = st.gsScope
+    ncap = listLengthB caps
+    n = st.gsNextLam
+    lamName = "$lam${strFromInt n}"
+    st1 = { st | gsNextLam = n + 1 }
+  in case rbs of
+    [] => Err "wasm target: zero-argument closures are not supported yet"
+    b :: rest => if listLengthB rest > 0 then genLamValue (fuel - 1) st [b] (IrLam rest body)
+    else case bindEnvLocals (beginFuncScope st1) caps 0 of
+      Err e => Err e
+      Ok cp => case freshLocal (secondOf cp) WvAnyRef of
+        Pair pl stp => case genExpr (fuel - 1) (pushBinder b pl stp) body of
+          Err e => Err e
+          Ok q =>
+            let
+              stF = secondOf q
+              lamFunc =
+                WatFunc lamName "" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef]
+                  stF.gsLocals
+                  (append (firstOf cp) (append [ILocalGet "$p1", ILocalSet pl] (firstOf q)))
+              capVals = capGetInstrs caps
+              envInstrs =
+                if ncap == 0 then [IRefNull] else append capVals [IArrayNewFixed "$env" ncap]
+              mkClo = append [IRefFunc lamName] (append envInstrs [IStructNew "$clo"])
+              stA = addLamFunc lamFunc stF
+              stB = addElemName lamName stA
+              stC = restoreFuncScope st stB
+            in Ok (Pair mkClo stC)
+        _ => Err "wasm target: lambda binder shape mismatch"
+
+-- | 通用闭包应用：逐实参 `call $rt_apply`（左结合）。
+genApplyValue : Int -> GenState -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
+genApplyValue fuel st head args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case genExpr (fuel - 1) st head of
+  Err e => Err e
+  Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) args
+
+genApplyArgs : Int -> GenState -> List Instr -> List Ir -> Result (Pair (List Instr) GenState)
+genApplyArgs _ st acc [] = Ok (Pair acc st)
+genApplyArgs fuel st acc (a :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+else case genExpr (fuel - 1) st a of
+  Err e => Err e
+  Ok p =>
+    genApplyArgs (fuel - 1) (secondOf p) (append acc (append (firstOf p) [ICall "$rt_apply"])) rest
 
 -- | 立即 lambda 应用：运行时 binder 必须恰好一个、实参恰好一个（`let` 的降级形态）。
 genLamApp : Int -> GenState -> List IrBinder -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
@@ -921,16 +1018,18 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
         let
           startState = secondOf p
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
+          lamFuncs = startState.gsFuncs
+          elemNames = startState.gsElems
           funcs =
             append (rtFunctions st.gsConsts)
-              (append (wasmBridgeFuncs listFamM) (append userFuncs [startFunc]))
+              (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc])))
           famTypes = concatMapType st.gsFams
           allTypes = append baseTypes famTypes
           globals = globalsOf ordered
           dataText = poolBytes st.gsPool
           dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
         in Ok
-          (WasmModule allTypes baseImports globals funcs [] dataM [WatExport "func" "_start" "$_start"] 4)
+          (WasmModule allTypes baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -948,7 +1047,7 @@ build program printResult =
     pool = foldlStrings (\acc => \s => addString s acc) statics users
     offsets = poolOffsets pool 0
     consts = mkConsts offsets
-    st0 = GenState fams defs offsets [] [] 0 [] consts
+    st0 = GenState fams defs offsets [] [] 0 [] consts [] 0
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e => if irEntryIsActionOf e then WasmRejected (WasmUnsupported "wasm target: effectful main is not supported yet")
