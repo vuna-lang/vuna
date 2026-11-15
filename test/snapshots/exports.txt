@@ -23,7 +23,7 @@ base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, resStdin, stdinReadBytes,
 base/lib/Base/Eq.vuna: Eq(..)
 base/lib/Base/Error.vuna: Error, catchError, ok, runError, throwError
 base/lib/Base/Field.vuna: Field
-base/lib/Base/Float.vuna: FromFloat(..), abs, floatToInt, intToFloat, sqrt
+base/lib/Base/Float.vuna: FromFloat(..), abs, floatRender, floatToInt, intToFloat, sqrt
 base/lib/Base/Foldable.vuna: Foldable(..), foldMap
 base/lib/Base/FromInt.vuna: FromInt(..)
 base/lib/Base/FromString.vuna: FromString(..)

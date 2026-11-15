@@ -556,8 +556,14 @@ recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) re
 -- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
 -- 分支顺序固定（Nat Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
 -- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`。
+-- | Float 展示的唯一实现（`Base.Float.floatRender`）：`Show Float`、`main : Float`
+--   入口与模板插值都落到这里，三个后端共用同一份 `%.12g` 渲染。
+floatRenderRefName : String
+floatRenderRefName = "Base.Float.floatRender"
+
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
+else if name == "strFromFloat" then OkC (IrGlobal floatRenderRefName)
 else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
 else case lookupPair name env.lwCtors of
   Just (Pair family keepFlags) => OkC (IrCtor family name [])
@@ -1113,7 +1119,7 @@ lowerDef env st d = case dtDefExtern d of
       ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
       OkC (Pair bodyIr st2) =>
         OkC
-          (Pair (IrDef (dtDefName d) (runtimeArityIn body) (depsOfBody env body) bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
+          (Pair (IrDef (dtDefName d) (runtimeArityIn body) (depsWithFloatRender env body) bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
     Nothing =>
       ErrC
         (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
@@ -1121,6 +1127,17 @@ lowerDef env st d = case dtDefExtern d of
 -- 依赖：运行时会用到的顶层定义（顺序=遍历顺序的首现）。
 depsOfBody : LwEnv -> Term -> List String
 depsOfBody env body = termDepsInto env.lwRuntimeNames [] body
+
+-- | `strFromFloat` 在 IR 里落成 `Base.Float.floatRender`，依赖表也要带上它，
+--   否则可达性收集会漏掉这条定义。
+depsWithFloatRender : LwEnv -> Term -> List String
+depsWithFloatRender env body =
+  let
+    -- `strFromFloat` 是内建名、不在 `runtimeNames` 里；先把它算成依赖，再改写成
+    -- 实际落到的 `Base.Float.floatRender`。
+    names = Base.HashMap.insert "strFromFloat" True env.lwRuntimeNames
+    ds = termDepsInto names [] body
+  in map (\d => if d == "strFromFloat" then floatRenderRefName else d) ds
 
 -- extern 类型 → `IrTy`（判据：Int/String/Bool/Array 基本类型，
 -- 显式 Pi 链；隐式参数与非基本类型是内部错）。
@@ -1418,7 +1435,7 @@ tyNamesInto (IrTyFun d c) acc = tyNamesInto c (tyNamesInto d acc)
 tyNamesInto (IrTyData fam args) acc = foldlTyNames args (pushDep fam acc)
 
 adjOfDef : LwEnv -> DtDef -> Pair String (List String)
-adjOfDef env d = Pair (dtDefName d) (depsOfBody env (bodyOrDummy d))
+adjOfDef env d = Pair (dtDefName d) (depsWithFloatRender env (bodyOrDummy d))
 
 bodyOrDummy : DtDef -> Term
 bodyOrDummy d = case dtDefBody d of

@@ -6,8 +6,8 @@
 > 六种位运算、`assert` / `todo` / `prim_fail`（统一错误报告）、`dbg!` 的
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
-> `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float 算术/比较/转换/abs/sqrt。
-> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。Float 展示、Effect、FFI 仍被明确拒绝
+> `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
+> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。Effect、FFI 仍被明确拒绝
 > （`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
@@ -105,7 +105,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 | `IrLam` | 支持 | 作为值 → 闭包对象 `[code][捕获...]`；应用 `call [rdi]`（`rdi` = 闭包，实参从 `rsi` 起） |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
-| Float | 支持（除展示） | 堆对象 `[f64]`；NaN 语义与 OCaml 一致 |
+| Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Float.floatRender` |
 | Effect / extern | 拒绝 | `native target: ... not supported yet` |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
@@ -130,7 +130,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - **零参顶层定义**编成零参函数，每次引用都 `call`。native 仍是纯语言（无 Effect），重复
   求值语义安全；引入副作用/Effect 之前必须改成初始化 + memo。
 - 入口 `main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受 `@ir@showInt` /
-  `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；`showFloat` / 自定义 Show 拒绝。
+  `@ir@showNat` / `@ir@showBool` / `@ir@showStr` / `@ir@showFloat`；其它自定义 Show 拒绝。
   `--no-print` 不打印，但仍计算并 exit 0。
 
 ## 5. 运行时符号
@@ -155,7 +155,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
-  `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`。
+  `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
+  走 `Base.Float.floatRender`（Vuna 实现，三端共用）。
 - 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
   `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
@@ -198,7 +199,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
   native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
-  Float 展示拒绝、`--no-compile`。
+  Effect main 拒绝、`--no-compile`。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
@@ -208,8 +209,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
-- Float 的展示（`strFromFloat` / `main : Float` 入口）；Effect / 一次性续延、FFI / extern、
-  宿主 syscalls 的通用面（只有 write/exit）。
+- Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

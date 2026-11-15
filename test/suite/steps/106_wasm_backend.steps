@@ -62,10 +62,9 @@ exit: 0
 out-equals: 7
 
 # 7) 拒绝面：编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
-#    Float 的算术/比较/转换已工作，但入口展示（`main : Float`）仍拒绝。
-run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
+run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\nmain : Eff [] Int\nmain = pure 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
 exit: 1
-out-contains: wasm target: custom Show entry
+out-contains: wasm target: effectful main
 file-absent: $TMPDIR/rej-out/main.wasm
 
 # 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。

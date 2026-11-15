@@ -89,8 +89,8 @@ exit: 0
 run: "$TMPDIR/argvrec-out/bin/argv" 2>&1
 out-equals: 12
 
-# 9) 不支持构造：Float 入口在编译期拒绝（exit 1），不产出可执行。
-run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
+# 9) 不支持构造：动作 main 在编译期拒绝（exit 1），不产出可执行。
+run: sh -c 'd="$TMPDIR/fl"; mkdir -p "$d/app"; printf "[package]\nname = \"fl\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\nmain : Eff [] Int\nmain = pure 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fl-out" "$d" 2>&1'
 exit: 1
 out-contains: native target:
 file-absent: $TMPDIR/fl-out/bin/fl

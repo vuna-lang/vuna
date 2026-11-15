@@ -82,10 +82,19 @@ let v_Eq_uBase_uBool_uBool
 
 == Base_dFloat.ml
 let v_Base_dFloat_dabs
+let v_Base_dFloat_ddigStep
+let v_Base_dFloat_ddigitsText
+let v_Base_dFloat_dexpForm
+let v_Base_dFloat_dexpSuffix
+let v_Base_dFloat_dfixedForm
+let v_Base_dFloat_dfloatRender
 let v_Base_dFloat_dfloatToInt
 let v_Base_dFloat_dfromFloat
 let v_Base_dFloat_dintToFloat
+let v_Base_dFloat_dnormStep
 let v_Base_dFloat_dsqrt
+let v_Base_dFloat_dtrimZeros
+let v_Base_dFloat_dzerosText
 let v_Eq_uFloat
 let v_FromFloat_uFloat
 let v_Num_uFloat

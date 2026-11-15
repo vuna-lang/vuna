@@ -988,6 +988,7 @@ entryShowFunc (IrRt s) = case s of
   "@ir@showNat" => Just "$rt_strFromInt"
   "@ir@showBool" => Just "$rt_showBool"
   "@ir@showStr" => Just "$rt_showStr"
+  "@ir@showFloat" => Just (watFuncNameOf floatRenderName)
   _ => Nothing
 entryShowFunc _ = Nothing
 
@@ -1110,12 +1111,18 @@ build program printResult =
     Just e => if irEntryIsActionOf e then WasmRejected (WasmUnsupported "wasm target: effectful main is not supported yet")
     else
       let
-        needed = collectNeeded 100000 [irEntryMainOf e] [] defs
+        needed = case irEntryShowOf e of
+          IrRt "@ir@showFloat" => collectNeeded 100000 [irEntryMainOf e, floatRenderName] [] defs
+          _ => collectNeeded 100000 [irEntryMainOf e] [] defs
         ordered = filter (\d => memStr (irDefName d) needed) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
       in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
+
+-- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
+floatRenderName : String
+floatRenderName = "Base.Float.floatRender"
 
 -- | 能力限制与内部错分开：`wasm target:` 前缀是显式拒绝，其余是生成器内部错。
 classifyWasmErr : String -> WasmErr

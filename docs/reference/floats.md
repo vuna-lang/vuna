@@ -36,19 +36,30 @@ intFromFloat : Float -> Int     -- 向零截断
 
 `Base.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
 `intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
-import（显式 `import Base.Float` 仍允许）。`show` 输出 OCaml `string_of_float` 的十进制
-形式。代价见「Prelude 与产物影响」。
+import（显式 `import Base.Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`
+一致（`%.12g`：12 位有效数字、去掉尾随零、定点范围 `[-4, 12)`、整数值保留结尾 `.`）：
 
-`main : Float` 的展示函数是 `string_of_float`；模板插值 `${1.5}` 直接走 `strFromFloat`，
-不需要 `Show` 实例。
+| 值 | 文本 |
+| --- | --- |
+| `1.5` / `6.0` / `0.0001` | `1.5` / `6.` / `0.0001` |
+| `2.0 / 3.0` | `0.666666666667` |
+| `1000000000000.0` | `1e+12` |
+| `1.0 / 0.0` / `0.0 / 0.0` | `inf` / `nan` |
+
+实现是 `Base.Float.floatRender`（只用 Float / Int 运算与字符串拼接），三个后端
+（OCaml / wasm / native）与模板插值共用这一份代码。NaN 不区分符号位：`0.0 / 0.0`
+在 x86 上是负 NaN，OCaml 的 `string_of_float` 会打印 `-nan`，这里统一打印 `nan`。
+
+`main : Float` 的展示同样走 `floatRender`；模板插值 `${1.5}` 与 `show` 同文本。
+代价见「Prelude 与产物影响」。
 
 ### interp / REPL
 
 核心求值器**支持浮点**：`vuna interp` 与 REPL 求值按 IEEE-754 double 归约
 全部浮点原语（`+ - * /`、`< <= > >=`、`==`、`/=`、`abs` / `sqrt` → `floatAbs` /
-`floatSqrt`、`strFromFloat` / `floatFromInt` / `intFromFloat`），语义与编译产物一致
+`floatSqrt`、`floatFromInt` / `intFromFloat`），语义与编译产物一致
 （除零得 `infinity`、`0.0 / 0.0` 得 `nan`、`nan == nan` 为 False、`+0.0 == -0.0` 为
-True）。`VFloat` 的载荷是 `string_of_float` 的规范文本（字面量在求值入口规范化），
+True）。`VFloat` 的载荷与展示都走同一份 `%.12g` 文本（字面量在求值入口规范化），
 因此 interp 展示、定义性相等与编译产物三处同文本：
 
 ```console
@@ -60,7 +71,7 @@ vuna> 1.0 / 0.0
 inf
 ```
 
-`main : Float` 的 interp 展示同样用规范文本（与编译路径的 `string_of_float` 一致）。
+`main : Float` 的 interp 展示同样用 `%.12g` 规范文本（与编译路径一致）。
 REPL 的 `:type` 仍只做类型检查，不等价于求值。**类型表达式里的浮点字面量仍被拒绝**
 （类型语法不接受 `Float` 字面量，见负例 `09_float_in_type`）。
 

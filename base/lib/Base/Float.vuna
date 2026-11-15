@@ -10,9 +10,14 @@ module Base.Float where
 -- 程序的 `Vuna_runtime.ml` 都会带浮点 helper；`Driver/Dt.programUsesFloat` 仍按 main
 -- 可达性判定，纯程序的 `vuna interp` 不受影响。细节与 interp 限制见 docs/reference/floats.md。
 import Base.Eq
+import Base.List
+import Base.Maybe
+import Base.Nat
 import Base.Num
 import Base.Ord
+import Base.Pair
 import Base.Show
+import Base.String
 
 -- | 把 `Float` 字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`1.5` 等价于
 -- `fromFloat 1.5`（与 `FromString` / `FromInt` 同一套 checking 位置降级规则）。
@@ -41,7 +46,8 @@ instance Num Float where
   mul x y = x * y
   div x y = x / y
 
--- 与 runtime 展示共用同一实现（`string_of_float`）。
+-- `strFromFloat` 在编译期被 Lowering 落成 `floatRender`（与 `%.12g` 对齐）；interp 直接
+-- 用内建归约，不展开 `floatRender` 的大体量定义。
 instance Show Float where
   show x = strFromFloat x
 
@@ -60,3 +66,102 @@ intToFloat = floatFromInt
 -- | Float → Int（向零截断；NaN/无穷/超出范围的行为由 OCaml `int_of_float` 决定）。
 export floatToInt : Float -> Int
 floatToInt = intFromFloat
+
+-- ---------------------------------------------------------------
+-- 展示（`%.12g`）
+-- ---------------------------------------------------------------
+-- 只用 Float / Int 运算与 String 拼接实现；`Show Float` 与 `main : Float` 入口在三个
+-- 后端共用这一份代码，语义与 OCaml `string_of_float` 逐字一致。
+normStep : Pair Int Float -> Int -> Pair Int Float
+normStep p _ =
+  let
+    e = firstOf p
+    m = secondOf p
+  in if m >= 10.0 then Pair (e + 1) (m / 10.0) else if m < 1.0 then Pair (e - 1) (m * 10.0) else p
+
+digStep : Pair Float (List Int) -> Int -> Pair Float (List Int)
+digStep p _ =
+  let
+    m = firstOf p
+    ds = secondOf p
+    d = floatToInt m
+  in Pair ((m - intToFloat d) * 10.0) (append ds [d])
+
+-- | 逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
+carryRev : List Int -> Maybe (List Int)
+carryRev [] = Nothing
+carryRev (d :: rest) = if d == 9 then case carryRev rest of
+  Nothing => Nothing
+  Just r => Just (0 :: r)
+else Just (d + 1 :: rest)
+
+-- | 去掉逆序数字串的前导零。
+trimZerosRev : List Int -> List Int
+trimZerosRev [] = []
+trimZerosRev (d :: rest) = if d == 0 then trimZerosRev rest else d :: rest
+
+trimZeros : List Int -> List Int
+trimZeros ds = case reverse (trimZerosRev (reverse ds)) of
+  [] => [0]
+  r => r
+
+dsLen : List Int -> Int
+dsLen [] = 0
+dsLen (_ :: rest) = 1 + dsLen rest
+
+digitsText : List Int -> String
+digitsText ds = foldl (\acc => \d => acc ++ strFromInt d) "" ds
+
+zerosText : Int -> String
+zerosText n = digitsText (map (\_ => 0) (range 0 n))
+
+expSuffix : Int -> String
+expSuffix e =
+  let
+    n = if e < 0 then 0 - e else e
+    sign = if e < 0 then "-" else "+"
+  in sign ++ (if n < 10 then "0" ++ strFromInt n else strFromInt n)
+
+expForm : Int -> List Int -> String
+expForm e ds = case ds of
+  d :: rest => case rest of
+    [] => strFromInt d ++ "e" ++ expSuffix e
+    _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
+  [] => "0e+00"
+
+fixedForm : Int -> List Int -> String
+fixedForm e ds = if e >= 0 then
+  let
+    intLen = e + 1
+    len = dsLen ds
+  in if len <= intLen then digitsText ds ++ zerosText (intLen - len) ++ "."
+  else digitsText (take intLen ds) ++ "." ++ digitsText (drop intLen ds)
+else "0." ++ zerosText (0 - e - 1) ++ digitsText ds
+
+-- | `Float` 的规范展示文本。
+export floatRender : Float -> String
+floatRender x = if x /= x then "nan"
+else
+  let
+    inf = 1.0 / 0.0
+  in if x == inf then "inf"
+  else if x == 0.0 - inf then "-inf"
+  else if x == 0.0 then if 1.0 / x < 0.0 then "-0." else "0."
+  else
+    let
+      neg = x < 0.0
+      a = if neg then 0.0 - x else x
+      p = foldl (\q => \i => normStep q i) (Pair 0 a) (range 0 700)
+      e0 = firstOf p
+      m0 = secondOf p
+      dp = foldl (\q => \i => digStep q i) (Pair m0 []) (range 0 12)
+      d13 = floatToInt (firstOf dp)
+      raw = secondOf dp
+      ed = if d13 >= 5 then case carryRev (reverse raw) of
+        Just r => Pair e0 (trimZeros (reverse r))
+        Nothing => Pair (e0 + 1) (trimZeros (1 :: map (\_ => 0) (range 0 11)))
+      else Pair e0 (trimZeros raw)
+      e = firstOf ed
+      ds = secondOf ed
+      body = if e < 0 - 4 || e >= 12 then expForm e ds else fixedForm e ds
+    in if neg then "-" ++ body else body
