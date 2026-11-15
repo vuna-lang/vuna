@@ -1,0 +1,10 @@
+import Base.List
+import Base.Nat
+
+il : List String -> List String
+il [] = []
+il ([x]) = [x]
+il (x :: rest) = x :: rest
+
+main : Nat
+main = length (il ["a", "b"])

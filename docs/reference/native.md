@@ -185,15 +185,12 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 ## 7. 验证
 
-- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e，127 checks）：
-  纯值部分（最小可执行、算术/let/if、binder 遮蔽、多函数 label 不撞名、顶层函数、Nat 递归
-  fact、Bool 入口与短路、63-bit 边界、除零 trap、确定性、`--no-compile`）与 String 部分
-  （String 入口、`++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
-  `strShow`、字符串相等、递归构造字符串、转义与 UTF-8 字节、bump 堆耗尽 trap、Float /
-  data / 高阶拒绝）以及 parity 面（六种位运算与移位边界、`assert` 成功/失败、`prim_fail`、
-  `todo`、`dbg!`、7/8/9 参函数的栈传参与递归调用）。
-- 差分：同一程序的 native 输出与 `vuna run`（OCaml 后端）逐字比较（fact / String 用例）；
-  OCaml 是语义 oracle。
+- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
+  native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
+  除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
+  Float 拒绝、`--no-compile`。
+- 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
+  `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
   `ocamlTools`（gcc/binutils）。
 

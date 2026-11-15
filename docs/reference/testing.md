@@ -394,13 +394,12 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   编译并跑出结果（用例 `103_ir_lowering.steps`）；
   `104_ir_runtime_contract.steps` 钉住 IR 运行时符号到 OCaml 文本的代表性映射
   （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。
-  `105_native_backend.steps` 覆盖 native 后端：x86-64 汇编生成、静态链接、与 OCaml
-  后端的输出差分、Nat 递归、63-bit 边界、除零 trap、确定性、String（`++` / `strFromInt` /
-  `strLength` / `strAt` / `strSubstring` / `strHash` / `strShow` / 相等 / String 入口）、
-  bump 堆耗尽 trap、拒绝面与 `--no-compile`（见 [native.md](native.md)）；
-  `106_wasm_backend.steps` 覆盖 wasm 后端：WAT 生成、`wasm-tools parse` + `wasmtime run`、
-  与 OCaml 后端的输出差分、Nat 递归、字符串原语、63-bit 边界、除零 trap、WAT 确定性 +
-  行宽、拒绝面与 `--target` 取值校验（见 [wasm.md](wasm.md)）。`corpus/dt_err/*` 是对应负例
+  `109_backend_parity.steps` 是三端**共享语义**的唯一来源：`suite/steps/parity/*.vuna`
+  每份程序配一个 `.out`，同一次运行对拍 OCaml / wasm / native 的输出；新增共享能力先加
+  夹具，再实现两个后端（一侧缺失即失败）。`105_native_backend.steps` 只保留 native 机制
+  （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
+  `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
+  行宽、trap、拒绝面、`--target` 校验）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；

@@ -127,12 +127,11 @@
 ## 7. 验证
 
 - `test/suite/steps/106_wasm_backend.steps`（section 90 / `steps_native`，e2e）：
-  工具链探针、最小可执行、算术/let/遮蔽/if、顶层函数、Nat 递归 fact、字符串
-  （`++` / strLength / strSubstring / 相等）、Bool 短路、63-bit 边界、除零 trap、
-  确定性 + 行宽、`--no-compile`、拒绝面、`--target` 取值校验，以及与 native 的 parity
-  面（六种位运算与移位边界、`assert` / `todo` / `prim_fail` 的错误文本、`dbg!`）。
-- 每个正例都做**差分**：`wasmtime run` 的输出与 `vuna run`（OCaml 后端）逐字比较，
-  OCaml 始终是语义 oracle。
+  wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
+  WAT 确定性 + 每行 ≤100 列、除零与运行时错误文本、`--no-compile`、拒绝面、`--target`
+  取值校验。
+- 共享语义由 `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
+  新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。
 
 ## 8. 已知边界
 

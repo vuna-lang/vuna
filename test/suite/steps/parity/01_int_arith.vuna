@@ -1,0 +1,5 @@
+main : Int
+main =
+  let
+    a = 6 * 7
+  in if a > 40 then a - 2 else a + 2

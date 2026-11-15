@@ -1,0 +1,12 @@
+record Point where
+  x : Int
+  y : Int
+
+p : Point
+p = Point { x = 1, y = 2 }
+
+q : Point
+q = { p | x = 40 }
+
+main : Int
+main = p.x + q.x + q.y

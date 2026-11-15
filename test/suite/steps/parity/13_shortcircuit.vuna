@@ -1,0 +1,2 @@
+main : Bool
+main = False && 1 / 0 == 0

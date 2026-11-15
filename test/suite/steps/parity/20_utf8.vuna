@@ -1,0 +1,2 @@
+main : String
+main = "héllo|λ|" ++ strFromInt 7

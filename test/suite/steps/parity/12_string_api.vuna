@@ -1,0 +1,4 @@
+import Base.String
+
+main : String
+main = unlines ["a", "b"]

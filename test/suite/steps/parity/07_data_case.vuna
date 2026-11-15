@@ -1,0 +1,11 @@
+data Color : Type where
+  Red : Color
+  Blue : Color
+
+pick : Color -> Int
+pick c = case c of
+  Red => 1
+  Blue => 2
+
+main : Int
+main = pick Red + pick Blue * 10

@@ -1,0 +1,2 @@
+main : Int
+main = bitAnd 6 3 + bitOr 6 3 + bitXor 6 3 + bitNot 0 + bitShl 1 61 + bitShr (0 - 1) 62

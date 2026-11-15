@@ -1,0 +1,4 @@
+import Base.List
+
+main : Int
+main = foldl (\a => \x => a + x) 0 (map (\x => x * 2) [1, 2, 3])

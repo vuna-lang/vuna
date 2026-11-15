@@ -1,0 +1,8 @@
+# 109) 后端 parity：同一程序的 OCaml / wasm / native 输出必须逐字一致，且等于夹具的
+# `.out`。共享语义用例只写在这里；105 / 106 保留机制性用例（ABI、trap、产物格式、
+# 拒绝面、工具链探针）。新增共享能力时先往 `suite/steps/parity/` 加一份 `.vuna` +
+# `.out`，再实现两个后端；一侧缺失时本 case 直接失败。
+for-each: suite/steps/parity/*.vuna
+  run: sh -c 'base=$(basename "{name}" .vuna); d="$TMPDIR/$base"; mkdir -p "$d/app"; printf "[package]\nname = \"p\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; cp "suite/steps/parity/{name}" "$d/app/Main.vuna"; want=$(cat "suite/steps/parity/$base.out"); if ! "$VUNA" build --target ocaml --out "$d/o" "$d" >"$d/o.log" 2>&1; then echo "OCAML BUILD FAILED: $(tail -n 3 "$d/o.log")"; elif ! "$VUNA" build --target wasm --out "$d/w" "$d" >"$d/w.log" 2>&1; then echo "WASM BUILD FAILED: $(tail -n 3 "$d/w.log")"; elif ! "$VUNA" build --target native --out "$d/n" "$d" >"$d/n.log" 2>&1; then echo "NATIVE BUILD FAILED: $(tail -n 3 "$d/n.log")"; else "$d/o/bin/p" >"$d/o.out" 2>&1; wasmtime run -W gc=y -W function-references=y "$d/w/main.wasm" >"$d/w.out" 2>&1; "$d/n/bin/p" >"$d/n.out" 2>&1; oc=$(cat "$d/o.out"); w=$(cat "$d/w.out"); n=$(cat "$d/n.out"); if [ "$oc" = "$want" ] && [ "$w" = "$want" ] && [ "$n" = "$want" ]; then echo OK; else echo "MISMATCH want=[$want] ocaml=[$oc] wasm=[$w] native=[$n]"; fi; fi'
+  out-equals: OK
+end:

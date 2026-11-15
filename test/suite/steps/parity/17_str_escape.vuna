@@ -1,0 +1,2 @@
+main : String
+main = "q\"b\\s\tt\n"

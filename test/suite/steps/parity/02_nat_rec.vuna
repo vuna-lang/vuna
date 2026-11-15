@@ -1,0 +1,9 @@
+import Base.Nat
+
+fact : Nat -> Nat
+fact n = case n of
+  Zero => 1
+  Succ k => natMul n (fact k)
+
+main : Nat
+main = fact (natFromInt 5)

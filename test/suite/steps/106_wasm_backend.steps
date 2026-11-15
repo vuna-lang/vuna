@@ -1,11 +1,9 @@
-# 106) wasm 后端：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime，行为与 OCaml
-# 后端差分一致。
+# 106) wasm 后端机制：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime。
 #
-# 覆盖：纯值/算术/let/遮蔽/if、顶层饱和函数、Nat 结构递归（IrNatCase）、字符串字面量与
-# `++` / strLength / strSubstring / strHash / 相等、Bool 入口与短路、63-bit 边界、除零
-# trap、确定性（两次 main.wat 逐字节相同 + 每行 ≤100 列）、`--no-compile` 只写
-# main.wat/build.sh、不支持构造的编译期拒绝。依赖 PATH 里的 wasm-tools / wasmtime
-# （devShell 与 e2e 的 nativeBuildInputs 已提供）。
+# 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
+# `109_backend_parity.steps` 对拍三端；这里只保留 wasm 特有的机制性用例：产物形状、
+# WAT 确定性 + 行宽、`elem declare`、trap、拒绝面与 `--target` 校验。依赖 PATH 里的
+# wasm-tools / wasmtime（devShell 与 e2e 的 nativeBuildInputs 已提供）。
 
 # 0) 工具链探针：缺工具时明确失败，而不是让后续步报 127。
 run: command -v wasm-tools
@@ -13,7 +11,7 @@ exit: 0
 run: command -v wasmtime
 exit: 0
 
-# 1) 最小可执行：main = 42；WAT 是 canonical 产物，.wasm 由 wasm-tools 汇编。
+# 1) 最小可执行：WAT 是 canonical 产物，.wasm 由 wasm-tools 汇编。
 run: sh -c 'd="$TMPDIR/min"; mkdir -p "$d/app"; printf "[package]\nname = \"min\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/min-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/min-out/main.wat
@@ -25,107 +23,35 @@ file-contains: $TMPDIR/min-out/main.wat wasi_snapshot_preview1
 run: sh -c 'cd "$TMPDIR/min-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 0
 out-equals: 42
-run: sh -c '"$VUNA" run "$TMPDIR/min" 2>&1 | tail -n 1'
-exit: 0
-out-equals: 42
 
-# 2) 算术 / if / let；与 OCaml 后端差分。
-run: sh -c 'd="$TMPDIR/arith"; mkdir -p "$d/app"; printf "[package]\nname = \"arith\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 3 + 4 in if 2 * x - 1 == 13 then 13 else 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arith-out" "$d"'
+# 2) 顶层函数落成 `$f_<name>`；闭包函数必须进 `(elem declare func ...)`（`ref.func`
+#    的前置条件，缺了 wasmtime 直接拒绝模块）。
+run: sh -c 'd="$TMPDIR/shape"; mkdir -p "$d/app"; printf "[package]\nname = \"shape\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "apply : (Int -> Int) -> Int -> Int\napply f x = f x\n\nmain : Int\nmain = apply (\x => x + 1) 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shape-out" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/arith-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 13
-run: sh -c '"$VUNA" run "$TMPDIR/arith" 2>&1 | tail -n 1'
-out-equals: 13
+file-contains: $TMPDIR/shape-out/main.wat (func $f_apply
+file-contains: $TMPDIR/shape-out/main.wat (elem declare func
+file-contains: $TMPDIR/shape-out/main.wat ref.func
 
 # 3) let 遮蔽：作用域必须在分支结束时恢复（否则读到最后一次 binder 的 local）。
 run: sh -c 'd="$TMPDIR/shadow"; mkdir -p "$d/app"; printf "[package]\nname = \"shadow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 10 in (let x = 1 in x) + x\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shadow-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/shadow-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 out-equals: 11
-run: sh -c '"$VUNA" run "$TMPDIR/shadow" 2>&1 | tail -n 1'
-out-equals: 11
 
-# 4) 顶层饱和函数调用。
-run: sh -c 'd="$TMPDIR/fn"; mkdir -p "$d/app"; printf "[package]\nname = \"fn\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "double : Int -> Int\ndouble x = x * 2\n\nmain : Int\nmain = double 21\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/fn-out" "$d"'
-exit: 0
-file-contains: $TMPDIR/fn-out/main.wat (func $f_double
-run: sh -c 'cd "$TMPDIR/fn-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 42
-run: sh -c '"$VUNA" run "$TMPDIR/fn" 2>&1 | tail -n 1'
-out-equals: 42
-
-# 5) Nat 结构递归（IrNatCase）：fact 5 = 120。
-run: sh -c 'd="$TMPDIR/fact"; mkdir -p "$d/app"; printf "[package]\nname = \"fact\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nfact : Nat -> Int\nfact n = case n of\n  Zero => 1\n  Succ k => (natToInt k + 1) * fact k\n\nmain : Int\nmain = fact (Succ (Succ (Succ (Succ (Succ Zero)))))" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/fact-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/fact-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 120
-run: sh -c '"$VUNA" run "$TMPDIR/fact" 2>&1 | tail -n 1'
-out-equals: 120
-
-# 6) 字符串：字面量入口（Show 加引号）、`++` 链（IrConcatMany）、strLength 与 strHash。
-run: sh -c 'd="$TMPDIR/str"; mkdir -p "$d/app"; printf "[package]\nname = \"str\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ \"b\" ++ \"c\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/str-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/str-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "abc"
-run: sh -c '"$VUNA" run "$TMPDIR/str" 2>&1 | tail -n 1'
-out-equals: "abc"
-run: sh -c 'printf "main : Int\nmain = strLength \"abc\"\n" > "$TMPDIR/str/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/len-out" "$TMPDIR/str"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/len-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 3
-run: sh -c '"$VUNA" run "$TMPDIR/str" 2>&1 | tail -n 1'
-out-equals: 3
-run: sh -c 'printf "main : String\nmain = strSubstring 1 2 \"abcd\"\n" > "$TMPDIR/str/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sub-out" "$TMPDIR/str"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/sub-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "bc"
-run: sh -c '"$VUNA" run "$TMPDIR/str" 2>&1 | tail -n 1'
-out-equals: "bc"
-
-# 6b) showStr 转义：与 OCaml 的 `dt_show_string` 逐字一致（`"` / `\` / 换行 / 制表）。
-run: sh -c 'd="$TMPDIR/show"; mkdir -p "$d/app"; printf "[package]\nname = \"show\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\\\\nb\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/show-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/show-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "a\nb"
-run: sh -c '"$VUNA" run "$TMPDIR/show" 2>&1 | tail -n 1'
-out-equals: "a\nb"
-
-# 7) Bool 入口、短路求值与字符串相等。
-run: sh -c 'd="$TMPDIR/bools"; mkdir -p "$d/app"; printf "[package]\nname = \"bools\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Bool\nmain = 1 > 2 && (1 / 0) == 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/bools-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/bools-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: False
-run: sh -c 'printf "main : Bool\nmain = \"abc\" == \"abc\"\n" > "$TMPDIR/bools/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/eq-out" "$TMPDIR/bools"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/eq-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: True
-run: sh -c '"$VUNA" run "$TMPDIR/bools" 2>&1 | tail -n 1'
-out-equals: True
-
-# 8) 63-bit 边界：加法 wrap、负数除法向零截断（与 OCaml int 同域）。
-run: sh -c 'd="$TMPDIR/bounds"; mkdir -p "$d/app"; printf "[package]\nname = \"bounds\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 4611686018427387903 + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/bounds-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/bounds-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: -4611686018427387904
-run: sh -c 'printf "main : Int\nmain = 0 - 3 / 2\n" > "$TMPDIR/bounds/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/negdiv-out" "$TMPDIR/bounds"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/negdiv-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: -1
-
-# 9) 除零 trap：非 0 退出 + 明确错误文本（不是静默 0）。
+# 4) 除零 trap：非 0 退出 + 明确错误文本（不是静默 0）。
 run: sh -c 'd="$TMPDIR/dz"; mkdir -p "$d/app"; printf "[package]\nname = \"dz\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1 / 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/dz-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/dz-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 exit: nonzero
 out-contains: division by zero
 
-# 10) 确定性：同一 IR 两次编译的 main.wat 逐字节相同；且每行 ≤100 列（稳定 diff）。
+# 5) 确定性：同一 IR 两次编译的 main.wat 逐字节相同；且每行 ≤100 列（稳定 diff）。
 run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ \"b\" ++ \"c\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target wasm; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target wasm; cmp "$TMPDIR/det-a/main.wat" "$TMPDIR/det-b/main.wat"'
 exit: 0
 run: sh -c 'awk "length(\$0) > 100 { bad = 1 } END { exit bad }" "$TMPDIR/det-a/main.wat"'
 exit: 0
 
-# 11) `--no-compile` 只写 main.wat + build.sh（不产 .wasm），build.sh 可独立汇编。
+# 6) `--no-compile` 只写 main.wat + build.sh（不产 .wasm），build.sh 可独立汇编。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --no-compile --out "$TMPDIR/nc-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/nc-out/main.wat
@@ -135,126 +61,30 @@ run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && wasmtime run -W gc=y -W functi
 exit: 0
 out-equals: 7
 
-# 12) 拒绝面：仍是编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
-run: sh -c 'd="$TMPDIR/str-main"; mkdir -p "$d/app"; printf "[package]\nname = \"sm\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"x\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sm-out" "$d"'
-exit: 0
-run: sh -c 'printf "main : Float\nmain = 1.5\n" > "$TMPDIR/str-main/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/flt-out" "$TMPDIR/str-main" 2>&1'
+# 7) 拒绝面：编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
+run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Float\nmain = 1.5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
 exit: 1
 out-contains: wasm target: float literals
-# Float 仍拒绝（data/case 已支持）。
+file-absent: $TMPDIR/rej-out/main.wasm
 
-# 14) parity 面：位运算 / assert / todo / prim_fail / dbg! —— 与 native 逐字一致。
-run: sh -c 'd="$TMPDIR/parity"; mkdir -p "$d/app"; printf "[package]\nname = \"parity\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = bitAnd 6 3 + bitOr 6 3 + bitXor 6 3 + bitNot 0 + bitShl 1 61\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-w" "$d"'
+# 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。
+run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-as" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/parity-w" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 2305843009213693965
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = bitShr (0 - 1) 62 + bitShr (0 - 1) 1 + bitShl 1 63 + bitShr 1 63\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-shr" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/parity-shr" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: -4611686018427387904
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = assert True \"ok\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-as-ok" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/parity-as-ok" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 9
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-as-fail" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/parity-as-fail" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-as" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: assertion failed: bad
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = prim_fail \"boom\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-pf" "$d"'
+run: sh -c 'printf "main : Int\nmain = prim_fail \"boom\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-pf" "$TMPDIR/traps"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/parity-pf" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-pf" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: boom
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = todo \"later\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-todo" "$d"'
+run: sh -c 'printf "main : Int\nmain = todo \"later\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-todo" "$TMPDIR/traps"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/parity-todo" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-todo" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: TODO: later
-run: sh -c 'd="$TMPDIR/parity"; printf "main : Int\nmain = let _ = dbg! \"x\" in 43\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/parity-dbg" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/parity-dbg" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 43
 
-# 15) 用户 data + 通用 case + record（与 native 同一表示决策）。
-run: sh -c 'd="$TMPDIR/m3a"; mkdir -p "$d/app"; printf "[package]\nname = \"m3a\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "data Color : Type where\n  Red : Color\n  Blue : Color\n\npick : Color -> Int\npick c = case c of\n  Red => 1\n  Blue => 2\n\nmain : Int\nmain = pick Red + pick Blue\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-w" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3a-w" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 3
-run: sh -c 'd="$TMPDIR/m3a"; printf "data Shape : Type where\n  Dot : Shape\n  Rect : Int -> Int -> Shape\n\narea : Shape -> Int\narea s = case s of\n  Dot => 0\n  Rect w h => w * h\n\nmain : Int\nmain = area (Rect 3 4) + area Dot\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-wrect" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3a-wrect" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 12
-run: sh -c 'd="$TMPDIR/m3a"; printf "record Point where\n  x : Int\n  y : Int\n\nmain : Int\nmain = let p = Point { x = 3, y = 4 } in p.x * p.x + p.y * p.y\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-wrec" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3a-wrec" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 25
-run: sh -c 'd="$TMPDIR/m3a"; printf "record Point where\n  x : Int\n  y : Int\n\np : Point\np = Point { x = 1, y = 2 }\n\nq : Point\nq = { p | x = 40 }\n\nmain : Int\nmain = p.y + q.x + q.y\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-wupd" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3a-wupd" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 44
-run: sh -c 'd="$TMPDIR/m3a"; printf "record P2 where\n  a : Int\n  b : Int\n\ndata Wrap : Type where\n  W : P2 -> Wrap\n  N : Wrap\n\nget : Wrap -> Int\nget w = case w of\n  W p => p.a + p.b\n  N => 0\n\nmain : Int\nmain = get (W (P2 { a = 20, b = 22 })) + get N\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3a-wnest" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3a-wnest" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 42
-
-# 16) List 桥接 strUnpack / strPack / strConcatMany / strSubstTemplate（wasm 侧）。
-run: sh -c 'd="$TMPDIR/m3b"; mkdir -p "$d/app"; printf "[package]\nname = \"m3b\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = strPack (strUnpack \"abc\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-pack" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-pack" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "abc"
-run: sh -c 'd="$TMPDIR/m3b"; printf "main : Int\nmain = strAt (strPack (strUnpack \"abc\")) 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-at" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-at" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 98
-run: sh -c 'd="$TMPDIR/m3b"; printf "main : String\nmain = strConcatMany [\"a\", \"bb\", \"ccc\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-cm" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-cm" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "abbccc"
-run: sh -c 'd="$TMPDIR/m3b"; printf "import Base.String\n\nmain : String\nmain = join \"-\" [\"a\", \"b\", \"c\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-join" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-join" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "a-b-c"
-# 模板替换：越界序号原样保留，`<>` / 结尾 `<` 按字面处理（与 dtp_substTemplate 一致）。
-run: sh -c 'd="$TMPDIR/m3b"; printf "import Base.Vec\n\nmain : String\nmain = substTemplate \"x=<0>, y=<1>, z=<9>; <>.\" [\"A\", \"B\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-st" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-st" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "x=A, y=B, z=<9>; <>."
-run: sh -c 'd="$TMPDIR/m3b"; printf "main : String\nmain = strSubstTemplate \"<01>|<10>|a<\" [\"A\", \"B\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/m3b-st2" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/m3b-st2" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "B|<10>|a<"
-
-# 17) 闭包（`$clo` + `elem declare` + `ref.func`/`call_ref`）与高阶应用。
-run: sh -c 'd="$TMPDIR/clo"; mkdir -p "$d/app"; printf "[package]\nname = \"clo\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "%s\n" "apply : (Int -> Int) -> Int -> Int" "apply f x = f x" "" "main : Int" "main = apply (\x => x + 1) 41" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-out" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 42
-# 多参 lambda 柯里化后穿过 map / foldl。
-run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "" "main : Int" "main = foldl (\a => \x => a + x) 0 (map (\x => x * 2) [1, 2, 3])" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-sum" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-sum" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: 12
-# 闭包捕获外层 binder。
-run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.List" "import Base.String" "" "main : String" "main = let k = 10 in join \",\" (map (\x => strFromInt (x + k)) [1, 2])" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-cap" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-cap" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "11,12"
-# `Base.String` 的高阶 API（闭包验收）。
-run: sh -c 'd="$TMPDIR/clo"; printf "%s\n" "import Base.String" "" "main : String" "main = join \"|\" (split \",\" \"a,b,,c\")" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-split" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-split" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "a|b||c"
-run: sh -c 'd="$TMPDIR/clo"; printf "import Base.String\n\nmain : String\nmain = unlines [\"a\", \"b\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-ul" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-ul" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "a\nb\n"
-run: sh -c 'd="$TMPDIR/clo"; printf "import Base.String\n\nmain : String\nmain = repeat 3 \"ab\" ++ \"[\" ++ trim \"  hi \" ++ \"]\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/clo-rep" "$d"'
-exit: 0
-run: sh -c 'cd "$TMPDIR/clo-rep" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
-out-equals: "ababab[hi]"
-
-# 13) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
+# 9) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
 run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'
 exit: 2
 out-contains: --target ocaml|wasm|native

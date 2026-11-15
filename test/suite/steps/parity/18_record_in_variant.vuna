@@ -1,0 +1,15 @@
+record P2 where
+  a : Int
+  b : Int
+
+data Wrap : Type where
+  W : P2 -> Wrap
+  N : Wrap
+
+get : Wrap -> Int
+get w = case w of
+  W p => p.a + p.b
+  N => 0
+
+main : Int
+main = get (W P2 { a = 20, b = 22 }) + get N
