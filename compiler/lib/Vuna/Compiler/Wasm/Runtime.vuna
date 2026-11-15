@@ -36,6 +36,9 @@ export record RtConsts(..) where
   rtcErrLen : Int
   rtcAssertOff : Int
   rtcAssertLen : Int
+  -- | 数组越界（与 OCaml `Invalid_argument ("index out of bounds")` 的首行一致）。
+  rtcOobOff : Int
+  rtcOobLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -187,6 +190,52 @@ rtFailStr c =
       cat
         [mkString c.rtcErrOff c.rtcErrLen, [ILocalGet "$p0", ICall "$rt_strConcat", ILocalSet "$m"], [IConstI32 2, ILocalGet "$m", IConstI32 1, ICall "$rt_write"], [IConstI32 2, ICall "$proc_exit", IUnreachable]]
   in rtFunc "$rt_failStr" params [] locals body
+
+-- | 数组越界：固定文本 + exit 2（wasm 没有位置表，因此没有 OCaml 报告器的 `at` 行）。
+rtArrayOob : RtConsts -> WatFunc
+rtArrayOob c =
+  rtFunc "$rt_arrayOob" [] [] []
+    (append (failWithConst c.rtcOobOff c.rtcOobLen) [ICall "$rt_failStr", IUnreachable])
+
+-- ---------------------------------------------------------------
+-- 数组（不可变、copy-on-write）
+-- ---------------------------------------------------------------
+-- 表示沿用 `$arr`（`anyref` 数组）：`array.len` 是长度，元素是任意运行时值。
+-- `arraySet` 先整块复制再写，原数组不变；越界读/写走 `$rt_arrayOob`。
+rtArrayLength : WatFunc
+rtArrayLength =
+  rtFunc "$rt_arrayLength" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefCast "$arr", IArrayLen, IPlain "i64.extend_i32_u", IStructNew "$int"]
+
+rtArrayGet : WatFunc
+rtArrayGet =
+  let
+    locals = [Pair "$ix" WvI32]
+    oob = [ICall "$rt_arrayOob", IUnreachable]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$arr", IArrayLen, ILocalSet "$ix"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob [], ILocalGet "$ix", ILocalGet "$p0", IRefCast "$arr", IArrayLen, IBinop "i32.ge_s", IIf "" oob [], ILocalGet "$p0", IRefCast "$arr", ILocalGet "$ix", IArrayGet "$arr"]]
+  in rtFunc "$rt_arrayGet" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
+
+rtArraySet : WatFunc
+rtArraySet =
+  let
+    locals = [Pair "$ix" WvI32, Pair "$n" WvI32, Pair "$new" (WvRef "$arr")]
+    oob = [ICall "$rt_arrayOob", IUnreachable]
+    body =
+      cat
+        [[ILocalGet "$p0", IRefCast "$arr", IArrayLen, ILocalSet "$n"], unboxInt 1, [IPlain "i32.wrap_i64", ILocalSet "$ix"], [ILocalGet "$ix", IConstI32 0, IBinop "i32.lt_s", IIf "" oob [], ILocalGet "$ix", ILocalGet "$n", IBinop "i32.ge_s", IIf "" oob [], ILocalGet "$n", IArrayNewDefault "$arr", ILocalSet "$new", ILocalGet "$new", IConstI32 0, ILocalGet "$p0", IRefCast "$arr", IConstI32 0, ILocalGet "$n", IArrayCopy "$arr" "$arr", ILocalGet "$new", ILocalGet "$ix", ILocalGet "$p2", IArraySet "$arr", ILocalGet "$new"]]
+  in rtFunc "$rt_arraySet" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef] [WvAnyRef]
+    locals body
+
+rtArrayMake : WatFunc
+rtArrayMake =
+  let
+    locals = [Pair "$n" WvI32, Pair "$out" (WvRef "$arr"), Pair "$i" WvI32]
+    body =
+      cat
+        [unboxInt 0, [IPlain "i32.wrap_i64", ILocalSet "$n", ILocalGet "$n", IArrayNewDefault "$arr", ILocalSet "$out", IConstI32 0, ILocalSet "$i"], [IBlock "$am_done" "" [ILoop "$am_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$am_done", ILocalGet "$out", ILocalGet "$i", ILocalGet "$p1", IArraySet "$arr", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$am_l"]]], [ILocalGet "$out"]]
+  in rtFunc "$rt_arrayMake" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
 
 -- | `strFromInt` / `showInt` / `showNat`。
 rtStrFromInt : WatFunc
@@ -670,6 +719,11 @@ rtFunctions c =
     rtWrite,
     rtPrintln,
     rtFailStr c,
+    rtArrayOob c,
+    rtArrayLength,
+    rtArrayGet,
+    rtArraySet,
+    rtArrayMake,
     rtStrFromInt,
     rtShowBool c,
     rtShowStr,
@@ -759,6 +813,12 @@ rtImplOf name =
   else if name == "@vuna@obs@sampleStop" then RtFunc 1 "$rt_boxZero"
   else if name == "@ir@natSucc" then RtFunc 1 "$rt_natSucc"
   else if name == "arrayEmpty" then RtValue [IConstI32 0, IArrayNewDefault "$arr"]
+  else if name == "arrayLength" then RtFunc 1 "$rt_arrayLength"
+  else if name == "arrayGet" then RtFunc 2 "$rt_arrayGet"
+  else if name == "arraySet" then RtFunc 3 "$rt_arraySet"
+  else if name == "arrayMake" then RtFunc 2 "$rt_arrayMake"
+  else if name == "arrayFromList" then RtFunc 1 "$rt_arrayFromList"
+  else if name == "arrayToList" then RtFunc 1 "$rt_arrayToList"
   else if name == "natAdd" then RtFunc 2 "$rt_natAdd"
   else if name == "natSub" then RtFunc 2 "$rt_natSub"
   else if name == "natMul" then RtFunc 2 "$rt_natMul"

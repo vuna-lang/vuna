@@ -35,9 +35,9 @@
 | Int / Nat | `(struct (field i64))`，63 位语义（wrap / 逻辑移位 / 除零 trap） |
 | Bool | `i31`（`ref.i31`） |
 | String | `(array (mut i8))`；字面量 `array.new_data $str $d0` |
-| 数组 | `(array (mut anyref))`（当前无运行时对象，仅类型表预留） |
-| 变体 / record | `(struct (field i32 tag) (field anyref ...))` / 纯字段 struct（未实现） |
-| 闭包 | `(struct (field (ref $ft)) (field anyref env))`，`$ft = (func anyref anyref (result anyref))`（未实现） |
+| 数组 | `(array (mut anyref))`；不可变（`arraySet` 复制整块再写），越界 trap |
+| 变体 / record | `(struct (field i32 tag) (field anyref ...))` / 纯字段 struct |
+| 闭包 | `(struct (field (ref $ft)) (field anyref env))`，`$ft = (func anyref anyref (result anyref))`；多参 lambda 创建时柯里化 |
 
 ## 3. 模块布局（稳定 diff）
 
@@ -97,13 +97,16 @@
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）：`bitShr` 按 OCaml `lsr` 语义
   （63-bit 值先 `shl`+`shr_u` 清掉符号扩展位，再逻辑右移）。
 - 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
-  `prim_fail`；`@vuna@debug@on` 是 0 元值（`False`），`@vuna@debug@line` 是 1 元桩。
+  `prim_fail` / `arrayLength` / `arrayGet` / `arraySet` / `arrayMake`，以及需要 canonical
+  `List` 族的 `arrayFromList` / `arrayToList`；`@vuna@debug@on` 是 0 元值（`False`），
+  `@vuna@debug@line` 是 1 元桩。
+- 数组：`$rt_arrayLength` / `$rt_arrayGet` / `$rt_arraySet` / `$rt_arrayMake`；越界走
+  `$rt_arrayOob`（`Invalid_argument("index out of bounds")` + exit 2）。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：
-`arrayGet` / `arraySet` / `arrayMake` / `arrayLength`（`Base.Array`，未实现）、
 `bi_lt_generic` 等结构化 `compare` 家族、Float 全部符号、
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush/Pop`、Sched 家族、
-`prim_eff_*` 宿主层原语、List 桥接 `dtp_*`。
+`prim_eff_*` 宿主层原语。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回盒装
@@ -137,7 +140,7 @@
 
 - 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
   应用侧按实参个数逐次 `call $rt_apply`。
-- `Array` 运行时；变体分支只按 tag 一次线性分派（不做多模式矩阵）。
+- 变体分支只按 tag 一次线性分派（不做多模式矩阵）。
 - Float、Effect / 一次性续延、FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
