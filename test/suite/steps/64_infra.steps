@@ -5,6 +5,9 @@ run: "$VUNA" check "$VUNA_SUITE_ROOT/compiler"
 exit: 0
 run: INFRA_SRC="$VUNA_SUITE_ROOT/compiler/lib/Vuna/Compiler/Hash.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"
 exit: 0
+# 边界夹具：文件尾注释（无尾随换行）、嵌套块注释、字符串转义、模板里的 `--`。
+run: INFRA_SRC="$VUNA_SUITE_ROOT/test/corpus/cst/01_trivia.vuna" "$VUNA" run "$VUNA_SUITE_ROOT/examples/infra"
+exit: 0
 # 内容寻址摘要：SHA-256 标准向量（空串 / "abc" / 80 字节跨块 + 填充 r>56 分支）。
 out-contains: hash-empty e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 out-contains: hash-abc ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad

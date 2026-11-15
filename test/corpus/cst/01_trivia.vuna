@@ -1,0 +1,19 @@
+-- leading line comment
+{- block comment {- nested -} tail -}
+module CstFixture where
+
+-- 行注释里的反例：-- 不是注释、{- 不是块注释
+f : Int
+f = 42
+
+g : String
+g = "quote \" backslash \\ tab \t"
+
+tmpl : String
+tmpl = "hi ${name} -- not a comment"
+
+fl : Float
+fl = 1.5
+
+{- 文件尾块注释 -}
+-- 文件尾行注释（无尾随换行）
