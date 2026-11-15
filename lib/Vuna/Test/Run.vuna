@@ -286,8 +286,9 @@ withStepsEnv env caseTmp isolated argv =
         "TMPDIR=${caseTmp}",
         "VUNA_STORE=${store}",
         "VUNA_REPL_HISTORY=${caseTmp}/repl-history",
-        -- wasmtime 默认写 `$HOME/.cache`；沙箱里 HOME 不可写，指到 case 私有目录。
-        "WASMTIME_CACHE_DIR=${caseTmp}/wasmtime-cache"
+        -- wasmtime 的编译缓存走 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；
+        -- 沙箱里 HOME 是 /homeless-shelter，指到 case 私有的 XDG 缓存根。
+        "XDG_CACHE_HOME=${caseTmp}/cache"
       ]
       argv)
 
