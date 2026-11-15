@@ -269,22 +269,23 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 | `Elab.Data.elabCtor` | 每个构造子两次从索引表重建 globals 列表 | 每趟算一次 |
 | `Elab.Data.checkViaDataDecls` | 每条声明重算去装箱候选集（含环检测） | 每趟算一次 |
 | `Elab.Dict.isDictFamily` | 每个隐式域重建一遍类名列表 | 先做 `Dict_` 前缀 O(1) 预筛 |
+| `Ctx` 求值环境 | `evalCtx`/`varTypeValue` 每次用 `ctxEnvAt` 重建整份环境 | 绑定点前插维护（level 绝对编号 ⇒ 已有 binder 的 level 不变） |
 
 读数（16 核、空 store、同窗口交替、各取 4 次最小）：
 
 | | 冷 `check compiler` 墙钟 | user | 热 `check compiler` |
 | --- | --- | --- | --- |
 | 处置前 | 14.12 s | 13.85 s | 43 ms |
-| 处置后 | 14.00 s | 13.74 s | 47 ms |
+| 处置后（含上下文环境增量维护） | 14.07 s | 13.79 s | 47 ms |
 
-冷路径 **≈0.9%**（约精化段的 2%）；热路径（全命中、只重放接口摘要）绝对值多 ~4 ms，
+冷路径 **≈1.5%**（约精化段的 3%）；热路径（全命中、只重放接口摘要）绝对值多 ~4 ms，
 与上面几处改动没有已知因果，怀疑是二进制布局/记录字段数带来的固定开销，作为下一轮的
 回归项复核。增长率门槛不变（单文件 500…8000 def 每档 ≤1.6×）。
-elab 占分配 ~92% 的格局没变：**下一杠杆是 `Ctx` 的求值环境**——`ctxEnv`/`varTypeValue`
-每次查询都重建 `List Value`（`ctxEnvAt` + `refineValue` 映射 + `shift` + `eval`），
-`evalCtx` 19 处、`varTypeValue`/`ctxEnv` 27 处调用，含 `inferVarRef` 与每个隐式实参。
-把它改成「上下文里存 Value 类型（level 形态，无需 shift）+ 环境缓存」才是结构性收益；
-本条只做了 O(1) 化（深度、零向量、族名预筛）。
+elab 占分配 ~92% 的格局没变，剩余耗时仍在 `conv`/`force`/`infer` 的项重算。
+`Ctx` 侧的 O(1) 化（深度、求值环境、零向量、族名预筛）到此为止；
+进一步尝试过「把 binder 类型在绑定点求值成 Value 直接复用（省掉 `shift`+`eval`）」，
+但会改变不透明/擦除决策（`isOpaqueRuntimeTyIn` 依赖按**当前**精化重算类型），
+属于语义改动而非性能改动，已放弃并把该不变式写进 [core.md](core.md) §5。
 
 ## 5. 增长率（合成包）
 
