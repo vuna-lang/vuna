@@ -8,7 +8,6 @@ module Vuna.Add where
 --      保留其余字节；子表形式不猜、报错让用户手改）；
 --   4. 默认 `vuna fetch` 取包；`--no-fetch` 只改 manifest，`--dry-run` 只打印。
 -- 索引不可信：写回的永远是摘要，后续 fetch/check 只认摘要。
-import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Pkg
@@ -18,8 +17,13 @@ import Vuna.Fetch
 import Vuna.Registry
 import Base.List
 import Base.String
+import Base.EffConsole
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffEnv
+import Base.EffProcess
 
-export runAdd : List String -> Eff hostRow Int
+export runAdd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fetch"] args of
   ErrC e => addFailText (diagText e)
   OkC parsed =>
@@ -42,7 +46,7 @@ splitSpecGo (c :: rest) acc =
   if c == 64 then Pair (strPack (reverse acc)) (Just (strPack rest))
   else splitSpecGo rest (c :: acc)
 
-addAt : String -> String -> Bool -> Bool -> Eff hostRow Int
+addAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Bool -> Eff r Int
 addAt dir spec dry noFetch = do
   abs <- absolutePath dir
   let
@@ -51,9 +55,9 @@ addAt dir spec dry noFetch = do
     version = secondOf named
     manifestPath = "${abs}/vuna.toml"
   in do
-    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists manifestPath)
+    exists <- fsFileExists manifestPath
     if exists then do
-      raw <- raiseToRow hostRow (@vuna@prim_eff_readFile manifestPath)
+      raw <- fsReadFile manifestPath
       case parseManifest manifestPath raw of
         ErrC e => printAddDiag e
         OkC manifest => case manifest.manifestRegistryIndex of
@@ -67,21 +71,21 @@ addAt dir spec dry noFetch = do
                 Just release => writeAndFetch manifestPath raw alias release dry noFetch abs
     else addFailText "missing vuna.toml in ${dir}"
 
-writeAndFetch : String -> String -> String -> Release -> Bool -> Bool -> String -> Eff hostRow Int
+writeAndFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Release -> Bool -> Bool -> String -> Eff r Int
 writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
 else
   let
     newLine = dependencyLine alias release
     updated = upsertDependencyLine alias newLine raw
   in if dry then do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: would write ${newLine}\n")
+    _ <- consolePrint "add: would write ${newLine}\n"
     pure 0
   else if updated == raw then do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: ${alias} already up to date\n")
+    _ <- consolePrint "add: ${alias} already up to date\n"
     if noFetch then pure 0 else fetchAt abs False
   else do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFileAtomic manifestPath updated)
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "add: wrote ${newLine}\n")
+    _ <- fsWriteFileAtomic manifestPath updated
+    _ <- consolePrint "add: wrote ${newLine}\n"
     if noFetch then pure 0 else fetchAt abs False
 
 -- 内联表依赖行（一行；别名 = 包名，D13）。
@@ -137,12 +141,12 @@ isAliasLine alias t = if startsWith alias t then
   in startsWith "=" (trim remainder)
 else False
 
-printAddDiag : Diagnostic -> Eff hostRow Int
+printAddDiag : Member nConsole ConsoleOp r => Diagnostic -> Eff r Int
 printAddDiag d = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print (diagText d ++ "\n"))
+  _ <- consolePrint (diagText d ++ "\n")
   pure 1
 
-addFailText : String -> Eff hostRow Int
+addFailText : Member nConsole ConsoleOp r => String -> Eff r Int
 addFailText msg = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${msg}\n")
+  _ <- consolePrint "error: ${msg}\n"
   pure 2

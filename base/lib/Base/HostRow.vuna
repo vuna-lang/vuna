@@ -1,6 +1,11 @@
 module Base.HostRow where
 
--- Base.HostRow：工具链/编译器统一的内建效应行。
+-- Base.HostRow：全部内建效应组成的整行值。
+--
+-- 工具链与编译器用 labeled 效应 + 细粒度行（`Member nX XOp r`），不用 `hostRow`
+-- 做统一行；它只剩两个用处：
+--   * 内建 `effTimeUs` 的 intrinsic 类型（`IEffRow hostRow Int`，见 `Intrinsics.vuna`）；
+--   * 语言夹具里验证「整行 handler 预装 / 行拼接」的显式行值。
 --
 -- `hostRow` / `hostTail` 是普通定义（不是公理——公理没有运行时定义，擦除会报
 -- `CG_AxiomAtRuntime`）；同时 `Core.Eval` 对这两个名字做归约，使跨模块签名比较、
@@ -24,11 +29,7 @@ hostTail =
   Cons "default" ConsoleOp
     (Cons "default" ClockOp (Cons "default" EnvOp (Cons "default" ProcessOp (Cons "default" ExitOp (Cons "default" StdinOp (Cons "default" ArgsOp (Cons "default" NetOp (Cons "default" RefOp []))))))))
 
--- | 工具链统一行：Fs → Console → Clock → Env → Process → Exit → Stdin → Args → Net → Ref。
+-- | 全集行：Fs → Console → Clock → Env → Process → Exit → Stdin → Args → Net → Ref。
+-- 只有内建 `effTimeUs` 的 intrinsic 类型与语言夹具用它；工具链请写具体标签约束。
 export hostRow : Row
 hostRow = Cons "default" FsOp hostTail
-
--- | 显式行提升（转发 Base.Eff.raiseTo）：工具链模块只依赖 HostRow 的导出，
--- 避免 `import Base.Eff` 带来的 Row(..) 构造子歧义。
-export raiseToRow : (r : Row) -> {a : Type} -> Eff [] a -> Eff r a
-raiseToRow r e = raiseTo r e

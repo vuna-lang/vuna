@@ -27,7 +27,6 @@ module Vuna.Obs.Merge where
 -- 是不混排这些时钟的理由）。
 --
 -- 输出：`--out` 省略 → stdout；否则写文件 + 打印 `wrote <path>`。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.Pair
@@ -38,6 +37,10 @@ import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Obs.Read
 import Vuna.Obs.Types
+import Base.EffConsole
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffProcess
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -46,7 +49,7 @@ mergeUsage : String
 mergeUsage = "usage: vuna obs merge [--out FILE] TRACE..."
 
 -- | `vuna obs merge` 的入口；参数错误 / 读盘失败 / 空 trace 文件都是退出码 2。
-export runObsMerge : List String -> Eff hostRow Int
+export runObsMerge : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsMerge args = case parseToolArgs "vuna obs merge" [ValueFlag "out"] args of
   ErrC e => mergeFail 2 (diagText e)
   OkC parsed => case outOf parsed of
@@ -60,9 +63,9 @@ outOf parsed = case flagValue parsed "out" of
   Nothing => OkC Nothing
   Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
 
-mergeFail : Int -> String -> Eff hostRow Int
+mergeFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
 mergeFail code e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure code
 
 -- ---------------------------------------------------------------
@@ -75,14 +78,14 @@ export record MergeMember(..) where
   memberT0 : Int
 
 -- 逐份读入（任一失败即停，错误带路径前缀，不静默跳过坏 trace）。
-mergeTraces : Maybe String -> List String -> Eff hostRow Int
+mergeTraces : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> List String -> Eff r Int
 mergeTraces out paths = do
   membersR <- readMembers paths []
   case membersR of
     ErrC e => mergeFail 2 (diagText e)
     OkC members => emitMerged out (sortMembers members)
 
-readMembers : List String -> List MergeMember -> Eff hostRow (Check (List MergeMember))
+readMembers : Member nFs FsOp r => List String -> List MergeMember -> Eff r (Check (List MergeMember))
 readMembers [] acc = pure (OkC (reverse acc))
 readMembers (path :: rest) acc = do
   traceR <- readTraceFull path
@@ -115,20 +118,18 @@ memberLe a b = a.memberT0 <= b.memberT0
 -- ---------------------------------------------------------------
 -- 产出
 -- ---------------------------------------------------------------
-emitMerged : Maybe String -> List MergeMember -> Eff hostRow Int
+emitMerged : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> List MergeMember -> Eff r Int
 emitMerged out members =
   let
     content = mergedText members
   in case out of
     Nothing => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print content)
+      _ <- consolePrint content
       pure 0
     Just path => do
       _ <- ensureDirPath (parentOf path)
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path content)
-      _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_print "wrote ${path} (${strFromInt (length members)} trace(s))\n")
+      _ <- fsWriteFile path content
+      _ <- consolePrint "wrote ${path} (${strFromInt (length members)} trace(s))\n"
       pure 0
 
 -- | 合并文本（纯；键序固定、无时间戳、无绝对路径 ⇒ 同一组输入逐字节一致）。

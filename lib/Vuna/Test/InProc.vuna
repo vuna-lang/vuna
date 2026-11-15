@@ -17,7 +17,6 @@ module Vuna.Test.InProc where
 --
 -- 仍在子进程的部分（构造上不可进程内，见 `docs/reference/testing.md` 的「进程绑定
 -- 岛」）：`build.sh`（ocamlopt 链接）、产物执行、`repl`/`lsp`/`seed`/包管理器。
-import Base.HostRow
 import Base.IORef
 import Base.List
 import Base.Maybe
@@ -32,6 +31,14 @@ import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 import Vuna.Test.Session
+import Base.Eff.Types
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffProcess
+import Base.EffClock
+import Base.EffArgs
 
 -- 诊断上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
 diagCap : Int
@@ -72,7 +79,7 @@ packageShown pkg ds = Base.List.take diagCap (filter (ownedByPackage pkg) (dedup
 -- ---------------------------------------------------------------
 -- 单文件 check：与 `vuna check <file>` 同一分派（`module` 头 → 库模块语义）。
 -- 返回裁剪后的诊断列表（`OkC` 时可能只有 warning；`ErrC` 时首错 + children）。
-export checkFile : String -> Eff hostRow (Check (List Diagnostic))
+export checkFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Diagnostic))
 checkFile path = do
   ctxR <- contextForFile path
   case ctxR of
@@ -94,7 +101,7 @@ checkFile path = do
 
 -- 包目录 check：`vuna check <dir>` 的单包路径（workspace 展开由调用方决定）。
 -- `wantWarnings = True`：warning 不持久化，负例断言必须看到它们，绕开一切缓存判定。
-export checkPackageAt : String -> Eff hostRow (Check (List Diagnostic))
+export checkPackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r (Check (List Diagnostic))
 checkPackageAt dir = do
   pkgR <- loadPackage dir
   case pkgR of
@@ -106,7 +113,7 @@ checkPackageAt dir = do
         OkC ws => pure (OkC (packageShown pkg ws))
 
 -- 目录是否为包目录（`vuna check <dir>` 与 `vuna check <file>` 的分派依据）。
-export isPackageDir : String -> Eff hostRow Bool
+export isPackageDir : Member nFs FsOp r => String -> Eff r Bool
 isPackageDir path = do
   isDir <- pathExistsDirEff path
   if not isDir then pure False
@@ -114,17 +121,17 @@ isPackageDir path = do
     hasManifest <- pathExistsFileEff "${path}/vuna.toml"
     pure hasManifest
 
-pathExistsDirEff : String -> Eff hostRow Bool
+pathExistsDirEff : Member nFs FsOp r => String -> Eff r Bool
 pathExistsDirEff path = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  if not exists then pure False else raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+  exists <- fsFileExists path
+  if not exists then pure False else fsIsDirectory path
 
-pathExistsFileEff : String -> Eff hostRow Bool
+pathExistsFileEff : Member nFs FsOp r => String -> Eff r Bool
 pathExistsFileEff path = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  exists <- fsFileExists path
   if not exists then pure False
   else do
-    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+    isDir <- fsIsDirectory path
     pure (not isDir)
 
 -- ---------------------------------------------------------------
@@ -138,7 +145,7 @@ pathExistsFileEff path = do
 -- **正例专用**：增量路径（`dtCheckSourceIncremental` / `dtEvalSourceIncremental`）
 -- 只汇总 loader + `dtProgWarnings`，不跑全量路径尾部的 `warnUnusedDefsIn`；负例
 -- 夹具要断言「未使用定义/遮蔽」这类 warning，必须走全量 `checkFile`。
-export checkFileSessioned : IORef Session -> String -> String -> Eff hostRow (Check (List Diagnostic))
+export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check (List Diagnostic))
 checkFileSessioned ref base source = do
   probed <- sessionCheckSample ref base source
   case probed of
@@ -147,7 +154,7 @@ checkFileSessioned ref base source = do
       Just e => pure (ErrC e)
       Nothing => pure (OkC sample.csDiags)
 
-export interpFileSessioned : IORef Session -> String -> String -> Eff hostRow (Check String)
+export interpFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check String)
 interpFileSessioned ref base source = do
   probed <- sessionEvalSample ref base source
   case probed of
@@ -160,7 +167,7 @@ interpFileSessioned ref base source = do
 -- interp
 -- ---------------------------------------------------------------
 -- `vuna interp <file>` 的进程内形态：DT 精化 + 核心求值，返回展示文本。
-export interpFile : String -> Eff hostRow (Check String)
+export interpFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check String)
 interpFile path = do
   ctxR <- contextForFile path
   case ctxR of
@@ -174,7 +181,7 @@ interpFile path = do
 -- `printResult = True` 与 CLI 默认一致（影响 codegen 的入口展示，进输入摘要）。
 -- 归一成 `Check Int`：`OkC (Pair n ds)` 只保留模块数（诊断要么为空，要么调用方
 -- 走负例路径；正例断言只要「编译成功且无诊断」）。
-export compileFile : String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
+export compileFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileFile path outDir = do
   ctxR <- contextForFile path
   case ctxR of
@@ -182,7 +189,7 @@ compileFile path outDir = do
     OkC ctx => compileToDir ctx path True outDir
 
 -- 包目录 compile（`vuna compile <dir> <out>`）：先要求可执行包，再编入口。
-export compilePackageAt : String -> String -> Eff hostRow (Check (Pair Int (List Diagnostic)))
+export compilePackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compilePackageAt dir outDir = do
   pkgR <- loadPackage dir
   case pkgR of
@@ -197,9 +204,9 @@ compilePackageAt dir outDir = do
 -- lint / fix
 -- ---------------------------------------------------------------
 -- `vuna lint <file>` 的进程内形态：返回 findings（顺序与 CLI 打印一致）。
-export lintFile : String -> Eff hostRow (Check (List Finding))
+export lintFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Finding))
 lintFile path = do
-  textR <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+  textR <- fsReadFile path
   looked <- fixitiesForFile emptyFixityEnv path textR
   pure (case secondOf looked of
     ErrC e => ErrC e
@@ -210,7 +217,7 @@ lintFile path = do
 -- 返回（修复数, 新源码）。调用方负责把新源码写回工作副本。
 -- **必须**先取程序级 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新
 -- lint 结果源码，空表会让「已知运算符」退化成 unknown fixity，第二轮起直接放弃修复。
-export fixFile : String -> String -> Eff hostRow (Check (Pair Int String))
+export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int String))
 fixFile path text = do
   looked <- fixitiesForFile emptyFixityEnv path text
   pure (case secondOf looked of

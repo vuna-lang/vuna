@@ -19,7 +19,6 @@ module Vuna.Test.Expect where
 --     相对路径按 caseRel 补前缀。规则唯一，夹具无需改写。
 --   * **平铺**：CLI 在 `--json` 下 `visibleDiags` 不过滤级联，`ErrC` 的诊断与其
 --     children 在同一份文档里是并列条目，投影也平铺一层，顺序与输出一致。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.Nat

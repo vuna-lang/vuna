@@ -29,7 +29,7 @@ module Vuna.Compiler.Driver.Iface where
 -- 必须 bump），模块顺序单独存 `objects/order/<包摘要>`。写侧只写内容变化的模块；读侧
 -- 按地址逐模块读并校验（语义自证 + 调用方哈希链）。
 --
--- 效果显式化：接口对象的读、写、存在性探测全部显式在 `Eff hostRow` 里；纯构造
+-- 效果显式化：接口对象的读、写、存在性探测全部显式在 `Eff r` 里；纯构造
 -- （接口哈希、覆盖性检查、布局计算）保持纯函数。
 import Vuna.Compiler.Canonical.Ast
 import Vuna.Compiler.Canonical.Bytes

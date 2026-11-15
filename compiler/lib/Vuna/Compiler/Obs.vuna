@@ -3,21 +3,20 @@ module Vuna.Compiler.Obs where
 -- Vuna.Compiler.Obs：编译器自身的观测插桩（阶段 span / 计数 / 标记）。
 --
 -- 只是 `Base.Obs` / `Base.Obs.Span` 的**编译器侧适配层**：给 `Check a` 加跨度、给
--- `Eff hostRow` 阶段打瞬时标记。规范见 `docs/reference/observability.md`。
+-- `Eff r` 阶段打瞬时标记。规范见 `docs/reference/observability.md`。
 --
 -- 为什么需要适配层：`Base.Obs.obsSpan` 吃 `Int -> a` thunk，而编译器内部的阶段返回
 -- `Check a`（`OkC` / `ErrC`）。这里把「求值 + 构造 Check」整体放进跨度的 thunk 里，
 -- 错误路径也照样写出带 `args.error` 的 `X` 事件。
--- `Eff hostRow` 的动作不能被纯跨度包住（执行发生在 runner 里），那些边界用
+-- `Eff r` 的动作不能被纯跨度包住（执行发生在 runner 里），那些边界用
 -- `vuna.mark.*` 瞬时标记记录（`obsMark`），时间轴上是零宽度点。
 --
 -- 关闭时全部退化为一次 `Lazy.force` + 直接调用（见规范 §6）。
-import Base.HostRow
 import Base.List
 import Vuna.Compiler.Common
 import Base.Obs
 import Base.Obs.Span
-import Base.Eff
+import Base.Eff.Types
 
 -- ---------------------------------------------------------------
 -- Check 形态的阶段 span
@@ -34,12 +33,12 @@ export obsDefCheck : String -> String -> (Int -> Check a) -> Check a
 obsDefCheck name def f =
   if obsLevel 0 > 1 then @vuna@obs@spanLab name "vuna.def" def (\u => f u) else f 0
 
--- | 带分类的 Effect 阶段标记（`Eff hostRow` 边界用；零宽度 instant）。
-export obsMarkEff : String -> Eff hostRow Int
-obsMarkEff name = raiseToRow hostRow (effPrim (\_ => obsMark name))
+-- | 带分类的 Effect 阶段标记（`Eff r` 边界用；零宽度 instant）。
+export obsMarkEff : {r : Row} -> String -> Eff r Int
+obsMarkEff name = effPrim (\_ => obsMark name)
 
--- | `Eff hostRow` 边界上的计数（`ph:"C"`，`args.value`）：用于缓存命中 / 落盘这类
+-- | `Eff r` 边界上的计数（`ph:"C"`，`args.value`）：用于缓存命中 / 落盘这类
 -- 「发生了几次」的归因。关闭时与 `obsMarkEff` 同口径（一次 `Lazy.force` + 分支）。
 -- 实参 `v` 由调用方给常量，别传 O(n) 表达式（关闭时也不会跳过实参求值）。
-export obsCountEff : String -> Int -> Eff hostRow Int
-obsCountEff name v = raiseToRow hostRow (effPrim (\_ => obsCounter name v))
+export obsCountEff : {r : Row} -> String -> Int -> Eff r Int
+obsCountEff name v = effPrim (\_ => obsCounter name v)

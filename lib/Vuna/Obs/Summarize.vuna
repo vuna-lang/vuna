@@ -27,7 +27,6 @@ module Vuna.Obs.Summarize where
 --
 -- 边界：不排序 `pid`/`tid`（按文件首现顺序处理）；不做跨进程合并（`merge` 属于下一批）；
 -- 缺失 `ts`/`dur` 的事件被跳过（validate 已把它们报成 error，summarize 保持 best-effort）。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.Ord

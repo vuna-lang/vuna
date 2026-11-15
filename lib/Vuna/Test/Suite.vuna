@@ -7,12 +7,14 @@ module Vuna.Test.Suite where
 --   * `[suite]` 只放全局默认（jobs/timeout/name）。
 --
 -- 本模块不做执行；只做「文件/TOML -> List Case」的数据转换（读盘经 Eff，TOML 解析与
--- case 建模保持纯）。对外入口因此是 `Eff hostRow`：`parseSuiteFile` / `discoverCases`。
-import Base.HostRow
+-- case 建模保持纯）。对外入口因此是 `Eff r`：`parseSuiteFile` / `discoverCases`。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args
+import Base.EffEnv
+import Base.EffFs
+import Base.Eff.Types
 
 -- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
 export record SuiteOpts(..) where
@@ -96,20 +98,19 @@ export record Case(..) where
 -- 路径与读盘
 -- ---------------------------------------------------------------
 -- 显式效果遍历（本模块只有 discovery 读盘这一条效果路径；纯 TOML/模型逻辑保持纯）。
-concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
+concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
   ys <- concatMapEff f rest
   pure (append xs ys)
 
-readTextFile : String -> Eff hostRow (Check String)
+readTextFile : Member nFs FsOp r => String -> Eff r (Check String)
 readTextFile path = do
   exists <- pathExistsFile path
   if exists then do
     isDir <- pathExistsDir path
-    if isDir then pure (err "is a directory: ${path}")
-    else fmap OkC (raiseToRow hostRow (@vuna@prim_eff_readFile path))
+    if isDir then pure (err "is a directory: ${path}") else fmap OkC (fsReadFile path)
   else pure (err "no such file: ${path}")
 
 -- suite 文件在 <root>/test/suite.toml；root = 上两级。
@@ -330,7 +331,7 @@ orOpt Nothing b = b
 
 -- 探测夹具 base 名下的全部期望文件：阶段限定后缀优先，裸 `.out`（interp+run
 -- 共享 golden，断言两者一致）与裸 `.err`（check 负例）是兼容形态。
-parseWant : String -> Eff hostRow FixtureWant
+parseWant : Member nFs FsOp r => String -> Eff r FixtureWant
 parseWant base = do
   diag <- firstExisting ["${base}.diag.json"]
   interpOut <- firstExisting ["${base}.interp.out"]
@@ -341,10 +342,8 @@ parseWant base = do
   pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
 -- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
-readExitCode : String -> Eff hostRow Int
-readExitCode path =
-  fmap (\text => parseExitDigits (strUnpack (trim text)) 0 0)
-    (raiseToRow hostRow (@vuna@prim_eff_readFile path))
+readExitCode : Member nFs FsOp r => String -> Eff r Int
+readExitCode path = fmap (\text => parseExitDigits (strUnpack (trim text)) 0 0) (fsReadFile path)
 
 parseExitDigits : List Int -> Int -> Int -> Int
 parseExitDigits [] acc seen = if seen == 0 then 0 else acc
@@ -353,7 +352,7 @@ parseExitDigits (c :: rest) acc seen =
   else if seen == 0 then parseExitDigits rest acc 0 else acc
 
 -- 目录型夹具的期望文件（`expected.diag.json` 是负例唯一载体）。
-dirWant : String -> Eff hostRow FixtureWant
+dirWant : Member nFs FsOp r => String -> Eff r FixtureWant
 dirWant caseDir = do
   diag <- firstExisting ["${caseDir}/expected.diag.json"]
   interpOut <- firstExisting ["${caseDir}/expected.interp.out"]
@@ -363,7 +362,7 @@ dirWant caseDir = do
   sharedOut <- firstExisting ["${caseDir}/expected.out"]
   pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
-firstExisting : List String -> Eff hostRow (Maybe String)
+firstExisting : Member nFs FsOp r => List String -> Eff r (Maybe String)
 firstExisting [] = pure Nothing
 firstExisting (p :: rest) = do
   exists <- pathExistsFile p
@@ -371,7 +370,7 @@ firstExisting (p :: rest) = do
 
 -- 从 want 推导 case。矛盾组合 / family 不允许的阶段显式 Err（→ CBroken）。
 -- `.run.exit` 的读取是建模期唯一的效果；读完后的判定保持纯。
-wantCase : Family -> String -> String -> FixtureWant -> Eff hostRow (Check Case)
+wantCase : Member nFs FsOp r => Family -> String -> String -> FixtureWant -> Eff r (Check Case)
 wantCase family source id want = do
   exitCode <- case want.fwRunExit of
     Just p => readExitCode p
@@ -413,13 +412,13 @@ wantCaseWith family source id want exitCode =
   else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
 
 -- 负例期望路径：`.diag.json`（结构化诊断是唯一真源）。
-expectPath : String -> Eff hostRow String
+expectPath : Member nFs FsOp r => String -> Eff r String
 expectPath base = do
   exists <- pathExistsFile "${base}.diag.json"
   if exists then pure "${base}.diag.json" else pure "${base}.diag.json"
 
 -- 目录型 family：entry 配置时每个子目录一个 case。
-discoverDirFamily : Suite -> Family -> String -> Eff hostRow (List Case)
+discoverDirFamily : Member nFs FsOp r => Suite -> Family -> String -> Eff r (List Case)
 discoverDirFamily suite family entry =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
@@ -427,10 +426,10 @@ discoverDirFamily suite family entry =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+      names <- fsReadDir dir
       concatMapEff (oneDir family dir entry) names
 
-oneDir : Family -> String -> String -> String -> Eff hostRow (List Case)
+oneDir : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (List Case)
 oneDir family dir entry name =
   let
     caseDir = "${dir}/${name}"
@@ -449,7 +448,7 @@ oneDir family dir entry name =
     else pure []
 
 -- 文件型 family：每个 `*.vuna` 一个 case；auto 按磁盘上存在的 `.out`/`.err` 判定。
-discoverFileFamily : Suite -> Family -> Eff hostRow (List Case)
+discoverFileFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverFileFamily suite family =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
@@ -457,7 +456,7 @@ discoverFileFamily suite family =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+      names <- fsReadDir dir
       concatMapEff (oneFile family dir) names
 
 matchesExclude : Family -> String -> Bool
@@ -476,7 +475,7 @@ includeActive family = case family.familyInclude of
   [] => False
   _ => True
 
-oneFile : Family -> String -> String -> Eff hostRow (List Case)
+oneFile : Member nFs FsOp r => Family -> String -> String -> Eff r (List Case)
 oneFile family dir name = if isFixtureName name then if matchesExclude family name then pure []
 else if includeActive family && not (matchesInclude family name) then pure []
 else
@@ -490,7 +489,7 @@ else
     )
 else pure []
 
-fileCase : Family -> String -> String -> String -> Eff hostRow (Check Case)
+fileCase : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (Check Case)
 fileCase family source base rel =
   let
     id = "${family.familySection}/${family.familyName}/${rel}"
@@ -530,7 +529,7 @@ brokenFamilyCase family msg =
     family.familyTags (CBroken msg) family.familyTimeout "e2e"
 
 -- steps 家族：目录里每个 `*.steps` 一个声明式 case（run/expect 指令由 runner 解释）。
-discoverStepsFamily : Suite -> Family -> Eff hostRow (List Case)
+discoverStepsFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverStepsFamily suite family =
   let
     dir = "${suite.suiteRoot}/${family.familyDir}"
@@ -538,13 +537,13 @@ discoverStepsFamily suite family =
     exists <- pathExistsDir dir
     if not exists then pure [brokenFamilyCase family "family dir not found: ${dir}"]
     else do
-      names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+      names <- fsReadDir dir
       concatMapEff (stepCaseOf family dir) names
 
-stepCaseOf : Family -> String -> String -> Eff hostRow (List Case)
+stepCaseOf : Member nFs FsOp r => Family -> String -> String -> Eff r (List Case)
 stepCaseOf family dir name = if not (endsWith ".steps" name) then pure []
 else do
-  text <- raiseToRow hostRow (@vuna@prim_eff_readFile "${dir}/${name}")
+  text <- fsReadFile "${dir}/${name}"
   let
     rel = substring 0 (byteLength name - 6) name
     id = "${family.familySection}/${family.familyName}/${rel}"
@@ -558,7 +557,7 @@ stepsTierOf text =
   else if contains "# tier: integration" text then "integration"
   else if contains "# tier: fast" text then "fast" else "e2e"
 
-discoverFamily : Suite -> Family -> Eff hostRow (List Case)
+discoverFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverFamily suite family = if family.familyKind == "steps" then discoverStepsFamily suite family
 else case family.familyEntry of
   Just entry => discoverDirFamily suite family entry
@@ -567,14 +566,14 @@ else case family.familyEntry of
 -- ---------------------------------------------------------------
 -- 对外入口
 -- ---------------------------------------------------------------
-export parseSuiteFile : String -> Eff hostRow (Check Suite)
+export parseSuiteFile : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Suite)
 parseSuiteFile path = do
-  cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
+  cwd <- envGetCwd
   let
     absPath = if startsWith "/" path then path else "${cwd}/${path}"
   in parseSuiteAt absPath
 
-parseSuiteAt : String -> Eff hostRow (Check Suite)
+parseSuiteAt : Member nFs FsOp r => String -> Eff r (Check Suite)
 parseSuiteAt absPath = do
   contents <- readTextFile absPath
   case contents of
@@ -583,7 +582,7 @@ parseSuiteAt absPath = do
       ErrC e => pure (ErrC e)
       OkC entries => pure (buildSuiteWithEntries absPath entries)
 
-export discoverCases : Suite -> Eff hostRow (List Case)
+export discoverCases : Member nFs FsOp r => Suite -> Eff r (List Case)
 discoverCases suite =
   let
     seedPath = "${suite.suiteRoot}/test/corpus/run/12_fact.vuna"

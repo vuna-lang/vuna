@@ -8,9 +8,13 @@ module Vuna.Repl.Client where
 --
 -- 不加载包上下文（CLI 在解析位置参数之前分流）：客户端只做传输，与仓库/包无关。
 -- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
-import Base.HostRow
 import Vuna.Compiler.Common
 import Vuna.Json.Frame
+import Base.EffConsole
+import Base.EffNet
+import Base.EffStdin
+import Base.Nat
+import Base.Eff.Types
 
 clientChunkSize : Int
 clientChunkSize = 65536
@@ -20,39 +24,39 @@ clientFuelBound : Int
 clientFuelBound = 1073741824
 
 -- 读 stdin 全部字节（一次调用的请求 body）。
-readStdinAll : String -> Int -> Eff hostRow String
+readStdinAll : Member nStdin StdinOp r => String -> Int -> Eff r String
 readStdinAll acc fuel = if fuel <= 0 then pure acc
 else do
-  chunk <- raiseToRow hostRow (@vuna@prim_eff_readBytes clientChunkSize)
+  chunk <- stdinReadBytes (natFromInt clientChunkSize)
   if chunk == "" then pure acc else readStdinAll (acc ++ chunk) (fuel - 1)
 
 -- 从连接读一帧的 body（只处理一个响应；多余字节丢弃）。
-readOneFrame : Int -> String -> Int -> Eff hostRow (Maybe String)
+readOneFrame : Member nNet NetOp r => Int -> String -> Int -> Eff r (Maybe String)
 readOneFrame conn buf fuel = if fuel <= 0 then pure Nothing
 else case splitHeaderBlock buf of
   Just (Pair header rest) => case contentLengthOf header of
     Just len => if strLength rest >= len then pure (Just (substring 0 (natFromInt len) rest))
     else do
-      chunk <- raiseToRow hostRow (@vuna@prim_eff_netRecv conn clientChunkSize)
+      chunk <- netRecv conn clientChunkSize
       if chunk == "" then pure Nothing else readOneFrame conn (rest ++ chunk) (fuel - 1)
     Nothing => pure Nothing
   Nothing => do
-    chunk <- raiseToRow hostRow (@vuna@prim_eff_netRecv conn clientChunkSize)
+    chunk <- netRecv conn clientChunkSize
     if chunk == "" then pure Nothing else readOneFrame conn (buf ++ chunk) (fuel - 1)
 
-export runReplClient : String -> Eff hostRow Int
+export runReplClient : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
 runReplClient addr = do
   body <- readStdinAll "" clientFuelBound
-  conn <- raiseToRow hostRow (@vuna@prim_eff_netConnect addr)
-  _ <- raiseToRow hostRow (@vuna@prim_eff_netSend conn (renderFrameBody body))
+  conn <- netConnect addr
+  _ <- netSend conn (renderFrameBody body)
   resp <- readOneFrame conn "" clientFuelBound
-  _ <- raiseToRow hostRow (@vuna@prim_eff_netClose conn)
+  _ <- netClose conn
   case resp of
     Nothing => do
       _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_eprint "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n")
+        consoleEprint
+          "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n"
       pure 2
     Just body2 => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print "${body2}\n")
+      _ <- consolePrint "${body2}\n"
       pure 0

@@ -16,6 +16,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Intrinsics
+import Base.Eff.Types
 
 -- 解析器递归的显式 fuel（保留 1G，逐点写清楚 measure 与上界）。
 --

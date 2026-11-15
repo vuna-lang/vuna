@@ -60,6 +60,7 @@
 | C48 | `vuna check` 仍会生成整套 codegen 文本再丢弃（`Driver.Dt.checkDtProgramOf` = lowering + `genUnitParts`），冷 `check compiler` 的 codegen 段约 1.4 s 里相当一部分是纯文本拼接 | `compiler/lib/Vuna/Compiler/Driver/Dt.vuna`（`checkDtProgramOf` / `dtCheckScoped`）、`Codegen/Assembly.vuna`（`genUnitParts` 注释「check 路径并丢弃文本」） | 后续（拆「校验 pass / 文本生成 pass」，需先列清哪些诊断确实来自文本生成段） |
 | C49 | 干净模块判定不复验依赖哈希链：`ownCleanInfo` 忽略依赖表参数，真正做 `moduleDepsOk` 的 `cleanModulesGo` **无调用点**（死代码）；依赖包接口变化时本包干净模块的缓存程序不做链校验，靠包级 check 缓存 key（依赖身份摘要）兜底 | `compiler/lib/Vuna/Compiler/Driver/Compile.vuna`（`ownCleanInfo` / `cleanModulesGo`） | 后续（要么删死代码并把链校验前移到 `ownCleanInfo`，要么明确「包级 key 已是唯一判据」） |
 | D84 | `examples/multi` 的包管理冒烟没有 CI 门禁：原 `checks.vuna-package` 在 239f525 被 `vuna-tests-e2e` 取代后未迁移，`nix/checks/vuna-package.sh` 仍在但未登记；现有 gate/e2e/tools tier 与 steps 都不覆盖 `examples/multi` 的 build/test | `nix/checks/default.nix`（无 `vuna-package`）、`nix/checks/vuna-package.sh`（未登记）、`test/suite/steps/28_packages.steps` | 后续（重新登记 check，或把冒烟迁成 steps） |
+| D85 | 模块顺序对象只按包名寻址（`addrOf ["order", pkgKey]`，`pkgKey` = 包名，不含源码/编译器身份），编译器重建或包源码变化后缓存里的「精化顺序」可能与新建 iface 的依赖边不一致，split 串接报 `IC_InvariantViolated: split dependency is not in topological order`；兜底只在 order 缺失时回退全量，不校验顺序本身是否仍与依赖图相容。本地规避是 `vuna clean --store` | `compiler/lib/Vuna/Compiler/Driver/Compile.vuna`（`writeOrderEff` / `readOrderEff` / `depModsByOrderEff`）、`Codegen/Split.vuna`（`canonicalTopo` 断言） | 后续（读侧按依赖图校验，不相容即回退全量） |
 
 ## 效应统一（Eff 已贯通）
 

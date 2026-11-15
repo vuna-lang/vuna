@@ -1,26 +1,27 @@
 module Base.IORef where
 
--- Base.IORef：`Eff []` 内的可变引用。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
+-- Base.IORef：可变引用。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
 --
--- 所有操作返回 `Eff []`，在 `main : Eff [] a` 或 handler 里执行。
--- `modifyRef` 读-改-写一次完成，避免调用方手写 do 时的中间绑定。
-import Base.Eff
+-- `Eff []` 内的本地可变存储（后台机制，**不是**行效应）：四个操作对任意行都可行，
+-- 运行时是恒等 `raise`（与 `Base.Eff.raise` 同语义），因此既能用在纯 `Eff []`，
+-- 也能出现在 `Eff r` 动作里而不必给调用方加 `RefOp` 约束。
+import Base.Eff.Types
 import Base.Monad
 
--- | 创建初值为 `x` 的新引用（`Eff []` 动作）。
-export newRef : a -> Eff [] (IORef a)
-newRef x = @vuna@prim_eff_newRef x
+-- | 创建初值为 `x` 的新引用。
+export newRef : {r : Row} -> a -> Eff r (IORef a)
+newRef x = raise (@vuna@prim_eff_newRef x)
 
 -- | 读取引用当前值。
-export readRef : IORef a -> Eff [] a
-readRef r = @vuna@prim_eff_readRef r
+export readRef : {r : Row} -> IORef a -> Eff r a
+readRef r = raise (@vuna@prim_eff_readRef r)
 
 -- | 写入新值，返回底层原语的 `Int` 结果（写入本身无有意义的返回值，通常忽略）。
-export writeRef : IORef a -> a -> Eff [] Int
-writeRef r v = @vuna@prim_eff_writeRef r v
+export writeRef : {r : Row} -> IORef a -> a -> Eff r Int
+writeRef r v = raise (@vuna@prim_eff_writeRef r v)
 
 -- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
-export modifyRef : IORef a -> (a -> a) -> Eff [] Int
+export modifyRef : {r : Row} -> IORef a -> (a -> a) -> Eff r Int
 modifyRef r f = do
   x <- readRef r
   writeRef r (f x)

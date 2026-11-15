@@ -11,7 +11,6 @@ module Vuna.Compiler.Diag.Format where
 --
 -- 列单位沿用编译器内部约定：1-based，UTF-8 字节（见 `Source`）。JSON 同时给出
 -- 行/列；LSP 适配器负责转 UTF-16。
-import Base.HostRow
 import Base.List
 import Vuna.Compiler.Source
 import Vuna.Compiler.Diag
@@ -19,7 +18,8 @@ import qualified Vuna.Compiler.Diagnostics
 import Base.Nat
 import Base.String
 import Vuna.Compiler.Version
-import Base.Eff
+import Base.Eff.Types
+import Base.EffFs
 
 -- ---------------------------------------------------------------
 -- 名称
@@ -155,20 +155,20 @@ snippetOf sp text =
   in join "\n" ["  --> ${showSpanLoc sp}", gutter, numberRow, caretRow]
 
 -- 文件可读才渲染片段（失败静默退回无片段）。
-renderSnippet : Span -> Eff hostRow String
+renderSnippet : Member nFs FsOp r => Span -> Eff r String
 renderSnippet sp = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists (spanFile sp))
+  exists <- fsFileExists (spanFile sp)
   if exists then do
-    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory (spanFile sp))
+    isDir <- fsIsDirectory (spanFile sp)
     if isDir then pure ""
     else do
-      text <- raiseToRow hostRow (@vuna@prim_eff_readFile (spanFile sp))
+      text <- fsReadFile (spanFile sp)
       pure (snippetOf sp text)
   else pure ""
 
 -- | short 视图的源码片段（结构化：只读 label 的 span，不反解析消息文本）。
 -- 文件不可读/无主 span 时返回空串（与旧行为一致：静默退回无片段）。
-export renderShortSnippetEff : Diagnostic -> Eff hostRow String
+export renderShortSnippetEff : Member nFs FsOp r => Diagnostic -> Eff r String
 renderShortSnippetEff d = case primarySpan d.diagLabels of
   Nothing => pure ""
   Just sp => do
@@ -196,7 +196,7 @@ isContextStyle : LabelStyle -> Bool
 isContextStyle LabelContext = True
 isContextStyle _ = False
 
-relatedBlocks : Maybe Span -> List Label -> Eff hostRow (List String)
+relatedBlocks : Member nFs FsOp r => Maybe Span -> List Label -> Eff r (List String)
 relatedBlocks primary [] = pure []
 relatedBlocks primary ((Label msp text style _) :: rest) = do
   restBlocks <- relatedBlocks primary rest
@@ -215,7 +215,7 @@ relatedBlocks primary ((Label msp text style _) :: rest) = do
           block = join "\n" (filter (\x => x /= "") [sn, note])
         in pure (Base.List.Cons block restBlocks)
 
-renderRelated : Maybe Span -> List Label -> Eff hostRow String
+renderRelated : Member nFs FsOp r => Maybe Span -> List Label -> Eff r String
 renderRelated primary labels = do
   blocks <- relatedBlocks primary labels
   pure (join "\n" (filter (\x => x /= "") blocks))
@@ -256,7 +256,7 @@ headerOf lang d =
   else "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
 
 -- `lang` 只是显式参数（`en` / `zh`）：没有 ambient 语言状态；片段读取是 Eff。
-export renderHuman : String -> Diagnostic -> Eff hostRow String
+export renderHuman : Member nFs FsOp r => String -> Diagnostic -> Eff r String
 renderHuman lang d =
   let
     primary = primarySpan d.diagLabels

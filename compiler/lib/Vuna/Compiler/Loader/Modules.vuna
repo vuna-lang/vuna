@@ -5,7 +5,6 @@ module Vuna.Compiler.Loader.Modules where
 -- 只放：Module / Project / ExportEntry / ExportRef 的类型与访问器、import 表的纯函数
 -- 校验、模块根查找（`findModuleFile`）、模块表与导出表的查询。名字解析在 Resolve，
 -- 导出表计算、加载流程与 flatten 在 Flatten；门面 `Vuna.Compiler.Loader` 重导出这些入口。
-import Base.HostRow
 import Vuna.Compiler.Loader.Diagnostics
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diagnostics.Rn
@@ -15,6 +14,8 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Eq
 import Vuna.Compiler.Packages.Pkg
+import Base.EffFs
+import Base.Eff.Types
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
@@ -337,14 +338,14 @@ rootAllows importerPkg root name = case root.rootExports of
 
 -- 模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
-export collectModuleFiles : List Root -> String -> String -> List (Pair String Root) -> List String -> Eff hostRow (Pair (List (Pair String Root)) (List String))
+export collectModuleFiles : Member nFs FsOp r => List Root -> String -> String -> List (Pair String Root) -> List String -> Eff r (Pair (List (Pair String Root)) (List String))
 collectModuleFiles [] name importerPkg allowed hidden =
   pure (Pair (reverse allowed) (reverse hidden))
 collectModuleFiles (root :: rest) name importerPkg allowed hidden =
   let
     path = modulePath root name
   in do
-    exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+    exists <- fsFileExists path
     if exists then if rootAllows importerPkg root name then collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
     else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
     else collectModuleFiles rest name importerPkg allowed hidden
@@ -359,7 +360,7 @@ candidateDir candidate = rootDir (secondOf candidate)
 withImporterSpan : Span -> Diagnostic -> Diagnostic
 withImporterSpan sp d = if spanFile sp == "" then d else withFallbackSpan sp d
 
-export findModuleFile : List Root -> String -> String -> Span -> Eff hostRow (Check (Pair String Root))
+export findModuleFile : Member nFs FsOp r => List Root -> String -> String -> Span -> Eff r (Check (Pair String Root))
 findModuleFile roots name importerPkg importerSpan = do
   collected <- collectModuleFiles roots name importerPkg [] []
   let

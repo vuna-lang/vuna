@@ -6,16 +6,16 @@ import Base.EffConsole
 import Base.HostRow
 import Base.List
 
-prog : (n : String) -> Eff (Cons n ProcessOp Nil) String
+prog : (n : String) -> Eff (Cons n ProcessOp []) String
 prog n = do
   args <- processArgs@(n)
-  code <- processRunIn@(n) "." ("true" :: [])
+  code <- processRunIn@(n) "." ["true"]
   pure (join "," args ++ "|" ++ strFromInt code)
 
 progReal : Eff hostRow String
 progReal = do
   args <- processArgs
-  code <- processRunIn "." ("true" :: [])
+  code <- processRunIn "." ["true"]
   pure (join "," args ++ "|" ++ strFromInt code)
 
 mret : String -> String
@@ -26,6 +26,8 @@ mopH op k = case op of
   Args => k ("a" :: "b" :: [])
   Exit c => k c
   RunIn dir args => k 3
+  Spawn args => k 9
+  Wait h => k 0
 
 main : Eff hostRow Int
 main = case runPure (handleProcess "mock" mret mopH (prog "mock")) of

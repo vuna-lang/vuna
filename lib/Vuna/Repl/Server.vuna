@@ -17,8 +17,7 @@ module Vuna.Repl.Server where
 -- 协议帧全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
 --
 -- server 模式限制（见 docs/reference/tooling.md）：server 模式下 `:!` 与效果表达式
--- （`main : Eff hostRow a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
-import Base.HostRow
+-- （`main : Eff r a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Compiler.Version
@@ -28,6 +27,15 @@ import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
 import Base.IORef
+import Base.EffConsole
+import Base.EffFs
+import Base.EffNet
+import Base.Eff.Types
+import Base.EffArgs
+import Base.EffClock
+import Base.EffEnv
+import Base.EffExit
+import Base.EffProcess
 
 -- 地址校验（CLI 层）：只接受本机端点。
 export checkReplAddr : String -> Check String
@@ -38,13 +46,13 @@ checkReplAddr addr =
     "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
 
 -- server 诊断（stderr；stdout 只留给 `listening` 行）。
-serverLog : String -> ReplState -> Eff hostRow ReplState
+serverLog : Member nConsole ConsoleOp r => String -> ReplState -> Eff r ReplState
 serverLog m st = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_eprint "[vuna-repl-server] ${m}\n")
+  _ <- consoleEprint "[vuna-repl-server] ${m}\n"
   pure st
 
 -- 传输告警：写 stderr 日志，并回 `-32700` 让客户端不会空等（LSP 的策略是丢帧不回）。
-replWarn : String -> ReplState -> Eff hostRow (Pair ReplState (List Json))
+replWarn : Member nConsole ConsoleOp r => String -> ReplState -> Eff r (Pair ReplState (List Json))
 replWarn m st = do
   st2 <- serverLog m st
   pure (Pair st2 [responseErr JNull errParse "parse error / bad frame: ${m}"])
@@ -67,7 +75,7 @@ data FeedResult : Type where
   FeedContinue : ReplState -> FeedResult
   FeedExit : FeedResult
 
-feedLines : ReplState -> List String -> Eff hostRow FeedResult
+feedLines : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> List String -> Eff r FeedResult
 feedLines st [] = pure (FeedContinue st)
 feedLines st (line :: rest) = do
   outcome <- inputStep st line
@@ -76,7 +84,7 @@ feedLines st (line :: rest) = do
     ReplContinue st2 => feedLines st2 rest
 
 -- `eval`：code（必需）+ close（可选，默认 true）。
-evalRequest : Json -> ReplState -> Eff hostRow (Pair Bool (Pair ReplState (List Json)))
+evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
 evalRequest msg st = case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
   Nothing =>
     pure
@@ -113,7 +121,7 @@ pingRequest msg st =
   in Pair False (Pair st [responseOk (idOf msg) (replResult "ok" True text "")])
 
 -- 请求分发；未知方法回 `-32601`（不结束进程）。
-handleRequest : Json -> ReplState -> Eff hostRow (Pair Bool (Pair ReplState (List Json)))
+handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
 handleRequest msg st = case methodOf msg of
   Nothing => pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
   Just m => case m of
@@ -125,22 +133,20 @@ handleRequest msg st = case methodOf msg of
         (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
 
 -- 就绪行里显示的地址：`tcp:...:0` 换成实际绑定的临时端口。
-listeningText : String -> Int -> Eff hostRow String
+listeningText : Member nNet NetOp r => String -> Int -> Eff r String
 listeningText addr h = do
-  port <- raiseToRow hostRow (@vuna@prim_eff_netPort h)
+  port <- netPort h
   pure
     (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 unixPathOf : String -> String
 unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
 
-cleanupAddr : String -> Eff hostRow Int
-cleanupAddr addr =
-  if startsWith "unix:" addr then raiseToRow hostRow (@vuna@prim_eff_removeFile (unixPathOf addr))
-  else pure 0
+cleanupAddr : Member nFs FsOp r => String -> Eff r Int
+cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr) else pure 0
 
 -- CLI 入口：起 session → listen → 打印就绪行 → accept 循环（每个连接一个会话切片）。
-export runReplServer : PackageContext -> ReplStart -> String -> Eff hostRow Int
+export runReplServer : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => PackageContext -> ReplStart -> String -> Eff r Int
 runReplServer ctx start addr = do
   outRef <- newRef ""
   errRef <- newRef ""
@@ -150,29 +156,27 @@ runReplServer ctx start addr = do
     session <- startReplSession ctx start sink
     case session of
       ErrC e => do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_eprint "[vuna-repl-server] ${diagText e}\n")
+        _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
         pure 2
       OkC (Pair st0 _) => do
-        h <- raiseToRow hostRow (@vuna@prim_eff_netListen addr)
+        h <- netListen addr
         ready <- listeningText addr h
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "listening ${ready}\n")
+        _ <- consolePrint "listening ${ready}\n"
         acceptLoop serverFuelBound addr h st0
 
 -- 连接循环是无限状态机：显式 fuel 守卫（1G 个连接）。
 serverFuelBound : Int
 serverFuelBound = 1073741824
 
-acceptLoop : Int -> String -> Int -> ReplState -> Eff hostRow Int
+acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Int -> String -> Int -> ReplState -> Eff r Int
 acceptLoop fuel addr h st = if fuel <= 0 then pure 0
 else do
-  conn <- raiseToRow hostRow (@vuna@prim_eff_netAccept h)
-  outcome <-
-    serveConnection (\n => raiseToRow hostRow (@vuna@prim_eff_netRecv conn n))
-      (\s => raiseToRow hostRow (@vuna@prim_eff_netSend conn s)) replWarn handleRequest st
-  _ <- raiseToRow hostRow (@vuna@prim_eff_netClose conn)
+  conn <- netAccept h
+  outcome <- serveConnection (\n => netRecv conn n) (\s => netSend conn s) replWarn handleRequest st
+  _ <- netClose conn
   case firstOf outcome of
     ExitRequested => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_netClose h)
+      _ <- netClose h
       _ <- cleanupAddr addr
       pure 0
     ExitClosed => acceptLoop (fuel - 1) addr h (secondOf outcome)

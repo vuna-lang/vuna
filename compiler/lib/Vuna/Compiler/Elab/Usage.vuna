@@ -157,7 +157,7 @@ checkTerm ec sp env t = case t of
   TProj base c tele i fi => checkTerm ec sp env base
   TRecUpd base c tele idxs body =>
     Vuna.Compiler.Common.step (checkTerm ec sp env base)
-      (\ub => \ec1 => Vuna.Compiler.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => OkC (Pair (uAdd ub ua) ec2)))
+      (\ub => \ec1 => Vuna.Compiler.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => Vuna.Compiler.Common.step (checkAltBinders ec2 sp tele ua) (\outer => \ec3 => OkC (Pair (uAdd ub outer) ec3))))
   TCase scrut alts =>
     Vuna.Compiler.Common.step (checkTerm ec sp env scrut)
       (\us => \ec1 => Vuna.Compiler.Common.step (checkAlts ec1 sp env alts) (\ua => \ec2 => OkC (Pair (uAdd us ua) ec2)))

@@ -27,6 +27,7 @@ import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Erase
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
+import Base.Eff.Types
 
 -- ---------------------------------------------------------------
 -- 生成环境

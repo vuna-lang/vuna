@@ -21,7 +21,6 @@ module Vuna.Obs where
 --
 -- 范围（规范 §7）：`run` / `summarize` / `validate` / `convert` / `render` / `merge` /
 -- `symbols` / `serve --cdp`。未知子命令仍回可操作错误 + 退出码 2（不静默 unknown）。
-import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Json
@@ -34,9 +33,16 @@ import Vuna.Obs.Serve
 import Vuna.Obs.Summarize
 import Vuna.Obs.Symbols
 import Vuna.Obs.Validate
+import Base.EffConsole
+import Base.Eff.Types
+import Base.EffClock
+import Base.EffEnv
+import Base.EffFs
+import Base.EffNet
+import Base.EffProcess
 
 -- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
-export runObs : List String -> Eff hostRow Int
+export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
 runObs args = case args of
   [] => obsUsage
   sub :: rest => case sub of
@@ -49,9 +55,7 @@ runObs args = case args of
     "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
     "serve" => Vuna.Obs.Serve.runObsServe rest
     _ => do
-      _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_print "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}")
+      _ <- consolePrint "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}"
       pure 2
 
 obsUsageText : String
@@ -66,15 +70,15 @@ obsUsageText = """usage:
   vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 """
 
-obsUsage : Eff hostRow Int
+obsUsage : Member nConsole ConsoleOp r => Eff r Int
 obsUsage = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print obsUsageText)
+  _ <- consolePrint obsUsageText
   pure 2
 
 -- ---------------------------------------------------------------
 -- validate
 -- ---------------------------------------------------------------
-obsValidateArgs : List String -> Eff hostRow Int
+obsValidateArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
   ErrC e => obsError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -82,7 +86,7 @@ obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
     [] => obsError "usage: vuna obs validate TRACE"
     _ => obsError "usage: vuna obs validate TRACE (exactly one trace)"
 
-obsValidateFile : String -> Eff hostRow Int
+obsValidateFile : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
 obsValidateFile path = do
   reportR <- validateTraceFile path
   case reportR of
@@ -92,25 +96,25 @@ obsValidateFile path = do
       errors <- pure (countErrors report)
       if errors > 0 then do
         _ <-
-          raiseToRow hostRow
-            (@vuna@prim_eff_print "error: ${strFromInt errors} error(s), ${strFromInt (countWarnings report)} warning(s) (${path})\n")
+          consolePrint
+            "error: ${strFromInt errors} error(s), ${strFromInt (countWarnings report)} warning(s) (${path})\n"
         pure 1
       else do
         _ <-
-          raiseToRow hostRow
-            (@vuna@prim_eff_print "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n")
+          consolePrint
+            "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n"
         pure 0
 
-printIssues : List ValidateIssue -> Eff hostRow Int
+printIssues : Member nConsole ConsoleOp r => List ValidateIssue -> Eff r Int
 printIssues [] = pure 0
 printIssues (i :: rest) = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${issueText i}\n")
+  _ <- consolePrint "${issueText i}\n"
   printIssues rest
 
 -- ---------------------------------------------------------------
 -- summarize
 -- ---------------------------------------------------------------
-obsSummarizeArgs : List String -> Eff hostRow Int
+obsSummarizeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsSummarizeArgs args = case parseToolArgs "vuna obs summarize" [BoolFlag "json", ValueFlag "baseline", ValueFlag "threshold"] args of
   ErrC e => obsError (diagText e)
   OkC parsed => case thresholdOf parsed of
@@ -141,7 +145,7 @@ parseDigits (c :: rest) acc neg =
   if c == 45 && not neg then parseDigits rest acc True
   else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
 
-baselineOf : Parsed -> Eff hostRow (Check (Maybe ObsSummary))
+baselineOf : Member nFs FsOp r => Parsed -> Eff r (Check (Maybe ObsSummary))
 baselineOf parsed = case flagValue parsed "baseline" of
   Nothing => pure (OkC Nothing)
   Just path => do
@@ -151,7 +155,7 @@ baselineOf parsed = case flagValue parsed "baseline" of
       OkC trace => pure (OkC (Just (summarizeTrace trace)))
 
 -- 无 TRACE 时用法错误（见调用方）；多个 TRACE 逐个输出，任一退出非 0 就停（不吞错误）。
-summarizeTraces : Parsed -> Int -> Maybe ObsSummary -> List String -> Eff hostRow Int
+summarizeTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> List String -> Eff r Int
 summarizeTraces parsed threshold base [] = pure 0
 summarizeTraces parsed threshold base (path :: rest) = do
   traceR <- readTraceFull path
@@ -161,7 +165,7 @@ summarizeTraces parsed threshold base (path :: rest) = do
       code <- emitSummary parsed threshold base path (summarizeTrace trace)
       if code /= 0 then pure code else summarizeTraces parsed threshold base rest
 
-emitSummary : Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff hostRow Int
+emitSummary : Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff r Int
 emitSummary parsed threshold base path summary = case base of
   Nothing => if flagSet parsed "json" then do
     _ <- obsLine (renderJson (summaryJson summary))
@@ -174,11 +178,11 @@ emitSummary parsed threshold base path summary = case base of
     pure 0
   Just baseSummary => emitDelta parsed threshold baseSummary path summary
 
-emitDelta : Parsed -> Int -> ObsSummary -> String -> ObsSummary -> Eff hostRow Int
+emitDelta : Member nConsole ConsoleOp r => Parsed -> Int -> ObsSummary -> String -> ObsSummary -> Eff r Int
 emitDelta parsed threshold baseSummary path summary =
   emitDeltaGo parsed threshold summary path (diffSummaries baseSummary summary)
 
-emitDeltaGo : Parsed -> Int -> ObsSummary -> String -> List StageDelta -> Eff hostRow Int
+emitDeltaGo : Member nConsole ConsoleOp r => Parsed -> Int -> ObsSummary -> String -> List StageDelta -> Eff r Int
 emitDeltaGo parsed threshold summary path deltas =
   let
     maxPct = maxAbsDeltaPct deltas
@@ -192,13 +196,12 @@ emitDeltaGo parsed threshold summary path deltas =
     _ <- printRows rows
     if exceeds then do
       _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_print "error: regression exceeds --threshold ${strFromInt threshold}% (max ${strFromInt maxPct}%)\n")
+        consolePrint
+          "error: regression exceeds --threshold ${strFromInt threshold}% (max ${strFromInt maxPct}%)\n"
       pure 1
     else do
       _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_print "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n")
+        consolePrint "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n"
       pure 0
 
 -- `--json` + `--baseline`：在标准摘要上再嵌一个 `baseline` 字段（仍是单行 JSON）。
@@ -207,19 +210,19 @@ summaryWithBaselineJson summary deltas = case summaryJson summary of
   JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
   other => other
 
-printRows : List String -> Eff hostRow Int
+printRows : Member nConsole ConsoleOp r => List String -> Eff r Int
 printRows [] = pure 0
 printRows (row :: rest) = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${row}\n")
+  _ <- consolePrint "${row}\n"
   printRows rest
 
-obsLine : String -> Eff hostRow Int
-obsLine s = raiseToRow hostRow (@vuna@prim_eff_print "${s}\n")
+obsLine : Member nConsole ConsoleOp r => String -> Eff r Int
+obsLine s = fmap natToInt (consolePrint "${s}\n")
 
 -- ---------------------------------------------------------------
 -- 错误出口（用法/前提 = 退出码 2）
 -- ---------------------------------------------------------------
-obsError : String -> Eff hostRow Int
+obsError : Member nConsole ConsoleOp r => String -> Eff r Int
 obsError e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure 2

@@ -22,7 +22,6 @@ module Vuna.Obs.Convert where
 -- 避免逐行拼 stdout 的额外拷贝。
 --
 -- 边界：cpu 采样为空是**语义失败**（退出码 1），不是「成功但空文件」。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.String
@@ -32,6 +31,10 @@ import Vuna.Json
 import Vuna.Obs.Flame
 import Vuna.Obs.Read
 import Vuna.Obs.Types
+import Base.EffConsole
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffProcess
 
 -- ---------------------------------------------------------------
 -- 选项
@@ -67,7 +70,7 @@ outOf parsed = case flagValue parsed "out" of
 -- ---------------------------------------------------------------
 -- | `vuna obs convert` 的入口：解析 `--to` / `--out` 与单个 TRACE。
 -- 用法/读盘错误退出码 2，无 cpu 采样退出码 1。
-export runObsConvert : List String -> Eff hostRow Int
+export runObsConvert : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsConvert args = case parseToolArgs "vuna obs convert" [ValueFlag "to", ValueFlag "out"] args of
   ErrC e => convertFail 2 (diagText e)
   OkC parsed => case convertOptsOf parsed of
@@ -80,7 +83,7 @@ runObsConvert args = case parseToolArgs "vuna obs convert" [ValueFlag "to", Valu
 convertUsage : String
 convertUsage = "usage: vuna obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
 
-convertTrace : ConvertOpts -> String -> Eff hostRow Int
+convertTrace : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => ConvertOpts -> String -> Eff r Int
 convertTrace opts path = do
   traceR <- readTraceFull path
   case traceR of
@@ -89,19 +92,19 @@ convertTrace opts path = do
       ErrC e => convertFail 1 (diagText e)
       OkC content => emitContent opts.convertOut content
 
-convertFail : Int -> String -> Eff hostRow Int
+convertFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
 convertFail code e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure code
 
-emitContent : Maybe String -> String -> Eff hostRow Int
+emitContent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> String -> Eff r Int
 emitContent Nothing content = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print content)
+  _ <- consolePrint content
   pure 0
 emitContent (Just path) content = do
   _ <- ensureDirPath (parentOf path)
-  _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path content)
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${path}\n")
+  _ <- fsWriteFile path content
+  _ <- consolePrint "wrote ${path}\n"
   pure 0
 
 -- ---------------------------------------------------------------

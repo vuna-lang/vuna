@@ -6,7 +6,6 @@ module Vuna.Compiler.Loader.Flatten where
 -- 导出表，再按 import 图递归加载（含隐式 Prelude）。
 -- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
 -- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
-import Base.HostRow
 import Base.List
 import Vuna.Compiler.Addr
 import Vuna.Compiler.Canonical.Bytes
@@ -28,6 +27,10 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Packages.Pkg
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffEnv
+import Base.EffProcess
 
 -- imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
@@ -51,7 +54,7 @@ lexCacheSchema = "vuna-lex-cache 1"
 lexCacheCodec : String
 lexCacheCodec = "lex-tokens 1"
 
--- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff hostRow` 里；
+-- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff r` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。
 --
 -- 寻址：`objects/lex/<输入摘要>`，输入摘要 = schema + codec + **源内容地址**。
@@ -61,7 +64,7 @@ lexAddrOf : String -> String
 lexAddrOf src = addrOf ["lex", lexCacheSchema, lexCacheCodec, contentAddress src]
 
 -- | 读 lex 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 lex）。
-readLexCache : String -> Eff hostRow (Maybe (List PTok))
+readLexCache : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List PTok))
 readLexCache addr = do
   payload <- storeObjectReadEff "lex" lexCacheCodec addr
   pure (case payload of
@@ -70,11 +73,11 @@ readLexCache addr = do
   )
 
 -- | 写 lex 缓存（目录由 `Store` 建；原子写由 `Store` 负责）。
-storeLexCache : String -> List PTok -> Eff hostRow Int
+storeLexCache : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List PTok -> Eff r Int
 storeLexCache addr toks = storeObjectWriteEff "lex" lexCacheCodec addr (encTop encPTokList toks)
 
 -- | 解析一个源文件（带 lex 缓存）。所有加载路径都走这里。
-export parseFileWithPath : String -> String -> Eff hostRow (Check SourceFile)
+export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check SourceFile)
 parseFileWithPath path src = do
   let
     addr = lexAddrOf src
@@ -86,7 +89,7 @@ parseFileWithPath path src = do
 
 -- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
 -- 与 parse 是否成功无关，错文件下次也能省掉 lex。
-lexAndStore : String -> String -> String -> Eff hostRow (Check SourceFile)
+lexAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Check SourceFile)
 lexAndStore addr path src = case lexSource src of
   ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
   OkC toks => do
@@ -543,13 +546,13 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 的 Prelude 不算候选（`implicitPreludeDeps` 按包名过滤）。
 -- ad-hoc（importerPkg==""）同样是包上下文（base-only）：自动注入 base 的 Prelude；
 -- 没有 base 依赖的包没有候选，于是不注入。
-export implicitPrelude : List Root -> String -> String -> List Import -> Eff hostRow (Check (List Import))
+export implicitPrelude : Member nFs FsOp r => List Root -> String -> String -> List Import -> Eff r (Check (List Import))
 implicitPrelude roots importerPkg currentName imports =
   if currentName == "Prelude" then pure (OkC [])
   else if memName "Prelude" (importModuleNames imports) then pure (OkC [])
   else implicitPreludeFrom roots importerPkg
 
-implicitPreludeFrom : List Root -> String -> Eff hostRow (Check (List Import))
+implicitPreludeFrom : Member nFs FsOp r => List Root -> String -> Eff r (Check (List Import))
 implicitPreludeFrom roots importerPkg = do
   collected <- collectModuleFiles roots "Prelude" importerPkg [] []
   let
@@ -569,7 +572,7 @@ withImportSpan : Import -> Diagnostic -> Diagnostic
 withImportSpan imp e =
   if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
 
-loadAll : Int -> List Root -> String -> List Module -> List String -> List Import -> Eff hostRow (Check (List Module))
+loadAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> List Import -> Eff r (Check (List Module))
 loadAll fuel roots importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
 else case imports of
   [] => pure (OkC modules)
@@ -579,7 +582,7 @@ else case imports of
       ErrC e => pure (ErrC e)
       OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
-loadModule : Int -> List Root -> String -> List Module -> List String -> Import -> Eff hostRow (Check (List Module))
+loadModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> Import -> Eff r (Check (List Module))
 loadModule fuel roots importerPkg modules stack imp =
   let
     name = importName imp
@@ -598,7 +601,7 @@ loadModule fuel roots importerPkg modules stack imp =
             root = secondOf found
             _ = dbg! "parse-module=${name}"
           in do
-            text <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+            text <- fsReadFile path
             parsed <- parseFileWithPath path text
             case parsed of
               ErrC e => pure (ErrC e)
@@ -630,18 +633,18 @@ loadModule fuel roots importerPkg modules stack imp =
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
 -- loadProject 返回 flatten 前的形态（入口声明 + 依赖模块列表），供分离编译使用。
-export loadProject : PackageContext -> String -> Eff hostRow (Check Project)
+export loadProject : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check Project)
 loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 
 -- 接口模式加载。`preloaded` 是依赖包里**已解析**的模块（来自模块接口），
 -- 加载器把它们当「已加载模块」直接命中：不读源码、不 parse、不算导出表。本包模块与入口
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
-export loadProjectWithPreloaded : PackageContext -> String -> List Module -> Eff hostRow (Check Project)
+export loadProjectWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List Module -> Eff r (Check Project)
 loadProjectWithPreloaded ctx entry preloaded = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists entry)
+  exists <- fsFileExists entry
   if exists then do
-    text <- raiseToRow hostRow (@vuna@prim_eff_readFile entry)
+    text <- fsReadFile entry
     parsed <- parseFileWithPath entry text
     case parsed of
       ErrC e => pure (ErrC e)
@@ -666,10 +669,10 @@ loadProjectWithPreloaded ctx entry preloaded = do
   else pure (ldErr1 (EntryFileNotFound entry) entry)
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
-export loadProjectModules : PackageContext -> List String -> Eff hostRow (Check Project)
+export loadProjectModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check Project)
 loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 
-export loadProjectModulesWithPreloaded : PackageContext -> List String -> List Module -> Eff hostRow (Check Project)
+export loadProjectModulesWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List Module -> Eff r (Check Project)
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
     entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
@@ -683,11 +686,11 @@ loadProjectModulesWithPreloaded ctx names preloaded =
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
-export loadProjectSource : PackageContext -> String -> String -> Eff hostRow (Check Project)
+export loadProjectSource : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check Project)
 loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label source []
 
 -- | 入口以源码字符串给出，依赖包模块可预置（零 parse）。
-export loadProjectSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff hostRow (Check Project)
+export loadProjectSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
 loadProjectSourceWithPreloaded ctx label source preloaded = do
   parsed <- parseFileWithPath label source
   case parsed of
@@ -716,11 +719,11 @@ loadProjectSourceWithPreloaded ctx label source preloaded = do
 -- 把该模块本身作为合成的 `Module` 放进 Project，再交给 `resolveProject` 做名字解析；
 -- 无模块头时退化为入口语义（与 `loadProjectSource` 相同）。
 -- 入口声明保持为空：调用方只需要逐模块已解析的声明。
-export loadModuleSource : PackageContext -> String -> String -> Eff hostRow (Check Project)
+export loadModuleSource : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check Project)
 loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label source []
 
 -- 依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
-export loadModuleSourceWithPreloaded : PackageContext -> String -> String -> List Module -> Eff hostRow (Check Project)
+export loadModuleSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
 loadModuleSourceWithPreloaded ctx label source preloaded = do
   parsed <- parseFileWithPath label source
   case parsed of
@@ -757,8 +760,8 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
 -- 但 fixity **声明表必须按文件重算**（local + 该文件自己的 import 闭包）——不同文件的
 -- imports 不同，跨文件复用声明表会让 fmt 给 `::`/`+` 等打出错误的括号。
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
--- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff hostRow`；声明表计算保持纯。
-export fixitiesForSourceIn : PackageContext -> List Module -> String -> String -> Eff hostRow (Check (Pair (List Module) (List FixityDecl)))
+-- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff r`；声明表计算保持纯。
+export fixitiesForSourceIn : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> String -> Eff r (Check (Pair (List Module) (List FixityDecl)))
 fixitiesForSourceIn ctx modules0 label source = do
   parsed <- parseFileWithPath label source
   case parsed of
@@ -798,7 +801,7 @@ fixitiesForSourceIn ctx modules0 label source = do
               )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
-export fixitiesForSource : PackageContext -> String -> String -> Eff hostRow (Check (List FixityDecl))
+export fixitiesForSource : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check (List FixityDecl))
 fixitiesForSource ctx label source = do
   pairR <- fixitiesForSourceIn ctx [] label source
   pure (case pairR of

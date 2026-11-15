@@ -47,12 +47,16 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args 有带行
   handler，Ref/Net 直调带行原语（`beRunHost=""`）；夹具 90–94。`runPure` 只收 Nil
   （纯性负例：`runPure (consolePrint ...)` → `TC_UnhandledEffects`）。
-- **编译器与工具链的 IO 带行**：行别名 `Base.HostRow.hostRow` + 两个入口带行，
-  `raise`/`raiseToRow` 桥接；`compiler/lib`、`base`、`lib` 工具链的 IO 叶子全部带行；
-  `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。宿主原语是
-  `@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，源码写不出
-  可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
-### 2.2 四层边界
+- **编译器与工具链的 IO 走 labeled 效应**：叶子统一用 `Base.Eff.*` labeled sender
+  （`consolePrint` / `fsReadFile` / `processSpawn` / `clockNow` / `envGetEnv` …），签名按
+  实际用到的标签写 `Member nX XOp r`（`nX` 可省略，由精化器补隐式实例名）；纯逻辑保持纯，
+  `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
+  `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Eff.Types` 只重导出
+  类型面（`Eff` / `Row` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与 `List.Cons`
+  的 `::` 歧义；`Base.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
+  `Base.HostRow.hostRow` / `hostTail` 只保留给内建 `effTimeUs` 的 intrinsic 类型。
+  宿主原语是 `@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
+  源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 
 | 层 | 类型/入口 | 说明 |
 | --- | --- | --- |

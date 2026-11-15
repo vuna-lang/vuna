@@ -45,7 +45,6 @@ module Vuna.Obs.Serve where
 -- `--allow-slow` 接受并**忽略**（当前无效果）：本子命令没有墙钟阈值，离线换算一份 trace
 -- 的耗时由输入大小决定；保留 flag 只为固定命令行形状，避免以后加阈值时再造一个新参数名。
 -- 文档 §7 写明它目前无效果。
-import Base.HostRow
 import Base.List
 import Base.Pair
 import Base.String
@@ -57,6 +56,11 @@ import Vuna.Json.Server
 import Vuna.Obs.Convert
 import Vuna.Obs.Read
 import Vuna.Obs.Types
+import Base.EffClock
+import Base.EffConsole
+import Base.EffFs
+import Base.EffNet
+import Base.Eff.Types
 
 -- JSON-RPC 2.0 保留的 server-error 区间起点（内容性失败：没有采样 / 没 start 就 stop）。
 errServer : Int
@@ -86,7 +90,7 @@ export record ServeState(..) where
 -- 入口
 -- ---------------------------------------------------------------
 -- | `vuna obs serve` 的入口；参数/输入前提错误退出码 2。
-export runObsServe : List String -> Eff hostRow Int
+export runObsServe : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => List String -> Eff r Int
 runObsServe args = case parseToolArgs "vuna obs serve" [ValueFlag "cdp", BoolFlag "allow-slow"] args of
   ErrC e => serveFail 2 (diagText e)
   OkC parsed => case flagValue parsed "cdp" of
@@ -97,7 +101,7 @@ runObsServe args = case parseToolArgs "vuna obs serve" [ValueFlag "cdp", BoolFla
 
 -- 启动：先按命令行顺序读入全部 TRACE（失败即退出 2，不进入监听），再 listen + 就绪行 +
 -- accept 一个连接。`--allow-slow` 目前无效果（见模块头），没有分支读它。
-serveStart : List String -> String -> Eff hostRow Int
+serveStart : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => List String -> String -> Eff r Int
 serveStart paths addr = do
   tracesR <- readServeTraces paths
   case tracesR of
@@ -106,9 +110,9 @@ serveStart paths addr = do
       let
         targetPid = targetPidOf traces
       in do
-        h <- raiseToRow hostRow (@vuna@prim_eff_netListen addr)
+        h <- netListen addr
         ready <- listeningText addr h
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "listening ${ready}\n")
+        _ <- consolePrint "listening ${ready}\n"
         serveOne (ServeState (concatRows traces) False 0 0 targetPid Nothing) addr h
 
 -- 地址校验（规则与 REPL server 一致：只允许本机端点）。
@@ -121,10 +125,10 @@ checkCdpAddr addr =
 
 -- 逐份读入 trace；任一失败即停（错误带路径前缀，不静默跳过坏输入）。空 trace（没有事件）
 -- 是**前提**失败（没有可换算的数据源），按文档规则退出 2。
-readServeTraces : List String -> Eff hostRow (Check (List ObsTrace))
+readServeTraces : Member nFs FsOp r => List String -> Eff r (Check (List ObsTrace))
 readServeTraces paths = readServeTracesGo paths []
 
-readServeTracesGo : List String -> List ObsTrace -> Eff hostRow (Check (List ObsTrace))
+readServeTracesGo : Member nFs FsOp r => List String -> List ObsTrace -> Eff r (Check (List ObsTrace))
 readServeTracesGo [] acc = pure (OkC (reverse acc))
 readServeTracesGo (path :: rest) acc = do
   traceR <- readTraceFull path
@@ -157,43 +161,39 @@ eventPidOf ((Pair _ ev) :: _) = eventPid ev
 -- 单连接循环
 -- ---------------------------------------------------------------
 -- accept 一个连接 → `serveConnection` 逐帧分发 → 清理 → 按状态映射退出码。
-serveOne : ServeState -> String -> Int -> Eff hostRow Int
+serveOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => ServeState -> String -> Int -> Eff r Int
 serveOne st0 addr h = do
-  conn <- raiseToRow hostRow (@vuna@prim_eff_netAccept h)
-  outcome <-
-    serveConnection (\n => raiseToRow hostRow (@vuna@prim_eff_netRecv conn n))
-      (\s => raiseToRow hostRow (@vuna@prim_eff_netSend conn s)) cdpWarn handleCdp st0
-  _ <- raiseToRow hostRow (@vuna@prim_eff_netClose conn)
-  _ <- raiseToRow hostRow (@vuna@prim_eff_netClose h)
+  conn <- netAccept h
+  outcome <- serveConnection (\n => netRecv conn n) (\s => netSend conn s) cdpWarn handleCdp st0
+  _ <- netClose conn
+  _ <- netClose h
   _ <- cleanupAddr addr
   let
     final = secondOf outcome
   in case firstOf outcome of
     ExitFatal msg => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_eprint "[vuna-obs-cdp] ${msg}\n")
+      _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
       pure 2
     _ => pure (if final.serveFailures > 0 then 1 else 0)
 
 -- 就绪行里显示的地址：`tcp:...:0` 换成实际绑定的临时端口（与 REPL server 的约定一致，
 -- 便于脚本 / 桥用 `tcp:127.0.0.1:0` 后从就绪行解析真实端口）。
-listeningText : String -> Int -> Eff hostRow String
+listeningText : Member nNet NetOp r => String -> Int -> Eff r String
 listeningText addr h = do
-  port <- raiseToRow hostRow (@vuna@prim_eff_netPort h)
+  port <- netPort h
   pure
     (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 unixPathOf : String -> String
 unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
 
-cleanupAddr : String -> Eff hostRow Int
-cleanupAddr addr =
-  if startsWith "unix:" addr then raiseToRow hostRow (@vuna@prim_eff_removeFile (unixPathOf addr))
-  else pure 0
+cleanupAddr : Member nFs FsOp r => String -> Eff r Int
+cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr) else pure 0
 
 -- 传输告警：stderr 一行诊断 + 回 `-32700`，让客户端不会空等（LSP 的策略是丢帧不回）。
-cdpWarn : String -> ServeState -> Eff hostRow (Pair ServeState (List Json))
+cdpWarn : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> ServeState -> Eff r (Pair ServeState (List Json))
 cdpWarn m st = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_eprint "[vuna-obs-cdp] ${m}\n")
+  _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
   pure (Pair st [responseErr JNull errParse "parse error / bad frame: ${m}"])
 
 -- ---------------------------------------------------------------
@@ -201,7 +201,7 @@ cdpWarn m st = do
 -- ---------------------------------------------------------------
 -- 未知方法回 `-32601`（不结束进程）。本子命令没有「请求退出」的帧：
 -- 客户端断开 / 传输层致命错误才结束。
-handleCdp : Json -> ServeState -> Eff hostRow (Pair Bool (Pair ServeState (List Json)))
+handleCdp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
 handleCdp msg st = case methodOf msg of
   Nothing => pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
   Just "Profiler.enable" => pure (Pair False (Pair st [responseOk (idOf msg) (JObj [])]))
@@ -222,16 +222,16 @@ resetStart : ServeState -> ServeState
 resetStart st = { st | serveStarted = False }
 
 -- `Profiler.start`：只记 startTimestamp（离线语义：不附加、不采样正在运行的进程）。
-profilerStart : Json -> ServeState -> Eff hostRow (Pair Bool (Pair ServeState (List Json)))
+profilerStart : Member nFs FsOp r, Member nClock ClockOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
 profilerStart msg st = do
-  now <- effTimeUs
+  now <- clockNow
   let
     st2 = { st | serveStarted = True, serveStartTs = now }
   in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [])]))
 
 -- `Profiler.stop`：整份 trace 的 CPU 采样 → CDP Profile（`Convert.cpuProfileOf`）。
 -- 没 start 就 stop、或 trace 里没有 CPU 采样 = 内容性失败（`-32000`，退出码 1）。
-profilerStop : Json -> ServeState -> Eff hostRow (Pair Bool (Pair ServeState (List Json)))
+profilerStop : Member nFs FsOp r, Member nConsole ConsoleOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
 profilerStop msg st = if not st.serveStarted then stopError msg st "Profiler.start was not called on this connection before Profiler.stop"
 else case cpuProfileOf st.serveRows of
   ErrC e => stopError msg st "Profiler.stop: ${diagText e}"
@@ -242,16 +242,16 @@ else case cpuProfileOf st.serveRows of
 
 -- 内容性失败：stderr 诊断 + `-32000` + 计数（退出码 1 的来源），并清掉 start 标记
 -- （重试需要重新 start）。
-stopError : Json -> ServeState -> String -> Eff hostRow (Pair Bool (Pair ServeState (List Json)))
+stopError : Member nFs FsOp r, Member nConsole ConsoleOp r => Json -> ServeState -> String -> Eff r (Pair Bool (Pair ServeState (List Json)))
 stopError msg st m = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_eprint "[vuna-obs-cdp] ${m}\n")
+  _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
   let
     st2 = { st | serveStarted = False, serveFailures = st.serveFailures + 1 }
   in pure (Pair False (Pair st2 [responseErr (idOf msg) errServer m]))
 
 -- `Profiler.setSamplingInterval`：接受并忽略（离线换算用 trace 里已有的采样；参数只记下来，
 -- 不影响任何输出）。缺 `params.interval` 或类型不对也照样回 `{}`（CDP 客户端不该因此卡住）。
-profilerSamplingInterval : Json -> ServeState -> Eff hostRow (Pair Bool (Pair ServeState (List Json)))
+profilerSamplingInterval : {r : Row} -> Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
 profilerSamplingInterval msg st =
   let
     iv = case jsonGetIn ["params", "interval"] msg of
@@ -263,7 +263,7 @@ profilerSamplingInterval msg st =
 -- ---------------------------------------------------------------
 -- 错误出口（用法/参数/前提 = 退出码 2；内容性失败在会话内计数，见 serveOne）
 -- ---------------------------------------------------------------
-serveFail : Int -> String -> Eff hostRow Int
+serveFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
 serveFail code e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure code

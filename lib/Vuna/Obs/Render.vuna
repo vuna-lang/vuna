@@ -20,7 +20,6 @@ module Vuna.Obs.Render where
 --
 -- 数据里**不放** `exec`（主机绝对路径）与 `t0`（epoch 值）：页面是给人看的视图，
 -- 保留绝对路径会把「可复现产物」变成「绑定某台机器的产物」。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.Pair
@@ -34,6 +33,10 @@ import Vuna.Obs.Flame
 import Vuna.Obs.Read
 import Vuna.Obs.Summarize
 import Vuna.Obs.Types
+import Base.EffConsole
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffProcess
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -42,7 +45,7 @@ renderUsage : String
 renderUsage = "usage: vuna obs render [--out FILE] TRACE"
 
 -- | `vuna obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
-export runObsRender : List String -> Eff hostRow Int
+export runObsRender : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsRender args = case parseToolArgs "vuna obs render" [ValueFlag "out"] args of
   ErrC e => renderFail 2 (diagText e)
   OkC parsed => case parsed.positionals of
@@ -56,20 +59,20 @@ runObsRender args = case parseToolArgs "vuna obs render" [ValueFlag "out"] args 
     [] => renderFail 2 renderUsage
     _ => renderFail 2 "${renderUsage} (exactly one TRACE)"
 
-renderFail : Int -> String -> Eff hostRow Int
+renderFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
 renderFail code e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure code
 
-renderTrace : String -> String -> Eff hostRow Int
+renderTrace : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 renderTrace out path = do
   traceR <- readTraceFull path
   case traceR of
     ErrC e => renderFail 2 (diagText e)
     OkC trace => do
       _ <- ensureDirPath (parentOf out)
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile out (renderPage trace))
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print "wrote ${out}\n")
+      _ <- fsWriteFile out (renderPage trace)
+      _ <- consolePrint "wrote ${out}\n"
       pure 0
 
 -- ---------------------------------------------------------------

@@ -5,7 +5,7 @@ module Vuna.Obs.Run where
 -- 语义（规范 `docs/reference/observability.md` §2 开关、§7 `run`）：
 --   * 本进程**不 setenv**（仓库没有 setenv 宿主原语），改用「env 前置命令」范式
 --     （同 `Vuna.Test.Run.withEnv`）：把 `["env", "VUNA_OBS=...", ...]` 拼在用户命令前，
---     交给 `@vuna@prim_eff_runIn`（它先 chdir 再 `Sys.command`，子进程继承这组 env）；
+--     交给 `processRunIn`（它先 chdir 再 `Sys.command`，子进程继承这组 env）；
 --     用户命令与参数在 `--` 之后原样透传（不做 argv 注入、不拼 shell 片段）；
 --   * `--level` 缺省 **2**（`run` 的默认语义就是 level 2；`--level 0` 显式关闭，用于
 --     关闭口径的对照）；`--sample` -> `VUNA_OBS_SAMPLE`；`--interval` -> `VUNA_OBS_INTERVAL`；
@@ -19,7 +19,6 @@ module Vuna.Obs.Run where
 --     读，`run` 不透传也不注入它们；
 --   * 子进程没产出 trace（level 0 / 忽略 env / 在开文件前失败退出）不是错误：
 --     打印 `no trace file produced` 后仍返回子命令退出码。
-import Base.HostRow
 import Base.List
 import Base.Pair
 import Base.String
@@ -27,6 +26,12 @@ import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Files
 import Base.Nat
+import Base.EffClock
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
+import Base.Eff.Types
 
 -- | `vuna obs run` 的选项（解析后的形态）。
 export record RunOpts(..) where
@@ -36,7 +41,7 @@ export record RunOpts(..) where
   runOptsOut : Maybe String
 
 -- | 执行 `vuna obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
-export runObsRun : List String -> Eff hostRow Int
+export runObsRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsRun args = case parseToolArgs "vuna obs run" [ValueFlag "level", ValueFlag "sample", ValueFlag "interval", ValueFlag "out"] args of
   ErrC e => obsRunError (diagText e)
   OkC parsed => case runOptsOf parsed of
@@ -98,18 +103,18 @@ parseDigits (c :: rest) acc neg =
 -- ---------------------------------------------------------------
 -- 执行
 -- ---------------------------------------------------------------
-runChild : RunOpts -> List String -> Eff hostRow Int
+runChild : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> List String -> Eff r Int
 runChild opts argv = do
-  cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
+  cwd <- envGetCwd
   target <- targetOf opts cwd
   envArgs <- envArgsOf opts cwd target
-  code <- raiseToRow hostRow (@vuna@prim_eff_runIn cwd (append envArgs argv))
+  code <- processRunIn cwd (append envArgs argv)
   _ <- printTracePaths target
   pure code
 
 -- `target` = `Pair (Maybe 精确文件) 目录`：`--out` 时第一个是绝对文件路径、目录为空；
 -- 否则第一个是 Nothing、第二个是本次运行的临时目录。
-targetOf : RunOpts -> String -> Eff hostRow (Pair (Maybe String) String)
+targetOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> String -> Eff r (Pair (Maybe String) String)
 targetOf opts cwd = case opts.runOptsOut of
   Just out => do
     path <- absoluteOut out cwd
@@ -120,19 +125,19 @@ targetOf opts cwd = case opts.runOptsOut of
     pure (Pair Nothing dir)
 
 -- `--out` 相对化：相对路径按调用方 cwd 拼成绝对路径（`runIn` 会先 chdir）。
-absoluteOut : String -> String -> Eff hostRow String
+absoluteOut : {r : Row} -> String -> String -> Eff r String
 absoluteOut out cwd = pure (if startsWith "/" out then out else "${cwd}/${out}")
 
 -- 本次运行的临时目录：`${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>`（唯一，避免混入旧 trace）。
-freshRunDir : Eff hostRow String
+freshRunDir : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
 freshRunDir = do
-  tmp <- raiseToRow hostRow (@vuna@prim_eff_getenv "TMPDIR")
-  stamp <- effTimeUs
+  tmp <- envGetEnv "TMPDIR"
+  stamp <- clockNow
   dir <- runDirPath tmp stamp
   _ <- ensureDirPath dir
   pure dir
 
-runDirPath : String -> Int -> Eff hostRow String
+runDirPath : {r : Row} -> String -> Int -> Eff r String
 runDirPath tmp stamp =
   let
     base =
@@ -141,14 +146,14 @@ runDirPath tmp stamp =
       else tmp
   in pure "${base}/vuna-obs-run-${strFromInt stamp}"
 
--- 前置 `env VAR=VAL ...` 参数（`@vuna@prim_eff_runIn` 经 shell 执行，子进程继承）。
-envArgsOf : RunOpts -> String -> Pair (Maybe String) String -> Eff hostRow (List String)
+-- 前置 `env VAR=VAL ...` 参数（`processRunIn` 经 shell 执行，子进程继承）。
+envArgsOf : {r : Row} -> RunOpts -> String -> Pair (Maybe String) String -> Eff r (List String)
 envArgsOf opts cwd target = do
   vars <- envVarsOf opts target
   pure (append ["env"] (map envPairText vars))
 
 -- 变量集：级别 + 输出位置（`--out` 给 `VUNA_OBS_FILE`，否则给 `VUNA_OBS_DIR`）+ 采样。
-envVarsOf : RunOpts -> Pair (Maybe String) String -> Eff hostRow (List (Pair String String))
+envVarsOf : {r : Row} -> RunOpts -> Pair (Maybe String) String -> Eff r (List (Pair String String))
 envVarsOf opts target =
   let
     levelText = if opts.runOptsLevel <= 0 then "0" else strFromInt opts.runOptsLevel
@@ -176,23 +181,23 @@ envPairText kv = "${firstOf kv}=${secondOf kv}"
 
 -- 跑完打印 trace 路径：`--out` 直接给出文件；否则列临时目录里的 `vuna-*.jsonl`
 -- （多进程 = 多个文件，目录序即字典序，输出确定）。
-printTracePaths : Pair (Maybe String) String -> Eff hostRow Int
+printTracePaths : Member nFs FsOp r, Member nConsole ConsoleOp r => Pair (Maybe String) String -> Eff r Int
 printTracePaths target = case firstOf target of
   Just out => printOutTrace out
   Nothing => printDirTraces (secondOf target)
 
-printOutTrace : String -> Eff hostRow Int
+printOutTrace : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
 printOutTrace out = do
   exists <- pathExistsFile out
   if exists then obsLine "trace: ${out}"
   else obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
 
-printDirTraces : String -> Eff hostRow Int
+printDirTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
 printDirTraces dir = do
   exists <- pathExistsDir dir
   if not exists then obsLine "no trace file produced (obs dir was not created: ${dir})"
   else do
-    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+    names <- fsReadDir dir
     printer <- pure (tracesAfter dir names)
     printer
 
@@ -200,7 +205,7 @@ traceLine : String -> String -> String
 traceLine dir name = "trace: ${dir}/${name}"
 
 -- 目录里的 trace 文件名过滤；空 = 打印「没产出」，否则逐行打印路径。
-tracesAfter : String -> List String -> Eff hostRow Int
+tracesAfter : Member nConsole ConsoleOp r => String -> List String -> Eff r Int
 tracesAfter dir names = do
   printers <- pure (map (traceLine dir) (filter isTraceName names))
   if length printers == 0 then obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
@@ -212,18 +217,18 @@ isTraceName name = startsWith "vuna-" name && endsWith ".jsonl" name
 -- ---------------------------------------------------------------
 -- 输出（与其它工具命令一致：直接 print，退出码由调用方给）
 -- ---------------------------------------------------------------
-obsLine : String -> Eff hostRow Int
+obsLine : Member nConsole ConsoleOp r => String -> Eff r Int
 obsLine s = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${s}\n")
+  _ <- consolePrint "${s}\n"
   pure 0
 
-obsLines : List String -> Eff hostRow Int
+obsLines : Member nConsole ConsoleOp r => List String -> Eff r Int
 obsLines [] = pure 0
 obsLines (s :: rest) = do
   _ <- obsLine s
   obsLines rest
 
-obsRunError : String -> Eff hostRow Int
+obsRunError : Member nConsole ConsoleOp r => String -> Eff r Int
 obsRunError e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure 2

@@ -28,7 +28,7 @@ module Vuna.Index where
 -- 本模块只做门面重导出（对外导出集合见模块头）。
 --
 -- 扫描/构建/缓存这些宿主动作不藏在纯签名里——`loadOrBuild` /
--- `buildIndex` 是 `Eff hostRow` 入口；REPL 的廉价依赖表由 `Scan` 内部维护（`indexStatsOf`
+-- `buildIndex` 是 `Eff r` 入口；REPL 的廉价依赖表由 `Scan` 内部维护（`indexStatsOf`
 -- 产出 stat 快照），命中判定在 `Query`。
 -- 数据模型、查找/影响面与文本渲染仍是纯函数。
 export import Vuna.Index.Query

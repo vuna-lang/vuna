@@ -6,6 +6,7 @@ base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rot
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, joinEffNilOuter, mkCont, performCore, raise, raiseTo, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken, weakenRow
 base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
+base/lib/Base/Eff/Types.vuna: module Base.Eff
 base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, resArgs
 base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, resClock
 base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, resConsole
@@ -15,7 +16,7 @@ base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, resExit
 base/lib/Base/EffExn.vuna: Exn, ExnOp(..), bracketExn, catchExn, exnRes, handleExn, runExn, throwExn, tryWith
 base/lib/Base/EffFs.vuna: FsOp(..), fsFileExists, fsFileMtime, fsFileSize, fsIsDirectory, fsMakeDir, fsReadDir, fsReadFile, fsRemoveFile, fsWriteFile, fsWriteFileAtomic, handleFs, resFs
 base/lib/Base/EffNet.vuna: NetOp(..), netAccept, netClose, netConnect, netListen, netPort, netRecv, netSend
-base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHostWith, processArgs, processExit, processRunIn, resProcess
+base/lib/Base/EffProcess.vuna: ProcessOp(..), handleProcess, handleProcessHostWith, processArgs, processExit, processRunIn, processSpawn, processWait, resProcess
 base/lib/Base/EffRef.vuna: RefOp(..), refNew, refRead, refWrite
 base/lib/Base/EffState.vuna: StateOp(..), get, handleState, put, resState
 base/lib/Base/EffStdin.vuna: StdinOp(..), handleStdin, resStdin, stdinReadBytes, stdinReadLine
@@ -29,7 +30,7 @@ base/lib/Base/FromString.vuna: FromString(..)
 base/lib/Base/HashMap.vuna: HashMap, fromList, insert, insertAll, lookup, member, ofNames, size, toList
 base/lib/Base/HashSet.vuna: HashSet, empty, fromList, insert, member, size, toList
 base/lib/Base/Hashable.vuna: Hashable(..), hashCombine, hashStr
-base/lib/Base/HostRow.vuna: hostRow, hostTail, raiseToRow
+base/lib/Base/HostRow.vuna: hostRow, hostTail
 base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: 
 base/lib/Base/Interp.vuna: Interp(..)

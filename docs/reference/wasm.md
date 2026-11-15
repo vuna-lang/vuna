@@ -117,7 +117,8 @@
 - `Wasm` 子模块只 import `Base.*`、`Ir`、`Wasm.*`；驱动只经
   `Driver.Dt.dtCheckWithProgramParts` + `Codegen.Lower.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 规则 10 守护）。
-- `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件（`Eff hostRow`）。
+- `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件（`Member nFs FsOp r`
+  等行约束下的 `Eff r`，不再用全集行 `hostRow`）。
 - 生成器带 fuel（`genExpr` 等），越界返回 `wasm codegen fuel exhausted`（内部错），不 panic。
 - 错误分类：`wasm target:` 前缀 = 能力限制（`WasmUnsupported`）；其余 = 生成器内部错
   （`WasmInternal`，前缀 `internal wasm backend error`）。

@@ -15,8 +15,7 @@ module Vuna.Obs.Read where
 --     （截断文件只可能缺尾部闭括号），补全成功则解析并按 warning 上报；补全失败/仍不完整
 --     则丢该行并 warning。绝不把截断升级成 error（规范 §7 `validate`：截断只报 warning）。
 --
--- 只有读盘是 `Eff hostRow`；解析、补全与行收集都是纯函数。
-import Base.HostRow
+-- 只有读盘是 `Eff r`；解析、补全与行收集都是纯函数。
 import Base.List
 import Base.Maybe
 import Base.Pair
@@ -25,6 +24,8 @@ import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Obs.Types
+import Base.Eff.Types
+import Base.EffFs
 
 -- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
 export record ObsTrace(..) where
@@ -34,7 +35,7 @@ export record ObsTrace(..) where
 -- | 读一个 trace 文件；返回逐行 `(行号, 事件)` 与截断 warning。
 -- 文件不存在/是目录/不可读 = `ErrC`（调用方映射到退出码 2）；中间行 JSON 坏 = `ErrC`；
 -- 末尾半个 JSON 行 = warning + 跳过（见模块头）。
-export readTraceFull : String -> Eff hostRow (Check ObsTrace)
+export readTraceFull : Member nFs FsOp r => String -> Eff r (Check ObsTrace)
 readTraceFull path = do
   textR <- readText path
   case textR of
@@ -43,7 +44,7 @@ readTraceFull path = do
 
 -- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（validate/summarize 需要 warning 时用
 -- `readTraceFull`）。签名按规范 §7 / 实现要点固定。
-export readTrace : String -> Eff hostRow (Check (List (Pair Int ObsEvent)))
+export readTrace : Member nFs FsOp r => String -> Eff r (Check (List (Pair Int ObsEvent)))
 readTrace path = do
   traceR <- readTraceFull path
   pure (fmap traceEventRows traceR)

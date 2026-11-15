@@ -16,8 +16,9 @@ module Vuna.Repl.Complete where
 -- 纯部分（`argKindOf` / `moduleNameOf` / `splitLastSlash`）与宿主部分分离，便于用
 -- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
 -- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
-import Base.HostRow
 import Vuna.Compiler.Common
+import Base.EffFs
+import Base.Eff.Types
 
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）
@@ -49,7 +50,7 @@ splitFirstWordChars (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 候选池
 -- ---------------------------------------------------------------
-export argCompletions : Int -> List String -> String -> Eff hostRow (List String)
+export argCompletions : Member nFs FsOp r => Int -> List String -> String -> Eff r (List String)
 argCompletions kind roots token = if token == "" then pure []
 else do
   mods <-
@@ -59,14 +60,14 @@ else do
   pure (dedupStrs (append mods paths))
 
 -- 小 helper：Effectful 的 map / concatMap（本模块自用）。
-mapEff : (a -> Eff hostRow b) -> List a -> Eff hostRow (List b)
+mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
   y <- f x
   ys <- mapEff f rest
   pure (y :: ys)
 
-concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
+concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
@@ -83,23 +84,23 @@ memInt c (x :: rest) = x == c || memInt c rest
 -- ---------------------------------------------------------------
 -- 模块名候选（递归扫描模块根）
 -- ---------------------------------------------------------------
-moduleCompletions : List String -> String -> Eff hostRow (List String)
+moduleCompletions : Member nFs FsOp r => List String -> String -> Eff r (List String)
 moduleCompletions roots token = concatMapEff (\root => modulesUnder root token) roots
 
-modulesUnder : String -> String -> Eff hostRow (List String)
+modulesUnder : Member nFs FsOp r => String -> String -> Eff r (List String)
 modulesUnder root token = do
   found <- walkModules 8192 root root
   pure (filter (\m => startsWith token m) found)
 
 -- 递归扫描 `dir`（`root` 是模块根，用于把文件路径换算成模块全名）。
 -- 性能：只在按下 Tab 时扫；`startsWith token` 的过滤放到最后做（先收集路径）。
-walkModules : Int -> String -> String -> Eff hostRow (List String)
+walkModules : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
 walkModules fuel root dir = if fuel <= 0 then pure []
 else do
   names <- safeReadDir dir
   concatMapEff (walkEntry (fuel - 1) root dir) names
 
-walkEntry : Int -> String -> String -> String -> Eff hostRow (List String)
+walkEntry : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (List String)
 walkEntry fuel root dir name = if fuel <= 0 then pure []
 else if name == "" || name == "." || name == ".." || startsWith "." name then pure []
 else
@@ -133,21 +134,21 @@ dropSuffix : String -> String -> String
 dropSuffix suffix s =
   if endsWith suffix s then substring 0 (byteLength s - byteLength suffix) s else s
 
-safeReadDir : String -> Eff hostRow (List String)
+safeReadDir : Member nFs FsOp r => String -> Eff r (List String)
 safeReadDir dir = do
   exists <- dirExists dir
-  if exists then raiseToRow hostRow (@vuna@prim_eff_readDir dir) else pure []
+  if exists then fsReadDir dir else pure []
 
--- raiseToRow hostRow (@vuna@prim_eff_isDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。)
-dirExists : String -> Eff hostRow Bool
+-- fsIsDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
+dirExists : Member nFs FsOp r => String -> Eff r Bool
 dirExists path = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-  if exists then raiseToRow hostRow (@vuna@prim_eff_isDirectory path) else pure False
+  exists <- fsFileExists path
+  if exists then fsIsDirectory path else pure False
 
 -- ---------------------------------------------------------------
 -- 文件路径候选
 -- ---------------------------------------------------------------
-pathCompletions : String -> Eff hostRow (List String)
+pathCompletions : Member nFs FsOp r => String -> Eff r (List String)
 pathCompletions token =
   let
     Pair dirText base = splitLastSlash token
@@ -157,7 +158,7 @@ pathCompletions token =
     mapEff (\n => pathCandidate dirText dir n)
       (filter (\n => startsWith base n && n /= base && not (startsWith "." n)) entries)
 
-pathCandidate : String -> String -> String -> Eff hostRow String
+pathCandidate : Member nFs FsOp r => String -> String -> String -> Eff r String
 pathCandidate dirText dir name =
   let
     shown = if dirText == "" then name else "${dirText}/${name}"

@@ -194,6 +194,7 @@ Base.Array  base/lib/Base/Array.vuna
 Base.Bits  base/lib/Base/Bits.vuna
 Base.Bool  base/lib/Base/Bool.vuna
 Base.Eff.Reader  base/lib/Base/Eff/Reader.vuna
+Base.Eff.Types  base/lib/Base/Eff/Types.vuna
 Base.Eff  base/lib/Base/Eff.vuna
 Base.EffArgs  base/lib/Base/EffArgs.vuna
 Base.EffClock  base/lib/Base/EffClock.vuna
@@ -364,6 +365,7 @@ Base.Array  ./lib/Base/Array.vuna
 Base.Bits  ./lib/Base/Bits.vuna
 Base.Bool  ./lib/Base/Bool.vuna
 Base.Eff.Reader  ./lib/Base/Eff/Reader.vuna
+Base.Eff.Types  ./lib/Base/Eff/Types.vuna
 Base.Eff  ./lib/Base/Eff.vuna
 Base.EffArgs  ./lib/Base/EffArgs.vuna
 Base.EffClock  ./lib/Base/EffClock.vuna

@@ -5,13 +5,17 @@ module Vuna.Lint where
 -- 本模块只保留 CLI（参数、打印、退出码）与 --fix 多轮循环。
 -- 参数走 `Vuna.Cli.Args` 的统一入口（--fix 开关 + 位置参数，未知/重复 flag 可读
 -- 错误），读盘先判存在/目录（`readText`），不对不存在路径抛宿主异常。
-import Base.HostRow
 import Vuna.Compiler.Common
+import Base.EffFs
+import Base.EffConsole
+import Base.Eff.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Cli.Args
 import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
+import Base.EffEnv
+import Base.EffProcess
 
 -- 单条 finding 的渲染（纯）：CLI 打印与测试断言共用同一份格式，夹具 `.out` 因此
 -- 既能由 CLI 生成、也能由进程内 `Finding` 投影重建。
@@ -25,12 +29,12 @@ renderFinding path fixMode f =
 export renderFixReport : String -> Int -> String
 renderFixReport path count = "${path}: fixed ${count} finding(s)"
 
-printFinding : String -> Bool -> Finding -> Eff hostRow Int
+printFinding : Member nConsole ConsoleOp r => String -> Bool -> Finding -> Eff r Int
 printFinding path fixMode f = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${renderFinding path fixMode f}\n")
+  _ <- consolePrint "${renderFinding path fixMode f}\n"
   pure 0
 
-printFindings : String -> Bool -> List Finding -> Eff hostRow Int
+printFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
 printFindings path fixMode [] = pure 0
 printFindings path fixMode (f :: rest) = do
   _ <- printFinding path fixMode f
@@ -40,36 +44,36 @@ lintUsage : String
 lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 
 -- 零参顶层定义在模块初始化时求值；打印 usage 是动作，函数化（调用点传 0）。
-lintUsageError : Int -> Eff hostRow Int
+lintUsageError : Member nConsole ConsoleOp r => Int -> Eff r Int
 lintUsageError _ = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print lintUsage)
+  _ <- consolePrint lintUsage
   pure 2
 
-reportFindings : String -> Bool -> List Finding -> Eff hostRow Int
+reportFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
 reportFindings path fixMode findings = do
   _ <- printFindings path fixMode findings
   pure (if length findings == 0 then 0 else 1)
 
-fixReport : String -> String -> List Finding -> List FixityDecl -> Eff hostRow Int
+fixReport : Member nConsole ConsoleOp r, Member nFs FsOp r => String -> String -> List Finding -> List FixityDecl -> Eff r Int
 fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "${path}: error: ${diagText e}\n")
+    _ <- consolePrint "${path}: error: ${diagText e}\n"
     pure 2
   OkC (Pair count newSource) => if count == 0 then reportFindings path True findings
   else do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path newSource)
+    _ <- fsWriteFile path newSource
     case lintSourceWith programFixities newSource of
       ErrC e => do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "${path}: error: ${diagText e}\n")
+        _ <- consolePrint "${path}: error: ${diagText e}\n"
         pure 2
       OkC remaining => do
-        _ <- raiseToRow hostRow (@vuna@prim_eff_print "${renderFixReport path count}\n")
+        _ <- consolePrint "${renderFixReport path count}\n"
         reportFindings path True remaining
 
-lintExisting : Bool -> String -> String -> List FixityDecl -> Eff hostRow Int
+lintExisting : Member nConsole ConsoleOp r, Member nFs FsOp r => Bool -> String -> String -> List FixityDecl -> Eff r Int
 lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "${path}: error: ${diagText e}\n")
+    _ <- consolePrint "${path}: error: ${diagText e}\n"
     pure 2
   OkC findings =>
     if doFix then fixReport path source findings programFixities
@@ -77,12 +81,12 @@ lintExisting doFix path source programFixities = case lintSourceWith programFixi
 
 -- 逐文件取程序级 fixity（`Vuna.FixityEnv` 按目录缓存模块图）；拿不到上下文是工具错误，
 -- 不静默按本地声明表继续（那会把 import 闭包里的运算符判成 unknown fixity）。
-lintOne : Bool -> FixityEnv -> String -> Eff hostRow (Pair FixityEnv Int)
+lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> String -> Eff r (Pair FixityEnv Int)
 lintOne doFix env path = do
   textR <- readText path
   case textR of
     ErrC e => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
+      _ <- consolePrint "error: ${diagText e}\n"
       pure (Pair env 2)
     OkC source => do
       looked <- fixitiesForFile env path source
@@ -90,25 +94,23 @@ lintOne doFix env path = do
         env2 = firstOf looked
       in case secondOf looked of
         ErrC e => do
-          _ <-
-            raiseToRow hostRow
-              (@vuna@prim_eff_print "${path}: cannot load package fixity context: ${diagText e}\n")
+          _ <- consolePrint "${path}: cannot load package fixity context: ${diagText e}\n"
           pure (Pair env2 2)
         OkC programFixities => do
           code <- lintExisting doFix path source programFixities
           pure (Pair env2 code)
 
-lintFiles : Bool -> FixityEnv -> List String -> Eff hostRow Int
+lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Eff r Int
 lintFiles doFix env [] = pure 0
 lintFiles doFix env (path :: rest) = do
   stepped <- lintOne doFix env path
   restCode <- lintFiles doFix (firstOf stepped) rest
   pure (if secondOf stepped > restCode then secondOf stepped else restCode)
 
-export runLint : List String -> Eff hostRow Int
+export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
+    _ <- consolePrint "error: ${diagText e}\n"
     pure 2
   OkC parsed => case parsed.positionals of
     [] => lintUsageError 0

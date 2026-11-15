@@ -19,6 +19,10 @@ import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
+import Base.EffArgs
+import Base.EffFs
+import Base.EffProcess
+import Base.EffStdin
 
 export dtRuntime : String
 dtRuntime = """let () =
@@ -87,9 +91,9 @@ ${dtPrimRuntime}"""
 
 -- effectful 内建（`prim_*`）的 DT 运行时实现。
 -- 签名在 `Vuna.Compiler.Intrinsics`（唯一真源），这里补 OCaml 侧实现（对应
--- `Codegen.Runtime` 的符号表）；`@vuna@prim_eff_getArgs` / `@vuna@prim_eff_readLine` 是零参**值**，
+-- `Codegen.Runtime` 的符号表）；`argsGetArgs` / `stdinReadLine` 是零参**值**，
 -- 所以在引用点展开成 `dtp_*(()`，与 Codegen 的既有处理一致（每次求值都重新读）。
--- `@vuna@prim_eff_readBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
+-- `stdinReadBytes` 是**函数**（`Int -> String`）：最多读 n 字节、有数据就立即返回
 -- （可能少于 n），EOF 返回 `""`——LSP 的帧循环靠它精确读 Content-Length 字节。
 dtPrimRuntime : String
 dtPrimRuntime = ("""type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t
@@ -1641,7 +1645,7 @@ effThunkText ctor unitTy rt arity =
   in if arity == 0 then "(${ctor} (fun (_ : ${unitTy}) -> ${rt}))"
   else "(fun ${argText} -> ${ctor} (fun (_ : ${unitTy}) -> ${rt} ${argText}))"
 
--- 原语最多 2 个运行时参数（`@vuna@prim_eff_writeFile` / `@vuna@prim_eff_runIn`）；表比实际用到的长，
+-- 原语最多 2 个运行时参数（`fsWriteFile` / `processRunIn`）；表比实际用到的长，
 -- `takeNames` 按 arity 截断（结构递归在表尾上，终止性检查可见）。
 ioParamNames : List String
 ioParamNames = ["dtio_0", "dtio_1", "dtio_2", "dtio_3"]

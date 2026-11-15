@@ -19,7 +19,6 @@ module Vuna.Obs.Validate where
 -- 不做的事（本批边界）：`cat` 只作信息字段不校验（运行时计数器用 `vuna.counter`，§3.2 表未列全）；
 -- 时间戳绝对单调只看同一 `pid`/`tid`，跨进程（merge 前）不比较；语义一致性（例如 span 嵌套
 -- 是否与 `args.parent` 一致）留给 `summarize` 的折叠规则，不在这里重复判定。
-import Base.HostRow
 import Base.List
 import Base.Pair
 import Base.String
@@ -27,6 +26,8 @@ import Vuna.Compiler.Common
 import Vuna.Json
 import Vuna.Obs.Read
 import Vuna.Obs.Types
+import Base.Eff.Types
+import Base.EffFs
 
 -- | 一条校验问题：严重级别 + 行号（0 = 与具体行无关）+ 消息。
 export record ValidateIssue(..) where
@@ -43,7 +44,7 @@ export record ValidateReport(..) where
   validateInstants : Int
 
 -- | 校验一个 trace 文件：读盘 + 规则。文件不存在/是目录 = `ErrC`（调用方映射退出码 2）。
-export validateTraceFile : String -> Eff hostRow (Check ValidateReport)
+export validateTraceFile : Member nFs FsOp r => String -> Eff r (Check ValidateReport)
 validateTraceFile path = do
   traceR <- readTraceFull path
   pure (fmap validateTrace traceR)

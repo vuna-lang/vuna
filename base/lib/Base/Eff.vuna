@@ -140,7 +140,7 @@ joinEffNilOuter m = MkEff (\u => case m of
 )
 
 -- | 行扩展：`Eff r a` 在行尾接上 `t`（`rowAppend r t`，运行时恒等）。
--- 用于把单效应动作（`Eff [FsOp]`）提升到统一行（`Eff hostRow`）。
+-- 用于把单效应动作（`Eff [FsOp]`）提升到更宽的行。
 export weakenRow : {r : Row} -> (t : Row) -> {a : Type} -> Eff r a -> Eff (rowAppend r t) a
 weakenRow t e = MkEff (\u => case e of
   MkEff f => f u

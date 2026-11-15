@@ -14,10 +14,9 @@ module Vuna.Cli where
 --     都是可读错误）；
 --   - 退出码统一为 0（成功）/ 1（被检查代码或查询的语义失败）/ 2（用法、参数、输入
 --     路径或不满足命令前提）；工具命令不得把宿主异常（对不存在路径调
---     `@vuna@prim_eff_isDirectory`、读不存在文件）漏给用户；
+--     `fsIsDirectory`、读不存在文件）漏给用户；
 --   - 所有用户给的路径先判存在/目录再读盘（`readText` / `requireExists` /
 --     `requireDirectory`）。
-import Base.HostRow
 import Base.EffConsole
 import Base.List
 import Vuna.Compiler.Common
@@ -50,17 +49,26 @@ import Vuna.Test.Run
 import Vuna.Run
 import Vuna.Lsp
 import Vuna.Cli.Args
+import Base.EffEnv
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffArgs
+import Base.EffClock
+import Base.EffExit
+import Base.EffNet
+import Base.EffProcess
+import Base.EffStdin
 import qualified Vuna.Lint
 
 -- 产品 CLI 的 console 输出走效应标签（`Base.EffConsole`）。入口是
--- `main : Eff hostRow Int`（由运行时执行）；只有 `consoleLine` 这一条真实路径经标签 +
+-- `main : Eff r Int`（由运行时执行）；只有 `consoleLine` 这一条真实路径经标签 +
 -- host handler 输出，是工具链里效应标签 + handler 的真实样板（边界见
 -- docs/reference/effects-layers.md §8.6）。
 toolUsageLines : String -> String
 toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
   ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
-      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : Eff hostRow a ... 走 compile+运行；
+      运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : Eff [] a ... 走 compile+运行；
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
   ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
       运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核
@@ -125,7 +133,7 @@ stripReleaseArgs [] = []
 stripReleaseArgs (a :: rest) =
   if a == "--release" then stripReleaseArgs rest else Base.List.Cons a (stripReleaseArgs rest)
 
-export runCli : List String -> Eff hostRow Int
+export runCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
 runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripPerfFlags args)
 
 -- `--` 之后是字面量参数（`vuna run <pkg> -- --help` 必须透传给子进程），不参与
@@ -137,7 +145,7 @@ helpSurface (arg :: rest) = Base.List.Cons arg (helpSurface rest)
 
 -- 编译器命令在 CompilerCli 里实现；`seed` 仍分发给 CompilerCli，由它统一
 -- 给出迁移提示（`build --out OUT [DIR]` / `compile DIR OUT`）。
-runCli1 : List String -> Eff hostRow Int
+runCli1 : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
 runCli1 args = case args of
   [] => usageError 0
   arg :: rest => case arg of
@@ -173,58 +181,56 @@ runCli1 args = case args of
 -- 版本唯一真源在编译器包（Vuna.Compiler.Version），产品 CLI 与
 -- vuna-compiler 共用；VSCode 用它探测服务器。
 -- 这一条输出路径走 console 效应标签（mock/real 可替换的样板），
--- 不直接 `@vuna@prim_eff_print`；整条 CLI 显式 `Eff hostRow`，最外层由运行时执行。
-consoleLine : String -> Eff hostRow Int
+-- 不直接 `@vuna@prim_eff_print`；整条 CLI 显式 `Eff r`，最外层由运行时执行。
+consoleLine : Member nConsole ConsoleOp r => String -> Eff r Int
 consoleLine msg = consolePrint msg >>= (\_ => pure 0)
 
-printVersion : Int -> Eff hostRow Int
+printVersion : Member nConsole ConsoleOp r => Int -> Eff r Int
 printVersion _ = consoleLine "vuna ${vunaVersion}\n"
 
 anyHelp : List String -> Bool
 anyHelp [] = False
 anyHelp (arg :: rest) = if arg == "-h" || arg == "--help" then True else anyHelp rest
 
-help : Int -> Eff hostRow Int
+help : Member nConsole ConsoleOp r => Int -> Eff r Int
 help _ = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print (usageFor "vuna"))
+  _ <- consolePrint (usageFor "vuna")
   pure 0
 
-usageError : Int -> Eff hostRow Int
+usageError : Member nConsole ConsoleOp r => Int -> Eff r Int
 usageError _ = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print (usageFor "vuna"))
+  _ <- consolePrint (usageFor "vuna")
   pure 2
 
-unknownCommand : String -> String -> Eff hostRow Int
+unknownCommand : Member nConsole ConsoleOp r => String -> String -> Eff r Int
 unknownCommand prog arg = do
-  _ <-
-    raiseToRow hostRow
-      (@vuna@prim_eff_print "error: unknown command `${arg}`\nrun `${prog} help`\n")
+  _ <- consolePrint "error: unknown command `${arg}`\nrun `${prog} help`\n"
   pure 2
 
 -- ---------------------------------------------------------------
 -- 统一错误出口（0/1/2）
 -- ---------------------------------------------------------------
-toolError : String -> Eff hostRow Int
+toolError : Member nConsole ConsoleOp r => String -> Eff r Int
 toolError e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure 2
 
-toolFailure : String -> Eff hostRow Int
+toolFailure : Member nConsole ConsoleOp r => String -> Eff r Int
 toolFailure e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure 1
 
 -- 显式路径的批量存在性检查：一次给出第一个缺失的路径（不静默跳过）。
-firstMissingPath : List String -> Eff hostRow (Maybe String)
+firstMissingPath : Member nFs FsOp r => List String -> Eff r (Maybe String)
 firstMissingPath [] = pure Nothing
 firstMissingPath (path :: rest) = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  exists <- fsFileExists path
   if exists then firstMissingPath rest else pure (Just path)
 
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
-interpArgs : List String -> Eff hostRow Int
+interpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 interpArgs args = case parseToolArgs "vuna interp" [] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -232,40 +238,40 @@ interpArgs args = case parseToolArgs "vuna interp" [] args of
     _ => usageError 0
 
 -- interp 只接受单文件；包目录的入口是 check / compile。
-interpFile : String -> Eff hostRow Int
+interpFile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 interpFile path = do
   existsR <- requireExists path
   case existsR of
     ErrC e => toolError (diagText e)
     OkC _ => do
-      isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+      isDir <- fsIsDirectory path
       if isDir then interpDirErr path else interpEmit path
 
-interpDirErr : String -> Eff hostRow Int
+interpDirErr : Member nConsole ConsoleOp r => String -> Eff r Int
 interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
 
-interpEmit : String -> Eff hostRow Int
+interpEmit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 interpEmit path = do
   ctxR <- contextForFile path
   case ctxR of
     ErrC e => toolFailure (diagText e)
     OkC ctx => do
       output <- interpretFile ctx path
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print "${output}\n")
+      _ <- consolePrint "${output}\n"
       pure (if startsWith "error:" output then 2 else 0)
 
 -- ---------------------------------------------------------------
 -- test（包模式；--list / --filter / --verbose / --fail-fast；
 -- --jobs N 包内并行 + 隐藏的 --only-file（内部子进程模式））
 -- ---------------------------------------------------------------
-testArgs : List String -> Eff hostRow Int
+testArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "bless-diag", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", MultiValueFlag "tier", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case flagValue parsed "suite" of
     Just suitePath => suiteRun parsed suitePath
     Nothing => packageTestRun parsed
 
-packageTestRun : Parsed -> Eff hostRow Int
+packageTestRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Parsed -> Eff r Int
 packageTestRun parsed = case testJobsOf parsed of
   ErrC e => toolError (diagText e)
   OkC jobs => case parsed.positionals of
@@ -274,7 +280,7 @@ packageTestRun parsed = case testJobsOf parsed of
     _ => usageError 0
 
 -- suite 模式：`--suite FILE`；位置参数只用于包模式，`--suite` 时不允许。
-suiteRun : Parsed -> String -> Eff hostRow Int
+suiteRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Eff r Int
 suiteRun parsed suitePath = case parsed.positionals of
   [] => case suiteJobsOf parsed of
     ErrC e => toolError (diagText e)
@@ -358,7 +364,7 @@ testOptsOf parsed jobs =
     (flagSet parsed "fail-fast") (if flagSet parsed "only-file" then 1 else jobs)
     (flagValue parsed "only-file")
 
-testRun : TestOpts -> String -> Eff hostRow Int
+testRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> String -> Eff r Int
 testRun opts dir = do
   dirR <- requireDirectory dir
   case dirR of
@@ -372,12 +378,12 @@ testRun opts dir = do
 -- ---------------------------------------------------------------
 -- fmt
 -- ---------------------------------------------------------------
-fmtArgs : List String -> Eff hostRow Int
+fmtArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 fmtArgs args = case parseToolArgs "vuna fmt" [BoolFlag "check"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => fmtRun (flagSet parsed "check") parsed.positionals
 
-fmtRun : Bool -> List String -> Eff hostRow Int
+fmtRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> List String -> Eff r Int
 fmtRun check [] = do
   targets <- fmtDefaultTargets 0
   case targets of
@@ -397,12 +403,12 @@ fmtRun check paths = do
 -- 不是 workspace 或没有任何源码目录都是**输入错误**（exit 2），不回退到相对
 -- 路径 `lib/app/test`（那会在非包目录把 `lib` 当文件读而抛宿主异常）。
 -- 零参顶层定义在模块初始化时求值；这里是启动期读盘动作，必须函数化。
-fmtDefaultTargets : Int -> Eff hostRow (Check (List String))
+fmtDefaultTargets : Member nFs FsOp r, Member nEnv EnvOp r => Int -> Eff r (Check (List String))
 fmtDefaultTargets _ = do
   found <- findManifestDirMaybe "."
   case found of
     Nothing => do
-      cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
+      cwd <- envGetCwd
       pure
         (err "not inside a vuna workspace (no vuna.toml found from ${cwd}); pass PATH explicitly")
     Just dir => do
@@ -417,20 +423,20 @@ fmtDefaultTargets _ = do
 packageTargets : Package -> List String
 packageTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app", "${packageDir pkg}/test"]
 
-existingTargets : List String -> List String -> Eff hostRow (List String)
+existingTargets : Member nFs FsOp r => List String -> List String -> Eff r (List String)
 existingTargets [] acc = pure (reverse acc)
 existingTargets (path :: rest) acc = do
   exists <- pathExistsDir path
   if exists then existingTargets rest (path :: acc) else existingTargets rest acc
 
-expandPaths : List String -> Eff hostRow (List String)
+expandPaths : Member nFs FsOp r => List String -> Eff r (List String)
 expandPaths [] = pure []
 expandPaths (path :: rest) = do
   here <- expandPath path
   there <- expandPaths rest
   pure (append here there)
 
-expandPath : String -> Eff hostRow (List String)
+expandPath : Member nFs FsOp r => String -> Eff r (List String)
 expandPath path = do
   exists <- pathExistsDir path
   if exists then collectVunaFiles path else pure [path]
@@ -439,9 +445,9 @@ expandPath path = do
 -- `Vuna.FixityEnv` 按文件目录缓存「按包上下文加载的模块图」（昂贵部分），声明表逐文件
 -- 重算（不同文件 imports 不同，跨文件复用会判 unknown fixity / 打出错误括号）。
 -- 上下文/加载失败是硬错误：fixity 无法确定时**拒绝格式化该文件**，不静默改语义。
-fmtFiles : Bool -> FixityEnv -> List String -> Int -> Eff hostRow Int
+fmtFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Int -> Eff r Int
 fmtFiles check env [] changed = if check && changed > 0 then do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${changed} file(s) need formatting\n")
+  _ <- consolePrint "${changed} file(s) need formatting\n"
   pure 1
 else pure 0
 fmtFiles check env (path :: rest) changed = do
@@ -458,17 +464,17 @@ fmtFiles check env (path :: rest) changed = do
           ErrC e => toolError "${path}: ${diagText e}"
           OkC formatted => if formatted == original then fmtFiles check env2 rest changed
           else if check then do
-            _ <- raiseToRow hostRow (@vuna@prim_eff_print "would reformat: ${path}\n")
+            _ <- consolePrint "would reformat: ${path}\n"
             fmtFiles check env2 rest (changed + 1)
           else do
-            _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path formatted)
-            _ <- raiseToRow hostRow (@vuna@prim_eff_print "formatted ${path}\n")
+            _ <- fsWriteFile path formatted
+            _ <- consolePrint "formatted ${path}\n"
             fmtFiles check env2 rest (changed + 1)
 
 -- ---------------------------------------------------------------
 -- repl
 -- ---------------------------------------------------------------
-replArgs : List String -> Eff hostRow Int
+replArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
 replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "client"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case flagValue parsed "client" of
@@ -493,23 +499,23 @@ replArgs args = case parseToolArgs "vuna repl" [ValueFlag "listen", ValueFlag "c
         _ => usageError 0
 
 -- `--client`：纯传输（不加载包上下文；地址校验在 Server 层共用）。
-replClientWith : String -> Eff hostRow Int
+replClientWith : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
 replClientWith addr = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
   OkC _ => runReplClient addr
 
 -- `--listen`：socket 上的常驻 server；启动目标与交互式同一套解析。
-replServerWith : String -> ReplStart -> Check PackageContext -> Eff hostRow Int
+replServerWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => String -> ReplStart -> Check PackageContext -> Eff r Int
 replServerWith addr start ctxRes = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
   OkC _ => replWith (Just addr) 0 start ctxRes
 
-replServerWithTarget : String -> String -> Eff hostRow Int
+replServerWithTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => String -> String -> Eff r Int
 replServerWithTarget addr target = case checkReplAddr addr of
   ErrC e => toolError (diagText e)
   OkC _ => replTargetWith (Just addr) target
 
-replWith : Maybe String -> Int -> ReplStart -> Check PackageContext -> Eff hostRow Int
+replWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Maybe String -> Int -> ReplStart -> Check PackageContext -> Eff r Int
 replWith listen _ start (ErrC e) = toolFailure (diagText e)
 replWith listen _ start (OkC ctx) = case listen of
   Nothing => runRepl ctx start
@@ -517,11 +523,11 @@ replWith listen _ start (OkC ctx) = case listen of
 
 -- 启动目标：存在目录 → 该包上下文；存在文件 → 文件所在包上下文 + 启动加载；
 -- 不存在且像模块名 → cwd 上下文 + 启动导入；其它报可操作错误。
-replTargetWith : Maybe String -> String -> Eff hostRow Int
+replTargetWith : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Maybe String -> String -> Eff r Int
 replTargetWith listen target = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists target)
+  exists <- fsFileExists target
   if exists then do
-    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory target)
+    isDir <- fsIsDirectory target
     if isDir then do
       ctxR <- contextForDir target
       replWith listen 0 (StartDir target) ctxR
@@ -539,7 +545,7 @@ replTargetWith listen target = do
 -- 用法：vuna gen-errors [ROOT]；ROOT 默认 "."，输出 ROOT/docs/.generated/errors.md。
 -- 生成物不纳入 git（docs/.generated/ 在 .gitignore）。
 -- ---------------------------------------------------------------
-genErrorsArgs : List String -> Eff hostRow Int
+genErrorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
@@ -553,28 +559,24 @@ genErrorsArgs args = case parseToolArgs "vuna gen-errors" [] args of
 -- 没有「刷新索引」命令；详见 Vuna.Index / Vuna.Tool.Session。
 -- ---------------------------------------------------------------
 -- `vuna store <sub>`：目前只有 `gc`（缓存族按 roots + grace + 容量淘汰）。
-storeArgs : List String -> Eff hostRow Int
+storeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 storeArgs args = case args of
   "gc" :: rest => Vuna.Clean.runStoreGc rest
   [] => do
-    _ <-
-      raiseToRow hostRow
-        (@vuna@prim_eff_print "usage: vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]\n")
+    _ <- consolePrint "usage: vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]\n"
     pure 2
   _ :: _ => do
-    _ <-
-      raiseToRow hostRow
-        (@vuna@prim_eff_print "usage: vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]\n")
+    _ <- consolePrint "usage: vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]\n"
     pure 2
 
-mapArgs : List String -> Eff hostRow Int
+mapArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 mapArgs args = case parseToolArgs "vuna map" [BoolFlag "modules", ValueFlag "find", ValueFlag "impact"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
     [] => mapRun parsed
     _ => usageError 0
 
-mapRun : Parsed -> Eff hostRow Int
+mapRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Parsed -> Eff r Int
 mapRun parsed = case flagValue parsed "find" of
   Just query => case flagValue parsed "impact" of
     Just _ => usageError 0
@@ -584,12 +586,12 @@ mapRun parsed = case flagValue parsed "find" of
     Nothing => printOverview (flagSet parsed "modules")
 
 -- 非 workspace 是输入错误（exit 2），不会输出空索引。
-withIndex : (Index -> Eff hostRow Int) -> Eff hostRow Int
+withIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => (Index -> Eff r Int) -> Eff r Int
 withIndex f = do
   found <- findManifestDirMaybe "."
   case found of
     Nothing => do
-      cwd <- raiseToRow hostRow @vuna@prim_eff_getcwd
+      cwd <- envGetCwd
       toolError
         "not inside a vuna workspace (no vuna.toml found from ${cwd}); run `vuna map` from a package or workspace root"
     Just _ => do
@@ -598,25 +600,25 @@ withIndex f = do
         ErrC e => toolError (diagText e)
         OkC index => f index
 
-printOverview : Bool -> Eff hostRow Int
+printOverview : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
 printOverview modulesOnly = withIndex (\index => let
   text = if modulesOnly then renderModules index else renderOverview index
 in do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${text}\n")
+  _ <- consolePrint "${text}\n"
   pure 0
 )
 
 -- 输出顺序：先逐行打印全部命中，再按命中数给退出码。
-printSymLines : List Sym -> Eff hostRow Int
+printSymLines : Member nConsole ConsoleOp r => List Sym -> Eff r Int
 printSymLines [] = pure 0
 printSymLines (s :: rest) = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "${symLineText s}\n")
+  _ <- consolePrint "${symLineText s}\n"
   printSymLines rest
 
-runFind : String -> Eff hostRow Int
+runFind : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 runFind query = withIndex (\index => case findSymbol index query of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
+    _ <- consolePrint "error: ${diagText e}\n"
     pure 1
   OkC hits => do
     _ <- printSymLines hits
@@ -624,9 +626,7 @@ runFind query = withIndex (\index => case findSymbol index query of
       [] => pure 1
       [_] => pure 0
       _ => do
-        _ <-
-          raiseToRow hostRow
-            (@vuna@prim_eff_print "ambiguous: ${length hits} candidates, use a full Module.name\n")
+        _ <- consolePrint "ambiguous: ${length hits} candidates, use a full Module.name\n"
         pure 2
 )
 
@@ -635,30 +635,30 @@ symLineText : Sym -> String
 symLineText s =
   "${symFullName s}  (${symLine s}:${symCol s})${if symSig s == "" then "" else "  ${symSig s}"}"
 
-runImpact : String -> Eff hostRow Int
+runImpact : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 runImpact query = withIndex (\index => case impactOf index query of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
+    _ <- consolePrint "error: ${diagText e}\n"
     pure 1
   OkC text => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "${text}\n")
+    _ <- consolePrint "${text}\n"
     pure 0
 )
 
-apiArgs : List String -> Eff hostRow Int
+apiArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 apiArgs args = case parseToolArgs "vuna api" [] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
     [modName] => runApi modName
     _ => usageError 0
 
-runApi : String -> Eff hostRow Int
+runApi : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 runApi modName = withIndex (\index => case renderApi index modName of
   ErrC e => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${diagText e}\n")
+    _ <- consolePrint "error: ${diagText e}\n"
     pure 1
   OkC text => do
-    _ <- raiseToRow hostRow (@vuna@prim_eff_print "${text}\n")
+    _ <- consolePrint "${text}\n"
     pure 0
 )
 
@@ -666,14 +666,14 @@ runApi modName = withIndex (\index => case renderApi index modName of
 -- goal（洞目标显示）
 -- `vuna goal <file.vuna>` 列出 DT 文件里每个洞 `_` 的位置、目标类型与上下文。
 -- ---------------------------------------------------------------
-goalArgs : List String -> Eff hostRow Int
+goalArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 goalArgs args = case parseToolArgs "vuna goal" [] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case parsed.positionals of
     [file] => goalRun file
     _ => usageError 0
 
-goalRun : String -> Eff hostRow Int
+goalRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
 goalRun file = do
   textR <- readText file
   case textR of
@@ -689,9 +689,7 @@ goalRun file = do
             OkC decls => case goalsOfProgramTolerant decls of
               ErrC e => toolFailure (diagText e)
               OkC infos => do
-                _ <-
-                  raiseToRow hostRow
-                    (@vuna@prim_eff_print (goalHeader file (length infos) ++ renderGoals file infos))
+                _ <- consolePrint (goalHeader file (length infos) ++ renderGoals file infos)
                 pure 0
 
 renderGoals : String -> List DtGoalInfo -> String

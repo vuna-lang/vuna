@@ -14,13 +14,16 @@ module Vuna.FixityEnv where
 -- 用本地表继续（那会退化成 unknown fixity 或错优先级）。
 --
 -- 本模块只属于工具链（fmt/lint/LSP），不进 seed 闭包。
-import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Packages.Pkg
+import Base.Eff.Types
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
 
 -- 表示抽象：只有 emptyFixityEnv / fixitiesForFile 能构造与推进缓存。
 export record FixityEnv where
@@ -52,8 +55,8 @@ cachePut key value entries = Pair key value :: cacheForget key entries
 
 -- 取一个文件的程序级 fixity：`Pair env' (Result (List FixityDecl))`。
 -- env' 带回推进后的缓存（即使本次失败，已成功的上下文缓存仍可复用）。
--- 上下文解析 / 模块图加载是宿主动作，显式 `Eff hostRow`；缓存推进仍是纯数据。
-export fixitiesForFile : FixityEnv -> String -> String -> Eff hostRow (Pair FixityEnv (Check (List FixityDecl)))
+-- 上下文解析 / 模块图加载是宿主动作，显式 `Eff r`；缓存推进仍是纯数据。
+export fixitiesForFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (Check (List FixityDecl)))
 fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let
     dir = dirKey path

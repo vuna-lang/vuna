@@ -18,11 +18,15 @@ import Vuna.Compiler.Hash
 import Vuna.Compiler.Store
 import Base.EffArgs
 import Base.EffExit
-import Base.HostRow
 import Base.Monad
-import Base.Eff
+import Base.Eff.Types
+import Base.EffClock
+import Base.EffConsole
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
 
-main : Eff hostRow Int
+main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
 main = do
   args <- argsGetArgs
   code <- runCompilerCli args

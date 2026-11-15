@@ -20,7 +20,6 @@ module Vuna.Obs.Symbols where
 --   * 按 `ocaml` 升序排序，同名再按 `unit`/`file`/`line` 升序（两次运行逐字节一致）。
 --
 -- 输出：`--out` 省略时打到 stdout，给了 `--out` 时只打印 `wrote <path>`。
-import Base.HostRow
 import Base.List
 import Base.Sort
 import Base.String
@@ -29,6 +28,10 @@ import Vuna.Compiler.Common
 import Vuna.Files
 import Vuna.Json
 import Vuna.Obs.Path
+import Base.EffConsole
+import Base.EffFs
+import Base.Eff.Types
+import Base.EffProcess
 
 -- | 一条符号定义（`vuna-symbols 1` 的 `defs` 元素）。
 export record SymbolDef(..) where
@@ -42,7 +45,7 @@ export symbolsSchemaVersion : String
 symbolsSchemaVersion = "vuna-symbols 1"
 
 -- | `vuna obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
-export runObsSymbols : List String -> Eff hostRow Int
+export runObsSymbols : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runObsSymbols args = case parseToolArgs "vuna obs symbols" [ValueFlag "out"] args of
   ErrC e => symbolsFail 2 (diagText e)
   OkC parsed => case outOf parsed of
@@ -57,15 +60,15 @@ outOf parsed = case flagValue parsed "out" of
   Nothing => OkC Nothing
   Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
 
-symbolsFail : Int -> String -> Eff hostRow Int
+symbolsFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
 symbolsFail code e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure code
 
 -- ---------------------------------------------------------------
 -- 读取产物目录
 -- ---------------------------------------------------------------
-symbolsDir : Maybe String -> String -> Eff hostRow Int
+symbolsDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> String -> Eff r Int
 symbolsDir out dir = do
   dirR <- requireDirectory dir
   case dirR of
@@ -86,7 +89,7 @@ isMlName : String -> Bool
 isMlName path = endsWith ".ml" path
 
 -- `Pair (unit, path)`：unit 只取决于文件名（split 产物的模块名就是文件名）。
-mlFilesOf : List String -> Eff hostRow (List (Pair String String))
+mlFilesOf : {r : Row} -> List String -> Eff r (List (Pair String String))
 mlFilesOf paths = pure (map unitPairOf paths)
 
 unitPairOf : String -> Pair String String
@@ -96,7 +99,7 @@ unitLe : Pair String String -> Pair String String -> Bool
 unitLe a b = firstOf a <= firstOf b
 
 -- 逐文件扫描（错误只可能是读盘失败，包一层给调用方）。
-scanUnits : List (Pair String String) -> List SymbolDef -> Eff hostRow (Check (List SymbolDef))
+scanUnits : Member nFs FsOp r => List (Pair String String) -> List SymbolDef -> Eff r (Check (List SymbolDef))
 scanUnits [] acc = pure (OkC (reverse acc))
 scanUnits ((Pair unit path) :: rest) acc = do
   textR <- readText path
@@ -104,20 +107,18 @@ scanUnits ((Pair unit path) :: rest) acc = do
     ErrC e => pure (ErrC e)
     OkC text => scanUnits rest (append (defsOfUnit unit (lines text)) acc)
 
-emitSymbols : Maybe String -> List SymbolDef -> Eff hostRow Int
+emitSymbols : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> List SymbolDef -> Eff r Int
 emitSymbols out defs =
   let
     payload = renderJson (symbolsJson defs)
   in case out of
     Nothing => do
-      _ <- raiseToRow hostRow (@vuna@prim_eff_print "${payload}\n")
+      _ <- consolePrint "${payload}\n"
       pure 0
     Just path => do
       _ <- ensureDirPath (parentOf path)
-      _ <- raiseToRow hostRow (@vuna@prim_eff_writeFile path "${payload}\n")
-      _ <-
-        raiseToRow hostRow
-          (@vuna@prim_eff_print "wrote ${path} (${strFromInt (length defs)} defs)\n")
+      _ <- fsWriteFile path "${payload}\n"
+      _ <- consolePrint "wrote ${path} (${strFromInt (length defs)} defs)\n"
       pure 0
 
 -- ---------------------------------------------------------------

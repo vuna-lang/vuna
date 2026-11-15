@@ -13,7 +13,6 @@ module Vuna.Clean where
 --   --all       两者都清。
 -- 不带 flag 时只清缓存族（默认不碰持久包对象）。
 -- `DIR` 只对 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages` 不收目录。
-import Base.HostRow
 import Vuna.Cli.Args
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
@@ -23,8 +22,14 @@ import Vuna.Compiler.Store
 import Base.List
 import Base.Nat
 import Base.String
+import Base.EffClock
+import Base.EffConsole
+import Base.EffFs
+import Base.EffProcess
+import Base.Eff.Types
+import Base.EffEnv
 
-export runClean : List String -> Eff hostRow Int
+export runClean : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed =>
@@ -48,7 +53,7 @@ runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "s
 
 -- 接口缓存在对象库（`$VUNA_STORE/objects/iface`），没有树内 `*.iface`；
 -- 因此没有 `--iface`：清缓存 = 清缓存族（`--store`）或包对象族（`--packages`）。
-cleanTargets : Bool -> Bool -> Bool -> Bool -> String -> Eff hostRow Int
+cleanTargets : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Bool -> Bool -> String -> Eff r Int
 cleanTargets wantStore wantPackages wantGc dry dir = do
   storeCode <- if wantStore then cleanStore dry else pure 0
   if storeCode /= 0 then pure storeCode
@@ -64,19 +69,19 @@ cacheScopesOf root =
   append (map (\k => "${root}/objects/${k}") cacheKindNames)
     ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
 
-cleanStore : Bool -> Eff hostRow Int
+cleanStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
 cleanStore dry = do
   root <- storeRootEff
   cleanScopes "clean-store" (cacheScopesOf root) dry
 
 -- `--packages`：默认整族清理；`--gc` 只删未被引用对象。
-cleanPackages : Bool -> String -> Bool -> Eff hostRow Int
+cleanPackages : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> Bool -> Eff r Int
 cleanPackages wantGc dir dry = do
   root <- storeDataRootEff
   if wantGc then cleanPackagesGc root dir dry
   else cleanScopes "clean-packages" ["${root}/objects/pkg", "${root}/pkgs", "${root}/tmp"] dry
 
-cleanPackagesGc : String -> String -> Bool -> Eff hostRow Int
+cleanPackagesGc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Eff r Int
 cleanPackagesGc root dir dry = do
   local <- collectRootDigests dir
   global <- allRootDigests
@@ -88,7 +93,7 @@ cleanPackagesGc root dir dry = do
   in do
     _ <- if dry then pure 0 else removeEach drop
     _ <-
-      @vuna@prim_eff_print
+      consolePrint
         "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
     pure 0
 
@@ -103,12 +108,12 @@ anyLine f (x :: rest) = if f x then True else anyLine f rest
 
 -- 引用集 = 当前包 + `[workspace].members`（**递归嵌套**）的 git/url 依赖摘要（path 依赖不
 -- 参与，D12）。工作队列 + seen + fuel：结构递归在队列上，fuel 只防 members 环/失控。
-collectRootDigests : String -> Eff hostRow (List String)
+collectRootDigests : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List String)
 collectRootDigests dir = do
   abs <- absolutePath dir
   walkMemberDirs 4096 [abs] []
 
-walkMemberDirs : Int -> List String -> List String -> Eff hostRow (List String)
+walkMemberDirs : Member nFs FsOp r => Int -> List String -> List String -> Eff r (List String)
 walkMemberDirs fuel queue seen = if fuel <= 0 then pure []
 else case queue of
   [] => pure []
@@ -122,11 +127,11 @@ else case queue of
           walkMemberDirs (fuel - 1) (append (map (\rel => joinPath d rel) members) rest) (d :: seen)
         pure (append hashes more)
 
-manifestInfoEff : String -> Eff hostRow (Maybe (Pair (List String) (List String)))
+manifestInfoEff : Member nFs FsOp r => String -> Eff r (Maybe (Pair (List String) (List String)))
 manifestInfoEff path = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  exists <- fsFileExists path
   if exists then do
-    raw <- raiseToRow hostRow (@vuna@prim_eff_readFile path)
+    raw <- fsReadFile path
     case parseManifest path raw of
       ErrC _ => pure Nothing
       OkC manifest => case validateManifest manifest of
@@ -143,52 +148,48 @@ depHashesOf (dep :: rest) = case depHashOf dep of
 
 -- 清一组**作用域路径**（目录或文件）：先统计文件数（dry-run/输出口径），再整目录删除。
 -- 路径不存在 ⇒ 跳过；`rm -rf` 只对目录，文件走 removeFile。
-cleanScopes : String -> List String -> Bool -> Eff hostRow Int
+cleanScopes : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> List String -> Bool -> Eff r Int
 cleanScopes label paths dry = do
   files <- concatMapEff filesUnder paths
   let
     n = length files
   in do
     _ <- if dry then pure 0 else removeEachPath paths
-    _ <-
-      raiseToRow hostRow
-        (@vuna@prim_eff_print "${label}: ${storeVerb dry} ${strFromInt n} file(s)\n")
+    _ <- consolePrint "${label}: ${storeVerb dry} ${strFromInt n} file(s)\n"
     pure 0
 
 -- 路径下的全部文件：不存在 ⇒ []；文件 ⇒ 它自己；目录 ⇒ 递归。
-filesUnder : String -> Eff hostRow (List String)
+filesUnder : Member nFs FsOp r => String -> Eff r (List String)
 filesUnder path = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  exists <- fsFileExists path
   if not exists then pure []
   else do
-    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+    isDir <- fsIsDirectory path
     if isDir then walkFiles 1048576 path else pure [path]
 
-removeEachPath : List String -> Eff hostRow Int
+removeEachPath : Member nFs FsOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 removeEachPath [] = pure 0
 removeEachPath (path :: rest) = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
+  exists <- fsFileExists path
   if not exists then removeEachPath rest
   else do
-    isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
-    _ <-
-      if isDir then raiseToRow hostRow (@vuna@prim_eff_runIn "." ["rm", "-rf", path])
-      else raiseToRow hostRow (@vuna@prim_eff_removeFile path)
+    isDir <- fsIsDirectory path
+    _ <- if isDir then processRunIn "." ["rm", "-rf", path] else fsRemoveFile path
     removeEachPath rest
 
 storeVerb : Bool -> String
 storeVerb True = "would remove"
 storeVerb False = "removed"
 
-removeEach : List String -> Eff hostRow Int
+removeEach : Member nFs FsOp r => List String -> Eff r Int
 removeEach [] = pure 0
 removeEach (f :: rest) = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_removeFile f)
+  _ <- fsRemoveFile f
   removeEach rest
 
-cleanError : String -> Eff hostRow Int
+cleanError : Member nConsole ConsoleOp r => String -> Eff r Int
 cleanError e = do
-  _ <- raiseToRow hostRow (@vuna@prim_eff_print "error: ${e}\n")
+  _ <- consolePrint "error: ${e}\n"
   pure 2
 
 -- 与工作树其他遍历一致的跳过规则：`.local` 不跳过（`VUNA_IFACE_DIR=.local/iface` 时要能清到）。
@@ -205,24 +206,24 @@ skipCleanDir name =
     || startsWith "result-" name
 
 -- 目录树是文件系统图（符号链接可成环），用显式 fuel 守卫。
-walkFiles : Int -> String -> Eff hostRow (List String)
+walkFiles : Member nFs FsOp r => Int -> String -> Eff r (List String)
 walkFiles fuel dir = if fuel <= 0 then pure []
 else do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- if exists then @vuna@prim_eff_isDirectory dir else pure False
+  exists <- fsFileExists dir
+  isDir <- if exists then fsIsDirectory dir else pure False
   if exists && isDir then do
-    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+    names <- fsReadDir dir
     concatMapEff (walkGo (fuel - 1) dir) names
   else pure []
 
-concatMapEff : (a -> Eff hostRow (List b)) -> List a -> Eff hostRow (List b)
+concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
   xs <- f x
   ys <- concatMapEff f rest
   pure (append xs ys)
 
-walkGo : Int -> String -> String -> Eff hostRow (List String)
+walkGo : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
 walkGo fuel dir name = if fuel <= 0 then pure []
 else case name of
   "." => pure []
@@ -232,8 +233,8 @@ else case name of
     let
       path = "${dir}/${name}"
     in do
-      exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists path)
-      isDir <- raiseToRow hostRow (@vuna@prim_eff_isDirectory path)
+      exists <- fsFileExists path
+      isDir <- fsIsDirectory path
       if exists && isDir then walkFiles (fuel - 1) path else pure [path]
 
 -- ---------------------------------------------------------------
@@ -243,7 +244,7 @@ else case name of
 -- 一条策略：常用的别删。roots（`store/roots/<项目摘要>`，项目只追加）就是「常用」的
 -- 声明；宽限窗口保护「刚写、root 还没写」的崩溃窗口。
 -- ---------------------------------------------------------------
-export runStoreGc : List String -> Eff hostRow Int
+export runStoreGc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueFlag "older-than", ValueFlag "max-size"] args of
   ErrC e => cleanError (diagText e)
   OkC parsed => do
@@ -289,13 +290,13 @@ else case digitOf (substring (Base.Nat.fromInt pos) (Base.Nat.fromInt 1) s) of
   Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
 
 -- 所有项目 roots 的并集（GC 的「保留」集合）。
-allRootDigests : Eff hostRow (List String)
+allRootDigests : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r (List String)
 allRootDigests = do
   projects <- storeRootProjectListEff
   concatMapEff storeRootLoadEff projects
 
 -- 遍历缓存族：objects/（**排除包对象族 objects/pkg/**）、blobs/、units/ 的全部文件。
-gcFilesOf : String -> Eff hostRow (List String)
+gcFilesOf : Member nFs FsOp r => String -> Eff r (List String)
 gcFilesOf root = do
   objs <- walkFiles 1048576 "${root}/objects"
   blobs <- walkFiles 1048576 "${root}/blobs"
@@ -306,22 +307,22 @@ gcFilesOf root = do
   in pure (append cacheObjs (append blobs units))
 
 -- 目录下的直接子目录（不存在/不是目录 ⇒ []）。
-subDirsOf : String -> Eff hostRow (List String)
+subDirsOf : Member nFs FsOp r => String -> Eff r (List String)
 subDirsOf dir = do
-  exists <- raiseToRow hostRow (@vuna@prim_eff_fileExists dir)
-  isDir <- if exists then @vuna@prim_eff_isDirectory dir else pure False
+  exists <- fsFileExists dir
+  isDir <- if exists then fsIsDirectory dir else pure False
   if exists && isDir then do
-    names <- raiseToRow hostRow (@vuna@prim_eff_readDir dir)
+    names <- fsReadDir dir
     concatMapEff (\n => do
       let
         p = "${dir}/${n}"
       in do
-        sub <- raiseToRow hostRow (@vuna@prim_eff_isDirectory p)
+        sub <- fsIsDirectory p
         pure (if sub then [p] else [])
     ) names
   else pure []
 
-dirSizeOf : String -> Eff hostRow Int
+dirSizeOf : Member nFs FsOp r => String -> Eff r Int
 dirSizeOf path = do
   files <- walkFiles 1048576 path
   xs <- sizesOf files
@@ -329,13 +330,13 @@ dirSizeOf path = do
 
 -- 视图候选：整目录按 roots 名保护、按目录 mtime 判旧。视图只能整目录删
 -- （`.complete` 还在时删单个文件会让读侧把半截视图当完整的）。
-gcViewCandidates : Int -> List String -> Int -> List String -> Eff hostRow (List (Pair Int (Pair Int String)))
+gcViewCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
 gcViewCandidates _ _ _ [] = pure []
 gcViewCandidates now keep grace (d :: rest) = do
   more <- gcViewCandidates now keep grace rest
   if memName (fileNameOf d) keep then pure more
   else do
-    mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime d)
+    mtime <- fsFileMtime d
     if mtime + grace < now then do
       size <- dirSizeOf d
       pure (Pair mtime (Pair size d) :: more)
@@ -347,16 +348,16 @@ fileNameOf path = case reverse (split "/" path) of
   x :: _ => x
 
 -- 候选 = 名字不在 roots 里、且 mtime 早于宽限窗口；带 size 便于容量判定。
-gcCandidates : Int -> List String -> Int -> List String -> Eff hostRow (List (Pair Int (Pair Int String)))
+gcCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
 gcCandidates _ _ _ [] = pure []
 gcCandidates now keep grace (p :: rest) = do
   more <- gcCandidates now keep grace rest
   if memName (fileNameOf p) keep then pure more
   else do
-    mtime <- raiseToRow hostRow (@vuna@prim_eff_fileMtime p)
+    mtime <- fsFileMtime p
     if mtime + grace < now then do
-      size <- raiseToRow hostRow (@vuna@prim_eff_fileSize p)
-      pure (Pair mtime (Pair size p) :: more)
+      size <- fsFileSize p
+      pure (Pair mtime (Pair (natToInt size) p) :: more)
     else pure more
 
 sortByAge : List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
@@ -380,14 +381,14 @@ sumSizes : List (Pair String Int) -> Int
 sumSizes [] = 0
 sumSizes (p :: rest) = secondOf p + sumSizes rest
 
-sizesOf : List String -> Eff hostRow (List (Pair String Int))
+sizesOf : Member nFs FsOp r => List String -> Eff r (List (Pair String Int))
 sizesOf [] = pure []
 sizesOf (p :: rest) = do
   more <- sizesOf rest
-  size <- raiseToRow hostRow (@vuna@prim_eff_fileSize p)
+  size <- fsFileSize p
   pure (Pair p size :: more)
 
-gcSweep : String -> List String -> Int -> Int -> Bool -> Eff hostRow Int
+gcSweep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> List String -> Int -> Int -> Bool -> Eff r Int
 gcSweep root keep grace maxBytes dry = do
   now <- currentSec
   files <- gcFilesOf root
@@ -408,12 +409,12 @@ gcSweep root keep grace maxBytes dry = do
   in do
     _ <- if dry then pure 0 else removeEachPath paths
     _ <-
-      @vuna@prim_eff_print
+      consolePrint
         "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
     pure 0
 
 -- 当前 Unix 秒（GC 的宽限窗口判据）。
-currentSec : Eff hostRow Int
+currentSec : Member nClock ClockOp r => Eff r Int
 currentSec = do
-  us <- effTimeUs
+  us <- clockNow
   pure (us / 1000000)

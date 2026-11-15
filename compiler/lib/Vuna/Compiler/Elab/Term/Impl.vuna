@@ -168,7 +168,7 @@ checkBoolCaseFuel fuel globals ctx ec scrutTerm alts expected sp = if fuel <= 0 
 else Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolTrueCtor expected sp) (\p => case p of
   Pair trueBody (Pair catchAll ec1) => case catchAll of
     Just falseBody => OkC (Pair (TIf scrutTerm trueBody falseBody) ec1)
-    Nothing => Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec alts boolFalseCtor expected sp) (\q => case q of
+    Nothing => Vuna.Compiler.Common.bind (boolAltFuel (fuel - 1) globals ctx ec1 alts boolFalseCtor expected sp) (\q => case q of
       Pair falseBody (Pair _ ec2) => OkC (Pair (TIf scrutTerm trueBody falseBody) ec2)
     )
 )
@@ -193,11 +193,11 @@ else case alt of
     else boolAltGoFuel (fuel - 1) globals ctx ec rest target expected sp catchAll
     PVar pname psp => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
       Pair bodyTerm ec1 =>
-        boolAltGoFuel (fuel - 1) globals ctx ec rest target expected sp (Just bodyTerm)
+        boolAltGoFuel (fuel - 1) globals ctx ec1 rest target expected sp (Just bodyTerm)
     )
     PWild psp => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
       Pair bodyTerm ec1 =>
-        boolAltGoFuel (fuel - 1) globals ctx ec rest target expected sp (Just bodyTerm)
+        boolAltGoFuel (fuel - 1) globals ctx ec1 rest target expected sp (Just bodyTerm)
     )
     _ => tcErr0 (patSpan pat) BoolCaseRestriction
 
@@ -1527,7 +1527,21 @@ else case expr of
     else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
   EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected sp
   EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-  EIf c t e sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  -- D51 补：check 位的 `if` 先用期望类型检查两个分支（矩阵降级产生的 `if` 体不会
+  -- 丢期望类型，`Row.Cons`/`List.Cons` 这类同名构造子因此能按族消歧）；分支检查失败时
+  -- 回退旧的推断路径（保留 Nat/Int 混合提升等推断期行为）。
+  EIf c t e sp => Vuna.Compiler.Common.bind (checkCondBoolFuel (fuel - 1) globals ctx ec c sp) (\pc => case pc of
+    Pair cTerm ec1 =>
+      let
+        attempt = Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 t expected) (\pt => case pt of
+          Pair tTerm ec2 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec2 e expected) (\pe => case pe of
+            Pair eTerm ec3 => OkC (Pair (TIf cTerm tTerm eTerm) ec3)
+          )
+        )
+      in case attempt of
+        OkC p => OkC p
+        ErrC _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+  )
   ECase scrut alts csp => checkCaseFuel (fuel - 1) globals ctx ec scrut alts expected csp
   ELet binds body rec_ sp => checkLetFuel (fuel - 1) globals ctx ec binds body rec_ expected sp
   -- 防御分支——正常路径已在绑定块入口展开；普通表达式位置直接降级后重查。

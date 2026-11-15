@@ -7,7 +7,7 @@ import Base.EffConsole
 import Base.HostRow
 import Base.List
 
-prog : (n : String) -> Eff (Cons n ProcessOp Nil) Int
+prog : (n : String) -> Eff (Cons n ProcessOp []) Int
 prog n = do
   c <- processExit@(n) 7
   pure c
@@ -20,11 +20,15 @@ mopH op k = case op of
   Args => k []
   Exit c => k c
   RunIn dir args => k 0
+  Spawn args => k 9
+  Wait h => k 0
 
 main : Eff hostRow Int
 main = do
   _ <-
-    consolePrint ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
-  observed <- raiseToRow hostRow (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
+    consolePrint
+      ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
+  observed <-
+    raiseTo hostRow (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
   _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
   pure 0

@@ -11,12 +11,14 @@ module Vuna.Tool.Session where
 --   * marker（空载荷，codec `tool-marker 1`）：命中但调用方手里已有记录（REPL 的）
 --   * 载荷字节（各调用方自己的 codec，如 `indexPayloadCodec`）
 -- 读侧 codec 不符 ⇒ `Nothing` ⇒ 调用方重算（marker 因此永远不会被当成载荷）。
-import Base.HostRow
-import Base.Eff
+import Base.Eff.Types
 import Base.List
 import Vuna.Compiler.Addr
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Store
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
 
 -- | 工具会话身份：`origin`（tool/pkg）+ `bucket`（同一进程内不同用途各占一桶）。
 export record ToolSession(..) where
@@ -40,7 +42,7 @@ toolMarkerCodec : String
 toolMarkerCodec = "tool-marker 1"
 
 -- | 命中：返回对象地址（调用方拿它去读载荷；marker 读不出 ⇒ 按 miss 重算）。
-export toolHitValue : ToolSession -> String -> List String -> Eff hostRow (Maybe (Maybe String))
+export toolHitValue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> Eff r (Maybe (Maybe String))
 toolHitValue ts key deps = do
   let
     addr = toolSessionAddrOf ts key deps
@@ -49,13 +51,13 @@ toolHitValue ts key deps = do
     pure (if exists then Just (Just addr) else Nothing)
 
 -- | 提交 marker 节点（成功但载荷在调用方手里）。
-export toolCommitValue : ToolSession -> String -> List String -> Eff hostRow ToolSession
+export toolCommitValue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> Eff r ToolSession
 toolCommitValue ts key deps = do
   _ <- storeObjectWriteEff "tool" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
   pure ts
 
 -- | 写载荷对象（同一输入同一地址；内容未变则不写盘），返回地址。
-export toolStorePayload : ToolSession -> String -> List String -> String -> String -> Eff hostRow (Pair ToolSession String)
+export toolStorePayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> String -> String -> Eff r (Pair ToolSession String)
 toolStorePayload ts key deps codec payload = do
   let
     addr = toolSessionAddrOf ts key deps
@@ -64,5 +66,5 @@ toolStorePayload ts key deps codec payload = do
     pure (Pair ts addr)
 
 -- | 读载荷（codec 不符 / 坏字节 ⇒ `Nothing` ⇒ 调用方重算）。
-export toolLoadPayload : String -> String -> Eff hostRow (Maybe String)
+export toolLoadPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Maybe String)
 toolLoadPayload addr codec = storeObjectReadEff "tool" codec addr

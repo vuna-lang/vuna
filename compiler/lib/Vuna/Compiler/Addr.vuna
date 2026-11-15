@@ -13,7 +13,6 @@ module Vuna.Compiler.Addr where
 --
 -- 分段用 `Canonical.Bytes` 的 `[n:…]`/`s<len>:` 自定界编码再取 SHA-256：不用「拼字符串
 -- 再加分隔符」，因为那会 reintroduce `("a","bc")` 与 `("ab","c")` 同键的歧义。
-import Base.HostRow
 import Base.List
 import Base.Maybe
 import Base.Pair
@@ -22,6 +21,10 @@ import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Hash
 import Vuna.Compiler.Store
+import Base.Eff.Types
+import Base.EffEnv
+import Base.EffFs
+import Base.EffProcess
 
 -- | 地址格式版本：分段文法或摘要算法变化时递增（地址随之换代）。
 export addrSchema : String
@@ -110,7 +113,7 @@ export headerAddrOf : String -> String -> String -> String
 headerAddrOf pkgKey moduleName srcAddr = addrOf ["header", headerCodec, pkgKey, moduleName, srcAddr]
 
 -- | 读 header（缺失/损坏 ⇒ `Nothing`，调用方现 parse 后写回）。
-export readHeaderEff : String -> Eff hostRow (Maybe ModHeader)
+export readHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe ModHeader)
 readHeaderEff addr = do
   payload <- storeObjectReadEff headerKind headerCodec addr
   pure (case payload of
@@ -119,7 +122,7 @@ readHeaderEff addr = do
   )
 
 -- | 写 header（幂等）。
-export writeHeaderEff : String -> ModHeader -> Eff hostRow Int
+export writeHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> ModHeader -> Eff r Int
 writeHeaderEff addr h = storeObjectWriteEff headerKind headerCodec addr (encModHeader h)
 
 -- ---------------------------------------------------------------

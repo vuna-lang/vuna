@@ -16,7 +16,6 @@ module Vuna.Test.Session where
 -- 返回值刻意**不用** `Maybe (Check a)`：该形状（把 `Check` 放进 `Maybe` 后由别的
 -- 模块解构）会触发精化器的一条 `TC_UnknownConstructorInCase` 误报。这里改用普通
 -- 记录 `CheckSample` / `EvalSample`，`Check` 的构造/解构只发生在 `Vuna.Test.InProc`。
-import Base.HostRow
 import Base.IORef
 import Vuna.Compiler.Common
 import Vuna.Compiler.Diag
@@ -24,6 +23,13 @@ import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Packages.Pkg
+import Base.Eff.Types
+import Base.EffArgs
+import Base.EffClock
+import Base.EffEnv
+import Base.EffExit
+import Base.EffFs
+import Base.EffProcess
 
 export record Session where
   sesRoot : String -- 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）
@@ -64,7 +70,7 @@ sesEvalAuxOf s = s.sesEvalAux
 
 -- 用 base 目录自己的包上下文（`contextForDir`）：包身份、包环境、依赖图都从它的
 -- manifest 推出，与 `vuna check <base>` 写侧完全同口径。
-readBaseIfaces : String -> Eff hostRow (Maybe (List ModuleIface))
+readBaseIfaces : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List ModuleIface))
 readBaseIfaces baseDir = do
   ctxR <- contextForDir baseDir
   case ctxR of
@@ -72,7 +78,7 @@ readBaseIfaces baseDir = do
     OkC ctx => ifacesForContextEff ctx
 
 -- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败/为空 ⇒ Nothing）。
-ensureSession : IORef Session -> String -> Eff hostRow (Maybe (List ModuleIface))
+ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => IORef Session -> String -> Eff r (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
   s <- readRef ref
   if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then pure (Just (sesIfacesOf s))
@@ -86,7 +92,7 @@ ensureSession ref baseDir = do
         pure (Just ifaces)
 
 -- check：`Nothing` = 会话不可用（调用方改走全量）。
-export sessionCheckSample : IORef Session -> String -> String -> Eff hostRow (Maybe CheckSample)
+export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe CheckSample)
 sessionCheckSample ref baseDir source = do
   ses <- ensureSession ref baseDir
   case ses of
@@ -96,12 +102,12 @@ sessionCheckSample ref baseDir source = do
       case ctxR of
         ErrC e => pure (Just (CheckSample (Just e) []))
         OkC ctx => do
-          text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+          text <- fsReadFile source
           s <- readRef ref
           result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
           applyCheckResult ref s baseDir ifaces result
 
-applyCheckResult : IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff hostRow (Maybe CheckSample)
+applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff r (Maybe CheckSample)
 applyCheckResult ref s baseDir ifaces result = case result of
   ErrC e => pure (Just (CheckSample (Just e) []))
   OkC p => if not (firstOf p) then pure Nothing
@@ -112,7 +118,7 @@ applyCheckResult ref s baseDir ifaces result = case result of
     pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
 -- interp：`Nothing` = 会话不可用（调用方改走全量 `dtEvalFile`）。
-export sessionEvalSample : IORef Session -> String -> String -> Eff hostRow (Maybe EvalSample)
+export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe EvalSample)
 sessionEvalSample ref baseDir source = do
   ses <- ensureSession ref baseDir
   case ses of
@@ -122,12 +128,12 @@ sessionEvalSample ref baseDir source = do
       case ctxR of
         ErrC e => pure (Just (EvalSample (Just e) ""))
         OkC ctx => do
-          text <- raiseToRow hostRow (@vuna@prim_eff_readFile source)
+          text <- fsReadFile source
           s <- readRef ref
           result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
           applyEvalResult ref s baseDir ifaces result
 
-applyEvalResult : IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff hostRow (Maybe EvalSample)
+applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff r (Maybe EvalSample)
 applyEvalResult ref s baseDir ifaces result = case result of
   ErrC e => pure (Just (EvalSample (Just e) ""))
   OkC p => if not (firstOf p) then pure Nothing
