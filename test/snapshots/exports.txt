@@ -6,7 +6,7 @@ base/lib/Base/Bits.vuna: add32, band, bnot, bor, bxor, mask32, mask8, rol32, rot
 base/lib/Base/Bool.vuna: Bool(..), and, bool, not, or, xor
 base/lib/Base/Eff.vuna: Cont, Eff, Member(..), ResFn(..), Row(..), bracket, defaultInstance, effPrim, finally, handleCore, handleCoreLin, handleWith, handleWithAt, joinEff, joinEffNilOuter, mkCont, performCore, raise, raiseTo, resFn, resOf, resumeCont, rowAppend, rowRem, runEff, runPure, sendCore, weaken, weakenRow
 base/lib/Base/Eff/Reader.vuna: ReaderOp(..), ask, handleReader, handleReaderLin, local, resReader
-base/lib/Base/Eff/Types.vuna: module Base.Eff
+base/lib/Base/Eff/Types.vuna: Base.Eff.Cont, Base.Eff.Eff, Base.Eff.Member, Base.Eff.ResFn, Base.Eff.Row, Base.Eff.bracket, Base.Eff.defaultInstance, Base.Eff.effPrim, Base.Eff.finally, Base.Eff.handleCore, Base.Eff.handleCoreLin, Base.Eff.handleWith, Base.Eff.handleWithAt, Base.Eff.joinEff, Base.Eff.joinEffNilOuter, Base.Eff.mkCont, Base.Eff.performCore, Base.Eff.raise, Base.Eff.raiseTo, Base.Eff.resFn, Base.Eff.resOf, Base.Eff.resumeCont, Base.Eff.rowAppend, Base.Eff.rowRem, Base.Eff.runEff, Base.Eff.runPure, Base.Eff.sendCore, Base.Eff.weaken, Base.Eff.weakenRow
 base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, resArgs
 base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, resClock
 base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, resConsole

@@ -37,6 +37,8 @@ cd "$REPO"
 # 模块头导出面：`module X ( a, B(..), module M, C.d ) where`。
 # 规范化：去注释 → 取括号内 → 逗号切项 → 去空白/空项 → 排序去重 → ", " 连接。
 # （逐文件处理：awk/sed 只负责抽 header，没有 header 的文件记 `(implicit)`。）
+# **输入按 `vuna fmt` 后的形状解析**：逐行 awk 不拼接多行 `export import X` 的续行，
+# 非规范写法会退化成 `module X`。改完源码先 `vuna fmt`，再刷新快照。
 export_items() { # header-file
   header=$(cat "$1")
   # 去行注释与单行块注释；源码头不含跨行块注释。

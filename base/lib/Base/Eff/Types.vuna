@@ -9,9 +9,4 @@ module Base.Eff.Types where
 --
 -- 需要显式行构造 `Cons n Op r` / `Nil` 的代码（测试夹具、base 的宿主 handler）仍导入
 -- `Base.Eff`。
-export import Base.Eff
-  ( Eff, Row, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow
-  , raise, raiseTo, sendCore, performCore, handleCore, handleCoreLin
-  , Cont, resumeCont, ResFn, resFn, resOf, handleWith, handleWithAt
-  , mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter
-  )
+export import Base.Eff (Eff, Row, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow, raise, raiseTo, sendCore, performCore, handleCore, handleCoreLin, Cont, resumeCont, ResFn, resFn, resOf, handleWith, handleWithAt, mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter)
