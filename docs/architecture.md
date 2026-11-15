@@ -60,8 +60,8 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 
 ```text
 源文件
- → Frontend.Lexer.lexSource      （token + Pos/Span；lexComments 供 fmt）
- → Frontend.Parser.parseSource   （offside layout → AST + imports）
+ → Frontend.Lexer.lexSource      （token + Pos/Span；lexSourceWithComments 一次给 token + 注释）
+ → Frontend.Parser.parseSource   （offside layout → AST + imports；工具用 parseSourceWithComments）
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）

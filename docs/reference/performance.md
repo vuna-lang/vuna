@@ -324,24 +324,32 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 
 | 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：elab |
 | --- | --- | --- | --- |
-| `check base` | 57 次 / 12.2 ms | 114 次 / 5.5 ms | 127 ms |
-| `check compiler` | 165 次 / 135 ms | 461 次 / 158 ms | ~19.7 s（全量口径） |
+| `check base` | 57 次 / ~11 ms | 114 次 / ~4.6 ms | ~127 ms |
+| `check compiler` | 165 次 / ~135 ms | 461 次 / ~158 ms | ~19.7 s（全量口径） |
 
-两条读数各说明一件事：
+三条结论：
 
-* lex : syntax ≈ 2:1（与「lex 占 parse 86%」的旧注释一致），所以**词法**是前端里值得优化的
-  那一半；
+* lex : syntax ≈ 2:1（与「lex 占 parse 的 86%」的旧注释一致），词法是前端里值得优化的那一半；
 * `syntax` 次数 = 模块数的 **2.8 倍**（461 / 164）：同一份源码在一次 check 里被反复
   `parseSourceRecoveringTokens`（加载、fixity 表、header 扫描各走一遍）。减少**次数**比加快
-  单次解析收益更直接。
+  单次解析收益更直接（债 D88）；
+* 前端整体在冷 `check` 里只有 ~1.5%：lex/parse 不再是瓶颈，工具链（fmt / lint / map / LSP）
+  才是它的主要消费者。
 
-增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义，相邻档 ≤2.5×）：
+增长率门槛 `checks.vuna-frontend-growth`（合成 N 个同形定义，相邻档 ≤2.5×；本机）：
 
-| N | `parse.lex` | `parse.syntax` | `fmt --check` |
+| N | `parse.lex` | `parse.syntax` | `fmt --check`（改前 → 改后） |
 | --- | --- | --- | --- |
-| 2000 | 11.9 ms | 8.5 ms | 76 ms |
-| 4000 | 18.1 ms | 16.5 ms | 117 ms |
-| 8000 | 28.6 ms | 19.5 ms | 167 ms |
+| 2000 | 11.9 ms | 7.9 ms | 77 → 70 ms |
+| 4000 | 17.4 ms | 15.2 ms | 119 → 106 ms |
+| 8000 | 25.7 ms | 18.3 ms | 168 → 154 ms |
+
+**注释只扫一遍**：`Frontend.Lexer` 现在有两条入口——token 路径（`lexChars`，不分配注释）
+与注释路径（`lexSourceWithComments`，一次扫描同时给出 token 与注释）。旧实现另有
+`scanComments` 并行扫描器（自己再实现「字符串里不算注释」），fmt / index / doc / LSP 都要
+`parse` + `lexComments` 两遍；现在走 `parseSourceWithComments`，只付一次词法（上表
+`fmt --check` 的 ~8% 即来自这里）。token 路径保持零分配：把注释收集并进 token 路径（每个
+token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃。
 
 ## 7. 测量规程
 
