@@ -15,6 +15,7 @@ let
       packages = import ./packages.nix {
         inherit pkgs ocamlTools;
         shellTools = common.shellTools pkgs;
+        e2eTools = common.e2eTools pkgs;
         inherit (common) version;
       };
     in

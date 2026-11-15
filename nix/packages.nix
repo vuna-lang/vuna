@@ -5,6 +5,7 @@
   pkgs,
   ocamlTools,
   shellTools,
+  e2eTools,
   version,
 }:
 let
@@ -98,7 +99,8 @@ let
 
   vuna-run-tests = import ./run-tests.nix {
     inherit pkgs vuna vuna-seed;
-    tools = shellTools;
+    # 与 checks 的 e2e 同一份 PATH：wasm-tools/wasmtime/cc/node 都在。
+    tools = e2eTools;
   };
 in
 {
