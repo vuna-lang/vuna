@@ -645,6 +645,73 @@ else case alts of
         Err e => Err e
         Ok q => Ok (Pair (append (firstOf bp) (firstOf q)) (secondOf q))
 
+-- ---------------------------------------------------------------
+-- List 桥接（M3b）：strUnpack / strPack / strConcatMany
+-- （strSubstTemplate 仍是待办；见 docs/reference/wasm.md §9）
+-- ---------------------------------------------------------------
+catI : List (List Instr) -> List Instr
+catI xs = concatMap (\x => x) xs
+
+refNulls : Int -> List Instr
+refNulls n = if n <= 0 then [] else IRefNull :: refNulls (n - 1)
+
+wasmListTy : WasmListFam -> String
+wasmListTy lf = watFamName lf.wasmListFamily
+
+wasmNilCell : WasmListFam -> List Instr
+wasmNilCell lf =
+  append [IConstI32 lf.wasmListNilTag]
+    (append (refNulls lf.wasmListConsFields) [IStructNew (wasmListTy lf)])
+
+wasmBridgeFuncs : Maybe WasmListFam -> List WatFunc
+wasmBridgeFuncs Nothing = []
+wasmBridgeFuncs (Just lf) = [rtStrUnpackF lf, rtStrPackF lf, rtStrConcatManyF lf]
+
+rtStrUnpackF : WasmListFam -> WatFunc
+rtStrUnpackF lf =
+  let
+    ty = wasmListTy lf
+    params = [Pair "$p0" WvAnyRef]
+    locals =
+      [ Pair "$s" (WvRef "$str"),
+        Pair "$n" WvI32,
+        Pair "$i" WvI32,
+        Pair "$acc" WvAnyRef,
+        Pair "$b" WvI32
+      ]
+    body =
+      catI
+        [[ILocalGet "$p0", IRefCast "$str", ILocalSet "$s", ILocalGet "$s", IArrayLen, ILocalSet "$n"], wasmNilCell lf, [ILocalSet "$acc", ILocalGet "$n", ILocalSet "$i"], [IBlock "$u_done" "" [ILoop "$u_l" "" [ILocalGet "$i", IPlain "i32.eqz", IBrIf "$u_done", ILocalGet "$i", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", ILocalGet "$s", ILocalGet "$i", IArrayGetU "$str", ILocalSet "$b", IConstI32 lf.wasmListConsTag, ILocalGet "$b", IPlain "i64.extend_i32_u", IStructNew "$int", ILocalGet "$acc", IStructNew ty, ILocalSet "$acc", IBr "$u_l"]]], [ILocalGet "$acc"]]
+  in WatFunc "$rt_strUnpack" "" params [WvAnyRef] locals body
+
+rtStrPackF : WasmListFam -> WatFunc
+rtStrPackF lf =
+  let
+    ty = wasmListTy lf
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$cur" WvAnyRef, Pair "$n" WvI32, Pair "$out" (WvRef "$str"), Pair "$idx" WvI32]
+    body =
+      catI
+        [[ILocalGet "$p0", ILocalSet "$cur", IConstI32 0, ILocalSet "$n"], [IBlock "$p_count_done" "" [ILoop "$p_count" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$p_count_done", ILocalGet "$n", IConstI32 1, IBinop "i32.add", ILocalSet "$n", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$p_count"]]], [ILocalGet "$n", IArrayNewDefault "$str", ILocalSet "$out", IConstI32 0, ILocalSet "$idx", ILocalGet "$p0", ILocalSet "$cur"], [IBlock "$p_fill_done" "" [ILoop "$p_fill" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$p_fill_done", ILocalGet "$out", ILocalGet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 1, IRefCast "$int", IStructGet "$int" 0, IPlain "i32.wrap_i64", IArraySet "$str", ILocalGet "$idx", IConstI32 1, IBinop "i32.add", ILocalSet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$p_fill"]]], [ILocalGet "$out"]]
+  in WatFunc "$rt_strPack" "" params [WvAnyRef] locals body
+
+rtStrConcatManyF : WasmListFam -> WatFunc
+rtStrConcatManyF lf =
+  let
+    ty = wasmListTy lf
+    params = [Pair "$p0" WvAnyRef]
+    locals =
+      [ Pair "$cur" WvAnyRef,
+        Pair "$total" WvI32,
+        Pair "$out" (WvRef "$str"),
+        Pair "$idx" WvI32,
+        Pair "$src" (WvRef "$str")
+      ]
+    body =
+      catI
+        [[ILocalGet "$p0", ILocalSet "$cur", IConstI32 0, ILocalSet "$total"], [IBlock "$c_count_done" "" [ILoop "$c_count" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$c_count_done", ILocalGet "$total", ILocalGet "$cur", IRefCast ty, IStructGet ty 1, IRefCast "$str", IArrayLen, IBinop "i32.add", ILocalSet "$total", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$c_count"]]], [ILocalGet "$total", IArrayNewDefault "$str", ILocalSet "$out", IConstI32 0, ILocalSet "$idx", ILocalGet "$p0", ILocalSet "$cur"], [IBlock "$c_fill_done" "" [ILoop "$c_fill" "" [ILocalGet "$cur", IRefCast ty, IStructGet ty 0, IConstI32 lf.wasmListNilTag, IBinop "i32.eq", IBrIf "$c_fill_done", ILocalGet "$out", ILocalGet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 1, IRefCast "$str", ILocalTee "$src", IConstI32 0, ILocalGet "$src", IArrayLen, IArrayCopy "$str" "$str", ILocalGet "$idx", ILocalGet "$src", IArrayLen, IBinop "i32.add", ILocalSet "$idx", ILocalGet "$cur", IRefCast ty, IStructGet ty 2, ILocalSet "$cur", IBr "$c_fill"]]], [ILocalGet "$out"]]
+  in WatFunc "$rt_strConcatMany" "" params [WvAnyRef] locals body
+
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFunc fuel st d = case d of
   IrExternDef name _ _ _ => Err "wasm target: extern definition `${name}` is not supported yet"
@@ -785,8 +852,8 @@ concatMapType (f :: rest) = case wasmFamType f of
   Nothing => concatMapType rest
   Just t => t :: concatMapType rest
 
-buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Result WasmModule
-buildModule fuel st ordered entry printResult = case genDefFuncs fuel st ordered of
+buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Maybe WasmListFam -> Result WasmModule
+buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel st ordered of
   Err msg => Err msg
   Ok pf =>
     let
@@ -798,7 +865,9 @@ buildModule fuel st ordered entry printResult = case genDefFuncs fuel st ordered
         let
           startState = secondOf p
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
-          funcs = append (rtFunctions st.gsConsts) (append userFuncs [startFunc])
+          funcs =
+            append (rtFunctions st.gsConsts)
+              (append (wasmBridgeFuncs listFamM) (append userFuncs [startFunc]))
           famTypes = concatMapType st.gsFams
           allTypes = append baseTypes famTypes
           globals = globalsOf ordered
@@ -831,7 +900,8 @@ build program printResult =
       let
         needed = collectNeeded 100000 [irEntryMainOf e] [] defs
         ordered = filter (\d => memStr (irDefName d) needed) defs
-      in case buildModule 100000 st0 ordered (Just e) printResult of
+        listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
+      in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
 

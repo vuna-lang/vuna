@@ -212,9 +212,10 @@ base 定义即使含不支持构造也不拒绝（与 wasm M1 的 `collectNeeded
 - **M3a**（已完成）：对象与标签。`IrCtor` / 对象头（tag + 字段）/ 通用 `IrCase` 分派 /
   `IrProj` / `IrRecord` / `IrRecUpd`。验收：用户 `data`（`Color` / `Shape`）、record 构造/投影/更新、
   record 嵌在变体字段里，全部与 OCaml 差分一致。栈溢出检查仍未做。
-- **M3b**：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` / `strPack` /
-  `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成可增长
-  arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。`CG_ListBridgeRequired` 同义
+- **M3b**（待办）：canonical `List` 族接进 M3a 的对象表示，然后实现 `strUnpack` /
+  `strPack` / `strConcatMany` / `strSubstTemplate` 四个桥接符号；同时把 1 MiB 固定堆换成
+  可增长 arena（打满就开新段，不做 RC/复用——回收策略留给 M4）。wasm 侧已完成前三个。
+  `CG_ListBridgeRequired` 同义
   门禁在 native 侧按「程序有没有 `IrListFam`」实现。
 - **M3c**：字符串 API 收口。以上到位后 `Base.String` 的 13 个导出（`split` / `join` /
   `contains` / `startsWith` / `endsWith` / `trim*` / `lines` / `unlines` / `repeat` /
