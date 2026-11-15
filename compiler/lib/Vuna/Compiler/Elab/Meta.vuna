@@ -1041,7 +1041,8 @@ rigOfLinearValue ec dom = if isLinearType ec dom then Rig1 else RigOmega
 
 -- 外层 context 是否含线性类型（决定是否需要对 λ body 做捕获扫描）。
 export ctxHasLinear : Ec -> Ctx -> Bool
-ctxHasLinear ec (Ctx items refs d) = ctxHasLinearItems ec (Ctx items refs d) items 0
+ctxHasLinear ec (Ctx items env refs d) =
+  ctxHasLinearItems ec (Ctx items env refs d) items 0
 
 ctxHasLinearItems : Ec -> Ctx -> List (Pair String Term) -> Int -> Bool
 ctxHasLinearItems ec ctx [] i = False
