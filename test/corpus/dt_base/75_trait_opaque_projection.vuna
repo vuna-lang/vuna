@@ -2,7 +2,7 @@
 -- 字典构造子的字段被渲染成不透明值（`Obj.t`）；自动生成的**方法投影**体
 -- `case d of MkDict f => f op` 若不给字段使用点包表现层 cast（`prim_erase`），
 -- ocamlopt 会在 `Obj.t` 上直接应用而报 `This is not a function`。
--- 这里只声明 trait + 实例（不调用投影：自定义 kind 的类参数在调用点还撞 M15 高阶元变量限制，
+-- 这里只声明 trait + 实例（不调用投影：自定义 kind 的类参数在调用点仍受高阶元变量限制，
 -- 与本缺口无关），覆盖生成的投影定义本身能编译。
 data Op : Type where
   Bump : Int -> Op

@@ -1,4 +1,4 @@
--- M32：多个约束（`Eq a, Ord a =>`）按源码顺序生成多只字典 binder；body 里 `==` / `<`
+-- 多个约束（`Eq a, Ord a =>`）按源码顺序生成多只字典 binder；body 里 `==` / `<`
 -- 分别命中对应假设。
 import Prelude
 

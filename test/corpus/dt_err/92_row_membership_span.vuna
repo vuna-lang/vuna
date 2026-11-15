@@ -1,4 +1,4 @@
--- S4 C5 位置夹具：行成员缺失诊断必须带位置（`tcErr1`），且片段不依赖仓库绝对路径。
+-- 位置夹具：行成员缺失诊断必须带位置（`tcErr1`），且片段不依赖仓库绝对路径。
 -- 期望出现 `:5:1: [TC_NoInstanceFound] no instance found for row membership`。
 import Base.Eff
 import Base.EffState

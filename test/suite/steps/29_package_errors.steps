@@ -1,5 +1,5 @@
 # store-isolated: 断言 build 的“首次构建/错误且不留产物”，不能被已发布视图命中。
 # 29) 包模式错误：缺依赖 / 依赖环 / 隐藏模块 / 依赖包歧义 → 非 0、含诊断码、不留产物。
-# 期望载体是结构化诊断 `expected.diag.json`（`.err` 文本片段已从夹具层删除）。
+# 期望载体是结构化诊断 `expected.diag.json`，不比对 `.err` 文本片段。
 run: sh -c 'for raw in corpus/packages/9[0-9]_*/ corpus/packages/m31_*/; do [ -d "$raw" ] || continue; dir=${raw%/}; case "$dir" in *95_cross_dep) continue ;; esac; code=$(grep -o "\"code\":\"[A-Za-z0-9_]*\"" "$dir/expected.diag.json" | head -1 | cut -d\" -f4); rm -rf "$dir/.output"; if out=$("$VUNA" build "$dir" 2>&1); then printf "expected failure: %s\n" "$dir"; exit 1; fi; if [ -n "$code" ] && ! printf "%s" "$out" | grep -qF "$code"; then printf "code missing: %s (%s)\n" "$dir" "$code"; exit 1; fi; if [ -e "$dir/.output" ]; then printf "output left: %s\n" "$dir"; exit 1; fi; rm -rf "$dir/.output"; done'
 exit: 0

@@ -1,4 +1,4 @@
--- M18.6：宇宙层级不透明化后的可观测行为。
+-- 宇宙层级不透明化后的可观测行为。
 -- 层级只能经 levelZero / levelSucc / levelMax / levelEq 前进，Elab 不自己做 Int 算术；
 -- 定义性相等里 `VType i` 与 `VType j` 的比较走 levelEq。
 data Nat : Type where

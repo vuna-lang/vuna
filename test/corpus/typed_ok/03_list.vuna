@@ -1,5 +1,5 @@
--- M26：Prelude 自动注入 → 用 base 的 `List`（构造子 Nil/Cons 来自 Prelude）。
--- 本地同名 `data List` 的解析优先级见 A07/A08/A09/C17（M27）。
+-- Prelude 自动注入 → 用 base 的 `List`（构造子 Nil/Cons 来自 Prelude）。
+-- 本地同名 `data List` 的解析优先级见 dt/56_user_list_data。
 sum : List Int -> Int
 sum Nil = 0
 sum (Cons x rest) = x + sum rest

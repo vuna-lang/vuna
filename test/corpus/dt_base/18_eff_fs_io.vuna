@@ -1,5 +1,5 @@
 -- Layer 1：宿主-backed Fs 效应（handler 直调 @vuna@prim_eff_* 原语；answer = `Eff [] Int`）。
--- W10 收尾：`Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
+-- `Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
 import Base.HostRow
 import Base.Eff
 import Base.EffFs

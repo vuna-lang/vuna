@@ -1,5 +1,5 @@
 #!/bin/sh
-# M26 API / 产物快照生成器。
+# API / 产物快照生成器。
 #
 # 用法（任意目录；第一个参数是输出目录，默认本目录）：
 #   sh test/snapshots/update.sh                 # 刷新并提交前三个/五个快照文件
@@ -16,7 +16,7 @@
 #   modules.txt              `vuna map --modules` 在仓库根 / compiler / base 的模块面。
 #   split-05_entry_data.txt  `vuna compile <pkg> OUTDIR` 的产物文件列表 + 每个 .ml 里
 #   split-06_entry_trait.txt `^type t_` / `^let v_` 的名字清单（排序），锁住 split 产物的
-#   split-dt_ad_hoc.txt      模块/入口归属与零参定义形态（M26/A05/A13/C08 的回归面）。
+#   split-dt_ad_hoc.txt      模块/入口归属与零参定义形态。
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
@@ -91,7 +91,7 @@ new_items() { # file
 }
 
 {
-  echo "# M26 导出面快照（module X (...) where 的项，排序规范化；新语法逐定义 export；旧 header 仍按列表）"
+  echo "# 导出面快照（module X (...) where 的项 + 逐定义 export，排序规范化）"
   for f in $(find lib/Vuna compiler/lib/Vuna base/lib -name '*.vuna' | LC_ALL=C sort); do
     header=$(awk '/^module[ \t]/{f=1} f{print} f&&/ where[ \t]*$/{exit}' "$f")
     case "$header" in
@@ -107,7 +107,7 @@ mv "$tmp/exports.txt" "$OUT/exports.txt"
 # ---------------------------------------------------------------- modules.txt
 # 模块面：仓库根（工具链 + app）、compiler 包、base 包。
 {
-  echo "# M26 模块面快照（vuna map --modules）"
+  echo "# 模块面快照（vuna map --modules）"
   echo ""
   echo "## root（工具链 + 产品 CLI）"
   "$VUNA" map --modules
@@ -135,7 +135,7 @@ split_snapshot() { # snapshot-name entry-or-pkg
     exit 1
   }
   {
-    printf '# M26 split 产物快照：%s\n' "$entry"
+    printf '# split 产物快照：%s\n' "$entry"
     printf '# files（排序，相对 OUTDIR）\n'
     ( cd "$outdir" && find . -type f | sed 's|^\./||' | LC_ALL=C sort )
     printf '\n# names（每个 .ml 的 ^type t_ / ^let v_，排序）\n'

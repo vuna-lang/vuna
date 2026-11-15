@@ -1,10 +1,10 @@
--- M18.5：lambda 形参擦除规则修复。
+-- lambda 形参擦除规则。
 -- lambda 形参只有域是宇宙才擦除；否则参与运行时表示（与定义参数同规则）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
--- ① 形参在运行时被使用：修复前报 `DT: type-level binding `n` is used at runtime`。
+-- ① 形参在运行时被使用：域是值类型的形参不擦除，因此合法。
 twice : (Nat -> Nat) -> Nat -> Nat
 twice f x = f (f x)
 
@@ -16,14 +16,14 @@ toInt n = case n of
   Zero => 0
   Succ k => 1 + toInt k
 
--- ② 形参未被使用：修复前静默少生成一层 `fun`，ocamlopt 才报类型错。
+-- ② 形参未被使用：仍必须生成完整 `fun` 层（少一层会在 ocamlopt 处报类型错）。
 apply2 : (Int -> Int) -> Int -> Int
 apply2 f x = f x
 
 unused : Int
 unused = apply2 (\n => 7) 1
 
--- ③ 闭包捕获上游状态：形参参与运行时表示后，捕获的变量必须能正确带入。
+-- ③ 闭包捕获上游状态：捕获的变量必须能正确带入闭包。
 addN : Int -> Int -> Int
 addN n x = x + n
 

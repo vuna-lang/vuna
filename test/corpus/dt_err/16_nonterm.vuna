@@ -1,4 +1,4 @@
--- M16：非结构化递归被拒（递归调用的实参没有变小）。
+-- 非结构化递归被拒（递归调用的实参没有变小）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

@@ -1,7 +1,7 @@
 # store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
-# 63) F3 B：语言级调试构造 `dbg!` / `assert` / `todo` 与 release 构建拒绝。
+# 63) 语言级调试构造 `dbg!` / `assert` / `todo` 与 release 构建拒绝。
 #     `--release` / `VUNA_RELEASE=1` 在 CLI 边界解析成显式 Bool，沿调用链传到 Resolver；
-#     包括 workspace 成员的子进程 check（旧实现成员子进程 argv 没有旗标，会漏判）。
+#     包括 workspace 成员的子进程 check（成员子进程 argv 也必须带旗标）。
 run: D="$TMPDIR/debug-constructs"; rm -rf "$D"; mkdir -p "$D"; printf 'main : Int\nmain = let _ = dbg! "msg" in assert True "ok" 1\n' >"$D/ok.vuna"; printf 'main : Int\nmain = assert False "boom" 0\n' >"$D/assert.vuna"; printf 'main : Int\nmain = todo "later"\n' >"$D/todo.vuna"; printf 'main : Int\nmain = let _ = dbg! "x" in 1\n' >"$D/dbg.vuna"
 run: "$VUNA" check "$TMPDIR/debug-constructs/ok.vuna" >/dev/null 2>&1
 run: VUNA_RELEASE=1 "$VUNA" check "$TMPDIR/debug-constructs/assert.vuna" 2>&1

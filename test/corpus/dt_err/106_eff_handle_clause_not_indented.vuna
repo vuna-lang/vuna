@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例：op 子句必须缩进到 handle 块内。
+-- 负例：op 子句必须缩进到 handle 块内。
 import Base.Eff
 import Base.EffConsole
 import Base.List

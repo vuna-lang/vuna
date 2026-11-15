@@ -1,4 +1,4 @@
--- M28（决策 5 / D10）：`axiom name : Ty` 是无体的可擦除/不透明顶层。
+-- `axiom name : Ty` 是无体的可擦除/不透明顶层。
 -- 类型层引用合法（`t` 作类型常量、`step` 作类型层函数值）；运行时使用会被 codegen
 -- 擦除检查拒绝（反例见 dt_err/42_axiom_runtime）。
 axiom t : Type

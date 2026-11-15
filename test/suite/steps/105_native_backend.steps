@@ -1,7 +1,7 @@
 # 105) native 后端：x86-64 汇编 -> 静态可执行，行为与 OCaml 后端差分一致。
 #
-# 覆盖 M1（纯值/算术/let/if、顶层饱和函数、Nat 结构递归、Bool 入口、63-bit 边界、
-# 除零 trap、确定性、拒绝面、`--no-compile`）与 M2（String 字面量 / `++` / `strFromInt`
+# 覆盖：纯值/算术/let/if、顶层饱和函数、Nat 结构递归、Bool 入口、63-bit 边界、
+# 除零 trap、确定性、拒绝面、`--no-compile`；String 字面量 / `++` / `strFromInt`
 # / strLength / strAt / strSubstring / strHash / strShow / `==` / String 入口打印 /
 # bump 堆耗尽 trap），以及与 wasm 的 parity 面（位运算、`assert` / `todo` / `prim_fail`
 # 的统一错误报告、`dbg!` 的 debug 原语、arity > 6 的栈传参）。依赖 PATH 里的 cc

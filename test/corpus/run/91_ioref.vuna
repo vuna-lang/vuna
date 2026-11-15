@@ -1,4 +1,4 @@
--- M33 W3：`Eff []` 内的 IORef（newRef / writeRef / readRef）。
+-- `Eff []` 内的 IORef（newRef / writeRef / readRef）。
 import Base.IORef
 import Base.Eff
 

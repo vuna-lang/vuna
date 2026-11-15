@@ -14,7 +14,7 @@
 #   3) 同 size + 同 mtime 的内容变更必须失效（安全窗内回落内容哈希，而非 mtime+size）；
 #   4) blob 被截断（framing 校验失败）⇒ 重算并重写合法 framing；
 #   5) 并发两个 map：都成功且缓存可读；
-#   6) 非 workspace 的 map 给出可读错误并非 0（C12）。
+#   6) 非 workspace 的 map 给出可读错误并非 0。
 set -u
 
 VUNA=${1:?usage: check.sh <vuna>}
@@ -76,7 +76,7 @@ module Demo.B where
 
 import Demo.A
 
--- M31.3（B26）：临时 workspace 无 base 依赖，`+` 需本地 fixity 声明。
+-- 临时 workspace 无 base 依赖，`+` 需本地 fixity 声明。
 infixl 6 +
 
 export two : Int

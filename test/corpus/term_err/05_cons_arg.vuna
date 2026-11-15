@@ -1,4 +1,4 @@
--- M25.2a 负例：递归调用藏在 `Cons` 实参里（旧实现 EApp 只递归函数头 → 静默通过）。
+-- 负例：递归调用藏在 `Cons` 实参里。
 import Prelude
 
 build : Int -> List Int

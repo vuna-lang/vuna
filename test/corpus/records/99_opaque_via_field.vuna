@@ -1,4 +1,4 @@
--- R1（records-v2）：`opaque` 恒为装箱 ⇒ `deriving via field` 按声明档位拒绝。
+-- `boxed` 恒为装箱 ⇒ `deriving via field` 按声明档位拒绝。
 boxed record Tagged where
   tag : Int
 deriving via field (Show)

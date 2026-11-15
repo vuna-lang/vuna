@@ -11,7 +11,7 @@ run: command -v readelf
 exit: 0
 
 # ---------------------------------------------------------------- fixtures
-# 一个带 obs span 的可执行包（后续多条断言复用）。
+# 一个带 obs span 的可执行包（多条断言复用）。
 run: sh -c 'd="$TMPDIR/app"; mkdir -p "$d/app"; printf "[package]\nname = \"obsapp\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"app.work\" \"vuna.user\" (\\_ => 7)\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/app-out" "$d"'
 exit: 0
 file-exists: $TMPDIR/app-out/bin/obsapp

@@ -1,4 +1,4 @@
--- 阶段 5：单效应 helper（Eff [FsOp]）在多效应 main（Eff [FsOp, ConsoleOp]）里
+-- 单效应 helper（Eff [FsOp]）在多效应 main（Eff [FsOp, ConsoleOp]）里
 -- 经行包含 lift 自动提升。
 import Base.Eff
 import Base.EffConsole

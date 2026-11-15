@@ -1,4 +1,4 @@
--- M15：接口（trait）+ 实例搜索 + 方法投影（字典编码）。
+-- 接口（trait）+ 实例搜索 + 方法投影（字典编码）。
 data Color : Type where
   Red : Color
   Blue : Color

@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）：参数化 op 族（Reader 的 k = 1）；结果行删除 Reader 条目。
+-- 参数化 op 族（Reader 的 k = 1）；结果行删除 Reader 条目。
 import Base.Eff
 import Base.Eff.Reader
 

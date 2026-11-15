@@ -1,4 +1,4 @@
--- stdlib：容器 Eq / Ord / Show 实例与 Ordering / Unit（M41）。
+-- 容器 Eq / Ord / Show 实例与 Ordering / Unit。
 -- `Show` 覆盖 List / Maybe / Pair / Result / Map；`Eq` / `Ord` 覆盖代数容器。
 import Base.Eq
 import Base.Int

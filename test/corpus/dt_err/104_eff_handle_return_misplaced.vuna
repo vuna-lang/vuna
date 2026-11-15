@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例：return 子句必须唯一且在最前。
+-- 负例：return 子句必须唯一且在最前。
 import Base.Eff
 import Base.EffConsole
 import Base.List

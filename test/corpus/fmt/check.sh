@@ -5,8 +5,8 @@
 #   *.vuna + *.fmt          —— 格式化 golden：format 结果与 .fmt 逐字节一致，
 #                              且 format→parse→format 幂等（fmt --check）。
 #   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp`（DT 核心求值）输出一致且等于 golden。
-#   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归；M23 起 where 语义夹具已改写成顶层定义）：
-#                              格式化前后 compile（M26：目录式 + build.sh）产物运行输出一致且等于 golden。
+#   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归，定义都在顶层）：
+#                              格式化前后 compile（目录式 + build.sh）产物运行输出一致且等于 golden。
 #
 # 环境变量：
 #   VUNA       验证编译器，默认 <repo>/.local/m11/vuna
@@ -19,7 +19,7 @@ REPO=$(CDPATH= cd -- "$HERE/../../.." && pwd) || exit 1
 
 : "${VUNA:=$REPO/.local/m11/vuna}"
 : "${OCAMLOPT:=ocamlopt}"
-# M26：包上下文取代 `--root`；base 位置经 VUNA_BASE 交给无 manifest 的文件。
+# base 位置经 VUNA_BASE 交给无 manifest 的文件；包上下文下不需要 `--root`。
 : "${VUNA_BASE:=$REPO/base}"
 export VUNA_BASE
 
@@ -40,9 +40,9 @@ check_eq() { # name expected actual
   if [ "$2" = "$3" ]; then ok; else bad "$1"; printf '  expected: %s\n  actual:   %s\n' "$2" "$3"; fi
 }
 
-# ---- 直接用产品 CLI（不再自编译探针包）----
-# probe 时代的 `write` / `check` / `fmt` 分别映射为：复制+fmt、fmt --check、fmt 后读回。
-# 这样 32_fmt_corpus 不再为“格式化器自测”冷编译整棵工具链（原 ~47 s）。
+# ---- 直接用产品 CLI ----
+# 三个动作分别映射为：复制+fmt、fmt --check、fmt 后读回。
+# 这样格式化器自测不必冷编译整棵工具链。
 fmt_write() { # src dst
   cp "$1" "$2" || return 1
   "$VUNA" fmt "$2" >/dev/null 2>&1
@@ -135,7 +135,7 @@ for file in "$HERE"/typed/*.vuna; do
     ok
   fi
   expected_text=$(cat "$expected")
-  # 原文件（M26：compile 产目录 + build.sh，不再产单文件 .ml）
+  # 原文件（compile 产目录 + build.sh，不产单文件 .ml）
   rm -rf "$tmp/t1" "$tmp/t1.exe"
   if ! ( cd "$REPO" && "$VUNA" compile "$file" "$tmp/t1" ) >"$tmp/t1.log" 2>&1; then
     bad "$name (typed compile)"

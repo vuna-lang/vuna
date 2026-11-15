@@ -1,4 +1,4 @@
--- D27 / effects.md §5–§6：签名索引效应（CPS 编码）的异构结果类型。
+-- 签名索引效应（CPS 编码）的异构结果类型（见 docs/reference/effects.md §5–§6）。
 --
 -- `resOp` 按运行时 op 决定结果类型（Bump ↦ Int，Read ↦ String）。处理器的续延
 -- `resOp op -> Int` 在运行时位置上是不可命名的擦除依赖类型：

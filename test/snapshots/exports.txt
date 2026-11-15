@@ -1,4 +1,4 @@
-# M26 导出面快照（module X (...) where 的项，排序规范化；新语法逐定义 export；旧 header 仍按列表）
+# 导出面快照（module X (...) where 的项 + 逐定义 export，排序规范化）
 base/lib/Base.vuna: module Base.Bits, module Base.Bool, module Base.Eq, module Base.Float, module Base.Foldable, module Base.Hashable, module Base.Interp, module Base.List, module Base.Map, module Base.Maybe, module Base.Monad, module Base.Monoid, module Base.Nat, module Base.Num, module Base.Obs, module Base.Obs.Span, module Base.Ord, module Base.Pair, module Base.Result, module Base.Show, module Base.Sort, module Base.String, module Base.Traversable, module Base.Unit
 base/lib/Base/Applicative.vuna: Applicative(..)
 base/lib/Base/Array.vuna: fromList, get, length, make, set, toList

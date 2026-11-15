@@ -1,12 +1,12 @@
 #!/bin/sh
-# M30 P2：LSP 全功能冒烟（JSON-RPC over stdio）。
+# LSP 全功能冒烟（JSON-RPC over stdio）。
 #
 # 用法（独立可运行，不依赖环境变量）：
 #   sh test/corpus/lsp/smoke.sh <path-to-vuna>
 #
 # 真的把 LSP 帧从 stdin 喂给 `vuna lsp`，断言 stdout 上的 JSON 帧：
 #
-# A. 协议/生命周期（M17 起保留的全部断言）
+# A. 协议/生命周期
 #   1. initialize            → capabilities 全套（textDocumentSync Full / hover /
 #                              completion(trigger ".") / definition / references /
 #                              documentSymbol / formatting / workspaceSymbol /
@@ -18,8 +18,8 @@
 #   5. shutdown → result null；exit → 进程退出码 0
 #   6. stdout 只含协议帧（无日志混入、无残留 CR），每帧正文长度与 Content-Length 一致
 #
-# B. M30 新增功能（临时两模块包 + 入口文本）
-#   7. 含 import 的模块类型错误**不再跳过**：Main 里 depHelper "oops" 报出来
+# B. 多模块包与查询功能（临时两模块包 + 入口文本）
+#   7. 含 import 的模块类型错误也会报出来：Main 里 depHelper "oops" 报出来
 #   8. lint 诊断合并：if/else-if 字面量链 → LN_LiteralIfChain（severity 2）
 #   9. textDocument/formatting → 全文 TextEdit（newText 里 `x : Int`）
 #  10. textDocument/documentSymbol → AST 声明树（data/record/trait 子节点）
@@ -33,17 +33,17 @@
 #
 # C. 传输/查询回归（交互式客户端；帧一次性批式喂入是抓不到的）
 #  18. 交互式帧读取：body 后没有换行时 initialize 也必须立刻有响应
-#      （回归点：读取层曾按行读 body → initialize 互等死锁）
+#      （读取层必须按 Content-Length 读满 body：按行读会让两端互等）
 #  19. 符号 hover：返回签名，且 range 落在**光标 token**（不是符号定义位置）
 #
-# D. M38 P1c：lint quick fix（textDocument/codeAction）
+# D. lint quick fix（textDocument/codeAction）
 #  20. docstring hover（只显示 `-- |`，普通注释不显示，多行保留）
 #  21. 触发 LN_LiteralIfChain 的文本 + 光标 range → CodeAction：kind=quickfix、
 #      title 带规则短名、内嵌完整诊断（range/severity/source/code/message）、0-based
-#      整行替换 range、newText 是 case 形式、全文档 "fix all lint findings"（C38 起是
-#      Command 形式）；context.only 不含 quickfix 或 range 与可修复 finding 不相交时回空数组。
+#      整行替换 range、newText 是 case 形式、全文档 "fix all lint findings"（Command 形式）；
+#      context.only 不含 quickfix 或 range 与可修复 finding 不相交时回空数组。
 #
-# E. C38 codeAction 高 ROI（case split + command 形式）
+# E. codeAction 高 ROI（case split + command 形式）
 #  30. 洞 + 上下文 data / record binder → `refactor.rewrite` 的 `case split on <name>`：
 #      构造子顺序/参数通配（Box _）/隐式构造子参数不进模式（MkH => _）/分支缩进 =
 #      洞行缩进 + 2；base 类型经 Prelude 解析（Bool → False/True）；函数类型 binder、
@@ -79,7 +79,7 @@ case "$VUNA" in
   *) VUNA=$(command -v "$VUNA" 2>/dev/null || echo "$VUNA") ;;
 esac
 # 相对路径按「调用者当前目录」解析成绝对路径，再切到仓库根
-# （本段由 Lead 提供：保证从仓库根和 test/ 两个目录都能跑）。
+# （保证从仓库根和 test/ 两个目录都能跑）。
 case "$VUNA" in
   /*) ;;
   *) VUNA=$(cd "$(dirname "$VUNA")" && pwd)/$(basename "$VUNA") ;;
@@ -159,7 +159,7 @@ check_eq() { # name expected actual
 }
 
 # ---------------------------------------------------------------
-# 夹具：两模块包（vuna.toml 新格式：无 version/edition）
+# 夹具：两模块包（vuna.toml 只有 [package]/[dependencies]，无 version/edition）
 #   lib/Dep.vuna    —— data/record/trait + depHelper 定义
 #   lib/Main.vuna   —— import Dep，使用 depHelper
 #   lib/Main2.vuna  —— 只写了一半的引用（completion 用）
@@ -457,7 +457,7 @@ check_contains "untitled: URI 之后仍能 shutdown" "$untitled_out" '"id":2'
 
 # ---- 17) 退出码 ----
 # LSP 约定：收到 shutdown 再 exit 退 0；EOF/未 shutdown 就退出算异常，退 1。
-# 回归点：EOF 路径曾把 flushLogs 的「写入字节数」当退出码。
+# 退出码只看协议状态：flushLogs 的写入字节数不参与。
 {
   printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}'
   printf 'Content-Length: 47\r\n\r\n{"jsonrpc":"2.0","method":"exit","params":null}'
@@ -473,8 +473,8 @@ printf 'Content-Length: 44\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"shutdown"}' 
 check_eq "收到 shutdown 但无 exit（EOF）退出码 1" "1" "$?"
 
 # ---- 18) 交互式帧读取：body 后没有换行、客户端等响应时也必须立刻处理 ----
-# 回归点：读取层曾用 `prim_readLine` 按行读 body；标准 LSP 帧的 body **不带换行**，
-# 于是 initialize 的响应要等下一帧写入才出现（客户端在等响应，不会再写 → 永久挂起）。
+# 读取层按 Content-Length 读满整个 body：标准 LSP 帧的 body **不带换行**，按行读会让
+# initialize 的响应等下一帧写入才出现（客户端在等响应，不会再写 → 永久挂起）。
 # 这里只写 initialize，延迟 6s 才写 shutdown/exit，要求在 4s 内看到 initialize 响应。
 #
 # 注意：这条流水线不能用 `awk` 生成帧——awk 的 stdout 是块缓冲，帧会等到 awk 退出
@@ -504,7 +504,7 @@ wait "$interactive_pid"
 check_eq "交互式会话退出码 0" "0" "$?"
 
 # ---- 19) 符号 hover：返回签名，且 range 落在**光标 token**（不是定义位置）----
-# 回归点：range 曾指向符号定义处，客户端会把使用点的 hover 当成失效而收起。
+# range 指向符号定义处会让客户端把使用点的 hover 当成失效而收起。
 # 这里故意 hover 在**使用点**（第 6 行 useIt = depHelper 1），定义在第 3 行；
 # range 必须是光标 token（line 6, char 8..17），不能是定义位置。
 {
@@ -555,7 +555,7 @@ check_contains "doc hover 显示 docstring" "$dochover_out" "Helper docs"
 check_contains "doc hover 保留多行" "$dochover_out" "second line"
 check_not_contains "doc hover 不含普通注释" "$dochover_out" "ordinary note"
 
-# ---- 21) codeAction：lint quick fix（M38 P1c；C38 起 fix all 走 Command 形式）----
+# ---- 21) codeAction：lint quick fix（fix all 走 Command 形式）----
 # Linty.vuna 的 literal-if-chain：Edit 行范围 1-based 4..7（整行替换；if 分派直接提升成 clause）。
 # 请求 range 用 LSP 的 0-based 4..6，与 Edit 相交 → 1 条单条 quickfix + 1 条 fix all
 # （`Command`，不带内嵌 edit）。断言 0-based 整行替换 range = (3,0)..(7,0)
@@ -579,8 +579,8 @@ check_eq "codeAction 会话退出码 0" "0" "$ca_code"
 check_contains "codeAction 回 id 2" "$ca_out" '"id":2'
 check_contains "codeAction kind=quickfix" "$ca_out" '"kind":"quickfix"'
 check_contains "codeAction title 带规则短名" "$ca_out" '"title":"fix: literal-if-chain"'
-# C38 收窄：内嵌诊断从「只带 code」升级为完整诊断（与 publishDiagnostics 同一条 JSON：
-# range / severity / source / code / message），客户端仍可按 code 关联。
+# 内嵌诊断是完整诊断（与 publishDiagnostics 同一条 JSON：
+# range / severity / source / code / message），客户端可按 code 关联。
 check_contains "codeAction 内嵌诊断带 0-based range" "$ca_out" '"diagnostics":[{"range":'
 check_contains "codeAction 内嵌诊断带 severity/source/code/message" "$ca_out" \
   '"severity":2,"source":"vuna","code":"LN_LiteralIfChain","message":"if dispatch on'
@@ -622,7 +622,7 @@ check_contains "超大帧声明写 stderr 日志" "$(cat "$tmp/big.err")" "frame
 printf 'Content-Length: 100\r\n\r\nshort' | "$VUNA" lsp >/dev/null 2>/dev/null
 check_eq "半帧 EOF 退出码 1" "1" "$?"
 
-# ---- 26) M40 模块名 hover：import / 导出项 `module B` / 模块头 + 模块 docstring ----
+# ---- 26) 模块名 hover：import / 导出项 `module B` / 模块头 + 模块 docstring ----
 # 模块 docstring 写在 `module` 头之前（`-- | ...`），docstring 任一行都应出现在 hover 里。
 mkdir -p "$tmp/modws/lib"
 printf '[package]\nname = "modws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/modws/vuna.toml"
@@ -668,7 +668,7 @@ check_contains "模块 definition 跳到 ModDoc.vuna" "$mod_out" '/ModDoc.vuna'
 check_contains "模块 definition 指向 module 头名字" "$mod_out" \
   '"range":{"start":{"line":2,"character":7},"end":{"line":2,"character":13}}'
 
-# ---- 27) M40 局部绑定：hover（语法级类型/值）与 definition（binder 位置）----
+# ---- 27) 局部绑定：hover（语法级类型/值）与 definition（binder 位置）----
 mkdir -p "$tmp/localws/lib"
 printf '[package]\nname = "localws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/localws/vuna.toml"
 cat >"$tmp/localws/lib/Local.vuna" <<'VEOF'
@@ -727,11 +727,10 @@ check_contains "遮蔽：body n 指向 let binder" "$local_out" \
 check_contains "遮蔽：值 n 指向函数参数" "$local_out" \
   '"id":10,"result":[{"uri":"file://'"$tmp"'/localws/lib/Local.vuna","range":{"start":{"line":9,"character":10}'
 
-# ---- 33) C45 Pi / 类型级 binder hover：顶层签名里的 `(f : A) -> B` binder 返回 domain 类型 ----
-# 回归点：Pi 类型住在签名里，而 hover 局部绑定原先只 walk pats + body、从不 walk 签名类型表达式，
-# 所以签名 Pi binder 是死代码（hover 返回 null）。修法：`findDeclBind` 先把 `DSig` 的完整签名
-# （`declSigType`，非 `arrowDomains`——后者丢 binder 名）喂给 `walkExpr`，其 `EPi` 分支按
-# `piNamePos` 命中 binder 名、类型取 domain。这里 hover 签名 binder 本体 + 带 `where` 的签名。
+# ---- 33) Pi / 类型级 binder hover：顶层签名里的 `(f : A) -> B` binder 返回 domain 类型 ----
+# Pi 类型住在签名里：hover 局部绑定必须连签名类型表达式一起 walk（`findDeclBind` 先把 `DSig`
+# 的完整签名 `declSigType` 喂给 `walkExpr`——不能用 `arrowDomains`，后者丢 binder 名），`EPi`
+# 分支按 `piNamePos` 命中 binder 名、类型取 domain。这里 hover 签名 binder 本体 + 带 `where` 的签名。
 mkdir -p "$tmp/piws/lib"
 printf '[package]\nname = "piws"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/piws/vuna.toml"
 cat >"$tmp/piws/lib/PiTest.vuna" <<'VEOF'
@@ -764,7 +763,7 @@ check_contains "Pi binder hover range 落在 binder f" "$pi_out" \
   '"range":{"start":{"line":2,"character":9},"end":{"line":2,"character":10}}'
 check_contains "带 where 的签名 Pi binder hover（fn）" "$pi_out" 'fn : Int -> Int'
 
-# ---- 28) M40 洞：未解 `_` 的目标+上下文；命名洞 `?name` 的名字/目标/上下文 ----
+# ---- 28) 洞：未解 `_` 的目标+上下文；命名洞 `?name` 的名字/目标/上下文 ----
 mkdir -p "$tmp/holews/lib"
 printf '[package]\nname = "holews"\n\n[dependencies]\nvuna-base = "%s/base"\n' "$repo" >"$tmp/holews/vuna.toml"
 cat >"$tmp/holews/lib/Holes.vuna" <<'VEOF'
@@ -808,7 +807,7 @@ check_contains "命名洞 hover 给上下文" "$hole_out" '`m` : Int'
 check_contains "命名洞 range 覆盖整个 ?goal" "$hole_out" \
   '"range":{"start":{"line":5,"character":5},"end":{"line":5,"character":10}}'
 
-# ---- 29) C38 rename：顶层函数 / 局部绑定（遮蔽）/ 记录字段 / prepareRename / 拒绝 ----
+# ---- 29) rename：顶层函数 / 局部绑定（遮蔽）/ 记录字段 / prepareRename / 拒绝 ----
 # 夹具覆盖三条路径：
 #   - topFn：签名行 + 定义子句 + 使用点（顶层函数，同一文件）；
 #   - shadow n：参数改名时只动参数 binder 与 let 值里的 n，**不碰** let binder / body n；
@@ -897,7 +896,7 @@ check_contains "prepareRename 也支持局部绑定" "$rename_out" \
 check_contains "rename 关键字 → result null" "$rename_out" '"id":6,"result":null'
 check_contains "rename base 标准库（Int）→ result null" "$rename_out" '"id":7,"result":null'
 
-# ---- 30) C38 case split：光标在洞上 + 上下文 data / record binder → refactor.rewrite 动作 ----
+# ---- 30) case split：光标在洞上 + 上下文 data / record binder → refactor.rewrite 动作 ----
 # 夹具覆盖：本模块 data（Color 三分支 / Box 带参数 / H 隐式构造子参数）、record（Pt 单
 # 分支、Pairing 参数化单分支）、多参数 data（Either：应用类型文本在 show 里是左结合全括号
 # `((Either Int) Bool)`）、base 类型（Bool → False/True，经隐式 Prelude 重导出）、洞在缩进
@@ -1031,7 +1030,7 @@ r14=$(lsp_frame_id "$tmp/split.out" 14)
 check_contains "case split: 参数化 record 单分支" "$r14" \
   '"newText":"case p of\n  Pairing { left = _, right = _ } => _"'
 
-# ---- 31) C38 command 形式：fix all → workspace/executeCommand → workspace/applyEdit ----
+# ---- 31) command 形式：fix all → workspace/executeCommand → workspace/applyEdit ----
 # 服务器不写文件：收到 `vuna.fixAllLint` 后回 executeCommand result null，并发一条
 # `workspace/applyEdit` 请求（客户端应用整文档替换；客户端响应按无 method 帧忽略）。
 {
@@ -1057,7 +1056,7 @@ check_contains "applyEdit newText 是 fixLoop 收敛结果" "$fixcmd_out" 'nameA
 check_contains "未知 command → JSON-RPC -32602" "$fixcmd_out" '"code":-32602'
 check_contains "未知 command 带命令名" "$fixcmd_out" 'unknown command: vuna.nope'
 
-# ---- 32) C38 case split 的限定 import、命名洞与安全降级 ----
+# ---- 32) case split 的限定 import、命名洞与安全降级 ----
 # `import qualified Dep` 时构造子 / record 类型名必须写限定名（Dep.Red / Dep.Point）；
 # 命名洞 `?goal` 的编辑 range 覆盖整个 token（不是 `_` 的零宽 span）。
 # 降级：axiom 是不透明类型（没有「别名右侧」可展开）→ 空数组；索引族的索引约束是 parse 级

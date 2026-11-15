@@ -1,4 +1,4 @@
--- M25.2a 正例：普通结构递归（列表 / Nat）应被接受。
+-- 结构递归（列表 / Nat）应被接受。
 import Prelude
 
 data Nat : Type where

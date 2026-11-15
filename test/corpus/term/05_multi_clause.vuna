@@ -1,4 +1,4 @@
--- M25.2a 正例：多 clause 函数，每个 clause 的自递归都要有下降证据。
+-- 多 clause 函数，每个 clause 的自递归都要有下降证据。
 import Prelude
 
 data Nat : Type where

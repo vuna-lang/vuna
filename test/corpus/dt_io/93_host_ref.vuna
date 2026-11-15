@@ -1,4 +1,4 @@
--- 阶段 4：Ref 内建行（带行宿主原语 + entry 允许 RefOp 行，无需 handler）。
+-- Ref 内建行（带行宿主原语 + entry 允许 RefOp 行，无需 handler）。
 import Base.Eff
 import Base.EffRef
 

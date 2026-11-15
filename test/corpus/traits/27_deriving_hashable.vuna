@@ -1,4 +1,4 @@
--- M41：`deriving (Hashable)`（参数化 data + 记录）。
+-- `deriving (Hashable)`（参数化 data + 记录）。
 import Base.Hashable
 import Base.Int
 

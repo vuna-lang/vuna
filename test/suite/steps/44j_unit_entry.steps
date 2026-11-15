@@ -1,7 +1,7 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 44j) 单元缓存按 entry 分桶 + GC（S7）：同一包上下文里不同入口文件各占一个桶；切换入口
-#      时旧桶被 GC 清掉，同一入口（路径不变、内容变了）重建仍能命中单元缓存。
-# 夹具现场生成；缓存落在 case 私有 $TMPDIR 下（原脚本另起 unit-cache-j，此处 case 隔离等价）。
+# 44j) 单元缓存按 entry 分桶 + GC：同一包上下文里不同入口文件各占一个桶；切换入口
+#      时上一个入口的桶被 GC 清掉，同一入口（路径不变、内容变了）重建仍能命中单元缓存。
+# 夹具现场生成；缓存落在 case 私有 $TMPDIR 下（每个 case 独立，不与其他 case 共享）。
 run: mkdir -p "$TMPDIR/unit-entry-pkg"
 run: printf '[package]\nname = "unit-entry-pkg"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/unit-entry-pkg/vuna.toml"
 run: printf 'main : Int\nmain = 1\n' > "$TMPDIR/unit-entry-pkg/A.vuna"

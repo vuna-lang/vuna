@@ -1,4 +1,4 @@
--- D45：let 的 RHS 只求值一次；线性 y 经 let 传递不应按 binder multiplicity 缩放。
+-- let 的 RHS 只求值一次；线性 y 经 let 传递不应按 binder multiplicity 缩放。
 k : (1 y : Int) -> Int
 k y =
   let

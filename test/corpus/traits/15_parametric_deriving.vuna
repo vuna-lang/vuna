@@ -1,4 +1,4 @@
--- M29-T2b：参数化 data 的 deriving：单参数（Box）、双参数（Pair2）、递归（Tree）。
+-- 参数化 data 的 deriving：单参数（Box）、双参数（Pair2）、递归（Tree）。
 import Prelude
 
 data Box a : Type where

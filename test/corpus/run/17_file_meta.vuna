@@ -1,4 +1,4 @@
--- 阶段 5：文件元数据走 typed effects（entry 自动预装 handler）。
+-- 文件元数据走 typed effects（entry 自动预装 handler）。
 import Base.Eff
 import Base.EffFs
 import Base.HostRow

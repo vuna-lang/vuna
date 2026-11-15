@@ -1,4 +1,4 @@
--- M31.3：反引号中缀 `` a `f` b `` ≡ `f a b`。名字是普通函数；fixity 按名字查表，
+-- 反引号中缀 `` a `f` b `` ≡ `f a b`。名字是普通函数；fixity 按名字查表，
 -- 没有声明时按 Haskell 约定 9 左结合（`1 `addFn` 2 `addFn` 3` = `(1+2)+3`）。
 addFn : Int -> Int -> Int
 addFn x y = x + y

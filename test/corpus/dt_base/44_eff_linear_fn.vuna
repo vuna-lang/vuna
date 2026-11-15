@@ -1,4 +1,4 @@
--- W7：线性函数类型（一次性闭包）= `Cont a b`；`mkCont` 把捕获线性资源的 λ 装进
+-- 线性函数类型（一次性闭包）= `Cont a b`；`mkCont` 把捕获线性资源的 λ 装进
 -- 线性数据的 rig-1 字段，`resumeCont` 恰好消费一次。`(1 x : A) -> B` 的线性箭头
 -- binder 是既有 QTT 语法（handler 续延 API 用它传 `Cont`）。
 import Base.Eff

@@ -1,4 +1,4 @@
--- W10 收尾：process 的 `Exit` 可控——mock handler（"mock"）与可选参数 handler
+-- process 的 `Exit` 可控——mock handler（"mock"）与可选参数 handler
 -- （"observed" 的 `handleProcessHostWith` 现成实例）都能观察退出码并继续执行；真实路径
 -- （`handleProcessHost` 的 `@vuna@prim_eff_exit`）保留，但本夹具不触发它（否则测试进程退出）。
 import Base.Eff

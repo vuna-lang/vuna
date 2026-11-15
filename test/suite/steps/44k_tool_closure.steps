@@ -26,8 +26,8 @@ out-contains: 43
 run: cd "$TMPDIR/iface-k-root" && printf 'import KDep\nunKBox (MkKBox 7)\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 7
 out-not-contains: TC_UnknownName
-# 新增一个模块：它被 buffer import 时，header 图能直接把它纳入闭包（旧实现依赖包级
-# manifest，新模块不在 manifest 里时只能整体回退全量）。断言：结果正确且不走回退。
+# 新增一个模块：它被 buffer import 时，header 图能直接把它纳入闭包。断言：结果正确且
+# 不走整体回退全量。
 run: printf 'module KNew where\n\nimport KDep\n\nexport newVal : Int\nnewVal = kdepVal + 1\n' > "$TMPDIR/iface-k-root/lib/KNew.vuna"
 run: cd "$TMPDIR/iface-k-root" && printf 'import KNew\nnewVal\n:q\n' | VUNA_DEBUG_PERF=1 "$VUNA" repl 2>&1
 out-contains: 43

@@ -1,4 +1,4 @@
--- M31.3：section 三种形态 + 与别名/普通括号表达式混用：
+-- section 三种形态 + 与别名/普通括号表达式混用：
 --   `(+)`    ≡ 运算符作为值（`+` 无别名，`(::)` → `Cons`、`(==)` → `eq` 走别名表）；
 --   `(+ e)`  ≡ \vuna_section => vuna_section + e；
 --   `(e +)`  ≡ \vuna_section => e + vuna_section。

@@ -1,4 +1,4 @@
-# 36) 错误码文档：`vuna gen-errors` 从 docstring 生成（M3），分区 + 幂等（M4）。
+# 36) 错误码文档：`vuna gen-errors` 从 docstring 生成，分区 + 幂等。
 #     沙箱里源码树只读，gen-errors 写 ROOT/docs/.generated/——用 tmp 根：软链 compiler +
 #     复制 Rules（readDir 跟随软链）。幂等改为两个独立根**并发生成**后逐字节比较：
 #     同输入同输出；墙钟从两次串行降到一次。

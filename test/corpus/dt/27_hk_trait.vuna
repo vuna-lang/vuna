@@ -1,10 +1,10 @@
--- M19：trait 的高阶 kind 参数（`Mapper f`，`f : Type -> Type`）+ 实例投影。
+-- trait 的高阶 kind 参数（`Mapper f`，`f : Type -> Type`）+ 实例投影。
 --
--- M15 把类参数一律绑成 `Type`，于是 `trait Mapper f` 的方法签名里写 `f a` 就报
--- `too many arguments`。M19 起：
+-- 类参数不能一律绑成 `Type`：那样 `trait Mapper f` 的方法签名里写 `f a` 会报
+-- `too many arguments`。规则：
 -- - 类参数的 kind 从方法签名推断（被应用 k 次 ⇒ `Type -> ... -> Type`）；
 -- - 投影的 lambda 链与应用点用**同一份 rigs**（`a : Type` 这类擦除位两侧都跳过），
---   因此与实例方法体的擦除行为严格对齐——这是 M22「擦除判据接线」的第一步。
+--   因此与实例方法体的擦除行为严格对齐。
 data Box : Type -> Type where
   MkBox : (a : Type) -> a -> Box a
 

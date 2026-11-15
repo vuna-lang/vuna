@@ -1,7 +1,7 @@
--- M26 反例：do 需要**可解的 Monad 实例**。本地 `data Box a` 只声明构造子、没有
+-- 反例：do 需要**可解的 Monad 实例**。本地 `data Box a` 只声明构造子、没有
 -- `instance Monad Box`；Prelude 自动注入只让 trait/方法在作用域里可见，实例字典仍解不出来。
--- （旧夹具断言「没有 Monad import 时 bind 不可见」；M26 起 ad-hoc 单文件恒注入 Prelude，
---  该错误已不可达，因此负例改为「缺实例」。）
+-- 负例锁「实例不可解」：注入的只有 trait 与方法名，字典不会凭空出现，
+--  因此 main 里对 Box 的 do 必须报错。
 data Box a : Type where
   MkBox : a -> Box a
 

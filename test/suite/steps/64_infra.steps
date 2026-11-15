@@ -26,14 +26,14 @@ out-contains: cst-file ok
 
 # 工具会话载荷（ToolContext）编码 roundtrip：字段顺序 / Maybe / 列表 / 尾部检查。
 out-contains: tool-ctx-rt ok
-# 规范编码 roundtrip + span 不敏感 + 字段覆盖（C32 哈希输入侧，Canonical.*）
+# 规范编码 roundtrip + span 不敏感 + 字段覆盖（哈希输入侧，`Canonical.*`）
 out-contains: canon-term-rt ok
 out-contains: canon-decl-rt ok
 out-contains: canon-defs-rt ok
 out-contains: canon-span ok
 out-contains: canon-export-parent ok
 out-contains: canon-fixity-target ok
-# TOML 解析器（阶段 T）：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
+# TOML 解析器：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
 # unicode 转义 / literal 字符串；以及必须拒绝的输入（重复键、浮点、重复表、点键定义的
 # 表再被 `[a]` 定义）。
 out-contains: toml-subtable ok

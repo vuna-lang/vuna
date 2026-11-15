@@ -1,4 +1,4 @@
--- 阶段 4：Net 内建行（listen/close，验证带行原语与 entry）。
+-- Net 内建行（listen/close，验证带行原语与 entry）。
 import Base.Eff
 import Base.EffNet
 

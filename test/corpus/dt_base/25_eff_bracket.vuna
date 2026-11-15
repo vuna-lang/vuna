@@ -1,4 +1,4 @@
--- W7：bracket 基础；use 抛 Exn 时 release 仍执行（经 State 观察）。
+-- bracket 基础；use 抛 Exn 时 release 仍执行（经 State 观察）。
 import Base.Eff
 import Base.EffExn
 import Base.EffState

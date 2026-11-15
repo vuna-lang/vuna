@@ -1,4 +1,4 @@
-# 104) IR ↔ 运行时契约（Track A 第二步）：IR 只带目标中立的运行时符号，OCaml 文本在
+# 104) IR ↔ 运行时契约：IR 只带目标中立的运行时符号，OCaml 文本在
 # `Codegen.Runtime` 符号表里。
 #
 # 契约一致性（`Intrinsics` ↔ `Ir.Runtime` ↔ `Codegen.Runtime`）由 check 路径上的

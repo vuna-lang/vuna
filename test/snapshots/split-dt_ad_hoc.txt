@@ -1,4 +1,4 @@
-# M26 split 产物快照：test/corpus/dt_ad_hoc/Main.vuna
+# split 产物快照：test/corpus/dt_ad_hoc/Main.vuna
 # files（排序，相对 OUTDIR）
 Base_dApplicative.ml
 Base_dBool.ml

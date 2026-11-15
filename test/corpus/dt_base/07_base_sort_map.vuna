@@ -1,4 +1,4 @@
--- M22.2：`Base.Sort`（Ord 泛型比较的实例搜索）与 `Base.Map` 可用。
+-- `Base.Sort`（Ord 泛型比较的实例搜索）与 `Base.Map` 可用。
 import Base.Sort
 import Base.Map
 

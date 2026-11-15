@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）：参数化 op 族（State 的 k = 1）。op 族
+-- 参数化 op 族（State 的 k = 1）。op 族
 -- `StateOp : Type -> Type`、标签 `State n s`、结果族 `resState s op`；handle 按族参数补洞，
 -- 续延拿到 `resState s Get = s`。
 import Base.Eff

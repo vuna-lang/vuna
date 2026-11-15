@@ -1,4 +1,4 @@
--- 行宽 100：超长 RHS / 列表 / 应用 / 中缀链折行（M11.6）。
+-- 行宽 100：超长 RHS / 列表 / 应用 / 中缀链折行。
 
 longSum : Int -> Int -> Int -> Int -> Int -> Int -> Int
 longSum a b c d e f g = a + b + c + d + e + f + g + a * b + c * d + e * f + g + a - b + c - d + e - f + g

@@ -1,5 +1,5 @@
--- M24.5 发现的 codegen 缺陷：类型级函数（结果类型是 `Type`，如 `Nat -> Type`）必须
--- 整体擦除，不能生成运行时定义（旧实现只看裸 `Type`，会生成未定义的 `v_Int`/`v_String`）。
+-- 类型级函数（结果类型是 `Type`，如 `Nat -> Type`）必须整体擦除，不能生成运行时定义。
+-- 判据看整个结果类型而不只是裸 `Type`：只看 `Type` 会生成未定义的 `v_Int`/`v_String`。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

@@ -1,4 +1,4 @@
--- R4（records-v2）：`data` 已退役记录语义 ⇒ `deriving via field` 只允许 record。
+-- `data` 没有记录语义 ⇒ `deriving via field` 只允许 record。
 -- 这个夹具保留 data 写法，负例期望 `[TC_DerivingViaOnlyRecord]`。
 data Wrap : Type where
   MkWrap : Int -> Wrap

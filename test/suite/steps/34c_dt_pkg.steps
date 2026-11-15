@@ -1,4 +1,4 @@
-# 34c) DT 包目录（M22.1）：check / compile 接受包目录（包上下文 + resolveProject）。
+# 34c) DT 包目录：check / compile 接受包目录（包上下文 + resolveProject）。
 #      夹具：corpus/dt_pkg/01_exec（可执行包）/ 02_lib（库包）/ 03_bad（无 manifest）/
 #      99_missing（不存在），以及 corpus/dt_ad_hoc/Main.vuna（包内 ad-hoc 单文件入口）。
 run: "$VUNA" check corpus/dt_pkg/01_exec 2>&1
@@ -28,15 +28,15 @@ run: "$VUNA" check corpus/dt_pkg/99_missing 2>&1
 exit: nonzero
 out-contains: no such file or package directory
 out-contains: error:
-# interp 只接受单文件：包目录给出清晰错误（M22.1）。
+# interp 只接受单文件：包目录给出清晰错误。
 run: "$VUNA" interp corpus/dt_pkg/01_exec 2>&1
 exit: nonzero
 out-contains: single file
-# M24：check/compile 默认就是 DT；help 不再宣传 `--dt`。
+# check/compile 默认就是 DT；help 不宣传 `--dt`。
 run: "$VUNA" help 2>&1
 exit: 0
 out-not-contains: --dt
-# M26：包内 ad-hoc 单文件入口（包根 Main.vuna + 同包 lib/ 模块，见 corpus/dt_ad_hoc）。
+# 包内 ad-hoc 单文件入口（包根 Main.vuna + 同包 lib/ 模块，见 corpus/dt_ad_hoc）。
 run: "$VUNA" interp corpus/dt_ad_hoc/Main.vuna 2>&1
 exit: 0
 out-equals: 42

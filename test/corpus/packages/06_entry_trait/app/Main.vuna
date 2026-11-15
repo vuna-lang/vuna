@@ -1,4 +1,4 @@
--- M26 夹具：入口 data + trait + instance + deriving 都可 build。
+-- 入口 data + trait + instance + deriving 都可 build。
 -- Prelude 由包上下文自动注入（base 依赖），因此 Show 与本文件的 Pretty 同时可见。
 data Color : Type where
   Red : Color

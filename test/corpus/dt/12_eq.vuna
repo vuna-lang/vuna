@@ -1,4 +1,4 @@
--- M14：Eq 族 —— refl 唯一构造子，sym/trans 靠索引合一自动消去不可能分支。
+-- Eq 族 —— refl 唯一构造子，sym/trans 靠索引合一自动消去不可能分支。
 data Eq : Type -> Type -> Type where
   Refl : (a : Type) -> Eq a a
 

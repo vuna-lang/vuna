@@ -1,4 +1,4 @@
--- M35.1：Base.Error 的 Monad/do + catchError 路径（interp 可归约）。
+-- Base.Error 的 Monad/do + catchError 路径（interp 可归约）。
 import Base.Error
 import Base.Int
 

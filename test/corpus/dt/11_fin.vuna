@@ -1,4 +1,4 @@
--- M14：Fin 安全索引 —— `Vec a (Succ m)` 与 `Fin (Succ m)` 一起排除两个 VNil/FZero 不可能分支。
+-- Fin 安全索引 —— `Vec a (Succ m)` 与 `Fin (Succ m)` 一起排除两个 VNil/FZero 不可能分支。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

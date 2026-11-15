@@ -1,4 +1,4 @@
--- M21：Functor / Monad 方法投影随自动导入的 `Prelude` 可见（fmap / bind / pure）。
+-- Functor / Monad 方法投影随自动导入的 `Prelude` 可见（fmap / bind / pure）。
 import Base.Eff
 
 main : Eff [] Int

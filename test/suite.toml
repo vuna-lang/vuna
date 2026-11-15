@@ -2,14 +2,14 @@
 #
 # 阶段矩阵由夹具期望文件的阶段限定后缀表达（`<base>.<stage>.<artifact>`，如
 # `01.check.err` / `01.interp.out` / `01.run.out`）；裸 `.out`（interp+run 共享
-# golden）与裸 `.err`（check 负例）是兼容形态。family 旗标只是各阶段的上限。
+# golden）与裸 `.err`（check 负例）是两种速记形态。family 旗标只是各阶段的上限。
 # 工具链/包/REPL/LSP/缓存类用例在 test/suite/steps/（声明式 steps family），见 testing.md。
 
 [suite]
 name = "vuna"
 jobs = 0          # 0 = auto（探测全部可用核）
 timeout = 300
-min_cases = 760    # case 数下限：整族从配置消失时显式失败（当前 797；+107 = 可观测性、+108 = obs serve/CDP）
+min_cases = 760    # case 数下限：整族从配置消失时显式失败（当前 797）
 
 # --- golden（interp + check + compile + run + 互证）---
 [family.dt]
@@ -31,7 +31,7 @@ dir = "test/corpus/dt_base"
 check = true
 tags = ["dt", "base"]
 
-# 只做 compile + run（原 `.nointerp` 夹具：效果程序 / 不可归约内建）。
+# 只做 compile + run（效果程序 / 不可归约内建）。
 [family.dt_io]
 section = "34"
 dir = "test/corpus/dt_io"
@@ -40,8 +40,8 @@ check = true
 compare_interp = false
 tags = ["dt", "io"]
 
-# 精化器性能回归（S1–S4）：只跑 `vuna check`，不编译不运行；
-# 单 case 超时 15s，长 do / 长 >>= 链超时即失败（期望实现把耗时压到线性）。
+# 精化器性能回归：只跑 `vuna check`，不编译不运行；
+# 单 case 超时 15s：长 do / 长 >>= 链必须保持线性耗时，超时即失败。
 [family.elab_perf]
 section = "34"
 dir = "test/corpus/elab_perf"

@@ -1,6 +1,6 @@
--- S4 C5：定义级收尾的未解字典目标必须带位置（而不是无位置的 NoLoc 消息）。
--- 当前实现走 `tcErr1NoLoc`（见 debt / S4 计划），所以 `.err` 先只断言错误码与模板；
--- C5 已落地：`.err` 断言路径无关的位置片段 `:16:7: [TC_NoInstanceFound] ...`。
+-- 位置夹具：定义级收尾的未解字典目标必须带位置（而不是无位置的 NoLoc 消息）。
+-- span 指在 `bad = nameOf MkB` 里的 `nameOf`（16:7），片段不依赖仓库绝对路径；
+-- `.diag.json` 锁定错误码与位置。
 import Prelude
 
 data B : Type where

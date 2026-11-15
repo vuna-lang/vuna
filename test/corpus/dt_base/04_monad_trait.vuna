@@ -1,4 +1,4 @@
--- M21：trait 方法投影经 `import Base.Monad` 可用（fmap / bind / pure），
+-- trait 方法投影经 `import Base.Monad` 可用（fmap / bind / pure），
 -- 具体实例来自 `import Base.Maybe`；do 块走同一套投影。
 import Base.Monad
 import Base.Maybe

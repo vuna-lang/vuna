@@ -1,4 +1,4 @@
-# M26 split 产物快照：test/corpus/packages/06_entry_trait
+# split 产物快照：test/corpus/packages/06_entry_trait
 # files（排序，相对 OUTDIR）
 Base_dApplicative.ml
 Base_dBool.ml

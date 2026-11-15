@@ -1,4 +1,4 @@
--- M14：索引族 Vec —— 用索引排除 VNil 分支（长度/首元素/尾）。
+-- 索引族 Vec —— 用索引排除 VNil 分支（长度/首元素/尾）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

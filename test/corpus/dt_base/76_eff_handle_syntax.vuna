@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）：`handle` 语法。省略 return（答案类型 = comp 结果类型）、
+-- `handle` 语法。省略 return（答案类型 = comp 结果类型）、
 -- 显式 return（b 与 a 不同）、开放尾行 wrapper 与 infer 位置的 let 绑定。
 import Base.Eff
 import Base.EffConsole

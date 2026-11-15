@@ -1,4 +1,4 @@
--- M42：多字段/多构造子类型保持原变体，与去装箱共存。
+-- 多字段/多构造子类型保持原变体，与去装箱共存。
 record Pair2 a b where
   first : a
   second : b

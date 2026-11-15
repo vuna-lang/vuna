@@ -1,4 +1,4 @@
--- D5/D6 负例：同一 op 族在行里有 2 个实例、perform 用裸标签 → 名字无法唯一解出。
+-- 负例：同一 op 族在行里有 2 个实例、perform 用裸标签 → 名字无法唯一解出。
 import Base.Eff
 import Base.EffConsole
 import Base.Nat

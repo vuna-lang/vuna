@@ -8,7 +8,7 @@
 #   - `eval` 一次多行、`close` 续行语义、求值/解析错误进 `result.error`；
 #   - **跨进程会话状态保留**：两个独立的 `--client` 进程之间定义仍然有效；
 #   - `:type` / `:load` / `:reload` / `:defs`；
-#   - server 模式拒绝 `:!` 与效果表达式（阶段 1 限制）；
+#   - server 模式拒绝 `:!` 与效果表达式；
 #   - JSON-RPC 错误码：未知方法 -32601、坏 JSON -32700（且连接与服务继续）；
 #   - `shutdown` 正常退出；`--client` 连不上 / 地址非法时退出码 2；
 #   - TCP loopback（`tcp:127.0.0.1:0` 临时端口）——沙箱里不可用时打印 SKIP。
@@ -161,7 +161,7 @@ check_contains ":reload" "$reload_out" '已重新加载'
 defs_out=$(req '{"jsonrpc":"2.0","id":15,"method":"eval","params":{"code":":defs"}}')
 check_contains ":defs 列出 answer" "$defs_out" 'answer'
 
-# ---- 4) 阶段 1 限制：`:!` 与效果表达式拒绝执行 ----
+# ---- 4) `:!` 与效果表达式拒绝执行 ----
 batch_out=$(req '{"jsonrpc":"2.0","id":16,"method":"eval","params":{"code":":! echo hi"}}')
 check_contains "server 模式拒绝 :!" "$batch_out" '"ok":false'
 check_contains ":! 提示指向外部 shell" "$batch_out" '外部 shell'

@@ -1,5 +1,5 @@
--- M27 / C17：用户 `data List` 与 base 的 canonical `Base.List.List` 并存；
--- `str*` 的桥接只认 canonical 族，用户族的构造子名不再影响 runtime helper 生成。
+-- 用户 `data List` 与 base 的 canonical `Base.List.List` 并存；
+-- `str*` 的桥接只认 canonical 族；用户族的构造子名不参与 runtime helper 生成。
 import Base.List
 
 data List a : Type where

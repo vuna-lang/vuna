@@ -1,4 +1,4 @@
--- M37：Reader 效应栈（用 Base.Eff.Reader 取代旧 ReaderT）。
+-- Reader 效应栈（`Base.Eff.Reader`）。
 -- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
 import Base.HostRow
 import Base.EffExit

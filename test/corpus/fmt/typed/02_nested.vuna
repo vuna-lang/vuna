@@ -1,6 +1,6 @@
--- M26：Prelude 自动注入 → `List` 用 base 的（删掉本地 data List / 无用的本地 data Bool）；
--- 本地 `Maybe` 改名 `MyMaybe`（构造子 MyNothing/MyJust），避开 base 的 Maybe/Just/Nothing。
--- 本地同名 data 的解析优先级见 A07/A08/A09/C17（M27）。
+-- Prelude 自动注入 → `List` 用 base 的（本文件不声明本地 data List / data Bool）；
+-- 本地类型取名 `MyMaybe`（构造子 MyNothing/MyJust），避开 base 的 Maybe/Just/Nothing。
+-- 本地同名 data 的解析优先级见 docs/reference/type-system.md。
 data MyMaybe : Type where
   MyNothing : MyMaybe
   MyJust : Int -> MyMaybe

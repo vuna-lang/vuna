@@ -1,4 +1,4 @@
--- 阶段 5：fs 查询走 typed effects（entry 自动预装 handler），不再直接调用宿主原语。
+-- fs 查询走 typed effects（entry 自动预装 handler），不直接调用宿主原语。
 import Base.Eff
 import Base.EffFs
 import Base.HostRow

@@ -1,4 +1,4 @@
--- linear record 的最小正例：句柄恰好消费一次（原 ST 夹具删除后的覆盖替代）。
+-- linear record 的最小正例：句柄恰好消费一次。
 linear record Box a where
   unbox : a
 

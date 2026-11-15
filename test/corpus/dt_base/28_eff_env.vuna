@@ -1,4 +1,4 @@
--- W10：env 效应标签（命名实例）——同一程序在 mock（"mock"）与入口行 handler 下
+-- env 效应标签（命名实例）——同一程序在 mock（"mock"）与入口行 handler 下
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
 import Base.Eff
 import Base.EffEnv

@@ -1,4 +1,4 @@
--- L2 负例：catch 要求行首是 Error n。
+-- 负例：catch 要求行首是 Error n。
 import Base.Eff
 import Base.EffError
 

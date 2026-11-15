@@ -1,4 +1,4 @@
--- M42：单字段 record / data 自动去装箱；字段访问与 case 都按 identity 表示。
+-- 单字段 record / data 自动去装箱；字段访问与 case 都按 identity 表示。
 record UserId where
   uid : Int
 

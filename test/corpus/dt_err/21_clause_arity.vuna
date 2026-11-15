@@ -1,4 +1,4 @@
--- M19：同一函数的多 clause 参数个数必须一致。
+-- 同一函数的多 clause 参数个数必须一致。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

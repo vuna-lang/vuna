@@ -1,4 +1,4 @@
--- M42：参数化单字段包装去装箱；嵌套的单字段包装也可透明。
+-- 参数化单字段包装去装箱；嵌套的单字段包装也可透明。
 data Box : Type -> Type where
   MkBox : {a : Type} -> a -> Box a
 

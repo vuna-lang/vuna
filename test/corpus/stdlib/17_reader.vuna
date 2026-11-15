@@ -1,4 +1,4 @@
--- M35.1：Base.Reader 的 Functor/Monad 路径（纯函数表示，interp 可归约）。
+-- Base.Reader 的 Functor/Monad 路径（纯函数表示，interp 可归约）。
 import Base.Reader
 import Base.Int
 

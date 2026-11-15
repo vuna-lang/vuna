@@ -1,4 +1,4 @@
--- M38：linear data：值必须恰好被消费一次；构造子字段可标注 1。
+-- linear data：值必须恰好被消费一次；构造子字段可标注 1。
 linear data Token : Type where
   MkToken : (1 x : Int) -> Token
 

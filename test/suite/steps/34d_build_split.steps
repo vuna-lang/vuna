@@ -1,5 +1,5 @@
 # store-isolated: build/no-compile/compile 各自用独立空 store，避免共享 view 命中。
-# 34d) 构建入口（M22.3a / M24 / M26）：`build` 产可执行 bin；`build --no-compile` 与
+# 34d) 构建入口：`build` 产可执行 bin；`build --no-compile` 与
 #      `compile <pkg> OUTDIR` 是**同一套 split 产物**（.output / OUTDIR 布局一致）。
 #      DT fmt round-trip：Pi 语法格式化后仍解析为同一程序且幂等（corpus/dt/03_compose.vuna）。
 #      夹具 corpus/dt_pkg/01_exec 复制到 $TMPDIR 后构建，避免写仓库工作树。

@@ -1,4 +1,4 @@
--- M35.1：Base.State 的 Monad/do 路径（纯函数表示，interp 可归约）。
+-- Base.State 的 Monad/do 路径（纯函数表示，interp 可归约）。
 import Base.State
 import Base.Int
 

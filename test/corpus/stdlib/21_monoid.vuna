@@ -1,4 +1,4 @@
--- stdlib：Semigroup / Monoid / foldMap（M41）。
+-- Semigroup / Monoid / foldMap。
 import Base.Eq
 import Base.Foldable
 import Base.Int

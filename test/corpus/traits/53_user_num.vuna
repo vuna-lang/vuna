@@ -1,4 +1,4 @@
--- D23：用户类型实现 `Num`（+ `FromInt`）后，`+ - * /` 就是 `Num` 方法的别名，
+-- 用户类型实现 `Num`（+ `FromInt`）后，`+ - * /` 就是 `Num` 方法的别名，
 -- 字面量经 `FromInt` 在期望类型位置降级（`1 + 2 : MyNum` 不写显式转换）。
 import Prelude
 

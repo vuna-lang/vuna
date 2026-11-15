@@ -1,4 +1,4 @@
-# 102) D11 abstract：定义模块自身也不能展开 abstract body；opaque 在定义模块内仍可见。
+# 102) abstract：定义模块自身也不能展开 abstract body；opaque 在定义模块内仍可见。
 run: sh -c 'rm -rf "$TMPDIR/abs-pkg"; mkdir -p "$TMPDIR/abs-pkg/lib"; printf "%s\n" "[package]" "name = \"abs-pkg\"" "" "[export]" "modules = [\"A\", \"D\"]" > "$TMPDIR/abs-pkg/vuna.toml"'
 run: sh -c 'printf "%s\n" "module D where" "" "export opaque N : Type" "N = Int" "" "own : N -> Int" "own x = x" > "$TMPDIR/abs-pkg/lib/D.vuna"'
 run: sh -c 'printf "%s\n" "module A where" "" "abstract T : Type" "T = Int" "" "bad : T -> Int" "bad x = x" > "$TMPDIR/abs-pkg/lib/A.vuna"'

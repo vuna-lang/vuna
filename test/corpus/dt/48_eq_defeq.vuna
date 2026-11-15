@@ -1,4 +1,4 @@
--- M24.5：隐式族参数版 Eq（`data Eq : {a : Type} -> a -> a -> Type`）可用；定义性相等
+-- 隐式族参数版 Eq（`data Eq : {a : Type} -> a -> a -> Type`）可用；定义性相等
 -- `plus Zero n ≡ n` 直接 conv 通过，所以 `plusZero` 一个 Refl 就够。
 data Nat : Type where
   Zero : Nat

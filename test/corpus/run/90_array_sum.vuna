@@ -1,4 +1,4 @@
--- M33 W3：不可变 Array（fromList / get / set 返回新数组 / length）。
+-- 不可变 Array（fromList / get / set 返回新数组 / length）。
 -- Array 原语在 interp 不归约（OpNone），只 compile + 运行。
 import Base.Array
 

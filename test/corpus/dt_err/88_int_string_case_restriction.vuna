@@ -1,4 +1,4 @@
--- M38：Int/String 的 case 限文字/变量模式；嵌套构造子模式在此路径被拒绝。
+-- Int/String 的 case 限文字/变量模式；嵌套构造子模式在此路径被拒绝。
 f : Int -> Int
 f (Just (Just x)) = x
 

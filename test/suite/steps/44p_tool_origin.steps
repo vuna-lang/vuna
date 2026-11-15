@@ -1,8 +1,7 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44p) 工具写回与整包写共用同一对象地址：LSP 冷启动的单模块写回落在
 #      `objects/iface/<输入摘要>`，随后命令行 check 直接复用（零重写、无 miss）。
-#      旧的 `meOrigin`（pkg/tool 隔离）随文件层与 manifest 一起删除 —— 地址由输入决定，
-#      谁写的都一样。
+#      对象地址由输入决定，谁写的都一样（LSP 与整包写共用同一地址）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库。
 run: sh -c 'rm -rf "$TMPDIR/org-pkg" "$TMPDIR/org-store" "$TMPDIR/org-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/org-pkg"'
 run: sh -c 'for mf in "$TMPDIR/org-pkg"/*/vuna.toml; do sed "s|vuna-base = \"[^\"]*\"|vuna-base = \"$VUNA_BASE\"|" "$mf" > "$mf.tmp" && mv "$mf.tmp" "$mf"; done'

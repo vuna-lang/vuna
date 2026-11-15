@@ -1,8 +1,8 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 44q) 双路径审计（C49 回归）：`VUNA_IFACE_AUDIT=1` 让同一次 check 分别走摘要路径与
-#      全量路径并逐字节比较诊断；record-update 定义的载荷必须闭合（旧缺陷：
-#      `Core.Term.hasFreeTermVar` 下降 `TRecUpd.body` 时少加 `length tele` 的 binder
-#      深度）。写入自检（`VUNA_IFACE_SELFTEST`）随文件层删除已不再存在。
+# 44q) 双路径审计：`VUNA_IFACE_AUDIT=1` 让同一次 check 分别走摘要路径与
+#      全量路径并逐字节比较诊断；record-update 定义的载荷必须闭合
+#      （`Core.Term.hasFreeTermVar` 下降 `TRecUpd.body` 时要带上 `length tele` 的 binder
+#      深度）。
 run: sh -c 'mkdir -p "$TMPDIR/c49/pkg/lib" "$TMPDIR/c49/pkg/app"'
 run: sh -c 'printf "%s\n" "[package]" "name = \"c49rec\"" "" "[dependencies]" "vuna-base = \"$VUNA_BASE\"" > "$TMPDIR/c49/pkg/vuna.toml"'
 run: sh -c 'printf "%s\n" "module C49 where" "" "export record Box(..) where" "  a : Int" "  b : Int" "" "export bump : Box -> Box" "bump x = { x | a = x.a + 1 }" > "$TMPDIR/c49/pkg/lib/C49.vuna"'

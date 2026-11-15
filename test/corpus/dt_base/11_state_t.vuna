@@ -1,4 +1,4 @@
--- M37：State 效应栈（用 Base.EffState 取代旧 StateT）。
+-- State 效应栈（`Base.EffState`）。
 -- 标签 `State "counter" Int`；handler 以 `s -> Pair a s` 为 answer 线程状态。
 import Base.HostRow
 import Base.EffExit

@@ -1,4 +1,4 @@
--- M42：委托派生可以嵌套：外层字段类型本身也委托到下一层，Show 一直落到 Int。
+-- 委托派生可以嵌套：外层字段类型本身也委托到下一层，Show 一直落到 Int。
 record Inner where
   inner : Int
 deriving via field (Show, Eq)

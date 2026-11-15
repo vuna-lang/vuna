@@ -1,4 +1,4 @@
--- M18.6：表示层定型（三值 rig）的可观测后果。
+-- 表示层定型（三值 rig）的可观测后果。
 -- 擦除由 rig 驱动：Rig0 的 binder 不进运行时表示，Rig1 的进。
 data Nat : Type where
   Zero : Nat

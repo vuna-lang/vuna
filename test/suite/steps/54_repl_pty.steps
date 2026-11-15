@@ -1,4 +1,4 @@
-# 54) REPL v2 pty 行编辑：方向键 / Ctrl-R / 退格 / Ctrl-C / Ctrl-D / Tab。
+# 54) REPL pty 行编辑：方向键 / Ctrl-R / 退格 / Ctrl-C / Ctrl-D / Tab。
 #     保留 `script -qec "$VUNA repl" /dev/null`；计数型断言用单步 sh 的 grep -c 校验。
 #     每个 pty 场景用独立 VUNA_REPL_HISTORY（case 私有 $TMPDIR）。
 run: sh -c 'n=$( ( sleep 0.5; printf "1 + 1\n"; sleep 0.3; printf "\033[A\n"; sleep 0.3; printf ":q\n" ) | NO_COLOR=1 VUNA_REPL_HISTORY="$TMPDIR/pty-a" script -qec "$VUNA repl" /dev/null 2>&1 | tr -d "\r" | grep -c "^2$"); [ "$n" -eq 2 ]'

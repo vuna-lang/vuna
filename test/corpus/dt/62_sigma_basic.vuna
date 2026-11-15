@@ -1,4 +1,4 @@
--- M29（B13/D12）：依赖对（Σ）的基本构造 / 投影 / 嵌套。
+-- 依赖对（Σ）的基本构造 / 投影 / 嵌套。
 --
 -- 用可编译的 **Tarski 风格存在式**演示：`Ty` 是运行时类型码（普通 data），
 -- `Tm : Ty -> Type` 是指标族，`Some = Σ (t : Ty). Tm t`。
@@ -6,8 +6,8 @@
 -- 泛型 `Sigma : (a : Type) -> (a -> Type) -> Type` 的值级构造受「类型不能依赖运行时值」
 -- 限制：`MkSigma` 的类型族参数是运行时字段，传类型族名会被擦除检查拒
 -- （`CG_TypeLevelNameRuntime`，负例 test/corpus/dt_err/45_generic_sigma_runtime.vuna）。
--- M29 决定不引入 type codes（B14/D09），因此**泛型 Σ 的值级使用归 F4**，可编译的 Σ 落地
--- 证据就是本夹具的类型码 + 指标族存在式（`base/` 不新增泛型 Σ 模块）。
+-- 不引入 type codes 时**泛型 Σ 不能在值级使用**；可编译的 Σ 形态就是本夹具的类型码 +
+-- 指标族存在式（`base/` 没有泛型 Σ 模块）。
 data Ty : Type where
   TNat : Ty
 

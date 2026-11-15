@@ -1,7 +1,7 @@
-# 65) M45 warning 通道修复回归：
-#   A) C49：模块头 `module X` 重导出的 import 不再报 UN_UnusedImport（含 alias 与直接名），
+# 65) warning 通道：
+#   A) 模块头 `module X` 重导出的 import 不报 UN_UnusedImport（含 alias 与直接名），
 #      真正未使用的 import 仍然报。
-#   B) C48：warning 不持久化 —— 热缓存（check 结果缓存 + 干净模块复用）下 `-W` 仍必须
+#   B) warning 不持久化 —— 热缓存（check 结果缓存 + 干净模块复用）下 `-W` 仍必须
 #      完整报 warning，`--deny-warnings` 仍必须把退出码提升为 1；普通 check 仍走缓存。
 #   C) 编译器生成的内部 binder（do 忽略 binder、字典字段 binder）不参与 UN_ 告警。
 

@@ -1,5 +1,5 @@
--- M28（决策 5 / D10）：定义参数少于签名时按剩余 Pi 链做 η 展开（补 `\_arityN` 并把
--- body 应用到新参数），不再报 TC_DefFewerParams。
+-- 定义参数少于签名时按剩余 Pi 链做 η 展开（补 `\_arityN` 并把 body 应用到新参数）；
+-- 参数不足本身不是错误，不报 TC_DefFewerParams。
 inc : Int -> Int
 inc x = x + 1
 

@@ -1,4 +1,4 @@
--- M25.2a 负例：多 clause 里只有一个 clause 下降（每个 clause 单独检查）。
+-- 负例：多 clause 里只有一个 clause 下降（每个 clause 单独检查）。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

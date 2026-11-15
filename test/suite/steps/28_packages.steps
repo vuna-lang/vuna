@@ -1,7 +1,7 @@
-# 28) 包模式（M11.5/M12.8/M24/M26）：workspace + 依赖包 + [export] + app/Main.vuna 入口。
+# 28) 包模式：workspace + 依赖包 + [export] + app/Main.vuna 入口。
 #     正例：`vuna build` 走 DT split → .output/{<Module>.ml,Main.ml,build.sh} + bin/<pkg>；
 #     `vuna check` / `vuna test` 也已是 DT（包 check = DT 精化；test = DT 核心求值）。
-#     E14（M26）：入口里声明的 data 必须发进产物 Main.ml（corpus/packages/05_entry_data /
+#     入口里声明的 data 必须发进产物 Main.ml（corpus/packages/05_entry_data /
 #     corpus/packages/06_entry_trait）。
 #     夹具 corpus/packages/[01][0-9]_*/ 先复制到 case 私有 $TMPDIR 并重写 vuna.toml 的
 #     vuna-base（绝对路径），避免往仓库工作树写 .output。
@@ -21,7 +21,7 @@ for-each: corpus/packages/[01][0-9]_*/
   exit: 0
   out-contains: 1 passed, 0 failed
 end:
-# E14：入口里声明的 data（C_Color_Red）必须发进产物 Main.ml。
+# 入口里声明的 data（C_Color_Red）必须发进产物 Main.ml。
 for-each: corpus/packages/05_entry_data/ corpus/packages/06_entry_trait/
   run: sh -c 'test -f "$TMPDIR/pkgs/{name}/.output/Main.ml"'
   exit: 0

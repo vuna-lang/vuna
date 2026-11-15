@@ -1,4 +1,4 @@
-# 101) D11 opaque：全量源码路径也必须把依赖包的 opaque body 从 deftbl 隐藏；
+# 101) opaque：全量源码路径也必须把依赖包的 opaque body 从 deftbl 隐藏；
 #      transparent 仍按普通定义展开。
 run: sh -c 'rm -rf "$TMPDIR/opq"; mkdir -p "$TMPDIR/opq/dep/lib" "$TMPDIR/opq/app/app"; printf "%s\n" "[package]" "name = \"d\"" "" "[export]" "modules = [\"D\"]" > "$TMPDIR/opq/dep/vuna.toml"; printf "%s\n" "module D where" "" "export opaque N : Type" "N = Int" "" "export transparent M : Type" "M = Int" "" "own : N -> Int" "own x = x" > "$TMPDIR/opq/dep/lib/D.vuna"'
 # 定义包自身仍可展开 opaque body。
@@ -13,7 +13,7 @@ out-contains: got D.N
 run: sh -c 'sed -i "s/D\.N/D.M/" "$TMPDIR/opq/app/app/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/opq/app"
 exit: 0
-# 单文件路径同样隐藏依赖 opaque body（M34.5 dtCheckSource）。
+# 单文件路径同样隐藏依赖 opaque body（`dtCheckSource`）。
 run: sh -c 'sed -i "s/D\.M/D.N/" "$TMPDIR/opq/app/app/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/opq/app/app/Main.vuna"
 exit: 1

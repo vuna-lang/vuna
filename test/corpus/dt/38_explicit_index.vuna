@@ -1,4 +1,4 @@
--- M22.3：擦除判据由 rig 驱动——**显式**索引 binder（`(n : Nat)`）是 Rig1，保留运行时
+-- 擦除判据由 rig 驱动——**显式**索引 binder（`(n : Nat)`）是 Rig1，保留运行时
 -- 字段（`VCons` 带 `t_Nat`）；**隐式**索引（`{n : Nat}`，见 17_erase）是 Rig0，擦除。
 -- `vlen` 把索引当递归参数读回来，不能被误擦。
 data Nat : Type where

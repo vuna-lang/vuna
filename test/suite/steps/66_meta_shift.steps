@@ -1,16 +1,14 @@
-# 66) C37 A 回归：接口摘要「擦除位残 meta」的移位/段分配。
+# 66) 接口摘要「擦除位残 meta」的移位/段分配。
 #
 # A① `shiftTerm` 覆盖全部 Term 构造子、fuel 用尽返回可检测错误：
-#     旧缺陷：`shiftTermFuel` 只递归 TPi/TLam/TApp/TCon/TCase/TIf，TMk/TRecord/TProj/
-#     TRecUpd 落到 `_ => t`；且 fuel(=128) 用尽后原样返回整棵子树 ⇒ record 构造/更新里的
-#     残 meta 保持旧编号、与本包 fresh 编号撞号（静默错项），深层项则静默漏移。
-#     探针直接 import `Vuna.Compiler.Driver.Cache`，把这些 meta 嵌进
-#     TMk/TRecord/TProj/TRecUpd/TCase/TIf 后断言全部 +off；600 层嵌套 > fuel guard 断言
-#     返回可检测的 ErrC。
+#     只递归部分构造子会让 TMk/TRecord/TProj/TRecUpd 里的残 meta 漏移；fuel 用尽后
+#     原样返回整棵子树则让 record 构造/更新里的残 meta 沿用未移位的编号、与本包 fresh 编号
+#     撞号（静默错项）。这里断言这几类构造子里的 meta 全部 +off；600 层嵌套超过 fuel
+#     guard 时返回可检测的 ErrC，而不是静默漏移。
 #
 # A② dep 段号与 iface 列表顺序无关：
 #     夹具 dep 有两个**互不 import** 的模块（A/B），翻转 `[export].modules` 顺序会改变
-#     dep manifest 的模块序（已验证）⇒ 旧实现的 `(idx+1)<<30` 段号随之变化。这里对同一
+#     dep manifest 的模块序（已验证）⇒ 段号不得随模块序变化。这里对同一
 #     app 做两次 `build --no-compile`（dep 模块序 A,B vs B,A，均先 check dep 写接口），
 #     codegen 产物目录必须逐字节一致。
 #

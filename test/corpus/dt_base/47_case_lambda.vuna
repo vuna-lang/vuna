@@ -1,4 +1,4 @@
--- B32：case 在推断位置（结果类型先是元变量）且分支体是 lambda。
+-- case 在推断位置（结果类型先是元变量）且分支体是 lambda。
 main : Int
 main =
   let

@@ -1,4 +1,4 @@
--- M42：参数化单字段 record 的委托派生；ctx 由字段类型里的参数推导。
+-- 参数化单字段 record 的委托派生；ctx 由字段类型里的参数推导。
 record EitherStr a where
   runEitherStr : a
 deriving via field (Show)

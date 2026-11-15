@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例（ND10）：同一 handle 块的 clause 构造子必须同族。
+-- 负例：同一 handle 块的 clause 构造子必须同族。
 import Base.Eff
 import Base.EffClock
 import Base.EffConsole

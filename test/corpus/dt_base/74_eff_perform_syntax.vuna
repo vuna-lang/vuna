@@ -1,7 +1,7 @@
--- native-effects N1：`perform <op>` 语法。key 取 op 族规范名（ND8），实例名由行解出
+-- `perform <op>` 语法。key 取 op 族规范名，实例名由行解出
 -- （`[ConsoleOp@audit]` → 名字 "audit"），结果类型走上下文。
--- handler 侧也按 ND8 用同一 key（现有 base wrapper 仍手写 "console"，统一留给
--- handle 语法的提交）。
+-- handler 侧也按同一 key 取名；base 的 wrapper 仍手写 "console"，两边 key 不配对
+-- （见 debt D57）。
 import Base.Eff
 import Base.EffConsole
 import Base.List

@@ -1,4 +1,4 @@
--- M24.5：scrutinee 反射 —— case 打在**裸 Nat 形参**上时，把 scrutinee 的值与构造子结果值
+-- scrutinee 反射 —— case 打在**裸 Nat 形参**上时，把 scrutinee 的值与构造子结果值
 -- 合一，goal 里的 k 才会精化成 `Zero` / `Succ j`。`rep`（按索引参数量化递归）因此在
 -- 没有 `Vec a k` 索引可合一时也能通过。
 data Nat : Type where

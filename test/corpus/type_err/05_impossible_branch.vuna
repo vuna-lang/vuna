@@ -1,4 +1,4 @@
--- B42 反例：occurs check 修正后，真正被索引排除的分支仍必须报不可达
+-- 负例：被索引排除的分支必须报不可达
 -- （`Fin Zero` 没有构造子，`FZ` 要求 `Fin (Succ n)`）。
 data Nat : Type where
   Zero : Nat

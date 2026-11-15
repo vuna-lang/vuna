@@ -1,4 +1,4 @@
-# 46) 语言级调试构造（F3 B）：dbg! / dbgShow 受 --debug-perf 门控（stderr，带时间戳）
+# 46) 语言级调试构造：dbg! / dbgShow 受 --debug-perf 门控（stderr，带时间戳）
 #     并返回值不变；assert/todo 失败走运行时报告器（exit 2、帧指向调用点）。
 run: sh -c 'mkdir -p "$TMPDIR/m38-dbg/app"; printf "[package]\nname = \"m38-dbg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-dbg/vuna.toml"; printf "main : Int\nmain = let _ = dbg! \"m38-trace\" in dbgShow 42\n" >"$TMPDIR/m38-dbg/app/Main.vuna"'
 run: "$VUNA" build "$TMPDIR/m38-dbg" 2>&1

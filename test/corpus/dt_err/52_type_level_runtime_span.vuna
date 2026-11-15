@@ -1,5 +1,5 @@
--- M29（A14）：类型级名字在运行时使用（`CG_TypeLevelNameRuntime`）现在带**定义位置**
--- （`bad` 的子句 span）；旧实现只有 `in `bad`: ` 而无 file:line:col。
+-- 类型级名字在运行时使用（`CG_TypeLevelNameRuntime`）报**定义位置**
+-- （`bad` 的子句 span），带 file:line:col。
 Pick : Int -> Type
 Pick n = Int
 

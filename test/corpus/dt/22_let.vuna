@@ -1,4 +1,4 @@
--- M19：`let` 表达式（顺序绑定 + 嵌套 + 推断位 + 捕获外层 binder）。
+-- `let` 表达式（顺序绑定 + 嵌套 + 推断位 + 捕获外层 binder）。
 -- `let x = e in body` 在精化期脱糖为 `(\x => body) e`，因此擦除行为与函数参数一致。
 data Nat : Type where
   Zero : Nat

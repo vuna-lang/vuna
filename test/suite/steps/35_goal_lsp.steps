@@ -1,4 +1,4 @@
-# 35) M17 工具链：`vuna goal` 洞目标显示 + LSP 编辑器冒烟；35b 容错目标查询（未解洞 /
+# 35) 工具链：`vuna goal` 洞目标显示 + LSP 编辑器冒烟；35b 容错目标查询（未解洞 /
 #      命名洞 ?goal）与 fmt/lint/check。包夹具在 case 私有 $TMPDIR（绝对 $VUNA_BASE）。
 run: "$VUNA" goal corpus/dt/15_goal.vuna 2>&1
 exit: 0

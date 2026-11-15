@@ -1,6 +1,6 @@
--- M26：Prelude 自动注入 → 直接用 base 的 `List`（Prelude 重导出 List/Nil/Cons）。
--- 本夹具现在覆盖「List 字面量 + 递归求和」；本地同名 `data List`（Nil/Cons）的解析
--- 优先级见 A07/A08/A09/C17（M27）。
+-- Prelude 自动注入 → 直接用 base 的 `List`（Prelude 重导出 List/Nil/Cons）。
+-- 本夹具覆盖「List 字面量 + 递归求和」。
+-- canonical `Base.List.List` 与本地 `data List` 并存时按期望类型解析。
 sum : List Int -> Int
 sum Nil = 0
 sum (Cons x xs) = x + sum xs

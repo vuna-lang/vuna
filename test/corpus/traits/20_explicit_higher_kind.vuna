@@ -1,4 +1,4 @@
--- M32：高阶 kind 约束（`Monad m =>`）与 do 块；body 的 `bind` 命中声明的
+-- 高阶 kind 约束（`Monad m =>`）与 do 块；body 的 `bind` 命中声明的
 -- `Dict_Monad m` 假设，main 用 Maybe 实例实例化。
 import Prelude
 import Base.Maybe

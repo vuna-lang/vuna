@@ -1,4 +1,4 @@
--- D24 负例：Nat 字面量 case 需要变量/通配兜底（Nat 是无限的）。
+-- 负例：Nat 字面量 case 需要变量/通配兜底（Nat 是无限的）。
 import Base.Nat
 
 f : Nat -> Int

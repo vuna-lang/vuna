@@ -1,4 +1,4 @@
--- M25.2a 正例：结构下降的互递归组（even/odd）必须被证明，而不是像旧实现那样静默跳过。
+-- 结构下降的互递归组（even/odd）必须被证明，不能静默跳过。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

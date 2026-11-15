@@ -1,4 +1,4 @@
--- W7：通用 bracket 对「非 Exn abort」的 cleanup。
+-- 通用 bracket 对「非 Exn abort」的 cleanup。
 -- Abort handler 丢弃续延（不 resume）时，运行时在 handler 退出点执行 release；
 -- release 里的 State 写入由外层 State handler 处理（经 State 观察 42）。
 import Base.Eff

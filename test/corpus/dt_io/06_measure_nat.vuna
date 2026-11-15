@@ -1,4 +1,4 @@
--- D25：宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.EffConsole.Print`、
+-- 宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.EffConsole.Print`、
 -- `Base.EffFs.WriteFile`/`FileSize`）；直调 `@vuna@prim_eff_*` 原语得到 `Int`。
 -- 本夹具用 entry 自动预装的行 handler 取 `Nat`、做 `Nat` 算术，并由 main 展示。
 import Base.Eff

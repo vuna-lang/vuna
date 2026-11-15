@@ -1,4 +1,4 @@
--- M23：实例里出现 trait 没声明的方法 ⇒ 硬错误（旧实现静默忽略）。
+-- 实例里出现 trait 没声明的方法 ⇒ 硬错误。
 trait Pretty a where
   pretty : a -> String
 

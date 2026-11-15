@@ -1,4 +1,4 @@
--- M29 旧的实例选择 `@name` 已删除；新 `@` 只覆盖隐式 String 实例名，
+-- `@` 只覆盖隐式 String 实例名；
 -- `pretty` 没有该参数 → `TC_NoInstParam`。
 trait Pretty a where
   pretty : a -> String

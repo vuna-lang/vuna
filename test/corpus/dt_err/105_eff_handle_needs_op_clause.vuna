@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例：handle 块至少要有一个 op 子句。
+-- 负例：handle 块至少要有一个 op 子句。
 import Base.Eff
 import Base.EffConsole
 import Base.List

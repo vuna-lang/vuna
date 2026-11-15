@@ -1,4 +1,4 @@
--- R1（records-v2）：表示档位声明。
+-- 表示档位声明：`alias` 透明、`boxed` 强制装箱。
 -- `alias record`：声明透明别名（构造/投影定义性恒等；擦除后恰好一个运行时字段），
 -- `deriving via field` 只看声明档位即可通过。
 alias record UserId where

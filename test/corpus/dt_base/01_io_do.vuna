@@ -1,4 +1,4 @@
--- M21：`do` / `bind` / `pure` / `fmap` 由自动导入的 `Prelude`（含 `Base.Monad`）带出；
+-- `do` / `bind` / `pure` / `fmap` 由自动导入的 `Prelude`（含 `Base.Monad`）带出；
 -- `import Base.Eff` 提供动作类型 `Eff`。Loader 的 T(..) 重导出规则同时带出方法投影。
 import Base.Eff
 

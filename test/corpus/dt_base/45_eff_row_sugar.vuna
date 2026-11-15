@@ -23,7 +23,7 @@ r1 = [Fetch]
 r2 : Row
 r2 = [Fetch, Log]
 
--- 命名行（ND1）：`Row.Cons` 需要 (名字, 标签, 尾行) 三个实参，`::` 中缀别名只适
+-- 命名行：`Row.Cons` 需要 (名字, 标签, 尾行) 三个实参，`::` 中缀别名只适
 -- 用于二参构造子，故这里直接写 `Cons "default" Fetch Nil`。
 r3 : Row
 r3 = Cons "default" Fetch []

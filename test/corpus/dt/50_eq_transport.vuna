@@ -1,4 +1,4 @@
--- M24.5：值级 Eq 的 sym / trans / subst，以及「按等式搬运类型/索引」的 cast。
+-- 值级 Eq 的 sym / trans / subst，以及「按等式搬运类型/索引」的 cast。
 -- 全部靠 `case Refl` 的索引精化：Refl 的结果索引把两个索引合一，goal 里的索引随之替换。
 data Nat : Type where
   Zero : Nat

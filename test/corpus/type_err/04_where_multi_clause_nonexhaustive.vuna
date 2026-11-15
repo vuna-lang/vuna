@@ -1,4 +1,4 @@
--- A2 负例：where 多 clause 的模式矩阵仍必须穷尽。
+-- 负例：where 多 clause 的模式矩阵仍必须穷尽。
 data Maybe2 : Type where
   Nothing2 : Maybe2
   Just2 : Int -> Maybe2

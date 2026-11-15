@@ -1,4 +1,4 @@
--- 阶段 3：多效应 main（FsOp + ConsoleOp）；entry 自动装两个 handler。
+-- 多效应 main（FsOp + ConsoleOp）；entry 自动装两个 handler。
 import Base.Eff
 import Base.EffConsole
 import Base.EffFs

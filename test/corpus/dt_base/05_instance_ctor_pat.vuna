@@ -1,4 +1,4 @@
--- M21：实例方法体的构造子形参（走与普通多 clause 相同的模式矩阵）。
+-- 实例方法体的构造子形参（走与普通多 clause 相同的模式矩阵）。
 import Base.Monad
 
 data Box a : Type where

@@ -1,4 +1,4 @@
--- W11：未处理运行时效应的诊断（main 兜底应报 key/name，而不是通用 Unhandled）。
+-- 未处理运行时效应的诊断：main 兜底报 key/name，而不是通用 Unhandled。
 import Base.Eff
 
 main : Int

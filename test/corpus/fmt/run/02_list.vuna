@@ -1,4 +1,4 @@
--- M26：Prelude 自动注入 → 用 base 的 `List`（本地同名 data List 见 M27 A07/A08/A09/C17）。
+-- Prelude 自动注入 → 用 base 的 `List`（本地同名 data 的解析优先级见 docs/reference/type-system.md）。
 sum : List Int -> Int
 sum Nil = 0
 sum (Cons x xs) = x + sum xs

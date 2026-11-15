@@ -1,4 +1,4 @@
--- M24.5：归纳 + cong + 反射 —— `plusZeroR` 需要在 `Succ k` 分支里把 goal 精化成
+-- 归纳 + cong + 反射 —— `plusZeroR` 需要在 `Succ k` 分支里把 goal 精化成
 -- `Eq (Succ k) (Succ (plus k Zero))`，再用归纳假设 `plusZeroR k` 与 cong 收尾。
 data Nat : Type where
   Zero : Nat

@@ -1,4 +1,4 @@
--- M16：索引/证明擦除 —— Eq 无字段、Vec 的长度索引不参与运行时计算。
+-- 索引/证明擦除 —— Eq 无字段、Vec 的长度索引不参与运行时计算。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

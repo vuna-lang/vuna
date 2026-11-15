@@ -1,7 +1,7 @@
 import Dep
 import Base.Maybe
 
--- M34.5 接口摘要夹具（根包侧）：
+-- 接口摘要夹具（根包侧）：
 --   * `x == ""` 走 primitive `Eq String` 特化——摘要路径的 deftbl 若混入签名
 --     （`String ↦ Type`），`force` 会把 String 归约成 Type，报 `Eq Type` 假歧义；
 --   * `deriving (Eq)` 需要依赖包摘要里的类表（`Base.Eq.Eq`）与字典构造子

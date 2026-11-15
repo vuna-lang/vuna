@@ -1,9 +1,9 @@
--- M19：内建泛化——`==` / `/=` 跨类型（按实参类型特化），str* 系列进 DT prelude。
+-- 内建泛化——`==` / `/=` 跨类型（按实参类型特化），str* 系列进 DT prelude。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat
 
--- 字符串比较（之前只对 Int，报 expected Int, got String）。
+-- 字符串比较（`==` 按实参类型特化到 String，不是只支持 Int）。
 sameName : String -> String -> Bool
 sameName a b = a == b
 

@@ -1,4 +1,4 @@
--- M11 反例：do 绑定模式只支持变量或 `_`。
+-- 反例：do 绑定模式只支持变量或 `_`。
 trait Monad m where
   bind : m a -> (a -> m b) -> m b
   pure : a -> m a

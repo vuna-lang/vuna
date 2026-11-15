@@ -1,5 +1,5 @@
-# 47) M38 vuna test 选项：--list / --filter（可重复）/ --verbose / --fail-fast；
-#     默认输出与退出码不变（第 42 段已锁默认输出，这里锁新开关的行为）。
+# 47) vuna test 选项：--list / --filter（可重复）/ --verbose / --fail-fast；
+#     默认输出与退出码不变（第 42 段已锁默认输出，这里锁这些开关的行为）。
 #     夹具 corpus/test-m30（root + member workspace + bad-* 独立失败夹具）复制到
 #     case 私有 $TMPDIR，重写所有 vuna.toml 的 vuna-base，避免与 §42/§47a 争 .output。
 run: dst="$TMPDIR/m38-test-m30"; rm -rf "$dst"; cp -r corpus/test-m30 "$dst"; find "$dst" -name vuna.toml -exec sed -i 's|^vuna-base = .*|vuna-base = "'"$VUNA_BASE"'"|' {} +

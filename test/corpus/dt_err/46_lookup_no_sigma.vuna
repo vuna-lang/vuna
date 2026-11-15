@@ -1,4 +1,4 @@
--- M29（B13/D12）负例：没有 Σ 时「元素类型依赖位置」的 Ctx/lookup 写不出来 ——
+-- 负例：没有 Σ 时「元素类型依赖位置」的 Ctx/lookup 写不出来 ——
 -- 递归步只能拿到 `Tm n`，而 goal 要 `Tm (Succ n)`（索引无法按位置精化）。
 -- 正例（存在式隐藏索引）见 test/corpus/dt/63_dep_lookup.vuna。
 data Nat : Type where

@@ -1,4 +1,4 @@
--- 阶段 5：Eff [] 的纯动作经 raise 自动 lift 到带行上下文（Eff [FsOp]）。
+-- Eff [] 的纯动作经 raise 自动 lift 到带行上下文（Eff [FsOp]）。
 import Base.Eff
 import Base.EffFs
 

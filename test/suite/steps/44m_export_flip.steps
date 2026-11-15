@@ -1,6 +1,6 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44m) 导出面翻转（依赖隐藏调用方用到的名字）：`miIfaceHash` 覆盖 exports 后，依赖方必须
-#      判脏；摘要路径与全量路径给出**同一**诊断（旧行为：摘要复用干净模块而漏报）。
+#      判脏；摘要路径与全量路径给出**同一**诊断（摘要路径不得复用旧接口而漏报）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库
 #      （只改副本，不动工作树）；`VUNA_IFACE_AUDIT=1` 同一进程跑两条路径、无 mismatch。
 run: sh -c 'rm -rf "$TMPDIR/iface-audit-pkg" "$TMPDIR/iface-audit-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/iface-audit-pkg"; mkdir -p "$TMPDIR/iface-audit-cache"'

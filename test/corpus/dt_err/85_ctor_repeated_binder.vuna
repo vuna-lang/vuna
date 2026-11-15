@@ -1,4 +1,4 @@
--- D40：构造子模式的嵌套子模式里重复绑定同名变量（`MkPair x x`）属于同一个绑定作用域，
+-- 构造子模式的嵌套子模式里重复绑定同名变量（`MkPair x x`）属于同一个绑定作用域，
 -- 非线性格不支持。
 data Pair : Type where
   MkPair : Int -> Int -> Pair

@@ -1,4 +1,4 @@
-# M26 模块面快照（vuna map --modules）
+# 模块面快照（vuna map --modules）
 
 ## root（工具链 + 产品 CLI）
 Vuna.Add  ./lib/Vuna/Add.vuna

@@ -1,7 +1,7 @@
 # 64) LSP push/pull 能力协商：声明 pull 能力的客户端只走 pull。
-#     服务器对这类客户端不再发 textDocument/publishDiagnostics —— vscode-languageclient
+#     服务器对这类客户端不发 textDocument/publishDiagnostics —— vscode-languageclient
 #     会为 push / pull 各建一个诊断集合，两套同时用会让 Problems 面板里同一条诊断出现
-#     两遍（M45 回归点）。空 capabilities 的 push 路径由 44l1 与 corpus/lsp/smoke.sh 覆盖。
+#     两遍。空 capabilities 的 push 路径由 44l1 与 corpus/lsp/smoke.sh 覆盖。
 run: mkdir -p "$TMPDIR/lsp-pull/lib"
 run: printf '[package]\nname = "lsp-pull"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lsp-pull/vuna.toml"
 run: printf 'module APull where\n\nvalue : Bool\nvalue = 1\n' > "$TMPDIR/lsp-pull/lib/APull.vuna"

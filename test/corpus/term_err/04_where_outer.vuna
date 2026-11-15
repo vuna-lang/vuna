@@ -1,4 +1,4 @@
--- M25.2a 负例：where 绑定体里调用外层函数且无下降（旧实现不遍历 ELet 绑定体 → 静默通过）。
+-- 负例：where 绑定体里调用外层函数且无下降。
 f : Int -> Int
 f n = go n where
   go : Int -> Int

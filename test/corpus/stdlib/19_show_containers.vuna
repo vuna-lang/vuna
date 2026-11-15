@@ -1,4 +1,4 @@
--- B31：容器 `Show` 实例（List / Maybe / Pair / Result）在各自类型模块随包加载。
+-- 容器 `Show` 实例（List / Maybe / Pair / Result）在各自类型模块随包加载。
 -- `Nothing` / `Err` 的 payload 类型无法从 show 的约束反推，用签名绑定消歧。
 -- 容器插值走 blanket `Show a => Interp a`；参数化实例的 tele 实参必须按擦除 rig 落地。
 import Base.Int

@@ -1,4 +1,4 @@
--- M42：deriving via field 仅允许单字段 record。
+-- deriving via field 仅允许单字段 record。
 record Point where
   x : Int
   y : Int

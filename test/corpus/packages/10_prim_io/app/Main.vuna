@@ -1,4 +1,4 @@
--- M37 / C1：Eff 是唯一动作类型；宿主原语是 `Eff []` 叶子。
+-- Eff 是唯一动作类型；宿主原语是 `Eff []` 叶子。
 -- `@vuna@prim_eff_sleep`（微秒，原生阻塞睡眠）探针断言真实推进时间；`exitWith 0`
 -- 让 golden 只含业务输出。
 import Base.HostRow

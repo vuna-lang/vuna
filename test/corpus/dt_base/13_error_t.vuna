@@ -1,4 +1,4 @@
--- M37：Error 效应栈（用 Base.EffError 取代旧 ErrorT）。
+-- Error 效应栈（`Base.EffError`）。
 -- `throw` 被作用域 `catch` 恢复；结果用 `Result` 观察。
 import Base.HostRow
 import Base.EffExit

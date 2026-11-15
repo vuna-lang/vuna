@@ -1,4 +1,4 @@
--- W10：console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实 handler
+-- console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实 handler
 -- 下各跑一次；mock 收集日志（纯 answer），real 走 entry 自动预装的 handler。
 import Base.Eff
 import Base.EffConsole

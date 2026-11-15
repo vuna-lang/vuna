@@ -1,10 +1,10 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
-# 52) C32 收口：所有缓存载荷统一 `Store` framing
+# 52) 缓存载荷统一 `Store` framing
 #     `vuna-cache-frame 2|tag|codec|len|内容地址\n<payload>`，载荷是显式规范编码（不再是
 #     OCaml Marshal）。截断（len 不符）、篡改（内容地址不符）、codec/tag 不符都必须被读侧
 #     拒绝 ⇒ 回退重算、不崩，且缓存文件被重写成合法 framing。
 #     单字节篡改用 dd 打在载荷中部（不是头部，避免只靠 magic 就过）。
-#     阶段 2 起 codegen 产物落在**内容寻址 blob**（`$VUNA_STORE/blobs/<digest>`），
+#     重算后的 codegen 产物落在**内容寻址 blob**（`$VUNA_STORE/blobs/<digest>`），
 #     图节点 `split:<pkg>:<kind>` 只存地址；坏字节的后果是「该地址读不出 ⇒ 重算并写回
 #     同一路径」。单元缓存（`PerfCache`）仍是独立目录，一并断言 framing。
 #     夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
@@ -28,9 +28,9 @@ out-equals: vuna-unit-cache 2
 run: sh -c 'unit=$(cat "$TMPDIR/c32-unit-path"); head -1 "$unit" | cut -d"|" -f3'
 out-equals: split-file 1
 # 52b) 截断：全部 blob 只留前 4096 字节（头行完整、载荷少一截）⇒ len/内容地址校验拒绝
-#      ⇒ 重算并重写同一路径。产物必须与干净构建**逐字节一致**（C51 已修：首次全量构建
-#      与「后续重算、有接口/单元缓存可复用」两条 codegen 路径的输出相同，包括
-#      `Vuna_runtime.ml` 的 `dt_def_locs` 表）。
+#      ⇒ 重算并重写同一路径。产物必须与干净构建**逐字节一致**：首次全量构建
+#      与「重算、有接口/单元缓存可复用」两条 codegen 路径的输出相同，包括
+#      `Vuna_runtime.ml` 的 `dt_def_locs` 表。
 run: sh -c 'for f in $(find "$VUNA_STORE"/blobs -type f); do head -c 4096 "$f" > "$f.part"; mv "$f.part" "$f"; done; TMPDIR="$TMPDIR/c32-cache" "$VUNA" build --no-compile --out "$TMPDIR/c32-out2" "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 # 52c) 篡改：在每个 blob 的载荷中部改一个字节（长度不变，内容地址必须拒绝）⇒ 重建成功，
@@ -50,7 +50,7 @@ out-contains: cache-path=hit
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
 out-contains: cache-path=miss
 run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f | wc -l)" -ge 1'
-# 52e) lex 缓存：全部截断后照常 lex 并重写（旧 Marshal 实现会 Marshal.from_string 崩溃）。
+# 52e) lex 缓存：全部截断后照常 lex 并重写（载荷不是 OCaml Marshal，截断按 framing 拒绝）。
 #      载荷落在输入寻址对象库 `<VUNA_STORE>/objects/lex/<输入摘要>`（路径 = 输入摘要，
 #      截断或 codec 不符 ⇒ 读侧拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**）。
 #      用独立夹具副本 + 独立 store，避免依赖本 case 前面步骤留下的 iface 缓存。

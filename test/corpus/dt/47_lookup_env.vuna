@@ -1,6 +1,6 @@
--- M24.5：不可达分支按**上下文**省略 —— `case env of ECons ...` 只写 ECons：
+-- 不可达分支按**上下文**省略 —— `case env of ECons ...` 只写 ECons：
 -- 进 ENil 分支时 n 被精化成 Zero，于是 `i : Fin Zero` 是空归纳族，这条分支永远进不去。
--- （旧实现按「索引能否合一」判可达性，ENil 看起来可达，会报 missing ENil。）
+-- （可达性判据要看分支上下文：只看索引能否合一会把 ENil 判成可达，报 missing ENil。）
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

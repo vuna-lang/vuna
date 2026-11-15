@@ -1,8 +1,7 @@
--- 150 层嵌套应用：迁移前的固定 512 步 codegen 预算会在此耗尽。
+-- 150 层嵌套应用：固定步数预算的 lowering 在这个深度会报 `IC_FuelExhausted (codegen)`。
 --
--- 每层 `step (...)` 消耗 genTermFuel 若干步（genAppFuel → genPlainAppFuel →
--- genPlainAppFallback → 两个子项），150 层就超过 512。新路径（Core → IR → 文本）
--- 只按节点结构递归，与嵌套深度无关。
+-- 项本身完全合法，只是「深度 > 预算」。后端只按节点结构递归，与嵌套深度无关，
+-- 所以这个深度能编译；门禁见 `checks.ir-boundary` 与 `103_ir_lowering.steps`。
 step : Int -> Int
 step a = a + 1
 

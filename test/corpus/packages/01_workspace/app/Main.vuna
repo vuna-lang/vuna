@@ -4,8 +4,8 @@ import Base.Eff
 import Base.EffConsole
 import Base.HostRow
 
--- 阶段 5：宿主 console 走 Eff hostRow（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
--- C35/M37：`tag` 让产物 Main.ml 引用依赖单元的构造子（跨单元全限定断言）。
+-- 宿主 console 走 Eff hostRow（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
+-- `tag` 让产物 Main.ml 引用依赖单元的构造子（跨单元全限定断言）。
 tag : DepTag
 tag = DepTagA
 

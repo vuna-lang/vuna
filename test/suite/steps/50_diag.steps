@@ -1,6 +1,7 @@
-# 50) M38 CLI 诊断片段：`-->` + 源码行 + 插入符；无位置错误保持单行；退出码不变。
+# 50) CLI 诊断片段：`-->` + 源码行 + 插入符；无位置错误保持单行；退出码不变。
 #     夹具写在 case 私有 $TMPDIR（包上下文只依赖 $VUNA_BASE），不触碰工作树。
-#     注：steps 的 out-contains 值会 trim 首尾空白，原 `"  --> "` 改为 `-->`（片段语义不变）。
+#     注：steps 的 out-contains 值会 trim 首尾空白，所以带前导空格的片段表达不出来，
+#     这里断言 `-->` 而不是 `  --> `（片段语义不变）。
 run: sh -c 'd="$TMPDIR/m38-diag-pkg"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"m38-diag-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = \"boom\"\n" > "$d/app/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/m38-diag-pkg" 2>&1
 exit: 1
@@ -240,7 +241,7 @@ out-contains: "localizedMessage":
 run: "$VUNA" check corpus/dt_err/03_hole.vuna --json 2>&1
 exit: 1
 out-contains: "kind":"span","name":"created"
-# M45：签名里自动量化的隐式类型变量不是用户可见 binder —— `f a = a` 与实例方法体内的
+# 签名里自动量化的隐式类型变量不是用户可见 binder —— `f a = a` 与实例方法体内的
 # `\a => \b =>` 不报 UN_ShadowedBinder（镜像 base 的 Applicative 实例）。
 run: sh -c 'printf "f : a -> a\nf a = a\n\nmain : Int\nmain = f 1\n" > "$TMPDIR/m45-generic-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m45-generic-shadow.vuna" 2>&1
@@ -252,7 +253,7 @@ out-not-contains: UN_ShadowedBinder
 run: sh -c 'printf "f : Int -> Int\nf x = let\n  x = 1\n  in x\n\nmain : Int\nmain = f 0\n" > "$TMPDIR/m45-real-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m45-real-shadow.vuna" 2>&1
 out-contains: [UN_ShadowedBinder]
-# M45：单文件 check 支持带 module 头的库模块（不再报 LD_ModuleHeaderInEntryFile）；
+# 单文件 check 支持带 module 头的库模块（不报 LD_ModuleHeaderInEntryFile）；
 # A 的真实遮蔽告警只报本文件，B 的类型错误定位到 B。
 run: sh -c 'd="$TMPDIR/m45-mod-file"; rm -rf "$d"; mkdir -p "$d/lib"; printf "[package]\nname = \"m45-mod-file\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module A where\n\na : Int -> Int\na x = let\n  x = 1\n  in x\n" > "$d/lib/A.vuna"; printf "module B where\n\nb : Int\nb = \"boom\"\n" > "$d/lib/B.vuna"'
 run: "$VUNA" check "$TMPDIR/m45-mod-file/lib/A.vuna" 2>&1

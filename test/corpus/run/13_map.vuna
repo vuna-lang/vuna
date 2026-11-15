@@ -1,5 +1,5 @@
--- M26：Prelude 自动注入 → 直接用 base 的 `List`；辅助函数改名 `mapList`，
--- 避免与 base `Base.List.map` 同名（本地同名 data List 的解析优先级见 M27 A07/A08/A09/C17）。
+-- Prelude 自动注入 → 直接用 base 的 `List`；辅助函数取名 `mapList`，
+-- 避免与 base `Base.List.map` 同名。
 mapList : (a -> b) -> List a -> List b
 mapList f Nil = Nil
 mapList f (Cons x xs) = Cons (f x) (mapList f xs)

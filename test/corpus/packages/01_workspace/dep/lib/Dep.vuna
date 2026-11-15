@@ -3,6 +3,6 @@ module Dep where
 export depText : String
 depText = "dep"
 
--- C35/M37：跨单元构造子引用的夹具。
+-- 跨单元构造子引用夹具：产物里的构造子按全限定名引用依赖单元。
 export data DepTag(..) : Type where
   DepTagA : DepTag

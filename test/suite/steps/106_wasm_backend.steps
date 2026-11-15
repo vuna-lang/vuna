@@ -1,4 +1,4 @@
-# 106) wasm 后端 M2：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime，行为与 OCaml
+# 106) wasm 后端：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime，行为与 OCaml
 # 后端差分一致。
 #
 # 覆盖：纯值/算术/let/遮蔽/if、顶层饱和函数、Nat 结构递归（IrNatCase）、字符串字面量与

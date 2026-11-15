@@ -1,4 +1,4 @@
--- M29-T2b 负例：`Eq (Box a)` 与 `Eq (Box Int)` 头可合一 ⇒ TC_OverlappingInstances。
+-- 负例：`Eq (Box a)` 与 `Eq (Box Int)` 头可合一 ⇒ TC_OverlappingInstances。
 import Prelude
 
 data Box a : Type where

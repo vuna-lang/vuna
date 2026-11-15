@@ -2,6 +2,6 @@ module Mid where
 
 import Dep
 
--- 使用依赖的导出名：依赖隐藏 `foo` 后，本模块必须判脏并重新报错（§44m）。
+-- 使用依赖的导出名：依赖隐藏 `foo` 后，本模块必须判脏并重新报错。
 export useFoo : Int
 useFoo = Dep.foo

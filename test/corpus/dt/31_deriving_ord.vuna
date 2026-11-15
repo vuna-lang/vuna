@@ -1,4 +1,4 @@
--- M19：`deriving (Ord)`——构造子按声明顺序为序，同构造子逐字段比较。
+-- `deriving (Ord)`——构造子按声明顺序为序，同构造子逐字段比较。
 import Prelude
 
 data C3 : Type where

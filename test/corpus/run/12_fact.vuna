@@ -1,5 +1,5 @@
--- M25.2a：改成结构递归（旧写法 `fact (n - 1)` 依赖 EApp 遍历漏洞静默通过；
--- 算术下降要等 M25.2b，这里用 Nat 上的结构递归保持 golden 不变）。
+-- Nat 上的结构递归（`fact (S k) = … * fact k`）：下降由构造子模式给出。
+-- Int 上的 `n - 1` 递降需要下界守卫证据，这里只用 Nat 结构递归，golden 不变。
 data Nat : Type where
   Z : Nat
   S : Nat -> Nat

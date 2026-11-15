@@ -1,5 +1,5 @@
 #!/bin/sh
-# test/corpus/cli/check.sh：M30 CLI 错误层 / 参数模型 / doc [export] 自检。
+# test/corpus/cli/check.sh：CLI 错误层 / 参数模型 / doc [export] 自检。
 #
 # 用法: sh corpus/cli/check.sh <vuna>
 #
@@ -11,7 +11,7 @@
 #         manifest 顺序、缺模块报错）；默认 OUT=DIR/docs/api.html；输出父目录递归创建；
 #   - gen-errors：ROOT 必须存在且是目录；docs/.generated 递归创建；
 #   - test/interp/goal/lint：不存在路径或目录输入给可读错误；
-#   - 参数模型：未知/重复/缺值 flag 给可读错误 + exit 2（不再吞掉或抛宿主异常）。
+#   - 参数模型：未知/重复/缺值 flag 给可读错误 + exit 2（不抛宿主异常）。
 #
 # 注意：vuna 的诊断走 stdout（prim_print，没有独立 stderr 原语），断言统一用 2>&1。
 set -u

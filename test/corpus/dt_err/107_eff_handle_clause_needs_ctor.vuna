@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例：op 子句头必须是「构造子模式 + 续延 binder」。
+-- 负例：op 子句头必须是「构造子模式 + 续延 binder」。
 import Base.Eff
 import Base.EffConsole
 import Base.List

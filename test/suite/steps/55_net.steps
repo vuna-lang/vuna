@@ -1,4 +1,4 @@
-# 55) M35.3 net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
+# 55) net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
 #     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。
 #     夹具 corpus/net/01_echo 会写 .output：复制到 $TMPDIR 并重写 vuna.toml 的 base 行。
 run: sh -c 'cp -R corpus/net/01_echo "$TMPDIR/net-fixture"; find "$TMPDIR/net-fixture" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'

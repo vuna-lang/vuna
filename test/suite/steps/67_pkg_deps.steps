@@ -1,9 +1,9 @@
-# 67) 依赖声明形态（阶段 0）：`[dependencies]` 的字符串简写 / 子表 / 内联表三路等价，
+# 67) 依赖声明形态：`[dependencies]` 的字符串简写 / 子表 / 内联表三路等价，
 #     以及摘要规则（D12）：`path` 依赖不写摘要；`git`（带 rev）/ `url` 必须带
 #     `sha256:<64 hex>`。结构错误必须在加载期报可定位的 PKG_ 码。
 #     最后一条是设计回归：改依赖源码不需要动任何 vuna.toml（新鲜度由 iface 链负责）。
 
-# 67a) 字符串简写（历史形态）继续可用。
+# 67a) 字符串简写形态可用。
 run: sh -c 'd="$TMPDIR/d67a"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67a\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" check "$d"'
 exit: 0
 
@@ -51,7 +51,7 @@ run: "$VUNA" check "$TMPDIR/d67i" 2>&1
 exit: 1
 out-contains: [PKG_UnknownSourceKey]
 
-# 67j) 完整的不可变源声明在阶段 0 尚未接入 store ⇒ PKG_NotMaterialized（带 fetch 提示）。
+# 67j) 未物化的不可变源依赖 ⇒ PKG_NotMaterialized（带 fetch 提示）。
 run: sh -c 'd="$TMPDIR/d67j"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67j\"\n\n[dependencies.foo]\ngit = \"https://example.invalid/x.git\"\nrev = \"abc123\"\nhash = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"'
 run: "$VUNA" check "$TMPDIR/d67j" 2>&1
 exit: 1

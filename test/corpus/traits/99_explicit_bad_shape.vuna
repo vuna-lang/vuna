@@ -1,4 +1,4 @@
--- M32 负例：约束项必须是单参数 trait 应用（`Eq` 缺实参）。
+-- 负例：约束项必须是单参数 trait 应用（`Eq` 缺实参）。
 import Prelude
 
 f : Eq => Int -> Bool

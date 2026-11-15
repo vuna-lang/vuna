@@ -1,4 +1,4 @@
--- M42：Ord 委托；单字段包装比较与底层字段一致。
+-- Ord 委托；单字段包装比较与底层字段一致。
 record Score where
   score : Int
 deriving via field (Eq, Ord)

@@ -1,4 +1,4 @@
--- W6 负例：tryWith 要求行首是 Exn n。
+-- 负例：tryWith 要求行首是 Exn n。
 import Base.Eff
 import Base.EffExn
 import Base.Result

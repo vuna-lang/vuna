@@ -1,4 +1,4 @@
--- B32 负例：分支 lambda 的 Result 类型必须一致。
+-- 负例：分支 lambda 的 Result 类型必须一致。
 main : Int
 main =
   let

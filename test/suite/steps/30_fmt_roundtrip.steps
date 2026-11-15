@@ -1,5 +1,5 @@
-# 30) fmt（M11.5/M11.6）：格式化后仍可解释（DT 语义）且输出不变；fmt 幂等。
-#     M26：格式化副本放进一个带 manifest 的临时包（= corpus 包同样的 base 上下文），
+# 30) fmt：格式化后仍可解释（DT 语义）且输出不变；fmt 幂等。
+#     格式化副本放进一个带 manifest 的临时包（= corpus 包同样的 base 上下文），
 #     这样 interp 看到的可见性与原文件一致（无 manifest 时是 base-only 上下文）。
 #     corpus/run/01_arithmetic.vuna、corpus/fmt/run/07_wrap.vuna 等路径保留以认领夹具。
 run: sh -c 'mkdir -p "$TMPDIR/fmt-pkg"; printf "[package]\nname = \"fmt-roundtrip\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/fmt-pkg/vuna.toml"'
@@ -9,7 +9,7 @@ for-each: corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/fmt/
   out-equals-file: {stem}.out
   run: "$VUNA" fmt --check "$TMPDIR/fmt-pkg/src.vuna" >/dev/null 2>&1
 end:
-# native-effects N1（提交 4b）：handle 语法的 fmt 往返——格式化后仍能 check，且二次 fmt 幂等。
+# handle 语法的 fmt 往返：格式化后仍能 check，且二次 fmt 幂等。
 for-each: corpus/dt_base/76_eff_handle_syntax.vuna corpus/dt_base/77_eff_handle_answer.vuna corpus/dt_base/78_eff_handle_state.vuna corpus/dt_base/79_eff_handle_reader.vuna corpus/dt_base/80_eff_handle_unknown_row.vuna
   run: sh -c 'cp "{item}" "$TMPDIR/fmt-pkg/handle.vuna"; chmod u+w "$TMPDIR/fmt-pkg/handle.vuna"; "$VUNA" fmt "$TMPDIR/fmt-pkg/handle.vuna" >/dev/null 2>&1'
   exit: 0

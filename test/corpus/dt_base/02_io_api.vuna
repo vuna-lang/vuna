@@ -1,6 +1,6 @@
--- M21：宿主原语（`@vuna@prim_eff_*`）在 DT 下的类型面。效果不在这条夹具里执行
+-- 宿主原语（`@vuna@prim_eff_*`）在 DT 下的类型面。效果不在这条夹具里执行
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
--- D25 的 `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
+-- `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
 -- 直接调用原语得到 `Int`。
 import Base.HostRow
 import Base.EffStdin

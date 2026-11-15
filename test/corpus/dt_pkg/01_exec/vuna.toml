@@ -1,8 +1,8 @@
-# M22.1 夹具：可执行包（app/Main.vuna + lib/ 模块）。
+# 可执行包夹具：app/Main.vuna 入口 + lib/ 模块。
 # check / compile 走包目录：loadProject + resolveProject。
-# M31.3（B26）：`Util` 里的 `+` 需要 fixity；本包**不加 vuna-base 依赖**——段 34d
-# 会把整包拷贝到 $tmp 再构建，相对路径依赖（../../../../base）在拷贝后失效。
-# 因此 fixity 由 `lib/Util.vuna` 本地 `infixl` 声明提供（`+` 是内建值，不需要 base）。
+# 本包**不加 vuna-base 依赖**——整包会被拷贝到 $tmp 构建，相对路径依赖
+# （../../../../base）在拷贝后失效。夹具模块因此只用跨模块引用：
+# `Util` 把 `Answer` 的值原样返回，不涉及运算符 fixity。
 [package]
 name = "dtpkg-exec"
 

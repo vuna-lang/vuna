@@ -1,4 +1,4 @@
--- W7 负例：线性续延 resume 两次 → 用量检查拒绝。
+-- 负例：线性续延 resume 两次 → 用量检查拒绝。
 import Base.Eff
 import Base.Eff.Reader
 

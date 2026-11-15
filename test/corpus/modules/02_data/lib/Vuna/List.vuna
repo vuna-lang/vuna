@@ -1,7 +1,6 @@
--- M31.3（B26）：本包**故意**不依赖 vuna-base（避免隐式 Prelude 把 Base.List 的
--- Nil/Cons 带进来，见 vuna.toml 注释）。D23 起 `+ - * /` 是 `Base.Num` 方法别名，
--- 无 base 的包没有这套 trait，因此这里只保留 cross-module data 需要的取首元素
--- （不再用算术演示 sum）。
+-- 本包**故意**不依赖 vuna-base（避免隐式 Prelude 把 Base.List 的 Nil/Cons
+-- 带进来，见 vuna.toml 注释）。`+ - * /` 是 `Base.Num` 的方法别名，无 base 的包
+-- 没有这套 trait，因此这里只保留 cross-module data 需要的取首元素。
 export data List a(..) : Type where
   Nil : List a
   Cons : a -> List a -> List a

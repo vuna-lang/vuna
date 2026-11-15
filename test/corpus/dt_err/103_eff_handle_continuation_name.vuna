@@ -1,4 +1,4 @@
--- native-effects N1（提交 4b）负例：同一 handle 块的续延 binder 名必须一致。
+-- 负例：同一 handle 块的续延 binder 名必须一致。
 import Base.Eff
 import Base.EffConsole
 import Base.List

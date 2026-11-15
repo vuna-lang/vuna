@@ -1,4 +1,4 @@
-# 44h) codegen 单元级缓存（S5）：改入口后重建——依赖单元命中缓存，产物与干净重建逐字节一致。
+# 44h) codegen 单元级缓存：改入口后重建——依赖单元命中缓存，产物与干净重建逐字节一致。
 #      夹具 corpus/packages/m34_summary 复制到 $TMPDIR（不改工作树），副本内所有
 #      vuna.toml 的 `vuna-base =` 行重写为 $VUNA_BASE。
 run: sh -c 'rm -rf "$TMPDIR/unit-pkg" "$TMPDIR/unit-cache" "$TMPDIR/unit-gen1" "$TMPDIR/unit-gen2"; cp -r corpus/packages/m34_summary "$TMPDIR/unit-pkg"; for mf in "$TMPDIR/unit-pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$TMPDIR/unit-cache" VUNA_UNIT_CACHE=1 "$VUNA" build --no-compile --out "$TMPDIR/unit-gen1" "$TMPDIR/unit-pkg/root" >/dev/null 2>&1'

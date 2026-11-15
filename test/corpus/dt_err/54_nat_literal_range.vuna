@@ -1,4 +1,4 @@
--- Nat 字面量超出 63 位可表示范围：C40 起词法期直接报 LX_IntLiteralOutOfRange，
--- 不再静默回绕（旧行为：2^62 回绕成 min_int 后在 Nat 期望处报 TC_NatLiteralOutOfRange）。
+-- Nat 字面量超出 63 位可表示范围时词法期直接报 LX_IntLiteralOutOfRange，
+-- 不静默回绕：范围外的字面量不能被截断成另一个数继续往下走。
 main : Nat
 main = 4611686018427387904

@@ -1,7 +1,7 @@
--- M19：多 clause 与方程左端模式（合成单个 case 表达式）。
--- M26：本地类型改名为 MyList/MyMaybe（构造子 MyNil/MyCons/MyNothing/MyJust），
+-- 多 clause 与方程左端模式（合成单个 case 表达式）。
+-- 本地类型叫 MyList/MyMaybe（构造子 MyNil/MyCons/MyNothing/MyJust）：
 -- 避开 base 的 List/Maybe 与其构造子 Nil/Cons/Just/Nothing；同名 data 的解析优先级
--- 见 A07/A08/A09/C17（M27）。语义与 expected.out 不变。
+-- 见 56_user_list_data.vuna、54_user_bool_data.vuna。
 data Nat : Type where
   Zero : Nat
   Succ : Nat -> Nat

@@ -1,4 +1,4 @@
--- W7：线性 handler；续延是 quantity 1 的 Cont，resume 一次通过。
+-- 线性 handler；续延是 quantity 1 的 Cont，resume 一次通过。
 import Base.Eff
 import Base.Eff.Reader
 

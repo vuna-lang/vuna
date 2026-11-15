@@ -1,8 +1,8 @@
--- S4：同一刚性类型变量上的多个同类字典目标在定义收尾时归并/去重到**一个**字典 binder
--- （`Eq a` 不重复提升）；调用点按具体类型一次性补字典。
--- 注意：同一定义里同时需要两个**不同**类的字典（如 `Eq a` + `Show a`）目前仍会触发
--- `liftFreeDictGoals` 的多 binder 缺陷（`DT: internal: negative de Bruijn index -2`），
--- 属 S4 之外/之后单独修的范围，本夹具只钉已支持的单类去重形态。
+-- 同一刚性类型变量上的多个同类字典目标在定义收尾时归并/去重到**一个**字典 binder
+-- （`Eq a` 不重复提升）。
+-- 不同类的两个字典（如 `Eq a` + `Show a`）各插一只 binder，见 `32_multi_dict_binders`；
+-- 本夹具只钉同类去重的形态：定义收尾只提升一次，
+-- 调用点按具体类型一次性补字典。
 import Prelude
 
 eqTwice : a -> a -> Bool

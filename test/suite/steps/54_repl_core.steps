@@ -1,7 +1,7 @@
-# 54) REPL v2：自动签名 / 泛化 / 重定义 / 块输入 / 命令面 / 类型文本 / 颜色 / 辅助命令。
+# 54) REPL 自动签名 / 泛化 / 重定义 / 块输入 / 命令面 / 类型文本 / 颜色 / 辅助命令。
 #     每个场景一条 `printf ... | "$VUNA" repl`；pty 行编辑在 54_repl_pty.steps。
-#     注：steps 的 out-contains 值会 trim 首尾空白，原片段 `" ms]"` / `"prompt = X> "` 的
-#     前导/尾随空格无法表达，按去空白后的片段断言（语义不变）。
+#     注：steps 的 out-contains 值会 trim 首尾空白，所以 ` ms]` / `prompt = X> ` 这类
+#     片段的空白无法表达，这里按去空白后的片段断言（语义不变）。
 run: printf 'x = 1 + 1\nx + 40\nf y = x + y\nf 40\nid z = z\nid 41\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 42
 out-contains: 41
@@ -19,13 +19,13 @@ run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.Eff\n:imports\n:q\
 out-contains: x : Int
 out-contains: f : Int -> Int
 out-contains: import Base.Eff
-# B1 回归：显式隐式 binder 不再被重复量化；B3 回归：类型文本 zonk。
+# 显式隐式 binder 不被重复量化；类型文本 zonk。
 run: printf 'm : {a : Type} -> a -> a\nm x = x\n:type m\n:type [1, 2, 3]\nid z = z\n:type id 1\n:q\n' | "$VUNA" repl 2>&1
 out-contains: m : {a : Type} -> a -> a
 out-not-contains: {a : Type} -> {a : Type}
 out-contains: List Int
 out-contains: id 1 : Int
-# v2.1：隐式 Prelude 可见；导入模块的类型名可作为项（`:type` 给 kind）。
+# 隐式 Prelude 可见；导入模块的类型名可作为项（`:type` 给 kind）。
 run: printf ':type Maybe\n:type Maybe Int\n:type Bool\n:type List\n:imports\n:q\n' | "$VUNA" repl 2>&1
 out-contains: Maybe : (a : Type) -> Type
 out-contains: Maybe Int : Type
@@ -37,7 +37,7 @@ run: printf ':load Base.Maybe\n:type Base.Maybe.Maybe\n:q\n' | "$VUNA" repl 2>&1
 out-contains: Base.Maybe.Maybe : (a : Type) -> Type
 run: printf ':load Base\n:type Maybe\n:q\n' | "$VUNA" repl 2>&1
 out-contains: Maybe : (a : Type) -> Type
-# v2.2：`:typeinfo`（`:ti`）单独列隐式参数 + 文档；裸运算符自动补括号；`>>` 给 do 派生提示。
+# `:typeinfo`（`:ti`）单独列隐式参数 + 文档；裸运算符自动补括号；`>>` 给 do 派生提示。
 run: printf 'id z = z\n:typeinfo id\n:ti id\n:type +\n:type >>\n:type (>>)\n:typeinfo Maybe\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 隐式参数
 out-contains: {t0 : Type}
@@ -48,7 +48,7 @@ out-contains: do 派生
 out-contains: 可选值
 run: printf ':typeinfo\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 用法: :typeinfo
-# v2.3：`:type` 的类型文本按 token 类别着色（universe / 箭头 / 全局名）；ANSI 用 printf '\033' 构造。
+# `:type` 的类型文本按 token 类别着色（universe / 箭头 / 全局名）；ANSI 转义由 printf 生成。
 run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[1;35mType"'
 run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[34m->"'
 run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[36mBase.Maybe.Maybe"'

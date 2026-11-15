@@ -1,4 +1,4 @@
--- Q2：`main : Eff [] a` 入口（行已处理干净的动作）；纯 handler 在入口前把行消掉。
+-- `main : Eff [] a` 入口（行已处理干净的动作）；纯 handler 在入口前把行消掉。
 import Base.Eff
 import Base.EffState
 import Base.Pair

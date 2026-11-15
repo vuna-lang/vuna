@@ -1,4 +1,4 @@
-# 49) M38 REPL 调试命令：:type / :load / :reload / :browse + 错误路径。
+# 49) REPL 调试命令：:type / :load / :reload / :browse + 错误路径。
 run: printf 'answer : Int\nanswer = 42\n' >"$TMPDIR/m38-scratch.vuna"
 run: sh -c 'printf ":type 1 + 1\n:q\n" | "$VUNA" repl 2>&1'
 out-contains: 1 + 1 : Int

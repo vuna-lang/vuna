@@ -1,4 +1,4 @@
--- stdlib：Applicative 的 pure / liftA2 / ap（M41）。
+-- Applicative 的 pure / liftA2 / ap。
 import Base.Applicative
 import Base.Eq
 import Base.Int

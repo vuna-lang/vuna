@@ -1,4 +1,4 @@
--- M11：`>>=` 与 `>>` 是 do 的派生（bind / bind+ignore）。
+-- `>>=` 与 `>>` 是 do 的派生（bind / bind+ignore）。
 trait Monad m where
   bind : m a -> (a -> m b) -> m b
   pure : a -> m a

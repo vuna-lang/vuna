@@ -1,4 +1,4 @@
-# 48) M38 vuna run：增量 build + 执行 + 参数透传 + 退出码；--no-build / 缺 bin / 库包。
+# 48) vuna run：增量 build + 执行 + 参数透传 + 退出码；--no-build / 缺 bin / 库包。
 #     `vuna run` 会写 .output：先把 corpus/packages/11_run_args 复制到 $TMPDIR 并重写
 #     其 vuna.toml 的 base 行。
 run: sh -c 'cp -R corpus/packages/11_run_args "$TMPDIR/run-args"; find "$TMPDIR/run-args" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
