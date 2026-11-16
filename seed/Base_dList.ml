@@ -3,12 +3,16 @@ type 'a0 t_Base_dList_dList = C_Base_dList_dList_Nil | C_Base_dList_dList_Cons o
 
 
 let dtp_unpack (s : string) =
-  let cs = List.init (String.length s) (fun i -> Char.code s.[i]) in
-  List.fold_right (fun x acc -> C_Base_dList_dList_Cons (x, acc)) cs C_Base_dList_dList_Nil
+  let rec go i acc = if i < 0 then acc else go (i - 1) (C_Base_dList_dList_Cons (Char.code (String.unsafe_get s i), acc)) in
+  go (String.length s - 1) C_Base_dList_dList_Nil
 let dtp_pack xs =
-  let rec to_list xs = match xs with C_Base_dList_dList_Nil -> [] | C_Base_dList_dList_Cons (x, rest) -> x :: to_list rest in
-  let cs = Array.of_list (to_list xs) in
-  String.init (Array.length cs) (fun i -> Char.chr cs.(i))
+  let rec len n l = match l with C_Base_dList_dList_Nil -> n | C_Base_dList_dList_Cons (_, rest) -> len (n + 1) rest in
+  let buf = Bytes.create (len 0 xs) in
+  let rec go i l = match l with
+    | C_Base_dList_dList_Nil -> ()
+    | C_Base_dList_dList_Cons (x, rest) -> Bytes.unsafe_set buf i (Char.chr x); go (i + 1) rest
+  in
+  (go 0 xs; Bytes.unsafe_to_string buf)
 
 let dtp_listOf xs = List.fold_right (fun x acc -> C_Base_dList_dList_Cons (x, acc)) xs C_Base_dList_dList_Nil
 let dtp_ocamlOf xs =

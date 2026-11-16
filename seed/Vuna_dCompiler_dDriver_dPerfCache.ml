@@ -6,13 +6,13 @@ let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheSchema = "vuna-unit-cache 2"
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheCodec = "split-file 1"
 
 # 38 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag = (fun nFs nEnv -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dcompilerTagEff nFs) nEnv)) (fun tag -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheSchema; "/"; tag])))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag = (fun nFs nEnv -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dcompilerTagEff nFs) nEnv)) (fun tag -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheSchema; "/"; tag])))))
 
 # 50 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dhashTextOf = (fun s -> (bi_strFromInt (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf s)))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dhashTextOf = (fun s -> (bi_strFromInt (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf s)))
 
 # 45 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheDir = (fun nFs nEnv nProcess pkg -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreRootReadyEff nFs) nEnv) nProcess)) (fun root -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [root; "/units/"; (v_Vuna_dCompiler_dDriver_dPerfCache_dhashTextOf pkg)])))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheDir = (fun nFs nEnv nProcess pkg -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreRootReadyEff nFs) nEnv) nProcess)) (fun root -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [root; "/units/"; (v_Vuna_dCompiler_dDriver_dPerfCache_dhashTextOf pkg)])))))
 
 # 68 "Vuna/Compiler/Driver/PerfCache.vuna"
 let v_Vuna_dCompiler_dDriver_dPerfCache_dcharSafe = (fun c -> (if (c = 46) then 95 else c))
@@ -21,13 +21,13 @@ let v_Vuna_dCompiler_dDriver_dPerfCache_dcharSafe = (fun c -> (if (c = 46) then 
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitNameSafe = (fun s -> (Base_dList.dtp_pack ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dDriver_dPerfCache_dcharSafe) (Base_dList.dtp_unpack s))))
 
 # 57 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheFileName = (fun name key -> ((fun h1 -> ((fun h2 -> ((fun h3 -> (String.concat "" [(v_Vuna_dCompiler_dDriver_dPerfCache_dunitNameSafe name); "-"; (bi_strFromInt h1); "-"; (bi_strFromInt h2); "-"; (bi_strFromInt h3); ".unit"])) (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf ("k3:" ^ key)))) (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf ("k2:" ^ key)))) (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf ("k1:" ^ key))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheFileName = (fun name key -> ((fun h1 -> ((fun h2 -> ((fun h3 -> (String.concat "" [(v_Vuna_dCompiler_dDriver_dPerfCache_dunitNameSafe name); "-"; (bi_strFromInt h1); "-"; (bi_strFromInt h2); "-"; (bi_strFromInt h3); ".unit"])) (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf ("k3:" ^ key)))) (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf ("k2:" ^ key)))) (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf ("k1:" ^ key))))
 
 # 53 "Vuna/Compiler/Driver/PerfCache.vuna"
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath = (fun dir name key -> (String.concat "" [dir; "/"; ((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheFileName name) key)]))
 
 # 74 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheEntryDir = (fun base entryKey -> (String.concat "" [base; "/e-"; (bi_strFromInt (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf ("entry:" ^ entryKey))); "-"; (bi_strFromInt (Vuna_dCompiler_dFingerprint.v_Vuna_dCompiler_dFingerprint_dtextHashOf ("entry2:" ^ entryKey)))]))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheEntryDir = (fun base entryKey -> (String.concat "" [base; "/e-"; (bi_strFromInt (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf ("entry:" ^ entryKey))); "-"; (bi_strFromInt (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf ("entry2:" ^ entryKey)))]))
 
 # 78 "Vuna/Compiler/Driver/PerfCache.vuna"
 let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheEntryKeyOf = (fun keys -> (match ((Base_dList.v_Base_dList_dlookupPair "__entry__") keys) with
@@ -57,7 +57,7 @@ let rec v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries = (fun nFs nProcess mc0 m
 ))
 
 # 95 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheGc = (fun nFs nProcess base keepDir -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreEnsureDirEff nFs) nProcess) base)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsReadDir nFs) base)) (fun names -> (((((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries nFs) nProcess) base) keepDir) names))))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheGc = (fun nFs nProcess base keepDir -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreEnsureDirEff nFs) nProcess) base)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsReadDir nFs) base)) (fun names -> (((((v_Vuna_dCompiler_dDriver_dPerfCache_dgcEntries nFs) nProcess) base) keepDir) names))))))
 
 # 138 "Vuna/Compiler/Driver/PerfCache.vuna"
 let rec v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo = (fun nFs nProcess mc0 mc1 mc2 -> (match mc2 with
@@ -67,14 +67,14 @@ let rec v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo = (fun nFs nProcess mc0 
 ))
 
 # 132 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheBucketGc = (fun nFs nProcess dir keepNames -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreEnsureDirEff nFs) nProcess) dir)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsReadDir nFs) dir)) (fun names -> (((((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo nFs) nProcess) dir) keepNames) names))))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheBucketGc = (fun nFs nProcess dir keepNames -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreEnsureDirEff nFs) nProcess) dir)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsReadDir nFs) dir)) (fun names -> (((((v_Vuna_dCompiler_dDriver_dPerfCache_dbucketGcGo nFs) nProcess) dir) keepNames) names))))))
 
 # 152 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheRead = (fun nFs nEnv dir name key -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag nFs) nEnv)) (fun tag -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreReadEff nFs) tag) v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheCodec) (((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath dir) name) key))) (fun payload -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (match payload with
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheRead = (fun nFs nEnv dir name key -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag nFs) nEnv)) (fun tag -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreReadEff nFs) tag) v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheCodec) (((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath dir) name) key))) (fun payload -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (match payload with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__7) -> (Vuna_dCompiler_dDriver_dSplit.v_Vuna_dCompiler_dDriver_dSplit_ddecSplitFileComplete dtb__7)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )))))))
 
 # 161 "Vuna/Compiler/Driver/PerfCache.vuna"
-let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheWrite = (fun nFs nEnv nProcess dir name key sf -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreEnsureDirEff nFs) nProcess) dir)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag nFs) nEnv)) (fun tag -> (((((Vuna_dCompiler_dStore.v_Vuna_dCompiler_dStore_dstoreWriteEff nFs) tag) v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheCodec) (((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath dir) name) key)) ((Vuna_dCompiler_dCanonical_dBytes.v_Vuna_dCompiler_dCanonical_dBytes_dencTop Vuna_dCompiler_dDriver_dSplit.v_Vuna_dCompiler_dDriver_dSplit_dencSplitFile) sf)))))))
+let v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheWrite = (fun nFs nEnv nProcess dir name key sf -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreEnsureDirEff nFs) nProcess) dir)) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheTag nFs) nEnv)) (fun tag -> (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreWriteEff nFs) tag) v_Vuna_dCompiler_dDriver_dPerfCache_dunitCacheCodec) (((v_Vuna_dCompiler_dDriver_dPerfCache_dunitCachePath dir) name) key)) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop Vuna_dCompiler_dDriver_dSplit.v_Vuna_dCompiler_dDriver_dSplit_dencSplitFile) sf)))))))
