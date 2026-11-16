@@ -1,18 +1,23 @@
+-- | `vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`：清理 store 里的
+-- 缓存族与取包对象族。
+--
+-- 一个 store 根、两类生命周期：
+--
+-- - `--store`：**缓存族** —— `objects/<kind>/`（iface / header / lex / order / check / tool /
+--   doc / mods / test / pkgiface / splitptr）、`blobs/`、`units/`、`views/{bin,testbin}/`、
+--   `.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
+-- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
+--   保留缓存族与 roots。
+-- - `--gc`：与 `--packages` 连用，只删包对象族里**未被引用**的对象；引用集是当前包与
+--   `[workspace].members`（递归）的 git / url 依赖摘要，加上所有项目 roots。
+-- - `--all`：两者都清。
+--
+-- 不带 flag 时只清缓存族（默认不碰持久包对象）。`DIR` 只对 `--gc` 的引用集有用（默认 `.`）；
+-- `--store` / `--packages` 不收目录。
+--
+-- 对象按内容寻址，删掉只会造成一次未命中、重算即可，所以清理不影响正确性。
 module Vuna.Clean where
 
--- Vuna.Clean：缓存清理（`vuna clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]`）。
---
--- 一个 store 根、两类生命周期（D15）：
---   --store     **缓存族**：`objects/<kind>/`（iface/header/lex/order/check/tool/mods/test/
---               splitptr）、`blobs/`、`units/`、`views/{bin,testbin}/`、`.tmp/`（锁与暂存）。
---               保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
---   --packages  **取包对象族**：`objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
---               保留缓存族与 roots。
---   --gc        与 `--packages` 连用：只删包对象族里**未被引用**的对象；引用集 =
---               当前包与 `[workspace].members`（递归）的 git/url 依赖摘要 + 所有项目 roots。
---   --all       两者都清。
--- 不带 flag 时只清缓存族（默认不碰持久包对象）。
--- `DIR` 只对 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages` 不收目录。
 import Vuna.Cli.Args
 import Base.Maybe
 import Vuna.Compiler.Base.Common
@@ -30,6 +35,9 @@ import Base.EffProcess
 import Base.Eff.Types
 import Base.EffEnv
 
+-- | `vuna clean` 的入口：解析 flag 与位置参数，决定清哪一族。
+-- `--gc` 必须与 `--packages` 连用；`--store` / `--packages` 不带 `--gc` 时不收目录。
+-- 用法错误打印 `error: ...` 并返回 2。
 export runClean : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "store", BoolFlag "packages", BoolFlag "gc", BoolFlag "all"] args of
   ErrC e => cleanError (diagText e)
@@ -52,15 +60,15 @@ runClean args = case parseToolArgs "vuna clean" [BoolFlag "dry-run", BoolFlag "s
         else cleanTargets wantStore wantPackages wantGc dry dir
       _ => cleanError "too many arguments; expected at most one directory"
 
--- 接口缓存在对象库（`$VUNA_STORE/objects/iface`），没有树内 `*.iface`；
--- 因此没有 `--iface`：清缓存 = 清缓存族（`--store`）或包对象族（`--packages`）。
+-- | 内部：依次清理被选中的族：先清缓存族，成功后再清包对象族；前一步失败即返回其退出码。
+-- 接口缓存在对象库（`$VUNA_STORE/objects/iface`），树内没有 `*.iface`，因此没有 `--iface`。
 cleanTargets : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Bool -> Bool -> String -> Eff r Int
 cleanTargets wantStore wantPackages wantGc dry dir = do
   storeCode <- if wantStore then cleanStore dry else pure 0
   if storeCode /= 0 then pure storeCode
   else if wantPackages then cleanPackages wantGc dir dry else pure 0
 
--- 缓存族：按 kind 目录 + 派生目录枚举，不碰包对象族与 roots。
+-- | 内部：缓存族按 kind 分目录的对象子目录名（`objects/<kind>`）。
 cacheKindNames : List String
 cacheKindNames =
   [ "iface",
@@ -76,23 +84,29 @@ cacheKindNames =
     "splitptr"
   ]
 
+-- | 内部：缓存族的清理作用域：各 kind 目录 + `blobs` / `units` / 两类视图产物 / `.tmp`。
+-- 不碰包对象族（`objects/pkg`）、`pkgs` 与 `roots`。
 cacheScopesOf : String -> List String
 cacheScopesOf root =
   append (map (\k => "${root}/objects/${k}") cacheKindNames)
     ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
 
+-- | 内部：清缓存族（`--store`）：作用域见 [Vuna.Clean.cacheScopesOf]，`dry` 时只统计不删。
 cleanStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
 cleanStore dry = do
   root <- storeRootEff
   cleanScopes "clean-store" (cacheScopesOf root) dry
 
--- `--packages`：默认整族清理；`--gc` 只删未被引用对象。
+-- | 内部：清包对象族（`--packages`）：默认整族清理（`objects/pkg` + `pkgs` + `tmp`）；
+-- `--gc` 只删未被引用的对象。
 cleanPackages : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> String -> Bool -> Eff r Int
 cleanPackages wantGc dir dry = do
   root <- storeDataRootEff
   if wantGc then cleanPackagesGc root dir dry
   else cleanScopes "clean-packages" ["${root}/objects/pkg", "${root}/pkgs", "${root}/tmp"] dry
 
+-- | 内部：包对象族的 GC：引用集 = `dir` 处项目树 + 所有项目 roots 的摘要，`objects/pkg` 与
+-- `pkgs` 下引用集之外的路径都删。`dry` 时只打印将要删除的文件数。
 cleanPackagesGc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Eff r Int
 cleanPackagesGc root dir dry = do
   local <- collectRootDigests dir
@@ -109,22 +123,27 @@ cleanPackagesGc root dir dry = do
         "clean-packages --gc: ${storeVerb dry} ${strFromInt n} unreferenced file(s) under ${root}\n"
     pure 0
 
--- 路径属于被引用对象：`objects/pkg/<digest>` 或 `pkgs/<digest>/...`。
+-- | 内部：路径是否属于被引用对象 —— `objects/pkg/<digest>` 或 `pkgs/<digest>/...` 命中
+-- 任一摘要即算被引用。
 isReferenced : List String -> String -> Bool
 isReferenced roots path =
   anyLine (\d => contains "/objects/pkg/${d}" path || contains "/pkgs/${d}/" path) roots
 
+-- | 内部：列表里是否有元素满足谓词。
 anyLine : (a -> Bool) -> List a -> Bool
 anyLine f [] = False
 anyLine f (x :: rest) = if f x then True else anyLine f rest
 
--- 引用集 = 当前包 + `[workspace].members`（**递归嵌套**）的 git/url 依赖摘要（path 依赖不
--- 参与，D12）。工作队列 + seen + fuel：结构递归在队列上，fuel 只防 members 环/失控。
+-- | 内部：收集 `dir` 处包树的引用摘要：当前包与 `[workspace].members`（**递归嵌套**）的
+-- git / url 依赖摘要；path 依赖不参与。工作队列 + seen + fuel：结构递归在队列上，
+-- fuel 只防 members 环 / 失控。
 collectRootDigests : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List String)
 collectRootDigests dir = do
   abs <- absolutePath dir
   walkMemberDirs 4096 [abs] []
 
+-- | 内部：按队列遍历成员目录，累加每个 manifest 的 git / url 依赖摘要；`seen` 防重访，
+-- `fuel` 耗尽或队列空即停止。
 walkMemberDirs : Member nFs FsOp r => Int -> List String -> List String -> Eff r (List String)
 walkMemberDirs fuel queue seen = if fuel <= 0 then pure []
 else case queue of
@@ -139,6 +158,8 @@ else case queue of
           walkMemberDirs (fuel - 1) (append (map (\rel => joinPath d rel) members) rest) (d :: seen)
         pure (append hashes more)
 
+-- | 内部：读并校验 manifest，返回 `(依赖摘要, members 相对路径)`；文件缺失或
+-- parse / 校验失败时返回 `Nothing`（调用方当作无信息跳过）。
 manifestInfoEff : Member nFs FsOp r => String -> Eff r (Maybe (Pair (List String) (List String)))
 manifestInfoEff path = do
   exists <- fsFileExists path
@@ -152,14 +173,15 @@ manifestInfoEff path = do
           pure (Just (Pair (depHashesOf valid.manifestDependencies) valid.manifestMembers))
   else pure Nothing
 
+-- | 内部：依赖列表里 git / url 源的摘要（归一化后）；path 依赖与无摘要的依赖跳过。
 depHashesOf : List Dependency -> List String
 depHashesOf [] = []
 depHashesOf (dep :: rest) = case depHashOf dep of
   Nothing => depHashesOf rest
   Just h => normalizeHash h :: depHashesOf rest
 
--- 清一组**作用域路径**（目录或文件）：先统计文件数（dry-run/输出口径），再整目录删除。
--- 路径不存在 ⇒ 跳过；`rm -rf` 只对目录，文件走 removeFile。
+-- | 内部：清一组**作用域路径**（目录或文件）：先统计文件数（dry-run 与输出口径），再整目录删除。
+-- 路径不存在则跳过；目录用 `rm -rf`，文件走 `fsRemoveFile`。目录路径本身也会被删。
 cleanScopes : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> List String -> Bool -> Eff r Int
 cleanScopes label paths dry = do
   files <- concatMapEff filesUnder paths
@@ -170,7 +192,8 @@ cleanScopes label paths dry = do
     _ <- consolePrint "${label}: ${storeVerb dry} ${strFromInt n} file(s)\n"
     pure 0
 
--- 路径下的全部文件：不存在 ⇒ []；文件 ⇒ 它自己；目录 ⇒ 递归。
+-- | 内部：路径下的全部文件：不存在给空列表；文件给自身；目录递归遍历（跳过
+-- [Vuna.Clean.skipCleanDir] 里的目录）。
 filesUnder : Member nFs FsOp r => String -> Eff r (List String)
 filesUnder path = do
   exists <- fsFileExists path
@@ -179,6 +202,7 @@ filesUnder path = do
     isDir <- fsIsDirectory path
     if isDir then walkFiles 1048576 path else pure [path]
 
+-- | 内部：逐个删除路径（不存在就跳过）；目录走 `rm -rf`，文件走 `fsRemoveFile`。
 removeEachPath : Member nFs FsOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 removeEachPath [] = pure 0
 removeEachPath (path :: rest) = do
@@ -189,22 +213,26 @@ removeEachPath (path :: rest) = do
     _ <- if isDir then processRunIn "." ["rm", "-rf", path] else fsRemoveFile path
     removeEachPath rest
 
+-- | 内部：输出用动词：`dry` 时为 `would remove`，否则 `removed`。
 storeVerb : Bool -> String
 storeVerb True = "would remove"
 storeVerb False = "removed"
 
+-- | 内部：逐个删除文件（不检查是否存在）。
 removeEach : Member nFs FsOp r => List String -> Eff r Int
 removeEach [] = pure 0
 removeEach (f :: rest) = do
   _ <- fsRemoveFile f
   removeEach rest
 
+-- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 cleanError : Member nConsole ConsoleOp r => String -> Eff r Int
 cleanError e = do
   _ <- consolePrint "error: ${e}\n"
   pure 2
 
--- 与工作树其他遍历一致的跳过规则：`.local` 不跳过（`VUNA_IFACE_DIR=.local/iface` 时要能清到）。
+-- | 内部：遍历时跳过的目录名：构建与仓库元数据（`.git` / `.direnv` / `node_modules` /
+-- `result*` / `seed` 等）。`.local` 不跳过：`VUNA_IFACE_DIR=.local/iface` 时要能清到。
 skipCleanDir : String -> Bool
 skipCleanDir name =
   name == ".git"
@@ -217,7 +245,8 @@ skipCleanDir name =
     || name == "result"
     || startsWith "result-" name
 
--- 目录树是文件系统图（符号链接可成环），用显式 fuel 守卫。
+-- | 内部：递归收集目录下的全部文件路径（跳过 [Vuna.Clean.skipCleanDir] 的目录）。
+-- 目录树是文件系统图（符号链接可成环），`fuel` 是显式守卫。
 walkFiles : Member nFs FsOp r => Int -> String -> Eff r (List String)
 walkFiles fuel dir = if fuel <= 0 then pure []
 else do
@@ -228,6 +257,7 @@ else do
     concatMapEff (walkGo (fuel - 1) dir) names
   else pure []
 
+-- | 内部：对列表逐项做效应计算并按序拼接结果。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -235,6 +265,7 @@ concatMapEff f (x :: rest) = do
   ys <- concatMapEff f rest
   pure (append xs ys)
 
+-- | 内部：处理目录项：跳过 `.` / `..` 与被跳过的目录名，目录递归、文件收进结果。
 walkGo : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
 walkGo fuel dir name = if fuel <= 0 then pure []
 else case name of
@@ -250,12 +281,14 @@ else case name of
       if exists && isDir then walkFiles (fuel - 1) path else pure [path]
 
 -- ---------------------------------------------------------------
--- `vuna store gc`：按 **roots + 宽限窗口 + 容量上限** 淘汰对象。
---
--- 输入寻址下删除对象**不影响正确性**：缺了就是一次未命中、重算即可。所以这里只需要
--- 一条策略：常用的别删。roots（`store/roots/<项目摘要>`，项目只追加）就是「常用」的
--- 声明；宽限窗口保护「刚写、root 还没写」的崩溃窗口。
+-- `vuna store gc`：按 roots + 宽限窗口 + 容量上限淘汰对象。
 -- ---------------------------------------------------------------
+-- | `vuna store gc` 的入口：先裁剪死项目根，再对缓存族做一次「roots + 宽限窗口 + 容量上限」
+-- 的淘汰。输入寻址下删除对象不影响正确性（缺了就是一次未命中、重算即可），所以策略只有
+-- 一条——常用的别删：roots（`store/roots/<项目摘要>`，项目只追加）是「常用」的声明，
+-- 宽限窗口保护「刚写、root 还没写」的崩溃窗口。
+-- 参数：`--dry-run` 只统计不删；`--older-than <秒>` 覆盖宽限窗口（默认 3600）；
+-- `--max-size <字节>` 容量上限（0 = 不限）。
 export runStoreGc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueFlag "older-than", ValueFlag "max-size"] args of
   ErrC e => cleanError (diagText e)
@@ -278,7 +311,8 @@ runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueF
       keep <- allRootDigests
       gcSweep root keep graceSec maxBytes dry
 
--- 十进制整数解析：只接受纯数字（`--older-than` / `--max-size` 都是非负整数）。
+-- | 十进制整数解析：只接受纯数字，解析失败返回默认值 `d`
+-- （`--older-than` / `--max-size` 都是非负整数）。
 -- 语言侧没有 char 级原语，这里用 `substring` 逐字符取一位再比对字面量；递归用显式 fuel
 -- （长度上限即 fuel），这样终止性检查不需要理解 `i` 的递增。
 strToIntOr : String -> Int -> Int
@@ -286,6 +320,7 @@ strToIntOr s d = case readNatFuel (toInt (byteLength s)) 0 s 0 of
   Just v => v
   Nothing => d
 
+-- | 内部：单个十进制数字字符 → 数值；非数字给 `Nothing`。
 digitOf : String -> Maybe Int
 digitOf "0" = Just 0
 digitOf "1" = Just 1
@@ -299,20 +334,22 @@ digitOf "8" = Just 8
 digitOf "9" = Just 9
 digitOf _ = Nothing
 
--- `fuel` 从长度递减到 0；`pos` 是当前位（0 起）。
+-- | 内部：从 `pos` 起逐位累加；`fuel` 从长度递减到 0，遇到非数字给 `Nothing`。
 readNatFuel : Int -> Int -> String -> Int -> Maybe Int
 readNatFuel fuel pos s acc = if fuel <= 0 then Just acc
 else case digitOf (substring (Base.Nat.fromInt pos) (Base.Nat.fromInt 1) s) of
   Nothing => Nothing
   Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
 
--- 项目根裁剪：`.project` 缺失（legacy 布局）或记录的目录已不存在 ⇒ 整个 roots 目录丢掉。
--- 只缩小保留集（其中的对象变成 GC 候选），不影响正确性；`--dry-run` 只统计。
+-- | 内部：裁剪死项目根 —— `.project` 缺失（legacy 布局）或记录的目录已不存在时整个 roots
+-- 条目丢掉。只缩小保留集（其中的对象因此成为 GC 候选），不影响正确性。返回裁剪条数；
+-- `dry` 时只统计不删。
 pruneProjectRoots : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
 pruneProjectRoots dry = do
   projects <- storeRootProjectListEff
   pruneProjectsGo dry projects 0
 
+-- | 内部：逐个检查项目根，删掉已死的条目（`dry` 时只计数）。
 pruneProjectsGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> List String -> Int -> Eff r Int
 pruneProjectsGo dry [] n = pure n
 pruneProjectsGo dry (p :: rest) n = do
@@ -322,7 +359,7 @@ pruneProjectsGo dry (p :: rest) n = do
     pruneProjectsGo dry rest (n + 1)
   else pruneProjectsGo dry rest n
 
--- 项目根的存活判据：记录的路径仍存在。legacy（无 `.project`）视为死。
+-- | 内部：项目根的存活判据 —— 记录的路径仍存在；读不出路径（legacy，无 `.project`）视为死。
 projectRootDead : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Bool
 projectRootDead projectId = do
   path <- storeProjectPathEff projectId
@@ -332,13 +369,13 @@ projectRootDead projectId = do
       exists <- fsFileExists dir
       pure (not exists)
 
--- 所有项目 roots 的并集（GC 的「保留」集合）。
+-- | 所有项目 roots 的摘要并集（GC 的「保留」集合）。
 allRootDigests : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r (List String)
 allRootDigests = do
   projects <- storeRootProjectListEff
   concatMapEff storeRootLoadEff projects
 
--- 遍历缓存族：objects/（**排除包对象族 objects/pkg/**）、blobs/、units/ 的全部文件。
+-- | 内部：缓存族里的全部文件：`objects/`（**排除包对象族 `objects/pkg/`**）、`blobs/`、`units/`。
 gcFilesOf : Member nFs FsOp r => String -> Eff r (List String)
 gcFilesOf root = do
   objs <- walkFiles 1048576 "${root}/objects"
@@ -349,7 +386,7 @@ gcFilesOf root = do
     cacheObjs = filter (\p => not (startsWith pkgPrefix p)) objs
   in pure (append cacheObjs (append blobs units))
 
--- 目录下的直接子目录（不存在/不是目录 ⇒ []）。
+-- | 内部：目录下的直接子目录（不存在或不是目录给空列表）。
 subDirsOf : Member nFs FsOp r => String -> Eff r (List String)
 subDirsOf dir = do
   exists <- fsFileExists dir
@@ -365,14 +402,16 @@ subDirsOf dir = do
     ) names
   else pure []
 
+-- | 内部：目录下所有文件的大小之和（字节）。
 dirSizeOf : Member nFs FsOp r => String -> Eff r Int
 dirSizeOf path = do
   files <- walkFiles 1048576 path
   xs <- sizesOf files
   pure (sumSizes xs)
 
--- 视图候选：整目录按 roots 名保护、按目录 mtime 判旧。视图只能整目录删
--- （`.complete` 还在时删单个文件会让读侧把半截视图当完整的）。
+-- | 内部：视图候选：整目录按 roots 名保护、按目录 mtime 判旧，给出
+-- `(mtime, (字节数, 路径))`。视图只能整目录删：`.complete` 还在时删单个文件会让读侧
+-- 把半截视图当完整的。
 gcViewCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
 gcViewCandidates _ _ _ [] = pure []
 gcViewCandidates now keep grace (d :: rest) = do
@@ -385,12 +424,13 @@ gcViewCandidates now keep grace (d :: rest) = do
       pure (Pair mtime (Pair size d) :: more)
     else pure more
 
+-- | 内部：路径的最后一段（`split "/"` 后取尾）。
 fileNameOf : String -> String
 fileNameOf path = case reverse (split "/" path) of
   [] => ""
   x :: _ => x
 
--- 候选 = 名字不在 roots 里、且 mtime 早于宽限窗口；带 size 便于容量判定。
+-- | 内部：文件候选：名字（对象摘要）不在 roots 里，且 mtime 早于宽限窗口；带 size 便于容量判定。
 gcCandidates : Member nFs FsOp r => Int -> List String -> Int -> List String -> Eff r (List (Pair Int (Pair Int String)))
 gcCandidates _ _ _ [] = pure []
 gcCandidates now keep grace (p :: rest) = do
@@ -403,27 +443,32 @@ gcCandidates now keep grace (p :: rest) = do
       pure (Pair mtime (Pair size p) :: more)
     else pure more
 
+-- | 内部：按 mtime（外层 `Int`）升序排序，最旧的在前。
 sortByAge : List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
 sortByAge [] = []
 sortByAge (x :: rest) = insertByAge x (sortByAge rest)
 
+-- | 内部：插入排序的一步（按 mtime 升序）。
 insertByAge : Pair Int (Pair Int String) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
 insertByAge x [] = [x]
 insertByAge x ((Pair k v) :: rest) =
   if firstOf x <= k then Base.List.Cons x (Base.List.Cons (Pair k v) rest)
   else Base.List.Cons (Pair k v) (insertByAge x rest)
 
--- 容量压力：最旧的先删，直到总量落到上限以下；上限 0 = 不限容量（全删候选）。
+-- | 内部：容量压力下的挑选：候选已按最旧在前排序，从旧的开始删直到总量落到上限以下。
+-- 上限 0 = 不限容量，候选全删。
 pickGo : Int -> Int -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
 pickGo _ _ [] acc = reverse acc
 pickGo total maxBytes (r :: rest) acc =
   if total <= maxBytes then reverse acc
   else pickGo (total - firstOf (secondOf r)) maxBytes rest (r :: acc)
 
+-- | 内部：`(路径, 字节数)` 列表的字节数求和。
 sumSizes : List (Pair String Int) -> Int
 sumSizes [] = 0
 sumSizes (p :: rest) = secondOf p + sumSizes rest
 
+-- | 内部：逐个查询文件大小，返回 `(路径, 字节数)`（查不到按 0 计）。
 sizesOf : Member nFs FsOp r => List String -> Eff r (List (Pair String Int))
 sizesOf [] = pure []
 sizesOf (p :: rest) = do
@@ -431,6 +476,8 @@ sizesOf (p :: rest) = do
   size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize p)
   pure (Pair p size :: more)
 
+-- | 内部：一轮淘汰：文件与视图目录各自求候选（roots 名保护 + 宽限窗口），合并后按年龄挑出
+-- 要删的目标（容量上限用），`dry` 时只报告。
 gcSweep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> List String -> Int -> Int -> Bool -> Eff r Int
 gcSweep root keep grace maxBytes dry = do
   now <- currentSec
@@ -456,7 +503,7 @@ gcSweep root keep grace maxBytes dry = do
         "store-gc: ${storeVerb dry} ${strFromInt n} object(s) under ${root} (keep ${strFromInt (length keep)}, grace ${strFromInt grace}s)\n"
     pure 0
 
--- 当前 Unix 秒（GC 的宽限窗口判据）。
+-- | 内部：当前 Unix 秒（GC 的宽限窗口判据）。
 currentSec : Member nClock ClockOp r => Eff r Int
 currentSec = do
   us <- clockNow

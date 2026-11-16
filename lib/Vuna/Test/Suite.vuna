@@ -1,13 +1,13 @@
+-- | suite 文件（`test/suite.toml`）的模型、校验与 case discovery。
+--
+-- `[suite]` 只放全局默认（name / jobs / timeout / min_cases）；`[family.<name>]` 按
+-- 目录约定展开成一批 golden / error / lint / fix / steps case，避免为每个夹具手写一段
+-- TOML。
+--
+-- 本模块不做执行，只做「文件 / TOML → `List Case`」的数据转换：读盘经 Eff 效果，
+-- TOML 解析与 case 建模保持纯。对外入口是 `parseSuiteFile` / `discoverCases`。
 module Vuna.Test.Suite where
 
--- Vuna.Test.Suite：suite 文件（test/suite.toml）的模型、校验与 case discovery。
---
---   * `[family.<name>]` 按目录约定展开成一批 golden/error case，避免为每个夹具
---     手写一段 TOML；
---   * `[suite]` 只放全局默认（jobs/timeout/name）。
---
--- 本模块不做执行；只做「文件/TOML -> List Case」的数据转换（读盘经 Eff，TOML 解析与
--- case 建模保持纯）。对外入口因此是 `Eff r`：`parseSuiteFile` / `discoverCases`。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
@@ -16,88 +16,143 @@ import Base.EffEnv
 import Base.EffFs
 import Base.Eff.Types
 
--- `vuna test --suite` 的选项。jobs = 0 表示 auto（由 runner 探测全部可用核）。
+-- | `vuna test --suite` 的选项；jobs = 0 表示 auto（由 runner 探测全部可用核）。
 export record SuiteOpts(..) where
+  -- | suite 文件路径（`--suite`）。
   suitePath : String
+  -- | 并行 job 数（`--jobs`；0 = auto）。
   suiteJobs : Int
+  -- | `--list`：只列 case，不执行。
   suiteListOnly : Bool
+  -- | `--verbose`：结果行尾追加耗时。
   suiteVerbose : Bool
+  -- | `--fail-fast`：首个失败即停止（并行时只在出错的 worker 内停止剩余 case）。
   suiteFailFast : Bool
+  -- | `--json`：汇总以 JSON 输出（同时抑制逐条结果行）。
   suiteJSON : Bool
+  -- | `--only`：按章节或 id 前缀过滤（可重复）。
   suiteOnly : List String
+  -- | `--filter`：对 case id / tag 做子串过滤（可重复，多值 OR）。
   suiteFilter : List String
+  -- | `--timeout` 的解析值（0 = 不超时）；case 预算当前取 family 的 `familyTimeout`，本字段尚未参与判定。
   suiteTimeout : Int
-  -- `Just (i, n)` 是父进程 spawn 出来的 worker 模式：只跑 index mod n == i 的 case。
+  -- | `Just (i, n)` 是父进程 spawn 出来的 worker 模式：默认只跑 index mod n == i 的 case；LPT 分桶模式下只跑自己那一桶。
   suiteWorker : Maybe (Pair Int Int)
+  -- | 结果落盘目录（`--results-dir`）。
   suiteResultsDir : Maybe String
+  -- | `--quiet`：抑制逐条结果行。
   suiteQuiet : Bool
+  -- | `--no-cache`：不读也不写结果缓存。
   suiteNoCache : Bool
+  -- | `--last-failed`：只跑上次失败的 case。
   suiteLastFailed : Bool
+  -- | `--bless`：把实际输出写回 golden 期望文件。
   suiteBless : Bool
+  -- | `--bless-diag`：把实际诊断写回 `.diag.json` 期望文件。
   suiteBlessDiag : Bool
+  -- | `--changed`：只跑与给定 revision 有差异的输入相关 case。
   suiteChanged : Maybe String
+  -- | 结果缓存与构建桶的根（`--cache-dir`）。
   suiteCacheDir : Maybe String
+  -- | `--watch`：检测到变化后整轮重跑 suite。
   suiteWatch : Bool
+  -- | `--timings`：打印最慢 10 个 case 的耗时。
   suiteTimings : Bool
+  -- | `--strict-skips`：跳过的 case 计入失败。
   suiteStrictSkips : Bool
+  -- | `--audit`：做 suite 覆盖审计而不是跑 case。
   suiteAudit : Bool
-  -- 可重复的 `--tier`；空 = 全部。
+  -- | 可重复的 `--tier`；空 = 全部。
   suiteTiers : List String
 
--- 一个 family：目录约定 + 各阶段的上限开关（后缀决定实际参与；family 关掉即不跑）。
+-- | 一个 family：目录约定 + 各阶段的上限开关（后缀决定实际参与；family 旗标是上限，关掉即不跑，但 `.interp.out` 分支例外——它强制 interp）。
 export record Family(..) where
+  -- | family 名（`[family.<name>]` 的 `<name>`）。
   familyName : String
+  -- | case id 的章节前缀（`section` 键，缺省空串）。
   familySection : String
+  -- | 夹具目录（`dir` 键，相对 suite 根，必填）。
   familyDir : String
+  -- | case 种类：`auto` / `golden` / `error` / `check-ok` / `check-error` / `lint` /
+  -- `fix` / `steps`。
   familyKind : String
+  -- | 目录型 family 的入口文件名；设置时每个子目录一个 case。
   familyEntry : Maybe String
+  -- | 是否允许 interp 阶段。
   familyInterp : Bool
+  -- | 是否允许 check 阶段。
   familyCheck : Bool
+  -- | 是否允许 compile 阶段。
   familyCompile : Bool
+  -- | 是否允许 run 阶段。
   familyRun : Bool
+  -- | 是否要求 interp 与 run 输出一致。
   familyCompareInterp : Bool
+  -- | 附加到每个 case 的 tag。
   familyTags : List String
+  -- | case 超时秒数（缺省取 suite 默认）。
   familyTimeout : Int
+  -- | 文件名子串排除表（命中即跳过）。
   familyExclude : List String
+  -- | 文件名子串白名单（非空时只收命中的文件）。
   familyInclude : List String
 
+-- | suite 全局配置与解析出的 family 列表。
 export record Suite(..) where
+  -- | suite 名（`[suite].name`，缺省 `vuna`）。
   suiteName : String
+  -- | suite 根目录（suite 文件的上两级）。
   suiteRoot : String
+  -- | 默认并行数（`[suite].jobs`，0 = auto）。
   suiteDefaultJobs : Int
+  -- | family 未设置时的默认超时秒数（`[suite].timeout`，缺省 300）。
   suiteDefaultTimeout : Int
+  -- | 解析出的 family（按首次出现顺序）。
   suiteFamilies : List Family
-  -- case 数下限：family 整族从配置里消失时，孤儿审计（只看已声明目录）也看不到它，
+  -- | case 数下限：family 整族从配置里消失时，孤儿审计（只看已声明目录）也看不到它，
   -- 用总数下限兜底。0 = 不检查。
   suiteMinCases : Int
 
--- `CGolden` 的字段：source expected interp check compile run compareInterp。
--- `CError` 的字段：source diagPath wantInterp wantCompile（负例期望载体是结构化诊断）。
+-- | 一个 case 的种类与参数（`source` 是夹具源文件路径）。
 export data CaseKind(..) : Type where
+  -- | golden 用例：source expected interp check compile run compareInterp。
   CGolden : String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> CaseKind
+  -- | 负例：source diagPath wantInterp wantCheck wantCompile（期望载体是结构化诊断）。
   CError : String -> String -> Bool -> Bool -> Bool -> CaseKind
+  -- | check 断言：source wantOk diagPath（wantOk 时 diagPath 为空）。
   CCheck : String -> Bool -> String -> CaseKind
+  -- | lint 用例：source expected（findings 的 golden 文本）。
   CLint : String -> String -> CaseKind
+  -- | fix 用例：source expected（修复后的源码）。
   CFix : String -> String -> CaseKind
+  -- | 运行用例：source expectedErr expectExit（退出码语义见 `wantCaseWith`）。
   CRuntime : String -> String -> Int -> CaseKind
+  -- | seed 自举用例：source expected。
   CSeed : String -> String -> CaseKind
-  -- 声明式用例：`*.steps` 文件（run/expect 指令），由 runner 解释执行。
+  -- | 声明式用例：`*.steps` 文件（`run:` / `read:` 指令与 `exit:` / `out-*` / `file-*` 断言），由 runner 解释执行。
   CSteps : String -> CaseKind
+  -- | 无法建模的用例；消息即失败原因。
   CBroken : String -> CaseKind
 
+-- | 一个可执行的用例。
 export record Case(..) where
+  -- | 用例 id（`<section>/<family>/<相对路径>`）。
   caseId : String
+  -- | 章节（`--only` 的数字前缀与分组按它匹配）。
   caseSection : String
+  -- | tag 列表。
   caseTags : List String
+  -- | 种类与参数。
   caseKind : CaseKind
+  -- | 超时秒数。
   caseTimeout : Int
-  -- fast | integration | e2e（用于 --tier 过滤与 CI 分层）。
+  -- | fast | integration | e2e | tools（用于 --tier 过滤与 CI 分层）。
   caseTier : String
 
 -- ---------------------------------------------------------------
 -- 路径与读盘
 -- ---------------------------------------------------------------
--- 显式效果遍历（本模块只有 discovery 读盘这一条效果路径；纯 TOML/模型逻辑保持纯）。
+-- | 内部：按顺序对每个元素跑效果并拼接结果列表（discovery 唯一的读取路径）。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -105,6 +160,7 @@ concatMapEff f (x :: rest) = do
   ys <- concatMapEff f rest
   pure (append xs ys)
 
+-- | 内部：读文本文件；文件不存在或是目录时返回 `ErrC`。
 readTextFile : Member nFs FsOp r => String -> Eff r (Check String)
 readTextFile path = do
   exists <- pathExistsFile path
@@ -113,43 +169,50 @@ readTextFile path = do
     if isDir then pure (err "is a directory: ${path}") else fmap OkC (fsReadFile path)
   else pure (err "no such file: ${path}")
 
--- suite 文件在 <root>/test/suite.toml；root = 上两级。
+-- | 内部：suite 文件在 `<root>/test/suite.toml`；root = 上两级。
 suiteFileRoot : String -> String
 suiteFileRoot path = parentOf (parentOf path)
 
 -- ---------------------------------------------------------------
 -- TOML 取值（类型错误显式报错，不静默回落默认）
 -- ---------------------------------------------------------------
+-- | 内部：错误消息里的章节后缀（` in [a.b]`）。
 sectionText : List String -> String
 sectionText [] = ""
 sectionText section = " in [${joinDots section}]"
 
+-- | 内部：两段 TOML 章节路径是否逐段相同。
 samePathText : List String -> List String -> Bool
 samePathText [] [] = True
 samePathText (x :: xs) (y :: ys) = if x == y then samePathText xs ys else False
 samePathText _ _ = False
 
+-- | 内部：统一格式的类型错误消息。
 fieldErr : List String -> String -> String -> String
 fieldErr section key msg = "wrong type for `${key}`${sectionText section}: ${msg}"
 
+-- | 内部：取字符串字段（缺失给 `Nothing`，类型不符报错）。
 getStr : List String -> String -> List TomlEntry -> Check (Maybe String)
 getStr section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
   Just (TStr s) => OkC (Just s)
   Just _ => err (fieldErr section key "expected a string")
 
+-- | 内部：取整数字段（缺失给 `Nothing`，类型不符报错）。
 getInt : List String -> String -> List TomlEntry -> Check (Maybe Int)
 getInt section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
   Just (TInt n) => OkC (Just n)
   Just _ => err (fieldErr section key "expected an integer")
 
+-- | 内部：取布尔字段（缺失给 `Nothing`，类型不符报错）。
 getBool : List String -> String -> List TomlEntry -> Check (Maybe Bool)
 getBool section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
   Just (TBool b) => OkC (Just b)
   Just _ => err (fieldErr section key "expected a boolean")
 
+-- | 内部：取字符串数组字段（缺失给 `Nothing`，元素非字符串或类型不符报错）。
 getList : List String -> String -> List TomlEntry -> Check (Maybe (List String))
 getList section key entries = case lookupEntry section key entries of
   Nothing => OkC Nothing
@@ -158,22 +221,26 @@ getList section key entries = case lookupEntry section key entries of
     Just ys => OkC (Just ys)
   Just _ => err (fieldErr section key "expected an array of strings")
 
--- 可选字段的解包（Maybe 默认值只用于“缺失”，类型错误仍由 get* 报出）。
+-- | 内部：字符串字段的缺省解包（缺失才用默认值，类型错误已由 `getStr` 报出）。
 strOr : String -> Maybe String -> String
 strOr d m = fromMaybe d m
 
+-- | 内部：整数字段的缺省解包。
 intOr : Int -> Maybe Int -> Int
 intOr d m = fromMaybe d m
 
+-- | 内部：布尔字段的缺省解包。
 boolOr : Bool -> Maybe Bool -> Bool
 boolOr d m = fromMaybe d m
 
+-- | 内部：字符串数组字段的缺省解包。
 listOr : List String -> Maybe (List String) -> List String
 listOr d m = fromMaybe d m
 
 -- ---------------------------------------------------------------
 -- family 解析
 -- ---------------------------------------------------------------
+-- | family 段落允许的键（未知键报错）。
 familyKeys : List String
 familyKeys =
   [ "section",
@@ -191,9 +258,11 @@ familyKeys =
     "include"
   ]
 
+-- | 内部：校验 family 段落的键都在 `familyKeys` 里（其它段落的条目忽略）。
 checkFamilyKeys : List String -> List TomlEntry -> Check Int
 checkFamilyKeys section entries = checkFamilyKeysGo section entries
 
+-- | 内部：`checkFamilyKeys` 的递归主体。
 checkFamilyKeysGo : List String -> List TomlEntry -> Check Int
 checkFamilyKeysGo section [] = OkC 0
 checkFamilyKeysGo section (e :: rest) =
@@ -201,32 +270,46 @@ checkFamilyKeysGo section (e :: rest) =
   else err "${sectionText section}: unknown key `${e.tomlEntryKey}`"
   else checkFamilyKeysGo section rest
 
--- buildFamily 的 option 读取拆成两段：单条 `>>=` 链过长会触发推断 fuel /
--- 指数级问题（Result 管道每层 bind 都带字典插入）。拆分后每段 ≤7 层。
+-- option 读取拆成两段：单条 `>>=` 链过长会触发推断 fuel / 指数级问题（Result 管道
+-- 每层 bind 都带字典插入）。拆分后每段 ≤7 层。
+-- | family 的 `kind` / `entry` 原始取值（`Nothing` = 未配置）。
 record FamilyOpts where
+  -- | `kind` 键（缺省按 `auto` 处理）。
   familyOptKind : Maybe String
+  -- | `entry` 键（目录型 family 的入口文件名）。
   familyOptEntry : Maybe String
 
+-- | family 的各阶段旗标、tag 与超时的原始取值（`Nothing` = 未配置）。
 record FamilyFlags where
+  -- | `interp` 键。
   familyFlagInterp : Maybe Bool
+  -- | `check` 键。
   familyFlagCheck : Maybe Bool
+  -- | `compile` 键。
   familyFlagCompile : Maybe Bool
+  -- | `run` 键。
   familyFlagRun : Maybe Bool
+  -- | `compare_interp` 键。
   familyFlagCompare : Maybe Bool
+  -- | `tags` 键。
   familyFlagTags : Maybe (List String)
+  -- | `timeout` 键。
   familyFlagTimeout : Maybe Int
 
+-- | 内部：读 `kind` / `entry`。
 readFamilyOpts : List String -> List TomlEntry -> Check FamilyOpts
 readFamilyOpts section entries =
   getStr section "kind" entries
     >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => OkC (FamilyOpts kindOpt entryOpt)))
 
+-- | 内部：读各阶段旗标、`compare_interp`、`tags` 与 `timeout`。
 readFamilyFlags : List String -> List TomlEntry -> Check FamilyFlags
 readFamilyFlags section entries =
   getBool section "interp" entries
     >>= (\interpOpt => getBool section "check" entries >>= (\checkOpt => getBool section "compile" entries >>= (\compileOpt => getBool section "run" entries >>= (\runOpt => getBool section "compare_interp" entries >>= (\compareOpt => getList section "tags" entries >>= (\tagsOpt => getInt section "timeout" entries >>= (\timeoutOpt => OkC (FamilyFlags interpOpt checkOpt compileOpt runOpt compareOpt tagsOpt timeoutOpt))))))))
 
 -- 长 `>>=` 链在 Result 管道上会触发推断 fuel 问题；这里用显式 case 展开。
+-- | 内部：由 `[family.<name>]` 条目构造 `Family`；缺 `dir` 或 `kind` 非法报错。
 buildFamily : Suite -> List TomlEntry -> String -> Check Family
 buildFamily suite entries name =
   let
@@ -257,10 +340,11 @@ buildFamily suite entries name =
                 else err
                   (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
 
--- 从 entries 收集 family 名（保持首次出现顺序）。
+-- | 内部：从 entries 收集 family 名（保持首次出现顺序）。
 familyNames : List TomlEntry -> List String
 familyNames entries = familyNamesGo entries []
 
+-- | 内部：`familyNames` 的递归主体（逆序累积，最后反转）。
 familyNamesGo : List TomlEntry -> List String -> List String
 familyNamesGo [] acc = reverse acc
 familyNamesGo (e :: rest) acc = case e.tomlEntrySection of
@@ -271,6 +355,7 @@ familyNamesGo (e :: rest) acc = case e.tomlEntrySection of
 -- ---------------------------------------------------------------
 -- suite 解析
 -- ---------------------------------------------------------------
+-- | 内部：由 TOML 条目构造 `Suite`——先取 `[suite]` 默认值，再逐个构造 family。
 buildSuiteWithEntries : String -> List TomlEntry -> Check Suite
 buildSuiteWithEntries path entries =
   let
@@ -292,6 +377,7 @@ buildSuiteWithEntries path entries =
             in buildFamiliesWith draft entries (familyNames entries)
               >>= (\families => OkC (Suite draft.suiteName draft.suiteRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases))
 
+-- | 内部：按名列表逐个构造 family。
 buildFamiliesWith : Suite -> List TomlEntry -> List String -> Check (List Family)
 buildFamiliesWith suite entries [] = OkC []
 buildFamiliesWith suite entries (name :: rest) = case buildFamily suite entries name of
@@ -301,36 +387,48 @@ buildFamiliesWith suite entries (name :: rest) = case buildFamily suite entries 
 -- ---------------------------------------------------------------
 -- discovery
 -- ---------------------------------------------------------------
+-- | 内部：去掉 `.vuna` 后缀。
 stripVuna : String -> String
 stripVuna name = if endsWith ".vuna" name then substring 0 (byteLength name - 5) name else name
 
+-- | 内部：夹具文件名——以 `.vuna` 结尾且不以 `_` 开头。
 isFixtureName : String -> Bool
 isFixtureName name = endsWith ".vuna" name && not (startsWith "_" name)
 
 -- ---------------------------------------------------------------
 -- 期望文件：`<base>.diag.json`（负例）与 `<base>.out` 系列（正例）
 -- ---------------------------------------------------------------
--- 负例的唯一期望载体是结构化诊断 `.diag.json`；文本片段（`.check.err` / `.err` /
--- `.compile.err` / `.cerr`）已从夹具层删除。阶段参与由「后缀存在性」推导，
--- family 旗标只是上限（关掉即不跑）；矛盾组合显式 CBroken，不静默跳过。
+-- | 一个夹具名下探测到的期望文件（`Nothing` = 该形态不存在）。
+--
+-- check / compile 类负例的期望载体是结构化诊断 `.diag.json`；run 类负例用 `.run.err` /
+-- `.run.exit`。阶段参与由「后缀存在性」推导，family 旗标只是上限（关掉即不跑）；矛盾组合
+-- 显式 `CBroken`，不静默跳过。
 record FixtureWant where
+  -- | 结构化诊断期望（`.diag.json`）。
   fwDiag : Maybe String
+  -- | interp golden（`.interp.out`）。
   fwInterpOut : Maybe String
+  -- | run golden（`.run.out`）。
   fwRunOut : Maybe String
+  -- | 运行期输出片段期望（`.run.err`）。
   fwRunErr : Maybe String
+  -- | 期望退出码文件（`.run.exit`）。
   fwRunExit : Maybe String
+  -- | interp 与 run 共享的 golden（`.out`），断言两者输出一致。
   fwSharedOut : Maybe String
 
+-- | 内部：`Maybe` 是否有值。
 hasOpt : Maybe a -> Bool
 hasOpt (Just _) = True
 hasOpt Nothing = False
 
+-- | 内部：两个 `Maybe` 取第一个有值的。
 orOpt : Maybe a -> Maybe a -> Maybe a
 orOpt (Just x) _ = Just x
 orOpt Nothing b = b
 
--- 探测夹具 base 名下的全部期望文件：阶段限定后缀优先，裸 `.out`（interp+run
--- 共享 golden，断言两者一致）与裸 `.err`（check 负例）是兼容形态。
+-- | 内部：探测夹具 base 名下的全部期望文件。阶段限定后缀优先；裸 `.out` 是 interp +
+-- run 共享的 golden。
 parseWant : Member nFs FsOp r => String -> Eff r FixtureWant
 parseWant base = do
   diag <- firstExisting ["${base}.diag.json"]
@@ -341,17 +439,18 @@ parseWant base = do
   sharedOut <- firstExisting ["${base}.out"]
   pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
--- `.run.exit` 的期望退出码（十进制；空/非数字视为 0）。
+-- | 内部：读 `.run.exit` 的期望退出码（取前导十进制数字；没有数字时 0）。
 readExitCode : Member nFs FsOp r => String -> Eff r Int
 readExitCode path = fmap (\text => parseExitDigits (strUnpack (trim text)) 0 0) (fsReadFile path)
 
+-- | 内部：解析十进制数字直到首个非数字；没有数字时给 0。
 parseExitDigits : List Int -> Int -> Int -> Int
 parseExitDigits [] acc seen = if seen == 0 then 0 else acc
 parseExitDigits (c :: rest) acc seen =
   if c >= 48 && c <= 57 then parseExitDigits rest (acc * 10 + (c - 48)) 1
   else if seen == 0 then parseExitDigits rest acc 0 else acc
 
--- 目录型夹具的期望文件（`expected.diag.json` 是负例唯一载体）。
+-- | 内部：目录型夹具的期望文件（`expected.*`；`expected.diag.json` 是 check / compile 类负例的载体）。
 dirWant : Member nFs FsOp r => String -> Eff r FixtureWant
 dirWant caseDir = do
   diag <- firstExisting ["${caseDir}/expected.diag.json"]
@@ -362,14 +461,14 @@ dirWant caseDir = do
   sharedOut <- firstExisting ["${caseDir}/expected.out"]
   pure (FixtureWant diag interpOut runOut runErr runExit sharedOut)
 
+-- | 内部：按顺序返回第一个存在的文件。
 firstExisting : Member nFs FsOp r => List String -> Eff r (Maybe String)
 firstExisting [] = pure Nothing
 firstExisting (p :: rest) = do
   exists <- pathExistsFile p
   if exists then pure (Just p) else firstExisting rest
 
--- 从 want 推导 case。矛盾组合 / family 不允许的阶段显式 Err（→ CBroken）。
--- `.run.exit` 的读取是建模期唯一的效果；读完后的判定保持纯。
+-- | 内部：从 want 推导 case。`.run.exit` 的读取是本函数内唯一的效果；读完后的判定保持纯。
 wantCase : Member nFs FsOp r => Family -> String -> String -> FixtureWant -> Eff r (Check Case)
 wantCase family source id want = do
   exitCode <- case want.fwRunExit of
@@ -377,6 +476,8 @@ wantCase family source id want = do
     Nothing => pure 0
   pure (wantCaseWith family source id want exitCode)
 
+-- | 内部：纯判定部分——矛盾组合 / family 不允许的阶段显式 `ErrC`（→ `CBroken`）；
+-- 退出码哨兵 256 表示断言恰好 0，0 表示断言非 0。
 wantCaseWith : Family -> String -> String -> FixtureWant -> Int -> Check Case
 wantCaseWith family source id want exitCode =
   let
@@ -411,13 +512,14 @@ wantCaseWith family source id want exitCode =
     (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast")
   else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
 
--- 负例期望路径：`.diag.json`（结构化诊断是唯一真源）。
+-- | 内部：负例期望路径 `<base>.diag.json`（结构化诊断是唯一真源）。
 expectPath : Member nFs FsOp r => String -> Eff r String
 expectPath base = do
   exists <- pathExistsFile "${base}.diag.json"
   if exists then pure "${base}.diag.json" else pure "${base}.diag.json"
 
--- 目录型 family：entry 配置时每个子目录一个 case。
+-- | 内部：目录型 family——`entry` 配置时每个子目录一个 case；目录缺失给一个
+-- `CBroken` 占位 case。
 discoverDirFamily : Member nFs FsOp r => Suite -> Family -> String -> Eff r (List Case)
 discoverDirFamily suite family entry =
   let
@@ -429,6 +531,7 @@ discoverDirFamily suite family entry =
       names <- fsReadDir dir
       concatMapEff (oneDir family dir entry) names
 
+-- | 内部：为一个子目录建 case——目录与入口文件都存在才算夹具，其余跳过。
 oneDir : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (List Case)
 oneDir family dir entry name =
   let
@@ -447,7 +550,8 @@ oneDir family dir entry name =
       )
     else pure []
 
--- 文件型 family：每个 `*.vuna` 一个 case；auto 按磁盘上存在的 `.out`/`.err` 判定。
+-- | 内部：文件型 family——每个夹具 `*.vuna` 一个 case；目录缺失给一个 `CBroken`
+-- 占位 case。
 discoverFileFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverFileFamily suite family =
   let
@@ -459,22 +563,28 @@ discoverFileFamily suite family =
       names <- fsReadDir dir
       concatMapEff (oneFile family dir) names
 
+-- | 内部：文件名是否命中 family 的 `exclude`。
 matchesExclude : Family -> String -> Bool
 matchesExclude family name = matchesAnyExclude family.familyExclude name
 
+-- | 内部：任一模式是文件名的子串即命中。
 matchesAnyExclude : List String -> String -> Bool
 matchesAnyExclude [] name = False
 matchesAnyExclude (pat :: rest) name =
   if contains pat name then True else matchesAnyExclude rest name
 
+-- | 内部：文件名是否命中 family 的 `include`。
 matchesInclude : Family -> String -> Bool
 matchesInclude family name = matchesAnyExclude family.familyInclude name
 
+-- | 内部：`include` 非空时启用白名单过滤。
 includeActive : Family -> Bool
 includeActive family = case family.familyInclude of
   [] => False
   _ => True
 
+-- | 内部：为一个夹具文件建 case——跳过非夹具、被 `exclude` 排除与未命中 `include`
+-- 的文件。
 oneFile : Member nFs FsOp r => Family -> String -> String -> Eff r (List Case)
 oneFile family dir name = if isFixtureName name then if matchesExclude family name then pure []
 else if includeActive family && not (matchesInclude family name) then pure []
@@ -489,6 +599,9 @@ else
     )
 else pure []
 
+-- | 内部：按 `kind` 选 case 形态——lint 用 `<base>.out`，fix 用 `<base>.expected`，
+-- check-error 用 `<base>.diag.json`；check-ok 无期望文件；其余走 `parseWant` + `wantCase`
+-- （`steps` 由 `discoverStepsFamily` 处理，不走这里）。
 fileCase : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (Check Case)
 fileCase family source base rel =
   let
@@ -523,12 +636,13 @@ fileCase family source base rel =
     want <- parseWant base
     wantCase family source id want
 
+-- | 内部：family 级错误的占位 case（id 以 `__missing__` 结尾，tier 记 `e2e`）。
 brokenFamilyCase : Family -> String -> Case
 brokenFamilyCase family msg =
   Case "${family.familySection}/${family.familyName}/__missing__" family.familySection
     family.familyTags (CBroken msg) family.familyTimeout "e2e"
 
--- steps 家族：目录里每个 `*.steps` 一个声明式 case（run/expect 指令由 runner 解释）。
+-- | 内部：steps family——目录里每个 `*.steps` 一个声明式 case。
 discoverStepsFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverStepsFamily suite family =
   let
@@ -540,6 +654,7 @@ discoverStepsFamily suite family =
       names <- fsReadDir dir
       concatMapEff (stepCaseOf family dir) names
 
+-- | 内部：一个 `*.steps` 文件对应的 case（tier 取文件头声明）。
 stepCaseOf : Member nFs FsOp r => Family -> String -> String -> Eff r (List Case)
 stepCaseOf family dir name = if not (endsWith ".steps" name) then pure []
 else do
@@ -550,13 +665,15 @@ else do
   in pure
     [Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text)]
 
--- steps 文件头 `# tier: integration|fast` 可覆盖默认 e2e；其余仍归 e2e。
+-- | steps 文件任意位置出现 `# tier: tools|integration|fast` 即覆盖默认 tier；没有声明则归 `e2e`。
 stepsTierOf : String -> String
 stepsTierOf text =
   if contains "# tier: tools" text then "tools"
   else if contains "# tier: integration" text then "integration"
   else if contains "# tier: fast" text then "fast" else "e2e"
 
+-- | 内部：按 kind 与 entry 选 discovery 方式（steps → 目录里找 `*.steps`；有 entry →
+-- 目录型；否则文件型）。
 discoverFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
 discoverFamily suite family = if family.familyKind == "steps" then discoverStepsFamily suite family
 else case family.familyEntry of
@@ -566,6 +683,7 @@ else case family.familyEntry of
 -- ---------------------------------------------------------------
 -- 对外入口
 -- ---------------------------------------------------------------
+-- | 对外入口：解析 suite 文件；相对路径按 cwd 补成绝对路径。
 export parseSuiteFile : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Suite)
 parseSuiteFile path = do
   cwd <- envGetCwd
@@ -573,6 +691,7 @@ parseSuiteFile path = do
     absPath = if startsWith "/" path then path else "${cwd}/${path}"
   in parseSuiteAt absPath
 
+-- | 内部：读文件 → 解析 TOML → 构造 `Suite`。
 parseSuiteAt : Member nFs FsOp r => String -> Eff r (Check Suite)
 parseSuiteAt absPath = do
   contents <- readTextFile absPath
@@ -582,6 +701,8 @@ parseSuiteAt absPath = do
       ErrC e => pure (ErrC e)
       OkC entries => pure (buildSuiteWithEntries absPath entries)
 
+-- | 对外入口：把每个 family 展开成 case；`test/corpus/run/12_fact.vuna` 存在时追加
+-- 一个固定的 seed 自举 case（id `13/seed`）。
 export discoverCases : Member nFs FsOp r => Suite -> Eff r (List Case)
 discoverCases suite =
   let

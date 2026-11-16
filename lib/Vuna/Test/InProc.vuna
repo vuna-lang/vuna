@@ -1,22 +1,18 @@
-module Vuna.Test.InProc where
-
--- Vuna.Test.InProc：测试的进程内执行层。
+-- | 测试的进程内执行层：直接调用编译器 / 工具链的导出函数并断言返回值，不 spawn
+-- `vuna <cmd>`、不截获 stdout、不改进程 cwd、不模拟退出码。
 --
--- 设计原则：**直接调用编译器/工具链的导出函数，断言返回值**。不 spawn
--- `vuna <cmd>`，也不截获 stdout / 改进程 cwd / 模拟退出码——那等于把 CLI 复制
--- 一遍再反解析它的输出。
+-- 本模块做三件事：上下文解析（文件 → `contextForFile`，包目录 → `loadPackage`）；
+-- 与 CLI 同口径的诊断裁剪（去重 → 按归属过滤 → 上限 20 条），使进程内结果与
+-- `vuna check --json` 写进 `.diag.json` 的形态逐项一致；分派到对应的导出函数
+-- （check / interp / compile / lint / fix）。
 --
--- 本模块只做三件事：
---   1. 上下文解析（文件 → `contextForFile`，包目录 → `loadPackage`）；
---   2. 与 CLI 同口径的**诊断裁剪**（去重 → 按归属过滤 → 上限 20 条），使进程内
---      结果与 `vuna check --json` 写进 `.diag.json` 的形态逐项一致；
---   3. 分派到对应的导出函数（check / interp / compile / lint / fix）。
---
--- 唯一的「路径选择」是**进程内的两条实现路径**（增量会话优先、失败退回全量），
--- 绝不退回子进程：会话不可用就再跑一次全量精化，两条都不可用才算用例失败。
+-- 唯一的路径选择是进程内的两条实现路径：增量会话优先，会话不可用就在同一进程内
+-- 退回全量精化；两条都不可用才算用例失败，绝不回退子进程。
 --
 -- 仍在子进程的部分（构造上不可进程内，见 `docs/reference/testing.md` 的「进程绑定
--- 岛」）：`build.sh`（ocamlopt 链接）、产物执行、`repl`/`lsp`/`seed`/包管理器。
+-- 岛」）：`build.sh`（ocamlopt 链接）、产物执行、`repl` / `lsp` / `seed` / 包管理器。
+module Vuna.Test.InProc where
+
 import Base.IORef
 import Base.List
 import Base.Maybe
@@ -40,22 +36,24 @@ import Base.EffProcess
 import Base.EffClock
 import Base.EffArgs
 
--- 诊断上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
+-- | 诊断上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
 diagCap : Int
 diagCap = 20
 
 -- ---------------------------------------------------------------
 -- 与 CLI 同口径的诊断裁剪
 -- ---------------------------------------------------------------
+-- | 内部：剥掉开头的 `./`。
 stripDotSlash : String -> String
 stripDotSlash s =
   if startsWith "./" s then substring (natFromInt 2) (natFromInt (strLength s - 2)) s else s
 
--- 与 `CompilerCli.ownedByFile` 同一判据：本文件拥有的诊断。
+-- | 本文件拥有的诊断（与 `CompilerCli.ownedByFile` 同一判据）。
 ownedByFile : String -> Diagnostic -> Bool
 ownedByFile path d = stripDotSlash (diagFileOf d) == stripDotSlash path
 
--- 与 `CompilerCli.ownedByPackage` 同一判据：`lib/` `app/` `test/` 下的诊断属于该包。
+-- | 本包拥有的诊断：`lib/` `app/` `test/` 下的诊断属于该包（与
+-- `CompilerCli.ownedByPackage` 同一判据）。
 ownedByPackage : Package -> Diagnostic -> Bool
 ownedByPackage pkg d =
   let
@@ -66,19 +64,19 @@ ownedByPackage pkg d =
     || startsWith (prefix ++ "app/") file
     || startsWith (prefix ++ "test/") file
 
--- 单文件入口：`checkEntryFile` / `checkModuleFileEntry` 的裁剪链。
+-- | 内部：单文件入口的裁剪链——去重 warning、按文件归属过滤、截断到 `diagCap`。
 fileShown : String -> List Diagnostic -> List Diagnostic
 fileShown path ds = Base.List.take diagCap (filter (ownedByFile path) (dedupeWarnings ds))
 
--- 包目录：`checkPackageCode` 的裁剪链。
+-- | 内部：包目录的裁剪链——去重 warning、按包归属过滤、截断到 `diagCap`。
 packageShown : Package -> List Diagnostic -> List Diagnostic
 packageShown pkg ds = Base.List.take diagCap (filter (ownedByPackage pkg) (dedupeWarnings ds))
 
 -- ---------------------------------------------------------------
 -- check
 -- ---------------------------------------------------------------
--- 单文件 check：与 `vuna check <file>` 同一分派（`module` 头 → 库模块语义）。
--- 返回裁剪后的诊断列表（`OkC` 时可能只有 warning；`ErrC` 时首错 + children）。
+-- | 单文件 check：与 `vuna check <file>` 同一分派（`module` 头 → 库模块语义）。返回
+-- 裁剪后的诊断列表（`OkC` 时可能只有 warning；`ErrC` 时首错 + children）。
 export checkFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Diagnostic))
 checkFile path = do
   ctxR <- contextForFile path
@@ -99,7 +97,7 @@ checkFile path = do
           OkC ws => OkC (fileShown path ws)
         )
 
--- 包目录 check：`vuna check <dir>` 的单包路径（workspace 展开由调用方决定）。
+-- | 包目录 check：`vuna check <dir>` 的单包路径（workspace 展开由调用方决定）。
 -- `wantWarnings = True`：warning 不持久化，负例断言必须看到它们，绕开一切缓存判定。
 export checkPackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r (Check (List Diagnostic))
 checkPackageAt dir = do
@@ -112,7 +110,8 @@ checkPackageAt dir = do
         ErrC e => pure (ErrC e)
         OkC ws => pure (OkC (packageShown pkg ws))
 
--- 目录是否为包目录（`vuna check <dir>` 与 `vuna check <file>` 的分派依据）。
+-- | 目录是否为包目录（含 `vuna.toml`）；`vuna check <dir>` 与 `vuna check <file>`
+-- 的分派依据。
 export isPackageDir : Member nFs FsOp r => String -> Eff r Bool
 isPackageDir path = do
   isDir <- pathExistsDirEff path
@@ -121,11 +120,13 @@ isPackageDir path = do
     hasManifest <- pathExistsFileEff "${path}/vuna.toml"
     pure hasManifest
 
+-- | 内部：路径存在且是目录。
 pathExistsDirEff : Member nFs FsOp r => String -> Eff r Bool
 pathExistsDirEff path = do
   exists <- fsFileExists path
   if not exists then pure False else fsIsDirectory path
 
+-- | 内部：路径存在且不是目录。
 pathExistsFileEff : Member nFs FsOp r => String -> Eff r Bool
 pathExistsFileEff path = do
   exists <- fsFileExists path
@@ -137,14 +138,12 @@ pathExistsFileEff path = do
 -- ---------------------------------------------------------------
 -- 会话优先的 check / interp
 -- ---------------------------------------------------------------
--- 会话优先的 check / interp
--- ---------------------------------------------------------------
--- 进程内两条路径：增量会话（命中依赖接口 + termAux 缓存，~10ms）优先；会话不可用
--- （接口缺失 / `applied=False`）时**在同一进程内**退回全量精化。绝不 spawn 子进程。
+-- | 会话优先的 check：增量会话（依赖接口 + termAux 缓存）命中就用样本，返回
+-- `Nothing` 时在同一进程内退回全量 `checkFile`，绝不 spawn 子进程。
 --
--- **正例专用**：增量路径（`dtCheckSourceIncremental` / `dtEvalSourceIncremental`）
--- 只汇总 loader + `dtProgWarnings`，不跑全量路径尾部的 `warnUnusedDefsIn`；负例
--- 夹具要断言「未使用定义/遮蔽」这类 warning，必须走全量 `checkFile`。
+-- 正例专用：增量路径（`dtCheckSourceIncremental`）只汇总 loader + `dtProgWarnings`，
+-- 不跑全量路径尾部的 `warnUnusedDefsIn`；负例夹具要断言「未使用定义 / 遮蔽」这类
+-- warning，必须走全量 `checkFile`。
 export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check (List Diagnostic))
 checkFileSessioned ref base source = do
   probed <- sessionCheckSample ref base source
@@ -154,6 +153,8 @@ checkFileSessioned ref base source = do
       Just e => pure (ErrC e)
       Nothing => pure (OkC sample.csDiags)
 
+-- | 会话优先的 interp：增量会话命中就用求值展示文本，返回 `Nothing` 时退回全量
+-- `interpFile`。
 export interpFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check String)
 interpFileSessioned ref base source = do
   probed <- sessionEvalSample ref base source
@@ -166,7 +167,7 @@ interpFileSessioned ref base source = do
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
--- `vuna interp <file>` 的进程内形态：DT 精化 + 核心求值，返回展示文本。
+-- | `vuna interp <file>` 的进程内形态：DT 精化 + 核心求值，返回展示文本。
 export interpFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check String)
 interpFile path = do
   ctxR <- contextForFile path
@@ -177,10 +178,9 @@ interpFile path = do
 -- ---------------------------------------------------------------
 -- compile
 -- ---------------------------------------------------------------
--- `vuna compile <file> <out>` 的进程内形态：目录 codegen（含 build.sh 与 ffi 复制）。
--- `printResult = True` 与 CLI 默认一致（影响 codegen 的入口展示，进输入摘要）。
--- 归一成 `Check Int`：`OkC (Pair n ds)` 只保留模块数（诊断要么为空，要么调用方
--- 走负例路径；正例断言只要「编译成功且无诊断」）。
+-- | `vuna compile <file> <outDir>` 的进程内形态：目录 codegen（含 `build.sh` 与 ffi
+-- 复制），返回模块数与诊断。`printResult = True` 与 CLI 默认一致（影响 codegen 的
+-- 入口展示，进输入摘要）。
 export compileFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileFile path outDir = do
   ctxR <- contextForFile path
@@ -188,7 +188,8 @@ compileFile path outDir = do
     ErrC e => pure (ErrC e)
     OkC ctx => compileToDir ctx path True outDir
 
--- 包目录 compile（`vuna compile <dir> <out>`）：先要求可执行包，再编入口。
+-- | 包目录 compile（`vuna compile <dir> <outDir>`）：先要求可执行包（入口文件存在），
+-- 再编入口。
 export compilePackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compilePackageAt dir outDir = do
   pkgR <- loadPackage dir
@@ -203,7 +204,7 @@ compilePackageAt dir outDir = do
 -- ---------------------------------------------------------------
 -- lint / fix
 -- ---------------------------------------------------------------
--- `vuna lint <file>` 的进程内形态：返回 findings（顺序与 CLI 打印一致）。
+-- | `vuna lint <file>` 的进程内形态：返回 findings（顺序与 CLI 打印一致）。
 export lintFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Finding))
 lintFile path = do
   textR <- fsReadFile path
@@ -213,10 +214,11 @@ lintFile path = do
     OkC fixities => lintSourceWith fixities textR
   )
 
--- `vuna lint --fix <file>` 的进程内形态（与 `Lint.fixReport` 同一条 `fixLoop` 路径）：
--- 返回（修复数, 新源码）。调用方负责把新源码写回工作副本。
--- **必须**先取程序级 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新
--- lint 结果源码，空表会让「已知运算符」退化成 unknown fixity，第二轮起直接放弃修复。
+-- | `vuna lint --fix <file>` 的进程内形态（与 `Lint.fixReport` 同一条 `fixLoop` 路径）：
+-- 返回（修复数, 新源码），调用方负责把新源码写回工作副本。
+--
+-- 必须先取程序级 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新 lint
+-- 结果源码，空表会让已知运算符退化成 unknown fixity，第二轮起直接放弃修复。
 export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int String))
 fixFile path text = do
   looked <- fixitiesForFile emptyFixityEnv path text

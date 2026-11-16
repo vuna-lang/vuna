@@ -1,21 +1,19 @@
+-- | 测试 runner 的进程内精化会话（每个 worker 进程一个）。
+--
+-- 进程内 check / interp 若每次都全量精化整棵 base 闭包，每个 case 都要付重复工作
+-- （instheads + bodies + instbodies）。本模块把依赖包（base）的模块接口缓存进会话，
+-- 用例只精化自己的入口，与 LSP 的诊断会话（`Lsp/Diagnostics.buildSession`）同一条
+-- `dtCheckSourceIncremental`。
+--
+-- 纪律：会话只影响进程内的路径选择，绝不回退子进程。接口读不到或 `applied = False`
+-- 时返回 `Nothing`，调用方 [Vuna.Test.InProc] 在同一进程内改走全量 `dtCheck` /
+-- `dtEvalFile`；两条进程内路径都不可用才算用例失败。
+--
+-- 返回值刻意不用 `Maybe (Check a)`：把 `Check` 放进 `Maybe` 再由别的模块解构会触发
+-- 精化器的 `TC_UnknownConstructorInCase` 误报。因此改用普通记录 `CheckSample` /
+-- `EvalSample`，`Check` 的构造与解构只发生在 [Vuna.Test.InProc]。
 module Vuna.Test.Session where
 
--- Vuna.Test.Session：测试 runner 的**进程内精化会话**（每个 worker 进程一个）。
---
--- 背景：进程内 check/interp 若每次都对整棵 base 闭包做全量精化，每个 case 要付
--- ~120ms 的重复工作（instheads + bodies + instbodies）。本模块把依赖包（base）的
--- 模块接口缓存进会话，用例只精化自己的入口，与 LSP 的诊断会话
--- （`Lsp/Diagnostics.buildSession`）同一条 `dtCheckSourceIncremental`。
---
--- 关键纪律：**会话只影响进程内的路径选择，绝不回退子进程**。
---   * 接口读不到 / `applied = False` ⇒ 返回 `Nothing`，调用方
---     （`Vuna.Test.InProc`）在同一进程内改走全量 `dtCheck` / `dtEvalFile`；
---   * 两条进程内路径都不可用 ⇒ 用例失败（`inprocess-unavailable`），
---     spawn `vuna check` 会把断言退回字符串匹配。
---
--- 返回值刻意**不用** `Maybe (Check a)`：该形状（把 `Check` 放进 `Maybe` 后由别的
--- 模块解构）会触发精化器的一条 `TC_UnknownConstructorInCase` 误报。这里改用普通
--- 记录 `CheckSample` / `EvalSample`，`Check` 的构造/解构只发生在 `Vuna.Test.InProc`。
 import Base.IORef
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
@@ -31,45 +29,60 @@ import Base.EffExit
 import Base.EffFs
 import Base.EffProcess
 
+-- | 进程内精化会话：依赖接口、包目录与两条路径的 termAux 缓存。
 export record Session where
-  sesRoot : String -- 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）
-  sesDir : String -- 当前依赖接口的包目录（base 绝对路径；空 = 尚未建立）
+  -- | 接口镜像根（`${envTmp}/iface`；空 = 不镜像，读源码旁）。
+  sesRoot : String
+  -- | 当前依赖接口的包目录（base 绝对路径；空 = 尚未建立）。
+  sesDir : String
+  -- | 缓存的依赖模块接口。
   sesIfaces : List ModuleIface
-  sesAux : Maybe AuxCache -- check 路径的 termAux 预处理缓存
-  sesEvalAux : Maybe AuxCache -- interp 路径的缓存
+  -- | check 路径的 termAux 预处理缓存。
+  sesAux : Maybe AuxCache
+  -- | interp 路径的 termAux 预处理缓存。
+  sesEvalAux : Maybe AuxCache
 
+-- | 空会话：只设定接口镜像根，依赖目录与接口留待首次使用时填充。
 export sessionNew : String -> Session
 sessionNew ifaceRoot = Session ifaceRoot "" [] Nothing Nothing
 
--- check 结果样本：`csErr = Just e` 表示精化失败；否则 `csDiags` 是完整诊断表
+-- | check 结果样本：`csErr = Just e` 表示精化失败；否则 `csDiags` 是完整诊断表
 -- （含 warning；`--json` 写进 `.diag.json` 的就是这一份）。
 export record CheckSample where
+  -- | 精化失败时的诊断（`Nothing` = 成功）。
   csErr : Maybe Diagnostic
+  -- | 完整诊断表（含 warning）。
   csDiags : List Diagnostic
 
--- interp 结果样本：`esErr = Just e` 表示精化失败；否则 `esText` 是求值展示文本。
+-- | interp 结果样本：`esErr = Just e` 表示精化失败；否则 `esText` 是求值展示文本。
 export record EvalSample where
+  -- | 精化失败时的诊断（`Nothing` = 成功）。
   esErr : Maybe Diagnostic
+  -- | 求值展示文本。
   esText : String
 
--- 字段投影 helper（绑定变量的记录字段访问需要显式类型）。
+-- | 内部：`sesRoot` 的投影（绑定变量的记录字段访问需要显式类型）。
 sesRootOf : Session -> String
 sesRootOf s = s.sesRoot
 
+-- | 内部：`sesDir` 的投影。
 sesDirOf : Session -> String
 sesDirOf s = s.sesDir
 
+-- | 内部：`sesIfaces` 的投影。
 sesIfacesOf : Session -> List ModuleIface
 sesIfacesOf s = s.sesIfaces
 
+-- | 内部：`sesAux` 的投影。
 sesAuxOf : Session -> Maybe AuxCache
 sesAuxOf s = s.sesAux
 
+-- | 内部：`sesEvalAux` 的投影。
 sesEvalAuxOf : Session -> Maybe AuxCache
 sesEvalAuxOf s = s.sesEvalAux
 
--- 用 base 目录自己的包上下文（`contextForDir`）：包身份、包环境、依赖图都从它的
--- manifest 推出，与 `vuna check <base>` 写侧完全同口径。
+-- | 内部：用 base 目录自己的包上下文（`contextForDir`）读依赖接口——包身份、包环境、
+-- 依赖图都从它的 manifest 推出，与 `vuna check <base>` 写侧完全同口径。
 readBaseIfaces : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List ModuleIface))
 readBaseIfaces baseDir = do
   ctxR <- contextForDir baseDir
@@ -77,7 +90,8 @@ readBaseIfaces baseDir = do
     ErrC _ => pure Nothing
     OkC ctx => ifacesForContextEff ctx
 
--- 会话可用性：命中缓存 → 直接用；否则读一次接口并写回（读失败/为空 ⇒ Nothing）。
+-- | 内部：会话可用性——缓存目录命中就直接用，否则读一次接口并写回（读失败或为空
+-- 给 `Nothing`）。
 ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => IORef Session -> String -> Eff r (Maybe (List ModuleIface))
 ensureSession ref baseDir = do
   s <- readRef ref
@@ -91,7 +105,7 @@ ensureSession ref baseDir = do
         _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
         pure (Just ifaces)
 
--- check：`Nothing` = 会话不可用（调用方改走全量）。
+-- | check 样本：会话不可用返回 `Nothing`（调用方改走全量 `checkFile`）。
 export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe CheckSample)
 sessionCheckSample ref baseDir source = do
   ses <- ensureSession ref baseDir
@@ -107,6 +121,8 @@ sessionCheckSample ref baseDir source = do
           result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
           applyCheckResult ref s baseDir ifaces result
 
+-- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
+-- （`Nothing`）。
 applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff r (Maybe CheckSample)
 applyCheckResult ref s baseDir ifaces result = case result of
   ErrC e => pure (Just (CheckSample (Just e) []))
@@ -117,7 +133,7 @@ applyCheckResult ref s baseDir ifaces result = case result of
         (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
     pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
--- interp：`Nothing` = 会话不可用（调用方改走全量 `dtEvalFile`）。
+-- | interp 样本：会话不可用返回 `Nothing`（调用方改走全量 `dtEvalFile`）。
 export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe EvalSample)
 sessionEvalSample ref baseDir source = do
   ses <- ensureSession ref baseDir
@@ -133,6 +149,8 @@ sessionEvalSample ref baseDir source = do
           result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
           applyEvalResult ref s baseDir ifaces result
 
+-- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
+-- （`Nothing`）。
 applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff r (Maybe EvalSample)
 applyEvalResult ref s baseDir ifaces result = case result of
   ErrC e => pure (Just (EvalSample (Just e) ""))
@@ -141,6 +159,7 @@ applyEvalResult ref s baseDir ifaces result = case result of
     _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
     pure (Just (EvalSample Nothing (firstOf (secondOf p))))
 
+-- | 内部：列表长度。
 listLength : List a -> Int
 listLength [] = 0
 listLength (_ :: rest) = 1 + listLength rest

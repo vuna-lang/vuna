@@ -1,24 +1,18 @@
+-- | 结构化诊断期望：把 `Check (List Diagnostic)` 与夹具的 `.diag.json` 投影成
+-- `severity|code|file|line|col` 字符串后比较。
+--
+-- 断言只看投影：进程内调用编译器函数拿到的诊断与 `.diag.json` 是同一份结构化文档，
+-- 不比对 message / fields / labels 文本。文案由 `nix/checks/lib/diag-style.sh` /
+-- `diag-raw.sh` 两个门禁守，夹具只锁定「哪个码、在哪、几条、什么顺序」。
+--
+-- 投影口径：主 label 取 `LabelPrimary` 的 span，没有主 label 时退回首个带 span 的
+-- label，两者都没有时位置记 `||0|0` 并追加诊断自带的 `absent` 理由。路径归一
+-- （`projFile`）两侧共用一条规则：剥 `<root>/test/`、剥 `<base>/`（记成 `base/`）、
+-- 夹具目录内的相对写法按 caseRel 补前缀；期望侧的 `<ROOT>` / `<BASE>` 占位符由
+-- `expandPlaceholders` 先展开。`--json` 下 `ErrC` 的诊断与其 children 在同一份
+-- 文档里并列，投影也平铺一层，顺序与输出一致。
 module Vuna.Test.Expect where
 
--- Vuna.Test.Expect：结构化诊断期望（投影 + 比较）。
---
--- 测试断言**只看返回值**：进程内调用编译器函数拿到 `Check (List Diagnostic)`，
--- 投影成 `severity|code|file|line|col`（无源位置时追加 `!<absent 理由>`）字符串序列，
--- 与夹具的 `.diag.json`（同一份结构化文档）投影比较。不比对 message / fields /
--- labels 文本：文案由 `nix/checks/lib/diag-style.sh` / `diag-raw.sh` 两个门禁守，夹具只
--- 锁定「哪个码、在哪、几条、什么顺序」。
---
--- 三个口径：
---   * **主 label**：`LabelPrimary` 的 span；没有主 label 时退回首个带 span 的 label；
---     两者都没有 ⇒ 位置记 `||0|0`，并要求诊断自带 `absent` 理由（与
---     `nix/checks/lib/diag-located.sh` 同源）。
---   * **路径归一**（`projFile`）：期望文件里有四种写法——`<ROOT>/test/...`（占位符，
---     由 `--bless-diag` 写入）、`corpus/...`（相对 `test/`）、`./vuna.toml`
---     （相对夹具目录）、`<BASE>/lib/...`（依赖包内）。进程内拿到的是绝对路径。
---     两侧都过同一条归一：剥 `<root>/test/`、剥 `<base>/`（记成 `base/`）、
---     相对路径按 caseRel 补前缀。规则唯一，夹具无需改写。
---   * **平铺**：CLI 在 `--json` 下 `visibleDiags` 不过滤级联，`ErrC` 的诊断与其
---     children 在同一份文档里是并列条目，投影也平铺一层，顺序与输出一致。
 import Base.List
 import Base.Maybe
 import Base.Nat
@@ -28,32 +22,36 @@ import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Base.Source
 import Vuna.Json
 
--- 一条比较结果（runner 把它翻译成自己的 `Assertion`；本模块不定义断言记录，
--- 避免与 `Vuna.Test.Run` 的 `Assertion` 字段名冲突）。
+-- | 一条比较结果。runner 把它翻译成自己的 `Assertion`；本模块不定义断言记录，
+-- 避免与 `Vuna.Test.Run` 的 `Assertion` 字段名冲突。
 export record ExpectDiff where
+  -- | 比较项名字（`<名称> count` 或 `<名称>[<序号>]`）。
   diffName : String
+  -- | 该项是否通过。
   diffOk : Bool
+  -- | 失败时的对照说明（期望与实际并列）。
   diffDetail : String
 
--- 诊断显示上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
+-- | 诊断显示上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
 export maxShownDiags : Int
 maxShownDiags = 20
 
 -- ---------------------------------------------------------------
 -- 路径归一
 -- ---------------------------------------------------------------
--- 期望侧占位符展开（`--bless-diag` 写下的形状；机器路径不进仓库）。
+-- | 展开期望文本里的 `<ROOT>` / `<BASE>` 占位符（`--bless-diag` 写下的形状；
+-- 机器路径不进仓库）。
 export expandPlaceholders : String -> String -> String -> String
 expandPlaceholders root base text = replaceText "<BASE>" base (replaceText "<ROOT>" root text)
 
+-- | 内部：把 `haystack` 里所有 `needle` 替换成 `replacement`（空 `needle` 原样返回）。
 replaceText : String -> String -> String -> String
 replaceText needle replacement haystack =
   if byteLength needle == 0 then haystack else join replacement (split needle haystack)
 
--- 唯一归一规则；两侧共用，因此期望与实际直接可比。
---   root/   → `test/corpus/...` → `corpus/...`
---   base/   → `base/lib/...`（不随 checkout 变化，入库可复现）
---   ./x     → `<caseRel>/x`（夹具目录内的相对写法）
+-- | 唯一归一规则；两侧共用，因此期望与实际直接可比：
+-- `root/` → `test/corpus/...` → `corpus/...`；`base/` → `base/lib/...`（不随 checkout
+-- 变化，入库可复现）；`./x` → `<caseRel>/x`（夹具目录内的相对写法）。
 export projFile : String -> String -> String -> String -> String
 projFile root base caseRel file =
   let
@@ -73,6 +71,7 @@ projFile root base caseRel file =
         in if caseRel == "" then rel else "${caseRel}/${rel}"
       else stripPrefixOf "./" f2
 
+-- | 内部：剥掉前缀；不以该前缀开头时原样返回。
 stripPrefixOf : String -> String -> String
 stripPrefixOf prefix s =
   let
@@ -85,12 +84,14 @@ stripPrefixOf prefix s =
 -- ---------------------------------------------------------------
 -- 名称
 -- ---------------------------------------------------------------
+-- | 把 `Severity` 投影成诊断文本里的级别名（`error` / `warning` / `note` / `help`）。
 export severityText : Severity -> String
 severityText SevError = "error"
 severityText SevWarning = "warning"
 severityText SevNote = "note"
 severityText SevHelp = "help"
 
+-- | `NoSourceReason` → 投影里的 `!` 后缀文本（`Nothing` 给空串）。
 export absentText : Maybe NoSourceReason -> String
 absentText Nothing = ""
 absentText (Just NsSynthetic) = "synthetic"
@@ -101,6 +102,7 @@ absentText (Just NsInternal) = "internal"
 -- ---------------------------------------------------------------
 -- 投影：Diagnostic -> 规范字符串
 -- ---------------------------------------------------------------
+-- | 内部：首个带 span 的 `LabelPrimary`。
 primaryOf : List Label -> Maybe Span
 primaryOf [] = Nothing
 primaryOf ((Label sp _ LabelPrimary _) :: rest) = case sp of
@@ -108,18 +110,20 @@ primaryOf ((Label sp _ LabelPrimary _) :: rest) = case sp of
   Nothing => primaryOf rest
 primaryOf (_ :: rest) = primaryOf rest
 
+-- | 内部：首个带 span 的 label（不看角色）。
 firstSpan : List Label -> Maybe Span
 firstSpan [] = Nothing
 firstSpan ((Label sp _ _ _) :: rest) = case sp of
   Just s => Just s
   Nothing => firstSpan rest
 
+-- | 内部：诊断的锚点 span——主 label 优先，退回首个带 span 的 label。
 diagAnchor : Diagnostic -> Maybe Span
 diagAnchor d = case primaryOf d.diagLabels of
   Just sp => Just sp
   Nothing => firstSpan d.diagLabels
 
--- 一条诊断的规范投影。无位置时追加 `!<absent>`，缺理由即投影为 `!`（期望文件损坏）。
+-- | 一条诊断的规范投影。无位置时追加 `!<absent>`，缺理由即投影为 `!`（期望文件损坏）。
 export projectDiag : String -> String -> String -> Diagnostic -> String
 projectDiag root base caseRel d =
   let
@@ -129,16 +133,19 @@ projectDiag root base caseRel d =
     Just sp =>
       "${head}|${projFile root base caseRel (spanFile sp)}|${strOfInt (spanStartLine sp)}|${strOfInt (spanStartCol sp)}"
 
--- `ErrC` 的诊断 + 其 children 平铺（与 `--json` 单文档输出同序），并按显示上限截断。
+-- | `ErrC` 的诊断 + 其 children 平铺（与 `--json` 单文档输出同序），并按显示上限
+-- 截断。
 export flattenErr : Diagnostic -> List Diagnostic
 flattenErr e = Base.List.take maxShownDiags (Base.List.Cons e e.diagChildren)
 
+-- | 批量投影：按输入顺序逐条走 `projectDiag`。
 export projectDiags : String -> String -> String -> List Diagnostic -> List String
 projectDiags root base caseRel ds = map (projectDiag root base caseRel) ds
 
 -- ---------------------------------------------------------------
 -- 从 `.diag.json` 读期望
 -- ---------------------------------------------------------------
+-- | 内部：把 `.diag.json` 里的一条诊断投影成与实际侧同形的一行。
 jsonDiagKey : String -> String -> String -> Json -> String
 jsonDiagKey root base caseRel d =
   let
@@ -152,22 +159,25 @@ jsonDiagKey root base caseRel d =
           "${head}|${projFile root base caseRel (strAt "file" sp)}|${strAtInt ["start", "line"] 0 sp}|${strAtInt ["start", "column"] 0 sp}"
       Nothing => "${head}||0|0!${strAt "absent" d}"
 
+-- | 内部：取字符串字段（缺失或类型不符给 `""`）。
 strAt : String -> Json -> String
 strAt key v = case jsonGet key v of
   Just (JStr s) => s
   _ => ""
 
+-- | 内部：按路径取整数字段（缺失或类型不符给 `fallback`）。
 strAtInt : List String -> Int -> Json -> Int
 strAtInt path fallback v = case jsonGetIn path v of
   Just (JNum n) => n
   _ => fallback
 
+-- | 内部：`labels` 数组的第一个元素。
 firstLabel : Json -> Maybe Json
 firstLabel d = case jsonGet "labels" d of
   Just (JArr (x :: _)) => Just x
   _ => Nothing
 
--- 读 `.diag.json` 文本 -> 期望投影序列。
+-- | 读 `.diag.json` 文本 → 期望投影序列：先展开占位符解析 JSON，再按显示上限截断。
 export expectKeys : String -> String -> String -> String -> Check (List String)
 expectKeys root base caseRel text = case parseJson (expandPlaceholders root base text) of
   ErrC e => ErrC e
@@ -178,31 +188,30 @@ expectKeys root base caseRel text = case parseJson (expandPlaceholders root base
 -- ---------------------------------------------------------------
 -- 平铺顺序无关比较
 -- ---------------------------------------------------------------
--- `--json` 输出顺序与 `ErrC` 的 children 顺序**不同**：CLI 把诊断收集进
--- `optSarifItems` 后由 `flushSarif` 按 `takeDiags` 原序输出，而 `ErrC` 的
--- `diagChildren` 是另一条装配顺序（`UN_UnusedDefinition` 在全量表里排在
--- `UN_UnusedImport` 之后，JSON 里反过来）。断言口径因此是**多重集**：条数 + 逐项
--- 定序比对（把两列各自排序后比），不锁定枚举顺序——顺序由渲染层门禁守。
+-- | 插入排序（升序，按 `<=` 比较字符串）。
 export sortKeys : List String -> List String
 sortKeys [] = []
 sortKeys (x :: rest) = insertKey x (sortKeys rest)
 
+-- | 内部：插入排序的一步——把 `x` 插进已排序列表的正确位置。
 insertKey : String -> List String -> List String
 insertKey x [] = [x]
 insertKey x (y :: rest) = if x <= y then x :: y :: rest else y :: insertKey x rest
 
--- 排序后的比较（`compareKeys` 原口径保留给真正有序的场景）。
+-- | 排序后比较。`--json` 输出顺序与 `ErrC` 的 children 顺序不同，因此断言口径是
+-- 多重集：条数 + 排序后逐项定序比对，不锁定枚举顺序（顺序由渲染层门禁守）。
 export compareSortedKeys : String -> List String -> List String -> List ExpectDiff
 compareSortedKeys name expected actual = compareKeys name (sortKeys expected) (sortKeys actual)
 
+-- | 内部：把 JSON 读取错误包成无位置的驱动诊断。
 jsonErr : String -> Diagnostic
 jsonErr msg = diagNoLoc SevError PhDriver CatTool msg msg
 
 -- ---------------------------------------------------------------
 -- 比较
 -- ---------------------------------------------------------------
--- 三段比较：先逐项对比 `zip` 出来的公共前缀，再分别报「期望多出来的」与「实测多
--- 出来的」。把「两侧同时下降」的形态拆成单列表递归，是为了满足 SCT 终止性检查。
+-- | 按原顺序比较两列键：先报条数，再逐项对比公共前缀，最后分别报「期望多出来的」
+-- 与「实测多出来的」。拆成单列表递归是为了满足 SCT 终止性检查。
 export compareKeys : String -> List String -> List String -> List ExpectDiff
 compareKeys name expected actual =
   let
@@ -216,6 +225,7 @@ compareKeys name expected actual =
     extraA = compareExtra name n (Base.List.drop n actual)
   in Base.List.Cons headA (append pairA (append missingA extraA))
 
+-- | 内部：公共前缀逐项比对（序号从 `idx` 起）。
 comparePairs : String -> Int -> List (Pair String String) -> List ExpectDiff
 comparePairs name _ [] = []
 comparePairs name idx (p :: rest) =
@@ -225,21 +235,25 @@ comparePairs name idx (p :: rest) =
   in Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" (e == a) "expected: ${e}\n  actual:   ${a}")
     (comparePairs name (idx + 1) rest)
 
+-- | 内部：期望侧多出来的键逐条报失败（序号从 `idx` 起）。
 compareMissing : String -> Int -> List String -> List ExpectDiff
 compareMissing name _ [] = []
 compareMissing name idx (e :: rest) =
   Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "missing diagnostic: ${e}")
     (compareMissing name (idx + 1) rest)
 
+-- | 内部：实测侧多出来的键逐条报失败（序号从 `idx` 起）。
 compareExtra : String -> Int -> List String -> List ExpectDiff
 compareExtra name _ [] = []
 compareExtra name idx (a :: rest) =
   Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "unexpected diagnostic: ${a}")
     (compareExtra name (idx + 1) rest)
 
+-- | 内部：列表长度。
 listLength : List a -> Int
 listLength [] = 0
 listLength (_ :: rest) = 1 + listLength rest
 
+-- | 内部：`Int` → 十进制文本。
 strOfInt : Int -> String
 strOfInt = strFromInt

@@ -1,24 +1,21 @@
-module Vuna.Interp where
-
--- Vuna.Interp：解释器 facade（工具链侧；编译入口见 Vuna.Compiler.Driver.Compile）。
+-- | `vuna interp` 的解释器 facade（工具链侧；编译入口见 [Vuna.Compiler.Driver.Compile]）。
 --
--- `vuna interp` 的语义是**精化后的核心求值**：按包上下文（最近 vuna.toml
--- 的依赖闭包；无 manifest 时 base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求
--- `main` 的值。因此子句元数、
--- 类型、覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
+-- 语义是**精化后的核心求值**：按包上下文（最近 `vuna.toml` 的依赖闭包；无 manifest 时
+-- base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求 `main` 的值。因此子句元数、类型、
+-- 覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
 --
--- 入口吃 `PackageContext`（没有环境根 / `List Root`）；调用方（CLI / REPL /
--- test runner）负责从文件、cwd 或包构造上下文。
---
--- 求值是**纯**的：不执行效果。`main : Eff r a` 一律报错；
--- 真正带 `consolePrint` / 文件效果的 `main` 请用 `compile` + 运行产物（见 docs/reference/primitives.md 的 interp 归约边界）。
--- 该模块只被 CLI / REPL / test runner 使用，不属于编译器 seed 闭包。
+-- 入口吃 `PackageContext`（没有环境根 / `List Root`）；调用方（CLI / REPL / test runner）
+-- 负责从文件、cwd 或包构造上下文。求值是**纯**的：不执行效果，`main : Eff r a` 一律报错；
+-- 真正带 `consolePrint` / 文件效果的 `main` 请用 `compile` + 运行产物。
 --
 -- 两条工具链能力（都不属于编译器 seed 闭包）：
---   - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
---   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
---     `compileToDir` + `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test`
---     的效果测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
+--
+-- - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
+-- - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走 `compileToDir` +
+--   `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test` 的效果测试共用这条执行路径）。
+--   效果的输出直接写终端，判定只看进程退出码。
+module Vuna.Interp where
+
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
@@ -32,6 +29,8 @@ import Base.Eff.Types
 import Base.EffArgs
 import Base.EffExit
 
+-- | 解释一个入口文件（`vuna interp`）：成功返回值的渲染文本，失败返回 `error: <诊断>`
+-- 文本。
 export interpretFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
 interpretFile ctx entry = do
   result <- dtEvalFile ctx entry
@@ -40,8 +39,9 @@ interpretFile ctx entry = do
     OkC output => output
   )
 
--- REPL 用：program（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
--- 不需要临时文件；表达式类型由 DT 精化器推断，值用 showValue 展示。
+-- | REPL 用：`program`（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
+-- 不需要临时文件；表达式类型由 DT 精化器推断，值用 `showValue` 展示。
+-- 有依赖接口时走带 ifaces 的路径，否则退回不需要接口的求值。
 export interpretExpr : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Eff r String
 interpretExpr ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
@@ -59,10 +59,10 @@ interpretExpr ctx program expr = do
         OkC output => output
       )
 
--- REPL：值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名）。
--- 类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；REPL 据此决定是否走效果执行。
--- REPL 会话复用 termAux（依赖包 decls）的 record/deriving 预处理结果。
--- 缓存 key 由接口哈希决定（REPL 的依赖接口不变时一直命中），失败路径不缓存。
+-- | 值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名），并带回可复用的
+-- `AuxCache`。类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；
+-- REPL 据此决定是否走效果执行。缓存复用依赖包 decls 的 record / deriving 预处理结果，
+-- key 由接口哈希决定（依赖接口不变时一直命中），失败路径不缓存。
 export evalExprInfoWithAux : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Maybe AuxCache -> Eff r (Check (Pair (Pair String String) (Maybe AuxCache)))
 evalExprInfoWithAux ctx program expr aux = do
   ifaces <- depIfacesForToolProgram ctx program
@@ -75,6 +75,7 @@ evalExprInfoWithAux ctx program expr aux = do
         OkC i => OkC (Pair i aux)
       )
 
+-- | 值文本 + zonk 后的类型文本（不返回缓存）；有依赖接口时走带 ifaces 的路径。
 export evalExprInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Eff r (Check (Pair String String))
 evalExprInfo ctx program expr = do
   ifaces <- depIfacesForToolProgram ctx program
@@ -85,16 +86,16 @@ evalExprInfo ctx program expr = do
 -- ---------------------------------------------------------------
 -- REPL v2：定义工具（自动签名 / 绑定类型 / 回写签名复查）
 -- ---------------------------------------------------------------
--- 为缺签名的顶层 DFun 推断可回读的签名；targets 由 REPL 选出（块内无签名、且缓冲里
+-- | 为缺签名的顶层 DFun 推断可回读的签名；`targets` 由 REPL 选出（块内无签名、且缓冲里
 -- 也没有只含签名的块）。失败返回可读错误，由 REPL 加提示后保持会话状态不变。
 export inferDefTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List String -> String -> Eff r (Check (List (Pair String String)))
 inferDefTypes ctx program targets defSource = dtInferDefTypes ctx program targets defSource
 
--- program 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
+-- | `program` 里每个顶层定义的名字 + zonk 后类型文本（`:defs` / `:info` 用）。
 export bindingTypes : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List (Pair String String)))
 bindingTypes ctx program = dtBindingTypes ctx program
 
--- 内存 program 的整程序检查（自动签名写回后的复查；也用于 :load 模块的立即校验）。
+-- | 内存 `program` 的整程序检查（自动签名写回后的复查；也用于 `:load` 模块的立即校验）。
 export checkProgram : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic))
 checkProgram ctx program = dtCheckSource ctx "<repl>" program
 
@@ -107,18 +108,16 @@ checkProgram ctx program = dtCheckSource ctx "<repl>" program
 --                           依赖根（绝对路径）
 --     app/Main.vuna      -- 调用方给的「带 main 的完整入口源码」
 --     .output/           -- compileToDir 产物 + build.sh + bin/vuna-effect
---
--- 失败都是可读的 `Err`（临时目录已清理）：manifest/精化/代码生成错误来自 compiler；
--- 链接失败带包名/目录/退出码；缺 `ocamlopt` 时给「进 nix develop」的可操作提示。
 -- ---------------------------------------------------------------
+-- | 内部：临时包的包名（固定值）。
 effectPackageName : String
 effectPackageName = "vuna-effect"
 
+-- | 内部：临时包里的可执行文件名。
 effectBinaryName : String
 effectBinaryName = "vuna-effect"
 
--- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
--- 读环境是启动期动作，函数化（零参顶层值会在模块初始化时求值）。
+-- | 内部：对列表逐项做效应计算并保持顺序。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -126,7 +125,7 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
--- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
+-- | 内部：临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 -- 读环境是启动期动作，函数化（零参顶层值会在模块初始化时求值）。
 tempBase : Member nEnv EnvOp r => Int -> Eff r String
 tempBase _ = do
@@ -134,18 +133,19 @@ tempBase _ = do
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
--- 微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
+-- | 内部：微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
 -- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
 freshTempDir : Member nFs FsOp r => String -> Eff r String
 freshTempDir base = pickTempDir base (range 0 1001)
 
+-- | 内部：依次探测 `<base>`、`<base>-1`…，返回第一个不存在的路径。
 pickTempDir : Member nFs FsOp r => String -> List Int -> Eff r String
 pickTempDir base [] = pure base
 pickTempDir base (n :: rest) = do
   exists <- fsFileExists (if n == 0 then base else "${base}-${n}")
   if exists then pickTempDir base rest else pure (if n == 0 then base else "${base}-${n}")
 
--- 上下文依赖根 → 临时包的 [dependencies] 条目（包名 → 包目录）。
+-- | 内部：上下文依赖根 → 临时包的 `[dependencies]` 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
 -- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
 effectDeps : Member nEnv EnvOp r => PackageContext -> Eff r (List (Pair String String))
@@ -154,38 +154,45 @@ effectDeps ctx = case contextRoots ctx of
   roots =>
     if contextPackageName ctx == "" then mapEff effectDep roots else mapEff effectDep (drop 1 roots)
 
+-- | 内部：单个依赖根 → `(包名, 绝对包目录)`。
 effectDep : Member nEnv EnvOp r => Root -> Eff r (Pair String String)
 effectDep root = do
   dir <- absoluteDir (rootPackageDir (rootDir root))
   pure (Pair (rootName root) dir)
 
--- 模块根固定是 <包目录>/lib；去掉后缀得到包目录（manifest 的 [dependencies] 吃包目录）。
+-- | 内部：模块根固定是 `<包目录>/lib`；去掉后缀得到包目录（manifest 的 `[dependencies]`
+-- 吃包目录）。
 rootPackageDir : String -> String
 rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4) dir else dir
 
--- 依赖路径必须是绝对路径（临时包不在调用方的工作目录下，相对路径会解析错）。
+-- | 内部：相对路径按 cwd 补成绝对路径（依赖路径必须是绝对路径：临时包不在调用方的
+-- 工作目录下，相对路径会解析错）。
 absoluteDir : Member nEnv EnvOp r => String -> Eff r String
 absoluteDir dir = do
   cwd <- envGetCwd
   pure (if startsWith "/" dir then dir else "${cwd}/${dir}")
 
+-- | 内部：TOML 双引号字符串。
 tomlQuote : String -> String
 tomlQuote s = "\"${tomlEscaped (strUnpack s)}\""
 
+-- | 内部：逐个字符做 TOML 字符串转义。
 tomlEscaped : List Int -> String
 tomlEscaped [] = ""
 tomlEscaped (c :: rest) = tomlChar c ++ tomlEscaped rest
 
+-- | 内部：单字符的 TOML 转义（`"` 与 `\`），其余原样。
 tomlChar : Int -> String
 tomlChar 34 = "\\\""
 tomlChar 92 = "\\\\"
 tomlChar c = strPack [c]
 
--- 依赖 key 用裸名（TOML 的 quoted key 在 vuna 的 TOML 解析器里不支持；包名已被
--- manifest 校验限制为 a-z/0-9/'-'，是合法 bare key）；路径值用双引号字符串。
+-- | 内部：依赖行：key 用裸名（vuna 的 TOML 解析器不支持 quoted key；包名已被 manifest
+-- 校验限制为 a-z / 0-9 / `-`，是合法 bare key）；路径值用双引号字符串。
 depLine : Pair String String -> String
 depLine dep = "${firstOf dep} = ${tomlQuote (secondOf dep)}\n"
 
+-- | 内部：`[dependencies]` 段文本（没有依赖时为空串）。
 depsSection : List (Pair String String) -> String
 depsSection [] = ""
 depsSection deps = """
@@ -193,6 +200,7 @@ depsSection deps = """
 [dependencies]
 ${join "" (map depLine deps)}"""
 
+-- | 内部：临时包的 manifest 文本：`[package]` 段 + 从上下文继承的依赖。
 effectManifest : Member nEnv EnvOp r => PackageContext -> Eff r String
 effectManifest ctx = do
   deps <- effectDeps ctx
@@ -201,29 +209,34 @@ name = ${tomlQuote effectPackageName}
 ${depsSection deps}"""
   )
 
--- `ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout/stderr 全部丢弃。
+-- | 内部：`ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout / stderr 全部丢弃。
 hasOcamlopt : Member nProcess ProcessOp r => Int -> Eff r Bool
 hasOcamlopt _ = do
   code <- processRunIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]
   pure (code == 0)
 
+-- | 内部：缺 `ocamlopt` 时的可操作提示。
 noOcamloptMessage : String
 noOcamloptMessage =
   "`ocamlopt` not found in PATH; run the toolchain inside `nix develop` (or install OCaml) to compile effect programs"
 
+-- | 内部：删掉临时目录并原样返回进程退出码。
 cleanupTemp : Member nProcess ProcessOp r => String -> Int -> Eff r Int
 cleanupTemp dir code = do
   _ <- processRunIn "/" ["rm", "-rf", dir]
   pure code
 
+-- | 内部：删掉临时目录并返回带消息的 `Err`。
 cleanupErr : Member nProcess ProcessOp r => String -> String -> Eff r (Check Int)
 cleanupErr dir e = do
   _ <- processRunIn "/" ["rm", "-rf", dir]
   pure (err e)
 
--- 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
+-- | 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（动作 main 先跑动作、再按结果类型打印）；
 -- effect 测试用 False（只看退出码，不比较输出）。
+-- 失败都是可读的 `Err`（临时目录已清理）：manifest / 精化 / 代码生成错误来自 compiler；
+-- 链接失败带包名 / 目录 / 退出码；缺 `ocamlopt` 时给「进 nix develop」的可操作提示。
 export runEffectProgram : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
 runEffectProgram ctx source printResult = do
   base <- tempBase 0

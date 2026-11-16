@@ -1,10 +1,11 @@
--- | vuna explain：按错误码查询目录条目（消息模板 + 说明）。
+-- | `vuna explain CODE` / `vuna explain --list [PREFIX] [--json]`：按错误码查询目录条目
+-- （消息模板 + 说明 + 严重度 / 阶段 / 分类，能查到示例时再给示例）。
+--
+-- 数据源是各域的枚举条目（`tcAll` / `cgAll` / `icAll` / `lexAll` / `psAll` / `rnAll` /
+-- `pkgAll` / `warnAll` / `ldAll` / `lintAll`），与 `vuna gen-errors` 同源，不另维护第二份
+-- 错误码文档。
 module Vuna.Explain where
 
--- Vuna.Explain：`vuna explain CODE` / `vuna explain --list`。
---
--- 数据源就是各域的枚举条目（`tcAll`/`cgAll`/`lexAll`/`psAll`/`ldAll`/`icAll`/`lintAll`），
--- 不再维护第二份错误码文档；字段与 `vuna gen-errors` 同源。
 import Base.List
 import Base.String
 import Vuna.Compiler.Base.Common
@@ -20,53 +21,71 @@ import Base.EffConsole
 import Base.Eff.Types
 import Base.EffFs
 
+-- | 一条错误码的展示条目。
 record Info where
+  -- | 错误码（含域前缀，如 `TC_` / `PKG_`）。
   infoCode : String
+  -- | 消息模板（`<0>` / `<1>` 是插值占位符）；lint 规则没有模板，留空。
   infoTemplate : String
+  -- | 人读说明（含义与修复方向）。
   infoDesc : String
 
+-- | 内部：类型检查 / 精化条目 → `Info`。
 tcInfo : TcEntry -> Info
 tcInfo e = Info e.tcEntryCode e.tcEntryTemplate e.tcEntryDesc
 
+-- | 内部：代码生成条目 → `Info`。
 cgInfo : CgEntry -> Info
 cgInfo e = Info e.cgEntryCode e.cgEntryTemplate e.cgEntryDesc
 
+-- | 内部：内部错误条目 → `Info`。
 icInfo : IcEntry -> Info
 icInfo e = Info e.icEntryCode e.icEntryTemplate e.icEntryDesc
 
+-- | 内部：词法条目 → `Info`。
 lexInfo : LexEntry -> Info
 lexInfo e = Info e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc
 
+-- | 内部：语法条目 → `Info`。
 psInfo : PsEntry -> Info
 psInfo e = Info e.psEntryCode e.psEntryTemplate e.psEntryDesc
 
+-- | 内部：告警条目 → `Info`。
 warnInfo : WarnEntry -> Info
 warnInfo e = Info e.warnEntryCode e.warnEntryTemplate e.warnEntryDesc
 
+-- | 内部：包清单条目 → `Info`。
 pkgInfo : PkgEntry -> Info
 pkgInfo e = Info e.pkgEntryCode e.pkgEntryTemplate e.pkgEntryDesc
 
+-- | 内部：名字解析条目 → `Info`。
 rnInfo : RnEntry -> Info
 rnInfo e = Info e.rnEntryCode e.rnEntryTemplate e.rnEntryDesc
 
+-- | 内部：模块加载条目 → `Info`。
 ldInfo : LdEntry -> Info
 ldInfo e = Info e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc
 
+-- | 内部：lint 规则条目 → `Info`（码取规则名，没有消息模板）。
 lintInfo : LintEntry -> Info
 lintInfo e = Info e.lintEntryCode e.lintEntryRule e.lintEntryDesc
 
+-- | 内部：所有域的条目，按 TC_ / CG_ / IC_ / LX_ / PS_ / RN_ / PKG_ / UN_ / LD_ / LN_ 的顺序拼接。
 allInfos : List Info
 allInfos =
   append (map tcInfo tcAll)
     (append (map cgInfo cgAll) (append (map icInfo icAll) (append (map lexInfo lexAll) (append (map psInfo psAll) (append (map rnInfo rnAll) (append (map pkgInfo pkgAll) (append (map warnInfo warnAll) (append (map ldInfo ldAll) (map lintInfo lintAll)))))))))
 
+-- | 内部：按错误码精确查找。
 findInfo : String -> List Info -> Maybe Info
 findInfo code [] = Nothing
 findInfo code (i :: rest) = if i.infoCode == code then Just i else findInfo code rest
 
+-- | 内部：错误码是否以给定前缀开头（`--list PREFIX` 的过滤口径）。
 matchesPrefix : String -> String -> Bool
 matchesPrefix prefix code = startsWith prefix code
 
+-- | 内部：打印一条条目的完整信息：码、消息、说明、严重度 / 阶段 / 分类，有示例时附示例路径。
 printInfo : Member nFs FsOp r, Member nConsole ConsoleOp r => Info -> Eff r Int
 printInfo i = do
   _ <- consolePrint "${i.infoCode}\n"
@@ -82,6 +101,7 @@ printInfo i = do
       pure 0
     Nothing => pure 0
 
+-- | 内部：逐条打印 `code  desc`；`prefix` 非空时只打印码以它开头的条目。
 listInfos : Member nConsole ConsoleOp r => List Info -> String -> Eff r Int
 listInfos [] prefix = pure 0
 listInfos (i :: rest) prefix = do
@@ -90,10 +110,13 @@ listInfos (i :: rest) prefix = do
     else pure 0
   listInfos rest prefix
 
+-- | 内部：先摘掉 `--json`（位置任意），再按剩余参数分发。
 explainArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 explainArgs args = case stripExplainJson args of
   Pair rest json => explainArgsJson rest json
 
+-- | 内部：参数分发：无参数打印用法（退出码 2）；`--list [PREFIX]` 列表；否则按码查询。
+-- 码不存在时打印错误并返回 2；`json` 决定文本还是 JSON 输出。
 explainArgsJson : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Bool -> Eff r Int
 explainArgsJson args json = case args of
   [] => do
@@ -112,16 +135,18 @@ explainArgsJson args json = case args of
       pure 2
     Just i => if json then printInfoJson i else printInfo i
 
+-- | 内部：从参数里摘掉所有 `--json`，返回 (其余参数, 是否出现 `--json`)。
 stripExplainJson : List String -> Pair (List String) Bool
 stripExplainJson [] = Pair [] False
 stripExplainJson ("--json" :: rest) = Pair (firstOf (stripExplainJson rest)) True
 stripExplainJson (arg :: rest) =
   Pair (Base.List.Cons arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
 
+-- | `vuna explain` 的入口（转发给 [Vuna.Explain.explainArgs]）。
 export runExplain : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 runExplain args = explainArgs args
 
--- JSON 输出（`vuna explain --json` / `--list --json`）；本地转义，不依赖 Vuna.Json
+-- | 内部：JSON 输出一条条目（`vuna explain --json`）。本地转义，不依赖 `Vuna.Json`
 -- （避免把 Explain 加进 Json 的依赖扇出）。
 printInfoJson : Member nFs FsOp r, Member nConsole ConsoleOp r => Info -> Eff r Int
 printInfoJson i = do
@@ -129,22 +154,29 @@ printInfoJson i = do
   _ <- consolePrint (json ++ "\n")
   pure 0
 
+-- | 内部：一条条目的 JSON 对象：`code` / `message` / `meaning` / `severity` / `phase` /
+-- `category` / `example`（无示例为 `null`）。
 infoJson : Member nFs FsOp r => Info -> Eff r String
 infoJson i = do
   example <- exampleOf i.infoCode
   pure
     ("{" ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString example)] ++ "}")
 
+-- | 内部：`"key":value` 片段（`value` 已渲染好，可以是字符串、`null` 或 `true`/`false`）。
 field : String -> String -> String
 field k v = "\"${k}\":${v}"
 
+-- | 内部：`Maybe String` → JSON 字符串（`Nothing` 为 `null`）。
 maybeJsonString : Maybe String -> String
 maybeJsonString Nothing = "null"
 maybeJsonString (Just s) = jsonQuote s
 
+-- | 内部：字符串 → 带引号的 JSON 字符串。
 jsonQuote : String -> String
 jsonQuote s = "\"" ++ join "" (map jsonEsc (strUnpack s)) ++ "\""
 
+-- | 内部：单个字符码的 JSON 转义（`"` / `\` / 换行 / 回车 / 制表符，其余控制字符走
+-- `\u00XX`）。
 jsonEsc : Int -> String
 jsonEsc 34 = "\\\""
 jsonEsc 92 = "\\\\"
@@ -153,12 +185,15 @@ jsonEsc 13 = "\\r"
 jsonEsc 9 = "\\t"
 jsonEsc c = if c < 32 then "\\u00" ++ hexPair c else strPack [c]
 
+-- | 内部：字节值的两位十六进制文本（小写）。
 hexPair : Int -> String
 hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 
+-- | 内部：0–15 → 十六进制位对应的字符码（`0`–`9` / `a`–`f`）。
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
+-- | 内部：对列表逐项做效应计算并保持顺序。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -166,11 +201,13 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
+-- | 内部：`--list --json`：`{"codes":[...]}`，元素与 [Vuna.Explain.infoJson] 同一形状。
 listInfosJson : Member nFs FsOp r, Member nConsole ConsoleOp r => List Info -> String -> Eff r Int
 listInfosJson infos prefix = do
   rendered <- mapEff infoJson (filter (matchesInfoPrefix prefix) infos)
   _ <- consolePrint ("{\"codes\":[" ++ join "," rendered ++ "]}\n")
   pure 0
 
+-- | 内部：`--list` 的前缀过滤（空前缀 = 全要）。
 matchesInfoPrefix : String -> Info -> Bool
 matchesInfoPrefix prefix i = prefix == "" || matchesPrefix prefix i.infoCode

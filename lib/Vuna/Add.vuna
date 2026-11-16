@@ -1,13 +1,13 @@
 -- | `vuna add <name>[@<version>] [DIR]`：查静态索引 → 写回 `[dependencies]` → 取包。
+--
+-- 流程：读包 manifest 的 `[registry].index`（目录 / `file://` / `http(s)://`）；解析索引
+-- 条目并按版本取发布（无版本 = 索引里的最后一个发布）；把 `(源, hash)` 写成内联表依赖
+-- 行，写回 `[dependencies]`（段级替换 / 追加，保留其余字节；子表形式不猜、报错让用户手改）；
+-- 默认调用 `vuna fetch` 取包，`--no-fetch` 只改 manifest，`--dry-run` 只打印。
+--
+-- 索引不可信：写回的永远是摘要，后续 fetch / check 只认摘要。
 module Vuna.Add where
 
--- Vuna.Add：索引的唯一消费者（D14）。流程：
---   1. 读包 manifest 的 `[registry].index`（目录 / `file://` / `http(s)://`）；
---   2. 解析索引条目并按版本取发布（无版本 = 索引里的最后一个发布）；
---   3. 把 `(源, hash)` 写成内联表依赖行，写回 `[dependencies]`（段级替换/追加，
---      保留其余字节；子表形式不猜、报错让用户手改）；
---   4. 默认 `vuna fetch` 取包；`--no-fetch` 只改 manifest，`--dry-run` 只打印。
--- 索引不可信：写回的永远是摘要，后续 fetch/check 只认摘要。
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Pkg
@@ -23,6 +23,8 @@ import Base.Eff.Types
 import Base.EffEnv
 import Base.EffProcess
 
+-- | `vuna add` 的入口：解析 `--dry-run` / `--no-fetch` 与位置参数（`<name>[@<version>]`，
+-- 可选 `DIR`，默认 `.`）；参数个数或用法错误打印 `error: ...` 并返回 2。
 export runAdd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fetch"] args of
   ErrC e => addFailText (diagText e)
@@ -36,16 +38,21 @@ runAdd args = case parseToolArgs "vuna add" [BoolFlag "dry-run", BoolFlag "no-fe
       [spec, dir] => addAt dir spec dry noFetch
       _ => addFailText "too many arguments; expected <name>[@<version>] [DIR]"
 
--- | `greet@1.2.0` → (`greet`, `Just "1.2.0"`)；无 `@` 时版本为 `Nothing`。
+-- | 内部：解析 `name[@version]` —— `greet@1.2.0` → (`greet`, `Just "1.2.0"`)，无 `@` 时版本
+-- 为 `Nothing`。
 splitSpec : String -> Pair String (Maybe String)
 splitSpec spec = splitSpecGo (strUnpack spec) []
 
+-- | 内部：逐字符扫描 `spec`，遇到 `@`（码 64）就在此处切开。
 splitSpecGo : List Int -> List Int -> Pair String (Maybe String)
 splitSpecGo [] acc = Pair (strPack (reverse acc)) Nothing
 splitSpecGo (c :: rest) acc =
   if c == 64 then Pair (strPack (reverse acc)) (Just (strPack rest))
   else splitSpecGo rest (c :: acc)
 
+-- | 内部：在 `dir` 的 manifest 里加上 `spec` 声明的依赖：先按 `[registry].index` 查条目与发布，
+-- 再交给 [Vuna.Add.writeAndFetch] 写回并（可选）取包。缺 manifest / 缺索引 / 索引里没有
+-- 该包或该版本都打印 `error:` 并返回非零退出码。
 addAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Bool -> Eff r Int
 addAt dir spec dry noFetch = do
   abs <- absolutePath dir
@@ -71,6 +78,9 @@ addAt dir spec dry noFetch = do
                 Just release => writeAndFetch manifestPath raw alias release dry noFetch abs
     else addFailText "missing vuna.toml in ${dir}"
 
+-- | 内部：写回依赖行并按需取包：`--dry-run` 只打印将要写入的行；内容未变时只提示已是最新；
+-- 否则原子写回 manifest。三种成功路径都按 `--no-fetch` 决定是否继续调用 `fetchAt`。
+-- 别名已是子表形式（`[dependencies.<alias>]`）时报错让用户手改。
 writeAndFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Release -> Bool -> Bool -> String -> Eff r Int
 writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
 else
@@ -88,7 +98,8 @@ else
     _ <- consolePrint "add: wrote ${newLine}\n"
     if noFetch then pure 0 else fetchAt abs False
 
--- 内联表依赖行（一行；别名 = 包名，D13）。
+-- | 内部：内联表依赖行（一行；别名即包名）：源（`git` + `rev` / `url` / `path`）、`hash`，
+-- 索引给了语义身份时再加 `identity`。
 dependencyLine : String -> Release -> String
 dependencyLine alias release =
   let
@@ -103,25 +114,29 @@ dependencyLine alias release =
   in "${alias} = { ${sourceText}hash = \"${hashText}\"${identityText} }"
 
 -- ---------------------------------------------------------------- 段级写回
--- 在 `[dependencies]` 段内替换同名行；没有同名行就在段末追加。子表形式
--- （`[dependencies.<alias>]`）不在这里处理：`upsertGo` 只看段内 key 行，
--- 若别名已是子表段，会走"追加"并产生重复定义——所以调用前先检查并报错。
+-- | 内部：在 `[dependencies]` 段内替换同名行；没有同名行就在段末追加。子表形式
+-- （`[dependencies.<alias>]`）原样返回，由调用方报错：`upsertGo` 只看段内 key 行，
+-- 若别名已是子表段会被当成「追加」并产生重复定义。
 upsertDependencyLine : String -> String -> String -> String
 upsertDependencyLine alias newLine raw =
   if hasSubtable alias raw then raw
   else join "\n" (upsertGo alias newLine (split "\n" raw) False False)
 
--- 子表形式检测（`[dependencies.<alias>]` 行）。
+-- | 内部：manifest 文本里是否有 `[dependencies.<alias>]` 段头行。
 hasSubtable : String -> String -> Bool
 hasSubtable alias raw = anyLine (isSubtableHeader alias) (split "\n" raw)
 
+-- | 内部：列表里是否有元素满足谓词。
 anyLine : (a -> Bool) -> List a -> Bool
 anyLine f [] = False
 anyLine f (x :: rest) = if f x then True else anyLine f rest
 
+-- | 内部：去掉前后空白后是否等于 `[dependencies.<alias>]`。
 isSubtableHeader : String -> String -> Bool
 isSubtableHeader alias line = trim line == "[dependencies.${alias}]"
 
+-- | 内部：`[dependencies]` 段的逐行扫描状态机：`inDeps` 表示当前位于该段内，`done`
+-- 表示已替换或已追加。段内遇到同名 key 行替换；没有同名行则在段末（下一个段头前）追加。
 upsertGo : String -> String -> List String -> Bool -> Bool -> List String
 upsertGo alias newLine [] inDeps done = if inDeps && not done then [newLine] else []
 upsertGo alias newLine (line :: rest) inDeps done =
@@ -133,9 +148,11 @@ upsertGo alias newLine (line :: rest) inDeps done =
   else line :: upsertGo alias newLine rest inDeps done
   else line :: upsertGo alias newLine rest False done
 
+-- | 内部：该行（已 trim）是否是段头。
 isSectionHeader : String -> Bool
 isSectionHeader t = startsWith "[" t
 
+-- | 内部：该行（已 trim）是否是别名 key 行：以别名开头，且剩余部分 trim 后以 `=` 开始。
 isAliasLine : String -> String -> Bool
 isAliasLine alias t = if startsWith alias t then
   let
@@ -144,11 +161,13 @@ isAliasLine alias t = if startsWith alias t then
   in startsWith "=" (trim remainder)
 else False
 
+-- | 内部：打印诊断文本并返回退出码 1。
 printAddDiag : Member nConsole ConsoleOp r => Diagnostic -> Eff r Int
 printAddDiag d = do
   _ <- consolePrint (diagText d ++ "\n")
   pure 1
 
+-- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 addFailText : Member nConsole ConsoleOp r => String -> Eff r Int
 addFailText msg = do
   _ <- consolePrint "error: ${msg}\n"

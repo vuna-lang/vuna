@@ -1,23 +1,24 @@
-module Vuna.Run where
-
--- Vuna.Run：`vuna run` —— 构建并运行包的可执行入口（工具链，永不进 seed 闭包）。
+-- | `vuna run`：构建并运行包的可执行入口（工具链，永不进 seed 闭包）。
 --
 -- 参数模型：`vuna run [--no-build] [--release] [--target ocaml|wasm|native]
--- [--package NAME] [--out DIR] [DIR] [-- ARG]...`。
--- 按**第一个** `--` 切分：前段是 vuna 自己的参数，后段原样透传给被运行的程序
--- （参数与子进程退出码都不改）。DIR 默认 "."，可以是包目录，也可以是 workspace 根。
+-- [--package NAME] [--out DIR] [DIR] [-- ARG]...`。按**第一个** `--` 切分：前段是 vuna
+-- 自己的参数，后段原样透传给被运行的程序（参数与子进程退出码都不改）。`DIR` 默认 `.`，
+-- 可以是包目录，也可以是 workspace 根。
 --
 -- 目标包选择：
---   1. `--package NAME` 显式选择（找不到 = 输入错误 exit 2）；
---   2. workspace 根且根包可执行（有 `app/Main.vuna`）→ 根包；
---   3. 否则恰好一个可执行成员 → 用它；
---   4. 否则列出候选并 exit 2（不猜）。
+--
+-- 1. `--package NAME` 显式选择（找不到 = 输入错误 exit 2）；
+-- 2. workspace 根且根包可执行（有 `app/Main.vuna`）→ 根包；
+-- 3. 否则恰好一个可执行成员 → 用它；
+-- 4. 否则列出候选并 exit 2（不猜）。
 --
 -- 构建走 in-process `runCompilerCliFor "vuna" (["build", DIR] ++ 包选择)`（`--no-build`
 -- 跳过）；执行走 `processRunIn <包目录> <.output/bin/<包名> :: 透传参数>`，子进程退出码
--- 原样返回。`--target wasm` 执行 `<OUT>/main.wasm`（wasmtime + stack-switching/gc/
--- function-references），`--target native` 与 ocaml 一样执行 `<OUT>/bin/<包名>`。
--- 目标没有可执行入口 / 构建被跳过导致产物缺失都是输入错误（exit 2）。
+-- 原样返回。`--target wasm` 执行 `<OUT>/main.wasm`（wasmtime + stack-switching / gc /
+-- function-references），`--target native` 与 ocaml 一样执行 `<OUT>/bin/<包名>`。目标没有
+-- 可执行入口、构建被跳过导致产物缺失都是输入错误（exit 2）。
+module Vuna.Run where
+
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
@@ -32,13 +33,15 @@ import Base.EffClock
 import Base.EffExit
 import Base.EffArgs
 
--- 按第一个 `--` 切分：前段是自身参数，后段原样透传。
+-- | 内部：按第一个 `--` 切分：前段是自身参数，后段原样透传。
 splitPassthrough : List String -> Pair (List String) (List String)
 splitPassthrough [] = Pair [] []
 splitPassthrough ("--" :: rest) = Pair [] rest
 splitPassthrough (arg :: rest) = case splitPassthrough rest of
   Pair own pass => Pair (arg :: own) pass
 
+-- | `vuna run` 的入口：先按 `--` 切分透传参数，再解析自身 flag 与可选目录。
+-- 参数个数或用法错误打印 `error: ...` 并返回 2；被运行程序的退出码原样返回。
 export runRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 runRun args =
   let
@@ -54,6 +57,7 @@ runRun args =
         runError
           "usage: vuna run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
 
+-- | 内部：校验 `--target` 后进入正式流程（不合法时打印用法错误并返回 2）。
 runGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Eff r Int
 runGo parsed passthrough dir = case flagValue parsed "target" of
   Just t =>
@@ -61,10 +65,12 @@ runGo parsed passthrough dir = case flagValue parsed "target" of
     else runError "invalid --target ${t}: expected --target ocaml|wasm|native"
   Nothing => runGoValid parsed passthrough dir
 
--- | `--target` 的取值与 `vuna build` 一致；未知目标是用法的错，不静默回落。
+-- | 内部：`--target` 的取值与 `vuna build` 一致；未知目标是用法的错，不静默回落。
 validRunTarget : String -> Bool
 validRunTarget t = t == "ocaml" || t == "wasm" || t == "native"
 
+-- | 内部：检查目录、加载包、选目标包，最后构建并执行。
+-- 目录 / 用法错误返回 2，包加载失败返回 1。
 runGoValid : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Eff r Int
 runGoValid parsed passthrough dir = do
   dirR <- requireDirectory dir
@@ -80,7 +86,9 @@ runGoValid parsed passthrough dir = do
             ErrC e => runError (diagText e)
             OkC target => runTarget parsed passthrough dir target
 
--- 目标包选择；workspace 成员列表来自 `workspacePackages`（与 build 同一真源）。
+-- | 选目标包：单包目录直接用根包（`--package` 只做名称核对）；workspace 按
+-- `--package` → 可执行的根包 → 唯一的可执行成员依次决定，否则给出候选错误。
+-- 成员列表来自 `workspacePackages`（与 build 同一真源）。
 selectTarget : Member nFs FsOp r, Member nEnv EnvOp r => Parsed -> String -> Package -> Eff r (Check Package)
 selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers of
   [] => case flagValue parsed "package" of
@@ -113,14 +121,17 @@ selectTarget parsed dir rootPkg = case rootPkg.packageManifest.manifestMembers o
                     "multiple executable packages in workspace ${dir}: ${packageLabels many}; choose one with --package"
               )
 
+-- | 内部：根包可执行时返回它，否则 `Nothing`。
 rootExecutable : Member nFs FsOp r => Package -> Eff r (Maybe Package)
 rootExecutable pkg = do
   ok <- isExecutable pkg
   pure (if ok then Just pkg else Nothing)
 
+-- | 内部：包是否可执行：入口 `app/Main.vuna` 是否存在。
 isExecutable : Member nFs FsOp r => Package -> Eff r Bool
 isExecutable pkg = pathExistsFile (packageEntry pkg)
 
+-- | 内部：按效应谓词过滤列表（保持顺序）。
 filterEff : {r : Row} -> (a -> Eff r Bool) -> List a -> Eff r (List a)
 filterEff pred [] = pure []
 filterEff pred (x :: rest) = do
@@ -128,21 +139,25 @@ filterEff pred (x :: rest) = do
   kept <- filterEff pred rest
   pure (if keep then x :: kept else kept)
 
+-- | 内部：包在错误信息里的名字：有包名用包名，否则用包目录。
 packageLabel : Package -> String
 packageLabel pkg =
   let
     name = packageName pkg
   in if name == "" then packageDir pkg else name
 
+-- | 内部：多个包名的逗号拼接（候选列表用）。
 packageLabels : List Package -> String
 packageLabels pkgs = join ", " (map packageLabel pkgs)
 
+-- | 内部：按包名查包。
 findPackageByName : String -> List Package -> Maybe Package
 findPackageByName name [] = Nothing
 findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
--- 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
+-- | 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
+-- `--no-build` 跳过构建直接执行；构建失败时原样返回其退出码。
 runTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Package -> Eff r Int
 runTarget parsed passthrough dir target =
   let
@@ -167,16 +182,16 @@ runTarget parsed passthrough dir target =
       if buildCode /= 0 then pure buildCode
       else execTarget (targetNameOf parsed) passthrough target (flagValue parsed "out")
 
+-- | 内部：`--target` 的值，缺省为 `ocaml`。
 targetNameOf : Parsed -> String
 targetNameOf parsed = case flagValue parsed "target" of
   Just t => t
   Nothing => "ocaml"
 
--- 执行：cwd 切到包目录，产物用**相对包目录**的路径（`@vuna@prim_eff_runIn` 先 chdir 再执行，
--- 传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍）。
+-- | 内部：执行：cwd 切到包目录，产物用**相对包目录**的路径（`@vuna@prim_eff_runIn` 先 chdir
+-- 再执行，传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍）。
 -- `--out DIR` 时产物在 DIR 下；相对 DIR 按调用方 cwd 解析成绝对路径
 -- （`processRunIn` 会 chdir 到包目录，绝对路径不受影响）。
--- wasm 目标执行 `<OUT>/main.wasm`（wasmtime），ocaml / native 执行 `<OUT>/bin/<包名>`。
 execTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Package -> Maybe String -> Eff r Int
 execTarget targetName passthrough target outM =
   let
@@ -188,9 +203,13 @@ execTarget targetName passthrough target outM =
       cwd <- envGetCwd
       execArtifact targetName passthrough pkgDir name (resolveOut cwd out) (resolveOut cwd out)
 
+-- | 内部：相对输出目录按 cwd 补成绝对路径。
 resolveOut : String -> String -> String
 resolveOut cwd out = if startsWith "/" out then out else "${cwd}/${out}"
 
+-- | 内部：执行产物 —— wasm 目标跑 `wasmtime run <OUT>/main.wasm`（启用 stack-switching /
+-- gc / function-references）；ocaml / native 跑 `<OUT>/bin/<包名>`。产物缺失时打印
+-- 提示（先构建或去掉 `--no-build`）并返回 2。
 execArtifact : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> String -> String -> String -> String -> Eff r Int
 execArtifact targetName passthrough pkgDir name relOut absOut = if targetName == "wasm" then do
   exists <- pathExistsFile "${absOut}/main.wasm"
@@ -203,11 +222,13 @@ else do
   if exists then processRunIn pkgDir ("${relOut}/bin/${name}" :: passthrough)
   else runError "binary not found: ${absOut}/bin/${name} (build the package first, or drop --no-build)"
 
+-- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 runError : Member nConsole ConsoleOp r => String -> Eff r Int
 runError e = do
   _ <- consolePrint "error: ${e}\n"
   pure 2
 
+-- | 内部：打印 `error: <msg>` 并返回退出码 1（包加载 / 解析失败）。
 runFailure : Member nConsole ConsoleOp r => String -> Eff r Int
 runFailure e = do
   _ <- consolePrint "error: ${e}\n"

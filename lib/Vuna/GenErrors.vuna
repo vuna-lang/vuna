@@ -1,13 +1,14 @@
+-- | `vuna gen-errors`：从**枚举真源**生成错误码文档（`docs/.generated/errors.md` 与
+-- `errors.json`）。
+--
+-- code、模板、说明、规则名、修复动作全部来自枚举表（`tcAll` / `cgAll` / `lexAll` /
+-- `psAll` / `icAll` / `rnAll` / `pkgAll` / `warnAll` / `ldAll` / `lintAll`），单一真源，
+-- 不需要扫源码注释、也不必从消息字面量反推前缀。`FX_`（自动修复码）由可修复的 `LN_`
+-- 规则派生：`FX_` + 规则名去掉 `-`。
+--
+-- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git。
 module Vuna.GenErrors where
 
--- Vuna.GenErrors：从**枚举真源**生成错误码文档。
---
--- code、模板、说明、规则名、修复动作全部来自三个枚举表——
---   Vuna.Compiler.Base.Diagnostics 的 `tcAll` / `cgAll`（TC_/CG_），
---   Vuna.Lint.Diagnostics 的 `lintAll`（LN_），
--- 单一真源，不需要扫源码注释、也不必从消息字面量反推前缀。
--- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
--- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
@@ -27,56 +28,77 @@ import Base.EffArgs
 import Base.EffExit
 import Base.EffProcess
 
+-- | 文档里的一行错误码条目（普通域与 lint 域共用一个形状）。
 record Entry where
+  -- | 错误码（普通域是 `TC_` 这类码，lint 域是规则名）。
   entryCode : String
+  -- | 消息模板（普通域才有，lint 域留空）。
   entryMsg : String
+  -- | 人读说明。
   entryDesc : String
+  -- | lint 规则名（普通域留空）。
   entryRule : String
+  -- | 自动修复的替换描述（lint 的 `edit`，普通域留空）。
   entryEdit : String
+  -- | 是否可自动修复。
   entryFixable : Bool
 
+-- | 内部：读取条目的「可自动修复」标志。
 entryFixable : Entry -> Bool
 entryFixable (Entry c m d r e f) = f
 
 -- ---------------------------------------------------------------
 -- 枚举表 → Entry（唯一数据来源）
 -- ---------------------------------------------------------------
+-- | 内部：类型检查 / 精化条目 → `Entry`。
 tcEntryToEntry : TcEntry -> Entry
 tcEntryToEntry e = Entry e.tcEntryCode e.tcEntryTemplate e.tcEntryDesc "" "" False
 
+-- | 内部：代码生成条目 → `Entry`。
 cgEntryToEntry : CgEntry -> Entry
 cgEntryToEntry e = Entry e.cgEntryCode e.cgEntryTemplate e.cgEntryDesc "" "" False
 
+-- | 内部：lint 规则条目 → `Entry`（码取规则名，带规则名 / 修复动作 / 可修复标志）。
 lintEntryToEntry : LintEntry -> Entry
 lintEntryToEntry e =
   Entry e.lintEntryCode "" e.lintEntryDesc e.lintEntryRule e.lintEntryEdit e.lintEntryFixable
 
+-- | 内部：词法条目 → `Entry`。
 lexEntryToEntry : LexEntry -> Entry
 lexEntryToEntry e = Entry e.lexEntryCode e.lexEntryTemplate e.lexEntryDesc "" "" False
 
+-- | 内部：语法条目 → `Entry`。
 psEntryToEntry : PsEntry -> Entry
 psEntryToEntry e = Entry e.psEntryCode e.psEntryTemplate e.psEntryDesc "" "" False
 
+-- | 内部：内部错误条目 → `Entry`。
 icEntryToEntry : IcEntry -> Entry
 icEntryToEntry e = Entry e.icEntryCode e.icEntryTemplate e.icEntryDesc "" "" False
 
+-- | 内部：告警条目 → `Entry`。
 warnEntryToEntry : WarnEntry -> Entry
 warnEntryToEntry e = Entry e.warnEntryCode e.warnEntryTemplate e.warnEntryDesc "" "" False
 
+-- | 内部：包清单条目 → `Entry`。
 pkgEntryToEntry : PkgEntry -> Entry
 pkgEntryToEntry e = Entry e.pkgEntryCode e.pkgEntryTemplate e.pkgEntryDesc "" "" False
 
+-- | 内部：名字解析条目 → `Entry`。
 rnEntryToEntry : RnEntry -> Entry
 rnEntryToEntry e = Entry e.rnEntryCode e.rnEntryTemplate e.rnEntryDesc "" "" False
 
+-- | 内部：模块加载条目 → `Entry`。
 ldEntryToEntry : LdEntry -> Entry
 ldEntryToEntry e = Entry e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc "" "" False
 
+-- | 内部：所有域的条目，按 TC_ / CG_ / LN_ / LX_ / PS_ / IC_ / RN_ / PKG_ / UN_ / LD_ 的顺序拼接。
 allEntries : List Entry
 allEntries =
   append (map tcEntryToEntry tcAll)
     (append (map cgEntryToEntry cgAll) (append (map lintEntryToEntry lintAll) (append (map lexEntryToEntry lexAll) (append (map psEntryToEntry psAll) (append (map icEntryToEntry icAll) (append (map rnEntryToEntry rnAll) (append (map pkgEntryToEntry pkgAll) (append (map warnEntryToEntry warnAll) (map ldEntryToEntry ldAll)))))))))
 
+-- | 生成 `errors.md` 与 `errors.json` 并打印写出的码条数。`root` 必须是目录，否则打印
+-- `error: ...` 并返回 2。
 export runGenErrors : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r Int
 runGenErrors root = do
   rootR <- requireDirectory root
@@ -91,6 +113,7 @@ runGenErrors root = do
       _ <- consolePrint "wrote ${root}/docs/.generated/errors.md (${length allEntries} codes)\n"
       pure 0
 
+-- | 内部：打印 `error: <msg>` 并返回退出码 2。
 genErrorsError : Member nConsole ConsoleOp r => String -> Eff r Int
 genErrorsError e = do
   _ <- consolePrint "error: ${e}\n"
@@ -99,6 +122,7 @@ genErrorsError e = do
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
+-- | 内部：渲染 `errors.md` 全文：按域分节，每节一张表；lint 与 FX_ 用 lint 表形状。
 renderDoc : Member nFs FsOp r => List Entry -> Eff r String
 renderDoc entries = do
   tcs <- renderTable (filter (isDomain "TC_") entries)
@@ -158,9 +182,12 @@ ${fxs}
 """
   )
 
+-- | 内部：条目是否属于某个域（按码前缀匹配）。
 isDomain : String -> Entry -> Bool
 isDomain dom e = startsWith dom e.entryCode
 
+-- | 内部：渲染普通域的表（code / severity / phase / category / 消息 / 说明 / example）；
+-- 没有条目时给 `（无）`。
 renderTable : Member nFs FsOp r => List Entry -> Eff r String
 renderTable [] = pure "（无）\n"
 renderTable entries = do
@@ -171,12 +198,15 @@ ${join "\n" rows}
 """
   )
 
+-- | 内部：一条普通域的表行（消息里的反引号已转义，示例缺失写 `—`）。
 renderRow : Member nFs FsOp r => Entry -> Eff r String
 renderRow e = do
   example <- exampleCell e.entryCode
   pure
     "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${escapeMsg e.entryMsg}` | ${e.entryDesc} | ${example} |"
 
+-- | 内部：渲染 lint / FX_ 的表（code / severity / phase / category / 规则 / 说明 / 自动修复）；
+-- 没有条目时给 `（无）`。
 renderLintTable : List Entry -> String
 renderLintTable [] = "（无）\n"
 renderLintTable entries = """| code | severity | phase | category | 规则 | 说明 | 自动修复 |
@@ -184,26 +214,29 @@ renderLintTable entries = """| code | severity | phase | category | 规则 | 说
 ${join "\n" (map renderLintRow entries)}
 """
 
+-- | 内部：一条 lint 域的表行。
 renderLintRow : Entry -> String
 renderLintRow e =
   "| ${e.entryCode} | ${diagSeverityOf (codeDomain e.entryCode)} | ${diagPhaseOf (codeDomain e.entryCode)} | ${diagCategoryOf (codeDomain e.entryCode)} | `${e.entryRule}` | ${e.entryDesc} | ${fixCell e} |"
 
+-- | 内部：`自动修复` 列（`是` / `否`）。
 fixCell : Entry -> String
 fixCell e = if entryFixable e then "是" else "否"
 
--- 消息里反引号转成单引号（避免 Markdown 代码标记冲突）。
+-- | 内部：消息里的反引号转成单引号（避免 Markdown 代码标记冲突）。
 escapeMsg : String -> String
 escapeMsg m = join "'" (split "`" m)
 
--- FX_：从可修复的 LN_ 推导（code = FX_ + 规则名去 `-`）。
+-- | 内部：`FX_` 条目：从可修复的 `LN_` 条目推导。
 fixEntries : List Entry -> List Entry
 fixEntries entries = map fxOf (filter entryFixable (filter (isDomain "LN_") entries))
 
+-- | 内部：`LN_` 条目 → `FX_` 条目（code = `FX_` + 规则名去 `-`）。
 fxOf : Entry -> Entry
 fxOf e =
   Entry "FX_${join "" (split "-" e.entryRule)}" e.entryMsg e.entryEdit e.entryRule e.entryEdit True
 
--- 效果列表遍历（本模块自用；顺序与纯 `map` 一致，示例夹具查找按此顺序发生）。
+-- | 内部：效果列表遍历；顺序与纯 `map` 一致，示例夹具查找按此顺序发生。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -211,43 +244,53 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
--- 目录 JSON：与 errors.md 同源（生成物，供工具/编辑器消费）。自带最小转义，
--- 刻意不依赖 Vuna.Json（避免把 GenErrors 加进 Json 的依赖扇出）。
+-- | 内部：渲染 `errors.json`：`{"version":1,"codes":[...]}`，与 `errors.md` 同源。
+-- 自带最小转义，刻意不依赖 `Vuna.Json`（避免把 GenErrors 加进 Json 的依赖扇出）。
 renderCatalogJson : Member nFs FsOp r => List Entry -> Eff r String
 renderCatalogJson entries = do
   texts <- mapEff entryJsonText entries
   pure ("{\"version\":1,\"codes\":[" ++ join "," texts ++ "]}")
 
+-- | 内部：一条条目的 JSON 对象（`code` / `severity` / `phase` / `category` / `message` /
+-- `desc` / `rule` / `edit` / `fixable`，有示例时再加 `example`）。
 entryJsonText : Member nFs FsOp r => Entry -> Eff r String
 entryJsonText e = do
   example <- exampleField e.entryCode
   pure
     ("{" ++ join "," [field "code" e.entryCode, field "severity" (diagSeverityOf (codeDomain e.entryCode)), field "phase" (diagPhaseOf (codeDomain e.entryCode)), field "category" (diagCategoryOf (codeDomain e.entryCode)), field "message" e.entryMsg, field "desc" e.entryDesc, field "rule" e.entryRule, field "edit" e.entryEdit, " \"fixable\":" ++ (if e.entryFixable then "true" else "false") ++ " "] ++ example ++ "}")
 
+-- | 内部：`"key":value` 片段（两侧带空格）。
 field : String -> String -> String
 field k v = " \"${k}\":${jsonQuote v} "
 
+-- | 内部：字符串 → 带引号的 JSON 字符串。
 jsonQuote : String -> String
 jsonQuote s = "\"" ++ join "" (map jsonEscapeChar (strUnpack s)) ++ "\""
 
+-- | 内部：需要特殊处理的字符码及其 JSON 转义文本。
 jsonEscapes : List (Pair Int String)
 jsonEscapes = [Pair 34 "\\\"", Pair 92 "\\\\", Pair 10 "\\n", Pair 13 "\\r", Pair 9 "\\t"]
 
+-- | 内部：单个字符码的 JSON 转义（其余控制字符走 `\u00XX`，普通字符原样）。
 jsonEscapeChar : Int -> String
 jsonEscapeChar c = case lookupEscape c jsonEscapes of
   Just s => s
   Nothing => if c < 32 then "\\u00" ++ hexPair c else strPack [c]
 
+-- | 内部：在转义表里查字符码。
 lookupEscape : Int -> List (Pair Int String) -> Maybe String
 lookupEscape c [] = Nothing
 lookupEscape c ((Pair k v) :: rest) = if c == k then Just v else lookupEscape c rest
 
+-- | 内部：字节值的两位十六进制文本（小写）。
 hexPair : Int -> String
 hexPair c = strPack [hexDigit (c / 16), hexDigit (c - c / 16 * 16)]
 
+-- | 内部：0–15 → 十六进制位对应的字符码（`0`–`9` / `a`–`f`）。
 hexDigit : Int -> Int
 hexDigit n = if n < 10 then 48 + n else 87 + n
 
+-- | 内部：Markdown 表格里的示例单元；查不到示例写 `—`。
 exampleCell : Member nFs FsOp r => String -> Eff r String
 exampleCell code = do
   found <- exampleOf code
@@ -256,6 +299,7 @@ exampleCell code = do
     Nothing => "—"
   )
 
+-- | 内部：示例路径的 JSON 字符串（查不到给 `null`）。
 jsonExample : Member nFs FsOp r => String -> Eff r String
 jsonExample code = do
   found <- exampleOf code
@@ -264,6 +308,7 @@ jsonExample code = do
     Nothing => "null"
   )
 
+-- | 内部：示例字段片段（`, "example": ...`）；查不到示例返回空串。
 exampleField : Member nFs FsOp r => String -> Eff r String
 exampleField code = do
   found <- exampleOf code

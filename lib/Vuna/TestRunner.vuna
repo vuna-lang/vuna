@@ -1,45 +1,28 @@
+-- | 包内测试运行器：按 `main` 的返回类别跑测试，支持效果测试、超时与 workspace 聚合。
+--
+-- 包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；类别由
+-- `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。`String`
+-- 核心求值后空串通过，`Int` / `Nat` 为 0 通过，`Bool` 为 True 通过，`Eff r a` 走
+-- 「临时包编译 + 运行」并按进程退出码判定（0 通过，失败的测试显式 `exit 1`）；其它
+-- 返回类型明确失败，错误信息里写清支持的类型。编译 / 精化失败也按 FAIL 记录诊断，
+-- 单测失败不中断其余测试。
+--
+-- 效果测试有单测超时：默认 120s，`VUNA_TEST_TIMEOUT` 覆盖（0 = 关闭，非数字回落
+-- 默认）。实现是在 scratch 目录（store scratch，或退回 TMPDIR 私有目录）里 `compileToDir`
+-- 测试入口；`compileToDir` 是进程内调用、不受外部超时，随后用 coreutils `timeout` 包住
+-- 「`sh build.sh` 链接」与「运行产物」两步，任一步超时记 FAIL 并清理。没有 `timeout`
+-- 命令时降级到 `runEffectProgram`（无外部超时）。纯测试走 `interpretFile`，终止性由
+-- 核心求值器的 fuel 守卫保证。
+--
+-- 入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文；测试模块与包内模块走
+-- 同一套模块可见性规则。`vuna test <workspace-root>` 对 workspace 里每个包各跑自己
+-- 的 `test/`，按包名分组汇总，任一失败总退出码 1；单包行为不变。
+--
+-- `--jobs N` 做包内进程级并行：每个测试文件一个子进程，spawn 当前可执行文件的隐藏
+-- 模式 `--only-file`。子进程继承 stdout/stderr，行内容完整但行与行之间可能交错；父进程
+-- 按退出码计 pass / fail，汇总行与串行逐字一致。
 module Vuna.TestRunner where
 
--- Vuna.TestRunner：包内测试运行器（支持效果测试与 workspace 聚合）。
---
--- 约定：包 `test/` 下每个 `*.vuna` 是一个测试模块，入口固定叫 `main`；
---   - `main : String`：核心求值，返回空串通过（历史约定，`interpretFile` 展示成 `""`）；
---   - `main : Int`：核心求值，值 0 通过；
---   - `main : Bool`：核心求值，值 True 通过；
---   - `main : Eff r a`：临时包编译 + 运行，以**进程退出码**判定（0 通过；失败测试显式
---     `exit 1`）。效果的输出直接写终端；
---   - 其它返回类型：明确失败（不再静默当失败），错误信息里写清支持的类型。
--- main 的类别用 `Vuna.Compiler.Driver.Dt.dtMainKind` 判定（同一份 DT 精化，不猜语法）。
--- 编译/精化失败也按 FAIL 记录诊断（单测失败不中断其余测试）。
---
--- `main : Eff r a` 的单测有**超时**（默认 120s，`VUNA_TEST_TIMEOUT`
--- 环境变量覆盖，0 = 关闭，非数字回落默认）。实现方式：效果测试直接在临时目录里
--- `compileToDir` 测试入口，再用 coreutils `timeout` 包住「`sh build.sh` 链接」与「运行
--- 产物」两步；任一步超时记 FAIL（"timed out after Ns"）并清理，不会让 `vuna test` 永久
--- 挂起。没有 `timeout` 命令的环境降级到 `runEffectProgram`（无外部超时，不算 FAIL 也不崩）。
--- 纯测试（`interpretFile`）不需要外部超时：其终止性由核心
--- 求值器的 fuel 守卫保证（与 `vuna interp` 同一路径）。
---
--- 入口是 `Package`，内部用 `Pkg.packageContext` 构造包上下文（没有环境根 flag）；
--- 测试模块与包内模块走同一套模块可见性规则。
--- `vuna test <workspace-root>` 对 workspace 里每个包各跑自己的 `test/`（根包 +
--- `[workspace].members`），按包名分组汇总，任一失败总退出码 1；单包（只含自己的
--- 目录，或它是 workspace 成员被直接指定）行为不变。
--- 选项收进 `TestOpts`：
---   - `--filter PAT`（可重复，多值 OR）：对 `<包名>/<文件名>` 与 `<文件名>` 做子串匹配，
---     未匹配的包整组跳过；
---   - `--list`：只列分组（workspace）与文件名，不执行，exit 0（单包缺 `test/` 仍 exit 2）；
---   - `--verbose`：`ok` / `FAIL` 行尾追加 ` (Nms)`，末尾打印总耗时；
---   - `--fail-fast`：首个失败即停止（跨包生效），已跑部分的汇总照常打印。
--- `--jobs N` 包内测试**进程级并行**（默认 1 = 串行、输出不变）。
---   N>1 时每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
---   `test <包目录> --only-file <文件名> --jobs 1`（`--verbose` 时追加 `--verbose`）；
---   子进程继承 stdout/stderr，**行内容完整但行与行之间可能交错**。父进程用
---   `processWait` 收退出码、按文件计 pass/fail，汇总行与串行逐字一致。`--fail-fast`
---   在并行下只停止启动新文件，已在跑的文件等完（汇总只统计已跑文件）；`--verbose`
---   的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印 `total:`。workspace
---   聚合仍是各包串行（包内文件并行）。`--only-file` 只给子进程用：只跑一个文件、
---   打印该文件的 ok/FAIL 行、不打印汇总、强制 jobs=1，不会再并行或递归 spawn。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Fingerprint
@@ -55,29 +38,42 @@ import Base.EffFs
 import Base.EffProcess
 import Base.Eff.Types
 
--- `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
+-- | `vuna test` 的选项；默认构造值（空过滤 + 全 False + jobs=1 + 无 only-file）等价于
 -- 串行单包行为。
 export record TestOpts(..) where
+  -- | `--filter PAT`（可重复，多值 OR）：对 `<包名>/<文件名>` 与 `<文件名>` 做子串匹配，
+  -- 未匹配的包整组跳过。
   testFilter : List String
+  -- | `--list`：只列文件名，不执行。
   testListOnly : Bool
+  -- | `--verbose`：结果行尾追加耗时，末尾打印总耗时。
   testVerbose : Bool
+  -- | `--fail-fast`：首个失败即停止（跨包生效）。
   testFailFast : Bool
-  -- `--jobs N`：包内测试文件的最大并发子进程数（默认 1 = 串行、行为与输出不变）。
+  -- | `--jobs N`：包内测试文件的最大并发子进程数（默认 1 = 串行、行为与输出不变）。
   testJobs : Int
-  -- 隐藏的内部子进程模式（`--only-file <name>`）：只跑该文件、不展开 workspace。
+  -- | 隐藏的内部子进程模式（`--only-file <name>`）：只跑该文件、不展开 workspace。
   testOnlyFile : Maybe String
 
--- 单测结果。打印集中在 runTestFiles（逐测耗时只有调用方知道），这里只带诊断文案。
+-- | 单个测试文件的结果。打印集中在 `runTestFiles`（逐测耗时只有调用方知道），这里只带
+-- 诊断文案。
 data TestOutcome : Type where
+  -- | 通过。
   TestPassed : TestOutcome
+  -- | 失败，附诊断文案。
   TestFailed : String -> TestOutcome
 
--- 汇总记账：stopped = fail-fast 已经触发（不再跑后续文件/包）。
+-- | 汇总记账：stopped = fail-fast 已经触发（不再跑后续文件 / 包）。
 record Tally where
+  -- | 通过数。
   tallyPass : Int
+  -- | 失败数。
   tallyFail : Int
+  -- | fail-fast 是否已触发。
   tallyStopped : Bool
 
+-- | 对外入口：`--only-file` 时只跑该文件，否则跑整包（workspace 聚合在 `runTestsGo`）；
+-- 返回退出码（0 全通过 / 1 有失败 / 2 输入错误），`--verbose` 时末尾打印总耗时。
 export runTests : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> Package -> Eff r Int
 runTests opts pkg = case opts.testOnlyFile of
   Just name => runOnlyFile opts pkg name
@@ -90,11 +86,13 @@ runTests opts pkg = case opts.testOnlyFile of
       pure code
     else pure code
 
+-- | 内部：自 `start`（微秒时间戳）起的毫秒数。
 elapsedMs : Member nClock ClockOp r => Int -> Eff r Int
 elapsedMs start = do
   now <- clockNow
   pure ((now - start) / 1000)
 
+-- | 内部：探测 workspace——单包直接跑，多包按包分组聚合。
 runTestsGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> Package -> Eff r Int
 runTestsGo opts pkg = do
   pkgsR <- workspacePackages (packageDir pkg)
@@ -104,7 +102,7 @@ runTestsGo opts pkg = do
       pure 2
     OkC pkgs => if length pkgs <= 1 then runPackageTests opts pkg else runWorkspaceTests opts pkgs
 
--- 打印一组行（--list / 文件清单用）。
+-- | 内部：逐行打印（`--list` 与文件清单用）。
 printLines : Member nConsole ConsoleOp r => List String -> Eff r Int
 printLines [] = pure 0
 printLines (line :: rest) = do
@@ -114,6 +112,7 @@ printLines (line :: rest) = do
 -- ---------------------------------------------------------------
 -- 单包（没有 test/ 是输入错误，退出码 2）
 -- ---------------------------------------------------------------
+-- | 内部：单包运行。没有 `test/` 是输入错误（退出码 2）；`--list` 只打印文件名。
 runPackageTests : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> Package -> Eff r Int
 runPackageTests opts pkg = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
@@ -131,10 +130,11 @@ runPackageTests opts pkg = do
     pure 2
 
 -- ---------------------------------------------------------------
--- 隐藏的 `--only-file <name>`：父进程 spawn 出来的**子进程模式**。
--- 只跑一个测试文件，打印该文件的 ok/FAIL 行（--verbose 带行尾耗时），不打印汇总；
--- 退出码 0/1 供父进程计数。此模式由 CLI 强制 jobs=1，不会再并行 / 递归 spawn。
+-- 隐藏的 `--only-file` 子进程模式
 -- ---------------------------------------------------------------
+-- | 内部：只跑一个测试文件，打印该文件的 `ok` / `FAIL` 行（`--verbose` 带行尾耗时），
+-- 不打印汇总；退出码 0 / 1 供父进程计数。此模式由 CLI 强制 jobs = 1，不会再并行或
+-- 递归 spawn。
 runOnlyFile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> Package -> String -> Eff r Int
 runOnlyFile opts pkg name = do
   hasTest <- pathExistsDir "${packageDir pkg}/test"
@@ -150,23 +150,26 @@ runOnlyFile opts pkg name = do
     _ <- consolePrint "error: test directory not found: ${packageDir pkg}/test\n"
     pure 2
 
--- 一个包的一组测试文件：jobs=1 用串行的 in-process 路径（行为逐字不变），
--- jobs>1 用进程级并行。两个调用点（单包 / workspace 成员）共用这一处选择。
+-- | 内部：一个包的一组测试文件——jobs = 1 用串行的进程内路径（行为与输出逐字不变），
+-- jobs > 1 用进程级并行。两个调用点（单包 / workspace 成员）共用这一处选择。
 runPackageTestGroup : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> Package -> String -> List String -> Eff r Tally
 runPackageTestGroup opts pkg testDir files =
   if opts.testJobs > 1 then runTestFilesParallel opts (packageDir pkg) testDir files
   else runTestFiles opts (packageContext pkg) testDir files 0 0
 
 -- ---------------------------------------------------------------
--- workspace 聚合：每个包一组，缺 test/ 的包跳过（不是错误：库成员常常没有测试）。
--- --list 模式只列「分组 + 文件」，不打印包数/汇总行（纯清单，exit 0）。
+-- workspace 聚合
 -- ---------------------------------------------------------------
+-- | 内部：每个包一组；缺 `test/` 的包跳过（不是错误：库成员常常没有测试）。`--list`
+-- 模式只列「分组 + 文件」，不打印包数 / 汇总行（纯清单，exit 0）。
 runWorkspaceTests : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> List Package -> Eff r Int
 runWorkspaceTests opts pkgs = if opts.testListOnly then runWorkspaceList opts pkgs
 else do
   _ <- consolePrint "workspace: ${length pkgs} package(s)\n"
   runWorkspaceGo opts pkgs 0 0
 
+-- | 内部：`--list` 的 workspace 版本——逐包打印分组标题与文件名，缺 `test/` 或被过滤
+-- 空的包整组跳过。
 runWorkspaceList : Member nFs FsOp r, Member nConsole ConsoleOp r => TestOpts -> List Package -> Eff r Int
 runWorkspaceList opts [] = pure 0
 runWorkspaceList opts (pkg :: rest) = do
@@ -180,6 +183,8 @@ runWorkspaceList opts (pkg :: rest) = do
       _ <- printLines files
       runWorkspaceList opts rest
 
+-- | 内部：按包顺序运行，累积 pass / fail；缺 `test/` 的包打印提示后跳过，fail-fast
+-- 触发时直接汇总。
 runWorkspaceGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> List Package -> Int -> Int -> Eff r Int
 runWorkspaceGo opts [] pass fail = workspaceFinish pass fail
 runWorkspaceGo opts (pkg :: rest) pass fail = do
@@ -197,13 +202,13 @@ runWorkspaceGo opts (pkg :: rest) pass fail = do
     _ <- consolePrint "-- ${workspacePackageLabel pkg} -- (no test directory)\n"
     runWorkspaceGo opts rest pass fail
 
--- workspace 总汇总 + 退出码（0 全通过 / 1 有失败）。
+-- | 内部：workspace 总汇总行 + 退出码（0 全通过 / 1 有失败）。
 workspaceFinish : Member nConsole ConsoleOp r => Int -> Int -> Eff r Int
 workspaceFinish pass fail = do
   _ <- consolePrint "\nworkspace: ${pass} passed, ${fail} failed\n"
   pure (if fail == 0 then 0 else 1)
 
--- 包名可能为空（只用于展示，不参与语义）。
+-- | 内部：分组标题里的包名；包名为空时退回包目录（只用于展示）。
 workspacePackageLabel : Package -> String
 workspacePackageLabel pkg =
   let
@@ -213,6 +218,7 @@ workspacePackageLabel pkg =
 -- ---------------------------------------------------------------
 -- 测试文件选择（--filter / --list 共用）
 -- ---------------------------------------------------------------
+-- | 内部：只留 `*.vuna` 文件名。
 testFiles : List String -> List String
 testFiles [] = []
 testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest else testFiles rest
@@ -220,23 +226,25 @@ testFiles (name :: rest) = if endsWith ".vuna" name then name :: testFiles rest 
 -- ---------------------------------------------------------------
 -- 过滤（--filter PAT，可重复；对 `<包名>/<文件名>` 与 `<文件名>` 做子串匹配）
 -- ---------------------------------------------------------------
+-- | 内部：是否有 `--filter`。
 filterActive : TestOpts -> Bool
 filterActive opts = case opts.testFilter of
   [] => False
   _ => True
 
+-- | 内部：读目录并按 `--filter` 过滤测试文件。
 filteredTestFiles : Member nFs FsOp r => TestOpts -> String -> String -> Eff r (List String)
 filteredTestFiles opts pkgName dir = do
   names <- fsReadDir dir
   pure (filter (\file => matchesFilter opts.testFilter pkgName file) (testFiles names))
 
--- 多值 OR：无过滤 = 全部匹配；有过滤 = 任一 PAT 命中 `<包名>/<文件名>` 或 `<文件名>`
--- 即匹配。注意「无过滤」与「OR 的终止」必须是两个不同的基例：若把 `[] => True`
+-- | 内部：多值 OR——无过滤时全部匹配。「无过滤」与「OR 的终止」必须是两个不同的基例。
 matchesFilter : List String -> String -> String -> Bool
 matchesFilter [] _ _ = True
 matchesFilter (pat :: rest) pkgName file =
   contains pat "${pkgName}/${file}" || contains pat file || matchesAnyFilter rest pkgName file
 
+-- | 内部：任一 PAT 命中 `<包名>/<文件名>` 或 `<文件名>`。
 matchesAnyFilter : List String -> String -> String -> Bool
 matchesAnyFilter [] pkgName file = False
 matchesAnyFilter (pat :: rest) pkgName file =
@@ -245,6 +253,8 @@ matchesAnyFilter (pat :: rest) pkgName file =
 -- ---------------------------------------------------------------
 -- 逐文件执行；返回 Tally
 -- ---------------------------------------------------------------
+-- | 内部：串行逐文件执行并累积 `Tally`；fail-fast 触发时立即打印汇总并返回，
+-- 已跑部分照常计入。
 runTestFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => TestOpts -> PackageContext -> String -> List String -> Int -> Int -> Eff r Tally
 runTestFiles opts ctx dir [] pass fail = do
   _ <- consolePrint "\n${pass} passed, ${fail} failed\n"
@@ -263,25 +273,25 @@ runTestFiles opts ctx dir (name :: rest) pass fail = do
 
 -- ---------------------------------------------------------------
 -- 进程级并行（jobs > 1）
+-- ---------------------------------------------------------------
+-- | 内部：每个测试文件一个子进程，spawn 当前可执行文件的隐藏模式
+-- `test <包目录> --only-file <文件名> --jobs 1`（父进程 `--verbose` 时追加
+-- `--verbose`）。子进程继承 stdin / stdout / stderr，因此结果行与测试自身的输出可能
+-- 交错；父进程不打印每文件结果行，只用 `processWait` 收退出码并按文件计 pass / fail，
+-- 汇总行与串行逐字一致。
 --
--- 每个测试文件一个子进程：spawn 当前可执行文件的隐藏模式
--- `test <包目录> --only-file <文件名> --jobs 1`（父进程 --verbose 时追加 --verbose）。
--- 子进程继承 stdin/stdout/stderr，因此 `ok`/`FAIL` 行与测试自身的输出**可能交错**
--- （`consolePrint` 每次 flush，单行内容完整；行序不保证）。父进程不打印每文件结果行，
--- 只用 `processWait` 收退出码、按文件计 pass/fail；汇总行与串行逐字一致。
---
--- 调度：running 按启动顺序排队；窗口满（jobs 个在跑）时等**队首**退出再启动下一个。
--- 因为 `processWait` 只能等指定 pid，失败检测发生在队首被 wait 时——并行下 fail-fast
--- 保证「失败后不再启动新文件」，但不保证在窗口里其它文件失败时立即停（它们要等
--- 排到队首才被 wait 到）；已在跑的文件总是等完并计入汇总。
+-- 调度：running 按启动顺序排队，窗口满（jobs 个在跑）时等队首退出再启动下一个。
+-- `processWait` 只能等指定 pid，因此失败检测发生在队首被 wait 时——并行下 fail-fast
+-- 只保证「失败后不再启动新文件」，已在跑的文件总是等完并计入汇总。
 --
 -- fuel = 2 * 文件数 + jobs + 2：每一轮要么 spawn 一个（pending 减一）要么 wait 一个
--- （running 减一），故步数上界成立；显式 fuel 让终止性检查不依赖跨参数测量。
--- ---------------------------------------------------------------
+-- （running 减一），步数上界成立；显式 fuel 让终止性检查不依赖跨参数测量。
 runTestFilesParallel : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => TestOpts -> String -> String -> List String -> Eff r Tally
 runTestFilesParallel opts pkgDir dir files =
   runParallel (2 * length files + opts.testJobs + 2) opts pkgDir dir files [] 0 0 False
 
+-- | 内部：并行调度主体——窗口未满就 spawn 下一个，满了就 wait 队首；`fuel` 用完、
+-- `pending` 为空或 fail-fast 已触发（`stopped`）时收尾。
 runParallel : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Int -> TestOpts -> String -> String -> List String -> List (Pair Int String) -> Int -> Int -> Bool -> Eff r Tally
 runParallel fuel opts pkgDir dir pending running pass fail stopped = if fuel <= 0 then finishRunning opts running pass fail stopped
 else case pending of
@@ -297,7 +307,7 @@ else case pending of
       runParallel (fuel - 1) opts pkgDir dir pending more (if code == 0 then pass + 1 else pass)
         (if code == 0 then fail else fail + 1) (opts.testFailFast && code /= 0)
 
--- 等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
+-- | 内部：等完所有在跑子进程并打印与串行一致的汇总行（fail-fast 触发时也走这里）。
 finishRunning : Member nConsole ConsoleOp r, Member nProcess ProcessOp r => TestOpts -> List (Pair Int String) -> Int -> Int -> Bool -> Eff r Tally
 finishRunning opts [] pass fail stopped = do
   _ <- consolePrint "\n${pass} passed, ${fail} failed\n"
@@ -307,25 +317,26 @@ finishRunning opts ((Pair pid _) :: rest) pass fail stopped = do
   finishRunning opts rest (if code == 0 then pass + 1 else pass)
     (if code == 0 then fail else fail + 1) (stopped || opts.testFailFast && code /= 0)
 
--- 子进程 argv：`test <包目录> --only-file <文件名> --jobs 1 [--verbose]`。
--- 子进程模式（runOnlyFile）不会再并行 / 递归 spawn。
+-- | 内部：子进程 argv——`test <包目录> --only-file <文件名> --jobs 1 [--verbose]`。
 spawnTestArgs : TestOpts -> String -> String -> List String
 spawnTestArgs opts pkgDir name =
   let
     verbose = if opts.testVerbose then ["--verbose"] else []
   in append ["test", pkgDir, "--only-file", name, "--jobs", "1"] verbose
 
--- 单测结果行：默认串行输出逐字一致；--verbose 时行尾追加耗时。
+-- | 内部：打印一条结果行（`ok` / `FAIL`；`--verbose` 时行尾追加耗时）。
 printOutcome : Member nConsole ConsoleOp r => TestOpts -> String -> TestOutcome -> Int -> Eff r Int
 printOutcome opts name TestPassed us =
   fmap natToInt (consolePrint "ok   ${name}${timingText opts us}\n")
 printOutcome opts name (TestFailed message) us =
   fmap natToInt (consolePrint "FAIL ${name}: ${message}${timingText opts us}\n")
 
+-- | 内部：`--verbose` 时的耗时后缀（毫秒），否则空串。
 timingText : TestOpts -> Int -> String
 timingText opts us = if opts.testVerbose then " (${us / 1000}ms)" else ""
 
--- 单个测试：按 main 的返回类别选执行路径。
+-- | 内部：单个测试——按 `main` 的返回类别选执行路径（`Eff` 走效果测试，其余核心求值
+-- 后与期望值比较；未知类别给明确失败）。
 runOneTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
 runOneTest ctx path name = do
   kindR <- dtMainKind ctx path
@@ -349,20 +360,21 @@ runOneTest ctx path name = do
         pure
           (TestFailed "unsupported test main type: ${kind} (expected `main : String` (empty = pass), `main : Int`/`Nat` (0 = pass), `main : Bool` (True = pass), `main : Eff r a` (exit code 0 = pass))")
 
--- 纯测试：`interpretFile` 的核心求值结果与期望值逐字比较。
+-- | 内部：纯测试——`interpretFile` 的核心求值结果与期望值逐字比较。
 pureTest : String -> String -> String -> TestOutcome
 pureTest name output expected =
   if output == expected then TestPassed else TestFailed "expected ${expected}, got ${output}"
 
--- 效果测试：退出码 0 通过；编译/链接失败按 FAIL 记录诊断。
--- 有 `timeout` 命令时走 runIOTestTimed（单测超时），否则退回 runEffectProgram。
+-- | 内部：效果测试——`timeout` 命令存在且超时未关闭时走 `runIOTestTimed`，否则退回
+-- `runIOTestLegacy`。退出码 0 通过；编译 / 链接失败按 FAIL 记录诊断。
 runIOTest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
 runIOTest ctx path name = do
   secs <- testTimeoutSecs 0
   has <- hasTimeoutCmd 0
   if secs <= 0 || not has then runIOTestLegacy ctx path name else runIOTestTimed ctx path name secs
 
--- 无外部超时的路径：临时包编译 + 运行（效果输出直接写终端，只看进程退出码）。
+-- | 内部：无外部超时的效果测试——临时包编译 + 运行，效果输出直接写终端，只看进程
+-- 退出码。
 runIOTestLegacy : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r TestOutcome
 runIOTestLegacy ctx path name = do
   source <- fsReadFile path
@@ -376,12 +388,14 @@ runIOTestLegacy ctx path name = do
 -- ---------------------------------------------------------------
 -- 效果测试的超时执行
 -- ---------------------------------------------------------------
--- 一条子进程命令的结果：正常退出码 / 被超时杀掉。
+-- | 一条子进程命令的结果。
 data CmdOutcome : Type where
+  -- | 正常退出，附退出码。
   CmdDone : Int -> CmdOutcome
+  -- | 被 `timeout` 杀掉。
   CmdTimedOut : CmdOutcome
 
--- 单测超时秒数：未设置/空 → 120；0 关闭；非数字 → 120（不静默放大）。
+-- | 内部：单测超时秒数——未设置 / 空 → 120，0 关闭，非数字 → 120（不静默放大）。
 testTimeoutSecs : Member nEnv EnvOp r => Int -> Eff r Int
 testTimeoutSecs _ = do
   env <- envGetEnv "VUNA_TEST_TIMEOUT"
@@ -390,71 +404,74 @@ testTimeoutSecs _ = do
     Just n => n
   )
 
+-- | 内部：十进制非负整数解析（空串给 `Nothing`）。
 parseNat : String -> Maybe Int
 parseNat s = if s == "" then Nothing else parseDigits (strUnpack s) 0
 
+-- | 内部：十进制数字累积（遇非数字给 `Nothing`）。
 parseDigits : List Int -> Int -> Maybe Int
 parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
--- `timeout`（coreutils）在 PATH 里吗？不在时降级为无外部超时路径（不算 FAIL）。
+-- | 内部：`timeout`（coreutils）是否在 PATH 里；不在时降级为无外部超时路径。
 hasTimeoutCmd : Member nProcess ProcessOp r => Int -> Eff r Bool
 hasTimeoutCmd _ = do
   code <- processRunIn "." ["sh", "-c", "command -v timeout >/dev/null 2>&1"]
   pure (code == 0)
 
--- 临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
+-- | 内部：临时目录根——`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 tempBase : Member nEnv EnvOp r => Int -> Eff r String
 tempBase _ = do
   env <- envGetEnv "TMPDIR"
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
--- 唯一临时目录：microsecond 时间戳基名 + `-N` 后缀探测（与 Vuna.Interp 的同一策略；
--- 递归按 fuel 结构下降，终止性检查可证）。
+-- | 内部：从 `base-fuel` 往下找第一个不存在的目录名；`fuel` 用完就退回 `base`。
 freshTempDir : Member nFs FsOp r => Int -> String -> Eff r String
 freshTempDir fuel base = if fuel <= 0 then pure base
 else do
   exists <- fsFileExists "${base}-${fuel}"
   if exists then freshTempDir (fuel - 1) base else pure "${base}-${fuel}"
 
--- 在 dir 里跑命令；超时（TERM，5s 后 KILL）返回 CmdTimedOut。
--- GNU timeout 的超时退出码是 124（-k 兜底杀掉时 137）；命令自身恰好以这两个码退出
--- 会被当作超时（实际不可能来自 vuna/产物，可接受）。
+-- | 内部：在 `dir` 里跑命令，外部 `timeout` 包住（TERM，5s 后 KILL）。GNU timeout 的
+-- 超时退出码是 124（`-k` 兜底杀掉时 137），命令自身以这两个码退出也会被当作超时
+-- （实际不可能来自 vuna 产物，可接受）。
 runTimedCmd : Member nProcess ProcessOp r => String -> List String -> Int -> Eff r CmdOutcome
 runTimedCmd dir argv secs = do
   code <- processRunIn dir (append ["timeout", "-s", "TERM", "-k", "5", "${secs}s"] argv)
   pure (if code == 124 || code == 137 then CmdTimedOut else CmdDone code)
 
--- 有超时的效果测试：临时目录里编译测试入口（printResult=False，只看退出码），
--- `sh build.sh` 与运行产物两步各自受 timeout 保护；失败/超时都清理临时目录。
--- 目录名含测试文件名：`--jobs` 并行时同一包的多个子进程各自建目录，即使时间戳相同
--- 也不会撞名（同包文件名唯一）。
--- effect 测试二进制缓存：key 含编译器指纹 + 包源码闭包内容 + base 内容 + 测试源码内容。
--- 产物落在 `$VUNA_STORE/views/testbin/<digest>/bin/vuna-test`；命中直接运行，跳过
--- compile + build.sh。只缓存 effect 测试（pure 仍走 interpretFile）。
+-- | effect 测试二进制的缓存对象种类：产物落在
+-- `$VUNA_STORE/views/testbin/<digest>/bin/vuna-test`，命中直接运行，跳过 compile 与
+-- `build.sh`。只缓存 effect 测试（pure 仍走 `interpretFile`）。
 testBinKind : String
 testBinKind = "testbin"
 
+-- | 内部：整数绝对值。
 absInt : Int -> Int
 absInt n = if n < 0 then 0 - n else n
 
+-- | 内部：`Int` → 十进制文本。
 strOfInt : Int -> String
 strOfInt n = strFromInt n
 
+-- | 内部：按顺序把每个文件内容的哈希混进一个整数累积值。
 hashFilesContent : Member nFs FsOp r => List String -> Eff r Int
 hashFilesContent files = hashFilesGo 0 files
 
+-- | 内部：`hashFilesContent` 的递归主体。
 hashFilesGo : Member nFs FsOp r => Int -> List String -> Eff r Int
 hashFilesGo acc [] = pure acc
 hashFilesGo acc (f :: rest) = do
   text <- fsReadFile f
   hashFilesGo (acc * 1000003 + absInt (textHashOf text)) rest
 
+-- | 内部：对每个目录先收集源码文件再混哈希。
 hashRoots : Member nFs FsOp r => List String -> Eff r Int
 hashRoots dirs = hashRootsGo 0 dirs
 
+-- | 内部：`hashRoots` 的递归主体。
 hashRootsGo : Member nFs FsOp r => Int -> List String -> Eff r Int
 hashRootsGo acc [] = pure acc
 hashRootsGo acc (d :: rest) = do
@@ -462,6 +479,8 @@ hashRootsGo acc (d :: rest) = do
   h <- hashFilesContent files
   hashRootsGo (acc * 1000003 + h) rest
 
+-- | 内部：effect 测试二进制的缓存 key——编译器指纹 + 包源码闭包内容 + 测试源码内容
+-- + 工具链标识。
 testBinDigest : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
 testBinDigest ctx path = do
   fp <- toolCompilerFingerprint
@@ -473,6 +492,7 @@ testBinDigest ctx path = do
       "testbin 4|${strOfInt fp}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}|${tool}"
   in pure (strOfInt (absInt (textHashOf input)))
 
+-- | 内部：运行已缓存的测试二进制，按退出码给结果（超时记 FAIL）。
 runCachedTestBin : Member nProcess ProcessOp r => String -> Int -> Eff r TestOutcome
 runCachedTestBin view secs = do
   runRes <- runTimedCmd view ["bin/vuna-test"] secs
@@ -482,6 +502,9 @@ runCachedTestBin view secs = do
     CmdDone code => TestFailed "effect program exited with code ${code}"
   )
 
+-- | 内部：在 `dir` 里编译测试入口（`printResult = False`，只看退出码），再跑
+-- `sh build.sh bin/vuna-test`；`compileToDir` 在进程内执行（不受外部超时），
+-- `sh build.sh` 由 `timeout` 保护，失败 / 超时都给出 FAIL。
 buildTestBin : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> String -> Int -> Eff r TestOutcome
 buildTestBin ctx path name dir secs = do
   compiled <- compileToDir ctx path False dir
@@ -497,6 +520,11 @@ buildTestBin ctx path name dir secs = do
           TestFailed "build: ${name}: `sh build.sh bin/vuna-test` failed in ${dir} (exit ${code})"
       )
 
+-- | 内部：有超时的效果测试——缓存命中直接运行；未命中先占 scratch 构建，构建成功发布
+-- 到 view 再运行；scratch 被并发构建者占用时不等待，退回私有临时构建（不发布）。
+--
+-- 私有临时目录名含测试文件名，`--jobs` 并行时同一包的多个子进程即使时间戳相同也不会
+-- 撞名（同包文件名唯一）。失败 / 超时都清理临时目录。
 runIOTestTimed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Int -> Eff r TestOutcome
 runIOTestTimed ctx path name secs = do
   digest <- testBinDigest ctx path
@@ -537,7 +565,7 @@ runIOTestTimed ctx path name secs = do
           )
         _ => ioCleanup dir built
 
--- 删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
+-- | 内部：删掉本次效果测试的临时目录（绝对路径，cwd 无关）后返回结果。
 ioCleanup : Member nProcess ProcessOp r => String -> TestOutcome -> Eff r TestOutcome
 ioCleanup dir outcome = do
   _ <- processRunIn "/" ["rm", "-rf", dir]

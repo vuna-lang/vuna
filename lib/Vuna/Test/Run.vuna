@@ -1,17 +1,24 @@
+-- | `vuna test`（suite 模式）的原生执行器：发现用例、并行调度、单 case 执行与结果汇总。
+--
+-- 数据流：`test/suite.toml` → [Vuna.Test.Suite.discoverCases] → 本模块执行每个 case →
+-- 结果 / 汇总 / JSON。golden / error / runtime / seed / steps 有 case 私有目录；lint /
+-- check / fix 全进程内、不建 case 目录。用例模型在 [Vuna.Test.Suite]，进程内执行在
+-- [Vuna.Test.InProc]，期望值比对在 [Vuna.Test.Expect]。
+--
+-- 并行模型：父进程 spawn N 个自身（隐藏的 `--worker i/N`），worker 按 `index mod N`
+-- 静态分片；每个 case 写一份 TSV 到临时 results 目录，父进程按全局下标读回。这样避开
+-- `processWait` 只能等指定 pid 的队首阻塞，也不必在父进程收集海量输出。非 e2e tier
+-- 改用 LPT 分桶，见「LPT 调度」一节。
+--
+-- 单 case 的两条执行路径：golden / error / check / lint / fix / runtime 走进程内
+-- 探针（不起 CLI 子进程）；seed、steps（`*.steps`）与产物执行走子进程——seed 用
+-- `vuna-seed` 真实编译，steps 与产物执行在跑真实产物，进程内无法替代。子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写入临时
+-- 目录，由 helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件与退出码。
+--
+-- 结果缓存：golden / error 的成功结果写成对象库里的 test verdict（输入是内容摘要），
+-- steps 不缓存；`--no-cache` / `--bless*` 时整体关闭。
 module Vuna.Test.Run where
 
--- Vuna.Test.Run：suite 模式的原生执行器。
---
--- 数据流：
---   test/suite.toml -> Vuna.Test.Suite.discoverCases -> 本模块并行执行
---   -> 每 case 独立临时目录 + 子进程 capture/timeout -> 结果/汇总/JSON
---
--- 并行模型：父进程按 `--jobs` spawn N 个自身（隐藏 `--worker i/N`），worker 按
--- `index mod N` 静态分片；每个 case 写一份 TSV 到临时 results 目录，父进程按序
--- 读回。这样避开 `processWait` 只能等指定 pid 的队首阻塞，也避免父进程收集海量输出。
---
--- 子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写进临时目录，由
--- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
 import Vuna.Compiler.Base.Common
 import Base.Nat
 import Base.Maybe
@@ -37,69 +44,100 @@ import Base.EffProcess
 import Base.EffExit
 import Base.EffArgs
 
--- 执行环境。
+-- | 一次 suite run 的执行环境：每个进程（父进程 / 各 worker）在 `runSuiteOnce` 里构造一次。
 record Env where
+  -- | 仓库（suite）根目录。
   envRoot : String
+  -- | case 的工作目录（`<root>/test`）；steps 与产物执行用它作 cwd。
   envCwd : String
+  -- | `runSuiteOnce` 产出本次 run 的临时根（`TMPDIR` 与子进程 cmd 输出文件都落在这里）。
   envTmp : String
+  -- | 被测 `vuna` 可执行文件路径。
   envVuna : String
+  -- | seed 编译器的可执行文件（`CSeed` 用例用）。
   envSeed : String
+  -- | base 包目录（`<root>/base`）。
   envBase : String
+  -- | `ocamlopt` 命令名（子进程环境里的 `OCAMLOPT`）。
   envOcamlopt : String
+  -- | 子进程捕获 helper 脚本的路径（`writeHelper` 产出）。
   envHelper : String
+  -- | 结果缓存与构建桶的根（`--cache-dir`，默认 `<root>/.local/test-cache`）。
   envCacheDir : String
+  -- | 是否允许读写结果缓存（`--no-cache` / `--bless` / `--bless-diag` 时关）。
   envCacheEnabled : Bool
+  -- | base 源码树的内容哈希（结果缓存 key 与构建桶名的一部分）。
   envBaseHash : Int
+  -- | 是否把失败 golden 的期望输出回写为实际输出。
   envBless : Bool
+  -- | 是否回写负例的 `.diag.json`。
   envBlessDiag : Bool
+  -- | 是否以 worker 模式运行（隐藏的 `--worker i/N`）。
   envWorker : Bool
-  -- 本 run 的输入寻址对象库根（父进程解析一次，worker/case 共用；见 runSuiteOnce）。
-  -- store-isolated 的 steps case 例外，仍用 case 私有 store。
+  -- | 本 run 的输入寻址对象库根（父进程解析一次，worker/case 共用；见 `runSuiteOnce`）。
+  -- `store-isolated` 的 steps case 例外，仍用 case 私有 store。
   envStore : String
-  -- 增量构建桶（跨 run 持久；见 buildCacheDir）。
+  -- | 增量构建桶（跨 run 持久；见 `buildCacheDir`）。
   envBuildDir : String
-  -- 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
+  -- | 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
   -- 命中时 golden 的 check/interp 不再 spawn CLI（~200ms → ~10ms），未命中回退子进程。
   envSession : IORef Session
 
--- 一次子进程调用：退出码 + 分离的 stdout/stderr + 是否被 timeout 杀掉。
+-- | 一次子进程调用：退出码、分离的 stdout/stderr、是否被判为超时。
 record CmdResult where
+  -- | 退出码。
   cmdCode : Int
+  -- | stdout（合并输出模式下 stderr 也在这里）。
   cmdOut : String
+  -- | stderr（合并输出模式或没有输出时为空串）。
   cmdErr : String
+  -- | 退出码是 `timeout` 的 124 或被杀后的 137。
   cmdTimedOut : Bool
 
--- 一条断言。
+-- | 一条断言：名称、是否通过、失败时展示的细节。
 record Assertion where
+  -- | 断言名，出现在汇总与失败消息里。
   assertionName : String
+  -- | 是否通过。
   assertionOk : Bool
+  -- | 失败时的细节（通过时通常为空串）。
   assertionDetail : String
 
--- 一个 case 的结果。
+-- | 一个 case 的结果；父进程从 worker 写的 TSV 读回的就是这个形状（失败消息除外）。
 record CaseResult where
+  -- | case id。
   resId : String
+  -- | 状态：`pass` / `fail` / `skip` / `cached` / `blessed`。
   resStatus : String
+  -- | 通过的断言数。
   resPass : Int
+  -- | 失败的断言数。
   resFail : Int
+  -- | 断言总数。
   resChecks : Int
+  -- | 耗时（毫秒）。
   resMs : Int
+  -- | 失败消息，每行一条（`名称: 细节`）。
   resMessages : List String
 
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
+-- | 内部：读环境变量；未设置时是空串。
 envVar : Member nEnv EnvOp r => String -> Eff r String
 envVar name = envGetEnv name
 
+-- | 内部：读环境变量，未设置或为空串时给回退值。
 envOr : Member nEnv EnvOp r => String -> String -> Eff r String
 envOr name fallback = do
   value <- envVar name
   pure (if value == "" then fallback else value)
 
+-- | 内部：`Int` → 十进制字符串。
 strOfInt : Int -> String
 strOfInt n = strFromInt n
 
--- 去掉结尾换行（命令替换语义；`$(...)` 会吃掉尾随换行）。
+-- | 去掉结尾的所有换行（命令替换语义：`$(...)` 会吃掉尾随换行）。
 trimNewlines : String -> String
 trimNewlines s =
   let
@@ -107,30 +145,35 @@ trimNewlines s =
     kept = dropNewlineChars rev
   in strPack (reverse kept)
 
+-- | 内部：从列表头部连续丢弃换行字节（10），遇到第一个非换行即停。
 dropNewlineChars : List Int -> List Int
 dropNewlineChars [] = []
 dropNewlineChars (c :: rest) = if c == 10 then dropNewlineChars rest else c :: rest
 
--- 文件名安全化：case id 里的 `/` 等替换成 `_`（避免把临时产物写进子目录）。
+-- | 文件名安全化：把 case id 里的 `/` 等字符替换成 `_`，避免临时产物写进子目录。
 safeName : String -> String
 safeName s = strPack (map safeChar (strUnpack s))
 
+-- | 内部：单个字节的安全化判定：字母、数字与 `-` `.` `_` 保留，其余变 `_`。
 safeChar : Int -> Int
 safeChar c =
   if c >= 97 && c <= 122 then c
   else if c >= 65 && c <= 90 then c
   else if c >= 48 && c <= 57 then c else if c == 45 || c == 46 || c == 95 then c else 95
 
+-- | 内部：列表长度。
 listLength : List a -> Int
 listLength [] = 0
 listLength (x :: rest) = 1 + listLength rest
 
+-- | 内部：整数列表求和。
 sumInts : List Int -> Int
 sumInts [] = 0
 sumInts (x :: rest) = x + sumInts rest
 
 -- 显式效果遍历：纯逻辑（case 模型 / JSON / 路径处理）保持纯，只有真正含效果的列表
--- 操作用这两个局部辅助（本模块没有现成的 Monad 遍历可复用）。
+-- 操作用下面三个局部辅助。
+-- | 内部：对列表逐元素跑效果函数，保持顺序。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -138,6 +181,7 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
+-- | 内部：对列表逐元素跑效果函数并拼接结果，保持顺序。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -145,6 +189,7 @@ concatMapEff f (x :: rest) = do
   ys <- concatMapEff f rest
   pure (append xs ys)
 
+-- | 内部：用效果谓词过滤列表，保持顺序。
 filterEff : {r : Row} -> (a -> Eff r Bool) -> List a -> Eff r (List a)
 filterEff pred [] = pure []
 filterEff pred (x :: rest) = do
@@ -155,10 +200,10 @@ filterEff pred (x :: rest) = do
 -- ---------------------------------------------------------------
 -- 临时目录与 helper
 -- ---------------------------------------------------------------
--- 临时根必须位于**任何 vuna.toml 之外**：§39 一类用例要验证「无 manifest → base-only」，
--- 若临时根落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库根包，
--- 上下文语义被悄悄改写。策略：优先 TMPDIR，其次 /tmp；两者都在
--- manifest 内时回落 TMPDIR（调用方自己的断言会暴露问题）。
+-- 临时根必须位于**任何 vuna.toml 之外**：「无 manifest → base-only」一类用例若把临时根
+-- 落在包内（Nix 沙箱里 TMPDIR 可能就是工作树根），向上找 manifest 会命中仓库根包，
+-- 上下文语义被悄悄改写。
+-- | 内部：从 `dir` 起向上最多 `fuel` 层找 `vuna.toml`，找到即 True。
 hasManifestAncestorFuel : Member nFs FsOp r => Int -> String -> Eff r Bool
 hasManifestAncestorFuel fuel dir = if fuel <= 0 then pure False
 else do
@@ -169,9 +214,11 @@ else do
       parent = Vuna.Cli.Args.parentOf dir
     in if parent == dir then pure False else hasManifestAncestorFuel (fuel - 1) parent
 
+-- | 内部：`dir` 或其祖先里有 `vuna.toml` 吗（向上最多 64 层）。
 hasManifestAncestor : Member nFs FsOp r => String -> Eff r Bool
 hasManifestAncestor dir = hasManifestAncestorFuel 64 dir
 
+-- | 内部：返回第一个存在、且祖先链上没有 `vuna.toml` 的候选目录。
 firstManifestFree : Member nFs FsOp r => List String -> Eff r (Maybe String)
 firstManifestFree [] = pure Nothing
 firstManifestFree (dir :: rest) = do
@@ -181,12 +228,13 @@ firstManifestFree (dir :: rest) = do
     if not hasAncestor then pure (Just dir) else firstManifestFree rest
   else firstManifestFree rest
 
+-- | 内部：临时根基线：取 `TMPDIR`，再按 manifest-free 规则修正。
 tempBase : Member nFs FsOp r, Member nEnv EnvOp r => Int -> Eff r String
 tempBase _ = do
   value <- envVar "TMPDIR"
   manifestFreeBase value
 
--- 临时根选择：优先 TMPDIR，其次 /tmp；两者都在 manifest 内时回落 primary。
+-- | 内部：优先 `TMPDIR`，其次 `/tmp`；两者都在 manifest 内时回落 primary（调用方的断言会暴露问题）。
 manifestFreeBase : Member nFs FsOp r => String -> Eff r String
 manifestFreeBase value =
   let
@@ -200,6 +248,7 @@ manifestFreeBase value =
       Nothing => primary
     )
 
+-- | 内部：在候选路径上找第一个不存在的名字并建目录（后缀带剩余次数，最多 1000 次）。
 freshTempRoot : Member nFs FsOp r, Member nProcess ProcessOp r => Int -> String -> Eff r String
 freshTempRoot fuel candidate = if fuel <= 0 then pure candidate
 else do
@@ -210,16 +259,21 @@ else do
       _ <- ensureDirPath candidate
       pure candidate
 
+-- | 内部：新建本次 run 的临时根 `<base>/vuna-suite-<时间戳>-<tag>`。
 makeTempRoot : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
 makeTempRoot tag = do
   base <- tempBase 0
   stamp <- clockNow
   freshTempRoot 1000 "${base}/vuna-suite-${strOfInt stamp}-${safeName tag}"
 
+-- | 子进程捕获 helper 的 shell 正文：`$1` 超时秒数、`$2`/`$3` 输出文件、`$4` stdin 文件
+-- （`-` = 不重定向）、`$5` 合并标志，其余为命令 argv。超时与合并共四种执行组合，
+-- `timeout` 的退出码原样透传；秒数为 0 或没有 `timeout` 命令时直接执行。
 helperScript : String
 helperScript =
   "#!/bin/sh\nsecs=$1\nout=$2\nerr=$3\ninp=$4\nmerge=$5\nshift 5\nif [ \"$secs\" -gt 0 ] && command -v timeout >/dev/null 2>&1; then\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>&1\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" >\"$out\" 2>\"$err\"\n    else\n      timeout --foreground -s TERM -k 10 \"$secs\" \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nelse\n  if [ \"$merge\" = \"1\" ]; then\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>&1\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>&1\n    fi\n  else\n    if [ \"$inp\" = \"-\" ]; then\n      \"$@\" >\"$out\" 2>\"$err\"\n    else\n      \"$@\" <\"$inp\" >\"$out\" 2>\"$err\"\n    fi\n  fi\n  rc=$?\nfi\nexit $rc\n"
 
+-- | 内部：把 `helperScript` 写进 `tmp/run-capture.sh` 并返回其路径。
 writeHelper : Member nFs FsOp r => String -> Eff r String
 writeHelper tmp = do
   _ <- fsWriteFile "${tmp}/run-capture.sh" helperScript
@@ -228,12 +282,14 @@ writeHelper tmp = do
 -- ---------------------------------------------------------------
 -- 子进程
 -- ---------------------------------------------------------------
+-- | 内部：读文件；不存在时给空串。
 readMaybeFile : Member nFs FsOp r => String -> Eff r String
 readMaybeFile path = do
   exists <- pathExistsFile path
   if exists then fsReadFile path else pure ""
 
--- 运行 argv（cwd 由 processRunIn 控制），timeout 秒级；返回退出码与分离输出。
+-- | 内部：经捕获 helper 跑 argv（cwd 由 `processRunIn` 给），超时按秒；`merge` 选
+-- stdout/stderr 合并还是分离。返回退出码与输出，124/137 记为超时。
 runCmdWith : Member nFs FsOp r, Member nProcess ProcessOp r => Bool -> Env -> String -> String -> Int -> List String -> Eff r CmdResult
 runCmdWith merge env tag cwd secs argv =
   let
@@ -248,38 +304,41 @@ runCmdWith merge env tag cwd secs argv =
     err <- readMaybeFile errPath
     pure (CmdResult code out err (code == 124 || code == 137))
 
+-- | 内部：`runCmdWith` 的分离输出版本（stdout 与 stderr 各读各的文件）。
 runCmd : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> String -> Int -> List String -> Eff r CmdResult
 runCmd env tag cwd secs argv = runCmdWith False env tag cwd secs argv
 
+-- | 内部：`runCmdWith` 的合并输出版本（stderr 并入 stdout，`cmdErr` 为空）。
 runCmdMerged : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> String -> Int -> List String -> Eff r CmdResult
 runCmdMerged env tag cwd secs argv = runCmdWith True env tag cwd secs argv
 
--- 给子进程注入 suite 需要的环境（父进程不能 setenv）。
+-- | 内部：给 argv 前置 `env VUNA=… VUNA_SEED=… VUNA_BASE=… OCAMLOPT=… VUNA_SUITE_ROOT=…`
+-- （父进程不能 setenv，只能给子进程注入）。
 withEnv : Env -> List String -> List String
 withEnv env argv =
   append
     ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}"]
     argv
 
--- family / tools case 的进程环境：TMPDIR 按 worker 隔离，对象库与整个 suite 共用
--- （父进程解析一次，见 runSuiteOnce）。对象库是输入寻址的：同一输入同一路径、
--- 原子写，日常 check/build 与测试共用同一根不会互相覆盖；只有断言缓存布局/GC/
--- 冷命中的 store-isolated case 才用私有 store。
+-- 对象库是输入寻址的：同一输入同一路径、原子写，日常 check/build 与测试共用同一根
+-- 不会互相覆盖；只有断言缓存布局/GC/冷命中的 `store-isolated` case 才用私有 store。
+-- | 内部：family / tools case 的进程环境：TMPDIR 按 worker 隔离，对象库与整个 suite 共用。
 withEnvIface : Env -> List String -> List String
 withEnvIface env argv = withEnvIfaceAt env "" argv
 
--- 显式 store 覆盖（`store-isolated` 一类 case 需要私有 store）；默认由 env.envStore 决定。
+-- | 内部：同上，但可显式覆盖对象库根（空串 = 用 `env.envStore`）。
 withEnvIfaceAt : Env -> String -> List String -> List String
 withEnvIfaceAt env storeOverride argv =
   let
     store = if storeOverride == "" then env.envStore else storeOverride
   in withEnv env (append ["env", "TMPDIR=${env.envTmp}", "VUNA_STORE=${store}"] argv)
 
--- steps case 的进程环境：TMPDIR/REPL 历史按 **case** 隔离（同一 worker 内多个 steps
--- case 顺序执行，共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染）。对象库默认与 suite
--- 共用；只有 store-isolated case 用 `${caseTmp}/store`。
--- wasmtime 的编译缓存走 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；
--- 沙箱里 HOME 是 /homeless-shelter，因此每个 case 指到自己的 XDG 缓存根。
+-- | 内部：steps case 的进程环境：TMPDIR / REPL 历史 / XDG 缓存按 case 隔离（同一 worker
+-- 内多个 steps case 顺序执行，共享 `envTmp` 会让 `$TMPDIR/ws1` 之类互相污染）；对象库
+-- 默认与 suite 共用，`isolated` 时用 `${caseTmp}/store`。
+--
+-- wasmtime 的编译缓存只认 `$HOME/.cache`（`WASMTIME_CACHE_DIR` 不生效）；沙箱里 HOME 是
+-- /homeless-shelter，因此每个 case 指到自己的 XDG 缓存根。
 withStepsEnv : Env -> String -> Bool -> List String -> List String
 withStepsEnv env caseTmp isolated argv =
   let
@@ -287,48 +346,60 @@ withStepsEnv env caseTmp isolated argv =
   in withEnv env
     (append ["env", "TMPDIR=${caseTmp}", "VUNA_STORE=${store}", "VUNA_REPL_HISTORY=${caseTmp}/repl-history", "XDG_CACHE_HOME=${caseTmp}/cache"] argv)
 
+-- | 内部：stdout 与 stderr 拼接（分离模式下 stdout 在前）。
 combinedOut : CmdResult -> String
 combinedOut r = r.cmdOut ++ r.cmdErr
 
 -- ---------------------------------------------------------------
 -- 断言
 -- ---------------------------------------------------------------
+-- | 断言退出码为 0。
 assertExit : String -> Int -> Assertion
 assertExit name code = Assertion name (code == 0) "exit ${strOfInt code}"
 
+-- | 断言退出码非 0。
 assertExitNonZero : String -> Int -> Assertion
 assertExitNonZero name code = Assertion name (code /= 0) "expected non-zero exit, got 0"
 
+-- | 断言 `hay` 含片段 `needle`。
 assertContains : String -> String -> String -> Assertion
 assertContains name hay needle =
   Assertion name (contains needle hay) "missing fragment: ${needle}\nactual:\n${hay}"
 
+-- | 断言两个字符串逐字相等。
 assertEq : String -> String -> String -> Assertion
 assertEq name expected actual =
   Assertion name (expected == actual) "expected:\n${expected}\nactual:\n${actual}"
 
+-- | 断言文件不存在。
 assertAbsent : Member nFs FsOp r => String -> String -> Eff r Assertion
 assertAbsent name path = do
   exists <- pathExistsFile path
   pure (Assertion name (not exists) "should not exist: ${path}")
 
+-- | 断言输出为空串。
 assertSilent : String -> String -> Assertion
 assertSilent name out = Assertion name (out == "") "expected no output, got:\n${out}"
 
+-- | 内部：通过的断言数。
 countPass : List Assertion -> Int
 countPass [] = 0
 countPass (a :: rest) = (if a.assertionOk then 1 else 0) + countPass rest
 
+-- | 内部：失败的断言数。
 countFail : List Assertion -> Int
 countFail [] = 0
 countFail (a :: rest) = (if a.assertionOk then 0 else 1) + countFail rest
 
+-- | 内部：失败断言 → `名称: 细节` 消息列表，保持顺序。
 failMessages : List Assertion -> List String
 failMessages [] = []
 failMessages (a :: rest) =
   if a.assertionOk then failMessages rest
   else "${a.assertionName}: ${a.assertionDetail}" :: failMessages rest
 
+-- | 内部：把断言列表汇总成 `CaseResult`：全部通过为 `pass`，否则 `fail`；
+-- 耗时取 `clockNow - start` 的毫秒数。
 finishCase : Member nClock ClockOp r => String -> Int -> List Assertion -> Eff r CaseResult
 finishCase id start assertions =
   let
@@ -342,9 +413,9 @@ finishCase id start assertions =
 -- ---------------------------------------------------------------
 -- golden / error case
 -- ---------------------------------------------------------------
--- 预热依赖接口（只在父进程跑一次）：`vuna check <base>` 把 base 的模块接口写进
--- 对象库（`$VUNA_STORE/objects/iface`），worker 共用同一根，因此后续 check/interp
--- 只精化自己的入口。失败只降级（会话回退 CLI），不影响用例结果。
+-- | 预热依赖接口：`vuna check <base>` 把 base 的模块接口写进对象库
+-- （`$VUNA_STORE/objects/iface`），worker 共用同一根，因此后续 check/interp 只精化自己的
+-- 入口。只在父进程跑一次；失败只降级（会话回退 CLI），不影响用例结果。返回退出码。
 warmIfaces : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> Eff r Int
 warmIfaces env = do
   r <-
@@ -352,26 +423,29 @@ warmIfaces env = do
       (withEnvIface env [env.envVuna, "check", env.envBase])
   pure r.cmdCode
 
+-- | 内部：case 私有的 codegen 输出目录。
 uniqueOutDir : Env -> String -> String
 uniqueOutDir env id = "${env.envTmp}/out-${safeName id}"
 
+-- | 内部：`rm -rf` 一个路径，返回退出码。
 removeTree : Member nProcess ProcessOp r => String -> Eff r Int
 removeTree path = processRunIn "/" ["rm", "-rf", path]
 
 -- ---------------------------------------------------------------
 -- 增量构建缓存：按「生成模块集」复用 ocamlopt 产物
 -- ---------------------------------------------------------------
--- 每个 case 的 codegen 都产出「整棵 base + 自己的 Main.ml」；base 部分对同一模块集
--- 逐字节一致，但每个 case 用独立目录会让每次从零 ocamlopt 编译 ~25 个单元
--- （~650ms）。这里先 codegen 到 case 私有 staging，再按 staging 里的模块集取
--- **每 worker 共享**的构建目录，整份拷进去后跑 build.sh：内容哈希 stamp 让 base 单元
--- 全部命中，只重编 Main.ml 并链接（~250ms）。模块集相同的 case 互相加速，模块集变
--- 化才付一次冷编译；worker 内 case 串行执行，目录无并发写。
--- key 用「名字哈希之和」：与 readDir 顺序无关；万一碰撞，build.sh 的 clean 检测会
--- 退回全量重建（只是慢，不会错）。
+-- 每个 case 的 codegen 都产出「整棵 base + 自己的 Main.ml」；base 部分对同一模块集逐字节
+-- 一致，但每个 case 用独立目录会让每次从零 ocamlopt 编译 ~25 个单元（~650ms）。这里先
+-- codegen 到 case 私有 staging，再按 staging 里的模块集取 **每 worker 共享**的构建目录，
+-- 整份拷进去后跑 build.sh：内容哈希 stamp 让 base 单元全部命中，只重编 Main.ml 并链接。
+-- 模块集相同的 case 互相加速，模块集变化才付一次冷编译；worker 内 case 串行执行，目录
+-- 无并发写。
+-- | 内部：模块名集合 → 构建桶 key（名字强哈希之和，与 readDir 顺序无关；万一碰撞只是
+-- 触发全量重建，不会算错）。
 buildSetKey : List String -> String
 buildSetKey names = strOfInt (nonNegTotal (map hashTextStrong names))
 
+-- | 内部：一组哈希的绝对值之和。
 nonNegTotal : List Int -> Int
 nonNegTotal [] = 0
 nonNegTotal (h :: rest) =
@@ -379,18 +453,18 @@ nonNegTotal (h :: rest) =
     v = if h < 0 then 0 - h else h
   in v + nonNegTotal rest
 
--- 共享构建目录的 key：staging 里的产物名集合（Main.ml 每 case 不同，不参与）。
--- 目录在 `--cache-dir`（默认 `.local/test-cache`）下按「worker 作用域 + 编译器指纹 +
--- base 哈希」分桶 ⇒ 跨 run 复用 base 的 .cmx：本地重跑不再冷编译整棵 base。
--- 注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为重编，
--- 极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
+-- | 共享构建目录：`<env.envBuildDir>/set-<模块集 key>`。桶名外层已含「worker 作用域 +
+-- 编译器指纹 + base 哈希」，所以跨 run 复用 base 的 `.cmx`。
+--
+-- 两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为重编，极端情况下
+-- 互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 buildCacheDir : Member nFs FsOp r => Env -> String -> Eff r String
 buildCacheDir env staging = do
   names <- fsReadDir staging
   pure "${env.envBuildDir}/set-${buildSetKey names}"
 
--- 把 staging 整份同步进共享目录（base 的 .ml 内容不变 ⇒ stamp 命中；Main.ml 换成
--- 本 case 的）。
+-- | 内部：把 staging 整份同步进共享构建目录（base 的 `.ml` 内容不变 ⇒ stamp 命中；
+-- Main.ml 换成当前 case 的），返回 `cp` 退出码。
 syncBuildDir : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 syncBuildDir staging dir = do
   _ <- ensureDirPath dir
@@ -399,99 +473,126 @@ syncBuildDir staging dir = do
 -- ---------------------------------------------------------------
 -- 进程内探针（**零子进程**）
 -- ---------------------------------------------------------------
--- 会话（依赖接口 + termAux 缓存）优先；不可用时在同一进程内退回全量精化
--- （`checkFileSessioned` / `interpFileSessioned`）。绝不 spawn `vuna`。
+-- | 内部：进程内 check 一个源文件：会话（依赖接口 + termAux 缓存）优先，不可用时在同一
+-- 进程内退回全量精化。绝不 spawn `vuna`。
 probeCheckIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> String -> Eff r (Check (List Diagnostic))
 probeCheckIn env source = checkFileSessioned env.envSession env.envBase source
 
+-- | 内部：进程内 interp 一个源文件，路径选择同 `probeCheckIn`。
 probeInterpIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> String -> Eff r (Check String)
 probeInterpIn env source = interpFileSessioned env.envSession env.envBase source
 
--- 负例的 check：**全量**路径（`warnUnusedDefsIn` 只在全量尾部跑，未使用/遮蔽类
--- warning 只在它那里产生；增量会话不产这些）。仍然零子进程。
+-- 负例的 check 必须走**全量**路径：`warnUnusedDefsIn` 只在全量尾部跑，未使用/遮蔽类
+-- warning 只在它那里产生，增量会话不产这些。
+-- | 内部：进程内的全量 check（负例用）。仍然零子进程。
 probeCheckInFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> String -> Eff r (Check (List Diagnostic))
 probeCheckInFull env source = checkFile source
 
+-- | 内部：进程内的全量 interp（负例用）。
 probeInterpInFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check String)
 probeInterpInFull source = interpFile source
 
+-- | 内部：进程内检查一个包目录（目录型 `.diag.json` 夹具用）。
 probePackageIn : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> String -> Eff r (Check (List Diagnostic))
 probePackageIn env dir = checkPackageAt dir
 
+-- | 内部：`Check` 是否成功。
 checkPassed : Check a -> Bool
 checkPassed (OkC _) = True
 checkPassed (ErrC _) = False
 
+-- | 内部：interp 结果 → 文本：成功取输出（去尾换行），失败取诊断文本。
 interpTextOf : Check String -> String
 interpTextOf (OkC s) = trimNewlines s
 interpTextOf (ErrC e) = diagText e
 
+-- | 内部：失败时给诊断文本，成功给空串。
 diagBriefOf : Check a -> String
 diagBriefOf (OkC _) = ""
 diagBriefOf (ErrC e) = diagText e
 
+-- | 断言该 case 的进程内耗时不超过 `caseTimeout` 秒预算。
 timeoutAssert : Case -> Int -> Assertion
 timeoutAssert c ms =
   Assertion "case timeout" (ms <= c.caseTimeout * 1000)
     "in-process case took ${strOfInt ms}ms, over ${strOfInt c.caseTimeout}s budget"
 
--- 跳过路径的占位诊断（不参与断言）。
+-- | 内部：跳过路径的占位诊断（某阶段未请求时放进记录，不参与断言）。
 caseSkipDiag : String -> Diagnostic
 caseSkipDiag why = diagNoLoc SevError PhDriver CatTool "case-skip" why
 
 -- ---------------------------------------------------------------
 -- 结构化诊断期望（`.diag.json` 唯一真源）
 -- ---------------------------------------------------------------
+-- | 内部：`.diag.json` 路径 → 相对 `test/` 的目录（诊断投影用）；不是 `expected.diag.json` 时给空串。
 caseRelOf : Env -> String -> String
 caseRelOf env diagPath =
   if not (endsWith "expected.diag.json" diagPath) then ""
   else relativeTo "${env.envRoot}/test" (Vuna.Cli.Args.parentOf diagPath)
 
+-- | 内部：读 `.diag.json` 并解析成期望键序列；读不到或解析失败走 `ErrC`。
 expectKeysOf : Member nFs FsOp r => Env -> String -> Eff r (Check (List String))
 expectKeysOf env diagPath = do
   text <- fsReadFile diagPath
   pure (expectKeys env.envRoot env.envBase (caseRelOf env diagPath) text)
 
+-- | 内部：把 check 结果投影成与期望同口径的键序列（`ErrC` 时展开其中的诊断）。
 actualKeysOf : Env -> String -> Check (List Diagnostic) -> List String
 actualKeysOf env caseRel (ErrC e) = projectDiags env.envRoot env.envBase caseRel (flattenErr e)
 actualKeysOf env caseRel (OkC ds) = projectDiags env.envRoot env.envBase caseRel ds
 
+-- | 内部：期望键里是否有 error 级条目。
 expectHasError : List String -> Bool
 expectHasError keys = any (\k => startsWith "error|" k) keys
 
+-- | 内部：同上；读不到期望文件（`ErrC`）按没有 error 处理。
 expectHasErrorOf : Check (List String) -> Bool
 expectHasErrorOf (OkC keys) = expectHasError keys
 expectHasErrorOf (ErrC _) = False
 
+-- | 内部：`ExpectDiff` → `Assertion`。
 diffToAssertion : ExpectDiff -> Assertion
 diffToAssertion d = Assertion d.diffName d.diffOk d.diffDetail
 
+-- | 内部：批量转换，保持顺序。
 diffsToAssertions : List ExpectDiff -> List Assertion
 diffsToAssertions [] = []
 diffsToAssertions (d :: rest) = diffToAssertion d :: diffsToAssertions rest
 
+-- | 内部：按键序列比对生成断言，断言名以 `name` 为前缀。
 diagAsserts : String -> List String -> List String -> List Assertion
 diagAsserts name expected actual = diffsToAssertions (compareSortedKeys name expected actual)
 
 -- ---------------------------------------------------------------
 -- golden（interp / check / compile + run）
 -- ---------------------------------------------------------------
--- 一次 golden 运行的全部读数（纯记录；断言在 `goldenAssertions` 里组装，避免在 do
--- 块里写 `let`——那会触发 `PS_ExpectedToken`）。
+-- | 一次 golden 运行的全部读数；断言统一在 `goldenAssertions` 里按开关组装。
 record GoldenRun where
+  -- | interp 结果（未请求时是占位诊断）。
   grInterp : Check String
+  -- | check 结果（未请求时是 `OkC []`）。
   grCheck : Check (List Diagnostic)
+  -- | compile 结果：退出码 + codegen 诊断。
   grCompile : Check (Pair Int (List Diagnostic))
+  -- | compile 是否成功（cache sync / build / run 断言的门）。
   grCompileOk : Bool
+  -- | 同步共享构建目录的退出码（未同步时为 0）。
   grSync : Int
+  -- | `build.sh` 的退出码。
   grBuildCode : Int
+  -- | 产物是否真的被请求并跑起来了。
   grRunOk : Bool
+  -- | 产物输出（合并输出，去尾换行）。
   grRunText : String
+  -- | 整个 case 的耗时（毫秒）。
   grMs : Int
 
+-- | 内部：取 `build.sh` 退出码。
 buildCodeOf : GoldenRun -> Int
 buildCodeOf gr = gr.grBuildCode
 
+-- | 内部：按 `want*` 开关组装 golden 断言：超时、interp 文本、check / compile 退出码、
+-- cache sync、build 退出码、产物文本，以及 `wantCompare` 时的 interp == run 一致性。
 goldenAssertions : Case -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> GoldenRun -> List Assertion
 goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCompare gr =
   let
@@ -512,12 +613,15 @@ goldenAssertions c expectedText wantInterp wantCheck wantCompile wantRun wantCom
   in append [timeoutAssert c gr.grMs]
     (append interpA (append checkA (append compileA (append syncA (append buildA (append runA compareA))))))
 
--- 把 staging 同步进共享构建桶（base 的 .cmx 只编译一次）。
+-- | 内部：把 staging 同步进按模块集选出的共享构建桶，返回拷贝退出码。
 syncStaging : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Eff r Int
 syncStaging env staging = do
   target <- buildCacheDir env staging
   syncBuildDir staging target
 
+-- | 执行一个 golden case：读期望文本，按开关依次 interp / check / compile / 同步构建桶 /
+-- 跑 `build.sh` / 跑产物，再汇总断言。`env.envBless` 且失败时把期望文件回写成实际输出，
+-- 结果状态记成 `blessed`（断言全算通过）。
 goldenCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Bool -> Bool -> Eff r CaseResult
 goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare = do
   start <- clockNow
@@ -556,16 +660,24 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
 -- ---------------------------------------------------------------
 -- error（负例：结构化诊断断言）
 -- ---------------------------------------------------------------
--- `expected` 已是 `.diag.json` 路径（`Suite` 的 discovery 以它为负例标记）。
--- 断言：`severity|code|file|line|col` 序列 + 条数 + 顺序；不比对 message / text。
+-- | 一次 error case 的全部读数。断言口径：`severity|code|file|line|col` 序列 + 条数 +
+-- 顺序，不比对 message / text；`expected` 已是 `.diag.json` 路径（discovery 以它为负例标记）。
 record ErrorRun where
+  -- | 期望键（`.diag.json` 解析结果）。
   erExpected : Check (List String)
+  -- | 实际诊断。
   erActual : Check (List Diagnostic)
+  -- | interp 结果（未请求时是占位诊断）。
   erInterp : Check String
+  -- | compile 结果（未请求时是占位诊断）。
   erCompile : Check (Pair Int (List Diagnostic))
+  -- | 「compile 不产出输出目录」断言（未请求时是恒真占位）。
   erAbsent : Assertion
+  -- | 耗时（毫秒）。
   erMs : Int
 
+-- | 内部：负例断言：键序列比对、check 必须报错、interp / compile 必须失败、输出目录
+-- 不存在；后两类只在期望里含 error 级条目时才收紧。
 errorAssertions : Env -> String -> Bool -> Bool -> Case -> ErrorRun -> List Assertion
 errorAssertions env diagPath wantInterp wantCompile c er =
   let
@@ -592,6 +704,9 @@ errorAssertions env diagPath wantInterp wantCompile c er =
   in append [timeoutAssert c er.erMs]
     (append keysA (append checkA (append interpA (append compileA absentA))))
 
+-- | 执行一个 error case：从 `.diag.json` 取期望；按 family 开关与夹具形态选实际诊断的
+-- 来源（目录型走包检查、`wantCheck` 走全量 check、只声明 compile 时取 compile 的诊断），
+-- 再汇总断言。`wantCompile` 时额外断言 compile 没有产出输出目录。
 errorCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> String -> String -> Bool -> Bool -> Bool -> Eff r CaseResult
 errorCase env c source diagPath wantInterp wantCheck wantCompile = do
   start <- clockNow
@@ -615,20 +730,23 @@ errorCase env c source diagPath wantInterp wantCheck wantCompile = do
   er <- pure (ErrorRun expectedR actualR interpR compileR absentA ((end - start) / 1000))
   finishCase c.caseId start (errorAssertions env diagPath wantInterp wantCompile c er)
 
--- 清空目录后进程内 compile（负例的「决不产出」断言）。
+-- | 内部：清空输出目录后进程内 compile。
 compileFresh : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileFresh source outdir = compileFreshResult source outdir
 
+-- | 内部：`rm -rf` 输出目录后进程内 compile，保证「决不产出」断言不被上次残留污染。
 compileFreshResult : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileFreshResult source outdir = do
   _ <- removeTree outdir
   compileFile source outdir
 
--- compile 结果 -> 诊断列表（`CG_NoMain` 一类 codegen 门禁的诊断藏在 `OkC` 的第二分量）。
+-- | 内部：compile 结果 → 诊断列表：`CG_NoMain` 一类 codegen 门禁的诊断藏在 `OkC` 的第二
+-- 分量里，非空时转成 `ErrC`。
 compileDiags : Check (Pair Int (List Diagnostic)) -> Check (List Diagnostic)
 compileDiags (ErrC e) = ErrC e
 compileDiags (OkC (Pair _ ds)) = if listLength ds == 0 then OkC [] else ErrC (firstDiagOf ds)
 
+-- | 内部：取第一条诊断；空列表给占位诊断。
 firstDiagOf : List Diagnostic -> Diagnostic
 firstDiagOf [] = caseSkipDiag "empty"
 firstDiagOf (d :: _) = d
@@ -636,9 +754,11 @@ firstDiagOf (d :: _) = d
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
+-- | 内部：解析开头的十进制数字；开头没有数字时给 `Nothing`。
 parseLeadingInt : String -> Maybe Int
 parseLeadingInt s = parseDigits (strUnpack s) 0 0
 
+-- | 内部：`parseLeadingInt` 的累加器版本（`acc` 累计值，`count` 已读位数）。
 parseDigits : List Int -> Int -> Int -> Maybe Int
 parseDigits [] acc count = if count == 0 then Nothing else Just acc
 parseDigits (c :: rest) acc count =
@@ -651,36 +771,39 @@ parseDigits (c :: rest) acc count =
 -- ---------------------------------------------------------------
 -- 结果缓存（本地增量；CI 用 --no-cache）
 -- ---------------------------------------------------------------
--- 只缓存 golden/error case 的成功结果。key 含编译器指纹、base 源码树哈希、source/
--- expected 内容（目录型再加整个夹具目录的 .vuna 树）。section/脚本一律不缓存。
+-- 只缓存 golden / error case 的成功结果。section / 脚本一律不缓存。
+-- | 内部：读文件内容；不存在时给空串（参与哈希）。
 hashFileText : Member nFs FsOp r => String -> Eff r String
 hashFileText path = do
   exists <- pathExistsFile path
   if exists then fsReadFile path else pure ""
 
+-- | 内部：把一组文件的内容依次卷进一个整数哈希。
 hashFiles : Member nFs FsOp r => Int -> List String -> Eff r Int
 hashFiles acc [] = pure acc
 hashFiles acc (path :: rest) = do
   text <- hashFileText path
   hashFiles (acc * 1000003 + hashTextStrong text) rest
 
+-- | 内部：目录下所有 `.vuna` 文件的内容哈希。
 hashTree : Member nFs FsOp r => String -> Eff r Int
 hashTree dir = do
   files <- collectVunaFiles dir
   hashFiles 0 files
 
+-- | 内部：按夹具形态选哈希口径：路径含 `/app/` 的走目录树，其余走单文件。
 caseTreeHash : Member nFs FsOp r => Case -> String -> String -> Eff r Int
 caseTreeHash c source expected =
   if contains "/app/" source then appTreeHash source expected else fileTreeHash source expected
 
--- 目录型夹具（`app/Main.vuna`）：整棵包目录的 .vuna 树参与 key。
+-- | 内部：目录型夹具：整棵包目录的 `.vuna` 树 + expected 内容。
 appTreeHash : Member nFs FsOp r => String -> String -> Eff r Int
 appTreeHash source expected = do
   treeHash <- hashTree (Vuna.Cli.Args.parentOf (Vuna.Cli.Args.parentOf source))
   expectedText <- hashFileText expected
   pure (treeHash * 1000003 + hashTextStrong expectedText)
 
--- 文件型夹具：source/expected 内容 + mtime/size。
+-- | 内部：文件型夹具：source / expected 内容 + source 的 mtime 与大小。
 fileTreeHash : Member nFs FsOp r => String -> String -> Eff r Int
 fileTreeHash source expected = do
   stamp <- fmap (fromMaybe 0) (fsFileMtime source)
@@ -690,23 +813,28 @@ fileTreeHash source expected = do
   pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")
 
 -- ---------------------------------------------------------------
--- test verdict 对象（objects/test/<testIn>）
+-- test verdict 对象（objects/test/<testInput>）
 --
--- 通过 = 对象存在；载荷 = checks 数。输入只含**内容**摘要，不含 mtime/size；steps
--- 暂不缓存（输入不可声明）。warning 不持久化，负例仍靠 `-W` / 私有 store 绕过命中。
+-- 通过 = 对象存在；载荷 = checks 数。输入只含**内容**摘要，不含 mtime / size；steps 不
+-- 缓存（输入不可声明）。warning 不持久化，负例仍靠 `-W` / 私有 store 绕过命中。
 -- ---------------------------------------------------------------
+-- | 内部：test verdict 输入串的 schema 前缀（改格式时与 codec 一并改）。
 testVerdictSchema : String
 testVerdictSchema = "vuna-test-verdict 1"
 
+-- | 内部：对象库 codec 标签。
 testVerdictCodec : String
 testVerdictCodec = "test-verdict 1"
 
+-- | 内部：哈希取绝对值（对象 key 用非负数）。
 absHash : Int -> Int
 absHash n = if n < 0 then 0 - n else n
 
+-- | 内部：对象库里的项目根 id（仓库根哈希的绝对值）。
 testProjectId : Env -> String
 testProjectId env = strOfInt (absHash (hashTextStrong env.envRoot))
 
+-- | 结果缓存 key：不缓存时给空串；只有 golden / error 有 key。
 verdictKey : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Case -> Eff r String
 verdictKey env c = if not env.envCacheEnabled then pure ""
 else case c.caseKind of
@@ -714,6 +842,8 @@ else case c.caseKind of
   CError source diagPath _ _ _ => verdictKeyOf env c source diagPath
   _ => pure ""
 
+-- | 内部：拼出 verdict 输入串（schema、case id、kind、source / expected 内容哈希、编译器
+-- 指纹、base 哈希）再取哈希。
 verdictKeyOf : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Case -> String -> String -> Eff r String
 verdictKeyOf env c source expected = do
   srcText <- hashFileText source
@@ -735,12 +865,15 @@ verdictKeyOf env c source expected = do
 -- ---------------------------------------------------------------
 -- --last-failed
 -- ---------------------------------------------------------------
+-- | 内部：`--last-failed` 的状态目录（`<root>/.local/test-suite`）。
 lastFailedDir : Env -> String
 lastFailedDir env = "${env.envRoot}/.local/test-suite"
 
+-- | 内部：上次失败的 case id 列表文件。
 lastFailedPath : Env -> String
 lastFailedPath env = "${lastFailedDir env}/last-failed"
 
+-- | 内部：读上次失败的 case id；没有状态文件时给空列表。
 lastFailedIds : Member nFs FsOp r => Env -> Eff r (List String)
 lastFailedIds env =
   let
@@ -752,11 +885,13 @@ lastFailedIds env =
       text <- fsReadFile path
       pure (filter (\line => line /= "") (lines text))
 
+-- | 内部：只留下 id 在上次失败列表里的 case。
 filterLastFailed : Member nFs FsOp r => Env -> List Case -> Eff r (List Case)
 filterLastFailed env cases = do
   ids <- lastFailedIds env
   pure (filter (caseIdIn ids) cases)
 
+-- | 内部：把本次失败的 case id 写回状态文件，返回写入字节数（无失败时给 0）。
 recordLastFailed : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> List CaseResult -> Eff r Int
 recordLastFailed env [] = pure 0
 recordLastFailed env results =
@@ -767,15 +902,20 @@ recordLastFailed env results =
     _ <- ensureDirPath (lastFailedDir env)
     fmap natToInt (fsWriteFile (lastFailedPath env) text)
 
+-- | 内部：case id 是否在给定列表里。
 caseIdIn : List String -> Case -> Bool
 caseIdIn ids c = memName c.caseId ids
 
+-- | 内部：取 `resId`。
 resIdOf : CaseResult -> String
 resIdOf r = r.resId
 
+-- | 内部：解析缓存载荷里的 checks 数（缺失或非数字按 0）。
 cachedChecks : String -> Int
 cachedChecks text = fromMaybe 0 (parseLeadingInt (trim text))
 
+-- | 内部：按 key 读 test verdict；命中返回状态为 `cached` 的结果（checks 数取自载荷，
+-- 断言数视为全通过），未命中给 `Nothing`。
 readCached : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> Eff r (Maybe CaseResult)
 readCached env c = do
   key <- verdictKey env c
@@ -788,6 +928,7 @@ readCached env c = do
         n <- pure (cachedChecks text)
         pure (Just (CaseResult c.caseId "cached" n 0 n 0 []))
 
+-- | 内部：只缓存 `pass` 结果：把 checks 数写进对象，并把 key 挂到项目根；返回写入字节数。
 writeCached : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> CaseResult -> Eff r Int
 writeCached env c r = do
   key <- verdictKey env c
@@ -796,6 +937,7 @@ writeCached env c r = do
     _ <- storeObjectWriteEff "test" testVerdictCodec key "${strOfInt r.resChecks}\n"
     storeRootAppendEff (testProjectId env) env.envRoot [key]
 
+-- | 单个 case 的执行入口：先查结果缓存，未命中才真正执行，成功时把结果写回缓存。
 runCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> Eff r CaseResult
 runCase env c = do
   cached <- readCached env c
@@ -811,6 +953,7 @@ runCase env c = do
 -- -----------------------------------------------------------
 -- `check-ok`：进程内全量 check 必须 `OkC` 且无 error 级诊断（warning 允许）。
 -- `check-error`：期望是 `.diag.json`，与 `CError` 同一套结构化断言（但只跑 check）。
+-- | 执行一个 check 用例：进程内全量 check，按 `expectPass` 走通过路径或负例路径。
 checkCase : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> String -> Bool -> String -> Eff r CaseResult
 checkCase env c source expectPass expectedErr = do
   start <- clockNow
@@ -819,6 +962,8 @@ checkCase env c source expectPass expectedErr = do
   end <- clockNow
   finishCase c.caseId start (checkCaseAsserts env expectedErr expectPass start end r expectedR)
 
+-- | 内部：check 用例的断言：超时；通过路径要求 check 成功且无 error 级诊断，负例路径要求
+-- 键序列匹配且 check 必须报错。
 checkCaseAsserts : Env -> String -> Bool -> Int -> Int -> Check (List Diagnostic) -> Check (List String) -> List Assertion
 checkCaseAsserts env expectedErr expectPass start end r expectedR =
   let
@@ -830,31 +975,34 @@ checkCaseAsserts env expectedErr expectPass start end r expectedR =
   else append [timeoutAssertBy ms expectedErr]
     (append (diagKeyAsserts env expectedErr expectedR r) (checkExitAsserts r))
 
--- 负例的 `.diag.json` 断言（`check-error` 与 `CError` 共用）。
+-- | 内部：`.diag.json` 键序列断言（`check-error` 与 `CError` 共用）；期望文件读不到时给
+-- 一条失败的 `expect file`。
 diagKeyAsserts : Env -> String -> Check (List String) -> Check (List Diagnostic) -> List Assertion
 diagKeyAsserts env diagPath (ErrC e) actualR =
   [Assertion "expect file" False "cannot read ${diagPath}: ${diagText e}"]
 diagKeyAsserts env diagPath (OkC expectedKeys) actualR =
   diagAsserts "diag" expectedKeys (actualKeysOf env (caseRelOf env diagPath) actualR)
 
--- 负例的退出语义（进程内：`ErrC` = 失败）。
+-- | 内部：负例的退出语义（进程内：`ErrC` = 失败，`OkC` = 期望报错却没报）。
 checkExitAsserts : Check (List Diagnostic) -> List Assertion
 checkExitAsserts (ErrC _) = [Assertion "check exit" True ""]
 checkExitAsserts (OkC _) = [Assertion "check exit" False "expected an error, check succeeded"]
 
--- 无 Case 上下文时的超时断言（`check-ok` 的家族超时是 15s）。
+-- | 内部：没有 `Case` 上下文时的超时断言（`check-ok` 一族的预算固定 15s）。
 timeoutAssertBy : Int -> String -> Assertion
 timeoutAssertBy ms name =
   Assertion "case timeout" (ms <= 15000) "in-process ${name} took ${strOfInt ms}ms, over 15s budget"
 
--- `OkC` 的诊断表里没有 error 级条目。
+-- | 内部：`OkC` 的诊断表里没有 error 级条目（`ErrC` 一律 False）。
 noErrorDiags : Check (List Diagnostic) -> Bool
 noErrorDiags (ErrC _) = False
 noErrorDiags (OkC ds) = not (any (\d => severityText (diagSeverityOf d) == "error") ds)
 
+-- | 内部：取诊断的严重级。
 diagSeverityOf : Diagnostic -> Severity
 diagSeverityOf d = d.diagSeverity
 
+-- | 内部：把 `<root>/test/` 前缀换成相对路径，lint 输出里不带机器相关前缀。
 relativeTestPath : Env -> String -> String
 relativeTestPath env source =
   let
@@ -862,6 +1010,8 @@ relativeTestPath env source =
   in if startsWith prefix source then substring (byteLength prefix) (byteLength source - byteLength prefix) source
   else source
 
+-- | 执行一个 lint 用例：进程内 lint，把 findings 渲染成文本与期望逐字比对；期望为空表示
+-- 不应有任何 finding。
 lintCase : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> Eff r CaseResult
 lintCase env c source expected = do
   start <- clockNow
@@ -878,16 +1028,17 @@ lintCase env c source expected = do
   in finishCase c.caseId start
     [timeoutAssert c ((end - start) / 1000), Assertion "lint output" expectedMatch "expected:\n${expectedText}\nactual:\n${rendered}", Assertion "lint exit" (if expectedText == "" then rendered == "" else rendered /= "") "lint findings mismatch"]
 
--- `--fix` 的工作副本路径（纯）：整份源码先拷到该文件，再对副本跑两次 lint --fix。
+-- | 内部：`--fix` 的工作副本路径（当前 `fixCase` 在内存里对源码跑两次 fix，不使用本函数）。
 fixWorkPath : Env -> Case -> String
 fixWorkPath env c = "${env.envTmp}/fix-${safeName c.caseId}.vuna"
 
+-- | 执行一个 `--fix` 用例：跑两遍进程内 fix，断言第一遍结果等于期望、第二遍无改动（幂等）。
 fixCase : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> Eff r CaseResult
 fixCase env c source expected = do
   start <- clockNow
   expectedText <- fmap trimNewlines (fsReadFile expected)
   sourceText <- fsReadFile source
-  -- 第一遍：写到工作副本（与 CLI 同一条 `fixLoop`，只是不经子进程）。
+  -- 第一遍写回工作副本（与 CLI 同一条 `fixLoop`，只是不经子进程）。
   once <- fixPass source sourceText
   twice <- fixPass source (firstOf once)
   end <- clockNow
@@ -896,7 +1047,7 @@ fixCase env c source expected = do
     idemA = assertEq "fix idempotent" (firstOf once) (firstOf twice)
   in finishCase c.caseId start [timeoutAssert c ((end - start) / 1000), fixA, idemA]
 
--- 一次 `lint --fix`：返回新源码文本（`fixLoop` 无改动时原样返回）。
+-- | 内部：跑一次进程内 `lint --fix`，返回 `(新源码, 错误文本)`；无改动时新源码与输入相同。
 fixPass : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Pair String String)
 fixPass source text = do
   fixed <- fixFile source text
@@ -905,12 +1056,14 @@ fixPass source text = do
     OkC (Pair _ newSource) => Pair newSource ""
   )
 
--- 产物运行期 case。expectedExit 语义：0 = 断言非 0（无显式退出码的遗留行为）；
--- 256 = 断言恰好 0（`.run.exit` 内容为 0，哨兵超出真实退出码 0–255 范围）；
--- n > 0（< 256）= 断言恰好 n。expectedErr 缺失（只有 `.run.exit`）时跳过片段断言。
+-- | 执行一个产物运行期 case：进程内 compile 并同步共享构建桶，子进程跑 `build.sh` 与产物，
+-- 再按 `expectedExit` 与输出片段断言。
 --
--- compile 进程内（`InProc.compileFile`）；`build.sh` + 产物执行留在子进程——那是
--- 执行真实产物，进程内无法替代（见「进程绑定岛」）。
+-- `expectedExit` 语义：0 = 断言非 0（无显式退出码的默认行为）；256 = 断言恰好 0（哨兵值
+-- 超出真实退出码 0–255）；其余 n = 断言恰好 n。`expectedErr` 为空（只有 `.run.exit`）时
+-- 跳过片段断言。
+--
+-- compile 走进程内；`build.sh` 与产物执行留在子进程——那是在跑真实产物，进程内无法替代。
 runtimeCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> Int -> Eff r CaseResult
 runtimeCase env c source expectedErr expectedExit =
   let
@@ -942,63 +1095,97 @@ runtimeCase env c source expectedErr expectedExit =
 -- ---------------------------------------------------------------
 -- 声明式步进用例（`*.steps`）
 -- ---------------------------------------------------------------
--- 行式指令，一个文件 = 一个 case。步骤由 `run:` / `read:` 开启，其余指令挂当前步：
---   exit: 0 | nonzero | <n>          缺省 0（run/read 默认必须成功）
---   out-contains: / out-not-contains: / out-equals: <literal> / out-equals-file: <path>
---   file-exists: / file-absent: / file-contains: <path> <fragment>
--- `for-each: <shell word list>` … `end:` 把块内步骤按匹配项各跑一次；`{item}` = 匹配项
--- （去尾 `/`）、`{name}` = basename、`{stem}` = 去掉结尾 `.vuna` 的匹配项。空匹配 = 失败。
--- 路径：`$TMPDIR` 展开为 case 临时根；相对路径按 cwd = test/ 解析。
+-- | 一个步骤：`stRun` / `stRead` 二者恰有一个非空，其余字段是该步的附加断言。
+--
+-- 一个 `.steps` 文件 = 一个 case：步骤由 `run:` / `read:` 开启，其余指令挂到当前步。
+-- 可用指令：`exit: 0 | nonzero | <n>`（缺省 0，即 run/read 默认必须成功）、
+-- `out-contains:`、`out-not-contains:`、`out-equals: <literal>`、`out-equals-file: <path>`、
+-- `file-exists:`、`file-absent:`、`file-contains: <path> <fragment>`。
+--
+-- 路径：`$TMPDIR` 展开为 case 临时根；相对路径按 cwd = `test/` 解析成绝对路径。
 record Step where
+  -- | `run:` 的 shell 命令（空 = 不是 run 步）。
   stRun : String
+  -- | `read:` 的文件路径（空 = 不是 read 步）。
   stRead : String
+  -- | `exit:` 规格：空或 `0` = 必须 0，`nonzero` = 必须非 0，其余按数字比对。
   stExit : String
+  -- | `out-contains:` 要求出现的片段。
   stContains : List String
+  -- | `out-not-contains:` 要求不出现的片段。
   stNotContains : List String
+  -- | `out-equals:` 期望的整段输出。
   stEquals : List String
+  -- | `out-equals-file:` 逐字比对的文件。
   stEqualsFile : List String
+  -- | `file-exists:` 必须存在的文件。
   stFiles : List String
+  -- | `file-absent:` 必须不存在的文件。
   stAbsent : List String
+  -- | `file-contains:` 必须含指定片段的文件，逐项为 `(路径, 片段)`。
   stFileContains : List (Pair String String)
 
+-- | 内部：全空的步骤模板。
 emptyStep : Step
 emptyStep = Step "" "" "" [] [] [] [] [] [] []
 
+-- | 内部：新建一个 `run:` 步。
 stepWithRun : String -> Step
 stepWithRun body = Step body "" "" [] [] [] [] [] [] []
 
+-- | 内部：新建一个 `read:` 步。
 stepWithRead : String -> Step
 stepWithRead path = Step "" path "" [] [] [] [] [] [] []
 
+-- | 一个步骤组：`sgGlob` 为空的组按原样顺序执行；非空则是 `for-each:` 块，组内步骤按
+-- 词表的每个匹配项各跑一次。占位符：`{item}` = 匹配项（去尾 `/`）、`{name}` = basename、
+-- `{stem}` = 去掉结尾 `.vuna` 的匹配项。展开为空 = 该组失败。
 record StepGroup where
+  -- | `for-each:` 的 shell word list（空 = 普通步骤组）。
   sgGlob : String
+  -- | 组内步骤，按文件顺序。
   sgSteps : List Step
 
+-- | 逐行解析的累加状态。
 record StepParse where
+  -- | 已闭合的步骤组（逆序累积）。
   spDone : List StepGroup
+  -- | 是否在 `for-each` 块内。
   spOpen : Bool
+  -- | 当前 `for-each` 的规格。
   spGlob : String
+  -- | 当前步组的步骤（逆序累积）。
   spSteps : List Step
+  -- | 首个解析错误；非空即停止解析。
   spErr : String
 
+-- | 单行指令应用到当前步的结果。
 data StepEdit : Type where
+  -- | 指令已应用，给更新后的步骤。
   SeOk : Step -> StepEdit
+  -- | 指令无法识别，给错误消息。
   SeErr : String -> StepEdit
 
+-- | 整份 `.steps` 的解析结果。
 data StepsParse : Type where
+  -- | 解析成功，给按文件顺序排列的步骤组。
   SpOk : List StepGroup -> StepsParse
+  -- | 解析失败，给错误消息。
   SpErr : String -> StepsParse
 
+-- | 内部：空行或 `#` 注释行。
 isBlankOrComment : String -> Bool
 isBlankOrComment line =
   let
     t = trim line
   in byteLength t == 0 || startsWith "#" t
 
+-- | 内部：第一个空格的下标；没有空格给 -1。
 firstSpaceIndex : List Int -> Int -> Int
 firstSpaceIndex [] i = 0 - 1
 firstSpaceIndex (c :: rest) i = if c == 32 then i else firstSpaceIndex rest (i + 1)
 
+-- | 内部：按第一个空格切成 `(前段, 去空白的后段)`；没有空格时后段为空串。
 splitFirstSpace : String -> Pair String String
 splitFirstSpace text =
   let
@@ -1008,46 +1195,55 @@ splitFirstSpace text =
   else Pair (substring 0 (natFromInt i) text)
     (trim (substring (natFromInt (i + 1)) (natFromInt (n - i - 1)) text))
 
+-- | 内部：给步骤设置 `exit:` 规格。
 stepWithExit : Step -> String -> Step
 stepWithExit st x =
   Step st.stRun st.stRead x st.stContains st.stNotContains st.stEquals st.stEqualsFile st.stFiles
     st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `out-contains:`。
 stepWithContains : Step -> String -> Step
 stepWithContains st x =
   Step st.stRun st.stRead st.stExit (append st.stContains [x]) st.stNotContains st.stEquals
     st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `out-not-contains:`。
 stepWithNotContains : Step -> String -> Step
 stepWithNotContains st x =
   Step st.stRun st.stRead st.stExit st.stContains (append st.stNotContains [x]) st.stEquals
     st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `out-equals-file:`。
 stepWithEqualsFile : Step -> String -> Step
 stepWithEqualsFile st x =
   Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals
     (append st.stEqualsFile [x]) st.stFiles st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `out-equals:`。
 stepWithEquals : Step -> String -> Step
 stepWithEquals st x =
   Step st.stRun st.stRead st.stExit st.stContains st.stNotContains (append st.stEquals [x])
     st.stEqualsFile st.stFiles st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `file-exists:`。
 stepWithFile : Step -> String -> Step
 stepWithFile st x =
   Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
     (append st.stFiles [x]) st.stAbsent st.stFileContains
 
+-- | 内部：给步骤追加一条 `file-absent:`。
 stepWithAbsent : Step -> String -> Step
 stepWithAbsent st x =
   Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
     st.stFiles (append st.stAbsent [x]) st.stFileContains
 
+-- | 内部：给步骤追加一条 `file-contains:`（`(路径, 片段)`）。
 stepWithFileContains : Step -> Pair String String -> Step
 stepWithFileContains st x =
   Step st.stRun st.stRead st.stExit st.stContains st.stNotContains st.stEquals st.stEqualsFile
     st.stFiles st.stAbsent (append st.stFileContains [x])
 
+-- | 内部：把一行指令应用到当前步；不认识的指令给 `SeErr`。
 applyDirective : Step -> String -> StepEdit
 applyDirective st t =
   let
@@ -1062,28 +1258,35 @@ applyDirective st t =
   else if startsWith "file-contains:" t then SeOk (stepWithFileContains st (splitFirstSpace (trim (substring 14 (n - 14) t))))
   else SeErr "unknown step directive: ${t}"
 
+-- | 内部：写入解析错误（保留其余字段）。
 setParseErr : StepParse -> String -> StepParse
 setParseErr st msg = StepParse st.spDone st.spOpen st.spGlob st.spSteps msg
 
+-- | 内部：替换当前步组的步骤列表。
 setParseSteps : StepParse -> List Step -> StepParse
 setParseSteps st steps = StepParse st.spDone st.spOpen st.spGlob steps st.spErr
 
+-- | 内部：进入 `for-each` 块。
 openGroup : StepParse -> String -> StepParse
 openGroup st spec = StepParse st.spDone True spec st.spSteps st.spErr
 
+-- | 内部：离开 `for-each` 块。
 closeGroup : StepParse -> StepParse
 closeGroup st = StepParse st.spDone False "" st.spSteps st.spErr
 
+-- | 内部：新开一步（前插到逆序累积里）。
 pushStep : StepParse -> Step -> StepParse
 pushStep st step = setParseSteps st (step :: st.spSteps)
 
+-- | 内部：把累积的步骤收成一个组并挂到 `spDone`；空组不产出。
 flushGroup : StepParse -> StepParse
 flushGroup st =
   if listLength st.spSteps == 0 then st
   else StepParse (StepGroup st.spGlob (reverse st.spSteps) :: st.spDone) st.spOpen st.spGlob [] st.spErr
 
--- 逐行解析（不用 foldl / 记录更新：把 `StepParse` 当多态 fold 的累加器、或在递归函数里
--- 用记录更新，都会触发 QTT 擦除 binder 推断 bug；显式构造器 + 错误字段更直接）。
+-- 逐行解析用显式构造器而不是 foldl / 记录更新：把 `StepParse` 当多态 fold 的累加器、
+-- 或在递归函数里用记录更新，都会触发 QTT 擦除 binder 推断 bug。
+-- | 内部：解析一行并更新状态；一旦有解析错误就原样返回状态。
 parseLine : StepParse -> String -> StepParse
 parseLine st line =
   let
@@ -1108,10 +1311,13 @@ parseLine st line =
       SeErr e => setParseErr st e
       SeOk step2 => setParseSteps st (step2 :: rest)
 
+-- | 内部：逐行解析。
 parseLines : List String -> StepParse -> StepParse
 parseLines [] st = st
 parseLines (line :: rest) st = parseLines rest (parseLine st line)
 
+-- | 解析整份 `.steps` 文本：出现未知指令、嵌套/未闭合的 `for-each`、或在首个
+-- `run:` / `read:` 之前的指令都给 `SpErr`。
 parseStepsV2 : String -> StepsParse
 parseStepsV2 text =
   let
@@ -1123,44 +1329,55 @@ parseStepsV2 text =
       flushed = flushGroup st
     in SpOk (reverse flushed.spDone)
 
+-- | 内部：组内步骤数。
 countGroupSteps : StepGroup -> Int
 countGroupSteps g = listLength g.sgSteps
 
+-- | 内部：所有组加起来的步骤总数。
 countStepGroups : List StepGroup -> Int
 countStepGroups [] = 0
 countStepGroups (g :: rest) = countGroupSteps g + countStepGroups rest
 
+-- | 内部：文本替换；`needle` 为空时原样返回。
 replaceAll : String -> String -> String -> String
 replaceAll needle repl text = if byteLength needle == 0 then text else join repl (split needle text)
 
+-- | 内部：从列表头部连续丢弃 `/`（47），遇到第一个非斜杠即停。
 dropTrailingSlashes : List Int -> List Int
 dropTrailingSlashes [] = []
 dropTrailingSlashes (c :: rest) = if c == 47 then dropTrailingSlashes rest else c :: rest
 
+-- | 内部：去掉结尾的 `/`；长度不超过 1 的字符串原样返回。
 stripTrailingSlash : String -> String
 stripTrailingSlash text =
   if byteLength text > 1 then strPack (reverse (dropTrailingSlashes (reverse (strUnpack text))))
   else text
 
+-- | 内部：列表最后一个元素；空列表给空串。
 lastSegment : List String -> String
 lastSegment [] = ""
 lastSegment ([x]) = x
 lastSegment (x :: rest) = lastSegment rest
 
+-- | 内部：路径 basename（丢弃空段）。
 baseNameOf : String -> String
 baseNameOf path = lastSegment (filter (\part => part /= "") (split "/" path))
 
+-- | 内部：去掉结尾 `.vuna` 的名字。
 stemOf : String -> String
 stemOf path = if endsWith ".vuna" path then substring 0 (byteLength path - 5) path else path
 
+-- | 内部：替换 `{item}` / `{name}` / `{stem}` 占位。
 substText : String -> String -> String -> String
 substText item name text =
   replaceAll "{item}" item (replaceAll "{name}" name (replaceAll "{stem}" (stemOf item) text))
 
+-- | 内部：对 `(路径, 片段)` 的两侧都做占位替换。
 substFileContains : String -> String -> Pair String String -> Pair String String
 substFileContains item name (Pair path frag) =
   Pair (substText item name path) (substText item name frag)
 
+-- | 内部：步骤所有字段的占位替换。
 substStep : String -> String -> Step -> Step
 substStep item name st =
   let
@@ -1169,12 +1386,15 @@ substStep item name st =
     (map s st.stEquals) (map s st.stEqualsFile) (map s st.stFiles) (map s st.stAbsent)
     (map (substFileContains item name) st.stFileContains)
 
+-- | 内部：步骤路径展开：`$TMPDIR` 换成 case 临时根；相对路径按 `env.envCwd` 解析成绝对路径。
 stepPath : Env -> String -> String -> String
 stepPath env caseTmp path =
   let
     expanded = replaceAll "$TMPDIR" caseTmp path
   in if startsWith "/" expanded then expanded else "${env.envCwd}/${expanded}"
 
+-- | 内部：按 `exit:` 规格生成退出码断言（空或 `0` = 必须 0，`nonzero` = 必须非 0，
+-- 其余按数字比对）。
 exitAsserts : String -> Int -> List Assertion
 exitAsserts spec code =
   if spec == "" || spec == "0" then [assertExit "exit" code]
@@ -1182,8 +1402,9 @@ exitAsserts spec code =
   else [ Assertion "exit" (code == fromMaybe 0 (parseLeadingInt spec)) "expected ${spec}, got ${strOfInt code}"
   ]
 
--- 失败上下文：step 命令行 + 捕获输出尾部。CI 里 steps case 只报 `exit: exit 1`，
--- 看不出是哪条命令失败、也看不到脚本自己打印的原因（如 corpus check.sh 的 `FAIL:` 行）。
+-- | 内部：失败上下文文本：命令行前 240 字节 + 输出尾部 1600 字节（无输出时只有命令行）。
+-- 没有它时 steps case 只报 `exit: exit 1`，看不出是哪条命令失败、也看不到脚本自己打印的
+-- 原因（如 corpus `check.sh` 的 `FAIL:` 行）。
 stepContext : String -> String -> String
 stepContext cmd out =
   let
@@ -1191,26 +1412,32 @@ stepContext cmd out =
   in "\n  step: ${truncateHead 240 cmd}"
     ++ (if byteLength outTail == 0 then "" else "\n  output tail:\n${truncateTail 1600 outTail}")
 
+-- | 内部：给失败断言追加步骤上下文；通过的断言原样返回。
 withStepContext : String -> Assertion -> Assertion
 withStepContext ctx a =
   if a.assertionOk then a else Assertion a.assertionName False "${a.assertionDetail}${ctx}"
 
+-- | 内部：取开头 `n` 字节，超长时补省略号。
 truncateHead : Int -> String -> String
 truncateHead n s = if byteLength s <= n then s else "${substring 0 (natFromInt n) s}…"
 
+-- | 内部：取结尾 `n` 字节，超长时前面补省略号。
 truncateTail : Int -> String -> String
 truncateTail n s =
   if byteLength s <= n then s
   else "…${substring (natFromInt (byteLength s - n)) (natFromInt n) s}"
 
+-- | 内部：断言文件含指定片段（文件不存在时按空文本比对，必然失败）。
 fileContainsAssert : Member nFs FsOp r => Env -> String -> Pair String String -> Eff r Assertion
 fileContainsAssert env caseTmp (Pair path frag) = do
   text <- readMaybeFile (stepPath env caseTmp path)
   pure
     (Assertion "file" (contains frag text) "file ${path} missing fragment: ${frag}\nactual:\n${text}")
 
--- 断言列表：纯片段（out-contains / file-exists 等）照旧现算；只有读文件的两类
--- （out-equals-file / file-contains）走效果遍历，顺序与 let 求值一致。
+-- 纯片段断言（out-contains / file-exists 等）现算；只有读文件的两类（out-equals-file /
+-- file-contains）走效果遍历，顺序与 let 求值一致。
+-- | 内部：一步的输出与文件断言：片段包含 / 不包含、整段相等、整段等于文件、文件存在 /
+-- 不存在 / 含片段。
 outAsserts : Member nFs FsOp r => Env -> String -> String -> Step -> Eff r (List Assertion)
 outAsserts env caseTmp out st = do
   equalsFileA <- mapEff (\path => do
@@ -1229,6 +1456,8 @@ outAsserts env caseTmp out st = do
   pure
     (append (map (\frag => assertContains "out" out frag) st.stContains) (append (map (\frag => Assertion "out" (not (contains frag out)) "unexpected fragment: ${frag}\nactual:\n${out}") st.stNotContains) (append (map (\want => assertEq "out" want (trimNewlines out)) st.stEquals) (append equalsFileA (append fileExistsA (append fileAbsentA fileContainsA))))))
 
+-- | 内部：跑一步并产出断言。`run:` 步在 steps 环境里跑 `sh -c`（超时即失败、再按
+-- `exit:` 与输出断言）；`read:` 步读文件当输出（文件不存在即失败）；两者都没有则无断言。
 stepAssertsV2 : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Int -> Bool -> Step -> Eff r (List Assertion)
 stepAssertsV2 env caseTmp timeout isolated st = if byteLength st.stRun > 0 then do
   r <-
@@ -1252,12 +1481,14 @@ else if byteLength st.stRead > 0 then
       (append (if exists then [] else [Assertion "read" False "no such file: ${st.stRead}"]) (append (if byteLength st.stExit == 0 then [] else exitAsserts st.stExit (if exists then 0 else 1)) outA))
 else pure []
 
+-- | 内部：给每条断言名加上 `name:` 前缀（`for-each` 里区分不同匹配项）。
 prefixAssertions : String -> List Assertion -> List Assertion
 prefixAssertions name [] = []
 prefixAssertions name (a :: rest) =
   Assertion "${name}: ${a.assertionName}" a.assertionOk a.assertionDetail
     :: prefixAssertions name rest
 
+-- | 内部：用 `sh -c` 展开 `for-each` 的词表，每个匹配项输出一行；有任何不存在的项即 exit 3。
 expandLoopItems : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Bool -> String -> Eff r CmdResult
 expandLoopItems env caseTmp isolated spec =
   let
@@ -1265,6 +1496,7 @@ expandLoopItems env caseTmp isolated spec =
       "for x in ${spec}; do if [ -e \"$x\" ]; then printf '%s\\n' \"$x\"; else exit 3; fi; done"
   in runCmdMerged env "for-each" env.envCwd 60 (withStepsEnv env caseTmp isolated ["sh", "-c", body])
 
+-- | 内部：对单个匹配项替换占位后跑组内步骤，断言名按 basename 加前缀。
 loopItemAsserts : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Int -> Bool -> StepGroup -> String -> Eff r (List Assertion)
 loopItemAsserts env caseTmp timeout isolated g raw =
   let
@@ -1275,6 +1507,8 @@ loopItemAsserts env caseTmp timeout isolated g raw =
     asserts <- concatMapEff (stepAssertsV2 env caseTmp timeout isolated) steps
     pure (prefixAssertions name asserts)
 
+-- | 内部：普通组按顺序跑；`for-each` 组先展开匹配项再逐项跑。展开失败或匹配为空都给一条
+-- 失败断言。
 stepGroupAsserts : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Int -> Bool -> StepGroup -> Eff r (List Assertion)
 stepGroupAsserts env caseTmp timeout isolated g = if byteLength g.sgGlob == 0 then concatMapEff (stepAssertsV2 env caseTmp timeout isolated) g.sgSteps
 else do
@@ -1286,11 +1520,13 @@ else do
   else if listLength items == 0 then pure [Assertion "for-each" False "matched nothing: ${g.sgGlob}"]
   else concatMapEff (loopItemAsserts env caseTmp timeout isolated g) items
 
--- steps case 的隔离临时根（纯）：同一 worker 内多个 steps case 顺序执行，
--- 共享 envTmp 会让 `$TMPDIR/ws1` 之类互相污染，所以按 case id 的哈希分目录。
+-- 同一 worker 内多个 steps case 顺序执行，共享 `envTmp` 会让 `$TMPDIR/ws1` 之类互相污染。
+-- | 内部：steps case 的隔离临时根（按 case id 哈希分目录）。
 stepsTmpDir : Env -> Case -> String
 stepsTmpDir env c = "${env.envTmp}/c-${strOfInt (hashTextStrong c.caseId)}"
 
+-- | 执行一个 `*.steps` case：建 case 私有临时根、解析文件、逐组跑步骤，最后要求至少有一条
+-- `run:` / `read:`。文件里出现 `store-isolated` 时该 case 用私有对象库。
 stepsCase : Member nFs FsOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => Env -> Case -> String -> Eff r CaseResult
 stepsCase env c path =
   let
@@ -1300,7 +1536,7 @@ stepsCase env c path =
     _ <- ensureDirPath caseTmp
     hasPath <- pathExistsFile path
     text <- if hasPath then fsReadFile path else pure ""
-    -- 文件头 `# store-isolated` 标记：该 case 断言缓存布局/GC/冷命中，必须用私有 store；
+    -- 文件里出现 `store-isolated` 标记：该 case 断言缓存布局/GC/冷命中，必须用私有 store；
     -- 其余 steps 默认与 suite 共用对象库。
     let
       isolated = contains "store-isolated" text
@@ -1314,6 +1550,8 @@ stepsCase env c path =
         in finishCase c.caseId start
           (Assertion "steps" hasWork "no run:/read: directive in ${path}" :: assertions)
 
+-- | 执行一个 seed 用例：用 seed 编译器（`env.envSeed`）编译源码、跑 `build.sh`、执行产物，
+-- 再把输出与期望文本逐字比对。编译前清空输出目录与私有接口目录。
 seedCase : Member nFs FsOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> Eff r CaseResult
 seedCase env c source expected =
   let
@@ -1337,6 +1575,7 @@ seedCase env c source expected =
     else pure [assertExit "seed compile exit" comp.cmdCode]
     finishCase c.caseId start buildA
 
+-- | 内部：按 `caseKind` 分派到具体执行函数；`CBroken` 直接产出一条失败断言。
 runCaseGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> Eff r CaseResult
 runCaseGo env c = case c.caseKind of
   CGolden source expected wantInterp wantCheck wantCompile wantRun wantCompare =>
@@ -1356,22 +1595,28 @@ runCaseGo env c = case c.caseKind of
 -- ---------------------------------------------------------------
 -- 过滤
 -- ---------------------------------------------------------------
+-- | 内部：非空且全是十进制数字。
 allDigits : String -> Bool
 allDigits s = s /= "" && allDigitChars (strUnpack s)
 
+-- | 内部：字节列表全是十进制数字（空列表算 True）。
 allDigitChars : List Int -> Bool
 allDigitChars [] = True
 allDigitChars (c :: rest) = c >= 48 && c <= 57 && allDigitChars rest
 
+-- | 内部：单条过滤模式匹配：纯数字模式按 section 相等或 case id 前缀匹配，其余模式在
+-- `section id tags` 拼串里做子串匹配。
 matchPattern : String -> Case -> Bool
 matchPattern pat c =
   if allDigits pat then c.caseSection == pat || startsWith "${pat}/" c.caseId
   else contains pat "${c.caseSection} ${c.caseId} ${join " " c.caseTags}"
 
+-- | 内部：任一模式命中；空模式列表给 False。
 matchAny : List String -> Case -> Bool
 matchAny [] c = False
 matchAny (pat :: rest) c = if matchPattern pat c then True else matchAny rest c
 
+-- | 内部：用例是否通过 `--only`、`--filter`、`--tier` 三道过滤（空列表表示不限制）。
 caseMatches : SuiteOpts -> Case -> Bool
 caseMatches opts c =
   let
@@ -1386,17 +1631,21 @@ caseMatches opts c =
       tiers => memName c.caseTier tiers
   in onlyOk && filterOk && tierOk
 
+-- | 内部：按 `SuiteOpts` 的过滤条件筛选用例列表。
 filterCases : SuiteOpts -> List Case -> List Case
 filterCases opts cases = filter (caseMatches opts) cases
 
 -- ---------------------------------------------------------------
 -- 打印与汇总
 -- ---------------------------------------------------------------
--- `consolePrint` 按 result 族返回 `Nat`（写入字节数）；这里的动作契约是 `Int`
+-- `consolePrint` 按 result 族返回 `Nat`（写入字节数）；本模块的动作契约是 `Int`
 -- （丢弃/比较都按 Int），因此在调用点用 `natToInt` 归一。
+-- | 内部：打印一行（补换行），返回写入字节数。
 printLine : Member nConsole ConsoleOp r => String -> Eff r Int
 printLine s = fmap natToInt (consolePrint "${s}\n")
 
+-- | 内部：一行状态文本：`ok  ` / `FAIL` + case id + 耗时（`cached` 单独标注；非 verbose
+-- 时省略耗时）。
 statusLine : Bool -> CaseResult -> String
 statusLine verbose r =
   let
@@ -1406,29 +1655,36 @@ statusLine verbose r =
       else if verbose then " (${strOfInt r.resMs}ms)" else ""
   in "${tag} ${r.resId}${timing}"
 
+-- | 内部：逐条缩进打印消息，返回写入字节数。
 printMessages : Member nConsole ConsoleOp r => List String -> Eff r Int
 printMessages [] = pure 0
 printMessages (m :: rest) = do
   _ <- printLine "  ${m}"
   printMessages rest
 
+-- | 内部：打印一条 case 结果及其失败消息。
 printResult : Member nConsole ConsoleOp r => Bool -> CaseResult -> Eff r Int
 printResult verbose r = do
   _ <- printLine (statusLine verbose r)
   printMessages r.resMessages
 
+-- | 内部：取 `resChecks`。
 resChecksOf : CaseResult -> Int
 resChecksOf r = r.resChecks
 
+-- | 内部：取 `resFail`。
 resFailOf : CaseResult -> Int
 resFailOf r = r.resFail
 
+-- | 内部：状态是否为 `fail`。
 isFailed : CaseResult -> Bool
 isFailed r = r.resStatus == "fail"
 
+-- | 内部：状态是否为 `skip`。
 isSkipped : CaseResult -> Bool
 isSkipped r = r.resStatus == "skip"
 
+-- | 汇总一行：全通过时给 checks 总数，否则给 checks 数 + 失败 case 列表。
 summarize : List CaseResult -> String
 summarize results =
   let
@@ -1439,6 +1695,7 @@ summarize results =
   in if failed == 0 && badCases == 0 then "vuna tests passed (${strOfInt checks} checks)"
   else "${strOfInt checks} checks, ${strOfInt badCases} failed case(s): ${join ", " (map resIdOf bad)}"
 
+-- | 打印被测编译器路径与指纹。
 printCompiler : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r => Env -> Eff r Int
 printCompiler env = do
   fp <- toolCompilerFingerprint
@@ -1447,6 +1704,7 @@ printCompiler env = do
 -- ---------------------------------------------------------------
 -- 顺序执行 + worker
 -- ---------------------------------------------------------------
+-- | 内部：把一个结果写成 `<index>.tsv`（父进程按全局下标读回），返回写入字节数。
 writeResultFile : Member nFs FsOp r => String -> Int -> CaseResult -> Eff r Int
 writeResultFile dir index r =
   let
@@ -1455,10 +1713,13 @@ writeResultFile dir index r =
       "${r.resId}\t${r.resStatus}\t${strOfInt r.resPass}\t${strOfInt r.resFail}\t${strOfInt r.resChecks}\t${strOfInt r.resMs}\n"
   in fmap natToInt (fsWriteFile path line)
 
+-- | 顺序执行一组带全局下标的 case（每跑完一个就写 TSV），返回按传入顺序排列的结果。
 runCasesIndexed : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> Eff r (List CaseResult)
 runCasesIndexed env verbose failFast quiet resultsDir indexed =
   runCasesIndexedGo env verbose failFast quiet resultsDir indexed [] False
 
+-- | 内部：顺序执行的递归体。`stopped`（`--fail-fast` 且已出现失败）之后每个 case 都记
+-- `skip` 并照样写 TSV，保证父进程能按序收齐。
 runCasesIndexedGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Bool -> Bool -> Bool -> String -> List (Pair Int Case) -> List CaseResult -> Bool -> Eff r (List CaseResult)
 runCasesIndexedGo env verbose failFast quiet resultsDir [] acc stopped = pure (reverse acc)
 runCasesIndexedGo env verbose failFast quiet resultsDir ((Pair index c) :: rest) acc stopped = if stopped then do
@@ -1472,6 +1733,7 @@ else do
   runCasesIndexedGo env verbose failFast quiet resultsDir rest (r :: acc)
     (failFast && r.resStatus == "fail")
 
+-- | 内部：布尔取反（本模块不用 base 的入口）。
 not : Bool -> Bool
 not True = False
 not False = True
@@ -1483,9 +1745,11 @@ not False = True
 -- `.local/test-suite/costs.tsv` 的实测耗时做 LPT 分桶：重 case 优先放到当前负载最小的 worker。
 -- worker 各自读同一份 costs，确定性地算出同一组 bins，再取自己的 bin。
 -- ---------------------------------------------------------------
+-- | 内部：实测耗时表路径（`.local/test-suite/costs.tsv`）。
 costsPath : Env -> String
 costsPath env = "${env.envRoot}/.local/test-suite/costs.tsv"
 
+-- | 内部：读耗时表；文件不存在时给空列表。
 loadCosts : Member nFs FsOp r => Env -> Eff r (List (Pair String Int))
 loadCosts env = do
   exists <- pathExistsFile (costsPath env)
@@ -1494,16 +1758,20 @@ loadCosts env = do
     text <- fsReadFile (costsPath env)
     pure (mapMaybe parseCostLine (lines text))
 
+-- | 内部：`id<TAB><ms>` → `(id, ms)`；没有第二个字段时跳过（`Nothing`），第二个字段不是数字时按 100。
 parseCostLine : String -> Maybe (Pair String Int)
 parseCostLine line = case split "\t" line of
   id :: ms :: _ => Just (Pair id (fromMaybe 100 (parseLeadingInt ms)))
   _ => Nothing
 
+-- | 内部：case 的调度权重：耗时表里有正数就用实测值，否则用 `defaultCost`。
 caseCost : List (Pair String Int) -> Case -> Int
 caseCost costs c = case lookupPair c.caseId costs of
   Just ms => if ms > 0 then ms else defaultCost c
   Nothing => defaultCost c
 
+-- | 内部：按 case kind 给的默认权重：steps 1500、seed 800、runtime 500、golden / error 300、
+-- 其余 100。
 defaultCost : Case -> Int
 defaultCost c = case c.caseKind of
   CSteps _ => 1500
@@ -1513,26 +1781,33 @@ defaultCost c = case c.caseKind of
   CError _ _ _ _ _ => 300
   _ => 100
 
+-- | 内部：只有显式指定 tier 且不含 `e2e` 时才用 LPT（e2e 的冷隔离长 case 对顺序敏感）。
 useLpt : SuiteOpts -> Bool
 useLpt opts = case opts.suiteTiers of
   [] => False
   tiers => not (memName "e2e" tiers)
 
+-- | 内部：空桶：用例列表为空、负载 0。
 emptyBin : Pair (List (Pair Int Case)) Int
 emptyBin = Pair [] 0
 
+-- | 内部：`n` 份同一初值。
 repeatN : Int -> Pair (List (Pair Int Case)) Int -> List (Pair (List (Pair Int Case)) Int)
 repeatN n x = if n <= 0 then [] else x :: repeatN (n - 1) x
 
+-- | 内部：按权重降序排序（插入排序）。
 sortWeighted : List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
 sortWeighted [] = []
 sortWeighted (x :: rest) = insertWeighted x (sortWeighted rest)
 
+-- | 内部：把一个带权项插进已按权重降序排好的列表。
 insertWeighted : Pair Int (Pair Int Case) -> List (Pair Int (Pair Int Case)) -> List (Pair Int (Pair Int Case))
 insertWeighted x [] = [x]
 insertWeighted x ((Pair w p) :: rest) =
   if firstOf x >= w then x :: Pair w p :: rest else Pair w p :: insertWeighted x rest
 
+-- | 内部：按实测耗时把 case 分进 `jobs` 个桶（重 case 优先给当前最轻的桶）；`addAtBinGo`
+-- 前插，桶内按权重升序（最轻的在表头）。
 lptBins : Member nFs FsOp r => Env -> Int -> List (Pair Int Case) -> Eff r (List (List (Pair Int Case)))
 lptBins env jobs indexed = do
   costs <- loadCosts env
@@ -1542,6 +1817,7 @@ lptBins env jobs indexed = do
     bins = assignAll sorted (repeatN jobs emptyBin)
   in pure (map (\b => firstOf b) bins)
 
+-- | 内部：逐个把带权项放进当前最轻的桶。
 assignAll : List (Pair Int (Pair Int Case)) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
 assignAll [] bins = bins
 assignAll (w :: rest) bins =
@@ -1551,33 +1827,41 @@ assignAll (w :: rest) bins =
     bins2 = addAtBin idx w bins
   in assignAll rest bins2
 
+-- | 内部：负载最小的桶下标（并列时取靠前者）。
 lightestIndex : List Int -> Int
 lightestIndex loads = lightestGo loads 0 0 999999999
 
+-- | 内部：`lightestIndex` 的递归体。
 lightestGo : List Int -> Int -> Int -> Int -> Int
 lightestGo [] _ best _ = best
 lightestGo (n :: rest) i best bestLoad =
   if n < bestLoad then lightestGo rest (i + 1) i n else lightestGo rest (i + 1) best bestLoad
 
+-- | 内部：把项加到第 `idx` 个桶。
 addAtBin : Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
 addAtBin idx w bins = addAtBinGo idx 0 w bins
 
+-- | 内部：`addAtBin` 的递归体（按计数走到第 `idx` 个桶后追加并累加负载）。
 addAtBinGo : Int -> Int -> Pair Int (Pair Int Case) -> List (Pair (List (Pair Int Case)) Int) -> List (Pair (List (Pair Int Case)) Int)
 addAtBinGo _ _ _ [] = []
 addAtBinGo idx i w ((Pair items load) :: rest) =
   if i == idx then Pair (secondOf w :: items) (load + firstOf w) :: rest
   else Pair items load :: addAtBinGo idx (i + 1) w rest
 
+-- | 内部：取第 `n` 个桶；越界给空桶。
 nthBin : Int -> List (List (Pair Int Case)) -> List (Pair Int Case)
 nthBin _ [] = []
 nthBin n (b :: rest) = if n <= 0 then b else nthBin (n - 1) rest
 
+-- | 内部：耗时表的一行：`id<TAB><ms>`。
 costRowText : CaseResult -> String
 costRowText r = "${r.resId}\t${strOfInt r.resMs}"
 
+-- | 内部：是否参与写耗时表（非 `cached` 且有正耗时）。
 isCostRow : CaseResult -> Bool
 isCostRow r = r.resStatus /= "cached" && r.resMs > 0
 
+-- | 内部：把本次实测耗时写回耗时表；没有可写的行时不动文件，返回写入字节数。
 recordCosts : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> List CaseResult -> Eff r Int
 recordCosts env results =
   let
@@ -1588,6 +1872,8 @@ recordCosts env results =
     _ <- ensureDirPath "${env.envRoot}/.local/test-suite"
     fmap natToInt (fsWriteFile (costsPath env) text)
 
+-- | 一个 worker 的入口：按 LPT（非 e2e tier）或静态分片取自己那份 case，顺序执行并把结果
+-- 写成 TSV。返回 0（无失败）/ 1。
 runWorker : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> SuiteOpts -> List Case -> Int -> Int -> Eff r Int
 runWorker env opts cases index count = do
   indexed <- if useLpt opts then do
@@ -1607,6 +1893,7 @@ runWorker env opts cases index count = do
 -- ---------------------------------------------------------------
 -- jobs
 -- ---------------------------------------------------------------
+-- | 探测并发数：`VUNA_TEST_JOBS` 优先，否则跑 `nproc`。
 detectJobs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Eff r Int
 detectJobs env = do
   override <- envVar "VUNA_TEST_JOBS"
@@ -1615,17 +1902,19 @@ detectJobs env = do
     r <- runCmd env "jobs-probe" "." 10 ["nproc"]
     pure (positiveOrOne (parseLeadingInt (trim r.cmdOut)))
 
--- 探测结果 -> 并发数：缺失/非正数一律回落 1。
+-- | 内部：探测结果 → 并发数：缺失或非正数一律回落 1。
 positiveOrOne : Maybe Int -> Int
 positiveOrOne Nothing = 1
 positiveOrOne (Just n) = if n > 0 then n else 1
 
+-- | 解析并发数：`--jobs` 为 0 时自动探测，否则用给定值。
 resolveJobs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> Eff r Int
 resolveJobs env opts = if opts.suiteJobs == 0 then detectJobs env else pure opts.suiteJobs
 
 -- ---------------------------------------------------------------
 -- 父进程
 -- ---------------------------------------------------------------
+-- | 内部：等所有 worker 退出；任一非 0 即返回 1，否则 0。
 waitPids : Member nProcess ProcessOp r => List Int -> Eff r Int
 waitPids [] = pure 0
 waitPids (pid :: rest) = do
@@ -1633,6 +1922,8 @@ waitPids (pid :: rest) = do
   last <- waitPids rest
   pure (if code /= 0 then 1 else last)
 
+-- | 内部：启动 `jobs` 个 worker 子进程（隐藏的 `--worker i/N` + results 目录 + 过滤 / 缓存 /
+-- 开关参数转发），返回 pid 列表。
 spawnWorkers : Member nProcess ProcessOp r => Env -> SuiteOpts -> String -> Int -> Int -> Int -> List Int -> Eff r (List Int)
 spawnWorkers env opts resultsDir jobs fuel index pids = if fuel <= 0 then pure (reverse pids)
 else if index >= jobs then pure (reverse pids)
@@ -1658,6 +1949,7 @@ else
     pid <- processSpawn args
     spawnWorkers env opts resultsDir jobs (fuel - 1) (index + 1) (pid :: pids)
 
+-- | 内部：读 worker 写的 `<index>.tsv`；文件缺失或列数不对给 `Nothing`。
 readResultFile : Member nFs FsOp r => String -> Int -> Eff r (Maybe CaseResult)
 readResultFile dir index =
   let
@@ -1674,15 +1966,18 @@ readResultFile dir index =
         _ => Nothing
       )
 
+-- | 内部：按全局下标顺序收集 worker 结果，缺失的补一条失败（见 `caseIdAt`）。
 collectResults : Member nFs FsOp r => String -> Int -> List (Pair Int Case) -> Eff r (List CaseResult)
 collectResults dir count indexed = collectResultsGo (count + 1) dir count 0 indexed []
 
--- 缺结果文件 ⇒ worker 没跑完/被杀（崩溃、OOM、超时被外层杀），不是 case 断言失败。
--- 用 index → case id 还原真实用例名；只报 `unknown-<index>` 时线上失败无法定位。
+-- 缺结果文件 ⇒ worker 没跑完 / 被杀（崩溃、OOM、被外层超时杀掉），不是 case 断言失败；
+-- 用全局下标还原真实用例名，否则线上失败无法定位。
+-- | 内部：全局下标 → case id；找不到时给 `unknown-<index>`。
 caseIdAt : Int -> List (Pair Int Case) -> String
 caseIdAt i [] = "unknown-${strOfInt i}"
 caseIdAt i ((Pair j c) :: rest) = if j == i then c.caseId else caseIdAt i rest
 
+-- | 内部：`collectResults` 的递归体（`fuel` 上限防跑飞）。
 collectResultsGo : Member nFs FsOp r => Int -> String -> Int -> Int -> List (Pair Int Case) -> List CaseResult -> Eff r (List CaseResult)
 collectResultsGo fuel dir count index indexed acc = if fuel <= 0 then pure (reverse acc)
 else if index >= count then pure (reverse acc)
@@ -1694,6 +1989,7 @@ else do
       collectResultsGo (fuel - 1) dir count (index + 1) indexed
         (CaseResult "${caseIdAt index indexed} (no result)" "fail" 0 1 0 0 [] :: acc)
 
+-- | 打印 `--json` 输出：suite / total / failed / checks / cases。
 printJSON : Member nConsole ConsoleOp r => List CaseResult -> Eff r Int
 printJSON results =
   let
@@ -1703,11 +1999,14 @@ printJSON results =
         [Pair "suite" (JStr "vuna"), Pair "total" (JNum (listLength results)), Pair "failed" (JNum (listLength (filter isFailed results))), Pair "checks" (JNum (sumInts (map resChecksOf results))), Pair "cases" (JArr cases)]
   in printLine (renderJson doc)
 
+-- | 内部：单条结果 → JSON 对象。
 resultJson : CaseResult -> Json
 resultJson r =
   JObj
     [Pair "id" (JStr r.resId), Pair "status" (JStr r.resStatus), Pair "pass" (JNum r.resPass), Pair "fail" (JNum r.resFail), Pair "checks" (JNum r.resChecks), Pair "ms" (JNum r.resMs)]
 
+-- | 收尾：写耗时表与上次失败列表，按需打印 timings / JSON / 汇总，返回退出码
+-- （`--strict-skips` 时 `skip` 也算失败）。
 finishResults : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> List CaseResult -> Eff r Int
 finishResults env opts results =
   let
@@ -1724,6 +2023,8 @@ finishResults env opts results =
     _ <- if opts.suiteJSON then printJSON results else printLine (summarize results)
     pure (if bad + strictBad == 0 then 0 else 1)
 
+-- | 父进程主路径：解析并发数（不超过 case 数）；单 worker 时顺序执行，否则 spawn worker、
+-- 等它们退出后按全局下标收集结果，最后交给 `finishResults`。
 runParent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> SuiteOpts -> Suite -> List Case -> Eff r Int
 runParent env opts suite cases = do
   jobs <- resolveJobs env opts
@@ -1747,6 +2048,7 @@ runParent env opts suite cases = do
       results <- collectResults resultsDir n indexed
       finishResults env opts results
 
+-- | 内部：给 case 配全局下标（从 0 起，保持发现顺序）。
 indexAll : List Case -> Int -> List (Pair Int Case) -> List (Pair Int Case)
 indexAll [] i acc = reverse acc
 indexAll (c :: rest) i acc = indexAll rest (i + 1) (Pair i c :: acc)
@@ -1754,14 +2056,17 @@ indexAll (c :: rest) i acc = indexAll rest (i + 1) (Pair i c :: acc)
 -- ---------------------------------------------------------------
 -- list
 -- ---------------------------------------------------------------
+-- | 内部：按耗时降序插入。
 insertByMs : CaseResult -> List CaseResult -> List CaseResult
 insertByMs r [] = [r]
 insertByMs r (x :: rest) = if r.resMs > x.resMs then r :: x :: rest else x :: insertByMs r rest
 
+-- | 内部：按耗时降序排序。
 sortByMs : List CaseResult -> List CaseResult
 sortByMs [] = []
 sortByMs (r :: rest) = insertByMs r (sortByMs rest)
 
+-- | 内部：打印前 `n` 条耗时。
 printTimingsGo : Member nConsole ConsoleOp r => Int -> List CaseResult -> Eff r Int
 printTimingsGo n [] = pure 0
 printTimingsGo n (r :: rest) = if n <= 0 then pure 0
@@ -1769,18 +2074,22 @@ else do
   _ <- printLine "timing ${strOfInt r.resMs}ms ${r.resId}"
   printTimingsGo (n - 1) rest
 
+-- | 打印最慢的 10 个 case 的耗时。
 printTimings : Member nConsole ConsoleOp r => List CaseResult -> Eff r Int
 printTimings results = printTimingsGo 10 (sortByMs results)
 
+-- | `--list`：逐条打印 case id（编译器信息由 `listSuite` 先打印）。
 printList : Member nConsole ConsoleOp r => List Case -> Eff r Int
 printList cases = printListGo cases
 
+-- | 内部：逐条打印 case id。
 printListGo : Member nConsole ConsoleOp r => List Case -> Eff r Int
 printListGo [] = pure 0
 printListGo (c :: rest) = do
   _ <- printCase c
   printListGo rest
 
+-- | 内部：打印一个 case id。
 printCase : Member nConsole ConsoleOp r => Case -> Eff r Int
 printCase c = printLine c.caseId
 
@@ -1790,6 +2099,7 @@ printCase c = printLine c.caseId
 -- ---------------------------------------------------------------
 -- --changed
 -- ---------------------------------------------------------------
+-- | 内部：去掉 `<root>/` 前缀；不在仓库内时原样返回（`--changed` 比较用相对路径）。
 stripRoot : Env -> String -> String
 stripRoot env path =
   let
@@ -1797,11 +2107,13 @@ stripRoot env path =
   in if startsWith prefix path then substring (byteLength prefix) (byteLength path - byteLength prefix) path
   else path
 
+-- | 内部：`git diff --name-only <rev>` 的路径列表（相对仓库根）；git 失败给 `Nothing`。
 changedPaths : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> Eff r (Maybe (List String))
 changedPaths env rev = do
   r <- runCmd env "git-diff" env.envRoot 60 ["git", "diff", "--name-only", rev]
   pure (if r.cmdCode == 0 then Just (filter (\line => line /= "") (lines r.cmdOut)) else Nothing)
 
+-- | 内部：该改动是否影响所有 case（编译器 / base / lib / app / suite 配置）。
 isGlobalChange : String -> Bool
 isGlobalChange path =
   startsWith "compiler/" path
@@ -1812,9 +2124,11 @@ isGlobalChange path =
     || startsWith "test/suite" path
     || path == "test/suite.toml"
 
+-- | 内部：取路径前 `n` 段并补尾 `/`。
 takeFirstSegments : Int -> String -> String
 takeFirstSegments n s = collectSegments n (split "/" s) ""
 
+-- | 内部：`takeFirstSegments` 的递归体。
 collectSegments : Int -> List String -> String -> String
 collectSegments n [] acc = acc
 collectSegments n (seg :: rest) acc =
@@ -1823,12 +2137,15 @@ collectSegments n (seg :: rest) acc =
   else if acc == "" then collectSegments (n - 1) rest "${seg}/"
   else collectSegments (n - 1) rest "${acc}${seg}/"
 
+-- | 内部：corpus 路径取前三段（`test/corpus/<族>/`），其余原样返回。
 corpusDirPrefix : String -> String
 corpusDirPrefix rel = if startsWith "test/corpus/" rel then takeFirstSegments 3 rel else rel
 
+-- | 内部：两个路径是否互相沾到（相等、互为前缀）。
 pathTouches : String -> String -> Bool
 pathTouches changed rel = changed == rel || startsWith changed rel || startsWith rel changed
 
+-- | 内部：case 依赖的路径（相对仓库根）；`CBroken` 没有路径。
 casePaths : Env -> Case -> List String
 casePaths env c = case c.caseKind of
   CGolden source expected _ _ _ _ _ => [stripRoot env source, stripRoot env expected]
@@ -1843,7 +2160,7 @@ casePaths env c = case c.caseKind of
   CSteps path => [stripRoot env path]
   CBroken _ => []
 
--- 章节/步骤文件的文本认领：夹具变更时，文件里提到该 corpus 目录就算“相关”。
+-- | 内部：章节 / 步骤文件的文本认领：文件里提到被改动的 corpus 目录，或本身被改动，就算相关。
 claimTextTouches : Member nFs FsOp r => Env -> String -> List String -> Eff r Bool
 claimTextTouches env path changed = do
   text <- fsReadFile path
@@ -1852,6 +2169,8 @@ claimTextTouches env path changed = do
   in pure
     (any (\p => contains (corpusDirPrefix p) text) corpusChanges || any (\p => contains (stripRoot env path) p) changed)
 
+-- | 内部：`changed` 里是否有改动影响该 case：全局改动一律算；steps 走文本认领，其余按
+-- `casePaths` 逐条比对。
 caseAffected : Member nFs FsOp r => Env -> List String -> Case -> Eff r Bool
 caseAffected env changed c = if any isGlobalChange changed then pure True
 else case c.caseKind of
@@ -1861,10 +2180,13 @@ else case c.caseKind of
       paths = casePaths env c
     in pure (any (\rel => any (\p => pathTouches p rel) changed) paths)
 
+-- | 内部：谓词在列表上是否存在命中（本模块不用 base 的入口）。
 any : (a -> Bool) -> List a -> Bool
 any pred [] = False
 any pred (x :: rest) = if pred x then True else any pred rest
 
+-- | 内部：`--changed <rev>` 过滤：只留下受改动影响的 case。git 失败时不过滤；改动里没有
+-- 相对路径时结果为空。
 changedFilter : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> String -> List Case -> Eff r (List Case)
 changedFilter env rev cases = do
   changed <- changedPaths env rev
@@ -1873,6 +2195,7 @@ changedFilter env rev cases = do
     Just [] => pure []
     Just flags => filterEff (caseAffected env flags) cases
 
+-- | 内部：`--list` 的输出：编译器信息 + case 列表。
 listSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r => Env -> List Case -> Eff r Int
 listSuite env cases = do
   _ <- printCompiler env
@@ -1881,17 +2204,21 @@ listSuite env cases = do
 -- ---------------------------------------------------------------
 -- --audit / --watch
 -- ---------------------------------------------------------------
+-- | 内部：去掉 `test/` 前缀（审计路径比较用）。
 stripTestPrefix : String -> String
 stripTestPrefix rel = if startsWith "test/" rel then substring 5 (byteLength rel - 5) rel else rel
 
+-- | 内部：case 认领的目录根：目录型夹具（`.../app/Main.vuna`）给带尾 `/` 的包根，其余原样。
 caseRoots : Env -> Case -> List String
 caseRoots env c = map rootOfPath (casePaths env c)
 
+-- | 内部：`.../app/Main.vuna` → 包根目录（带尾 `/`）；其余原样。
 rootOfPath : String -> String
 rootOfPath path =
   if endsWith "/app/Main.vuna" path then "${Vuna.Cli.Args.parentOf (Vuna.Cli.Args.parentOf path)}/"
   else path
 
+-- | 内部：收集 steps 文件的文本（用于审计的文本认领）。
 claimTextPairs : Member nFs FsOp r => List Case -> Eff r (List (Pair String String))
 claimTextPairs [] = pure []
 claimTextPairs (c :: rest) = case c.caseKind of
@@ -1901,29 +2228,33 @@ claimTextPairs (c :: rest) = case c.caseKind of
     pure (Pair path text :: more)
   _ => claimTextPairs rest
 
+-- | 内部：是否有 steps 文本提到该路径（去掉 `test/` 前缀后的全路径或其 corpus 目录）。
 anyText : List (Pair String String) -> String -> Bool
 anyText [] rel = False
 anyText ((Pair _ text) :: rest) rel =
   if contains (stripTestPrefix rel) text || contains (stripTestPrefix (corpusDirPrefix rel)) text then True
   else anyText rest rel
 
+-- | 内部：该路径被某个 case 的目录根覆盖，或被 steps 文本提到。
 auditClaimed : Env -> List Case -> List (Pair String String) -> String -> Bool
 auditClaimed env cases texts rel =
   any (\c => any (\root => root == rel || startsWith root rel) (caseRoots env c)) cases
     || anyText texts rel
 
+-- | 内部：逐行打印 `orphan <rel>`。
 printOrphans : Member nConsole ConsoleOp r => List String -> Eff r Int
 printOrphans [] = pure 0
 printOrphans (rel :: rest) = do
   _ <- printLine "orphan ${rel}"
   printOrphans rest
 
+-- | 内部：`test/corpus/codegen/` 下的产物不参与审计。
 auditPathIgnored : String -> Bool
 auditPathIgnored path = contains "/test/corpus/codegen/" path
 
--- 全量 corpus 里没有被任何 case / section 脚本认领的夹具。family 配置漏掉一整族
--- （或期望文件改错名）时 suite 会「少跑 case 却依然全绿」——这个结果是默认护栏的
--- 输入，不依赖 `--audit` 手动开关。
+-- | 内部：全量 corpus 里没有被任何 case / section 脚本认领的夹具。family 配置漏掉一整族
+-- （或期望文件改错名）时 suite 会「少跑 case 却依然全绿」；本函数只服务 `--audit`，默认
+-- 护栏是同口径但只看 family 声明目录的 `familyOrphans`。
 auditOrphans : Member nFs FsOp r => Suite -> Eff r (List String)
 auditOrphans suite =
   let
@@ -1940,26 +2271,30 @@ auditOrphans suite =
       fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
+-- | 内部：取前 `n` 个元素。
 takeFirst : Int -> List a -> List a
 takeFirst n xs = if n <= 0 then []
 else case xs of
   [] => []
   x :: rest => x :: takeFirst (n - 1) rest
 
--- family 声明的目录里应该被 case 认领的夹具（rel 路径）。文件型 = 顶层
--- `*.vuna`（跳过 `_` 辅助模块）；目录型 = 每个子目录的 entry。section 专属目录
--- （dt_pkg / dt_ad_hoc 等）不在 family 里，不参与精确审计。
+-- 文件型夹具 = 顶层 `*.vuna`（跳过 `_` 辅助模块）；目录型夹具 = 每个子目录的 entry。
+-- section 专属目录（dt_pkg / dt_ad_hoc 等）不在 family 里，不参与精确审计。
+-- | 内部：是否算 family 的顶层夹具文件。
 isFixtureFile : String -> Bool
 isFixtureFile name = endsWith ".vuna" name && not (startsWith "_" name)
 
+-- | 内部：文件型夹具的相对路径。
 fixtureTopOf : String -> String -> List String
 fixtureTopOf familyDir name = ["${familyDir}/${name}"]
 
+-- | 内部：目录型夹具的入口文件路径（文件存在才算）。
 fixtureEntryOf : Member nFs FsOp r => String -> String -> String -> String -> Eff r (List String)
 fixtureEntryOf dir familyDir entry name = do
   exists <- pathExistsFile "${dir}/${name}/${entry}"
   pure (if exists then ["${familyDir}/${name}/${entry}"] else [])
 
+-- | 内部：一个 family 声明的目录里应被 case 认领的夹具（相对路径）；目录不存在给空列表。
 familyFixtures : Member nFs FsOp r => String -> Family -> Eff r (List String)
 familyFixtures root family =
   let
@@ -1973,14 +2308,17 @@ familyFixtures root family =
         Just entry => concatMapEff (fixtureEntryOf dir family.familyDir entry) names
         Nothing => pure (concatMap (fixtureTopOf family.familyDir) (filter isFixtureFile names))
 
+-- | 内部：精确审计用的空 steps 文本表（不做文本认领）。
 noSectionTexts : List (Pair String String)
 noSectionTexts = []
 
+-- | 内部：该夹具在精确审计下是孤儿（只有目录认领算数）。
 familyOrphan : Env -> List Case -> String -> Bool
 familyOrphan env cases rel = not (auditClaimed env cases noSectionTexts rel)
 
--- 精确护栏：不用 section 脚本文本做模糊认领（只看目录名会让整个 family 从 suite.toml
--- 消失时也报 0 orphan）。
+-- 精确护栏：不用 section 脚本文本做模糊认领——只看目录名会让整个 family 从 suite.toml
+-- 消失时也报 0 orphan。
+-- | 精确护栏：family 声明目录里没被任何 case 认领的夹具。
 familyOrphans : Member nFs FsOp r => Suite -> Eff r (List String)
 familyOrphans suite =
   let
@@ -1995,16 +2333,19 @@ familyOrphans suite =
           False "/tmp/vuna-store" "/tmp/vuna-build" ref
     in pure (filter (familyOrphan env cases) fixtures)
 
+-- | 内部：逗号拼接。
 commaJoin : List String -> String
 commaJoin xs = join ", " xs
 
--- 孤儿存在 ⇒ 注入一个显式失败 case（worker 分片会把它派给某一个 worker 跑一次）。
+-- | 内部：孤儿夹具非空时生成一个 `audit/orphans` 失败 case（worker 分片会把它派给某一个
+-- worker 跑一次；消息里最多列 12 个路径）。
 auditCases : List String -> List Case
 auditCases [] = []
 auditCases paths =
   [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0 "e2e"
   ]
 
+-- | `--audit`：列出未认领的夹具，返回退出码（有孤儿即 1）。
 auditSuite : Member nFs FsOp r, Member nConsole ConsoleOp r => SuiteOpts -> Suite -> Eff r Int
 auditSuite opts suite = do
   unclaimed <- auditOrphans suite
@@ -2015,12 +2356,15 @@ auditSuite opts suite = do
     _ => 1
   )
 
+-- | 内部：一组文件里最大的 mtime（缺失按 0）。
 maxMtime : Member nFs FsOp r => Int -> List String -> Eff r Int
 maxMtime acc [] = pure acc
 maxMtime acc (path :: rest) = do
   m <- fmap (fromMaybe 0) (fsFileMtime path)
   maxMtime (if m > acc then m else acc) rest
 
+-- | 内部：`--watch` 的快照：corpus / suite / lib / compiler / app / base 与两个配置文件的
+-- mtime 最大值。
 watchSnapshot : Member nFs FsOp r => String -> Eff r Int
 watchSnapshot root = do
   corpusFiles <- collectSourceFiles "${root}/test/corpus"
@@ -2033,6 +2377,7 @@ watchSnapshot root = do
   maxMtime 0
     (append corpusFiles (append suiteFiles (append libFiles (append compilerFiles (append appFiles (append baseFiles extra))))))
 
+-- | 内部：`--watch` 的轮询体：每 500ms 取一次快照，变化就重跑整个 suite。
 watchLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> SuiteOpts -> Suite -> Int -> Int -> Eff r Int
 watchLoop fuel opts suite last rc = if fuel <= 0 then pure rc
 else do
@@ -2044,17 +2389,22 @@ else do
     watchLoop (fuel - 1) opts suite now rc2
   else watchLoop (fuel - 1) opts suite last rc
 
+-- | `--watch`：先跑一次 suite，再持续轮询重跑。
 watchSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => SuiteOpts -> Suite -> Eff r Int
 watchSuite opts suite = do
   rc <- runSuiteOnce opts suite
   snapshot <- watchSnapshot suite.suiteRoot
   watchLoop 100000000 opts suite snapshot rc
 
+-- | `vuna test` 的入口：`--audit`、`--watch`、正常跑一次三选一。
 export runSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => SuiteOpts -> Suite -> Eff r Int
 runSuite opts suite =
   if opts.suiteAudit then auditSuite opts suite
   else if opts.suiteWatch then watchSuite opts suite else runSuiteOnce opts suite
 
+-- | 跑一次 suite：建临时根与捕获 helper，解析 base / store / 编译器路径，构造 `Env`，
+-- 发现用例并注入默认护栏 case（family 孤儿、case 总数下限），再按 `--list` / worker /
+-- 父进程三条出口执行，最后删掉临时根。
 runSuiteOnce : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => SuiteOpts -> Suite -> Eff r Int
 runSuiteOnce opts suite =
   let
@@ -2119,36 +2469,40 @@ runSuiteOnce opts suite =
       _ <- processRunIn "/" ["rm", "-rf", tmp]
       pure result
 
--- 给每个 case 配全局下标：`zip cases [0..n-1]`，再按 worker index 过滤。
+-- | 内部：`[start, start+fuel)`。
 rangeUp : Int -> Int -> List Int
 rangeUp fuel start = if fuel <= 0 then [] else start :: rangeUp (fuel - 1) (start + 1)
 
+-- | 内部：静态分片：带上全局下标后按 `matchesIndex` 过滤出该 worker 的 case。
 indexedCases : List Case -> Int -> Int -> List (Pair Int Case)
 indexedCases cases index count =
   filter (matchesIndex index count) (zip (rangeUp (listLength cases) 0) cases)
 
--- 全局下标 i 属于 worker index：i mod count == index。
+-- | 内部：全局下标 `i` 属于第 `index` 个 worker（`i mod count == index`）。
 matchesIndex : Int -> Int -> Pair Int Case -> Bool
 matchesIndex index count (Pair i _) = if count <= 0 then False else i - i / count * count == index
 
--- 把绝对源码路径转成相对 cwd 的路径（.diag.json 不写机器相关前缀）。
+-- | 内部：把绝对源码路径转成相对 `base` 的路径（`.diag.json` 不写机器相关前缀）。
 relativeTo : String -> String -> String
 relativeTo base path =
   if startsWith "${base}/" path then substring (natFromInt (strLength base + 1)) (natFromInt (strLength path - strLength base - 1))
     path
   else path
 
--- 文本替换（诊断 JSON 归一化用；Base.String 没有 replace）。
+-- 诊断 JSON 归一化用（`Base.String` 没有 replace）。
+-- | 内部：把 `haystack` 里所有 `needle` 换成 `replacement`。
 replaceAllText : String -> String -> String -> String
 replaceAllText needle replacement haystack =
   let
     chars = strUnpack haystack
   in strPack (reverse (replaceAllGo needle replacement chars [] chars))
 
+-- | 内部：`replaceAllText` 的递归体（`acc` 逆序累积输出）。
 replaceAllGo : String -> String -> List Int -> List Int -> List Int -> List Int
 replaceAllGo needle replacement rest acc [] = acc
 replaceAllGo needle replacement rest acc (_ :: fs) = replaceStep needle replacement rest acc fs
 
+-- | 内部：在当前位置尝试匹配 `needle` 并替换，不匹配时前进一个字节继续。
 replaceStep : String -> String -> List Int -> List Int -> List Int -> List Int
 replaceStep needle replacement [] acc fs = acc
 replaceStep needle replacement (c :: cs) acc fs =
@@ -2156,25 +2510,29 @@ replaceStep needle replacement (c :: cs) acc fs =
     (append (reverse (strUnpack replacement)) acc) fs
   else replaceAllGo needle replacement cs (c :: acc) fs
 
+-- | 内部：第一个字节列表是否为第二个的前缀。
 prefixOfInts : List Int -> List Int -> Bool
 prefixOfInts [] _ = True
 prefixOfInts _ [] = False
 prefixOfInts (a :: xs) (b :: ys) = if a == b then prefixOfInts xs ys else False
 
+-- | 内部：丢弃前 `n` 个字节。
 dropNInts : Int -> List Int -> List Int
 dropNInts n xs = if n <= 0 then xs
 else case xs of
   [] => []
   _ :: rest => dropNInts (n - 1) rest
 
--- 诊断 JSON 里的环境路径归一化（本地工作树 vs nix 构建目录）。
+-- | 内部：诊断文本里的环境路径归一化（本地工作树 vs nix 构建目录）：base 路径 → `<BASE>`，
+-- 仓库根 → `<ROOT>`。
 normalizeDiagText : Env -> String -> String
 normalizeDiagText env text =
   let
     t1 = replaceAllText env.envBase "<BASE>" text
   in replaceAllText env.envRoot "<ROOT>" t1
 
--- 含 `.package-dir` 标记的目录型夹具：以包根为 cwd 跑 `vuna check .`。
+-- | 内部：向上找含 `.package-dir` 标记的包根；找不到给空串。当前无调用者，目录型 error
+-- case 走 `probePackageIn`。
 pkgRootOf : Member nFs FsOp r => String -> Int -> Eff r String
 pkgRootOf dir fuel = if fuel <= 0 then pure ""
 else do
