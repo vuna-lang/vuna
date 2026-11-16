@@ -1,0 +1,10 @@
+apply : (Int -> Int) -> Int -> Int
+apply f x = f x
+
+-- 两臂各自构造一个闭包：闭包编号必须互不相同（wasm 后端曾让 else 臂的
+-- `ref.func` 指向 then 臂的函数体，两个 `choose` 给出同一个结果）。
+choose : Bool -> Int
+choose b = if b then apply (\x => x + 1) 10 else apply (\x => x + 100) 10
+
+main : Int
+main = choose True * 1000 + choose False

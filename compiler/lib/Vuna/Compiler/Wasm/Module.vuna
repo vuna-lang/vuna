@@ -304,19 +304,29 @@ else case poolLookup s st.gsPoolTbl of
   Nothing => Err "string literal missing from wasm data pool"
   Just p => Ok (Pair [IConstI32 (firstOf p), IConstI32 (secondOf p), IArrayNewData "$str" "$d0"] st)
 
+-- 两臂**顺序**生成：else 臂从 then 臂生成后的状态继续。闭包编号 `gsNextLam` 与函数表是
+-- 单调累加的；若两臂都从条件后的状态起步，两臂内各自的 lambda 会拿到同一个 `$lamN`，
+-- `mergeArmState` 按名字去重时后一臂的闭包函数被丢掉，else 臂的 `ref.func` 便指向
+-- then 臂的函数体。作用域回到条件后的基线，避免 then 臂内 `case` 分支的 binder 泄漏。
+resumeArm : GenState -> GenState -> GenState
+resumeArm base afterThen = { afterThen | gsScope = base.gsScope }
+
 genIf : Int -> GenState -> Ir -> Ir -> Ir -> Result (Pair (List Instr) GenState)
 genIf fuel st c th el = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case genExpr (fuel - 1) (noTail st) c of
   Err e => Err e
-  Ok pc => case genExpr (fuel - 1) (withTail st.gsTail (secondOf pc)) th of
-    Err e => Err e
-    Ok pt => case genExpr (fuel - 1) (withTail st.gsTail (secondOf pc)) el of
+  Ok pc =>
+    let
+      base = withTail st.gsTail (secondOf pc)
+    in case genExpr (fuel - 1) base th of
       Err e => Err e
-      Ok pe =>
-        let
-          merged = withTail st.gsTail (mergeArmState (secondOf pt) (secondOf pe))
-        in Ok
-          (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) merged)
+      Ok pt => case genExpr (fuel - 1) (withTail st.gsTail (resumeArm base (secondOf pt))) el of
+        Err e => Err e
+        Ok pe =>
+          let
+            merged = withTail st.gsTail (mergeArmState (secondOf pt) (secondOf pe))
+          in Ok
+            (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) merged)
 
 -- | `let`：单运行时 binder；装箱 case 降级的多 binder 走 `genLetBound` 的逐项分支。
 genLet : Int -> GenState -> List IrBinder -> Ir -> Ir -> Result (Pair (List Instr) GenState)
