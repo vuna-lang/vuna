@@ -1,14 +1,14 @@
-module Vuna.Fmt.Decl where
-
--- Vuna.Fmt.Decl：声明 / 模块头 / import / `infix*` 声明的打印与文件组装。
+-- | 声明 / 模块头 / import / `infix*` 声明的打印与文件组装。
 --
 -- 布局约定：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 -- `infix*` 声明放在 imports 之后、第一个声明之前（源码顺序，每行一条），单独成一个
 -- section（与 imports / 声明之间各空一行）；导出列表按字面文本 ASCII 字典序排序
--- （`module B` 整模块重导出排最后），单行超 maxWidth 或含注释时逐项一行（逗号前置）。
--- where 块按 parser 的 ELet..True 形态还原成 where 写法（带签名绑定先输出签名行）。
+-- （`module B` 整模块重导出排最后），单行超 `maxWidth` 或含注释时逐项一行（逗号前置）。
+-- where 块按 parser 的 `ELet .. True` 形态还原成 where 写法（带签名绑定先输出签名行）。
 --
--- env = 程序可见的 fixity 闭包（本地声明在最前），只用于打印侧的优先级/别名判定。
+-- `env` 是程序可见的 fixity 闭包（本地声明在最前），只用于打印侧的优先级 / 别名判定。
+module Vuna.Fmt.Decl where
+
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -19,58 +19,72 @@ import Base.Sort
 import Base.String
 
 -- ---------------------------------------------------------------
--- 线性声明前缀。
+-- 声明前缀
+-- ---------------------------------------------------------------
+-- | 内部：线性声明前缀（`linear ` / 空串）。
 linearPrefix : Bool -> String
 linearPrefix True = "linear "
 linearPrefix False = ""
 
--- 声明前缀 = 表示档位前缀 + 线性前缀（`alias record` / `lin record`）。
+-- | 内部：声明前缀 = 表示档位前缀 + 线性前缀（如 `alias record`）。
 declPrefix : ReprTier -> Bool -> String
 declPrefix tier lin = reprPrefix tier ++ linearPrefix lin
 
--- D11：逐定义 export / opacity 的渲染前缀（从模块头 side table 取）。
+-- | 模块头带来的逐定义渲染修饰：`export` / opacity 前缀与导出成员规格，均按声明名索引。
 record FmtDeclMods where
+  -- | 声明名 → 渲染前缀（`export ` / `export opaque ` 等；无前缀的声明不在表里）。
   fdmPrefix : List (Pair String String)
+  -- | 声明名 → 导出成员规格（`(..)` / `(a, b)`）；缺省表示不带成员后缀。
   fdmMembers : List (Pair String ExportMembers)
 
+-- | 空修饰表（无模块头或模块头没有导出声明的透明情况）。
 emptyFmtDeclMods : FmtDeclMods
 emptyFmtDeclMods = FmtDeclMods [] []
 
+-- | 内部：opacity 关键字文本（`opaque ` / `transparent ` / `abstract `）。
 opacityWord : Opacity -> String
 opacityWord OpacityOpaque = "opaque "
 opacityWord OpacityTransparent = "transparent "
 opacityWord OpacityAbstract = "abstract "
 
+-- | 内部：按名字查前缀文本（查不到为空串）。
 lookupText : String -> List (Pair String String) -> String
 lookupText name [] = ""
 lookupText name ((Pair n p) :: rest) = if n == name then p else lookupText name rest
 
+-- | 内部：按名字查导出成员规格。
 lookupMembersText : String -> List (Pair String ExportMembers) -> Maybe ExportMembers
 lookupMembersText name [] = Nothing
 lookupMembersText name ((Pair n m) :: rest) =
   if n == name then Just m else lookupMembersText name rest
 
+-- | 内部：按名字查 opacity 关键字（没有该名字的 opacity 声明时为空串）。
 lookupOpacityByName : String -> List OpacitySpec -> String
 lookupOpacityByName name [] = ""
 lookupOpacityByName name (o :: rest) =
   if o.opacityName == name then opacityWord o.opacityKind else lookupOpacityByName name rest
 
+-- | 内部：导出列表里是否有这个名字。
 anyExportOf : String -> List ExportSpec -> Bool
 anyExportOf name [] = False
 anyExportOf name (e :: rest) = exportSpecName e == name || anyExportOf name rest
 
+-- | 内部：导出项的渲染前缀：`export ` + 该名字的 opacity 关键字。
 exportPrefixOf : List OpacitySpec -> ExportSpec -> Pair String String
 exportPrefixOf opacity e =
   Pair (exportSpecName e) ("export " ++ lookupOpacityByName (exportSpecName e) opacity)
 
+-- | 内部：只声明了 opacity、没有出现在导出列表里的名字（这些声明也要加前缀）。
 opacityOnlyOf : List ExportSpec -> OpacitySpec -> List (Pair String String)
 opacityOnlyOf exports o =
   if anyExportOf o.opacityName exports then [] else [Pair o.opacityName (opacityWord o.opacityKind)]
 
+-- | 内部：`type T(..)` 这类导出项的成员规格（其它导出项没有成员）。
 membersOfSpec : ExportSpec -> List (Pair String ExportMembers)
 membersOfSpec (ESType name m sp) = [Pair name m]
 membersOfSpec _ = []
 
+-- | 内部：从模块头建立前缀 / 成员表（没有模块头时为空表）。
 buildFmtDeclMods : Maybe ModDecl -> FmtDeclMods
 buildFmtDeclMods Nothing = emptyFmtDeclMods
 buildFmtDeclMods (Just (ModDecl _ _ _ exports _ opacity _)) =
@@ -79,7 +93,7 @@ buildFmtDeclMods (Just (ModDecl _ _ _ exports _ opacity _)) =
     members = concatMap membersOfSpec exports
   in FmtDeclMods (append (map (exportPrefixOf opacity) exports) opacityOnly) members
 
--- 声明名（渲染侧前缀查找用）；instance 不参与导出。
+-- | 内部：声明名（渲染侧前缀查找用）；instance 不参与导出，返回空串。
 declFmtName : Decl -> String
 declFmtName (DData name params kind ctors derivings viaField repr lin sp) = name
 declFmtName (DAxiom name ty sp) = name
@@ -90,12 +104,14 @@ declFmtName (DRecord name params fields derivings viaField repr lin sp) = name
 declFmtName (DTrait name params supers methods sp) = name
 declFmtName (DInstance ctxE head methods sp) = ""
 
+-- | 内部：导出成员后缀（`(..)` / `(a, b)`；没有成员时为空串）。
 membersSuffix : Maybe ExportMembers -> String
 membersSuffix Nothing = ""
 membersSuffix (Just EMNone) = ""
 membersSuffix (Just EMAll) = "(..)"
 membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
 
+-- | 内部：把 `suffix` 插到该行 `marker` 之前；行里没有 `marker` 时原样返回。
 insertBeforeMarker : String -> String -> String -> String
 insertBeforeMarker marker suffix line = if contains marker line then case split marker line of
   [] => line
@@ -103,18 +119,21 @@ insertBeforeMarker marker suffix line = if contains marker line then case split 
   first :: rest => "${first}${suffix}${marker}${join marker rest}"
 else line
 
+-- | 内部：对第一条含 `needle` 的行做变换，其余行不动。
 mapFirstLineContaining : String -> (String -> String) -> List String -> List String
 mapFirstLineContaining needle f [] = []
 mapFirstLineContaining needle f (line :: rest) =
   if contains needle line then f line :: rest else line :: mapFirstLineContaining needle f rest
 
--- trait 头行：跳过注释（父类前缀里可能出现的 `trait` 字样不应被当成声明头）。
+-- | 内部：对第一条 trait 头行做变换；跳过注释行（父类前缀里可能出现的 `trait` 字样
+-- 不应被当成声明头）。
 mapFirstTraitHeader : (String -> String) -> List String -> List String
 mapFirstTraitHeader f [] = []
 mapFirstTraitHeader f (line :: rest) =
   if contains "trait " line && not (contains "--" line) then f line :: rest
   else line :: mapFirstTraitHeader f rest
 
+-- | 内部：给渲染好的声明加 export / opacity 前缀与导出成员后缀。
 applyDeclMods : FmtDeclMods -> Decl -> List String -> List String
 applyDeclMods mods (DInstance ctxE head methods sp) lines = lines
 applyDeclMods mods (DFun name pats body sp) lines = lines
@@ -143,12 +162,15 @@ applyDeclMods mods decl lines =
       mapFirstTraitHeader (\line => insertBeforeMarker " where" members line) afterPrefix
     _ => afterPrefix
 
+-- ---------------------------------------------------------------
 -- 声明渲染
 -- ---------------------------------------------------------------
+-- | 内部：渲染单个声明并贴上它的注释。
 renderDeclAt : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
 renderDeclAt env at lineInd decl =
   attachAt at (declSpan decl) lineInd (renderDeclBody env at lineInd decl)
 
+-- | 内部：按声明种类分发到具体渲染。
 renderDeclBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Decl -> List String
 renderDeclBody env at lineInd (DData name params kind ctors derivings viaField repr lin sp) =
   renderDataDecl env at viaField (declPrefix repr lin) name params kind ctors derivings
@@ -164,12 +186,14 @@ renderDeclBody env at lineInd (DTrait name params supers methods sp) =
 renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
   renderInstanceDecl env at ctxE head methods
 
--- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
+-- | 内部：`<prefix>name : Ty` 签名行（顶层签名与 axiom 声明共用；`prefix` 为 `""` 或
+-- `"axiom "`，`ctx` 拼在 `:` 之前）。
 renderSigLine : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> List Expr -> Expr -> List String
 renderSigLine env at lineInd prefix name ctx ty =
   prefixFirst "${spaces lineInd}${prefix}${declNameText name} : ${renderInstanceCtx env ctx}"
     (renderTypeExpr env at lineInd ty)
 
+-- | 内部：`data` 头（档位前缀 + 参数 + kind）+ 逐构造器 + deriving。
 renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Bool -> String -> String -> List String -> Expr -> List Ctor -> List String -> List String
 renderDataDecl env at viaField prefix name params kind ctors derivings =
   let
@@ -178,25 +202,29 @@ renderDataDecl env at viaField prefix name params kind ctors derivings =
     ctorLines = concatMap (\c => renderCtorDecl env at c) ctors
   in append [header] (append ctorLines (renderDerivings viaField derivings))
 
--- 声明位的运算符名带括号：`(==) : ...` / `(::) : ...`。
+-- | 内部：声明位的运算符名要带括号（`(==) : ...` / `(::) : ...`）。
 declNameText : String -> String
 declNameText name = case strUnpack name of
   c :: rest => if isNameStart c then name else "(${name})"
   [] => name
 
+-- | 内部：字符码能否作为标识符首字符（字母或下划线）。
 isNameStart : Int -> Bool
 isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
+-- | 内部：构造器行 `Ctor : Ty`（缩进 2）并贴上其注释。
 renderCtorDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
 renderCtorDecl env at (Ctor cname ty arity sp) =
   attachAt at sp 2 (prefixFirst "  ${declNameText cname} : " (renderTypeExpr env at 2 ty))
 
+-- | 内部：`deriving (...)` / `deriving via field (...)` 行（无派生项时为空）。
 renderDerivings : Bool -> List String -> List String
 renderDerivings viaField [] = []
 renderDerivings viaField names =
   if viaField then ["deriving via field (${joinComma names})"]
   else ["deriving (${joinComma names})"]
 
+-- | 内部：`record` 头 + 逐字段 + deriving。
 renderRecordDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Bool -> String -> String -> List String -> List Field -> List String -> List String
 renderRecordDecl env at viaField prefix name params fields derivings =
   let
@@ -204,11 +232,13 @@ renderRecordDecl env at viaField prefix name params fields derivings =
     fieldLines = concatMap (\f => renderRecordField env at f) fields
   in append [header] (append fieldLines (renderDerivings viaField derivings))
 
+-- | 内部：字段行 `name : Ty`（缩进 2）并贴上其注释。
 renderRecordField : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> List String
 renderRecordField env at f =
   attachAt at (fieldSpan f) 2
     (prefixFirst "  ${fieldName f} : " (renderTypeExpr env at 2 (fieldType f)))
 
+-- | 内部：trait 头（父类上下文 + 名字 + 参数）+ 逐条方法签名。
 renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List TraitParam -> List Expr -> List TraitMethod -> List String
 renderTraitDecl env at name params supers methods =
   let
@@ -217,16 +247,19 @@ renderTraitDecl env at name params supers methods =
     methodLines = concatMap (\m => renderMethodSig env at m) methods
   in append [header] methodLines
 
--- 注释锚点用方法签名 span（方法名到类型结束），不用类型表达式 span。
+-- | 内部：trait 参数文本（无 kind 时只写名字，有 kind 时 `(a : K)`）。
 traitParamText : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitParam -> String
 traitParamText env at (TraitParam n Nothing) = n
 traitParamText env at (TraitParam n (Just k)) = "(${n} : ${join " " (renderTypeExpr env at 0 k)})"
 
+-- | 内部：trait 方法签名行 `name : Ty`（缩进 2）并贴上其注释；注释锚点用方法签名
+-- span（方法名到类型结束），不用类型表达式 span。
 renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
 renderMethodSig env at m =
   attachAt at (traitMethodSpan m) 2
     (prefixFirst "  ${declNameText (traitMethodName m)} : " (renderTypeExpr env at 2 m.traitMethodType))
 
+-- | 内部：instance 头（上下文 + 头表达式 + `where`）+ 逐条方法声明（缩进 2）。
 renderInstanceDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
 renderInstanceDecl env at ctxE head methods =
   let
@@ -238,23 +271,25 @@ renderInstanceDecl env at ctxE head methods =
     methodLines = concatMap (\d => renderDeclAt env at 2 d) methods
   in append headLine methodLines
 
--- 实例上下文：`C a, C b => `（实例可带 ctx；空 ctx 输出空串）。
+-- | 内部：实例上下文 `C a, C b => `（空上下文输出空串）。
 renderInstanceCtx : List FixityDecl -> List Expr -> String
 renderInstanceCtx env [] = ""
 renderInstanceCtx env ctxE = "${joinTexts ", " (map (renderOneCtx env) ctxE)} => "
 
+-- | 内部：用分隔串连接字符串列表（单元素不追加分隔串）。
 joinTexts : String -> List String -> String
 joinTexts sep [] = ""
 joinTexts sep ([x]) = x
 joinTexts sep (x :: rest) = x ++ sep ++ joinTexts sep rest
 
+-- | 内部：单条上下文文本；渲不出单行时给占位 `…`。
 renderOneCtx : List FixityDecl -> Expr -> String
 renderOneCtx env e = case inlineExpr env e of
   Just s => s
   Nothing => "…"
 
--- 函数子句 / instance 方法子句 / where 绑定子句共用。
--- where 块（parser desugar 成 ELet .. True）优先按 where 形式还原。
+-- | 内部：函数子句 / instance 方法子句 / where 绑定子句共用；body 是 `ELet .. True`
+-- 时优先按 where 形式还原。
 renderClause : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
 renderClause env at lineInd name pats body =
   let
@@ -279,10 +314,12 @@ renderClause env at lineInd name pats body =
         else headerBase :: prefixFirst (spaces (lineInd + 2)) (renderExpr env at (lineInd + 2) body)
       Nothing => prefixFirst "${headerBase} " (renderExpr env at lineInd body)
 
+-- | 内部：where 绑定块（逐条渲染）。
 renderWhereBindings : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> List String
 renderWhereBindings env at lineInd binds =
   concatMap (\b => renderWhereBinding env at lineInd b) binds
 
+-- | 内部：单条 where 绑定；带签名时先输出签名行，再输出定义（两者的注释分别贴上）。
 renderWhereBinding : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
 renderWhereBinding env at lineInd (Pair pat value) = case value of
   -- 带签名的 where 绑定先输出 `name : Ty` 独立一行，再按原格式输出子句。
@@ -291,13 +328,14 @@ renderWhereBinding env at lineInd (Pair pat value) = case value of
       (attachAt at (patSpan pat) lineInd (renderWhereBindingBody env at lineInd pat inner))
   _ => attachAt at (patSpan pat) lineInd (renderWhereBindingBody env at lineInd pat value)
 
--- where 绑定签名行：`g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
+-- | 内部：where 绑定签名行 `g : Int -> Int`（缩进与 where 绑定一致，类型不折行）。
 renderWhereSigLine : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereSigLine env at lineInd (PVar name psp) ty =
   prefixFirst "${spaces lineInd}${name} : " (renderTypeExpr env at lineInd ty)
 renderWhereSigLine env at lineInd pat ty =
   prefixFirst "${spaces lineInd}${renderPat pat} : " (renderTypeExpr env at lineInd ty)
 
+-- | 内部：where 绑定的定义体：多 clause 局部函数、λ 参数还原成子句参数、否则普通绑定。
 renderWhereBindingBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereBindingBody env at lineInd (PVar name psp) value = case value of
   ELocalFun clauses lsp => renderLocalFunClauses env at lineInd name clauses
@@ -306,29 +344,33 @@ renderWhereBindingBody env at lineInd (PVar name psp) value = case value of
 renderWhereBindingBody env at lineInd pat value =
   renderBindingValue env at lineInd "${renderPat pat} =" value
 
--- where 内部多 clause 局部函数：每个 clause 走 `renderClause`（与顶层子句同形）。
+-- | 内部：where 内部的多 clause 局部函数：每个 clause 走 `renderClause`
+-- （与顶层子句同形）。
 renderLocalFunClauses : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair (List Pat) Expr) -> List String
 renderLocalFunClauses env at lineInd name [] = []
 renderLocalFunClauses env at lineInd name ((Pair pats body) :: rest) =
   append (renderClause env at lineInd name pats body)
     (renderLocalFunClauses env at lineInd name rest)
 
--- 顶层声明：不同函数之间一个空行；类型签名紧贴同名函数子句。
+-- | 内部：顶层声明序列：不同函数之间一个空行；类型签名紧贴同名函数子句。
 renderTopDecls : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> List String
 renderTopDecls mods env at [] = []
 renderTopDecls mods env at (d :: rest) =
   append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
 
+-- | 内部：渲染余下声明，按 `attachDecl` 决定是否与上一条之间空行。
 renderTopRest : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> List String
 renderTopRest mods env at prev [] = []
 renderTopRest mods env at prev (d :: rest) =
   if attachDecl prev d then append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
   else "" :: append (applyDeclMods mods d (renderDeclAt env at 0 d)) (renderTopRest mods env at d rest)
 
+-- | 内部：下一条是否紧贴上一条（同名的函数子句，不空行）。
 attachDecl : Decl -> Decl -> Bool
 attachDecl prev (DFun n pats body sp) = declNamed prev n
 attachDecl prev _ = False
 
+-- | 内部：声明是否以该名字命名（函数子句或类型签名）。
 declNamed : Decl -> String -> Bool
 declNamed (DFun m pats body sp) n = m == n
 declNamed (DSig m ctx ty sp) n = m == n
@@ -337,12 +379,14 @@ declNamed _ n = False
 -- ---------------------------------------------------------------
 -- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
+-- | 内部：模块头：显式导出列表（排序后输出）或 `module M where`。
 renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> List String
 renderModDecl at (ModDecl name True items _ _ _ sp) =
   renderExplicitModDecl at name (sortExports items)
 renderModDecl at (ModDecl name False items _ _ _ sp) = ["module ${name} where"]
 
--- 空导出列表（`module M () where`）与短列表保持单行；超宽或含项注释时逐项一行。
+-- | 内部：显式导出列表：空列表（`module M () where`）与短列表保持单行；超宽或含项注释
+-- 时逐项一行。
 renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
 renderExplicitModDecl at name [] = ["module ${name} () where"]
 renderExplicitModDecl at name sorted =
@@ -351,108 +395,128 @@ renderExplicitModDecl at name sorted =
   in if fitsLine 0 oneLine && not (anyItemHasComments at sorted) then [oneLine]
   else renderExportListBlock at name sorted
 
--- 多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
+-- | 内部：多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
 renderExportListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> List String
 renderExportListBlock at name items =
   append ["module ${name}"] (append (renderExportLines at items) ["  ) where"])
 
+-- | 内部：导出列表的项行序列（首项 + 余项）。
 renderExportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> List String
 renderExportLines at [] = []
 renderExportLines at (first :: rest) =
   append (renderExportLine at "  ( " first) (renderExportRest at rest)
 
+-- | 内部：导出列表余项的项行（每项前置 `, `）。
 renderExportRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> List String
 renderExportRest at [] = []
 renderExportRest at (item :: rest) =
   append (renderExportLine at "  , " item) (renderExportRest at rest)
 
+-- | 内部：单条导出项行（前置 `( ` / `, `，并贴上该项的注释）。
 renderExportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> ExportItem -> List String
 renderExportLine at prefixText item =
   attachAt at (exportItemSpan item) 2 [prefixText ++ renderExportItem item]
 
+-- | 内部：导出项文本（`name` / `name(..)` / `name(a, b)` / `module M`）。
 renderExportItem : ExportItem -> String
 renderExportItem (XBare name _) = name
 renderExportItem (XTypeAll name _) = "${name}(..)"
 renderExportItem (XTypeSome name members _) = "${name}(${joinComma members})"
 renderExportItem (XModule name _) = "module ${name}"
 
--- 排序键：分组前缀（`module B` = 1，其余 = 0）++ 字面文本；稳定排序保证幂等。
+-- | 内部：排序分组前缀（`module B` 整模块重导出 = 1，其余 = 0）。
 exportRank : ExportItem -> Int
 exportRank (XModule _ _) = 1
 exportRank _ = 0
 
+-- | 内部：排序键 = 分组前缀 ++ 项的字面文本（稳定排序保证幂等）。
 exportKey : ExportItem -> String
 exportKey item = strFromInt (exportRank item) ++ renderExportItem item
 
+-- | 内部：字符码表的字典序比较（前缀更短者在前）。
 strLeChars : List Int -> List Int -> Bool
 strLeChars [] [] = True
 strLeChars [] (y :: ys) = True
 strLeChars (x :: xs) [] = False
 strLeChars (x :: xs) (y :: ys) = x < y || (if x > y then False else strLeChars xs ys)
 
+-- | 内部：字符串的 ASCII 字典序比较。
 strLe : String -> String -> Bool
 strLe a b = strLeChars (strUnpack a) (strUnpack b)
 
+-- | 内部：导出项排序谓词（按 `exportKey`）。
 exportKeyLe : ExportItem -> ExportItem -> Bool
 exportKeyLe a b = strLe (exportKey a) (exportKey b)
 
+-- | 内部：按 `exportKey` 稳定排序导出列表。
 sortExports : List ExportItem -> List ExportItem
 sortExports items = sortBy exportKeyLe items
 
+-- | 内部：import 行文本：`import` + 可选 `qualified` + 模块名 + 可选 ` as 别名`。
 renderImport : Import -> String
 renderImport (Import name isQualified alias sp) =
   "import ${if isQualified then "qualified " else ""}${name}${aliasSuffix alias}"
 
+-- | 内部：导入别名后缀 ` as Alias`（无别名时为空串）。
 aliasSuffix : Maybe String -> String
 aliasSuffix Nothing = ""
 aliasSuffix (Just a) = " as ${a}"
 
--- `infix` / `infixl` / `infixr`（FixityDecl 的结合性编码：0 = 无，1 = 左，2 = 右）。
+-- | 内部：结合性关键字（`FixityDecl` 编码：1 = 左 `infixl`，2 = 右 `infixr`，其余 `infix`）。
 assocKeyword : Int -> String
 assocKeyword 1 = "infixl"
 assocKeyword 2 = "infixr"
 assocKeyword n = "infix"
 
--- 规范写法：`infixl 6 +` / `infixr 5 :: = Cons` / `infix 4 == = eq`。
+-- | 内部：`infix*` 声明行，规范写法 `infixl 6 +` / `infixr 5 :: = Cons` /
+-- `infix 4 == = eq`。
 renderFixityDecl : FixityDecl -> String
 renderFixityDecl (FixityDecl op level assoc target sp) =
   "${assocKeyword assoc} ${level} ${op}${targetSuffix target}"
 
+-- | 内部：别名目标后缀 ` = target`（无目标时为空串）。
 targetSuffix : Maybe String -> String
 targetSuffix Nothing = ""
 targetSuffix (Just t) = " = ${t}"
 
+-- | 内部：单条 `infix*` 声明行（贴上该声明的注释）。
 renderFixityLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> FixityDecl -> List String
 renderFixityLine at d = attachAt at (fixitySpan d) 0 [renderFixityDecl d]
 
+-- | 内部：模块头 section（匿名 / 无名模块不输出）。
 renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List String
 renderHeader at Nothing = []
 renderHeader at (Just m) =
   if m.modDeclName == "" then [] else attachAt at m.modDeclSpan 0 (renderModDecl at m)
 
+-- | 内部：单条 import 行（贴上该 import 的注释）。
 renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> List String
 renderImportLine at imp = attachAt at imp.importSpan 0 [renderImport imp]
 
--- D11：`export import` 行。整模块重导出用普通 import 形式，选择性重导出带括号列表。
+-- | 内部：模块头里的 `export import` 重导出项（`export import` 行由它派生）。
 headerReexports : Maybe ModDecl -> List ExportItem
 headerReexports Nothing = []
 headerReexports (Just (ModDecl _ _ _ _ reexports _ _)) = reexports
 
+-- | 内部：import 的前缀（有别名用别名，否则用模块名）。
 importPrefixText : Import -> String
 importPrefixText imp = case imp.importAlias of
   Just alias => alias
   Nothing => imp.importName
 
+-- | 内部：文本以 `prefix` 开头时去掉它，否则原样返回。
 dropPrefixText : String -> String -> String
 dropPrefixText prefix text =
   if startsWith prefix text then strPack (dropNChars (strLength prefix) (strUnpack text)) else text
 
+-- | 内部：丢掉前 `n` 个字符。
 dropNChars : Int -> List Int -> List Int
 dropNChars n xs = if n <= 0 then xs
 else case xs of
   [] => []
   _ :: rest => dropNChars (n - 1) rest
 
+-- | 内部：导出项是否属于该 import 前缀（整模块重导出匹配模块名，其余匹配 `prefix.`）。
 itemMatchesPrefix : String -> ExportItem -> Bool
 itemMatchesPrefix prefix item =
   let
@@ -463,9 +527,11 @@ itemMatchesPrefix prefix item =
     XTypeAll n _ => startsWith dotted n
     XTypeSome n _ _ => startsWith dotted n
 
+-- | 内部：属于该 import 的重导出项。
 itemsForImport : Import -> List ExportItem -> List ExportItem
 itemsForImport imp items = filter (itemMatchesPrefix (importPrefixText imp)) items
 
+-- | 内部：选择性重导出项文本（去掉 import 前缀）。
 renderSelectiveItem : String -> ExportItem -> String
 renderSelectiveItem prefix item =
   let
@@ -476,31 +542,35 @@ renderSelectiveItem prefix item =
     XTypeSome n members _ => "${dropPrefixText p n}(${joinComma members})"
     XModule n _ => n
 
+-- | 内部：是否整模块重导出（`module M`）。
 isWholeModuleReexport : ExportItem -> Bool
 isWholeModuleReexport (XModule _ _) = True
 isWholeModuleReexport _ = False
 
+-- | 内部：重导出项里是否有整模块重导出。
 anyWholeModule : List ExportItem -> Bool
 anyWholeModule [] = False
 anyWholeModule (i :: rest) = isWholeModuleReexport i || anyWholeModule rest
 
+-- | 内部：`export import ...` 行：整模块重导出用普通 import 形式，选择性重导出带括号列表。
 renderReexportLine : Import -> List ExportItem -> String
 renderReexportLine imp items =
   if anyWholeModule items then "export ${renderImport imp}"
   else "export ${renderImport imp} (${joinComma (map (renderSelectiveItem (importPrefixText imp)) items)})"
 
+-- | 内部：import section；带重导出项的 import 渲染成 `export import` 行。
 renderImportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List Import -> List String
 renderImportLines at hdr imports = concatMap (\imp => case itemsForImport imp (headerReexports hdr) of
   [] => renderImportLine at imp
   items => attachAt at imp.importSpan 0 [renderReexportLine imp items]
 ) imports
 
+-- | 内部：文件末尾的注释行（顶格）。
 renderEofComments : List Comment -> List String
 renderEofComments [] = []
 renderEofComments comments = concatMap (commentLeadLines 0) comments
 
--- 文件组装：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释各成一个 section，
--- 非空 section 之间空一行（`filterSections` 去掉空 section 靠 `joinSections` 分隔）。
+-- | 文件组装的五个 section：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释。
 export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> List (List String)
 renderSourceSections env hdr imports fixities decls at eof =
   [ renderHeader at hdr,
@@ -510,12 +580,14 @@ renderSourceSections env hdr imports fixities decls at eof =
     renderEofComments eof
   ]
 
+-- | 去掉空 section（非空 section 之间由 `joinSections` 空一行）。
 export filterSections : List (List String) -> List (List String)
 filterSections [] = []
 filterSections (section :: rest) = case section of
   [] => filterSections rest
   _ => section :: filterSections rest
 
+-- | 拼接 section：相邻 section 之间空一行。
 export joinSections : List (List String) -> List String
 joinSections [] = []
 joinSections ([section]) = section

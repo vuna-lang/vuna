@@ -1,60 +1,72 @@
+-- | 格式化器共用的行/字符串小工具与行宽常量（无 AST 逻辑），供 [Vuna.Fmt.Expr]、
+-- [Vuna.Fmt.Comment]、[Vuna.Fmt.Decl] 与门面 [Vuna.Fmt] 共用。
 module Vuna.Fmt.Util where
 
--- Vuna.Fmt.Util：格式化器共用的行/字符串小工具与行宽常量（无 AST 逻辑）。
--- Vuna.Fmt.Util：格式化器的共享小工具，供 Expr / Comment / Decl 与门面共用。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 
 -- ---------------------------------------------------------------
 -- 行 / 字符串小工具
 -- ---------------------------------------------------------------
+-- | `n` 个空格；`n <= 0` 时为空串。
 export spaces : Int -> String
 spaces n = if n <= 0 then "" else " ${spaces (n - 1)}"
 
+-- | 直接拼接字符串列表（无分隔符）。
 export concatStrings : List String -> String
 concatStrings [] = ""
 concatStrings (s :: rest) = s ++ concatStrings rest
 
+-- | 用 `, ` 连接字符串列表。
 export joinComma : List String -> String
 joinComma [] = ""
 joinComma ([x]) = x
 joinComma (x :: rest) = "${x}, ${joinComma rest}"
 
+-- | 每项前加一个空格再拼接（用于把参数 / 实参串在标识符之后）；空列表为空串。
 export joinSpace : List String -> String
 joinSpace [] = ""
 joinSpace (x :: rest) = " ${x}${joinSpace rest}"
 
+-- | 用换行连接字符串列表。
 export joinLines : List String -> String
 joinLines [] = ""
 joinLines ([l]) = l
 joinLines (l :: rest) = "${l}\n${joinLines rest}"
 
+-- | 列表首项；空列表为空串。
 export firstLine : List String -> String
 firstLine [] = ""
 firstLine (l :: rest) = l
 
+-- | 去掉首项后的其余元素。
 export restLines : List a -> List a
 restLines [] = []
 restLines (l :: rest) = rest
 
+-- | 在首项前加 `pre`；空列表得到只含 `pre` 的单元素列表。
 export prefixFirst : String -> List String -> List String
 prefixFirst pre [] = [pre]
 prefixFirst pre (l :: rest) = (pre ++ l) :: rest
 
+-- | 在末项后追加 `suffix`；空列表得到只含 `suffix` 的单元素列表。
 export appendLast : String -> List String -> List String
 appendLast suffix [] = [suffix]
 appendLast suffix ([l]) = [l ++ suffix]
 appendLast suffix (l :: rest) = l :: appendLast suffix rest
 
--- 把 argLines 追加到 lines 的最后一个物理行后面（前置分隔串 sep）。
+-- | 把 `argLines` 接到 `lines` 的最后一行之后：首段前置 `sep` 紧跟该行，后续段各自成为
+-- 新行；`argLines` 为空时 `lines` 原样返回。
 export appendBefore : String -> List String -> List String -> List String
 appendBefore sep lines [] = lines
 appendBefore sep lines (a :: rest) = append (appendLast (sep ++ a) lines) rest
 
+-- | 列表是否为空。
 export isNilList : List a -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
+-- | 逐项做 `Maybe` 映射，全部成功才得到 `Just`（保持顺序）。
 export mapMaybeStrings : (Expr -> Maybe String) -> List Expr -> Maybe (List String)
 mapMaybeStrings f [] = Just []
 mapMaybeStrings f (x :: rest) = case f x of
@@ -64,19 +76,25 @@ mapMaybeStrings f (x :: rest) = case f x of
     Just ss => Just (s :: ss)
 
 -- ---------------------------------------------------------------
--- 字符串字面量：按 lexer 支持的转义重新编码
+-- 位置 / 行宽
+-- ---------------------------------------------------------------
+-- | 占位 span（1 行 1 列的合成位置），用于没有源码位置的合成模式。
 export dummySpan : Span
 dummySpan = Span "" 1 1 1 1
 
+-- | 单行显示宽度上限（列）。
 export maxWidth : Int
 maxWidth = 100
 
+-- | 字符串的显示宽度（按字符数，不按字节）。
 export strWidth : String -> Int
 strWidth s = length (strUnpack s)
 
+-- | 从缩进 `indent` 起放 `text` 是否不超过 `maxWidth`。
 export fitsLine : Int -> String -> Bool
 fitsLine indent text = indent + strWidth text <= maxWidth
 
+-- | 列表末项；空列表为空串。
 export lastLineOf : List String -> String
 lastLineOf [] = ""
 lastLineOf ([x]) = x

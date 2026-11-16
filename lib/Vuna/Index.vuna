@@ -1,36 +1,27 @@
+-- | 源码符号索引的门面：用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是
+-- 通读全仓（工具链模块，不进 seed 闭包）。
+--
+-- 索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查；顶层签名必填，
+-- parse 级签名就是工具链需要的语义面（语义问题由 LSP 的 DT 检查消费，不在这里重复）。
+--
+-- 缓存走 [Vuna.Tool.Session] 的输入寻址对象：会话身份 = `(origin, bucket, nodeKey, 依赖摘要…)`，
+-- 对象落在 `$VUNA_STORE/objects/tool/<addr>`，命中即读载荷，未命中才重建。载荷是
+-- `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 2`，`Store` framing）。
+-- 依赖表有两条路径：CLI 用逐源文件内容哈希 `f:<path>:<hash>`（同 size + 同 mtime 的内容
+-- 变更也必须失效）；REPL 用 stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，只对安全窗内的
+-- 文件算内容哈希。
+--
+-- 没有「刷新索引」命令：`vuna map` / `vuna api` / REPL 每次调用先算依赖表，与对象记录一致
+-- 就读载荷解码，否则全量重建并写回对象。
+--
+-- 符号全名是 `<vuna 模块全名>.<顶层名>`，如 `Vuna.Compiler.Elab.elabProgramFull`。
+--
+-- 数据模型在 [Vuna.Index.Types]，parse 扫描/构建/缓存在 [Vuna.Index.Scan]，查找与影响面在
+-- [Vuna.Index.Query]，`map` / `api` 的文本渲染在 [Vuna.Index.Render]；本模块只做门面重导出。
+-- 扫描/构建/缓存是 `Eff r` 动作（`loadOrBuild` / `buildIndex`），数据模型、查找/影响面与
+-- 文本渲染是纯函数。
 module Vuna.Index where
 
--- Vuna.Index：源码符号索引（工具链模块，**永不进 seed 闭包**）。
---
--- 目的：让 agent/人类用一条命令定位「符号在哪、谁引用它、该跑哪些测试」，而不是通读
--- 全仓。索引只依赖 parse 级信息（AST + Span + lexComments），不跑类型检查。
---
--- 缓存设计（`Vuna.Tool.Session` 输入寻址对象）：
---   - 会话身份 = `(origin, bucket, nodeKey, 依赖摘要…)`，对象落在
---     `$VUNA_STORE/objects/tool/<addr>`；命中即读载荷，未命中才重建；
---   - 载荷 = `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 2`，`Store`
---     framing）；
---   - 依赖表：强路径 = 逐源文件内容哈希 `f:<path>:<hash>`（同 size + 同 mtime
---     的内容变更也必须失效）；廉价路径（REPL）= stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，
---     只对安全窗内的文件算内容哈希。
---
--- 新鲜度：每次调用先算依赖表，与对象记录一致就读载荷解码；否则全量重建、写回对象。
--- 因此**没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判定。
---
--- 文档决策：顶层签名必填；parse 级签名就是工具链需要的语义面，不引入独立的
--- 语义索引（D13 的语义部分由 LSP 的 DT 检查消费，不在 Index 里重复）。
---
--- 符号全名：`<vuna 模块全名>.<顶层名>`，如
--- `Vuna.Compiler.Elab.elabProgramFull`。
---
--- 数据模型在 Vuna.Index.Types，parse 扫描/构建/缓存在 Vuna.Index.Scan，
--- 查找与影响面在 Vuna.Index.Query，map/api 的文本渲染在 Vuna.Index.Render；
--- 本模块只做门面重导出（对外导出集合见模块头）。
---
--- 扫描/构建/缓存这些宿主动作不藏在纯签名里——`loadOrBuild` /
--- `buildIndex` 是 `Eff r` 入口；REPL 的廉价依赖表由 `Scan` 内部维护（`indexStatsOf`
--- 产出 stat 快照），命中判定在 `Query`。
--- 数据模型、查找/影响面与文本渲染仍是纯函数。
 export import Vuna.Index.Query
 export import Vuna.Index.Render
 export import Vuna.Index.Scan

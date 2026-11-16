@@ -1,14 +1,11 @@
+-- | `vuna doc` 的门面：只重导出 [Vuna.Doc.Run.runDoc]。
+--
+-- 分层：[Vuna.Doc.Comments] 从 `lexComments` 的注释里识别 docstring 并关联声明；
+-- [Vuna.Doc.Model] 把 AST 与 `DocTable` 构建成 `DocBook`；[Vuna.Doc.Prose] 把受限 Markdown
+-- 渲染成 HTML；[Vuna.Doc.Html] 输出单文件 HTML（内联 CSS/JS + 搜索索引）；
+-- [Vuna.Doc.Run] 处理参数、包发现、`[export]`、`--check` 与写出。
+--
+-- 输出是一个自包含 HTML，不生成 Markdown。
 module Vuna.Doc where
 
 export import Vuna.Doc.Run (runDoc)
-
--- Vuna.Doc：`vuna doc` 的门面（工具链；永不进 seed 闭包）。
---
--- 实现分层：
---   * Vuna.Doc.Comments  从 lexComments 识别 `-- |` / `{- | -}` 并关联声明；
---   * Vuna.Doc.Model      AST + DocTable -> DocBook；
---   * Vuna.Doc.Prose      docstring 受限 Markdown -> HTML；
---   * Vuna.Doc.Html       单文件 HTML（内联 CSS/JS + 搜索索引）；
---   * Vuna.Doc.Run        参数、包发现、[export]、--check、写出。
---
--- 输出是**一个自包含 HTML**；不生成 Markdown。

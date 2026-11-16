@@ -1,108 +1,156 @@
+-- | 源码符号索引的数据模型与字段访问子。
+--
+-- 只含可序列化的纯数据：构建在 [Vuna.Index.Scan]，查找与影响面在 [Vuna.Index.Query]，
+-- 文本渲染在 [Vuna.Index.Render]，载荷编解码在 [Vuna.Index.Codec]。
 module Vuna.Index.Types where
 
--- Vuna.Index.Types：源码符号索引的数据模型与字段访问子。
--- 只含可序列化的纯数据；构建/查询/渲染分别在 Scan / Query / Render。
 import Vuna.Compiler.Base.Common
 
 -- ---------------------------------------------------------------
 -- 数据模型
 -- ---------------------------------------------------------------
--- 模块元信息（不含 AST，可安全序列化到缓存）。`modDoc` 是模块 docstring
--- （`module` 头之前的 `-- |` 块，识别规则见 `Doc.Comments`），`vuna api` 用它渲染模块标题
--- 下的说明。
+-- | 模块元信息（不含 AST，可安全序列化到缓存）。
 export record ModuleInfo(..) where
+  -- | 模块全名（源码模块头优先，缺失时由路径推导）。
   modName : String
+  -- | 所属包名；不在 workspace 内时为空串。
   modPackage : String
+  -- | 源文件路径（扫描时使用的路径形式）。
   modPath : String
+  -- | 源文件大小（扫描时 `strLength` 的结果），`vuna map` 概览显示用。
   modBytes : Int
+  -- | 顶层声明条数（按程序级 fixity 重排后计数）。
   modDecls : Int
+  -- | 模块 docstring（`module` 头之前的 `-- |` 块，识别规则见 [Vuna.Doc.Comments]），
+  -- `vuna api` 用它渲染模块标题下的说明。
   modDoc : String
 
+-- | `ModuleInfo.modName` 的访问子。
 export modName : ModuleInfo -> String
 modName (ModuleInfo m p path bytes decls doc) = m
 
+-- | `ModuleInfo.modPackage` 的访问子。
 export modPackage : ModuleInfo -> String
 modPackage (ModuleInfo m p path bytes decls doc) = p
 
+-- | `ModuleInfo.modPath` 的访问子。
 export modPath : ModuleInfo -> String
 modPath (ModuleInfo m p path bytes decls doc) = path
 
+-- | `ModuleInfo.modBytes` 的访问子。
 export modBytes : ModuleInfo -> Int
 modBytes (ModuleInfo m p path bytes decls doc) = bytes
 
+-- | `ModuleInfo.modDecls` 的访问子。
 export modDecls : ModuleInfo -> Int
 modDecls (ModuleInfo m p path bytes decls doc) = decls
 
+-- | `ModuleInfo.modDoc` 的访问子。
 export modDoc : ModuleInfo -> String
 modDoc (ModuleInfo m p path bytes decls doc) = doc
 
--- 符号：模块全名、名字、种类、显示签名、语法类型、docstring、起始行列。
--- `symType` 是 `Vuna.Sig.renderType` 的**可回读**类型文本（函数/构造子/字段/
--- 方法/axiom/extern）；data/record/trait 为空。`vuna search --type` 用它建类型表。
+-- | 一个可检索的符号。
+--
+-- 符号既是查找的单位（`vuna map` / `vuna api`），也是引用与影响面分析的端点。
 export record Sym(..) where
+  -- | 符号所在的模块全名。
   symModule : String
+  -- | 符号名，不含模块前缀（全名见 `symFullName`）。
   symName : String
+  -- | 符号种类：`data` / `ctor` / `record` / `field` / `trait` / `method` / `axiom` /
+  -- `extern` / `fun`。
   symKind : String
+  -- | 供显示的一行签名：`fun` 为「名字 : 签名」，`data` / `record` / `trait` 为声明头。
   symSig : String
+  -- | `Vuna.Sig.renderType` 的可回读类型文本（函数、构造子、字段、方法、axiom、extern）；
+  -- data / record / trait 为空串。`vuna search --type` 用它建类型表。
   symType : String
+  -- | 符号 docstring；没有时为空串。
   symDoc : String
+  -- | 符号起始行（1 起）。
   symLine : Int
+  -- | 符号起始列。
   symCol : Int
 
+-- | `Sym.symModule` 的访问子。
 export symModule : Sym -> String
 symModule (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sMod
 
+-- | `Sym.symName` 的访问子。
 export symName : Sym -> String
 symName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sName
 
+-- | `Sym.symKind` 的访问子。
 export symKind : Sym -> String
 symKind (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sKind
 
+-- | `Sym.symSig` 的访问子。
 export symSig : Sym -> String
 symSig (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sSig
 
+-- | `Sym.symType` 的访问子。
 export symType : Sym -> String
 symType (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sType
 
+-- | `Sym.symDoc` 的访问子。
 export symDoc : Sym -> String
 symDoc (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sDoc
 
+-- | `Sym.symLine` 的访问子。
 export symLine : Sym -> Int
 symLine (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sLine
 
+-- | `Sym.symCol` 的访问子。
 export symCol : Sym -> Int
 symCol (Sym sMod sName sKind sSig sType sDoc sLine sCol) = sCol
 
+-- | 符号全名 `<模块全名>.<符号名>`（查找与去重的键）。
 export symFullName : Sym -> String
 symFullName (Sym sMod sName sKind sSig sType sDoc sLine sCol) = "${sMod}.${sName}"
 
--- 引用：引用方模块、被引用的名字、引用出现处（行、列）。refs 不只记录
--- 「模块引用了哪些名字」，还记录出现位置，供 `referencesAt` 与影响面分析使用。
+-- | 一条引用：引用方模块 + 被引用的名字 + 出现位置。
+--
+-- 记录出现位置（而不只是「模块引用了哪些名字」）是为了支撑 `referencesAt` 与影响面分析。
 export record Ref(..) where
+  -- | 引用方模块全名。
   refModule : String
+  -- | 被引用的名字（裸名，不带模块前缀）。
   refName : String
+  -- | 引用出现的行（1 起）。
   refLine : Int
+  -- | 引用出现的列。
   refCol : Int
 
+-- | `Ref.refModule` 的访问子。
 export refModule : Ref -> String
 refModule (Ref refMod refNm refLn refCl) = refMod
 
+-- | `Ref.refName` 的访问子。
 export refName : Ref -> String
 refName (Ref refMod refNm refLn refCl) = refNm
 
--- 索引：模块 + 符号 + 反向边（引用方模块 → 引用位置）。
+-- | 整个仓库的索引：模块表 + 符号表 + 引用表。
+--
+-- 引用表就是反向边（引用方模块 → 引用位置），影响面直接读它，不再解析源码。
 export record Index(..) where
+  -- | 扫到的模块元信息，按扫描顺序。
   indexModules : List ModuleInfo
+  -- | 全部符号（同名多子句函数已合并，保留首子句）。
   indexSymbols : List Sym
+  -- | 全部引用，按源码顺序。
   indexRefs : List Ref
 
+-- | `Index.indexModules` 的访问子。
 export indexModules : Index -> List ModuleInfo
 indexModules (Index ms syms refs) = ms
 
--- 去重（保持首次出现顺序）：Scan 的引用抽取与 Render 的分组共用。
+-- | 去重并保持首次出现顺序。
+--
+-- `vuna map` 的包分组与影响面的 readers 都靠它给出稳定顺序。
 export distinct : List String -> List String
 distinct xs = distinctGo xs []
 
+-- | 内部：`distinct` 的累积器版本，倒序累积、最后 `reverse` 还原顺序。
 distinctGo : List String -> List String -> List String
 distinctGo [] acc = reverse acc
 distinctGo (x :: rest) acc =

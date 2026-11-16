@@ -1,10 +1,10 @@
+-- | 把源码解析成文档模型（工具链；永不进 seed 闭包）。
+--
+-- 输入是一组源文件路径与包名，输出 `DocBook`（模块 -> 条目/成员 + docstring）。
+-- 不跑类型检查：签名 / 类型 / data 形状都来自 parse 级 AST，docstring 来自
+-- [Vuna.Doc.Comments]；`[export]` 过滤在 [Vuna.Doc.Run]，HTML 渲染在 [Vuna.Doc.Html]。
 module Vuna.Doc.Model where
 
--- Vuna.Doc.Model：把源码解析成文档模型（工具链；永不进 seed 闭包）。
---
--- 输入是一组源文件路径与包名；输出 `DocBook`（模块 -> 条目/成员 + docstring）。
--- 不跑类型检查：签名 / 类型 / data 形状都来自 parse 级 AST；docstring 来自
--- `Vuna.Doc.Comments`。`[export]` 过滤与输出格式在 `Vuna.Doc.Run` / `Html`。
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
@@ -23,69 +23,97 @@ import Base.EffProcess
 -- ---------------------------------------------------------------
 -- 数据模型
 -- ---------------------------------------------------------------
+-- | 文档里的一个条目：一个顶层声明，或某个类型的成员（构造子 / 字段 / trait 方法）。
 export record DocItem(..) where
+  -- | 条目名（成员条目是成员名）。
   itemName : String
+  -- | 条目种类：`fun` / `data` / `record` / `trait` / `axiom` / `extern` / `ctor` / `field` / `method`。
   itemKind : String
+  -- | 渲染好的签名文本；成员条目形如 `name : Type`。
   itemSignature : String
+  -- | docstring 正文；空串表示没有。
   itemDoc : String
+  -- | 源码起始行号（1 基）。
   itemLine : Int
+  -- | 成员条目（构造子 / 字段 / 方法）；顶层条目为空表。
   itemMembers : List DocItem
 
+-- | 条目名。
 export itemName : DocItem -> String
 itemName (DocItem name kind sig doc line members) = name
 
+-- | 条目种类。
 export itemKind : DocItem -> String
 itemKind (DocItem name kind sig doc line members) = kind
 
+-- | 签名文本。
 export itemSignature : DocItem -> String
 itemSignature (DocItem name kind sig doc line members) = sig
 
+-- | docstring 正文。
 export itemDoc : DocItem -> String
 itemDoc (DocItem name kind sig doc line members) = doc
 
+-- | 源码起始行号。
 export itemLine : DocItem -> Int
 itemLine (DocItem name kind sig doc line members) = line
 
+-- | 成员条目。
 export itemMembers : DocItem -> List DocItem
 itemMembers (DocItem name kind sig doc line members) = members
 
+-- | 一个模块的文档：包名、模块全名、源路径、模块 docstring 与条目列表。
 export record DocModule(..) where
+  -- | 所属包名；单目录模式为空串。
   modulePackage : String
+  -- | 模块全名；没有 `module` 头时取文件名去掉 `.vuna`。
   moduleName : String
+  -- | 源文件路径（`--check` 定位与缓存键用）。
   modulePath : String
+  -- | 模块头 docstring；空串表示没有。
   moduleDoc : String
+  -- | 顶层条目，顺序与源码一致。
   moduleItems : List DocItem
 
+-- | 所属包名。
 export modulePackage : DocModule -> String
 modulePackage (DocModule pkg name path doc items) = pkg
 
+-- | 模块全名。
 export moduleName : DocModule -> String
 moduleName (DocModule pkg name path doc items) = name
 
+-- | 源文件路径。
 export modulePath : DocModule -> String
 modulePath (DocModule pkg name path doc items) = path
 
+-- | 模块头 docstring。
 export moduleDoc : DocModule -> String
 moduleDoc (DocModule pkg name path doc items) = doc
 
+-- | 顶层条目列表。
 export moduleItems : DocModule -> List DocItem
 moduleItems (DocModule pkg name path doc items) = items
 
+-- | 整份文档：按包与文件顺序排列的模块列表。
 export record DocBook(..) where
+  -- | 模块列表；顺序由构建时的 scope 与文件顺序决定。
   bookModules : List DocModule
 
+-- | 模块列表。
 export bookModules : DocBook -> List DocModule
 bookModules (DocBook modules) = modules
 
 -- ---------------------------------------------------------------
 -- 构建
 -- ---------------------------------------------------------------
--- 包名 + 源文件列表 -> 模块列表（按输入文件顺序；调用方负责 [export] 过滤）。
+-- | 包名 + 源文件列表 -> 模块列表（按输入文件顺序）；调用方负责 `[export]` 过滤。
 export buildModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r (Check (List DocModule))
 buildModules pkg files = do
   built <- buildModulesGo emptyFixityEnv pkg files []
   pure (secondOf built)
 
+-- | 内部：逐个文件构建模块并串接 fixity 环境；首个错误即返回。
 buildModulesGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> List String -> List DocModule -> Eff r (Pair FixityEnv (Check (List DocModule)))
 buildModulesGo env pkg [] acc = pure (Pair env (OkC (reverse acc)))
 buildModulesGo env pkg (path :: rest) acc = do
@@ -95,6 +123,7 @@ buildModulesGo env pkg (path :: rest) acc = do
       ErrC e => pure (Pair env2 (ErrC e))
       OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
 
+-- | 内部：读一个源文件，算出它的 fixity 上下文后构建模块。
 buildModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (Check DocModule))
 buildModule env pkg path = do
   textR <- readText path
@@ -104,6 +133,7 @@ buildModule env pkg path = do
       looked <- fixitiesForFile env path source
       pure (buildModuleWith pkg path source looked)
 
+-- | 内部：解析已读入的源码并转成 `DocModule`；fixity 重排失败与解析失败都带路径进 `ErrC`。
 buildModuleWith : String -> String -> String -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
 buildModuleWith pkg path source looked =
   let
@@ -120,10 +150,12 @@ buildModuleWith pkg path source looked =
           in Pair env2
             (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
 
+-- | 内部：优先取 `module X where` 的名字；没有模块头时用文件名去掉 `.vuna`。
 moduleNameOfPath : String -> Maybe ModDecl -> String
 moduleNameOfPath path (Just (ModDecl name hasList items _ _ _ sp)) = name
 moduleNameOfPath path Nothing = stripVunaSuffix (baseName path)
 
+-- | 内部：去掉文件名末尾的 `.vuna`。
 stripVunaSuffix : String -> String
 stripVunaSuffix name =
   if endsWith ".vuna" name then substring 0 (byteLength name - 5) name else name
@@ -131,9 +163,13 @@ stripVunaSuffix name =
 -- ---------------------------------------------------------------
 -- 条目
 -- ---------------------------------------------------------------
+-- | 内部：把声明表按源码顺序展开成条目，并按名字去重。
 itemsOfDecls : DocTable -> List Decl -> List DocItem
 itemsOfDecls table decls = dedupeItems (concatMap (itemsOfDecl table decls) decls)
 
+-- | 内部：一个声明对应的条目。
+--
+-- 私有（`_` 开头）跳过；`DFun` 在有同名签名时跳过（签名条目已覆盖）；`instance` 不产生条目。
 itemsOfDecl : DocTable -> List Decl -> Decl -> List DocItem
 itemsOfDecl table decls (DSig name ctx ty sp) =
   if isPrivate name then []
@@ -165,23 +201,28 @@ itemsOfDecl table decls (DExtern name cName ty sp) =
   ]
 itemsOfDecl table decls (DInstance ctxE head methods sp) = []
 
--- 无签名函数不应出现在文档里（顶层签名是语言要求）；这里仅在签名缺失时用一个
--- 占位签名，避免 doc 静默丢条目（`vuna check` 会先报缺签名）。
+-- | 内部：声明表里是否有该名字的顶层签名。
+--
+-- 顶层签名是语言要求；缺签名时 `DFun` 用一个占位签名进文档，避免 doc 静默丢条目
+-- （`vuna check` 会先报缺签名）。
 hasSig : String -> List Decl -> Bool
 hasSig name [] = False
 hasSig name (d :: rest) = case d of
   DSig n ctx ty sp => if n == name then True else hasSig name rest
   _ => hasSig name rest
 
+-- | 内部：按名字去重，保留首次出现。
 dedupeItems : List DocItem -> List DocItem
 dedupeItems items = dedupeItemsGo items []
 
+-- | 内部：`dedupeItems` 的 `seen` 累加实现。
 dedupeItemsGo : List DocItem -> List String -> List DocItem
 dedupeItemsGo [] seen = []
 dedupeItemsGo (i :: rest) seen =
   if memName (itemName i) seen then dedupeItemsGo rest seen
   else i :: dedupeItemsGo rest (itemName i :: seen)
 
+-- | 内部：名字是否以 `_` 开头（私有项不收录）。
 isPrivate : String -> Bool
 isPrivate name = case strUnpack name of
   c :: rest => c == 95
@@ -190,65 +231,79 @@ isPrivate name = case strUnpack name of
 -- ---------------------------------------------------------------
 -- 签名块
 -- ---------------------------------------------------------------
+-- | 内部：类型参数后缀；无参数时为空串。
 paramSuffix : List String -> String
 paramSuffix [] = ""
 paramSuffix params = " ${join " " params}"
 
+-- | 内部：`deriving (...)` 行；没有 deriving 时为空表。
 derivingLines : List String -> List String
 derivingLines [] = []
 derivingLines derivings = ["deriving (${join ", " derivings})"]
 
+-- | 内部：`data ... where` 签名块（构造子 + deriving）。
 dataSignature : String -> List String -> Expr -> List Ctor -> List String -> String
 dataSignature name params kind ctors derivings =
   join "\n"
     ("data ${name}${paramSuffix params} : ${renderType kind} where" :: append (map ctorLine ctors) (derivingLines derivings))
 
+-- | 内部：`record ... where` 签名块（字段 + deriving）。
 recordSignature : String -> List String -> List Field -> List String -> String
 recordSignature name params fields derivings =
   join "\n"
     ("record ${name}${paramSuffix params} where" :: append (map fieldLine fields) (derivingLines derivings))
 
+-- | 内部：`trait` 签名块（父类上下文 + 方法）。
 traitSignature : String -> List TraitParam -> List Expr -> List TraitMethod -> String
 traitSignature name params supers methods =
   join "\n"
     ("trait ${ctxText supers}${name}${traitParamSuffix params} where" :: map methodLine methods)
 
+-- | 内部：trait 的父类上下文前缀；没有父类时为空串。
 ctxText : List Expr -> String
 ctxText [] = ""
 ctxText supers = join ", " (map renderType supers) ++ " => "
 
+-- | 内部：trait 参数后缀；无参数时为空串。
 traitParamSuffix : List TraitParam -> String
 traitParamSuffix [] = ""
 traitParamSuffix params = " " ++ join " " (map traitParamText params)
 
+-- | 内部：单个 trait 参数的渲染（匿名名，或 `(n : kind)`）。
 traitParamText : TraitParam -> String
 traitParamText (TraitParam n Nothing) = n
 traitParamText (TraitParam n (Just k)) = "(${n} : ${renderType k})"
 
+-- | 内部：一行构造子声明。
 ctorLine : Ctor -> String
 ctorLine (Ctor name ty arity sp) = "  ${name} : ${renderType ty}"
 
+-- | 内部：一行字段声明。
 fieldLine : Field -> String
 fieldLine (Field name ty sp) = "  ${name} : ${renderType ty}"
 
+-- | 内部：一行 trait 方法声明。
 methodLine : TraitMethod -> String
 methodLine m = "  ${traitMethodName m} : ${renderType m.traitMethodType}"
 
 -- ---------------------------------------------------------------
 -- 成员条目
 -- ---------------------------------------------------------------
+-- | 内部：把构造子转成 `ctor` 成员条目。
 ctorItems : DocTable -> String -> List Ctor -> List DocItem
 ctorItems table parent ctors =
   map
     (\c => DocItem (ctorName c) "ctor" "${ctorName c} : ${renderType (ctorType c)}" (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) [])
     ctors
 
+-- | 内部：把字段转成 `field` 成员条目。
 fieldItems : DocTable -> String -> List Field -> List DocItem
 fieldItems table parent fields =
   map
     (\f => DocItem (fieldName f) "field" "${fieldName f} : ${renderType (fieldType f)}" (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) [])
     fields
 
+-- | 内部：把 trait 方法转成 `method` 成员条目。
 methodItems : DocTable -> String -> List TraitMethod -> List DocItem
 methodItems table parent methods =
   map

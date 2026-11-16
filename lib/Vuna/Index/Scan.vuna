@@ -1,18 +1,18 @@
+-- | parse 级扫描、符号抽取、全量构建与索引缓存。
+--
+-- 缓存走 [Vuna.Tool.Session] 的输入寻址对象：依赖表两条路径——CLI / LSP / `search` 用逐源文件
+-- 内容哈希 `f:<path>:<hash>`（同 size + 同 mtime 的内容变更也必须失效），REPL 用 stat 键
+-- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希，见 `indexStatsOf`）。命中 ⇒ 读
+-- `objects/tool/<addr>` 载荷解码（[Vuna.Index.Codec]）；未命中 ⇒ 全量重建 + 写载荷对象
+-- （同一输入同一地址），每次 miss 只提交调用方选定的一个 key。
+--
+-- 没有「刷新索引」命令：`vuna map` / `vuna api` / REPL 自己判新鲜度。`Store` 是唯一写盘层，
+-- 帧格式与内容地址校验见 [Vuna.Compiler.Base.Store]。
+--
+-- 效果显式化：目录遍历、读文件、缓存写、时钟全部在 `Eff r` 里；纯数据逻辑（路径、哈希、
+-- 文本渲染、序列化解析）保持纯函数，`indexStatsOf` 只产出 stat 快照。
 module Vuna.Index.Scan where
 
--- Vuna.Index.Scan：parse 级扫描、符号抽取、全量构建与索引缓存。
---
--- 缓存设计：`Vuna.Tool.Session` 输入寻址对象（见 `indexLoadOrBuild`）。
---   - 依赖表两条路径：CLI 用逐源文件内容哈希（同 size + 同 mtime 的内容变更也
---     必须失效），REPL 用 stat 键（安全窗内回落内容哈希，`indexStatsOf`）；
---   - 命中 ⇒ 读 `objects/tool/<addr>` 载荷解码（`Index.Codec`）；未命中 ⇒ 全量重建 +
---     写载荷对象（同一输入同一地址）；每次 miss 只提交调用方选定的一个 key。
---
--- **没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判新鲜度。
--- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Base.Store`。
---
--- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff r` 里；纯数据逻辑
--- （路径/哈希/JSON 渲染/序列化解析）保持纯函数；`indexStatsOf` 只产出 stat 快照。
 import Vuna.Compiler.Base.Common
 import Base.Nat
 import Base.Maybe
@@ -36,24 +36,27 @@ import Base.EffFs
 import Base.Eff.Types
 import Base.EffProcess
 
--- 工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
+-- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 indexFuelExhausted : String -> a
 indexFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 
 -- ---------------------------------------------------------------
 -- 小型 helper（本模块自用，避免污染 Base）
 -- ---------------------------------------------------------------
+-- | 内部：按单字节分隔符切分字符码列表，返回各片段的字符串（先反序累积、最后 `reverse`）。
 splitChars : Int -> List Int -> List String -> List Int -> List String
 splitChars sep [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitChars sep (c :: rest) acc seg =
   if c == sep then splitChars sep rest (strPack (reverse seg) :: acc) []
   else splitChars sep rest acc (c :: seg)
 
+-- | 内部：把数字字符码累加成整数；遇到非数字即 `Nothing`。
 parseIntGo : List Int -> Int -> Maybe Int
 parseIntGo [] acc = Just acc
 parseIntGo (c :: rest) acc =
   if c >= 48 && c <= 57 then parseIntGo rest (acc * 10 + (c - 48)) else Nothing
 
+-- | 内部：去掉前缀；没有该前缀时原样返回。
 dropPrefix : String -> String -> String
 dropPrefix prefix s =
   if startsWith prefix s then substring (byteLength prefix) (byteLength s - byteLength prefix) s
@@ -62,6 +65,7 @@ dropPrefix prefix s =
 -- ---------------------------------------------------------------
 -- 效果列表遍历（本模块自用；顺序与纯 `map` / `concatMap` 一致）
 -- ---------------------------------------------------------------
+-- | 内部：在 `Eff r` 里逐项 map，结果顺序与纯 `map` 一致。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -69,6 +73,7 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
+-- | 内部：在 `Eff r` 里逐项 concatMap，结果顺序与纯 `concatMap` 一致。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -79,6 +84,7 @@ concatMapEff f (x :: rest) = do
 -- ---------------------------------------------------------------
 -- 目录遍历
 -- ---------------------------------------------------------------
+-- | 内部：目录名黑名单——版本库、构建产物、编辑器/插件缓存等不参与扫描的目录。
 skipDir : String -> Bool
 skipDir name =
   name == "."
@@ -94,16 +100,18 @@ skipDir name =
     || name == "node_modules"
     || name == ".vscode"
 
+-- | 内部：递归收集目录下的 `.vuna` 文件（fuel 上限 1048576）。
 collectVuna : Member nFs FsOp r => String -> Eff r (List String)
 collectVuna dir = collectVunaGo 1048576 dir
 
--- 目录树递归（符号链接可成环）用显式 fuel 守卫；每次下钻一层消耗 1。
+-- | 内部：目录树递归的入口，每下钻一层消耗 1 个 fuel（符号链接可成环，故用显式守卫）。
 collectVunaGo : Member nFs FsOp r => Int -> String -> Eff r (List String)
 collectVunaGo fuel dir = if fuel <= 0 then indexFuelExhausted "directory walk"
 else do
   names <- fsReadDir dir
   concatMapEff (walkVunaGo (fuel - 1) dir) names
 
+-- | 内部：处理目录里的一个条目——命中黑名单就跳过，是目录就下钻，否则只收 `.vuna` 后缀。
 walkVunaGo : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
 walkVunaGo fuel dir name = if fuel <= 0 then indexFuelExhausted "directory walk"
 else if skipDir name then pure []
@@ -115,14 +123,15 @@ else
     if exists then collectVunaGo (fuel - 1) path
     else pure (if endsWith ".vuna" name then [path] else [])
 
--- fsIsDirectory 对不存在的路径会抛异常，必须先判存在。
+-- | 内部：路径存在且是目录（`fsIsDirectory` 对不存在的路径会抛异常，故先判存在）。
 dirExists : Member nFs FsOp r => String -> Eff r Bool
 dirExists path = do
   exists <- fsFileExists path
   if exists then fsIsDirectory path else pure False
 
--- 包的索引范围：<pkg>/lib 与 <pkg>/app（模块源码）。刻意不扫 test/ 与 examples/
--- （夹具含故意不合法的语法，不是模块源码）。
+-- | 内部：包的索引范围——`<pkg>/lib` 与 `<pkg>/app` 下的模块源码。
+--
+-- 刻意不扫 `test/` 与 `examples/`：夹具含故意不合法的语法，不是模块源码。
 packageSources : Member nFs FsOp r => String -> Eff r (List String)
 packageSources dir = do
   hasLib <- dirExists "${dir}/lib"
@@ -131,6 +140,10 @@ packageSources dir = do
   appFiles <- if hasApp then collectVuna "${dir}/app" else pure []
   pure (append libFiles appFiles)
 
+-- | 内部：仓库 → 待扫描的 `(目录, 包名)` 列表。
+--
+-- 有 manifest 时取 workspace 的包；找不到 manifest 或不是 workspace 时，把找到的 manifest
+-- 目录（没有 manifest 时用入参 `repo`）当作匿名包（包名为空串）。
 packageDirs : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List (Pair String String))
 packageDirs repo = do
   found <- findManifestDir repo
@@ -144,45 +157,54 @@ packageDirs repo = do
       )
 
 -- ---------------------------------------------------------------
--- 符号抽取（v3：doc 来自 DocTable，普通注释不再进入 symDoc）
+-- 符号抽取（doc 来自 DocTable，普通注释不进 `symDoc`）
 -- ---------------------------------------------------------------
+-- | 内部：声明的起始行。
 declLine : Decl -> Int
 declLine d = spanStartLine (declSpan d)
 
+-- | 内部：声明的起始列。
 declCol : Decl -> Int
 declCol d = spanStartCol (declSpan d)
 
+-- | 内部：类型参数后缀（` a b`）；没有参数时为空串。
 paramSuffix : List String -> String
 paramSuffix [] = ""
 paramSuffix params = " ${join " " params}"
 
+-- | 内部：trait 参数后缀（每个参数前加一个空格，见 `traitParamText`）；没有参数时为空串。
 traitParamSuffix : List TraitParam -> String
 traitParamSuffix [] = ""
 traitParamSuffix params = " " ++ join " " (map traitParamText params)
 
+-- | 内部：trait 父约束前缀（`A, B => `）；没有父约束时为空串。
 traitCtxText : List Expr -> String
 traitCtxText [] = ""
 traitCtxText supers = join ", " (map renderType supers) ++ " => "
 
+-- | 内部：单个 trait 参数的文本；带 kind 注解时是 `(n : k)`。
 traitParamText : TraitParam -> String
 traitParamText (TraitParam n Nothing) = n
 traitParamText (TraitParam n (Just k)) = "(${n} : ${renderType k})"
 
+-- | 内部：在声明列表里找该名字的签名声明（`DSig`）并渲染带上下文的类型；找不到为空串。
 signatureOf : String -> List Decl -> String
 signatureOf name [] = ""
 signatureOf name (d :: rest) = case d of
   DSig n ctx ty sp => if n == name then renderTypeInCtx ctx ty else signatureOf name rest
   _ => signatureOf name rest
 
+-- | 内部：同 `signatureOf`，但只渲染类型本体（不带类型上下文），即 `symType` 的取值。
 typeOf : String -> List Decl -> String
 typeOf name [] = ""
 typeOf name (d :: rest) = case d of
   DSig n ctx ty sp => if n == name then renderType ty else typeOf name rest
   _ => typeOf name rest
 
--- 声明的一行显示文本（`vuna api` 的行 / LSP `documentSymbol.detail` 共用）：
--- `fun` / `axiom` / `extern` 给「名字 : 签名」，data / record / trait 给声明头，
--- 实例（无名字可显示）给空串。
+-- | 声明的一行显示文本（`vuna api` 的行与 LSP `documentSymbol.detail` 共用）。
+--
+-- `DSig` / `axiom` / `extern` / `fun` 给「名字 : 签名」（`fun` 从签名声明里取类型；没有同名
+-- `DSig` 时只给裸名字），`data` / `record` / `trait` 给声明头，实例没有名字可显示，给空串。
 export declSigText : List Decl -> Decl -> String
 declSigText decls (DData name params kind ctors derivings viaField repr lin sp) =
   "data ${name}${paramSuffix params}"
@@ -198,9 +220,13 @@ declSigText decls (DFun name pats body sp) = case signatureOf name decls of
   sig => "${name} : ${sig}"
 declSigText decls (DInstance ctxE head methods sp) = ""
 
+-- | 内部：一个模块的全部符号（顶层声明 + 各自成员）。
 symbolsOfModule : String -> List Decl -> DocTable -> List Sym
 symbolsOfModule sMod decls table = concatMap (symbolsOfDecl sMod decls table) decls
 
+-- | 内部：一条声明产生的符号。
+--
+-- `data` / `record` / `trait` 连成员（构造子、字段、方法）一起产出；签名声明与实例不产出符号。
 symbolsOfDecl : String -> List Decl -> DocTable -> Decl -> List Sym
 symbolsOfDecl sMod decls table d =
   let
@@ -226,35 +252,38 @@ symbolsOfDecl sMod decls table d =
     DFun name pats body sp =>
       [ Sym sMod name "fun" (signatureOf name decls) (typeOf name decls) (docForDecl table name) line col
       ]
-    -- 实例声明不产生符号（字典按实例表注册）。
     DInstance ctxE head methods sp => []
 
+-- | 内部：`data` 的构造子符号（种类 `ctor`，行/列取构造子自身位置）。
 ctorSymbols : String -> String -> List Ctor -> DocTable -> List Sym
 ctorSymbols sMod parent ctors table =
   map
     (\c => Sym sMod (ctorName c) "ctor" "${ctorName c} : ${renderType (ctorType c)}" (renderType (ctorType c)) (docForMember table parent (ctorName c)) (spanStartLine (ctorSpan c)) (spanStartCol (ctorSpan c)))
     ctors
 
+-- | 内部：`record` 的字段符号（种类 `field`，行/列取字段自身位置）。
 fieldSymbols : String -> String -> List Field -> DocTable -> List Sym
 fieldSymbols sMod parent fields table =
   map
     (\f => Sym sMod (fieldName f) "field" "${fieldName f} : ${renderType (fieldType f)}" (renderType (fieldType f)) (docForMember table parent (fieldName f)) (spanStartLine (fieldSpan f)) (spanStartCol (fieldSpan f)))
     fields
 
--- trait 方法签名带 span，方法符号的行/列直接取方法签名位置。
+-- | 内部：一个 trait 方法符号；行/列取方法签名的位置。
 methodSymbol : String -> String -> TraitMethod -> DocTable -> Sym
 methodSymbol sMod parent m table =
   Sym sMod (traitMethodName m) "method" "${traitMethodName m} : ${renderType m.traitMethodType}"
     (renderType m.traitMethodType) (docForMember table parent (traitMethodName m))
     (spanStartLine (traitMethodSpan m)) (spanStartCol (traitMethodSpan m))
 
+-- | 内部：一个 trait 的全部方法符号。
 methodSymbols : String -> String -> List TraitMethod -> DocTable -> List Sym
 methodSymbols sMod parent methods table = map (\m => methodSymbol sMod parent m table) methods
 
--- 同名符号合并：多子句函数会产生重复 DFun，只保留第一条（行号取首子句）。
+-- | 内部：同名符号合并——多子句函数会产生重复 `DFun`，只保留第一条（行号取首子句）。
 dedupeSymbols : List Sym -> List Sym
 dedupeSymbols syms = dedupeGo syms [] []
 
+-- | 内部：`dedupeSymbols` 的累积器版本，按全名去重。
 dedupeGo : List Sym -> List String -> List Sym -> List Sym
 dedupeGo [] seen acc = reverse acc
 dedupeGo (s :: rest) seen acc =
@@ -264,11 +293,13 @@ dedupeGo (s :: rest) seen acc =
 -- ---------------------------------------------------------------
 -- 模块名
 -- ---------------------------------------------------------------
--- 模块全名：源码模块头优先；无模块头时按路径推导。
+-- | 内部：模块全名——源码模块头优先，无模块头时按路径推导。
 moduleNameOf : String -> String -> Maybe ModDecl -> String
 moduleNameOf dir path (Just (ModDecl name explicit items _ _ _ sp)) = name
 moduleNameOf dir path Nothing = segmentModule dir path
 
+-- | 内部：按路径推导模块名——去掉 `<dir>/lib/` 或 `<dir>/` 前缀与 `.vuna` 后缀，
+-- 再把路径分隔符换成点。
 segmentModule : String -> String -> String
 segmentModule dir path =
   let
@@ -280,13 +311,17 @@ segmentModule dir path =
 -- ---------------------------------------------------------------
 -- 引用抽取（语法级，保守：收集所有出现过的变量名 + 出现位置）
 -- ---------------------------------------------------------------
+-- | 内部：模块内的全部引用（按源码顺序）。
 refsInDecls : String -> List Decl -> List Ref
 refsInDecls sMod decls = reverse (refsInDeclsGo sMod decls [])
 
+-- | 内部：`refsInDecls` 的累积器版本。
 refsInDeclsGo : String -> List Decl -> List Ref -> List Ref
 refsInDeclsGo sMod [] acc = acc
 refsInDeclsGo sMod (d :: rest) acc = refsInDeclsGo sMod rest (refsInDecl sMod d acc)
 
+-- | 内部：一条声明里的引用，覆盖函数体、构造子类型、字段类型、trait 父约束与方法类型
+-- 以及实例头与方法体。
 refsInDecl : String -> Decl -> List Ref -> List Ref
 refsInDecl sMod (DFun name pats body sp) acc = refsInExprGo sMod body acc
 refsInDecl sMod (DData name params kind ctors derivings viaField repr lin sp) acc =
@@ -299,55 +334,64 @@ refsInDecl sMod (DInstance ctxE head methods sp) acc =
   refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
 refsInDecl sMod _ acc = acc
 
+-- | 内部：构造子类型里的引用。
 refsInCtors : String -> List Ctor -> List Ref -> List Ref
 refsInCtors sMod [] acc = acc
 refsInCtors sMod (c :: rest) acc = refsInCtors sMod rest (refsInExprGo sMod (ctorType c) acc)
 
+-- | 内部：trait 方法类型里的引用。
 refsInMethods : String -> List TraitMethod -> List Ref -> List Ref
 refsInMethods sMod [] acc = acc
 refsInMethods sMod (m :: rest) acc =
   refsInMethods sMod rest (refsInExprGo sMod m.traitMethodType acc)
 
+-- | 内部：一组表达式里的引用。
 refsInExprs : String -> List Expr -> List Ref -> List Ref
 refsInExprs sMod [] acc = acc
 refsInExprs sMod (e :: rest) acc = refsInExprs sMod rest (refsInExprGo sMod e acc)
 
+-- | 内部：record 字段类型里的引用。
 refsInFieldTypes : String -> List Field -> List Ref -> List Ref
 refsInFieldTypes sMod [] acc = acc
 refsInFieldTypes sMod (f :: rest) acc =
   refsInFieldTypes sMod rest (refsInExprGo sMod (fieldType f) acc)
 
--- record 字面量/更新里的字段值（名字, 表达式）。
+-- | 内部：record 字面量/更新里的字段值（名字, 表达式）中的引用。
 refsInFields : String -> List (Pair String Expr) -> List Ref -> List Ref
 refsInFields sMod [] acc = acc
 refsInFields sMod ((Pair fname value) :: rest) acc =
   refsInFields sMod rest (refsInExprGo sMod value acc)
 
+-- | 内部：绑定里的引用（`let` 绑定与 `case` 分支的「模式, 表达式」），只看值表达式。
 refsInBinds : String -> List (Pair Pat Expr) -> List Ref -> List Ref
 refsInBinds sMod [] acc = acc
 refsInBinds sMod ((Pair p x) :: rest) acc = refsInBinds sMod rest (refsInExprGo sMod x acc)
 
+-- | 内部：`where` / `let` 多子句局部函数的引用，只看各 clause 的 body（与绑定一致，不看模式）。
 refsInLocalClauses : String -> List (Pair (List Pat) Expr) -> List Ref -> List Ref
 refsInLocalClauses sMod [] acc = acc
 refsInLocalClauses sMod ((Pair pats body) :: rest) acc =
   refsInLocalClauses sMod rest (refsInExprGo sMod body acc)
 
+-- | 内部：应用实参里的引用。
 refsInArgs : String -> List Expr -> List Ref -> List Ref
 refsInArgs sMod [] acc = acc
 refsInArgs sMod (a :: rest) acc = refsInArgs sMod rest (refsInExprGo sMod a acc)
 
+-- | 内部：`do` 语句里的引用（绑定的值表达式与语句表达式）。
 refsInDoStmts : String -> List DoStmt -> List Ref -> List Ref
 refsInDoStmts sMod [] acc = acc
 refsInDoStmts sMod (s :: rest) acc = case s of
   DBind p x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
   DExpr x tsp => refsInDoStmts sMod rest (refsInExprGo sMod x acc)
 
--- 累积器版本（difference list 语义）：每节点 O(1) cons，最后 reverse 一次。
--- 若逐分支左结合 append 子树的引用列表，在应用 spine / 嵌套表达式上会呈 O(n²)；
--- 输出顺序仍是源码顺序（先逆序收集，reverse 后还原）。
+-- 累积器版本（difference list 语义）：每节点 O(1) cons，最后 reverse 一次；若逐分支左结合
+-- append 子树引用列表，在应用 spine / 嵌套表达式上会呈 O(n²)。输出顺序仍是源码顺序。
+-- | 内部：单条表达式里的引用。
 refsInExpr : String -> Expr -> List Ref
 refsInExpr sMod e = reverse (refsInExprGo sMod e [])
 
+-- | 内部：`refsInExpr` 的累积器版本（逆序收集，`refsInExpr` 负责还原顺序）。
 refsInExprGo : String -> Expr -> List Ref -> List Ref
 refsInExprGo sMod e acc = case e of
   -- 洞（`_` / `?name`）不是引用，不进索引（否则 `map --impact` / references 有噪音）。
@@ -390,7 +434,7 @@ refsInExprGo sMod e acc = case e of
       (refsInExprGo sMod r (Ref sMod op (spanStartLine sp) (spanStartCol sp) :: acc))
   EParen inner sp => refsInExprGo sMod inner acc
 
--- 模板片段里的引用（洞内表达式递归；文本块无引用）。
+-- | 内部：模板字面量各片段里的引用——洞内表达式递归，文本块没有引用。
 refsInInterpParts : String -> List InterpPart -> List Ref -> List Ref
 refsInInterpParts sMod [] acc = acc
 refsInInterpParts sMod ((IPText s) :: rest) acc = refsInInterpParts sMod rest acc
@@ -400,19 +444,27 @@ refsInInterpParts sMod ((IPHole e) :: rest) acc =
 -- ---------------------------------------------------------------
 -- 全量构建
 -- ---------------------------------------------------------------
+-- | 单个文件索引成功后的产物。
 record Built where
+  -- | 该文件的模块元信息（单元素表）。
   builtModules : List ModuleInfo
+  -- | 该文件的符号。
   builtSymbols : List Sym
+  -- | 该文件的引用。
   builtRefs : List Ref
 
--- 索引一个文件。parse/fixity 失败返回 Err（调用方转成 warning），不中断整体。
--- 返回推进后的 `FixityEnv`：按目录复用包上下文与已加载模块图（见 Vuna.FixityEnv）。
+-- | 索引一个文件。
+--
+-- parse/fixity 失败返回 `ErrC`（调用方转成 warning），不中断整体；返回值带推进后的
+-- `FixityEnv`——按目录复用包上下文与已加载模块图（见 [Vuna.FixityEnv]）。
 indexOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv (Check Built))
 indexOne env dir pkgName path = do
   exists <- fsFileExists path
   if exists then indexOneExisting env dir pkgName path
   else pure (Pair env (err "${path}: no such file"))
 
+-- | 内部：`indexOne` 的文件存在分支——读源码、取包 fixity 上下文、按程序级 fixity 重排，
+-- 再抽模块名、模块 doc、符号与引用。
 indexOneExisting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv (Check Built))
 indexOneExisting env dir pkgName path = do
   source <- fsReadFile path
@@ -438,26 +490,35 @@ indexOneExisting env dir pkgName path = do
             refs = refsInDecls sMod decls
           in pure (Pair env2 (OkC (Built [info] syms refs)))
 
+-- | 跨文件的累积器：模块表、符号表、引用表都倒序累积，最后统一 `reverse`。
 record Acc where
+  -- | 已累积的模块元信息（倒序）。
   accModules : List ModuleInfo
+  -- | 已累积的符号（倒序）。
   accSymbols : List Sym
+  -- | 已累积的引用（倒序）。
   accRefs : List Ref
+  -- | 扫描中遇到的（parse / fixity）警告。
   accWarns : List Diagnostic
 
--- 把 xs 逆序前插到 ys（O(#xs)）：跨文件累积用，避免每文件 append 复制整个已累积列表。
+-- | 内部：把 `xs` 逆序前插到 `ys`（O(#xs)）；跨文件累积用它，避免每个文件都 `append`
+-- 复制整个已累积列表。
 prependRev : List a -> List a -> List a
 prependRev [] ys = ys
 prependRev (x :: rest) ys = prependRev rest (x :: ys)
 
+-- | 内部：按文件顺序索引一个包，返回推进后的 `FixityEnv` 与累积器。
 indexPackage : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (Pair FixityEnv Acc)
 indexPackage env dir pkgName files acc = foldFiles env dir pkgName files acc
 
+-- | 内部：逐文件索引的折叠——`FixityEnv` 与累积器在文件之间传递。
 foldFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> List String -> Acc -> Eff r (Pair FixityEnv Acc)
 foldFiles env dir pkgName [] acc = pure (Pair env acc)
 foldFiles env dir pkgName (path :: rest) acc = do
   stepped <- indexFileInto env dir pkgName path acc
   foldFiles (firstOf stepped) dir pkgName rest (secondOf stepped)
 
+-- | 内部：索引单个文件并把结果并入累积器；失败时只追加一条警告。
 indexFileInto : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> String -> Acc -> Eff r (Pair FixityEnv Acc)
 indexFileInto env dir pkgName path acc = do
   stepped <- indexOne env dir pkgName path
@@ -469,6 +530,7 @@ indexFileInto env dir pkgName path acc = do
       pure
         (Pair (firstOf stepped) (Acc (prependRev b.builtModules acc.accModules) (prependRev b.builtSymbols acc.accSymbols) (prependRev b.builtRefs acc.accRefs) acc.accWarns))
 
+-- | 内部：遍历所有 `(目录, 包名)`，包内先展开源码文件再依次索引。
 collectAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> List (Pair String String) -> Acc -> Eff r (Pair FixityEnv Acc)
 collectAll env [] acc = pure (Pair env acc)
 collectAll env (root :: rest) acc = do
@@ -480,7 +542,7 @@ collectAll env (root :: rest) acc = do
     stepped <- indexPackage env dir pkgName files acc
     collectAll (firstOf stepped) rest (secondOf stepped)
 
--- 全量构建（parse 所有源码，不读写缓存）。
+-- | 全量构建：解析所有源码，不读写缓存；符号表按全名合并多子句。
 export buildIndex : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
 buildIndex repo = do
   dirs <- packageDirs repo
@@ -493,38 +555,41 @@ buildIndex repo = do
 -- ---------------------------------------------------------------
 -- 缓存：工具会话对象 + 输入寻址载荷
 -- ---------------------------------------------------------------
---   会话 key：`index:<dir>`（CLI）/ `index-cheap:<dir>`（REPL），作为 `ToolSession` 的
---   bucket + node key；
---   载荷：`Index.Codec.encIndex` 的规范字节，落 `objects/tool/<addr>`（codec
---   `index-payload 2`，`Store` framing + SHA-256 校验）；
---   依赖表：CLI 逐文件内容哈希 `f:<path>:<hash>`；REPL 用 stat 键
---   `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内带内容哈希，窗口外留空）。
--- 命中 ⇒ 读载荷解码；miss ⇒ 重建 + 写载荷对象（同一输入同一地址）。
+-- 会话 key、载荷与依赖表的分层见模块头；这里只构造 key 与依赖键。
+-- | 内部：强依赖路径（CLI / LSP / `search`）的会话 key，`index:<dir>`（同时用作桶名）。
 indexNodeKey : String -> String
 indexNodeKey repo = "index:${repo}"
 
+-- | 内部：REPL 路径的会话 key，`index-cheap:<dir>`（与 CLI 的强依赖缓存互不污染）。
 indexNodeKeyCheap : String -> String
 indexNodeKeyCheap repo = "index-cheap:${repo}"
 
--- mtime 只有秒级分辨率：`builtSec` 前 `indexMtimeSafetyWindowSec` 秒内改过的文件必须回落
--- 内容哈希，否则「同秒同 size 的编辑」会被漏掉。
+-- | 内部：mtime 安全窗（秒）。
+--
+-- mtime 只有秒级分辨率：`builtSec` 前这么多秒内改过的文件必须回落内容哈希，否则
+-- 「同秒同 size 的编辑」会被漏掉。
 indexMtimeSafetyWindowSec : Int
 indexMtimeSafetyWindowSec = 5
 
+-- | 单个源文件的 stat 快照，即依赖表的一项。
 record SourceStat where
+  -- | 源文件路径。
   ssPath : String
+  -- | 文件大小（窗口外取 `fsFileSize`，窗口内取读入内容的 `strLength`）。
   ssBytes : Int
+  -- | mtime（秒）。
   ssMtime : Int
-  -- 安全窗内 = 内容哈希；窗口外 = ""（依赖表键里带上，两侧规则一致就不会假失配）。
+  -- | 内容哈希：安全窗内为哈希，窗口外为空串（键里带上，两侧规则一致就不会假失配）。
   ssHash : String
 
--- 当前 stat 面（含窗口内的内容哈希）。依赖表的唯一来源。
+-- | 内部：当前 stat 面（含安全窗内的内容哈希），是廉价依赖表的唯一来源。
 indexStatsOf : Member nFs FsOp r, Member nEnv EnvOp r => Int -> String -> Eff r (List SourceStat)
 indexStatsOf builtSec repo = do
   dirs <- packageDirs repo
   sources <- concatMapEff packageSources (map firstOf dirs)
   mapEff (sourceStatOf builtSec) sources
 
+-- | 内部：单个文件的 stat 快照；mtime 落在安全窗内时额外读内容算哈希。
 sourceStatOf : Member nFs FsOp r => Int -> String -> Eff r SourceStat
 sourceStatOf builtSec path = do
   exists <- fsFileExists path
@@ -537,21 +602,24 @@ sourceStatOf builtSec path = do
     else pure (SourceStat path bytes mtime "")
   else pure (SourceStat path 0 0 "")
 
+-- | 内部：内容哈希——拼接两个不同前缀的 `Base.Hashable.hashStr` 结果，依赖键用。
 contentHash : String -> String
 contentHash content = "${Base.Hashable.hashStr content}-${Base.Hashable.hashStr "v2:${content}"}"
 
+-- | 内部：stat 快照 → 廉价依赖键 `st:<path>:<bytes>:<mtime>:<hash>`。
 indexDepKey : SourceStat -> String
 indexDepKey s = "st:${s.ssPath}:${strFromInt s.ssBytes}:${strFromInt s.ssMtime}:${s.ssHash}"
 
--- 带缓存的入口：查索引节点 → 命中读 blob 解码 → 未命中重建并写回。
--- 非 workspace（向上找不到 vuna.toml）是**输入错误**，不再静默建空索引。
--- 强依赖（CLI 路径）：逐源文件**内容哈希**（同 size + 同 mtime 的内容变更也必须失效）。
+-- | 内部：强依赖表（CLI 路径）——逐源文件内容哈希 `f:<path>:<hash>`。
+--
+-- 同 size + 同 mtime 的内容变更也必须失效；文件不存在时哈希段留空。
 indexStrongDeps : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (List String)
 indexStrongDeps repo = do
   dirs <- packageDirs repo
   sources <- concatMapEff packageSources (map firstOf dirs)
   mapEff strongDepOf sources
 
+-- | 内部：单个文件的强依赖键。
 strongDepOf : Member nFs FsOp r => String -> Eff r String
 strongDepOf path = do
   exists <- fsFileExists path
@@ -560,18 +628,22 @@ strongDepOf path = do
     pure "f:${path}:${contentHash source}"
   else pure "f:${path}:"
 
--- 带缓存的入口（CLI：`vuna map` / `vuna api`）：强依赖 + `index:<dir>` 节点
--- → 命中读 blob 解码 → 未命中重建并写回。非 workspace（向上找不到 vuna.toml）是
--- **输入错误**，不再静默建空索引。
+-- | 带缓存的入口（CLI 与 LSP）：强依赖 + `index:<dir>` 节点。
+--
+-- 命中就读 blob 解码，未命中重建并写回。非 workspace（向上找不到 `vuna.toml`）是输入错误，
+-- 不静默建空索引。
 export loadOrBuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
 loadOrBuild repo = indexLoadOrBuild repo False
 
--- 廉价入口（REPL：每会话首次 `:browse`/`:info`/`:search`）：依赖表用 stat 键
+-- | 廉价入口（REPL 每会话首次 `:browse` / `:info` / `:search`）：依赖表用 stat 键
 -- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希），不读全部源码算哈希。
+--
 -- 节点 key 前缀不同（`index-cheap:`），与 CLI 的强依赖缓存互不污染。
 export loadOrBuildCheap : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check Index)
 loadOrBuildCheap repo = indexLoadOrBuild repo True
 
+-- | 内部：两条入口的共同实现——判 workspace、算依赖表、命中解码，否则 `rebuildIndex`；
+-- `cheap` 选择 stat 键路径与节点 key。
 indexLoadOrBuild : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Eff r (Check Index)
 indexLoadOrBuild repo cheap = do
   found <- findManifestDirMaybe repo
@@ -603,14 +675,15 @@ indexLoadOrBuild repo cheap = do
                 Nothing => rebuildIndex ts0 repo node deps
             _ => rebuildIndex ts0 repo node deps
 
--- 廉价依赖：stat 快照 → 键。
+-- | 内部：廉价依赖表——stat 快照转成依赖键。
 cheapDeps : Member nFs FsOp r, Member nEnv EnvOp r => Int -> String -> Eff r (List String)
 cheapDeps builtSec repo = do
   stats <- indexStatsOf builtSec repo
   pure (map indexDepKey stats)
 
--- 重建：全量扫描 → 编码 → 写 blob → 提交节点（`toolStorePayload` 内含 `sessionSave`）。
--- 一次 miss 只提交调用方选定的 `node`（`index:` 或 `index-cheap:`），不写另一个 key。
+-- | 内部：重建并写回——全量扫描、编码载荷、写载荷对象（`toolStorePayload`；输入寻址，地址
+-- 存在即命中，无需单独提交依赖表）；一次 miss 只提交调用方选定的 `node`（`index:` 或
+-- `index-cheap:`）。
 rebuildIndex : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> String -> List String -> Eff r (Check Index)
 rebuildIndex ts repo node deps = do
   _ <- indexNote "index-path=build"

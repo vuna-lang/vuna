@@ -1,15 +1,14 @@
+-- | 注释保留：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置挂到最近的「条目」上。
+--
+-- 可挂注释的条目：顶部声明 / import / `infix*` 声明 / 构造器 / 记录字段 / trait 方法 /
+-- let 与 where 绑定 / case 分支 / do 语句。单独成行的注释成为下一条目的前置注释，
+-- 写在同一行末尾的注释成为该条目的行尾注释；表达式内部的注释前移到最内层包含它的
+-- 条目（没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
+--
+-- 对外提供 `anchorSpans` / `assignComments` / `attachAt`，供门面 [Vuna.Fmt] 与
+-- [Vuna.Fmt.Expr] / [Vuna.Fmt.Decl] 使用。
 module Vuna.Fmt.Comment where
 
--- Vuna.Fmt.Comment：注释保留。
---
--- 注释不在 AST 里，格式化器单独 lex 出注释，按源码位置挂到最近的「条目」
--- （顶部声明/import/`infix*` 声明/构造器/记录字段/trait 方法/let 与 where 绑定/case 分支/
--- do 语句）：
--- 单独成行的注释成为下一条目的前置注释，写在同一行末尾的注释成为该条目的行尾注释；
--- 表达式内部的注释前移到最内层包含它的条目（没有则前移到下一条目；文件末尾的注释
--- 保留在文件末尾）。
---
--- 暴露 anchorSpans / assignComments / attachAt 给门面与 Expr / Decl。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
@@ -23,64 +22,73 @@ import Vuna.Fmt.Util
 -- - 行尾注释（仅单行注释）追加在该条目最后一行末尾；
 -- - 多行块注释一律以「前置」形式插入（不挂在行尾）。
 -- ---------------------------------------------------------------
+-- | 内部：是否行注释（`--` 而非 `{- -}`）。
 isLineComment : Comment -> Bool
 isLineComment c = case c.commentKind of
   CLine => True
   CBlock => False
 
+-- | 内部：注释文本是否含换行。
 containsNewline : String -> Bool
 containsNewline s = hasNewlineChar (strUnpack s)
 
+-- | 内部：字符码表里是否有换行（10）。
 hasNewlineChar : List Int -> Bool
 hasNewlineChar [] = False
 hasNewlineChar (c :: rest) = c == 10 || hasNewlineChar rest
 
+-- | 内部：注释文本不含换行（行尾注释只接受这种）。
 isSingleLineComment : Comment -> Bool
 isSingleLineComment c = not (containsNewline c.commentText)
 
+-- | 内部：行尾注释的原文（行注释 `--...`，块注释 `{-...-}`）。
 inlineCommentText : Comment -> String
 inlineCommentText c = case c.commentKind of
   CLine => "--${c.commentText}"
   CBlock => "{-${c.commentText}-}"
 
+-- | 内部：去掉行尾空格与制表符。
 trimRightSpaces : String -> String
 trimRightSpaces s = strPack (reverse (dropReverseSpaces (reverse (strUnpack s))))
 
+-- | 内部：从（逆序的）字符表头部丢弃空格 / 制表符。
 dropReverseSpaces : List Int -> List Int
 dropReverseSpaces [] = []
 dropReverseSpaces (c :: rest) = if c == 32 || c == 9 then dropReverseSpaces rest else c :: rest
 
--- 按 `\n` 切分（保留末尾空段，块注释原文用）。
+-- | 内部：按 `\n` 切分，保留末尾空段（块注释原文用）。
 splitOnNewline : String -> List String
 splitOnNewline s = splitNewlineChars (strUnpack s) [] []
 
+-- | 内部：`splitOnNewline` 的字符级累加器。
 splitNewlineChars : List Int -> List String -> List Int -> List String
 splitNewlineChars [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitNewlineChars (c :: rest) acc seg =
   if c == 10 then splitNewlineChars rest (strPack (reverse seg) :: acc) []
   else splitNewlineChars rest acc (c :: seg)
 
--- 去掉至多 n 个前导空格（块注释续行的公共缩进）。
+-- | 内部：去掉至多 `n` 个前导空格（块注释续行的公共缩进）。
 dropSpacesUpTo : Int -> String -> String
 dropSpacesUpTo n line = if n <= 0 then line
 else case strUnpack line of
   c :: rest => if c == 32 then dropSpacesUpTo (n - 1) (strPack rest) else line
   [] => line
 
--- 块注释续行：去掉原来的起始列缩进，再按目标缩进重排（只改空白，不改正文）。
+-- | 内部：块注释续行：去掉原起始列缩进，再按目标缩进重排（只改空白，不改正文）。
 commentContinuation : Int -> Int -> String -> String
 commentContinuation indent stripN line =
   let
     trimmed = trimRightSpaces (dropSpacesUpTo stripN line)
   in if trimmed == "" then "" else spaces indent ++ trimmed
 
--- 最后一行保留原行尾空白（`-}` 前通常有一个空格），只去除起始列缩进。
+-- | 内部：块注释末行：去掉起始列缩进后补 `-}`，保留原行尾空白。
 commentTailLines : Int -> Int -> List String -> List String
 commentTailLines indent stripN [] = []
 commentTailLines indent stripN ([line]) = ["${spaces indent}${dropSpacesUpTo stripN line}-}"]
 commentTailLines indent stripN (line :: rest) =
   commentContinuation indent stripN line :: commentTailLines indent stripN rest
 
+-- | 内部：多行块注释的前置行（首行 `{-...`，续行按 `indent` 重排，末行补 `-}`）。
 blockCommentLines : Int -> Comment -> List String
 blockCommentLines indent c =
   let
@@ -91,6 +99,7 @@ blockCommentLines indent c =
     first :: rest =>
       "${spaces indent}{-${trimRightSpaces first}" :: commentTailLines indent stripN rest
 
+-- | 注释作为前置行渲染：行注释 `--...`；单行块注释 `{-...-}`；多行块注释按 `indent` 重排。
 export commentLeadLines : Int -> Comment -> List String
 commentLeadLines indent c = case c.commentKind of
   CLine => ["${spaces indent}--${c.commentText}"]
@@ -99,22 +108,25 @@ commentLeadLines indent c = case c.commentKind of
     else ["${spaces indent}{-${c.commentText}-}"]
 
 -- 位置比较与附件表 ------------------------------------------------
+-- | 内部：(行, 列) 严格先后比较。
 posBefore : Int -> Int -> Int -> Int -> Bool
 posBefore l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 < c2
 
+-- | 内部：(行, 列) 不晚于比较。
 posBeforeOrEq : Int -> Int -> Int -> Int -> Bool
 posBeforeOrEq l1 c1 l2 c2 = l1 < l2 || l1 == l2 && c1 <= c2
 
--- 注释起点是否落在条目 span 内。
+-- | 内部：位置是否落在该 span 内（含两个端点）。
 containsPos : Span -> Int -> Int -> Bool
 containsPos sp line col =
   posBeforeOrEq (spanStartLine sp) (spanStartCol sp) line col
     && posBeforeOrEq line col (spanEndLine sp) sp.spanEndCol
 
--- 最内层包含注释的条目（起点最晚者）。
+-- | 内部：包含该位置的条目中起点最晚者（即最内层条目）。
 innermostEnclosing : List Span -> Span -> Maybe Span
 innermostEnclosing anchors csp = enclosingFold Nothing anchors csp
 
+-- | 内部：`innermostEnclosing` 的折叠。
 enclosingFold : Maybe Span -> List Span -> Span -> Maybe Span
 enclosingFold best [] csp = best
 enclosingFold best (sp :: rest) csp = if containsPos sp (spanStartLine csp) (spanStartCol csp) then case best of
@@ -123,25 +135,29 @@ enclosingFold best (sp :: rest) csp = if containsPos sp (spanStartLine csp) (spa
     if betterNext sp b then enclosingFold (Just sp) rest csp else enclosingFold best rest csp
 else enclosingFold best rest csp
 
+-- | 内部：两个 (行, 列) 键是否相等。
 sameKey : Pair Int Int -> Pair Int Int -> Bool
 sameKey (Pair l c) (Pair l2 c2) = l == l2 && c == c2
 
--- 附件表：条目起点 (行, 列) -> (前置注释, 行尾注释)。
+-- | 内部：按条目起点 (行, 列) 查附件槽；槽 = (前置注释, 行尾注释)。
 lookupSlot : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Maybe (Pair (List Comment) (List Comment))
 lookupSlot [] line col = Nothing
 lookupSlot ((Pair key slot) :: rest) line col =
   if sameKey key (Pair line col) then Just slot else lookupSlot rest line col
 
+-- | 内部：条目的前置注释列表（无槽时为空）。
 leadOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
 leadOf at line col = case lookupSlot at line col of
   Nothing => []
   Just slot => firstOf slot
 
+-- | 内部：条目的行尾注释列表（无槽时为空）。
 trailOf : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> List Comment
 trailOf at line col = case lookupSlot at line col of
   Nothing => []
   Just slot => secondOf slot
 
+-- | 内部：把注释追加到该条目的前置或行尾列表；无槽时新建。
 addToSlot : Pair Int Int -> Bool -> Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
 addToSlot key isTrail comment [] =
   if isTrail then [Pair key (Pair [] [comment])] else [Pair key (Pair [comment] [])]
@@ -153,11 +169,11 @@ addToSlot key isTrail comment ((Pair k slot) :: rest) = if sameKey k key then
   in Pair key newSlot :: rest
 else Pair k slot :: addToSlot key isTrail comment rest
 
--- 行尾注释候选：与注释同行的、结束于注释之前的最近条目（结束列最大；
--- 同列时取起点更晚者，即更深层条目）。
+-- | 内部：能否作为行尾锚点：与注释同行且结束于注释起点之前。
 trailCandidate : Span -> Span -> Bool
 trailCandidate sp csp = spanEndLine sp == spanStartLine csp && sp.spanEndCol < spanStartCol csp
 
+-- | 内部：行尾候选择优：结束列更大者优先，同列取起点更晚者（更深层条目）。
 betterTrail : Span -> Span -> Bool
 betterTrail sp b =
   let
@@ -167,9 +183,11 @@ betterTrail sp b =
   else if ec < bc then False
   else posBefore (spanStartLine b) (spanStartCol b) (spanStartLine sp) (spanStartCol sp)
 
+-- | 内部：行尾注释的锚点（无候选为 `Nothing`）。
 bestTrailAnchor : List Span -> Span -> Maybe Span
 bestTrailAnchor anchors csp = trailFold Nothing anchors csp
 
+-- | 内部：`bestTrailAnchor` 的折叠。
 trailFold : Maybe Span -> List Span -> Span -> Maybe Span
 trailFold best [] csp = best
 trailFold best (sp :: rest) csp = if trailCandidate sp csp then case best of
@@ -177,17 +195,20 @@ trailFold best (sp :: rest) csp = if trailCandidate sp csp then case best of
   Just b => if betterTrail sp b then trailFold (Just sp) rest csp else trailFold best rest csp
 else trailFold best rest csp
 
--- 下一条目：起点严格晚于注释起点的最近条目。
+-- | 内部：条目起点是否严格晚于注释起点。
 isLaterAnchor : Span -> Span -> Bool
 isLaterAnchor sp csp =
   posBefore (spanStartLine csp) (spanStartCol csp) (spanStartLine sp) (spanStartCol sp)
 
+-- | 内部：候选择优：起点更早者优先。
 betterNext : Span -> Span -> Bool
 betterNext sp b = posBefore (spanStartLine sp) (spanStartCol sp) (spanStartLine b) (spanStartCol b)
 
+-- | 内部：注释之后最近的条目（无则为 `Nothing`）。
 bestNextAnchor : List Span -> Span -> Maybe Span
 bestNextAnchor anchors csp = nextFold Nothing anchors csp
 
+-- | 内部：`bestNextAnchor` 的折叠。
 nextFold : Maybe Span -> List Span -> Span -> Maybe Span
 nextFold best [] csp = best
 nextFold best (sp :: rest) csp = if isLaterAnchor sp csp then case best of
@@ -195,6 +216,8 @@ nextFold best (sp :: rest) csp = if isLaterAnchor sp csp then case best of
   Just b => if betterNext sp b then nextFold (Just sp) rest csp else nextFold best rest csp
 else nextFold best rest csp
 
+-- | 把注释分配到条目附件表：单行注释优先挂行尾锚点，否则走前置路径；
+-- 返回 (附件表, 文件末尾注释)。
 export assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
 assignComments anchors [] at eof = Pair at eof
 assignComments anchors (c :: rest) at eof =
@@ -207,6 +230,7 @@ assignComments anchors (c :: rest) at eof =
     Nothing => assignNextComment anchors c rest at eof
   else assignNextComment anchors c rest at eof
 
+-- | 内部：前置路径：挂到下一条目；没有下一条目就落到文件末尾注释。
 assignNextComment : List Span -> Comment -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
 assignNextComment anchors c rest at eof = case nextAnchorWithFallback anchors (commentSpan c) of
   Just sp =>
@@ -214,8 +238,8 @@ assignNextComment anchors c rest at eof = case nextAnchorWithFallback anchors (c
       eof
   Nothing => assignComments anchors rest at (append eof [c])
 
--- 没有「下一条目」或下一条目已跳出当前声明时，注释前移到最内层包含它的条目之前
--- （例如函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
+-- | 内部：下一条目；若下一条目跳出最内层包含条目，则改用该包含条目
+-- （函数体末尾的注释回到该函数上方，而不是下一位函数上方）。
 nextAnchorWithFallback : List Span -> Span -> Maybe Span
 nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
   Nothing => case innermostEnclosing anchors csp of
@@ -227,22 +251,24 @@ nextAnchorWithFallback anchors csp = case bestNextAnchor anchors csp of
       if posBeforeOrEq (spanStartLine enc) (spanStartCol enc) (spanStartLine sp) (spanStartCol sp) && posBeforeOrEq (spanStartLine sp) (spanStartCol sp) (spanEndLine enc) enc.spanEndCol then Just sp
       else Just enc
 
--- 条目定位：收集所有可挂注释的语法条目 span（源码顺序）。
--- trait 方法用方法签名 span（方法名到类型结束）。
+-- | 内部：trait 方法的锚点用方法签名 span（方法名到类型结束）。
 traitMethodAnchor : TraitMethod -> Span
 traitMethodAnchor m = traitMethodSpan m
 
+-- | 内部：import 的锚点。
 importAnchor : Import -> Span
 importAnchor imp = imp.importSpan
 
+-- | 内部：模块头与其导出项的锚点。
 headerAnchors : Maybe ModDecl -> List Span
 headerAnchors Nothing = []
 headerAnchors (Just m) = append [m.modDeclSpan] (modDeclItemAnchors m)
 
--- 导出项也作为注释锚点：排序时项注释随项移动。
+-- | 内部：导出项锚点（排序时项注释随项移动）。
 modDeclItemAnchors : ModDecl -> List Span
 modDeclItemAnchors (ModDecl _ _ items _ _ _ _) = map exportItemSpan items
 
+-- | 内部：一个声明自身的锚点 + 其内部条目（构造器 / 记录字段 / trait 方法 / 子表达式）。
 declAnchors : Decl -> List Span
 declAnchors (DData name params kind ctors derivings viaField repr lin sp) = sp :: map ctorSpan ctors
 declAnchors (DAxiom name ty sp) = [sp]
@@ -253,25 +279,33 @@ declAnchors (DRecord name params fields derivings viaField repr lin sp) = sp :: 
 declAnchors (DTrait name params supers methods sp) = sp :: map traitMethodAnchor methods
 declAnchors (DInstance ctxE head methods sp) = sp :: concatMap declAnchors methods
 
+-- | 内部：let 绑定的锚点（模式 span）。
 bindingAnchor : Pair Pat Expr -> Span
 bindingAnchor (Pair pat value) = patSpan pat
 
+-- | 内部：let 绑定值里的表达式锚点。
 bindingValueAnchors : Pair Pat Expr -> List Span
 bindingValueAnchors (Pair pat value) = exprAnchors value
 
+-- | 内部：case 分支的锚点（模式 span）。
 altAnchor : Pair Pat Expr -> Span
 altAnchor (Pair pat body) = patSpan pat
 
+-- | 内部：case 分支体内的表达式锚点。
 altBodyAnchors : Pair Pat Expr -> List Span
 altBodyAnchors (Pair pat body) = exprAnchors body
 
+-- | 内部：记录字段值的表达式锚点。
 fieldExprAnchors : Pair String Expr -> List Span
 fieldExprAnchors (Pair fname value) = exprAnchors value
 
+-- | 内部：do 语句的锚点（语句 span + 值里的表达式锚点）。
 doStmtAnchors : DoStmt -> List Span
 doStmtAnchors (DBind pat value sp) = sp :: exprAnchors value
 doStmtAnchors (DExpr value sp) = sp :: exprAnchors value
 
+-- | 内部：表达式里可挂注释的条目（let 绑定、case 分支、do 语句、签名行、局部函数
+-- clause 等），按源码顺序。
 exprAnchors : Expr -> List Span
 exprAnchors e = case e of
   EVar name sp => []
@@ -306,33 +340,38 @@ exprAnchors e = case e of
   -- 外层条目——注释在 `${...}` 里不进 AST，见 Lexer 的说明）。
   EInterp multi parts sp => concatMap interpPartAnchors parts
 
+-- | 内部：模板片段里洞表达式的锚点（文本块没有锚点）。
 interpPartAnchors : InterpPart -> List Span
 interpPartAnchors (IPText s) = []
 interpPartAnchors (IPHole e) = exprAnchors e
 
+-- | 内部：局部函数 clause 体的锚点。
 localClauseAnchors : Pair (List Pat) Expr -> List Span
 localClauseAnchors (Pair pats body) = exprAnchors body
 
--- `infix*` 声明的 span 也是注释锚点（前置/行尾注释随声明保留）。
+-- | 收集整个文件的注释锚点（源码顺序）：模块头 / 导出项 / import / `infix*` 声明 /
+-- 声明及其内部条目。
 export anchorSpans : Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List Span
 anchorSpans hdr imports fixities decls =
   append (headerAnchors hdr)
     (append (map importAnchor imports) (append (map fixitySpan fixities) (concatMap declAnchors decls)))
 
--- 把附件表应用到条目渲染结果上：前置注释在上，行尾注释追加到最后一行。
+-- | 内部：条目的前置注释行（按 `indent` 缩进）。
 leadingLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String
 leadingLines at sp indent =
   concatMap (\c => commentLeadLines indent c) (leadOf at (spanStartLine sp) (spanStartCol sp))
 
+-- | 内部：把行尾注释逐个追加到条目最后一行末尾。
 trailingOn : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> List String -> List String
 trailingOn at sp lines = case trailOf at (spanStartLine sp) (spanStartCol sp) of
   [] => lines
   cs => foldl (\acc, c => appendLast " ${inlineCommentText c}" acc) lines cs
 
+-- | 把条目的注释贴到渲染结果上：前置注释在上（按 `indent` 缩进），行尾注释追加到最后一行。
 export attachAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Int -> List String -> List String
 attachAt at sp indent lines = append (leadingLines at sp indent) (trailingOn at sp lines)
 
--- 导出项是否挂了注释（前置或行尾）：有注释时强制多行，避免单行把后续项注释掉。
+-- | 内部：导出项是否挂了注释（前置或行尾）。
 itemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ExportItem -> Bool
 itemHasComments at item =
   let
@@ -341,6 +380,7 @@ itemHasComments at item =
     Nothing => False
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
+-- | 任一导出项挂了注释：有则导出列表强制多行，避免单行把后续项注释掉。
 export anyItemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
 anyItemHasComments at [] = False
 anyItemHasComments at (item :: rest) = itemHasComments at item || anyItemHasComments at rest

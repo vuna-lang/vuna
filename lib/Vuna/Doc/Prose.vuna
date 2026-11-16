@@ -1,22 +1,25 @@
+-- | docstring 的受限 Markdown -> HTML；解析在生成期完成，客户端不解析 Markdown。
+--
+-- 支持段落（空行分隔）、行内代码（反引号）、围栏代码块、`[text](url)` 链接与
+-- `[Module.name]` 交叉引用。其余文本 HTML 转义后原样输出；链接只允许 http/https/#/相对路径，
+-- 避免 `javascript:` 进入生成物。
 module Vuna.Doc.Prose where
 
--- Vuna.Doc.Prose：docstring 的受限 Markdown -> HTML（生成期完成；客户端不解析 Markdown）。
---
--- 支持：段落（空行分隔）、行内代码（反引号）、fenced code（```）、
--- `[text](url)` 链接、`[Module.name]` 交叉引用。其余文本 HTML 转义后原样输出；
--- 链接只允许 http/https/#/相对路径，避免 `javascript:` 进入生成物。
 import Vuna.Compiler.Base.Common
 
 -- ---------------------------------------------------------------
 -- 转义
 -- ---------------------------------------------------------------
+-- | HTML 转义 `&`、`<`、`>`、`"`、`'`。
 export htmlEscape : String -> String
 htmlEscape s = htmlEscapeChars (strUnpack s) ""
 
+-- | 内部：逐字符转义。
 htmlEscapeChars : List Int -> String -> String
 htmlEscapeChars [] acc = acc
 htmlEscapeChars (c :: rest) acc = htmlEscapeChars rest (acc ++ htmlEscapeChar c)
 
+-- | 内部：单个字符的转义串；无需转义的字符原样返回。
 htmlEscapeChar : Int -> String
 htmlEscapeChar 38 = "&amp;"
 htmlEscapeChar 60 = "&lt;"
@@ -28,10 +31,12 @@ htmlEscapeChar c = strPack [c]
 -- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
+-- | 入口：docstring 文本 -> HTML 片段；按围栏切成代码块与正文，代码块整段转义，正文按空行分段。
 export renderProse : List (Pair String String) -> String -> String
 renderProse links text =
   join "\n" (filterNonEmpty (renderFenceParts links (split "```" text) False))
 
+-- | 内部：交替处理正文段与代码段；`isCode` 标记当前段是否落在围栏内。
 renderFenceParts : List (Pair String String) -> List String -> Bool -> List String
 renderFenceParts links [] isCode = []
 renderFenceParts links (part :: rest) isCode = if isCode then
@@ -41,6 +46,7 @@ renderFenceParts links (part :: rest) isCode = if isCode then
   in html :: renderFenceParts links rest False
 else append (renderParagraphs links part) (renderFenceParts links rest True)
 
+-- | 内部：去掉代码块首行的语言标签与包裹空行。
 stripLanguageTag : String -> String
 stripLanguageTag part = case lines part of
   first :: rest =>
@@ -48,17 +54,21 @@ stripLanguageTag part = case lines part of
     else if isLanguageTag first then trimRight (join "\n" rest) else trimRight part
   [] => ""
 
+-- | 内部：首行是否像语言标签（不含空格且不超过 16 字符）。
 isLanguageTag : String -> Bool
 isLanguageTag s = not (contains " " s) && strLength s <= 16
 
+-- | 内部：正文 -> `<p>` 列表；段内换行渲染成 `<br>`。
 renderParagraphs : List (Pair String String) -> String -> List String
 renderParagraphs links text =
   map (\para => "<p>${join "<br>" (map (renderInline links) para)}</p>") (paragraphs (lines text))
 
+-- | 内部：按空行把行列表切成段落，段内保留原始行。
 paragraphs : List String -> List (List String)
 paragraphs [] = []
 paragraphs lines0 = paragraphsGo lines0 [] []
 
+-- | 内部：`paragraphs` 的累加实现。
 paragraphsGo : List String -> List String -> List (List String) -> List (List String)
 paragraphsGo [] current acc =
   if length current == 0 then reverse acc else reverse (reverse current :: acc)
@@ -67,6 +77,7 @@ paragraphsGo (l :: rest) current acc =
   else paragraphsGo rest [] (reverse current :: acc)
   else paragraphsGo rest (l :: current) acc
 
+-- | 内部：过滤空串。
 filterNonEmpty : List String -> List String
 filterNonEmpty [] = []
 filterNonEmpty (s :: rest) = if s == "" then filterNonEmpty rest else s :: filterNonEmpty rest
@@ -74,9 +85,11 @@ filterNonEmpty (s :: rest) = if s == "" then filterNonEmpty rest else s :: filte
 -- ---------------------------------------------------------------
 -- 行内（fuel 递减，保证终止性可证）
 -- ---------------------------------------------------------------
+-- | 内部：行内渲染（代码、链接、交叉引用）；fuel 取字符数 + 1，保证扫描终止。
 renderInline : List (Pair String String) -> String -> String
 renderInline links s = renderInlineGo (strLength s + 1) links (strUnpack s) ""
 
+-- | 内部：`renderInline` 的扫描实现；fuel 耗尽时返回已累积的输出，剩余文本丢弃。
 renderInlineGo : Int -> List (Pair String String) -> List Int -> String -> String
 renderInlineGo fuel links [] acc = acc
 renderInlineGo fuel links (c :: rest) acc = if fuel <= 0 then acc
@@ -103,16 +116,19 @@ else if c == 91 then case takeUntil 93 rest [] of
           "${acc}<a href=\"#${htmlEscape anchor}\">${htmlEscape (strPack label)}</a>"
 else renderInlineGo (fuel - 1) links rest (acc ++ htmlEscapeChar c)
 
+-- | 内部：取到分隔符为止的内容与剩余；找不到分隔符返回 `Nothing`。
 takeUntil : Int -> List Int -> List Int -> Maybe (Pair (List Int) (List Int))
 takeUntil sep [] acc = Nothing
 takeUntil sep (c :: rest) acc =
   if c == sep then Just (Pair (reverse acc) rest) else takeUntil sep rest (c :: acc)
 
+-- | 内部：按全名在交叉引用表里查锚点。
 lookupLink : List (Pair String String) -> String -> Maybe String
 lookupLink [] name = Nothing
 lookupLink ((Pair key anchor) :: rest) name =
   if key == name then Just anchor else lookupLink rest name
 
+-- | 内部：链接协议白名单：`http://`、`https://`、`#` 与不含冒号的相对路径。
 safeUrl : String -> Bool
 safeUrl url =
   startsWith "http://" url

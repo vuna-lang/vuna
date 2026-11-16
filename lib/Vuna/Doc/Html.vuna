@@ -1,25 +1,28 @@
+-- | 把 `DocBook` 渲染成自包含的单 HTML 文件。
+--
+-- 无外部 CSS/JS/CDN；搜索数据以 JSON 内嵌，客户端 JS 做名称 / 签名 / doc 子串检索。
+-- 类型检索走 CLI（`vuna search --type`），搜索框遇到 `->` / `=>` 时提示该命令。
+-- 所有源码文本先 HTML 转义；JSON 中的 `<` 写成 `\u003c`，避免提前闭合 script。
+-- 输出不含时间戳 / 随机数，同一 `DocBook` 逐字节可复现。
 module Vuna.Doc.Html where
 
--- Vuna.Doc.Html：DocBook -> 自包含单 HTML（工具链；永不进 seed 闭包）。
---
--- 无外部 CSS/JS/CDN；搜索数据以 JSON 内嵌，客户端 JS 做名称/签名/doc 子串检索。
--- 类型检索走 CLI（`vuna search --type`）；页面遇到 `->` / `=>` 时提示命令。
--- 所有源码文本先 HTML 转义；JSON 中的 `<` 写成 `\u003c`，避免提前闭合 script。
--- 输出不含时间戳/随机数，同一 DocBook 逐字节可复现。
 import Vuna.Compiler.Base.Common
 import Vuna.Doc.Model
 import Vuna.Doc.Prose
 import Vuna.Json
 
+-- | 内部：字符串拼接（两参形式，便于部分应用）。
 concat2 : String -> String -> String
 concat2 a b = a ++ b
 
 -- ---------------------------------------------------------------
 -- 锚点 / 交叉引用
 -- ---------------------------------------------------------------
+-- | 锚点：小写字母与数字保留，空格和 `-` 变成 `-`，其余字符丢弃。
 slug : String -> String
 slug s = slugChars (strUnpack s) ""
 
+-- | 内部：`slug` 的逐字符实现。
 slugChars : List Int -> String -> String
 slugChars [] acc = acc
 slugChars (c :: rest) acc =
@@ -27,30 +30,37 @@ slugChars (c :: rest) acc =
   else if c >= 97 && c <= 122 || c >= 48 && c <= 57 then slugChars rest (concat2 acc (strPack [c]))
   else if c == 32 || c == 45 then slugChars rest (concat2 acc "-") else slugChars rest acc
 
+-- | 内部：模块锚点，由模块全名生成。
 moduleAnchor : DocModule -> String
 moduleAnchor m = slug (moduleName m)
 
+-- | 内部：条目锚点（`模块名.条目名`）。
 itemAnchor : String -> DocItem -> String
 itemAnchor modName item = slug (concat2 modName (concat2 "." (itemName item)))
 
+-- | 内部：成员锚点（`模块名.父名.成员名`）。
 memberAnchor : String -> String -> DocItem -> String
 memberAnchor modName parent member =
   slug (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
 
--- 交叉引用表：只用全名（Doc.Prose 的 `[Module.name]`）。短名在消歧前不自动加，
--- 避免把 `[map]` 链到错误模块。
+-- | 交叉引用表：只放全名（`[Module.name]` 形式）。
+--
+-- 短名在消歧前不自动加，避免把 `[map]` 链到错误模块。
 linkMap : DocBook -> List (Pair String String)
 linkMap book = concatMap moduleLinks (bookModules book)
 
+-- | 内部：一个模块及其条目 / 成员的链接项。
 moduleLinks : DocModule -> List (Pair String String)
 moduleLinks m =
   Pair (moduleName m) (moduleAnchor m) :: concatMap (itemLinks (moduleName m)) (moduleItems m)
 
+-- | 内部：一个条目及其成员的链接项。
 itemLinks : String -> DocItem -> List (Pair String String)
 itemLinks modName item =
   Pair (concat2 modName (concat2 "." (itemName item))) (itemAnchor modName item)
     :: map (memberLink modName (itemName item)) (itemMembers item)
 
+-- | 内部：一个成员的链接项。
 memberLink : String -> String -> DocItem -> Pair String String
 memberLink modName parent member =
   Pair (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
@@ -59,63 +69,76 @@ memberLink modName parent member =
 -- ---------------------------------------------------------------
 -- 页面
 -- ---------------------------------------------------------------
+-- | 入口：完整 HTML 页面（侧栏 + 正文 + 内嵌搜索索引与脚本）。
 export renderPage : DocBook -> String
 renderPage book =
   strConcatMany
     ["<!doctype html>\n<html lang='zh-CN'>\n<head>\n", "<meta charset='utf-8'>\n", "<meta name='viewport' content='width=device-width, initial-scale=1'>\n", "<title>vuna API</title>\n<style>\n", css, "</style>\n</head>\n<body>\n", sidebar book, "<main>\n", header book, "<div id='results' hidden></div>\n<div id='doc-content'>\n", strConcatMany (map (renderModule (linkMap book)) (bookModules book)), "</div>\n</main>\n", "<script type='application/json' id='vuna-index'>", scriptSafe (renderJson (JArr (searchEntries book))), "</script>\n<script>\n", js, "\n</script>\n</body>\n</html>\n"]
 
+-- | 内部：侧栏（搜索框、过滤下拉、按包的目录）。
 sidebar : DocBook -> String
 sidebar book =
   strConcatMany
     ["<aside class='sidebar'>\n<p class='brand'>vuna API</p>\n", "<input id='search' type='search' placeholder='Search symbols / docs…  (/ to focus)' autocomplete='off'>\n", filterControls book, "<nav>\n", strConcatMany (map (tocPackage book) (packageNames book)), "</nav>\n</aside>"]
 
+-- | 内部：页头（包 / 模块 / 符号计数与类型检索提示）。
 header : DocBook -> String
 header book =
   strConcatMany
     ["<header class='top'>\n<h1>vuna API</h1>\n<p class='meta'>", strFromInt (length (packageNames book)), " packages · ", strFromInt (length (bookModules book)), " modules · ", strFromInt (symbolCount book), " symbols</p>\n", "<p class='hint'>Type search: <code>vuna search --type \"a -> a\"</code></p>\n</header>"]
 
+-- | 内部：包与种类过滤器（客户端 JS 消费）。
 filterControls : DocBook -> String
 filterControls book =
   strConcatMany
     ["<div class='filters'>\n<select id='pkg-filter'><option value=''>All packages</option>", strConcatMany (map packageOption (packageNames book)), "</select>\n<select id='kind-filter'><option value=''>All kinds</option>", "<option value='fun'>fun</option><option value='data'>data</option><option value='record'>record</option>", "<option value='trait'>trait</option><option value='ctor'>ctor</option><option value='field'>field</option>", "<option value='method'>method</option><option value='axiom'>axiom</option><option value='extern'>extern</option>", "<option value='module'>module</option></select>\n</div>"]
 
+-- | 内部：一个包的下拉选项。
 packageOption : String -> String
 packageOption pkg =
   strConcatMany
     ["<option value='", htmlEscape pkg, "'>", htmlEscape (displayPackage pkg), "</option>"]
 
+-- | 内部：一个包的目录分节。
 tocPackage : DocBook -> String -> String
 tocPackage book pkg =
   strConcatMany
     ["<div class='toc-pkg'>\n<h2>", htmlEscape (displayPackage pkg), "</h2>\n<ul>\n", strConcatMany (map moduleTocItem (filter (packageModule pkg) (bookModules book))), "</ul>\n</div>\n"]
 
+-- | 内部：模块是否属于该包。
 packageModule : String -> DocModule -> Bool
 packageModule pkg m = modulePackage m == pkg
 
+-- | 内部：目录里一个模块的链接项。
 moduleTocItem : DocModule -> String
 moduleTocItem m =
   strConcatMany ["<li><a href='#", moduleAnchor m, "'>", htmlEscape (moduleName m), "</a></li>\n"]
 
+-- | 内部：一个模块的整节（模块 docstring + 条目）。
 renderModule : List (Pair String String) -> DocModule -> String
 renderModule links m =
   strConcatMany
     ["<section class='module' id='", moduleAnchor m, "'>\n<h2>", htmlEscape (moduleName m), "<span class='pkg'>", htmlEscape (displayPackage (modulePackage m)), "</span></h2>\n", renderDoc links (moduleDoc m), strConcatMany (map (renderItem links (moduleName m)) (moduleItems m)), "</section>\n"]
 
+-- | 内部：一个条目的整块（标题、签名、docstring、成员）。
 renderItem : List (Pair String String) -> String -> DocItem -> String
 renderItem links modName item =
   strConcatMany
     ["<article class='item' id='", itemAnchor modName item, "'>\n<h3>", htmlEscape (itemName item), " <span class='kind'>", htmlEscape (itemKind item), "</span> <span class='loc'>line ", strFromInt (itemLine item), "</span></h3>\n", renderSignature (itemSignature item), renderDoc links (itemDoc item), strConcatMany (map (renderMember links modName (itemName item)) (itemMembers item)), "</article>\n"]
 
+-- | 内部：一个成员块（标题、签名、docstring）。
 renderMember : List (Pair String String) -> String -> String -> DocItem -> String
 renderMember links modName parent member =
   strConcatMany
     ["<div class='member' id='", memberAnchor modName parent member, "'>\n<h4>", htmlEscape (itemName member), " <span class='kind'>", htmlEscape (itemKind member), "</span></h4>\n", renderSignature (itemSignature member), renderDoc links (itemDoc member), "</div>\n"]
 
+-- | 内部：签名块；空签名不输出。
 renderSignature : String -> String
 renderSignature sig =
   if sig == "" then ""
   else strConcatMany ["<pre class='sig'><code>", htmlEscape sig, "</code></pre>\n"]
 
+-- | 内部：docstring 块；空 docstring 不输出。
 renderDoc : List (Pair String String) -> String -> String
 renderDoc links doc =
   if doc == "" then "" else strConcatMany ["<div class='doc'>", renderProse links doc, "</div>\n"]
@@ -123,33 +146,40 @@ renderDoc links doc =
 -- ---------------------------------------------------------------
 -- 搜索数据
 -- ---------------------------------------------------------------
+-- | 内部：全部搜索条目（模块 / 条目 / 成员）。
 searchEntries : DocBook -> List Json
 searchEntries book = concatMap moduleEntries (bookModules book)
 
+-- | 内部：一个模块及其条目 / 成员的搜索条目。
 moduleEntries : DocModule -> List Json
 moduleEntries m =
   entryJson (moduleName m) (moduleName m) (modulePackage m) "module" "" (moduleDoc m) (moduleAnchor m)
     :: concatMap (itemEntries m) (moduleItems m)
 
+-- | 内部：一个条目及其成员的搜索条目。
 itemEntries : DocModule -> DocItem -> List Json
 itemEntries m item =
   entryJson (concat2 (moduleName m) (concat2 "." (itemName item))) (moduleName m) (modulePackage m) (itemKind item) (itemSignature item) (itemDoc item) (itemAnchor (moduleName m) item)
     :: map (memberEntry m item) (itemMembers item)
 
+-- | 内部：一个成员的搜索条目。
 memberEntry : DocModule -> DocItem -> DocItem -> Json
 memberEntry m parent member =
   entryJson (concat2 (moduleName m) (concat2 "." (itemName member))) (moduleName m)
     (modulePackage m) (itemKind member) (itemSignature member) (itemDoc member)
     (memberAnchor (moduleName m) (itemName parent) member)
 
+-- | 内部：一条搜索记录的 JSON：`n` 名 / `m` 模块 / `p` 包 / `k` 种类 / `s` 签名 / `d` doc / `a` 锚点。
 entryJson : String -> String -> String -> String -> String -> String -> String -> Json
 entryJson name modName pkg kind sig doc anchor =
   JObj
     [Pair "n" (JStr name), Pair "m" (JStr modName), Pair "p" (JStr pkg), Pair "k" (JStr kind), Pair "s" (JStr sig), Pair "d" (JStr doc), Pair "a" (JStr anchor)]
 
+-- | 内部：把 `<` 转成 `\u003c`，避免 JSON 里出现 `</script` 提前闭合。
 scriptSafe : String -> String
 scriptSafe s = scriptSafeChars (strUnpack s) ""
 
+-- | 内部：`scriptSafe` 的逐字符实现。
 scriptSafeChars : List Int -> String -> String
 scriptSafeChars [] acc = acc
 scriptSafeChars (c :: rest) acc =
@@ -159,29 +189,37 @@ scriptSafeChars (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 统计 / 包
 -- ---------------------------------------------------------------
+-- | 内部：包名去重，保持首次出现的顺序。
 packageNames : DocBook -> List String
 packageNames book = distinctStrings (map modulePackage (bookModules book))
 
+-- | 内部：字符串列表去重，保留首次出现的顺序。
 distinctStrings : List String -> List String
 distinctStrings xs = reverse (distinctGo xs [])
 
+-- | 内部：`distinctStrings` 的累加实现。
 distinctGo : List String -> List String -> List String
 distinctGo [] acc = acc
 distinctGo (x :: rest) acc =
   if memName x acc then distinctGo rest acc else distinctGo rest (x :: acc)
 
+-- | 内部：包名的显示文本；空包名显示为 `(no package)`。
 displayPackage : String -> String
 displayPackage pkg = if pkg == "" then "(no package)" else pkg
 
+-- | 内部：符号总数（条目数 + 成员数）。
 symbolCount : DocBook -> Int
 symbolCount book = sumCounts (map moduleSymbolCount (bookModules book))
 
+-- | 内部：一个模块的符号数。
 moduleSymbolCount : DocModule -> Int
 moduleSymbolCount m = sumCounts (map itemSymbolCount (moduleItems m))
 
+-- | 内部：一个条目算 1 个符号，再加上它的成员数。
 itemSymbolCount : DocItem -> Int
 itemSymbolCount i = 1 + length (itemMembers i)
 
+-- | 内部：整数列表求和。
 sumCounts : List Int -> Int
 sumCounts [] = 0
 sumCounts (n :: rest) = n + sumCounts rest
@@ -189,11 +227,13 @@ sumCounts (n :: rest) = n + sumCounts rest
 -- ---------------------------------------------------------------
 -- 静态资源（内联）
 -- ---------------------------------------------------------------
+-- | 内联样式表（浅色 / 深色随系统设置）。
 css : String
 css =
   strConcatMany
     [":root{--bg:#fff;--fg:#1f2328;--muted:#59636e;--line:#d0d7de;--accent:#0969da;--code:#f6f8fa;--hit:#fff8c5}\n", "@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--line:#30363d;--accent:#58a6ff;--code:#161b22;--hit:#3b2e00}}\n", "*{box-sizing:border-box}body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--fg);display:grid;grid-template-columns:300px 1fr;min-height:100vh}\n", "a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}\n", ".sidebar{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);padding:16px 14px}\n", ".brand{font-weight:700;font-size:17px;margin:0 0 10px}#search{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}\n", ".filters{display:flex;gap:6px;margin:8px 0 12px}.filters select{flex:1;min-width:0;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}\n", ".toc-pkg h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:18px 0 6px}.toc-pkg ul{list-style:none;margin:0;padding:0}.toc-pkg li{margin:3px 0;overflow-wrap:anywhere}\n", "main{padding:24px 32px 80px;min-width:0}.top h1{margin:0 0 4px;font-size:28px}.meta,.hint{color:var(--muted);margin:0}.hint{font-size:13px}\n", ".module{border-top:1px solid var(--line);margin-top:28px;padding-top:8px}.module h2{font-size:22px;margin:12px 0 6px;overflow-wrap:anywhere}.module h2 .pkg{font-size:12px;color:var(--muted);margin-left:8px}\n", ".item{margin:20px 0 20px 12px;padding-left:14px;border-left:3px solid var(--line)}.item h3{margin:0 0 6px;font-size:17px;overflow-wrap:anywhere}.item h4{margin:14px 0 4px;font-size:15px;overflow-wrap:anywhere}\n", ".member{margin:12px 0 12px 12px;padding-left:10px;border-left:2px dashed var(--line)}.kind{font-size:11px;font-weight:400;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:0 6px;vertical-align:middle}\n", ".loc{font-size:11px;color:var(--muted);font-weight:400;float:right}pre.sig{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow:auto;margin:6px 0}\n", ".doc p{margin:8px 0}.doc code{background:var(--code);padding:1px 4px;border-radius:4px}#results{padding:12px 0 4px}#results .count{color:var(--muted);margin:0 0 8px}#results .hint{background:var(--hit);padding:8px 10px;border-radius:6px}\n", ".hit{display:block;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin:6px 0;color:var(--fg)}.hit:hover{text-decoration:none;border-color:var(--accent)}.hit .hn{font-weight:600}.hit code{display:block;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}.hit .hd{display:block;color:var(--muted);font-size:13px}\n", "@media (max-width:820px){body{display:block}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}main{padding:18px 16px 60px}}\n"]
 
+-- | 内联检索脚本：子串打分、包 / 种类过滤、命中列表与锚点跳转。
 js : String
 js =
   strConcatMany

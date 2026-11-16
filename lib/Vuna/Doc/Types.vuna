@@ -1,51 +1,71 @@
+-- | docstring 提取的数据模型（工具链叶子；永不进 seed 闭包）。
+--
+-- `DocBlock` 是源码里一个已识别的 docstring 块（`-- |` 行块或 `{- | -}` 块）；
+-- `DocTable` 是按模块整理好的查询表：模块文档、顶层名 -> doc、`父名<TAB>成员名` -> doc。
+-- 普通注释不会出现在这里，只有 [Vuna.Doc.Comments] 识别出的 doc block 才会进入。
 module Vuna.Doc.Types where
 
--- Vuna.Doc.Types：docstring 提取的数据模型（工具链叶子；永不进 seed 闭包）。
---
--- `DocBlock` 是源码里一个**已识别**的 docstring 块（`-- |` 行块或 `{- | -}` 块），
--- `DocTable` 是按模块整理好的查询表：模块文档、顶层名 -> doc、`parent\tmember` -> doc。
--- 普通注释不会出现在这里（只有 Doc.Comments 识别出的 doc block 才会进入）。
 import Vuna.Compiler.Base.Common
 
+-- | 一个已识别的 docstring 块及其源码位置；正文已剥掉标记与公共缩进。
+--
+-- 行块每行去掉一个前导空格，块注释按非空行的最小公共缩进 dedent。
 export record DocBlock(..) where
+  -- | docstring 正文（行块按换行拼接，右侧去空白）。
   docBlockText : String
+  -- | 块首行行号（1 基）。
   docBlockStartLine : Int
+  -- | 块末行行号（1 基；行块含所有续行，块注释与首行相同）。
   docBlockEndLine : Int
+  -- | 块起始列（1 基）；关联目标时要求列相同。
   docBlockCol : Int
 
+-- | docstring 正文。
 export docBlockText : DocBlock -> String
 docBlockText (DocBlock text start end col) = text
 
+-- | 块首行行号。
 export docBlockStartLine : DocBlock -> Int
 docBlockStartLine (DocBlock text start end col) = start
 
+-- | 块末行行号。
 export docBlockEndLine : DocBlock -> Int
 docBlockEndLine (DocBlock text start end col) = end
 
+-- | 块起始列。
 export docBlockCol : DocBlock -> Int
 docBlockCol (DocBlock text start end col) = col
 
+-- | 按模块整理的 docstring 查询表。
 export record DocTable(..) where
+  -- | 模块头 docstring；空串表示没有。
   docTableModuleDoc : String
+  -- | 顶层名 -> docstring；没有 doc 的名字不出现。
   docTableDecls : List (Pair String String)
+  -- | `父名<TAB>成员名` -> docstring；没有 doc 的成员不出现。
   docTableMembers : List (Pair String String)
 
+-- | 模块头 docstring。
 export docTableModuleDoc : DocTable -> String
 docTableModuleDoc (DocTable mdoc decls members0) = mdoc
 
+-- | 顶层名 -> docstring 表。
 export docTableDecls : DocTable -> List (Pair String String)
 docTableDecls (DocTable mdoc decls members0) = decls
 
+-- | 成员 docstring 表。
 export docTableMembers : DocTable -> List (Pair String String)
 docTableMembers (DocTable mdoc decls members0) = members0
 
--- 查询：顶层名 / `parent\tmember`。没有 doc 时返回空串（调用方据此渲染「无文档」）。
+-- | 查顶层声明的 docstring；没有 doc 时返回空串（调用方按空串跳过渲染）。
 export docForDecl : DocTable -> String -> String
 docForDecl table name = lookupPair name (docTableDecls table)
 
+-- | 查 `data` / `record` / `trait` 成员（构造子 / 字段 / 方法）的 docstring；没有 doc 时返回空串。
 export docForMember : DocTable -> String -> String -> String
 docForMember table parent name = lookupPair "${parent}\t${name}" (docTableMembers table)
 
+-- | 内部：在 `(键, 值)` 表里取第一个匹配键的值；没有匹配时为空串。
 lookupPair : String -> List (Pair String String) -> String
 lookupPair key [] = ""
 lookupPair key ((Pair k v) :: rest) = if k == key then v else lookupPair key rest
