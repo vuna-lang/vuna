@@ -87,3 +87,4 @@
 79_dep_identity.steps	check	cli-text
 80_code_identity.steps	build	build-link;cli-text
 81_pkg_errors.steps	add,check,fetch	pkg-store;cli-text
+110_effect_parity.steps	build	backend-parity;artifact-exec;build-link
