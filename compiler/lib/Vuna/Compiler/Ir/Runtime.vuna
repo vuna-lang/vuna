@@ -299,6 +299,8 @@ irRtPlainNames =
     "@vuna@obs@log",
     "@vuna@obs@counter",
     "@vuna@obs@mark",
+    "@vuna@obs@spanBegin",
+    "@vuna@obs@spanEnd",
     "@vuna@obs@sampleStart",
     "@vuna@obs@sampleStop",
     "@vuna@obs@spanLab"

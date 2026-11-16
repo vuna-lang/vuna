@@ -276,6 +276,8 @@ ocamlRtTextTable =
     Pair "@vuna@obs@log" "dtp_obs_log",
     Pair "@vuna@obs@counter" "dtp_obs_counter",
     Pair "@vuna@obs@mark" "dtp_obs_mark",
+    Pair "@vuna@obs@spanBegin" "dtp_obs_span_begin",
+    Pair "@vuna@obs@spanEnd" "dtp_obs_span_end",
     Pair "@vuna@obs@sampleStart" "dtp_obs_sample_start",
     Pair "@vuna@obs@sampleStop" "dtp_obs_sample_stop",
     Pair "@ir@natSucc" "bi_natSucc",

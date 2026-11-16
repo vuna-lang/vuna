@@ -177,3 +177,11 @@ out-contains: obs spans need closures
 run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
 exit: nonzero
 out-contains: obs spans need closures
+
+# ---------------------------------------------------------------- 对象库读写 span
+# `Store` 的对象读/写是工作单元：`VUNA_OBS=1` 的 trace 必须出现 vuna.cache.lookup /
+# vuna.cache.write 的 ph:"X" 事件（不是零宽 mark）。
+run: sh -c 'VUNA_STORE="$TMPDIR/cache-store" VUNA_OBS=1 VUNA_OBS_FILE="$TMPDIR/cache-trace.jsonl" "$VUNA" check "$TMPDIR/app" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'grep -q "\"name\":\"vuna.cache.lookup\"" "$TMPDIR/cache-trace.jsonl" && grep -q "\"name\":\"vuna.cache.write\"" "$TMPDIR/cache-trace.jsonl"'
+exit: 0

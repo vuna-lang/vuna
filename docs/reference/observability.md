@@ -91,17 +91,18 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 - `ph:"X"` 跨度：`vuna.elab`（整段精化的汇总跨度）、`vuna.elab.bodies`（逐定义精化段，
   `vuna.elab` 的子区间）、`vuna.codegen.check`（lowering + 装配校验；整包检查与增量收尾的
   `dtCheckScoped` 各一处）、`vuna.parse.lex`（一次全文词法）、`vuna.parse.syntax`（token 流
-  → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）；
+  → AST 的语法分析）、`vuna.parse.cst`（无损 CST 组装，工具侧调用）、`vuna.cache.lookup` / `vuna.cache.write`
+  （对象库读写；`obsSpanEff` 的 begin/end token 对）；
 - `ph:"X"` + `args.def`（level ≥ 2）：`vuna.def.elab`（逐定义）；
 - `ph:"i"` 阶段标记（`Eff` 边界，零宽度）：`vuna.load`、`vuna.resolve`、`vuna.iface.compute`、
-  `vuna.iface.write`、`vuna.codegen.split`、`vuna.cache.lookup`；
+  `vuna.iface.write`、`vuna.codegen.split`；
 - `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
   `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
 - `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
 
 **保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.parse`（伞名：
 前端整体阶段，实际耗时由三个子跨度承担）、`vuna.elab.sigs`、`vuna.elab.datas`、`vuna.elab.traits`、`vuna.elab.instheads`、
-`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.codegen.unit`、`vuna.cache.write`、
+`vuna.elab.instbodies`、`vuna.elab.tail`、`vuna.codegen.unit`、
 `vuna.check`、`vuna.build`、`vuna.link`、`vuna.def.lower`、`vuna.def.text`、
 `vuna.counter.core.*` / `vuna.counter.meta.*` / `vuna.counter.alloc.words` /
 `vuna.counter.heap.words` / `vuna.counter.steps`。加插桩时**不要**改名（工具/看板按名字聚合）。
@@ -416,10 +417,11 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 ## 10. 已知边界（开放项）
 
 - 表达式级 / 分支级 span：Core 只有 `TVar` 带 span（debt D80），当前只能到「定义级 + 采样」。
-- **`Eff` 边界只有零宽度标记、没有跨度**：`vuna.load` / `vuna.resolve` / `vuna.iface.*` /
-  `vuna.codegen.split` / `vuna.cache.lookup` 走 `obsMarkEff`（瞬时 `ph:"i"`），因为纯
-  `span` 包不住 `Eff` 动作的执行（执行发生在 runner 里）。它们的耗时仍由 `--debug-perf`
-  文本行（`iface-mods-phases` / `iface-write=…`）承担；`vuna obs` 侧只能看到顺序。
+- **`Eff` 边界大多仍是零宽度标记**：`vuna.load` / `vuna.resolve` / `vuna.iface.*` /
+  `vuna.codegen.split` 走 `obsMarkEff`（瞬时 `ph:"i"`）。对象库读写已经用 `obsSpanEff`
+  （`spanBegin` / `spanEnd` token 对）发真正的 `ph:"X"` 跨度：`vuna.cache.lookup` /
+  `vuna.cache.write`。其余阶段迁移到 `obsSpanEff` 需要逐个确认 `Eff` 动作的 abort 路径，
+  耗时仍由 `--debug-perf` 文本行承担。
 - **core 热路径的计数仍未接**：`vuna.counter.core.*` / `vuna.counter.meta.*` /
   `vuna.counter.steps` 需要给 `Core.Eval.force` / `primReduce` 加探针，会显著改热路径，
   待做且要先量代价；已接的计数只覆盖缓存三件套（hit / miss / write）。

@@ -636,6 +636,8 @@ obsReduce g sp = if g == obsLevelIntrinsicName then Just (VInt 0)
 else if g == obsLogIntrinsicName then Just (VInt 0)
 else if g == obsCounterIntrinsicName then Just (VInt 0)
 else if g == obsMarkIntrinsicName then Just (VInt 0)
+else if g == obsSpanBeginIntrinsicName then Just (VInt 0)
+else if g == obsSpanEndIntrinsicName then Just (VInt 0)
 else if g == obsSampleStartIntrinsicName then Just (VInt 0)
 else if g == obsSampleStopIntrinsicName then Just (VInt 0)
 else if g == obsSpanIntrinsicName then case sp of

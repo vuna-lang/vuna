@@ -1148,6 +1148,29 @@ let dtp_obs_span_lab (name : string) (cat : string) (label : string) (f : int ->
     v
   end
 
+let dtp_obs_open_spans : (int, string * string * int * Gc.stat) Hashtbl.t =
+  Hashtbl.create 64
+
+let dtp_obs_span_seq = ref 0
+
+let dtp_obs_span_begin (name : string) (cat : string) : int =
+  if not (dtp_obs_on ()) then 0
+  else begin
+    incr dtp_obs_span_seq;
+    let id = !dtp_obs_span_seq in
+    Hashtbl.replace dtp_obs_open_spans id (name, cat, dtp_timeUs (), Gc.quick_stat ());
+    id
+  end
+
+let dtp_obs_span_end (id : int) : int =
+  if id = 0 then 0
+  else match Hashtbl.find_opt dtp_obs_open_spans id with
+    | None -> 0
+    | Some (name, cat, t0, s0) ->
+      Hashtbl.remove dtp_obs_open_spans id;
+      dtp_obs_span_emit name cat None t0 s0 true;
+      0
+
 let dtp_obs_mark_like (ph : string) (name : string) (cat : string) (kv : (Buffer.t -> unit) option) =
   let b = Buffer.create 160 in
   dtp_obs_hdr b ph name (dtp_timeUs ());

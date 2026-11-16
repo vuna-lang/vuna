@@ -144,13 +144,10 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 **结构化观测**（`VUNA_OBS>=1`，见 [observability.md](observability.md)）走另一条通道：
 `Driver/Compile` 与 `Driver/Dt` 的阶段跨度（`vuna.load` / `vuna.elab` / `vuna.iface.compute` /
-`vuna.codegen.split` …），与上面 `dbg!` 标签**同时可用但独立开关**。缓存命中路径目前只有
-`dbg!` 标签、没有对应 span：判定的输入是地址，因此 span 只能定位到「读/写载荷」这一级
-（`vuna.cache.lookup` / `vuna.cache.write` 属规范词汇表，尚未插桩）。
-
-**命中路径没有 span**：判定的输入是地址，因此 span 只能定位到「读/写载荷」这一级
-（`vuna.cache.lookup` / `vuna.cache.write` 属规范词汇表，尚未插桩）。排查「为什么 miss」
-靠比对地址：`addrOf` 的输入项都在上面的表里，逐个对即可。
+`vuna.codegen.split` …），与上面 `dbg!` 标签**同时可用但独立开关**。对象库读/写本身是
+`ph:"X"` 跨度：`Store` 的 `storeObjectReadEff` / `storeObjectWriteEff`（以及 `storeReadAsEff`）
+分别发 `vuna.cache.lookup` / `vuna.cache.write`，所以「慢在哪个对象读写」可以直接在 trace
+里归因。排查「为什么 miss」仍靠比对地址：`addrOf` 的输入项都在上面的表里，逐个对即可。
 
 ## 诊断载荷与重放
 

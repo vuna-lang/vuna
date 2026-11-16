@@ -259,6 +259,14 @@ obsCounterIntrinsicName = "@vuna@obs@counter"
 export obsMarkIntrinsicName : String
 obsMarkIntrinsicName = "@vuna@obs@mark"
 
+-- | `Eff` 跨度开始：`name -> cat -> token`。
+export obsSpanBeginIntrinsicName : String
+obsSpanBeginIntrinsicName = "@vuna@obs@spanBegin"
+
+-- | `Eff` 跨度结束：`token -> 0`。
+export obsSpanEndIntrinsicName : String
+obsSpanEndIntrinsicName = "@vuna@obs@spanEnd"
+
 -- | 开始采样：`"cpu"|"mem"|"both" -> 间隔(us) -> 0`。
 export obsSampleStartIntrinsicName : String
 obsSampleStartIntrinsicName = "@vuna@obs@sampleStart"
@@ -865,7 +873,7 @@ effIntrinsics =
 export internalIntrinsics : List Intrinsic
 internalIntrinsics =
   append
-    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
+    [Intrinsic debugOnIntrinsicName (IFun IInt IBool) OpNone False, Intrinsic debugLineIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsLevelIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSpanIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a"))))) OpNone False, Intrinsic obsSpanLabIntrinsicName (IPi "a" (IFun IStr (IFun IStr (IFun IStr (IFun (IFun IInt (IVar "a")) (IVar "a")))))) OpNone False, Intrinsic obsLogIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsCounterIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsMarkIntrinsicName (IFun IStr IInt) OpNone False, Intrinsic obsSpanBeginIntrinsicName (IFun IStr (IFun IStr IInt)) OpNone False, Intrinsic obsSpanEndIntrinsicName (IFun IInt IInt) OpNone False, Intrinsic obsSampleStartIntrinsicName (IFun IStr (IFun IInt IInt)) OpNone False, Intrinsic obsSampleStopIntrinsicName (IFun IInt IInt) OpNone False]
     (filter (\i => not (intrinsicVisible i)) effIntrinsics)
 
 -- | 编译器 tracing 原语名：codegen 据此按需追加 runtime helper（`usesTrace`）。
@@ -883,6 +891,8 @@ obsIntrinsicNames =
     obsLogIntrinsicName,
     obsCounterIntrinsicName,
     obsMarkIntrinsicName,
+    obsSpanBeginIntrinsicName,
+    obsSpanEndIntrinsicName,
     obsSampleStartIntrinsicName,
     obsSampleStopIntrinsicName
   ]

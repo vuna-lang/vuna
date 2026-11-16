@@ -1642,8 +1642,6 @@ checkViaGraph ctx mods run = do
     let
       dig = checkInOf mods
     in do
-      -- 缓存查询边界标记（`vuna.cache.lookup`）：`Eff` 动作不能包纯跨度。
-      _ <- obsMarkEff "vuna.cache.lookup"
       payload <- storeObjectReadEff "check" checkResultCodec dig
       case payload of
         Just raw => case decCheckOutcome raw of

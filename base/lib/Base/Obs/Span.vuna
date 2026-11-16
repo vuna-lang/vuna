@@ -10,6 +10,9 @@ module Base.Obs.Span where
 --
 -- 规范见 `docs/reference/observability.md`；开关与成本纪律与 `Base.Obs` 相同。
 import Base.Obs
+import Base.Eff
+import Base.Eff.Types
+import Base.Monad
 
 -- | 一个带分类的跨度：执行 `f 0` 并记录 `name` / `cat` 的 `ph:"X"` 事件（含耗时、分配
 -- 与堆读数）；异常路径也写出事件并原样重抛，异常不被吞。`cat` 用 `vuna.phase` /
@@ -20,6 +23,13 @@ obsSpan name cat f = @vuna@obs@span name cat f
 -- | `obsSpan` 的便捷形态：分类固定 `vuna.user`（用户程序自己的跨度）。
 export obsSpanP : String -> (Int -> a) -> a
 obsSpanP name f = @vuna@obs@span name "vuna.user" f
+
+-- | 包住一个 `Eff` 动作的跨度：begin → action → end，`finally` 保证 abort 路径也结束
+-- 跨度。用于对象库读写这类「动作本身就是工作单元」的边界（`Store` 的 cache span）。
+export obsSpanEff : {r : Row} -> {a : Type} -> String -> String -> Eff r a -> Eff r a
+obsSpanEff name cat action = do
+  tok <- pure (obsSpanBegin name cat)
+  finally action (pure (obsSpanEnd tok))
 
 -- | 采样一段计算：开始、执行、停止（异常也保证停止）。典型用法是包住整个 `main` 热点
 -- 或一次基准循环。`mode` / `intervalUs` 语义同 `Base.Obs.obsSampleStart`。

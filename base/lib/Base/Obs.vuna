@@ -52,6 +52,15 @@ obsCounter name value = @vuna@obs@counter name value
 export obsMark : String -> Int
 obsMark name = @vuna@obs@mark name
 
+-- | 开始一个 `Eff` 跨度：返回 token（关闭时为 0）。与 `obsSpanEnd` 配对；因为
+-- `Eff` 动作不能被纯 thunk 包住，跨度边界需要在执行期记录（`Base.Obs.Span.obsSpanEff`）。
+export obsSpanBegin : String -> String -> Int
+obsSpanBegin name cat = @vuna@obs@spanBegin name cat
+
+-- | 结束一个 `Eff` 跨度：按 token 找开始时间并写 `ph:"X"` 事件；未知/0 token 静默返回 0。
+export obsSpanEnd : Int -> Int
+obsSpanEnd tok = @vuna@obs@spanEnd tok
+
 -- ---------------------------------------------------------------
 -- 采样
 -- ---------------------------------------------------------------

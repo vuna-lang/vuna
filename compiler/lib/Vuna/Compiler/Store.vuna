@@ -39,6 +39,7 @@ import Base.EffEnv
 import Base.EffFs
 import Base.EffProcess
 import Base.Eff.Types
+import Base.Obs.Span
 
 -- | framing 版本串；格式变更即 bump（版本不符即拒绝，不做迁移）。
 export storeMagic : String
@@ -199,12 +200,13 @@ storeReadEff tag codec path = do
 
 -- | 读 + 校验「头里的内容地址 == 期望值」（不重算；见 `storeDecodeAs`）。
 export storeReadAsEff : Member nFs FsOp r => String -> String -> String -> String -> Eff r (Maybe String)
-storeReadAsEff tag codec digest path = do
+storeReadAsEff tag codec digest path = obsSpanEff "vuna.cache.lookup" "vuna.cache" (do
   exists <- fsFileExists path
   if exists then do
     raw <- fsReadFile path
     pure (storeDecodeAs tag codec digest raw)
   else pure Nothing
+)
 
 -- | 写（原子替换）。返回写入字节数。
 export storeWriteEff : Member nFs FsOp r => String -> String -> String -> String -> Eff r Int
@@ -344,17 +346,19 @@ storeObjectExistsEff kind digest = do
 
 -- | 读对象 + 全量校验（magic/tag/codec/长度/重算内容地址）。
 export storeObjectReadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Maybe String)
-storeObjectReadEff kind codec digest = do
+storeObjectReadEff kind codec digest = obsSpanEff "vuna.cache.lookup" "vuna.cache" (do
   path <- storeObjectPathEff kind digest
   storeReadEff (storeObjectTag kind) codec path
+)
 
 -- | 写对象（原子替换；内容不变不写）。
 export storeObjectWriteEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r Int
-storeObjectWriteEff kind codec digest payload = do
+storeObjectWriteEff kind codec digest payload = obsSpanEff "vuna.cache.write" "vuna.cache" (do
   root <- storeRootReadyEff
   _ <- storeEnsureDirEff "${root}/objects/${kind}"
   path <- storeObjectPathEff kind digest
   storeWriteIfChangedEff (storeObjectTag kind) codec path payload
+)
 
 -- | 列出某 kind 下的全部对象摘要（GC 用；目录不存在 ⇒ 空）。
 export storeObjectListEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List String)
