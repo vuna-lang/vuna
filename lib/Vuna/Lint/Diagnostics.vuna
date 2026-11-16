@@ -117,9 +117,9 @@ lookupRuleName name (r :: rest) =
 
 -- | 规则的默认严重度（未写配置时）。
 export lintDefaultSeverity : LintRule -> LintSeverity
-lintDefaultSeverity LiteralIfChain = LintError
-lintDefaultSeverity DispatchLift = LintError
-lintDefaultSeverity ListLiteral = LintError
+lintDefaultSeverity LiteralIfChain = LintWarn
+lintDefaultSeverity DispatchLift = LintWarn
+lintDefaultSeverity ListLiteral = LintWarn
 
 -- | 全部规则（配置与默认预设的遍历源）。
 export lintAllRules : List LintRule

@@ -22,7 +22,7 @@ import Vuna.Lint.Diagnostics
 export record LintConfig(..) where
   -- | 规则 → 严重度。
   lintCfgRules : List (Pair LintRule LintSeverity)
-  -- | `max-warnings`；`Nothing` = 沿用上层/默认（默认不限）。
+  -- | `max-warnings`；`Nothing` = 沿用上层/默认（默认 0：warning 也失败）。
   lintCfgMaxWarnings : Maybe Int
   -- | 排除路径模式（相对 manifest 目录；CLI 目标展开时使用）。
   lintCfgExclude : List String
@@ -34,7 +34,7 @@ export defaultLintConfig : LintConfig
 defaultLintConfig =
   LintConfig
     (map (\r => Pair r (if lintRecommended r then lintDefaultSeverity r else LintOff)) lintAllRules)
-    Nothing [] ""
+    (Just 0) [] ""
 
 -- | 某种预设下的规则表。
 presetRules : String -> List (Pair LintRule LintSeverity)

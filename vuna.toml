@@ -14,5 +14,5 @@ vuna-base = "base"
 # lint 配置由 `vuna lint` 消费；编译器只做 TOML 结构解析，不校验规则语义。
 [lint]
 preset = "recommended"
-max-warnings = -1
+max-warnings = 0
 exclude = ["test/**", "examples/**"]

@@ -8,7 +8,9 @@
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
   `[export]`（modules）、`[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
-  `[dependencies]`（依赖声明，见下节）、`[layers]`（包内模块的依赖方向，见「层约束」）。
+  `[dependencies]`（依赖声明，见下节）、`[layers]`（包内模块的依赖方向，见「层约束」）、
+  `[lint]`（lint 配置；编译器只做 TOML 结构放行，schema 由 `vuna lint` 消费时校验，
+  见 [lint.md](lint.md) §1.1）。
   TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
   点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
   不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略

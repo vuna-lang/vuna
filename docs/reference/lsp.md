@@ -105,8 +105,10 @@ Content-Length: <字节数>\r\n
   `test/suite/steps/44l1_lsp_inc.steps`（push 客户端）。
 - 错误串 `<file>:<line>:<col>: message` 转成 LSP 的 0-based range；依赖模块的错误按
   `spanFile` 过滤（只发当前文件），无位置的错误归当前文件。
-- lint findings 合并进同一 `publishDiagnostics`：severity 2、`code` 为 `LN_*` 规则码、
-  `source: "vuna"`。`codeAction` quick fix 内嵌的 `diagnostics` 复用**同一条**
+- lint findings 合并进同一 `publishDiagnostics`：severity 按 `vuna.toml [lint]` 的有效规则
+  （error→1 / warn→2）、range 使用 finding 的起止位置（UTF-16 换算）、`code` 为 `LN_*`
+  规则码、`source: "vuna"`；源码 `vuna-lint:` 抑制与 CLI 同一条 `lintSourceWithConfig` 路径。
+  `codeAction` quick fix 内嵌的 `diagnostics` 复用**同一条**
   `Diag`→JSON 转换（`Vuna.Lsp.Diagnostics.findingDiagJson`），所以字段集合与已发布诊断
   一致（range / severity / source / code / message），客户端按 `code` 直接关联。
 - 已知边界（模块头注释同步记录）：`didChange` 全量重新精化（大文件可能滞后，编辑器端应

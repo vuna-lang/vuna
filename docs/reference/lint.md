@@ -3,27 +3,79 @@
 本文记录 `vuna lint` 的规则、可修复判据与语料。实现入口是
 `lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
 `lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`lib/Vuna/Lint.vuna`（CLI 与输出）、
-`lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：code / rule / 消息的唯一真源）。
+`lib/Vuna/Lint/Config.vuna`（`vuna.toml [lint]`）、`lib/Vuna/Lint/Suppress.vuna`（源码抑制）、
+`lib/Vuna/Lint/Cache.vuna`（结果缓存）、`lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
+code / rule / 消息的唯一真源）。
 
 ## 1. 用法与输出
 
 ```console
-vuna lint <file.vuna>...          # 只报告：有 finding 时退出码 1
-vuna lint --fix <file.vuna>...    # 逐轮应用可修复 finding，最多 8 轮
+vuna lint [PATH]...                     # PATH 可为文件或目录；省略 = workspace 各包 lib/app
+vuna lint --fix [PATH]...               # 逐轮应用可修复 finding，最多 --max-passes 轮
+vuna lint --fix --dry-run [PATH]...     # 只报告会修复多少条，不写盘
+vuna lint --format json [PATH]...       # text（默认）| json | github
+vuna lint --select list-literal --ignore dispatch-lift [PATH]...
+vuna lint --max-warnings 0 [PATH]...    # warning 超限也 exit 1
+vuna lint --list | --explain <RULE>
 ```
 
-输出格式：`路径:行:列: [LN_xxx] rule-name: 消息`（列 1-based）。`--fix` 模式下不可修复的
-finding 追加 ` (not auto-fixable)`。LSP 把同一批 finding 合并为 warning（severity 2），见
-`lib/Vuna/Lsp/Diagnostics.vuna`。
+- 文本格式：`路径:行:列: [LN_xxx] rule-name: 消息`（列 1-based）；`--fix` 模式下不可修复的
+  finding 追加 ` (not auto-fixable)`。LSP 用同一批 finding（含结束位置与 severity），见
+  `lib/Vuna/Lsp/Diagnostics.vuna`。
+- 退出码：0 = 无 error 且 warning 未超 `max-warnings`；1 = 有 error / warning 超限；2 = 用法、
+  配置、读盘、解析或 fixity 上下文错误。error/warning 由规则配置决定。
+- 目录会递归收集 `.vuna`（跳过生成物 / corpus）；重复路径去重，顺序保持用户/目录顺序。
+- `--fix` 原子写盘，只应用可安全修复的 finding（被替换行含注释 / tab / CR 时跳过），每轮
+  复验后余下的 finding 照常报告。`--no-cache` 关闭结果缓存。
 
-`vuna lint` **必须显式给路径**：没有位置参数是用法错误（exit 2）；有 finding 时 exit 1；
-文件读不到 / 解析失败 / 取不到程序级 fixity 上下文也是工具错误（exit 2），不静默跳过。
-`--fix` 只应用可安全修复的 finding（被替换行含注释 / tab / CR 时跳过），每轮复验后余下
-的 finding 照常报告。
+## 1.1 配置（`vuna.toml` 的 `[lint]`）
+
+编译器只把 `[lint]` 当 TOML 结构放行（`Frontend.Manifest` 不校验规则语义）；lint 消费时由
+`Vuna.Lint.Config` 认领并校验，未知 key / 未知规则 / 非法 severity 报 `vuna.toml:行`。
+
+```toml
+[lint]
+preset = "recommended"          # recommended | all | none
+max-warnings = -1               # -1 = 不限；0 = 任何 warning 也失败
+exclude = ["test/**", "examples/**"]
+
+[lint.rules]
+literal-if-chain = "error"      # off | warn | error
+dispatch-lift = "error"
+list-literal = "error"
+```
+
+配置从文件所在目录向上收集 manifest：外层（workspace 根）先应用，内层覆盖；命令行
+`--select` / `--ignore` / `--max-warnings` 最后覆盖。`--config PATH` 读显式文件的 `[lint]`，
+`--no-config` 使用默认（recommended、全部 error）。改 `[lint]` 不改变 check/build 缓存
+（`manifestSemanticText` 不含它）。
+
+## 1.2 源码抑制
+
+只认注释里的 `vuna-lint:` 前缀（注释文本来自 lexer）：
+
+```vuna
+-- vuna-lint: disable-next-line literal-if-chain
+probe x = if x == 1 then 1 else if x == 2 then 2 else 3
+
+-- vuna-lint: disable list-literal
+-- vuna-lint: enable list-literal
+-- vuna-lint: ignore-file
+```
+
+规则名接受 kebab 短名或 `LN_` code；`disable` / `enable` 按行区间生效，`disable-line` /
+`disable-next-line` 只作用于单行；未知规则是配置错误（exit 2）。抑制在 CLI 与 LSP 同一条
+`lintSourceWithConfig` 路径上生效。
+
+## 1.3 结果缓存
+
+`vuna lint` 把成功 lint 的完整 finding（含 Edit）写入对象库 `objects/lint`，键覆盖
+`lint-cache schema + 编译器指纹 + 源内容 + 程序级 fixity 闭包 + 有效规则配置`。解析/抑制
+错误不缓存；`--fix` 不读缓存；`--no-cache` 完全关闭；`vuna clean --store` 会清理该 kind。
 
 ## 2. 实现模型
 
-规则判定全部走 AST：`lintSourceWith` 先 `parseSource`，再按声明遍历 `Expr`（覆盖全部构造子，
+规则判定全部走 AST：`lintSourceWithConfig` 先 `parseSourceWithComments`，再按声明遍历 `Expr`（覆盖全部构造子，
 含 `ELocalFun` / `EAnn`），同时携带外层模式上下文（clause 模式列表或外层 case 的 alt
 模式）。需要源码原文（字面量、模式、分支体）时用 span + token 边界从源码切片
 （`exprText` / `patText`），**不重新渲染 / 转义字符串字面量**。
@@ -213,9 +265,8 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   通过 `vuna check` 的程序（DT 已强制 `case` 穷尽）。把 case 拆成多 clause 会改变 SCT 的
   分析形态；若某个递归函数拆分后 SCT 找不到下降环，应改进 SCT 或收窄规则，不能靠 lint 层
   豁免（CI 门禁要求零 finding）。
-- **CI 门禁**：`nix/checks/vuna-lint.sh` 扫全部包源码
-  （`find compiler/lib base/lib lib app -name '*.vuna'`），要求零 finding；脚本没有按规则
-  或按文件的过滤豁免。
+- **CI 门禁**：`nix/checks/vuna-lint.sh` 执行 `vuna lint --max-warnings 0 --no-cache`，
+  扫 workspace 各包的 lib/app，要求零 finding；配置来自根 `vuna.toml`，没有按文件的过滤豁免。
 - `--fix` 产物保证可重新 parse；不保证 `vuna fmt` 幂等（部分既有语料的期望产物保留
   lift 的换行体形态）。新增 fix 语料按 fmt 规范形态设计并验证幂等。
 - `dispatch-lift` 只处理顶层 DFun 的 clause 与 case alt 的直接体；instance 方法、

@@ -61,7 +61,10 @@ import qualified Vuna.Lint
 
 -- | 内部：工具命令的用法行（`${prog} <cmd> ...`）；`prog` 是程序名原文。
 toolUsageLines : String -> String
-toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
+toolUsageLines prog = """  ${prog} lint [--fix] [--dry-run] [--format text|json|github] [--max-warnings N] [--quiet]
+       [--select RULE]... [--ignore RULE]... [--config PATH] [--no-config] [--no-cache]
+       [--max-passes N] [--list] [--explain RULE] [PATH]...
+       PATH 可为文件或目录；省略时扫 workspace 各包的 lib/ 与 app/；配置读 vuna.toml 的 [lint]
   ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
   ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
       运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : Eff [] a ... 走 compile+运行；

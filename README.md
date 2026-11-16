@@ -42,7 +42,7 @@ examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可�
 nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
-./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（必须给路径）
+./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
 ```
 
@@ -69,7 +69,7 @@ stage1 的 `vuna-compiler build .` 产出 `.output/bin/vuna`。流程见 [bootst
 vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR  # 逐模块 codegen 到目录；成功静默
 vuna check (<entry.vuna> | <package-dir>)
 vuna build [--no-compile] [--out DIR] [PKG-DIR]  # 默认 `<PKG-DIR>/.output`；跑 build.sh → 输出目录/bin/<包名>
-vuna lint [--fix] <file.vuna>...
+vuna lint [--fix] [--format text|json|github] [PATH]...
 vuna interp <file.vuna>                   # 精化后核心求值（纯；不执行效果）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
 vuna run [DIR] [--package NAME] [--no-build] [--release] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
@@ -171,7 +171,7 @@ manifest，不向上找。命令语义与包格式
 | [docs/reference/bootstrap.md](docs/reference/bootstrap.md) | 种子策略、rotation 流程、fixed point、TCB 边界 |
 | [docs/reference/testing.md](docs/reference/testing.md) | 测试体系、corpus 分类、nix checks 清单、性能基准 |
 | [docs/reference/test-architecture.md](docs/reference/test-architecture.md) | 测试体系设计：共享对象库、store-isolated、verdict 对象、tier 与预算 |
-| [docs/reference/lint.md](docs/reference/lint.md) | lint 规则（AST 驱动、`--fix` 与门禁） |
+| [docs/reference/lint.md](docs/reference/lint.md) | lint 规则、`vuna.toml [lint]` 配置、源码抑制、结果缓存与门禁 |
 | [docs/reference/debt.md](docs/reference/debt.md) | 仍未关闭的债务、缺陷与未实现能力（按语言 / 工具分组，带证据） |
 
 文档分层规则：README 只保留定位/上手/目录/硬约束/导航；细节在 `docs/reference/`；
