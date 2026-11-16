@@ -497,8 +497,10 @@ dependencyHashes ctx = case contextRoots ctx of
 -- 依赖包 check/build 成功后写一个稳定对象 `objects/pkgiface/<key>`，key = 包名 + 该包
 -- lib 根源闭包摘要 + 编译器 tag，载荷 = `pkgIfaceHashOfModules`。依赖方按同样的 key 读取：
 --   * 命中 ⇒ `iface:<pkgIfaceHash>`（注释 / 诊断配置 / opaque 体变化不脏依赖方）；
---   * 缺失（依赖还没 check、或源码变了还没重跑）⇒ `manifest:<toml 内容摘要>` 回退，
---     冷 store 仍可确定性判脏；依赖重跑后同一个接口身份会回到 `iface:` 值。
+--   * 缺失（依赖还没 check、或源码变了还没重跑）⇒
+--     `manifest:<toml 内容摘要>:<该根源闭包摘要>` 回退。
+--     源闭包在回退里：依赖源码变了而依赖方先跑，也必然换地址，不会复用旧判定；
+--     依赖重跑后同一个接口身份回到 `iface:`，注释不敏感的增量性质恢复。
 -- 没有读依赖接口对象，因此不会回到 `ifaceModsEff`（env）形成环。
 -- ---------------------------------------------------------------
 pkgIfaceSummaryKind : String
@@ -523,7 +525,7 @@ depRootIdentityEff root = do
       verdict = case saved of
         Just _ => "iface"
         Nothing => "manifest"
-      _ = dbg! "dep-identity=${rootName root} verdict=${verdict}"
+      _ = dbg! "dep-identity=${rootName root} verdict=${verdict} src=${strFromInt h}"
     in case saved of
       Just s => pure (Pair (rootName root) "iface:${s}")
       Nothing => do
@@ -532,7 +534,7 @@ depRootIdentityEff root = do
         in do
           exists <- fsFileExists tomlPath
           toml <- if exists then fsReadFile tomlPath else pure ""
-          pure (Pair (rootName root) "manifest:${textHash toml}")
+          pure (Pair (rootName root) "manifest:${textHash toml}:${strFromInt h}")
 
 depIdentitiesEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (Pair String String))
 depIdentitiesEff ctx = case contextRoots ctx of
@@ -621,7 +623,7 @@ runBuildScript dir out name = do
 -- ---------------------------------------------------------------
 -- | 输入摘要的 schema（结构变化必须 bump；旧对象自然拒绝）。
 checkNodeSchema : String
-checkNodeSchema = "vuna-check-node 2"
+checkNodeSchema = "vuna-check-node 3"
 
 hashText : Int -> String
 hashText n = strFromInt n
@@ -2175,7 +2177,7 @@ auditCheckLib wantWarnings ctx names = do
 -- ---------------------------------------------------------------
 -- | split 输入摘要的 schema（结构变化必须 bump；旧 blob 自然失效）。
 splitNodeSchema : String
-splitNodeSchema = "vuna-split-node 2"
+splitNodeSchema = "vuna-split-node 3"
 
 -- | split 载荷的编码版本（`Store` 的 codec 段）。
 -- 载荷是 `canonicalTopo` 后的规范拓扑序。命中路径直接按

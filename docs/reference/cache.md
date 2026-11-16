@@ -64,7 +64,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   `[diagnostics]`（纯显示配置）与 `[registry]`（取包位置）**不进指纹**——改诊断格式
   或索引位置不得让整包与依赖方接口失效；
 - `src` = **本包**源文件闭包摘要；
-- `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要）；
+- `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要 + 该根源闭包摘要）；
 - `ver` = 编译器版本 + 二进制指纹；
 - `flags` = 语义开关（`release` / `debug`：release 的 debug-only 构造诊断不同，必须进地址）。
 
@@ -172,6 +172,10 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 - **warning 可能不完整**：诊断列表会随 Pass 一起落盘，但「干净模块复用」的那次运行只拿到
   被精化模块的 warning；`-W` / `--deny-warnings` 仍直接绕过判定（不判命中也不提交），
   以保证热缓存下告警完整。普通 `vuna check` 的命中/失败重放不受影响。
+- **依赖未重跑时回退身份含源闭包**：`objects/pkgiface` 缺失（依赖还没 check，或依赖源码
+  变了还没重跑）时，回退值是 `manifest:<toml 摘要>:<根源闭包摘要>`。源闭包在回退里，
+  所以依赖方先跑也不会复用旧判定；代价是依赖**未重跑**时注释变更也会多一次 miss。
+  依赖重跑后身份回到 `iface:<pkgIfaceHash>`，注释不敏感的增量性质恢复。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），
