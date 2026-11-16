@@ -128,16 +128,6 @@ checkAltBindersGo ec sp ((Pair name rig) :: rest) us = case us of
       (\_ => checkAltBindersGo ec2 sp rest more)
 
 -- ---------------------------------------------------------------
--- 零向量按 depth 共享：`List Rig` 不可变，同一 depth 的零向量可以直接复用，避免每个
--- 叶子节点都重建一条与上下文等长的向量。
-zeroVecAt : Ec -> Int -> Pair (List Rig) Ec
-zeroVecAt ec depth = case Base.HashMap.lookup depth (ecZeroVecs ec) of
-  Just v => Pair v ec
-  Nothing =>
-    let
-      v = uZeroOf depth
-    in Pair v (ecPutZeroVecs ec (Base.HashMap.insert depth v (ecZeroVecs ec)))
-
 -- 项遍历（显式线程 `Ec`：使用点登记进 `ecUseSpans`，诊断就地取用）
 -- ---------------------------------------------------------------
 checkTerm : Ec -> Span -> List (Pair String Rig) -> Term -> Check (Pair (List Rig) Ec)
@@ -146,11 +136,11 @@ checkTerm ec sp env t = case t of
     let
       ec2 = if usp.spanStartLine == 0 then ec else recordUseSpan ec name usp
     in OkC (Pair (uVarAt (natToInt (length env)) i) ec2)
-  TMeta m => OkC (zeroVecAt ec (natToInt (length env)))
-  TGlobal g => OkC (zeroVecAt ec (natToInt (length env)))
-  TType l => OkC (zeroVecAt ec (natToInt (length env)))
+  TMeta m => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TGlobal g => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   -- 类型：0-fragment，里面的 binder 不产生运行时用量。
-  TPi name implicit rig dom cod => OkC (zeroVecAt ec (natToInt (length env)))
+  TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   TLam name rig body =>
     let
       ecW =
@@ -175,16 +165,13 @@ checkTerm ec sp env t = case t of
   TIf c th el =>
     Vuna.Compiler.Common.step (checkTerm ec sp env c)
       (\uc => \ec1 => Vuna.Compiler.Common.step (checkTerm ec1 sp env th) (\ut => \ec2 => Vuna.Compiler.Common.step (checkTerm ec2 sp env el) (\ue => \ec3 => OkC (Pair (uAdd uc (uJoin ut ue)) ec3))))
-  TInt n => OkC (zeroVecAt ec (natToInt (length env)))
-  TStr s => OkC (zeroVecAt ec (natToInt (length env)))
-  TFloat raw => OkC (zeroVecAt ec (natToInt (length env)))
-  TBool b => OkC (zeroVecAt ec (natToInt (length env)))
+  TInt n => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TStr s => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TFloat raw => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+  TBool b => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 
 checkArgs : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (Pair (List Rig) Ec)
-checkArgs ec sp env args =
-  let
-    z = zeroVecAt ec (natToInt (length env))
-  in checkArgsGo (secondOf z) sp env args (firstOf z)
+checkArgs ec sp env args = checkArgsGo ec sp env args (uZeroOf (natToInt (length env)))
 
 checkArgsGo : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Check (Pair (List Rig) Ec)
 checkArgsGo ec sp env [] acc = OkC (Pair acc ec)
@@ -199,7 +186,7 @@ checkAlts ec sp env alts = checkAltsGo ec sp env alts Nothing
 checkAltsGo : Ec -> Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Check (Pair (List Rig) Ec)
 checkAltsGo ec sp env [] acc = case acc of
   Just u => OkC (Pair u ec)
-  Nothing => OkC (zeroVecAt ec (natToInt (length env)))
+  Nothing => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 checkAltsGo ec sp env ((CaseAlt cname binders body) :: rest) acc =
   let
     env2 = append (reverse binders) env

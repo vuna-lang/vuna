@@ -650,7 +650,7 @@ dtEvalExprInInfoCore prog expr = case prog of
         Ec next sols (reverse bodies) datas [] [] (instStoreOf insts) classes csEmpty
           (Base.HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols)
           (Base.HashMap.fromList []) True (Base.HashMap.fromList []) (ctorTblOfDatas datas)
-          (datasHaveLinear datas) [] [] warnings [] (Base.HashMap.fromList [])
+          (datasHaveLinear datas) [] [] warnings []
     in Vuna.Compiler.Common.bind (inferE globals emptyCtx ec0 expr) (\p => case p of
       Pair term (Pair ty ec1) =>
         let

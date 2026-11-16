@@ -5,7 +5,6 @@ module Vuna.Compiler.Elab.Dict where
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Base.List
-import Base.String
 import Vuna.Compiler.Common
 import Base.HashMap
 import Vuna.Compiler.Core
@@ -29,11 +28,8 @@ isDictValue ec (VNeutral n) = case n of
   _ => False
 isDictValue ec _ = False
 
--- 字典族名恒为 `Dict_<类>`（`dictTypeName`）：先用前缀挡掉绝大多数非字典域，
--- 避免每次隐式实参插入都重建一遍类名列表。
 isDictFamily : Ec -> String -> Bool
-isDictFamily ec g =
-  startsWith dictTypePrefix g && memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
+isDictFamily ec g = memName g (map (\c => dictTypeName (dtClassName c)) (ecClasses ec))
 
 -- 实例搜索：
 --   1. 先查**局部上下文**里的字典 binder（实例方法体的 tele ctx 字典）；
