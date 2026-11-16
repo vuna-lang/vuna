@@ -1,15 +1,13 @@
+-- | 一阶 Error 效应 + 作用域 catch：`catch n comp fallback` 在 comp 内安装临时 Error handler，`Throw` 截获后不恢复续延（一次性续延直接丢弃），返回 `Result` 给外层，再在 handler 之外执行 `fallback`。
 module Base.EffError where
 
--- Base.EffError：一阶 Error 效应 + 作用域 catch。
---
--- `catch n comp fallback` 在 comp 内安装临时 Error handler；Throw 截获后不恢复
--- 续延（一次性续延直接丢弃），返回 Result 给外层，再在 handler 之外执行 fallback。
 import Base.Eff
 import Base.Monad
 import Base.Result
 
 -- | error 操作只有 `Throw`，携带错误消息 `String`。
 export data ErrorOp(..) : Type where
+  -- | 抛出错误消息。
   Throw : String -> ErrorOp
 
 -- | 结果族：`Throw` 返回 `Int`（占位；throw 不恢复续延）。

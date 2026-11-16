@@ -1,10 +1,8 @@
+-- | 可变引用：内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
+--
+-- 本地可变存储位于 `Eff []` 内（后台机制，**不是**行效应）：操作都只是对宿主原语的 `raise`（`modifyRef` 由 `readRef` + `writeRef` 组合），对任意行都可行，因此既能用在纯 `Eff []`，也能出现在 `Eff r` 动作里而不必给调用方加 `RefOp` 约束。
 module Base.IORef where
 
--- Base.IORef：可变引用。内建类型构造子 `IORef`，OCaml 表示 `'a ref`。
---
--- `Eff []` 内的本地可变存储（后台机制，**不是**行效应）：四个操作对任意行都可行，
--- 运行时是恒等 `raise`（与 `Base.Eff.raise` 同语义），因此既能用在纯 `Eff []`，
--- 也能出现在 `Eff r` 动作里而不必给调用方加 `RefOp` 约束。
 import Base.Eff.Types
 import Base.Monad
 

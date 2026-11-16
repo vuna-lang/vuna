@@ -1,8 +1,6 @@
--- | 可选值类型：`Nothing` 表示无值，`Just x` 表示有值。
+-- | 可选值类型与消除/映射函数。构造子 `Nothing` / `Just` 导出，可直接模式匹配；取值至多一个，`Ord` 里 `Nothing < Just x`。`Functor` / `Monad` / `Applicative` / `Foldable` / `Traversable` / `Eq` / `Ord` / `Hashable` / `Semigroup` / `Monoid` 实例落在本模块，容器 `Show` 实例使 `Interp` 经 blanket 实例自动获得。本模块不依赖 [Base.List]。
 module Base.Maybe where
 
--- Base.Maybe：可选值类型与消除/映射函数（不依赖 List）。
--- `Bool` 的类型与构造子来自 Base.Bool；base 包不自动注入 Prelude，因此显式 import。
 import Base.Bool
 import Base.Eq
 import Base.Hashable
@@ -14,7 +12,7 @@ import Base.Ord
 -- 容器 `Show` 实例（`Interp` 由 Base.Interp 的 blanket 实例免费获得）。
 import Base.Show
 
--- | 可选值。
+-- | 可选值：`Nothing` 表示无值，`Just x` 表示有值；构造子导出，可直接模式匹配。
 export data Maybe a(..) : Type where
   -- | 无值。
   Nothing : Maybe a
@@ -41,8 +39,7 @@ export maybe : b -> (a -> b) -> Maybe a -> b
 maybe d f Nothing = d
 maybe d f (Just x) = f x
 
--- Functor / Monad 实例。trait 来自 Base.Monad，类型 Maybe 定义在本模块，
--- 因此可以写 default（匿名）实例（孤儿规则允许）。
+-- 类型 `Maybe` 定义在本模块，因此可以写 default（匿名）实例（孤儿规则允许）。
 instance Functor Maybe where
   fmap f m = case m of
     Nothing => Nothing
@@ -67,9 +64,8 @@ instance Applicative Maybe where
       Just b => Just (f a b)
 
 -- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
--- 这里用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
--- `Base.List → Base.Maybe` 已存在（Maybe 不能反向 import List），名字不可见；
--- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。
+-- 拼接用 `++` 的反引号形式：`Maybe` 不能 import `Base.List`（List → Maybe 已存在），
+-- 而 `++` 是恒可见的 String intrinsic。
 instance Show a => Show (Maybe a) where
   show m = case m of
     Nothing => "Nothing"

@@ -1,19 +1,10 @@
+-- | `Ord` trait 的声明（声明与实例分离），外加三值比较 `Ordering` 与 `compare` / `min` / `max`。`<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名，fixity 与别名映射由本模块的 `infixl` 声明唯一提供。
+--
+-- 实例落点同 `Base.Eq`：`Int` / `String` 的实例在 `Base.Int` / `Base.String`；`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随 trait 留本模块（放 `Base.Bool` 会成环）。
+--
+-- `Ordering` 定义在本模块而不是独立模块：`compare` 的签名依赖它，独立模块会与本模块形成 import 环。`compare` 只用 `lt` 派生、不新增 `Ord` 方法，因此 `deriving (Ord)` 的展开面不变。
 module Base.Ord where
 
--- Base.Ord：`Ord` trait 的**声明**（声明与实例分离），外加三值比较
--- `Ordering` / `compare` 与 `min` / `max`。
---
--- 实例落点规则同 `Base.Eq`：`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随
--- trait 留本模块（放 `Base.Bool` 会成环）；`Int` / `String` 的实例在
--- `Base.Int` / `Base.String`。
---
--- `<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名：Int / String 上的
--- 特化是内建实例实现。fixity 与别名的**唯一来源**是本模块的 `infixl` 声明（Loader
--- 在中缀重排时消费，不再有编译器内建兜底表）。
---
--- `Ordering` 定义在本模块而不是独立模块：`compare` 的签名依赖它，独立模块会与
--- 本模块形成 import 环。`compare` 用 `lt` 派生（不新增 `Ord` 方法），因此
--- `deriving (Ord)` 的生成器无需改动。
 import Base.Bool
 import Base.Eq
 import Base.Hashable
@@ -24,11 +15,15 @@ infixl 4 <= = le
 infixl 4 > = gt
 infixl 4 >= = ge
 
--- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 由本模块的 `infixl` 声明提供。Bool 实例随 trait 留在本模块（方法返回 Bool，放 Base.Bool 会成 import 环），Int / String 实例在各自类型模块。
+-- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 由本模块的 `infixl` 声明提供。
 export trait Ord a(..) where
+  -- | 严格小于。
   lt : a -> a -> Bool
+  -- | 小于或相等。
   le : a -> a -> Bool
+  -- | 严格大于。
   gt : a -> a -> Bool
+  -- | 大于或相等。
   ge : a -> a -> Bool
 
 -- `Bool` 的顺序用模式匹配直接表达：`False < True`。

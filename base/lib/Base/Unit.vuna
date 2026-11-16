@@ -1,9 +1,6 @@
+-- | 单元素类型（「无有意义返回值」的惯用类型）。只有 `MkUnit` 一个构造子；用于 `Eff [] Unit` 风格的动作结果占位。`Eq` / `Ord` / `Show` / `Hashable` / `Monoid` 实例都是穷尽、零分配的（只模式匹配一个构造子）。
 module Base.Unit where
 
--- Base.Unit：单元素类型（「无有意义返回值」的惯用类型）。
---
--- 只有 `MkUnit` 一个构造子；用于 `Eff [] Unit` 风格的动作结果占位。`Eq` / `Ord` /
--- `Show` 实例为穷尽、零分配实现（只模式匹配一个构造子）。
 import Base.Bool
 import Base.Eq
 import Base.Hashable
@@ -11,7 +8,7 @@ import Base.Monoid
 import Base.Ord
 import Base.Show
 
--- | 单元素类型：只有 `MkUnit` 一个构造子。
+-- | 单元素类型：唯一的值是 `MkUnit`，所有 `Unit` 值相等、顺序上互不小于对方，常作「无有意义返回值」的占位。
 export data Unit(..) : Type where
   -- | 唯一的值。
   MkUnit : Unit

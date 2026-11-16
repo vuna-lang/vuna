@@ -1,12 +1,9 @@
+-- | 键泛型的持久集合，内部是键都映射到 `True` 的 `HashMap a Bool`；构造器不导出。键要求 `Eq` + `Hashable`（同 [Base.HashMap]）；`toList` 按桶序展开，**不保证插入序**，`size` 是 O(n)。
 module Base.HashSet where
 
--- Base.HashSet：键泛型的持久集合，内部是 `HashMap a Bool`。
---
--- 键要求 `Eq` + `Hashable`（同 HashMap）。构造器不导出；`toList` 按桶序展开，
--- **不保证插入序**；`size` 是 O(n)。
--- base 模块不自动注入 Prelude，容器的限定名（HashMap.*）需要显式 import。
 import Base.Bool
 import Base.Eq
+-- base 模块不自动注入 Prelude，容器的限定名（`Base.HashMap.*`）需要显式 import。
 import Base.HashMap
 import Base.Hashable
 import Base.List
@@ -16,6 +13,7 @@ import Base.Show
 
 -- | 键泛型的集合，内部是键都映射到 `True` 的 `HashMap a Bool`；构造器不导出。
 export record HashSet a where
+  -- | 底层表；每个成员都映射到 `True`。
   hashSetTable : HashMap a Bool
 
 -- | 空集合（空表统一写 `HashMap.fromList []`）。
@@ -42,6 +40,6 @@ toList (HashSet t) = map firstOf (Base.HashMap.toList t)
 export size : Eq a => HashSet a -> Nat
 size s = length (toList s)
 
--- `Show` 经 `toList`：构造器不可见；桶序展开。
+-- 经 `toList` 展示（构造器不可见；桶序展开）。
 instance Show a, Eq a => Show (HashSet a) where
   show s = "fromList " `++` show (toList s)

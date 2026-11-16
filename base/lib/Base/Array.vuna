@@ -1,16 +1,6 @@
+-- | 不可变数组。`Array` 是内建类型构造子（OCaml `'a array`），没有 data 构造子：模板是 [Base.Array.fromList] / [Base.Array.make]（另有内建空数组 `arrayEmpty` 与 `[||]` 字面量），经 [Base.Array.toList] 取回。`set` 返回**新数组**（copy-on-write），原数组不变；`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义不同，见 docs/reference/primitives.md）。尺寸与下标是 `Nat`，底层原语仍是 `Int`（转换是恒等/单分支）。`Eq` / `Show` 实例按约定落在本模块，实例体经 `toList` 复用 `List` 的实现。
 module Base.Array where
 
--- Base.Array：不可变数组。内建类型构造子 `Array`，OCaml 表示 `'a array`。
---
--- 构造器不可见：只能经 `fromList` / `make` 构造；`set` 返回**新数组**（copy-on-write），
--- 原数组不变。`get` / `set` 越界是宿主 `Invalid_argument`（与 `strAt` 的 -1 哨兵语义
--- 不同，见 docs/reference/primitives.md）。
---
--- 尺寸/下标是 **Nat**；底层原语仍是 Int（低层 runtime 接口），这里的转换是恒等/单分支。
---
--- `Array` 是没有定义模块的内建类型构造子（实例落点由 `Elab/Trait.vuna` 的
--- `isGlobalHeadType` 放行），`Eq` / `Show` 实例按约定落在本模块；实例体经 `toList`
--- 复用 `List` 的实现。
 import Base.Bool
 import Base.Eq
 import Base.List
@@ -41,11 +31,11 @@ set a i v = arraySet a (natToInt i) v
 export make : Nat -> a -> Array a
 make n v = arrayMake (natToInt n) v
 
--- | 逐元素相等；经 `toList` 复用 `Eq (List a)`。
+-- 经 `toList` 复用 `Eq (List a)`。
 instance Eq a => Eq (Array a) where
   eq a b = toList a == toList b
   neq a b = if a == b then False else True
 
--- | 展示为与 List 相同的 `[a, b, c]`；经 `toList` 复用 `Show (List a)`。
+-- 展示为与 List 相同的 `[a, b, c]`（经 `toList` 复用 `Show (List a)`）。
 instance Show a => Show (Array a) where
   show a = show (toList a)

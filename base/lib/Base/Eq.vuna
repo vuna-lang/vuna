@@ -1,24 +1,18 @@
+-- | `Eq` trait 的声明（声明与实例分离）：`eq` / `neq`，`==` / `/=` 是它们的别名，fixity 与别名映射由本模块的 `infixl` 声明唯一提供。
+--
+-- 实例跟类型模块走：`Int` / `String` 是 language primitive 类型，实例在 `Base.Int` / `Base.String`。`Bool` 是例外，实例随 trait 留本模块——`eq` 返回 `Bool`，放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 ImportCycle）。
 module Base.Eq where
 
--- Base.Eq：`Eq` trait 的**声明**（声明与实例分离）。
---
--- 实例落点规则：实例跟类型模块走；唯独 `Bool` 是 `Eq` 方法签名的一部分（返回类型），
--- 放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 ImportCycle），
--- 所以 Bool 实例随 trait 留在本模块。`Int` / `String` 是 language primitive 类型，
--- 实例在 `Base.Int` / `Base.String`。
---
--- `==` / `/=` 是 `eq` / `neq` 的别名：`a == b`、`eq a b` 是同一个调用；Int / String
--- 上的内建特化（`bi_eq_*`）是这两个类的内建实例实现，而不是运算符的独立语义。
--- fixity 与别名的**唯一来源**是本模块的 `infixl` 声明（Loader 在中缀重排时消费，
--- 不再有编译器内建兜底表）。
 import Base.Bool
 
 infixl 4 == = eq
 infixl 4 /= = neq
 
--- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 与别名映射由本模块的 `infixl` 声明提供。Bool 实例随 trait 留在本模块（方法返回 Bool，放 Base.Bool 会成 import 环），Int / String 实例在各自类型模块。
+-- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 与别名映射由本模块的 `infixl` 声明提供。
 export trait Eq a(..) where
+  -- | 相等判定：`eq x y` 为真当且仅当两者表示同一个值。
   eq : a -> a -> Bool
+  -- | 不等判定；实例应保证 `neq x y` 与 `eq x y` 取反一致。
   neq : a -> a -> Bool
 
 -- `Bool` 的相等用模式匹配直接表达（不依赖 `==` / `eq`，避免实例体自引用）。

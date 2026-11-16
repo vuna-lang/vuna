@@ -1,15 +1,13 @@
+-- | 一阶命令行参数效应：标签 = `ArgsOp`（实例名在行的 `Cons n ArgsOp r` 条目里），操作只有 `GetArgs`，返回 `List String`；真实 handler 用 `@vuna@prim_eff_getArgs`。
 module Base.EffArgs where
 
--- Base.EffArgs：一阶命令行参数效应。
---
--- 标签 = `ArgsOp`（实例名在行的 `Cons n ArgsOp r` 条目里）；操作只有 GetArgs，返回 `List String`。
--- 真实 handler 用 `@vuna@prim_eff_getArgs` 实现。
 import Base.Eff
 import Base.Monad
 import Base.List
 
 -- | 参数操作：`GetArgs`（不含 argv[0] 的命令行参数）。
 export data ArgsOp(..) : Type where
+  -- | 取命令行参数（不含 argv[0]）。
   GetArgs : ArgsOp
 
 -- | 操作的结果类型族：`GetArgs` 返回 `List String`。
@@ -31,18 +29,20 @@ argsOpHIO op k = case op of
     xs <- @vuna@prim_eff_getArgs
     k xs
 
--- | 宿主 handler：结果行删除 `ArgsOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
+-- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是 `[ArgsOp]`）。
 argsOpHIOHost : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff (Cons "default" ArgsOp []) a) -> Eff (Cons "default" ArgsOp []) a
 argsOpHIOHost op k = case op of
   GetArgs => do
     xs <- @vuna@host@getArgs
     k xs
 
+-- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [ArgsOp]`（不导出）。
 handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ArgsOp r) a -> Eff r (Eff (Cons "default" ArgsOp []) a)
 handleArgsHostHost n comp = handleArgs n (\a => pure a) argsOpHIOHost comp
 
+-- | entry 自动预装用（泛化 r）：把行头 `ArgsOp` 的 send 翻译成宿主 intrinsic。
 runArgsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ArgsOp r) a -> Eff (rowAppend r (Cons "default" ArgsOp [])) a
 runArgsHost comp = joinEff (handleArgsHostHost "default" comp)

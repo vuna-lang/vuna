@@ -1,17 +1,14 @@
--- | 布尔类型与逻辑辅助函数。
+-- | 布尔类型与逻辑辅助函数。按「实例跟类型模块走」的落点规则承载 `Show Bool` 实例，因此依赖 [Base.Show]；`Eq` / `Ord` 实例随 trait 留在 [Base.Eq] / [Base.Ord]（`Bool` 是它们方法的返回类型，放这里会成环）。
 module Base.Bool where
 
--- Base.Bool：布尔类型与逻辑辅助函数。按「实例跟类型模块走」的落点规则承载
--- `Show Bool` 实例，因此依赖 Base.Show；`Eq` / `Ord` 实例随 trait 留在
--- `Base.Eq` / `Base.Ord`（`Bool` 是它们方法的返回类型，放这里会成环）。
 import Base.Hashable
 import Base.Show
 
--- `&&` / `||` 的 fixity 声明在本模块（它们是短路内建值，不是 trait 方法）。
+-- `&&` / `||` 是短路内建值（不是 trait 方法），fixity 声明在本模块。
 infixl 3 &&
 infixl 2 ||
 
--- | 布尔：`False` / `True`。
+-- | 布尔类型：`False` / `True`。构造子导出，可直接模式匹配；`&&` / `||` 是短路内建值，[Base.Bool.and] / [Base.Bool.or] 是不短路的函数版本。
 export data Bool(..) : Type where
   -- | 假。
   False : Bool
@@ -43,8 +40,7 @@ export bool : a -> a -> Bool -> a
 bool ifFalse ifTrue True = ifTrue
 bool ifFalse ifTrue False = ifFalse
 
--- `Bool` 的展示用 `if` 输出 True/False（与内建实例一致）；不能写 `show True`，
--- 那会自递归。
+-- 用 `if` 直接输出：写 `show True` 会自递归。
 instance Show Bool where
   show b = if b then "True" else "False"
 

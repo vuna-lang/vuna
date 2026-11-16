@@ -1,8 +1,10 @@
+-- | 高阶 / 作用域 Error：标签类型 `Exn`（无参标记），操作 `ThrowExn` 与 `Try`。
+--
+-- `Try` 携带一个子计算；handler 用嵌套的 `runExn` + `runEff` 在临时 handler 下运行它，
+-- 实现 scoped handler——其余效应仍由外层运行时 handler 处理。嵌套深度由 fuel 限制
+-- （`runExn` 默认 64），耗尽时返回 `Err "exn: fuel exhausted"`。
 module Base.EffExn where
 
--- Base.EffExn：高阶/作用域 Error。
--- `Try` 操作携带一个子计算；handler 用嵌套的 `runExn` + `runEff` 在临时 handler
--- 下运行子计算，实现 scoped handler（其余效应仍由外层运行时 handler 处理）。
 import Base.Eff
 import Base.Monad
 import Base.Ord
@@ -14,7 +16,9 @@ export data Exn : Type where
 
 -- | exn 操作（高阶）：`ThrowExn msg` 与 `Try sub`——`Try` 携带一个子计算，由 handler 在临时 handler 下运行。
 export data ExnOp(..) : String -> Row -> Type -> Type where
+  -- | 抛出错误消息（结果占位 `Int`；不恢复续延）。
   ThrowExn : (0 n : String) -> {r : Row} -> {a : Type} -> String -> ExnOp n r a
+  -- | 在临时 exn handler 下运行子计算 `comp`，返回 `Result a`。
   Try : (0 n : String) -> {r : Row} -> {a : Type} -> Eff (Base.Eff.Cons n Exn r) a -> ExnOp n r a
 
 -- | 结果族：`ThrowExn` 返回 `Int`，`Try` 返回 `Result a`。

@@ -1,33 +1,20 @@
+-- | `Applicative` trait（`pure` / `ap` / `liftA2`）。父类是 `Functor`；本模块重导出 `Base.Functor`，`import Base.Applicative` 也能看到 `fmap`。
+--
+-- `pure` 归本模块而不是 `Base.Monad`：`do` 只依赖 `bind`，而 `pure` 是 Applicative 的能力。`Base.Monad` 重导出本模块，`import Base.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 module Base.Applicative where
 
--- Base.Applicative：`Applicative` trait（`pure` / `ap` / `liftA2` 三个方法）。
--- `Functor` 是父类；本模块重导出 `Base.Functor`，`import Base.Applicative` 也能看到 `fmap`。
 export import Base.Functor
 
---
--- `pure` 属于本模块而不是 `Base.Monad`：`do` 只依赖 `bind`，而 `pure` 是
--- Applicative 的能力。`Base.Monad` 为方便用户重导出本模块（`import Base.Monad`
--- 仍能看到 `pure` / `ap` / `liftA2`）。
---
--- `ap : f (a -> b) -> f a -> f b` **可以**作为实例方法：精化器能检查实例方法签名里
--- 「高阶类参数套函数类型」的实例体（`case` 不会误报 `TC_ImpossibleBranchIndex`）。
---
--- `liftA2` 是 **trait 方法**，不是由 `ap` 派生的顶层函数。原因在 codegen：字典
--- 投影在生成的 OCaml 里是无类型标注的元组字段，OCaml 侧推断出
--- `val dliftA2 : ('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
--- 这类签名——`pure` 的返回类型与 `ap` 的首参被错误统一；派生体
--- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误
--- （`Base_dMaybe.ml` 的 Traversable `mapM` 首当其冲：`Error: This expression
--- should not be a function, the expected type is 'a t_Base_dMaybe`）。派生要等字典/
--- 投影带上类型标注、能在 OCaml 侧恢复 `f a` / `f (a -> b)` 的关系（debt D52）。
---
--- 没有默认方法（`liftA2` 逐实例手写，见下）；父类是 `Functor`：`Applicative f`
--- 的实例必须能提供 `Functor f` 的字典，`Applicative f =>` 的泛型代码可直接用 `fmap`。
--- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。
+-- `liftA2` 是 trait 方法而不是由 `ap` 派生的顶层函数：字典投影在生成的 OCaml 里是无类型
+-- 标注的元组字段，`pure` 的返回类型与 `ap` 的首参会被错误统一，派生体
+-- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误（debt D52），
+-- 因此逐实例手写、不提供默认方法。`ap` 的高阶签名本身可以作为实例方法（精化器不会误报
+-- `TC_ImpossibleBranchIndex`）。
+-- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。实例同时提供 `Functor f` 的字典，`Applicative f =>` 的泛型代码可直接用 `fmap`。
 export trait Functor f => Applicative f(..) where
   -- | 把纯值提升为动作。
   pure : a -> f a
   -- | 应用动作里的函数：把 `f (a -> b)` 应用到 `f a` 得到 `f b`。
   ap : f (a -> b) -> f a -> f b
-  -- | 提升二元函数并在两个动作上应用（由各实例显式实现；不作派生，见文件头注释）。
+  -- | 提升二元函数并在两个动作上应用（逐实例显式实现，不由 `ap` 派生）。
   liftA2 : (a -> b -> c) -> f a -> f b -> f c

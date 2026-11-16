@@ -1,18 +1,8 @@
+-- | 一阶进程效应：标签 `ProcessOp` 是命名实例，操作为 `Args` / `Exit` / `RunIn` / `Spawn` / `Wait`。
+--
+-- 两个真实 handler 共用 `onExit` 语义：`handleProcessHostWith` 的 answer 是 `Eff []`，直调 `@vuna@prim_eff_getArgs` / `@vuna@prim_eff_runIn` / `@vuna@prim_eff_spawn` / `@vuna@prim_eff_wait`；entry 预装的 `runProcessHost` 用 `*_process_host` 变体与 `@vuna@host@tryRunIn`，并把失败收口行 `ProcessErrorOp` 接到行尾。`runProcessHost` 的 `Exit` 走真实退出（`onExit = @vuna@prim_eff_exit_process_host`，不返回）；`handleProcessHostWith` 让调用方传入 `onExit`，从而在真实原语路径上**观察**退出码而不结束进程；mock handler（`handleProcess`）本来就能观察 `Exit`。
 module Base.EffProcess where
 
--- Base.EffProcess：一阶进程效应。
---
--- 标签 `ProcessOp` 是命名实例；操作：
---   * `Args`：取进程参数（`@vuna@prim_eff_getArgs`，**不含** argv[0]）；
---   * `Exit`：以状态码退出（`@vuna@prim_eff_exit`，真实 handler 下不返回）；
---   * `RunIn`：在目录 dir 下运行命令（`@vuna@prim_eff_runIn`），返回退出码。
--- 真实 handler 用 `process` 原语。
---
--- `Exit` 可控。`handleProcessHost` 保留「真实退出」语义（`onExit = exit`）；
--- `handleProcessHostWith` 让调用方传入 `onExit`，从而在真实原语路径上**观察**退出码而
--- 不结束进程；`handleProcessHostObserved` 是它的现成实例（`Exit c` 直接作为结果返回，
--- 程序继续执行）。mock handler（`handleProcess`）本来就能观察 `Exit`。
--- 夹具 dt_base/38（mock + observed 两条路径；真实退出路径不触发，避免测试进程退出）。
 import Base.Eff
 import Base.Eq
 import Base.Monad
@@ -22,10 +12,15 @@ import Base.Result
 -- | process 操作：`Args`（取进程参数）、`Exit c`（以状态码 c 退出）、`RunIn dir args`（在目录下运行命令）、
 -- `Spawn args`（异步启动并返回句柄）、`Wait h`（等句柄并返回退出码）。
 export data ProcessOp(..) : Type where
+  -- | 取进程参数（不含 argv[0]）。
   Args : ProcessOp
+  -- | 以状态码 `c` 退出进程。
   Exit : Int -> ProcessOp
+  -- | 在目录 `dir` 下运行命令 `args`，返回退出码。
   RunIn : String -> List String -> ProcessOp
+  -- | 异步启动命令 `args`，返回句柄。
   Spawn : List String -> ProcessOp
+  -- | 等待 `Spawn` 返回的句柄 `h`，返回退出码。
   Wait : Int -> ProcessOp
 
 -- | 结果族：`Args` 返回 `List String`，其余（`Exit` / `RunIn` / `Spawn` / `Wait`）返回 `Int`。
@@ -69,6 +64,7 @@ export data ProcessError(..) : Type where
 
 -- | 进程错误效应：单操作 `ProcessFail`（abort，不恢复续延）。
 export data ProcessErrorOp(..) : Type where
+  -- | 抛出进程启动失败。
   ProcessFail : ProcessError -> ProcessErrorOp
 
 -- | 结果族：`ProcessFail` 不恢复续延，返回类型任意（占位 `Int`）。
@@ -118,8 +114,6 @@ processOpHIOWith onExit op k = case op of
 export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff [] a)
 handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpHIOWith onExit) comp
 
--- 真实路径：`Exit` 调用 `@vuna@prim_eff_exit`，进程立即退出、不返回。
--- | 真实路径 handler：`Exit` 调 `@vuna@prim_eff_exit`，进程立即退出、不返回。
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
@@ -147,23 +141,27 @@ processOpHIOWithHost onExit op k = case op of
     c <- raise (@vuna@prim_eff_wait h)
     k c
 
+-- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
 handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Cons "process-error" ProcessErrorOp []) Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff (Cons "process-error" ProcessErrorOp []) a)
 handleProcessHostWithHost n onExit comp =
   handleProcess n (\a => pure a) (processOpHIOWithHost onExit) comp
 
+-- | entry 自动预装用（泛化 r）：真实退出路径 `Exit` 走 `@vuna@prim_eff_exit_process_host`，失败收口行 `ProcessErrorOp` 接到行尾。
 runProcessHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ProcessOp r) a -> Eff (rowAppend r (Cons "process-error" ProcessErrorOp [])) a
 runProcessHost comp =
   joinEff
     (handleProcessHostWithHost "default" (\c => raise (@vuna@prim_eff_exit_process_host c)) comp)
 
--- | 局部恢复：把进程启动失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+-- | 内部：`runProcessError` 的成功侧 `ret`——值包装成 `Ok`。
 processErrorRet : {a : Type} -> a -> Result a
 processErrorRet a = Ok a
 
+-- | 内部：`runProcessError` 的 op 解释——`ProcessFail e` 直接变 `Err (processErrorText e)`（不恢复续延）。
 processErrorOpHR : {a : Type} -> (o : ProcessErrorOp) -> (resProcessError o -> Result a) -> Result a
 processErrorOpHR op _ = case op of
   ProcessFail e => Err (processErrorText e)
 
+-- | 把进程启动失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `ProcessErrorOp`。
 export runProcessError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n ProcessErrorOp r) a -> Eff r (Result a)
 runProcessError n comp =
   handleCore ProcessErrorOp "process-error" n processErrorRet processErrorOpHR comp

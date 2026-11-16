@@ -1,15 +1,15 @@
+-- | 库级 State monad：表示是 `s -> Pair a s` 的纯函数，没有语言级效应；`do` 依赖本模块的 `Functor` / `Monad` 实例。
+--
+-- 运行入口是 `runState`（唯一 handler），`evalState` / `execState` 只取结果或最终状态。
 module Base.State where
 
--- Base.State：库级 State monad（`Functor` / `Monad` 实例齐全，`do` 可用）。
---
--- 表示是 `s -> Pair a s` 的纯函数：没有语言级效应，handler 就是 `runState` /
--- `evalState` / `execState`。`bind` / `pure` / `fmap` 走 Base.Monad 的 trait 实例。
 import Base.Pair
 import Base.Int
 import Base.Monad
 
--- | 库级 State monad：表示是 `s -> Pair a s` 的纯函数，没有语言级效应。用 `runState` / `evalState` / `execState` 运行；`do` 依赖本模块的 Functor / Monad 实例。
+-- | 库级 State monad：把状态 `s` 映射到「结果 `a` + 新状态 `s`」。
 export record State s a where
+  -- | 在给定初始状态下执行，返回结果与最终状态。
   stateRun : s -> Pair a s
 
 -- | 运行 State 并返回「结果 + 最终状态」的 `Pair`；是唯一 handler，其余运行函数都基于它。

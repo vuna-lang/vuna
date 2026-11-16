@@ -1,18 +1,17 @@
--- | 二元组类型与投影函数。
+-- | 二元组类型与投影函数。按「实例跟类型模块走」的落点规则承载 `Show` / `Eq` / `Ord` / `Hashable` 实例，因此依赖 [Base.Show] / [Base.Eq] / [Base.Ord] / [Base.Hashable]；`Bool` 构造子与 `&&` / `||` 的 fixity 来自 [Base.Bool]。
 module Base.Pair where
 
--- Base.Pair：二元组类型与投影函数。按「实例跟类型模块走」的落点规则承载
--- `Show` / `Eq` / `Ord` 实例，因此依赖 Base.Show / Base.Eq / Base.Ord；
--- Bool 构造子与 `&&` / `||` 的 fixity 来自 Base.Bool。
 import Base.Bool
 import Base.Eq
 import Base.Hashable
 import Base.Ord
 import Base.Show
 
--- | 二元组 `Pair a b`；构造子字段是 `first` / `second`。
+-- | 二元组 `Pair a b`；构造子与字段 `first` / `second` 都导出，可直接模式匹配取分量。`Eq` / `Ord` 逐分量比较，`Ord` 是字典序（先比 `first`，相等再比 `second`）。
 export record Pair a b(..) where
+  -- | 第一个分量。
   first : a
+  -- | 第二个分量。
   second : b
 
 -- | 取第一个分量。
@@ -24,9 +23,8 @@ export secondOf : Pair a b -> b
 secondOf (Pair a b) = b
 
 -- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
--- 用 `++` 的反引号形式拼字符串：列表字面量会折叠成 `Cons`/`Nil`，而
--- `Base.List → Base.Pair` 已存在（Pair 不能反向 import List），名字不可见；
--- 反引号中缀不要求 fixity 声明，`++` 又是恒可见的 String intrinsic。
+-- 拼接用 `++` 的反引号形式：`Pair` 不能 import `Base.List`（List → Pair 已存在），
+-- 而 `++` 是恒可见的 String intrinsic。
 instance Show a, Show b => Show (Pair a b) where
   show p = case p of
     Pair x y => "(" `++` (show x) `++` ", " `++` (show y) `++` ")"

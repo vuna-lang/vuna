@@ -1,18 +1,12 @@
+-- | 稳定排序。`mergeSort` 用 `Ord` 的 `<=`；`sortBy` 接受自定义比较函数，参数 `le` 表示 `<=`（`insertBy` 体里的 `<=` 经 fixity 解析到该参数）。实现是插入排序：递归吃 tail，满足 DT 的结构递归检查（归并排序的 `sortBy le (take half xs)` 不满足），稳定性与排序结果不变。
 module Base.Sort where
 
--- Base.Sort：稳定排序。`mergeSort` 用内建比较运算符（Ord 语义）；`sortBy` 接受自定义
--- 比较函数。
---
--- DT 的终止性检查只接受**结构递归**（递归调用必须是形参的真子项），归并排序的
--- `sortBy le (take half xs)` 不满足；这里改成插入排序（自底向上按 tail 递归），
--- 稳定性与排序结果不变，DT / HM 两条路径都成立。
 import Base.List
 import Base.Bool
--- `mergeSort` 的 `<=` 在刚性类型上提升成 Dict_Ord；显式 import 保证类存在与
--- split 单元顺序。
+-- `mergeSort` 的 `<=` 在刚性类型上提升成 Dict_Ord；显式 import 保证类存在与 split 单元顺序。
 import Base.Ord
 
--- | 插入步骤：按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
+-- | 内部：插入步骤——按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
 insertBy le y [] = [y]
 insertBy le y (x :: xs) = if y <= x then y :: x :: xs else x :: insertBy le y xs

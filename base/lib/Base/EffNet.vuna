@@ -1,17 +1,14 @@
+-- | 一阶网络效应（命名实例，与 Fs / Console / Process 一致）：操作经 `sendCore` 派发，因此可以装 mock handler（内存表）或真实 handler；entry 会为 `main` 行里的 `NetOp` 自动预装真实 handler。
+--
+-- 真实 handler 用 `@vuna@host@tryNet*`：宿主失败时读宿主状态槽并抛 `NetErrorOp`（typed；
+-- entry 收口的 `runNetErrorHost` 打印 `vuna: net: <上下文>: <原因>` 并 exit 1），想局部恢复
+-- 的调用方用 `runNetError` 收成 `Result`。
+--
+-- 「对端关闭」不是错误：`netRecv` 返回 `Maybe String`，EOF 是 `Nothing`。句柄失效映射成
+-- typed `NetBadHandle`（宿主状态码 8），由 `runNetError` / entry 收口处理。地址格式：
+-- `tcp:HOST:PORT` 或 `unix:PATH`（解析见 `dtp_net_parse`）。
 module Base.EffNet where
 
--- Base.EffNet：一阶网络效应（命名实例，与 Fs/Console/Process 一致）。
---
--- 操作经 `sendCore` 派发，因此可以装 mock handler（内存表）或真实 handler；entry 会为
--- `main` 行里的 `NetOp` 自动预装真实 handler。真实 handler 用 `@vuna@host@tryNet*`：
--- 宿主失败时读宿主状态槽并抛 `NetErrorOp`（typed；entry 收口的 `runNetErrorHost` 打印
--- `vuna: net: <上下文>: <原因>` 并 exit 1），想局部恢复的调用方用 `runNetError` 收成
--- `Result`。
---
--- 「对端关闭」不是错误：`netRecv` 返回 `Maybe String`，EOF 是 `Nothing`。
--- 句柄失效属于不变式破坏（宿主 `failwith`，exit 2），不走 typed error。
---
--- 地址格式：`tcp:HOST:PORT` 或 `unix:PATH`（见 `dtp_net_parse`）。
 import Base.Eff
 import Base.Eq
 import Base.Maybe
@@ -22,15 +19,25 @@ import Base.String
 
 -- | 网络操作描述：监听 / 取端口 / 接受 / 收 / 发 / 关 / 连接。
 export data NetOp(..) : Type where
+  -- | 绑定并监听地址 `addr`。
   Listen : String -> NetOp
+  -- | 取监听句柄 `h` 的端口。
   Port : Int -> NetOp
+  -- | 在监听句柄 `h` 上接受连接。
   Accept : Int -> NetOp
+  -- | 从句柄 `h` 最多收 `n` 字节。
   Recv : Int -> Int -> NetOp
+  -- | 向句柄 `h` 发送整串 `s`。
   Send : Int -> String -> NetOp
+  -- | 关闭句柄 `h`（幂等）。
   Close : Int -> NetOp
+  -- | 连接地址 `addr`。
   Connect : String -> NetOp
+  -- | 在句柄 `h` 上带超时 `micros`（微秒）接受连接。
   AcceptWithin : Int -> Int -> NetOp
+  -- | 从句柄 `h` 最多收 `bytes` 字节，超时 `micros`（微秒）。
   RecvWithin : Int -> Int -> Int -> NetOp
+  -- | 向句柄 `h` 发送整串 `s`，超时 `micros`（微秒）。
   SendWithin : Int -> String -> Int -> NetOp
 
 -- | 带超时的单步结果：正常完成 / 对端关闭 / 超时。
@@ -125,6 +132,7 @@ export data NetError(..) : Type where
 
 -- | 网络错误效应：单操作 `NetFail`（abort，不恢复续延）。
 export data NetErrorOp(..) : Type where
+  -- | 抛出网络失败。
   NetFail : NetError -> NetErrorOp
 
 -- | 结果族：`NetFail` 不恢复续延，返回类型任意（占位 `Int`）。
@@ -225,14 +233,16 @@ handleNetHostHost n comp = handleNet n (\a => pure a) netOpHIOHost comp
 runNetHost : {r : Row} -> {a : Type} -> Eff (Cons "default" NetOp r) a -> Eff (rowAppend r (Cons "net-error" NetErrorOp [])) a
 runNetHost comp = joinEff (handleNetHostHost "default" comp)
 
--- | 局部恢复：把网络失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+-- | 内部：`runNetError` 的成功侧 `ret`——值包装成 `Ok`。
 netErrorRet : {a : Type} -> a -> Result a
 netErrorRet a = Ok a
 
+-- | 内部：`runNetError` 的 op 解释——`NetFail e` 直接变 `Err (netErrorText e)`（不恢复续延）。
 netErrorOpHR : {a : Type} -> (o : NetErrorOp) -> (resNetError o -> Result a) -> Result a
 netErrorOpHR op _ = case op of
   NetFail e => Err (netErrorText e)
 
+-- | 把网络失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `NetErrorOp`。
 export runNetError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n NetErrorOp r) a -> Eff r (Result a)
 runNetError n comp = handleCore NetErrorOp "net-error" n netErrorRet netErrorOpHR comp
 

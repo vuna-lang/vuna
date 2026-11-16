@@ -1,17 +1,6 @@
+-- | 非负整数。类型层是普通归纳族 `Zero` / `Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用）。算术语义：`plus` / `mult` 饱和到 max_int，`minus` 截断到 0（永不产生负数），`div` 向下取整，除零与 `Int` 的 `/` 一样在运行期失败。[Base.Nat.toInt] 是无损提升，[Base.Nat.fromInt] 有损（负数 clamp 成 0），需要区分时用 [Base.Nat.fromIntMaybe]。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化到同一组原语。
 module Base.Nat where
 
--- Base.Nat：非负整数。
---
--- 类型层仍是普通归纳族 `Zero`/`Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用），
--- 但 codegen 的运行时表示是 **OCaml int**：`Zero = 0`、`Succ n = n + 1`（饱和到
--- max_int = 4611686018427387903）。因此 Nat 没有变体分配，模式匹配降成整数比较。
---
--- 算术语义（与 `Vuna.Compiler.Intrinsics` 的 bi_nat* / Core.Eval 的 interp 实现一致）：
---   * `plus` / `mult` 饱和到 max_int；
---   * `minus` 截断到 0（不会产生负数）；
---   * `Num.div`（`/`）向下取整；除零与 Int `/` 同样在运行期 `Failure "division by zero"`。
--- `toInt` 是无损提升（运行时恒等）；`fromInt` 有损（负数 clamp 成 0），需要区分时用
--- `fromIntMaybe`。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化，直接走同一组原语。
 import Base.Bool
 import Base.Eq
 import Base.Int
@@ -22,9 +11,12 @@ import Base.Num
 import Base.Ord
 import Base.Show
 
--- | 非负整数（归纳族 `Zero` / `Succ`）。类型层是普通归纳族，供 Vec 索引、覆盖性与终止性复用；运行时表示是 OCaml int（`Zero = 0`、`Succ n = n + 1`，饱和到 max_int），没有变体分配。
+-- codegen：运行时表示是 OCaml int（`Zero = 0`、`Succ n = n + 1`，饱和到 max_int），没有变体分配，模式匹配降成整数比较。
+-- | 非负整数（归纳族 `Zero` / `Succ`）。类型层是普通归纳族，供 `Vec` 索引、覆盖性与终止性复用；构造子导出，可结构递归。
 export data Nat(..) : Type where
+  -- | 零。
   Zero : Nat
+  -- | 后继。
   Succ : Nat -> Nat
 
 -- | 加法，结果饱和到 max_int；`+` 在 Nat 上下文由精化器特化到同一原语。
@@ -69,9 +61,7 @@ instance Ord Nat where
   gt x y = toInt x > toInt y
   ge x y = toInt x >= toInt y
 
--- `Num` 实例，语义沿用 Nat 算术（`sub` 截断到 0、`div` 向下取整）。
--- 方法体写内建运算符，由精化器特化成 `natAdd` / `natSub` / `natMul` / `natDiv`；
--- `+` 是 `add` 的别名，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+-- 方法体写内建运算符，由精化器特化成 `natAdd` / `natSub` / `natMul` / `natDiv`（不自递归）。
 instance Num Nat where
   add x y = x + y
   sub x y = x - y

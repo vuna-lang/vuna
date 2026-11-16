@@ -1,8 +1,6 @@
--- | 列表类型与常用操作。
+-- | 列表类型与常用操作。`List(..)` 导出构造子（`Nil` / `Cons`，中缀别名 `::`），可直接模式匹配与结构递归；所有操作都是持久、不可变的，返回新列表而不修改入参。`Semigroup` / `Monoid` 以 `append` 为拼接、`[]` 为单位元；`Eq` / `Ord`（字典序）/ `Show` / `Hashable` / `Foldable` / `Traversable` / `Monad` 实例落在本模块。
 module Base.List where
 
--- Base.List：列表类型与常用操作。
--- `Bool` 的类型与构造子来自 Base.Bool；base 包不自动注入 Prelude，因此显式 import。
 import Base.Pair
 import Base.Maybe
 import Base.Nat
@@ -11,15 +9,12 @@ import Base.Foldable
 import Base.Monad
 import Base.Monoid
 import Base.Traversable
--- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import Base.Eq 既保证类存在，
--- 也让 split 产物有正确的单元依赖顺序（生成代码引用 Base.Eq.eq 投影）。
+-- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import 保证类存在与 split 单元顺序。
 import Base.Eq
 import Base.Hashable
--- `==` / `<=` 是 Eq / Ord 方法名的别名，base 模块不自动注入 Prelude，
--- 因此 take/drop/rangeFrom 的 `<=` 需要 Ord 方法名可见。
+-- `==` / `<=` 是 Eq / Ord 的方法名别名，base 模块不自动注入 Prelude，需要它们可见。
 import Base.Ord
--- `+` / `-` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
--- range 的算术需要它的声明进入 import 闭包。
+-- `+` / `-` 的 fixity 声明在 Base.Int；range 的算术需要它进入 import 闭包。
 import Base.Int
 import Base.Show
 import Base.Num
@@ -27,14 +22,14 @@ import Base.Num
 -- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
 infixr 5 :: = Cons
 
--- | 列表类型。
+-- | 单链表：`Nil` 为空，`Cons` 持有头 `a` 与尾 `List a`。构造子导出，`::` 是 `Cons` 的中缀别名（表达式与 pattern 通用）；长度与元素个数不受类型层约束。
 export data List a(..) : Type where
   -- | 空列表。
   Nil : List a
   -- | 非空列表：头 `a` 与尾 `List a`。
   Cons : a -> List a -> List a
 
--- | 拼接两个列表。
+-- | 拼接两个列表：复制 `xs` 的全部 cons 单元、共享 `ys`（代价 O(xs 的长度)）。
 export append : List a -> List a -> List a
 append [] ys = ys
 append (x :: xs) ys = x :: append xs ys
@@ -48,8 +43,8 @@ reverseOnto (x :: xs) acc = reverseOnto xs (x :: acc)
 export reverse : List a -> List a
 reverse xs = reverseOnto xs []
 
--- 度量是 Nat；实现内部用 Int 累加，末尾一次 natFromInt，避免逐元素 Nat 加法。
--- | 列表长度（`Nat`）。
+-- 度量是 Nat；内部用 Int 累加，末尾一次 `natFromInt`，避免逐元素 Nat 加法。
+-- | 列表长度（`Nat`，线性）。
 export length : List a -> Nat
 length xs = natFromInt (lengthInt xs)
 
@@ -78,10 +73,8 @@ export foldr : (a -> b -> b) -> b -> List a -> b
 foldr f acc [] = acc
 foldr f acc (x :: xs) = f x (foldr f acc xs)
 
--- 原来的 `append (f x) (concatMap f rest)` 在「每段都较长」时是 O(n²)
--- （每层 append 复制 f x）。所以用尾递归 accumulator：把每段逆序前插，最后整体 reverse，
--- 总代价 O(所有段长之和)。终止性仍是结构递归（rest）。
--- | 对每个元素执行返回列表的函数并拼接。
+-- 尾递归 accumulator + 末尾 reverse：每段只复制一次，总代价 O(所有段长之和)。
+-- | 对每个元素执行返回列表的函数并按序拼接。
 export concatMap : (a -> List b) -> List a -> List b
 concatMap f xs = concatMapGo f xs []
 
@@ -105,12 +98,9 @@ export lookupPair : String -> List (Pair String v) -> Maybe v
 lookupPair name [] = Nothing
 lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
 
--- 名字去重/包含判定（全部是字符串列表上的线性扫描）：保留结构递归吃 `rest` 的形状，
--- 调用点分布在预精化热路径，常数比建表更重要。
---
+-- 名字去重/包含判定都是字符串列表上的线性扫描：调用点分布在预精化热路径，
+-- 常数比建表更重要。
 -- | 保序字符串去重：重复的名字只保留**最后一次**出现（`[a, b, a]` → `[b, a]`）。
--- 实现与编译器各处的旧 `dedup` / `uniqNames` / `dedupNames` 逐字一致（先判 `x` 是否还在
--- `rest` 里，在就跳过），因此调用点的元素顺序/位置不变。
 export nubNames : List String -> List String
 nubNames [] = []
 nubNames (x :: rest) = if memName x rest then nubNames rest else x :: nubNames rest
@@ -145,14 +135,12 @@ export drop : Int -> List a -> List a
 drop n [] = []
 drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
 
--- 升序写法 `i :: range (i + 1) n` 需要「有界计数器」规则才能证明终止性；
--- 这里对「剩余个数」倒计数（`k = n - i`，每次 `k - 1`，由 `k <= 0` 守卫），
--- 终止性由「守卫 Int」判据直接可证，语义相同（`i >= n` 时 `k <= 0` 返回空表）。
--- | 从 0 到 `to`（不含）的整数列表。
+-- 按「剩余个数」倒计数（`k = n - i`，`k <= 0` 守卫），终止性由「守卫 Int」判据直接可证。
+-- | 从 `from` 到 `to`（不含 `to`）的整数列表；`to <= from` 时为空。
 export range : Int -> Int -> List Int
 range i n = rangeFrom i (n - i)
 
--- | 从 `from` 到 `to`（不含 `to`）的整数列表。
+-- | 内部：从 `i` 开始、长度为 `k` 的整数列表；`k <= 0` 时为空。
 rangeFrom : Int -> Int -> List Int
 rangeFrom i k = if k <= 0 then [] else i :: rangeFrom (i + 1) (k - 1)
 
@@ -192,11 +180,7 @@ instance Applicative List where
   ap mf mx = concatMap (\g => map g mx) mf
   liftA2 f xs ys = concatMap (\a => map (\b => f a b) ys) xs
 
--- 容器 `Show` 实例。元素用 `show`（约束实例的 ctx 字典）；拼接只用 `++`
--- intrinsic——`strConcatMany` 等带 List 桥接的 intrinsic 在「声明 List 族的单元」里
--- 会触发 split 生成器的自依赖（bridgeUnit 固定为 List 单元），故避开。
--- `++` 无 fixity 声明时用反引号形式（List 不能 import Base.String，避免成环）。
--- | 内部：把已 `show` 的元素列表拼成 `[a, b, c]` 的正文（不含方括号，供 Show 实例使用）。
+-- | 内部：把已 `show` 的元素拼接成 `[a, b, c]` 的正文（不含方括号），供 `Show` 实例使用。
 showElems : List String -> String
 showElems [] = ""
 showElems (x :: rest) = x `++` (showElemsTail rest)
@@ -206,6 +190,8 @@ showElemsTail : List String -> String
 showElemsTail [] = ""
 showElemsTail (x :: rest) = ", " `++` x `++` (showElemsTail rest)
 
+-- 容器 `Show` 实例：元素逐个 `show`，拼接只用 `++` intrinsic（`strConcatMany` 会触发
+-- split 自依赖）；`List` 不能 import `Base.String`，故用反引号形式。
 instance Show a => Show (List a) where
   show xs = "[" `++` (showElems (map (\x => show x) xs)) `++` "]"
 

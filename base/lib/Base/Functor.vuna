@@ -1,10 +1,9 @@
+-- | `Functor` trait（`fmap`）：在容器或动作上映射函数而不改变结构。
+--
+-- 单独成模块是为了让 `Applicative` 能以 `Functor f =>` 声明父类约束；`Base.Monad` 重导出本模块，`import Base.Monad` 仍能看到 `fmap`。
 module Base.Functor where
 
--- Base.Functor：`Functor` trait（`fmap`）。
---
--- 单独成模块是为了让 `Applicative` 能以 `Functor f =>` 声明父类约束：
--- `Base.Monad` 重导出本模块，`import Base.Monad` 仍能看到 `fmap`。
--- 高阶 kind 支持见 `Functor f` 的 `f`。
 -- | 函子 trait：`fmap : (a -> b) -> f a -> f b`，负责在容器上映射而不改变结构。
 export trait Functor f(..) where
+  -- | 用 `f` 变换容器里的每个元素，容器结构（数量、顺序）不变。
   fmap : (a -> b) -> f a -> f b

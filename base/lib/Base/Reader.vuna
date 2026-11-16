@@ -1,12 +1,13 @@
+-- | 库级 Reader monad：表示是 `e -> a` 的纯函数，`do` 依赖本模块的 `Functor` / `Monad` 实例。
+--
+-- handler 是 `runReader`；`local` 在局部改写环境。
 module Base.Reader where
 
--- Base.Reader：库级 Reader monad（`Functor` / `Monad` 实例齐全，`do` 可用）。
---
--- 表示是 `e -> a` 的纯函数：handler 就是 `runReader`；`local` 在局部改写环境。
 import Base.Monad
 
--- | 库级 Reader monad：表示是 `e -> a` 的纯函数（构造器不导出）；用 `runReader` 运行，`do` 依赖 Functor / Monad 实例。
+-- | 库级 Reader monad：在只读环境 `e` 下求值得到 `a`（构造器不导出，用 `runReader` 运行）。
 export record Reader e a where
+  -- | 把环境 `e` 喂给该 Reader 得到结果。
   readerRun : e -> a
 
 -- | handler：把环境 `e` 喂给 Reader 得到结果。

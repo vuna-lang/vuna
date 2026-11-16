@@ -1,10 +1,9 @@
+-- | 一阶标准输入效应：标签 `StdinOp` 是命名实例，操作 `ReadLine`（读一行）与 `ReadBytes`（最多读 n 字节，n 是度量 → `Nat`）。
+--
+-- 两者在 EOF 时给 `Nothing`，不把 EOF 与空串混成一个值（空行是 `Just ""`）。真实 handler
+-- 直调 `@vuna@prim_eff_*`，EOF 由宿主状态槽区分。
 module Base.EffStdin where
 
--- Base.EffStdin：一阶标准输入效应。
---
--- 标签 `StdinOp` 是命名实例；操作 ReadLine（读一行）与 ReadBytes（最多读 n 字节，
--- n 是度量 → Nat）。两者在 EOF 时给 `Nothing`（无值），不把 EOF 与空串混成一个值。
--- 真实 handler 直调 `@vuna@prim_eff_*` 实现，EOF 由宿主状态槽区分。
 import Base.Eff
 import Base.Eq
 import Base.Maybe
@@ -13,7 +12,9 @@ import Base.Nat
 
 -- | 标准输入操作：`ReadLine` / `ReadBytes`（最多 n 字节）。
 export data StdinOp(..) : Type where
+  -- | 读一行。
   ReadLine : StdinOp
+  -- | 最多读 `n` 字节。
   ReadBytes : Nat -> StdinOp
 
 -- | 操作的结果类型族：两个操作都返回 `Maybe String`（`Nothing` = EOF）。
@@ -45,10 +46,10 @@ stdinOpHIO op k = case op of
     ok <- @vuna@prim_eff_hostStatus
     if ok == 1 then k Nothing else k (Just v)
 
--- | 宿主 handler：结果行删除 `StdinOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
+-- | 带 `StdinOp` 行的 op 解释：宿主原语读入后按状态槽区分 EOF，再写穿继续（answer 行是 `[StdinOp]`）。
 stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff (Cons "default" StdinOp []) a) -> Eff (Cons "default" StdinOp []) a
 stdinOpHIOHost op k = case op of
   ReadLine => do
@@ -60,8 +61,10 @@ stdinOpHIOHost op k = case op of
     ok <- raise @vuna@prim_eff_hostStatus
     if ok == 1 then k Nothing else k (Just v)
 
+-- | 带行的宿主 handler：删掉 `StdinOp`，answer 是 `Eff [StdinOp]`（不导出）。
 handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff (Cons "default" StdinOp []) a)
 handleStdinHostHost n comp = handleStdin n (\a => pure a) stdinOpHIOHost comp
 
+-- | entry 自动预装用（泛化 r）：把行头 `StdinOp` 的 send 翻译成宿主 intrinsic。
 runStdinHost : {r : Row} -> {a : Type} -> Eff (Cons "default" StdinOp r) a -> Eff (rowAppend r (Cons "default" StdinOp [])) a
 runStdinHost comp = joinEff (handleStdinHostHost "default" comp)

@@ -1,25 +1,17 @@
+-- | 模板字符串插值的转换 trait：模板里每个 `${e}` 由编译器降级为 `interp e`（纯语法糖）。
+--
+-- 转换语义完全由实例决定：blanket 实例 `Show a => Interp a` 让所有 `Show` 类型免费获得插值，默认输出 `show x`；`String` 的具体实例覆盖 blanket，原样输出（不走 `strShow`，不加引号、不转义）；用户可为自己类型写 `instance Interp T` 覆盖展示。
+--
+-- 覆盖规则依赖实例解析：blanket（头实参是裸类参数）是 fallback，具体实例优先；具体实例之间仍禁止重叠。
+--
+-- 刻意**不**提供 `deriving (Interp)`：需要默认展示用 `deriving (Show)`，需要自定义就手写 `instance Interp T`。
 module Base.Interp where
 
--- Base.Interp：模板字符串插值的转换 trait。
---
--- 模板里每个 `${e}` 由编译器降级为 `Base.Interp.interp e`（纯语法糖，见
--- docs/reference/templates.md）。转换语义完全由实例决定：
---
---   * blanket 实例 `Show a => Interp a`：任何实现了 `Show` 的类型免费获得插值，
---     默认输出 = `show`；
---   * `String` 的**具体实例**覆盖 blanket：插值原样输出（不走 `strShow`，不加引号）；
---   * 用户可为自己类型写 `instance Interp T` 覆盖 blanket 的展示。
---
--- 覆盖规则依赖编译器的实例解析：blanket（头实参是裸类参数）是 fallback，具体实例优先
--- （见 docs/reference/records-traits.md）。具体实例之间仍禁止重叠。
---
--- 刻意**不**提供 `deriving (Interp)`：需要默认展示用 `deriving (Show)`，需要自定义
--- 就手写 `instance Interp T`。
 import Base.Show
 
--- 插值的唯一方法：把值转成要拼进字符串的文本。
--- | 模板字符串插值的转换方法：模板里每个 `${e}` 由编译器降级为 `interp e`，返回要拼入字符串的文本。语义全部由实例决定——`Show a => Interp a` 是 blanket（默认输出 `show x`），`String` 的具体实例覆盖 blanket 原样输出，用户可为自定义类型写具体实例覆盖展示；blanket 只作 fallback，具体实例优先。
+-- | 模板字符串插值的转换方法：把值转成要拼进字符串的文本，语义由实例决定。
 export trait Interp a(..) where
+  -- | 把一个值渲染成可拼入模板的文本。
   interp : a -> String
 
 -- blanket：`Show a` ⇒ 免费插值（默认 = show）。

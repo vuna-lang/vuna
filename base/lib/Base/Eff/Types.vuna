@@ -1,12 +1,9 @@
+-- | `Base.Eff` 的**类型面**选择性重导出（编译器与工具链共用）。
+--
+-- 为什么单独一个模块：`import Base.Eff` 会把 `Row.Nil` / `Row.Cons` 构造子也带进作用域，
+-- 与 `Base.List` 的 `Nil` / `Cons` 在列表表达式（`x :: rest`）与列表字面量上产生
+-- `TC_AmbiguousCtor`。这里只导出动作类型、行类型、行成员约束与组合子，需要显式行构造
+-- （`Cons n Op r` / `Nil`）的代码仍导入 `Base.Eff`。
 module Base.Eff.Types where
 
--- Base.Eff.Types：`Base.Eff` 的**类型面**选择性重导出（编译器与工具链共用）。
---
--- 为什么单独一个模块：`import Base.Eff` 会把 `Row.Nil` / `Row.Cons` 构造子也带进
--- 作用域，与 `Base.List` 的 `Nil` / `Cons` 在列表表达式（`x :: rest`）与列表字面量上
--- 产生 `TC_AmbiguousCtor`。工具链只需要动作类型、行类型、行成员约束与组合子，
--- 不需要行构造子；统一从这里导入。
---
--- 需要显式行构造 `Cons n Op r` / `Nil` 的代码（测试夹具、base 的宿主 handler）仍导入
--- `Base.Eff`。
 export import Base.Eff (Eff, Row, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow, raise, raiseTo, sendCore, performCore, handleCore, handleCoreLin, Cont, resumeCont, ResFn, resFn, resOf, handleWith, handleWithAt, mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter)

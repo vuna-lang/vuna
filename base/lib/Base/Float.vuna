@@ -1,14 +1,6 @@
+-- | `Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。运行时表示是 OCaml IEEE-754 double（编译器内建，没有 data 声明）。本模块随 `Prelude` 自动导出：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import（显式 import 仍允许）。代价是 Prelude 闭包包含本模块，所有程序生成的运行时都会带浮点 helper；`main` 不含浮点的纯程序在 `vuna interp` 下不受影响，细节见 docs/reference/floats.md。
 module Base.Float where
 
--- Base.Float：`Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。
---
--- 运行时表示是 OCaml IEEE-754 double（编译器内建；没有 data 声明）。本模块**随
--- `Prelude` 自动导出**：`FromFloat`、转换 helper 与
--- `Eq` / `Ord` / `Show Float` 实例都不需要显式 import（显式 import 仍允许）。
---
--- 代价：Prelude 闭包包含本模块，`Codegen.Split` 按全部定义扫描浮点用法，因此所有
--- 程序的 `Vuna_runtime.ml` 都会带浮点 helper；`Driver/Dt.programUsesFloat` 仍按 main
--- 可达性判定，纯程序的 `vuna interp` 不受影响。细节与 interp 限制见 docs/reference/floats.md。
 import Base.Eq
 import Base.List
 import Base.Maybe
@@ -22,6 +14,7 @@ import Base.String
 -- | 把 `Float` 字面量转换为 `a`：期望类型为 `a` 且存在本实例时，`1.5` 等价于
 -- `fromFloat 1.5`（与 `FromString` / `FromInt` 同一套 checking 位置降级规则）。
 export trait FromFloat a(..) where
+  -- | 把 `Float` 转成 `a`。
   fromFloat : Float -> a
 
 -- `Float` 是字面量的默认类型：恒等转换。
@@ -38,16 +31,14 @@ instance Ord Float where
   gt x y = x > y
   ge x y = x >= y
 
--- `Num` 实例。方法体写内建运算符，由精化器特化成 `bi_*_float`；
--- `+` 是 `add` 的别名，特化认 `Base.Num` 方法投影，仍然走原语（不自递归）。
+-- 方法体写内建运算符，由精化器特化成 `bi_*_float`（`+` 是 `add` 别名，不自递归）。
 instance Num Float where
   add x y = x + y
   sub x y = x - y
   mul x y = x * y
   div x y = x / y
 
--- `strFromFloat` 在编译期被 Lowering 落成 `floatRender`（与 `%.12g` 对齐）；interp 直接
--- 用内建归约，不展开 `floatRender` 的大体量定义。
+-- `strFromFloat` 在编译期落成 `floatRender`（与 `%.12g` 对齐）；interp 直接用内建归约。
 instance Show Float where
   show x = strFromFloat x
 
@@ -70,8 +61,8 @@ floatToInt = intFromFloat
 -- ---------------------------------------------------------------
 -- 展示（`%.12g`）
 -- ---------------------------------------------------------------
--- 只用 Float / Int 运算与 String 拼接实现；`Show Float` 与 `main : Float` 入口在三个
--- 后端共用这一份代码，语义与 OCaml `string_of_float` 逐字一致。
+-- 只用 Float / Int 运算与 String 拼接；`Show Float` 与 `main : Float` 入口在三个后端共用这一份代码。
+-- | 内部：规格化的单步——`m >= 10` 时除以 10、`m < 1` 时乘以 10，指数同步 ±1；第一个参数是 `Pair 指数 尾数`。
 normStep : Pair Int Float -> Int -> Pair Int Float
 normStep p _ =
   let
@@ -79,6 +70,7 @@ normStep p _ =
     m = secondOf p
   in if m >= 10.0 then Pair (e + 1) (m / 10.0) else if m < 1.0 then Pair (e - 1) (m * 10.0) else p
 
+-- | 内部：取尾数的整数位作为一个数字，把余数乘 10 交给下一位；状态是 `Pair 尾数 已取数字`。
 digStep : Pair Float (List Int) -> Int -> Pair Float (List Int)
 digStep p _ =
   let
@@ -87,7 +79,7 @@ digStep p _ =
     d = floatToInt m
   in Pair ((m - intToFloat d) * 10.0) (append ds [d])
 
--- | 逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
+-- | 内部：逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
 carryRev : List Int -> Maybe (List Int)
 carryRev [] = Nothing
 carryRev (d :: rest) = if d == 9 then case carryRev rest of
@@ -95,26 +87,31 @@ carryRev (d :: rest) = if d == 9 then case carryRev rest of
   Just r => Just (0 :: r)
 else Just (d + 1 :: rest)
 
--- | 去掉逆序数字串的前导零。
+-- | 内部：去掉逆序数字串的前导零。
 trimZerosRev : List Int -> List Int
 trimZerosRev [] = []
 trimZerosRev (d :: rest) = if d == 0 then trimZerosRev rest else d :: rest
 
+-- | 内部：去掉正序数字串尾部的零；全零时保留单个 `0`。
 trimZeros : List Int -> List Int
 trimZeros ds = case reverse (trimZerosRev (reverse ds)) of
   [] => [0]
   r => r
 
+-- | 内部：数字串长度。
 dsLen : List Int -> Int
 dsLen [] = 0
 dsLen (_ :: rest) = 1 + dsLen rest
 
+-- | 内部：把每个数字转成字符并拼接（仅用于 0..9）。
 digitsText : List Int -> String
 digitsText ds = foldl (\acc => \d => acc ++ strFromInt d) "" ds
 
+-- | 内部：`n` 个 `0` 的文本；`n <= 0` 时为空。
 zerosText : Int -> String
 zerosText n = digitsText (map (\_ => 0) (range 0 n))
 
+-- | 内部：科学计数法的指数后缀（`e+05` / `e-05`，指数至少两位）。
 expSuffix : Int -> String
 expSuffix e =
   let
@@ -122,12 +119,14 @@ expSuffix e =
     sign = if e < 0 then "-" else "+"
   in sign ++ (if n < 10 then "0" ++ strFromInt n else strFromInt n)
 
+-- | 内部：科学计数法正文 `d.ddde±xx`（只有一位整数位；空数字串退化为 `0e+00`）。
 expForm : Int -> List Int -> String
 expForm e (d :: rest) = case rest of
   [] => strFromInt d ++ "e" ++ expSuffix e
   _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
 expForm e [] = "0e+00"
 
+-- | 内部：定点正文（按指数决定小数点位置，缺位补零、多余位截断；负指数时整数部分为 `0`）。
 fixedForm : Int -> List Int -> String
 fixedForm e ds = if e >= 0 then
   let
@@ -137,7 +136,7 @@ fixedForm e ds = if e >= 0 then
   else digitsText (take intLen ds) ++ "." ++ digitsText (drop intLen ds)
 else "0." ++ zerosText (0 - e - 1) ++ digitsText ds
 
--- | `Float` 的规范展示文本。
+-- | `Float` 的规范展示文本：与 `%.12g` 对齐（12 位有效数字，指数 `e < -4` 或 `e >= 12` 时用科学计数法）；`nan` / `inf` / `-inf` / `-0.` 特判。
 export floatRender : Float -> String
 floatRender x = if x /= x then "nan"
 else

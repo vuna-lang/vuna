@@ -1,23 +1,18 @@
+-- | 通用哈希 trait：`hash : a -> Int`，是 `HashMap` / `HashSet` 这类泛型哈希容器的键约束。
+--
+-- 约定：`eq x y` 为真时必须 `hash x == hash y`，否则相等的键会散到不同桶。`hash` 可返回任意 `Int`，容器在内部归一化到 0..1023 桶（负数与 `min_int` 都安全）。
+--
+-- `hashStr` 是 `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式），也是公开给需要采样键的工具（`Debug` / `Index.Scan`）的入口；`hashCombine` 供复合键与 `deriving (Hashable)` 组合子哈希使用。
 module Base.Hashable where
 
--- Base.Hashable：通用哈希 trait（泛型哈希容器的键约束）。
---
--- `HashMap k v` / `HashSet a` 只要求键实现 `Eq` + `Hashable`；`hash` 返回任意 `Int`，
--- 容器在内部归一化到 0..1023 桶（负数与 `min_int` 都安全）。相等但 hash 不同的键
--- 不被发现——这是实例实现必须遵守的约定（与 `Eq` 一致）。
---
--- `hashStr` 是 `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式），也是
--- 公开给需要采样键的工具（`Debug` / `Index.Scan`）的入口；`hashCombine` 供复合键
--- 与 `deriving (Hashable)` 组合子哈希使用。
---
--- import `Base.Num` 是让 `hashCombine` 的内建算术 `a * 31 + b` 有效：它经
--- `*` / `+` 的 `Num` 方法别名，由精化器特化成 Int 原语；`+ - * /` 的 fixity 也由
--- `Base.Num` 提供。`Base.Num` 是叶模块（不 import 任何模块），因此不会形成
--- `Base.Hashable ↔ Base.Int` 的环：`String` / `Int` 等实例仍在各自类型模块。
+-- import `Base.Num` 让 `hashCombine` 的内建算术 `a * 31 + b` 有效：`*` / `+` 是 `Num` 方法别名，
+-- 由精化器特化成 Int 原语。`Base.Num` 是叶模块（不 import 任何模块），因此不会形成
+-- `Base.Hashable ↔ Base.Int` 的环，`String` / `Int` 等实例仍在各自类型模块。
 import Base.Num
 
 -- | 可哈希的 trait：`hash : a -> Int`。约定：`eq x y` 为真时必须 `hash x == hash y`。
 export trait Hashable a(..) where
+  -- | 值的哈希码；只要求满足「相等 ⇒ 同哈希」，分布质量影响容器性能。
   hash : a -> Int
 
 -- | `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式）；也供需要采样键的工具使用。

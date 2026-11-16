@@ -1,30 +1,13 @@
+-- | 字符串工具。长度以 UTF-8 字节计（`Nat`）；底层只使用字符串原语（`strUnpack` / `strPack` / `strLength` / `strConcatMany` / `strSubstring` / `++`，以及 `Hashable` 用的 `strHash`）与 [Base.List]。`split` 用显式 fuel 计步（上界 `2*len(text)+len(sep)+2`），使 `splitAcc` / `skipSep` 的互递归满足终止性检查；空分隔符退化为逐字符切分。`Eq` / `Ord` / `Hashable` / `Semigroup` / `Monoid` 实例落在本模块。
 module Base.String where
 
--- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
--- `Bool` 的类型与构造子来自 Base.Bool；base 包不自动注入 Prelude，因此显式 import。
---
--- split 用显式 fuel 计步：`splitAcc` 每次只吃一个字符，
--- 匹配到分隔符后交给 `skipSep` 逐个跳过；两段都带同一个 fuel 参数并每步 `fuel - 1`
--- （`fuel <= 0` 守卫），终止性由「守卫 Int」判据证明（跨函数互调用已纳入 SCC 检查，
--- 见 docs/reference/type-system.md 的「定义与终止性」一节）。
---
--- **上界证明**（`fuel = 2*len(text) + len(sep) + 2` 永不耗尽）：
---   * 一次 splitAcc 调用恰好消费 1 个字符（`c :: rest`），最后一次（`chars = []`）不消费；
---     沿一条求值路径 splitAcc 至多被调用 len(text)+1 次 ⇒ 至多 len(text)+1 步；
---   * 每次命中分隔符时 skipSep 被调用一次，它消费恰好 len(sep) 个字符、至多递减
---     len(sep) 步；skipSep 消费的字符都属于 text、且都被匹配掉，故所有 skipSep 步数之和
---     ≤ len(text)；
---   * 沿路径总步数 ≤ (len(text)+1) + len(text) = 2*len(text)+1，加 `+1` 兜住末次入口，
---     再加 len(sep)+1 的余量 ⇒ 2*len(text)+len(sep)+2 严格大于上界。
---   空 sep 走单独分支（不消耗 fuel），不受影响；分离器长度不进入逐字符循环的计数。
 import Base.List
 import Base.Bool
 -- `String` 是 primitive 类型，Eq / Ord 实例跟类型模块走（落点规则见 Base/Eq.vuna）。
 import Base.Eq
 import Base.Hashable
 import Base.Ord
--- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；base 模块不自动注入 Prelude，
--- 本模块的算术运算符需要它的声明进入 import 闭包。
+-- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；本模块的算术运算符需要它进入闭包。
 import Base.Int
 import Base.Nat
 -- 模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
@@ -35,7 +18,6 @@ import Base.Num
 -- `++` 的 fixity 声明（字符串拼接是内建值）。
 infixr 5 ++
 
--- 字节长度（UTF-8 字节数）是度量 → Nat；strLength 仍是低层 Int 原语。
 -- | UTF-8 字节长度（度量是 `Nat`；底层 `strLength` 仍是 Int 原语）。
 export byteLength : String -> Nat
 byteLength s = natFromInt (strLength s)
@@ -66,8 +48,7 @@ skipSep sep (chars@(c :: rest)) fuel n acc parts =
 export join : String -> List String -> String
 join sep xs = strConcatMany (_interleave sep xs)
 
--- `join` 用一次 `strConcatMany`（runtime `String.concat ""`，单遍分配）：逐段拼接
--- （`x ++ sep ++ join sep rest`）的总拷贝是 O(n²)。
+-- | 内部：把 `sep` 插到相邻元素之间，结果交给一次 `strConcatMany`。
 _interleave : String -> List String -> List String
 _interleave sep [] = []
 _interleave sep ([x]) = [x]
@@ -111,38 +92,38 @@ endsWith suffix text =
     lt = strLength text
   in if ls > lt then False else _startsWithChars (strUnpack suffix) (drop (lt - ls) (strUnpack text))
 
--- `repeat` 用一次 `strConcatMany`；逐段拼接（`s ++ repeat (n-1) s`）是 O(n²) 拷贝。
 -- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 export repeat : Nat -> String -> String
 repeat n s = strConcatMany (map (\_ => s) (range 0 (natToInt n)))
 
--- `substring` 直接用 `strSubstring` 原语（runtime `String.sub` + clamp），
--- 不走 `strUnpack`/`take`/`drop`/`strPack` 的 List 桥接。
 -- | 取子串 `(start, len)`；越界由 `strSubstring` 原语 clamp，不走 List 桥接。
 export substring : Nat -> Nat -> String -> String
 substring start len s = strSubstring (natToInt start) (natToInt len) s
 
+-- | 内部：空格 / `\t` / `\n` / `\r` 的字节判定。
 _isSpace : Int -> Bool
 _isSpace c = c == 32 || c == 9 || c == 10 || c == 13
 
+-- | 内部：去掉字符列表左侧的空白。
 _dropSpace : List Int -> List Int
 _dropSpace [] = []
 _dropSpace (c :: rest) = if _isSpace c then _dropSpace rest else c :: rest
 
+-- | 内部：字符列表版本的前缀判定。
 _startsWithChars : List Int -> List Int -> Bool
 _startsWithChars [] text = True
 _startsWithChars (p :: prest) text = case text of
   [] => False
   t :: trest => p == t && _startsWithChars prest trest
 
+-- | 内部：字符列表版本的子串判定（逐位置试前缀）。
 _containsChars : List Int -> List Int -> Bool
 _containsChars needle text = if _startsWithChars needle text then True
 else case text of
   [] => False
   c :: rest => _containsChars needle rest
 
--- primitive 没有构造子，实例实现走编译器内建特化（`bi_eq_str` / 泛型比较运行时），
--- 不会自递归。
+-- primitive 没有构造子：实例体写内建运算符，由编译器特化，不会自递归。
 instance Eq String where
   eq x y = x == y
   neq x y = x /= y

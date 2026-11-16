@@ -1,14 +1,11 @@
+-- | 一阶文件系统效应（宿主-backed 的完整 fs 面）：标签 `FsOp` 是命名实例，`n` 是 String 实例名，与 Console / Clock / Env / Process 一致。
+--
+-- 操作是描述；真实 handler 直调 `@vuna@host@try*` 原语实现语义。带行 handler 的 answer 是
+-- `Eff [FsErrorOp] a`，由 `runFsHost` 用 `joinEff` 把失败收口行接到行尾。
+-- 同一程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实宿主 handler，或用两个
+-- mock 实例做对照；行条目按实例名区分，所有操作与 handler 都显式带实例名。
 module Base.EffFs where
 
--- Base.EffFs：一阶文件系统效应（宿主-backed 的完整 fs 面）。
---
--- 操作是描述；真实 handler 直调 `@vuna@prim_eff_*` 原语实现语义。answer 是 `Eff [] a`，
--- 由 `joinEff` 展平（见 Base.Eff）。`handleFsHost` 是可直接 `joinEff` 展平的宿主 handler。
---
--- `Fs` 是**命名实例**（`FsOp`，n 是 String 实例名，与 Console/Clock/Env/Process 一致）。
--- 同一个程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实宿主 handler
--- （`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
--- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
 import Base.Eq
 import Base.Maybe
@@ -20,18 +17,28 @@ import Base.Result
 
 -- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
 export data FsOp(..) : Type where
+  -- | 读整个文件。
   ReadFile : String -> FsOp
+  -- | 把整串写入文件。
   WriteFile : String -> String -> FsOp
+  -- | 原子写：写临时文件后 rename。
   WriteFileAtomic : String -> String -> FsOp
+  -- | 列目录（真实 handler 按字符串排序）。
   ReadDir : String -> FsOp
+  -- | 判断路径是否目录。
   IsDirectory : String -> FsOp
+  -- | 建目录（幂等）。
   MakeDir : String -> FsOp
+  -- | 删文件（幂等）。
   RemoveFile : String -> FsOp
+  -- | 判断路径是否存在（不抛异常）。
   FileExists : String -> FsOp
+  -- | 取 mtime（秒级；取不到给 `Nothing`）。
   FileMtime : String -> FsOp
+  -- | 取文件字节数（取不到给 `Nothing`）。
   FileSize : String -> FsOp
 
--- | 操作的结果类型族：读文件 `String`、读目录 `List String`、布尔查询 `Bool`，其余（写入 / 删除 / 元数据）返回 `Int`。
+-- | 操作的结果类型族：`ReadFile` → `String`，`ReadDir` → `List String`，`IsDirectory` / `FileExists` → `Bool`，`WriteFile` → `Nat`（写入字节数），`FileMtime` → `Maybe Int`、`FileSize` → `Maybe Nat`，其余（`WriteFileAtomic` / `MakeDir` / `RemoveFile`）→ `Int`。
 export resFs : FsOp -> Type
 resFs (ReadFile p) = String
 resFs (WriteFile p s) = Nat
@@ -67,6 +74,7 @@ export data FsError(..) : Type where
 
 -- | fs 错误效应：单操作 `FsFail`（abort，不恢复续延；`res` 只是占位）。
 export data FsErrorOp(..) : Type where
+  -- | 抛出 fs 失败。
   FsFail : FsError -> FsErrorOp
 
 -- | 结果族：`FsFail` 不恢复续延，返回类型任意（占位 `Int`）。
@@ -202,18 +210,20 @@ fsOpHIOHost op k = case op of
 handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "fs-error" FsErrorOp []) a)
 handleFsHostHost n comp = handleFs n (\a => pure a) fsOpHIOHost comp
 
--- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic。
+-- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic，并把失败收口行 `FsErrorOp` 接到行尾。
 runFsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" FsOp r) a -> Eff (rowAppend r (Cons "fs-error" FsErrorOp [])) a
 runFsHost comp = joinEff (handleFsHostHost "default" comp)
 
--- | 局部恢复：把 fs 失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+-- | 内部：`runFsError` 的成功侧 `ret`——值包装成 `Ok`。
 fsErrorRet : {a : Type} -> a -> Result a
 fsErrorRet a = Ok a
 
+-- | 内部：`runFsError` 的 op 解释——`FsFail e` 直接变 `Err (fsErrorText e)`（不恢复续延）。
 fsErrorOpHR : {a : Type} -> (o : FsErrorOp) -> (resFsError o -> Result a) -> Result a
 fsErrorOpHR op _ = case op of
   FsFail e => Err (fsErrorText e)
 
+-- | 把 fs 失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `FsErrorOp`。
 export runFsError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n FsErrorOp r) a -> Eff r (Result a)
 runFsError n comp = handleCore FsErrorOp "fs-error" n fsErrorRet fsErrorOpHR comp
 
