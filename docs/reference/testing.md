@@ -152,8 +152,9 @@ end:
 
 ### suite 的组成
 
-- 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_io 与 run/modules/
-  records/traits/monad/stdlib/lint/fix/term 等）。
+- 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_io/dt_compiler 与 run/modules/
+  records/traits/monad/stdlib/lint/fix/term 等）。`dt_compiler` 是编译器包 API 的函数级夹具
+  （mock handler + `runPure`，不碰真实文件系统），只跑 run。
 - 工具链/包/REPL/LSP/net/缓存/iface 段是 `test/suite/steps/*.steps` 声明式用例。
 - suite 入口只有 `vuna test --suite test/suite.toml`。
 

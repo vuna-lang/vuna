@@ -31,6 +31,13 @@ dir = "test/corpus/dt_base"
 check = true
 tags = ["dt", "base"]
 
+# 编译器包 API 的函数级夹具（mock handler + runPure 断言；只跑 run）。
+[family.dt_compiler]
+section = "34"
+dir = "test/corpus/compiler"
+check = true
+tags = ["dt", "compiler"]
+
 # 只做 compile + run（效果程序 / 不可归约内建）。
 [family.dt_io]
 section = "34"

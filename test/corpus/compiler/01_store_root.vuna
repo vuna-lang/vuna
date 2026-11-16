@@ -1,0 +1,30 @@
+-- `storeDataRootEff` 的回退表：候选按优先级排列，首个命中者胜出。
+-- `HOME` 为空或是 Nix 构建沙箱的 `/homeless-shelter` 时不参与；空串一律算「无值」。
+-- 全部走 mock Env handler（runPure），不依赖真实环境变量与文件系统。
+import Prelude
+import Base.Eff
+import Base.EffEnv
+import Vuna.Compiler.Store
+
+mockOpH : List (Pair String String) -> (o : EnvOp) -> (Base.EffEnv.resEnv o -> String) -> String
+mockOpH table op k = case op of
+  GetEnv name => k (fromMaybe "" (lookupPair name table))
+  GetCwd => k "/mock/cwd"
+  ExecPath => k "/mock/exec"
+
+rootWith : List (Pair String String) -> String
+rootWith table = runPure (handleEnv "mock" (\s => s) (mockOpH table) (mockRoot "mock"))
+
+mockRoot : (n : String) -> Eff (Cons n EnvOp []) String
+mockRoot n = storeDataRootEff
+
+main : Int
+main =
+  (if rootWith [Pair "VUNA_STORE" "/override"] == "/override" then 1 else 0)
+    + (if rootWith [Pair "VUNA_STORE" "/override", Pair "XDG_DATA_HOME" "/xdg"] == "/override" then 1 else 0)
+    + (if rootWith [Pair "XDG_DATA_HOME" "/xdg"] == "/xdg/vuna/store" then 1 else 0)
+    + (if rootWith [Pair "HOME" "/home/u"] == "/home/u/.vuna/store" then 1 else 0)
+    + (if rootWith [Pair "HOME" "/homeless-shelter"] == "/tmp/vuna-store" then 1 else 0)
+    + (if rootWith [Pair "HOME" "/homeless-shelter", Pair "TMPDIR" "/t"] == "/t/vuna-store" then 1 else 0)
+    + (if rootWith [Pair "TMPDIR" "/t"] == "/t/vuna-store" then 1 else 0)
+    + (if rootWith [Pair "VUNA_STORE" "", Pair "XDG_DATA_HOME" ""] == "/tmp/vuna-store" then 1 else 0)

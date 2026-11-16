@@ -35,6 +35,7 @@ module Vuna.Compiler.Store where
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.List
+import Base.Maybe
 import Base.String
 import Base.EffClock
 import Base.EffEnv
@@ -160,24 +161,35 @@ storeDecodeFast tag codec raw = case frameSplit raw of
   Nothing => Nothing
   Just p => if headerOk tag codec (firstOf p) (secondOf p) then Just (secondOf p) else Nothing
 
--- | 存储根（唯一根：对象库 + 视图 + roots）：`VUNA_STORE` → `$XDG_DATA_HOME/vuna/store`
--- → `~/.vuna/store` → `$TMPDIR/vuna-store` → `/tmp/vuna-store`。
---
--- `HOME` 为空或是 `/homeless-shelter`（Nix 构建沙箱）时**不能**用它：那条路径不可写，
--- 会让构建在第一次写对象时崩掉。沙箱内回落到 `$TMPDIR`（构建期缓存，天然可弃）。
+-- | 存储根（唯一根：对象库 + 视图 + roots）。候选按优先级排列，首个命中者胜出：
+-- `VUNA_STORE` → `$XDG_DATA_HOME/vuna/store` → `~/.vuna/store` → `$TMPDIR/vuna-store`
+-- → `/tmp/vuna-store`。
 export storeDataRootEff : Member nEnv EnvOp r => Eff r String
-storeDataRootEff = do
-  override <- envGetEnv "VUNA_STORE"
-  if override /= "" then pure override
-  else do
-    xdg <- envGetEnv "XDG_DATA_HOME"
-    if xdg /= "" then pure "${xdg}/vuna/store"
-    else do
-      home <- envGetEnv "HOME"
-      if home /= "" && home /= "/homeless-shelter" then pure "${home}/.vuna/store"
-      else do
-        tmp <- envGetEnv "TMPDIR"
-        pure (if tmp == "" then "/tmp/vuna-store" else "${tmp}/vuna-store")
+storeDataRootEff =
+  let
+    override = envGetEnvNonEmpty "VUNA_STORE"
+    xdg = fmap (dirUnder "vuna/store") (envGetEnvNonEmpty "XDG_DATA_HOME")
+  in do
+    found <- firstSuccess [override, xdg, homeStoreRootEff]
+    maybe tmpStoreRootEff pure found
+
+-- | 在非空基址下拼固定子路径；没有基址（`Nothing`）仍给 `Nothing`。
+dirUnder : String -> Maybe String -> Maybe String
+dirUnder sub (Just base) = Just "${base}/${sub}"
+dirUnder sub Nothing = Nothing
+
+-- | `HOME` 可用（非空、且不是 Nix 构建沙箱的 `/homeless-shelter`）时的存储根。
+-- 沙箱里那条路径不可写，会让构建在第一次写对象时崩掉，所以这里直接不给候选。
+homeStoreRootEff : Member nEnv EnvOp r => Eff r (Maybe String)
+homeStoreRootEff = do
+  home <- envGetEnv "HOME"
+  pure (if home /= "" && home /= "/homeless-shelter" then Just "${home}/.vuna/store" else Nothing)
+
+-- | `$TMPDIR` 下的可弃存储根；沙箱构建期的兜底，也是 `storeDataRootEff` 的最后一级。
+tmpStoreRootEff : Member nEnv EnvOp r => Eff r String
+tmpStoreRootEff = do
+  found <- fmap (dirUnder "vuna-store") (envGetEnvNonEmpty "TMPDIR")
+  pure (fromMaybe "/tmp/vuna-store" found)
 
 -- | 缓存根 = **对象库根**：包对象、header、lex、split/unit 与 roots
 -- 都在 `$VUNA_STORE` 下，GC 与 roots 只有唯一口径。
@@ -309,11 +321,6 @@ storeDropPastSlash (c :: rest) = if c == 47 then rest else storeDropPastSlash re
 export storeRootEff : Member nEnv EnvOp r => Eff r String
 storeRootEff = storeDataRootEff
 
-fallbackRootEff : Member nEnv EnvOp r => Eff r String
-fallbackRootEff = do
-  tmp <- envGetEnv "TMPDIR"
-  pure (if tmp == "" then "/tmp/vuna-store" else "${tmp}/vuna-store")
-
 -- | 解析并**确保可用**的存储根（先 `isDirectory`，再 `mkdir -p`，最后回落 `$TMPDIR`）。
 export storeRootReadyEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
 storeRootReadyEff = do
@@ -321,7 +328,7 @@ storeRootReadyEff = do
   ok <- dirReady primary
   if ok then pure primary
   else do
-    alt <- fallbackRootEff
+    alt <- tmpStoreRootEff
     ok2 <- dirReady alt
     if ok2 then pure alt else pure alt
 
