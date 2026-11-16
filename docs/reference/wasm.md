@@ -1,24 +1,28 @@
 # wasm 后端
 
-> 状态：**端到端工作**（`main` 为 Int / Nat / String / Bool；支持 `let` / `if` /
-> 顶层饱和调用 / 立即 lambda 应用 / Nat 结构递归 / `++` 链 / 内建饱和应用 / 入口打印 /
-> 六种位运算 / `assert` / `todo` / `prim_fail` / `dbg!` 原语（与 native parity）；
-> 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
-> 族已接进 struct 表示，四个桥接符号（`strUnpack` / `strPack` / `strConcatMany` /
-> `strSubstTemplate`）已实现；闭包值（`$clo` + `elem declare`）与高阶应用已工作）。
-> `Float` 的算术/比较/转换/展示已工作；`main : Eff r a` 与 `IORef` 可用；handler
-> （`perform` / `handle`）用 stack switching 实现（泛型 tag + handler 循环，见
-> [wasm-effects.md](wasm-effects.md)）；入口按 `irEntryHandlersOf` 预装宿主 handler。
-> 未实现的宿主叶子与 FFI 仍拒绝（`WasmUnsupported`）。实现入口：
-> `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
+> 状态：**端到端工作，并已支撑编译器自举**。wasm 版编译器能编译 `compiler` 包：
+> `vuna build compiler --target wasm --no-compile --out DIR` 产出的 `main.wat` 可被
+> `wasm-tools parse` 汇编；该二进制在仓库根（`--dir` 指向根）跑 `check compiler`（exit 0）、
+> `check . --error-format json`（整仓：根包 + compiler + base，诊断为空）均成功；
+> `build compiler --target ocaml --no-compile --out DIR2` 产出 154 个文件，与
+> OCaml 版编译器同参数产物逐字节一致（唯一差异是 `build-id`：包 identity 含依赖包
+> identity，依赖包 identity 继承构建它的编译器身份，不同构建器必然不同）。
+> 能力面：Int / Nat / String / Bool / Float；`let` / `if` / 用户 `data` / record /
+> 通用 `case`；饱和顶层调用、eta 展开与多参柯里化闭包（`$clo` +
+> `(elem declare func ...)`，应用逐实参 `call $rt_apply`）；内建饱和应用；结构化比较
+> `bi_lt/le/gt/ge_generic`（`$rt_compare`）；`main : Eff r a` 与 handler（stack
+> switching，见 [wasm-effects.md](wasm-effects.md)）；WASI preview1 宿主层
+> （fs / env / args / clock）。未实现的宿主操作在运行期显式失败（不伪造结果）；
+> 符号表外的原语（extern、网络等）在引用点拒绝。
+> 实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
 ## 1. 产物与工具链
 
 - **canonical 产物是 WAT 文本**（`main.wat`）；`.wasm` 不手写、不进 Git，由
   `wasm-tools parse main.wat -o main.wasm` 生成（版本由 Nix 固定）。
-- `vuna compile <PKG> <OUT> --target wasm` → `<OUT>/main.wat`。
-- `vuna build <PKG> --target wasm --out <OUT>`：写 `<OUT>/main.wat` + `<OUT>/build.sh`，
+- `vuna compile <ENTRY|PKG-DIR> <OUT> --target wasm` → `<OUT>/main.wat`。
+- `vuna build <PKG-DIR> --target wasm --out <OUT>`：写 `<OUT>/main.wat` + `<OUT>/build.sh`，
   并直接调用 `wasm-tools parse` 产出 `<OUT>/main.wasm`（工具缺失/失败即 exit 1，
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
@@ -27,8 +31,22 @@
   stack-switching 运行时函数，统一用
   `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`。
   handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
-  调用栈；默认 `max-wasm-stack`（512K）够 2000 次 perform，实际上限由被处理计算自己的
-  递归深度决定。
+  调用栈。
+- **栈要按编译器级输入配**：默认 `max-wasm-stack`（512 KiB）对编译器级输入不够，
+  长列表上会以 `call stack exhausted` 失败。编译器在长列表上
+  会用到**非尾递归**辅助函数（`map` / `append` / `Bytes.lenOf` 这类 `1 + f rest` 形状），
+  栈深与输入规模成正比。口径是「与 OCaml 默认 8 MiB 栈同量级」：在仓库根跑
+  `check <绝对路径>/compiler` 在 `-W max-wasm-stack=8388608` 下完成；整仓
+  `check <绝对路径> --error-format json` 在 32 MiB 下完成，故跑编译器产物推荐
+  ```console
+  wasmtime run -W max-wasm-stack=33554432 -W stack-switching=y -W gc=y \
+    -W function-references=y --dir / main.wasm ARGS...
+  ```
+  词法主循环（`Lexer.lexChars` / `lexCharsWith`）是尾递归（逆序累积 + 一次 reverse），
+  不按 token 数吃栈；effect 次数也不吃栈，剩余上限由被处理计算自身的递归深度决定。
+- 产物把预打开目录的 **fd 3** 当作根（见 §5），因此需要文件系统的运行要带
+  `--dir <root>`；多个 `--dir` 时只用第一个。路径按 fd 3 解析而**不按 `PWD`**，
+  所以给编译器传包路径时用绝对路径（相对路径会被当成相对 fd 3 的根）。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
   `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
 
@@ -45,18 +63,27 @@
 | 变体 / record | `(struct (field i32 tag) (field anyref ...))` / 纯字段 struct |
 | 闭包 | `(struct (field (ref $ft)) (field anyref env))`，`$ft = (func anyref anyref (result anyref))`；多参 lambda 创建时柯里化 |
 
+零参 `IrLam []` 不构造闭包：直接在该引用点内联求值。捕获是创建时把当前作用域里的
+binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$rt_apply` 逐个实参进行。
+
 ## 3. 模块布局（稳定 diff）
 
 - 名字稳定：`$t_<watName family>`、`$f_<watName>`、`$g_<watName>`、`$d_<N>`，
-  由 Vuna 全限定名派生，**不按位置编号**；`$d_` 只用于数据段；运行时函数 `$rt_*`。
-- 固定顺序：types（基础类型 → 按声明序的族）→ imports → memory → globals
-  （按定义序，**只含零参定义**）→ functions（Runtime → 用户函数（定义序）→ `_start`）
-  → elements → data → exports。
+  由 Vuna 全限定名派生，**不按位置编号**；`$d_` 只用于数据段；运行时函数 `$rt_*`；
+  闭包函数 `$lam<n>`（模块内单调递增）。
+- 固定顺序：types（基础类型 → 按声明序的族）→ tags（泛型 `$eff`）→ imports
+  （WASI preview1）→ memory（4 页 = 256 KiB，导出 `memory`）→ globals
+  （`$g_cleanups` / `$g_hostStatus` → 零参定义（定义序））→ functions（Runtime →
+  `$rt_compare` 与字符串/数组比较 → List 桥接 → 用户函数（定义序）→ `$lam<n>` →
+  `_start`）→ elements → data → exports。
+- elements 是 `(elem declare func ...)`：闭包函数按创建顺序，末尾固定追加
+  `$rt_effThunk` / `$rt_effResumeClo`（两者都被 `ref.func` 引用）。
 - 缩进固定 2 空格、一条指令一行；行宽上限 100 列，超长字符串按 24 字节分块
   为相邻字面量。
 - 同一 IR 的 WAT 字节确定；`.wasm` 只保证行为（字节依赖工具版本，由 Nix 固定）。
-- 局部变量编号只在**函数内**递增（`$l<n>`）；每个函数生成前局部表清零，
-  结束后恢复外层状态。
+- 局部变量编号只在**函数内**递增（`$l<n>`）；每个函数生成前局部表清零
+  （`beginFuncScope`），结束后恢复外层状态。参数是 `$p<n>`，`case` 的 scrutinee
+  槽是 `$sc0`。
 
 ## 4. IR 支持面
 
@@ -66,25 +93,27 @@
 | IR 节点 | 当前 | 说明 |
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` / `IrStr` | 支持 | 字符串字面量进 `$d0` 池，空串走 `array.new_default` |
-| `IrGlobal` | 支持（零参引用） | arity > 0 当值引用 → 拒绝（函数值） |
+| `IrGlobal` | 支持 | arity 0 读全局；arity > 0 作值引用时 eta 展开成柯里化闭包 |
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝 |
-| `IrIf` | 支持 | 条件 `ref.cast i31` + `i31.get_u`；两臂局部表合并 |
-| `IrApp` | 支持饱和顶层调用、单参立即 lambda 应用 | 后者覆盖 `let` 的脱糖；部分应用/高阶/函数值拒绝 |
-| `IrLam` | 支持 | 作为值 → `$clo`（code + 捕获 env）；多参 lambda 创建时柯里化为嵌套单参闭包；应用逐实参 `call $rt_apply` |
+| `IrIf` | 支持 | 条件 `ref.cast i31` + `i31.get_u`；两臂**顺序**生成，合并局部表 / 闭包函数 / elem 表（见 §6） |
+| `IrApp` | 支持 | 饱和顶层调用；部分应用、高阶与函数值走闭包（逐实参 `call $rt_apply`）；立即单参 lambda 应用走直接 `local.set` 快路径 |
+| `IrLam` | 支持 | 作为值 → `$clo`（code + 捕获 env）；多参 lambda 创建时柯里化为嵌套单参闭包；零参 lambda 直接内联 |
 | `IrNatCase` | 支持 | `sc == 0` 二选一；succ binder = `sc - 1`（重新装箱），catch binder = `sc` |
-| `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路在 Lowering 已降成 `IrIf` |
+| `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`\|\|` 短路在 Lowering 已降成 `IrIf` |
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
-| `IrRt` | 仅 `@ir@natSucc`（调用 head）与入口 show | 其它 → 拒绝（函数值） |
+| `IrRt` | 支持 | `RtValue` 直接内联；`RtFunc` 作值 eta 展开成闭包；符号表外的符号在引用点拒绝 |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Float.floatRender` |
 | Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
 | Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [wasm-effects.md](wasm-effects.md) |
-| extern / 其余宿主原语 | 拒绝 | 与 native 相同的限制面 |
+| `IrEffBind` | 拒绝 | effect 的 bind 降级；与 native 同一限制 |
+| extern / FFI | 拒绝 | `IrExternDef` 在生成期报 `WasmUnsupported` |
 
 - 入口：`main` 必须是零参值；`main : Eff r a` 支持——入口按 `irEntryHandlersOf`
-  预装宿主 handler（如 `runConsoleHost`），再用 `runMain` 执行后展示。入口 show 只接受
-  `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；`showFloat` 走
-  `Base.Float.floatRender`；其它自定义 Show 拒绝。`--no-print` 不打印，仍求值。
+  预装 base 内建效应的 `run*Host`（清单见 `Vuna.Compiler.Base.Intrinsics.builtinEffects`），
+  再用 `runMain` 执行后展示。入口 show 接受 `@ir@showInt` / `@ir@showNat` /
+  `@ir@showBool` / `@ir@showStr` / `@ir@showFloat`（Float 走
+  `Base.Float.floatRender`）；其它自定义 Show 在生成期拒绝。`--no-print` 不打印，仍求值。
 - **零参定义**在 `_start` 里按依赖序初始化进全局（每次引用读全局，不重算）；
   **饱和函数**（arity > 0）生成 `$f_<name>` 并被 `call`。
 
@@ -97,36 +126,58 @@
 | --- | --- |
 | Int | `+ - * /`（63-bit wrap；除零 → `$rt_failStr` + `unreachable`）、`bitAnd/Or/Xor/Not/Shl/Shr`、`bi_eq_int` / `bi_neq_int` / `bi_lt_int` / `bi_le_int` / `bi_gt_int` / `bi_ge_int`、`&&` / `\|\|` |
 | Nat | `@ir@natSucc`（饱和）、`natAdd` / `natSub` / `natMul` / `natDiv`（饱和与截断语义）、`natToInt`（恒等）/ `natFromInt`（负数钳 0） |
-| String | `++`（`array.copy`）、`strFromInt`、`strShow`（`"` 包裹，按 `dt_show_string` 转义引号/反斜杠/换行/制表/回车；两遍扫描先定长度）、`strLength`、`strAt`（越界 `-1`）、`strSubstring(start, len, s)`（钳位后复制）、`strHash`（`(h*33+byte)&1023`）、`bi_eq_str` / `bi_neq_str` |
+| String | `++`（`array.copy`）、`strFromInt`、`strShow`（`"` 包裹，按 `dt_show_string` 转义引号/反斜杠/换行/制表/回车；两遍扫描先定长度）、`strLength`、`strAt`（越界 `-1`）、`strSubstring(start, len, s)`（钳位后复制）、`strHash`（`(h*33+byte)&1023`）、`bi_eq_str` / `bi_neq_str`、List 桥接 `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` / `arrayFromList` / `arrayToList` |
+| 结构化比较 | `$rt_compare` 给三向 i32（`-1` / `0` / `1`），`bi_lt/le/gt/ge_generic` 包装成 Bool。分派按运行时类型：`i31` → `$int` → `$float` → `$str` → `$arr` → 用户族（声明序逐个 `ref.test`）；`null` 参与排序；分派末端与不可比的值对走 `$rt_cmpTrap`（`wasm host operation is not implemented` + exit 2），跨族的 `ref.cast` 也可能直接 trap |
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
-| 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on` / `@vuna@debug@line` 走常量折叠 |
+| 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`path_symlink`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
+| 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename` / `trySymlink`、`fileExists` / `fileMtime` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
+| 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on`（恒 `False`）/ `@vuna@debug@line`（桩）；obs 叶子桩（见下） |
 
 - **运行时错误报告**统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
   报告器 `dt_report_exn` 的第一行一致；`assert` / `todo` 分别加 `assertion failed: ` /
   `TODO: ` 前缀。`rt_failStr` 是唯一的失败出口（拼前缀后走 `rt_write`）。
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）：`bitShr` 按 OCaml `lsr` 语义
   （63-bit 值先 `shl`+`shr_u` 清掉符号扩展位，再逻辑右移）。
-- 浮点展示不是运行时符号，走 `Base.Float.floatRender`（三端共用）。
+- 浮点展示不是运行时符号，走 `Base.Float.floatRender`（三端共用）：Lowering 把
+  `strFromFloat` 改写成该定义，入口 `@ir@showFloat` 也直接调到它。
 - 浮点：`$rt_floatFromInt` / `$rt_intFromFloat`（`i64.trunc_f64_s`）/ `$rt_floatAbs` /
   `$rt_floatSqrt`，`$rt_floatAdd/Sub/Mul/Div` 与 `$rt_floatEq/Neq/Lt/Le/Gt/Ge`（`f64.*`）。
 - 值形态（`IrApp (IrRt sym) args`）覆盖 `strAt` / `strSubstring` / `assert` / `todo` /
   `prim_fail` / `arrayLength` / `arrayGet` / `arraySet` / `arrayMake`，以及需要 canonical
-  `List` 族的 `arrayFromList` / `arrayToList`；`@vuna@debug@on` 是 0 元值（`False`），
-  `@vuna@debug@line` 是 1 元桩。
+  `List` 族的 `arrayFromList` / `arrayToList` / `strUnpack` / `strPack` /
+  `strConcatMany` / `strSubstTemplate`。
 - 数组：`$rt_arrayLength` / `$rt_arrayGet` / `$rt_arraySet` / `$rt_arrayMake`；越界走
   `$rt_arrayOob`（`Invalid_argument("index out of bounds")` + exit 2）。
+- Console / Ref 的 `@vuna@prim_eff_*` 变体（`_print` / `_eprint` / `_exit` /
+  `_newRef` / `_readRef` / `_writeRef`）直连同一组实现：写 fd 1/2、`proc_exit`、
+  长度 1 的 `$arr`。
 
-**明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：
-`bi_lt_generic` 等结构化 `compare` 家族、`strFromFloat`（Float 展示）、
-`prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush/Pop`、Sched 家族、
-`prim_eff_*` 宿主层原语。
+**宿主层**：直接实现 WASI preview1，不引入自定义 host import。线性内存只有固定 scratch
+（iov、两条路径区、64 KiB 读写缓冲、`filestat`、4 KiB `readdir` 缓冲），GC 堆在引擎侧；
+预打开目录的 **fd 3** 是唯一的根，路径统一去掉开头的 `/`（WASI dirfd 形式）。写走
+`$rt_writeChunked`（每次 ≤64 KiB，stdout/stderr 大输出不受线性内存大小限制）；读按
+`filestat` 的 size 分块；`fd_readdir` 用 cookie 续读。WASI errno 映射成与 `dtp_hostCode`
+一致的 1..6 / 9，写进 `$g_hostStatus` 供 `@vuna@prim_eff_hostStatus` 读取。
+
+- **env / cwd / execPath / 时间**：`getenv` 一次 `environ_get` 进 scratch 后按 `KEY=`
+  前缀匹配；`getcwd` 读 `PWD`（空则 `"."`）；`execPath` 返回空串（WASI preview1 没有
+  可执行路径）；`sleep` 用 `clock_time_get` 轮询到目标微秒；`isTty` 恒 `False`。
+- **未实现的宿主操作**走 `$rt_hostTrap<n>`：运行期 `vuna: runtime error: wasm host
+  operation is not implemented` + exit 2，不返回伪造结果。直接调用多数
+  `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / `writeFileAtomic` /
+  `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `fileMtime` / `fileSize`）
+  是这条路径；base 的 `FsOp` handler 不走它们，而是走 `@vuna@host@try*`，属于可用路径。
+  `@vuna@prim_eff_readDir` / `getArgs` / `getenv` / `getcwd` / `execPath` / `sleep`
+  直连真实实现。
+
+**明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
+契约符号，例如 Sched 家族（`prim_sched*`）与网络宿主原语（`@vuna@host@tryNet*`）。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
-`log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回盒装
-`Int 0`，`counter` / `sampleStart` 是 2 元桩）；`@vuna@obs@span` 是高阶原语（吃
-`Int -> a` thunk），本后端没有闭包表示，故**编译期拒绝**（`WasmUnsupported`，不给假
-数据）。因此 wasm 产物上 `VUNA_OBS` 不生效。
-
+`log` / `counter` / `mark` / `spanBegin` / `spanEnd` / `sampleStart` / `sampleStop`
+是 **no-op 桩**（返回盒装 `Int 0`；`counter` / `spanBegin` / `sampleStart` 是 2 元桩）；
+`@vuna@obs@span` / `spanLab` 把最后一个 thunk 应用到 unit 后返回，不产生计时数据。
+叶子全是 no-op，因此 wasm 产物上 `VUNA_OBS` 不生效。
 
 ## 6. 实现约束
 
@@ -134,30 +185,70 @@
   `[layers]` 强制：`"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]`）；驱动只经
   `Driver.Dt.dtCheckWithProgramParts` + `Lowering.Program.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 只留形状与正向断言）。
-- `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件（`Member nFs FsOp r`
-  等行约束下的 `Eff r`，不再用全集行 `hostRow`）。
+- `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件，签名只要求
+  `Member nFs FsOp r` / `nEnv EnvOp r` / `nProcess ProcessOp r`，不用全集行。
 - 生成器带 fuel（`genExpr` 等），越界返回 `wasm codegen fuel exhausted`（内部错），不 panic。
 - 错误分类：`wasm target:` 前缀 = 能力限制（`WasmUnsupported`）；其余 = 生成器内部错
   （`WasmInternal`，前缀 `internal wasm backend error`）。
 - 任何新表都必须按定义序/固定顺序构造（禁止 HashMap 迭代），否则 WAT 不确定。
+- **`IrIf` 的两臂必须顺序生成**：else 臂从 then 臂生成后的 `GenState` 续跑
+  （`resumeArm` 只把作用域回到条件后的基线）。`gsNextLam` 与函数表单调累加，
+  `mergeArmState` 按名字取并集。若两臂都从条件后的状态起步，两臂各自的 lambda 会拿到
+  同一个 `$lamN`，后一臂的闭包函数在按名去重时被丢掉，else 臂的 `ref.func` 便指向 then
+  臂的函数体。回归夹具：`test/suite/steps/parity/49_if_branch_closures.vuna`
+  （期望 `11110`），由 `109_backend_parity` 对拍三端。
+- 闭包函数先插到 `gsFuncs` 头部、装配时 reverse；elem 名字同样 reverse 后追加固定的
+  `$rt_effThunk` / `$rt_effResumeClo`。`$lam<n>` 只由生成顺序决定且不复用，所以生成顺序
+  必须固定，WAT 才能逐字节确定。
 
 ## 7. 验证
 
 - `test/suite/steps/106_wasm_backend.steps`（section 90 / `steps_native`，e2e）：
   wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
-  WAT 确定性 + 每行 ≤100 列、除零与运行时错误文本、`--no-compile`、拒绝面、`--target`
-  取值校验；末尾的 stack-switching 探针验证 `cont`/`resume`/`suspend` 与 handler 转发。
-- 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console）由
+  WAT 确定性 + 每行 ≤100 列、除零 / 数组越界 / `assert` / `prim_fail` / `todo` 的错误
+  文本、`--no-compile`、拒绝面、`--target` 取值校验；stack-switching 探针验证
+  `cont`/`resume`/`suspend` 与 handler 转发；另有 2000 次 perform（默认栈不增长）与
+  重复 resume 的 one-shot trap（`continuation already resumed`）。
+- 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
-  新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。
+  新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。生成器的两臂顺序约束由
+  `49_if_branch_closures.vuna` 锁住（见 §6）。
+- **自举口径**（wasm 版编译器编译自身）：先从仓库根生成并汇编 wasm 编译器，再用它跑
+  `check` 与 `build` 对拍。产物用 fd 3 当根且路径按 fd 3 解析，所以包参数用绝对路径。
+  ```console
+  cd <仓库根>
+  ./result/bin/vuna build compiler --target wasm --no-compile --out /tmp/wasm-compiler
+  wasm-tools parse /tmp/wasm-compiler/main.wat -o /tmp/wasm-compiler/main.wasm
+  wasmtime run -W max-wasm-stack=8388608 -W stack-switching=y -W gc=y -W function-references=y \
+    --dir / --env VUNA_BASE="$PWD/base" --env VUNA_STORE=/tmp/vuna-wasm-store \
+    /tmp/wasm-compiler/main.wasm check "$PWD/compiler"
+  wasmtime run -W max-wasm-stack=33554432 -W stack-switching=y -W gc=y -W function-references=y \
+    --dir / --env VUNA_BASE="$PWD/base" --env VUNA_STORE=/tmp/vuna-wasm-store \
+    /tmp/wasm-compiler/main.wasm check "$PWD" --error-format json
+  ```
+  两条 `check` 的预期是 exit 0、诊断为空（整仓那次耗时约 20 分钟）。同一二进制跑
+  `build "$PWD/compiler" --target ocaml --no-compile --out DIR2` 的产物与 OCaml 版编译器
+  同参数产物逐字节一致（154 个文件；唯一差异是 `build-id`，见页首）。
 
 ## 8. 已知边界
 
-- 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
-  应用侧按实参个数逐次 `call $rt_apply`。
-- 变体分支只按 tag 一次线性分派（不做多模式矩阵）。
-- 未实现的宿主叶子（Fs/Clock/Env/Process/Stdin 等）、FFI / extern、宿主 syscalls 的
-  通用面（只有 write/exit）仍拒绝。
+- 闭包是**单参**形状（`$ft = (anyref anyref) -> anyref`）：多参 lambda 创建时柯里化，
+  应用侧每多一个实参就多一次 `call $rt_apply`。零参 lambda 内联，不产生闭包。
+- 变体分支只按 tag 一次线性分派（不做多模式矩阵）；结构化比较的用户族也按声明序线性
+  `ref.test`。
+- **进程派生**：WASI preview1 没有 `fork`/`exec`。文本格式的多包 workspace `check` 会为
+  成员包 `processSpawn` 子进程再 `processWait`，wasm 版编译器在这种调用下以
+  `vuna: runtime error: wasm host operation is not implemented` 退出（exit 2）。
+  可行替代：`--error-format json`（机器格式走进程内顺序检查）或按包单独
+  `check <pkg-dir>`。
+- stdin（`readLine` / `readBytes`）、`runIn` / `spawn` / `wait` 在运行期 trap；
+  网络（`@vuna@host@tryNet*`）与 extern / FFI 在生成期拒绝。
+- 直接调用 `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / …）是运行期
+  trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
+- wasm 的 `tryRemoveTree` 只做「unlink 文件」或「删空目录」（`path_unlink_file` +
+  `path_remove_directory`），不递归；要删非空树需调用方逐层处理。
+- 栈：默认 512 KiB 不够编译器级输入；按 §1 的口径给 `max-wasm-stack`。
+- 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 

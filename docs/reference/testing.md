@@ -403,7 +403,8 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   `-W stack-switching=y`。`105_native_backend.steps` 只保留 native 机制
   （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
-  行宽、trap、拒绝面、`--target` 校验）。`corpus/dt_err/*` 是对应负例
+  行宽、trap、拒绝面、`--target` 校验、stack-switching 探针与 2000 次 perform）；
+  wasm 版编译器编译自身的自举口径见 [wasm.md](wasm.md) §7。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；
