@@ -401,7 +401,8 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
       Just t => Pair t slot
       Nothing => case findDtData g datas of
         Just gd =>
-          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp)) slot
+          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp))
+            slot
         Nothing => Pair (IrTyVar slot) (slot + 1)
 renderFieldTy levels table datas lvl _ slot = Pair (IrTyVar slot) (slot + 1)
 
@@ -693,12 +694,14 @@ concatLeavesIn : Term -> List Term
 concatLeavesIn t = concatLeavesGo t []
 
 concatLeavesGo : Term -> List Term -> List Term
-concatLeavesGo t acc = case t of
-  TApp (TApp head l rl) r rr => if rigIsErased rl || rigIsErased rr then t :: acc
+concatLeavesGo (TApp (TApp head l rl) r rr) acc =
+  let
+    whole = TApp (TApp head l rl) r rr
+  in if rigIsErased rl || rigIsErased rr then whole :: acc
   else case head of
-    TGlobal g => if g == "++" then concatLeavesGo l (concatLeavesGo r acc) else t :: acc
-    _ => t :: acc
-  _ => t :: acc
+    TGlobal g => if g == "++" then concatLeavesGo l (concatLeavesGo r acc) else whole :: acc
+    _ => whole :: acc
+concatLeavesGo t acc = t :: acc
 
 -- `f a1 ... an` 的 head 是内建、且每个实参都未擦除时，收集 (名字, 实参)（左→右）。
 -- 脊只展平一次：长应用链上不按层重复拼接。
