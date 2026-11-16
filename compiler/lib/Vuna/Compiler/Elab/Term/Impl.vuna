@@ -1103,9 +1103,13 @@ expandRowListLitGo nilName consName (e :: rest) sp =
 
 -- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
 litFamilyCons : Ec -> String -> Maybe DtCtor
-litFamilyCons ec fam = case litFamilyCtor ec fam "::" of
+litFamilyCons ec fam = firstCtorOf ec fam ["::", "Cons", "RCons", "VCons"]
+
+firstCtorOf : Ec -> String -> List String -> Maybe DtCtor
+firstCtorOf ec fam [] = Nothing
+firstCtorOf ec fam (n :: rest) = case litFamilyCtor ec fam n of
   Just c => Just c
-  Nothing => litFamilyCtor ec fam "Cons"
+  Nothing => firstCtorOf ec fam rest
 
 -- | 把列表字面量按目标族展开成 Nil/Cons 应用；行字面量走 `Cons` 的三实参形态。
 expandListLit : Ec -> String -> List Expr -> Span -> Check Expr

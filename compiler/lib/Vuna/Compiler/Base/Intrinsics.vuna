@@ -584,7 +584,7 @@ canonicalFamilies =
 -- / `Base.List.List.(::)` 同键），其余名字原样。
 export ctorSpellingKey : String -> String
 ctorSpellingKey name =
-  if endsWith ".Cons" name || endsWith ".::" name || endsWith ".(::)" name then "${dropLastSegment name}.CONS"
+  if endsWith ".Cons" name || endsWith ".RCons" name || endsWith ".VCons" name || endsWith ".::" name || endsWith ".(::)" name then "${dropLastSegment name}.CONS"
   else name
 
 -- 去掉最后一个 `.` 之后的段。
