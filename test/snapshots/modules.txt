@@ -126,6 +126,7 @@ Vuna.Compiler.Driver.Split  compiler/lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Driver.ToolPayload  compiler/lib/Vuna/Compiler/Driver/ToolPayload.vuna
 Vuna.Compiler.Driver.Wasm  compiler/lib/Vuna/Compiler/Driver/Wasm.vuna
 Vuna.Compiler.Elab.Case  compiler/lib/Vuna/Compiler/Elab/Case.vuna
+Vuna.Compiler.Elab.Coverage  compiler/lib/Vuna/Compiler/Elab/Coverage.vuna
 Vuna.Compiler.Elab.Data  compiler/lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  compiler/lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  compiler/lib/Vuna/Compiler/Elab/Dict.vuna
@@ -294,6 +295,7 @@ Vuna.Compiler.Driver.Split  ./lib/Vuna/Compiler/Driver/Split.vuna
 Vuna.Compiler.Driver.ToolPayload  ./lib/Vuna/Compiler/Driver/ToolPayload.vuna
 Vuna.Compiler.Driver.Wasm  ./lib/Vuna/Compiler/Driver/Wasm.vuna
 Vuna.Compiler.Elab.Case  ./lib/Vuna/Compiler/Elab/Case.vuna
+Vuna.Compiler.Elab.Coverage  ./lib/Vuna/Compiler/Elab/Coverage.vuna
 Vuna.Compiler.Elab.Data  ./lib/Vuna/Compiler/Elab/Data.vuna
 Vuna.Compiler.Elab.Derive  ./lib/Vuna/Compiler/Elab/Derive.vuna
 Vuna.Compiler.Elab.Dict  ./lib/Vuna/Compiler/Elab/Dict.vuna
