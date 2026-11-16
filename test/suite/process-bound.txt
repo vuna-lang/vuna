@@ -14,6 +14,7 @@
 107_observability.steps	build,compile,obs	artifact-exec;build-link;cli-render;cli-text;obs-transport
 108_obs_cdp.steps	(indirect)	cli-text
 109_backend_parity.steps	build	artifact-exec;build-link
+111_host_error.steps	run	artifact-exec;build-link;cli-text
 14b_binary_fingerprint.steps	build	build-link;cli-text
 14_cli.steps	build,check,compile,corpus,help,interp,lint,seed,--typed	seed-binary;build-link;cli-text;tooling-output;corpus-selfcheck
 17_diagnostics.steps	check,compile,interp	cli-render;cli-text
