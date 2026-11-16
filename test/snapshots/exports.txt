@@ -151,7 +151,7 @@ compiler/lib/Vuna/Compiler/Native/Abi.vuna: nativeArenaEndLabel, nativeArgRegs, 
 compiler/lib/Vuna/Compiler/Native/Model.vuna: Instr(..), NativeBss(..), NativeErr(..), NativeFunc(..), NativeOutcome(..), NativeProgram(..), NativeRodata(..), NativeStrLit(..), Operand(..), Reg(..), nativeErrText, reg8Text, regText
 compiler/lib/Vuna/Compiler/Native/Module.vuna: NRes(..), build
 compiler/lib/Vuna/Compiler/Native/Render.vuna: renderProgram
-compiler/lib/Vuna/Compiler/Native/Runtime.vuna: nativeBss, nativeRodata, nativeRtFuncs, nativeRtTarget, nativeRtValueArity, stackTopLabel
+compiler/lib/Vuna/Compiler/Native/Runtime.vuna: nativeBss, nativeRodata, nativeRtFuncs, nativeRtTarget, nativeRtValueArity, stackGuardInstrs, stackTopLabel
 compiler/lib/Vuna/Compiler/Obs.vuna: obsCheck, obsCountEff, obsDefCheck, obsMarkEff
 compiler/lib/Vuna/Compiler/Packages/Pkg.vuna: Package(..), PackageContext, Root, absolutePath, contextDir, contextForDir, contextForFile, contextPackageName, contextPackageOf, contextRelease, contextRoots, contextWithRelease, findManifestDir, findManifestDirMaybe, joinPath, loadManifestAt, loadPackage, locateBase, normalizeDir, packageContext, packageDir, packageEntry, packageExports, packageName, packageRoots, rootDir, rootName, rootPackage, workspacePackages
 compiler/lib/Vuna/Compiler/Packages/Source.vuna: contentHashOf, identityHashOf, normalizeHash, packageFilesEff, packageSourceEff, skipSourceDir, verifyHash
