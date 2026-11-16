@@ -6,7 +6,7 @@ module Vuna.Lint.Diagnostics where
 -- kebab 短名，两者都在此一处声明——同一规则的名字不手写两遍，避免漂移。
 --
 -- 分层：本模块在**根包**（`vuna`），不属于 compiler 包 —— 工具链永不进 TCB
--- （`nix/tcb-forbidden.txt`）。`Vuna.Compiler.Diagnostics` 承载编译期诊断（TC_/CG_），
+-- （`nix/seed/forbidden.txt`）。`Vuna.Compiler.Diagnostics` 承载编译期诊断（TC_/CG_），
 -- 本模块承载 lint 诊断（LN_）。两者单向依赖：根包 → compiler，反之不成立。
 import Base.Bool
 import Base.List

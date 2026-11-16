@@ -16,13 +16,13 @@ OUT=${1:?usage: seed-selfhost.sh OUT}
 export VUNA_BASE="$PWD/base"
 
 # 提交入库的 seed 只能含 compiler 闭包（工具链与 dynamic codegen 都不在 TCB 里）。
-sh nix/tcb-check.sh nix/tcb-forbidden.txt seed
-# 完整 allowlist：seed/ 的文件集必须与 nix/seed-files.txt 逐项一致（多/少/换文件都报错）。
-sh nix/tcb-allowlist.sh nix/seed-files.txt seed
+sh nix/seed/tcb-check.sh nix/seed/forbidden.txt seed
+# 完整 allowlist：seed/ 的文件集必须与 nix/seed/files.txt 逐项一致（多/少/换文件都报错）。
+sh nix/seed/tcb-allowlist.sh nix/seed/files.txt seed
 
 # 闭包数量断言：只靠黑名单时 seed 静默缩水（漏模块）仍会绿；数量从
-# `nix/seed-files.txt`（由 seed rotation 自动同步）里的 `.ml` 行推导。
-EXPECTED_SEED_ML=$(grep -c '\.ml$' nix/seed-files.txt)
+# `nix/seed/files.txt`（由 seed rotation 自动同步）里的 `.ml` 行推导。
+EXPECTED_SEED_ML=$(grep -c '\.ml$' nix/seed/files.txt)
 ACTUAL_SEED_ML=$(find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ')
 if [ "$ACTUAL_SEED_ML" != "$EXPECTED_SEED_ML" ]; then
   echo "seed-selfhost: seed 闭包 .ml 数量 $ACTUAL_SEED_ML != 期望 $EXPECTED_SEED_ML（seed 缩水或 seed-files.txt 过期；重新 rotation）" >&2
@@ -30,9 +30,9 @@ if [ "$ACTUAL_SEED_ML" != "$EXPECTED_SEED_ML" ]; then
 fi
 
 # 种子对 compiler 包分离编译 → stage1 源码集。
-# 与 nix/seed-rotate.sh 用同一入口（只 codegen、不链接），保证 seed/ 与 s1 可比。
+# 与 nix/seed/rotate.sh 用同一入口（只 codegen、不链接），保证 seed/ 与 s1 可比。
 "$VUNA_SEED" build --no-compile --out s1 compiler
-sh nix/tcb-check.sh nix/tcb-forbidden.txt s1
+sh nix/seed/tcb-check.sh nix/seed/forbidden.txt s1
 
 # rotation 按需：seed 与当前源码的生成结果可以不同（信任锚点允许滞后）。
 # 这里只报告差异规模，供判断何时 rotation；不同步不阻塞。
@@ -48,9 +48,9 @@ fi
 {
   printf 'seed_total_files=%s\n' "$total_seed_files"
   printf 'seed_lag_lines=%s\n' "$lag_lines"
-  if [ -f nix/seed-rotation.txt ]; then
+  if [ -f nix/seed/rotation.txt ]; then
     printf 'rotation_meta=present\n'
-    sed -n -e 's/^rotated_at=/rotated_at=/p' -e 's/^source_digest=/source_digest=/p' -e 's/^git_commit=/git_commit=/p' nix/seed-rotation.txt
+    sed -n -e 's/^rotated_at=/rotated_at=/p' -e 's/^source_digest=/source_digest=/p' -e 's/^git_commit=/git_commit=/p' nix/seed/rotation.txt
   else
     printf 'rotation_meta=missing\n'
   fi
@@ -63,7 +63,7 @@ cp -r s1 b1
 # stage1 再生成 → stage2 源码集；两者逐字节一致。
 ./vuna-stage1 build --no-compile --out s2 compiler
 diff -r s1 s2
-sh nix/tcb-check.sh nix/tcb-forbidden.txt s2
+sh nix/seed/tcb-check.sh nix/seed/forbidden.txt s2
 
 # 行为抽查：stage1 编译器（DT split codegen）编译并运行一个程序。
 # compile 产目录（Main.ml + build.sh），用 build.sh 链接出可执行文件。

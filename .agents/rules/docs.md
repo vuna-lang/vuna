@@ -33,7 +33,7 @@
 
 ## 生成物：不读、不手改
 
-- `seed/`：OCaml 信任锚点，只能经 `nix/seed-rotate.sh` 轮换；
+- `seed/`：OCaml 信任锚点，只能经 `nix/seed/rotate.sh` 轮换；
 - `docs/api.html`、`docs/.generated/errors.md`：由 `vuna doc` / `vuna gen-errors` 生成；
 - `result`、`.output`、`_scratch/`、`.local/`：本地产物，已 gitignore。
 

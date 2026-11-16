@@ -1,6 +1,6 @@
 #!/bin/sh
 # codegen 产物指标（固定夹具精确基线 / 手动上限）。
-# 用法: sh nix/metrics.sh <SRC> [BUDGET]
+# 用法: sh nix/tools/metrics.sh <SRC> [BUDGET]
 #   SRC     单个 .ml 文件，或按分离编译布局的目录（聚合其中所有 .ml）
 #   BUDGET  可选的基线文件（每行 "<metric> <max>" 或 "<metric> =<expected>"）；
 #           省略则只打印指标。`<max>` 是上限（超了失败）；`=<expected>` 是精确基线

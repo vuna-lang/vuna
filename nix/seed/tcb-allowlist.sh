@@ -1,11 +1,11 @@
 #!/bin/sh
 # TCB 完整 allowlist 断言：seed/ 的文件集必须与提交入库的清单逐项一致。
 #
-# 用法: sh nix/tcb-allowlist.sh ALLOWLIST DIR
-#   ALLOWLIST  允许出现在 seed/ 的文件名清单（nix/seed-files.txt，由 rotation 自动更新）
+# 用法: sh nix/seed/tcb-allowlist.sh ALLOWLIST DIR
+#   ALLOWLIST  允许出现在 seed/ 的文件名清单（nix/seed/files.txt，由 rotation 自动更新）
 #   DIR        要检查的目录（通常 seed）
 #
-# 黑名单（nix/tcb-check.sh）只防「已知危险模块」；数量断言（nix/seed-files.txt）只防
+# 黑名单（nix/seed/tcb-check.sh）只防「已知危险模块」；数量断言（nix/seed/files.txt）只防
 # 缩水。本脚本保证「多一个/少一个/换一个文件」都能被发现，且清单变更进入 review。
 set -eu
 

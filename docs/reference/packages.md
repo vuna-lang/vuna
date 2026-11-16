@@ -230,7 +230,7 @@ modules = [
 所有编译命令都走 DT 精化 + 擦除 codegen，`vuna interp` 总是 DT 精化 + 核心求值。包目录
 入口直接作为入口文件交给 `compile` / `check`；`compile`/`build` 的产物统一是逐模块目录
 （`--out` 指定 build 的输出目录），seed rotation 用 `build --no-compile --out` +
-`nix/seed-rotate.sh`。工具命令的退出码约定：0 成功、1 运行期错误、2 用法 / 参数错误；
+`nix/seed/rotate.sh`。工具命令的退出码约定：0 成功、1 运行期错误、2 用法 / 参数错误；
 不存在路径 / 非 workspace / 非包目录给可读错误，不泄漏宿主异常。详见
 [bootstrap.md](bootstrap.md)。
 

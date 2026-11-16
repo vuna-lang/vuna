@@ -2,7 +2,7 @@
 # 隐藏效果守卫：compiler/lib 与 lib 不得用 `runPure` 在纯签名里隐藏 Eff 执行。
 #
 # 用户面已统一到 Eff（main : Eff [] a，由运行时执行）。本脚本统计两个目录下每个 .vuna
-# 文件中 `runPure` 后接 `(` 的调用点数，与基线 nix/eff-boundary.allowlist 比较：
+# 文件中 `runPure` 后接 `(` 的调用点数，与基线 nix/checks/data/eff-boundary.allowlist 比较：
 #   - allowlist 里没有的文件出现调用点 → 失败（基线当前为空，即零容忍）；
 #   - 某文件调用点数超过基线 → 失败；
 #   - 基线里的文件调用点变少 → 提示更新基线（不失败）；
@@ -13,7 +13,7 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 if [ ! -d "$root/compiler/lib" ]; then root=$(pwd); fi
-allow="$root/nix/eff-boundary.allowlist"
+allow="$root/nix/checks/data/eff-boundary.allowlist"
 exc="$root/nix/eff-boundary.exceptions"
 tmp="${TMPDIR:-/tmp}/eff-boundary.$$"
 excTmp="${tmp}.exc"
@@ -75,7 +75,7 @@ if [ -s "$excTmp" ]; then
   sed 's/^/  /' "$excTmp"
 fi
 if [ "$fail" -ne 0 ]; then
-  echo "eff-boundary: 失败（基线见 nix/eff-boundary.allowlist）" >&2
+  echo "eff-boundary: 失败（基线见 nix/checks/data/eff-boundary.allowlist）" >&2
   exit 1
 fi
 echo "eff-boundary: ok（基线 $(wc -l <"$allow") 个文件，例外 $(wc -l <"$excTmp") 个文件）"

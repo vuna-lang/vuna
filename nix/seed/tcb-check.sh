@@ -1,11 +1,11 @@
 #!/bin/sh
 # TCB 黑名单断言：检查给定目录里是否出现禁止进入 seed 闭包的模块。
 #
-# 用法: sh nix/tcb-check.sh LIST DIR...
+# 用法: sh nix/seed/tcb-check.sh LIST DIR...
 #   LIST  黑名单文件（每行一个模块名，忽略空行与 # 注释）
 #   DIR   要检查的目录（如 seed、s1、s2）
 #
-# `checks.seed-selfhost` 与 `nix/seed-rotate.sh` 共用本脚本与同一份 LIST。
+# `checks.seed-selfhost` 与 `nix/seed/rotate.sh` 共用本脚本与同一份 LIST。
 set -eu
 
 if [ "$#" -lt 2 ]; then

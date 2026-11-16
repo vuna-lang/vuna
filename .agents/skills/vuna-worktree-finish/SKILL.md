@@ -134,5 +134,5 @@ worktree: <路径>（分支 <branch>）
 - `git reset --hard`、`git checkout .` 清理现场——会丢工作树改动。
 - `git worktree remove --force` 或先删目录再问，导致提交无法带回。
 - 在主仓直接 `git commit --amend` 改动已带回的提交来「修冲突」。
-- 冲突时手改 `seed/` 让 cherry-pick 过；`seed/` 只经 `sh nix/seed-rotate.sh` 轮换。
+- 冲突时手改 `seed/` 让 cherry-pick 过；`seed/` 只经 `sh nix/seed/rotate.sh` 轮换。
 - 为收尾跑 `nix flake check`（CI 口径），本地验证用 `./result/bin/vuna` + 章节过滤。

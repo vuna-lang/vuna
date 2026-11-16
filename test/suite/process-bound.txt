@@ -2,7 +2,7 @@
 #
 # 格式：<文件名>\t<子命令>\t<为什么必须子进程>
 # 判据：这里只登记「构造上不可进程内」的步骤；能进程内断状态的都在 runner 里做掉了。
-# 数量由 nix/steps-inproc.max 做 ratchet（只允许下降，迁移走一个就删一行并下调上限）。
+# 数量由 nix/checks/data/steps-inproc.max 做 ratchet（只允许下降，迁移走一个就删一行并下调上限）。
 
 100_export.steps	check	cli-text
 101_opaque.steps	check,interp	cli-text

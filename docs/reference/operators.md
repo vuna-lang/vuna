@@ -204,4 +204,4 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
 - `test/corpus/dt_err/53_unknown_fixity`：未知符号运算符报 `unknown fixity`。
 - `test/corpus/fmt/23_fixity_decls` / `24_backtick_sections` / `25_custom_ops`：声明打印与
   fmt 新语法往返。
-- `nix run .#vuna-run-tests` 全量；`sh nix/seed-rotate.sh <vuna>` 验证自举 fixed point。
+- `nix run .#vuna-run-tests` 全量；`sh nix/seed/rotate.sh <vuna>` 验证自举 fixed point。

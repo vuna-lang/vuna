@@ -2,18 +2,18 @@
 # seed rotation：用当前编译器从 compiler 包生成 seed/ 多文件文件集。
 #
 # 前提：当前 seed 能编译当前源码（nix flake check 通过）。
-# 用法: sh nix/seed-rotate.sh [VUNA]
+# 用法: sh nix/seed/rotate.sh [VUNA]
 #   VUNA  当前 stage 1 产品 CLI（vuna），默认 ./result/bin/vuna
 #
 # seed 只覆盖 compiler 包（compiler/app/Main.vuna 的 import 闭包），
 # 工具链（fmt/lint/repl/doc/test）不在种子里。
 #
 # 生成与校验全部在临时目录完成：只有 TCB 断言与 fixed point 都通过后才替换 seed/，
-# 因此失败不会破坏工作树里的信任锚点。替换后写入 nix/seed-rotation.txt（审计元数据）。
+# 因此失败不会破坏工作树里的信任锚点。替换后写入 nix/seed/rotation.txt（审计元数据）。
 #
 # rotation 按需触发（见 docs/reference/bootstrap.md），不是每次 compiler/base 改动都做。
 set -eu
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 # 用法里写的是位置参数；漏赋值会让 `VUNA` 在 set -u 下报 unbound。
 # 优先级：位置参数 > 环境变量 > 默认产品 CLI。
@@ -44,7 +44,7 @@ export VUNA_STORE="$tmp/store-a"
 "$VUNA" build --no-compile --out "$tmp/seed" compiler
 
 # 种子必须只含 compiler 闭包：工具模块与旧 dynamic codegen 一旦出现都算错误。
-sh nix/tcb-check.sh nix/tcb-forbidden.txt "$tmp/seed"
+sh nix/seed/tcb-check.sh nix/seed/forbidden.txt "$tmp/seed"
 
 # 用生成的种子构建（在副本里构建，避免 .cmi/.cmx 污染待比较的文件集），
 # 并验证它能逐字节重生成同一文件集（fixed point）。
@@ -92,12 +92,12 @@ fi
 rm -rf "$old_seed"
 # 完整文件清单由 checks.seed-selfhost 读取（`.ml` 数量从清单推导）；rotation 时自动
 # 同步，避免清单腐化。清单变更会进入 rotation 的 git diff，供 review 确认 TCB 边界。
-find seed -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort >nix/seed-files.txt
+find seed -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort >nix/seed/files.txt
 
 # 写元数据（同目录临时文件 + mv，尽量原子；元数据只用于审计）。
-meta_tmp="nix/seed-rotation.txt.tmp"
+meta_tmp="nix/seed/rotation.txt.tmp"
 {
-  printf '# 由 nix/seed-rotate.sh 生成。记录 seed/ 对应（rotation 时）的源码状态。\n'
+  printf '# 由 nix/seed/rotate.sh 生成。记录 seed/ 对应（rotation 时）的源码状态。\n'
   printf '# 仅供审计与滞后报告；CI 不因 seed 落后于源码而失败。\n'
   printf 'rotated_at=%s\n' "$rotated_at"
   printf 'source_digest=sha256:%s\n' "$source_digest"
@@ -106,6 +106,6 @@ meta_tmp="nix/seed-rotation.txt.tmp"
   printf 'seed_files=%s\n' "$seed_files"
   printf 'git_commit=%s\n' "$git_commit"
 } >"$meta_tmp"
-mv "$meta_tmp" nix/seed-rotation.txt
+mv "$meta_tmp" nix/seed/rotation.txt
 
-echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过，元数据已写入 nix/seed-rotation.txt"
+echo "seed-rotate: 已生成 seed/（$(ls seed | wc -l | tr -d ' ') 个文件），fixed point 通过，元数据已写入 nix/seed/rotation.txt"

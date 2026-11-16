@@ -364,7 +364,7 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 | 火焰图 | `--to folded` + `flamegraph.pl`（nixpkgs `FlameGraph`） | 已实现（根在前、同名栈合并、按栈名排序） |
 | 单文件 HTML 报告 | `vuna obs render --out report.html` | 已实现（内嵌 JSON + 内联 CSS/JS，无外链、可复现） |
 | 多进程 / workspace 合并 | `vuna obs merge [--out FILE] TRACE...` | 已实现（按 `t0` 分组 + `vuna.mark.merge-member` 成员行） |
-| Linux perf | `#line` → `.debug_line` 直接指向 `.vuna`；`vuna-symbols.json`（由 `vuna obs symbols` 生成）兜底 | 手动，见 `nix/obs.sh` |
+| Linux perf | `#line` → `.debug_line` 直接指向 `.vuna`；`vuna-symbols.json`（由 `vuna obs symbols` 生成）兜底 | 手动，见 `nix/tools/obs.sh` |
 | gdb | `#line` + `-g`：`list` / `bt` 给出 `.vuna` 行 | 手动 |
 | OCaml `Runtime_events` | **不接**：GC/调度器事件与 vuna span 时间基准不同，先只做 `Gc` 计数器 | 非目标 |
 
@@ -391,7 +391,7 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 - **`serve` 的多 trace 拼接不做 `merge` 的成员分组**：命令行的多份 trace 按顺序拼采样，
   `pid` 保留各事件原值；跨机器合并请先 `vuna obs merge` 再 serve（否则时间轴不可比）。
 
-`perf` / `gdb` / `valgrind` **不在**默认 devShell（避免构建图变重）；`nix/obs.sh` 在缺工具时
+`perf` / `gdb` / `valgrind` **不在**默认 devShell（避免构建图变重）；`nix/tools/obs.sh` 在缺工具时
 给出可操作提示，`perf record` 需要 `perf_event_open` 权限，Nix 沙箱常拒 ⇒ **perf 路径不进
 `nix flake check`**，只做手动验证。
 
@@ -405,13 +405,13 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |
 | 手动（本批，`obs serve --cdp` + 桥） | 起 `vuna obs serve --cdp tcp:127.0.0.1:0 TRACE`，用任意 Content-Length 客户端连：`Runtime.getIsolateId` / `Profiler.enable` / `Profiler.start` / `Profiler.stop` 都有合法响应、`profile.samples` 数 == trace 的 `vuna.sample.cpu` 数、未知方法回 `-32601`、同一 trace 两次 stop 的 profile JSON 逐字节一致、无 cpu 采样的 trace 在 stop 上回 `-32000` 且进程退出码 1、参数错误退出码 2；再起 `node test/corpus/obs-cdp/bridge.mjs`，自造 WS 客户端（`node:crypto` 手写握手 + 帧）断言 `Sec-WebSocket-Accept` 正确、`Profile.nodes` 非空、ping/pong 通。**不进 `nix flake check`**（需要 Node + 端口，沙箱不保证） |
 | 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
-| `checks.vuna-metrics` + `nix/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
+| `checks.vuna-metrics` + `nix/checks/data/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
 | suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |
 | suite `108_obs_cdp.steps` | `vuna obs serve --cdp`：就绪行、六条 CDP 请求、`getIsolateId`=trace pid、`profile.samples`==cpu 采样数、未知方法 `-32601`、跨进程 profile 逐字节一致、与 `convert --to cpuprofile` 逐字节等价、`-32000`+退出码 1、参数错误退出码 2、unix socket 清理；有 Node 时再验 `test/corpus/obs-cdp/bridge.mjs` 的 WS 握手（独立算 `Sec-WebSocket-Accept`）+ `Profiler.*` + ping/pong（无 Node 打印 SKIP） |
 
 回归面（每次改动后）：`vuna fmt <改动>`、`vuna check .`、`sh nix/checks/lib/eff-boundary.sh`、
 `sh nix/checks/lib/ir-boundary.sh`、`vuna test --suite test/suite.toml --only 90/steps_native/107_observability --only 90/steps_native/108_obs_cdp`、
-`checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（`sh nix/seed-rotate.sh ./result/bin/vuna`）。
+`checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（`sh nix/seed/rotate.sh ./result/bin/vuna`）。
 
 ## 10. 已知边界（开放项）
 

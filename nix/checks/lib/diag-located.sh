@@ -1,6 +1,6 @@
 #!/bin/sh
 # 诊断位置门禁：每条结构化诊断（test/corpus/**/*.diag.json）必须有主 span；
-# 没有主 span 的必须带显式 `absent` 理由，且该码登记在 nix/diag-located.allow
+# 没有主 span 的必须带显式 `absent` 理由，且该码登记在 nix/checks/data/diag-located.allow
 # （逐码审计，只减不增）。
 #
 # 数据源是 `vuna test --suite ... --bless-diag` 生成的结构化夹具，所以门禁与
@@ -39,7 +39,7 @@ find test/corpus -name '*.diag.json' -print0 \
       | (if ([.labels[]? | select(.span != null)] | length) > 0 then "located" else "unlocated" end)' \
   | sort | uniq -c > "$tmp/counts.txt" 2>/dev/null || true
 
-allow=nix/diag-located.allow
+allow=nix/checks/data/diag-located.allow
 if [ -f "$allow" ]; then
   grep -v '^[[:space:]]*#' "$allow" 2>/dev/null | grep -v '^[[:space:]]*$' | sort -u > "$tmp/allow.txt" || true
 else

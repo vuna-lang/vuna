@@ -4,7 +4,7 @@
 # 规则（对 errors.md 的「消息」列逐条检查）：
 #   - 消息非空（LN_/FX_ 由规则名/修复动作承载，允许空）；
 #   - 不以句号结尾（消息会拼进 `[CODE] 消息` 行，句号多余）；
-#   - 首字符小写（专有名词例外见 nix/diag-style-allow.txt，逐码记录）；
+#   - 首字符小写（专有名词例外见 nix/checks/data/diag-style-allow.txt，逐码记录）；
 #   - 无首尾空白、无双空格、不以 `error`/`Error`/`ERR` 开头；
 #   - 插值占位符只允许 `<0>`..`<9>`（模板 arity 由类型索引保证，这里只查拼写）。
 set -eu
@@ -17,7 +17,7 @@ mkdir -p "$tmp/docs"
 md="$tmp/docs/.generated/errors.md"
 [ -f "$md" ] || { echo "diag-style: gen-errors did not produce errors.md" >&2; exit 1; }
 
-allowfile=nix/diag-style-allow.txt
+allowfile=nix/checks/data/diag-style-allow.txt
 if [ -f "$allowfile" ]; then
   grep -v '^[[:space:]]*#' "$allowfile" | grep -v '^[[:space:]]*$' | sort -u > "$tmp/allow.txt" || true
 else

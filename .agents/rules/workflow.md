@@ -33,7 +33,7 @@ git rebase main
 - 提交前检查 `git status --short`：不应出现 `result`、`.output`、`_scratch/`、`.local/`、
   `docs/api.html`、`docs/.generated/` 等生成物。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
-- **禁止手改 `seed/`**：它只能由 `sh nix/seed-rotate.sh ./result/bin/vuna` 轮换。
+- **禁止手改 `seed/`**：它只能由 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换。
 
 ## 4. 收尾：带回主仓
 

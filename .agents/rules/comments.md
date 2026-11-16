@@ -49,7 +49,7 @@
   未关闭缺口集中在 [`docs/reference/debt.md`](../../docs/reference/debt.md)。
 - **`.agents/`、`nix/`**：规则/脚本注释同样只写当下口径；门槛脚本的「标定历史」只保留
   方法与当前值，逐轮记录留在 git 历史。
-- **`nix/context.budget` 这类阈值文件**：写清指标定义与当前值即可，不要累积每轮改动的说明。
+- **`nix/checks/data/context.budget` 这类阈值文件**：写清指标定义与当前值即可，不要累积每轮改动的说明。
 
 ## 自检（改完扫一眼）
 

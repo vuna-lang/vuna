@@ -5,11 +5,11 @@
 # span 区间），但入口文档每轮都要读，所以单独设预算。
 #
 # 判定：超过预算 ⇒ REGRESSION（退出 1）；达到预算 70% ⇒ WARN（只提示，退出 0）。
-# 预算本身按「实测 × 1.5」留余量标定（见 nix/context.budget 头部策略）。
+# 预算本身按「实测 × 1.5」留余量标定（见 nix/checks/data/context.budget 头部策略）。
 #
-# 用法: sh nix/context-budget.sh [REPO] [BUDGET]
+# 用法: sh nix/tools/context-budget.sh [REPO] [BUDGET]
 #   REPO    仓库根，默认当前目录
-#   BUDGET  预算文件，默认 <repo>/nix/context.budget
+#   BUDGET  预算文件，默认 <repo>/nix/checks/data/context.budget
 #
 # 指标：
 #   coldstart_bytes  AGENTS.md + docs/architecture.md + README.md 的字节数之和
@@ -19,11 +19,11 @@
 #   max_ref_lines    单篇 docs/reference/*.md 的最大行数
 #   max_module_lines 单个 .vuna 源模块的最大行数（单点最大阅读成本）
 #
-# 有意改动文档结构后，用本脚本复测；压缩了就按实测下调 nix/context.budget（附注释说明）。
+# 有意改动文档结构后，用本脚本复测；压缩了就按实测下调 nix/checks/data/context.budget（附注释说明）。
 set -eu
 
 REPO=${1:-.}
-BUDGET=${2:-$REPO/nix/context.budget}
+BUDGET=${2:-$REPO/nix/checks/data/context.budget}
 
 cd "$REPO"
 
@@ -108,7 +108,7 @@ while read -r name max; do
   fi
 done <"$BUDGET"
 if [ "$fail" -ne 0 ]; then
-  echo "context-budget: exceeded (nix/context.budget)" >&2
+  echo "context-budget: exceeded (nix/checks/data/context.budget)" >&2
   exit 1
 fi
 if [ "$warn" -ne 0 ]; then

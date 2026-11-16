@@ -203,8 +203,8 @@ vuna test --suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存�
 - `--bless-diag`：负例 case 用 `check/compile --json` 的实际聚合文档写回 `.diag.json`（源码路径相对 cwd；环境路径归一化为 `<ROOT>`/`<BASE>`，本地与 nix 构建可比）。
 - 目录型夹具根部的 `.package-dir` 标记：check/compile 以该目录为 cwd 运行 `vuna <cmd> .`，用于包级诊断（`PKG_`/`LD_`），对应 family `pkg_err`（`entry = "lib/Main.vuna"`）。
 - `nix/checks/lib/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out` + steps 侧车
-  `*.diagcodes`；缺口与不可达审计在 `nix/diag-coverage-allow.txt`，覆盖数不低于
-  `nix/diag-coverage.min`）；`nix/checks/lib/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
+  `*.diagcodes`；缺口与不可达审计在 `nix/checks/data/diag-coverage-allow.txt`，覆盖数不低于
+  `nix/checks/data/diag-coverage.min`）；`nix/checks/lib/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/checks/data/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶/last-failed；verdict 在对象库）。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
@@ -264,7 +264,7 @@ steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 （`seed`）、多进程 store 互斥（`fetch` / `add` / `pin` / `store` / `clean`）、CLI 渲染文本与
 `--json` / SARIF 文档形状。这些逐个登记在 `test/suite/process-bound.txt`（
 `文件<TAB>子命令<TAB>原因`），由 `nix/checks/lib/steps-inproc.sh` 校验：steps 里出现未登记的
-文件名就失败；登记数超过 `nix/steps-inproc.max` 也失败（ratchet 只降）。
+文件名就失败；登记数超过 `nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。
 
 已知边界：增量会话的 `dtIncrementalCheckedCore` 只汇总 loader + `dtProgWarnings`，
 **不跑**全量尾部的 `warnUnusedDefsIn`；所以负例的 check 一律走全量（`InProc.checkFile`），
@@ -438,7 +438,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
 - `vuna-static`：不依赖 vuna 二进制的结构守卫合集（实现见 `nix/checks/lib/`）：
   - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
-    `nix/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
+    `nix/checks/data/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
   - `ir-boundary`：IR 边界结构性守卫（`Vuna.Compiler.Ir*` 不得 import
     Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
     import Core/Elab/Intrinsics；`Codegen/Lower.vuna` 是唯一的上游消费者；
@@ -446,7 +446,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
     IR），见 [ir.md](ir.md)；
   - `steps-inproc`：进程绑定岛门禁——fixture 用例已全部进程内执行，steps 里仍 spawn
     `$VUNA` 的文件必须逐个登记在 `test/suite/process-bound.txt`，且总数不超过
-    `nix/steps-inproc.max`（ratchet 只降不增）；
+    `nix/checks/data/steps-inproc.max`（ratchet 只降不增）；
   - `diag-raw`：compiler 内源码诊断必须走域码，位置渲染只在 `Diag.Format`；
 - `vuna-obs-schema`：观测**结构**门禁——关闭（`VUNA_OBS=0`）不产 trace；`VUNA_OBS=2` 的
   `check compiler` / `check base` 各产出可被 `vuna obs validate` 接受的 trace、
@@ -482,9 +482,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   `vuna-compiler-growth` 互补（整条 check 里前端只占几个百分点，n² 会被精化成本掩盖）。
   读数见 [performance.md](performance.md) §6.1；
 - `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
-  `nix/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
+  `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
-- `context-budget`：入口文档字节数与单模块行数对 `nix/context.budget`（预算按实测 ×1.5
+- `context-budget`：入口文档字节数与单模块行数对 `nix/checks/data/context.budget`（预算按实测 ×1.5
   留余量；超过预算失败，达到 70% 只打印 `WARN`。`WARN` 在本机跑 check 时可见，nix 只在
   失败时打印 builder 日志，所以 CI 成功时不显示）；
 - `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑

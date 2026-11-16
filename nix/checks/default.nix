@@ -37,8 +37,8 @@ let
     manifest = ../../vuna.toml;
     agents = ../../AGENTS.md;
     readme = ../../README.md;
-    seedFiles = ../../nix/seed-files.txt;
-    seedRotation = ../../nix/seed-rotation.txt;
+    seedFiles = ../../nix/seed/files.txt;
+    seedRotation = ../../nix/seed/rotation.txt;
   };
 
   workspace = [
@@ -130,7 +130,7 @@ let
     };
 
   # seed → stage0 → stage1 → stage2，逐字节 fixed point（alias 已并入 seed-selfhost）。
-  # rotation 按需：seed 落后于源码只报告滞后，不失败；元数据在 nix/seed-rotation.txt。
+  # rotation 按需：seed 落后于源码只报告滞后，不失败；元数据在 nix/seed/rotation.txt。
   seed-selfhost = mkCheck {
     name = "vuna-seed-selfhost";
     srcs = [
@@ -142,9 +142,9 @@ let
       src.manifest
       ../../test/corpus/run/12_fact.vuna
       ../../test/corpus/dt/01_id.vuna
-      ../../nix/tcb-check.sh
-      ../../nix/tcb-allowlist.sh
-      ../../nix/tcb-forbidden.txt
+      ../../nix/seed/tcb-check.sh
+      ../../nix/seed/tcb-allowlist.sh
+      ../../nix/seed/forbidden.txt
       src.seedFiles
       src.seedRotation
     ];
@@ -194,8 +194,8 @@ in
     srcs = [
       src.codegenCorpus
       src.base
-      ../../nix/metrics.sh
-      ../../nix/codegen.baseline
+      ../../nix/tools/metrics.sh
+      ../../nix/checks/data/codegen.baseline
     ];
     script = ./vuna-metrics.sh;
   };
@@ -258,8 +258,8 @@ in
       src.docs
       src.agents
       src.readme
-      ../../nix/context-budget.sh
-      ../../nix/context.budget
+      ../../nix/tools/context-budget.sh
+      ../../nix/checks/data/context.budget
     ];
     script = ./context-budget.sh;
   };
@@ -280,11 +280,11 @@ in
       src.corpus
       src.steps
       ./lib
-      ../../nix/diag-coverage-allow.txt
-      ../../nix/diag-coverage.min
-      ../../nix/diag-unreachable.txt
-      ../../nix/diag-located.allow
-      ../../nix/diag-style-allow.txt
+      ../../nix/checks/data/diag-coverage-allow.txt
+      ../../nix/checks/data/diag-coverage.min
+      ../../nix/checks/data/diag-unreachable.txt
+      ../../nix/checks/data/diag-located.allow
+      ../../nix/checks/data/diag-style-allow.txt
     ];
     nativeBuildInputs = [
       pkgs.findutils
@@ -303,8 +303,8 @@ in
       src.steps
       src.processBound
       ./lib
-      ../../nix/eff-boundary.allowlist
-      ../../nix/steps-inproc.max
+      ../../nix/checks/data/eff-boundary.allowlist
+      ../../nix/checks/data/steps-inproc.max
     ];
     nativeBuildInputs = [
       pkgs.gnugrep

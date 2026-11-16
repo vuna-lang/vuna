@@ -40,8 +40,8 @@ let
     mainProgram = "vuna-seed";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../seed} seed
-      cp -r ${../base} "$out/base"
+      cp -r ${../../seed} seed
+      cp -r ${../../base} "$out/base"
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
@@ -55,8 +55,8 @@ let
     mainProgram = "vuna-compiler";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../compiler} compiler
-      cp -r ${../base} base
+      cp -r ${../../compiler} compiler
+      cp -r ${../../base} base
       chmod -R u+w .
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
@@ -71,11 +71,11 @@ let
     mainProgram = "vuna";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../lib} lib
-      cp -r ${../app} app
-      cp -r ${../compiler} compiler
-      cp -r ${../base} base
-      cp ${../vuna.toml} vuna.toml
+      cp -r ${../../lib} lib
+      cp -r ${../../app} app
+      cp -r ${../../compiler} compiler
+      cp -r ${../../base} base
+      cp ${../../vuna.toml} vuna.toml
       chmod -R u+w .
       export VUNA_STORE="$TMPDIR/vuna-store"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
@@ -88,7 +88,7 @@ let
   vuna-bench =
     (pkgs.writeShellScriptBin "vuna-bench" ''
       export PATH="${lib.makeBinPath shellTools}:$PATH"
-      exec ${pkgs.bash}/bin/bash ${../bench/bootstrap.sh} "$@"
+      exec ${pkgs.bash}/bin/bash ${../../bench/bootstrap.sh} "$@"
     '')
     // {
       meta.description = "手动 vuna 性能基准（构建/编译/产物尺寸）";
@@ -98,7 +98,7 @@ let
   vuna-perf =
     (pkgs.writeShellScriptBin "vuna-perf" ''
       export PATH="${lib.makeBinPath ([ vuna ] ++ shellTools ++ [ pkgs.time ])}:$PATH"
-      exec ${pkgs.bash}/bin/bash ${../bench/run.sh} "$@"
+      exec ${pkgs.bash}/bin/bash ${../../bench/run.sh} "$@"
     '')
     // {
       meta.description = "生成程序与运行时性能基准（vuna 产物 vs 手写 OCaml）";

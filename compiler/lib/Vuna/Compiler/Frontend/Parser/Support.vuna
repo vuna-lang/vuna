@@ -2,7 +2,7 @@ module Vuna.Compiler.Frontend.Parser.Support where
 
 -- Vuna.Compiler.Frontend.Parser.Support：parser 的状态类型（PState）与 token/游标
 -- 辅助（lookahead、advance、span、fuel、infix 表、token 分类）。解析规则留在
--- `Parser.vuna`；拆出本模块是为满足 `nix/context.budget` 的 max_module_lines。
+-- `Parser.vuna`；拆出本模块是为满足 `nix/checks/data/context.budget` 的 max_module_lines。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer

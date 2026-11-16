@@ -66,7 +66,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 `withSpanFileIfEmpty` 注入）；Resolver 在 `EVar`/模式/限定名/类型表达式边界
 `withFallbackSpan`，Loader 的导入点用 `Import.importSpan`。没有「首条解析诊断无位置」
 的兼容特例，也没有 `attachParsePath` 的 context-label 兜底。确实无源码位置的码登记在
-`nix/diag-located.allow`（只减不增），由 `nix/checks/lib/diag-located.sh` 守住。
+`nix/checks/data/diag-located.allow`（只减不增），由 `nix/checks/lib/diag-located.sh` 守住。
 
 ## 4. 错误码域
 
@@ -189,9 +189,9 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 - 负例夹具双轨：320 个 `.diag.json` 结构化期望（`--json` 聚合文档，`--bless-diag` 生成）
   与 `.err` 首行片段断言并存；`--bless-diag` 在 runner 内写盘（worker 透传）。
 - `nix/checks/lib/diag-located.sh`：结构化诊断必须有主 span，或带显式 `absent` 理由并逐码
-  登记在 `nix/diag-located.allow`（只减不增）；当前 320/324 有位置，4 条按码登记（3 package-graph + 1 synthetic）。
+  登记在 `nix/checks/data/diag-located.allow`（只减不增）；当前 320/324 有位置，4 条按码登记（3 package-graph + 1 synthetic）。
 - `nix/checks/lib/diag-coverage.sh`：目录码 vs 结构化夹具覆盖门禁（allowlist 记录缺口、
-  基线 `nix/diag-coverage.min` 防回退；当前 191/242，缺口在 allowlist 且必须于 `nix/diag-unreachable.txt` 登记不可达原因）。
+  基线 `nix/checks/data/diag-coverage.min` 防回退；当前 191/242，缺口在 allowlist 且必须于 `nix/checks/data/diag-unreachable.txt` 登记不可达原因）。
 - `vuna check .`、全量 suite、`nix build .#vuna-seed` 必须通过。
 
 ## 9. 能力现状
@@ -215,16 +215,16 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 文案规范/门禁 | `nix/checks/lib/diag-style.sh`：句号/大小写/空白/占位符；专有名词例外逐码 allowlist |
 | explanation/example/`explain` | `explain` 文本/`--json`/`--list --json`，含模板/中文说明/severity/phase/category/example；元变量/洞带 `name`/note 与洞目标 span；`Elab/MetaSpans` 登记创建点，洞与可延迟字典元变量附 `fields.span name=created`，纯合成 meta 无源位置时不伪造 |
 | 效果行 | `TC_UnhandledEffects` fields 含 expected/actual 行 + 每个未处理 effect 单独一条 `unhandled:` 行 |
-| 结构化夹具 + 每码覆盖门禁 | 320 个 `.diag.json`；覆盖门禁 191/242，51 个缺口 allowlist 且逐码在 `nix/diag-unreachable.txt` 审计 |
+| 结构化夹具 + 每码覆盖门禁 | 320 个 `.diag.json`；覆盖门禁 191/242，51 个缺口 allowlist 且逐码在 `nix/checks/data/diag-unreachable.txt` 审计 |
 | 位置门禁 | `nix/checks/lib/diag-located.sh`：无 span 必须带 `absent` 理由并逐码登记；当前 320/324 有位置，剩余 3 package-graph + 1 internal；parser/resolver/loader/elab 用户面码均有位置 |
-| 无源码位置显式化 | `NoSourceReason`（synthetic/tool-usage/package-graph/internal）/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/diag-located.allow`，门禁要求「无 span 必须带理由」 |
+| 无源码位置显式化 | `NoSourceReason`（synthetic/tool-usage/package-graph/internal）/`Stability` 模型字段；JSON 仅在无位置时输出 `absent`；剩余无位置码逐码登记在 `nix/checks/data/diag-located.allow`，门禁要求「无 span 必须带理由」 |
 | SourceRef | `--json --with-sources` 顶层 `sources`：file/digest/package/module/relPath；默认 JSON 契约不变 |
 
 ## 10. 已知缺口
 
 - `rawAt` / `rawNoLoc` 仍是未分类的源码裸消息出口（只剩 `Elab/Types.errAt` 的兜底路径）。
 - 目录元数据：部分条目未带 severity/phase/category/explanation/example；仍有码没有结构化夹具
-  （缺口在 allowlist，逐码登记在 `nix/diag-unreachable.txt`）。
+  （缺口在 allowlist，逐码登记在 `nix/checks/data/diag-unreachable.txt`）。
 - `fields` 的构造器按语义族填充，尚未覆盖全部诊断族。
 
 ## 11. 边界

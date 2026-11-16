@@ -111,7 +111,7 @@ manifest，不向上找。命令语义与包格式
 ├── examples/  # 多包示例
 ├── .agents/   # AI 规则（rules/）与场景技能（skills/）
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
-├── nix/       # 构建图（packages/checks）+ rotate/metrics
+├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
 ├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
@@ -126,7 +126,7 @@ manifest，不向上找。命令语义与包格式
 ## 硬约束（改坏了 CI 会失败）
 
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
-2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/tcb-forbidden.txt`）；
+2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/seed/forbidden.txt`）；
 3. **效果原语返回 `Eff []` 动作**：effectful `prim_*`（含 `prim_eff_*`）没有 manifest
    门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Eff` +
    handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，

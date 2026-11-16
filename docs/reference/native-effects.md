@@ -23,7 +23,7 @@
    `(key, name)` 路由 + 约定（没有包级特权与能力声明，见 [effects.md](effects.md) §8.6）。
 
 **seed 约束**：`Base.Eff` 在 seed 闭包里（`Vuna.Compiler.Common` import 它；
-`nix/seed-files.txt` 含 `Base_dEff.ml`），base 的其余效应模块不在 seed。改标签形状而不
+`nix/seed/files.txt` 含 `Base_dEff.ml`），base 的其余效应模块不在 seed。改标签形状而不
 引入新语法时，旧 seed 仍能编译新源码；rotation 按需触发（规则见
 [bootstrap.md](bootstrap.md)）。
 
@@ -179,7 +179,7 @@ handle comp {
 ### 3.4 bootstrap 要求
 
 改这套降级逻辑时：`./result/bin/vuna check .` 必须过；新 seed 由 stage1 重新生成后
-stage1 == stage2（97 文件）；seed 闭包不变（`nix/tcb-check.sh`）。新关键字对 bootstrap 无
+stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）。新关键字对 bootstrap 无
 压力——编译器源码本身不写效应程序，降级逻辑也不需要用 `perform`/`handle` 写
 （[bootstrap.md](bootstrap.md)）。
 
@@ -242,7 +242,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 - 工具链：`30_fmt_roundtrip` 覆盖 handle 夹具的 fmt 往返（格式化后仍 `check` 通过、
   二次 fmt 幂等）。
 - 全域：`vuna check .`、`vuna fmt --check`、`nix run .#vuna-run-tests`；rotation 后
-  stage1 == stage2；`seed/` 闭包不变（`nix/tcb-check.sh`）。
+  stage1 == stage2；`seed/` 闭包不变（`nix/seed/tcb-check.sh`）。
 - 性能：`elab_perf` 全绿；长 do 链的 `Member` 证明参数边界（4 → 6）。
 
 ## 9. 风险与开放问题

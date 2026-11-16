@@ -43,7 +43,7 @@
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
 4. **工具链不进 TCB**：整个 `lib/` 与 `app/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
-   obs/package manager 等都在 `lib/`）；黑名单与断言见 `nix/tcb-forbidden.txt`；
+   obs/package manager 等都在 `lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
    执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
@@ -54,7 +54,7 @@
    `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Eff.*` 标签 + handler（纪律，不是门控，
    见 [effects.md](docs/reference/effects.md) §8.6）。
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
-   `checks.eff-boundary` 基线为 0（`nix/eff-boundary.allowlist` 为空），无例外；
+   `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；
    tracing 走隐藏 runtime 原语。
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
@@ -66,7 +66,7 @@
 
 - **每轮开工先 rebase 主分支**（`git fetch origin main` → `git rebase main`），历史保持线性
   （[workflow.md](.agents/rules/workflow.md)）。
-- **禁止手改 `seed/`**：只能 `sh nix/seed-rotate.sh ./result/bin/vuna` 轮换，且独立成
+- **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换，且独立成
   `chore(seed): ...` 提交（[workflow.md](.agents/rules/workflow.md)）。
 - **改完代码跑 `./result/bin/vuna fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量
   `nix build` / `nix flake check`（[verification.md](.agents/rules/verification.md)）。
@@ -93,7 +93,7 @@ nix build .#vuna --out-link result        # 产品 CLI；.#vuna-compiler / .#vun
 ./result/bin/vuna fmt <改动的文件/目录>     # 格式化；--check 只检查
 ./result/bin/vuna run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
 nix run .#vuna-run-tests -- --only <章节> # 按章节跑 suite（--list 看章节）
-sh nix/seed-rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
+sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
 nix flake check                           # 3 packages + 19 checks（清单见 testing.md）
 ./result/bin/vuna map --find <Module.name> # 定位符号；另有 --impact / api
 ```
@@ -110,7 +110,8 @@ Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 等，**不进 seed**）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` +
 `suite/`（原生 runner + steps 用例）+ `corpus/` 夹具；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +
-lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图 + CI 门禁 + rotate/metrics；`docs/` = 分层文档。
+lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（`build/`）+ CI 门禁（`checks/`）+
+seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 
 ## 文档导航
 

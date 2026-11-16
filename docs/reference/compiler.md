@@ -7,7 +7,7 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed-files.txt` 为准）；工具链
+就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed/files.txt` 为准）；工具链
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
@@ -312,7 +312,7 @@ codegen 健康由**固定夹具**度量：`test/corpus/codegen/` 是冻结的包
 record、trait/instance/deriving、as-pattern、where/let 多 clause、List 结构递归、Int 相等、
 零参定义、动作/do、`prim_*` 的 `Eff` 包装、跨模块 split）。`checks.vuna-metrics` 用
 `vuna build --no-compile` 生成它，剔除 `Base_*.ml` / `Prelude.ml` / `Vuna_runtime.ml` 后，
-用 `nix/metrics.sh` 与 `nix/codegen.baseline` 做**精确基线**比较
+用 `nix/tools/metrics.sh` 与 `nix/checks/data/codegen.baseline` 做**精确基线**比较
 （`<metric> =<expected>`，不等即失败）。
 
 输入固定，所以任何漂移都是 codegen 输出变化，必须复核后更新基线；剔除 base/runtime 是
@@ -322,7 +322,7 @@ diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也
 `bench/bootstrap.sh`。
 
 **种子尺寸不设门槛**：`seed/` 的绝对 bytes/lines 随功能增长，没有可比性；bench 的
-`sizes.seed_bytes` / `stage1_bytes` 只作参考，`nix/metrics.sh` 仍可手动量任意产物。
+`sizes.seed_bytes` / `stage1_bytes` 只作参考，`nix/tools/metrics.sh` 仍可手动量任意产物。
 
 ## 相关阅读
 

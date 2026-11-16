@@ -21,7 +21,7 @@ s1 == s2（文件集合逐字节）即 fixed point
                                   ──build.sh/ocamlopt──▶ .output/bin/vuna，产品 CLI）
 ```
 
-`nix/seed-rotate.sh` 用当前产品 CLI 生成临时种子后，也会用该种子构建出的编译器重新
+`nix/seed/rotate.sh` 用当前产品 CLI 生成临时种子后，也会用该种子构建出的编译器重新
 `build --no-compile --out` 并与种子 `diff -r`，同样要求逐字节一致后才替换 `seed/`。
 
 seed 与 `compile` / `build` 的目录产物都由**同一个** DT split codegen 生成
@@ -38,7 +38,7 @@ stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：每个 vuna
 模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块与 `build.sh`。种子**只覆盖 compiler
 包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
-编译器编译出来，不在信任锚点里。当前闭包规模以 `seed/` 实际内容与 `nix/seed-files.txt` 为准。
+编译器编译出来，不在信任锚点里。当前闭包规模以 `seed/` 实际内容与 `nix/seed/files.txt` 为准。
 
 唯一的硬性不变量：
 
@@ -64,19 +64,19 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 取舍：信任锚点因此可能落后于源码。这是明确接受的代价，换来的是不再为每次 `compiler/`
 或 `base/` 改动产生 3–4k 行生成物 diff、避免 feature 分支与 rebase 的 seed 冲突。fixed point
 仍保证当前编译器自洽；发布前由 rotation 收敛。滞后程度由 CI 报告与
-`nix/seed-rotation.txt` 元数据可见。
+`nix/seed/rotation.txt` 元数据可见。
 
 - 种子只通过 **seed rotation** 更新：用当前产品 CLI 对 compiler 包做 DT split codegen，
   在临时目录完成 TCB、完整 allowlist、闭包数量与 fixed point 校验后才替换 `seed/`，并写入
-  `nix/seed-rotation.txt`（`nix/seed-rotate.sh`，失败不破坏工作树）；
+  `nix/seed/rotation.txt`（`nix/seed/rotate.sh`，失败不破坏工作树）；
 - 接口缓存放在对象库（`$VUNA_STORE/objects/iface`），源码旁没有接口文件；两遍编译共用
   对象库，位置表路径由包上下文归一，fixed point 比较的是生成文件集；
 - CI 用 `checks.seed-selfhost` 守不变量 1/2：`seed/` 由 `packages.vuna-seed` 构建；种子对
   **compiler 包**做 DT split 得到 stage1 文件集并构建；stage1 再生成 stage2 文件集，
   `diff -r` 逐字节一致；同时报告 seed 与当前源码生成结果的滞后规模（不失败），按
-  `nix/tcb-check.sh` / `nix/tcb-forbidden.txt` 断言 seed/stage1/stage2 都不含工具模块，按
-  `nix/tcb-allowlist.sh` / `nix/seed-files.txt` 断言 seed 文件集逐项一致，按
-  `nix/seed-files.txt` 断言闭包清单与 `.ml` 数量，并检查增量构建与行为抽查；
+  `nix/seed/tcb-check.sh` / `nix/seed/forbidden.txt` 断言 seed/stage1/stage2 都不含工具模块，按
+  `nix/seed/tcb-allowlist.sh` / `nix/seed/files.txt` 断言 seed 文件集逐项一致，按
+  `nix/seed/files.txt` 断言闭包清单与 `.ml` 数量，并检查增量构建与行为抽查；
 - 如果新特性会让源码超出旧种子能编译的语法子集，必须先把特性实现成旧语法可编译的形式，
   rotate 种子后再在编译器源码里使用；
 - `seed/` 下所有文件都是生成物，禁止手改。
@@ -85,8 +85,8 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 
 - `checks.seed-selfhost` 用 `LC_ALL=C diff -rq seed s1` 统计差异文件数，写入
   `$OUT/seed-lag.txt` 与 CI 日志，**不失败**；
-- `nix/seed-rotation.txt` 记录上次 rotation 的时间、`compiler/` + `base/` 源码指纹、
-  文件数、seed 闭包数量与 git commit（`nix/seed-rotate.sh` 写入）；它只用于审计，不参与
+- `nix/seed/rotation.txt` 记录上次 rotation 的时间、`compiler/` + `base/` 源码指纹、
+  文件数、seed 闭包数量与 git commit（`nix/seed/rotate.sh` 写入）；它只用于审计，不参与
   失败判定；
 - rotation 必须独立成 `chore(seed): ...` 提交，不与特性提交混合。
 
@@ -95,16 +95,16 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 ```console
 # 前提：当前 seed 能编译当前源码（否则先按「旧种子能编译新源码」规则把源码落到旧语法）
 nix build .#vuna --out-link result
-sh nix/seed-rotate.sh ./result/bin/vuna   # 生成 → TCB + fixed point 校验 → 替换 seed/ 并写元数据
+sh nix/seed/rotate.sh ./result/bin/vuna   # 生成 → TCB + fixed point 校验 → 替换 seed/ 并写元数据
 nix flake check                           # seed-selfhost 等全部通过
 git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）
-git add seed/ nix/seed-files.txt nix/seed-rotation.txt && git commit
+git add seed/ nix/seed/files.txt nix/seed/rotation.txt && git commit
 ```
 
-`nix/seed-rotate.sh` 在临时目录完成全部生成与校验：`vuna build --no-compile --out
-"$tmp/seed" compiler` → 按 `nix/tcb-forbidden.txt` 断言 TCB → 用该种子构建并验证自生成
-fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.txt`，因此中间失败不会破坏
-当前信任锚点。TCB 黑名单只有 `nix/tcb-forbidden.txt` 一份（由 `nix/tcb-check.sh` 断言），
+`nix/seed/rotate.sh` 在临时目录完成全部生成与校验：`vuna build --no-compile --out
+"$tmp/seed" compiler` → 按 `nix/seed/forbidden.txt` 断言 TCB → 用该种子构建并验证自生成
+fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed/rotation.txt`，因此中间失败不会破坏
+当前信任锚点。TCB 黑名单只有 `nix/seed/forbidden.txt` 一份（由 `nix/seed/tcb-check.sh` 断言），
 新增工具模块时追加到那里。替换步骤先把新种子复制到同目录临时路径，再用 rename 换入，
 失败时保留原 `seed/`。
 
@@ -144,9 +144,9 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed-rotation.tx
 
 ## 种子文件集（当前）
 
-`seed/` 由 `vuna build --no-compile --out <tmp>/seed compiler`（`nix/seed-rotate.sh` 在临时
+`seed/` 由 `vuna build --no-compile --out <tmp>/seed compiler`（`nix/seed/rotate.sh` 在临时
 目录执行，校验通过后替换 `seed/`）产出，文件集按依赖序排列，`seed/build.sh` 的 `MODULES`
-列出全部编译单元。最终清单与数量以 `seed/` 实际内容与 `nix/seed-files.txt` 为准：
+列出全部编译单元。最终清单与数量以 `seed/` 实际内容与 `nix/seed/files.txt` 为准：
 
 ```text
 Vuna_runtime

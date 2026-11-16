@@ -7,11 +7,11 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   # 构建图按职责拆在 nix/ 下：
-  #   common.nix   —— 系统列表、工具集、版本号
-  #   packages.nix —— 自举链（vuna-seed → vuna-compiler → vuna）与开发 runner
-  #   checks/      —— CI 门槛（定义在 checks/default.nix，主体是 checks/*.sh）
-  #   outputs.nix  —— 组装 packages / checks / devShells / formatter
+  #   build/   —— flake outputs：common / packages / run-tests / outputs
+  #   checks/  —— CI 门槛（default.nix + 入口脚本 + lib/ 实现 + data/ 基线）
+  #   seed/    —— seed rotation 与 TCB 断言
+  #   tools/   —— 独立开发工具（metrics / context-budget / obs）
   outputs =
     { nixpkgs, ... }:
-    import ./nix/outputs.nix { inherit nixpkgs; };
+    import ./nix/build/outputs.nix { inherit nixpkgs; };
 }

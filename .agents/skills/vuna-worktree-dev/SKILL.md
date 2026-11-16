@@ -33,7 +33,7 @@ git rev-parse --abbrev-ref HEAD    # 当前分支（副 worktree 通常不是 ma
    `vuna run`。**不要为自测跑 `nix build` / `nix flake check`**（慢，CI/Lead 负责）。
 4. **测试用章节过滤**：`nix run .#vuna-run-tests -- --only <章节>`（`--list` 看章节名），
    别为验证一处改动跑全量套件。
-5. **`seed/` 禁止手改**：它是生成物，只能 `sh nix/seed-rotate.sh ./result/bin/vuna` 轮换。
+5. **`seed/` 禁止手改**：它是生成物，只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换。
    改 `compiler/` 前先确认**旧种子能编译新源码**：`nix build .#vuna-seed`（或至少等 CI 的
    `checks.seed-selfhost`）；需要新语法时先以旧语法落地 → rotate → 再用新语法。
    日常改 `lib/` / `app/` / `test/` / `docs/` **不需要** rotation；rotation 必须独立成
@@ -72,7 +72,7 @@ nix run .#vuna-run-tests -- --only dt  # 按章节跑测试
 
 ```console
 nix build .#vuna-seed              # 不变量 1：旧种子能编译当前源码
-sh nix/seed-rotate.sh ./result/bin/vuna   # 仅当确实需要轮换（新语法 / 发布前）
+sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当确实需要轮换（新语法 / 发布前）
 git diff seed/                     # 轮换后必须能解释每个变化
 ```
 

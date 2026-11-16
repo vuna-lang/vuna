@@ -34,7 +34,7 @@ grep -rhoE '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+$' test/suite/steps --include='*.diag
   >> "$tmp/covered.txt" || true
 sort -u -o "$tmp/covered.txt" "$tmp/covered.txt"
 
-allowfile=nix/diag-coverage-allow.txt
+allowfile=nix/checks/data/diag-coverage-allow.txt
 if [ -f "$allowfile" ]; then
   grep -v '^[[:space:]]*#' "$allowfile" | grep -v '^[[:space:]]*$' | sort -u > "$tmp/allow.txt" || true
 else
@@ -64,7 +64,7 @@ if [ -n "$stale" ]; then
   exit 1
 fi
 
-unreachfile=nix/diag-unreachable.txt
+unreachfile=nix/checks/data/diag-unreachable.txt
 if [ -f "$unreachfile" ]; then
   awk '!/^#/ && NF { print $1 }' "$unreachfile" | sort -u > "$tmp/unreachable.txt"
   missing_reason=$(comm -23 "$tmp/allow.txt" "$tmp/unreachable.txt")
@@ -83,7 +83,7 @@ fi
 
 catalog_n=$(wc -l < "$tmp/catalog.txt" | tr -d " ")
 covered_n=$(wc -l < "$tmp/covered.txt" | tr -d ' ')
-minfile=nix/diag-coverage.min
+minfile=nix/checks/data/diag-coverage.min
 min=0
 if [ -f "$minfile" ]; then min=$(tr -d '[:space:]' < "$minfile"); fi
 if [ "$covered_n" -lt "$min" ]; then

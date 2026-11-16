@@ -52,7 +52,7 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
-`nix/seed-*.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
+`nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -219,7 +219,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；`vuna interp` 不执行运行时效应（见
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
-  `nix/tcb-forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有
+  `nix/seed/forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有
   `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `prim_*` / `prim_eff_*` 对任何包
   可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
   使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
@@ -249,7 +249,7 @@ sh s1/build.sh）→ stage1 →（build --no-compile --out s2 compiler）→ dif
 ```
 
 命令 / 入口：`build --no-compile --out`（`compileToDir` → `dtSplitProjectParts` / `dtSplitProjectWithIfaces` →
-`generateDtSplitProgram`）、`nix/seed-rotate.sh`、`checks.seed-selfhost`。**硬不变量**：
+`generateDtSplitProgram`）、`nix/seed/rotate.sh`、`checks.seed-selfhost`。**硬不变量**：
 旧 seed 能编译新源码；rotation 按需（见 [bootstrap.md](reference/bootstrap.md)）；之后
 stage1 == stage2；seed 只含 compiler 包入口闭包。
 测试：第 13/38 段 + `checks.seed-selfhost`，详见 [bootstrap.md](reference/bootstrap.md)。

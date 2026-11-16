@@ -119,7 +119,7 @@ function parseArgs(argv) {
 }
 
 // ---------------------------------------------------------------- vuna 可执行定位
-// 与 nix/obs.sh 的 find_vuna 同一个顺序：$VUNA → ./result/bin/vuna → PATH 里的 vuna。
+// 与 nix/tools/obs.sh 的 find_vuna 同一个顺序：$VUNA → ./result/bin/vuna → PATH 里的 vuna。
 function findVuna(explicit) {
   if (explicit) return explicit;
   if (process.env.VUNA) return process.env.VUNA;

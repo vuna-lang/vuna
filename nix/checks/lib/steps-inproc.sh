@@ -7,14 +7,14 @@
 #
 # 判据（两条）：
 #   1. 出现 `"$VUNA"` 的文件必须出现在 `test/suite/process-bound.txt`；
-#   2. 登记行数不得超过 `nix/steps-inproc.max`（ratchet：只允许下降）。
+#   2. 登记行数不得超过 `nix/checks/data/steps-inproc.max`（ratchet：只允许下降）。
 set -eu
 
 root=$(pwd)
 cd "$root"
 
 registry=test/suite/process-bound.txt
-maxfile=nix/steps-inproc.max
+maxfile=nix/checks/data/steps-inproc.max
 
 [ -f "$registry" ] || {
   echo "steps-inproc: missing $registry" >&2

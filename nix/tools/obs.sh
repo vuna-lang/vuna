@@ -3,12 +3,12 @@
 # Chrome / Perfetto / speedscope / 火焰图 / Linux perf / gdb。
 #
 # 用法（在仓库根或任意目录）：
-#   sh nix/obs.sh trace   -- <cmd...>       用 VUNA_OBS=2 跑命令，打印 trace 路径
-#   sh nix/obs.sh flame   <trace...>        转 folded 栈（有 flamegraph.pl 时顺带出 SVG）
-#   sh nix/obs.sh speed   <trace...>        转 speedscope JSON（可直接拖进 speedscope.app）
-#   sh nix/obs.sh cpuprof <trace...>        转 .cpuprofile（Chrome DevTools 的 Performance 面板）
-#   sh nix/obs.sh dwarf   [OUTDIR]          readelf 断言 DWARF 行表指向 `.vuna`（默认 .output）
-#   sh nix/obs.sh perf    -- <cmd...>       perf record -g 跑命令并还原 `.vuna` 帧（需 perf + 权限）
+#   sh nix/tools/obs.sh trace   -- <cmd...>       用 VUNA_OBS=2 跑命令，打印 trace 路径
+#   sh nix/tools/obs.sh flame   <trace...>        转 folded 栈（有 flamegraph.pl 时顺带出 SVG）
+#   sh nix/tools/obs.sh speed   <trace...>        转 speedscope JSON（可直接拖进 speedscope.app）
+#   sh nix/tools/obs.sh cpuprof <trace...>        转 .cpuprofile（Chrome DevTools 的 Performance 面板）
+#   sh nix/tools/obs.sh dwarf   [OUTDIR]          readelf 断言 DWARF 行表指向 `.vuna`（默认 .output）
+#   sh nix/tools/obs.sh perf    -- <cmd...>       perf record -g 跑命令并还原 `.vuna` 帧（需 perf + 权限）
 #
 # 工具缺失时给可操作提示而不是 127：`perf` / `gdb` / `flamegraph.pl` 都**不在**默认
 # devShell（避免构建图变重）；按需 `nix shell nixpkgs#perf nixpkgs#FlameGraph`。
@@ -23,7 +23,7 @@ set -eu
 
 VUNA=${VUNA:-}
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
+here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd) || exit 1
 
 find_vuna() {
   if [ -n "$VUNA" ]; then

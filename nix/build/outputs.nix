@@ -22,7 +22,7 @@ let
     {
       inherit packages;
 
-      checks = import ./checks {
+      checks = import ../checks {
         inherit
           pkgs
           packages
