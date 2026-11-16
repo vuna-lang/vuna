@@ -8,7 +8,7 @@ trait Functor f => Applicative f where
   pure : a -> f a
 
 trait Applicative m => Monad m where
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
 
 data Box a : Type where
   MkBox : a -> Box a
@@ -20,7 +20,7 @@ instance Applicative Box where
   pure x = MkBox x
 
 instance Monad Box where
-  bind (MkBox x) f = f x
+  (>>=) (MkBox x) f = f x
 
 inc : Int -> Int
 inc n = n + 1
