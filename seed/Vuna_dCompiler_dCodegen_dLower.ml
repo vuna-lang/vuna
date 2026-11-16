@@ -1479,36 +1479,43 @@ let rec v_Vuna_dCompiler_dCodegen_dLower_dfilterMapRunHost = (fun mc0 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
+# 1516 "Vuna/Compiler/Codegen/Lower.vuna"
+let rec v_Vuna_dCompiler_dCodegen_dLower_dfilterMapErrorRunHost = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__588, dtb__589) -> ((fun host -> (if (host = "") then (v_Vuna_dCompiler_dCodegen_dLower_dfilterMapErrorRunHost dtb__589) else (Base_dList.C_Base_dList_dList_Cons (host, (v_Vuna_dCompiler_dCodegen_dLower_dfilterMapErrorRunHost dtb__589))))) (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_dbuiltinEffectErrorRunHostOf dtb__588))
+  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
 # 1494 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dlowerEntryOf = (fun defs -> (match ((Vuna_dCompiler_dCodegen_dErase.v_Vuna_dCompiler_dCodegen_dErase_dfindDtDef "main") defs) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__588) -> (match (v_Vuna_dCompiler_dCodegen_dLower_dactionResultTyIn (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__588)) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__589) -> ((fun innerTy -> ((fun tags -> ((fun handlers -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = (v_Vuna_dCompiler_dCodegen_dLower_dmainShowIr innerTy); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = "main"; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = true; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_deffMainRunName)); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = handlers }))))) (v_Vuna_dCompiler_dCodegen_dLower_dfilterMapRunHost tags))) (v_Vuna_dCompiler_dCodegen_dLower_dmainRowTags (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__588)))) (Base_dPair.v_Base_dPair_dsecondOf dtb__589))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = (v_Vuna_dCompiler_dCodegen_dLower_dmainShowIr (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__588)); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = "main"; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = false; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = Base_dList.C_Base_dList_dList_Nil }))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__590) -> (match (v_Vuna_dCompiler_dCodegen_dLower_dactionResultTyIn (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__590)) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__591) -> ((fun innerTy -> ((fun tags -> ((fun handlers -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = (v_Vuna_dCompiler_dCodegen_dLower_dmainShowIr innerTy); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = "main"; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = true; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (Vuna_dCompiler_dIntrinsics.v_Vuna_dCompiler_dIntrinsics_deffMainRunName)); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = handlers }))))) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCodegen_dLower_dfilterMapRunHost tags)) (v_Vuna_dCompiler_dCodegen_dLower_dfilterMapErrorRunHost tags)))) (v_Vuna_dCompiler_dCodegen_dLower_dmainRowTags (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__590)))) (Base_dPair.v_Base_dPair_dsecondOf dtb__591))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = (v_Vuna_dCompiler_dCodegen_dLower_dmainShowIr (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefType dtb__590)); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = "main"; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = false; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = Base_dList.C_Base_dList_dList_Nil }))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1514 "Vuna/Compiler/Codegen/Lower.vuna"
+# 1523 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dgroupOfPair = (fun mc0 -> (match mc0 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__590; Base_dPair.f_Base_dPair_dPair_second = dtb__591 } -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = dtb__590; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = dtb__591 }
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__592; Base_dPair.f_Base_dPair_dPair_second = dtb__593 } -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = dtb__592; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = dtb__593 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1527 "Vuna/Compiler/Codegen/Lower.vuna"
+# 1536 "Vuna/Compiler/Codegen/Lower.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dLower_dnameSetOf = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__592, dtb__593) -> ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__592) true) (v_Vuna_dCompiler_dCodegen_dLower_dnameSetOf dtb__593))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__594, dtb__595) -> ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__594) true) (v_Vuna_dCompiler_dCodegen_dLower_dnameSetOf dtb__595))
   | Base_dList.C_Base_dList_dList_Nil -> ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1518 "Vuna/Compiler/Codegen/Lower.vuna"
+# 1527 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dmkLwEnv = (fun datas defs unit -> ((fun shared -> ((fun runtime -> { f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwShared = shared; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwDatas = runtime; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwTyParams = (v_Vuna_dCompiler_dCodegen_dLower_dtyParamsOf runtime); f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwRecordFields = (v_Vuna_dCompiler_dCodegen_dLower_drecordFieldsOf runtime); f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwCtors = (shared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwOpaques = (shared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwUnboxed = (shared).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwDefs = defs; f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwDefTbl = (v_Vuna_dCompiler_dCodegen_dLower_ddefTblOf defs); f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwRuntimeNames = (v_Vuna_dCompiler_dCodegen_dLower_dnameSetOf (Vuna_dCompiler_dCodegen_dErase.v_Vuna_dCompiler_dCodegen_dErase_druntimeNamesOf defs)); f_Vuna_dCompiler_dCodegen_dLower_dLwEnv_lwUnit = unit }) (v_Vuna_dCompiler_dCodegen_dLower_drtDatasOf datas))) ((v_Vuna_dCompiler_dCodegen_dLower_dlowerSharedOf datas) defs)))
 
-# 1546 "Vuna/Compiler/Codegen/Lower.vuna"
+# 1555 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dpartitionRuntimeDefs = (fun defs -> (match ((Vuna_dCompiler_dCodegen_dErase.v_Vuna_dCompiler_dCodegen_dErase_dpartitionDefs (Vuna_dCompiler_dCodegen_dErase.v_Vuna_dCompiler_dCodegen_dErase_ddefTable defs)) defs) with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__594; Base_dPair.f_Base_dPair_dPair_second = dtb__595 } -> dtb__594
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__596; Base_dPair.f_Base_dPair_dPair_second = dtb__597 } -> dtb__596
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -1518,5 +1525,5 @@ let v_Vuna_dCompiler_dCodegen_dLower_dlowerUnitAfterChecks = (fun env defNames d
 # 1384 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dlowerUnitOf = (fun env defNames dataNames -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (v_Vuna_dCompiler_dCodegen_dLower_dcheckProgramOf env)) (fun _u -> (((v_Vuna_dCompiler_dCodegen_dLower_dlowerUnitAfterChecks env) defNames) dataNames))))
 
-# 1532 "Vuna/Compiler/Codegen/Lower.vuna"
+# 1541 "Vuna/Compiler/Codegen/Lower.vuna"
 let v_Vuna_dCompiler_dCodegen_dLower_dlowerProgramOf = (fun datas defs -> ((fun env -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dCodegen_dLower_dlowerUnitOf env) ((Base_dList.v_Base_dList_dmap Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefName) defs)) ((Base_dList.v_Base_dList_dmap Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName) datas))) (fun unitIr -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (v_Vuna_dCompiler_dCodegen_dLower_dlowerEntryOf defs)) (fun entry -> ((fun program -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (Vuna_dCompiler_dIr.v_Vuna_dCompiler_dIr_dvalidateProgram program)) (fun _u -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (program))))) { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = (v_Vuna_dCompiler_dCodegen_dLower_dlwEnvShared env); Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTyDecls = (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTyDecls; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups = (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitHasListFamily = (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitHasListFamily; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTypeRefs = (unitIr).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTypeRefs; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitEntry = entry } })))))) (((v_Vuna_dCompiler_dCodegen_dLower_dmkLwEnv datas) defs) "")))
