@@ -74,13 +74,12 @@ concatMapRow f [] = []
 concatMapRow f (row :: rest) = append (f row) (concatMapRow f rest)
 
 specializeRow : Int -> String -> List Pat -> List (List Pat)
-specializeRow ar cname row = case row of
-  [] => []
-  p :: ps => case patHead p of
-    PCon c subs _ => if c == cname then [append subs ps] else []
-    PVar _ _ => [append (wilds ar) ps]
-    PWild _ => [append (wilds ar) ps]
-    _ => []
+specializeRow ar cname [] = []
+specializeRow ar cname (p :: ps) = case patHead p of
+  PCon c subs _ => if c == cname then [append subs ps] else []
+  PVar _ _ => [append (wilds ar) ps]
+  PWild _ => [append (wilds ar) ps]
+  _ => []
 
 hasNilRow : List (List Pat) -> Bool
 hasNilRow [] = False
@@ -159,9 +158,8 @@ matrixWitness table clauses =
 
 -- 各行的列数必须一致（`where`/`let` 里允许不同 arity 的方程，矩阵算法不适用）。
 uniformArity : List (List Pat) -> Bool
-uniformArity rows = case rows of
-  [] => False
-  r :: rest => allSameLen (natToInt (length r)) rest
+uniformArity [] = False
+uniformArity (r :: rest) = allSameLen (natToInt (length r)) rest
 
 allSameLen : Int -> List (List Pat) -> Bool
 allSameLen n [] = True
@@ -177,9 +175,8 @@ matrixArity (row :: _) = natToInt (length row)
 -- 优先（那些错误在精化前无法预知，预检会把它们盖掉）。见证首位必须是构造子，否则
 -- 保持原诊断（字面量列 / 未知族 / 重载构造子的情形留给既有文案）。
 export improveExhaustive : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Check a -> Check a
-improveExhaustive table clauses sp res = case res of
-  OkC v => OkC v
-  ErrC d => ErrC (improveDiag table clauses sp d)
+improveExhaustive table clauses sp (OkC v) = OkC v
+improveExhaustive table clauses sp (ErrC d) = ErrC (improveDiag table clauses sp d)
 
 improveDiag : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Diagnostic -> Diagnostic
 improveDiag table clauses sp d = if d.diagCode /= "TC_NotExhaustive" then d
@@ -194,11 +191,10 @@ else case matrixWitness table clauses of
 -- 只有见证**首位**就是构造子时才值得抢先报错：那是最清晰的「漏了某个构造子」。
 -- 首位是通配（字面量列 / 未知族）时不推断，留给降级后的既有诊断。
 export witnessNamesCtor : List Pat -> Bool
-witnessNamesCtor ws = case ws of
-  p :: _ => case patHead p of
-    PCon _ _ _ => True
-    _ => False
-  [] => False
+witnessNamesCtor [] = False
+witnessNamesCtor (p :: _) = case patHead p of
+  PCon _ _ _ => True
+  _ => False
 
 -- 模式渲染：见证里的变量/通配统一显示为 `_`，构造子应用带括号。
 -- `fuel` 只用于让终止性可证（模式深度远小于 64）。
