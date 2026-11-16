@@ -332,8 +332,46 @@ else case pending of
       Just d => reachableNames (fuel - 1) (append (irDefDeps d) rest) defTbl seen2
 
 -- ---------------------------------------------------------------
--- 合法性护栏
+-- 节点遍历（后端共用的纯分析）
 -- ---------------------------------------------------------------
+-- | 一个 IR 项里的全部字符串字面量（含 `IrConcatMany` 的叶子），按出现顺序。
+-- native / wasm 的字符串池都吃这一份，避免各自维护一份节点分派。
+export irStringsOf : Ir -> List String
+irStringsOf (IrStr s) = [s]
+irStringsOf (IrCtor _ _ args) = concatMap irStringsOf args
+irStringsOf (IrRecord _ fields) = concatMap irStringsOfField fields
+irStringsOf (IrProj base _ _) = irStringsOf base
+irStringsOf (IrRecUpd base _ fields) = append (irStringsOf base) (concatMap irStringsOfField fields)
+irStringsOf (IrRtApp _ args) = concatMap irStringsOf args
+irStringsOf (IrCast inner) = irStringsOf inner
+irStringsOf (IrLet _ scrut body) = append (irStringsOf scrut) (irStringsOf body)
+irStringsOf (IrLam _ body) = irStringsOf body
+irStringsOf (IrApp f a) = append (irStringsOf f) (irStringsOf a)
+irStringsOf (IrIf c t e) = append (irStringsOf c) (append (irStringsOf t) (irStringsOf e))
+irStringsOf (IrCase scrut alts) = append (irStringsOf scrut) (concatMap irStringsOfAlt alts)
+irStringsOf (IrNatCase scrut _ z s c) =
+  append (irStringsOf scrut)
+    (append (irStringsOfAltMaybe z) (append (irStringsOfAltMaybe s) (irStringsOfAltMaybe c)))
+irStringsOf (IrConcatMany parts) = concatMap irStringsOf parts
+irStringsOf (IrEffThunk _ _ _ _ prim) = irStringsOf prim
+irStringsOf _ = []
+
+irStringsOfField : Pair String Ir -> List String
+irStringsOfField p = irStringsOf (secondOf p)
+
+irStringsOfAlt : IrAlt -> List String
+irStringsOfAlt alt = irStringsOf (irAltBodyOf alt)
+
+irStringsOfAltMaybe : Maybe IrAlt -> List String
+irStringsOfAltMaybe Nothing = []
+irStringsOfAltMaybe (Just alt) = irStringsOfAlt alt
+
+-- | 一个运行时定义体的字符串字面量（extern / 无体定义为空）。
+export irStringsOfDef : IrDef -> List String
+irStringsOfDef d = case irDefBody d of
+  Nothing => []
+  Just body => irStringsOf body
+
 -- | 单元内定义名不得重复（迁移前在 OCaml 名字层校验；IR 层先按源码名去重，
 -- 后端再按渲染名去重）。
 export checkUniqueDefNames : List IrDef -> Check Int

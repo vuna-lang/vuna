@@ -129,49 +129,13 @@ memStr s (x :: rest) = s == x || memStr s rest
 -- ---------------------------------------------------------------
 -- 字符串字面量池
 -- -----------------------------------------------------------
--- | 收集一个 IR 项里的**全部**字符串字面量（含 `IrConcatMany` 的叶子）。
-strLitsOf : Ir -> List String
-strLitsOf (IrStr s) = [s]
-strLitsOf (IrCtor _ _ args) = concatMap strLitsOf args
-strLitsOf (IrRecord _ fields) = concatMap strLitsOfField fields
-strLitsOf (IrProj base _ _) = strLitsOf base
-strLitsOf (IrRecUpd base _ fields) = append (strLitsOf base) (concatMap strLitsOfField fields)
-strLitsOf (IrRtApp _ args) = concatMap strLitsOf args
-strLitsOf (IrCast inner) = strLitsOf inner
-strLitsOf (IrLet _ scrut body) = append (strLitsOf scrut) (strLitsOf body)
-strLitsOf (IrLam _ body) = strLitsOf body
-strLitsOf (IrApp f a) = append (strLitsOf f) (strLitsOf a)
-strLitsOf (IrIf c t e) = append (strLitsOf c) (append (strLitsOf t) (strLitsOf e))
-strLitsOf (IrCase scrut alts) = append (strLitsOf scrut) (concatMap strLitsOfAlt alts)
-strLitsOf (IrNatCase scrut _ z s c) =
-  append (strLitsOf scrut)
-    (append (strLitsOfAltMaybe z) (append (strLitsOfAltMaybe s) (strLitsOfAltMaybe c)))
-strLitsOf (IrConcatMany parts) = concatMap strLitsOf parts
-strLitsOf (IrEffThunk _ _ _ _ prim) = strLitsOf prim
-strLitsOf _ = []
-
-strLitsOfField : Pair String Ir -> List String
-strLitsOfField p = strLitsOf (secondOf p)
-
-strLitsOfAlt : IrAlt -> List String
-strLitsOfAlt alt = strLitsOf (irAltBodyOf alt)
-
-strLitsOfAltMaybe : Maybe IrAlt -> List String
-strLitsOfAltMaybe Nothing = []
-strLitsOfAltMaybe (Just alt) = strLitsOfAlt alt
-
-strLitsOfDef : IrDef -> List String
-strLitsOfDef d = case irDefBody d of
-  Nothing => []
-  Just b => strLitsOf b
-
 addLit : List (Pair String String) -> String -> List (Pair String String)
 addLit pool s =
   if memStr s (map (\p => firstOf p) pool) then pool
   else append pool [Pair s (nativeStrLitLabel (length pool))]
 
 poolOfDefs : List IrDef -> List (Pair String String)
-poolOfDefs defs = foldl addLit [] (concatMap strLitsOfDef defs)
+poolOfDefs defs = foldl addLit [] (concatMap irStringsOfDef defs)
 
 poolLabelOf : String -> List (Pair String String) -> Maybe String
 poolLabelOf _ [] = Nothing

@@ -124,65 +124,6 @@ memStr s (x :: rest) = s == x || memStr s rest
 addString : String -> List String -> List String
 addString s pool = if memStr s pool then pool else append pool [s]
 
-strLitsAltFuel : Int -> List IrAlt -> List String
-strLitsAltFuel fuel alts = if fuel <= 0 then []
-else case alts of
-  [] => []
-  a :: rest => append (strLitsOfFuel (fuel - 1) (irAltBodyOf a)) (strLitsAltFuel (fuel - 1) rest)
-
-strLitsAltMaybeFuel : Int -> List (Maybe IrAlt) -> List String
-strLitsAltMaybeFuel fuel ms = if fuel <= 0 then []
-else case ms of
-  [] => []
-  Nothing :: rest => strLitsAltMaybeFuel (fuel - 1) rest
-  (Just a) :: rest =>
-    append (strLitsOfFuel (fuel - 1) (irAltBodyOf a)) (strLitsAltMaybeFuel (fuel - 1) rest)
-
-strLitsFieldsFuel : Int -> List (Pair String Ir) -> List String
-strLitsFieldsFuel fuel fs = if fuel <= 0 then []
-else case fs of
-  [] => []
-  p :: rest => append (strLitsOfFuel (fuel - 1) (secondOf p)) (strLitsFieldsFuel (fuel - 1) rest)
-
-strLitsArgsFuel : Int -> List Ir -> List String
-strLitsArgsFuel fuel args = if fuel <= 0 then []
-else case args of
-  [] => []
-  a :: rest => append (strLitsOfFuel (fuel - 1) a) (strLitsArgsFuel (fuel - 1) rest)
-
-strLitsOfFuel : Int -> Ir -> List String
-strLitsOfFuel fuel ir = if fuel <= 0 then []
-else case ir of
-  IrStr s => [s]
-  IrVar _ => []
-  IrGlobal _ => []
-  IrInt _ => []
-  IrBool _ => []
-  IrFloatLit _ => []
-  IrRt _ => []
-  IrCast x => strLitsOfFuel (fuel - 1) x
-  IrApp f a => append (strLitsOfFuel (fuel - 1) f) (strLitsOfFuel (fuel - 1) a)
-  IrLam _ b => strLitsOfFuel (fuel - 1) b
-  IrLet _ s b => append (strLitsOfFuel (fuel - 1) s) (strLitsOfFuel (fuel - 1) b)
-  IrIf c t e =>
-    append (strLitsOfFuel (fuel - 1) c)
-      (append (strLitsOfFuel (fuel - 1) t) (strLitsOfFuel (fuel - 1) e))
-  IrCase s alts => append (strLitsOfFuel (fuel - 1) s) (strLitsAltFuel (fuel - 1) alts)
-  IrNatCase s _ z su c =>
-    append (strLitsOfFuel (fuel - 1) s) (strLitsAltMaybeFuel (fuel - 1) [z, su, c])
-  IrRtApp _ args => strLitsArgsFuel (fuel - 1) args
-  IrConcatMany parts => strLitsArgsFuel (fuel - 1) parts
-  IrCtor _ _ args => strLitsArgsFuel (fuel - 1) args
-  IrRecord _ fs => strLitsFieldsFuel (fuel - 1) fs
-  IrProj b _ _ => strLitsOfFuel (fuel - 1) b
-  IrRecUpd b _ fs => append (strLitsOfFuel (fuel - 1) b) (strLitsFieldsFuel (fuel - 1) fs)
-  IrEffThunk _ _ _ _ p => strLitsOfFuel (fuel - 1) p
-  IrEffBind _ _ _ => []
-
-strLitsDef : IrDef -> List String
-strLitsDef (IrDef _ _ _ b _ _ _) = strLitsOfFuel 100000 b
-strLitsDef (IrExternDef _ _ _ _) = []
-
 poolOffsets : List String -> Int -> List (Pair String (Pair Int Int))
 poolOffsets [] _ = []
 poolOffsets (s :: rest) off =
@@ -1138,7 +1079,7 @@ build program printResult =
         "Invalid_argument(\"index out of bounds\")",
         "continuation already resumed"
       ]
-    users = concatMap strLitsDef defs
+    users = concatMap irStringsOfDef defs
     pool = foldlStrings (\acc => \s => addString s acc) statics users
     offsets = poolOffsets pool 0
     consts = mkConsts offsets
