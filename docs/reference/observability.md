@@ -193,6 +193,21 @@ obsSampleStop  : Int -> Int
   （`docs/reference/performance.md` §2 的读数纪律：绝对读数用两者都关的口径）。
 - **绝对读数只用 `VUNA_OBS=0`**；obs 只用于归因与相对比较（同 [performance.md](performance.md) §2 纪律）。
 
+## 6.1 工具链自采样
+
+`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `app/Main.vuna` 在
+`VUNA_OBS_SAMPLE` 非空时调用 `obsSampleStart` / `obsSampleStop`（普通 `VUNA_OBS=1`
+不启动定时器）。所以可以直接 profile 工具链：
+
+```console
+d=$(mktemp -d); VUNA_STORE="$d/store" ./result/bin/vuna obs run --level 1 --sample cpu \
+  --interval 500 --out "$d/tool.jsonl" -- ./result/bin/vuna check compiler
+./result/bin/vuna obs convert --to cpuprofile --out "$d/tool.cpuprofile" "$d/tool.jsonl"
+```
+
+采样事件的 `args.stack` 以信号处理帧 `dtp_obs_cpu_tick` 开头，取第二帧起才是用户栈；
+`samples` 数量有上限（当前每次运行 8192 条），长命令只看得到前一段的画像。
+
 ## 7. 工具链 `vuna obs`
 
 ```console

@@ -118,6 +118,13 @@ run: sh -c '"$VUNA" obs summarize "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0
 out-contains: samples:cpu
 
+# 工具链自采样：`vuna` 自己也是被观测程序（`VUNA_OBS_SAMPLE` 驱动 Main 的
+# sampleStart/Stop）。冷 `check base` 作输入，至少要有 CPU 采样点。
+run: sh -c 'VUNA_STORE="$TMPDIR/tool-store" "$VUNA" obs run --level 1 --sample cpu --interval 1000 --out "$TMPDIR/tool-trace.jsonl" -- "$VUNA" check "$VUNA_BASE" >/dev/null'
+exit: 0
+run: sh -c 'grep -c "vuna[.]sample[.]cpu" "$TMPDIR/tool-trace.jsonl"'
+exit: 0
+
 # ---------------------------------------------------------------- 8) convert / render
 run: sh -c '"$VUNA" obs convert --to cpuprofile --out "$TMPDIR/a.cpuprofile" "$TMPDIR"/sam-trace/*.jsonl'
 exit: 0

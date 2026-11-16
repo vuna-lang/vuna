@@ -4,6 +4,7 @@
 -- 用法见 `vuna help`。
 import Vuna.Cli
 import Base.Monad
+import Base.Obs
 import Base.Eff.Types
 import Base.EffArgs
 import Base.EffExit
@@ -15,8 +16,18 @@ import Base.EffNet
 import Base.EffProcess
 import Base.EffStdin
 
+-- 工具链自采样：只有显式给了 `VUNA_OBS_SAMPLE`（`vuna obs run --sample ...`）才启动，
+-- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器。`sampleStart` 在 obs 关闭时是空操作。
+sampleWanted : Member nEnv EnvOp r => Eff r Bool
+sampleWanted = do
+  mode <- envGetEnv "VUNA_OBS_SAMPLE"
+  pure (if mode == "" then False else True)
+
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 main = do
+  sample <- sampleWanted
+  _ <- if sample then pure (obsSampleStart "" 0) else pure 0
   args <- argsGetArgs
   code <- runCli args
+  _ <- if sample then pure (obsSampleStop 0) else pure 0
   exitWith code
