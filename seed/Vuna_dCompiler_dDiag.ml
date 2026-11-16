@@ -19,7 +19,7 @@ and t_Vuna_dCompiler_dDiag_dDiagnostic = { f_Vuna_dCompiler_dDiag_dDiagnostic_di
 and 'a0 t_Vuna_dCompiler_dDiag_dCheck = C_Vuna_dCompiler_dDiag_dCheck_OkC of ('a0) | C_Vuna_dCompiler_dDiag_dCheck_ErrC of (t_Vuna_dCompiler_dDiag_dDiagnostic)
 
 # 364 "Vuna/Compiler/Diag.vuna"
-let v_Functor_uVuna_uCompiler_uDiag_uCheck = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun mc0 mc1 -> (match mc1 with
+let v_Functor_uVuna_uCompiler_uDiag_uCheck = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun mc0 mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__0) -> (C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__0))
   | C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__1) -> (C_Vuna_dCompiler_dDiag_dCheck_OkC ((mc0 dtb__1)))
   | _ -> failwith "DT: impossible branch"

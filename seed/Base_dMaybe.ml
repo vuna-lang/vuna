@@ -2,7 +2,7 @@ open Vuna_runtime
 type 'a0 t_Base_dMaybe_dMaybe = C_Base_dMaybe_dMaybe_Nothing | C_Base_dMaybe_dMaybe_Just of ('a0)
 
 # 46 "Base/Maybe.vuna"
-let v_Functor_uBase_uMaybe_uMaybe = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun f m -> (match m with
+let v_Functor_uBase_uMaybe_uMaybe = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun f m -> (match m with
   | C_Base_dMaybe_dMaybe_Nothing -> C_Base_dMaybe_dMaybe_Nothing
   | C_Base_dMaybe_dMaybe_Just (dtb__0) -> (C_Base_dMaybe_dMaybe_Just ((f dtb__0)))
   | _ -> failwith "DT: impossible branch"

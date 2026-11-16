@@ -118,7 +118,7 @@ let rec v_Base_dList_dmap = (fun mc0 mc1 -> (match mc1 with
 ))
 
 # 184 "Base/List.vuna"
-let v_Functor_uBase_uList_uList = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun f xs -> ((v_Base_dList_dmap f) xs))))
+let v_Functor_uBase_uList_uList = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun f xs -> ((v_Base_dList_dmap f) xs))))
 
 # 68 "Base/List.vuna"
 let rec v_Base_dList_dfilter = (fun mc0 mc1 -> (match mc1 with

@@ -7,7 +7,7 @@ and ('a0, 'a1) t_Base_dEff_dCont = C_Base_dEff_dCont_MkCont of (('a0) -> 'a1)
 and 'a0 t_Base_dEff_dResFn = C_Base_dEff_dResFn_MkResFn of (('a0) -> Obj.t)
 
 # 61 "Base/Eff.vuna"
-let v_Functor_uBase_uEff_uEff_ur = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun f e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
+let v_Functor_uBase_uEff_uEff_ur = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun f e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
   | C_Base_dEff_dEff_MkEff (dtb__0) -> (f (dtb__0 u))
   | _ -> failwith "DT: impossible branch"
 )))))))

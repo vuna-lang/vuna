@@ -2,7 +2,7 @@ open Vuna_runtime
 type 'a0 t_Base_dResult_dResult = C_Base_dResult_dResult_Ok of ('a0) | C_Base_dResult_dResult_Err of (string)
 
 # 30 "Base/Result.vuna"
-let v_Functor_uBase_uResult_uResult = (Base_dMonad.C_Dict_uBase_dMonad_dFunctor_Functor ((fun mc0 mc1 -> (match mc1 with
+let v_Functor_uBase_uResult_uResult = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun mc0 mc1 -> (match mc1 with
   | C_Base_dResult_dResult_Err (dtb__0) -> (C_Base_dResult_dResult_Err (dtb__0))
   | C_Base_dResult_dResult_Ok (dtb__1) -> (C_Base_dResult_dResult_Ok ((mc0 dtb__1)))
   | _ -> failwith "DT: impossible branch"

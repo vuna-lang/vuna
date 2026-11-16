@@ -89,7 +89,7 @@ let v_Vuna_dCompiler_dFrontend_dDiagnostics_dpsTemplate = (fun mc0 -> (match mc0
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_HandleNeedsOpClause -> "handle block needs at least one operation clause"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_HandleClauseNotIndented -> "handle clause is not indented enough"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_HandleClauseNeedsCtor -> "handle operation clause must be `Ctor pats k` (a constructor pattern followed by the continuation binder)"
-  | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ConstraintUnsupportedHere -> "trait constraints (`C a =>`) are only supported on top-level signatures"
+  | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ConstraintUnsupportedHere -> "trait constraints (`C a =>`) are only supported on top-level signatures and trait heads"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_FixityLevelRange -> "fixity level must be between 0 and 9"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_ExpectedFixityLevel -> "expected a fixity level (0-9)"
   | C_Vuna_dCompiler_dFrontend_dDiagnostics_dPsDiag_UnexpectedIndentInBinding -> "unexpected indentation in a let/where binding block"
