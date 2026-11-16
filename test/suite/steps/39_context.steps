@@ -23,13 +23,13 @@ exit: 0
 out-equals: 42
 run: "$VUNA" build "$TMPDIR/cross/b" 2>&1
 exit: nonzero
-out-contains: module A not found
+out-contains: cannot find module A
 run: "$VUNA" check "$TMPDIR/cross/b" 2>&1
 exit: nonzero
-out-contains: module A not found
+out-contains: cannot find module A
 run: "$VUNA" compile "$TMPDIR/cross/b" "$TMPDIR/cross-out" 2>&1
 exit: nonzero
-out-contains: module A not found
+out-contains: cannot find module A
 run: "$VUNA" build "$TMPDIR/cross/a" 2>&1
 exit: 0
 file-exists: $TMPDIR/cross/a/.output/bin/consumer-a

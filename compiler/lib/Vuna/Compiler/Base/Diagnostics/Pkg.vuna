@@ -129,25 +129,25 @@ pkgTemplate (InvalidPackageName _) =
   "invalid package name \"<0>\" (allowed characters: a-z, 0-9, '-')"
 pkgTemplate (MissingManifest _) = "missing vuna.toml in <0>"
 pkgTemplate (MissingBase _) =
-  "pkg: cannot locate vuna-base (tried: <0>); set VUNA_BASE to a directory containing vuna.toml"
+  "cannot locate vuna-base: tried <0> (set VUNA_BASE to a directory containing vuna.toml)"
 pkgTemplate (LibraryWithoutEntry _) =
-  "check: library package <0> has no app/Main.vuna (executable) and no [export].modules (library)"
-pkgTemplate (NoManifestUpward _) = "no vuna.toml found from <0> (searched upward)"
+  "library package <0> must have app/Main.vuna (executable) or [export].modules (library)"
+pkgTemplate (NoManifestUpward _) = "missing vuna.toml upward from <0>"
 pkgTemplate (TomlSyntax _) = "<0>"
 pkgTemplate (UnexpectedTopLevelKey _) = "unexpected top-level key \"<0>\""
 pkgTemplate (UnknownSection _) = "unknown section [<0>]"
 pkgTemplate (LayerInvalidName _) =
-  "invalid layer name \"<0>\" (use a module prefix such as \"Vuna.Compiler.Ir\")"
+  "invalid layer name \"<0>\" (expected a module prefix such as Vuna.Compiler.Ir)"
 pkgTemplate (LayerInvalidTarget _) =
-  "invalid layer target \"<0>\" (must be a module prefix such as \"Vuna.Compiler.Base\")"
+  "invalid layer target \"<0>\" (expected a module prefix such as Vuna.Compiler.Base)"
 pkgTemplate (LayerKeyMustBeQuoted _) =
-  "layer \"<0>\" must be a quoted key in [layers]: \"<0>\" = [...]"
+  "layer \"<0>\" must be a quoted key in [layers] (\"<0>\" = [...])"
 pkgTemplate (LayerCycle _) = "layer dependency cycle: <0>"
 pkgTemplate (UnknownKey _ _) = "unknown key \"<0>\" in [<1>]"
 pkgTemplate (UnknownSourceKey _ _) = "unknown key \"<0>\" in [dependencies.<1>]"
 pkgTemplate (DependencySourceMissing _) =
   "dependency \"<0>\" must specify path, git (with rev) or url"
-pkgTemplate (GitRevRequired _) = "dependency \"<0>\" uses git but has no rev"
+pkgTemplate (GitRevRequired _) = "missing rev for git dependency \"<0>\""
 pkgTemplate (HashMalformed _) = "invalid dependency hash \"<0>\" (expected sha256:<64 hex>)"
 pkgTemplate (IdentityMalformed _) = "invalid dependency identity \"<0>\" (expected sha256:<64 hex>)"
 pkgTemplate (MissingHash _) =
@@ -155,7 +155,7 @@ pkgTemplate (MissingHash _) =
 pkgTemplate (SourceConflict _) =
   "dependency \"<0>\" specifies more than one source (path / git / url)"
 pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (run: vuna fetch)"
-pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
+pkgTemplate (FetchFailed _) = "cannot fetch package: <0>"
 pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
 pkgTemplate (IdentityMismatch _ _) = "package \"<0>\" identity mismatch: <1>"
@@ -229,9 +229,9 @@ export record PkgEntry(..) where
 export pkgAll : List PkgEntry
 pkgAll =
   [ PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
-    PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员名为空",
+    PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员为空",
     PkgEntry (pkgCode EmptyPackageName) (pkgTemplate EmptyPackageName) "包名为空",
-    PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] name",
+    PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] 的 name",
     PkgEntry (pkgCode (DependencyPathNotString "")) (pkgTemplate (DependencyPathNotString "")) "依赖路径必须是字符串",
     PkgEntry (pkgCode (DuplicateDependency "")) (pkgTemplate (DuplicateDependency "")) "重复依赖",
     PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
@@ -242,12 +242,12 @@ pkgAll =
     PkgEntry (pkgCode (InvalidDiagMaxErrors "")) (pkgTemplate (InvalidDiagMaxErrors "")) "非法 max-errors",
     PkgEntry (pkgCode (InvalidDiagLang "")) (pkgTemplate (InvalidDiagLang "")) "非法诊断语言",
     PkgEntry (pkgCode (ExpectedStringArray "")) (pkgTemplate (ExpectedStringArray "")) "字符串数组字段类型错误",
-    PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单/包图错误",
+    PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单与包图错误",
     PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",
     PkgEntry (pkgCode (InvalidPackageName "")) (pkgTemplate (InvalidPackageName "")) "非法包名",
     PkgEntry (pkgCode (MissingManifest "")) (pkgTemplate (MissingManifest "")) "找不到 vuna.toml",
     PkgEntry (pkgCode (MissingBase "")) (pkgTemplate (MissingBase "")) "找不到 vuna-base",
-    PkgEntry (pkgCode (LibraryWithoutEntry "")) (pkgTemplate (LibraryWithoutEntry "")) "库包缺入口/导出",
+    PkgEntry (pkgCode (LibraryWithoutEntry "")) (pkgTemplate (LibraryWithoutEntry "")) "库包缺入口或导出",
     PkgEntry (pkgCode (NoManifestUpward "")) (pkgTemplate (NoManifestUpward "")) "向上找不到 vuna.toml",
     PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
     PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
@@ -255,11 +255,11 @@ pkgAll =
     PkgEntry (pkgCode (LayerInvalidName "")) (pkgTemplate (LayerInvalidName "")) "层名非法",
     PkgEntry (pkgCode (LayerInvalidTarget "")) (pkgTemplate (LayerInvalidTarget "")) "层目标非法",
     PkgEntry (pkgCode (LayerKeyMustBeQuoted "")) (pkgTemplate (LayerKeyMustBeQuoted "")) "层键未加引号",
-    PkgEntry (pkgCode (LayerCycle "")) (pkgTemplate (LayerCycle "")) "层依赖成环",
+    PkgEntry (pkgCode (LayerCycle "")) (pkgTemplate (LayerCycle "")) "层依赖循环",
     PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
     PkgEntry (pkgCode (UnknownSourceKey "" "")) (pkgTemplate (UnknownSourceKey "" "")) "依赖表未知 key",
     PkgEntry (pkgCode (DependencySourceMissing "")) (pkgTemplate (DependencySourceMissing "")) "依赖未指定源",
-    PkgEntry (pkgCode (GitRevRequired "")) (pkgTemplate (GitRevRequired "")) "git 依赖缺 rev",
+    PkgEntry (pkgCode (GitRevRequired "")) (pkgTemplate (GitRevRequired "")) "git 依赖缺修订",
     PkgEntry (pkgCode (HashMalformed "")) (pkgTemplate (HashMalformed "")) "依赖哈希格式非法",
     PkgEntry (pkgCode (MissingHash "")) (pkgTemplate (MissingHash "")) "不可变源缺哈希",
     PkgEntry (pkgCode (SourceConflict "")) (pkgTemplate (SourceConflict "")) "依赖源冲突",

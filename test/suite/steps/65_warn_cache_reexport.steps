@@ -28,15 +28,15 @@ run: printf 'module UserWarn where\n\nu : Int -> Int\nu x = 1\n' > "$TMPDIR/warn
 # 冷跑：建 check 缓存 + 模块接口。
 run: "$VUNA" check -W "$TMPDIR/warn-cache" 2>&1
 out-contains: [UN_ShadowedBinder]
-out-contains: binder `x` is never used
+out-contains: binder x is never used
 # 生成 binder 不参与告警：do 忽略 binder / 字典字段 binder。
 out-not-contains: vuna_do_ignore
-out-not-contains: binder `f0`
-out-not-contains: binder `_f0`
+out-not-contains: binder f0
+out-not-contains: binder _f0
 # 热跑：同一份冷跑结果缓存/干净模块都在，warning 仍必须完整出现。
 run: "$VUNA" check -W "$TMPDIR/warn-cache" 2>&1
 out-contains: [UN_ShadowedBinder]
-out-contains: binder `x` is never used
+out-contains: binder x is never used
 out-not-contains: vuna_do_ignore
 # --deny-warnings 在热缓存下仍把退出码提升为 1。
 run: "$VUNA" check --deny-warnings "$TMPDIR/warn-cache" 2>&1

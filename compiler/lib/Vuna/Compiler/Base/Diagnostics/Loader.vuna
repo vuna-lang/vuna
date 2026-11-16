@@ -38,11 +38,12 @@ export ldTemplate : {n : Nat} -> LdDiag n -> String
 ldTemplate (EntryFileNotFound _) = "entry file not found: <0>"
 ldTemplate (ImportCycle _) = "import cycle: <0>"
 ldTemplate (InvalidModuleName _) = "invalid module name: <0>"
-ldTemplate (ModuleHeaderInEntryFile _) = "module header is not allowed in entry file (<0>)"
-ldTemplate (ModuleHeaderInEntrySource _) = "module header is not allowed in entry source (<0>)"
-ldTemplate (ModuleNotFound _ _) = "module <0> not found (roots: <1>)"
+ldTemplate (ModuleHeaderInEntryFile _) = "module header is not supported in the entry file (<0>)"
+ldTemplate (ModuleHeaderInEntrySource _) =
+  "module header is not supported in the entry source (<0>)"
+ldTemplate (ModuleNotFound _ _) = "cannot find module <0> (roots: <1>)"
 ldTemplate (ModuleNotExported _ _) = "module <0> is not exported by package <1>"
-ldTemplate (LayerViolation _ _ _ _) = "module <0> (layer <2>) may not import <1> (layer <3>)"
+ldTemplate (LayerViolation _ _ _ _) = "module <0> (layer <2>) cannot import <1> (layer <3>)"
 
 export record LdEntry(..) where
   ldEntryCode : String
@@ -52,13 +53,13 @@ export record LdEntry(..) where
 export ldAll : List LdEntry
 ldAll =
   [ LdEntry (ldCode (EntryFileNotFound "")) (ldTemplate (EntryFileNotFound "")) "入口文件不存在",
-    LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "import 成环",
+    LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "导入循环",
     LdEntry (ldCode (InvalidModuleName "")) (ldTemplate (InvalidModuleName "")) "非法模块名",
     LdEntry (ldCode (ModuleHeaderInEntryFile "")) (ldTemplate (ModuleHeaderInEntryFile "")) "入口文件不允许模块头",
     LdEntry (ldCode (ModuleHeaderInEntrySource "")) (ldTemplate (ModuleHeaderInEntrySource "")) "入口源码不允许模块头",
     LdEntry (ldCode (ModuleNotFound "" "")) (ldTemplate (ModuleNotFound "" "")) "模块未找到",
     LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出",
-    LdEntry (ldCode (LayerViolation "" "" "" "")) (ldTemplate (LayerViolation "" "" "" "")) "跨层 import"
+    LdEntry (ldCode (LayerViolation "" "" "" "")) (ldTemplate (LayerViolation "" "" "" "")) "跨层导入"
   ]
 
 export ldMsg : {n : Nat} -> LdDiag n -> Vec n String -> Diagnostic

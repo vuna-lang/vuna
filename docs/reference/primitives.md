@@ -403,7 +403,7 @@
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
 - `main : Eff [] a` / `main : Eff [] a` 一律报
-  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a / Eff [] a); compile and run the program instead`
+  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
   （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：

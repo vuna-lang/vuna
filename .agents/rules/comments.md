@@ -42,7 +42,7 @@
 - **`test/suite/steps/*.steps`**：头注释只写章节主题与断言面。
 - **用户可见字符串**（诊断模板 `tcTemplate`/`cgTemplate`、CLI `help`/`--help`、
   `errors.md` 文案）：不得出现编号；诊断消息描述的是**规则本身**
-  （「case on Bool only accepts ...」），不是「哪个里程碑还没做完」。
+  （「case on Bool accepts only True, False, or variable patterns」），不是「哪个里程碑还没做完」。
 - **`docs/reference/*.md` 主题页**：描述现状与不变量；**不写里程碑编号、不写「后续路线」**。
   终态方向集中在 [`docs/architecture-target.md`](../../docs/architecture-target.md)，
   未关闭缺口集中在 [`docs/reference/debt.md`](../../docs/reference/debt.md)。

@@ -162,7 +162,7 @@ in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>
 
 `vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
 `main : Eff [] a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
-`interp cannot execute effects (main : Eff [] a / Eff [] a); compile and run the program instead`
+`interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
 （exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
 `compile` + 运行产物。
 

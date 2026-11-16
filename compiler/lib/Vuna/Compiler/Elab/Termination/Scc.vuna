@@ -412,7 +412,7 @@ sctCheck comp defTbl ctors projs facts msg =
   in case closureLoop table0 240 of
     Pair table1 True =>
       if sctCheckTable table1 then OkC 0
-      else ErrC (appendMessage " [SCT 无下降环: ${sctDiag table1}]" msg)
+      else ErrC (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)
     Pair table1 False => ErrC msg
 
 -- ===============================================================

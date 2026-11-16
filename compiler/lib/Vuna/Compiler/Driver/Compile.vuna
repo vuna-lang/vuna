@@ -631,7 +631,7 @@ export runBuildScript : Member nProcess ProcessOp r => String -> String -> Strin
 runBuildScript dir out name = do
   code <- processRunIn dir ["sh", "build.sh", out]
   pure
-    (if code == 0 then OkC 0 else err "build: ${name}: `sh build.sh ${out}` failed in ${dir} (exit ${code})")
+    (if code == 0 then OkC 0 else err "build: ${name}: sh build.sh ${out} failed in ${dir} (exit ${code})")
 
 -- 判过标记是**输入寻址对象的存在性**：`checkIn` 就是那四个摘要的哈希，存在即判过。
 -- ---------------------------------------------------------------

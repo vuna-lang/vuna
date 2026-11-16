@@ -16,7 +16,7 @@ run: "$VUNA" check "$TMPDIR/m9/ne_fun.vuna" 2>&1
 exit: nonzero
 run: "$VUNA" check "$TMPDIR/m9/red.vuna" 2>&1
 exit: nonzero
-out-contains: catch-all branch must be the last one
+out-contains: catch-all branch must come last
 run: "$VUNA" check "$TMPDIR/m9/ok.vuna" 2>&1
 exit: 0
 out-equals:

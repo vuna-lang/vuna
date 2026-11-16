@@ -44,18 +44,17 @@ cgCode (UnsolvedMetavarRuntime _) = "CG_UnsolvedMetavarRuntime"
 export cgTemplate : {n : Nat} -> CgErr n -> String
 cgTemplate DependencyCycle = "dependency cycle between runtime definitions"
 cgTemplate InterpCannotExecuteEffects =
-  "interp cannot execute effects (main : Eff [] a); compile and run the program instead"
+  "interp cannot execute effects (main : Eff [] a), so compile and run the program instead"
 cgTemplate MainNotValue = "main does not reduce to a value"
 cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime"
-cgTemplate (AxiomAtRuntime _) =
-  "axiom `<0>` cannot be used at runtime (it has no runtime definition)"
+cgTemplate (AxiomAtRuntime _) = "axiom <0> cannot be used at runtime (it has no runtime definition)"
 cgTemplate (ListBridgeRequired _) =
-  "builtin `<0>` requires the canonical `Base.List.List` declaration from vuna-base (no base dependency in this package)"
+  "builtin <0> requires the canonical Base.List.List declaration from vuna-base (no base dependency in this package)"
 cgTemplate (RecursiveValueDefinition _) =
-  "top-level value definition `<0>` cannot be recursive; make it a function or remove the cycle"
-cgTemplate (TypeLevelBindingRuntime _) = "type-level binding `<0>` is used at runtime"
-cgTemplate (TypeLevelNameRuntime _) = "type-level name `<0>` is used at runtime"
+  "top-level value definition <0> cannot be recursive, so make it a function or remove the cycle"
+cgTemplate (TypeLevelBindingRuntime _) = "type-level binding <0> is used at runtime"
+cgTemplate (TypeLevelNameRuntime _) = "type-level name <0> is used at runtime"
 cgTemplate (UnsolvedMetavarRuntime _) = "unsolved metavariable in runtime code<0>"
 
 export record CgEntry(..) where
@@ -69,20 +68,20 @@ cgAll = concatLists [cgChunk0, cgChunk1]
 cgChunk0 : List CgEntry
 cgChunk0 =
   [ CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
-    CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效果",
-    CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约到值",
+    CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效应",
+    CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约为值",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
-    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型被运行时使用",
-    CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 被运行时使用（它没有运行时定义体）",
-    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 canonical Base.List.List 桥接但包没有 base 依赖"
+    CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型出现在运行时",
+    CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 出现在运行时（它没有运行时定义）",
+    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 vuna-base 的 Base.List.List 声明才能桥接，但包内没有 base 依赖"
   ]
 
 cgChunk1 : List CgEntry
 cgChunk1 =
-  [ CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组里的零参值定义无法安全落地",
-    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定被运行时使用",
-    CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字被运行时使用",
-    CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码里有未解元变量"
+  [ CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组中的零参值定义无法安全生成",
+    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定出现在运行时",
+    CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字出现在运行时",
+    CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码中存在未解元变量"
   ]
 
 -- ---------------------------------------------------------------

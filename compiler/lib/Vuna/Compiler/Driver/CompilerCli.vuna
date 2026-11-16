@@ -39,12 +39,12 @@ import Base.EffExit
 export compilerUsageLines : String -> String
 compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] [--target ocaml|wasm|native] (<entry.vuna> | <package-dir>) <out-dir>
   ${prog} check [--release] [--continue-on-error] (<file.vuna> | <package-dir>)
-  <file.vuna>                   带 module 头 → 按库模块检查（包上下文）；无头 → 入口文件
+  <file.vuna>            带 module 头时按库模块检查（包上下文），否则按入口文件
   ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]
-  --no-print                    compile 生成的程序不打印 main 结果（默认打印）
-  --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
-  --continue-on-error           多错误：逐定义收集（失败定义回滚后跳过；仅入口文件/库包）
-  ${prog} version, --version          显示版本
+  --no-print             编译生成的程序不打印 main 结果（默认打印）
+  --release              发布构建：拒绝 assert / todo 等调试专用构造
+  --continue-on-error    多错误：逐个定义收集（失败定义回滚后跳过；仅入口文件或库包）
+  ${prog} version, --version  显示版本
   ${prog} help, -h
 """
 
@@ -437,8 +437,7 @@ runCompilerCliFor1 prog args o = case args of
     "build" => buildArgs prog rest o
     "version" => withOpts o (printVersion 0)
     "--version" => withOpts o (printVersion 0)
-    "seed" =>
-      withOpts o (removedCommand prog "seed" "use `build --out OUT [DIR]` or `compile DIR OUT`")
+    "seed" => withOpts o (removedCommand prog "seed" "use build --out OUT [DIR] or compile DIR OUT")
     "help" => withOpts o (helpFor prog)
     _ =>
       if startsWith "-" arg then withOpts o (removedFlag prog arg)
@@ -469,12 +468,12 @@ usageErr prog = do
 -- | CLI 辅助：unknownCommand（参数/退出码约定见 tooling.md）。
 unknownCommand : Member nConsole ConsoleOp r => String -> String -> Eff r Int
 unknownCommand prog arg = do
-  _ <- consolePrint "error: unknown command `${arg}`\nrun `${prog} help` for the command list\n"
+  _ <- consolePrint "error: unknown command ${arg}\nrun ${prog} help for the command list\n"
   pure 2
 
 removedCommand : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
 removedCommand prog cmd hint = do
-  _ <- consolePrint "error: `${cmd}` has been removed; ${hint}\n"
+  _ <- consolePrint "error: ${cmd} has been removed; ${hint}\n"
   pure 2
 
 -- 被删除 flag 的可操作提示（Vuna.Cli 的工具命令复用同一张表）。
@@ -485,10 +484,10 @@ dashFlag name = "--${name}"
 export removedFlagHint : String -> Maybe String
 removedFlagHint flag =
   if flag == dashFlag "dt" then Just "DT is the only path; drop the flag"
-  else if flag == dashFlag "package" then Just "use `build` or `compile`"
-  else if flag == dashFlag "split" then Just "split is the only output model; use `build --out OUT [DIR]` or `compile <pkg-dir> OUT`"
+  else if flag == dashFlag "package" then Just "use build or compile"
+  else if flag == dashFlag "split" then Just "split is the only output model; use build --out OUT [DIR] or compile <pkg-dir> OUT"
   else if flag == dashFlag "root" then Just "module resolution is decided by the nearest vuna.toml; set VUNA_BASE for standalone files"
-  else if flag == dashFlag "out" then Just "pass OUTDIR positionally to `compile`; `build` accepts --out DIR"
+  else if flag == dashFlag "out" then Just "pass OUTDIR positionally to compile; build accepts --out DIR"
   else if flag == dashFlag "no-typecheck" then Just "checking is always enabled"
   else if flag == dashFlag "typecheck" then Just "checking is always enabled"
   else if flag == dashFlag "typed" then Just "DT is the only path" else Nothing
@@ -591,7 +590,7 @@ executablePackage label dir = do
   if exists then do
     isDir <- fsIsDirectory dir
     if isDir then executablePackageAt label dir
-    else pure (err "${label}: expects a package directory, not a file: ${dir}")
+    else pure (err "${label}: expected a package directory, not a file: ${dir}")
   else pure (err "no such file or package directory: ${dir}")
 
 executablePackageAt : Member nFs FsOp r, Member nEnv EnvOp r => String -> String -> Eff r (Check Package)
@@ -603,7 +602,7 @@ executablePackageAt label dir = do
       exists <- fsFileExists (packageEntry pkg)
       if exists then pure (OkC pkg)
       else pure
-        (err "${label}: library package ${packageName pkg} has no app/Main.vuna (executable package required)")
+        (err "${label}: library package ${packageName pkg} has no app/Main.vuna (an executable package is required)")
 
 -- ---------------------------------------------------------------
 -- compile：文件入口（最近的 vuna.toml 包上下文 / 无 manifest 的 base-only）
@@ -960,7 +959,7 @@ isSingleLibraryPackage _ = pure False
 
 libraryOnlyMessage : List Package -> String
 libraryOnlyMessage (pkg :: _) =
-  "library package ${packageName pkg} has no app/Main.vuna (executable package required; use `check` for libraries)"
+  "library package ${packageName pkg} has no app/Main.vuna (an executable package is required; use check for libraries)"
 libraryOnlyMessage [] = "no package to build"
 
 selectBuildTargets : Maybe String -> List Package -> Check (List Package)

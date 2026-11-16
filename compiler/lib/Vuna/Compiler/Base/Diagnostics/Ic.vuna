@@ -28,6 +28,6 @@ export record IcEntry(..) where
 
 export icAll : List IcEntry
 icAll =
-  [ IcEntry (icCode (FuelExhausted "")) (icTemplate (FuelExhausted "")) "阶段燃料耗尽（编译器不变量：必须推进）",
+  [ IcEntry (icCode (FuelExhausted "")) (icTemplate (FuelExhausted "")) "阶段燃料耗尽（编译器不变量：阶段必须推进）",
     IcEntry (icCode (InvariantViolated "")) (icTemplate (InvariantViolated "")) "编译器内部不变量被破坏"
   ]

@@ -37,15 +37,15 @@ warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnTemplate（目录/模板见 diagnostics.md）。
 export warnTemplate : {n : Nat} -> WarnErr n -> String
-warnTemplate WarnBranchAfterCatchAll = "this branch is unreachable (a catch-all precedes it)"
+warnTemplate WarnBranchAfterCatchAll = "unreachable branch: a catch-all precedes it"
 warnTemplate (WarnRedundantCtorBranch _) =
-  "redundant constructor branch: `<0>` is already covered by an earlier branch"
+  "redundant constructor branch: <0> is already covered by an earlier branch"
 warnTemplate (WarnRedundantLiteralBranch _) =
-  "redundant literal branch: `<0>` is already covered by an earlier branch"
-warnTemplate (UnusedBinder _) = "binder `<0>` is never used"
-warnTemplate (UnusedDefinition _) = "definition `<0>` is never used"
-warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
-warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
+  "redundant literal branch: <0> is already covered by an earlier branch"
+warnTemplate (UnusedBinder _) = "binder <0> is never used"
+warnTemplate (UnusedDefinition _) = "definition <0> is never used"
+warnTemplate (UnusedImport _) = "module <0> is imported but never used"
+warnTemplate (ShadowedBinder _) = "binder <0> shadows an outer binder"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
 export warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
@@ -69,11 +69,11 @@ export record WarnEntry(..) where
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnAll（目录/模板见 diagnostics.md）。
 export warnAll : List WarnEntry
 warnAll =
-  [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",
+  [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "兜底分支之后的分支不可达",
     WarnEntry (warnCode (WarnRedundantCtorBranch "")) (warnTemplate (WarnRedundantCtorBranch "")) "冗余构造子分支",
     WarnEntry (warnCode (WarnRedundantLiteralBranch "")) (warnTemplate (WarnRedundantLiteralBranch "")) "冗余字面量分支",
-    WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "binder 未使用",
-    WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "定义未使用",
-    WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "import 未使用",
-    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "binder 遮蔽外层同名 binder"
+    WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "未使用的 binder",
+    WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "未使用的定义",
+    WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "未使用的导入",
+    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "遮蔽外层同名 binder"
   ]

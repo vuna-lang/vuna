@@ -105,15 +105,15 @@ rnTemplate (UnknownType _) = "unknown type <0>"
 rnTemplate (UnknownFixity _) =
   "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
 rnTemplate (DuplicateFixity _) =
-  "operator <0> has more than one fixity declaration (a symbol has exactly one precedence/associativity in a program)"
+  "operator <0> has more than one fixity declaration (a symbol must have exactly one precedence/associativity in a program)"
 rnTemplate (BuiltinFixity _) =
-  "the fixity of built-in operator <0> is fixed by the compiler; remove the declaration"
+  "the fixity of built-in operator <0> is fixed by the compiler (remove the declaration)"
 rnTemplate (UnknownVariable _) = "unbound variable <0>"
-rnTemplate (UnknownMacro _) = "unknown macro: <0>"
+rnTemplate (UnknownMacro _) = "unknown macro <0>"
 rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
 rnTemplate (AmbiguousConstructor _ _) = "ambiguous constructor <0> (qualify it as <1>)"
 rnTemplate (AmbiguousConstructorInExport _ _) =
-  "ambiguous constructor <0> in <1>; export T(..) instead"
+  "ambiguous constructor <0> in <1> (export T(..) instead)"
 rnTemplate (TypeNotExported _ _) = "type <0> is not exported by <1>"
 rnTemplate (ValueNotExported _ _) = "<0> is not exported by <1>"
 rnTemplate (MacroArity _ _ _) = "macro <0> expects <1> argument(s), got <2>"
@@ -167,26 +167,26 @@ export record RnEntry(..) where
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.rnAll（目录/模板见 diagnostics.md）。
 export rnAll : List RnEntry
 rnAll =
-  [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复 import",
-    RnEntry (rnCode (AmbiguousConstructorExport "")) (rnTemplate (AmbiguousConstructorExport "")) "导出的构造子歧义",
+  [ RnEntry (rnCode DuplicateImport) (rnTemplate DuplicateImport) "重复导入",
+    RnEntry (rnCode (AmbiguousConstructorExport "")) (rnTemplate (AmbiguousConstructorExport "")) "导出的构造子名有歧义",
     RnEntry (rnCode (AmbiguousModule "" "")) (rnTemplate (AmbiguousModule "" "")) "模块名歧义",
-    RnEntry (rnCode (CannotExportUnknownName "")) (rnTemplate (CannotExportUnknownName "")) "导出未知名",
+    RnEntry (rnCode (CannotExportUnknownName "")) (rnTemplate (CannotExportUnknownName "")) "导出未知名字",
     RnEntry (rnCode (DuplicateExport "")) (rnTemplate (DuplicateExport "")) "重复导出",
     RnEntry (rnCode (DuplicateModuleAlias "")) (rnTemplate (DuplicateModuleAlias "")) "重复模块别名",
     RnEntry (rnCode (InvalidModuleAlias "")) (rnTemplate (InvalidModuleAlias "")) "非法模块别名",
     RnEntry (rnCode (InvalidTopLevelName "")) (rnTemplate (InvalidTopLevelName "")) "非法顶层名",
     RnEntry (rnCode (InvalidTypeExpression "")) (rnTemplate (InvalidTypeExpression "")) "非法类型表达式",
     RnEntry (rnCode (InvalidVariableName "")) (rnTemplate (InvalidVariableName "")) "非法变量名",
-    RnEntry (rnCode (ModuleAliasConflict "")) (rnTemplate (ModuleAliasConflict "")) "模块别名与 import 冲突",
+    RnEntry (rnCode (ModuleAliasConflict "")) (rnTemplate (ModuleAliasConflict "")) "模块别名与导入冲突",
     RnEntry (rnCode (ModuleNameMismatch "")) (rnTemplate (ModuleNameMismatch "")) "模块名不匹配",
-    RnEntry (rnCode (ModuleNotImported "")) (rnTemplate (ModuleNotImported "")) "模块未被 import",
+    RnEntry (rnCode (ModuleNotImported "")) (rnTemplate (ModuleNotImported "")) "模块未被导入",
     RnEntry (rnCode (TypeHasNoConstructor "" "")) (rnTemplate (TypeHasNoConstructor "" "")) "类型没有该构造子",
     RnEntry (rnCode (UnknownConstructor "")) (rnTemplate (UnknownConstructor "")) "未知构造子",
     RnEntry (rnCode (UnknownInterface "")) (rnTemplate (UnknownInterface "")) "未知接口",
     RnEntry (rnCode (UnknownType "")) (rnTemplate (UnknownType "")) "未知类型",
     RnEntry (rnCode (UnknownFixity "")) (rnTemplate (UnknownFixity "")) "未知运算符 fixity",
     RnEntry (rnCode (DuplicateFixity "")) (rnTemplate (DuplicateFixity "")) "运算符 fixity 重复声明",
-    RnEntry (rnCode (BuiltinFixity "")) (rnTemplate (BuiltinFixity "")) "内建运算符 fixity 不可声明",
+    RnEntry (rnCode (BuiltinFixity "")) (rnTemplate (BuiltinFixity "")) "内建运算符 fixity 由编译器固定",
     RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
     RnEntry (rnCode (UnknownMacro "")) (rnTemplate (UnknownMacro "")) "未知宏",
     RnEntry (rnCode (AmbiguousPrelude "")) (rnTemplate (AmbiguousPrelude "")) "隐式 Prelude 歧义",
@@ -194,5 +194,5 @@ rnAll =
     RnEntry (rnCode (AmbiguousConstructorInExport "" "")) (rnTemplate (AmbiguousConstructorInExport "" "")) "导出中构造子歧义",
     RnEntry (rnCode (TypeNotExported "" "")) (rnTemplate (TypeNotExported "" "")) "类型未被导出",
     RnEntry (rnCode (ValueNotExported "" "")) (rnTemplate (ValueNotExported "" "")) "值未被导出",
-    RnEntry (rnCode (MacroArity "" "" "")) (rnTemplate (MacroArity "" "" "")) "宏参数个数不匹配"
+    RnEntry (rnCode (MacroArity "" "" "")) (rnTemplate (MacroArity "" "" "")) "宏实参个数不匹配"
   ]

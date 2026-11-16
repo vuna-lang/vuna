@@ -130,10 +130,10 @@ g =
 - 签名写在同名子句**之前**；悬空签名 / 重复签名 / 缩进越界都是 `PS_` 前缀的明确诊断：
 
   ```text
-  [PS_WhereSigNoDef] binding signature for `g` has no definition
-  [PS_WhereSigDuplicate] duplicate binding signature for `g`
-  [PS_WhereSigBeforeClause] binding signature for `g` must come before its clause
-  [PS_WhereSigMultiClause] binding `g` has more than one clause; a signature can annotate only one
+  [PS_WhereSigNoDef] binding signature for g has no definition
+  [PS_WhereSigDuplicate] duplicate binding signature for g
+  [PS_WhereSigBeforeClause] binding signature for g must come before its clause
+  [PS_WhereSigMultiClause] binding g has more than one clause (a signature can annotate only one)
   [PS_UnexpectedIndentInBinding] unexpected indentation in a let/where binding block
   ```
 

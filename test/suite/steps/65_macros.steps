@@ -25,7 +25,7 @@ run: printf 'main : Int\nmain = nope! 1\n' > "$TMPDIR/mac-unknown.vuna"
 run: "$VUNA" check "$TMPDIR/mac-unknown.vuna" 2>&1
 exit: nonzero
 out-contains: RN_UnknownMacro
-out-contains: unknown macro: nope
+out-contains: unknown macro nope
 run: printf 'main : Int\nmain = dbg! "a" "b"\n' > "$TMPDIR/mac-arity.vuna"
 run: "$VUNA" check "$TMPDIR/mac-arity.vuna" 2>&1
 exit: nonzero

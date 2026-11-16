@@ -541,7 +541,7 @@ else case parseSource "<repl>" defSource of
 aritiesOf : List String -> List Decl -> Check (List (Pair String Int))
 aritiesOf [] decls = OkC []
 aritiesOf (t :: rest) decls = case findArity t decls of
-  Nothing => err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
+  Nothing => err ("自动签名：找不到定义 " ++ t ++ "（需要 DFun）")
   Just n =>
     Vuna.Compiler.Base.Common.bind (aritiesOf rest decls) (\more => OkC ((::) (Pair t n) more))
 
@@ -580,7 +580,7 @@ buildPi (dom :: rest) result = TPi "_" False RigOmega dom (buildPi rest result)
 inferEachType : List String -> DtProgram -> Ec -> List String -> Check (List (Pair String String))
 inferEachType [] prog ec taken = OkC []
 inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
-  Nothing => err ("自动签名: 精化结果里找不到定义 " ++ t)
+  Nothing => err ("自动签名：精化结果里找不到定义 " ++ t)
   Just def =>
     Vuna.Compiler.Base.Common.bind (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
       (\sigText => Vuna.Compiler.Base.Common.bind (inferEachType rest prog ec taken) (\more => OkC ((::) (Pair t sigText) more)))
@@ -621,14 +621,14 @@ generalizeSignature ty taken =
   let
     metas = dedupInts (metaIdsOf ty)
   in if length metas == 0 then OkC (showTypeSig ty)
-  else if length metas > 8 then err "自动推断出的类型参数超过 8 个，请先写类型签名"
+  else if length metas > 8 then err "自动签名的类型参数超过 8 个，请先写类型签名"
   else
     let
       entries = buildGenMetas metas taken 0 ty
       total = listLen entries
       body = substGenMetas ty entries 0 total
       sigText = showTypeSig (wrapGenMetas entries body)
-    in if contains "?" sigText then err "自动推断的签名仍含未解元变量，请先写类型签名"
+    in if contains "?" sigText then err "自动签名的结果仍含未解元变量，请先写类型签名"
     else OkC sigText
 
 buildGenMetas : List Int -> List String -> Int -> Term -> List GenMeta
