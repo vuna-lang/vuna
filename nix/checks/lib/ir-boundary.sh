@@ -83,15 +83,15 @@ for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Comp
   fi
 done
 
-# 规则 4：SplitGen（声明归属 + 分文件装配，属 Driver 层）必须路由到 Lowering，
-# 且不得自己消费 Core / Intrinsics。
+# 规则 4：SplitGen（归属过滤 + 分文件装配，属 Driver 层）只吃 IR：单元 lowering
+# 由 Driver 通过闭包注入，本模块不得自己 import Core / Elab / Intrinsics / Lowering / Checks。
 SPLIT=compiler/lib/Vuna/Compiler/Driver/SplitGen.vuna
 if [ -f "$SPLIT" ]; then
-  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Lowering$'; then
-    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Lowering (must lower per unit)"
+  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
+    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Ir (split must be IR-driven)"
     fail=$((fail + 1))
   fi
-  check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Intrinsics)(\.|$))'
+  check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Lowering|Checks)(\.|$))'
 fi
 
 # 规则 5（正向断言）：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。

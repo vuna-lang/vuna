@@ -36,11 +36,13 @@ import Vuna.Compiler.Codegen
 import Vuna.Compiler.Lowering
 import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Ir
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
 import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.SplitGen
 import Base.EffConsole
 import Base.EffEnv
@@ -1503,6 +1505,44 @@ unitCacheEnabled = do
   v <- envGetEnv "VUNA_UNIT_CACHE"
   pure (v /= "0")
 
+-- | 生成输入：程序级检查 + 归属表 + 位置表/运行时文本 + 按需求值的单元 lowering。
+-- 单一入口：单元切分不再各自读 `DtProgram`，而是通过 `siLowerUnit` 闭包按需 lowering
+-- （命中单元缓存时不调用）。
+splitInputOf : PackageContext -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List (Pair String (Pair String Int)) -> Check SplitInput
+splitInputOf ctx moduleParts entryDecls prog printResult extraDefLocs =
+  let
+    allDatas = rtDatasOf (dtProgDatas prog)
+    allDefs = dtProgDefs prog
+    runtimeDefs = partitionRuntimeDefs allDefs
+    env = mkLwEnv (dtProgDatas prog) allDefs (splitUnitOfModule entryOwner)
+    shared = lwEnvShared env
+    meta = splitMetaOf moduleParts entryDecls
+    _ = dbg! "cg-splitmeta-done"
+    normPath = splitLocPath (map rootDir (contextRoots ctx)) (contextDir ctx)
+    locTbl = dtDefLocTable normPath (append shared.irSharedDefLocs extraDefLocs)
+    _ = dbg! "cg-deflocs-done"
+    runtimeText =
+      dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace shared.irSharedUsesObs
+    _ = dbg! "cg-runtimeText-done"
+    defNames = map dtDefName runtimeDefs
+    dataNames = map dtDataName allDatas
+    ordered =
+      append (append [runtimeUnit] (map (\q => splitUnitOfModule (firstOf q)) moduleParts))
+        [splitUnitOfModule entryOwner]
+  in Vuna.Compiler.Common.bind (checkProgramOf env) (\_ => Vuna.Compiler.Common.bind (checkResolvedModules meta moduleParts entryDecls runtimeDefs allDatas) (\_ => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta runtimeDefs) (\defPairs => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta allDatas) (\dataPairs => let
+    defOwnerT = ownerTblOf defPairs
+    dataOwnerT = ownerTblOf dataPairs
+    lowerUnit : String -> Check IrUnit
+    lowerUnit mname =
+      lowerUnitChecked (lwEnvWithUnit (splitUnitOfModule mname) env)
+        (namesInUnit defOwnerT mname defNames) (namesInUnit dataOwnerT mname dataNames)
+  in OkC
+    (SplitInput (map firstOf moduleParts) ordered defNames dataNames defPairs dataPairs shared runtimeText printResult normPath lowerUnit (lowerEntryOf allDefs))
+  )
+  )
+  )
+  )
+
 splitGenerateCached : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List Module -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (List SplitFile))
 splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult extraDefLocs =
   let
@@ -1517,11 +1557,12 @@ splitGenerateCached ctx entry modules moduleParts entryDecls prog printResult ex
     let
       dir = unitCacheEntryDir base bucketKey
       keepNames = map (\p => unitCacheFileName (firstOf p) (secondOf p)) keys
-    in do
-      _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
-      if pkg == "" || not enabled then generateDtSplitProgram moduleParts entryDecls prog printResult roots cdir extraDefLocs
-      else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) moduleParts
-        entryDecls prog printResult roots cdir extraDefLocs
+    in case splitInputOf ctx moduleParts entryDecls prog printResult extraDefLocs of
+      ErrC e => pure (ErrC e)
+      OkC si => do
+        _ <- if enabled && pkg /= "" then unitCacheBucketGc dir keepNames else pure 0
+        if pkg == "" || not enabled then generateDtSplitProgram si
+        else generateDtSplitProgramWith (unitCacheLookup dir keys) (unitCacheStore dir keys) si
 
 dtGenerateIncremental : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Pair (List Decl) (List Module) -> CheckedPackage -> Bool -> List (Pair String (Pair String Int)) -> Eff r (Check (Pair (List SplitFile) CheckedPackage))
 dtGenerateIncremental ctx entry parts checked printResult extraDefLocs =

@@ -29,7 +29,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；`Codegen/` 整目录只吃 IR（不 import `Core` / `Elab` / `Intrinsics` / `Driver`），唯一的 Core 消费者是 `Lowering.vuna` 与 `Checks.vuna`。声明归属切分与分文件装配在 `Driver/SplitGen.vuna`（属 Driver 层，允许 import `Elab` 的声明表，但不得 import `Core` / `Intrinsics`，且必须路由到 `Lowering`） | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
+| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；`Codegen/` 整目录只吃 IR（不 import `Core` / `Elab` / `Intrinsics` / `Driver`），唯一的 Core 消费者是 `Lowering.vuna` 与 `Checks.vuna`。声明归属切分与分文件装配在 `Driver/SplitGen.vuna`：归属表由 `Driver.Owner` + `Driver.Dt` 算好，单元 IR 经 `SplitInput.siLowerUnit` 闭包按需取得，因此 SplitGen 也只吃 IR（不得 import `Core` / `Elab` / `Intrinsics` / `Lowering` / `Checks`） | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 |
 

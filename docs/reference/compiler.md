@@ -73,7 +73,7 @@
 | `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
 | `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
-| `Driver.SplitGen` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Lowering` 出 `IrUnit`） | `generateDtSplitProgram` |
+| `Driver.SplitGen` | **唯一** codegen 生成器：归属过滤 + 分文件装配 + 依赖序校验；输入是 `SplitInput`（归属表、共享元数据、运行时文本、`siLowerUnit` 闭包），不 import Core / Elab / Intrinsics | `generateDtSplitProgram`、`SplitInput` |
 | `Ir`（门面） | 后端中立的擦除后中间表示：重导出 `Ir.Model`、`Ir.Analysis` 与 `Ir.Runtime`；校验入口 | `validateProgram`、`validateUnit` |
 | `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |

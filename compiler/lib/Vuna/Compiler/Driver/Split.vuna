@@ -21,6 +21,10 @@ import Base.List
 import Base.EffFs
 import Base.Eff.Types
 
+-- | 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
+export entryUnitName : String
+entryUnitName = "Main"
+
 export record SplitFile(..) where
   splitName : String
   splitText : String
