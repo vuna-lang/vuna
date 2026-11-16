@@ -52,9 +52,11 @@ binderErasedOf (IrBinder nm erased) = erased
 --
 -- 遍历顺序、fresh 编号分配、分支与实参顺序必须稳定（门禁是逐字节一致）。
 --
--- **预算**：固定步数会在深层合法项上误报 `IC_FuelExhausted (codegen)`；
--- 这里按项规模派生（`lowerBudgetFor size = 8 * size + 512`），因此只有「项本身
--- 有病」才会耗尽，正常源码的嵌套深度不触发。终止性检查需要这个递减参数。
+-- **预算与 `if fuel <= 0` 守卫是终止性证书**：项 lowering 有非结构边（`TRecord`
+-- 展开成应用脊、非 record 族的 `TProj` / `TRecUpd` 展开成 `case`、从应用脊 / 实参
+-- 列表取子项），DT 的 SCT 只接受「结构下降或**带守卫的**递减 Int」；删掉守卫会让
+-- 终止性检查直接失败。预算按项规模派生（`lowerBudgetFor size = 8 * size + 512`，
+-- 每个节点最多消耗几步），因此深层合法项不会误报 `IC_FuelExhausted (codegen)`。
 --
 -- binder 栈 `List IrBinder` 最近绑定在前；`IrVar` 直接携带 binder 身份（Lowering
 -- 已把 de Bruijn 下标解析掉），运行时引用擦除 binder 在这里就是错误。
@@ -179,24 +181,21 @@ lowerAppFuel fuel env st binders f a rig = if fuel <= 0 then icFuel "ir-lower"
 else if rigIsErased rig then lowerTermFuel (fuel - 1) env st binders f
 else case flattenConApp (TApp f a rig) of
   Just (Pair c args) => lowerConAppFuel (fuel - 1) env st binders c args
-  Nothing => lowerAppOptimizedFuel (fuel - 1) env st binders (TApp f a rig)
-
-lowerAppOptimizedFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Check (Pair Ir LwSt)
-lowerAppOptimizedFuel fuel env st binders t = if fuel <= 0 then icFuel "ir-lower"
-else case flattenConcatChainIn t of
-  Just parts => if listLength parts >= 3 then Vuna.Compiler.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (\p => case p of
-    Pair texts st2 => OkC (Pair (IrConcatMany texts) st2)
-  )
-  else lowerPlainAppFuel (fuel - 1) env st binders t
-  Nothing => lowerPlainAppFuel (fuel - 1) env st binders t
+  Nothing => case flattenConcatChainIn (TApp f a rig) of
+    Just parts => if listLength parts >= 3 then Vuna.Compiler.Common.bind (lowerTermsFuel (fuel - 1) env st binders parts) (\p => case p of
+      Pair texts st2 => OkC (Pair (IrConcatMany texts) st2)
+    )
+    else lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
+    Nothing => lowerPlainAppFuel (fuel - 1) env st binders (TApp f a rig)
 
 lowerPlainAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Check (Pair Ir LwSt)
 lowerPlainAppFuel fuel env st binders t = if fuel <= 0 then icFuel "ir-lower"
 else case t of
   TApp f a rig => case flattenIntrinsicAppIn t of
-    Just (Pair name args) =>
-      if inlineArityMatchesIn name args then lowerInlineAppFuel (fuel - 1) env st binders name args
-      else lowerAppFallbackFuel (fuel - 1) env st binders f a rig
+    Just (Pair name args) => if inlineArityMatchesIn name args then Vuna.Compiler.Common.bind (lowerInlineArgsFuel (fuel - 1) env st binders args) (\p => case p of
+      Pair irs st2 => OkC (Pair (IrRtApp name irs) st2)
+    )
+    else lowerAppFallbackFuel (fuel - 1) env st binders f a rig
     Nothing => lowerAppFallbackFuel (fuel - 1) env st binders f a rig
   _ => icInternal "lowerPlainApp expects an application"
 
@@ -206,12 +205,6 @@ else Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders f) (\pf 
   Pair irF st1 => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st1 binders a) (\pa => case pa of
     Pair irA st2 => OkC (Pair (IrApp irF irA) st2)
   )
-)
-
-lowerInlineAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
-lowerInlineAppFuel fuel env st binders name args = if fuel <= 0 then icFuel "ir-lower"
-else Vuna.Compiler.Common.bind (lowerInlineArgsFuel (fuel - 1) env st binders args) (\p => case p of
-  Pair irs st2 => OkC (Pair (IrRtApp name irs) st2)
 )
 
 lowerInlineArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> List (Pair Term Rig) -> Check (Pair (List Ir) LwSt)
