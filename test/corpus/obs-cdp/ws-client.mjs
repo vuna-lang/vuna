@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// test/corpus/obs-cdp/ws-client.mjs —— `nix/obs-cdp-bridge.mjs` 的最小 WebSocket + CDP 客户端。
+// test/corpus/obs-cdp/ws-client.mjs —— `test/corpus/obs-cdp/bridge.mjs` 的最小 WebSocket + CDP 客户端。
 //
 // 用法：node test/corpus/obs-cdp/ws-client.mjs <HTTP-BASE> [CAPTURE_DIR]
 //   HTTP-BASE 形如 `http://127.0.0.1:PORT`（桥的 HTTP 端点）。

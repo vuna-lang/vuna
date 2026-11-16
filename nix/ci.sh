@@ -20,8 +20,8 @@
 # derivation 数；每个 derivation 拿 CI_TOKENS/CI_JOBS 个 cores。gate/e2e 两个
 # suite check 共享这个预算，e2e 内的 tools 层再固定 2 worker。
 #
-# --bench 默认关闭：性能读数受机器负载影响，入库基线（nix/bench-baseline.json）
-# 只对同 arch/nproc/compiler 的回归做软告警（见 nix/bench.sh 的 --threshold）。
+# --bench 默认关闭：性能读数受机器负载影响，入库基线（bench/bootstrap-baseline.json）
+# 只对同 arch/nproc/compiler 的回归做软告警（见 bench/bootstrap.sh 的 --threshold）。
 set -eu
 cd "$(dirname "$0")/.."
 

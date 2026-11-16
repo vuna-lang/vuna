@@ -444,7 +444,7 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 `ratio = vuna/ocaml`（绝对 ms 不可比）。
 
 口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json` 入库，`--check` 对超阈值项
-软告警。与 `nix/bench.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
+软告警。与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 当前读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；绝对 ms 随
 机器变化，只比较 ratio）：

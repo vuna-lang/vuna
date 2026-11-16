@@ -1,5 +1,5 @@
 #!/bin/sh
-# `vuna obs serve --cdp` + `nix/obs-cdp-bridge.mjs` 的冒烟（suite e2e tier 用）。
+# `vuna obs serve --cdp` + `test/corpus/obs-cdp/bridge.mjs` 的冒烟（suite e2e tier 用）。
 #
 # 用法：sh test/corpus/obs-cdp/smoke.sh <path-to-vuna>
 #   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）；SKIP_BRIDGE=1 只测 serve。
@@ -32,7 +32,7 @@ VUNA=$1
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../../.." && pwd)
 VUNA_BASE=${VUNA_BASE:-$REPO/base}
-BRIDGE=$REPO/nix/obs-cdp-bridge.mjs
+BRIDGE=$REPO/test/corpus/obs-cdp/bridge.mjs
 
 # socket 路径要短（sun_path 上限 108 字节）。
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocdp.XXXXXX") || exit 1

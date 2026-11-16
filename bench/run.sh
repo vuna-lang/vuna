@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vuna-perf：生成程序 + 编译器运行基准（`nix run .#vuna-perf`）。
 #
-# 与 nix/bench.sh 的分工：bench.sh 测**构建/编译**的墙钟与产物尺寸；本脚本测
+# 与 bench/bootstrap.sh 的分工：bench.sh 测**构建/编译**的墙钟与产物尺寸；本脚本测
 # **生成程序运行时**（vuna 产物 vs 手写 OCaml 等价实现）与编译器的运行期负载。
 #
 # 口径（写进 docs/reference/performance.md）：

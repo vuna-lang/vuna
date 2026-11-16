@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// nix/obs-cdp-bridge.mjs —— Chrome DevTools 的 WebSocket 桥（工具侧资产，零依赖）。
+// test/corpus/obs-cdp/bridge.mjs —— Chrome DevTools 的 WebSocket 桥（工具侧资产，零依赖）。
 //
 // 规范：docs/reference/observability.md §1 O11、§7 `serve --cdp`、§8 生态表、§10。
 //
@@ -41,7 +41,7 @@
 //   ls /tmp/vuna-trace/vuna-*.jsonl
 //
 //   # 2) 起桥（默认监听 127.0.0.1:9229；trace 是桥的**数据源**，可给多份）：
-//   node nix/obs-cdp-bridge.mjs --port 9229 /tmp/vuna-trace/vuna-1234.jsonl
+//   node test/corpus/obs-cdp/bridge.mjs --port 9229 /tmp/vuna-trace/vuna-1234.jsonl
 //
 //   # 3) 检查 HTTP 端点：
 //   curl -s http://127.0.0.1:9229/json/version

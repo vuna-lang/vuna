@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # vuna-bench: 手动性能基准（构建 / 编译 / 产物尺寸）。
 # 由 `nix run .#vuna-bench` 提供；默认不是 CI check，运行结果只在 --json/--save
-# 指定时写文件；入库的产物只有基线 nix/bench-baseline.json（--check 的软对比对象）。
+# 指定时写文件；入库的产物只有基线 bench/bootstrap-baseline.json（--check 的软对比对象）。
 #
-# 基线：`nix run .#vuna-bench -- --quick --json nix/bench-baseline.json` 生成
+# 基线：`nix run .#vuna-bench -- --quick --json bench/bootstrap-baseline.json` 生成
 # 提交入库的基线；之后用 `--check`（读基线、超阈值 WARN、退出 0）做软对比。
 # 基线按机器记录 meta（arch/nproc/compiler/runs/warmup），跨机器或口径不同时
 # 只软告警、不阻断；--strict 也只把「同机器 + 同 compiler」的超阈值当失败。
@@ -35,7 +35,7 @@ options:
   --json FILE|-          写出 JSON 报告；`-` 表示只输出 JSON
   --save FILE            与 --json 相同
   --baseline FILE        与之前的 JSON 报告对比，输出 delta（jq 解析）
-  --check                读取基线（--baseline FILE，默认 nix/bench-baseline.json），
+  --check                读取基线（--baseline FILE，默认 bench/bootstrap-baseline.json），
                          对超出 --threshold 的指标打印 WARN；软告警，退出 0
   --strict               与 --check 连用：同机器、同 compiler 的 WARN 变为退出 1；
                          跨机器/口径不同以及 bench 状态失败仍只告警、不阻断
@@ -44,7 +44,7 @@ options:
   --keep                 保留临时构建目录
   -h, --help             显示本帮助
 
-基线：`--quick --json nix/bench-baseline.json` 生成入库基线；基线 meta 记录
+基线：`--quick --json bench/bootstrap-baseline.json` 生成入库基线；基线 meta 记录
 arch/nproc/compiler/ocamlopt/git_head/git_dirty/runs/warmup，跨机器只做软告警。
 
 环境：
@@ -168,9 +168,9 @@ abspath() {
   esac
 }
 
-# --check 默认读取入库基线 nix/bench-baseline.json。
+# --check 默认读取入库基线 bench/bootstrap-baseline.json。
 if [ "$CHECK" = 1 ] && [ -z "$BASELINE" ]; then
-  BASELINE=$REPO/nix/bench-baseline.json
+  BASELINE=$REPO/bench/bootstrap-baseline.json
 fi
 if [ "$CHECK" = 1 ] && [ "$JSON_OUT" = "-" ]; then
   die "--check 不能与 --json - 组合（机器 JSON 与 WARN 行会混在一起）"

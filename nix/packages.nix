@@ -85,17 +85,24 @@ let
   };
 
   # 手动性能基准与原生测试 runner；编译器在运行时解析，不在构建期绑定。
-  vuna-bench = import ./bench.nix {
-    inherit pkgs;
-    tools = shellTools;
-  };
+  vuna-bench =
+    (pkgs.writeShellScriptBin "vuna-bench" ''
+      export PATH="${lib.makeBinPath shellTools}:$PATH"
+      exec ${pkgs.bash}/bin/bash ${../bench/bootstrap.sh} "$@"
+    '')
+    // {
+      meta.description = "手动 vuna 性能基准（构建/编译/产物尺寸）";
+    };
 
   # 生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
-  vuna-perf = import ./perf.nix {
-    inherit pkgs;
-    tools = shellTools;
-    inherit vuna;
-  };
+  vuna-perf =
+    (pkgs.writeShellScriptBin "vuna-perf" ''
+      export PATH="${lib.makeBinPath ([ vuna ] ++ shellTools ++ [ pkgs.time ])}:$PATH"
+      exec ${pkgs.bash}/bin/bash ${../bench/run.sh} "$@"
+    '')
+    // {
+      meta.description = "生成程序与运行时性能基准（vuna 产物 vs 手写 OCaml）";
+    };
 
   vuna-run-tests = import ./run-tests.nix {
     inherit pkgs vuna vuna-seed;

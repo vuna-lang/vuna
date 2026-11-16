@@ -1,10 +1,10 @@
 # bench：生成程序与运行时基准
 
-本目录是「生成程序 vs 手写 OCaml」的测量设施。它与 `nix/bench.sh` 分工：
+本目录是「生成程序 vs 手写 OCaml」的测量设施。它与 `bench/bootstrap.sh` 分工：
 
 | 设施 | 测什么 | 入口 |
 | --- | --- | --- |
-| `nix/bench.sh` | 编译器**构建/编译**墙钟、产物尺寸、codegen 计数 | `nix run .#vuna-bench` |
+| `bench/bootstrap.sh` | 编译器**构建/编译**墙钟、产物尺寸、codegen 计数 | `nix run .#vuna-bench` |
 | `bench/run.sh` | **生成程序运行时**（vuna 产物 vs 手写 OCaml）、`check`/`compile` 运行期负载 | `nix run .#vuna-perf` |
 
 ## 口径
@@ -20,7 +20,7 @@
   `baseline.json`，对 ratio 超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`
   （软告警、退出 0）。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
-  JSON 结构；当前先由 `nix/bench.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
+  JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
 
 ## 运行
