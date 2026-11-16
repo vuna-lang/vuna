@@ -93,11 +93,14 @@ dependencyLine : String -> Release -> String
 dependencyLine alias release =
   let
     hashText = "sha256:${release.relHash}"
+    identityText = case release.relIdentity of
+      Nothing => ""
+      Just i => ", identity = \"sha256:${i}\""
     sourceText = case release.relSource of
       DepGit url rev => "git = \"${url}\", rev = \"${rev}\", "
       DepUrl u => "url = \"${u}\", "
       DepPath p => "path = \"${p}\", "
-  in "${alias} = { ${sourceText}hash = \"${hashText}\" }"
+  in "${alias} = { ${sourceText}hash = \"${hashText}\"${identityText} }"
 
 -- ---------------------------------------------------------------- 段级写回
 -- 在 `[dependencies]` 段内替换同名行；没有同名行就在段末追加。子表形式

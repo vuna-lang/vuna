@@ -29,11 +29,12 @@ import Base.EffProcess
 import Base.Eff.Types
 import Base.EffEnv
 
--- | 一条发布：人读版本号 + 不可变源 + 内容摘要。
+-- | 一条发布：人读版本号 + 不可变源 + 内容摘要 + 可选语义身份。
 export record Release(..) where
   relVersion : String
   relSource : DependencySource
   relHash : String
+  relIdentity : Maybe String
 
 -- | 一个包的索引条目（发布顺序 = 文件里的顺序）。
 export record RegistryEntry(..) where
@@ -68,22 +69,33 @@ maybeStringEntry path section key entries = case lookupEntry section key entries
   Just (TStr s) => Just s
   _ => Nothing
 
+mkRelease : String -> DependencySource -> String -> Maybe String -> Release
+mkRelease version source hash identity = Release version source (normalizeHash hash) identity
+
 -- 一条发布：git（url + rev + hash）或 url（+ hash）。
 buildRelease : String -> String -> List TomlEntry -> Check Release
 buildRelease path version entries =
   let
     section = ["releases", version]
-  in case maybeStringEntry path section "git" entries of
-    Just url => case maybeStringEntry path section "rev" entries of
-      Nothing => pkgPath1 path (IndexMalformed "release ${version}: git needs rev") version
-      Just rev => case stringEntry path section "hash" entries of
-        ErrC e => ErrC e
-        OkC hash => OkC (Release version (DepGit url rev) (normalizeHash hash))
-    Nothing => case maybeStringEntry path section "url" entries of
-      Just url => case stringEntry path section "hash" entries of
-        ErrC e => ErrC e
-        OkC hash => OkC (Release version (DepUrl url) (normalizeHash hash))
-      Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
+  in case optionalIdentity path section entries of
+    ErrC e => ErrC e
+    OkC identity => case maybeStringEntry path section "git" entries of
+      Just url => case maybeStringEntry path section "rev" entries of
+        Nothing => pkgPath1 path (IndexMalformed "release ${version}: git needs rev") version
+        Just rev => case stringEntry path section "hash" entries of
+          ErrC e => ErrC e
+          OkC hash => OkC (mkRelease version (DepGit url rev) hash identity)
+      Nothing => case maybeStringEntry path section "url" entries of
+        Just url => case stringEntry path section "hash" entries of
+          ErrC e => ErrC e
+          OkC hash => OkC (mkRelease version (DepUrl url) hash identity)
+        Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
+
+optionalIdentity : String -> List String -> List TomlEntry -> Check (Maybe String)
+optionalIdentity path section entries = case maybeStringEntry path section "identity" entries of
+  Nothing => OkC Nothing
+  Just s =>
+    if validHashText s then OkC (Just (normalizeHash s)) else pkgPath1 path (IdentityMalformed s) s
 
 -- | 解析索引文件文本。
 export parseRegistryEntry : String -> String -> Check RegistryEntry
