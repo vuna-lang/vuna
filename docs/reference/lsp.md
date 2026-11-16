@@ -152,10 +152,15 @@ Content-Length: <字节数>\r\n
   suggestion 各缓存一份；同一 buffer 的重复 hover / codeAction 是毫秒级，文本一变即失效。
   pull 诊断另有帧缓存（`stateDiagCache`，上限 32），重复 `textDocument/diagnostic` 直接重放。
 - **会话（`DiagCache`）**：诊断 / codeAction 会建立（或复用）工具会话；hover **不**主动建会话
-  （建会话要算依赖接口闭包，冷 store 上秒级），已有会话时直接复用。会话要求 iface 对象与
-  **当前编译器 tag** 匹配：换了编译器二进制后旧 iface 失配，`vuna check <pkg>` / `vuna build`
-  用同一个二进制跑一次即可恢复；失配时观测里能看到 `vuna.tool.iface.miss:<模块>` 与
-  `vuna.lsp.session.unavailable`。
+  （建会话要算依赖接口闭包，冷 store 上秒级），已有会话时直接复用。
+- **本包干净模块**（增量的预置集合）：`[export]` 为空的入口包也会写模块接口（模块面 =
+  入口闭包），所以根包不需要 `[export]` 就能复用。判定分两步：逐模块自身判据（接口自证 /
+  源新鲜 / 缓存程序可用 / 无缺失依赖）→ 依赖链**定点**（本包模块的依赖必须命中依赖表或已收
+  干净模块；枚举顺序不保证拓扑序，单遍会连锁误判）。缺一个模块的接口只跳过它自己，不让整组
+  作废。每个请求还会对本包干净模块做 stat/内容校验，外部改同包模块后同一进程下次请求即失效。
+- **会话要求 iface 与当前编译器 tag 匹配**：换了编译器二进制后旧 iface 失配，`vuna check <pkg>`
+  / `vuna build` 用同一个二进制跑一次即可恢复；失配时观测里能看到
+  `vuna.tool.iface.miss.<模块>` 与 `vuna.lsp.session.unavailable`。
 - **取消**：`$/cancelRequest` 记 id（上限 64），派发前发现已取消就直接回 `-32800`
   （RequestCancelled），不执行。阻塞式读 stdin 下无法打断**已开始**的精化。
 - **归因**：`VUNA_OBS=1` 时每个请求一个 `lsp.<method>` 跨度，洞目标路径有

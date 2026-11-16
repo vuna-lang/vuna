@@ -327,14 +327,18 @@ buildSession ctx label text modName = do
       in do
         builtSec <- toolNowSec
         clean <- toolCleanOwnModules ctx tool builtSec modName ownNeeded
-        manifestInfo <- sourceInfoForPath "${contextDir ctx}/vuna.toml"
-        key <- ctxKeyOf ctx
-        base <- pure (toolSessionNewMemory "tool")
-        db <-
-          toolCommitValue base (lspNodeKey ctx)
-            (sessionStatDeps (append tool.tcStats [manifestInfo]))
-        pure
-          (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv))
+        let
+          _ = obsCounter "vuna.lsp.session.clean" (length clean)
+          _ = obsCounter "vuna.lsp.session.ownNeeded" (length ownNeeded)
+        in do
+          manifestInfo <- sourceInfoForPath "${contextDir ctx}/vuna.toml"
+          key <- ctxKeyOf ctx
+          base <- pure (toolSessionNewMemory "tool")
+          db <-
+            toolCommitValue base (lspNodeKey ctx)
+              (sessionStatDeps (append tool.tcStats [manifestInfo]))
+          pure
+            (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv))
 
 -- 会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
 usableSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache)
@@ -342,11 +346,33 @@ usableSession cache ctx label text modName imports = do
   health <- case cache of
     Just c => do
       fresh <- cacheFresh (Just c) label ctx
-      if fresh then pure (sessionClosureOk c imports) else pure Nothing
+      if fresh then do
+        ownFresh <- sessionOwnFresh c imports
+        if ownFresh then pure (sessionClosureOk c imports) else pure Nothing
+      else pure Nothing
     Nothing => pure Nothing
   case health of
     Just c => pure (Just c)
     Nothing => buildSession ctx label text modName
+
+-- 本包干净模块的**新鲜度**校验（每个请求）：会话本身只校验依赖闭包的 stat，本包模块
+-- 由 `dcClean` 的接口预置；外部改了某个同包模块时必须在下次请求就失效（否则同一进程里
+-- 一直复用陈旧接口）。只 stat 本次 import 闭包真正用到的干净模块（通常个位数）。
+sessionOwnFresh : Member nFs FsOp r, Member nEnv EnvOp r => DiagCache -> List Import -> Eff r Bool
+sessionOwnFresh c imports = case c.dcTool of
+  Nothing => pure True
+  Just tool =>
+    let
+      allIfaces = append tool.tcDepIfaces c.dcClean
+      reached = closureNamesOf allIfaces (startNamesOf imports)
+      used = filter (\mi => memName (miNameOf mi) reached) c.dcClean
+    in allFresh c.dcBuiltSec (map miSourceOf used)
+
+allFresh : Member nFs FsOp r => Int -> List SourceInfo -> Eff r Bool
+allFresh builtSec [] = pure True
+allFresh builtSec (si :: rest) = do
+  ok <- sourceFresh builtSec si
+  if ok then allFresh builtSec rest else pure False
 
 sessionClosureOk : DiagCache -> List Import -> Maybe DiagCache
 sessionClosureOk c imports = case c.dcTool of

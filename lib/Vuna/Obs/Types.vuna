@@ -221,6 +221,31 @@ vunaEventVocabulary =
     "vuna.elab.term.core",
     "vuna.elab.instbodies",
     "vuna.elab.tail",
+    "vuna.elab.incr.clean",
+    "vuna.elab.incr.dirty",
+    "vuna.elab.incr.decls",
+    "vuna.lsp.goals.incremental",
+    "vuna.lsp.goals.local",
+    "vuna.lsp.goals.full",
+    "vuna.lsp.goals.fallback",
+    "vuna.lsp.goals.setup",
+    "vuna.lsp.goals.elab",
+    "vuna.lsp.session.clean",
+    "vuna.lsp.session.ownNeeded",
+    "vuna.lsp.session.unavailable",
+    "vuna.lsp.session.skipped",
+    "vuna.tool.clean.cands",
+    "vuna.tool.clean.read",
+    "vuna.tool.clean.kept",
+    "vuna.tool.clean.reject.self",
+    "vuna.tool.clean.reject.fresh",
+    "vuna.tool.clean.reject.cached",
+    "vuna.tool.clean.reject.missingdep",
+    "vuna.tool.clean.reject.deps",
+    "vuna.tool.ifaces.lookup",
+    "vuna.tool.ifaces.ready",
+    "vuna.tool.ifaces.missing",
+    "vuna.tool.ifaces.disabled",
     "vuna.iface.compute",
     "vuna.iface.write",
     "vuna.codegen.check",
@@ -254,11 +279,13 @@ vunaEventVocabulary =
     "vuna.log"
   ]
 
--- | 名字是否是 §3.3 的已知 `vuna.*` 事件（`vuna.mark.*` 前缀放行；非 `vuna.` 前缀一律放行）。
+-- | 名字是否是 §3.3 的已知 `vuna.*` 事件。前缀放行：`vuna.mark.*`（动态标记）与
+-- `vuna.tool.iface.miss.`（带模块名的接口失配归因）；非 `vuna.` 前缀一律放行。
 export isKnownVunaEventName : String -> Bool
 isKnownVunaEventName name =
   if not (startsWith "vuna." name) then True
-  else if startsWith "vuna.mark." name then True else memName name vunaEventVocabulary
+  else if startsWith "vuna.mark." name then True
+  else if startsWith "vuna.tool.iface.miss." name then True else memName name vunaEventVocabulary
 
 -- ---------------------------------------------------------------
 -- 解析（纯；错误文案一律带行号）

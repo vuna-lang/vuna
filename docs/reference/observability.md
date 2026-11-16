@@ -98,6 +98,13 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
   `vuna.iface.write`、`vuna.codegen.split`；
 - `ph:"C"` 计数：`vuna.counter.cache.hit`（接口对象 / 地址表 / check 结果命中）、
   `vuna.counter.cache.miss`（未命中）、`vuna.counter.cache.write`（check 结果落盘）；
+  增量装配 / 干净模块判定：`vuna.elab.incr.{clean,dirty,decls}`、
+  `vuna.tool.clean.{cands,read,kept}` 与 `vuna.tool.clean.reject.{self,fresh,cached,missingdep,deps}`
+  （每请求「预置了几个干净模块、要精化几个模块/多少条 decl、哪些模块为什么被拒」）；
+  LSP 会话：`vuna.lsp.session.{clean,ownNeeded}`；
+- `ph:"i"` 工具路径标记：`vuna.tool.ifaces.{lookup,ready,missing,disabled}` 与
+  `vuna.tool.iface.miss.<模块名>`（前缀放行，带模块名的接口失配归因）、
+  `vuna.lsp.goals.{incremental,local,full,fallback}`、`vuna.lsp.session.{unavailable,skipped}`；
 - `vuna.log` / `vuna.mark.*` / `vuna.sample.cpu` / `vuna.sample.mem` / `vuna.obs.schema`。
 
 **保留名**（在词汇表里、`vuna obs validate` 认，但**尚无插桩点**）：`vuna.parse`（伞名：

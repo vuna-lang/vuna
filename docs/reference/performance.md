@@ -28,10 +28,11 @@
 | `lint` / `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（根包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
-| LSP hover 非洞行（`bench/lsp-probe.py`，根包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–3 s） |
-| LSP hover 洞上（会话热，同文件） | 首次 ~2.5–3.5 s，同内容重复 ~1 ms；无会话时走单文件精化 ~0.4 s |
-| LSP codeAction quickfix（同文件） | 首次 ~1–4 s，同内容重复 ~0.3 s |
-| LSP pull 诊断（同文件） | 首次 ~1–3.5 s，同内容重复 0 ms |
+| LSP hover 非洞行（`bench/lsp-probe.py`，根包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–2.5 s） |
+| LSP hover 洞上（会话热，同文件） | 首次 ~0.45 s（只精化入口模块），同内容重复 ~1 ms；无会话时走单文件精化 ~0.4 s |
+| LSP codeAction quickfix（同文件） | 首次 ~1.7 s，同内容重复 ~0.3 s |
+| LSP pull 诊断（同文件） | 首次 ~0.45 s，同内容重复 0 ms |
+| 根包（入口包）`check .` | 冷 ~14 s（含 base/compiler 闭包）/ 热 ~0.1 s（模块接口与导出面同口径落对象库） |
 | REPL 重 import（4 次求值） | ~4.2 s |
 
 `fmt --check` 省略 PATH 会扫 `test/suite/fixtures` 并因夹具缺 manifest 退出 2（不是格式

@@ -41,3 +41,19 @@ read: $TMPDIR/lsp-inc-sess-diag1.txt
 out-equals: []
 read: $TMPDIR/lsp-inc-sess-diag2.txt
 out-contains: TC_
+# C) 入口包（无 `[export]`）也要写模块接口；会话要能复用本包干净模块。
+#    回归点：`shadowAllowed` 只对 `[export]` 非空的包写接口 ⇒ 入口包的模块永远不在对象库里，
+#    `toolCleanOwnModules` 每请求判 0 个干净模块 ⇒ LSP 每次 hover/诊断都整包重精化。
+#    同时锁定依赖链定点：A → B → 开 C 时，A/B 都必须进干净集（枚举顺序不保证拓扑序）。
+run: mkdir -p "$TMPDIR/lsp-inc-chain/app" "$TMPDIR/lsp-inc-chain/lib"
+run: printf '[package]\nname = "lsp-inc-chain"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/lsp-inc-chain/vuna.toml"
+run: printf 'module CInner where\n\nexport innerVal : Int\ninnerVal = 41\n' > "$TMPDIR/lsp-inc-chain/lib/CInner.vuna"
+run: printf 'module CMid where\n\nimport CInner\n\nexport midVal : Int\nmidVal = innerVal + 1\n' > "$TMPDIR/lsp-inc-chain/lib/CMid.vuna"
+run: printf 'module COuter where\n\nimport CMid\n\nexport outerVal : Int\nouterVal = midVal + 1\n' > "$TMPDIR/lsp-inc-chain/lib/COuter.vuna"
+run: printf 'import COuter\n\nmain : Int\nmain = outerVal\n' > "$TMPDIR/lsp-inc-chain/app/Main.vuna"
+# 入口包 check 必须写接口对象（obs 标记 `vuna.iface.write` 只在写发生时出现）。
+run: rm -f "$TMPDIR/lsp-inc-chain.trace"; VUNA_OBS=1 VUNA_OBS_FILE="$TMPDIR/lsp-inc-chain.trace" "$VUNA" check "$TMPDIR/lsp-inc-chain" >/dev/null 2>&1; if grep -q '"name":"vuna.iface.write"' "$TMPDIR/lsp-inc-chain.trace"; then echo IFACE_WRITTEN; else echo IFACE_MISSING; fi
+out-contains: IFACE_WRITTEN
+# 打开 COuter：本包干净模块 = CInner + CMid（COuter 自己是被编辑的入口，不进干净集）。
+run: d="$TMPDIR/lsp-inc-chain"; log="$TMPDIR/lsp-inc-chain.log"; trace="$TMPDIR/lsp-inc-chain-lsp.trace"; rm -f "$trace"; esc() { sed -e 's/$/\\n/' "$1" | tr -d '\n'; }; fr() { printf 'Content-Length: %s\r\n\r\n%s' "$(printf '%s' "$1" | wc -c)" "$1"; }; uri="file://$d/lib/COuter.vuna"; init=$(printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file://%s","capabilities":{}}}' "$d"); open=$(printf '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"%s","languageId":"vuna","version":1,"text":"%s"}}}' "$uri" "$(esc "$d/lib/COuter.vuna")"); { fr "$init"; fr '{"jsonrpc":"2.0","method":"initialized","params":{}}'; fr "$open"; sleep 0.3; fr '{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}'; fr '{"jsonrpc":"2.0","method":"exit","params":null}'; } | ( cd "$d" && VUNA_OBS=1 VUNA_OBS_FILE="$trace" "$VUNA" lsp >"$log" 2>/dev/null ); grep -o '"name":"vuna.lsp.session.clean","cat":"vuna.counter","args":{"value":[0-9]*}' "$trace" | tail -1
+out-contains: "value":2

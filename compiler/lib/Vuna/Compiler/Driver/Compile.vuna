@@ -1030,6 +1030,19 @@ readIfaceAtEff a = do
 -- 按地址读整条闭包的接口。缓存计数（`vuna.counter.cache.hit` / `.miss`）：每个模块
 -- 一次 `ph:"C"`——计数实参是常量 1（无 O(n) 表达式），关闭时只多一次 `Lazy.force` +
 -- 分支与一个 `Eff` 绑定（相对这里的读对象/解码成本可忽略）。
+-- 逐地址读接口，**跳过缺失项**：本包干净模块是纯优化，缺一个模块的接口不应该让整组
+-- 干净模块作废（依赖它的模块会被 `moduleDepsOk` 一并拒掉，安全性不变）。依赖包仍用
+-- all-or-nothing 的 `readIfaceListEff`：缺依赖必须整包回退，不能静默少装一个。
+export readIfaceListPartialEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (List ModuleIface)
+readIfaceListPartialEff [] = pure []
+readIfaceListPartialEff (m :: rest) = do
+  mi <- readIfaceAtEff m.cmAddr
+  xs <- readIfaceListPartialEff rest
+  pure (case mi of
+    Nothing => xs
+    Just x => x :: xs
+  )
+
 readIfaceListEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List ClosureMod -> Eff r (Maybe (List ModuleIface))
 readIfaceListEff [] = pure (Just [])
 readIfaceListEff (m :: rest) = do
@@ -1399,7 +1412,7 @@ toolNowSec = do
 -- 校验：文件还在，且（mtime+size 快路径）或（内容哈希）与记录一致。
 -- 安全窗与 `sourceInfoUnchanged` 同一个（`mtimeSafetyWindowSec`）：记录的 mtime 距会话建立
 -- 不足窗口时，同秒内同大小编辑不可分辨 ⇒ 回读哈希。
-sourceFresh : Member nFs FsOp r => Int -> SourceInfo -> Eff r Bool
+export sourceFresh : Member nFs FsOp r => Int -> SourceInfo -> Eff r Bool
 sourceFresh builtSec si = do
   let
     path = siPathOf si
@@ -1475,10 +1488,13 @@ toolCleanOwnModules ctx tool builtSec exclude needed = do
   let
     cands = filter (ownCleanWanted needed exclude) (selfModsOf ctx mods)
   in do
-    ifs <- readIfaceListEff cands
-    case ifs of
-      Nothing => pure []
-      Just clean => toolCleanGo builtSec tool.tcDepHashes clean []
+    let
+      _ = obsCounter "vuna.tool.clean.cands" (length cands)
+    in do
+      clean <- readIfaceListPartialEff cands
+      let
+        _ = obsCounter "vuna.tool.clean.read" (length clean)
+      in toolCleanGo builtSec tool.tcDepHashes clean []
 
 ownCleanWanted : List String -> Maybe String -> ClosureMod -> Bool
 ownCleanWanted needed exclude m = memName m.cmName needed && (case exclude of
@@ -1486,16 +1502,54 @@ ownCleanWanted needed exclude m = memName m.cmName needed && (case exclude of
   Nothing => True
 )
 
+-- 干净模块判定分两步：
+--   1. 逐模块的**自身**判据（接口载荷自证 / 源新鲜 / 缓存程序可用 / 无缺失依赖哨兵）——一次 Eff pass；
+--   2. 依赖链判据（本包模块的 `miDepHashes` 必须命中「依赖表 或 已收干净模块」）——纯定点。
+-- 第 2 步必须定点而不是单遍：候选顺序是闭包枚举顺序（不保证拓扑序），单遍会把「依赖还没
+-- 被接受」的模块误判成脏，连锁把大半包判脏（实测根包 27 个候选里 16 个这样被拒）。
 toolCleanGo : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> Eff r (List ModuleIface)
-toolCleanGo builtSec depTbl [] cleanRev = pure (reverse cleanRev)
-toolCleanGo builtSec depTbl (m :: rest) cleanRev = do
+toolCleanGo builtSec depTbl cands cleanRev = do
+  ok <- cleanSelfOk builtSec cands []
+  pure (cleanFixpoint (length ok + 1) depTbl ok cleanRev)
+
+cleanSelfOk : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List ModuleIface -> List ModuleIface -> Eff r (List ModuleIface)
+cleanSelfOk builtSec [] acc = pure (reverse acc)
+cleanSelfOk builtSec (m :: rest) acc = do
   selfOk <- payloadSelfOk m
   let
     _ = if selfOk then 0 else dbg! "iface-reject=self-hash ${miNameOf m}"
   in do
     fresh <- sourceFresh builtSec (miSourceOf m)
-    if fresh && cachedProgramValid (miCachedOf m) && selfOk && not (hasMissingDep (miDepHashesOf m)) && moduleDepsOk depTbl cleanRev (miDepHashesOf m) then toolCleanGo builtSec depTbl rest (m :: cleanRev)
-    else toolCleanGo builtSec depTbl rest cleanRev
+    let
+      valid = cachedProgramValid (miCachedOf m)
+      missingDep = hasMissingDep (miDepHashesOf m)
+      ok = fresh && valid && selfOk && not missingDep
+      -- 归因：整包重精化时看是哪一条把干净模块判掉（各计数器只在 reject 时 +1）。
+      _ = if selfOk then 0 else obsCounter "vuna.tool.clean.reject.self" 1
+      _ = if fresh then 0 else obsCounter "vuna.tool.clean.reject.fresh" 1
+      _ = if valid then 0 else obsCounter "vuna.tool.clean.reject.cached" 1
+      _ = if missingDep then obsCounter "vuna.tool.clean.reject.missingdep" 1 else 0
+    in cleanSelfOk builtSec rest (if ok then m :: acc else acc)
+
+-- 依赖链定点：每遍按枚举顺序收「依赖已满足」的模块，链式依赖在同一遍里推进；
+-- 一遍没有任何进展 ⇒ 其余模块的依赖不在闭包内，整批拒绝（fuel 只防脏数据）。
+cleanFixpoint : Int -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface
+cleanFixpoint fuel depTbl pending cleanRev = if fuel <= 0 then append (reverse pending) cleanRev
+else case cleanPass depTbl pending cleanRev [] of
+  Pair [] kept => append (reverse kept) cleanRev
+  Pair rest kept => if length kept == 0 then append (reverse rest) cleanRev
+  else
+    let
+      _ = obsCounter "vuna.tool.clean.kept" (length kept)
+    in cleanFixpoint (fuel - 1) depTbl rest (append (reverse kept) cleanRev)
+
+cleanPass : List (Pair String String) -> List ModuleIface -> List ModuleIface -> List ModuleIface -> Pair (List ModuleIface) (List ModuleIface)
+cleanPass depTbl [] cleanRev acc = Pair [] (reverse acc)
+cleanPass depTbl (m :: rest) cleanRev acc = if moduleDepsOk depTbl cleanRev (miDepHashesOf m) then cleanPass depTbl rest (m :: cleanRev) (m :: acc)
+else
+  let
+    p = cleanPass depTbl rest cleanRev acc
+  in Pair (m :: firstOf p) (secondOf p)
 
 -- 单模块接口写回：LSP 每次成功请求后只写「当前模块」的接口对象。语义与整包 ifaceOfPackage
 -- 一致（见 `Iface.ifaceOfModule`）；有缺口/其他脏模块时返回 Err，调用方静默跳过（不影响诊断）。
@@ -1972,12 +2026,12 @@ resyncCleanSources sources clean = map (\m => case lookupPair (miNameOf m) sourc
 -- 入口-only 包（单文件夹具、`vuna compile <file>`）没有可复用的库模块面：给它们写接口
 -- 会让同一份源码在后续阶段（check → compile）命中缓存而**跳过精化**，于是只在精化时
 -- 产生的诊断（典型 `UN_UnusedImport`）静默消失。
+-- 有包记录就写（含 `[export]` 为空的入口包：它的模块面 = 入口闭包）。
+-- 没有包记录（单文件夹具 / base-only 上下文）不写：没有可判定的「本包」边界。
 shadowAllowed : PackageContext -> Bool
 shadowAllowed ctx = case ctx.contextPackage of
   Nothing => False
-  Just pkg => case packageExports pkg of
-    Just _ => True
-    Nothing => False
+  Just _ => True
 
 -- 模块名是否在导出名单里（`filter` 的命名谓词；lambda 参数无类型标注时字段访问不可用）。
 nameExportedBy : List String -> ClosureMod -> Bool
@@ -1987,8 +2041,8 @@ nameExportedBy names m = memName m.cmName names
 -- lib 根下的全部 `.vuna`：未导出模块只服务本包内部（依赖方按 `rootAllows` 看不到它们），
 -- 把它们算进判据会让「入口闭包 == 导出面」的包永远判 partial，于是每轮都补跑一遍
 -- lib check（冷 `check compiler` 实测 21.5 s vs 单遍 12.5 s）。
--- `shadowAllowed` 已保证有包且 `[export]` 非空 ⇒ 这里只走 `Just` 分支；`Nothing` 的
--- 兜底只为「根不限制导出」的上下文（单文件夹具）保持旧语义。
+-- 入口包（`[export]` 为空）的模块面 = 入口闭包本身：`own` 已经是「本包在闭包里出现的
+-- 全部模块」，所以 `Nothing` 分支直接返回 `own`。
 exportedOwnOf : PackageContext -> List ClosureMod -> List ClosureMod
 exportedOwnOf ctx own = case ctx.contextPackage of
   Nothing => own

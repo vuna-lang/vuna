@@ -108,7 +108,7 @@ def main():
 
     env = dict(os.environ)
     if args.obs_out:
-        env["VUNA_OBS"] = "1"
+        env["VUNA_OBS"] = os.environ.get("VUNA_OBS", "1")
         env["VUNA_OBS_FILE"] = args.obs_out
 
     lsp = Lsp(args.bin, env)
