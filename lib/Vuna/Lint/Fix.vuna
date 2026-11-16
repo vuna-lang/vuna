@@ -10,16 +10,34 @@ import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Config
 import Vuna.Lint.Rules
 
--- | 内部：按 `editStart` 降序排序编辑（插入排序）。
-sortEdits : List Edit -> List Edit
-sortEdits [] = []
-sortEdits (e :: rest) = insertEdit e (sortEdits rest)
+-- | 内部：编辑按起点降序（从后往前应用）。
+editStartGe : Edit -> Edit -> Bool
+editStartGe a b = a.editStart >= b.editStart
 
--- | 内部：把一个编辑按起点降序插入已排序列表。
-insertEdit : Edit -> List Edit -> List Edit
-insertEdit e [] = [e]
-insertEdit e (f :: rest) =
-  if e.editStart > f.editStart then e :: f :: rest else f :: insertEdit e rest
+-- | 内部：合并两个按起点降序的编辑序列。
+mergeEdits : Int -> List Edit -> List Edit -> List Edit
+mergeEdits fuel [] ys = ys
+mergeEdits fuel xs [] = xs
+mergeEdits fuel (x :: xs) (y :: ys) =
+  if fuel <= 0 then append (x :: xs) (y :: ys)
+  else if editStartGe x y then x :: mergeEdits (fuel - 1) xs (y :: ys)
+  else y :: mergeEdits (fuel - 1) (x :: xs) ys
+
+-- | 内部：按起点降序归并排序编辑。
+sortEditsGo : Int -> List Edit -> List Edit
+sortEditsGo fuel [] = []
+sortEditsGo fuel ([x]) = [x]
+sortEditsGo fuel edits = if fuel <= 0 then edits
+else
+  let
+    half = length edits / 2
+    left = sortEditsGo (fuel - 1) (takeList half edits)
+    right = sortEditsGo (fuel - 1) (dropList half edits)
+  in mergeEdits fuel left right
+
+-- | 内部：按 `editStart` 降序排序编辑。
+sortEdits : List Edit -> List Edit
+sortEdits edits = sortEditsGo (length edits + 1) edits
 
 -- | 内部：收集 finding 里带编辑的项（累加器风格，结果与输入反序）。
 collectEdits : List Finding -> List Edit -> List Edit

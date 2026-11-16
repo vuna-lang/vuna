@@ -1797,18 +1797,42 @@ mkFindingAt line col sp rule msg edit =
   Finding line col (spanEndLine sp) (spanEndCol sp + 1) (lintCode rule) (lintRule rule) msg
     (lintDefaultSeverity rule) edit
 
--- | 内部：按（行, 列）升序排序 finding（插入排序）。
-sortFindings : List Finding -> List Finding
-sortFindings [] = []
-sortFindings (f :: rest) = insertFinding f (sortFindings rest)
+-- | 内部：finding 的稳定顺序（行、列、code）。
+findingLe : Finding -> Finding -> Bool
+findingLe a b =
+  if a.findingLine /= b.findingLine then a.findingLine <= b.findingLine
+  else if a.findingCol /= b.findingCol then a.findingCol <= b.findingCol
+  else a.findingCode <= b.findingCode
 
--- | 内部：把一个 finding 按（行, 列）顺序插入。
-insertFinding : Finding -> List Finding -> List Finding
-insertFinding f [] = [f]
-insertFinding f (g :: rest) =
-  if f.findingLine < g.findingLine then f :: g :: rest
-  else if f.findingLine == g.findingLine && f.findingCol <= g.findingCol then f :: g :: rest
-  else g :: insertFinding f rest
+-- | 内部：把 findings 分成前后两半。
+splitFindings : Int -> List Finding -> Pair (List Finding) (List Finding)
+splitFindings n xs = Pair (takeIndex n xs) (dropIndex n xs)
+
+-- | 内部：合并两个已排序序列（fuel 保证互递归终止）。
+mergeFindings : Int -> List Finding -> List Finding -> List Finding
+mergeFindings fuel [] ys = ys
+mergeFindings fuel xs [] = xs
+mergeFindings fuel (x :: xs) (y :: ys) =
+  if fuel <= 0 then append (x :: xs) (y :: ys)
+  else if findingLe x y then x :: mergeFindings (fuel - 1) xs (y :: ys)
+  else y :: mergeFindings (fuel - 1) (x :: xs) ys
+
+-- | 内部：归并排序（fuel = 剩余可拆分数）。
+sortFindingsGo : Int -> List Finding -> List Finding
+sortFindingsGo fuel [] = []
+sortFindingsGo fuel ([x]) = [x]
+sortFindingsGo fuel findings = if fuel <= 0 then findings
+else
+  let
+    half = length findings / 2
+    halves = splitFindings half findings
+    left = sortFindingsGo (fuel - 1) (firstOf halves)
+    right = sortFindingsGo (fuel - 1) (secondOf halves)
+  in mergeFindings fuel left right
+
+-- | 内部：按（行, 列, code）升序排序 finding。
+sortFindings : List Finding -> List Finding
+sortFindings findings = sortFindingsGo (length findings + 1) findings
 
 -- | 内部：big 的替换行范围是否严格包含 small（两端都相等不算包含）。
 editContains : Edit -> Edit -> Bool
