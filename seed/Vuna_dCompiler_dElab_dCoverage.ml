@@ -91,7 +91,7 @@ let v_Vuna_dCompiler_dElab_dCoverage_dfamilyCtors = (fun table cname -> ((fun nd
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 )
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-)) ((Base_dList.v_Base_dList_dfilter (fun e -> (((Base_dEq.v_Base_dEq_dneq (Base_dMaybe.v_Eq_uBase_uMaybe_uMaybe_ua Base_dInt.v_Eq_uInt)) ((v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry cname) (Base_dPair.v_Base_dPair_dsecondOf (Base_dPair.v_Base_dPair_dsecondOf e)))) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))) table)))
+)) ((Base_dList.v_Base_dList_dfilter (fun e -> (((Base_dEq.v_Base_dEq_d_x47__x61_ (Base_dMaybe.v_Eq_uBase_uMaybe_uMaybe_ua Base_dInt.v_Eq_uInt)) ((v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry cname) (Base_dPair.v_Base_dPair_dsecondOf (Base_dPair.v_Base_dPair_dsecondOf e)))) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))) table)))
 
 # 103 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dorderedCtors = (fun ctors heads -> ((Base_dList.v_Base_dList_dappend ((Base_dList.v_Base_dList_dfilter (fun e -> (Base_dBool.v_Base_dBool_dnot ((Base_dList.v_Base_dList_dmemName (Base_dPair.v_Base_dPair_dfirstOf e)) heads)))) ctors)) ((Base_dList.v_Base_dList_dfilter (fun e -> ((Base_dList.v_Base_dList_dmemName (Base_dPair.v_Base_dPair_dfirstOf e)) heads))) ctors)))
@@ -114,11 +114,11 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_ddropPats = (fun n xs -> (if (n <= 0) t
 let rec v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness = (fun table fuel pending rows qs -> (let dtnat__37 = fuel in (if dtnat__37 = 0 then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (let dtb__38 = (dtnat__37 - 1) in (match pending with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__39) -> (match dtb__39 with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
-  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> ((fun ar -> ((fun sub -> ((fun deeper -> (match deeper with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__40, dtb__41) -> ((fun ar -> ((fun specialized -> ((fun deeper -> (match deeper with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((((v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness table) dtb__38) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__41))) rows) qs)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__42) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon ((Base_dPair.v_Base_dPair_dfirstOf dtb__40), ((v_Vuna_dCompiler_dElab_dCoverage_dtakePats ar) dtb__42), v_Vuna_dCompiler_dElab_dCoverage_demptyPatSpan)), ((v_Vuna_dCompiler_dElab_dCoverage_ddropPats ar) dtb__42)))))
   | _ -> failwith "DT: impossible branch"
-)) (((((v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness table) dtb__38) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) sub) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dCoverage_dwilds ar)) qs)))) (((v_Vuna_dCompiler_dElab_dCoverage_dspecializeCtor ar) (Base_dPair.v_Base_dPair_dfirstOf dtb__40)) rows))) (Base_dPair.v_Base_dPair_dsecondOf dtb__40))
+)) (((((v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness table) dtb__38) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) specialized) ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dCoverage_dwilds ar)) qs)))) (((v_Vuna_dCompiler_dElab_dCoverage_dspecializeCtor ar) (Base_dPair.v_Base_dPair_dfirstOf dtb__40)) rows))) (Base_dPair.v_Base_dPair_dsecondOf dtb__40))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (match qs with

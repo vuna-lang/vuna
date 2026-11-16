@@ -10,20 +10,20 @@ let v_Show_uBase_uPair_uPair_ua_ub = (fun _uctx0 _uctx1 -> (Base_dShow.C_Dict_uB
 # 33 "Base/Pair.vuna"
 let rec v_Eq_uBase_uPair_uPair_ua_ub = (fun _uctx0 _uctx1 -> (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
   | { f_Base_dPair_dPair_first = dtb__2; f_Base_dPair_dPair_second = dtb__3 } -> (match mc1 with
-  | { f_Base_dPair_dPair_first = dtb__4; f_Base_dPair_dPair_second = dtb__5 } -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__2) dtb__4) then (((Base_dEq.v_Base_dEq_deq _uctx1) dtb__3) dtb__5) else false)
+  | { f_Base_dPair_dPair_first = dtb__4; f_Base_dPair_dPair_second = dtb__5 } -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) dtb__2) dtb__4) then (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx1) dtb__3) dtb__5) else false)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun p q -> (if (((Base_dEq.v_Base_dEq_deq ((v_Eq_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) p) q) then false else true)))))
+)), (fun p q -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ ((v_Eq_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) p) q) then false else true)))))
 
 # 37 "Base/Pair.vuna"
 let rec v_Ord_uBase_uPair_uPair_ua_ub = (fun _uctx0 _uctx1 -> (Base_dOrd.C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (match mc0 with
   | { f_Base_dPair_dPair_first = dtb__6; f_Base_dPair_dPair_second = dtb__7 } -> (match mc1 with
-  | { f_Base_dPair_dPair_first = dtb__8; f_Base_dPair_dPair_second = dtb__9 } -> (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__6) dtb__8) then true else (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__8) dtb__6) then false else (((Base_dOrd.v_Base_dOrd_dlt _uctx1) dtb__7) dtb__9)))
+  | { f_Base_dPair_dPair_first = dtb__8; f_Base_dPair_dPair_second = dtb__9 } -> (if (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx0) dtb__6) dtb__8) then true else (if (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx0) dtb__8) dtb__6) then false else (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx1) dtb__7) dtb__9)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun p q -> (if (((Base_dOrd.v_Base_dOrd_dlt ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) p) q) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_dlt ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)))), (fun p q -> (((Base_dOrd.v_Base_dOrd_dlt ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)), (fun p q -> (((Base_dOrd.v_Base_dOrd_dle ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)))))
+)), (fun p q -> (if (((Base_dOrd.v_Base_dOrd_d_x60_ ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) p) q) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_d_x60_ ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)))), (fun p q -> (((Base_dOrd.v_Base_dOrd_d_x60_ ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)), (fun p q -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ ((v_Ord_uBase_uPair_uPair_ua_ub _uctx0) _uctx1)) q) p)))))
 
 # 43 "Base/Pair.vuna"
 let v_Hashable_uBase_uPair_uPair_ua_ub = (fun _uctx0 _uctx1 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun p -> (match p with

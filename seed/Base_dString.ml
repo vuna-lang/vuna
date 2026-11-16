@@ -95,7 +95,7 @@ let v_Base_dString_dlines = (fun s -> ((v_Base_dString_dsplit "\n") s))
 let v_Base_dString_dstartsWith = (fun prefix text -> ((v_Base_dString_d_ustartsWithChars (Base_dList.dtp_unpack prefix)) (Base_dList.dtp_unpack text)))
 
 # 88 "Base/String.vuna"
-let v_Base_dString_dendsWith = (fun suffix text -> ((fun ls -> ((fun lt -> (if (ls > lt) then false else ((v_Base_dString_d_ustartsWithChars (Base_dList.dtp_unpack suffix)) ((Base_dList.v_Base_dList_ddrop (lt - ls)) (Base_dList.dtp_unpack text))))) (bi_strLength text))) (bi_strLength suffix)))
+let v_Base_dString_dendsWith = (fun suffix text -> ((fun ls -> ((fun ltLen -> (if (ls > ltLen) then false else ((v_Base_dString_d_ustartsWithChars (Base_dList.dtp_unpack suffix)) ((Base_dList.v_Base_dList_ddrop (ltLen - ls)) (Base_dList.dtp_unpack text))))) (bi_strLength text))) (bi_strLength suffix)))
 
 # 121 "Base/String.vuna"
 let rec v_Base_dString_d_ucontainsChars = (fun needle text -> (if ((v_Base_dString_d_ustartsWithChars needle) text) then true else (match text with

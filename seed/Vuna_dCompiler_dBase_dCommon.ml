@@ -8,7 +8,7 @@ let v_Functor_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dFunctor.C_Dict_uB
 let v_Applicative_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun x -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) x)), (fun mf mx -> (((Base_dApplicative.v_Base_dApplicative_dap Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (let dtb__1 = mf in dtb__1)) (let dtb__2 = mx in dtb__2))), (fun f ma mb -> ((((Base_dApplicative.v_Base_dApplicative_dliftA2 Base_dEff.v_Applicative_uBase_uEff_uEff_ur) f) (let dtb__3 = ma in dtb__3)) (let dtb__4 = mb in dtb__4)))))
 
 # 46 "Vuna/Compiler/Base/Common.vuna"
-let v_Monad_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun m k -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (let dtb__5 = m in dtb__5)) (fun x -> (let dtb__6 = (k x) in dtb__6))))))
+let v_Monad_uVuna_uCompiler_uBase_uCommon_uEffCheck = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun m k -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (let dtb__5 = m in dtb__5)) (fun x -> (let dtb__6 = (k x) in dtb__6))))))
 
 # 26 "Vuna/Compiler/Base/Common.vuna"
 let v_Vuna_dCompiler_dBase_dCommon_dbind = (fun mc0 mc1 -> (match mc0 with

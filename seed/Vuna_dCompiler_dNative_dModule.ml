@@ -53,7 +53,7 @@ let v_Vuna_dCompiler_dNative_dModule_dbNameEq = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 98 "Vuna/Compiler/Native/Module.vuna"
-let v_Vuna_dCompiler_dNative_dModule_dbinderEq = (fun a b -> (if ((v_Vuna_dCompiler_dNative_dModule_dbNameEq (a).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName) (b).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName) then (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_uBool_uBool) (a).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased) (b).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased) else false))
+let v_Vuna_dCompiler_dNative_dModule_dbinderEq = (fun a b -> (if ((v_Vuna_dCompiler_dNative_dModule_dbNameEq (a).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName) (b).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName) then (((Base_dEq.v_Base_dEq_d_x61__x61_ Base_dEq.v_Eq_uBase_uBool_uBool) (a).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased) (b).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased) else false))
 
 # 101 "Vuna/Compiler/Native/Module.vuna"
 let rec v_Vuna_dCompiler_dNative_dModule_dlookupBinder = (fun mc0 mc1 -> (match mc1 with

@@ -36,7 +36,7 @@ let v_Vuna_dCompiler_dWasm_dModule_dbNameEq = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 73 "Vuna/Compiler/Wasm/Module.vuna"
-let v_Vuna_dCompiler_dWasm_dModule_dbinderEq = (fun a b -> (if ((v_Vuna_dCompiler_dWasm_dModule_dbNameEq (v_Vuna_dCompiler_dWasm_dModule_dbinderNameOf a)) (v_Vuna_dCompiler_dWasm_dModule_dbinderNameOf b)) then (((Base_dEq.v_Base_dEq_deq Base_dEq.v_Eq_uBase_uBool_uBool) (v_Vuna_dCompiler_dWasm_dModule_dbinderErasedOf a)) (v_Vuna_dCompiler_dWasm_dModule_dbinderErasedOf b)) else false))
+let v_Vuna_dCompiler_dWasm_dModule_dbinderEq = (fun a b -> (if ((v_Vuna_dCompiler_dWasm_dModule_dbNameEq (v_Vuna_dCompiler_dWasm_dModule_dbinderNameOf a)) (v_Vuna_dCompiler_dWasm_dModule_dbinderNameOf b)) then (((Base_dEq.v_Base_dEq_d_x61__x61_ Base_dEq.v_Eq_uBase_uBool_uBool) (v_Vuna_dCompiler_dWasm_dModule_dbinderErasedOf a)) (v_Vuna_dCompiler_dWasm_dModule_dbinderErasedOf b)) else false))
 
 # 76 "Vuna/Compiler/Wasm/Module.vuna"
 let rec v_Vuna_dCompiler_dWasm_dModule_dlookupBinder = (fun mc0 mc1 -> (match mc1 with

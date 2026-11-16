@@ -48,11 +48,11 @@ let rec v_Eq_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dE
   | _ -> false
 )
   | C_Base_dResult_dResult_Ok (dtb__16) -> (match mc1 with
-  | C_Base_dResult_dResult_Ok (dtb__17) -> (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__16) dtb__17)
+  | C_Base_dResult_dResult_Ok (dtb__17) -> (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) dtb__16) dtb__17)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun r s -> (if (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uResult_uResult_ua _uctx0)) r) s) then false else true)))))
+)), (fun r s -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ (v_Eq_uBase_uResult_uResult_ua _uctx0)) r) s) then false else true)))))
 
 # 83 "Base/Result.vuna"
 let v_Hashable_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun r -> (match r with

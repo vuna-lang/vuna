@@ -27,6 +27,7 @@ Base_dMaybe.ml
 Base_dMonad.ml
 Base_dMonoid.ml
 Base_dNat.ml
+Base_dNeg.ml
 Base_dNum.ml
 Base_dObs.ml
 Base_dObs_dSpan.ml

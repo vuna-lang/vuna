@@ -396,7 +396,7 @@ let v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge = (fun mc0 -> (match mc0 with
 ))
 
 # 1660 "Vuna/Compiler/Codegen/Term.vuna"
-let v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows = (fun rows -> ((Base_dSort.v_Base_dSort_dsortBy (fun a b -> (((Base_dOrd.v_Base_dOrd_dle Base_dString.v_Ord_uString) a) b))) rows))
+let v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows = (fun rows -> ((Base_dSort.v_Base_dSort_dsortBy (fun a b -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ Base_dString.v_Ord_uString) a) b))) rows))
 
 # 1663 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf = (fun norm row -> ((fun name -> ((fun file -> ((fun line -> (String.concat "" ["  ("; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_dvalueName name)); ", ("; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString name); ", "; (Vuna_dCompiler_dCodegen_dDecl.v_Vuna_dCompiler_dCodegen_dDecl_docamlString (String.concat "" [(norm file); ":"; (bi_strFromInt line)])); "));\n"])) (Base_dPair.v_Base_dPair_dsecondOf (Base_dPair.v_Base_dPair_dsecondOf row)))) (Base_dPair.v_Base_dPair_dfirstOf (Base_dPair.v_Base_dPair_dsecondOf row)))) (Base_dPair.v_Base_dPair_dfirstOf row)))

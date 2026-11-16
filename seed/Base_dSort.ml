@@ -14,4 +14,4 @@ let rec v_Base_dSort_dsortBy = (fun mc0 mc1 -> (match mc1 with
 ))
 
 # 21 "Base/Sort.vuna"
-let v_Base_dSort_dmergeSort = (fun _uctx0 xs -> ((v_Base_dSort_dsortBy (fun x y -> (((Base_dOrd.v_Base_dOrd_dle _uctx0) x) y))) xs))
+let v_Base_dSort_dmergeSort = (fun _uctx0 xs -> ((v_Base_dSort_dsortBy (fun x y -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ _uctx0) x) y))) xs))

@@ -5,7 +5,7 @@ type t_Vuna_dCompiler_dBase_dHash_dDigest = int Base_dList.t_Base_dList_dList
 let v_Vuna_dCompiler_dBase_dHash_ddigestLanes = (fun mc0 -> (let dtb__0 = mc0 in dtb__0))
 
 # 49 "Vuna/Compiler/Base/Hash.vuna"
-let v_Vuna_dCompiler_dBase_dHash_ddigestInt = (fun mc0 -> (let dtb__1 = mc0 in ((Base_dBits.v_Base_dBits_dband (((Base_dList.v_Base_dList_dfoldl (fun h lane -> (((Base_dNum.v_Base_dNum_dadd Base_dInt.v_Num_uInt) (((Base_dNum.v_Base_dNum_dmul Base_dInt.v_Num_uInt) h) 1000003)) lane))) 0) dtb__1)) 4611686018427387903)))
+let v_Vuna_dCompiler_dBase_dHash_ddigestInt = (fun mc0 -> (let dtb__1 = mc0 in ((Base_dBits.v_Base_dBits_dband (((Base_dList.v_Base_dList_dfoldl (fun h lane -> (((Base_dNum.v_Base_dNum_d_x43_ Base_dInt.v_Num_uInt) (((Base_dNum.v_Base_dNum_d_x42_ Base_dInt.v_Num_uInt) h) 1000003)) lane))) 0) dtb__1)) 4611686018427387903)))
 
 # 74 "Vuna/Compiler/Base/Hash.vuna"
 let v_Vuna_dCompiler_dBase_dHash_dshaInit = (Base_dList.C_Base_dList_dList_Cons (1779033703, (Base_dList.C_Base_dList_dList_Cons (3144134277, (Base_dList.C_Base_dList_dList_Cons (1013904242, (Base_dList.C_Base_dList_dList_Cons (2773480762, (Base_dList.C_Base_dList_dList_Cons (1359893119, (Base_dList.C_Base_dList_dList_Cons (2600822924, (Base_dList.C_Base_dList_dList_Cons (528734635, (Base_dList.C_Base_dList_dList_Cons (1541459225, Base_dList.C_Base_dList_dList_Nil))))))))))))))))

@@ -44,7 +44,7 @@ let v_Show_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dShow.C_Dict_uBase_dSho
 # 75 "Base/Maybe.vuna"
 let rec v_Eq_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Just (dtb__7) -> (match mc1 with
-  | C_Base_dMaybe_dMaybe_Just (dtb__8) -> (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__7) dtb__8)
+  | C_Base_dMaybe_dMaybe_Just (dtb__8) -> (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) dtb__7) dtb__8)
   | _ -> false
 )
   | C_Base_dMaybe_dMaybe_Nothing -> (match mc1 with
@@ -52,12 +52,12 @@ let rec v_Eq_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun m n -> (if (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uMaybe_uMaybe_ua _uctx0)) m) n) then false else true)))))
+)), (fun m n -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ (v_Eq_uBase_uMaybe_uMaybe_ua _uctx0)) m) n) then false else true)))))
 
 # 82 "Base/Maybe.vuna"
 let rec v_Ord_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dMaybe_dMaybe_Just (dtb__9) -> (match mc1 with
-  | C_Base_dMaybe_dMaybe_Just (dtb__10) -> (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__9) dtb__10)
+  | C_Base_dMaybe_dMaybe_Just (dtb__10) -> (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx0) dtb__9) dtb__10)
   | C_Base_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 )
@@ -67,7 +67,7 @@ let rec v_Ord_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dO
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun m n -> (if (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) m) n) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)))), (fun m n -> (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)), (fun m n -> (((Base_dOrd.v_Base_dOrd_dle (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)))))
+)), (fun m n -> (if (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) m) n) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)))), (fun m n -> (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)), (fun m n -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ (v_Ord_uBase_uMaybe_uMaybe_ua _uctx0)) n) m)))))
 
 # 91 "Base/Maybe.vuna"
 let v_Hashable_uBase_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun m -> (match m with

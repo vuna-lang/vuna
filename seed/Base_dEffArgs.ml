@@ -9,13 +9,13 @@ let v_Base_dEffArgs_dhandleArgs = (fun n ret opH comp -> (((((Base_dEff.v_Base_d
 
 # 27 "Base/EffArgs.vuna"
 let v_Base_dEffArgs_dargsOpHIO = (fun op k -> (match op with
-  | C_Base_dEffArgs_dArgsOp_GetArgs -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
+  | C_Base_dEffArgs_dArgsOp_GetArgs -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 37 "Base/EffArgs.vuna"
 let v_Base_dEffArgs_dargsOpHIOHost = (fun op k -> (match op with
-  | C_Base_dEffArgs_dArgsOp_GetArgs -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
+  | C_Base_dEffArgs_dArgsOp_GetArgs -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (Base_dList.dtp_listOf (dtp_getArgs ()))))) (fun xs -> ((Obj.magic k) xs)))
   | _ -> failwith "DT: impossible branch"
 ))
 

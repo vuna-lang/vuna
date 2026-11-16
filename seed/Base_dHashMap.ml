@@ -7,7 +7,7 @@ let v_Base_dHashMap_d_ubucketOf = (fun n -> ((fun m -> (if (m < 0) then (m + 102
 # 33 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_d_ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__0 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__2; Base_dPair.f_Base_dPair_dPair_second = dtb__3 } -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) mc0) dtb__2) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__3)) else (((v_Base_dHashMap_d_ulookupAssoc _uctx0) mc0) dtb__1))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__2; Base_dPair.f_Base_dPair_dPair_second = dtb__3 } -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) mc0) dtb__2) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__3)) else (((v_Base_dHashMap_d_ulookupAssoc _uctx0) mc0) dtb__1))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -17,7 +17,7 @@ let rec v_Base_dHashMap_d_ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
 # 38 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_d_uhasKeyIn = (fun _uctx0 mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (match dtb__4 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__6; Base_dPair.f_Base_dPair_dPair_second = dtb__7 } -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) mc0) dtb__6) then true else (((v_Base_dHashMap_d_uhasKeyIn _uctx0) mc0) dtb__5))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__6; Base_dPair.f_Base_dPair_dPair_second = dtb__7 } -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) mc0) dtb__6) then true else (((v_Base_dHashMap_d_uhasKeyIn _uctx0) mc0) dtb__5))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> false

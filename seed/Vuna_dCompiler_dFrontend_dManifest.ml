@@ -50,7 +50,7 @@ let v_Vuna_dCompiler_dFrontend_dManifest_dmanifestErr = (fun path msg -> (if (pa
 # 105 "Vuna/Compiler/Frontend/Manifest.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dManifest_dsameSection = (fun _uctx0 mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__16, dtb__17) -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__16) dtb__18) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection _uctx0) dtb__17) dtb__19) else false)
+  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) dtb__16) dtb__18) then (((v_Vuna_dCompiler_dFrontend_dManifest_dsameSection _uctx0) dtb__17) dtb__19) else false)
   | _ -> false
 )
   | Base_dList.C_Base_dList_dList_Nil -> (match mc1 with

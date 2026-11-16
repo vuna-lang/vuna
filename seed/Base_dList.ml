@@ -42,7 +42,7 @@ let dtp_substTemplate tmpl xs =
 # 199 "Base/List.vuna"
 let rec v_Eq_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__0) dtb__2) then (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uList_uList_ua _uctx0)) dtb__1) dtb__3) else false)
+  | C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) dtb__0) dtb__2) then (((Base_dEq.v_Base_dEq_d_x61__x61_ (v_Eq_uBase_uList_uList_ua _uctx0)) dtb__1) dtb__3) else false)
   | _ -> false
 )
   | C_Base_dList_dList_Nil -> (match mc1 with
@@ -50,12 +50,12 @@ let rec v_Eq_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dE
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun xs ys -> (if (((Base_dEq.v_Base_dEq_deq (v_Eq_uBase_uList_uList_ua _uctx0)) xs) ys) then false else true)))))
+)), (fun xs ys -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ (v_Eq_uBase_uList_uList_ua _uctx0)) xs) ys) then false else true)))))
 
 # 206 "Base/List.vuna"
 let rec v_Ord_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__6, dtb__7) -> (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__4) dtb__6) then true else (if (((Base_dOrd.v_Base_dOrd_dlt _uctx0) dtb__6) dtb__4) then false else (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) dtb__5) dtb__7)))
+  | C_Base_dList_dList_Cons (dtb__6, dtb__7) -> (if (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx0) dtb__4) dtb__6) then true else (if (((Base_dOrd.v_Base_dOrd_d_x60_ _uctx0) dtb__6) dtb__4) then false else (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uList_uList_ua _uctx0)) dtb__5) dtb__7)))
   | C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 )
@@ -65,7 +65,7 @@ let rec v_Ord_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dOrd.C_Dict_uBase_dOrd
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun xs ys -> (if (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) xs) ys) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_dlt (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_dle (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))))
+)), (fun xs ys -> (if (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uList_uList_ua _uctx0)) xs) ys) then true else (Base_dBool.v_Base_dBool_dnot (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_d_x60_ (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)), (fun xs ys -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ (v_Ord_uBase_uList_uList_ua _uctx0)) ys) xs)))))
 
 # 216 "Base/List.vuna"
 let rec v_Hashable_uBase_uList_uList_ua = (fun _uctx0 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun xs -> (match xs with
@@ -166,7 +166,7 @@ let v_Applicative_uBase_uList_uList = (Base_dApplicative.C_Dict_uBase_dApplicati
 
 # 88 "Base/List.vuna"
 let rec v_Base_dList_dmem = (fun _uctx0 mc0 mc1 -> (match mc1 with
-  | C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (if (((Base_dEq.v_Base_dEq_deq _uctx0) mc0) dtb__30) then true else (((v_Base_dList_dmem _uctx0) mc0) dtb__31))
+  | C_Base_dList_dList_Cons (dtb__30, dtb__31) -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) mc0) dtb__30) then true else (((v_Base_dList_dmem _uctx0) mc0) dtb__31))
   | C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -265,13 +265,13 @@ let rec v_Base_dList_dfirstJust = (fun mc0 -> (match mc0 with
 ))
 
 # 164 "Base/List.vuna"
-let rec v_Base_dList_dfirstSuccess = (fun _uctx0 d83 mc0 -> (match mc0 with
-  | C_Base_dList_dList_Cons (dtb__58, dtb__59) -> (((Base_dMonad.v_Base_dMonad_dbind _uctx0) dtb__58) (fun v -> (match v with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60) -> ((Base_dApplicative.v_Base_dApplicative_dpure d83) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Base_dList_dfirstSuccess _uctx0) d83) dtb__59)
+let rec v_Base_dList_dfirstSuccess = (fun _uctx0 d89 mc0 -> (match mc0 with
+  | C_Base_dList_dList_Cons (dtb__58, dtb__59) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ _uctx0) dtb__58) (fun v -> (match v with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60) -> ((Base_dApplicative.v_Base_dApplicative_dpure d89) (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Base_dList_dfirstSuccess _uctx0) d89) dtb__59)
   | _ -> failwith "DT: impossible branch"
 )))
-  | C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure d83) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
+  | C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure d89) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)
   | _ -> failwith "DT: impossible branch"
 ))
 

@@ -52,7 +52,7 @@ let v_Vuna_dCompiler_dWasm_dRender_dwatString = (fun s -> (Base_dList.dtp_pack (
 # 81 "Vuna/Compiler/Wasm/Render.vuna"
 let rec v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (if (mc1 = 0) then (Base_dList.C_Base_dList_dList_Cons ((Base_dList.v_Base_dList_dreverse mc2), (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo (Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5))) 24) Base_dList.C_Base_dList_dList_Nil))) else (((v_Vuna_dCompiler_dWasm_dRender_dchunkBytesGo dtb__5) (mc1 - 1)) (Base_dList.C_Base_dList_dList_Cons (dtb__4, mc2))))
-  | Base_dList.C_Base_dList_dList_Nil -> (if (((Base_dEq.v_Base_dEq_deq (Base_dList.v_Eq_uBase_uList_uList_ua Base_dInt.v_Eq_uInt)) mc2) Base_dList.C_Base_dList_dList_Nil) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList_Cons ((Base_dList.v_Base_dList_dreverse mc2), Base_dList.C_Base_dList_dList_Nil)))
+  | Base_dList.C_Base_dList_dList_Nil -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ (Base_dList.v_Eq_uBase_uList_uList_ua Base_dInt.v_Eq_uInt)) mc2) Base_dList.C_Base_dList_dList_Nil) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList_Cons ((Base_dList.v_Base_dList_dreverse mc2), Base_dList.C_Base_dList_dList_Nil)))
   | _ -> failwith "DT: impossible branch"
 ))
 
