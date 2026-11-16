@@ -213,11 +213,6 @@ projectionParamLams (nm :: rest) body = TLam nm Rig0 (projectionParamLams rest b
 projectionParamNames : Int -> List String
 projectionParamNames n = if n == 1 then ["_p"] else map (\i => "_p${i}") (range 0 n)
 
-export explicitPiArity : Term -> Int
-explicitPiArity (TPi n implicit rig dom cod) =
-  if implicit then explicitPiArity cod else 1 + explicitPiArity cod
-explicitPiArity _ = 0
-
 -- 投影定义表：每个方法一条 `m = <投影定义体>`。
 export projectionDefs : String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
 projectionDefs tname nParams methods fieldTys nFields =

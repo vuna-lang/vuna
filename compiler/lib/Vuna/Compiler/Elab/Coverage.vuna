@@ -1,0 +1,93 @@
+module Vuna.Compiler.Elab.Coverage where
+
+-- Vuna.Compiler.Elab.Coverage：模式矩阵的覆盖性见证（保守版）。
+--
+-- 目的：嵌套模式走模式矩阵降级时会合成 `case`，覆盖性错误原来落在合成代码上。这里在
+-- **源矩阵**上判一件事并给出见证 —— **单列矩阵里，某个构造子完全没出现**。命中时调用方
+-- 就能把「缺 `Cons _ _`」报回源模式的位置与文本。
+--
+-- 为什么只做这一种情形（其余仍走降级后的既有诊断）：
+--   * 多列 / 嵌套列的完整性依赖「每个构造子的显式参数个数」与「构造子归属哪个族」，
+--     而构造子清单目前**不随接口摘要跨包传递**（`ecDatas` 在依赖包里没有 ctor 列表），
+--     重载构造子（`@vuna@ctor@...` 一个名字挂多个族）也无法从名字唯一确定族；
+--   * 只看单列 + 顶层缺失构造子，判据是纯局部的，不会把穷尽矩阵误判成漏分支
+--     （这正是覆盖性诊断最不能出的错）。
+-- 判据与降级一致：构造子列按族的全部构造子比对；字面量列不推断（无限域）。
+import Base.List
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Ast
+
+emptyPatSpan : Span
+emptyPatSpan = Span "" 0 0 0 0
+
+-- 一行等长的通配模式。
+export wilds : Int -> List Pat
+wilds n = if n <= 0 then [] else PWild emptyPatSpan :: wilds (n - 1)
+
+-- 剥掉 as-pattern（覆盖性按内层模式判定）。
+export patHead : Pat -> Pat
+patHead (PAs _ inner _) = patHead inner
+patHead p = p
+
+headCtorName : List Pat -> Maybe String
+headCtorName row = case row of
+  [] => Nothing
+  p :: _ => case patHead p of
+    PCon c _ _ => Just c
+    _ => Nothing
+
+-- 该列出现的构造子名（保序、去重）。
+ctorHeadsOf : List (List Pat) -> List String
+ctorHeadsOf rows = nubNames (mapMaybe headCtorName rows)
+
+allRowsUnary : List (List Pat) -> Bool
+allRowsUnary [] = False
+allRowsUnary (row :: rest) = natToInt (length row) == 1 && allRowsUnary rest
+
+lookupEntry : String -> List (Pair String Int) -> Maybe Int
+lookupEntry cname [] = Nothing
+lookupEntry cname ((Pair c n) :: rest) = if c == cname then Just n else lookupEntry cname rest
+
+-- 构造子所属族的构造子表。**必须唯一**：重载构造子无法从名字定位族，按「未知」处理。
+familyCtors : List (Pair String (List (Pair String Int))) -> String -> Maybe (List (Pair String Int))
+familyCtors table cname =
+  case filter (\e => lookupEntry cname (secondOf e) /= Nothing) table of
+    (one :: []) => Just (secondOf one)
+    _ => Nothing
+
+-- 单列矩阵里完全没出现的第一个构造子（带参数个数）。不满足条件返回 Nothing。
+export missingTopCtor : List (Pair String (List (Pair String Int))) -> List (List Pat) -> Maybe Pat
+missingTopCtor table clauses = if not (allRowsUnary clauses) then Nothing
+else case ctorHeadsOf clauses of
+  [] => Nothing
+  h :: _ => case familyCtors table h of
+    Nothing => Nothing
+    Just ctors => firstMissing ctors (ctorHeadsOf clauses)
+
+firstMissing : List (Pair String Int) -> List String -> Maybe Pat
+firstMissing [] heads = Nothing
+firstMissing (entry :: rest) heads =
+  if memName (firstOf entry) heads then firstMissing rest heads
+  else Just (PCon (firstOf entry) (wilds (secondOf entry)) emptyPatSpan)
+
+-- 模式渲染：见证里的变量/通配统一显示为 `_`，构造子应用带括号。
+-- `fuel` 只用于让终止性可证（模式深度远小于 64）。
+export renderPat : Pat -> String
+renderPat p = renderPatIn 64 False p
+
+renderPatIn : Int -> Bool -> Pat -> String
+renderPatIn fuel paren p = if fuel <= 0 then "_"
+else case patHead p of
+  PCon c subs _ => if natToInt (length subs) == 0 then c
+  else
+    let
+      body = "${c} ${join " " (map (renderPatIn (fuel - 1) True) subs)}"
+    in if paren then "(${body})" else body
+  PVar _ _ => "_"
+  PWild _ => "_"
+  PInt n _ => strFromInt n
+  PStr s _ => "\"${s}\""
+  PRecord rn fields _ => "{ ${rn} }"
+  PAs _ inner _ => renderPatIn (fuel - 1) paren inner

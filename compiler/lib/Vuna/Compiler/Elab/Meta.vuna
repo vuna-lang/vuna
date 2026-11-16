@@ -1223,8 +1223,20 @@ baseNameOf name = lastSeg name
 
 -- 构造子名 → 族的全部构造子（`Elab.Match` 的模式矩阵用它判断「这一列的构造子
 -- 是否已经全覆盖」——全覆盖时不再补通配兜底，避免把剩余列的匹配不全暴露成假覆盖）。
-export ctorFamilyTable : Ec -> List (Pair String (List String))
-ctorFamilyTable ec = map (\d => Pair (dtDataName d) (map dtCtorName (dtDataCtors d))) (ecDatas ec)
+-- 构造子的**显式** Pi binder 个数：模式里写的子模式只对应显式 binder（隐式的族参数 /
+-- 类型参数由精化器插入）。穷尽性见证用它给「缺失构造子」补子模式。
+export explicitPiArity : Term -> Int
+explicitPiArity (TPi n implicit rig dom cod) =
+  if implicit then explicitPiArity cod else 1 + explicitPiArity cod
+explicitPiArity _ = 0
+
+-- 族名 → [(构造子, 显式参数个数)]。参数个数供模式矩阵的穷尽性见证使用（缺的构造子
+-- 没有 clause 可查，只能从 data 声明取）。
+export ctorFamilyTable : Ec -> List (Pair String (List (Pair String Int)))
+ctorFamilyTable ec =
+  map
+    (\d => Pair (dtDataName d) (map (\c => Pair (dtCtorName c) (explicitPiArity (dtCtorType c))) (dtDataCtors d)))
+    (ecDatas ec)
 
 -- 后续分支里的兜底体（`case` 最后一个变量/通配分支），供嵌套模式的折叠使用。
 export findCatchAllBody : List (Pair Pat Expr) -> Maybe Expr
