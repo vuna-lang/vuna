@@ -50,6 +50,8 @@ export data PkgErr(..) : Nat -> Type where
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
   UnknownSourceKey : String -> String -> PkgErr (Succ (Succ Zero))
   HashMismatch : String -> String -> PkgErr (Succ (Succ Zero))
+  -- arity 3
+  DuplicatePackageName : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgCode（目录/模板见 diagnostics.md）。
 export pkgCode : {n : Nat} -> PkgErr n -> String
@@ -88,6 +90,7 @@ pkgCode (NotMaterialized _) = "PKG_NotMaterialized"
 pkgCode (FetchFailed _) = "PKG_FetchFailed"
 pkgCode (IndexMalformed _) = "PKG_IndexMalformed"
 pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
+pkgCode (DuplicatePackageName _ _ _) = "PKG_DuplicatePackageName"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
 export pkgTemplate : {n : Nat} -> PkgErr n -> String
@@ -135,6 +138,8 @@ pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (ru
 pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
 pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
+pkgTemplate (DuplicatePackageName _ _ _) =
+  "duplicate package name \"<0>\" in <1> and <2> (package names must be unique within a dependency graph)"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgMsg（目录/模板见 diagnostics.md）。
 export pkgMsg : {n : Nat} -> PkgErr n -> Vec n String -> Diagnostic

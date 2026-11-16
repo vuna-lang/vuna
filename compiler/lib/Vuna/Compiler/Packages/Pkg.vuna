@@ -317,8 +317,7 @@ checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name s
   Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
   Just prevDir =>
     if prevDir == dir then checkUniqueNamesGo seen rest
-    else err
-      "pkg: duplicate package name \"${name}\" in ${prevDir} and ${dir} (package names must be unique within a dependency graph)"
+    else pkgNoLoc (DuplicatePackageName name prevDir dir) [name, prevDir, dir]
 
 checkUniquePackageNames : List Package -> Check Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
