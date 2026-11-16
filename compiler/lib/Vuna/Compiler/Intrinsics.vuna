@@ -123,9 +123,9 @@ record BuiltinEffect where
 
 -- | 内建宿主效应的失败收口 handler（entry 追加在最外层；空串 = 该家族没有失败通道）。
 export builtinEffectErrorRunHostOf : String -> String
-builtinEffectErrorRunHostOf tag =
-  if tag == "Base.EffFs.FsOp" then "Base.EffFs.runFsErrorHost"
-  else if tag == "Base.EffProcess.ProcessOp" then "Base.EffProcess.runProcessErrorHost" else ""
+builtinEffectErrorRunHostOf "Base.EffFs.FsOp" = "Base.EffFs.runFsErrorHost"
+builtinEffectErrorRunHostOf "Base.EffProcess.ProcessOp" = "Base.EffProcess.runProcessErrorHost"
+builtinEffectErrorRunHostOf _ = ""
 
 -- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。

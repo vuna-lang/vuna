@@ -199,22 +199,23 @@ kindDomains _ = []
 -- 只收集直接写出的 `T x1 … xk`（`EVar T` 应用）里的裸变量实参；实参本身是应用时
 -- 交给「按应用次数」的规则。
 export argParamKinds : List (Pair String (List Expr)) -> Expr -> List (Pair String Expr)
-argParamKinds tbl e = case e of
-  EApp (EVar t _) args sp =>
-    append (zipArgKinds (lookupParamKinds tbl t) args) (concatMap (argParamKinds tbl) args)
-  EApp fn args sp => append (argParamKinds tbl fn) (concatMap (argParamKinds tbl) args)
-  ELam names body sp => argParamKinds tbl body
-  EPi n i _ dom cod sp => append (argParamKinds tbl dom) (argParamKinds tbl cod)
-  ELet binds body rec_ sp =>
-    append (concatMap (\b => argParamKinds tbl (secondOf b)) binds) (argParamKinds tbl body)
-  ECase scrut alts sp =>
-    append (argParamKinds tbl scrut) (concatMap (\a => argParamKinds tbl (secondOf a)) alts)
-  EIf c t f sp => append (argParamKinds tbl c) (append (argParamKinds tbl t) (argParamKinds tbl f))
-  EField b f sp => argParamKinds tbl b
-  ERecord rn fields sp => concatMap (\p => argParamKinds tbl (secondOf p)) fields
-  ERecUpdate b fields sp => argParamKinds tbl b
-  EAnn v ty sp => append (argParamKinds tbl v) (argParamKinds tbl ty)
-  _ => []
+argParamKinds tbl (EApp (EVar t _) args sp) =
+  append (zipArgKinds (lookupParamKinds tbl t) args) (concatMap (argParamKinds tbl) args)
+argParamKinds tbl (EApp fn args sp) =
+  append (argParamKinds tbl fn) (concatMap (argParamKinds tbl) args)
+argParamKinds tbl (ELam names body sp) = argParamKinds tbl body
+argParamKinds tbl (EPi n i _ dom cod sp) = append (argParamKinds tbl dom) (argParamKinds tbl cod)
+argParamKinds tbl (ELet binds body rec_ sp) =
+  append (concatMap (\b => argParamKinds tbl (secondOf b)) binds) (argParamKinds tbl body)
+argParamKinds tbl (ECase scrut alts sp) =
+  append (argParamKinds tbl scrut) (concatMap (\a => argParamKinds tbl (secondOf a)) alts)
+argParamKinds tbl (EIf c t f sp) =
+  append (argParamKinds tbl c) (append (argParamKinds tbl t) (argParamKinds tbl f))
+argParamKinds tbl (EField b f sp) = argParamKinds tbl b
+argParamKinds tbl (ERecord rn fields sp) = concatMap (\p => argParamKinds tbl (secondOf p)) fields
+argParamKinds tbl (ERecUpdate b fields sp) = argParamKinds tbl b
+argParamKinds tbl (EAnn v ty sp) = append (argParamKinds tbl v) (argParamKinds tbl ty)
+argParamKinds tbl _ = []
 
 lookupParamKinds : List (Pair String (List Expr)) -> String -> Maybe (List Expr)
 lookupParamKinds [] name = Nothing
