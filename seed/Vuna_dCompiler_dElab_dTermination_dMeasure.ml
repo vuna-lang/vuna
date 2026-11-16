@@ -498,7 +498,7 @@ and v_Vuna_dCompiler_dElab_dTermination_dMeasure_dwrapCheck = (fun p rest sizes 
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_dposVarIn = (fun x p caller facts region -> (if ((Base_dList.v_Base_dList_dmemName x) region) then true else (((v_Vuna_dCompiler_dElab_dTermination_dMeasure_dposHasTbl caller) p) facts)))
 
 # 490 "Vuna/Compiler/Elab/Termination/Measure.vuna"
-let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disSubOpName = (fun op -> (if (op = "-") then true else (op = "Base.Num.sub")))
+let v_Vuna_dCompiler_dElab_dTermination_dMeasure_disSubOpName = (fun op -> (if (if (op = "-") then true else (op = "Base.Num.sub")) then true else (op = "Base.Num.-")))
 
 # 498 "Vuna/Compiler/Elab/Termination/Measure.vuna"
 let v_Vuna_dCompiler_dElab_dTermination_dMeasure_darithMinusBase = (fun mc0 mc1 mc2 mc3 mc4 mc5 mc6 -> (match mc1 with

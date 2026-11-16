@@ -93,7 +93,7 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics_dIc Vuna_runtime Base_dList)" > "Vuna_dCompiler_dBase_dDiagnostics_dIc.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dHash Vuna_runtime Base_dList Base_dPair Base_dBits Base_dNum Base_dInt)" > "Vuna_dCompiler_dBase_dHash.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dFrontend_dCanonical_dPkg.stamp"
-  printf '%s' "$(stamp_want Base_dEffFs Base_dEff Base_dResult Base_dApplicative Vuna_runtime Base_dList Base_dFunctor Base_dMonad Base_dMaybe)" > "Base_dEffFs.stamp"
+  printf '%s' "$(stamp_want Base_dEffFs Base_dEff Base_dSort Base_dOrd Base_dResult Base_dApplicative Vuna_runtime Base_dString Base_dList Base_dFunctor Base_dMonad Base_dMaybe)" > "Base_dEffFs.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dModel Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dList Base_dPair Base_dMaybe)" > "Vuna_dCompiler_dWasm_dModel.stamp"
   printf '%s' "$(stamp_want Base_dEffProcess Base_dEff Base_dResult Base_dApplicative Vuna_runtime Base_dList Base_dMonad)" > "Base_dEffProcess.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dAbi Vuna_runtime Base_dList Vuna_dCompiler_dNative_dModel)" > "Vuna_dCompiler_dNative_dAbi.stamp"
@@ -101,7 +101,7 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   printf '%s' "$(stamp_want Base_dHashMap Base_dArray Vuna_runtime Base_dString Base_dList Base_dPair Base_dHashable Base_dShow Base_dMaybe Base_dEq)" > "Base_dHashMap.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dStore Base_dEffClock Base_dEff Base_dEffFs Base_dApplicative Vuna_runtime Base_dString Base_dList Base_dPair Base_dFunctor Base_dEffProcess Base_dBool Base_dMonad Base_dMaybe Base_dEffEnv Base_dObs_dSpan Base_dEq Vuna_dCompiler_dBase_dHash)" > "Vuna_dCompiler_dBase_dStore.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dWasm_dInstr Base_dInterp Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dString Base_dList Base_dPair Base_dMaybe Base_dInt Base_dEq)" > "Vuna_dCompiler_dWasm_dRender.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dIntrinsics Vuna_runtime Base_dString Base_dList Base_dPair Base_dBool Base_dMaybe Base_dHashMap)" > "Vuna_dCompiler_dBase_dIntrinsics.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dIntrinsics Vuna_runtime Base_dString Base_dList Base_dPair Base_dBool Vuna_dCompiler_dBase_dSource Base_dMaybe Base_dHashMap)" > "Vuna_dCompiler_dBase_dIntrinsics.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiag Base_dApplicative Vuna_runtime Base_dString Base_dList Base_dPair Base_dFunctor Base_dMonad Vuna_dCompiler_dBase_dSource Base_dMaybe Base_dInt Base_dEq)" > "Vuna_dCompiler_dBase_dDiag.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dAst Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dSource Base_dMaybe)" > "Vuna_dCompiler_dFrontend_dAst.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dNative_dRender Vuna_runtime Base_dString Base_dList Vuna_dCompiler_dNative_dAbi Vuna_dCompiler_dNative_dModel)" > "Vuna_dCompiler_dNative_dRender.stamp"
@@ -135,7 +135,7 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dMatch Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dElab_dMatch.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dBase_dDiagnostics Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dBase_dDiagnostics_dLoader Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dDiagnostics_dIc Base_dMaybe Vuna_dCompiler_dBase_dDiagnostics_dWarning)" > "Vuna_dCompiler_dBase_dDiagnostics.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dElab_dRecords.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dLoader_dFixity.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Base_dHashMap Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dLoader_dFixity.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dVec Vuna_dCompiler_dBase_dSource Base_dMaybe)" > "Vuna_dCompiler_dElab_dPrelude.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dSig Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Base_dHashMap Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dSig.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dLexer Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dBool Vuna_dCompiler_dBase_dDiagnostics_dFrontend Vuna_dCompiler_dBase_dSource Base_dMaybe)" > "Vuna_dCompiler_dFrontend_dLexer.stamp"
@@ -147,7 +147,7 @@ if [ "$clean" -eq 1 ] && [ "$JOBS" -le 1 ]; then
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dTypes Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dBool Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Base_dHashMap Base_dInt Vuna_dCompiler_dCore_dEval)" > "Vuna_dCompiler_dElab_dTypes.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dCodegen_dTerm Base_dSort Vuna_dCompiler_dIr_dRuntime Base_dOrd Vuna_dCompiler_dCodegen_dRuntime Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCodegen_dDecl Vuna_dCompiler_dBase_dSource Base_dMaybe Vuna_dCompiler_dIr_dModel Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dCodegen_dTerm.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dIr_dAnalysis Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dBool Base_dVec Base_dNum Base_dMaybe Vuna_dCompiler_dIr_dModel Base_dHashMap Base_dInt Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dIr_dAnalysis.stamp"
-  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dPerfCache Base_dEff Base_dEffFs Vuna_dCompiler_dBase_dStore Base_dApplicative Vuna_runtime Base_dList Base_dEffProcess Base_dMonad Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dLoader_dFingerprint Vuna_dCompiler_dDriver_dSplit)" > "Vuna_dCompiler_dDriver_dPerfCache.stamp"
+  printf '%s' "$(stamp_want Vuna_dCompiler_dDriver_dPerfCache Base_dEff Base_dEffFs Vuna_dCompiler_dBase_dStore Base_dApplicative Vuna_runtime Base_dList Base_dMonad Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dLoader_dFingerprint Vuna_dCompiler_dDriver_dSplit)" > "Vuna_dCompiler_dDriver_dPerfCache.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dFrontend_dManifest Vuna_dCompiler_dBase_dDiagnostics_dPkg Vuna_runtime Base_dString Base_dList Vuna_dCompiler_dFrontend_dToml Base_dPair Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Base_dMaybe Base_dEq Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dFrontend_dManifest.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dDerive Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dElab_dRecords Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Vuna_dCompiler_dBase_dCommon)" > "Vuna_dCompiler_dElab_dDerive.stamp"
   printf '%s' "$(stamp_want Vuna_dCompiler_dElab_dRepresentation Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dIntrinsics Base_dBool Vuna_dCompiler_dCore_dTerm Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dElab_dTypes)" > "Vuna_dCompiler_dElab_dRepresentation.stamp"
@@ -317,7 +317,7 @@ for p in $pids; do wait "$p" || exit 1; done
 pids=""
 compile_mod Vuna_dCompiler_dFrontend_dCanonical_dPkg Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dBase_dHash &
 pids="$pids $!"
-compile_mod Base_dEffFs Base_dEff Base_dResult Base_dApplicative Vuna_runtime Base_dList Base_dFunctor Base_dMonad Base_dMaybe &
+compile_mod Base_dEffFs Base_dEff Base_dSort Base_dOrd Base_dResult Base_dApplicative Vuna_runtime Base_dString Base_dList Base_dFunctor Base_dMonad Base_dMaybe &
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dWasm_dModel Vuna_dCompiler_dWasm_dInstr Vuna_runtime Base_dList Base_dPair Base_dMaybe &
 pids="$pids $!"
@@ -335,7 +335,7 @@ compile_mod Vuna_dCompiler_dBase_dStore Base_dEffClock Base_dEff Base_dEffFs Bas
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dWasm_dRender Vuna_dCompiler_dWasm_dInstr Base_dInterp Vuna_dCompiler_dWasm_dModel Vuna_runtime Base_dString Base_dList Base_dPair Base_dMaybe Base_dInt Base_dEq &
 pids="$pids $!"
-compile_mod Vuna_dCompiler_dBase_dIntrinsics Vuna_runtime Base_dString Base_dList Base_dPair Base_dBool Base_dMaybe Base_dHashMap &
+compile_mod Vuna_dCompiler_dBase_dIntrinsics Vuna_runtime Base_dString Base_dList Base_dPair Base_dBool Vuna_dCompiler_dBase_dSource Base_dMaybe Base_dHashMap &
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dBase_dDiag Base_dApplicative Vuna_runtime Base_dString Base_dList Base_dPair Base_dFunctor Base_dMonad Vuna_dCompiler_dBase_dSource Base_dMaybe Base_dInt Base_dEq &
 pids="$pids $!"
@@ -409,7 +409,7 @@ compile_mod Vuna_dCompiler_dBase_dDiagnostics Vuna_dCompiler_dBase_dDiagnostics_
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dElab_dRecords Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_dCompiler_dBase_dDiagnostics_dCommon Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dBase_dCommon &
 pids="$pids $!"
-compile_mod Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Vuna_dCompiler_dBase_dCommon &
+compile_mod Vuna_dCompiler_dLoader_dFixity Vuna_dCompiler_dBase_dDiagnostics_dRn Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dVec Vuna_dCompiler_dBase_dSource Vuna_dCompiler_dFrontend_dAst Base_dMaybe Base_dHashMap Vuna_dCompiler_dBase_dCommon &
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dElab_dPrelude Vuna_dCompiler_dBase_dDiagnostics_dTc Vuna_runtime Base_dList Base_dPair Vuna_dCompiler_dBase_dIntrinsics Vuna_dCompiler_dBase_dDiag Vuna_dCompiler_dCore_dTerm Base_dVec Vuna_dCompiler_dBase_dSource Base_dMaybe &
 pids="$pids $!"
@@ -433,7 +433,7 @@ compile_mod Vuna_dCompiler_dCodegen_dTerm Base_dSort Vuna_dCompiler_dIr_dRuntime
 pids="$pids $!"
 compile_mod Vuna_dCompiler_dIr_dAnalysis Vuna_dCompiler_dBase_dDiagnostics_dCg Vuna_runtime Base_dString Base_dList Base_dPair Vuna_dCompiler_dBase_dDiag Base_dBool Base_dVec Base_dNum Base_dMaybe Vuna_dCompiler_dIr_dModel Base_dHashMap Base_dInt Vuna_dCompiler_dBase_dCommon &
 pids="$pids $!"
-compile_mod Vuna_dCompiler_dDriver_dPerfCache Base_dEff Base_dEffFs Vuna_dCompiler_dBase_dStore Base_dApplicative Vuna_runtime Base_dList Base_dEffProcess Base_dMonad Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dLoader_dFingerprint Vuna_dCompiler_dDriver_dSplit &
+compile_mod Vuna_dCompiler_dDriver_dPerfCache Base_dEff Base_dEffFs Vuna_dCompiler_dBase_dStore Base_dApplicative Vuna_runtime Base_dList Base_dMonad Vuna_dCompiler_dBase_dBytes Base_dMaybe Vuna_dCompiler_dLoader_dFingerprint Vuna_dCompiler_dDriver_dSplit &
 pids="$pids $!"
 for p in $pids; do wait "$p" || exit 1; done
 pids=""
