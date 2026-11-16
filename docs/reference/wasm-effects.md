@@ -1,7 +1,7 @@
 # wasm 效应 handler（stack switching）
 
-> 状态：**工具链已验证，运行时尚未实现**。本页记录 stack-switching 的可行性探针、与
-> `Base.Eff` 语义的对应关系和实现切分；wasm 当前仍拒绝 `perform` / `handle`。
+> 状态：**已实现并接入三端对拍**。本页记录 stack-switching 的工具链验证、与
+> `Base.Eff` 语义的对应关系、运行时实现与剩余限制。
 
 ## 1. 工具链结论
 
@@ -51,31 +51,39 @@ comp thunk 是 `EffUnit -> a`，用 continuation 类型：
 - `ret` / `opH` / `k` 都是运行时函数值；wasm 后端已有闭包/函数引用表示，需确认任意
   `anyref` 调用路径。
 
-## 3. 实现切分
+## 3. 运行时实现
 
-1. **Wat 模型/渲染**：确认/补齐 `tag`、`cont`、`cont.new`、`resume`、`suspend`、
-   `(on $tag $label)` 与 `elem declare` 的文本构造；`wasm-tools` 已验证语法。
-2. **`Wasm.Runtime`**：加泛型 tag、`$ft`/`$ct` 类型、`rt_eff_perform`、
-   `rt_eff_handle`（含正常/匹配/转发三条路径）与 `ret` 调用。
-3. **`Wasm.Module`**：把 `prim_effectPerform` / `prim_effectHandle` 接进 `rtImplOf`；
-   入口按 `irEntryHandlersOf` 预装宿主 handler，移除
-   `host effect handlers are not supported yet`。
-4. **测试**：把 `110_effect_parity` 的夹具加 wasm 后并入 `109_backend_parity`；
-   `106` 保留 double-resume/trap 等 wasm 机制用例。
-5. **宿主效应**：`console` 等宿主叶子已经存在；先接 Console/Exit/Ref 的 entry handler，
-   再按 native 的顺序扩 Fs/Clock/Env。
+- **Wat 模型/渲染**：`WatType.WatContType`、`WatTag`、`wmTags` 与 tag section；
+  `cont.new` / `resume` / `suspend` 以 `IPlain` 文本指令生成，标签/标签 clause 走固定
+  名字（`$eff` / `$on`）。
+- **`Wasm.Runtime`**：
+  - payload = `$arr [key, name, op]`，泛型 tag `$eff : [anyref] -> [anyref]`；
+  - `$rt_effPerform` = 构造 payload 后 `suspend $eff`；
+  - `$rt_effHandle` = `cont.new $ct (ref.func $rt_effThunk)` + `$rt_handleLoop`；
+  - `$rt_handleLoop`：`resume` 的 `(on $eff $on)` 块；正常返回走 `ret`，匹配时
+    调 `opH(op, k)`，不匹配时再次 `suspend $eff` 转发给外层，外层 resume 后继续恢复
+    自己的 continuation；
+  - `$rt_effResumeClo` 把 captured continuation + ret/opH/key/name 包成 `$clo`，供
+    `opH` 的 `k` 调用（经 `$rt_apply`）。
+- **`Wasm.Module`**：`prim_effectPerform` / `prim_effectHandle` 接进 `rtImplOf`；
+  入口按 `irEntryHandlersOf` 预装宿主 handler（`main : Eff r a` 已支持）；Console/Exit/Ref
+  的宿主叶子映射补齐。
+- **测试**：效果夹具已并入 `109_backend_parity`（`38_eff_*`–`47_eff_*`，三端对拍）；
+  `106` 保留 stack-switching 工具链探针。所有 wasm 运行统一带
+  `-W stack-switching=y -W gc=y -W function-references=y`。
 
-## 4. 风险与开放问题
+## 4. 剩余限制
 
-- **Wat AST**：现有 `Wasm.Model` 是否把指令/标签作为结构化构造，还是直接字符串；
-  若后者的自由度更高但确定性/校验弱，需要新增构造并锁 WAT 逐字节确定性。
-- **值表示**：payload/结果统一 `anyref` 时，op 记录、字符串、闭包如何装箱；避免每次
-  effect 都新建过多对象。
-- **函数值调用**：`ret`/`opH`/`k` 的调用约定（闭包字段 vs typed funcref）要与现有
-  单参闭包/`$rt_apply` 对齐。
-- **key/name 路由**：外层转发后的结果类型必须与内层 comp 的 continuation 类型对齐；
-  泛型 `$ct` 应足够。
-- **性能**：每个 effect 至少一次 suspend/resume；one-shot、无 multi-shot，符合当前语义。
+- **运行参数**：产物运行时函数总是包含 stack-switching 指令，wasmtime 必须显式开
+  `-W stack-switching=y`。
+- **one-shot trap 文本**：重复 resume 由 wasm 运行时 trap；尚未包装成 Vuna 路径的
+  `continuation already resumed` 文本（三端对拍暂不覆盖 double resume）。
+- **宿主效应广度**：Console/Exit/Ref 已接；Fs/Clock/Env/Process/Stdin 等未实现宿主叶子
+  仍在 `rtImplOf` 处拒绝。
+- **栈增长**：handler / opH / k 的嵌套会随 effect 次数增长 wasm 调用栈；wasmtime 默认
+  `max-wasm-stack`（512K）约支持 ~100 次 effect，测试用 64 MiB（`48_eff_many` 覆盖 200 次），
+  更长循环需要更大的 `-W max-wasm-stack` 或等待不嵌套的 handler 运行时设计。
+- **性能**：每个 effect 至少一次 suspend/resume；符合 one-shot 语义。
 
 ## 5. 相关阅读
 

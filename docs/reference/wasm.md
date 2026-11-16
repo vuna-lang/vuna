@@ -6,10 +6,10 @@
 > 用户 `data`（变体 tag 分派）、record 构造/投影/更新与通用 `case`；canonical `List`
 > 族已接进 struct 表示，四个桥接符号（`strUnpack` / `strPack` / `strConcatMany` /
 > `strSubstTemplate`）已实现；闭包值（`$clo` + `elem declare`）与高阶应用已工作）。
-> `Float` 的算术/比较/转换/展示已工作；`main : Eff [] a` 与 `IORef` 可用；handler
-> （`perform` / `handle`）尚未实现，但 stack-switching 工具链已用 wasmtime 探针验证可行
-> （见 [wasm-effects.md](wasm-effects.md)）；依赖 handler 的宿主效应行与 FFI 仍拒绝
-> （`WasmUnsupported`）。实现入口：
+> `Float` 的算术/比较/转换/展示已工作；`main : Eff r a` 与 `IORef` 可用；handler
+> （`perform` / `handle`）用 stack switching 实现（泛型 tag + handler 循环，见
+> [wasm-effects.md](wasm-effects.md)）；入口按 `irEntryHandlersOf` 预装宿主 handler。
+> 未实现的宿主叶子与 FFI 仍拒绝（`WasmUnsupported`）。实现入口：
 > `Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
@@ -23,9 +23,11 @@
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：`wasmtime run main.wasm`
-  （50 默认开 WasmGC）。显式开 GC 的跨版本写法：
-  `wasmtime run -W gc=y -W function-references=y main.wasm`。
+- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：产物总是包含
+  stack-switching 运行时函数，统一用
+  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`；
+  handler 的嵌套会占 wasm 调用栈，默认 `max-wasm-stack`（512K）约支持 ~100 次 effect，
+  长循环用 `-W max-wasm-stack=67108864`（测试）或更大。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
   `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
 
@@ -75,13 +77,13 @@
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
 | Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Float.floatRender` |
 | Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
-| Effect handlers | 待实现 | stack switching 工具链已验证；见 [wasm-effects.md](wasm-effects.md) |
+| Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [wasm-effects.md](wasm-effects.md) |
 | extern / 其余宿主原语 | 拒绝 | 与 native 相同的限制面 |
 
-- 入口：`main` 必须是零参值；`main : Eff` 拒绝。入口 show 只接受
-  `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；
-  `showFloat` 走 `Base.Float.floatRender`；其它自定义 Show 拒绝。`main : Eff [] a` 用
-  `runMain` 执行后展示；带宿主效应行的 main 拒绝。`--no-print` 不打印，仍求值。
+- 入口：`main` 必须是零参值；`main : Eff r a` 支持——入口按 `irEntryHandlersOf`
+  预装宿主 handler（如 `runConsoleHost`），再用 `runMain` 执行后展示。入口 show 只接受
+  `@ir@showInt` / `@ir@showNat` / `@ir@showBool` / `@ir@showStr`；`showFloat` 走
+  `Base.Float.floatRender`；其它自定义 Show 拒绝。`--no-print` 不打印，仍求值。
 - **零参定义**在 `_start` 里按依赖序初始化进全局（每次引用读全局，不重算）；
   **饱和函数**（arity > 0）生成 `$f_<name>` 并被 `call`。
 
@@ -143,7 +145,8 @@
   wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
   WAT 确定性 + 每行 ≤100 列、除零与运行时错误文本、`--no-compile`、拒绝面、`--target`
   取值校验；末尾的 stack-switching 探针验证 `cont`/`resume`/`suspend` 与 handler 转发。
-- 共享语义由 `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
+- 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console）由
+  `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。
 
 ## 8. 已知边界
@@ -151,9 +154,8 @@
 - 零参闭包（`IrLam []`）拒绝；闭包统一是**单参**的（多参 lambda 在创建时柯里化），
   应用侧按实参个数逐次 `call $rt_apply`。
 - 变体分支只按 tag 一次线性分派（不做多模式矩阵）。
-- 效应 handler（`perform` / `handle`）尚未实现；stack switching 工具链已验证，实现
-  切分见 [wasm-effects.md](wasm-effects.md)。依赖 handler 的宿主效应行、FFI / extern、
-  宿主 syscalls 的通用面（只有 write/exit）仍拒绝。
+- 未实现的宿主叶子（Fs/Clock/Env/Process/Stdin 等）、FFI / extern、宿主 syscalls 的
+  通用面（只有 write/exit）仍拒绝。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 
