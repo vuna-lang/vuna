@@ -133,43 +133,93 @@ filterNames pred (n :: rest) =
 notIn : String -> List String -> Bool
 notIn name names = not (memName name names)
 
-groupDeps : HashMap String (List String) -> List String -> List String
-groupDeps adjT group =
-  filterNames (\n => notIn n group)
-    (nubNames (filter (\n => n /= "") (concatMap (neighborsOf adjT) group)))
-
-allIn : List String -> HashMap String Bool -> Bool
-allIn [] allowed = True
-allIn (n :: rest) allowed = Base.HashMap.member n allowed && allIn rest allowed
-
-groupReady : HashMap String (List String) -> List String -> HashMap String Bool -> Bool
-groupReady adjT group emitted = allIn (groupDeps adjT group) emitted
-
-pickReady : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
-pickReady adjT groups emitted = pickReadyAcc adjT groups [] emitted
-
-pickReadyAcc : HashMap String (List String) -> List (List String) -> List (List String) -> HashMap String Bool -> Maybe (Pair (List String) (List (List String)))
-pickReadyAcc adjT [] before emitted = Nothing
-pickReadyAcc adjT (g :: rest) before emitted =
-  if groupReady adjT g emitted then Just (Pair g (append (reverse before) rest))
-  else pickReadyAcc adjT rest (g :: before) emitted
-
+-- ---------------------------------------------------------------
+-- 拓扑排序（Kahn；与「每轮挑最小下标的就绪组」逐项等价）
+-- ---------------------------------------------------------------
+--
+-- 旧实现每产出一组就重扫剩余组并重算依赖（最坏 O(V²)），反向依赖的命令式定义上会
+-- 明显退化。这里一次建依赖下标表 + 入度 + 反向边，按**原始下标最小优先**出队，
+-- 与旧算法的输出顺序逐项一致。
 orderGroups : HashMap String (List String) -> List (List String) -> Check (List (List String))
-orderGroups adjT groups = orderGroupsAcc adjT groups (Base.HashMap.fromList [])
+orderGroups adjT groups =
+  let
+    indexed = indexGroups 0 groups []
+    groupIdxT = groupIndexTbl indexed
+    grpTbl =
+      Base.HashMap.insertAll (map (\p => Pair (firstOf p) (secondOf p)) indexed)
+        (Base.HashMap.fromList [])
+    depPairs = map (\p => Pair (firstOf p) (groupDepIdx adjT groupIdxT p)) indexed
+    revTbl = reverseDepTbl depPairs
+    indeg =
+      foldl (\acc, p => Base.HashMap.insert (firstOf p) (countList (secondOf p)) acc)
+        (Base.HashMap.fromList []) depPairs
+    ready = filter (\n => lookupInt indeg n == 0) (map firstOf indexed)
+  in orderGroupsGo (countList groups + 1) grpTbl revTbl indeg ready (countList groups) []
 
-orderGroupsAcc : HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
-orderGroupsAcc adjT remaining emitted =
-  orderGroupsAccFuel (length remaining + 1) adjT remaining emitted
+indexGroups : Int -> List (List String) -> List (Pair Int (List String)) -> List (Pair Int (List String))
+indexGroups i [] acc = reverse acc
+indexGroups i (g :: rest) acc = indexGroups (i + 1) rest (Pair i g :: acc)
 
-orderGroupsAccFuel : Int -> HashMap String (List String) -> List (List String) -> HashMap String Bool -> Check (List (List String))
-orderGroupsAccFuel fuel adjT remaining emitted = if fuel <= 0 then cgErr0 DependencyCycle
-else case remaining of
-  [] => OkC []
-  _ => case pickReady adjT remaining emitted of
-    Nothing => cgErr0 DependencyCycle
-    Just (Pair g rest) =>
-      Vuna.Compiler.Common.bind (orderGroupsAccFuel (fuel - 1) adjT rest (addAllNames g emitted))
-        (\tail => OkC (Base.List.Cons g tail))
+groupIndexTbl : List (Pair Int (List String)) -> HashMap String Int
+groupIndexTbl indexed =
+  Base.HashMap.insertAll (concatMap (\p => map (\n => Pair n (firstOf p)) (secondOf p)) indexed)
+    (Base.HashMap.fromList [])
+
+-- | 组的下标依赖：把组内各成员在邻接表里的依赖映射成组下标（去重、去自环）。
+-- 不在本单元的依赖已在 `groupNames` 过滤。
+groupDepIdx : HashMap String (List String) -> HashMap String Int -> Pair Int (List String) -> List Int
+groupDepIdx adjT gIdxT (Pair i g) =
+  groupDepIdxGo i gIdxT (concatMap (neighborsOf adjT) g) (Base.HashMap.fromList []) []
+
+groupDepIdxGo : Int -> HashMap String Int -> List String -> HashMap Int Bool -> List Int -> List Int
+groupDepIdxGo i gIdxT [] seen acc = reverse acc
+groupDepIdxGo i gIdxT (n :: rest) seen acc = case Base.HashMap.lookup n gIdxT of
+  Just j =>
+    if j == i || Base.HashMap.member j seen then groupDepIdxGo i gIdxT rest seen acc
+    else groupDepIdxGo i gIdxT rest (Base.HashMap.insert j True seen) (j :: acc)
+  Nothing => groupDepIdxGo i gIdxT rest seen acc
+
+reverseDepTbl : List (Pair Int (List Int)) -> HashMap Int (List Int)
+reverseDepTbl pairs = foldl addReverseEdges (Base.HashMap.fromList []) pairs
+
+-- 同一个依赖被多个组引用时必须追加（`insertAll` 会覆盖同键）。
+addReverseEdges : HashMap Int (List Int) -> Pair Int (List Int) -> HashMap Int (List Int)
+addReverseEdges tbl (Pair i deps) =
+  foldl (\acc, d => Base.HashMap.insert d (append (lookupDeps acc d) [i]) acc) tbl deps
+
+lookupInt : HashMap Int Int -> Int -> Int
+lookupInt tbl k = case Base.HashMap.lookup k tbl of
+  Just v => v
+  Nothing => 0
+
+lookupNames : HashMap Int (List String) -> Int -> List String
+lookupNames tbl k = case Base.HashMap.lookup k tbl of
+  Just v => v
+  Nothing => []
+
+lookupDeps : HashMap Int (List Int) -> Int -> List Int
+lookupDeps tbl k = case Base.HashMap.lookup k tbl of
+  Just v => v
+  Nothing => []
+
+-- | 最小下标优先的有序插入（就绪集合通常很小）。
+insertReady : Int -> List Int -> List Int
+insertReady i [] = [i]
+insertReady i (x :: rest) =
+  if i <= x then Base.List.Cons i (Base.List.Cons x rest) else Base.List.Cons x (insertReady i rest)
+
+orderGroupsGo : Int -> HashMap Int (List String) -> HashMap Int (List Int) -> HashMap Int Int -> List Int -> Int -> List (List String) -> Check (List (List String))
+orderGroupsGo fuel grpTbl revTbl indeg ready remaining acc = if fuel <= 0 then cgErr0 DependencyCycle
+else if remaining == 0 then OkC (reverse acc)
+else case ready of
+  [] => cgErr0 DependencyCycle
+  i :: rest =>
+    let
+      deps = lookupDeps revTbl i
+      indeg2 = foldl (\acc2, d => Base.HashMap.insert d (lookupInt indeg d - 1) acc2) indeg deps
+      ready2 = foldl (\r, d => if lookupInt indeg2 d == 0 then insertReady d r else r) rest deps
+    in orderGroupsGo (fuel - 1) grpTbl revTbl indeg2 ready2 (remaining - 1)
+      (lookupNames grpTbl i :: acc)
 
 -- ---------------------------------------------------------------
 -- 对外分组入口
