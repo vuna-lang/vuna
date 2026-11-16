@@ -1,0 +1,25 @@
+# 39) lint 产品面：vuna.toml [lint] 配置、源码抑制、JSON 输出、未知规则只由 lint 认领。
+run: sh -c 'p="$TMPDIR/lint-pkg"; mkdir -p "$p/lib"; printf "[package]\nname = \"lint-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\nmax-warnings = 0\n" "$VUNA_BASE" > "$p/vuna.toml"; printf "%s\n" "module Probe where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$p/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_LiteralIfChain
+out-contains: :4:11:
+run: sh -c 'printf "%s\n" "module Probe where" "" "probe : Int -> Int" "-- vuna-lint: disable-next-line literal-if-chain" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+run: sh -c 'printf "%s\n" "module Probe where" "" "probe : Int -> Int" "probe x = if x == 1 then 1 else if x == 2 then 2 else 3" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --format json --no-cache "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: "code":"LN_LiteralIfChain"
+out-contains: "endLine":4
+out-contains: "fixable":true
+run: sh -c 'printf "[package]\nname = \"lint-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\n[lint.rules]\nunknown-rule = \"error\"\n" "$VUNA_BASE" > "$TMPDIR/lint-pkg/vuna.toml"'
+exit: 0
+run: "$VUNA" check "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+run: "$VUNA" lint "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 2
+out-contains: unknown lint rule: unknown-rule
