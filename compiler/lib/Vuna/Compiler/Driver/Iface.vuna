@@ -204,7 +204,7 @@ ifaceSchema = "vuna-iface 27"
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 7 (opaque/abstract bodies excluded)"
+ifaceHashVersion = "vuna-iface-hash 8 (opaque/abstract bodies excluded)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多
@@ -395,10 +395,22 @@ hashImports is = payloadDigest (encTop (encList encImport) is)
 hashDecls : List Decl -> String
 hashDecls ds = payloadDigest (encTop encDecls ds)
 
+-- `miDecls` 本身要保留体（同包增量 codegen 需要），但 iface 摘要里 opaque/abstract 的
+-- 体必须不可见：把体替换成固定占位再编码，只保留签名与模式形状。
+stripOpaqueDeclBodies : List String -> Decl -> Decl
+stripOpaqueDeclBodies names d = case d of
+  DFun n pats _ sp => if memName n names then DFun n pats (EVar "@opaque@" sp) sp else d
+  _ => d
+
+hashDeclsForIface : List String -> List Decl -> String
+hashDeclsForIface names ds = hashDecls (map (stripOpaqueDeclBodies names) ds)
+
 hashOfParts : String -> String -> List Import -> List Import -> List FixityDecl -> List RecordMeta -> List ExportEntry -> List Decl -> CachedProgram -> String
 hashOfParts name pkg imports implicitImports fixities records exports decls cp =
-  digestParts
-    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDecls decls, hashDatas (cachedDatas cp), hashDefs (map opaqueBaseName (cachedOpaqueOf cp)) (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashOpaque (cachedOpaqueOf cp)]
+  let
+    opaqueNames = map opaqueBaseName (cachedOpaqueOf cp)
+  in digestParts
+    [ifaceHashVersion, name, pkg, hashImports imports, hashImports implicitImports, hashFixities fixities, hashRecords records, hashDeclsForIface opaqueNames decls, hashDatas (cachedDatas cp), hashDefs opaqueNames (cachedDefs cp), hashGlobals (cachedGlobals cp), hashInsts (cachedInsts cp), hashClasses (cachedClasses cp), hashExports exports, hashOpaque (cachedOpaqueOf cp)]
 
 export hashOfIface : ModuleIface -> String
 hashOfIface m =
@@ -644,10 +656,13 @@ coverageIssueGo oi ourNames inherited merged prelude (name :: rest) =
     issue = coverageIssueOf oi ourNames inherited merged prelude name
   in if issue == "" then coverageIssueGo oi ourNames inherited merged prelude rest else issue
 
+isSealName : String -> Bool
+isSealName n = startsWith "vuna_seal_" n
+
 artifactNamesOf : DtProgram -> List String
 artifactNamesOf prog =
-  append (map dtDataName (dtProgDatas prog))
-    (append (map dtDefName (dtProgDefs prog)) (append (map dtInstName (dtProgInsts prog)) (append (map dtClassName (dtProgClasses prog)) (map firstOf (dtProgGlobals prog)))))
+  filter (\n => not (isSealName n))
+    (append (map dtDataName (dtProgDatas prog)) (append (map dtDefName (dtProgDefs prog)) (append (map dtInstName (dtProgInsts prog)) (append (map dtClassName (dtProgClasses prog)) (map firstOf (dtProgGlobals prog))))))
 
 -- 摘要里已出现的全部名字（data / ctor / def / inst / class / global），用于覆盖性检查。
 dataNamesOf : CachedProgram -> List String
