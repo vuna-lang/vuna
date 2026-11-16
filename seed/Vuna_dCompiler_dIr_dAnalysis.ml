@@ -177,96 +177,130 @@ let v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsAcc = (fun adjT remaining emitted
 # 158 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups = (fun adjT groups -> (((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroupsAcc adjT) groups) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)))
 
+# 206 "Vuna/Compiler/Ir/Analysis.vuna"
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dallCovered = (fun mc0 mc1 -> (match mc1 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__44, dtb__45) -> (if ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) dtb__44) mc0) then ((v_Vuna_dCompiler_dIr_dAnalysis_dallCovered mc0) dtb__45) else false)
+  | Base_dList.C_Base_dList_dList_Nil -> true
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 199 "Vuna/Compiler/Ir/Analysis.vuna"
+let v_Vuna_dCompiler_dIr_dAnalysis_dcheckGroupsCover = (fun groups names -> ((fun covered -> (if ((v_Vuna_dCompiler_dIr_dAnalysis_dallCovered covered) names) then (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (groups)) else (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal "SCC grouping dropped definitions (DFS budget exhausted?)"))) (Base_dHashMap.v_Base_dHashMap_dofNames ((Base_dList.v_Base_dList_dconcatMap (fun g -> g)) groups))))
+
 # 181 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames = (fun adj names -> ((fun nameTbl -> ((fun adj2 -> ((fun adjT -> ((fun revT -> (match ((((v_Vuna_dCompiler_dIr_dAnalysis_dpostOrder adjT) names) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)) Base_dList.C_Base_dList_dList_Nil) with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__44; Base_dPair.f_Base_dPair_dPair_second = dtb__45 } -> ((fun comps -> ((fun groups -> ((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups adjT) groups)) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromComps comps) names))) ((((v_Vuna_dCompiler_dIr_dAnalysis_dcollectComps revT) dtb__45) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)) Base_dList.C_Base_dList_dList_Nil))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__46; Base_dPair.f_Base_dPair_dPair_second = dtb__47 } -> ((fun comps -> ((fun groups -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((v_Vuna_dCompiler_dIr_dAnalysis_dorderGroups adjT) groups)) (fun ordered -> ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckGroupsCover ordered) names)))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupsFromComps comps) names))) ((((v_Vuna_dCompiler_dIr_dAnalysis_dcollectComps revT) dtb__47) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)) Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dIr_dAnalysis_dreverseAdjTbl adj2))) (v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf adj2))) ((Base_dList.v_Base_dList_dmap (fun p -> { Base_dPair.f_Base_dPair_dPair_first = (Base_dPair.v_Base_dPair_dfirstOf p); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dfilter (fun n -> ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) n) nameTbl))) (Base_dPair.v_Base_dPair_dsecondOf p)) })) adj))) (Base_dHashMap.v_Base_dHashMap_dofNames names)))
 
-# 197 "Vuna/Compiler/Ir/Analysis.vuna"
+# 211 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__46, dtb__47) -> (match dtb__47 with
-  | Base_dList.C_Base_dList_dList_Nil -> ((Base_dList.v_Base_dList_dmemName dtb__46) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf mc0) dtb__46))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__48, dtb__49) -> (match dtb__49 with
+  | Base_dList.C_Base_dList_dList_Nil -> ((Base_dList.v_Base_dList_dmemName dtb__48) ((v_Vuna_dCompiler_dIr_dAnalysis_dneighborsOf mc0) dtb__48))
   | _ -> true
 )
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 204 "Vuna/Compiler/Ir/Analysis.vuna"
+# 218 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__48, dtb__49) -> (if ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefArity dtb__48) = 0) then (if (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefRecValueOk dtb__48) then (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue dtb__49) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName dtb__48)))) else (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue dtb__49))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__50, dtb__51) -> (if ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefArity dtb__50) = 0) then (if (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefRecValueOk dtb__50) then (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue dtb__51) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName dtb__50)))) else (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue dtb__51))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 210 "Vuna/Compiler/Ir/Analysis.vuna"
+# 224 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__50, dtb__51) -> (if ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName dtb__50) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__50)) else ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName mc0) dtb__51))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (if ((Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName dtb__52) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__52)) else ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName mc0) dtb__53))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 214 "Vuna/Compiler/Ir/Analysis.vuna"
+# 228 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName dtb__52) mc0) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc0) dtb__53)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__54) -> (Base_dList.C_Base_dList_dList_Cons (dtb__54, ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc0) dtb__53)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55) -> (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName dtb__54) mc0) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc0) dtb__55)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__56) -> (Base_dList.C_Base_dList_dList_Cons (dtb__56, ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc0) dtb__55)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 222 "Vuna/Compiler/Ir/Analysis.vuna"
+# 236 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroups = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__55, dtb__56) -> ((fun members -> ((fun isRec -> ((fun checked -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind checked) (fun grp -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroups mc0) mc1) dtb__56)) (fun tail -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (grp, tail))))))))) (if isRec then (match (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue members) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__57) -> (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName dtb__57) members) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__58) -> ((((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefSpan dtb__58)) dtb__57) (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__57))) (Base_dVec.C_Base_dVec_dVec_Cons (dtb__57, Base_dVec.C_Base_dVec_dVec_Nil)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__57))) dtb__57)
+  | Base_dList.C_Base_dList_dList_Cons (dtb__57, dtb__58) -> ((fun members -> ((fun isRec -> ((fun checked -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind checked) (fun grp -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind (((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroups mc0) mc1) dtb__58)) (fun tail -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (grp, tail))))))))) (if isRec then (match (v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecursiveValue members) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__59) -> (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfindDefByName dtb__59) members) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__60) -> ((((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefSpan dtb__60)) dtb__59) (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__59))) (Base_dVec.C_Base_dVec_dVec_Cons (dtb__59, Base_dVec.C_Base_dVec_dVec_Nil)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErr1 (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__59))) dtb__59)
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = true; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = members }))
   | _ -> failwith "DT: impossible branch"
-) else (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = false; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = members }))))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec mc0) dtb__55))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc1) dtb__55))
+) else (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = false; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = members }))))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec mc0) dtb__57))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupDefsOf mc1) dtb__57))
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 245 "Vuna/Compiler/Ir/Analysis.vuna"
+# 269 "Vuna/Compiler/Ir/Analysis.vuna"
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dcountList = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__61, dtb__62) -> (1 + (v_Vuna_dCompiler_dIr_dAnalysis_dcountList dtb__62))
+  | Base_dList.C_Base_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 266 "Vuna/Compiler/Ir/Analysis.vuna"
+let v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount = (fun defs -> (((Base_dList.v_Base_dList_dfoldl (fun acc d -> (((Base_dNum.v_Base_dNum_dadd Base_dInt.v_Num_uInt) acc) (v_Vuna_dCompiler_dIr_dAnalysis_dcountList (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefDeps d))))) 0) defs))
+
+# 273 "Vuna/Compiler/Ir/Analysis.vuna"
+let rec v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames = (fun fuel pending defTbl seen -> (if (fuel <= 0) then seen else (match pending with
+  | Base_dList.C_Base_dList_dList_Nil -> seen
+  | Base_dList.C_Base_dList_dList_Cons (dtb__63, dtb__64) -> (if ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) dtb__63) seen) then ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames (fuel - 1)) dtb__64) defTbl) seen) else ((fun seen2 -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) dtb__63) defTbl) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames (fuel - 1)) dtb__64) defTbl) seen2)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__65) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames (fuel - 1)) ((Base_dList.v_Base_dList_dappend (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefDeps dtb__65)) dtb__64)) defTbl) seen2)
+  | _ -> failwith "DT: impossible branch"
+)) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__63) true) seen)))
+  | _ -> failwith "DT: impossible branch"
+)))
+
+# 257 "Vuna/Compiler/Ir/Analysis.vuna"
+let v_Vuna_dCompiler_dIr_dAnalysis_dreachableDefs = (fun seeds defs -> ((fun defTbl -> ((fun budget -> ((fun seen -> ((Base_dList.v_Base_dList_dfilter (fun d -> ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)) seen))) defs)) ((((v_Vuna_dCompiler_dIr_dAnalysis_dreachableNames budget) seeds) defTbl) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)))) ((8 + (v_Vuna_dCompiler_dIr_dAnalysis_dcountList seeds)) + (v_Vuna_dCompiler_dIr_dAnalysis_ddepEdgeCount defs)))) (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dString.v_Hashable_uString) ((Base_dList.v_Base_dList_dmap (fun d -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d); Base_dPair.f_Base_dPair_dPair_second = d })) defs)) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil))))
+
+# 293 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__59, dtb__60) -> (if ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) dtb__59) mc1) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__59; "`"])) else ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo dtb__60) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__59) true) mc1)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__66, dtb__67) -> (if ((((Base_dHashMap.v_Base_dHashMap_dmember Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) dtb__66) mc1) then (Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dicInternal (String.concat "" ["duplicate runtime definition name in IR: `"; dtb__66; "`"])) else ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo dtb__67) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) dtb__66) true) mc1)))
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (0))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 242 "Vuna/Compiler/Ir/Analysis.vuna"
+# 290 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNames = (fun defs -> ((v_Vuna_dCompiler_dIr_dAnalysis_dcheckUniqueDefNamesGo ((Base_dList.v_Base_dList_dmap Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName) defs)) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)))
 
-# 276 "Vuna/Compiler/Ir/Analysis.vuna"
+# 324 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__61, dtb__62) -> (if (mc1 dtb__61) then ((v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName dtb__62) mc1) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__61)))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__68, dtb__69) -> (if (mc1 dtb__68) then ((v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName dtb__69) mc1) else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__68)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 264 "Vuna/Compiler/Ir/Analysis.vuna"
+# 312 "Vuna/Compiler/Ir/Analysis.vuna"
 let rec v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo = (fun mc0 mc1 mc2 mc3 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__63, dtb__64) -> ((fun isRec -> ((fun checked -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind checked) (fun grp -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo mc0) dtb__64) mc2) mc3)) (fun tail -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (grp, tail))))))))) (if isRec then (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName dtb__63) mc2) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__65) -> ((((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt (mc3 dtb__65)) dtb__65) (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__65))) (Base_dVec.C_Base_dVec_dVec_Cons (dtb__65, Base_dVec.C_Base_dVec_dVec_Nil)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = dtb__63 }))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__70, dtb__71) -> ((fun isRec -> ((fun checked -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind checked) (fun grp -> ((Vuna_dCompiler_dCommon.v_Vuna_dCompiler_dCommon_dbind ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo mc0) dtb__71) mc2) mc3)) (fun tail -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (grp, tail))))))))) (if isRec then (match ((v_Vuna_dCompiler_dIr_dAnalysis_dfirstBadRecName dtb__70) mc2) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__72) -> ((((Vuna_dCompiler_dDiagnostics_dCg.v_Vuna_dCompiler_dDiagnostics_dCg_dcgErrDefAt (mc3 dtb__72)) dtb__72) (Vuna_dCompiler_dDiagnostics_dCg.C_Vuna_dCompiler_dDiagnostics_dCg_dCgErr_RecursiveValueDefinition (dtb__72))) (Base_dVec.C_Base_dVec_dVec_Cons (dtb__72, Base_dVec.C_Base_dVec_dVec_Nil)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = true; Base_dPair.f_Base_dPair_dPair_second = dtb__70 }))
   | _ -> failwith "DT: impossible branch"
-) else (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = dtb__63 }))))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec mc0) dtb__63))
+) else (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC ({ Base_dPair.f_Base_dPair_dPair_first = false; Base_dPair.f_Base_dPair_dPair_second = dtb__70 }))))) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNeedsRec mc0) dtb__70))
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 260 "Vuna/Compiler/Ir/Analysis.vuna"
+# 308 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__66) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo mc0) dtb__66) mc3) mc4)
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__67) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__67))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__73) -> ((((v_Vuna_dCompiler_dIr_dAnalysis_dassembleGo mc0) dtb__73) mc3) mc4)
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__74) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__74))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 256 "Vuna/Compiler/Ir/Analysis.vuna"
+# 304 "Vuna/Compiler/Ir/Analysis.vuna"
 let v_Vuna_dCompiler_dIr_dAnalysis_dassembleGroupNames = (fun adj names recOk spanOf -> (((((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNamesGo (v_Vuna_dCompiler_dIr_dAnalysis_dadjTblOf adj)) names) ((v_Vuna_dCompiler_dIr_dAnalysis_dgroupNames adj) names)) recOk) spanOf))

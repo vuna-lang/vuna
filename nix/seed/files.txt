@@ -48,13 +48,11 @@ Vuna_dCompiler_dCanonical_dCoreTerm.ml
 Vuna_dCompiler_dCanonical_dElab.ml
 Vuna_dCompiler_dCanonical_dLex.ml
 Vuna_dCompiler_dCanonical_dPkg.ml
+Vuna_dCompiler_dChecks.ml
 Vuna_dCompiler_dCodegen.ml
 Vuna_dCompiler_dCodegen_dAssembly.ml
 Vuna_dCompiler_dCodegen_dDecl.ml
-Vuna_dCompiler_dCodegen_dErase.ml
-Vuna_dCompiler_dCodegen_dLower.ml
 Vuna_dCompiler_dCodegen_dRuntime.ml
-Vuna_dCompiler_dCodegen_dSplit.ml
 Vuna_dCompiler_dCodegen_dTerm.ml
 Vuna_dCompiler_dCommon.ml
 Vuna_dCompiler_dCore.ml
@@ -82,6 +80,7 @@ Vuna_dCompiler_dDriver_dNative.ml
 Vuna_dCompiler_dDriver_dOwner.ml
 Vuna_dCompiler_dDriver_dPerfCache.ml
 Vuna_dCompiler_dDriver_dSplit.ml
+Vuna_dCompiler_dDriver_dSplitGen.ml
 Vuna_dCompiler_dDriver_dToolPayload.ml
 Vuna_dCompiler_dDriver_dWasm.ml
 Vuna_dCompiler_dElab.ml
@@ -131,6 +130,7 @@ Vuna_dCompiler_dLoader_dFixity.ml
 Vuna_dCompiler_dLoader_dFlatten.ml
 Vuna_dCompiler_dLoader_dModules.ml
 Vuna_dCompiler_dLoader_dResolve.ml
+Vuna_dCompiler_dLowering.ml
 Vuna_dCompiler_dNative_dAbi.ml
 Vuna_dCompiler_dNative_dModel.ml
 Vuna_dCompiler_dNative_dModule.ml

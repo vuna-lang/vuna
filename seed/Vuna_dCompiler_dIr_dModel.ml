@@ -9,7 +9,7 @@ and t_Vuna_dCompiler_dIr_dModel_dIrDef = C_Vuna_dCompiler_dIr_dModel_dIrDef_IrDe
 and t_Vuna_dCompiler_dIr_dModel_dIrGroup = { f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec : bool; f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs : t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dList.t_Base_dList_dList }
 and t_Vuna_dCompiler_dIr_dModel_dIrEntry = { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow : t_Vuna_dCompiler_dIr_dModel_dIr; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain : string; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction : bool; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain : string Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers : string Base_dList.t_Base_dList_dList }
 and t_Vuna_dCompiler_dIr_dModel_dIrListFam = { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily : string; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil : string; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons : string }
-and t_Vuna_dCompiler_dIr_dModel_dIrShared = { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields : (string, (int, string) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam : t_Vuna_dCompiler_dIr_dModel_dIrListFam Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors : (string, (string, bool Base_dList.t_Base_dList_dList) Base_dPair.t_Base_dPair_dPair) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques : (string, bool Base_dList.t_Base_dList_dList) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed : string Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams : (string, int Base_dList.t_Base_dList_dList) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs : (string, (string, int) Base_dPair.t_Base_dPair_dPair) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList }
+and t_Vuna_dCompiler_dIr_dModel_dIrShared = { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields : (string, (int, string) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam : t_Vuna_dCompiler_dIr_dModel_dIrListFam Base_dMaybe.t_Base_dMaybe_dMaybe; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs : bool; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs : (string, (string, int) Base_dPair.t_Base_dPair_dPair) Base_dPair.t_Base_dPair_dPair Base_dList.t_Base_dList_dList }
 and t_Vuna_dCompiler_dIr_dModel_dIrUnit = { f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTyDecls : t_Vuna_dCompiler_dIr_dModel_dIrTyDecl Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitGroups : t_Vuna_dCompiler_dIr_dModel_dIrGroup Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitHasListFamily : bool; f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitTypeRefs : string Base_dList.t_Base_dList_dList; f_Vuna_dCompiler_dIr_dModel_dIrUnit_irUnitEntry : t_Vuna_dCompiler_dIr_dModel_dIrEntry Base_dMaybe.t_Base_dMaybe_dMaybe }
 and t_Vuna_dCompiler_dIr_dModel_dIrProgram = { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared : t_Vuna_dCompiler_dIr_dModel_dIrShared; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit : t_Vuna_dCompiler_dIr_dModel_dIrUnit }
 
@@ -96,151 +96,90 @@ let v_Vuna_dCompiler_dIr_dModel_dirGroupDefs = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 296 "Vuna/Compiler/Ir/Model.vuna"
+# 288 "Vuna/Compiler/Ir/Model.vuna"
 let rec v_Vuna_dCompiler_dIr_dModel_dirSharedRecordFieldsOf = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__92, dtb__93) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__92) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__92) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedRecordFieldsOf mc0) dtb__93))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 306 "Vuna/Compiler/Ir/Model.vuna"
-let rec v_Vuna_dCompiler_dIr_dModel_dirSharedCtorFamilyGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__94, dtb__95) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__94) = mc0) then (Base_dPair.v_Base_dPair_dfirstOf (Base_dPair.v_Base_dPair_dsecondOf dtb__94)) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorFamilyGo mc0) dtb__95))
-  | Base_dList.C_Base_dList_dList_Nil -> ""
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 302 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirSharedCtorFamily = (fun mc0 mc1 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields = dtb__96; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam = dtb__97; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat = dtb__98; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace = dtb__99; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs = dtb__100; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors = dtb__101; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques = dtb__102; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed = dtb__103; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams = dtb__104; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs = dtb__105 } -> ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorFamilyGo mc1) dtb__101)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 316 "Vuna/Compiler/Ir/Model.vuna"
-let rec v_Vuna_dCompiler_dIr_dModel_dirSharedCtorKeepFlagsGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__106, dtb__107) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__106) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf (Base_dPair.v_Base_dPair_dsecondOf dtb__106)) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorKeepFlagsGo mc0) dtb__107))
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 312 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirSharedCtorKeepFlags = (fun mc0 mc1 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields = dtb__108; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam = dtb__109; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat = dtb__110; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace = dtb__111; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs = dtb__112; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors = dtb__113; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques = dtb__114; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed = dtb__115; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams = dtb__116; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs = dtb__117 } -> ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorKeepFlagsGo mc1) dtb__113)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 326 "Vuna/Compiler/Ir/Model.vuna"
-let rec v_Vuna_dCompiler_dIr_dModel_dirSharedCtorOpaqueFlagsGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__118, dtb__119) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__118) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__118) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorOpaqueFlagsGo mc0) dtb__119))
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 322 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirSharedCtorOpaqueFlags = (fun mc0 mc1 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields = dtb__120; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam = dtb__121; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat = dtb__122; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace = dtb__123; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs = dtb__124; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors = dtb__125; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques = dtb__126; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed = dtb__127; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams = dtb__128; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs = dtb__129 } -> ((v_Vuna_dCompiler_dIr_dModel_dirSharedCtorOpaqueFlagsGo mc1) dtb__126)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 332 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirSharedIsUnboxed = (fun mc0 mc1 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields = dtb__130; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam = dtb__131; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat = dtb__132; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace = dtb__133; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs = dtb__134; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors = dtb__135; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques = dtb__136; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed = dtb__137; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams = dtb__138; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs = dtb__139 } -> ((Base_dList.v_Base_dList_dmemName mc1) dtb__137)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 341 "Vuna/Compiler/Ir/Model.vuna"
-let rec v_Vuna_dCompiler_dIr_dModel_dirSharedTyParamsOfGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__140, dtb__141) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__140) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__140) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedTyParamsOfGo mc0) dtb__141))
-  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 337 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirSharedTyParamsOf = (fun mc0 mc1 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedRecordFields = dtb__142; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedListFam = dtb__143; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesFloat = dtb__144; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesTrace = dtb__145; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUsesObs = dtb__146; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtors = dtb__147; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedCtorOpaques = dtb__148; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedUnboxed = dtb__149; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedTyParams = dtb__150; f_Vuna_dCompiler_dIr_dModel_dIrShared_irSharedDefLocs = dtb__151 } -> ((v_Vuna_dCompiler_dIr_dModel_dirSharedTyParamsOfGo mc1) dtb__150)
-  | _ -> failwith "DT: impossible branch"
-))
-
-# 365 "Vuna/Compiler/Ir/Model.vuna"
-let v_Vuna_dCompiler_dIr_dModel_dirNatChainMax = 4611686018427387903
-
-# 372 "Vuna/Compiler/Ir/Model.vuna"
+# 315 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirInlineArity = (fun mc0 -> (if (mc0 = "+") then 2 else (if (mc0 = "-") then 2 else (if (mc0 = "*") then 2 else (if (mc0 = "/") then 2 else (if (mc0 = "&&") then 2 else (if (mc0 = "||") then 2 else (if (mc0 = "bitAnd") then 2 else (if (mc0 = "bitOr") then 2 else (if (mc0 = "bitXor") then 2 else (if (mc0 = "bitNot") then 1 else (if (mc0 = "bitShl") then 2 else (if (mc0 = "bitShr") then 2 else (if (mc0 = "++") then 2 else (if (mc0 = "bi_eq_int") then 2 else (if (mc0 = "bi_neq_int") then 2 else (if (mc0 = "bi_eq_str") then 2 else (if (mc0 = "bi_neq_str") then 2 else (if (mc0 = "bi_lt_int") then 2 else (if (mc0 = "bi_le_int") then 2 else (if (mc0 = "bi_gt_int") then 2 else (if (mc0 = "bi_ge_int") then 2 else (if (mc0 = "bi_lt_generic") then 2 else (if (mc0 = "bi_le_generic") then 2 else (if (mc0 = "bi_gt_generic") then 2 else (if (mc0 = "bi_ge_generic") then 2 else (if (mc0 = "bi_add_float") then 2 else (if (mc0 = "bi_sub_float") then 2 else (if (mc0 = "bi_mul_float") then 2 else (if (mc0 = "bi_div_float") then 2 else (if (mc0 = "bi_eq_float") then 2 else (if (mc0 = "bi_neq_float") then 2 else (if (mc0 = "bi_lt_float") then 2 else (if (mc0 = "bi_le_float") then 2 else (if (mc0 = "bi_gt_float") then 2 else (if (mc0 = "bi_ge_float") then 2 else (if (mc0 = "natToInt") then 1 else (if (mc0 = "natFromInt") then 1 else (if (mc0 = "natAdd") then 2 else (if (mc0 = "natSub") then 2 else (if (mc0 = "natMul") then 2 else (if (mc0 = "natDiv") then 2 else 0))))))))))))))))))))))))))))))))))))))))))
 
-# 417 "Vuna/Compiler/Ir/Model.vuna"
+# 360 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirListFamilyOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__152; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__153; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__154 } -> dtb__152
+  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__94; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__95; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__96 } -> dtb__94
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 421 "Vuna/Compiler/Ir/Model.vuna"
+# 364 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirListNilOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__155; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__156; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__157 } -> dtb__156
+  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__97; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__98; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__99 } -> dtb__98
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 425 "Vuna/Compiler/Ir/Model.vuna"
+# 368 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirListConsOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__158; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__159; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__160 } -> dtb__160
+  | { f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListFamily = dtb__100; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListNil = dtb__101; f_Vuna_dCompiler_dIr_dModel_dIrListFam_irListCons = dtb__102 } -> dtb__102
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 429 "Vuna/Compiler/Ir/Model.vuna"
+# 372 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirAltCtorOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__161; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__162; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__163 } -> dtb__161
+  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__103; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__104; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__105 } -> dtb__103
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 433 "Vuna/Compiler/Ir/Model.vuna"
+# 376 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirAltBindersOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__164; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__165; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__166 } -> dtb__165
+  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__106; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__107; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__108 } -> dtb__107
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 437 "Vuna/Compiler/Ir/Model.vuna"
+# 380 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__167; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__168; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__169 } -> dtb__169
+  | { f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltCtor = dtb__109; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBinders = dtb__110; f_Vuna_dCompiler_dIr_dModel_dIrAlt_irAltBody = dtb__111 } -> dtb__111
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 441 "Vuna/Compiler/Ir/Model.vuna"
+# 384 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirEntryShowOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__170; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__171; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__172; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__173; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__174 } -> dtb__170
+  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__112; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__113; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__114; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__115; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__116 } -> dtb__112
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 445 "Vuna/Compiler/Ir/Model.vuna"
+# 388 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirEntryMainOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__175; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__176; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__177; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__178; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__179 } -> dtb__176
+  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__117; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__118; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__119; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__120; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__121 } -> dtb__118
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 449 "Vuna/Compiler/Ir/Model.vuna"
+# 392 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirEntryIsActionOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__180; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__181; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__182; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__183; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__184 } -> dtb__182
+  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__122; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__123; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__124; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__125; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__126 } -> dtb__124
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 453 "Vuna/Compiler/Ir/Model.vuna"
+# 396 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirEntryRunMainOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__185; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__186; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__187; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__188; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__189 } -> dtb__188
+  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__127; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__128; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__129; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__130; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__131 } -> dtb__130
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 457 "Vuna/Compiler/Ir/Model.vuna"
+# 400 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirEntryHandlersOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__190; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__191; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__192; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__193; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__194 } -> dtb__194
+  | { f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryShow = dtb__132; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryMain = dtb__133; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryIsAction = dtb__134; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryRunMain = dtb__135; f_Vuna_dCompiler_dIr_dModel_dIrEntry_irEntryHandlers = dtb__136 } -> dtb__136
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 461 "Vuna/Compiler/Ir/Model.vuna"
+# 404 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirProgSharedOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = dtb__195; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = dtb__196 } -> dtb__195
+  | { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = dtb__137; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = dtb__138 } -> dtb__137
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 465 "Vuna/Compiler/Ir/Model.vuna"
+# 408 "Vuna/Compiler/Ir/Model.vuna"
 let v_Vuna_dCompiler_dIr_dModel_dirProgUnitOf = (fun mc0 -> (match mc0 with
-  | { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = dtb__197; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = dtb__198 } -> dtb__198
+  | { f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgShared = dtb__139; f_Vuna_dCompiler_dIr_dModel_dIrProgram_irProgUnit = dtb__140 } -> dtb__140
   | _ -> failwith "DT: impossible branch"
 ))
