@@ -132,7 +132,9 @@ let dtp_effect_handle key name ret h th =
       with
       | r -> run_cleanups (); r
       | exception e -> run_cleanups (); raise e)
-let dtp_print s = print_string s; flush stdout; String.length s
+let dtp_print s =
+  (try print_string s; flush stdout; String.length s
+   with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)
 let dtp_async_tbl : (int, unit -> Obj.t) Hashtbl.t = Hashtbl.create 16
 let dtp_async_next = ref 0
 let dtp_async_fork th =
@@ -145,6 +147,26 @@ let dtp_async_await (h : int) : Obj.t =
   match Hashtbl.find_opt dtp_async_tbl h with
   | Some join -> join ()
   | None -> failwith "async: invalid task handle"
+(* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
+   返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
+   用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
+let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
+let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
+let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
+let dtp_hostCode (e : exn) : int =
+  match e with
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
+  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
+  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
+  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
+  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
+  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
+  | _ -> 9
+(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
+let dtp_hostCodeAt path (e : exn) : int =
+  try ignore (Unix.stat path); dtp_hostCode e
+  with e2 -> dtp_hostCode e2
+let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
@@ -169,13 +191,15 @@ let dtp_getArgs () =
   let argv = Sys.argv in
   let n = Array.length argv in
   if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
-let dtp_readLine () = try input_line stdin with End_of_file -> ""
+let dtp_readLine () =
+  (try dtp_hostSetStatus 0; input_line stdin
+   with End_of_file -> dtp_hostSetStatus 1; "")
 let dtp_readBytes n =
-  if n <= 0 then ""
+  if n <= 0 then (dtp_hostSetStatus 1; "")
   else
     let b = Bytes.create n in
-    let k = try input stdin b 0 n with _ -> 0 in
-    if k <= 0 then "" else Bytes.sub_string b 0 k
+    let k = (try dtp_hostSetStatus 0; input stdin b 0 n with _ -> 0) in
+    if k <= 0 then (dtp_hostSetStatus 1; "") else Bytes.sub_string b 0 k
 let dtp_readDir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
   with Sys_error msg -> failwith ("readDir: " ^ msg)
@@ -189,29 +213,11 @@ let dtp_removeFile path =
   with Sys_error msg -> failwith ("removeFile: " ^ msg)
 let dtp_fileExists path = Sys.file_exists path
 let dtp_fileMtime path =
-  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
+  (try dtp_hostSetStatus 0; int_of_float (Unix.stat path).Unix.st_mtime
+   with e -> dtp_hostFail (dtp_hostCode e); 0)
 let dtp_fileSize path =
-  try (Unix.stat path).Unix.st_size with _ -> 0
-(* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
-   返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
-   用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
-let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
-let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
-let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
-let dtp_hostCode (e : exn) : int =
-  match e with
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
-  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
-  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
-  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
-  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
-  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
-  | _ -> 9
-(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
-let dtp_hostCodeAt path (e : exn) : int =
-  try ignore (Unix.stat path); dtp_hostCode e
-  with e2 -> dtp_hostCode e2
-let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
+  (try dtp_hostSetStatus 0; (Unix.stat path).Unix.st_size
+   with e -> dtp_hostFail (dtp_hostCode e); 0)
 let dtp_tryReadFile path =
   (try
      dtp_hostSetStatus 0;
@@ -936,31 +942,30 @@ let dt_def_locs = [
   ("v_Base_dEffExit_dhandleExitHostHost", ("Base.EffExit.handleExitHostHost", "Base/EffExit.vuna:44"));
   ("v_Base_dEffExit_dresExit", ("Base.EffExit.resExit", "Base/EffExit.vuna:16"));
   ("v_Base_dEffExit_drunExitHost", ("Base.EffExit.runExitHost", "Base/EffExit.vuna:47"));
-  ("v_Base_dEffFs_dfsErrorOfCode", ("Base.EffFs.fsErrorOfCode", "Base/EffFs.vuna:81"));
-  ("v_Base_dEffFs_dfsErrorOpHR", ("Base.EffFs.fsErrorOpHR", "Base/EffFs.vuna:238"));
-  ("v_Base_dEffFs_dfsErrorRet", ("Base.EffFs.fsErrorRet", "Base/EffFs.vuna:235"));
-  ("v_Base_dEffFs_dfsErrorText", ("Base.EffFs.fsErrorText", "Base/EffFs.vuna:91"));
-  ("v_Base_dEffFs_dfsFail", ("Base.EffFs.fsFail", "Base/EffFs.vuna:77"));
-  ("v_Base_dEffFs_dfsFileExists", ("Base.EffFs.fsFileExists", "Base/EffFs.vuna:129"));
-  ("v_Base_dEffFs_dfsFileMtime", ("Base.EffFs.fsFileMtime", "Base/EffFs.vuna:133"));
-  ("v_Base_dEffFs_dfsFileSize", ("Base.EffFs.fsFileSize", "Base/EffFs.vuna:137"));
-  ("v_Base_dEffFs_dfsHostStatus", ("Base.EffFs.fsHostStatus", "Base/EffFs.vuna:182"));
-  ("v_Base_dEffFs_dfsIsDirectory", ("Base.EffFs.fsIsDirectory", "Base/EffFs.vuna:117"));
-  ("v_Base_dEffFs_dfsMakeDir", ("Base.EffFs.fsMakeDir", "Base/EffFs.vuna:121"));
-  ("v_Base_dEffFs_dfsOpHIO", ("Base.EffFs.fsOpHIO", "Base/EffFs.vuna:145"));
-  ("v_Base_dEffFs_dfsOpHIOHost", ("Base.EffFs.fsOpHIOHost", "Base/EffFs.vuna:186"));
-  ("v_Base_dEffFs_dfsReadDir", ("Base.EffFs.fsReadDir", "Base/EffFs.vuna:113"));
-  ("v_Base_dEffFs_dfsReadFile", ("Base.EffFs.fsReadFile", "Base/EffFs.vuna:101"));
-  ("v_Base_dEffFs_dfsRemoveFile", ("Base.EffFs.fsRemoveFile", "Base/EffFs.vuna:125"));
-  ("v_Base_dEffFs_dfsWriteFile", ("Base.EffFs.fsWriteFile", "Base/EffFs.vuna:105"));
-  ("v_Base_dEffFs_dfsWriteFileAtomic", ("Base.EffFs.fsWriteFileAtomic", "Base/EffFs.vuna:109"));
-  ("v_Base_dEffFs_dhandleFs", ("Base.EffFs.handleFs", "Base/EffFs.vuna:141"));
-  ("v_Base_dEffFs_dhandleFsHostHost", ("Base.EffFs.handleFsHostHost", "Base/EffFs.vuna:227"));
-  ("v_Base_dEffFs_dresFs", ("Base.EffFs.resFs", "Base/EffFs.vuna:35"));
-  ("v_Base_dEffFs_dresFsError", ("Base.EffFs.resFsError", "Base/EffFs.vuna:73"));
-  ("v_Base_dEffFs_drunFsError", ("Base.EffFs.runFsError", "Base/EffFs.vuna:242"));
-  ("v_Base_dEffFs_drunFsErrorHost", ("Base.EffFs.runFsErrorHost", "Base/EffFs.vuna:246"));
-  ("v_Base_dEffFs_drunFsHost", ("Base.EffFs.runFsHost", "Base/EffFs.vuna:231"));
+  ("v_Base_dEffFs_dfsErrorOfCode", ("Base.EffFs.fsErrorOfCode", "Base/EffFs.vuna:82"));
+  ("v_Base_dEffFs_dfsErrorOpHR", ("Base.EffFs.fsErrorOpHR", "Base/EffFs.vuna:207"));
+  ("v_Base_dEffFs_dfsErrorRet", ("Base.EffFs.fsErrorRet", "Base/EffFs.vuna:204"));
+  ("v_Base_dEffFs_dfsErrorText", ("Base.EffFs.fsErrorText", "Base/EffFs.vuna:92"));
+  ("v_Base_dEffFs_dfsFail", ("Base.EffFs.fsFail", "Base/EffFs.vuna:78"));
+  ("v_Base_dEffFs_dfsFileExists", ("Base.EffFs.fsFileExists", "Base/EffFs.vuna:130"));
+  ("v_Base_dEffFs_dfsFileMtime", ("Base.EffFs.fsFileMtime", "Base/EffFs.vuna:134"));
+  ("v_Base_dEffFs_dfsFileSize", ("Base.EffFs.fsFileSize", "Base/EffFs.vuna:138"));
+  ("v_Base_dEffFs_dfsHostStatus", ("Base.EffFs.fsHostStatus", "Base/EffFs.vuna:149"));
+  ("v_Base_dEffFs_dfsIsDirectory", ("Base.EffFs.fsIsDirectory", "Base/EffFs.vuna:118"));
+  ("v_Base_dEffFs_dfsMakeDir", ("Base.EffFs.fsMakeDir", "Base/EffFs.vuna:122"));
+  ("v_Base_dEffFs_dfsOpHIOHost", ("Base.EffFs.fsOpHIOHost", "Base/EffFs.vuna:153"));
+  ("v_Base_dEffFs_dfsReadDir", ("Base.EffFs.fsReadDir", "Base/EffFs.vuna:114"));
+  ("v_Base_dEffFs_dfsReadFile", ("Base.EffFs.fsReadFile", "Base/EffFs.vuna:102"));
+  ("v_Base_dEffFs_dfsRemoveFile", ("Base.EffFs.fsRemoveFile", "Base/EffFs.vuna:126"));
+  ("v_Base_dEffFs_dfsWriteFile", ("Base.EffFs.fsWriteFile", "Base/EffFs.vuna:106"));
+  ("v_Base_dEffFs_dfsWriteFileAtomic", ("Base.EffFs.fsWriteFileAtomic", "Base/EffFs.vuna:110"));
+  ("v_Base_dEffFs_dhandleFs", ("Base.EffFs.handleFs", "Base/EffFs.vuna:142"));
+  ("v_Base_dEffFs_dhandleFsHostHost", ("Base.EffFs.handleFsHostHost", "Base/EffFs.vuna:196"));
+  ("v_Base_dEffFs_dresFs", ("Base.EffFs.resFs", "Base/EffFs.vuna:36"));
+  ("v_Base_dEffFs_dresFsError", ("Base.EffFs.resFsError", "Base/EffFs.vuna:74"));
+  ("v_Base_dEffFs_drunFsError", ("Base.EffFs.runFsError", "Base/EffFs.vuna:211"));
+  ("v_Base_dEffFs_drunFsErrorHost", ("Base.EffFs.runFsErrorHost", "Base/EffFs.vuna:215"));
+  ("v_Base_dEffFs_drunFsHost", ("Base.EffFs.runFsHost", "Base/EffFs.vuna:200"));
   ("v_Base_dEffProcess_dhandleProcess", ("Base.EffProcess.handleProcess", "Base/EffProcess.vuna:94"));
   ("v_Base_dEffProcess_dhandleProcessHostWith", ("Base.EffProcess.handleProcessHostWith", "Base/EffProcess.vuna:117"));
   ("v_Base_dEffProcess_dhandleProcessHostWithHost", ("Base.EffProcess.handleProcessHostWithHost", "Base/EffProcess.vuna:149"));
@@ -982,14 +987,14 @@ let dt_def_locs = [
   ("v_Base_dEffProcess_drunProcessError", ("Base.EffProcess.runProcessError", "Base/EffProcess.vuna:166"));
   ("v_Base_dEffProcess_drunProcessErrorHost", ("Base.EffProcess.runProcessErrorHost", "Base/EffProcess.vuna:171"));
   ("v_Base_dEffProcess_drunProcessHost", ("Base.EffProcess.runProcessHost", "Base/EffProcess.vuna:153"));
-  ("v_Base_dEffStdin_dhandleStdin", ("Base.EffStdin.handleStdin", "Base/EffStdin.vuna:31"));
-  ("v_Base_dEffStdin_dhandleStdinHostHost", ("Base.EffStdin.handleStdinHostHost", "Base/EffStdin.vuna:57"));
-  ("v_Base_dEffStdin_dresStdin", ("Base.EffStdin.resStdin", "Base/EffStdin.vuna:18"));
-  ("v_Base_dEffStdin_drunStdinHost", ("Base.EffStdin.runStdinHost", "Base/EffStdin.vuna:60"));
-  ("v_Base_dEffStdin_dstdinOpHIO", ("Base.EffStdin.stdinOpHIO", "Base/EffStdin.vuna:35"));
-  ("v_Base_dEffStdin_dstdinOpHIOHost", ("Base.EffStdin.stdinOpHIOHost", "Base/EffStdin.vuna:48"));
-  ("v_Base_dEffStdin_dstdinReadBytes", ("Base.EffStdin.stdinReadBytes", "Base/EffStdin.vuna:27"));
-  ("v_Base_dEffStdin_dstdinReadLine", ("Base.EffStdin.stdinReadLine", "Base/EffStdin.vuna:23"));
+  ("v_Base_dEffStdin_dhandleStdin", ("Base.EffStdin.handleStdin", "Base/EffStdin.vuna:34"));
+  ("v_Base_dEffStdin_dhandleStdinHostHost", ("Base.EffStdin.handleStdinHostHost", "Base/EffStdin.vuna:64"));
+  ("v_Base_dEffStdin_dresStdin", ("Base.EffStdin.resStdin", "Base/EffStdin.vuna:21"));
+  ("v_Base_dEffStdin_drunStdinHost", ("Base.EffStdin.runStdinHost", "Base/EffStdin.vuna:67"));
+  ("v_Base_dEffStdin_dstdinOpHIO", ("Base.EffStdin.stdinOpHIO", "Base/EffStdin.vuna:38"));
+  ("v_Base_dEffStdin_dstdinOpHIOHost", ("Base.EffStdin.stdinOpHIOHost", "Base/EffStdin.vuna:53"));
+  ("v_Base_dEffStdin_dstdinReadBytes", ("Base.EffStdin.stdinReadBytes", "Base/EffStdin.vuna:30"));
+  ("v_Base_dEffStdin_dstdinReadLine", ("Base.EffStdin.stdinReadLine", "Base/EffStdin.vuna:26"));
   ("v_Base_dEff_dbracket", ("Base.Eff.bracket", "Base/Eff.vuna:263"));
   ("v_Base_dEff_dcontAdapter", ("Base.Eff.contAdapter", "Base/Eff.vuna:194"));
   ("v_Base_dEff_ddefaultInstance", ("Base.Eff.defaultInstance", "Base/Eff.vuna:48"));
@@ -1801,62 +1806,62 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dCodegen_dSplit_dsplitUnitOfModule", ("Vuna.Compiler.Codegen.Split.splitUnitOfModule", "Vuna/Compiler/Codegen/Split.vuna:30"));
   ("v_Vuna_dCompiler_dCodegen_dSplit_dsplitWithOwnersWith", ("Vuna.Compiler.Codegen.Split.splitWithOwnersWith", "Vuna/Compiler/Codegen/Split.vuna:268"));
   ("v_Vuna_dCompiler_dCodegen_dSplit_dunitDepsOf", ("Vuna.Compiler.Codegen.Split.unitDepsOf", "Vuna/Compiler/Codegen/Split.vuna:84"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText", ("Vuna.Compiler.Codegen.Term.armPatternText", "Vuna/Compiler/Codegen/Term.vuna:1846"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf", ("Vuna.Compiler.Codegen.Term.bindAndOf", "Vuna/Compiler/Codegen/Term.vuna:1923"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf", ("Vuna.Compiler.Codegen.Term.bindFirstOf", "Vuna/Compiler/Codegen/Term.vuna:1920"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf", ("Vuna.Compiler.Codegen.Term.bindGroupOf", "Vuna/Compiler/Codegen/Term.vuna:1915"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf", ("Vuna.Compiler.Codegen.Term.bindKeywordOf", "Vuna/Compiler/Codegen/Term.vuna:1926"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf", ("Vuna.Compiler.Codegen.Term.bridgeUnitOf", "Vuna/Compiler/Codegen/Term.vuna:1610"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dconAppText", ("Vuna.Compiler.Codegen.Term.conAppText", "Vuna/Compiler/Codegen/Term.vuna:2016"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtDefLocTable", ("Vuna.Compiler.Codegen.Term.dtDefLocTable", "Vuna/Compiler/Codegen/Term.vuna:1536"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtFloatRuntime", ("Vuna.Compiler.Codegen.Term.dtFloatRuntime", "Vuna/Compiler/Codegen/Term.vuna:940"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge", ("Vuna.Compiler.Codegen.Term.dtListBridge", "Vuna/Compiler/Codegen/Term.vuna:1488"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime", ("Vuna.Compiler.Codegen.Term.dtObsRuntime", "Vuna/Compiler/Codegen/Term.vuna:980"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_darmPatternText", ("Vuna.Compiler.Codegen.Term.armPatternText", "Vuna/Compiler/Codegen/Term.vuna:1852"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindAndOf", ("Vuna.Compiler.Codegen.Term.bindAndOf", "Vuna/Compiler/Codegen/Term.vuna:1929"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindFirstOf", ("Vuna.Compiler.Codegen.Term.bindFirstOf", "Vuna/Compiler/Codegen/Term.vuna:1926"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf", ("Vuna.Compiler.Codegen.Term.bindGroupOf", "Vuna/Compiler/Codegen/Term.vuna:1921"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbindKeywordOf", ("Vuna.Compiler.Codegen.Term.bindKeywordOf", "Vuna/Compiler/Codegen/Term.vuna:1932"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dbridgeUnitOf", ("Vuna.Compiler.Codegen.Term.bridgeUnitOf", "Vuna/Compiler/Codegen/Term.vuna:1616"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dconAppText", ("Vuna.Compiler.Codegen.Term.conAppText", "Vuna/Compiler/Codegen/Term.vuna:2022"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtDefLocTable", ("Vuna.Compiler.Codegen.Term.dtDefLocTable", "Vuna/Compiler/Codegen/Term.vuna:1542"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtFloatRuntime", ("Vuna.Compiler.Codegen.Term.dtFloatRuntime", "Vuna/Compiler/Codegen/Term.vuna:946"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtListBridge", ("Vuna.Compiler.Codegen.Term.dtListBridge", "Vuna/Compiler/Codegen/Term.vuna:1494"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtObsRuntime", ("Vuna.Compiler.Codegen.Term.dtObsRuntime", "Vuna/Compiler/Codegen/Term.vuna:986"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtPrimRuntime", ("Vuna.Compiler.Codegen.Term.dtPrimRuntime", "Vuna/Compiler/Codegen/Term.vuna:99"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtReporterRuntime", ("Vuna.Compiler.Codegen.Term.dtReporterRuntime", "Vuna/Compiler/Codegen/Term.vuna:906"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtReporterRuntime", ("Vuna.Compiler.Codegen.Term.dtReporterRuntime", "Vuna/Compiler/Codegen/Term.vuna:912"));
   ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntime", ("Vuna.Compiler.Codegen.Term.dtRuntime", "Vuna/Compiler/Codegen/Term.vuna:28"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntimeWith", ("Vuna.Compiler.Codegen.Term.dtRuntimeWith", "Vuna/Compiler/Codegen/Term.vuna:1475"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtSchedRuntime", ("Vuna.Compiler.Codegen.Term.dtSchedRuntime", "Vuna/Compiler/Codegen/Term.vuna:444"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtTraceRuntime", ("Vuna.Compiler.Codegen.Term.dtTraceRuntime", "Vuna/Compiler/Codegen/Term.vuna:957"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffThunkText", ("Vuna.Compiler.Codegen.Term.effThunkText", "Vuna/Compiler/Codegen/Term.vuna:1755"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTyPair", ("Vuna.Compiler.Codegen.Term.effUnitTyPair", "Vuna/Compiler/Codegen/Term.vuna:1634"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr", ("Vuna.Compiler.Codegen.Term.effUnitTypeNameIr", "Vuna/Compiler/Codegen/Term.vuna:1640"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers", ("Vuna.Compiler.Codegen.Term.foldHandlers", "Vuna/Compiler/Codegen/Term.vuna:2001"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArm", ("Vuna.Compiler.Codegen.Term.genArm", "Vuna/Compiler/Codegen/Term.vuna:1812"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArms", ("Vuna.Compiler.Codegen.Term.genArms", "Vuna/Compiler/Codegen/Term.vuna:1804"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields", ("Vuna.Compiler.Codegen.Term.genAssignedFields", "Vuna/Compiler/Codegen/Term.vuna:1782"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenBridgeRef", ("Vuna.Compiler.Codegen.Term.genBridgeRef", "Vuna/Compiler/Codegen/Term.vuna:1627"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef", ("Vuna.Compiler.Codegen.Term.genCtorRef", "Vuna/Compiler/Codegen/Term.vuna:1589"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenDef", ("Vuna.Compiler.Codegen.Term.genDef", "Vuna/Compiler/Codegen/Term.vuna:1952"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook", ("Vuna.Compiler.Codegen.Term.genEntryHook", "Vuna/Compiler/Codegen/Term.vuna:1978"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup", ("Vuna.Compiler.Codegen.Term.genGroup", "Vuna/Compiler/Codegen/Term.vuna:1903"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies", ("Vuna.Compiler.Codegen.Term.genGroupBodies", "Vuna/Compiler/Codegen/Term.vuna:1944"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups", ("Vuna.Compiler.Codegen.Term.genGroups", "Vuna/Compiler/Codegen/Term.vuna:1895"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIr", ("Vuna.Compiler.Codegen.Term.genIr", "Vuna/Compiler/Codegen/Term.vuna:1646"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs", ("Vuna.Compiler.Codegen.Term.genIrArgs", "Vuna/Compiler/Codegen/Term.vuna:1773"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode", ("Vuna.Compiler.Codegen.Term.genIrNode", "Vuna/Compiler/Codegen/Term.vuna:1649"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt", ("Vuna.Compiler.Codegen.Term.genNatAlt", "Vuna/Compiler/Codegen/Term.vuna:1879"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches", ("Vuna.Compiler.Codegen.Term.genNatBranches", "Vuna/Compiler/Codegen/Term.vuna:1853"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef", ("Vuna.Compiler.Codegen.Term.genValueRef", "Vuna/Compiler/Codegen/Term.vuna:1582"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep", ("Vuna.Compiler.Codegen.Term.gsAddDep", "Vuna/Compiler/Codegen/Term.vuna:1576"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily", ("Vuna.Compiler.Codegen.Term.gsDepOfFamily", "Vuna/Compiler/Codegen/Term.vuna:1596"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll", ("Vuna.Compiler.Codegen.Term.hasCatchAll", "Vuna/Compiler/Codegen/Term.vuna:1798"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dhookText", ("Vuna.Compiler.Codegen.Term.hookText", "Vuna/Compiler/Codegen/Term.vuna:2008"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dinlineText", ("Vuna.Compiler.Codegen.Term.inlineText", "Vuna/Compiler/Codegen/Term.vuna:1423"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames", ("Vuna.Compiler.Codegen.Term.ioParamNames", "Vuna/Compiler/Codegen/Term.vuna:1764"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf", ("Vuna.Compiler.Codegen.Term.lineDirectiveOf", "Vuna/Compiler/Codegen/Term.vuna:1936"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf", ("Vuna.Compiler.Codegen.Term.locRowOf", "Vuna/Compiler/Codegen/Term.vuna:1542"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt", ("Vuna.Compiler.Codegen.Term.mkGenSt", "Vuna/Compiler/Codegen/Term.vuna:1569"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith", ("Vuna.Compiler.Codegen.Term.mkGenStWith", "Vuna/Compiler/Codegen/Term.vuna:1572"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText", ("Vuna.Compiler.Codegen.Term.nonErasedBinderText", "Vuna/Compiler/Codegen/Term.vuna:1794"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames", ("Vuna.Compiler.Codegen.Term.qualifyBridgeNames", "Vuna/Compiler/Codegen/Term.vuna:1618"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText", ("Vuna.Compiler.Codegen.Term.qualifyBridgeText", "Vuna/Compiler/Codegen/Term.vuna:1623"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf", ("Vuna.Compiler.Codegen.Term.recordLabelOf", "Vuna/Compiler/Codegen/Term.vuna:1602"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned", ("Vuna.Compiler.Codegen.Term.recordPatAssigned", "Vuna/Compiler/Codegen/Term.vuna:1839"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatText", ("Vuna.Compiler.Codegen.Term.recordPatText", "Vuna/Compiler/Codegen/Term.vuna:1835"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll", ("Vuna.Compiler.Codegen.Term.replaceAll", "Vuna/Compiler/Codegen/Term.vuna:1615"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows", ("Vuna.Compiler.Codegen.Term.sortLocRows", "Vuna/Compiler/Codegen/Term.vuna:1539"));
-  ("v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames", ("Vuna.Compiler.Codegen.Term.takeNames", "Vuna/Compiler/Codegen/Term.vuna:1767"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtRuntimeWith", ("Vuna.Compiler.Codegen.Term.dtRuntimeWith", "Vuna/Compiler/Codegen/Term.vuna:1481"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtSchedRuntime", ("Vuna.Compiler.Codegen.Term.dtSchedRuntime", "Vuna/Compiler/Codegen/Term.vuna:450"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_ddtTraceRuntime", ("Vuna.Compiler.Codegen.Term.dtTraceRuntime", "Vuna/Compiler/Codegen/Term.vuna:963"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffThunkText", ("Vuna.Compiler.Codegen.Term.effThunkText", "Vuna/Compiler/Codegen/Term.vuna:1761"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTyPair", ("Vuna.Compiler.Codegen.Term.effUnitTyPair", "Vuna/Compiler/Codegen/Term.vuna:1640"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_deffUnitTypeNameIr", ("Vuna.Compiler.Codegen.Term.effUnitTypeNameIr", "Vuna/Compiler/Codegen/Term.vuna:1646"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers", ("Vuna.Compiler.Codegen.Term.foldHandlers", "Vuna/Compiler/Codegen/Term.vuna:2007"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArm", ("Vuna.Compiler.Codegen.Term.genArm", "Vuna/Compiler/Codegen/Term.vuna:1818"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenArms", ("Vuna.Compiler.Codegen.Term.genArms", "Vuna/Compiler/Codegen/Term.vuna:1810"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenAssignedFields", ("Vuna.Compiler.Codegen.Term.genAssignedFields", "Vuna/Compiler/Codegen/Term.vuna:1788"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenBridgeRef", ("Vuna.Compiler.Codegen.Term.genBridgeRef", "Vuna/Compiler/Codegen/Term.vuna:1633"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenCtorRef", ("Vuna.Compiler.Codegen.Term.genCtorRef", "Vuna/Compiler/Codegen/Term.vuna:1595"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenDef", ("Vuna.Compiler.Codegen.Term.genDef", "Vuna/Compiler/Codegen/Term.vuna:1958"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook", ("Vuna.Compiler.Codegen.Term.genEntryHook", "Vuna/Compiler/Codegen/Term.vuna:1984"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroup", ("Vuna.Compiler.Codegen.Term.genGroup", "Vuna/Compiler/Codegen/Term.vuna:1909"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroupBodies", ("Vuna.Compiler.Codegen.Term.genGroupBodies", "Vuna/Compiler/Codegen/Term.vuna:1950"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups", ("Vuna.Compiler.Codegen.Term.genGroups", "Vuna/Compiler/Codegen/Term.vuna:1901"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIr", ("Vuna.Compiler.Codegen.Term.genIr", "Vuna/Compiler/Codegen/Term.vuna:1652"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrArgs", ("Vuna.Compiler.Codegen.Term.genIrArgs", "Vuna/Compiler/Codegen/Term.vuna:1779"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenIrNode", ("Vuna.Compiler.Codegen.Term.genIrNode", "Vuna/Compiler/Codegen/Term.vuna:1655"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatAlt", ("Vuna.Compiler.Codegen.Term.genNatAlt", "Vuna/Compiler/Codegen/Term.vuna:1885"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenNatBranches", ("Vuna.Compiler.Codegen.Term.genNatBranches", "Vuna/Compiler/Codegen/Term.vuna:1859"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef", ("Vuna.Compiler.Codegen.Term.genValueRef", "Vuna/Compiler/Codegen/Term.vuna:1588"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsAddDep", ("Vuna.Compiler.Codegen.Term.gsAddDep", "Vuna/Compiler/Codegen/Term.vuna:1582"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dgsDepOfFamily", ("Vuna.Compiler.Codegen.Term.gsDepOfFamily", "Vuna/Compiler/Codegen/Term.vuna:1602"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dhasCatchAll", ("Vuna.Compiler.Codegen.Term.hasCatchAll", "Vuna/Compiler/Codegen/Term.vuna:1804"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dhookText", ("Vuna.Compiler.Codegen.Term.hookText", "Vuna/Compiler/Codegen/Term.vuna:2014"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dinlineText", ("Vuna.Compiler.Codegen.Term.inlineText", "Vuna/Compiler/Codegen/Term.vuna:1429"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dioParamNames", ("Vuna.Compiler.Codegen.Term.ioParamNames", "Vuna/Compiler/Codegen/Term.vuna:1770"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dlineDirectiveOf", ("Vuna.Compiler.Codegen.Term.lineDirectiveOf", "Vuna/Compiler/Codegen/Term.vuna:1942"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dlocRowOf", ("Vuna.Compiler.Codegen.Term.locRowOf", "Vuna/Compiler/Codegen/Term.vuna:1548"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenSt", ("Vuna.Compiler.Codegen.Term.mkGenSt", "Vuna/Compiler/Codegen/Term.vuna:1575"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dmkGenStWith", ("Vuna.Compiler.Codegen.Term.mkGenStWith", "Vuna/Compiler/Codegen/Term.vuna:1578"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dnonErasedBinderText", ("Vuna.Compiler.Codegen.Term.nonErasedBinderText", "Vuna/Compiler/Codegen/Term.vuna:1800"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeNames", ("Vuna.Compiler.Codegen.Term.qualifyBridgeNames", "Vuna/Compiler/Codegen/Term.vuna:1624"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dqualifyBridgeText", ("Vuna.Compiler.Codegen.Term.qualifyBridgeText", "Vuna/Compiler/Codegen/Term.vuna:1629"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordLabelOf", ("Vuna.Compiler.Codegen.Term.recordLabelOf", "Vuna/Compiler/Codegen/Term.vuna:1608"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned", ("Vuna.Compiler.Codegen.Term.recordPatAssigned", "Vuna/Compiler/Codegen/Term.vuna:1845"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_drecordPatText", ("Vuna.Compiler.Codegen.Term.recordPatText", "Vuna/Compiler/Codegen/Term.vuna:1841"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dreplaceAll", ("Vuna.Compiler.Codegen.Term.replaceAll", "Vuna/Compiler/Codegen/Term.vuna:1621"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dsortLocRows", ("Vuna.Compiler.Codegen.Term.sortLocRows", "Vuna/Compiler/Codegen/Term.vuna:1545"));
+  ("v_Vuna_dCompiler_dCodegen_dTerm_dtakeNames", ("Vuna.Compiler.Codegen.Term.takeNames", "Vuna/Compiler/Codegen/Term.vuna:1773"));
   ("v_Vuna_dCompiler_dCommon_dbind", ("Vuna.Compiler.Common.bind", "Vuna/Compiler/Common.vuna:26"));
   ("v_Vuna_dCompiler_dCommon_drunEffCheck", ("Vuna.Compiler.Common.runEffCheck", "Vuna/Compiler/Common.vuna:36"));
   ("v_Vuna_dCompiler_dCommon_dstep", ("Vuna.Compiler.Common.step", "Vuna/Compiler/Common.vuna:51"));
@@ -2490,247 +2495,247 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dDriver_dCache_dtermValidAt", ("Vuna.Compiler.Driver.Cache.termValidAt", "Vuna/Compiler/Driver/Cache.vuna:118"));
   ("v_Vuna_dCompiler_dDriver_dCache_dtermsValidAt", ("Vuna.Compiler.Driver.Cache.termsValidAt", "Vuna/Compiler/Driver/Cache.vuna:150"));
   ("v_Vuna_dCompiler_dDriver_dCache_dwithCachedOpaque", ("Vuna.Compiler.Driver.Cache.withCachedOpaque", "Vuna/Compiler/Driver/Cache.vuna:54"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dabsoluteSpanLabel", ("Vuna.Compiler.Driver.Compile.absoluteSpanLabel", "Vuna/Compiler/Driver/Compile.vuna:1563"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_daddrOfModIn", ("Vuna.Compiler.Driver.Compile.addrOfModIn", "Vuna/Compiler/Driver/Compile.vuna:878"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_daddrsVia", ("Vuna.Compiler.Driver.Compile.addrsVia", "Vuna/Compiler/Driver/Compile.vuna:973"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dallModuleSourcesValid", ("Vuna.Compiler.Driver.Compile.allModuleSourcesValid", "Vuna/Compiler/Driver/Compile.vuna:1224"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dallNamesIn", ("Vuna.Compiler.Driver.Compile.allNamesIn", "Vuna/Compiler/Driver/Compile.vuna:720"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dallSelfHashesOk", ("Vuna.Compiler.Driver.Compile.allSelfHashesOk", "Vuna/Compiler/Driver/Compile.vuna:2087"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dallStableDiags", ("Vuna.Compiler.Driver.Compile.allStableDiags", "Vuna/Compiler/Driver/Compile.vuna:1585"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_danyAbsoluteChild", ("Vuna.Compiler.Driver.Compile.anyAbsoluteChild", "Vuna/Compiler/Driver/Compile.vuna:1572"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dassignAndWriteMods", ("Vuna.Compiler.Driver.Compile.assignAndWriteMods", "Vuna/Compiler/Driver/Compile.vuna:976"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dassignGo", ("Vuna.Compiler.Driver.Compile.assignGo", "Vuna/Compiler/Driver/Compile.vuna:893"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dassignOrdered", ("Vuna.Compiler.Driver.Compile.assignOrdered", "Vuna/Compiler/Driver/Compile.vuna:902"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCheckExe", ("Vuna.Compiler.Driver.Compile.auditCheckExe", "Vuna/Compiler/Driver/Compile.vuna:1779"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCheckLib", ("Vuna.Compiler.Driver.Compile.auditCheckLib", "Vuna/Compiler/Driver/Compile.vuna:2158"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCompare", ("Vuna.Compiler.Driver.Compile.auditCompare", "Vuna/Compiler/Driver/Compile.vuna:1824"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCompile", ("Vuna.Compiler.Driver.Compile.auditCompile", "Vuna/Compiler/Driver/Compile.vuna:253"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dbaseDepIfacesOf", ("Vuna.Compiler.Driver.Compile.baseDepIfacesOf", "Vuna/Compiler/Driver/Compile.vuna:1352"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildIdForEff", ("Vuna.Compiler.Driver.Compile.buildIdForEff", "Vuna/Compiler/Driver/Compile.vuna:495"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildMetaText", ("Vuna.Compiler.Driver.Compile.buildMetaText", "Vuna/Compiler/Driver/Compile.vuna:588"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildSplit", ("Vuna.Compiler.Driver.Compile.buildSplit", "Vuna/Compiler/Driver/Compile.vuna:353"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildViewAddrOf", ("Vuna.Compiler.Driver.Compile.buildViewAddrOf", "Vuna/Compiler/Driver/Compile.vuna:2286"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcacheBase", ("Vuna.Compiler.Driver.Compile.cacheBase", "Vuna/Compiler/Driver/Compile.vuna:391"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcanonicalDir", ("Vuna.Compiler.Driver.Compile.canonicalDir", "Vuna/Compiler/Driver/Compile.vuna:1544"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcanonicalPath", ("Vuna.Compiler.Driver.Compile.canonicalPath", "Vuna/Compiler/Driver/Compile.vuna:1548"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckAndShadow", ("Vuna.Compiler.Driver.Compile.checkAndShadow", "Vuna/Compiler/Driver/Compile.vuna:2098"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe", ("Vuna.Compiler.Driver.Compile.checkCachedExe", "Vuna/Compiler/Driver/Compile.vuna:1721"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib", ("Vuna.Compiler.Driver.Compile.checkCachedLib", "Vuna/Compiler/Driver/Compile.vuna:2109"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckInOf", ("Vuna.Compiler.Driver.Compile.checkInOf", "Vuna/Compiler/Driver/Compile.vuna:2292"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsExe", ("Vuna.Compiler.Driver.Compile.checkModsExe", "Vuna/Compiler/Driver/Compile.vuna:677"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsLib", ("Vuna.Compiler.Driver.Compile.checkModsLib", "Vuna/Compiler/Driver/Compile.vuna:690"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsOf", ("Vuna.Compiler.Driver.Compile.checkModsOf", "Vuna/Compiler/Driver/Compile.vuna:1624"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckNodeSchema", ("Vuna.Compiler.Driver.Compile.checkNodeSchema", "Vuna/Compiler/Driver/Compile.vuna:634"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage", ("Vuna.Compiler.Driver.Compile.checkPackage", "Vuna/Compiler/Driver/Compile.vuna:83"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckSignatureOf", ("Vuna.Compiler.Driver.Compile.checkSignatureOf", "Vuna/Compiler/Driver/Compile.vuna:1808"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckUncachedExe", ("Vuna.Compiler.Driver.Compile.checkUncachedExe", "Vuna/Compiler/Driver/Compile.vuna:1730"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckUncachedLib", ("Vuna.Compiler.Driver.Compile.checkUncachedLib", "Vuna/Compiler/Driver/Compile.vuna:2115"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckViaGraph", ("Vuna.Compiler.Driver.Compile.checkViaGraph", "Vuna/Compiler/Driver/Compile.vuna:1647"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcleanHashOf", ("Vuna.Compiler.Driver.Compile.cleanHashOf", "Vuna/Compiler/Driver/Compile.vuna:1915"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcleanIfacesOrEmpty", ("Vuna.Compiler.Driver.Compile.cleanIfacesOrEmpty", "Vuna/Compiler/Driver/Compile.vuna:1890"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dclosureHashOf", ("Vuna.Compiler.Driver.Compile.closureHashOf", "Vuna/Compiler/Driver/Compile.vuna:455"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dclosureModsEff", ("Vuna.Compiler.Driver.Compile.closureModsEff", "Vuna/Compiler/Driver/Compile.vuna:797"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectClean", ("Vuna.Compiler.Driver.Compile.collectClean", "Vuna/Compiler/Driver/Compile.vuna:1876"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectDepPackages", ("Vuna.Compiler.Driver.Compile.collectDepPackages", "Vuna/Compiler/Driver/Compile.vuna:706"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectDepPackagesFuel", ("Vuna.Compiler.Driver.Compile.collectDepPackagesFuel", "Vuna/Compiler/Driver/Compile.vuna:709"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectVunaMeta", ("Vuna.Compiler.Driver.Compile.collectVunaMeta", "Vuna/Compiler/Driver/Compile.vuna:399"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir", ("Vuna.Compiler.Driver.Compile.compileToDir", "Vuna/Compiler/Driver/Compile.vuna:143"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcompileToDirNormal", ("Vuna.Compiler.Driver.Compile.compileToDirNormal", "Vuna/Compiler/Driver/Compile.vuna:181"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcompilerClosureModule", ("Vuna.Compiler.Driver.Compile.compilerClosureModule", "Vuna/Compiler/Driver/Compile.vuna:491"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcompilerFingerprint", ("Vuna.Compiler.Driver.Compile.compilerFingerprint", "Vuna/Compiler/Driver/Compile.vuna:386"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dconcatMapEff", ("Vuna.Compiler.Driver.Compile.concatMapEff", "Vuna/Compiler/Driver/Compile.vuna:61"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcontextSources", ("Vuna.Compiler.Driver.Compile.contextSources", "Vuna/Compiler/Driver/Compile.vuna:469"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dcopyFfiFiles", ("Vuna.Compiler.Driver.Compile.copyFfiFiles", "Vuna/Compiler/Driver/Compile.vuna:332"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddecMods", ("Vuna.Compiler.Driver.Compile.decMods", "Vuna/Compiler/Driver/Compile.vuna:968"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddecOrderNamesComplete", ("Vuna.Compiler.Driver.Compile.decOrderNamesComplete", "Vuna/Compiler/Driver/Compile.vuna:1088"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddefLocLine", ("Vuna.Compiler.Driver.Compile.defLocLine", "Vuna/Compiler/Driver/Compile.vuna:2265"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepAddrOf", ("Vuna.Compiler.Driver.Compile.depAddrOf", "Vuna/Compiler/Driver/Compile.vuna:861"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIdentitiesEff", ("Vuna.Compiler.Driver.Compile.depIdentitiesEff", "Vuna/Compiler/Driver/Compile.vuna:548"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIdentitiesHash", ("Vuna.Compiler.Driver.Compile.depIdentitiesHash", "Vuna/Compiler/Driver/Compile.vuna:553"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfaceHashTable", ("Vuna.Compiler.Driver.Compile.depIfaceHashTable", "Vuna/Compiler/Driver/Compile.vuna:1832"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfaceSourcesValid", ("Vuna.Compiler.Driver.Compile.depIfaceSourcesValid", "Vuna/Compiler/Driver/Compile.vuna:1208"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForCheck", ("Vuna.Compiler.Driver.Compile.depIfacesForCheck", "Vuna/Compiler/Driver/Compile.vuna:1269"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForTool", ("Vuna.Compiler.Driver.Compile.depIfacesForTool", "Vuna/Compiler/Driver/Compile.vuna:1343"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolProgram", ("Vuna.Compiler.Driver.Compile.depIfacesForToolProgram", "Vuna/Compiler/Driver/Compile.vuna:1340"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolSource", ("Vuna.Compiler.Driver.Compile.depIfacesForToolSource", "Vuna/Compiler/Driver/Compile.vuna:1325"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolSourceDetailed", ("Vuna.Compiler.Driver.Compile.depIfacesForToolSourceDetailed", "Vuna/Compiler/Driver/Compile.vuna:1430"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesOf", ("Vuna.Compiler.Driver.Compile.depIfacesOf", "Vuna/Compiler/Driver/Compile.vuna:1057"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsByOrderEff", ("Vuna.Compiler.Driver.Compile.depModsByOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1182"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsOf", ("Vuna.Compiler.Driver.Compile.depModsOf", "Vuna/Compiler/Driver/Compile.vuna:1051"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsOrdered", ("Vuna.Compiler.Driver.Compile.depModsOrdered", "Vuna/Compiler/Driver/Compile.vuna:1197"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepPackageCount", ("Vuna.Compiler.Driver.Compile.depPackageCount", "Vuna/Compiler/Driver/Compile.vuna:736"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepPackageList", ("Vuna.Compiler.Driver.Compile.depPackageList", "Vuna/Compiler/Driver/Compile.vuna:731"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepRootIdentityEff", ("Vuna.Compiler.Driver.Compile.depRootIdentityEff", "Vuna/Compiler/Driver/Compile.vuna:525"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepSemanticText", ("Vuna.Compiler.Driver.Compile.depSemanticText", "Vuna/Compiler/Driver/Compile.vuna:657"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddepSourceText", ("Vuna.Compiler.Driver.Compile.depSourceText", "Vuna/Compiler/Driver/Compile.vuna:652"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddependencyHashes", ("Vuna.Compiler.Driver.Compile.dependencyHashes", "Vuna/Compiler/Driver/Compile.vuna:476"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddiagHasAbsolutePath", ("Vuna.Compiler.Driver.Compile.diagHasAbsolutePath", "Vuna/Compiler/Driver/Compile.vuna:1576"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddistinctPkgs", ("Vuna.Compiler.Driver.Compile.distinctPkgs", "Vuna/Compiler/Driver/Compile.vuna:1143"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta", ("Vuna.Compiler.Driver.Compile.dropPrefixMeta", "Vuna/Compiler/Driver/Compile.vuna:424"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_delabFullRequested", ("Vuna.Compiler.Driver.Compile.elabFullRequested", "Vuna/Compiler/Driver/Compile.vuna:1792"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dencMods", ("Vuna.Compiler.Driver.Compile.encMods", "Vuna/Compiler/Driver/Compile.vuna:965"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dencOrderNames", ("Vuna.Compiler.Driver.Compile.encOrderNames", "Vuna/Compiler/Driver/Compile.vuna:1085"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_densureDirPath", ("Vuna.Compiler.Driver.Compile.ensureDirPath", "Vuna/Compiler/Driver/Compile.vuna:128"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_densureDirPathFuel", ("Vuna.Compiler.Driver.Compile.ensureDirPathFuel", "Vuna/Compiler/Driver/Compile.vuna:131"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dentrySource", ("Vuna.Compiler.Driver.Compile.entrySource", "Vuna/Compiler/Driver/Compile.vuna:460"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dexportedDepModsOf", ("Vuna.Compiler.Driver.Compile.exportedDepModsOf", "Vuna/Compiler/Driver/Compile.vuna:1168"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dexportedOwnOf", ("Vuna.Compiler.Driver.Compile.exportedOwnOf", "Vuna/Compiler/Driver/Compile.vuna:1981"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfindClosureMod", ("Vuna.Compiler.Driver.Compile.findClosureMod", "Vuna/Compiler/Driver/Compile.vuna:793"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfindPkgEntry", ("Vuna.Compiler.Driver.Compile.findPkgEntry", "Vuna/Compiler/Driver/Compile.vuna:789"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfirstInvalidGo", ("Vuna.Compiler.Driver.Compile.firstInvalidGo", "Vuna/Compiler/Driver/Compile.vuna:2337"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfirstInvalidModule", ("Vuna.Compiler.Driver.Compile.firstInvalidModule", "Vuna/Compiler/Driver/Compile.vuna:2331"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfullCheckExe", ("Vuna.Compiler.Driver.Compile.fullCheckExe", "Vuna/Compiler/Driver/Compile.vuna:1771"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dfullCheckLib", ("Vuna.Compiler.Driver.Compile.fullCheckLib", "Vuna/Compiler/Driver/Compile.vuna:2152"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dgoPkgs", ("Vuna.Compiler.Driver.Compile.goPkgs", "Vuna/Compiler/Driver/Compile.vuna:1148"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dhasAbsoluteLabels", ("Vuna.Compiler.Driver.Compile.hasAbsoluteLabels", "Vuna/Compiler/Driver/Compile.vuna:1568"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dhashText", ("Vuna.Compiler.Driver.Compile.hashText", "Vuna/Compiler/Driver/Compile.vuna:637"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dheaderAddrOfMod", ("Vuna.Compiler.Driver.Compile.headerAddrOfMod", "Vuna/Compiler/Driver/Compile.vuna:812"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceAddrIn", ("Vuna.Compiler.Driver.Compile.ifaceAddrIn", "Vuna/Compiler/Driver/Compile.vuna:873"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceAuditRequested", ("Vuna.Compiler.Driver.Compile.ifaceAuditRequested", "Vuna/Compiler/Driver/Compile.vuna:1799"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceCompilerTag", ("Vuna.Compiler.Driver.Compile.ifaceCompilerTag", "Vuna/Compiler/Driver/Compile.vuna:1927"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceHashOfName", ("Vuna.Compiler.Driver.Compile.ifaceHashOfName", "Vuna/Compiler/Driver/Compile.vuna:2082"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceModsEff", ("Vuna.Compiler.Driver.Compile.ifaceModsEff", "Vuna/Compiler/Driver/Compile.vuna:912"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceModsWithEff", ("Vuna.Compiler.Driver.Compile.ifaceModsWithEff", "Vuna/Compiler/Driver/Compile.vuna:917"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceObjectCodec", ("Vuna.Compiler.Driver.Compile.ifaceObjectCodec", "Vuna/Compiler/Driver/Compile.vuna:748"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceSchemaTag", ("Vuna.Compiler.Driver.Compile.ifaceSchemaTag", "Vuna/Compiler/Driver/Compile.vuna:1924"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difaceSelfTestRequested", ("Vuna.Compiler.Driver.Compile.ifaceSelfTestRequested", "Vuna/Compiler/Driver/Compile.vuna:2077"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difacesForContextEff", ("Vuna.Compiler.Driver.Compile.ifacesForContextEff", "Vuna/Compiler/Driver/Compile.vuna:1008"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_difacesForRootsEff", ("Vuna.Compiler.Driver.Compile.ifacesForRootsEff", "Vuna/Compiler/Driver/Compile.vuna:1014"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dimportClosureGo", ("Vuna.Compiler.Driver.Compile.importClosureGo", "Vuna/Compiler/Driver/Compile.vuna:1305"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dimportClosureOf", ("Vuna.Compiler.Driver.Compile.importClosureOf", "Vuna/Compiler/Driver/Compile.vuna:1315"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dimportNameStr", ("Vuna.Compiler.Driver.Compile.importNameStr", "Vuna/Compiler/Driver/Compile.vuna:1275"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_disDepModOf", ("Vuna.Compiler.Driver.Compile.isDepModOf", "Vuna/Compiler/Driver/Compile.vuna:851"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_disNeededMod", ("Vuna.Compiler.Driver.Compile.isNeededMod", "Vuna/Compiler/Driver/Compile.vuna:1318"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_disSelfModOf", ("Vuna.Compiler.Driver.Compile.isSelfModOf", "Vuna/Compiler/Driver/Compile.vuna:854"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_disStableDiag", ("Vuna.Compiler.Driver.Compile.isStableDiag", "Vuna/Compiler/Driver/Compile.vuna:1580"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_djoinJsonList", ("Vuna.Compiler.Driver.Compile.joinJsonList", "Vuna/Compiler/Driver/Compile.vuna:574"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_djoinLines", ("Vuna.Compiler.Driver.Compile.joinLines", "Vuna/Compiler/Driver/Compile.vuna:1818"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dlastSegment", ("Vuna.Compiler.Driver.Compile.lastSegment", "Vuna/Compiler/Driver/Compile.vuna:585"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dlastSegmentRev", ("Vuna.Compiler.Driver.Compile.lastSegmentRev", "Vuna/Compiler/Driver/Compile.vuna:581"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dlayoutDigestOf", ("Vuna.Compiler.Driver.Compile.layoutDigestOf", "Vuna/Compiler/Driver/Compile.vuna:2271"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dloadHeaderEff", ("Vuna.Compiler.Driver.Compile.loadHeaderEff", "Vuna/Compiler/Driver/Compile.vuna:819"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmanifestSemanticText", ("Vuna.Compiler.Driver.Compile.manifestSemanticText", "Vuna/Compiler/Driver/Compile.vuna:661"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmapEff", ("Vuna.Compiler.Driver.Compile.mapEff", "Vuna/Compiler/Driver/Compile.vuna:54"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmapMaybeEff", ("Vuna.Compiler.Driver.Compile.mapMaybeEff", "Vuna/Compiler/Driver/Compile.vuna:68"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmaybeSemanticText", ("Vuna.Compiler.Driver.Compile.maybeSemanticText", "Vuna/Compiler/Driver/Compile.vuna:648"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaFileName", ("Vuna.Compiler.Driver.Compile.metaFileName", "Vuna/Compiler/Driver/Compile.vuna:376"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaPairText", ("Vuna.Compiler.Driver.Compile.metaPairText", "Vuna/Compiler/Driver/Compile.vuna:571"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaPathOf", ("Vuna.Compiler.Driver.Compile.metaPathOf", "Vuna/Compiler/Driver/Compile.vuna:600"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaSchema", ("Vuna.Compiler.Driver.Compile.metaSchema", "Vuna/Compiler/Driver/Compile.vuna:373"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate", ("Vuna.Compiler.Driver.Compile.metaUpToDate", "Vuna/Compiler/Driver/Compile.vuna:610"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmissingNamesOf", ("Vuna.Compiler.Driver.Compile.missingNamesOf", "Vuna/Compiler/Driver/Compile.vuna:2054"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodGraphEntry", ("Vuna.Compiler.Driver.Compile.modGraphEntry", "Vuna/Compiler/Driver/Compile.vuna:845"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodHashPair", ("Vuna.Compiler.Driver.Compile.modHashPair", "Vuna/Compiler/Driver/Compile.vuna:1452"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodKeyOf", ("Vuna.Compiler.Driver.Compile.modKeyOf", "Vuna/Compiler/Driver/Compile.vuna:959"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodNameOf", ("Vuna.Compiler.Driver.Compile.modNameOf", "Vuna/Compiler/Driver/Compile.vuna:848"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsCodec", ("Vuna.Compiler.Driver.Compile.modsCodec", "Vuna/Compiler/Driver/Compile.vuna:956"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsKeyOf", ("Vuna.Compiler.Driver.Compile.modsKeyOf", "Vuna/Compiler/Driver/Compile.vuna:962"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsKind", ("Vuna.Compiler.Driver.Compile.modsKind", "Vuna/Compiler/Driver/Compile.vuna:953"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleDepsOk", ("Vuna.Compiler.Driver.Compile.moduleDepsOk", "Vuna/Compiler/Driver/Compile.vuna:1906"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleGraphOf", ("Vuna.Compiler.Driver.Compile.moduleGraphOf", "Vuna/Compiler/Driver/Compile.vuna:857"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleNameOfPath", ("Vuna.Compiler.Driver.Compile.moduleNameOfPath", "Vuna/Compiler/Driver/Compile.vuna:435"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmtimeFastPath", ("Vuna.Compiler.Driver.Compile.mtimeFastPath", "Vuna/Compiler/Driver/Compile.vuna:1262"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dmtimeSafetyWindowSec", ("Vuna.Compiler.Driver.Compile.mtimeSafetyWindowSec", "Vuna/Compiler/Driver/Compile.vuna:1236"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dnameExportedBy", ("Vuna.Compiler.Driver.Compile.nameExportedBy", "Vuna/Compiler/Driver/Compile.vuna:1972"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dorderCodec", ("Vuna.Compiler.Driver.Compile.orderCodec", "Vuna/Compiler/Driver/Compile.vuna:1082"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dorderCoversEff", ("Vuna.Compiler.Driver.Compile.orderCoversEff", "Vuna/Compiler/Driver/Compile.vuna:1126"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dorderKeyOfEff", ("Vuna.Compiler.Driver.Compile.orderKeyOfEff", "Vuna/Compiler/Driver/Compile.vuna:1099"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dorderKind", ("Vuna.Compiler.Driver.Compile.orderKind", "Vuna/Compiler/Driver/Compile.vuna:1079"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanInfo", ("Vuna.Compiler.Driver.Compile.ownCleanInfo", "Vuna/Compiler/Driver/Compile.vuna:1868"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanModules", ("Vuna.Compiler.Driver.Compile.ownCleanModules", "Vuna/Compiler/Driver/Compile.vuna:1882"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanWanted", ("Vuna.Compiler.Driver.Compile.ownCleanWanted", "Vuna/Compiler/Driver/Compile.vuna:1475"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_downRootsOf", ("Vuna.Compiler.Driver.Compile.ownRootsOf", "Vuna/Compiler/Driver/Compile.vuna:466"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_downSourceInfos", ("Vuna.Compiler.Driver.Compile.ownSourceInfos", "Vuna/Compiler/Driver/Compile.vuna:1933"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpackageEnvHash", ("Vuna.Compiler.Driver.Compile.packageEnvHash", "Vuna/Compiler/Driver/Compile.vuna:1842"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpairText", ("Vuna.Compiler.Driver.Compile.pairText", "Vuna/Compiler/Driver/Compile.vuna:556"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpayloadSelfOk", ("Vuna.Compiler.Driver.Compile.payloadSelfOk", "Vuna/Compiler/Driver/Compile.vuna:1901"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpickByOrder", ("Vuna.Compiler.Driver.Compile.pickByOrder", "Vuna/Compiler/Driver/Compile.vuna:1134"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpickDepMods", ("Vuna.Compiler.Driver.Compile.pickDepMods", "Vuna/Compiler/Driver/Compile.vuna:1188"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgEq", ("Vuna.Compiler.Driver.Compile.pkgEq", "Vuna/Compiler/Driver/Compile.vuna:1140"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryCodec", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryCodec", "Vuna/Compiler/Driver/Compile.vuna:518"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryKeyOf", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryKeyOf", "Vuna/Compiler/Driver/Compile.vuna:521"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryKind", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryKind", "Vuna/Compiler/Driver/Compile.vuna:515"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgKeyOf", ("Vuna.Compiler.Driver.Compile.pkgKeyOf", "Vuna/Compiler/Driver/Compile.vuna:772"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgTableEff", ("Vuna.Compiler.Driver.Compile.pkgTableEff", "Vuna/Compiler/Driver/Compile.vuna:775"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dpmModulesOfIface", ("Vuna.Compiler.Driver.Compile.pmModulesOfIface", "Vuna/Compiler/Driver/Compile.vuna:2334"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dprepareForStore", ("Vuna.Compiler.Driver.Compile.prepareForStore", "Vuna/Compiler/Driver/Compile.vuna:1589"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dprojectIdOf", ("Vuna.Compiler.Driver.Compile.projectIdOf", "Vuna/Compiler/Driver/Compile.vuna:1631"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadIfaceAtEff", ("Vuna.Compiler.Driver.Compile.readIfaceAtEff", "Vuna/Compiler/Driver/Compile.vuna:1021"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadIfaceListEff", ("Vuna.Compiler.Driver.Compile.readIfaceListEff", "Vuna/Compiler/Driver/Compile.vuna:1032"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadOneModIface", ("Vuna.Compiler.Driver.Compile.readOneModIface", "Vuna/Compiler/Driver/Compile.vuna:1863"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadOrderEff", ("Vuna.Compiler.Driver.Compile.readOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1114"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadSplitBlob", ("Vuna.Compiler.Driver.Compile.readSplitBlob", "Vuna/Compiler/Driver/Compile.vuna:2318"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreadSplitPointer", ("Vuna.Compiler.Driver.Compile.readSplitPointer", "Vuna/Compiler/Driver/Compile.vuna:2254"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drebuildSplit", ("Vuna.Compiler.Driver.Compile.rebuildSplit", "Vuna/Compiler/Driver/Compile.vuna:206"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreleaseFlagOf", ("Vuna.Compiler.Driver.Compile.releaseFlagOf", "Vuna/Compiler/Driver/Compile.vuna:673"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dreplayFailure", ("Vuna.Compiler.Driver.Compile.replayFailure", "Vuna/Compiler/Driver/Compile.vuna:1599"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dresolveStoredDiag", ("Vuna.Compiler.Driver.Compile.resolveStoredDiag", "Vuna/Compiler/Driver/Compile.vuna:1596"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dresolveStoredPath", ("Vuna.Compiler.Driver.Compile.resolveStoredPath", "Vuna/Compiler/Driver/Compile.vuna:1556"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dresyncCleanSources", ("Vuna.Compiler.Driver.Compile.resyncCleanSources", "Vuna/Compiler/Driver/Compile.vuna:1950"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootEnvHashOf", ("Vuna.Compiler.Driver.Compile.rootEnvHashOf", "Vuna/Compiler/Driver/Compile.vuna:993"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootExportsOf", ("Vuna.Compiler.Driver.Compile.rootExportsOf", "Vuna/Compiler/Driver/Compile.vuna:1177"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootHash", ("Vuna.Compiler.Driver.Compile.rootHash", "Vuna/Compiler/Driver/Compile.vuna:450"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootKeepEff", ("Vuna.Compiler.Driver.Compile.rootKeepEff", "Vuna/Compiler/Driver/Compile.vuna:1637"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootOfName", ("Vuna.Compiler.Driver.Compile.rootOfName", "Vuna/Compiler/Driver/Compile.vuna:1093"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootPkgTableEff", ("Vuna.Compiler.Driver.Compile.rootPkgTableEff", "Vuna/Compiler/Driver/Compile.vuna:1001"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drootSources", ("Vuna.Compiler.Driver.Compile.rootSources", "Vuna/Compiler/Driver/Compile.vuna:442"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drunAndStore", ("Vuna.Compiler.Driver.Compile.runAndStore", "Vuna/Compiler/Driver/Compile.vuna:1676"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript", ("Vuna.Compiler.Driver.Compile.runBuildScript", "Vuna/Compiler/Driver/Compile.vuna:625"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsameIfaceHashes", ("Vuna.Compiler.Driver.Compile.sameIfaceHashes", "Vuna/Compiler/Driver/Compile.vuna:2091"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsameNameSet", ("Vuna.Compiler.Driver.Compile.sameNameSet", "Vuna/Compiler/Driver/Compile.vuna:717"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dselfModsOf", ("Vuna.Compiler.Driver.Compile.selfModsOf", "Vuna/Compiler/Driver/Compile.vuna:1054"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dshadowAllowed", ("Vuna.Compiler.Driver.Compile.shadowAllowed", "Vuna/Compiler/Driver/Compile.vuna:1964"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dskipMetaDir", ("Vuna.Compiler.Driver.Compile.skipMetaDir", "Vuna/Compiler/Driver/Compile.vuna:396"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dslashToDot", ("Vuna.Compiler.Driver.Compile.slashToDot", "Vuna/Compiler/Driver/Compile.vuna:432"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dslashesToDots", ("Vuna.Compiler.Driver.Compile.slashesToDots", "Vuna/Compiler/Driver/Compile.vuna:429"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsortNames", ("Vuna.Compiler.Driver.Compile.sortNames", "Vuna/Compiler/Driver/Compile.vuna:890"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceFresh", ("Vuna.Compiler.Driver.Compile.sourceFresh", "Vuna/Compiler/Driver/Compile.vuna:1400"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceInfoForPath", ("Vuna.Compiler.Driver.Compile.sourceInfoForPath", "Vuna/Compiler/Driver/Compile.vuna:1385"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceInfoUnchanged", ("Vuna.Compiler.Driver.Compile.sourceInfoUnchanged", "Vuna/Compiler/Driver/Compile.vuna:1239"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsourcePathMapOfRoots", ("Vuna.Compiler.Driver.Compile.sourcePathMapOfRoots", "Vuna/Compiler/Driver/Compile.vuna:1216"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitBlobPath", ("Vuna.Compiler.Driver.Compile.splitBlobPath", "Vuna/Compiler/Driver/Compile.vuna:2216"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitBlobTag", ("Vuna.Compiler.Driver.Compile.splitBlobTag", "Vuna/Compiler/Driver/Compile.vuna:2189"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheCodec", ("Vuna.Compiler.Driver.Compile.splitCacheCodec", "Vuna/Compiler/Driver/Compile.vuna:2185"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitIdentityOf", ("Vuna.Compiler.Driver.Compile.splitIdentityOf", "Vuna/Compiler/Driver/Compile.vuna:2276"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitInOf", ("Vuna.Compiler.Driver.Compile.splitInOf", "Vuna/Compiler/Driver/Compile.vuna:2237"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitModsOf", ("Vuna.Compiler.Driver.Compile.splitModsOf", "Vuna/Compiler/Driver/Compile.vuna:2195"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitNodeSchema", ("Vuna.Compiler.Driver.Compile.splitNodeSchema", "Vuna/Compiler/Driver/Compile.vuna:2179"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitPtrCodec", ("Vuna.Compiler.Driver.Compile.splitPtrCodec", "Vuna/Compiler/Driver/Compile.vuna:2251"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitPtrKind", ("Vuna.Compiler.Driver.Compile.splitPtrKind", "Vuna/Compiler/Driver/Compile.vuna:2248"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitSignatureOf", ("Vuna.Compiler.Driver.Compile.splitSignatureOf", "Vuna/Compiler/Driver/Compile.vuna:1814"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dstatOfClosureMod", ("Vuna.Compiler.Driver.Compile.statOfClosureMod", "Vuna/Compiler/Driver/Compile.vuna:1455"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dstoreCheckPayload", ("Vuna.Compiler.Driver.Compile.storeCheckPayload", "Vuna/Compiler/Driver/Compile.vuna:1604"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsummaryCheckExeParts", ("Vuna.Compiler.Driver.Compile.summaryCheckExeParts", "Vuna/Compiler/Driver/Compile.vuna:1743"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsummaryCheckLibParts", ("Vuna.Compiler.Driver.Compile.summaryCheckLibParts", "Vuna/Compiler/Driver/Compile.vuna:2126"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dsummarySplitParts", ("Vuna.Compiler.Driver.Compile.summarySplitParts", "Vuna/Compiler/Driver/Compile.vuna:160"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtextHash", ("Vuna.Compiler.Driver.Compile.textHash", "Vuna/Compiler/Driver/Compile.vuna:380"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCleanGo", ("Vuna.Compiler.Driver.Compile.toolCleanGo", "Vuna/Compiler/Driver/Compile.vuna:1481"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCleanOwnModules", ("Vuna.Compiler.Driver.Compile.toolCleanOwnModules", "Vuna/Compiler/Driver/Compile.vuna:1464"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCompilerFingerprint", ("Vuna.Compiler.Driver.Compile.toolCompilerFingerprint", "Vuna/Compiler/Driver/Compile.vuna:1533"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolDepModsOf", ("Vuna.Compiler.Driver.Compile.toolDepModsOf", "Vuna/Compiler/Driver/Compile.vuna:1322"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolEnabled", ("Vuna.Compiler.Driver.Compile.toolEnabled", "Vuna/Compiler/Driver/Compile.vuna:1300"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolImportNamesOf", ("Vuna.Compiler.Driver.Compile.toolImportNamesOf", "Vuna/Compiler/Driver/Compile.vuna:1287"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolImportsOfSource", ("Vuna.Compiler.Driver.Compile.toolImportsOfSource", "Vuna/Compiler/Driver/Compile.vuna:1278"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolNeededOfImports", ("Vuna.Compiler.Driver.Compile.toolNeededOfImports", "Vuna/Compiler/Driver/Compile.vuna:1422"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolNowSec", ("Vuna.Compiler.Driver.Compile.toolNowSec", "Vuna/Compiler/Driver/Compile.vuna:1392"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolSessionFresh", ("Vuna.Compiler.Driver.Compile.toolSessionFresh", "Vuna/Compiler/Driver/Compile.vuna:1415"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolTextHash", ("Vuna.Compiler.Driver.Compile.toolTextHash", "Vuna/Compiler/Driver/Compile.vuna:1382"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolWriteModuleIface", ("Vuna.Compiler.Driver.Compile.toolWriteModuleIface", "Vuna/Compiler/Driver/Compile.vuna:1494"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolWriteModuleIfaceCold", ("Vuna.Compiler.Driver.Compile.toolWriteModuleIfaceCold", "Vuna/Compiler/Driver/Compile.vuna:1518"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwalkVunaMeta", ("Vuna.Compiler.Driver.Compile.walkVunaMeta", "Vuna/Compiler/Driver/Compile.vuna:409"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwithAddr", ("Vuna.Compiler.Driver.Compile.withAddr", "Vuna/Compiler/Driver/Compile.vuna:883"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwithPrelude", ("Vuna.Compiler.Driver.Compile.withPrelude", "Vuna/Compiler/Driver/Compile.vuna:840"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteBuildMeta", ("Vuna.Compiler.Driver.Compile.writeBuildMeta", "Vuna/Compiler/Driver/Compile.vuna:603"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiledNormalized", ("Vuna.Compiler.Driver.Compile.writeCompiledNormalized", "Vuna/Compiler/Driver/Compile.vuna:306"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteFileIfChanged", ("Vuna.Compiler.Driver.Compile.writeFileIfChanged", "Vuna/Compiler/Driver/Compile.vuna:294"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteIfaceObjects", ("Vuna.Compiler.Driver.Compile.writeIfaceObjects", "Vuna/Compiler/Driver/Compile.vuna:2063"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteIfaceShadow", ("Vuna.Compiler.Driver.Compile.writeIfaceShadow", "Vuna/Compiler/Driver/Compile.vuna:1988"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteModuleIfaceGuarded", ("Vuna.Compiler.Driver.Compile.writeModuleIfaceGuarded", "Vuna/Compiler/Driver/Compile.vuna:1508"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteOrderEff", ("Vuna.Compiler.Driver.Compile.writeOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1106"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwritePkgIfaceSummaryEff", ("Vuna.Compiler.Driver.Compile.writePkgIfaceSummaryEff", "Vuna/Compiler/Driver/Compile.vuna:560"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitBlob", ("Vuna.Compiler.Driver.Compile.writeSplitBlob", "Vuna/Compiler/Driver/Compile.vuna:2298"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitBlobAt", ("Vuna.Compiler.Driver.Compile.writeSplitBlobAt", "Vuna/Compiler/Driver/Compile.vuna:2223"));
-  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitPointer", ("Vuna.Compiler.Driver.Compile.writeSplitPointer", "Vuna/Compiler/Driver/Compile.vuna:2262"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dabsoluteSpanLabel", ("Vuna.Compiler.Driver.Compile.absoluteSpanLabel", "Vuna/Compiler/Driver/Compile.vuna:1564"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_daddrOfModIn", ("Vuna.Compiler.Driver.Compile.addrOfModIn", "Vuna/Compiler/Driver/Compile.vuna:879"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_daddrsVia", ("Vuna.Compiler.Driver.Compile.addrsVia", "Vuna/Compiler/Driver/Compile.vuna:974"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dallModuleSourcesValid", ("Vuna.Compiler.Driver.Compile.allModuleSourcesValid", "Vuna/Compiler/Driver/Compile.vuna:1225"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dallNamesIn", ("Vuna.Compiler.Driver.Compile.allNamesIn", "Vuna/Compiler/Driver/Compile.vuna:721"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dallSelfHashesOk", ("Vuna.Compiler.Driver.Compile.allSelfHashesOk", "Vuna/Compiler/Driver/Compile.vuna:2088"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dallStableDiags", ("Vuna.Compiler.Driver.Compile.allStableDiags", "Vuna/Compiler/Driver/Compile.vuna:1586"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_danyAbsoluteChild", ("Vuna.Compiler.Driver.Compile.anyAbsoluteChild", "Vuna/Compiler/Driver/Compile.vuna:1573"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dassignAndWriteMods", ("Vuna.Compiler.Driver.Compile.assignAndWriteMods", "Vuna/Compiler/Driver/Compile.vuna:977"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dassignGo", ("Vuna.Compiler.Driver.Compile.assignGo", "Vuna/Compiler/Driver/Compile.vuna:894"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dassignOrdered", ("Vuna.Compiler.Driver.Compile.assignOrdered", "Vuna/Compiler/Driver/Compile.vuna:903"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCheckExe", ("Vuna.Compiler.Driver.Compile.auditCheckExe", "Vuna/Compiler/Driver/Compile.vuna:1780"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCheckLib", ("Vuna.Compiler.Driver.Compile.auditCheckLib", "Vuna/Compiler/Driver/Compile.vuna:2159"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCompare", ("Vuna.Compiler.Driver.Compile.auditCompare", "Vuna/Compiler/Driver/Compile.vuna:1825"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dauditCompile", ("Vuna.Compiler.Driver.Compile.auditCompile", "Vuna/Compiler/Driver/Compile.vuna:254"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dbaseDepIfacesOf", ("Vuna.Compiler.Driver.Compile.baseDepIfacesOf", "Vuna/Compiler/Driver/Compile.vuna:1353"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildIdForEff", ("Vuna.Compiler.Driver.Compile.buildIdForEff", "Vuna/Compiler/Driver/Compile.vuna:496"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildMetaText", ("Vuna.Compiler.Driver.Compile.buildMetaText", "Vuna/Compiler/Driver/Compile.vuna:589"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildSplit", ("Vuna.Compiler.Driver.Compile.buildSplit", "Vuna/Compiler/Driver/Compile.vuna:354"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dbuildViewAddrOf", ("Vuna.Compiler.Driver.Compile.buildViewAddrOf", "Vuna/Compiler/Driver/Compile.vuna:2287"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcacheBase", ("Vuna.Compiler.Driver.Compile.cacheBase", "Vuna/Compiler/Driver/Compile.vuna:392"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcanonicalDir", ("Vuna.Compiler.Driver.Compile.canonicalDir", "Vuna/Compiler/Driver/Compile.vuna:1545"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcanonicalPath", ("Vuna.Compiler.Driver.Compile.canonicalPath", "Vuna/Compiler/Driver/Compile.vuna:1549"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckAndShadow", ("Vuna.Compiler.Driver.Compile.checkAndShadow", "Vuna/Compiler/Driver/Compile.vuna:2099"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedExe", ("Vuna.Compiler.Driver.Compile.checkCachedExe", "Vuna/Compiler/Driver/Compile.vuna:1722"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckCachedLib", ("Vuna.Compiler.Driver.Compile.checkCachedLib", "Vuna/Compiler/Driver/Compile.vuna:2110"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckInOf", ("Vuna.Compiler.Driver.Compile.checkInOf", "Vuna/Compiler/Driver/Compile.vuna:2293"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsExe", ("Vuna.Compiler.Driver.Compile.checkModsExe", "Vuna/Compiler/Driver/Compile.vuna:678"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsLib", ("Vuna.Compiler.Driver.Compile.checkModsLib", "Vuna/Compiler/Driver/Compile.vuna:691"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckModsOf", ("Vuna.Compiler.Driver.Compile.checkModsOf", "Vuna/Compiler/Driver/Compile.vuna:1625"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckNodeSchema", ("Vuna.Compiler.Driver.Compile.checkNodeSchema", "Vuna/Compiler/Driver/Compile.vuna:635"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage", ("Vuna.Compiler.Driver.Compile.checkPackage", "Vuna/Compiler/Driver/Compile.vuna:84"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckSignatureOf", ("Vuna.Compiler.Driver.Compile.checkSignatureOf", "Vuna/Compiler/Driver/Compile.vuna:1809"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckUncachedExe", ("Vuna.Compiler.Driver.Compile.checkUncachedExe", "Vuna/Compiler/Driver/Compile.vuna:1731"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckUncachedLib", ("Vuna.Compiler.Driver.Compile.checkUncachedLib", "Vuna/Compiler/Driver/Compile.vuna:2116"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcheckViaGraph", ("Vuna.Compiler.Driver.Compile.checkViaGraph", "Vuna/Compiler/Driver/Compile.vuna:1648"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcleanHashOf", ("Vuna.Compiler.Driver.Compile.cleanHashOf", "Vuna/Compiler/Driver/Compile.vuna:1916"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcleanIfacesOrEmpty", ("Vuna.Compiler.Driver.Compile.cleanIfacesOrEmpty", "Vuna/Compiler/Driver/Compile.vuna:1891"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dclosureHashOf", ("Vuna.Compiler.Driver.Compile.closureHashOf", "Vuna/Compiler/Driver/Compile.vuna:456"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dclosureModsEff", ("Vuna.Compiler.Driver.Compile.closureModsEff", "Vuna/Compiler/Driver/Compile.vuna:798"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectClean", ("Vuna.Compiler.Driver.Compile.collectClean", "Vuna/Compiler/Driver/Compile.vuna:1877"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectDepPackages", ("Vuna.Compiler.Driver.Compile.collectDepPackages", "Vuna/Compiler/Driver/Compile.vuna:707"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectDepPackagesFuel", ("Vuna.Compiler.Driver.Compile.collectDepPackagesFuel", "Vuna/Compiler/Driver/Compile.vuna:710"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcollectVunaMeta", ("Vuna.Compiler.Driver.Compile.collectVunaMeta", "Vuna/Compiler/Driver/Compile.vuna:400"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir", ("Vuna.Compiler.Driver.Compile.compileToDir", "Vuna/Compiler/Driver/Compile.vuna:144"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcompileToDirNormal", ("Vuna.Compiler.Driver.Compile.compileToDirNormal", "Vuna/Compiler/Driver/Compile.vuna:182"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcompilerClosureModule", ("Vuna.Compiler.Driver.Compile.compilerClosureModule", "Vuna/Compiler/Driver/Compile.vuna:492"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcompilerFingerprint", ("Vuna.Compiler.Driver.Compile.compilerFingerprint", "Vuna/Compiler/Driver/Compile.vuna:387"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dconcatMapEff", ("Vuna.Compiler.Driver.Compile.concatMapEff", "Vuna/Compiler/Driver/Compile.vuna:62"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcontextSources", ("Vuna.Compiler.Driver.Compile.contextSources", "Vuna/Compiler/Driver/Compile.vuna:470"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dcopyFfiFiles", ("Vuna.Compiler.Driver.Compile.copyFfiFiles", "Vuna/Compiler/Driver/Compile.vuna:333"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddecMods", ("Vuna.Compiler.Driver.Compile.decMods", "Vuna/Compiler/Driver/Compile.vuna:969"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddecOrderNamesComplete", ("Vuna.Compiler.Driver.Compile.decOrderNamesComplete", "Vuna/Compiler/Driver/Compile.vuna:1089"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddefLocLine", ("Vuna.Compiler.Driver.Compile.defLocLine", "Vuna/Compiler/Driver/Compile.vuna:2266"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepAddrOf", ("Vuna.Compiler.Driver.Compile.depAddrOf", "Vuna/Compiler/Driver/Compile.vuna:862"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIdentitiesEff", ("Vuna.Compiler.Driver.Compile.depIdentitiesEff", "Vuna/Compiler/Driver/Compile.vuna:549"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIdentitiesHash", ("Vuna.Compiler.Driver.Compile.depIdentitiesHash", "Vuna/Compiler/Driver/Compile.vuna:554"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfaceHashTable", ("Vuna.Compiler.Driver.Compile.depIfaceHashTable", "Vuna/Compiler/Driver/Compile.vuna:1833"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfaceSourcesValid", ("Vuna.Compiler.Driver.Compile.depIfaceSourcesValid", "Vuna/Compiler/Driver/Compile.vuna:1209"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForCheck", ("Vuna.Compiler.Driver.Compile.depIfacesForCheck", "Vuna/Compiler/Driver/Compile.vuna:1270"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForTool", ("Vuna.Compiler.Driver.Compile.depIfacesForTool", "Vuna/Compiler/Driver/Compile.vuna:1344"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolProgram", ("Vuna.Compiler.Driver.Compile.depIfacesForToolProgram", "Vuna/Compiler/Driver/Compile.vuna:1341"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolSource", ("Vuna.Compiler.Driver.Compile.depIfacesForToolSource", "Vuna/Compiler/Driver/Compile.vuna:1326"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesForToolSourceDetailed", ("Vuna.Compiler.Driver.Compile.depIfacesForToolSourceDetailed", "Vuna/Compiler/Driver/Compile.vuna:1431"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepIfacesOf", ("Vuna.Compiler.Driver.Compile.depIfacesOf", "Vuna/Compiler/Driver/Compile.vuna:1058"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsByOrderEff", ("Vuna.Compiler.Driver.Compile.depModsByOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1183"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsOf", ("Vuna.Compiler.Driver.Compile.depModsOf", "Vuna/Compiler/Driver/Compile.vuna:1052"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepModsOrdered", ("Vuna.Compiler.Driver.Compile.depModsOrdered", "Vuna/Compiler/Driver/Compile.vuna:1198"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepPackageCount", ("Vuna.Compiler.Driver.Compile.depPackageCount", "Vuna/Compiler/Driver/Compile.vuna:737"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepPackageList", ("Vuna.Compiler.Driver.Compile.depPackageList", "Vuna/Compiler/Driver/Compile.vuna:732"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepRootIdentityEff", ("Vuna.Compiler.Driver.Compile.depRootIdentityEff", "Vuna/Compiler/Driver/Compile.vuna:526"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepSemanticText", ("Vuna.Compiler.Driver.Compile.depSemanticText", "Vuna/Compiler/Driver/Compile.vuna:658"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddepSourceText", ("Vuna.Compiler.Driver.Compile.depSourceText", "Vuna/Compiler/Driver/Compile.vuna:653"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddependencyHashes", ("Vuna.Compiler.Driver.Compile.dependencyHashes", "Vuna/Compiler/Driver/Compile.vuna:477"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddiagHasAbsolutePath", ("Vuna.Compiler.Driver.Compile.diagHasAbsolutePath", "Vuna/Compiler/Driver/Compile.vuna:1577"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddistinctPkgs", ("Vuna.Compiler.Driver.Compile.distinctPkgs", "Vuna/Compiler/Driver/Compile.vuna:1144"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_ddropPrefixMeta", ("Vuna.Compiler.Driver.Compile.dropPrefixMeta", "Vuna/Compiler/Driver/Compile.vuna:425"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_delabFullRequested", ("Vuna.Compiler.Driver.Compile.elabFullRequested", "Vuna/Compiler/Driver/Compile.vuna:1793"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dencMods", ("Vuna.Compiler.Driver.Compile.encMods", "Vuna/Compiler/Driver/Compile.vuna:966"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dencOrderNames", ("Vuna.Compiler.Driver.Compile.encOrderNames", "Vuna/Compiler/Driver/Compile.vuna:1086"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_densureDirPath", ("Vuna.Compiler.Driver.Compile.ensureDirPath", "Vuna/Compiler/Driver/Compile.vuna:129"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_densureDirPathFuel", ("Vuna.Compiler.Driver.Compile.ensureDirPathFuel", "Vuna/Compiler/Driver/Compile.vuna:132"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dentrySource", ("Vuna.Compiler.Driver.Compile.entrySource", "Vuna/Compiler/Driver/Compile.vuna:461"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dexportedDepModsOf", ("Vuna.Compiler.Driver.Compile.exportedDepModsOf", "Vuna/Compiler/Driver/Compile.vuna:1169"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dexportedOwnOf", ("Vuna.Compiler.Driver.Compile.exportedOwnOf", "Vuna/Compiler/Driver/Compile.vuna:1982"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfindClosureMod", ("Vuna.Compiler.Driver.Compile.findClosureMod", "Vuna/Compiler/Driver/Compile.vuna:794"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfindPkgEntry", ("Vuna.Compiler.Driver.Compile.findPkgEntry", "Vuna/Compiler/Driver/Compile.vuna:790"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfirstInvalidGo", ("Vuna.Compiler.Driver.Compile.firstInvalidGo", "Vuna/Compiler/Driver/Compile.vuna:2338"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfirstInvalidModule", ("Vuna.Compiler.Driver.Compile.firstInvalidModule", "Vuna/Compiler/Driver/Compile.vuna:2332"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfullCheckExe", ("Vuna.Compiler.Driver.Compile.fullCheckExe", "Vuna/Compiler/Driver/Compile.vuna:1772"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dfullCheckLib", ("Vuna.Compiler.Driver.Compile.fullCheckLib", "Vuna/Compiler/Driver/Compile.vuna:2153"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dgoPkgs", ("Vuna.Compiler.Driver.Compile.goPkgs", "Vuna/Compiler/Driver/Compile.vuna:1149"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dhasAbsoluteLabels", ("Vuna.Compiler.Driver.Compile.hasAbsoluteLabels", "Vuna/Compiler/Driver/Compile.vuna:1569"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dhashText", ("Vuna.Compiler.Driver.Compile.hashText", "Vuna/Compiler/Driver/Compile.vuna:638"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dheaderAddrOfMod", ("Vuna.Compiler.Driver.Compile.headerAddrOfMod", "Vuna/Compiler/Driver/Compile.vuna:813"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceAddrIn", ("Vuna.Compiler.Driver.Compile.ifaceAddrIn", "Vuna/Compiler/Driver/Compile.vuna:874"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceAuditRequested", ("Vuna.Compiler.Driver.Compile.ifaceAuditRequested", "Vuna/Compiler/Driver/Compile.vuna:1800"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceCompilerTag", ("Vuna.Compiler.Driver.Compile.ifaceCompilerTag", "Vuna/Compiler/Driver/Compile.vuna:1928"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceHashOfName", ("Vuna.Compiler.Driver.Compile.ifaceHashOfName", "Vuna/Compiler/Driver/Compile.vuna:2083"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceModsEff", ("Vuna.Compiler.Driver.Compile.ifaceModsEff", "Vuna/Compiler/Driver/Compile.vuna:913"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceModsWithEff", ("Vuna.Compiler.Driver.Compile.ifaceModsWithEff", "Vuna/Compiler/Driver/Compile.vuna:918"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceObjectCodec", ("Vuna.Compiler.Driver.Compile.ifaceObjectCodec", "Vuna/Compiler/Driver/Compile.vuna:749"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceSchemaTag", ("Vuna.Compiler.Driver.Compile.ifaceSchemaTag", "Vuna/Compiler/Driver/Compile.vuna:1925"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difaceSelfTestRequested", ("Vuna.Compiler.Driver.Compile.ifaceSelfTestRequested", "Vuna/Compiler/Driver/Compile.vuna:2078"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difacesForContextEff", ("Vuna.Compiler.Driver.Compile.ifacesForContextEff", "Vuna/Compiler/Driver/Compile.vuna:1009"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_difacesForRootsEff", ("Vuna.Compiler.Driver.Compile.ifacesForRootsEff", "Vuna/Compiler/Driver/Compile.vuna:1015"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dimportClosureGo", ("Vuna.Compiler.Driver.Compile.importClosureGo", "Vuna/Compiler/Driver/Compile.vuna:1306"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dimportClosureOf", ("Vuna.Compiler.Driver.Compile.importClosureOf", "Vuna/Compiler/Driver/Compile.vuna:1316"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dimportNameStr", ("Vuna.Compiler.Driver.Compile.importNameStr", "Vuna/Compiler/Driver/Compile.vuna:1276"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_disDepModOf", ("Vuna.Compiler.Driver.Compile.isDepModOf", "Vuna/Compiler/Driver/Compile.vuna:852"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_disNeededMod", ("Vuna.Compiler.Driver.Compile.isNeededMod", "Vuna/Compiler/Driver/Compile.vuna:1319"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_disSelfModOf", ("Vuna.Compiler.Driver.Compile.isSelfModOf", "Vuna/Compiler/Driver/Compile.vuna:855"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_disStableDiag", ("Vuna.Compiler.Driver.Compile.isStableDiag", "Vuna/Compiler/Driver/Compile.vuna:1581"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_djoinJsonList", ("Vuna.Compiler.Driver.Compile.joinJsonList", "Vuna/Compiler/Driver/Compile.vuna:575"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_djoinLines", ("Vuna.Compiler.Driver.Compile.joinLines", "Vuna/Compiler/Driver/Compile.vuna:1819"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dlastSegment", ("Vuna.Compiler.Driver.Compile.lastSegment", "Vuna/Compiler/Driver/Compile.vuna:586"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dlastSegmentRev", ("Vuna.Compiler.Driver.Compile.lastSegmentRev", "Vuna/Compiler/Driver/Compile.vuna:582"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dlayoutDigestOf", ("Vuna.Compiler.Driver.Compile.layoutDigestOf", "Vuna/Compiler/Driver/Compile.vuna:2272"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dloadHeaderEff", ("Vuna.Compiler.Driver.Compile.loadHeaderEff", "Vuna/Compiler/Driver/Compile.vuna:820"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmanifestSemanticText", ("Vuna.Compiler.Driver.Compile.manifestSemanticText", "Vuna/Compiler/Driver/Compile.vuna:662"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmapEff", ("Vuna.Compiler.Driver.Compile.mapEff", "Vuna/Compiler/Driver/Compile.vuna:55"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmapMaybeEff", ("Vuna.Compiler.Driver.Compile.mapMaybeEff", "Vuna/Compiler/Driver/Compile.vuna:69"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmaybeSemanticText", ("Vuna.Compiler.Driver.Compile.maybeSemanticText", "Vuna/Compiler/Driver/Compile.vuna:649"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaFileName", ("Vuna.Compiler.Driver.Compile.metaFileName", "Vuna/Compiler/Driver/Compile.vuna:377"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaPairText", ("Vuna.Compiler.Driver.Compile.metaPairText", "Vuna/Compiler/Driver/Compile.vuna:572"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaPathOf", ("Vuna.Compiler.Driver.Compile.metaPathOf", "Vuna/Compiler/Driver/Compile.vuna:601"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaSchema", ("Vuna.Compiler.Driver.Compile.metaSchema", "Vuna/Compiler/Driver/Compile.vuna:374"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate", ("Vuna.Compiler.Driver.Compile.metaUpToDate", "Vuna/Compiler/Driver/Compile.vuna:611"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmissingNamesOf", ("Vuna.Compiler.Driver.Compile.missingNamesOf", "Vuna/Compiler/Driver/Compile.vuna:2055"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodGraphEntry", ("Vuna.Compiler.Driver.Compile.modGraphEntry", "Vuna/Compiler/Driver/Compile.vuna:846"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodHashPair", ("Vuna.Compiler.Driver.Compile.modHashPair", "Vuna/Compiler/Driver/Compile.vuna:1453"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodKeyOf", ("Vuna.Compiler.Driver.Compile.modKeyOf", "Vuna/Compiler/Driver/Compile.vuna:960"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodNameOf", ("Vuna.Compiler.Driver.Compile.modNameOf", "Vuna/Compiler/Driver/Compile.vuna:849"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsCodec", ("Vuna.Compiler.Driver.Compile.modsCodec", "Vuna/Compiler/Driver/Compile.vuna:957"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsKeyOf", ("Vuna.Compiler.Driver.Compile.modsKeyOf", "Vuna/Compiler/Driver/Compile.vuna:963"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmodsKind", ("Vuna.Compiler.Driver.Compile.modsKind", "Vuna/Compiler/Driver/Compile.vuna:954"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleDepsOk", ("Vuna.Compiler.Driver.Compile.moduleDepsOk", "Vuna/Compiler/Driver/Compile.vuna:1907"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleGraphOf", ("Vuna.Compiler.Driver.Compile.moduleGraphOf", "Vuna/Compiler/Driver/Compile.vuna:858"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmoduleNameOfPath", ("Vuna.Compiler.Driver.Compile.moduleNameOfPath", "Vuna/Compiler/Driver/Compile.vuna:436"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmtimeFastPath", ("Vuna.Compiler.Driver.Compile.mtimeFastPath", "Vuna/Compiler/Driver/Compile.vuna:1263"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dmtimeSafetyWindowSec", ("Vuna.Compiler.Driver.Compile.mtimeSafetyWindowSec", "Vuna/Compiler/Driver/Compile.vuna:1237"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dnameExportedBy", ("Vuna.Compiler.Driver.Compile.nameExportedBy", "Vuna/Compiler/Driver/Compile.vuna:1973"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dorderCodec", ("Vuna.Compiler.Driver.Compile.orderCodec", "Vuna/Compiler/Driver/Compile.vuna:1083"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dorderCoversEff", ("Vuna.Compiler.Driver.Compile.orderCoversEff", "Vuna/Compiler/Driver/Compile.vuna:1127"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dorderKeyOfEff", ("Vuna.Compiler.Driver.Compile.orderKeyOfEff", "Vuna/Compiler/Driver/Compile.vuna:1100"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dorderKind", ("Vuna.Compiler.Driver.Compile.orderKind", "Vuna/Compiler/Driver/Compile.vuna:1080"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanInfo", ("Vuna.Compiler.Driver.Compile.ownCleanInfo", "Vuna/Compiler/Driver/Compile.vuna:1869"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanModules", ("Vuna.Compiler.Driver.Compile.ownCleanModules", "Vuna/Compiler/Driver/Compile.vuna:1883"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_downCleanWanted", ("Vuna.Compiler.Driver.Compile.ownCleanWanted", "Vuna/Compiler/Driver/Compile.vuna:1476"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_downRootsOf", ("Vuna.Compiler.Driver.Compile.ownRootsOf", "Vuna/Compiler/Driver/Compile.vuna:467"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_downSourceInfos", ("Vuna.Compiler.Driver.Compile.ownSourceInfos", "Vuna/Compiler/Driver/Compile.vuna:1934"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpackageEnvHash", ("Vuna.Compiler.Driver.Compile.packageEnvHash", "Vuna/Compiler/Driver/Compile.vuna:1843"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpairText", ("Vuna.Compiler.Driver.Compile.pairText", "Vuna/Compiler/Driver/Compile.vuna:557"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpayloadSelfOk", ("Vuna.Compiler.Driver.Compile.payloadSelfOk", "Vuna/Compiler/Driver/Compile.vuna:1902"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpickByOrder", ("Vuna.Compiler.Driver.Compile.pickByOrder", "Vuna/Compiler/Driver/Compile.vuna:1135"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpickDepMods", ("Vuna.Compiler.Driver.Compile.pickDepMods", "Vuna/Compiler/Driver/Compile.vuna:1189"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgEq", ("Vuna.Compiler.Driver.Compile.pkgEq", "Vuna/Compiler/Driver/Compile.vuna:1141"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryCodec", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryCodec", "Vuna/Compiler/Driver/Compile.vuna:519"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryKeyOf", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryKeyOf", "Vuna/Compiler/Driver/Compile.vuna:522"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgIfaceSummaryKind", ("Vuna.Compiler.Driver.Compile.pkgIfaceSummaryKind", "Vuna/Compiler/Driver/Compile.vuna:516"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgKeyOf", ("Vuna.Compiler.Driver.Compile.pkgKeyOf", "Vuna/Compiler/Driver/Compile.vuna:773"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpkgTableEff", ("Vuna.Compiler.Driver.Compile.pkgTableEff", "Vuna/Compiler/Driver/Compile.vuna:776"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dpmModulesOfIface", ("Vuna.Compiler.Driver.Compile.pmModulesOfIface", "Vuna/Compiler/Driver/Compile.vuna:2335"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dprepareForStore", ("Vuna.Compiler.Driver.Compile.prepareForStore", "Vuna/Compiler/Driver/Compile.vuna:1590"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dprojectIdOf", ("Vuna.Compiler.Driver.Compile.projectIdOf", "Vuna/Compiler/Driver/Compile.vuna:1632"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadIfaceAtEff", ("Vuna.Compiler.Driver.Compile.readIfaceAtEff", "Vuna/Compiler/Driver/Compile.vuna:1022"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadIfaceListEff", ("Vuna.Compiler.Driver.Compile.readIfaceListEff", "Vuna/Compiler/Driver/Compile.vuna:1033"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadOneModIface", ("Vuna.Compiler.Driver.Compile.readOneModIface", "Vuna/Compiler/Driver/Compile.vuna:1864"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadOrderEff", ("Vuna.Compiler.Driver.Compile.readOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1115"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadSplitBlob", ("Vuna.Compiler.Driver.Compile.readSplitBlob", "Vuna/Compiler/Driver/Compile.vuna:2319"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreadSplitPointer", ("Vuna.Compiler.Driver.Compile.readSplitPointer", "Vuna/Compiler/Driver/Compile.vuna:2255"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drebuildSplit", ("Vuna.Compiler.Driver.Compile.rebuildSplit", "Vuna/Compiler/Driver/Compile.vuna:207"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreleaseFlagOf", ("Vuna.Compiler.Driver.Compile.releaseFlagOf", "Vuna/Compiler/Driver/Compile.vuna:674"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dreplayFailure", ("Vuna.Compiler.Driver.Compile.replayFailure", "Vuna/Compiler/Driver/Compile.vuna:1600"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dresolveStoredDiag", ("Vuna.Compiler.Driver.Compile.resolveStoredDiag", "Vuna/Compiler/Driver/Compile.vuna:1597"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dresolveStoredPath", ("Vuna.Compiler.Driver.Compile.resolveStoredPath", "Vuna/Compiler/Driver/Compile.vuna:1557"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dresyncCleanSources", ("Vuna.Compiler.Driver.Compile.resyncCleanSources", "Vuna/Compiler/Driver/Compile.vuna:1951"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootEnvHashOf", ("Vuna.Compiler.Driver.Compile.rootEnvHashOf", "Vuna/Compiler/Driver/Compile.vuna:994"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootExportsOf", ("Vuna.Compiler.Driver.Compile.rootExportsOf", "Vuna/Compiler/Driver/Compile.vuna:1178"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootHash", ("Vuna.Compiler.Driver.Compile.rootHash", "Vuna/Compiler/Driver/Compile.vuna:451"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootKeepEff", ("Vuna.Compiler.Driver.Compile.rootKeepEff", "Vuna/Compiler/Driver/Compile.vuna:1638"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootOfName", ("Vuna.Compiler.Driver.Compile.rootOfName", "Vuna/Compiler/Driver/Compile.vuna:1094"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootPkgTableEff", ("Vuna.Compiler.Driver.Compile.rootPkgTableEff", "Vuna/Compiler/Driver/Compile.vuna:1002"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drootSources", ("Vuna.Compiler.Driver.Compile.rootSources", "Vuna/Compiler/Driver/Compile.vuna:443"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drunAndStore", ("Vuna.Compiler.Driver.Compile.runAndStore", "Vuna/Compiler/Driver/Compile.vuna:1677"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript", ("Vuna.Compiler.Driver.Compile.runBuildScript", "Vuna/Compiler/Driver/Compile.vuna:626"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsameIfaceHashes", ("Vuna.Compiler.Driver.Compile.sameIfaceHashes", "Vuna/Compiler/Driver/Compile.vuna:2092"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsameNameSet", ("Vuna.Compiler.Driver.Compile.sameNameSet", "Vuna/Compiler/Driver/Compile.vuna:718"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dselfModsOf", ("Vuna.Compiler.Driver.Compile.selfModsOf", "Vuna/Compiler/Driver/Compile.vuna:1055"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dshadowAllowed", ("Vuna.Compiler.Driver.Compile.shadowAllowed", "Vuna/Compiler/Driver/Compile.vuna:1965"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dskipMetaDir", ("Vuna.Compiler.Driver.Compile.skipMetaDir", "Vuna/Compiler/Driver/Compile.vuna:397"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dslashToDot", ("Vuna.Compiler.Driver.Compile.slashToDot", "Vuna/Compiler/Driver/Compile.vuna:433"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dslashesToDots", ("Vuna.Compiler.Driver.Compile.slashesToDots", "Vuna/Compiler/Driver/Compile.vuna:430"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsortNames", ("Vuna.Compiler.Driver.Compile.sortNames", "Vuna/Compiler/Driver/Compile.vuna:891"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceFresh", ("Vuna.Compiler.Driver.Compile.sourceFresh", "Vuna/Compiler/Driver/Compile.vuna:1401"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceInfoForPath", ("Vuna.Compiler.Driver.Compile.sourceInfoForPath", "Vuna/Compiler/Driver/Compile.vuna:1386"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsourceInfoUnchanged", ("Vuna.Compiler.Driver.Compile.sourceInfoUnchanged", "Vuna/Compiler/Driver/Compile.vuna:1240"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsourcePathMapOfRoots", ("Vuna.Compiler.Driver.Compile.sourcePathMapOfRoots", "Vuna/Compiler/Driver/Compile.vuna:1217"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitBlobPath", ("Vuna.Compiler.Driver.Compile.splitBlobPath", "Vuna/Compiler/Driver/Compile.vuna:2217"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitBlobTag", ("Vuna.Compiler.Driver.Compile.splitBlobTag", "Vuna/Compiler/Driver/Compile.vuna:2190"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitCacheCodec", ("Vuna.Compiler.Driver.Compile.splitCacheCodec", "Vuna/Compiler/Driver/Compile.vuna:2186"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitIdentityOf", ("Vuna.Compiler.Driver.Compile.splitIdentityOf", "Vuna/Compiler/Driver/Compile.vuna:2277"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitInOf", ("Vuna.Compiler.Driver.Compile.splitInOf", "Vuna/Compiler/Driver/Compile.vuna:2238"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitModsOf", ("Vuna.Compiler.Driver.Compile.splitModsOf", "Vuna/Compiler/Driver/Compile.vuna:2196"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitNodeSchema", ("Vuna.Compiler.Driver.Compile.splitNodeSchema", "Vuna/Compiler/Driver/Compile.vuna:2180"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitPtrCodec", ("Vuna.Compiler.Driver.Compile.splitPtrCodec", "Vuna/Compiler/Driver/Compile.vuna:2252"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitPtrKind", ("Vuna.Compiler.Driver.Compile.splitPtrKind", "Vuna/Compiler/Driver/Compile.vuna:2249"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsplitSignatureOf", ("Vuna.Compiler.Driver.Compile.splitSignatureOf", "Vuna/Compiler/Driver/Compile.vuna:1815"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dstatOfClosureMod", ("Vuna.Compiler.Driver.Compile.statOfClosureMod", "Vuna/Compiler/Driver/Compile.vuna:1456"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dstoreCheckPayload", ("Vuna.Compiler.Driver.Compile.storeCheckPayload", "Vuna/Compiler/Driver/Compile.vuna:1605"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsummaryCheckExeParts", ("Vuna.Compiler.Driver.Compile.summaryCheckExeParts", "Vuna/Compiler/Driver/Compile.vuna:1744"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsummaryCheckLibParts", ("Vuna.Compiler.Driver.Compile.summaryCheckLibParts", "Vuna/Compiler/Driver/Compile.vuna:2127"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dsummarySplitParts", ("Vuna.Compiler.Driver.Compile.summarySplitParts", "Vuna/Compiler/Driver/Compile.vuna:161"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtextHash", ("Vuna.Compiler.Driver.Compile.textHash", "Vuna/Compiler/Driver/Compile.vuna:381"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCleanGo", ("Vuna.Compiler.Driver.Compile.toolCleanGo", "Vuna/Compiler/Driver/Compile.vuna:1482"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCleanOwnModules", ("Vuna.Compiler.Driver.Compile.toolCleanOwnModules", "Vuna/Compiler/Driver/Compile.vuna:1465"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolCompilerFingerprint", ("Vuna.Compiler.Driver.Compile.toolCompilerFingerprint", "Vuna/Compiler/Driver/Compile.vuna:1534"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolDepModsOf", ("Vuna.Compiler.Driver.Compile.toolDepModsOf", "Vuna/Compiler/Driver/Compile.vuna:1323"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolEnabled", ("Vuna.Compiler.Driver.Compile.toolEnabled", "Vuna/Compiler/Driver/Compile.vuna:1301"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolImportNamesOf", ("Vuna.Compiler.Driver.Compile.toolImportNamesOf", "Vuna/Compiler/Driver/Compile.vuna:1288"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolImportsOfSource", ("Vuna.Compiler.Driver.Compile.toolImportsOfSource", "Vuna/Compiler/Driver/Compile.vuna:1279"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolNeededOfImports", ("Vuna.Compiler.Driver.Compile.toolNeededOfImports", "Vuna/Compiler/Driver/Compile.vuna:1423"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolNowSec", ("Vuna.Compiler.Driver.Compile.toolNowSec", "Vuna/Compiler/Driver/Compile.vuna:1393"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolSessionFresh", ("Vuna.Compiler.Driver.Compile.toolSessionFresh", "Vuna/Compiler/Driver/Compile.vuna:1416"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolTextHash", ("Vuna.Compiler.Driver.Compile.toolTextHash", "Vuna/Compiler/Driver/Compile.vuna:1383"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolWriteModuleIface", ("Vuna.Compiler.Driver.Compile.toolWriteModuleIface", "Vuna/Compiler/Driver/Compile.vuna:1495"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dtoolWriteModuleIfaceCold", ("Vuna.Compiler.Driver.Compile.toolWriteModuleIfaceCold", "Vuna/Compiler/Driver/Compile.vuna:1519"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwalkVunaMeta", ("Vuna.Compiler.Driver.Compile.walkVunaMeta", "Vuna/Compiler/Driver/Compile.vuna:410"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwithAddr", ("Vuna.Compiler.Driver.Compile.withAddr", "Vuna/Compiler/Driver/Compile.vuna:884"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwithPrelude", ("Vuna.Compiler.Driver.Compile.withPrelude", "Vuna/Compiler/Driver/Compile.vuna:841"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteBuildMeta", ("Vuna.Compiler.Driver.Compile.writeBuildMeta", "Vuna/Compiler/Driver/Compile.vuna:604"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteCompiledNormalized", ("Vuna.Compiler.Driver.Compile.writeCompiledNormalized", "Vuna/Compiler/Driver/Compile.vuna:307"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteFileIfChanged", ("Vuna.Compiler.Driver.Compile.writeFileIfChanged", "Vuna/Compiler/Driver/Compile.vuna:295"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteIfaceObjects", ("Vuna.Compiler.Driver.Compile.writeIfaceObjects", "Vuna/Compiler/Driver/Compile.vuna:2064"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteIfaceShadow", ("Vuna.Compiler.Driver.Compile.writeIfaceShadow", "Vuna/Compiler/Driver/Compile.vuna:1989"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteModuleIfaceGuarded", ("Vuna.Compiler.Driver.Compile.writeModuleIfaceGuarded", "Vuna/Compiler/Driver/Compile.vuna:1509"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteOrderEff", ("Vuna.Compiler.Driver.Compile.writeOrderEff", "Vuna/Compiler/Driver/Compile.vuna:1107"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwritePkgIfaceSummaryEff", ("Vuna.Compiler.Driver.Compile.writePkgIfaceSummaryEff", "Vuna/Compiler/Driver/Compile.vuna:561"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitBlob", ("Vuna.Compiler.Driver.Compile.writeSplitBlob", "Vuna/Compiler/Driver/Compile.vuna:2299"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitBlobAt", ("Vuna.Compiler.Driver.Compile.writeSplitBlobAt", "Vuna/Compiler/Driver/Compile.vuna:2224"));
+  ("v_Vuna_dCompiler_dDriver_dCompile_dwriteSplitPointer", ("Vuna.Compiler.Driver.Compile.writeSplitPointer", "Vuna/Compiler/Driver/Compile.vuna:2263"));
   ("v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp", ("Vuna.Compiler.Driver.CompilerCli.anyHelp", "Vuna/Compiler/Driver/CompilerCli.vuna:456"));
   ("v_Vuna_dCompiler_dDriver_dCompilerCli_dapplyDiagConfig", ("Vuna.Compiler.Driver.CompilerCli.applyDiagConfig", "Vuna/Compiler/Driver/CompilerCli.vuna:141"));
   ("v_Vuna_dCompiler_dDriver_dCompilerCli_dapplyManifestOpts", ("Vuna.Compiler.Driver.CompilerCli.applyManifestOpts", "Vuna/Compiler/Driver/CompilerCli.vuna:144"));
@@ -4910,16 +4915,16 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dElab_dUsage_dwarnUnusedBinder", ("Vuna.Compiler.Elab.Usage.warnUnusedBinder", "Vuna/Compiler/Elab/Usage.vuna:336"));
   ("v_Vuna_dCompiler_dElab_dUsage_dwithUseFields", ("Vuna.Compiler.Elab.Usage.withUseFields", "Vuna/Compiler/Elab/Usage.vuna:359"));
   ("v_Vuna_dCompiler_dElab_dUsage_dwithUseSpans", ("Vuna.Compiler.Elab.Usage.withUseSpans", "Vuna/Compiler/Elab/Usage.vuna:363"));
-  ("v_Vuna_dCompiler_dFingerprint_dbuildIdFileName", ("Vuna.Compiler.Fingerprint.buildIdFileName", "Vuna/Compiler/Fingerprint.vuna:37"));
-  ("v_Vuna_dCompiler_dFingerprint_dbuildIdSchema", ("Vuna.Compiler.Fingerprint.buildIdSchema", "Vuna/Compiler/Fingerprint.vuna:41"));
-  ("v_Vuna_dCompiler_dFingerprint_dcompilerFingerprintEff", ("Vuna.Compiler.Fingerprint.compilerFingerprintEff", "Vuna/Compiler/Fingerprint.vuna:97"));
-  ("v_Vuna_dCompiler_dFingerprint_dcompilerIdOf", ("Vuna.Compiler.Fingerprint.compilerIdOf", "Vuna/Compiler/Fingerprint.vuna:47"));
-  ("v_Vuna_dCompiler_dFingerprint_dcompilerTagEff", ("Vuna.Compiler.Fingerprint.compilerTagEff", "Vuna/Compiler/Fingerprint.vuna:63"));
-  ("v_Vuna_dCompiler_dFingerprint_dfingerprintOfStat", ("Vuna.Compiler.Fingerprint.fingerprintOfStat", "Vuna/Compiler/Fingerprint.vuna:56"));
-  ("v_Vuna_dCompiler_dFingerprint_dreadBuildIdNear", ("Vuna.Compiler.Fingerprint.readBuildIdNear", "Vuna/Compiler/Fingerprint.vuna:80"));
-  ("v_Vuna_dCompiler_dFingerprint_dreadFirstBuildId", ("Vuna.Compiler.Fingerprint.readFirstBuildId", "Vuna/Compiler/Fingerprint.vuna:87"));
-  ("v_Vuna_dCompiler_dFingerprint_dsourceFrag", ("Vuna.Compiler.Fingerprint.sourceFrag", "Vuna/Compiler/Fingerprint.vuna:52"));
-  ("v_Vuna_dCompiler_dFingerprint_dtextHashOf", ("Vuna.Compiler.Fingerprint.textHashOf", "Vuna/Compiler/Fingerprint.vuna:59"));
+  ("v_Vuna_dCompiler_dFingerprint_dbuildIdFileName", ("Vuna.Compiler.Fingerprint.buildIdFileName", "Vuna/Compiler/Fingerprint.vuna:38"));
+  ("v_Vuna_dCompiler_dFingerprint_dbuildIdSchema", ("Vuna.Compiler.Fingerprint.buildIdSchema", "Vuna/Compiler/Fingerprint.vuna:42"));
+  ("v_Vuna_dCompiler_dFingerprint_dcompilerFingerprintEff", ("Vuna.Compiler.Fingerprint.compilerFingerprintEff", "Vuna/Compiler/Fingerprint.vuna:99"));
+  ("v_Vuna_dCompiler_dFingerprint_dcompilerIdOf", ("Vuna.Compiler.Fingerprint.compilerIdOf", "Vuna/Compiler/Fingerprint.vuna:48"));
+  ("v_Vuna_dCompiler_dFingerprint_dcompilerTagEff", ("Vuna.Compiler.Fingerprint.compilerTagEff", "Vuna/Compiler/Fingerprint.vuna:64"));
+  ("v_Vuna_dCompiler_dFingerprint_dfingerprintOfStat", ("Vuna.Compiler.Fingerprint.fingerprintOfStat", "Vuna/Compiler/Fingerprint.vuna:57"));
+  ("v_Vuna_dCompiler_dFingerprint_dreadBuildIdNear", ("Vuna.Compiler.Fingerprint.readBuildIdNear", "Vuna/Compiler/Fingerprint.vuna:82"));
+  ("v_Vuna_dCompiler_dFingerprint_dreadFirstBuildId", ("Vuna.Compiler.Fingerprint.readFirstBuildId", "Vuna/Compiler/Fingerprint.vuna:89"));
+  ("v_Vuna_dCompiler_dFingerprint_dsourceFrag", ("Vuna.Compiler.Fingerprint.sourceFrag", "Vuna/Compiler/Fingerprint.vuna:53"));
+  ("v_Vuna_dCompiler_dFingerprint_dtextHashOf", ("Vuna.Compiler.Fingerprint.textHashOf", "Vuna/Compiler/Fingerprint.vuna:60"));
   ("v_Vuna_dCompiler_dFrontend_dAst_d_udeclCtors", ("Vuna.Compiler.Frontend.Ast._declCtors", "Vuna/Compiler/Frontend/Ast.vuna:386"));
   ("v_Vuna_dCompiler_dFrontend_dAst_dappAtSyntax", ("Vuna.Compiler.Frontend.Ast.appAtSyntax", "Vuna/Compiler/Frontend/Ast.vuna:565"));
   ("v_Vuna_dCompiler_dFrontend_dAst_dclausesFor", ("Vuna.Compiler.Frontend.Ast.clausesFor", "Vuna/Compiler/Frontend/Ast.vuna:314"));
@@ -6427,70 +6432,70 @@ let dt_def_locs = [
   ("v_Vuna_dCompiler_dSource_dsplitPath", ("Vuna.Compiler.Source.splitPath", "Vuna/Compiler/Source.vuna:141"));
   ("v_Vuna_dCompiler_dSource_dsplitPathChars", ("Vuna.Compiler.Source.splitPathChars", "Vuna/Compiler/Source.vuna:145"));
   ("v_Vuna_dCompiler_dSource_dsuggest", ("Vuna.Compiler.Source.suggest", "Vuna/Compiler/Source.vuna:177"));
-  ("v_Vuna_dCompiler_dStore_dbreakFirstNewline", ("Vuna.Compiler.Store.breakFirstNewline", "Vuna/Compiler/Store.vuna:85"));
-  ("v_Vuna_dCompiler_dStore_dclaimAt", ("Vuna.Compiler.Store.claimAt", "Vuna/Compiler/Store.vuna:416"));
-  ("v_Vuna_dCompiler_dStore_ddirReady", ("Vuna.Compiler.Store.dirReady", "Vuna/Compiler/Store.vuna:322"));
-  ("v_Vuna_dCompiler_dStore_ddirUnder", ("Vuna.Compiler.Store.dirUnder", "Vuna/Compiler/Store.vuna:171"));
-  ("v_Vuna_dCompiler_dStore_dfCodecOf", ("Vuna.Compiler.Store.fCodecOf", "Vuna/Compiler/Store.vuna:58"));
-  ("v_Vuna_dCompiler_dStore_dfPayloadOf", ("Vuna.Compiler.Store.fPayloadOf", "Vuna/Compiler/Store.vuna:61"));
-  ("v_Vuna_dCompiler_dStore_dfTagOf", ("Vuna.Compiler.Store.fTagOf", "Vuna/Compiler/Store.vuna:55"));
-  ("v_Vuna_dCompiler_dStore_dframeHeader", ("Vuna.Compiler.Store.frameHeader", "Vuna/Compiler/Store.vuna:65"));
-  ("v_Vuna_dCompiler_dStore_dframeSplit", ("Vuna.Compiler.Store.frameSplit", "Vuna/Compiler/Store.vuna:94"));
-  ("v_Vuna_dCompiler_dStore_dheaderDigestOf", ("Vuna.Compiler.Store.headerDigestOf", "Vuna/Compiler/Store.vuna:126"));
-  ("v_Vuna_dCompiler_dStore_dheaderFields", ("Vuna.Compiler.Store.headerFields", "Vuna/Compiler/Store.vuna:80"));
-  ("v_Vuna_dCompiler_dStore_dheaderOk", ("Vuna.Compiler.Store.headerOk", "Vuna/Compiler/Store.vuna:108"));
-  ("v_Vuna_dCompiler_dStore_dhomeStoreRootEff", ("Vuna.Compiler.Store.homeStoreRootEff", "Vuna/Compiler/Store.vuna:177"));
-  ("v_Vuna_dCompiler_dStore_dinsertRootLine", ("Vuna.Compiler.Store.insertRootLine", "Vuna/Compiler/Store.vuna:501"));
-  ("v_Vuna_dCompiler_dStore_dmergeRootLines", ("Vuna.Compiler.Store.mergeRootLines", "Vuna/Compiler/Store.vuna:504"));
-  ("v_Vuna_dCompiler_dStore_dobjectPathIn", ("Vuna.Compiler.Store.objectPathIn", "Vuna/Compiler/Store.vuna:334"));
-  ("v_Vuna_dCompiler_dStore_dscratchStale", ("Vuna.Compiler.Store.scratchStale", "Vuna/Compiler/Store.vuna:446"));
-  ("v_Vuna_dCompiler_dStore_dscratchStaleSec", ("Vuna.Compiler.Store.scratchStaleSec", "Vuna/Compiler/Store.vuna:443"));
-  ("v_Vuna_dCompiler_dStore_dstoreCacheBaseEff", ("Vuna.Compiler.Store.storeCacheBaseEff", "Vuna/Compiler/Store.vuna:190"));
-  ("v_Vuna_dCompiler_dStore_dstoreDataRootEff", ("Vuna.Compiler.Store.storeDataRootEff", "Vuna/Compiler/Store.vuna:161"));
-  ("v_Vuna_dCompiler_dStore_dstoreDecode", ("Vuna.Compiler.Store.storeDecode", "Vuna/Compiler/Store.vuna:132"));
-  ("v_Vuna_dCompiler_dStore_dstoreDecodeAs", ("Vuna.Compiler.Store.storeDecodeAs", "Vuna/Compiler/Store.vuna:146"));
-  ("v_Vuna_dCompiler_dStore_dstoreDropPastSlash", ("Vuna.Compiler.Store.storeDropPastSlash", "Vuna/Compiler/Store.vuna:284"));
-  ("v_Vuna_dCompiler_dStore_dstoreEncode", ("Vuna.Compiler.Store.storeEncode", "Vuna/Compiler/Store.vuna:69"));
-  ("v_Vuna_dCompiler_dStore_dstoreEncodeAs", ("Vuna.Compiler.Store.storeEncodeAs", "Vuna/Compiler/Store.vuna:76"));
-  ("v_Vuna_dCompiler_dStore_dstoreEnsureDirEff", ("Vuna.Compiler.Store.storeEnsureDirEff", "Vuna/Compiler/Store.vuna:252"));
-  ("v_Vuna_dCompiler_dStore_dstoreEnsureDirFuel", ("Vuna.Compiler.Store.storeEnsureDirFuel", "Vuna/Compiler/Store.vuna:261"));
-  ("v_Vuna_dCompiler_dStore_dstoreFileExistsEff", ("Vuna.Compiler.Store.storeFileExistsEff", "Vuna/Compiler/Store.vuna:245"));
-  ("v_Vuna_dCompiler_dStore_dstoreMagic", ("Vuna.Compiler.Store.storeMagic", "Vuna/Compiler/Store.vuna:46"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectExistsEff", ("Vuna.Compiler.Store.storeObjectExistsEff", "Vuna/Compiler/Store.vuna:343"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectListEff", ("Vuna.Compiler.Store.storeObjectListEff", "Vuna/Compiler/Store.vuna:365"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectPathEff", ("Vuna.Compiler.Store.storeObjectPathEff", "Vuna/Compiler/Store.vuna:337"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectReadEff", ("Vuna.Compiler.Store.storeObjectReadEff", "Vuna/Compiler/Store.vuna:349"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectRemoveEff", ("Vuna.Compiler.Store.storeObjectRemoveEff", "Vuna/Compiler/Store.vuna:375"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectTag", ("Vuna.Compiler.Store.storeObjectTag", "Vuna/Compiler/Store.vuna:331"));
-  ("v_Vuna_dCompiler_dStore_dstoreObjectWriteEff", ("Vuna.Compiler.Store.storeObjectWriteEff", "Vuna/Compiler/Store.vuna:356"));
-  ("v_Vuna_dCompiler_dStore_dstoreParentOf", ("Vuna.Compiler.Store.storeParentOf", "Vuna/Compiler/Store.vuna:268"));
-  ("v_Vuna_dCompiler_dStore_dstoreParentPathOf", ("Vuna.Compiler.Store.storeParentPathOf", "Vuna/Compiler/Store.vuna:281"));
-  ("v_Vuna_dCompiler_dStore_dstoreReadAsEff", ("Vuna.Compiler.Store.storeReadAsEff", "Vuna/Compiler/Store.vuna:203"));
-  ("v_Vuna_dCompiler_dStore_dstoreReadEff", ("Vuna.Compiler.Store.storeReadEff", "Vuna/Compiler/Store.vuna:194"));
-  ("v_Vuna_dCompiler_dStore_dstoreRemoveEff", ("Vuna.Compiler.Store.storeRemoveEff", "Vuna/Compiler/Store.vuna:248"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootAppendEff", ("Vuna.Compiler.Store.storeRootAppendEff", "Vuna/Compiler/Store.vuna:511"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootEff", ("Vuna.Compiler.Store.storeRootEff", "Vuna/Compiler/Store.vuna:307"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootLoadEff", ("Vuna.Compiler.Store.storeRootLoadEff", "Vuna/Compiler/Store.vuna:538"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootProjectListEff", ("Vuna.Compiler.Store.storeRootProjectListEff", "Vuna/Compiler/Store.vuna:551"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootReadyEff", ("Vuna.Compiler.Store.storeRootReadyEff", "Vuna/Compiler/Store.vuna:311"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootRemoveEff", ("Vuna.Compiler.Store.storeRootRemoveEff", "Vuna/Compiler/Store.vuna:561"));
-  ("v_Vuna_dCompiler_dStore_dstoreRootsPathEff", ("Vuna.Compiler.Store.storeRootsPathEff", "Vuna/Compiler/Store.vuna:495"));
-  ("v_Vuna_dCompiler_dStore_dstoreScratchClaimEff", ("Vuna.Compiler.Store.storeScratchClaimEff", "Vuna/Compiler/Store.vuna:453"));
-  ("v_Vuna_dCompiler_dStore_dstoreScratchDropEff", ("Vuna.Compiler.Store.storeScratchDropEff", "Vuna/Compiler/Store.vuna:471"));
-  ("v_Vuna_dCompiler_dStore_dstoreScratchPathEff", ("Vuna.Compiler.Store.storeScratchPathEff", "Vuna/Compiler/Store.vuna:437"));
-  ("v_Vuna_dCompiler_dStore_dstoreScratchPathIn", ("Vuna.Compiler.Store.storeScratchPathIn", "Vuna/Compiler/Store.vuna:434"));
-  ("v_Vuna_dCompiler_dStore_dstoreScratchPathOfClaim", ("Vuna.Compiler.Store.storeScratchPathOfClaim", "Vuna/Compiler/Store.vuna:467"));
-  ("v_Vuna_dCompiler_dStore_dstoreViewLockEff", ("Vuna.Compiler.Store.storeViewLockEff", "Vuna/Compiler/Store.vuna:407"));
-  ("v_Vuna_dCompiler_dStore_dstoreViewPathEff", ("Vuna.Compiler.Store.storeViewPathEff", "Vuna/Compiler/Store.vuna:388"));
-  ("v_Vuna_dCompiler_dStore_dstoreViewPublishEff", ("Vuna.Compiler.Store.storeViewPublishEff", "Vuna/Compiler/Store.vuna:477"));
-  ("v_Vuna_dCompiler_dStore_dstoreViewUnlockEff", ("Vuna.Compiler.Store.storeViewUnlockEff", "Vuna/Compiler/Store.vuna:428"));
-  ("v_Vuna_dCompiler_dStore_dstoreViewValidEff", ("Vuna.Compiler.Store.storeViewValidEff", "Vuna/Compiler/Store.vuna:393"));
-  ("v_Vuna_dCompiler_dStore_dstoreWriteAsEff", ("Vuna.Compiler.Store.storeWriteAsEff", "Vuna/Compiler/Store.vuna:217"));
-  ("v_Vuna_dCompiler_dStore_dstoreWriteEff", ("Vuna.Compiler.Store.storeWriteEff", "Vuna/Compiler/Store.vuna:213"));
-  ("v_Vuna_dCompiler_dStore_dstoreWriteIfChangedAsEff", ("Vuna.Compiler.Store.storeWriteIfChangedAsEff", "Vuna/Compiler/Store.vuna:234"));
-  ("v_Vuna_dCompiler_dStore_dstoreWriteIfChangedEff", ("Vuna.Compiler.Store.storeWriteIfChangedEff", "Vuna/Compiler/Store.vuna:222"));
-  ("v_Vuna_dCompiler_dStore_dtmpStoreRootEff", ("Vuna.Compiler.Store.tmpStoreRootEff", "Vuna/Compiler/Store.vuna:183"));
-  ("v_Vuna_dCompiler_dStore_dwriteRootFiles", ("Vuna.Compiler.Store.writeRootFiles", "Vuna/Compiler/Store.vuna:529"));
+  ("v_Vuna_dCompiler_dStore_dbreakFirstNewline", ("Vuna.Compiler.Store.breakFirstNewline", "Vuna/Compiler/Store.vuna:86"));
+  ("v_Vuna_dCompiler_dStore_dclaimAt", ("Vuna.Compiler.Store.claimAt", "Vuna/Compiler/Store.vuna:417"));
+  ("v_Vuna_dCompiler_dStore_ddirReady", ("Vuna.Compiler.Store.dirReady", "Vuna/Compiler/Store.vuna:323"));
+  ("v_Vuna_dCompiler_dStore_ddirUnder", ("Vuna.Compiler.Store.dirUnder", "Vuna/Compiler/Store.vuna:172"));
+  ("v_Vuna_dCompiler_dStore_dfCodecOf", ("Vuna.Compiler.Store.fCodecOf", "Vuna/Compiler/Store.vuna:59"));
+  ("v_Vuna_dCompiler_dStore_dfPayloadOf", ("Vuna.Compiler.Store.fPayloadOf", "Vuna/Compiler/Store.vuna:62"));
+  ("v_Vuna_dCompiler_dStore_dfTagOf", ("Vuna.Compiler.Store.fTagOf", "Vuna/Compiler/Store.vuna:56"));
+  ("v_Vuna_dCompiler_dStore_dframeHeader", ("Vuna.Compiler.Store.frameHeader", "Vuna/Compiler/Store.vuna:66"));
+  ("v_Vuna_dCompiler_dStore_dframeSplit", ("Vuna.Compiler.Store.frameSplit", "Vuna/Compiler/Store.vuna:95"));
+  ("v_Vuna_dCompiler_dStore_dheaderDigestOf", ("Vuna.Compiler.Store.headerDigestOf", "Vuna/Compiler/Store.vuna:127"));
+  ("v_Vuna_dCompiler_dStore_dheaderFields", ("Vuna.Compiler.Store.headerFields", "Vuna/Compiler/Store.vuna:81"));
+  ("v_Vuna_dCompiler_dStore_dheaderOk", ("Vuna.Compiler.Store.headerOk", "Vuna/Compiler/Store.vuna:109"));
+  ("v_Vuna_dCompiler_dStore_dhomeStoreRootEff", ("Vuna.Compiler.Store.homeStoreRootEff", "Vuna/Compiler/Store.vuna:178"));
+  ("v_Vuna_dCompiler_dStore_dinsertRootLine", ("Vuna.Compiler.Store.insertRootLine", "Vuna/Compiler/Store.vuna:502"));
+  ("v_Vuna_dCompiler_dStore_dmergeRootLines", ("Vuna.Compiler.Store.mergeRootLines", "Vuna/Compiler/Store.vuna:505"));
+  ("v_Vuna_dCompiler_dStore_dobjectPathIn", ("Vuna.Compiler.Store.objectPathIn", "Vuna/Compiler/Store.vuna:335"));
+  ("v_Vuna_dCompiler_dStore_dscratchStale", ("Vuna.Compiler.Store.scratchStale", "Vuna/Compiler/Store.vuna:447"));
+  ("v_Vuna_dCompiler_dStore_dscratchStaleSec", ("Vuna.Compiler.Store.scratchStaleSec", "Vuna/Compiler/Store.vuna:444"));
+  ("v_Vuna_dCompiler_dStore_dstoreCacheBaseEff", ("Vuna.Compiler.Store.storeCacheBaseEff", "Vuna/Compiler/Store.vuna:191"));
+  ("v_Vuna_dCompiler_dStore_dstoreDataRootEff", ("Vuna.Compiler.Store.storeDataRootEff", "Vuna/Compiler/Store.vuna:162"));
+  ("v_Vuna_dCompiler_dStore_dstoreDecode", ("Vuna.Compiler.Store.storeDecode", "Vuna/Compiler/Store.vuna:133"));
+  ("v_Vuna_dCompiler_dStore_dstoreDecodeAs", ("Vuna.Compiler.Store.storeDecodeAs", "Vuna/Compiler/Store.vuna:147"));
+  ("v_Vuna_dCompiler_dStore_dstoreDropPastSlash", ("Vuna.Compiler.Store.storeDropPastSlash", "Vuna/Compiler/Store.vuna:285"));
+  ("v_Vuna_dCompiler_dStore_dstoreEncode", ("Vuna.Compiler.Store.storeEncode", "Vuna/Compiler/Store.vuna:70"));
+  ("v_Vuna_dCompiler_dStore_dstoreEncodeAs", ("Vuna.Compiler.Store.storeEncodeAs", "Vuna/Compiler/Store.vuna:77"));
+  ("v_Vuna_dCompiler_dStore_dstoreEnsureDirEff", ("Vuna.Compiler.Store.storeEnsureDirEff", "Vuna/Compiler/Store.vuna:253"));
+  ("v_Vuna_dCompiler_dStore_dstoreEnsureDirFuel", ("Vuna.Compiler.Store.storeEnsureDirFuel", "Vuna/Compiler/Store.vuna:262"));
+  ("v_Vuna_dCompiler_dStore_dstoreFileExistsEff", ("Vuna.Compiler.Store.storeFileExistsEff", "Vuna/Compiler/Store.vuna:246"));
+  ("v_Vuna_dCompiler_dStore_dstoreMagic", ("Vuna.Compiler.Store.storeMagic", "Vuna/Compiler/Store.vuna:47"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectExistsEff", ("Vuna.Compiler.Store.storeObjectExistsEff", "Vuna/Compiler/Store.vuna:344"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectListEff", ("Vuna.Compiler.Store.storeObjectListEff", "Vuna/Compiler/Store.vuna:366"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectPathEff", ("Vuna.Compiler.Store.storeObjectPathEff", "Vuna/Compiler/Store.vuna:338"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectReadEff", ("Vuna.Compiler.Store.storeObjectReadEff", "Vuna/Compiler/Store.vuna:350"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectRemoveEff", ("Vuna.Compiler.Store.storeObjectRemoveEff", "Vuna/Compiler/Store.vuna:376"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectTag", ("Vuna.Compiler.Store.storeObjectTag", "Vuna/Compiler/Store.vuna:332"));
+  ("v_Vuna_dCompiler_dStore_dstoreObjectWriteEff", ("Vuna.Compiler.Store.storeObjectWriteEff", "Vuna/Compiler/Store.vuna:357"));
+  ("v_Vuna_dCompiler_dStore_dstoreParentOf", ("Vuna.Compiler.Store.storeParentOf", "Vuna/Compiler/Store.vuna:269"));
+  ("v_Vuna_dCompiler_dStore_dstoreParentPathOf", ("Vuna.Compiler.Store.storeParentPathOf", "Vuna/Compiler/Store.vuna:282"));
+  ("v_Vuna_dCompiler_dStore_dstoreReadAsEff", ("Vuna.Compiler.Store.storeReadAsEff", "Vuna/Compiler/Store.vuna:204"));
+  ("v_Vuna_dCompiler_dStore_dstoreReadEff", ("Vuna.Compiler.Store.storeReadEff", "Vuna/Compiler/Store.vuna:195"));
+  ("v_Vuna_dCompiler_dStore_dstoreRemoveEff", ("Vuna.Compiler.Store.storeRemoveEff", "Vuna/Compiler/Store.vuna:249"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootAppendEff", ("Vuna.Compiler.Store.storeRootAppendEff", "Vuna/Compiler/Store.vuna:512"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootEff", ("Vuna.Compiler.Store.storeRootEff", "Vuna/Compiler/Store.vuna:308"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootLoadEff", ("Vuna.Compiler.Store.storeRootLoadEff", "Vuna/Compiler/Store.vuna:539"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootProjectListEff", ("Vuna.Compiler.Store.storeRootProjectListEff", "Vuna/Compiler/Store.vuna:552"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootReadyEff", ("Vuna.Compiler.Store.storeRootReadyEff", "Vuna/Compiler/Store.vuna:312"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootRemoveEff", ("Vuna.Compiler.Store.storeRootRemoveEff", "Vuna/Compiler/Store.vuna:562"));
+  ("v_Vuna_dCompiler_dStore_dstoreRootsPathEff", ("Vuna.Compiler.Store.storeRootsPathEff", "Vuna/Compiler/Store.vuna:496"));
+  ("v_Vuna_dCompiler_dStore_dstoreScratchClaimEff", ("Vuna.Compiler.Store.storeScratchClaimEff", "Vuna/Compiler/Store.vuna:454"));
+  ("v_Vuna_dCompiler_dStore_dstoreScratchDropEff", ("Vuna.Compiler.Store.storeScratchDropEff", "Vuna/Compiler/Store.vuna:472"));
+  ("v_Vuna_dCompiler_dStore_dstoreScratchPathEff", ("Vuna.Compiler.Store.storeScratchPathEff", "Vuna/Compiler/Store.vuna:438"));
+  ("v_Vuna_dCompiler_dStore_dstoreScratchPathIn", ("Vuna.Compiler.Store.storeScratchPathIn", "Vuna/Compiler/Store.vuna:435"));
+  ("v_Vuna_dCompiler_dStore_dstoreScratchPathOfClaim", ("Vuna.Compiler.Store.storeScratchPathOfClaim", "Vuna/Compiler/Store.vuna:468"));
+  ("v_Vuna_dCompiler_dStore_dstoreViewLockEff", ("Vuna.Compiler.Store.storeViewLockEff", "Vuna/Compiler/Store.vuna:408"));
+  ("v_Vuna_dCompiler_dStore_dstoreViewPathEff", ("Vuna.Compiler.Store.storeViewPathEff", "Vuna/Compiler/Store.vuna:389"));
+  ("v_Vuna_dCompiler_dStore_dstoreViewPublishEff", ("Vuna.Compiler.Store.storeViewPublishEff", "Vuna/Compiler/Store.vuna:478"));
+  ("v_Vuna_dCompiler_dStore_dstoreViewUnlockEff", ("Vuna.Compiler.Store.storeViewUnlockEff", "Vuna/Compiler/Store.vuna:429"));
+  ("v_Vuna_dCompiler_dStore_dstoreViewValidEff", ("Vuna.Compiler.Store.storeViewValidEff", "Vuna/Compiler/Store.vuna:394"));
+  ("v_Vuna_dCompiler_dStore_dstoreWriteAsEff", ("Vuna.Compiler.Store.storeWriteAsEff", "Vuna/Compiler/Store.vuna:218"));
+  ("v_Vuna_dCompiler_dStore_dstoreWriteEff", ("Vuna.Compiler.Store.storeWriteEff", "Vuna/Compiler/Store.vuna:214"));
+  ("v_Vuna_dCompiler_dStore_dstoreWriteIfChangedAsEff", ("Vuna.Compiler.Store.storeWriteIfChangedAsEff", "Vuna/Compiler/Store.vuna:235"));
+  ("v_Vuna_dCompiler_dStore_dstoreWriteIfChangedEff", ("Vuna.Compiler.Store.storeWriteIfChangedEff", "Vuna/Compiler/Store.vuna:223"));
+  ("v_Vuna_dCompiler_dStore_dtmpStoreRootEff", ("Vuna.Compiler.Store.tmpStoreRootEff", "Vuna/Compiler/Store.vuna:184"));
+  ("v_Vuna_dCompiler_dStore_dwriteRootFiles", ("Vuna.Compiler.Store.writeRootFiles", "Vuna/Compiler/Store.vuna:530"));
   ("v_Vuna_dCompiler_dVersion_dvunaVersion", ("Vuna.Compiler.Version.vunaVersion", "Vuna/Compiler/Version.vuna:12"));
   ("v_Vuna_dCompiler_dWasm_dInstr_doneInstr", ("Vuna.Compiler.Wasm.Instr.oneInstr", "Vuna/Compiler/Wasm/Instr.vuna:86"));
   ("v_Vuna_dCompiler_dWasm_dInstr_dseqInstr", ("Vuna.Compiler.Wasm.Instr.seqInstr", "Vuna/Compiler/Wasm/Instr.vuna:82"));
