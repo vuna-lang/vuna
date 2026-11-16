@@ -24,7 +24,7 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 ├─ Addr.vuna                  输入摘要（地址）唯一构造器：addrOf / header / 项目身份
 ├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Lex / Pkg
 ├─ Store.vuna                 唯一落盘层：framing / 原子写 / 缓存根 / roots / 对象读写
-├─ Fingerprint.vuna           编译器指纹（换二进制即缓存换代）
+├─ Fingerprint.vuna           编译器身份（构建期烘焙的内容身份；同源同身份，见 reference/cache.md）
 ├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
 ├─ Packages/                  Pkg                              包图与模块根
 ├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten

@@ -134,25 +134,8 @@ else do
   exists <- fsFileExists path
   if exists then pure 0 else processRunIn "." ["mkdir", "-p", path]
 
--- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
--- 先 reverse，跳过第一个 `/` 后剩下的字符再 reverse 回来。
-dropPastSlash : List Int -> List Int
-dropPastSlash [] = []
-dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
-
-parentOfPath : String -> String
-parentOfPath path =
-  let
-    chars = strUnpack path
-    rev = reverse chars
-    after = dropPastSlash rev
-  in if length after == length rev then "."
-  else
-    let
-      parent = strPack (reverse after)
-    in if parent == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
-
+-- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）由 `Source.parentOfPath`
+-- 提供（`Common` 已重导出），这里不再保留第二份实现。
 -- 逐模块 split 输出到 outDir：各模块 .ml + Main.ml + build.sh；Ok 写出的文件数。
 -- outDir 在 codegen 成功后才创建（精化失败不留产物）。
 -- 包根 `ffi/*.c` 复制到 `OUTDIR/ffi/` 并写进 build.sh（受限 FFI 的 C 实现）。
@@ -306,13 +289,24 @@ auditCompile ctx entry printResult outDir = do
                     OkC count => OkC (Pair count checked.checkedWarnings)
                   )
 
+-- 内容相同就不写：`build-id` 这类小文件反复重写会改 mtime，影响 `diff -r` 与增量判定。
+writeFileIfChanged : Member nFs FsOp r => String -> String -> Eff r Nat
+writeFileIfChanged path content = do
+  exists <- fsFileExists path
+  if exists then do
+    old <- fsReadFile path
+    if old == content then pure 0 else fsWriteFile path content
+  else fsWriteFile path content
+
 -- 把**已规范拓扑序**的 split 文件写入 outDir 并写 build.sh。
 -- 调用方保证 files 已过 `canonicalTopo`：命中路径的 blob 在写侧就规范化了，未命中路径
 -- 在写 blob 前规范化。build.sh 的层/顺序因此不在热路径重算：`canonicalTopo` 只在写侧
 -- 跑一次。
-writeCompiledNormalized : Member nFs FsOp r, Member nProcess ProcessOp r => PackageContext -> String -> List SplitFile -> Eff r (Check Int)
+writeCompiledNormalized : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List SplitFile -> Eff r (Check Int)
 writeCompiledNormalized ctx outDir files = do
   _ <- ensureDirPath outDir
+  id <- buildIdForEff ctx
+  _ <- writeFileIfChanged "${outDir}/${buildIdFileName}" "${id}\n"
   let
     _ = dbg! "write-compiled-start"
   in do
@@ -385,11 +379,8 @@ metaFileName = "build-meta.json"
 textHash : String -> Int
 textHash s = Vuna.Compiler.Hash.contentKey s
 
--- 编译器二进制指纹（缓存 key 必须含它：check/codegen 语义随编译器变化）。
--- 必须取**可执行文件自身**的路径 + 大小 + mtime，不能取 `@vuna@prim_eff_getArgs` 的第一个用户参数：
--- 那样会把子命令名（如 `test`）当路径：只要 cwd 里恰好有同名文件/目录（包根的 `test/`
--- 就是最常见的情况），`@vuna@prim_eff_readFile` 会去读目录并抛 `Failure("readFile: ...")`。
--- store 路径 + size + mtime 足以区分重新构建的编译器。
+-- 编译器身份（缓存 key 必须含它：check/codegen 语义随编译器变化）。口径与读取顺序见
+-- `Vuna.Compiler.Fingerprint`（产物 `build-id` → `VUNA_COMPILER_TAG` → stat 兜底）。
 -- env/stat 是宿主动作，显式 `Eff r`。
 compilerFingerprint : Member nFs FsOp r, Member nEnv EnvOp r => Eff r Int
 compilerFingerprint = compilerFingerprintEff
@@ -488,6 +479,25 @@ dependencyHashes ctx = case contextRoots ctx of
     h <- rootHash r
     pure (Pair (rootName r) h)
   ) deps
+
+-- ---------------------------------------------------------------
+-- 编译器身份的归属与产物里的 `build-id`
+--
+-- 身份属于**编译器闭包**，不属于打包它的 CLI：本包模块含 `compilerClosureModule` 的包按
+-- 源闭包定址（与谁构建它无关），其余包继承构建它的编译器身份。因此改 `lib/` 不会让
+-- 编译器缓存换代，改 `compiler/` 会；同源跨目录、重建同源也一致。
+-- ---------------------------------------------------------------
+compilerClosureModule : String
+compilerClosureModule = "Vuna.Compiler.Fingerprint"
+
+-- | 构建产物要写进 `build-id` 的身份。
+buildIdForEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r String
+buildIdForEff ctx = do
+  own <- concatMapEff rootSources (ownRootsOf ctx)
+  if memName compilerClosureModule (map firstOf own) then do
+    deps <- depIdentitiesEff ctx
+    pure (compilerIdOf own (depIdentitiesHash deps))
+  else compilerTagEff
 
 -- ---------------------------------------------------------------
 -- 依赖身份：依赖方只消费依赖包的**接口身份**，不是源字节闭包。

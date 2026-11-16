@@ -153,6 +153,25 @@ splitPathChars (c :: rest) acc =
 export baseName : String -> String
 baseName path = secondOf (splitPath path)
 
+-- | 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）。
+-- 与 `splitPath` 不同：这里切**最后**一个 `/`。
+export parentOfPath : String -> String
+parentOfPath path =
+  let
+    chars = strUnpack path
+    rev = reverse chars
+    after = dropPastSlash rev
+  in if length after == length rev then "."
+  else
+    let
+      parent = strPack (reverse after)
+    in if parent == "" then if startsWith "/" path then "/" else "."
+    else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
+
+dropPastSlash : List Int -> List Int
+dropPastSlash [] = []
+dropPastSlash (c :: rest) = if c == 47 then rest else dropPastSlash rest
+
 -- | 候选建议：与出错名相似的名字（诊断）。无相似项返回空串。
 export suggest : String -> List String -> String
 suggest name [] = ""

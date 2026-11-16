@@ -1,24 +1,55 @@
--- | 编译器身份：二进制指纹与缓存 tag 的唯一来源。
+-- | 编译器身份：构建期烘焙的内容常量（`build-id`）与缓存 tag 的唯一来源。
 module Vuna.Compiler.Fingerprint where
 
 -- 编译器缓存键里的「编译器身份」段。
 --
--- `check` 缓存、`split` 缓存、codegen 单元缓存、AST 缓存与
--- iface 目录分桶都要求同一段身份，且消费方分布在 `Driver.Compile` / `Driver.PerfCache` /
--- `Loader.Flatten`。这里只有一个实现，任何新增缓存都必须用它
--- （AST key 不含编译器指纹时，换编译器后会读到不符的 AST）。
+-- `check` 缓存、`split` 缓存、codegen 单元缓存、iface 分桶与 `pkgEnv` 都要求同一段身份，
+-- 消费方分布在 `Driver.Compile` / `Driver.PerfCache` / `Loader.Flatten`。这里只有一个实现，
+-- 任何新增缓存都必须用它。
 --
--- 口径：**可执行文件自身**的路径 + 大小 + mtime。不能用 `getArgs` 的第一个参数：
--- 那样会把子命令名（如 `test`）当路径，cwd 里恰好有同名目录时 `readFile` 会抛
--- `Failure("readFile: ...")`。store 路径 + size + mtime
--- 足以区分重新构建的编译器。
+-- 口径：**身份属于编译器闭包，不属于打包它的 CLI**。
+--   * 编译器包（本包模块含 `Vuna.Compiler.Fingerprint`）的 `build-id` =
+--     本包源闭包 + 依赖身份摘要 + `buildIdSchema` 的摘要（`compilerIdOf`）；
+--     `vuna build` 把它写进产物目录，`nix/seed/rotate.sh` 让 `seed/build-id` 一起入库。
+--   * 其他包的 `build-id` = 构建它的编译器的身份（继承）。
 --
--- env/stat 是宿主动作，显式 `Eff []`。
-import Vuna.Compiler.Hash
-import Vuna.Compiler.Version
+-- 运行时读取顺序：`VUNA_COMPILER_TAG`（排障/测试）→ 可执行文件旁的 `build-id`
+-- （`$out/build-id`，回退 `$out/bin/build-id`）→ 路径 + 大小 + mtime 兜底
+-- （未安装的临时产物；保守，但换目录/重建就会换代）。
+--
+-- 为什么不用二进制内容哈希：OCaml 后端的 DWARF 会写构建目录（`DW_AT_comp_dir`），
+-- 同源两次构建的二进制字节必然不同，内容哈希因此无法表达「同源同身份」。
 import Base.Eff.Types
 import Base.EffEnv
 import Base.EffFs
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Sort
+import Base.String
+import Vuna.Compiler.Addr
+import Vuna.Compiler.Hash
+import Vuna.Compiler.Source
+import Vuna.Compiler.Version
+
+-- | 产物目录里的身份文件名（与 `build.sh` / `build-meta.json` 同级）。
+export buildIdFileName : String
+buildIdFileName = "build-id"
+
+-- | 身份摘要的 schema（结构变化必须 bump；旧身份自然失配）。
+export buildIdSchema : String
+buildIdSchema = "vuna-compiler-id 1"
+
+-- | 编译器闭包的内容身份：本包源闭包（模块名 → 内容哈希，按名排序）+ 依赖身份摘要。
+--
+-- 与谁构建它无关：rotation 的 stage1 / stage2 写入同一个值，同源跨目录也一致。
+export compilerIdOf : List (Pair String Int) -> String -> String
+compilerIdOf own depsDigest =
+  addrOf
+    (buildIdSchema :: depsDigest :: map sourceFrag (sortBy (\a, b => firstOf a <= firstOf b) own))
+
+sourceFrag : Pair String Int -> String
+sourceFrag p = "${firstOf p}=${strFromInt (secondOf p)}"
 
 -- | 指纹派生：把三要素拼成内容键（纯函数，便于测试与跨模块复用口径）。
 export fingerprintOfStat : String -> Int -> Int -> Int
@@ -27,16 +58,42 @@ fingerprintOfStat exe size mtime = textHashOf "${exe}:${size}:${mtime}"
 export textHashOf : String -> Int
 textHashOf s = Vuna.Compiler.Hash.contentKey s
 
--- | 当前编译器的指纹（`Int` 形态；缓存 key 的算术段用）。
-export compilerFingerprintEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r Int
-compilerFingerprintEff = do
-  exe <- envExecPath
-  size <- fsFileSize exe
-  mtime <- fsFileMtime exe
-  pure (if size > 0 then fingerprintOfStat exe size mtime else textHashOf vunaVersion)
-
--- | 当前编译器的标签（`String` 形态；iface / AST / Store 的 tag 与 codec 段用）。
+-- | 当前程序的编译器身份（缓存 tag；`Int` 形态见 `compilerFingerprintEff`）。
 export compilerTagEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
 compilerTagEff = do
-  fp <- compilerFingerprintEff
-  pure "${vunaVersion}/${fp}"
+  override <- envGetEnv "VUNA_COMPILER_TAG"
+  if override /= "" then pure override
+  else do
+    exe <- envExecPath
+    saved <- readBuildIdNear exe
+    case saved of
+      Just id => pure id
+      Nothing => do
+        size <- fsFileSize exe
+        mtime <- fsFileMtime exe
+        pure
+          (if size > 0 then "stat:${strFromInt (fingerprintOfStat exe size mtime)}" else vunaVersion)
+
+-- 可执行文件旁的 `build-id`：安装布局 `$out/bin/<prog>` + `$out/build-id`，
+-- 构建布局 `--out DIR` 下 `DIR/build-id`（`DIR/bin/<prog>` 或 `DIR/<pkg>/bin/<prog>`）。
+readBuildIdNear : Member nFs FsOp r => String -> Eff r (Maybe String)
+readBuildIdNear exe =
+  let
+    binDir = parentOfPath exe
+    outDir = parentOfPath binDir
+  in readFirstBuildId ["${outDir}/${buildIdFileName}", "${binDir}/${buildIdFileName}"]
+
+readFirstBuildId : Member nFs FsOp r => List String -> Eff r (Maybe String)
+readFirstBuildId [] = pure Nothing
+readFirstBuildId (path :: rest) = do
+  exists <- fsFileExists path
+  if exists then do
+    raw <- fsReadFile path
+    pure (if trim raw == "" then Nothing else Just (trim raw))
+  else readFirstBuildId rest
+
+-- | 当前编译器指纹（`Int` 形态；缓存 key 的算术段用）。
+export compilerFingerprintEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r Int
+compilerFingerprintEff = do
+  tag <- compilerTagEff
+  pure (textHashOf tag)

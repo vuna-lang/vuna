@@ -36,8 +36,9 @@ stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
 ## 种子策略
 
 种子（`seed/`）**提交入库**，是构建输入而不是构建产物。种子是**多文件文件集**：每个 vuna
-模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块与 `build.sh`。种子**只覆盖 compiler
-包**（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
+模块对应一个 OCaml 模块（`.ml`），外加共享 runtime 模块、`build.sh` 与 `build-id`（编译器身份，
+见 [cache.md](cache.md)「编译器身份」）。种子**只覆盖 compiler 包**
+（`compiler/app/Main.vuna` 的 import 闭包）：工具链（fmt/lint/repl/doc/test/lsp）由
 编译器编译出来，不在信任锚点里。当前闭包规模以 `seed/` 实际内容与 `nix/seed/files.txt` 为准。
 
 唯一的硬性不变量：

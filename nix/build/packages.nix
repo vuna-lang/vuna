@@ -45,6 +45,8 @@ let
       chmod -R u+w seed
       cd seed
       sh build.sh "$out/bin/vuna-seed"
+      # 编译器身份随产物安装（`Fingerprint` 读 `$out/build-id`）。
+      if [ -f build-id ]; then cp build-id "$out/build-id"; fi
     '';
   };
 
@@ -61,6 +63,7 @@ let
       ${vuna-seed}/bin/vuna-seed build --no-compile --out stage1 compiler
       sh stage1/build.sh "$out/bin/vuna-compiler"
       cp -r base "$out/base"
+      if [ -f stage1/build-id ]; then cp stage1/build-id "$out/build-id"; fi
     '';
   };
 
@@ -81,6 +84,7 @@ let
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
       cp .output/bin/vuna "$out/bin/vuna"
       cp -r base "$out/base"
+      if [ -f .output/build-id ]; then cp .output/build-id "$out/build-id"; fi
     '';
   };
 

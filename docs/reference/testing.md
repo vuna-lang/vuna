@@ -131,7 +131,7 @@ end:
   `run:` 步的退出码/超时失败额外附**该步命令**与**捕获输出尾部**（脚本自己打印的
   `FAIL: ...` 就在里面），否则只能看到 `exit: exit 1`。
 - 本地结果判定：成功的 golden/error case 写成 `objects/test/<testIn>`（输入寻址，
-  key 含 schema、case id、kind、source/expected **内容**哈希、编译器指纹、base 树哈希、
+  key 含 schema、case id、kind、source/expected **内容**哈希、编译器身份、base 树哈希、
   语义 env；不含 mtime/size）；命中打印 `(cached)`。通过后登记 roots。
   `--no-cache` 关闭读写，CI check 固定 `--no-cache`；`*.steps` 不缓存。
 
@@ -275,12 +275,12 @@ steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 
 golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key>`），桶放在
 `--cache-dir`（默认 `.local/test-cache`）下的
-`build/<worker 作用域>-<编译器指纹>-<base 哈希>/`：
+`build/<worker 作用域>-<编译器身份>-<base 哈希>/`：
 
 - 同 run 内：只有 `Main.ml` 变化 ⇒ `build.sh` 内容哈希 stamp 只重编它 + 链接；
 - **跨 run**：base 的 25 个单元 `.cmx` 直接复用，本地重跑不必付「每 worker 首次
   整棵 base 冷编译」；
-- 桶名含编译器指纹与 base 哈希，编译器/base 变了自动换桶（不会读到陈旧产物）；
+- 桶名含编译器身份与 base 哈希，编译器/base 变了自动换桶（不会读到陈旧产物）；
 - 并发注意：两个 suite 同时用同一 worker 号会写同一桶（内容哈希 stamp 会退化为
   重编，极端情况下互相踩写）；并发跑时给其中一个传 `--cache-dir` 隔离。
 
@@ -546,6 +546,6 @@ bytes/lines/最长行/行尾空白、codegen 健康度计数（`let rec`、`Stri
 ### effect 测试产物缓存
 
 `vuna test` 的 effect 测试（`main : Eff ...`）编译产物按内容寻址缓存在
-`$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器指纹、包源码闭包、context roots
+`$VUNA_STORE/views/testbin/<testBin>/`，key 含编译器身份、包源码闭包、context roots
 内容与测试源内容；命中直接运行缓存二进制，跳过 `compile + build.sh`。pure 测试仍走
 `interpretFile`，不缓存。

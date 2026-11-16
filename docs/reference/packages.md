@@ -191,8 +191,9 @@ modules = [
 
 ## 构建确定性与增量
 
-- **确定性**：同一源码 + 同一编译器产出的 `.ml` / `build.sh` / `build-meta.json` 逐字节
-  一致，产物不含绝对路径或时间戳（测试对两次 `build --out` 做逐字节 diff）。
+- **确定性**：同一源码 + 同一编译器产出的 `.ml` / `build.sh` / `build-id` /
+  `build-meta.json` 逐字节一致，产物不含绝对路径或时间戳（测试对两次 `build --out` 做逐字节
+  diff）。
 - **build meta**：`build` 链接成功后写 `<out>/build-meta.json`（`compile` 与
   `build --no-compile` 不写，避免污染 seed rotation 与快照）。字段：`schema`、`compiler`、
   `package`、`entry`、`linked`、`closure`、`manifest`、`sources`（模块名 → 内容哈希）、

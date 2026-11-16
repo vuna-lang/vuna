@@ -67,13 +67,32 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   或索引位置不得让整包与依赖方接口失效；
 - `src` = **本包**源文件闭包摘要；
 - `deps` = 依赖包的**接口身份**（`pkgIfaceHash`；缺接口时回退 manifest 摘要 + 该根源闭包摘要）；
-- `ver` = 编译器版本 + 二进制指纹；
+- `ver` = 编译器身份（见下节「编译器身份」）；
 - `flags` = 语义开关（`release` / `debug`：release 的 debug-only 构造诊断不同，必须进地址）。
 
 `splitIdentity`（产物身份）的输入：包名 + `pr0|pr1` + `pkgIfaceHash` + `pkgImplHash` +
 布局摘要（排序后的定义名/相对文件/startLine）+ 编译器 tag。它不看源字节：注释变更不换
 语义 key，行移动换布局摘要，`opaque`/`abstract` 体变更换 `pkgImplHash`。快指针
 `objects/splitptr/<splitIn>` 只是「源输入 → 语义产物」的别名，不是身份。
+
+## 编译器身份
+
+缓存 key 里的「编译器」段不是二进制指纹，而是**内容身份**：
+
+- 编译器包（本包模块含 `Vuna.Compiler.Fingerprint`）的身份 = 本包源闭包（模块名 → 内容哈希，
+  按名排序）+ 依赖身份摘要 + `vuna-compiler-id 1`（`Fingerprint.compilerIdOf`）；
+- 其他包的身份 = 构建它的编译器的身份（继承）。
+
+`vuna build` / `vuna compile` 把身份写进产物目录的 `build-id`（与 `build.sh` 同级），
+`nix/build/packages.nix` 装到 `$out/build-id`；`seed/build-id` 由 rotation 一起生成、随信任锚点
+入库。运行时读取顺序：`VUNA_COMPILER_TAG`（排障/测试）→ `$out/build-id`（回退
+`$out/bin/build-id`；构建布局读 `DIR/build-id`）→ 路径 + 大小 + mtime 兜底（未安装的临时产物）。
+
+为什么不用二进制内容哈希：OCaml 后端的 DWARF 写构建目录（`DW_AT_comp_dir`），同源两次构建的
+字节必然不同，内容哈希无法表达「同源同身份」。
+
+后果：改 `lib/`（工具链）不换编译器身份，不脏编译器缓存；改 `compiler/` 才换代；同一份编译器
+源码在任意 worktree / 目录构建得到同一身份；重建同源也不再换代。
 
 ## 哈希命名（定稿）
 
@@ -192,4 +211,5 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   包名 + 该包源闭包 + 编译器 tag；读侧还要求顺序里的模块名仍存在于当前闭包，不相容即当
   缺失处理（回退全量，不产错序）。
 - `VUNA_ELAB_FULL=1` 强制全量精化（排障 / A-B 对拍）；`VUNA_IFACE_AUDIT=1` 在同一进程跑
-  摘要与全量两条路径并逐字节比较诊断与产物。
+  摘要与全量两条路径并逐字节比较诊断与产物；`VUNA_COMPILER_TAG=<tag>` 覆盖编译器身份
+  （排障 / 锁「身份进地址」的测试；正常构建不要设置）。
