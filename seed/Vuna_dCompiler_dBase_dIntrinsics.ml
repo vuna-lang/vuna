@@ -291,7 +291,7 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment = (fun name -> (match (V
 ))
 
 # 586 "Vuna/Compiler/Base/Intrinsics.vuna"
-let v_Vuna_dCompiler_dBase_dIntrinsics_dctorSpellingKey = (fun name -> (if (if (if ((Base_dString.v_Base_dString_dendsWith ".Cons") name) then true else ((Base_dString.v_Base_dString_dendsWith ".::") name)) then true else ((Base_dString.v_Base_dString_dendsWith ".(::)") name)) then ((v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment name) ^ ".CONS") else name))
+let v_Vuna_dCompiler_dBase_dIntrinsics_dctorSpellingKey = (fun name -> (if (if (if (if (if ((Base_dString.v_Base_dString_dendsWith ".Cons") name) then true else ((Base_dString.v_Base_dString_dendsWith ".RCons") name)) then true else ((Base_dString.v_Base_dString_dendsWith ".VCons") name)) then true else ((Base_dString.v_Base_dString_dendsWith ".::") name)) then true else ((Base_dString.v_Base_dString_dendsWith ".(::)") name)) then ((v_Vuna_dCompiler_dBase_dIntrinsics_ddropLastSegment name) ^ ".CONS") else name))
 
 # 600 "Vuna/Compiler/Base/Intrinsics.vuna"
 let rec v_Vuna_dCompiler_dBase_dIntrinsics_dfindCanonicalFamilyGo = (fun mc0 mc1 -> (match mc1 with
