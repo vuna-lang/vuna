@@ -70,6 +70,8 @@ export data WatType(..) : Type where
   WatFuncType : String -> List WatValTy -> List WatValTy -> WatType
   WatStructType : String -> List WatField -> WatType
   WatArrayType : String -> Bool -> WatValTy -> WatType
+  -- | `(type $ct (cont $ft))`：typed continuation。
+  WatContType : String -> String -> WatType
 
 -- | import 函数：WASI preview1 用。
 export record WatImport(..) where
@@ -78,6 +80,12 @@ export record WatImport(..) where
   watImportFunc : String
   watImportParams : List WatValTy
   watImportResults : List WatValTy
+
+-- | 控制 tag：`(tag $t (param ...) (result ...))`。
+export record WatTag(..) where
+  watTagName : String
+  watTagParams : List WatValTy
+  watTagResults : List WatValTy
 
 -- | 定义函数。`watFuncType` 为空表示内联签名；非空表示 `(type $t)`。
 export record WatFunc(..) where
@@ -108,6 +116,7 @@ export record WatData(..) where
 -- | 一个 wasm 模块（文本渲染前）。
 export record WasmModule(..) where
   wmTypes : List WatType
+  wmTags : List WatTag
   wmImports : List WatImport
   wmGlobals : List WatGlobal
   wmFuncs : List WatFunc

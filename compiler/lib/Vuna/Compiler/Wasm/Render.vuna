@@ -227,6 +227,7 @@ renderType : WatType -> List String
 renderType (WatFuncType name params results) = renderFuncType name params results
 renderType (WatStructType name fields) = renderStructType name fields
 renderType (WatArrayType name mut elemTy) = renderArrayType name mut elemTy
+renderType (WatContType name funcTy) = [lineOf 2 "(type ${name} (cont ${funcTy}))"]
 
 renderFuncType : String -> List WatValTy -> List WatValTy -> List String
 renderFuncType name params results =
@@ -266,6 +267,13 @@ importMulti imp =
     closeImport = [lineOf 2 ")"]
   in append openLine
     (append funcLine (append paramLines (append resultLines (append closeFunc closeImport))))
+
+renderTag : WatTag -> List String
+renderTag t =
+  let
+    paramsText = joinWith "" (map (\ty => " (param " ++ watValTyText ty ++ ")") t.watTagParams)
+    resultsText = joinWith "" (map (\ty => " (result " ++ watValTyText ty ++ ")") t.watTagResults)
+  in [lineOf 2 ("(tag ${t.watTagName}" ++ paramsText ++ resultsText ++ ")")]
 
 renderImport : WatImport -> List String
 renderImport imp = if fitsLine (importOne imp) then [importOne imp] else importMulti imp
@@ -336,6 +344,7 @@ moduleLines : WasmModule -> List String
 moduleLines m =
   let
     typeLines = concatMap renderType m.wmTypes
+    tagLines = concatMap renderTag m.wmTags
     importLines = concatMap renderImport m.wmImports
     globalLines = concatMap renderGlobal m.wmGlobals
     funcLines = concatMap renderFunc m.wmFuncs
@@ -346,7 +355,7 @@ moduleLines m =
     exportLines = concatMap renderExport m.wmExports
     memoryLines = [lineOf 2 "(memory (export \"memory\") ${strFromInt m.wmMemPages})"]
   in append ["(module"]
-    (append (sectionComment "types") (append typeLines (append (sectionComment "imports") (append importLines (append (sectionComment "memory") (append memoryLines (append (sectionComment "globals") (append globalLines (append (sectionComment "functions") (append funcLines (append (sectionComment "elements") (append elemLines (append (sectionComment "data") (append dataLines (append (sectionComment "exports") (append exportLines [")", ""]))))))))))))))))
+    (append (sectionComment "types") (append typeLines (append (sectionComment "tags") (append tagLines (append (sectionComment "imports") (append importLines (append (sectionComment "memory") (append memoryLines (append (sectionComment "globals") (append globalLines (append (sectionComment "functions") (append funcLines (append (sectionComment "elements") (append elemLines (append (sectionComment "data") (append dataLines (append (sectionComment "exports") (append exportLines [")", ""]))))))))))))))))))
 
 export renderModule : WasmModule -> String
 renderModule m = joinWith "\n" (moduleLines m)

@@ -1028,21 +1028,25 @@ else case entry of
       runSeeds = case irEntryRunMainOf e of
         Just rm => if irEntryIsActionOf e then [rm] else []
         Nothing => []
-      needed = collectNeeded 100000 (irEntryMainOf e :: runSeeds) [] st1.gsDefs
+      handlerSeeds = irEntryHandlersOf e
+      needed =
+        collectNeeded 100000 (append [irEntryMainOf e] (append runSeeds handlerSeeds)) [] st1.gsDefs
       ordered = filter (\d => memStr (irDefName d) needed) st1.gsDefs
       runInstrs = case irEntryRunMainOf e of
         Just rm => if irEntryIsActionOf e then [ICall (watFuncNameOf rm)] else []
         Nothing => []
+      handlerInstrs = concatMap (\h => [ICall (watFuncNameOf h)]) handlerSeeds
+      mainInstrs =
+        append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append handlerInstrs runInstrs)
     in case genDefsInits (fuel - 1) st1 ordered of
       Err err => Err err
-      Ok p => if not printResult then if irEntryIsActionOf e then Ok
-        (Pair (append (firstOf p) (append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append runInstrs [IDrop]))) (secondOf p))
+      Ok p => if not printResult then if irEntryIsActionOf e then Ok (Pair (append (firstOf p) (append mainInstrs [IDrop])) (secondOf p))
       else Ok p
       else case entryShowFunc (irEntryShowOf e) of
         Nothing => Err "wasm target: custom Show entry is not supported yet"
         Just showFn =>
           Ok
-            (Pair (append (firstOf p) (append [IGlobalGet (watGlobalNameOf (irEntryMainOf e))] (append runInstrs [ICall showFn, ICall "$rt_println"]))) (secondOf p))
+            (Pair (append (firstOf p) (append mainInstrs [ICall showFn, ICall "$rt_println"])) (secondOf p))
 
 collectNeeded : Int -> List String -> List String -> List IrDef -> List String
 collectNeeded fuel [] seen _ = reverse seen
@@ -1067,8 +1071,14 @@ baseTypes =
     WatStructType "$int" [WatField False WvI64],
     WatStructType "$float" [WatField False WvF64],
     WatArrayType "$str" True WvI8,
-    WatArrayType "$arr" True WvAnyRef
+    WatArrayType "$arr" True WvAnyRef,
+    WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
+    WatContType "$ct" "$cft",
+    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
   ]
+
+baseTags : List WatTag
+baseTags = [WatTag "$eff" [WvAnyRef] [WvAnyRef]]
 
 baseImports : List WatImport
 baseImports =
@@ -1104,7 +1114,7 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
           startState = secondOf p
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
           lamFuncs = startState.gsFuncs
-          elemNames = startState.gsElems
+          elemNames = append startState.gsElems ["$rt_effThunk", "$rt_effResumeClo"]
           funcs =
             append (rtFunctions st.gsConsts)
               (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc])))
@@ -1114,7 +1124,7 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
           dataText = poolBytes st.gsPool
           dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
         in Ok
-          (WasmModule allTypes baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
+          (WasmModule allTypes baseTags baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -1142,16 +1152,18 @@ build program printResult =
     st0 = GenState fams defs offsets [] [] 0 [] consts [] 0
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
-    Just e => if irEntryIsActionOf e && hasHandlers (irEntryHandlersOf e) then WasmRejected (WasmUnsupported "wasm target: host effect handlers are not supported yet")
-    else
+    Just e =>
       let
         runSeeds = case irEntryRunMainOf e of
           Just rm => if irEntryIsActionOf e then [rm] else []
           Nothing => []
+        handlerSeeds = irEntryHandlersOf e
         needed = case irEntryShowOf e of
           IrRt "@ir@showFloat" =>
-            collectNeeded 100000 (append [irEntryMainOf e, floatRenderName] runSeeds) [] defs
-          _ => collectNeeded 100000 (irEntryMainOf e :: runSeeds) [] defs
+            collectNeeded 100000
+              (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds)) [] defs
+          _ =>
+            collectNeeded 100000 (append [irEntryMainOf e] (append runSeeds handlerSeeds)) [] defs
         ordered = filter (\d => memStr (irDefName d) needed) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
       in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
@@ -1161,10 +1173,6 @@ build program printResult =
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
 floatRenderName = "Base.Float.floatRender"
-
-hasHandlers : List String -> Bool
-hasHandlers [] = False
-hasHandlers _ = True
 
 -- | 能力限制与内部错分开：`wasm target:` 前缀是显式拒绝，其余是生成器内部错。
 classifyWasmErr : String -> WasmErr

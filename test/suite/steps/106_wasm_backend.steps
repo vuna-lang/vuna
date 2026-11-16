@@ -20,7 +20,7 @@ file-exists: $TMPDIR/min-out/main.wasm
 file-contains: $TMPDIR/min-out/main.wat (module
 file-contains: $TMPDIR/min-out/main.wat (func $_start
 file-contains: $TMPDIR/min-out/main.wat wasi_snapshot_preview1
-run: sh -c 'cd "$TMPDIR/min-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/min-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: 0
 out-equals: 42
 
@@ -35,13 +35,13 @@ file-contains: $TMPDIR/shape-out/main.wat ref.func
 # 3) let 遮蔽：作用域必须在分支结束时恢复（否则读到最后一次 binder 的 local）。
 run: sh -c 'd="$TMPDIR/shadow"; mkdir -p "$d/app"; printf "[package]\nname = \"shadow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 10 in (let x = 1 in x) + x\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shadow-out" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/shadow-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/shadow-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 out-equals: 11
 
 # 4) 除零 trap：非 0 退出 + 明确错误文本（不是静默 0）。
 run: sh -c 'd="$TMPDIR/dz"; mkdir -p "$d/app"; printf "[package]\nname = \"dz\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1 / 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/dz-out" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/dz-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/dz-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: nonzero
 out-contains: division by zero
 
@@ -57,38 +57,38 @@ exit: 0
 file-exists: $TMPDIR/nc-out/main.wat
 file-exists: $TMPDIR/nc-out/build.sh
 file-absent: $TMPDIR/nc-out/main.wasm
-run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && wasmtime run -W gc=y -W function-references=y main.wasm'
+run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm'
 exit: 0
 out-equals: 7
 
 # 7) 拒绝面：编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
-#    带宿主效应行的 main 需要 handler 续延，仍拒绝。
-run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffConsole\n\nmain : Eff [ConsoleOp] Int\nmain = pure 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
+#    未实现的宿主叶子（这里 Env）仍是能力限制。
+run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetEnv \"X\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
 exit: 1
-out-contains: wasm target: host effect handlers
+out-contains: wasm target: runtime symbol
 file-absent: $TMPDIR/rej-out/main.wasm
 
 # 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。
 run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-as" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/traps-as" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-as" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: assertion failed: bad
 run: sh -c 'printf "main : Int\nmain = prim_fail \"boom\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-pf" "$TMPDIR/traps"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/traps-pf" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-pf" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: boom
 run: sh -c 'printf "main : Int\nmain = todo \"later\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-todo" "$TMPDIR/traps"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/traps-todo" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/traps-todo" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: TODO: later
 
 # 9) 数组越界：trap 文本与 OCaml 报告器首行一致（wasm 没有位置行），exit 2。
 run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arr-out" "$d"'
 exit: 0
-run: sh -c 'cd "$TMPDIR/arr-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+run: sh -c 'cd "$TMPDIR/arr-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
 
@@ -101,6 +101,6 @@ out-contains: --target ocaml|wasm|native
 #     探针同时验证内层 handler 把不匹配 effect 转发给外层、再恢复自己的 comp。
 run: sh -c 'wasm-tools parse "suite/fixtures/wasm_stack_switch/forward.wat" -o "$TMPDIR/cont.wasm"'
 exit: 0
-run: sh -c 'wasmtime run -W stack-switching=y -W gc=y -W function-references=y --invoke run "$TMPDIR/cont.wasm" 2>/dev/null'
+run: sh -c 'wasmtime run -W stack-switching=y -W gc=y -W function-references=y -W max-wasm-stack=67108864 --invoke run "$TMPDIR/cont.wasm" 2>/dev/null'
 exit: 0
 out-equals: 101

@@ -776,11 +776,153 @@ rtBitShr =
   in rtFunc "$rt_bitShr" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------
+-- 效应 handler（stack switching）
+-- ---------------------------------------------------------------
+-- 泛型 tag `$eff` 的 payload 是 `$arr [key, name, op]`；`suspend` 的 result 是 resume
+-- 时交回的值。comp thunk 的 continuation 类型是 `$cft = (anyref) -> anyref`。
+rtEffPerform : WatFunc
+rtEffPerform =
+  rtFunc "$rt_effPerform" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef] [WvAnyRef]
+    []
+    [ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", IArrayNewFixed "$arr" 3, IPlain "suspend $eff"]
+
+rtEffThunk : WatFunc
+rtEffThunk =
+  WatFunc "$rt_effThunk" "$cft" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefNull, ICall "$rt_apply"]
+
+rtEffResumeClo : WatFunc
+rtEffResumeClo =
+  let
+    locals = [Pair "$ctx" (WvRef "$effK")]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$effK",
+        ILocalSet "$ctx",
+        ILocalGet "$ctx",
+        IStructGet "$effK" 0,
+        ILocalGet "$p1",
+        ILocalGet "$ctx",
+        IStructGet "$effK" 1,
+        ILocalGet "$ctx",
+        IStructGet "$effK" 2,
+        ILocalGet "$ctx",
+        IStructGet "$effK" 3,
+        ILocalGet "$ctx",
+        IStructGet "$effK" 4,
+        ICall "$rt_handleLoop"
+      ]
+  in WatFunc "$rt_effResumeClo" "$ft" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
+
+rtHandleLoop : WatFunc
+rtHandleLoop =
+  let
+    params =
+      [ Pair "$cont" (WvRef "$ct"),
+        Pair "$v" WvAnyRef,
+        Pair "$ret" WvAnyRef,
+        Pair "$opH" WvAnyRef,
+        Pair "$key" WvAnyRef,
+        Pair "$name" WvAnyRef
+      ]
+    locals =
+      [ Pair "$payload" WvAnyRef,
+        Pair "$k" (WvRef "$ct"),
+        Pair "$res" WvAnyRef,
+        Pair "$op" WvAnyRef,
+        Pair "$ctx" (WvRef "$effK"),
+        Pair "$kclo" WvAnyRef,
+        Pair "$v2" WvAnyRef
+      ]
+    keyEq =
+      [ ILocalGet "$payload",
+        IRefCast "$arr",
+        IConstI32 0,
+        IArrayGet "$arr",
+        ILocalGet "$key",
+        ICall "$rt_eqStr",
+        IRefCast "i31",
+        II31GetU
+      ]
+    nameEq =
+      [ ILocalGet "$payload",
+        IRefCast "$arr",
+        IConstI32 1,
+        IArrayGet "$arr",
+        ILocalGet "$name",
+        ICall "$rt_eqStr",
+        IRefCast "i31",
+        II31GetU
+      ]
+    extractOp =
+      [ILocalGet "$payload", IRefCast "$arr", IConstI32 2, IArrayGet "$arr", ILocalSet "$op"]
+    mkKctx =
+      [ ILocalGet "$k",
+        ILocalGet "$ret",
+        ILocalGet "$opH",
+        ILocalGet "$key",
+        ILocalGet "$name",
+        IStructNew "$effK",
+        ILocalSet "$ctx"
+      ]
+    mkKclo = [IRefFunc "$rt_effResumeClo", ILocalGet "$ctx", IStructNew "$clo", ILocalSet "$kclo"]
+    callOpH =
+      [ILocalGet "$opH", ILocalGet "$op", ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply"]
+    forwardToOuter =
+      [ ILocalGet "$payload",
+        IPlain "suspend $eff",
+        ILocalSet "$v2",
+        ILocalGet "$k",
+        ILocalGet "$v2",
+        ILocalGet "$ret",
+        ILocalGet "$opH",
+        ILocalGet "$key",
+        ILocalGet "$name",
+        ICall "$rt_handleLoop"
+      ]
+    body =
+      append
+        [IBlock "$on" "anyref (ref $ct)" [ILocalGet "$v", ILocalGet "$cont", IPlain "resume $ct (on $eff $on)", ILocalSet "$res", ILocalGet "$ret", ILocalGet "$res", ICall "$rt_apply", IReturn], ILocalSet "$k", ILocalSet "$payload"]
+        (append keyEq (append nameEq [IBinop "i32.and", IIf "anyref" (append extractOp (append mkKctx (append mkKclo callOpH))) forwardToOuter]))
+  in rtFunc "$rt_handleLoop" params [WvAnyRef] locals body
+
+rtEffHandle : WatFunc
+rtEffHandle =
+  let
+    params =
+      [ Pair "$key" WvAnyRef,
+        Pair "$name" WvAnyRef,
+        Pair "$ret" WvAnyRef,
+        Pair "$opH" WvAnyRef,
+        Pair "$comp" WvAnyRef,
+        Pair "$u" WvAnyRef
+      ]
+    locals = [Pair "$cont" (WvRef "$ct")]
+    body =
+      [ IRefFunc "$rt_effThunk",
+        IPlain "cont.new $ct",
+        ILocalSet "$cont",
+        ILocalGet "$cont",
+        ILocalGet "$comp",
+        ILocalGet "$ret",
+        ILocalGet "$opH",
+        ILocalGet "$key",
+        ILocalGet "$name",
+        ICall "$rt_handleLoop"
+      ]
+  in rtFunc "$rt_effHandle" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
 -- 已实现函数清单（固定顺序）
 -- ---------------------------------------------------------------
 export rtFunctions : RtConsts -> List WatFunc
 rtFunctions c =
   [ rtApply,
+    rtEffPerform,
+    rtEffThunk,
+    rtEffResumeClo,
+    rtHandleLoop,
+    rtEffHandle,
     rtWrite,
     rtPrintln,
     rtEffNewRef,
@@ -935,6 +1077,23 @@ rtImplOf "strSubstring" = RtFunc 3 "$rt_substring"
 rtImplOf "strHash" = RtFunc 1 "$rt_strHash"
 rtImplOf "bi_eq_str" = RtFunc 2 "$rt_eqStr"
 rtImplOf "bi_neq_str" = RtFunc 2 "$rt_neqStr"
+rtImplOf "@vuna@host@print" = RtFunc 1 "$rt_effPrint"
+rtImplOf "prim_eff_print_host" = RtFunc 1 "$rt_effPrint"
+rtImplOf "@vuna@prim_eff_print_host" = RtFunc 1 "$rt_effPrint"
+rtImplOf "@vuna@host@exitOp" = RtFunc 1 "$rt_effExit"
+rtImplOf "prim_eff_exitOp_host" = RtFunc 1 "$rt_effExit"
+rtImplOf "@vuna@prim_eff_exitOp_host" = RtFunc 1 "$rt_effExit"
+rtImplOf "@vuna@host@newRef" = RtFunc 1 "$rt_newRef"
+rtImplOf "prim_eff_newRef_host" = RtFunc 1 "$rt_newRef"
+rtImplOf "@vuna@prim_eff_newRef_host" = RtFunc 1 "$rt_newRef"
+rtImplOf "@vuna@host@readRef" = RtFunc 1 "$rt_readRef"
+rtImplOf "prim_eff_readRef_host" = RtFunc 1 "$rt_readRef"
+rtImplOf "@vuna@prim_eff_readRef_host" = RtFunc 1 "$rt_readRef"
+rtImplOf "@vuna@host@writeRef" = RtFunc 2 "$rt_writeRef"
+rtImplOf "prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
+rtImplOf "@vuna@prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
+rtImplOf "prim_effectPerform" = RtFunc 3 "$rt_effPerform"
+rtImplOf "prim_effectHandle" = RtFunc 6 "$rt_effHandle"
 rtImplOf "prim_eff_newRef" = RtFunc 1 "$rt_newRef"
 rtImplOf "@vuna@prim_eff_newRef" = RtFunc 1 "$rt_newRef"
 rtImplOf "prim_eff_readRef" = RtFunc 1 "$rt_readRef"
