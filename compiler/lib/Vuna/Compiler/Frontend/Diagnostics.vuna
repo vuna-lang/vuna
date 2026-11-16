@@ -188,7 +188,7 @@ psTemplate UnexpectedIndentInBinding = "unexpected indentation in a let/where bi
 psTemplate ExpectedFixityLevel = "expected a fixity level (0-9)"
 psTemplate FixityLevelRange = "fixity level must be between 0 and 9"
 psTemplate ConstraintUnsupportedHere =
-  "trait constraints (`C a =>`) are only supported on top-level signatures"
+  "trait constraints (`C a =>`) are only supported on top-level signatures and trait heads"
 psTemplate HandleClauseNeedsCtor =
   "handle operation clause must be `Ctor pats k` (a constructor pattern followed by the continuation binder)"
 psTemplate HandleClauseNotIndented = "handle clause is not indented enough"

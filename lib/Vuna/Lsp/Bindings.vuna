@@ -269,7 +269,7 @@ hasMemberNamed (d :: rest) name =
 memberNames : Decl -> List String
 memberNames (DData name params kind ctors derivings viaField repr lin sp) = map ctorName ctors
 memberNames (DRecord name params fields derivings viaField repr lin sp) = map fieldName fields
-memberNames (DTrait name params methods sp) = map traitMethodName methods
+memberNames (DTrait name params supers methods sp) = map traitMethodName methods
 memberNames d = []
 
 -- 顶层声明名是否存在于缓冲里。
@@ -280,7 +280,7 @@ hasDeclNamed (d :: rest) name = if declTopName d == name then True else hasDeclN
 declTopName : Decl -> String
 declTopName (DData name params kind ctors derivings viaField repr lin sp) = name
 declTopName (DRecord name params fields derivings viaField repr lin sp) = name
-declTopName (DTrait name params methods sp) = name
+declTopName (DTrait name params supers methods sp) = name
 declTopName (DSig name ctx ty sp) = name
 declTopName (DFun name pats body sp) = name
 declTopName (DAxiom name ty sp) = name

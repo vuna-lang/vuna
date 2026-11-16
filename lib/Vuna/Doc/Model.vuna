@@ -151,9 +151,9 @@ itemsOfDecl table decls (DRecord name params fields derivings viaField repr lin 
   if isPrivate name then []
   else [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
   ]
-itemsOfDecl table decls (DTrait name params methods sp) =
+itemsOfDecl table decls (DTrait name params supers methods sp) =
   if isPrivate name then []
-  else [ DocItem name "trait" (traitSignature name params methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
+  else [ DocItem name "trait" (traitSignature name params supers methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
   ]
 itemsOfDecl table decls (DAxiom name ty sp) =
   if isPrivate name then []
@@ -208,9 +208,14 @@ recordSignature name params fields derivings =
   join "\n"
     ("record ${name}${paramSuffix params} where" :: append (map fieldLine fields) (derivingLines derivings))
 
-traitSignature : String -> List TraitParam -> List TraitMethod -> String
-traitSignature name params methods =
-  join "\n" ("trait ${name}${traitParamSuffix params} where" :: map methodLine methods)
+traitSignature : String -> List TraitParam -> List Expr -> List TraitMethod -> String
+traitSignature name params supers methods =
+  join "\n"
+    ("trait ${ctxText supers}${name}${traitParamSuffix params} where" :: map methodLine methods)
+
+ctxText : List Expr -> String
+ctxText [] = ""
+ctxText supers = join ", " (map renderType supers) ++ " => "
 
 traitParamSuffix : List TraitParam -> String
 traitParamSuffix [] = ""

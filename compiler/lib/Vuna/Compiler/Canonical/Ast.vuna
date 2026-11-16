@@ -276,8 +276,9 @@ encDecl (DFun name pats body _) acc = encTag 4 (encStr name (encPatList pats (en
 encDecl (DRecord name params fields derivings viaField repr lin _) acc =
   encTag 5
     (encStr name (encStrList params (encFieldList fields (encStrList derivings (encBool viaField (encReprTier repr (encBool lin acc)))))))
-encDecl (DTrait name params methods _) acc =
-  encTag 6 (encStr name (encTraitParamList params (encTraitMethodList methods acc)))
+encDecl (DTrait name params supers methods _) acc =
+  encTag 6
+    (encStr name (encTraitParamList params (encExprList supers (encTraitMethodList methods acc))))
 encDecl (DInstance ctxE head methods _) acc =
   encTag 7 (encExprList ctxE (encExpr head (encDecls methods acc)))
 
@@ -619,9 +620,11 @@ else case decTag fuel bytes of
       Nothing => Nothing
       Just (Pair v1 b2) => case decList decTraitParam (fuel - 1) b2 of
         Nothing => Nothing
-        Just (Pair v2 b3) => case decList decTraitMethod (fuel - 1) b3 of
+        Just (Pair v2 b3) => case decExprList (fuel - 1) b3 of
           Nothing => Nothing
-          Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 v3 noSpan) b4)
+          Just (Pair vsup bsup) => case decList decTraitMethod (fuel - 1) bsup of
+            Nothing => Nothing
+            Just (Pair v3 b4) => Just (Pair (DTrait v1 v2 vsup v3 noSpan) b4)
     7 => case decExprList (fuel - 1) b1 of
       Nothing => Nothing
       Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of

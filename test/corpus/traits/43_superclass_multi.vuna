@@ -1,0 +1,29 @@
+-- 多个父类 + 父类实参不是类参数的简单重复（`C Int a`）。
+import Prelude
+
+trait C a b where
+  c : a -> b -> Int
+
+trait Show a where
+  showIt : a -> String
+
+trait C Int a, Show a => D a where
+  d : a -> Int
+
+data S : Type where
+  MkS : S
+
+instance C Int S where
+  c _ _ = 1
+
+instance Show S where
+  showIt _ = "s"
+
+instance D S where
+  d _ = c 0 MkS
+
+useD : D x => x -> String
+useD x = showIt x ++ "/ok"
+
+main : String
+main = useD MkS

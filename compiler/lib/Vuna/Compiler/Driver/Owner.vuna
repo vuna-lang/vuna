@@ -38,7 +38,7 @@ splitDeclNames (d :: rest) = case d of
   DFun name pats body sp => name :: splitDeclNames rest
   DData name params kind ctors derivings viaField repr lin sp => name :: splitDeclNames rest
   DRecord name params fields derivings viaField repr lin sp => name :: splitDeclNames rest
-  DTrait name params methods sp => name :: splitDeclNames rest
+  DTrait name params supers methods sp => name :: splitDeclNames rest
   _ => splitDeclNames rest
 
 splitDataNames : List Decl -> List String
@@ -98,12 +98,12 @@ splitDerivedOwners owner dname params (t :: rest) =
 -- trait 的运行时产物不在顶层声明名里：方法投影定义与字典类型都由 Elab 生成，
 -- 因此按 `DTrait` 结构显式补上（入口 trait 没有模块前缀，这一步是唯一归属来源）。
 splitTraitDefOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDefOwnerOf owner (DTrait tname params methods sp) =
+splitTraitDefOwnerOf owner (DTrait tname params supers methods sp) =
   map (\m => Pair (traitMethodName m) owner) methods
 splitTraitDefOwnerOf owner _ = []
 
 splitTraitDataOwnerOf : String -> Decl -> List (Pair String String)
-splitTraitDataOwnerOf owner (DTrait tname params methods sp) = [Pair "Dict_${tname}" owner]
+splitTraitDataOwnerOf owner (DTrait tname params supers methods sp) = [Pair "Dict_${tname}" owner]
 splitTraitDataOwnerOf owner _ = []
 
 splitInstanceOwnersGo : String -> List Decl -> List (Pair String String)

@@ -240,7 +240,8 @@ collectSigsInto banned preludeBanned paramKinds seen acc (d :: rest) = case d of
     collectSigsInto banned preludeBanned paramKinds seen acc rest
   DRecord name params fields derivings viaField repr lin sp =>
     collectSigsInto banned preludeBanned paramKinds seen acc rest
-  DTrait name params methods sp => collectSigsInto banned preludeBanned paramKinds seen acc rest
+  DTrait name params supers methods sp =>
+    collectSigsInto banned preludeBanned paramKinds seen acc rest
   DInstance ctxE head methods sp => collectSigsInto banned preludeBanned paramKinds seen acc rest
 
 collectSigOne : HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
@@ -595,7 +596,7 @@ dictCtorName cname = "MkDict_${cname}"
 export collectTraitDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)
 collectTraitDecls [] acc = reverse acc
 collectTraitDecls (d :: rest) acc = case d of
-  DTrait tname params methods sp => collectTraitDecls rest (Pair d sp :: acc)
+  DTrait tname params supers methods sp => collectTraitDecls rest (Pair d sp :: acc)
   _ => collectTraitDecls rest acc
 
 export collectInstDecls : List Decl -> List (Pair Decl Span) -> List (Pair Decl Span)

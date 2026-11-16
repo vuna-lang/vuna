@@ -66,6 +66,7 @@ export data TcErr(..) : Nat -> Type where
   TypeMismatchCaseVars : String -> TcErr (Succ Zero)
   DuplicateInstance : String -> TcErr (Succ Zero)
   InstanceContextMissing : String -> TcErr (Succ Zero)
+  SuperclassNotSatisfied : String -> String -> TcErr (Succ (Succ Zero))
   OverlappingInstances : String -> TcErr (Succ Zero)
   DuplicateSignature : String -> TcErr (Succ Zero)
   ExpectedSignature : String -> TcErr (Succ Zero)
@@ -200,6 +201,7 @@ tcCode (MainArity _) = "TC_MainArity"
 tcCode (TypeMismatchCaseVars _) = "TC_TypeMismatchCaseVars"
 tcCode (DuplicateInstance _) = "TC_DuplicateInstance"
 tcCode (InstanceContextMissing _) = "TC_InstanceContextMissing"
+tcCode (SuperclassNotSatisfied _ _) = "TC_SuperclassNotSatisfied"
 tcCode (OverlappingInstances _) = "TC_OverlappingInstances"
 tcCode (DuplicateSignature _) = "TC_DuplicateSignature"
 tcCode (ExpectedSignature _) = "TC_ExpectedSignature"
@@ -305,6 +307,7 @@ tcTemplate (TypeMismatchCaseVars _) =
   "type mismatch: case branch <0> binds a different number of variables"
 tcTemplate (DuplicateInstance _) = "duplicate instance <0>"
 tcTemplate (InstanceContextMissing _) = "instance context cannot be satisfied: <0>"
+tcTemplate (SuperclassNotSatisfied _ _) = "instance <0> requires superclass instance <1>"
 tcTemplate (OverlappingInstances _) = "overlapping instance <0>"
 tcTemplate (DuplicateSignature _) = "duplicate signature for <0>"
 tcTemplate (ExpectedSignature _) = "expected a type signature for <0>"
@@ -465,6 +468,7 @@ tcChunk6 : List TcEntry
 tcChunk6 =
   [ TcEntry (tcCode (DuplicateInstance "")) (tcTemplate (DuplicateInstance "")) "重复的 instance",
     TcEntry (tcCode (InstanceContextMissing "")) (tcTemplate (InstanceContextMissing "")) "实例上下文无法满足",
+    TcEntry (tcCode (SuperclassNotSatisfied "" "")) (tcTemplate (SuperclassNotSatisfied "" "")) "实例缺少父类要求的字典",
     TcEntry (tcCode (OverlappingInstances "")) (tcTemplate (OverlappingInstances "")) "重叠的 instance",
     TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",

@@ -160,6 +160,10 @@ traitParamSuffix : List TraitParam -> String
 traitParamSuffix [] = ""
 traitParamSuffix params = " " ++ join " " (map traitParamText params)
 
+traitCtxText : List Expr -> String
+traitCtxText [] = ""
+traitCtxText supers = join ", " (map renderType supers) ++ " => "
+
 traitParamText : TraitParam -> String
 traitParamText (TraitParam n Nothing) = n
 traitParamText (TraitParam n (Just k)) = "(${n} : ${renderType k})"
@@ -184,7 +188,8 @@ declSigText decls (DData name params kind ctors derivings viaField repr lin sp) 
   "data ${name}${paramSuffix params}"
 declSigText decls (DRecord name params fields derivings viaField repr lin sp) =
   "record ${name}${paramSuffix params}"
-declSigText decls (DTrait name params methods sp) = "trait ${name}${traitParamSuffix params}"
+declSigText decls (DTrait name params supers methods sp) =
+  "trait ${traitCtxText supers}${name}${traitParamSuffix params}"
 declSigText decls (DAxiom name ty sp) = "${name} : ${renderType ty}"
 declSigText decls (DExtern name cName ty sp) = "${name} : ${renderType ty}"
 declSigText decls (DSig name ctx ty sp) = "${name} : ${renderTypeInCtx ctx ty}"
@@ -208,8 +213,8 @@ symbolsOfDecl sMod decls table d =
     DRecord name params fields derivings viaField repr lin sp =>
       Sym sMod name "record" "record ${name}${paramSuffix params}" "" (docForDecl table name) line col
         :: fieldSymbols sMod name fields table
-    DTrait name params methods sp =>
-      Sym sMod name "trait" "trait ${name}${traitParamSuffix params}" "" (docForDecl table name) line col
+    DTrait name params supers methods sp =>
+      Sym sMod name "trait" "trait ${traitCtxText supers}${name}${traitParamSuffix params}" "" (docForDecl table name) line col
         :: methodSymbols sMod name methods table
     DSig name ctx ty sp => []
     DAxiom name ty sp =>
@@ -288,7 +293,8 @@ refsInDecl sMod (DData name params kind ctors derivings viaField repr lin sp) ac
   refsInCtors sMod ctors acc
 refsInDecl sMod (DRecord name params fields derivings viaField repr lin sp) acc =
   refsInFieldTypes sMod fields acc
-refsInDecl sMod (DTrait name params methods sp) acc = refsInMethods sMod methods acc
+refsInDecl sMod (DTrait name params supers methods sp) acc =
+  refsInMethods sMod methods (refsInExprs sMod supers acc)
 refsInDecl sMod (DInstance ctxE head methods sp) acc =
   refsInDeclsGo sMod methods (refsInExprGo sMod head acc)
 refsInDecl sMod _ acc = acc
@@ -301,6 +307,10 @@ refsInMethods : String -> List TraitMethod -> List Ref -> List Ref
 refsInMethods sMod [] acc = acc
 refsInMethods sMod (m :: rest) acc =
   refsInMethods sMod rest (refsInExprGo sMod m.traitMethodType acc)
+
+refsInExprs : String -> List Expr -> List Ref -> List Ref
+refsInExprs sMod [] acc = acc
+refsInExprs sMod (e :: rest) acc = refsInExprs sMod rest (refsInExprGo sMod e acc)
 
 refsInFieldTypes : String -> List Field -> List Ref -> List Ref
 refsInFieldTypes sMod [] acc = acc

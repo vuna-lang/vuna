@@ -909,10 +909,10 @@ resolveDecl modules label prefix ns imports d = case d of
     Vuna.Compiler.Common.bind
       (onErrDiag (withFallbackSpan sp) (resolveTypeTopName label prefix dname))
       (\dn => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveRecordField modules label prefix ns imports) fields) (\fields2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTypeName modules label prefix ns imports) derivings) (\ds2 => OkC (DRecord dn params fields2 ds2 viaField repr lin sp))))
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     Vuna.Compiler.Common.bind
       (onErrDiag (withFallbackSpan sp) (resolveTypeTopName label prefix tname))
-      (\tn => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => OkC (DTrait tn params ms sp)))
+      (\tn => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) supers) (\ss => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (resolveTraitMethod modules label prefix ns imports) methods) (\ms => OkC (DTrait tn params ss ms sp))))
   DInstance ctxE head methods sp =>
     Vuna.Compiler.Common.bind
       (Vuna.Compiler.Common.traverse (\cx => resolveConstraintExpr modules label prefix ns imports cx) ctxE)

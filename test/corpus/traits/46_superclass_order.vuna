@@ -1,0 +1,8 @@
+-- 负例：父类只能在 trait 声明之前引用（按源顺序）⇒ TC_UnknownInterface。
+import Prelude
+
+trait A a => B a where
+  b : a -> Int
+
+trait A a where
+  a : a -> Int

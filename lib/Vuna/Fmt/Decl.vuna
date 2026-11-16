@@ -87,7 +87,7 @@ declFmtName (DExtern name cName ty sp) = name
 declFmtName (DSig name ctx ty sp) = name
 declFmtName (DFun name pats body sp) = name
 declFmtName (DRecord name params fields derivings viaField repr lin sp) = name
-declFmtName (DTrait name params methods sp) = name
+declFmtName (DTrait name params supers methods sp) = name
 declFmtName (DInstance ctxE head methods sp) = ""
 
 membersSuffix : Maybe ExportMembers -> String
@@ -119,7 +119,7 @@ applyDeclMods mods decl lines =
     marker = case decl of
       DData _ _ _ _ _ _ _ _ _ => "data ${name}"
       DRecord _ _ _ _ _ _ _ _ => "record ${name}"
-      DTrait _ _ _ _ => "trait ${name}"
+      DTrait _ _ _ _ _ => "trait "
       DAxiom _ _ _ => "axiom ${name}"
       DExtern _ _ _ _ => "extern ${name}"
       DSig _ _ _ _ => "${name} :"
@@ -130,7 +130,7 @@ applyDeclMods mods decl lines =
       mapFirstLineContaining marker (\line => insertBeforeMarker " : " members line) afterPrefix
     DRecord _ _ _ _ _ _ _ _ =>
       mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
-    DTrait _ _ _ _ =>
+    DTrait _ _ _ _ _ =>
       mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
     _ => afterPrefix
 
@@ -150,8 +150,8 @@ renderDeclBody env at lineInd (DSig name ctx ty sp) = renderSigLine env at lineI
 renderDeclBody env at lineInd (DFun name pats body sp) = renderClause env at lineInd name pats body
 renderDeclBody env at lineInd (DRecord name params fields derivings viaField repr lin sp) =
   renderRecordDecl env at viaField (declPrefix repr lin) name params fields derivings
-renderDeclBody env at lineInd (DTrait name params methods sp) =
-  renderTraitDecl env at name params methods
+renderDeclBody env at lineInd (DTrait name params supers methods sp) =
+  renderTraitDecl env at name params supers methods
 renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
   renderInstanceDecl env at ctxE head methods
 
@@ -191,10 +191,11 @@ renderRecordField env at f =
   attachAt at (fieldSpan f) 2
     (prefixFirst "  ${fieldName f} : " (renderTypeExpr env at 2 (fieldType f)))
 
-renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List TraitParam -> List TraitMethod -> List String
-renderTraitDecl env at name params methods =
+renderTraitDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List TraitParam -> List Expr -> List TraitMethod -> List String
+renderTraitDecl env at name params supers methods =
   let
-    header = "trait ${name}${joinSpace (map (traitParamText env at) params)} where"
+    header =
+      "trait ${renderInstanceCtx env supers}${name}${joinSpace (map (traitParamText env at) params)} where"
     methodLines = concatMap (\m => renderMethodSig env at m) methods
   in append [header] methodLines
 

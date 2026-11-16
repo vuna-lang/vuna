@@ -83,14 +83,15 @@ encDtInst (DtInst name tele ctxE head sp) acc =
 
 -- | `DtClass` 的**语义**编码：名字 / 参数名 / 方法投影 / 字段类型（span 丢弃）。
 export encDtClassSem : DtClass -> List String -> List String
-encDtClassSem (DtClass name params projs fieldTys _) acc =
-  encStr name (encList encStr params (encList encTelePair projs (encList encTerm fieldTys acc)))
+encDtClassSem (DtClass name params supers projs fieldTys _) acc =
+  encStr name
+    (encList encStr params (encList encTerm supers (encList encTelePair projs (encList encTerm fieldTys acc))))
 
 -- | `DtClass` 载荷编码：语义字段 + 方法 span 表。
 export encDtClass : DtClass -> List String -> List String
-encDtClass (DtClass name params projs fieldTys spans) acc =
+encDtClass (DtClass name params supers projs fieldTys spans) acc =
   encStr name
-    (encList encStr params (encList encTelePair projs (encList encTerm fieldTys (encList (encPair encStr encSpan) spans acc))))
+    (encList encStr params (encList encTerm supers (encList encTelePair projs (encList encTerm fieldTys (encList (encPair encStr encSpan) spans acc)))))
 
 -- | 闭合项对（`(名字, 项)`）：实例 telescope / 类方法投影共用。
 encTelePair : Pair String Term -> List String -> List String
@@ -229,7 +230,7 @@ decDtInst fuel bytes =
 export decDtClass : Int -> Cur -> Maybe (Pair DtClass Cur)
 decDtClass fuel bytes =
   thenPair (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTelePair (fuel - 1) b2) (\projs, b3 => thenPair (decList decTerm (fuel - 1) b3) (\fieldTys, b4 => thenPair (decList (decPair decStr decSpan) (fuel - 1) b4) (\spans, b5 => Just (Pair (DtClass name params projs fieldTys spans) b5))))))
+    (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTerm (fuel - 1) b2) (\supers, b3 => thenPair (decList decTelePair (fuel - 1) b3) (\projs, b4 => thenPair (decList decTerm (fuel - 1) b4) (\fieldTys, b5 => thenPair (decList (decPair decStr decSpan) (fuel - 1) b5) (\spans, b6 => Just (Pair (DtClass name params supers projs fieldTys spans) b6)))))))
 
 -- | 解析 `ExportEntry`。
 export decExportEntry : Int -> Cur -> Maybe (Pair ExportEntry Cur)

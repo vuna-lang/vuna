@@ -703,7 +703,7 @@ dtEvalExprInInfoCore prog expr = case prog of
 hasHasFieldDecls : List Decl -> Bool
 hasHasFieldDecls [] = False
 hasHasFieldDecls (d :: rest) = case d of
-  DTrait n ps ms sp =>
+  DTrait n ps supers ms sp =>
     if n == "Base.Record.HasField" || baseNameOf n == "HasField" then True
     else hasHasFieldDecls rest
   _ => hasHasFieldDecls rest

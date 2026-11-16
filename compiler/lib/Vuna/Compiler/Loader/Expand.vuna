@@ -63,9 +63,9 @@ else case d of
   DRecord name params fields derivings viaField repr lin sp =>
     Vuna.Compiler.Common.bind (expandFields (fuel - 1) fields)
       (\fields2 => OkC (DRecord name params fields2 derivings viaField repr lin sp))
-  DTrait name params methods sp =>
-    Vuna.Compiler.Common.bind (expandTraitMethods (fuel - 1) methods)
-      (\methods2 => OkC (DTrait name params methods2 sp))
+  DTrait name params supers methods sp =>
+    Vuna.Compiler.Common.bind (expandExprs (fuel - 1) supers)
+      (\supers2 => Vuna.Compiler.Common.bind (expandTraitMethods (fuel - 1) methods) (\methods2 => OkC (DTrait name params supers2 methods2 sp)))
   DInstance ctxE head methods sp =>
     Vuna.Compiler.Common.bind (expandExprs (fuel - 1) ctxE)
       (\ctx2 => Vuna.Compiler.Common.bind (expandExpr (fuel - 1) head) (\head2 => Vuna.Compiler.Common.bind (expandDeclsGo (fuel - 1) methods) (\methods2 => OkC (DInstance ctx2 head2 methods2 sp))))

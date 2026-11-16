@@ -462,42 +462,63 @@ parseRecordExport lin tier st blockCol kwPos = Vuna.Compiler.Common.bind (expect
 )
 
 parseTraitExport : PState -> Int -> Pos -> Check (Pair ParsedDecl PState)
-parseTraitExport st blockCol kwPos = Vuna.Compiler.Common.bind (expectKw st "trait") (\st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseTraitExportHead st2) (\head, st3 => case head of
-  Pair params members => Vuna.Compiler.Common.bind (expectKw st3 "where") (\st4 => Vuna.Compiler.Common.step (parseMethodSigs st4 blockCol) (\methods, st5 => let
-    decl =
-      DTrait name params methods
-        (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))
-  in OkC
-    (Pair (ParsedDecl Nothing (Just decl) (Just (ESType name members (declSpan decl))) Nothing) st5)
-  )
-  )
+parseTraitExport st blockCol kwPos = Vuna.Compiler.Common.bind (expectKw st "trait") (\st1 => Vuna.Compiler.Common.step (parseTraitHead st1) (\h, st2 => Vuna.Compiler.Common.step (parseTraitExportMembers st2) (\members, st3 => Vuna.Compiler.Common.bind (expectKw st3 "where") (\st4 => Vuna.Compiler.Common.step (parseMethodSigs st4 blockCol) (\methods, st5 => let
+  decl =
+    DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods
+      (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))
+in OkC
+  (Pair (ParsedDecl Nothing (Just decl) (Just (ESType h.traitHeadName members (declSpan decl))) Nothing) st5)
+)
+)
 )
 )
 )
 
--- trait 导出头：`(..)`/`(m1, m2)` 是成员列表；否则是原有的 kind 参数 `(a : Type)`。
-parseTraitExportHead : PState -> Check (Pair (Pair (List TraitParam) ExportMembers) PState)
-parseTraitExportHead st =
-  Vuna.Compiler.Common.step (parseTraitExportParams (stateFuel st) st)
-    (\params, st1 => if atSym st1 "(" then Vuna.Compiler.Common.step (parseExportMembers st1) (\members, st2 => OkC (Pair (Pair params members) st2)) else OkC (Pair (Pair params EMNone) st1))
+-- trait 头：`[C1 a, C2 b =>] Name params`。父类约束在 trait 名之前（Haskell 风格）。
+-- 用 token lookahead 判断是否存在约束前缀：`=>` 出现在 `where` 之前且括号深度为 0。
+record TraitHead where
+  traitHeadName : String
+  traitHeadParams : List TraitParam
+  traitHeadSupers : List Expr
 
--- trait 导出头里的 kind 参数：遇到成员列表 `(..)`/`(m1, m2)` 就停，不把它当参数。
-parseTraitExportParams : Int -> PState -> Check (Pair (List TraitParam) PState)
-parseTraitExportParams fuel st = if fuel <= 0 then icFuel "parser"
-else case peekTok st of
-  PTok (TIdent name) _ =>
-    Vuna.Compiler.Common.step (parseTraitExportParams (fuel - 1) (advance st))
-      (\rest, st1 => OkC (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
-  PTok (TSym "(") _ =>
-    if parenIsMemberList st then OkC (Pair [] st)
-    else Vuna.Compiler.Common.step (parseTraitParamGroup st)
-      (\params, st1 => Vuna.Compiler.Common.step (parseTraitExportParams (fuel - 1) st1) (\rest, st2 => OkC (Pair (append params rest) st2)))
-  _ => OkC (Pair [] st)
+parseTraitHead : PState -> Check (Pair TraitHead PState)
+parseTraitHead st = if traitSupersFollow st then Vuna.Compiler.Common.bind (parseTraitSupers (stateFuel st) st) (\p => let
+  supers = firstOf p
+  st1 = secondOf p
+in Vuna.Compiler.Common.step (expectIdent st1)
+  (\name, st2 => Vuna.Compiler.Common.step (parseTraitParams (stateFuel st2) st2) (\params, st3 => OkC (Pair (TraitHead name params supers) st3)))
+)
+else Vuna.Compiler.Common.step (expectIdent st)
+  (\name, st1 => Vuna.Compiler.Common.step (parseTraitParams (stateFuel st1) st1) (\params, st2 => OkC (Pair (TraitHead name params []) st2)))
 
-parseTraitParamGroup : PState -> Check (Pair (List TraitParam) PState)
-parseTraitParamGroup st =
-  Vuna.Compiler.Common.bind (expectSym st "(")
-    (\st1 => Vuna.Compiler.Common.step (parsePiNames (stateFuel st1) st1) (\names, st2 => Vuna.Compiler.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 0) (\kind, st4 => Vuna.Compiler.Common.bind (expectSym st4 ")") (\st5 => OkC (Pair (map (\n => TraitParam n (Just kind)) names) st5))))))
+traitSupersFollow : PState -> Bool
+traitSupersFollow st = traitSupersFollowGo 0 st.toksOf
+
+traitSupersFollowGo : Int -> List PTok -> Bool
+traitSupersFollowGo depth [] = False
+traitSupersFollowGo depth ((PTok tok p) :: rest) = case tok of
+  TSym "=>" => depth == 0
+  TKw "where" => False
+  TSym "(" => traitSupersFollowGo (depth + 1) rest
+  TSym ")" => traitSupersFollowGo (if depth > 0 then depth - 1 else 0) rest
+  _ => traitSupersFollowGo depth rest
+
+parseTraitSupers : Int -> PState -> Check (Pair (List Expr) PState)
+parseTraitSupers fuel st =
+  if fuel <= 0 then icFuel "parser"
+  else Vuna.Compiler.Common.step (parseExpr fuel st 0)
+    (\e1, st1 => parseTraitSupersRest (fuel - 1) st1 [e1])
+
+parseTraitSupersRest : Int -> PState -> List Expr -> Check (Pair (List Expr) PState)
+parseTraitSupersRest fuel st acc =
+  if fuel <= 0 then icFuel "parser"
+  else if atSym st "=>" then OkC (Pair (reverse acc) (advance st))
+  else Vuna.Compiler.Common.bind (expectSym st ",")
+    (\st1 => Vuna.Compiler.Common.step (parseExpr (fuel - 1) st1 0) (\e, st2 => parseTraitSupersRest (fuel - 1) st2 (e :: acc)))
+
+-- trait 导出成员：`trait C(..)` / `trait C(m1, m2)`；无成员列表 = EMNone。
+parseTraitExportMembers : PState -> Check (Pair ExportMembers PState)
+parseTraitExportMembers st = parseOptionalMembers st
 
 -- 只看括号组里第一个 token：`..` / `)` / `ident ,` / `ident )` 是成员列表；
 -- `ident ident :` / `ident :` 是显式 kind 参数。
@@ -855,12 +876,18 @@ parseDerivingNames fuel st =
   else Vuna.Compiler.Common.step (expectIdent st)
     (\name, st1 => if atSym st1 "," then Vuna.Compiler.Common.step (parseDerivingNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons name rest) st2)) else Vuna.Compiler.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair [name] st2)))
 
--- trait 声明：`trait Name params where` + 缩进方法签名 `m : Ty`。
+-- trait 声明：`trait [supers =>] Name params where` + 缩进方法签名 `m : Ty`。
 -- 多参数 trait 参数可带显式 kind：`trait C (a : Type) (r : Row)`（裸参数仍支持）。
 parseTrait : PState -> Int -> Pos -> Check (Pair Decl PState)
-parseTrait st blockCol kwPos =
-  Vuna.Compiler.Common.bind (expectKw st "trait")
-    (\st1 => Vuna.Compiler.Common.step (expectIdent st1) (\name, st2 => Vuna.Compiler.Common.step (parseTraitParams (stateFuel st2) st2) (\params, st3 => Vuna.Compiler.Common.bind (expectKw st3 "where") (\st4 => Vuna.Compiler.Common.step (parseMethodSigs st4 blockCol) (\methods, st5 => OkC (Pair (DTrait name params methods (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st5)) (posCol (lastPos st5)))) st5))))))
+parseTrait st blockCol kwPos = Vuna.Compiler.Common.bind (expectKw st "trait") (\st1 => Vuna.Compiler.Common.step (parseTraitHead st1) (\h, st2 => Vuna.Compiler.Common.bind (expectKw st2 "where") (\st3 => Vuna.Compiler.Common.step (parseMethodSigs st3 blockCol) (\methods, st4 => let
+  decl =
+    DTrait h.traitHeadName h.traitHeadParams h.traitHeadSupers methods
+      (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))
+in OkC (Pair decl st4)
+)
+)
+)
+)
 
 -- trait 参数：裸标识符（kind 由方法签名推断）或 `(a b : Kind)` / `(a : Kind)`。
 parseTraitParams : Int -> PState -> Check (Pair (List TraitParam) PState)
@@ -870,7 +897,8 @@ else case peekTok st of
     Vuna.Compiler.Common.step (parseTraitParams (fuel - 1) (advance st))
       (\rest, st1 => OkC (Pair (Base.List.Cons (TraitParam name Nothing) rest) st1))
   PTok (TSym "(") _ =>
-    Vuna.Compiler.Common.bind (expectSym st "(")
+    if parenIsMemberList st then OkC (Pair [] st)
+    else Vuna.Compiler.Common.bind (expectSym st "(")
       (\st1 => Vuna.Compiler.Common.step (parsePiNames (fuel - 1) st1) (\names, st2 => Vuna.Compiler.Common.bind (expectSym st2 ":") (\st3 => Vuna.Compiler.Common.step (parseExpr (stateFuel st3) st3 0) (\kind, st4 => Vuna.Compiler.Common.bind (expectSym st4 ")") (\st5 => Vuna.Compiler.Common.step (parseTraitParams (fuel - 1) st5) (\rest, st6 => OkC (Pair (append (map (\n => TraitParam n (Just kind)) names) rest) st6)))))))
   _ => OkC (Pair [] st)
 

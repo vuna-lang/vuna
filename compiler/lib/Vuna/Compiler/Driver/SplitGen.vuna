@@ -138,7 +138,7 @@ entryDeclIdentities (d :: rest) = case d of
     Pair True name :: entryDeclIdentities rest
   DRecord name params fields derivings viaField repr lin sp =>
     Pair True name :: entryDeclIdentities rest
-  DTrait name params methods sp => Pair True name :: entryDeclIdentities rest
+  DTrait name params supers methods sp => Pair True name :: entryDeclIdentities rest
   _ => entryDeclIdentities rest
 
 entryDeclKey : Pair Bool String -> String

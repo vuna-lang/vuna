@@ -159,7 +159,7 @@ findOwnData name (d :: rest) = case d of
     if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
   DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Just (Pair dname [dname]) else findOwnData name rest
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
   _ => findOwnData name rest
 
@@ -193,7 +193,7 @@ findOwnCtorNames name (d :: rest) = case d of
   DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Base.List.Cons (Pair dname dname) (findOwnCtorNames name rest)
     else findOwnCtorNames name rest
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     append
       (map (\m => Pair tname (traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
       (findOwnCtorNames name rest)
@@ -228,7 +228,7 @@ ownTypeEntries prefix (d :: rest) name = case d of
     if dname == name then Just
       (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
     else ownTypeEntries prefix rest name
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     if tname == name then Just
       (Base.List.Cons ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
     else ownTypeEntries prefix rest name
@@ -313,7 +313,7 @@ ownCtorEntriesNamed prefix name (d :: rest) = case d of
   DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
     else ownCtorEntriesNamed prefix name rest
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     append
       (ownCtorEntries prefix tname (map traitMethodName (filter (\m => traitMethodName m == name) methods)))
       (ownCtorEntriesNamed prefix name rest)
@@ -910,7 +910,8 @@ declRefNames (DData dname params kind ctors derivings viaField repr lin sp) =
   append (exprRefNames kind) (append (concatMap ctorRefNames ctors) derivings)
 declRefNames (DRecord dname params fields derivings viaField repr lin sp) =
   append (concatMap fieldRefNames fields) derivings
-declRefNames (DTrait tname params methods sp) = concatMap traitMethodRefNames methods
+declRefNames (DTrait tname params supers methods sp) =
+  append (concatMap exprRefNames supers) (concatMap traitMethodRefNames methods)
 declRefNames (DInstance ctxE head methods sp) =
   append (concatMap exprRefNames ctxE) (append (exprRefNames head) (concatMap declRefNames methods))
 declRefNames (DSig name ctx ty sp) = append (concatMap exprRefNames ctx) (exprRefNames ty)

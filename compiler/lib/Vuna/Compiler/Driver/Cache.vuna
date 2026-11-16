@@ -81,8 +81,9 @@ fixData tbl (DtData n ps ctors kind viaClasses lin repr fields isRec) =
 -- 之下（深度 = 类参数个数；单参数类是 1，多参数 trait 必须按个数，否则会被误判 free-var），
 -- 自定义实例时由 `substInstParam` 把类参数换成头实参。
 fixClass : HashMap Int Value -> DtClass -> DtClass
-fixClass tbl (DtClass n ps projs tys spans) =
-  DtClass n ps (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
+fixClass tbl (DtClass n ps supers projs tys spans) =
+  DtClass n ps (map (fixTerm tbl (length ps)) supers)
+    (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
     (map (fixTerm tbl (length ps)) tys) spans
 
 -- 实例 telescope：tele 第 i 项在 i 个 tele binder 之下；ctx 域与结果头在全部 tele binder 之下。
@@ -166,6 +167,7 @@ classesValid (c :: rest) =
   let
     projs = map (\p => secondOf p) c.dtClassMethods
   in termsValidAt 0 projs
+    && termsValidAt (length c.dtClassParams) c.dtClassSupers
     && termsValidAt (length c.dtClassParams) c.dtClassFieldTys
     && classesValid rest
 
@@ -279,8 +281,12 @@ classIssue c =
   in if projIssue /= "" then "${dtClassName c} proj:${projIssue}"
   else
     let
-      fieldIssue = ctxIssues (length c.dtClassParams) c.dtClassFieldTys
-    in if fieldIssue == "" then "" else "${dtClassName c} field:${fieldIssue}"
+      superIssue = ctxIssues (length c.dtClassParams) c.dtClassSupers
+    in if superIssue /= "" then "${dtClassName c} super:${superIssue}"
+    else
+      let
+        fieldIssue = ctxIssues (length c.dtClassParams) c.dtClassFieldTys
+      in if fieldIssue == "" then "" else "${dtClassName c} field:${fieldIssue}"
 
 classesIssue : List DtClass -> String
 classesIssue [] = ""
@@ -403,9 +409,9 @@ shiftTele off ((Pair n t) :: rest) =
     (\t2 => Vuna.Compiler.Common.bind (shiftTele off rest) (\rest2 => OkC (Pair n t2 :: rest2)))
 
 shiftClass : Int -> DtClass -> Check DtClass
-shiftClass off (DtClass n ps projs tys spans) =
-  Vuna.Compiler.Common.bind (shiftTele off projs)
-    (\projs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftTerm off) tys) (\tys2 => OkC (DtClass n ps projs2 tys2 spans)))
+shiftClass off (DtClass n ps supers projs tys spans) =
+  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftTerm off) supers)
+    (\supers2 => Vuna.Compiler.Common.bind (shiftTele off projs) (\projs2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (shiftTerm off) tys) (\tys2 => OkC (DtClass n ps supers2 projs2 tys2 spans))))
 
 shiftInst : Int -> DtInst -> Check DtInst
 shiftInst off (DtInst n tele ctxE head sp) =

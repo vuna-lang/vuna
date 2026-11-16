@@ -60,7 +60,7 @@ targetsOfDecl (DData name params kind ctors derivings viaField repr lin sp) =
   DocTarget (spanStartLine sp) 1 "decl" name "" :: ctorTargets name ctors
 targetsOfDecl (DRecord name params fields derivings viaField repr lin sp) =
   DocTarget (spanStartLine sp) 1 "decl" name "" :: fieldTargets name fields
-targetsOfDecl (DTrait name params methods sp) =
+targetsOfDecl (DTrait name params supers methods sp) =
   DocTarget (spanStartLine sp) 1 "decl" name "" :: methodTargets name methods
 targetsOfDecl (DSig name ctx ty sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]
 targetsOfDecl (DFun name pats body sp) = [DocTarget (spanStartLine sp) 1 "decl" name ""]

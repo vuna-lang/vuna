@@ -199,12 +199,12 @@ setPrepared prepared mi =
 
 -- 接口格式版本：载荷布局或字段语义变化必须 bump（地址随之换代，旧载荷自然失效）。
 export ifaceSchema : String
-ifaceSchema = "vuna-iface 27"
+ifaceSchema = "vuna-iface 28"
 
 -- | 接口哈希的**算法格式版本**：参与哈希输入（与 `ifaceSchema` 独立——schema 管载荷
 -- 布局，本版本管摘要算法/分片编码；换算法时旧哈希自然换代）。
 ifaceHashVersion : String
-ifaceHashVersion = "vuna-iface-hash 8 (opaque/abstract bodies excluded)"
+ifaceHashVersion = "vuna-iface-hash 9 (opaque/abstract bodies excluded)"
 
 -- ---------------------------------------------------------------
 -- 哈希：接口哈希必须比 `strHash`（10 bit）强得多

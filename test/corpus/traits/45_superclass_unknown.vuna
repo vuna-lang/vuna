@@ -1,0 +1,5 @@
+-- 负例：父类约束引用了未声明的 trait ⇒ RN_UnknownInterface。
+import Prelude
+
+trait Nope a => C a where
+  c : a -> Int

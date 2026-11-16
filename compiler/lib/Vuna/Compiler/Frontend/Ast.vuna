@@ -149,7 +149,8 @@ export data Decl(..) : Type where
   -- `derivings` 后的 `Bool` 是 `deriving via field` 标记。
   -- `viaField` 后的 `ReprTier` 是表示档位（`alias`/`boxed` 前缀，缺省 `ReprAuto`）。
   DRecord : String -> List String -> List Field -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
-  DTrait : String -> List TraitParam -> List TraitMethod -> Span -> Decl
+  -- `supers` 是父类约束（`Functor f => Applicative f` 的前缀），放在参数与方法之间。
+  DTrait : String -> List TraitParam -> List Expr -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
 -- 模块头与导出项。
@@ -270,7 +271,7 @@ declSpan (DExtern name cName ty sp) = sp
 declSpan (DSig name ctx ty sp) = sp
 declSpan (DFun name pats body sp) = sp
 declSpan (DRecord name params fields derivings viaField repr lin sp) = sp
-declSpan (DTrait name params methods sp) = sp
+declSpan (DTrait name params supers methods sp) = sp
 declSpan (DInstance ctxE head methods sp) = sp
 
 export ctorSpan : Ctor -> Span
@@ -366,7 +367,7 @@ declNames (DExtern name cName ty _) = [name]
 declNames (DSig name ctx ty _) = [name]
 declNames (DData dname params kind ctors derivings viaField repr lin _) = map ctorName ctors
 declNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
-declNames (DTrait tname params methods _) = map traitMethodName methods
+declNames (DTrait tname params supers methods _) = map traitMethodName methods
 declNames (DInstance ctxE head methods _) = []
 
 -- 顶层可见名字（把 data / record / trait 的**类型名**也算进来）。
@@ -379,13 +380,13 @@ export declAllNames : Decl -> List String
 declAllNames (DData dname params kind ctors derivings viaField repr lin _) =
   dname :: map ctorName ctors
 declAllNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
-declAllNames (DTrait tname params methods _) = tname :: map traitMethodName methods
+declAllNames (DTrait tname params supers methods _) = tname :: map traitMethodName methods
 declAllNames d = declNames d
 
 _declCtors : Decl -> List String
 _declCtors (DData dname params kind ctors derivings viaField repr lin _) = map ctorName ctors
 _declCtors (DRecord dname params fields derivings viaField repr lin _) = [dname]
-_declCtors (DTrait tname params methods _) = map traitMethodName methods
+_declCtors (DTrait tname params supers methods _) = map traitMethodName methods
 _declCtors _ = []
 
 export ctorsOf : List Decl -> List String
@@ -394,7 +395,7 @@ ctorsOf decls = concatMap _declCtors decls
 export declTypeNames : Decl -> List String
 declTypeNames (DData name params kind ctors derivings viaField repr lin _) = [name]
 declTypeNames (DRecord name params fields derivings viaField repr lin _) = [name]
-declTypeNames (DTrait name params methods _) = [name]
+declTypeNames (DTrait name params supers methods _) = [name]
 declTypeNames _ = []
 
 export typeNamesOf : List Decl -> List String

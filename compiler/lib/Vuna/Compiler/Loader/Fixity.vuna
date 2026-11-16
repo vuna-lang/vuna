@@ -287,9 +287,9 @@ reorderDecl t (DFun name pats body sp) =
 reorderDecl t (DRecord name params fields derivings viaField repr lin sp) =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderRecordField t v) fields)
     (\fs => OkC (DRecord name params fs derivings viaField repr lin sp))
-reorderDecl t (DTrait name params methods sp) =
+reorderDecl t (DTrait name params supers methods sp) =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderTraitParam t p) params)
-    (\ps => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderTraitMethod t v) methods) (\ms => OkC (DTrait name ps ms sp)))
+    (\ps => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) supers) (\ss => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderTraitMethod t v) methods) (\ms => OkC (DTrait name ps ss ms sp))))
 reorderDecl t (DInstance ctx head methods sp) =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) ctx)
     (\ctx2 => Vuna.Compiler.Common.bind (reorderExpr t head) (\head2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))

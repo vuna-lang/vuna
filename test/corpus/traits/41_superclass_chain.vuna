@@ -1,0 +1,33 @@
+-- 三级父类链：Monad => Applicative => Functor；`Monad m =>` 可直接用 bind / pure / fmap。
+import Prelude
+
+trait Functor f where
+  fmap : (a -> b) -> f a -> f b
+
+trait Functor f => Applicative f where
+  pure : a -> f a
+
+trait Applicative m => Monad m where
+  bind : m a -> (a -> m b) -> m b
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+instance Functor Box where
+  fmap f (MkBox x) = MkBox (f x)
+
+instance Applicative Box where
+  pure x = MkBox x
+
+instance Monad Box where
+  bind (MkBox x) f = f x
+
+inc : Int -> Int
+inc n = n + 1
+
+wrap : Monad m => m Int -> m Int
+wrap x = x >>= (\v => fmap inc (pure v))
+
+main : Int
+main = case wrap (MkBox 1) of
+  MkBox n => n

@@ -223,7 +223,7 @@ declKindOfName name (DData n params kind ctors derivings viaField repr lin sp) =
   if n == name then Just "data" else if anyCtorNamed name ctors then Just "ctor" else Nothing
 declKindOfName name (DRecord n params fields derivings viaField repr lin sp) =
   if n == name then Just "record" else if anyFieldNamed name fields then Just "field" else Nothing
-declKindOfName name (DTrait n params methods sp) =
+declKindOfName name (DTrait n params supers methods sp) =
   if n == name then Just "trait" else if anyMethodNamed name methods then Just "method" else Nothing
 declKindOfName name (DSig n ctx ty sp) = if n == name then Just "fun" else Nothing
 declKindOfName name (DFun n pats body sp) = if n == name then Just "fun" else Nothing
@@ -327,7 +327,7 @@ declPositions lines kind name (DData n params k ctors derivings viaField repr li
 declPositions lines kind name (DRecord n params fields derivings viaField repr lin sp) =
   append (if kindMatches kind "record" && n == name then firstInSpanOf lines sp name else [])
     (concatMap (fieldPositions lines kind name) fields)
-declPositions lines kind name (DTrait n params methods sp) =
+declPositions lines kind name (DTrait n params supers methods sp) =
   append (if kindMatches kind "trait" && n == name then firstInSpanOf lines sp name else [])
     (concatMap (methodPositions lines kind name) methods)
 declPositions lines kind name (DSig n ctx ty sp) =
@@ -399,7 +399,9 @@ else case d of
     concatMap (ctorUses (fuel - 1) ctx) ctors
   DRecord n params fields derivings viaField repr lin sp =>
     concatMap (fieldUses (fuel - 1) ctx) fields
-  DTrait n params methods sp => concatMap (methodUses (fuel - 1) ctx) methods
+  DTrait n params supers methods sp =>
+    append (concatMap (\e => usesInExpr (fuel - 1) ctx e) supers)
+      (concatMap (methodUses (fuel - 1) ctx) methods)
   DInstance ctxE head methods sp =>
     append (usesInExpr (fuel - 1) ctx head) (usesInDecls (fuel - 1) ctx methods)
   DAxiom n ty sp => usesInExpr (fuel - 1) ctx ty

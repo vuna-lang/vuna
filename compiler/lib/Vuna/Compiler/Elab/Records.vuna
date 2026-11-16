@@ -138,7 +138,7 @@ desugarRecordDecl records d = case d of
       (\pats2 => Vuna.Compiler.Common.bind (desugarExpr records body) (\body2 => OkC (DFun name pats2 body2 sp)))
   DData name params kind ctors derivings viaField repr lin sp => OkC d
   DRecord name params fields derivings viaField repr lin sp => OkC d
-  DTrait name params methods sp => OkC d
+  DTrait name params supers methods sp => OkC d
   DInstance ctxE head methods sp =>
     Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarRecordDecl records) methods)
       (\ms => OkC (DInstance ctxE head ms sp))

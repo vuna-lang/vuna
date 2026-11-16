@@ -1,0 +1,17 @@
+-- 负例：`instance B T` 没有可用的父类实例 `A T` ⇒ TC_SuperclassNotSatisfied。
+import Prelude
+
+trait A a where
+  a : a -> Int
+
+trait A a => B a where
+  b : a -> Int
+
+data T : Type where
+  MkT : T
+
+instance B T where
+  b _ = 2
+
+main : Int
+main = b MkT

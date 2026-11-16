@@ -1,0 +1,23 @@
+-- 父类约束：`B a` 的字典自动带 `A a` 的字典；泛型函数只写 `B t =>` 就能用 `a`。
+import Prelude
+
+trait A a where
+  a : a -> Int
+
+trait A a => B a where
+  b : a -> Int
+
+data T : Type where
+  MkT : T
+
+instance A T where
+  a _ = 1
+
+instance B T where
+  b _ = 2
+
+both : B t => t -> Int
+both x = a x + b x
+
+main : Int
+main = both MkT

@@ -1539,9 +1539,9 @@ declFindings lines toks allDecls (DData name params kind ctors derivings viaFiel
     (walkListLiteralExprs lintFuel lines toks (ctorTypes ctors))
 declFindings lines toks allDecls (DRecord name params fields derivings viaField repr lin sp) rest =
   walkListLiteralExprs lintFuel lines toks (fieldTypes fields)
-declFindings lines toks allDecls (DTrait name params methods sp) rest =
-  append (walkListLiteralExprs lintFuel lines toks (traitParamKinds params))
-    (walkListLiteralExprs lintFuel lines toks (traitMethodTypes methods))
+declFindings lines toks allDecls (DTrait name params supers methods sp) rest =
+  append (walkListLiteralExprs lintFuel lines toks supers)
+    (append (walkListLiteralExprs lintFuel lines toks (traitParamKinds params)) (walkListLiteralExprs lintFuel lines toks (traitMethodTypes methods)))
 declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =
   append (walkListLiteralExprs lintFuel lines toks ctxE)
     (append (walkListLiteral lintFuel lines toks head) (scanMethodDecls lines toks methods))

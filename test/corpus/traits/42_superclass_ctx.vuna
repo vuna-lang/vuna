@@ -1,0 +1,27 @@
+-- 实例 ctx 蕴含父类实例：`instance Base a => Ext (Box a)` 的父类字典
+-- `Base (Box a)` 由 `Base a` 与参数化实例递归得到。
+import Prelude
+
+trait Base a where
+  base : a -> Int
+
+trait Base a => Ext a where
+  ext : a -> Int
+
+instance Base Int where
+  base n = n
+
+data Box a : Type where
+  MkBox : a -> Box a
+
+helper : Base a => a -> Int
+helper x = base x
+
+instance Base a => Base (Box a) where
+  base (MkBox x) = helper x
+
+instance Base a => Ext (Box a) where
+  ext (MkBox x) = base (MkBox x) + helper x
+
+main : Int
+main = ext (MkBox 2)
