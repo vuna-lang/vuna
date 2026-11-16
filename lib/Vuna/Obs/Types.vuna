@@ -14,7 +14,7 @@ module Vuna.Obs.Types where
 -- `parseEvent` / `eventToJson` / `renderEventLine` / `eventPh` / `eventTs` / `eventDur` /
 -- `spanInterval` / `eventBase` / `eventArgs` / `argJson` / `argInt` / `argStr` / `argStack` /
 -- `sampleOf` / `vunaEventVocabulary` / `isKnownVunaEventName`。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 
 -- | 规范事件格式版本：trace 首行元数据的 `args.schema` 必须逐字等于它。

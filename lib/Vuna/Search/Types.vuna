@@ -1,7 +1,7 @@
 module Vuna.Search.Types where
 
 -- Vuna.Search.Types：检索结果的数据模型（工具链；永不进 seed 闭包）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 export record SearchHit(..) where
   hitName : String

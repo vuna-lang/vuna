@@ -7,7 +7,7 @@ module ReplGapsPure where
 --   * `app/Main.vuna`（main : Int = 失败计数）→ `vuna run test/corpus/repl`；
 --   * `test/ReplPure.vuna`（main : Eff [] Int，失败时 exit 1）→ `vuna test test/corpus/repl`。
 -- `checks = 0` 表示全部通过。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.History
 import Vuna.Repl.Paste.Decode

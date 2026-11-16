@@ -8,7 +8,7 @@ module Vuna.Test.Suite where
 --
 -- 本模块不做执行；只做「文件/TOML -> List Case」的数据转换（读盘经 Eff，TOML 解析与
 -- case 建模保持纯）。对外入口因此是 `Eff r`：`parseSuiteFile` / `discoverCases`。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args

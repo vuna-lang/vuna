@@ -6,7 +6,7 @@ module Vuna.Doc.Html where
 -- 类型检索走 CLI（`vuna search --type`）；页面遇到 `->` / `=>` 时提示命令。
 -- 所有源码文本先 HTML 转义；JSON 中的 `<` 写成 `\u003c`，避免提前闭合 script。
 -- 输出不含时间戳/随机数，同一 DocBook 逐字节可复现。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Doc.Model
 import Vuna.Doc.Prose
 import Vuna.Json

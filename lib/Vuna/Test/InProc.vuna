@@ -21,12 +21,12 @@ import Base.IORef
 import Base.List
 import Base.Maybe
 import Base.String
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Diagnostics.Sink
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Base.Diagnostics.Sink
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.FixityEnv
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules

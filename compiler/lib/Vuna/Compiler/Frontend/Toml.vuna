@@ -29,8 +29,8 @@ module Vuna.Compiler.Frontend.Toml where
 -- 表定义冲突（TOML 1.0 的主要规则）：重复 `[a]`、`[a]` 之后再 `[[a]]`、点键定义过的
 -- 表再 `[a]`、`[a]` 之后再 `[a.b]`（合法）等按规范处理；表数组元素内部再声明子表
 -- 这类 corner case 不支持，边界见文档。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Pkg
 import Base.Bits
 
 export data TomlValue(..) : Type where

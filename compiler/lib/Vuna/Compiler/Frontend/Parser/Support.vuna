@@ -3,10 +3,10 @@ module Vuna.Compiler.Frontend.Parser.Support where
 -- Vuna.Compiler.Frontend.Parser.Support：parser 的状态类型（PState）与 token/游标
 -- 辅助（lookahead、advance、span、fuel、infix 表、token 分类）。解析规则留在
 -- `Parser.vuna`；拆出本模块是为满足 `nix/checks/data/context.budget` 的 max_module_lines。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Diagnostics
+import Vuna.Compiler.Base.Diagnostics.Frontend
 
 -- | 解析模式。决定「语义级语法错误」是否致命：
 --   * `PmStrict`：编译器路径。非线性格（重复 binder）等**语法层被借用的语义检查**

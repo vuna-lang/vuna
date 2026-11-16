@@ -18,14 +18,14 @@ module Vuna.Compiler.Ir.Model where
 --     符号**（`Ir.Runtime` 的契约条目），不含 `v_` / `t_` / `C_` 之类目标前缀，
 --     也不含 OCaml 表达式。
 --
--- 边界：本模块只 import Base 的纯数据结构与 `Vuna.Compiler.Source` 的 `Span`，
+-- 边界：本模块只 import Base 的纯数据结构与 `Vuna.Compiler.Base.Source` 的 `Span`，
 -- 不下钻 Core / Elab / Intrinsics / Codegen。
 export import Base.Pair
 export import Base.Bool
 export import Base.List
 export import Base.Maybe
 export import Base.String
-import Vuna.Compiler.Source
+import Vuna.Compiler.Base.Source
 
 -- ---------------------------------------------------------------
 -- 签名级运行时类型表面

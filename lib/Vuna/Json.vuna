@@ -13,7 +13,7 @@ module Vuna.Json where
 -- 输出端把 < 0x20 的控制字符转成 \u00XX）。
 import Base.List
 import Base.Maybe
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.String
 
 -- ---------------------------------------------------------------

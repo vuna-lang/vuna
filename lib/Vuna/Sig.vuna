@@ -12,7 +12,7 @@ module Vuna.Sig where
 -- 本模块负责把它们还原成列表字面量，保留名不允许泄漏到 api/doc/search/hover。
 -- `::` 链仍按中缀打印（不把闭合 `::` 归一成 `[...]`），这样 `symType` 的
 -- parse 级形状与源码拼写一致，`search --type` 的匹配语义不受打印改动影响。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 
 export renderType : Expr -> String

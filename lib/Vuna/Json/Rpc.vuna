@@ -9,7 +9,7 @@ module Vuna.Json.Rpc where
 --
 -- 标准错误码（JSON-RPC 2.0 §5.1）在这里有唯一真源；LSP 的 `errMethodNotFound`
 -- 也由此重导出（见 `Vuna.Lsp.Protocol`），不再各处手写 `0 - 32601`。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 
 -- JSON-RPC 2.0 错误码（负数）。

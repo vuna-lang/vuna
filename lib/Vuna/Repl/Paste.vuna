@@ -13,7 +13,7 @@ module Vuna.Repl.Paste where
 -- Enter 才提交整段（整段作为一个输入单元或多行 pending，交给 Repl 的既有输入逻辑）。
 -- 不支持该模式的终端不会发 `\e[200~`，只多输出一对被忽略的转义；
 -- 非 tty 路径根本不进入编辑器。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Repl.Paste.Decode
 import Vuna.Repl.Term
 import Base.Eff.Types

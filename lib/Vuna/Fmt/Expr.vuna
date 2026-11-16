@@ -5,7 +5,7 @@ module Vuna.Fmt.Expr where
 -- 单行形式（inlinePrecGo，按运算符优先级补括号；case/let/do 返回 Nothing）与块级形式
 -- （renderExprGo → renderBlockGo/renderWideGo，按 maxWidth 折行）共用同一份模式与中缀表。
 -- 注释锚点由 Vuna.Fmt.Comment 提供（attachAt）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer

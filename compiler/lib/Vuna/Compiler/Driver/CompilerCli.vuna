@@ -11,18 +11,18 @@ module Vuna.Compiler.Driver.CompilerCli where
 -- 拼装）保持纯函数。`CliOpts` 也没有 ambient 存储：入口构造一次后作为显式参数沿命令链
 -- 传递，需要写回的地方（manifest 诊断配置、sarif/json 收集）返回更新后的 `CliOpts`
 -- （`Pair Int CliOpts`）。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Fingerprint
-import Vuna.Compiler.Diagnostics.Sink
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Loader.Fingerprint
+import Vuna.Compiler.Base.Diagnostics.Sink
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Wasm
 import Vuna.Compiler.Driver.Native
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Version
-import Vuna.Compiler.Diag
-import Vuna.Compiler.Diag.Format
+import Vuna.Compiler.Base.Version
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diag.Format
 import Vuna.Compiler.Frontend.Manifest
 import Base.Nat
 import Base.List
@@ -304,7 +304,7 @@ sourceRefEff file = do
   exists <- fsFileExists abs
   digest <- if exists then do
     text <- fsReadFile abs
-    pure (strFromInt (Vuna.Compiler.Fingerprint.textHashOf text))
+    pure (strFromInt (Vuna.Compiler.Loader.Fingerprint.textHashOf text))
   else pure ""
   root <- findPkgRootGo 12 (dirOf abs)
   let

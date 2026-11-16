@@ -19,7 +19,7 @@ module Vuna.Fmt where
 -- `infix*` 声明放在最前（本地优先），并用 keep 表（`tableOfKeepOps`）重排/打印：
 -- 未知**符号**运算符由 Loader 报错（不静默改语义，调用方据此拒绝格式化）；未知反引号
 -- 名字按 9 左结合（Haskell 默认）。本模块不引用固定兜底表。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer

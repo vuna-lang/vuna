@@ -1,0 +1,101 @@
+module Vuna.Compiler.Loader.Layers where
+
+-- 层依赖约束（`[layers]`）。
+--
+-- 层 = 模块前缀；`[layers]` 只写需要严格方向的层，值是「该层允许直接依赖的层」，
+-- 未写的层不约束。判定只看 **直接 import 边**：
+--
+--   模块 m 属于所有匹配它的层前缀（`Vuna.Compiler.Base.Source` 同时属于
+--   `Vuna.Compiler` 与 `Vuna.Compiler.Base`）；m 可以 import t，当且仅当对每个
+--   匹配层 L：t 落在 L 自己的子树、或落在 closure(L.uses) 的某个层子树里。
+--
+-- 依赖包的模块恒放行：跨包方向由 `[export]` 与依赖包自己的 `[layers]` 管。
+-- 入口文件（`Project.projectEntryImports`）没有模块名，不参与检查。
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diagnostics.Loader
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Manifest
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Loader.Modules
+import Base.List
+import Base.String
+
+isLayerPrefix : String -> String -> Bool
+isLayerPrefix prefix name = name == prefix || startsWith "${prefix}." name
+
+usesOfLayer : List Layer -> String -> List String
+usesOfLayer [] name = []
+usesOfLayer (l :: rest) name = if l.layerName == name then l.layerUses else usesOfLayer rest name
+
+closureGo : Int -> List Layer -> List String -> List String -> List String
+closureGo fuel layers todo acc = if fuel <= 0 then acc
+else case todo of
+  [] => acc
+  n :: rest =>
+    if memName n acc then closureGo (fuel - 1) layers rest acc
+    else closureGo (fuel - 1) layers (append rest (usesOfLayer layers n)) (n :: acc)
+
+-- | 一行的许可集：自身层 + uses 的传递闭包（层数有限，fuel 足够）。
+allowedByRow : List Layer -> Layer -> List String
+allowedByRow layers l = closureGo (length layers + 2) layers l.layerUses [l.layerName]
+
+covered : List String -> String -> Bool
+covered [] name = False
+covered (p :: rest) name = isLayerPrefix p name || covered rest name
+
+-- | 匹配的所有层取交集：每个匹配行都必须允许 `target` 落在它的许可子树里。
+importAllowed : List Layer -> List Layer -> String -> Bool
+importAllowed layers [] target = True
+importAllowed layers (r :: rest) target =
+  covered (allowedByRow layers r) target && importAllowed layers rest target
+
+layerMatches : String -> Layer -> Bool
+layerMatches name l = isLayerPrefix l.layerName name
+
+matchingLayers : List Layer -> String -> List Layer
+matchingLayers rules name = filter (layerMatches name) rules
+
+-- | 诊断里用的层标签：最具体的已声明层；没有声明则退回到模块名的父前缀。
+export labelOf : List Layer -> String -> String
+labelOf rules name = case matchingLayers rules name of
+  [] => prefixOfName name
+  l :: rest => labelBest l rest
+
+labelBest : Layer -> List Layer -> String
+labelBest best [] = best.layerName
+labelBest best (l :: rest) =
+  if strLength l.layerName > strLength best.layerName then labelBest l rest else labelBest best rest
+
+layersOfRoot : List Root -> String -> List Layer
+layersOfRoot [] pkg = []
+layersOfRoot (r :: rest) pkg = if rootName r == pkg then rootLayers r else layersOfRoot rest pkg
+
+withImportSpan : Import -> Diagnostic -> Diagnostic
+withImportSpan imp e =
+  if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
+
+checkImports : List Layer -> List Layer -> String -> String -> List Module -> List Import -> Check Int
+checkImports allRules matched srcName srcPkg modules [] = OkC 0
+checkImports allRules matched srcName srcPkg modules (imp :: rest) = case findModule modules (importName imp) of
+  Nothing => checkImports allRules matched srcName srcPkg modules rest
+  Just t =>
+    if modulePackageOf t /= srcPkg then checkImports allRules matched srcName srcPkg modules rest
+    else if importAllowed allRules matched (moduleNameOf t) then checkImports allRules matched srcName srcPkg modules rest
+    else onErrDiag (withImportSpan imp)
+      (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
+
+checkModules : List Root -> List Module -> List Module -> Check Int
+checkModules roots all [] = OkC 0
+checkModules roots all (m :: rest) =
+  let
+    rules = layersOfRoot roots (modulePackageOf m)
+    matched = matchingLayers rules (moduleNameOf m)
+  in if length matched == 0 then checkModules roots all rest
+  else case checkImports rules matched (moduleNameOf m) (modulePackageOf m) all (moduleAllImportsOf m) of
+    ErrC e => ErrC e
+    OkC _ => checkModules roots all rest
+
+-- | 项目级层检查：逐个模块检查直接 import 边是否越过层边界。
+export checkProjectLayers : List Root -> Project -> Check Int
+checkProjectLayers roots project = checkModules roots project.projectModules project.projectModules

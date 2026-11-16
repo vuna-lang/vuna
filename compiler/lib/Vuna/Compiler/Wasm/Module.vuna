@@ -16,7 +16,9 @@ import Base.Maybe
 import Base.Pair
 import Base.Result
 import Base.String
-import Vuna.Compiler.Ir
+import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Analysis
+import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Runtime

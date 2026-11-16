@@ -6,7 +6,7 @@ module Vuna.Search.Query where
 -- doc：查询按空白分词，要求全部 token 出现在 docstring 中。
 -- 类型：parse 级结构化匹配（exact / alpha / general / specific / result / overlap）。
 --       签名与查询都从 `symType` 的**可回读**文本重新 parse；不做实例/隐式解析。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Index.Types

@@ -4,7 +4,7 @@ module Vuna.Lint.Fix where
 --
 -- 编辑按起点排序、从后往前应用（避免行号漂移），每次修复后用 parseSource 复验，
 -- 不合法就当作不可修复。门面的 --fix 循环调用本模块的 fixLoop。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Rules

@@ -5,18 +5,19 @@ module Vuna.Compiler.Elab.Dict where
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Base.List
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
-import Vuna.Compiler.Core
 import Vuna.Compiler.Core.Term
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Frontend.Ast
 
 export isDictDomain : Ec -> Value -> Bool
@@ -178,7 +179,7 @@ else case args of
   arg :: rest => case viaWrapperOf ec fam arg of
     Nothing => tryViaArgs globals ctx (fuel - 1) ec sp fam rest (idx + 1)
     Just fieldTy =>
-      Vuna.Compiler.Common.bind
+      Vuna.Compiler.Base.Common.bind
         (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp)
         (\p => OkC (Just p))
 
@@ -408,7 +409,7 @@ rowYesCtorName = "Base.Eff.Yes.MkYes"
 
 -- 行成员证明：`Member e r` 是 Type-1 归纳族；精化器按行结构
 -- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名
--- （名字集中在 `Vuna.Compiler.Intrinsics` 的效果协议常量）。
+-- （名字集中在 `Vuna.Compiler.Base.Intrinsics` 的效果协议常量）。
 memberDomName : String
 memberDomName = effMemberFamilyName
 
@@ -512,9 +513,9 @@ memberProofAt fuel depth ec nF eF rF target = if fuel <= 0 then icFuel "member p
 else case forceVal ec rF of
   VCon cname cargs => if cname == effRowConsCtor then case cargs of
     n1 :: h :: t :: _ =>
-      if target <= 0 then Vuna.Compiler.Common.bind (convEc ec depth eF h)
-        (\ec1 => Vuna.Compiler.Common.bind (convEc ec1 depth nF n1) (\ec2 => OkC (Pair (ctorValue ec2 hereCtorName [nF, eF, t]) ec2)))
-      else Vuna.Compiler.Common.bind (memberProofAt (fuel - 1) depth ec nF eF t (target - 1))
+      if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h)
+        (\ec1 => Vuna.Compiler.Base.Common.bind (convEc ec1 depth nF n1) (\ec2 => OkC (Pair (ctorValue ec2 hereCtorName [nF, eF, t]) ec2)))
+      else Vuna.Compiler.Base.Common.bind (memberProofAt (fuel - 1) depth ec nF eF t (target - 1))
         (\p => OkC (Pair (ctorValue (secondOf p) thereCtorName [nF, eF, n1, h, t, firstOf p]) (secondOf p)))
     _ => icInternal "malformed row in member proof"
   else icInternal "member proof target out of range"
@@ -962,7 +963,7 @@ cmpMethodShortOf name = methodShortOf name
 export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
-    Vuna.Compiler.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
+    Vuna.Compiler.Base.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
       (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
     Nothing =>
@@ -1049,7 +1050,7 @@ export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Ter
 -- （`Ord instance required`），不生成 `bi_lt_generic` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
-    Vuna.Compiler.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
+    Vuna.Compiler.Base.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
       (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>

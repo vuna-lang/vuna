@@ -8,10 +8,10 @@ module Vuna.Compiler.Core.Eval where
 --
 -- 定义性相等（beta + delta + eta）在 Vuna.Compiler.Core.Conv；本模块是它的下游依赖。
 -- 依赖 Core.Term 的表示层与纯数据操作。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Vuna.Compiler.Core.Term
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 
 -- ---------------------------------------------------------------
 -- 环境与求值（beta）
@@ -429,7 +429,7 @@ strPrim3 ([a, b, c]) f = case asStr a of
   Nothing => Nothing
 strPrim3 sp f = Nothing
 
--- 内建归约：唯一真源是 `Vuna.Compiler.Intrinsics` 的名字表 + 归约标签。
+-- 内建归约：唯一真源是 `Vuna.Compiler.Base.Intrinsics` 的名字表 + 归约标签。
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
 -- 行删除：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
 -- 判断后再移除。类型族里重复变量（`rowRem e (Cons e r)`）不会强制相等，不能用于此。

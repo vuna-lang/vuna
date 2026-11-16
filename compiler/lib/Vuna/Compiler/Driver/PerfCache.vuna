@@ -16,12 +16,12 @@ module Vuna.Compiler.Driver.PerfCache where
 --
 -- 效果显式化：目录遍历 / 读文件 / 写文件 / 建目录 / 删除 / 环境与二进制指纹全部显式在
 -- `Eff r` 里；纯数据逻辑（路径 / 哈希 / 文件名 / 桶 key）保持纯函数。
-import Vuna.Compiler.Canonical.Bytes
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Bytes
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Split
-import Vuna.Compiler.Fingerprint
-import Vuna.Compiler.Store
-import Vuna.Compiler.Version
+import Vuna.Compiler.Loader.Fingerprint
+import Vuna.Compiler.Base.Store
+import Vuna.Compiler.Base.Version
 import Base.EffFs
 import Base.EffProcess
 import Base.Eff.Types

@@ -3,19 +3,19 @@ module Vuna.GenErrors where
 -- Vuna.GenErrors：从**枚举真源**生成错误码文档。
 --
 -- code、模板、说明、规则名、修复动作全部来自三个枚举表——
---   Vuna.Compiler.Diagnostics 的 `tcAll` / `cgAll`（TC_/CG_），
+--   Vuna.Compiler.Base.Diagnostics 的 `tcAll` / `cgAll`（TC_/CG_），
 --   Vuna.Lint.Diagnostics 的 `lintAll`（LN_），
 -- 单一真源，不需要扫源码注释、也不必从消息字面量反推前缀。
 -- FX_（自动修复码）由可修复的 LN_ 规则派生：`FX_` + 规则名去 `-`。
 -- 纯数据渲染，不读文件、不跑类型检查；生成物不纳入 git（docs/.generated/ 在 .gitignore）。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Diagnostics.Rn
-import Vuna.Compiler.Diagnostics.Pkg
-import Vuna.Compiler.Diagnostics.Warning
-import Vuna.Compiler.Frontend.Diagnostics
-import Vuna.Compiler.Loader.Diagnostics
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Base.Diagnostics.Rn
+import Vuna.Compiler.Base.Diagnostics.Pkg
+import Vuna.Compiler.Base.Diagnostics.Warning
+import Vuna.Compiler.Base.Diagnostics.Frontend
+import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Files
 import Vuna.Lint.Diagnostics
 import Base.List
@@ -114,8 +114,8 @@ renderDoc entries = do
   fxs <- pure (renderLintTable (fixEntries entries))
   pure ("""# vuna 错误码
 
-由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Diagnostics` 的 `tcAll`/`cgAll`、
-`Vuna.Compiler.Frontend.Diagnostics` 的 `lexAll`/`psAll`、`Vuna.Compiler.Loader.Diagnostics` 的 `ldAll`、
+由 `vuna gen-errors` 从枚举真源（`Vuna.Compiler.Base.Diagnostics` 的 `tcAll`/`cgAll`、
+`Vuna.Compiler.Base.Diagnostics.Frontend` 的 `lexAll`/`psAll`、`Vuna.Compiler.Base.Diagnostics.Loader` 的 `ldAll`、
 `Vuna.Lint.Diagnostics` 的 `lintAll`）生成；**勿手改**（生成物，不纳入 git）。
 
 约定：运行诊断输出 `[CODE] 消息`；符号语义稳定、只增不删；

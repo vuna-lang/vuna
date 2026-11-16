@@ -10,19 +10,22 @@ module Vuna.Compiler.Driver.Owner where
 -- 归属来源只有 Loader-resolved 的声明结构：声明名、`DInstance` 头（与 Elab 同一
 -- `instanceName` 实现）、`DData`/`DRecord` 的 deriving 实例名、`DTrait` 的方法投影名与
 -- `Dict_<trait>`。推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Elab
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Intrinsics
-import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Base.Intrinsics
 import Base.HashMap
+import Vuna.Compiler.Elab.Derive
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.InstName
+import Vuna.Compiler.Elab.Term
+import Vuna.Compiler.Elab.Types
 
 splitNoSpan : Span
 splitNoSpan = Span "" 0 0 0 0
 
--- 入口单元的固定名（唯一定义在 `Driver.Split.entryUnitName`）。
+-- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
 export entryOwner : String
-entryOwner = entryUnitName
+entryOwner = "Main"
 
 -- | 名字的模块前缀（`A.B.f` → `A.B`；无点时 `""`）；实现收敛到 `Source.prefixOfName`。
 export modulePrefixOfName : String -> String
@@ -188,90 +191,11 @@ splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
 export nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Check (List (Pair String String))
 nameOwnerPairsOfDefs meta [] = OkC []
 nameOwnerPairsOfDefs meta (d :: rest) =
-  Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d))
-    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => OkC (Pair (dtDefName d) o :: ps)))
+  Vuna.Compiler.Base.Common.bind (splitDefOwnerOf meta (dtDefName d))
+    (\o => Vuna.Compiler.Base.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => OkC (Pair (dtDefName d) o :: ps)))
 
 export nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Check (List (Pair String String))
 nameOwnerPairsOfDatas meta [] = OkC []
 nameOwnerPairsOfDatas meta (d :: rest) =
-  Vuna.Compiler.Common.bind (splitDataOwnerOf meta d)
-    (\o => Vuna.Compiler.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => OkC (Pair (dtDataName d) o :: ps)))
-
--- ---------------------------------------------------------------
--- 生成前护栏：模块声明必须已 resolved、入口声明必须是裸名、归属必须全覆盖
--- ---------------------------------------------------------------
-checkModuleDeclName : List String -> String -> String -> Check Int
-checkModuleDeclName knownModules mname name =
-  if containsDot name then if memName (modulePrefixOfName name) knownModules then OkC 0
-  else err
-    "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
-  else err
-    "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
-
-checkModuleDeclNames : List String -> String -> List String -> Check Int
-checkModuleDeclNames knownModules mname [] = OkC 0
-checkModuleDeclNames knownModules mname (n :: rest) =
-  Vuna.Compiler.Common.bind (checkModuleDeclName knownModules mname n)
-    (\_ => checkModuleDeclNames knownModules mname rest)
-
-checkModuleDecls : List String -> List (Pair String (List Decl)) -> Check Int
-checkModuleDecls knownModules [] = OkC 0
-checkModuleDecls knownModules ((Pair mname decls) :: rest) =
-  Vuna.Compiler.Common.bind (checkModuleDeclNames knownModules mname (splitDeclNames decls))
-    (\_ => checkModuleDecls knownModules rest)
-
--- 入口的**声明身份**：签名/定义同名是正常形态（DSig + 多 clause DFun），所以只看
--- data/record/trait/sig 这些唯一标识；它们必须是裸名（入口没有模块前缀）。
--- `data T` 与值 `T` 同名是允许的（两个命名空间），因此身份带命名空间标签；
--- 只有同一命名空间内重名才是重复。
-entryDeclIdentities : List Decl -> List (Pair Bool String)
-entryDeclIdentities [] = []
-entryDeclIdentities (d :: rest) = case d of
-  DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
-  DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
-  DData name params kind ctors derivings viaField repr lin sp =>
-    Pair True name :: entryDeclIdentities rest
-  DRecord name params fields derivings viaField repr lin sp =>
-    Pair True name :: entryDeclIdentities rest
-  DTrait name params supers methods sp => Pair True name :: entryDeclIdentities rest
-  _ => entryDeclIdentities rest
-
-entryDeclKey : Pair Bool String -> String
-entryDeclKey (Pair True name) = "type\t${name}"
-entryDeclKey (Pair False name) = "value\t${name}"
-
-checkEntryDeclName : List String -> Pair Bool String -> Check Int
-checkEntryDeclName seen identity =
-  let
-    name = secondOf identity
-    key = entryDeclKey identity
-  in if name == "" then icInternal "entry declaration has an empty name"
-  else if containsDot name then err
-    "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
-  else if memName key seen then icInternal "duplicate entry declaration `${name}`" else OkC 0
-
-checkEntryDeclsGo : List String -> List (Pair Bool String) -> Check Int
-checkEntryDeclsGo seen [] = OkC 0
-checkEntryDeclsGo seen (n :: rest) =
-  Vuna.Compiler.Common.bind (checkEntryDeclName seen n)
-    (\_ => checkEntryDeclsGo (entryDeclKey n :: seen) rest)
-
-checkEntryDecls : List Decl -> Check Int
-checkEntryDecls decls = checkEntryDeclsGo [] (entryDeclIdentities decls)
-
--- 每个 runtime `DtDef` / `DtData` 都必须有归属（查表命中或带点名字命中已知模块），
--- 在生成前失败并带名字，而不是静默丢定义。
-checkDefOwners : SplitMeta -> List DtDef -> Check Int
-checkDefOwners meta [] = OkC 0
-checkDefOwners meta (d :: rest) =
-  Vuna.Compiler.Common.bind (splitDefOwnerOf meta (dtDefName d)) (\_ => checkDefOwners meta rest)
-
-checkDataOwners : SplitMeta -> List DtData -> Check Int
-checkDataOwners meta [] = OkC 0
-checkDataOwners meta (d :: rest) =
-  Vuna.Compiler.Common.bind (splitDataOwnerOf meta d) (\_ => checkDataOwners meta rest)
-
-export checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Check Int
-checkResolvedModules meta modules entryDecls runtime datas =
-  Vuna.Compiler.Common.bind (checkModuleDecls meta.smKnownModules modules)
-    (\_ => Vuna.Compiler.Common.bind (checkEntryDecls entryDecls) (\_ => Vuna.Compiler.Common.bind (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
+  Vuna.Compiler.Base.Common.bind (splitDataOwnerOf meta d)
+    (\o => Vuna.Compiler.Base.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => OkC (Pair (dtDataName d) o :: ps)))

@@ -1,6 +1,6 @@
 module Vuna.Compiler.Elab.Prelude where
 
--- Vuna.Compiler.Elab.Prelude：把 `Vuna.Compiler.Intrinsics` 的**唯一内建声明表**翻译成
+-- Vuna.Compiler.Elab.Prelude：把 `Vuna.Compiler.Base.Intrinsics` 的**唯一内建声明表**翻译成
 -- DT 的 prelude globals（签名项）。这里是内建名字/签名表的唯一消费点：
 --
 --   - `Int` / `String` 是语言 primitive 类型；`Bool` 是 base 的普通 data 声明
@@ -11,10 +11,12 @@ module Vuna.Compiler.Elab.Prelude where
 --
 -- 名字解析（arity/放行/能力）在 `Loader.Resolve`，runtime 映射在 `Codegen.Term`，
 -- interp 归约在 `Core.Eval`——三处都消费同一张表。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
-import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Base.Intrinsics
 
 export intTy : Term
 intTy = TGlobal intTypeName

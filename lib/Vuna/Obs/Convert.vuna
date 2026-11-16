@@ -26,7 +26,7 @@ import Base.List
 import Base.Maybe
 import Base.String
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Flame
 import Vuna.Obs.Read

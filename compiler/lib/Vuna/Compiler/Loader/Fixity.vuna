@@ -15,9 +15,9 @@ module Vuna.Compiler.Loader.Fixity where
 --
 -- 重排后 AST 不含 `EInfix` / `EBacktick` / `ESect*` / `EParen`；Elab / codegen 不应看到
 -- 它们（残留即 internal error）。Fmt / Index / Lsp 在 parse 后阶段各自处理这些节点。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Diagnostics.Rn
+import Vuna.Compiler.Base.Diagnostics.Rn
 
 export record FixityTable where
   renameMode : Bool
@@ -103,15 +103,15 @@ infixTerm t c lhs rhs sp =
 -- 把右嵌套的 `EInfix` / `EBacktick` 链展平成「首操作数 + 链元素列表」；括号 / 应用 / 原子
 -- 作为边界操作数（先递归重排，EParen 在这里消失）。
 collectChain : FixityTable -> Expr -> Check (Pair Expr (List ChainOp))
-collectChain t (EInfix op l r sp) = Vuna.Compiler.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Common.bind (collectChain t r) (\p => case p of
+collectChain t (EInfix op l r sp) = Vuna.Compiler.Base.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Base.Common.bind (collectChain t r) (\p => case p of
   Pair first rest => OkC (Pair l2 (ChainOp op False first sp :: rest))
 )
 )
-collectChain t (EBacktick name l r sp) = Vuna.Compiler.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Common.bind (collectChain t r) (\p => case p of
+collectChain t (EBacktick name l r sp) = Vuna.Compiler.Base.Common.bind (reorderExpr t l) (\l2 => Vuna.Compiler.Base.Common.bind (collectChain t r) (\p => case p of
   Pair first rest => OkC (Pair l2 (ChainOp name True first sp :: rest))
 )
 )
-collectChain t e = Vuna.Compiler.Common.bind (reorderExpr t e) (\e2 => OkC (Pair e2 []))
+collectChain t e = Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => OkC (Pair e2 []))
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
@@ -129,14 +129,14 @@ else case rest of
         nextMin = if assoc == 2 then level else level + 1
         rhs = c.chainRhs
       in if level < minPrec then OkC (Pair lhs rest)
-      else Vuna.Compiler.Common.bind (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
+      else Vuna.Compiler.Base.Common.bind (climb (fuel - 1) t nextMin rhs more sp) (\p => case p of
         Pair rhs2 more2 => climb (fuel - 1) t minPrec (infixTerm t c lhs rhs2 sp) more2 sp
       )
 
 -- 一条中缀链：先展平，再按优先级重排；重排后不允许剩运算符。
 reorderChain : FixityTable -> Expr -> Check Expr
-reorderChain t e = Vuna.Compiler.Common.bind (collectChain t e) (\p => case p of
-  Pair first rest => Vuna.Compiler.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprSpan e)) (\q => case q of
+reorderChain t e = Vuna.Compiler.Base.Common.bind (collectChain t e) (\p => case p of
+  Pair first rest => Vuna.Compiler.Base.Common.bind (climb (2 * length rest + 2) t 0 first rest (exprSpan e)) (\q => case q of
     Pair out leftover =>
       if length leftover == 0 then OkC out else icInternal "infix reorder left an operator"
   )
@@ -154,97 +154,99 @@ reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
 reorderExpr t (ESectOp op sp) =
   if renameMode t then OkC (EVar (aliasOf t op) sp) else OkC (ESectOp op sp)
 reorderExpr t (ESectL op e sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t e)
+  Vuna.Compiler.Base.Common.bind (reorderExpr t e)
     (\e2 => if renameMode t then OkC (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [EVar "vuna_section" sp, e2] sp) sp) else OkC (ESectL op e2 sp))
 reorderExpr t (ESectR e op sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t e)
+  Vuna.Compiler.Base.Common.bind (reorderExpr t e)
     (\e2 => if renameMode t then OkC (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [e2, EVar "vuna_section" sp] sp) sp) else OkC (ESectR e2 op sp))
 reorderExpr t (EParen inner sp) = reorderExpr t inner
 reorderExpr t (ELam names body sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
 reorderExpr t (EApp fn args sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t fn)
-    (\fn2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp fn2 args2 sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t fn)
+    (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp fn2 args2 sp)))
 reorderExpr t (EPi name implicit qty dom cod sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t dom)
-    (\dom2 => Vuna.Compiler.Common.bind (reorderExpr t cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t dom)
+    (\dom2 => Vuna.Compiler.Base.Common.bind (reorderExpr t cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
 reorderExpr t (ELet binds body rec_ sp) =
-  Vuna.Compiler.Common.bind (reorderBinds t binds)
-    (\binds2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
+  Vuna.Compiler.Base.Common.bind (reorderBinds t binds)
+    (\binds2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
 reorderExpr t (ELocalFun clauses sp) =
-  Vuna.Compiler.Common.bind (reorderClauses t clauses) (\cs => OkC (ELocalFun cs sp))
+  Vuna.Compiler.Base.Common.bind (reorderClauses t clauses) (\cs => OkC (ELocalFun cs sp))
 reorderExpr t (ECase scrut alts sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t scrut)
-    (\scrut2 => Vuna.Compiler.Common.bind (reorderAlts t alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t scrut)
+    (\scrut2 => Vuna.Compiler.Base.Common.bind (reorderAlts t alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
 reorderExpr t (EIf c th el sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t c)
-    (\c2 => Vuna.Compiler.Common.bind (reorderExpr t th) (\th2 => Vuna.Compiler.Common.bind (reorderExpr t el) (\el2 => OkC (EIf c2 th2 el2 sp))))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t c)
+    (\c2 => Vuna.Compiler.Base.Common.bind (reorderExpr t th) (\th2 => Vuna.Compiler.Base.Common.bind (reorderExpr t el) (\el2 => OkC (EIf c2 th2 el2 sp))))
 reorderExpr t (EField base fname sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t base) (\b => OkC (EField b fname sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t base) (\b => OkC (EField b fname sp))
 reorderExpr t (ERecord rname fields sp) =
-  Vuna.Compiler.Common.bind (reorderFields t fields) (\fs => OkC (ERecord rname fs sp))
+  Vuna.Compiler.Base.Common.bind (reorderFields t fields) (\fs => OkC (ERecord rname fs sp))
 reorderExpr t (ERecUpdate base fields sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t base)
-    (\b => Vuna.Compiler.Common.bind (reorderFields t fields) (\fs => OkC (ERecUpdate b fs sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t base)
+    (\b => Vuna.Compiler.Base.Common.bind (reorderFields t fields) (\fs => OkC (ERecUpdate b fs sp)))
 reorderExpr t (EDo stmts sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderDoStmt t v) stmts)
-    (\ss => OkC (EDo ss sp))
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\v => reorderDoStmt t v) stmts) (\ss => OkC (EDo ss sp))
 reorderExpr t (EAnn inner ty sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t inner)
-    (\i2 => Vuna.Compiler.Common.bind (reorderExpr t ty) (\t2 => OkC (EAnn i2 t2 sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t inner)
+    (\i2 => Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\t2 => OkC (EAnn i2 t2 sp)))
 -- 模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
 reorderExpr t (EInterp multi parts sp) =
-  Vuna.Compiler.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
+  Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
 reorderExpr t other = icInternal "Fixity.reorderExpr: unexpected expression form"
 
 -- 模板片段列表（`EInterp` 的洞内表达式同样要按 fixity 重排）。
 reorderInterpParts : FixityTable -> List InterpPart -> Check (List InterpPart)
 reorderInterpParts t [] = OkC []
 reorderInterpParts t (p :: rest) = case p of
-  IPText s => Vuna.Compiler.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPText s :: ps))
+  IPText s =>
+    Vuna.Compiler.Base.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPText s :: ps))
   IPHole e =>
-    Vuna.Compiler.Common.bind (reorderExpr t e)
-      (\e2 => Vuna.Compiler.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPHole e2 :: ps)))
+    Vuna.Compiler.Base.Common.bind (reorderExpr t e)
+      (\e2 => Vuna.Compiler.Base.Common.bind (reorderInterpParts t rest) (\ps => OkC (IPHole e2 :: ps)))
 
 reorderBinds : FixityTable -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
-reorderBinds t binds = Vuna.Compiler.Common.traverse (\v => reorderBind t v) binds
+reorderBinds t binds = Vuna.Compiler.Base.Common.traverse (\v => reorderBind t v) binds
 
 reorderBind : FixityTable -> Pair Pat Expr -> Check (Pair Pat Expr)
 reorderBind t (Pair pat value) =
-  Vuna.Compiler.Common.bind (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Common.bind (reorderExpr t value) (\v2 => OkC (Pair p2 v2)))
+  Vuna.Compiler.Base.Common.bind (reorderPattern t pat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (Pair p2 v2)))
 
 reorderFields : FixityTable -> List (Pair String Expr) -> Check (List (Pair String Expr))
-reorderFields t fields = Vuna.Compiler.Common.traverse (\v => reorderField t v) fields
+reorderFields t fields = Vuna.Compiler.Base.Common.traverse (\v => reorderField t v) fields
 
 reorderField : FixityTable -> Pair String Expr -> Check (Pair String Expr)
 reorderField t (Pair fname value) =
-  Vuna.Compiler.Common.bind (reorderExpr t value) (\v2 => OkC (Pair fname v2))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t value) (\v2 => OkC (Pair fname v2))
 
 reorderClauses : FixityTable -> List (Pair (List Pat) Expr) -> Check (List (Pair (List Pat) Expr))
-reorderClauses t clauses = Vuna.Compiler.Common.traverse (\v => reorderClause t v) clauses
+reorderClauses t clauses = Vuna.Compiler.Base.Common.traverse (\v => reorderClause t v) clauses
 
 -- `case ... of` 的分支是 `Pair Pat Expr`（局部函数 clause 才是 `Pair (List Pat) Expr`）。
 reorderAlts : FixityTable -> List (Pair Pat Expr) -> Check (List (Pair Pat Expr))
-reorderAlts t alts = Vuna.Compiler.Common.traverse (\a => reorderAlt t a) alts
+reorderAlts t alts = Vuna.Compiler.Base.Common.traverse (\a => reorderAlt t a) alts
 
 reorderAlt : FixityTable -> Pair Pat Expr -> Check (Pair Pat Expr)
 reorderAlt t (Pair pat body) =
-  Vuna.Compiler.Common.bind (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => OkC (Pair p2 b2)))
+  Vuna.Compiler.Base.Common.bind (reorderPattern t pat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (Pair p2 b2)))
 
 reorderClause : FixityTable -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
 reorderClause t (Pair pats body) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\pat => reorderPattern t pat) pats)
-    (\pats2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => OkC (Pair pats2 b2)))
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\pat => reorderPattern t pat) pats)
+    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (Pair pats2 b2)))
 
 reorderDoStmt : FixityTable -> DoStmt -> Check DoStmt
 reorderDoStmt t (DBind pat expr sp) =
-  Vuna.Compiler.Common.bind (reorderPattern t pat)
-    (\p2 => Vuna.Compiler.Common.bind (reorderExpr t expr) (\e2 => OkC (DBind p2 e2 sp)))
+  Vuna.Compiler.Base.Common.bind (reorderPattern t pat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (reorderExpr t expr) (\e2 => OkC (DBind p2 e2 sp)))
 reorderDoStmt t (DExpr expr sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t expr) (\e2 => OkC (DExpr e2 sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t expr) (\e2 => OkC (DExpr e2 sp))
 
 export reorderPattern : FixityTable -> Pat -> Check Pat
 reorderPattern t pat = case pat of
@@ -256,71 +258,78 @@ reorderPattern t pat = case pat of
     let
       -- 中缀构造子（`::`）按别名表换成 canonical 名（`Cons`）。
       name2 = if name == "::" && renameMode t then aliasOf t "::" else name
-    in Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderPattern t p) pats)
+    in Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (\p => reorderPattern t p) pats)
       (\pats2 => OkC (PCon name2 pats2 sp))
   -- as-pattern `x@pat` 只递归内层模式。
   PAs name inner sp =>
-    Vuna.Compiler.Common.bind (reorderPattern t inner) (\inner2 => OkC (PAs name inner2 sp))
+    Vuna.Compiler.Base.Common.bind (reorderPattern t inner) (\inner2 => OkC (PAs name inner2 sp))
   PRecord rname fields sp =>
-    Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderRecPatField t p) fields)
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (\p => reorderRecPatField t p) fields)
       (\fs => OkC (PRecord rname fs sp))
 
 reorderRecPatField : FixityTable -> Pair String Pat -> Check (Pair String Pat)
 reorderRecPatField t (Pair fname pat) =
-  Vuna.Compiler.Common.bind (reorderPattern t pat) (\p2 => OkC (Pair fname p2))
+  Vuna.Compiler.Base.Common.bind (reorderPattern t pat) (\p2 => OkC (Pair fname p2))
 
 -- 类型表达式同样走重排（`a -> b -> c` 是 `EInfix "->"` 链）。
 reorderDecl : FixityTable -> Decl -> Check Decl
 reorderDecl t (DData name params kind ctors derivings viaField repr lin sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t kind)
-    (\k2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\c => reorderCtor t c) ctors) (\cs => OkC (DData name params k2 cs derivings viaField repr lin sp)))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t kind)
+    (\k2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\c => reorderCtor t c) ctors) (\cs => OkC (DData name params k2 cs derivings viaField repr lin sp)))
 reorderDecl t (DAxiom name ty sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (DAxiom name ty2 sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (DAxiom name ty2 sp))
 reorderDecl t (DExtern name cName ty sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (DExtern name cName ty2 sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (DExtern name cName ty2 sp))
 reorderDecl t (DSig name ctx ty sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) ctx)
-    (\ctx2 => Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
+  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
 reorderDecl t (DFun name pats body sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderPattern t p) pats)
-    (\pats2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\p => reorderPattern t p) pats)
+    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
 reorderDecl t (DRecord name params fields derivings viaField repr lin sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderRecordField t v) fields)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\v => reorderRecordField t v) fields)
     (\fs => OkC (DRecord name params fs derivings viaField repr lin sp))
 reorderDecl t (DTrait name params supers methods sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderTraitParam t p) params)
-    (\ps => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) supers) (\ss => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderTraitMethod t v) methods) (\ms => OkC (DTrait name ps ss ms sp))))
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\p => reorderTraitParam t p) params)
+    (\ps => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) supers) (\ss => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\v => reorderTraitMethod t v) methods) (\ms => OkC (DTrait name ps ss ms sp))))
 reorderDecl t (DInstance ctx head methods sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) ctx)
-    (\ctx2 => Vuna.Compiler.Common.bind (reorderExpr t head) (\head2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))
+  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => Vuna.Compiler.Base.Common.bind (reorderExpr t head) (\head2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\v => reorderInstanceMethodDecl t v) methods) (\ms => OkC (DInstance ctx2 head2 ms sp))))
 
 -- | 重排 trait 参数显式 kind 里的中缀（`Type -> Type` 这类 kind 必须经过 Loader，否则 Elab 见到残留 EParen）。
 reorderTraitParam : FixityTable -> TraitParam -> Check TraitParam
 reorderTraitParam t p = case p.traitParamKind of
   Nothing => OkC p
   Just k =>
-    Vuna.Compiler.Common.bind (reorderExpr t k) (\k2 => OkC (TraitParam p.traitParamName (Just k2)))
+    Vuna.Compiler.Base.Common.bind (reorderExpr t k)
+      (\k2 => OkC (TraitParam p.traitParamName (Just k2)))
 
 reorderCtor : FixityTable -> Ctor -> Check Ctor
 reorderCtor t (Ctor name ty arity sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (Ctor name ty2 arity sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (Ctor name ty2 arity sp))
 
 reorderRecordField : FixityTable -> Field -> Check Field
 reorderRecordField t (Field name ty sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (Field name ty2 sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (Field name ty2 sp))
 
 reorderTraitMethod : FixityTable -> TraitMethod -> Check TraitMethod
 reorderTraitMethod t (TraitMethod name ty sp) =
-  Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (TraitMethod name ty2 sp))
+  Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (TraitMethod name ty2 sp))
 
 reorderInstanceMethodDecl : FixityTable -> Decl -> Check Decl
 reorderInstanceMethodDecl t (DSig name ctx ty sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\e => reorderExpr t e) ctx)
-    (\ctx2 => Vuna.Compiler.Common.bind (reorderExpr t ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
+  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\e => reorderExpr t e) ctx)
+    (\ctx2 => Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\ty2 => OkC (DSig name ctx2 ty2 sp)))
 reorderInstanceMethodDecl t (DFun name pats body sp) =
-  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\p => reorderPattern t p) pats)
-    (\pats2 => Vuna.Compiler.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (\p => reorderPattern t p) pats)
+    (\pats2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b2 => OkC (DFun name pats2 b2 sp)))
 reorderInstanceMethodDecl t other = OkC other
 
 export reorderProgram : FixityTable -> List Decl -> Check (List Decl)
-reorderProgram t decls = Vuna.Compiler.Common.traverse (\v => reorderDecl t v) decls
+reorderProgram t decls = Vuna.Compiler.Base.Common.traverse (\v => reorderDecl t v) decls

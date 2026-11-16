@@ -3,7 +3,7 @@ module Vuna.Compiler.Elab.Termination.Measure where
 -- Vuna.Compiler.Elab.Termination.Measure：DT 终止性判据的共享底座——
 -- 基础工具、定义分组、构造子名、size 表、守卫 Int 的正事实、投影分析、调用点关系、
 -- 以及弱边/环检测。入口与 SCC 判定在 `Vuna.Compiler.Elab.Termination`，SCT 在 `.Scc`。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 

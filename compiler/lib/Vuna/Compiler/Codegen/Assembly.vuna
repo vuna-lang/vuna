@@ -11,8 +11,10 @@ module Vuna.Compiler.Codegen.Assembly where
 -- 单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
 -- 到的依赖单元（`unitPartsDeps`），供 `Driver.SplitGen` 写进 `SplitFile` 与 build.sh。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Ir
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Analysis
+import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Term
 
@@ -43,7 +45,7 @@ export genUnitParts : QualCtx -> IrShared -> IrUnit -> Check UnitParts
 genUnitParts qc shared unitIr = genUnitPartsWith (\p => p) qc shared unitIr
 
 export genUnitPartsWith : (String -> String) -> QualCtx -> IrShared -> IrUnit -> Check UnitParts
-genUnitPartsWith norm qc shared unitIr = Vuna.Compiler.Common.bind (genTypePart qc unitIr) (\typeText => let
+genUnitPartsWith norm qc shared unitIr = Vuna.Compiler.Base.Common.bind (genTypePart qc unitIr) (\typeText => let
   _ = dbg! "cg-typedecls-done"
 in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
   ErrC e => ErrC e
@@ -64,7 +66,8 @@ checkUnitParts shared unitIr = checkGroupsForBuild unitIr.irUnitGroups
 checkGroupsForBuild : List IrGroup -> Check Int
 checkGroupsForBuild [] = OkC 0
 checkGroupsForBuild (g :: rest) =
-  Vuna.Compiler.Common.bind (checkDefsForBuild (irGroupDefs g)) (\_ => checkGroupsForBuild rest)
+  Vuna.Compiler.Base.Common.bind (checkDefsForBuild (irGroupDefs g))
+    (\_ => checkGroupsForBuild rest)
 
 checkDefsForBuild : List IrDef -> Check Int
 checkDefsForBuild [] = OkC 0

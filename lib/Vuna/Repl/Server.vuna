@@ -18,9 +18,9 @@ module Vuna.Repl.Server where
 --
 -- server 模式限制（见 docs/reference/tooling.md）：server 模式下 `:!` 与效果表达式
 -- （`main : Eff r a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Version
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Base.Version
 import Vuna.Json
 import Vuna.Json.Frame
 import Vuna.Json.Rpc

@@ -4,14 +4,16 @@ module Vuna.Compiler.Elab.Meta where
 -- 全局签名表与 UTC 收集、dt data/ctor 查找、telescope 与结果 spine 计算、已解元变量内联、
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Diag
 import Base.List
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
-import Vuna.Compiler.Core
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Elab.Prelude
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
@@ -42,7 +44,7 @@ instantiateNullaryCtorFuel : Int -> Ec -> Ctx -> Value -> Check (Pair Value (Pai
 instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then OkC (Pair v (Pair [] ec))
 else case forceVal ec v of
   VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
-    Pair metaTerm ec1 => Vuna.Compiler.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
+    Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
       Pair ty (Pair metas ec2) => OkC (Pair ty (Pair (Base.List.Cons metaTerm metas) ec2))
     )
   else OkC (Pair v (Pair [] ec))

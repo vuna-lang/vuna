@@ -4,7 +4,7 @@
 import Prelude
 import Base.Eff
 import Base.EffEnv
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Store
 
 mockOpH : List (Pair String String) -> (o : EnvOp) -> (Base.EffEnv.resEnv o -> String) -> String
 mockOpH table op k = case op of

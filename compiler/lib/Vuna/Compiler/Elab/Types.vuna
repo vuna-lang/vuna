@@ -4,10 +4,12 @@ module Vuna.Compiler.Elab.Types where
 -- 等精化结果、Ec 环境与 Ctx 局部上下文、以及「上下文环境求值 / 索引精化代入」的基础设施。
 -- 数据定义只在这里（叶子模块），其余模块只做模式匹配与访问器调用。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Base.List
-import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Frontend.Ast
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。

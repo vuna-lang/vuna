@@ -18,7 +18,7 @@ module Vuna.Repl.History where
 --
 -- 已知边界：v1 单元本身含裸换行时无法区分（v1 只写单行，故不会出现）；v2 首行
 -- 与用户实际输入单元同名的概率可忽略（判别只看**首行**，首行必须是头）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 export historyHeader : String
 historyHeader = "vuna-repl-history 2"

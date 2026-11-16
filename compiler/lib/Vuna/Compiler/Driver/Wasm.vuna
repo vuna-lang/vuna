@@ -8,12 +8,12 @@ module Vuna.Compiler.Driver.Wasm where
 import Base.Eff.Types
 import Base.Int
 import Base.Pair
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Lowering
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Module
 import Vuna.Compiler.Wasm.Render

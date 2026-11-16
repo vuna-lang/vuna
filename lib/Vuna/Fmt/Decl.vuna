@@ -9,7 +9,7 @@ module Vuna.Fmt.Decl where
 -- where 块按 parser 的 ELet..True 形态还原成 where 写法（带签名绑定先输出签名行）。
 --
 -- env = 程序可见的 fixity 闭包（本地声明在最前），只用于打印侧的优先级/别名判定。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Comment

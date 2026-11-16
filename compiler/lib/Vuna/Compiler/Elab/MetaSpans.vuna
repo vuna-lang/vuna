@@ -10,8 +10,10 @@ module Vuna.Compiler.Elab.MetaSpans where
 -- 因此没有进程内可变登记表；调用方通过 Ec 把登记表穿起来。
 import Base.List
 import Base.Pair
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Elab.Types
 
 -- | 记录元变量创建点（同 id 覆盖：新记录前插，查找取首个匹配）。

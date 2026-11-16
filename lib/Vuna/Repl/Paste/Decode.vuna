@@ -11,7 +11,7 @@ module Vuna.Repl.Paste.Decode where
 --   * 内容里出现「终止序列的前缀」时先挂起（`pasteMatch`），后续不匹配再回吐，
 --     因此内容里的 ESC（如 `\e[A`）不会被误判成终止序列的一部分；
 --   * 终止序列固定 6 字节 `\e [ 2 0 1 ~`，回退用「最长真后缀是终止序列前缀」。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 -- `\e[201~` 的字节。
 export pasteTerminator : List Int

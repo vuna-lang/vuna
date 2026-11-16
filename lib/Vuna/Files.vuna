@@ -2,7 +2,7 @@ module Vuna.Files where
 
 -- Vuna.Files：目录遍历工具（fmt / doc / test / Index 共用）。
 -- 只依赖 fsReadDir / fsIsDirectory / fsFileExists 内建；fsReadDir 返回字典序，遍历顺序确定。
--- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Common，供编译器驱动与工具共用。
+-- 路径拆分（splitPath / baseName）在 Vuna.Compiler.Base.Common，供编译器驱动与工具共用。
 --
 -- 注意：内建 `fsIsDirectory` 对**不存在的路径**会抛异常（会直接终止进程），
 -- 所以任何来自用户输入的路径都必须先用 `pathExistsDir` 判存在，
@@ -12,7 +12,7 @@ module Vuna.Files where
 -- 纯过滤/路径/名称逻辑（`skipGenerated` 等）保持纯函数。
 import Base.Eff.Types
 import Base.EffFs
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 -- 工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 toolFuelExhausted : String -> a

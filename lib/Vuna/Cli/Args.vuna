@@ -19,7 +19,7 @@ module Vuna.Cli.Args where
 -- `requireExists` / `requireDirectory` 是唯一入口。
 -- 这些守卫与目录创建显式在 `Eff r` 里（错误仍用 `Check` 携带）；
 -- 纯 flag 解析 API 保持纯函数。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
 import Base.EffFs
 import Base.Eff.Types

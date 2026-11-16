@@ -23,9 +23,9 @@ import Base.List
 import Base.Maybe
 import Base.Nat
 import Base.String
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diag
-import Vuna.Compiler.Source
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Source
 import Vuna.Json
 
 -- 一条比较结果（runner 把它翻译成自己的 `Assertion`；本模块不定义断言记录，

@@ -1,0 +1,481 @@
+-- | 结构化诊断模型与编译器结果通道（`Check` 的 `ErrC` 载荷是 `Diagnostic`）。
+module Vuna.Compiler.Base.Diag where
+
+-- 诊断的唯一数据模型。
+--
+-- 约定（诊断重设计）：
+--   * 诊断从产生到消费都是 `Diagnostic` 值；字符串只在最终渲染器里出现。
+--   * 位置只放在 `Label` 里（首端/末端 span），禁止在错误路径拼 `file:line:col`。
+--   * 无位置必须显式：构造时不给 label，而不是「忘记带」。
+--   * `ErrC` 载荷即 `Diagnostic`；`OkC` 构造子名与 `Base.Check` 一致。
+--   * `err` 只用于工具错误（phase = Tool）；源码诊断必须走各域带 code 的构造器。
+--   * `rawAt`/`rawNoLoc` 只用于尚未分类的裸消息。
+--
+-- 本模块不 import `Common`（避免 Common -> Diag -> Common 成环）：Span 来自 `Source`。
+import Vuna.Compiler.Base.Source
+import Base.Monad
+import Base.List
+import Base.Pair
+
+-- ---------------------------------------------------------------
+-- 枚举
+-- ---------------------------------------------------------------
+-- | 诊断严重度。`Note`/`Help` 用于挂在某个告警/错误下的子信息。
+export data Severity(..) : Type where
+  SevError : Severity
+  SevWarning : Severity
+  SevNote : Severity
+  SevHelp : Severity
+
+-- | 产生诊断的编译器阶段（决定排序、退出码与文档分区）。
+export data Phase(..) : Type where
+  PhLex : Phase
+  PhParse : Phase
+  PhResolve : Phase
+  PhLoad : Phase
+  PhElab : Phase
+  PhUnify : Phase
+  PhCoverage : Phase
+  PhTermination : Phase
+  PhUsage : Phase
+  PhCodegen : Phase
+  PhPackage : Phase
+  PhDriver : Phase
+  PhTool : Phase
+  PhInternal : Phase
+
+-- | 文档/统计用的语义分类。
+export data Category(..) : Type where
+  CatSyntax : Category
+  CatNames : Category
+  CatTypes : Category
+  CatUniverses : Category
+  CatCoverage : Category
+  CatTermination : Category
+  CatQuantity : Category
+  CatEffects : Category
+  CatRecords : Category
+  CatTraits : Category
+  CatCodegen : Category
+  CatPackage : Category
+  CatTool : Category
+  CatInternal : Category
+
+-- | 标签角色：主位置、次位置、上下文（定义名等）。
+export data LabelStyle(..) : Type where
+  LabelPrimary : LabelStyle
+  LabelSecondary : LabelStyle
+  LabelContext : LabelStyle
+
+-- | 诊断来源：直接产生，或因先前失败被标记为级联（可指向父诊断 id）。
+export data Origin(..) : Type where
+  OriginDirect : Origin
+  OriginCascade : Maybe Int -> Origin
+
+-- | 建议的可自动应用程度（对应 LSP code action 的 confidence）。
+export data Applicability(..) : Type where
+  MachineApplicable : Applicability
+  MaybeIncorrect : Applicability
+  HasPlaceholder : Applicability
+
+-- | 无源码位置的原因。**显式**：诊断没有 span 时必须给出理由，渲染/JSON 暴露它，
+-- 门禁按码审计，没有「忘记带位置」的静默路径。`NsSynthetic` 用于合成节点与
+-- 尚未把已有 span 接到产生点的诊断，逐码 allowlist 收敛到 0。
+export data NoSourceReason(..) : Type where
+  NsSynthetic : NoSourceReason
+  NsToolUsage : NoSourceReason
+  NsPackageGraph : NoSourceReason
+  NsInternal : NoSourceReason
+
+-- | 诊断稳定性：结果是否为输入摘要的纯函数。`Volatile` 不落盘。
+export data Stability(..) : Type where
+  Stable : Stability
+  Volatile : Stability
+
+-- ---------------------------------------------------------------
+-- 结构
+-- ---------------------------------------------------------------
+-- | 诊断标签：位置 + 文本 + 角色 + 可选来源 span（desugar/派生实例溯源）。
+export record Label(..) where
+  labelSpan : Maybe Span
+  labelText : String
+  labelStyle : LabelStyle
+  labelProvenance : Maybe Span
+
+-- | 单个文本编辑（建议/自动修复）。
+export record DiagEdit(..) where
+  editSpan : Span
+  editNewText : String
+
+-- | 一条建议（标题 + 可应用程度 + 编辑集）。
+export record Suggestion(..) where
+  suggestionTitle : String
+  suggestionApplicability : Applicability
+  suggestionEdits : List DiagEdit
+
+-- | 候选（名字建议 / 实例头 / 重载），可带声明位置与拒绝原因。
+export record Candidate(..) where
+  candidateText : String
+  candidateSpan : Maybe Span
+  candidateReason : Maybe String
+
+-- | 终止性 call matrix 的一行：被调者、实参摘要、大小关系、调用点。
+export record CallInfo(..) where
+  callCallee : String
+  callArg : String
+  callRelation : String
+  callSpan : Maybe Span
+
+-- | 机器可读语义字段（给 LSP/JSON/测试消费，不从散文反解析）。
+export data DiagField(..) : Type where
+  FieldExpected : String -> DiagField
+  FieldFound : String -> DiagField
+  FieldName : String -> DiagField
+  FieldCandidates : List Candidate -> DiagField
+  FieldCall : CallInfo -> DiagField
+  FieldQuantity : String -> Int -> Int -> DiagField
+  FieldEffect : String -> DiagField
+  FieldModule : String -> DiagField
+  FieldSpan : String -> Span -> DiagField
+  FieldNote : String -> DiagField
+
+-- | 合一/实例搜索/终止性等过程轨迹的一帧。
+export record TraceFrame(..) where
+  tracePhase : Phase
+  traceText : String
+  traceSpan : Maybe Span
+  traceChildren : List TraceFrame
+
+-- | 内部编译器错误（ICE）载荷。
+export record IceInfo(..) where
+  icePhase : Phase
+  iceFunction : String
+  iceInvariant : String
+  iceFingerprint : String
+  iceHint : String
+
+-- | 一条完整诊断。字段顺序即构造顺序（记录按位置构造）。
+export record Diagnostic(..) where
+  diagId : Int
+  diagSeverity : Severity
+  diagPhase : Phase
+  diagCategory : Category
+  diagCode : String
+  diagMessage : String
+  diagLabels : List Label
+  diagFields : List DiagField
+  diagTrace : List TraceFrame
+  diagNotes : List String
+  diagSuggestions : List Suggestion
+  diagOrigin : Origin
+  diagChildren : List Diagnostic
+  diagInternal : Bool
+  diagIce : Maybe IceInfo
+  -- 无源码位置时**必须**给出理由；有主 span 的诊断应为 Nothing（withLabel 自动清空）。
+  diagAbsent : Maybe NoSourceReason
+  -- 缓存稳定性：Stable 才允许作为输入摘要的纯函数落盘重放。
+  diagStability : Stability
+
+-- ---------------------------------------------------------------
+-- 编译器结果通道
+-- ---------------------------------------------------------------
+-- | `OkC a` 或 `ErrC Diagnostic`。构造子名与 `Base.Check` 一致。
+export data Check a(..) : Type where
+  OkC : a -> Check a
+  ErrC : Diagnostic -> Check a
+
+-- ---------------------------------------------------------------
+-- 构造
+-- ---------------------------------------------------------------
+-- | 无 label 的源码诊断：显式带 `NsSynthetic`（门禁要求逐码 allowlist）。
+export diagNoLoc : Severity -> Phase -> Category -> String -> String -> Diagnostic
+diagNoLoc sev phase cat code msg =
+  Diagnostic 0 sev phase cat code msg [] [] [] [] [] OriginDirect [] False Nothing
+    (Just NsSynthetic) Volatile
+
+-- | 带主 label 的源码诊断。
+export diagAt : Span -> Severity -> Phase -> Category -> String -> String -> Diagnostic
+diagAt sp sev phase cat code msg =
+  Diagnostic 0 sev phase cat code msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] []
+    OriginDirect [] False Nothing Nothing Stable
+
+-- | 工具/用法错误（phase = Tool，无位置，无码）。
+export err : String -> Check a
+err msg =
+  ErrC
+    (Diagnostic 0 SevError PhTool CatTool "" msg [] [] [] [] [] OriginDirect [] False Nothing (Just NsToolUsage) Volatile)
+
+-- | 尚未分类但带位置的裸消息。
+export rawAt : Span -> String -> Check a
+rawAt sp msg =
+  ErrC
+    (Diagnostic 0 SevError PhElab CatTypes "" msg [Label (Just sp) "" LabelPrimary Nothing] [] [] [] [] OriginDirect [] False Nothing Nothing Stable)
+
+-- | 尚未分类且无位置的裸消息。
+export rawNoLoc : String -> Check a
+rawNoLoc msg =
+  ErrC
+    (Diagnostic 0 SevError PhElab CatTypes "" msg [] [] [] [] [] OriginDirect [] False Nothing (Just NsSynthetic) Volatile)
+
+-- ---------------------------------------------------------------
+-- 组合（不修改原值）
+-- ---------------------------------------------------------------
+-- | 追加一个标签。
+export withLabel : Label -> Diagnostic -> Diagnostic
+withLabel l d =
+  normalizeSite
+    (Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage (append d.diagLabels [l]) d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability)
+
+-- | 有主 span 的诊断自动清空 `diagAbsent`（位置与「无位置理由」互斥）。
+normalizeSite : Diagnostic -> Diagnostic
+normalizeSite d =
+  if hasPrimaryLabel d.diagLabels then { { d | diagAbsent = Nothing } | diagStability = Stable }
+  else d
+
+-- | 改写诊断的稳定性（缓存边界用：路径不可规范化时标 Volatile）。
+export withStability : Stability -> Diagnostic -> Diagnostic
+withStability s d = { d | diagStability = s }
+
+-- | 对诊断（含 children）的每个 label span 的文件部分做变换（路径规范化/还原）。
+export mapSpanFile : (String -> String) -> Diagnostic -> Diagnostic
+mapSpanFile f (Diagnostic did sev phase cat code msg labels fields trace notes sugs origin kids internal ice absent stab) =
+  Diagnostic did sev phase cat code msg (map (mapLabelFile f) labels) fields trace notes sugs origin
+    (mapDiagChildren f kids) internal ice absent stab
+
+-- 递归 children 用直接结构递归（SCT 不接受 map 里的高阶递归边）。
+mapDiagChildren : (String -> String) -> List Diagnostic -> List Diagnostic
+mapDiagChildren f [] = []
+mapDiagChildren f (k :: rest) = Base.List.Cons (mapSpanFile f k) (mapDiagChildren f rest)
+
+mapLabelFile : (String -> String) -> Label -> Label
+mapLabelFile f (Label msp text style prov) =
+  Label (mapSpanPath f msp) text style (mapSpanPath f prov)
+
+mapSpanPath : (String -> String) -> Maybe Span -> Maybe Span
+mapSpanPath f Nothing = Nothing
+mapSpanPath f (Just sp) =
+  Just (Span (f sp.spanFile) sp.spanStartLine sp.spanStartCol sp.spanEndLine sp.spanEndCol)
+
+-- | 显式声明「无源码位置」的理由（没有主 span 时由产生点调用）。
+export withAbsent : NoSourceReason -> Diagnostic -> Diagnostic
+withAbsent reason d =
+  if hasPrimaryLabel d.diagLabels then d
+  else { { d | diagAbsent = Just reason } | diagStability = stabilityOfAbsent reason }
+
+stabilityOfAbsent : NoSourceReason -> Stability
+stabilityOfAbsent NsSynthetic = Volatile
+stabilityOfAbsent NsToolUsage = Volatile
+stabilityOfAbsent NsPackageGraph = Volatile
+stabilityOfAbsent NsInternal = Volatile
+
+-- | 追加一个字段。
+export withField : DiagField -> Diagnostic -> Diagnostic
+withField f d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels (append d.diagFields [f]) d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 追加一条 note。
+export withNote : String -> Diagnostic -> Diagnostic
+withNote n d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace (append d.diagNotes [n]) d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 追加一条 help（渲染为 `help: ...`）。
+export withHelp : String -> Diagnostic -> Diagnostic
+withHelp h d = withNote "help: ${h}" d
+
+-- | 追加一条建议。
+export withSuggestion : Suggestion -> Diagnostic -> Diagnostic
+withSuggestion s d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes (append d.diagSuggestions [s]) d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 追加一帧轨迹。
+export withTrace : TraceFrame -> Diagnostic -> Diagnostic
+withTrace t d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields (append d.diagTrace [t]) d.diagNotes d.diagSuggestions d.diagOrigin
+    d.diagChildren d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 改写来源（级联标记用）。
+export withOrigin : Origin -> Diagnostic -> Diagnostic
+withOrigin o d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions o d.diagChildren
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 定义级诊断：主位置 + `in \`name\`` 上下文标签。
+export withContext : Maybe Span -> String -> Diagnostic -> Diagnostic
+withContext msp name d =
+  let
+    added = withLabel (Label msp "in `${name}`" LabelContext Nothing) d
+  in case msp of
+    Just sp => withLabel (Label (Just sp) "" LabelPrimary Nothing) added
+    Nothing => added
+
+-- ---------------------------------------------------------------
+-- 文本渲染
+-- ---------------------------------------------------------------
+-- | 一个诊断的主 span（首个 Primary 标签）。
+primarySpanOf : List Label -> Maybe Span
+primarySpanOf [] = Nothing
+primarySpanOf ((Label sp _ LabelPrimary _) :: rest) = sp
+primarySpanOf (_ :: rest) = primarySpanOf rest
+
+-- | 上下文前缀（`in \`name\`: `）。
+contextPrefixOf : List Label -> String
+contextPrefixOf [] = ""
+contextPrefixOf ((Label _ text LabelContext _) :: rest) = "${text}: "
+contextPrefixOf (_ :: rest) = contextPrefixOf rest
+
+-- | 位置前缀（`file:line:col: `）；无主 span 时为空。
+locPrefixOf : List Label -> String
+locPrefixOf labels = case primarySpanOf labels of
+  Just sp => "${showSpanLoc sp}: "
+  Nothing => ""
+
+-- | 诊断首行文本：`[file:l:c: ][in \`name\`: ][CODE] 消息`。
+export diagText : Diagnostic -> String
+diagText d =
+  let
+    body = if d.diagCode == "" then d.diagMessage else "[${d.diagCode}] ${d.diagMessage}"
+  in locPrefixOf d.diagLabels ++ contextPrefixOf d.diagLabels ++ body
+
+-- | 替换首行消息（保留 code / 位置 / 字段 / 建议；用于把同一错误说得更具体）。
+export withMessage : String -> Diagnostic -> Diagnostic
+withMessage msg d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode msg d.diagLabels
+    d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 在消息末尾追加细节（不改变 code/位置；用于把阶段细节并进首行）。
+export appendMessage : String -> Diagnostic -> Diagnostic
+appendMessage suffix d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode (d.diagMessage ++ suffix)
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- ---------------------------------------------------------------
+-- Check 的 Functor / Applicative / Monad（根工具链用 `fmap`/`do` 组合编译器结果）
+-- ---------------------------------------------------------------
+instance Functor Check where
+  fmap f (OkC x) = OkC (f x)
+  fmap f (ErrC e) = ErrC e
+
+instance Monad Check where
+  bind (OkC x) k = k x
+  bind (ErrC e) k = ErrC e
+
+instance Applicative Check where
+  pure = OkC
+  ap mf mx = case mf of
+    OkC g => case mx of
+      OkC x => OkC (g x)
+      ErrC e => ErrC e
+    ErrC e => ErrC e
+  liftA2 f (OkC x) (OkC y) = OkC (f x y)
+  liftA2 f (ErrC e) _ = ErrC e
+  liftA2 f _ (ErrC e) = ErrC e
+
+-- | 挂一批子诊断（批量错误通道：解析恢复期收集的多条诊断挂在首条错误上，
+-- 由 CLI 的诊断出口统一输出；渲染器不展开 children）。
+export withChildren : List Diagnostic -> Diagnostic -> Diagnostic
+withChildren cs d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin cs
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
+-- | 若诊断没有主位置，就用给定 span 补一个（包装器用）。
+export withFallbackSpan : Span -> Diagnostic -> Diagnostic
+withFallbackSpan sp d =
+  if hasPrimaryLabel d.diagLabels then d else withLabel (Label (Just sp) "" LabelPrimary Nothing) d
+
+-- | 给「文件名为空」的 span 补文件名。Lexer 只持有字符游标（不知道文件名），
+-- 入口（`Loader.Flatten` 的 parse/lex 路径）用它把真实路径注入诊断。
+export withSpanFileIfEmpty : String -> Diagnostic -> Diagnostic
+withSpanFileIfEmpty path d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    (map (withLabelFileIfEmpty path) d.diagLabels) d.diagFields d.diagTrace d.diagNotes
+    d.diagSuggestions d.diagOrigin d.diagChildren d.diagInternal d.diagIce d.diagAbsent
+    d.diagStability
+
+withLabelFileIfEmpty : String -> Label -> Label
+withLabelFileIfEmpty path (Label Nothing text style prov) = Label Nothing text style prov
+withLabelFileIfEmpty path (Label (Just sp) text style prov) =
+  if spanFile sp == "" then Label (Just (Span path (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)))
+    text style prov
+  else Label (Just sp) text style prov
+
+hasPrimaryLabel : List Label -> Bool
+hasPrimaryLabel [] = False
+hasPrimaryLabel ((Label _ _ LabelPrimary _) :: rest) = True
+hasPrimaryLabel (_ :: rest) = hasPrimaryLabel rest
+
+-- ---------------------------------------------------------------
+-- 内部错误（IC_）：阶段/不变量错误，渲染为 internal compiler error，exit 2。
+-- ---------------------------------------------------------------
+-- | 打上 internal 标记与 ICE 载荷。
+markInternal : String -> String -> Diagnostic -> Diagnostic
+markInternal fn invariant d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode d.diagMessage
+    d.diagLabels d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    True
+    (Just (IceInfo PhInternal fn invariant "" "this is a compiler bug; please report it with the command line and source"))
+    (Just NsInternal) Volatile
+
+-- | 内部：燃料耗尽（`phase` = 阶段/函数名）。
+export icFuel : String -> Check a
+icFuel phase =
+  ErrC
+    (markInternal "fuel" phase (diagNoLoc SevError PhInternal CatInternal "IC_FuelExhausted" "${phase} ran out of fuel (compiler invariant: the phase must make progress)"))
+
+-- | 内部：不变量违例。
+export icInternal : String -> Check a
+icInternal what =
+  ErrC
+    (markInternal "invariant" what (diagNoLoc SevError PhInternal CatInternal "IC_InvariantViolated" "internal invariant violated: ${what}"))
+
+-- | 在 `Check` 的 ErrC 载荷上做变换（保留 OkC 与错误语义）。
+export onErrDiag : (Diagnostic -> Diagnostic) -> Check a -> Check a
+onErrDiag f (ErrC d) = ErrC (f d)
+onErrDiag f (OkC x) = OkC x
+
+-- | 主位置的文件（无位置返回 ""）。
+export diagFileOf : Diagnostic -> String
+diagFileOf d = case primaryLabelOf d.diagLabels of
+  Nothing => ""
+  Just (Label (Just sp) _ _ _) => spanFile sp
+  _ => ""
+
+primaryLabelOf : List Label -> Maybe Label
+primaryLabelOf [] = Nothing
+primaryLabelOf (l :: rest) = case l of
+  Label _ _ LabelPrimary _ => Just l
+  _ => primaryLabelOf rest
+
+sameSeverity : Severity -> Severity -> Bool
+sameSeverity SevError SevError = True
+sameSeverity SevWarning SevWarning = True
+sameSeverity SevNote SevNote = True
+sameSeverity SevHelp SevHelp = True
+sameSeverity _ _ = False
+
+-- | 两条诊断是否「同一位置 + 同一码 + 同一消息」（去重用；忽略字段/建议）。
+export sameDiag : Diagnostic -> Diagnostic -> Bool
+sameDiag a b =
+  a.diagCode == b.diagCode
+    && a.diagMessage == b.diagMessage
+    && sameSeverity a.diagSeverity b.diagSeverity
+    && labelSpanOf a.diagLabels == labelSpanOf b.diagLabels
+
+labelSpanOf : List Label -> List (Pair String (Pair Int (Pair Int Int)))
+labelSpanOf [] = []
+labelSpanOf ((Label msp _ _ _) :: rest) = case msp of
+  Nothing => Base.List.Cons (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
+  Just sp =>
+    Base.List.Cons
+      (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp))))
+      (labelSpanOf rest)

@@ -9,7 +9,7 @@ module Vuna.Repl.Term where
 -- 约定：所有函数返回 Int/Bool，失败返回非 0，不抛异常（读字节返回 -1 = EOF/超时，
 -- 具体含义由调用方按当前读模式解释）。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.EffClock
 import Base.EffConsole
 import Base.EffEnv

@@ -2,11 +2,13 @@ module Vuna.Compiler.Elab.Sig where
 
 -- Vuna.Compiler.Elab.Sig：签名工具：trait 类参数的 kind 推断与顶层签名的自由名量化。
 -- 两者都只做 AST 变换，量化依赖 kind 推断，因此放在同一模块。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Core
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Intrinsics
 
 -- ---------------------------------------------------------------------------
 -- 类参数 kind 推断（原 Elab/Kind.vuna）

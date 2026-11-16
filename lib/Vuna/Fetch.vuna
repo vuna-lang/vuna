@@ -10,14 +10,14 @@ module Vuna.Fetch where
 --   * `--locked`：不联网，只检查 store 是否已物化；缺失即失败。
 -- 传输外置给宿主 `git` / `curl`；语言内只有裸 TCP 原语，不实现 TLS。
 import Vuna.Cli.Args
-import Vuna.Compiler.Addr
-import Vuna.Compiler.Canonical.Pkg
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Loader.Addr
+import Vuna.Compiler.Frontend.Canonical.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Packages.Source
-import Vuna.Compiler.Store
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Source
+import Vuna.Compiler.Base.Store
 import Vuna.PackageStore
 import Base.Nat
 import Base.List

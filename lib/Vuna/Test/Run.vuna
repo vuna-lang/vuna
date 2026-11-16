@@ -12,13 +12,13 @@ module Vuna.Test.Run where
 --
 -- 子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写进临时目录，由
 -- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.Nat
 import Base.Maybe
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Store
 import qualified Vuna.Cli.Args
 import Vuna.Test.Expect
 import Vuna.Test.InProc

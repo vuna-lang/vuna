@@ -2,7 +2,7 @@ module Vuna.Fmt.Util where
 
 -- Vuna.Fmt.Util：格式化器共用的行/字符串小工具与行宽常量（无 AST 逻辑）。
 -- Vuna.Fmt.Util：格式化器的共享小工具，供 Expr / Comment / Decl 与门面共用。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 
 -- ---------------------------------------------------------------

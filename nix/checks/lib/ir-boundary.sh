@@ -2,28 +2,24 @@
 # checks.ir-boundary：IR 边界的**结构**守卫（长期不变量）。
 #
 # 目标链路：`Core --Lowering--> IR --Codegen.{Decl,Term,Assembly}--> OCaml 文本`
-#           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
+#           `Driver.SplitGen` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
 #           `Lowering` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
-# 九条规则（违反即失败）：
-#   1. `Vuna.Compiler.Ir*`（IR 模型与分析）不得依赖任何上游/目标侧模块：
-#      不许 import `Vuna.Compiler.Core*`、`Vuna.Compiler.Elab*`、`Vuna.Compiler.Intrinsics`、
-#      `Vuna.Compiler.Codegen*`。IR 只认「源码名 + 已决策的表示形状 + 运行时符号契约」。
-#   2. **文本生成层**（`Codegen.{Decl,Term,Assembly}`）不得 import
-#      `Vuna.Compiler.Core*` / `Vuna.Compiler.Elab*` / `Vuna.Compiler.Intrinsics`：
-#      它们只吃 IR。这条保证「后端只有一个输入面 = IR」，删掉直连 Core 的路径后
-#      无法悄悄复活。
-#   3. 正向断言：`Lowering.vuna` 存在且 import 了 `Core`/`Elab`（Core → IR 的
-#      唯一入口；防止「删了直连路径也删了 lowering」）。
-#   4. 正向断言：`Codegen.Split` 经 `Lowering` 出 IR（而不是自己拿 `DtDef` 拼文本）。
-#      Split 仍要按声明归属切分，所以它是这条链上唯一允许 import `Elab` 的后端模块
-#      （`DtProgram` / `DtDef` / `DtData` 是切分单位）；但 `Core` / `Intrinsics` 一律不许
-#      ——擦除判据与 runtime 名映射都在 Lowering。
-#   5. 正向断言：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
-#   9. native 后端（`Vuna.Compiler.Native*` 与 `Driver/Native`）只吃 IR：不得 import
-#      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Native.Module` 必须 import IR。
-#  10. wasm 后端（`Vuna.Compiler.Wasm*` 与 `Driver/Wasm`）只吃 IR：不得 import
-#      `Core` / `Elab` / `Intrinsics` / `Codegen` / `Native`；`Wasm.Module` 必须 import IR。
+# 依赖**方向**由 `compiler/vuna.toml` 的 `[layers]` 声明、由 loader 在 import 时
+# 强制（例如 `Ir` 只能依赖 `Base`、`Codegen` 不能依赖 `Core`/`Elab`）。本脚本只留
+# **正向断言与形状断言**——声明式层表表达不了「必须 import 某个模块」和「IR 里不许
+# 出现目标文本」这两类规则。
+#
+# 规则：
+#   3. `Lowering/Program.vuna` 存在且 import `Core`/`Elab`（Core → IR 的唯一入口）。
+#   3b. `Codegen/` 只放 IR→文本；Core→IR、Core 侧检查、归属切分不得搬回来。
+#   4. `Driver.SplitGen` 必须路由到 `Lowering`，且不得自己消费 `Core` / `Intrinsics`。
+#   5. 文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
+#   6. `IrRuntime` / `IrBridge` 这类目标文本节点不得出现。
+#   7. IR 数据模块里的字面量只能是符号名（不含空格 / 括号 / 花括号）。
+#   8. 运行时契约与 OCaml 符号表存在；表按契约取键，Lowering 跑一致性检查。
+#   9. native 后端：`Native.Module` 必须消费 IR。
+#  10. wasm 后端：`Wasm.Module` 必须消费 IR。
 #
 # 只扫 `import` / `export import` 行（vuna 的模块依赖面就是这些行）。
 set -eu
@@ -51,20 +47,8 @@ check_forbidden() {
   fi
 }
 
-# 规则 1：IR 层不得向上/向下依赖。
-for f in compiler/lib/Vuna/Compiler/Ir.vuna compiler/lib/Vuna/Compiler/Ir/*.vuna; do
-  [ -f "$f" ] || continue
-  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen)(\.|$))'
-done
-
-# 规则 2：`Codegen/` 只吃 IR（整目录，无例外；也不许向上 import Driver）。
-for f in compiler/lib/Vuna/Compiler/Codegen.vuna compiler/lib/Vuna/Compiler/Codegen/*.vuna; do
-  [ -f "$f" ] || continue
-  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Driver)(\.|$))'
-done
-
 # 规则 3：Lowering 存在且是唯一的 Core 消费者。
-LOWER=compiler/lib/Vuna/Compiler/Lowering.vuna
+LOWER=compiler/lib/Vuna/Compiler/Lowering/Program.vuna
 if [ ! -f "$LOWER" ]; then
   echo "ir-boundary: missing $LOWER (Core -> IR lowering must exist)"
   fail=$((fail + 1))
@@ -83,15 +67,15 @@ for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Comp
   fi
 done
 
-# 规则 4：SplitGen（归属过滤 + 分文件装配，属 Driver 层）只吃 IR：单元 lowering
-# 由 Driver 通过闭包注入，本模块不得自己 import Core / Elab / Intrinsics / Lowering / Checks。
+# 规则 4：SplitGen（声明归属 + 分文件装配，属 Driver 层）必须路由到 Lowering，
+# 且不得自己消费 Core / Intrinsics。
 SPLIT=compiler/lib/Vuna/Compiler/Driver/SplitGen.vuna
 if [ -f "$SPLIT" ]; then
-  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
-    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Ir (split must be IR-driven)"
+  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Lowering\.Program$'; then
+    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Lowering.Program (must lower per unit)"
     fail=$((fail + 1))
   fi
-  check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Lowering|Checks)(\.|$))'
+  check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Base\.Intrinsics)(\.|$))'
 fi
 
 # 规则 5（正向断言）：文本生成层都消费 IR（不允许残留只吃 `DtDef`、绕过 IR 的路径）。
@@ -111,7 +95,7 @@ done
 if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
   compiler/lib/Vuna/Compiler/Ir/Model.vuna \
   compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
-  compiler/lib/Vuna/Compiler/Lowering.vuna \
+  compiler/lib/Vuna/Compiler/Lowering/Program.vuna \
   compiler/lib/Vuna/Compiler/Codegen/Term.vuna
 then
   echo "ir-boundary: removed IR runtime-text nodes reappeared (IrRuntime / IrBridge)"
@@ -128,7 +112,7 @@ then
   fail=$((fail + 1))
 fi
 
-# 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lower 用后端表做一致性检查。
+# 规则 8（正向断言）：契约与 OCaml 符号表存在，且 Lowering 用后端表做一致性检查。
 for f in compiler/lib/Vuna/Compiler/Ir/Runtime.vuna compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna; do
   if [ ! -f "$f" ]; then
     echo "ir-boundary: missing $f (IR runtime contract)"
@@ -136,7 +120,7 @@ for f in compiler/lib/Vuna/Compiler/Ir/Runtime.vuna compiler/lib/Vuna/Compiler/C
   fi
 done
 TABLE=compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
-if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+if [ -f "$TABLE" ] && ! imports_of "$TABLE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
   echo "ir-boundary: $TABLE does not import Vuna.Compiler.Ir (table must be keyed by the contract)"
   fail=$((fail + 1))
 fi
@@ -145,35 +129,19 @@ if [ -f "$LOWER" ] && ! imports_of "$LOWER" | grep -qE '^Vuna\.Compiler\.Codegen
   fail=$((fail + 1))
 fi
 
-# 规则 9（native 后端）：只吃 IR；不 import 上游或其它后端。
-for f in compiler/lib/Vuna/Compiler/Native/*.vuna; do
-  [ -f "$f" ] || continue
-  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen|Wasm)(\.|$))'
-done
-NATIVE_DRIVER=compiler/lib/Vuna/Compiler/Driver/Native.vuna
-if [ -f "$NATIVE_DRIVER" ]; then
-  check_forbidden "$NATIVE_DRIVER" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
-fi
+# 规则 9（native 后端）：`Native.Module` 必须消费 IR。
 NATIVE_MODULE=compiler/lib/Vuna/Compiler/Native/Module.vuna
 if [ -f "$NATIVE_MODULE" ]; then
-  if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+  if ! imports_of "$NATIVE_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
     echo "ir-boundary: $NATIVE_MODULE does not import Vuna.Compiler.Ir (native backend must consume IR)"
     fail=$((fail + 1))
   fi
 fi
 
-# 规则 10（wasm 后端）：只吃 IR；不 import 上游或其它后端。
-for f in compiler/lib/Vuna/Compiler/Wasm/*.vuna; do
-  [ -f "$f" ] || continue
-  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen|Native)(\.|$))'
-done
-WASM_DRIVER=compiler/lib/Vuna/Compiler/Driver/Wasm.vuna
-if [ -f "$WASM_DRIVER" ]; then
-  check_forbidden "$WASM_DRIVER" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
-fi
+# 规则 10（wasm 后端）：`Wasm.Module` 必须消费 IR。
 WASM_MODULE=compiler/lib/Vuna/Compiler/Wasm/Module.vuna
 if [ -f "$WASM_MODULE" ]; then
-  if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Compiler\.Ir$'; then
+  if ! imports_of "$WASM_MODULE" | grep -qE '^Vuna\.Compiler\.Ir(\.|$)'; then
     echo "ir-boundary: $WASM_MODULE does not import Vuna.Compiler.Ir (wasm backend must consume IR)"
     fail=$((fail + 1))
   fi

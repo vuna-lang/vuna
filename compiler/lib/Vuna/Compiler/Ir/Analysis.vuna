@@ -8,10 +8,10 @@ module Vuna.Compiler.Ir.Analysis where
 -- 分组算法从迁移前的 `Checks` 原样搬来（Kosaraju：完成序 → 反向图收集 → 依赖
 -- 就绪排序）。分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序，必须与迁移前
 -- **逐项一致**才能做到产物逐字节相同。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.List
 import Base.HashMap
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Ir.Model
 
 -- ---------------------------------------------------------------
@@ -240,7 +240,7 @@ groupNames adj names =
       let
         comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
-      in Vuna.Compiler.Common.bind (orderGroups adjT groups)
+      in Vuna.Compiler.Base.Common.bind (orderGroups adjT groups)
         (\ordered => checkGroupsCover ordered names)
 
 -- | 分组必须覆盖全部名字：DFS 预算耗尽或分组算法异常时，宁可报内部错也不能
@@ -294,8 +294,8 @@ assembleGroups adjT defs (g :: rest) =
         Nothing => cgErr1 (RecursiveValueDefinition name) name
       Nothing => OkC (IrGroup True members)
     else OkC (IrGroup False members)
-  in Vuna.Compiler.Common.bind checked
-    (\grp => Vuna.Compiler.Common.bind (assembleGroups adjT defs rest) (\tail => OkC (Base.List.Cons grp tail)))
+  in Vuna.Compiler.Base.Common.bind checked
+    (\grp => Vuna.Compiler.Base.Common.bind (assembleGroups adjT defs rest) (\tail => OkC (Base.List.Cons grp tail)))
 
 -- ---------------------------------------------------------------
 -- 可达性（后端共用的纯分析）
@@ -367,8 +367,8 @@ assembleGo adjT (g :: rest) recOk spanOf =
       Just name => cgErrDefAt (spanOf name) name (RecursiveValueDefinition name) [name]
       Nothing => OkC (Pair True g)
     else OkC (Pair False g)
-  in Vuna.Compiler.Common.bind checked
-    (\grp => Vuna.Compiler.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC (Base.List.Cons grp tail)))
+  in Vuna.Compiler.Base.Common.bind checked
+    (\grp => Vuna.Compiler.Base.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC (Base.List.Cons grp tail)))
 
 firstBadRecName : List String -> (String -> Bool) -> Maybe String
 firstBadRecName [] recOk = Nothing

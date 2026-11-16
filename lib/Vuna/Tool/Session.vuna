@@ -13,9 +13,9 @@ module Vuna.Tool.Session where
 -- 读侧 codec 不符 ⇒ `Nothing` ⇒ 调用方重算（marker 因此永远不会被当成载荷）。
 import Base.Eff.Types
 import Base.List
-import Vuna.Compiler.Addr
+import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Store
 import Base.EffEnv
 import Base.EffFs
 import Base.EffProcess

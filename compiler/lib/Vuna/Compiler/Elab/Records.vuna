@@ -9,9 +9,9 @@ module Vuna.Compiler.Elab.Records where
 -- **DRecord 不降级成 DData**。本模块只收集 `RecordMeta`，并把
 -- record 表达式/模式降级成对**合成位置构造子**的引用（构造子名 = record 名）；合成构造子
 -- 由 `Elab.Data.elabDataBodies` 在精化期直接建立（服务 TMk/eval/codegen）。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Tc
-import Vuna.Compiler.Diagnostics.Common
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Tc
+import Vuna.Compiler.Base.Diagnostics.Common
 import Vuna.Compiler.Frontend.Ast
 
 -- | 一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
@@ -129,18 +129,20 @@ recordCtorType params fields ret sp = recordParamPis params (recordArrowType fie
 
 -- 记录语法降级：构造 → 构造器应用；记录模式 → 构造器模式（按声明顺序补 PWild）。
 export desugarRecords : List RecordMeta -> List Decl -> Check (List Decl)
-desugarRecords records decls = Vuna.Compiler.Common.traverse (desugarRecordDecl records) decls
+desugarRecords records decls = Vuna.Compiler.Base.Common.traverse (desugarRecordDecl records) decls
 
 desugarRecordDecl : List RecordMeta -> Decl -> Check Decl
 desugarRecordDecl records d = case d of
   DFun name pats body sp =>
-    Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarPattern records) pats)
-      (\pats2 => Vuna.Compiler.Common.bind (desugarExpr records body) (\body2 => OkC (DFun name pats2 body2 sp)))
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (desugarPattern records) pats)
+      (\pats2 => Vuna.Compiler.Base.Common.bind (desugarExpr records body) (\body2 => OkC (DFun name pats2 body2 sp)))
   DData name params kind ctors derivings viaField repr lin sp => OkC d
   DRecord name params fields derivings viaField repr lin sp => OkC d
   DTrait name params supers methods sp => OkC d
   DInstance ctxE head methods sp =>
-    Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarRecordDecl records) methods)
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (desugarRecordDecl records) methods)
       (\ms => OkC (DInstance ctxE head ms sp))
   DSig name ctx ty sp => OkC d
   -- axiom 的类型表达式里可能有 record 语法吗？类型位置不走 record 降级
@@ -157,19 +159,20 @@ else case pat of
   PWild sp => OkC (PWild sp)
   PVar n sp => OkC (PVar n sp)
   PAs n inner sp =>
-    Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records inner) (\p => OkC (PAs n p sp))
+    Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records inner)
+      (\p => OkC (PAs n p sp))
   PInt n sp => OkC (PInt n sp)
   PStr s sp => OkC (PStr s sp)
   PCon name pats sp =>
-    Vuna.Compiler.Common.bind
-      (Vuna.Compiler.Common.traverse (\x => desugarPatternFuel (fuel - 1) records x) pats)
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (\x => desugarPatternFuel (fuel - 1) records x) pats)
       (\ps => OkC (PCon name ps sp))
   PRecord name fields sp => case lookupRecord name records of
     Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
       else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
-      else Vuna.Compiler.Common.bind
+      else Vuna.Compiler.Base.Common.bind
         (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp)
         (\ps => OkC (PCon r.recordMetaCtor ps sp))
 
@@ -179,11 +182,12 @@ else case fdefs of
   [] => OkC []
   f :: rest => case lookupProvided f.recordFieldName provided of
     Nothing =>
-      Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp)
+      Vuna.Compiler.Base.Common.bind
+        (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp)
         (\ps => OkC (PWild sp :: ps))
     Just p =>
-      Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records p)
-        (\p2 => Vuna.Compiler.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp) (\ps => OkC (p2 :: ps)))
+      Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records p)
+        (\p2 => Vuna.Compiler.Base.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records rest provided sp) (\ps => OkC (p2 :: ps)))
 
 desugarExprFuel : Int -> List RecordMeta -> Expr -> Check Expr
 desugarExprFuel fuel records e = if fuel <= 0 then icFuel "record desugar"
@@ -193,62 +197,63 @@ else case e of
   EStr s sp => OkC e
   EFloat raw sp => OkC e
   ELam ps b sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records b) (\b2 => OkC (ELam ps b2 sp))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records b)
+      (\b2 => OkC (ELam ps b2 sp))
   EApp f args sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records f)
-      (\f2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarExprFuel (fuel - 1) records) args) (\a2 => OkC (EApp f2 a2 sp)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records f)
+      (\f2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarExprFuel (fuel - 1) records) args) (\a2 => OkC (EApp f2 a2 sp)))
   ELet binds body rec_ sp =>
-    Vuna.Compiler.Common.bind
-      (Vuna.Compiler.Common.traverse (desugarBindFuel (fuel - 1) records) binds)
-      (\b2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records body) (\body2 => OkC (ELet b2 body2 rec_ sp)))
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (desugarBindFuel (fuel - 1) records) binds)
+      (\b2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records body) (\body2 => OkC (ELet b2 body2 rec_ sp)))
   -- where/let 多 clause 局部函数：逐 clause 消解记录模式与 body。
   ELocalFun clauses sp =>
-    Vuna.Compiler.Common.bind
-      (Vuna.Compiler.Common.traverse (desugarLocalClauseFuel (fuel - 1) records) clauses)
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (desugarLocalClauseFuel (fuel - 1) records) clauses)
       (\c2 => OkC (ELocalFun c2 sp))
   ECase scrut alts sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records scrut)
-      (\s2 => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => OkC (ECase s2 (map (expandCaseAs s2) a2) sp)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records scrut)
+      (\s2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarAltFuel (fuel - 1) records) alts) (\a2 => OkC (ECase s2 (map (expandCaseAs s2) a2) sp)))
   EIf c t el sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records c)
-      (\c2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records t) (\t2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records el) (\e2 => OkC (EIf c2 t2 e2 sp))))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records c)
+      (\c2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records t) (\t2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records el) (\e2 => OkC (EIf c2 t2 e2 sp))))
   -- 字段访问/更新的消歧需要 base 的类型，留给精化期按结构化字段表查表。
   EField base fname sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records base)
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records base)
       (\b => OkC (EField b fname sp))
   ERecord name fields sp => case lookupRecord name records of
     Nothing => tcErr1 sp (UnknownRecord name) name
     Just r =>
       if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp)
       else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields)
-      else Vuna.Compiler.Common.bind
+      else Vuna.Compiler.Base.Common.bind
         (desugarRecordValuesFuel (fuel - 1) records r.recordMetaFields fields sp)
         (\vs => OkC (EApp (EVar r.recordMetaCtor sp) vs sp))
   ERecUpdate base fields sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records base)
-      (\b => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (desugarFieldValueFuel (fuel - 1) records) fields) (\fs => OkC (ERecUpdate b fs sp)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records base)
+      (\b => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarFieldValueFuel (fuel - 1) records) fields) (\fs => OkC (ERecUpdate b fs sp)))
   EDo stmts sp =>
-    Vuna.Compiler.Common.bind
-      (Vuna.Compiler.Common.traverse (desugarDoStmtFuel (fuel - 1) records) stmts)
+    Vuna.Compiler.Base.Common.bind
+      (Vuna.Compiler.Base.Common.traverse (desugarDoStmtFuel (fuel - 1) records) stmts)
       (\s2 => OkC (EDo s2 sp))
   -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。
   EPi name implicit qty dom cod sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records dom)
-      (\d2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records cod) (\c2 => OkC (EPi name implicit qty d2 c2 sp)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records dom)
+      (\d2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records cod) (\c2 => OkC (EPi name implicit qty d2 c2 sp)))
   -- where 绑定签名（`EAnn value ty`）两边都做结构递归（record 可出现在值里）。
   EAnn value ty sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value)
-      (\v2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records ty) (\t2 => OkC (EAnn v2 t2 sp)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records value)
+      (\v2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records ty) (\t2 => OkC (EAnn v2 t2 sp)))
   _ => icInternal "unreordered infix/paren in elaboration"
 
 desugarDoStmtFuel : Int -> List RecordMeta -> DoStmt -> Check DoStmt
 desugarDoStmtFuel fuel records stmt = if fuel <= 0 then icFuel "record desugar"
 else case stmt of
   DBind p e sp =>
-    Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records p)
-      (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DBind p2 e2 sp)))
+    Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records p)
+      (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DBind p2 e2 sp)))
   DExpr e sp =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DExpr e2 sp))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records e) (\e2 => OkC (DExpr e2 sp))
 
 desugarRecordValuesFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Expr) -> Span -> Check (List Expr)
 desugarRecordValuesFuel fuel records [] provided sp =
@@ -257,33 +262,33 @@ desugarRecordValuesFuel fuel records (f :: rest) provided sp = if fuel <= 0 then
 else case lookupProvided f.recordFieldName provided of
   Nothing => ErrC (missingFieldMsg sp f.recordFieldName)
   Just v =>
-    Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records v)
-      (\v2 => Vuna.Compiler.Common.bind (desugarRecordValuesFuel (fuel - 1) records rest provided sp) (\vs => OkC (v2 :: vs)))
+    Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v)
+      (\v2 => Vuna.Compiler.Base.Common.bind (desugarRecordValuesFuel (fuel - 1) records rest provided sp) (\vs => OkC (v2 :: vs)))
 
 desugarFieldValueFuel : Int -> List RecordMeta -> Pair String Expr -> Check (Pair String Expr)
 desugarFieldValueFuel fuel records (Pair fname v) =
   if fuel <= 0 then icFuel "record desugar"
-  else Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => OkC (Pair fname v2))
+  else Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records v) (\v2 => OkC (Pair fname v2))
 
 desugarBindFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
 desugarBindFuel fuel records (Pair pat value) =
   if fuel <= 0 then icFuel "record desugar"
-  else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
-    (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (Pair p2 v2)))
+  else Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records pat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records value) (\v2 => OkC (Pair p2 v2)))
 
 -- 局部函数 clause（参数模式列表 + body）。
 desugarLocalClauseFuel : Int -> List RecordMeta -> Pair (List Pat) Expr -> Check (Pair (List Pat) Expr)
 desugarLocalClauseFuel fuel records clause =
   if fuel <= 0 then icFuel "record desugar"
-  else Vuna.Compiler.Common.bind
-    (Vuna.Compiler.Common.traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
-    (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => OkC (Pair p2 b2)))
+  else Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (desugarPatternFuel (fuel - 1) records) (firstOf clause))
+    (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records (secondOf clause)) (\b2 => OkC (Pair p2 b2)))
 
 desugarAltFuel : Int -> List RecordMeta -> Pair Pat Expr -> Check (Pair Pat Expr)
 desugarAltFuel fuel records (Pair pat body) =
   if fuel <= 0 then icFuel "record desugar"
-  else Vuna.Compiler.Common.bind (desugarPatternFuel (fuel - 1) records pat)
-    (\p2 => Vuna.Compiler.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => OkC (Pair p2 b2)))
+  else Vuna.Compiler.Base.Common.bind (desugarPatternFuel (fuel - 1) records pat)
+    (\p2 => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records body) (\b2 => OkC (Pair p2 b2)))
 
 -- HasField 实例：为当前模块的 record 字段生成 `instance HasField (Field "f") R T`。
 -- | 为一批记录的每个字段生成 `HasField` 实例声明。
@@ -347,7 +352,7 @@ export prepareDeclsWith : List Decl -> List Decl -> Check (Pair (List RecordMeta
 prepareDeclsWith auxDecls decls0 =
   let
     records = append (recordsOfDecls auxDecls) (recordsOfDecls decls0)
-  in Vuna.Compiler.Common.bind (desugarRecords records decls0) (\ds => OkC (Pair records ds))
+  in Vuna.Compiler.Base.Common.bind (desugarRecords records decls0) (\ds => OkC (Pair records ds))
 
 -- 记录的构造子名：记录名本身。Elab 在值位置先查构造子表、类型位置走 globals
 -- （`checkType` / `checkAppUnderType`），所以「类型名与构造子同名」不冲突

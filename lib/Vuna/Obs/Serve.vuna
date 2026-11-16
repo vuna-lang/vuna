@@ -49,7 +49,7 @@ import Base.List
 import Base.Pair
 import Base.String
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Json.Rpc
 import Vuna.Json.Server

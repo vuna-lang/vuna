@@ -1,0 +1,66 @@
+-- | 诊断告警去重（纯 helper）。
+module Vuna.Compiler.Base.Diagnostics.Sink where
+
+-- Vuna.Compiler.Base.Diagnostics.Sink：warning 去重。
+--
+-- 本模块不持有状态；诊断的来源与去向：
+--   * Elab 的 warning 经 `Ec.ecWarnings` 显式线程，精化出口挂到 `DtProgram`；
+--   * loader 的 unused-import 与 parse 恢复诊断直接作为返回值交给驱动层；
+--   * 驱动层（`CompilerCli` / LSP）在输出前用本模块去重（按首次出现顺序）。
+--
+-- 复杂度：按 `sameDiag` 的等价关系建**一次**键表（`HashMap String Bool`），O(n)（逐项
+-- 扫历史是 O(n²)：`UN_UnusedDefinition` 一次几千条时尾部 ~830 ms）。键必须与 `sameDiag`
+-- 等价：码 + 消息 + 严重度 + **全部 label 的 span 序列**（其余字段（建议/备注）不参与）。
+import Base.HashMap
+import Vuna.Compiler.Base.Common
+import Base.List
+
+-- | 严重度的键标签（与 `Diag.sameSeverity` 的等价类一一对应）。
+severityTag : Severity -> String
+severityTag SevError = "E"
+severityTag SevWarning = "W"
+severityTag SevNote = "N"
+severityTag SevHelp = "H"
+
+-- | 长度前缀，避免 `"a|b"` 与 `"a|" + "b"` 之类的拼接歧义（同 `Iface.partOf`）。
+tagPart : String -> String
+tagPart s = "${strLength s}:${s}"
+
+-- | 一条诊断的去重键（等价于 `sameDiag` 的整组比较）。
+diagKey : Diagnostic -> String
+diagKey d =
+  "${severityTag d.diagSeverity}|${tagPart d.diagCode}|${tagPart d.diagMessage}|${spansKey d.diagLabels}"
+
+-- | 全部 label 的位置序列（`Nothing` 也占一个位置，与 `sameDiag` 的 `labelSpanOf` 一致）。
+spansKey : List Label -> String
+spansKey [] = ""
+spansKey (l :: rest) = spanPart l.labelSpan ++ spansKey rest
+
+-- 每个 span 段自定界（文件长度前缀 + 行/列以分隔符结尾），拼接后唯一可解码；
+-- 这正是 `labelSpanOf` 的 (文件, 起始行, 起始列, 结束行) 四元组，不含结束列。
+spanPart : Maybe Span -> String
+spanPart Nothing = "0,"
+spanPart (Just sp) =
+  "1:"
+    ++ tagPart sp.spanFile
+    ++ ":"
+    ++ strFromInt sp.spanStartLine
+    ++ ":"
+    ++ strFromInt sp.spanStartCol
+    ++ ":"
+    ++ strFromInt sp.spanEndLine
+    ++ ","
+
+-- | 去重累加器：`seen` 是已保留诊断的键表，`acc` 是逆序结果。
+dedupeGo : List Diagnostic -> HashMap String Bool -> List Diagnostic -> List Diagnostic
+dedupeGo [] _ acc = reverse acc
+dedupeGo (d :: rest) seen acc =
+  let
+    key = diagKey d
+  in case Base.HashMap.lookup key seen of
+    Just _ => dedupeGo rest seen acc
+    Nothing => dedupeGo rest (Base.HashMap.insert key True seen) (d :: acc)
+
+-- | 诊断域实现：按首次出现顺序去重（与 `sameDiag` 同一等价类，O(n)）。
+export dedupeWarnings : List Diagnostic -> List Diagnostic
+dedupeWarnings ds = dedupeGo ds (Base.HashMap.fromList []) []

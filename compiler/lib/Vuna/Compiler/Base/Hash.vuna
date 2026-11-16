@@ -1,0 +1,365 @@
+-- | 内容寻址摘要原语：SHA-256 + 大输入内容键（预折叠）/ 内容地址。
+module Vuna.Compiler.Base.Hash where
+
+-- Vuna.Compiler.Base.Hash：内容寻址的**格式层**（不含查询/缓存策略）。
+--
+-- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途的密钥派生。
+--
+-- * 摘要 = **SHA-256**（FIPS 180-4），在本模块用 `Base.Bits` 的 32-bit 包装实现：
+--   因此 OCaml 后端、wasm 后端与 `interp` 都能算出同一份内容地址——这是
+--   D2（两端语义一致）与 D5（内容寻址）共同要求的。
+-- * `Digest` 的 8 条 lane 就是 SHA-256 的 8 个 32-bit 大端字；`digestHex` 渲染成
+--   标准的小写 64 位十六进制，`digestInt` 提供「必须落成 Int」位置的 63-bit 派生键。
+-- * 本模块只做**摘要与预哈希**；规范编码（自定界原子文法 + 解码器 roundtrip）在
+--   `Vuna.Compiler.Canonical`（D5：格式层，不随编译器或宿主序列化漂移）。
+import Base.Bits
+import Base.List
+import Base.String
+
+-- | 8 个 32-bit 摘要字（大端序；即标准 SHA-256 的 64 位十六进制）。
+export record Digest(..) where
+  digestLanes : List Int
+
+-- | 取摘要的 8 条 lane。
+export digestLanes : Digest -> List Int
+digestLanes (Digest lanes) = lanes
+
+-- | 字节序列（每项 0..255）→ 摘要。
+export digestOfBytes : List Int -> Digest
+digestOfBytes bytes = Digest (sha256Bytes bytes)
+
+-- | 字符串 → 摘要（按 UTF-8 字节）。
+--
+-- 直接按字节下标（`strAt`，O(1)）喂 SHA，**不**先 `strUnpack` 成列表：接口载荷可达
+-- 数 MB，逐字节建 cons 会让 iface 哈希成为 check 的新热点。语义与 `digestOfBytes
+-- (strUnpack s)` 完全相同（同一组字节、同一算法）。
+export digestOfString : String -> Digest
+digestOfString s = Digest (sha256OfString s)
+
+-- | 渲染成小写十六进制：每条 lane 8 位，共 64 位。
+export digestHex : Digest -> String
+digestHex (Digest lanes) = strConcatMany (map hex8 lanes)
+
+-- | 摘要 → 63-bit 派生键（`Int`）：8 条 lane 依次滚动折叠后掩到 `Int` 正区间。
+--
+-- 用途：必须落成 `Int` 的位置（排序键、缓存目录/文件名里的短 key、测试 runner 的
+-- 分桶）。它是 SHA-256 的派生量，碰撞面约 2^-62；需要可移植/可展示的内容地址
+-- 仍用 `digestHex`。
+export digestInt : Digest -> Int
+digestInt (Digest lanes) = band (foldl (\h, lane => h * 1000003 + lane) 0 lanes) 4611686018427387903
+
+-- | 字符串 → 63-bit 派生键（`digestInt` 的便捷入口）；对整串跑 SHA-256，只适合短输入。
+export digestIntOf : String -> Int
+digestIntOf s = digestInt (digestOfString s)
+
+-- | **内容键**（63-bit）`contentKey s = digestIntOf (prehashOfString s)`。
+--
+-- 用途：需要按内容判等/分桶的**大输入**（源文件、缓存 key 组合串）。先做 4-lane 63-bit
+-- 多项式预折叠（O(n) 低常数，与 `payloadDigest` 同一威胁模型：无对手、只防意外碰撞），
+-- 再对折叠串跑 SHA-256 并取 63-bit 派生键——因此**不再**对每个源文件逐字节跑语言内
+-- SHA（那会让 `check` 的缓存 key 计算从 ~20ms 抬到数百 ms）。
+export contentKey : String -> Int
+contentKey s = digestIntOf (prehashOfString s)
+
+-- | **内容地址**（64 位十六进制）：`digestHex (digestOfString (prehashOfString s))`。
+-- 与 `contentKey` 同一折叠，输出可展示/可比较的地址（ast 缓存 key、内容寻址文件名）。
+export contentAddress : String -> String
+contentAddress s = digestHex (digestOfString (prehashOfString s))
+
+-- ---------------------------------------------------------------
+-- SHA-256（FIPS 180-4）
+-- ---------------------------------------------------------------
+-- | SHA-256 初始状态 H0（前 8 个素数平方根小数部分的前 32 位）。
+shaInit : List Int
+shaInit =
+  [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225]
+
+-- | SHA-256 轮常量 K（前 64 个素数立方根小数部分的前 32 位）。
+shaK : List Int
+shaK =
+  [ 1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ]
+
+-- | 列表长度（`Base.List.length` 返回 `Nat`；这里需要 `Int`）。
+lenInt : List a -> Int
+lenInt [] = 0
+lenInt (_ :: rest) = 1 + lenInt rest
+
+-- | 在第 `i` 位取整数（越界返回 0）。
+atIdx : Int -> List Int -> Int
+atIdx i [] = 0
+atIdx i (x :: rest) = if i <= 0 then x else atIdx (i - 1) rest
+
+-- | 重复 `n` 个 0。
+zeros : Int -> List Int
+zeros n = map (\_ => 0) (range 0 n)
+
+-- | 8 字节大端（SHA-256 的 64-bit 消息长度字段）。
+lenBytes : Int -> List Int
+lenBytes n =
+  [ band (shr n 56) 255,
+    band (shr n 48) 255,
+    band (shr n 40) 255,
+    band (shr n 32) 255,
+    band (shr n 24) 255,
+    band (shr n 16) 255,
+    band (shr n 8) 255,
+    band n 255
+  ]
+
+-- | 填充：`0x80` + 若干 0 + 64-bit 大端比特长度，使总长为 64 的倍数。
+padMessage : List Int -> List Int
+padMessage bytes =
+  let
+    n = lenInt bytes
+    r = n + 1 - (n + 1) / 64 * 64
+    zerosNeeded = if r <= 56 then 56 - r else 120 - r
+  in append (append (append bytes [128]) (zeros zerosNeeded)) (lenBytes (n * 8))
+
+-- | 切成 64 字节的块（`n` 为块数；用守卫 Int 递减证明终止）。
+chunk64 : List Int -> List (List Int)
+chunk64 bytes = chunks ((lenInt bytes + 63) / 64) bytes
+
+-- | 取前 `k` 个 64 字节块。
+chunks : Int -> List Int -> List (List Int)
+chunks k bytes = if k <= 0 then [] else take 64 bytes :: chunks (k - 1) (drop 64 bytes)
+
+-- | 4 字节大端 → 32-bit 字。
+wordAt : List Int -> Int -> Int
+wordAt chunk j =
+  let
+    b0 = atIdx (j * 4) chunk
+    b1 = atIdx (j * 4 + 1) chunk
+    b2 = atIdx (j * 4 + 2) chunk
+    b3 = atIdx (j * 4 + 3) chunk
+  in bor (bor (shl32 b0 24) (shl32 b1 16)) (bor (shl32 b2 8) b3)
+
+-- | 一个 64 字节块 → 16 个 32-bit 字。
+chunkWords : List Int -> List Int
+chunkWords chunk = map (\j => wordAt chunk j) (range 0 16)
+
+-- | 小写 sigma0：`rotr 7 ^ rotr 18 ^ shr 3`。
+sigma0Small : Int -> Int
+sigma0Small x = bxor (rotr32 x 7) (bxor (rotr32 x 18) (shr32 x 3))
+
+-- | 小写 sigma1：`rotr 17 ^ rotr 19 ^ shr 10`。
+sigma1Small : Int -> Int
+sigma1Small x = bxor (rotr32 x 17) (bxor (rotr32 x 19) (shr32 x 10))
+
+-- | 大写 Sigma0：`rotr 2 ^ rotr 13 ^ rotr 22`。
+bigSigma0 : Int -> Int
+bigSigma0 x = bxor (rotr32 x 2) (bxor (rotr32 x 13) (rotr32 x 22))
+
+-- | 大写 Sigma1：`rotr 6 ^ rotr 11 ^ rotr 25`。
+bigSigma1 : Int -> Int
+bigSigma1 x = bxor (rotr32 x 6) (bxor (rotr32 x 11) (rotr32 x 25))
+
+-- 消息表扩展：维护「最近 16 字」的滑动窗口（最新在前），避免对增长中的列表做
+-- 远端下标访问（下标访问在这里是热点）。
+-- | 窗口下标访问（窗口固定 16 项；越界返回 0）。
+atWindow : Int -> List Int -> Int
+atWindow i [] = 0
+atWindow i (x :: rest) = if i <= 0 then x else atWindow (i - 1) rest
+
+-- | 由 16 字扩展成 64 字消息表：前 16 字原样，其余按 SHA-256 公式追加。
+schedule : List Int -> List Int
+schedule w16 = append w16 (scheduleGo 48 (reverse w16))
+
+-- | 追加剩余 `k` 个字（`window` = 最近 16 字，最新在前）。
+scheduleGo : Int -> List Int -> List Int
+scheduleGo k window = if k <= 0 then []
+else
+  let
+    w2 = atWindow 1 window
+    w7 = atWindow 6 window
+    w15 = atWindow 14 window
+    w16 = atWindow 15 window
+    next = add32 (add32 (sigma1Small w2) w7) (add32 w16 (sigma0Small w15))
+  in next :: scheduleGo (k - 1) (next :: take 15 window)
+
+-- | `ch`：`(e land f) xor ((lnot e) land g)`。
+ch32 : Int -> Int -> Int -> Int
+ch32 e f g = bxor (band e f) (band (bnot e) g)
+
+-- | `maj`：三者多数。
+maj32 : Int -> Int -> Int -> Int
+maj32 a b c = bxor (band a b) (bxor (band a c) (band b c))
+
+-- | 64 轮压缩：状态以 8 个参数传递，消息表与轮常量成对消费（列表头 O(1)）。
+roundsGo : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> List (Pair Int Int) -> List Int
+roundsGo a b c d e f g h [] = [a, b, c, d, e, f, g, h]
+roundsGo a b c d e f g h ((Pair w k) :: rest) =
+  let
+    t1 = add32 (add32 (add32 h (bigSigma1 e)) (add32 (ch32 e f g) k)) w
+    t2 = add32 (bigSigma0 a) (maj32 a b c)
+  in roundsGo (add32 t1 t2) a b c (add32 d t1) e f g rest
+
+-- | 压缩函数：8 字状态 + 16 字块 → 8 字新状态（尚未与初值相加）。
+compress : List Int -> List Int -> List Int
+compress st w16 =
+  roundsGo (atIdx 0 st) (atIdx 1 st) (atIdx 2 st) (atIdx 3 st) (atIdx 4 st) (atIdx 5 st)
+    (atIdx 6 st) (atIdx 7 st) (zip (schedule w16) shaK)
+
+-- | 两个 8 字状态按 32-bit 加法逐位相加。
+zipAdd : List Int -> List Int -> List Int
+zipAdd xs ys = map (\i => add32 (atIdx i xs) (atIdx i ys)) (range 0 8)
+
+-- | 处理一个 64 字节块：更新 8 字状态。
+compressBlock : List Int -> List Int -> List Int
+compressBlock st block = zipAdd st (compress st (chunkWords block))
+
+-- | SHA-256：字节序列 → 8 个 32-bit 大端字。
+sha256Bytes : List Int -> List Int
+sha256Bytes bytes = foldl compressBlock shaInit (chunk64 (padMessage bytes))
+
+-- ---------------------------------------------------------------
+-- SHA-256（字符串直读版：不建逐字节列表）
+-- ---------------------------------------------------------------
+-- | 填充后总长（字节）：`0x80` + 若干 0 + 8 字节大端比特长度，使总长为 64 的倍数。
+paddedLen : Int -> Int
+paddedLen n =
+  let
+    r = n + 1 - (n + 1) / 64 * 64
+    z = if r <= 56 then 56 - r else 120 - r
+  in n + 1 + z + 8
+
+-- | 填充后第 `i` 个字节（`i < total`）。
+paddedByte : String -> Int -> Int -> Int -> Int
+paddedByte s n total i =
+  if i < n then strAt s i
+  else if i == n then 128
+  else if i < total - 8 then 0 else band (shr (n * 8) (8 * (7 - (i - (total - 8))))) 255
+
+-- | 块 `b` 的第 `j` 个 32-bit 大端字。
+wordAtString : String -> Int -> Int -> Int -> Int -> Int
+wordAtString s n total b j =
+  let
+    base = b * 64 + j * 4
+    b0 = paddedByte s n total base
+    b1 = paddedByte s n total (base + 1)
+    b2 = paddedByte s n total (base + 2)
+    b3 = paddedByte s n total (base + 3)
+  in bor (bor (shl32 b0 24) (shl32 b1 16)) (bor (shl32 b2 8) b3)
+
+-- | 块 `b` → 16 个 32-bit 字。
+chunkWordsString : String -> Int -> Int -> Int -> List Int
+chunkWordsString s n total b = map (\j => wordAtString s n total b j) (range 0 16)
+
+-- | 逐块压缩（`k` 为剩余块数，守卫 Int 递减证明终止）。
+blocksGo : String -> Int -> Int -> Int -> Int -> List Int -> List Int
+blocksGo s n total k b st =
+  if k <= 0 then st
+  else blocksGo s n total (k - 1) (b + 1)
+    (zipAdd st (compress st (schedule (chunkWordsString s n total b))))
+
+-- | 字符串 → 8 个 32-bit 大端字（语义与 `sha256Bytes (strUnpack s)` 相同）。
+sha256OfString : String -> List Int
+sha256OfString s =
+  let
+    n = strLength s
+    total = paddedLen n
+  in blocksGo s n total (total / 64) 0 shaInit
+
+-- ---------------------------------------------------------------
+-- 大载荷折叠（iface 哈希用）
+-- ---------------------------------------------------------------
+-- | 4 lane 63-bit wrapping 多项式预哈希（每字节 O(1)、零分配）。
+--
+-- 用途：接口哈希的输入里有 MB 级的规范编码载荷（defs / datas / globals / …）。
+-- 对这类载荷逐字节跑 SHA-256 会把 iface 阶段变成 check 的新热点；
+-- 这里先用 4 条独立 lane 把载荷折叠成 64 字节的确定性串，再对它做 SHA-256。
+-- 顶层摘要仍是 SHA-256；预哈希是 252-bit 的**非密码学**多项式（无对手模型，
+-- 与缓存层的威胁模型一致；accidental 碰撞面 2^-252 量级已足够）。
+--
+-- OCaml `Int` 溢出按 63-bit 二进制补码回绕（§primitives），因此乘法天然 mod 2^63，
+-- 不需要取模运算；跨机器、跨进程确定。
+export prehashOfString : String -> String
+prehashOfString s = prehashGo (strLength s) 0 1 2 3 4 s
+
+-- | 逐字节滚动（`k` 为剩余字节数，守卫 Int 递减）。
+prehashGo : Int -> Int -> Int -> Int -> Int -> Int -> String -> String
+prehashGo k i h0 h1 h2 h3 s = if k <= 0 then "${strFromInt h0},${strFromInt h1},${strFromInt h2},${strFromInt h3}"
+else
+  let
+    b = strAt s i + 1
+  in prehashGo (k - 1) (i + 1) (h0 * 131 + b) (h1 * 137 + b) (h2 * 139 + b) (h3 * 149 + b) s
+
+-- ---------------------------------------------------------------
+-- 十六进制渲染
+-- ---------------------------------------------------------------
+-- | 一个 lane 的 8 位十六进制（16^7 … 16^0）。
+hex8 : Int -> String
+hex8 v =
+  strConcatMany
+    [hexDigit (digitAt v 268435456), hexDigit (digitAt v 16777216), hexDigit (digitAt v 1048576), hexDigit (digitAt v 65536), hexDigit (digitAt v 4096), hexDigit (digitAt v 256), hexDigit (digitAt v 16), hexDigit (digitAt v 1)]
+
+-- | 取第 `p` 位（十六进制位）。
+digitAt : Int -> Int -> Int
+digitAt v p = band (v / p) 15
+
+-- | 十六进制数字 → 字符（0-9 → '0'-'9'；10-15 → 'a'-'f'）。
+hexDigit : Int -> String
+hexDigit d = if d < 10 then strFromInt d else strPack [87 + d]

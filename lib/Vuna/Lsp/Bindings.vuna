@@ -17,11 +17,11 @@ module Vuna.Lsp.Bindings where
 --
 -- hover/definition 的 JSON 组装在本模块；`Vuna.Lsp` 负责管线顺序（洞 → 本模块 → Index 符号）。
 -- 命中返回 `Just`；未命中返回 `Nothing`，调用方继续走既有的 Index 路径。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.Files

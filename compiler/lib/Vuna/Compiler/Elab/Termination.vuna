@@ -3,9 +3,9 @@ module Vuna.Compiler.Elab.Termination where
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口。
 -- 判据细节见 `.Measure`（size/守卫正事实/投影/关系/弱环）与 `.Scc`（size-change）。
 import Base.List
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
@@ -353,7 +353,7 @@ collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf a
 collectMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap String (List Int) -> List String -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Check (Pair Bool (List (Pair (Pair (Pair String String) Int) Span)))
 collectMeasure comp defTbl ctors projs p facts [] acc = OkC acc
 collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
-  Vuna.Compiler.Common.bind
+  Vuna.Compiler.Base.Common.bind
     (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
     (\acc2 => collectMeasure comp defTbl ctors projs p facts rest acc2)
 
@@ -449,8 +449,8 @@ anyOwnTbl ownTbl (n :: rest) = if Base.HashMap.member n ownTbl then True else an
 checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Check Int
 checkSccsWith ownTbl [] defTbl ctors projs g facts = OkC 0
 checkSccsWith ownTbl (comp :: rest) defTbl ctors projs g facts =
-  if anyOwnTbl ownTbl comp then Vuna.Compiler.Common.bind (checkComp comp defTbl ctors projs g facts)
-    (\n => Vuna.Compiler.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
+  if anyOwnTbl ownTbl comp then Vuna.Compiler.Base.Common.bind (checkComp comp defTbl ctors projs g facts)
+    (\n => Vuna.Compiler.Base.Common.bind (checkSccsWith ownTbl rest defTbl ctors projs g facts) (\m => OkC (n + m)))
   else checkSccsWith ownTbl rest defTbl ctors projs g facts
 
 -- | 取调用边的参数关系编号。

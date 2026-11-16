@@ -10,14 +10,14 @@ module Vuna.PackageStore where
 --
 -- 包对象放在 `objects/pkg/` 这个 kind 目录下，而不是 `objects/<hex>`：缓存族按
 -- `objects/<kind>/` 分目录，`clean --store` / `store gc` 才能按族作用域，不会误删包对象。
--- 对象 framing 复用 `Vuna.Compiler.Store`（同样的 magic/codec/长度/内容地址校验），
+-- 对象 framing 复用 `Vuna.Compiler.Base.Store`（同样的 magic/codec/长度/内容地址校验），
 -- 但 tag 不含编译器指纹：包对象跨编译器版本复用（它们只是源码字节）。
 -- 本模块只做读写与物化；**取包**（git/url）在 `Vuna.Fetch`，两者都不进 seed。
-import Vuna.Compiler.Canonical.Pkg
-import Vuna.Compiler.Common
+import Vuna.Compiler.Frontend.Canonical.Pkg
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
-import Vuna.Compiler.Packages.Source
-import Vuna.Compiler.Store
+import Vuna.Compiler.Frontend.Packages.Source
+import Vuna.Compiler.Base.Store
 import Base.List
 import Base.String
 import Base.EffFs

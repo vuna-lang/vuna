@@ -24,7 +24,7 @@ import Base.List
 import Base.Sort
 import Base.String
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Vuna.Json
 import Vuna.Obs.Path

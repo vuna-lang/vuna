@@ -18,7 +18,7 @@ import Base.List
 import Base.Maybe
 import Base.Sort
 import Base.String
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Obs.Types
 
 -- | 一条 CPU 采样：时间戳（epoch 微秒）+ 栈（叶在前）。

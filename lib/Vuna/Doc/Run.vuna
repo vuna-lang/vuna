@@ -7,12 +7,12 @@ module Vuna.Doc.Run where
 -- 默认 OUT：DIR=. -> docs/api.html，其他 DIR -> DIR/docs/api.html。
 -- `--check` 不写文件，只报告缺失 docstring 的顶层导出项（退出 1）。
 import Vuna.Cli.Args
-import Vuna.Compiler.Addr
-import Vuna.Compiler.Common
-import Vuna.Compiler.Fingerprint
-import Vuna.Compiler.Hash
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Store
+import Vuna.Compiler.Loader.Addr
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Loader.Fingerprint
+import Vuna.Compiler.Base.Hash
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Base.Store
 import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files

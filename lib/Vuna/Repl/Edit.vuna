@@ -18,7 +18,7 @@ module Vuna.Repl.Edit where
 --     权衡：每次查询要起 `sh` + `stty` 两个进程，2s 延迟对 resize 可接受且常驻开销低）。
 -- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。
 -- 所有出口（提交/EOF/取消/不可用）都恢复终端状态（含关闭括号粘贴）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
 import Vuna.Repl.Term

@@ -39,8 +39,7 @@ module Vuna.Lsp where
 --     跨模块名字按源文本呈现；
 --   - 主循环串行：`$/cancelRequest` 只能阻止**尚未开始**的请求（已开始的精化不打断）；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Elab
+import Vuna.Compiler.Base.Common
 import Vuna.Index
 import Vuna.Json
 import Vuna.Json.Server
@@ -60,6 +59,8 @@ import Base.EffProcess
 import Base.EffStdin
 import Base.Nat
 import Base.Obs
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.Term
 
 -- ---------------------------------------------------------------
 -- 常量

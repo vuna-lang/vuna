@@ -59,6 +59,10 @@
 6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
+8. **包内层方向**：`compiler/` 的层依赖由 `compiler/vuna.toml` 的 `[layers]` 声明、由 loader
+   在 import 时强制（越层报 `LD_LayerViolation`，语义见
+   [packages.md](docs/reference/packages.md)「层约束」）；`checks.ir-boundary` 只保留
+   「必须 import 某模块」的正向断言与 IR 形状断言。
 
 ## 纪律红线
 

@@ -1,14 +1,19 @@
 module Vuna.Compiler.Lowering.Entry where
 
 -- 入口（`main` 钩子）的已决策形态：动作 vs 值、展示函数、内建宿主 handler 序列。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Base.List
-import Vuna.Compiler.Core
-import Vuna.Compiler.Elab
-import Vuna.Compiler.Checks
-import Vuna.Compiler.Intrinsics
-import Vuna.Compiler.Ir
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Core.Canonical
+import Vuna.Compiler.Elab.Types
+import Vuna.Compiler.Lowering.Checks
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Analysis
+import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Lowering.Env
 
 -- ---------------------------------------------------------------

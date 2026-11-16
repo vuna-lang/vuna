@@ -13,7 +13,7 @@ module Vuna.Json.Frame where
 --
 -- 上界：单帧与缓冲都限制在 `maxFrameBytes` 内（坏客户端不能把内存撑爆；
 -- 正常源文件帧远小于此）。`splitHeaderBlock` 同时容忍 `\r\n\r\n` 与裸 `\n\n`。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Base.EffStdin
 import Base.Eff.Types

@@ -29,7 +29,7 @@ module Vuna.Lsp.Rename where
 --     跟进；其他形态（如只出现在别的模块签名里的类型）不保证；
 --   - 运算符（中缀/section/反引号固定名）、`deriving (...)`、fixity 别名不改；
 --   - 带 `'` 的名字被 `tokenAtCursor` 截断（既有 token 边界限制）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Index

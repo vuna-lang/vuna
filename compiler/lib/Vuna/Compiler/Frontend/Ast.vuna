@@ -1,7 +1,7 @@
 module Vuna.Compiler.Frontend.Ast where
 
 -- Vuna.Compiler.Frontend.Ast：语法类型与 AST 辅助函数。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 -- 记录字段：字段名 + 类型表达式 + span。
 export record Field(..) where

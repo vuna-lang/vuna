@@ -22,14 +22,13 @@ module Vuna.Lsp.Query where
 --   references        定义位置 + Index `findReferences` 的出现位置；
 --   completion        关键字 + 当前缓冲顶层名 + Index 符号（`.` 后按模块过滤，cap 500）；
 --   workspace/symbol  Index 过滤（cap 200），没有 textDocument 时用首个打开文档推断根。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.FixityEnv
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Fmt
 import Vuna.Index
 import Vuna.Json
@@ -46,6 +45,8 @@ import Base.EffEnv
 import Base.EffExit
 import Base.EffFs
 import Base.EffProcess
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.Term
 
 -- 结果上限：避免病态索引/大文件把单帧撑爆。
 maxCompletions : Int

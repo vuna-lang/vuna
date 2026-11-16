@@ -1,6 +1,6 @@
 import Prelude
 import Base.List
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Meta

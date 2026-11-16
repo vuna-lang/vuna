@@ -36,9 +36,9 @@ exit: 0
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-x"'
 exit: 0
 
-# 编译器身份的归属：本包含 `Vuna.Compiler.Fingerprint` 时按源闭包定址（同源两次构建一致、
+# 编译器身份的归属：本包含 `Vuna.Compiler.Loader.Fingerprint` 时按源闭包定址（同源两次构建一致、
 # 不等于构建者身份）；其他包继承构建者身份（改自己的源码不换身份）。
-run: sh -c 'set -eu; S="$TMPDIR/det"; H=$(dirname "$(dirname "$VUNA")"); own=$(cat "$H/build-id"); mkdir -p "$S/idpkg/lib/Vuna/Compiler" "$S/idpkg/app"; printf "[package]\nname = \"idpkg\"\n[export]\nmodules = [\"Vuna.Compiler.Fingerprint\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/idpkg/vuna.toml"; printf "module Vuna.Compiler.Fingerprint where\n\nexport marker : Int\nmarker = 1\n" > "$S/idpkg/lib/Vuna/Compiler/Fingerprint.vuna"; printf "main : Int\nmain = 1\n" > "$S/idpkg/app/Main.vuna"; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id1" "$S/idpkg" >/dev/null 2>&1; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id2" "$S/idpkg" >/dev/null 2>&1; a=$(cat "$S/id1/build-id"); b=$(cat "$S/id2/build-id"); test "$a" = "$b"; test "$a" != "$own"; VUNA_STORE="$S/store-x" "$VUNA" build --no-compile --out "$S/idp" "$S/a" >/dev/null 2>&1; test "$(cat "$S/idp/build-id")" = "$own"'
+run: sh -c 'set -eu; S="$TMPDIR/det"; H=$(dirname "$(dirname "$VUNA")"); own=$(cat "$H/build-id"); mkdir -p "$S/idpkg/lib/Vuna/Compiler/Loader" "$S/idpkg/app"; printf "[package]\nname = \"idpkg\"\n[export]\nmodules = [\"Vuna.Compiler.Loader.Fingerprint\"]\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$S/idpkg/vuna.toml"; printf "module Vuna.Compiler.Loader.Fingerprint where\n\nexport marker : Int\nmarker = 1\n" > "$S/idpkg/lib/Vuna/Compiler/Loader/Fingerprint.vuna"; printf "main : Int\nmain = 1\n" > "$S/idpkg/app/Main.vuna"; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id1" "$S/idpkg" >/dev/null 2>&1; VUNA_STORE="$S/store-id" "$VUNA" build --no-compile --out "$S/id2" "$S/idpkg" >/dev/null 2>&1; a=$(cat "$S/id1/build-id"); b=$(cat "$S/id2/build-id"); test "$a" = "$b"; test "$a" != "$own"; VUNA_STORE="$S/store-x" "$VUNA" build --no-compile --out "$S/idp" "$S/a" >/dev/null 2>&1; test "$(cat "$S/idp/build-id")" = "$own"'
 exit: 0
 
 # 排障钩子 `VUNA_COMPILER_TAG` 覆盖身份：同源、不同 tag ⇒ 对象地址集合不同

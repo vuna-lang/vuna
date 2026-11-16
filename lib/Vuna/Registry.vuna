@@ -15,13 +15,13 @@ module Vuna.Registry where
 --
 -- 索引放在任何地方：本地目录、`file://`、`http(s)://`（后者由宿主 `curl` 取一次）。
 -- 索引不可信：写回 manifest 的永远是 `(源, hash)`，之后 fetch/check 只认摘要。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Cli.Args
-import Vuna.Compiler.Packages.Source
-import Vuna.Compiler.Store
+import Vuna.Compiler.Frontend.Packages.Source
+import Vuna.Compiler.Base.Store
 import Base.List
 import Base.String
 import Base.EffFs

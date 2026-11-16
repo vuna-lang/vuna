@@ -25,8 +25,8 @@ import Base.List
 import Base.Nat
 import Base.Pair
 import Base.String
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 
 emptyPatSpan : Span

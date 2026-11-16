@@ -14,7 +14,7 @@ module Vuna.Lsp.Protocol where
 --
 -- 连接循环（读帧 → 分发 → 发帧）在 `Vuna.Json.Server.serveConnection`；LSP 与
 -- REPL server 共用同一份机械实现，各自的请求语义/错误策略留在各自模块。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Base.EffFs
 import Base.Eff.Types
@@ -116,7 +116,7 @@ export decodeUri : String -> String
 decodeUri uri =
   if startsWith fileScheme uri then percentDecode (substring 7 (byteLength uri - 7) uri) else ""
 
--- 路径工具：注意 `Vuna.Compiler.Common.splitPath` 按**第一个** `/` 切
+-- 路径工具：注意 `Vuna.Compiler.Base.Common.splitPath` 按**第一个** `/` 切
 -- （Driver/Compile 也注明它不适合取 basename），不能用来取目录/文件名；
 -- 这里按最后一个 `/` 自己算。
 export lastSlashGo : List Int -> Int -> Int -> Int

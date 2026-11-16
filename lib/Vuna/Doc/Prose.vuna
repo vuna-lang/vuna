@@ -5,7 +5,7 @@ module Vuna.Doc.Prose where
 -- 支持：段落（空行分隔）、行内代码（反引号）、fenced code（```）、
 -- `[text](url)` 链接、`[Module.name]` 交叉引用。其余文本 HTML 转义后原样输出；
 -- 链接只允许 http/https/#/相对路径，避免 `javascript:` 进入生成物。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 -- ---------------------------------------------------------------
 -- 转义

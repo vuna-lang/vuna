@@ -10,12 +10,12 @@ module Vuna.Compiler.Driver.Native where
 import Base.Eff.Types
 import Base.Int
 import Base.Pair
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Lowering
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Native.Model
 import Vuna.Compiler.Native.Module
 import Vuna.Compiler.Native.Render

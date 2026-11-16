@@ -2,7 +2,7 @@ module Vuna.Index.Render where
 
 -- Vuna.Index.Render：`vuna map` / `vuna api` 的文本渲染。
 -- 纯字符串拼装，不读源码；doc 由 Vuna.Doc 直接按源码 + `[export]` 渲染。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Index.Types
 
 -- ---------------------------------------------------------------

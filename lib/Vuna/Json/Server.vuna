@@ -14,7 +14,7 @@ module Vuna.Json.Server where
 --
 -- 上界：单帧 / 缓冲 16 MiB、循环 fuel 1G 次；超限走 `ExitFatal`，由调用方决定是
 -- 终止进程（LSP）还是只关掉这个连接继续服务（REPL server）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Json.Frame
 import Base.Eff.Types

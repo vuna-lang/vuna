@@ -19,8 +19,8 @@ module Vuna.Interp where
 --   - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走
 --     `compileToDir` + `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test`
 --     的效果测试共用这一条执行路径）。效果的输出直接写终端，判定只看进程退出码。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Base.EffClock

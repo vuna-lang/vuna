@@ -14,8 +14,10 @@ module Vuna.Compiler.Elab.InstCoherence where
 -- 但具体实例之间仍按原规则禁止重叠（`TC_OverlappingInstances`），同一类出现两个
 -- blanket（头 α-等价）仍按 `TC_DuplicateInstance` 拒绝。搜索侧的“具体优先”在
 -- `Elab/Dict.vuna` 的 `searchInstFuel` 里实现。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Types

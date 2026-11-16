@@ -2,8 +2,10 @@ module Vuna.Compiler.Elab.Term where
 
 -- Vuna.Compiler.Elab.Term：项检查门面：对外暴露带常量 fuel 的 wrapper，
 -- 实现见 `.Impl`，非递归 helper 见 `.Support`。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Elab.Case
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match

@@ -40,15 +40,16 @@ module Vuna.Repl where
 --   * 源码索引（`stateBrowseIndex`）：索引入口自身也是工具会话客户端（对象载荷 = 索引
 --     编码），命中就从载荷解码、未命中才扫描重建；REPL 只额外在会话内记住解出来的 `Index`。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Loader
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Version
+import Vuna.Compiler.Loader.Flatten
+import Vuna.Compiler.Loader.Modules
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Base.Version
 import Vuna.Index
 import Vuna.Interp
 import Vuna.Repl.Edit

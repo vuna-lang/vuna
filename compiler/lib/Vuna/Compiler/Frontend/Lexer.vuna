@@ -17,8 +17,8 @@ module Vuna.Compiler.Frontend.Lexer where
 -- 洞内注释（`--` / `{- -}`）随洞 token 一起被 `skipTrivia` 跳过：插值洞里的注释
 -- **不进入 AST / 注释表**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
 import Base.List
-import Vuna.Compiler.Common
-import Vuna.Compiler.Frontend.Diagnostics
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Frontend
 
 -- 模板字面量的片段：文本块或插值洞（洞内 token 列表）。
 export data TmplPart(..) : Type where

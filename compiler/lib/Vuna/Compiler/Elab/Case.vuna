@@ -11,15 +11,17 @@ module Vuna.Compiler.Elab.Case where
 -- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。精化路径只有两条：
 -- 先降级成模式矩阵，或直接走规范形。
 import Base.List
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
-import Vuna.Compiler.Diagnostics
-import Vuna.Compiler.Diagnostics.Warning
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Diagnostics
+import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 
 -- ---------------------------------------------------------------
 -- 索引合一（unifyIdx）
@@ -40,7 +42,7 @@ unifyIdxList ec acc depth fuel xs ys =
 unifyIdxListGo : Ec -> List (Pair Int Value) -> Int -> Int -> List Value -> List Value -> Check (List (Pair Int Value))
 unifyIdxListGo ec acc depth fuel [] [] = OkC acc
 unifyIdxListGo ec acc depth fuel (x :: xs) (y :: ys) =
-  Vuna.Compiler.Common.bind (unifyIdx ec acc depth (fuel - 1) x y)
+  Vuna.Compiler.Base.Common.bind (unifyIdx ec acc depth (fuel - 1) x y)
     (\acc2 => unifyIdxList ec acc2 depth (fuel - 1) xs ys)
 unifyIdxListGo ec acc depth fuel _ _ = unifyErr
 
@@ -579,7 +581,7 @@ missingCtors ctx ec idxs written (ctor :: rest) =
 export checkCaseDone : Ec -> Ctx -> DtData -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Term -> List CaseAlt -> Check (Pair Term Ec)
 checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
   if hasCatchAll alts then OkC (Pair (TCase scrutTerm altTerms) ec)
-  else Vuna.Compiler.Common.bind (checkCoverage ctx ec dd idxs alts sp)
+  else Vuna.Compiler.Base.Common.bind (checkCoverage ctx ec dd idxs alts sp)
     (\_ => OkC (Pair (TCase scrutTerm altTerms) ec))
 
 -- 冗余分支的整块删除 span：从分支起始行行首到分支体结束行的下一行行首。

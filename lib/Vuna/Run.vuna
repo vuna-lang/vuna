@@ -18,8 +18,8 @@ module Vuna.Run where
 -- 原样返回。`--target wasm` 执行 `<OUT>/main.wasm`（wasmtime + stack-switching/gc/
 -- function-references），`--target native` 与 ocaml 一样执行 `<OUT>/bin/<包名>`。
 -- 目标没有可执行入口 / 构建被跳过导致产物缺失都是输入错误（exit 2）。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Cli.Args
 import Vuna.Files

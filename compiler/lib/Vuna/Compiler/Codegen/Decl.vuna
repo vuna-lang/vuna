@@ -10,10 +10,12 @@ module Vuna.Compiler.Codegen.Decl where
 -- 不消费 `DtData` / `DtDef` / `Value`：表示决策（族参数槽、keep flags、不透明字段、
 -- record 字段表、去装箱族）全部由 `Lowering` 在 IR 里定好。边界由
 -- `checks.ir-boundary` 守护。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Ir
+import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Analysis
+import Vuna.Compiler.Ir.Runtime
 
 -- ---------------------------------------------------------------
 -- 名字编码

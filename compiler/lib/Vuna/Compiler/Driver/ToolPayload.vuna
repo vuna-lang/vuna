@@ -18,7 +18,7 @@ import Base.List
 import Base.Maybe
 import Base.Pair
 import Base.String
-import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 

@@ -1,9 +1,11 @@
 module Vuna.Compiler.Elab.Term.Support where
 
 -- Vuna.Compiler.Elab.Term.Support：Term 的非递归叶子 helper（无组内递归）。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Elab.Case
 import Vuna.Compiler.Elab.Dict
 import Vuna.Compiler.Elab.Match

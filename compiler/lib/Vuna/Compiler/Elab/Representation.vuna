@@ -5,11 +5,13 @@ module Vuna.Compiler.Elab.Representation where
 -- `ReprAuto` 未声明，回落自动去装箱推断（推断仍保留：显式档位优先）。
 -- 这里只做结构与类型项判定，不依赖 Codegen：`Elab` 用它做 via-field 的表示校验，
 -- `Codegen.Decl` 用它生成类型别名 / 恒等构造 / case 绑定。判据见 `unboxedCandidateOfData`。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Core
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 
 -- | 自动去装箱候选：族名、唯一保留字段所在的构造子，以及该字段在完整 telescope 中的下标。
 export record UnboxedCand(..) where

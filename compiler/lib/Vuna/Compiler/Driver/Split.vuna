@@ -13,17 +13,13 @@ module Vuna.Compiler.Driver.Split where
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
 import Base.Sort
-import Vuna.Compiler.Canonical.Bytes
-import Vuna.Compiler.Common
-import Vuna.Compiler.Hash
+import Vuna.Compiler.Base.Bytes
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Hash
 import Base.HashMap
 import Base.List
 import Base.EffFs
 import Base.Eff.Types
-
--- | 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
-export entryUnitName : String
-entryUnitName = "Main"
 
 export record SplitFile(..) where
   splitName : String
@@ -251,7 +247,7 @@ joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 -- 不变量：depth 是最长路径的不动点、稳定插入排序、同 depth 内按
 -- `unitTieKey` 升序（`<=`）。
 unitTieKey : String -> Int
-unitTieKey name = Vuna.Compiler.Hash.contentKey "t:${name}"
+unitTieKey name = Vuna.Compiler.Base.Hash.contentKey "t:${name}"
 
 -- 名字集合（graph 单元 + 全部直接依赖）：tie key 只对唯一名字各算一次 SHA-256。
 nameSetOf : List (Pair String (List String)) -> HashMap String Bool -> HashMap String Bool

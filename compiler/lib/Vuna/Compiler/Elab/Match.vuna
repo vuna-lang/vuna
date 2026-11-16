@@ -16,9 +16,9 @@ module Vuna.Compiler.Elab.Match where
 -- （内层 source case 各自降级）之间靠调用方传入的位置名区分（`checkCaseMatrixFuel` 用
 -- 上下文深度做前缀）。
 import Base.List
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Elab.Coverage
-import Vuna.Compiler.Diagnostics
+import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 
 -- 单 clause 的参数全是变量（或通配）时可直接 `checkDef` 绑定；否则需要 `multiToExpr`
@@ -46,7 +46,7 @@ multiToExpr table clauses = case arityOf clauses of
   else
     let
       names = paramNames n
-    in Vuna.Compiler.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200)
+    in Vuna.Compiler.Base.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200)
       (\body => OkC (wrapLambdas names body))
 
 -- 与 multiToExpr 同一套模式矩阵，但不包 lambda：`name` 是已在作用域里的位置名，
@@ -98,8 +98,8 @@ else case clauses of
     PVar pname psp => buildColumnExpr table (prepVarColumn pos clauses) restParams fb (fuel - 1)
     PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
     _ =>
-      Vuna.Compiler.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1))
-        (\restExpr => Vuna.Compiler.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+      Vuna.Compiler.Base.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1))
+        (\restExpr => Vuna.Compiler.Base.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
   -- 该字面量分支的子矩阵不只是「当前行 + 剩余列」——同一字面量的后续行与
   -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
   -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
@@ -177,7 +177,7 @@ hasAsHead (c :: rest) = case c of
 asColumn : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
 asColumn table clauses pos restParams fb fuel =
   if fuel <= 0 then ErrC (tcMsg PatternFuel [])
-  else Vuna.Compiler.Common.bind
+  else Vuna.Compiler.Base.Common.bind
     (buildColumnExpr table (map (asInnerClause pos) clauses) (pos :: restParams) fb (fuel - 1))
     (\e => OkC e)
 
@@ -207,10 +207,10 @@ firstPatSpan _ = Span "" 0 0 0 0
 -- 会报 `missing Cons`）。族信息由 Elab 传入（`ctorTable`）。
 ctorColumn : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> List String -> Span -> Int -> Check Expr
 ctorColumn table clauses pos restParams fbSp fuel = if fuel <= 0 then icFuel "pattern matrix"
-else Vuna.Compiler.Common.bind (ctorAltList table clauses pos restParams fbSp (fuel - 1)) (\alts => let
+else Vuna.Compiler.Base.Common.bind (ctorAltList table clauses pos restParams fbSp (fuel - 1)) (\alts => let
   caseSp = firstPatSpan clauses
 in if familyCovered table (ctorHeads clauses) then OkC (ECase (EVar pos caseSp) alts caseSp)
-else Vuna.Compiler.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1))
+else Vuna.Compiler.Base.Common.bind (fallbackAltList table pos clauses restParams fbSp (fuel - 1))
   (\fbAlts => OkC (ECase (EVar pos caseSp) (append alts fbAlts) caseSp))
 )
 
@@ -418,8 +418,8 @@ else
     subParams = append freshSubs restParams
     branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
     expanded = clausesForCtor cname branchPats pos clauses
-  in Vuna.Compiler.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1))
-    (\bodyExpr => Vuna.Compiler.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC (Base.List.Cons (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
+  in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1))
+    (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC (Base.List.Cons (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
@@ -488,7 +488,7 @@ fallbackAltList table pos clauses restParams fbSp fuel = if fuel <= 0 then icFue
 else case prepFallbacks pos (filterFallback clauses) of
   [] => OkC []
   fbs =>
-    Vuna.Compiler.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1))
+    Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1))
       (\bodyExpr => OkC [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
 
 prepFallbacks : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)

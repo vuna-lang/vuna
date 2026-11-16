@@ -2,7 +2,7 @@ module Vuna.Index.Types where
 
 -- Vuna.Index.Types：源码符号索引的数据模型与字段访问子。
 -- 只含可序列化的纯数据；构建/查询/渲染分别在 Scan / Query / Render。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 -- ---------------------------------------------------------------
 -- 数据模型

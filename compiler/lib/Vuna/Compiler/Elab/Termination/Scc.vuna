@@ -2,7 +2,7 @@ module Vuna.Compiler.Elab.Termination.Scc where
 
 -- Vuna.Compiler.Elab.Termination.Scc：size-change termination 引擎——
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure

@@ -14,7 +14,7 @@ import Base.Int
 import Base.List
 import Base.Pair
 import Base.String
-import Vuna.Compiler.Canonical.Bytes
+import Vuna.Compiler.Base.Bytes
 import Vuna.Index.Types
 
 -- | 载荷 schema（字段集变化必须 bump；其他版本的载荷自然拒绝）。

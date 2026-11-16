@@ -5,7 +5,7 @@ module Vuna.Doc.Types where
 -- `DocBlock` 是源码里一个**已识别**的 docstring 块（`-- |` 行块或 `{- | -}` 块），
 -- `DocTable` 是按模块整理好的查询表：模块文档、顶层名 -> doc、`parent\tmember` -> doc。
 -- 普通注释不会出现在这里（只有 Doc.Comments 识别出的 doc block 才会进入）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 
 export record DocBlock(..) where
   docBlockText : String

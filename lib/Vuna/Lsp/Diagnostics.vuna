@@ -22,15 +22,14 @@ module Vuna.Lsp.Diagnostics where
 --     模块的接口写回本包 manifest（buffer == 磁盘时；只写当前模块、保留其他条目、原子写）。
 --     这让 LSP-only 会话逐步变热；
 --   - 无接口（依赖包还没 check / 本包没有 manifest）时回退全量精化，诊断语义不变。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diagnostics.Sink
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Iface
-import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
@@ -46,6 +45,8 @@ import Base.EffEnv
 import Base.EffExit
 import Base.EffProcess
 import Base.Obs
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.Term
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
 severityError : Int

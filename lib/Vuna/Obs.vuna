@@ -22,7 +22,7 @@ module Vuna.Obs where
 -- 范围（规范 §7）：`run` / `summarize` / `validate` / `convert` / `render` / `merge` /
 -- `symbols` / `serve --cdp`。未知子命令仍回可操作错误 + 退出码 2（不静默 unknown）。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Convert
 import Vuna.Obs.Merge

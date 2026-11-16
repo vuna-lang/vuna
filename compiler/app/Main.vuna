@@ -11,11 +11,16 @@ import Vuna.Compiler.Driver.CompilerCli
 -- 否则 `iface-skip partial`（不写接口），`Compile.checkPackage` 于是补一遍 lib check，
 -- 同一份源码精化两遍（冷 `check compiler` 实测 21.5 s vs 单遍 12.5 s）。
 -- 新增导出模块时同步补这里的 import。
-import Vuna.Compiler.Canonical
+import Vuna.Compiler.Frontend.Canonical.Ast
+import Vuna.Compiler.Frontend.Canonical.Lex
+import Vuna.Compiler.Frontend.Canonical.Pkg
+import Vuna.Compiler.Core.Canonical
+import Vuna.Compiler.Elab.Canonical
+import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Driver.ToolPayload
 import Vuna.Compiler.Frontend.Cst
-import Vuna.Compiler.Hash
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Hash
+import Vuna.Compiler.Base.Store
 import Base.EffArgs
 import Base.EffExit
 import Base.Monad

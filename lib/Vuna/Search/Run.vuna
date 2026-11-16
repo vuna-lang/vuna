@@ -7,7 +7,7 @@ module Vuna.Search.Run where
 -- 默认：查询含 `->` / `=>` 走类型检索，否则名称+doc 检索。
 -- 退出码：0 命中、1 无命中、2 用法/查询解析/非 workspace 错误。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Index
 import Vuna.Json
 import Vuna.Search.Query

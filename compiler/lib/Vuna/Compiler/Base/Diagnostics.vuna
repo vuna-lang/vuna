@@ -1,0 +1,149 @@
+module Vuna.Compiler.Base.Diagnostics where
+
+-- 错误码体系门面。
+--
+-- 把诊断的「标识 + 模板 + arity」从「字符串字面量 + 就近 `-- @code` 注释」收拢为
+-- **域枚举 + 构造子携带模板**。三个不变量：
+--
+-- 1. **arity 编译期锁定**（路 A）：`TcErr : Nat -> Type`，构造子的索引即模板插值个数
+--    （`UnknownName : String -> TcErr (Succ Zero)` = arity 1）。throw 点给 `Vec n String`，
+--    长度由类型 unify 锁定——arity 拼错**编译失败**。`n` 隐式（Rig0），运行时零开销。
+-- 2. **构造子 = 唯一真源**：每个构造子携带自己的模板（String payload，占位符 `<0>` `<1>`…）
+--    + arity（类型索引）+ code（`tcCode` 派生）。模板/arity/code 一处声明，永不漂移。
+--    渲染用 `Base.Vec.substTemplate`。
+-- 3. **`tcAll`/`cgAll` = 文档遍历源**：同构 `List TcEntry`/`CgEntry`（code + 模板 + 说明），
+--    `gen-errors` 遍历它渲染 `docs/.generated/errors.md`，不再扫 `-- @code` 注释。
+--
+-- 约定：
+-- - 符号语义稳定、**只增不删**；同语义多处共享一个构造子（不再「同规则不同码」）。
+-- - 一个码只承载**一种**语义：混了两种消息时就拆码
+--   （`OpOnlyIntString` / `NotTraitMethod` / `OpNotDefinedFor`；
+--   `CtorWrongIndices` / `CtorError` 各自独立）。
+-- - 占位符 `<k>` 每个只出现一次（`substTemplate` 按序号单次替换）；需要同一实参出现两处时
+--   用两个序号并传两次（如 `WhereNeedsSig`）。
+-- - `DT: internal:`（编译器内部不变量）不占符号，仍走裸字符串，不经本模块。
+-- - 消息不带 `DT: ` 前缀：`[CODE]` 已承载阶段信息。
+--
+-- 分层：本门面只做**整模块重导出**，实现按域拆到
+-- `Diagnostics.Common`（共享拼装 helper）、`Diagnostics.Tc`（TC_）、`Diagnostics.Cg`（CG_）；
+-- 对外名字集合是下面三个模块的并集，调用点只认本门面。
+-- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
+-- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
+export import Vuna.Compiler.Base.Common
+export import Base.Nat
+import Base.String
+export import Base.Vec
+import Vuna.Compiler.Base.Diagnostics.Rn
+import Vuna.Compiler.Base.Diagnostics.Pkg
+import Vuna.Compiler.Base.Diagnostics.Warning
+import Vuna.Compiler.Base.Diagnostics.Frontend
+import Vuna.Compiler.Base.Diagnostics.Loader
+export import Vuna.Compiler.Base.Diagnostics.Cg as Cg
+export import Vuna.Compiler.Base.Diagnostics.Ic as Ic
+export import Vuna.Compiler.Base.Diagnostics.Tc as Tc
+
+-- ---------------------------------------------------------------
+-- 目录元数据：severity/phase/category 由码域推导（单点映射，不另建真源）。
+-- ---------------------------------------------------------------
+-- | 码的域前缀（`TC_TypeMismatch` → `TC`）。
+export codeDomain : String -> String
+codeDomain code = case split "_" code of
+  [] => code
+  d :: _ => d
+
+-- | 码域 → 诊断阶段。
+export diagPhaseOf : String -> String
+diagPhaseOf "LX" = "lex"
+diagPhaseOf "PS" = "parse"
+diagPhaseOf "RN" = "resolve"
+diagPhaseOf "LD" = "load"
+diagPhaseOf "PKG" = "package"
+diagPhaseOf "TC" = "elab"
+diagPhaseOf "CG" = "codegen"
+diagPhaseOf "IC" = "internal"
+diagPhaseOf "UN" = "usage"
+diagPhaseOf "LN" = "lint"
+diagPhaseOf "FX" = "effect"
+diagPhaseOf _ = "tool"
+
+-- | 码域 → 诊断类别。
+export diagCategoryOf : String -> String
+diagCategoryOf "LX" = "syntax"
+diagCategoryOf "PS" = "syntax"
+diagCategoryOf "RN" = "resolve"
+diagCategoryOf "LD" = "package"
+diagCategoryOf "PKG" = "package"
+diagCategoryOf "TC" = "types"
+diagCategoryOf "CG" = "codegen"
+diagCategoryOf "IC" = "internal"
+diagCategoryOf "UN" = "quantity"
+diagCategoryOf "LN" = "style"
+diagCategoryOf "FX" = "effects"
+diagCategoryOf _ = "tool"
+
+-- | 码域 → 默认 severity（UN_/LN_ 为 warning，其余 error）。
+export diagSeverityOf : String -> String
+diagSeverityOf "UN" = "warning"
+diagSeverityOf "LN" = "warning"
+diagSeverityOf _ = "error"
+
+-- | 码 → 目录说明（中文；human 渲染在 `--lang zh` 时展示）。LN_ 说明在 lint 目录，
+-- 编译器内部不可见，返回 Nothing。
+export diagDescOf : String -> Maybe String
+diagDescOf code = lookupDesc code allDescPairs
+
+-- | TC 目录 (code,desc) 对。
+tcDescPairs : List TcEntry -> List (Pair String String)
+tcDescPairs [] = []
+tcDescPairs (e :: rest) = Pair e.tcEntryCode e.tcEntryDesc :: tcDescPairs rest
+
+-- | CG 目录 (code,desc) 对。
+cgDescPairs : List CgEntry -> List (Pair String String)
+cgDescPairs [] = []
+cgDescPairs (e :: rest) = Pair e.cgEntryCode e.cgEntryDesc :: cgDescPairs rest
+
+-- | IC 目录 (code,desc) 对。
+icDescPairs : List IcEntry -> List (Pair String String)
+icDescPairs [] = []
+icDescPairs (e :: rest) = Pair e.icEntryCode e.icEntryDesc :: icDescPairs rest
+
+-- | LX 目录 (code,desc) 对。
+lexDescPairs : List LexEntry -> List (Pair String String)
+lexDescPairs [] = []
+lexDescPairs (e :: rest) = Pair e.lexEntryCode e.lexEntryDesc :: lexDescPairs rest
+
+-- | PS 目录 (code,desc) 对。
+psDescPairs : List PsEntry -> List (Pair String String)
+psDescPairs [] = []
+psDescPairs (e :: rest) = Pair e.psEntryCode e.psEntryDesc :: psDescPairs rest
+
+-- | RN 目录 (code,desc) 对。
+rnDescPairs : List RnEntry -> List (Pair String String)
+rnDescPairs [] = []
+rnDescPairs (e :: rest) = Pair e.rnEntryCode e.rnEntryDesc :: rnDescPairs rest
+
+-- | PKG 目录 (code,desc) 对。
+pkgDescPairs : List PkgEntry -> List (Pair String String)
+pkgDescPairs [] = []
+pkgDescPairs (e :: rest) = Pair e.pkgEntryCode e.pkgEntryDesc :: pkgDescPairs rest
+
+-- | UN 目录 (code,desc) 对。
+warnDescPairs : List WarnEntry -> List (Pair String String)
+warnDescPairs [] = []
+warnDescPairs (e :: rest) = Pair e.warnEntryCode e.warnEntryDesc :: warnDescPairs rest
+
+-- | LD 目录 (code,desc) 对。
+ldDescPairs : List LdEntry -> List (Pair String String)
+ldDescPairs [] = []
+ldDescPairs (e :: rest) = Pair e.ldEntryCode e.ldEntryDesc :: ldDescPairs rest
+
+-- | 全部目录条目的 (code,desc) 对。
+allDescPairs : List (Pair String String)
+allDescPairs =
+  append (tcDescPairs tcAll)
+    (append (cgDescPairs cgAll) (append (icDescPairs icAll) (append (lexDescPairs lexAll) (append (psDescPairs psAll) (append (rnDescPairs rnAll) (append (pkgDescPairs pkgAll) (append (warnDescPairs warnAll) (ldDescPairs ldAll))))))))
+
+-- | 按 code 查说明。
+lookupDesc : String -> List (Pair String String) -> Maybe String
+lookupDesc code [] = Nothing
+lookupDesc code ((Pair c d) :: rest) = if c == code then Just d else lookupDesc code rest

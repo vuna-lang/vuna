@@ -6,7 +6,7 @@ module Vuna.Doc.Model where
 -- 不跑类型检查：签名 / 类型 / data 形状都来自 parse 级 AST；docstring 来自
 -- `Vuna.Doc.Comments`。`[export]` 过滤与输出格式在 `Vuna.Doc.Run` / `Html`。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser

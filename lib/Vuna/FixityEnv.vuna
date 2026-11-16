@@ -15,11 +15,11 @@ module Vuna.FixityEnv where
 --
 -- 本模块只属于工具链（fmt/lint/LSP），不进 seed 闭包。
 import Vuna.Cli.Args
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Base.Eff.Types
 import Base.EffEnv
 import Base.EffFs

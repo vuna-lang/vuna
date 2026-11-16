@@ -17,12 +17,12 @@ module Vuna.Test.Session where
 -- 模块解构）会触发精化器的一条 `TC_UnknownConstructorInCase` 误报。这里改用普通
 -- 记录 `CheckSample` / `EvalSample`，`Check` 的构造/解构只发生在 `Vuna.Test.InProc`。
 import Base.IORef
-import Vuna.Compiler.Common
-import Vuna.Compiler.Diag
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Dt
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Base.Eff.Types
 import Base.EffArgs
 import Base.EffClock

@@ -31,17 +31,19 @@ module Vuna.Compiler.Driver.Iface where
 --
 -- 效果显式化：接口对象的读、写、存在性探测全部显式在 `Eff r` 里；纯构造
 -- （接口哈希、覆盖性检查、布局计算）保持纯函数。
-import Vuna.Compiler.Canonical.Ast
-import Vuna.Compiler.Canonical.Bytes
-import Vuna.Compiler.Canonical.CoreTerm
-import Vuna.Compiler.Canonical.Elab
-import Vuna.Compiler.Common
-import Vuna.Compiler.Hash
-import Vuna.Compiler.Store
+import Vuna.Compiler.Frontend.Canonical.Ast
+import Vuna.Compiler.Base.Bytes
+import Vuna.Compiler.Core.Canonical
+import Vuna.Compiler.Elab.Canonical
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Hash
+import Vuna.Compiler.Base.Store
 import Base.Sort
 import Base.HashMap
 import Base.List
-import Vuna.Compiler.Core
+import Vuna.Compiler.Core.Term
+import Vuna.Compiler.Core.Eval
+import Vuna.Compiler.Core.Conv
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
@@ -49,11 +51,11 @@ import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Owner
-import Vuna.Compiler.Intrinsics
-import Vuna.Compiler.Source
+import Vuna.Compiler.Base.Intrinsics
+import Vuna.Compiler.Base.Source
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Flatten
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 
 -- 源信息：模块名 → (绝对路径, 内容哈希, mtime, size)。路径只用于本机校验（换 checkout
 -- 会失效，回退全量）；mtime/size 是可选快路径（`VUNA_CACHE_MTIME=1`），默认仍用内容哈希。
@@ -214,16 +216,16 @@ ifaceHashVersion = "vuna-iface-hash 9 (opaque/abstract bodies excluded)"
 -- `hashTextStrong` 是「必须落成 Int」位置（排序键 / 工具缓存 / codegen unit key）的统一
 -- 强哈希：SHA-256 的 63-bit 派生键（`Hash.contentKey`），不做多 lane 盐折叠。
 export hashTextStrong : String -> Int
-hashTextStrong s = Vuna.Compiler.Hash.contentKey s
+hashTextStrong s = Vuna.Compiler.Base.Hash.contentKey s
 
 -- | 内容摘要（SHA-256，64 位小写十六进制）：碰撞面在几百模块规模上必须可忽略。
 export shaText : String -> String
-shaText s = Vuna.Compiler.Hash.digestHex (Vuna.Compiler.Hash.digestOfString s)
+shaText s = Vuna.Compiler.Base.Hash.digestHex (Vuna.Compiler.Base.Hash.digestOfString s)
 
 -- | 大载荷段（源文本 / 规范编码字节）的内容地址：先 4-lane 预哈希折叠，再做 SHA-256
 -- （与 `Hash.contentAddress` 同一函数）。
 export payloadDigest : String -> String
-payloadDigest s = Vuna.Compiler.Hash.contentAddress s
+payloadDigest s = Vuna.Compiler.Base.Hash.contentAddress s
 
 -- | 可解析分片：长度前缀，保证多段拼接无歧义。
 partOf : String -> String

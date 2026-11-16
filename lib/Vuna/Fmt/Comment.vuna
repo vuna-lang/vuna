@@ -10,7 +10,7 @@ module Vuna.Fmt.Comment where
 -- 保留在文件末尾）。
 --
 -- 暴露 anchorSpans / assignComments / attachAt 给门面与 Expr / Decl。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Util

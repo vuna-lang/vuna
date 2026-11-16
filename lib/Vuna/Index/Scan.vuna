@@ -9,11 +9,11 @@ module Vuna.Index.Scan where
 --     写载荷对象（同一输入同一地址）；每次 miss 只提交调用方选定的一个 key。
 --
 -- **没有「刷新索引」命令**：`vuna map` / `vuna api` / REPL 自己判新鲜度。
--- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Store`。
+-- `Store` 是唯一写盘层，帧格式与内容地址校验见 `Vuna.Compiler.Base.Store`。
 --
 -- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff r` 里；纯数据逻辑
 -- （路径/哈希/JSON 渲染/序列化解析）保持纯函数；`indexStatsOf` 只产出 stat 快照。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.Nat
 import Base.Maybe
 import Base.HashMap
@@ -22,7 +22,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.FixityEnv

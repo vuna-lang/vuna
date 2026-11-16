@@ -12,7 +12,7 @@ module Vuna.Doc.Comments where
 -- 的目标（模块头 / 顶层声明 / 构造子 / 字段 / trait 方法）；尾随 doc block 归到**同一行、
 -- 列在注释左侧**的目标（模块头不参与）。两种位置同时存在时前置优先。孤儿 doc 忽略。
 -- `DSig` 与 `DFun` 同名：doc 写在签名前或首子句前都归到该名字（先出现者优先）。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Doc.Types

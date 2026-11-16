@@ -15,11 +15,11 @@ module Vuna.Clean where
 -- `DIR` 只对 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages` 不收目录。
 import Vuna.Cli.Args
 import Base.Maybe
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Manifest
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Packages.Source
-import Vuna.Compiler.Store
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Frontend.Packages.Source
+import Vuna.Compiler.Base.Store
 import Base.List
 import Base.Nat
 import Base.String

@@ -1,0 +1,79 @@
+-- | UN_ 域：不影响检查结果的告警（未使用/冗余/遮蔽），severity = warning。
+module Vuna.Compiler.Base.Diagnostics.Warning where
+
+-- Vuna.Compiler.Base.Diagnostics.Warning：warning 目录（phase/category 由具体检查给）。
+--
+-- warning 与 error 共用 `Diagnostic`/渲染/LSP；区别只有 `Severity` 与退出码策略：
+-- 默认不影响退出码，`--deny-warnings` 时提升为失败。本模块是**叶子层**：只做
+-- 「目录 → Diagnostic」的纯构造，不依赖 Elab 状态（`Ec` 版发射 helper 在
+-- `Vuna.Compiler.Elab.Warn`）。无 Ec 的调用方（loader 的 unused-import、驱动层的
+-- unused-def）直接用 `warnDiagAt*` 构造诊断并返回给驱动层；不存在进程内收集器。
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Diagnostics.Common
+import Base.Nat
+import Base.Vec
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnErr（目录/模板见 diagnostics.md）。
+export data WarnErr(..) : Nat -> Type where
+  -- arity 0
+  WarnBranchAfterCatchAll : WarnErr Zero
+  -- arity 1
+  WarnRedundantCtorBranch : String -> WarnErr (Succ Zero)
+  WarnRedundantLiteralBranch : String -> WarnErr (Succ Zero)
+  UnusedBinder : String -> WarnErr (Succ Zero)
+  UnusedDefinition : String -> WarnErr (Succ Zero)
+  UnusedImport : String -> WarnErr (Succ Zero)
+  ShadowedBinder : String -> WarnErr (Succ Zero)
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnCode（目录/模板见 diagnostics.md）。
+export warnCode : {n : Nat} -> WarnErr n -> String
+warnCode WarnBranchAfterCatchAll = "UN_BranchAfterCatchAll"
+warnCode (WarnRedundantCtorBranch _) = "UN_RedundantCtorBranch"
+warnCode (WarnRedundantLiteralBranch _) = "UN_RedundantLiteralBranch"
+warnCode (UnusedBinder _) = "UN_UnusedBinder"
+warnCode (UnusedDefinition _) = "UN_UnusedDefinition"
+warnCode (UnusedImport _) = "UN_UnusedImport"
+warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnTemplate（目录/模板见 diagnostics.md）。
+export warnTemplate : {n : Nat} -> WarnErr n -> String
+warnTemplate WarnBranchAfterCatchAll = "this branch is unreachable (a catch-all precedes it)"
+warnTemplate (WarnRedundantCtorBranch _) =
+  "redundant constructor branch: `<0>` is already covered by an earlier branch"
+warnTemplate (WarnRedundantLiteralBranch _) =
+  "redundant literal branch: `<0>` is already covered by an earlier branch"
+warnTemplate (UnusedBinder _) = "binder `<0>` is never used"
+warnTemplate (UnusedDefinition _) = "definition `<0>` is never used"
+warnTemplate (UnusedImport _) = "module `<0>` is imported but never used"
+warnTemplate (ShadowedBinder _) = "binder `<0>` shadows an outer binder"
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
+export warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnMsg e args =
+  diagNoLoc SevWarning PhUsage CatQuantity (warnCode e) (diagBody (warnTemplate e) args)
+
+-- | 在 span 上构造一条 warning（纯函数；无 Ec 的调用方直接把它返回给驱动层）。
+export warnDiagAt : Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnDiagAt sp e args = withLabel (Label (Just sp) "" LabelPrimary Nothing) (warnMsg e args)
+
+-- | 带后处理（如附加 suggestion）的 span warning（纯函数）。
+export warnDiagAtMod : (Diagnostic -> Diagnostic) -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
+warnDiagAtMod f sp e args = f (warnDiagAt sp e args)
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
+export record WarnEntry(..) where
+  warnEntryCode : String
+  warnEntryTemplate : String
+  warnEntryDesc : String
+
+-- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnAll（目录/模板见 diagnostics.md）。
+export warnAll : List WarnEntry
+warnAll =
+  [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "catch-all 之后的分支不可达",
+    WarnEntry (warnCode (WarnRedundantCtorBranch "")) (warnTemplate (WarnRedundantCtorBranch "")) "冗余构造子分支",
+    WarnEntry (warnCode (WarnRedundantLiteralBranch "")) (warnTemplate (WarnRedundantLiteralBranch "")) "冗余字面量分支",
+    WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "binder 未使用",
+    WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "定义未使用",
+    WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "import 未使用",
+    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "binder 遮蔽外层同名 binder"
+  ]

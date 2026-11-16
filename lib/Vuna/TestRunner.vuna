@@ -40,10 +40,10 @@ module Vuna.TestRunner where
 --   的每文件耗时由子进程自己测量并打印在行尾，父进程照旧打印 `total:`。workspace
 --   聚合仍是各包串行（包内文件并行）。`--only-file` 只给子进程用：只跑一个文件、
 --   打印该文件的 ok/FAIL 行、不打印汇总、强制 jobs=1，不会再并行或递归 spawn。
-import Vuna.Compiler.Common
-import Vuna.Compiler.Packages.Pkg
-import Vuna.Compiler.Fingerprint
-import Vuna.Compiler.Store
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Loader.Fingerprint
+import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
 import Vuna.Files

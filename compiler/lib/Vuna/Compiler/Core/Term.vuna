@@ -10,9 +10,9 @@ module Vuna.Compiler.Core.Term where
 -- 详见 docs/reference/core.md 的映射表与不变量。
 --
 -- 本模块是 Core 的叶子，只依赖 Common。
-import Vuna.Compiler.Common
+import Vuna.Compiler.Base.Common
 import Base.HashMap
-import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Base.Intrinsics
 export import Base.Bool (not)
 
 -- ---------------------------------------------------------------

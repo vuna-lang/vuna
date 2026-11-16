@@ -19,16 +19,15 @@ module Vuna.Cli where
 --     `requireDirectory`）。
 import Base.EffConsole
 import Base.List
-import Vuna.Compiler.Common
-import Vuna.Compiler.Packages.Pkg
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
-import Vuna.Compiler.Version
+import Vuna.Compiler.Base.Version
 import Vuna.Interp
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.FixityEnv
-import Vuna.Compiler.Elab
 import Vuna.Fmt
 import Vuna.Files
 import Vuna.Index
@@ -58,6 +57,8 @@ import Base.EffExit
 import Base.EffNet
 import Base.EffProcess
 import Base.EffStdin
+import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Elab.Term
 import qualified Vuna.Lint
 
 -- 产品 CLI 的 console 输出走效应标签（`Base.EffConsole`）。入口是
@@ -180,7 +181,7 @@ runCli1 args = case args of
     "help" => help 0
     _ => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand "vuna" arg
 
--- 版本唯一真源在编译器包（Vuna.Compiler.Version），产品 CLI 与
+-- 版本唯一真源在编译器包（Vuna.Compiler.Base.Version），产品 CLI 与
 -- vuna-compiler 共用；VSCode 用它探测服务器。
 -- 这一条输出路径走 console 效应标签（mock/real 可替换的样板），
 -- 不直接 `@vuna@prim_eff_print`；整条 CLI 显式 `Eff r`，最外层由运行时执行。
