@@ -552,10 +552,14 @@ readInputPlain : Member nConsole ConsoleOp r, Member nStdin StdinOp r => ReplSta
 readInputPlain st = do
   _ <- replEmit st (promptRendered st)
   raw <- stdinReadLine
-  if trim raw == "" then do
-    next <- stdinReadLine
-    pure (if next == "" then ReadEof else ReadBlankLine next)
-  else pure (ReadLine raw)
+  case raw of
+    Nothing => pure ReadEof
+    Just line => if trim line == "" then do
+      next <- stdinReadLine
+      case next of
+        Nothing => pure ReadEof
+        Just line2 => pure (ReadBlankLine line2)
+    else pure (ReadLine line)
 
 readInput : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => ReplState -> Eff r ReadResult
 readInput st = if editingEnabled st then do

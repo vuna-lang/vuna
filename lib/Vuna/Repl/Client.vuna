@@ -28,7 +28,9 @@ readStdinAll : Member nStdin StdinOp r => String -> Int -> Eff r String
 readStdinAll acc fuel = if fuel <= 0 then pure acc
 else do
   chunk <- stdinReadBytes (natFromInt clientChunkSize)
-  if chunk == "" then pure acc else readStdinAll (acc ++ chunk) (fuel - 1)
+  case chunk of
+    Nothing => pure acc
+    Just bytes => readStdinAll (acc ++ bytes) (fuel - 1)
 
 -- 从连接读一帧的 body（只处理一个响应；多余字节丢弃）。
 readOneFrame : Member nNet NetOp r => Int -> String -> Int -> Eff r (Maybe String)

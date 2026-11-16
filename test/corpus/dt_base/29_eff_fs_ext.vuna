@@ -2,6 +2,8 @@
 -- 元数据/目录/删除。注：fs 步骤拆成两个 helper，行类型已钉死。单段 14 步 do 链会触发
 -- 精化的指数级膨胀；拆开不改变语义与操作顺序。
 import Base.Eff
+import Base.Nat
+import Base.Maybe
 import Base.EffFs
 import Base.EffConsole
 import Base.HostRow
@@ -32,7 +34,7 @@ inspectFs : Int -> Eff hostRow String
 inspectFs written = do
   exists <- fsFileExists pathA
   content <- fsReadFile pathA
-  size <- fsFileSize pathA
+  size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize pathA)
   isdir <- fsIsDirectory dir
   files <- fsReadDir dir
   _ <- fsRemoveFile pathA

@@ -17,7 +17,7 @@ readProbe = fsReadFile "x"
 writeProbe : Eff hostRow Nat
 writeProbe = fsWriteFile "x" "y"
 
-lineProbe : Eff hostRow String
+lineProbe : Eff hostRow (Maybe String)
 lineProbe = stdinReadLine
 
 dirProbe : Eff hostRow (List String)
@@ -35,10 +35,10 @@ removeProbe = fsRemoveFile "x"
 existsProbe : Eff hostRow Bool
 existsProbe = fsFileExists "x"
 
-mtimeProbe : Eff hostRow Int
+mtimeProbe : Eff hostRow (Maybe Int)
 mtimeProbe = fsFileMtime "x"
 
-sizeProbe : Eff hostRow Nat
+sizeProbe : Eff hostRow (Maybe Nat)
 sizeProbe = fsFileSize "x"
 
 argsProbe : Eff hostRow (List String)

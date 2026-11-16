@@ -168,7 +168,9 @@ let dtp_effect_handle key name ret h th =
       with
       | r -> run_cleanups (); r
       | exception e -> run_cleanups (); raise e)
-let dtp_print s = print_string s; flush stdout; String.length s
+let dtp_print s =
+  (try print_string s; flush stdout; String.length s
+   with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)
 let dtp_async_tbl : (int, unit -> Obj.t) Hashtbl.t = Hashtbl.create 16
 let dtp_async_next = ref 0
 let dtp_async_fork th =
@@ -181,6 +183,26 @@ let dtp_async_await (h : int) : Obj.t =
   match Hashtbl.find_opt dtp_async_tbl h with
   | Some join -> join ()
   | None -> failwith \"async: invalid task handle\"
+(* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
+   返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
+   用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
+let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
+let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
+let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
+let dtp_hostCode (e : exn) : int =
+  match e with
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
+  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
+  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
+  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
+  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
+  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
+  | _ -> 9
+(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
+let dtp_hostCodeAt path (e : exn) : int =
+  try ignore (Unix.stat path); dtp_hostCode e
+  with e2 -> dtp_hostCode e2
+let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
@@ -205,13 +227,15 @@ let dtp_getArgs () =
   let argv = Sys.argv in
   let n = Array.length argv in
   if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
-let dtp_readLine () = try input_line stdin with End_of_file -> \"\"
+let dtp_readLine () =
+  (try dtp_hostSetStatus 0; input_line stdin
+   with End_of_file -> dtp_hostSetStatus 1; \"\")
 let dtp_readBytes n =
-  if n <= 0 then \"\"
+  if n <= 0 then (dtp_hostSetStatus 1; \"\")
   else
     let b = Bytes.create n in
-    let k = try input stdin b 0 n with _ -> 0 in
-    if k <= 0 then \"\" else Bytes.sub_string b 0 k
+    let k = (try dtp_hostSetStatus 0; input stdin b 0 n with _ -> 0) in
+    if k <= 0 then (dtp_hostSetStatus 1; \"\") else Bytes.sub_string b 0 k
 let dtp_readDir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
   with Sys_error msg -> failwith (\"readDir: \" ^ msg)
@@ -225,29 +249,11 @@ let dtp_removeFile path =
   with Sys_error msg -> failwith (\"removeFile: \" ^ msg)
 let dtp_fileExists path = Sys.file_exists path
 let dtp_fileMtime path =
-  try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
+  (try dtp_hostSetStatus 0; int_of_float (Unix.stat path).Unix.st_mtime
+   with e -> dtp_hostFail (dtp_hostCode e); 0)
 let dtp_fileSize path =
-  try (Unix.stat path).Unix.st_size with _ -> 0
-(* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
-   返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
-   用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
-let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
-let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
-let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
-let dtp_hostCode (e : exn) : int =
-  match e with
-  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
-  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
-  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
-  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
-  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
-  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
-  | _ -> 9
-(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
-let dtp_hostCodeAt path (e : exn) : int =
-  try ignore (Unix.stat path); dtp_hostCode e
-  with e2 -> dtp_hostCode e2
-let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
+  (try dtp_hostSetStatus 0; (Unix.stat path).Unix.st_size
+   with e -> dtp_hostFail (dtp_hostCode e); 0)
 let dtp_tryReadFile path =
   (try
      dtp_hostSetStatus 0;

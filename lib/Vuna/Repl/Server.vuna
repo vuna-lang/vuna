@@ -172,7 +172,9 @@ acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock Clock
 acceptLoop fuel addr h st = if fuel <= 0 then pure 0
 else do
   conn <- netAccept h
-  outcome <- serveConnection (\n => netRecv conn n) (\s => netSend conn s) replWarn handleRequest st
+  outcome <-
+    serveConnection (\n => fmap (\s => if s == "" then Nothing else Just s) (netRecv conn n))
+      (\s => netSend conn s) replWarn handleRequest st
   _ <- netClose conn
   case firstOf outcome of
     ExitRequested => do

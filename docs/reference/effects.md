@@ -217,8 +217,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile`/`FileSize` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
 | `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
@@ -328,7 +328,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 | 语义 | 载体 | 例子 |
 | --- | --- | --- |
 | 正常值 | `a` | 读到的文件内容、子进程退出码 |
-| 无值（正常流程的一部分） | `Maybe a` / `Bool` | `fsFileExists`、`envGetEnvNonEmpty` |
+| 无值（正常流程的一部分） | `Maybe a` / `Bool` | `fsFileExists`、`envGetEnvNonEmpty`、`fsFileSize`/`fsFileMtime`、stdin 的 EOF |
 | 可恢复的失败（控制流） | **行里的 typed error**（`FsErrorOp` / `ProcessErrorOp`） | 文件不存在、权限不足、磁盘满、cwd 不存在 |
 | 不变式破坏（bug） | 崩溃（exit 2 + 报告器） | 越界、未处理效应、内部句柄非法 |
 
@@ -349,12 +349,17 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 `hostRow` 与 `collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
 answer 行里（`[FsErrorOp]`），entry 靠 family 标签决定装哪些收口 handler。
 
+「无值」永远进 `Maybe`，不进错误通道：`fsFileSize` / `fsFileMtime` 取不到给 `Nothing`，
+stdin 的 `stdinReadLine` / `stdinReadBytes` 到 EOF 也给 `Nothing`（空行是 `Just ""`）。
+console 的写失败（典型 EPIPE：`vuna … | head`）不是宿主错误：原语返回 0 并停止输出，
+不崩进程。
+
 夹具：`dt_base/85_fs_error`（mock 抛 → `runFsError` 收成 `Result`）、
 `steps/111_host_error`（真实 handler：fs 缺失 / process cwd 缺失 → exit 1 + 诊断；
 `false` 的非零退出码仍是值）。
 
-仍未类型的边界：net（`raise` 直调原语、无 handler）、stdin 的 EOF、console 的 EPIPE、
-`fileSize`/`fileMtime` 的「取不到静默 0」——见 [debt.md](debt.md) D90。
+仍未类型化的边界：net（`raise` 直调原语、无 handler、不可 mock，失败只能到顶层报告器）——
+见 [debt.md](debt.md) D90。
 
 ## 9. 仍开放的边界
 

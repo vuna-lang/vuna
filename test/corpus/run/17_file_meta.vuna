@@ -1,7 +1,9 @@
--- 文件元数据走 typed effects（entry 自动预装 handler）。
+-- 文件元数据走 typed effects（entry 自动预装 handler）：取不到时是 `Nothing`（无值），
+-- 不是 0；存在时 `Just` 才是值。
 import Base.Eff
 import Base.EffFs
 import Base.HostRow
+import Base.Maybe
 
 prog : Eff hostRow Int
 prog = do
@@ -9,11 +11,16 @@ prog = do
   stamp <- fsFileMtime "corpus/run/17_file_meta.vuna"
   missingSize <- fsFileSize "/vuna/definitely-not-a-file-xyz"
   missingMtime <- fsFileMtime "/vuna/definitely-not-a-file-xyz"
-  pure (if self > 0 then
-          (if stamp > 1000000000 then
-             (if missingSize == 0 then (if missingMtime == 0 then 7 else 1) else 2)
-           else 3)
-        else 4)
+  pure ((((case self of
+    Just n => if natToInt n > 0 then 1 else 0
+    Nothing => 0
+  ) + (case stamp of
+    Just s => if s > 1000000000 then 1 else 0
+    Nothing => 0
+  )
+  ) + (if isNothing missingSize then 1 else 0)
+  ) + (if isNothing missingMtime then 1 else 0)
+  )
 
 main : Eff hostRow Int
 main = prog

@@ -14,6 +14,8 @@ module Vuna.Index.Scan where
 -- 效果显式化：目录遍历、读文件、缓存写、时钟全部显式在 `Eff r` 里；纯数据逻辑
 -- （路径/哈希/JSON 渲染/序列化解析）保持纯函数；`indexStatsOf` 只产出 stat 快照。
 import Vuna.Compiler.Common
+import Base.Nat
+import Base.Maybe
 import Base.HashMap
 import Base.Hashable
 import Vuna.Compiler.Frontend.Ast
@@ -517,8 +519,8 @@ sourceStatOf : Member nFs FsOp r => Int -> String -> Eff r SourceStat
 sourceStatOf builtSec path = do
   exists <- fsFileExists path
   if exists then do
-    bytes <- fsFileSize path
-    mtime <- fsFileMtime path
+    bytes <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
+    mtime <- fmap (fromMaybe 0) (fsFileMtime path)
     if mtime + indexMtimeSafetyWindowSec > builtSec then do
       source <- fsReadFile path
       pure (SourceStat path (strLength source) mtime (contentHash source))

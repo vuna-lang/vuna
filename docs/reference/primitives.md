@@ -241,7 +241,7 @@
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
 （`Base.EffConsole.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
-`prim_eff_readLine : Eff [] String`、`prim_eff_readDir : String -> Eff [] (List String)`、
+`prim_eff_readLine : Eff [] String`（EOF 时写状态槽 1、返回 `""`）、`prim_eff_readDir : String -> Eff [] (List String)`、
 `prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
 `prim_eff_makeDir` / `prim_eff_removeFile` / `prim_eff_fileMtime : String -> Eff [] Int`、
 `prim_eff_fileSize : String -> Eff [] Int`、`prim_eff_writeFile : String -> String -> Eff [] Int`、

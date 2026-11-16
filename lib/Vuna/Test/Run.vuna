@@ -13,6 +13,8 @@ module Vuna.Test.Run where
 -- 子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写进临时目录，由
 -- helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件 + 退出码。
 import Vuna.Compiler.Common
+import Base.Nat
+import Base.Maybe
 import Vuna.Compiler.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
@@ -681,8 +683,8 @@ appTreeHash source expected = do
 -- 文件型夹具：source/expected 内容 + mtime/size。
 fileTreeHash : Member nFs FsOp r => String -> String -> Eff r Int
 fileTreeHash source expected = do
-  stamp <- fsFileMtime source
-  size <- fsFileSize source
+  stamp <- fmap (fromMaybe 0) (fsFileMtime source)
+  size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize source)
   sourceText <- hashFileText source
   expectedText <- hashFileText expected
   pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")
@@ -2016,7 +2018,7 @@ auditSuite opts suite = do
 maxMtime : Member nFs FsOp r => Int -> List String -> Eff r Int
 maxMtime acc [] = pure acc
 maxMtime acc (path :: rest) = do
-  m <- fsFileMtime path
+  m <- fmap (fromMaybe 0) (fsFileMtime path)
   maxMtime (if m > acc then m else acc) rest
 
 watchSnapshot : Member nFs FsOp r => String -> Eff r Int

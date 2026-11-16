@@ -2,9 +2,12 @@ module Base.EffStdin where
 
 -- Base.EffStdin：一阶标准输入效应。
 --
--- 标签 `StdinOp` 是命名实例；操作 ReadLine（读一行，EOF 返回空串）与
--- ReadBytes（最多读 n 字节，n 是度量 → Nat）。真实 handler 直调 `@vuna@prim_eff_*` 实现。
+-- 标签 `StdinOp` 是命名实例；操作 ReadLine（读一行）与 ReadBytes（最多读 n 字节，
+-- n 是度量 → Nat）。两者在 EOF 时给 `Nothing`（无值），不把 EOF 与空串混成一个值。
+-- 真实 handler 直调 `@vuna@prim_eff_*` 实现，EOF 由宿主状态槽区分。
 import Base.Eff
+import Base.Eq
+import Base.Maybe
 import Base.Monad
 import Base.Nat
 
@@ -13,17 +16,17 @@ export data StdinOp(..) : Type where
   ReadLine : StdinOp
   ReadBytes : Nat -> StdinOp
 
--- | 操作的结果类型族：两个操作都返回 `String`。
+-- | 操作的结果类型族：两个操作都返回 `Maybe String`（`Nothing` = EOF）。
 export resStdin : StdinOp -> Type
-resStdin ReadLine = String
-resStdin (ReadBytes _) = String
+resStdin ReadLine = Maybe String
+resStdin (ReadBytes _) = Maybe String
 
--- | 通过命名实例读一行；EOF 返回空串（与空行不可区分）。
-export stdinReadLine : Member n StdinOp r => Eff r String
+-- | 通过命名实例读一行；EOF 给 `Nothing`（空行是 `Just ""`）。
+export stdinReadLine : Member n StdinOp r => Eff r (Maybe String)
 stdinReadLine = sendCore StdinOp "stdin" n ReadLine
 
--- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 返回空串。
-export stdinReadBytes : Member n StdinOp r => Nat -> Eff r String
+-- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 给 `Nothing`。
+export stdinReadBytes : Member n StdinOp r => Nat -> Eff r (Maybe String)
 stdinReadBytes k = sendCore StdinOp "stdin" n (ReadBytes k)
 
 -- | 一阶 handler：结果行删除 `StdinOp`。
@@ -35,10 +38,12 @@ stdinOpHIO : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [] a) -> Eff [] a
 stdinOpHIO op k = case op of
   ReadLine => do
     v <- @vuna@prim_eff_readLine
-    k v
+    ok <- @vuna@prim_eff_hostStatus
+    if ok == 1 then k Nothing else k (Just v)
   ReadBytes n => do
     v <- @vuna@prim_eff_readBytes (natToInt n)
-    k v
+    ok <- @vuna@prim_eff_hostStatus
+    if ok == 1 then k Nothing else k (Just v)
 
 -- | 宿主 handler：结果行删除 `StdinOp`，answer 是已处理干净的 `Eff []` 动作，可用 `joinEff` 展平。
 -- ---------------------------------------------------------------
@@ -48,10 +53,12 @@ stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff (Cons "defaul
 stdinOpHIOHost op k = case op of
   ReadLine => do
     v <- @vuna@host@readLine
-    k v
+    ok <- raise @vuna@prim_eff_hostStatus
+    if ok == 1 then k Nothing else k (Just v)
   ReadBytes n => do
     v <- @vuna@host@readBytes (natToInt n)
-    k v
+    ok <- raise @vuna@prim_eff_hostStatus
+    if ok == 1 then k Nothing else k (Just v)
 
 handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff (Cons "default" StdinOp []) a)
 handleStdinHostHost n comp = handleStdin n (\a => pure a) stdinOpHIOHost comp

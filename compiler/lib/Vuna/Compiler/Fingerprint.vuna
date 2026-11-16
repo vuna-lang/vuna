@@ -20,6 +20,7 @@ module Vuna.Compiler.Fingerprint where
 -- 为什么不用二进制内容哈希：OCaml 后端的 DWARF 会写构建目录（`DW_AT_comp_dir`），
 -- 同源两次构建的二进制字节必然不同，内容哈希因此无法表达「同源同身份」。
 import Base.Eff.Types
+import Base.Nat
 import Base.EffEnv
 import Base.EffFs
 import Base.List
@@ -69,10 +70,11 @@ compilerTagEff = do
     case saved of
       Just id => pure id
       Nothing => do
-        size <- fsFileSize exe
-        mtime <- fsFileMtime exe
-        pure
-          (if size > 0 then "stat:${strFromInt (fingerprintOfStat exe size mtime)}" else vunaVersion)
+        sizeOpt <- fsFileSize exe
+        mtime <- fmap (fromMaybe 0) (fsFileMtime exe)
+        case sizeOpt of
+          Nothing => pure vunaVersion
+          Just size => pure "stat:${strFromInt (fingerprintOfStat exe (natToInt size) mtime)}"
 
 -- 可执行文件旁的 `build-id`：安装布局 `$out/bin/<prog>` + `$out/build-id`，
 -- 构建布局 `--out DIR` 下 `DIR/build-id`（`DIR/bin/<prog>` 或 `DIR/<pkg>/bin/<prog>`）。

@@ -14,6 +14,7 @@ module Vuna.Clean where
 -- 不带 flag 时只清缓存族（默认不碰持久包对象）。
 -- `DIR` 只对 `--gc` 的引用集有用（默认 `.`）；`--store` / `--packages` 不收目录。
 import Vuna.Cli.Args
+import Base.Maybe
 import Vuna.Compiler.Common
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Packages.Pkg
@@ -347,7 +348,7 @@ gcViewCandidates now keep grace (d :: rest) = do
   more <- gcViewCandidates now keep grace rest
   if memName (fileNameOf d) keep then pure more
   else do
-    mtime <- fsFileMtime d
+    mtime <- fmap (fromMaybe 0) (fsFileMtime d)
     if mtime + grace < now then do
       size <- dirSizeOf d
       pure (Pair mtime (Pair size d) :: more)
@@ -365,10 +366,10 @@ gcCandidates now keep grace (p :: rest) = do
   more <- gcCandidates now keep grace rest
   if memName (fileNameOf p) keep then pure more
   else do
-    mtime <- fsFileMtime p
+    mtime <- fmap (fromMaybe 0) (fsFileMtime p)
     if mtime + grace < now then do
-      size <- fsFileSize p
-      pure (Pair mtime (Pair (natToInt size) p) :: more)
+      size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize p)
+      pure (Pair mtime (Pair size p) :: more)
     else pure more
 
 sortByAge : List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
@@ -396,7 +397,7 @@ sizesOf : Member nFs FsOp r => List String -> Eff r (List (Pair String Int))
 sizesOf [] = pure []
 sizesOf (p :: rest) = do
   more <- sizesOf rest
-  size <- fsFileSize p
+  size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize p)
   pure (Pair p size :: more)
 
 gcSweep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> List String -> Int -> Int -> Bool -> Eff r Int

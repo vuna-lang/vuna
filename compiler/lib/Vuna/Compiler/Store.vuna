@@ -30,6 +30,7 @@ module Vuna.Compiler.Store where
 -- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样。check marker 载荷为 0 字节，
 -- split/unit 载荷只在 miss 路径写。
 import Vuna.Compiler.Common
+import Base.Nat
 import Vuna.Compiler.Hash
 import Base.List
 import Base.Maybe
@@ -444,7 +445,7 @@ scratchStaleSec = 600
 
 scratchStale : Member nFs FsOp r, Member nClock ClockOp r => String -> Eff r Bool
 scratchStale path = do
-  mtime <- fsFileMtime path
+  mtime <- fmap (fromMaybe 0) (fsFileMtime path)
   us <- clockNow
   pure (mtime + scratchStaleSec < us / 1000000)
 

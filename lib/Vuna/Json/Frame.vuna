@@ -28,9 +28,9 @@ maxFrameBytes = 16777216
 
 -- 从 stdin 读最多 n 字节（`stdinReadBytes` 的动作值；由 `serveConnection` 执行）。
 --
--- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 返回 ""。
+-- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 给 `Nothing`。
 -- 调用方（`Vuna.Json.Server.serveConnection`）负责拼接缓冲并重试切帧。
-export readChunk : Member nStdin StdinOp r => Int -> Eff r String
+export readChunk : Member nStdin StdinOp r => Int -> Eff r (Maybe String)
 readChunk n = stdinReadBytes (natFromInt n)
 
 -- 把一帧编码成字节串（纯函数；传输层与 socket 传输共用）。

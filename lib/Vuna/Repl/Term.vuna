@@ -88,9 +88,11 @@ termReadBlock _ = processRunIn "." ["stty", "min", "1", "time", "0"]
 export termReadByte : Member nStdin StdinOp r => Int -> Eff r Int
 termReadByte _ = do
   s <- stdinReadBytes (natFromInt 1)
-  pure (case strUnpack s of
-    [] => 0 - 1
-    b :: rest => b
+  pure (case s of
+    Nothing => 0 - 1
+    Just bytes => case strUnpack bytes of
+      [] => 0 - 1
+      b :: rest => b
   )
 
 -- 终端列数；失败默认 80。

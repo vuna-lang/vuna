@@ -16,6 +16,7 @@ module Vuna.Compiler.Driver.Compile where
 -- `Eff r` 里；纯逻辑（路径/哈希/序列化/缓存键计算/AST 变换）保持纯函数。下挂模块
 -- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff r`，这里直接调用。
 import Base.Sort
+import Base.Maybe
 import Vuna.Compiler.Addr
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
@@ -1239,8 +1240,8 @@ sourceInfoUnchanged : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv En
 sourceInfoUnchanged path si = do
   fast <- mtimeFastPath
   if fast then do
-    m <- fsFileMtime path
-    sz <- fsFileSize path
+    m <- fmap (fromMaybe 0) (fsFileMtime path)
+    sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
     if m == siMtimeOf si && sz == siSizeOf si then do
       now <- toolNowSec
       if m + mtimeSafetyWindowSec < now then pure True
@@ -1384,8 +1385,8 @@ toolTextHash = payloadDigest
 export sourceInfoForPath : Member nFs FsOp r => String -> Eff r SourceInfo
 sourceInfoForPath path = do
   raw <- fsReadFile path
-  mtime <- fsFileMtime path
-  size <- fsFileSize path
+  mtime <- fmap (fromMaybe 0) (fsFileMtime path)
+  size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
   pure (SourceInfo path (payloadDigest raw) mtime size)
 
 export toolNowSec : Member nClock ClockOp r => Eff r Int
@@ -1404,8 +1405,8 @@ sourceFresh builtSec si = do
     exists <- fsFileExists path
     if exists == False then pure False
     else do
-      m <- fsFileMtime path
-      sz <- fsFileSize path
+      m <- fmap (fromMaybe 0) (fsFileMtime path)
+      sz <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize path)
       if m == siMtimeOf si && sz == siSizeOf si && siMtimeOf si + mtimeSafetyWindowSec <= builtSec then pure True
       else do
         content <- fsReadFile path
@@ -1453,8 +1454,8 @@ modHashPair m = Pair m.cmName m.cmAddr
 
 statOfClosureMod : Member nFs FsOp r => ClosureMod -> Eff r SourceInfo
 statOfClosureMod m = do
-  mtime <- fsFileMtime m.cmPath
-  size <- fsFileSize m.cmPath
+  mtime <- fmap (fromMaybe 0) (fsFileMtime m.cmPath)
+  size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize m.cmPath)
   pure (SourceInfo m.cmPath m.cmSrc mtime size)
 
 -- 本包干净模块：按**对象地址**读本包模块接口，再做源内容 / 依赖链校验。
@@ -1936,8 +1937,8 @@ ownSourceInfos ctx = do
     mapEff (\p => do
       abs <- absolutePath p
       raw <- fsReadFile abs
-      mtime <- fsFileMtime abs
-      size <- fsFileSize abs
+      mtime <- fmap (fromMaybe 0) (fsFileMtime abs)
+      size <- fmap (\o => natToInt (fromMaybe Zero o)) (fsFileSize abs)
       pure
         (Pair (moduleNameOfPath (rootDir root) p) (SourceInfo abs (payloadDigest raw) mtime size))
     ) paths

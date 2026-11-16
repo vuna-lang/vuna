@@ -163,7 +163,9 @@ eventPidOf ((Pair _ ev) :: _) = eventPid ev
 serveOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => ServeState -> String -> Int -> Eff r Int
 serveOne st0 addr h = do
   conn <- netAccept h
-  outcome <- serveConnection (\n => netRecv conn n) (\s => netSend conn s) cdpWarn handleCdp st0
+  outcome <-
+    serveConnection (\n => fmap (\s => if s == "" then Nothing else Just s) (netRecv conn n))
+      (\s => netSend conn s) cdpWarn handleCdp st0
   _ <- netClose conn
   _ <- netClose h
   _ <- cleanupAddr addr

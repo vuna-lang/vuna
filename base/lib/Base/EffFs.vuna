@@ -11,6 +11,7 @@ module Base.EffFs where
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
 import Base.Eq
+import Base.Maybe
 import Base.Nat
 import Base.Monad
 import Base.Bool
@@ -40,8 +41,8 @@ resFs (IsDirectory p) = Bool
 resFs (MakeDir p) = Int
 resFs (RemoveFile p) = Int
 resFs (FileExists p) = Bool
-resFs (FileMtime p) = Int
-resFs (FileSize p) = Nat
+resFs (FileMtime p) = Maybe Int
+resFs (FileSize p) = Maybe Nat
 
 -- | 宿主 fs 失败的种类：带出错路径；文本由 `fsErrorText` 统一渲染。
 --
@@ -128,51 +129,17 @@ fsRemoveFile p = sendCore FsOp "fs" n (RemoveFile p)
 export fsFileExists : Member n FsOp r => String -> Eff r Bool
 fsFileExists p = sendCore FsOp "fs" n (FileExists p)
 
--- | 通过命名实例取 mtime（秒级）；取不到时静默返回 0。
-export fsFileMtime : Member n FsOp r => String -> Eff r Int
+-- | 通过命名实例取 mtime（秒级）；取不到（不存在 / 权限）给 `Nothing`，不把「未知」伪装成 0。
+export fsFileMtime : Member n FsOp r => String -> Eff r (Maybe Int)
 fsFileMtime p = sendCore FsOp "fs" n (FileMtime p)
 
--- | 通过命名实例取文件字节数（`Nat`）；取不到时静默返回 0。
-export fsFileSize : Member n FsOp r => String -> Eff r Nat
+-- | 通过命名实例取文件字节数（`Nat`）；取不到（不存在 / 权限）给 `Nothing`。
+export fsFileSize : Member n FsOp r => String -> Eff r (Maybe Nat)
 fsFileSize p = sendCore FsOp "fs" n (FileSize p)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `FsOp`。
 export handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
-
--- | 真实 handler 的操作解释：把每个操作映射到对应 `@vuna@prim_eff_*` 原语（`WriteFile` / `FileSize` 的结果在边界转回 `Nat`）。
-fsOpHIO : {a : Type} -> (o : FsOp) -> (resFs o -> Eff [] a) -> Eff [] a
-fsOpHIO op k = case op of
-  ReadFile p => do
-    s <- @vuna@prim_eff_readFile p
-    k s
-  WriteFile p s => do
-    n <- fmap natFromInt (@vuna@prim_eff_writeFile p s)
-    k n
-  WriteFileAtomic p s => do
-    n <- @vuna@prim_eff_writeFileAtomic p s
-    k n
-  ReadDir p => do
-    xs <- @vuna@prim_eff_readDir p
-    k xs
-  IsDirectory p => do
-    b <- @vuna@prim_eff_isDirectory p
-    k b
-  MakeDir p => do
-    n <- @vuna@prim_eff_makeDir p
-    k n
-  RemoveFile p => do
-    n <- @vuna@prim_eff_removeFile p
-    k n
-  FileExists p => do
-    b <- @vuna@prim_eff_fileExists p
-    k b
-  FileMtime p => do
-    n <- @vuna@prim_eff_fileMtime p
-    k n
-  FileSize p => do
-    n <- fmap natFromInt (@vuna@prim_eff_fileSize p)
-    k n
 
 -- ---------------------------------------------------------------
 -- 带行的真实 handler（entry 自动预装用；不导出）
@@ -217,10 +184,12 @@ fsOpHIOHost op k = case op of
     k b
   FileMtime p => do
     n <- raise (@vuna@host@fileMtime p)
-    k n
+    ok <- fsHostStatus
+    if ok /= 0 then k Nothing else k (Just n)
   FileSize p => do
     n <- fmap natFromInt (raise (@vuna@host@fileSize p))
-    k n
+    ok <- fsHostStatus
+    if ok /= 0 then k Nothing else k (Just n)
 
 -- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsErrorOp]`（不导出）。
 handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "fs-error" FsErrorOp []) a)
