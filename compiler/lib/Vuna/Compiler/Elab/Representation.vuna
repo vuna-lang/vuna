@@ -46,8 +46,7 @@ keptIndicesGo (k :: rest) i =
 
 -- | 是否为不可去装箱的内建族（Bool / Nat / Type 构造子）。
 export isSpecialUnboxFamily : String -> Bool
-isSpecialUnboxFamily name =
-  name == boolTypeName || name == natTypeName || isTypeConstructorName name
+isSpecialUnboxFamily name = isUnboxedCanonical name || isTypeConstructorName name
 
 -- 按族名查 data（Representation 自包含，不依赖 Codegen）。
 -- | 按族名在数据表里查 DtData；找不到返回 Nothing。
@@ -57,7 +56,7 @@ findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtDat
 
 -- | 类型头是否为可命名类型（Int/Str/Bool/Nat、Type 构造子或已声明数据族）。
 knownTypeHead : List DtData -> String -> Bool
-knownTypeHead datas g = g == intTypeName || g == strTypeName || g == boolTypeName || g == natTypeName || isTypeConstructorName g || (case findDtData g datas of
+knownTypeHead datas g = g == intTypeName || g == strTypeName || isUnboxedCanonical g || isTypeConstructorName g || (case findDtData g datas of
   Just _ => True
   Nothing => False
 )

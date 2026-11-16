@@ -100,8 +100,7 @@ mapSome f (x :: rest) = case f x of
 -- 不透明字段判据（D27）：卡住的类型族应用 / 类型族参数 → 运行时不可命名。
 -- 与 `Elab.Meta.valueOpaqueScoped` 同源；类型声明、构造子实参 cast、case 绑定共用。
 isTypeHeadOpaqueDatas : List DtData -> String -> Bool
-isTypeHeadOpaqueDatas datas name = if name == boolTypeName then False
-else if name == natTypeName then False
+isTypeHeadOpaqueDatas datas name = if isUnboxedCanonical name then False
 else case findDtData name datas of
   Just _ => False
   Nothing => not (isTypeConstructorName name)
@@ -147,18 +146,9 @@ hasRecordRepr d = if isRecordData d then case recordRtFields d of
   _ => True
 else False
 
--- | canonical Bool 族的运行时表示就是 OCaml bool（不生成变体声明）。
-isBoolFamilyName : String -> Bool
-isBoolFamilyName name = name == boolTypeName
-
--- | canonical Nat 族的运行时表示是 int（不生成变体声明）。
-isNatFamilyName : String -> Bool
-isNatFamilyName name = name == natTypeName
-
--- | 运行时族：剔除 Bool / Nat（它们的运行时表示不是变体）。
+-- | 运行时族：剔除表示不是变体的 canonical 族（Bool / Nat）。
 export rtDatasOf : List DtData -> List DtData
-rtDatasOf datas =
-  filter (\d => not (isBoolFamilyName (dtDataName d)) && not (isNatFamilyName (dtDataName d))) datas
+rtDatasOf datas = filter (\d => not (isUnboxedCanonical (dtDataName d))) datas
 
 -- 构造子字段的「不透明」形状（D27）：与 keep flags 逐位对齐，擦除位置恒 False。
 -- 判据与 `Elab.Meta.valueOpaqueScoped` 同源（卡住的类型族应用 / 类型族参数）。
@@ -333,17 +323,25 @@ else case v of
     NGlobal g sp => renderTyGlobal fuel levels table datas g sp
   _ => IrTyOpaque
 
+-- | primitive / canonical 族的 IR 运行时类型；`Nothing` = 普通 data（按声明渲染）。
+reprTyIr : String -> Maybe IrTy
+reprTyIr name = if name == intTypeName then Just IrTyInt
+else if name == strTypeName then Just IrTyStr
+else if name == floatTypeName then Just IrTyFloat
+else case canonicalReprOf name of
+  Just FamReprNat => Just IrTyInt
+  Just FamReprBool => Just IrTyBool
+  _ => Nothing
+
 renderTyGlobal : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> IrTy
 renderTyGlobal fuel levels table datas g sp = case renderTyIntrinsic g (map (\x => renderTyFuel (fuel - 1) levels table datas x) sp) of
   Just t => t
-  Nothing => if g == intTypeName then IrTyInt
-  else if g == natTypeName then IrTyInt
-  else if g == strTypeName then IrTyStr
-  else if g == floatTypeName then IrTyFloat
-  else if g == boolTypeName then IrTyBool
-  else case findDtData g datas of
-    Just gd => IrTyData g (renderFamilyArgs (fuel - 1) levels table datas (lookupUsedIn table g) sp)
-    Nothing => IrTyOpaque
+  Nothing => case reprTyIr g of
+    Just t => t
+    Nothing => case findDtData g datas of
+      Just gd =>
+        IrTyData g (renderFamilyArgs (fuel - 1) levels table datas (lookupUsedIn table g) sp)
+      Nothing => IrTyOpaque
 
 renderTyIntrinsic : String -> List IrTy -> Maybe IrTy
 renderTyIntrinsic "Array" ([a]) = Just (IrTyArray a)
@@ -386,15 +384,12 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
     Nothing => Pair (IrTyVar slot) (slot + 1)
   NGlobal g sp => case renderTyIntrinsic g (map (\x => renderTyFuel 256 levels table datas x) sp) of
     Just t => Pair t slot
-    Nothing => if g == intTypeName then Pair IrTyInt slot
-    else if g == natTypeName then Pair IrTyInt slot
-    else if g == strTypeName then Pair IrTyStr slot
-    else if g == floatTypeName then Pair IrTyFloat slot
-    else if g == boolTypeName then Pair IrTyBool slot
-    else case findDtData g datas of
-      Just gd =>
-        Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupUsedIn table g) sp)) slot
-      Nothing => Pair (IrTyVar slot) (slot + 1)
+    Nothing => case reprTyIr g of
+      Just t => Pair t slot
+      Nothing => case findDtData g datas of
+        Just gd =>
+          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupUsedIn table g) sp)) slot
+        Nothing => Pair (IrTyVar slot) (slot + 1)
 renderFieldTy levels table datas lvl _ slot = Pair (IrTyVar slot) (slot + 1)
 
 flagMatchesRigIn : Bool -> Rig -> Bool
@@ -1159,10 +1154,10 @@ externDomIr (VNeutral (NGlobal "Array" _)) = icInternal "extern Array needs one 
 externDomIr v = externBasicIr v
 
 externBasicIr : Value -> Check IrTy
-externBasicIr (VNeutral (NGlobal g args)) =
-  if g == intTypeName then OkC IrTyInt
-  else if g == strTypeName then OkC IrTyStr
-  else if g == boolTypeName then OkC IrTyBool else icInternal "extern type is not basic: ${g}"
+externBasicIr (VNeutral (NGlobal g args)) = if isFfiScalarName g then case reprTyIr g of
+  Just t => OkC t
+  Nothing => icInternal "extern type has no runtime representation: ${g}"
+else icInternal "extern type is not basic: ${g}"
 externBasicIr (VNeutral _) = icInternal "extern type is not a global type"
 externBasicIr _ = icInternal "extern type is not basic"
 
@@ -1482,12 +1477,17 @@ mainShowIr tyTerm = case force (Base.HashMap.fromList []) solsEmpty defaultFuel 
   _ => IrGlobal mainShowDefName
 
 mainShowForNameIr : String -> Ir
-mainShowForNameIr g =
-  if g == intTypeName then IrRt irRtShowInt
-  else if g == natTypeName then IrRt irRtShowNat
-  else if g == strTypeName then IrRt irRtShowStr
-  else if g == floatTypeName then IrRt irRtShowFloat
-  else if g == boolTypeName then IrRt irRtShowBool else IrGlobal mainShowDefName
+mainShowForNameIr g = case mainShowRtIr g of
+  Just rt => rt
+  Nothing => IrGlobal mainShowDefName
+
+mainShowRtIr : String -> Maybe Ir
+mainShowRtIr g =
+  if g == intTypeName then Just (IrRt irRtShowInt)
+  else if g == natTypeName then Just (IrRt irRtShowNat)
+  else if g == strTypeName then Just (IrRt irRtShowStr)
+  else if g == floatTypeName then Just (IrRt irRtShowFloat)
+  else if g == boolTypeName then Just (IrRt irRtShowBool) else Nothing
 
 -- | 入口 lowering：有运行时 `main` 才产出 `IrEntry`。
 export lowerEntryOf : List DtDef -> Check (Maybe IrEntry)

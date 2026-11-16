@@ -26,8 +26,13 @@ strTy = TGlobal strTypeName
 export floatTy : Term
 floatTy = TGlobal floatTypeName
 
-boolTy : Term
+-- | canonical `Bool` 类型对应的核心项。
+export boolTy : Term
 boolTy = TGlobal boolTypeName
+
+-- | canonical `Bool` 类型的中性值（比较结果 / `if` 条件 / 短路的期望类型）。
+export boolTyValue : Value
+boolTyValue = VNeutral (NGlobal boolTypeName [])
 
 -- `a -> b -> c` 的签名拼接（b/c 按外层 binder 深度移位）。
 export fun2 : Term -> Term -> Term -> Term
@@ -147,11 +152,7 @@ builtinEqTyName v = case builtinTyName v of
 -- 刚性变量）必须走 Ord 字典。
 export cmpBuiltinTyName : Value -> Maybe String
 cmpBuiltinTyName v = case builtinTyName v of
-  Just g =>
-    if g == intTypeName then Just intTypeName
-    else if g == strTypeName then Just strTypeName
-    else if g == floatTypeName then Just floatTypeName
-    else if g == boolTypeName then Just boolTypeName else Nothing
+  Just g => if memName g cmpSpecializedTyNames then Just g else Nothing
   Nothing => Nothing
 
 -- 族名后的参数作为**隐式** binder 前置到 kind（`data List a : Type` 的 `a` + `Type`

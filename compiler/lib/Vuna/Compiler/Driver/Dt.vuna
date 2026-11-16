@@ -769,11 +769,23 @@ dtMainKind ctx entry = do
           _ => OkC "Other"
   )
 
+-- `vuna test` 的 main 结果类型名（展示用）；其它类型归 `Other`。
+mainKindNames : List (Pair String String)
+mainKindNames =
+  [ Pair intTypeName "Int",
+    Pair natTypeName "Nat",
+    Pair strTypeName "String",
+    Pair boolTypeName "Bool"
+  ]
+
 mainKindForName : String -> Check String
-mainKindForName g =
-  if g == intTypeName then OkC "Int"
-  else if g == natTypeName then OkC "Nat"
-  else if g == strTypeName then OkC "String" else if g == boolTypeName then OkC "Bool" else OkC "Other"
+mainKindForName g = case lookupMainKind g mainKindNames of
+  Just k => OkC k
+  Nothing => OkC "Other"
+
+lookupMainKind : String -> List (Pair String String) -> Maybe String
+lookupMainKind g [] = Nothing
+lookupMainKind g (p :: rest) = if firstOf p == g then Just (secondOf p) else lookupMainKind g rest
 
 -- 合成定义的唯一名字：只在 `dtEvalExpr` 内部出现，摘除时按名字识别。
 replExprName : String

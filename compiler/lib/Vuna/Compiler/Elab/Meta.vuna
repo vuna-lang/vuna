@@ -72,14 +72,11 @@ boolCtorTerm name = case boolCtorValue name of
   Just False => TBool False
   Nothing => TGlobal name
 
-isBoolFamilyName : String -> Bool
-isBoolFamilyName name = name == boolTypeName
-
 -- `inferE (EVar ctor)`：零参构造子（`Nil`/`Nothing` 等）的隐式类型参数实例化成元变量，
 -- 使其类型为 `List ?m`/`Maybe ?m`（值），而非 `{a}->List a`（函数）。
 export inferCtorRef : Ec -> Ctx -> String -> Term -> Check (Pair Term (Pair Value Ec))
 inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
-  Just ctor => if isBoolFamilyName (dtCtorFamily ctor) then OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair (VNeutral (NGlobal boolTypeName [])) ec))
+  Just ctor => if isBoolCanonical (dtCtorFamily ctor) then OkC (Pair (boolCtorTerm (dtCtorName ctor)) (Pair boolTyValue ec))
   else
     let
       ctorTy = eval [] tyTerm
@@ -1113,7 +1110,7 @@ neutralHeadName (NVar name _ _) = name
 neutralHeadName (NGlobal name _) = name
 
 export isBoolGlobal : String -> Bool
-isBoolGlobal name = name == boolTypeName
+isBoolGlobal name = isBoolCanonical name
 
 -- 名字既是构造子又是数据类型（如 `data Pair a b where Pair : a -> b -> Pair a b`）：
 -- 在类型位置（expected 是宇宙）应走 `checkAppGeneral`，值位置走 `checkAppCtor`。
@@ -1131,7 +1128,7 @@ isSortVal ec v = case forceVal ec v of
 export ctorRefTerm : List DtData -> String -> Term
 ctorRefTerm datas name = case dtCtorLookup name datas of
   Just ctor =>
-    if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm (dtCtorName ctor)
+    if isBoolCanonical (dtCtorFamily ctor) then boolCtorTerm (dtCtorName ctor)
     else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
   Nothing => TGlobal name
 
@@ -1142,7 +1139,7 @@ ctorRefTerm datas name = case dtCtorLookup name datas of
 export ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
-    if isBoolFamilyName (dtCtorFamily ctor) then boolCtorTerm g
+    if isBoolCanonical (dtCtorFamily ctor) then boolCtorTerm g
     else if length args >= length (dtCtorTelescope ctor) then mkCtorTerm datas ctor g args
     else etaCtorTerm ctor args
   Nothing => foldAppTerms (TGlobal g) args

@@ -460,10 +460,9 @@ intrinsicVisible (Intrinsic name sig op visible) = visible
 -- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
 -- 其它同名声明是非法伪造。
 export canonicalCtorsFor : String -> Maybe (List String)
-canonicalCtorsFor name =
-  if name == boolTypeName then Just [boolTrueCtor, boolFalseCtor]
-  else if name == listFamilyName then Just [listNilCtor, listConsCtor]
-  else if name == natTypeName then Just [natZeroCtor, natSuccCtor] else Nothing
+canonicalCtorsFor name = case findCanonicalFamily name of
+  Just f => Just (cfCtors f)
+  Nothing => Nothing
 
 -- | 内建的函数 arity（按 `arityOfType (intrinsicSignature i)` 计算）。
 export intrinsicArity : Intrinsic -> Int
@@ -540,6 +539,84 @@ listNilCtor = "Base.List.List.Nil"
 -- | canonical `Cons` 构造子的完整符号。
 export listConsCtor : String
 listConsCtor = "Base.List.List.Cons"
+
+-- ---------------------------------------------------------------
+-- canonical 族表
+-- ---------------------------------------------------------------
+-- | canonical 族的运行时表示类别（目标中立；具体 IR 类型由 codegen 映射）。
+export data FamilyRepr(..) : Type where
+  -- | OCaml `bool` / IR `IrTyBool`：不生成变体声明。
+  FamReprBool : FamilyRepr
+  -- | OCaml `int` / IR `IrTyInt`：`Zero` = 0、`Succ n` = `n + 1` 饱和；不生成变体声明。
+  FamReprNat : FamilyRepr
+  -- | 普通 data：按声明的构造子布局。
+  FamReprBoxed : FamilyRepr
+
+-- | 一个 canonical 族：完整符号、固定构造子、运行时表示类别。
+export record CanonicalFamily where
+  cfName : String
+  cfCtors : List String
+  cfRepr : FamilyRepr
+
+-- | 族的完整符号。
+export cfName : CanonicalFamily -> String
+cfName (CanonicalFamily name _ _) = name
+
+-- | 族的固定构造子集合。
+export cfCtors : CanonicalFamily -> List String
+cfCtors (CanonicalFamily _ ctors _) = ctors
+
+-- | 族的运行时表示类别。
+export cfRepr : CanonicalFamily -> FamilyRepr
+cfRepr (CanonicalFamily _ _ repr) = repr
+
+-- | canonical 族表：身份、构造子与表示的唯一真源；新增族只改这里。
+export canonicalFamilies : List CanonicalFamily
+canonicalFamilies =
+  [ CanonicalFamily boolTypeName [boolTrueCtor, boolFalseCtor] FamReprBool,
+    CanonicalFamily natTypeName [natZeroCtor, natSuccCtor] FamReprNat,
+    CanonicalFamily listFamilyName [listNilCtor, listConsCtor] FamReprBoxed
+  ]
+
+-- | 按完整符号查 canonical 族。
+export findCanonicalFamily : String -> Maybe CanonicalFamily
+findCanonicalFamily name = findCanonicalFamilyGo name canonicalFamilies
+
+findCanonicalFamilyGo : String -> List CanonicalFamily -> Maybe CanonicalFamily
+findCanonicalFamilyGo name [] = Nothing
+findCanonicalFamilyGo name (f :: rest) =
+  if cfName f == name then Just f else findCanonicalFamilyGo name rest
+
+-- | 该族的运行时表示类别；非 canonical 族为 `Nothing`。
+export canonicalReprOf : String -> Maybe FamilyRepr
+canonicalReprOf name = case findCanonicalFamily name of
+  Just f => Just (cfRepr f)
+  Nothing => Nothing
+
+-- | 运行时表示不是普通 data 变体的 canonical 族（当前为 Bool / Nat）。
+export isUnboxedCanonical : String -> Bool
+isUnboxedCanonical name = case canonicalReprOf name of
+  Just FamReprBoxed => False
+  Just _ => True
+  Nothing => False
+
+-- | 该名字是否为 canonical Bool 族。
+export isBoolCanonical : String -> Bool
+isBoolCanonical name = case canonicalReprOf name of
+  Just FamReprBool => True
+  _ => False
+
+-- | 比较运算符可特化的类型名：其它类型的 `<` / `<=` / `>` / `>=` 走 `Ord` 字典。
+export cmpSpecializedTyNames : List String
+cmpSpecializedTyNames = [intTypeName, strTypeName, floatTypeName, boolTypeName]
+
+-- | 受限 FFI 允许的标量类型（`extern` 的参数 / 结果 / `Array` 元素）。
+export ffiScalarNames : List String
+ffiScalarNames = [intTypeName, strTypeName, boolTypeName]
+
+-- | 该类型名是否是 FFI 允许的标量。
+export isFfiScalarName : String -> Bool
+isFfiScalarName name = memName name ffiScalarNames
 
 -- | 模板字符串插值的 trait 的 canonical 名。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。

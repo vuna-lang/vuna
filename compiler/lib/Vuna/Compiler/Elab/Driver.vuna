@@ -449,7 +449,7 @@ checkExternValue sp fuel lvl v =
   else checkExternDomain sp v
 
 checkExternDomain : Span -> Value -> Check Int
-checkExternDomain sp (VNeutral (NGlobal g args)) = if g == intTypeName || g == strTypeName || g == boolTypeName then OkC 0
+checkExternDomain sp (VNeutral (NGlobal g args)) = if isFfiScalarName g then OkC 0
 else if g == "Array" then case args of
   [elem] => checkExternArrayElem sp elem
   _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
@@ -459,8 +459,7 @@ checkExternDomain sp _ = tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-ba
 
 checkExternArrayElem : Span -> Value -> Check Int
 checkExternArrayElem sp (VNeutral (NGlobal g args)) =
-  if g == intTypeName || g == strTypeName || g == boolTypeName then OkC 0
-  else tcErr1 sp (FfiTypeUnsupported "Array ${g}") g
+  if isFfiScalarName g then OkC 0 else tcErr1 sp (FfiTypeUnsupported "Array ${g}") g
 checkExternArrayElem sp _ =
   tcErr1 sp (FfiTypeUnsupported "Array element is not a basic type") "array-element"
 
@@ -937,15 +936,10 @@ mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) = case fn of
   _ => OkC 0
 mainEntryRowCheck ec bodies sp _ = OkC 0
 
--- main 结果类型是否是内建展示类型（与 Codegen.Term.mainShowForName 的集合一致）。
+-- main 结果类型是否是内建展示类型（与 Codegen.Lower.mainShowRtIr 的集合一致）。
 mainShowBuiltinTy : Value -> Bool
 mainShowBuiltinTy (VNeutral n) = case n of
-  NGlobal g [] =>
-    g == intTypeName
-      || g == natTypeName
-      || g == strTypeName
-      || g == boolTypeName
-      || g == floatTypeName
+  NGlobal g [] => memName g [intTypeName, natTypeName, strTypeName, boolTypeName, floatTypeName]
   _ => False
 mainShowBuiltinTy _ = False
 

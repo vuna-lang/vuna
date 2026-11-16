@@ -153,7 +153,7 @@ else
 export checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then icFuel "inference"
 else case forceVal ec scrutTy of
-  VNeutral (NGlobal fam idxs) => if fam == boolTypeName && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
+  VNeutral (NGlobal fam idxs) => if isBoolCanonical fam && length idxs == 0 then checkBoolCaseFuel (fuel - 1) globals ctx ec scrutTerm alts expected sp
   else if fam == natTypeName then if natLitCaseAlts alts then checkNatLitCaseFuel (fuel - 1) globals ctx ec (natToIntTerm scrutTerm) scrutTerm natTyValue alts
     expected sp
   else checkCaseOfFuel (fuel - 1) globals ctx ec scrutTerm scrutTy fam idxs alts expected sp
@@ -342,7 +342,7 @@ else
 -- 推断收下真实 `Base.Bool.Bool` 条件（`Base.List.filter` 的 `if p x`）。
 export checkCondBoolFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Check (Pair Term Ec)
 checkCondBoolFuel fuel globals ctx ec c sp = if fuel <= 0 then icFuel "inference"
-else case checkEFuel (fuel - 1) globals ctx ec c (VNeutral (NGlobal boolTypeName [])) of
+else case checkEFuel (fuel - 1) globals ctx ec c boolTyValue of
   OkC pc => OkC pc
   ErrC _ => Vuna.Compiler.Common.bind (inferEFuel (fuel - 1) globals ctx ec c) (\pc => case pc of
     Pair cTerm (Pair cTy ec1) =>
@@ -2279,11 +2279,9 @@ isStringTyValue _ = False
 export specializeBoolAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeBoolAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else if name == "&&" || name == "||" then case args of
-  [a, b] => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a (VNeutral (NGlobal boolTypeName []))) (\pa => case pa of
-    Pair aTerm ec1 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b (VNeutral (NGlobal boolTypeName []))) (\pb => case pb of
-      Pair bTerm ec2 =>
-        OkC
-          (Just (Pair (boolShortCircuit name aTerm bTerm) (Pair (VNeutral (NGlobal boolTypeName [])) ec2)))
+  [a, b] => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec a boolTyValue) (\pa => case pa of
+    Pair aTerm ec1 => Vuna.Compiler.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 b boolTyValue) (\pb => case pb of
+      Pair bTerm ec2 => OkC (Just (Pair (boolShortCircuit name aTerm bTerm) (Pair boolTyValue ec2)))
     )
   )
   _ => tcErr1 sp (NeedsTwoArgs name) name

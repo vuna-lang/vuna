@@ -958,7 +958,7 @@ export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term
 specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
   Just tyName =>
     Vuna.Compiler.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
-      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
+      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
   Nothing => case findClassByShortName "Eq" (ecClasses ec) of
     Nothing =>
       let
@@ -977,7 +977,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
       else case searchInstanceIn globals ctx ec dictTy sp of
         OkC (Pair dictTerm ec1) =>
           OkC
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
         ErrC e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else ErrC e
@@ -991,7 +991,7 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
   in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 =>
       OkC
-        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
+        (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) metaTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue (ecAddConstraint ec1 CkDict m dictTy (Just sp) 0))))
 
 -- ---------------------------------------------------------------
 -- `lt` / `le` / `gt` / `ge` 的饱和应用按实参类型特化
@@ -1013,7 +1013,7 @@ cmpRuntimeName sp method "Float" = case method of
   "gt" => OkC "bi_gt_float"
   _ => OkC "bi_ge_float"
 cmpRuntimeName sp method tyName =
-  if tyName == boolTypeName then OkC (cmpGenericName method)
+  if isBoolCanonical tyName then OkC (cmpGenericName method)
   else tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 cmpGenericName : String -> String
@@ -1045,7 +1045,7 @@ export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Ter
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
   Just tyName =>
     Vuna.Compiler.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
-      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec))))
+      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
   Nothing => case findClassByShortName "Ord" (ecClasses ec) of
     Nothing =>
       let
@@ -1062,7 +1062,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
       else case searchInstanceIn globals ctx ec dictTy sp of
         OkC (Pair dictTerm ec1) =>
           OkC
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair (VNeutral (NGlobal boolTypeName [])) ec1)))
+            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
         ErrC e =>
           if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
           else ErrC e
