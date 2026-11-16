@@ -163,6 +163,23 @@ mapMaybe f (x :: xs) = case f x of
   Nothing => mapMaybe f xs
   Just y => y :: mapMaybe f xs
 
+-- | 首个有值的候选；全部无值即 `Nothing`。顺序决定优先级。
+export firstJust : List (Maybe a) -> Maybe a
+firstJust [] = Nothing
+firstJust (x :: rest) = case x of
+  Just v => Just v
+  Nothing => firstJust rest
+
+-- | 依次尝试候选动作，返回第一个成功的：命中即停，失败（`Nothing`）才继续。
+-- 后面的动作只构造、不执行；全部失败即 `Nothing`。
+export firstSuccess : Monad m => {m : Type -> Type} -> {a : Type} -> List (m (Maybe a)) -> m (Maybe a)
+firstSuccess [] = pure Nothing
+firstSuccess (x :: rest) = do
+  v <- x
+  case v of
+    Just found => pure (Just found)
+    Nothing => firstSuccess rest
+
 -- Functor / Monad 实例（trait 来自 Base.Monad，List 定义在本模块）。
 instance Functor List where
   fmap f xs = map f xs

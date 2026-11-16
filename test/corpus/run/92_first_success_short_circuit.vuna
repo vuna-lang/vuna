@@ -1,0 +1,32 @@
+-- `firstSuccess` 命中即停：命中之后的候选动作只构造、不执行；
+-- 全部失败时才会逐个执行。用 IORef 记录「候选是否跑过」。
+import Prelude
+import Base.Eff
+import Base.IORef
+
+afterHit : IORef Int -> Eff [] (Maybe Int)
+afterHit ref = do
+  _ <- writeRef ref 1
+  pure (Just 8)
+
+failAfter : IORef Int -> Eff [] (Maybe Int)
+failAfter ref = do
+  _ <- writeRef ref 1
+  pure Nothing
+
+main : Eff [] Int
+main = do
+  hitRef <- newRef 0
+  hit <- firstSuccess [pure Nothing, pure (Just 7), afterHit hitRef]
+  hitRan <- readRef hitRef
+  missRef <- newRef 0
+  miss <- firstSuccess [pure Nothing, failAfter missRef]
+  missRan <- readRef missRef
+  pure (((((case hit of
+    Just n => n
+    Nothing => 0
+  ) * 1000
+  ) + hitRan * 100
+  ) + (if isNothing miss then 10 else 0)
+  ) + missRan
+  )

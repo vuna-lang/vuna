@@ -5,6 +5,8 @@ module Base.EffEnv where
 -- 标签 = `EnvOp`（实例名在行的 `Cons n EnvOp r` 条目里）；操作 GetEnv / GetCwd / ExecPath 都返回 String。
 -- 真实 handler 直调对应 `@vuna@prim_eff_*` 原语（`@vuna@prim_eff_getenv` / `@vuna@prim_eff_getcwd` / `@vuna@prim_eff_execPath`）。
 import Base.Eff
+import Base.Eq
+import Base.Maybe
 import Base.Monad
 
 -- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
@@ -22,6 +24,13 @@ resEnv ExecPath = String
 -- | 通过命名实例取环境变量；真实 handler 走 `@vuna@prim_eff_getenv`（未设置或为空串都返回空串）。
 export envGetEnv : Member n EnvOp r => String -> Eff r String
 envGetEnv k = sendCore EnvOp "env" n (GetEnv k)
+
+-- | 取环境变量，未设置或为空串时给 `Nothing`：原语无法区分「未设置」与「空串」，
+-- 需要「有值才算命中」的调用方（路径类）用这个，而不是比较空串。
+export envGetEnvNonEmpty : Member n EnvOp r => String -> Eff r (Maybe String)
+envGetEnvNonEmpty k = do
+  v <- envGetEnv k
+  pure (if v == "" then Nothing else Just v)
 
 -- | 通过命名实例取当前工作目录。
 export envGetCwd : Member n EnvOp r => Eff r String

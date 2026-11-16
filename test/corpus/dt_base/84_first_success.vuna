@@ -1,0 +1,66 @@
+-- 候选选择组合子：`firstJust` / `firstSuccess`（顺序即优先级，首个成功者胜出），
+-- 以及 `envGetEnvNonEmpty`（未设置与空串都算无值）。
+import Prelude
+import Base.Eff
+import Base.EffEnv
+
+firstOfNone : Maybe Int
+firstOfNone = firstJust []
+
+firstOfLater : Maybe Int
+firstOfLater = firstJust [Nothing, Just 2, Just 3]
+
+-- `Just 0` 也是命中：候选判断的是「有没有值」，不是「值是否为真」。
+firstOfZero : Maybe Int
+firstOfZero = firstJust [Just 0, Just 9]
+
+picks : Eff [] (Maybe Int)
+picks = firstSuccess [pure Nothing, pure (Just 5), pure (Just 6)]
+
+picksNone : Eff [] (Maybe Int)
+picksNone = firstSuccess [pure Nothing, pure Nothing]
+
+-- mock 环境：表里查不到按空串处理（与原语「未设置返回空串」一致）。
+mockEnv : List (Pair String String) -> String -> String
+mockEnv table name = fromMaybe "" (lookupPair name table)
+
+mockOpH : List (Pair String String) -> (o : EnvOp) -> (Base.EffEnv.resEnv o -> Int) -> Int
+mockOpH table op k = case op of
+  GetEnv name => k (mockEnv table name)
+  GetCwd => k "/mock/cwd"
+  ExecPath => k "/mock/exec"
+
+envScore : Maybe String -> Maybe String -> Maybe String -> Int
+envScore set empty missing = ((case set of
+  Just v => if v == "/s" then 1 else 0
+  Nothing => 0
+) + (if isNothing empty then 1 else 0)
+) + (if isNothing missing then 1 else 0)
+
+envProbe : (n : String) -> Eff (Cons n EnvOp []) Int
+envProbe n = do
+  set <- envGetEnvNonEmpty@(n) "SET"
+  empty <- envGetEnvNonEmpty@(n) "EMPTY"
+  missing <- envGetEnvNonEmpty@(n) "MISSING"
+  pure (envScore set empty missing)
+
+envTotal : Int
+envTotal =
+  runPure
+    (handleEnv "mock" (\s => s) (mockOpH [Pair "SET" "/s", Pair "EMPTY" ""]) (envProbe "mock"))
+
+main : Int
+main = (((((if isNothing firstOfNone then 1 else 0) + (case firstOfLater of
+  Just 2 => 1
+  _ => 0
+)
+) + (case firstOfZero of
+  Just 0 => 1
+  _ => 0
+)
+) + (case runPure picks of
+  Just 5 => 1
+  _ => 0
+)
+) + (if isNothing (runPure picksNone) then 1 else 0)
+) + envTotal
