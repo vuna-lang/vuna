@@ -30,8 +30,8 @@ instance Functor (Error e) where
   fmap f (MkErr e) = MkErr e
 
 instance Monad (Error e) where
-  bind (MkOk a) k = k a
-  bind (MkErr e) k = MkErr e
+  >>= (MkOk a) k = k a
+  >>= (MkErr e) k = MkErr e
 
 instance Applicative (Error e) where
   pure a = MkOk a

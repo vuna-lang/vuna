@@ -16,7 +16,7 @@ describe r = case r of
   Err e => "Err " ++ e
 
 probe : Result (Pair Int String)
-probe = bind (Ok 1) (\x => Ok (Pair x "s"))
+probe = (>>=) (Ok 1) (\x => Ok (Pair x "s"))
 
 main : String
 main = describe probe

@@ -275,8 +275,8 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 `Bool`/`List` 是 base 的普通 data：canonical `Base.Bool.Bool` 精化成 OCaml `bool`
 （`TBool`），`List` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
-与 `if`/`let`（表示类别来自 `Base.Intrinsics.canonicalFamilies` 的 `FamilyRepr`；
-`Lowering.Program` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
+与 `if`/`let`（表示类别来自 `Intrinsics.canonicalFamilies` 的 `FamilyRepr`；
+`Codegen.Lower` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
 **例外（`res op` 这类擦除依赖）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用）
 整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式

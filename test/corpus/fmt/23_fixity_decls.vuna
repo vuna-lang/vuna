@@ -5,8 +5,7 @@ import Base.Int
 -- 声明打印：imports 之后、第一个声明之前，源码顺序，每行一条。
 infixl 6 +
 infixr 5 :: = Cons
-infix 4 == = eq
-
+infix 4 ==
 -- 行尾注释挂在声明上（span 进注释锚点）
 infixl 7 * -- 数值乘法
 

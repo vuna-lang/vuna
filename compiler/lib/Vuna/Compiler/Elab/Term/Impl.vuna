@@ -1705,16 +1705,16 @@ inferLetFuel fuel globals ctx ec binds body rec_ sp =
 export checkLetGoFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetGoFuel fuel globals ctx ec [] body rec_ expected sp =
   if fuel <= 0 then icFuel "inference" else checkEFuel (fuel - 1) globals ctx ec body expected
-checkLetGoFuel fuel globals ctx ec (bind :: rest) body rec_ expected sp =
+checkLetGoFuel fuel globals ctx ec (bnd :: rest) body rec_ expected sp =
   if fuel <= 0 then icFuel "inference"
-  else checkLetOneFuel (fuel - 1) globals ctx ec bind rest body rec_ expected sp
+  else checkLetOneFuel (fuel - 1) globals ctx ec bnd rest body rec_ expected sp
 
 export checkLetOneFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
-checkLetOneFuel fuel globals ctx ec bind rest body rec_ expected sp = if fuel <= 0 then icFuel "inference"
-else case firstOf bind of
+checkLetOneFuel fuel globals ctx ec bnd rest body rec_ expected sp = if fuel <= 0 then icFuel "inference"
+else case firstOf bnd of
   PVar name psp =>
     let
-      value = secondOf bind
+      value = secondOf bnd
     in Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
       Pair valueTerm (Pair valueTy ec1) =>
         let
@@ -1731,7 +1731,7 @@ else case firstOf bind of
     )
   PWild psp =>
     let
-      value = secondOf bind
+      value = secondOf bnd
     in Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
       Pair valueTerm (Pair valueTy ec1) =>
         let
@@ -1748,7 +1748,7 @@ else case firstOf bind of
   -- 穷尽性交给既有的 case 精化（不可失败模式通过，`Just` 这类非穷尽模式报覆盖性错误）。
   _ =>
     checkEFuel (fuel - 1) globals ctx ec
-      (ECase (secondOf bind) [Pair (firstOf bind) (ELet rest body rec_ sp)] (patSpan (firstOf bind)))
+      (ECase (secondOf bnd) [Pair (firstOf bnd) (ELet rest body rec_ sp)] (patSpan (firstOf bnd)))
       expected
 
 -- 推断位的 `let`（嵌套 let 的 value 位置就是推断位）；入口见上方 `inferLetFuel`。

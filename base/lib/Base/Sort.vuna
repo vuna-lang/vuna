@@ -8,13 +8,13 @@ import Base.Ord
 
 -- | 内部：插入步骤——按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
 insertBy : (a -> a -> Bool) -> a -> List a -> List a
-insertBy le y [] = [y]
-insertBy le y (x :: xs) = if y <= x then y :: x :: xs else x :: insertBy le y xs
+insertBy cmp y [] = [y]
+insertBy cmp y (x :: xs) = if cmp y x then y :: x :: xs else x :: insertBy cmp y xs
 
 -- | 自定义比较函数的**稳定**升序排序（实现是插入排序，递归吃 tail，满足 DT 的结构递归检查）。`le` 表示 `<=`。
 export sortBy : (a -> a -> Bool) -> List a -> List a
-sortBy le [] = []
-sortBy le (y :: ys) = insertBy le y (sortBy le ys)
+sortBy cmp [] = []
+sortBy cmp (y :: ys) = insertBy cmp y (sortBy cmp ys)
 
 -- | 用 `Ord` 的 `<=` 排序的稳定升序排序；等价于 `sortBy (\x, y => x <= y)`。
 export mergeSort : Ord a => List a -> List a

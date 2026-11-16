@@ -1,7 +1,7 @@
 -- 高阶 kind + 一般约束泛化。`bindPair : m a -> m b -> m (Pair a b)` 的
 -- 签名里 m 是类型构造器变量；调用点分别传入 Maybe 与 LList 的字典。
 trait Monad m where
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
   pure : a -> m a
 
 data Maybe a : Type where
@@ -24,13 +24,13 @@ concatMap f LNil = LNil
 concatMap f (LCons x xs) = append (f x) (concatMap f xs)
 
 instance Monad Maybe where
-  bind m f = case m of
+  (>>=) m f = case m of
     Nothing => Nothing
     Just x => f x
   pure x = Just x
 
 instance Monad LList where
-  bind xs f = concatMap f xs
+  (>>=) xs f = concatMap f xs
   pure x = LCons x LNil
 
 bindPair : m a -> m b -> m (Pair a b)
@@ -49,4 +49,7 @@ showL LNil = "[]"
 showL (LCons (Pair a b) rest) = strFromInt a ++ ":" ++ strFromInt b ++ " " ++ showL rest
 
 main : String
-main = showM (bindPair (Just 1) (Just 2)) ++ "/" ++ showL (bindPair (LCons 1 (LCons 2 LNil)) (LCons 3 LNil))
+main =
+  showM (bindPair (Just 1) (Just 2))
+    ++ "/"
+    ++ showL (bindPair (LCons 1 (LCons 2 LNil)) (LCons 3 LNil))

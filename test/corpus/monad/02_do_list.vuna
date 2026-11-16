@@ -2,7 +2,7 @@
 -- 本地列表类型取名 LList（构造子 LNil/LCons），避开 base 的 List/Nil/Cons；
 -- 本地同名 data 的解析优先级见 docs/reference/type-system.md。
 trait Monad m where
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
   pure : a -> m a
 
 data Pair a b : Type where
@@ -21,7 +21,7 @@ concatMap f LNil = LNil
 concatMap f (LCons x xs) = append (f x) (concatMap f xs)
 
 instance Monad LList where
-  bind xs f = concatMap f xs
+  (>>=) xs f = concatMap f xs
   pure x = LCons x LNil
 
 pairs : LList (Pair Int Int)

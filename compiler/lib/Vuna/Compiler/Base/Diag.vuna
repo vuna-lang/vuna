@@ -366,8 +366,8 @@ instance Functor Check where
   fmap f (ErrC e) = ErrC e
 
 instance Monad Check where
-  bind (OkC x) k = k x
-  bind (ErrC e) k = ErrC e
+  (>>=) (OkC x) k = k x
+  (>>=) (ErrC e) k = ErrC e
 
 instance Applicative Check where
   pure = OkC

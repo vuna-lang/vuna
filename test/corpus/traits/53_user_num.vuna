@@ -9,10 +9,10 @@ instance FromInt MyNum where
   fromInt n = MkMyNum n
 
 instance Num MyNum where
-  add (MkMyNum a) (MkMyNum b) = MkMyNum (a + b)
-  sub (MkMyNum a) (MkMyNum b) = MkMyNum (a - b)
-  mul (MkMyNum a) (MkMyNum b) = MkMyNum (a * b)
-  div (MkMyNum a) (MkMyNum b) = MkMyNum (a / b)
+  (+) (MkMyNum a) (MkMyNum b) = MkMyNum (a + b)
+  (-) (MkMyNum a) (MkMyNum b) = MkMyNum (a - b)
+  (*) (MkMyNum a) (MkMyNum b) = MkMyNum (a * b)
+  (/) (MkMyNum a) (MkMyNum b) = MkMyNum (a / b)
 
 toInt : MyNum -> Int
 toInt (MkMyNum n) = n
@@ -31,7 +31,10 @@ divLit = 9 / 2
 
 main : String
 main =
-  strFromInt (toInt addLit) ++ "/"
-    ++ strFromInt (toInt subLit) ++ "/"
-    ++ strFromInt (toInt mulLit) ++ "/"
+  strFromInt (toInt addLit)
+    ++ "/"
+    ++ strFromInt (toInt subLit)
+    ++ "/"
+    ++ strFromInt (toInt mulLit)
+    ++ "/"
     ++ strFromInt (toInt divLit)

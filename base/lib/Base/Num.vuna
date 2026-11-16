@@ -3,18 +3,18 @@ module Base.Num where
 
 -- 精化器认 `Base.Num` 的方法投影并映射回内建原语，因此实例体写 `x + y` 不会自递归；
 -- 其它类型回落到普通 trait 方法应用。
-infixl 6 + = add
-infixl 6 - = sub
-infixl 7 * = mul
-infixl 7 / = div
+infixl 6 +
+infixl 6 -
+infixl 7 *
+infixl 7 /
 
 -- | 数值算术 trait：`add` / `sub` / `mul` / `div` 对应 `+` / `-` / `*` / `/`（后者是这些方法的中缀别名）。
 export trait Num a(..) where
   -- | 加法（`+`）。
-  add : a -> a -> a
+  (+) : a -> a -> a
   -- | 减法（`-`）。
-  sub : a -> a -> a
+  (-) : a -> a -> a
   -- | 乘法（`*`）。
-  mul : a -> a -> a
+  (*) : a -> a -> a
   -- | 除法（`/`）。
-  div : a -> a -> a
+  (/) : a -> a -> a

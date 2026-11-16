@@ -5,10 +5,10 @@ data Box a : Type where
   MkBox : a -> Box a
 
 instance Monad Box where
-  bind b f = b
+  (>>=) b f = b
 
 instance Monad Box where
-  bind b f = b
+  (>>=) b f = b
 
 main : Int
 main = 0

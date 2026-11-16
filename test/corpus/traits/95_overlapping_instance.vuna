@@ -5,12 +5,12 @@ data Box a : Type where
   MkBox : a -> Box a
 
 instance Eq a => Eq (Box a) where
-  eq x y = True
-  neq x y = False
+  (==) x y = True
+  (/=) x y = False
 
 instance Eq (Box Int) where
-  eq x y = True
-  neq x y = False
+  (==) x y = True
+  (/=) x y = False
 
 main : String
 main = "x"

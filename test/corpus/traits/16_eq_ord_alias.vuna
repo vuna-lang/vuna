@@ -12,14 +12,14 @@ main : String
 main =
   let
     a = 1 == 1
-    b = eq 1 1
+    b = (==) 1 1
     c = "x" == "x"
-    d = eq "x" "y"
+    d = (==) "x" "y"
     e = Red == Red
     f = Red == Blue
     g = True == False
     h = 1 < 2
-    i = lt 1 2
+    i = (<) 1 2
     j = False < True
     k = mem 1 [1, 2]
   in show a

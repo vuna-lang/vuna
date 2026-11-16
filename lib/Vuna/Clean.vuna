@@ -360,8 +360,8 @@ subDirsOf dir = do
       let
         p = "${dir}/${n}"
       in do
-        sub <- fsIsDirectory p
-        pure (if sub then [p] else [])
+        isDirEntry <- fsIsDirectory p
+        pure (if isDirEntry then [p] else [])
     ) names
   else pure []
 

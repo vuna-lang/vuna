@@ -3,6 +3,7 @@ module Base.Int where
 
 import Base.Eq
 import Base.Hashable
+import Base.Neg
 import Base.Num
 import Base.Ord
 -- `Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
@@ -10,23 +11,26 @@ import Base.Show
 
 -- primitive 没有构造子可匹配：实例体写内建运算符，由编译器特化，不会自递归。
 instance Eq Int where
-  eq x y = x == y
-  neq x y = x /= y
+  == x y = x == y
+  /= x y = x /= y
 
 instance Ord Int where
-  lt x y = x < y
-  le x y = x <= y
-  gt x y = x > y
-  ge x y = x >= y
+  < x y = x < y
+  <= x y = x <= y
+  > x y = x > y
+  >= x y = x >= y
 
 -- 方法体写内建运算符，由精化器特化成 `bi_*_int` 原语（`+` 是 `add` 别名，不自递归）。
 instance Num Int where
-  add x y = x + y
-  sub x y = x - y
-  mul x y = x * y
-  div x y = x / y
+  + x y = x + y
+  - x y = x - y
+  * x y = x * y
+  / x y = x / y
 
 -- `Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
+instance Neg Int where
+  negate x = 0 - x
+
 instance Show Int where
   show x = strFromInt x
 

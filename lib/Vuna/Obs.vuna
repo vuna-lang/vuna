@@ -44,7 +44,7 @@ import Base.EffProcess
 -- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
 export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
 runObs [] = obsUsage
-runObs (sub :: rest) = case sub of
+runObs (obs :: rest) = case obs of
   "run" => Vuna.Obs.Run.runObsRun rest
   "summarize" => obsSummarizeArgs rest
   "validate" => obsValidateArgs rest
@@ -54,7 +54,7 @@ runObs (sub :: rest) = case sub of
   "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
   "serve" => Vuna.Obs.Serve.runObsServe rest
   _ => do
-    _ <- consolePrint "error: unknown `vuna obs` subcommand `${sub}`\n${obsUsageText}"
+    _ <- consolePrint "error: unknown `vuna obs` subcommand `${obs}`\n${obsUsageText}"
     pure 2
 
 obsUsageText : String

@@ -167,7 +167,7 @@ renderDeclBody env at lineInd (DInstance ctxE head methods sp) =
 -- 顶层签名与 axiom 声明共用：`<prefix>name : Ty`（prefix 为 "" 或 "axiom "）。
 renderSigLine : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> String -> List Expr -> Expr -> List String
 renderSigLine env at lineInd prefix name ctx ty =
-  prefixFirst "${spaces lineInd}${prefix}${name} : ${renderInstanceCtx env ctx}"
+  prefixFirst "${spaces lineInd}${prefix}${declNameText name} : ${renderInstanceCtx env ctx}"
     (renderTypeExpr env at lineInd ty)
 
 renderDataDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Bool -> String -> String -> List String -> Expr -> List Ctor -> List String -> List String
@@ -178,9 +178,18 @@ renderDataDecl env at viaField prefix name params kind ctors derivings =
     ctorLines = concatMap (\c => renderCtorDecl env at c) ctors
   in append [header] (append ctorLines (renderDerivings viaField derivings))
 
+-- 声明位的运算符名带括号：`(==) : ...` / `(::) : ...`。
+declNameText : String -> String
+declNameText name = case strUnpack name of
+  c :: rest => if isNameStart c then name else "(${name})"
+  [] => name
+
+isNameStart : Int -> Bool
+isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
+
 renderCtorDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> List String
 renderCtorDecl env at (Ctor cname ty arity sp) =
-  attachAt at sp 2 (prefixFirst "  ${cname} : " (renderTypeExpr env at 2 ty))
+  attachAt at sp 2 (prefixFirst "  ${declNameText cname} : " (renderTypeExpr env at 2 ty))
 
 renderDerivings : Bool -> List String -> List String
 renderDerivings viaField [] = []
@@ -216,7 +225,7 @@ traitParamText env at (TraitParam n (Just k)) = "(${n} : ${join " " (renderTypeE
 renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> List String
 renderMethodSig env at m =
   attachAt at (traitMethodSpan m) 2
-    (prefixFirst "  ${traitMethodName m} : " (renderTypeExpr env at 2 m.traitMethodType))
+    (prefixFirst "  ${declNameText (traitMethodName m)} : " (renderTypeExpr env at 2 m.traitMethodType))
 
 renderInstanceDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Expr -> List Decl -> List String
 renderInstanceDecl env at ctxE head methods =
@@ -249,7 +258,7 @@ renderOneCtx env e = case inlineExpr env e of
 renderClause : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List Pat -> Expr -> List String
 renderClause env at lineInd name pats body =
   let
-    headerBase = "${spaces lineInd}${name}${joinSpace (map renderPatAtom pats)} ="
+    headerBase = "${spaces lineInd}${declNameText name}${joinSpace (map renderPatAtom pats)} ="
   in case body of
     ELet binds inner recFlag sp => if recFlag then
       let

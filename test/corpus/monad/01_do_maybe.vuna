@@ -1,5 +1,5 @@
 trait Monad m where
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
   pure : a -> m a
 
 data Maybe a : Type where
@@ -7,7 +7,7 @@ data Maybe a : Type where
   Just : a -> Maybe a
 
 instance Monad Maybe where
-  bind m f = case m of
+  (>>=) m f = case m of
     Nothing => Nothing
     Just x => f x
   pure x = Just x

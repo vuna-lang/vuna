@@ -14,14 +14,14 @@ export data Unit(..) : Type where
   MkUnit : Unit
 
 instance Eq Unit where
-  eq MkUnit MkUnit = True
-  neq MkUnit MkUnit = False
+  == MkUnit MkUnit = True
+  /= MkUnit MkUnit = False
 
 instance Ord Unit where
-  lt _ _ = False
-  le _ _ = True
-  gt _ _ = False
-  ge _ _ = True
+  < _ _ = False
+  <= _ _ = True
+  > _ _ = False
+  >= _ _ = True
 
 instance Show Unit where
   show MkUnit = "MkUnit"

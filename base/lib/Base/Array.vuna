@@ -33,8 +33,8 @@ make n v = arrayMake (natToInt n) v
 
 -- 经 `toList` 复用 `Eq (List a)`。
 instance Eq a => Eq (Array a) where
-  eq a b = toList a == toList b
-  neq a b = if a == b then False else True
+  == a b = toList a == toList b
+  /= a b = if a == b then False else True
 
 -- 展示为与 List 相同的 `[a, b, c]`（经 `toList` 复用 `Show (List a)`）。
 instance Show a => Show (Array a) where

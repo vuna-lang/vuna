@@ -10,17 +10,26 @@
 **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义；`` a `f` b `` 与 `f a b` 同义。
 运算符不拥有独立语义，也不存在「只有编译器能定义运算符」的第二套命名空间。
 
-比较 / 相等运算符 `==` `/=` `<` `<=` `>` `>=` 是 Eq/Ord **方法名的解析期别名**；算术
-运算符 `+` / `-` / `*` / `/` 是 `Base.Num` 方法 `add` / `sub` / `mul` / `div` 的解析期别名
-（内建四则改为不可见，codegen / interp 仍按 runtime 映射；用户实现 `Num` 配 `FromInt`
-即可重载）。
+比较 / 相等 `==` `/=` `<` `<=` `>` `>=` **就是** `Base.Eq` / `Base.Ord` 的方法名；
+算术 `+` / `-` / `*` / `/` **就是** `Base.Num` 的方法名（内建四则对用户不可见，
+codegen / interp 仍按 runtime 映射；用户实现 `Num` 配 `FromInt` 即可重载）。
+trait 方法、instance 方法与 data 构造子都可以用符号名声明。
+
+**声明位带括号，使用位裸写**：`(==) : a -> a -> Bool`、`(<+>) x y = ...`、
+`(::) : a -> List a -> List a`；使用时写中缀 `a == b`，把运算符当值/前缀应用时写
+`(==)` / `(==) a b`。fmt 以带括号为规范形式。
+
+一元负号：前缀 `-` 在数字字面量上直接成为负字面量（`-1`，`(-1)` 与 `(- 1)` 按
+`-` 与数字是否紧邻区分）；其它表达式展开成 `negate e`，`negate` 是独立的
+`Base.Neg` trait（`Int` / `Float` 有实例）。`Nat` 没有加法逆元，`-x : Nat` 是类型错误；
+`f - 1` 仍是二分减法。
 
 ## 机制（`Vuna.Compiler.Loader.Fixity`）
 
 1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`，括号收成
    `EParen`（保留分组边界）；`::` 在 pattern 里也保留符号原形。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
-   `EApp` / `EPi`；同一步完成**别名替换**（`==`→`eq`、`::`→`Cons`、`>>=`→`bind`）与
+   `EApp` / `EPi`；同一步完成**别名替换**（仅剩 `::`→`Cons` 这类库内别名）与
    **section 展开**。
 3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
@@ -39,25 +48,24 @@
 
 ## `Eq` / `Ord` 的唯一真源
 
-- 方法名是唯一真源：`Base.Eq` 的 `eq` / `neq`，`Base.Ord` 的 `lt` / `le` / `gt` / `ge`。
-  运算符只是它们的中缀写法。
+- 方法名是唯一真源：`Base.Eq` 的 `(==)` / `(/=)`，`Base.Ord` 的 `(<)` / `(<=)` /
+  `(>)` / `(>=)`。
 - `Elab` 的运算符特化按「名字是否为 Eq/Ord 类的方法投影」判定
   （`Elab.Dict.isEqMethod` / `isCmpMethod`，从类表取投影名，不硬编码模块前缀）；
-  `==` 与 `eq`、`<` 与 `lt` 走完全相同的路径。
+  投影名最后一段是运算符名（`Base.Eq.==` → `==`）；`Elab.Dict.opShortOf` 同时认
+  旧式标识符拼写（`eq` / `lt` 等），实例与派生体用哪种写法都能命中。
 - Int / String / Float 上的特化（`bi_eq_int` / `bi_eq_str` / `bi_eq_float` / `bi_*_int` /
   `bi_*_float` / `bi_*_generic`）是 **内建实例实现**，不是运算符的独立语义：它可以发生在
-  方法投影的饱和应用上，因此 `eq` / `==` / deriving 生成的比较都命中同一条规则；
+  方法投影的饱和应用上，因此手写实例、`deriving` 生成的比较都命中同一条规则；
   特化优先于字典搜索，实例体里写 `==` 不会递归。
 - 无 `Eq` 证据（具体类型无实例、`Eq` 类不在作用域）仍在 check 期报错；没有结构比较兜底。
 
 ## `Num` 的唯一真源
 
-- 方法名是唯一真源：`Base.Num` 的 `add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/`
-  只是它们的中缀别名（`Base.Num` 里声明 `infixl 6 + = add` 等）。
+- 方法名是唯一真源：`Base.Num` 的 `(+)` / `(-)` / `(*)` / `(/)`（fixity 也在该模块）。
 - `Elab` 的算术特化按「名字是否为 `Num` 类的方法投影」判定（`Elab.Dict.numMethodOpName`，
   从类表取投影名、不硬编码模块前缀），把投影映射回运算符名后复用
-  `Elab/Term/Impl.specializeArithCheck/AppFuel`；因此 `+` 与 `add` 是同一条路径，
-  实例体里写 `x + y` 不会自递归。
+  `Elab/Term/Impl.specializeArithCheck/AppFuel`；实例体里写 `x + y` 不会自递归。
 - Int / Nat / Float 的 `Num` 实现在类型模块（`Base.Int` / `Base.Nat` / `Base.Float`），
   精化器把它们特化回 `bi_*` / `nat*` 内建原语；其它类型回落到普通 trait 方法应用
   （`Num a =>` 泛型代码）。
@@ -65,9 +73,9 @@
   `1 + 2 : MyNum` 可用；期望结果类型经 hint 先解出类参数，实参字面量再按该类型 check
   （夹具 `test/corpus/traits/53_user_num`）。推断位置（没有期望类型）仍按 Int 字面量，
   与既有「字面量默认 Int」一致。
-- 终止性检查的 fuel 递减规则同时认 `-` 与 `Base.Num.sub` 投影
-  （`Elab/Termination/Measure.isSubOpName`），`fuel - 1` 的终止性证明不受别名替换影响。
-- 算术运算符来自 `Base.Num`（fixity 与别名声明都在该模块）：**不依赖 vuna-base 的包
+- 终止性检查的 fuel 递减规则认 `-` 与 `Base.Num.-` 投影
+  （`Elab/Termination/Measure.isSubOpName`）。
+- 算术运算符来自 `Base.Num`（fixity 声明在该模块）：**不依赖 vuna-base 的包
   没有这套运算符**，与 `Eq` / `Ord` 等方法一样必须在作用域里（无 base 上下文不能写
   `+ - * /`；base 包内模块则按需 `import Base.Num`）。
 
@@ -78,19 +86,20 @@
 
 | 符号 | 优先级 / 结合 | 别名 | 声明所在模块 | 说明 |
 | --- | --- | --- | --- | --- |
-| `==` | 4 左 | `eq` | `Base.Eq` | `Eq` 方法 |
-| `/=` | 4 左 | `neq` | `Base.Eq` | `Eq` 方法 |
-| `<` `<=` `>` `>=` | 4 左 | `lt` `le` `gt` `ge` | `Base.Ord` | `Ord` 方法 |
+| `==` | 4 左 | — | `Base.Eq` | `Eq` 方法（`(==)`） |
+| `/=` | 4 左 | — | `Base.Eq` | `Eq` 方法（`(/=)`） |
+| `<` `<=` `>` `>=` | 4 左 | — | `Base.Ord` | `Ord` 方法（`(<)` 等） |
 | `&&` `\|\|` | 3 / 2 左 | — | `Base.Bool` | 短路内建（不是 trait 方法） |
-| `+` `-` | 6 左 | `add` `sub` | `Base.Num` | `Num` 方法（Int/Nat/Float 实例由精化器特化回内建原语） |
-| `*` `/` | 7 左 | `mul` `div` | `Base.Num` | `Num` 方法（同上） |
+| `+` `-` | 6 左 | — | `Base.Num` | `Num` 方法（`(+)` / `(-)`；实例由精化器特化回内建原语） |
+| `*` `/` | 7 左 | — | `Base.Num` | `Num` 方法（`(*)` / `(/)`） |
 | `++` | 5 右 | — | `Base.String` | String 内建值 |
-| `::` | 5 右 | `Cons` | `Base.List` | 表达式与 pattern 都走这条声明 |
-| `>>=` | 1 右 | `bind` | `Base.Monad` | `Monad` 方法 |
-| `>>` | 1 左 | —（do 派生） | `Base.Monad` | `a >> b` ≡ `bind a (\_ -> b)`，由 Loader 展开（不是普通别名） |
+| `::` | 5 右 | `Cons` | `Base.List` | `List` 构造子（过渡期仍用别名指向 `Cons`） |
+| `>>=` | 1 右 | — | `Base.Monad` | `Monad` 方法（`(>>=)`） |
+| `>>` | 1 左 | —（do 派生） | `Base.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
 
-`>>` 不走别名表：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**的 `bind`（模块内自定义 Monad trait 时也要绑对），所以留在 Loader 的 do 派生里；`Base.Monad` 只提供它的 fixity
-声明与 `>>=` → `bind` 别名。base 包模块**不**自动注入 Prelude，因此每个模块用到的运算符
+`>>` 留在 Loader 的 do 派生里：它需要「丢弃第一个结果」的适配，且必须用**调用点可见**
+的 `>>=`（模块内自定义 Monad trait 时也要绑对）；`Base.Monad` 提供它的 fixity 声明
+以及 `(>>) : Monad m => m a -> m b -> m b` 的等价定义。base 包模块**不**自动注入 Prelude，因此每个模块用到的运算符
 必须由本模块声明或 import 闭包可见。
 
 `pure` 在 `Base.Applicative`（`Base.Monad` 重导出）；`Applicative` 的三个方法 `pure` / `ap` /
@@ -128,7 +137,7 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
 
 ## 算术运算符的特化
 
-`+ - * /` 是 `Base.Num` 方法别名；`Base.Int` / `Base.Nat` / `Base.Float` 的实例
+`+ - * /` 是 `Base.Num` 的方法；`Base.Int` / `Base.Nat` / `Base.Float` 的实例
 方法体写内建运算符，精化器按期望类型/实参类型把它们特化回内建原语：
 
 - 期望类型或两侧都是 Nat（含 Nat + 整数字面量）→ `natAdd/natSub/natMul/natDiv`，结果 Nat；
@@ -155,7 +164,7 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
   折叠（语法糖，不是运算符）。
 - **`&&` / `||`** 是短路内建（不是 trait 方法），fixity 来自 `Base.Bool` 声明。
 - **`++`** 是 String 内建值，fixity 来自 `Base.String` 声明；**`+` / `-` / `*` / `/`** 是
-  `Base.Num` 方法别名（fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / interp
+  `Base.Num` 方法（fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / interp
   的 runtime 映射（`intrinsicVisible=False`）。
 
 ## 实例落点规则

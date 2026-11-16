@@ -58,7 +58,7 @@ instance Functor (Eff r) where
   )
 
 instance Monad (Eff r) where
-  bind e k = MkEff (\u => case e of
+  >>= e k = MkEff (\u => case e of
     MkEff f => case k (f u) of
       MkEff g => g u
   )

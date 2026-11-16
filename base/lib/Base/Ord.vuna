@@ -10,32 +10,32 @@ import Base.Eq
 import Base.Hashable
 import Base.Show
 
-infixl 4 < = lt
-infixl 4 <= = le
-infixl 4 > = gt
-infixl 4 >= = ge
+infixl 4 <
+infixl 4 <=
+infixl 4 >
+infixl 4 >=
 
 -- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 由本模块的 `infixl` 声明提供。
 export trait Ord a(..) where
   -- | 严格小于。
-  lt : a -> a -> Bool
+  (<) : a -> a -> Bool
   -- | 小于或相等。
-  le : a -> a -> Bool
+  (<=) : a -> a -> Bool
   -- | 严格大于。
-  gt : a -> a -> Bool
+  (>) : a -> a -> Bool
   -- | 大于或相等。
-  ge : a -> a -> Bool
+  (>=) : a -> a -> Bool
 
 -- `Bool` 的顺序用模式匹配直接表达：`False < True`。
 instance Ord Bool where
-  lt False True = True
-  lt _ _ = False
-  le False _ = True
-  le True x = x
-  gt True False = True
-  gt _ _ = False
-  ge True _ = True
-  ge False x = x
+  < False True = True
+  < _ _ = False
+  <= False _ = True
+  <= True x = x
+  > True False = True
+  > _ _ = False
+  >= True _ = True
+  >= False x = x
 
 -- | 三值比较结果：`LT`（小于）/ `EQ`（相等）/ `GT`（大于）；顺序即 `LT < EQ < GT`。
 export data Ordering(..) : Type where
@@ -47,14 +47,14 @@ export data Ordering(..) : Type where
   GT : Ordering
 
 instance Eq Ordering where
-  eq LT LT = True
-  eq EQ EQ = True
-  eq GT GT = True
-  eq _ _ = False
-  neq a b = if a == b then False else True
+  == LT LT = True
+  == EQ EQ = True
+  == GT GT = True
+  == _ _ = False
+  /= a b = if a == b then False else True
 
 instance Ord Ordering where
-  lt a b = case a of
+  < a b = case a of
     LT => case b of
       LT => False
       EQ => True
@@ -64,9 +64,9 @@ instance Ord Ordering where
       EQ => False
       GT => True
     GT => False
-  le a b = a < b || not (b < a)
-  gt a b = b < a
-  ge a b = b <= a
+  <= a b = a < b || not (b < a)
+  > a b = b < a
+  >= a b = b <= a
 
 instance Show Ordering where
   show o = case o of

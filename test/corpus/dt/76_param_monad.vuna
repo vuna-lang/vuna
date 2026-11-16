@@ -9,7 +9,7 @@ runState st s = case st of
   MkState f => f s
 
 instance Monad (State s) where
-  bind st k = MkState (\s => case runState st s of
+  (>>=) st k = MkState (\s => case runState st s of
     MkPair a s2 => runState (k a) s2
   )
 

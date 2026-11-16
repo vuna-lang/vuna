@@ -62,12 +62,12 @@ checkBindingSigs False binds = OkC 0
 
 export checkWhereSigs : List (Pair Pat Expr) -> Check Int
 checkWhereSigs [] = OkC 0
-checkWhereSigs (bind :: rest) = case secondOf bind of
+checkWhereSigs (bnd :: rest) = case secondOf bnd of
   EAnn value ty annSp => checkWhereSigs rest
   _ =>
     let
-      name = whereBindingName (firstOf bind)
-    in tcErr2 (patSpan (firstOf bind)) (WhereNeedsSig name name) name name
+      name = whereBindingName (firstOf bnd)
+    in tcErr2 (patSpan (firstOf bnd)) (WhereNeedsSig name name) name name
 
 export whereBindingName : Pat -> String
 whereBindingName (PVar name sp) = name

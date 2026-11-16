@@ -44,7 +44,7 @@ instance Applicative EffCheck where
   liftA2 f ma mb = EffCheck (liftA2 f ma.effCheckRun mb.effCheckRun)
 
 instance Monad EffCheck where
-  bind m k = EffCheck (Base.Monad.bind m.effCheckRun (\x => (k x).effCheckRun))
+  (>>=) m k = EffCheck (m.effCheckRun >>= (\x => (k x).effCheckRun))
 
 -- | 处理 `Check (Pair a b)` 的双参数绑定（状态传递用）。
 export step : Check (Pair a b) -> (a -> b -> Check c) -> Check c

@@ -34,12 +34,18 @@ tableOfKeepOps ds = FixityTable False ds
 renameMode : FixityTable -> Bool
 renameMode (FixityTable r ds) = r
 
--- 内建运算符：`->` 是语法。它的 fixity 由编译器固定，用户不能再声明（会命中 `BuiltinFixity`）。
+-- 内建运算符：`->` 是语法，`&&` / `||` 是短路原语。fixity 由编译器固定，
+-- 用户声明会命中 `BuiltinFixity`。
 export builtinFixityDecls : List FixityDecl
-builtinFixityDecls = [FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0)]
+builtinFixityDecls =
+  [ FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0),
+    FixityDecl "&&" 3 1 Nothing (Span "" 0 0 0 0),
+    FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0)
+  ]
 
+-- 过渡期：`&&` / `||` 允许库里保留声明（下一条提交删除该声明）。
 export builtinFixityOps : List String
-builtinFixityOps = map fixityOpOf builtinFixityDecls
+builtinFixityOps = ["->"]
 
 fixityOpOf : FixityDecl -> String
 fixityOpOf d = d.fixityOp
@@ -124,7 +130,7 @@ fixityOf t c = case lookupFixity t c.chainOp of
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then if c.chainOp == ">>" then EApp (EVar "bind" sp) [lhs, ELam ["_"] rhs sp] sp
+  if renameMode t then if c.chainOp == ">>" then EApp (EVar ">>=" sp) [lhs, ELam ["_"] rhs sp] sp
   else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
   else if c.chainIsBacktick then EBacktick c.chainOp lhs rhs sp
   else EApp (EVar c.chainOp sp) [lhs, rhs] sp

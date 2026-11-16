@@ -7,10 +7,10 @@ data Box a : Type where
   MkBox : a -> Box a
 
 instance Eq a => Eq (Box a) where
-  eq x y = case x of
+  (==) x y = case x of
     MkBox p => case y of
       MkBox q => p == q
-  neq x y = if x == y then False else True
+  (/=) x y = if x == y then False else True
 
 main : String
 main = if mem (MkBox 1) [MkBox 1, MkBox 2] then "found" else "missing"

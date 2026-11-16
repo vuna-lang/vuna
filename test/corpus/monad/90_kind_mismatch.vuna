@@ -1,10 +1,10 @@
 -- 反例：Monad 的参数要求 kind * -> *，Int 是 *。
 trait Monad m where
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
   pure : a -> m a
 
 instance Monad Int where
-  bind n f = n
+  (>>=) n f = n
   pure x = x
 
 main : Int

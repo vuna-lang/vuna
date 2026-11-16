@@ -131,8 +131,8 @@ coverageWitness table fuel pending rows qs = case fuel of
       entry :: rest =>
         let
           ar = secondOf entry
-          sub = specializeCtor ar (firstOf entry) rows
-          deeper = coverageWitness table fuel2 Nothing sub (append (wilds ar) qs)
+          specialized = specializeCtor ar (firstOf entry) rows
+          deeper = coverageWitness table fuel2 Nothing specialized (append (wilds ar) qs)
         in case deeper of
           Nothing => coverageWitness table fuel2 (Just rest) rows qs
           Just w => Just (PCon (firstOf entry) (takePats ar w) emptyPatSpan :: dropPats ar w)

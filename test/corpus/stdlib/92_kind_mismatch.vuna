@@ -2,7 +2,7 @@
 import Base.Monad
 
 instance Monad Int where
-  bind n f = n
+  (>>=) n f = n
 
 main : Int
 main = 0

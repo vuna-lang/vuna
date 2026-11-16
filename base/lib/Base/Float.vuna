@@ -5,6 +5,7 @@ import Base.Eq
 import Base.List
 import Base.Maybe
 import Base.Nat
+import Base.Neg
 import Base.Num
 import Base.Ord
 import Base.Pair
@@ -22,23 +23,26 @@ instance FromFloat Float where
   fromFloat x = x
 
 instance Eq Float where
-  eq x y = x == y
-  neq x y = x /= y
+  == x y = x == y
+  /= x y = x /= y
 
 instance Ord Float where
-  lt x y = x < y
-  le x y = x <= y
-  gt x y = x > y
-  ge x y = x >= y
+  < x y = x < y
+  <= x y = x <= y
+  > x y = x > y
+  >= x y = x >= y
 
 -- 方法体写内建运算符，由精化器特化成 `bi_*_float`（`+` 是 `add` 别名，不自递归）。
 instance Num Float where
-  add x y = x + y
-  sub x y = x - y
-  mul x y = x * y
-  div x y = x / y
+  + x y = x + y
+  - x y = x - y
+  * x y = x * y
+  / x y = x / y
 
 -- `strFromFloat` 在编译期落成 `floatRender`（与 `%.12g` 对齐）；interp 直接用内建归约。
+instance Neg Float where
+  negate x = 0.0 - x
+
 instance Show Float where
   show x = strFromFloat x
 

@@ -366,7 +366,7 @@ renameExprUnless oldName newName names body =
   if memName oldName names then body else renameExpr oldName newName body
 
 renameBind : String -> String -> Pair Pat Expr -> Pair Pat Expr
-renameBind oldName newName bind = Pair (firstOf bind) (renameExpr oldName newName (secondOf bind))
+renameBind oldName newName bnd = Pair (firstOf bnd) (renameExpr oldName newName (secondOf bnd))
 
 renameFieldValue : String -> String -> Pair String Expr -> Pair String Expr
 renameFieldValue oldName newName field =

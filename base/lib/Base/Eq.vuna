@@ -5,23 +5,23 @@ module Base.Eq where
 
 import Base.Bool
 
-infixl 4 == = eq
-infixl 4 /= = neq
+infixl 4 ==
+infixl 4 /=
 
 -- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 与别名映射由本模块的 `infixl` 声明提供。
 export trait Eq a(..) where
   -- | 相等判定：`eq x y` 为真当且仅当两者表示同一个值。
-  eq : a -> a -> Bool
+  (==) : a -> a -> Bool
   -- | 不等判定；实例应保证 `neq x y` 与 `eq x y` 取反一致。
-  neq : a -> a -> Bool
+  (/=) : a -> a -> Bool
 
 -- `Bool` 的相等用模式匹配直接表达（不依赖 `==` / `eq`，避免实例体自引用）。
 instance Eq Bool where
-  eq True True = True
-  eq True False = False
-  eq False True = False
-  eq False False = True
-  neq True True = False
-  neq True False = True
-  neq False True = True
-  neq False False = False
+  == True True = True
+  == True False = False
+  == False True = False
+  == False False = True
+  /= True True = False
+  /= True False = True
+  /= False True = True
+  /= False False = False

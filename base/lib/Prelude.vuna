@@ -18,6 +18,7 @@ export import Base.FromString
 export import Base.Hashable
 export import Base.List
 export import Base.Monoid
+export import Base.Neg
 -- 算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Num。
 export import Base.Num
 export import Base.Maybe

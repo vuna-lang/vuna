@@ -18,7 +18,7 @@ instance Functor (Reader e) where
   fmap f r = Reader (\e => f (r.readerRun e))
 
 instance Monad (Reader e) where
-  bind r k = Reader (\e => (k (r.readerRun e)).readerRun e)
+  >>= r k = Reader (\e => (k (r.readerRun e)).readerRun e)
 
 instance Applicative (Reader e) where
   pure a = Reader (\e => a)

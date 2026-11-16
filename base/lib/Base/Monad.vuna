@@ -8,10 +8,14 @@ export import Base.Applicative
 -- `>>=` 是 `bind` 的别名；`>>` 的 fixity 也在这里，但**不**是普通别名——`a >> b` 由 Loader
 -- 按 do 派生展开成 `bind a (\_ -> b)`（丢弃结果需要调用点可见的 `bind`，写成全局特化函数会
 -- 在模块内自定义 Monad trait 时绑错）。fixity 与别名映射的唯一来源是这两条声明。
-infixr 1 >>= = bind
+infixr 1 >>=
 infixl 1 >>
 
 -- | Monad trait：`bind : m a -> (a -> m b) -> m b`。方法名固定（`Monad.bind`），`do` 在 Loader 里 desugar 成它；父类是 `Applicative`，`pure` / `fmap` 由父类字典提供。
 export trait Applicative m => Monad m(..) where
   -- | 把一个 `m a` 动作的结果喂给后续计算 `a -> m b`，前后动作按顺序衔接。
-  bind : m a -> (a -> m b) -> m b
+  (>>=) : m a -> (a -> m b) -> m b
+
+-- | 丢弃第一个结果：`a >> b` 等价于 `a >>= \_ => b`。
+export >> : Monad m => m a -> m b -> m b
+>> a b = a >>= \_ => b

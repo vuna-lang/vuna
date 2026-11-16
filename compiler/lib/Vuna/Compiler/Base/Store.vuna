@@ -170,8 +170,8 @@ storeDataRootEff =
 
 -- | 在非空基址下拼固定子路径；没有基址（`Nothing`）仍给 `Nothing`。
 dirUnder : String -> Maybe String -> Maybe String
-dirUnder sub (Just base) = Just "${base}/${sub}"
-dirUnder sub Nothing = Nothing
+dirUnder suffix (Just base) = Just "${base}/${suffix}"
+dirUnder suffix Nothing = Nothing
 
 -- | `HOME` 可用（非空、且不是 Nix 构建沙箱的 `/homeless-shelter`）时的存储根。
 -- 沙箱里那条路径不可写，会让构建在第一次写对象时崩掉，所以这里直接不给候选。

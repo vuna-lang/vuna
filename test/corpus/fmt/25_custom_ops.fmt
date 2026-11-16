@@ -5,8 +5,8 @@ import Base.Int
 -- 自定义运算符：声明 + 符号名函数定义 + 中缀/前缀两种使用。
 infixl 6 <+>
 
-<+> : Int -> Int -> Int
-<+> a b = a + b
+(<+>) : Int -> Int -> Int
+(<+>) a b = a + b
 
 combine : Int
 combine = 1 <+> 2 <+> 3
