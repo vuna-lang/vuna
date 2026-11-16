@@ -59,9 +59,10 @@ record LintOpts where
   lintOptSelect : List String
   lintOptIgnore : List String
   lintOptMaxWarnings : Maybe Int
+  lintOptNoCache : Bool
 
 defaultLintOpts : LintOpts
-defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing
+defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing False
 
 -- | 单个文件的结果。
 record FileOutcome where
@@ -247,17 +248,21 @@ lintOne opts env path = do
               env2 = firstOf looked
             in case secondOf looked of
               ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
-              OkC programFixities => case lintSourceWithConfig cfg programFixities source of
-                ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
-                OkC findings => do
-                  fixedR <-
-                    if opts.lintOptFix then fixFileWith opts cfg path programFixities source findings
-                    else pure (OkC (Pair findings 0))
-                  pure (case fixedR of
-                    ErrC e => Pair env2 (FileOutcome path [] 0 (Just (diagText e)))
-                    OkC (Pair remaining fixed) =>
-                      Pair env2 (FileOutcome path remaining fixed Nothing)
-                  )
+              OkC programFixities => do
+                linted <-
+                  if opts.lintOptFix || opts.lintOptNoCache then pure (lintSourceWithConfig cfg programFixities source)
+                  else lintSourceWithCache cfg programFixities source
+                case linted of
+                  ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
+                  OkC findings => do
+                    fixedR <-
+                      if opts.lintOptFix then fixFileWith opts cfg path programFixities source findings
+                      else pure (OkC (Pair findings 0))
+                    pure (case fixedR of
+                      ErrC e => Pair env2 (FileOutcome path [] 0 (Just (diagText e)))
+                      OkC (Pair remaining fixed) =>
+                        Pair env2 (FileOutcome path remaining fixed Nothing)
+                    )
 
 -- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
 fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
@@ -472,7 +477,7 @@ parseLintOpts parsed = case formatOf (flagValue parsed "format") of
       Just maxPasses =>
         if maxPasses <= 0 then Nothing
         else Just
-          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings))
+          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache"))
 
 formatOf : Maybe String -> Maybe LintFormat
 formatOf Nothing = Just LintText
@@ -487,7 +492,7 @@ intOf (Just s) d = parseIntArg s
 
 -- | `vuna lint` 的入口。
 export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
+runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", BoolFlag "no-cache", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
   ErrC e => do
     _ <- consoleEprint "error: ${diagText e}\n"
     pure 2
