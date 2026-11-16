@@ -139,6 +139,7 @@ Vuna_dCompiler_dLowering_dEnv.ml
 Vuna_dCompiler_dLowering_dProgram.ml
 Vuna_dCompiler_dLowering_dTy.ml
 Vuna_dCompiler_dNative_dAbi.ml
+Vuna_dCompiler_dNative_dAudit.ml
 Vuna_dCompiler_dNative_dModel.ml
 Vuna_dCompiler_dNative_dModule.ml
 Vuna_dCompiler_dNative_dRender.ml

@@ -54,13 +54,19 @@ let v_Vuna_dCompiler_dNative_dAbi_dnativeFuncLabel = (fun name -> ("vuna_" ^ (v_
 let v_Vuna_dCompiler_dNative_dAbi_dnativeRtLabel = (fun name -> ("rt_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
 # 114 "Vuna/Compiler/Native/Abi.vuna"
+let v_Vuna_dCompiler_dNative_dAbi_dnativeGlobalValueLabel = (fun name -> ("vuna_gv_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
+
+# 118 "Vuna/Compiler/Native/Abi.vuna"
+let v_Vuna_dCompiler_dNative_dAbi_dnativeRtValueLabel = (fun sym -> ("rt_gv_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName sym)))
+
+# 122 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeEntryLabel = "_start"
 
-# 119 "Vuna/Compiler/Native/Abi.vuna"
+# 127 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeJumpLabel = (fun n -> (".L" ^ (bi_strFromInt n)))
 
-# 123 "Vuna/Compiler/Native/Abi.vuna"
+# 131 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeDataLabel = (fun name -> ("rt_data_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))
 
-# 127 "Vuna/Compiler/Native/Abi.vuna"
+# 135 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeStrLitLabel = (fun n -> ("rt_lit_" ^ (bi_strFromInt n)))
