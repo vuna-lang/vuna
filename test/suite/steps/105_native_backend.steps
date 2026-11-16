@@ -199,3 +199,9 @@ exit: 0
 run: sh -c 'VUNA_TEST_ENV=hello "$TMPDIR/hostargs-out/bin/hostargs" one two 2>&1'
 exit: 0
 out-equals: 10
+
+# 9p) bracket/finally：cleanup 登记表 push/pop（正常路径；abort 不运行，与 wasm 同边界）。
+run: sh -c 'd="$TMPDIR/bracket"; mkdir -p "$d/app"; printf "[package]\nname = \"bracket\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Int\n\nmain : Int\nmain = runPure (bracket (pure 7) (\\\\_ => pure 0) (\\\\r => pure (r * 6)))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/bracket-out" "$d"'
+exit: 0
+run: "$TMPDIR/bracket-out/bin/bracket" 2>&1
+out-equals: 42

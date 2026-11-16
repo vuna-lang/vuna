@@ -102,6 +102,10 @@ tsLabel = "rt_ts"
 export termiosLabel : String
 termiosLabel = "rt_termios"
 
+-- | `bracket` / `finally` 的 cleanup 登记表（LIFO 链表头；`prim_cleanupPush/Pop` 维护）。
+export cleanupHeadLabel : String
+cleanupHeadLabel = "rt_cleanups"
+
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）→ 进程入参 → 宿主槽。
 export nativeBss : List NativeBss
 nativeBss =
@@ -120,7 +124,8 @@ nativeBss =
     NativeBss hostStatusLabel 8 8,
     NativeBss pathBufLabel 4096 8,
     NativeBss tsLabel 16 8,
-    NativeBss termiosLabel 64 8
+    NativeBss termiosLabel 64 8,
+    NativeBss cleanupHeadLabel 8 8
   ]
 
 -- ---------------------------------------------------------------
@@ -819,6 +824,19 @@ isTtyFn =
 hostStatusFn : NativeFunc
 hostStatusFn = rtFunc "host_status_get" 0 [IMov (OpReg Rax) (OpRip hostStatusLabel)]
 
+-- | `prim_cleanupPush f`：把 thunk 压进 LIFO（节点 `[closure][next]`），返回 0。
+--   只有正常路径会 pop；abort 路径不运行登记表（与 wasm / [debt.md] D42 的边界一致）。
+cleanupPushFn : NativeFunc
+cleanupPushFn =
+  rtFunc "cleanup_push" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 16), ICall (nativeRtLabel "alloc"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpRip cleanupHeadLabel), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpRip cleanupHeadLabel) (OpReg Rax), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `prim_cleanupPop _`：弹出栈顶（空栈无操作），返回 0。
+cleanupPopFn : NativeFunc
+cleanupPopFn =
+  rtFunc "cleanup_pop" 0
+    [IMov (OpReg Rax) (OpRip cleanupHeadLabel), ITest Rax Rax, IJcc "jz" ".Lrt_cpop_done", IMov (OpReg Rax) (OpMem Rax 8), IMov (OpRip cleanupHeadLabel) (OpReg Rax), ILabel ".Lrt_cpop_done", IMov (OpReg Rax) (OpImm 0)]
+
 -- ---------------------------------------------------------------
 -- 函数表与 IR 符号映射
 -- ---------------------------------------------------------------
@@ -898,6 +916,8 @@ nativeRtFuncs =
     sleepUsFn,
     isTtyFn,
     hostStatusFn,
+    cleanupPushFn,
+    cleanupPopFn,
     trapImpossibleFn,
     trapDivZeroFn,
     trapArrayOobFn,
@@ -1046,6 +1066,8 @@ nativeRtTarget "prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
 nativeRtTarget "@vuna@prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
 nativeRtTarget "@vuna@host@isTty" = Just (nativeRtLabel "is_tty")
 nativeRtTarget "@vuna@prim_eff_hostStatus" = Just (nativeRtLabel "host_status_get")
+nativeRtTarget "prim_cleanupPush" = Just (nativeRtLabel "cleanup_push")
+nativeRtTarget "prim_cleanupPop" = Just (nativeRtLabel "cleanup_pop")
 nativeRtTarget "floatFromInt" = Just (nativeRtLabel "float_from_int")
 nativeRtTarget "intFromFloat" = Just (nativeRtLabel "int_from_float")
 nativeRtTarget "floatAbs" = Just (nativeRtLabel "float_abs")
@@ -1172,6 +1194,8 @@ nativeRtValueArity "@vuna@prim_eff_sleep" = 1
 nativeRtValueArity "prim_eff_sleep_host" = 1
 nativeRtValueArity "@vuna@prim_eff_sleep_host" = 1
 nativeRtValueArity "@vuna@host@sleep" = 1
+nativeRtValueArity "prim_cleanupPush" = 1
+nativeRtValueArity "prim_cleanupPop" = 1
 nativeRtValueArity "@vuna@obs@span" = 3
 nativeRtValueArity "@vuna@obs@spanLab" = 4
 nativeRtValueArity _ = 0
