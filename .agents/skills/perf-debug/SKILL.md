@@ -42,7 +42,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    `nix build .#vuna --out-link result`，再 `./result/bin/vuna check base`（~0.4 s）确认可用。
    构建时间（缓存命中 ~10–15 s）不算进任何读数。
 2. **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
-   `export VUNA_STORE="$root/.local/store"` 且已预热；换新 `TMPDIR` 对命中率**没有影响**
+   使用默认根 `~/.vuna/store`（单一根，多 worktree 共享）且已预热；换新 `TMPDIR` 对命中率**没有影响**
    （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。真冷写法：
    ```console
    d=$(mktemp -d /tmp/vp.XXXX); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna check compiler
@@ -196,9 +196,8 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 - **签名/告警不变式的验收方式**：这类「只改容器不改语义」的优化，除了增长率表，还要
   用 `check --warnings` 对比旧/新二进制的**逐字节输出**，以及整仓
   `build --no-compile` 的 `diff -r`（本轮的四处改动两者都通过）。
-- `nix run .#vuna-run-tests` 默认用**主仓 `.local/store`**（`run-tests.nix` 里
-  `VUNA_STORE=${VUNA_STORE:-$repo/.local/store}`）；副 worktree 里跑它会把主仓的 store
-  路径带进来，容易得出「看起来失败」的读数。要在副 worktree 干净验证就直接
+- `nix run .#vuna-run-tests` 默认用**测试专用根** `~/.vuna/test-store`（suite 会故意截断
+  store 里的对象，不能与开发缓存共用）。要量冷读数就直接
   `VUNA_STORE=$(mktemp -d) ./result/bin/vuna test --suite test/suite.toml`。
 
 ## 反模式
@@ -206,7 +205,8 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 - 全量 15/40/60 分钟「看它能不能完」：没读数、没定位，只是把超时当时钟。
 - 只报一次「现在快/慢了」而不报增长率表：无法区分噪声、复杂度回退与规模差异。
 - **在 devShell 里不隔离 `VUNA_STORE` 就量冷基准**：量到的是热路径（§0 第 2/4 条）。
-- **只换 `TMPDIR` 就以为换了冷热**；或不给 `VUNA_STORE` 让 store 落到 `~/.vuna/store`。
+- **只换 `TMPDIR` 就以为换了冷热**；或量「冷」时忘了显式给一个空 `VUNA_STORE`
+  （默认根 `~/.vuna/store` 是热的，那量到的是热路径）。
 - **跨窗口比 clean vs debug 的墙钟**：负载比开关更响（§0 第 5 条）。
 - 用过期 `./result/bin/vuna` 的自检失败反推「源码坏了」：先重建二进制。
 - **拿「与规模无关」的读数当门槛通过**：探针失效（全命中/走错路径）时每档都一样快，

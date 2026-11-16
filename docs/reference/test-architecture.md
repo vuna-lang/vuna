@@ -17,7 +17,7 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
 ## 2. 形态：Test-as-Store-Client
 
 ```text
-                    .local/store（唯一根；VUNA_STORE 可覆盖）
+                    ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
    objects/iface|header|lex|order|check|tool|test|pkgiface|splitptr
    blobs/<splitIdentity>   units/<pkg>   views/bin/<splitIn>   roots/<project>/<digest>
                               ▲
@@ -33,7 +33,7 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
 
 ### 2.1 共享规则
 
-1. **一次 run 一个 store root**：默认项目内 `.local/store`（`nix develop` 的 shellHook、
+1. **一次 run 一个 store root**：默认 `~/.vuna/test-store`（测试专用，不与开发缓存共用；`nix run .#vuna-run-tests` 导出，
    `nix run .#vuna-run-tests`、CI check 各自导出；`VUNA_STORE` 可覆盖）。父进程解析一次，
    所有 worker/case 继承同一路径。
 2. **父进程只预热一次**：`vuna check base`（需要时 `check .`）；worker 不各自 warmup。

@@ -36,14 +36,11 @@ let
       devShells = {
         default = pkgs.mkShell {
           packages = e2eTools ++ [ packages.vuna-seed ];
+          # 单一 store 根：不再按 worktree 分 `.local/store`（默认 `~/.vuna/store`）。
+          # 测试用独立根（`nix/build/run-tests.nix`），因为 suite 会故意破坏对象。
           shellHook = ''
-            root=$PWD
-            while [ "$root" != "/" ] && [ ! -f "$root/test/suite.toml" ]; do
-              root=$(dirname "$root")
-            done
-            export VUNA_STORE="''${VUNA_STORE:-$root/.local/store}"
-            mkdir -p "$VUNA_STORE"
-            echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=$VUNA_STORE）"
+            export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
+            echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=''${VUNA_STORE:-默认根 ~/.vuna/store}；VUNA_OCAML_ID=$VUNA_OCAML_ID）"
           '';
         };
 

@@ -462,13 +462,15 @@ hashRootsGo acc (d :: rest) = do
   h <- hashFilesContent files
   hashRootsGo (acc * 1000003 + h) rest
 
-testBinDigest : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> String -> Eff r String
+testBinDigest : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
 testBinDigest ctx path = do
   fp <- toolCompilerFingerprint
   src <- fsReadFile path
   rootsHash <- hashRoots (map (\r => rootDir r) (contextRoots ctx))
+  tool <- toolchainIdEff
   let
-    input = "testbin 3|${strOfInt fp}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}"
+    input =
+      "testbin 4|${strOfInt fp}|${strOfInt rootsHash}|${strOfInt (absInt (textHashOf src))}|${tool}"
   in pure (strOfInt (absInt (textHashOf input)))
 
 runCachedTestBin : Member nProcess ProcessOp r => String -> Int -> Eff r TestOutcome
@@ -501,7 +503,8 @@ runIOTestTimed ctx path name secs = do
   -- 与 bin 视图同口径：testbin 也登记进项目 roots，否则宽限期后会被 store gc 整目录淘汰
   -- （淘汰只影响命中率，但每次重编测试二进制是可见成本）。
   pid <- projectIdOf ctx
-  _ <- storeRootAppendEff pid [digest]
+  proj <- absolutePath (contextDir ctx)
+  _ <- storeRootAppendEff pid proj [digest]
   view <- storeViewPathEff testBinKind digest
   cached <- storeViewValidEff testBinKind digest
   if cached then runCachedTestBin view secs

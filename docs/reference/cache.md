@@ -31,9 +31,10 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
   units/<包哈希>/e-<h>-<h>/         # split-unit 缓存（按声明摘要命中）
-  views/bin/<splitIn>/              # 构建视图（产物真身，含 .complete）
-views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
+  views/bin/<视图摘要>/             # 构建视图（产物真身，含 .complete；key = splitIn + 链接工具链）
+  views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，含 .complete）
   pkgs/<64hex>/                     # 包物化视图（可删可重建）
+  roots/<项目摘要>/.project         # 项目绝对目录（GC 据此清理已消失的项目根）
   roots/<项目摘要>/<digest>         # 该项目的保留集合（每个 digest 一个文件，GC 用）
   .tmp/                             # 视图锁与暂存（可删）
   tmp/                              # 取包中转（可删）
@@ -94,6 +95,26 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 后果：改 `lib/`（工具链）不换编译器身份，不脏编译器缓存；改 `compiler/` 才换代；同一份编译器
 源码在任意 worktree / 目录构建得到同一身份；重建同源也不再换代。
 
+## 单一 store 根
+
+对象库是**用户级单一根**（默认 `~/.vuna/store`，`VUNA_STORE` 可覆盖），不按 worktree 分。
+多 worktree / 多进程共用一个根是设计内用法：
+
+- 视图、对象、roots 全部按输入摘要寻址 → 另一目录 / 另一 worktree 的同一份输入直接命中；
+  实测同一编译器身份下换目录 `check .` ~82 ms、`build .` ~0.6 s（冷态分别 ~49 s / ~28 s）；
+- 并发安全由既有机制承担：views 用 `mkdir` 锁串行、roots 只追加、units 只在桶内清理；
+- 代价：`vuna clean --store` / `vuna store gc` 是**全局操作**，任一 worktree 执行都会影响
+  所有使用者（只影响命中率，不影响正确性）。不要在别人构建时跑 `clean --store`。
+
+必须隔离的四类（理由都不是权限，而是判据/口径）：
+
+| 场景 | 根 | 为什么 |
+| --- | --- | --- |
+| seed rotation 两遍 | 各自全新的临时根 | 共享缓存会让 runtime 位置表路径归一不同、fixed point 假失败 |
+| growth / bench 探针 | 每档空根 | 预热根会把读数磨平 |
+| suite（`vuna-run-tests`） | `~/.vuna/test-store` | `52_cache_framing` 会故意截断 blob/lex 对象；共用会打回所有开发缓存 |
+| nix 沙箱（checks / packages） | `$TMPDIR` | 宿主 store 不可见，`HOME=/homeless-shelter` 天然回落 |
+
 ## 哈希命名（定稿）
 
 | 名称 | 输入面 | 角色 |
@@ -116,13 +137,15 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 
 ## roots 与 GC
 
-- 每个项目一个目录 `roots/<项目摘要>/`，每个受保护 digest 一个空文件（项目 = 规范化绝对
-  包目录的摘要）。项目**只追加**；没有读-改-写，并发 check/build 不会丢 root。
-  GC 扫所有项目目录里文件名的并集——A 不需要知道 B 的存在。读取侧也接受单文件布局
-  （`roots/<项目>` 是文件时先读 digest 列表），所以 stage0 / stage1 两种布局能平滑接上。
+- 每个项目一个目录 `roots/<项目摘要>/`：`<digest>` 空文件（项目 = 规范化绝对包目录的
+  摘要）+ 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**；没有读-改-写，并发
+  check/build 不会丢 root。GC 扫所有项目目录里 digest 文件名的并集——A 不需要知道 B
+  的存在。读取侧也接受单文件布局（`roots/<项目>` 是文件时先读 digest 列表）。
 - 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna fetch` 取到包后、
   test verdict 提交后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
+  - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
+    布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉。它只缩小保留集，不影响正确性。
   - 候选 = 缓存族里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
     root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（包对象族归 `clean --packages`）；
   - `views/bin/` 与 `views/testbin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
@@ -194,6 +217,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 | 依赖身份 | 依赖方只消费 `pkgIfaceHash`；依赖未重跑不假命中 | `79_dep_identity`（注释 / 透明体 / opaque / 冷热 store / build 快指针） |
 | 产物身份 | `pkgImplHash` + 布局；注释/行移动/opaque/abstract 的边界 | `80_code_identity`（本包 + 跨包 q 的 splitptr） |
 | 包身份 | `identityHash` 进 manifest/registry/pin/fetch/check | `67` / `68` / `69` / `81` / `64_infra` |
+| 单一根 | 换目录/换 worktree 同一输入直接命中；项目根可裁剪；默认根 = `~/.vuna/store`；视图 key 含链接工具链 | `76_store_shared` |
 
 ## 已知边界
 
@@ -212,4 +236,5 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   缺失处理（回退全量，不产错序）。
 - `VUNA_ELAB_FULL=1` 强制全量精化（排障 / A-B 对拍）；`VUNA_IFACE_AUDIT=1` 在同一进程跑
   摘要与全量两条路径并逐字节比较诊断与产物；`VUNA_COMPILER_TAG=<tag>` 覆盖编译器身份
-  （排障 / 锁「身份进地址」的测试；正常构建不要设置）。
+  （排障 / 锁「身份进地址」的测试；正常构建不要设置）；`VUNA_OCAML_ID=<id>` 覆盖链接工具链
+  身份（`views/bin` key 的一段；devShell 与测试 runner 会自动注入，手工构建时一般不用设）。

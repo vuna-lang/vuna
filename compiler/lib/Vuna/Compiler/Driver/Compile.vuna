@@ -1634,10 +1634,13 @@ projectIdOf ctx = do
   pure (projectIdAddrOf abs)
 
 -- | 把摘要追加进本项目 roots（GC 的保留集合）。失败不影响正确性（删了只是重算）。
+-- 同时记录项目的绝对目录：GC 按它清理「目录已不存在」的项目根（统一 store 下
+-- 临时目录 / 已删除的 worktree 不会永久钉住对象）。
 rootKeepEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Int
 rootKeepEff ctx digests = do
   pid <- projectIdOf ctx
-  storeRootAppendEff pid digests
+  abs <- absolutePath (contextDir ctx)
+  storeRootAppendEff pid abs digests
 
 -- 包级 check 判定：**输入寻址对象的「存在性」**。
 --
@@ -2281,12 +2284,35 @@ splitIdentityOf ctx printResult tag modules =
   in addrOf
     ["split-identity", splitNodeSchema, pkg, pr, pkgIfaceHashOfModules pkg modules, pkgImplHashOfModules pkg modules, layoutDigestOf ctx modules, tag]
 
--- | build 视图的地址：与 split 判定同一个输入摘要。默认输出目录就是
+-- | 链接工具链身份：视图里放的是**链接产物**，它由生成的 .ml 与链接工具链共同决定。
+-- `views/bin` 的 key 因此 = 产物输入摘要 + 工具链身份；统一 store 下不会把别的工具链
+-- 链出来的二进制当成同一次构建。优先 `VUNA_OCAML_ID`（构建图注入，免一次子进程），
+-- 否则现跑 `ocamlopt -version`（只发生在 `build` 路径，`check` / `--no-compile` 不付）。
+-- 取不到 ⇒ `none`（仍可构建，只是不同工具链的视图不区分）。
+export toolchainIdEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
+toolchainIdEff = do
+  override <- envGetEnv "VUNA_OCAML_ID"
+  if override /= "" then pure override
+  else do
+    base <- cacheBase
+    _ <- storeEnsureDirEff "${base}/.tmp"
+    let
+      path = "${base}/.tmp/ocamlopt-version"
+    in do
+      _ <- processRunIn "." ["sh", "-c", "ocamlopt -version > \"${path}\" 2>/dev/null || true"]
+      exists <- fsFileExists path
+      if exists then do
+        text <- fsReadFile path
+        pure (if trim text == "" then "none" else trim text)
+      else pure "none"
+
+-- | build 视图的地址：产物输入摘要 + 链接工具链身份。默认输出目录就是
 -- `$VUNA_STORE/views/bin/<该摘要>`，`.output` 只是指向它的符号链接。
 export buildViewAddrOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r String
 buildViewAddrOf ctx entry printResult = do
   mods <- splitModsOf ctx entry printResult
-  pure (splitInOf mods)
+  tool <- toolchainIdEff
+  pure (addrOf ["view-bin", splitInOf mods, tool])
 
 -- | check 的判定摘要：四个输入摘要 + 包 + kind。存在即「判过」。
 checkInOf : CheckMods -> String

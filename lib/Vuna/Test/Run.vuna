@@ -794,7 +794,7 @@ writeCached env c r = do
   if key == "" || r.resStatus /= "pass" then pure 0
   else do
     _ <- storeObjectWriteEff "test" testVerdictCodec key "${strOfInt r.resChecks}\n"
-    storeRootAppendEff (testProjectId env) [key]
+    storeRootAppendEff (testProjectId env) env.envRoot [key]
 
 runCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> Eff r CaseResult
 runCase env c = do

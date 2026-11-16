@@ -46,27 +46,27 @@ export fetchAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv Env
 fetchAt dir locked = do
   abs <- absolutePath dir
   root <- Vuna.PackageStore.storeRootEff
-  fetchAll fetchFuel root (projectIdAddrOf abs) locked [abs] []
+  fetchAll fetchFuel root (projectIdAddrOf abs) abs locked [abs] []
 
 -- 依赖图的**访问预算**（不是语义深度限制）：`visited` 已防环，这里只挡失控/恶意图。
 -- 正常包图远小于此；超了说明输入不是有限 DAG，报可读错误而不是静默截断。
 fetchFuel : Int
 fetchFuel = 4096
 
-fetchAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> String -> String -> Bool -> List String -> List String -> Eff r Int
-fetchAll fuel root pid locked [] visited = pure 0
-fetchAll fuel root pid locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
+fetchAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> String -> String -> String -> Bool -> List String -> List String -> Eff r Int
+fetchAll fuel root pid proj locked [] visited = pure 0
+fetchAll fuel root pid proj locked (dir :: rest) visited = if fuel <= 0 then fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
 else if memName dir visited then do
   _ <- consolePrint "fetch: ${dir} (cycle skipped)\n"
-  fetchAll (fuel - 1) root pid locked rest visited
+  fetchAll (fuel - 1) root pid proj locked rest visited
 else do
-  mdirs <- dirsOfPackage root pid locked dir
+  mdirs <- dirsOfPackage root pid proj locked dir
   case mdirs of
     Nothing => pure 1
-    Just dirs => fetchAll (fuel - 1) root pid locked (append dirs rest) (dir :: visited)
+    Just dirs => fetchAll (fuel - 1) root pid proj locked (append dirs rest) (dir :: visited)
 
-dirsOfPackage : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> String -> Eff r (Maybe (List String))
-dirsOfPackage root pid locked dir = do
+dirsOfPackage : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> Eff r (Maybe (List String))
+dirsOfPackage root pid proj locked dir = do
   let
     manifestPath = "${dir}/vuna.toml"
   in do
@@ -81,25 +81,25 @@ dirsOfPackage root pid locked dir = do
           ErrC e => do
             _ <- printDiagEff e
             pure Nothing
-          OkC valid => dirsOfDeps root pid locked dir valid.manifestDependencies
+          OkC valid => dirsOfDeps root pid proj locked dir valid.manifestDependencies
     else do
       _ <- fetchFailText "missing vuna.toml in ${dir}"
       pure Nothing
 
-dirsOfDeps : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> String -> List Dependency -> Eff r (Maybe (List String))
-dirsOfDeps root pid locked baseDir [] = pure (Just [])
-dirsOfDeps root pid locked baseDir (dep :: rest) = do
-  here <- dirOfDep root pid locked baseDir dep
+dirsOfDeps : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> List Dependency -> Eff r (Maybe (List String))
+dirsOfDeps root pid proj locked baseDir [] = pure (Just [])
+dirsOfDeps root pid proj locked baseDir (dep :: rest) = do
+  here <- dirOfDep root pid proj locked baseDir dep
   case here of
     Nothing => pure Nothing
     Just d => do
-      there <- dirsOfDeps root pid locked baseDir rest
+      there <- dirsOfDeps root pid proj locked baseDir rest
       case there of
         Nothing => pure Nothing
         Just ds => pure (Just (d :: ds))
 
-dirOfDep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> String -> Dependency -> Eff r (Maybe String)
-dirOfDep root pid locked baseDir dep = case depSourceOf dep of
+dirOfDep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> Dependency -> Eff r (Maybe String)
+dirOfDep root pid proj locked baseDir dep = case depSourceOf dep of
   DepPath rel => do
     abs <- absolutePath (joinPath baseDir rel)
     let
@@ -136,7 +136,7 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
           ok <- verifyMaterializedIdentityEff root dep digest
           if ok then do
             _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-            _ <- storeRootAppendEff pid [digest]
+            _ <- storeRootAppendEff pid proj [digest]
             pure (Just (materializedDir root digest))
           else pure Nothing
         else if locked then do
@@ -147,7 +147,7 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
           case stored of
             Nothing => pure Nothing
             Just got => do
-              _ <- storeRootAppendEff pid [got]
+              _ <- storeRootAppendEff pid proj [got]
               pure (Just (materializedDir root got))
   DepUrl u => case depHashOf dep of
     Nothing => do
@@ -162,7 +162,7 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
           ok <- verifyMaterializedIdentityEff root dep digest
           if ok then do
             _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-            _ <- storeRootAppendEff pid [digest]
+            _ <- storeRootAppendEff pid proj [digest]
             pure (Just (materializedDir root digest))
           else pure Nothing
         else if locked then do
@@ -173,7 +173,7 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
           case stored of
             Nothing => pure Nothing
             Just got => do
-              _ <- storeRootAppendEff pid [got]
+              _ <- storeRootAppendEff pid proj [got]
               pure (Just (materializedDir root got))
 
 identityOkOf : Dependency -> PackageSource -> Bool

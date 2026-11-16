@@ -11,7 +11,7 @@
 进程；`vuna build` 读数**包含** `build.sh` 按直接依赖分层的层内并行，`check` / `compile`
 读数不含编译并行——workspace check 的成员并行见下文；读数随机器与版本变化）。
 
-下表是**热 store** 口径（`.local/store` 已预热，即日常迭代实际感知的耗时）；**空
+下表是**热 store** 口径（默认根 `~/.vuna/store` 已预热，即日常迭代实际感知的耗时）；**空
 `VUNA_STORE` 的冷读数差一个数量级，见紧接着的小节**。当前读数（已含本节末尾的四处
 修复）：
 
@@ -39,7 +39,7 @@
 
 ### 冷 / 热必须分开报
 
-§1 的「典型值」是**热 store** 口径（`.local/store` 已预热），同一源码在**空
+§1 的「典型值」是**热 store** 口径（默认根 `~/.vuna/store` 已预热），同一源码在**空
 `VUNA_STORE`** 上会差一个数量级。同机（16 核，`nix build .#vuna` 产物，单进程，
 无 `--debug-perf`、`VUNA_OBS=0`）：
 
@@ -397,7 +397,7 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
   共用同一探针目录，`vuna.toml` 被覆盖成「整编译器」的 export 列表，读数整体作废，而且
   看起来像「固定 45s 的神秘成本」。
 - **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
-  `export VUNA_STORE="$root/.local/store"`（已预热）；换新 `TMPDIR` 对命中率没有影响
+  不再按 worktree 分 store（统一到默认根 `~/.vuna/store`，已预热）；换新 `TMPDIR` 对命中率没有影响
   （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。要冷就显式给空目录：
   `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。
   `VUNA_STORE` 未设/空串会回退 `~/.vuna/store`（回退链见 `Store.storeDataRootEff`），

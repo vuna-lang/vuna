@@ -261,7 +261,6 @@ runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueF
   ErrC e => cleanError (diagText e)
   OkC parsed => do
     root <- storeRootReadyEff
-    keep <- allRootDigests
     let
       dry = flagSet parsed "dry-run"
       graceSec = case lookupPair "older-than" parsed.valuesOf of
@@ -271,6 +270,12 @@ runStoreGc args = case parseToolArgs "vuna store gc" [BoolFlag "dry-run", ValueF
         Just v => strToIntOr v 0
         Nothing => 0
     in do
+      pruned <- pruneProjectRoots dry
+      _ <-
+        if pruned == 0 then pure 0
+        else fmap natToInt
+          (consolePrint "store-gc: ${storeVerb dry} ${strFromInt pruned} dead project root(s)\n")
+      keep <- allRootDigests
       gcSweep root keep graceSec maxBytes dry
 
 -- 十进制整数解析：只接受纯数字（`--older-than` / `--max-size` 都是非负整数）。
@@ -300,6 +305,32 @@ readNatFuel fuel pos s acc = if fuel <= 0 then Just acc
 else case digitOf (substring (Base.Nat.fromInt pos) (Base.Nat.fromInt 1) s) of
   Nothing => Nothing
   Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
+
+-- 项目根裁剪：`.project` 缺失（legacy 布局）或记录的目录已不存在 ⇒ 整个 roots 目录丢掉。
+-- 只缩小保留集（其中的对象变成 GC 候选），不影响正确性；`--dry-run` 只统计。
+pruneProjectRoots : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Eff r Int
+pruneProjectRoots dry = do
+  projects <- storeRootProjectListEff
+  pruneProjectsGo dry projects 0
+
+pruneProjectsGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> List String -> Int -> Eff r Int
+pruneProjectsGo dry [] n = pure n
+pruneProjectsGo dry (p :: rest) n = do
+  dead <- projectRootDead p
+  if dead then do
+    _ <- if dry then pure 0 else storeRootRemoveEff p
+    pruneProjectsGo dry rest (n + 1)
+  else pruneProjectsGo dry rest n
+
+-- 项目根的存活判据：记录的路径仍存在。legacy（无 `.project`）视为死。
+projectRootDead : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Bool
+projectRootDead projectId = do
+  path <- storeProjectPathEff projectId
+  case path of
+    Nothing => pure True
+    Just dir => do
+      exists <- fsFileExists dir
+      pure (not exists)
 
 -- 所有项目 roots 的并集（GC 的「保留」集合）。
 allRootDigests : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r (List String)

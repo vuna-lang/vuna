@@ -25,8 +25,11 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
   done
   export VUNA_BASE="$repo/base"
   export VUNA_SEED="${vuna-seed}/bin/vuna-seed"
-  # 与日常 check/build 共用项目内对象库；VUNA_STORE 已设置时尊重调用方。
-  export VUNA_STORE="''${VUNA_STORE:-$repo/.local/store}"
+  export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
+  # suite 用**独立**对象库：`52_cache_framing` 会故意截断 store 里的 blob/lex 对象，
+  # 与开发缓存共用会把所有 worktree 的重建成本一次性打回冷态。持久根保证
+  # `--only <章节>` 反复跑仍有命中；`VUNA_STORE` 已设置时尊重调用方。
+  export VUNA_STORE="''${VUNA_STORE:-$HOME/.vuna/test-store}"
   mkdir -p "$VUNA_STORE"
   exec "${vuna}/bin/vuna" test --suite "$repo/test/suite.toml" "$@"
 ''

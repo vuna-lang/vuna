@@ -505,11 +505,44 @@ mergeRootLines : List String -> List String -> List String
 mergeRootLines lines [] = lines
 mergeRootLines lines (d :: rest) = mergeRootLines (insertRootLine d lines) rest
 
--- | 追加受保护摘要。布局 = `roots/<project>/<digest>`，每个摘要一个文件：
+-- | roots 目录里的项目路径记录（非 digest 项）。GC 用它判断项目目录是否还存在：
+-- 找不到路径 ⇒ 整个项目根丢掉。项目目录只写一次，之后内容不变。
+export projectPathFileName : String
+projectPathFileName = ".project"
+
+-- | 记录项目路径（幂等：内容相同不写）。
+export storeProjectPathRecordEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
+storeProjectPathRecordEff projectId projectPath = do
+  dir <- storeRootsPathEff projectId
+  _ <- storeEnsureDirEff dir
+  let
+    path = "${dir}/${projectPathFileName}"
+  in do
+    exists <- fsFileExists path
+    if exists then do
+      old <- fsReadFile path
+      if trim old == projectPath then pure 0 else fsWriteFileAtomic path projectPath
+    else fsWriteFileAtomic path projectPath
+
+-- | 读项目路径（legacy 项目根没有 `.project` ⇒ Nothing）。
+export storeProjectPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe String)
+storeProjectPathEff projectId = do
+  dir <- storeRootsPathEff projectId
+  let
+    path = "${dir}/${projectPathFileName}"
+  in do
+    exists <- fsFileExists path
+    if exists then do
+      text <- fsReadFile path
+      pure (Just (trim text))
+    else pure Nothing
+
+-- | 追加受保护摘要。布局 = `roots/<project>/.project` + `roots/<project>/<digest>`：
 -- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。读取侧同时接受
 -- `roots/<project>` 单文件布局，写侧只写目录布局。
-export storeRootAppendEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
-storeRootAppendEff projectId digests = do
+export storeRootAppendEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> List String -> Eff r Int
+storeRootAppendEff projectId projectPath digests = do
+  _ <- storeProjectPathRecordEff projectId projectPath
   dir <- storeRootsPathEff projectId
   exists <- fsFileExists dir
   if exists then do
@@ -534,14 +567,17 @@ writeRootFiles dir (d :: rest) = do
   n <- writeRootFiles dir rest
   pure (n + 1)
 
--- | 读一个项目的 root 摘要：目录布局逐文件读；单文件布局逐行读。
+-- | 读一个项目的 root 摘要：目录布局逐文件读（跳过 `.project` 这类点文件）；
+-- 单文件布局逐行读。
 export storeRootLoadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List String)
 storeRootLoadEff projectId = do
   path <- storeRootsPathEff projectId
   exists <- fsFileExists path
   if exists then do
     isDir <- fsIsDirectory path
-    if isDir then fsReadDir path
+    if isDir then do
+      names <- fsReadDir path
+      pure (filter (\n => not (startsWith "." n)) names)
     else do
       text <- fsReadFile path
       pure (filter (\l => strLength l > 0) (split "\n" text))

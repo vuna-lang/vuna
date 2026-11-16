@@ -137,7 +137,7 @@ end:
 
 ### 共享对象库（`VUNA_STORE`）
 
-- 默认根：项目内 `.local/store`（devShell / `nix run .#vuna-run-tests` / CI check 各自导出；
+- 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
 - 父进程只预热一次 `vuna check base`（需要时 `check .`），worker 不各自 warmIfaces。
 - 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
