@@ -1,8 +1,7 @@
 # store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
-# 14b) 编译器二进制指纹（PerfCache.binaryFingerprint）：指纹只能基于可执行文件
-#      自身（execPath+size+mtime），**不得**把「第一个用户参数」当路径去读——那样 cwd 里
-#      有同名文件/目录时会直接 `Fatal error: exception Failure("readFile: ...")`。这里 cwd
-#      造一个 `build/` 目录再 `vuna build pkg`，必须正常构建并运行。
+# 14b) 编译器身份不得把「第一个用户参数」当路径去读——那样 cwd 里有同名文件/目录时会直接
+#      `Fatal error: exception Failure("readFile: ...")`。这里 cwd 造一个 `build/` 目录再
+#      `vuna build pkg`，必须正常构建并运行（身份取自可执行文件旁 `build-id`，回退 stat）。
 #      夹具是 $TMPDIR 里的临时包。
 run: sh -c 'mkdir -p "$TMPDIR/fp/build/keep" "$TMPDIR/fp/pkg/app"; printf "[package]\nname = \"fp-probe\"\n" >"$TMPDIR/fp/pkg/vuna.toml"; printf "main : Int\nmain = 7\n" >"$TMPDIR/fp/pkg/app/Main.vuna"'
 run: sh -c 'cd "$TMPDIR/fp" && "$VUNA" build pkg 2>&1'
