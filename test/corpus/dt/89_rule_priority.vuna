@@ -1,0 +1,15 @@
+-- 多列规则 + 兜底：矩阵降级要按**行优先级**剪枝（某行剩余模式全不可辩时，后面的行不可达），
+-- 否则决策树会按「每列一个分支」展开成指数体积。这里锁行为：结果必须是第一条匹配。
+data T : Type where
+  A : T
+  B : T
+  C : T
+
+pick : T -> T -> T -> Int
+pick A _ _ = 1
+pick _ A _ = 2
+pick _ _ A = 3
+pick _ _ _ = 4
+
+main : Int
+main = pick C C C + pick A B C * 10 + pick C A C * 100 + pick C C A * 1000
