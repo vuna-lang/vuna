@@ -7,8 +7,9 @@
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
-> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。`main : Eff [] a` 与 `IORef` 可用；
-> 需要 handler 续延的宿主效应行、FFI 仍被明确拒绝（`NativeUnsupported`）。
+> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。`main : Eff r a`（含带行的宿主效应，
+> 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 用**栈拷贝 + 续延栈迁移**
+> 实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
 > 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
@@ -78,13 +79,46 @@
   起（第 6 个实参起压栈），调用点 `mov r11, [rdi]; call r11`。闭包函数入口先把捕获值
   拷进本帧槽，再按常规绑定形参。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
-  `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。
+  `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。运行时只有续延恢复用 `r15`
+  暂存续延记录（§3.4），生成代码不碰它。
 - **单出口**：带栈帧的运行时函数体内出现的 `IRet` 由 `Native.Runtime.rtFunc` 统一改写
   成跳到函数尾标签（`mov rsp, rbp; pop rbp; ret`）；只有无栈帧的入口/陷阱（`rtRawFunc`）
   直接写 `ret`。手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
 - 入口 `_start`：初始化堆指针 → `and rsp, -16` → `call vuna_main` → 按入口 show
   打印 → `exit(0)`；不解析 argv，无栈溢出检查。
 - 递归使用机器栈直接 `call`；不做尾调用优化。
+
+### 3.4 效应 handler 与一次性续延
+
+运行时表示（`Native.Runtime`）：
+
+- **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 64 B：
+  `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶（base_rsp）`
+  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无）`。
+- **续延记录** 88 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
+  `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
+  `[80]=恢复值 v`。
+- **续延闭包** 16 B：`[0]=rt_eff_resume [8]=记录`；调用约定与普通闭包一致。
+
+`perform`：按 `(key, name)` 扫链；找到后把节点弹出（`rt_handlers = node.prev`），把
+`[perform_rbp, node.base_rsp)` 的栈字节拷到堆，分配记录与续延闭包，然后**在当前栈上**
+调用 `opH(op, k)`（不再切到 handler 帧，避免 opH 帧落进捕获区）。`opH` 返回时：
+- 若节点有活动 resume 记录（`node[56] != 0`，说明当前 comp 已在续延上运行），把返回值
+  当作答案交回该 resume 的调用点；
+- 否则走 `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
+
+`resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获字节拷到
+**堆上的新栈段**（`size + 64 KiB` slack，向下增长留在段内），修正栈内 rbp 链（统一加
+`new_start - old_start`），把 comp 顶部返回地址改成 `rt_eff_kdone`，再把 `node.base_rsp`
+指向新栈顶（后续同一 handler 的 perform 继续以它为界）。从 perform 的返回点继续执行。
+
+`rt_eff_kdone`：comp 正常结束后按需弹掉节点、应用 `ret`，把答案交回 `k` 的调用点；
+`ret` 也在新栈段上执行。abort（opH 不调用 `k`）不经过 `kdone`，直接把 opH 返回值当作
+answer。
+
+约束：续延一次性（`used` 标记，resume 两次 trap）；迁移后的旧栈段不回收；只支持
+one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算。宿主 handler 的
+「先做宿主操作再 `k`」写法（`consoleOpHIOHost` 等）与用户 `handle` 走同一条路径。
 
 ## 4. IR 支持面
 
@@ -108,7 +142,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 | `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
 | Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Float.floatRender` |
-| Effect / extern | 拒绝 | `native target: ... not supported yet` |
+| Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
+| extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
 
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /
@@ -129,10 +164,11 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - List 桥接符号（`strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`）支持：
   函数体在 `Native.Module` 按 List 族的 tag 生成，复用对象表示（`head` 是未装箱 Int；
   两遍扫描：先算长度，再分配填充）。
-- **零参顶层定义**编成零参函数，每次引用都 `call`。native 仍是纯语言（无 Effect），重复
-  求值语义安全；引入副作用/Effect 之前必须改成初始化 + memo。
-- 入口 `main` 必须是零参值；`main : Eff [] a` 支持（入口用 `runMain` 执行后按 `a` 展示），
-  带宿主效应行的 `main`（需要 handler 续延）拒绝。入口 show 只接受 `@ir@showInt` /
+- **零参顶层定义**编成零参函数，每次引用都 `call`。零参定义必须保持纯值语义（重复求值
+  等价）；带副作用的值要走 `Eff` 动作，不能藏在零参定义里。
+- 入口 `main` 必须是零参值；`main : Eff r a` 支持：入口先按 `irEntryHandlersOf` 预装宿主
+  handler（`runConsoleHost` / `runExitHost` / …），再用 `runMain` 执行，最后按 `a` 展示。
+  入口 show 只接受 `@ir@showInt` /
   `@ir@showNat` / `@ir@showBool` / `@ir@showStr` / `@ir@showFloat`；其它自定义 Show 拒绝。
   `--no-print` 不打印，但仍计算并 exit 0。
 
@@ -158,8 +194,10 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 效应叶子：`prim_eff_newRef` / `readRef` / `writeRef`（`IORef`，单槽对象）、
-  `prim_eff_print` / `eprint`（写 fd 后返回字节数）、`prim_eff_exit`。续延
-  （`prim_effectPerform` / `prim_effectHandle`）与其余 `prim_eff_*` 宿主原语仍未实现。
+  `prim_eff_print` / `eprint`（写 fd 后返回字节数）、`prim_eff_exit`；预装宿主 handler
+  用到的 `@vuna@host@*` / `prim_eff_*_host` 名字映射到同一批叶子。
+- 续延：`prim_effectPerform`（`rt_eff_perform`）、`prim_effectHandle`（`rt_eff_handle`）、
+  `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
   走 `Base.Float.floatRender`（Vuna 实现，三端共用）。
@@ -205,7 +243,7 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
   native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
-  Effect main 拒绝、`--no-compile`。
+  效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
@@ -215,8 +253,10 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
-- 效应 handler（`perform` / `handle`：一次性续延需要栈捕获）与依赖 handler 的宿主效应行；
-  FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
+- 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把 comp
+  栈帧拷到堆上的新栈段（默认 64 KiB slack），旧段不回收；深递归 + 大量 resume 会消耗
+  arena。
+- FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

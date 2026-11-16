@@ -360,3 +360,24 @@ consolePrint@(n) "hi"      -- n 是运行时变量
   （`rowRem` 需要在 comp 之后解名字），内部跨 wrapper 调用用 `@(n)`。
 - **不做**：`consolePrintAt`、`Defaulted`、`:=` 默认参数、显式位置默认参数、把 `Member`
   变成 trait；`perform`/`handle` 语法本身仍无 `@`（[debt.md](debt.md) D60 的剩余部分）。
+
+## 11. native 后端的续延实现
+
+OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_effectPerform` /
+`prim_effectHandle` 由 `Native.Runtime` 的栈拷贝实现（细节与布局见
+[native.md](native.md) §3.4）：
+
+- handler 链是 `.bss` 的 `rt_handlers`；节点按 `(key, name)` 线性扫描。
+- `perform` 把 comp 栈帧（`[perform_rbp, handler 栈顶)`）拷到堆，构造一次性续延闭包，
+  并在**当前栈**上调用 `opH`；不调用 `k` 的 opH 返回值直接作为 answer。
+- `k v` 把捕获帧搬到堆上的新栈段、修正 rbp 链、把 comp 顶部返回地址改到
+  `rt_eff_kdone`；`kdone` 应用 `ret` 后把 answer 交回 `k` 的调用点。因此 `opH` 在
+  `k` 返回后继续计算、宿主 handler 的「先做宿主操作再 `k`」都与 OCaml 语义一致。
+- 一次性：续延记录带 `used`；resume 两次 trap `vuna: runtime error: continuation
+  already resumed`（exit 2）。
+- host 叶子（`@vuna@host@print`、`@vuna@host@exitOp`、Ref 等）在 `Native.Runtime`
+  的 intrinsic 表里映射到既有 `prim_eff_*` 实现；入口按 `irEntryHandlersOf` 预装
+  `runXHost`。
+
+wasm 后端仍拒绝 handler（需要 stack switching），shared parity 夹具暂不覆盖 handler；
+native 的机制用例在 `105_native_backend.steps`。
