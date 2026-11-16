@@ -1110,6 +1110,9 @@ q_text='module Q where\n\nimport qualified Dep\n\npick : Dep.Color -> Int\npick 
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$q_uri"'","languageId":"vuna","version":1,"text":"'"$q_text"'"}}}'
+  # 先 hover 同一个洞：hover 只做单文件精化（不建会话），缓存里的洞目标标记为「依赖不完整」，
+  # 随后的 case split 必须重算并拿到完整上下文。回归点：别让 hover 的空结果把 codeAction 饿死。
+  frame_line '{"jsonrpc":"2.0","id":15,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$q_uri"'"},"position":{"line":5,"character":9}}}'
   frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":5,"character":9},"end":{"line":5,"character":9}},"context":{"diagnostics":[]}}}'
   frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":8,"character":10},"end":{"line":8,"character":10}},"context":{"diagnostics":[]}}}'
   frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"'"$q_uri"'"},"range":{"start":{"line":11,"character":10},"end":{"line":11,"character":10}},"context":{"diagnostics":[]}}}'
@@ -1119,6 +1122,7 @@ q_text='module Q where\n\nimport qualified Dep\n\npick : Dep.Color -> Int\npick 
   frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
 } | "$VUNA" lsp >"$tmp/splitq.out" 2>/dev/null
 check_eq "限定 import case split 会话退出码 0" "0" "$?"
+check_contains "先 hover 再 case split：hover 有响应" "$(lsp_frame_id "$tmp/splitq.out" 15)" '"id":15'
 qr2=$(lsp_frame_id "$tmp/splitq.out" 2)
 check_contains "限定 import：构造子写限定名（Dep.Red）" "$qr2" \
   '"newText":"case c of\n  Dep.Red => _\n  Dep.Green => _"'
