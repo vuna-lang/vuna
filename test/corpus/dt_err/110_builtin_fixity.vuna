@@ -1,0 +1,5 @@
+-- `&&` 的 fixity 由编译器固定；用户声明必须报 RN_BuiltinFixity。
+infixl 3 &&
+
+main : Int
+main = 1
