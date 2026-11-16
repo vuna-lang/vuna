@@ -27,8 +27,8 @@ s1 == s2（文件集合逐字节）即 fixed point
 seed 与 `compile` / `build` 的目录产物都由**同一个** DT split codegen 生成
 （`Codegen.Split.generateDtSplitProgram`，入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`）；输出模型是
 `Driver.Split.SplitFile` + `Driver.Split.buildScript`）：每个源码模块一个 `.ml`，另有共享
-runtime 模块、`Main.ml` 与 `build.sh`；**不生成 `.mli`**。没有第二套输出模型或 `--split`
-开关。
+runtime 模块、`Main.ml`、`build.sh` 与 `build-id`（编译器身份）；**不生成 `.mli`**。
+没有第二套输出模型或 `--split` 开关。
 
 Nix 侧的对应关系：`packages.vuna-seed`、`packages.vuna-compiler`、`packages.vuna` 分别构建
 stage 0 / stage 1 / 产品 CLI；`checks.seed-selfhost` 守整条链。
