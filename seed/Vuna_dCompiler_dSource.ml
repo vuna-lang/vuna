@@ -139,10 +139,20 @@ let v_Vuna_dCompiler_dSource_dsplitPath = (fun path -> ((v_Vuna_dCompiler_dSourc
 # 154 "Vuna/Compiler/Source.vuna"
 let v_Vuna_dCompiler_dSource_dbaseName = (fun path -> (Base_dPair.v_Base_dPair_dsecondOf (v_Vuna_dCompiler_dSource_dsplitPath path)))
 
-# 177 "Vuna/Compiler/Source.vuna"
+# 172 "Vuna/Compiler/Source.vuna"
+let rec v_Vuna_dCompiler_dSource_ddropPastSlash = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (if (dtb__52 = 47) then dtb__53 else (v_Vuna_dCompiler_dSource_ddropPastSlash dtb__53))
+  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 159 "Vuna/Compiler/Source.vuna"
+let v_Vuna_dCompiler_dSource_dparentOfPath = (fun path -> ((fun chars -> ((fun rev -> ((fun after -> (if ((Base_dList.v_Base_dList_dlength after) = (Base_dList.v_Base_dList_dlength rev)) then "." else ((fun parent -> (if (parent = "") then (if ((Base_dString.v_Base_dString_dstartsWith "/") path) then "/" else ".") else (if (if ((Base_dString.v_Base_dString_dstartsWith "/") path) then (Base_dBool.v_Base_dBool_dnot ((Base_dString.v_Base_dString_dstartsWith "/") parent)) else false) then ("/" ^ parent) else parent))) (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse after))))) (v_Vuna_dCompiler_dSource_ddropPastSlash rev))) (Base_dList.v_Base_dList_dreverse chars))) (Base_dList.dtp_unpack path)))
+
+# 196 "Vuna/Compiler/Source.vuna"
 let rec v_Vuna_dCompiler_dSource_dprefixLen2 = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__52, dtb__53) -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55) -> (if (dtb__52 = dtb__54) then (1 + ((v_Vuna_dCompiler_dSource_dprefixLen2 dtb__53) dtb__55)) else 0)
+  | Base_dList.C_Base_dList_dList_Cons (dtb__54, dtb__55) -> (match mc1 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__56, dtb__57) -> (if (dtb__54 = dtb__56) then (1 + ((v_Vuna_dCompiler_dSource_dprefixLen2 dtb__55) dtb__57)) else 0)
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 )
@@ -150,15 +160,15 @@ let rec v_Vuna_dCompiler_dSource_dprefixLen2 = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 183 "Vuna/Compiler/Source.vuna"
+# 202 "Vuna/Compiler/Source.vuna"
 let v_Vuna_dCompiler_dSource_dlengthDiffLE = (fun la lb n -> (if (la >= lb) then ((la - lb) <= n) else ((lb - la) <= n)))
 
-# 165 "Vuna/Compiler/Source.vuna"
+# 184 "Vuna/Compiler/Source.vuna"
 let v_Vuna_dCompiler_dSource_d_usimilarName = (fun a b -> (if (a = b) then false else (if ((Base_dString.v_Base_dString_dstartsWith a) b) then true else (if ((Base_dString.v_Base_dString_dstartsWith b) a) then true else ((fun la -> ((fun lb -> (if (((v_Vuna_dCompiler_dSource_dlengthDiffLE (Base_dList.v_Base_dList_dlength la)) (Base_dList.v_Base_dList_dlength lb)) 2) then (((v_Vuna_dCompiler_dSource_dprefixLen2 la) lb) >= 2) else false)) (Base_dList.dtp_unpack b))) (Base_dList.dtp_unpack a))))))
 
-# 158 "Vuna/Compiler/Source.vuna"
+# 177 "Vuna/Compiler/Source.vuna"
 let rec v_Vuna_dCompiler_dSource_dsuggest = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__56, dtb__57) -> (if ((v_Vuna_dCompiler_dSource_d_usimilarName mc0) dtb__56) then (String.concat "" [" (did you mean "; dtb__56; "?)"]) else ((v_Vuna_dCompiler_dSource_dsuggest mc0) dtb__57))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__58, dtb__59) -> (if ((v_Vuna_dCompiler_dSource_d_usimilarName mc0) dtb__58) then (String.concat "" [" (did you mean "; dtb__58; "?)"]) else ((v_Vuna_dCompiler_dSource_dsuggest mc0) dtb__59))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))

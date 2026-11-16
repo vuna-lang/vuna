@@ -149,4 +149,5 @@ Vuna_dCompiler_dWasm_dRender.ml
 Vuna_dCompiler_dWasm_dRuntime.ml
 Vuna_dCompiler_dWasm_dTypes.ml
 Vuna_runtime.ml
+build-id
 build.sh
