@@ -165,7 +165,7 @@ let v_Vuna_dCompiler_dElab_dCoverage_dmatrixArity = (fun mc0 -> (match mc0 with
 # 155 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dmatrixWitness = (fun table clauses -> (if (v_Vuna_dCompiler_dElab_dCoverage_duniformArity clauses) then (((((v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness table) (bi_natFromInt 256)) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing) clauses) (v_Vuna_dCompiler_dElab_dCoverage_dwilds (v_Vuna_dCompiler_dElab_dCoverage_dmatrixArity clauses))) else Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing))
 
-# 194 "Vuna/Compiler/Elab/Coverage.vuna"
+# 197 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor = (fun mc0 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Cons (dtb__55, dtb__56) -> (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead dtb__55) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__57, dtb__58, dtb__59) -> true
@@ -175,7 +175,7 @@ let v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor = (fun mc0 -> (match mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 205 "Vuna/Compiler/Elab/Coverage.vuna"
+# 208 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn = (fun fuel paren p -> (if (fuel <= 0) then "_" else (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead p) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__60, dtb__61, dtb__62) -> (if ((Base_dList.v_Base_dList_dlength dtb__61) = 0) then dtb__60 else ((fun body -> (if paren then (String.concat "" ["("; body; ")"]) else body)) (String.concat "" [dtb__60; " "; ((Base_dString.v_Base_dString_djoin " ") ((Base_dList.v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn (fuel - 1)) true)) dtb__61))])))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__63, dtb__64) -> "_"
@@ -187,22 +187,22 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn = (fun fuel paren p -> (if
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 202 "Vuna/Compiler/Elab/Coverage.vuna"
+# 205 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_drenderPat = (fun p -> (((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn 64) false) p))
 
-# 220 "Vuna/Compiler/Elab/Coverage.vuna"
+# 223 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_drenderWitness = (fun ws -> ((Base_dString.v_Base_dString_djoin " ") ((Base_dList.v_Base_dList_dmap ((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn 64) true)) ws)))
 
-# 182 "Vuna/Compiler/Elab/Coverage.vuna"
+# 185 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dimproveDiag = (fun table clauses sp d -> (if ((d).Vuna_dCompiler_dDiag.f_Vuna_dCompiler_dDiag_dDiagnostic_diagCode <> "TC_NotExhaustive") then d else (match ((v_Vuna_dCompiler_dElab_dCoverage_dmatrixWitness table) clauses) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__76) -> (if (v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor dtb__76) then ((fun rx -> ((Vuna_dCompiler_dDiag.v_Vuna_dCompiler_dDiag_dwithFallbackSpan sp) ((Vuna_dCompiler_dDiagnostics_dTc.v_Vuna_dCompiler_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dDiagnostics_dTc.C_Vuna_dCompiler_dDiagnostics_dTc_dTcErr_NotExhaustive (rx))) (Base_dVec.C_Base_dVec_dVec_Cons (rx, Base_dVec.C_Base_dVec_dVec_Nil))))) (v_Vuna_dCompiler_dElab_dCoverage_drenderWitness dtb__76)) else d)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> d
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 178 "Vuna/Compiler/Elab/Coverage.vuna"
+# 181 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dimproveExhaustive = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
-  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__77) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (((((v_Vuna_dCompiler_dElab_dCoverage_dimproveDiag mc0) mc1) mc2) dtb__77)))
+  | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__77) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_ErrC (((((v_Vuna_dCompiler_dElab_dCoverage_dimproveDiag mc0) (mc1 0)) mc2) dtb__77)))
   | Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__78) -> (Vuna_dCompiler_dDiag.C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__78))
   | _ -> failwith "DT: impossible branch"
 ))
