@@ -4,7 +4,7 @@
 --
 -- 全部是**纯函数**（返回 `Int` 或 `Bool`，无 `Eff`）：深部纯函数照样能埋探针，不需要把签名 effect 化；开关是 ambient 运行时配置，与 `dbg!` 同形态。
 --
--- **高阶**部分（`obsSpan` / `obsSpanP` / `obsSample`：吃 `Int -> a` thunk）在 `Base.Obs.Span`——OCaml 后端用闭包实现，wasm / native 没有闭包表示、引用点编译期拒绝（见 native.md / wasm.md 的「可观测性」段）。
+-- **高阶**部分（`obsSpan` / `obsSpanP` / `obsSample`：吃 `Int -> a` thunk）在 `Base.Obs.Span`——OCaml / native 后端用闭包实现，wasm 没有闭包表示、引用点编译期拒绝（见 native.md / wasm.md 的「可观测性」段）。
 --
 -- 与 `dbg!` 的关系：`dbg!` 保留其 stderr 文本协议（`DEBUG <epoch-us> <text>`，由 `--debug-perf` 门控）；本层是结构化事件。需要两者都拿到时用 `obsLog`——它在 observability 打开时写事件、并同格式写 stderr。
 --

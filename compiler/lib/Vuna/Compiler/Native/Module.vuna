@@ -243,9 +243,7 @@ genRtValueCall fuel st sym args = if fuel <= 0 then internal "native codegen fue
 else
   let
     arity = nativeRtValueArity sym
-  in if sym == "@vuna@obs@span" || sym == "@vuna@obs@spanLab" then unsupported
-    "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
-  else if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
+  in if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
   else if length args /= arity then unsupported "native target: partial application of runtime functions is not supported yet"
   else case nativeRtTarget sym of
     Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
@@ -399,12 +397,6 @@ else case ir of
   IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
   IrCase _ _ => unsupported "native target: case is not supported yet"
   IrLam bs body => genLamValue (fuel - 1) st bs body
-  IrRt "@vuna@obs@span" =>
-    unsupported
-      "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
-  IrRt "@vuna@obs@spanLab" =>
-    unsupported
-      "native target: obs spans need closures (not supported yet); leaf obs primitives (level/log/counter/mark/sample) are no-op stubs"
   IrRt _ => unsupported "native target: runtime function values are not supported yet"
   IrFloatLit raw => genFloatLit st raw
   IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim

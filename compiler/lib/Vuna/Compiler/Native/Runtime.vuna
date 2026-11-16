@@ -156,14 +156,26 @@ natToIntFn = rtFunc "nat_to_int" 0 [IMov (OpReg Rax) (OpReg Rdi)]
 -- 可观测性原语桩（`docs/reference/observability.md` §4.1）
 -- ---------------------------------------------------------------
 -- native 后端只提供**叶子**原语的 no-op 桩：读级别与记事件都返回 Int 0（0 = 「没打开 /
--- 没产生事件」）。`@vuna@obs@span` 是**高阶**原语（吃一个 `Int -> a` 的 thunk），本后端
--- 没有闭包表示，故不在表里 —— 引用点由 `Module.genRtApp` 报
--- `NativeUnsupported`（编译期拒绝，不给假数据）。
+-- 没产生事件」）。高阶原语 `@vuna@obs@span` 调 thunk 后原样返回，不写事件
+-- （`VUNA_OBS` 在 native 产物上不生效）。
 obsZeroFn : String -> NativeFunc
 obsZeroFn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
 
 obsZero2Fn : String -> NativeFunc
 obsZero2Fn name = rtFunc name 0 [IMov (OpReg Rax) (OpImm 0)]
+
+-- | 高阶跨度：`obs_span_run name cat f` 只在 f 是闭包时调用 `f 0` 并返回结果；
+--   事件写盘为 no-op（`VUNA_OBS` 在 native 产物上不生效）。
+obsSpanFn : NativeFunc
+obsSpanFn =
+  rtFunc "obs_span_run" 0
+    [IMov (OpReg Rdi) (OpReg Rdx), IMov (OpReg Rsi) (OpImm 0), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11]
+
+-- | `obs_span_lab name cat label f`：与 `obs_span` 同形，多一个 label 实参。
+obsSpanLabFn : NativeFunc
+obsSpanLabFn =
+  rtFunc "obs_span_lab_run" 0
+    [IMov (OpReg Rdi) (OpReg Rcx), IMov (OpReg Rsi) (OpImm 0), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11]
 
 -- `dbg!` 展开里的两个运行时符号（与 OCaml 的 `dtp_debug_on` / `dtp_debug_line` 对齐）：
 -- 默认关闭 ⇒ `debug_on` 恒返回 0（False），`debug_line` 是 1 参恒等返回 0 的桩。
@@ -712,6 +724,8 @@ nativeRtFuncs =
     obsZeroFn "obs_span_end",
     obsZero2Fn "obs_sample_start",
     obsZeroFn "obs_sample_stop",
+    obsSpanFn,
+    obsSpanLabFn,
     debugOnFn,
     debugLineFn,
     strAllocFn,
@@ -896,6 +910,8 @@ nativeRtTarget "@vuna@obs@spanBegin" = Just (nativeRtLabel "obs_span_begin")
 nativeRtTarget "@vuna@obs@spanEnd" = Just (nativeRtLabel "obs_span_end")
 nativeRtTarget "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
 nativeRtTarget "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
+nativeRtTarget "@vuna@obs@span" = Just (nativeRtLabel "obs_span_run")
+nativeRtTarget "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
 nativeRtTarget "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
 nativeRtTarget "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
 nativeRtTarget _ = Nothing
@@ -969,4 +985,6 @@ nativeRtValueArity "@vuna@obs@spanBegin" = 2
 nativeRtValueArity "@vuna@obs@spanEnd" = 1
 nativeRtValueArity "@vuna@obs@sampleStart" = 2
 nativeRtValueArity "@vuna@obs@sampleStop" = 1
+nativeRtValueArity "@vuna@obs@span" = 3
+nativeRtValueArity "@vuna@obs@spanLab" = 4
 nativeRtValueArity _ = 0

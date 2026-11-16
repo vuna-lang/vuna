@@ -226,8 +226,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回 `Int 0`）；
-`@vuna@obs@span` 是高阶原语（吃 `Int -> a` thunk），本后端没有闭包表示，故**编译期
-拒绝**（`NativeUnsupported`，不给假数据）。因此 native 产物上 `VUNA_OBS` 不生效。
+高阶的 `@vuna@obs@span` / `spanLab` 调 thunk（闭包，实参 `0`）后原样返回结果，不写事件。
+因此 native 产物上 `VUNA_OBS` 不生效。
 
 ## 6. 模块布局与确定性
 

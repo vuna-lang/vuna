@@ -1,6 +1,6 @@
 -- | 可观测性的**高阶**部分：跨度与采样配对。
 --
--- 单独成模块的原因：`obsSpan` 接受一个 `Int -> a` 的 thunk，是**高阶**原语。OCaml 后端用普通闭包实现；wasm / native 后端没有闭包表示，因此**编译期拒绝**这个符号。把高阶部分与叶子原语（`Base.Obs` 的 level / log / counter / mark / sampleStart / sampleStop）分开，`import Base.Obs` 才能在两个非 OCaml 后端上照常构建。
+-- 单独成模块的原因：`obsSpan` 接受一个 `Int -> a` 的 thunk，是**高阶**原语。OCaml / native 后端用普通闭包实现；wasm 后端没有闭包表示，因此**编译期拒绝**这个符号。把高阶部分与叶子原语（`Base.Obs` 的 level / log / counter / mark / sampleStart / sampleStop）分开，`import Base.Obs` 才能在不支持高阶原语的后端上照常构建。
 --
 -- 开关与成本纪律与 `Base.Obs` 相同。
 module Base.Obs.Span where

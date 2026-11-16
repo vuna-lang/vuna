@@ -176,6 +176,12 @@ exit: 0
 run: "$TMPDIR/effcap-out/bin/effcap" 2>&1
 out-equals: 20001
 
+# 9n) 高阶观测原语：`@vuna@obs@span` 不写事件，但必须调 thunk 并返回其结果。
+run: sh -c 'd="$TMPDIR/obsspan"; mkdir -p "$d/app"; printf "[package]\nname = \"obsspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"vuna.probe\" \"vuna.user\" (\\_ => 42)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/obsspan-out" "$d"'
+exit: 0
+run: "$TMPDIR/obsspan-out/bin/obsspan" 2>&1
+out-equals: 42
+
 # 10) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
 exit: 0
