@@ -16,6 +16,7 @@ module Vuna.Compiler.Lowering where
 -- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、
 -- fresh 编号分配顺序、分支与实参顺序都不能随实现方式变化。
 import Vuna.Compiler.Common
+export import Vuna.Compiler.Lowering.Env
 import Vuna.Compiler.Obs
 import Vuna.Compiler.Diagnostics
 import Base.HashMap
@@ -30,52 +31,6 @@ import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
 import Base.Eff.Types
 
--- ---------------------------------------------------------------
--- 生成环境
--- ---------------------------------------------------------------
---
--- 「程序级表」在 N 次单元 lowering 之间是常量：放在 `LwEnv` 里只算一次
--- （split 路径每个模块都用同一份）。单元内可变量只有 fresh 计数（`LwSt`）。
-export record LwEnv where
-  lwShared : IrShared
-  -- 运行时族（Bool / Nat 族已被过滤，不进运行时表示）。
-  lwDatas : List DtData
-  -- 族 → 运行时类型参数槽（声明与实参共用的不动点结果）。
-  lwTyParams : HashMap String (List Int)
-  -- 族 → (去装箱构造子, 保留字段序号)；去装箱声明判定用。
-  lwUnboxedInfo : List (Pair String (Pair DtCtor Int))
-  -- 族 → 运行时字段表 `(字段序号, 字段源码名)`（只有 OCaml record 表示的族）。
-  lwRecordFields : HashMap String (List (Pair Int String))
-  -- 构造子 → (族名, keep flags)。
-  lwCtors : HashMap String (Pair String (List Bool))
-  -- 构造子 → 不透明字段 flags。
-  lwOpaques : HashMap String (List Bool)
-  -- 去装箱族集合。
-  lwUnboxed : HashMap String Bool
-  -- 程序是否声明 canonical `Base.List.List` 族（桥接内建的放行判据）。
-  lwHasListFamily : Bool
-  -- 运行时定义表（delta 展开与归属查询用）。
-  lwDefs : List DtDef
-  -- 名字 → 定义（**一次建表**，分组/单元过滤都查它；`lwDefs` 是唯一真源）。
-  --
-  -- 为什么要表：`appendGroups` 过去对每个 SCC 都 `filter (memName …) lwDefs`，单点 SCC
-  -- 的合成程序是 O(n²)（N=2000/4000/8000 的 codegen 段 89/284/1083 ms，逐档 ×3.2/×3.8）。
-  -- 表只替换**查找**，不参与排序：组内成员顺序仍来自 `assembleGroupNames`（源码序）。
-  lwDefTbl : HashMap String DtDef
-  -- 定义名 → 使用事实（运行时依赖 + 隐藏原语旗标）；分组与 `IrDef` 都吃它。
-  lwFacts : HashMap String TermUse
-  -- 当前单元名（`Main` 是入口单元；check 路径为 ""）。
-  lwUnit : String
-
-export lwEnvShared : LwEnv -> IrShared
-lwEnvShared (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts unit) =
-  shared
-
-export lwEnvWithUnit : String -> LwEnv -> LwEnv
-lwEnvWithUnit unit (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts oldUnit) =
-  LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts unit
-
--- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
 -- 小名字列表用 `Base.List` 的 `memName` / `lookupPair`；程序级大表（构造子、族、
@@ -84,11 +39,6 @@ lwEnvWithUnit unit (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasLis
 pushDep : String -> List String -> List String
 pushDep dep deps = if dep == "" then deps else if memName dep deps then deps else append deps [dep]
 
--- | 列表长度（`Base.List.length` 的本地名，避免与 `Ir` 里的字段名混淆）。
-listLength : List a -> Int
-listLength [] = 0
-listLength (x :: rest) = 1 + listLength rest
-
 -- | 单元内生成状态（唯一可变量：case / Nat case 的 fresh binder 计数）。
 export record LwSt where
   lwNext : Int
@@ -96,225 +46,6 @@ export record LwSt where
 -- record 字段访问器（vuna 不为 record 生成字段函数，统一用位置模式）。
 binderErasedOf : IrBinder -> Bool
 binderErasedOf (IrBinder nm erased) = erased
-
--- | `Maybe` 过滤映射（`List` 没有现成的 mapMaybe）。
-mapSome : (a -> Maybe b) -> List a -> List b
-mapSome f [] = []
-mapSome f (x :: rest) = case f x of
-  Nothing => mapSome f rest
-  Just y => y :: mapSome f rest
-
--- 不透明字段判据（D27）：卡住的类型族应用 / 类型族参数 → 运行时不可命名。
--- 与 `Elab.Meta.valueOpaqueScoped` 同源；类型声明、构造子实参 cast、case 绑定共用。
-isTypeHeadOpaqueDatas : List DtData -> String -> Bool
-isTypeHeadOpaqueDatas datas name = if isUnboxedCanonical name then False
-else case findDtData name datas of
-  Just _ => False
-  Nothing => not (isTypeConstructorName name)
-
-memOpaqueLevel : Int -> List Int -> Bool
-memOpaqueLevel i [] = False
-memOpaqueLevel i (x :: rest) = if x == i then True else memOpaqueLevel i rest
-
--- ---------------------------------------------------------------
--- 表示判定
--- ---------------------------------------------------------------
---
--- 这三族判据（record 表示 / 去装箱别名 / 运行时族过滤）属于 Lowering（表示决策），
--- 后端只渲染 `IrTyDecl`。
--- `recordFieldLabel` 留在 Decl（它是**文本**：`f_<fam>_<field>`）。
--- | 该族是否为 record（声明来源 + 单构造子）。
-isRecordData : DtData -> Bool
-isRecordData d = if dtDataIsRecord d then case dtDataCtors d of
-  [_] => True
-  _ => False
-else False
-
--- | record 的运行时字段（字段声明序号 → 字段源码名），只含 keep 字段。
-recordRtFields : DtData -> List (Pair Int String)
-recordRtFields d = case dtDataCtors d of
-  [c] =>
-    let
-      arity = listLength d.dtDataParams
-    in recordRtFieldsGo (dtDataName d) (drop arity (ctorKeepFlags c)) (dtDataFields d)
-  _ => []
-
-recordRtFieldsGo : String -> List Bool -> List DtFieldMeta -> List (Pair Int String)
-recordRtFieldsGo family [] fs = []
-recordRtFieldsGo family (k :: ks) [] = []
-recordRtFieldsGo family (k :: ks) (f :: fs) =
-  if k then Pair f.dtFieldIndex f.dtFieldName :: recordRtFieldsGo family ks fs
-  else recordRtFieldsGo family ks fs
-
--- | 该族用 OCaml record 表示：是 record 且**有**运行时字段。
-hasRecordRepr : DtData -> Bool
-hasRecordRepr d = if isRecordData d then case recordRtFields d of
-  [] => False
-  _ => True
-else False
-
--- | 运行时族：剔除表示不是变体的 canonical 族（Bool / Nat）。
-export rtDatasOf : List DtData -> List DtData
-rtDatasOf datas = filter (\d => not (isUnboxedCanonical (dtDataName d))) datas
-
--- 构造子字段的「不透明」形状（D27）：与 keep flags 逐位对齐，擦除位置恒 False。
--- 判据与 `Elab.Meta.valueOpaqueScoped` 同源（卡住的类型族应用 / 类型族参数）。
-ctorOpaqueFlagsOf : List DtData -> DtCtor -> List Bool
-ctorOpaqueFlagsOf datas c = ctorOpaqueGo datas (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) [] []
-
-ctorOpaqueGo : List DtData -> List (Pair String Rig) -> Int -> Value -> List Int -> List Bool -> List Bool
-ctorOpaqueGo datas [] lvl v famLevels acc = reverse acc
-ctorOpaqueGo datas ((Pair name rig) :: rest) lvl v famLevels acc = case v of
-  VPi pname implicit _ dom clo =>
-    let
-      flag =
-        not (rigIsErased rig)
-          && valueOpaqueScoped (\l => memOpaqueLevel l famLevels) (isTypeHeadOpaqueDatas datas) lvl famLevels dom
-      fam2 = if isFamilyKindValue dom then lvl :: famLevels else famLevels
-      next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in ctorOpaqueGo datas rest (lvl + 1) next fam2 (flag :: acc)
-  _ => reverse acc
-
--- 运行时定义的位置行（只对有 span 的定义）。
-locRowPair : DtDef -> Maybe (Pair String (Pair String Int))
-locRowPair d = case dtDefSpan d of
-  Nothing => Nothing
-  Just sp => Just (Pair (dtDefName d) (Pair sp.spanFile (spanStartLine sp)))
-
--- ---------------------------------------------------------------
--- 族参数槽（不动点）与运行时类型渲染
--- ---------------------------------------------------------------
---
--- 这一节产出 `IrTy`（不是 OCaml 文本）：判定逻辑（哪些族参数槽要用、哪些字段不透明）
--- 必须与构造子实参对齐、
--- 声明与实参共用同一份结果，否则类型参数位置漂移。
-typeParamLevels : DtData -> List Int
-typeParamLevels d = typeParamLevelsGo d.dtDataParams 0
-
-typeParamLevelsGo : List (Pair String Rig) -> Int -> List Int
-typeParamLevelsGo [] i = []
-typeParamLevelsGo (p :: rest) i =
-  if rigIsErased (secondOf p) then i :: typeParamLevelsGo rest (i + 1)
-  else typeParamLevelsGo rest (i + 1)
-
-memIntIn : Int -> List Int -> Bool
-memIntIn i [] = False
-memIntIn i (x :: rest) = x == i || memIntIn i rest
-
-levelSlotIn : List Int -> Int -> Maybe Int
-levelSlotIn levels lvl = levelSlotGoIn levels lvl 0
-
-levelSlotGoIn : List Int -> Int -> Int -> Maybe Int
-levelSlotGoIn [] lvl acc = Nothing
-levelSlotGoIn (x :: rest) lvl acc = if x == lvl then Just acc else levelSlotGoIn rest lvl (acc + 1)
-
-nthValueIn : List Value -> Int -> Maybe Value
-nthValueIn [] i = Nothing
-nthValueIn (v :: rest) i = if i <= 0 then Just v else nthValueIn rest (i - 1)
-
-lookupUsedIn : List (Pair String (List Int)) -> String -> List Int
-lookupUsedIn [] name = []
-lookupUsedIn (p :: rest) name = if firstOf p == name then secondOf p else lookupUsedIn rest name
-
--- | 同一张表的哈希索引版本（声明 / 实参渲染用；不动点内部仍用列表）。
-lookupTyParamsIn : HashMap String (List Int) -> String -> List Int
-lookupTyParamsIn tbl name = case Base.HashMap.lookup name tbl of
-  Just levels => levels
-  Nothing => []
-
-collectUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
-collectUsedLevels tps table datas lvl v = collectUsedLevelsFuel 256 tps table datas lvl v
-
-collectUsedLevelsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
-collectUsedLevelsFuel fuel tps table datas lvl v = if fuel <= 0 then []
-else case v of
-  VPi name implicit rig dom clo =>
-    if implicit then collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1)
-      (applyClosure clo (VNeutral (NVar name lvl [])))
-    else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl dom)
-      (collectUsedLevelsFuel (fuel - 1) tps table datas (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
-  VNeutral n => case n of
-    NVar name lvl2 sp =>
-      append (if memIntIn lvl2 tps then [lvl2] else [])
-        (collectUsedSpineFuel (fuel - 1) tps table datas lvl sp)
-    NGlobal g sp => case findDtData g datas of
-      Just gd => collectFamilyArgsFuel (fuel - 1) tps table datas lvl (lookupUsedIn table g) sp
-      Nothing => collectUsedSpineFuel (fuel - 1) tps table datas lvl sp
-  _ => []
-
-collectUsedSpineFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Value -> List Int
-collectUsedSpineFuel fuel tps table datas lvl [] = if fuel <= 0 then [] else []
-collectUsedSpineFuel fuel tps table datas lvl (v :: rest) =
-  if fuel <= 0 then []
-  else append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl v)
-    (collectUsedSpineFuel (fuel - 1) tps table datas lvl rest)
-
-collectFamilyArgs : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
-collectFamilyArgs tps table datas lvl usedPats args =
-  collectFamilyArgsFuel 256 tps table datas lvl usedPats args
-
-collectFamilyArgsFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> List Int -> List Value -> List Int
-collectFamilyArgsFuel fuel tps table datas lvl usedPats args = if fuel <= 0 then []
-else case usedPats of
-  [] => []
-  i :: rest => case nthValueIn args i of
-    Just arg =>
-      append (collectUsedLevelsFuel (fuel - 1) tps table datas lvl arg)
-        (collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args)
-    Nothing => collectFamilyArgsFuel (fuel - 1) tps table datas lvl rest args
-
-ctorUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List (Pair String Rig) -> Int -> Value -> List Int
-ctorUsedLevels tps table datas famLevels [] lvl v = []
-ctorUsedLevels tps table datas famLevels ((Pair name rig) :: rest) lvl v = case v of
-  VPi pname implicit _ dom clo =>
-    let
-      isOpq =
-        valueOpaqueScoped (\l => memOpaqueLevel l famLevels) (isTypeHeadOpaqueDatas datas) lvl
-          famLevels dom
-      fam2 = if isFamilyKindValue dom then lvl :: famLevels else famLevels
-      next = applyClosure clo (VNeutral (NVar pname lvl []))
-    in if rigIsErased rig then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
-    else if isOpq then ctorUsedLevels tps table datas fam2 rest (lvl + 1) next
-    else append (collectUsedLevels tps table datas lvl dom)
-      (ctorUsedLevels tps table datas fam2 rest (lvl + 1) next)
-  -- 不透明字段渲染成独立运行时值，不再引用数据族参数：collect 必须与渲染同步跳过，
-  -- 否则 usedTable 与声明 arity 漂移（类型参数个数对不上）。
-  _ => []
-
-dataUsedLevels : DtData -> List (Pair String (List Int)) -> List DtData -> List Int
-dataUsedLevels d table datas =
-  let
-    raw =
-      concatMap
-        (\c => ctorUsedLevels (typeParamLevels d) table datas [] (dtCtorTelescope c) 0 (eval [] (dtCtorType c)))
-        (dtDataCtors d)
-  in filter (\l => memIntIn l raw) (typeParamLevels d)
-
-levelListEq : List Int -> List Int -> Bool
-levelListEq [] [] = True
-levelListEq (x :: xs) (y :: ys) = x == y && levelListEq xs ys
-levelListEq _ _ = False
-
-sameLevelTable : List (Pair String (List Int)) -> List (Pair String (List Int)) -> Bool
-sameLevelTable [] [] = True
-sameLevelTable (a :: rest) (b :: rest2) =
-  if firstOf a == firstOf b && levelListEq (secondOf a) (secondOf b) then sameLevelTable rest rest2
-  else False
-sameLevelTable _ _ = False
-
-usedTableFix : List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
-usedTableFix datas table = usedTableFixFuel 64 datas table
-
-usedTableFixFuel : Int -> List DtData -> List (Pair String (List Int)) -> List (Pair String (List Int))
-usedTableFixFuel fuel datas table = if fuel <= 0 then table
-else
-  let
-    next = map (\d => Pair (dtDataName d) (dataUsedLevels d table datas)) datas
-  in if sameLevelTable next table then next else usedTableFixFuel (fuel - 1) datas next
-
--- | 族 → 运行时类型参数槽（不动点到稳定；声明与实参共用这一份）。
-tyParamsOf : List DtData -> List (Pair String (List Int))
-tyParamsOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 
 -- ---------------------------------------------------------------
 -- 运行时类型渲染（Value → IrTy）
@@ -456,11 +187,6 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 --
 -- 三族运行时表示（去装箱别名 / OCaml record / 变体）在这里判定，产出 `IrTyDecl`。
 -- record 字段表与类型参数槽在 `LwEnv` 里只算一次，声明与实参共用同一份结果。
-recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
-recordFieldsOf datas =
-  map (\d => Pair (dtDataName d) (recordRtFields d))
-    (filter hasRecordRepr (filter (\d => not (memName (dtDataName d) (unboxedFamilySet datas))) datas))
-
 tyDeclsOf : HashMap String (List Int) -> List (Pair String (Pair DtCtor Int)) -> List DtData -> List DtData -> Check (List IrTyDecl)
 tyDeclsOf tyParams unboxed allDatas subset = tyDeclsGo tyParams allDatas unboxed subset
 
@@ -566,11 +292,6 @@ recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) re
 -- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
 -- 分支顺序固定（Nat Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
 -- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`。
--- | Float 展示的唯一实现（`Base.Float.floatRender`）：`Show Float`、`main : Float`
---   入口与模板插值都落到这里，三个后端共用同一份 `%.12g` 渲染。
-floatRenderRefName : String
-floatRenderRefName = "Base.Float.floatRender"
-
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == "strFromFloat" then OkC (IrGlobal floatRenderRefName)
@@ -1141,14 +862,6 @@ lowerDef env st d = case dtDefExtern d of
       ErrC
         (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
 
--- | 依赖表里的 `strFromFloat` 落成 `Base.Float.floatRender`（否则可达性收集会漏）。
-factsDepsOf : LwEnv -> String -> List String
-factsDepsOf env name =
-  map (\d => if d == "strFromFloat" then floatRenderRefName else d) (factsOf env name).termUseDeps
-
-factsOf : LwEnv -> String -> TermUse
-factsOf env name = lookupFacts env.lwFacts name
-
 -- extern 类型 → `IrTy`（判据：Int/String/Bool/Array 基本类型，
 -- 显式 Pi 链；隐式参数与非基本类型是内部错）。
 lowerExternTy : Term -> Check IrTy
@@ -1183,59 +896,6 @@ lowerDefs env st (d :: rest) = Vuna.Compiler.Common.bind (lowerDef env st d) (\p
     Pair tail st3 => OkC (Pair (Base.List.Cons ir tail) st3)
   )
 )
-
--- ---------------------------------------------------------------
--- 共享元数据
--- ---------------------------------------------------------------
-export lowerSharedOf : List DtData -> List DtDef -> HashMap String TermUse -> IrShared
-lowerSharedOf datas defs facts =
-  let
-    runtime = rtDatasOf datas
-    locRows = mapSome locRowPair defs
-  in IrShared (recordFieldsOf runtime) (listFamOf runtime)
-    (anyDefFlag (\f => f.termUseFlags.useFlagsFloat || f.termUseFloatLit) defs facts)
-    (anyDefFlag (\f => f.termUseFlags.useFlagsTrace) defs facts)
-    (anyDefFlag (\f => f.termUseFlags.useFlagsObs) defs facts) locRows
-
--- | 是否有任一可见定义命中旗标（隐藏 runtime 段按此按需追加）。
-anyDefFlag : (TermUse -> Bool) -> List DtDef -> HashMap String TermUse -> Bool
-anyDefFlag pred [] facts = False
-anyDefFlag pred (d :: rest) facts =
-  pred (lookupFacts facts (dtDefName d)) || anyDefFlag pred rest facts
-
-lookupFacts : HashMap String TermUse -> String -> TermUse
-lookupFacts facts name = case Base.HashMap.lookup name facts of
-  Just f => f
-  Nothing => TermUse [] noUseFlags False
-
-listFamOf : List DtData -> Maybe IrListFam
-listFamOf datas = case findListFamilyData datas of
-  Nothing => Nothing
-  Just dd => case findFamilyCtor (dtDataCtors dd) listNilCtor of
-    Nothing => Nothing
-    Just nilC => case findFamilyCtor (dtDataCtors dd) listConsCtor of
-      Nothing => Nothing
-      Just consC => Just (IrListFam (dtDataName dd) (dtCtorName nilC) (dtCtorName consC))
-
-findFamilyCtor : List DtCtor -> String -> Maybe DtCtor
-findFamilyCtor [] name = Nothing
-findFamilyCtor (c :: rest) name = if dtCtorName c == name then Just c else findFamilyCtor rest name
-
-findListFamilyData : List DtData -> Maybe DtData
-findListFamilyData [] = Nothing
-findListFamilyData (d :: rest) =
-  if dtDataName d == listFamilyName then Just d else findListFamilyData rest
-
-ctorTableOf : List DtData -> List (Pair String (Pair String (List Bool)))
-ctorTableOf datas =
-  concatMap
-    (\d => map (\c => Pair (dtCtorName c) (Pair (dtCtorFamily c) (ctorKeepFlags c))) (dtDataCtors d))
-    datas
-
-ctorOpaqueTableOf : List DtData -> List (Pair String (List Bool))
-ctorOpaqueTableOf datas =
-  concatMap (\d => map (\c => Pair (dtCtorName c) (ctorOpaqueFlagsOf datas c)) (dtDataCtors d))
-    datas
 
 -- ---------------------------------------------------------------
 -- 单元 lowering
@@ -1300,11 +960,6 @@ groupDefs env defs =
     Pair grouped _ => OkC grouped
   )
   )
-
--- 名字 → 定义（同键后插优先；与 `findDtDef` 的「首个匹配」语义在无重复名时等价）。
-defTblOf : List DtDef -> HashMap String DtDef
-defTblOf [] = Base.HashMap.fromList []
-defTblOf (d :: rest) = Base.HashMap.insert (dtDefName d) d (defTblOf rest)
 
 tblLookup : HashMap String DtDef -> String -> Maybe DtDef
 tblLookup tbl name = Base.HashMap.lookup name tbl
@@ -1527,58 +1182,6 @@ filterMapErrorRunHost (tag :: rest) =
 
 groupOfPair : Pair Bool (List IrDef) -> IrGroup
 groupOfPair (Pair isRec ds) = IrGroup isRec ds
-
--- | 构建 lowering 环境（split 路径每个程序一份；check 路径用 `lwEnvWithUnit ""`）。
-export mkLwEnv : List DtData -> List DtDef -> String -> LwEnv
-mkLwEnv datas defs unit =
-  let
-    facts = defFactsTblOf defs
-    shared = lowerSharedOf datas defs facts
-    runtime = rtDatasOf datas
-  in LwEnv shared runtime (strTblOf (tyParamsOf runtime)) (unboxedInfoOf runtime)
-    (strTblOf shared.irSharedRecordFields) (strTblOf (ctorTableOf runtime))
-    (strTblOf (ctorOpaqueTableOf runtime)) (Base.HashMap.ofNames (unboxedFamilySet runtime))
-    (hasDataNamed listFamilyName datas) defs (defTblOf defs) facts unit
-
--- | 全部定义的使用事实：每个体只遍历一次（依赖与旗标同源）。
-defFactsTblOf : List DtDef -> HashMap String TermUse
-defFactsTblOf defs =
-  let
-    -- `strFromFloat` 是内建名、不在定义表里；依赖遍历要放行它（落盘时改写成
-    -- `Base.Float.floatRender`）。
-    names = nameSetOf (Base.List.Cons "strFromFloat" (runtimeNamesOf defs))
-  in Base.HashMap.insertAll (map (\d => Pair (dtDefName d) (defFactsOf names d)) defs)
-    (Base.HashMap.fromList [])
-
-defFactsOf : HashMap String Bool -> DtDef -> TermUse
-defFactsOf names d = case dtDefBody d of
-  Nothing => TermUse [] noUseFlags False
-  Just body => termUseInto names useFlagsOfName body
-
--- 隐藏原语 → 旗标（`Intrinsics` 的三张清单是唯一真源；三类互不重叠）。
-intrinsicUseFlagsTbl : HashMap String UseFlags
-intrinsicUseFlagsTbl =
-  Base.HashMap.insertAll
-    (append (map (\n => Pair n (UseFlags True False False)) floatIntrinsicNames) (append (map (\n => Pair n (UseFlags False True False)) traceIntrinsicNames) (map (\n => Pair n (UseFlags False False True)) obsIntrinsicNames)))
-    (Base.HashMap.fromList [])
-
-useFlagsOfName : String -> UseFlags
-useFlagsOfName name = case Base.HashMap.lookup name intrinsicUseFlagsTbl of
-  Just f => f
-  Nothing => noUseFlags
-
--- | 字符串键的关联表（程序级表：一次建好，热路径只查）。
-strTblOf : List (Pair String v) -> HashMap String v
-strTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
-
--- | 程序里是否有这个名字的数据族（桥接内建的放行判据）。
-hasDataNamed : String -> List DtData -> Bool
-hasDataNamed name [] = False
-hasDataNamed name (d :: rest) = dtDataName d == name || hasDataNamed name rest
-
-nameSetOf : List String -> HashMap String Bool
-nameSetOf [] = Base.HashMap.fromList []
-nameSetOf (n :: rest) = Base.HashMap.insert n True (nameSetOf rest)
 
 -- | 整个程序当作一个单元 lowering（check 路径；文本丢弃）。
 export lowerProgramOf : List DtData -> List DtDef -> Check IrProgram
