@@ -70,7 +70,8 @@ nativeRodata =
     NativeRodata (nativeDataLabel "impossible") impossibleMessage,
     NativeRodata (nativeDataLabel "array_oob") arrayOobMessage,
     NativeRodata (nativeDataLabel "unhandled_effect") unhandledEffectMessage,
-    NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage
+    NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage,
+    NativeRodata (nativeDataLabel "bad_stack") badStackMessage
   ]
 
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
@@ -80,7 +81,8 @@ nativeBss =
     NativeBss nativeHeapEndLabel 0 0,
     NativeBss nativeHeapPtrLabel 8 8,
     NativeBss nativeArenaEndLabel 8 8,
-    NativeBss handlersLabel 8 8
+    NativeBss handlersLabel 8 8,
+    NativeBss stackTopLabel 8 8
   ]
 
 -- ---------------------------------------------------------------
@@ -325,24 +327,32 @@ floatSqrtFn = rtFunc "float_sqrt" 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmUnop 
 --   * handler 链：`.bss` 里的 `rt_handlers` 指向最内层节点；节点 64 B：
 --     `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶 [40]=prev`
 --     `[48]=base_rbp [56]=活动 resume 记录（0 = 无）`。
---   * 续延记录 88 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp`（`cur_rbp`）、
+--   * 续延记录 128 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp`（`cur_rbp`）、
 --     `[24]=used [32]=handler 节点 [40]=perform 时的链顶`、
---     `[48]=resume 调用者 rbp [56]=rsp [64]=返回地址 [72]=r15`、`[80]=恢复值 v`。
+--     `[48]=resume 调用者 rbp [56]=rsp [64]=返回地址 [72]=r15`、`[80]=恢复值 v`、
+--     `[88]=prev_top [96]=new_cur [104]=new_top [112]=delta [120]=捕获时的栈顶`。
 --   * 续延闭包 16 B：`[0]=code [8]=续延记录`；调用约定与普通闭包一致（rdi=闭包）。
 --
--- `perform` 把 `[cur_rbp, handler.base_rsp)` 的栈字节拷到堆上，在当前栈上执行
--- `opH(op, k)`（opH 帧落在捕获区外）。`k v` 把捕获帧搬到堆上的新栈段（保留向下增长的
--- slack）、修正 rbp 链，并把 comp 顶部返回地址改到 `eff_kdone`；`kdone` 应用 `ret` 后把
+-- `perform` 把 `[cur_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）
+-- 拷到堆上，在当前栈上执行 `opH(op, k)`（opH 帧落在捕获区外）。`k v` 把整段栈搬到
+-- 堆上的新栈段（保留向下增长的 slack）、平移 rbp 链与 handler 节点的栈地址，把匹配
+-- handler 的顶部返回地址改到 `eff_kdone`；`kdone` 应用 `ret` 后撤销平移、恢复栈顶，把
 -- 答案交回 `k` 的调用点。opH 不调用 `k` 时，其返回值直接作为 handler answer。
 -- 续延是一次性的（`used` 标记）。
 handlersLabel : String
 handlersLabel = "rt_handlers"
+
+export stackTopLabel : String
+stackTopLabel = "rt_stack_top"
 
 unhandledEffectMessage : String
 unhandledEffectMessage = "vuna: runtime error: unhandled effect\n"
 
 resumeTwiceMessage : String
 resumeTwiceMessage = "vuna: runtime error: continuation already resumed\n"
+
+badStackMessage : String
+badStackMessage = "vuna: runtime error: invalid continuation stack\n"
 
 trapUnhandledFn : NativeFunc
 trapUnhandledFn =
@@ -354,26 +364,17 @@ trapResumeTwiceFn =
   rtRawFunc "trap_resume_twice"
     [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "resume_twice"), IMov (OpReg Rdx) (OpImm (strLength resumeTwiceMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
 
+trapBadStackFn : NativeFunc
+trapBadStackFn =
+  rtRawFunc "trap_bad_stack"
+    [IMov (OpReg Rax) (OpImm 1), IMov (OpReg Rdi) (OpImm 2), ILea Rsi (nativeDataLabel "bad_stack"), IMov (OpReg Rdx) (OpImm (strLength badStackMessage)), ISyscall, IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 2), ISyscall]
+
 -- | `prim_effectPerform key name op`：rdi/rsi/rdx。找到最内层匹配 handler 后拷贝栈，
 --   回到 handler 帧调用 `opH(op, k)`，再把它的结果作为 `handle` 的结果返回。
 effPerformFn : NativeFunc
 effPerformFn =
   rtFunc "eff_perform" 96
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_eff_perform_scan", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_unhandled", IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_found", ILabel ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rax 40), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_eff_perform_scan", ILabel ".Lrt_eff_perform_unhandled", ICall (nativeRtLabel "trap_unhandled_effect"), ILabel ".Lrt_eff_perform_found", IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rdx 32), IBinReg "sub" Rcx (OpReg Rbp), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rcx), IMov (OpReg Rdi) (OpReg Rcx), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rbp), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IRepMovsb, IMov (OpReg Rdi) (OpImm 88), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpMem Rdx 48) (OpImm 0), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpMem Rdx 64) (OpImm 0), IMov (OpMem Rdx 72) (OpImm 0), IMov (OpMem Rdx 80) (OpImm 0), IMov (OpReg Rdi) (OpImm 16), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), ILea Rcx (nativeRtLabel "eff_resume"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 7)), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem R9 24), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpReg R11), IMov (OpReg Rdx) (OpReg R10), IMov (OpReg R9) (OpMem Rdi 0), ICallReg R9, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rcx 56), ITest R8 R8, IJcc "jz" ".Lrt_eff_perform_abort_handle", IMov (OpMem Rcx 56) (OpImm 0), IMov (OpReg Rbp) (OpMem R8 48), IMov (OpReg Rsp) (OpMem R8 56), IMov (OpReg R9) (OpMem R8 64), IMov (OpReg R15) (OpMem R8 72), IJmpReg R9, ILabel ".Lrt_eff_perform_abort_handle", IMov (OpReg Rbp) (OpMem Rcx 48), IJmp ".Lrt_eff_handle_abort"]
-
--- | 续延闭包体：`rdi` = 闭包、`rsi` = v。恢复 comp 的栈帧，把 comp 顶部的返回地址改到
---   `eff_kdone`（comp 正常结束后在那里应用 `ret`），然后从 perform 的返回点继续。
---   `r15` 在恢复期间持有续延记录，供 `eff_kdone` 取回 handler 与调用者的返回上下文。
-effResumeFn : NativeFunc
-effResumeFn =
-  rtRawFunc "eff_resume"
-    [IMov (OpReg R8) (OpMem Rdi 8), IMov (OpReg Rax) (OpMem R8 24), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_resume_used", IMov (OpMem R8 24) (OpImm 1), IMov (OpMem R8 48) (OpReg Rbp), ILeaMem Rax Rsp 8, IMov (OpMem R8 56) (OpReg Rax), IMov (OpReg Rax) (OpMem Rsp 0), IMov (OpMem R8 64) (OpReg Rax), IMov (OpMem R8 72) (OpReg R15), IMov (OpMem R8 80) (OpReg Rsi), IMov (OpReg Rcx) (OpMem R8 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg R15) (OpReg R8), IMov (OpReg R9) (OpMem R8 16), IMov (OpReg R10) (OpMem R8 8), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpImm 524304), ICall (nativeRtLabel "alloc"), IBinReg "add" Rax (OpImm 524288), IBinReg "add" Rax (OpImm 15), IBinReg "and" Rax (OpImm (0 - 16)), IMov (OpReg R8) (OpReg Rax), IMov (OpReg R9) (OpMem R15 16), IMov (OpReg R10) (OpMem R15 8), IMov (OpReg Rsi) (OpMem R15 0), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rcx) (OpReg R10), IRepMovsb, IMov (OpReg Rsi) (OpReg R8), IBinReg "add" Rsi (OpReg R10), IMov (OpReg Rcx) (OpReg R8), IBinReg "add" Rcx (OpReg R10), IBinReg "sub" Rcx (OpImm 8), ILea Rax (nativeRtLabel "eff_kdone"), IMov (OpMem Rcx 0) (OpReg Rax), IMov (OpReg Rax) (OpMem R15 32), IMov (OpReg Rcx) (OpReg R8), IBinReg "add" Rcx (OpReg R10), IMov (OpMem Rax 32) (OpReg Rcx), IMov (OpMem Rax 56) (OpReg R15), IMov (OpReg Rdi) (OpReg R8), IBinReg "sub" Rdi (OpReg R9), IMov (OpReg R11) (OpReg R9), IBinReg "add" R11 (OpReg R10), IMov (OpReg Rcx) (OpReg R8), ILabel ".Lrt_eff_resume_reloc", ICmp (OpReg Rcx) (OpReg Rsi), IJcc "jae" ".Lrt_eff_resume_reloc_done", ICmp (OpReg Rcx) (OpReg R8), IJcc "jb" ".Lrt_eff_resume_reloc_done", IMov (OpReg Rdx) (OpMem Rcx 0), ICmp (OpReg Rdx) (OpReg R9), IJcc "jb" ".Lrt_eff_resume_reloc_next", ICmp (OpReg Rdx) (OpReg R11), IJcc "jae" ".Lrt_eff_resume_reloc_next", IBinReg "add" Rdx (OpReg Rdi), IMov (OpMem Rcx 0) (OpReg Rdx), ILabel ".Lrt_eff_resume_reloc_next", IMov (OpReg Rcx) (OpReg Rdx), IJmp ".Lrt_eff_resume_reloc", ILabel ".Lrt_eff_resume_reloc_done", IMov (OpReg Rax) (OpMem R15 80), IMov (OpReg Rcx) (OpMem R8 8), IMov (OpReg Rbp) (OpMem R8 0), IMov (OpReg Rsp) (OpReg R8), IBinReg "add" Rsp (OpImm 16), IJmpReg Rcx, ILabel ".Lrt_eff_resume_used", ICall (nativeRtLabel "trap_resume_twice")]
-
--- | comp 在续延恢复后正常结束：按需弹掉 handler，应用 `ret`，把答案交回 `k` 的调用点。
-effKdoneFn : NativeFunc
-effKdoneFn =
-  rtRawFunc "eff_kdone"
-    [IMov (OpReg R8) (OpMem R15 32), IMov (OpReg R9) (OpRip handlersLabel), ICmp (OpReg R9) (OpReg R8), IJcc "jne" ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 40), IMov (OpRip handlersLabel) (OpReg R9), ILabel ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 56), ICmp (OpReg R9) (OpReg R15), IJcc "jne" ".Lrt_eff_kdone_keep_ctx", IMov (OpMem R8 56) (OpImm 0), ILabel ".Lrt_eff_kdone_keep_ctx", IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpMem R8 16), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11, IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_eff_perform_scan", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_unhandled", IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_found", ILabel ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rax 40), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_eff_perform_scan", ILabel ".Lrt_eff_perform_unhandled", ICall (nativeRtLabel "trap_unhandled_effect"), ILabel ".Lrt_eff_perform_found", IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg Rax), IBinReg "sub" Rax (OpReg Rbp), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" (nativeRtLabel "trap_bad_stack"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rbp), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IRepMovsb, IMov (OpReg Rdi) (OpImm 128), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 9)), IMov (OpMem Rdx 120) (OpReg Rcx), IMov (OpReg Rdi) (OpImm 16), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), ILea Rcx (nativeRtLabel "eff_resume"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 7)), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem R9 24), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpReg R11), IMov (OpReg Rdx) (OpReg R10), IMov (OpReg R9) (OpMem Rdi 0), ICallReg R9, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rcx 56), ITest R8 R8, IJcc "jz" ".Lrt_eff_perform_abort_handle", IMov (OpMem Rcx 56) (OpImm 0), IMov (OpReg R15) (OpReg R8), IMov (OpReg Rdi) (OpReg R8), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx, ILabel ".Lrt_eff_perform_abort_handle", IMov (OpReg Rbp) (OpMem Rcx 48), IJmp ".Lrt_eff_handle_abort"]
 
 -- | `prim_effectHandle key name ret opH th u`（6 参，`u` 只作延迟标记）：安装节点、
 --   执行 thunk，按需弹出，最后把结果交给 `ret`。
@@ -381,6 +382,36 @@ effHandleFn : NativeFunc
 effHandleFn =
   rtFunc "eff_handle" 96
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg R8), IMov (OpReg Rdi) (OpImm 64), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 24) (OpReg Rcx), ILeaMem Rcx Rbp (nativeSlotOff 11), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpRip handlersLabel), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 48) (OpReg Rcx), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpRip handlersLabel) (OpReg Rdx), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rsi) (OpImm 0), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11, IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpReg Rcx) (OpRip handlersLabel), ICmp (OpReg Rcx) (OpReg Rdx), IJcc "jne" ".Lrt_eff_handle_no_pop", IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), ILabel ".Lrt_eff_handle_no_pop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 6)), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11, ILabel ".Lrt_eff_handle_abort"]
+
+-- | 把 `[lo, hi)` 内的栈地址（handler 节点 base_rsp / base_rbp）平移 `delta`。
+--   `rdi` = 续延记录（先处理 record.node），随后沿 `rt_handlers` 链处理；`rsi` = lo、
+--   `rdx` = hi、`rcx` = delta。只改节点里的栈地址；保留 rax / rbp / rsp / r15 / rdi。
+effTranslateNodesFn : NativeFunc
+effTranslateNodesFn =
+  rtRawFunc "eff_translate_nodes"
+    [IMov (OpReg R8) (OpMem Rdi 32), IMov (OpReg R9) (OpMem R8 32), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_rec_rsp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_rec_rsp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 32) (OpReg R9), ILabel ".Lrt_translate_rec_rsp", IMov (OpReg R9) (OpMem R8 48), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_rec_rbp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_rec_rbp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 48) (OpReg R9), ILabel ".Lrt_translate_rec_rbp", IMov (OpReg R8) (OpRip handlersLabel), ILabel ".Lrt_translate_nodes_loop", ITest R8 R8, IJcc "jz" ".Lrt_translate_nodes_done", IMov (OpReg R9) (OpMem R8 32), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_node_rsp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_node_rsp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 32) (OpReg R9), ILabel ".Lrt_translate_node_rsp", IMov (OpReg R9) (OpMem R8 48), ICmp (OpReg R9) (OpReg Rsi), IJcc "jb" ".Lrt_translate_node_rbp", ICmp (OpReg R9) (OpReg Rdx), IJcc "jae" ".Lrt_translate_node_rbp", IBinReg "add" R9 (OpReg Rcx), IMov (OpMem R8 48) (OpReg R9), ILabel ".Lrt_translate_node_rbp", IMov (OpReg R8) (OpMem R8 40), IJmp ".Lrt_translate_nodes_loop", ILabel ".Lrt_translate_nodes_done", IRet]
+
+-- | 撤销一次 resume 的栈迁移：节点地址按 -delta 平移，`rt_stack_top` 恢复为 prev_top。
+--   `rdi` = 续延记录；保留 rax（answer）。
+effUnrelocateFn : NativeFunc
+effUnrelocateFn =
+  rtRawFunc "eff_unrelocate"
+    [IMov (OpReg Rcx) (OpMem Rdi 112), INeg Rcx, IMov (OpReg Rsi) (OpMem Rdi 96), IMov (OpReg Rdx) (OpMem Rdi 104), ICall (nativeRtLabel "eff_translate_nodes"), IMov (OpReg Rcx) (OpMem Rdi 88), IMov (OpRip stackTopLabel) (OpReg Rcx), IRet]
+
+-- | 续延闭包体：`rdi` = 闭包、`rsi` = v。把 `[perform_rbp, rt_stack_top)` 整段
+--   （含外层 handler 的挂起帧）拷到新栈段，平移 rbp 链与节点栈地址，把匹配 handler 的
+--   顶部返回地址改到 `eff_kdone`，再从 perform 的返回点继续。
+effResumeFn : NativeFunc
+effResumeFn =
+  rtRawFunc "eff_resume"
+    [IMov (OpReg R8) (OpMem Rdi 8), IMov (OpReg Rax) (OpMem R8 24), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_resume_used", IMov (OpMem R8 24) (OpImm 1), IMov (OpMem R8 48) (OpReg Rbp), ILeaMem Rax Rsp 8, IMov (OpMem R8 56) (OpReg Rax), IMov (OpReg Rax) (OpMem Rsp 0), IMov (OpMem R8 64) (OpReg Rax), IMov (OpMem R8 72) (OpReg R15), IMov (OpMem R8 80) (OpReg Rsi), IMov (OpReg R15) (OpReg R8), IMov (OpReg R9) (OpMem R8 16), IMov (OpReg R10) (OpMem R8 8), IMov (OpReg R11) (OpMem R8 120), IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpImm 524304), ICall (nativeRtLabel "alloc"), IMov (OpReg R9) (OpMem R15 16), IMov (OpReg R10) (OpMem R15 8), IMov (OpReg Rdi) (OpReg Rax), IBinReg "add" Rdi (OpImm 524288), IBinReg "add" Rdi (OpReg R10), IBinReg "add" Rdi (OpImm 15), IBinReg "and" Rdi (OpImm (0 - 16)), IMov (OpReg Rsi) (OpReg Rdi), IBinReg "sub" Rsi (OpReg R10), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "sub" Rcx (OpReg R9), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem R15 88) (OpReg Rax), IMov (OpMem R15 96) (OpReg Rsi), IMov (OpMem R15 104) (OpReg Rdi), IMov (OpMem R15 112) (OpReg Rcx), IMov (OpReg Rdi) (OpReg Rsi), IMov (OpReg Rsi) (OpMem R15 0), IMov (OpReg Rcx) (OpReg R10), IRepMovsb, IMov (OpReg Rax) (OpMem R15 40), IMov (OpRip handlersLabel) (OpReg Rax), IMov (OpReg Rcx) (OpMem R15 112), IMov (OpReg Rdx) (OpMem R15 120), IMov (OpReg R8) (OpMem R15 96), IMov (OpReg R10) (OpMem R15 104), IMov (OpReg Rsi) (OpMem R15 96), ILabel ".Lrt_eff_resume_reloc", ICmp (OpReg R8) (OpReg R10), IJcc "jae" ".Lrt_eff_resume_reloc_done", ICmp (OpReg R8) (OpReg Rsi), IJcc "jb" ".Lrt_eff_resume_reloc_done", IMov (OpReg R11) (OpMem R8 0), ICmp (OpReg R11) (OpReg R9), IJcc "jb" ".Lrt_eff_resume_reloc_next", ICmp (OpReg R11) (OpReg Rdx), IJcc "jae" ".Lrt_eff_resume_reloc_next", IBinReg "add" R11 (OpReg Rcx), IMov (OpMem R8 0) (OpReg R11), ILabel ".Lrt_eff_resume_reloc_next", IMov (OpReg R8) (OpReg R11), IJmp ".Lrt_eff_resume_reloc", ILabel ".Lrt_eff_resume_reloc_done", IMov (OpReg Rdi) (OpReg R15), IMov (OpReg Rsi) (OpMem R15 16), IMov (OpReg Rdx) (OpMem R15 120), IMov (OpReg Rcx) (OpMem R15 112), ICall (nativeRtLabel "eff_translate_nodes"), IMov (OpReg Rax) (OpMem R15 32), IMov (OpReg R8) (OpMem Rax 32), IBinReg "sub" R8 (OpImm 8), ILea Rax (nativeRtLabel "eff_kdone"), IMov (OpMem R8 0) (OpReg Rax), IMov (OpReg Rax) (OpMem R15 32), IMov (OpMem Rax 56) (OpReg R15), IMov (OpReg Rax) (OpMem R15 104), IMov (OpRip stackTopLabel) (OpReg Rax), IMov (OpReg R8) (OpMem R15 96), IMov (OpReg Rax) (OpMem R15 80), IMov (OpReg Rcx) (OpMem R8 8), IMov (OpReg Rbp) (OpMem R8 0), IMov (OpReg Rsp) (OpReg R8), IBinReg "add" Rsp (OpImm 16), IJmpReg Rcx, ILabel ".Lrt_eff_resume_used", ICall (nativeRtLabel "trap_resume_twice")]
+
+-- | comp 在续延恢复后正常结束：按需弹掉 handler，应用 `ret`，撤销栈迁移，把答案交回
+--   `k` 的调用点。
+effKdoneFn : NativeFunc
+effKdoneFn =
+  rtRawFunc "eff_kdone"
+    [IMov (OpReg R8) (OpMem R15 32), IMov (OpReg R9) (OpRip handlersLabel), ICmp (OpReg R9) (OpReg R8), IJcc "jne" ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 40), IMov (OpRip handlersLabel) (OpReg R9), ILabel ".Lrt_eff_kdone_no_pop", IMov (OpReg R9) (OpMem R8 56), ICmp (OpReg R9) (OpReg R15), IJcc "jne" ".Lrt_eff_kdone_keep_ctx", IMov (OpMem R8 56) (OpImm 0), ILabel ".Lrt_eff_kdone_keep_ctx", IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpMem R8 16), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11, IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx]
 
 -- ---------------------------------------------------------------
 -- 效应原语（宿主层叶子 + IORef）
@@ -630,10 +661,13 @@ nativeRtFuncs =
     arrayMakeFn,
     effPerformFn,
     effHandleFn,
+    effTranslateNodesFn,
+    effUnrelocateFn,
     effResumeFn,
     effKdoneFn,
     trapUnhandledFn,
     trapResumeTwiceFn,
+    trapBadStackFn,
     eraseFn,
     effNewRefFn,
     effReadRefFn,

@@ -379,10 +379,9 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
   的 intrinsic 表里映射到既有 `prim_eff_*` 实现；入口按 `irEntryHandlersOf` 预装
   `runXHost`。
 
-- 嵌套限制：内层 handler 恢复后，外层 handler 在同一条恢复段里被 `perform` 时，
-  捕获区跨到已挂起的内层 handler 帧，栈迁移后帧重叠；只保证内层恢复、外层不在恢复段里
-  被触发的组合（[debt.md](debt.md) D89）。
-- 恢复栈段固定 512 KiB slack（约 5k 个常见帧），旧段不回收。
+- 捕获/迁移的是 `[perform_rbp, rt_stack_top)` 整段栈（含外层 handler 的挂起帧）；
+  内层恢复后再触发外层 `perform` 也走同一段，节点栈地址随段平移、`kdone` 时撤销。
+- 每次恢复保留 512 KiB slack（约 5k 个常见帧），旧段不回收（[debt.md](debt.md) D89）。
 
 wasm 后端仍拒绝 handler（需要 stack switching），shared parity 夹具暂不覆盖 handler；
 native 的机制用例在 `105_native_backend.steps`。

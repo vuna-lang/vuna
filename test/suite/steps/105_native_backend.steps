@@ -156,6 +156,12 @@ exit: 0
 run: "$TMPDIR/effdeep-out/bin/effdeep" 2>&1
 out-equals: 2001
 
+# 9k) 嵌套 handler 的内层恢复段里触发外层 perform：整段栈迁移后仍回到 211。
+run: sh -c 'd="$TMPDIR/effnested"; mkdir -p "$d/app"; printf "[package]\nname = \"effnested\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int\nprog = do\n  x <- perform (A 1)\n  y <- perform (B 2)\n  pure (x + y)\n\ninner : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int -> Eff (Cons \"b\" BOp []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnested-out" "$d"'
+exit: 0
+run: "$TMPDIR/effnested-out/bin/effnested" 2>&1
+out-equals: 211
+
 # 10) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
 exit: 0

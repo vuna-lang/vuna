@@ -1051,7 +1051,8 @@ startFunc printResult kind mainName runMainM handlers =
     handlerPart =
       concatMap (\h => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]) handlers
     callMain =
-      append [IBinReg "and" Rsp (OpImm (0 - 16)), ICall (nativeFuncLabel mainName)]
+      append
+        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip stackTopLabel) (OpReg Rsp), ICall (nativeFuncLabel mainName)]
         (append handlerPart runPart)
     printer = if printResult then case kind of
       "bool" => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_bool")]
