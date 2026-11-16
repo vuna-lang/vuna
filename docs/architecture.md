@@ -34,8 +34,8 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 │                             Prelude Match Records Derive     双向精化
 ├─ Ir.vuna + Ir/            Model Analysis                   擦除后 IR（纯数据 + SCC；无 Core 依赖）
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
-├─ Lowering.vuna + Lowering/ 实现 + Env                      Core→IR（擦除 / 表示 / 形态 / 入口分类 / 程序级检查）
-│                           Env                            程序级表 / 表示判定 / 类型参数槽 / 使用事实
+├─ Lowering.vuna + Lowering/ 实现                            Core→IR（擦除 / 表示 / 形态 / 程序级检查）
+│                           Env Ty Entry                    程序级表与使用事实 / 类型表面与声明 / 入口形态
 ├─ Checks.vuna               Core 侧检查（擦除 / 作用域 / axiom / 定义体事实），不产生 IR
 ├─ Codegen.vuna + Codegen/  Decl Term Assembly Runtime        IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Native/                  Model Abi Runtime Module Render   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）

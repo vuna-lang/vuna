@@ -1,0 +1,209 @@
+module Vuna.Compiler.Lowering.Ty where
+
+-- Core → IR 的**类型表面**：类型参数槽渲染、`IrTy`、类型声明。纯函数（不进项）。
+import Vuna.Compiler.Common
+import Base.HashMap
+import Base.List
+import Vuna.Compiler.Core
+import Vuna.Compiler.Elab
+import Vuna.Compiler.Elab.Representation
+import Vuna.Compiler.Intrinsics
+import Vuna.Compiler.Ir
+import Vuna.Compiler.Lowering.Env
+
+-- ---------------------------------------------------------------
+-- 运行时类型渲染（Value → IrTy）
+-- ---------------------------------------------------------------
+--
+-- `IrTy` 是签名级运行时类型。判据（哪些字段不透明、哪些族参数槽进声明）必须与
+-- 构造子实参逐位对齐；文本渲染在后端。
+renderTyOf : List Int -> HashMap String (List Int) -> List DtData -> Value -> IrTy
+renderTyOf levels table datas v = renderTyFuel 256 levels table datas v
+
+renderTyFuel : Int -> List Int -> HashMap String (List Int) -> List DtData -> Value -> IrTy
+renderTyFuel fuel levels table datas v = if fuel <= 0 then IrTyOpaque
+else case v of
+  VNeutral n => case n of
+    NVar name lvl sp => case levelSlotIn levels lvl of
+      Just s => IrTyVar s
+      -- 命名不到的局部类型变量：不透明运行时值。
+      Nothing => IrTyOpaque
+    NGlobal g sp => renderTyGlobal fuel levels table datas g sp
+  _ => IrTyOpaque
+
+-- | primitive / canonical 族的 IR 运行时类型；`Nothing` = 普通 data（按声明渲染）。
+export reprTyIr : String -> Maybe IrTy
+reprTyIr name = if name == intTypeName then Just IrTyInt
+else if name == strTypeName then Just IrTyStr
+else if name == floatTypeName then Just IrTyFloat
+else case canonicalReprOf name of
+  Just FamReprNat => Just IrTyInt
+  Just FamReprBool => Just IrTyBool
+  _ => Nothing
+
+renderTyGlobal : Int -> List Int -> HashMap String (List Int) -> List DtData -> String -> List Value -> IrTy
+renderTyGlobal fuel levels table datas g sp = case renderTyIntrinsic g (map (\x => renderTyFuel (fuel - 1) levels table datas x) sp) of
+  Just t => t
+  Nothing => case reprTyIr g of
+    Just t => t
+    Nothing => case findDtData g datas of
+      Just gd =>
+        IrTyData g (renderFamilyArgs (fuel - 1) levels table datas (lookupTyParamsIn table g) sp)
+      Nothing => IrTyOpaque
+
+renderTyIntrinsic : String -> List IrTy -> Maybe IrTy
+renderTyIntrinsic "Array" ([a]) = Just (IrTyArray a)
+renderTyIntrinsic "IORef" ([a]) = Just (IrTyRef a)
+renderTyIntrinsic _ _ = Nothing
+
+renderFamilyArgs : Int -> List Int -> HashMap String (List Int) -> List DtData -> List Int -> List Value -> List IrTy
+renderFamilyArgs fuel levels table datas usedPats args = if fuel <= 0 then []
+else case usedPats of
+  [] => []
+  i :: rest => case nthValueIn args i of
+    Just arg =>
+      renderTyFuel (fuel - 1) levels table datas arg
+        :: renderFamilyArgs (fuel - 1) levels table datas rest args
+    Nothing => renderFamilyArgs (fuel - 1) levels table datas rest args
+
+-- 显式 Pi 结构化渲染（`(Int -> a)` 这类）；带隐式量词的 Pi 整体不透明。
+renderPiTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
+renderPiTy levels table datas lvl v = renderPiTyFuel 256 levels table datas lvl v
+
+renderPiTyFuel : Int -> List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
+renderPiTyFuel fuel levels table datas lvl v = if fuel <= 0 then renderTyFuel fuel levels table datas v
+else case v of
+  VPi name implicit rig dom clo =>
+    let
+      next = applyClosure clo (VNeutral (NVar name lvl []))
+    in if rigIsErased rig then renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next
+    else IrTyFun (renderPiTyFuel (fuel - 1) levels table datas lvl dom)
+      (renderPiTyFuel (fuel - 1) levels table datas (lvl + 1) next)
+  _ => renderTyFuel fuel levels table datas v
+
+-- 单个字段的运行时类型 + 下一个不透明参数槽。
+renderFieldTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> Int -> Pair IrTy Int
+renderFieldTy levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
+  if implicit then Pair (IrTyVar slot) (slot + 1)
+  else Pair (renderPiTy levels table datas lvl dom) slot
+renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
+  NVar name lvl2 sp => case levelSlotIn levels lvl2 of
+    Just s => Pair (IrTyVar s) slot
+    Nothing => Pair (IrTyVar slot) (slot + 1)
+  NGlobal g sp => case renderTyIntrinsic g (map (\x => renderTyFuel 256 levels table datas x) sp) of
+    Just t => Pair t slot
+    Nothing => case reprTyIr g of
+      Just t => Pair t slot
+      Nothing => case findDtData g datas of
+        Just gd =>
+          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp))
+            slot
+        Nothing => Pair (IrTyVar slot) (slot + 1)
+renderFieldTy levels table datas lvl _ slot = Pair (IrTyVar slot) (slot + 1)
+
+export flagMatchesRigIn : Bool -> Rig -> Bool
+flagMatchesRigIn True rig = not (rigIsErased rig)
+flagMatchesRigIn False rig = rigIsErased rig
+
+-- 构造子字段的运行时类型表（唯一真源：keep flags + 不透明 flags 与 telescope 逐位对齐）。
+ctorFieldTys : List Int -> HashMap String (List Int) -> List DtData -> List Bool -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Check (Pair (List IrTy) Int)
+ctorFieldTys levels table datas keepFlags opaqueFlags [] lvl v slot = OkC (Pair [] slot)
+ctorFieldTys levels table datas [] (_ :: _) tele lvl v slot =
+  icInternal "constructor opaque flags longer than its shape"
+ctorFieldTys levels table datas [] [] (_ :: _) lvl v slot =
+  icInternal "constructor shape has more binders than its telescope"
+ctorFieldTys levels table datas (_ :: _) [] (_ :: _) lvl v slot =
+  icInternal "constructor opaque flags shorter than its shape"
+ctorFieldTys levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :: rest) lvl v slot = if flagMatchesRigIn keep rig then case v of
+  VPi pname implicit _ dom clo =>
+    let
+      next = applyClosure clo (VNeutral (NVar pname lvl []))
+    in if keep then if opq then Vuna.Compiler.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot) (\p => case p of
+      -- 不透明字段：整个字段渲染成不命名的运行时值；不消耗类型参数槽。
+      Pair tys slot3 => OkC (Pair (IrTyOpaque :: tys) slot3)
+    )
+    else case renderFieldTy levels table datas lvl dom slot of
+      Pair text slot2 => Vuna.Compiler.Common.bind (ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot2) (\p => case p of
+        Pair tys slot3 => OkC (Pair (text :: tys) slot3)
+      )
+    else ctorFieldTys levels table datas flags opqs rest (lvl + 1) next slot
+  _ => icInternal "constructor telescope does not match its type"
+else icInternal "constructor keep flag disagrees with telescope rig"
+
+ctorArityNeed : List Int -> HashMap String (List Int) -> List DtData -> DtCtor -> Check Int
+ctorArityNeed levels table datas c =
+  Vuna.Compiler.Common.bind
+    (ctorFieldTys levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels))
+    (\p => OkC (secondOf p - listLength levels))
+
+dataArityNeed : List Int -> HashMap String (List Int) -> List DtData -> List DtCtor -> Check Int
+dataArityNeed levels table datas ctors =
+  Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (ctorArityNeed levels table datas) ctors)
+    (\ns => OkC (listLength levels + maxIntListIn ns))
+
+maxIntListIn : List Int -> Int
+maxIntListIn [] = 0
+maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn rest
+
+-- ---------------------------------------------------------------
+-- 类型声明（IR）
+-- ---------------------------------------------------------------
+--
+-- 三族运行时表示（去装箱别名 / OCaml record / 变体）在这里判定，产出 `IrTyDecl`。
+-- record 字段表与类型参数槽在 `LwEnv` 里只算一次，声明与实参共用同一份结果。
+export tyDeclsOf : HashMap String (List Int) -> List (Pair String (Pair DtCtor Int)) -> List DtData -> List DtData -> Check (List IrTyDecl)
+tyDeclsOf tyParams unboxed allDatas subset = tyDeclsGo tyParams allDatas unboxed subset
+
+export tyDeclsGo : HashMap String (List Int) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> List DtData -> Check (List IrTyDecl)
+tyDeclsGo table allDatas unboxed [] = OkC []
+tyDeclsGo table allDatas unboxed (d :: rest) =
+  Vuna.Compiler.Common.bind (tyDeclOf table allDatas unboxed d)
+    (\decl => Vuna.Compiler.Common.bind (tyDeclsGo table allDatas unboxed rest) (\tail => OkC (Base.List.Cons decl tail)))
+
+export tyDeclOf : HashMap String (List Int) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check IrTyDecl
+tyDeclOf table allDatas unboxed d =
+  let
+    levels = lookupTyParamsIn table (dtDataName d)
+    arity = listLength levels
+  in case lookupUnboxedInfo (dtDataName d) unboxed of
+    Just (Pair c idx) => Vuna.Compiler.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => case firstOf p of
+      [only] => OkC (IrUnboxedDecl (dtDataName d) arity only)
+      _ => icInternal "unboxed constructor does not have exactly one kept field: ${dtCtorName c}"
+    )
+    Nothing => if hasRecordRepr d then case dtDataCtors d of
+      [c] =>
+        Vuna.Compiler.Common.bind
+          (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels))
+          (\p => OkC (IrRecordDecl (dtDataName d) arity (recordRtFields d) (firstOf p)))
+      _ => icInternal "record family must have exactly one constructor: ${dtDataName d}"
+    else Vuna.Compiler.Common.bind (dataArityNeed levels table allDatas (dtDataCtors d))
+      (\fullArity => Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (\c => Vuna.Compiler.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => OkC (Pair (dtCtorName c) (firstOf p)))) (dtDataCtors d)) (\ctors => OkC (IrVariantDecl (dtDataName d) fullArity ctors)))
+
+-- 类型声明里引用到的全局族名（去重、首现顺序）。后端据此算跨单元类型依赖。
+export tyDeclRefs : List IrTyDecl -> List String
+tyDeclRefs decls = tyDeclRefsGo (map tyDeclTys decls) []
+
+tyDeclTys : IrTyDecl -> List IrTy
+tyDeclTys (IrVariantDecl name n ctors) = concatMap secondOf ctors
+tyDeclTys (IrRecordDecl name n fields tys) = tys
+tyDeclTys (IrUnboxedDecl name n ty) = [ty]
+
+tyDeclRefsGo : List (List IrTy) -> List String -> List String
+tyDeclRefsGo [] acc = reverse acc
+tyDeclRefsGo (tys :: rest) acc = tyDeclRefsGo rest (foldlTyNames tys acc)
+
+foldlTyNames : List IrTy -> List String -> List String
+foldlTyNames [] acc = acc
+foldlTyNames (t :: rest) acc = foldlTyNames rest (tyNamesInto t acc)
+
+tyNamesInto : IrTy -> List String -> List String
+tyNamesInto (IrTyVar i) acc = acc
+tyNamesInto IrTyInt acc = acc
+tyNamesInto IrTyStr acc = acc
+tyNamesInto IrTyBool acc = acc
+tyNamesInto IrTyFloat acc = acc
+tyNamesInto IrTyOpaque acc = acc
+tyNamesInto (IrTyArray a) acc = tyNamesInto a acc
+tyNamesInto (IrTyRef a) acc = tyNamesInto a acc
+tyNamesInto (IrTyFun d c) acc = tyNamesInto c (tyNamesInto d acc)
+tyNamesInto (IrTyData fam args) acc = foldlTyNames args (pushDep fam acc)
