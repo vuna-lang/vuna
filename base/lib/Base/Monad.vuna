@@ -1,13 +1,13 @@
 module Base.Monad where
 
--- Base.Monad：Functor / Monad trait（支持高阶 kind 与约束泛化）。
--- do 语法糖在 loader 里 desugar 成 bind / lambda；fmap 是普通 trait 方法。
--- 约定方法名固定：Functor.fmap、Monad.bind、Applicative.pure。
+-- Base.Monad：`Monad` trait（支持高阶 kind 与约束泛化）。
+-- do 语法糖在 loader 里 desugar 成 bind / lambda；`bind` 是普通 trait 方法。
+-- 约定方法名固定：`Monad.bind`；`Functor.fmap` / `Applicative.pure` 由父类链提供。
 --
 -- `pure` 属于 `Base.Applicative` 而不是本模块（`do` 只需要 `bind`；`pure` 是
--- Applicative 的能力）。本模块**重导出** `Base.Applicative`，因此既有
--- `import Base.Monad` 的代码仍能看到 `pure` / `liftA2` / `ap`；但类型要有
--- `Applicative` 实例才能用 `pure`（每个 monad 类型都补了）。
+-- Applicative 的能力）。本模块**重导出** `Base.Applicative`（以及它重导出的
+-- `Base.Functor`），因此既有 `import Base.Monad` 的代码仍能看到 `fmap` / `pure` /
+-- `liftA2` / `ap`；父类链保证 `Monad m =>` 的代码可以直接用这些方法。
 --
 -- fixity 与别名来自本模块的 `infixr` / `infixl` 声明：`>>=` → bind；`>>` 的 fixity
 -- 也在这里，但**不**是普通别名——`a >> b` 由 Loader 按 do 派生展开成
@@ -18,10 +18,6 @@ export import Base.Applicative
 infixr 1 >>= = bind
 infixl 1 >>
 
--- | 函子 trait：`fmap : (a -> b) -> f a -> f b`，负责在容器上映射而不改变结构。高阶 kind 支持见 `Functor f` 的 `f`。
-export trait Functor f(..) where
-  fmap : (a -> b) -> f a -> f b
-
--- | Monad trait：`bind : m a -> (a -> m b) -> m b`。方法名固定（`Monad.bind`），`do` 语法糖在 Loader 里 desugar 成它；`>>=` 是 `bind` 的别名，`>>` 不是普通别名而是按 do 派生展开（丢弃结果需调用点可见的 `bind`）。`pure` 在 `Base.Applicative`（本模块重导出），类型需要 Applicative 实例。
-export trait Monad m(..) where
+-- | Monad trait：`bind : m a -> (a -> m b) -> m b`。方法名固定（`Monad.bind`），`do` 语法糖在 Loader 里 desugar 成它；`>>=` 是 `bind` 的别名，`>>` 不是普通别名而是按 do 派生展开（丢弃结果需调用点可见的 `bind`）。父类是 `Applicative`（其父类为 `Functor`）；`pure` / `fmap` 由父类字典提供。
+export trait Applicative m => Monad m(..) where
   bind : m a -> (a -> m b) -> m b

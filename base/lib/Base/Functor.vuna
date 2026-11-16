@@ -1,0 +1,10 @@
+module Base.Functor where
+
+-- Base.Functor：`Functor` trait（`fmap`）。
+--
+-- 单独成模块是为了让 `Applicative` 能以 `Functor f =>` 声明父类约束：
+-- `Base.Monad` 重导出本模块，`import Base.Monad` 仍能看到 `fmap`。
+-- 高阶 kind 支持见 `Functor f` 的 `f`。
+-- | 函子 trait：`fmap : (a -> b) -> f a -> f b`，负责在容器上映射而不改变结构。
+export trait Functor f(..) where
+  fmap : (a -> b) -> f a -> f b
