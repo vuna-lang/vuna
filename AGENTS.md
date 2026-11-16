@@ -66,6 +66,10 @@
 
 - **每轮开工先 rebase 主分支**（`git fetch origin main` → `git rebase main`），历史保持线性
   （[workflow.md](.agents/rules/workflow.md)）。
+- **改动只在副 worktree 进行**：所有源码 / 文档改动都在独立 worktree
+  （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取、
+  rebase 与 cherry-pick；收尾按技能 `worktree` 的脚本把提交带回主仓并 teardown
+  （[workflow.md](.agents/rules/workflow.md)）。
 - **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换，且独立成
   `chore(seed): ...` 提交（[workflow.md](.agents/rules/workflow.md)）。
 - **改完代码跑 `./result/bin/vuna fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量

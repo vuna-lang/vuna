@@ -13,7 +13,9 @@ git rebase main
 - 历史必须**线性**：优先 ff-only merge / rebase / cherry-pick / 挤压提交，不产生 merge 提交。
 - rebase 后按需重建本地编译器（`nix build .#vuna --out-link result`），先跑
   `./result/bin/vuna check .` 与相关 suite 再继续。
-- 在副 worktree 里开工的完整口径见技能 `vuna-worktree-dev`。
+- **所有改动都在副 worktree 内完成**（`~/.local/share/opencode/worktree/…` /
+  `.local/worktrees/…`），主工作区只读：不直接在主根改文件，收尾用脚本把提交 cherry-pick
+  回去。完整口径见技能 `worktree`。
 
 ## 2. 开发：小步 + 本地验证
 
