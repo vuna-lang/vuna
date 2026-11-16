@@ -17,6 +17,7 @@ module Vuna.Compiler.Driver.Compile where
 -- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff r`，这里直接调用。
 import Base.Sort
 import Base.Maybe
+import Base.Obs
 import Vuna.Compiler.Addr
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
@@ -1037,6 +1038,7 @@ readIfaceListEff (m :: rest) = do
     Nothing => do
       let
         _ = dbg! "iface-miss ${m.cmName} ${m.cmAddr} pkg=${m.cmPkg} src=${m.cmSrc}"
+        _ = obsMark "vuna.tool.iface.miss:${m.cmName}:${m.cmAddr}"
       in do
         _ <- obsCountEff "vuna.counter.cache.miss" 1
         pure Nothing
@@ -1431,6 +1433,7 @@ export depIfacesForToolSourceDetailed : Member nFs FsOp r, Member nClock ClockOp
 depIfacesForToolSourceDetailed ctx label source = do
   enabled <- toolEnabled
   if enabled then do
+    _ <- obsMarkEff "vuna.tool.ifaces.lookup"
     mods <- ifaceModsEff ctx
     starts <- toolImportsOfSource ctx label source
     let
@@ -1441,13 +1444,18 @@ depIfacesForToolSourceDetailed ctx label source = do
     in do
       ifaces <- readIfaceListEff depMods
       case ifaces of
-        Nothing => pure Nothing
+        Nothing => do
+          _ <- obsMarkEff "vuna.tool.ifaces.missing"
+          pure Nothing
         Just ifs => do
+          _ <- obsMarkEff "vuna.tool.ifaces.ready"
           stats <- mapEff statOfClosureMod depMods
           let
             _ = dbg! "tool-closure modules=${length ifs}"
           in pure (Just (ToolContext ifs depHashes needed ownNames stats))
-  else pure Nothing
+  else do
+    _ <- obsMarkEff "vuna.tool.ifaces.disabled"
+    pure Nothing
 
 modHashPair : ClosureMod -> Pair String String
 modHashPair m = Pair m.cmName m.cmAddr

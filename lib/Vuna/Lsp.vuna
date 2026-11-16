@@ -22,15 +22,25 @@ module Vuna.Lsp where
 -- body 后面没有换行，客户端在拿到响应前也不发下一帧，行级读会在 `initialize` 就互等死锁。
 -- 退出码：收到 shutdown 后的 exit 退 0，否则（EOF / 未 shutdown）退 1。
 --
--- 服务器状态：打开的文档表、惰性 Index（一次构建并缓存）、日志缓冲。
+-- 服务器状态：打开的文档表、惰性 Index（一次构建并缓存）、日志缓冲、按内容寻址的
+-- 单文件分析缓存（`DocCache`：洞目标 / 诊断 suggestion）。
+-- 请求延迟：洞精化只在**光标所在行**有 `_` / `?name` 时触发；洞目标与 suggestion 按
+-- (uri, 文本内容哈希) 复用（文本一变即失效）。同一 buffer 的重复 hover / codeAction
+-- 因此是毫秒级，不会每个请求重跑精化。
 -- 已知边界：
---   - didChange 跑一次完整 DT 精化（同 uri + 内容重复请求命中进程内诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
+--   - didChange 在 push 诊断客户端上跑一次 DT 检查（同 uri + 内容重复请求命中进程内
+--     诊断帧缓存），大文件逐个按键变更可能较慢（客户端可降级为保存时检查）；
 --   - 编辑**未保存的依赖模块**时，精化仍从磁盘读依赖（LSP 只覆盖当前文档）；
 --   - Index 只反映磁盘内容、不随 didChange 刷新（hover 的 docstring 例外：打开着的文件以
 --     缓冲为准，见 `bufferTexts` / `Bindings.bufferSymDoc`）；构建失败则相关方法退化返回空结果；
 --   - 首次索引查找可能触发索引全量重建（会话对象未命中；仓库级秒级），期间请求排队；
+--   - 洞精化优先走「依赖包接口 + 本包干净模块」的增量装配；本机 iface 对象缺失 / 编译器
+--     版本变化后尚未跑过 `check`|`build` 时退化为只精化当前 buffer（与 `vuna goal` 同源），
+--     跨模块名字按源文本呈现；
+--   - 主循环串行：`$/cancelRequest` 只能阻止**尚未开始**的请求（已开始的精化不打断）；
 --   - 多根 workspace 未支持：workspace/symbol 用首个打开文档推断工作区根。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Elab
 import Vuna.Index
 import Vuna.Json
 import Vuna.Json.Server
@@ -49,6 +59,7 @@ import Base.EffFs
 import Base.EffProcess
 import Base.EffStdin
 import Base.Nat
+import Base.Obs
 
 -- ---------------------------------------------------------------
 -- 常量
@@ -100,53 +111,113 @@ record LspState where
   stateLogs : List String
   stateDiagCache : List (Pair Int Json)
   stateDiagSession : Maybe DiagCache
+  -- 单文件分析结果缓存：key = uri + 文本内容哈希（文本一变即失效）。hover / case split
+  -- 共用洞目标，codeAction 复用诊断 suggestion。
+  stateDocCache : List (Pair Int DocCache)
+  -- 已收到 `$/cancelRequest` 的请求 id：串行循环里取消只意味着「不再开始」。
+  stateCanceled : List Int
+
+-- 同一份 buffer 内容的分析结果（惰性填充：某一项没算过就是 Nothing）。
+-- `dcGoals` 带上「依赖是否完整」标记：只精化当前 buffer 的结果（False）不能直接用于
+-- case split，命中时需要再算一次。
+record DocCache where
+  dcGoals : Maybe (Pair Bool (List DtGoalInfo))
+  dcSuggestions : Maybe (List (Pair (Pair Int Int) (List Json)))
 
 setDocs : List Doc -> LspState -> LspState
-setDocs docs (LspState _ s pull idx tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setDocs docs (LspState _ s pull idx tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setShutdown : Bool -> LspState -> LspState
-setShutdown s (LspState docs _ pull idx tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setShutdown s (LspState docs _ pull idx tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setClientPull : Bool -> LspState -> LspState
-setClientPull pull (LspState docs s _ idx tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setClientPull pull (LspState docs s _ idx tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setIndex : Maybe Index -> LspState -> LspState
-setIndex idx (LspState docs s pull _ tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setIndex idx (LspState docs s pull _ tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setIndexTried : Bool -> LspState -> LspState
-setIndexTried tried (LspState docs s pull idx _ hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setIndexTried tried (LspState docs s pull idx _ hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setRootHintIfEmpty : String -> LspState -> LspState
-setRootHintIfEmpty hint (LspState docs s pull idx tried (existing@(Just prev)) logs dc dsess) =
-  LspState docs s pull idx tried existing logs dc dsess
-setRootHintIfEmpty hint (LspState docs s pull idx tried Nothing logs dc dsess) =
-  LspState docs s pull idx tried (Just hint) logs dc dsess
+setRootHintIfEmpty hint (LspState docs s pull idx tried (existing@(Just prev)) logs dc dsess gs canc) =
+  LspState docs s pull idx tried existing logs dc dsess gs canc
+setRootHintIfEmpty hint (LspState docs s pull idx tried Nothing logs dc dsess gs canc) =
+  LspState docs s pull idx tried (Just hint) logs dc dsess gs canc
 
 setDiagCache : List (Pair Int Json) -> LspState -> LspState
-setDiagCache dc (LspState docs s pull idx tried hint logs _ dsess) =
-  LspState docs s pull idx tried hint logs dc dsess
+setDiagCache dc (LspState docs s pull idx tried hint logs _ dsess gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 setDiagSession : Maybe DiagCache -> LspState -> LspState
-setDiagSession dsess (LspState docs s pull idx tried hint logs dc _) =
-  LspState docs s pull idx tried hint logs dc dsess
+setDiagSession dsess (LspState docs s pull idx tried hint logs dc _ gs canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
+
+setDocCache : List (Pair Int DocCache) -> LspState -> LspState
+setDocCache gs (LspState docs s pull idx tried hint logs dc dsess _ canc) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
+
+setCanceled : List Int -> LspState -> LspState
+setCanceled canc (LspState docs s pull idx tried hint logs dc dsess gs _) =
+  LspState docs s pull idx tried hint logs dc dsess gs canc
 
 -- LSP 进程内诊断帧缓存（上限 32 条，前插）。
 pushDiag : Int -> Json -> LspState -> LspState
-pushDiag key frame (LspState docs s pull idx tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess
+pushDiag key frame (LspState docs s pull idx tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint logs (truncateCache 32 (Pair key frame :: dc)) dsess gs canc
+
+-- uri + 文本内容的缓存 key（诊断帧与洞目标共用同一口径）。
+contentKeyOf : String -> String -> Int
+contentKeyOf uri text = strHash uri * 1000003 + strHash text
+
+-- 单文件分析结果缓存（上限 8 条，前插）：同一 buffer 的 hover / case split / codeAction
+-- 复用同一次精化或诊断。
+lookupDocCache : Int -> List (Pair Int DocCache) -> Maybe DocCache
+lookupDocCache k [] = Nothing
+lookupDocCache k ((Pair k2 v) :: rest) = if k == k2 then Just v else lookupDocCache k rest
+
+-- 替换同 key 条目（保留另一项已有结果），否则前插。
+upsertDocCache : Int -> DocCache -> LspState -> LspState
+upsertDocCache key entry st =
+  let
+    rest = filter (\kv => firstOf kv /= key) st.stateDocCache
+  in setDocCache (truncateCache 8 (Pair key entry :: rest)) st
+
+cacheEntryOf : Int -> LspState -> DocCache
+cacheEntryOf key st = case lookupDocCache key st.stateDocCache of
+  Just e => e
+  Nothing => DocCache Nothing Nothing
+
+-- 取消集合：只保留最近 64 个（客户端取消的通常就是刚发出的几个）。
+rememberCancel : Int -> LspState -> LspState
+rememberCancel i st = setCanceled (takeCanceled 64 (i :: st.stateCanceled)) st
+
+takeCanceled : Int -> List Int -> List Int
+takeCanceled n [] = []
+takeCanceled n (x :: rest) = if n <= 0 then [] else x :: takeCanceled (n - 1) rest
+
+isCanceled : Int -> LspState -> Bool
+isCanceled i st = containsInt i st.stateCanceled
+
+containsInt : Int -> List Int -> Bool
+containsInt x [] = False
+containsInt x (y :: rest) = if x == y then True else containsInt x rest
+
+forgetCancel : Int -> LspState -> LspState
+forgetCancel i st = setCanceled (filter (\x => x /= i) st.stateCanceled) st
 
 truncateCache : Int -> List a -> List a
 truncateCache n [] = []
 truncateCache n (x :: rest) = if n <= 0 then [] else x :: truncateCache (n - 1) rest
 
 logTo : String -> LspState -> LspState
-logTo line (LspState docs s pull idx tried hint logs dc dsess) =
-  LspState docs s pull idx tried hint (line :: logs) dc dsess
+logTo line (LspState docs s pull idx tried hint logs dc dsess gs canc) =
+  LspState docs s pull idx tried hint (line :: logs) dc dsess gs canc
 
 -- 退出时一次写出（内存累积的日志，见 Protocol.flushLogLines）。
 flushLogs : Member nFs FsOp r => LspState -> Eff r Int
@@ -274,7 +345,7 @@ handleDidChange msg state =
 diagnoseCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Int -> String -> LspState -> Eff r (Pair LspState Json)
 diagnoseCached uri version text state =
   let
-    key = strHash uri * 1000003 + strHash text
+    key = contentKeyOf uri text
   in case lookupDiag key state.stateDiagCache of
     Just frame => pure (Pair state frame)
     Nothing => do
@@ -306,13 +377,55 @@ handlePullDiagnostics msg state =
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
-  in do
-    result <- diagnosticsForCached state.stateDiagSession uri text
-    let
-      labeled = secondOf result
-      state1 = setDiagSession (firstOf result) state
-    in pure
-      (Pair False (Pair state1 [responseOk (idOf msg) (diagReportJson uri text (secondOf labeled))]))
+    -- pull 结果与 push 帧共用一张缓存表，但 key 走不同的内容域（`pull|` 前缀）：
+    -- 同一 buffer 在 push 模式下已经缓存过通知帧，pull 请求必须拿报告而不是那个帧。
+    key = contentKeyOf uri ("pull|" ++ text)
+  in case lookupDiag key state.stateDiagCache of
+    Just report => pure (Pair False (Pair state [responseOk (idOf msg) report]))
+    Nothing => do
+      result <- diagnosticsForCached state.stateDiagSession uri text
+      let
+        labeled = secondOf result
+        report = diagReportJson uri text (secondOf labeled)
+        state1 = pushDiag key report (setDiagSession (firstOf result) state)
+      in pure (Pair False (Pair state1 [responseOk (idOf msg) report]))
+
+-- 洞目标（按 uri + 文本记忆化）：同一 buffer 的 hover / case split 只精化一次。
+goalsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Eff r (Pair LspState (List DtGoalInfo))
+goalsCached allowFull allowBuild state uri text =
+  let
+    key = contentKeyOf uri text
+    entry = cacheEntryOf key state
+  in case entry.dcGoals of
+    Just (Pair complete gs) =>
+      if not allowFull || complete then pure (Pair state gs)
+      else goalsCompute allowFull allowBuild state uri text key entry
+    Nothing => goalsCompute allowFull allowBuild state uri text key entry
+
+goalsCompute : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> LspState -> String -> String -> Int -> DocCache -> Eff r (Pair LspState (List DtGoalInfo))
+goalsCompute allowFull allowBuild state uri text key entry = do
+  pair <- goalsForDoc allowFull allowBuild state.stateDiagSession uri text
+  let
+    state1 =
+      upsertDocCache key (DocCache (Just (secondOf pair)) entry.dcSuggestions)
+        (setDiagSession (firstOf pair) state)
+  in pure (Pair state1 (secondOf (secondOf pair)))
+
+-- 诊断 suggestion（codeAction 的 quickfix 来源）：同内容只跑一次诊断。
+suggestionsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => LspState -> String -> String -> Eff r (Pair LspState (List (Pair (Pair Int Int) (List Json))))
+suggestionsCached state uri text =
+  let
+    key = contentKeyOf uri text
+    entry = cacheEntryOf key state
+  in case entry.dcSuggestions of
+    Just sug => pure (Pair state sug)
+    Nothing => do
+      pair <- suggestionsForDoc state.stateDiagSession uri text
+      let
+        state1 =
+          upsertDocCache key (DocCache entry.dcGoals (Just (secondOf pair)))
+            (setDiagSession (firstOf pair) state)
+      in pure (Pair state1 (secondOf pair))
 
 handleHover : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
 handleHover msg state =
@@ -323,20 +436,27 @@ handleHover msg state =
     col = colOfParams params + 1
     text = textForUri uri state
   in do
-    holeHover <- holeHoverAt uri line col text
-    case holeHover of
-      Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
-      Nothing => do
-        bindHover <- bindingHoverAt (bufferTexts state) uri line col text
-        case bindHover of
-          Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
-          Nothing => do
-            indexPair <- ensureIndex uri state
-            let
-              state1 = firstOf indexPair
-              midx = secondOf indexPair
-            in pure
-              (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
+    holePair <- if lineHasHole text line then do
+      gp <- goalsCached False False state uri text
+      pure (Pair (firstOf gp) (holeHoverFrom line col (secondOf gp)))
+    else pure (Pair state Nothing)
+    case secondOf holePair of
+      Just hover => pure (Pair False (Pair (firstOf holePair) [responseOk (idOf msg) hover]))
+      Nothing => handleHoverFallback msg (firstOf holePair) uri line col text
+
+-- hover 的第二段：模块引用 / 局部绑定（parse 级），未命中再看 Index 符号。
+handleHoverFallback : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> String -> Int -> Int -> String -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleHoverFallback msg state uri line col text = do
+  bindHover <- bindingHoverAt (bufferTexts state) uri line col text
+  case bindHover of
+    Just hover => pure (Pair False (Pair state [responseOk (idOf msg) hover]))
+    Nothing => do
+      indexPair <- ensureIndex uri state
+      let
+        state1 = firstOf indexPair
+        midx = secondOf indexPair
+      in pure
+        (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
 
 -- formatting：formatSourceWith 成功且内容变化 ⇒ 全文 TextEdit；否则 []（fixity 是程序级的）。
 handleFormatting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
@@ -366,19 +486,36 @@ onlyKindsOf params = case jsonGetIn ["context", "only"] params >>= jsonAsArr of
   Just kinds => Just (mapMaybe jsonAsStr kinds)
 
 -- codeAction：当前缓冲 → lint quick fix / fix all command / 洞 case split（纯查询）。
+-- 洞目标与诊断 suggestion 都按 (uri, text) 缓存：Neovim 等客户端在光标移动时反复请求
+-- codeAction，第二次起只做 lint + 过滤。
 handleCodeAction : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
 handleCodeAction msg state =
   let
     params = paramsOf msg
     uri = uriOfParams params
     text = textForUri uri state
+    only = onlyKindsOf params
     startLine = rangeLineOf "start" params + 1
     startCol = rangeCharOf "start" params + 1
     endLine = rangeLineOf "end" params + 1
     endCol = rangeCharOf "end" params + 1
   in do
-    actions <- codeActionsFor uri text startLine startCol endLine endCol (onlyKindsOf params)
-    pure (Pair False (Pair state [responseOk (idOf msg) (JArr actions)]))
+    goalPair <- if caseSplitWanted text startLine startCol endLine endCol only then do
+      gp <- goalsCached True True state uri text
+      pure (Pair (firstOf gp) (Just (secondOf gp)))
+    else pure (Pair state Nothing)
+    let
+      state0 = firstOf goalPair
+    in do
+      suggPair <-
+        if quickfixWanted only then suggestionsCached state0 uri text else pure (Pair state0 [])
+      let
+        state1 = firstOf suggPair
+      in do
+        actions <-
+          codeActionsFor (secondOf goalPair) (secondOf suggPair) uri text startLine startCol endLine
+            endCol only
+        pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr actions)]))
 
 -- ---------------------------------------------------------------
 -- workspace/executeCommand（fix all 的 command 形式）
@@ -538,12 +675,35 @@ handleWorkspaceSymbol msg state =
     in pure (Pair False (Pair state1 [responseOk (idOf msg) (JArr (workspaceSymbols midx query))]))
 
 -- 处理一帧。返回 (是否退出, 新状态, 待发送帧)。
+-- 取消：主循环串行，读 stdin 是阻塞的，所以运行中的计算无法打断；能做的是「不再开始」
+-- —— `$/cancelRequest` 先记账，派发前发现该 id 已取消就直接回 RequestCancelled，
+-- 客户端重复 hover / 拖慢的批量 codeAction 不会再把队列越排越长。
 handleFrame : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
 handleFrame msg state = case jsonGet "method" msg of
   Nothing => pure (Pair False (Pair state [])) -- 客户端对我们请求的响应：忽略
   Just m => case jsonAsStr m of
     Nothing => pure (Pair False (Pair state []))
-    Just methodName => dispatch methodName msg state
+    Just methodName => if methodName == "$/cancelRequest" then handleCancel msg state
+    else
+      let
+        reqId = idIntOf msg
+      in if reqId /= 0 && isCanceled reqId state then pure
+        (Pair False (Pair (forgetCancel reqId state) [responseErr (idOf msg) errRequestCancelled "cancelled"]))
+      else do
+        tok <- pure (obsSpanBegin "lsp.${methodName}" "vuna.lsp")
+        r <- dispatch methodName msg state
+        _ <- pure (obsSpanEnd tok)
+        pure r
+
+idIntOf : Json -> Int
+idIntOf msg = fromMaybe 0 (jsonGet "id" msg >>= jsonAsInt)
+
+handleCancel : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleCancel msg state =
+  let
+    canceled = fromMaybe 0 (jsonGetIn ["params", "id"] msg >>= jsonAsInt)
+    state1 = if canceled == 0 then state else rememberCancel canceled state
+  in pure (Pair False (Pair state1 []))
 
 dispatch : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
 dispatch "initialize" msg state =
@@ -614,7 +774,7 @@ runLsp _ = do
   outcome <-
     serveConnection readChunk writeStdout (\m => \s => pure (lspWarn m s))
       (\m => \s => handleFrame m s)
-      (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing))
+      (logTo "starting" (LspState [] False False Nothing False Nothing [] [] Nothing [] []))
   let
     exitM = firstOf outcome
     state = secondOf outcome

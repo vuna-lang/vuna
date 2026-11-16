@@ -28,6 +28,10 @@ errInvalidParams = 0 - 32602
 export errInternal : Int
 errInternal = 0 - 32603
 
+-- LSP `$/cancelRequest` 的约定错误码（RequestCancelled）。
+export errRequestCancelled : Int
+errRequestCancelled = 0 - 32800
+
 -- 请求读取：`id` 缺省为 `null`（LSP 与 REPL server 都用这个语义回显）。
 export idOf : Json -> Json
 idOf msg = fromMaybe JNull (jsonGet "id" msg)

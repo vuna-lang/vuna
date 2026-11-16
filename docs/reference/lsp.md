@@ -108,12 +108,12 @@ Content-Length: <字节数>\r\n
   一致（range / severity / source / code / message），客户端按 `code` 直接关联。
 - 已知边界（模块头注释同步记录）：`didChange` 全量重新精化（大文件可能滞后，编辑器端应
   去抖）；依赖的未保存改动读盘；Index 每进程一次、不随编辑刷新；首次索引查找可能触发
-  索引节点全量重建（仓库级秒级，期间请求排队）；没有洞的文件 hover 不跑精化，
-  含洞的文件每次 hover 会重跑一次整模块精化；多根 workspace 取首个文档；一次只发首个编译
-  错误；`codeAction` 每次重算 fixity + lint（无进程内缓存），并产出 quickfix /
+  索引节点全量重建（仓库级秒级，期间请求排队）；多根 workspace 取首个文档；一次只发首个编译
+  错误；`codeAction` 每次重算 fixity + lint（诊断 suggestion 按内容缓存），并产出 quickfix /
   `refactor.rewrite` case split / `vuna.fixAllLint` command；`rename` 的跨文件范围基于 Index（磁盘内容），未保存的其它模块改动不反映，且不跟进类型名在其它模块签名里的使用。
-- case split 边界：只在请求 range 的行文本里有洞 token 时才跑一次整模块容错精化
-  （无进程内缓存；同行有洞就会触发，列位置再由 goal span 精确判定）；构造子信息是 parse
+- case split 边界：只在请求 range 的行文本里有洞 token 时才取洞目标（目标按 (uri, 文本内容)
+  缓存，hover 与 codeAction 共用；同行有洞就会触发，列位置再由 goal span 精确判定）；构造子
+  信息是 parse
   级，依赖模块每次读盘（未保存改动不反映）；枚举**非索引 `data`（多分支）与 `record`
   （单分支，record 模式）**；索引族仍不枚举——索引约束在 parse 级不可知，枚举全部构造子会
   写出精化器以 `TC_ImpossibleBranchIndex` 拒绝的不可达分支（实测 `Vec (Succ n) a` 的
@@ -133,6 +133,35 @@ Content-Length: <字节数>\r\n
   洞查询用容错入口，跳过用量/终止性校验（只影响 hover / `goal`，不影响 `check`）；同名 `?name`
   不共享求解。Pi binder 解析与 `references` 局部名识别已支持（见上）。
 - URI：`file://` + `%XX` 解码；非 file / 不存在的路径用 cwd 包上下文，不崩溃。
+
+### 请求延迟与缓存
+
+主循环严格串行（一次一帧），所以**任何单请求的长耗时都会被后面的请求排队放大**。目标是把
+编辑器高频请求（hover / codeAction / documentSymbol 的重复触发）压到毫秒级：
+
+- **hover 的洞门控按光标行**：只有光标所在行出现 `_` / `?name` 才取洞目标；文件别处有洞
+  不触发精化。没有洞的行走 Bindings / Index（毫秒级）。
+- **洞目标三级来源**（`Lsp.Diagnostics.goalsForDoc`）：
+  1. 增量装配（依赖包接口 + 本包干净模块预置，`Dt.dtGoalsSourceIncremental`）——语义最完整，
+     需要本机 iface 对象可用；
+  2. 只精化当前 buffer（与 `vuna goal` 同源）：分钟级 store 失效时仍可用，导入类型的签名
+     解不开时不产出目标（hover 退化到符号查询）；
+  3. 整包从源码加载（`dtGoalsSourceTolerant`）只在 **codeAction case split** 需要完整洞上下文
+     时才用作最后回退。
+- **内容缓存**（`LspState.DocCache`，key = uri + 文本内容哈希，上限 8）：洞目标与诊断
+  suggestion 各缓存一份；同一 buffer 的重复 hover / codeAction 是毫秒级，文本一变即失效。
+  pull 诊断另有帧缓存（`stateDiagCache`，上限 32），重复 `textDocument/diagnostic` 直接重放。
+- **会话（`DiagCache`）**：诊断 / codeAction 会建立（或复用）工具会话；hover **不**主动建会话
+  （建会话要算依赖接口闭包，冷 store 上秒级），已有会话时直接复用。会话要求 iface 对象与
+  **当前编译器 tag** 匹配：换了编译器二进制后旧 iface 失配，`vuna check <pkg>` / `vuna build`
+  用同一个二进制跑一次即可恢复；失配时观测里能看到 `vuna.tool.iface.miss:<模块>` 与
+  `vuna.lsp.session.unavailable`。
+- **取消**：`$/cancelRequest` 记 id（上限 64），派发前发现已取消就直接回 `-32800`
+  （RequestCancelled），不执行。阻塞式读 stdin 下无法打断**已开始**的精化。
+- **归因**：`VUNA_OBS=1` 时每个请求一个 `lsp.<method>` 跨度，洞目标路径有
+  `vuna.lsp.goals.{incremental,local,full}` 标记与 `vuna.lsp.goals.{setup,elab}` 子跨度。
+  `bench/lsp-probe.py` 是可重复探针（hover 非洞行 / 洞上 / 重复、codeAction、documentSymbol、
+  pull 诊断），读数见 [performance.md](performance.md)。
 
 ### 编辑器冒烟
 

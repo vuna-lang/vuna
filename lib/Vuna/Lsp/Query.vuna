@@ -6,9 +6,9 @@ module Vuna.Lsp.Query where
 -- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
 --
 -- 方法：
---   hover             先 DT 洞目标（`_` / `?name`；文本里无洞 token 时跳过精化；走
---                     容错查询，未解洞也给目标+上下文），未命中再看 Bindings（模块名/局部
---                     绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
+--   hover             先 DT 洞目标（`_` / `?name`；门控是**光标所在行**有洞 token，文件别处有洞
+--                     不触发精化；目标由服务器按内容缓存后传入，见 Vuna.Lsp），未命中再看
+--                     Bindings（模块名/局部绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
 --                     range 落在光标 token 上（不是定义位置）；
 --   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
 --   codeAction        lint finding（可自动修复）→ quick fix TextEdit（内嵌诊断带
@@ -151,26 +151,17 @@ currentModuleNameOf text = case parseSource "<lsp>" text of
   OkC (SourceFile hdr imports fx decls _ _ _) => currentModuleName decls hdr
 
 -- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
--- 快速判据：文本里没有洞（`_` / `?name`）时直接跳过——否则每次 hover 都要跑一遍
--- 整模块（含 import 闭包）的 DT 精化，大文件上是秒级开销。
+-- 门控按**光标所在行**：洞是单行 token，只有这一行出现 `_` / `?name` 时才需要精化；
+-- 文件别处有洞不构成理由——整篇扫描会让任意一行的 hover 都跑整模块（含 import 闭包）
+-- 的 DT 精化，大文件上是秒级开销。
 -- 用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
-export holeHoverAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Int -> Int -> String -> Eff r (Maybe Json)
-holeHoverAt uri line col text =
-  if hasHole text then holeHoverChecked uri line col text else pure Nothing
+export lineHasHole : String -> Int -> Bool
+lineHasHole text line = hasHole (lineText text line)
 
-holeHoverChecked : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Int -> Int -> String -> Eff r (Maybe Json)
-holeHoverChecked uri line col text = do
-  ctxR <- contextForDoc uri
-  case ctxR of
-    ErrC e => pure Nothing
-    OkC (Pair label ctx) => do
-      gsR <- dtGoalsSourceTolerant ctx label text
-      pure (case gsR of
-        ErrC e => Nothing
-        OkC gs => case holeAt line col gs of
-          Nothing => Nothing
-          Just g => Just (holeHoverJson g)
-      )
+export holeHoverFrom : Int -> Int -> List DtGoalInfo -> Maybe Json
+holeHoverFrom line col gs = case holeAt line col gs of
+  Nothing => Nothing
+  Just g => Just (holeHoverJson g)
 
 -- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）；`?name` 是 `?` 紧邻标识符
 -- 起始字符。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
@@ -314,16 +305,17 @@ formattingFixities uri text =
 -- `context.only`（Maybe：Nothing = 客户端不限制、Just [] = 明确不要任何 kind）：
 --   - quickfix 动作只在未限制或含 `quickfix` 时给；
 --   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
-export codeActionsFor : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
-codeActionsFor uri text reqStart reqStartCol reqEnd reqEndCol only = do
+export codeActionsFor : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
+codeActionsFor mgoals suggestions uri text reqStart reqStartCol reqEnd reqEndCol only = do
   ctxR <- contextForDoc uri
   case ctxR of
     ErrC e => pure []
     OkC (Pair label ctx) =>
-      codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only
+      codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol
+        only
 
-codeActionsForCtx : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
-codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only = do
+codeActionsForCtx : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
+codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only = do
   looked <- fixitiesForFile emptyFixityEnv label text
   case secondOf looked of
     ErrC e => pure []
@@ -331,12 +323,11 @@ codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only 
       ErrC e => pure []
       OkC findings => do
         rawSplits <-
-          if refactorAllowed only then caseSplitActions uri label ctx text reqStart reqStartCol reqEnd reqEndCol
-          else pure []
-        diagActions <-
-          if quickfixAllowed only then diagnosticSuggestionActions uri text reqStart reqEnd
+          if refactorAllowed only then caseSplitActions uri label ctx mgoals text reqStart reqStartCol reqEnd reqEndCol
           else pure []
         let
+          diagActions =
+            if quickfixAllowed only then suggestionsInRange reqStart reqEnd suggestions else []
           splits = take maxCodeActions rawSplits
           fixable =
             if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
@@ -352,12 +343,23 @@ codeActionsForCtx uri label ctx text reqStart reqStartCol reqEnd reqEndCol only 
           diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
         in pure (append splits (append singles2 (append fixAll2 diagActions2)))
 
+-- 缓存条目形如 (0-based 起止行, actions)：只取与请求 range 相交的那些。
+suggestionsInRange : Int -> Int -> List (Pair (Pair Int Int) (List Json)) -> List Json
+suggestionsInRange reqStart reqEnd [] = []
+suggestionsInRange reqStart reqEnd ((Pair (Pair sl el) acts) :: rest) =
+  if sl <= reqEnd && el >= reqStart then append acts (suggestionsInRange reqStart reqEnd rest)
+  else suggestionsInRange reqStart reqEnd rest
+
 onlyKindsAllow : String -> Maybe (List String) -> Bool
 onlyKindsAllow kind Nothing = True
 onlyKindsAllow kind (Just kinds) = memName kind kinds
 
 quickfixAllowed : Maybe (List String) -> Bool
 quickfixAllowed only = onlyKindsAllow "quickfix" only
+
+-- 服务器侧判定：这次 codeAction 是否需要诊断 suggestion。
+export quickfixWanted : Maybe (List String) -> Bool
+quickfixWanted only = quickfixAllowed only
 
 -- `refactor` 是 `refactor.rewrite` 的父 kind：客户端只要 `refactor` 时也应给 rewrite。
 refactorAllowed : Maybe (List String) -> Bool
@@ -438,7 +440,7 @@ fixAllLintWorkspaceEdit uri text = do
 -- ---------------------------------------------------------------
 -- 触发链（便宜 → 贵）：
 --   1. 文本级扫描请求 range 里的 `_` / `?name` token（不跑精化；没有就不查洞）；
---   2. 命中才跑容错洞查询 `dtGoalsSourceTolerant`（与 hover / `vuna goal` 同源）；
+--   2. 命中才用服务器传入的容错洞目标（与 hover / `vuna goal` 同源；按 (uri, text) 缓存）；
 --   3. 取覆盖请求 range 的那个洞，对上下文里每个「类型头解析到非索引 data / record」的
 --      binder 生成一条 `refactor.rewrite`：`case <name> of` / `  <Ctor> _ => _` / ...；
 --      record 是单构造器类型，给**一条**分支 `  <Type> { f = _, g = _ } => _`。
@@ -727,19 +729,22 @@ ctxSplitActions uri text sf roots preludeModules g =
   concatMapEff (binderSplitAction uri text sf roots preludeModules g) g.dtGoalInfoCtx
 
 -- 入口：请求 range → 洞 → 上下文里的可分裂 binder（不命中返回 []）。
-caseSplitActions : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Eff r (List Json)
-caseSplitActions uri label ctx text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then pure []
-else do
-  gsR <- dtGoalsSourceTolerant ctx label text
-  case gsR of
-    ErrC e => pure []
-    OkC gs => case goalAtRange sl sc el ec gs of
-      Nothing => pure []
-      Just g => case parseSource "<lsp>" text of
-        ErrC e => pure []
-        OkC sf => do
-          preludeModules <- preludeReexportModules (contextRoots ctx)
-          ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
+-- goals 由服务器按 (uri, text) 记忆化后传入；Nothing = 本次不需要/没拿到目标。
+caseSplitActions : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> PackageContext -> Maybe (List DtGoalInfo) -> String -> Int -> Int -> Int -> Int -> Eff r (List Json)
+caseSplitActions uri label ctx mgoals text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then pure []
+else case mgoals of
+  Nothing => pure []
+  Just gs => case goalAtRange sl sc el ec gs of
+    Nothing => pure []
+    Just g => case parseSource "<lsp>" text of
+      ErrC e => pure []
+      OkC sf => do
+        preludeModules <- preludeReexportModules (contextRoots ctx)
+        ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
+
+-- 服务器侧判定：这次 codeAction 是否需要洞目标（refactor kind 且请求 range 的行里有洞）。
+export caseSplitWanted : String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Bool
+caseSplitWanted text sl sc el ec only = refactorAllowed only && rangeTouchesHole text sl sc el ec
 
 -- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------
@@ -1092,22 +1097,22 @@ workspaceSymbols (Just idx) query =
 
 -- ---------------------------------------------------------------
 -- 诊断自带的 suggestion（如 UN_UnusedDefinition 的删除编辑）→ quick fix CodeAction。
-diagnosticSuggestionActions : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> String -> Int -> Int -> Eff r (List Json)
-diagnosticSuggestionActions uri text reqStart reqEnd = do
-  result <- diagnosticsForSuggestions Nothing uri text
+-- 一次返回该 buffer 的全部 suggestion（0-based 起止行 + actions），由服务器按内容缓存、
+-- 调用方按请求 range 过滤。
+export suggestionsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (List (Pair (Pair Int Int) (List Json))))
+suggestionsForDoc session uri text = do
+  result <- diagnosticsForSuggestions session uri text
   let
     diags = secondOf (secondOf result)
-  in pure (concatMap (diagSuggestionActions uri reqStart reqEnd) diags)
+  in pure (Pair (firstOf result) (mapMaybe (suggestionEntry uri) diags))
 
-diagSuggestionActions : String -> Int -> Int -> Diagnostic -> List Json
-diagSuggestionActions uri reqStart reqEnd d =
-  if not (diagTouchesReq d reqStart reqEnd) then []
-  else map (suggestionActionJson uri) d.diagSuggestions
-
-diagTouchesReq : Diagnostic -> Int -> Int -> Bool
-diagTouchesReq d reqStart reqEnd = case primarySpanQ d.diagLabels of
-  Nothing => False
-  Just sp => spanStartLine sp - 1 <= reqEnd && spanEndLine sp - 1 >= reqStart
+suggestionEntry : String -> Diagnostic -> Maybe (Pair (Pair Int Int) (List Json))
+suggestionEntry uri d = case primarySpanQ d.diagLabels of
+  Nothing => Nothing
+  Just sp =>
+    if isEmptyList d.diagSuggestions then Nothing
+    else Just
+      (Pair (Pair (spanStartLine sp - 1) (spanEndLine sp - 1)) (map (suggestionActionJson uri) d.diagSuggestions))
 
 suggestionActionJson : String -> Suggestion -> Json
 suggestionActionJson uri s =

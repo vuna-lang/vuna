@@ -11,6 +11,7 @@ module Vuna.Compiler.Driver.Dt where
 import Base.Sort
 import Base.List
 import Base.String
+import Base.Obs
 import Vuna.Compiler.Common
 import Vuna.Compiler.Obs
 import Vuna.Compiler.Canonical.Ast
@@ -1146,8 +1147,22 @@ dtIncrementalChecked ctx resolved depIfaces cleanIfaces = Vuna.Compiler.Common.b
 -- 工具链诊断只要「当前文件能不能过检查」，此时跳过整包组装与全量 codegen 检查
 -- （依赖 / 干净模块的产物在写各自接口时已经验过），只对本次新精化的 datas/defs 跑同一条
 -- 检查链 —— 诊断语义与全量路径一致（错误都落在本次精化的文件上）。
-dtIncrementalCheckedCore : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
-dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
+-- 增量路径的装配结果：起始环境（依赖包 / 干净同包模块）+ 本次要精化的 decls。
+-- strict（`dtIncrementalCheckedCore`）与容错洞查询（`dtGoalsIncrementalCore`）共用，
+-- 两条路只在「精化后怎么收尾」上不同。
+record DtIncrSetup where
+  dsStartEc : Ec
+  dsStartGlobals : List (Pair String Term)
+  dsTermAux : List Decl
+  dsPrepared : List Decl
+  dsDecls : List Decl
+  dsWarns : List Diagnostic
+  dsDepCps : List CachedProgram
+  dsCleanCps : List CachedProgram
+  dsNext : Maybe AuxCache
+
+dtIncrementalSetup : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Check DtIncrSetup
+dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache =
   let
     parts = secondOf resolved
     loaderWarns = firstOf resolved
@@ -1184,18 +1199,28 @@ dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage =
       Nothing =>
         if length ifacePrepared > 0 && length missingPrepared == 0 then OkC ifacePrepared
         else dtPrepareTermAux termAux
-    startGlobals = secondOf start
-    startEc = firstOf start
   in Vuna.Compiler.Common.bind prepared (\preparedAux => let
     next = if cacheable then Just (AuxCache key preparedAux start depCps cleanCps) else Nothing
-  in Vuna.Compiler.Common.bind (dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls) (\prog => let
-    warns = append loaderWarns (dtProgWarnings prog)
-  in Vuna.Compiler.Common.bind
-    (if needPackage then dtFinishPackageScoped loaderWarns depCps cleanCps prog parts next else dtFinishScoped depCps cleanCps prog next)
-    (\r => OkC (Pair warns r))
+  in OkC
+    (DtIncrSetup (firstOf start) (secondOf start) termAux preparedAux decls loaderWarns depCps cleanCps next)
   )
   )
-  )
+
+dtIncrementalCheckedCore : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Bool -> Check (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))
+dtIncrementalCheckedCore ctx resolved depIfaces cleanIfaces cache needPackage = Vuna.Compiler.Common.bind (dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache) (\s => Vuna.Compiler.Common.bind (dtElabFullWithPrepared s.dsStartEc s.dsStartGlobals s.dsTermAux s.dsPrepared s.dsDecls) (\prog => let
+  warns = append s.dsWarns (dtProgWarnings prog)
+in Vuna.Compiler.Common.bind
+  (if needPackage then dtFinishPackageScoped s.dsWarns s.dsDepCps s.dsCleanCps prog (secondOf resolved) s.dsNext else dtFinishScoped s.dsDepCps s.dsCleanCps prog s.dsNext)
+  (\r => OkC (Pair warns r))
+)
+)
+
+-- 洞查询的增量收尾：不跑 codegen 检查、不组装整包，只取容错精化的 goals。
+dtGoalsIncrementalCore : PackageContext -> Pair (List Diagnostic) (Pair (List Decl) (List Module)) -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Check (Pair (List DtGoalInfo) (Maybe AuxCache))
+dtGoalsIncrementalCore ctx resolved depIfaces cleanIfaces cache =
+  Vuna.Compiler.Common.bind
+    (obsCheck "vuna.lsp.goals.setup" (\_ => dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache))
+    (\s => Vuna.Compiler.Common.bind (obsCheck "vuna.lsp.goals.elab" (\_ => elabGoalsWithPrepared s.dsStartEc s.dsStartGlobals s.dsTermAux s.dsDecls)) (\gs => OkC (Pair gs s.dsNext)))
 
 -- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查。
 dtFinishPackage : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
@@ -1293,6 +1318,32 @@ dtCheckSourceIncremental ctx label source depIfaces cleanIfaces cache needPackag
           else case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
             ErrC e => ErrC e
             OkC resolved => case dtIncrementalCheckedCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache needPackage of
+              ErrC e => ErrC e
+              OkC r => OkC (Pair True r)
+    )
+
+-- 洞查询（hover / case split）的增量入口：与 `dtCheckSourceIncremental` 同一条装配
+-- 路径（依赖包接口 + 干净同包模块预置），但只做容错精化并取 goals，不跑 codegen 检查。
+-- 返回 `False` = 本路径不适用（闭包外依赖缺接口），调用方回退整包从源码加载。
+export dtGoalsSourceIncremental : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List ModuleIface -> List ModuleIface -> Maybe AuxCache -> Eff r (Check (Pair Bool (Pair (List DtGoalInfo) (Maybe AuxCache))))
+dtGoalsSourceIncremental ctx label source depIfaces cleanIfaces cache =
+  let
+    pkgName = contextPackageName ctx
+    preloaded = append (modulesOfIfaces depIfaces) (reverse (map moduleOfIface cleanIfaces))
+    allIfaces = append depIfaces cleanIfaces
+  in do
+    projectR <- loadModuleSourceWithPreloaded ctx label source preloaded
+    pure (case projectR of
+      ErrC e => ErrC e
+      OkC project => case filterProjectToImports pkgName project of
+        Pair filtered mods =>
+          let
+            missing = missingDepModules pkgName mods (map miNameOf allIfaces)
+            _ = if length missing > 0 then obsMark "vuna.lsp.goals.fallback" else 0
+          in if length missing > 0 then OkC (Pair False (Pair [] cache))
+          else case resolveProjectKeeping (contextRelease ctx) (preloadKeepOf allIfaces mods) filtered of
+            ErrC e => ErrC e
+            OkC resolved => case dtGoalsIncrementalCore ctx resolved (materializedDeps pkgName (secondOf resolved) depIfaces) (materializedOwn pkgName (secondOf resolved) cleanIfaces) cache of
               ErrC e => ErrC e
               OkC r => OkC (Pair True r)
     )

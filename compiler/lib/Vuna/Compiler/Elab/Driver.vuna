@@ -1244,6 +1244,16 @@ goalsOfProgramTolerant decls = Vuna.Compiler.Common.bind (prepareDecls decls) (\
       (\ds2 => Vuna.Compiler.Common.bind (elabProgramCoreWithAux False ecEmpty preludeGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
 )
 
+-- 容错洞查询的**注入环境**版本：起始 Ec / globals / termAux 由调用方给（增量路径把
+-- 依赖包与干净同包模块的产物预置进去），只对 `decls` 做容错精化并取洞目标。
+-- 与 `goalsOfProgramTolerant` 的差别只有环境来源，语义一致（未解洞不报错）。
+export elabGoalsWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Check (List DtGoalInfo)
+elabGoalsWithPrepared startEc startGlobals termAux decls = Vuna.Compiler.Common.bind (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls)) (\p => case p of
+  Pair records ds =>
+    Vuna.Compiler.Common.bind (expandDerivings ds)
+      (\ds2 => Vuna.Compiler.Common.bind (elabProgramCoreWithAux False startEc startGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
+)
+
 export elabProgram : List Decl -> Check (Pair (List DtData) (List DtDef))
 elabProgram decls =
   Vuna.Compiler.Common.bind (elabProgramFull decls)

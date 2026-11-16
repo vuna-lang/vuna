@@ -27,11 +27,13 @@ import Vuna.Compiler.Diagnostics.Sink
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Iface
+import Vuna.Compiler.Elab
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Packages.Pkg
 import Vuna.Files
 import Vuna.FixityEnv
+import Vuna.Compiler.Loader.Fixity
 import Vuna.Json
 import Vuna.Tool.Session
 import Vuna.Lint.Rules
@@ -43,6 +45,7 @@ import Base.EffClock
 import Base.EffEnv
 import Base.EffExit
 import Base.EffProcess
+import Base.Obs
 
 -- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
 severityError : Int
@@ -246,6 +249,39 @@ ownNeededOf tool needed =
     ownNames = ownNamesOfTool tool
   in filter (\n => memName n ownNames) needed
 
+-- 内存版 import 闭包：从起始名字沿「依赖包 + 本包干净模块」接口的 miDepHashes 传递展开。
+-- 会话建立时算过一次 `tcNeeded`（闭包），之后每个请求只做这次纯名字展开，不再跑
+-- `ifaceModsEff`（接口身份计算在根包上是秒级固定开销）。
+closureNamesOf : List ModuleIface -> List String -> List String
+closureNamesOf ifaces starts = closureGo 8192 ifaces starts []
+
+closureGo : Int -> List ModuleIface -> List String -> List String -> List String
+closureGo fuel _ [] acc = acc
+closureGo fuel ifaces (n :: rest) acc = if fuel <= 0 then acc
+else if memName n acc then closureGo (fuel - 1) ifaces rest acc
+else case findIface n ifaces of
+  Nothing => closureGo (fuel - 1) ifaces rest (n :: acc)
+  Just mi => closureGo (fuel - 1) ifaces (append (map firstOf (miDepHashesOf mi)) rest) (n :: acc)
+
+findIface : String -> List ModuleIface -> Maybe ModuleIface
+findIface n [] = Nothing
+findIface n (mi :: rest) = if miNameOf mi == n then Just mi else findIface n rest
+
+-- 起始名字：buffer 的直接 import（本模块名不需要——它自己就是被精化的那一个）。
+startNamesOf : List Import -> List String
+startNamesOf imports = map importNameOf imports
+
+importNameOf : Import -> String
+importNameOf imp = imp.importName
+
+-- buffer 的直接 import 展开后，本包干净模块里哪些要预置。
+cleanNeededOf : DiagCache -> ToolContext -> List Import -> List ModuleIface
+cleanNeededOf c tool imports =
+  let
+    allIfaces = append tool.tcDepIfaces c.dcClean
+    needed = closureNamesOf allIfaces (startNamesOf imports)
+  in filter (\mi => memName (miNameOf mi) needed) c.dcClean
+
 -- needed ⊆ 会话建立时的闭包吗？buffer 引入新 import 时闭包会变大，必须重建会话。
 neededInClosure : List String -> List String -> Bool
 neededInClosure closure [] = True
@@ -306,18 +342,20 @@ usableSession cache ctx label text modName imports = do
   health <- case cache of
     Just c => do
       fresh <- cacheFresh (Just c) label ctx
-      if fresh then sessionClosureOk c ctx modName imports else pure Nothing
+      if fresh then pure (sessionClosureOk c imports) else pure Nothing
     Nothing => pure Nothing
   case health of
     Just c => pure (Just c)
     Nothing => buildSession ctx label text modName
 
-sessionClosureOk : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> PackageContext -> Maybe String -> List Import -> Eff r (Maybe DiagCache)
-sessionClosureOk c ctx modName imports = case c.dcTool of
-  Nothing => pure (Just c)
-  Just tool => do
-    needed <- toolNeededOfImports ctx tool (currentNameOf modName) imports
-    pure (if neededInClosure tool.tcNeeded needed then Just c else Nothing)
+sessionClosureOk : DiagCache -> List Import -> Maybe DiagCache
+sessionClosureOk c imports = case c.dcTool of
+  Nothing => Just c
+  Just tool =>
+    let
+      allIfaces = append tool.tcDepIfaces c.dcClean
+      reached = closureNamesOf allIfaces (startNamesOf imports)
+    in if neededInClosure tool.tcNeeded reached then Just c else Nothing
 
 currentNameOf : Maybe String -> String
 currentNameOf Nothing = ""
@@ -349,11 +387,10 @@ entryHashMatches (Just h) x = h == x
 
 -- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- 安全阀说「不适用」（Nothing）时回退全量。
-incrementalCheckedOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff r (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
-incrementalCheckedOf session tool label text modName imports needPkg = do
-  needed <- toolNeededOfImports session.dcCtx tool (currentNameOf modName) imports
+incrementalCheckedOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff r (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
+incrementalCheckedOf session tool label text modName imports needPkg =
   let
-    cleanNeeded = filter (\mi => memName (miNameOf mi) (ownNeededOf tool needed)) session.dcClean
+    cleanNeeded = cleanNeededOf session tool imports
   in dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
     needPkg
 
@@ -480,6 +517,90 @@ diagnosticsForCachedWith includeUnused cache uri text = do
                 Nothing => Nothing
             in pure
               (Pair cache3 (Pair label (append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))))
+
+-- 洞目标（hover / case split）。三级来源：
+--   1. 增量装配（依赖包接口 + 本包干净模块预置；import 闭包不再逐个从磁盘 parse + 精化）；
+--   2. 只精化当前 buffer（与 `vuna goal` 同源；import 名字按源文本呈现，导入类型的签名解不
+--      开时得不到目标）——毫秒级，编辑器循环里不会因为冷 store 卡住；
+--   3. `allowFull = True` 时才整包从源码加载 + 容错精化（依赖齐全、语义最完整，但大文件
+--      上是秒级）：只给真正需要洞上下文的 codeAction case split 用。
+-- 返回 (会话, (是否依赖完整, 目标列表))：完整 = 走 1 或 3；服务器按这个标记决定缓存能否
+-- 复用给 case split。
+export goalsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
+goalsForDoc allowFull allowBuild cache uri text = do
+  ctxR <- contextForDoc uri
+  case ctxR of
+    ErrC e => pure (Pair cache (Pair False []))
+    OkC (Pair label ctx) => case parseSource label text of
+      ErrC e => pure (Pair cache (Pair False []))
+      OkC (SourceFile hdr imports fixities decls _ _ _) =>
+        let
+          modName = case hdr of
+            Just (ModDecl n hasList items _ _ _ sp) => Just n
+            Nothing => Nothing
+        in do
+          session <- if allowBuild || isJustCache cache then usableSession cache ctx label text modName imports
+          else do
+            _ <- pure (obsMark "vuna.lsp.session.skipped")
+            pure Nothing
+          case session of
+            Just c => case c.dcTool of
+              Just tool => do
+                gsR <- goalsIncrementalOf c tool label text modName imports
+                case gsR of
+                  ErrC e => goalsLocalOrFull allowFull cache ctx label text
+                  OkC (Pair applied (Pair gs aux)) => if applied then
+                    let
+                      _ = obsMark "vuna.lsp.goals.incremental"
+                    in pure (Pair (Just (setAuxCache c aux)) (Pair True gs))
+                  else goalsLocalOrFull allowFull (Just c) ctx label text
+              Nothing => goalsLocalOrFull allowFull (Just c) ctx label text
+            Nothing => do
+              _ <- pure (obsMark "vuna.lsp.session.unavailable")
+              goalsLocalOrFull allowFull cache ctx label text
+
+goalsIncrementalOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Eff r (Check (Pair Bool (Pair (List DtGoalInfo) (Maybe AuxCache))))
+goalsIncrementalOf c tool label text modName imports =
+  let
+    cleanNeeded = cleanNeededOf c tool imports
+  in dtGoalsSourceIncremental c.dcCtx label text tool.tcDepIfaces cleanNeeded c.dcAux
+
+-- 没有会话时是否值得尝试建会话（hover 不建：建会话要算接口闭包，秒级；诊断/case split 建）。
+isJustCache : Maybe DiagCache -> Bool
+isJustCache Nothing = False
+isJustCache (Just c) = True
+
+setAuxCache : DiagCache -> Maybe AuxCache -> DiagCache
+setAuxCache c aux =
+  DiagCache c.dcLabel c.dcKey c.dcCtx c.dcDb c.dcTool c.dcClean c.dcBuiltSec c.dcStats aux c.dcFix
+
+-- 回退（会话不可用 / 增量装配不适用）：只精化当前 buffer（与 `vuna goal` 同一条路径：
+-- 程序级 fixity → reorder → 容错精化）。import 闭包不展开，跨模块名字按源文本解析——
+-- 这是 `vuna goal` 的既有语义，比「整包从源码重读重精化」快一个量级。
+-- `allowFull` 时（case split 需要完整洞上下文）再退回整包从源码加载。
+goalsLocalOrFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe DiagCache -> PackageContext -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
+goalsLocalOrFull allowFull cache ctx label text = do
+  _ <- pure (obsMark "vuna.lsp.goals.local")
+  looked <- fixitiesForFile emptyFixityEnv label text
+  let
+    localGoals = case secondOf looked of
+      ErrC e => []
+      OkC programFixities => case parseSource label text of
+        ErrC e => []
+        OkC (SourceFile hdr imports fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+          ErrC e => []
+          OkC decls => case goalsOfProgramTolerant decls of
+            ErrC e => []
+            OkC gs => gs
+  in if allowFull then do
+    _ <- pure (obsMark "vuna.lsp.goals.full")
+    gsR <- dtGoalsSourceTolerant ctx label text
+    pure (Pair cache (case gsR of
+      ErrC e => Pair True localGoals
+      OkC gs => Pair True gs
+    )
+    )
+  else pure (Pair cache (Pair False localGoals))
 
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =
