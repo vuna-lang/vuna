@@ -203,6 +203,12 @@ let dtp_hostCodeAt path (e : exn) : int =
   try ignore (Unix.stat path); dtp_hostCode e
   with e2 -> dtp_hostCode e2
 let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
+let dtp_hostBtK = Domain.DLS.new_key (fun () -> ref None)
+let dtp_hostSetBt bt = (Domain.DLS.get dtp_hostBtK) := bt
+let dtp_hostReset () = dtp_hostSetStatus 0; dtp_hostSetBt None
+let dtp_hostMark code e =
+  dtp_hostSetStatus (if code = 0 then 9 else code);
+  dtp_hostSetBt (Some (Printexc.get_raw_backtrace ()))
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
@@ -228,13 +234,13 @@ let dtp_getArgs () =
   let n = Array.length argv in
   if n <= 1 then [] else Array.to_list (Array.sub argv 1 (n - 1))
 let dtp_readLine () =
-  (try dtp_hostSetStatus 0; input_line stdin
+  (try dtp_hostReset (); input_line stdin
    with End_of_file -> dtp_hostSetStatus 1; \"\")
 let dtp_readBytes n =
   if n <= 0 then (dtp_hostSetStatus 1; \"\")
   else
     let b = Bytes.create n in
-    let k = (try dtp_hostSetStatus 0; input stdin b 0 n with _ -> 0) in
+    let k = (try dtp_hostReset (); input stdin b 0 n with _ -> 0) in
     if k <= 0 then (dtp_hostSetStatus 1; \"\") else Bytes.sub_string b 0 k
 let dtp_readDir path =
   try List.sort compare (Array.to_list (Sys.readdir path))
@@ -249,14 +255,14 @@ let dtp_removeFile path =
   with Sys_error msg -> failwith (\"removeFile: \" ^ msg)
 let dtp_fileExists path = Sys.file_exists path
 let dtp_fileMtime path =
-  (try dtp_hostSetStatus 0; int_of_float (Unix.stat path).Unix.st_mtime
-   with e -> dtp_hostFail (dtp_hostCode e); 0)
+  (try dtp_hostReset (); int_of_float (Unix.stat path).Unix.st_mtime
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
 let dtp_fileSize path =
-  (try dtp_hostSetStatus 0; (Unix.stat path).Unix.st_size
-   with e -> dtp_hostFail (dtp_hostCode e); 0)
+  (try dtp_hostReset (); (Unix.stat path).Unix.st_size
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
 let dtp_tryReadFile path =
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
      Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
        (fun () ->
@@ -266,10 +272,10 @@ let dtp_tryReadFile path =
             let n = Unix.read fd tmp 0 (Bytes.length tmp) in
             if n > 0 then (Buffer.add_subbytes buf tmp 0 n; go ()) in
           go (); Buffer.contents buf)
-   with e -> dtp_hostFail (dtp_hostCode e); \"\")
+   with e -> dtp_hostMark (dtp_hostCode e) e; \"\")
 let dtp_tryWriteFile path contents =
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      let fd = Unix.openfile path [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
      Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
        (fun () ->
@@ -281,11 +287,11 @@ let dtp_tryWriteFile path contents =
               if k > 0 then go (off + k) in
           go 0);
      String.length contents
-   with e -> dtp_hostFail (dtp_hostCode e); 0)
+   with e -> dtp_hostMark (dtp_hostCode e) e; 0)
 let dtp_tryWriteFileAtomic path contents =
   let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      (let fd = Unix.openfile tmp [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
       Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
         (fun () ->
@@ -300,27 +306,27 @@ let dtp_tryWriteFileAtomic path contents =
      String.length contents
    with e -> (try Unix.unlink tmp with _ -> ()); dtp_hostFail (dtp_hostCode e); 0)
 let dtp_tryReadDir path =
-  (try dtp_hostSetStatus 0; List.sort compare (Array.to_list (Sys.readdir path))
+  (try dtp_hostReset (); List.sort compare (Array.to_list (Sys.readdir path))
    with e -> dtp_hostFail (dtp_hostCodeAt path e); [])
 let dtp_tryIsDirectory path =
-  (try dtp_hostSetStatus 0; (Unix.stat path).Unix.st_kind = Unix.S_DIR
-   with e -> dtp_hostFail (dtp_hostCode e); false)
+  (try dtp_hostReset (); (Unix.stat path).Unix.st_kind = Unix.S_DIR
+   with e -> dtp_hostMark (dtp_hostCode e) e; false)
 let dtp_tryMakeDir path =
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      (try Unix.mkdir path 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
      0
-   with e -> dtp_hostFail (dtp_hostCode e); 1)
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
 let dtp_tryRemoveFile path =
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      (try Unix.unlink path with Unix.Unix_error (Unix.ENOENT, _, _) -> ());
      0
-   with e -> dtp_hostFail (dtp_hostCode e); 1)
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
 let dtp_tryRunIn dir args =
   let cmd = String.concat \" \" (List.map Filename.quote args) in
   (try
-     dtp_hostSetStatus 0;
+     dtp_hostReset ();
      let old = Sys.getcwd () in
      Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
    with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
@@ -366,7 +372,7 @@ let dtp_net_put (fd : Unix.file_descr) : int =
 let dtp_net_get (h : int) : Unix.file_descr =
   match Hashtbl.find_opt dtp_net_tbl h with
   | Some fd -> fd
-  | None -> failwith \"net: invalid handle\"
+  | None -> dtp_hostSetStatus 8; failwith \"net: invalid handle\"
 let dtp_net_drop (h : int) = (try Hashtbl.remove dtp_net_tbl h with _ -> ())
 let dtp_netCodeOf (ue : Unix.error) : int =
   match ue with
@@ -445,18 +451,18 @@ let dtp_netStatus (e : exn) : int =
   | _ -> 6
 let dtp_netMarkStatus (e : exn) =
   let c = dtp_hostStatus () in
-  if c = 0 then dtp_hostSetStatus (dtp_netStatus e)
+  dtp_hostMark (if c = 0 then dtp_netStatus e else c) e
 let dtp_try_net_listen addr =
-  (try dtp_hostSetStatus 0; dtp_net_listen addr
+  (try dtp_hostReset (); dtp_net_listen addr
    with e -> dtp_netMarkStatus e; -1)
 let dtp_try_net_port h =
-  (try dtp_hostSetStatus 0; dtp_net_port h
+  (try dtp_hostReset (); dtp_net_port h
    with e -> dtp_netMarkStatus e; -1)
 let dtp_try_net_accept h =
-  (try dtp_hostSetStatus 0; dtp_net_accept h
+  (try dtp_hostReset (); dtp_net_accept h
    with e -> dtp_netMarkStatus e; -1)
 let dtp_try_net_send h s =
-  (try dtp_hostSetStatus 0; dtp_net_send h s
+  (try dtp_hostReset (); dtp_net_send h s
    with e -> dtp_netMarkStatus e; 0)
 let dtp_try_net_recv h n =
   if n <= 0 then (dtp_hostSetStatus 1; \"\")
@@ -465,10 +471,10 @@ let dtp_try_net_recv h n =
     (try
        let k = Unix.read (dtp_net_get h) b 0 n in
        if k <= 0 then (dtp_hostSetStatus 1; \"\")
-       else (dtp_hostSetStatus 0; Bytes.sub_string b 0 k)
+       else (dtp_hostReset (); Bytes.sub_string b 0 k)
      with e -> dtp_netMarkStatus e; \"\")
 let dtp_try_net_close h =
-  (try dtp_hostSetStatus 0; dtp_net_close h
+  (try dtp_hostReset (); dtp_net_close h
    with e -> dtp_netMarkStatus e; 0)
 let dtp_net_connect (addr : string) : int =
   match dtp_net_parse addr with
@@ -481,8 +487,45 @@ let dtp_net_connect (addr : string) : int =
     (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
      with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
 let dtp_try_net_connect addr =
-  (try dtp_hostSetStatus 0; dtp_net_connect addr
+  (try dtp_hostReset (); dtp_net_connect addr
    with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_accept_within h micros =
+  (try
+     dtp_hostReset ();
+     let lfd = dtp_net_get h in
+     let (r, _, _) = Unix.select [lfd] [] [] (float_of_int micros /. 1000000.0) in
+     if r = [] then (dtp_hostSetStatus 7; -1)
+     else let (fd, _) = Unix.accept lfd in dtp_net_put fd
+   with e -> dtp_netMarkStatus e; -1)
+let dtp_try_net_recv_within h n micros =
+  if n <= 0 then (dtp_hostReset (); dtp_hostSetStatus 1; \"\")
+  else
+    (try
+       dtp_hostReset ();
+       let fd = dtp_net_get h in
+       let b = Bytes.create n in
+       let (r, _, _) = Unix.select [fd] [] [] (float_of_int micros /. 1000000.0) in
+       if r = [] then (dtp_hostSetStatus 7; \"\")
+       else
+         let k = Unix.read fd b 0 n in
+         if k <= 0 then (dtp_hostSetStatus 1; \"\") else Bytes.sub_string b 0 k
+     with e -> dtp_netMarkStatus e; \"\")
+let dtp_try_net_send_within h s micros =
+  (try
+     dtp_hostReset ();
+     let fd = dtp_net_get h in
+     let n = String.length s in
+     let secs = float_of_int micros /. 1000000.0 in
+     let rec go off =
+       if off >= n then true
+       else
+         let (_, w, _) = Unix.select [] [fd] [] secs in
+         if w = [] then false
+         else
+           let k = Unix.write_substring fd s off (n - off) in
+           if k <= 0 then false else go (off + k) in
+     if go 0 then n else (dtp_hostSetStatus 7; 0)
+   with e -> dtp_netMarkStatus e; 0)
 """
 ) ++ dtSchedRuntime
 
@@ -967,21 +1010,28 @@ let dt_frame_label slot =
       (match List.assoc_opt key dt_def_locs with
        | Some (display, loc) -> Some (display ^ \" (\" ^ loc ^ \")\")
        | None -> None)
+let dt_bt_labels (bt : Printexc.raw_backtrace) : string list =
+  match Printexc.backtrace_slots bt with
+  | None -> []
+  | Some slots ->
+    let rec go rest shown acc =
+      if shown >= 12 then List.rev acc
+      else match rest with
+      | [] -> List.rev acc
+      | slot :: tl ->
+        (match dt_frame_label slot with
+         | Some s -> go tl (shown + 1) (s :: acc)
+         | None -> go tl shown acc)
+    in go (Array.to_list slots) 0 []
+let dtp_hostReportFrames () : int =
+  (match !(Domain.DLS.get dtp_hostBtK) with
+   | None -> ()
+   | Some bt -> List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt));
+  0
 let dt_report_exn e bt =
   let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
   Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;
-  match Printexc.backtrace_slots bt with
-  | None -> ()
-  | Some slots ->
-    let rec go rest shown =
-      if shown >= 12 then ()
-      else match rest with
-      | [] -> ()
-      | slot :: tl ->
-        (match dt_frame_label slot with
-         | Some s -> Printf.eprintf \"  at %s\\n%!\" s; go tl (shown + 1)
-         | None -> go tl shown)
-    in go (Array.to_list slots) 0
+  List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt)
 """
 
 -- | 浮点 runtime helper（仅在程序使用 Float 时追加；见 `dtRuntimeWith`）。单独的文本块
