@@ -243,8 +243,7 @@ flagAt i (b :: rest) = if i <= 0 then b else flagAt (i - 1) rest
 
 export projectionDefsGo : String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
 projectionDefsGo ctor nParams methods fieldTys idx nFields =
-  projectionDefsOpaqueGo (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx
-    nFields
+  projectionDefsOpaqueGo (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx nFields
 
 -- 实例落点静态检查（孤儿实例）。
 --
