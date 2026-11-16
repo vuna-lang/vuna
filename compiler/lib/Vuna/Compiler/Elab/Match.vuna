@@ -133,9 +133,19 @@ litPatExpr _ = EInt 0 (Span "" 0 0 0 0)
 
 -- | 模式矩阵的列下降：按当前列（`pos`）的模式形态分派成 case / if 表达式。
 buildColumnExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
-buildColumnExpr table clauses params fb fuel = if fuel <= 0 then ErrC (tcMsg PatternFuel [])
+buildColumnExpr table clauses0 params fb fuel =
+  if fuel <= 0 then ErrC (tcMsg PatternFuel [])
+  else buildColumnExprPruned table (pruneRows clauses0) params fb fuel
+
+buildColumnExprPruned : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
+buildColumnExprPruned table clauses params fb fuel = if fuel <= 0 then ErrC (tcMsg PatternFuel [])
 else if allEmptyPats clauses then OkC (bodyOfFirst clauses)
+else if allWildPats (firstPats clauses) then OkC (bodyOfFirst clauses)
 else case params of
+  -- 行优先级剪枝：某行的**剩余模式全不可辩**时，它覆盖之后的所有行（后面的行不可能被选中）。
+  -- 不剪会把深层决策树按「每列一个分支」展开成指数体积（`f A _ _ = 0; f _ A _ = 1; f _ _ _ = b`
+  -- 这类「多列规则 + 兜底」在 k 列时生成 3^k 个叶子，绝大多数叶子是同一个兜底体）。
+  -- 首行全通配时直接返回它的体：没有任何列还需要判定。
   [] => tcErr0 fb ClauseTooManyPatterns
   pos :: restParams =>
     if hasAsHead clauses then asColumn table clauses pos restParams fb fuel
@@ -223,6 +233,35 @@ allCtorHeads (c :: rest) = case c of
     PCon cname subpats psp => allCtorHeads rest
     _ => False
   Pair [] body => False
+
+-- 剩余模式是否全为通配（体不引用任何绑定名，可直接返回）。
+allWildPats : List Pat -> Bool
+allWildPats [] = True
+allWildPats (p :: rest) = isWildPat p && allWildPats rest
+
+isWildPat : Pat -> Bool
+isWildPat (PWild _) = True
+isWildPat _ = False
+
+firstPats : List (Pair (List Pat) Expr) -> List Pat
+firstPats ((Pair pats body) :: rest) = pats
+firstPats [] = []
+
+-- 不可辩模式（变量/通配/as-通配）：该行从这一列起覆盖一切。
+irrefutablePat : Pat -> Bool
+irrefutablePat (PVar _ _) = True
+irrefutablePat (PWild _) = True
+irrefutablePat (PAs _ inner _) = irrefutablePat inner
+irrefutablePat _ = False
+
+allIrrefutablePats : List Pat -> Bool
+allIrrefutablePats [] = True
+allIrrefutablePats (p :: rest) = irrefutablePat p && allIrrefutablePats rest
+
+-- 保留到第一个「剩余模式全不可辩」的行（含），丢弃其后不可达的行。
+pruneRows : List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
+pruneRows [] = []
+pruneRows (c :: rest) = if allIrrefutablePats (firstOf c) then [c] else c :: pruneRows rest
 
 allEmptyPats : List (Pair (List Pat) Expr) -> Bool
 allEmptyPats [] = True
