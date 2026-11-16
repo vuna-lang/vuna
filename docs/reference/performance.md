@@ -282,9 +282,16 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 结论要写清：elab 的瓶颈仍是 `conv`/`force`/`infer` 的项重算（分配 ~92%），
 `Ctx` 记账、零向量、族名判定这类结构开销只有千分之几，**不值得继续投入**。
 两项试过又撤掉的改动（连同原因）：
-- 用量零向量按 depth 共享：HashMap 查比建 5–10 个 cons 更贵，撤；
-- `isDictFamily` 加 `Dict_` 前缀预筛：`startsWith` 对两个串做 `strUnpack`，
-  与原「扫 17 个类名」同量级，撤；
+- 用量零向量按 depth 共享：`HashMap.insert` 是 copy-on-write（两次 32 元素数组复制），
+  比建 5–10 条 cons 贵一个量级，而收益只是省几条 cons，撤（**不是**「查」慢：查是
+  hash + 两次 `Array.get` + 桶内线性扫，Int 键在小桶里比建 cons 便宜）；
+- `isDictFamily` 加 `Dict_` 前缀预筛：`startsWith` 会把**两个串都** `strUnpack` 成
+  `List Int`（按整串长度分配），与原「扫 17 个类名」同量级，撤；
+- 桶数 1024 → 4096（64×64，只为 Int 键降碰撞）：同窗口 6 次交替最小 14.10 s vs
+  14.05 s，**≈0.3%，噪声量级**，撤。容器真正的上限在「固定 1024 桶 + 桶内链表」：
+  27k 条解表平均桶长 ~26，`toList`/`size` 还是 O(n·桶长)。要动就得换 HAMT（稀疏节点 +
+  完整哈希位）或加宽 `strHash`（intrinsic，涉及 interp/native/wasm 三份实现 + 主题页），
+  并重新 rotation；按当前读数不值得。
 - 把 binder 类型在绑定点求值成 Value 直接复用（省 `shift`+`eval`）：会改变不透明/擦除
   决策（`isOpaqueRuntimeTyIn` 按**当前**精化重算类型），属语义改动，撤，并把该不变式
   写进 [core.md](core.md) §5。`Ctx` 只保留「求值环境前插维护」这一处结构简化。
