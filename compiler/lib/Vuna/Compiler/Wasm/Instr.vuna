@@ -43,6 +43,8 @@ export data Instr(..) : Type where
   IRefNull : Instr
   -- | `ref.cast (ref $t)`；`$t` 可为 `i31`。
   IRefCast : String -> Instr
+  -- | `ref.test (ref $t)`：类型测试，返回 i32。
+  IRefTest : String -> Instr
   IRefAsNonNull : Instr
   IStructNew : String -> Instr
   IStructGet : String -> Int -> Instr

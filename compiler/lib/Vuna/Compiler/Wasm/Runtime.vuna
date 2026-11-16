@@ -42,6 +42,9 @@ export record RtConsts(..) where
   -- | 一次性续延被第二次 resume（与 native 的 trap 文本一致）。
   rtcResumedOff : Int
   rtcResumedLen : Int
+  -- | 该目标未实现的宿主操作（运行期显式失败，不伪造结果）。
+  rtcHostOff : Int
+  rtcHostLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -204,7 +207,8 @@ rtArrayOob c =
 -- 效应原语（宿主层叶子 + IORef）
 -- ---------------------------------------------------------------
 -- `Eff` 的运行时壳是 base 的 `MkEff` data；这些原语只负责「做一次宿主操作」。
--- 续延（`prim_effectPerform` / `prim_effectHandle`）需要栈捕获，仍不支持。
+-- 续延（`prim_effectPerform` / `prim_effectHandle`）走 stack switching；cleanup 登记表
+-- 只维护 LIFO（abort 路径不运行，见 `rtCleanupPush`）。
 rtEffNewRef : WatFunc
 rtEffNewRef =
   rtFunc "$rt_newRef" [Pair "$p0" WvAnyRef] [WvAnyRef] [Pair "$out" (WvRef "$arr")]
@@ -432,7 +436,7 @@ rtShowStr =
 -- ---------------------------------------------------------------
 -- 除法/失败辅助
 -- ---------------------------------------------------------------
-failWithConst : Int -> Int -> List Instr
+export failWithConst : Int -> Int -> List Instr
 failWithConst off len = cat [mkString off len, [ICall "$rt_failStr", IUnreachable]]
 
 rtDiv : RtConsts -> WatFunc
@@ -734,11 +738,126 @@ rtBoxZero =
     params = [Pair "$p0" WvAnyRef]
   in rtFunc "$rt_boxZero" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
 
+-- | `@vuna@debug@on`：1 元常量 False（`dbg!` 的开关在 wasm 上恒关）。
+rtConstFalse1 : WatFunc
+rtConstFalse1 =
+  let
+    params = [Pair "$p0" WvAnyRef]
+  in rtFunc "$rt_constFalse1" params [WvAnyRef] [] (boolValue False)
+
+-- | 三向比较基元（-1 / 0 / 1）；`$rt_compare` 与字符串/数组比较共用。
+rtCmpI32 : WatFunc
+rtCmpI32 =
+  let
+    params = [Pair "$x" WvI32, Pair "$y" WvI32]
+    body =
+      [ ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "i32.lt_s",
+        ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "i32.gt_s",
+        IBinop "i32.sub"
+      ]
+  in rtFunc "$rt_cmpI32" params [WvI32] [] body
+
+rtCmpI64 : WatFunc
+rtCmpI64 =
+  let
+    params = [Pair "$x" WvI64, Pair "$y" WvI64]
+    body =
+      [ ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "i64.lt_s",
+        ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "i64.gt_s",
+        IBinop "i32.sub"
+      ]
+  in rtFunc "$rt_cmpI64" params [WvI32] [] body
+
+rtCmpF64 : WatFunc
+rtCmpF64 =
+  let
+    params = [Pair "$x" WvF64, Pair "$y" WvF64]
+    body =
+      [ ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "f64.lt",
+        ILocalGet "$x",
+        ILocalGet "$y",
+        IBinop "f64.gt",
+        IBinop "i32.sub"
+      ]
+  in rtFunc "$rt_cmpF64" params [WvI32] [] body
+
+-- | `bi_*_generic`：把 `$rt_compare` 的结果映射成 Bool（i31）。
+rtGenericCmp : String -> String -> WatFunc
+rtGenericCmp name op =
+  let
+    params = [Pair "$a" WvAnyRef, Pair "$b" WvAnyRef]
+    body = [ILocalGet "$a", ILocalGet "$b", ICall "$rt_compare", IConstI32 0, IBinop op, II31New]
+  in rtFunc name params [WvAnyRef] [] body
+
 rtBoxZero2 : WatFunc
 rtBoxZero2 =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
   in rtFunc "$rt_boxZero2" params [WvAnyRef] [] [IConstI64 0, IStructNew "$int"]
+
+-- | 未实现的宿主操作：按 arity 生成显式失败函数（不伪造结果）。
+rtHostTrap : RtConsts -> Int -> WatFunc
+rtHostTrap c n =
+  let
+    params = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
+  in rtFunc "$rt_hostTrap${strFromInt n}" params [WvAnyRef] []
+    (failWithConst c.rtcHostOff c.rtcHostLen)
+
+-- | `bracket` 的 cleanup 登记表：全局 LIFO（无调度器时只有一个 fiber）。
+--   正常路径由 `bracket` 自己 pop + 执行 release；abort 路径不运行登记表（与 native 的
+--   硬中止限制一致），因此这里只维护栈本身。
+rtCleanupPush : WatFunc
+rtCleanupPush =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IGlobalGet "$g_cleanups",
+        IStructNew "$clean",
+        IGlobalSet "$g_cleanups",
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_cleanupPush" params [WvAnyRef] [] body
+
+rtCleanupPop : WatFunc
+rtCleanupPop =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    body =
+      [ IGlobalGet "$g_cleanups",
+        IPlain "ref.is_null",
+        IIf "" [INop] [IGlobalGet "$g_cleanups", IRefCast "$clean", IStructGet "$clean" 1, IGlobalSet "$g_cleanups"],
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_cleanupPop" params [WvAnyRef] [] body
+
+-- | 高阶 obs span：关闭观测时等价于把 thunk 应用到 0。叶子原语已是 no-op 桩。
+rtObsSpan : WatFunc
+rtObsSpan =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef]
+    body = [ILocalGet "$p2", IConstI64 0, IStructNew "$int", IReturnCall "$rt_apply"]
+  in rtFunc "$rt_obsSpan" params [WvAnyRef] [] body
+
+-- | `obsSpanLab`：多一个 label 参数，thunk 仍是最后一个。
+rtObsSpanLab : WatFunc
+rtObsSpanLab =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef, Pair "$p3" WvAnyRef]
+    body = [ILocalGet "$p3", IConstI64 0, IStructNew "$int", IReturnCall "$rt_apply"]
+  in rtFunc "$rt_obsSpanLab" params [WvAnyRef] [] body
 
 rtBitNot : WatFunc
 rtBitNot =
@@ -1004,7 +1123,26 @@ rtFunctions c =
     rtEqStr,
     rtNeqStr,
     rtBoxZero,
+    rtConstFalse1,
     rtBoxZero2,
+    rtCleanupPush,
+    rtCleanupPop,
+    rtHostTrap c 0,
+    rtHostTrap c 1,
+    rtHostTrap c 2,
+    rtHostTrap c 3,
+    rtHostTrap c 4,
+    rtHostTrap c 5,
+    rtHostTrap c 6,
+    rtCmpI32,
+    rtCmpI64,
+    rtCmpF64,
+    rtGenericCmp "$rt_ltGeneric" "i32.lt_s",
+    rtGenericCmp "$rt_leGeneric" "i32.le_s",
+    rtGenericCmp "$rt_gtGeneric" "i32.gt_s",
+    rtGenericCmp "$rt_geGeneric" "i32.ge_s",
+    rtObsSpan,
+    rtObsSpanLab,
     rtErase,
     rtAssert c,
     rtPrimFail,
@@ -1046,7 +1184,7 @@ rtImplOf "@ir@showInt" = RtFunc 1 "$rt_strFromInt"
 rtImplOf "@ir@showNat" = RtFunc 1 "$rt_strFromInt"
 rtImplOf "@ir@showBool" = RtFunc 1 "$rt_showBool"
 rtImplOf "@ir@showStr" = RtFunc 1 "$rt_showStr"
-rtImplOf "@vuna@debug@on" = RtValue (boolValue False)
+rtImplOf "@vuna@debug@on" = RtFunc 1 "$rt_constFalse1"
 rtImplOf "@vuna@debug@line" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@level" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@log" = RtFunc 1 "$rt_boxZero"
@@ -1056,6 +1194,8 @@ rtImplOf "@vuna@obs@spanBegin" = RtFunc 2 "$rt_boxZero2"
 rtImplOf "@vuna@obs@spanEnd" = RtFunc 1 "$rt_boxZero"
 rtImplOf "@vuna@obs@sampleStart" = RtFunc 2 "$rt_boxZero2"
 rtImplOf "@vuna@obs@sampleStop" = RtFunc 1 "$rt_boxZero"
+rtImplOf "@vuna@obs@span" = RtFunc 3 "$rt_obsSpan"
+rtImplOf "@vuna@obs@spanLab" = RtFunc 4 "$rt_obsSpanLab"
 rtImplOf "@ir@natSucc" = RtFunc 1 "$rt_natSucc"
 rtImplOf "arrayEmpty" = RtValue [IConstI32 0, IArrayNewDefault "$arr"]
 rtImplOf "floatFromInt" = RtFunc 1 "$rt_floatFromInt"
@@ -1094,6 +1234,10 @@ rtImplOf "strSubstring" = RtFunc 3 "$rt_substring"
 rtImplOf "strHash" = RtFunc 1 "$rt_strHash"
 rtImplOf "bi_eq_str" = RtFunc 2 "$rt_eqStr"
 rtImplOf "bi_neq_str" = RtFunc 2 "$rt_neqStr"
+rtImplOf "bi_lt_generic" = RtFunc 2 "$rt_ltGeneric"
+rtImplOf "bi_le_generic" = RtFunc 2 "$rt_leGeneric"
+rtImplOf "bi_gt_generic" = RtFunc 2 "$rt_gtGeneric"
+rtImplOf "bi_ge_generic" = RtFunc 2 "$rt_geGeneric"
 rtImplOf "@vuna@host@print" = RtFunc 1 "$rt_effPrint"
 rtImplOf "prim_eff_print_host" = RtFunc 1 "$rt_effPrint"
 rtImplOf "@vuna@prim_eff_print_host" = RtFunc 1 "$rt_effPrint"
@@ -1111,6 +1255,8 @@ rtImplOf "prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
 rtImplOf "@vuna@prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
 rtImplOf "prim_effectPerform" = RtFunc 3 "$rt_effPerform"
 rtImplOf "prim_effectHandle" = RtFunc 6 "$rt_effHandle"
+rtImplOf "prim_cleanupPush" = RtFunc 1 "$rt_cleanupPush"
+rtImplOf "prim_cleanupPop" = RtFunc 1 "$rt_cleanupPop"
 rtImplOf "prim_eff_newRef" = RtFunc 1 "$rt_newRef"
 rtImplOf "@vuna@prim_eff_newRef" = RtFunc 1 "$rt_newRef"
 rtImplOf "prim_eff_readRef" = RtFunc 1 "$rt_readRef"
@@ -1123,4 +1269,64 @@ rtImplOf "prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
 rtImplOf "@vuna@prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
 rtImplOf "prim_eff_exit" = RtFunc 1 "$rt_effExit"
 rtImplOf "@vuna@prim_eff_exit" = RtFunc 1 "$rt_effExit"
+-- 宿主面：先全部落到显式失败桩，真实实现按族逐步替换。
+rtImplOf "@vuna@host@tryReadFile" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryWriteFile" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@host@tryWriteFileAtomic" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@host@tryReadDir" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryIsDirectory" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryMakeDir" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryRemoveFile" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryRemoveTree" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryRename" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@host@trySymlink" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@host@tryMakeDirExclusive" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@fileExists" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@fileMtime" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@fileSize" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_hostStatus" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@host@getenv" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@getcwd" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@host@execPath" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@host@getArgs" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@host@isTty" = RtValue (boolValue False)
+rtImplOf "@vuna@prim_eff_getArgs_process_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@prim_eff_readFile" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_writeFile" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@prim_eff_writeFileAtomic" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@prim_eff_readDir" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_isDirectory" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_makeDir" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_removeFile" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_fileExists" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_fileMtime" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_fileSize" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_readLine" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_readBytes" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_getArgs" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_getenv" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_getcwd" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_execPath" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_sleep" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@readLine" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@host@readBytes" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "prim_eff_readLine_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_readLine_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "prim_eff_readBytes_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_readBytes_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@tryRunIn" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "@vuna@host@runIn" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
+rtImplOf "prim_eff_getArgs_process_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "effTimeUs_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@sleep" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf _ = RtUnsupported
