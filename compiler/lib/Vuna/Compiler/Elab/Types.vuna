@@ -253,10 +253,15 @@ export record ConstraintStore where
   -- 目标在 program-level 每轮被跳过（仍留在 pending 里，供定义收尾 lift 用）。
   -- 按 id 索引（Hash），否则记录随尝试次数增长后，每次 `ecTriedAt` 都要线性扫。
   csTried : HashMap Int Int
+  -- 解表条目数（O(1) 读）：epoch 判据要按它比较，不能每步 `length (ecSols …)`。
+  csSolsCount : Int
+  -- 上一轮收敛结束时的 (id, 解表数)：两者都没变时整轮必然空转，直接跳过。
+  csPassNext : Int
+  csPassSols : Int
 
 -- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
 export csEmpty : ConstraintStore
-csEmpty = ConstraintStore [] 0 (Base.HashMap.fromList [])
+csEmpty = ConstraintStore [] 0 (Base.HashMap.fromList []) 0 (0 - 1) (0 - 1)
 
 -- 末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
 --   - `ecCtorTbl : HashMap String DtCtor`：构造子名 → DtCtor。`elabDatas` 之后建一次
@@ -437,31 +442,33 @@ ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl
 -- | 取约束存储里的待处理约束列表（维持原有顺序）。
 export ecPending : Ec -> List Constraint
 ecPending ec = case ecConstraints ec of
-  ConstraintStore pending next tried => pending
+  ConstraintStore pending next tried cnt passNext passSols => pending
 
 -- | 替换待处理约束列表，保留下一个 id 与已尝试记录。
 export ecPutPending : Ec -> List Constraint -> Ec
 ecPutPending ec pending2 = case ecConstraints ec of
-  ConstraintStore pending next tried => ecPutConstraints ec (ConstraintStore pending2 next tried)
+  ConstraintStore pending next tried cnt passNext passSols =>
+    ecPutConstraints ec (ConstraintStore pending2 next tried cnt passNext passSols)
 
 -- | 分配新 id 并把一条约束追加到待处理列表末尾。
 export ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
 ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
-  ConstraintStore pending next tried =>
+  ConstraintStore pending next tried cnt passNext passSols =>
     ecPutConstraints ec
-      (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried)
+      (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried cnt passNext passSols)
 
 -- 已尝试记录（epoch = 解表长度）。
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 export ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
-  ConstraintStore pending next tried => Base.HashMap.lookup cid tried
+  ConstraintStore pending next tried cnt passNext passSols => Base.HashMap.lookup cid tried
 
 -- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
 export ecRecordTried : Ec -> Int -> Int -> Ec
 ecRecordTried ec cid epoch = case ecConstraints ec of
-  ConstraintStore pending next tried =>
-    ecPutConstraints ec (ConstraintStore pending next (Base.HashMap.insert cid epoch tried))
+  ConstraintStore pending next tried cnt passNext passSols =>
+    ecPutConstraints ec
+      (ConstraintStore pending next (Base.HashMap.insert cid epoch tried) cnt passNext passSols)
 
 export ecEmpty : Ec
 ecEmpty =
@@ -486,12 +493,34 @@ ecPutSols ec sols2 =
   let
     delta = solsDelta (ecSols ec) sols2
     soltbl2 = Base.HashMap.insertAll delta (ecSolTbl ec)
-  in ecPutSolsRaw ec sols2 soltbl2
+    ec2 = ecPutSolsRaw ec sols2 soltbl2
+  in ecPutSolsCount ec2 (ecSolsCountOf ec2 + length delta)
+
+-- | O(1) 读解表条目数（求解器的 epoch 判据）。
+export ecSolsCountOf : Ec -> Int
+ecSolsCountOf ec = case ecConstraints ec of
+  ConstraintStore pending next tried cnt passNext passSols => cnt
+
+ecPutSolsCount : Ec -> Int -> Ec
+ecPutSolsCount ec cnt = case ecConstraints ec of
+  ConstraintStore pending next tried old passNext passSols =>
+    ecPutConstraints ec (ConstraintStore pending next tried cnt passNext passSols)
 
 ecPutSolsRaw : Ec -> List (Pair Int Value) -> HashMap Int Value -> Ec
 ecPutSolsRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) sols2 soltbl2 =
   Ec next sols2 defs datas depths goals insts classes dgoals deftbl gtbl soltbl2 dptbl gcomp ctbl
     ctortbl haslin mspans uspans warnings counters errors
+
+-- | 记录一轮求解结束时的 (id, 解表数)，供下一轮的空转判据。
+export ecPutPassMarker : Ec -> Ec
+ecPutPassMarker ec = case ecConstraints ec of
+  ConstraintStore pending next tried cnt passNext passSols =>
+    ecPutConstraints ec (ConstraintStore pending next tried cnt next cnt)
+
+-- | 自上次求解轮以来没有新约束、解表也没增长 ⇒ 这一轮必然全部跳过，可整体省掉。
+export ecDictPassIdle : Ec -> Bool
+ecDictPassIdle ec = case ecConstraints ec of
+  ConstraintStore pending next tried cnt passNext passSols => passNext == next && passSols == cnt
 
 -- 新解是前插的：旧表头编号之前的条目就是本次新增的解。
 solsDelta : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)

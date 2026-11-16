@@ -610,7 +610,9 @@ resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)
       ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
 
 export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
-resolveDictGoals globals ec = resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec
+resolveDictGoals globals ec =
+  if ecDictPassIdle ec then ec
+  else ecPutPassMarker (resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec)
 
 -- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（旋转语义：
 -- 每趟从头部取一个目标）。把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；
@@ -628,7 +630,7 @@ else case ecPending ec0 of
       Just _ => resolveDictGoalsFuel (fuel - 1) globals ec1
       Nothing =>
         let
-          solsNow = length (ecSols ec1)
+          solsNow = ecSolsCountOf ec1
         in case ecTriedAt ec1 cid of
           -- 上次尝试后解表没增长 ⇒ 结果不会变，跳过搜索，原地保留。
           Just tried => if tried == solsNow then
@@ -640,7 +642,7 @@ else case ecPending ec0 of
               forced = forceVal ec1 dom
               kept =
                 Constraint cid kind m (if isMemberDomain ec1 dom then dom else forced) cspan cdepth
-              solsTried = length (ecSols ec1)
+              solsTried = ecSolsCountOf ec1
             in case tryResolveDictGoal globals ec1 c forced of
               Just ec2 => resolveDictGoalsFuel (fuel - 1) globals ec2
               Nothing =>
