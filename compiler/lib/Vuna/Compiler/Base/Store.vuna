@@ -256,15 +256,17 @@ storeEnsureDirEff path = storeEnsureDirFuel 256 path
 -- | 建目录（幂等）。
 --
 -- 并发注意：`vuna test --jobs N` / 并行 workspace check 会有多个进程同时建同一个缓存目录。
--- 「先 exists 再 makeDir」有 TOCTOU 窗口（两个进程都看到不存在，第二个 makeDir 抛
--- `File exists`）——宿主 `makeDir` 不幂等，语言里也没有 try/catch。所以末级创建走
--- `mkdir -p`（幂等 + 一次建完整条链），existence 检查只用于快速短路。
+-- 宿主 `MakeDir` 幂等（已存在返回 0），所以逐级递归创建不会因 EEXIST 失败；existence
+-- 检查只用于快速短路。
 storeEnsureDirFuel : Member nFs FsOp r, Member nProcess ProcessOp r => Int -> String -> Eff r Int
 storeEnsureDirFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
   exists <- fsFileExists path
-  if exists then pure 0 else processRunIn "." ["mkdir", "-p", path]
+  if exists then pure 0
+  else do
+    _ <- storeEnsureDirFuel (fuel - 1) (storeParentOf path)
+    fsMakeDir path
 
 storeParentOf : String -> String
 storeParentOf path =
@@ -416,20 +418,19 @@ storeViewLockEff kind digest = do
 
 claimAt : Member nFs FsOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> Eff r Bool
 claimAt path = do
-  code <- processRunIn "." ["mkdir", path]
-  if code == 0 then pure True
+  ok <- fsMakeDirExclusive path
+  if ok then pure True
   else do
     stale <- scratchStale path
     if not stale then pure False
     else do
-      _ <- processRunIn "." ["rm", "-rf", path]
-      code2 <- processRunIn "." ["mkdir", path]
-      pure (code2 == 0)
+      _ <- fsRemoveTree path
+      fsMakeDirExclusive path
 
 export storeViewUnlockEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 storeViewUnlockEff kind digest = do
   root <- storeRootReadyEff
-  processRunIn "." ["rm", "-rf", "${root}/.tmp/lock-${kind}-${digest}"]
+  fsRemoveTree "${root}/.tmp/lock-${kind}-${digest}"
 
 -- | 视图暂存目录（同一 inputDigest 唯一）。
 storeScratchPathIn : String -> String -> String -> String
@@ -455,15 +456,14 @@ export storeScratchClaimEff : Member nFs FsOp r, Member nClock ClockOp r, Member
 storeScratchClaimEff kind digest = do
   path <- storeScratchPathEff kind digest
   _ <- storeEnsureDirEff (storeParentPathOf path)
-  code <- processRunIn "." ["mkdir", path]
-  if code == 0 then pure True
+  ok <- fsMakeDirExclusive path
+  if ok then pure True
   else do
     stale <- scratchStale path
     if not stale then pure False
     else do
-      _ <- processRunIn "." ["rm", "-rf", path]
-      code2 <- processRunIn "." ["mkdir", path]
-      pure (code2 == 0)
+      _ <- fsRemoveTree path
+      fsMakeDirExclusive path
 
 export storeScratchPathOfClaim : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r String
 storeScratchPathOfClaim = storeScratchPathEff
@@ -472,7 +472,7 @@ storeScratchPathOfClaim = storeScratchPathEff
 export storeScratchDropEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 storeScratchDropEff kind digest = do
   path <- storeScratchPathEff kind digest
-  processRunIn "." ["rm", "-rf", path]
+  fsRemoveTree path
 
 -- | 发布暂存目录：写 `.complete` 后 `mv` 到视图位置。目标已存在（并发先到者）则丢弃暂存。
 export storeViewPublishEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
@@ -481,11 +481,8 @@ storeViewPublishEff kind digest = do
   view <- storeViewPathEff kind digest
   _ <- storeEnsureDirEff (storeParentPathOf view)
   _ <- fsWriteFileAtomic "${scratch}/.complete" digest
-  code <- processRunIn "." ["mv", scratch, view]
-  if code == 0 then pure 0
-  else do
-    _ <- processRunIn "." ["rm", "-rf", scratch]
-    pure 0
+  _ <- fsRename scratch view
+  pure 0
 
 -- ---------------------------------------------------------------
 -- roots（GC 的保护集）
@@ -601,5 +598,5 @@ storeRootRemoveEff projectId = do
   exists <- fsFileExists path
   if exists then do
     isDir <- fsIsDirectory path
-    if isDir then processRunIn "." ["rm", "-rf", path] else fsRemoveFile path
+    if isDir then fsRemoveTree path else fsRemoveFile path
   else pure 0

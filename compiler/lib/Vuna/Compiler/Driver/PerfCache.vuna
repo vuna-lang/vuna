@@ -79,17 +79,9 @@ unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
   Just k => k
   Nothing => ""
 
--- | 删除文件，**文件不存在也不报错**。
---
--- 为什么不能直接用 `fsRemoveFile`：单元缓存目录按包共享，`vuna test --jobs N` /
--- workspace 并行 check 会有多个进程同时 GC 同一个桶。`removeFile` 在文件已被别的进程
--- 删掉时抛宿主异常（语言里没有 try/catch），表现为
--- `runtime error: removeFile: ... No such file or directory`。
--- `exists` 再删仍有 TOCTOU 窗口，所以走 `rm -f`（幂等）。
+-- | 删除文件；`fsRemoveFile` 本身幂等（不存在返回 0），多进程 GC 同一桶也安全。
 safeRemoveFile : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
-safeRemoveFile path = do
-  exists <- fsFileExists path
-  if exists then processRunIn "/" ["rm", "-f", path] else pure 0
+safeRemoveFile path = fsRemoveFile path
 
 export unitCacheGc : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
 unitCacheGc base keepDir = do

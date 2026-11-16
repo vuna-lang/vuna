@@ -55,6 +55,10 @@ mopH op k = case op of
   FileExists p => k True
   FileMtime p => k (Just 0)
   FileSize p => k (Just 42)
+  RemoveTree p => k 0
+  Rename s d => k 0
+  Symlink t l => k 0
+  MakeDirExclusive p => k True
 
 main : Eff hostRow Int
 main = do

@@ -367,11 +367,9 @@ stripDiagFormatGo (arg :: rest) acc found =
     (Just (substring (natFromInt 17) (natFromInt (strLength arg - 17)) arg))
   else stripDiagFormatGo rest (arg :: acc) found
 
--- 终端探测：用一次 sh 判定 stdout 是否 TTY（不加原语、不动 TCB；同 REPL 的 stty 做法）。
-stdoutIsTty : Member nProcess ProcessOp r => Eff r Bool
-stdoutIsTty = do
-  code <- processRunIn "." ["sh", "-c", "[ -t 1 ]"]
-  pure (code == 0)
+-- 终端探测：wasm/native 恒 False，OCaml 用 `Unix.isatty`。
+stdoutIsTty : {r : Row} -> Eff r Bool
+stdoutIsTty = raise @vuna@host@isTty
 
 -- | 编译器 CLI 入口：剥离诊断参数后分发。
 export runCompilerCliFor : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> List String -> Eff r Int
@@ -1128,7 +1126,7 @@ buildDefaultView ctx pkg name entry viewDigest o = do
           r <- compileToDir ctx entry True view
           case r of
             ErrC e => do
-              _ <- processRunIn "." ["rm", "-rf", view]
+              _ <- fsRemoveTree view
               _ <- storeViewUnlockEff "bin" viewDigest
               printDiag o e
             OkC _ => do
@@ -1168,14 +1166,14 @@ markViewComplete dir digest = fsWriteFileAtomic "${dir}/.complete" digest
 -- 默认输出时把 `<pkg>/.output` 指向视图；`--out` 时不动磁盘布局。
 -- `.complete` 由持锁者在构建成功后写（`markViewComplete`），不在这里写，
 -- 避免“链接失败但视图已被标记完成”。
-linkDefaultOutput : Member nProcess ProcessOp r => Maybe String -> Package -> String -> String -> Eff r Int
+linkDefaultOutput : Member nFs FsOp r => Maybe String -> Package -> String -> String -> Eff r Int
 linkDefaultOutput (Just _) _ _ _ = pure 0
 linkDefaultOutput Nothing pkg outDir _viewDigest = do
   let
     link = "${packageDir pkg}/.output"
   in do
-    _ <- processRunIn "." ["rm", "-rf", link]
-    processRunIn "." ["ln", "-s", outDir, link]
+    _ <- fsRemoveTree link
+    fsSymlink outDir link
 
 compileCodegen : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> CliOpts -> Eff r (Pair Int CliOpts)
 compileCodegen ctx entry outDir o = do
@@ -1241,7 +1239,7 @@ finishWarningsDir warns o dir code =
   in do
     r <- printDiagList o "" shown
     if o.optDenyWarnings && length ws > 0 then do
-      _ <- processRunIn "/" ["rm", "-rf", dir]
+      _ <- fsRemoveTree dir
       pure (Pair 1 (secondOf r))
     else pure (Pair code (secondOf r))
 

@@ -11,9 +11,12 @@ import Base.Eq
 import Base.Maybe
 import Base.Nat
 import Base.Monad
+import Base.Ord
 import Base.Bool
 import Base.List
 import Base.Result
+import Base.Sort
+import Base.String
 
 -- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
 export data FsOp(..) : Type where
@@ -37,6 +40,14 @@ export data FsOp(..) : Type where
   FileMtime : String -> FsOp
   -- | 取文件字节数（取不到给 `Nothing`）。
   FileSize : String -> FsOp
+  -- | 递归删除文件/目录树；不跟随符号链接（= `rm -rf`，缺失也算成功）。
+  RemoveTree : String -> FsOp
+  -- | `rename(2)`：同文件系统内移动/覆盖。
+  Rename : String -> String -> FsOp
+  -- | `symlink(target, link)`。
+  Symlink : String -> String -> FsOp
+  -- | 原子建目录：已存在返回 False（与幂等 `MakeDir` 区分，锁用）。
+  MakeDirExclusive : String -> FsOp
 
 -- | 操作的结果类型族：`ReadFile` → `String`，`ReadDir` → `List String`，`IsDirectory` / `FileExists` → `Bool`，`WriteFile` → `Nat`（写入字节数），`FileMtime` → `Maybe Int`、`FileSize` → `Maybe Nat`，其余（`WriteFileAtomic` / `MakeDir` / `RemoveFile`）→ `Int`。
 export resFs : FsOp -> Type
@@ -50,6 +61,10 @@ resFs (RemoveFile p) = Int
 resFs (FileExists p) = Bool
 resFs (FileMtime p) = Maybe Int
 resFs (FileSize p) = Maybe Nat
+resFs (RemoveTree p) = Int
+resFs (Rename s d) = Int
+resFs (Symlink t l) = Int
+resFs (MakeDirExclusive p) = Bool
 
 -- | 宿主 fs 失败的种类：带出错路径；文本由 `fsErrorText` 统一渲染。
 --
@@ -105,6 +120,9 @@ fsErrorText (FsIsDir p) = "fs: ${p}: is a directory"
 fsErrorText (FsExists p) = "fs: ${p}: already exists"
 fsErrorText (FsIo p) = "fs: ${p}: host I/O error"
 
+sortEntries : List String -> List String
+sortEntries xs = sortBy (\a, b => a <= b) xs
+
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
 export fsReadFile : Member n FsOp r => String -> Eff r String
 fsReadFile p = do
@@ -152,6 +170,22 @@ fsFileMtime p = sendCore FsOp "fs" n (FileMtime p)
 export fsFileSize : Member n FsOp r => String -> Eff r (Maybe Nat)
 fsFileSize p = sendCore FsOp "fs" n (FileSize p)
 
+-- | 递归删除文件/目录树（不跟随符号链接；不存在也算成功）。
+export fsRemoveTree : Member n FsOp r => String -> Eff r Int
+fsRemoveTree p = sendCore FsOp "fs" n (RemoveTree p)
+
+-- | 重命名（同文件系统；目标覆盖由宿主语义决定）。
+export fsRename : Member n FsOp r => String -> String -> Eff r Int
+fsRename src dst = sendCore FsOp "fs" n (Rename src dst)
+
+-- | 建符号链接（target 是链接内容，link 是链接路径）。
+export fsSymlink : Member n FsOp r => String -> String -> Eff r Int
+fsSymlink target link = sendCore FsOp "fs" n (Symlink target link)
+
+-- | 原子建目录：成功 `True`，已存在 `False`，其它失败按 typed error。
+export fsMakeDirExclusive : Member n FsOp r => String -> Eff r Bool
+fsMakeDirExclusive p = sendCore FsOp "fs" n (MakeDirExclusive p)
+
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `FsOp`。
 export handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n FsOp r} -> (a -> b) -> ((o : FsOp) -> (resFs o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n FsOp r) b
 handleFs n ret opH comp = handleCore FsOp "fs" n ret opH comp
@@ -181,7 +215,7 @@ fsOpHIOHost op k = case op of
   ReadDir p => do
     xs <- raise (@vuna@host@tryReadDir p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode "readDir ${p}" ok) else k xs
+    if ok /= 0 then fsFail (fsErrorOfCode "readDir ${p}" ok) else k (sortEntries xs)
   IsDirectory p => do
     b <- raise (@vuna@host@tryIsDirectory p)
     ok <- fsHostStatus
@@ -194,6 +228,23 @@ fsOpHIOHost op k = case op of
     _ <- raise (@vuna@host@tryRemoveFile p)
     ok <- fsHostStatus
     if ok /= 0 then fsFail (fsErrorOfCode "removeFile ${p}" ok) else k 0
+  RemoveTree p => do
+    _ <- raise (@vuna@host@tryRemoveTree p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode "removeTree ${p}" ok) else k 0
+  Rename src dst => do
+    _ <- raise (@vuna@host@tryRename src dst)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode "rename ${src} -> ${dst}" ok) else k 0
+  Symlink target link => do
+    _ <- raise (@vuna@host@trySymlink target link)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode "symlink ${target} -> ${link}" ok) else k 0
+  MakeDirExclusive p => do
+    _ <- raise (@vuna@host@tryMakeDirExclusive p)
+    ok <- fsHostStatus
+    if ok == 0 then k True
+    else if ok == 6 then k False else fsFail (fsErrorOfCode "makeDirExclusive ${p}" ok)
   FileExists p => do
     b <- raise (@vuna@host@fileExists p)
     k b

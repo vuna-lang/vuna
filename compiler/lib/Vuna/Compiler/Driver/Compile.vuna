@@ -125,9 +125,8 @@ checkPackage release wantWarnings pkg =
 
 -- 逐级创建目录（`--out a/b` 的父目录可能不存在）。
 --
--- 并发注意：并行构建会在同一目录上竞争；宿主 `makeDir` 不幂等（EEXIST 直接抛异常），
--- 「先 exists 再 makeDir」有 TOCTOU 窗口。末级创建走 `mkdir -p`（幂等）。
--- 递归沿 `parentOfPath` 上升，不是结构下降，用显式 fuel 守卫（路径深度上限）。
+-- 并发注意：并行构建会在同一目录上竞争；宿主 `MakeDir` 幂等（已存在返回 0），
+-- 逐级递归创建不会因 EEXIST 失败。
 export ensureDirPath : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
 ensureDirPath path = ensureDirPathFuel 256 path
 
@@ -136,7 +135,10 @@ ensureDirPathFuel fuel path = if fuel <= 0 then pure 0
 else if path == "" || path == "." || path == "/" then pure 0
 else do
   exists <- fsFileExists path
-  if exists then pure 0 else processRunIn "." ["mkdir", "-p", path]
+  if exists then pure 0
+  else do
+    _ <- ensureDirPathFuel (fuel - 1) (parentOfPath path)
+    fsMakeDir path
 
 -- 去掉最后一段（`a/b/c` -> `a/b`；无 `/` -> "."；绝对路径的父仍绝对）由 `Source.parentOfPath`
 -- 提供（`Common` 已重导出），这里不再保留第二份实现。
