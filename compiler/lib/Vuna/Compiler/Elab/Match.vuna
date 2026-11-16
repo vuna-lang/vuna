@@ -32,10 +32,18 @@ allVarPats (p :: rest) = case p of
   PAs _ _ _ => False
   _ => False
 
+-- 只拒绝「比首子句 arity 更多」的 clause；少模式的 catch-all（如 `floatPrim1 _`）
+-- 是 curry 后的合法降级，保持既有语义。
+clauseArityTooMany : Int -> List (Pair (List Pat) Expr) -> Bool
+clauseArityTooMany n [] = False
+clauseArityTooMany n ((Pair pats _) :: rest) =
+  natToInt (length pats) > n || clauseArityTooMany n rest
+
 export multiToExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> Check Expr
 multiToExpr table clauses = case arityOf clauses of
   Nothing => ErrC (tcMsg FunctionNoClauses [])
-  Just n =>
+  Just n => if clauseArityTooMany n clauses then tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
+  else
     let
       names = paramNames n
     in Vuna.Compiler.Common.bind (buildColumnExpr table clauses names (firstPatSpan clauses) 200)
@@ -45,7 +53,11 @@ multiToExpr table clauses = case arityOf clauses of
 -- 直接返回以它为 scrutinee 的嵌套 case 体。供 Elab 的 case 去重降级使用
 -- （先把 scrutinee 用 let 绑定成 name，保证只求值一次）。
 export multiToCaseExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> String -> Check Expr
-multiToCaseExpr table clauses name = buildColumnExpr table clauses [name] (firstPatSpan clauses) 200
+multiToCaseExpr table clauses name = case arityOf clauses of
+  Nothing => tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
+  Just n =>
+    if clauseArityTooMany n clauses then tcErr0 (firstPatSpan clauses) ClauseTooManyPatterns
+    else buildColumnExpr table clauses [name] (firstPatSpan clauses) 200
 
 -- 源矩阵（剥掉 as-pattern）：覆盖性见证用。
 export matrixOf : List (Pair (List Pat) Expr) -> List (List Pat)
