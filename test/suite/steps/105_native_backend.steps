@@ -150,17 +150,24 @@ exit: 0
 run: "$TMPDIR/effret-out/bin/effret" 2>&1
 out-equals: 5
 
-# 9j) 恢复后深递归：续延栈段留出的向下增长空间（512 KiB）覆盖约 2k 帧。
-run: sh -c 'd="$TMPDIR/effdeep"; mkdir -p "$d/app"; printf "[package]\nname = \"effdeep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 2000)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effdeep-out" "$d"'
+# 9j) 恢复后深递归：续延栈段留出的向下增长空间（128 KiB）覆盖约 500 帧。
+run: sh -c 'd="$TMPDIR/effdeep"; mkdir -p "$d/app"; printf "[package]\nname = \"effdeep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 500)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effdeep-out" "$d"'
 exit: 0
 run: "$TMPDIR/effdeep-out/bin/effdeep" 2>&1
-out-equals: 2001
+out-equals: 501
 
 # 9k) 嵌套 handler 的内层恢复段里触发外层 perform：整段栈迁移后仍回到 211。
 run: sh -c 'd="$TMPDIR/effnested"; mkdir -p "$d/app"; printf "[package]\nname = \"effnested\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int\nprog = do\n  x <- perform (A 1)\n  y <- perform (B 2)\n  pure (x + y)\n\ninner : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int -> Eff (Cons \"b\" BOp []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnested-out" "$d"'
 exit: 0
 run: "$TMPDIR/effnested-out/bin/effnested" 2>&1
 out-equals: 211
+
+# 9l) 续延栈段越界：恢复后的深递归超过 slack 时 trap（exit 2），不踩堆。
+run: sh -c 'd="$TMPDIR/effovf"; mkdir -p "$d/app"; printf "[package]\nname = \"effovf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 3000)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effovf-out" "$d"'
+exit: 0
+run: "$TMPDIR/effovf-out/bin/effovf" 2>&1
+exit: 2
+out-contains: continuation stack overflow
 
 # 10) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'

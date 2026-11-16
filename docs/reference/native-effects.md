@@ -381,7 +381,9 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
 
 - 捕获/迁移的是 `[perform_rbp, rt_stack_top)` 整段栈（含外层 handler 的挂起帧）；
   内层恢复后再触发外层 `perform` 也走同一段，节点栈地址随段平移、`kdone` 时撤销。
-- 每次恢复保留 512 KiB slack（约 5k 个常见帧），旧段不回收（[debt.md](debt.md) D89）。
+- 恢复栈段保留 128 KiB slack（约 1k 个常见帧），从 free list 复用；函数 prologue 检查
+  `rt_stack_limit`，越界 trap。嵌套 effect 的总开销仍随深度增长
+  （[debt.md](debt.md) D89）。
 
 wasm 后端仍拒绝 handler（需要 stack switching），shared parity 夹具暂不覆盖 handler；
 native 的机制用例在 `105_native_backend.steps`。

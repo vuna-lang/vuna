@@ -554,7 +554,7 @@ else
     frame = nativeFrameBytes stF.fgNextSlot
     lamFunc =
       NativeFunc lamName frame
-        (append (nativePrologue frame) (append (firstOf cp) (append (firstOf bp) (append (firstOf q) nativeEpilogue))))
+        (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf cp) (append (firstOf bp) (append (firstOf q) nativeEpilogue)))))
     allocP = genAlloc st1 (1 + ncap)
     obj = firstOf (secondOf allocP)
     st2 = secondOf (secondOf allocP)
@@ -998,7 +998,9 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
     instrs = append (firstOf p) nativeEpilogue
-    mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)
+    mainF =
+      NativeFunc (nativeFuncLabel name) frame
+        (append (nativePrologue frame) (append stackGuardInstrs instrs))
   in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
   )
   else case body of
@@ -1010,7 +1012,9 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
         st1 = secondOf q
         frame = nativeFrameBytes st1.fgNextSlot
         instrs = append (firstOf bp) (append (firstOf q) nativeEpilogue)
-        mainF = NativeFunc (nativeFuncLabel name) frame (append (nativePrologue frame) instrs)
+        mainF =
+          NativeFunc (nativeFuncLabel name) frame
+            (append (nativePrologue frame) (append stackGuardInstrs instrs))
       in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
       )
       )
@@ -1101,7 +1105,8 @@ bridgeFn : String -> Int -> List Instr -> NativeFunc
 bridgeFn name slots body =
   let
     frame = nativeFrameBytes slots
-  in NativeFunc (nativeRtLabel name) frame (append (nativePrologue frame) (append body nativeEpilogue))
+  in NativeFunc (nativeRtLabel name) frame
+    (append (nativePrologue frame) (append stackGuardInstrs (append body nativeEpilogue)))
 
 nlistCellBytes : NListDesc -> Int
 nlistCellBytes d = 8 * (1 + d.nlMaxArity)

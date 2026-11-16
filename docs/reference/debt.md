@@ -69,7 +69,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈并固定留 512 KiB slack（约 5k 个常见帧，超出会越过段界）；迁移后的旧栈段不回收，深递归 + 大量 resume 会持续消耗 arena；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effUnrelocateFn`）；[native.md](native.md) §3.4；105 的 `effdeep` / `effmany` 用例 | 后续（栈段回收/按需 slack；multi-shot 不做） |
+| D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈；栈段从 free list 复用、保留 128 KiB slack 并有 `rt_stack_limit` 越界 trap，但**嵌套 effect 的总开销仍随深度增长**（每层复制整段栈，深链会 O(depth²) 拷贝并最终 OOM/trap）；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effAllocSegmentFn` / `effFreeSegmentFn`）；[native.md](native.md) §3.4；105 的 `effmany` / `effdeep` / `effovf` 用例 | 后续（分段栈/按需扩容；multi-shot 不做） |
 
 ## 相关阅读
 

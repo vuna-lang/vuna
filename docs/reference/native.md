@@ -109,7 +109,7 @@
 - 否则走 `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
 
 `resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获的整段栈
-拷到**堆上的新栈段**（`len + 512 KiB` slack，向下增长留在段内），把 rbp 链和所有活动
+拷到**堆上的新栈段**（`len + 128 KiB` slack，向下增长留在段内），把 rbp 链和所有活动
 handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 handler 的顶部返回地址
 改成 `rt_eff_kdone`；`rt_stack_top` 指向新栈顶，从 perform 的返回点继续执行。
 
@@ -120,10 +120,14 @@ handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 hand
 因为捕获/迁移的是**整段栈**，内层续延恢复后触发外层 handler 也能正确穿过已挂起的内层
 handler 帧（节点地址随段平移，返回时再撤销）。
 
-约束：续延一次性（`used` 标记，resume 两次 trap）；每次 resume 复制整段栈并保留 slack，
-迁移后的旧栈段不回收；只支持 one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后
-继续计算。宿主 handler 的「先做宿主操作再 `k`」写法（`consoleOpHIOHost` 等）与用户
-`handle` 走同一条路径。
+栈段来自 `rt_seg_free` free list：`kdone` / abort 归还的段按大小复用，顺序 effect 不会
+无限累积。每个 resume 的 slack 固定 128 KiB（约 1k 个常见帧）；函数 prologue 比较
+`rt_stack_limit`，越界 trap `continuation stack overflow` 而不是踩堆。嵌套 effect 的
+总开销仍随深度增长（每层复制一次整段栈）。
+
+约束：续延一次性（`used` 标记，resume 两次 trap）；每次 resume 复制整段栈；只支持
+one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算。宿主 handler 的
+「先做宿主操作再 `k`」写法（`consoleOpHIOHost` 等）与用户 `handle` 走同一条路径。
 
 ## 4. IR 支持面
 
@@ -259,8 +263,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把
-  `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（默认 512 KiB slack，约 5k 个
-  常见帧；超出会越过段界），旧段不回收；深递归 + 大量 resume 会消耗 arena。
+  `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 1k 个常见帧；
+  越界 trap），栈段按大小复用；嵌套 effect 的总开销仍随深度增长。
 - FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
