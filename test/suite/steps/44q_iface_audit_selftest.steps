@@ -19,3 +19,8 @@ out-not-contains: iface-audit-mismatch
 # 正常路径（不带审计）冷缓存也通过。
 run: sh -c 'rm -rf "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" "$VUNA" check "$TMPDIR/c49/pkg"'
 exit: 0
+# 构建/编译路径的审计（`subject=compile`）：摘要 codegen 与全量 codegen 逐字节一致。
+run: sh -c 'rm -rf "$TMPDIR/c49/out" "$TMPDIR/c49/cache"; VUNA_STORE="$TMPDIR/c49/store" TMPDIR="$TMPDIR/c49/cache" VUNA_IFACE_AUDIT=1 "$VUNA" build --no-compile --out "$TMPDIR/c49/out" "$TMPDIR/c49/pkg" --debug-perf 2>&1'
+exit: 0
+out-contains: iface-audit subject=compile
+out-not-contains: iface-audit-mismatch

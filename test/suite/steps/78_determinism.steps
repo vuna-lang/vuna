@@ -13,3 +13,12 @@ exit: 0
 # 生成源码逐字节一致（build.sh 里的相对路径也已归一）。
 run: sh -c 'S="$TMPDIR/det"; diff -r "$S/out-a" "$S/out-b"'
 exit: 0
+# 环境矩阵：TZ / LANG / LC_ALL / HOME / TMPDIR 不同，地址与产物仍逐字节一致。
+# 跨机器不可在单 runner 实测；金标摘要（64_infra 的 pkg-golden）+ 这条环境矩阵
+# 共同锁「规范编码不读环境」。
+run: sh -c 'S="$TMPDIR/det"; mkdir -p "$S/home-a" "$S/home-b" "$S/tmp-a" "$S/tmp-b"; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" "$VUNA" check "$S/a" >/dev/null 2>&1 || exit 1; TZ=UTC LANG=C LC_ALL=C HOME="$S/home-a" TMPDIR="$S/tmp-a" VUNA_STORE="$S/store-a2" "$VUNA" build --no-compile --out "$S/out-a2" "$S/a" >/dev/null 2>&1 || exit 2; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" "$VUNA" check "$S/b" >/dev/null 2>&1 || exit 3; TZ=Asia/Shanghai LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8 HOME="$S/home-b" TMPDIR="$S/tmp-b" VUNA_STORE="$S/store-b2" "$VUNA" build --no-compile --out "$S/out-b2" "$S/b" >/dev/null 2>&1 || exit 4'
+exit: 0
+run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/objects" -type f | sed "s|$S/store-a2/||" | sort > "$S/addr-a2"; find "$S/store-b2/objects" -type f | sed "s|$S/store-b2/||" | sort > "$S/addr-b2"; diff -u "$S/addr-a2" "$S/addr-b2"'
+exit: 0
+run: sh -c 'S="$TMPDIR/det"; find "$S/store-a2/blobs" -type f | sed "s|$S/store-a2/||" | sort > "$S/blob-a2"; find "$S/store-b2/blobs" -type f | sed "s|$S/store-b2/||" | sort > "$S/blob-b2"; diff -u "$S/blob-a2" "$S/blob-b2"; diff -r "$S/out-a2" "$S/out-b2"'
+exit: 0

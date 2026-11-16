@@ -59,3 +59,9 @@ exit: 0
 run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o2" "$S/mid" 2>&1'
 exit: 0
 out-not-contains: split-pointer-hit
+# 依赖已重跑后，注释变更不脏依赖方的构建：mid 的快指针必须命中、产物不重建。
+run: sh -c 'S="$TMPDIR/dsb"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o3" "$S/mid" >/dev/null 2>&1'
+exit: 0
+run: sh -c 'S="$TMPDIR/dsb"; printf "module D where\n\n-- harmless note\n\nexport f : Int -> Int\nf x = x\n\nexport h : Int\nh = 1\n" > "$S/dep/lib/D.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" build --no-compile --out "$S/o4" "$S/mid" 2>&1'
+exit: 0
+out-contains: split-pointer-hit

@@ -57,3 +57,4 @@ out-contains: pkg-canon-rt ok
 out-contains: pkg-identity-rt ok
 out-contains: pkg-identity-name ok
 out-contains: pkg-identity-deps ok
+out-contains: pkg-golden ok

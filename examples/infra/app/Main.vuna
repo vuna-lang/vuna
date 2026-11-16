@@ -3,6 +3,7 @@ import Base.List
 import Base.Maybe
 import Base.Pair
 import Base.String
+import Vuna.Compiler.Addr
 import Vuna.Compiler.Canonical
 import Vuna.Compiler.Canonical.Pkg
 import Vuna.Compiler.Common
@@ -64,6 +65,7 @@ main = do
   _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
   _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
   _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
+  _ <- prim_eff_print (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
   _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
   -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
   -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
@@ -181,6 +183,18 @@ pkgIdentityDeps =
     a = PackageSource "p" [] [] pkgFilesSample
     b = PackageSource "p" [] [Pair "dep" "abc"] pkgFilesSample
   in contentHashOf a == contentHashOf b && not (identityHashOf a == identityHashOf b)
+
+-- | 跨机器稳定性的金标：规范编码 + SHA-256 的固定输入必须得到固定摘要。
+-- 编码里混入绝对路径 / mtime / map 顺序 / 本地化，这条会立刻失败。
+goldenSource : PackageSource
+goldenSource =
+  PackageSource "p" ["M"] [] [PackageFile "M.vuna" "module M where\n\nexport x : Int\nx = 1\n"]
+
+pkgGolden : Bool
+pkgGolden =
+  addrOf ["probe", "x"] == "3c493721c06369c776469b60bef0288f4e31b100a21c4b6267b527bc0a6f17ba"
+    && contentHashOf goldenSource == "bf65a68d17c1f6f628ed7c54d7656d188d9b8e3d7edeafb3e3258022b00156e3"
+    && identityHashOf goldenSource == "467b5763eff1f6d1914cda856b5985264d5bab96543c1eeee292ed40b67791b7"
 
 -- | 80 个 'a'（跨两个 SHA-256 块，覆盖填充的 r > 56 分支）。
 repeatA : Int -> String
