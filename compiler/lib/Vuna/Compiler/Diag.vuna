@@ -344,6 +344,13 @@ diagText d =
     body = if d.diagCode == "" then d.diagMessage else "[${d.diagCode}] ${d.diagMessage}"
   in locPrefixOf d.diagLabels ++ contextPrefixOf d.diagLabels ++ body
 
+-- | 替换首行消息（保留 code / 位置 / 字段 / 建议；用于把同一错误说得更具体）。
+export withMessage : String -> Diagnostic -> Diagnostic
+withMessage msg d =
+  Diagnostic d.diagId d.diagSeverity d.diagPhase d.diagCategory d.diagCode msg d.diagLabels
+    d.diagFields d.diagTrace d.diagNotes d.diagSuggestions d.diagOrigin d.diagChildren
+    d.diagInternal d.diagIce d.diagAbsent d.diagStability
+
 -- | 在消息末尾追加细节（不改变 code/位置；用于把阶段细节并进首行）。
 export appendMessage : String -> Diagnostic -> Diagnostic
 appendMessage suffix d =

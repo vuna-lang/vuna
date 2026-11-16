@@ -1,22 +1,32 @@
 module Vuna.Compiler.Elab.Coverage where
 
--- Vuna.Compiler.Elab.Coverage：模式矩阵的覆盖性见证（保守版）。
+-- Vuna.Compiler.Elab.Coverage：模式矩阵的穷尽性见证。
 --
--- 目的：嵌套模式走模式矩阵降级时会合成 `case`，覆盖性错误原来落在合成代码上。这里在
--- **源矩阵**上判一件事并给出见证 —— **单列矩阵里，某个构造子完全没出现**。命中时调用方
--- 就能把「缺 `Cons _ _`」报回源模式的位置与文本。
+-- 输入是模式矩阵（每行一个 clause 的模式向量）与构造子表
+-- （族 → (是否可判, [(构造子, 显式参数个数)])），输出**第一个**缺失模式的向量：
+-- Maranget 的 usefulness 在全通配查询上的特化。
 --
--- 为什么只做这一种情形（其余仍走降级后的既有诊断）：
---   * 多列 / 嵌套列的完整性依赖「每个构造子的显式参数个数」与「构造子归属哪个族」，
---     而构造子清单目前**不随接口摘要跨包传递**（`ecDatas` 在依赖包里没有 ctor 列表），
---     重载构造子（`@vuna@ctor@...` 一个名字挂多个族）也无法从名字唯一确定族；
---   * 只看单列 + 顶层缺失构造子，判据是纯局部的，不会把穷尽矩阵误判成漏分支
---     （这正是覆盖性诊断最不能出的错）。
--- 判据与降级一致：构造子列按族的全部构造子比对；字面量列不推断（无限域）。
+-- 调用方式：矩阵照常降级、精化；**只有**精化已经报 `TC_NotExhaustive` 时才用见证改写
+-- 首行消息（`improveExhaustive`）。这样类型错、分支参数个数错等更具体的诊断优先——
+-- 精化前的预检会把它们盖掉。
+--
+-- 判据与降级一致：
+--   * 构造子列：族的全部构造子逐个尝试（**没出现的先试**，见证更具体）；通配行同时参与
+--     特化，所以「有构造子没出现」不等于不穷尽（`Cons _ _ ; _ _` 是穷尽的）；
+--   * 字面量列：无限域，只有通配行覆盖；
+--   * 未知族 / 重载构造子（`@vuna@ctor@…` 一名挂多族）不推断，按「已覆盖」处理——
+--     宁可少报一个见证，也不能把穷尽矩阵判成漏分支；
+--   * 索引族（构造子结果索引不是裸变量，如 `Vec (Succ n) a`）不判：索引精化会让某些
+--     构造子在该类型下不可构造（`Vec 2 a` 没有 `VNil`）；
+--   * 各行必须等长：`where` / `let` 允许不同 arity 的方程，矩阵算法不适用于那种组。
+--
+-- 参数个数用**显式** Pi binder 数（模式只写显式子模式，隐式族参数由精化器插入）。
 import Base.List
+import Base.Nat
 import Base.Pair
 import Base.String
 import Vuna.Compiler.Common
+import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 
 emptyPatSpan : Span
@@ -42,35 +52,154 @@ headCtorName row = case row of
 ctorHeadsOf : List (List Pat) -> List String
 ctorHeadsOf rows = nubNames (mapMaybe headCtorName rows)
 
-allRowsUnary : List (List Pat) -> Bool
-allRowsUnary [] = False
-allRowsUnary (row :: rest) = natToInt (length row) == 1 && allRowsUnary rest
+-- 通配头（变量/通配/as-通配）：该行覆盖整列。
+isWildHead : Pat -> Bool
+isWildHead p = case patHead p of
+  PVar _ _ => True
+  PWild _ => True
+  _ => False
+
+-- 默认矩阵：只保留通配头行，并丢掉该列。
+defaultRows : List (List Pat) -> List (List Pat)
+defaultRows [] = []
+defaultRows (row :: rest) = case row of
+  [] => defaultRows rest
+  p :: ps => if isWildHead p then ps :: defaultRows rest else defaultRows rest
+
+-- 特化：取该构造子的行（子模式接到其余列前）；通配行补 arity 个通配。
+specializeCtor : Int -> String -> List (List Pat) -> List (List Pat)
+specializeCtor ar cname rows = concatMapRow (specializeRow ar cname) rows
+
+concatMapRow : (List Pat -> List (List Pat)) -> List (List Pat) -> List (List Pat)
+concatMapRow f [] = []
+concatMapRow f (row :: rest) = append (f row) (concatMapRow f rest)
+
+specializeRow : Int -> String -> List Pat -> List (List Pat)
+specializeRow ar cname row = case row of
+  [] => []
+  p :: ps => case patHead p of
+    PCon c subs _ => if c == cname then [append subs ps] else []
+    PVar _ _ => [append (wilds ar) ps]
+    PWild _ => [append (wilds ar) ps]
+    _ => []
+
+hasNilRow : List (List Pat) -> Bool
+hasNilRow [] = False
+hasNilRow (row :: rest) = case row of
+  [] => True
+  _ => hasNilRow rest
 
 lookupEntry : String -> List (Pair String Int) -> Maybe Int
 lookupEntry cname [] = Nothing
 lookupEntry cname ((Pair c n) :: rest) = if c == cname then Just n else lookupEntry cname rest
 
 -- 构造子所属族的构造子表。**必须唯一**：重载构造子无法从名字定位族，按「未知」处理。
-familyCtors : List (Pair String (List (Pair String Int))) -> String -> Maybe (List (Pair String Int))
-familyCtors table cname =
-  case filter (\e => lookupEntry cname (secondOf e) /= Nothing) table of
-    (one :: []) => Just (secondOf one)
-    _ => Nothing
+familyCtors : List (Pair String (Pair Bool (List (Pair String Int)))) -> String -> Maybe (List (Pair String Int))
+familyCtors table cname = case filter (\e => lookupEntry cname (secondOf (secondOf e)) /= Nothing) table of
+  -- 索引族的构造子不可按名字判可达（`Vec 2 a` 没有 `VNil`），对见证按「未知」处理。
+  [one] => if firstOf (secondOf one) then Just (secondOf (secondOf one)) else Nothing
+  _ => Nothing
 
--- 单列矩阵里完全没出现的第一个构造子（带参数个数）。不满足条件返回 Nothing。
-export missingTopCtor : List (Pair String (List (Pair String Int))) -> List (List Pat) -> Maybe Pat
-missingTopCtor table clauses = if not (allRowsUnary clauses) then Nothing
-else case ctorHeadsOf clauses of
-  [] => Nothing
-  h :: _ => case familyCtors table h of
-    Nothing => Nothing
-    Just ctors => firstMissing ctors (ctorHeadsOf clauses)
+-- 构造子尝试顺序：本列没出现的在前（见证更具体），已出现的在后。
+orderedCtors : List (Pair String Int) -> List String -> List (Pair String Int)
+orderedCtors ctors heads =
+  append (filter (\e => not (memName (firstOf e) heads)) ctors)
+    (filter (\e => memName (firstOf e) heads) ctors)
 
-firstMissing : List (Pair String Int) -> List String -> Maybe Pat
-firstMissing [] heads = Nothing
-firstMissing (entry :: rest) heads =
-  if memName (firstOf entry) heads then firstMissing rest heads
-  else Just (PCon (firstOf entry) (wilds (secondOf entry)) emptyPatSpan)
+takePats : Int -> List Pat -> List Pat
+takePats n xs = if n <= 0 then []
+else case xs of
+  [] => []
+  p :: rest => p :: takePats (n - 1) rest
+
+dropPats : Int -> List Pat -> List Pat
+dropPats n xs = if n <= 0 then xs
+else case xs of
+  [] => []
+  _ :: rest => dropPats (n - 1) rest
+
+-- 见证：全通配查询下矩阵是否穷尽；不穷尽时给出前缀（长度 = 原矩阵列数）。
+--
+-- `pending` 把「列下降」与「同列逐构造子尝试」合成**一个**自递归函数：
+--   * `Nothing` = 处理当前列（列下降）；
+--   * `Just ctors` = 已按族展开，正在逐个构造子尝试（取第一个出现缺失的分支）。
+-- 燃料用 `Nat` 并按其构造子递归（`Zero`/`Succ`），终止性由结构下降直接可证。
+export coverageWitness : List (Pair String (Pair Bool (List (Pair String Int)))) -> Nat -> Maybe (List (Pair String Int)) -> List (List Pat) -> List Pat -> Maybe (List Pat)
+coverageWitness table fuel pending rows qs = case fuel of
+  Zero => Nothing
+  Succ fuel2 => case pending of
+    Just ctors => case ctors of
+      [] => Nothing
+      entry :: rest =>
+        let
+          ar = secondOf entry
+          sub = specializeCtor ar (firstOf entry) rows
+          deeper = coverageWitness table fuel2 Nothing sub (append (wilds ar) qs)
+        in case deeper of
+          Nothing => coverageWitness table fuel2 (Just rest) rows qs
+          Just w => Just (PCon (firstOf entry) (takePats ar w) emptyPatSpan :: dropPats ar w)
+    Nothing => case qs of
+      [] => if hasNilRow rows then Nothing else Just []
+      _ :: qsRest =>
+        let
+          heads = ctorHeadsOf rows
+        in case heads of
+          [] => case coverageWitness table fuel2 Nothing (defaultRows rows) qsRest of
+            Nothing => Nothing
+            Just w => Just (PWild emptyPatSpan :: w)
+          h :: _ => case familyCtors table h of
+            -- 未知族（跨包表缺失 / 重载构造子）：不推断，按已覆盖处理。
+            Nothing => Nothing
+            Just ctors => coverageWitness table fuel2 (Just (orderedCtors ctors heads)) rows qsRest
+
+-- 矩阵穷尽性：`Just w` = 缺 w（w 的长度等于矩阵列数）。
+export matrixWitness : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Maybe (List Pat)
+matrixWitness table clauses =
+  if uniformArity clauses then coverageWitness table (natFromInt 256) Nothing clauses (wilds (matrixArity clauses))
+  else Nothing
+
+-- 各行的列数必须一致（`where`/`let` 里允许不同 arity 的方程，矩阵算法不适用）。
+uniformArity : List (List Pat) -> Bool
+uniformArity rows = case rows of
+  [] => False
+  r :: rest => allSameLen (natToInt (length r)) rest
+
+allSameLen : Int -> List (List Pat) -> Bool
+allSameLen n [] = True
+allSameLen n (r :: rest) = natToInt (length r) == n && allSameLen n rest
+
+matrixArity : List (List Pat) -> Int
+matrixArity [] = 0
+matrixArity (row :: _) = natToInt (length row)
+
+-- 把「合成 case 不可穷尽」的诊断换成带**源模式见证**的版本。
+--
+-- 只在错误码已经是 `TC_NotExhaustive` 时改写：类型错 / 分支参数个数错等更具体的诊断
+-- 优先（那些错误在精化前无法预知，预检会把它们盖掉）。见证首位必须是构造子，否则
+-- 保持原诊断（字面量列 / 未知族 / 重载构造子的情形留给既有文案）。
+export improveExhaustive : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Check a -> Check a
+improveExhaustive table clauses sp res = case res of
+  OkC v => OkC v
+  ErrC d => ErrC (improveDiag table clauses sp d)
+
+improveDiag : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Diagnostic -> Diagnostic
+improveDiag table clauses sp d = if d.diagCode /= "TC_NotExhaustive" then d
+else case matrixWitness table clauses of
+  Just w => if witnessNamesCtor w then
+    let
+      rx = renderWitness w
+    in withFallbackSpan sp (tcMsg (NotExhaustive rx) [rx])
+  else d
+  Nothing => d
+
+-- 只有见证**首位**就是构造子时才值得抢先报错：那是最清晰的「漏了某个构造子」。
+-- 首位是通配（字面量列 / 未知族）时不推断，留给降级后的既有诊断。
+export witnessNamesCtor : List Pat -> Bool
+witnessNamesCtor ws = case ws of
+  p :: _ => case patHead p of
+    PCon _ _ _ => True
+    _ => False
+  [] => False
 
 -- 模式渲染：见证里的变量/通配统一显示为 `_`，构造子应用带括号。
 -- `fuel` 只用于让终止性可证（模式深度远小于 64）。
@@ -91,3 +220,6 @@ else case patHead p of
   PStr s _ => "\"${s}\""
   PRecord rn fields _ => "{ ${rn} }"
   PAs _ inner _ => renderPatIn (fuel - 1) paren inner
+
+export renderWitness : List Pat -> String
+renderWitness ws = join " " (map (renderPatIn 64 True) ws)

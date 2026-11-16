@@ -1232,11 +1232,35 @@ explicitPiArity _ = 0
 
 -- 族名 → [(构造子, 显式参数个数)]。参数个数供模式矩阵的穷尽性见证使用（缺的构造子
 -- 没有 clause 可查，只能从 data 声明取）。
-export ctorFamilyTable : Ec -> List (Pair String (List (Pair String Int)))
+export ctorFamilyTable : Ec -> List (Pair String (Pair Bool (List (Pair String Int))))
 ctorFamilyTable ec =
   map
-    (\d => Pair (dtDataName d) (map (\c => Pair (dtCtorName c) (explicitPiArity (dtCtorType c))) (dtDataCtors d)))
+    (\d => Pair (dtDataName d) (Pair (not (familyIndexed d)) (map (\c => Pair (dtCtorName c) (explicitPiArity (dtCtorType c))) (dtDataCtors d))))
     (ecDatas ec)
+
+-- 索引族不能只按构造子名字判覆盖性：索引精化会让某些构造子在该类型下不可构造
+-- （`Vec 2 a` 没有 `VNil`）。判据看**构造子的结果索引**：只要有一个构造子的结果族参数
+-- 不是裸变量，就是索引族。见证只对参数族开放。
+familyIndexed : DtData -> Bool
+familyIndexed d = anyCtorIndexed (dtDataCtors d)
+
+anyCtorIndexed : List DtCtor -> Bool
+anyCtorIndexed [] = False
+anyCtorIndexed (c :: rest) = ctorResultIndexed c || anyCtorIndexed rest
+
+ctorResultIndexed : DtCtor -> Bool
+ctorResultIndexed c = case resultSpine (dropPis (dtCtorType c)) of
+  Pair _ args => anyNonVarArg args
+
+dropPis : Term -> Term
+dropPis (TPi _ _ _ _ cod) = dropPis cod
+dropPis t = t
+
+anyNonVarArg : List Term -> Bool
+anyNonVarArg [] = False
+anyNonVarArg (a :: rest) = case a of
+  TVar _ _ _ => anyNonVarArg rest
+  _ => True
 
 -- 后续分支里的兜底体（`case` 最后一个变量/通配分支），供嵌套模式的折叠使用。
 export findCatchAllBody : List (Pair Pat Expr) -> Maybe Expr
