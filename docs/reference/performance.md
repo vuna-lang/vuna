@@ -336,9 +336,15 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   导出不再线性扫整张导出表；`modulesExporting{Value,Ctor,Type}` 走索引。
   同窗口交替对比冷 `check compiler` 再快 5–10%。
 
-此时自采样的剩余热点：`Elab.Types.ecTriedAt`（求解 worklist 每轮对每个待处理约束都查一次，
-且 `append pending [c]` 是 O(长度) 追加）、`Base.List.dtp_unpack` + `List.init`（lexer 把整串
-展开成字符表，见 D87）、`Elab.Meta.dtCtorLookup` 的回落扫描、`Core.Eval.quote`。
+- 字典求解：`ConstraintStore` 记录解表条目数（`csSolsCount`，`ecPutSols` 增量维护）与上一轮
+  结束时的 `(id, 解表数)`；没有新约束、解表也没增长的轮次整体跳过。epoch 比较改用 O(1)
+  计数（原来每步 `length (ecSols ec)`，解表 2.8 万条时是 O(解表) × 约束步数）。冷
+  `check compiler` 的 `elab.dict.round` 55863 → 22359，同机 CPU 时间 −33%
+  （`ru_utime+ru_stime`，负载波动大时只看这一项）。
+
+此时自采样的剩余热点：`Base.List.dtp_unpack` + `List.init`（lexer 把整串展开成字符表，
+见 D87）、`Elab.Meta.dtCtorLookup` 的回落扫描、`Core.Eval.quote`；求解器里还剩
+`append pending [c]` 的 O(长度) 追加（旋转语义，改动要连语义一起重写）。
 
 ## 5. 增长率（合成包）
 
