@@ -43,7 +43,7 @@ compilerUsageLines prog = """  ${prog} compile [--no-print] [--release] [--targe
   ${prog} build [--release] [--no-compile] [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]
   --no-print                    compile 生成的程序不打印 main 结果（默认打印）
   --release                     release 构建：拒绝 assert / todo 等 debug 专用构造
-  --continue-on-error           best-effort 多错误：逐次移除失败声明后继续（仅入口文件）
+  --continue-on-error           多错误：逐定义收集（失败定义回滚后跳过；仅入口文件/库包）
   ${prog} version, --version          显示版本
   ${prog} help, -h
 """

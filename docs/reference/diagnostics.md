@@ -124,7 +124,7 @@ warning 的**通道**没有进程内全局收集器：Elab 期 `warnAt*`
 | JSON | `renderJsonList` | `{version,tool,diagnostics[]}`，含 labels/fields/trace/notes/suggestions/origin/internal/ice |
 | SARIF | `renderSarif` | SARIF 2.1.0 单 run：ruleId/level/message/locations/relatedLocations |
 
-CLI 开关：`--error-format=short|human|json|sarif|github`、`--with-sources`（JSON 附源文件内容摘要）、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab best-effort 多错误，仅**入口文件**；级联默认折叠，`--show-cascade` 显示；`--fail-fast` 只显示首条；带 `module` 头的库模块单文件检查只报首错）；包级 check
+CLI 开关：`--error-format=short|human|json|sarif|github`、`--with-sources`（JSON 附源文件内容摘要）、`--json`、`--message-format=...`、`--lang en|zh`（zh 时 human 消息本地化）、`--continue-on-error`（elab 单遍逐定义恢复，仅**入口文件**与库包；签名/data/trait/实例头错误仍是硬错误；级联默认折叠，`--show-cascade` 显示；`--fail-fast` 只显示首条；带 `module` 头的库模块单文件检查只报首错）；包级 check
 会把格式、`--lang`、`--max-errors` 透传给成员包子进程；成员包错误带 `[包名]` 前缀。
 **源身份**：`--json --with-sources` 在顶层追加 `"sources"`，每项含 `file` / `package`（最近祖先 `vuna.toml` 的包名）/ `module`（`lib|app` 前缀 + `.vuna` 去掉后按 `/` → `.`）/ `relPath`（包相对路径）/ `digest`（内容摘要）。用于跨 checkout/缓存复用时定位同一份内容；不带该 flag 时输出与既有 `.diag.json` 契约逐字节一致。
 
@@ -204,7 +204,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 码域（RN_/PKG_ 独立域、无死码） | `RN_` / `PKG_` 各自独立域；无发射点的死码已清理；码数以枚举真源与 `gen-errors` 产物为准 |
 | 目录单一真源 + 生成枚举/文档 | 枚举构造子锁定码/arity；描述/中文/示例表与枚举同模块维护并由 `gen-errors` 生成 `errors.md`+`errors.json`（含 example）；`explain` 同源；LSP data 附 `catalog` 提示 |
 | 渲染/LSP/CLI | short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
-| 多错误 + Cascade | 默认上限 20；级联默认折叠，`--show-cascade` 显示；parser 顶层 resync；elab `--continue-on-error` best-effort：文件入口/可执行包/库包逐次移除失败声明，最多 8 条；依赖被移除声明的错误标 `origin=cascade`（human note；JSON/SARIF/LSP data 同源）；`--max-errors` 同时约束恢复结果 |
+| 多错误 + Cascade | 默认上限 20；级联默认折叠，`--show-cascade` 显示；parser 顶层 resync；elab `--continue-on-error`：单遍精化，失败的定义体/实例体回滚后跳过（丢弃它创建的元变量与解），错误按源序收集、条数只受 `--max-errors` 约束；不再重跑整程序，也不再有「移除声明后的级联」；`--max-errors` 同时约束恢复结果 |
 | warnings（未使用/冗余/不可达） | `UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import/`module X` 重导出统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接且绕过 check 缓存/干净模块复用以保证不漏报 |
 | 建议引擎 + Fix | `Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试 |
 | 类型不匹配 expected/found | fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达 |

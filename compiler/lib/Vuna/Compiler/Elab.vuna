@@ -13,6 +13,6 @@ export import Vuna.Compiler.Elab.Meta as Meta (dictCtorName, dictTypeName, isFam
 export import Vuna.Compiler.Elab.Data as Data (eraseIndexMask, indexErasureCandidates)
 export import Vuna.Compiler.Elab.Trait as Trait (checkInstanceHeads, elabInstanceBodies)
 export import Vuna.Compiler.Elab.InstName as InstName (derivedInstName, instanceName)
-export import Vuna.Compiler.Elab.Driver as Driver (DtGoalInfo, addClassesEc, addDatasEc, addInstsEc, dtEvalExprIn, dtEvalExprInInfo, ecOfProgram, elabProgram, elabProgramFull, elabProgramFullWith, elabProgramFullWithAux, elabProgramGoWith, elabProgramGoWithAux, goalsOfProgram, goalsOfProgramTolerant, maybeAddHasFieldInstances)
+export import Vuna.Compiler.Elab.Driver as Driver (DtGoalInfo, addClassesEc, addDatasEc, addInstsEc, dtEvalExprIn, dtEvalExprInInfo, ecOfProgram, elabProgram, elabProgramErrors, elabProgramFull, elabProgramFullWith, elabProgramFullWithAux, elabProgramGoWith, elabProgramGoWithAux, goalsOfProgram, goalsOfProgramTolerant, maybeAddHasFieldInstances)
 export import Vuna.Compiler.Elab.Derive as Derive (instHead)
 export import Vuna.Compiler.Elab.Usage as Usage (checkProgramUsage, isTypeForming)

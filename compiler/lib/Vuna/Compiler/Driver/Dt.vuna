@@ -1730,8 +1730,8 @@ warnUnusedDefsTbl (d :: rest) usedTbl =
         (warnUnusedDefsTbl rest usedTbl)
     Nothing => warnUnusedDefsTbl rest usedTbl
 
--- 恢复式检查（MVP，仅入口文件）：逐次精化，失败时按诊断所在行移除对应顶层声明后重试，
--- 收集最多 fuel 条独立错误。移除导致的后续级联错误也会被收集（调用方标注 best-effort）。
+-- 恢复式检查（仅入口文件）：单遍精化，定义体/实例体的错误逐条收集（失败定义回滚后
+-- 跳过），不再重跑整程序。签名 / data / trait / 实例头阶段的错误仍是硬错误。
 -- 成功路径仍由 `dtCheck` 负责（含 codegen）；本函数只在首次失败时使用。
 -- | 诊断/告警实现：dtCheckRecovering（详见 diagnostics.md）。
 export dtCheckRecovering : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Check (List Diagnostic))
@@ -1739,115 +1739,17 @@ dtCheckRecovering ctx entry = do
   declsR <- dtLoad ctx entry
   pure (case declsR of
     ErrC e => ErrC e
-    OkC loaded => recoverElab 8 (firstOf loaded) [] []
+    OkC loaded => elabProgramErrors (firstOf loaded)
   )
 
--- | 恢复式精化循环：失败后移除相关声明继续。
-recoverElab : Int -> List Decl -> List String -> List Diagnostic -> Check (List Diagnostic)
-recoverElab fuel decls removed errs = if fuel <= 0 then OkC (reverse errs)
-else case elabProgram decls of
-  OkC _ => OkC (reverse errs)
-  ErrC d =>
-    let
-      d2 = markCascade removed d
-      names = case primarySpanOf d.diagLabels of
-        Nothing => []
-        Just sp => concatMap (\x => if declMatchesDiag sp x then declNames x else []) decls
-      decls2 = filter (\x => not (declDropped names x)) decls
-    in if length decls2 == length decls then OkC (reverse (Base.List.Cons d2 errs))
-    else recoverElab (fuel - 1) decls2 (append removed names) (Base.List.Cons d2 errs)
-
--- | 诊断主 label 的起始行（无位置返回 Nothing）。
-diagPrimaryLine : Diagnostic -> Maybe Int
-diagPrimaryLine d = primaryLineOf d.diagLabels
-
--- | 诊断主 label 的 span（无位置返回 Nothing）。
-primarySpanOf : List Label -> Maybe Span
-primarySpanOf [] = Nothing
-primarySpanOf ((Label (Just sp) _ LabelPrimary _) :: _) = Just sp
-primarySpanOf (_ :: rest) = primarySpanOf rest
-
--- | 声明是否与诊断位置（文件 + 行）匹配。
-declMatchesDiag : Span -> Decl -> Bool
-declMatchesDiag sp x =
-  let
-    dsp = declSpan x
-    sameFile =
-      spanFile dsp == ""
-        || spanFile sp == ""
-        || normalizeDiagFile (spanFile dsp) == normalizeDiagFile (spanFile sp)
-  in sameFile && spanContainsLine dsp (spanStartLine sp)
-
--- | 从 label 列表取主 label 起始行。
-primaryLineOf : List Label -> Maybe Int
-primaryLineOf [] = Nothing
-primaryLineOf ((Label (Just sp) _ LabelPrimary _) :: _) = Just (spanStartLine sp)
-primaryLineOf (_ :: rest) = primaryLineOf rest
-
--- | span 是否覆盖某行。
-spanContainsLine : Span -> Int -> Bool
-spanContainsLine sp line = spanStartLine sp <= line && line <= spanEndLine sp
-
--- | 声明是否包含待移除的名字。
-declDropped : List String -> Decl -> Bool
-declDropped names d = anyNameIn (declNames d) names
-
--- | 名字列表是否有交集。
-anyNameIn : List String -> List String -> Bool
-anyNameIn [] names = False
-anyNameIn (n :: rest) names = if memName n names then True else anyNameIn rest names
-
--- | 若诊断文本提到已移除声明名，标记为级联（best-effort 恢复的已知副作用）。
--- | 级联标记：诊断提到被移除声明名时标 origin=cascade。
-markCascade : List String -> Diagnostic -> Diagnostic
-markCascade [] d = d
-markCascade removed d =
-  if mentionedAny removed d.diagMessage then withOrigin (OriginCascade Nothing)
-    (withField (FieldNote "best-effort: may be a cascade from an earlier removed declaration") d)
-  else d
-
--- | 诊断消息是否按单词命中任一名字。
-mentionedAny : List String -> String -> Bool
-mentionedAny names msg = anyWordIn names (wordsOf msg)
-
--- | 名字列表与单词列表是否有交集。
-anyWordIn : List String -> List String -> Bool
-anyWordIn [] words = False
-anyWordIn (n :: rest) words = if memName n words then True else anyWordIn rest words
-
--- | 按标识符字符切词。
-wordsOf : String -> List String
-wordsOf s = wordsGo (strUnpack s) [] []
-
--- | 切词循环。
-wordsGo : List Int -> List Int -> List String -> List String
-wordsGo [] cur acc = reverse (flushWord cur acc)
-wordsGo (c :: rest) cur acc =
-  if isIdentChar c then wordsGo rest (Base.List.Cons c cur) acc
-  else wordsGo rest [] (flushWord cur acc)
-
--- | 把当前词刷入累积列表。
-flushWord : List Int -> List String -> List String
-flushWord [] acc = acc
-flushWord cur acc = Base.List.Cons (strPack (reverse cur)) acc
-
--- | 标识符字符判定。
-isIdentChar : Int -> Bool
-isIdentChar c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
-
--- | 库包（[export].modules）的恢复式检查：加载模块后对汇总声明做逐声明恢复。
+-- | 库包（[export].modules）的恢复式检查：加载模块后对汇总声明做单遍逐定义恢复。
 export dtCheckLibraryRecovering : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check (List Diagnostic))
 dtCheckLibraryRecovering ctx names = do
   partsR <- dtLoadModulesParts ctx names
   pure (case partsR of
     ErrC e => ErrC e
-    OkC resolved => recoverElab 8 (dtProjectDecls (secondOf resolved)) [] []
+    OkC resolved => elabProgramErrors (dtProjectDecls (secondOf resolved))
   )
-
--- | 去掉 ./ 前缀便于路径比较。
-normalizeDiagFile : String -> String
-normalizeDiagFile p =
-  if startsWith "./" p then substring (natFromInt 2) (natFromInt (strLength p - 2)) p else p
 
 -- `vuna check` 的整包 codegen 检查：Lowering（擦除 / 表示决策 / SCC）+ 装配（丢弃文本），
 -- 保证「能 check 就能 build」。main 的存在与返回类型只在生成入口要求（库模块也能 check）。

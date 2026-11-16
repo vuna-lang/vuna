@@ -1119,21 +1119,26 @@ checkInstanceHeadsGo ((d@(Pair decl dsp)) :: rest) classes globals ec acc insts 
 -- 实例方法体（在顶层定义之后精化）。
 -- 入口收**全量已 resolve 声明**（Driver 传入，`List Decl`），内部自己筛出
 -- 实例列表；全量声明同时用于「实例缺方法」诊断反查 trait 方法签名 span（`traitMethodSpanOf`）。
-export elabInstanceBodies : List Decl -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Check (Pair (List DtDef) Ec)
-elabInstanceBodies allDecls classes datas globals ec =
-  elabInstanceBodiesGo (collectInstDecls allDecls []) (map (\d => Pair d (declSpan d)) allDecls)
-    classes datas globals ec []
+export elabInstanceBodies : Bool -> List Decl -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> Check (Pair (List DtDef) Ec)
+elabInstanceBodies recover allDecls classes datas globals ec =
+  elabInstanceBodiesGo recover (collectInstDecls allDecls [])
+    (map (\d => Pair d (declSpan d)) allDecls) classes datas globals ec []
 
-export elabInstanceBodiesGo : List (Pair Decl Span) -> List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Check (Pair (List DtDef) Ec)
-elabInstanceBodiesGo [] allDecls classes datas globals ec acc = OkC (Pair (reverse acc) ec)
-elabInstanceBodiesGo (d :: rest) allDecls classes datas globals ec acc = Vuna.Compiler.Common.bind (elabInstance (d :: rest) allDecls globals classes datas ec d) (\p => case p of
-  Pair gs ec1 =>
-    let
-      -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
-      newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
-      ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
-    in elabInstanceBodiesGo rest allDecls classes datas (append globals gs) ecTbl (append newDefs acc)
-)
+export elabInstanceBodiesGo : Bool -> List (Pair Decl Span) -> List (Pair Decl Span) -> List DtClass -> List DtData -> List (Pair String Term) -> Ec -> List DtDef -> Check (Pair (List DtDef) Ec)
+elabInstanceBodiesGo recover [] allDecls classes datas globals ec acc = OkC (Pair (reverse acc) ec)
+elabInstanceBodiesGo recover (d :: rest) allDecls classes datas globals ec acc = case elabInstance (d :: rest) allDecls globals classes datas ec d of
+  -- 逐实例恢复：失败时记录诊断、回滚到实例之前的状态，继续下一个实例。
+  ErrC e =>
+    if recover then elabInstanceBodiesGo recover rest allDecls classes datas globals (ecAddError ec e) acc
+    else ErrC e
+  OkC p => case p of
+    Pair gs ec1 =>
+      let
+        -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
+        newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
+        ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
+      in elabInstanceBodiesGo recover rest allDecls classes datas (append globals gs) ecTbl
+        (append newDefs acc)
 
 -- 从「精化前后 Ec 的 defs 差集」里取出这一条 instance 生成的定义。
 -- `srcSpan` 是该实例声明的位置（`Nothing` 时诊断保持无位置）。
