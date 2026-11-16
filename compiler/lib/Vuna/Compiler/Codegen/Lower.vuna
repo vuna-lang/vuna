@@ -41,15 +41,19 @@ export record LwEnv where
   -- 运行时族（Bool / Nat 族已被过滤，不进运行时表示）。
   lwDatas : List DtData
   -- 族 → 运行时类型参数槽（声明与实参共用的不动点结果）。
-  lwTyParams : List (Pair String (List Int))
+  lwTyParams : HashMap String (List Int)
+  -- 族 → (去装箱构造子, 保留字段序号)；去装箱声明判定用。
+  lwUnboxedInfo : List (Pair String (Pair DtCtor Int))
   -- 族 → 运行时字段表 `(字段序号, 字段源码名)`（只有 OCaml record 表示的族）。
-  lwRecordFields : List (Pair String (List (Pair Int String)))
+  lwRecordFields : HashMap String (List (Pair Int String))
   -- 构造子 → (族名, keep flags)。
-  lwCtors : List (Pair String (Pair String (List Bool)))
+  lwCtors : HashMap String (Pair String (List Bool))
   -- 构造子 → 不透明字段 flags。
-  lwOpaques : List (Pair String (List Bool))
+  lwOpaques : HashMap String (List Bool)
   -- 去装箱族集合。
-  lwUnboxed : List String
+  lwUnboxed : HashMap String Bool
+  -- 程序是否声明 canonical `Base.List.List` 族（桥接内建的放行判据）。
+  lwHasListFamily : Bool
   -- 运行时定义表（delta 展开与归属查询用）。
   lwDefs : List DtDef
   -- 名字 → 定义（**一次建表**，分组/单元过滤都查它；`lwDefs` 是唯一真源）。
@@ -64,16 +68,18 @@ export record LwEnv where
   lwUnit : String
 
 export lwEnvShared : LwEnv -> IrShared
-lwEnvShared (LwEnv shared datas typs recs ctors opqs unboxed defs tbl names unit) = shared
+lwEnvShared (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names unit) =
+  shared
 
 export lwEnvWithUnit : String -> LwEnv -> LwEnv
-lwEnvWithUnit unit (LwEnv shared datas typs recs ctors opqs unboxed defs tbl names oldUnit) =
-  LwEnv shared datas typs recs ctors opqs unboxed defs tbl names unit
+lwEnvWithUnit unit (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names oldUnit) =
+  LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names unit
 
 -- ---------------------------------------------------------------
 -- 小工具
 -- ---------------------------------------------------------------
--- 名字查表用 `Base.List` 的单一实现（`memName` / `lookupPair`）。
+-- 小名字列表用 `Base.List` 的 `memName` / `lookupPair`；程序级大表（构造子、族、
+-- 类型参数槽）在 `LwEnv` 里建一次哈希索引，热路径只查表。
 -- `gsAddDep` 去重（保持首现顺序；最终依赖顺序由 Split 按模块序重排）。
 pushDep : String -> List String -> List String
 pushDep dep deps = if dep == "" then deps else if memName dep deps then deps else append deps [dep]
@@ -181,7 +187,7 @@ locRowPair d = case dtDefSpan d of
 --
 -- 这一节产出 `IrTy`（不是 OCaml 文本）：判定逻辑（哪些族参数槽要用、哪些字段不透明）
 -- 必须与构造子实参对齐、
--- 与 `IrShared.irSharedTyParams` 用同一份结果，否则声明与实参位置漂移。
+-- 声明与实参共用同一份结果，否则类型参数位置漂移。
 typeParamLevels : DtData -> List Int
 typeParamLevels d = typeParamLevelsGo d.dtDataParams 0
 
@@ -209,6 +215,12 @@ nthValueIn (v :: rest) i = if i <= 0 then Just v else nthValueIn rest (i - 1)
 lookupUsedIn : List (Pair String (List Int)) -> String -> List Int
 lookupUsedIn [] name = []
 lookupUsedIn (p :: rest) name = if firstOf p == name then secondOf p else lookupUsedIn rest name
+
+-- | 同一张表的哈希索引版本（声明 / 实参渲染用；不动点内部仍用列表）。
+lookupTyParamsIn : HashMap String (List Int) -> String -> List Int
+lookupTyParamsIn tbl name = case Base.HashMap.lookup name tbl of
+  Just levels => levels
+  Nothing => []
 
 collectUsedLevels : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> List Int
 collectUsedLevels tps table datas lvl v = collectUsedLevelsFuel 256 tps table datas lvl v
@@ -310,10 +322,10 @@ tyParamsOf datas = usedTableFix datas (map (\d => Pair (dtDataName d) []) datas)
 --
 -- `IrTy` 是签名级运行时类型。判据（哪些字段不透明、哪些族参数槽进声明）必须与
 -- 构造子实参逐位对齐；文本渲染在后端。
-renderTyOf : List Int -> List (Pair String (List Int)) -> List DtData -> Value -> IrTy
+renderTyOf : List Int -> HashMap String (List Int) -> List DtData -> Value -> IrTy
 renderTyOf levels table datas v = renderTyFuel 256 levels table datas v
 
-renderTyFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Value -> IrTy
+renderTyFuel : Int -> List Int -> HashMap String (List Int) -> List DtData -> Value -> IrTy
 renderTyFuel fuel levels table datas v = if fuel <= 0 then IrTyOpaque
 else case v of
   VNeutral n => case n of
@@ -334,14 +346,14 @@ else case canonicalReprOf name of
   Just FamReprBool => Just IrTyBool
   _ => Nothing
 
-renderTyGlobal : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> String -> List Value -> IrTy
+renderTyGlobal : Int -> List Int -> HashMap String (List Int) -> List DtData -> String -> List Value -> IrTy
 renderTyGlobal fuel levels table datas g sp = case renderTyIntrinsic g (map (\x => renderTyFuel (fuel - 1) levels table datas x) sp) of
   Just t => t
   Nothing => case reprTyIr g of
     Just t => t
     Nothing => case findDtData g datas of
       Just gd =>
-        IrTyData g (renderFamilyArgs (fuel - 1) levels table datas (lookupUsedIn table g) sp)
+        IrTyData g (renderFamilyArgs (fuel - 1) levels table datas (lookupTyParamsIn table g) sp)
       Nothing => IrTyOpaque
 
 renderTyIntrinsic : String -> List IrTy -> Maybe IrTy
@@ -349,7 +361,7 @@ renderTyIntrinsic "Array" ([a]) = Just (IrTyArray a)
 renderTyIntrinsic "IORef" ([a]) = Just (IrTyRef a)
 renderTyIntrinsic _ _ = Nothing
 
-renderFamilyArgs : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> List Int -> List Value -> List IrTy
+renderFamilyArgs : Int -> List Int -> HashMap String (List Int) -> List DtData -> List Int -> List Value -> List IrTy
 renderFamilyArgs fuel levels table datas usedPats args = if fuel <= 0 then []
 else case usedPats of
   [] => []
@@ -360,10 +372,10 @@ else case usedPats of
     Nothing => renderFamilyArgs (fuel - 1) levels table datas rest args
 
 -- 显式 Pi 结构化渲染（`(Int -> a)` 这类）；带隐式量词的 Pi 整体不透明。
-renderPiTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> IrTy
+renderPiTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
 renderPiTy levels table datas lvl v = renderPiTyFuel 256 levels table datas lvl v
 
-renderPiTyFuel : Int -> List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> IrTy
+renderPiTyFuel : Int -> List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
 renderPiTyFuel fuel levels table datas lvl v = if fuel <= 0 then renderTyFuel fuel levels table datas v
 else case v of
   VPi name implicit rig dom clo =>
@@ -375,7 +387,7 @@ else case v of
   _ => renderTyFuel fuel levels table datas v
 
 -- 单个字段的运行时类型 + 下一个不透明参数槽。
-renderFieldTy : List Int -> List (Pair String (List Int)) -> List DtData -> Int -> Value -> Int -> Pair IrTy Int
+renderFieldTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> Int -> Pair IrTy Int
 renderFieldTy levels table datas lvl (dom@(VPi name implicit rig d clo)) slot =
   if implicit then Pair (IrTyVar slot) (slot + 1)
   else Pair (renderPiTy levels table datas lvl dom) slot
@@ -389,7 +401,7 @@ renderFieldTy levels table datas lvl (VNeutral n) slot = case n of
       Just t => Pair t slot
       Nothing => case findDtData g datas of
         Just gd =>
-          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupUsedIn table g) sp)) slot
+          Pair (IrTyData g (renderFamilyArgs 256 levels table datas (lookupTyParamsIn table g) sp)) slot
         Nothing => Pair (IrTyVar slot) (slot + 1)
 renderFieldTy levels table datas lvl _ slot = Pair (IrTyVar slot) (slot + 1)
 
@@ -398,7 +410,7 @@ flagMatchesRigIn True rig = not (rigIsErased rig)
 flagMatchesRigIn False rig = rigIsErased rig
 
 -- 构造子字段的运行时类型表（唯一真源：keep flags + 不透明 flags 与 telescope 逐位对齐）。
-ctorFieldTys : List Int -> List (Pair String (List Int)) -> List DtData -> List Bool -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Check (Pair (List IrTy) Int)
+ctorFieldTys : List Int -> HashMap String (List Int) -> List DtData -> List Bool -> List Bool -> List (Pair String Rig) -> Int -> Value -> Int -> Check (Pair (List IrTy) Int)
 ctorFieldTys levels table datas keepFlags opaqueFlags [] lvl v slot = OkC (Pair [] slot)
 ctorFieldTys levels table datas [] (_ :: _) tele lvl v slot =
   icInternal "constructor opaque flags longer than its shape"
@@ -422,13 +434,13 @@ ctorFieldTys levels table datas (keep :: flags) (opq :: opqs) ((Pair name rig) :
   _ => icInternal "constructor telescope does not match its type"
 else icInternal "constructor keep flag disagrees with telescope rig"
 
-ctorArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> DtCtor -> Check Int
+ctorArityNeed : List Int -> HashMap String (List Int) -> List DtData -> DtCtor -> Check Int
 ctorArityNeed levels table datas c =
   Vuna.Compiler.Common.bind
     (ctorFieldTys levels table datas (ctorKeepFlags c) (ctorOpaqueFlagsOf datas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels))
     (\p => OkC (secondOf p - listLength levels))
 
-dataArityNeed : List Int -> List (Pair String (List Int)) -> List DtData -> List DtCtor -> Check Int
+dataArityNeed : List Int -> HashMap String (List Int) -> List DtData -> List DtCtor -> Check Int
 dataArityNeed levels table datas ctors =
   Vuna.Compiler.Common.bind (Vuna.Compiler.Common.traverse (ctorArityNeed levels table datas) ctors)
     (\ns => OkC (listLength levels + maxIntListIn ns))
@@ -442,26 +454,25 @@ maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn re
 -- ---------------------------------------------------------------
 --
 -- 三族运行时表示（去装箱别名 / OCaml record / 变体）在这里判定，产出 `IrTyDecl`。
--- `irSharedRecordFields` 与这里用同一份 `recordFieldsOf`（record field 表），
--- `irSharedTyParams` 与 `tyParamsOf` 同一份不动点结果。
+-- record 字段表与类型参数槽在 `LwEnv` 里只算一次，声明与实参共用同一份结果。
 recordFieldsOf : List DtData -> List (Pair String (List (Pair Int String)))
 recordFieldsOf datas =
   map (\d => Pair (dtDataName d) (recordRtFields d))
     (filter hasRecordRepr (filter (\d => not (memName (dtDataName d) (unboxedFamilySet datas))) datas))
 
-tyDeclsOf : List DtData -> List DtData -> Check (List IrTyDecl)
-tyDeclsOf allDatas subset = tyDeclsGo (tyParamsOf allDatas) allDatas (unboxedInfoOf allDatas) subset
+tyDeclsOf : HashMap String (List Int) -> List (Pair String (Pair DtCtor Int)) -> List DtData -> List DtData -> Check (List IrTyDecl)
+tyDeclsOf tyParams unboxed allDatas subset = tyDeclsGo tyParams allDatas unboxed subset
 
-tyDeclsGo : List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> List DtData -> Check (List IrTyDecl)
+tyDeclsGo : HashMap String (List Int) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> List DtData -> Check (List IrTyDecl)
 tyDeclsGo table allDatas unboxed [] = OkC []
 tyDeclsGo table allDatas unboxed (d :: rest) =
   Vuna.Compiler.Common.bind (tyDeclOf table allDatas unboxed d)
     (\decl => Vuna.Compiler.Common.bind (tyDeclsGo table allDatas unboxed rest) (\tail => OkC (Base.List.Cons decl tail)))
 
-tyDeclOf : List (Pair String (List Int)) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check IrTyDecl
+tyDeclOf : HashMap String (List Int) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check IrTyDecl
 tyDeclOf table allDatas unboxed d =
   let
-    levels = lookupUsedIn table (dtDataName d)
+    levels = lookupTyParamsIn table (dtDataName d)
     arity = listLength levels
   in case lookupUnboxedInfo (dtDataName d) unboxed of
     Just (Pair c idx) => Vuna.Compiler.Common.bind (ctorFieldTys levels table allDatas (ctorKeepFlags c) (ctorOpaqueFlagsOf allDatas c) (dtCtorTelescope c) 0 (eval [] (dtCtorType c)) (listLength levels)) (\p => case firstOf p of
@@ -524,10 +535,10 @@ else case t of
     lowerTermFuel (fuel - 1) env st binders (recordTermAsAppIn (TGlobal name) args)
   TCase scrut alts => lowerCaseFuel (fuel - 1) env st binders scrut alts
   -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
-  TRecUpd base c tele idxs body => case lookupPair c env.lwRecordFields of
+  TRecUpd base c tele idxs body => case Base.HashMap.lookup c env.lwRecordFields of
     Just fields => lowerRecordUpdateFuel (fuel - 1) env st binders base c tele fields idxs body
     Nothing => lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c tele body])
-  TProj base c tele i fi => case lookupPair c env.lwRecordFields of
+  TProj base c tele i fi => case Base.HashMap.lookup c env.lwRecordFields of
     Just fields => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
       Pair baseIr st2 => OkC (Pair (IrProj baseIr c (recordFieldNameAt fi fields)) st2)
     )
@@ -561,7 +572,7 @@ lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == "strFromFloat" then OkC (IrGlobal floatRenderRefName)
 else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
-else case lookupPair name env.lwCtors of
+else case Base.HashMap.lookup name env.lwCtors of
   Just (Pair family keepFlags) => OkC (IrCtor family name [])
   Nothing => case findIntrinsic name of
     Just i =>
@@ -576,8 +587,7 @@ else case lookupPair name env.lwCtors of
 -- 桥接标记来自契约（`Ir.Runtime`，单一来源）。
 lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir
 lowerBridgeGuard env name ir =
-  if irRtBridgesList name then if memName listFamilyName (map dtDataName env.lwDatas) then OkC ir
-  else cgErr1 (ListBridgeRequired name) name
+  if irRtBridgesList name then if env.lwHasListFamily then OkC ir else cgErr1 (ListBridgeRequired name) name
   else OkC ir
 
 effUnitTyIn : IrTy
@@ -764,9 +774,9 @@ else if c == natSuccCtor then case alignCtorArgs c [True] args of
         _ => icInternal "Nat Succ must have exactly one runtime argument"
       [] => icInternal "Nat Succ must have exactly one runtime argument"
   )
-else case lookupPair c env.lwCtors of
+else case Base.HashMap.lookup c env.lwCtors of
   Nothing => icInternal "unknown constructor ${c}"
-  Just (Pair family keepFlags) => case lookupPair c env.lwOpaques of
+  Just (Pair family keepFlags) => case Base.HashMap.lookup c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => Vuna.Compiler.Common.bind (lowerConArgsFuel (fuel - 1) env st binders (ctorOpaqueKeptFlags keepFlags opqs) runtimeArgs) (\p => case p of
       Pair irs st2 => lowerConAppFinish env st2 family c irs
@@ -776,10 +786,10 @@ else case lookupPair c env.lwCtors of
 -- 收尾：去装箱族只保留单字段（构造子不落 OCaml 变体）；record 族生成 `IrRecord`；
 -- 其余生成 `IrCtor`。族名与字段名都是源码名（文本前缀属后端）。
 lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List Ir -> Check (Pair Ir LwSt)
-lowerConAppFinish env st family c irs = if memName family env.lwUnboxed then case irs of
+lowerConAppFinish env st family c irs = if Base.HashMap.member family env.lwUnboxed then case irs of
   [only] => OkC (Pair only st)
   _ => icInternal "unboxed constructor application does not have exactly one runtime argument"
-else case lookupPair family env.lwRecordFields of
+else case Base.HashMap.lookup family env.lwRecordFields of
   Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
   Nothing => OkC (Pair (IrCtor family c irs) st)
 
@@ -873,9 +883,9 @@ lowerUnboxedCaseAlt : LwEnv -> List CaseAlt -> Maybe CaseAlt
 lowerUnboxedCaseAlt env [] = Nothing
 lowerUnboxedCaseAlt env (alt :: rest) = case caseAltName alt of
   "" => Nothing
-  name => case lookupPair name env.lwCtors of
+  name => case Base.HashMap.lookup name env.lwCtors of
     Just (Pair family keepFlags) =>
-      if memName family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
+      if Base.HashMap.member family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
       else Nothing
     Nothing => Nothing
 
@@ -883,7 +893,7 @@ lowerUnboxedCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> CaseAlt 
 lowerUnboxedCaseFuel fuel env st outer scrut alt = if fuel <= 0 then icFuel "ir-lower"
 else case caseAltName alt of
   "" => icInternal "unboxed case arm has no constructor"
-  name => case lookupPair name env.lwCtors of
+  name => case Base.HashMap.lookup name env.lwCtors of
     Nothing => icInternal "no shape for constructor ${name}"
     Just (Pair family keepFlags) => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
       Pair scrutIr st1 => Vuna.Compiler.Common.bind (altEnvCheckedIn st1 name outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\q => case q of
@@ -901,7 +911,7 @@ else if caseAltName alt == "" then
   in Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (aePatsOf bound) bodyIr) st2)
   )
-else case lookupPair (caseAltName alt) env.lwCtors of
+else case Base.HashMap.lookup (caseAltName alt) env.lwCtors of
   Nothing => icInternal "unknown constructor ${caseAltName alt}"
   Just (Pair family keepFlags) => Vuna.Compiler.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 =>
@@ -1056,9 +1066,9 @@ else Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st outer base) (\p 
 
 lowerRecordUpdateArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Ir -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
 lowerRecordUpdateArgsFuel fuel env st binders baseIr c fields idxs args = if fuel <= 0 then icFuel "ir-lower"
-else case lookupPair c env.lwCtors of
+else case Base.HashMap.lookup c env.lwCtors of
   Nothing => icInternal "no shape for constructor ${c}"
-  Just (Pair family keepFlags) => case lookupPair c env.lwOpaques of
+  Just (Pair family keepFlags) => case Base.HashMap.lookup c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => let
       positions = lookupRtPositionsIn fields idxs
@@ -1120,10 +1130,6 @@ lowerDef env st d = case dtDefExtern d of
       ErrC
         (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
 
--- 依赖：运行时会用到的顶层定义（顺序=遍历顺序的首现）。
-depsOfBody : LwEnv -> Term -> List String
-depsOfBody env body = termDepsInto env.lwRuntimeNames [] body
-
 -- | `strFromFloat` 在 IR 里落成 `Base.Float.floatRender`，依赖表也要带上它，
 --   否则可达性收集会漏掉这条定义。
 depsWithFloatRender : LwEnv -> Term -> List String
@@ -1177,11 +1183,9 @@ export lowerSharedOf : List DtData -> List DtDef -> IrShared
 lowerSharedOf datas defs =
   let
     runtime = rtDatasOf datas
-    table = tyParamsOf runtime
     locRows = mapSome locRowPair defs
   in IrShared (recordFieldsOf runtime) (listFamOf runtime) (anyDefUsesFloat defs)
-    (anyDefUsesTrace defs) (anyDefUsesObs defs) (ctorTableOf runtime) (ctorOpaqueTableOf runtime)
-    (unboxedFamilySet runtime) table locRows
+    (anyDefUsesTrace defs) (anyDefUsesObs defs) locRows
 
 listFamOf : List DtData -> Maybe IrListFam
 listFamOf datas = case findListFamilyData datas of
@@ -1394,9 +1398,9 @@ lowerUnitAfterChecks env defNames dataNames =
     dataNameTbl = Base.HashMap.ofNames dataNames
     unitDatas = filter (\d => Base.HashMap.member (dtDataName d) dataNameTbl) datas
     runtime = partitionRuntimeDefs defs
-  in Vuna.Compiler.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Common.bind (tyDeclsOf datas unitDatas) (\decls => let
+  in Vuna.Compiler.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Common.bind (tyDeclsOf env.lwTyParams env.lwUnboxedInfo datas unitDatas) (\decls => let
     groups2 = map groupOfPair groups
-    hasList = memName listFamilyName (map dtDataName unitDatas)
+    hasList = hasDataNamed listFamilyName unitDatas
   in OkC (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing)
   )
   )
@@ -1529,9 +1533,19 @@ mkLwEnv datas defs unit =
   let
     shared = lowerSharedOf datas defs
     runtime = rtDatasOf datas
-  in LwEnv shared runtime (tyParamsOf runtime) (recordFieldsOf runtime) shared.irSharedCtors
-    shared.irSharedCtorOpaques shared.irSharedUnboxed defs (defTblOf defs)
-    (nameSetOf (runtimeNamesOf defs)) unit
+  in LwEnv shared runtime (strTblOf (tyParamsOf runtime)) (unboxedInfoOf runtime)
+    (strTblOf shared.irSharedRecordFields) (strTblOf (ctorTableOf runtime))
+    (strTblOf (ctorOpaqueTableOf runtime)) (Base.HashMap.ofNames (unboxedFamilySet runtime))
+    (hasDataNamed listFamilyName datas) defs (defTblOf defs) (nameSetOf (runtimeNamesOf defs)) unit
+
+-- | 字符串键的关联表（程序级表：一次建好，热路径只查）。
+strTblOf : List (Pair String v) -> HashMap String v
+strTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
+
+-- | 程序里是否有这个名字的数据族（桥接内建的放行判据）。
+hasDataNamed : String -> List DtData -> Bool
+hasDataNamed name [] = False
+hasDataNamed name (d :: rest) = dtDataName d == name || hasDataNamed name rest
 
 nameSetOf : List String -> HashMap String Bool
 nameSetOf [] = Base.HashMap.fromList []

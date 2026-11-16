@@ -91,9 +91,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - `IrGroup`：`irGroupIsRec` + 成员（SCC 序）。
 - `IrUnit`：类型声明 + 分组 + `hasListFamily` + `typeRefs` + 可选 `IrEntry`。
 - `IrProgram`：`IrShared` + 一个 `IrUnit`（check 路径的整程序装配）。
-- `IrShared`：record 运行时字段表、canonical List 族、`usesFloat` / `usesTrace`、
-  构造子 → (族, keep flags)、构造子 → 不透明 flags、去装箱族集合、族 → 类型参数槽、
-  定义位置行。它承载的是「表示决策的结果」，所以归属 IR 而不是后端。
+- `IrShared`：record 运行时字段表、canonical List 族、`usesFloat` / `usesTrace` /
+  `usesObs`、定义位置行。它只承载**后端渲染要消费**的表示决策结果；构造子形状、去装箱
+  集合、类型参数槽是 Lowering 内部的查表输入，不进 IR。
 
 ## 运行时契约（`Vuna.Compiler.Ir.Runtime`）
 

@@ -264,9 +264,9 @@ export record IrListFam(..) where
 
 -- | 程序级共享元数据（与单元无关，Lowering 一次算好）。
 --
--- 这些表原本是 `Codegen.Term.GenSt` 的全部内容（构造子 → 族 / keep 形状 / 不透明形状、
--- 去装箱族集合、族 → 运行时类型参数槽、record 字段表、List 族、float/trace 开关、
--- 定义位置行）。它们是**表示决策的结果**，所以属于 IR；后端只查表渲染。
+-- 只保留后端渲染真正消费的表示决策结果：record 字段表、canonical List 族、
+-- float / tracing / obs 开关与定义位置行。构造子形状、去装箱集合、类型参数槽都是
+-- Lowering 内部的查表输入，不进 IR。
 export record IrShared(..) where
   -- | 用 OCaml record 表示的族 → 运行时字段表 `(字段序号, 字段源码名)`。
   -- case 分支的 record pattern 需要它；构造 / 投影 / 更新节点自带字段名。
@@ -280,14 +280,6 @@ export record IrShared(..) where
   -- | 程序是否用到可观测性隐藏原语（决定是否追加 obs runtime；与 tracing 分开，
   -- 让 `dbg!` 程序不背事件缓冲、obs 程序不背 stderr 门控）。
   irSharedUsesObs : Bool
-  -- | 构造子 → (族名, keep flags)：构造子引用与 case 分支的形状判定。
-  irSharedCtors : List (Pair String (Pair String (List Bool)))
-  -- | 构造子 → 不透明字段 flags（与 keep flags 逐位对齐）：实参处包 `Obj.magic`。
-  irSharedCtorOpaques : List (Pair String (List Bool))
-  -- | 去装箱族集合（case 降级成 `let`、构造子应用只保留单字段）。
-  irSharedUnboxed : List String
-  -- | 族 → 运行时类型参数槽（声明与实参共用的不动点结果）。
-  irSharedTyParams : List (Pair String (List Int))
   -- | 运行时定义的位置行：定义名 → (文件, 起始行)。只有带 span 的定义在这里；
   -- 跨单元的 `extraDefLocs` 由调用方与这里合并（顺序无关，落盘前统一排序）。
   irSharedDefLocs : List (Pair String (Pair String Int))
@@ -296,51 +288,6 @@ export irSharedRecordFieldsOf : String -> List (Pair String (List (Pair Int Stri
 irSharedRecordFieldsOf family [] = []
 irSharedRecordFieldsOf family (p :: rest) =
   if firstOf p == family then secondOf p else irSharedRecordFieldsOf family rest
-
--- | 构造子 → 族名（未知构造子返回空串）。
-export irSharedCtorFamily : IrShared -> String -> String
-irSharedCtorFamily (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
-  irSharedCtorFamilyGo ctor ctors
-
-irSharedCtorFamilyGo : String -> List (Pair String (Pair String (List Bool))) -> String
-irSharedCtorFamilyGo ctor [] = ""
-irSharedCtorFamilyGo ctor (p :: rest) =
-  if firstOf p == ctor then firstOf (secondOf p) else irSharedCtorFamilyGo ctor rest
-
--- | 构造子的 keep flags（未知构造子返回空表）。
-export irSharedCtorKeepFlags : IrShared -> String -> List Bool
-irSharedCtorKeepFlags (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
-  irSharedCtorKeepFlagsGo ctor ctors
-
-irSharedCtorKeepFlagsGo : String -> List (Pair String (Pair String (List Bool))) -> List Bool
-irSharedCtorKeepFlagsGo ctor [] = []
-irSharedCtorKeepFlagsGo ctor (p :: rest) =
-  if firstOf p == ctor then secondOf (secondOf p) else irSharedCtorKeepFlagsGo ctor rest
-
--- | 构造子的不透明字段 flags（未知构造子返回空表）。
-export irSharedCtorOpaqueFlags : IrShared -> String -> List Bool
-irSharedCtorOpaqueFlags (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) ctor =
-  irSharedCtorOpaqueFlagsGo ctor opqs
-
-irSharedCtorOpaqueFlagsGo : String -> List (Pair String (List Bool)) -> List Bool
-irSharedCtorOpaqueFlagsGo ctor [] = []
-irSharedCtorOpaqueFlagsGo ctor (p :: rest) =
-  if firstOf p == ctor then secondOf p else irSharedCtorOpaqueFlagsGo ctor rest
-
--- | 族是否是去装箱族。
-export irSharedIsUnboxed : IrShared -> String -> Bool
-irSharedIsUnboxed (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) family =
-  memName family unboxed
-
--- | 族的运行时类型参数槽（未知族返回空表）。
-export irSharedTyParamsOf : IrShared -> String -> List Int
-irSharedTyParamsOf (IrShared recs listFam uf ut uo ctors opqs unboxed typs locs) family =
-  irSharedTyParamsOfGo family typs
-
-irSharedTyParamsOfGo : String -> List (Pair String (List Int)) -> List Int
-irSharedTyParamsOfGo family [] = []
-irSharedTyParamsOfGo family (p :: rest) =
-  if firstOf p == family then secondOf p else irSharedTyParamsOfGo family rest
 
 -- | 一个编译单元的 IR。
 export record IrUnit(..) where
@@ -359,10 +306,6 @@ export record IrUnit(..) where
 export record IrProgram(..) where
   irProgShared : IrShared
   irProgUnit : IrUnit
-
--- | `Nat` 链折回时的饱和上限（与 Core / 运行时一致）。
-export irNatChainMax : Int
-irNatChainMax = 4611686018427387903
 
 -- | 内建饱和应用的内联 arity（名字 → 运行时参数个数；0 = 不可内联）。
 --
