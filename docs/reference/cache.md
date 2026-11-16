@@ -20,7 +20,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/iface/<模块接口地址>      # 模块接口（codec module-iface 4；带实例/方法 span）
   objects/header/<头地址>           # 模块 header（imports + fixities），冷启动快路径
   objects/lex/<源摘要>              # lex tokens
-  objects/order/<包摘要>            # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
+  objects/order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
   objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
   objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
   objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
@@ -179,6 +179,8 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），
-  拓扑排序给不出唯一顺序 ⇒ 写侧把顺序存成 `objects/order`，读侧照它排列。
+  拓扑排序给不出唯一顺序 ⇒ 写侧把顺序存成 `objects/order`，读侧照它排列。顺序对象的 key =
+  包名 + 该包源闭包 + 编译器 tag；读侧还要求顺序里的模块名仍存在于当前闭包，不相容即当
+  缺失处理（回退全量，不产错序）。
 - `VUNA_ELAB_FULL=1` 强制全量精化（排障 / A-B 对拍）；`VUNA_IFACE_AUDIT=1` 在同一进程跑
   摘要与全量两条路径并逐字节比较诊断与产物。

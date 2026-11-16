@@ -103,7 +103,7 @@ checkPackage release wantWarnings pkg =
             -- `VUNA_ELAB_FULL=1` 的语义是「每条路径都全量」，必须照跑第二遍（也会重新
             -- 读写 lex 对象；截断恢复的用例依赖它）。
             full <- elabFullRequested
-            covered <- if full then pure False else orderCoversEff (packageName pkg) names
+            covered <- if full then pure False else orderCoversEff ctx names
             if covered then do
               let
                 _ = dbg! "check-lib-skip covered=${length names}"
@@ -178,9 +178,7 @@ summarySplitParts ctx entry printResult = do
   depIfaces <- depIfacesOf ctx
   case depIfaces of
     Just ifaces => do
-      -- `depTbl` 只被 `ownCleanModules` 转发、且 `ownCleanInfo` 忽略它（见其参数），
-      -- 所以传 `[]`：否则 `depIfaceHashTable` 会白跑一遍 `ifaceModsEff`。
-      clean <- ownCleanModules ctx []
+      clean <- ownCleanModules ctx
       let
         _ = case clean of
           Just clean2 => dbg! "cache-own-clean=${length clean2}"
@@ -1080,24 +1078,42 @@ decOrderNamesComplete s = case decList decStr (strLength s) (curOf s) of
   Nothing => Nothing
   Just (Pair names rest) => if curAtEnd rest then Just names else Nothing
 
+rootOfName : String -> List Root -> Maybe Root
+rootOfName _ [] = Nothing
+rootOfName n (r :: rest) = if rootName r == n then Just r else rootOfName n rest
+
+-- 顺序对象的身份 = 包名 + 包源闭包 + 编译器 tag。只用包名会让编译器换代或源码变化后
+-- 仍读到旧顺序（`Split.canonicalTopo` 随后报依赖不在拓扑序）。
+orderKeyOfEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r String
+orderKeyOfEff root = do
+  h <- rootHash root
+  tag <- compilerTagEff
+  pure (addrOf ["order", rootName root, strFromInt h, tag])
+
 -- | 写某包的模块顺序（完整模块面写全后调用）。
-writeOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
-writeOrderEff pkgKey names =
-  storeObjectWriteEff orderKind orderCodec (addrOf ["order", pkgKey]) (encOrderNames names)
+writeOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Int
+writeOrderEff ctx names = case rootOfName (contextPackageName ctx) (contextRoots ctx) of
+  Nothing => pure 0
+  Just root => do
+    key <- orderKeyOfEff root
+    storeObjectWriteEff orderKind orderCodec key (encOrderNames names)
 
 -- | 读某包的模块顺序；缺失/损坏 ⇒ Nothing（调用方回退全量，宁可慢，不产错序）。
-readOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List String))
-readOrderEff pkgKey = do
-  payload <- storeObjectReadEff orderKind orderCodec (addrOf ["order", pkgKey])
-  pure (case payload of
-    Nothing => Nothing
-    Just bytes => decOrderNamesComplete bytes
-  )
+readOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r (Maybe (List String))
+readOrderEff ctx pkg = case rootOfName pkg (contextRoots ctx) of
+  Nothing => pure Nothing
+  Just root => do
+    key <- orderKeyOfEff root
+    payload <- storeObjectReadEff orderKind orderCodec key
+    pure (case payload of
+      Nothing => Nothing
+      Just bytes => decOrderNamesComplete bytes
+    )
 
 -- | 已写的模块顺序是否覆盖这些导出模块（覆盖 ⇒ 入口那遍已写全 iface，无需再补 lib check）。
-orderCoversEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Bool
-orderCoversEff pkg names = do
-  ord <- readOrderEff (pkgKeyOf pkg)
+orderCoversEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Bool
+orderCoversEff ctx names = do
+  ord <- readOrderEff ctx (contextPackageName ctx)
   pure (case ord of
     Just written => allNamesIn names written
     Nothing => False
@@ -1120,18 +1136,20 @@ distinctPkgs (m :: rest) acc =
 goPkgs : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List ClosureMod -> List String -> List ClosureMod -> Eff r (Maybe (List ClosureMod))
 goPkgs _ _ [] acc = pure (Just acc)
 goPkgs ctx mods (p :: rest) acc = do
-  ord <- readOrderEff (pkgKeyOf p)
+  ord <- readOrderEff ctx p
   case ord of
     Nothing => pure Nothing
     Just names =>
       let
+        -- 顺序对象是按「包源闭包 + 编译器 tag」寻址的；这里再挡一次名集不相容
+        -- （手改/残留对象）：顺序里出现闭包中不存在的模块 ⇒ 当缺失处理。
+        current = map modNameOf (filter (pkgEq p) mods)
+        namesCurrent = allNamesIn names current
         picked = pickByOrder mods names
         -- 该依赖包**对外承诺**的模块面（`[export].modules`；根不限制导出 ⇒ 全部模块）。
         -- 完整性判据 = 「导出面 ⊆ 写侧顺序」——与写侧 `writeIfaceShadow` 的判据同口径。
-        -- 旧口径要求 `picked` 覆盖该包在闭包里的**全部**模块，于是写侧一旦按导出面
-        -- 写（少写未导出模块），依赖方就永远判不完整、整体退回全量。
         required = exportedDepModsOf ctx p mods
-      in if allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc picked)
+      in if namesCurrent && allNamesIn (map modNameOf required) (map modNameOf picked) then goPkgs ctx mods rest (append acc picked)
       else pure Nothing
 
 -- 依赖包 p 的对外模块面（按 `mods` 的闭包枚举顺序）。
@@ -1598,7 +1616,7 @@ checkModsOf pkg kind manifest sources deps ver flags =
 -- 项目身份：**规范化绝对包目录**的摘要。roots 按项目分目录（`store/roots/<id>/`），
 -- 项目只追加自己关心的摘要；GC 扫所有项目的并集，所以 A 不需要知道 B 的存在。
 -- 公式在 `Addr.projectIdAddrOf`：`vuna fetch` 也要写同一个项目的 roots。
-projectIdOf : Member nEnv EnvOp r => PackageContext -> Eff r String
+export projectIdOf : Member nEnv EnvOp r => PackageContext -> Eff r String
 projectIdOf ctx = do
   abs <- absolutePath (contextDir ctx)
   pure (projectIdAddrOf abs)
@@ -1725,7 +1743,7 @@ summaryCheckExeParts wantWarnings ctx entry = do
       -- `depTbl` 不被消费：`ownCleanInfo` 忽略该参数（见其签名），`ownCleanModules` 只是
       -- 原样转发。此前这里传 `depIfaceHashTable ctx`，而那个函数内部会跑一整遍
       -- `ifaceModsEff`（整闭包源扫描 + 地址表），一次 check 要跑 6 次以上——纯死计算。
-      clean <- ownCleanModules ctx []
+      clean <- ownCleanModules ctx
       case clean of
         Just clean2 => do
           let
@@ -1824,10 +1842,10 @@ packageEnvHash ctx = do
 -- ---------------------------------------------------------------
 -- 包内逐模块增量的脏/净判定
 --
--- 保守规则：模块干净 ⇔ 源内容哈希未变 ∧ 闭合产物有效 ∧ 它记录的直接依赖接口哈希全部
--- 仍然成立。依赖哈希来自：外部依赖包（当前接口表）或**同包已判定干净的模块**（其接口
--- 哈希未变）。同包依赖若是脏模块或新模块，则本模块也判脏（接口哈希可能变），不做乐观
--- 复用；脏性沿 import 边自然传播（干净表里查不到 ⇒ 脏）。
+-- 判据是**接口地址**本身：`ifaceAddrIn` 已把模块源摘要、`pkgEnv` 与每个 import 的
+-- 依赖接口地址编进地址，所以「按地址读到了旧接口」就等价于「源 + 依赖链都没变」。
+-- 同包依赖是脏模块时它的接口地址也会变，脏性沿 import 边自然传播；不需要在读侧再扫一遍
+-- `miDepHashes`（那是工具路径 `toolCleanGo` 在**没有地址表**时的替代判据）。
 -- ---------------------------------------------------------------
 -- 与 `ownCleanModules` 同一次读取，同时回报「已有整包接口是否可完整读回」（按模块跳过
 -- 的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
@@ -1837,8 +1855,8 @@ readOneModIface m = do
   mi <- readIfaceAtEff m.cmAddr
   pure (Pair m mi)
 
-ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List (Pair String String) -> Eff r (Pair Bool (Maybe (List ModuleIface)))
-ownCleanInfo ctx _ = do
+ownCleanInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Pair Bool (Maybe (List ModuleIface)))
+ownCleanInfo ctx = do
   mods <- ifaceModsEff ctx
   reads <- mapEff readOneModIface (selfModsOf ctx mods)
   let
@@ -1851,9 +1869,9 @@ collectClean (p :: rest) = case secondOf p of
   Nothing => collectClean rest
   Just mi => mi :: collectClean rest
 
-ownCleanModules : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List (Pair String String) -> Eff r (Maybe (List ModuleIface))
-ownCleanModules ctx depTbl = do
-  info <- ownCleanInfo ctx depTbl
+ownCleanModules : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
+ownCleanModules ctx = do
+  info <- ownCleanInfo ctx
   pure (secondOf info)
 
 -- 工具路径（LSP 冷启动写单模块接口）复用的干净模块：记录原样写回，避免用增量路径缺失的
@@ -1861,39 +1879,11 @@ ownCleanModules ctx depTbl = do
 -- writeIfaceShadow 的同一次 `ownCleanInfo` 读取，不经过这里。
 cleanIfacesOrEmpty : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List ModuleIface)
 cleanIfacesOrEmpty ctx = do
-  -- `ownCleanInfo` 忽略依赖表参数，所以这里传 `[]`：传 `depIfaceHashTable ctx` 只会多跑
-  -- 一遍 `ifaceModsEff`（本函数的两段都不消费那张表）。
-  clean <- ownCleanModules ctx []
+  clean <- ownCleanModules ctx
   pure (case clean of
     Just clean2 => clean2
     Nothing => []
   )
-
-cleanModulesGo : Member nEnv EnvOp r => List (Pair String String) -> List (Pair String SourceInfo) -> List (Pair String String) -> List ModuleIface -> List ModuleIface -> Eff r (Pair (List ModuleIface) (List String))
-cleanModulesGo origins sources depTbl [] cleanRev = pure (Pair (reverse cleanRev) [])
-cleanModulesGo origins sources depTbl (m :: rest) cleanRev = do
-  let
-    pkgOrigin = case lookupPair (miNameOf m) origins of
-      Just o => o == "pkg"
-      Nothing => False
-    _ = if pkgOrigin then 0 else dbg! "iface-reject=tool-origin ${miNameOf m}"
-    sameSource = case lookupPair (miNameOf m) sources of
-      Just si => siHashOf si == siHashOf (miSourceOf m)
-      Nothing => False
-  in do
-    selfOk <- payloadSelfOk m
-    let
-      _ = if selfOk then 0 else dbg! "iface-reject=self-hash ${miNameOf m}"
-      keep =
-        pkgOrigin
-          && sameSource
-          && cachedProgramValid (miCachedOf m)
-          && selfOk
-          && not (hasMissingDep (miDepHashesOf m))
-          && moduleDepsOk depTbl cleanRev (miDepHashesOf m)
-    in do
-      if keep then cleanModulesGo origins sources depTbl rest (m :: cleanRev)
-      else cleanModulesGo origins sources depTbl rest cleanRev
 
 -- 载荷自证（`VUNA_IFACE_SELFTEST=1`）：复用前用载荷重算哈希，与记录的 `miIfaceHash`
 -- 比对。默认关闭——热路径只做 schema / 编译器指纹 / 环境指纹这些 O(1) 门；CI 打开
@@ -2033,7 +2023,7 @@ else do
                 pure (OkC [])
             else do
               -- 先写「模块顺序」再写接口对象：读侧只有两份都在时才用接口路径。
-              _ <- writeOrderEff (pkgKeyOf (contextPackageName ctx)) (map miNameOf modules)
+              _ <- writeOrderEff ctx (map miNameOf modules)
               -- 接口写边界：`Eff` 动作，标记而非跨度；`vuna.counter.cache.write` 不是
               -- 词汇表里的名字（只有 `vuna.cache.write`，且它是保留的 span 名而不是计数名的
               -- 样子），所以这里只打标记 + 保留既有 `iface-write=…` 文本行的四段 ms：
@@ -2134,7 +2124,7 @@ summaryCheckLibParts wantWarnings ctx names = do
         dtCheckLibraryWithProgramParts ctx names
     Just ifaces => do
       -- 同 `summarySplitParts`：依赖表参数不被消费，传 `[]` 免一次 `ifaceModsEff`。
-      clean <- ownCleanModules ctx []
+      clean <- ownCleanModules ctx
       case clean of
         Just clean2 => do
           let
