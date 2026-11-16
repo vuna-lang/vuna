@@ -78,19 +78,19 @@ let v_Base_dFloat_dzerosText = (fun n -> (v_Base_dFloat_ddigitsText ((Base_dList
 let v_Base_dFloat_dexpSuffix = (fun e -> ((fun n -> ((fun sign -> (sign ^ (if (n < 10) then ("0" ^ (bi_strFromInt n)) else (bi_strFromInt n)))) (if (e < 0) then "-" else "+"))) (if (e < 0) then (0 - e) else e)))
 
 # 126 "Base/Float.vuna"
-let v_Base_dFloat_dexpForm = (fun e ds -> (match ds with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match dtb__10 with
-  | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" [(bi_strFromInt dtb__9); "e"; (v_Base_dFloat_dexpSuffix e)])
-  | _ -> (String.concat "" [(bi_strFromInt dtb__9); "."; (v_Base_dFloat_ddigitsText dtb__10); "e"; (v_Base_dFloat_dexpSuffix e)])
-)
+let v_Base_dFloat_dexpForm = (fun mc0 mc1 -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> "0e+00"
+  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match dtb__10 with
+  | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" [(bi_strFromInt dtb__9); "e"; (v_Base_dFloat_dexpSuffix mc0)])
+  | _ -> (String.concat "" [(bi_strFromInt dtb__9); "."; (v_Base_dFloat_ddigitsText dtb__10); "e"; (v_Base_dFloat_dexpSuffix mc0)])
+)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 133 "Base/Float.vuna"
+# 132 "Base/Float.vuna"
 let v_Base_dFloat_dfixedForm = (fun e ds -> (if (e >= 0) then ((fun intLen -> ((fun len -> (if (len <= intLen) then (String.concat "" [(v_Base_dFloat_ddigitsText ds); (v_Base_dFloat_dzerosText (intLen - len)); "."]) else (String.concat "" [(v_Base_dFloat_ddigitsText ((Base_dList.v_Base_dList_dtake intLen) ds)); "."; (v_Base_dFloat_ddigitsText ((Base_dList.v_Base_dList_ddrop intLen) ds))]))) (v_Base_dFloat_ddsLen ds))) (e + 1)) else (String.concat "" ["0."; (v_Base_dFloat_dzerosText ((0 - e) - 1)); (v_Base_dFloat_ddigitsText ds)])))
 
-# 143 "Base/Float.vuna"
+# 142 "Base/Float.vuna"
 let v_Base_dFloat_dfloatRender = (fun x -> (if (x <> x) then "nan" else ((fun inf -> (if (x = inf) then "inf" else (if (x = (0.0 -. inf)) then "-inf" else (if (x = 0.0) then (if ((1.0 /. x) < 0.0) then "-0." else "0.") else ((fun neg -> ((fun a -> ((fun p -> ((fun e0 -> ((fun m0 -> ((fun dp -> ((fun d13 -> ((fun raw -> ((fun ed -> ((fun e -> ((fun ds -> ((fun body -> (if neg then ("-" ^ body) else body)) (if (if (e < (0 - 4)) then true else (e >= 12)) then ((v_Base_dFloat_dexpForm e) ds) else ((v_Base_dFloat_dfixedForm e) ds)))) (Base_dPair.v_Base_dPair_dsecondOf ed))) (Base_dPair.v_Base_dPair_dfirstOf ed))) (if (d13 >= 5) then (match (v_Base_dFloat_dcarryRev (Base_dList.v_Base_dList_dreverse raw)) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__11) -> { Base_dPair.f_Base_dPair_dPair_first = e0; Base_dPair.f_Base_dPair_dPair_second = (v_Base_dFloat_dtrimZeros (Base_dList.v_Base_dList_dreverse dtb__11)) }
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> { Base_dPair.f_Base_dPair_dPair_first = (e0 + 1); Base_dPair.f_Base_dPair_dPair_second = (v_Base_dFloat_dtrimZeros (Base_dList.C_Base_dList_dList_Cons (1, ((Base_dList.v_Base_dList_dmap (fun _u -> 0)) ((Base_dList.v_Base_dList_drange 0) 11))))) }

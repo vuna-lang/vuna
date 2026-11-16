@@ -86,6 +86,7 @@ Vuna_dCompiler_dDriver_dToolPayload.ml
 Vuna_dCompiler_dDriver_dWasm.ml
 Vuna_dCompiler_dElab.ml
 Vuna_dCompiler_dElab_dCase.ml
+Vuna_dCompiler_dElab_dCoverage.ml
 Vuna_dCompiler_dElab_dData.ml
 Vuna_dCompiler_dElab_dDerive.ml
 Vuna_dCompiler_dElab_dDict.ml

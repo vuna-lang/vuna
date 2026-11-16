@@ -20,7 +20,7 @@ let v_Base_dEffExit_dexitOpHIOHost = (fun op k -> (match op with
 ))
 
 # 44 "Base/EffExit.vuna"
-let v_Base_dEffExit_dhandleExitHostHost = (fun n comp -> ((((v_Base_dEffExit_dhandleExit n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffExit_dexitOpHIOHost) comp))
+let v_Base_dEffExit_dhandleExitHostHost = (fun n comp -> ((((v_Base_dEffExit_dhandleExit n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (fun o k -> ((v_Base_dEffExit_dexitOpHIOHost o) (Obj.magic k)))) comp))
 
 # 47 "Base/EffExit.vuna"
 let v_Base_dEffExit_drunExitHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff ((v_Base_dEffExit_dhandleExitHostHost "default") comp)))

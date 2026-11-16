@@ -1108,15 +1108,21 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dfindClassByShortName = (fun mc0 mc1 -> (ma
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1227 "Vuna/Compiler/Elab/Meta.vuna"
-let v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable = (fun ec -> ((Base_dList.v_Base_dList_dmap (fun d -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dmap Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDatas ec)))
+# 1229 "Vuna/Compiler/Elab/Meta.vuna"
+let rec v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__596, dtb__597, dtb__598, dtb__599, dtb__600) -> (if dtb__597 then (v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity dtb__600) else (1 + (v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity dtb__600)))
+  | _ -> 0
+))
 
-# 1231 "Vuna/Compiler/Elab/Meta.vuna"
+# 1236 "Vuna/Compiler/Elab/Meta.vuna"
+let v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable = (fun ec -> ((Base_dList.v_Base_dList_dmap (fun d -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dmap (fun c -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDatas ec)))
+
+# 1243 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__596, dtb__597) -> (match dtb__596 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__598; Base_dPair.f_Base_dPair_dPair_second = dtb__599 } -> (match dtb__598 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__600, dtb__601, dtb__602) -> (v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody dtb__597)
-  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__599))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__601, dtb__602) -> (match dtb__601 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__603; Base_dPair.f_Base_dPair_dPair_second = dtb__604 } -> (match dtb__603 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__605, dtb__606, dtb__607) -> (v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody dtb__602)
+  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__604))
 )
   | _ -> failwith "DT: impossible branch"
 )

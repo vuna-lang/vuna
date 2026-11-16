@@ -45,18 +45,22 @@ let v_Vuna_dCompiler_dPackages_dSource_dexportsOf = (fun manifest -> (match (man
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 124 "Vuna/Compiler/Packages/Source.vuna"
-let v_Vuna_dCompiler_dPackages_dSource_ddepKeyOf = (fun dep -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dep); Base_dPair.f_Base_dPair_dPair_second = (match (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepHashOf dep) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> "path"
+# 125 "Vuna/Compiler/Packages/Source.vuna"
+let v_Vuna_dCompiler_dPackages_dSource_ddepKeyOf = (fun dep -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepAliasOf dep); Base_dPair.f_Base_dPair_dPair_second = (match (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepIdentityOf dep) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4) -> (v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash dtb__4)
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (match (Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_ddepHashOf dep) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> "path"
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__5) -> (v_Vuna_dCompiler_dPackages_dSource_dnormalizeHash dtb__5)
+  | _ -> failwith "DT: impossible branch"
+)
   | _ -> failwith "DT: impossible branch"
 ) })
 
 # 107 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dpackageSourceEff = (fun nFs root manifest -> (((Base_dMonad.v_Base_dMonad_dbind Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Vuna_dCompiler_dPackages_dSource_dpackageFilesEff nFs) root)) (fun files -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) { Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psName = (v_Vuna_dCompiler_dPackages_dSource_dpackageNameOf manifest); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psExports = (v_Vuna_dCompiler_dPackages_dSource_dexportsOf manifest); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psDeps = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dPackages_dSource_ddepKeyOf) (manifest).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestDependencies); Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psFiles = files }))))
 
-# 131 "Vuna/Compiler/Packages/Source.vuna"
+# 134 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_dcontentHashOf = (fun ps -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_dencPackageContent (ps).Vuna_dCompiler_dCanonical_dPkg.f_Vuna_dCompiler_dCanonical_dPkg_dPackageSource_psFiles)))
 
-# 135 "Vuna/Compiler/Packages/Source.vuna"
+# 138 "Vuna/Compiler/Packages/Source.vuna"
 let v_Vuna_dCompiler_dPackages_dSource_didentityHashOf = (fun ps -> (Vuna_dCompiler_dHash.v_Vuna_dCompiler_dHash_dcontentAddress (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_dencPackageIdentity (Vuna_dCompiler_dCanonical_dPkg.v_Vuna_dCompiler_dCanonical_dPkg_didentityOfSource ps))))

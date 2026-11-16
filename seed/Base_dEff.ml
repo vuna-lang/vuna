@@ -106,34 +106,37 @@ let v_Base_dEff_dsendCore = (fun key name o -> (C_Base_dEff_dEff_MkEff ((fun _u 
 let v_Base_dEff_dperformCore = (fun n key o -> (((v_Base_dEff_dsendCore key) n) o))
 
 # 179 "Base/Eff.vuna"
-let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((((((dtp_effect_handle key) name) ret) opH) (v_Base_dEff_drunThunk comp)))))
+let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((fun u -> (match comp with
+  | C_Base_dEff_dEff_MkEff (dtb__16) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__16) u)
+  | _ -> failwith "DT: impossible branch"
+)))))
 
-# 187 "Base/Eff.vuna"
+# 189 "Base/Eff.vuna"
 let v_Base_dEff_dresumeCont = (fun c x -> (match c with
-  | C_Base_dEff_dCont_MkCont (dtb__16) -> (dtb__16 x)
+  | C_Base_dEff_dCont_MkCont (dtb__17) -> (dtb__17 x)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 192 "Base/Eff.vuna"
+# 194 "Base/Eff.vuna"
 let v_Base_dEff_dcontAdapter = (fun opH o k -> (((Obj.magic opH) o) (C_Base_dEff_dCont_MkCont ((Obj.magic k)))))
 
-# 196 "Base/Eff.vuna"
+# 198 "Base/Eff.vuna"
 let v_Base_dEff_dhandleCoreLin = (fun key name ret opH comp -> (((((v_Base_dEff_dhandleCore key) name) ret) (v_Base_dEff_dcontAdapter (Obj.magic opH))) comp))
 
-# 212 "Base/Eff.vuna"
+# 214 "Base/Eff.vuna"
 let v_Base_dEff_dresFn = (fun r -> (C_Base_dEff_dResFn_MkResFn (r)))
 
-# 228 "Base/Eff.vuna"
+# 230 "Base/Eff.vuna"
 let v_Base_dEff_dhandleWith = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCore key) n) ret) (Obj.magic opH)) comp))
 
-# 239 "Base/Eff.vuna"
+# 241 "Base/Eff.vuna"
 let v_Base_dEff_dhandleWithAt = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCore key) n) ret) (Obj.magic opH)) comp))
 
-# 250 "Base/Eff.vuna"
+# 252 "Base/Eff.vuna"
 let v_Base_dEff_dmkCont = (fun k -> (C_Base_dEff_dCont_MkCont (k)))
 
-# 261 "Base/Eff.vuna"
+# 263 "Base/Eff.vuna"
 let v_Base_dEff_dbracket = (fun acquire release use -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) acquire) (fun res -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_push (fun _u -> (v_Base_dEff_drunEff (release res))))))) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (use res)) (fun a -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_pop 0)))) (fun _u -> (((Base_dMonad.v_Base_dMonad_dbind v_Monad_uBase_uEff_uEff_ur) (release res)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) a))))))))))))
 
-# 272 "Base/Eff.vuna"
+# 274 "Base/Eff.vuna"
 let v_Base_dEff_dfinally = (fun comp cleanup -> (((v_Base_dEff_dbracket ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) 0)) (fun _u -> cleanup)) (fun _u -> comp)))
