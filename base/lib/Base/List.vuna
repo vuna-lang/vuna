@@ -2,7 +2,7 @@
 module Base.List where
 
 -- Base.List：列表类型与常用操作。
--- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+-- `Bool` 的类型与构造子来自 Base.Bool；base 包不自动注入 Prelude，因此显式 import。
 import Base.Pair
 import Base.Maybe
 import Base.Nat

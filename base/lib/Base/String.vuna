@@ -1,7 +1,7 @@
 module Base.String where
 
 -- Base.String：字符串工具。底层只使用 strUnpack/strPack/strLength/++ 与 Base.List。
--- import Base.Bool 只为让 `data Bool` 声明进入程序（typed codegen 生成 True/False 表达式所需）。
+-- `Bool` 的类型与构造子来自 Base.Bool；base 包不自动注入 Prelude，因此显式 import。
 --
 -- split 用显式 fuel 计步：`splitAcc` 每次只吃一个字符，
 -- 匹配到分隔符后交给 `skipSep` 逐个跳过；两段都带同一个 fuel 参数并每步 `fuel - 1`
