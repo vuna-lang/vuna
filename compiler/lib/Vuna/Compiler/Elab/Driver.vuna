@@ -341,8 +341,9 @@ elabOneDef decls globals name tyTerm sp ec =
 
 -- 逐定义恢复的共用出口：错误进 `Ec.ecErrors` 并继续下一个声明；严格路径短路。
 resumeBodies : Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Diagnostic -> Check (Pair (List DtDef) Ec)
-resumeBodies recover rest globals doneDefs acc ec d =
-  if recover then elabBodies recover rest globals doneDefs acc (ecAddError ec d) else ErrC d
+resumeBodies (recover@True) rest globals doneDefs acc ec d =
+  elabBodies recover rest globals doneDefs acc (ecAddError ec d)
+resumeBodies False rest globals doneDefs acc ec d = ErrC d
 
 -- `recover`：逐定义恢复。失败时把诊断记进 `Ec.ecErrors`、回滚到该定义**之前**的状态
 -- （丢弃它创建的元变量与解），继续检查下一个定义；严格路径仍然首错短路。

@@ -664,9 +664,8 @@ ctxLookup name ctx = ctxLookupAt name ctx.ctxItems 0
 
 -- 求值环境代入索引精化：没有精化时直接复用环境（O(1)），有精化才逐项重写。
 export refinedEnv : List (Pair Int Value) -> List Value -> List Value
-refinedEnv refs env = case refs of
-  [] => env
-  _ => map (refineValue refs defaultFuel) env
+refinedEnv [] env = env
+refinedEnv refs env = map (refineValue refs defaultFuel) env
 
 -- 上下文的求值环境：binder 的 level 从底部开始，与 quote 约定一致。
 export ctxEnvAt : List (Pair String Term) -> Int -> Int -> List Value

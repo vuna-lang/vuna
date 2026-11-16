@@ -123,11 +123,10 @@ expSuffix e =
   in sign ++ (if n < 10 then "0" ++ strFromInt n else strFromInt n)
 
 expForm : Int -> List Int -> String
-expForm e ds = case ds of
-  d :: rest => case rest of
-    [] => strFromInt d ++ "e" ++ expSuffix e
-    _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
-  [] => "0e+00"
+expForm e (d :: rest) = case rest of
+  [] => strFromInt d ++ "e" ++ expSuffix e
+  _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
+expForm e [] = "0e+00"
 
 fixedForm : Int -> List Int -> String
 fixedForm e ds = if e >= 0 then
