@@ -28,6 +28,7 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Native.Abi
+import Vuna.Compiler.Native.Audit
 import Vuna.Compiler.Native.Model
 import Vuna.Compiler.Native.Runtime
 
@@ -1201,7 +1202,7 @@ build program printResult =
                   else reachableDefs seeds defs
                 pool = poolOfDefs ordered
               in case genDefs defs pool unit.irUnitTyDecls 0 ordered [] of
-                NFail err => NativeRejected err
+                NFail err => NativeRejected (nativeAuditEnrich err ordered)
                 NOk pair =>
                   let
                     start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)

@@ -139,6 +139,10 @@ one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算�
 从 `IrEntry.irEntryMain` 沿 `irDefDeps` 收集**可达**定义，只生成可达函数；不可达的
 base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` 同策略）。
 
+生成失败时，诊断后面附一次静态审计（`Native.Audit`）：把可达定义里**全部**不支持的
+构造按种类计数（缺失符号、运行时符号当值、全局函数当值、部分/过度应用、多 binder `let`、
+effect bind、extern），最多列 12 类，避免「一次只报一个 unsupported」的串行试错。
+
 | IR 节点 | 当前 | 说明 |
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` | 支持 | `IrInt` 检查 63-bit 范围 |

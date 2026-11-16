@@ -109,6 +109,7 @@ modules = [
   "Vuna.Compiler.Lowering.Program",
   "Vuna.Compiler.Lowering.Ty",
   "Vuna.Compiler.Native.Abi",
+  "Vuna.Compiler.Native.Audit",
   "Vuna.Compiler.Native.Model",
   "Vuna.Compiler.Native.Module",
   "Vuna.Compiler.Native.Render",
