@@ -487,7 +487,7 @@ arithRel p _ sizes caller facts region = Nothing
 -- 终止性检查里「fuel 递减」只看减法语义，因此两种写法都认。
 -- | `-` 的两种写法：内建运算符名与 `Base.Num.sub` 方法投影（别名替换后）。
 export isSubOpName : String -> Bool
-isSubOpName op = op == "-" || op == "Base.Num.sub"
+isSubOpName op = op == "-" || op == "Base.Num.sub" || op == "Base.Num.-"
 
 export arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinus p ([base, EInt k ksp]) sizes caller facts region =

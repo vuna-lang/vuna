@@ -1,0 +1,25 @@
+-- 运算符的声明位统一带括号：顶层签名/定义、导出、data 构造子、trait 与 instance 方法。
+-- 使用位才裸写（中缀 `a <=> b`、前缀/传值 `(<=>)`）。
+import Prelude
+
+export (<=>) : Int -> Int -> Int
+(<=>) x y = x * 10 + y
+
+infixl 6 <=>
+
+data Wrap : Type where
+  (|>) : Int -> Wrap
+
+unwrap : Wrap -> Int
+unwrap ((|>) n) = n
+
+export trait PairUp a(..) where
+  (<*>) : a -> a -> a
+
+infixl 7 <*>
+
+instance PairUp Int where
+  (<*>) x y = x + y * 2
+
+main : String
+main = show (1 <=> 2) ++ "/" ++ show (unwrap ((|>) 5)) ++ "/" ++ show (1 <*> 2)

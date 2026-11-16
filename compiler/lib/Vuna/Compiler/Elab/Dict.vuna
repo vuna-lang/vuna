@@ -899,26 +899,50 @@ classHasProjection className short name ec = case findClassByShortName className
   Nothing => False
   Just cls => classMethodProjection cls.dtClassMethods short == name
 
+-- 投影名/符号名的最后一段（`Base.Eq.==` → `==`）。
+opShortOf : String -> String
+opShortOf name = lastSeg name
+
 export isEqMethod : Ec -> String -> Bool
 -- 后两个是**内部生成名**：`Elab.Derive`（deriving 展开）与 `Elab.Match`（字面量模式）
 -- 直接构造 `EVar "=="` / `EVar "/="`，不经过 Loader 别名；用户源码的 `==` 一律在
 -- Loader 被换成 `eq`，所以内部名不会泄漏到用户语义。
 isEqMethod ec name =
-  classHasProjection "Eq" "eq" name ec
+  opShortOf name == "=="
+    || opShortOf name == "/="
+    || opShortOf name == "eq"
+    || opShortOf name == "neq"
+    || classHasProjection "Eq" "eq" name ec
     || classHasProjection "Eq" "neq" name ec
     || name == "=="
     || name == "/="
 
 export isCmpMethod : Ec -> String -> Bool
 isCmpMethod ec name =
-  classHasProjection "Ord" "lt" name ec
+  baseNameOf name == "<"
+    || baseNameOf name == "<="
+    || baseNameOf name == ">"
+    || baseNameOf name == ">="
+    || baseNameOf name == "lt"
+    || baseNameOf name == "le"
+    || baseNameOf name == "gt"
+    || baseNameOf name == "ge"
+    || classHasProjection "Ord" "lt" name ec
     || classHasProjection "Ord" "le" name ec
     || classHasProjection "Ord" "gt" name ec
     || classHasProjection "Ord" "ge" name ec
+    || classHasProjection "Ord" "<" name ec
+    || classHasProjection "Ord" "<=" name ec
+    || classHasProjection "Ord" ">" name ec
+    || classHasProjection "Ord" ">=" name ec
     || name == "<"
     || name == "<="
     || name == ">"
     || name == ">="
+    || name == "lt"
+    || name == "le"
+    || name == "gt"
+    || name == "ge"
 
 -- `Base.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
@@ -928,27 +952,63 @@ isCmpMethod ec name =
 -- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
 export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
-  if classHasProjection "Num" "add" name ec then Just "+"
-  else if classHasProjection "Num" "sub" name ec then Just "-"
-  else if classHasProjection "Num" "mul" name ec then Just "*"
-  else if classHasProjection "Num" "div" name ec then Just "/" else Nothing
+  if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then Just "+"
+  else if classHasProjection "Num" "sub" name ec || classHasProjection "Num" "-" name ec then Just "-"
+  else if classHasProjection "Num" "mul" name ec || classHasProjection "Num" "*" name ec then Just "*"
+  else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then Just "/"
+  else Nothing
 
 -- 方法投影的**短名**（`Base.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String
 methodShortOf name = secondOf (splitLastDot (splitOnDot name))
 
--- 内部生成名（`==` 等）到方法短名的映射；方法投影完整名直接取最后一段。
+-- 方法短名直接取名字最后一段；运算符名与旧的标识符方法名都原样保留。
 eqMethodShortOf : String -> String
-eqMethodShortOf "==" = "eq"
-eqMethodShortOf "/=" = "neq"
 eqMethodShortOf name = methodShortOf name
 
 cmpMethodShortOf : String -> String
-cmpMethodShortOf "<" = "lt"
-cmpMethodShortOf "<=" = "le"
-cmpMethodShortOf ">" = "gt"
-cmpMethodShortOf ">=" = "ge"
 cmpMethodShortOf name = methodShortOf name
+
+-- 同一方法的两种写法（旧库 `eq` / 新库 `==` 等）。库方法可以是标识符或运算符，
+-- 实例/派生体的内部名与库里的声明名不一定一致，统一走这张表找投影。
+methodNameAliases : String -> List String
+methodNameAliases name = case name of
+  "==" => ["eq"]
+  "eq" => ["=="]
+  "/=" => ["neq"]
+  "neq" => ["/="]
+  "<" => ["lt"]
+  "lt" => ["<"]
+  "<=" => ["le"]
+  "le" => ["<="]
+  ">" => ["gt"]
+  "gt" => [">"]
+  ">=" => ["ge"]
+  "ge" => [">="]
+  "+" => ["add"]
+  "add" => ["+"]
+  "-" => ["sub"]
+  "sub" => ["-"]
+  "*" => ["mul"]
+  "mul" => ["*"]
+  "/" => ["div"]
+  "div" => ["/"]
+  ">>=" => ["bind"]
+  "bind" => [">>="]
+  _ => []
+
+-- 类里是否有该短名的方法（`classMethodProjection` 找不到时会回落传入的短名）。
+hasMethodShort : List (Pair String Term) -> String -> Bool
+hasMethodShort methods short = classMethodProjection methods short /= short
+
+-- 类方法投影名：先按同名找，找不到再按等价写法找；都没有时回落短名。
+projectionFor : DtClass -> String -> String
+projectionFor cls short = if hasMethodShort cls.dtClassMethods short then classMethodProjection cls.dtClassMethods short
+else case methodNameAliases short of
+  alt :: rest =>
+    if hasMethodShort cls.dtClassMethods alt then classMethodProjection cls.dtClassMethods alt
+    else short
+  [] => short
 
 -- `eq` / `neq` 的饱和应用（运算符是方法别名）：`Int` / `String`
 -- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
@@ -973,7 +1033,7 @@ specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (fo
     Just cls =>
       let
         mname =
-          if name == "==" || name == "/=" then classMethodProjection cls.dtClassMethods (eqMethodShortOf name)
+          if name == "==" || name == "/=" || name == "eq" || name == "neq" then projectionFor cls (eqMethodShortOf name)
           else name
         -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
         -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
@@ -1007,26 +1067,33 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
 -- 刚性类参数延迟提升成 `{d : Dict_Ord a}`。
 -- `name` 是方法投影完整名（`Base.Ord.lt` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Check String
-cmpRuntimeName sp method "Int" = case method of
-  "lt" => OkC "bi_lt_int"
-  "le" => OkC "bi_le_int"
-  "gt" => OkC "bi_gt_int"
-  _ => OkC "bi_ge_int"
+cmpRuntimeName sp method "Int" =
+  if isLtShort method then OkC "bi_lt_int"
+  else if isLeShort method then OkC "bi_le_int"
+  else if isGtShort method then OkC "bi_gt_int" else OkC "bi_ge_int"
 cmpRuntimeName sp method "String" = OkC (cmpGenericName method)
-cmpRuntimeName sp method "Float" = case method of
-  "lt" => OkC "bi_lt_float"
-  "le" => OkC "bi_le_float"
-  "gt" => OkC "bi_gt_float"
-  _ => OkC "bi_ge_float"
+cmpRuntimeName sp method "Float" =
+  if isLtShort method then OkC "bi_lt_float"
+  else if isLeShort method then OkC "bi_le_float"
+  else if isGtShort method then OkC "bi_gt_float" else OkC "bi_ge_float"
 cmpRuntimeName sp method tyName =
   if isBoolCanonical tyName then OkC (cmpGenericName method)
   else tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 cmpGenericName : String -> String
-cmpGenericName "lt" = "bi_lt_generic"
-cmpGenericName "le" = "bi_le_generic"
-cmpGenericName "gt" = "bi_gt_generic"
-cmpGenericName _ = "bi_ge_generic"
+cmpGenericName method =
+  if isLtShort method then "bi_lt_generic"
+  else if isLeShort method then "bi_le_generic"
+  else if isGtShort method then "bi_gt_generic" else "bi_ge_generic"
+
+isLtShort : String -> Bool
+isLtShort m = m == "<" || m == "lt"
+
+isLeShort : String -> Bool
+isLeShort m = m == "<=" || m == "le"
+
+isGtShort : String -> Bool
+isGtShort m = m == ">" || m == "gt"
 
 -- 字典的类参数还有未解元变量时**不做实例搜索**：否则会像 `srt (\x,y => x <= y) xs`
 -- 那样被第一个内建实例（Ord Int）提前定死，随后与 `List a` 统一时报 occurs check。
@@ -1060,7 +1127,7 @@ specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (
     Just cls =>
       let
         mname =
-          if name == "<" || name == "<=" || name == ">" || name == ">=" then classMethodProjection cls.dtClassMethods (cmpMethodShortOf name)
+          if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then projectionFor cls (cmpMethodShortOf name)
           else name
         tyTerm = quote (ctxDepth ctx) aTy
         dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])

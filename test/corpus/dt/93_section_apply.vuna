@@ -1,0 +1,17 @@
+-- `(+ e)` / `(e +)` 直接应用到实参时按定义展开，不生成 lambda（推断位置不需要签名）。
+import Prelude
+
+direct : Int
+direct = (+ 1) 2
+
+rightDirect : Int
+rightDirect = (10 -) 3
+
+asValue : Int
+asValue = applyTo (+ 1)
+
+applyTo : (Int -> Int) -> Int
+applyTo f = f 10
+
+main : String
+main = show direct ++ "/" ++ show rightDirect ++ "/" ++ show asValue

@@ -18,6 +18,7 @@ module Vuna.Compiler.Base.Intrinsics where
 --     `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Base.Common
+import Base.String
 import Base.HashMap
 
 -- ---------------------------------------------------------------
@@ -577,6 +578,19 @@ canonicalFamilies =
     CanonicalFamily natTypeName [natZeroCtor, natSuccCtor] FamReprNat,
     CanonicalFamily listFamilyName [listNilCtor, listConsCtor] FamReprBoxed
   ]
+
+-- | 构造子拼写的等价键：列表/行族的 cons 在库里可能叫 `Cons`、`::` 或 `(::)`，
+-- 过渡期按「最后一段是这三种之一」归一（`Base.List.List.Cons` / `Base.List.List.::`
+-- / `Base.List.List.(::)` 同键），其余名字原样。
+export ctorSpellingKey : String -> String
+ctorSpellingKey name =
+  if endsWith ".Cons" name || endsWith ".::" name || endsWith ".(::)" name then "${dropLastSegment name}.CONS"
+  else name
+
+-- 去掉最后一个 `.` 之后的段。
+dropLastSegment : String -> String
+dropLastSegment name = case splitLastDot (splitOnDot name) of
+  Pair rev last => joinDots rev
 
 -- | 按完整符号查 canonical 族。
 export findCanonicalFamily : String -> Maybe CanonicalFamily

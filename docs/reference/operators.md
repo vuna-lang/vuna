@@ -24,19 +24,18 @@
    **section 展开**。
 3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
-4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户），没有编译器
-   内建运算符表。`->` 是语法而不是用户运算符，由 `Loader.Fixity.syntaxFixityDecls` 恒可见
-   （不看也不受库声明影响）。
+4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
+   编译器只为内建符号（`->`，以及后续收归内建表的短路原语）提供固定声明
+   （`Loader.Fixity.builtinFixityDecls`），用户对它们声明 fixity 会报 `RN_BuiltinFixity`。
 5. **未知运算符 = 报错**：符号运算符用于中缀、但可见表里没有声明 ⇒
    `unknown fixity for operator <op> (declare it with infixl/infixr/infix)`，check / compile /
    interp 非 0。**不静默默认优先级**——否则漏声明时 `a + b * c` 会静默变成 `(a + b) * c`。
    只有反引号名字没有声明时按 9 左结合（与 Haskell 一致）。
-6. **可见 fixity 闭包去重**：每个模块的 visible 表按运算符**首现去重**（本模块声明优先，其次
-   import 顺序）。import 图里的 diamond 会让「本模块 ++ import 闭包」的重复拼接按路径数指数
-   增长；去重后每个模块的可见表只含不同运算符（`Flatten.dedupeFixities`）。查找本来就用
-   「第一处匹配」，去重不改变语义。
-7. **fixity 是程序级属性**：同一个运算符在 A 模块的优先级可能来自它 import 的库模块，因此
-   fmt 需要调用方给出「程序可见闭包」（`Loader.Flatten.fixitiesForSource`）。
+6. **fixity 全程序唯一**：一个运算符在加载闭包里只能有一处声明；重复声明报
+   `RN_DuplicateFixity`（指向后一处）。`Module` 只存本模块自己的声明，加载完成后拼成
+   一张全程序表参与每个模块的重排——import 到定义模块即全局生效，不再有「本模块优先」。
+7. **fmt 用同一张表**：`Loader.Flatten.fixitiesForSource` 给出程序级声明表；重复/内建冲突
+   在 fmt 路径同样报错，不静默按第一处处理。
 
 ## `Eq` / `Ord` 的唯一真源
 

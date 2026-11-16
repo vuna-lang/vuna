@@ -1,0 +1,14 @@
+-- 一元负号：前缀位置的数字字面量直接是负字面量；`f - 1` 仍是减法。
+import Prelude
+
+negLit : Int
+negLit = -7
+
+subStill : Int
+subStill = 10 - 1
+
+negInParens : Int
+negInParens = 2 * -3
+
+main : String
+main = show negLit ++ "/" ++ show subStill ++ "/" ++ show negInParens

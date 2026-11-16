@@ -1,0 +1,7 @@
+-- 同一运算符在程序里只能声明一次 fixity：第二处必须报错。
+import Prelude
+
+infixl 6 +
+
+main : Int
+main = 1 + 2

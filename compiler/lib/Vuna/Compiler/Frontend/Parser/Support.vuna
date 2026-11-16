@@ -273,7 +273,7 @@ isSyntaxSym op = case op of
 
 -- 保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
 -- 集合 = 表达式位置的语法符号（`isSyntaxSym`）∪ {`->`, `` ` ``}。
--- `->` 是语法而非用户运算符（fixity 由 Loader.syntaxFixityDecls 恒提供）；反引号是定界符。
+-- `->` 是语法而非用户运算符（fixity 由 Loader.builtinFixityDecls 恒提供）；反引号是定界符。
 export isReservedValueName : String -> Bool
 isReservedValueName name = isSyntaxSym name || name == "->" || name == "`"
 
@@ -293,8 +293,15 @@ sectionOpAt st = case peekTokAt st 1 of
   else if op == "?" then case holeAtomAt (advance st) of
     Just _ => Nothing
     Nothing => Just op
-  else Just op
+  else if op == "-" && minusLiteralAt p st then Nothing else Just op
+  -- `(-1)` / `(-1.5)`：`-` 与数字紧邻时是负字面量，不是 `(- 1)` section。
   _ => Nothing
+
+minusLiteralAt : Pos -> PState -> Bool
+minusLiteralAt p st = case peekTokAt st 2 of
+  Just (PTok (TInt _) q) => posLine q == posLine p && posCol q == posCol p + 1
+  Just (PTok (TFloat _) q) => posLine q == posLine p && posCol q == posCol p + 1
+  _ => False
 
 export countArrows : Expr -> Int
 countArrows (EInfix "->" _ rest _) = 1 + countArrows rest

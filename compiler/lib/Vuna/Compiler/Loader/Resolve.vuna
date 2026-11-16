@@ -165,7 +165,7 @@ ctorCandidates : List Module -> String -> Namespaces -> List Import -> String ->
 -- 保持词法遮蔽：本地优先，不并入 import 候选。纯构造子名（`Nil` 等）才做 union。
 ctorCandidates modules prefix ns imports name = Vuna.Compiler.Base.Common.bind (importedCtorTargets modules imports name) (\imp => let
   local = localCtorTargets prefix ns name
-in if notEmptyList local && name /= "Nil" && name /= "Cons" then OkC local
+in if notEmptyList local && name /= "Nil" && name /= "Cons" && name /= "::" then OkC local
 else OkC (nubNames (append local imp))
 )
 
@@ -706,8 +706,9 @@ else case stmts of
 -- 绑定都可能命中），支持「本地自定义 `trait Monad`」的夹具。
 -- | 在块作用域里解析 `bind` 一次（局部 trait 方法 / import / 外层绑定都可能命中）。
 resolveDoBind : List Module -> String -> String -> Namespaces -> List Import -> List String -> Check String
-resolveDoBind modules label prefix ns imports scope =
-  resolveGlobal modules label prefix ns imports scope "bind"
+resolveDoBind modules label prefix ns imports scope = case resolveGlobal modules label prefix ns imports scope ">>=" of
+  OkC n => OkC n
+  ErrC _ => resolveGlobal modules label prefix ns imports scope "bind"
 
 -- 非末条语句的链式降级：`bind` 已解析好，逐条解析语句表达式（do-binder 对后续语句可见，
 -- 与被降级的 lambda 作用域一致；`_` binder 不引入可见名字）。

@@ -54,12 +54,15 @@ builtinTyName v = case v of
     _ => Nothing
   _ => Nothing
 
+isEqShort : String -> Bool
+isEqShort m = m == "==" || m == "eq"
+
 -- 按实参类型 + 方法短名选 runtime 函数名（只有 Int / String 可特化；其它类型走 Eq 字典）。
 -- | 按实参类型与 `eq`/`neq` 方法短名选 runtime 函数名（Int / String / Float 可特化，其余报错）。
 export eqRuntimeName : String -> String -> Check String
-eqRuntimeName method "Int" = if method == "eq" then OkC "bi_eq_int" else OkC "bi_neq_int"
-eqRuntimeName method "String" = if method == "eq" then OkC "bi_eq_str" else OkC "bi_neq_str"
-eqRuntimeName method "Float" = if method == "eq" then OkC "bi_eq_float" else OkC "bi_neq_float"
+eqRuntimeName method "Int" = if isEqShort method then OkC "bi_eq_int" else OkC "bi_neq_int"
+eqRuntimeName method "String" = if isEqShort method then OkC "bi_eq_str" else OkC "bi_neq_str"
+eqRuntimeName method "Float" = if isEqShort method then OkC "bi_eq_float" else OkC "bi_neq_float"
 eqRuntimeName method tyName = ErrC (tcMsg (OpOnlyIntString method tyName) [method, tyName])
 
 -- ---------------------------------------------------------------

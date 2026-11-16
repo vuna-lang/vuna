@@ -1101,16 +1101,22 @@ expandRowListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Base.Common.bind (expandRowListLitGo nilName consName rest sp)
     (\t => OkC (EApp (EVar consName sp) [rowLitNameExpr e sp, rowLitLabel e, t] sp))
 
+-- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
+litFamilyCons : Ec -> String -> Maybe DtCtor
+litFamilyCons ec fam = case litFamilyCtor ec fam "::" of
+  Just c => Just c
+  Nothing => litFamilyCtor ec fam "Cons"
+
 -- | 把列表字面量按目标族展开成 Nil/Cons 应用；行字面量走 `Cons` 的三实参形态。
 expandListLit : Ec -> String -> List Expr -> Span -> Check Expr
 expandListLit ec fam elems sp = if fam == effRowFamilyName then case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
-  Just nilC => case litFamilyCtor ec fam "Cons" of
+  Just nilC => case litFamilyCons ec fam of
     Nothing => tcErr1 sp (UnknownName fam) fam
     Just consC => expandRowListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 else case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
-  Just nilC => case litFamilyCtor ec fam "Cons" of
+  Just nilC => case litFamilyCons ec fam of
     Nothing => tcErr1 sp (UnknownName fam) fam
     Just consC => expandListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 
@@ -2434,7 +2440,7 @@ resolveOverPatFuel (Succ k) ec ctx expected pat = case pat of
   PCon name args sp => if isListNilSyntax name then case litFamilyCtor ec (listLitFamily ec expected) "Nil" of
     Just c => resolveCtorPatFuel k ec ctx expected (dtCtorName c) args sp
     Nothing => OkC (Pair (PCon "__list_literal__" args sp) ec)
-  else if isListConsSyntax name then case litFamilyCtor ec (listLitFamily ec expected) "Cons" of
+  else if isListConsSyntax name then case litFamilyCons ec (listLitFamily ec expected) of
     Just c => resolveCtorPatFuel k ec ctx expected (dtCtorName c) args sp
     Nothing => OkC (Pair (PCon "__list_literal__" args sp) ec)
   else if isOverCtorName name then Vuna.Compiler.Base.Common.bind

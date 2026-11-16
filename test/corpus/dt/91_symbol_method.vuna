@@ -1,0 +1,22 @@
+-- 运算符是普通名字：trait 方法、instance 方法与 data 构造子都可以用符号名声明，
+-- 中缀使用只需要同名 fixity 声明。
+import Prelude
+
+export trait Combine a(..) where
+  (<+>) : a -> a -> a
+
+infixl 6 <+>
+
+instance Combine Int where
+  (<+>) x y = x * 10 + y
+
+data Pair2 : Type where
+  (<=>) : Int -> Int -> Pair2
+
+infixl 6 <=>
+
+firstOf2 : Pair2 -> Int
+firstOf2 ((<=>) x y) = x
+
+main : String
+main = show (1 <+> 2) ++ "/" ++ show (firstOf2 ((<=>) 3 4)) ++ "/" ++ show (1 <+> 2 <+> 3)

@@ -677,6 +677,31 @@ instanceHeadTerm (EVar n sp) = TGlobal n
 instanceHeadTerm _ = TGlobal "Int"
 
 -- 实例里出现 trait 没声明的方法 ⇒ 硬错误（不得静默忽略多余方法）。
+-- 方法短名的规范形式：同一方法的两种写法（`eq` 与 `==`、`lt` 与 `<` …）视为同名。
+-- 库里方法可以是标识符或运算符，deriving/手写实例用哪一种都应命中。
+canonicalMethodShort : String -> String
+canonicalMethodShort name = case baseNameOf name of
+  "eq" => "=="
+  "neq" => "/="
+  "lt" => "<"
+  "le" => "<="
+  "gt" => ">"
+  "ge" => ">="
+  "add" => "+"
+  "sub" => "-"
+  "mul" => "*"
+  "div" => "/"
+  "bind" => ">>="
+  other => other
+
+sameMethodShort : String -> String -> Bool
+sameMethodShort a b = canonicalMethodShort a == canonicalMethodShort b
+
+anySameMethod : String -> List String -> Bool
+anySameMethod name known = case known of
+  [] => False
+  k :: rest => if sameMethodShort name k then True else anySameMethod name rest
+
 export firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
 firstUnknownInstanceMethod cls methods =
   firstUnknownInstanceMethodGo (map (\m => baseNameOf (firstOf m)) cls.dtClassMethods) methods
@@ -685,7 +710,7 @@ export firstUnknownInstanceMethodGo : List String -> List Decl -> Maybe String
 firstUnknownInstanceMethodGo known [] = Nothing
 firstUnknownInstanceMethodGo known (d :: rest) = case d of
   DFun n pats body sp =>
-    if memName (baseNameOf n) known then firstUnknownInstanceMethodGo known rest else Just n
+    if anySameMethod (baseNameOf n) known then firstUnknownInstanceMethodGo known rest else Just n
   _ => firstUnknownInstanceMethodGo known rest
 
 -- 缺方法要在**精化方法体之前**判定：方法体本身可能还有类型错误（例如跨模块 trait
@@ -702,7 +727,7 @@ firstMissingInstanceMethodGo (m :: rest) decls =
 export hasMethodClauses : String -> List Decl -> Bool
 hasMethodClauses name [] = False
 hasMethodClauses name (d :: rest) = case d of
-  DFun n pats body sp => baseNameOf n == name || hasMethodClauses name rest
+  DFun n pats body sp => sameMethodShort n name || hasMethodClauses name rest
   _ => hasMethodClauses name rest
 
 -- 实例缺方法时把诊断落到 trait 里的**方法签名行**——先按类全名找到
@@ -809,7 +834,7 @@ export methodClausesGo : String -> List Decl -> List (Pair (List Pat) Expr) -> L
 methodClausesGo mname [] acc = reverse acc
 methodClausesGo mname (d :: rest) acc = case d of
   DFun n pats body sp =>
-    if baseNameOf n == baseNameOf mname then methodClausesGo mname rest (Pair pats body :: acc)
+    if sameMethodShort n mname then methodClausesGo mname rest (Pair pats body :: acc)
     else methodClausesGo mname rest acc
   _ => methodClausesGo mname rest acc
 

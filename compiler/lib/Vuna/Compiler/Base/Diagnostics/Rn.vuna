@@ -19,6 +19,10 @@ export data RnErr(..) : Nat -> Type where
   -- arity 1
   AmbiguousConstructorExport : String -> RnErr (Succ Zero)
   AmbiguousModule : String -> String -> RnErr (Succ (Succ Zero))
+  -- | 同一运算符在程序里声明了不止一次 fixity（符号的 fixity 全程序唯一）。
+  DuplicateFixity : String -> RnErr (Succ Zero)
+  -- | 内建运算符（`->` / `&&` / `||`）的 fixity 由编译器固定，不能声明。
+  BuiltinFixity : String -> RnErr (Succ Zero)
   CannotExportUnknownName : String -> RnErr (Succ Zero)
   DuplicateExport : String -> RnErr (Succ Zero)
   DuplicateModuleAlias : String -> RnErr (Succ Zero)
@@ -52,6 +56,8 @@ export rnCode : {n : Nat} -> RnErr n -> String
 rnCode DuplicateImport = "RN_DuplicateImport"
 rnCode (AmbiguousConstructorExport _) = "RN_AmbiguousConstructorExport"
 rnCode (AmbiguousModule _ _) = "RN_AmbiguousModule"
+rnCode (DuplicateFixity _) = "RN_DuplicateFixity"
+rnCode (BuiltinFixity _) = "RN_BuiltinFixity"
 rnCode (CannotExportUnknownName _) = "RN_CannotExportUnknownName"
 rnCode (DuplicateExport _) = "RN_DuplicateExport"
 rnCode (DuplicateModuleAlias _) = "RN_DuplicateModuleAlias"
@@ -98,6 +104,10 @@ rnTemplate (UnknownInterface _) = "unknown interface <0>"
 rnTemplate (UnknownType _) = "unknown type <0>"
 rnTemplate (UnknownFixity _) =
   "unknown fixity for operator <0> (declare it with infixl/infixr/infix)"
+rnTemplate (DuplicateFixity _) =
+  "operator <0> has more than one fixity declaration (a symbol has exactly one precedence/associativity in a program)"
+rnTemplate (BuiltinFixity _) =
+  "the fixity of built-in operator <0> is fixed by the compiler; remove the declaration"
 rnTemplate (UnknownVariable _) = "unbound variable <0>"
 rnTemplate (UnknownMacro _) = "unknown macro: <0>"
 rnTemplate (AmbiguousPrelude _) = "ambiguous implicit Prelude (found in: <0>)"
@@ -175,6 +185,8 @@ rnAll =
     RnEntry (rnCode (UnknownInterface "")) (rnTemplate (UnknownInterface "")) "未知接口",
     RnEntry (rnCode (UnknownType "")) (rnTemplate (UnknownType "")) "未知类型",
     RnEntry (rnCode (UnknownFixity "")) (rnTemplate (UnknownFixity "")) "未知运算符 fixity",
+    RnEntry (rnCode (DuplicateFixity "")) (rnTemplate (DuplicateFixity "")) "运算符 fixity 重复声明",
+    RnEntry (rnCode (BuiltinFixity "")) (rnTemplate (BuiltinFixity "")) "内建运算符 fixity 不可声明",
     RnEntry (rnCode (UnknownVariable "")) (rnTemplate (UnknownVariable "")) "未绑定变量",
     RnEntry (rnCode (UnknownMacro "")) (rnTemplate (UnknownMacro "")) "未知宏",
     RnEntry (rnCode (AmbiguousPrelude "")) (rnTemplate (AmbiguousPrelude "")) "隐式 Prelude 歧义",

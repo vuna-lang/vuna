@@ -118,16 +118,14 @@ parseWith mode path toks = case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => 
       [] => OkC parsed
       e :: rest => ErrC (withChildren rest e)
 
+-- fixity 是**程序级**属性：加载闭包里所有模块的声明构成一张表（import 到就全局生效），
+-- 不再按逐模块的可见闭包拼接。`Module` 里存的是该模块自己的声明。
 visibleFixitiesOf : List Module -> List Import -> List FixityDecl
-visibleFixitiesOf modules imports = concatMap (\imp => case findModule modules (importName imp) of
-  Just m => moduleFixitiesOf m
-  Nothing => []
-) imports
+visibleFixitiesOf modules imports = concatMap moduleFixitiesOf modules
 
--- 按运算符去重（保留第一处 = 本地声明优先，其次 import 顺序）。
--- 每个 Module 的 visible 列表是按 import 图拼接的，图里有大量 diamond，若不去重则
--- 列表长度随层数指数增长（`append` 递归会爆栈）。去重后每个模块的可见表只含
--- 不同运算符（O(运算符数)），闭包计算保持线性。
+-- 按「声明身份」去重（文件 + 起始行列）：同一个模块的声明从不同 import 路径到达时
+-- 只保留一份；不同模块对同一运算符的声明都保留，交给 `checkUniqueFixities` 报重复。
+-- 去重后长度是 O(不同声明数)，闭包拼接保持线性（import 图有大量 diamond）。
 dedupeFixities : List FixityDecl -> List FixityDecl
 dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
 
@@ -135,10 +133,19 @@ dedupeFixitiesGo : List FixityDecl -> HashMap String Int -> List FixityDecl -> L
 dedupeFixitiesGo [] seen acc = reverse acc
 dedupeFixitiesGo (d :: rest) seen acc =
   let
-    key = d.fixityOp
+    key = fixityDeclKey d
   in case Base.HashMap.lookup key seen of
     Just _ => dedupeFixitiesGo rest seen acc
     Nothing => dedupeFixitiesGo rest (Base.HashMap.insert key 1 seen) (d :: acc)
+
+-- 声明身份键：**运算符 + 声明处位置**。iface 里 span 被归一化成空，位置相同的不同
+-- 运算符不能互相去重，所以 op 必须进键；同一模块对同一运算符声明两次（值相同）在
+-- 源码装载时由模块级检查报错。
+fixityDeclKey : FixityDecl -> String
+fixityDeclKey d =
+  let
+    sp = d.fixitySpan
+  in "${d.fixityOp}@${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
 
 -- ---------------------------------------------------------------
 -- 模块导出表计算
@@ -636,9 +643,7 @@ loadModule fuel roots importerPkg modules stack imp =
                             ErrC e => pure (ErrC e)
                             OkC exports =>
                               let
-                                visible =
-                                  dedupeFixities
-                                    (append fixities (visibleFixitiesOf modules2 (append imports implicit)))
+                                visible = fixities
                               in pure
                                 (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
     else pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
@@ -762,9 +767,7 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
                   ErrC e => pure (ErrC e)
                   OkC exports =>
                     let
-                      visible =
-                        dedupeFixities
-                          (append fixities (visibleFixitiesOf modules (append imports implicit)))
+                      visible = fixities
                     in pure
                       (withLayerCheck (contextRoots ctx) (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (reexportedImportNames imports (append items reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
 
@@ -838,19 +841,17 @@ resolveProjectWith release project = resolveProjectKeeping release [] project
 export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (List Diagnostic) (Pair (List Decl) (List Module)))
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
-    entryTable =
-      tableOf
-        (dedupeFixities (append entryFixes (visibleFixitiesOf modules (append imports implicit))))
-  in Vuna.Compiler.Base.Common.bind (reorderProgram entryTable decls)
-    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Base.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2))))))))
+    projectFixities = dedupeFixities (append (concatMap moduleFixitiesOf modules) entryFixes)
+  in Vuna.Compiler.Base.Common.bind (checkUniqueFixities projectFixities)
+    (\fixes => Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls) (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Base.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))
 
-resolveModulesKeep : Bool -> List String -> List Module -> Check (Pair (List Module) (List Diagnostic))
-resolveModulesKeep release keep [] = OkC (Pair [] [])
-resolveModulesKeep release keep ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
-  if memName name keep then Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep rest)
-    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
-  else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixities) decls)
-    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
+resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
+resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
+resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity) :: rest) =
+  if memName name keep then Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
+    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity) (firstOf p2)) (secondOf p2)))
+  else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls)
+    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。

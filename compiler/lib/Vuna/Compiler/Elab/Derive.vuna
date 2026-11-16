@@ -46,23 +46,51 @@ traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
 -- 的 `case` 拿不到 scrutinee 的类型。
 export expandDerivings : List Decl -> Check (List Decl)
 expandDerivings decls =
-  Vuna.Compiler.Base.Common.bind (collectDerivings decls) (\insts => OkC (append decls insts))
+  Vuna.Compiler.Base.Common.bind (collectDerivings decls decls) (\insts => OkC (append decls insts))
 
-collectDerivings : List Decl -> Check (List Decl)
-collectDerivings [] = OkC []
-collectDerivings (d :: rest) = case d of
+-- 类方法的实际名字：优先符号名，没有时回落标识符名（旧库里方法仍叫 `eq` / `lt`）。
+-- 从声明列表里的 trait 声明取方法表——`deriving` 展开发生在类表建立之前。
+-- 同名 trait 可能同时出现（本模块声明 + 隐式 Prelude 的库 trait），逐个看：
+-- 只要任意一处声明了符号方法就用符号名，否则回落标识符名。
+traitMethodOf : List Decl -> String -> String -> String -> String
+traitMethodOf decls classShort symbolName identName =
+  let
+    _ = dbg! "derive-trace class=${classShort} names=${show (allTraitMethodNames decls classShort)}"
+    _ = dbg! "derive-trace symbol=${symbolName} ident=${identName}"
+  in if anyTraitHasMethod decls classShort symbolName then symbolName
+  else if anyTraitHasMethod decls classShort identName then identName else symbolName
+
+allTraitMethodNames : List Decl -> String -> List String
+allTraitMethodNames [] cls = []
+allTraitMethodNames (d :: rest) cls = case d of
+  DTrait tname params methods sp =>
+    if traitShortName tname == cls then append (map traitMethodName methods) (allTraitMethodNames rest cls)
+    else allTraitMethodNames rest cls
+  _ => allTraitMethodNames rest cls
+
+anyTraitHasMethod : List Decl -> String -> String -> Bool
+anyTraitHasMethod [] cls m = False
+anyTraitHasMethod (d :: rest) cls m = case d of
+  DTrait tname params methods sp =>
+    if traitShortName tname == cls && memName m (map traitMethodName methods) then True
+    else anyTraitHasMethod rest cls m
+  _ => anyTraitHasMethod rest cls m
+
+collectDerivings : List Decl -> List Decl -> Check (List Decl)
+collectDerivings all [] = OkC []
+collectDerivings all (d :: rest) = case d of
   DData name params kind ctors derivings viaField repr lin sp =>
-    if viaField then collectDerivings rest
-    else if length derivings == 0 then collectDerivings rest
-    else Vuna.Compiler.Base.Common.bind (derivingsFor name params ctors derivings sp)
-      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings rest) (\more => OkC (append insts more)))
+    if viaField then collectDerivings all rest
+    else if length derivings == 0 then collectDerivings all rest
+    else Vuna.Compiler.Base.Common.bind (derivingsFor all name params ctors derivings sp)
+      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
   -- record 不再降级成 DData，派生直接从字段表合成单构造子骨架。
   DRecord name params fields derivings viaField repr lin sp =>
-    if viaField then collectDerivings rest
-    else if length derivings == 0 then collectDerivings rest
-    else Vuna.Compiler.Base.Common.bind (recordDerivingsFor name params fields derivings sp)
-      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings rest) (\more => OkC (append insts more)))
-  _ => collectDerivings rest
+    if viaField then collectDerivings all rest
+    else if length derivings == 0 then collectDerivings all rest
+    else Vuna.Compiler.Base.Common.bind (recordDerivingsFor all name params fields derivings sp)
+      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
+  _ => collectDerivings all rest
 
 -- | record 的派生骨架——字段箭头（不含族参数 Pi）+ 返回记录类型；构造子名 = record 名。
 recordCtorOf : String -> List String -> List Field -> Span -> Ctor
@@ -70,21 +98,22 @@ recordCtorOf dname params fields sp =
   Ctor dname (recordArrowType fields (recordRetType dname params sp) sp) (length fields) sp
 
 -- | record 的 `deriving (...)` 展开成与 data 相同的实例规则（合成单构造子）。
-recordDerivingsFor : String -> List String -> List Field -> List String -> Span -> Check (List Decl)
-recordDerivingsFor dname params fields derivings sp =
-  derivingsFor dname params [recordCtorOf dname params fields sp] derivings sp
+recordDerivingsFor : List Decl -> String -> List String -> List Field -> List String -> Span -> Check (List Decl)
+recordDerivingsFor all dname params fields derivings sp =
+  derivingsFor all dname params [recordCtorOf dname params fields sp] derivings sp
 
-derivingsFor : String -> List String -> List Ctor -> List String -> Span -> Check (List Decl)
-derivingsFor dname params ctors derivings sp = derivingsForGo dname params ctors derivings sp []
+derivingsFor : List Decl -> String -> List String -> List Ctor -> List String -> Span -> Check (List Decl)
+derivingsFor all dname params ctors derivings sp =
+  derivingsForGo all dname params ctors derivings sp []
 
-derivingsForGo : String -> List String -> List Ctor -> List String -> Span -> List Decl -> Check (List Decl)
-derivingsForGo dname params ctors [] sp acc = OkC (reverse acc)
+derivingsForGo : List Decl -> String -> List String -> List Ctor -> List String -> Span -> List Decl -> Check (List Decl)
+derivingsForGo all dname params ctors [] sp acc = OkC (reverse acc)
 -- 参数化 data 的派生生成**带 context 的实例**（`Eq a => Eq (Box a)`）。
 -- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
 -- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
-derivingsForGo dname params ctors (t :: rest) sp acc =
-  Vuna.Compiler.Base.Common.bind (deriveInstance dname params ctors t sp)
-    (\decl => derivingsForGo dname params ctors rest sp (decl :: acc))
+derivingsForGo all dname params ctors (t :: rest) sp acc =
+  Vuna.Compiler.Base.Common.bind (deriveInstance all dname params ctors t sp)
+    (\decl => derivingsForGo all dname params ctors rest sp (decl :: acc))
 
 -- ctx 参数：data 参数里在构造子字段类型中出现过的（保持声明顺序）。
 deriveCtxParams : List String -> List Ctor -> List String
@@ -111,8 +140,8 @@ anyExprMentions p (e :: rest) = exprMentionsName p e || anyExprMentions p rest
 -- 单个类的实例声明。`tn` 是 Loader 解析后的完整类名；方法名（`show` / `eq` / ...）由
 -- `elabInstance` 按类方法的最后一段匹配，因此实例里仍写短名。
 -- 参数化 data 生成带 ctx 的 DInstance（ctx 顺序 = 声明顺序，见 deriveCtxParams）。
-deriveInstance : String -> List String -> List Ctor -> String -> Span -> Check Decl
-deriveInstance dname params ctors tn sp =
+deriveInstance : List Decl -> String -> List String -> List Ctor -> String -> Span -> Check Decl
+deriveInstance all dname params ctors tn sp =
   let
     hd = instHead tn dname params sp
     used = deriveCtxParams params ctors
@@ -125,21 +154,24 @@ deriveInstance dname params ctors tn sp =
       in OkC (DInstance ctxExprs hd ms sp)
     "Eq" =>
       let
-        eqProj = traitMethodGlobal tn "eq"
+        eqName = traitMethodOf all "Eq" "==" "eq"
+        neqName = traitMethodOf all "Eq" "/=" "neq"
         ms =
-          [ DFun "eq" [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
-            DFun "neq" [PVar "sx" sp, PVar "sy" sp] (neqBody eqProj sp) sp
+          [ DFun eqName [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
+            DFun neqName [PVar "sx" sp, PVar "sy" sp] (neqBody "==" sp) sp
           ]
       in OkC (DInstance ctxExprs hd ms sp)
     "Ord" =>
       let
-        ltProj = traitMethodGlobal tn "lt"
-        leProj = traitMethodGlobal tn "le"
+        ltName = traitMethodOf all "Ord" "<" "lt"
+        leName = traitMethodOf all "Ord" "<=" "le"
+        gtName = traitMethodOf all "Ord" ">" "gt"
+        geName = traitMethodOf all "Ord" ">=" "ge"
         ms =
-          [ DFun "lt" [PVar "sx" sp, PVar "sy" sp] (ordBody leProj ctors sp) sp,
-            DFun "le" [PVar "sx" sp, PVar "sy" sp] (leBody ltProj sp) sp,
-            DFun "gt" [PVar "sx" sp, PVar "sy" sp] (gtBody ltProj sp) sp,
-            DFun "ge" [PVar "sx" sp, PVar "sy" sp] (geBody leProj sp) sp
+          [ DFun ltName [PVar "sx" sp, PVar "sy" sp] (ordBody "<=" ctors sp) sp,
+            DFun leName [PVar "sx" sp, PVar "sy" sp] (leBody "<" sp) sp,
+            DFun gtName [PVar "sx" sp, PVar "sy" sp] (gtBody "<" sp) sp,
+            DFun geName [PVar "sx" sp, PVar "sy" sp] (geBody "<=" sp) sp
           ]
       in OkC (DInstance ctxExprs hd ms sp)
     "Hashable" =>

@@ -120,7 +120,7 @@ parseExportMembers st =
 parseMemberNames : Int -> PState -> Check (Pair (List String) PState)
 parseMemberNames fuel st =
   if fuel <= 0 then icFuel "parser"
-  else Vuna.Compiler.Base.Common.step (expectIdent st)
+  else Vuna.Compiler.Base.Common.step (expectDeclName st)
     (\name, st1 => if atSym st1 "," then Vuna.Compiler.Base.Common.step (parseMemberNames (fuel - 1) (advance st1)) (\rest, st2 => OkC (Pair (Base.List.Cons name rest) st2)) else Vuna.Compiler.Base.Common.bind (expectSym st1 ")") (\st2 => OkC (Pair [name] st2)))
 
 exportItemOf : String -> ExportMembers -> Span -> ExportItem
@@ -350,6 +350,10 @@ parseExportedValue op st blockCol = case peekTok st of
       (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2))
     else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol name p)
       (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2))
+  -- 声明位带括号的符号名：`export (==) : ...` / `export (<+>) x y = ...`。
+  PTok (TSym "(") p =>
+    Vuna.Compiler.Base.Common.step (expectDeclName st)
+      (\name, st1 => if atSym st1 ":" then Vuna.Compiler.Base.Common.step (parseSignature st1 blockCol True name (peekPos st)) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2)) else Vuna.Compiler.Base.Common.step (parseClause st1 blockCol name (peekPos st)) (\decl, st2 => OkC (Pair (ParsedDecl Nothing (Just decl) (Just (ESValue name (spanOf st st2))) (opacitySpecOf op name (spanOf st st2))) st2)))
   PTok (TSym sym) p => if isReservedValueName sym then ps1 st (ExpectedToken "value name") "value name"
   else
     let
@@ -541,6 +545,22 @@ parseFixityDecl st blockCol assoc kwPos =
   Vuna.Compiler.Base.Common.step (expectFixityLevel (advance st))
     (\level, st1 => Vuna.Compiler.Base.Common.step (expectOpName st1) (\op, st2 => if atSym st2 "=" then Vuna.Compiler.Base.Common.bind (expectSym st2 "=") (\st3 => Vuna.Compiler.Base.Common.step (expectOpName st3) (\target, st4 => OkC (Pair (FixityDecl op level assoc (Just target) (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st4)) (posCol (lastPos st4)))) st4))) else OkC (Pair (FixityDecl op level assoc Nothing (Span (fileOf st) (posLine kwPos) (posCol kwPos) (posLine (lastPos st2)) (posCol (lastPos st2)))) st2)))
 
+-- 声明位的名字：标识符 / `(sym)` / 裸符号。trait 方法、instance 方法、data 构造子
+-- 与导出成员列表共用，允许运算符与标识符同等使用。保留符号不是可定义名。
+expectDeclName : PState -> Check (Pair String PState)
+expectDeclName st = case peekTok st of
+  PTok (TIdent name) _ => OkC (Pair name (advance st))
+  PTok (TSym "(") _ => case peekTokAt st 1 of
+    Just (PTok (TSym sym) _) => if isReservedValueName sym then ps1 st (ExpectedToken "operator") "operator"
+    else case peekTokAt st 2 of
+      Just (PTok (TSym ")") _) => OkC (Pair sym (advance (advance (advance st))))
+      _ => ps1 st (ExpectedToken "operator") "operator"
+    _ => ps1 st (ExpectedToken "operator") "operator"
+  PTok (TSym sym) _ =>
+    if isReservedValueName sym then ps1 st (ExpectedToken "operator") "operator"
+    else OkC (Pair sym (advance st))
+  _ => ps0 st ExpectedIdentifier
+
 expectFixityLevel : PState -> Check (Pair Int PState)
 expectFixityLevel st = case peekTok st of
   PTok (TInt n) p => if n >= 0 && n <= 9 then OkC (Pair n (advance st)) else ps0 st FixityLevelRange
@@ -569,6 +589,11 @@ parseDecl st blockCol = case peekTok st of
   PTok (TKw "record") p => parseRecord False ReprAuto st blockCol p
   PTok (TKw "trait") p => parseTrait st blockCol p
   PTok (TKw "instance") p => parseInstance st blockCol p
+  -- 声明位的运算符名：`(==) : ...` / `(<+>) x y = ...`（与 trait 方法 / instance 方法 /
+  -- 构造子一致）。裸符号写法（`<+> x y = ...`）同样接受。
+  PTok (TSym "(") p =>
+    Vuna.Compiler.Base.Common.step (expectDeclName st)
+      (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol True name p else parseClause st1 blockCol name p)
   PTok (TIdent name) p => if name == "alias" && tierFollows st then parseTieredDecl ReprAlias st blockCol p
   else if name == "boxed" && tierFollows st then parseTieredDecl ReprBoxed st blockCol p
   else
@@ -913,7 +938,7 @@ parseMethodSigList fuel st methodCol = if fuel <= 0 then icFuel "parser"
 else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == methodCol then Vuna.Compiler.Base.Common.step (expectIdent st)
+    if col == methodCol then Vuna.Compiler.Base.Common.step (expectDeclName st)
       (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 ":") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st2) st2 methodCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st3b => Vuna.Compiler.Base.Common.step (parseMethodSigList (fuel - 1) st3b methodCol) (\rest, st4 => OkC (Pair (Base.List.Cons (TraitMethod name ty (spanOf st st3)) rest) st4))))))
     else if col > methodCol then ps0 st UnexpectedIndentInTrait else OkC (Pair [] st)
 
@@ -978,13 +1003,22 @@ else case peekPos st of
     else if col > declCol then ps0 st UnexpectedIndentInInstance else OkC (Pair [] st)
 
 parseInstanceDecl : PState -> Int -> Check (Pair Decl PState)
-parseInstanceDecl st blockCol = case peekTok st of
-  PTok (TIdent name) p =>
-    let
-      st1 = advance st
-    in if atSym st1 ":" then parseSignature st1 blockCol False name p
-    else parseClause st1 blockCol name p
-  _ => ps0 st ExpectedInstanceMethod
+parseInstanceDecl st blockCol =
+  if instanceMethodStart st then Vuna.Compiler.Base.Common.step (expectDeclName st)
+    (\name, st1 => if atSym st1 ":" then parseSignature st1 blockCol False name (peekPos st) else parseClause st1 blockCol name (peekPos st))
+  else ps0 st ExpectedInstanceMethod
+
+-- instance 方法名：标识符、`(sym)`、裸符号；其它 token 仍走 `ExpectedInstanceMethod`。
+instanceMethodStart : PState -> Bool
+instanceMethodStart st = case peekTok st of
+  PTok (TIdent _) _ => True
+  PTok (TSym "(") _ => case peekTokAt st 1 of
+    Just (PTok (TSym sym) _) => case peekTokAt st 2 of
+      Just (PTok (TSym ")") _) => not (isReservedValueName sym)
+      _ => False
+    _ => False
+  PTok (TSym sym) _ => not (isReservedValueName sym)
+  _ => False
 
 parseParams : Int -> PState -> Check (Pair (List String) PState)
 parseParams fuel st = if fuel <= 0 then icFuel "parser"
@@ -1004,7 +1038,7 @@ parseCtorList fuel st ctorCol = if fuel <= 0 then icFuel "parser"
 else if isEof st then OkC (Pair [] st)
 else case peekPos st of
   Pos line col =>
-    if col == ctorCol then Vuna.Compiler.Base.Common.step (expectIdent st)
+    if col == ctorCol then Vuna.Compiler.Base.Common.step (expectDeclName st)
       (\name, st1 => Vuna.Compiler.Base.Common.bind (expectSym st1 ":") (\st2 => Vuna.Compiler.Base.Common.step (parseExpr (stateFuel st2) st2 ctorCol) (\ty, st3 => Vuna.Compiler.Base.Common.bind (rejectCtxSuffix st3) (\st3b => Vuna.Compiler.Base.Common.step (parseCtorList (fuel - 1) st3b ctorCol) (\rest, st4 => OkC (Pair (Base.List.Cons (Ctor name ty (countArrows ty) (spanOf st st3)) rest) st4))))))
     else if col > ctorCol then ps0 st UnexpectedIndentInData else OkC (Pair [] st)
 
@@ -1045,7 +1079,21 @@ else case peekTok st of
   PTok (TKw "do") p => parseDo (fuel - 1) st blockCol
   PTok (TKw "perform") p => parsePerform (fuel - 1) st blockCol
   PTok (TKw "handle") p => parseHandle (fuel - 1) st blockCol
+  -- 一元负号：前缀位置才成立（表达式开头 / 运算符后 / `(` 等之后），所以 `f - 1`
+  -- 仍是减法。字面量直接成为负字面量；其它表达式走 `negate`。
+  PTok (TSym "-") p => parseNegation (fuel - 1) st blockCol
   _ => parseApplication (fuel - 1) st blockCol
+
+parseNegation : Int -> PState -> Int -> Check (Pair Expr PState)
+parseNegation fuel st blockCol = if fuel <= 0 then icFuel "parser"
+else case peekTokAt st 1 of
+  Just (PTok (TInt n) _) =>
+    OkC (Pair (EInt (0 - n) (spanOf st (advance (advance st)))) (advance (advance st)))
+  Just (PTok (TFloat raw) _) =>
+    OkC (Pair (EFloat ("-" ++ raw) (spanOf st (advance (advance st)))) (advance (advance st)))
+  _ =>
+    Vuna.Compiler.Base.Common.step (parseApplication (fuel - 1) (advance st) blockCol)
+      (\e, st1 => OkC (Pair (EApp (EVar "negate" (spanOf st (advance st))) [e] (spanOf st st1)) st1))
 
 parseApplication : Int -> PState -> Int -> Check (Pair Expr PState)
 parseApplication fuel st blockCol = if fuel <= 0 then icFuel "parser"
@@ -1118,6 +1166,13 @@ else case peekTok st of
       st1 = advance st
     in if atSym st1 "{" then Vuna.Compiler.Base.Common.bind (expectSym st1 "{")
       (\st1b => Vuna.Compiler.Base.Common.step (parseRecordAssignments (fuel - 1) st1b blockCol) (\fields, st2 => OkC (Pair (ERecord name fields (spanOf st st2)) st2)))
+    else if atSym st1 "." then case peekTokAt st1 1 of
+      -- 限定符号引用 `A.+`：模块名 + `.` + 符号名，合成一个带点全名交给 Resolve。
+      Just (PTok (TSym sym) _) =>
+        if isReservedValueName sym then OkC (Pair (EVar name (spanOf st st1)) st1)
+        else OkC
+          (Pair (EVar (name ++ "." ++ sym) (spanOf st (advance (advance st1)))) (advance (advance st1)))
+      _ => OkC (Pair (EVar name (spanOf st st1)) st1)
     else if macroBangAt st1 p name then Vuna.Compiler.Base.Common.bind (expectSym st1 "!")
       (\st1b => Vuna.Compiler.Base.Common.step (parseArgs (fuel - 1) st1b blockCol) (\args, st2 => OkC (Pair (macroAtom name args (spanOf st st2) (spanOf st st1b)) st2)))
     else OkC (Pair (EVar name (spanOf st st1)) st1)
@@ -1622,6 +1677,16 @@ else case peekTok st of
     else if ctorPatternStart name then Vuna.Compiler.Base.Common.step (parsePatternAtoms (fuel - 1) st1 blockCol)
       (\args, st2 => OkC (Pair (PCon name args (spanOf st st2)) st2))
     else parsePatternAtom (fuel - 1) st blockCol
+  -- 符号构造子：`(sym) p1 p2`（无参时 `(sym)` 本身是空构造子模式）。
+  PTok (TSym "(") _ => case peekTokAt st 1 of
+    Just (PTok (TSym sym) _) => if isReservedValueName sym then parsePatternAtom (fuel - 1) st blockCol
+    else case peekTokAt st 2 of
+      Just (PTok (TSym ")") _) =>
+        Vuna.Compiler.Base.Common.step
+          (parsePatternAtoms (fuel - 1) (advance (advance (advance st))) blockCol)
+          (\args, st2 => OkC (Pair (PCon sym args (spanOf st st2)) st2))
+      _ => parsePatternAtom (fuel - 1) st blockCol
+    _ => parsePatternAtom (fuel - 1) st blockCol
   _ => parsePatternAtom (fuel - 1) st blockCol
 
 parseRecordPatternFields : Int -> PState -> Int -> Check (Pair (List (Pair String Pat)) PState)
