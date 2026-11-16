@@ -2166,7 +2166,7 @@ auditCheckLib wantWarnings ctx names = do
 -- ---------------------------------------------------------------
 -- | split 输入摘要的 schema（结构变化必须 bump；旧 blob 自然失效）。
 splitNodeSchema : String
-splitNodeSchema = "vuna-split-node 3"
+splitNodeSchema = "vuna-split-node 2"
 
 -- | split 载荷的编码版本（`Store` 的 codec 段）。
 -- 载荷是 `canonicalTopo` 后的规范拓扑序。命中路径直接按
