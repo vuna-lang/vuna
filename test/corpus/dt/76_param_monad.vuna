@@ -13,6 +13,11 @@ instance Monad (State s) where
     MkPair a s2 => runState (k a) s2
   )
 
+instance Functor (State s) where
+  fmap f st = MkState (\s => case runState st s of
+    MkPair a s2 => MkPair (f a) s2
+  )
+
 instance Applicative (State s) where
   pure x = MkState (\s => MkPair x s)
   ap mf mx = MkState (\s => case runState mf s of

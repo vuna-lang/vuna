@@ -235,7 +235,7 @@ main = pretty Red ++ "/" ++ show Red
 ```
 
 - **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
-  默认方法、父类、关联类型未实现（见 [debt.md](debt.md)）。
+  默认方法、关联类型未实现（见 [debt.md](debt.md)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
@@ -260,6 +260,11 @@ main = pretty Red ++ "/" ++ show Red
   ```
   签名约束、实例头与实例 ctx 的实参个数必须与 trait 的参数个数一致；实例搜索按完整的
   `Dict_C a1 .. an` 头统一（不是只看第一个参数）。
+- **父类约束**：`trait Functor f => Applicative f where ...`（多个用逗号）。父类字典
+  **不嵌入**子类字典值；实例声明时逐个搜索直接父类实例（实例 ctx 或全局实例），缺失报
+  `TC_SuperclassNotSatisfied`。泛型 body 使用父类方法时，刚性字典目标走既有提升规则，
+  变成额外隐式字典参数，调用点按实例搜索填充（`Monad m =>` 因而不必手写三段约束）。
+  父类必须是在当前声明之前可见的 trait（同模块按源顺序），因此父子关系天然无环。
 - **实例按 head 全局唯一**：同一 head 的重复 / 重叠实例报 `duplicate instance` /
   `overlapping instance`（含 `deriving` 生成的实例）。**没有命名实例**：不存在
   `instance C T as name` 或 `@name` 选择，相干性只靠「同一 head 唯一」。
@@ -332,7 +337,7 @@ describe x y = if x == y then show x else show x ++ "/" ++ show y
   参数（与不写约束的签名同一条推断路径，`mem : a -> L a -> Bool` 因此不变）。
 - 调用点没有新语法：类型实参由统一解出，字典实参按实例搜索填充。
 - 只支持顶层签名：`where` / `let`、`axiom`、trait 方法、构造子 / 记录字段写 `=>` 报
-  `[PS_ConstraintUnsupportedHere]`（trait 方法约束是父类语义，未实现）。未声明接口头报
+  `[PS_ConstraintUnsupportedHere]`（方法级约束未实现；父类约束写在 trait 头）。未声明接口头报
   `unknown interface <name>`；实参个数与 trait 参数个数不符报 `[TC_ConstraintNotDict]`；
   kind 不符报 `[TC_TypeMismatch]`。
 
@@ -379,13 +384,16 @@ main = case (MkEmail "x@y") of MkEmail s => s
     pure (x + y)
   ```
 
-- `Functor`（`fmap`）与 `Monad`（`bind`）在 `base/lib/Base/Monad.vuna`；`pure` / `liftA2` / `ap`
-  在 `Base.Applicative`（`Base.Monad` 为兼容重导出它）。`Maybe` / `List` / `Result` /
-  `State` / `Reader` / `Error` 各有 `Functor` / `Applicative` / `Monad` 三个实例
-  （`Eff r` 也有，见 [effects.md](effects.md) §8）。`Monad m` 的 `m` 是
-  kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），实例 head 是
-  类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
-  声明期报错。没有父类：`Monad` 不自动提供 `Applicative`，每个 monad 类型要写全三个实例。
+- `Functor`（`fmap`）在 `base/lib/Base/Functor.vuna`；`pure` / `liftA2` / `ap` 在
+  `Base.Applicative`；`Monad`（`bind`）在 `Base.Monad`（重导出 `Base.Applicative` /
+  `Base.Functor`）。`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` 各有
+  `Functor` / `Applicative` / `Monad` 三个实例（`Eff r` 也有，见 [effects.md](effects.md) §8）。
+  `Monad m` 的 `m` 是 kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），
+  实例 head 是类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
+  声明期报错。**父类链**：`trait Functor f => Applicative f`、`trait Applicative m => Monad m`；
+  每个实例仍要写全三个（实例声明检查父类实例存在）。泛型代码只写 `Monad m =>` 时，
+  body 对 `pure` / `fmap` 的刚性字典需求由既有提升机制变成额外隐式字典参数，
+  调用点按实例搜索填充；不需要手写三段约束。
 - **`Eff`** 是 `base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。动作只在 `main`
   由运行时经 `runPure` 执行。

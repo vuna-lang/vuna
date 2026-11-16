@@ -9,6 +9,11 @@ data Opt a : Type where
   Opt : a -> Opt a
   None : Opt a
 
+instance Functor Opt where
+  fmap f o = case o of
+    Opt x => Opt (f x)
+    None => None
+
 instance Applicative Opt where
   pure x = Opt x
   ap mf mx = case mf of

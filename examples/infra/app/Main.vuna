@@ -260,7 +260,7 @@ declFixtures =
     DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) spA,
     DData "Color" [] (EVar "Type" spA) [Ctor "Red" (EVar "Color" spA) 0 spA, Ctor "Green" (EVar "Color" spA) 0 spB] [] False ReprAuto False spA,
     DRecord "Point" [] [Field "x" (EVar "Int" spA) spA, Field "y" (EVar "Int" spB) spB] [] False ReprAuto False spA,
-    DTrait "Show" [TraitParam "a" Nothing] [TraitMethod "show" (EVar "a" spA) spA] spB,
+    DTrait "Show" [TraitParam "a" Nothing] [] [TraitMethod "show" (EVar "a" spA) spA] spB,
     DInstance [] (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA) [DFun "show" [PWild spA] (EStr "c" spA) spA] spA,
     DAxiom "ax" (EVar "Int" spA) spA,
     DExtern "ext" "c_ext" (EVar "Int" spA) spA,

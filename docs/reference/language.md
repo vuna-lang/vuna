@@ -194,7 +194,8 @@ M = Int
 ## 签名的 trait 约束
 
 顶层签名可写约束前缀（`f : Eq a, Show a => a -> String`）；语义、绑定顺序、诊断与边界见
-[records-traits.md](records-traits.md)。约束只允许在顶层签名上，其它位置写 `=>` 报
+[records-traits.md](records-traits.md)。约束只允许在顶层签名上（以及 trait 头的父类前缀
+`trait Functor f => Applicative f where`），其它位置写 `=>` 报
 `[PS_ConstraintUnsupportedHere]`。
 
 显式隐式 binder 可以写在约束之前（`{a b : Type} -> Convert a b => a -> b`）：同一

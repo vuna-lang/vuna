@@ -29,8 +29,9 @@
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Num` | 数值算术 trait：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
-| `Base.Monad` | `Functor` / `Monad` trait（`Monad` 只有 `bind`）；为兼容既有 `import Base.Monad`，本模块重导出 `Base.Applicative`（`pure` / `liftA2` / `ap`） |
-| `Base.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；`liftA2` 暂不作派生）；`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` / `Eff` 实例 |
+| `Base.Monad` | `Monad` trait（只有 `bind`；父类 `Applicative`）；重导出 `Base.Applicative`（进而重导出 `Base.Functor`），既有 `import Base.Monad` 仍看到 `fmap` / `pure` / `liftA2` / `ap` |
+| `Base.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；父类 `Functor`，重导出 `Base.Functor`）；`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` / `Eff` 实例 |
+| `Base.Functor` | `Functor` trait（`fmap`）；`Applicative` 的父类 |
 | `Base.Monoid` | `Semigroup`（`mappend`）与 `Monoid`（`mempty`）trait（无父类，泛型代码同时约束两者）；`List` / `String` / `Maybe` / `Nat` / `Unit` 实例 |
 | `Base.Foldable` | `Foldable` trait（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；`List` / `Maybe` / `Result` 实例 |
 | `Base.Traversable` | `Traversable t f`（双参数：容器 + Applicative）与方法 `mapM : (a -> f b) -> t a -> f (t b)`；`List` / `Maybe` / `Result` 实例 |
@@ -96,7 +97,8 @@ module Base.HashMap (HashMap, fromList, insert, insertAll, lookup, member, ofNam
 module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
 module Base.Unit (Unit(..)) where
 module Base.Hashable (Hashable(..), hashCombine, hashStr) where
-module Base.Applicative (Applicative(..)) where
+module Base.Functor (Functor(..)) where
+module Base.Applicative (Applicative(..), module Base.Functor) where
 module Base.Monoid (Monoid(..), Semigroup(..)) where
 module Base.Foldable (Foldable(..), foldMap) where
 module Base.Traversable (Traversable(..)) where
@@ -104,7 +106,7 @@ module Base.Nat (Nat(..), plus, minus, mult, toInt, fromInt, fromIntMaybe,
                  pred, isZero) where
 module Base.Num (Num(..)) where
 module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
-module Base.Monad (Functor(..), Monad(..), module Base.Applicative) where
+module Base.Monad (Monad(..), module Base.Applicative) where
 module Base.Error (Error, catchError, ok, runError, throwError) where
 ```
 
