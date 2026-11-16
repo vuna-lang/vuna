@@ -540,29 +540,38 @@ else case scanTemplateText (fuel - 1) False body [] [] of
 -- trivia 之后逐个 token，直到 EOF；注释在 trivia 阶段一并收集（`lexComments` 与 CST
 -- 的 trivia 都取自这一次扫描）。每个 token 扣 1 步（各扫描器自带够用的 fuel：token
 -- 内的字符数 ≤ 剩余源码长度，见 `sourceFuel` 的上界说明）。
+-- 主循环是**尾递归**（token 逆序累积，出口一次 `reverse`）：递归深度等于源码 token 数，
+-- 非尾形式在固定大小的 wasm 栈上会被大文件（如编译器自身的模块）耗尽。
 export lexCharsWith : Int -> List Comment -> Chars -> Check (Pair (List PTok) (List Comment))
-lexCharsWith fuel acc cs = if fuel <= 0 then icFuel "lexer"
+lexCharsWith fuel acc0 cs = case lexCharsWithRev fuel acc0 [] cs of
+  ErrC e => ErrC e
+  OkC (Pair toks comments) => OkC (Pair (reverse toks) comments)
+
+lexCharsWithRev : Int -> List Comment -> List PTok -> Chars -> Check (Pair (List PTok) (List Comment))
+lexCharsWithRev fuel acc toks cs = if fuel <= 0 then icFuel "lexer"
 else case skipTriviaComments fuel cs of
   ErrC e => ErrC e
-  OkC (Pair cs2 comments) => if charsEmpty cs2 then OkC (Pair [PTok TEof (charsPos cs2)] (reverse (append (reverse comments) acc)))
+  OkC (Pair cs2 comments) => if charsEmpty cs2 then OkC (Pair (PTok TEof (charsPos cs2) :: toks) (reverse (append (reverse comments) acc)))
   else case lexOneToken fuel cs2 of
     -- 末尾 trivia 里的注释也要收（否则文件尾注释会从注释表里消失）。
     ErrC e => ErrC e
-    OkC (Pair tok cs3) => case lexCharsWith (fuel - 1) (append (reverse comments) acc) cs3 of
-      ErrC e => ErrC e
-      OkC (Pair toks allComments) => OkC (Pair (tok :: toks) allComments)
+    OkC (Pair tok cs3) =>
+      lexCharsWithRev (fuel - 1) (append (reverse comments) acc) (tok :: toks) cs3
 
--- | token 流主循环（不收集注释）：编译器热路径只走这一条。
+-- | token 流主循环（不收集注释）：编译器热路径只走这一条。尾递归，见 `lexCharsWith`。
 export lexChars : Int -> Chars -> Check (List PTok)
-lexChars fuel cs = if fuel <= 0 then icFuel "lexer"
+lexChars fuel cs = case lexCharsRev fuel [] cs of
+  ErrC e => ErrC e
+  OkC toks => OkC (reverse toks)
+
+lexCharsRev : Int -> List PTok -> Chars -> Check (List PTok)
+lexCharsRev fuel acc cs = if fuel <= 0 then icFuel "lexer"
 else case skipTrivia fuel cs of
   ErrC e => ErrC e
-  OkC cs2 => if charsEmpty cs2 then OkC [PTok TEof (charsPos cs2)]
+  OkC cs2 => if charsEmpty cs2 then OkC (PTok TEof (charsPos cs2) :: acc)
   else case lexOneToken fuel cs2 of
     ErrC e => ErrC e
-    OkC (Pair tok cs3) => case lexChars (fuel - 1) cs3 of
-      ErrC e => ErrC e
-      OkC toks => OkC (tok :: toks)
+    OkC (Pair tok cs3) => lexCharsRev (fuel - 1) (tok :: acc) cs3
 
 -- | 一次扫描的产物：token 流 + 注释表（源码顺序）。注释侧消费者（CST、
 -- `parseSourceWithComments`、`lexComments`）用这一份，避免第二次全量词法。
