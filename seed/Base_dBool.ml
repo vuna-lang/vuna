@@ -1,21 +1,21 @@
 open Vuna_runtime
-# 46 "Base/Bool.vuna"
+# 43 "Base/Bool.vuna"
 let v_Show_uBase_uBool_uBool = (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fun b -> (if b then "True" else "False"))))
 
-# 50 "Base/Bool.vuna"
+# 47 "Base/Bool.vuna"
 let v_Hashable_uBase_uBool_uBool = (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun b -> (if b then 1 else 0))))
 
-# 22 "Base/Bool.vuna"
+# 19 "Base/Bool.vuna"
 let v_Base_dBool_dnot = (fun mc0 -> (if mc0 then false else true))
 
-# 27 "Base/Bool.vuna"
+# 24 "Base/Bool.vuna"
 let v_Base_dBool_dand = (fun mc0 mc1 -> (if mc0 then mc1 else false))
 
-# 32 "Base/Bool.vuna"
+# 29 "Base/Bool.vuna"
 let v_Base_dBool_dor = (fun mc0 mc1 -> (if mc0 then true else mc1))
 
-# 37 "Base/Bool.vuna"
+# 34 "Base/Bool.vuna"
 let v_Base_dBool_dxor = (fun mc0 mc1 -> (if mc0 then (v_Base_dBool_dnot mc1) else mc1))
 
-# 42 "Base/Bool.vuna"
+# 39 "Base/Bool.vuna"
 let v_Base_dBool_dbool = (fun mc0 mc1 mc2 -> (if mc2 then mc1 else mc0))
