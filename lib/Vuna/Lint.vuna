@@ -477,7 +477,7 @@ parseLintOpts parsed = case formatOf (flagValue parsed "format") of
     Just maxWarnings => case intOf (flagValue parsed "max-passes") 8 of
       Nothing => Nothing
       Just maxPasses =>
-        if maxPasses <= 0 || maxWarnings < -1 then Nothing
+        if maxPasses <= 0 || maxWarnings /= -2 && maxWarnings < -1 then Nothing
         else Just
           (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache"))
 
