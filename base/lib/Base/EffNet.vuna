@@ -29,8 +29,21 @@ export data NetOp(..) : Type where
   Send : Int -> String -> NetOp
   Close : Int -> NetOp
   Connect : String -> NetOp
+  AcceptWithin : Int -> Int -> NetOp
+  RecvWithin : Int -> Int -> Int -> NetOp
+  SendWithin : Int -> String -> Int -> NetOp
 
--- | 操作的结果类型族：`Recv` 返回 `Maybe String`（`Nothing` = 对端关闭），其余返回 `Int`。
+-- | 带超时的单步结果：正常完成 / 对端关闭 / 超时。
+export data NetStep a(..) : Type where
+  -- | 正常完成。
+  StepOk : a -> NetStep a
+  -- | 对端关闭（读 / 写）。
+  StepClosed : NetStep a
+  -- | 到超时为止没有进展。
+  StepTimeout : NetStep a
+
+-- | 操作的结果类型族：`Recv` 返回 `Maybe String`（`Nothing` = 对端关闭），
+-- `*Within` 返回 `NetStep`（区分完成 / 关闭 / 超时），其余返回 `Int`。
 export resNet : NetOp -> Type
 resNet (Listen _) = Int
 resNet (Port _) = Int
@@ -39,34 +52,59 @@ resNet (Recv _ _) = Maybe String
 resNet (Send _ _) = Int
 resNet (Close _) = Int
 resNet (Connect _) = Int
+resNet (AcceptWithin _ _) = NetStep Int
+resNet (RecvWithin _ _ _) = NetStep String
+resNet (SendWithin _ _ _) = NetStep Int
 
 -- | 绑定并监听地址，返回句柄。
 export netListen : Member n NetOp r => String -> Eff r Int
-netListen addr = sendCore NetOp "net" n (Listen addr)
+netListen addr = do
+  sendCore NetOp "net" n (Listen addr)
 
 -- | 取监听句柄的端口（`unix:` 地址给 0）。
 export netPort : Member n NetOp r => Int -> Eff r Int
-netPort h = sendCore NetOp "net" n (Port h)
+netPort h = do
+  sendCore NetOp "net" n (Port h)
 
 -- | 接受连接，返回新句柄。
 export netAccept : Member n NetOp r => Int -> Eff r Int
-netAccept h = sendCore NetOp "net" n (Accept h)
+netAccept h = do
+  sendCore NetOp "net" n (Accept h)
 
 -- | 最多接收 `n` 字节；对端关闭给 `Nothing`。
 export netRecv : Member n NetOp r => Int -> Int -> Eff r (Maybe String)
-netRecv h bytes = sendCore NetOp "net" n (Recv h bytes)
+netRecv h bytes = do
+  sendCore NetOp "net" n (Recv h bytes)
 
 -- | 发送整个字符串，返回写入字节数。
 export netSend : Member n NetOp r => Int -> String -> Eff r Int
-netSend h s = sendCore NetOp "net" n (Send h s)
+netSend h s = do
+  sendCore NetOp "net" n (Send h s)
 
 -- | 关闭句柄（幂等）。
 export netClose : Member n NetOp r => Int -> Eff r Int
-netClose h = sendCore NetOp "net" n (Close h)
+netClose h = do
+  sendCore NetOp "net" n (Close h)
 
 -- | 连接地址，返回句柄。
 export netConnect : Member n NetOp r => String -> Eff r Int
-netConnect addr = sendCore NetOp "net" n (Connect addr)
+netConnect addr = do
+  sendCore NetOp "net" n (Connect addr)
+
+-- | 带超时（微秒）接受连接：超时给 `StepTimeout`，不阻塞到对端出现。
+export netAcceptWithin : Member n NetOp r => Int -> Int -> Eff r (NetStep Int)
+netAcceptWithin h micros = do
+  sendCore NetOp "net" n (AcceptWithin h micros)
+
+-- | 带超时接收：区分「读到数据 / 对端关闭 / 超时」。
+export netRecvWithin : Member n NetOp r => Int -> Int -> Int -> Eff r (NetStep String)
+netRecvWithin h bytes micros = do
+  sendCore NetOp "net" n (RecvWithin h bytes micros)
+
+-- | 带超时发送整个字符串：超时给 `StepTimeout`（可能已写出前缀）。
+export netSendWithin : Member n NetOp r => Int -> String -> Int -> Eff r (NetStep Int)
+netSendWithin h s micros = do
+  sendCore NetOp "net" n (SendWithin h s micros)
 
 -- | 宿主网络失败的种类：带上下文（地址或 `handle N`）。
 export data NetError(..) : Type where
@@ -80,6 +118,8 @@ export data NetError(..) : Type where
   NetAddrInUse : String -> NetError
   -- | 地址格式非法。
   NetBadAddr : String -> NetError
+  -- | 句柄失效（已关闭 / 伪造的句柄下标）。
+  NetBadHandle : String -> NetError
   -- | 其它宿主网络错误。
   NetIo : String -> NetError
 
@@ -102,6 +142,8 @@ netErrorOfCode ctx 3 = NetTimeout ctx
 netErrorOfCode ctx 4 = NetClosed ctx
 netErrorOfCode ctx 5 = NetAddrInUse ctx
 netErrorOfCode ctx 6 = NetBadAddr ctx
+netErrorOfCode ctx 7 = NetTimeout ctx
+netErrorOfCode ctx 8 = NetBadHandle ctx
 netErrorOfCode ctx _ = NetIo ctx
 
 -- | 失败种类的人类可读文本（诊断输出用）。
@@ -111,6 +153,7 @@ netErrorText (NetTimeout ctx) = "net: ${ctx}: timed out"
 netErrorText (NetClosed ctx) = "net: ${ctx}: connection closed"
 netErrorText (NetAddrInUse ctx) = "net: ${ctx}: address already in use"
 netErrorText (NetBadAddr ctx) = "net: ${ctx}: invalid address"
+netErrorText (NetBadHandle ctx) = "net: ${ctx}: invalid handle (closed or unknown)"
 netErrorText (NetIo ctx) = "net: ${ctx}: host I/O error"
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `NetOp`。
@@ -157,6 +200,22 @@ netOpHIOHost op k = case op of
     c <- raise (@vuna@host@tryNetConnect addr)
     ok <- netHostStatus
     if ok /= 0 then netFail (netErrorOfCode addr ok) else k c
+  AcceptWithin h micros => do
+    c <- raise (@vuna@host@tryNetAcceptWithin h micros)
+    ok <- netHostStatus
+    if ok == 0 then k (StepOk c)
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
+  RecvWithin h bytes micros => do
+    s <- raise (@vuna@host@tryNetRecvWithin h bytes micros)
+    ok <- netHostStatus
+    if ok == 0 then k (StepOk s)
+    else if ok == 1 then k StepClosed
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
+  SendWithin h s micros => do
+    n <- raise (@vuna@host@tryNetSendWithin h s micros)
+    ok <- netHostStatus
+    if ok == 0 then k (StepOk n)
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
 
 -- | 带 `NetOp` 行的宿主 handler：删掉 `NetOp`，answer 是 `Eff [NetErrorOp]`（不导出）。
 handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n NetOp r) a -> Eff r (Eff (Cons "net-error" NetErrorOp []) a)
@@ -185,5 +244,6 @@ runNetErrorHost comp = do
     Ok a => pure a
     Err msg => do
       _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise @vuna@prim_eff_hostReportFrames
       _ <- raise (@vuna@prim_eff_exit 1)
       prim_fail "unreachable: net error handler"

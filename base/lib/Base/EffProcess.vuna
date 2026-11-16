@@ -46,11 +46,13 @@ processExit c = sendCore ProcessOp "process" n (Exit c)
 
 -- | 通过命名实例在目录 `dir` 下运行命令 `args`，返回退出码；执行后恢复原 cwd。
 export processRunIn : Member n ProcessOp r => String -> List String -> Eff r Int
-processRunIn dir args = sendCore ProcessOp "process" n (RunIn dir args)
+processRunIn dir args = do
+  sendCore ProcessOp "process" n (RunIn dir args)
 
 -- | 通过命名实例异步启动命令 `args`，返回句柄；用 `processWait` 等退出码（并行 jobs 用）。
 export processSpawn : Member n ProcessOp r => List String -> Eff r Int
-processSpawn args = sendCore ProcessOp "process" n (Spawn args)
+processSpawn args = do
+  sendCore ProcessOp "process" n (Spawn args)
 
 -- | 通过命名实例等待 `processSpawn` 返回的句柄，返回退出码。
 export processWait : Member n ProcessOp r => Int -> Eff r Int
@@ -174,5 +176,6 @@ runProcessErrorHost comp = do
     Ok a => pure a
     Err msg => do
       _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise @vuna@prim_eff_hostReportFrames
       _ <- raise (@vuna@prim_eff_exit 1)
       prim_fail "unreachable: process error handler"

@@ -304,6 +304,7 @@ irRtPlainNames =
     "@vuna@host@tryNetRecvWithin",
     "@vuna@host@tryNetSendWithin",
     "@vuna@prim_eff_hostReportFrames",
+    "@vuna@prim_eff_hostRememberSite",
     "prim_eff_getenv",
     "@vuna@prim_eff_getenv",
     "prim_eff_getcwd",
