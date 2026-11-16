@@ -3,6 +3,7 @@ module Vuna.Compiler.Elab.Term.Impl where
 -- Vuna.Compiler.Elab.Term.Impl：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
 import Base.List
 import Vuna.Compiler.Common
+import Vuna.Compiler.Obs
 import Base.Nat
 import Vuna.Compiler.Core
 import Vuna.Compiler.Diagnostics
@@ -147,8 +148,9 @@ else
   let
     name = "nd_scrut${ctxDepth ctx}"
     clauses = map (\alt => Pair [firstOf alt] (secondOf alt)) alts
-  in Vuna.Compiler.Common.bind (multiToCaseExpr (ctorFamilyTable ec) clauses name)
-    (\bodyExpr => improveExhaustive (ctorFamilyTable ec) (matrixOf clauses) sp (checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected))
+    table = ctorFamilyTable ec
+  in Vuna.Compiler.Common.bind (multiToCaseExpr table clauses name)
+    (\bodyExpr => improveExhaustive table (\_ => matrixOf clauses) sp (checkEFuel (fuel - 1) globals ctx ec (ELet [Pair (PVar name sp) scrut] bodyExpr False sp) expected))
 
 export checkCaseFamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
 checkCaseFamFuel fuel globals ctx ec scrutTerm scrutTy alts expected sp = if fuel <= 0 then icFuel "inference"
@@ -1437,13 +1439,15 @@ else case handleOperand expr of
   -- `Cons n e er`。comp 的行已具体时行首版只会同样失败，原错误（e1）保留。
   Just _ => Vuna.Compiler.Common.bind (handleCallExpr globals ec expr (exprSpan expr)) (\callExpr => case checkEFuel (fuel - 1) globals ctx ec callExpr expected of
     OkC r => OkC r
-    ErrC e1 => Vuna.Compiler.Common.bind (handleCallExprAt globals ec expr (exprSpan expr)) (\callExpr2 => case checkEFuel (fuel - 1) globals ctx ec callExpr2 expected of
+    ErrC e1 => Vuna.Compiler.Common.bind (handleCallExprAt globals ec expr (exprSpan expr)) (\callExpr2 => case obsCheck "vuna.elab.term.retry" (\_ => checkEFuel (fuel - 1) globals ctx ec callExpr2 expected) of
       OkC r2 => OkC r2
       ErrC _ => ErrC e1
     )
   )
   Nothing => case performOperand expr of
-    Just _ => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+    Just _ =>
+      obsCheck "vuna.elab.term.infer"
+        (\_ => checkByInferFuel (fuel - 1) globals ctx ec expr expected)
     Nothing => case appAtOperand expr of
       Just _ =>
         Vuna.Compiler.Common.bind (appAtCallExpr expr)
@@ -1453,7 +1457,9 @@ else case handleOperand expr of
           Vuna.Compiler.Common.bind
             (expandListLit ec (listLitFamily ec (forceVal ec expected)) elems (exprSpan expr))
             (\e2 => checkEFuel (fuel - 1) globals ctx ec e2 expected)
-        Nothing => checkEFuelNoRow fuel globals ctx ec expr expected
+        Nothing =>
+          obsDefCheck "vuna.elab.term.core" (exprFormName expr)
+            (\_ => checkEFuelNoRow fuel globals ctx ec expr expected)
 
 -- 字面量转换（FromString / FromInt）：期望类型不是内建字面量类型时，若期望类型上存在
 -- 对应 trait 的实例，就把字面量降级成 trait 方法应用（`fromString "s"` / `fromInt n`），
@@ -1468,6 +1474,33 @@ literalTraitLower globals ctx ec traitName methodName lit expected sp =
   in case searchInstanceIn globals ctx ec dictDom sp of
     ErrC _ => Nothing
     OkC (Pair _ ec1) => Just (Pair (EApp (EVar methodName sp) [lit] sp) ec1)
+
+-- 诊断标签：check 核心按表达式形态分桶（只在 level >= 2 的逐节点 span 上用）。
+exprFormName : Expr -> String
+exprFormName expr = case expr of
+  EVar _ _ => "EVar"
+  EInt _ _ => "EInt"
+  EStr _ _ => "EStr"
+  ELam _ _ _ => "ELam"
+  EApp _ _ _ => "EApp"
+  EPi _ _ _ _ _ _ => "EPi"
+  EIf _ _ _ _ => "EIf"
+  ECase _ _ _ => "ECase"
+  ELet _ _ _ _ => "ELet"
+  ELocalFun _ _ => "ELocalFun"
+  EField _ _ _ => "EField"
+  ERecord _ _ _ => "ERecord"
+  ERecUpdate _ _ _ => "ERecUpdate"
+  EDo _ _ => "EDo"
+  EInfix _ _ _ _ => "EInfix"
+  EParen _ _ => "EParen"
+  EBacktick _ _ _ _ => "EBacktick"
+  ESectOp _ _ => "ESectOp"
+  ESectL _ _ _ => "ESectL"
+  ESectR _ _ _ => "ESectR"
+  EAnn _ _ _ => "EAnn"
+  EInterp _ _ _ => "EInterp"
+  EFloat _ _ => "EFloat"
 
 checkEFuelNoRow : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkEFuelNoRow fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
@@ -2102,7 +2135,9 @@ else case fn of
     (resolveOverCtor ec vsp (Just expected) (overCtorShort name) (overCtorTargets name))
     (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args expected sp)
   else case ctxLookup name ctx of
-    Just _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
+    -- 局部 binder 不可能是运算符方法（`+` / `==` / `Base.Num.x` 这类名字都要么是
+    -- 全局、要么是运算符语法），直接走推断即可，省掉每处引用一次的运算符特化链。
+    Just _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
     -- **类型位置 = 期望是宇宙且名字在类型命名空间**。位置本身不能单独决定
     -- 命名空间（`applyTwice Box ...` 里 `Box` 在值位置、期望是 `Type -> Type`），
     -- 所以显式问 `isTypeName`，不只靠期望类型是不是宇宙。

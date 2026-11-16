@@ -17,6 +17,7 @@ import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Obs
 
 -- 类参数绑成隐式 binder 后的局部上下文。
 -- 类参数可以是**高阶 kind**（`trait Mapper f`，方法签名里写 `f a`）。kind 从方法签名推断：
@@ -1218,11 +1219,13 @@ else
       if implicit then if isDictDomain ec dom then bindDictBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
       else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo [] body sp
       else tcErr0 sp ImplicitParamKind
-      else Vuna.Compiler.Common.bind (checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp)
-        (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
+      else Vuna.Compiler.Common.bind
+        (obsCheck "vuna.elab.term.body" (\_ => checkBodyAtEndFuel (fuel - 1) globals ctx ec body expected sp))
+        (\p => Vuna.Compiler.Common.bind (obsCheck "vuna.elab.term.goals" (\_ => resolveRowGoalsCtx globals ctx (secondOf p) sp)) (\ec2 => OkC (Pair (firstOf p) ec2)))
     _ =>
-      Vuna.Compiler.Common.bind (checkE globals ctx ec body expected)
-        (\p => Vuna.Compiler.Common.bind (resolveRowGoalsCtx globals ctx (secondOf p) sp) (\ec2 => OkC (Pair (firstOf p) ec2)))
+      Vuna.Compiler.Common.bind
+        (obsCheck "vuna.elab.term.body" (\_ => checkE globals ctx ec body expected))
+        (\p => Vuna.Compiler.Common.bind (obsCheck "vuna.elab.term.goals" (\_ => resolveRowGoalsCtx globals ctx (secondOf p) sp)) (\ec2 => OkC (Pair (firstOf p) ec2)))
 
 -- 显式约束的隐式字典 binder：自动绑定（不消耗 pattern）、绑成 `TLam Rig1`，body 经 `localDictLookup` 命中声明假设。
 bindDictBinderFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> Value -> Closure -> List Pat -> Expr -> Span -> Check (Pair Term Ec)
@@ -1322,7 +1325,7 @@ else
 elabFunDefIn : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)
 elabFunDefIn globals ctx0 ec [] expected sp = tcErr0 sp FunctionNoClauses
 elabFunDefIn globals ctx0 ec ([Pair pats body]) expected sp =
-  if allVarPats pats then checkDefIn globals ctx0 ec pats body expected sp
+  if allVarPats pats then obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec pats body expected sp)
   else elabFunDefMulti globals ctx0 ec [Pair pats body] expected sp
 elabFunDefIn globals ctx0 ec clauses expected sp =
   elabFunDefMulti globals ctx0 ec clauses expected sp
@@ -1332,12 +1335,17 @@ elabFunDefMulti : List (Pair String Term) -> Ctx -> Ec -> List (Pair (List Pat) 
 elabFunDefMulti globals ctx0 ec clauses expected sp =
   let
     _ = dbg! "MULTI"
-  in Vuna.Compiler.Common.bind (resolveOverFunPats ec ctx0 expected clauses) (\r => case r of
-    Pair clauses2 ec1 => Vuna.Compiler.Common.bind (multiToExpr (ctorFamilyTable ec1) clauses2) (\bodyExpr => let
-      _ = dbg! "CHECKDEF"
-    in improveExhaustive (ctorFamilyTable ec1) (matrixOf clauses2) (firstPatSpan clauses2)
-      (checkDefIn globals ctx0 ec1 [] bodyExpr expected sp)
-    )
+  in Vuna.Compiler.Common.bind (obsCheck "vuna.elab.pats" (\_ => resolveOverFunPats ec ctx0 expected clauses)) (\r => case r of
+    Pair clauses2 ec1 =>
+      let
+        table = ctorFamilyTable ec1
+      in Vuna.Compiler.Common.bind (obsCheck "vuna.elab.pats" (\_ => multiToExpr table clauses2)) (\bodyExpr => let
+        _ = dbg! "CHECKDEF"
+        checked =
+          obsCheck "vuna.elab.term" (\_ => checkDefIn globals ctx0 ec1 [] bodyExpr expected sp)
+      in obsCheck "vuna.elab.coverage"
+        (\_ => improveExhaustive table (\_ => matrixOf clauses2) (firstPatSpan clauses2) checked)
+      )
   )
 
 export elabFunDef : List (Pair String Term) -> Ec -> List (Pair (List Pat) Expr) -> Value -> Span -> Check (Pair Term Ec)

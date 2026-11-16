@@ -16,6 +16,7 @@ module Vuna.Compiler.Codegen.Lower where
 -- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、
 -- fresh 编号分配顺序、分支与实参顺序都不能随实现方式变化。
 import Vuna.Compiler.Common
+import Vuna.Compiler.Obs
 import Vuna.Compiler.Diagnostics
 import Base.HashMap
 import Base.List
@@ -1538,16 +1539,15 @@ nameSetOf (n :: rest) = Base.HashMap.insert n True (nameSetOf rest)
 
 -- | 整个程序当作一个单元 lowering（check 路径；文本丢弃）。
 export lowerProgramOf : List DtData -> List DtDef -> Check IrProgram
-lowerProgramOf datas defs =
-  let
-    env = mkLwEnv datas defs ""
-  in Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName datas)) (\unitIr => Vuna.Compiler.Common.bind (lowerEntryOf defs) (\entry => let
-    program =
-      IrProgram (lwEnvShared env)
-        (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry)
-  in Vuna.Compiler.Common.bind (validateProgram program) (\_ => OkC program)
-  )
-  )
+lowerProgramOf datas defs = Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.env" (\_ => OkC (mkLwEnv datas defs ""))) (\env => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.prepare" (\_ => checkProgramOf env)) (\_ => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.unit" (\_ => lowerUnitAfterChecks env (map dtDefName defs) (map dtDataName datas))) (\unitIr => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.entry" (\_ => lowerEntryOf defs)) (\entry => let
+  program =
+    IrProgram (lwEnvShared env)
+      (IrUnit unitIr.irUnitTyDecls unitIr.irUnitGroups unitIr.irUnitHasListFamily unitIr.irUnitTypeRefs entry)
+in Vuna.Compiler.Common.bind (validateProgram program) (\_ => OkC program)
+)
+)
+)
+)
 
 -- | 运行时定义分区（不跑检查；Split 的归属表与名字护栏只看运行时定义——axiom /
 -- 类型级定义没有归属，也不进任何单元文件）。

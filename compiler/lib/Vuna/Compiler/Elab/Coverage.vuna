@@ -174,9 +174,12 @@ matrixArity (row :: _) = natToInt (length row)
 -- 只在错误码已经是 `TC_NotExhaustive` 时改写：类型错 / 分支参数个数错等更具体的诊断
 -- 优先（那些错误在精化前无法预知，预检会把它们盖掉）。见证首位必须是构造子，否则
 -- 保持原诊断（字面量列 / 未知族 / 重载构造子的情形留给既有文案）。
-export improveExhaustive : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Check a -> Check a
-improveExhaustive table clauses sp (OkC v) = OkC v
-improveExhaustive table clauses sp (ErrC d) = ErrC (improveDiag table clauses sp d)
+-- `clausesOf` 是**惰性**的源矩阵：矩阵只在诊断需要改写时才构建（正常精化不付这份
+-- 遍历；`matrixOf` 在 Match 里，Coverage 不能反向 import，因此用 thunk 而不是直接吃
+-- 已建好的 `List (List Pat)`）。
+export improveExhaustive : List (Pair String (Pair Bool (List (Pair String Int)))) -> (Int -> List (List Pat)) -> Span -> Check a -> Check a
+improveExhaustive table clausesOf sp (OkC v) = OkC v
+improveExhaustive table clausesOf sp (ErrC d) = ErrC (improveDiag table (clausesOf 0) sp d)
 
 improveDiag : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (List Pat) -> Span -> Diagnostic -> Diagnostic
 improveDiag table clauses sp d = if d.diagCode /= "TC_NotExhaustive" then d

@@ -1263,7 +1263,7 @@ dtCheckScoped allDatas unitDatas defs =
   let
     env = mkLwEnv allDatas defs ""
   in obsCheck "vuna.codegen.check"
-    (\_ => Vuna.Compiler.Common.bind (lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas)) (\unitIr => Vuna.Compiler.Common.bind (genUnitParts noQual (lwEnvShared env) unitIr) (\_ => OkC 0)))
+    (\_ => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.lower" (\_ => lowerUnitOf env (map dtDefName defs) (map dtDataName unitDatas))) (\unitIr => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (lwEnvShared env) unitIr)) (\_ => OkC 0)))
 
 -- 单文件（LSP buffer / REPL 所在模块）的增量精化。
 --   1. 依赖包模块与**干净的同包模块**以「预置模块」进 Loader（零 parse/resolve）；
@@ -1767,5 +1767,5 @@ dtCheckLibraryRecovering ctx names = do
 -- 保证「能 check 就能 build」。main 的存在与返回类型只在生成入口要求（库模块也能 check）。
 checkDtProgramOf : List DtData -> List DtDef -> Check Int
 checkDtProgramOf datas defs =
-  Vuna.Compiler.Common.bind (lowerProgramOf datas defs)
-    (\programIr => Vuna.Compiler.Common.bind (genUnitParts noQual (irProgSharedOf programIr) (irProgUnitOf programIr)) (\_ => OkC 0))
+  Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.lower" (\_ => lowerProgramOf datas defs))
+    (\programIr => Vuna.Compiler.Common.bind (obsCheck "vuna.codegen.gen" (\_ => checkUnitParts (irProgSharedOf programIr) (irProgUnitOf programIr))) (\_ => OkC 0))

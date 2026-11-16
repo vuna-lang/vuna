@@ -55,6 +55,27 @@ in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
     in OkC (UnitParts [openHeader qc, typeText, listBridgeFor shared unitIr] bodies st deps)
 )
 
+-- | check 路径的结构检查：只验证「每个运行时定义都有体」（生成期唯一的错误点），
+-- 不拼任何文本。文本生成是纯渲染（`Codegen.Term` 只有这一处 `ErrC`），
+-- 因此跳过它不削弱「能 check 就能 build」。
+export checkUnitParts : IrShared -> IrUnit -> Check Int
+checkUnitParts shared unitIr = checkGroupsForBuild unitIr.irUnitGroups
+
+checkGroupsForBuild : List IrGroup -> Check Int
+checkGroupsForBuild [] = OkC 0
+checkGroupsForBuild (g :: rest) =
+  Vuna.Compiler.Common.bind (checkDefsForBuild (irGroupDefs g)) (\_ => checkGroupsForBuild rest)
+
+checkDefsForBuild : List IrDef -> Check Int
+checkDefsForBuild [] = OkC 0
+checkDefsForBuild (d :: rest) = case irDefExtern d of
+  Just _ => checkDefsForBuild rest
+  Nothing => case irDefBody d of
+    Nothing =>
+      ErrC
+        (withContext (irDefSpan d) (irDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
+    Just _ => checkDefsForBuild rest
+
 genTypePart : QualCtx -> IrUnit -> Check String
 genTypePart qc unitIr = OkC (irTypeDeclsText qc unitIr.irUnitTyDecls)
 

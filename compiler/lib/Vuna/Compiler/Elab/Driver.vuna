@@ -316,7 +316,7 @@ elabOneDef decls globals name tyTerm sp ec =
     _ = dbg! "DEF ${name}"
   in Vuna.Compiler.Common.bind (obsDefCheck "vuna.def.elab" name (\_ => elabFunDef globals ec (clausesOfTbl ec decls name) (eval [] tyTerm) sp)) (\p => let
     _ = dbg! "FUN ${name}"
-  in case p of
+  in obsCheck "vuna.elab.post" (\_ => case p of
     Pair bodyTerm ec1 =>
       let
         -- 先把命中的延迟字典目标解到签名声明的 ctx binder（若有），剩余目标
@@ -337,6 +337,7 @@ elabOneDef decls globals name tyTerm sp ec =
           ecPutGlobalsTbl liftedEc (Base.HashMap.insert name liftedTy (ecGlobalsTbl liftedEc))
         ecWithDef = ecAddDef ecGlobals (Pair name cleanTerm)
       in OkC (Pair (DtDef name liftedTy cleanTerm (Just sp)) ecWithDef)
+  )
   )
 
 -- 逐定义恢复的共用出口：错误进 `Ec.ecErrors` 并继续下一个声明；严格路径短路。
