@@ -21,10 +21,10 @@
     ["(", ")"],
     ["\"", "\""]
   ],
-  "wordPattern": "[A-Za-z_][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)*",
+  "wordPattern": "\\??[A-Za-z_][A-Za-z0-9_']*(?:\\.[A-Za-z_][A-Za-z0-9_']*)*",
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*.*(\\b(where|of|do|let|then|else)\\s*$|->\\s*$|=\\s*$)",
-    "decreaseIndentPattern": "^\\s*(in\\b|else\\b)"
+    "increaseIndentPattern": "^\\s*.*(\\b(where|of|do|let|then|else)\\s*$|->\\s*$|=\\s*$|\\{\\s*$)",
+    "decreaseIndentPattern": "^\\s*(in\\b|else\\b|\\})"
   },
   "folding": {
     "offSide": true,
