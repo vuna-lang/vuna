@@ -29,7 +29,7 @@
 set -eu
 export LC_ALL=C
 
-# 脚本以 cwd = 仓库根布局运行（本地 `sh nix/checks/ir-boundary.sh` 与 nix check 都是）。
+# 脚本以 cwd = 仓库根布局运行（本地 `sh nix/checks/lib/ir-boundary.sh` 与 nix check 都是）。
 cd "$(pwd)"
 
 fail=0

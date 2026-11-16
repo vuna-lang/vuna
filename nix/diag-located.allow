@@ -1,7 +1,7 @@
 # 诊断位置门禁的基线。
 #
 # 这里的每一行都是「目前确实没有源码位置」的诊断码；门禁只允许这个集合**变小**：
-# 新增无位置诊断会让 `nix/checks/diag-located.sh` 失败。修复一个码就从这里删掉一行。
+# 新增无位置诊断会让 `nix/checks/lib/diag-located.sh` 失败。修复一个码就从这里删掉一行。
 #
 # 分类：
 #   * RN_AmbiguousPrelude：隐式 Prelude 注入没有用户书写点，天然无位置。

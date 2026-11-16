@@ -5,13 +5,13 @@ module Vuna.Test.Expect where
 -- 测试断言**只看返回值**：进程内调用编译器函数拿到 `Check (List Diagnostic)`，
 -- 投影成 `severity|code|file|line|col`（无源位置时追加 `!<absent 理由>`）字符串序列，
 -- 与夹具的 `.diag.json`（同一份结构化文档）投影比较。不比对 message / fields /
--- labels 文本：文案由 `nix/checks/diag-style.sh` / `diag-raw.sh` 两个门禁守，夹具只
+-- labels 文本：文案由 `nix/checks/lib/diag-style.sh` / `diag-raw.sh` 两个门禁守，夹具只
 -- 锁定「哪个码、在哪、几条、什么顺序」。
 --
 -- 三个口径：
 --   * **主 label**：`LabelPrimary` 的 span；没有主 label 时退回首个带 span 的 label；
 --     两者都没有 ⇒ 位置记 `||0|0`，并要求诊断自带 `absent` 理由（与
---     `nix/checks/diag-located.sh` 同源）。
+--     `nix/checks/lib/diag-located.sh` 同源）。
 --   * **路径归一**（`projFile`）：期望文件里有四种写法——`<ROOT>/test/...`（占位符，
 --     由 `--bless-diag` 写入）、`corpus/...`（相对 `test/`）、`./vuna.toml`
 --     （相对夹具目录）、`<BASE>/lib/...`（依赖包内）。进程内拿到的是绝对路径。

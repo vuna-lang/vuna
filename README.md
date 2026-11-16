@@ -111,7 +111,7 @@ manifest，不向上找。命令语义与包格式
 ├── examples/  # 多包示例
 ├── .agents/   # AI 规则（rules/）与场景技能（skills/）
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
-├── nix/       # 构建图（packages/checks）+ rotate/metrics/bench
+├── nix/       # 构建图（packages/checks）+ rotate/metrics
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
 ├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）

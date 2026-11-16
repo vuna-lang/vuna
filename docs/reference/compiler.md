@@ -7,7 +7,7 @@
 ## 模块地图
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
-就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed-count.txt` 为准）；工具链
+就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed-files.txt` 为准）；工具链
 （fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
 代码按**目录即层**组织：Frontend → Packages → Loader → Core → Elab → Codegen → Driver，
 同层模块可互相 import，上层只能依赖下层。每层 `X.vuna` 是**门面**：只 import 子模块并选择性
@@ -319,7 +319,7 @@ record、trait/instance/deriving、as-pattern、where/let 多 clause、List 结�
 因为它们的尺寸随功能增长，纳入会重新引入「移动靶」。正常语言/检查器功能提交不改基线；
 有意改 codegen、夹具或 base 接口时，重跑 `sh nix/checks/vuna-metrics.sh` 取新值并复核
 diff。盲区：base/runtime 自身的 codegen 不在这条门禁里；尺寸也不等于耗时——耗时/内存看
-`nix/bench.sh`。
+`bench/bootstrap.sh`。
 
 **种子尺寸不设门槛**：`seed/` 的绝对 bytes/lines 随功能增长，没有可比性；bench 的
 `sizes.seed_bytes` / `stage1_bytes` 只作参考，`nix/metrics.sh` 仍可手动量任意产物。

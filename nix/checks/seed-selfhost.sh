@@ -20,12 +20,12 @@ sh nix/tcb-check.sh nix/tcb-forbidden.txt seed
 # 完整 allowlist：seed/ 的文件集必须与 nix/seed-files.txt 逐项一致（多/少/换文件都报错）。
 sh nix/tcb-allowlist.sh nix/seed-files.txt seed
 
-# 闭包数量断言：只靠黑名单时 seed 静默缩水（漏模块）仍会绿；数量来自
-# `nix/seed-count.txt`，由 seed rotation 自动更新（见 nix/seed-rotate.sh）。
-EXPECTED_SEED_ML=$(sed -n '1p' nix/seed-count.txt)
+# 闭包数量断言：只靠黑名单时 seed 静默缩水（漏模块）仍会绿；数量从
+# `nix/seed-files.txt`（由 seed rotation 自动同步）里的 `.ml` 行推导。
+EXPECTED_SEED_ML=$(grep -c '\.ml$' nix/seed-files.txt)
 ACTUAL_SEED_ML=$(find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ')
 if [ "$ACTUAL_SEED_ML" != "$EXPECTED_SEED_ML" ]; then
-  echo "seed-selfhost: seed 闭包 .ml 数量 $ACTUAL_SEED_ML != 期望 $EXPECTED_SEED_ML（seed 缩水或 seed-count.txt 过期；重新 rotation）" >&2
+  echo "seed-selfhost: seed 闭包 .ml 数量 $ACTUAL_SEED_ML != 期望 $EXPECTED_SEED_ML（seed 缩水或 seed-files.txt 过期；重新 rotation）" >&2
   exit 1
 fi
 

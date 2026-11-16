@@ -94,7 +94,7 @@ nix build .#vuna --out-link result        # 产品 CLI；.#vuna-compiler / .#vun
 ./result/bin/vuna run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
 nix run .#vuna-run-tests -- --only <章节> # 按章节跑 suite（--list 看章节）
 sh nix/seed-rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
-nix flake check                           # 3 packages + 21 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 19 checks（清单见 testing.md）
 ./result/bin/vuna map --find <Module.name> # 定位符号；另有 --impact / api
 ```
 
@@ -110,7 +110,7 @@ Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 等，**不进 seed**）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` +
 `suite/`（原生 runner + steps 用例）+ `corpus/` 夹具；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +
-lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图 + rotate/metrics/bench；`docs/` = 分层文档。
+lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图 + CI 门禁 + rotate/metrics；`docs/` = 分层文档。
 
 ## 文档导航
 

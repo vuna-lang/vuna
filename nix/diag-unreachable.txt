@@ -1,5 +1,5 @@
 # 不可达/内部不变量诊断码审计：allowlist 中的每个码必须在此登记原因。
-# 格式：CODE<TAB>reason；由 `nix/checks/diag-coverage.sh` 校验与 allowlist 双向一致。
+# 格式：CODE<TAB>reason；由 `nix/checks/lib/diag-coverage.sh` 校验与 allowlist 双向一致。
 #
 # 登记口径：这些码只在编译器内部不变量被破坏、或只能由环境/构造 AST 触发时出现；
 # 源码夹具无法合法触发。若未来出现可达路径，必须补夹具并同时删除这里与 allowlist。

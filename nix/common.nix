@@ -59,7 +59,13 @@ let
     ];
 in
 {
-  inherit systems ocamlTools shellTools wasmTools e2eTools;
+  inherit
+    systems
+    ocamlTools
+    shellTools
+    wasmTools
+    e2eTools
+    ;
 
   forAllSystems = lib.genAttrs systems;
 

@@ -23,7 +23,12 @@ let
       inherit packages;
 
       checks = import ./checks {
-        inherit pkgs packages ocamlTools e2eTools;
+        inherit
+          pkgs
+          packages
+          ocamlTools
+          e2eTools
+          ;
       };
 
       # default 是全量开发环境；ocaml 只含工具链，不依赖仓库源码，

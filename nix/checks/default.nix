@@ -1,7 +1,8 @@
-# CI 门槛定义。每个 check 的源集合只在这里声明一次，mkCheck 用 fileset 暂存成
-# 最小工作树，然后执行 nix/checks/<name>.sh（主体脚本），并由 Nix 注入工具路径。
+# CI 门槛定义。源集合按目录命名后组合，mkCheck 用 fileset 暂存成最小工作树，
+# 然后执行 nix/checks/<name>.sh（主体脚本），并由 Nix 注入工具路径。
 #
-# 约定：脚本以 cwd = 仓库根布局运行，$1 是输出目录；工具通过环境变量传入。
+# 约定：脚本以 cwd = 仓库根布局运行，$1 是输出目录；需要 vuna 二进制的 check 用
+# vunaCheck（默认注入 $VUNA），纯静态扫描用 mkCheck。
 {
   pkgs,
   packages,
@@ -18,6 +19,57 @@ let
     ;
 
   repo = ../..;
+
+  # 可复用的源集合；check 处只组合，不重复写路径。
+  src = {
+    seed = ../../seed;
+    compiler = ../../compiler;
+    base = ../../base;
+    lib = ../../lib;
+    app = ../../app;
+    test = ../../test;
+    examples = ../../examples;
+    docs = ../../docs;
+    corpus = ../../test/corpus;
+    codegenCorpus = ../../test/corpus/codegen;
+    steps = ../../test/suite/steps;
+    processBound = ../../test/suite/process-bound.txt;
+    manifest = ../../vuna.toml;
+    agents = ../../AGENTS.md;
+    readme = ../../README.md;
+    seedFiles = ../../nix/seed-files.txt;
+    seedRotation = ../../nix/seed-rotation.txt;
+  };
+
+  workspace = [
+    src.base
+    src.compiler
+    src.lib
+    src.app
+    src.manifest
+  ];
+
+  testTree = workspace ++ [
+    src.test
+    src.examples
+  ];
+
+  vscodeSrcs = [
+    ../../vscode/package.json
+    ../../vscode/package-lock.json
+    ../../vscode/tsconfig.json
+    ../../vscode/src
+    ../../vscode/scripts
+    ../../vscode/dist
+    ../../vscode/syntaxes
+    ../../vscode/language-configuration.json
+    ../../vscode/snippets
+    ../../vscode/README.md
+    ../../vscode/LICENSE
+    ../../vscode/.vscodeignore
+    ../../vscode/check.sh
+    ../../vscode/dev
+  ];
 
   sourceOf =
     srcs:
@@ -55,25 +107,46 @@ let
         touch "$out/ok"
       '';
 
+  # 需要 vuna 二进制的 check：默认注入 $VUNA，其余环境按需追加。
+  vunaCheck =
+    {
+      name,
+      srcs,
+      script,
+      env ? { },
+      nativeBuildInputs ? [ ],
+    }:
+    mkCheck {
+      inherit
+        name
+        srcs
+        script
+        nativeBuildInputs
+        ;
+      env = {
+        VUNA = "${vuna}/bin/vuna";
+      }
+      // env;
+    };
+
   # seed → stage0 → stage1 → stage2，逐字节 fixed point（alias 已并入 seed-selfhost）。
   # rotation 按需：seed 落后于源码只报告滞后，不失败；元数据在 nix/seed-rotation.txt。
   seed-selfhost = mkCheck {
     name = "vuna-seed-selfhost";
     srcs = [
-      ../../seed
-      ../../compiler
-      ../../base
-      ../../lib
-      ../../app
-      ../../vuna.toml
+      src.seed
+      src.compiler
+      src.base
+      src.lib
+      src.app
+      src.manifest
       ../../test/corpus/run/12_fact.vuna
       ../../test/corpus/dt/01_id.vuna
       ../../nix/tcb-check.sh
       ../../nix/tcb-allowlist.sh
       ../../nix/tcb-forbidden.txt
-      ../../nix/seed-count.txt
-      ../../nix/seed-files.txt
-      ../../nix/seed-rotation.txt
+      src.seedFiles
+      src.seedRotation
     ];
     env = {
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
@@ -94,19 +167,10 @@ in
 
   # 测试分两层：gate 只跑 fast+integration，e2e（steps/长 case）单独一个 derivation。
   # 两层可并行（CI 用 --max-jobs 2 --cores 8），每层内部仍共享一个私有对象库。
-  vuna-tests-gate = mkCheck {
+  vuna-tests-gate = vunaCheck {
     name = "vuna-tests-gate";
-    srcs = [
-      ../../test
-      ../../base
-      ../../lib
-      ../../compiler
-      ../../app
-      ../../examples
-      ../../vuna.toml
-    ];
+    srcs = testTree;
     env = {
-      VUNA = "${vuna}/bin/vuna";
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "fast integration";
     };
@@ -114,73 +178,46 @@ in
     script = ./vuna-tests.sh;
   };
 
-  vuna-tests-e2e = mkCheck {
+  vuna-tests-e2e = vunaCheck {
     name = "vuna-tests-e2e";
-    srcs = [
-      ../../test
-      ../../base
-      ../../lib
-      ../../compiler
-      ../../app
-      ../../examples
-      ../../vuna.toml
-    ];
+    srcs = testTree;
     env = {
-      VUNA = "${vuna}/bin/vuna";
       VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
       VUNA_TEST_TIERS = "e2e";
     };
     nativeBuildInputs = e2eTools;
     script = ./vuna-tests.sh;
   };
-  vuna-metrics = mkCheck {
+
+  vuna-metrics = vunaCheck {
     name = "vuna-metrics";
     srcs = [
-      ../../test/corpus/codegen
-      ../../base
+      src.codegenCorpus
+      src.base
       ../../nix/metrics.sh
       ../../nix/codegen.baseline
     ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
     script = ./vuna-metrics.sh;
   };
 
   # 编译器增长率门槛（合成 N 个同形定义，相邻档墙钟比有上界）。
   # 绝对时间不可跨机器比；增长率可比，用来挡「某次改动把线性路径退化成 n²」。
-  vuna-compiler-growth = mkCheck {
+  vuna-compiler-growth = vunaCheck {
     name = "vuna-compiler-growth";
     srcs = [
-      ../../base
-      ../../nix/checks/compiler-growth.sh
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
+      src.base
+      src.manifest
     ];
     script = ./compiler-growth.sh;
   };
 
   # 包路径**增量** check 的增长率门槛：单文件探针走全量精化，覆盖不到包级增量收尾
   # （globals 去重 / 写接口 / 终止性 own 判定）的 O(n²) 回归。
-  vuna-compiler-growth-incremental = mkCheck {
+  vuna-compiler-growth-incremental = vunaCheck {
     name = "vuna-compiler-growth-incremental";
     srcs = [
-      ../../base
-      ../../nix/checks/compiler-growth-pkg.sh
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
+      src.base
+      src.manifest
     ];
     script = ./compiler-growth-pkg.sh;
   };
@@ -188,85 +225,41 @@ in
   # 前端增长率门槛：合成 2000/4000/8000 个同形定义，相邻档的
   # `vuna.parse.lex` / `vuna.parse.syntax`（来自 trace）与 `fmt --check` 墙钟比有上界。
   # 与 compiler-growth 互补：那边看整条 check（前端只占几个百分点），这边直接看前端读数。
-  vuna-frontend-growth = mkCheck {
+  vuna-frontend-growth = vunaCheck {
     name = "vuna-frontend-growth";
     srcs = [
-      ../../base
-      ../../nix/checks/frontend-growth.sh
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
+      src.base
+      src.manifest
     ];
     script = ./frontend-growth.sh;
   };
 
-  vuna-typecheck = mkCheck {
+  vuna-typecheck = vunaCheck {
     name = "vuna-typecheck";
-    srcs = [
-      ../../lib
-      ../../compiler
-      ../../base
-      ../../app
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
+    srcs = workspace;
     script = ./vuna-typecheck.sh;
   };
 
-  vuna-lint = mkCheck {
+  vuna-lint = vunaCheck {
     name = "vuna-lint";
-    srcs = [
-      ../../compiler
-      ../../lib
-      ../../base
-      ../../app
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
+    srcs = workspace;
     script = ./vuna-lint.sh;
   };
 
-  vuna-fmt = mkCheck {
+  vuna-fmt = vunaCheck {
     name = "vuna-fmt";
-    srcs = [
-      ../../compiler
-      ../../base
-      ../../lib
-      ../../app
-      ../../examples
-      ../../vuna.toml
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
+    srcs = workspace ++ [ src.examples ];
     script = ./vuna-fmt.sh;
   };
 
   context-budget = mkCheck {
     name = "vuna-context-budget";
-    srcs = [
-      ../../compiler
-      ../../base
-      ../../lib
-      ../../app
-      ../../docs
-      ../../AGENTS.md
-      ../../README.md
+    srcs = workspace ++ [
+      src.docs
+      src.agents
+      src.readme
       ../../nix/context-budget.sh
       ../../nix/context.budget
-    ];
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
     ];
     script = ./context-budget.sh;
   };
@@ -275,139 +268,61 @@ in
   # node_modules 带进 Nix store；只校验已构建的 dist/（重新构建见 vscode/README）。
   vscode-ext = mkCheck {
     name = "vuna-vscode-ext";
-    srcs = [
-      ../../vscode/package.json
-      ../../vscode/package-lock.json
-      ../../vscode/tsconfig.json
-      ../../vscode/src
-      ../../vscode/scripts
-      ../../vscode/dist
-      ../../vscode/syntaxes
-      ../../vscode/language-configuration.json
-      ../../vscode/snippets
-      ../../vscode/README.md
-      ../../vscode/LICENSE
-      ../../vscode/.vscodeignore
-      ../../vscode/check.sh
-      ../../vscode/dev
-    ];
-    nativeBuildInputs = [
-      pkgs.nodejs
-      pkgs.bash
-    ];
+    srcs = vscodeSrcs;
+    nativeBuildInputs = [ pkgs.nodejs ];
     script = ./vscode-ext.sh;
   };
-  # 诊断码覆盖门禁：每个目录码至少有结构化夹具（或显式 allowlist）；覆盖数不低于基线。
-  diag-coverage = mkCheck {
-    name = "vuna-diag-coverage";
+
+  # 诊断策略三件套（码覆盖 / 位置 / 文案）；实现见 nix/checks/lib/。
+  vuna-diag = vunaCheck {
+    name = "vuna-diag";
     srcs = [
-      ../../test/corpus
-      ../../test/suite/steps
-      ../../nix/checks/diag-coverage.sh
+      src.corpus
+      src.steps
+      ./lib
       ../../nix/diag-coverage-allow.txt
       ../../nix/diag-coverage.min
       ../../nix/diag-unreachable.txt
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    script = ./diag-coverage.sh;
-  };
-
-  # 诊断位置门禁：结构化诊断必须有主 span；没有源码可指的码只能
-  # 逐码登记在 nix/diag-located.allow（基线，只减不增）。
-  diag-located = mkCheck {
-    name = "vuna-diag-located";
-    srcs = [
-      ../../test/corpus
-      ../../nix/checks/diag-located.sh
       ../../nix/diag-located.allow
+      ../../nix/diag-style-allow.txt
     ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
     nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
       pkgs.findutils
       pkgs.gnugrep
       pkgs.jq
     ];
-    script = ./diag-located.sh;
+    script = ./diag.sh;
   };
 
-  # 诊断文案规范门禁：消息模板风格统一（句号/大小写/空白/占位符）。
-  diag-style = mkCheck {
-    name = "vuna-diag-style";
+  # 静态结构守卫（诊断码 / IR 边界 / 进程绑定岛 / 隐藏效果）；实现见 nix/checks/lib/。
+  vuna-static = mkCheck {
+    name = "vuna-static";
     srcs = [
-      ../../nix/checks/diag-style.sh
-      ../../nix/diag-style-allow.txt
-    ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    script = ./diag-style.sh;
-  };
-
-  # 隐藏效果守卫：`runPure` 调用点只降不增（基线 nix/eff-boundary.allowlist，当前为空）。
-  eff-boundary = mkCheck {
-    name = "vuna-eff-boundary";
-    srcs = [
-      ../../compiler/lib
-      ../../lib
-      ../../nix/check-eff-boundary.sh
+      src.compiler
+      src.lib
+      src.steps
+      src.processBound
+      ./lib
       ../../nix/eff-boundary.allowlist
+      ../../nix/steps-inproc.max
     ];
     nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
       pkgs.gnugrep
+      pkgs.gnused
     ];
-    script = ../../nix/check-eff-boundary.sh;
-  };
-
-  # 诊断门禁：compiler 内源码诊断必须走域码（TC_/CG_/RN_/LD_/IC_...）；位置渲染只在
-  # Diag.Format/Source。工具/构建/清单错误（exit 2）是显式白名单。
-  diag-raw = mkCheck {
-    name = "vuna-diag-raw";
-    srcs = [
-      ../../compiler
-      ../../lib
-      ../../nix/checks/diag-raw.sh
-    ];
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-    ];
-    script = ./diag-raw.sh;
+    script = ./static.sh;
   };
 
   # 可观测性结构门禁（`docs/reference/observability.md` §9）：关闭不产 trace；`VUNA_OBS=2`
   # 的 check 产出可被 `vuna obs validate` 接受的 trace；`summarize --json` 单行且结构化；
   # 编译器自观测必须仍产出 `vuna.elab` / `vuna.codegen.check` 两个阶段跨度。
-  vuna-obs-schema = mkCheck {
+  vuna-obs-schema = vunaCheck {
     name = "vuna-obs-schema";
     srcs = [
-      ../../compiler
-      ../../base
-      ../../nix/checks/vuna-obs-schema.sh
+      src.compiler
+      src.base
     ];
-    env = {
-      VUNA = "${vuna}/bin/vuna";
-    };
     nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
       pkgs.findutils
       pkgs.gnugrep
     ];
@@ -416,20 +331,14 @@ in
 
   # `#line` 注入门禁（规范 §5）：split 产物的指令是包相对 `.vuna` 路径，且 `-g` 编出的
   # 可执行文件在 DWARF `.debug_line` 里真的指向 `.vuna`（不需要 gdb/perf）。
-  vuna-obs-dwarf = mkCheck {
+  vuna-obs-dwarf = vunaCheck {
     name = "vuna-obs-dwarf";
-    srcs = [
-      ../../test/corpus/codegen
-      ../../nix/checks/vuna-obs-dwarf.sh
-    ];
+    srcs = [ src.codegenCorpus ];
     env = {
-      VUNA = "${vuna}/bin/vuna";
       VUNA_BASE = "${repo}/base";
     };
     nativeBuildInputs = ocamlTools ++ [
       pkgs.binutils
-      pkgs.bash
-      pkgs.coreutils
       pkgs.findutils
       pkgs.gnugrep
     ];
@@ -438,61 +347,38 @@ in
 
   # 关闭口径门禁（规范 §6）：`VUNA_OBS=0` 与不设观测的产物逐字节一致、关闭时不写 trace
   # 文件、生成运行时的 obs 入口都以关闭快速路径开头（不在关闭路径读时钟/分配）。
-  vuna-obs-overhead = mkCheck {
+  vuna-obs-overhead = vunaCheck {
     name = "vuna-obs-overhead";
     srcs = [
-      ../../test/corpus/codegen
-      ../../base
-      ../../nix/checks/vuna-obs-overhead.sh
+      src.codegenCorpus
+      src.base
     ];
     env = {
-      VUNA = "${vuna}/bin/vuna";
       VUNA_BASE = "${repo}/base";
     };
     nativeBuildInputs = ocamlTools ++ [
-      pkgs.bash
-      pkgs.coreutils
       pkgs.findutils
       pkgs.gnugrep
     ];
     script = ./vuna-obs-overhead.sh;
   };
 
-  # IR 边界：Core → IR → OCaml 的单一链路。
-  # `Vuna.Compiler.Ir*` 不得 import Core/Elab/Intrinsics/Codegen；文本生成层
-  # （Codegen 门面与 Decl/Term/Assembly）不得 import Core/Elab/Intrinsics，唯一例外是
-  # `Codegen/Lower.vuna`（Core→IR 的唯一入口）；Split 必须路由到 Lower；生成层必须消费 IR。
-  # 静态结构守卫，不需要 vuna 二进制。
-  ir-boundary = mkCheck {
-    name = "vuna-ir-boundary";
+  # flake.nix 与 nix/ 的 Nix 文件必须与 nixfmt 输出一致。
+  vuna-nix-fmt = mkCheck {
+    name = "vuna-nix-fmt";
     srcs = [
-      ../../compiler
-      ../../nix/checks/ir-boundary.sh
+      ../../flake.nix
+      ../../nix
     ];
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.gnused
-    ];
-    script = ./ir-boundary.sh;
+    nativeBuildInputs = [ pkgs.nixfmt ];
+    script = ./nix-fmt.sh;
   };
-  # 测试的进程绑定岛门禁（`docs/reference/testing.md`）：fixture 用例已全部进程内执行，
-  # steps 里剩下的 spawn 必须逐个登记原因（PTY / stdio 帧 / 产物执行 / 多进程 store /
-  # CLI 渲染文本），登记数量按 ratchet 只降不增。静态扫描，不需要 vuna 二进制。
-  steps-inproc = mkCheck {
-    name = "vuna-steps-inproc";
-    srcs = [
-      ../../test/suite/steps
-      ../../test/suite/process-bound.txt
-      ../../nix/checks/steps-inproc.sh
-      ../../nix/steps-inproc.max
-    ];
-    nativeBuildInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.gnugrep
-    ];
-    script = ./steps-inproc.sh;
+
+  # 顶层 nix/checks/*.sh 与 default.nix 的登记必须一一对应，防止 orphan 脚本。
+  vuna-checks-inventory = mkCheck {
+    name = "vuna-checks-inventory";
+    srcs = [ ./. ];
+    nativeBuildInputs = [ pkgs.gnugrep ];
+    script = ./inventory.sh;
   };
 }

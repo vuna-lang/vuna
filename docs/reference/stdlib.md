@@ -204,7 +204,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   可用；诊断在缺少显式 import 时仍会提示加对应 import。ad-hoc 文件同样没有能力门控：
   既可经 `Base.Eff` + handler，也可直接调用 `prim_*` / `prim_eff_*`（约定：用户面应经 handler）。
 - split 输出（`compile` / `build` 目录）的编译单元只有 `Vuna_runtime` + 各源码模块 +
-  `Main`；文件集以 `seed/` 与 `nix/seed-count.txt` 为准。
+  `Main`；文件集以 `seed/` 与 `nix/seed-files.txt` 为准。
 
 ## 已知边界
 

@@ -90,9 +90,8 @@ if ! mv "$new_seed" seed; then
   exit 1
 fi
 rm -rf "$old_seed"
-# 闭包数量/完整文件清单由 checks.seed-selfhost 读取；rotation 时自动同步，避免清单腐化。
-# 清单变更会进入 rotation 的 git diff，供 review 确认 TCB 边界。
-find seed -maxdepth 1 -type f -name '*.ml' | wc -l | tr -d ' ' >nix/seed-count.txt
+# 完整文件清单由 checks.seed-selfhost 读取（`.ml` 数量从清单推导）；rotation 时自动
+# 同步，避免清单腐化。清单变更会进入 rotation 的 git diff，供 review 确认 TCB 边界。
 find seed -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort >nix/seed-files.txt
 
 # 写元数据（同目录临时文件 + mv，尽量原子；元数据只用于审计）。

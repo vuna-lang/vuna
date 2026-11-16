@@ -9,9 +9,9 @@
 #   - 跨行调用也计数（fmt 可能把 `runPure` 与 `(` 拆成两行）；
 #   - nix/eff-boundary.exceptions（若存在）里的文件是显式 sanctioned 例外；当前为零例外。
 #
-# 用法：sh nix/check-eff-boundary.sh [--update]
+# 用法：sh nix/checks/lib/eff-boundary.sh [--update]
 set -eu
-root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 if [ ! -d "$root/compiler/lib" ]; then root=$(pwd); fi
 allow="$root/nix/eff-boundary.allowlist"
 exc="$root/nix/eff-boundary.exceptions"
@@ -47,14 +47,14 @@ while read -r f n; do
     echo "eff-boundary: $f 基线 $base 处，实际 $n 处：不允许新增隐藏效果" >&2
     fail=1
   elif [ "$n" -lt "$base" ]; then
-    echo "eff-boundary: $f 已减少到 $n 处（基线 $base）：请运行 sh nix/check-eff-boundary.sh --update" >&2
+    echo "eff-boundary: $f 已减少到 $n 处（基线 $base）：请运行 sh nix/checks/lib/eff-boundary.sh --update" >&2
   fi
 done <"$tmp"
 if [ -f "$allow" ]; then
   while read -r f n; do
     [ -n "$f" ] || continue
     if ! grep -q "^$f " "$tmp"; then
-      echo "eff-boundary: $f 已无隐藏效果调用点：请运行 sh nix/check-eff-boundary.sh --update" >&2
+      echo "eff-boundary: $f 已无隐藏效果调用点：请运行 sh nix/checks/lib/eff-boundary.sh --update" >&2
     fi
   done <"$allow"
 fi

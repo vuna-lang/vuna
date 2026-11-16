@@ -4,7 +4,7 @@
 # `IC_FuelExhausted (codegen)`（项本身完全合法），因此这里必须通过并且产物能真跑。
 #
 # IR 的结构边界（后端只消费 IR、IR 不 import 上游）由 `checks.ir-boundary`
-# （`nix/checks/ir-boundary.sh`）在 `nix flake check` 里守；本 steps 用例只钉产物行为。
+# （`nix/checks/lib/ir-boundary.sh`）在 `nix flake check` 里守；本 steps 用例只钉产物行为。
 run: "$VUNA" check corpus/dt_deep 2>&1
 exit: 0
 out-not-contains: IC_FuelExhausted

@@ -13,7 +13,7 @@
 #      开头（`nix/checks/vuna-obs-overhead.sh` 用 grep 抽 `let dtp_obs_*` 块检查），
 #      防止有人在关闭路径上加时钟读/分配。
 #
-# 本 check 不测墙钟（那是 benchmark 的事，见 nix/bench 与 performance.md §5）。
+# 本 check 不测墙钟（那是 benchmark 的事，见 bench/bootstrap.sh 与 performance.md §5）。
 set -eu
 
 OUT=${1:?usage: check.sh OUT}
