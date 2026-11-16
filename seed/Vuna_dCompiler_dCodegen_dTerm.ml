@@ -491,10 +491,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_drecordPatAssigned = (fun mc0 mc1 mc2 mc
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> (match mc3 with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> Base_dList.C_Base_dList_dList_Nil
-)
   | _ -> failwith "DT: impossible branch"
 ))
 

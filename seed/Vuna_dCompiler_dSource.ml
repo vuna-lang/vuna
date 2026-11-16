@@ -146,10 +146,7 @@ let rec v_Vuna_dCompiler_dSource_dprefixLen2 = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> 0
-  | _ -> 0
-)
   | _ -> failwith "DT: impossible branch"
 ))
 

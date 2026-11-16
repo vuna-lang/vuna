@@ -42,10 +42,7 @@ let v_Vuna_dCompiler_dCore_dTerm_drigAdd = (fun mc0 mc1 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> mc0
   | _ -> C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> mc1
-  | _ -> mc1
-)
   | _ -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> mc0
   | _ -> C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega
@@ -62,19 +59,13 @@ let v_Vuna_dCompiler_dCore_dTerm_drigScale = (fun mc0 mc1 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0
   | _ -> mc1
 )
-  | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0 -> C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0
-  | _ -> C_Vuna_dCompiler_dCore_dTerm_dRig_Rig0
-)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 75 "Vuna/Compiler/Core/Term.vuna"
 let v_Vuna_dCompiler_dCore_dTerm_drigJoin = (fun mc0 mc1 -> (match mc0 with
-  | C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega -> C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega
-  | _ -> C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega
-)
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1 -> (match mc1 with
   | C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega -> C_Vuna_dCompiler_dCore_dTerm_dRig_RigOmega
   | C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1 -> C_Vuna_dCompiler_dCore_dTerm_dRig_Rig1

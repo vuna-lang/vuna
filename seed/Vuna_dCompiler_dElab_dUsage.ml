@@ -25,10 +25,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_duAdd = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> mc1
-  | _ -> mc1
-)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -42,10 +39,7 @@ let rec v_Vuna_dCompiler_dElab_dUsage_duJoin = (fun mc0 mc1 -> (match mc0 with
   | Base_dList.C_Base_dList_dList_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> mc1
-  | _ -> mc1
-)
   | _ -> failwith "DT: impossible branch"
 ))
 

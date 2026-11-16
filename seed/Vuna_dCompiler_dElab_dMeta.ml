@@ -18,10 +18,7 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dzipTeleRigs = (fun mc0 mc1 -> (match mc0 w
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 )
-  | Base_dList.C_Base_dList_dList_Nil -> (match mc1 with
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
-  | _ -> Base_dList.C_Base_dList_dList_Nil
-)
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -1114,15 +1111,47 @@ let rec v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity = (fun mc0 -> (match mc0 w
   | _ -> 0
 ))
 
-# 1236 "Vuna/Compiler/Elab/Meta.vuna"
-let v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable = (fun ec -> ((Base_dList.v_Base_dList_dmap (fun d -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dmap (fun c -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDatas ec)))
+# 1256 "Vuna/Compiler/Elab/Meta.vuna"
+let rec v_Vuna_dCompiler_dElab_dMeta_ddropPis = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TPi (dtb__601, dtb__602, dtb__603, dtb__604, dtb__605) -> (v_Vuna_dCompiler_dElab_dMeta_ddropPis dtb__605)
+  | _ -> mc0
+))
 
-# 1243 "Vuna/Compiler/Elab/Meta.vuna"
+# 1260 "Vuna/Compiler/Elab/Meta.vuna"
+let rec v_Vuna_dCompiler_dElab_dMeta_danyNonVarArg = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__606, dtb__607) -> (match dtb__606 with
+  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__608, dtb__609, dtb__610) -> (v_Vuna_dCompiler_dElab_dMeta_danyNonVarArg dtb__607)
+  | _ -> true
+)
+  | Base_dList.C_Base_dList_dList_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1252 "Vuna/Compiler/Elab/Meta.vuna"
+let v_Vuna_dCompiler_dElab_dMeta_dctorResultIndexed = (fun c -> (match (v_Vuna_dCompiler_dElab_dMeta_dresultSpine (v_Vuna_dCompiler_dElab_dMeta_ddropPis (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c))) with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__611; Base_dPair.f_Base_dPair_dPair_second = dtb__612 } -> (v_Vuna_dCompiler_dElab_dMeta_danyNonVarArg dtb__612)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1248 "Vuna/Compiler/Elab/Meta.vuna"
+let rec v_Vuna_dCompiler_dElab_dMeta_danyCtorIndexed = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList_Cons (dtb__613, dtb__614) -> (if (v_Vuna_dCompiler_dElab_dMeta_dctorResultIndexed dtb__613) then true else (v_Vuna_dCompiler_dElab_dMeta_danyCtorIndexed dtb__614))
+  | Base_dList.C_Base_dList_dList_Nil -> false
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 1245 "Vuna/Compiler/Elab/Meta.vuna"
+let v_Vuna_dCompiler_dElab_dMeta_dfamilyIndexed = (fun d -> (v_Vuna_dCompiler_dElab_dMeta_danyCtorIndexed (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)))
+
+# 1236 "Vuna/Compiler/Elab/Meta.vuna"
+let v_Vuna_dCompiler_dElab_dMeta_dctorFamilyTable = (fun ec -> ((Base_dList.v_Base_dList_dmap (fun d -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = (Base_dBool.v_Base_dBool_dnot (v_Vuna_dCompiler_dElab_dMeta_dfamilyIndexed d)); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dmap (fun c -> { Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorName c); Base_dPair.f_Base_dPair_dPair_second = (v_Vuna_dCompiler_dElab_dMeta_dexplicitPiArity (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c)) })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataCtors d)) } })) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decDatas ec)))
+
+# 1267 "Vuna/Compiler/Elab/Meta.vuna"
 let rec v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__601, dtb__602) -> (match dtb__601 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__603; Base_dPair.f_Base_dPair_dPair_second = dtb__604 } -> (match dtb__603 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__605, dtb__606, dtb__607) -> (v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody dtb__602)
-  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__604))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__615, dtb__616) -> (match dtb__615 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__617; Base_dPair.f_Base_dPair_dPair_second = dtb__618 } -> (match dtb__617 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__619, dtb__620, dtb__621) -> (v_Vuna_dCompiler_dElab_dMeta_dfindCatchAllBody dtb__616)
+  | _ -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__618))
 )
   | _ -> failwith "DT: impossible branch"
 )

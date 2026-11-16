@@ -25,13 +25,10 @@ let v_Applicative_uBase_uResult_uResult = (Base_dApplicative.C_Dict_uBase_dAppli
   | C_Base_dResult_dResult_Err (dtb__7) -> (C_Base_dResult_dResult_Err (dtb__7))
   | _ -> failwith "DT: impossible branch"
 )), (fun mc0 mc1 mc2 -> (match mc1 with
-  | C_Base_dResult_dResult_Err (dtb__8) -> (match mc2 with
-  | C_Base_dResult_dResult_Err (dtb__9) -> (C_Base_dResult_dResult_Err (dtb__8))
-  | _ -> (C_Base_dResult_dResult_Err (dtb__8))
-)
-  | C_Base_dResult_dResult_Ok (dtb__10) -> (match mc2 with
-  | C_Base_dResult_dResult_Err (dtb__11) -> (C_Base_dResult_dResult_Err (dtb__11))
-  | C_Base_dResult_dResult_Ok (dtb__12) -> (C_Base_dResult_dResult_Ok (((mc0 dtb__10) dtb__12)))
+  | C_Base_dResult_dResult_Err (dtb__8) -> (C_Base_dResult_dResult_Err (dtb__8))
+  | C_Base_dResult_dResult_Ok (dtb__9) -> (match mc2 with
+  | C_Base_dResult_dResult_Err (dtb__10) -> (C_Base_dResult_dResult_Err (dtb__10))
+  | C_Base_dResult_dResult_Ok (dtb__11) -> (C_Base_dResult_dResult_Ok (((mc0 dtb__9) dtb__11)))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -39,19 +36,19 @@ let v_Applicative_uBase_uResult_uResult = (Base_dApplicative.C_Dict_uBase_dAppli
 
 # 76 "Base/Result.vuna"
 let v_Show_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fun r -> (match r with
-  | C_Base_dResult_dResult_Ok (dtb__13) -> ("Ok " ^ ((Base_dShow.v_Base_dShow_dshow _uctx0) dtb__13))
-  | C_Base_dResult_dResult_Err (dtb__14) -> ("Err " ^ ((Base_dShow.v_Base_dShow_dshow Base_dShow.v_Show_uString) dtb__14))
+  | C_Base_dResult_dResult_Ok (dtb__12) -> ("Ok " ^ ((Base_dShow.v_Base_dShow_dshow _uctx0) dtb__12))
+  | C_Base_dResult_dResult_Err (dtb__13) -> ("Err " ^ ((Base_dShow.v_Base_dShow_dshow Base_dShow.v_Show_uString) dtb__13))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 83 "Base/Result.vuna"
 let rec v_Eq_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
-  | C_Base_dResult_dResult_Err (dtb__15) -> (match mc1 with
-  | C_Base_dResult_dResult_Err (dtb__16) -> (dtb__15 = dtb__16)
+  | C_Base_dResult_dResult_Err (dtb__14) -> (match mc1 with
+  | C_Base_dResult_dResult_Err (dtb__15) -> (dtb__14 = dtb__15)
   | _ -> false
 )
-  | C_Base_dResult_dResult_Ok (dtb__17) -> (match mc1 with
-  | C_Base_dResult_dResult_Ok (dtb__18) -> (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__17) dtb__18)
+  | C_Base_dResult_dResult_Ok (dtb__16) -> (match mc1 with
+  | C_Base_dResult_dResult_Ok (dtb__17) -> (((Base_dEq.v_Base_dEq_deq _uctx0) dtb__16) dtb__17)
   | _ -> false
 )
   | _ -> failwith "DT: impossible branch"
@@ -59,32 +56,32 @@ let rec v_Eq_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dEq.C_Dict_uBase_dE
 
 # 89 "Base/Result.vuna"
 let v_Hashable_uBase_uResult_uResult_ua = (fun _uctx0 -> (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun r -> (match r with
-  | C_Base_dResult_dResult_Ok (dtb__19) -> ((Base_dHashable.v_Base_dHashable_dhashCombine 1) ((Base_dHashable.v_Base_dHashable_dhash _uctx0) dtb__19))
-  | C_Base_dResult_dResult_Err (dtb__20) -> ((Base_dHashable.v_Base_dHashable_dhashCombine 2) (Base_dHashable.v_Base_dHashable_dhashStr dtb__20))
+  | C_Base_dResult_dResult_Ok (dtb__18) -> ((Base_dHashable.v_Base_dHashable_dhashCombine 1) ((Base_dHashable.v_Base_dHashable_dhash _uctx0) dtb__18))
+  | C_Base_dResult_dResult_Err (dtb__19) -> ((Base_dHashable.v_Base_dHashable_dhashCombine 2) (Base_dHashable.v_Base_dHashable_dhashStr dtb__19))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 94 "Base/Result.vuna"
 let v_Foldable_uBase_uResult_uResult = (Base_dFoldable.C_Dict_uBase_dFoldable_dFoldable_Foldable ((fun f z r -> (match r with
-  | C_Base_dResult_dResult_Ok (dtb__21) -> ((f dtb__21) z)
-  | C_Base_dResult_dResult_Err (dtb__22) -> z
+  | C_Base_dResult_dResult_Ok (dtb__20) -> ((f dtb__20) z)
+  | C_Base_dResult_dResult_Err (dtb__21) -> z
   | _ -> failwith "DT: impossible branch"
 ))))
 
 # 99 "Base/Result.vuna"
 let v_Traversable_uBase_uResult_uResult_uf = (fun _uctx0 -> (Base_dTraversable.C_Dict_uBase_dTraversable_dTraversable_Traversable ((fun fun_ r -> (match r with
-  | C_Base_dResult_dResult_Ok (dtb__23) -> ((((Base_dApplicative.v_Base_dApplicative_dliftA2 _uctx0) (fun y _u -> (C_Base_dResult_dResult_Ok (y)))) (fun_ dtb__23)) ((Base_dApplicative.v_Base_dApplicative_dpure _uctx0) dtb__23))
-  | C_Base_dResult_dResult_Err (dtb__24) -> ((Base_dApplicative.v_Base_dApplicative_dpure _uctx0) (C_Base_dResult_dResult_Err (dtb__24)))
+  | C_Base_dResult_dResult_Ok (dtb__22) -> ((((Base_dApplicative.v_Base_dApplicative_dliftA2 _uctx0) (fun y _u -> (C_Base_dResult_dResult_Ok (y)))) (fun_ dtb__22)) ((Base_dApplicative.v_Base_dApplicative_dpure _uctx0) dtb__22))
+  | C_Base_dResult_dResult_Err (dtb__23) -> ((Base_dApplicative.v_Base_dApplicative_dpure _uctx0) (C_Base_dResult_dResult_Err (dtb__23)))
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 51 "Base/Result.vuna"
 let rec v_Base_dResult_dtraverse = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__25, dtb__26) -> (match (mc0 dtb__25) with
-  | C_Base_dResult_dResult_Err (dtb__27) -> (C_Base_dResult_dResult_Err (dtb__27))
-  | C_Base_dResult_dResult_Ok (dtb__28) -> (match ((v_Base_dResult_dtraverse mc0) dtb__26) with
-  | C_Base_dResult_dResult_Err (dtb__29) -> (C_Base_dResult_dResult_Err (dtb__29))
-  | C_Base_dResult_dResult_Ok (dtb__30) -> (C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList_Cons (dtb__28, dtb__30))))
+  | Base_dList.C_Base_dList_dList_Cons (dtb__24, dtb__25) -> (match (mc0 dtb__24) with
+  | C_Base_dResult_dResult_Err (dtb__26) -> (C_Base_dResult_dResult_Err (dtb__26))
+  | C_Base_dResult_dResult_Ok (dtb__27) -> (match ((v_Base_dResult_dtraverse mc0) dtb__25) with
+  | C_Base_dResult_dResult_Err (dtb__28) -> (C_Base_dResult_dResult_Err (dtb__28))
+  | C_Base_dResult_dResult_Ok (dtb__29) -> (C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__29))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -95,9 +92,9 @@ let rec v_Base_dResult_dtraverse = (fun mc0 mc1 -> (match mc1 with
 
 # 60 "Base/Result.vuna"
 let v_Base_dResult_dstep = (fun mc0 mc1 -> (match mc0 with
-  | C_Base_dResult_dResult_Err (dtb__31) -> (C_Base_dResult_dResult_Err (dtb__31))
-  | C_Base_dResult_dResult_Ok (dtb__32) -> (match dtb__32 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__33; Base_dPair.f_Base_dPair_dPair_second = dtb__34 } -> ((mc1 dtb__33) dtb__34)
+  | C_Base_dResult_dResult_Err (dtb__30) -> (C_Base_dResult_dResult_Err (dtb__30))
+  | C_Base_dResult_dResult_Ok (dtb__31) -> (match dtb__31 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__32; Base_dPair.f_Base_dPair_dPair_second = dtb__33 } -> ((mc1 dtb__32) dtb__33)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -105,14 +102,14 @@ let v_Base_dResult_dstep = (fun mc0 mc1 -> (match mc0 with
 
 # 65 "Base/Result.vuna"
 let v_Base_dResult_dmapError = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dResult_dResult_Err (dtb__35) -> (C_Base_dResult_dResult_Err ((mc0 dtb__35)))
-  | C_Base_dResult_dResult_Ok (dtb__36) -> (C_Base_dResult_dResult_Ok (dtb__36))
+  | C_Base_dResult_dResult_Err (dtb__34) -> (C_Base_dResult_dResult_Err ((mc0 dtb__34)))
+  | C_Base_dResult_dResult_Ok (dtb__35) -> (C_Base_dResult_dResult_Ok (dtb__35))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 70 "Base/Result.vuna"
 let v_Base_dResult_dwithDefault = (fun mc0 mc1 -> (match mc1 with
-  | C_Base_dResult_dResult_Err (dtb__37) -> mc0
-  | C_Base_dResult_dResult_Ok (dtb__38) -> dtb__38
+  | C_Base_dResult_dResult_Err (dtb__36) -> mc0
+  | C_Base_dResult_dResult_Ok (dtb__37) -> dtb__37
   | _ -> failwith "DT: impossible branch"
 ))
