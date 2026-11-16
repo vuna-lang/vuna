@@ -930,17 +930,17 @@ cmpFamBody fam =
     FamRecord => cmpFields ty (range 0 (length fam.wasmFamRecordFields))
     FamUnboxed => [IConstI32 0]
 
-cmpFamBranch : WasmFam -> List Instr -> List Instr
-cmpFamBranch fam rest =
+cmpFamFlat : WasmFam -> List Instr
+cmpFamFlat fam =
   let
     ty = watFamName fam.wasmFamName
   in [ ILocalGet "$a",
     IRefTest ty,
-    IIf "i32" [ILocalGet "$b", IRefTest ty, IIf "i32" (cmpFamBody fam) [IConstI32 1]] rest
+    IIf "" [ILocalGet "$b", IRefTest ty, IIf "" (append (cmpFamBody fam) [IReturn]) [IConstI32 1, IReturn]] [INop]
   ]
 
-cmpPrimBranch : String -> List Instr -> List Instr -> List Instr
-cmpPrimBranch ty thenBody rest = [ILocalGet "$a", IRefTest ty, IIf "i32" thenBody rest]
+cmpPrimFlat : String -> List Instr -> List Instr
+cmpPrimFlat ty body = [ILocalGet "$a", IRefTest ty, IIf "" (append body [IReturn]) [INop]]
 
 isConcreteFam : WasmFam -> Bool
 isConcreteFam f = case f.wasmFamKind of
@@ -951,22 +951,20 @@ cmpDispatch : List WasmFam -> List Instr
 cmpDispatch fams =
   let
     concrete = filter isConcreteFam fams
-    famTrap = foldr (\f => \acc => cmpFamBranch f acc) [ICall "$rt_cmpTrap"] concrete
-    arrB = cmpPrimBranch "$arr" [ILocalGet "$a", ILocalGet "$b", ICall "$rt_cmpArr"] famTrap
-    strB = cmpPrimBranch "$str" [ILocalGet "$a", ILocalGet "$b", ICall "$rt_cmpStr"] arrB
-    floatB =
-      cmpPrimBranch "$float"
-        [ILocalGet "$a", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$b", IRefCast "$float", IStructGet "$float" 0, ICall "$rt_cmpF64"]
-        strB
-    intB =
-      cmpPrimBranch "$int"
-        [ILocalGet "$a", IRefCast "$int", IStructGet "$int" 0, ILocalGet "$b", IRefCast "$int", IStructGet "$int" 0, ICall "$rt_cmpI64"]
-        floatB
     i31B =
-      cmpPrimBranch "i31"
+      cmpPrimFlat "i31"
         [ILocalGet "$a", IRefCast "i31", II31GetS, ILocalGet "$b", IRefCast "i31", II31GetS, ICall "$rt_cmpI32"]
-        intB
-  in i31B
+    intB =
+      cmpPrimFlat "$int"
+        [ILocalGet "$a", IRefCast "$int", IStructGet "$int" 0, ILocalGet "$b", IRefCast "$int", IStructGet "$int" 0, ICall "$rt_cmpI64"]
+    floatB =
+      cmpPrimFlat "$float"
+        [ILocalGet "$a", IRefCast "$float", IStructGet "$float" 0, ILocalGet "$b", IRefCast "$float", IStructGet "$float" 0, ICall "$rt_cmpF64"]
+    strB = cmpPrimFlat "$str" [ILocalGet "$a", ILocalGet "$b", ICall "$rt_cmpStr"]
+    arrB = cmpPrimFlat "$arr" [ILocalGet "$a", ILocalGet "$b", ICall "$rt_cmpArr"]
+    famB = concatMap cmpFamFlat concrete
+  in append i31B
+    (append intB (append floatB (append strB (append arrB (append famB [ILocalGet "$a", ILocalGet "$b", ICall "$rt_cmpTrap"])))))
 
 rtCompareFunc : List WasmFam -> WatFunc
 rtCompareFunc fams =

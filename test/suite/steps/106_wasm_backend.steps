@@ -62,10 +62,10 @@ exit: 0
 out-equals: 7
 
 # 7) 拒绝面：编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
-#    未实现的宿主叶子（这里 Env）仍是能力限制。
-run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetEnv \"X\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
+#    FFI extern 仍被拒绝（宿主效应叶子正在补齐）。
+run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "extern c_add \"c_add\" : Int -> Int -> Int\n\nmain : Int\nmain = c_add 1 2\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
 exit: 1
-out-contains: wasm target: runtime symbol
+out-contains: wasm target: extern definition
 file-absent: $TMPDIR/rej-out/main.wasm
 
 # 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。

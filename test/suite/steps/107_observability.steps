@@ -5,7 +5,7 @@
 # `VUNA_OBS=2` trace 的结构与 `obs validate`；`#line` 是包相对 `.vuna` 路径、产物可跑；
 # DWARF `.debug_line` 指向 `.vuna`；运行时错误回栈落到 `.vuna`；`VUNA_OBS=3` 采样；
 # convert（cpuprofile/folded/speedscope）与 render 的确定性；summarize --json / --baseline；
-# 非 OCaml 后端：叶子原语 no-op 桩、`obsSpan` 编译期拒绝。
+# 非 OCaml 后端：叶子原语 no-op 桩；wasm 的 obsSpan 直接应用 thunk，native 仍拒绝。
 
 run: command -v readelf
 exit: 0
@@ -178,8 +178,10 @@ exit: 0
 file-exists: $TMPDIR/wobs-out/main.wat
 
 run: sh -c 'd="$TMPDIR/wspan"; mkdir -p "$d/app"; printf "[package]\nname = \"wspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/wspan-out" "$d"'
-exit: nonzero
-out-contains: obs spans need closures
+exit: 0
+run: sh -c 'cd "$TMPDIR/wspan-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm'
+exit: 0
+out-equals: 1
 
 run: sh -c 'd="$TMPDIR/nspan"; mkdir -p "$d/app"; printf "[package]\nname = \"nspan\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Obs.Span\n\nmain : Int\nmain = obsSpan \"x\" \"vuna.user\" (\\_ => 1)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/nspan-out" "$d"'
 exit: nonzero
