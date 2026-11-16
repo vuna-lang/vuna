@@ -1,0 +1,17 @@
+-- 自由隐式名的 kind 从「作为类型构造子实参」的位置反推：`Box f` 里 `f` 没有被应用，
+-- 只看应用次数会把 `f` 判成 `Type`，与 `Box` 的参数 kind `Type -> Type` 冲突。
+data Box : (Type -> Type) -> Type where
+  MkBox : {g : Type -> Type} -> g Int -> Box g
+
+useBox : Box f -> Int
+useBox (MkBox _) = 7
+
+-- 同一个 `f` 同时以「实参」和「被应用」两种形态出现：两边必须得到同一个 kind。
+both : Box f -> f Int -> Int
+both (MkBox _) _ = 7
+
+boxList : Box List
+boxList = MkBox [1, 2]
+
+main : Int
+main = useBox boxList + both boxList Nil
