@@ -109,6 +109,14 @@ nativeFuncLabel name = "vuna_${nativeName name}"
 export nativeRtLabel : String -> String
 nativeRtLabel name = "rt_${nativeName name}"
 
+-- | 顶层函数当值时的静态 wrapper 标签（诚实反映「这是函数值」）。
+export nativeGlobalValueLabel : String -> String
+nativeGlobalValueLabel name = "vuna_gv_${nativeName name}"
+
+-- | 运行时符号当值时的 wrapper 标签。
+export nativeRtValueLabel : String -> String
+nativeRtValueLabel sym = "rt_gv_${nativeName sym}"
+
 -- | 程序入口标签（固定）。
 export nativeEntryLabel : String
 nativeEntryLabel = "_start"

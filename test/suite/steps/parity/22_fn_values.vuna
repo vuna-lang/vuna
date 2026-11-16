@@ -1,0 +1,46 @@
+import Base.Int
+import Base.List
+
+inc : Int -> Int
+inc x = x + 1
+
+plus2 : Int -> Int -> Int
+plus2 a b = a + b
+
+plus3 : Int -> Int -> Int -> Int
+plus3 a b c = a + b + c
+
+idf : Int -> (Int -> Int)
+idf x = \y => x + y
+
+total : List Int -> Int
+total xs = foldl (\a, b => a + b) 0 xs
+
+-- 形参是闭包：`g 10` 在运行时只拿到部分应用，map 再逐个饱和。
+applyWith : (Int -> Int -> Int) -> List Int -> Int
+applyWith g xs = total (map (g 10) xs)
+
+s1 : Int
+s1 = total (map inc [1, 2, 3])
+
+s2 : Int
+s2 = total (map (plus3 10 20) [1, 2, 3])
+
+s3 : Int
+s3 =
+  let g = plus3
+  in g 1 2 3
+
+s4 : Int
+s4 = idf 1 2
+
+s5 : Int
+s5 =
+  let g = idf
+  in g 5 6
+
+s6 : Int
+s6 = applyWith plus2 [1, 2, 3]
+
+main : Int
+main = s1 + s2 + s3 + s4 + s5 + s6

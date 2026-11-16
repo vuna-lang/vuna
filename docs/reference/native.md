@@ -75,9 +75,15 @@
   （最后一个实参先压，第 7 个最终在 `[rbp+16]`）。栈参数个数为奇数时先 `sub rsp, 8`
   补空洞，保证 `call` 时 `rsp` 16 字节对齐（prologue 的 `push rbp` + 16 倍数 frame 是
   另一处保证）；返回后一次性 `add rsp, 8*k + pad` 回收。
-- **闭包调用**：`rdi` = 闭包对象（其第 0 槽是代码指针、其后是捕获值），实参从 `rsi`
-  起（第 6 个实参起压栈），调用点 `mov r11, [rdi]; call r11`。闭包函数入口先把捕获值
-  拷进本帧槽，再按常规绑定形参。
+- **闭包**：布局 `[0]`=code、`[8]`=arity（运行时 binder 数）、`[16..]`=捕获值。
+  调用时 `rdi` = 闭包自身，实参从 `rsi` 起（`rsi/rdx/rcx/r8/r9`，第 6 个实参起压栈）。
+  闭包函数入口先把捕获值拷进本帧槽，再按常规绑定形参。
+- **动态应用**：生成代码不直接 `call [rdi]`，统一走运行时 `rt_apply(闭包, n, 实参数组)`
+  （实参数组升序，arg i 在 `[argp+8i]`）：饱和 → `rt_apply_exact` 按闭包 ABI 装寄存器 /
+  压栈后调用；不足 → 分配部分应用闭包（`rt_apply_shim` 在真正饱和时把「已捕获 + 收到」
+  拼成实参数组）；过多 → 先吃掉前 arity 个实参，再把返回值当闭包继续应用剩余实参。
+  顶层函数 / 运行时符号**当值**时生成静态 wrapper（闭包 ABI → 标准 ABI）作为 code，
+  arity 取定义参数个数 / `nativeRtValueArity` / `irInlineArity`。
 - 生成代码只使用 caller-saved 寄存器（`rax, rdi, rsi, rdx, rcx, r8-r11`）与帧指针
   `rbp`，不碰 `rbx/r12-r15`，因此无需保存 callee-saved。运行时只有续延恢复用 `r15`
   暂存续延记录（§3.4），生成代码不碰它。
@@ -98,7 +104,7 @@
 - **续延记录** 88 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
   `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
   `[80]=恢复值 v`。
-- **续延闭包** 16 B：`[0]=rt_eff_resume [8]=记录`；调用约定与普通闭包一致。
+- **续延闭包** 24 B：`[0]=rt_eff_resume [8]=arity(1) [16]=记录`；调用约定与普通闭包一致。
 
 `perform`：按 `(key, name)` 扫链；找到后把节点弹出（`rt_handlers = node.prev`），把
 `[perform_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）拷到堆，
@@ -140,25 +146,26 @@ one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算�
 base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` 同策略）。
 
 生成失败时，诊断后面附一次静态审计（`Native.Audit`）：把可达定义里**全部**不支持的
-构造按种类计数（缺失符号、运行时符号当值、全局函数当值、部分/过度应用、多 binder `let`、
-effect bind、extern），最多列 12 类，避免「一次只报一个 unsupported」的串行试错。
+构造按种类计数（缺失符号、运行时符号当值、runtime app arity、多 binder `let`、
+effect bind、extern），每类给计数与最多三个例子，避免「一次只报一个 unsupported」的
+串行试错。
 
 | IR 节点 | 当前 | 说明 |
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` | 支持 | `IrInt` 检查 63-bit 范围 |
 | `IrStr` | 支持 | `.rodata` 里 `{.quad len; .ascii bytes}`，求值成 `lea`（内容去重，首现顺序编号） |
-| `IrGlobal` | 支持（零参引用） | 生成 `call vuna_<name>`；作为函数值传递则拒绝 |
+| `IrGlobal` | 支持 | 零参引用生成 `call vuna_<name>`；作为函数值传递时生成闭包（wrapper） |
 | `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝 |
-| `IrApp` | 支持饱和顶层调用、单参立即 lambda 应用、运行时常量函数值饱和应用 | 部分应用/高阶拒绝 |
+| `IrApp` | 支持 | 饱和顶层/运行时调用直调；部分 / 过度应用与动态 head 走 `rt_apply` |
 | `IrIf` | 支持 | 条件按 0/1 判 |
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路 |
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
 | `IrNatCase` | 支持 | `if sc == 0 then zero else succ`；succ binder = `sc-1`，catch binder = `sc` |
-| `IrLam` | 支持 | 作为值 → 闭包对象 `[code][捕获...]`；应用 `call [rdi]`（`rdi` = 闭包，实参从 `rsi` 起） |
+| `IrLam` | 支持 | 作为值 → 闭包对象 `[code][arity][捕获...]`；应用统一走 `rt_apply` |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | 对象头 + 字段；§5 的「对象表示」 |
 | `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
 | `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
-| `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；其余见 §5 |
+| `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；作为值同样生成 wrapper 闭包 |
 | Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
@@ -174,8 +181,9 @@ effect bind、extern），最多列 12 类，避免「一次只报一个 unsuppo
   可观测性叶子桩。其余 `IrRtApp` 符号拒绝。
 - **两种调用形态**都要覆盖：内建饱和应用走 `IrRtApp sym args`（`irInlineArity`）；
   `strAt` / `strSubstring` / `assert` / `todo` / `prim_fail` 这类**多参函数值**在 IR 里是
-  `IrApp (IrRt sym) args` 的饱和应用（`irInlineArity = 0`），由
-  `Native.Runtime.nativeRtValueArity` 给出 arity，饱和才生成 `call`（部分应用拒绝）。
+  `IrApp (IrRt sym) args`（`irInlineArity = 0`），由
+  `Native.Runtime.nativeRtValueArity` 给出 arity；饱和直调，部分/过度应用与作为值都
+  生成 wrapper 闭包。
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…，与 `+` 同一形态决策）；63-bit
   语义与 `Codegen.Term.bi_bit*` 一致（`bitShr` 是保留 bit 62 的逻辑右移）。
 - 运行时错误报告统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
@@ -275,7 +283,6 @@ effect bind、extern），最多列 12 类，避免「一次只报一个 unsuppo
 
 ## 8. 已知边界
 
-- 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把
   `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
