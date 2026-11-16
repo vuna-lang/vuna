@@ -86,7 +86,9 @@ ctorEntriesOfGo (p :: rest) tag =
 maxCtorFields : List WasmCtor -> Int
 maxCtorFields [] = 0
 maxCtorFields (c :: rest) =
-  if c.wasmCtorFields > maxCtorFields rest then c.wasmCtorFields else maxCtorFields rest
+  let
+    m = maxCtorFields rest
+  in if c.wasmCtorFields > m then c.wasmCtorFields else m
 
 famOfDecl : IrTyDecl -> WasmFam
 famOfDecl (IrVariantDecl name _params ctors) =
