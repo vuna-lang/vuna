@@ -255,6 +255,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
   效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
+- 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console）由
+  `test/suite/steps/110_effect_parity.steps` 对拍 OCaml 与 native；wasm handler 落地后
+  并入 109 的三端对拍。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
   `ocamlTools`（gcc/binutils）。
 

@@ -1,0 +1,13 @@
+import Base.Eff
+
+data POp : Type where
+  P : Int -> POp
+
+resP : POp -> Type
+resP (P n) = Int
+
+main : Int
+main = runPure (handle (pure 5) {
+  return x -> x + 10
+  P n k -> k n
+})

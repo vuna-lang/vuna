@@ -396,7 +396,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。
   `109_backend_parity.steps` 是三端**共享语义**的唯一来源：`suite/steps/parity/*.vuna`
   每份程序配一个 `.out`，同一次运行对拍 OCaml / wasm / native 的输出；新增共享能力先加
-  夹具，再实现两个后端（一侧缺失即失败）。`105_native_backend.steps` 只保留 native 机制
+  夹具，再实现两个后端（一侧缺失即失败）。`110_effect_parity.steps` 是效应语义的两端
+  对拍（OCaml / native）：`suite/steps/effect_parity/*.vuna` 覆盖 resume / abort / 嵌套
+  handler / return 改类型 / 宿主 console / 深递归；wasm handler 落地后并入 109。`105_native_backend.steps` 只保留 native 机制
   （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
   行宽、trap、拒绝面、`--target` 校验）。`corpus/dt_err/*` 是对应负例

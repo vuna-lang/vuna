@@ -1,0 +1,26 @@
+import Base.Eff
+
+data AOp : Type where
+  A : Int -> AOp
+
+resA : AOp -> Type
+resA (A n) = Int
+
+data BOp : Type where
+  B : Int -> BOp
+
+resB : BOp -> Type
+resB (B n) = Int
+
+prog : Eff (Cons "a" AOp (Cons "b" BOp [])) Int
+prog = do
+  x <- perform (A 1)
+  pure x
+
+inner : Eff (Cons "a" AOp (Cons "b" BOp [])) Int -> Eff (Cons "b" BOp []) Int
+inner comp = handle comp {
+  A n k -> k (n + 10)
+}
+
+main : Int
+main = runPure (handle (inner prog) { B n k -> k (n * 100) })

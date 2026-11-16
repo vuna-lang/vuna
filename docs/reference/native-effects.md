@@ -385,5 +385,6 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
   `rt_stack_limit`，越界 trap。嵌套 effect 的总开销仍随深度增长
   （[debt.md](debt.md) D89）。
 
-wasm 后端仍拒绝 handler（需要 stack switching），shared parity 夹具暂不覆盖 handler；
-native 的机制用例在 `105_native_backend.steps`。
+wasm 后端仍拒绝 handler（需要 stack switching）。效应语义的 OCaml↔native 对拍在
+`110_effect_parity.steps`（wasm 落地后并入 109）；native 的机制用例在
+`105_native_backend.steps`。

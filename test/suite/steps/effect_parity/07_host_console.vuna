@@ -1,0 +1,9 @@
+import Base.Eff
+import Base.EffConsole
+import Base.Nat
+
+main : Eff [ConsoleOp] Nat
+main = do
+  a <- consolePrint "a"
+  b <- consolePrint "b"
+  pure (a * 10 + b)

@@ -1,0 +1,14 @@
+import Base.Eff
+
+data POp : Type where
+  P : Int -> POp
+
+resP : POp -> Type
+resP (P n) = Int
+
+main : Int
+main = runPure (handle (do
+  a <- perform (P 3)
+  b <- perform (P 4)
+  pure (a * 10 + b)
+) { P n k -> k (n + 1) })

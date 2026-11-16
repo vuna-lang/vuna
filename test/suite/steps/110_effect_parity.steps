@@ -1,0 +1,6 @@
+# 110) 效应语义 parity：OCaml 是语义 oracle，native 输出必须逐字一致且等于 `.out`。
+# handler / 续延的共享语义先在这里对拍；wasm handler 落地后并入 109 的三端对拍。
+for-each: suite/steps/effect_parity/*.vuna
+  run: sh -c 'base=$(basename "{name}" .vuna); d="$TMPDIR/$base"; mkdir -p "$d/app"; printf "[package]\nname = \"p\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; cp "suite/steps/effect_parity/{name}" "$d/app/Main.vuna"; want=$(cat "suite/steps/effect_parity/$base.out"); if ! "$VUNA" build --target ocaml --out "$d/o" "$d" >"$d/o.log" 2>&1; then echo "OCAML BUILD FAILED: $(tail -n 3 "$d/o.log")"; elif ! "$VUNA" build --target native --out "$d/n" "$d" >"$d/n.log" 2>&1; then echo "NATIVE BUILD FAILED: $(tail -n 3 "$d/n.log")"; else "$d/o/bin/p" >"$d/o.out" 2>&1; "$d/n/bin/p" >"$d/n.out" 2>&1; oc=$(cat "$d/o.out"); n=$(cat "$d/n.out"); if [ "$oc" = "$want" ] && [ "$n" = "$want" ]; then echo OK; else echo "MISMATCH want=[$want] ocaml=[$oc] native=[$n]"; fi; fi'
+  out-equals: OK
+end:
