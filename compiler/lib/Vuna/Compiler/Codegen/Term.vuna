@@ -228,6 +228,96 @@ let dtp_fileMtime path =
   try int_of_float (Unix.stat path).Unix.st_mtime with _ -> 0
 let dtp_fileSize path =
   try (Unix.stat path).Unix.st_size with _ -> 0
+(* 宿主失败通道：try 变体不抛宿主异常，而是把失败码写进**当前 Domain** 的状态槽，
+   返回默认值；base 的宿主 handler 随后读 status 转成 typed error。0 = 成功。
+   用 Domain.DLS 而不是全局 ref：异步任务会在别的 Domain 上跑。 *)
+let dtp_hostStatusK = Domain.DLS.new_key (fun () -> ref 0)
+let dtp_hostSetStatus c = (Domain.DLS.get dtp_hostStatusK) := c
+let dtp_hostStatus () = !(Domain.DLS.get dtp_hostStatusK)
+let dtp_hostCode (e : exn) : int =
+  match e with
+  | Unix.Unix_error (Unix.ENOENT, _, _) -> 1
+  | Unix.Unix_error ((Unix.EACCES | Unix.EPERM), _, _) -> 2
+  | Unix.Unix_error (Unix.ENOSPC, _, _) -> 3
+  | Unix.Unix_error (Unix.ENOTDIR, _, _) -> 4
+  | Unix.Unix_error (Unix.EISDIR, _, _) -> 5
+  | Unix.Unix_error (Unix.EEXIST, _, _) -> 6
+  | _ -> 9
+(* `Sys_error` 不带 errno；先 `Unix.stat` 一次拿到具体原因，再退回通用码。 *)
+let dtp_hostCodeAt path (e : exn) : int =
+  try ignore (Unix.stat path); dtp_hostCode e
+  with e2 -> dtp_hostCode e2
+let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
+let dtp_tryReadFile path =
+  (try
+     dtp_hostSetStatus 0;
+     let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
+     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+       (fun () ->
+          let buf = Buffer.create 65536 in
+          let tmp = Bytes.create 65536 in
+          let rec go () =
+            let n = Unix.read fd tmp 0 (Bytes.length tmp) in
+            if n > 0 then (Buffer.add_subbytes buf tmp 0 n; go ()) in
+          go (); Buffer.contents buf)
+   with e -> dtp_hostFail (dtp_hostCode e); \"\")
+let dtp_tryWriteFile path contents =
+  (try
+     dtp_hostSetStatus 0;
+     let fd = Unix.openfile path [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
+     Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+       (fun () ->
+          let b = Bytes.of_string contents in
+          let n = Bytes.length b in
+          let rec go off =
+            if off < n then
+              let k = Unix.write fd b off (n - off) in
+              if k > 0 then go (off + k) in
+          go 0);
+     String.length contents
+   with e -> dtp_hostFail (dtp_hostCode e); 0)
+let dtp_tryWriteFileAtomic path contents =
+  let tmp = path ^ \".\" ^ string_of_int (Unix.getpid ()) ^ \".tmp\" in
+  (try
+     dtp_hostSetStatus 0;
+     (let fd = Unix.openfile tmp [Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC] 0o666 in
+      Fun.protect ~finally:(fun () -> (try Unix.close fd with _ -> ()))
+        (fun () ->
+           let b = Bytes.of_string contents in
+           let n = Bytes.length b in
+           let rec go off =
+             if off < n then
+               let k = Unix.write fd b off (n - off) in
+               if k > 0 then go (off + k) in
+           go 0));
+     Unix.rename tmp path;
+     String.length contents
+   with e -> (try Unix.unlink tmp with _ -> ()); dtp_hostFail (dtp_hostCode e); 0)
+let dtp_tryReadDir path =
+  (try dtp_hostSetStatus 0; List.sort compare (Array.to_list (Sys.readdir path))
+   with e -> dtp_hostFail (dtp_hostCodeAt path e); [])
+let dtp_tryIsDirectory path =
+  (try dtp_hostSetStatus 0; (Unix.stat path).Unix.st_kind = Unix.S_DIR
+   with e -> dtp_hostFail (dtp_hostCode e); false)
+let dtp_tryMakeDir path =
+  (try
+     dtp_hostSetStatus 0;
+     (try Unix.mkdir path 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
+     0
+   with e -> dtp_hostFail (dtp_hostCode e); 1)
+let dtp_tryRemoveFile path =
+  (try
+     dtp_hostSetStatus 0;
+     (try Unix.unlink path with Unix.Unix_error (Unix.ENOENT, _, _) -> ());
+     0
+   with e -> dtp_hostFail (dtp_hostCode e); 1)
+let dtp_tryRunIn dir args =
+  let cmd = String.concat \" \" (List.map Filename.quote args) in
+  (try
+     dtp_hostSetStatus 0;
+     let old = Sys.getcwd () in
+     Fun.protect ~finally:(fun () -> Sys.chdir old) (fun () -> Sys.chdir dir; Sys.command cmd)
+   with e -> dtp_hostFail (dtp_hostCodeAt dir e); -1)
 let dtp_timeUs () = int_of_float (Unix.gettimeofday () *. 1000000.0)
 let dtp_sleep us =
   (if us > 0 then Unix.sleepf (float_of_int us /. 1000000.0));

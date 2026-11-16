@@ -121,6 +121,12 @@ record BuiltinEffect where
   -- | 默认实例名（`main` 行里裸标签展开成它）。
   beDefaultName : String
 
+-- | 内建宿主效应的失败收口 handler（entry 追加在最外层；空串 = 该家族没有失败通道）。
+export builtinEffectErrorRunHostOf : String -> String
+builtinEffectErrorRunHostOf tag =
+  if tag == "Base.EffFs.FsOp" then "Base.EffFs.runFsErrorHost"
+  else if tag == "Base.EffProcess.ProcessOp" then "Base.EffProcess.runProcessErrorHost" else ""
+
 -- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
 export builtinEffects : List BuiltinEffect
@@ -765,15 +771,24 @@ effIntrinsics =
     Intrinsic "prim_eff_removeFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_removeFile_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
     Intrinsic "@vuna@host@removeFile" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
-    Intrinsic "prim_eff_fileExists_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone True,
-    Intrinsic "@vuna@prim_eff_fileExists_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone False,
-    Intrinsic "@vuna@host@fileExists" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IBool)) OpNone False,
-    Intrinsic "prim_eff_fileMtime_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone True,
-    Intrinsic "@vuna@prim_eff_fileMtime_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
-    Intrinsic "@vuna@host@fileMtime" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
-    Intrinsic "prim_eff_fileSize_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone True,
-    Intrinsic "@vuna@prim_eff_fileSize_host" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
-    Intrinsic "@vuna@host@fileSize" (IFun IStr (IEffRow (IRowCons "default" (IGlobal "Base.EffFs.FsOp") IRowNil) IInt)) OpNone False,
+    Intrinsic "prim_eff_fileExists_host" (IFun IStr (IEff IBool)) OpNone True,
+    Intrinsic "@vuna@prim_eff_fileExists_host" (IFun IStr (IEff IBool)) OpNone False,
+    Intrinsic "@vuna@host@fileExists" (IFun IStr (IEff IBool)) OpNone False,
+    Intrinsic "prim_eff_fileMtime_host" (IFun IStr (IEff IInt)) OpNone True,
+    Intrinsic "@vuna@prim_eff_fileMtime_host" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@host@fileMtime" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "prim_eff_fileSize_host" (IFun IStr (IEff IInt)) OpNone True,
+    Intrinsic "@vuna@prim_eff_fileSize_host" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@host@fileSize" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@prim_eff_hostStatus" (IEff IInt) OpNone False,
+    Intrinsic "@vuna@host@tryReadFile" (IFun IStr (IEff IStr)) OpNone False,
+    Intrinsic "@vuna@host@tryWriteFile" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@host@tryWriteFileAtomic" (IFun IStr (IFun IStr (IEff IInt))) OpNone False,
+    Intrinsic "@vuna@host@tryReadDir" (IFun IStr (IEff (IList IStr))) OpNone False,
+    Intrinsic "@vuna@host@tryIsDirectory" (IFun IStr (IEff IBool)) OpNone False,
+    Intrinsic "@vuna@host@tryMakeDir" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@host@tryRemoveFile" (IFun IStr (IEff IInt)) OpNone False,
+    Intrinsic "@vuna@host@tryRunIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone False,
     Intrinsic "prim_eff_exit" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_exit" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_runIn" (IFun IStr (IFun (IList IStr) (IEff IInt))) OpNone True,
@@ -791,10 +806,10 @@ effIntrinsics =
     Intrinsic "prim_eff_execPath_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone True,
     Intrinsic "@vuna@prim_eff_execPath_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone False,
     Intrinsic "@vuna@host@execPath" (IEffRow (IRowCons "default" (IGlobal "Base.EffEnv.EnvOp") IRowNil) IStr) OpNone False,
-    Intrinsic "prim_eff_getArgs_process_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) (IList IStr)) OpNone True,
-    Intrinsic "@vuna@prim_eff_getArgs_process_host" (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) (IList IStr)) OpNone False,
-    Intrinsic "prim_eff_exit_process_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt)) OpNone True,
-    Intrinsic "@vuna@prim_eff_exit_process_host" (IFun IInt (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt)) OpNone False,
+    Intrinsic "prim_eff_getArgs_process_host" (IEff (IList IStr)) OpNone True,
+    Intrinsic "@vuna@prim_eff_getArgs_process_host" (IEff (IList IStr)) OpNone False,
+    Intrinsic "prim_eff_exit_process_host" (IFun IInt (IEff IInt)) OpNone True,
+    Intrinsic "@vuna@prim_eff_exit_process_host" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone True,
     Intrinsic "@vuna@prim_eff_runIn_host" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone False,
     Intrinsic "@vuna@host@runIn" (IFun IStr (IFun (IList IStr) (IEffRow (IRowCons "default" (IGlobal "Base.EffProcess.ProcessOp") IRowNil) IInt))) OpNone False,

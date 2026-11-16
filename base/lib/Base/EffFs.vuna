@@ -10,6 +10,7 @@ module Base.EffFs where
 -- （`handleFsHost "real"`），或用两个 mock 实例做对照；行条目按实例名区分。
 -- 所有操作与 handler 都显式带实例名（夹具 dt_base/18、29、40）。
 import Base.Eff
+import Base.Eq
 import Base.Nat
 import Base.Monad
 import Base.Bool
@@ -40,6 +41,59 @@ resFs (RemoveFile p) = Int
 resFs (FileExists p) = Bool
 resFs (FileMtime p) = Int
 resFs (FileSize p) = Nat
+
+-- | 宿主 fs 失败的种类：带出错路径；文本由 `fsErrorText` 统一渲染。
+--
+-- 失败是**控制流**（动作没有结果），因此走效应而不是返回值：调用点照旧写
+-- `fsReadFile p : Eff r String`，不需要解包；真实 handler 在执行失败时抛
+-- `FsErrorOp`，entry 预装的 `runFsErrorHost` 把它收口成诊断 + 退出码 1。
+export data FsError(..) : Type where
+  -- | 路径不存在。
+  FsMissing : String -> FsError
+  -- | 权限不足。
+  FsDenied : String -> FsError
+  -- | 设备 / 配额已满。
+  FsNoSpace : String -> FsError
+  -- | 路径前缀不是目录。
+  FsNotDir : String -> FsError
+  -- | 期望文件却是目录。
+  FsIsDir : String -> FsError
+  -- | 目录已存在（需要创建时）。
+  FsExists : String -> FsError
+  -- | 其它宿主错误。
+  FsIo : String -> FsError
+
+-- | fs 错误效应：单操作 `FsFail`（abort，不恢复续延；`res` 只是占位）。
+export data FsErrorOp(..) : Type where
+  FsFail : FsError -> FsErrorOp
+
+-- | 结果族：`FsFail` 不恢复续延，返回类型任意（占位 `Int`）。
+export resFsError : FsErrorOp -> Type
+resFsError _ = Int
+
+-- | 抛出一个 fs 失败（由真实 handler 使用；想局部恢复的调用方 catch 它）。
+export fsFail : Member n FsErrorOp r => FsError -> Eff r a
+fsFail e = sendCore FsErrorOp "fs-error" n (FsFail e)
+
+-- | 宿主状态码 → 失败种类（0 = 成功；码表见 `@vuna@prim_eff_hostStatus` 的运行时实现）。
+export fsErrorOfCode : String -> Int -> FsError
+fsErrorOfCode path 1 = FsMissing path
+fsErrorOfCode path 2 = FsDenied path
+fsErrorOfCode path 3 = FsNoSpace path
+fsErrorOfCode path 4 = FsNotDir path
+fsErrorOfCode path 5 = FsIsDir path
+fsErrorOfCode path 6 = FsExists path
+fsErrorOfCode path _ = FsIo path
+
+-- | 失败种类的人类可读文本（诊断输出用）。
+export fsErrorText : FsError -> String
+fsErrorText (FsMissing p) = "fs: ${p}: no such file or directory"
+fsErrorText (FsDenied p) = "fs: ${p}: permission denied"
+fsErrorText (FsNoSpace p) = "fs: ${p}: no space left on device"
+fsErrorText (FsNotDir p) = "fs: ${p}: not a directory"
+fsErrorText (FsIsDir p) = "fs: ${p}: is a directory"
+fsErrorText (FsExists p) = "fs: ${p}: already exists"
+fsErrorText (FsIo p) = "fs: ${p}: host I/O error"
 
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
 export fsReadFile : Member n FsOp r => String -> Eff r String
@@ -155,6 +209,17 @@ fsOpHIOHost op k = case op of
   FileSize p => do
     n <- fmap natFromInt (@vuna@host@fileSize p)
     k n
+
+-- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
+fsErrorOpH : {r : Row} -> {a : Type} -> (o : FsErrorOp) -> (resFsError o -> Eff r a) -> Eff r a
+fsErrorOpH op _ = case op of
+  FsFail e => do
+    _ <- raise (@vuna@prim_eff_eprint "vuna: ${fsErrorText e}\n")
+    _ <- raise (@vuna@prim_eff_exit 1)
+    prim_fail "unreachable: fs error handler"
+
+runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "fs-error" FsErrorOp r) a -> Eff r a
+runFsErrorHost comp = handleCore FsErrorOp "fs-error" "fs-error" (\a => a) fsErrorOpH comp
 
 -- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsOp]`（不导出）。
 handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "default" FsOp []) a)

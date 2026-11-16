@@ -1498,7 +1498,7 @@ lowerEntryOf defs = case findDtDef "main" defs of
       let
         innerTy = secondOf p
         tags = mainRowTags (dtDefType mainDef)
-        handlers = filterMapRunHost tags
+        handlers = append (filterMapRunHost tags) (filterMapErrorRunHost tags)
       in OkC (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers))
     Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing []))
 
@@ -1509,6 +1509,15 @@ filterMapRunHost (tag :: rest) =
   let
     host = builtinEffectImplOf tag
   in if host == "" then filterMapRunHost rest else host :: filterMapRunHost rest
+
+-- 失败收口 handler：与 family handler 同序，但**接在后面**——左折后它们在最外层，
+-- 才能接住 family handler 执行期抛出的 typed error。
+filterMapErrorRunHost : List String -> List String
+filterMapErrorRunHost [] = []
+filterMapErrorRunHost (tag :: rest) =
+  let
+    host = builtinEffectErrorRunHostOf tag
+  in if host == "" then filterMapErrorRunHost rest else host :: filterMapErrorRunHost rest
 
 groupOfPair : Pair Bool (List IrDef) -> IrGroup
 groupOfPair (Pair isRec ds) = IrGroup isRec ds
