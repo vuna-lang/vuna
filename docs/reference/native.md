@@ -120,10 +120,15 @@ handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 hand
 因为捕获/迁移的是**整段栈**，内层续延恢复后触发外层 handler 也能正确穿过已挂起的内层
 handler 帧（节点地址随段平移，返回时再撤销）。
 
-栈段来自 `rt_seg_free` free list：`kdone` / abort 归还的段按大小复用，顺序 effect 不会
-无限累积。每个 resume 的 slack 固定 128 KiB（约 1k 个常见帧）；函数 prologue 比较
-`rt_stack_limit`，越界 trap `continuation stack overflow` 而不是踩堆。嵌套 effect 的
-总开销仍随深度增长（每层复制一次整段栈）。
+捕获缓冲与迁移栈段各有一条 free list（`rt_cap_free` / `rt_seg_free`），块大小向上取整到
+2 的幂：`perform` 的捕获块在 `resume` 拷走后立即归还，`kdone` / abort 归还栈段，因此
+顺序 effect 只复用固定的几档块，不会每次新 `mmap`。每个 resume 的 slack 固定 128 KiB
+（约 500 个常见帧）；函数 prologue 比较 `rt_stack_limit`，越界 trap
+`continuation stack overflow` 而不是踩堆。
+
+嵌套 effect 的总开销仍随深度增长：每次 resume 复制当前整段栈并保留自己的栈段（外层
+handler 帧还在上面），所以 N 层顺序 perform 是 O(N²) 拷贝 / 内存（500 次约 22 ms、
+2000 次约 260 ms / 500 MiB、5000 次约 1.4 s / 3 GiB）。
 
 约束：续延一次性（`used` 标记，resume 两次 trap）；每次 resume 复制整段栈；只支持
 one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算。宿主 handler 的
@@ -265,8 +270,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把
-  `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 1k 个常见帧；
-  越界 trap），栈段按大小复用；嵌套 effect 的总开销仍随深度增长。
+  `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
+  越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
+  因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
 - FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。

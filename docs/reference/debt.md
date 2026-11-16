@@ -68,7 +68,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈；栈段从 free list 复用、保留 128 KiB slack 并有 `rt_stack_limit` 越界 trap，但**嵌套 effect 的总开销仍随深度增长**（每层复制整段栈，深链会 O(depth²) 拷贝并最终 OOM/trap）；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effAllocSegmentFn` / `effFreeSegmentFn`）；[native.md](native.md) §3.4；105 的 `effmany` / `effdeep` / `effovf` 用例 | 后续（分段栈/按需扩容；multi-shot 不做） |
+| D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈，并保留本层栈段（外层 handler 帧在其上），所以 N 层顺序 effect 是 O(N²) 拷贝与内存：500 次 ≈ 22 ms / 35 MiB、1000 次 ≈ 65 ms / 135 MiB、2000 次 ≈ 260 ms / 500 MiB、5000 次 ≈ 1.4 s / 3 GiB；捕获块与栈段已按 2 的幂分档走 free list 复用（`rt_cap_free` / `rt_seg_free`），单次大捕获（> 1 MiB）也能正确扩 mmap；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effAllocCaptureFn` / `effAllocSegmentFn` / `pow2CeilFn`）；[native.md](native.md) §3.4；105 的 `effmany` / `effcap` / `effdeep` / `effovf` | 后续（分段栈/按需扩容；multi-shot 不做） |
 
 
 ## 相关阅读
