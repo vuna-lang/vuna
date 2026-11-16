@@ -967,20 +967,20 @@ else case fn of
       Nothing => case dtCtorLookupEc ec name of
         Just ctor => Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp hint) (\pa => case pa of
           Pair argTerms (Pair resTy ec2) =>
-            OkC (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+            OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
         )
         Nothing => case globalsLookup name globals ec of
           -- 推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
           -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
           Just tyTerm => if skipArithSpecForHint ec name hint then Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
             Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+              OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
           )
           else Vuna.Compiler.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (\mspec => case mspec of
             Just pair => OkC pair
             Nothing => Vuna.Compiler.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (\pa => case pa of
               Pair argTerms (Pair resTy ec2) =>
-                OkC (Pair (ctorAppTerm (ecDatas ec2) (TGlobal name) argTerms) (Pair resTy ec2))
+                OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
             )
           )
           -- `==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被

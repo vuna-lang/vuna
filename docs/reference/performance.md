@@ -342,9 +342,18 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   `check compiler` 的 `elab.dict.round` 55863 → 22359，同机 CPU 时间 −33%
   （`ru_utime+ru_stime`，负载波动大时只看这一项）。
 
-此时自采样的剩余热点：`Base.List.dtp_unpack` + `List.init`（lexer 把整串展开成字符表，
-见 D87）、`Elab.Meta.dtCtorLookup` 的回落扫描、`Core.Eval.quote`；求解器里还剩
-`append pending [c]` 的 O(长度) 追加（旋转语义，改动要连语义一起重写）。
+- `dtp_unpack` / `dtp_pack` 改成直接循环（原来 `List.init` + `fold_right` 两趟、`dtp_pack`
+  还经 `Array.of_list` + `String.init`）：每读一个文件少一趟中间列表，采样里
+  `List.init` 与 unpack 闭包从 ~17% 降到 ~6%。
+- 构造子查表命中失败时不再盲目线性扫族表：`ConstraintStore.csCtorIndexComplete` 记录索引
+  是否覆盖全部 data（`ecPutCtorTbl` 后为真），覆盖后「查不到 = 不是构造子」直接返回。
+  冷 `check compiler` 实测 96k 次回落全部是「不是构造子」，现在不再各扫 285 个族；
+  `ctorRefTerm` / `ctorAppTerm` 也改用 Ec 版本（查 `ecCtorTbl`）。
+
+此时自采样的剩余热点：`Base.List.dtp_unpack`（lexer 仍把整串展开成字符表，见 D87 的游标
+重构）、`String.concat`（Canonical/地址编码）、`dtp_strHash`、`nubNames`/`reverseOnto`、
+`Core.Eval.quote`；求解器里还剩 `append pending [c]` 的 O(长度) 追加（旋转语义，
+改动要连语义一起重写）。
 
 ## 5. 增长率（合成包）
 

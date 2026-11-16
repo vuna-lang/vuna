@@ -84,8 +84,8 @@ inferCtorRef ec ctx name tyTerm = case dtCtorLookupEc ec name of
       OkC (Pair instTy (Pair metas ec1)) =>
         OkC (Pair (nullaryCtorTerm ctor metas) (Pair instTy ec1))
       ErrC e => ErrC e
-    else OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair ctorTy ec))
-  Nothing => OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+    else OkC (Pair (ctorRefTermEc ec name) (Pair ctorTy ec))
+  Nothing => OkC (Pair (ctorRefTermEc ec name) (Pair (eval [] tyTerm) ec))
 
 -- 定义性相等（唯一入口；Bool 与其它 primitive 类型一样按同名全局比较）。
 -- 解的作用域在求解点就地检查（Core.Conv.solveMeta*），这里只把解表写回 Ec；
@@ -320,7 +320,7 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
 export dtCtorLookupEc : Ec -> String -> Maybe DtCtor
 dtCtorLookupEc ec name = case Base.HashMap.lookup name ec.ecCtorTbl of
   Just c => Just c
-  Nothing => dtCtorLookup name (ecDatas ec)
+  Nothing => if ecCtorIndexComplete ec then Nothing else dtCtorLookup name (ecDatas ec)
 
 -- ---------------------------------------------------------------
 -- Elab 侧的**显式命名空间查询**
@@ -1126,6 +1126,14 @@ isSortVal ec v = case forceVal ec v of
 -- 保证 `TCon` 实参与 telescope 逐位对齐（求值器的 VCon 依赖这个对齐）。
 -- **非零参**构造子的**未饱和引用**做 η 展开（`etaCtorTerm`），不再留
 -- `TGlobal`——见 `etaCtorTerm` 注释。
+-- | `ctorRefTerm` 的 Ec 版本：构造子查 `ecCtorTbl`（O(1)），不走族表线性扫。
+export ctorRefTermEc : Ec -> String -> Term
+ctorRefTermEc ec name = case dtCtorLookupEc ec name of
+  Just ctor =>
+    if isBoolCanonical (dtCtorFamily ctor) then boolCtorTerm (dtCtorName ctor)
+    else if length (dtCtorTelescope ctor) == 0 then TCon name [] else etaCtorTerm ctor []
+  Nothing => TGlobal name
+
 export ctorRefTerm : List DtData -> String -> Term
 ctorRefTerm datas name = case dtCtorLookup name datas of
   Just ctor =>
@@ -1137,6 +1145,16 @@ ctorRefTerm datas name = case dtCtorLookup name datas of
 -- 未饱和应用做 η 展开（与 `ctorRefTerm` 共用 `etaCtorTerm`），
 -- 否则「构造子当函数值传递」会留 TGlobal 脊：精化期 conv 与 VCon 对不上、
 -- codegen 也会把裸构造子名当运行期值输出（OCaml 报 should not be a constructor）。
+-- | `ctorAppTerm` 的 Ec 版本（构造子查表；record 判定仍需族表）。
+export ctorAppTermEc : Ec -> Term -> List (Pair Term Rig) -> Term
+ctorAppTermEc ec (TGlobal g) args = case dtCtorLookupEc ec g of
+  Just ctor =>
+    if isBoolCanonical (dtCtorFamily ctor) then boolCtorTerm g
+    else if length args >= length (dtCtorTelescope ctor) then mkCtorTerm (ecDatas ec) ctor g args
+    else etaCtorTerm ctor args
+  Nothing => foldAppTerms (TGlobal g) args
+ctorAppTermEc ec fn args = foldAppTerms fn args
+
 export ctorAppTerm : List DtData -> Term -> List (Pair Term Rig) -> Term
 ctorAppTerm datas (TGlobal g) args = case dtCtorLookup g datas of
   Just ctor =>
