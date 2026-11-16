@@ -14,6 +14,9 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 
 - 编译器优先用**当前 worktree 自己**的 `./result/bin/vuna`；没有或版本可疑时
   `nix build .#vuna --out-link result`（缓存命中约 10–15s）。
+- **改完源码要验证 `nix build` 真的重建了**：机器级 eval cache 会在副 worktree / 未提交
+  改动下返回旧求值（`Output paths:` 里是同一个 store 路径、也没有 `building ...` 行）。
+  加 `--option eval-cache false`；判据是产物里能看到刚加的字符串（或 store 路径变了）。
 - 测试别为验证一处改动跑全量：先 `--only <章节>`，必要时再 `--filter PAT`。
 - 只有纯 `Int`/`String`/`Bool` 的夹具能走 `vuna interp`；`main : Eff [] a` 走
   `compile`/`build` + 运行产物。
