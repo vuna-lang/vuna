@@ -5,7 +5,7 @@ module Vuna.Index.Codec where
 --
 -- 为什么要它：`Index` 是工具链里最大的缓存载荷（模块表 + 符号表 + 引用表，MB 级）。
 -- 载荷 = **节点 `index:<dir>` / `index-cheap:<dir>` 的值（`QRef`）+ 内容寻址 blob**
--- （`<cache>/blobs/<digest>`，codec `index-payload 2`），读写都过 `Store` 的 framing 校验。
+-- （`objects/tool/<地址>`，codec `index-payload 2`），读写都过 `Store` 的 framing 校验。
 --
 -- 编码是累积器风格、字段顺序 = record 声明顺序；解码要求**恰好消费完**（尾随字节 ⇒
 -- `Nothing`，与其它载荷一致）。文本字段 (name/kind/sig/type/doc) 用 `encStr` 自定界，

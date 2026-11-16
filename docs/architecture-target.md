@@ -89,7 +89,7 @@
 | D2 | 效应一次性续延；单一操作语义（CBV）；宿主交互走事件队列 | 两套操作语义会让差分测试与两端复用同时失效 | 外壳与 runtime 承担全部循环与事件分发 |
 | D3 | 原生后端用 Perceus 式 RC + 复用；wasm 后端用 WasmGC（宿主 tracing GC） | 原生后端的 0/1/ω 与 RC 天然衔接；wasm 侧直接复用 WasmGC，不手写 RC | 两条后端的内存语义不同：原生 RC 回收不了环；wasm 的回收时机由宿主决定 |
 | D4 | 宏终局是 typed macro / elaborator reflection，先做 AST→AST | 声明式宏够用一阵，reflection 才是终态 | 精化器要成为稳定库值；LSP 必须能跑宏并支持超时取消 |
-| D5 | 内容寻址身份停在"依赖按哈希固定"，哈希格式按"代码即内容"设计 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash`·`implHash` / `identityHash` 三者从一开始就分开**；依赖类型语言还需要 iface/impl 双摘要（包级 `pkgIfaceHash` / `pkgImplHash`），因此 D11 是它的前提 |
+| D5 | 内容寻址身份停在"依赖按哈希固定 + 包身份接线"：`identityHash` 进 manifest/registry/pin/fetch/check，不做分发服务器 | 身份模型可以渐进，哈希格式不能返工 | **`contentHash` / `ifaceHash`·`implHash` / `identityHash` 三者从一开始就分开**；依赖类型语言还需要 iface/impl 双摘要（包级 `pkgIfaceHash` / `pkgImplHash`），因此 D11 是它的前提；分发真实性仍是非目标 |
 | D11 | 引入 `opaque` / `abstract` 定义修饰符 | 让 iface/impl 双摘要真正生效：`ifaceHash` 不含不展开体（不影响下游精化），`implHash` 含它（只影响产物） | 多一个语言特性，用户要理解"能不能展开"的差别 |
 | D12 | 摘要只固定**不可变源**：`git`+`rev` / `url` 必填 `hash`，`path` 依赖不写摘要 | 完整性（取源）与新鲜度（判脏）是两条链：新鲜度已由 `siHash` → `miIfaceHash` → `miDepHashes` 负责，改依赖源码不该动上游 manifest | `path` 依赖不可复现；发布前必须转成 `git`/`url` |
 | D13 | 一个依赖图内同一包名只能出现一次（无版本号共存） | 无版本命名空间，规则最简；包名只参与"同包可见"判定 | 无法共存同名包的两个版本，只能改名/分叉 |

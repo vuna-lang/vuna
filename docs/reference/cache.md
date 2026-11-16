@@ -22,7 +22,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/lex/<源摘要>              # lex tokens
   objects/order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
   objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
-  objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
+  objects/tool/<工具会话地址>       # LSP / REPL / vuna map / vuna doc 的载荷
   objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
   objects/test/<测试判定 key>       # test verdict（通过/失败计数）
   objects/pkgiface/<key>            # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
@@ -54,7 +54,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 | 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
 | 依赖模块接口 | 按地址读 `objects/iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
 | 依赖身份 | `objects/pkgiface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
-| 工具会话（LSP/REPL/`map`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
+| 工具会话（LSP/REPL/`map`/`doc`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
 | 模块 header | `objects/header/<addr>` 存在 | 解析源码取 header |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
@@ -163,6 +163,16 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   `check-store dropped=N` 里可见；Fail 则要求整条错误 Stable，否则不落盘。
 - **坏载荷只降级**：解码失败/截断按 miss 处理并重写；删除对象只是重算。
 - **trace 子帧不落盘**：产生侧只生成单层 trace；出现嵌套子帧时需要 bump diag codec。
+
+## 轨道 C 出口门禁
+
+| 层 | 门禁 | 测试 |
+| --- | --- | --- |
+| 哈希格式 | 编码 roundtrip；固定输入金标；跨目录/跨环境同摘要 | `64_infra`（`pkg-canon-rt` / `pkg-identity-*` / `pkg-golden`）、`78_determinism`（双目录 + TZ/LANG/HOME/TMPDIR 矩阵） |
+| 对象库 | 新旧路径 audit 差分；clean/gc 互不误删；对象读写有 span | `44c2` / `44m` / `44q`（check 与 compile 两条 audit）、`59` / `70` / `75` / `77`、`107_observability` |
+| 依赖身份 | 依赖方只消费 `pkgIfaceHash`；依赖未重跑不假命中 | `79_dep_identity`（注释 / 透明体 / opaque / 冷热 store / build 快指针） |
+| 产物身份 | `pkgImplHash` + 布局；注释/行移动/opaque/abstract 的边界 | `80_code_identity`（本包 + 跨包 q 的 splitptr） |
+| 包身份 | `identityHash` 进 manifest/registry/pin/fetch/check | `67` / `68` / `69` / `81` / `64_infra` |
 
 ## 已知边界
 

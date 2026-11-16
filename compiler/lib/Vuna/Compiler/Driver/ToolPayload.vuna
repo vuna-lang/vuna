@@ -12,7 +12,7 @@ module Vuna.Compiler.Driver.ToolPayload where
 -- `decToolContextComplete` 要求**全部消费完**（尾部多余字节 ⇒ `Nothing`，与其它载荷一致）。
 --
 -- 载荷本身由 `Store` 承载（`storeWriteEff` / `storeReadAsEff`），codec 段用
--- `toolContextCodec`；blob 路径仍是内容寻址的 `<cache>/blobs/<digest>`。
+-- `toolContextCodec`；载荷落在 `objects/tool/<地址>`（输入寻址，`Store` framing）。
 import Base.Int
 import Base.List
 import Base.Maybe

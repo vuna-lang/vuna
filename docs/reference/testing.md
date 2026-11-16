@@ -168,12 +168,13 @@ end:
 | §44n | `pmEnv` 包级环境指纹：改 `vuna.toml`（不进模块源哈希）⇒ `iface-reject=own-env`，重算后收敛 |
 | §44o | 镜像模式内容寻址 + 孤儿 GC：实现变化产生新 token 文件，过期 token 在 60s 窗口外被删 |
 | §44p | `meOrigin` 隔离：LSP 冷启动写回标 `tool`，命令行 check 拒绝（`iface-reject=tool-origin`），下一次整包写回归 `pkg` |
-| §44q | 闭合判定的 binder 深度口径：含 record-update（`TRecUpd.body` 在 `tele` 之下）的最小包，冷缓存下 `AUDIT+SELFTEST`、只 `SELFTEST`、只 `AUDIT`、热缓存双开关都必须 exit 0 且 `iface-selftest=ok` |
+| §44q | 闭合判定的 binder 深度口径：含 record-update（`TRecUpd.body` 在 `tele` 之下）的最小包，冷/热缓存的 check audit 都必须 exit 0；`build --no-compile` 另断言 `iface-audit subject=compile`（摘要 codegen vs 全量 codegen） |
 
 基础开关：`VUNA_IFACE_AUDIT=1`（同一进程跑摘要 + 全量、逐字节比较、不一致即失败且不落盘）、
 `VUNA_IFACE_SELFTEST=1`（写侧读回 + `hashOfIface` 载荷自证）。两者可以**同时**开启（CI/排障
-组合，§44q 覆盖冷缓存：写侧自检失败即 check 失败，审计不一致不落盘）；注意 AUDIT 会绕过
-check 图命中、强制每次重算两条路径，全量双跑成本高，不适合放在热路径。
+组合）；注意 AUDIT 会绕过 check 图命中、强制每次重算两条路径，全量双跑成本高，不适合放在
+热路径。`44q` 只覆盖 AUDIT；SELFTEST 由 `VUNA_IFACE_SELFTEST=1` 的本地/排障运行覆盖，不
+单独成 steps。
 
 ### 超时
 

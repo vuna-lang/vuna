@@ -56,9 +56,9 @@ vuna fetch [--locked] [DIR]
 
 | 源 | 行为 |
 | --- | --- |
-| `path` | 不复制、不写 store；声明了 `hash` 就校验（不符报 `PKG_HashMismatch`），没写则打印当前摘要 |
-| `git` + `rev` + `hash` | 已物化 ⇒ `cached`；否则克隆到 `tmp/` → checkout `rev` → 收集内容 → 校验摘要 → 写对象 + 物化 |
-| `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验 |
+| `path` | 不复制、不写 store；声明了 `hash` 就校验（不符报 `PKG_HashMismatch`），声明了 `identity` 就校验语义身份（不符报 `PKG_IdentityMismatch`）；没写则打印当前摘要 |
+| `git` + `rev` + `hash` | 已物化 ⇒ `cached`（缓存命中也会复验 `identity`）；否则克隆到 `tmp/` → checkout `rev` → 收集内容 → 校验摘要/身份 → 写对象 + 物化 |
+| `url` + `hash` | URL 直指 **`pkg-source 1` 对象文件**（不是 tar/压缩包；vuna 没有解压原语），下载后按 framing + 内容地址校验；声明 `identity` 时物化后复验 |
 
 - **只有 fetch 联网**：`check` / `build` / `test` 只读 store，缺对象报
   `PKG_NotMaterialized`（消息里带 `vuna fetch` 提示），绝不隐式取包。
@@ -66,6 +66,8 @@ vuna fetch [--locked] [DIR]
 - 传输外置给宿主：`git`（clone/checkout）与 `curl`（URL 下载）。语言内只有裸 TCP 原语，
   **不实现 TLS**；HTTPS 由宿主工具的证书栈承担。
 - 摘要不符时**不写 store、不物化**：说明源被改写或声明过期，需人工确认后用正确摘要重写。
+- `vuna pin` 对 git 依赖同时写 `hash`（完整性）与 `identity`（语义身份）；缓存命中路径
+  也复验 `identity`，所以改错身份不会因 local store 已物化而被放过。
 
 ## 4. 解析与失败模式
 
@@ -99,7 +101,8 @@ roots 只追加（删除依赖后旧对象仍受保护，直到显式整族清�
 
 ## 6. 静态索引与 `vuna add`
 
-索引是**可选**的便利层（D14）：`name [@version] → (源, hash)`。
+索引是**可选**的便利层（D14）：`name [@version] → (源, hash, identity?)`。`identity` 可选，
+写回 manifest 后由 fetch/check 校验语义身份（内容完整性仍只由 `hash` 负责）。
 
 ```toml
 # index/<name>.toml（[releases."<version>"] 用引号段名）
@@ -110,6 +113,7 @@ name = "greet"
 git = "https://..."        # 或 url = "..."（pkg-source 对象文件）
 rev = "<commit>"
 hash = "sha256:<64hex>"
+identity = "sha256:<64hex>"   # 可选；写回依赖声明并在 fetch/check 校验
 ```
 
 包 manifest 里声明索引位置：
@@ -128,7 +132,8 @@ vuna add greet@1.2.0 [DIR] [--dry-run] [--no-fetch]
  用户手改。
 - 默认随后 `vuna fetch`（命中 `cached` 不重复取）；`--no-fetch` 只改 manifest，
   `--dry-run` 只打印。
-- **索引不可信**：写回的永远是摘要，之后 fetch/check 只认摘要。
+- **索引不可信**：写回的永远是摘要（+ 可选身份），之后 fetch/check 只认摘要；索引里的
+  `identity` 与取到的包不符时 fetch 失败（`PKG_IdentityMismatch`），不会静默写回。
 
 ## 7. GC
 
@@ -146,7 +151,7 @@ B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保�
 ## 8. 已知边界
 
 - **无版本号 / 无 lockfile**：manifest 即锁文件；`path` 依赖不锁定。
-- **无 registry 服务器（D14）**：静态索引（`name → version → (源, hash)`）是可选便利层，
+- **无 registry 服务器（D14）**：静态索引（`name → version → (源, hash, identity?)`）是可选便利层，
   不是真源；包名只是本地别名，不需要全局唯一命名。
 - **分发真实性是显式非目标（D14）**：不提供签名、撤销、透明日志或账户；`hash` 只保证内容
   完整，来源可信性由用户选择的 URL 决定。
@@ -162,14 +167,15 @@ B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保�
 
 - `90/steps_native/67_pkg_deps`：依赖声明三路写法、摘要规则、结构错误码、改依赖源码
   不动 manifest 的回归。
-- `90/steps_native/68_pkg_fetch`：本地 git 仓库取包、摘要不符、`--locked`、离线 check、
-  `clean --packages`、`pin`。
+- `90/steps_native/68_pkg_fetch`：本地 git 仓库取包、摘要/身份不符、`--locked`、离线 check、
+  `clean --packages`、`pin`（写 hash + identity；缓存命中复验身份）。
 - `90/steps_native/69_pkg_registry`：本地静态索引、`add` 的 dry-run/写回/自动 fetch/幂等、
-  版本不存在、`--no-fetch`、`[registry]` 未知 key。
+  版本不存在、`--no-fetch`、`[registry]` 未知 key、索引 `identity` 写回。
 - `90/steps_native/70_pkg_gc`：`clean --packages --gc` 保留被工作区/项目 roots 引用的对象、
   删除游离对象、跨项目 roots 保护、`--gc` 必须配 `--packages`。
 - `90/steps_native/81_pkg_errors`：`PKG_FetchFailed` / `PKG_HashMismatch` /
-  `PKG_IndexMalformed` 的结构化覆盖（侧车 `81_pkg_errors.diagcodes` 供 diag-coverage 读取）。
+  `PKG_IdentityMismatch` / `PKG_IdentityMalformed` / `PKG_IndexMalformed` 的结构化覆盖
+  （侧车 `81_pkg_errors.diagcodes` 供 diag-coverage 读取）。
 - `90/steps_native/64_infra`：`pkg-canon-rt` / `pkg-identity-*`（规范编码与两种摘要的输入面）。
 
 ## 相关阅读
