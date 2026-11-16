@@ -159,7 +159,7 @@ compiler/lib/Vuna/Compiler/Source.vuna: Pos(..), Span(..), baseName, containsDot
 compiler/lib/Vuna/Compiler/Store.vuna: Frame(..), fCodecOf, fPayloadOf, fTagOf, storeCacheBaseEff, storeDataRootEff, storeDecode, storeDecodeAs, storeEncode, storeEncodeAs, storeEnsureDirEff, storeFileExistsEff, storeMagic, storeObjectExistsEff, storeObjectListEff, storeObjectPathEff, storeObjectReadEff, storeObjectRemoveEff, storeObjectTag, storeObjectWriteEff, storeParentPathOf, storeReadAsEff, storeReadEff, storeRemoveEff, storeRootAppendEff, storeRootEff, storeRootLoadEff, storeRootProjectListEff, storeRootReadyEff, storeRootRemoveEff, storeRootsPathEff, storeScratchClaimEff, storeScratchDropEff, storeScratchPathEff, storeScratchPathOfClaim, storeViewLockEff, storeViewPathEff, storeViewPublishEff, storeViewUnlockEff, storeViewValidEff, storeWriteAsEff, storeWriteEff, storeWriteIfChangedAsEff, storeWriteIfChangedEff
 compiler/lib/Vuna/Compiler/Version.vuna: vunaVersion
 compiler/lib/Vuna/Compiler/Wasm/Instr.vuna: Instr(..), oneInstr, seqInstr
-compiler/lib/Vuna/Compiler/Wasm/Model.vuna: Target(..), WasmErr(..), WasmModule(..), WatData(..), WatExport(..), WatField(..), WatFunc(..), WatGlobal(..), WatImport(..), WatType(..), WatValTy(..), targetText, wasmErrText, watValTyText
+compiler/lib/Vuna/Compiler/Wasm/Model.vuna: Target(..), WasmErr(..), WasmModule(..), WatData(..), WatExport(..), WatField(..), WatFunc(..), WatGlobal(..), WatImport(..), WatTag(..), WatType(..), WatValTy(..), targetText, wasmErrText, watValTyText
 compiler/lib/Vuna/Compiler/Wasm/Module.vuna: WasmOutcome(..), build
 compiler/lib/Vuna/Compiler/Wasm/Render.vuna: renderModule, watString
 compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna: RtConsts(..), RtImpl(..), rtFunctions, rtImplOf
