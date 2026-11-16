@@ -1,26 +1,18 @@
+-- | `vuna obs` 的子命令门面：只做分发与退出码，参数解析与业务实现都在各子模块。
+--
+-- 分层：`Types`（事件模型 + 纯解析/渲染原语）、`Read`（JSONL 读取与截断容错）、
+-- `Validate`（字段/时序/词汇表校验）、`Summarize`（span 树折叠、`--json` 与基线差值）、
+-- `Run`（env 注入 + 子进程 + trace 路径）、`Flame`（CPU 采样 → 折叠栈）、
+-- `Convert`（cpuprofile / speedscope / folded / jsonl）、`Render`（单文件 HTML）、
+-- `Merge`（多 trace → 一份合法 JSONL）、`Symbols`（split 产物 `.ml` → 符号表）、
+-- `Serve`（CDP Profiler 子集，数据源是已有 trace 文件而非 live sampling）。
+--
+-- 退出码：0 成功 / 1 被观测内容语义失败 / 2 用法或前提不满足；未知子命令打印可操作
+-- 错误与用法并返回 2，不静默当作成功。
+--
+-- 本模块属于 `lib/` 工具链，不进 seed 闭包。
 module Vuna.Obs where
 
--- Vuna.Obs：`vuna obs` 的门面（工具链；**永不进 seed 闭包**）。
---
--- 分层：
---   * `Vuna.Obs.Types`    事件模型（M/X/C/i）+ schema 常量 + 纯解析/渲染原语；
---   * `Vuna.Obs.Read`     JSONL 读取（行号、空行跳过、末行截断降级为 warning）；
---   * `Vuna.Obs.Validate` §3 字段/时序/词汇表校验（error = 退出码 1）；
---   * `Vuna.Obs.Summarize` span 树折叠 → 阶段/计数/采样表 + `--json` + `--baseline` 差值；
---   * `Vuna.Obs.Run`      `vuna obs run`（env 注入 + 子进程 + trace 路径打印）；
---   * `Vuna.Obs.Flame`    CPU 采样 → 折叠栈（`convert --to folded` 与 `render` 共用）；
---   * `Vuna.Obs.Convert`  `convert --to cpuprofile|speedscope|folded|jsonl`；
---   * `Vuna.Obs.Render`   `render`（单文件 HTML：瀑布 / 火焰图 / 计数器与采样表）；
---   * `Vuna.Obs.Merge`    `merge`（多 trace → 一份合法 JSONL）；
---   * `Vuna.Obs.Symbols`  `symbols`（split 产物 `.ml` → `vuna-symbols 1` 符号表）；
---   * `Vuna.Obs.Serve`    `serve --cdp`（CDP Profiler 子集，Content-Length JSON-RPC；
---     **离线**：数据源是已有 trace 文件，不是 live sampling）。
---
--- 本模块只做**子命令分发与退出码**（0 成功 / 1 被观测内容语义失败 / 2 用法或前提不满足），
--- 参数解析与业务实现都在各子模块。
---
--- 范围（规范 §7）：`run` / `summarize` / `validate` / `convert` / `render` / `merge` /
--- `symbols` / `serve --cdp`。未知子命令仍回可操作错误 + 退出码 2（不静默 unknown）。
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Json
@@ -41,7 +33,8 @@ import Base.EffFs
 import Base.EffNet
 import Base.EffProcess
 
--- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）。
+-- | `vuna obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）；无子命令或未知子命令
+-- 打印用法并返回退出码 2。
 export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
 runObs [] = obsUsage
 runObs (obs :: rest) = case obs of
@@ -57,6 +50,7 @@ runObs (obs :: rest) = case obs of
     _ <- consolePrint "error: unknown `vuna obs` subcommand `${obs}`\n${obsUsageText}"
     pure 2
 
+-- | 全部子命令的用法文本（无参数与未知子命令时打印）。
 obsUsageText : String
 obsUsageText = """usage:
   vuna obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>
@@ -69,6 +63,7 @@ obsUsageText = """usage:
   vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 """
 
+-- | 内部：打印用法文本并返回退出码 2（没有子命令）。
 obsUsage : Member nConsole ConsoleOp r => Eff r Int
 obsUsage = do
   _ <- consolePrint obsUsageText
@@ -77,6 +72,7 @@ obsUsage = do
 -- ---------------------------------------------------------------
 -- validate
 -- ---------------------------------------------------------------
+-- | 内部：解析 `validate` 的参数：必须恰好一个 TRACE，否则用法错误（退出码 2）。
 obsValidateArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
   ErrC e => obsError (diagText e)
@@ -85,6 +81,8 @@ obsValidateArgs args = case parseToolArgs "vuna obs validate" [] args of
     [] => obsError "usage: vuna obs validate TRACE"
     _ => obsError "usage: vuna obs validate TRACE (exactly one trace)"
 
+-- | 内部：校验一个 trace 文件并打印每条问题；有 error ⇒ 退出码 1，否则打印通过摘要与
+-- warning 条数 ⇒ 0。
 obsValidateFile : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
 obsValidateFile path = do
   reportR <- validateTraceFile path
@@ -104,6 +102,7 @@ obsValidateFile path = do
             "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n"
         pure 0
 
+-- | 内部：逐条打印校验问题（返回值恒为 0，只为配合 `do` 串联）。
 printIssues : Member nConsole ConsoleOp r => List ValidateIssue -> Eff r Int
 printIssues [] = pure 0
 printIssues (i :: rest) = do
@@ -113,6 +112,8 @@ printIssues (i :: rest) = do
 -- ---------------------------------------------------------------
 -- summarize
 -- ---------------------------------------------------------------
+-- | 内部：解析 `summarize` 的参数（`--json` / `--baseline` / `--threshold` + TRACE 列表）；
+-- 没有 TRACE 是用法错误。
 obsSummarizeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
 obsSummarizeArgs args = case parseToolArgs "vuna obs summarize" [BoolFlag "json", ValueFlag "baseline", ValueFlag "threshold"] args of
   ErrC e => obsError (diagText e)
@@ -127,7 +128,7 @@ obsSummarizeArgs args = case parseToolArgs "vuna obs summarize" [BoolFlag "json"
           ErrC e => obsError (diagText e)
           OkC base => summarizeTraces parsed threshold base traces
 
--- `--threshold`：缺省 10（百分比，非负整数）。
+-- | 内部：解析 `--threshold`（百分比整数，缺省 10）。
 thresholdOf : Parsed -> Check Int
 thresholdOf parsed = case flagValue parsed "threshold" of
   Nothing => OkC 10
@@ -135,15 +136,18 @@ thresholdOf parsed = case flagValue parsed "threshold" of
     Just n => OkC n
     Nothing => err "--threshold must be a non-negative integer (percent), got `${text}`"
 
+-- | 内部：十进制整数文本解析（空串 = `Nothing`）。
 parseNonNegIntText : String -> Maybe Int
 parseNonNegIntText s = if s == "" then Nothing else parseDigits (strUnpack s) 0 False
 
+-- | 内部：`parseNonNegIntText` 的逐字符累加（前导 `-` 取负，遇非数字 = `Nothing`）。
 parseDigits : List Int -> Int -> Bool -> Maybe Int
 parseDigits [] acc neg = Just (if neg then 0 - acc else acc)
 parseDigits (c :: rest) acc neg =
   if c == 45 && not neg then parseDigits rest acc True
   else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
 
+-- | 内部：读 `--baseline` 指定的 trace 并摘要；未给基线 ⇒ `Nothing`，读盘失败 ⇒ `ErrC`。
 baselineOf : Member nFs FsOp r => Parsed -> Eff r (Check (Maybe ObsSummary))
 baselineOf parsed = case flagValue parsed "baseline" of
   Nothing => pure (OkC Nothing)
@@ -153,7 +157,8 @@ baselineOf parsed = case flagValue parsed "baseline" of
       ErrC e => pure (err "baseline: ${diagText e}")
       OkC trace => pure (OkC (Just (summarizeTrace trace)))
 
--- 无 TRACE 时用法错误（见调用方）；多个 TRACE 逐个输出，任一退出非 0 就停（不吞错误）。
+-- | 内部：逐个 TRACE 读入并输出摘要；首个非 0 退出码即停（不吞错误）。空列表返回 0，
+-- 「没有 TRACE」的用法错误由调用方挡掉。
 summarizeTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> List String -> Eff r Int
 summarizeTraces parsed threshold base [] = pure 0
 summarizeTraces parsed threshold base (path :: rest) = do
@@ -164,6 +169,7 @@ summarizeTraces parsed threshold base (path :: rest) = do
       code <- emitSummary parsed threshold base path (summarizeTrace trace)
       if code /= 0 then pure code else summarizeTraces parsed threshold base rest
 
+-- | 内部：输出一份摘要：无基线走阶段/计数/采样表（或 `--json`），有基线走差值。
 emitSummary : Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff r Int
 emitSummary parsed threshold Nothing path summary = if flagSet parsed "json" then do
   _ <- obsLine (renderJson (summaryJson summary))
@@ -177,10 +183,12 @@ else do
 emitSummary parsed threshold (Just baseSummary) path summary =
   emitDelta parsed threshold baseSummary path summary
 
+-- | 内部：基线模式：算阶段差值后交给 `emitDeltaGo` 输出。
 emitDelta : Member nConsole ConsoleOp r => Parsed -> Int -> ObsSummary -> String -> ObsSummary -> Eff r Int
 emitDelta parsed threshold baseSummary path summary =
   emitDeltaGo parsed threshold summary path (diffSummaries baseSummary summary)
 
+-- | 内部：输出差值表（或 `--json`）；最大绝对差值超过 `--threshold` ⇒ 退出码 1。
 emitDeltaGo : Member nConsole ConsoleOp r => Parsed -> Int -> ObsSummary -> String -> List StageDelta -> Eff r Int
 emitDeltaGo parsed threshold summary path deltas =
   let
@@ -203,24 +211,27 @@ emitDeltaGo parsed threshold summary path deltas =
         consolePrint "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n"
       pure 0
 
--- `--json` + `--baseline`：在标准摘要上再嵌一个 `baseline` 字段（仍是单行 JSON）。
+-- | 内部：在摘要 JSON 上再嵌一个 `baseline` 字段（仍是单行 JSON）。
 summaryWithBaselineJson : ObsSummary -> List StageDelta -> Json
 summaryWithBaselineJson summary deltas = case summaryJson summary of
   JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
   other => other
 
+-- | 内部：逐行打印（每行补一个换行）。
 printRows : Member nConsole ConsoleOp r => List String -> Eff r Int
 printRows [] = pure 0
 printRows (row :: rest) = do
   _ <- consolePrint "${row}\n"
   printRows rest
 
+-- | 内部：打印一行（带换行），返回写入字节数（`Nat` 转 `Int`）。
 obsLine : Member nConsole ConsoleOp r => String -> Eff r Int
 obsLine s = fmap natToInt (consolePrint "${s}\n")
 
 -- ---------------------------------------------------------------
--- 错误出口（用法/前提 = 退出码 2）
+-- 错误出口
 -- ---------------------------------------------------------------
+-- | 内部：错误出口：打印 `error: ...` 并返回退出码 2（用法 / 前提不满足）。
 obsError : Member nConsole ConsoleOp r => String -> Eff r Int
 obsError e = do
   _ <- consolePrint "error: ${e}\n"

@@ -1,19 +1,13 @@
+-- | `vuna obs` 的规范事件模型（schema `vuna-obs 1`），外加纯解析与渲染原语。
+-- 规范的唯一来源是 `docs/reference/observability.md` §3（事件模型）与 §3.3（事件名词汇表）。
+--
+-- 本模块只有纯函数：不做 I/O、不读文件（读盘在 [Vuna.Obs.Read]），无 `Eff`。缺字段分两层：
+-- 结构身份字段（`ph` / `pid` / `tid` / `name`）缺失就是解析错误，错误文案带行号；schema
+-- 语义字段（`ts` / `dur` / `args.value` / `args.stack` / `args.text`）在这里保留为 `Maybe`
+-- 或原始 `args`，由 [Vuna.Obs.Validate] 报 error。事件名词汇表只在本模块写一份，
+-- validate 只消费它，不复制字面量。
 module Vuna.Obs.Types where
 
--- Vuna.Obs.Types：`vuna obs` 的规范事件模型（schema `vuna-obs 1`）+ 纯解析/渲染原语。
--- 规范唯一来源：`docs/reference/observability.md` §3（事件模型）与 §3.3（事件名词汇表）。
---
--- 边界（第一批）：
---   * 本模块**只有纯函数**：不做 I/O、不读文件（读盘在 `Vuna.Obs.Read`），无 `Eff`；
---   * 缺字段分两层：结构身份字段（`ph` / `pid` / `tid` / `name`）缺失 = 解析错误（带行号）；
---     schema 语义字段（`ts` / `dur` / `args.value` / `args.stack` / `args.text`）在这里
---     保留为 `Maybe` / 原始 `args`，由 `Vuna.Obs.Validate` 报 error（规则见文档 §7 `validate`）；
---   * 事件名词汇表只在本模块写一份，validate 只消费它，不复制字面量。
---
--- 下一批（convert / render / merge / symbols）可直接复用：
--- `parseEvent` / `eventToJson` / `renderEventLine` / `eventPh` / `eventTs` / `eventDur` /
--- `spanInterval` / `eventBase` / `eventArgs` / `argJson` / `argInt` / `argStr` / `argStack` /
--- `sampleOf` / `vunaEventVocabulary` / `isKnownVunaEventName`。
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 
@@ -30,30 +24,49 @@ obsSummarySchema = "vuna-obs-summary 1"
 -- ---------------------------------------------------------------
 -- | 元数据事件（`ph:"M"`）：必须是 trace 首行，`args.schema` 声明格式版本。
 export record ObsMetaData(..) where
+  -- | 事件名，规范值 `vuna.obs.schema`。
   metaName : String
+  -- | 格式版本串，必须等于 `obsSchemaVersion`。
   metaSchema : String
+  -- | 生产者的版本标识。
   metaVersion : String
+  -- | 观测级别（0..3）。
   metaLevel : Int
+  -- | 可执行文件名（用于标识生产者，不进 HTML 报告）。
   metaExec : String
+  -- | 命令行参数（调试与报告展示用）。
   metaArgv : List String
+  -- | trace 起点的 epoch 微秒；缺省 = `Nothing`。
   metaT0 : Maybe Int
+  -- | 进程号（`Unix.getpid`）。
   metaPid : Int
+  -- | fiber id（无调度器时 0）。
   metaTid : Int
 
 -- | 非元数据事件的公共字段（`ts` 允许缺失，交给 validate 报；`args` 保留原始扁平对象）。
 export record ObsBase(..) where
+  -- | 事件时间戳（epoch 微秒）；缺失 = `Nothing`。
   baseTs : Maybe Int
+  -- | 所属进程号。
   basePid : Int
+  -- | 所属 fiber id（无调度器时 0）。
   baseTid : Int
+  -- | 事件名（`vuna.*` 规范名或用户自定义名）。
   baseName : String
+  -- | 事件分类标签（可缺省 = ""）。
   baseCat : String
+  -- | 原始 `args` 扁平对象（键序即文件顺序）。
   baseArgs : List (Pair String Json)
 
 -- | 一个 trace 事件：元数据 `M` / 跨度 `X`（自带 `dur`）/ 计数 `C` / 瞬时 `i`。
 export data ObsEvent(..) : Type where
+  -- | 元数据事件，只允许出现在 trace 首行。
   ObsMetaEvent : ObsMetaData -> ObsEvent
+  -- | 跨度事件；第二项是时长（微秒，缺失 = `Nothing`）。
   ObsSpanEvent : ObsBase -> Maybe Int -> ObsEvent
+  -- | 计数器事件；第二项是计数值（缺失 = `Nothing`）。
   ObsCounterEvent : ObsBase -> Maybe Int -> ObsEvent
+  -- | 瞬时事件（采样、日志等）。
   ObsInstantEvent : ObsBase -> ObsEvent
 
 -- | 事件的 `ph` 标签（`M` / `X` / `C` / `i`）。
@@ -158,6 +171,7 @@ argStack ev = case argJson "stack" ev of
   Just (JArr items) => stringsOf items
   _ => Nothing
 
+-- | 内部：把 JSON 数组逐项转成字符串列表；任一元素不是字符串 = `Nothing`。
 stringsOf : List Json -> Maybe (List String)
 stringsOf [] = Just []
 stringsOf ((JStr s) :: rest) = case stringsOf rest of
@@ -177,7 +191,9 @@ sampleKindOfName _ = ""
 
 -- | 一条采样事件：种类 + 栈（叶在前）。
 export record ObsSample(..) where
+  -- | 采样事件名（`vuna.sample.cpu` / `vuna.sample.mem`）。
   sampleName : String
+  -- | 采样栈帧名（叶在前，首项是最内层帧）。
   sampleStack : List String
 
 -- | 从事件取采样（不是 `i` 采样事件、或 `args.stack` 缺失/非法 = `Nothing`）。
@@ -300,52 +316,62 @@ parseEvent line json = case strOfField "ph" json of
   Just ph => parseErr line "unknown ph `${ph}` (expected M, X, C or i)"
   Nothing => parseErr line "event must be a JSON object with a string `ph`"
 
+-- | 内部：构造带行号的解析错误。
 parseErr : Int -> String -> Check a
 parseErr line msg = err "line ${strFromInt line}: ${msg}"
 
+-- | 内部：按名字取 JSON 对象的字段；非对象或字段不存在 = `Nothing`。
 fieldJson : String -> Json -> Maybe Json
 fieldJson key (JObj kvs) = lookupPair key kvs
 fieldJson key _ = Nothing
 
+-- | 内部：取 JSON 对象的字符串字段；不是字符串 = `Nothing`。
 strOfField : String -> Json -> Maybe String
 strOfField key json = case fieldJson key json of
   Just (JStr s) => Just s
   _ => Nothing
 
+-- | 内部：必需的整数字段；缺失或类型不对都是解析错误。
 requiredInt : Int -> String -> Json -> Check Int
 requiredInt line key json = case fieldJson key json of
   Just (JNum n) => OkC n
   Just _ => parseErr line "field `${key}` must be an integer"
   Nothing => parseErr line "event is missing integer field `${key}`"
 
+-- | 内部：必需的字符串字段；缺失或类型不对都是解析错误。
 requiredStr : Int -> String -> Json -> Check String
 requiredStr line key json = case fieldJson key json of
   Just (JStr s) => OkC s
   Just _ => parseErr line "field `${key}` must be a string"
   Nothing => parseErr line "event is missing string field `${key}`"
 
+-- | 内部：可选的整数字段；存在但类型不对仍是解析错误。
 optionalInt : Int -> String -> Json -> Check (Maybe Int)
 optionalInt line key json = case fieldJson key json of
   Nothing => OkC Nothing
   Just (JNum n) => OkC (Just n)
   Just _ => parseErr line "field `${key}` must be an integer"
 
+-- | 内部：取 `args` 对象的键值对；缺失或不是对象 = 空表。
 argsOfJson : Json -> List (Pair String Json)
 argsOfJson json = case fieldJson "args" json of
   Just (JObj kvs) => kvs
   _ => []
 
+-- | 内部：取 `cat` 字段；缺失或不是字符串 = ""。
 catOfJson : Json -> String
 catOfJson json = case strOfField "cat" json of
   Just cat => cat
   Nothing => ""
 
+-- | 内部：`args` 里的可选整数字段；存在但类型不对是解析错误。
 optionalArgInt : Int -> String -> Json -> Check (Maybe Int)
 optionalArgInt line key json = case lookupPair key (argsOfJson json) of
   Nothing => OkC Nothing
   Just (JNum n) => OkC (Just n)
   Just _ => parseErr line "`args.${key}` must be an integer"
 
+-- | 内部：解析非元数据事件的公共字段（`pid` / `tid` / `name` 必需）。
 parseBase : Int -> Json -> Check ObsBase
 parseBase line json = do
   pid <- requiredInt line "pid" json
@@ -354,6 +380,7 @@ parseBase line json = do
   ts <- optionalInt line "ts" json
   pure (ObsBase ts pid tid name (catOfJson json) (argsOfJson json))
 
+-- | 内部：解析 `ph:"M"` 事件；`args` 语义字段缺失时退化成空串 / 0。
 parseMeta : Int -> Json -> Check ObsEvent
 parseMeta line json = do
   pid <- requiredInt line "pid" json
@@ -362,38 +389,45 @@ parseMeta line json = do
   pure
     (ObsMetaEvent (ObsMetaData name (metaStrOf json "schema") (metaStrOf json "version") (metaIntOf json "level") (metaStrOf json "exec") (metaArgvOf json) (metaT0Of json) pid tid))
 
+-- | 内部：`args` 里的字符串字段；缺失或类型不对 = ""。
 metaStrOf : Json -> String -> String
 metaStrOf json key = case lookupPair key (argsOfJson json) of
   Just (JStr s) => s
   _ => ""
 
+-- | 内部：`args` 里的整数字段；缺失或类型不对 = 0。
 metaIntOf : Json -> String -> Int
 metaIntOf json key = case lookupPair key (argsOfJson json) of
   Just (JNum n) => n
   _ => 0
 
+-- | 内部：`args.t0`；缺失或不是整数 = `Nothing`。
 metaT0Of : Json -> Maybe Int
 metaT0Of json = case lookupPair "t0" (argsOfJson json) of
   Just (JNum n) => Just n
   _ => Nothing
 
+-- | 内部：`args.argv`；缺失、不是数组或含非字符串元素 = 空表。
 metaArgvOf : Json -> List String
 metaArgvOf json = case lookupPair "argv" (argsOfJson json) of
   Just (JArr items) => fromMaybe [] (stringsOf items)
   _ => []
 
+-- | 内部：解析 `ph:"X"` 事件（`dur` 可选，缺失交给 validate）。
 parseSpan : Int -> Json -> Check ObsEvent
 parseSpan line json = do
   base <- parseBase line json
   dur <- optionalInt line "dur" json
   pure (ObsSpanEvent base dur)
 
+-- | 内部：解析 `ph:"C"` 事件（`args.value` 可选，缺失交给 validate）。
 parseCounter : Int -> Json -> Check ObsEvent
 parseCounter line json = do
   base <- parseBase line json
   value <- optionalArgInt line "value" json
   pure (ObsCounterEvent base value)
 
+-- | 内部：解析 `ph:"i"` 事件。
 parseInstant : Int -> Json -> Check ObsEvent
 parseInstant line json = do
   base <- parseBase line json
@@ -408,6 +442,7 @@ eventToJson (ObsMetaEvent m) =
   JObj
     (append [Pair "ph" (JStr "M"), Pair "name" (JStr m.metaName), Pair "pid" (JNum m.metaPid), Pair "tid" (JNum m.metaTid)] [Pair "args" (JObj (metaArgsJson m))])
 
+-- | 内部：元数据事件的 `args` 对象；`t0` 缺失时不写出该键。
 metaArgsJson : ObsMetaData -> List (Pair String Json)
 metaArgsJson m = append [Pair "schema" (JStr m.metaSchema), Pair "version" (JStr m.metaVersion), Pair "level" (JNum m.metaLevel), Pair "exec" (JStr m.metaExec), Pair "argv" (JArr (map JStr m.metaArgv))] (case m.metaT0 of
   Just t0 => [Pair "t0" (JNum t0)]
@@ -424,18 +459,22 @@ eventToJson (ObsInstantEvent base) =
   JObj
     (append (append [Pair "ph" (JStr "i"), Pair "pid" (JNum base.basePid), Pair "tid" (JNum base.baseTid), Pair "name" (JStr base.baseName)] (append (tsPair base) (catPairs base))) (argsPairs base))
 
+-- | 内部：`ts` 键；缺失时返回空表（不写出该键）。
 tsPair : ObsBase -> List (Pair String Json)
 tsPair base = case base.baseTs of
   Just ts => [Pair "ts" (JNum ts)]
   Nothing => []
 
+-- | 内部：`cat` 键；空分类不写出。
 catPairs : ObsBase -> List (Pair String Json)
 catPairs base = if base.baseCat == "" then [] else [Pair "cat" (JStr base.baseCat)]
 
+-- | 内部：`dur` 键；缺失时返回空表。
 durPairs : Maybe Int -> List (Pair String Json)
 durPairs (Just d) = [Pair "dur" (JNum d)]
 durPairs Nothing = []
 
+-- | 内部：`args` 键；空 args 不写出。
 argsPairs : ObsBase -> List (Pair String Json)
 argsPairs base = if length base.baseArgs == 0 then [] else [Pair "args" (JObj base.baseArgs)]
 

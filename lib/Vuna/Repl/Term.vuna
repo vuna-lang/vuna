@@ -1,13 +1,13 @@
-module Vuna.Repl.Term where
-
--- Vuna.Repl.Term：REPL 行编辑的终端层（工具链；不进 seed 闭包）。
+-- | REPL 行编辑的终端层：终端模式 / 尺寸（POSIX `stty`）、逐字节读、转义与写 stdout。
 --
--- 只用现有原语：`processRunIn` 调 POSIX `stty` 做终端模式/尺寸，`stdinReadBytes (natFromInt 1)` 逐字节
--- 读入。没有给编译器加终端原语，TCB 不变；非 POSIX 或 stty 不可用时调用方回退到
+-- 只用现有原语：`processRunIn` 调 `stty` 切换模式与查询尺寸，`stdinReadBytes (natFromInt 1)`
+-- 逐字节读入，因此编译器不需要终端原语；非 POSIX 或 stty 不可用时调用方回退到
 -- `stdinReadLine`。
 --
--- 约定：所有函数返回 Int/Bool，失败返回非 0，不抛异常（读字节返回 -1 = EOF/超时，
--- 具体含义由调用方按当前读模式解释）。
+-- 约定：所有函数返回 Int / Bool，失败返回非 0，不抛异常；读字节返回 -1 表示 EOF 或超时，
+-- 具体含义由调用方按当前读模式解释。
+module Vuna.Repl.Term where
+
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Base.EffClock
@@ -19,38 +19,43 @@ import Base.EffStdin
 import Base.Nat
 import Base.Eff.Types
 
+-- | ESC 字节（转义序列的前缀）。
 export escCode : String
 escCode = strPack [27]
 
+-- | 用 SGR 参数 `code` 给 `s` 上色（`\e[<code>m` … `\e[0m`）。
 export ansi : String -> String -> String
 ansi code s = "${escCode}[${code}m${s}${escCode}[0m"
 
--- 单引号 shell 转义（路径可能来自 TMPDIR）。
+-- | 单引号 shell 转义（路径可能来自 `TMPDIR`）。
 export shellQuote : String -> String
 shellQuote s = "'${shellEscaped (strUnpack s)}'"
 
+-- | 内部：把单引号写成 `'\''`，其余字节原样，供 `shellQuote` 拼装。
 shellEscaped : List Int -> String
 shellEscaped [] = ""
 shellEscaped (c :: rest) =
   if c == 39 then "'\\''${shellEscaped rest}" else strPack [c] ++ shellEscaped rest
 
--- 会话级临时路径（stty 状态 / 尺寸文件）；同一进程内 clockNow 保证不撞名。
+-- | 会话级临时路径（`stty` 状态 / 尺寸文件）；同一进程内用 `clockNow` 保证不撞名。
 export termTmpPath : Member nClock ClockOp r, Member nEnv EnvOp r => Int -> Eff r String
 termTmpPath _ = do
   base <- termTempBase 0
   now <- clockNow
   pure "${base}/vuna-repl-term-${now}"
 
+-- | 内部：临时目录根——`TMPDIR`（去掉尾随 `/`），未设置时用 `/tmp`。
 termTempBase : Member nEnv EnvOp r => Int -> Eff r String
 termTempBase _ = do
   env <- envGetEnv "TMPDIR"
   pure
     (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
+-- | 删除文件（`rm -f`），返回子命令退出码。
 export rmFile : Member nProcess ProcessOp r => String -> Eff r Int
 rmFile path = processRunIn "/" ["rm", "-f", path]
 
--- `stty -g > path`：保存终端状态。
+-- | `stty -g > path`：把终端状态保存到 `path`；成功且文件存在给 0，否则给非 0。
 export termSaveState : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
 termSaveState path = do
   code <- processRunIn "." ["sh", "-c", "stty -g > ${shellQuote path}"]
@@ -59,7 +64,7 @@ termSaveState path = do
     pure (if exists then 0 else 1)
   else pure 1
 
--- `stty <saved>`：恢复终端；失败再试 `stty sane`。
+-- | `stty <saved>`：按保存的状态恢复终端（并删掉状态文件）；失败再试 `stty sane`。
 export termRestoreState : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
 termRestoreState path = do
   textR <- readText path
@@ -72,19 +77,20 @@ termRestoreState path = do
     _ <- rmFile path
     if code == 0 then pure 0 else processRunIn "." ["stty", "sane"]
 
--- `stty raw -echo min 1 time 0`：原始模式，逐字节阻塞读。
+-- | `stty raw -echo min 1 time 0`：进入原始模式（不回显），逐字节阻塞读。
 export termEnterRaw : Member nProcess ProcessOp r => Int -> Eff r Int
 termEnterRaw _ = processRunIn "." ["stty", "raw", "-echo", "min", "1", "time", "0"]
 
--- Esc 序列探测用：0.1s 超时读（readByte 返回 -1 = 无后续字节）。
+-- | `stty min 0 time 1`：0.1s 超时读——无输入时读字节返回 -1，调用方据此轮询（Esc 序列探测、
+-- resize 检测）。
 export termReadTimeout : Member nProcess ProcessOp r => Int -> Eff r Int
 termReadTimeout _ = processRunIn "." ["stty", "min", "0", "time", "1"]
 
--- 恢复阻塞读。
+-- | `stty min 1 time 0`：恢复逐字节阻塞读。
 export termReadBlock : Member nProcess ProcessOp r => Int -> Eff r Int
 termReadBlock _ = processRunIn "." ["stty", "min", "1", "time", "0"]
 
--- 读 1 字节；EOF 或超时返回 -1。
+-- | 读 1 字节；EOF 或超时返回 -1（没有读到字节）。
 export termReadByte : Member nStdin StdinOp r => Int -> Eff r Int
 termReadByte _ = do
   s <- stdinReadBytes (natFromInt 1)
@@ -95,7 +101,7 @@ termReadByte _ = do
       b :: rest => b
   )
 
--- 终端列数；失败默认 80。
+-- | 终端列数：`stty size` 的第二列；查询失败、非数字或非正数时给缺省值 80。
 export termWidth : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Eff r Int
 termWidth _ = do
   base <- termTmpPath 0
@@ -118,13 +124,16 @@ termWidth _ = do
         _ => 80
       )
 
+-- | 内部：把纯数字串解析成非负整数；空串或含非数字字符给 `Nothing`。
 parseDigitsInt : String -> Maybe Int
 parseDigitsInt s = if s == "" then Nothing else parseDigits (strUnpack s) 0
 
+-- | 内部：逐位累加十进制数（`acc` 是已累加的值）。
 parseDigits : List Int -> Int -> Maybe Int
 parseDigits [] acc = Just acc
 parseDigits (c :: rest) acc =
   if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) else Nothing
 
+-- | 往 stdout 写一段文本（不换行），返回写入的字节数。
 export writeOut : Member nConsole ConsoleOp r => String -> Eff r Int
 writeOut s = fmap natToInt (consolePrint s)

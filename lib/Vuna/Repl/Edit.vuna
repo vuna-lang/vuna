@@ -1,23 +1,25 @@
+-- | REPL 行编辑器：按键解码、缓冲编辑原语、历史、Ctrl-R 反向搜索、Tab 补全与渲染。
+--
+-- 终端能力全部来自 [Vuna.Repl.Term]（`stty` + 逐字节读），因此编译器不需要终端原语。
+--
+-- 支持的按键：左 / 右移动、Home / End、Backspace / Delete（按 UTF-8 码点边界）；↑ / ↓ 历史；
+-- Ctrl-R 反向增量历史搜索（Enter 接受、Esc / Ctrl-C 取消）；Ctrl-A/E/K/U/W/L、Ctrl-P/N、
+-- Ctrl-B/F；Ctrl-C 取消当前输入、Ctrl-D 空行退出。
+--
+-- Tab 补全：普通位置补命令名 / 当前缓冲绑定名，`:load` 参数位补模块名与文件路径；`:browse` /
+-- `import` 参数位只补模块名（候选池在 [Vuna.Repl.Complete]，只在按 Tab 时枚举）。唯一匹配直接
+-- 补全，多个匹配补最长公共前缀。
+--
+-- 括号粘贴（[Vuna.Repl.Paste]）：`\e[200~` … `\e[201~` 之间的内容原样进缓冲，粘贴里的换行不
+-- 触发提交、Tab 不触发补全；换行在渲染时显示为 `↵`。
+--
+-- 空闲轮询与 resize 重绘：`stty min 0 time 1` 每 0.1s 醒一次（不忙等），每 20 个空闲 tick
+-- （≈2s）查一次 `stty size`，宽度变了按新宽度重绘当前行。
+--
+-- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。所有出口
+-- （提交 / EOF / 取消 / 不可用）都恢复终端状态（含关闭括号粘贴）。
 module Vuna.Repl.Edit where
 
--- Vuna.Repl.Edit：REPL 行编辑器（工具链；不进 seed 闭包）。
---
--- 终端能力全部来自 `Vuna.Repl.Term`（stty + stdinReadBytes），因此不需要给编译器加
--- 终端原语。支持：
---   * 左/右移动、Home/End、Backspace/Delete（按 UTF-8 码点边界）；
---   * ↑/↓ 历史；Ctrl-R 反向增量历史搜索（Enter 接受、Esc/Ctrl-C 取消）；
---   * Ctrl-A/E/K/U/W/L、Ctrl-P/N、Ctrl-B/F；
---   * Ctrl-C 取消当前输入、Ctrl-D 空行退出；
---   * Tab 补全：普通位置补命令名 / 当前缓冲绑定名；`:load` / `:browse` / `import` 的
---     参数位补模块名与文件路径（候选池在 `Vuna.Repl.Complete`，只在按 Tab 时枚举）。
---     唯一匹配补全、多个匹配补最长公共前缀。
---   * 括号粘贴（`Vuna.Repl.Paste`）：`\e[200~` … `\e[201~` 之间的内容原样进缓冲，
---     粘贴里的换行不触发提交、Tab 不触发补全；换行在渲染时显示为 `↵`。
---   * 空闲轮询 + 窗口 resize 重绘：`stty min 0 time 1` 每 0.1s 醒一次（不忙等），
---     每 20 个空闲 tick（≈2s）查一次 `stty size`，宽度变了按新宽度重绘当前行（轮询频率是
---     权衡：每次查询要起 `sh` + `stty` 两个进程，2s 延迟对 resize 可接受且常驻开销低）。
--- 渲染用 `\r` + 水平窗口（超宽时只显示尾部）+ `\x1b[K`，光标用 `\x1b[nD` 回移。
--- 所有出口（提交/EOF/取消/不可用）都恢复终端状态（含关闭括号粘贴）。
 import Vuna.Compiler.Base.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
@@ -30,67 +32,117 @@ import Base.EffEnv
 import Base.EffFs
 import Base.EffProcess
 
+-- | 一次编辑会话的配置：提示符、历史、补全池、显示宽度与模块根。
 export record EditConfig(..) where
+  -- | 提示符（原样输出在行首）。
   editPrompt : String
+  -- | 提示符占用的列数（计算可用宽度时从终端宽度里扣掉）。
   editPromptWidth : Int
+  -- | 历史条目（旧→新）。
   editHistory : List String
+  -- | 普通位置的补全池（命令名 / 当前缓冲绑定名）。
   editCompletions : List String
+  -- | 初始显示宽度（终端列数；之后按 `stty size` 刷新）。
   editWidth : Int
+  -- | 是否给 Ctrl-R 搜索提示加上颜色。
   editColorOn : Bool
-  -- 当前包上下文的模块根（`:load` / `:browse` / `import` 参数位补全用）。
+  -- | 当前包上下文的模块根（`:load` / `:browse` / `import` 参数位补全用）。
   editRoots : List String
 
+-- | 编辑会话的结果。
 export data EditOutcome(..) : Type where
+  -- | 用户提交了一行（含粘贴进来的多行文本）。
   EditLine : String -> EditOutcome
+  -- | 空行按 Ctrl-D 结束会话。
   EditEof : EditOutcome
+  -- | 用户按 Ctrl-C 取消当前输入。
   EditCancel : EditOutcome
+  -- | 编辑器不可用（拿不到 / 进不了终端原始模式），调用方应回退到逐行读。
   EditUnavailable : EditOutcome
 
+-- | 查询终端列数（转调 [Vuna.Repl.Term.termWidth]，便于调用方只 import 本模块）。
 export terminalWidth : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Eff r Int
 terminalWidth n = termWidth n
 
+-- | 编辑器状态：缓冲字节、光标位置（字节偏移）、历史游标与草稿、反向搜索结果。
 record EditState where
+  -- | 当前缓冲的 UTF-8 字节。
   esBuf : List Int
+  -- | 光标位置（缓冲字节偏移）；移动与删除按码点边界对齐，输入过程中可能含未完成的 UTF-8 序列。
   esCursor : Int
+  -- | 历史游标：0 = 正在编辑新输入，n = 停在第 n 条最新历史。
   esHistIdx : Int
+  -- | 进入历史前的草稿（↓ 回到 0 时恢复）。
   esDraft : List Int
+  -- | 是否处于 Ctrl-R 反向搜索模式（此时按键走搜索处理）。
   esSearching : Bool
+  -- | 反向搜索的查询字节。
   esQuery : List Int
+  -- | 当前匹配：(历史序号, 条目)；`Nothing` = 无匹配。
   esMatch : Maybe (Pair Int String)
 
+-- | 主循环的一步结果。
 data EditResult : Type where
+  -- | 继续编辑，携带新状态。
   EContinue : EditState -> EditResult
+  -- | 提交该文本（Enter）。
   ESubmit : String -> EditResult
+  -- | 结束会话（空行按 Ctrl-D）。
   EExit : EditResult
+  -- | 取消当前输入（Ctrl-C / fuel 耗尽）。
   ECancel : EditResult
 
+-- | 解码后的按键。
 data Key : Type where
+  -- | 单字节按键；`applyNormalKey` 只在 `>= 32` 时插入。
   KChar : Int -> Key
+  -- | 回车 / 换行。
   KEnter : Key
+  -- | Backspace（127 或 8）。
   KBackspace : Key
+  -- | Delete（`\e[3~`）。
   KDelete : Key
+  -- | 左箭头。
   KLeft : Key
+  -- | 右箭头。
   KRight : Key
+  -- | 上箭头（历史向前）。
   KUp : Key
+  -- | 下箭头（历史向后）。
   KDown : Key
+  -- | Home（Ctrl-A、`\e[H`、`\e[1~`、`\e[7~`）。
   KHome : Key
+  -- | End（Ctrl-E、`\e[F`、`\e[4~`、`\e[8~`）。
   KEnd : Key
+  -- | Tab（触发补全）。
   KTab : Key
+  -- | Ctrl-K（删到行尾）。
   KCtrK : Key
+  -- | Ctrl-U（删到行首）。
   KCtrU : Key
+  -- | Ctrl-W（删前一个单词）。
   KCtrW : Key
+  -- | Ctrl-L（清屏后重绘）。
   KCtrL : Key
+  -- | Ctrl-R（开始 / 继续反向搜索）。
   KCtrR : Key
+  -- | Ctrl-C（取消当前输入）。
   KCtrC : Key
+  -- | Ctrl-D（空行时结束会话，否则删除光标处字符）。
   KCtrD : Key
+  -- | 单独的 Esc 键（无后续序列）。
   KEsc : Key
+  -- | EOF（当前按键解码不产生它：读不到字节一律当 `KIdle`）。
   KEof : Key
-  -- 空闲 tick（0.1s 内没有输入；只用于 resize 检测，不产生编辑动作）。
+  -- | 空闲 tick（0.1s 内没有输入；只用于 resize 检测，不产生编辑动作）。
   KIdle : Key
-  -- 一次括号粘贴的完整内容（可能含换行）。
+  -- | 一次括号粘贴的完整内容（可能含换行）。
   KPaste : String -> Key
+  -- | 无法识别的字节 / 序列（忽略）。
   KIgnore : Key
 
+-- | 跑一次行编辑：保存终端状态 → 进原始模式 → 开括号粘贴 → 渲染 → 主循环，最后恢复终端
+-- 状态并换行。返回 `EditUnavailable` 表示拿不到 / 进不了终端原始模式，调用方应回退到逐行读。
 export editLine : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => EditConfig -> Eff r EditOutcome
 editLine cfg = do
   path <- termTmpPath 0
@@ -106,14 +158,13 @@ editLine cfg = do
         st0 = EditState [] 0 0 [] False [] Nothing
       in do
         _ <- pasteEnable 0
-        -- 进入空闲轮询模式（min 0 time 1）：没有输入时每 0.1s 醒一次用于 resize 检测，
-        -- 不忙等；原绑定键读取改由 readKey 的 KIdle 分支处理。
+        -- 进入空闲轮询模式（min 0 time 1）：没有输入时每 0.1s 醒一次用于 resize 检测，不忙等。
         _ <- termReadTimeout 0
         _ <- redraw cfg cfg.editWidth st0
         -- fuel 上限：空闲 tick 也扣 1，1e7 tick ≈ 11.6 天（远超一次交互会话）。
-        -- 边界：timed read 的**超时与 EOF 都返回 -1**（`stdinReadBytes` 无法区分），本编辑器
-        -- 一律当 KIdle——所以 tty 关闭/EOF 会退化成空闲轮询，耗尽 fuel 后以 ECancel 结束
-        -- （≈11.6 天）；正常退出靠 Ctrl-D（空行）或 `:quit`，不依赖 EOF 判定。
+        -- 边界：超时读的无输入与 EOF 都返回 -1（`stdinReadBytes` 无法区分），一律当 KIdle，
+        -- 所以 tty 关闭会退化成空闲轮询、耗尽 fuel 后以 ECancel 结束；正常退出靠 Ctrl-D
+        -- （空行）或 `:quit`，不依赖 EOF 判定。
         result <- editLoop 10000000 cfg cfg.editWidth 0 st0
         -- 先关括号粘贴（终端设置），再恢复 raw 前保存的终端状态。
         _ <- pasteDisable 0
@@ -121,14 +172,16 @@ editLine cfg = do
         _ <- writeOut "\n"
         pure (outcomeOf result)
 
+-- | 内部：把主循环结果映射成对外结果（未结束的态按当前缓冲内容当提交）。
 outcomeOf : EditResult -> EditOutcome
 outcomeOf (ESubmit text) = EditLine text
 outcomeOf EExit = EditEof
 outcomeOf ECancel = EditCancel
 outcomeOf (EContinue st) = EditLine (strOf st.esBuf)
 
--- 主循环：读一键 → 处理 → 重绘；`KIdle` 每 20 tick（≈2s）查一次终端宽度，
--- 变化时按新宽度重绘。`width` 是本次使用的列数（初值来自 Repl 的 `stty size`）。
+-- | 内部：主循环——读一键 → 处理 → 重绘；`KIdle` 累计 20 个 tick（≈2s）查一次终端宽度，
+-- 变了就按新宽度重绘。`width` 是本次使用的列数（初值来自 Repl 的 `stty size`）。fuel 耗尽
+-- 返回 `ECancel`。
 editLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => Int -> EditConfig -> Int -> Int -> EditState -> Eff r EditResult
 editLoop fuel cfg width tick st = if fuel <= 0 then pure ECancel
 else do
@@ -151,6 +204,7 @@ else do
         editLoop (fuel - 1) cfg width 0 st2
       other => pure other
 
+-- | 内部：是否为空闲 tick 键（只有 `KIdle`）。
 isIdleKey : Key -> Bool
 isIdleKey KIdle = True
 isIdleKey _ = False
@@ -158,8 +212,9 @@ isIdleKey _ = False
 -- ---------------------------------------------------------------
 -- 按键解码
 -- ---------------------------------------------------------------
--- 终端处于 `min 0 time 1`（0.1s 超时）模式：没有输入时返回 KIdle，交给 resize 检测。
--- Esc 序列的后续字节也用同一超时读取：单独的 Esc 键会在 0.1s 超时后判为 KEsc。
+-- | 内部：读一个按键——单字节按键直接映射，`ESC` 交给序列解码；读不到字节（超时 / EOF）
+-- 给 `KIdle`。终端处于 `min 0 time 1`（0.1s 超时）模式，Esc 序列的后续字节也用同一超时读取，
+-- 因此单独的 Esc 键在超时后判为 `KEsc`。
 readKey : Member nStdin StdinOp r => Int -> Eff r Key
 readKey _ = do
   b <- termReadByte 0
@@ -184,17 +239,20 @@ readKey _ = do
     27 => readEscape 0
     _ => pure (KChar b)
 
+-- | 内部：Esc 之后的字节——`[` 或 `O` 走 CSI / SS3 解码，没有后续字节（超时）给 `KEsc`，
+-- 其它给 `KIgnore`。
 readEscape : Member nStdin StdinOp r => Int -> Eff r Key
 readEscape _ = do
   b2 <- termReadByte 0
   if b2 < 0 then pure KEsc else if b2 == 91 || b2 == 79 then csiKey 0 else pure KIgnore
 
--- CSI / SS3：`ESC [ ... final`。参数位只取第一个数值（`;` 之后的忽略），最多 16 字节；
--- 支持的 final：A/B/C/D（方向）、H/F（Home/End）、`~` 加参数（1/7 Home、4/8 End、
--- 3 Delete、200 括号粘贴开始——随后读到 `ESC [ 2 0 1 ~` 为止作为一次粘贴内容）。
+-- | 内部：CSI / SS3 序列 `ESC [ ... final` 的入口（参数位最多 16 字节）。
 csiKey : Member nStdin StdinOp r => Int -> Eff r Key
 csiKey _ = csiParams 16 0 0
 
+-- | 内部：累积数字参数，按 final 字节收尾——字母走 `csiLetter`，`~` 走 `csiTilde`。数字累积进
+-- `acc`；`;` 只把参数计数 +1、不重置 `acc`，因此 `~` 前的多参数序列会得到拼接值。fuel 耗尽 /
+-- 读到 EOF / 未知 final 都给 `KIgnore`。
 csiParams : Member nStdin StdinOp r => Int -> Int -> Int -> Eff r Key
 csiParams fuel acc digits = if fuel <= 0 then pure KIgnore
 else do
@@ -206,6 +264,7 @@ else do
     126 => if digits == 0 then pure KIgnore else csiTilde acc
     _ => if b >= 64 && b <= 90 then pure (csiLetter b) else pure KIgnore
 
+-- | 内部：字母 final 的映射——A/B/C/D 为方向键，H/F 为 Home/End，其余给 `KIgnore`。
 csiLetter : Int -> Key
 csiLetter 65 = KUp
 csiLetter 66 = KDown
@@ -215,6 +274,8 @@ csiLetter 72 = KHome
 csiLetter 70 = KEnd
 csiLetter _ = KIgnore
 
+-- | 内部：`~` 参数的映射——1/7 Home、4/8 End、3 Delete、200 读一整段括号粘贴内容；其余给
+-- `KIgnore`。
 csiTilde : Member nStdin StdinOp r => Int -> Eff r Key
 csiTilde 1 = pure KHome
 csiTilde 7 = pure KHome
@@ -229,10 +290,14 @@ csiTilde _ = pure KIgnore
 -- ---------------------------------------------------------------
 -- 按键处理
 -- ---------------------------------------------------------------
+-- | 内部：按当前模式分派按键——搜索模式走 `applySearchKey`，否则走 `applyNormalKey`。
 applyKey : Member nFs FsOp r, Member nConsole ConsoleOp r => EditConfig -> Key -> EditState -> Eff r EditResult
 applyKey cfg key st =
   if st.esSearching then applySearchKey cfg key st else applyNormalKey cfg key st
 
+-- | 内部：普通编辑模式的按键处理——可打印字节插入缓冲，Enter 提交，Ctrl-C 取消，空行
+-- Ctrl-D / EOF 结束会话；Tab 触发补全，Ctrl-L 清屏，Ctrl-R 进入反向搜索；其余键走编辑原语
+-- （移动、删除、kill、历史）。
 applyNormalKey : Member nFs FsOp r, Member nConsole ConsoleOp r => EditConfig -> Key -> EditState -> Eff r EditResult
 applyNormalKey cfg (KChar b) st =
   if b >= 32 then pure (EContinue (insertByte b st)) else pure (EContinue st)
@@ -264,6 +329,9 @@ applyNormalKey cfg KIdle st = pure (EContinue st)
 applyNormalKey cfg (KPaste text) st = pure (EContinue (insertText st text))
 applyNormalKey cfg KIgnore st = pure (EContinue st)
 
+-- | 内部：Ctrl-R 搜索模式的按键处理——字符追加查询、Backspace 删查询、Ctrl-R 跳到下一条
+-- 匹配（按实现从最旧起向新扫）、Enter 接受（无匹配时用查询文本当输入）、Esc / Ctrl-C /
+-- 左右键退出搜索；其余键忽略。
 applySearchKey : Member nConsole ConsoleOp r => EditConfig -> Key -> EditState -> Eff r EditResult
 applySearchKey cfg (KChar b) st =
   if b >= 32 then pure (EContinue (searchQueryAppend cfg st b)) else pure (EContinue st)
@@ -280,10 +348,11 @@ applySearchKey cfg KIdle st = pure (EContinue st)
 applySearchKey cfg (KPaste text) st = pure (EContinue (searchAppendText cfg st text))
 applySearchKey cfg _ st = pure (EContinue st)
 
--- 粘贴进搜索查询：逐字节追加（与打字同语义），不触发其它按键。
+-- | 内部：把粘贴内容追加进搜索查询——逐字节按打字语义处理，不触发其它按键。
 searchAppendText : EditConfig -> EditState -> String -> EditState
 searchAppendText cfg st text = searchAppendBytes cfg st (strUnpack text)
 
+-- | 内部：`searchAppendText` 的逐字节实现（跳过控制字节）。
 searchAppendBytes : EditConfig -> EditState -> List Int -> EditState
 searchAppendBytes cfg st [] = st
 searchAppendBytes cfg st (b :: rest) =
@@ -293,50 +362,62 @@ searchAppendBytes cfg st (b :: rest) =
 -- ---------------------------------------------------------------
 -- 编辑原语
 -- ---------------------------------------------------------------
+-- | 内部：列表长度。
 lenInt : List a -> Int
 lenInt [] = 0
 lenInt (_ :: rest) = 1 + lenInt rest
 
+-- | 内部：较大值。
 imax : Int -> Int -> Int
 imax a b = if a >= b then a else b
 
+-- | 内部：较小值。
 immin : Int -> Int -> Int
 immin a b = if a <= b then a else b
 
+-- | 内部：字节表转字符串（`strPack` 的别名，读作「当前缓冲内容」）。
 strOf : List Int -> String
 strOf = strPack
 
+-- | 内部：是否为 UTF-8 续字节（0x80–0xBF）。
 isContinuation : Int -> Bool
 isContinuation b = b >= 128 && b < 192
 
+-- | 内部：是否为空白字节（空格或制表）。
 isSpaceByte : Int -> Bool
 isSpaceByte b = b == 32 || b == 9
 
+-- | 内部：光标前一个码点的起始偏移（已在开头给 0）。
 prevCharStart : List Int -> Int -> Int
 prevCharStart buf cur = prevCharGo (reverse (take cur buf)) cur
 
+-- | 内部：`prevCharStart` 的逆序逐字节实现（跳过续字节）。
 prevCharGo : List Int -> Int -> Int
 prevCharGo [] cur = 0
 prevCharGo (b :: rest) cur = if isContinuation b then prevCharGo rest (cur - 1) else cur - 1
 
+-- | 内部：从光标位置往后跨一个码点的偏移（已到末尾给缓冲长度）。
 nextCharStart : List Int -> Int -> Int
 nextCharStart buf cur =
   let
     total = lenInt buf
   in if cur >= total then total else immin total (cur + 1 + contCount (nthByte buf cur))
 
+-- | 内部：取缓冲第 `i` 个字节；越界给 0。
 nthByte : List Int -> Int -> Int
 nthByte buf i = case drop i buf of
   b :: rest => b
   [] => 0
 
+-- | 内部：在光标处插入一个字节并右移光标，同时把历史游标重置为 0（编辑后不再算历史条目）。
 insertByte : Int -> EditState -> EditState
 insertByte b st =
   let
     buf2 = append (append (take st.esCursor st.esBuf) [b]) (drop st.esCursor st.esBuf)
   in EditState buf2 (st.esCursor + 1) 0 st.esDraft st.esSearching st.esQuery st.esMatch
 
--- 一次插入一段文本（括号粘贴）：换行作为普通字节进缓冲，不算提交。
+-- | 内部：在光标处插入一段文本（括号粘贴）并把光标移到插入内容之后；换行作为普通字节进
+-- 缓冲，不算提交，历史游标重置为 0。
 insertText : EditState -> String -> EditState
 insertText st text =
   let
@@ -344,19 +425,23 @@ insertText st text =
     buf2 = append (append (take st.esCursor st.esBuf) bytes) (drop st.esCursor st.esBuf)
   in withBuf st buf2 (st.esCursor + lenInt bytes)
 
+-- | 内部：只改光标位置（缓冲与历史游标不动）。
 withCursor : EditState -> Int -> EditState
 withCursor st cur =
   EditState st.esBuf cur st.esHistIdx st.esDraft st.esSearching st.esQuery st.esMatch
 
+-- | 内部：替换缓冲与光标，并把历史游标归 0。
 withBuf : EditState -> List Int -> Int -> EditState
 withBuf st buf cur = EditState buf cur 0 st.esDraft st.esSearching st.esQuery st.esMatch
 
+-- | 内部：删除光标前一个码点（Backspace）。
 deleteBack : EditState -> EditState
 deleteBack st =
   let
     start = prevCharStart st.esBuf st.esCursor
   in withBuf st (removeRange start st.esCursor st.esBuf) start
 
+-- | 内部：删除光标处的一个码点（Delete）；光标已在末尾时原样返回。
 deleteAt : EditState -> EditState
 deleteAt st = if st.esCursor >= lenInt st.esBuf then st
 else
@@ -364,28 +449,35 @@ else
     end = nextCharStart st.esBuf st.esCursor
   in withBuf st (removeRange st.esCursor end st.esBuf) st.esCursor
 
+-- | 内部：删掉缓冲里 `[start, end)` 的字节。
 removeRange : Int -> Int -> List Int -> List Int
 removeRange start end buf = append (take start buf) (drop end buf)
 
+-- | 内部：删掉光标到行尾的内容（Ctrl-K）。
 killToEnd : EditState -> EditState
 killToEnd st = withBuf st (take st.esCursor st.esBuf) st.esCursor
 
+-- | 内部：删掉行首到光标的内容（Ctrl-U），光标归 0。
 killToStart : EditState -> EditState
 killToStart st = withBuf st (drop st.esCursor st.esBuf) 0
 
+-- | 内部：删掉光标前的一个单词（Ctrl-W；先跳空白再跳非空白）。
 killWord : EditState -> EditState
 killWord st =
   let
     start = wordStart st.esBuf st.esCursor
   in withBuf st (removeRange start st.esCursor st.esBuf) start
 
+-- | 内部：光标前一个单词的起始偏移（先跳过空白，再跳过非空白）。
 wordStart : List Int -> Int -> Int
 wordStart buf cur = wsSpace (reverse (take cur buf)) cur
 
+-- | 内部：从光标逆序跳过空白字节。
 wsSpace : List Int -> Int -> Int
 wsSpace [] cur = cur
 wsSpace (b :: rest) cur = if isSpaceByte b then wsSpace rest (cur - 1) else wsWord rest cur
 
+-- | 内部：从光标逆序跳过非空白字节（单词体）。
 wsWord : List Int -> Int -> Int
 wsWord [] cur = cur
 wsWord (b :: rest) cur = if isSpaceByte b then cur else wsWord rest (cur - 1)
@@ -393,14 +485,18 @@ wsWord (b :: rest) cur = if isSpaceByte b then cur else wsWord rest (cur - 1)
 -- ---------------------------------------------------------------
 -- 历史
 -- ---------------------------------------------------------------
+-- | 内部：第 `n` 条最新历史（`n = 1` 是最近一条）；`n <= 0` 给 `Nothing`，`n > 长度` 时因 `drop` 的负索引退化为最旧一条（调用方需先自检）。
 fromNewest : Int -> List String -> Maybe String
 fromNewest n xs = if n <= 0 then Nothing else elemAt (lenInt xs - n) xs
 
+-- | 内部：取第 `i` 个元素；`i` 为负时 `drop` 返回整表（调用方需先自检），超过长度给 `Nothing`。
 elemAt : Int -> List a -> Maybe a
 elemAt i xs = case drop i xs of
   x :: rest => Just x
   [] => Nothing
 
+-- | 内部：↑ 历史——换成再旧一条并把光标放末尾；第一次上移时把当前输入存进草稿，已在最旧
+-- 一条则不动。
 historyUp : EditConfig -> EditState -> EditState
 historyUp cfg st =
   let
@@ -412,6 +508,7 @@ historyUp cfg st =
     Nothing => st
     Just entry => EditState (strUnpack entry) (byteLength entry) (hi + 1) draft False [] Nothing
 
+-- | 内部：↓ 历史——换成更新一条；从最新一条再往下时恢复进入历史前保存的草稿。
 historyDown : EditConfig -> EditState -> EditState
 historyDown cfg st =
   let
@@ -426,6 +523,9 @@ historyDown cfg st =
 -- ---------------------------------------------------------------
 -- 补全
 -- ---------------------------------------------------------------
+-- | 内部：Tab 补全——按光标所在 token 与参数位种类取候选（普通位置用 `editCompletions`，
+-- 参数位用 [Vuna.Repl.Complete.argCompletions]）：唯一匹配直接补全，多匹配补最长公共前缀，
+-- 前缀没有变长则响铃。
 complete : Member nFs FsOp r, Member nConsole ConsoleOp r => EditConfig -> EditState -> Eff r EditState
 complete cfg st =
   let
@@ -449,29 +549,36 @@ complete cfg st =
           (withBuf st (append (append (take start st.esBuf) (strUnpack common)) (drop st.esCursor st.esBuf)) (start + byteLength common))
         else bell st
 
+-- | 内部：响铃（写一个 BEL，0x07）并原样返回状态。
 bell : Member nConsole ConsoleOp r => EditState -> Eff r EditState
 bell st = do
   _ <- writeOut (strPack [7])
   pure st
 
+-- | 内部：光标所在 token 的起始偏移（token 以空白分隔）。
 tokenStart : List Int -> Int -> Int
 tokenStart buf cur = tokenGo (reverse (take cur buf)) cur
 
+-- | 内部：`tokenStart` 的逆序逐字节实现。
 tokenGo : List Int -> Int -> Int
 tokenGo [] cur = 0
 tokenGo (b :: rest) cur = if isSpaceByte b then cur else tokenGo rest (cur - 1)
 
+-- | 内部：一组字符串的最长公共前缀；空表给空串。
 commonPrefixStrs : List String -> String
 commonPrefixStrs [] = ""
 commonPrefixStrs (x :: rest) = prefixFold x rest
 
+-- | 内部：逐个与累加结果取公共前缀。
 prefixFold : String -> List String -> String
 prefixFold acc [] = acc
 prefixFold acc (y :: rest) = prefixFold (commonPrefix2 acc y) rest
 
+-- | 内部：两个字符串的最长公共前缀。
 commonPrefix2 : String -> String -> String
 commonPrefix2 a b = strOf (commonPrefixBytes (strUnpack a) (strUnpack b))
 
+-- | 内部：两串字节的最长公共前缀。
 commonPrefixBytes : List Int -> List Int -> List Int
 commonPrefixBytes [] ys = []
 commonPrefixBytes xs [] = []
@@ -480,15 +587,18 @@ commonPrefixBytes (x :: xs) (y :: ys) = if x == y then x :: commonPrefixBytes xs
 -- ---------------------------------------------------------------
 -- Ctrl-R 反向搜索
 -- ---------------------------------------------------------------
+-- | 内部：进入 Ctrl-R 反向搜索（空查询，无匹配）。缓冲与草稿保持不变。
 startSearch : EditState -> EditState
 startSearch st = EditState st.esBuf st.esCursor 0 st.esDraft True [] Nothing
 
+-- | 内部：往搜索查询追加一个字节（历史游标归 0），并从历史列表最旧的第 1 条开始向新搜索。
 searchQueryAppend : EditConfig -> EditState -> Int -> EditState
 searchQueryAppend cfg st b =
   let
     query = append st.esQuery [b]
   in EditState st.esBuf st.esCursor 0 st.esDraft True query (searchFrom cfg.editHistory 1 query)
 
+-- | 内部：删掉搜索查询的最后一个码点，并重新搜索。
 searchQueryBackspace : EditConfig -> EditState -> EditState
 searchQueryBackspace cfg st =
   let
@@ -497,6 +607,7 @@ searchQueryBackspace cfg st =
       else take (prevCharStart st.esQuery (lenInt st.esQuery)) st.esQuery
   in EditState st.esBuf st.esCursor 0 st.esDraft True query (searchFrom cfg.editHistory 1 query)
 
+-- | 内部：继续搜索——从当前匹配序号的后一条（按旧→新方向更晚的一条）开始找。
 searchContinue : EditConfig -> EditState -> EditState
 searchContinue cfg st =
   let
@@ -506,32 +617,41 @@ searchContinue cfg st =
   in EditState st.esBuf st.esCursor 0 st.esDraft True st.esQuery
     (searchFrom cfg.editHistory start st.esQuery)
 
+-- | 内部：从历史列表第 `start` 条（按旧→新编号）开始向新找包含查询的条目（查询为空时取第一
+-- 条）；找不到给 `Nothing`。
 searchFrom : List String -> Int -> List Int -> Maybe (Pair Int String)
 searchFrom history start query = searchFromGo (drop (imax 0 (start - 1)) history) start query
 
+-- | 内部：`searchFrom` 的递归实现——`idx` 是当前条目在历史列表里按旧→新的序号。
 searchFromGo : List String -> Int -> List Int -> Maybe (Pair Int String)
 searchFromGo [] idx query = Nothing
 searchFromGo (entry :: rest) idx query =
   if lenInt query == 0 || contains (strOf query) entry then Just (Pair idx entry)
   else searchFromGo rest (idx + 1) query
 
+-- | 内部：接受某个历史匹配——缓冲换成该条目，退出搜索；`idx` 按 `searchFrom` 的旧→新编号写入 `esHistIdx`。
 acceptSearch : EditState -> Int -> String -> EditState
 acceptSearch st idx entry =
   EditState (strUnpack entry) (byteLength entry) idx st.esDraft False [] Nothing
 
+-- | 内部：无匹配时接受搜索——把查询文本本身当作输入，退出搜索。
 acceptSearchText : EditState -> String -> EditState
 acceptSearchText st text =
   EditState (strUnpack text) (byteLength text) 0 st.esDraft False [] Nothing
 
+-- | 内部：退出搜索——清掉查询与匹配，缓冲与历史游标保持不变。
 exitSearch : EditState -> EditState
 exitSearch st = EditState st.esBuf st.esCursor st.esHistIdx st.esDraft False [] Nothing
 
 -- ---------------------------------------------------------------
 -- 渲染
 -- ---------------------------------------------------------------
+-- | 内部：按模式重绘——搜索态走 `redrawSearch`，否则 `redrawNormal`；返回写入的字节数。
 redraw : Member nConsole ConsoleOp r => EditConfig -> Int -> EditState -> Eff r Int
 redraw cfg width st = if st.esSearching then redrawSearch cfg st else redrawNormal cfg width st
 
+-- | 内部：重绘普通行——`\r` + 提示符 + 尾部窗口 + 清到行尾，再把光标左移「光标后内容」的
+-- 列数（不超过窗口列数）回到编辑位置。可用宽度下限 8 列。
 redrawNormal : Member nConsole ConsoleOp r => EditConfig -> Int -> EditState -> Eff r Int
 redrawNormal cfg width st =
   let
@@ -541,13 +661,15 @@ redrawNormal cfg width st =
     text = "${cfg.editPrompt}${renderBytes win}${escCode}[K${moveLeftText left}"
   in writeOut "\r${text}"
 
--- 缓冲字节 → 显示文本：裸换行（粘贴/历史里的多行单元）渲染成单列 `↵`，
--- 其余字节原样输出（宽度口径与 `bytesWidth` 一致：换行算 1 列）。
+-- | 内部：缓冲字节 → 显示文本——裸换行（粘贴 / 历史里的多行单元）渲染成单列 `↵`，其余字节
+-- 原样输出（宽度口径与 `bytesWidth` 一致：换行算 1 列）。
 renderBytes : List Int -> String
 renderBytes [] = ""
 renderBytes (b :: rest) =
   if b == 10 then "↵${renderBytes rest}" else "${strPack [b]}${renderBytes rest}"
 
+-- | 内部：重绘 Ctrl-R 搜索提示（``(reverse-i-search)`query': match``，开色时提示部分上色），
+-- 再清到行尾。
 redrawSearch : Member nConsole ConsoleOp r => EditConfig -> EditState -> Eff r Int
 redrawSearch cfg st =
   let
@@ -559,14 +681,16 @@ redrawSearch cfg st =
     styled = if cfg.editColorOn then ansi "36" promptText ++ matchText else promptText ++ matchText
   in writeOut "\r${styled}${escCode}[K"
 
--- 超宽时只显示尾部 avail 列（按 UTF-8 码点边界裁）。
+-- | 内部：超宽时只保留尾部 `avail` 列（按 UTF-8 码点边界裁）。
 tailWindow : Int -> List Int -> List Int
 tailWindow avail buf =
   if bytesWidth buf <= avail then buf else dropToWidth (bytesWidth buf - avail) buf
 
+-- | 内部：从头丢弃字节，直到剩下内容的显示宽度不超过 `k` 列。
 dropToWidth : Int -> List Int -> List Int
 dropToWidth k buf = dropToWidthGo k 0 buf
 
+-- | 内部：`dropToWidth` 的累加实现（`skip` 是当前码点还没跳过的续字节数）。
 dropToWidthGo : Int -> Int -> List Int -> List Int
 dropToWidthGo k skip [] = []
 dropToWidthGo k skip (b :: rest) =
@@ -575,16 +699,19 @@ dropToWidthGo k skip (b :: rest) =
   else if isContinuation b then dropToWidthGo k 0 rest
   else dropToWidthGo (k - cpWidth b) (contCount b) rest
 
--- 显示宽度近似：续字节 0；CJK 常见区段 2；其余 1（组合字符/emoji 可能偏 1 格）。
+-- | 内部：显示宽度近似——续字节 0；CJK 常见区段 2；其余 1（组合字符 / emoji 可能偏 1 格）。
 bytesWidth : List Int -> Int
 bytesWidth [] = 0
 bytesWidth (b :: rest) = if isContinuation b then bytesWidth rest else cpWidth b + bytesWidth rest
 
+-- | 内部：单个首字节码点的显示宽度近似（4 字节 emoji 与 CJK 常见区段算 2 列，其余 1 列）。
 cpWidth : Int -> Int
 cpWidth b = if b >= 240 then 2 else if b >= 228 && b <= 233 then 2 else 1
 
+-- | 内部：UTF-8 首字节之后跟的续字节个数（4 字节首字节给 3，2 字节给 1，ASCII 给 0）。
 contCount : Int -> Int
 contCount b = if b >= 240 then 3 else if b >= 224 then 2 else if b >= 192 then 1 else 0
 
+-- | 内部：光标左移 `n` 列的转义文本；`n <= 0` 给空串。
 moveLeftText : Int -> String
 moveLeftText n = if n > 0 then "${escCode}[${n}D" else ""

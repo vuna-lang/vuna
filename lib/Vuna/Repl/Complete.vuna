@@ -1,21 +1,20 @@
-module Vuna.Repl.Complete where
-
--- Vuna.Repl.Complete：`:load` / `:browse` / `import` **参数位**的 Tab 补全候选
--- （工具链；不进 seed 闭包）。
+-- | `:load` / `:browse` / `import` 参数位的 Tab 补全候选。
 --
--- 两类候选（只在按下 Tab 时枚举 → 编辑器每读一行不做目录访问）：
---   * 模块名：包上下文模块根（自身 lib + 依赖闭包；base-only 时只有 base）下递归扫描
---     `*.vuna`，相对路径 `Base/Nat.vuna` → `Base.Nat`（与 Loader 的 `modulePath` 一致）；
---   * 文件路径：token 按**最后一个** `/` 拆成目录 + 末段，列出该目录项、只保留匹配末段
---     前缀的条目，目录补尾随 `/`（cwd 相对路径与绝对路径都支持）。
+-- 两类候选（只在按下 Tab 时枚举，编辑器每读一行不做目录访问）。模块名：包上下文模块根（自身
+-- lib + 依赖闭包；base-only 时只有 base）下递归扫描 `*.vuna`，相对路径 `Base/Nat.vuna` →
+-- `Base.Nat`（与 Loader 的 `modulePath` 一致）。文件路径：token 按最后一个 `/` 拆成目录 +
+-- 末段，列出该目录项、只保留匹配末段前缀的条目，目录补尾随 `/`（cwd 相对路径与绝对路径都
+-- 支持）。
 --
--- 与 Loader 可见性的已知差异：依赖根有 `[export] modules` 限制时这里仍会列出该根下
--- 全部模块（`Root` 的 exports 字段不在 `Pkg` 导出面内）；越权模块会在 `:load` 时被
--- Loader 拒绝并给出可操作错误，补全只是建议，不改变语义。
+-- 与 Loader 可见性的已知差异：依赖根有 `[export] modules` 限制时这里仍会列出该根下全部
+-- 模块（`Root` 的 exports 字段不在 `Pkg` 导出面内）；越权模块会在 `:load` 时被 Loader 拒绝
+-- 并给出可操作错误，补全只是建议，不改变语义。
 --
 -- 纯部分（`argKindOf` / `moduleNameOf` / `splitLastSlash`）与宿主部分分离，便于用
 -- `test/corpus/repl/app/Main.vuna` 直接单测；多匹配补最长公共前缀、唯一匹配直接补全的语义由
--- `Vuna.Repl.Edit` 保持（本模块只给候选池）。
+-- [Vuna.Repl.Edit] 保持（本模块只给候选池）。
+module Vuna.Repl.Complete where
+
 import Vuna.Compiler.Base.Common
 import Base.EffFs
 import Base.Eff.Types
@@ -23,8 +22,9 @@ import Base.Eff.Types
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）
 -- ---------------------------------------------------------------
--- 返回补全种类：0 = 普通（命令名 / 缓冲绑定名，由 Repl 提供）；
---               1 = `:load` 参数（模块名 + 文件路径）；2 = 只要模块名（`:browse` / `import`）。
+-- | 参数位种类：0 = 普通（命令名 / 缓冲绑定名，由 Repl 提供）；1 = `:load` 参数（模块名 +
+-- 文件路径）；2 = 只要模块名（`:browse` / `import`）。只看光标前的文本：光标还在第一个词里
+-- 时给 0，词不在已知命令表里也给 0。
 export argKindOf : List Int -> Int -> Int
 argKindOf buf cur =
   let
@@ -38,9 +38,11 @@ argKindOf buf cur =
     "import" => 2
     _ => 0
 
+-- | 内部：把字符串拆成第一个词与其余文本（词按空格 / 制表分隔，其余文本已去掉前导空白）。
 splitFirstWord : String -> Pair String String
 splitFirstWord s = splitFirstWordChars (strUnpack s) []
 
+-- | 内部：`splitFirstWord` 的逐字节实现（`acc` 是逆序的第一个词）。
 splitFirstWordChars : List Int -> List Int -> Pair String String
 splitFirstWordChars [] acc = Pair (strPack (reverse acc)) ""
 splitFirstWordChars (c :: rest) acc =
@@ -50,6 +52,8 @@ splitFirstWordChars (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 候选池
 -- ---------------------------------------------------------------
+-- | 参数位候选池：按 `kind` 取模块名与 / 或文件路径候选，去重后保持顺序；`token` 为空时
+-- 给空表（不枚举目录）。
 export argCompletions : Member nFs FsOp r => Int -> List String -> String -> Eff r (List String)
 argCompletions kind roots token = if token == "" then pure []
 else do
@@ -59,7 +63,7 @@ else do
   paths <- if kind == 2 then pure [] else pathCompletions token
   pure (dedupStrs (append mods paths))
 
--- 小 helper：Effectful 的 map / concatMap（本模块自用）。
+-- | 内部：效果版 `map`（本模块自用）。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
 mapEff f (x :: rest) = do
@@ -67,6 +71,7 @@ mapEff f (x :: rest) = do
   ys <- mapEff f rest
   pure (y :: ys)
 
+-- | 内部：效果版 `concatMap`（本模块自用）。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -74,9 +79,11 @@ concatMapEff f (x :: rest) = do
   ys <- concatMapEff f rest
   pure (append xs ys)
 
+-- | 内部：字符串是否含 `/`（含 `/` 的 token 只走文件路径补全）。
 containsSlash : String -> Bool
 containsSlash s = memInt 47 (strUnpack s)
 
+-- | 内部：字节值是否在列表中。
 memInt : Int -> List Int -> Bool
 memInt c [] = False
 memInt c (x :: rest) = x == c || memInt c rest
@@ -84,22 +91,25 @@ memInt c (x :: rest) = x == c || memInt c rest
 -- ---------------------------------------------------------------
 -- 模块名候选（递归扫描模块根）
 -- ---------------------------------------------------------------
+-- | 内部：所有模块根下匹配 `token` 前缀的模块名，按根顺序拼接。
 moduleCompletions : Member nFs FsOp r => List String -> String -> Eff r (List String)
 moduleCompletions roots token = concatMapEff (\root => modulesUnder root token) roots
 
+-- | 内部：单个模块根下匹配 `token` 前缀的模块全名。
 modulesUnder : Member nFs FsOp r => String -> String -> Eff r (List String)
 modulesUnder root token = do
   found <- walkModules 8192 root root
   pure (filter (\m => startsWith token m) found)
 
--- 递归扫描 `dir`（`root` 是模块根，用于把文件路径换算成模块全名）。
--- 性能：只在按下 Tab 时扫；`startsWith token` 的过滤放到最后做（先收集路径）。
+-- | 内部：递归扫描 `dir`（`root` 是模块根，用于把文件路径换算成模块全名），返回目录下
+-- 全部模块全名。性能：只在按下 Tab 时扫，`startsWith token` 的过滤放到最后做（先收集路径）。
 walkModules : Member nFs FsOp r => Int -> String -> String -> Eff r (List String)
 walkModules fuel root dir = if fuel <= 0 then pure []
 else do
   names <- safeReadDir dir
   concatMapEff (walkEntry (fuel - 1) root dir) names
 
+-- | 内部：处理目录项——跳过隐藏项与 `.` / `..`，子目录递归，`*.vuna` 文件换算成模块名。
 walkEntry : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (List String)
 walkEntry fuel root dir name = if fuel <= 0 then pure []
 else if name == "" || name == "." || name == ".." || startsWith "." name then pure []
@@ -111,14 +121,17 @@ else
     if isDir then walkModules (fuel - 1) root path
     else pure (if endsWith ".vuna" name then [moduleNameOf root path] else [])
 
+-- | 内部：把路径里的 `/` 换成模块名的 `.`。
 dotsOf : String -> String
 dotsOf s = strPack (mapSlashToDot (strUnpack s))
 
+-- | 内部：逐字节把 `/`（47）替换为 `.`（46）。
 mapSlashToDot : List Int -> List Int
 mapSlashToDot [] = []
 mapSlashToDot (c :: rest) = (if c == 47 then 46 else c) :: mapSlashToDot rest
 
--- 路径 → 模块全名（`root` 是该模块根目录；不在根下返回空串）。纯函数，可直接单测。
+-- | 路径 → 模块全名（`root` 是该模块根目录；不在根下、或不以 `.vuna` 结尾时给空串）。
+-- 纯函数，可直接单测。
 export moduleNameOf : String -> String -> String
 moduleNameOf root path =
   let
@@ -130,16 +143,19 @@ moduleNameOf root path =
       rel = substring (byteLength prefix) (byteLength path - byteLength prefix) path
     in dotsOf (dropSuffix ".vuna" rel)
 
+-- | 内部：去掉结尾的固定后缀；后缀不匹配时原样返回。
 dropSuffix : String -> String -> String
 dropSuffix suffix s =
   if endsWith suffix s then substring 0 (byteLength s - byteLength suffix) s else s
 
+-- | 内部：列目录项；目录不存在时给空表。
 safeReadDir : Member nFs FsOp r => String -> Eff r (List String)
 safeReadDir dir = do
   exists <- dirExists dir
   if exists then fsReadDir dir else pure []
 
--- fsIsDirectory 对不存在的路径会抛宿主异常，必须先判存在（与 Cli.Args 的约定一致）。
+-- | 内部：路径是否存在且是目录。先判存在再问 `fsIsDirectory`——后者对不存在的路径会抛宿主
+-- 异常（与 `Vuna.Cli.Args` 的约定一致）。
 dirExists : Member nFs FsOp r => String -> Eff r Bool
 dirExists path = do
   exists <- fsFileExists path
@@ -148,6 +164,8 @@ dirExists path = do
 -- ---------------------------------------------------------------
 -- 文件路径候选
 -- ---------------------------------------------------------------
+-- | 内部：文件路径候选——按最后一个 `/` 拆目录与末段，列出该目录里以末段为前缀的条目
+-- （跳过隐藏项与完全相同的名字）。
 pathCompletions : Member nFs FsOp r => String -> Eff r (List String)
 pathCompletions token =
   let
@@ -158,6 +176,7 @@ pathCompletions token =
     mapEff (\n => pathCandidate dirText dir n)
       (filter (\n => startsWith base n && n /= base && not (startsWith "." n)) entries)
 
+-- | 内部：拼出候选的显示形式（目录补尾随 `/`）；`dirText` 为空表示当前目录、不带前缀。
 pathCandidate : Member nFs FsOp r => String -> String -> String -> Eff r String
 pathCandidate dirText dir name =
   let
@@ -166,10 +185,11 @@ pathCandidate dirText dir name =
     isDir <- dirExists "${dir}/${name}"
     pure (if isDir then "${shown}/" else shown)
 
--- 按**最后一个** `/` 拆成 (目录, 末段)；没有 `/` 时目录为空串。
+-- | 按最后一个 `/` 拆成（目录, 末段）；没有 `/` 时目录为空串。纯函数，可直接单测。
 export splitLastSlash : String -> Pair String String
 splitLastSlash s = splitLastSlashRev (reverse (strUnpack s)) []
 
+-- | 内部：`splitLastSlash` 的逆序逐字节实现（`acc` 是逆序的末段）。
 splitLastSlashRev : List Int -> List Int -> Pair String String
 splitLastSlashRev [] acc = Pair "" (strPack acc)
 splitLastSlashRev (c :: rest) acc =
@@ -178,6 +198,7 @@ splitLastSlashRev (c :: rest) acc =
 -- ---------------------------------------------------------------
 -- 去重（保序；候选规模很小）
 -- ---------------------------------------------------------------
+-- | 内部：去重并保持首次出现的顺序。
 dedupStrs : List String -> List String
 dedupStrs [] = []
 dedupStrs (x :: rest) = if memName x rest then dedupStrs rest else x :: dedupStrs rest

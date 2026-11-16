@@ -1,18 +1,15 @@
+-- | 括号粘贴（bracketed paste）的终端开关与读取。
+--
+-- 终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间。解码状态机是纯函数
+-- （[Vuna.Repl.Paste.Decode]，可脱离宿主单测）；本模块负责逐字节读（`readPasteBody`：`\r`
+-- 规范化为 `\n`，读到终止序列 / EOF 为止）与终端开关（`pasteEnable` / `pasteDisable` 输出
+-- `\e[?2004h` / `\e[?2004l`，退出时务必关闭）。
+--
+-- 语义：粘贴内容原样进入编辑缓冲（换行保留），Tab / Enter 都不触发按键语义；用户按 Enter
+-- 才提交整段（整段作为一个输入单元或多行 pending，交给 Repl 的既有输入逻辑）。不支持该模式的
+-- 终端不会发 `\e[200~`，只多输出一对被忽略的转义；非 tty 路径根本不进入编辑器。
 module Vuna.Repl.Paste where
 
--- Vuna.Repl.Paste：括号粘贴（bracketed paste）的终端开关与读取（工具链；不进 seed 闭包）。
---
--- 背景：终端开启 DECSET 2004 后，粘贴内容被包在 `\e[200~` … `\e[201~` 之间。行编辑器
--- 若不认识这两个序列，`\e[200~` 会被拆成杂散字符、粘贴里的换行会被逐行当成 Enter 提交
--- （debt D35）。解码状态机是纯函数（`Vuna.Repl.Paste.Decode`，可脱离宿主单测），
--- 本模块只负责：
---   * `readPasteBody`：逐字节读、`\r` 规范化为 `\n`、读到终止序列/EOF 为止；
---   * `pasteEnable` / `pasteDisable`：输出 `\e[?2004h` / `\e[?2004l`（退出时务必关闭）。
---
--- 语义：粘贴内容**原样**进入编辑缓冲（换行保留），Tab / Enter 都不触发按键语义；用户按
--- Enter 才提交整段（整段作为一个输入单元或多行 pending，交给 Repl 的既有输入逻辑）。
--- 不支持该模式的终端不会发 `\e[200~`，只多输出一对被忽略的转义；
--- 非 tty 路径根本不进入编辑器。
 import Vuna.Compiler.Base.Common
 import Vuna.Repl.Paste.Decode
 import Vuna.Repl.Term
@@ -20,13 +17,15 @@ import Base.Eff.Types
 import Base.EffConsole
 import Base.EffStdin
 
--- 读粘贴体（起点在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~` 或 EOF/超时
--- （termReadByte 返回 -1）为止。fuel 是字节数守卫（1 MiB），防终端异常时无限读。
+-- | 读粘贴体（调用时已在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~`、EOF 或超时
+-- （`termReadByte` 返回 -1）为止，返回粘贴内容（`\r` 已规范化为 `\n`）。fuel 是 1 MiB 的
+-- 字节数守卫，防终端异常时无限读。
 export readPasteBody : Member nStdin StdinOp r => Int -> Eff r String
 readPasteBody _ = do
   st <- readPasteGo 1048576 emptyPasteState
   pure (strPack (reverse st.pasteContent))
 
+-- | 内部：读循环——已读到终止序列或 fuel 耗尽即返回当前状态。
 readPasteGo : Member nStdin StdinOp r => Int -> PasteState -> Eff r PasteState
 readPasteGo fuel st = if fuel <= 0 then pure st
 else if pasteIsDone st then pure st
@@ -34,15 +33,17 @@ else do
   b <- termReadByte 0
   if b < 0 then pure st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
 
--- 终端粘贴的行尾可能是 CR / CRLF 的前半；缓冲里只保留裸 LF。
+-- | 内部：终端粘贴的行尾可能是 CR / CRLF 的前半，缓冲里只保留裸 LF。
 normalizePasteByte : Int -> Int
 normalizePasteByte b = if b == 13 then 10 else b
 
 -- ---------------------------------------------------------------
 -- 终端开关
 -- ---------------------------------------------------------------
+-- | 打开括号粘贴（DECSET 2004），终端之后会把粘贴内容包进起止序列。
 export pasteEnable : Member nConsole ConsoleOp r => Int -> Eff r Int
 pasteEnable _ = writeOut "${escCode}[?2004h"
 
+-- | 关闭括号粘贴（DECSET 2004）；退出编辑前必须调用。
 export pasteDisable : Member nConsole ConsoleOp r => Int -> Eff r Int
 pasteDisable _ = writeOut "${escCode}[?2004l"

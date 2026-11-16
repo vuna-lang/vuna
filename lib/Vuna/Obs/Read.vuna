@@ -1,21 +1,16 @@
+-- | trace 文件（Chrome Trace Event JSONL）的读取与截断容错。
+--
+-- 调用链：`readText`（`Vuna.Cli.Args` 的存在/目录守卫 + 宿主读盘）→ 逐行
+-- `Vuna.Json.parseJson` → `Vuna.Obs.Types.parseEvent`（结构身份字段）→ 行号与事件一起返回，
+-- 供 validate / summarize 报位置。只有读盘是 `Eff r`；解析、补全与行收集都是纯函数。
+--
+-- 容错规则：空行（trim 后为空）跳过，不占行号语义。非最后一行 JSON 解析失败是硬错误
+-- （`line N: ...`）——文件是 append-only 的，中间坏行说明文件被外部改坏，静默跳过会掩盖
+-- 数据损坏。最后一行 JSON 解析失败视为「进程被杀在半个 JSON 行」：先按括号平衡尝试补全
+-- （截断只可能缺尾部闭括号），补全成功则解析并按 warning 上报；补全失败/仍不完整则丢该行
+-- 并 warning。截断永不升级成 error（`validate` 只把截断报 warning）。
 module Vuna.Obs.Read where
 
--- Vuna.Obs.Read：trace 文件（Chrome Trace Event JSONL）的读取与容错。
--- 规范：`docs/reference/observability.md` §1（O1：每行一事件、崩溃可截断容忍）、§3（事件模型）。
---
--- 调用链：`readText`（`Vuna.Cli.Args` 的存在/目录守卫 + 宿主读盘）→ 逐行 `Vuna.Json.parseJson`
--- → `Vuna.Obs.Types.parseEvent`（结构身份字段）→ 行号与事件一起返回，供 validate / summarize
--- 报位置。
---
--- 容错规则（本模块唯一的策略，测试见模块尾 golden 注释）：
---   * 空行（trim 后为空）跳过，不占行号语义；
---   * **非最后一行** JSON 解析失败 = 硬错误（`line N: ...`）——文件是 append-only 的，
---     中间坏行说明文件被外部改坏，静默跳过会掩盖数据损坏；
---   * **最后一行** JSON 解析失败 = 视为「进程被杀在半个 JSON 行」：先按括号平衡尝试补全
---     （截断文件只可能缺尾部闭括号），补全成功则解析并按 warning 上报；补全失败/仍不完整
---     则丢该行并 warning。绝不把截断升级成 error（规范 §7 `validate`：截断只报 warning）。
---
--- 只有读盘是 `Eff r`；解析、补全与行收集都是纯函数。
 import Base.List
 import Base.Maybe
 import Base.Pair
@@ -29,12 +24,14 @@ import Base.EffFs
 
 -- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
 export record ObsTrace(..) where
+  -- | 按文件顺序的 `(1-based 行号, 事件)`。
   traceEvents : List (Pair Int ObsEvent)
+  -- | 读入阶段的 warning（截断丢弃/补全），按出现顺序。
   traceWarnings : List String
 
 -- | 读一个 trace 文件；返回逐行 `(行号, 事件)` 与截断 warning。
--- 文件不存在/是目录/不可读 = `ErrC`（调用方映射到退出码 2）；中间行 JSON 坏 = `ErrC`；
--- 末尾半个 JSON 行 = warning + 跳过（见模块头）。
+-- `ErrC` 的情况：文件不存在/是目录/不可读（调用方映射到退出码 2）、非末行解析或结构不合法；
+-- 末尾半个 JSON 行只记 warning（见模块头）。
 export readTraceFull : Member nFs FsOp r => String -> Eff r (Check ObsTrace)
 readTraceFull path = do
   textR <- readText path
@@ -42,13 +39,13 @@ readTraceFull path = do
     ErrC e => pure (ErrC e)
     OkC text => pure (parseTraceText text)
 
--- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（validate/summarize 需要 warning 时用
--- `readTraceFull`）。签名按规范 §7 / 实现要点固定。
+-- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（需要 warning 时用 `readTraceFull`）。
 export readTrace : Member nFs FsOp r => String -> Eff r (Check (List (Pair Int ObsEvent)))
 readTrace path = do
   traceR <- readTraceFull path
   pure (fmap traceEventRows traceR)
 
+-- | 内部：取事件表（`readTrace` 的收尾）。
 traceEventRows : ObsTrace -> List (Pair Int ObsEvent)
 traceEventRows t = t.traceEvents
 
@@ -61,10 +58,12 @@ collectLines n [] = []
 collectLines n (line :: rest) =
   if trim line == "" then collectLines (n + 1) rest else Pair n line :: collectLines (n + 1) rest
 
--- | trace 文本 -> `ObsTrace`（纯）。中间行 JSON 坏是 error，末行坏是 warning。
+-- | trace 文本 -> `ObsTrace`（纯）。中间行 JSON 坏是 error；末行 JSON 坏按截断处理（补全后
+-- 再过 `parseEvent`，仍不行就丢弃并 warning）。
 export parseTraceText : String -> Check ObsTrace
 parseTraceText text = readLines (collectLines 1 (lines text)) [] []
 
+-- | 内部：逐行解析并累积事件与 warning；末行坏走截断恢复，中间行坏直接报错。
 readLines : List (Pair Int String) -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
 readLines [] events warnings = OkC (ObsTrace (reverse events) (reverse warnings))
 readLines ((Pair line raw) :: rest) events warnings = case parseJson raw of
@@ -76,17 +75,18 @@ readLines ((Pair line raw) :: rest) events warnings = case parseJson raw of
     ErrC e => ErrC e
     OkC ev => readLines rest (Pair line ev :: events) warnings
 
--- 末行 JSON 不完整：先尝试补全闭括号（截断文件只缺尾部），补全成功仍要过 parseEvent。
--- 末行是最后一行，这里直接收尾（不回调 readLines，避免与 readLines 成互递归）。
+-- | 内部：末行无法恢复：丢弃该行并记 warning，直接收尾（末行已是最后一行，不再回调
+-- `readLines`，避免互递归）。
 tailWarning : Int -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
 tailWarning line events warnings =
   OkC (ObsTrace (reverse events) (reverse (dropWarning line :: warnings)))
 
+-- | 内部：末行补全成功：保留事件并记 warning。
 tailRepaired : Int -> ObsEvent -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
 tailRepaired line ev events warnings =
   OkC (ObsTrace (reverse (Pair line ev :: events)) (reverse (repairWarning line :: warnings)))
 
--- 末行恢复尝试：返回 `Just 事件`（补全成功）或 `Nothing`（按截断丢弃）。
+-- | 内部：末行恢复尝试：返回 `Just 事件`（补全并解析成功）或 `Nothing`（按截断丢弃）。
 tryTailEvent : Int -> String -> Maybe ObsEvent
 tryTailEvent line raw = case repairTruncatedJson raw of
   Nothing => Nothing
@@ -96,9 +96,11 @@ tryTailEvent line raw = case repairTruncatedJson raw of
       ErrC _ => Nothing
       OkC ev => Just ev
 
+-- | 内部：丢弃截断行的 warning 文案。
 dropWarning : Int -> String
 dropWarning line = "line ${strFromInt line}: truncated JSON line dropped (file cut mid-write)"
 
+-- | 内部：补全截断行的 warning 文案。
 repairWarning : Int -> String
 repairWarning line = "line ${strFromInt line}: truncated JSON line repaired (file cut mid-write)"
 
@@ -107,15 +109,20 @@ repairWarning line = "line ${strFromInt line}: truncated JSON line repaired (fil
 -- ---------------------------------------------------------------
 -- | 括号扫描状态：未闭合的括号栈（头 = 最内层）、是否在字符串内、是否处于转义、是否不匹配。
 export record BracketScan(..) where
+  -- | 未闭合的开括号字符码，头是最内层。
   scanOpen : List Int
+  -- | 扫描点是否在字符串字面量内。
   scanInString : Bool
+  -- | 扫描点是否处于转义状态（字符串内刚读到 `\`）。
   scanEscaped : Bool
+  -- | 是否出现不匹配的闭括号（此时已无法补全）。
   scanBroken : Bool
 
 -- | 按 JSON 词法扫描括号；字符串内的括号不计数。截断点若在字符串内则不尝试补全。
 export scanBrackets : List Int -> BracketScan
 scanBrackets chars = scanGo chars (BracketScan [] False False False)
 
+-- | 内部：`scanBrackets` 的逐字符状态机。
 scanGo : List Int -> BracketScan -> BracketScan
 scanGo [] scan = scan
 scanGo (c :: rest) scan = if scan.scanBroken then scan
@@ -143,6 +150,7 @@ repairTruncatedJson raw =
   in if scan.scanBroken || scan.scanInString || scan.scanEscaped || length scan.scanOpen == 0 then Nothing
   else Just (raw ++ join "" (map closerOf scan.scanOpen))
 
+-- | 内部：未闭合开括号对应的闭括号文本（其余一律 `]`，由调用方保证只传 `{` / `[`）。
 closerOf : Int -> String
 closerOf 123 = "}"
 closerOf _ = "]"

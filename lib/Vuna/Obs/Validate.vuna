@@ -1,24 +1,18 @@
+-- | trace 的字段 / 时序 / 词汇表校验：把一份 `ObsTrace` 折成带行号的 issue 列表与事件统计。
+--
+-- 规则（error = 退出码 1，warning = 只打印）：首事件必须是 `ph:"M"` 且
+-- `args.schema == "vuna-obs 1"`，`M` 出现在其它位置是 error；每个非 `M` 事件必须有整数
+-- `ts`；同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）；`ph:"X"` 必须有 `dur >= 0`
+-- 且 `args.allocWords` / `args.heapWords`（若有）必须是整数；`ph:"C"` 必须有整数
+-- `args.value`；采样事件必须有字符串数组 `args.stack`、`vuna.log` 必须有字符串
+-- `args.text`；`vuna.*` 名字必须在词汇表内（`vuna.mark.*` 前缀放行），非 `vuna.` 前缀一律
+-- 放行；文件截断的 warning 由 [Vuna.Obs.Read] 产出，这里只转发、不升级为 error。
+--
+-- `cat` 只作信息字段不校验；时间戳单调只看同一 `pid` / `tid`，跨进程不比较；span 嵌套是否
+-- 与 `args.parent` 一致留给 summarize 的折叠规则，这里不重复判定。规范见
+-- `docs/reference/observability.md` §3（事件模型）与 §7 `validate`。
 module Vuna.Obs.Validate where
 
--- Vuna.Obs.Validate：trace 的字段 / 时序 / 词汇表校验（规范 `docs/reference/observability.md`
--- §3 事件模型、§7 `validate`）。
---
--- 规则（error = 退出码 1，warning = 只打印）：
---   1. 首事件**必须**是 `ph:"M"` 且 `args.schema == "vuna-obs 1"`；`M` 出现在其它位置 = error。
---   2. 每个非 `M` 事件必须有整数 `ts`（epoch 微秒）。
---   3. 同一 `pid`/`tid` 内 `ts` 单调不减（倒挂 = error）。
---   4. `ph:"X"` 必须有 `dur` 且 `dur >= 0`；`ts + dur` 越过后继 `ts` **允许**（嵌套 span）。
---      `args.allocWords` / `args.heapWords`（若有）必须是整数（§3.3 档次读数挂在 span 上）。
---   5. `ph:"C"` 必须有整数 `args.value`。
---   6. `ph:"i"` 的 `vuna.sample.cpu` / `vuna.sample.mem` 必须有字符串数组 `args.stack`；
---      `vuna.log` 必须有字符串 `args.text`。
---   7. 名字以 `vuna.` 开头的事件必须在 §3.3 词汇表内（`vuna.mark.*` 前缀放行）；非 `vuna.`
---      前缀（如 `app.render`、原型 `probe.phase`）一律放行。
---   8. 文件截断（末行半个 JSON 行）= warning，由 `Vuna.Obs.Read` 降级，这里只转发（不升级为 error）。
---
--- 不做的事（本批边界）：`cat` 只作信息字段不校验（运行时计数器用 `vuna.counter`，§3.2 表未列全）；
--- 时间戳绝对单调只看同一 `pid`/`tid`，跨进程（merge 前）不比较；语义一致性（例如 span 嵌套
--- 是否与 `args.parent` 一致）留给 `summarize` 的折叠规则，不在这里重复判定。
 import Base.List
 import Base.Pair
 import Base.String
@@ -31,16 +25,24 @@ import Base.EffFs
 
 -- | 一条校验问题：严重级别 + 行号（0 = 与具体行无关）+ 消息。
 export record ValidateIssue(..) where
+  -- | 严重级别（`SevError` 决定退出码 1，`SevWarning` 只打印）。
   issueSeverity : Severity
+  -- | 问题所在的输入行号（1-based）；0 = 与具体行无关。
   issueLine : Int
+  -- | 问题文案（不含级别与行号前缀，由 `issueText` 拼装）。
   issueText : String
 
 -- | 校验结果：全部问题（error 在前、warning 在后，各自按文件顺序）+ 统计。
 export record ValidateReport(..) where
+  -- | 全部问题，顺序即输出顺序。
   validateIssues : List ValidateIssue
+  -- | 事件总数。
   validateEvents : Int
+  -- | `ph:"X"` 事件数。
   validateSpans : Int
+  -- | `ph:"C"` 事件数。
   validateCounters : Int
+  -- | `ph:"i"` 事件数。
   validateInstants : Int
 
 -- | 校验一个 trace 文件：读盘 + 规则。文件不存在/是目录 = `ErrC`（调用方映射退出码 2）。
@@ -63,21 +65,27 @@ validateTrace trace =
     (append schemaIssues (append fieldIssues (append nameIssues (append orderIssues truncIssues))))
     (length evs) (countPh "X" evs) (countPh "C" evs) (countPh "i" evs)
 
+-- | 内部：数某个 `ph` 的事件条数。
 countPh : String -> List (Pair Int ObsEvent) -> Int
 countPh ph rows = length (filter (hasPh ph) rows)
 
+-- | 内部：事件行的 `ph` 是否等于给定标签。
 hasPh : String -> Pair Int ObsEvent -> Bool
 hasPh ph row = eventPh (secondOf row) == ph
 
+-- | 内部：按级别与行号构造一条问题。
 issue : Severity -> Int -> String -> ValidateIssue
 issue sev line text = ValidateIssue sev line text
 
+-- | 内部：构造一条 error。
 errorAt : Int -> String -> ValidateIssue
 errorAt line text = issue SevError line text
 
+-- | 内部：构造一条 warning。
 warningAt : Int -> String -> ValidateIssue
 warningAt line text = issue SevWarning line text
 
+-- | 内部：把读盘层降级出的截断文案转成 warning（行号 0，文案自带位置）。
 truncationWarnings : List String -> List ValidateIssue
 truncationWarnings [] = []
 truncationWarnings (w :: rest) = warningAt 0 w :: truncationWarnings rest
@@ -85,6 +93,7 @@ truncationWarnings (w :: rest) = warningAt 0 w :: truncationWarnings rest
 -- ---------------------------------------------------------------
 -- 1) 元数据首行
 -- ---------------------------------------------------------------
+-- | 内部：首事件必须是元数据，且 schema / 名字正确；`M` 出现在其它位置是 error。
 checkSchema : List (Pair Int ObsEvent) -> List ValidateIssue
 checkSchema [] =
   [ errorAt 0 "empty trace: expected a metadata event (ph:\"M\", args.schema=\"vuna-obs 1\") as the first line"
@@ -95,12 +104,14 @@ checkSchema ((Pair line ev) :: rest) = case ev of
     errorAt line "first event must be metadata (ph:\"M\"), got ph:\"${eventPh ev}\""
       :: strayMeta rest
 
+-- | 内部：元数据的 `args.schema` 与事件名两项检查。
 schemaOf : ObsMetaData -> Int -> List ValidateIssue
 schemaOf m line =
   append
     (if m.metaSchema == obsSchemaVersion then [] else [errorAt line "metadata schema is `${m.metaSchema}`, expected `${obsSchemaVersion}`"])
     (if m.metaName == "vuna.obs.schema" then [] else [errorAt line "metadata name must be `vuna.obs.schema`, got `${m.metaName}`"])
 
+-- | 内部：除首行外不允许再出现元数据事件。
 strayMeta : List (Pair Int ObsEvent) -> List ValidateIssue
 strayMeta [] = []
 strayMeta ((Pair line ev) :: rest) = append (case ev of
@@ -111,10 +122,12 @@ strayMeta ((Pair line ev) :: rest) = append (case ev of
 -- ---------------------------------------------------------------
 -- 2) ~ 6) 字段与时序
 -- ---------------------------------------------------------------
+-- | 内部：逐事件收集字段问题。
 checkFields : List (Pair Int ObsEvent) -> List ValidateIssue
 checkFields [] = []
 checkFields ((Pair line ev) :: rest) = append (fieldIssuesOf line ev) (checkFields rest)
 
+-- | 内部：单个事件的字段问题（按 `ph` 分派；元数据事件没有字段要求）。
 fieldIssuesOf : Int -> ObsEvent -> List ValidateIssue
 fieldIssuesOf line (ObsMetaEvent _) = []
 fieldIssuesOf line (ev@(ObsSpanEvent _ dur)) =
@@ -124,31 +137,37 @@ fieldIssuesOf line (ev@(ObsCounterEvent _ value)) =
 fieldIssuesOf line (ev@(ObsInstantEvent _)) =
   append (tsRequired line ev) (instantArgsIssues line ev)
 
+-- | 内部：非元数据事件必须带 `ts`。
 tsRequired : Int -> ObsEvent -> List ValidateIssue
 tsRequired line ev = case eventTs ev of
   Just _ => []
   Nothing => [errorAt line "event is missing integer field `ts`"]
 
+-- | 内部：span 必须带 `dur` 且非负。
 durRequired : Int -> Maybe Int -> List ValidateIssue
 durRequired line (Just d) =
   if d < 0 then [errorAt line "span `dur` must be >= 0, got ${strFromInt d}"] else []
 durRequired line Nothing = [errorAt line "span (ph:\"X\") is missing integer field `dur`"]
 
+-- | 内部：span 上的 `args.allocWords` / `args.heapWords`（若有）必须是整数。
 allocWordsIssue : Int -> ObsEvent -> List ValidateIssue
 allocWordsIssue line ev =
   append (intArgIssue line "allocWords" ev) (intArgIssue line "heapWords" ev)
 
+-- | 内部：某个 `args` 字段若存在必须是整数。
 intArgIssue : Int -> String -> ObsEvent -> List ValidateIssue
 intArgIssue line key ev = case argJson key ev of
   Nothing => []
   Just (JNum _) => []
   Just _ => [errorAt line "`args.${key}` must be an integer"]
 
+-- | 内部：计数器必须带 `args.value`。
 counterValueIssue : Int -> Maybe Int -> List ValidateIssue
 counterValueIssue line (Just _) = []
 counterValueIssue line Nothing =
   [errorAt line "counter (ph:\"C\") is missing integer field `args.value`"]
 
+-- | 内部：采样事件必须有 `args.stack`，`vuna.log` 必须有 `args.text`。
 instantArgsIssues : Int -> ObsEvent -> List ValidateIssue
 instantArgsIssues line ev =
   let
@@ -161,13 +180,13 @@ instantArgsIssues line ev =
     Nothing => [errorAt line "log event `vuna.log` is missing string field `args.text`"]
   else []
 
+-- | 内部：同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）。
 checkOrder : List (Pair Int ObsEvent) -> List ValidateIssue
 checkOrder evs = checkOrderGo evs []
 
--- 每个 (pid,tid) 记录上一条事件的 `(ts, end)`；`end` 对 span 是 `ts + dur`。
--- 规则：`ts` 单调不减；**唯一例外是嵌套 span**——span 按完成序写出（内层先落盘），
--- 内层 span 的 `ts` 因此可以早于前一条。此时只要求新 span 的区间 [ts, ts+dur]
--- 落在上一条 span 的区间内（end 不回退），否则仍然是倒挂。
+-- | 内部：逐事件检查时序。每个 `(pid,tid)` 记录上一条事件的 `(ts, end)`（`end` 对 span 是
+-- `ts + dur`）。span 按完成序写出，内层 span 的 `ts` 因此可以早于前一条；此时只要求新 span
+-- 的区间落在上一条 span 的区间内（`end` 不回退），否则仍是倒挂。
 checkOrderGo : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (Pair Int Int)) -> List ValidateIssue
 checkOrderGo [] _ = []
 checkOrderGo ((Pair line ev) :: rest) seen = case eventTs ev of
@@ -188,13 +207,16 @@ checkOrderGo ((Pair line ev) :: rest) seen = case eventTs ev of
           (if backwards then [errorAt line "timestamp goes backwards for pid ${strFromInt (eventPid ev)} / tid ${strFromInt (eventTid ev)}: ts=${strFromInt ts} < ${strFromInt prevTs} and the event does not nest inside the previous span"] else [])
           (checkOrderGo rest (Pair key (Pair ts endTs) :: removePairOf key seen))
 
+-- | 内部：按 `(pid,tid)` 查已记录的最后一条事件区间。
 lookupPairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> Maybe (Pair Int Int)
 lookupPairOf key [] = Nothing
 lookupPairOf key ((Pair k v) :: rest) = if sameKey key k then Just v else lookupPairOf key rest
 
+-- | 内部：两个 `(pid,tid)` 键是否相同。
 sameKey : Pair Int Int -> Pair Int Int -> Bool
 sameKey (Pair p1 t1) (Pair p2 t2) = p1 == p2 && t1 == t2
 
+-- | 内部：从记录表里删掉某个 `(pid,tid)` 键（用新值覆盖旧值）。
 removePairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> List (Pair (Pair Int Int) (Pair Int Int))
 removePairOf key [] = []
 removePairOf key ((Pair k v) :: rest) =
@@ -203,6 +225,7 @@ removePairOf key ((Pair k v) :: rest) =
 -- ---------------------------------------------------------------
 -- 7) 词汇表
 -- ---------------------------------------------------------------
+-- | 内部：`vuna.*` 事件名必须在词汇表内（`vuna.mark.*` / `vuna.tool.iface.miss.*` 前缀放行）。
 checkNames : List (Pair Int ObsEvent) -> List ValidateIssue
 checkNames [] = []
 checkNames ((Pair line ev) :: rest) =
@@ -219,9 +242,11 @@ checkNames ((Pair line ev) :: rest) =
 export countSeverity : Severity -> ValidateReport -> Int
 countSeverity sev report = length (filter (sameSeverity sev) (map issueSev report.validateIssues))
 
+-- | 内部：取一条问题的严重级别。
 issueSev : ValidateIssue -> Severity
 issueSev i = i.issueSeverity
 
+-- | 内部：两个严重级别是否相同（`Severity` 没有 `Eq` 实例，用模式匹配判定）。
 sameSeverity : Severity -> Severity -> Bool
 sameSeverity SevError SevError = True
 sameSeverity SevWarning SevWarning = True
@@ -239,18 +264,22 @@ countWarnings report = countSeverity SevWarning report
 export issueText : ValidateIssue -> String
 issueText i = "${severityText (issueSev i)}: ${positionText (issueLineOf i)}${issueBody i}"
 
+-- | 内部：问题的行号。
 issueLineOf : ValidateIssue -> Int
 issueLineOf i = i.issueLine
 
+-- | 内部：问题的消息正文。
 issueBody : ValidateIssue -> String
 issueBody i = i.issueText
 
+-- | 内部：严重级别的展示文本（`error` / `warning` / `note` / `help`）。
 severityText : Severity -> String
 severityText SevError = "error"
 severityText SevWarning = "warning"
 severityText SevNote = "note"
 severityText SevHelp = "help"
 
+-- | 内部：行号前缀；0 或负数表示与具体行无关，返回空串。
 positionText : Int -> String
 positionText line = if line <= 0 then "" else "line ${strFromInt line}: "
 

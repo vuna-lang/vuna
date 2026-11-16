@@ -1,13 +1,13 @@
+-- | `vuna repl --client ADDR`：一次调用发一个请求、收一个响应。
+--
+-- 用途：agent / 脚本在独立进程里驱动常驻 REPL server（每次 bash 调用都是新 shell，不能指望
+-- 同一个进程的 stdin 会话）。stdin 内容是一个 JSON-RPC 请求 body（不带帧头），客户端补
+-- `Content-Length` 帧、连接 ADDR、读回一帧并把响应 body 打到 stdout。
+--
+-- 不加载包上下文（CLI 在解析位置参数之前分流）：客户端只做传输，与仓库 / 包无关。
+-- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
 module Vuna.Repl.Client where
 
--- Vuna.Repl.Client：`vuna repl --client ADDR` —— 一次调用发一个请求、收一个响应。
---
--- 用途：agent / 脚本在**独立进程**里驱动常驻 REPL server（每次 bash 调用都是新 shell，
--- 不能指望同一个进程的 stdin 会话）。stdin 内容是一个 JSON-RPC 请求 **body**（不带帧头），
--- 客户端补 `Content-Length` 帧、连接 ADDR、读回一帧并把响应 body 打到 stdout。
---
--- 不加载包上下文（CLI 在解析位置参数之前分流）：客户端只做传输，与仓库/包无关。
--- 退出码：收到响应 0；连接失败（宿主异常，运行时报 `net: connect: ...`）或响应不完整 2。
 import Vuna.Compiler.Base.Common
 import Vuna.Json.Frame
 import Base.EffConsole
@@ -16,14 +16,16 @@ import Base.EffStdin
 import Base.Nat
 import Base.Eff.Types
 
+-- | 单次读 stdin / 读 socket 的字节上限。
 clientChunkSize : Int
 clientChunkSize = 65536
 
--- 窗口大小上限（读 stdin / 读一帧的循环守卫）。
+-- | 读 stdin / 读一帧的循环 fuel 上限。
 clientFuelBound : Int
 clientFuelBound = 1073741824
 
--- 读 stdin 全部字节（一次调用的请求 body）。
+-- | 内部：读 stdin 全部字节（一次调用的请求 body），每次最多 `clientChunkSize` 字节，
+-- 直到 EOF 或 fuel 耗尽。
 readStdinAll : Member nStdin StdinOp r => String -> Int -> Eff r String
 readStdinAll acc fuel = if fuel <= 0 then pure acc
 else do
@@ -32,7 +34,8 @@ else do
     Nothing => pure acc
     Just bytes => readStdinAll (acc ++ bytes) (fuel - 1)
 
--- 从连接读一帧的 body（只处理一个响应；多余字节丢弃）。
+-- | 内部：从连接读一帧的 body（只处理一个响应，帧后的多余字节丢弃）；帧头缺失、连接中断
+-- 或 fuel 耗尽给 `Nothing`。
 readOneFrame : Member nNet NetOp r => Int -> String -> Int -> Eff r (Maybe String)
 readOneFrame conn buf fuel = if fuel <= 0 then pure Nothing
 else case splitHeaderBlock buf of
@@ -50,6 +53,8 @@ else case splitHeaderBlock buf of
       Nothing => pure Nothing
       Just bytes => readOneFrame conn (buf ++ bytes) (fuel - 1)
 
+-- | CLI 入口：读 stdin 作请求 body，给 `addr` 发一帧，把响应 body 打到 stdout 并返回退出码
+-- （0 = 收到响应，2 = 响应不完整）。
 export runReplClient : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
 runReplClient addr = do
   body <- readStdinAll "" clientFuelBound

@@ -1,23 +1,22 @@
-module Vuna.Repl.Server where
-
--- Vuna.Repl.Server：REPL server（JSON-RPC over Content-Length，socket 传输）。
+-- | REPL server：JSON-RPC over Content-Length，socket 传输的常驻进程。
 --
 -- 传输：`--listen unix:PATH`（Unix domain socket）或 `--listen tcp:127.0.0.1:PORT`
--- （loopback TCP；`PORT=0` 用临时端口）。**只允许本机 loopback / Unix socket**：
--- 能连上这个端点 = 能在你的进程里执行任意 vuna 代码，地址校验在 `checkReplAddr`。
+-- （loopback TCP；`PORT=0` 用临时端口）。只允许本机 loopback / Unix socket：能连上这个端点
+-- 就等于能在进程里执行任意 vuna 代码，地址校验在 `checkReplAddr`。
 --
--- 生命周期：常驻进程；**会话状态跨连接保留**（定义 / import / `:load` 目标都在内存里）。
--- 每个连接用 `Vuna.Json.Server.serveConnection` 逐帧服务：
---   `eval`   —— 一次提交可含多行；`close:true`（默认）按「输入结束」收尾；
---   `ping`   —— 版本 + 包名（探活）；
---   `shutdown` / `:quit` —— 回响应后进程 exit 0（并清理 unix socket 路径）。
--- 对端关闭 = 只关连接、继续 accept；传输层致命错误（超大帧 / fuel）只影响该连接。
+-- 生命周期：会话状态跨连接保留（定义 / import / `:load` 目标都在内存里）。每个连接用
+-- [Vuna.Json.Server.serveConnection] 逐帧服务，方法有 `eval`（一次提交可含多行，
+-- `close:true` 默认按「输入结束」收尾）、`ping`（版本 + 包名，探活）、`shutdown` / `:quit`
+-- （回响应后进程 exit 0 并清理 unix socket 路径）。对端关闭只关连接、继续 accept；传输层
+-- 致命错误（超大帧 / fuel 耗尽）只影响该连接。
 --
--- stdout 只用于启动时的一行 `listening <地址>`（agent 用它/后台作业日志判断就绪）；
--- 协议帧全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
+-- stdout 只用于启动时的一行 `listening <地址>`（agent 用它 / 后台作业日志判断就绪）；协议帧
+-- 全部走 socket；诊断走 stderr（`[vuna-repl-server]` 前缀）。
 --
--- server 模式限制（见 docs/reference/tooling.md）：server 模式下 `:!` 与效果表达式
--- （`main : Eff r a` 临时编译运行）**拒绝执行**——子进程会写真实 stdout，污染协议通道。
+-- server 模式限制（见 `docs/reference/tooling.md`）：`:!` 与效果表达式（`main : Eff r a`）
+-- 临时编译运行会被拒绝——子进程会写真实 stdout，污染协议通道。
+module Vuna.Repl.Server where
+
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Base.Version
@@ -37,7 +36,7 @@ import Base.EffEnv
 import Base.EffExit
 import Base.EffProcess
 
--- 地址校验（CLI 层）：只接受本机端点。
+-- | 地址校验（CLI 层）：只接受 `unix:PATH` 或 `tcp:127.0.0.1:PORT`，其余给带说明的错误。
 export checkReplAddr : String -> Check String
 checkReplAddr addr =
   if startsWith "unix:" addr && strLength addr > 5 then OkC addr
@@ -45,36 +44,40 @@ checkReplAddr addr =
   else err
     "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
 
--- server 诊断（stderr；stdout 只留给 `listening` 行）。
+-- | 内部：写一行 `[vuna-repl-server] ...` 诊断到 stderr（stdout 只留给 `listening` 行），
+-- 状态原样返回便于串接。
 serverLog : Member nConsole ConsoleOp r => String -> ReplState -> Eff r ReplState
 serverLog m st = do
   _ <- consoleEprint "[vuna-repl-server] ${m}\n"
   pure st
 
--- 传输告警：写 stderr 日志，并回 `-32700` 让客户端不会空等（LSP 的策略是丢帧不回）。
+-- | 内部：传输告警——写 stderr 日志，并回 `-32700` 错误帧让客户端不会空等。
 replWarn : Member nConsole ConsoleOp r => String -> ReplState -> Eff r (Pair ReplState (List Json))
 replWarn m st = do
   st2 <- serverLog m st
   pure (Pair st2 [responseErr JNull errParse "parse error / bad frame: ${m}"])
 
--- JSON-RPC result 载荷（status / ok / output / error；前后端共同契约）。
+-- | 内部：JSON-RPC result 载荷（`status` / `ok` / `output` / `error`；前后端共同契约）。
 replResult : String -> Bool -> String -> String -> Json
 replResult status ok output err =
   JObj
     [Pair "status" (JStr status), Pair "ok" (JBool ok), Pair "output" (JStr output), Pair "error" (JStr err)]
 
--- 把多行 code 切成行：**末尾 `\n` 不额外产生空行**（`"x\n"` ≡ `"x"`）；
--- 其余空行保留（交给 `blankStep` 的交互语义：提交待续输入 / 块内空行）。
+-- | 内部：把多行 code 切成行——末尾换行不额外产生空行（`"x\n"` ≡ `"x"`），其余空行保留
+-- （交给 `inputStep` 的交互语义：提交待续输入 / 块内空行）。
 codeLines : String -> List String
 codeLines code = case reverse (split "\n" code) of
   "" :: rest => reverse rest
   parts => reverse parts
 
--- 逐行喂给 `inputStep`；`:q`/`:quit` 直接返回退出。
+-- | 逐行喂入的结果：继续（带新状态）或请求结束进程。
 data FeedResult : Type where
+  -- | 还有输入要处理，携带更新后的会话状态。
   FeedContinue : ReplState -> FeedResult
+  -- | 输入里出现了退出请求，服务端应回响应后结束。
   FeedExit : FeedResult
 
+-- | 内部：把多行依次喂给 `inputStep`；`:q` / `:quit` 直接返回 `FeedExit`。
 feedLines : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> List String -> Eff r FeedResult
 feedLines st [] = pure (FeedContinue st)
 feedLines st (line :: rest) = do
@@ -83,7 +86,8 @@ feedLines st (line :: rest) = do
     ReplExit _ => pure FeedExit
     ReplContinue st2 => feedLines st2 rest
 
--- `eval`：code（必需）+ close（可选，默认 true）。
+-- | 内部：处理 `eval`——code（必需，字符串）+ close（可选，默认 true）。返回
+-- (是否结束进程, (新状态, 响应帧))；`status` 为 `ok` / `incomplete` / `exit`。
 evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
 evalRequest msg st = case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
   Nothing =>
@@ -111,7 +115,7 @@ evalRequest msg st = case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
               pure
                 (Pair False (Pair st3 [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))]))
 
--- `ping`：版本 + 包名（探活/自述，不改状态）。
+-- | 内部：处理 `ping`——返回版本与包名（`base-only` 表示没有包上下文），不改状态。
 pingRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
 pingRequest msg st =
   let
@@ -120,7 +124,8 @@ pingRequest msg st =
     text = "vuna ${vunaVersion}\n包: ${label}\n"
   in Pair False (Pair st [responseOk (idOf msg) (replResult "ok" True text "")])
 
--- 请求分发；未知方法回 `-32601`（不结束进程）。
+-- | 内部：请求分发——`eval` / `ping` / `shutdown`；未知方法回 `-32601`（不结束进程），
+-- 缺 `method` 回 `-32600`。
 handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
 handleRequest msg st = case methodOf msg of
   Nothing => pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
@@ -132,20 +137,23 @@ handleRequest msg st = case methodOf msg of
       pure
         (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
 
--- 就绪行里显示的地址：`tcp:...:0` 换成实际绑定的临时端口。
+-- | 内部：就绪行里显示的地址——`tcp:...:0` 换成实际绑定的临时端口。
 listeningText : Member nNet NetOp r => String -> Int -> Eff r String
 listeningText addr h = do
   port <- netPort h
   pure
     (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
+-- | 内部：`unix:PATH` 里的 `PATH` 部分。
 unixPathOf : String -> String
 unixPathOf addr = substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr
 
+-- | 内部：退出时清理监听地址——Unix socket 删掉文件，TCP 无需处理（返回 0）。
 cleanupAddr : Member nFs FsOp r => String -> Eff r Int
 cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr) else pure 0
 
--- CLI 入口：起 session → listen → 打印就绪行 → accept 循环（每个连接一个会话切片）。
+-- | CLI 入口：起会话 → 监听 `addr` → 打印一行 `listening <地址>` → accept 循环。会话初始化失败
+-- 写 stderr 并给退出码 2。
 export runReplServer : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => PackageContext -> ReplStart -> String -> Eff r Int
 runReplServer ctx start addr = do
   outRef <- newRef ""
@@ -164,10 +172,12 @@ runReplServer ctx start addr = do
         _ <- consolePrint "listening ${ready}\n"
         acceptLoop serverFuelBound addr h st0
 
--- 连接循环是无限状态机：显式 fuel 守卫（1G 个连接）。
+-- | 连接循环的 fuel 上限（1G 个连接）。
 serverFuelBound : Int
 serverFuelBound = 1073741824
 
+-- | 内部：accept 循环——每个连接跑一次 `serveConnection` 再关连接；退出请求则关监听、清理
+-- socket 路径并返回 0，对端关闭 / 致命错误则记录后继续 accept。
 acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Int -> String -> Int -> ReplState -> Eff r Int
 acceptLoop fuel addr h st = if fuel <= 0 then pure 0
 else do
