@@ -10,7 +10,7 @@ base/lib/Base/Eff/Types.vuna: Base.Eff.Cont, Base.Eff.Eff, Base.Eff.Member, Base
 base/lib/Base/EffArgs.vuna: ArgsOp(..), argsGetArgs, handleArgs, resArgs
 base/lib/Base/EffClock.vuna: ClockOp(..), clockNow, clockSleepMicros, handleClock, resClock
 base/lib/Base/EffConsole.vuna: ConsoleOp(..), consoleEprint, consolePrint, handleConsole, resConsole
-base/lib/Base/EffEnv.vuna: EnvOp(..), envExecPath, envGetCwd, envGetEnv, handleEnv, resEnv
+base/lib/Base/EffEnv.vuna: EnvOp(..), envExecPath, envGetCwd, envGetEnv, envGetEnvNonEmpty, handleEnv, resEnv
 base/lib/Base/EffError.vuna: ErrorOp(..), catch, handleError, resError, runError, throw
 base/lib/Base/EffExit.vuna: ExitOp(..), exitWith, handleExit, resExit
 base/lib/Base/EffExn.vuna: Exn, ExnOp(..), bracketExn, catchExn, exnRes, handleExn, runExn, throwExn, tryWith
@@ -34,7 +34,7 @@ base/lib/Base/HostRow.vuna: hostRow, hostTail
 base/lib/Base/IORef.vuna: modifyRef, newRef, readRef, writeRef
 base/lib/Base/Int.vuna: 
 base/lib/Base/Interp.vuna: Interp(..)
-base/lib/Base/List.vuna: List(..), allMem, anyMem, append, concatMap, drop, filter, foldl, foldr, hasDupNames, length, lookupPair, map, mapMaybe, mem, memName, nubNames, range, reverse, take, zip
+base/lib/Base/List.vuna: List(..), allMem, anyMem, append, concatMap, drop, filter, firstJust, firstSuccess, foldl, foldr, hasDupNames, length, lookupPair, map, mapMaybe, mem, memName, nubNames, range, reverse, take, zip
 base/lib/Base/Map.vuna: Map, empty, fromList, insert, keys, lookup, remove, size, toList, values
 base/lib/Base/Maybe.vuna: Maybe(..), fromMaybe, isJust, isNothing, maybe
 base/lib/Base/Monad.vuna: Functor(..), Monad(..), module Base.Applicative
