@@ -96,3 +96,11 @@ out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
 run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'
 exit: 2
 out-contains: --target ocaml|wasm|native
+
+# 11) stack-switching 工具链：cont/resume/suspend 可解析并在 wasmtime 跑通；
+#     探针同时验证内层 handler 把不匹配 effect 转发给外层、再恢复自己的 comp。
+run: sh -c 'wasm-tools parse "suite/fixtures/wasm_stack_switch/forward.wat" -o "$TMPDIR/cont.wasm"'
+exit: 0
+run: sh -c 'wasmtime run -W stack-switching=y -W gc=y -W function-references=y --invoke run "$TMPDIR/cont.wasm" 2>/dev/null'
+exit: 0
+out-equals: 101
