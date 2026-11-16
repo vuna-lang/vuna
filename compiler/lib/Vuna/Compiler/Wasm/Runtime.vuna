@@ -39,6 +39,9 @@ export record RtConsts(..) where
   -- | 数组越界（与 OCaml `Invalid_argument ("index out of bounds")` 的首行一致）。
   rtcOobOff : Int
   rtcOobLen : Int
+  -- | 一次性续延被第二次 resume（与 native 的 trap 文本一致）。
+  rtcResumedOff : Int
+  rtcResumedLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -791,14 +794,17 @@ rtEffThunk =
   WatFunc "$rt_effThunk" "$cft" [Pair "$p0" WvAnyRef] [WvAnyRef] []
     [ILocalGet "$p0", IRefNull, IReturnCall "$rt_apply"]
 
-rtEffResumeClo : WatFunc
-rtEffResumeClo =
+rtEffResumeClo : RtConsts -> WatFunc
+rtEffResumeClo c =
   let
     locals = [Pair "$ctx" (WvRef "$effK")]
     body =
       [ ILocalGet "$p0",
         IRefCast "$effK",
         ILocalSet "$ctx",
+        ILocalGet "$ctx",
+        IStructGet "$effK" 5,
+        IIf "" [ICall "$rt_resumeTwice"] [ILocalGet "$ctx", IConstI32 1, IStructSet "$effK" 5],
         ILocalGet "$ctx",
         IStructGet "$effK" 0,
         ILocalGet "$p1",
@@ -862,6 +868,7 @@ rtHandleLoop =
         ILocalGet "$opH",
         ILocalGet "$key",
         ILocalGet "$name",
+        IConstI32 0,
         IStructNew "$effK",
         ILocalSet "$ctx"
       ]
@@ -890,6 +897,10 @@ rtHandleLoop =
         [IBlock "$on" "anyref (ref $ct)" [ILocalGet "$v", ILocalGet "$cont", IPlain "resume $ct (on $eff $on)", ILocalSet "$res", ILocalGet "$ret", ILocalGet "$res", IReturnCall "$rt_apply"], ILocalSet "$k", ILocalSet "$payload"]
         (append keyEq (append nameEq [IBinop "i32.and", IIf "anyref" (append extractOp (append mkKctx (append mkKclo callOpH))) forwardToOuter]))
   in rtFunc "$rt_handleLoop" params [WvAnyRef] locals body
+
+-- | 一次性续延被第二次 resume：与 native 同一行文本，exit 2。
+rtResumeTwice : RtConsts -> WatFunc
+rtResumeTwice c = rtFunc "$rt_resumeTwice" [] [] [] (failWithConst c.rtcResumedOff c.rtcResumedLen)
 
 rtEffHandle : WatFunc
 rtEffHandle =
@@ -925,7 +936,8 @@ rtFunctions c =
   [ rtApply,
     rtEffPerform,
     rtEffThunk,
-    rtEffResumeClo,
+    rtResumeTwice c,
+    rtEffResumeClo c,
     rtHandleLoop,
     rtEffHandle,
     rtWrite,

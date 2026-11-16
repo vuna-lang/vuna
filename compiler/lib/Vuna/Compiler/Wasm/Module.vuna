@@ -1074,7 +1074,7 @@ baseTypes =
     WatArrayType "$arr" True WvAnyRef,
     WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
     WatContType "$ct" "$cft",
-    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
+    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvI32]
   ]
 
 baseTags : List WatTag
@@ -1143,7 +1143,8 @@ build program printResult =
         "division by zero",
         "vuna: runtime error: ",
         "assertion failed: ",
-        "Invalid_argument(\"index out of bounds\")"
+        "Invalid_argument(\"index out of bounds\")",
+        "continuation already resumed"
       ]
     users = concatMap strLitsDef defs
     pool = foldlStrings (\acc => \s => addString s acc) statics users
@@ -1198,7 +1199,8 @@ mkConsts offsets =
     (lenOf "TODO: ") (offOf "division by zero") (lenOf "division by zero")
     (offOf "vuna: runtime error: ") (lenOf "vuna: runtime error: ") (offOf "assertion failed: ")
     (lenOf "assertion failed: ") (offOf "Invalid_argument(\"index out of bounds\")")
-    (lenOf "Invalid_argument(\"index out of bounds\")")
+    (lenOf "Invalid_argument(\"index out of bounds\")") (offOf "continuation already resumed")
+    (lenOf "continuation already resumed")
 
 joinWith : String -> List String -> String
 joinWith sep xs = Base.String.join sep xs
