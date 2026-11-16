@@ -13,7 +13,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagDef = (fun msp name d -
 
 # 35 "Vuna/Compiler/Base/Diagnostics/Common.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dconcatLists = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> ((Base_dList.v_Base_dList_dappend dtb__0) (v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dconcatLists dtb__1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__0, dtb__1) -> ((Base_dList.v_Base_dList_dappend dtb__0) (v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dconcatLists dtb__1))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))

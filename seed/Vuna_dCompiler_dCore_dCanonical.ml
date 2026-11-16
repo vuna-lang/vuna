@@ -28,10 +28,10 @@ let rec v_Vuna_dCompiler_dCore_dCanonical_dencArg = (fun mc0 mc1 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 ))
 # 43 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_dencArgs = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo xs) acc))))
+and v_Vuna_dCompiler_dCore_dCanonical_dencArgs = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo xs) acc))))
 # 47 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencArg dtb__4) ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo dtb__5) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencArg dtb__4) ((v_Vuna_dCompiler_dCore_dCanonical_dencArgsGo dtb__5) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -41,10 +41,10 @@ and v_Vuna_dCompiler_dCore_dCanonical_dencAlt = (fun mc0 mc1 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 # 64 "Vuna/Compiler/Core/Canonical.vuna"
-and v_Vuna_dCompiler_dCore_dCanonical_dencAlts = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo xs) acc))))
+and v_Vuna_dCompiler_dCore_dCanonical_dencAlts = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo xs) acc))))
 # 68 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencAlt dtb__9) ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo dtb__10) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__9, dtb__10) -> ((v_Vuna_dCompiler_dCore_dCanonical_dencAlt dtb__9) ((v_Vuna_dCompiler_dCore_dCanonical_dencAltsGo dtb__10) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))

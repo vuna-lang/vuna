@@ -4,29 +4,29 @@ and t_Vuna_dCompiler_dElab_dRecords_dRecordMeta = { f_Vuna_dCompiler_dElab_dReco
 
 # 39 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordFieldPairs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (dtb__0).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName; Base_dPair.f_Base_dPair_dPair_second = (dtb__0).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldType }, (v_Vuna_dCompiler_dElab_dRecords_drecordFieldPairs dtb__1)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = (dtb__0).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName; Base_dPair.f_Base_dPair_dPair_second = (dtb__0).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldType }, (v_Vuna_dCompiler_dElab_dRecords_drecordFieldPairs dtb__1)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 44 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordFieldNames = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__2, dtb__3) -> (Base_dList.C_Base_dList_dList_Cons ((dtb__2).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName, (v_Vuna_dCompiler_dElab_dRecords_drecordFieldNames dtb__3)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__2, dtb__3) -> (Base_dList.C_Base_dList_dList__x58__x58_ ((dtb__2).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName, (v_Vuna_dCompiler_dElab_dRecords_drecordFieldNames dtb__3)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 49 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dlookupRecord = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (if ((dtb__4).f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4)) else ((v_Vuna_dCompiler_dElab_dRecords_dlookupRecord mc0) dtb__5))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (if ((dtb__4).f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4)) else ((v_Vuna_dCompiler_dElab_dRecords_dlookupRecord mc0) dtb__5))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 53 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__6, dtb__7) -> (match dtb__6 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__8; Base_dPair.f_Base_dPair_dPair_second = dtb__9 } -> (Base_dList.C_Base_dList_dList_Cons (dtb__8, (v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf dtb__7)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__6, dtb__7) -> (match dtb__6 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__8; Base_dPair.f_Base_dPair_dPair_second = dtb__9 } -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__8, (v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf dtb__7)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
@@ -35,7 +35,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dfieldNamesOf = (fun mc0 -> (match mc0 w
 
 # 57 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dlookupProvided = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__10, dtb__11) -> (match dtb__10 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__10, dtb__11) -> (match dtb__10 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__12; Base_dPair.f_Base_dPair_dPair_second = dtb__13 } -> (if (dtb__12 = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__13)) else ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided mc0) dtb__11))
   | _ -> failwith "DT: impossible branch"
 )
@@ -45,7 +45,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dlookupProvided = (fun mc0 mc1 -> (match
 
 # 61 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dhasDuplicateFieldNames = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__14, dtb__15) -> (match dtb__14 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__14, dtb__15) -> (match dtb__14 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__16; Base_dPair.f_Base_dPair_dPair_second = dtb__17 } -> (match ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided dtb__16) dtb__15) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__18) -> true
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dElab_dRecords_dhasDuplicateFieldNames dtb__15)
@@ -58,17 +58,17 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dhasDuplicateFieldNames = (fun mc0 -> (m
 ))
 
 # 67 "Vuna/Compiler/Elab/Records.vuna"
-let v_Vuna_dCompiler_dElab_dRecords_dmissingFieldMsg = (fun sp fname -> ((Vuna_dCompiler_dBase_dDiagnostics_dCommon.v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_RecordMissingField (fname))) (Base_dVec.C_Base_dVec_dVec_Cons (fname, Base_dVec.C_Base_dVec_dVec_Nil)))))
+let v_Vuna_dCompiler_dElab_dRecords_dmissingFieldMsg = (fun sp fname -> ((Vuna_dCompiler_dBase_dDiagnostics_dCommon.v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_RecordMissingField (fname))) (Base_dVec.C_Base_dVec_dVec_VCons (fname, Base_dVec.C_Base_dVec_dVec_Nil)))))
 
 # 70 "Vuna/Compiler/Elab/Records.vuna"
-let v_Vuna_dCompiler_dElab_dRecords_dunknownFieldMsg = (fun sp fname -> ((Vuna_dCompiler_dBase_dDiagnostics_dCommon.v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_RecordUnknownField (fname))) (Base_dVec.C_Base_dVec_dVec_Cons (fname, Base_dVec.C_Base_dVec_dVec_Nil)))))
+let v_Vuna_dCompiler_dElab_dRecords_dunknownFieldMsg = (fun sp fname -> ((Vuna_dCompiler_dBase_dDiagnostics_dCommon.v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_RecordUnknownField (fname))) (Base_dVec.C_Base_dVec_dVec_VCons (fname, Base_dVec.C_Base_dVec_dVec_Nil)))))
 
 # 73 "Vuna/Compiler/Elab/Records.vuna"
 let v_Vuna_dCompiler_dElab_dRecords_dduplicateFieldMsg = (fun sp -> ((Vuna_dCompiler_dBase_dDiagnostics_dCommon.v_Vuna_dCompiler_dBase_dDiagnostics_dCommon_dwithDiagSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_RecordDuplicateField) Base_dVec.C_Base_dVec_dVec_Nil)))
 
 # 76 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dhasUnknownFields = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__19, dtb__20) -> (match dtb__19 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__19, dtb__20) -> (match dtb__19 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__21; Base_dPair.f_Base_dPair_dPair_second = dtb__22 } -> (if ((Base_dList.v_Base_dList_dmemName dtb__21) mc0) then ((v_Vuna_dCompiler_dElab_dRecords_dhasUnknownFields mc0) dtb__20) else true)
   | _ -> failwith "DT: impossible branch"
 )
@@ -78,7 +78,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dhasUnknownFields = (fun mc0 mc1 -> (mat
 
 # 81 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dfirstUnknownFieldMsg = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__23, dtb__24) -> (match dtb__23 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__23, dtb__24) -> (match dtb__23 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__25; Base_dPair.f_Base_dPair_dPair_second = dtb__26 } -> (if ((Base_dList.v_Base_dList_dmemName dtb__25) mc1) then (((v_Vuna_dCompiler_dElab_dRecords_dfirstUnknownFieldMsg mc0) mc1) dtb__24) else ((v_Vuna_dCompiler_dElab_dRecords_dunknownFieldMsg mc0) dtb__25))
   | _ -> failwith "DT: impossible branch"
 )
@@ -88,7 +88,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_dfirstUnknownFieldMsg = (fun mc0 mc1 mc2
 
 # 96 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordFieldsOf = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName = (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldName dtb__27); f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldType = (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldType dtb__27); f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldIndex = mc1 }, ((v_Vuna_dCompiler_dElab_dRecords_drecordFieldsOf dtb__28) (mc1 + 1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName = (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldName dtb__27); f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldType = (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldType dtb__27); f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldIndex = mc1 }, ((v_Vuna_dCompiler_dElab_dRecords_drecordFieldsOf dtb__28) (mc1 + 1))))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -101,7 +101,7 @@ let v_Vuna_dCompiler_dElab_dRecords_drecordRetType = (fun dname params sp -> (Vu
 
 # 115 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordArrowTypeGo = (fun mc0 mc1 mc2 mc3 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__29, dtb__30) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EPi (("@vuna@record@arg" ^ (bi_strFromInt mc0)), false, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldType dtb__29), ((((v_Vuna_dCompiler_dElab_dRecords_drecordArrowTypeGo (mc0 + 1)) dtb__30) mc2) mc3), mc3))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, dtb__30) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EPi (("@vuna@record@arg" ^ (bi_strFromInt mc0)), false, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldType dtb__29), ((((v_Vuna_dCompiler_dElab_dRecords_drecordArrowTypeGo (mc0 + 1)) dtb__30) mc2) mc3), mc3))
   | Base_dList.C_Base_dList_dList_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
@@ -111,7 +111,7 @@ let v_Vuna_dCompiler_dElab_dRecords_drecordArrowType = (fun fields ret sp -> (((
 
 # 122 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordParamPis = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__31, dtb__32) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EPi (dtb__31, true, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Type", mc2)), (((v_Vuna_dCompiler_dElab_dRecords_drecordParamPis dtb__32) mc1) mc2), mc2))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__31, dtb__32) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EPi (dtb__31, true, Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing, (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Type", mc2)), (((v_Vuna_dCompiler_dElab_dRecords_drecordParamPis dtb__32) mc1) mc2), mc2))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -137,9 +137,9 @@ let rec v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel = (fun fuel records 
 # 180 "Vuna/Compiler/Elab/Records.vuna"
 and v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel = (fun fuel records fdefs provided sp -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil)) else (match fdefs with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil))
-  | Base_dList.C_Base_dList_dList_Cons (dtb__50, dtb__51) -> (match ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided (dtb__50).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName) provided) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel (fuel - 1)) records) dtb__51) provided) sp)) (fun ps -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (sp)), ps))))))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__52) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel (fuel - 1)) records) dtb__52)) (fun p2 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel (fuel - 1)) records) dtb__51) provided) sp)) (fun ps -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (p2, ps))))))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__50, dtb__51) -> (match ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided (dtb__50).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName) provided) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel (fuel - 1)) records) dtb__51) provided) sp)) (fun ps -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (sp)), ps))))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__52) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((v_Vuna_dCompiler_dElab_dRecords_ddesugarPatternFuel (fuel - 1)) records) dtb__52)) (fun p2 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordPatternFieldsFuel (fuel - 1)) records) dtb__51) provided) sp)) (fun ps -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList__x58__x58_ (p2, ps))))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
@@ -152,21 +152,21 @@ let v_Vuna_dCompiler_dElab_dRecords_ddesugarPattern = (fun records pat -> (((v_V
 let v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar = (fun i -> ("@vuna@record@hf" ^ (bi_strFromInt i)))
 
 # 323 "Vuna/Compiler/Elab/Records.vuna"
-let rec v_Vuna_dCompiler_dElab_dRecords_drecordInstancePatsFrom = (fun i remaining sp -> (if (remaining <= 0) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar ((v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar i), sp)), (((v_Vuna_dCompiler_dElab_dRecords_drecordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
+let rec v_Vuna_dCompiler_dElab_dRecords_drecordInstancePatsFrom = (fun i remaining sp -> (if (remaining <= 0) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar ((v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar i), sp)), (((v_Vuna_dCompiler_dElab_dRecords_drecordInstancePatsFrom (i + 1)) (remaining - 1)) sp)))))
 
 # 319 "Vuna/Compiler/Elab/Records.vuna"
 let v_Vuna_dCompiler_dElab_dRecords_drecordInstancePats = (fun n sp -> (((v_Vuna_dCompiler_dElab_dRecords_drecordInstancePatsFrom 0) n) sp))
 
 # 329 "Vuna/Compiler/Elab/Records.vuna"
-let v_Vuna_dCompiler_dElab_dRecords_dhasFieldInstanceDecl = (fun rname params ctor n fi fname fty -> ((fun fsp -> ((fun recType -> ((fun label -> ((fun head -> ((fun pats -> ((fun body -> ((fun meth -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DInstance (Base_dList.C_Base_dList_dList_Nil, head, (Base_dList.C_Base_dList_dList_Cons (meth, Base_dList.C_Base_dList_dList_Nil)), fsp))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun ("getField", (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar ("p", fsp)), Base_dList.C_Base_dList_dList_Nil)), body, fsp)))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_ECase ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("p", fsp)), (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (ctor, pats, fsp)); Base_dPair.f_Base_dPair_dPair_second = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ((v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar fi), fsp)) }, Base_dList.C_Base_dList_dList_Nil)), fsp)))) ((v_Vuna_dCompiler_dElab_dRecords_drecordInstancePats n) fsp))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Record.HasField", fsp)), (Base_dList.C_Base_dList_dList_Cons (label, (Base_dList.C_Base_dList_dList_Cons (recType, (Base_dList.C_Base_dList_dList_Cons (fty, Base_dList.C_Base_dList_dList_Nil)))))), fsp)))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Field.Field", fsp)), (Base_dList.C_Base_dList_dList_Cons ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (fname, fsp)), Base_dList.C_Base_dList_dList_Nil)), fsp)))) (match params with
+let v_Vuna_dCompiler_dElab_dRecords_dhasFieldInstanceDecl = (fun rname params ctor n fi fname fty -> ((fun fsp -> ((fun recType -> ((fun label -> ((fun head -> ((fun pats -> ((fun body -> ((fun meth -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DInstance (Base_dList.C_Base_dList_dList_Nil, head, (Base_dList.C_Base_dList_dList__x58__x58_ (meth, Base_dList.C_Base_dList_dList_Nil)), fsp))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun ("getField", (Base_dList.C_Base_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar ("p", fsp)), Base_dList.C_Base_dList_dList_Nil)), body, fsp)))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_ECase ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("p", fsp)), (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (ctor, pats, fsp)); Base_dPair.f_Base_dPair_dPair_second = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ((v_Vuna_dCompiler_dElab_dRecords_drecordInstanceVar fi), fsp)) }, Base_dList.C_Base_dList_dList_Nil)), fsp)))) ((v_Vuna_dCompiler_dElab_dRecords_drecordInstancePats n) fsp))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Record.HasField", fsp)), (Base_dList.C_Base_dList_dList__x58__x58_ (label, (Base_dList.C_Base_dList_dList__x58__x58_ (recType, (Base_dList.C_Base_dList_dList__x58__x58_ (fty, Base_dList.C_Base_dList_dList_Nil)))))), fsp)))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Field.Field", fsp)), (Base_dList.C_Base_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (fname, fsp)), Base_dList.C_Base_dList_dList_Nil)), fsp)))) (match params with
   | Base_dList.C_Base_dList_dList_Nil -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (rname, fsp))
   | _ -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (rname, fsp)), ((Base_dList.v_Base_dList_dmap (fun p -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (p, fsp)))) params), fsp))
 ))) (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dexprSpan fty)))
 
 # 308 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesGo = (fun mc0 mc1 mc2 mc3 mc4 mc5 -> (match mc4 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__53, dtb__54) -> (match dtb__53 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__55; Base_dPair.f_Base_dPair_dPair_second = dtb__56 } -> (Base_dList.C_Base_dList_dList_Cons ((((((((v_Vuna_dCompiler_dElab_dRecords_dhasFieldInstanceDecl mc0) mc1) mc2) mc3) mc5) dtb__55) dtb__56), ((((((v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesGo mc0) mc1) mc2) mc3) dtb__54) (mc5 + 1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__53, dtb__54) -> (match dtb__53 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__55; Base_dPair.f_Base_dPair_dPair_second = dtb__56 } -> (Base_dList.C_Base_dList_dList__x58__x58_ ((((((((v_Vuna_dCompiler_dElab_dRecords_dhasFieldInstanceDecl mc0) mc1) mc2) mc3) mc5) dtb__55) dtb__56), ((((((v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesGo mc0) mc1) mc2) mc3) dtb__54) (mc5 + 1))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
@@ -178,7 +178,7 @@ let v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesOf = (fun r -> (((((
 
 # 296 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstances = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__57, dtb__58) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesOf dtb__57)) (v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstances dtb__58))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__57, dtb__58) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstancesOf dtb__57)) (v_Vuna_dCompiler_dElab_dRecords_drecordHasFieldInstances dtb__58))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -188,8 +188,8 @@ let v_Vuna_dCompiler_dElab_dRecords_dctorName = (fun dname -> dname)
 
 # 87 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_drecordsOfDecls = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__59, dtb__60) -> (match dtb__59 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DRecord (dtb__61, dtb__62, dtb__63, dtb__64, dtb__65, dtb__66, dtb__67, dtb__68) -> (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaName = dtb__61; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaParams = dtb__62; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaFields = ((v_Vuna_dCompiler_dElab_dRecords_drecordFieldsOf dtb__63) 0); f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaDerivings = dtb__64; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaDerivingVia = dtb__65; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaRepr = dtb__66; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaCtor = (v_Vuna_dCompiler_dElab_dRecords_dctorName dtb__61); f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaLinear = dtb__67 }, (v_Vuna_dCompiler_dElab_dRecords_drecordsOfDecls dtb__60)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__59, dtb__60) -> (match dtb__59 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DRecord (dtb__61, dtb__62, dtb__63, dtb__64, dtb__65, dtb__66, dtb__67, dtb__68) -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaName = dtb__61; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaParams = dtb__62; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaFields = ((v_Vuna_dCompiler_dElab_dRecords_drecordFieldsOf dtb__63) 0); f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaDerivings = dtb__64; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaDerivingVia = dtb__65; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaRepr = dtb__66; f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaCtor = (v_Vuna_dCompiler_dElab_dRecords_dctorName dtb__61); f_Vuna_dCompiler_dElab_dRecords_dRecordMeta_recordMetaLinear = dtb__67 }, (v_Vuna_dCompiler_dElab_dRecords_drecordsOfDecls dtb__60)))
   | _ -> (v_Vuna_dCompiler_dElab_dRecords_drecordsOfDecls dtb__60)
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
@@ -198,7 +198,7 @@ let rec v_Vuna_dCompiler_dElab_dRecords_drecordsOfDecls = (fun mc0 -> (match mc0
 
 # 373 "Vuna/Compiler/Elab/Records.vuna"
 let rec v_Vuna_dCompiler_dElab_dRecords_dexpandCaseAsGo = (fun mc0 mc1 mc2 -> (match mc1 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__69, dtb__70, dtb__71) -> (((v_Vuna_dCompiler_dElab_dRecords_dexpandCaseAsGo mc0) dtb__70) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_ELet ((Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__69, dtb__71)); Base_dPair.f_Base_dPair_dPair_second = mc0 }, Base_dList.C_Base_dList_dList_Nil)), mc2, false, dtb__71)))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PAs (dtb__69, dtb__70, dtb__71) -> (((v_Vuna_dCompiler_dElab_dRecords_dexpandCaseAsGo mc0) dtb__70) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_ELet ((Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__69, dtb__71)); Base_dPair.f_Base_dPair_dPair_second = mc0 }, Base_dList.C_Base_dList_dList_Nil)), mc2, false, dtb__71)))
   | _ -> { Base_dPair.f_Base_dPair_dPair_first = mc1; Base_dPair.f_Base_dPair_dPair_second = mc2 }
 ))
 
@@ -240,9 +240,9 @@ and v_Vuna_dCompiler_dElab_dRecords_ddesugarDoStmtFuel = (fun fuel records stmt 
 )))
 # 259 "Vuna/Compiler/Elab/Records.vuna"
 and v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordValuesFuel = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__127, dtb__128) -> (if (mc0 <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "record desugar") else (match ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided (dtb__127).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName) mc3) with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__127, dtb__128) -> (if (mc0 <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "record desugar") else (match ((v_Vuna_dCompiler_dElab_dRecords_dlookupProvided (dtb__127).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName) mc3) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (((v_Vuna_dCompiler_dElab_dRecords_dmissingFieldMsg mc4) (dtb__127).f_Vuna_dCompiler_dElab_dRecords_dRecordFieldMeta_recordFieldName)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__129) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel (mc0 - 1)) mc1) dtb__129)) (fun v2 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordValuesFuel (mc0 - 1)) mc1) dtb__128) mc3) mc4)) (fun vs -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList_Cons (v2, vs))))))))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__129) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((v_Vuna_dCompiler_dElab_dRecords_ddesugarExprFuel (mc0 - 1)) mc1) dtb__129)) (fun v2 -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((v_Vuna_dCompiler_dElab_dRecords_ddesugarRecordValuesFuel (mc0 - 1)) mc1) dtb__128) mc3) mc4)) (fun vs -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dList.C_Base_dList_dList__x58__x58_ (v2, vs))))))))
   | _ -> failwith "DT: impossible branch"
 ))
   | Base_dList.C_Base_dList_dList_Nil -> (if (mc0 <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "record desugar") else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dList.C_Base_dList_dList_Nil)))

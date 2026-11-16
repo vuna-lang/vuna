@@ -5,7 +5,7 @@ type t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx = { f_Vuna_dCompiler_dCodegen_dDec
 let v_Vuna_dCompiler_dCodegen_dDecl_disAsciiAlphaNum = (fun c -> (if (if (if (c >= 65) then (c <= 90) else false) then true else (if (c >= 97) then (c <= 122) else false)) then true else (if (c >= 48) then (c <= 57) else false)))
 
 # 32 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar = (fun mc0 -> (if (mc0 = 46) then (Base_dList.C_Base_dList_dList_Cons (95, (Base_dList.C_Base_dList_dList_Cons (100, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 95) then (Base_dList.C_Base_dList_dList_Cons (95, (Base_dList.C_Base_dList_dList_Cons (117, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 39) then (Base_dList.C_Base_dList_dList_Cons (95, (Base_dList.C_Base_dList_dList_Cons (112, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 35) then (Base_dList.C_Base_dList_dList_Cons (95, (Base_dList.C_Base_dList_dList_Cons (104, Base_dList.C_Base_dList_dList_Nil)))) else (if (v_Vuna_dCompiler_dCodegen_dDecl_disAsciiAlphaNum mc0) then (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil)) else (Base_dList.dtp_unpack (String.concat "" ["_x"; (bi_strFromInt mc0); "_"]))))))))
+let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar = (fun mc0 -> (if (mc0 = 46) then (Base_dList.C_Base_dList_dList__x58__x58_ (95, (Base_dList.C_Base_dList_dList__x58__x58_ (100, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 95) then (Base_dList.C_Base_dList_dList__x58__x58_ (95, (Base_dList.C_Base_dList_dList__x58__x58_ (117, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 39) then (Base_dList.C_Base_dList_dList__x58__x58_ (95, (Base_dList.C_Base_dList_dList__x58__x58_ (112, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 35) then (Base_dList.C_Base_dList_dList__x58__x58_ (95, (Base_dList.C_Base_dList_dList__x58__x58_ (104, Base_dList.C_Base_dList_dList_Nil)))) else (if (v_Vuna_dCompiler_dCodegen_dDecl_disAsciiAlphaNum mc0) then (Base_dList.C_Base_dList_dList__x58__x58_ (mc0, Base_dList.C_Base_dList_dList_Nil)) else (Base_dList.dtp_unpack (String.concat "" ["_x"; (bi_strFromInt mc0); "_"]))))))))
 
 # 39 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName = (fun name -> (Base_dList.dtp_pack ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeChar) (Base_dList.dtp_unpack name))))
@@ -14,7 +14,7 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName = (fun name -> (Base_dList.dtp
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlPad3 = (fun s -> (if ((bi_strLength s) = 1) then ("00" ^ s) else (if ((bi_strLength s) = 2) then ("0" ^ s) else s)))
 
 # 45 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_Vuna_dCompiler_dCodegen_dDecl_docamlEscapeChar = (fun mc0 -> (if (mc0 = 34) then (Base_dList.C_Base_dList_dList_Cons (92, (Base_dList.C_Base_dList_dList_Cons (34, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 92) then (Base_dList.C_Base_dList_dList_Cons (92, (Base_dList.C_Base_dList_dList_Cons (92, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 10) then (Base_dList.C_Base_dList_dList_Cons (92, (Base_dList.C_Base_dList_dList_Cons (110, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 9) then (Base_dList.C_Base_dList_dList_Cons (92, (Base_dList.C_Base_dList_dList_Cons (116, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 13) then (Base_dList.C_Base_dList_dList_Cons (92, (Base_dList.C_Base_dList_dList_Cons (114, Base_dList.C_Base_dList_dList_Nil)))) else (if (if (mc0 >= 32) then (mc0 <= 126) else false) then (Base_dList.C_Base_dList_dList_Cons (mc0, Base_dList.C_Base_dList_dList_Nil)) else (Base_dList.dtp_unpack ("\\" ^ (v_Vuna_dCompiler_dCodegen_dDecl_docamlPad3 (bi_strFromInt mc0)))))))))))
+let v_Vuna_dCompiler_dCodegen_dDecl_docamlEscapeChar = (fun mc0 -> (if (mc0 = 34) then (Base_dList.C_Base_dList_dList__x58__x58_ (92, (Base_dList.C_Base_dList_dList__x58__x58_ (34, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 92) then (Base_dList.C_Base_dList_dList__x58__x58_ (92, (Base_dList.C_Base_dList_dList__x58__x58_ (92, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 10) then (Base_dList.C_Base_dList_dList__x58__x58_ (92, (Base_dList.C_Base_dList_dList__x58__x58_ (110, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 9) then (Base_dList.C_Base_dList_dList__x58__x58_ (92, (Base_dList.C_Base_dList_dList__x58__x58_ (116, Base_dList.C_Base_dList_dList_Nil)))) else (if (mc0 = 13) then (Base_dList.C_Base_dList_dList__x58__x58_ (92, (Base_dList.C_Base_dList_dList__x58__x58_ (114, Base_dList.C_Base_dList_dList_Nil)))) else (if (if (mc0 >= 32) then (mc0 <= 126) else false) then (Base_dList.C_Base_dList_dList__x58__x58_ (mc0, Base_dList.C_Base_dList_dList_Nil)) else (Base_dList.dtp_unpack ("\\" ^ (v_Vuna_dCompiler_dCodegen_dDecl_docamlPad3 (bi_strFromInt mc0)))))))))))
 
 # 53 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlString = (fun s -> (String.concat "" ["\""; (Base_dList.dtp_pack ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_docamlEscapeChar) (Base_dList.dtp_unpack s))); "\""]))
@@ -63,16 +63,16 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dqualCtorText = (fun qc family ctor -> (((v_
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText = (fun qc name -> (((v_Vuna_dCompiler_dCodegen_dDecl_dqualPrefix qc) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (qc).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) name)) (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName name)))
 
 # 128 "Vuna/Compiler/Codegen/Decl.vuna"
-let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = (Base_dList.C_Base_dList_dList_Cons ("and", (Base_dList.C_Base_dList_dList_Cons ("as", (Base_dList.C_Base_dList_dList_Cons ("assert", (Base_dList.C_Base_dList_dList_Cons ("asr", (Base_dList.C_Base_dList_dList_Cons ("begin", (Base_dList.C_Base_dList_dList_Cons ("class", (Base_dList.C_Base_dList_dList_Cons ("constraint", (Base_dList.C_Base_dList_dList_Cons ("do", (Base_dList.C_Base_dList_dList_Cons ("done", (Base_dList.C_Base_dList_dList_Cons ("downto", (Base_dList.C_Base_dList_dList_Cons ("else", (Base_dList.C_Base_dList_dList_Cons ("end", (Base_dList.C_Base_dList_dList_Cons ("exception", (Base_dList.C_Base_dList_dList_Cons ("external", (Base_dList.C_Base_dList_dList_Cons ("false", (Base_dList.C_Base_dList_dList_Cons ("for", (Base_dList.C_Base_dList_dList_Cons ("fun", (Base_dList.C_Base_dList_dList_Cons ("function", (Base_dList.C_Base_dList_dList_Cons ("functor", (Base_dList.C_Base_dList_dList_Cons ("if", (Base_dList.C_Base_dList_dList_Cons ("in", (Base_dList.C_Base_dList_dList_Cons ("include", (Base_dList.C_Base_dList_dList_Cons ("inherit", (Base_dList.C_Base_dList_dList_Cons ("initializer", (Base_dList.C_Base_dList_dList_Cons ("land", (Base_dList.C_Base_dList_dList_Cons ("lazy", (Base_dList.C_Base_dList_dList_Cons ("let", (Base_dList.C_Base_dList_dList_Cons ("lor", (Base_dList.C_Base_dList_dList_Cons ("lsl", (Base_dList.C_Base_dList_dList_Cons ("lsr", (Base_dList.C_Base_dList_dList_Cons ("lxor", (Base_dList.C_Base_dList_dList_Cons ("match", (Base_dList.C_Base_dList_dList_Cons ("method", (Base_dList.C_Base_dList_dList_Cons ("mod", (Base_dList.C_Base_dList_dList_Cons ("module", (Base_dList.C_Base_dList_dList_Cons ("mutable", (Base_dList.C_Base_dList_dList_Cons ("new", (Base_dList.C_Base_dList_dList_Cons ("nonrec", (Base_dList.C_Base_dList_dList_Cons ("object", (Base_dList.C_Base_dList_dList_Cons ("of", (Base_dList.C_Base_dList_dList_Cons ("open", (Base_dList.C_Base_dList_dList_Cons ("or", (Base_dList.C_Base_dList_dList_Cons ("private", (Base_dList.C_Base_dList_dList_Cons ("rec", (Base_dList.C_Base_dList_dList_Cons ("sig", (Base_dList.C_Base_dList_dList_Cons ("struct", (Base_dList.C_Base_dList_dList_Cons ("then", (Base_dList.C_Base_dList_dList_Cons ("to", (Base_dList.C_Base_dList_dList_Cons ("true", (Base_dList.C_Base_dList_dList_Cons ("try", (Base_dList.C_Base_dList_dList_Cons ("type", (Base_dList.C_Base_dList_dList_Cons ("val", (Base_dList.C_Base_dList_dList_Cons ("virtual", (Base_dList.C_Base_dList_dList_Cons ("when", (Base_dList.C_Base_dList_dList_Cons ("while", (Base_dList.C_Base_dList_dList_Cons ("with", Base_dList.C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = (Base_dList.C_Base_dList_dList__x58__x58_ ("and", (Base_dList.C_Base_dList_dList__x58__x58_ ("as", (Base_dList.C_Base_dList_dList__x58__x58_ ("assert", (Base_dList.C_Base_dList_dList__x58__x58_ ("asr", (Base_dList.C_Base_dList_dList__x58__x58_ ("begin", (Base_dList.C_Base_dList_dList__x58__x58_ ("class", (Base_dList.C_Base_dList_dList__x58__x58_ ("constraint", (Base_dList.C_Base_dList_dList__x58__x58_ ("do", (Base_dList.C_Base_dList_dList__x58__x58_ ("done", (Base_dList.C_Base_dList_dList__x58__x58_ ("downto", (Base_dList.C_Base_dList_dList__x58__x58_ ("else", (Base_dList.C_Base_dList_dList__x58__x58_ ("end", (Base_dList.C_Base_dList_dList__x58__x58_ ("exception", (Base_dList.C_Base_dList_dList__x58__x58_ ("external", (Base_dList.C_Base_dList_dList__x58__x58_ ("false", (Base_dList.C_Base_dList_dList__x58__x58_ ("for", (Base_dList.C_Base_dList_dList__x58__x58_ ("fun", (Base_dList.C_Base_dList_dList__x58__x58_ ("function", (Base_dList.C_Base_dList_dList__x58__x58_ ("functor", (Base_dList.C_Base_dList_dList__x58__x58_ ("if", (Base_dList.C_Base_dList_dList__x58__x58_ ("in", (Base_dList.C_Base_dList_dList__x58__x58_ ("include", (Base_dList.C_Base_dList_dList__x58__x58_ ("inherit", (Base_dList.C_Base_dList_dList__x58__x58_ ("initializer", (Base_dList.C_Base_dList_dList__x58__x58_ ("land", (Base_dList.C_Base_dList_dList__x58__x58_ ("lazy", (Base_dList.C_Base_dList_dList__x58__x58_ ("let", (Base_dList.C_Base_dList_dList__x58__x58_ ("lor", (Base_dList.C_Base_dList_dList__x58__x58_ ("lsl", (Base_dList.C_Base_dList_dList__x58__x58_ ("lsr", (Base_dList.C_Base_dList_dList__x58__x58_ ("lxor", (Base_dList.C_Base_dList_dList__x58__x58_ ("match", (Base_dList.C_Base_dList_dList__x58__x58_ ("method", (Base_dList.C_Base_dList_dList__x58__x58_ ("mod", (Base_dList.C_Base_dList_dList__x58__x58_ ("module", (Base_dList.C_Base_dList_dList__x58__x58_ ("mutable", (Base_dList.C_Base_dList_dList__x58__x58_ ("new", (Base_dList.C_Base_dList_dList__x58__x58_ ("nonrec", (Base_dList.C_Base_dList_dList__x58__x58_ ("object", (Base_dList.C_Base_dList_dList__x58__x58_ ("of", (Base_dList.C_Base_dList_dList__x58__x58_ ("open", (Base_dList.C_Base_dList_dList__x58__x58_ ("or", (Base_dList.C_Base_dList_dList__x58__x58_ ("private", (Base_dList.C_Base_dList_dList__x58__x58_ ("rec", (Base_dList.C_Base_dList_dList__x58__x58_ ("sig", (Base_dList.C_Base_dList_dList__x58__x58_ ("struct", (Base_dList.C_Base_dList_dList__x58__x58_ ("then", (Base_dList.C_Base_dList_dList__x58__x58_ ("to", (Base_dList.C_Base_dList_dList__x58__x58_ ("true", (Base_dList.C_Base_dList_dList__x58__x58_ ("try", (Base_dList.C_Base_dList_dList__x58__x58_ ("type", (Base_dList.C_Base_dList_dList__x58__x58_ ("val", (Base_dList.C_Base_dList_dList__x58__x58_ ("virtual", (Base_dList.C_Base_dList_dList__x58__x58_ ("when", (Base_dList.C_Base_dList_dList__x58__x58_ ("while", (Base_dList.C_Base_dList_dList__x58__x58_ ("with", Base_dList.C_Base_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 # 188 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName = (fun name -> ((fun oc -> (if ((Base_dList.v_Base_dList_dmemName oc) v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords) then (oc ^ "_") else oc)) (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName name)))
 
 # 199 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dinterpose = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__1, dtb__2) -> (match dtb__2 with
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList_Cons (dtb__1, Base_dList.C_Base_dList_dList_Nil))
-  | _ -> (Base_dList.C_Base_dList_dList_Cons (dtb__1, (Base_dList.C_Base_dList_dList_Cons (mc0, ((v_Vuna_dCompiler_dCodegen_dDecl_dinterpose mc0) dtb__2)))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, dtb__2) -> (match dtb__2 with
+  | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, Base_dList.C_Base_dList_dList_Nil))
+  | _ -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, (Base_dList.C_Base_dList_dList__x58__x58_ (mc0, ((v_Vuna_dCompiler_dCodegen_dDecl_dinterpose mc0) dtb__2)))))
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -89,7 +89,7 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamNames = (fun n -> ((Base_dList.v_B
 
 # 210 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl = (fun mc0 -> (if (mc0 = 0) then "" else ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__3, dtb__4) -> (match dtb__4 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, dtb__4) -> (match dtb__4 with
   | Base_dList.C_Base_dList_dList_Nil -> (dtb__3 ^ " ")
   | _ -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith ", ") nd_uscrut1); ") "])
 )
@@ -98,7 +98,7 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dtypeParamDecl = (fun mc0 -> (if (mc0 = 0) t
 
 # 216 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dfamilyTyText = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__5, dtb__6) -> (match dtb__6 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__5, dtb__6) -> (match dtb__6 with
   | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" [dtb__5; " "; (Base_dPair.v_Base_dPair_dfirstOf ((v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText mc0) mc1))])
   | _ -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith ", ") mc2); ") "; (Base_dPair.v_Base_dPair_dfirstOf ((v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText mc0) mc1))])
 )
@@ -111,14 +111,14 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dparenOne = (fun t -> (String.concat "" ["("
 
 # 226 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dparenList = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__7, dtb__8) -> ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dCodegen_dDecl_dparenOne dtb__7), Base_dList.C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dCodegen_dDecl_dparenList dtb__8))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__7, dtb__8) -> ((Base_dList.v_Base_dList_dappend (Base_dList.C_Base_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dCodegen_dDecl_dparenOne dtb__7), Base_dList.C_Base_dList_dList_Nil))) (v_Vuna_dCompiler_dCodegen_dDecl_dparenList dtb__8))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 221 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dctorDeclText = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match dtb__10 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__9, dtb__10) -> (match dtb__10 with
   | Base_dList.C_Base_dList_dList_Nil -> (String.concat "" [mc0; " of "; (v_Vuna_dCompiler_dCodegen_dDecl_dparenOne dtb__9)])
   | _ -> (String.concat "" [mc0; " of "; ((v_Vuna_dCompiler_dCodegen_dDecl_djoinWith " * ") (v_Vuna_dCompiler_dCodegen_dDecl_dparenList mc1))])
 )
@@ -167,8 +167,8 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dctorBodyOf = (fun mc0 mc1 mc2 -> (match mc2
 
 # 274 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls = (fun mc0 mc1 mc2 mc3 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__25, dtb__26) -> (match mc3 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" [((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldLabel mc1) (Base_dPair.v_Base_dPair_dsecondOf dtb__25)); " : "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__27)]), ((((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls mc0) mc1) dtb__26) dtb__28)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__25, dtb__26) -> (match mc3 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" [((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldLabel mc1) (Base_dPair.v_Base_dPair_dsecondOf dtb__25)); " : "; ((v_Vuna_dCompiler_dCodegen_dDecl_dirTyText mc0) dtb__27)]), ((((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldDecls mc0) mc1) dtb__26) dtb__28)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 )
@@ -192,7 +192,7 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dirTypeDeclsText = (fun mc0 mc1 -> (match mc
 
 # 289 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun mc0 -> (match mc0 with
-  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__39, dtb__40) -> (Base_dList.C_Base_dList_dList_Cons (dtb__39, ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) dtb__40)))
+  | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__39, dtb__40) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__39, ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) dtb__40)))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__41, dtb__42) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__41)) (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__42))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyRef (dtb__43) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__43)
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyArray (dtb__44) -> (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__44)
@@ -207,7 +207,7 @@ let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun mc0 -> (match mc
 
 # 301 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo = (fun mc0 mc1 mc2 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__46, dtb__47) -> ((fun owner -> (if (if (owner = "") then true else (owner = (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) mc2) else (if ((Base_dList.v_Base_dList_dmemName owner) mc2) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) mc2) else (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) (Base_dList.C_Base_dList_dList_Cons (owner, mc2)))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) dtb__46))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__46, dtb__47) -> ((fun owner -> (if (if (owner = "") then true else (owner = (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) mc2) else (if ((Base_dList.v_Base_dList_dmemName owner) mc2) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) mc2) else (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__47) (Base_dList.C_Base_dList_dList__x58__x58_ (owner, mc2)))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) dtb__46))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.v_Base_dList_dreverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))

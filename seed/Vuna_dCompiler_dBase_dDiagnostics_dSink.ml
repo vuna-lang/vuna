@@ -20,7 +20,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart = (fun mc0 -> (match mc0
 
 # 36 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__1, dtb__2) -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart (dtb__1).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan) ^ (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey dtb__2))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, dtb__2) -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart (dtb__1).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan) ^ (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey dtb__2))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -30,9 +30,9 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey = (fun d -> (String.conca
 
 # 56 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((fun key -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) key) mc1) with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, dtb__4) -> ((fun key -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) key) mc1) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__5) -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) mc1) mc2)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) key) true) mc1)) (Base_dList.C_Base_dList_dList_Cons (dtb__3, mc2)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) key) true) mc1)) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey dtb__3))
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.v_Base_dList_dreverse mc2)

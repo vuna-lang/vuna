@@ -5,4 +5,4 @@ type t_Vuna_dCompiler_dWasm_dInstr_dInstr = C_Vuna_dCompiler_dWasm_dInstr_dInstr
 let v_Vuna_dCompiler_dWasm_dInstr_dseqInstr = (fun xs ys -> ((Base_dList.v_Base_dList_dappend xs) ys))
 
 # 90 "Vuna/Compiler/Wasm/Instr.vuna"
-let v_Vuna_dCompiler_dWasm_dInstr_doneInstr = (fun i -> (Base_dList.C_Base_dList_dList_Cons (i, Base_dList.C_Base_dList_dList_Nil)))
+let v_Vuna_dCompiler_dWasm_dInstr_doneInstr = (fun i -> (Base_dList.C_Base_dList_dList__x58__x58_ (i, Base_dList.C_Base_dList_dList_Nil)))

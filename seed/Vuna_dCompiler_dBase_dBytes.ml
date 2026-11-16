@@ -18,7 +18,7 @@ let v_Vuna_dCompiler_dBase_dBytes_dcurSlice = (fun c start len -> (((dtp_substri
 
 # 68 "Vuna/Compiler/Base/Bytes.vuna"
 let rec v_Vuna_dCompiler_dBase_dBytes_dlenOf = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (1 + (v_Vuna_dCompiler_dBase_dBytes_dlenOf dtb__1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (1 + (v_Vuna_dCompiler_dBase_dBytes_dlenOf dtb__1))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -30,31 +30,31 @@ let v_Vuna_dCompiler_dBase_dBytes_dencConcat = (fun parts -> (Base_dList.dtp_con
 let v_Vuna_dCompiler_dBase_dBytes_dencTop = (fun f x -> (v_Vuna_dCompiler_dBase_dBytes_dencConcat ((f x) Base_dList.C_Base_dList_dList_Nil)))
 
 # 81 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencTag = (fun n acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["#"; (bi_strFromInt n); ";"]), acc)))
+let v_Vuna_dCompiler_dBase_dBytes_dencTag = (fun n acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["#"; (bi_strFromInt n); ";"]), acc)))
 
 # 85 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencInt = (fun n acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["i"; (bi_strFromInt n); ";"]), acc)))
+let v_Vuna_dCompiler_dBase_dBytes_dencInt = (fun n acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["i"; (bi_strFromInt n); ";"]), acc)))
 
 # 89 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencStr = (fun s acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["s"; (bi_strFromInt (bi_strLength s)); ":"]), (Base_dList.C_Base_dList_dList_Cons (s, acc)))))
+let v_Vuna_dCompiler_dBase_dBytes_dencStr = (fun s acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["s"; (bi_strFromInt (bi_strLength s)); ":"]), (Base_dList.C_Base_dList_dList__x58__x58_ (s, acc)))))
 
 # 93 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencBool = (fun mc0 mc1 -> (if mc0 then (Base_dList.C_Base_dList_dList_Cons ("b1", mc1)) else (Base_dList.C_Base_dList_dList_Cons ("b0", mc1))))
+let v_Vuna_dCompiler_dBase_dBytes_dencBool = (fun mc0 mc1 -> (if mc0 then (Base_dList.C_Base_dList_dList__x58__x58_ ("b1", mc1)) else (Base_dList.C_Base_dList_dList__x58__x58_ ("b0", mc1))))
 
 # 102 "Vuna/Compiler/Base/Bytes.vuna"
 let rec v_Vuna_dCompiler_dBase_dBytes_dencListGo = (fun mc0 mc1 mc2 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__2, dtb__3) -> ((mc0 dtb__2) (((v_Vuna_dCompiler_dBase_dBytes_dencListGo mc0) dtb__3) mc2))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__2, dtb__3) -> ((mc0 dtb__2) (((v_Vuna_dCompiler_dBase_dBytes_dencListGo mc0) dtb__3) mc2))
   | Base_dList.C_Base_dList_dList_Nil -> mc2
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 98 "Vuna/Compiler/Base/Bytes.vuna"
-let v_Vuna_dCompiler_dBase_dBytes_dencList = (fun f xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), (((v_Vuna_dCompiler_dBase_dBytes_dencListGo f) xs) acc))))
+let v_Vuna_dCompiler_dBase_dBytes_dencList = (fun f xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), (((v_Vuna_dCompiler_dBase_dBytes_dencListGo f) xs) acc))))
 
 # 107 "Vuna/Compiler/Base/Bytes.vuna"
 let v_Vuna_dCompiler_dBase_dBytes_dencMaybe = (fun mc0 mc1 mc2 -> (match mc1 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4) -> (Base_dList.C_Base_dList_dList_Cons ("1", ((mc0 dtb__4) mc2)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList_Cons ("0", mc2))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__4) -> (Base_dList.C_Base_dList_dList__x58__x58_ ("1", ((mc0 dtb__4) mc2)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList__x58__x58_ ("0", mc2))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -115,7 +115,7 @@ let v_Vuna_dCompiler_dBase_dBytes_ddecStr = (fun fuel c -> (if (fuel <= 0) then 
 )) (v_Vuna_dCompiler_dBase_dBytes_dcurChar c))))
 
 # 179 "Vuna/Compiler/Base/Bytes.vuna"
-let rec v_Vuna_dCompiler_dBase_dBytes_ddecItems = (fun fp n fuel c acc -> (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = c })) else (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((v_Vuna_dCompiler_dBase_dBytes_dthenPair ((fp fuel) c)) (fun x b -> (((((v_Vuna_dCompiler_dBase_dBytes_ddecItems fp) (n - 1)) (fuel - 1)) b) (Base_dList.C_Base_dList_dList_Cons (x, acc))))))))
+let rec v_Vuna_dCompiler_dBase_dBytes_ddecItems = (fun fp n fuel c acc -> (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = c })) else (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((v_Vuna_dCompiler_dBase_dBytes_dthenPair ((fp fuel) c)) (fun x b -> (((((v_Vuna_dCompiler_dBase_dBytes_ddecItems fp) (n - 1)) (fuel - 1)) b) (Base_dList.C_Base_dList_dList__x58__x58_ (x, acc))))))))
 
 # 171 "Vuna/Compiler/Base/Bytes.vuna"
 let v_Vuna_dCompiler_dBase_dBytes_ddecList = (fun fp fuel c -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun nd_uscrut4 -> (match nd_uscrut4 with

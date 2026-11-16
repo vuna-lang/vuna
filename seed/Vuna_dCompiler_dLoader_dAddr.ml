@@ -9,10 +9,10 @@ let v_Vuna_dCompiler_dLoader_dAddr_daddrSchema = "vuna-addr 1"
 let v_Vuna_dCompiler_dLoader_dAddr_dhashHex = (fun s -> (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestHex (Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_ddigestOfString s)))
 
 # 39 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_daddrOf = (fun parts -> (v_Vuna_dCompiler_dLoader_dAddr_dhashHex ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr)) (Base_dList.C_Base_dList_dList_Cons (v_Vuna_dCompiler_dLoader_dAddr_daddrSchema, parts)))))
+let v_Vuna_dCompiler_dLoader_dAddr_daddrOf = (fun parts -> (v_Vuna_dCompiler_dLoader_dAddr_dhashHex ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr)) (Base_dList.C_Base_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dAddr_daddrSchema, parts)))))
 
 # 44 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dprojectIdAddrOf = (fun dir -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dList.C_Base_dList_dList_Cons ("project", (Base_dList.C_Base_dList_dList_Cons (dir, Base_dList.C_Base_dList_dList_Nil))))))
+let v_Vuna_dCompiler_dLoader_dAddr_dprojectIdAddrOf = (fun dir -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dList.C_Base_dList_dList__x58__x58_ ("project", (Base_dList.C_Base_dList_dList__x58__x58_ (dir, Base_dList.C_Base_dList_dList_Nil))))))
 
 # 58 "Vuna/Compiler/Loader/Addr.vuna"
 let v_Vuna_dCompiler_dLoader_dAddr_dheaderKind = "header"
@@ -95,7 +95,7 @@ let v_Vuna_dCompiler_dLoader_dAddr_ddecModHeaderComplete = (fun s -> ((fun nd_us
 )) ((v_Vuna_dCompiler_dLoader_dAddr_ddecHeader 65536) (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurOf s))))
 
 # 113 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dheaderAddrOf = (fun pkgKey moduleName srcAddr -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dList.C_Base_dList_dList_Cons ("header", (Base_dList.C_Base_dList_dList_Cons (v_Vuna_dCompiler_dLoader_dAddr_dheaderCodec, (Base_dList.C_Base_dList_dList_Cons (pkgKey, (Base_dList.C_Base_dList_dList_Cons (moduleName, (Base_dList.C_Base_dList_dList_Cons (srcAddr, Base_dList.C_Base_dList_dList_Nil))))))))))))
+let v_Vuna_dCompiler_dLoader_dAddr_dheaderAddrOf = (fun pkgKey moduleName srcAddr -> (v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dList.C_Base_dList_dList__x58__x58_ ("header", (Base_dList.C_Base_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dAddr_dheaderCodec, (Base_dList.C_Base_dList_dList__x58__x58_ (pkgKey, (Base_dList.C_Base_dList_dList__x58__x58_ (moduleName, (Base_dList.C_Base_dList_dList__x58__x58_ (srcAddr, Base_dList.C_Base_dList_dList_Nil))))))))))))
 
 # 117 "Vuna/Compiler/Loader/Addr.vuna"
 let v_Vuna_dCompiler_dLoader_dAddr_dreadHeaderEff = (fun nFs nEnv nProcess addr -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreObjectReadEff nFs) nEnv) nProcess) v_Vuna_dCompiler_dLoader_dAddr_dheaderKind) v_Vuna_dCompiler_dLoader_dAddr_dheaderCodec) addr)) (fun payload -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (match payload with
@@ -109,7 +109,7 @@ let v_Vuna_dCompiler_dLoader_dAddr_dwriteHeaderEff = (fun nFs nEnv nProcess addr
 
 # 136 "Vuna/Compiler/Loader/Addr.vuna"
 let rec v_Vuna_dCompiler_dLoader_dAddr_dlookupImports = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__25, dtb__26) -> (match dtb__25 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__25, dtb__26) -> (match dtb__25 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__27; Base_dPair.f_Base_dPair_dPair_second = dtb__28 } -> (if (dtb__27 = mc0) then dtb__28 else ((v_Vuna_dCompiler_dLoader_dAddr_dlookupImports mc0) dtb__26))
   | _ -> failwith "DT: impossible branch"
 )
@@ -119,7 +119,7 @@ let rec v_Vuna_dCompiler_dLoader_dAddr_dlookupImports = (fun mc0 mc1 -> (match m
 
 # 140 "Vuna/Compiler/Loader/Addr.vuna"
 let rec v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__29, dtb__30) -> (if (mc0 <= 0) then { Base_dPair.f_Base_dPair_dPair_first = mc3; Base_dPair.f_Base_dPair_dPair_second = mc4 } else (if ((Base_dList.v_Base_dList_dmemName dtb__29) mc3) then (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo mc0) mc1) dtb__30) mc3) mc4) else ((fun deps -> ((fun after -> (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo (mc0 - 1)) mc1) dtb__30) (Base_dList.C_Base_dList_dList_Cons (dtb__29, (Base_dPair.v_Base_dPair_dfirstOf after)))) (Base_dList.C_Base_dList_dList_Cons (dtb__29, (Base_dPair.v_Base_dPair_dsecondOf after))))) (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo (mc0 - 1)) mc1) deps) mc3) mc4))) ((v_Vuna_dCompiler_dLoader_dAddr_dlookupImports dtb__29) mc1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, dtb__30) -> (if (mc0 <= 0) then { Base_dPair.f_Base_dPair_dPair_first = mc3; Base_dPair.f_Base_dPair_dPair_second = mc4 } else (if ((Base_dList.v_Base_dList_dmemName dtb__29) mc3) then (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo mc0) mc1) dtb__30) mc3) mc4) else ((fun deps -> ((fun after -> (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo (mc0 - 1)) mc1) dtb__30) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, (Base_dPair.v_Base_dPair_dfirstOf after)))) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, (Base_dPair.v_Base_dPair_dsecondOf after))))) (((((v_Vuna_dCompiler_dLoader_dAddr_dtopoVisitGo (mc0 - 1)) mc1) deps) mc3) mc4))) ((v_Vuna_dCompiler_dLoader_dAddr_dlookupImports dtb__29) mc1))))
   | Base_dList.C_Base_dList_dList_Nil -> { Base_dPair.f_Base_dPair_dPair_first = mc3; Base_dPair.f_Base_dPair_dPair_second = mc4 }
   | _ -> failwith "DT: impossible branch"
 ))

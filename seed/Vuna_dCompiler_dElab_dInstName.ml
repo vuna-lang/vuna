@@ -14,7 +14,7 @@ let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun s -> ((Base_dStrin
 
 # 51 "Vuna/Compiler/Elab/InstName.vuna"
 let rec v_Vuna_dCompiler_dElab_dInstName_dargSuffix = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__7, dtb__8) -> (String.concat "" ["_"; (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__7); (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__8)])
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__7, dtb__8) -> (String.concat "" ["_"; (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__7); (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__8)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -29,7 +29,7 @@ and v_Vuna_dCompiler_dElab_dInstName_dexprNameFor = (fun e -> (match e with
 
 # 46 "Vuna/Compiler/Elab/InstName.vuna"
 let v_Vuna_dCompiler_dElab_dInstName_dargSuffixTail = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> ((v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__18) ^ (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__19))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__18, dtb__19) -> ((v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__18) ^ (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__19))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))

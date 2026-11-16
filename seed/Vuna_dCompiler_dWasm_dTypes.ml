@@ -8,7 +8,7 @@ and t_Vuna_dCompiler_dWasm_dTypes_dWasmListFam = { f_Vuna_dCompiler_dWasm_dTypes
 let v_Vuna_dCompiler_dWasm_dTypes_disWatNameChar = (fun c -> (if (if (if (if (c >= 48) then (c <= 57) else false) then true else (if (c >= 65) then (c <= 90) else false)) then true else (if (c >= 97) then (c <= 122) else false)) then true else (c = 95)))
 
 # 53 "Vuna/Compiler/Wasm/Types.vuna"
-let v_Vuna_dCompiler_dWasm_dTypes_dwatNameChar = (fun c -> (if (v_Vuna_dCompiler_dWasm_dTypes_disWatNameChar c) then (Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Cons (c, Base_dList.C_Base_dList_dList_Nil))) else (String.concat "" ["_x"; (bi_strFromInt c); "_"])))
+let v_Vuna_dCompiler_dWasm_dTypes_dwatNameChar = (fun c -> (if (v_Vuna_dCompiler_dWasm_dTypes_disWatNameChar c) then (Base_dList.dtp_pack (Base_dList.C_Base_dList_dList__x58__x58_ (c, Base_dList.C_Base_dList_dList_Nil))) else (String.concat "" ["_x"; (bi_strFromInt c); "_"])))
 
 # 57 "Vuna/Compiler/Wasm/Types.vuna"
 let v_Vuna_dCompiler_dWasm_dTypes_dwatName = (fun name -> (Base_dList.dtp_pack ((Base_dList.v_Base_dList_dconcatMap (fun c -> (Base_dList.dtp_unpack (v_Vuna_dCompiler_dWasm_dTypes_dwatNameChar c)))) (Base_dList.dtp_unpack name))))
@@ -27,7 +27,7 @@ let v_Vuna_dCompiler_dWasm_dTypes_dwatDataNameOf = (fun n -> ("$d_" ^ (bi_strFro
 
 # 82 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dctorEntriesOfGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (Base_dList.C_Base_dList_dList_Cons ({ f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = (Base_dPair.v_Base_dPair_dfirstOf dtb__0); f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorTag = mc1; f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields = (Base_dList.v_Base_dList_dlength (Base_dPair.v_Base_dPair_dsecondOf dtb__0)) }, ((v_Vuna_dCompiler_dWasm_dTypes_dctorEntriesOfGo dtb__1) (mc1 + 1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = (Base_dPair.v_Base_dPair_dfirstOf dtb__0); f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorTag = mc1; f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields = (Base_dList.v_Base_dList_dlength (Base_dPair.v_Base_dPair_dsecondOf dtb__0)) }, ((v_Vuna_dCompiler_dWasm_dTypes_dctorEntriesOfGo dtb__1) (mc1 + 1))))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -37,7 +37,7 @@ let v_Vuna_dCompiler_dWasm_dTypes_dctorEntriesOf = (fun ctors -> ((v_Vuna_dCompi
 
 # 87 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dmaxCtorFields = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__2, dtb__3) -> ((fun m -> (if ((dtb__2).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields > m) then (dtb__2).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields else m)) (v_Vuna_dCompiler_dWasm_dTypes_dmaxCtorFields dtb__3))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__2, dtb__3) -> ((fun m -> (if ((dtb__2).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields > m) then (dtb__2).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields else m)) (v_Vuna_dCompiler_dWasm_dTypes_dmaxCtorFields dtb__3))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -55,14 +55,14 @@ let v_Vuna_dCompiler_dWasm_dTypes_dwasmFamsOf = (fun decls -> ((Base_dList.v_Bas
 
 # 106 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dwasmFamLookup = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__14, dtb__15) -> (if ((dtb__14).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamName = mc1) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__14)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmFamLookup dtb__15) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__14, dtb__15) -> (if ((dtb__14).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamName = mc1) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__14)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmFamLookup dtb__15) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 113 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorTagGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__16, dtb__17) -> (if ((dtb__16).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((dtb__16).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorTag)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorTagGo mc0) dtb__17))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__16, dtb__17) -> (if ((dtb__16).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((dtb__16).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorTag)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorTagGo mc0) dtb__17))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -72,7 +72,7 @@ let v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorTagOf = (fun fam ctorName -> ((v_Vuna
 
 # 121 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorFieldGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__18, dtb__19) -> (if ((dtb__18).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((dtb__18).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorFieldGo mc0) dtb__19))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__18, dtb__19) -> (if ((dtb__18).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorName = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((dtb__18).f_Vuna_dCompiler_dWasm_dTypes_dWasmCtor_wasmCtorFields)) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorFieldGo mc0) dtb__19))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -82,7 +82,7 @@ let v_Vuna_dCompiler_dWasm_dTypes_dwasmCtorFieldCountOf = (fun fam ctorName -> (
 
 # 129 "Vuna/Compiler/Wasm/Types.vuna"
 let rec v_Vuna_dCompiler_dWasm_dTypes_dwasmRecordFieldGo = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__20, dtb__21) -> (if ((Base_dPair.v_Base_dPair_dsecondOf dtb__20) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.v_Base_dPair_dfirstOf dtb__20))) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmRecordFieldGo mc0) dtb__21))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__20, dtb__21) -> (if ((Base_dPair.v_Base_dPair_dsecondOf dtb__20) = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((Base_dPair.v_Base_dPair_dfirstOf dtb__20))) else ((v_Vuna_dCompiler_dWasm_dTypes_dwasmRecordFieldGo mc0) dtb__21))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -97,11 +97,11 @@ let v_Vuna_dCompiler_dWasm_dTypes_dwasmIsRecordFam = (fun fam -> (match (fam).f_
 ))
 
 # 145 "Vuna/Compiler/Wasm/Types.vuna"
-let rec v_Vuna_dCompiler_dWasm_dTypes_drepeatField = (fun n -> (if (n <= 0) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList_Cons ({ Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldMut = false; Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy = Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvAnyRef }, (v_Vuna_dCompiler_dWasm_dTypes_drepeatField (n - 1))))))
+let rec v_Vuna_dCompiler_dWasm_dTypes_drepeatField = (fun n -> (if (n <= 0) then Base_dList.C_Base_dList_dList_Nil else (Base_dList.C_Base_dList_dList__x58__x58_ ({ Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldMut = false; Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy = Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvAnyRef }, (v_Vuna_dCompiler_dWasm_dTypes_drepeatField (n - 1))))))
 
 # 139 "Vuna/Compiler/Wasm/Types.vuna"
 let v_Vuna_dCompiler_dWasm_dTypes_dwasmFamFields = (fun fam -> (match (fam).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamKind with
-  | C_Vuna_dCompiler_dWasm_dTypes_dWasmFamKind_FamVariant -> (Base_dList.C_Base_dList_dList_Cons ({ Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldMut = false; Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy = Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvI32 }, (v_Vuna_dCompiler_dWasm_dTypes_drepeatField (fam).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamMaxFields)))
+  | C_Vuna_dCompiler_dWasm_dTypes_dWasmFamKind_FamVariant -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldMut = false; Vuna_dCompiler_dWasm_dModel.f_Vuna_dCompiler_dWasm_dModel_dWatField_watFieldTy = Vuna_dCompiler_dWasm_dModel.C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvI32 }, (v_Vuna_dCompiler_dWasm_dTypes_drepeatField (fam).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamMaxFields)))
   | C_Vuna_dCompiler_dWasm_dTypes_dWasmFamKind_FamRecord -> (v_Vuna_dCompiler_dWasm_dTypes_drepeatField (Base_dList.v_Base_dList_dlength (fam).f_Vuna_dCompiler_dWasm_dTypes_dWasmFam_wasmFamRecordFields))
   | C_Vuna_dCompiler_dWasm_dTypes_dWasmFamKind_FamUnboxed -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"

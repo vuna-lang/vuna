@@ -77,11 +77,11 @@ let v_Traversable_uBase_uResult_uResult_uf = (fun _uctx0 -> (Base_dTraversable.C
 
 # 46 "Base/Result.vuna"
 let rec v_Base_dResult_dtraverse = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__24, dtb__25) -> (match (mc0 dtb__24) with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__24, dtb__25) -> (match (mc0 dtb__24) with
   | C_Base_dResult_dResult_Err (dtb__26) -> (C_Base_dResult_dResult_Err (dtb__26))
   | C_Base_dResult_dResult_Ok (dtb__27) -> (match ((v_Base_dResult_dtraverse mc0) dtb__25) with
   | C_Base_dResult_dResult_Err (dtb__28) -> (C_Base_dResult_dResult_Err (dtb__28))
-  | C_Base_dResult_dResult_Ok (dtb__29) -> (C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__29))))
+  | C_Base_dResult_dResult_Ok (dtb__29) -> (C_Base_dResult_dResult_Ok ((Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__29))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

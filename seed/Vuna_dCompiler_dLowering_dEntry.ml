@@ -14,10 +14,10 @@ let v_Vuna_dCompiler_dLowering_dEntry_dactionResultTyIn = (fun mc0 -> (match mc0
 # 31 "Vuna/Compiler/Lowering/Entry.vuna"
 let rec v_Vuna_dCompiler_dLowering_dEntry_dcollectBuiltinRowTags = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TCon (dtb__7, dtb__8) -> (if (dtb__7 = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_deffRowConsCtor) then ((fun nd_uscrut3 -> (match nd_uscrut3 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match dtb__10 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__11, dtb__12) -> (match dtb__12 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__13, dtb__14) -> ((fun rest -> ((fun tagTerm -> (match tagTerm with
-  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__15) -> (if (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disBuiltinEffectTag dtb__15) then (Base_dList.C_Base_dList_dList_Cons (dtb__15, rest)) else rest)
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__9, dtb__10) -> (match dtb__10 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__11, dtb__12) -> (match dtb__12 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__13, dtb__14) -> ((fun rest -> ((fun tagTerm -> (match tagTerm with
+  | Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__15) -> (if (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_disBuiltinEffectTag dtb__15) then (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__15, rest)) else rest)
   | _ -> rest
 )) (Base_dPair.v_Base_dPair_dfirstOf dtb__11))) (v_Vuna_dCompiler_dLowering_dEntry_dcollectBuiltinRowTags (Base_dPair.v_Base_dPair_dfirstOf dtb__13)))
   | _ -> Base_dList.C_Base_dList_dList_Nil
@@ -65,14 +65,14 @@ let v_Vuna_dCompiler_dLowering_dEntry_dmainShowIr = (fun tyTerm -> (match ((((Vu
 
 # 86 "Vuna/Compiler/Lowering/Entry.vuna"
 let rec v_Vuna_dCompiler_dLowering_dEntry_dfilterMapRunHost = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> ((fun host -> (if (host = "") then (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapRunHost dtb__28) else (Base_dList.C_Base_dList_dList_Cons (host, (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapRunHost dtb__28))))) (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOf dtb__27))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> ((fun host -> (if (host = "") then (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapRunHost dtb__28) else (Base_dList.C_Base_dList_dList__x58__x58_ (host, (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapRunHost dtb__28))))) (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectImplOf dtb__27))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 95 "Vuna/Compiler/Lowering/Entry.vuna"
 let rec v_Vuna_dCompiler_dLowering_dEntry_dfilterMapErrorRunHost = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__29, dtb__30) -> ((fun host -> (if (host = "") then (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapErrorRunHost dtb__30) else (Base_dList.C_Base_dList_dList_Cons (host, (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapErrorRunHost dtb__30))))) (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectErrorRunHostOf dtb__29))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, dtb__30) -> ((fun host -> (if (host = "") then (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapErrorRunHost dtb__30) else (Base_dList.C_Base_dList_dList__x58__x58_ (host, (v_Vuna_dCompiler_dLowering_dEntry_dfilterMapErrorRunHost dtb__30))))) (Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dbuiltinEffectErrorRunHostOf dtb__29))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))

@@ -21,10 +21,10 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTok = (fun mc0 mc1 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 # 59 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartListGo xs) acc))))
 # 62 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__11, dtb__12) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPart dtb__11) ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartListGo dtb__12) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__11, dtb__12) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPart dtb__11) ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencTmplPartListGo dtb__12) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -34,10 +34,10 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTok = (fun mc0 mc1 -> (match
   | _ -> failwith "DT: impossible branch"
 ))
 # 73 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokListGo xs) acc))))
 # 76 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__15, dtb__16) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTok dtb__15) ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokListGo dtb__16) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__15, dtb__16) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTok dtb__15) ((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_dencPTokListGo dtb__16) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -181,7 +181,7 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecTmplPartList = (fun fuel byte
 # 169 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecTmplPartItems = (fun fuel n bytes acc -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__67) -> (match dtb__67 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__68; Base_dPair.f_Base_dPair_dPair_second = dtb__69 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecTmplPartItems (fuel - 1)) (n - 1)) dtb__69) (Base_dList.C_Base_dList_dList_Cons (dtb__68, acc)))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__68; Base_dPair.f_Base_dPair_dPair_second = dtb__69 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecTmplPartItems (fuel - 1)) (n - 1)) dtb__69) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__68, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -199,7 +199,7 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecPTokList = (fun fuel bytes ->
 # 183 "Vuna/Compiler/Frontend/Canonical/Lex.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecPTokItems = (fun fuel n bytes acc -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__73) -> (match dtb__73 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__74; Base_dPair.f_Base_dPair_dPair_second = dtb__75 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecPTokItems (fuel - 1)) (n - 1)) dtb__75) (Base_dList.C_Base_dList_dList_Cons (dtb__74, acc)))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__74; Base_dPair.f_Base_dPair_dPair_second = dtb__75 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dLex_ddecPTokItems (fuel - 1)) (n - 1)) dtb__75) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__74, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing

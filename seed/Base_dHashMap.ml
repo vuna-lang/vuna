@@ -6,7 +6,7 @@ let v_Base_dHashMap_d_ubucketOf = (fun n -> ((fun m -> (if (m < 0) then (m + 102
 
 # 33 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_d_ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__0, dtb__1) -> (match dtb__0 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__0 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__2; Base_dPair.f_Base_dPair_dPair_second = dtb__3 } -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) mc0) dtb__2) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__3)) else (((v_Base_dHashMap_d_ulookupAssoc _uctx0) mc0) dtb__1))
   | _ -> failwith "DT: impossible branch"
 )
@@ -16,7 +16,7 @@ let rec v_Base_dHashMap_d_ulookupAssoc = (fun _uctx0 mc0 mc1 -> (match mc1 with
 
 # 38 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_d_uhasKeyIn = (fun _uctx0 mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__4, dtb__5) -> (match dtb__4 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (match dtb__4 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__6; Base_dPair.f_Base_dPair_dPair_second = dtb__7 } -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ _uctx0) mc0) dtb__6) then true else (((v_Base_dHashMap_d_uhasKeyIn _uctx0) mc0) dtb__5))
   | _ -> failwith "DT: impossible branch"
 )
@@ -26,8 +26,8 @@ let rec v_Base_dHashMap_d_uhasKeyIn = (fun _uctx0 mc0 mc1 -> (match mc1 with
 
 # 43 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_d_udedupGo = (fun _uctx0 mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__8, dtb__9) -> (match dtb__8 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__10; Base_dPair.f_Base_dPair_dPair_second = dtb__11 } -> (if (((v_Base_dHashMap_d_uhasKeyIn _uctx0) dtb__10) mc1) then (((v_Base_dHashMap_d_udedupGo _uctx0) dtb__9) mc1) else (((v_Base_dHashMap_d_udedupGo _uctx0) dtb__9) (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__10; Base_dPair.f_Base_dPair_dPair_second = dtb__11 }, mc1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__8, dtb__9) -> (match dtb__8 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__10; Base_dPair.f_Base_dPair_dPair_second = dtb__11 } -> (if (((v_Base_dHashMap_d_uhasKeyIn _uctx0) dtb__10) mc1) then (((v_Base_dHashMap_d_udedupGo _uctx0) dtb__9) mc1) else (((v_Base_dHashMap_d_udedupGo _uctx0) dtb__9) (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = dtb__10; Base_dPair.f_Base_dPair_dPair_second = dtb__11 }, mc1))))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.v_Base_dList_dreverse mc1)
@@ -38,7 +38,7 @@ let rec v_Base_dHashMap_d_udedupGo = (fun _uctx0 mc0 mc1 -> (match mc0 with
 let v_Base_dHashMap_d_udedupBucket = (fun _uctx0 xs -> (((v_Base_dHashMap_d_udedupGo _uctx0) xs) Base_dList.C_Base_dList_dList_Nil))
 
 # 54 "Base/HashMap.vuna"
-let v_Base_dHashMap_dinsert = (fun _uctx0 mc0 mc1 mc2 -> (let dtb__12 = mc2 in ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (((Base_dArray.v_Base_dArray_dset base) oi) (((Base_dArray.v_Base_dArray_dset outer) ii) (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }, inner))))) ((Base_dArray.v_Base_dArray_dget outer) ii))) ((Base_dArray.v_Base_dArray_dget base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_d_ubucketOf ((Base_dHashable.v_Base_dHashable_dhash _uctx0) mc0)))) (if ((Base_dArray.v_Base_dArray_dlength dtb__12) = 0) then ((Base_dArray.v_Base_dArray_dmake 32) ((Base_dArray.v_Base_dArray_dmake 32) Base_dList.C_Base_dList_dList_Nil)) else dtb__12))))
+let v_Base_dHashMap_dinsert = (fun _uctx0 mc0 mc1 mc2 -> (let dtb__12 = mc2 in ((fun base -> ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> ((fun outer -> ((fun inner -> (((Base_dArray.v_Base_dArray_dset base) oi) (((Base_dArray.v_Base_dArray_dset outer) ii) (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }, inner))))) ((Base_dArray.v_Base_dArray_dget outer) ii))) ((Base_dArray.v_Base_dArray_dget base) oi))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_d_ubucketOf ((Base_dHashable.v_Base_dHashable_dhash _uctx0) mc0)))) (if ((Base_dArray.v_Base_dArray_dlength dtb__12) = 0) then ((Base_dArray.v_Base_dArray_dmake 32) ((Base_dArray.v_Base_dArray_dmake 32) Base_dList.C_Base_dList_dList_Nil)) else dtb__12))))
 
 # 68 "Base/HashMap.vuna"
 let v_Base_dHashMap_dlookup = (fun _uctx0 _uctx1 mc0 mc1 -> (let dtb__13 = mc1 in (if ((Base_dArray.v_Base_dArray_dlength dtb__13) = 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else ((fun b -> ((fun qi -> ((fun oi -> ((fun ii -> (((v_Base_dHashMap_d_ulookupAssoc _uctx1) mc0) ((Base_dArray.v_Base_dArray_dget ((Base_dArray.v_Base_dArray_dget dtb__13) oi)) ii))) (bi_natFromInt (b - (qi * 32))))) (bi_natFromInt qi))) (if 32 = 0 then failwith "division by zero" else b / 32))) (v_Base_dHashMap_d_ubucketOf ((Base_dHashable.v_Base_dHashable_dhash _uctx0) mc0))))))
@@ -52,7 +52,7 @@ let v_Base_dHashMap_dmember = (fun _uctx0 _uctx1 key t -> (match ((((v_Base_dHas
 
 # 85 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_dinsertAll = (fun _uctx0 mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__15, dtb__16) -> (match dtb__15 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__15, dtb__16) -> (match dtb__15 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__17; Base_dPair.f_Base_dPair_dPair_second = dtb__18 } -> (((v_Base_dHashMap_dinsertAll _uctx0) dtb__16) ((((v_Base_dHashMap_dinsert _uctx0) dtb__17) dtb__18) mc1))
   | _ -> failwith "DT: impossible branch"
 )
@@ -62,7 +62,7 @@ let rec v_Base_dHashMap_dinsertAll = (fun _uctx0 mc0 mc1 -> (match mc0 with
 
 # 90 "Base/HashMap.vuna"
 let rec v_Base_dHashMap_dfromList = (fun _uctx0 mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__19, dtb__20) -> (match dtb__19 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__19, dtb__20) -> (match dtb__19 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__21; Base_dPair.f_Base_dPair_dPair_second = dtb__22 } -> ((((v_Base_dHashMap_dinsert _uctx0) dtb__21) dtb__22) ((v_Base_dHashMap_dfromList _uctx0) dtb__20))
   | _ -> failwith "DT: impossible branch"
 )

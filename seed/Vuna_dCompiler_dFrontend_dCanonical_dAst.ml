@@ -19,34 +19,34 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencReprTier = (fun mc0 mc1 -> (m
 
 # 64 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencMaybeQty = (fun mc0 mc1 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> (Base_dList.C_Base_dList_dList_Cons ("1", ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencQty dtb__0) mc1)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList_Cons ("0", mc1))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> (Base_dList.C_Base_dList_dList__x58__x58_ ("1", ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencQty dtb__0) mc1)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList__x58__x58_ ("0", mc1))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 83 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__1, dtb__2) -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr dtb__1) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrListGo dtb__2) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, dtb__2) -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr dtb__1) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrListGo dtb__2) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 79 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrListGo xs) acc))))
+let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrListGo xs) acc))))
 
 # 97 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatListGo xs) acc))))
+let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatListGo xs) acc))))
 # 101 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__3, dtb__4) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPat dtb__3) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatListGo dtb__4) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, dtb__4) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPat dtb__3) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatListGo dtb__4) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 151 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatListGo xs) acc))))
 # 155 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__5, dtb__6) -> (match dtb__5 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__5, dtb__6) -> (match dtb__5 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__7; Base_dPair.f_Base_dPair_dPair_second = dtb__8 } -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr dtb__7) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPat dtb__8) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrPatListGo dtb__6) mc1)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -66,18 +66,18 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPat = (fun mc0 mc1 -> (match 
 ))
 
 # 88 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprListGo xs) acc))))
+let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprListGo xs) acc))))
 # 92 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__25, dtb__26) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__25) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprListGo dtb__26) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__25, dtb__26) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__25) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExprListGo dtb__26) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 106 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprListGo xs) acc))))
 # 110 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (match dtb__27 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (match dtb__27 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__29; Base_dPair.f_Base_dPair_dPair_second = dtb__30 } -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPat dtb__29) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__30) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprListGo dtb__28) mc1)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -85,10 +85,10 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatExprListGo = (fun mc0 mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 # 115 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClauses = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClausesGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClauses = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClausesGo xs) acc))))
 # 119 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClausesGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__31, dtb__32) -> (match dtb__31 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__31, dtb__32) -> (match dtb__31 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__33; Base_dPair.f_Base_dPair_dPair_second = dtb__34 } -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPatList dtb__33) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__34) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClausesGo dtb__32) mc1)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -96,26 +96,26 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencClausesGo = (fun mc0 mc1 -> (
   | _ -> failwith "DT: impossible branch"
 ))
 # 124 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtListGo xs) acc))))
 # 128 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__35, dtb__36) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDoStmt dtb__35) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtListGo dtb__36) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__35, dtb__36) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDoStmt dtb__35) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStmtListGo dtb__36) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 133 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartListGo xs) acc))))
 # 137 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__37, dtb__38) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencInterpPart dtb__37) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartListGo dtb__38) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__37, dtb__38) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencInterpPart dtb__37) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencPartListGo dtb__38) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 # 142 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprListGo xs) acc))))
+and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprListGo xs) acc))))
 # 146 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__39, dtb__40) -> (match dtb__39 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__39, dtb__40) -> (match dtb__39 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__41; Base_dPair.f_Base_dPair_dPair_second = dtb__42 } -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr dtb__41) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__42) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencStrExprListGo dtb__40) mc1)))
   | _ -> failwith "DT: impossible branch"
 )
@@ -164,8 +164,8 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr = (fun mc0 mc1 -> (match
 
 # 69 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencMaybeExpr = (fun mc0 mc1 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__118) -> (Base_dList.C_Base_dList_dList_Cons ("1", ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__118) mc1)))
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList_Cons ("0", mc1))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__118) -> (Base_dList.C_Base_dList_dList__x58__x58_ ("1", ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencExpr dtb__118) mc1)))
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (Base_dList.C_Base_dList_dList__x58__x58_ ("0", mc1))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -177,13 +177,13 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtor = (fun mc0 mc1 -> (match
 
 # 164 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__123, dtb__124) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtor dtb__123) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorListGo dtb__124) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__123, dtb__124) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtor dtb__123) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorListGo dtb__124) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 160 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorListGo xs) acc))))
+let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencCtorListGo xs) acc))))
 
 # 257 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencField = (fun mc0 mc1 -> (match mc0 with
@@ -193,13 +193,13 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencField = (fun mc0 mc1 -> (matc
 
 # 173 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__128, dtb__129) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencField dtb__128) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldListGo dtb__129) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__128, dtb__129) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencField dtb__128) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldListGo dtb__129) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 169 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldListGo xs) acc))))
+let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencFieldListGo xs) acc))))
 
 # 261 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParam = (fun mc0 mc1 -> (match mc0 with
@@ -209,13 +209,13 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParam = (fun mc0 mc1 -> 
 
 # 182 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__132, dtb__133) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParam dtb__132) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamListGo dtb__133) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__132, dtb__133) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParam dtb__132) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamListGo dtb__133) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 178 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamListGo xs) acc))))
+let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitParamListGo xs) acc))))
 
 # 265 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethod = (fun mc0 mc1 -> (match mc0 with
@@ -225,19 +225,19 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethod = (fun mc0 mc1 ->
 
 # 191 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodListGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__137, dtb__138) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethod dtb__137) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodListGo dtb__138) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__137, dtb__138) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethod dtb__137) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodListGo dtb__138) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 187 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodList = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodListGo xs) acc))))
+let v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodList = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencTraitMethodListGo xs) acc))))
 
 # 196 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDecls = (fun xs acc -> (Base_dList.C_Base_dList_dList_Cons ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDeclsGo xs) acc))))
+let rec v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDecls = (fun xs acc -> (Base_dList.C_Base_dList_dList__x58__x58_ ((String.concat "" ["["; (bi_strFromInt (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dlenOf xs)); ":"]), ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDeclsGo xs) acc))))
 # 200 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDeclsGo = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__139, dtb__140) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDecl dtb__139) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDeclsGo dtb__140) mc1))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__139, dtb__140) -> ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDecl dtb__139) ((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_dencDeclsGo dtb__140) mc1))
   | Base_dList.C_Base_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
@@ -390,7 +390,7 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecPatList = (fun fuel bytes -> 
 # 720 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecPatListItems = (fun fuel n bytes acc -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__229) -> (match dtb__229 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__230; Base_dPair.f_Base_dPair_dPair_second = dtb__231 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecPatListItems (fuel - 1)) (n - 1)) dtb__231) (Base_dList.C_Base_dList_dList_Cons (dtb__230, acc)))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__230; Base_dPair.f_Base_dPair_dPair_second = dtb__231 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecPatListItems (fuel - 1)) (n - 1)) dtb__231) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__230, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -834,7 +834,7 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecExprList = (fun fuel bytes ->
 # 705 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecExprListItems = (fun fuel n bytes acc -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__412) -> (match dtb__412 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__413; Base_dPair.f_Base_dPair_dPair_second = dtb__414 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecExprListItems (fuel - 1)) (n - 1)) dtb__414) (Base_dList.C_Base_dList_dList_Cons (dtb__413, acc)))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__413; Base_dPair.f_Base_dPair_dPair_second = dtb__414 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecExprListItems (fuel - 1)) (n - 1)) dtb__414) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__413, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
@@ -1199,7 +1199,7 @@ and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecDecls = (fun fuel bytes -> (i
 # 735 "Vuna/Compiler/Frontend/Canonical/Ast.vuna"
 and v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecDeclsItems = (fun fuel n bytes acc -> (if (fuel <= 0) then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.v_Base_dList_dreverse acc); Base_dPair.f_Base_dPair_dPair_second = bytes })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__559) -> (match dtb__559 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__560; Base_dPair.f_Base_dPair_dPair_second = dtb__561 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecDeclsItems (fuel - 1)) (n - 1)) dtb__561) (Base_dList.C_Base_dList_dList_Cons (dtb__560, acc)))
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__560; Base_dPair.f_Base_dPair_dPair_second = dtb__561 } -> ((((v_Vuna_dCompiler_dFrontend_dCanonical_dAst_ddecDeclsItems (fuel - 1)) (n - 1)) dtb__561) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__560, acc)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing

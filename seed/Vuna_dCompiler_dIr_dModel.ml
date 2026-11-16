@@ -98,7 +98,7 @@ let v_Vuna_dCompiler_dIr_dModel_dirGroupDefs = (fun mc0 -> (match mc0 with
 
 # 288 "Vuna/Compiler/Ir/Model.vuna"
 let rec v_Vuna_dCompiler_dIr_dModel_dirSharedRecordFieldsOf = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__92, dtb__93) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__92) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__92) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedRecordFieldsOf mc0) dtb__93))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__92, dtb__93) -> (if ((Base_dPair.v_Base_dPair_dfirstOf dtb__92) = mc0) then (Base_dPair.v_Base_dPair_dsecondOf dtb__92) else ((v_Vuna_dCompiler_dIr_dModel_dirSharedRecordFieldsOf mc0) dtb__93))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))

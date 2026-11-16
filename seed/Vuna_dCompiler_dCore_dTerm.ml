@@ -152,7 +152,7 @@ let v_Vuna_dCompiler_dCore_dTerm_dnatChainNext = (fun n -> (if (n >= v_Vuna_dCom
 # 256 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dflattenTermAppGo = (fun mc0 mc1 -> (match mc0 with
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__17, dtb__18) -> { Base_dPair.f_Base_dPair_dPair_first = (C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__17)); Base_dPair.f_Base_dPair_dPair_second = ((Base_dList.v_Base_dList_dappend dtb__18) mc1) }
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__19, dtb__20, dtb__21) -> ((v_Vuna_dCompiler_dCore_dTerm_dflattenTermAppGo dtb__19) (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 }, mc1)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__19, dtb__20, dtb__21) -> ((v_Vuna_dCompiler_dCore_dTerm_dflattenTermAppGo dtb__19) (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = dtb__20; Base_dPair.f_Base_dPair_dPair_second = dtb__21 }, mc1)))
   | _ -> { Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }
 ))
 
@@ -173,7 +173,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dnatChainArgs = (fun fuel c args -> (if (c = Vu
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (0))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 ) else (if (c = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dnatSuccCtor) then ((fun nd_uscrut3 -> (match nd_uscrut3 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (match dtb__27 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (match dtb__27 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__29; Base_dPair.f_Base_dPair_dPair_second = dtb__30 } -> (match dtb__28 with
   | Base_dList.C_Base_dList_dList_Nil -> (match ((v_Vuna_dCompiler_dCore_dTerm_dnatChainGo fuel) dtb__29) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__31) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dCore_dTerm_dnatChainNext dtb__31)))
@@ -214,7 +214,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dtermSize = (fun mc0 -> (match mc0 with
 ))
 # 284 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dtermSizeArgs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__74, dtb__75) -> (match dtb__74 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__74, dtb__75) -> (match dtb__74 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__76; Base_dPair.f_Base_dPair_dPair_second = dtb__77 } -> ((v_Vuna_dCompiler_dCore_dTerm_dtermSize dtb__76) + (v_Vuna_dCompiler_dCore_dTerm_dtermSizeArgs dtb__75))
   | _ -> failwith "DT: impossible branch"
 )
@@ -223,7 +223,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dtermSizeArgs = (fun mc0 -> (match mc0 with
 ))
 # 288 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dtermSizeAlts = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__78, dtb__79) -> ((v_Vuna_dCompiler_dCore_dTerm_dtermSize (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__78)) + (v_Vuna_dCompiler_dCore_dTerm_dtermSizeAlts dtb__79))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__78, dtb__79) -> ((v_Vuna_dCompiler_dCore_dTerm_dtermSize (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__78)) + (v_Vuna_dCompiler_dCore_dTerm_dtermSizeAlts dtb__79))
   | Base_dList.C_Base_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -233,7 +233,7 @@ let v_Vuna_dCompiler_dCore_dTerm_dmetaLookup = (fun i t -> ((((Base_dHashMap.v_B
 
 # 300 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dmetaLookupList = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__80, dtb__81) -> (match dtb__80 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__80, dtb__81) -> (match dtb__80 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__82; Base_dPair.f_Base_dPair_dPair_second = dtb__83 } -> (if (mc0 = dtb__82) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__83)) else ((v_Vuna_dCompiler_dCore_dTerm_dmetaLookupList mc0) dtb__81))
   | _ -> failwith "DT: impossible branch"
 )
@@ -270,7 +270,7 @@ let v_Vuna_dCompiler_dCore_dTerm_dsolsLookup = (fun mc0 mc1 -> (match mc1 with
 
 # 342 "Vuna/Compiler/Core/Term.vuna"
 let v_Vuna_dCompiler_dCore_dTerm_dsolsCons = (fun mc0 mc1 mc2 -> (match mc2 with
-  | { f_Vuna_dCompiler_dCore_dTerm_dSols_solsTbl = dtb__93; f_Vuna_dCompiler_dCore_dTerm_dSols_solsList = dtb__94; f_Vuna_dCompiler_dCore_dTerm_dSols_solsDepth = dtb__95 } -> { f_Vuna_dCompiler_dCore_dTerm_dSols_solsTbl = ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dInt.v_Hashable_uInt) mc0) mc1) dtb__93); f_Vuna_dCompiler_dCore_dTerm_dSols_solsList = (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }, dtb__94)); f_Vuna_dCompiler_dCore_dTerm_dSols_solsDepth = dtb__95 }
+  | { f_Vuna_dCompiler_dCore_dTerm_dSols_solsTbl = dtb__93; f_Vuna_dCompiler_dCore_dTerm_dSols_solsList = dtb__94; f_Vuna_dCompiler_dCore_dTerm_dSols_solsDepth = dtb__95 } -> { f_Vuna_dCompiler_dCore_dTerm_dSols_solsTbl = ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dInt.v_Hashable_uInt) mc0) mc1) dtb__93); f_Vuna_dCompiler_dCore_dTerm_dSols_solsList = (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = mc0; Base_dPair.f_Base_dPair_dPair_second = mc1 }, dtb__94)); f_Vuna_dCompiler_dCore_dTerm_dSols_solsDepth = dtb__95 }
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -302,7 +302,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMeta = (fun mc0 mc1 -> (mat
 ))
 # 373 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaArgs = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__139, dtb__140) -> (match dtb__139 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__139, dtb__140) -> (match dtb__139 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__141; Base_dPair.f_Base_dPair_dPair_second = dtb__142 } -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMeta mc0) dtb__141) then true else ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaArgs mc0) dtb__140))
   | _ -> failwith "DT: impossible branch"
 )
@@ -311,7 +311,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaArgs = (fun mc0 mc1 -> (mat
 ))
 # 378 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaAlts = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__143, dtb__144) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMeta mc0) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__143)) then true else ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaAlts mc0) dtb__144))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__143, dtb__144) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMeta mc0) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__143)) then true else ((v_Vuna_dCompiler_dCore_dTerm_dtermHasUnsolvedMetaAlts mc0) dtb__144))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -340,7 +340,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat = (fun mc0 mc1 -> (match mc1
 ))
 # 408 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyArgUsesFloat = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__187, dtb__188) -> (match dtb__187 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__187, dtb__188) -> (match dtb__187 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__189; Base_dPair.f_Base_dPair_dPair_second = dtb__190 } -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat mc0) dtb__189) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyArgUsesFloat mc0) dtb__188))
   | _ -> failwith "DT: impossible branch"
 )
@@ -349,7 +349,7 @@ and v_Vuna_dCompiler_dCore_dTerm_danyArgUsesFloat = (fun mc0 mc1 -> (match mc1 w
 ))
 # 413 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyAltUsesFloat = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__191, dtb__192) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat mc0) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__191)) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyAltUsesFloat mc0) dtb__192))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__191, dtb__192) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat mc0) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__191)) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyAltUsesFloat mc0) dtb__192))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -363,7 +363,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames = (fun mc0 -> (match mc0 w
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TCase (dtb__199, dtb__200) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__199)) ((Base_dList.v_Base_dList_dconcatMap (fun a -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody a)))) dtb__200))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecUpd (dtb__201, dtb__202, dtb__203, dtb__204, dtb__205) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__201)) (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__205))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TProj (dtb__206, dtb__207, dtb__208, dtb__209, dtb__210) -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__206)
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__211, dtb__212) -> (Base_dList.C_Base_dList_dList_Cons (dtb__211, ((Base_dList.v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames (Base_dPair.v_Base_dPair_dfirstOf p)))) dtb__212)))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TRecord (dtb__211, dtb__212) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__211, ((Base_dList.v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames (Base_dPair.v_Base_dPair_dfirstOf p)))) dtb__212)))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TMk (dtb__213, dtb__214) -> ((Base_dList.v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames (Base_dPair.v_Base_dPair_dfirstOf p)))) dtb__214)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TCon (dtb__215, dtb__216) -> ((Base_dList.v_Base_dList_dconcatMap (fun p -> (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames (Base_dPair.v_Base_dPair_dfirstOf p)))) dtb__216)
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TApp (dtb__217, dtb__218, dtb__219) -> ((Base_dList.v_Base_dList_dappend (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__217)) (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__218))
@@ -372,14 +372,14 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames = (fun mc0 -> (match mc0 w
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TType (dtb__228) -> Base_dList.C_Base_dList_dList_Nil
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TMeta (dtb__229) -> Base_dList.C_Base_dList_dList_Nil
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TVar (dtb__230, dtb__231, dtb__232) -> Base_dList.C_Base_dList_dList_Nil
-  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__233) -> (Base_dList.C_Base_dList_dList_Cons (dtb__233, Base_dList.C_Base_dList_dList_Nil))
+  | C_Vuna_dCompiler_dCore_dTerm_dTerm_TGlobal (dtb__233) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__233, Base_dList.C_Base_dList_dList_Nil))
   | C_Vuna_dCompiler_dCore_dTerm_dTerm_TFloat (dtb__234) -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 467 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dlookupPair = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__235, dtb__236) -> (match dtb__235 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__235, dtb__236) -> (match dtb__235 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__237; Base_dPair.f_Base_dPair_dPair_second = dtb__238 } -> (if (dtb__237 = mc0) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__238)) else ((v_Vuna_dCompiler_dCore_dTerm_dlookupPair mc0) dtb__236))
   | _ -> failwith "DT: impossible branch"
 )
@@ -389,8 +389,8 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dlookupPair = (fun mc0 mc1 -> (match mc1 wi
 
 # 460 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__239, dtb__240) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dlookupPair dtb__239) mc0) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__241) -> (Base_dList.C_Base_dList_dList_Cons (dtb__241, ((v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf mc0) dtb__240)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__239, dtb__240) -> (match ((v_Vuna_dCompiler_dCore_dTerm_dlookupPair dtb__239) mc0) with
+  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__241) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__241, ((v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf mc0) dtb__240)))
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf mc0) dtb__240)
   | _ -> failwith "DT: impossible branch"
 )
@@ -400,13 +400,13 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf = (fun mc0 mc1 -> (match mc1 w
 
 # 451 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dreachesTermsFuel = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__242, dtb__243) -> (if (mc0 <= 0) then false else (if ((v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat mc2) dtb__242) then true else ((((v_Vuna_dCompiler_dCore_dTerm_dreachesTermsFuel (mc0 - 1)) mc1) mc2) ((Base_dList.v_Base_dList_dappend dtb__243) ((v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf mc1) (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__242))))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__242, dtb__243) -> (if (mc0 <= 0) then false else (if ((v_Vuna_dCompiler_dCore_dTerm_dtermUsesFloat mc2) dtb__242) then true else ((((v_Vuna_dCompiler_dCore_dTerm_dreachesTermsFuel (mc0 - 1)) mc1) mc2) ((Base_dList.v_Base_dList_dappend dtb__243) ((v_Vuna_dCompiler_dCore_dTerm_dbodyTermsOf mc1) (v_Vuna_dCompiler_dCore_dTerm_dtermGlobalNames dtb__242))))))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 446 "Vuna/Compiler/Core/Term.vuna"
-let v_Vuna_dCompiler_dCore_dTerm_dtermReachesFloat = (fun defs names t -> ((((v_Vuna_dCompiler_dCore_dTerm_dreachesTermsFuel 4096) defs) names) (Base_dList.C_Base_dList_dList_Cons (t, Base_dList.C_Base_dList_dList_Nil))))
+let v_Vuna_dCompiler_dCore_dTerm_dtermReachesFloat = (fun defs names t -> ((((v_Vuna_dCompiler_dCore_dTerm_dreachesTermsFuel 4096) defs) names) (Base_dList.C_Base_dList_dList__x58__x58_ (t, Base_dList.C_Base_dList_dList_Nil))))
 
 # 471 "Vuna/Compiler/Core/Term.vuna"
 let v_Vuna_dCompiler_dCore_dTerm_ddefLookup = (fun name tbl -> ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) name) tbl))
@@ -435,7 +435,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dhasFreeVar = (fun mc0 mc1 -> (match mc1 wi
 ))
 # 497 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarArgs = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__286, dtb__287) -> (match dtb__286 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__286, dtb__287) -> (match dtb__286 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__288; Base_dPair.f_Base_dPair_dPair_second = dtb__289 } -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVar mc0) dtb__288) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarArgs mc0) dtb__287))
   | _ -> failwith "DT: impossible branch"
 )
@@ -444,7 +444,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarArgs = (fun mc0 mc1 -> (match mc1 wi
 ))
 # 501 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarAlts = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__290, dtb__291) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVar (mc0 + (Base_dList.v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__290)))) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__290)) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarAlts mc0) dtb__291))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__290, dtb__291) -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVar (mc0 + (Base_dList.v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__290)))) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__290)) then true else ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeVarAlts mc0) dtb__291))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -473,7 +473,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dhasMeta = (fun mc0 mc1 mc2 -> (match mc2 w
 ))
 # 527 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dhasMetaArgs = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__334, dtb__335) -> (match dtb__334 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__334, dtb__335) -> (match dtb__334 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__336; Base_dPair.f_Base_dPair_dPair_second = dtb__337 } -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta mc0) mc1) dtb__336) then true else (((v_Vuna_dCompiler_dCore_dTerm_dhasMetaArgs mc0) mc1) dtb__335))
   | _ -> failwith "DT: impossible branch"
 )
@@ -482,7 +482,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dhasMetaArgs = (fun mc0 mc1 mc2 -> (match mc2 w
 ))
 # 531 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dhasMetaAlts = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__338, dtb__339) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta mc0) (mc1 + (Base_dList.v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__338)))) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__338)) then true else (((v_Vuna_dCompiler_dCore_dTerm_dhasMetaAlts mc0) mc1) dtb__339))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__338, dtb__339) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasMeta mc0) (mc1 + (Base_dList.v_Base_dList_dlength (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__338)))) (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__338)) then true else (((v_Vuna_dCompiler_dCore_dTerm_dhasMetaAlts mc0) mc1) dtb__339))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -511,8 +511,8 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshift = (fun mc0 mc1 mc2 -> (match mc2 wit
 ))
 # 564 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshiftArgs = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__382, dtb__383) -> (match dtb__382 with
-  | { Base_dPair.f_Base_dPair_dPair_first = dtb__384; Base_dPair.f_Base_dPair_dPair_second = dtb__385 } -> (Base_dList.C_Base_dList_dList_Cons ({ Base_dPair.f_Base_dPair_dPair_first = (((v_Vuna_dCompiler_dCore_dTerm_dshift mc0) mc1) dtb__384); Base_dPair.f_Base_dPair_dPair_second = dtb__385 }, (((v_Vuna_dCompiler_dCore_dTerm_dshiftArgs mc0) mc1) dtb__383)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__382, dtb__383) -> (match dtb__382 with
+  | { Base_dPair.f_Base_dPair_dPair_first = dtb__384; Base_dPair.f_Base_dPair_dPair_second = dtb__385 } -> (Base_dList.C_Base_dList_dList__x58__x58_ ({ Base_dPair.f_Base_dPair_dPair_first = (((v_Vuna_dCompiler_dCore_dTerm_dshift mc0) mc1) dtb__384); Base_dPair.f_Base_dPair_dPair_second = dtb__385 }, (((v_Vuna_dCompiler_dCore_dTerm_dshiftArgs mc0) mc1) dtb__383)))
   | _ -> failwith "DT: impossible branch"
 )
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
@@ -520,7 +520,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshiftArgs = (fun mc0 mc1 mc2 -> (match mc2 wit
 ))
 # 569 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshiftAlts = (fun mc0 mc1 mc2 -> (match mc2 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__386, dtb__387) -> (Base_dList.C_Base_dList_dList_Cons ((((v_Vuna_dCompiler_dCore_dTerm_dshiftAlt mc0) mc1) dtb__386), (((v_Vuna_dCompiler_dCore_dTerm_dshiftAlts mc0) mc1) dtb__387)))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__386, dtb__387) -> (Base_dList.C_Base_dList_dList__x58__x58_ ((((v_Vuna_dCompiler_dCore_dTerm_dshiftAlt mc0) mc1) dtb__386), (((v_Vuna_dCompiler_dCore_dTerm_dshiftAlts mc0) mc1) dtb__387)))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -637,7 +637,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar = (fun mc0 mc1 -> (match mc
 ))
 # 708 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyPairFree = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__520, dtb__521) -> (match dtb__520 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__520, dtb__521) -> (match dtb__520 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__522; Base_dPair.f_Base_dPair_dPair_second = dtb__523 } -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar mc0) dtb__522) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyPairFree mc0) dtb__521))
   | _ -> failwith "DT: impossible branch"
 )
@@ -646,7 +646,7 @@ and v_Vuna_dCompiler_dCore_dTerm_danyPairFree = (fun mc0 mc1 -> (match mc1 with
 ))
 # 712 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyAltFree = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__524, dtb__525) -> (match dtb__524 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__524, dtb__525) -> (match dtb__524 with
   | { f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltName = dtb__526; f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltBinders = dtb__527; f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltBody = dtb__528 } -> (if ((v_Vuna_dCompiler_dCore_dTerm_dhasFreeTermVar (mc0 + (Base_dList.v_Base_dList_dlength dtb__527))) dtb__528) then true else ((v_Vuna_dCompiler_dCore_dTerm_danyAltFree mc0) dtb__525))
   | _ -> failwith "DT: impossible branch"
 )
@@ -671,7 +671,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dhasNegativeVar = (fun mc0 -> (match mc0 wi
 ))
 # 733 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyNegativeVarArgs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__564, dtb__565) -> (match dtb__564 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__564, dtb__565) -> (match dtb__564 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__566; Base_dPair.f_Base_dPair_dPair_second = dtb__567 } -> (if (v_Vuna_dCompiler_dCore_dTerm_dhasNegativeVar dtb__566) then true else (v_Vuna_dCompiler_dCore_dTerm_danyNegativeVarArgs dtb__565))
   | _ -> failwith "DT: impossible branch"
 )
@@ -680,7 +680,7 @@ and v_Vuna_dCompiler_dCore_dTerm_danyNegativeVarArgs = (fun mc0 -> (match mc0 wi
 ))
 # 737 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_danyNegativeVarAlts = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__568, dtb__569) -> (match dtb__568 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__568, dtb__569) -> (match dtb__568 with
   | { f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltName = dtb__570; f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltBinders = dtb__571; f_Vuna_dCompiler_dCore_dTerm_dCaseAlt_caseAltBody = dtb__572 } -> (if (v_Vuna_dCompiler_dCore_dTerm_dhasNegativeVar dtb__572) then true else (v_Vuna_dCompiler_dCore_dTerm_danyNegativeVarAlts dtb__569))
   | _ -> failwith "DT: impossible branch"
 )
@@ -712,7 +712,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaValueFuel = (fun fuel sols 
 # 771 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaListFuel = (fun fuel sols vs -> (if (fuel <= 0) then false else (match vs with
   | Base_dList.C_Base_dList_dList_Nil -> false
-  | Base_dList.C_Base_dList_dList_Cons (dtb__604, dtb__605) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__604) then true else (((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaListFuel (fuel - 1)) sols) dtb__605))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__604, dtb__605) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaValueFuel (fuel - 1)) sols) dtb__604) then true else (((v_Vuna_dCompiler_dCore_dTerm_dhasUnsolvedMetaListFuel (fuel - 1)) sols) dtb__605))
   | _ -> failwith "DT: impossible branch"
 )))
 # 781 "Vuna/Compiler/Core/Term.vuna"
@@ -766,7 +766,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes = (fun mc0 mc1 mc2 -> (match 
 ))
 # 821 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__645, dtb__646) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes mc0) 0) dtb__645) then true else ((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList mc0) dtb__646))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__645, dtb__646) -> (if (((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapes mc0) 0) dtb__645) then true else ((v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesList mc0) dtb__646))
   | Base_dList.C_Base_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
@@ -778,7 +778,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dlevelEscapesClo = (fun mc0 mc1 -> (match mc1 w
 
 # 894 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dshowBinders = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__649, dtb__650) -> (match dtb__649 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__649, dtb__650) -> (match dtb__649 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__651; Base_dPair.f_Base_dPair_dPair_second = dtb__652 } -> (String.concat "" [" "; dtb__651; (v_Vuna_dCompiler_dCore_dTerm_dshowBinders dtb__650)])
   | _ -> failwith "DT: impossible branch"
 )
@@ -788,7 +788,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshowBinders = (fun mc0 -> (match mc0 with
 
 # 901 "Vuna/Compiler/Core/Term.vuna"
 let rec v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__653, dtb__654) -> (if (dtb__653 = 34) then ("\\\"" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 92) then ("\\\\" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 10) then ("\\n" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 9) then ("\\t" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 13) then ("\\r" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else ((Base_dList.dtp_pack (Base_dList.C_Base_dList_dList_Cons (dtb__653, Base_dList.C_Base_dList_dList_Nil))) ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)))))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__653, dtb__654) -> (if (dtb__653 = 34) then ("\\\"" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 92) then ("\\\\" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 10) then ("\\n" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 9) then ("\\t" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else (if (dtb__653 = 13) then ("\\r" ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)) else ((Base_dList.dtp_pack (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__653, Base_dList.C_Base_dList_dList_Nil))) ^ (v_Vuna_dCompiler_dCore_dTerm_dshowCoreChars dtb__654)))))))
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -820,7 +820,7 @@ let rec v_Vuna_dCompiler_dCore_dTerm_dshowTerm = (fun mc0 -> (match mc0 with
 ))
 # 874 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__697, dtb__698) -> (match dtb__697 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__697, dtb__698) -> (match dtb__697 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__699; Base_dPair.f_Base_dPair_dPair_second = dtb__700 } -> (String.concat "" [" "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__699); (v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms dtb__698)])
   | _ -> failwith "DT: impossible branch"
 )
@@ -829,7 +829,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowArgTerms = (fun mc0 -> (match mc0 with
 ))
 # 879 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_drecordAppShow = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__701, dtb__702) -> (match dtb__701 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__701, dtb__702) -> (match dtb__701 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__703; Base_dPair.f_Base_dPair_dPair_second = dtb__704 } -> ((v_Vuna_dCompiler_dCore_dTerm_drecordAppShow (String.concat "" ["("; mc0; " "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm dtb__703); ")"])) dtb__702)
   | _ -> failwith "DT: impossible branch"
 )
@@ -838,7 +838,7 @@ and v_Vuna_dCompiler_dCore_dTerm_drecordAppShow = (fun mc0 mc1 -> (match mc1 wit
 ))
 # 889 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__705, dtb__706) -> (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dcaseAltName dtb__705); (v_Vuna_dCompiler_dCore_dTerm_dshowBinders (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__705)); " => "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__705)); " | "; (v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts dtb__706)])
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__705, dtb__706) -> (String.concat "" [(v_Vuna_dCompiler_dCore_dTerm_dcaseAltName dtb__705); (v_Vuna_dCompiler_dCore_dTerm_dshowBinders (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBinders dtb__705)); " => "; (v_Vuna_dCompiler_dCore_dTerm_dshowTerm (v_Vuna_dCompiler_dCore_dTerm_dcaseAltBody dtb__705)); " | "; (v_Vuna_dCompiler_dCore_dTerm_dshowCoreAlts dtb__706)])
   | Base_dList.C_Base_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
@@ -861,7 +861,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi = (fun mc0 -> (match mc0 with
 ))
 # 870 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__724, dtb__725) -> (match dtb__724 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__724, dtb__725) -> (match dtb__724 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__726; Base_dPair.f_Base_dPair_dPair_second = dtb__727 } -> (String.concat "" [" "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__726); (v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs dtb__725)])
   | _ -> failwith "DT: impossible branch"
 )
@@ -870,7 +870,7 @@ and v_Vuna_dCompiler_dCore_dTerm_dshowSigArgs = (fun mc0 -> (match mc0 with
 ))
 # 884 "Vuna/Compiler/Core/Term.vuna"
 and v_Vuna_dCompiler_dCore_dTerm_dshowSigAppText = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__728, dtb__729) -> (match dtb__728 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__728, dtb__729) -> (match dtb__728 with
   | { Base_dPair.f_Base_dPair_dPair_first = dtb__730; Base_dPair.f_Base_dPair_dPair_second = dtb__731 } -> ((v_Vuna_dCompiler_dCore_dTerm_dshowSigAppText (String.concat "" ["("; mc0; " "; (v_Vuna_dCompiler_dCore_dTerm_dshowSigParenIfPi dtb__730); ")"])) dtb__729)
   | _ -> failwith "DT: impossible branch"
 )

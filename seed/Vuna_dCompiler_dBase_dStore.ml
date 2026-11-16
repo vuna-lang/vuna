@@ -33,11 +33,11 @@ let v_Vuna_dCompiler_dBase_dStore_dstoreEncodeAs = (fun tag codec digest payload
 
 # 82 "Vuna/Compiler/Base/Store.vuna"
 let v_Vuna_dCompiler_dBase_dStore_dheaderFields = (fun line -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__9, dtb__10) -> (match dtb__10 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__11, dtb__12) -> (match dtb__12 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__13, dtb__14) -> (match dtb__14 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__15, dtb__16) -> (match dtb__16 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__17, dtb__18) -> (match dtb__18 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__9, dtb__10) -> (match dtb__10 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__11, dtb__12) -> (match dtb__12 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__13, dtb__14) -> (match dtb__14 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__15, dtb__16) -> (match dtb__16 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__17, dtb__18) -> (match dtb__18 with
   | Base_dList.C_Base_dList_dList_Nil -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = dtb__9; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__11; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__13; Base_dPair.f_Base_dPair_dPair_second = { Base_dPair.f_Base_dPair_dPair_first = dtb__15; Base_dPair.f_Base_dPair_dPair_second = dtb__17 } } } }))
   | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
 )
@@ -54,7 +54,7 @@ let v_Vuna_dCompiler_dBase_dStore_dheaderFields = (fun line -> ((fun nd_uscrut1 
 
 # 87 "Vuna/Compiler/Base/Store.vuna"
 let rec v_Vuna_dCompiler_dBase_dStore_dbreakFirstNewline = (fun mc0 mc1 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__19, dtb__20) -> (if (dtb__19 = 10) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)); Base_dPair.f_Base_dPair_dPair_second = (Base_dList.dtp_pack dtb__20) })) else ((v_Vuna_dCompiler_dBase_dStore_dbreakFirstNewline dtb__20) (Base_dList.C_Base_dList_dList_Cons (dtb__19, mc1))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__19, dtb__20) -> (if (dtb__19 = 10) then (Base_dMaybe.C_Base_dMaybe_dMaybe_Just ({ Base_dPair.f_Base_dPair_dPair_first = (Base_dList.dtp_pack (Base_dList.v_Base_dList_dreverse mc1)); Base_dPair.f_Base_dPair_dPair_second = (Base_dList.dtp_pack dtb__20) })) else ((v_Vuna_dCompiler_dBase_dStore_dbreakFirstNewline dtb__20) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__19, mc1))))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
@@ -108,7 +108,7 @@ let v_Vuna_dCompiler_dBase_dStore_dhomeStoreRootEff = (fun nEnv -> (((Base_dMona
 let v_Vuna_dCompiler_dBase_dStore_dtmpStoreRootEff = (fun nEnv -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dFunctor.v_Base_dFunctor_dfmap Base_dEff.v_Functor_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dBase_dStore_ddirUnder "vuna-store")) ((Base_dEffEnv.v_Base_dEffEnv_denvGetEnvNonEmpty nEnv) "TMPDIR"))) (fun found -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) ((Base_dMaybe.v_Base_dMaybe_dfromMaybe "/tmp/vuna-store") found)))))
 
 # 163 "Vuna/Compiler/Base/Store.vuna"
-let v_Vuna_dCompiler_dBase_dStore_dstoreDataRootEff = (fun nEnv -> ((fun override -> ((fun xdg -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dList.v_Base_dList_dfirstSuccess Base_dEff.v_Monad_uBase_uEff_uEff_ur) Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dList.C_Base_dList_dList_Cons (override, (Base_dList.C_Base_dList_dList_Cons (xdg, (Base_dList.C_Base_dList_dList_Cons ((v_Vuna_dCompiler_dBase_dStore_dhomeStoreRootEff nEnv), Base_dList.C_Base_dList_dList_Nil)))))))) (fun found -> (((Base_dMaybe.v_Base_dMaybe_dmaybe (v_Vuna_dCompiler_dBase_dStore_dtmpStoreRootEff nEnv)) (Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur)) found)))) (((Base_dFunctor.v_Base_dFunctor_dfmap Base_dEff.v_Functor_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dBase_dStore_ddirUnder "vuna/store")) ((Base_dEffEnv.v_Base_dEffEnv_denvGetEnvNonEmpty nEnv) "XDG_DATA_HOME")))) ((Base_dEffEnv.v_Base_dEffEnv_denvGetEnvNonEmpty nEnv) "VUNA_STORE")))
+let v_Vuna_dCompiler_dBase_dStore_dstoreDataRootEff = (fun nEnv -> ((fun override -> ((fun xdg -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dList.v_Base_dList_dfirstSuccess Base_dEff.v_Monad_uBase_uEff_uEff_ur) Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (Base_dList.C_Base_dList_dList__x58__x58_ (override, (Base_dList.C_Base_dList_dList__x58__x58_ (xdg, (Base_dList.C_Base_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dBase_dStore_dhomeStoreRootEff nEnv), Base_dList.C_Base_dList_dList_Nil)))))))) (fun found -> (((Base_dMaybe.v_Base_dMaybe_dmaybe (v_Vuna_dCompiler_dBase_dStore_dtmpStoreRootEff nEnv)) (Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur)) found)))) (((Base_dFunctor.v_Base_dFunctor_dfmap Base_dEff.v_Functor_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dBase_dStore_ddirUnder "vuna/store")) ((Base_dEffEnv.v_Base_dEffEnv_denvGetEnvNonEmpty nEnv) "XDG_DATA_HOME")))) ((Base_dEffEnv.v_Base_dEffEnv_denvGetEnvNonEmpty nEnv) "VUNA_STORE")))
 
 # 196 "Vuna/Compiler/Base/Store.vuna"
 let v_Vuna_dCompiler_dBase_dStore_dstoreReadEff = (fun nFs tag codec path -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsFileExists nFs) path)) (fun exists -> (if exists then (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsReadFile nFs) path)) (fun raw -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_dstoreDecode tag) codec) raw)))) else ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing)))))
@@ -136,7 +136,7 @@ let v_Vuna_dCompiler_dBase_dStore_dstoreRemoveEff = (fun nFs path -> ((Base_dEff
 
 # 288 "Vuna/Compiler/Base/Store.vuna"
 let rec v_Vuna_dCompiler_dBase_dStore_dstoreDropPastSlash = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__27, dtb__28) -> (if (dtb__27 = 47) then dtb__28 else (v_Vuna_dCompiler_dBase_dStore_dstoreDropPastSlash dtb__28))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (if (dtb__27 = 47) then dtb__28 else (v_Vuna_dCompiler_dBase_dStore_dstoreDropPastSlash dtb__28))
   | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
@@ -157,7 +157,7 @@ let v_Vuna_dCompiler_dBase_dStore_dstoreParentPathOf = (fun _uarity0 -> (v_Vuna_
 let v_Vuna_dCompiler_dBase_dStore_dstoreRootEff = (fun nEnv -> (v_Vuna_dCompiler_dBase_dStore_dstoreDataRootEff nEnv))
 
 # 326 "Vuna/Compiler/Base/Store.vuna"
-let v_Vuna_dCompiler_dBase_dStore_ddirReady = (fun nFs nProcess path -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsFileExists nFs) path)) (fun exists -> (if (Base_dBool.v_Base_dBool_dnot exists) then (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dEffProcess.v_Base_dEffProcess_dprocessRunIn nProcess) ".") (Base_dList.C_Base_dList_dList_Cons ("mkdir", (Base_dList.C_Base_dList_dList_Cons ("-p", (Base_dList.C_Base_dList_dList_Cons (path, Base_dList.C_Base_dList_dList_Nil)))))))) (fun code -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (code = 0)))) else ((Base_dEffFs.v_Base_dEffFs_dfsIsDirectory nFs) path)))))
+let v_Vuna_dCompiler_dBase_dStore_ddirReady = (fun nFs nProcess path -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((Base_dEffFs.v_Base_dEffFs_dfsFileExists nFs) path)) (fun exists -> (if (Base_dBool.v_Base_dBool_dnot exists) then (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dEffProcess.v_Base_dEffProcess_dprocessRunIn nProcess) ".") (Base_dList.C_Base_dList_dList__x58__x58_ ("mkdir", (Base_dList.C_Base_dList_dList__x58__x58_ ("-p", (Base_dList.C_Base_dList_dList__x58__x58_ (path, Base_dList.C_Base_dList_dList_Nil)))))))) (fun code -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (code = 0)))) else ((Base_dEffFs.v_Base_dEffFs_dfsIsDirectory nFs) path)))))
 
 # 315 "Vuna/Compiler/Base/Store.vuna"
 let v_Vuna_dCompiler_dBase_dStore_dstoreRootReadyEff = (fun nFs nEnv nProcess -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dBase_dStore_dstoreDataRootEff nEnv)) (fun primary -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_ddirReady nFs) nProcess) primary)) (fun ok -> (if ok then ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) primary) else (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (v_Vuna_dCompiler_dBase_dStore_dtmpStoreRootEff nEnv)) (fun alt -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_ddirReady nFs) nProcess) alt)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) alt)))))))))))
@@ -232,11 +232,11 @@ let v_Vuna_dCompiler_dBase_dStore_dstoreViewPublishEff = (fun nFs nEnv nProcess 
 let v_Vuna_dCompiler_dBase_dStore_dstoreRootsPathEff = (fun nFs nEnv nProcess projectId -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_dstoreRootReadyEff nFs) nEnv) nProcess)) (fun root -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (String.concat "" [root; "/roots/"; projectId])))))
 
 # 500 "Vuna/Compiler/Base/Store.vuna"
-let v_Vuna_dCompiler_dBase_dStore_dinsertRootLine = (fun line lines -> (if ((Base_dList.v_Base_dList_dmemName line) lines) then lines else (Base_dList.C_Base_dList_dList_Cons (line, lines))))
+let v_Vuna_dCompiler_dBase_dStore_dinsertRootLine = (fun line lines -> (if ((Base_dList.v_Base_dList_dmemName line) lines) then lines else (Base_dList.C_Base_dList_dList__x58__x58_ (line, lines))))
 
 # 503 "Vuna/Compiler/Base/Store.vuna"
 let rec v_Vuna_dCompiler_dBase_dStore_dmergeRootLines = (fun mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__29, dtb__30) -> ((v_Vuna_dCompiler_dBase_dStore_dmergeRootLines ((v_Vuna_dCompiler_dBase_dStore_dinsertRootLine dtb__29) mc0)) dtb__30)
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__29, dtb__30) -> ((v_Vuna_dCompiler_dBase_dStore_dmergeRootLines ((v_Vuna_dCompiler_dBase_dStore_dinsertRootLine dtb__29) mc0)) dtb__30)
   | Base_dList.C_Base_dList_dList_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
@@ -252,7 +252,7 @@ let v_Vuna_dCompiler_dBase_dStore_dstoreProjectPathEff = (fun nFs nEnv nProcess 
 
 # 561 "Vuna/Compiler/Base/Store.vuna"
 let rec v_Vuna_dCompiler_dBase_dStore_dwriteRootFiles = (fun nFs nProcess mc0 mc1 -> (match mc1 with
-  | Base_dList.C_Base_dList_dList_Cons (dtb__31, dtb__32) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_dstoreEnsureDirEff nFs) nProcess) mc0)) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dEffFs.v_Base_dEffFs_dfsWriteFileAtomic nFs) (String.concat "" [mc0; "/"; dtb__31])) "")) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((v_Vuna_dCompiler_dBase_dStore_dwriteRootFiles nFs) nProcess) mc0) dtb__32)) (fun n -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (n + 1))))))))
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__31, dtb__32) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((v_Vuna_dCompiler_dBase_dStore_dstoreEnsureDirEff nFs) nProcess) mc0)) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (((Base_dEffFs.v_Base_dEffFs_dfsWriteFileAtomic nFs) (String.concat "" [mc0; "/"; dtb__31])) "")) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((((v_Vuna_dCompiler_dBase_dStore_dwriteRootFiles nFs) nProcess) mc0) dtb__32)) (fun n -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (n + 1))))))))
   | Base_dList.C_Base_dList_dList_Nil -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) 0)
   | _ -> failwith "DT: impossible branch"
 ))
