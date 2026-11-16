@@ -70,7 +70,10 @@ lintMaxWarnings cfg = case cfg.lintCfgMaxWarnings of
 
 -- | 路径是否被配置排除（当前支持目录/文件前缀与 `*` 通配；模式相对 manifest 目录）。
 export lintExcluded : String -> LintConfig -> Bool
-lintExcluded path cfg = anyPattern path cfg.lintCfgExclude
+lintExcluded path cfg =
+  let
+    p = if startsWith "./" path then substring 2 (byteLength path - 2) path else path
+  in anyPattern p cfg.lintCfgExclude || anyPattern path cfg.lintCfgExclude
 
 -- | 内部：任一模式命中。
 anyPattern : String -> List String -> Bool

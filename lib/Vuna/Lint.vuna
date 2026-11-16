@@ -242,11 +242,11 @@ lintOne opts env path = do
         ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
         OkC cfg0 => case applyOpts opts cfg0 of
           ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
-          OkC cfg => do
+          OkC cfg => if lintExcluded path cfg then pure (Pair env (FileOutcome path [] 0 Nothing))
+          else do
             looked <- fixitiesForFile env path source
-            let
-              env2 = firstOf looked
-            in case secondOf looked of
+            env2 <- pure (firstOf looked)
+            case secondOf looked of
               ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
               OkC programFixities => do
                 linted <-
@@ -336,17 +336,19 @@ printGithubFindings path (f :: rest) =
 -- | 内部：JSON 输出（stdout 只输出一个 JSON 对象）。
 printJsonOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
 printJsonOutcomes opts outcomes = do
-  _ <- consolePrint "${renderJson (outcomeJson outcomes)}\n"
+  _ <- consolePrint "${renderJson (outcomeJson opts outcomes)}\n"
   pure 0
 
 -- | 内部：JSON 对象。
-outcomeJson : List FileOutcome -> Json
-outcomeJson outcomes =
+outcomeJson : LintOpts -> List FileOutcome -> Json
+outcomeJson opts outcomes =
   JObj
-    [Pair "version" (JNum 1), Pair "findings" (JArr (concatMap outcomeFindingsJson outcomes)), Pair "errors" (JArr (mapMaybe outcomeErrorJson outcomes)), Pair "summary" (JObj [Pair "files" (JNum (length outcomes)), Pair "errors" (JNum (countErrors outcomes)), Pair "warnings" (JNum (countWarnings outcomes)), Pair "fixable" (JNum (countFixable outcomes)), Pair "fixed" (JNum (countFixed outcomes))])]
+    [Pair "version" (JNum 1), Pair "findings" (JArr (concatMap (outcomeFindingsJson opts) outcomes)), Pair "errors" (JArr (mapMaybe outcomeErrorJson outcomes)), Pair "summary" (JObj [Pair "files" (JNum (length outcomes)), Pair "errors" (JNum (countErrors outcomes)), Pair "warnings" (JNum (countWarnings outcomes)), Pair "fixable" (JNum (countFixable outcomes)), Pair "fixed" (JNum (countFixed outcomes))])]
 
-outcomeFindingsJson : FileOutcome -> List Json
-outcomeFindingsJson o = map (findingJson o.fileOutcomePath) o.fileOutcomeFindings
+outcomeFindingsJson : LintOpts -> FileOutcome -> List Json
+outcomeFindingsJson opts o =
+  map (findingJson o.fileOutcomePath)
+    (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
 
 outcomeErrorJson : FileOutcome -> Maybe Json
 outcomeErrorJson o = case o.fileOutcomeError of
@@ -475,7 +477,7 @@ parseLintOpts parsed = case formatOf (flagValue parsed "format") of
     Just maxWarnings => case intOf (flagValue parsed "max-passes") 8 of
       Nothing => Nothing
       Just maxPasses =>
-        if maxPasses <= 0 then Nothing
+        if maxPasses <= 0 || maxWarnings < -1 then Nothing
         else Just
           (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache"))
 
