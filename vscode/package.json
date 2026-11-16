@@ -1,7 +1,7 @@
 {
   "name": "vuna",
   "displayName": "Vuna",
-  "description": "Vuna language support: syntax highlighting, LSP (diagnostics, hover, formatting, symbols, go-to-definition, references, completion), lint/check/build commands.",
+  "description": "Vuna language support: syntax highlighting (TextMate + semantic tokens), LSP (diagnostics, hover, formatting, symbols, go-to-definition, references, completion, highlight, folding), lint/check/build commands.",
   "version": "0.1.0",
   "publisher": "vuna-lang",
   "license": "MIT",
@@ -53,6 +53,25 @@
       {
         "language": "vuna",
         "path": "./snippets/vuna.json"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "vuna",
+        "scopes": {
+          "namespace": ["entity.name.namespace.vuna"],
+          "type": ["entity.name.type.vuna"],
+          "enumMember": ["entity.name.type.constructor.vuna"],
+          "function": ["entity.name.function.vuna"],
+          "method": ["entity.name.function.member.vuna"],
+          "property": ["variable.other.property.vuna"],
+          "parameter": ["variable.parameter.vuna"],
+          "variable": ["variable.other.vuna"],
+          "variable.hole": ["variable.parameter.hole.vuna"],
+          "keyword": ["keyword.control.vuna", "keyword.declaration.vuna", "storage.type.vuna"],
+          "number": ["constant.numeric.integer.vuna", "constant.numeric.float.vuna"],
+          "macro": ["support.function.macro.vuna"]
+        }
       }
     ],
     "commands": [

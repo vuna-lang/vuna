@@ -1,0 +1,271 @@
+module Vuna.Lsp.Semantic where
+
+-- Vuna.Lsp.Semantic：LSP semantic tokens（工具链模块，**永不进 seed 闭包**）。
+--
+-- 分类来源是 **CST 词法流**（`Frontend.Cst.lexCst`，O(bytes)）+ 当前文件的**声明表**
+-- （从同一份源码的 parse 结果收集 data/record/trait 名、构造子、record 字段、
+-- 函数 / axiom / extern、trait 方法、顶层子句参数与模块前缀）。只输出能确定的 token：
+-- 关键字、数字、标识符分类。
+--
+-- 字符串、注释与运算符**不产出**语义 token：语义 token 会覆盖 TextMate 语法层，而模板
+-- 字符串里的 `${}` 插值、转义与运算符只有语法层能正确分层。
+--
+-- 已知边界：
+--   - 声明表按**名字**匹配，不做作用域区分（同名遮蔽、跨模块同名符号都按名字归类）；
+--   - 软关键字（`export` / `alias` / `via` …）与 `_` 不产出 token，留给 TextMate 语法；
+--   - 词法失败时返回空数组，编辑器继续用 TextMate 语法；
+--   - 列换算按 LSP 要求走 UTF-16（`Diagnostics.utf16ColOf`）。
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Compiler.Frontend.Parser
+import Vuna.Json
+import Vuna.Lsp.Diagnostics
+import Vuna.Lsp.Protocol
+
+-- ---------------------------------------------------------------
+-- legend：顺序即 LSP token type 索引
+-- ---------------------------------------------------------------
+-- 与 `vscode/package.json` 的 `contributes.semanticTokenScopes` 按名字对应；改顺序必须同步。
+export semanticTokenTypes : List String
+semanticTokenTypes =
+  [ "namespace",
+    "type",
+    "enumMember",
+    "function",
+    "method",
+    "property",
+    "parameter",
+    "variable",
+    "keyword",
+    "number",
+    "macro"
+  ]
+
+export semanticTokenModifiers : List String
+semanticTokenModifiers = ["hole"]
+
+tkNamespace : Int
+tkNamespace = 0
+
+tkType : Int
+tkType = 1
+
+tkEnumMember : Int
+tkEnumMember = 2
+
+tkFunction : Int
+tkFunction = 3
+
+tkMethod : Int
+tkMethod = 4
+
+tkProperty : Int
+tkProperty = 5
+
+tkParameter : Int
+tkParameter = 6
+
+tkVariable : Int
+tkVariable = 7
+
+tkKeyword : Int
+tkKeyword = 8
+
+tkNumber : Int
+tkNumber = 9
+
+tkMacro : Int
+tkMacro = 10
+
+-- token modifier 是位掩码：bit0 = hole（命名洞 `?name`）。
+modHole : Int
+modHole = 1
+
+-- ---------------------------------------------------------------
+-- 声明表：按名字归类（不建作用域）
+-- ---------------------------------------------------------------
+record DeclTable where
+  dtNamespaces : List String
+  dtTypes : List String
+  dtCtors : List String
+  dtFields : List String
+  dtFuns : List String
+  dtMethods : List String
+  dtParams : List String
+
+emptyDeclTable : DeclTable
+emptyDeclTable = DeclTable [] [] [] [] [] [] []
+
+declTableFor : String -> DeclTable
+declTableFor text = case parseSource "<semantic>" text of
+  ErrC _ => emptyDeclTable
+  OkC sf => declTableOf sf
+
+declTableOf : SourceFile -> DeclTable
+declTableOf sf =
+  DeclTable (namespaceNames sf) (concatMap declTypeNames sf.sourceFileDecls)
+    (concatMap declCtorsOf sf.sourceFileDecls) (concatMap declFieldsOf sf.sourceFileDecls)
+    (concatMap declFunsOf sf.sourceFileDecls) (concatMap declMethodsOf sf.sourceFileDecls)
+    (concatMap declParamsOf sf.sourceFileDecls)
+
+-- 模块头 + import + import alias 的全部点分前缀（`Base.List.map` 的 `Base` / `Base.List`）。
+namespaceNames : SourceFile -> List String
+namespaceNames sf =
+  let
+    mods = case sf.sourceFileModDecl of
+      Nothing => []
+      Just md => [md.modDeclName]
+    imports = map importNameOf sf.sourceFileImports
+    aliases = mapMaybe importAliasOf sf.sourceFileImports
+  in concatMap dottedPrefixes (append mods (append imports aliases))
+
+importNameOf : Import -> String
+importNameOf imp = imp.importName
+
+importAliasOf : Import -> Maybe String
+importAliasOf imp = imp.importAlias
+
+dottedPrefixes : String -> List String
+dottedPrefixes name = dottedPrefixesGo (splitOnDot name) ""
+
+dottedPrefixesGo : List String -> String -> List String
+dottedPrefixesGo [] acc = []
+dottedPrefixesGo (seg :: rest) acc =
+  let
+    next = if acc == "" then seg else "${acc}.${seg}"
+  in next :: dottedPrefixesGo rest next
+
+declCtorsOf : Decl -> List String
+declCtorsOf (DData _ _ _ ctors _ _ _ _ _) = map ctorName ctors
+declCtorsOf _ = []
+
+declFieldsOf : Decl -> List String
+declFieldsOf (DRecord _ _ fields _ _ _ _ _) = map fieldName fields
+declFieldsOf _ = []
+
+declFunsOf : Decl -> List String
+declFunsOf (DSig n _ _ _) = [n]
+declFunsOf (DFun n _ _ _) = [n]
+declFunsOf (DAxiom n _ _) = [n]
+declFunsOf (DExtern n _ _ _) = [n]
+declFunsOf _ = []
+
+declMethodsOf : Decl -> List String
+declMethodsOf (DTrait _ _ _ methods _) = map traitMethodName methods
+declMethodsOf _ = []
+
+declParamsOf : Decl -> List String
+declParamsOf (DFun _ pats _ _) = concatMap patNames pats
+declParamsOf _ = []
+
+patNames : Pat -> List String
+patNames (PVar n _) = [n]
+patNames (PAs n inner _) = n :: patNames inner
+patNames (PCon _ pats _) = concatMap patNames pats
+patNames (PRecord _ fields _) = concatMap patPairNames fields
+patNames _ = []
+
+patPairNames : Pair String Pat -> List String
+patPairNames (Pair _ pat) = patNames pat
+
+-- ---------------------------------------------------------------
+-- 分类
+-- ---------------------------------------------------------------
+-- 软关键字不是 lexer 的 `TKw`：不产出语义 token，避免把 `export` 之类覆盖成 variable。
+export reservedWord : String -> Bool
+reservedWord name =
+  name == "export"
+    || name == "abstract"
+    || name == "alias"
+    || name == "boxed"
+    || name == "via"
+    || name == "field"
+    || name == "return"
+
+export upperStart : String -> Bool
+upperStart name = case strUnpack name of
+  [] => False
+  c :: _ => c >= 65 && c <= 90
+
+kindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
+kindOf table prevTok t rest =
+  if t.cstTag == "kw" then Just (Pair tkKeyword 0)
+  else if t.cstTag == "int" || t.cstTag == "float" then Just (Pair tkNumber 0)
+  else if t.cstTag == "ident" then identKindOf table prevTok t rest else Nothing
+
+identKindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
+identKindOf table prevTok t rest =
+  let
+    name = t.cstText
+  in if name == "_" || reservedWord name then Nothing
+  else if startsWith "@" name then Nothing
+  else if isHoleTok prevTok t then Just (Pair tkVariable modHole)
+  else if followedByBang t rest then Just (Pair tkMacro 0)
+  else if memName name table.dtCtors then Just (Pair tkEnumMember 0)
+  else if memName name table.dtTypes then Just (Pair tkType 0)
+  else if memName name table.dtMethods then Just (Pair tkMethod 0)
+  else if memName name table.dtFields then Just (Pair tkProperty 0)
+  else if memName name table.dtParams then Just (Pair tkParameter 0)
+  else if memName name table.dtFuns then Just (Pair tkFunction 0)
+  else if memName name table.dtNamespaces then Just (Pair tkNamespace 0)
+  else if upperStart name then Just (Pair tkType 0) else Just (Pair tkVariable 0)
+
+-- `?name`：`?` 与名字紧邻（lexer 把它们切成两个 token）。
+isHoleTok : Maybe CstToken -> CstToken -> Bool
+isHoleTok Nothing _ = False
+isHoleTok (Just prev) t =
+  prev.cstTag == "sym"
+    && prev.cstText == "?"
+    && spanEndLine prev.cstSpan == spanStartLine t.cstSpan
+    && spanEndCol prev.cstSpan == spanStartCol t.cstSpan
+
+-- `name!` 内置宏：`!` 与名字紧邻。
+followedByBang : CstToken -> List CstToken -> Bool
+followedByBang _ [] = False
+followedByBang t (next :: _) =
+  next.cstTag == "sym"
+    && next.cstText == "!"
+    && spanStartLine next.cstSpan == spanEndLine t.cstSpan
+    && spanStartCol next.cstSpan == spanEndCol t.cstSpan
+
+-- ---------------------------------------------------------------
+-- 输出：LSP 的 delta 编码 [deltaLine, deltaStartChar, length, tokenType, modifiers]
+-- ---------------------------------------------------------------
+export semanticTokensJson : String -> Json
+semanticTokensJson text = JObj [Pair "data" (JArr (map JNum (semanticTokenData text)))]
+
+semanticTokenData : String -> List Int
+semanticTokenData text =
+  let
+    table = declTableFor text
+  in case lexCst text of
+    Nothing => []
+    Just toks => rowsGo (split "\n" text) table 0 0 Nothing toks
+
+rowsGo : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> List CstToken -> List Int
+rowsGo lines table prevLine prevStart prevTok [] = []
+rowsGo lines table prevLine prevStart prevTok (t :: rest) = case tokenRow lines table prevLine prevStart prevTok t rest of
+  Nothing => rowsGo lines table prevLine prevStart (Just t) rest
+  Just row =>
+    append (firstOf row)
+      (rowsGo lines table (firstOf (secondOf row)) (secondOf (secondOf row)) (Just t) rest)
+
+tokenRow : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair (List Int) (Pair Int Int))
+tokenRow lines table prevLine prevStart prevTok t rest = case kindOf table prevTok t rest of
+  Nothing => Nothing
+  Just kind =>
+    let
+      sp = t.cstSpan
+      line1 = spanStartLine sp
+      line0 = line1 - 1
+      ln = lineAt1 lines line1
+      startU = utf16ColOf ln (spanStartCol sp) - 1
+      endU = utf16ColOf ln (spanEndCol sp) - 1
+      width = endU - startU
+      deltaLine = line0 - prevLine
+      deltaStart = if deltaLine == 0 then startU - prevStart else startU
+    in if width <= 0 then Nothing
+    else if deltaLine < 0 then Nothing
+    else if deltaLine == 0 && deltaStart < 0 then Nothing
+    else Just (Pair [deltaLine, deltaStart, width, firstOf kind, secondOf kind] (Pair line0 startU))

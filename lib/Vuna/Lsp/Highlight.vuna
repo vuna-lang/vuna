@@ -1,0 +1,61 @@
+module Vuna.Lsp.Highlight where
+
+-- Vuna.Lsp.Highlight：LSP documentHighlight（工具链模块，**永不进 seed 闭包**）。
+--
+-- 两条路径：
+--   1. **局部绑定**：复用 `Bindings.bindingRenameOccurrences`（与 rename/hover 同源的
+--      作用域解析：遮蔽、顺序作用域、函数参数 / λ / `let` / `where` / `case` / `do` /
+--      `as` / 记录模式字段）；
+--   2. **顶层符号**：当前文件里同名 `ident` token（来自 CST 词法流，天然跳过注释与字符串）。
+--      这条路径不做作用域区分：同名局部变量会一起高亮（已知边界，与语义 token 的口径一致）。
+--
+-- 返回 LSP DocumentHighlight（kind = 1，Text），range 按 LSP 要求走 UTF-16。
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Cst
+import Vuna.Json
+import Vuna.Lsp.Bindings
+import Vuna.Lsp.Diagnostics
+import Vuna.Lsp.Protocol
+import Vuna.Lsp.Semantic
+
+export documentHighlights : Int -> Int -> String -> List Json
+documentHighlights line col text =
+  let
+    lines = split "\n" text
+  in case lexCst text of
+    Nothing => []
+    Just toks => case identAt toks line col of
+      Nothing => []
+      Just tok =>
+        let
+          name = tok.cstText
+        in if name == "_" || reservedWord name then []
+        else if startsWith "@" name then []
+        else case bindingRenameOccurrences line col text of
+          Just occs => map (positionHighlight lines name) occs
+          Nothing => map (positionHighlight lines name) (identHits toks name)
+
+-- 光标（1-based 行 / UTF-8 字节列）下的 ident token（含端点）。
+identAt : List CstToken -> Int -> Int -> Maybe CstToken
+identAt [] line col = Nothing
+identAt (t :: rest) line col =
+  if t.cstTag == "ident" && spanStartLine t.cstSpan == line && col >= spanStartCol t.cstSpan && col <= spanEndCol t.cstSpan then Just t
+  else identAt rest line col
+
+identHits : List CstToken -> String -> List (Pair Int Int)
+identHits toks name = mapMaybe (tokPosIfName name) toks
+
+tokPosIfName : String -> CstToken -> Maybe (Pair Int Int)
+tokPosIfName name t =
+  if t.cstTag == "ident" && t.cstText == name then Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
+  else Nothing
+
+positionHighlight : List String -> String -> Pair Int Int -> Json
+positionHighlight lines name pos =
+  let
+    line = firstOf pos
+    col = secondOf pos
+    ln = lineAt1 lines line
+    endCol = col + strLength name
+  in JObj
+    [Pair "range" (lspRange line (utf16ColOf ln col) line (utf16ColOf ln endCol)), Pair "kind" (JNum 1)]

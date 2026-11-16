@@ -95,7 +95,8 @@ lineTextAt (x :: rest) n = if n <= 1 then x else lineTextAt rest (n - 1)
 
 -- UTF-8 字节列（1-based）→ UTF-16 code unit 列（1-based）。
 -- 只数到 byteCol-1 的字节：4 字节序列（>= 0xF0）计 2 个 unit，续字节（0x80..0xBF）计 0。
-utf16ColOf : String -> Int -> Int
+-- semantic tokens / documentHighlight 也用它把 span 列换算成 LSP 的 UTF-16。
+export utf16ColOf : String -> Int -> Int
 utf16ColOf lineText byteCol = utf16ColGo (strUnpack lineText) 0 0 (byteCol - 1) + 1
 
 utf16ColGo : List Int -> Int -> Int -> Int -> Int

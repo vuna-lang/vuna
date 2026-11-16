@@ -16,6 +16,9 @@ module Vuna.Lsp where
 -- 解析；顶层符号复用 Index 与 AST 声明位置）；codeAction 除 lint quick fix 外，还包括洞的
 -- case split（`refactor.rewrite`，构造子解析在 Query）与 `vuna.fixAllLint` command
 -- （`workspace/executeCommand` → 服务器发 `workspace/applyEdit`）。
+-- semanticTokens/full 走 `Vuna.Lsp.Semantic`（CST 词法流 + 声明表），documentHighlight 走
+-- `Vuna.Lsp.Highlight`（局部绑定复用 Bindings 的作用域解析），foldingRange 走
+-- `Vuna.Lsp.Folding`（行首缩进的 offside 块）。
 --
 -- 协议约束：**stdout 只写协议帧**；日志走 stderr（内存累积、退出时一次写出）。
 -- 读取按 `Content-Length` 精确切字节（`readChunk`），**不能按行读**：标准 LSP 帧的
@@ -23,7 +26,7 @@ module Vuna.Lsp where
 -- 退出码：收到 shutdown 后的 exit 退 0，否则（EOF / 未 shutdown）退 1。
 --
 -- 服务器状态：打开的文档表、惰性 Index（一次构建并缓存）、日志缓冲、按内容寻址的
--- 单文件分析缓存（`DocCache`：洞目标 / 诊断 suggestion）。
+-- 单文件分析缓存（`DocCache`：洞目标 / 诊断 suggestion / semanticTokens 结果）。
 -- 请求延迟：洞精化只在**光标所在行**有 `_` / `?name` 时触发；洞目标与 suggestion 按
 -- (uri, 文本内容哈希) 复用（文本一变即失效）。同一 buffer 的重复 hover / codeAction
 -- 因此是毫秒级，不会每个请求重跑精化。
@@ -45,9 +48,12 @@ import Vuna.Json
 import Vuna.Json.Server
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Diagnostics
+import Vuna.Lsp.Folding
+import Vuna.Lsp.Highlight
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Query
 import Vuna.Lsp.Rename
+import Vuna.Lsp.Semantic
 import Base.EffConsole
 import Base.Eff.Types
 import Base.EffArgs
@@ -120,10 +126,12 @@ record LspState where
 
 -- 同一份 buffer 内容的分析结果（惰性填充：某一项没算过就是 Nothing）。
 -- `dcGoals` 带上「依赖是否完整」标记：只精化当前 buffer 的结果（False）不能直接用于
--- case split，命中时需要再算一次。
+-- case split，命中时需要再算一次。`dcTokens` 是 semanticTokens/full 的结果对象
+-- （`{data:[...]}`），按同一份内容缓存，避免每次请求重跑词法 + parse。
 record DocCache where
   dcGoals : Maybe (Pair Bool (List DtGoalInfo))
   dcSuggestions : Maybe (List (Pair (Pair Int Int) (List Json)))
+  dcTokens : Maybe Json
 
 setDocs : List Doc -> LspState -> LspState
 setDocs docs (LspState _ s pull idx tried hint logs dc dsess gs canc) =
@@ -192,7 +200,7 @@ upsertDocCache key entry st =
 cacheEntryOf : Int -> LspState -> DocCache
 cacheEntryOf key st = case lookupDocCache key st.stateDocCache of
   Just e => e
-  Nothing => DocCache Nothing Nothing
+  Nothing => DocCache Nothing Nothing Nothing
 
 -- 取消集合：只保留最近 64 个（客户端取消的通常就是刚发出的几个）。
 rememberCancel : Int -> LspState -> LspState
@@ -261,8 +269,12 @@ docToPair d = Pair (decodeUri d.docUri) d.docText
 -- ---------------------------------------------------------------
 serverCapabilities : Json
 serverCapabilities =
-  JObj
-    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])]), Pair "diagnosticProvider" (JObj [Pair "interleaved" (JBool False), Pair "workspaceDiagnostics" (JBool False)])]
+  let
+    legend =
+      JObj
+        [Pair "tokenTypes" (JArr (map JStr semanticTokenTypes)), Pair "tokenModifiers" (JArr (map JStr semanticTokenModifiers))]
+  in JObj
+    [Pair "textDocumentSync" (JObj [Pair "openClose" (JBool True), Pair "change" (JNum syncKindFull)]), Pair "completionProvider" (JObj [Pair "triggerCharacters" (JArr [JStr "."]), Pair "resolveProvider" (JBool False)]), Pair "definitionProvider" (JBool True), Pair "referencesProvider" (JBool True), Pair "renameProvider" (JObj [Pair "prepareProvider" (JBool True)]), Pair "documentSymbolProvider" (JBool True), Pair "documentFormattingProvider" (JBool True), Pair "documentHighlightProvider" (JBool True), Pair "foldingRangeProvider" (JBool True), Pair "semanticTokensProvider" (JObj [Pair "legend" legend, Pair "full" (JBool True)]), Pair "workspaceSymbolProvider" (JBool True), Pair "hoverProvider" (JBool True), Pair "codeActionProvider" (JObj [Pair "codeActionKinds" (JArr [JStr "quickfix", JStr "refactor.rewrite"])]), Pair "executeCommandProvider" (JObj [Pair "commands" (JArr [JStr fixAllLintCommand])]), Pair "diagnosticProvider" (JObj [Pair "interleaved" (JBool False), Pair "workspaceDiagnostics" (JBool False)])]
 
 -- ---------------------------------------------------------------
 -- 请求分发
@@ -408,7 +420,7 @@ goalsCompute allowFull allowBuild state uri text key entry = do
   pair <- goalsForDoc allowFull allowBuild state.stateDiagSession uri text
   let
     state1 =
-      upsertDocCache key (DocCache (Just (secondOf pair)) entry.dcSuggestions)
+      upsertDocCache key (DocCache (Just (secondOf pair)) entry.dcSuggestions entry.dcTokens)
         (setDiagSession (firstOf pair) state)
   in pure (Pair state1 (secondOf (secondOf pair)))
 
@@ -424,7 +436,7 @@ suggestionsCached state uri text =
       pair <- suggestionsForDoc state.stateDiagSession uri text
       let
         state1 =
-          upsertDocCache key (DocCache entry.dcGoals (Just (secondOf pair)))
+          upsertDocCache key (DocCache entry.dcGoals (Just (secondOf pair)) entry.dcTokens)
             (setDiagSession (firstOf pair) state)
       in pure (Pair state1 (secondOf pair))
 
@@ -568,6 +580,44 @@ handleDocumentSymbol msg state =
   in do
     symbols <- documentSymbols uri text
     pure (Pair False (Pair state [responseOk (idOf msg) (JArr symbols)]))
+
+-- semanticTokens/full：CST 词法流 + 声明表（`Vuna.Lsp.Semantic`）。结果按 uri + 内容缓存，
+-- 同一 buffer 的重复请求不再重跑词法 + parse。
+handleSemanticTokens : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleSemanticTokens msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    text = textForUri uri state
+    key = contentKeyOf uri text
+    entry = cacheEntryOf key state
+  in case entry.dcTokens of
+    Just cached => pure (Pair False (Pair state [responseOk (idOf msg) cached]))
+    Nothing =>
+      let
+        tokens = semanticTokensJson text
+        state1 = upsertDocCache key (DocCache entry.dcGoals entry.dcSuggestions (Just tokens)) state
+      in pure (Pair False (Pair state1 [responseOk (idOf msg) tokens]))
+
+-- documentHighlight：局部绑定走作用域解析，顶层符号用当前文件同名 ident token。
+handleDocumentHighlight : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleDocumentHighlight msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    line = lineOfParams params + 1
+    col = colOfParams params + 1
+    text = textForUri uri state
+  in pure (Pair False (Pair state [responseOk (idOf msg) (JArr (documentHighlights line col text))]))
+
+-- foldingRange：按行首缩进的 offside 块（`Vuna.Lsp.Folding`）。
+handleFoldingRange : {r : Row} -> Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
+handleFoldingRange msg state =
+  let
+    params = paramsOf msg
+    uri = uriOfParams params
+    text = textForUri uri state
+  in pure (Pair False (Pair state [responseOk (idOf msg) (JArr (foldingRangesJson text))]))
 
 -- definition：模块引用/局部绑定（parse 级）→ Index 符号 → 同文件兜底。
 handleDefinition : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
@@ -724,6 +774,9 @@ dispatch "textDocument/references" msg state = handleReferences msg state
 dispatch "textDocument/prepareRename" msg state = handlePrepareRename msg state
 dispatch "textDocument/rename" msg state = handleRename msg state
 dispatch "textDocument/documentSymbol" msg state = handleDocumentSymbol msg state
+dispatch "textDocument/semanticTokens/full" msg state = handleSemanticTokens msg state
+dispatch "textDocument/documentHighlight" msg state = handleDocumentHighlight msg state
+dispatch "textDocument/foldingRange" msg state = handleFoldingRange msg state
 dispatch "textDocument/formatting" msg state = handleFormatting msg state
 dispatch "textDocument/codeAction" msg state = handleCodeAction msg state
 dispatch "workspace/executeCommand" msg state = handleExecuteCommand msg state

@@ -330,6 +330,9 @@ check_contains "initialize 声明 definitionProvider" "$init" '"definitionProvid
 check_contains "initialize 声明 referencesProvider" "$init" '"referencesProvider":true'
 check_contains "initialize 声明 renameProvider(prepareProvider)" "$init" '"renameProvider":{"prepareProvider":true}'
 check_contains "initialize 声明 documentSymbolProvider" "$init" '"documentSymbolProvider":true'
+check_contains "initialize 声明 documentHighlightProvider" "$init" '"documentHighlightProvider":true'
+check_contains "initialize 声明 foldingRangeProvider" "$init" '"foldingRangeProvider":true'
+check_contains "initialize 声明 semanticTokensProvider(legend+full)" "$init" '"semanticTokensProvider":{"legend":{"tokenTypes":["namespace","type","enumMember","function","method","property","parameter","variable","keyword","number","macro"]'
 check_contains "initialize 声明 documentFormattingProvider" "$init" '"documentFormattingProvider":true'
 check_contains "initialize 声明 workspaceSymbolProvider" "$init" '"workspaceSymbolProvider":true'
 check_contains "initialize 声明 codeActionProvider(codeActionKinds=[quickfix,refactor.rewrite])" "$init" '"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}'
@@ -1298,6 +1301,49 @@ cp2=$(lsp_frame_id "$tmp/compl.out" 2)
 check_contains "completion 项带 documentation（Markdown）" "$cp2" '"documentation":{"kind":"markdown","value":"buffer fn docs."}'
 check_contains "completion 项带 detail 签名" "$cp2" '"detail":"Int -> Int"'
 check_not_contains "completion 不回落到磁盘 docstring" "$cp2" 'disk fn docs.'
+
+# ---- 26g) semantic tokens / documentHighlight / foldingRange ----
+# 语义 token 只输出能确定的分类（关键字 / 数字 / 标识符：类型、构造子、函数、字段、
+# 参数、洞、宏），字符串与运算符留给 TextMate；documentHighlight 的局部绑定走作用域
+# 解析（定义 + 使用）；foldingRange 按行首缩进产出 offside 块。
+sm_uri="file://$tmp/semantic.vuna"
+sm_text='module Sm where\n\ndata Color : Type where\n  Red : Color\n\nrecord Pt where\n  px : Int\n\nparse : Int -> Int\nparse n = dbg! n\n\nmain : Int\nmain =\n  let\n    y : Int\n    y = ?goal\n  in parse y\n'
+{
+  frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$sm_uri"'","languageId":"vuna","version":1,"text":"'"$sm_text"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"'"$sm_uri"'"}}}'
+  # line9 char15 = `parse n = dbg! n` 的最后一个 n（局部 binder）
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"'"$sm_uri"'"},"position":{"line":9,"character":15}}}'
+  # line0 char1 = module 关键字（不是 ident，回空）
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"'"$sm_uri"'"},"position":{"line":0,"character":1}}}'
+  frame_line '{"jsonrpc":"2.0","id":5,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"'"$sm_uri"'"}}}'
+  frame_line '{"jsonrpc":"2.0","id":6,"method":"shutdown","params":null}'
+  frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
+} | "$VUNA" lsp >"$tmp/sem.out" 2>/dev/null
+sm2=$(lsp_frame_id "$tmp/sem.out" 2)
+sm3=$(lsp_frame_id "$tmp/sem.out" 3)
+sm4=$(lsp_frame_id "$tmp/sem.out" 4)
+sm5=$(lsp_frame_id "$tmp/sem.out" 5)
+check_contains "semanticTokens 回 data 数组" "$sm2" '"data":['
+sm_data=$(printf '%s' "$sm2" | grep -o '"data":\[[^]]*\]' | sed 's/.*"data":\[//;s/\].*$//')
+sm_ints=$(printf '%s' "$sm_data" | awk -F, '{ print NF }')
+check_eq "semanticTokens 数据是 5 元组" "0" "$((sm_ints % 5))"
+sm_cover=$(printf '%s\n' "$sm_data" | awk -F, '
+  { for (i = 4; i <= NF; i += 5) {
+      if ($i + 0 == 2) e++
+      if ($i + 0 == 3) f++
+      if ($i + 0 == 5) p++
+      if ($i + 0 == 8) k++
+      if ($i + 0 == 10) m++
+    }
+    for (i = 5; i <= NF; i += 5) if ($i + 0 == 1) h++
+    if (e < 1 || f < 1 || p < 1 || k < 4 || m < 1 || h < 1) print "missing"
+  }')
+check_eq "semanticTokens 覆盖 ctor/function/property/keyword/macro/hole" "" "$sm_cover"
+check_eq "documentHighlight 局部 binder 出现两次（定义 + 使用）" "2" "$(printf '%s' "$sm3" | grep -o '"kind":1' | wc -l | tr -d ' ')"
+check_contains "documentHighlight 在关键字上回空数组" "$sm4" '"result":[]'
+check_contains "foldingRange 折叠 let 块" "$sm5" '"startLine":13,"endLine":15'
+check_contains "foldingRange 折叠顶层函数体" "$sm5" '"startLine":12,"endLine":16'
 
 printf 'lsp: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "lsp smoke passed"

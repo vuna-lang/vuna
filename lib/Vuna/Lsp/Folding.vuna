@@ -1,0 +1,56 @@
+module Vuna.Lsp.Folding where
+
+-- Vuna.Lsp.Folding：LSP foldingRange（工具链模块，**永不进 seed 闭包**）。
+--
+-- 按行首缩进的 offside 块产出折叠范围：缩进变深就开一个块，回到同级或更浅缩进就关闭；
+-- 空行不参与（不关闭块，也不计入块尾）。只发至少两行的块。这是语言无关的兜底层——
+-- 客户端能把 `foldingRangeProvider` 的块与 `-- region` 标记合并使用。
+import Vuna.Compiler.Base.Common
+import Vuna.Json
+
+export foldingRangesJson : String -> List Json
+foldingRangesJson text =
+  let
+    lines = split "\n" text
+    ranges = reverse (foldLines lines 1 0 [] [])
+  in map foldRangeJson ranges
+
+-- 栈 = 每层 (缩进, 起始行)，均 1-based；lastContent = 上一条非空行的行号。
+foldLines : List String -> Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> List (Pair Int Int)
+foldLines [] _ lastContent stack acc = popAll stack lastContent acc
+foldLines (ln :: rest) lineNo lastContent stack acc = if isBlankLine ln then foldLines rest (lineNo + 1) lastContent stack acc
+else
+  let
+    indent = indentOf ln
+    popped = popBlocks indent lastContent stack acc
+  in foldLines rest (lineNo + 1) lineNo (Pair indent lineNo :: firstOf popped) (secondOf popped)
+
+-- 关闭所有缩进 >= 当前行的块（同级兄弟不折叠）。
+popBlocks : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> Pair (List (Pair Int Int)) (List (Pair Int Int))
+popBlocks indent end [] acc = Pair [] acc
+popBlocks indent end (entry :: rest) acc =
+  if firstOf entry >= indent then popBlocks indent end rest (closeBlock (secondOf entry) end acc)
+  else Pair (entry :: rest) acc
+
+popAll : List (Pair Int Int) -> Int -> List (Pair Int Int) -> List (Pair Int Int)
+popAll [] lastContent acc = acc
+popAll (entry :: rest) lastContent acc =
+  popAll rest lastContent (closeBlock (secondOf entry) lastContent acc)
+
+closeBlock : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
+closeBlock start end acc = if end > start then Pair start end :: acc else acc
+
+foldRangeJson : Pair Int Int -> Json
+foldRangeJson range =
+  JObj
+    [Pair "startLine" (JNum (firstOf range - 1)), Pair "endLine" (JNum (secondOf range - 1)), Pair "kind" (JStr "region")]
+
+isBlankLine : String -> Bool
+isBlankLine ln = indentOf ln == strLength ln
+
+indentOf : String -> Int
+indentOf s = indentGo (strUnpack s) 0
+
+indentGo : List Int -> Int -> Int
+indentGo [] n = n
+indentGo (c :: rest) n = if c == 32 || c == 9 then indentGo rest (n + 1) else n
