@@ -54,24 +54,14 @@ expandDerivings decls =
 -- 只要任意一处声明了符号方法就用符号名，否则回落标识符名。
 traitMethodOf : List Decl -> String -> String -> String -> String
 traitMethodOf decls classShort symbolName identName =
-  let
-    _ = dbg! "derive-trace class=${classShort} names=${show (allTraitMethodNames decls classShort)}"
-    _ = dbg! "derive-trace symbol=${symbolName} ident=${identName}"
-  in if anyTraitHasMethod decls classShort symbolName then symbolName
+  if anyTraitHasMethod decls classShort symbolName then symbolName
   else if anyTraitHasMethod decls classShort identName then identName else symbolName
 
-allTraitMethodNames : List Decl -> String -> List String
-allTraitMethodNames [] cls = []
-allTraitMethodNames (d :: rest) cls = case d of
-  DTrait tname params methods sp =>
-    if traitShortName tname == cls then append (map traitMethodName methods) (allTraitMethodNames rest cls)
-    else allTraitMethodNames rest cls
-  _ => allTraitMethodNames rest cls
 
 anyTraitHasMethod : List Decl -> String -> String -> Bool
 anyTraitHasMethod [] cls m = False
 anyTraitHasMethod (d :: rest) cls m = case d of
-  DTrait tname params methods sp =>
+  DTrait tname params supers methods sp =>
     if traitShortName tname == cls && memName m (map traitMethodName methods) then True
     else anyTraitHasMethod rest cls m
   _ => anyTraitHasMethod rest cls m

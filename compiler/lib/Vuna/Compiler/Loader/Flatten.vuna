@@ -847,11 +847,11 @@ resolveProjectKeeping release keep (Project decls imports implicit modules entry
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
-resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity) :: rest) =
+resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
   if memName name keep then Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
-    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity) (firstOf p2)) (secondOf p2)))
+    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls)
-    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity) (firstOf p2)) (append warns (secondOf p2))))))))
+    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。
