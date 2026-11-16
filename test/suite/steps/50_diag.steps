@@ -147,7 +147,7 @@ out-contains: = found: String
 out-contains: = trace[unify]:
 run: "$VUNA" check corpus/dt_err/28_multi_clause_coverage.vuna --error-format human 2>&1
 exit: 1
-out-contains: = candidates: Nat.Succ
+out-contains: missing (Nat.Succ _)
 # explain --json：目录条目机器可读（含 example 夹具路径）。
 run: "$VUNA" explain --json TC_TypeMismatch
 out-contains: "code":"TC_TypeMismatch"
