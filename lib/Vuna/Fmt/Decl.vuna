@@ -108,6 +108,13 @@ mapFirstLineContaining needle f [] = []
 mapFirstLineContaining needle f (line :: rest) =
   if contains needle line then f line :: rest else line :: mapFirstLineContaining needle f rest
 
+-- trait 头行：跳过注释（父类前缀里可能出现的 `trait` 字样不应被当成声明头）。
+mapFirstTraitHeader : (String -> String) -> List String -> List String
+mapFirstTraitHeader f [] = []
+mapFirstTraitHeader f (line :: rest) =
+  if contains "trait " line && not (contains "--" line) then f line :: rest
+  else line :: mapFirstTraitHeader f rest
+
 applyDeclMods : FmtDeclMods -> Decl -> List String -> List String
 applyDeclMods mods (DInstance ctxE head methods sp) lines = lines
 applyDeclMods mods (DFun name pats body sp) lines = lines
@@ -131,7 +138,7 @@ applyDeclMods mods decl lines =
     DRecord _ _ _ _ _ _ _ _ =>
       mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
     DTrait _ _ _ _ _ =>
-      mapFirstLineContaining marker (\line => insertBeforeMarker " where" members line) afterPrefix
+      mapFirstTraitHeader (\line => insertBeforeMarker " where" members line) afterPrefix
     _ => afterPrefix
 
 -- 声明渲染

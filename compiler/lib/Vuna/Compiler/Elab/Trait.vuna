@@ -87,13 +87,11 @@ elabTraitFinal globals ec tname paramNames superParts methods methodsP pKinds fi
   in Vuna.Compiler.Common.bind (elabConstraintDomains (ecClasses ec) globals classCtx superParts sp ec) (\pq => case pq of
     Pair superTys ecSup =>
       let
-        nSupers = length superTys
-        nFields = nSupers + length fieldTys
-        allFieldTys = append superTys fieldTys
+        nFields = length fieldTys
         dname = dictTypeName tname
         cname = dictCtorName tname
         dapp = dictAppTermOf dname paramNames
-        ctorTy = foldParamPis paramsKinds (foldPiFieldTys allFieldTys dapp)
+        ctorTy = foldParamPis paramsKinds (foldPiFieldTys fieldTys dapp)
         tele = teleOfType ctorTy
         dd =
           DtData dname tele [DtCtor cname dname tele ctorTy Nothing]
@@ -101,14 +99,11 @@ elabTraitFinal globals ec tname paramNames superParts methods methodsP pKinds fi
         projs = methodProjections tname paramNames pKinds methodsP fieldTys
         projSpans = map (\m => Pair (traitMethodName m) (traitMethodSpan m)) methods
         -- 字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
-        -- 判定与 codegen 的字段 opaque 标志同源（`Elab.Meta.isOpaqueRuntimeTyIn`），上下文是
-        -- 类参数 telescope（字段类型的自由变量正好是这些类参数）。
         fieldCtx = bindClassParams paramsKinds emptyCtx
         opaqueFields =
           map (\t => isOpaqueRuntimeTyIn ecSup fieldCtx (eval (ctxEnv fieldCtx) t)) fieldTys
         projBodies =
-          projectionDefsOpaque nSupers opaqueFields tname (length paramNames) methodsP fieldTys
-            nFields
+          projectionDefsOpaque opaqueFields tname (length paramNames) methodsP fieldTys nFields
         cls = DtClass tname paramNames superTys projs fieldTys projSpans
         ec2 = ecAddClass (ecAddData ecSup dd) cls
         ec3 = foldlAddDef ec2 projBodies
@@ -226,29 +221,29 @@ projectionParamNames : Int -> List String
 projectionParamNames n = if n == 1 then ["_p"] else map (\i => "_p${i}") (range 0 n)
 
 -- 投影定义表：每个方法一条 `m = <投影定义体>`；字段号从父类字段之后开始。
-export projectionDefs : Int -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
-projectionDefs nSupers tname nParams methods fieldTys nFields =
-  projectionDefsOpaque nSupers (map (\_ => False) fieldTys) tname nParams methods fieldTys nFields
+export projectionDefs : String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
+projectionDefs tname nParams methods fieldTys nFields =
+  projectionDefsOpaque (map (\_ => False) fieldTys) tname nParams methods fieldTys nFields
 
 -- 按 `opaqueFields`（与方法同序）决定每个投影体是否给字典字段变量包 cast。
-projectionDefsOpaque : Int -> List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
-projectionDefsOpaque nSupers flags tname nParams methods fieldTys nFields =
-  projectionDefsOpaqueGo nSupers flags (dictCtorName tname) nParams methods fieldTys 0 nFields
+projectionDefsOpaque : List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> List (Pair String Term)
+projectionDefsOpaque flags tname nParams methods fieldTys nFields =
+  projectionDefsOpaqueGo flags (dictCtorName tname) nParams methods fieldTys 0 nFields
 
-projectionDefsOpaqueGo : Int -> List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
-projectionDefsOpaqueGo nSupers flags ctor nParams [] fieldTys idx nFields = []
-projectionDefsOpaqueGo nSupers flags ctor nParams (m :: rest) [] idx nFields = []
-projectionDefsOpaqueGo nSupers flags ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFields =
-  Pair mname (projectionBodyOpaque (flagAt idx flags) ctor (nSupers + idx) (methodArgRigsOf binderRig t) nFields nParams)
-    :: projectionDefsOpaqueGo nSupers flags ctor nParams rest rest2 (idx + 1) nFields
+projectionDefsOpaqueGo : List Bool -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
+projectionDefsOpaqueGo flags ctor nParams [] fieldTys idx nFields = []
+projectionDefsOpaqueGo flags ctor nParams (m :: rest) [] idx nFields = []
+projectionDefsOpaqueGo flags ctor nParams ((Pair mname mexpr) :: rest) (t :: rest2) idx nFields =
+  Pair mname (projectionBodyOpaque (flagAt idx flags) ctor idx (methodArgRigsOf binderRig t) nFields nParams)
+    :: projectionDefsOpaqueGo flags ctor nParams rest rest2 (idx + 1) nFields
 
 flagAt : Int -> List Bool -> Bool
 flagAt i [] = False
 flagAt i (b :: rest) = if i <= 0 then b else flagAt (i - 1) rest
 
-export projectionDefsGo : Int -> String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
-projectionDefsGo nSupers ctor nParams methods fieldTys idx nFields =
-  projectionDefsOpaqueGo nSupers (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx
+export projectionDefsGo : String -> Int -> List (Pair String Expr) -> List Term -> Int -> Int -> List (Pair String Term)
+projectionDefsGo ctor nParams methods fieldTys idx nFields =
+  projectionDefsOpaqueGo (map (\_ => False) fieldTys) ctor nParams methods fieldTys idx
     nFields
 
 -- 实例落点静态检查（孤儿实例）。
@@ -309,18 +304,18 @@ instanceLandingOk allDecls sp cls headExpr =
     || anyDeclInFile allDecls headNames file
     || anyGlobalHead headNames
 
--- 实例的直接父类字典：逐个按实例 ctx + 全局实例搜索，结果按父类声明顺序放进字典值。
--- 搜索失败说明实例没有满足父类要求（`instance Monad T` 缺 `Applicative T`）。
-elabSuperFields : List (Pair String Term) -> Ctx -> Int -> String -> Span -> List Term -> List Term -> List Term -> Ec -> Check (Pair (List Term) Ec)
-elabSuperFields globals ctx nCtx instName sp args supers acc ec = case supers of
-  [] => OkC (Pair (reverse acc) ec)
+-- 实例的直接父类要求：逐个按实例 ctx + 全局实例搜索（只校验，不把父类字典塞进字典值）。
+-- 父类字典作为独立隐式参数在调用点/签名处求解（与普通约束同一套机制）。
+checkSuperClasses : List (Pair String Term) -> Ctx -> Int -> String -> Span -> List Term -> List Term -> Ec -> Check Ec
+checkSuperClasses globals ctx nCtx instName sp args supers ec = case supers of
+  [] => OkC ec
   s :: rest =>
     let
       goal = evalCtx ctx (shift 0 nCtx (substInstParams args s))
     in case searchInstanceIn globals ctx ec goal sp of
       ErrC e =>
         tcErr2 sp (SuperclassNotSatisfied instName (showValue goal)) instName (showValue goal)
-      OkC (Pair t ec1) => elabSuperFields globals ctx nCtx instName sp args rest (t :: acc) ec1
+      OkC (Pair t ec1) => checkSuperClasses globals ctx nCtx instName sp args rest ec1
 
 -- 实例落点通过后的正常实例精化（方法检查 + 字典项构造）。
 elabInstanceWithClass : List (Pair String Term) -> List (Pair Decl Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Check (Pair (List (Pair String Term)) Ec)
@@ -338,16 +333,13 @@ elabInstanceWithClass globals allDecls cls info ec0 headExpr methods msp = case 
         nTele = length (instSigTele info)
         bodyDepth = nTele + nCtx
         iname = instanceName (dtClassName cls) headExpr
-      in Vuna.Compiler.Common.bind (elabSuperFields globals bodyCtx nCtx iname msp (instSigArgs info) cls.dtClassSupers [] ec0) (\ps => let
-        superTerms = firstOf ps
-        ecSuper = secondOf ps
-      in Vuna.Compiler.Common.bind (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ecSuper methods msp) (\q => let
+      in Vuna.Compiler.Common.bind (checkSuperClasses globals bodyCtx nCtx iname msp (instSigArgs info) cls.dtClassSupers ec0) (\ecSuper => Vuna.Compiler.Common.bind (elabInstanceMethodsCtx globals cls bodyCtx nCtx (instSigArgs info) ecSuper methods msp) (\q => let
         fieldTerms = firstOf q
         ec1 = secondOf (secondOf q)
         solvedCtx = solveCtxGoals bodyCtx nCtx nTele ec1 []
         ctxSubs = firstOf solvedCtx
         ec2 = secondOf solvedCtx
-        fields1 = map (applyCtxSubstsTo nCtx ctxSubs) (append superTerms fieldTerms)
+        fields1 = map (applyCtxSubstsTo nCtx ctxSubs) fieldTerms
       in Vuna.Compiler.Common.bind (resolveRigidGoals globals bodyCtx msp (ecPending ec2) [] ec2) (\r => let
         globSubs = firstOf r
         ec3 = secondOf r

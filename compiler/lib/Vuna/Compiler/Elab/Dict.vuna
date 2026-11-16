@@ -253,9 +253,7 @@ firstUnsolvedInterpGoalGo ec ((Constraint cid kind m dom span depth) :: rest) = 
 
 -- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
 localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
-localDictLookup ctx i dom ec = case localDictLookupExact ctx i dom ec of
-  Just pair => Just pair
-  Nothing => localSuperLookup ctx i dom ec 8
+localDictLookup ctx i dom ec = localDictLookupExact ctx i dom ec
 
 localDictLookupExact : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
 localDictLookupExact ctx i dom ec = case ctx.ctxItems of
@@ -271,86 +269,6 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
     OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0)) (ecPutSols ec (solsList sols2)))
     ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
   else localDictLookupGo ctx (i + 1) dom ec rest
-
--- 超类蕴含：局部 `Dict_C args` 的（传递）父类字典可以由字典字段投影得到。
--- 只在精确匹配全部失败后尝试；父类只引用先声明的 trait，字段链天然无环（fuel 兜底）。
-localSuperLookup : Ctx -> Int -> Value -> Ec -> Int -> Maybe (Pair Term Ec)
-localSuperLookup ctx i dom ec fuel = if fuel <= 0 then Nothing
-else case ctx.ctxItems of
-  [] => Nothing
-  _ => localSuperLookupGo ctx i dom ec fuel ctx.ctxItems
-
-localSuperLookupGo : Ctx -> Int -> Value -> Ec -> Int -> List (Pair String Term) -> Maybe (Pair Term Ec)
-localSuperLookupGo ctx i dom ec fuel [] = Nothing
-localSuperLookupGo ctx i dom ec fuel ((Pair name ty) :: rest) =
-  let
-    v = forceVal ec (varTypeValue ctx i ty)
-  in case v of
-    VNeutral (NGlobal fam args) => if isDictFamily ec fam then case findClassByDictFamily (ecClasses ec) fam of
-      Just cls => if length cls.dtClassSupers > 0 then case dictSuperLookup ec fam args (TVar name i (Span "" 0 0 0 0)) fuel dom of
-        Just pair => Just pair
-        Nothing => localSuperLookupGo ctx (i + 1) dom ec fuel rest
-      else localSuperLookupGo ctx (i + 1) dom ec fuel rest
-      Nothing => localSuperLookupGo ctx (i + 1) dom ec fuel rest
-    else localSuperLookupGo ctx (i + 1) dom ec fuel rest
-    _ => localSuperLookupGo ctx (i + 1) dom ec fuel rest
-
--- 从 `Dict_C args` 值出发，沿父类字段找目标字典（按层展开候选，fuel 兜底防环）。
-record DictCand where
-  dictCandFam : String
-  dictCandArgs : List Value
-  dictCandTerm : Term
-
-dictSuperLookup : Ec -> String -> List Value -> Term -> Int -> Value -> Maybe (Pair Term Ec)
-dictSuperLookup ec fam args term fuel target =
-  dictSuperLookupQueue ec fuel [DictCand fam args term] target
-
-dictSuperLookupQueue : Ec -> Int -> List DictCand -> Value -> Maybe (Pair Term Ec)
-dictSuperLookupQueue ec fuel queue target = if fuel <= 0 then Nothing
-else case queue of
-  [] => Nothing
-  c :: rest => case findClassByDictFamily (ecClasses ec) c.dictCandFam of
-    Nothing => dictSuperLookupQueue ec (fuel - 1) rest target
-    Just cls =>
-      let
-        nSupers = length cls.dtClassSupers
-        nFields = nSupers + length cls.dtClassMethods
-      in if nSupers == 0 then dictSuperLookupQueue ec (fuel - 1) rest target
-      else
-        let
-          r =
-            tryClassSupers ec cls nFields (reverse c.dictCandArgs) c.dictCandTerm 0
-              cls.dtClassSupers target
-        in case firstOf r of
-          Just hit => Just hit
-          Nothing => dictSuperLookupQueue ec (fuel - 1) (append rest (secondOf r)) target
-
--- 检查一个类的直接父类字段：命中即返回投影项；未命中的父类字典进候选表供下一层继续。
-tryClassSupers : Ec -> DtClass -> Int -> List Value -> Term -> Int -> List Term -> Value -> Pair (Maybe (Pair Term Ec)) (List DictCand)
-tryClassSupers ec cls nFields env term idx supers target = case supers of
-  [] => Pair Nothing []
-  s :: rest =>
-    let
-      sdom = forceVal ec (eval env s)
-      sel = dictFieldSelect cls idx nFields term
-      r = tryClassSupers ec cls nFields env term (idx + 1) rest target
-    in case conv (ecDefTbl ec) (ecSolsP ec) 0 target sdom of
-      OkC sols => Pair (Just (Pair sel (ecPutSols ec (solsList sols)))) []
-      ErrC _ => case sdom of
-        VNeutral (NGlobal fam2 args2) => Pair (firstOf r) (DictCand fam2 args2 sel :: secondOf r)
-        _ => r
-
--- 字典字段选择项：`case dict of MkDict_C _f0 .. _f{n-1} => _f{k}`。
-dictFieldSelect : DtClass -> Int -> Int -> Term -> Term
-dictFieldSelect cls fieldIdx nFields scrut =
-  TCase scrut
-    [CaseAlt (dictCtorName (dtClassName cls)) (fieldBinderNames nFields) (TVar (fieldVarName fieldIdx) (nFields - 1 - fieldIdx) (Span "" 0 0 0 0))]
-
--- 按字典族名（`Dict_<类>`）找类；父类项与字段布局都从这里取。
-findClassByDictFamily : List DtClass -> String -> Maybe DtClass
-findClassByDictFamily [] fam = Nothing
-findClassByDictFamily (c :: rest) fam =
-  if dictTypeName (dtClassName c) == fam then Just c else findClassByDictFamily rest fam
 
 -- 刚性类参数快路径：只有当**同一字典族**的实例都是单态（tele/ctx 均空）时才可确定
 -- 匹配不上。按类过滤：blanket 实例（如 `Interp`）只让它自己的类退回全量搜索，
