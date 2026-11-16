@@ -49,7 +49,7 @@ LSP 细节（帧格式、已实现方法、模块解析、诊断来源、编辑�
 - 默认输出 `DIR/docs/api.html`（`DIR=.` 时 `docs/api.html`）；父目录逐级创建；
 - workspace 根渲染所有成员包，单包目录只渲染该包；尊重每包的 `[export].modules`；
 - `--check` 报告缺失 docstring 的顶层导出项（exit 1，不写文件）；
-- 正常生成走对象库：载荷是 `objects/tool` 里的 `doc-html 1`，key = 包/导出面 + 每个
+- 正常生成走对象库：载荷是 `objects/doc` 里的 `doc-html 1`，key = 包/导出面 + 每个
   源文件的字节 + 编译器 tag；第二次同输入输出 `doc-cache=hit`（`--check` 不缓存判定）；
 - docstring 语法、HTML 搜索框、类型检索与边界见 [api-docs.md](api-docs.md)。
 

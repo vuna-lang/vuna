@@ -75,7 +75,7 @@ else if check then do
     OkC book => runCheck book
 else do
   key <- docCacheKey scopes files
-  cached <- storeObjectReadEff "tool" "doc-html 1" key
+  cached <- storeObjectReadEff "doc" "doc-html 1" key
   case cached of
     Just content => do
       _ <- writeDocFile out content
@@ -89,7 +89,7 @@ else do
           let
             content = renderPage book
           in do
-            _ <- storeObjectWriteEff "tool" "doc-html 1" key content
+            _ <- storeObjectWriteEff "doc" "doc-html 1" key content
             _ <- writeDocFile out content
             _ <- consolePrint "doc-cache=miss\n"
             _ <- consolePrint "wrote ${out} (${length (bookModules book)} modules)\n"

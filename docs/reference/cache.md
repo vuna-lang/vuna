@@ -22,7 +22,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/lex/<源摘要>              # lex tokens
   objects/order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
   objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
-  objects/tool/<工具会话地址>       # LSP / REPL / vuna map / vuna doc 的载荷
+  objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
+  objects/doc/<doc 输入摘要>         # vuna doc 的渲染产物（codec doc-html 1）
   objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
   objects/test/<测试判定 key>       # test verdict（通过/失败计数）
   objects/pkgiface/<key>            # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
@@ -38,7 +39,7 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
   tmp/                              # 取包中转（可删）
 ```
 
-缓存族 = `objects/{iface,header,lex,order,check,tool,mods,test,pkgiface,splitptr}` + `blobs` + `units` +
+缓存族 = `objects/{iface,header,lex,order,check,tool,doc,mods,test,pkgiface,splitptr}` + `blobs` + `units` +
 `views` + `.tmp`；包对象族 = `objects/pkg` + `pkgs` + `tmp`。两族生命周期不同：
 `vuna clean --store` / `vuna store gc` 只碰缓存族，`vuna clean --packages` 只碰包对象族
 （见 [package-store.md](package-store.md)）。
@@ -54,7 +55,8 @@ views/testbin/<testBin>/          # effect 测试编译产物（bin/vuna-test，
 | 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
 | 依赖模块接口 | 按地址读 `objects/iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
 | 依赖身份 | `objects/pkgiface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
-| 工具会话（LSP/REPL/`map`/`doc`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
+| 工具会话（LSP/REPL/`map`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
+| `vuna doc` | `objects/doc/<key>` 存在 | 重新解析 + 渲染 |
 | 模块 header | `objects/header/<addr>` 存在 | 解析源码取 header |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
