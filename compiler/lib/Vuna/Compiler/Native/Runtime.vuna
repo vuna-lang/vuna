@@ -72,10 +72,37 @@ nativeRodata =
     NativeRodata (nativeDataLabel "unhandled_effect") unhandledEffectMessage,
     NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage,
     NativeRodata (nativeDataLabel "bad_stack") badStackMessage,
-    NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage
+    NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage,
+    NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0])
   ]
 
--- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）。
+-- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
+export argcLabel : String
+argcLabel = "rt_argc"
+
+export argvLabel : String
+argvLabel = "rt_argv"
+
+export envpLabel : String
+envpLabel = "rt_envp"
+
+-- | 宿主状态槽：fs / process 的 `try*` 原语把 errno 风格的状态码留在这里，
+--   `@vuna@prim_eff_hostStatus` 读它（0 = 成功）。
+export hostStatusLabel : String
+hostStatusLabel = "rt_host_status"
+
+-- | `getcwd` / `readlink` 的路径缓冲。
+export pathBufLabel : String
+pathBufLabel = "rt_path_buf"
+
+-- | `clock_gettime` / `nanosleep` 的 timespec（16 B）与 `ioctl(TCGETS)` 的 termios 缓冲。
+export tsLabel : String
+tsLabel = "rt_ts"
+
+export termiosLabel : String
+termiosLabel = "rt_termios"
+
+-- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）→ 进程入参 → 宿主槽。
 export nativeBss : List NativeBss
 nativeBss =
   [ NativeBss nativeHeapLabel nativeHeapBytes 16,
@@ -86,7 +113,14 @@ nativeBss =
     NativeBss stackTopLabel 8 8,
     NativeBss stackLimitLabel 8 8,
     NativeBss segFreeLabel 8 8,
-    NativeBss capFreeLabel 8 8
+    NativeBss capFreeLabel 8 8,
+    NativeBss argcLabel 8 8,
+    NativeBss argvLabel 8 8,
+    NativeBss envpLabel 8 8,
+    NativeBss hostStatusLabel 8 8,
+    NativeBss pathBufLabel 4096 8,
+    NativeBss tsLabel 16 8,
+    NativeBss termiosLabel 64 8
   ]
 
 -- ---------------------------------------------------------------
@@ -367,7 +401,7 @@ floatSqrtFn = rtFunc "float_sqrt" 0 (append [IXmmLoad 0 (OpMem Rdi 0), IXmmUnop 
 --     `[48]=resume 调用者 rbp [56]=rsp [64]=返回地址 [72]=r15`、`[80]=恢复值 v`、
 --     `[88]=prev_top [96]=new_cur [104]=new_top [112]=delta [120]=捕获时的栈顶`、
 --     `[128]=栈段基址 [136]=栈段大小 [144]=prev_stack_limit`。
---   * 续延闭包 16 B：`[0]=code [8]=续延记录`；调用约定与普通闭包一致（rdi=闭包）。
+--   * 续延闭包 24 B：`[0]=code [8]=arity(1) [16]=续延记录`；调用约定与普通闭包一致（rdi=闭包）。
 --
 -- `perform` 把 `[cur_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）
 -- 拷到堆上，在当前栈上执行 `opH(op, k)`（opH 帧落在捕获区外）。`k v` 把整段栈搬到
@@ -717,6 +751,75 @@ applyShimFn =
     [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rdx), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg R8), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg R9), IMov (OpReg Rax) (OpMem Rdi 8), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rdi 16), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rax 8), IBinReg "sub" Rcx (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rcx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IBinReg "add" Rax (OpMem Rbp (nativeSlotOff 1)), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rax (OpImm 15), IBinReg "and" Rax (OpImm (0 - 16)), IBinReg "sub" Rsp (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg Rsp), IBinReg "xor" R8 (OpReg R8), ILabel ".Lrt_sh_cap", ICmp (OpReg R8) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_sh_cap_done", IMov (OpReg R9) (OpReg R8), IBinReg "shl" R9 (OpImm 3), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 9)), IBinReg "add" Rdx (OpReg R9), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IBinReg "add" Rcx (OpImm 24), IBinReg "add" Rcx (OpReg R9), IMov (OpReg Rcx) (OpMem Rcx 0), IMov (OpMem Rdx 0) (OpReg Rcx), IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_sh_cap", ILabel ".Lrt_sh_cap_done", IBinReg "xor" R8 (OpReg R8), ILabel ".Lrt_sh_recv", ICmp (OpReg R8) (OpMem Rbp (nativeSlotOff 1)), IJcc "jge" ".Lrt_sh_recv_done", IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IBinReg "add" R9 (OpReg R8), IBinReg "shl" R9 (OpImm 3), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 9)), IBinReg "add" Rdx (OpReg R9), ICmp (OpReg R8) (OpImm 5), IJcc "jge" ".Lrt_sh_from_stack", IMov (OpReg Rcx) (OpReg R8), IBinReg "shl" Rcx (OpImm 3), IMov (OpReg Rax) (OpReg Rbp), IBinReg "sub" Rax (OpImm 40), IBinReg "sub" Rax (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rax 0), IJmp ".Lrt_sh_store", ILabel ".Lrt_sh_from_stack", IMov (OpReg Rcx) (OpReg R8), IBinReg "sub" Rcx (OpImm 5), IBinReg "shl" Rcx (OpImm 3), IMov (OpReg Rax) (OpReg Rbp), IBinReg "add" Rax (OpImm 16), IBinReg "add" Rax (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rax 0), ILabel ".Lrt_sh_store", IMov (OpMem Rdx 0) (OpReg Rcx), IBinReg "add" R8 (OpImm 1), IJmp ".Lrt_sh_recv", ILabel ".Lrt_sh_recv_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), IBinReg "add" Rsi (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 9)), ICall (nativeRtLabel "apply"), IRet]
 
 -- ---------------------------------------------------------------
+-- 宿主层：进程入参 / 环境 / 目录 / 时钟 / tty
+-- ---------------------------------------------------------------
+-- 字符串构造统一走 `str_from_bytes`（长度已知）与 `str_from_c`（NUL 结尾）；
+-- 失败路径返回空串（而不是伪造路径），宿主状态码由各 `try*` 原语写入 `rt_host_status`。
+strFromBytesFn : NativeFunc
+strFromBytesFn =
+  rtFunc "str_from_bytes" 16
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rdi) (OpReg Rsi), ICall (nativeRtLabel "str_alloc"), IMov (OpReg R11) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem R11 0) (OpReg Rcx), ILeaMem Rdi R11 8, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IRepMovsb, IMov (OpReg Rax) (OpReg R11), IRet]
+
+-- | `rdi` = NUL 结尾字节串 -> String（不含 NUL）。
+strFromCFn : NativeFunc
+strFromCFn =
+  rtFunc "str_from_c" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_sfc_scan", IMovzx Rax (OpMemX Rdi Rcx 0), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_sfc_done", IBinReg "add" Rcx (OpImm 1), IJmp ".Lrt_sfc_scan", ILabel ".Lrt_sfc_done", IMov (OpReg Rsi) (OpReg Rcx), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_from_bytes"), IRet]
+
+-- | 单字节字符串（`rdi` = 字节值）：失败路径用的 `"."`。
+strOneCharFn : NativeFunc
+strOneCharFn =
+  rtFunc "str_one_char" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm 1), ICall (nativeRtLabel "str_alloc"), IMov (OpReg Rcx) (OpImm 1), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovByteRegOp (OpMem Rax 8) Rcx, IRet]
+
+-- | 空串：长度头 0，无字节。
+strEmptyFn : NativeFunc
+strEmptyFn =
+  rtFunc "str_empty" 0
+    [IBinReg "xor" Rdi (OpReg Rdi), ICall (nativeRtLabel "str_alloc"), IMov (OpMem Rax 0) (OpImm 0)]
+
+-- | `getenv key`：`envp` 里找 `key=`，返回值部分（找不到返回空串）。
+getenvFn : NativeFunc
+getenvFn =
+  rtFunc "getenv" 32
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpReg R8) (OpRip envpLabel), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg R8), IBinReg "xor" R9 (OpReg R9), ILabel ".Lrt_ge_outer", IMov (OpReg Rax) (OpReg R9), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rax (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rax 0), ITest R10 R10, IJcc "jz" ".Lrt_ge_none", IBinReg "xor" Rcx (OpReg Rcx), ILabel ".Lrt_ge_cmp", ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IJcc "jge" ".Lrt_ge_eq", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 0)), ILeaMem Rdx Rdx 8, IMovzx Rax (OpMemX Rdx Rcx 0), IMovzx Rsi (OpMemX R10 Rcx 0), ICmp (OpReg Rax) (OpReg Rsi), IJcc "jne" ".Lrt_ge_next", IBinReg "add" Rcx (OpImm 1), IJmp ".Lrt_ge_cmp", ILabel ".Lrt_ge_eq", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 0)), ILeaMem Rdx Rdx 8, IBinReg "add" Rdx (OpReg Rcx), IMovzx Rax (OpMemX R10 Rcx 0), ICmp (OpReg Rax) (OpImm 61), IJcc "jne" ".Lrt_ge_next", IMov (OpReg Rdi) (OpReg R10), IBinReg "add" Rdi (OpReg Rcx), IBinReg "add" Rdi (OpImm 1), ICall (nativeRtLabel "str_from_c"), IRet, ILabel ".Lrt_ge_next", IBinReg "add" R9 (OpImm 1), IJmp ".Lrt_ge_outer", ILabel ".Lrt_ge_none", ICall (nativeRtLabel "str_empty"), IRet]
+
+-- | `getcwd`：失败返回 `"."`。
+getcwdFn : NativeFunc
+getcwdFn =
+  rtFunc "getcwd" 0
+    [ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm 4096), IMov (OpReg Rax) (OpImm 79), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_gcwd_fail", ILea Rdi pathBufLabel, ICall (nativeRtLabel "str_from_c"), IRet, ILabel ".Lrt_gcwd_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
+
+-- | `execPath`：`readlink("/proc/self/exe")`；失败返回 `"."`。
+execPathFn : NativeFunc
+execPathFn =
+  rtFunc "exec_path" 8
+    [ILea Rdi (nativeDataLabel "proc_self_exe"), ILea Rsi pathBufLabel, IMov (OpReg Rdx) (OpImm 4095), IMov (OpReg Rax) (OpImm 89), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_ep_fail", IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_ep_fail", IMov (OpReg Rdi) (OpImm 46), ICall (nativeRtLabel "str_one_char"), IRet]
+
+-- | 当前时间（微秒）：`clock_gettime(CLOCK_REALTIME)`。
+--   `ts` 在 `.bss`，`lea` 一次拿地址后读 `[sec]` / `[nsec]`。
+nowUsFn : NativeFunc
+nowUsFn =
+  rtFunc "now_us" 0
+    [IBinReg "xor" Rdi (OpReg Rdi), ILea Rsi tsLabel, IMov (OpReg Rax) (OpImm 228), ISyscall, ILea Rcx tsLabel, IMov (OpReg Rax) (OpMem Rcx 0), IBinReg "imul" Rax (OpImm 1000000), IMov (OpReg R8) (OpReg Rax), IMov (OpReg Rax) (OpMem Rcx 8), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R9) (OpImm 1000), IDivUnsigned R9, IBinReg "add" Rax (OpReg R8)]
+
+-- | 阻塞睡眠 `us` 微秒：`nanosleep({us/1e6, (us%1e6)*1000})`，返回 0。
+sleepUsFn : NativeFunc
+sleepUsFn =
+  rtFunc "sleep_us" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpReg Rdi), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rcx) (OpImm 1000000), IDivUnsigned Rcx, ILea R9 tsLabel, IMov (OpMem R9 0) (OpReg Rax), IBinReg "imul" Rdx (OpImm 1000), IMov (OpMem R9 8) (OpReg Rdx), IMov (OpReg Rdi) (OpReg R9), IBinReg "xor" Rsi (OpReg Rsi), IMov (OpReg Rax) (OpImm 35), ISyscall, IMov (OpReg Rax) (OpImm 0)]
+
+-- | `ioctl(0, TCGETS)` 成功即 tty（0/1）。
+isTtyFn : NativeFunc
+isTtyFn =
+  rtFunc "is_tty" 0
+    [IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rsi) (OpImm 21505), ILea Rdx termiosLabel, IMov (OpReg Rax) (OpImm 16), ISyscall, ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
+
+-- | 宿主状态槽（`try*` 原语写入；0 = 成功）。
+hostStatusFn : NativeFunc
+hostStatusFn = rtFunc "host_status_get" 0 [IMov (OpReg Rax) (OpRip hostStatusLabel)]
+
+-- ---------------------------------------------------------------
 -- 函数表与 IR 符号映射
 -- ---------------------------------------------------------------
 export nativeRtFuncs : List NativeFunc
@@ -784,6 +887,17 @@ nativeRtFuncs =
     applyFn,
     applyExactFn,
     applyShimFn,
+    strFromBytesFn,
+    strFromCFn,
+    strOneCharFn,
+    strEmptyFn,
+    getenvFn,
+    getcwdFn,
+    execPathFn,
+    nowUsFn,
+    sleepUsFn,
+    isTtyFn,
+    hostStatusFn,
     trapImpossibleFn,
     trapDivZeroFn,
     trapArrayOobFn,
@@ -900,6 +1014,38 @@ nativeRtTarget "prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
 nativeRtTarget "@vuna@prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
 nativeRtTarget "prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
 nativeRtTarget "@vuna@prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
+-- 宿主：环境 / 入参 / 目录 / 时钟 / tty（`_host` 与 `@vuna@host@*` 是同一组叶子）。
+nativeRtTarget "effTimeUs" = Just (nativeRtLabel "now_us")
+nativeRtTarget "effTimeUs_host" = Just (nativeRtLabel "now_us")
+nativeRtTarget "prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTarget "@vuna@prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTarget "prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
+nativeRtTarget "@vuna@prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
+nativeRtTarget "@vuna@host@sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTarget "prim_eff_getenv" = Just (nativeRtLabel "getenv")
+nativeRtTarget "@vuna@prim_eff_getenv" = Just (nativeRtLabel "getenv")
+nativeRtTarget "prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
+nativeRtTarget "@vuna@prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
+nativeRtTarget "@vuna@host@getenv" = Just (nativeRtLabel "getenv")
+nativeRtTarget "prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTarget "@vuna@prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTarget "prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
+nativeRtTarget "@vuna@prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
+nativeRtTarget "@vuna@host@getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTarget "prim_eff_execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTarget "@vuna@prim_eff_execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTarget "prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
+nativeRtTarget "@vuna@prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
+nativeRtTarget "@vuna@host@execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTarget "prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "@vuna@prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "@vuna@prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "@vuna@host@getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "@vuna@prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
+nativeRtTarget "@vuna@host@isTty" = Just (nativeRtLabel "is_tty")
+nativeRtTarget "@vuna@prim_eff_hostStatus" = Just (nativeRtLabel "host_status_get")
 nativeRtTarget "floatFromInt" = Just (nativeRtLabel "float_from_int")
 nativeRtTarget "intFromFloat" = Just (nativeRtLabel "int_from_float")
 nativeRtTarget "floatAbs" = Just (nativeRtLabel "float_abs")
@@ -1016,6 +1162,16 @@ nativeRtValueArity "@vuna@obs@spanBegin" = 2
 nativeRtValueArity "@vuna@obs@spanEnd" = 1
 nativeRtValueArity "@vuna@obs@sampleStart" = 2
 nativeRtValueArity "@vuna@obs@sampleStop" = 1
+nativeRtValueArity "prim_eff_getenv" = 1
+nativeRtValueArity "@vuna@prim_eff_getenv" = 1
+nativeRtValueArity "prim_eff_getenv_host" = 1
+nativeRtValueArity "@vuna@prim_eff_getenv_host" = 1
+nativeRtValueArity "@vuna@host@getenv" = 1
+nativeRtValueArity "prim_eff_sleep" = 1
+nativeRtValueArity "@vuna@prim_eff_sleep" = 1
+nativeRtValueArity "prim_eff_sleep_host" = 1
+nativeRtValueArity "@vuna@prim_eff_sleep_host" = 1
+nativeRtValueArity "@vuna@host@sleep" = 1
 nativeRtValueArity "@vuna@obs@span" = 3
 nativeRtValueArity "@vuna@obs@spanLab" = 4
 nativeRtValueArity _ = 0

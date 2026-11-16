@@ -508,10 +508,11 @@ else case ir of
   IrRt sym =>
     let
       arity = rtValueArityOf sym
-    in if arity <= 0 then unsupported "native target: runtime function values are not supported yet"
-    else case nativeRtTarget sym of
+    in case nativeRtTarget sym of
       Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
-      Just label => genValueClosure st (nativeRtValueLabel sym) arity label
+      Just label =>
+        if arity <= 0 then NOk (Pair [ICall label] st)
+        else genValueClosure st (nativeRtValueLabel sym) arity label
   IrFloatLit raw => genFloatLit st raw
   IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
@@ -1093,6 +1094,18 @@ entryShowKind _ = Nothing
 startFunc : Bool -> String -> String -> Maybe String -> List String -> NativeFunc
 startFunc printResult kind mainName runMainM handlers =
   let
+    -- 初始栈：`[rsp]=argc`、`[rsp+8]=argv[0]…`、`argv+8*(argc+1)=envp[0]…`。
+    -- 必须在 `and rsp,-16` 之前取。
+    captureArgs =
+      [ IMov (OpReg Rax) (OpMem Rsp 0),
+        IMov (OpRip argcLabel) (OpReg Rax),
+        IBinReg "add" Rax (OpImm 1),
+        IBinReg "shl" Rax (OpImm 3),
+        ILeaMem Rcx Rsp 8,
+        IMov (OpRip argvLabel) (OpReg Rcx),
+        IBinReg "add" Rcx (OpReg Rax),
+        IMov (OpRip envpLabel) (OpReg Rcx)
+      ]
     initHeap =
       [ ILea Rax nativeHeapLabel,
         IMov (OpRip nativeHeapPtrLabel) (OpReg Rax),
@@ -1126,7 +1139,8 @@ startFunc printResult kind mainName runMainM handlers =
       _ => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_int")]
     else []
     exitInstrs = [IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 0), ISyscall]
-  in NativeFunc nativeEntryLabel 0 (append initHeap (append callMain (append printer exitInstrs)))
+  in NativeFunc nativeEntryLabel 0
+    (append captureArgs (append initHeap (append callMain (append printer exitInstrs))))
 
 -- ---------------------------------------------------------------
 -- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
@@ -1161,6 +1175,17 @@ bridgeFn name slots body =
 
 nlistCellBytes : NListDesc -> Int
 nlistCellBytes d = 8 * (1 + d.nlMaxArity)
+
+-- | `getArgs`：`argv[1..argc-1]` -> `List String`（从后往前构造 cons；不含 argv[0]）。
+getArgsFn : NListDesc -> NativeFunc
+getArgsFn d =
+  let
+    cell = nlistCellBytes d
+    acc = nativeSlotOff 0
+    idx = nativeSlotOff 1
+    s = nativeSlotOff 2
+  in bridgeFn "getArgs" 3
+    [IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpReg Rax) (OpRip argcLabel), IBinReg "sub" Rax (OpImm 1), IMov (OpMem Rbp idx) (OpReg Rax), ILabel ".Lrt_getargs_loop", IMov (OpReg Rcx) (OpMem Rbp idx), ICmp (OpReg Rcx) (OpImm 1), IJcc "jl" ".Lrt_getargs_done", IMov (OpReg Rdx) (OpRip argvLabel), IMov (OpReg Rax) (OpReg Rcx), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rax (OpReg Rdx), IMov (OpReg Rdi) (OpMem Rax 0), ICall (nativeRtLabel "str_from_c"), IMov (OpMem Rbp s) (OpReg Rax), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpReg Rcx) (OpMem Rbp s), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp acc), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp idx) (OpReg Rcx), IJmp ".Lrt_getargs_loop", ILabel ".Lrt_getargs_done", IMov (OpReg Rax) (OpMem Rbp acc)]
 
 -- | `strUnpack`：rdi = String -> rax = List Int（从末字节向前构造 cons）。
 strUnpackFn : NListDesc -> NativeFunc
@@ -1262,6 +1287,7 @@ nativeBridgeFuncs lfM fams = case nlistDescOf lfM fams of
   Just d =>
     [ strUnpackFn d,
       strPackFn d,
+      getArgsFn d,
       strConcatManyFn d,
       strArgAtFn,
       strSubstTemplateFn d,

@@ -191,3 +191,11 @@ file-absent: $TMPDIR/nc-out/bin/nc
 run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && ./bin/nc'
 exit: 0
 out-equals: "n7"
+
+# 9o) 宿主入参/环境/目录/时钟：argv 不含 argv[0]，envp 键值扫描，cwd/execPath 非空，
+#     sleep 后时间不倒退；结果 2+5+1+1+1 = 10。
+run: sh -c 'd="$TMPDIR/hostargs"; mkdir -p "$d/app"; printf "[package]\nname = \"hostargs\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffArgs\nimport Base.EffClock\nimport Base.EffEnv\nimport Base.Int\nimport Base.List\nimport Base.String\n\nmain : Eff [ArgsOp, ClockOp, EnvOp] Int\nmain = do\n  args <- argsGetArgs\n  home <- envGetEnv \"VUNA_TEST_ENV\"\n  cwd <- envGetCwd\n  exe <- envExecPath\n  t0 <- clockNow\n  _ <- clockSleepMicros 1000\n  t1 <- clockNow\n  pure (length args + strLength home + (if strLength cwd > 0 then 1 else 0) + (if strLength exe > 0 then 1 else 0) + (if t1 >= t0 then 1 else 0))\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/hostargs-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_TEST_ENV=hello "$TMPDIR/hostargs-out/bin/hostargs" one two 2>&1'
+exit: 0
+out-equals: 10

@@ -34,11 +34,6 @@ else case nativeRtTarget sym of
   Just _ => True
   Nothing => False
 
--- | 运行时符号作为值时的 arity（`nativeRtValueArity` 优先，其次内建饱和应用 arity）。
-auditValueArity : String -> Int
-auditValueArity sym =
-  if nativeRtValueArity sym > 0 then nativeRtValueArity sym else irInlineArity sym
-
 -- | `IrRtApp`：arity 必须等于 `irInlineArity`，且符号必须在白名单里。
 auditRtAppKeys : String -> List Ir -> List String
 auditRtAppKeys sym args =
@@ -78,9 +73,7 @@ auditKeys defs (IrLam _ body) = auditKeys defs body
 auditKeys defs (IrApp f a) = append (auditKeys defs f) (auditKeys defs a)
 auditKeys defs (IrRtApp sym args) =
   append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)
-auditKeys defs (IrRt sym) =
-  if not (auditSymSupported sym) then ["symbol " ++ sym]
-  else if auditValueArity sym > 0 then [] else ["symbol-as-value " ++ sym]
+auditKeys defs (IrRt sym) = if auditSymSupported sym then [] else ["symbol " ++ sym]
 auditKeys defs (IrEffThunk _ _ _ _ prim) = auditKeys defs prim
 auditKeys defs (IrEffBind _ _ _) = ["effect-bind"]
 
@@ -121,8 +114,7 @@ auditRestOf key = case split " " key of
 
 -- 输出顺序：先缺失符号，再形状缺口。
 auditCategories : List String
-auditCategories =
-  ["symbol", "symbol-as-value", "rt-app-arity", "multi-binder-let", "effect-bind", "extern"]
+auditCategories = ["symbol", "rt-app-arity", "multi-binder-let", "effect-bind", "extern"]
 
 auditInCategory : String -> String -> Bool
 auditInCategory cat key = auditPrefixOf key == cat

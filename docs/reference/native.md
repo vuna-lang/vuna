@@ -224,6 +224,15 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - 效应叶子：`prim_eff_newRef` / `readRef` / `writeRef`（`IORef`，单槽对象）、
   `prim_eff_print` / `eprint`（写 fd 后返回字节数）、`prim_eff_exit`；预装宿主 handler
   用到的 `@vuna@host@*` / `prim_eff_*_host` 名字映射到同一批叶子。
+- 进程入参与环境：`_start` 从初始栈拷 `argc` / `argv` / `envp` 到 `.bss`；`getArgs`
+  （List 桥接，不含 `argv[0]`）、`getenv`（扫 `envp` 的 `KEY=`）、`getcwd`（syscall 79）、
+  `execPath`（`readlink /proc/self/exe`，syscall 89）失败时返回空串 / `"."`。
+- 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`prim_eff_sleep`（`nanosleep`，
+  syscall 35）、`@vuna@host@isTty`（`ioctl(0, TCGETS)`）、`@vuna@prim_eff_hostStatus`
+  （读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
+- 未实现的宿主面：fs（14 个 `try*` / `exists` / `mtime` / `size`）、process
+  （`runIn` / `spawn` / `wait` / `exit_process_host`）、stdin（`readLine` / `readBytes`）、
+  以及 net 与 `prim_cleanupPush/Pop`。
 - 续延：`prim_effectPerform`（`rt_eff_perform`）、`prim_effectHandle`（`rt_eff_handle`）、
   `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
@@ -288,7 +297,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
-- FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
+- FFI / extern；宿主 syscalls 的 fs / process / stdin 面（env / args / clock / tty 已实现）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
