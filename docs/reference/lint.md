@@ -218,6 +218,9 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
   `Cons` / 裸 `Nil`、注释行不修、幂等）。
+- `test/suite/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
+  （含结束位置与 fixable）、以及「未知规则只由 lint 认领、`vuna check` 仍通过」。
+- `nix/checks/vuna-lint.sh`：workspace 默认目标 + `--max-warnings 0 --no-cache`。
 
 ## 5. as-pattern 生成
 
