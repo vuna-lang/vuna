@@ -358,8 +358,12 @@ console 的写失败（典型 EPIPE：`vuna … | head`）不是宿主错误：�
 `steps/111_host_error`（真实 handler：fs 缺失 / process cwd 缺失 → exit 1 + 诊断；
 `false` 的非零退出码仍是值）。
 
-仍未类型化的边界：net（`raise` 直调原语、无 handler、不可 mock，失败只能到顶层报告器）——
-见 [debt.md](debt.md) D90。
+net 走同一套：`Base.EffNet` 的 `NetOp` 是普通命名实例效应（可 mock、entry 预装
+`runNetHost`），失败抛 `NetErrorOp`（`NetRefused/Timeout/Closed/AddrInUse/BadAddr/Io`），
+`runNetError n` 可局部收成 `Result`；`netRecv` 的对端关闭是 `Nothing`（无值）。
+
+剩余边界：entry 收口只有文本，不带 vuna 位置帧（typed error 丢弃了宿主 backtrace）；
+net 的 accept/读写仍是阻塞式，没有超时参数——见 [debt.md](debt.md) D90。
 
 ## 9. 仍开放的边界
 

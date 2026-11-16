@@ -1,4 +1,5 @@
-# 55) net 原语：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
+# 55) net 效应：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
+#     非法地址是 typed error（`NetErrorOp`）：entry 收口成 `vuna: net: …` + 退出码 1。
 #     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。
 #     夹具 corpus/net/01_echo 会写 .output：复制到 $TMPDIR 并重写 vuna.toml 的 base 行。
 run: sh -c 'cp -R corpus/net/01_echo "$TMPDIR/net-fixture"; find "$TMPDIR/net-fixture" -name vuna.toml -exec sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" {} +'
@@ -13,5 +14,9 @@ run: B="$TMPDIR/net-fixture/.output/bin/net-echo"; S="$TMPDIR/net-echo.sock"; L=
 out-contains: echo:ping
 out-contains: stale-server-exit:0
 run: "$TMPDIR/net-fixture/.output/bin/net-echo" client "bogus:" 2>&1
-exit: 2
-out-contains: net: invalid address
+exit: 1
+out-contains: net: bogus:: invalid address
+# 连一个不存在的 unix socket：宿主失败是 typed error（不是崩溃），退出码 1。
+run: "$TMPDIR/net-fixture/.output/bin/net-echo" client "unix:$TMPDIR/no-such.sock" 2>&1
+exit: 1
+out-contains: vuna: net: unix:

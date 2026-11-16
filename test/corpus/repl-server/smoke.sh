@@ -10,7 +10,8 @@
 #   - `:type` / `:load` / `:reload` / `:defs`；
 #   - server 模式拒绝 `:!` 与效果表达式；
 #   - JSON-RPC 错误码：未知方法 -32601、坏 JSON -32700（且连接与服务继续）；
-#   - `shutdown` 正常退出；`--client` 连不上 / 地址非法时退出码 2；
+#   - `shutdown` 正常退出；`--client` 连不上是 typed net error（诊断 + 退出码 1），
+#     非法 `--listen` 地址仍是使用错误（退出码 2）；
 #   - TCP loopback（`tcp:127.0.0.1:0` 临时端口）——沙箱里不可用时打印 SKIP。
 set -u
 
@@ -183,8 +184,8 @@ check_eq "非法 --listen 地址退出码 2" "2" "$?"
 check_contains "非法 --listen 地址给出原因" "$(cat "$tmp/badaddr.out" "$tmp/badaddr.err" 2>/dev/null)" "只允许本机"
 printf '%s' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
   "$VUNA" repl --client "unix:$tmp/nonexistent.sock" >/dev/null 2>"$tmp/noserver.err"
-check_eq "连不上的 --client 退出码 2" "2" "$?"
-check_contains "连不上的 --client 有 stderr 诊断" "$(cat "$tmp/noserver.err")" "net: connect"
+check_eq "连不上的 --client 退出码 1" "1" "$?"
+check_contains "连不上的 --client 有 stderr 诊断" "$(cat "$tmp/noserver.err")" "net: unix:"
 
 # ---- 7) TCP 临时端口（沙箱不可用则 SKIP）----
 "$VUNA" repl --listen "tcp:127.0.0.1:0" >"$tmp/tcp.log" 2>"$tmp/tcp.err" &

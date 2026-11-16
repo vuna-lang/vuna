@@ -1,4 +1,4 @@
--- Net 内建行（listen/close，验证带行原语与 entry）。
+-- Net 效应（listen/close）：entry 自动预装真实 handler + 失败收口。
 import Base.Eff
 import Base.EffNet
 

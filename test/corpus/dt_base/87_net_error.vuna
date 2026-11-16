@@ -1,0 +1,29 @@
+-- 网络失败的类型化通道：`netFail` 抛到行里，`runNetError` 折叠成 `Result`。
+-- 「对端关闭」不是错误（`netRecv` 给 `Nothing`），所以这里只测 typed error 本身。
+import Prelude
+import Base.Eff
+import Base.EffNet
+import Base.Result
+
+prog : Eff (Cons "net-error" NetErrorOp []) Int
+prog = do
+  _ <- netFail (NetRefused "tcp:127.0.0.1:1")
+  pure 0
+
+okProg : Eff (Cons "net-error" NetErrorOp []) Int
+okProg = pure 5
+
+failed : Result Int
+failed = runPure (runNetError "net-error" prog)
+
+succeeded : Result Int
+succeeded = runPure (runNetError "net-error" okProg)
+
+main : Int
+main = (case failed of
+  Err msg => if msg == "net: tcp:127.0.0.1:1: connection refused" then 1 else 0
+  Ok _ => 0
+) + (case succeeded of
+  Ok 5 => 1
+  _ => 0
+)

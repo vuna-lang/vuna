@@ -12,13 +12,14 @@ import Base.EffConsole
 import Base.EffExit
 import Base.EffNet
 import Base.HostRow
+import Base.Maybe
 
 serve : String -> Eff hostRow Int
 serve path = do
   h <- netListen path
   _ <- consolePrint ("ready" ++ "\n")
   c <- netAccept h
-  msg <- netRecv c 4096
+  msg <- fmap (fromMaybe "") (netRecv c 4096)
   _ <- netSend c ("echo:" ++ msg)
   _ <- netClose c
   _ <- netClose h
@@ -31,7 +32,7 @@ serveTcp = do
   p <- netPort h
   _ <- consolePrint (("port:" ++ strFromInt p) ++ "\n")
   c <- netAccept h
-  msg <- netRecv c 4096
+  msg <- fmap (fromMaybe "") (netRecv c 4096)
   _ <- netSend c ("echo:" ++ msg)
   _ <- netClose c
   _ <- netClose h
@@ -41,7 +42,7 @@ client : String -> Eff hostRow Int
 client addr = do
   c <- netConnect addr
   _ <- netSend c "ping\n"
-  reply <- netRecv c 4096
+  reply <- fmap (fromMaybe "") (netRecv c 4096)
   _ <- netClose c
   _ <- consolePrint reply
   exitWith 0

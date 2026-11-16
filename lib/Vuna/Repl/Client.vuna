@@ -40,11 +40,15 @@ else case splitHeaderBlock buf of
     Just len => if strLength rest >= len then pure (Just (substring 0 (natFromInt len) rest))
     else do
       chunk <- netRecv conn clientChunkSize
-      if chunk == "" then pure Nothing else readOneFrame conn (rest ++ chunk) (fuel - 1)
+      case chunk of
+        Nothing => pure Nothing
+        Just bytes => readOneFrame conn (rest ++ bytes) (fuel - 1)
     Nothing => pure Nothing
   Nothing => do
     chunk <- netRecv conn clientChunkSize
-    if chunk == "" then pure Nothing else readOneFrame conn (buf ++ chunk) (fuel - 1)
+    case chunk of
+      Nothing => pure Nothing
+      Just bytes => readOneFrame conn (buf ++ bytes) (fuel - 1)
 
 export runReplClient : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
 runReplClient addr = do

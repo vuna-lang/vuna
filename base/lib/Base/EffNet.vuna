@@ -1,39 +1,189 @@
 module Base.EffNet where
 
--- Base.EffNet：带内建 Net 行的网络操作。
+-- Base.EffNet：一阶网络效应（命名实例，与 Fs/Console/Process 一致）。
 --
--- 操作直调带行宿主原语（`@vuna@prim_eff_net*_host`），不经过 sendCore/handler：网络是
--- 宿主机制，不提供 mock；`NetOp` 只是行标签。
+-- 操作经 `sendCore` 派发，因此可以装 mock handler（内存表）或真实 handler；entry 会为
+-- `main` 行里的 `NetOp` 自动预装真实 handler。真实 handler 用 `@vuna@host@tryNet*`：
+-- 宿主失败时读宿主状态槽并抛 `NetErrorOp`（typed；entry 收口的 `runNetErrorHost` 打印
+-- `vuna: net: <上下文>: <原因>` 并 exit 1），想局部恢复的调用方用 `runNetError` 收成
+-- `Result`。
+--
+-- 「对端关闭」不是错误：`netRecv` 返回 `Maybe String`，EOF 是 `Nothing`。
+-- 句柄失效属于不变式破坏（宿主 `failwith`，exit 2），不走 typed error。
+--
+-- 地址格式：`tcp:HOST:PORT` 或 `unix:PATH`（见 `dtp_net_parse`）。
 import Base.Eff
+import Base.Eq
+import Base.Maybe
+import Base.Monad
+import Base.Nat
+import Base.Result
+import Base.String
 
--- | Net 行标签（无载荷；操作直接映射到带行原语）。
+-- | 网络操作描述：监听 / 取端口 / 接受 / 收 / 发 / 关 / 连接。
 export data NetOp(..) : Type where
-  NetTag : NetOp
+  Listen : String -> NetOp
+  Port : Int -> NetOp
+  Accept : Int -> NetOp
+  Recv : Int -> Int -> NetOp
+  Send : Int -> String -> NetOp
+  Close : Int -> NetOp
+  Connect : String -> NetOp
 
--- | 绑定并监听地址，返回句柄表下标（带 `NetOp` 行）。
-export netListen : String -> {r : Row} -> Eff r Int
-netListen addr = raise (@vuna@prim_eff_netListen addr)
+-- | 操作的结果类型族：`Recv` 返回 `Maybe String`（`Nothing` = 对端关闭），其余返回 `Int`。
+export resNet : NetOp -> Type
+resNet (Listen _) = Int
+resNet (Port _) = Int
+resNet (Accept _) = Int
+resNet (Recv _ _) = Maybe String
+resNet (Send _ _) = Int
+resNet (Close _) = Int
+resNet (Connect _) = Int
 
--- | 取监听句柄的端口（带 `NetOp` 行）。
-export netPort : Int -> {r : Row} -> Eff r Int
-netPort h = raise (@vuna@prim_eff_netPort h)
+-- | 绑定并监听地址，返回句柄。
+export netListen : Member n NetOp r => String -> Eff r Int
+netListen addr = sendCore NetOp "net" n (Listen addr)
 
--- | 接受连接，返回新句柄（带 `NetOp` 行）。
-export netAccept : Int -> {r : Row} -> Eff r Int
-netAccept h = raise (@vuna@prim_eff_netAccept h)
+-- | 取监听句柄的端口（`unix:` 地址给 0）。
+export netPort : Member n NetOp r => Int -> Eff r Int
+netPort h = sendCore NetOp "net" n (Port h)
 
--- | 接收最多 n 字节（带 `NetOp` 行）。
-export netRecv : Int -> Int -> {r : Row} -> Eff r String
-netRecv h n = raise (@vuna@prim_eff_netRecv h n)
+-- | 接受连接，返回新句柄。
+export netAccept : Member n NetOp r => Int -> Eff r Int
+netAccept h = sendCore NetOp "net" n (Accept h)
 
--- | 发送字符串，返回写入字节数（带 `NetOp` 行）。
-export netSend : Int -> String -> {r : Row} -> Eff r Int
-netSend h s = raise (@vuna@prim_eff_netSend h s)
+-- | 最多接收 `n` 字节；对端关闭给 `Nothing`。
+export netRecv : Member n NetOp r => Int -> Int -> Eff r (Maybe String)
+netRecv h bytes = sendCore NetOp "net" n (Recv h bytes)
 
--- | 关闭句柄（带 `NetOp` 行）。
-export netClose : Int -> {r : Row} -> Eff r Int
-netClose h = raise (@vuna@prim_eff_netClose h)
+-- | 发送整个字符串，返回写入字节数。
+export netSend : Member n NetOp r => Int -> String -> Eff r Int
+netSend h s = sendCore NetOp "net" n (Send h s)
 
--- | 连接地址，返回句柄（带 `NetOp` 行）。
-export netConnect : String -> {r : Row} -> Eff r Int
-netConnect addr = raise (@vuna@prim_eff_netConnect addr)
+-- | 关闭句柄（幂等）。
+export netClose : Member n NetOp r => Int -> Eff r Int
+netClose h = sendCore NetOp "net" n (Close h)
+
+-- | 连接地址，返回句柄。
+export netConnect : Member n NetOp r => String -> Eff r Int
+netConnect addr = sendCore NetOp "net" n (Connect addr)
+
+-- | 宿主网络失败的种类：带上下文（地址或 `handle N`）。
+export data NetError(..) : Type where
+  -- | 对端拒绝连接。
+  NetRefused : String -> NetError
+  -- | 连接 / 读写超时。
+  NetTimeout : String -> NetError
+  -- | 连接被对端关闭（写已断的 socket）。
+  NetClosed : String -> NetError
+  -- | 地址已被占用（监听）。
+  NetAddrInUse : String -> NetError
+  -- | 地址格式非法。
+  NetBadAddr : String -> NetError
+  -- | 其它宿主网络错误。
+  NetIo : String -> NetError
+
+-- | 网络错误效应：单操作 `NetFail`（abort，不恢复续延）。
+export data NetErrorOp(..) : Type where
+  NetFail : NetError -> NetErrorOp
+
+-- | 结果族：`NetFail` 不恢复续延，返回类型任意（占位 `Int`）。
+export resNetError : NetErrorOp -> Type
+resNetError _ = Int
+
+-- | 抛出一个网络失败（由真实 handler 使用；想局部恢复的调用方 catch 它）。
+export netFail : Member n NetErrorOp r => NetError -> Eff r a
+netFail e = sendCore NetErrorOp "net-error" n (NetFail e)
+
+-- | 宿主状态码 → 失败种类（0 = 成功、1 = 对端关闭；码表见 `dtp_netStatus`）。
+export netErrorOfCode : String -> Int -> NetError
+netErrorOfCode ctx 2 = NetRefused ctx
+netErrorOfCode ctx 3 = NetTimeout ctx
+netErrorOfCode ctx 4 = NetClosed ctx
+netErrorOfCode ctx 5 = NetAddrInUse ctx
+netErrorOfCode ctx 6 = NetBadAddr ctx
+netErrorOfCode ctx _ = NetIo ctx
+
+-- | 失败种类的人类可读文本（诊断输出用）。
+export netErrorText : NetError -> String
+netErrorText (NetRefused ctx) = "net: ${ctx}: connection refused"
+netErrorText (NetTimeout ctx) = "net: ${ctx}: timed out"
+netErrorText (NetClosed ctx) = "net: ${ctx}: connection closed"
+netErrorText (NetAddrInUse ctx) = "net: ${ctx}: address already in use"
+netErrorText (NetBadAddr ctx) = "net: ${ctx}: invalid address"
+netErrorText (NetIo ctx) = "net: ${ctx}: host I/O error"
+
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `NetOp`。
+export handleNet : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n NetOp r} -> (a -> b) -> ((o : NetOp) -> (resNet o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n NetOp r) b
+handleNet n ret opH comp = handleCore NetOp "net" n ret opH comp
+
+-- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里。
+netHostStatus : {r : Row} -> Eff r Int
+netHostStatus = raise @vuna@prim_eff_hostStatus
+
+-- | 句柄类失败的上下文文本。
+handleContext : Int -> String
+handleContext h = "handle ${strFromInt h}"
+
+-- | 带 `NetOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[NetErrorOp]`。
+netOpHIOHost : {a : Type} -> (o : NetOp) -> (resNet o -> Eff (Cons "net-error" NetErrorOp []) a) -> Eff (Cons "net-error" NetErrorOp []) a
+netOpHIOHost op k = case op of
+  Listen addr => do
+    h <- raise (@vuna@host@tryNetListen addr)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode addr ok) else k h
+  Port h => do
+    p <- raise (@vuna@host@tryNetPort h)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k p
+  Accept h => do
+    c <- raise (@vuna@host@tryNetAccept h)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k c
+  Recv h n => do
+    s <- raise (@vuna@host@tryNetRecv h n)
+    ok <- netHostStatus
+    if ok == 0 then k (Just s)
+    else if ok == 1 then k Nothing else netFail (netErrorOfCode (handleContext h) ok)
+  Send h s => do
+    n <- raise (@vuna@host@tryNetSend h s)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k n
+  Close h => do
+    _ <- raise (@vuna@host@tryNetClose h)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k 0
+  Connect addr => do
+    c <- raise (@vuna@host@tryNetConnect addr)
+    ok <- netHostStatus
+    if ok /= 0 then netFail (netErrorOfCode addr ok) else k c
+
+-- | 带 `NetOp` 行的宿主 handler：删掉 `NetOp`，answer 是 `Eff [NetErrorOp]`（不导出）。
+handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n NetOp r) a -> Eff r (Eff (Cons "net-error" NetErrorOp []) a)
+handleNetHostHost n comp = handleNet n (\a => pure a) netOpHIOHost comp
+
+-- | entry 自动预装用（泛化 r）：把行头 `NetOp` 的 send 翻译成宿主 intrinsic。
+runNetHost : {r : Row} -> {a : Type} -> Eff (Cons "default" NetOp r) a -> Eff (rowAppend r (Cons "net-error" NetErrorOp [])) a
+runNetHost comp = joinEff (handleNetHostHost "default" comp)
+
+-- | 局部恢复：把网络失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+netErrorRet : {a : Type} -> a -> Result a
+netErrorRet a = Ok a
+
+netErrorOpHR : {a : Type} -> (o : NetErrorOp) -> (resNetError o -> Result a) -> Result a
+netErrorOpHR op _ = case op of
+  NetFail e => Err (netErrorText e)
+
+export runNetError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n NetErrorOp r) a -> Eff r (Result a)
+runNetError n comp = handleCore NetErrorOp "net-error" n netErrorRet netErrorOpHR comp
+
+-- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
+runNetErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "net-error" NetErrorOp r) a -> Eff r a
+runNetErrorHost comp = do
+  res <- runNetError "net-error" comp
+  case res of
+    Ok a => pure a
+    Err msg => do
+      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise (@vuna@prim_eff_exit 1)
+      prim_fail "unreachable: net error handler"

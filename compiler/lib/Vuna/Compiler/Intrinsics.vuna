@@ -125,6 +125,7 @@ record BuiltinEffect where
 export builtinEffectErrorRunHostOf : String -> String
 builtinEffectErrorRunHostOf "Base.EffFs.FsOp" = "Base.EffFs.runFsErrorHost"
 builtinEffectErrorRunHostOf "Base.EffProcess.ProcessOp" = "Base.EffProcess.runProcessErrorHost"
+builtinEffectErrorRunHostOf "Base.EffNet.NetOp" = "Base.EffNet.runNetErrorHost"
 builtinEffectErrorRunHostOf _ = ""
 
 -- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
@@ -139,7 +140,7 @@ builtinEffects =
     BuiltinEffect "Base.EffExit.ExitOp" "@vuna@runExitHost" "Base.EffExit.runExitHost" "default",
     BuiltinEffect "Base.EffStdin.StdinOp" "@vuna@runStdinHost" "Base.EffStdin.runStdinHost" "default",
     BuiltinEffect "Base.EffArgs.ArgsOp" "@vuna@runArgsHost" "Base.EffArgs.runArgsHost" "default",
-    BuiltinEffect "Base.EffNet.NetOp" "" "" "default",
+    BuiltinEffect "Base.EffNet.NetOp" "@vuna@runNetHost" "Base.EffNet.runNetHost" "default",
     BuiltinEffect "Base.EffRef.RefOp" "" "" "default"
   ]
 

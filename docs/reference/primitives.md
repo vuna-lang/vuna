@@ -277,7 +277,10 @@
 包括 workspace 成员子进程）里由 `Loader.Resolve` 拒绝（`TC_DebugConstructInRelease`）；
 `dbg!` 作为调试输出在两种构建都可用（受 `--debug-perf` 门控）。
 
-`net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）：
+`net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）。用户面走
+`Base.EffNet` 的 `NetOp` 效应（可 mock；entry 自动预装真实 handler）；宿主失败由
+`@vuna@host@tryNet*` + 状态槽转成 `NetErrorOp`（typed），`recv` 的对端关闭是
+`Nothing`（`Maybe String`），不是错误：
 
 - `prim_eff_netListen : String -> Eff [] Int`：绑定并监听，返回 listener 句柄。地址是
   `tcp:HOST:PORT`（HOST 只接受数字 IPv4；`PORT=0` 取临时端口）或 `unix:PATH`；
@@ -313,7 +316,7 @@
 | `process` | `prim_eff_getArgs`、`prim_eff_exit`、`prim_eff_runIn`、`prim_eff_spawn`、`prim_eff_wait` |
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
-| `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect` |
+| `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect`；宿主 handler 用 `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus`（0 = 成功、1 = 对端关闭、2.. = refused/timeout/closed/addr-in-use/bad-addr/io） |
 | 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
