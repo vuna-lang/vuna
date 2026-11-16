@@ -429,6 +429,38 @@ let dtp_net_send (h : int) (s : string) : int =
 let dtp_net_close (h : int) : int =
   (try Unix.close (dtp_net_get h) with _ -> ());
   dtp_net_drop h; 0
+let dtp_netStatus (e : exn) : int =
+  match e with
+  | Unix.Unix_error (Unix.ECONNREFUSED, _, _) -> 2
+  | Unix.Unix_error (Unix.ETIMEDOUT, _, _) -> 3
+  | Unix.Unix_error ((Unix.EPIPE | Unix.ECONNRESET), _, _) -> 4
+  | Unix.Unix_error (Unix.EADDRINUSE, _, _) -> 5
+  | Failure _ -> 6
+  | _ -> 9
+let dtp_try_net_listen addr =
+  (try dtp_hostSetStatus 0; dtp_net_listen addr
+   with e -> dtp_hostSetStatus (dtp_netStatus e); -1)
+let dtp_try_net_port h =
+  (try dtp_hostSetStatus 0; dtp_net_port h
+   with e -> dtp_hostSetStatus (dtp_netStatus e); -1)
+let dtp_try_net_accept h =
+  (try dtp_hostSetStatus 0; dtp_net_accept h
+   with e -> dtp_hostSetStatus (dtp_netStatus e); -1)
+let dtp_try_net_send h s =
+  (try dtp_hostSetStatus 0; dtp_net_send h s
+   with e -> dtp_hostSetStatus (dtp_netStatus e); 0)
+let dtp_try_net_recv h n =
+  if n <= 0 then (dtp_hostSetStatus 1; \"\")
+  else
+    let b = Bytes.create n in
+    (try
+       let k = Unix.read (dtp_net_get h) b 0 n in
+       if k <= 0 then (dtp_hostSetStatus 1; \"\")
+       else (dtp_hostSetStatus 0; Bytes.sub_string b 0 k)
+     with e -> dtp_hostSetStatus (dtp_netStatus e); \"\")
+let dtp_try_net_close h =
+  (try dtp_hostSetStatus 0; dtp_net_close h
+   with e -> dtp_hostSetStatus (dtp_netStatus e); 0)
 let dtp_net_connect (addr : string) : int =
   match dtp_net_parse addr with
   | `Unix path ->
@@ -439,6 +471,9 @@ let dtp_net_connect (addr : string) : int =
     let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
     (try Unix.connect s (Unix.ADDR_INET (Unix.inet_addr_of_string host, port)); dtp_net_put s
      with e -> (try Unix.close s with _ -> ()); dtp_net_error \"connect\" e)
+let dtp_try_net_connect addr =
+  (try dtp_hostSetStatus 0; dtp_net_connect addr
+   with e -> dtp_hostSetStatus (dtp_netStatus e); -1)
 """
 ) ++ dtSchedRuntime
 
