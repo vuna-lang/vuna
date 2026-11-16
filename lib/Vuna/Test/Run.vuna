@@ -23,6 +23,7 @@ import Vuna.Compiler.Base.Common
 import Base.Nat
 import Base.Maybe
 import Vuna.Compiler.Base.Diag
+import qualified Vuna.Compiler.Base.Diag.Format
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Base.Store
@@ -728,7 +729,19 @@ errorCase env c source diagPath wantInterp wantCheck wantCompile = do
     else pure (Assertion "no-outdir" True "")
   end <- clockNow
   er <- pure (ErrorRun expectedR actualR interpR compileR absentA ((end - start) / 1000))
-  finishCase c.caseId start (errorAssertions env diagPath wantInterp wantCompile c er)
+  base <- finishCase c.caseId start (errorAssertions env diagPath wantInterp wantCompile c er)
+  if env.envBlessDiag then case actualR of
+    OkC [] => pure base
+    _ => do
+      _ <- fsWriteFile diagPath "${blessDiagText env diagPath (diagsOfCheck actualR)}\n"
+      pure
+        (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${diagPath}"])
+  else pure base
+
+-- | 内部：`--bless-diag` 写盘的诊断列表；`ErrC` 展开其 children（与投影口径一致）。
+diagsOfCheck : Check (List Diagnostic) -> List Diagnostic
+diagsOfCheck (OkC ds) = ds
+diagsOfCheck (ErrC e) = flattenErr e
 
 -- | 内部：清空输出目录后进程内 compile。
 compileFresh : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
@@ -2530,6 +2543,19 @@ normalizeDiagText env text =
   let
     t1 = replaceAllText env.envBase "<BASE>" text
   in replaceAllText env.envRoot "<ROOT>" t1
+
+-- | 内部：`--bless-diag` 的写盘文本：结构化诊断 → JSON；路径按夹具约定归一
+-- （夹具目录内 `./x`、`test/` 下 `corpus/x`、base 记 `<BASE>/`），环境路径用
+-- `<ROOT>`/`<BASE>` 占位，本地与 nix 构建可比。
+blessDiagText : Env -> String -> List Diagnostic -> String
+blessDiagText env diagPath ds =
+  let
+    raw = Vuna.Compiler.Base.Diag.Format.renderJsonList "en" ds
+    dir = Vuna.Cli.Args.parentOf diagPath
+    t1 = if endsWith "expected.diag.json" diagPath then replaceAllText "${dir}/" "./" raw else raw
+    t2 = replaceAllText "${env.envRoot}/test/" "" t1
+    t3 = replaceAllText env.envBase "<BASE>" t2
+  in replaceAllText env.envRoot "<ROOT>" t3
 
 -- | 内部：向上找含 `.package-dir` 标记的包根；找不到给空串。当前无调用者，目录型 error
 -- case 走 `probePackageIn`。
