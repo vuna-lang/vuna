@@ -323,6 +323,28 @@ let dtp_tryRemoveFile path =
      (try Unix.unlink path with Unix.Unix_error (Unix.ENOENT, _, _) -> ());
      0
    with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryRemoveTree path =
+  let rec go p =
+    try
+      let st = Unix.lstat p in
+      (match st.Unix.st_kind with
+       | Unix.S_DIR ->
+           Array.iter (fun e -> go (Filename.concat p e)) (Sys.readdir p);
+           Unix.rmdir p
+       | _ -> Unix.unlink p)
+    with Unix.Unix_error (Unix.ENOENT, _, _) -> () in
+  (try dtp_hostReset (); go path; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryRename src dst =
+  (try dtp_hostReset (); Unix.rename src dst; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_trySymlink target link =
+  (try dtp_hostReset (); Unix.symlink target link; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_tryMakeDirExclusive path =
+  (try dtp_hostReset (); Unix.mkdir path 0o755; 0
+   with e -> dtp_hostMark (dtp_hostCode e) e; 1)
+let dtp_isTty () = Unix.isatty Unix.stdout
 let dtp_tryRunIn dir args =
   let cmd = String.concat \" \" (List.map Filename.quote args) in
   (try
