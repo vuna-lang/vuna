@@ -42,11 +42,10 @@ patHead (PAs _ inner _) = patHead inner
 patHead p = p
 
 headCtorName : List Pat -> Maybe String
-headCtorName row = case row of
-  [] => Nothing
-  p :: _ => case patHead p of
-    PCon c _ _ => Just c
-    _ => Nothing
+headCtorName [] = Nothing
+headCtorName (p :: _) = case patHead p of
+  PCon c _ _ => Just c
+  _ => Nothing
 
 -- 该列出现的构造子名（保序、去重）。
 ctorHeadsOf : List (List Pat) -> List String

@@ -398,9 +398,9 @@ hashDecls ds = payloadDigest (encTop encDecls ds)
 -- `miDecls` 本身要保留体（同包增量 codegen 需要），但 iface 摘要里 opaque/abstract 的
 -- 体必须不可见：把体替换成固定占位再编码，只保留签名与模式形状。
 stripOpaqueDeclBodies : List String -> Decl -> Decl
-stripOpaqueDeclBodies names d = case d of
-  DFun n pats _ sp => if memName n names then DFun n pats (EVar "@opaque@" sp) sp else d
-  _ => d
+stripOpaqueDeclBodies names (DFun n pats body sp) =
+  if memName n names then DFun n pats (EVar "@opaque@" sp) sp else DFun n pats body sp
+stripOpaqueDeclBodies _ d = d
 
 hashDeclsForIface : List String -> List Decl -> String
 hashDeclsForIface names ds = hashDecls (map (stripOpaqueDeclBodies names) ds)
