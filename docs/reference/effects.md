@@ -341,7 +341,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
    `FsErrorOp` / `ProcessErrorOp`（abort 语义，不恢复续延）。**调用点签名不变**：
    `fsReadFile p : Eff r String` 不需要解包，只有想恢复的地方才在签名里加
    `Member n FsErrorOp r` 并 `runFsError n` / `catch`。
-3. **entry 收口**：`Lower` 在内建 family handler 之后追加
+3. **entry 收口**：`Lowering` 在内建 family handler 之后追加
    `runFsErrorHost` / `runProcessErrorHost` / `runNetErrorHost`（左折 → 最外层），打印
    `vuna: <family>: <op> <上下文>: <原因>`（例如 `vuna: fs: writeFile /x: permission denied`）
    并以**退出码 1** 结束（可恢复失败）；exit 2 留给不变式破坏与未处理效应。
@@ -352,7 +352,6 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
    都只剩运行时与 base 帧（用户 def 的帧不进栈）。要给出调用点只能给每次宿主操作付
    栈捕获的代价，且仍拿不到用户帧；因此收口只给操作上下文。崩溃路径（`dt_report_exn`）
    仍有源码帧，因为它走普通异常栈。
-
 `hostRow` 与 `collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
 answer 行里（`[FsErrorOp]`），entry 靠 family 标签决定装哪些收口 handler。
 

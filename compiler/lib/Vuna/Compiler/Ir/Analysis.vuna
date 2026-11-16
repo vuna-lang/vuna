@@ -5,7 +5,7 @@ module Vuna.Compiler.Ir.Analysis where
 -- 只依赖 `Ir.Model`（不碰 Core/Elab），因此同一套分组既能服务 Lowering（用 Core 侧算出的
 -- 名字 + 依赖做分组，再按组序降低体），也能服务已降低的 IR（校验 / 检查路径）。
 --
--- 分组算法从迁移前的 `Codegen.Erase` 原样搬来（Kosaraju：完成序 → 反向图收集 → 依赖
+-- 分组算法从迁移前的 `Checks` 原样搬来（Kosaraju：完成序 → 反向图收集 → 依赖
 -- 就绪排序）。分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序，必须与迁移前
 -- **逐项一致**才能做到产物逐字节相同。
 import Vuna.Compiler.Common
@@ -246,6 +246,40 @@ assembleGroups adjT defs (g :: rest) =
     else OkC (IrGroup False members)
   in Vuna.Compiler.Common.bind checked
     (\grp => Vuna.Compiler.Common.bind (assembleGroups adjT defs rest) (\tail => OkC (Base.List.Cons grp tail)))
+
+-- ---------------------------------------------------------------
+-- 可达性（后端共用的纯分析）
+-- ---------------------------------------------------------------
+-- | 从入口种子出发的可达定义（依赖闭包；未知名字忽略），按 `defs` 程序顺序返回。
+--
+-- 名字表一次建好；预算 = 种子数 + 依赖边数（每个名字最多处理一次），不用固定上限。
+export reachableDefs : List String -> List IrDef -> List IrDef
+reachableDefs seeds defs =
+  let
+    defTbl =
+      Base.HashMap.insertAll (map (\d => Pair (irDefName d) d) defs) (Base.HashMap.fromList [])
+    budget = 8 + countList seeds + depEdgeCount defs
+    seen = reachableNames budget seeds defTbl (Base.HashMap.fromList [])
+  in filter (\d => Base.HashMap.member (irDefName d) seen) defs
+
+depEdgeCount : List IrDef -> Int
+depEdgeCount defs = foldl (\acc, d => acc + countList (irDefDeps d)) 0 defs
+
+countList : List a -> Int
+countList [] = 0
+countList (_ :: rest) = 1 + countList rest
+
+reachableNames : Int -> List String -> HashMap String IrDef -> HashMap String Bool -> HashMap String Bool
+reachableNames fuel pending defTbl seen = if fuel <= 0 then seen
+else case pending of
+  [] => seen
+  n :: rest => if Base.HashMap.member n seen then reachableNames (fuel - 1) rest defTbl seen
+  else
+    let
+      seen2 = Base.HashMap.insert n True seen
+    in case Base.HashMap.lookup n defTbl of
+      Nothing => reachableNames (fuel - 1) rest defTbl seen2
+      Just d => reachableNames (fuel - 1) (append (irDefDeps d) rest) defTbl seen2
 
 -- ---------------------------------------------------------------
 -- 合法性护栏

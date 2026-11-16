@@ -14,7 +14,7 @@ roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对�
 
 ```text
 compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
-                                Frontend → Packages → Loader → Core → Elab → Ir → Codegen → Driver）
+                                Frontend → Packages → Loader → Core → Elab → Lowering → Ir → Codegen → Driver）
 ├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
 ├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
 ├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
@@ -34,8 +34,10 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 │                             Prelude Match Records Derive     双向精化
 ├─ Ir.vuna + Ir/            Model Analysis                   擦除后 IR（纯数据 + SCC；无 Core 依赖）
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
-├─ Codegen.vuna + Codegen/  Lower Decl Erase Term
-│                           Assembly Split Runtime            Core→IR 降低 + OCaml 文本生成 + 运行时符号表
+├─ Lowering.vuna             Core→IR 唯一入口（擦除 / 表示 / 形态 / 入口分类 / 程序级检查）
+├─ Checks.vuna               Core 侧检查（擦除 / 作用域 / axiom / 定义体事实），不产生 IR
+├─ Codegen.vuna + Codegen/  Decl Term Assembly Split
+│                           Runtime                           IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Native/                  Model Abi Runtime Module Render   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
 └─ Driver/                    Split Dt Compile Wasm Native
                               CompilerCli                      输出模型 / facade / 后端驱动 / CLI
@@ -65,7 +67,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
- → Codegen.Lower                 （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
+ → Lowering                      （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
  → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
@@ -106,7 +108,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 （卡住的类型族应用）另走「不透明擦除值 + 恒等 cast」表示（见 [effects.md](reference/effects.md) §5）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；
 已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
-`Codegen.Erase.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
+`Checks.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
 [core.md](reference/core.md)。
 
 **相等 / 实例 / 证明**：`==` / 比较是证据驱动的（Int/String 内建或 `Eq` / `Ord` 字典，
@@ -116,11 +118,11 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 
 **内建语义单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 /
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Codegen.Lower`（名字 → IR 符号）都消费它；OCaml 运行时文本在
+`Core.Eval`（归约）、`Lowering`（名字 → IR 符号）都消费它；OCaml 运行时文本在
 `Codegen.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
-擦除检查由 `Codegen.Lower.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
+擦除检查由 `Lowering.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
 判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
 `Obj.t` / `Obj.magic`。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
@@ -130,7 +132,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
 `Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`；
-`Codegen.Lower.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
+`Lowering.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
 `Codegen.Split.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 

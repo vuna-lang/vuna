@@ -124,15 +124,6 @@ memStr : String -> List String -> Bool
 memStr _ [] = False
 memStr s (x :: rest) = s == x || memStr s rest
 
-collectNeeded : Int -> List String -> List String -> List IrDef -> List String
-collectNeeded fuel work seen defs = if fuel <= 0 then reverse seen
-else case work of
-  [] => reverse seen
-  n :: rest => if memStr n seen then collectNeeded (fuel - 1) rest seen defs
-  else case findDef n defs of
-    Nothing => collectNeeded (fuel - 1) rest (n :: seen) defs
-    Just d => collectNeeded (fuel - 1) (append rest (irDefDeps d)) (n :: seen) defs
-
 -- ---------------------------------------------------------------
 -- 字符串字面量池
 -- -----------------------------------------------------------
@@ -1247,10 +1238,9 @@ build program printResult =
                 seeds = case runMainM of
                   Just rm => append [mainName, rm] (irEntryHandlersOf e)
                   Nothing => append [mainName] (irEntryHandlersOf e)
-                needed =
-                  if kind == "float" then collectNeeded 100000 (floatRenderName :: seeds) [] defs
-                  else collectNeeded 100000 seeds [] defs
-                ordered = filter (\d => memStr (irDefName d) needed) defs
+                ordered =
+                  if kind == "float" then reachableDefs (floatRenderName :: seeds) defs
+                  else reachableDefs seeds defs
                 pool = poolOfDefs ordered
               in case genDefs defs pool unit.irUnitTyDecls 0 ordered [] of
                 NFail err => NativeRejected err

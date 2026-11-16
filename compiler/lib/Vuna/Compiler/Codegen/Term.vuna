@@ -3,7 +3,7 @@ module Vuna.Compiler.Codegen.Term where
 -- IR → OCaml 文本 + DT 运行时前缀。
 --
 -- 本模块**只消费 IR**（`Vuna.Compiler.Ir`）：擦除判定、表示决策、
--- Nat 折回、内联形态、入口分类都在 `Codegen.Lower` 完成。这里只剩：
+-- Nat 折回、内联形态、入口分类都在 `Lowering` 完成。这里只剩：
 --   * 运行时文本常量（`dtRuntime` / 报告器 / 浮点与 tracing helper / List 桥接）；
 --   * `Ir` 节点 → OCaml 文本（含跨单元限定与依赖累积）；
 --   * 分组 → `let` / `let rec ... and ...` 文本；

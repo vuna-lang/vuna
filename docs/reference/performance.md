@@ -98,7 +98,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
    ... required=88`）。同轮删掉两处死计算：`summaryCheckExeParts` / `summaryCheckLibParts`
    原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 忽略该参数——
    每次 check 白跑一遍整闭包源扫描（`ifaceModsEff`）。
-2. **codegen 分组按 SCC 线性过滤全体定义**（`Codegen/Lower.appendGroups`）：每个单点 SCC
+2. **codegen 分组按 SCC 线性过滤全体定义**（`Lowering.appendGroups`）：每个单点 SCC
    都 `filter (memList …) env.lwDefs` ⇒ O(n²)。改为「环境里一次建 `lwDefTbl`、组内按成员名
    查表」；`recOkOfIn`/`spanOfIn` 同为逐名 `findDtDef` 线性扫，改成同一张表。
    合成探针的 codegen 段（`termination-done → cg-typedecls-done`）修前 89/284/1083 ms
@@ -339,7 +339,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 | 4000 | 735 ms | 254 ms | 1.36× |
 | 8000 | 2230 ms | 397 ms | 1.56× |
 
-修前 8000 档是 3.03×（越过 2.5× 门槛），修后同一档 1.56×：`Lower.appendGroups` 的
+修前 8000 档是 3.03×（越过 2.5× 门槛），修后同一档 1.56×：`Lowering.appendGroups` 的
 O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一类回归现在会被挡住。
 
 ### 5.2 包路径增量 `check`（增量收尾路径）

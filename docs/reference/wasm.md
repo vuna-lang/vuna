@@ -131,7 +131,7 @@
 ## 6. 实现约束
 
 - `Wasm` 子模块只 import `Base.*`、`Ir`、`Wasm.*`；驱动只经
-  `Driver.Dt.dtCheckWithProgramParts` + `Codegen.Lower.lowerProgramOf`，不 import
+  `Driver.Dt.dtCheckWithProgramParts` + `Lowering.lowerProgramOf`，不 import
   Core/Elab/Intrinsics（`checks.ir-boundary` 规则 10 守护）。
 - `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件（`Member nFs FsOp r`
   等行约束下的 `Eff r`，不再用全集行 `hostRow`）。

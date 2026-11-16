@@ -1,6 +1,6 @@
-module Vuna.Compiler.Codegen.Erase where
+module Vuna.Compiler.Checks where
 
--- 擦除检查与运行时依赖遍历（纯分析）。
+-- Core 侧检查与定义体事实（纯分析，不产生 IR / 文本）。
 --
 -- 输入是 Elab 产出的 `DtProgram` 定义表（项上自带擦除标志），本模块负责：
 --   - 类型级 / 运行时定义分区（`isTypeForming` / `partitionDefs`）；

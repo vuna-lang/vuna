@@ -724,7 +724,7 @@ isIndexDomain ec dom = isTypeDomain dom || isDataHead (ecDatas ec) (forceVal ec 
 --      查它的 binder 类型，若 binder 类型本身是 index domain（`Type` / 高阶 kind /
 --      `Nat` 之类索引族）则放行。`Int` / `String` 这类非类型域仍拒绝。
 -- 放行**不改变擦除判据**：隐式 binder 恒 Rig0（`binderRig`），值只在类型/证明位置可用；
--- 运行时使用由 `Codegen.Erase` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
+-- 运行时使用由 `Checks` 的擦除检查报错（`dt_err/42_implicit_value_runtime`）。
 export isImplicitDomain : Ctx -> Ec -> Value -> Bool
 isImplicitDomain ctx ec dom = if isIndexDomain ec dom then True
 else case forceVal ec dom of

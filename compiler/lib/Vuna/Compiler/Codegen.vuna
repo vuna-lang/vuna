@@ -3,7 +3,7 @@ module Vuna.Compiler.Codegen where
 -- DT 擦除 codegen 的门面。
 --
 -- 调用链是唯一的一条：
---   `Core --Codegen.Lower--> IR --Codegen.{Decl,Term,Assembly,Split}--> OCaml 文本`
+--   `Core --Lowering--> IR --Codegen.{Decl,Term,Assembly,Split}--> OCaml 文本`
 -- `Erase` 只剩纯分析（擦除/作用域护栏、依赖遍历），是 Lowering 的输入工具。
 -- 对外入口：check 路径的 `lowerProgramOf` + `genUnitParts`，split 的
 -- `generateDtSplitProgram(With)`（装配全在 `Assembly`）。

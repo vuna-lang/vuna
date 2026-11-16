@@ -23,7 +23,7 @@ import Vuna.Compiler.Elab
 import Vuna.Compiler.Diagnostics
 import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Codegen.Decl
-import Vuna.Compiler.Codegen.Lower
+import Vuna.Compiler.Lowering
 import Vuna.Compiler.Codegen.Term
 
 splitUnitOfModule : String -> String
@@ -308,7 +308,7 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
           unitDefs = defsInUnit ctx.sgcDefOwnerT mname ctx.sgcAllDefs
           qc = QualCtx unit ctx.sgcDefUnitT ctx.sgcDataUnitT
           envU = lwEnvWithUnit unit ctx.sgcEnv
-        in case lowerUnitAfterChecks envU (map dtDefName unitDefs) (map dtDataName unitDatas) of
+        in case lowerUnitChecked envU (map dtDefName unitDefs) (map dtDataName unitDatas) of
           ErrC e => pure (ErrC e)
           OkC unitIr => case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
             ErrC e => pure (ErrC e)
@@ -338,7 +338,7 @@ splitMainFileWith lookup store ctx printResult = do
         entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
         qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
         envU = lwEnvWithUnit entryUnit ctx.sgcEnv
-      in case lowerUnitAfterChecks envU (map dtDefName entryDefs) (map dtDataName entryDatas) of
+      in case lowerUnitChecked envU (map dtDefName entryDefs) (map dtDataName entryDatas) of
         ErrC e => pure (ErrC e)
         OkC unitIr => case lowerEntryOf ctx.sgcAllDefs of
           ErrC e => pure (ErrC e)

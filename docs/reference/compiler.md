@@ -14,7 +14,7 @@
 重导出，实现与数据定义都在 `X/` 的叶子模块。全包 **93 个模块**（85 个导出 + 内部
 `Diag` / `Diag.Format` / `Diagnostics.Ic` / `Driver.Iface` / `Driver.Owner` /
 `Elab.MetaSpans` / `Loader.Expand` / `Source`）；目标每模块 ≤~800 行
-（`Codegen.Lower` / `Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.5k 行）。
+（`Lowering` / `Codegen.Term` / `Driver.Dt` / `Elab.Trait` 等已超目标，约 1.1–1.5k 行）。
 
 | 模块 | 职责 | 关键入口 |
 | --- | --- | --- |
@@ -67,17 +67,17 @@
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
 | `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
 | `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `generateDtSplitProgram` |
-| `Codegen.Lower` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
+| `Lowering` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
 | `Codegen.Decl` | 纯文本叶子：OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ `IrTy` / `IrTyDecl` → OCaml 类型文本 | `irTyText`、`irTyDeclText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
-| `Codegen.Erase` | 擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、运行时依赖遍历（SCC 分组的输入） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termDepsInto`、`partitionDefs` |
+| `Checks` | Core 侧检查（不产生 IR）：擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、定义体事实（`termUseInto`：运行时依赖 + float/tracing/obs 旗标，一次遍历） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termUseInto`、`partitionDefs` |
 | `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
-| `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lower.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
+| `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
-| `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Codegen.Lower` 出 `IrUnit`） | `generateDtSplitProgram` |
+| `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Lowering` 出 `IrUnit`） | `generateDtSplitProgram` |
 | `Ir`（门面） | 后端中立的擦除后中间表示：重导出 `Ir.Model`、`Ir.Analysis` 与 `Ir.Runtime`；校验入口 | `validateProgram`、`validateUnit` |
 | `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |
-| `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏），从 `Codegen.Erase` 原样迁出；名字级入口给 Lowering 用 | `assembleGroups`、`assembleGroupNames`、`groupNames`、`adjTblOf` |
+| `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏、覆盖自证）+ 入口可达性（native / wasm 共用） | `assembleGroups`、`assembleGroupNames`、`groupNames`、`reachableDefs` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
@@ -114,7 +114,7 @@
 
 ## 编译链
 
-只有一条链：`Loader → Elab → Codegen.Lower（Core → IR）→ Codegen.{Decl,Term,Assembly}`，
+只有一条链：`Loader → Elab → Lowering（Core → IR）→ Codegen.{Decl,Term,Assembly}`，
 由 `Vuna.Compiler.Driver.Compile` 的 `checkPackage` / `compileToDir` 组合：
 
 - `Pkg.contextForFile` / `contextForDir` 给出唯一 `PackageContext`（最近 manifest + 依赖
@@ -127,12 +127,12 @@
 - `Elab.Driver.elabProgramFull` 做 DT 双向精化（record 声明由 `Elab.Data` 直接精化、
   `deriving` 由 `Elab.Derive` 从字段表展开，多 clause 由 `Elab.Match` 展开），产出
   `DtProgram`（datas / defs / classes / insts）；
-- `Codegen.Lower` 把本次程序的 datas/defs 降成 `Ir`（`checkProgramOf` 跑程序级检查，
+- `Lowering` 把本次程序的 datas/defs 降成 `Ir`（`checkProgramOf` 跑程序级检查，
   `lowerUnitOf` 出 `IrUnit`，`lowerEntryOf` 出 `IrEntry`）——它是 **Core 的唯一消费者**；
 - `Codegen.Assembly.genUnitParts` 把 `IrUnit` 装配成「open 头 + 类型 + 桥接 + 正文」；
   `Codegen.Term.genEntryHook` 渲染 main 钩子；
 - `Codegen.Split.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
-  （每单元经 `Codegen.Lower` 出 `IrUnit`；含直接依赖；**唯一输出模型**；`compile` 与 `build` 都走它）。
+  （每单元经 `Lowering` 出 `IrUnit`；含直接依赖；**唯一输出模型**；`compile` 与 `build` 都走它）。
 
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
 检查该入口，库包以 `[export].modules` 为根。
@@ -221,7 +221,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 （`TBool`），`List` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
 构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（表示类别来自 `Intrinsics.canonicalFamilies` 的 `FamilyRepr`；
-`Codegen.Lower` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
+`Lowering` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
 **例外（`res op` 这类擦除依赖）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用）
 整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式
@@ -239,7 +239,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 只用 OCaml 标准库 + Unix（运行时前导代码），不依赖解释循环。代码质量要点：
 
 - **依赖分组**（函数级 SCC，与模块间依赖无关）：用 Kosaraju SCC 求函数依赖分量
-  （`Codegen.Lower` 用 `Ir.Analysis.assembleGroupNames`，分组结果带 `irGroupIsRec`），
+  （`Lowering` 用 `Ir.Analysis.assembleGroupNames`，分组结果带 `irGroupIsRec`），
   自/互递归分量才用 `let rec ... and ...`，非自递归
   单函数用 `let`；
 - **比较运算符特化**：精化期按实参类型把 `==` `/=` `<` `<=` `>` `>=` 重写为
@@ -294,10 +294,10 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 文件划分只由源码顺序与名字决定，不依赖时间 / 环境（确定性）；无法归属的 `DtDef` /
 `DtData` 报清晰错误，不静默丢弃。生成链的护栏（构造子字段形状单一真源、
-`checkResolvedModules`、entryDecls 与归属校验、`Codegen.Lower.ensureUniqueOcamlNamesIn`）见
+`checkResolvedModules`、entryDecls 与归属校验、`Lowering.ensureUniqueOcamlNamesIn`）见
 [core.md](core.md) §7。
 
-**零成本表示**：`Codegen.Lower` 对单构造子单运行时字段的族产出 `IrUnboxedDecl`
+**零成本表示**：`Lowering` 对单构造子单运行时字段的族产出 `IrUnboxedDecl`
 （后端渲染成 OCaml 类型别名而不是变体，如 `type t_UserId = int`、`and t_Wrap = int`；
 字段不透明 / 函数 / 未知名字段保持装箱，类型参数与别名实参按字段实际引用的参数渲染）。
 对应的构造子应用在 Lowering 里只保留单字段（物化为 `Ir` 的同一个节点，`MkWrap 1` → `1`），

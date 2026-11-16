@@ -33,7 +33,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Intrinsics
 import Vuna.Compiler.Codegen
-import Vuna.Compiler.Codegen.Lower
+import Vuna.Compiler.Lowering
 import Vuna.Compiler.Codegen.Assembly
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Ir

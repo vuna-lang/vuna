@@ -1029,9 +1029,7 @@ else case entry of
         Just rm => if irEntryIsActionOf e then [rm] else []
         Nothing => []
       handlerSeeds = irEntryHandlersOf e
-      needed =
-        collectNeeded 100000 (append [irEntryMainOf e] (append runSeeds handlerSeeds)) [] st1.gsDefs
-      ordered = filter (\d => memStr (irDefName d) needed) st1.gsDefs
+      ordered = reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) st1.gsDefs
       runInstrs = case irEntryRunMainOf e of
         Just rm => if irEntryIsActionOf e then [ICall (watFuncNameOf rm)] else []
         Nothing => []
@@ -1047,14 +1045,6 @@ else case entry of
         Just showFn =>
           Ok
             (Pair (append (firstOf p) (append mainInstrs [ICall showFn, ICall "$rt_println"])) (secondOf p))
-
-collectNeeded : Int -> List String -> List String -> List IrDef -> List String
-collectNeeded fuel [] seen _ = reverse seen
-collectNeeded fuel (n :: rest) seen defs = if fuel <= 0 then reverse seen
-else if memStr n seen then collectNeeded (fuel - 1) rest seen defs
-else case findDef n defs of
-  Nothing => collectNeeded (fuel - 1) rest (n :: seen) defs
-  Just d => collectNeeded (fuel - 1) (append rest (irDefDeps d)) (n :: seen) defs
 
 findDef : String -> List IrDef -> Maybe IrDef
 findDef _ [] = Nothing
@@ -1159,13 +1149,11 @@ build program printResult =
           Just rm => if irEntryIsActionOf e then [rm] else []
           Nothing => []
         handlerSeeds = irEntryHandlersOf e
-        needed = case irEntryShowOf e of
+        ordered = case irEntryShowOf e of
           IrRt "@ir@showFloat" =>
-            collectNeeded 100000
-              (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds)) [] defs
-          _ =>
-            collectNeeded 100000 (append [irEntryMainOf e] (append runSeeds handlerSeeds)) [] defs
-        ordered = filter (\d => memStr (irDefName d) needed) defs
+            reachableDefs (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds))
+              defs
+          _ => reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
       in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
         Ok m => WasmOk m

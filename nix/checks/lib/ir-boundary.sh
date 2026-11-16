@@ -1,9 +1,9 @@
 #!/bin/sh
 # checks.ir-boundary：IR 边界的**结构**守卫（长期不变量）。
 #
-# 目标链路：`Core --Codegen.Lower--> IR --Codegen.{Decl,Term,Assembly}--> OCaml 文本`
+# 目标链路：`Core --Lowering--> IR --Codegen.{Decl,Term,Assembly}--> OCaml 文本`
 #           `Codegen.Split` 只做「归属表 + 按归属过滤 + 分文件」，每个单元都经
-#           `Codegen.Lower` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
+#           `Lowering` 出 `IrUnit` 再交给 `Codegen.Assembly` 装配。
 #
 # 九条规则（违反即失败）：
 #   1. `Vuna.Compiler.Ir*`（IR 模型与分析）不得依赖任何上游/目标侧模块：
@@ -13,9 +13,9 @@
 #      `Vuna.Compiler.Core*` / `Vuna.Compiler.Elab*` / `Vuna.Compiler.Intrinsics`：
 #      它们只吃 IR。这条保证「后端只有一个输入面 = IR」，删掉直连 Core 的路径后
 #      无法悄悄复活。
-#   3. 正向断言：`Codegen/Lower.vuna` 存在且 import 了 `Core`/`Elab`（Core → IR 的
+#   3. 正向断言：`Lowering.vuna` 存在且 import 了 `Core`/`Elab`（Core → IR 的
 #      唯一入口；防止「删了直连路径也删了 lowering」）。
-#   4. 正向断言：`Codegen.Split` 经 `Codegen.Lower` 出 IR（而不是自己拿 `DtDef` 拼文本）。
+#   4. 正向断言：`Codegen.Split` 经 `Lowering` 出 IR（而不是自己拿 `DtDef` 拼文本）。
 #      Split 仍要按声明归属切分，所以它是这条链上唯一允许 import `Elab` 的后端模块
 #      （`DtProgram` / `DtDef` / `DtData` 是切分单位）；但 `Core` / `Intrinsics` 一律不许
 #      ——擦除判据与 runtime 名映射都在 Lowering。
@@ -70,7 +70,7 @@ do
 done
 
 # 规则 3：Lowering 存在且是唯一的 Core 消费者。
-LOWER=compiler/lib/Vuna/Compiler/Codegen/Lower.vuna
+LOWER=compiler/lib/Vuna/Compiler/Lowering.vuna
 if [ ! -f "$LOWER" ]; then
   echo "ir-boundary: missing $LOWER (Core -> IR lowering must exist)"
   fail=$((fail + 1))
@@ -81,11 +81,19 @@ else
   fi
 fi
 
+# 规则 3b：`Codegen/` 目录只放 IR→文本；Core→IR 与 Core 侧检查不得再搬回来。
+for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Compiler/Codegen/Erase.vuna; do
+  if [ -f "$gone" ]; then
+    echo "ir-boundary: $gone must live outside Codegen/ (Codegen is IR -> text only)"
+    fail=$((fail + 1))
+  fi
+done
+
 # 规则 4：Split 必须路由到 Lowering，且不得自己消费 Core / Intrinsics。
 SPLIT=compiler/lib/Vuna/Compiler/Codegen/Split.vuna
 if [ -f "$SPLIT" ]; then
-  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Codegen\.Lower$'; then
-    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Codegen.Lower (must lower per unit)"
+  if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Lowering$'; then
+    echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Lowering (must lower per unit)"
     fail=$((fail + 1))
   fi
   check_forbidden "$SPLIT" '^(Vuna\.Compiler\.(Core|Intrinsics)(\.|$))'
@@ -108,7 +116,7 @@ done
 if grep -nE '\bIrRuntime\b|\bIrBridge\b' \
   compiler/lib/Vuna/Compiler/Ir/Model.vuna \
   compiler/lib/Vuna/Compiler/Ir/Runtime.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Lower.vuna \
+  compiler/lib/Vuna/Compiler/Lowering.vuna \
   compiler/lib/Vuna/Compiler/Codegen/Term.vuna
 then
   echo "ir-boundary: removed IR runtime-text nodes reappeared (IrRuntime / IrBridge)"

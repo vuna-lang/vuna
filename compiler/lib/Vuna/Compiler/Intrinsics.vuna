@@ -9,7 +9,7 @@ module Vuna.Compiler.Intrinsics where
 -- 消费方：
 --   - `Loader.Resolve`：名字解析（arity）、DT prelude 放行；
 --   - `Elab.Prelude`：构造 prelude globals（签名）；
---   - `Codegen.Lower`：全局名 → IR 运行时符号（契约 `Ir.Runtime`）；
+--   - `Lowering`：全局名 → IR 运行时符号（契约 `Ir.Runtime`）；
 --   - `Core.Eval`：按 IntrinsicOp 归约。
 --
 -- 身份规则：内置实体按**声明的 symbol**判定，不按短名/lastName：

@@ -1,7 +1,7 @@
 # IR 参考：擦除后的中间表示与运行时契约
 
 本文描述三层：`Vuna.Compiler.Ir.*`（IR 数据定义与纯分析）、`Vuna.Compiler.Ir.Runtime`
-（IR ↔ 运行时**契约**）与 `Vuna.Compiler.Codegen.Lower`（Core → IR 的唯一入口）、
+（IR ↔ 运行时**契约**）与 `Vuna.Compiler.Lowering`（Core → IR 的唯一入口）、
 `Vuna.Compiler.Codegen.Runtime`（契约的 OCaml 实现）。
 
 子系统位置见 [architecture.md](../architecture.md)，
@@ -11,7 +11,7 @@
 ## 位置与形状
 
 ```text
-Loader → Elab → Core ──Lower──> IR ──Codegen.{Decl,Term,Assembly,Split}──> OCaml 文本
+Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assembly,Split}──> OCaml 文本
                           │
                           └── Ir.Runtime：运行时符号契约（符号名 + 桥接标记）
                               Codegen.Runtime：符号 → OCaml 运行时表达式
@@ -29,7 +29,7 @@ Loader → Elab → Core ──Lower──> IR ──Codegen.{Decl,Term,Assembly
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；文本生成层（`Codegen` 门面与 `Decl`/`Term`/`Assembly`/`Runtime`）不 import `Core` / `Elab` / `Intrinsics`，唯一的上游消费者是 `Codegen/Lower.vuna`。`Codegen/Split.vuna` 按声明归属切分，因此允许 import `Elab`（`DtProgram`/`DtDef`/`DtData` 是切分单位），但 `Core` / `Intrinsics` 一律不许，且必须路由到 `Codegen.Lower` | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
+| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；文本生成层（`Codegen` 门面与 `Decl`/`Term`/`Assembly`/`Runtime`）不 import `Core` / `Elab` / `Intrinsics`，唯一的上游消费者是 `Lowering.vuna`。`Codegen/Split.vuna` 按声明归属切分，因此允许 import `Elab`（`DtProgram`/`DtDef`/`DtData` 是切分单位），但 `Core` / `Intrinsics` 一律不许，且必须路由到 `Lowering` | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 |
 
@@ -126,10 +126,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 - `Ir.validateUnit` / `validateProgram`：IR 里每个符号必须已声明；`IrRtApp` 的实参个数必须
   等于 `irInlineArity`（违反即 `IC_InvariantViolated`）。
-- `Codegen.Lower.checkRuntimeContract`（挂在 `checkProgramOf`）：`Intrinsics` ↔ 契约名字集
+- `Lowering.checkRuntimeContract`（挂在 `checkProgramOf`）：`Intrinsics` ↔ 契约名字集
   相等 + 后端表对契约双向全覆盖。三处任一漂移都是内部错，不新增用户诊断码。
 - `checks.ir-boundary`：规则 6（`IrRuntime` / `IrBridge` 不得复活）、规则 7（IR 数据模块的
-  字面量只能是符号名，不含空格 / 括号）、规则 8（契约与后端表存在、Lower 用后端表做一致性
+  字面量只能是符号名，不含空格 / 括号）、规则 8（契约与后端表存在、`Lowering` 用后端表做一致性
   检查）。
 
 改动规则：新增内建要同步三处——`Intrinsics`（语义）+ `Ir.Runtime`（契约名字 / 桥接标记）+
@@ -138,7 +138,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
 
-从 `Codegen.Erase` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
+从 `Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
 排序），语义与顺序不变（分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序）：
 
 - `groupNames : List (Pair String (List String)) -> List String -> Check (List (List String))`
@@ -149,6 +149,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - `assembleGroups` —— 按分组序列落成 `IrGroup`，并对递归组里零参定义的右值形状做
   护栏（`CG_RecursiveValueDefinition`；判据由 Lowering 放进 `irDefRecValueOk`）。
 - `checkUniqueDefNames` —— 单元内定义名去重（IR 层按源码名，后端再按渲染名）。
+- `reachableDefs` —— 从入口种子出发的依赖闭包（名字表一次建好、预算 = 种子数 + 依赖边数），
+  按程序顺序返回；native / wasm 共用，不再各自实现线性可达性扫描。
+- `checkGroupsCover` —— 分组必须覆盖全部名字：DFS 预算耗尽或分组异常时报内部错，不让定义
+  静默缺席。
 
 ## 责任分界
 
@@ -167,11 +171,11 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 校验入口
 
-- `Ir.validateUnit` / `Ir.validateProgram`：定义名唯一 + 分组可完成（成环报
-  `CG_DependencyCycle`）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致（见上节）。`Codegen.Lower.lowerProgramOf` 产完
-  `IrProgram` 后**立刻跑一次**，因此这条自证挂在 `vuna check` 的 codegen 阶段上（不是
-  只写在文档里的约定）。
-- 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Codegen.Erase`，由 Lowering
+- `Ir.validateUnit` / `Ir.validateProgram`：定义名唯一 + 分组自洽（每个依赖只指向更早的组
+  或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
+  （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
+  `Lowering.lowerUnitChecked` 逐单元跑一次。
+- 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Checks`，由 Lowering
   调用），因此诊断文本与顺序不变。
 
 ## 预算

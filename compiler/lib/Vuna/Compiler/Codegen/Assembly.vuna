@@ -4,7 +4,7 @@ module Vuna.Compiler.Codegen.Assembly where
 --
 -- 本模块只消费 IR：`genUnitParts` 把 `IrUnit`（类型声明 + 分组 +
 -- List 族标志）装成「open 头 + 类型声明 + List 桥接 + 分组正文」的片段与生成状态。
--- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）在 `Codegen.Lower`；main 钩子
+-- 准备阶段（擦除检查 / 名字护栏 / SCC 分组）在 `Lowering`；main 钩子
 -- 统一由 `Codegen.Term.genEntryHook` 渲染。check 路径在 `Driver.Dt` 里走
 -- `Lower.lowerProgramOf` + `genUnitParts` 并丢弃文本（`buildText=False`）。
 --
