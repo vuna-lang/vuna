@@ -296,6 +296,29 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   决策（`isOpaqueRuntimeTyIn` 按**当前**精化重算类型），属语义改动，撤，并把该不变式
   写进 [core.md](core.md) §5。`Ctx` 只保留「求值环境前插维护」这一处结构简化。
 
+### 4.1 逐定义精化与 codegen 检查的分段（span 口径）
+
+`VUNA_OBS=1`、空 `VUNA_STORE`、单进程冷跑 `check compiler`（绝对数随机器负载浮动，
+看份额即可）：
+
+| span | 耗时 | 说明 |
+| --- | --- | --- |
+| `vuna.elab.bodies` | ~9.2 s | 逐定义精化（`vuna.def.elab` 5784 次） |
+| `vuna.elab.term` / `.term.body` | ~9.0 s | `checkDefIn` 的正文检查 |
+| `vuna.codegen.check` | ~1.4 s | `.lower` ~1.4 s（`.unit` ~1.0 s）；`.gen` <10 ms |
+| `vuna.parse.syntax` / `.lex` | 0.14 s / 0.11 s | 315 / 166 次 |
+
+按表达式形态归因 `vuna.elab.term.core`（level 2 逐节点 span 的自用时间）：`EApp` ~4.6 s、
+`EVar` ~3.6 s，其余形态合计 <1 s。所以剩余成本是**每个表达式节点的推断/统一**，
+不是可以整段跳过的阶段；再往下需要给工具链自身接 CPU 采样
+（`@vuna@obs@sampleStart` 目前只接在用户程序运行时），用函数级栈定位 `conv` / `force`。
+
+据此落地的两条改动：
+- 局部 binder 的引用不再走运算符特化链（`+` / `==` / `Base.Num.*` 只可能是全局名）：
+  `EVar` 自用时间 4.6 s → 3.6 s；
+- check 路径用 `Codegen.Assembly.checkUnitParts` 只校验「运行时定义有体」，不拼产物文本
+  （文本生成是纯渲染，`Codegen.Term` 唯一的 `ErrC` 已保留）：`codegen.check` 1.7 s → 1.4 s。
+
 ## 5. 增长率（合成包）
 
 ### 5.1 单文件 `check`（全量精化路径）
