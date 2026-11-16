@@ -68,7 +68,7 @@ ldInfo e = Info e.ldEntryCode e.ldEntryTemplate e.ldEntryDesc
 
 -- | 内部：lint 规则条目 → `Info`（码取规则名，没有消息模板）。
 lintInfo : LintEntry -> Info
-lintInfo e = Info e.lintEntryCode e.lintEntryRule e.lintEntryDesc
+lintInfo e = Info e.lintEntryCode "" e.lintEntryDesc
 
 -- | 内部：所有域的条目，按 TC_ / CG_ / IC_ / LX_ / PS_ / RN_ / PKG_ / UN_ / LD_ / LN_ 的顺序拼接。
 allInfos : List Info
