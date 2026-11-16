@@ -88,6 +88,7 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
   ${prog} fetch [--locked] [DIR]           取包到持久 store（git/url；--locked 只校验不联网）
   ${prog} add <name>[@<version>] [DIR]     查 [registry].index → 写回 [dependencies] 并取包
                                           （--dry-run 只打印；--no-fetch 只改 manifest）
+  ${prog} pin [DIR]                        把 git 依赖的实际内容摘要写回 manifest
   ${prog} store gc [--dry-run] [--older-than SEC] [--max-size BYTES]   缓存族 GC（roots 保护；不碰包对象）
   ${prog} clean [--store] [--packages] [--gc] [--all] [--dry-run] [DIR]
        清理：store = 缓存族（objects/<kind>、blobs、units、views/bin、.tmp）；
