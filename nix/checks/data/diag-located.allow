@@ -14,6 +14,8 @@
 RN_AmbiguousPrelude
 PKG_NotMaterialized
 PKG_Invalid
+# 同名包是跨多个 manifest 的图级冲突，没有单一的“用户书写行”；错误消息带两个目录。
+PKG_DuplicatePackageName
 
 # --- 内部错误与纯求值路径 ---
 IC_InvariantViolated

@@ -247,5 +247,8 @@ pkgAll =
     PkgEntry (pkgCode (NotMaterialized "")) (pkgTemplate (NotMaterialized "")) "包未物化",
     PkgEntry (pkgCode (FetchFailed "")) (pkgTemplate (FetchFailed "")) "取包失败",
     PkgEntry (pkgCode (IndexMalformed "")) (pkgTemplate (IndexMalformed "")) "包索引格式非法",
-    PkgEntry (pkgCode (HashMismatch "" "")) (pkgTemplate (HashMismatch "" "")) "包内容摘要不符"
+    PkgEntry (pkgCode (HashMismatch "" "")) (pkgTemplate (HashMismatch "" "")) "包内容摘要不符",
+    PkgEntry (pkgCode (IdentityMalformed "")) (pkgTemplate (IdentityMalformed "")) "依赖身份格式非法",
+    PkgEntry (pkgCode (IdentityMismatch "" "")) (pkgTemplate (IdentityMismatch "" "")) "包语义身份不符",
+    PkgEntry (pkgCode (DuplicatePackageName "" "" "")) (pkgTemplate (DuplicatePackageName "" "" "")) "依赖图内包名重复"
   ]
