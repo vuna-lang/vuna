@@ -26,7 +26,7 @@ let v_Applicative_uBase_uResult_uResult = (Base_dApplicative.C_Dict_uBase_dAppli
   | _ -> failwith "DT: impossible branch"
 )), (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Base_dResult_dResult_Err (dtb__8) -> (match mc2 with
-  | C_Base_dResult_dResult_Err (dtb__9) -> (C_Base_dResult_dResult_Err (dtb__9))
+  | C_Base_dResult_dResult_Err (dtb__9) -> (C_Base_dResult_dResult_Err (dtb__8))
   | _ -> (C_Base_dResult_dResult_Err (dtb__8))
 )
   | C_Base_dResult_dResult_Ok (dtb__10) -> (match mc2 with

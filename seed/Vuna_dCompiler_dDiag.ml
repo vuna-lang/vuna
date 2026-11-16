@@ -43,7 +43,7 @@ let v_Applicative_uVuna_uCompiler_uDiag_uCheck = (Base_dApplicative.C_Dict_uBase
   | _ -> failwith "DT: impossible branch"
 )), (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__8) -> (match mc2 with
-  | C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__9) -> (C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__9))
+  | C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__9) -> (C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__8))
   | _ -> (C_Vuna_dCompiler_dDiag_dCheck_ErrC (dtb__8))
 )
   | C_Vuna_dCompiler_dDiag_dCheck_OkC (dtb__10) -> (match mc2 with
