@@ -50,45 +50,46 @@ auditRtAppKeys sym args =
 -- 逐节点收集缺口 key
 -- ---------------------------------------------------------------
 auditKeys : List IrDef -> Ir -> List String
-auditKeys defs ir = case ir of
-  IrVar _ => []
-  IrGlobal _ => []
-  IrInt _ => []
-  IrStr _ => []
-  IrBool _ => []
-  IrFloatLit _ => []
-  IrCast inner => auditKeys defs inner
-  IrLet bs scrut body =>
-    append
-      (append (if auditRuntimeBinders bs > 1 then ["multi-binder-let"] else []) (auditKeys defs scrut))
-      (auditKeys defs body)
-  IrIf c t e => append (auditKeys defs c) (append (auditKeys defs t) (auditKeys defs e))
-  IrCtor _ _ args => concatMap (auditKeys defs) args
-  IrRecord _ fields => concatMap (\p => auditKeys defs (secondOf p)) fields
-  IrProj base _ _ => auditKeys defs base
-  IrRecUpd base _ fields =>
-    append (auditKeys defs base) (concatMap (\p => auditKeys defs (secondOf p)) fields)
-  IrCase scrut alts => append (auditKeys defs scrut) (concatMap (auditAltKeys defs) alts)
-  IrNatCase scrut _ z s c =>
-    append (auditKeys defs scrut)
-      (append (auditAltMaybeKeys defs z) (append (auditAltMaybeKeys defs s) (auditAltMaybeKeys defs c)))
-  IrConcatMany parts => concatMap (auditKeys defs) parts
-  IrLam _ body => auditKeys defs body
-  IrApp f a => append (auditKeys defs f) (auditKeys defs a)
-  IrRtApp sym args => append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)
-  IrRt sym =>
-    if not (auditSymSupported sym) then ["symbol " ++ sym]
-    else if auditValueArity sym > 0 then [] else ["symbol-as-value " ++ sym]
-  IrEffThunk _ _ _ _ prim => auditKeys defs prim
-  IrEffBind _ _ _ => ["effect-bind"]
+auditKeys defs (IrVar _) = []
+auditKeys defs (IrGlobal _) = []
+auditKeys defs (IrInt _) = []
+auditKeys defs (IrStr _) = []
+auditKeys defs (IrBool _) = []
+auditKeys defs (IrFloatLit _) = []
+auditKeys defs (IrCast inner) = auditKeys defs inner
+auditKeys defs (IrLet bs scrut body) =
+  append
+    (append (if auditRuntimeBinders bs > 1 then ["multi-binder-let"] else []) (auditKeys defs scrut))
+    (auditKeys defs body)
+auditKeys defs (IrIf c t e) =
+  append (auditKeys defs c) (append (auditKeys defs t) (auditKeys defs e))
+auditKeys defs (IrCtor _ _ args) = concatMap (auditKeys defs) args
+auditKeys defs (IrRecord _ fields) = concatMap (\p => auditKeys defs (secondOf p)) fields
+auditKeys defs (IrProj base _ _) = auditKeys defs base
+auditKeys defs (IrRecUpd base _ fields) =
+  append (auditKeys defs base) (concatMap (\p => auditKeys defs (secondOf p)) fields)
+auditKeys defs (IrCase scrut alts) =
+  append (auditKeys defs scrut) (concatMap (auditAltKeys defs) alts)
+auditKeys defs (IrNatCase scrut _ z s c) =
+  append (auditKeys defs scrut)
+    (append (auditAltMaybeKeys defs z) (append (auditAltMaybeKeys defs s) (auditAltMaybeKeys defs c)))
+auditKeys defs (IrConcatMany parts) = concatMap (auditKeys defs) parts
+auditKeys defs (IrLam _ body) = auditKeys defs body
+auditKeys defs (IrApp f a) = append (auditKeys defs f) (auditKeys defs a)
+auditKeys defs (IrRtApp sym args) =
+  append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)
+auditKeys defs (IrRt sym) =
+  if not (auditSymSupported sym) then ["symbol " ++ sym]
+  else if auditValueArity sym > 0 then [] else ["symbol-as-value " ++ sym]
+auditKeys defs (IrEffThunk _ _ _ _ prim) = auditKeys defs prim
+auditKeys defs (IrEffBind _ _ _) = ["effect-bind"]
 
 auditAltKeys : List IrDef -> IrAlt -> List String
 auditAltKeys defs alt = auditKeys defs (irAltBodyOf alt)
 
 auditAltMaybeKeys : List IrDef -> Maybe IrAlt -> List String
-auditAltMaybeKeys defs m = case m of
-  Nothing => []
-  Just alt => auditAltKeys defs alt
+auditAltMaybeKeys defs Nothing = []
+auditAltMaybeKeys defs (Just alt) = auditAltKeys defs alt
 
 auditDefKeys : List IrDef -> IrDef -> List String
 auditDefKeys defs d = case irDefBody d of
@@ -157,10 +158,9 @@ nativeAuditLines defs =
 
 -- | 把审计块接在 unsupported 文本后面（诊断仍是第一条失败的文本）。
 export nativeAuditEnrich : NativeErr -> List IrDef -> NativeErr
-nativeAuditEnrich err defs = case err of
-  NativeUnsupported msg =>
-    let
-      lines = nativeAuditLines defs
-    in if length lines == 0 then err
-    else NativeUnsupported (msg ++ "\n" ++ foldl (\acc, l => acc ++ "\n" ++ l) "" lines)
-  NativeInternal _ => err
+nativeAuditEnrich (err@(NativeUnsupported msg)) defs =
+  let
+    lines = nativeAuditLines defs
+  in if length lines == 0 then err
+  else NativeUnsupported (msg ++ "\n" ++ foldl (\acc, l => acc ++ "\n" ++ l) "" lines)
+nativeAuditEnrich (err@(NativeInternal _)) defs = err

@@ -696,9 +696,8 @@ sameMethodShort : String -> String -> Bool
 sameMethodShort a b = canonicalMethodShort a == canonicalMethodShort b
 
 anySameMethod : String -> List String -> Bool
-anySameMethod name known = case known of
-  [] => False
-  k :: rest => if sameMethodShort name k then True else anySameMethod name rest
+anySameMethod name [] = False
+anySameMethod name (k :: rest) = if sameMethodShort name k then True else anySameMethod name rest
 
 export firstUnknownInstanceMethod : DtClass -> List Decl -> Maybe String
 firstUnknownInstanceMethod cls methods =
