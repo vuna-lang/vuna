@@ -78,7 +78,7 @@ rtApply =
         ILocalGet "$env",
         ILocalGet "$p1",
         ILocalGet "$code",
-        ICallRef "$ft"
+        IReturnCallRef "$ft"
       ]
   in rtFunc "$rt_apply" params [WvAnyRef] locals body
 
@@ -789,7 +789,7 @@ rtEffPerform =
 rtEffThunk : WatFunc
 rtEffThunk =
   WatFunc "$rt_effThunk" "$cft" [Pair "$p0" WvAnyRef] [WvAnyRef] []
-    [ILocalGet "$p0", IRefNull, ICall "$rt_apply"]
+    [ILocalGet "$p0", IRefNull, IReturnCall "$rt_apply"]
 
 rtEffResumeClo : WatFunc
 rtEffResumeClo =
@@ -810,7 +810,7 @@ rtEffResumeClo =
         IStructGet "$effK" 3,
         ILocalGet "$ctx",
         IStructGet "$effK" 4,
-        ICall "$rt_handleLoop"
+        IReturnCall "$rt_handleLoop"
       ]
   in WatFunc "$rt_effResumeClo" "$ft" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] locals body
 
@@ -867,7 +867,12 @@ rtHandleLoop =
       ]
     mkKclo = [IRefFunc "$rt_effResumeClo", ILocalGet "$ctx", IStructNew "$clo", ILocalSet "$kclo"]
     callOpH =
-      [ILocalGet "$opH", ILocalGet "$op", ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply"]
+      [ ILocalGet "$opH",
+        ILocalGet "$op",
+        ICall "$rt_apply",
+        ILocalGet "$kclo",
+        IReturnCall "$rt_apply"
+      ]
     forwardToOuter =
       [ ILocalGet "$payload",
         IPlain "suspend $eff",
@@ -878,11 +883,11 @@ rtHandleLoop =
         ILocalGet "$opH",
         ILocalGet "$key",
         ILocalGet "$name",
-        ICall "$rt_handleLoop"
+        IReturnCall "$rt_handleLoop"
       ]
     body =
       append
-        [IBlock "$on" "anyref (ref $ct)" [ILocalGet "$v", ILocalGet "$cont", IPlain "resume $ct (on $eff $on)", ILocalSet "$res", ILocalGet "$ret", ILocalGet "$res", ICall "$rt_apply", IReturn], ILocalSet "$k", ILocalSet "$payload"]
+        [IBlock "$on" "anyref (ref $ct)" [ILocalGet "$v", ILocalGet "$cont", IPlain "resume $ct (on $eff $on)", ILocalSet "$res", ILocalGet "$ret", ILocalGet "$res", IReturnCall "$rt_apply"], ILocalSet "$k", ILocalSet "$payload"]
         (append keyEq (append nameEq [IBinop "i32.and", IIf "anyref" (append extractOp (append mkKctx (append mkKclo callOpH))) forwardToOuter]))
   in rtFunc "$rt_handleLoop" params [WvAnyRef] locals body
 
@@ -908,7 +913,7 @@ rtEffHandle =
         ILocalGet "$opH",
         ILocalGet "$key",
         ILocalGet "$name",
-        ICall "$rt_handleLoop"
+        IReturnCall "$rt_handleLoop"
       ]
   in rtFunc "$rt_effHandle" params [WvAnyRef] locals body
 

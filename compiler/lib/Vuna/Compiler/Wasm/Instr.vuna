@@ -35,6 +35,10 @@ export data Instr(..) : Type where
   ICall : String -> Instr
   -- | 经 funcref 调用，参数的类型名（如 `$ft`）。
   ICallRef : String -> Instr
+  -- | 直接尾调用函数名（调用帧让位给被调用方）。
+  IReturnCall : String -> Instr
+  -- | 经 funcref 尾调用，参数的类型名（如 `$ft`）。
+  IReturnCallRef : String -> Instr
   IRefFunc : String -> Instr
   IRefNull : Instr
   -- | `ref.cast (ref $t)`；`$t` 可为 `i31`。
