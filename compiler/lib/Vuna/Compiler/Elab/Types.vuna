@@ -249,11 +249,12 @@ export record ConstraintStore where
   csNextId : Int
   -- conId ↦ 上次尝试时的解表长度。只有解表增长才值得重试；没有进展的
   -- 目标在 program-level 每轮被跳过（仍留在 pending 里，供定义收尾 lift 用）。
-  csTried : List (Pair Int Int)
+  -- 按 id 索引（Hash），否则记录随尝试次数增长后，每次 `ecTriedAt` 都要线性扫。
+  csTried : HashMap Int Int
 
 -- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
 export csEmpty : ConstraintStore
-csEmpty = ConstraintStore [] 0 []
+csEmpty = ConstraintStore [] 0 (Base.HashMap.fromList [])
 
 -- 末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
 --   - `ecCtorTbl : HashMap String DtCtor`：构造子名 → DtCtor。`elabDatas` 之后建一次
@@ -452,24 +453,13 @@ ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 export ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
-  ConstraintStore pending next tried => assocIntLookup cid tried
+  ConstraintStore pending next tried => Base.HashMap.lookup cid tried
 
 -- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
 export ecRecordTried : Ec -> Int -> Int -> Ec
 ecRecordTried ec cid epoch = case ecConstraints ec of
   ConstraintStore pending next tried =>
-    ecPutConstraints ec (ConstraintStore pending next (assocIntSet cid epoch tried))
-
--- | 在整数键关联表里查值；未命中返回 Nothing。
-assocIntLookup : Int -> List (Pair Int Int) -> Maybe Int
-assocIntLookup cid [] = Nothing
-assocIntLookup cid ((Pair k v) :: rest) = if k == cid then Just v else assocIntLookup cid rest
-
--- | 在整数键关联表里插入或覆盖值，返回新表。
-assocIntSet : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
-assocIntSet cid v [] = [Pair cid v]
-assocIntSet cid v ((Pair k w) :: rest) =
-  if k == cid then Pair k v :: rest else Pair k w :: assocIntSet cid v rest
+    ecPutConstraints ec (ConstraintStore pending next (Base.HashMap.insert cid epoch tried))
 
 export ecEmpty : Ec
 ecEmpty =

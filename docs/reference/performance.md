@@ -317,11 +317,20 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 不是可以整段跳过的阶段；再往下需要给工具链自身接 CPU 采样
 （`@vuna@obs@sampleStart` 目前只接在用户程序运行时），用函数级栈定位 `conv` / `force`。
 
+用工具链自采样（`observability.md` §6.1）看函数级热点，冷 `check compiler` 的顶部是
+**解析期的名字解析**（`Loader.Modules.isDataOrRecordCtorTarget` 与 `mangle` 的字符串拼接、
+`lookupExport` 的线性扫描）、`Elab.Types.ecTriedAt` 的约束尝试记录、以及
+`Elab.Meta.dtCtorLookup`；`Core.Eval.quote` 与 `List` 的 `unpack` 次之。
+
 据此落地的两条改动：
 - 局部 binder 的引用不再走运算符特化链（`+` / `==` / `Base.Num.*` 只可能是全局名）：
   `EVar` 自用时间 4.6 s → 3.6 s；
 - check 路径用 `Codegen.Assembly.checkUnitParts` 只校验「运行时定义有体」，不拼产物文本
   （文本生成是纯渲染，`Codegen.Term` 唯一的 `ErrC` 已保留）：`codegen.check` 1.7 s → 1.4 s。
+- `isDataOrRecordCtorTarget` 先按 canonical 的「数据前缀」筛族、再比构造子短名（不再为每个
+  构造子拼一次 `${mname}.${dname}.${cname}`）；`ConstraintStore.csTried` 从关联表改成
+  `HashMap Int Int`（否则尝试记录变长后每次 `ecTriedAt` 线性扫描）。
+  冷 `check compiler` 与上一版同一窗口交替对比快 17–20%（负载波动大，只作同机参考）。
 
 ## 5. 增长率（合成包）
 

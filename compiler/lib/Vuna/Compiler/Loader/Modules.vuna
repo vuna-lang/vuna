@@ -390,20 +390,37 @@ findModule ((Module mname mpkg imports imps decls exports fx reexports opacity) 
 -- 里排除；trait method 不是族的构造子，仍按原名字解析）。
 -- | 任一已加载模块里是否存在以 target 为 canonical 名的 data/record 构造子。
 export isDataOrRecordCtorTarget : List Module -> String -> Bool
-isDataOrRecordCtorTarget [] target = False
-isDataOrRecordCtorTarget (m :: rest) target =
-  isCtorTargetInDecls (moduleNameOf m) target (moduleDeclsOf m)
-    || isDataOrRecordCtorTarget rest target
+isDataOrRecordCtorTarget modules target =
+  let
+    cname = lastSeg target
+    dprefix = prefixOfName target
+  in if dprefix == "" then False else anyModuleCtorTarget modules target dprefix cname
+
+anyModuleCtorTarget : List Module -> String -> String -> String -> Bool
+anyModuleCtorTarget [] _ _ _ = False
+anyModuleCtorTarget (m :: rest) target dprefix cname =
+  let
+    mname = moduleNameOf m
+  in if not (startsWith mname target) then anyModuleCtorTarget rest target dprefix cname
+  else isCtorTargetInDecls mname target dprefix cname (moduleDeclsOf m)
+    || anyModuleCtorTarget rest target dprefix cname
 
 -- | 单模块声明里是否存在 canonical 名为 target 的 data/record 构造子。
-isCtorTargetInDecls : String -> String -> List Decl -> Bool
-isCtorTargetInDecls mname target [] = False
-isCtorTargetInDecls mname target (d :: rest) = case d of
+-- 先按 canonical 的「数据前缀」筛一次族，再比构造子短名；不再为每个构造子拼一次
+-- `${mname}.${dname}.${cname}`（解析期这一步按名字调用，拼接量随构造子数放大）。
+isCtorTargetInDecls : String -> String -> String -> String -> List Decl -> Bool
+isCtorTargetInDecls mname target dprefix cname [] = False
+isCtorTargetInDecls mname target dprefix cname (d :: rest) = case d of
   DData dname params kind ctors derivings viaField repr lin sp =>
-    anyCtorTarget mname dname target ctors || isCtorTargetInDecls mname target rest
+    mangle mname dname == dprefix && anyCtorNamed cname ctors
+      || isCtorTargetInDecls mname target dprefix cname rest
   DRecord dname params fields derivings viaField repr lin sp =>
-    mangle mname dname == target || isCtorTargetInDecls mname target rest
-  _ => isCtorTargetInDecls mname target rest
+    mangle mname dname == target || isCtorTargetInDecls mname target dprefix cname rest
+  _ => isCtorTargetInDecls mname target dprefix cname rest
+
+anyCtorNamed : String -> List Ctor -> Bool
+anyCtorNamed cname [] = False
+anyCtorNamed cname (c :: rest) = ctorName c == cname || anyCtorNamed cname rest
 
 -- | `data dname` 的构造子里是否有 canonical 名为 target 的。
 anyCtorTarget : String -> String -> String -> List Ctor -> Bool
