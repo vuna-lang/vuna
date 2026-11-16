@@ -267,7 +267,11 @@ export record TermUse where
 
 export termUseInto : HashMap String Bool -> (String -> UseFlags) -> Term -> TermUse
 termUseInto runtimeNames flagOf t =
-  termUseFuel 100000 runtimeNames flagOf True (TermUse [] noUseFlags False) t
+  termUseFuel (useBudgetFor (termSize t)) runtimeNames flagOf True (TermUse [] noUseFlags False) t
+
+-- | 使用事实的遍历预算：按项规模派生（每节点最多几步递归），不靠固定上限。
+useBudgetFor : Int -> Int
+useBudgetFor size = 512 + 4 * size
 
 addRuntimeDep : HashMap String Bool -> Bool -> String -> TermUse -> TermUse
 addRuntimeDep names live n u =
@@ -387,7 +391,7 @@ checkAllDefScopes (d :: rest) = case dtDefBody d of
     OkC n => checkAllDefScopes rest
 
 export termDepsInto : HashMap String Bool -> List String -> Term -> List String
-termDepsInto a1 a2 a3 = termDepsIntoFuel 100000 a1 a2 a3
+termDepsInto a1 a2 a3 = termDepsIntoFuel (useBudgetFor (termSize a3)) a1 a2 a3
 
 termDepsArgs : HashMap String Bool -> List String -> List (Pair Term Rig) -> List String
 termDepsArgs a1 a2 a3 = termDepsArgsFuel 100000 a1 a2 a3

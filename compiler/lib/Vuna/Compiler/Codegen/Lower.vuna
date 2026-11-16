@@ -539,8 +539,9 @@ else case t of
     Just fields => lowerRecordUpdateFuel (fuel - 1) env st binders base c tele fields idxs body
     Nothing => lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c tele body])
   TProj base c tele i fi => case Base.HashMap.lookup c env.lwRecordFields of
-    Just fields => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
-      Pair baseIr st2 => OkC (Pair (IrProj baseIr c (recordFieldNameAt fi fields)) st2)
+    Just fields => Vuna.Compiler.Common.bind (recordFieldNameAt fi fields) (\label => Vuna.Compiler.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
+      Pair baseIr st2 => OkC (Pair (IrProj baseIr c label) st2)
+    )
     )
     Nothing => lowerProjAsCaseFuel (fuel - 1) env st binders base c tele i fi
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
@@ -551,9 +552,10 @@ binderAtIn : Int -> List IrBinder -> Maybe IrBinder
 binderAtIn i [] = Nothing
 binderAtIn i (b :: rest) = if i <= 0 then Just b else binderAtIn (i - 1) rest
 
-recordFieldNameAt : Int -> List (Pair Int String) -> String
-recordFieldNameAt i [] = ""
-recordFieldNameAt i ((Pair n label) :: rest) = if n == i then label else recordFieldNameAt i rest
+recordFieldNameAt : Int -> List (Pair Int String) -> Check String
+recordFieldNameAt i [] = icInternal "record field position out of range"
+recordFieldNameAt i ((Pair n label) :: rest) =
+  if n == i then OkC label else recordFieldNameAt i rest
 
 -- | 把 `TRecord name args` 展开成等价 `TApp` 链。
 recordTermAsAppIn : Term -> List (Pair Term Rig) -> Term
@@ -1093,7 +1095,7 @@ else case nthOpqArgIn (secondOf p) opqs args of
     Pair ir st2 => Vuna.Compiler.Common.bind (lowerUpdFieldsFuel (fuel - 1) env st2 binders fields opqs rest args) (\r => case r of
       Pair updates st3 => case lookupRtLabelIn (firstOf p) fields of
         Just label => OkC (Pair (Pair label ir :: updates) st3)
-        Nothing => OkC (Pair updates st3)
+        Nothing => icInternal "record update position has no runtime field"
     )
   )
 

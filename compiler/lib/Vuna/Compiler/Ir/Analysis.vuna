@@ -190,7 +190,21 @@ groupNames adj names =
       let
         comps = collectComps revT order (Base.HashMap.fromList []) []
         groups = groupsFromComps comps names
-      in orderGroups adjT groups
+      in Vuna.Compiler.Common.bind (orderGroups adjT groups)
+        (\ordered => checkGroupsCover ordered names)
+
+-- | 分组必须覆盖全部名字：DFS 预算耗尽或分组算法异常时，宁可报内部错也不能
+-- 让定义悄悄缺席（缺席的定义会在链接期才暴露成未定义符号）。
+checkGroupsCover : List (List String) -> List String -> Check (List (List String))
+checkGroupsCover groups names =
+  let
+    covered = Base.HashMap.ofNames (concatMap (\g => g) groups)
+  in if allCovered covered names then OkC groups
+  else icInternal "SCC grouping dropped definitions (DFS budget exhausted?)"
+
+allCovered : HashMap String Bool -> List String -> Bool
+allCovered covered [] = True
+allCovered covered (n :: rest) = Base.HashMap.member n covered && allCovered covered rest
 
 -- | 单函数 SCC 且不引用自身时用 let；多函数 SCC（互递归）或自递归才用 let rec。
 groupNeedsRec : HashMap String (List String) -> List String -> Bool
