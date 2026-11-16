@@ -842,9 +842,8 @@ argValsAt ((Pair name rig) :: rest) depth i =
   freshVar name (depth + i) :: argValsAt rest depth (i + 1)
 
 -- 逐个把实参喂给闭包：闭包 env 是分支外环境，实参按 arg0 先喂的顺序。
--- 实参全部喂完后求值分支体（分支绑定子已按顺序进入 env）。
 export applyClosureBinder : Closure -> List Value -> Value
-applyClosureBinder (Closure env body) [] = eval env body
+applyClosureBinder clo [] = VCon "_alt" []
 applyClosureBinder (Closure env body) (a :: rest) =
   applyClosureBinder (Closure (a :: env) body) rest
 
