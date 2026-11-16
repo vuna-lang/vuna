@@ -53,21 +53,6 @@ upperStart name = case strUnpack name of
   c :: _ => c >= 65 && c <= 90
   [] => False
 
-firstJust : List (Maybe a) -> Maybe a
-firstJust [] = Nothing
-firstJust (x :: rest) = case x of
-  Just v => Just v
-  Nothing => firstJust rest
-
--- Eff 版的 firstJust：按顺序执行，命中即停（后续动作构造但不执行）。
-firstJustEff : {r : Row} -> List (Eff r (Maybe a)) -> Eff r (Maybe a)
-firstJustEff [] = pure Nothing
-firstJustEff (x :: rest) = do
-  v <- x
-  case v of
-    Just found => pure (Just found)
-    Nothing => firstJustEff rest
-
 lookupPair : String -> List (Pair String String) -> Maybe String
 lookupPair key [] = Nothing
 lookupPair key ((Pair k v) :: rest) = if k == key then Just v else lookupPair key rest
@@ -350,7 +335,7 @@ mkModuleRef buffers uri text sf name =
 -- import 行：模块名或 alias。alias 用整词查找（短 alias 可能是模块名的子串）。
 importModuleRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
 importModuleRef buffers uri line text sf tokStart token =
-  firstJustEff (map (importMatch buffers uri line text sf tokStart token) sf.sourceFileImports)
+  firstSuccess (map (importMatch buffers uri line text sf tokStart token) sf.sourceFileImports)
 
 importMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> Import -> Eff r (Maybe ModuleRef)
 importMatch buffers uri line text sf tokStart token imp =
@@ -378,7 +363,7 @@ exportModuleRef buffers uri line text sf tokStart token = case sf.sourceFileModD
   Just m =>
     let
       lines = split "\n" text
-    in firstJustEff
+    in firstSuccess
       (map (exportItemMatch buffers uri line text sf tokStart token lines) m.modDeclExportItems)
 
 exportItemMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff r (Maybe ModuleRef)
@@ -431,7 +416,7 @@ else do
 -- 限定名里的模块前缀：`Base.List.map` 光标在 `List` ⇒ `Base.List`；在 `map` ⇒ 不命中。
 qualifiedRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
 qualifiedRef buffers uri line col text sf tokStart token =
-  firstJustEff
+  firstSuccess
     (map (tryPrefix buffers uri line col text sf tokStart token) (moduleCandidates token))
 
 -- 命中条件：光标落在候选名字的字符范围内。`tokenAtCursor` 返回的 `tokStart` 是 **1-based**
