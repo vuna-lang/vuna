@@ -229,6 +229,11 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   两条 `check` 的预期是 exit 0、诊断为空（整仓那次耗时约 20 分钟）。同一二进制跑
   `build "$PWD/compiler" --target ocaml --no-compile --out DIR2` 的产物与 OCaml 版编译器
   同参数产物逐字节一致（154 个文件；唯一差异是 `build-id`，见页首）。
+- **wasm→wasm 生成**：同一二进制跑
+  `build "$PWD/compiler" --target wasm --no-compile --out DIR3`（`max-wasm-stack` 给
+  256 MiB）产出的 `main.wat` 与 `./result/bin/vuna` 同参数产物逐字节一致
+  （26,202,591 字节）；它汇编出的 `main.wasm` 也能继续 `check` 包。生成器的输出是确定性
+  的，所以产物层面已是 fixed point。32 MiB 栈跑这条会 `call stack exhausted`（见 §8）。
 
 ## 8. 已知边界
 
@@ -247,7 +252,9 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
 - wasm 的 `tryRemoveTree` 只做「unlink 文件」或「删空目录」（`path_unlink_file` +
   `path_remove_directory`），不递归；要删非空树需调用方逐层处理。
-- 栈：默认 512 KiB 不够编译器级输入；按 §1 的口径给 `max-wasm-stack`。
+- 栈：默认 512 KiB 不够编译器级输入；按 §1 的口径给 `max-wasm-stack`
+  （`check compiler` 8 MiB；整仓 `check` 32 MiB；wasm→wasm 生成 compiler 包 256 MiB）。
+  栈深来自长列表上的非尾辅助函数（`append` 之类 `1 + f rest`），与列表长度成正比。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
