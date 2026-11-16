@@ -1,10 +1,16 @@
+-- | vuna 源码风格检查与自动修复（`vuna lint`）的 CLI 门面。
+--
+-- 本模块只负责参数解析、逐文件读盘、finding 打印与 `--fix` 多轮循环；规则扫描与源码切片在
+-- [Vuna.Lint.Rules]，编辑应用在 [Vuna.Lint.Fix]，规则名、消息与修复描述在
+-- [Vuna.Lint.Diagnostics]。
+--
+-- 参数经 `Vuna.Cli.Args` 的统一入口解析（`--fix` 开关加位置参数，未知或重复 flag 是用法
+-- 错误）；读盘前先判路径是否存在、是不是目录，读不到时按工具错误返回，不抛宿主异常。
+--
+-- 退出码：0 表示没有 finding，1 表示有 finding（`--fix` 后仍有剩余也算），2 表示用法错误、
+-- 读盘失败或解析失败。
 module Vuna.Lint where
 
--- Vuna.Lint：vuna 源码风格检查与自动修复（首批规则）门面。
--- 规则扫描与语法层工具在 Vuna.Lint.Rules，编辑应用在 Vuna.Lint.Fix；
--- 本模块只保留 CLI（参数、打印、退出码）与 --fix 多轮循环。
--- 参数走 `Vuna.Cli.Args` 的统一入口（--fix 开关 + 位置参数，未知/重复 flag 可读
--- 错误），读盘先判存在/目录（`readText`），不对不存在路径抛宿主异常。
 import Vuna.Compiler.Base.Common
 import Base.EffFs
 import Base.EffConsole
@@ -17,43 +23,50 @@ import Vuna.Lint.Rules
 import Base.EffEnv
 import Base.EffProcess
 
--- 单条 finding 的渲染（纯）：CLI 打印与测试断言共用同一份格式，夹具 `.out` 因此
--- 既能由 CLI 生成、也能由进程内 `Finding` 投影重建。
+-- | 把一条 finding 渲染成 `path:line:col: [code] rule: message`；`fixMode` 为真时追加
+-- `(not auto-fixable)` 标记。CLI 打印与测试断言共用这一份格式。
 export renderFinding : String -> Bool -> Finding -> String
 renderFinding path fixMode f =
   let
     suffix = if fixMode then " (not auto-fixable)" else ""
   in "${path}:${f.findingLine}:${f.findingCol}: [${f.findingCode}] ${f.findingRule}: ${f.findingMessage}${suffix}"
 
--- `--fix` 的「已修复 N 条」报告行（纯）。
+-- | `--fix` 的「已修复 N 条」报告行：`path: fixed N finding(s)`。
 export renderFixReport : String -> Int -> String
 renderFixReport path count = "${path}: fixed ${count} finding(s)"
 
+-- | 内部：打印一条 finding（带换行），返回 0。
 printFinding : Member nConsole ConsoleOp r => String -> Bool -> Finding -> Eff r Int
 printFinding path fixMode f = do
   _ <- consolePrint "${renderFinding path fixMode f}\n"
   pure 0
 
+-- | 内部：按顺序打印全部 finding，返回 0。
 printFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
 printFindings path fixMode [] = pure 0
 printFindings path fixMode (f :: rest) = do
   _ <- printFinding path fixMode f
   printFindings path fixMode rest
 
+-- | 内部：`vuna lint` 的用法文本。
 lintUsage : String
 lintUsage = "usage: vuna lint [--fix] <file.vuna>...\n"
 
--- 零参顶层定义在模块初始化时求值；打印 usage 是动作，函数化（调用点传 0）。
+-- 零参顶层值在模块初始化时求值，打印是动作，因此包成函数（调用点传 0）。
+-- | 内部：打印用法并返回退出码 2。
 lintUsageError : Member nConsole ConsoleOp r => Int -> Eff r Int
 lintUsageError _ = do
   _ <- consolePrint lintUsage
   pure 2
 
+-- | 内部：打印 findings；没有 finding 返回 0，否则返回 1。
 reportFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
 reportFindings path fixMode findings = do
   _ <- printFindings path fixMode findings
   pure (if length findings == 0 then 0 else 1)
 
+-- | 内部：跑 `--fix` 循环；有修复则写回文件、重新扫描剩余 finding 并打印报告，没有修复则
+-- 退化为普通报告；写出或解析失败打印错误并返回 2。
 fixReport : Member nConsole ConsoleOp r, Member nFs FsOp r => String -> String -> List Finding -> List FixityDecl -> Eff r Int
 fixReport path source findings programFixities = case fixLoop programFixities source findings 8 0 of
   ErrC e => do
@@ -70,6 +83,8 @@ fixReport path source findings programFixities = case fixLoop programFixities so
         _ <- consolePrint "${renderFixReport path count}\n"
         reportFindings path True remaining
 
+-- | 内部：解析并扫描一份源码；`doFix` 为真走修复路径，否则只报告。解析失败打印错误并
+-- 返回 2。
 lintExisting : Member nConsole ConsoleOp r, Member nFs FsOp r => Bool -> String -> String -> List FixityDecl -> Eff r Int
 lintExisting doFix path source programFixities = case lintSourceWith programFixities source of
   ErrC e => do
@@ -79,8 +94,9 @@ lintExisting doFix path source programFixities = case lintSourceWith programFixi
     if doFix then fixReport path source findings programFixities
     else reportFindings path False findings
 
--- 逐文件取程序级 fixity（`Vuna.FixityEnv` 按目录缓存模块图）；拿不到上下文是工具错误，
--- 不静默按本地声明表继续（那会把 import 闭包里的运算符判成 unknown fixity）。
+-- | 内部：lint 单个文件：取程序级 fixity 上下文后扫描或修复，返回更新后的 fixity env 与
+-- 退出码。fixity 按目录缓存模块图；拿不到上下文按工具错误返回 2，不退回本文件的声明表
+-- （否则会把 import 闭包里的运算符判成 unknown fixity）。
 lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> String -> Eff r (Pair FixityEnv Int)
 lintOne doFix env path = do
   textR <- readText path
@@ -100,6 +116,7 @@ lintOne doFix env path = do
           code <- lintExisting doFix path source programFixities
           pure (Pair env2 code)
 
+-- | 内部：逐文件 lint，返回各文件退出码的最大值（任一文件报错即整体非 0）。
 lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> FixityEnv -> List String -> Eff r Int
 lintFiles doFix env [] = pure 0
 lintFiles doFix env (path :: rest) = do
@@ -107,6 +124,8 @@ lintFiles doFix env (path :: rest) = do
   restCode <- lintFiles doFix (firstOf stepped) rest
   pure (if secondOf stepped > restCode then secondOf stepped else restCode)
 
+-- | `vuna lint` 的入口：解析 `--fix` 与位置参数，逐文件 lint 并返回退出码；没有位置参数时
+-- 打印用法并返回 2。
 export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix"] args of
   ErrC e => do

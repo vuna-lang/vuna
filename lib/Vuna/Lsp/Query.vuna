@@ -1,27 +1,29 @@
+-- | LSP 各查询方法的实现：输入文本 / 位置 / 索引，输出 JSON 结果。
+--
+-- 纯查询层，不持有服务器状态（状态机在 [Vuna.Lsp] 门面）；依赖方向 Query → Diagnostics →
+-- Protocol，单向无环。
+--
+-- hover：先 DT 洞目标（`_` / `?name`；门控是光标所在行有洞 token，目标由服务器按内容缓存后
+-- 传入），未命中再看 Bindings（模块名 / 局部绑定），最后 Index 标识符签名 / 注释；range 落在
+-- 光标 token 上（不是定义位置）。
+--
+-- formatting：`Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit。
+--
+-- codeAction：lint finding（可自动修复）→ quick fix TextEdit（内嵌诊断与 publishDiagnostics
+-- 同源）；全文档 fix all 走 `Command`（`vuna.fixAllLint` + workspace/executeCommand）；光标在洞
+-- 上时按上下文 data / record binder 生成 `case split on <name>`（`refactor.rewrite`，构造子解析是
+-- parse 级）。
+--
+-- documentSymbol：AST 声明树（data / record / trait 带子节点），selectionRange 精确落名字。
+--
+-- definition：先看模块引用 / 局部绑定，再走位置 token（支持 `Mod.name`）→ Index 符号 →
+-- Location；Index 不可用时用同文件缓冲兜底。references：局部绑定作用域内的出现优先，Index
+-- `findReferences` 仅作回落。
+--
+-- completion：关键字 + 当前缓冲顶层名 + Index 符号（`.` 后按模块过滤，上限 500）。
+-- workspace/symbol：Index 过滤（上限 200）。
 module Vuna.Lsp.Query where
 
--- Vuna.Lsp.Query：LSP 各查询方法的实现（工具链模块，**永不进 seed 闭包**）。
---
--- 全是「输入文本/位置/索引 → JSON 结果」的纯查询，不持有服务器状态（状态机在
--- Vuna.Lsp 门面）。依赖方向：Query → Diagnostics → Protocol，单向无环。
---
--- 方法：
---   hover             先 DT 洞目标（`_` / `?name`；门控是**光标所在行**有洞 token，文件别处有洞
---                     不触发精化；目标由服务器按内容缓存后传入，见 Vuna.Lsp），未命中再看
---                     Bindings（模块名/局部绑定，见 Vuna.Lsp），最后 Index 标识符签名/注释；
---                     range 落在光标 token 上（不是定义位置）；
---   formatting        `Vuna.Fmt.formatSourceWith`（程序级 fixity）成功且内容变化 ⇒ 全文 TextEdit；
---   codeAction        lint finding（可自动修复）→ quick fix TextEdit（内嵌诊断带
---                     range/severity/source/code/message，与 publishDiagnostics 同源）；全文档
---                     fix all 走 `Command`（`vuna.fixAllLint` + workspace/executeCommand）；
---                     光标在洞上时按上下文 data / record binder 生成 `case split on <name>`
---                     （`refactor.rewrite`；构造子解析是 parse 级，见下方 case split 段）；
---   documentSymbol    AST 声明树（data/record/trait 带子节点）；selectionRange 精确落名字；
---   definition        位置 token（支持 `Mod.name`）→ Index 符号 → Location；Index 不可用时
---                     同文件缓冲兜底；
---   references        定义位置 + Index `findReferences` 的出现位置；
---   completion        关键字 + 当前缓冲顶层名 + Index 符号（`.` 后按模块过滤，cap 500）；
---   workspace/symbol  Index 过滤（cap 200），没有 textDocument 时用首个打开文档推断根。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Ast
@@ -48,21 +50,23 @@ import Base.EffProcess
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 
--- 结果上限：避免病态索引/大文件把单帧撑爆。
+-- | 补全结果上限：避免病态索引 / 大文件把单帧撑爆。
 maxCompletions : Int
 maxCompletions = 500
 
+-- | workspace/symbol 结果上限。
 maxWorkspaceSymbols : Int
 maxWorkspaceSymbols = 200
 
+-- | references 的出现位置上限（定义位置另加 1 条）。
 maxReferences : Int
 maxReferences = 500
 
--- codeAction 结果上限：同屏 quick fix 不需要无限长。
+-- | codeAction 结果上限：同屏 quick fix 不需要无限长。
 maxCodeActions : Int
 maxCodeActions = 20
 
--- 全文范围（格式化用）：0:0 到最后一行的行尾。
+-- | 内部：全文范围（格式化用）：LSP 0:0 到最后一行的行尾。
 fullRange : String -> Json
 fullRange text =
   let
@@ -74,7 +78,9 @@ fullRange text =
   in lspRange 1 1 (endLine + 1) (strLength endText + 1)
 
 -- ---------------------------------------------------------------
--- 选择范围：尽量指向名字本身，找不到就退回声明起点（`findNamePos` 在 Protocol）。
+-- 选择范围：selectionRange
+-- ---------------------------------------------------------------
+-- | 内部：选择范围（selectionRange）尽量指向名字本身，`findNamePos` 找不到就退回声明起点。
 nameSelRange : List String -> Span -> String -> Json
 nameSelRange lines sp name = case findNamePos lines sp name of
   Nothing =>
@@ -85,9 +91,11 @@ nameSelRange lines sp name = case findNamePos lines sp name of
 -- ---------------------------------------------------------------
 -- hover：DT 洞目标 + 标识符签名
 -- ---------------------------------------------------------------
+-- | 内部：洞上下文里的一条条目（`- \`名字\` : 类型` + 换行）。
 ctxLine : Pair String String -> String
 ctxLine kv = "- `${firstOf kv}` : ${secondOf kv}\n"
 
+-- | 内部：洞目标的「Context:」段落；上下文为空时返回 ""。
 contextBlock : List (Pair String String) -> String
 contextBlock [] = ""
 contextBlock ctx = """
@@ -95,16 +103,18 @@ contextBlock ctx = """
 Context:
 ${join "" (map ctxLine ctx)}"""
 
+-- | 内部：洞目标的 markdown 正文：`vuna` 代码块里给出类型（命名洞写 `?name : 类型`，匿名洞只写
+-- 目标类型），后面接上下文列出的 binder 类型。
 goalContents : DtGoalInfo -> Json
 goalContents g =
   let
-    -- 命名洞显示 `?name : <目标类型>`；匿名洞只显示目标类型。
     label =
       if g.dtGoalInfoName == "" then g.dtGoalInfoGoal
       else "${g.dtGoalInfoName} : ${g.dtGoalInfoGoal}"
   in JObj
     [Pair "kind" (JStr "markdown"), Pair "value" (JStr "```vuna\n${label}\n```\n${contextBlock g.dtGoalInfoCtx}")]
 
+-- | 内部：光标（1-based 行 / 列）是否落在洞的 span 内（含端点）。
 holeContains : Int -> Int -> DtGoalInfo -> Bool
 holeContains line col g =
   let
@@ -115,10 +125,12 @@ holeContains line col g =
     ec = sp.spanEndCol
   in not (line < sl || line > el || line == sl && col < sc || line == el && col > ec)
 
+-- | 内部：列表里第一个覆盖光标的洞目标。
 holeAt : Int -> Int -> List DtGoalInfo -> Maybe DtGoalInfo
 holeAt line col [] = Nothing
 holeAt line col (g :: rest) = if holeContains line col g then Just g else holeAt line col rest
 
+-- | 内部：洞 hover 的 LSP 响应；range 是洞的 span。
 holeHoverJson : DtGoalInfo -> Json
 holeHoverJson g =
   let
@@ -126,6 +138,8 @@ holeHoverJson g =
   in JObj
     [Pair "contents" (goalContents g), Pair "range" (lspRange (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) sp.spanEndCol)]
 
+-- | 内部：符号 hover 的 markdown 正文：函数写 `全名 : 签名`，其余符号有签名时只写签名、无签名时
+-- 写全名；有 docstring 时追加在后面。
 symbolHoverBody : Sym -> String
 symbolHoverBody s =
   let
@@ -137,43 +151,43 @@ symbolHoverBody s =
 ${body}
 ```${doc}"""
 
--- hover 的 range 必须是**光标下的 token**，不是符号定义位置：客户端（VS Code）用
--- hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起。返回定义位置会让使用点
--- 的 hover 立刻消失。
+-- | 内部：符号 hover 的 LSP 响应。range 必须是光标下的 token，不是符号定义位置：客户端
+-- （VS Code）用 hover.range 判断 hover 何时失效，鼠标一动到 range 外就收起；返回定义位置会让
+-- 使用点的 hover 立刻消失。
 symbolHoverJson : Sym -> Int -> Int -> String -> Json
 symbolHoverJson s line startCol token =
   JObj
     [Pair "contents" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (symbolHoverBody s))]), Pair "range" (lspRange line startCol line (startCol + strLength token))]
 
--- ---------------------------------------------------------------
+-- | 内部：解析源文本取当前模块名；解析失败或无 `module` 头时为 ""。
 currentModuleNameOf : String -> String
 currentModuleNameOf text = case parseSource "<lsp>" text of
   ErrC e => ""
   OkC (SourceFile hdr imports fx decls _ _ _) => currentModuleName decls hdr
 
--- hover 的第一段：DT 洞目标（包上下文；与 `vuna goal` 同源）。
--- 门控按**光标所在行**：洞是单行 token，只有这一行出现 `_` / `?name` 时才需要精化；
--- 文件别处有洞不构成理由——整篇扫描会让任意一行的 hover 都跑整模块（含 import 闭包）
--- 的 DT 精化，大文件上是秒级开销。
--- 用 tolerant 查询，**未解洞**也能拿到目标类型与上下文快照。
+-- | 光标所在行是否有洞 token（`_` 或 `?name`）。门控按行：洞是单行 token，只有这一行出现洞时
+-- 才需要精化——整篇扫描会让任意一行的 hover 都跑整模块（含 import 闭包）的 DT 精化，大文件上
+-- 是秒级开销。
 export lineHasHole : String -> Int -> Bool
 lineHasHole text line = hasHole (lineText text line)
 
+-- | 光标处的洞 hover：命中时返回 JSON，不在任何洞上返回 `Nothing`。
+-- `DtGoalInfo` 是容错的查询结果，未解的洞也能给出目标类型与上下文快照。
 export holeHoverFrom : Int -> Int -> List DtGoalInfo -> Maybe Json
 holeHoverFrom line col gs = case holeAt line col gs of
   Nothing => Nothing
   Just g => Just (holeHoverJson g)
 
--- 洞判定：`_` 是独立 token（左右都不是标识符/限定名的连接字符）；`?name` 是 `?` 紧邻标识符
--- 起始字符。行首/行尾用哨兵 -1；字符串或注释里的洞字符会误判成「有洞」，只多跑一次
--- 精化，不影响正确性。
+-- | 内部：洞判定用的「连接字符」：标识符字符加 `.`（限定名的一部分）。
 holeJoinCode : Int -> Bool
 holeJoinCode c =
   c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95 || c == 46
 
+-- | 内部：命名洞 `?name` 里 `?` 之后允许的标识符起始字符。
 holeIdentStart : Int -> Bool
 holeIdentStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
+-- | 内部：扫描一行字符找洞：`_` 交给 `holeAtUnderscore`，`?` 交给 `holeNamedAhead`。
 holeScan : List Int -> Int -> Bool
 holeScan [] prev = False
 holeScan (c :: rest) prev = case c of
@@ -181,26 +195,30 @@ holeScan (c :: rest) prev = case c of
   63 => holeNamedAhead rest
   _ => holeScan rest c
 
--- `?` 后面紧跟标识符起始字符（同行，无空格）⇒ 命名洞；否则按普通运算符字符继续扫。
+-- | 内部：`?` 后面紧跟标识符起始字符（同行、无空格）⇒ 命名洞；否则按普通运算符字符继续扫。
 holeNamedAhead : List Int -> Bool
 holeNamedAhead [] = False
 holeNamedAhead (c :: rest) = holeIdentStart c || holeScan rest 63
 
+-- | 内部：`_` 是独立 token（左右都不是连接字符）才算洞；否则继续扫。
 holeAtUnderscore : List Int -> Int -> Bool
 holeAtUnderscore rest prev =
   if holeJoinCode prev then holeScan rest 95
   else if holeJoinNext rest then holeScan rest 95 else True
 
+-- | 内部：`_` 右侧是否紧跟连接字符（是则不是洞）。
 holeJoinNext : List Int -> Bool
 holeJoinNext [] = False
 holeJoinNext (c :: rest) = holeJoinCode c
 
+-- | 内部：文本里是否有洞 token。字符串或注释里的洞字符会误判成「有洞」，只多跑一次精化，不影响
+-- 正确性。
 hasHole : String -> Bool
 hasHole text = holeScan (strUnpack text) (0 - 1)
 
--- hover 的第二段：光标标识符的签名/注释（Index；不可用/未命中 → null）。
--- `buffers` 覆盖 Index 的 docstring：Index 是磁盘快照，打开着的文件以缓冲为准，否则
--- 同一个符号的 docstring 在「模块 hover」与「符号 hover」两处会显示成不同版本。
+-- | hover 的第二段：光标标识符的签名 / 注释（Index；不可用或未命中 → `JNull`）。
+-- `buffers` 覆盖 Index 的 docstring：Index 是磁盘快照，打开着的文件以缓冲为准，否则同一个符号
+-- 在模块 hover 与符号 hover 两处会显示成不同版本。
 export symbolHoverResult : List (Pair String String) -> String -> Int -> Int -> String -> Maybe Index -> Json
 symbolHoverResult buffers uri line col text Nothing = JNull
 symbolHoverResult buffers uri line col text (Just idx) = case tokenAtCursor text line col of
@@ -209,7 +227,8 @@ symbolHoverResult buffers uri line col text (Just idx) = case tokenAtCursor text
     Nothing => JNull
     Just sym => symbolHoverJson (bufferDocOf buffers idx sym) line startCol token
 
--- 打开中的缓冲里该符号的 docstring（未打开 / 缓冲里没有这个名字 → 保留 Index 的）。
+-- | 内部：把符号的 docstring 换成打开中的缓冲里的版本（未打开或缓冲里没有这个名字时保留
+-- Index 的）。
 bufferDocOf : List (Pair String String) -> Index -> Sym -> Sym
 bufferDocOf buffers idx s = case modulePathOf idx (symModule s) of
   Nothing => s
@@ -218,7 +237,7 @@ bufferDocOf buffers idx s = case modulePathOf idx (symModule s) of
     Just doc =>
       Sym (symModule s) (symName s) (symKind s) (symSig s) (symType s) doc (symLine s) (symCol s)
 
--- definition：光标 token → Index 符号 → Location；Index 不可用/未命中时同文件兜底。
+-- | definition：光标 token → Index 符号 → Location；Index 不可用或未命中时在同文件缓冲里找。
 export definitionResult : String -> Int -> Int -> String -> Maybe Index -> Json
 definitionResult uri line col text Nothing =
   bufferDefinition uri text (fromMaybe "" (fmap secondOf (tokenAtCursor text line col)))
@@ -230,12 +249,10 @@ definitionResult uri line col text (Just idx) = case tokenAtCursor text line col
       Nothing => bufferDefinition uri text token
       Just loc => JArr [loc]
 
--- references：定义位置 + Index refs 的出现位置。
--- `references` 识别局部名——光标落在局部绑定上时，返回该 binder 在当前文档作用域内的
--- 全部出现位置（定义 + 使用，遮蔽同源，复用 `Vuna.Lsp.Bindings.bindingRenameOccurrences`），
--- 而不是按名字全局匹配（那会把同名顶层符号 / 其它作用域的同名局部混进来）。
--- 局部未命中（顶层符号 / 模块名 / 洞 / 关键字 ⇒ `bindingRenameOccurrences` 返回 Nothing）才回落
--- Index refs。返回扁平 Location 列表（与 `referencesFor` 同结构）。
+-- | references：光标落在局部绑定上时，返回该 binder 在当前文档作用域内的全部出现位置
+-- （定义 + 使用，遮蔽同源，复用 `Vuna.Lsp.Bindings.bindingRenameOccurrences`），不按名字全局
+-- 匹配（那会把同名顶层符号 / 其它作用域的同名局部混进来）。
+-- 局部未命中（顶层符号 / 模块名 / 洞 / 关键字）才回落 Index refs。返回扁平 Location 列表。
 export referencesResult : String -> Int -> Int -> String -> Maybe Index -> List Json
 referencesResult uri line col text midx =
   let
@@ -248,7 +265,7 @@ referencesResult uri line col text midx =
         Nothing => []
         Just idx => referencesFor idx (currentModuleNameOf text) token
 
--- 局部绑定的引用位置（scope-aware）；光标不在局部绑定上返回 []。
+-- | 内部：局部绑定的引用位置（scope-aware，最多 `maxReferences` 条）；光标不在局部绑定上返回 []。
 localRefLocations : String -> Int -> Int -> String -> List Json
 localRefLocations uri line col text = case bindingRenameOccurrences line col text of
   Nothing => []
@@ -256,6 +273,7 @@ localRefLocations uri line col text = case bindingRenameOccurrences line col tex
     map (\pos => localRefLocation uri text (firstOf pos) (secondOf pos))
       (take maxReferences positions)
 
+-- | 内部：单条局部引用位置（同一文档内的 Location，宽度取光标 token 长度）。
 localRefLocation : String -> String -> Int -> Int -> Json
 localRefLocation uri text line col =
   let
@@ -264,10 +282,10 @@ localRefLocation uri text line col =
       Just (Pair _ token) => strLength token
   in JObj [Pair "uri" (JStr uri), Pair "range" (lspRange line col line (col + width))]
 
--- formatting：formatSourceWith 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
--- fixity 是程序级的——与 CLI 同源，用 `Vuna.FixityEnv`（按文件目录缓存模块图，
--- 声明表逐文件重算 local + import 闭包）。上下文/加载失败或未知运算符 ⇒ 返回空 edits
--- （不让 LSP 请求失败，也不静默改语义）。
+-- | formatting：`formatSourceWith` 成功且内容有变化 ⇒ 全文 TextEdit；否则 []。
+-- fixity 是程序级的，与 CLI 同源（`Vuna.FixityEnv` 按文件目录缓存模块图，声明表逐文件重算
+-- local + import 闭包）。上下文 / 加载失败或未知运算符 ⇒ 返回空 edits，不让 LSP 请求失败，
+-- 也不静默改语义。
 export formattingEdits : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (List Json)
 formattingEdits uri text = do
   fxR <- formattingFixities uri text
@@ -280,6 +298,7 @@ formattingEdits uri text = do
         else [JObj [Pair "range" (fullRange text), Pair "newText" (JStr formatted)]]
   )
 
+-- | 内部：按文档 uri 求程序级 fixity 表；uri 解不出路径或加载失败时返回错误。
 formattingFixities : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (List FixityDecl))
 formattingFixities uri text =
   let
@@ -292,20 +311,16 @@ formattingFixities uri text =
 -- ---------------------------------------------------------------
 -- codeAction：lint quick fix + fix all 的 Command 形式 + 洞 case split
 -- ---------------------------------------------------------------
--- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；
--- 只取**可自动修复**（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）
--- 相交的 finding。Edit 的行范围是 1-based 闭区间**整行替换**：
---   LSP range = (editStart - 1, 0) .. (editStop, 0)（末端取下一行行首，不吞掉下一行）；
---   newText = `joinLines editLines`。
--- 另加一条 "fix all lint findings"：`Vuna.Lint.Fix.fixLoop` 跑到收敛（与 CLI `--fix`
--- 同一条路径）；该动作走 **`Command` 形式**（`vuna.fixAllLint`），客户端执行后由
--- `workspace/executeCommand` → `workspace/applyEdit` 推送整文档替换（见 Vuna.Lsp）。
--- 请求 range 附近没有可修复 finding 时不给 fix all，避免每一行都冒出全文档 fix。
--- 总条数上限 20；fix all 占最后一格，case split 动作排在最前。
+-- | codeAction 入口：lint quick fix + fix all 的 `Command` 形式 + 洞 case split。
 --
--- `context.only`（Maybe：Nothing = 客户端不限制、Just [] = 明确不要任何 kind）：
---   - quickfix 动作只在未限制或含 `quickfix` 时给；
---   - case split 动作只在未限制或含 `refactor` / `refactor.rewrite` 时给。
+-- 与诊断同源：程序级 fixity（`Vuna.FixityEnv`）→ `Vuna.Lint.Rules.lintSourceWith`；只取可自动
+-- 修复（`findingEdit = Just`）且编辑行范围与请求 range（1-based 行闭区间）相交的 finding。
+-- 另加一条 "fix all lint findings"（`Vuna.Lint.Fix.fixLoop` 跑到收敛，与 CLI `--fix` 同一条
+-- 路径）；请求 range 附近没有可修复 finding 时不给 fix all，避免每行都冒出全文档 fix。
+-- 总条数上限 `maxCodeActions`；case split 排最前，fix all 为它预留一格、排在诊断 suggestion 之前。
+--
+-- `context.only`（`Nothing` = 客户端不限制、`Just []` = 明确不要任何 kind）：quickfix 动作只在
+-- 未限制或含 `quickfix` 时给；case split 只在未限制或含 `refactor` / `refactor.rewrite` 时给。
 export codeActionsFor : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
 codeActionsFor mgoals suggestions uri text reqStart reqStartCol reqEnd reqEndCol only = do
   ctxR <- contextForDoc uri
@@ -315,6 +330,8 @@ codeActionsFor mgoals suggestions uri text reqStart reqStartCol reqEnd reqEndCol
       codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol
         only
 
+-- | 内部：已拿到包上下文的 codeAction 实现（`label` 是包标签，供 fixity 缓存）。
+-- 组装顺序：case split、quick fix、fix all、诊断自带 suggestion；总数不超过 `maxCodeActions`。
 codeActionsForCtx : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
 codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only = do
   looked <- fixitiesForFile emptyFixityEnv label text
@@ -344,47 +361,52 @@ codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol req
           diagActions2 = take (maxOf 0 (maxCodeActions - used)) diagActions
         in pure (append splits (append singles2 (append fixAll2 diagActions2)))
 
--- 缓存条目形如 (0-based 起止行, actions)：只取与请求 range 相交的那些。
+-- | 内部：缓存条目形如 (0-based 起止行, actions)，只取与请求 range 相交的那些。
 suggestionsInRange : Int -> Int -> List (Pair (Pair Int Int) (List Json)) -> List Json
 suggestionsInRange reqStart reqEnd [] = []
 suggestionsInRange reqStart reqEnd ((Pair (Pair sl el) acts) :: rest) =
   if sl <= reqEnd && el >= reqStart then append acts (suggestionsInRange reqStart reqEnd rest)
   else suggestionsInRange reqStart reqEnd rest
 
+-- | 内部：`context.only` 是否允许某个 kind（`Nothing` = 不限制）。
 onlyKindsAllow : String -> Maybe (List String) -> Bool
 onlyKindsAllow kind Nothing = True
 onlyKindsAllow kind (Just kinds) = memName kind kinds
 
+-- | 内部：是否允许 `quickfix`。
 quickfixAllowed : Maybe (List String) -> Bool
 quickfixAllowed only = onlyKindsAllow "quickfix" only
 
--- 服务器侧判定：这次 codeAction 是否需要诊断 suggestion。
+-- | 服务器侧判定：这次 codeAction 是否需要诊断 suggestion。
 export quickfixWanted : Maybe (List String) -> Bool
 quickfixWanted only = quickfixAllowed only
 
--- `refactor` 是 `refactor.rewrite` 的父 kind：客户端只要 `refactor` 时也应给 rewrite。
+-- | 内部：是否允许 refactor 类动作。`refactor` 是 `refactor.rewrite` 的父 kind，客户端只要
+-- `refactor` 时也应给 rewrite。
 refactorAllowed : Maybe (List String) -> Bool
 refactorAllowed only = onlyKindsAllow "refactor.rewrite" only || onlyKindsAllow "refactor" only
 
+-- | 内部：两个整数取较大者。
 maxOf : Int -> Int -> Int
 maxOf a b = if a >= b then a else b
 
--- 请求 range（1-based 行闭区间）与 Edit 的行范围（1-based 闭区间）是否相交。
+-- | 内部：请求 range（1-based 行闭区间）与 Edit 的行范围（1-based 闭区间）是否相交。
 editTouches : Int -> Int -> Finding -> Bool
 editTouches reqStart reqEnd f = case f.findingEdit of
   Nothing => False
   Just e => e.editStart <= reqEnd && e.editEnd >= reqStart
 
--- Edit 的行范围是 1-based 闭区间整行替换 → LSP 0-based 半开 range（末端 = 下一行行首）。
+-- | 内部：Edit 的行范围是 1-based 闭区间整行替换 → LSP 0-based 半开 range（末端 = 下一行行首）。
 editLspRange : Edit -> Json
 editLspRange e = lspRange e.editStart 1 (e.editEnd + 1) 1
 
+-- | 内部：`{range, newText}` 形式的 TextEdit。
 textEditJson : Json -> String -> Json
 textEditJson range newText = JObj [Pair "range" range, Pair "newText" (JStr newText)]
 
--- 单条 quick fix：title 带规则短名；`diagnostics` 复用 `Vuna.Lsp.Diagnostics` 的
--- finding→diagnostic 转换（与 publishDiagnostics 同一条 JSON：range/severity/source/code/
--- message），客户端可按 code 关联到已有诊断；edit.changes 按 uri 分组。
+-- | 内部：单条 quick fix。title 带规则短名；`diagnostics` 复用 `Vuna.Lsp.Diagnostics` 的
+-- finding → diagnostic 转换（与 publishDiagnostics 同一条 JSON），客户端可按 code 关联到已有
+-- 诊断；`edit.changes` 按 uri 分组。
 findingQuickFix : String -> Finding -> Maybe Json
 findingQuickFix uri f = case f.findingEdit of
   Nothing => Nothing
@@ -392,32 +414,33 @@ findingQuickFix uri f = case f.findingEdit of
     Just
       (JObj [Pair "title" (JStr "fix: ${f.findingRule}"), Pair "kind" (JStr "quickfix"), Pair "diagnostics" (JArr [findingDiagJson f]), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (editLspRange e) (joinLines e.editLines)])])])])
 
--- fix all 的命令名（initialize capabilities 的 executeCommandProvider 与动作共用）。
+-- | fix all 的命令名（initialize capabilities 的 executeCommandProvider 与动作共用）。
 export fixAllLintCommand : String
 fixAllLintCommand = "vuna.fixAllLint"
 
--- fix all 走 `Command`（不内嵌 WorkspaceEdit）：客户端选中后发
--- `workspace/executeCommand`，服务器再以 `workspace/applyEdit` 推送整文档替换。
--- 好处是 codeAction 结果不带大段 newText，且 command 通道可被客户端/脚本单独触发。
+-- | 内部：fix all 的动作，走 `Command` 而不内嵌 WorkspaceEdit：客户端选中后发
+-- `workspace/executeCommand`，服务器再以 `workspace/applyEdit` 推送整文档替换，因此 codeAction
+-- 结果不带大段 newText，command 通道也能被客户端 / 脚本单独触发。
 fixAllActionJson : String -> Json
 fixAllActionJson uri =
   JObj
     [Pair "title" (JStr "fix all lint findings"), Pair "kind" (JStr "quickfix"), Pair "command" (JObj [Pair "title" (JStr "fix all lint findings"), Pair "command" (JStr fixAllLintCommand), Pair "arguments" (JArr [JStr uri])])]
 
--- fixLoop 把全部可修复 finding 迭代应用（8 轮，与 CLI `--fix` 一致）；无改动 → Nothing。
+-- | 内部：`fixLoop` 把全部可修复 finding 迭代应用（最多 8 轮，与 CLI `--fix` 一致）；
+-- 无改动时返回 `Nothing`。
 fixAllLintEdit : List FixityDecl -> String -> List Finding -> Maybe String
 fixAllLintEdit programFixities text findings = case fixLoop programFixities text findings 8 0 of
   ErrC e => Nothing
   OkC (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
 
--- fix all 的 codeAction：只有确实有改动时才产生动作。
+-- | 内部：fix all 的 codeAction；只有确实有改动时才产生动作。
 fixAllActions : String -> List FixityDecl -> String -> List Finding -> List Json
 fixAllActions uri programFixities text findings = case fixAllLintEdit programFixities text findings of
   Nothing => []
   Just newText => [fixAllActionJson uri]
 
--- `workspace/executeCommand` 的 `vuna.fixAllLint`：按当前缓冲重算 lint + fixLoop，
--- 返回 WorkspaceEdit（changes 按 uri 分组）；无改动 / 上下文不可用 → Nothing。
+-- | `workspace/executeCommand` 的 `vuna.fixAllLint`：按当前缓冲重算 lint + fixLoop，返回
+-- WorkspaceEdit（changes 按 uri 分组，整文档替换）；无改动或上下文不可用时返回 `Nothing`。
 export fixAllLintWorkspaceEdit : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Maybe Json)
 fixAllLintWorkspaceEdit uri text = do
   ctxR <- contextForDoc uri
@@ -439,36 +462,23 @@ fixAllLintWorkspaceEdit uri text = do
 -- ---------------------------------------------------------------
 -- case split：洞 → 上下文 binder 的 data 构造子 / record 分支
 -- ---------------------------------------------------------------
--- 触发链（便宜 → 贵）：
---   1. 文本级扫描请求 range 里的 `_` / `?name` token（不跑精化；没有就不查洞）；
---   2. 命中才用服务器传入的容错洞目标（与 hover / `vuna goal` 同源；按 (uri, text) 缓存）；
---   3. 取覆盖请求 range 的那个洞，对上下文里每个「类型头解析到非索引 data / record」的
---      binder 生成一条 `refactor.rewrite`：`case <name> of` / `  <Ctor> _ => _` / ...；
---      record 是单构造器类型，给**一条**分支 `  <Type> { f = _, g = _ } => _`。
---
--- 构造子信息是 parse 级：当前缓冲 AST + `Bindings.moduleSourceIn`（按包上下文模块根读
--- 依赖模块源码；本模块内联）。类型头解析失败（函数类型 / 类型变量 / 索引族 / axiom /
--- 依赖模块缺失）就跳过该 binder——不报错、不产生动作（安全降级）。构造子名 / record
--- 类型名也按作用域决定：本模块 / open import / Prelude 重导出写短名，`import qualified`
--- 写 `Mod.` 限定名；两者都不成立的类型（只经函数签名间接可见）给不了合法模式名 →
--- 同样跳过。
---
--- 缩进：分支 = 洞所在行的行首缩进 + 2（与 fmt 对 `case` 的输出一致）。
--- 边界：隐式构造子参数（`{a : Type} ->`）不进模式（`ctorPatArity` 按 EPi 的 implicit 判定）；
--- 索引族**不枚举**（索引约束在 parse 级不可知，不可达分支会被精化器以
--- `TC_ImpossibleBranchIndex` 拒绝）；record 分支字段全部写 `_`（省略字段 = 通配也可，
--- 但写全字段不依赖字段默认值且与 fmt 输出一致）；洞若出现在类型位置，生成的 `case` 不是
--- 合法表达式——goal API 不区分表达式/类型位置，由编辑器把 action 当建议展示（用户可撤销）。
--- 请求 range 的行文本里是否有洞 token（文本级门控：没有就不跑整模块 DT 精化）。
--- 只按行判（不比较列）：同行的洞在 goalAtRange 里按 span 精确判定，误报只多一次精化。
+-- 触发链（便宜 → 贵）：文本级扫洞 token → 容错洞目标（与 hover / `vuna goal` 同源，按
+-- (uri, text) 缓存）→ 对上下文里每个类型头解析到非索引 data / record 的 binder 生成一条
+-- `refactor.rewrite`。构造子信息是 parse 级：当前缓冲 AST + `Bindings.moduleSourceIn`（按包
+-- 上下文模块根读依赖模块源码，本模块内联）。
+-- 类型头解析失败（函数类型 / 类型变量 / 索引族 / axiom / 依赖模块缺失）就跳过该 binder，
+-- 不报错、不产生动作（安全降级）。
+-- | 内部：请求 range 的行文本里是否有洞 token（文本级门控：没有就不跑整模块 DT 精化）。
+-- 只按行判、不比较列：同行的洞在 `goalAtRange` 里按 span 精确判定，误报只多一次精化。
 rangeTouchesHole : String -> Int -> Int -> Int -> Int -> Bool
 rangeTouchesHole text sl sc el ec = hasHole (join "\n" (map (lineText text) (range sl (el + 1))))
 
+-- | 内部：(行, 列) 位置比较（1-based）。
 posBeforeOrEq : Pair Int Int -> Pair Int Int -> Bool
 posBeforeOrEq a b = firstOf a < firstOf b || firstOf a == firstOf b && secondOf a <= secondOf b
 
--- 洞 span 对 `_` 是零宽（end = start）：末列至少放宽到 start + 1，让「光标在 token 右侧」
--- 也能命中；命名洞的 span 本身覆盖整个 `?name`。
+-- | 内部：洞是否与请求 range 相交。洞 span 对 `_` 是零宽（end = start），末列至少放宽到
+-- start + 1，让「光标在 token 右侧」也能命中；命名洞的 span 本身覆盖整个 `?name`。
 goalTouchesRange : Int -> Int -> Int -> Int -> DtGoalInfo -> Bool
 goalTouchesRange sl sc el ec g =
   let
@@ -479,25 +489,28 @@ goalTouchesRange sl sc el ec g =
     p2 = Pair el ec
   in posBeforeOrEq p1 h2 && posBeforeOrEq h1 p2
 
+-- | 内部：列表里第一个与请求 range 相交的洞目标。
 goalAtRange : Int -> Int -> Int -> Int -> List DtGoalInfo -> Maybe DtGoalInfo
 goalAtRange sl sc el ec [] = Nothing
 goalAtRange sl sc el ec (g :: rest) =
   if goalTouchesRange sl sc el ec g then Just g else goalAtRange sl sc el ec rest
 
--- 非索引 data 的 kind 只能是 `Type`（索引族写成 `... -> Type`，不枚举）。
+-- | 内部：非索引 data 的 kind 只能是 `Type`（索引族写成 `... -> Type`，不枚举）。
 dataKindIsType : Expr -> Bool
 dataKindIsType (EVar "Type" sp) = True
 dataKindIsType (EParen inner sp) = dataKindIsType inner
 dataKindIsType _ = False
 
--- 可 split 的类型：非索引 data（多分支）或 record（单构造器，构造器名 = 类型名）。
--- 索引族**不做**：parse 级拿不到索引约束，枚举全部构造子可能生成精化器直接拒绝的
--- 不可达分支（`TC_ImpossibleBranchIndex`），所以宁可安全降级。`axiom` / 类型变量 /
--- trait / 函数类型没有可枚举的构造子，同样不给动作。
+-- | 可 split 的类型：非索引 data（多分支）或 record（单构造器，构造器名 = 类型名）。
 data SplitTy : Type where
+  -- | 非索引 data：带它的构造子列表，每个构造子生成一条分支。
   SplitData : List Ctor -> SplitTy
+  -- | record：类型名 + 字段名列表，只生成一条分支。
   SplitRecord : String -> List String -> SplitTy
 
+-- | 内部：在这些声明里找可 split 的类型。索引族不做：parse 级拿不到索引约束，枚举全部构造子
+-- 可能生成精化器直接拒绝的不可达分支（`TC_ImpossibleBranchIndex`），宁可安全降级。
+-- `axiom` / 类型变量 / trait / 函数类型没有可枚举的构造子，同样返回 `Nothing`。
 findSplitIn : List Decl -> String -> Maybe SplitTy
 findSplitIn [] name = Nothing
 findSplitIn ((DData dname params kind ctors derivings viaField repr lin sp) :: rest) name =
@@ -507,24 +520,25 @@ findSplitIn ((DRecord dname params fields derivings viaField repr lin sp) :: res
   if dname == name then Just (SplitRecord dname (map fieldName fields)) else findSplitIn rest name
 findSplitIn (_ :: rest) name = findSplitIn rest name
 
--- 类型表达式的头名（`Base.Maybe.Maybe` / `T.Color` / 应用后的 `T.Box`）。函数类型 /
--- Pi / 运算符不是构造子类型的候选 → Nothing。
--- 注意：洞上下文里的类型是精化器 `showTerm` 的文本，应用写在全括号里且左结合
--- （`((Base.Pair.Pair Int) Base.Bool.Bool)`），所以 EApp 要沿函数侧递归剥括号。
--- 箭头 `A -> B` 也编码成 `EApp (EVar "->") [A, B]`：头名是 `->`，解析不到声明 → 降级。
+-- | 内部：类型表达式的头名（`Base.Maybe.Maybe` / `T.Color` / 应用后的 `T.Box`）。
+-- 洞上下文里的类型是精化器 `showTerm` 的文本，应用写在全括号里且左结合
+-- （`((Base.Pair.Pair Int) Base.Bool.Bool)`），所以 `EApp` 要沿函数侧递归剥括号。
+-- 箭头 `A -> B` 若编码成 `EApp (EVar "->") [A, B]`，头名是 `->`，后续解析不到声明即降级；
+-- `EInfix` / `EPi` / 其它形状返回 `Nothing`。
 typeHeadName : Expr -> Maybe String
 typeHeadName (EVar n sp) = Just n
 typeHeadName (EApp f args sp2) = typeHeadName f
 typeHeadName (EParen inner sp) = typeHeadName inner
 typeHeadName _ = Nothing
 
+-- | 内部：`Maybe` 列表里第一个 `Just`。
 firstMaybe : List (Maybe a) -> Maybe a
 firstMaybe [] = Nothing
 firstMaybe (x :: rest) = case x of
   Just v => Just v
   Nothing => firstMaybe rest
 
--- Eff 版的 firstMaybe：按顺序执行，命中即停。
+-- | 内部：Eff 版的 `firstMaybe`：按顺序执行，命中即停。
 firstMaybeEff : {r : Row} -> List (Eff r (Maybe a)) -> Eff r (Maybe a)
 firstMaybeEff [] = pure Nothing
 firstMaybeEff (x :: rest) = do
@@ -533,7 +547,7 @@ firstMaybeEff (x :: rest) = do
     Just found => pure (Just found)
     Nothing => firstMaybeEff rest
 
--- 顺序执行每个元素的效果并拼接结果（列表顺序与纯 concatMap 一致）。
+-- | 内部：顺序执行每个元素的效果并拼接结果（列表顺序与纯 `concatMap` 一致）。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
 concatMapEff f (x :: rest) = do
@@ -541,6 +555,7 @@ concatMapEff f (x :: rest) = do
   ys <- concatMapEff f rest
   pure (append xs ys)
 
+-- | 内部：读模块源码并找可 split 的类型；源码缺失或解析失败时为 `Nothing`。
 moduleSplitIn : Member nFs FsOp r => List Root -> String -> String -> Eff r (Maybe SplitTy)
 moduleSplitIn roots modName tyName = do
   src <- moduleSourceIn roots modName
@@ -550,11 +565,12 @@ moduleSplitIn roots modName tyName = do
       ErrC e => pure Nothing
       OkC dep => pure (findSplitIn dep.sourceFileDecls tyName)
 
+-- | 内部：单个导出项 `module B` 是否提供该类型（其余导出项不贡献类型）。
 exportedSplit : Member nFs FsOp r => List Root -> String -> ExportItem -> Eff r (Maybe SplitTy)
 exportedSplit roots tyName (XModule name sp) = moduleSplitIn roots name tyName
 exportedSplit roots tyName item = pure Nothing
 
--- 未限定类型名：本模块 → Prelude 的整模块重导出 → 各 open/qualified import 的模块。
+-- | 内部：在 Prelude 的整模块重导出面里找该类型。
 preludeSplit : Member nFs FsOp r => List Root -> String -> Eff r (Maybe SplitTy)
 preludeSplit roots tyName = do
   src <- moduleSourceIn roots "Prelude"
@@ -565,10 +581,13 @@ preludeSplit roots tyName = do
       OkC sf =>
         firstMaybeEff (map (\m => moduleSplitIn roots m tyName) (preludeReexportModuleNames sf))
 
+-- | 内部：导出项 `module B` 贡献的模块名；其余导出项为空。
 reexportModuleName : ExportItem -> List String
 reexportModuleName (XModule name sp) = [name]
 reexportModuleName _ = []
 
+-- | 内部：Prelude 的整模块重导出模块名（新的 `sourceFileReexports` 优先，为空时退回 module 头
+-- 的导出项）。
 preludeReexportModuleNames : SourceFile -> List String
 preludeReexportModuleNames sf =
   let
@@ -578,12 +597,16 @@ preludeReexportModuleNames sf =
       Nothing => []
   in if isEmptyList newNames then oldNames else newNames
 
+-- | 内部：单条 import 的目标模块里是否有该类型。
 importSplit : Member nFs FsOp r => List Root -> String -> Import -> Eff r (Maybe SplitTy)
 importSplit roots tyName imp = moduleSplitIn roots imp.importName tyName
 
+-- | 内部：按 import 顺序在导入模块里找该类型（第一个命中即停）。
 importedSplit : Member nFs FsOp r => List Root -> String -> List Import -> Eff r (Maybe SplitTy)
 importedSplit roots tyName imports = firstMaybeEff (map (importSplit roots tyName) imports)
 
+-- | 内部：未限定类型名的解析顺序：本模块 → Prelude 的整模块重导出 → 各 import 的模块。返回
+-- (模块名, 可 split 的声明)，模块名 "" 表示写短名。
 resolveUnqualifiedSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> Eff r (Maybe (Pair String SplitTy))
 resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls tyName of
   Just split => pure (Just (Pair "" split))
@@ -598,14 +621,14 @@ resolveUnqualifiedSplit sf roots tyName = case findSplitIn sf.sourceFileDecls ty
           Nothing => Nothing
         )
 
--- 洞上下文里的类型文本 → (类型所在模块名, 可 split 的声明)。模块名 "" = 当前缓冲 /
--- 经 Prelude 重导出（分支写短名）。
--- 边界：类型文本是精化器 show 出来的**规范全名**（`Dep.Point` / `B.Local`），所以
--- `import ... as` 的模块别名不会出现在这里；也没有类型别名声明可展开（见 lsp.md）。
+-- | 内部：给解析结果附上类型所在模块名；`Nothing` 原样透传。
 tagSplit : String -> Maybe SplitTy -> Maybe (Pair String SplitTy)
 tagSplit modName (Just cs) = Just (Pair modName cs)
 tagSplit modName Nothing = Nothing
 
+-- | 内部：把洞上下文里的类型文本解析成类型表达式，再按头名（可带模块前缀）解析到可 split 的
+-- 声明；任一步失败时为 `Nothing`。类型文本是精化器 show 出来的规范全名（`Dep.Point` /
+-- `B.Local`），所以 `import ... as` 的模块别名不会出现，也没有类型别名声明可展开。
 resolveTypeSplit : Member nFs FsOp r => SourceFile -> List Root -> String -> String -> Eff r (Maybe (Pair String SplitTy))
 resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
   ErrC e => pure Nothing
@@ -622,7 +645,7 @@ resolveTypeSplit sf roots curMod tyText = case parseExpressionSource tyText of
         found <- moduleSplitIn roots modName tyName
         pure (tagSplit modName found)
 
--- 构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
+-- | 内部：构造子的模式参数个数：显式 `->` / `(a : Type) ->`（EPi implicit = False）才占通配；
 -- 隐式 `{a : Type} ->`（EPi implicit = True）由调用点推断，不进模式。
 ctorPatArity : Expr -> Int
 ctorPatArity (EInfix "->" lhs rhs sp) = 1 + ctorPatArity rhs
@@ -630,24 +653,29 @@ ctorPatArity (EApp (EVar "->" sp1) ([x, rest]) sp2) = 1 + ctorPatArity rest
 ctorPatArity (EPi n implicit qty dom cod sp) = (if implicit then 0 else 1) + ctorPatArity cod
 ctorPatArity ty = 0
 
+-- | 内部：`n` 个通配参数的模式文本（`" _ _ _"`）。
 ctorWildArgs : Int -> String
 ctorWildArgs n = join "" (map (\_ => " _") (range 0 n))
 
--- 直接 `import qualified` 的目标模块：构造子 / record 类型名要写限定名；本模块 /
--- open import / 经 Prelude 重导出的 base 类型短名在作用域里。既没直接 import、也不在
--- Prelude 重导出面里的模块（类型只经函数签名间接可见）连限定名都不可解析 —— 不给动作。
+-- | 内部：该模块是否被直接 `import qualified`；没直接 import 时返回 `Nothing`。
+-- 直接 `import qualified` 的目标模块，构造子 / record 类型名要写限定名；本模块、open import、
+-- 经 Prelude 重导出的 base 类型写短名。既没直接 import 也不在 Prelude 重导出面里的模块（类型
+-- 只经函数签名间接可见）连限定名都不可解析，不给动作。
 importQualifiedness : SourceFile -> String -> Maybe Bool
 importQualifiedness sf name = firstMaybe (map (matchImportQualified name) sf.sourceFileImports)
 
+-- | 内部：单条 import 是否指向该模块，是则给出它的 qualified 标记。
 matchImportQualified : String -> Import -> Maybe Bool
 matchImportQualified name imp =
   if imp.importName == name then Just imp.importIsQualified else Nothing
 
+-- | 内部：导出项 `module B` 的模块名；其余导出项为 `Nothing`。
 exportModuleName : ExportItem -> Maybe String
 exportModuleName (XModule name sp) = Just name
 exportModuleName item = Nothing
 
--- Prelude 的整模块重导出面（`module Base.Bool` 等）：这些模块的短名在任意模块里可见。
+-- | 内部：Prelude 的整模块重导出面（`module Base.Bool` 等）——这些模块的短名在任意模块里
+-- 可见；读不到或解析失败时为 []。
 preludeReexportModules : Member nFs FsOp r => List Root -> Eff r (List String)
 preludeReexportModules roots = do
   src <- moduleSourceIn roots "Prelude"
@@ -663,6 +691,8 @@ preludeReexportModules roots = do
             Just m => mapMaybe exportModuleName m.modDeclExportItems
         in pure (append newNames oldNames)
 
+-- | 内部：分支里写构造子 / 类型名时要加的前缀（`""` 短名、`"Mod."` 限定名）；模块名不可解析时
+-- 返回 `Nothing`（该 binder 不给动作）。
 typePatternPrefix : SourceFile -> List String -> String -> Maybe String
 typePatternPrefix sf preludeModules modName = if modName == "" then Just ""
 else if modName == currentModuleName sf.sourceFileDecls sf.sourceFileModDecl then Just ""
@@ -671,41 +701,50 @@ else case importQualifiedness sf modName of
   Just False => Just ""
   Nothing => if memName modName preludeModules then Just "" else Nothing
 
+-- | 内部：一条 data 分支（`<Ctor> _ _ => _`，前置换行与缩进）。
 branchLine : String -> String -> Ctor -> String
 branchLine indent prefix c =
   "\n${indent}${prefix}${ctorName c}${ctorWildArgs (ctorPatArity (ctorType c))} => _"
 
--- record 是单构造器类型（构造器名 = 类型名）：一条分支，字段全写 `_`。
+-- | 内部：record 分支。record 是单构造器类型（构造器名 = 类型名），只给一条分支，字段全写 `_`
+-- （省略字段也可以，但写全字段不依赖字段默认值且与 fmt 输出一致）；无字段时写裸模式。
 recordBranchLine : String -> String -> String -> List String -> String
 recordBranchLine indent prefix name fields =
   if isEmptyList fields then "\n${indent}${prefix}${name} => _"
   else "\n${indent}${prefix}${name} { ${join ", " (map (\f => "${f} = _") fields)} } => _"
 
+-- | 内部：全部分支文本（每个分支自带换行与缩进）。
 splitBranchLines : String -> String -> SplitTy -> String
 splitBranchLines indent prefix (SplitData ctors) = join "" (map (branchLine indent prefix) ctors)
 splitBranchLines indent prefix (SplitRecord name fields) =
   recordBranchLine indent prefix name fields
 
+-- | 内部：`case <binder> of` + 分支文本。分支缩进 = 洞所在行的行首缩进 + 2（与 fmt 对 `case`
+-- 的输出一致）。
 caseSplitNewText : Int -> String -> String -> SplitTy -> String
 caseSplitNewText baseIndent binder prefix split =
   "case ${binder} of" ++ splitBranchLines (spacesOf (baseIndent + 2)) prefix split
 
+-- | 内部：行首的空格数（缩进宽度）。
 leadingSpaces : String -> Int
 leadingSpaces s = leadingSpacesGo (strUnpack s) 0
 
+-- | 内部：`leadingSpaces` 的计数循环。
 leadingSpacesGo : List Int -> Int -> Int
 leadingSpacesGo [] n = n
 leadingSpacesGo (c :: rest) n = if c == 32 then leadingSpacesGo rest (n + 1) else n
 
+-- | 内部：`n` 个空格。
 spacesOf : Int -> String
 spacesOf n = join "" (map (\_ => " ") (range 0 n))
 
+-- | 内部：`refactor.rewrite` 动作（title + 一个同文档 TextEdit）。
 splitActionJson : String -> Int -> Int -> Int -> String -> String -> Json
 splitActionJson uri line startCol endCol title newText =
   JObj
     [Pair "title" (JStr title), Pair "kind" (JStr "refactor.rewrite"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr [textEditJson (lspRange line startCol line endCol) newText])])])]
 
--- 一个 binder → 最多一条 action（类型解析不到 / 构造子名不在作用域就 0 条）。
+-- | 内部：一个上下文 binder → 最多一条 action（类型解析不到、构造子名不在作用域时 0 条）。
 binderSplitAction : Member nFs FsOp r => String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Pair String String -> Eff r (List Json)
 binderSplitAction uri text sf roots preludeModules g (Pair name tyText) = do
   resolved <-
@@ -725,12 +764,13 @@ binderSplitAction uri text sf roots preludeModules g (Pair name tyText) = do
           pure
             [splitActionJson uri line startCol endCol "case split on ${name}" (caseSplitNewText baseIndent name prefix split)]
 
+-- | 内部：对洞上下文里的每个 binder 依次生成 split 动作。
 ctxSplitActions : Member nFs FsOp r => String -> String -> SourceFile -> List Root -> List String -> DtGoalInfo -> Eff r (List Json)
 ctxSplitActions uri text sf roots preludeModules g =
   concatMapEff (binderSplitAction uri text sf roots preludeModules g) g.dtGoalInfoCtx
 
--- 入口：请求 range → 洞 → 上下文里的可分裂 binder（不命中返回 []）。
--- goals 由服务器按 (uri, text) 记忆化后传入；Nothing = 本次不需要/没拿到目标。
+-- | 内部：case split 的入口：请求 range → 洞 → 上下文里的可分裂 binder；不命中返回 []。
+-- `mgoals` 由服务器按 (uri, text) 记忆化后传入，`Nothing` = 本次不需要或没拿到目标。
 caseSplitActions : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> PackageContext -> Maybe (List DtGoalInfo) -> String -> Int -> Int -> Int -> Int -> Eff r (List Json)
 caseSplitActions uri label ctx mgoals text sl sc el ec = if not (rangeTouchesHole text sl sc el ec) then pure []
 else case mgoals of
@@ -743,13 +783,14 @@ else case mgoals of
         preludeModules <- preludeReexportModules (contextRoots ctx)
         ctxSplitActions uri text sf (contextRoots ctx) preludeModules g
 
--- 服务器侧判定：这次 codeAction 是否需要洞目标（refactor kind 且请求 range 的行里有洞）。
+-- | 服务器侧判定：这次 codeAction 是否需要洞目标（refactor kind 且请求 range 的行里有洞）。
 export caseSplitWanted : String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Bool
 caseSplitWanted text sl sc el ec only = refactorAllowed only && rangeTouchesHole text sl sc el ec
 
--- Index：惰性加载（首次 definition/references/completion/workspaceSymbol 时）
 -- ---------------------------------------------------------------
--- 工作区根：从文件所在目录向上取**最外层** manifest（workspace 根）。
+-- Index：惰性加载（首次 definition / references / completion / workspaceSymbol 时）
+-- ---------------------------------------------------------------
+-- | 内部：从文件所在目录向上取最外层 manifest（workspace 根）；到根或 fuel 耗尽就停。
 outermostManifest : Member nFs FsOp r => Int -> String -> Eff r String
 outermostManifest fuel dir = if fuel <= 0 then pure dir
 else
@@ -762,6 +803,7 @@ else
       Nothing => pure dir
       Just p => outermostManifest (fuel - 1) p
 
+-- | 文档所在工作区根：从文件目录向上找最外层 manifest；找不到时退回 cwd 的 manifest，再退回 "."。
 export workspaceRoot : Member nFs FsOp r => String -> Eff r String
 workspaceRoot uri =
   let
@@ -778,12 +820,13 @@ workspaceRoot uri =
         )
       Just nearest => outermostManifest 64 nearest
 
+-- | 内部：索引里某模块的源文件路径；索引里没有该模块时返回 `Nothing`。
 modulePathOf : Index -> String -> Maybe String
 modulePathOf idx modNameQuery = case filter (\mi => modName mi == modNameQuery) (indexModules idx) of
   mi :: rest => Just (modPath mi)
   [] => Nothing
 
--- 符号定义位置 → LSP Location。
+-- | 内部：符号定义位置 → LSP Location；索引里找不到它所属的模块时为 `Nothing`。
 symLocation : Index -> Sym -> Maybe Json
 symLocation idx s = case modulePathOf idx (symModule s) of
   Nothing => Nothing
@@ -791,7 +834,7 @@ symLocation idx s = case modulePathOf idx (symModule s) of
     Just
       (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange (symLine s) (symCol s) (symLine s) (symCol s + strLength (symName s)))])
 
--- 光标名字的最佳符号：优先当前模块，否则取第一个候选。
+-- | 内部：光标名字的最佳符号：优先当前模块，否则取第一个候选。
 pickBestSymbol : String -> List Sym -> Maybe Sym
 pickBestSymbol curMod syms = case filter (\s => symModule s == curMod) syms of
   s :: rest => Just s
@@ -799,28 +842,32 @@ pickBestSymbol curMod syms = case filter (\s => symModule s == curMod) syms of
     s :: rest => Just s
     [] => Nothing
 
+-- | 内部：索引里按名字查候选符号，再按当前模块择优。
 bestSymbol : Index -> String -> String -> Maybe Sym
 bestSymbol idx curMod token = case findSymbol idx token of
   OkC syms => pickBestSymbol curMod syms
   ErrC e => Nothing
 
--- 当前文档的模块名（无 module 头 → ""）。
+-- | 内部：当前文档的模块名（无 module 头 → ""）。
 currentModuleName : List Decl -> Maybe ModDecl -> String
 currentModuleName decls Nothing = ""
 currentModuleName decls (Just (ModDecl name explicit items _ _ _ sp)) = name
 
--- 当前缓冲里的顶层名字（类型名 + 声明名），供补全使用。
+-- | 内部：一条声明贡献的补全名字（类型名 + 声明名）。
 declBufferNames : Decl -> List String
 declBufferNames d = append (typeNamesOf [d]) (declNames d)
 
+-- | 内部：当前缓冲里的顶层名字（类型名 + 声明名），供补全使用；解析失败时为 []。
 bufferNames : String -> List String
 bufferNames text = case parseSource "<completion>" text of
   ErrC e => []
   OkC (SourceFile hdr imports fx decls _ _ _) => dedupeNames (concatMap declBufferNames decls)
 
+-- | 内部：按首次出现顺序去重（保留原顺序）。
 dedupeNames : List String -> List String
 dedupeNames xs = dedupeNamesGo xs [] []
 
+-- | 内部：`dedupeNames` 的累加循环。
 dedupeNamesGo : List String -> List String -> List String -> List String
 dedupeNamesGo [] seen acc = reverse acc
 dedupeNamesGo (x :: rest) seen acc =
@@ -829,6 +876,7 @@ dedupeNamesGo (x :: rest) seen acc =
 -- ---------------------------------------------------------------
 -- documentSymbol：AST 声明树
 -- ---------------------------------------------------------------
+-- | 内部：声明的显示名（`instance` 固定写 `instance`）。
 declNameOf : Decl -> String
 declNameOf (DData name params kind ctors derivings viaField repr lin sp) = name
 declNameOf (DAxiom name ty sp) = name
@@ -839,8 +887,8 @@ declNameOf (DRecord name params fields derivings viaField repr lin sp) = name
 declNameOf (DTrait name params supers methods sp) = name
 declNameOf (DInstance ctxE head methods sp) = "instance"
 
--- LSP SymbolKind：Function=12、Field=8、Interface=11、Constant=14、
--- EnumMember=22、Struct=23、Method=6。
+-- | 内部：声明的 LSP SymbolKind（Function=12、Field=8、Interface=11、Constant=14、
+-- EnumMember=22、Struct=23、Method=6）。
 declSymbolKind : Decl -> Int
 declSymbolKind (DData name params kind ctors derivings viaField repr lin sp) = 23
 declSymbolKind (DRecord name params fields derivings viaField repr lin sp) = 23
@@ -851,28 +899,33 @@ declSymbolKind (DSig name ctx ty sp) = 12
 declSymbolKind (DFun name pats body sp) = 12
 declSymbolKind (DInstance ctxE head methods sp) = 12
 
--- `detail` 是客户端在大纲里跟在名字后面的灰字（VS Code 用它显示签名）；空串则省略。
+-- | 内部：documentSymbol 节点。`detail` 是客户端在大纲里跟在名字后面的灰字（VS Code 用它显示
+-- 签名），空串则省略；`children` 为空时同样省略。
 symbolJson : String -> Int -> String -> Json -> Json -> List Json -> Json
 symbolJson name kind detail range sel children =
   JObj
     (append (append [Pair "name" (JStr name), Pair "kind" (JNum kind)] (if detail == "" then [] else [Pair "detail" (JStr detail)])) (append [Pair "range" range, Pair "selectionRange" sel] (if isEmptyList children then [] else [Pair "children" (JArr children)])))
 
+-- | 内部：构造子子节点（EnumMember，detail 是构造子签名）。
 ctorSymbolJson : List String -> Ctor -> Json
 ctorSymbolJson lines c =
   symbolJson (ctorName c) 22 "${ctorName c} : ${renderType (ctorType c)}" (spanRange (ctorSpan c))
     (nameSelRange lines (ctorSpan c) (ctorName c)) []
 
+-- | 内部：record 字段子节点（Field，detail 是字段签名）。
 fieldSymbolJson : List String -> Field -> Json
 fieldSymbolJson lines f =
   symbolJson (fieldName f) 8 "${fieldName f} : ${renderType (fieldType f)}"
     (spanRange (fieldSpan f)) (nameSelRange lines (fieldSpan f) (fieldName f)) []
 
--- 方法子节点用方法签名 span（方法名到类型结束），不复用 trait 声明 span。
+-- | 内部：trait 方法子节点（Method）。用方法签名 span（方法名到类型最后一个 token 的起点），
+-- 不复用 trait 声明 span。
 methodSymbolJson : List String -> TraitMethod -> Json
 methodSymbolJson lines m =
   symbolJson (traitMethodName m) 6 "${traitMethodName m} : ${renderType m.traitMethodType}"
     (spanRange (traitMethodSpan m)) (nameSelRange lines (traitMethodSpan m) (traitMethodName m)) []
 
+-- | 内部：声明的子节点（data → 构造子、record → 字段、trait → 方法，其余为空）。
 declChildrenJson : List String -> Decl -> List Json
 declChildrenJson lines (DData name params kind ctors derivings viaField repr lin sp) =
   map (ctorSymbolJson lines) ctors
@@ -881,6 +934,7 @@ declChildrenJson lines (DRecord name params fields derivings viaField repr lin s
 declChildrenJson lines (DTrait name params supers methods sp) = map (methodSymbolJson lines) methods
 declChildrenJson lines _ = []
 
+-- | 内部：单个声明的 documentSymbol 节点（含子节点；detail 取签名）。
 declSymbolJson : List String -> List Decl -> Decl -> Json
 declSymbolJson lines decls d =
   let
@@ -889,6 +943,8 @@ declSymbolJson lines decls d =
   in symbolJson name (declSymbolKind d) (declSigText decls d) (spanRange sp)
     (nameSelRange lines sp name) (declChildrenJson lines d)
 
+-- | documentSymbol：按 AST 声明顺序输出声明树（data / record / trait 带子节点）。声明先与 fmt
+-- 一样按程序级 fixity 重排；解析或 fixity 加载失败时为 []。
 export documentSymbols : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (List Json)
 documentSymbols uri text = case parseSource uri text of
   ErrC e => pure []
@@ -904,12 +960,14 @@ documentSymbols uri text = case parseSource uri text of
 -- ---------------------------------------------------------------
 -- definition：位置 → token → Index → Location
 -- ---------------------------------------------------------------
+-- | 内部：按名字（裸名或类型名）在声明列表里找第一条命中。
 findDeclByName : String -> List Decl -> Maybe Decl
 findDeclByName name [] = Nothing
 findDeclByName name (d :: rest) =
   if memName name (declBufferNames d) then Just d else findDeclByName name rest
 
--- Index 不可用/未命中时的同文件兜底：在当前缓冲的顶层声明里找同名定义。
+-- | 内部：Index 不可用 / 未命中时的同文件兜底：在当前缓冲的顶层声明里找同名定义，
+-- 找不到返回 `JNull`。
 bufferDefinition : String -> String -> String -> Json
 bufferDefinition uri text token = case parseSource uri text of
   ErrC e => JNull
@@ -922,6 +980,7 @@ bufferDefinition uri text token = case parseSource uri text of
 -- ---------------------------------------------------------------
 -- references：Index refs（带出现位置）+ 定义位置
 -- ---------------------------------------------------------------
+-- | 内部：一条索引引用 → Location；所属模块不在索引里时为 `Nothing`。
 refLocation : Index -> Ref -> Maybe Json
 refLocation idx r = case modulePathOf idx (refModule r) of
   Nothing => Nothing
@@ -929,6 +988,8 @@ refLocation idx r = case modulePathOf idx (refModule r) of
     Just
       (JObj [Pair "uri" (JStr (pathToUri path)), Pair "range" (lspRange r.refLine r.refCol r.refLine (r.refCol + strLength (refName r)))])
 
+-- | 内部：Index 路径的 references：定义位置在前，随后是 `findReferences` 的出现位置
+-- （最多 `maxReferences` 条）；未命中符号时为 []。
 referencesFor : Index -> String -> String -> List Json
 referencesFor idx curMod token = case bestSymbol idx curMod token of
   Nothing => []
@@ -946,20 +1007,27 @@ referencesFor idx curMod token = case bestSymbol idx curMod token of
 -- ---------------------------------------------------------------
 -- completion
 -- ---------------------------------------------------------------
+-- | 一条补全候选：显示名、LSP CompletionItemKind、detail 与文档。
 record Compl where
+  -- | 候选的显示文本（补全列表里的名字）。
   complLabel : String
+  -- | LSP CompletionItemKind。
   complKind : Int
+  -- | 灰字 detail（函数的签名等）；"" = 省略。
   complDetail : String
+  -- | markdown 文档；"" = 省略。
   complDoc : String
 
+-- | 候选的显示文本。
 complLabel : Compl -> String
 complLabel (Compl label kind detail doc) = label
 
+-- | 候选的 markdown 文档。
 complDoc : Compl -> String
 complDoc (Compl label kind detail doc) = doc
 
--- CompletionItemKind：Method=2、Function=3、Constructor=4、Field=5、Variable=6、
--- Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22。
+-- | 内部：符号种类 → LSP CompletionItemKind（Method=2、Function=3、Constructor=4、Field=5、
+-- Variable=6、Class=7、Interface=8、Module=9、Keyword=14、Constant=21、Struct=22）。
 symCompletionKind : Sym -> Int
 symCompletionKind s = case symKind s of
   "fun" => 3
@@ -972,6 +1040,7 @@ symCompletionKind s = case symKind s of
   "method" => 2
   _ => 6
 
+-- | 内部：符号种类 → LSP SymbolKind（workspace/symbol 用）。
 symSymbolKind : Sym -> Int
 symSymbolKind s = case symKind s of
   "data" => 23
@@ -983,20 +1052,24 @@ symSymbolKind s = case symKind s of
   "method" => 6
   _ => 12
 
+-- | 内部：候选的 CompletionItem JSON（detail / documentation 为空时省略对应字段）。
 complJson : Compl -> Json
 complJson c =
   JObj
     (append (append [Pair "label" (JStr (complLabel c)), Pair "kind" (JNum c.complKind)] (if c.complDetail == "" then [] else [Pair "detail" (JStr c.complDetail)])) (if complDoc c == "" then [] else [Pair "documentation" (JObj [Pair "kind" (JStr "markdown"), Pair "value" (JStr (complDoc c))])]))
 
+-- | 内部：按 label 去重（保留首次出现）。
 dedupeCompls : List Compl -> List Compl
 dedupeCompls xs = dedupeComplsGo xs [] []
 
+-- | 内部：`dedupeCompls` 的累加循环。
 dedupeComplsGo : List Compl -> List String -> List Compl -> List Compl
 dedupeComplsGo [] seen acc = reverse acc
 dedupeComplsGo (x :: rest) seen acc =
   if memName (complLabel x) seen then dedupeComplsGo rest seen acc
   else dedupeComplsGo rest (complLabel x :: seen) (x :: acc)
 
+-- | 内部：补全里的关键字候选来源（按语言关键字表的固定顺序）。
 lspKeywords : List String
 lspKeywords =
   [ "module",
@@ -1021,14 +1094,16 @@ lspKeywords =
     "False"
   ]
 
--- 缓冲里未进 Index 的顶层名（未保存的新声明）：没有签名/文档，kind 按函数给。
--- 顺序是 Index 在前（有准确 kind / 签名 / 文档）、缓冲名补 Index 没覆盖的、关键字最后。
+-- | 内部：缓冲里的全部顶层名（没有签名 / 文档，kind 按函数给）。整体顺序是 Index 在前，
+-- 缓冲名在 join 后按 label 去重时让 Index 版本覆盖同名项，关键字最后。
 bufferCompls : String -> List Compl
 bufferCompls text = map (\n => Compl n 3 "" "") (bufferNames text)
 
+-- | 内部：关键字候选。
 keywordCompls : List Compl
 keywordCompls = map (\n => Compl n 14 "" "") lspKeywords
 
+-- | 内部：Index 里的全部符号作为补全候选（docstring 以缓冲为准）。
 indexCompls : List (Pair String String) -> Maybe Index -> List Compl
 indexCompls buffers Nothing = []
 indexCompls buffers (Just idx) =
@@ -1036,13 +1111,16 @@ indexCompls buffers (Just idx) =
     (\s => Compl (symName s) (symCompletionKind s) (symSig s) (symDoc (bufferDocOf buffers idx s)))
     idx.indexSymbols
 
+-- | 内部：只保留 label 以给定前缀开头的候选。
 hasPrefix : String -> List Compl -> List Compl
 hasPrefix prefix items = filter (\c => startsWith prefix (complLabel c)) items
 
+-- | 内部：去重后截到 `maxCompletions` 条，并转成 JSON。
 finishCompls : List Compl -> List Json
 finishCompls items = map complJson (take maxCompletions (dedupeCompls items))
 
--- `.` 之后的限定补全：前缀是模块名，按 `<module>.` 过滤符号全名。
+-- | 内部：`.` 之后的限定补全：从 `.` 往前取出模块名，按 `<module>.` 过滤符号全名，再按光标
+-- 前缀过滤裸名。
 qualifiedCompletions : List (Pair String String) -> String -> List Int -> Int -> String -> Maybe Index -> List Json
 qualifiedCompletions buffers ln chars prefixStart prefix Nothing = []
 qualifiedCompletions buffers ln chars prefixStart prefix (Just idx) =
@@ -1058,6 +1136,8 @@ qualifiedCompletions buffers ln chars prefixStart prefix (Just idx) =
   in finishCompls
     (map (\s => Compl (symName s) (symCompletionKind s) (symSig s) (symDoc (bufferDocOf buffers idx s))) hits)
 
+-- | completion 入口：`line0` / `col0` 是 LSP 的 0-based 位置。取光标左侧的标识符前缀；
+-- `.` 后走 `qualifiedCompletions`，否则按前缀过滤「Index 符号 + 缓冲顶层名 + 关键字」。
 export completionItems : List (Pair String String) -> String -> Int -> Int -> Maybe Index -> List Json
 completionItems buffers text line0 col0 midx =
   let
@@ -1076,12 +1156,15 @@ completionItems buffers text line0 col0 midx =
 -- ---------------------------------------------------------------
 -- workspace/symbol
 -- ---------------------------------------------------------------
+-- | 内部：workspace/symbol 的候选符号：优先 `findSymbol`，查询失败时退回子串匹配。
 matchingSymbols : Index -> String -> List Sym
 matchingSymbols idx query = case findSymbol idx query of
   OkC syms => syms
   ErrC e =>
     filter (\s => contains query (symName s) || contains query (symFullName s)) idx.indexSymbols
 
+-- | 内部：WorkspaceSymbol JSON（name / kind / location，模块名作为 containerName）；符号无法
+-- 定位时为 `Nothing`。
 symbolInfoJson : Index -> Sym -> Maybe Json
 symbolInfoJson idx s = case symLocation idx s of
   Nothing => Nothing
@@ -1089,6 +1172,8 @@ symbolInfoJson idx s = case symLocation idx s of
     Just
       (JObj (append [Pair "name" (JStr (symName s)), Pair "kind" (JNum (symSymbolKind s)), Pair "location" loc] (if symModule s == "" then [] else [Pair "containerName" (JStr (symModule s))])))
 
+-- | workspace/symbol：空查询返回全部符号，否则按查询过滤；最多 `maxWorkspaceSymbols` 条。
+-- Index 不可用或无匹配时为 []。
 export workspaceSymbols : Maybe Index -> String -> List Json
 workspaceSymbols Nothing query = []
 workspaceSymbols (Just idx) query =
@@ -1097,9 +1182,10 @@ workspaceSymbols (Just idx) query =
   in mapMaybe (symbolInfoJson idx) (take maxWorkspaceSymbols syms)
 
 -- ---------------------------------------------------------------
--- 诊断自带的 suggestion（如 UN_UnusedDefinition 的删除编辑）→ quick fix CodeAction。
--- 一次返回该 buffer 的全部 suggestion（0-based 起止行 + actions），由服务器按内容缓存、
--- 调用方按请求 range 过滤。
+-- 诊断自带 suggestion 的 quick fix
+-- ---------------------------------------------------------------
+-- | 一次返回该 buffer 的全部 suggestion（0-based 起止行 + actions），由服务器按内容缓存、调用方
+-- 按请求 range 过滤；同时回传 `DiagCache` 供下一帧复用。
 export suggestionsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (List (Pair (Pair Int Int) (List Json))))
 suggestionsForDoc session uri text = do
   result <- diagnosticsForSuggestions session uri text
@@ -1107,6 +1193,8 @@ suggestionsForDoc session uri text = do
     diags = secondOf (secondOf result)
   in pure (Pair (firstOf result) (mapMaybe (suggestionEntry uri) diags))
 
+-- | 内部：一条诊断 → (0-based 起止行, 该诊断的全部 suggestion 动作)；没有 primary span 或没有
+-- suggestion 时为 `Nothing`。
 suggestionEntry : String -> Diagnostic -> Maybe (Pair (Pair Int Int) (List Json))
 suggestionEntry uri d = case primarySpanQ d.diagLabels of
   Nothing => Nothing
@@ -1115,14 +1203,17 @@ suggestionEntry uri d = case primarySpanQ d.diagLabels of
     else Just
       (Pair (Pair (spanStartLine sp - 1) (spanEndLine sp - 1)) (map (suggestionActionJson uri) d.diagSuggestions))
 
+-- | 内部：一条 suggestion → quickfix CodeAction（title 取 suggestion 自带标题）。
 suggestionActionJson : String -> Suggestion -> Json
 suggestionActionJson uri s =
   JObj
     [Pair "title" (JStr s.suggestionTitle), Pair "kind" (JStr "quickfix"), Pair "edit" (JObj [Pair "changes" (JObj [Pair uri (JArr (map suggestionEditJson s.suggestionEdits))])])]
 
+-- | 内部：一条诊断编辑 → TextEdit。
 suggestionEditJson : DiagEdit -> Json
 suggestionEditJson e = textEditJson (spanRange e.editSpan) e.editNewText
 
+-- | 内部：首个 primary 标签的 span。
 primarySpanQ : List Label -> Maybe Span
 primarySpanQ [] = Nothing
 primarySpanQ ((Label sp _ LabelPrimary _) :: rest) = sp

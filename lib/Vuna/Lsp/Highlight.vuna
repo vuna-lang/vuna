@@ -1,15 +1,13 @@
+-- | LSP documentHighlight：光标处名字在当前文档里的全部出现位置。
+--
+-- 两条路径：局部绑定复用 [Vuna.Lsp.Bindings] 的作用域解析（遮蔽、顺序作用域、函数参数 /
+-- λ / `let` / `where` / `case` / `do` / `as` / 记录模式字段）；顶层符号取当前文件里同名的
+-- `ident` token（来自 CST 词法流，天然跳过注释与字符串），这条路径不做作用域区分，同名局部
+-- 变量会一起高亮（与语义 token 的口径一致）。
+--
+-- 输出 LSP `DocumentHighlight`（kind = 1，Text），range 按 LSP 要求走 UTF-16。
 module Vuna.Lsp.Highlight where
 
--- Vuna.Lsp.Highlight：LSP documentHighlight（工具链模块，**永不进 seed 闭包**）。
---
--- 两条路径：
---   1. **局部绑定**：复用 `Bindings.bindingRenameOccurrences`（与 rename/hover 同源的
---      作用域解析：遮蔽、顺序作用域、函数参数 / λ / `let` / `where` / `case` / `do` /
---      `as` / 记录模式字段）；
---   2. **顶层符号**：当前文件里同名 `ident` token（来自 CST 词法流，天然跳过注释与字符串）。
---      这条路径不做作用域区分：同名局部变量会一起高亮（已知边界，与语义 token 的口径一致）。
---
--- 返回 LSP DocumentHighlight（kind = 1，Text），range 按 LSP 要求走 UTF-16。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Json
@@ -18,6 +16,8 @@ import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Lsp.Semantic
 
+-- | 光标（1-based 行 / 字节列）处的名字 → 当前文档的 `DocumentHighlight` 列表；不在名字上、
+-- 名字是 `_`、软关键字或 `@` 前缀时返回空。
 export documentHighlights : Int -> Int -> String -> List Json
 documentHighlights line col text =
   let
@@ -35,21 +35,24 @@ documentHighlights line col text =
           Just occs => map (positionHighlight lines name) occs
           Nothing => map (positionHighlight lines name) (identHits toks name)
 
--- 光标（1-based 行 / UTF-8 字节列）下的 ident token（含端点）。
+-- | 内部：光标（1-based 行 / UTF-8 字节列）下的 ident token（含端点）。
 identAt : List CstToken -> Int -> Int -> Maybe CstToken
 identAt [] line col = Nothing
 identAt (t :: rest) line col =
   if t.cstTag == "ident" && spanStartLine t.cstSpan == line && col >= spanStartCol t.cstSpan && col <= spanEndCol t.cstSpan then Just t
   else identAt rest line col
 
+-- | 内部：所有同名 ident token 的 (行, 列)。
 identHits : List CstToken -> String -> List (Pair Int Int)
 identHits toks name = mapMaybe (tokPosIfName name) toks
 
+-- | 内部：token 是 ident 且同名时返回其起始位置。
 tokPosIfName : String -> CstToken -> Maybe (Pair Int Int)
 tokPosIfName name t =
   if t.cstTag == "ident" && t.cstText == name then Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
   else Nothing
 
+-- | 内部：(行, 列) + 名字 → 起止列按 UTF-16 换算的 `DocumentHighlight`（kind = 1，Text）。
 positionHighlight : List String -> String -> Pair Int Int -> Json
 positionHighlight lines name pos =
   let

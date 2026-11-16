@@ -1,27 +1,30 @@
+-- | 编译器诊断 → LSP 诊断的转换链：按文件取包上下文、跑 DT 精化与 lint，把结构化诊断发布成
+-- `textDocument/publishDiagnostics` / `textDocument/diagnostic` 的 JSON。工具链模块，不进 seed 闭包。
+--
+-- 诊断来源：解析失败 ⇒ 一条带位置的 parse 诊断；有 `module` 头按模块源码路径、无头按入口语义
+-- 做 DT 精化；依赖文件（`spanFile` 不是当前文件）的错误被过滤掉——每个打开的文件只发布自己的
+-- 诊断；没有位置的错误归到当前文件 0:0。最后并入 [Vuna.Lint.Rules.lintSourceWith] 的语法级
+-- finding（severity 2，code 取 `LN_*` 规则码；重排用程序级 [Vuna.FixityEnv]，与 fmt/CLI 同源）。
+--
+-- 位置与字段：编译器列是 1-based UTF-8 字节，LSP 要 0-based UTF-16 code unit，由 `utf16ColOf`
+-- 按 buffer 文本换算；`diagnosticJson` 组装 range / severity / source / code / tags /
+-- relatedInformation，结构化字段（expected / found / candidates / quantity / span 等）放进
+-- `data` 供机器消费，不解析散文。
+--
+-- 包上下文：`contextForDoc` 把 file:// URI 转成路径后取 `contextForFile`；非 file URI 或磁盘上
+-- 不存在的路径退化到 cwd 的 `contextForDir "."`；失败由调用方转成 0:0 的 `pkg: ...` 诊断。
+--
+-- 会话缓存：`DiagCache` 保存一次请求建立的包上下文、依赖模块接口、本包干净模块、termAux 预处理
+-- 与 fixity 环境。每个请求先做惰性校验（编译器指纹 + 包名 + 闭包源文件与 manifest 的
+-- mtime+size，安全窗内回读内容哈希），任一变化就重建（没有文件 watcher）；校验通过时只精化当前
+-- buffer，并把当前模块的接口写回本包 manifest（buffer == 磁盘时）。没有可用接口时回退全量
+-- 精化，诊断语义不变。
+--
+-- 洞目标（`goalsForDoc`）走同一套包上下文与会话：优先「依赖包接口 + 本包干净模块预置」的增量
+-- 装配，其次只精化当前 buffer（与 `vuna goal` 同源），`allowFull` 时才整包从源码加载 + 容错
+-- 精化；返回值里的「依赖是否完整」标记决定服务器能否把缓存复用给 case split。
 module Vuna.Lsp.Diagnostics where
 
--- Vuna.Lsp.Diagnostics：LSP 诊断链（工具链模块，**永不进 seed 闭包**）。
---
--- 策略（走包上下文，不因「含 import 就跳过」）：
---   1. 解析失败 ⇒ 一条带位置的 parse 诊断；
---   2. 有 `module` 头 ⇒ 模块源码路径，无头 ⇒ 入口语义；DT 精化错误按
---      `<file>:<line>:<col>` 转 LSP 0-based；
---   3. 依赖文件（spanFile 不是当前文件）的错误**过滤掉**——每个打开的文件只发布自己的
---      诊断；没有位置的错误归到当前文件 0:0；
---   4. 合并 `Vuna.Lint.Rules.lintSourceWith` 的语法级 finding（severity 2，code = LN_ 规则码）；
---      lint 重排用**程序级** fixity（`Vuna.FixityEnv`，与 fmt/CLI 同源）。
---
--- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
--- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
---
--- **会话缓存** + 单文件增量精化。
---   - `DiagCache` 保存一次请求建立的包上下文 / 依赖模块接口 / 本包干净模块 / termAux 预处理
---     / fixity 环境；每个请求先做**惰性校验**（编译器指纹 + 包名 + 闭包源文件与 manifest 的
---     mtime+size，安全窗内回读内容哈希），任一变化就重建（无文件 watcher）；
---   - 校验通过时只精化当前 buffer（同包干净模块 / 依赖包 artifact 从接口预置），并把当前
---     模块的接口写回本包 manifest（buffer == 磁盘时；只写当前模块、保留其他条目、原子写）。
---     这让 LSP-only 会话逐步变热；
---   - 无接口（依赖包还没 check / 本包没有 manifest）时回退全量精化，诊断语义不变。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Driver.Compile
@@ -48,31 +51,31 @@ import Base.Obs
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 
--- DiagnosticSeverity：1 = Error、2 = Warning、3 = Information、4 = Hint
+-- | 错误级 severity 的 LSP 数值（`DiagnosticSeverity` 1）。
 severityError : Int
 severityError = 1
 
+-- | 警告级 severity 的 LSP 数值（`DiagnosticSeverity` 2）。
 severityWarning : Int
 severityWarning = 2
 
 -- 诊断
 -- ---------------------------------------------------------------
--- LSP 直接消费编译器的 `Diagnostic`（结构化值），不再从文本反解析位置。
--- 列单位：编译器内部 1-based UTF-8 字节；LSP 要求 0-based UTF-16 code units，
--- 这里按 buffer 文本换算（非 ASCII 行的 range 才正确）。
--- 首个 primary 标签的 span。
+-- 编译器诊断直接以结构化值消费，不再从文本反解析位置。
+-- | 首个 primary 标签的 span；没有 primary 标签时返回 `Nothing`（调用方按 0:0 处理）。
 diagPrimarySpan : List Label -> Maybe Span
 diagPrimarySpan [] = Nothing
 diagPrimarySpan ((Label sp _ LabelPrimary _) :: rest) = sp
 diagPrimarySpan (_ :: rest) = diagPrimarySpan rest
 
--- 首个 primary 标签的文本。
+-- | 首个 primary 标签的文本；没有 primary 标签时为空串。
 diagPrimaryText : List Label -> String
 diagPrimaryText [] = ""
 diagPrimaryText ((Label _ text LabelPrimary _) :: rest) = text
 diagPrimaryText (_ :: rest) = diagPrimaryText rest
 
--- 诊断是否属于当前文件：无位置的诊断归到当前 buffer；依赖文件的诊断不发。
+-- | 内部：诊断是否属于当前文件。`spanFile` 为空（无位置）的诊断归到当前 buffer，等于 `label`
+-- 或以 `/<文件名>` 结尾也算当前文件；其余（依赖文件）不发布。
 diagOwns : String -> Diagnostic -> Bool
 diagOwns label d = case diagPrimarySpan d.diagLabels of
   Nothing => True
@@ -81,24 +84,25 @@ diagOwns label d = case diagPrimarySpan d.diagLabels of
     else if sp.spanFile == label then True
     else if fileNameOf label /= "" && endsWith "/${fileNameOf label}" sp.spanFile then True else False
 
--- Severity → LSP 1..4。
+-- | 内部：编译器 severity 映射到 LSP 1..4（Error / Warning / Note / Help）。
 lspSeverityOf : Severity -> Int
 lspSeverityOf SevError = 1
 lspSeverityOf SevWarning = 2
 lspSeverityOf SevNote = 3
 lspSeverityOf SevHelp = 4
 
--- 第 n 行文本（1-based）；越界返回空串。
+-- | 内部：第 `n` 行文本（1-based）；越界返回空串。
 lineTextAt : List String -> Int -> String
 lineTextAt [] n = ""
 lineTextAt (x :: rest) n = if n <= 1 then x else lineTextAt rest (n - 1)
 
--- UTF-8 字节列（1-based）→ UTF-16 code unit 列（1-based）。
--- 只数到 byteCol-1 的字节：4 字节序列（>= 0xF0）计 2 个 unit，续字节（0x80..0xBF）计 0。
 -- semantic tokens / documentHighlight 也用它把 span 列换算成 LSP 的 UTF-16。
+-- | UTF-8 字节列（1-based）→ UTF-16 code unit 列（1-based），按该行文本换算：只数到
+-- `byteCol - 1` 的字节，4 字节序列（首字节 >= `0xF0`）计 2 个 unit，续字节（`0x80..0xBF`）计 0。
 export utf16ColOf : String -> Int -> Int
 utf16ColOf lineText byteCol = utf16ColGo (strUnpack lineText) 0 0 (byteCol - 1) + 1
 
+-- | 内部：`utf16ColOf` 的逐字节累加（`stop` 是字节索引上界，0-based）。
 utf16ColGo : List Int -> Int -> Int -> Int -> Int
 utf16ColGo [] i units stop = units
 utf16ColGo (b :: rest) i units stop =
@@ -107,13 +111,13 @@ utf16ColGo (b :: rest) i units stop =
   else if b >= 128 && b < 192 then utf16ColGo rest (i + 1) units stop
   else utf16ColGo rest (i + 1) (units + 1) stop
 
--- 一个标签的位置转 LSP range（用 buffer 文本换算 UTF-16）。
+-- | 内部：一个 span 转 LSP range：列先按对应行的文本换算成 UTF-16，再由 `lspRange` 统一转 0-based。
 labelRangeJson : List String -> Span -> Json
 labelRangeJson lines sp =
   lspRange (spanStartLine sp) (utf16ColOf (lineTextAt lines (spanStartLine sp)) (spanStartCol sp))
     (spanEndLine sp) (utf16ColOf (lineTextAt lines (spanEndLine sp)) (spanEndCol sp))
 
--- 次级/上下文标签 → relatedInformation 的一项。
+-- | 内部：一个次级 / 上下文标签 → `relatedInformation` 的一项；无位置或文本为空时不产出。
 labelRelatedJson : String -> List String -> Label -> List Json
 labelRelatedJson label lines (Label Nothing text _ _) = []
 labelRelatedJson label lines (Label (Just s) text _ _) =
@@ -121,7 +125,7 @@ labelRelatedJson label lines (Label (Just s) text _ _) =
   else [ JObj [Pair "location" (JObj [Pair "uri" (JStr (pathToUri label)), Pair "range" (labelRangeJson lines s)]), Pair "message" (JStr text)]
   ]
 
--- 字段 → `data` 数组项（机器消费，不解析散文）。
+-- | 内部：一个结构化诊断字段 → `data` 数组项（机器消费，不解析散文）。
 fieldJson : DiagField -> Json
 fieldJson (FieldExpected s) = JObj [Pair "kind" (JStr "expected"), Pair "value" (JStr s)]
 fieldJson (FieldFound s) = JObj [Pair "kind" (JStr "found"), Pair "value" (JStr s)]
@@ -141,6 +145,7 @@ fieldJson (FieldSpan name sp) =
     [Pair "kind" (JStr "span"), Pair "name" (JStr name), Pair "value" (JObj [Pair "file" (JStr sp.spanFile), Pair "line" (JNum sp.spanStartLine), Pair "column" (JNum sp.spanStartCol)])]
 fieldJson (FieldNote s) = JObj [Pair "kind" (JStr "note"), Pair "value" (JStr s)]
 
+-- | 内部：候选修复 → `data` 里的一项；`span` 与 `reason` 仅在存在时出现。
 candidateJson : Candidate -> Json
 candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (append (case c.candidateSpan of
   Just sp => [Pair "span" (spanRange sp)]
@@ -152,7 +157,7 @@ candidateJson c = JObj (append [Pair "text" (JStr c.candidateText)] (append (cas
 )
 )
 
--- 诊断消息 + notes + suggestions（LSP 客户端只显示 message）。
+-- | 内部：诊断消息 + notes + suggestions 拼成多行文本（LSP 客户端只显示 message）。
 messageWithExtras : Diagnostic -> String
 messageWithExtras d =
   let
@@ -160,10 +165,12 @@ messageWithExtras d =
     fixes = map suggestionHelp d.diagSuggestions
   in join "\n" (append [d.diagMessage] (append notes fixes))
 
+-- | 内部：建议的展示行（`help: <标题>`）。
 suggestionHelp : Suggestion -> String
 suggestionHelp s = "help: ${s.suggestionTitle}"
 
--- 一条结构化诊断 → LSP Diagnostic JSON。
+-- | 一条结构化诊断 → LSP `Diagnostic` JSON。`range` 取首个 primary 标签（缺省 0:0），
+-- `source` 固定为 `vuna`，`code` / `tags` / `relatedInformation` / `data` 按有无内容裁剪。
 diagnosticJson : String -> List String -> Diagnostic -> Json
 diagnosticJson label lines d =
   let
@@ -189,8 +196,9 @@ diagnosticJson label lines d =
       else append withRelated [Pair "data" (JArr fieldData)]
   in JObj withData
 
--- 包上下文：file:// URI → 路径 → `contextForFile`；非 file URI（或磁盘上不存在的
--- 路径）退化到 cwd 的 `contextForDir "."`。失败由调用方转成 0:0 的 `pkg: ...` 诊断。
+-- | 文档 URI → 包上下文。返回的 `String` 是判归属用的路径标签：URI 能解码出路径时是解码后的
+-- 路径（即使磁盘上不存在），解码不出时为空串；找不到文件或非 file URI 时退化到 cwd 的
+-- `contextForDir "."`，失败（`ErrC`）由调用方转成 0:0 的 `pkg: ...` 诊断。
 export contextForDoc : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (Pair String PackageContext))
 contextForDoc uri =
   let
@@ -219,44 +227,55 @@ contextForDoc uri =
 -- ---------------------------------------------------------------
 -- 会话缓存
 -- ---------------------------------------------------------------
--- 缓存项只在「编译器指纹 / 包名 / 闭包源文件与 manifest 的 stat 全部未变」时复用；
--- 外部改任意依赖文件后下一次请求必然失败校验并重建（无 watcher）。
+-- | 一次 LSP 会话的缓存：包上下文、依赖接口、本包干净模块、termAux 预处理与 fixity 环境。
+-- 复用条件由 `cacheFresh` 判定（label + 编译器指纹 + 包名 + 闭包源文件与 manifest 的 stat）；
+-- 任一不满足就重建，因此外部改动不需要文件 watcher 也能被发现。
 export record DiagCache where
+  -- | 当前文档的路径标签（来自 `contextForDoc`，用于诊断归属判定与缓存一致性比对）。
   dcLabel : String
+  -- | 缓存 key：编译器二进制指纹 + 包名。
   dcKey : Int
+  -- | 建立缓存时的包上下文（增量精化与接口写回都用它）。
   dcCtx : PackageContext
-  -- 工具会话（共用对象地址；LSP 内纯内存 + 落盘对象）。
+  -- | 工具会话（共用对象地址；LSP 内纯内存 + 落盘对象）。
   dcDb : ToolSession
+  -- | 工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）；`Nothing` 表示没有可校验的接口。
   dcTool : Maybe ToolContext
+  -- | 本包干净模块的接口（增量精化时预置给当前 buffer）。
   dcClean : List ModuleIface
+  -- | 建立会话的时间戳（秒）；本包干净模块的新鲜度以它为基准。
   dcBuiltSec : Int
+  -- | 校验面：依赖闭包源文件与本包 manifest 的 stat（路径 / mtime / size）。
   dcStats : List SourceInfo
+  -- | termAux 预处理缓存（增量精化复用，成功后随本次请求更新）。
   dcAux : Maybe AuxCache
+  -- | 程序级 fixity 环境（lint 重排复用）。
   dcFix : FixityEnv
 
--- 缓存 key：编译器二进制指纹 + 包名（包上下文/依赖图变化由 stats 面兜住）。
+-- | 内部：缓存 key = 编译器二进制指纹 + 包名（包上下文与依赖图的变化由 `dcStats` 面兜住）。
 ctxKeyOf : Member nFs FsOp r, Member nEnv EnvOp r => PackageContext -> Eff r Int
 ctxKeyOf ctx = do
   fp <- toolCompilerFingerprint
   pure (fp * 1000003 + hashTextStrong "lsp|${contextPackageName ctx}")
 
--- 本包模块名集合（来自 manifest）。
+-- | 内部：本包模块名集合（来自工具的 manifest）。
 ownNamesOfTool : ToolContext -> List String
 ownNamesOfTool tool = tool.tcOwnNames
 
--- buffer 当前 import 闭包里的「本包模块名」子集（增量路径只预置这些干净模块）。
+-- | 内部：`needed` 里属于本包的模块名子集（增量路径只预置这些干净模块）。
 ownNeededOf : ToolContext -> List String -> List String
 ownNeededOf tool needed =
   let
     ownNames = ownNamesOfTool tool
   in filter (\n => memName n ownNames) needed
 
--- 内存版 import 闭包：从起始名字沿「依赖包 + 本包干净模块」接口的 miDepHashes 传递展开。
 -- 会话建立时算过一次 `tcNeeded`（闭包），之后每个请求只做这次纯名字展开，不再跑
 -- `ifaceModsEff`（接口身份计算在根包上是秒级固定开销）。
+-- | 内部：从起始名字沿接口的 `miDepHashes` 传递展开出的模块名闭包。
 closureNamesOf : List ModuleIface -> List String -> List String
 closureNamesOf ifaces starts = closureGo 8192 ifaces starts []
 
+-- | 内部：`closureNamesOf` 的展开循环；`fuel` 是防御病态依赖图的步数预算。
 closureGo : Int -> List ModuleIface -> List String -> List String -> List String
 closureGo fuel _ [] acc = acc
 closureGo fuel ifaces (n :: rest) acc = if fuel <= 0 then acc
@@ -265,18 +284,20 @@ else case findIface n ifaces of
   Nothing => closureGo (fuel - 1) ifaces rest (n :: acc)
   Just mi => closureGo (fuel - 1) ifaces (append (map firstOf (miDepHashesOf mi)) rest) (n :: acc)
 
+-- | 内部：按模块名查接口（线性扫描）。
 findIface : String -> List ModuleIface -> Maybe ModuleIface
 findIface n [] = Nothing
 findIface n (mi :: rest) = if miNameOf mi == n then Just mi else findIface n rest
 
--- 起始名字：buffer 的直接 import（本模块名不需要——它自己就是被精化的那一个）。
+-- | 内部：闭包展开的起始名字，即 buffer 的直接 import 名单（本模块自身不需要）。
 startNamesOf : List Import -> List String
 startNamesOf imports = map importNameOf imports
 
+-- | 内部：取一条 import 的模块名。
 importNameOf : Import -> String
 importNameOf imp = imp.importName
 
--- buffer 的直接 import 展开后，本包干净模块里哪些要预置。
+-- | 内部：buffer 的直接 import 展开后，本包干净模块里需要预置给增量精化的那些。
 cleanNeededOf : DiagCache -> ToolContext -> List Import -> List ModuleIface
 cleanNeededOf c tool imports =
   let
@@ -284,25 +305,28 @@ cleanNeededOf c tool imports =
     needed = closureNamesOf allIfaces (startNamesOf imports)
   in filter (\mi => memName (miNameOf mi) needed) c.dcClean
 
--- needed ⊆ 会话建立时的闭包吗？buffer 引入新 import 时闭包会变大，必须重建会话。
+-- | 内部：`needed ⊆ closure` 吗？buffer 引入新 import 时闭包会变大，必须重建会话。
 neededInClosure : List String -> List String -> Bool
 neededInClosure closure [] = True
 neededInClosure closure (n :: rest) = memName n closure && neededInClosure closure rest
 
 -- 会话节点的依赖 key：**校验面 stat**（依赖源码 + manifest；`dcStats` 就是这张表）。
---
--- 与 REPL 同一套约定：`st:<path>:<mtime>:<size>` 进依赖表、key 保持稳定
--- （`lspiface:<pkg>:<dirHash>`），stat 任何一项变化 ⇒ miss ⇒ 重建。
+-- 与 REPL 同一套约定：key 保持稳定（`lspiface:<pkg>:<dirHash>`），依赖表里放
+-- `st:<path>:<mtime>:<size>`，stat 任何一项变化 ⇒ miss ⇒ 重建。
+-- | 内部：把 stat 表转成工具会话依赖表的条目列表。
 sessionStatDeps : List SourceInfo -> List String
 sessionStatDeps stats = map statDepKey stats
 
+-- | 内部：一个源文件的 stat 依赖条目（`st:<path>:<mtime>:<size>`）。
 statDepKey : SourceInfo -> String
 statDepKey si = "st:${si.siPath}:${strFromInt si.siMtime}:${strFromInt si.siSize}"
 
+-- | 内部：工具会话节点 key（`lspiface:<包名>:<目录哈希>`），与 stat 依赖表一起决定是否命中。
 lspNodeKey : PackageContext -> String
 lspNodeKey ctx = "lspiface:${contextPackageName ctx}:${toolTextHash (contextDir ctx)}"
 
--- 缓存校验：label / 编译器指纹 + 包 一致，且工具会话对象在当前 stat 依赖表下命中。
+-- | 内部：缓存是否可复用——label 与编译器指纹 / 包 key 一致，且工具会话在当前 stat
+-- 依赖表下命中（`Nothing` 一律不复用）。
 cacheFresh : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> String -> PackageContext -> Eff r Bool
 cacheFresh Nothing label ctx = pure False
 cacheFresh (Just c) label ctx = if c.dcLabel == label then do
@@ -316,8 +340,8 @@ cacheFresh (Just c) label ctx = if c.dcLabel == label then do
   else pure False
 else pure False
 
--- 建立会话：工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）+ 本包干净模块 + 校验面。
--- 返回 Nothing = 当前没有可校验的工具接口（每请求走全量）。
+-- | 内部：建立会话——工具接口（依赖闭包 / 依赖哈希 / 本包 manifest）+ 本包干净模块 +
+-- 校验面。返回 `Nothing` 表示当前没有可校验的工具接口（每次请求走全量精化）。
 buildSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Maybe String -> Eff r (Maybe DiagCache)
 buildSession ctx label text modName = do
   toolM <- depIfacesForToolSourceDetailed ctx label text
@@ -342,7 +366,7 @@ buildSession ctx label text modName = do
           pure
             (Just (DiagCache label key ctx db (Just tool) clean builtSec (append tool.tcStats [manifestInfo]) Nothing emptyFixityEnv))
 
--- 会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
+-- | 内部：会话里的工具接口可用且闭包未扩大 ⇒ 直接复用；否则（一次）重建。
 usableSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> List Import -> Eff r (Maybe DiagCache)
 usableSession cache ctx label text modName imports = do
   health <- case cache of
@@ -357,9 +381,9 @@ usableSession cache ctx label text modName imports = do
     Just c => pure (Just c)
     Nothing => buildSession ctx label text modName
 
--- 本包干净模块的**新鲜度**校验（每个请求）：会话本身只校验依赖闭包的 stat，本包模块
--- 由 `dcClean` 的接口预置；外部改了某个同包模块时必须在下次请求就失效（否则同一进程里
--- 一直复用陈旧接口）。只 stat 本次 import 闭包真正用到的干净模块（通常个位数）。
+-- 外部改了某个同包模块时必须在下次请求就失效，否则同一进程里会一直复用陈旧接口；
+-- 因此只 stat 本次 import 闭包真正用到的干净模块（通常个位数）。
+-- | 内部：本包干净模块的新鲜度校验（本次 import 闭包用到的那些 stat 是否都未变）。
 sessionOwnFresh : Member nFs FsOp r, Member nEnv EnvOp r => DiagCache -> List Import -> Eff r Bool
 sessionOwnFresh c imports = case c.dcTool of
   Nothing => pure True
@@ -370,12 +394,14 @@ sessionOwnFresh c imports = case c.dcTool of
       used = filter (\mi => memName (miNameOf mi) reached) c.dcClean
     in allFresh c.dcBuiltSec (map miSourceOf used)
 
+-- | 内部：逐个判断源文件是否仍在 `builtSec` 之后未变（空表视为新鲜）。
 allFresh : Member nFs FsOp r => Int -> List SourceInfo -> Eff r Bool
 allFresh builtSec [] = pure True
 allFresh builtSec (si :: rest) = do
   ok <- sourceFresh builtSec si
   if ok then allFresh builtSec rest else pure False
 
+-- | 内部：本次 import 闭包仍在会话闭包内就保留缓存，否则返回 `Nothing`（触发重建）。
 sessionClosureOk : DiagCache -> List Import -> Maybe DiagCache
 sessionClosureOk c imports = case c.dcTool of
   Nothing => Just c
@@ -385,6 +411,7 @@ sessionClosureOk c imports = case c.dcTool of
       reached = closureNamesOf allIfaces (startNamesOf imports)
     in if neededInClosure tool.tcNeeded reached then Just c else Nothing
 
+-- | 内部：`Maybe` 模块名取值，`Nothing` 为空串。
 currentNameOf : Maybe String -> String
 currentNameOf Nothing = ""
 currentNameOf (Just n) = n
@@ -392,11 +419,13 @@ currentNameOf (Just n) = n
 -- ---------------------------------------------------------------
 -- 精化 + 写回
 -- ---------------------------------------------------------------
+-- | 内部：`Check` 结果里的诊断——`OkC` 无诊断；`ErrC` 只在诊断属于当前文件时保留。
 diagsOfCheck : String -> Check (List Diagnostic) -> List Diagnostic
 diagsOfCheck label (OkC _) = []
 diagsOfCheck label (ErrC e) = if diagOwns label e then [e] else []
 
--- buffer == 磁盘吗？单模块写回的前置条件（否则写下的 SourceInfo 与磁盘不符，读侧会判脏）。
+-- | 内部：buffer 与磁盘内容是否一致（按内容哈希比较，文件不存在为 `False`）。单模块写回的
+-- 前置条件：否则写下的 `SourceInfo` 与磁盘不符，读侧会判脏。
 diskMatches : Member nFs FsOp r => String -> String -> Eff r Bool
 diskMatches label text = do
   exists <- fsFileExists label
@@ -405,16 +434,17 @@ diskMatches label text = do
     pure (toolTextHash source == toolTextHash text)
   else pure False
 
+-- | 内部：该模块名是否在本包干净模块集合里（已写回接口、可直接预置）。
 isCleanModule : DiagCache -> String -> Bool
 isCleanModule session name = memName name (map miNameOf session.dcClean)
 
--- Maybe Int 与「当前磁盘内容哈希」相等吗（无条目 = 需要写）。
+-- | 内部：`Maybe` 哈希与给定哈希是否相等（`Nothing` 视为不相等）。
 entryHashMatches : Maybe String -> String -> Bool
 entryHashMatches Nothing _ = False
 entryHashMatches (Just h) x = h == x
 
--- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
--- 安全阀说「不适用」（Nothing）时回退全量。
+-- | 内部：单文件增量精化（会话可用）——依赖接口 + 本包干净模块预置，只精化当前 buffer；
+-- `applied = False` 表示安全阀判定不适用，调用方应回退全量。
 incrementalCheckedOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Bool -> Eff r (Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))))
 incrementalCheckedOf session tool label text modName imports needPkg =
   let
@@ -422,6 +452,8 @@ incrementalCheckedOf session tool label text modName imports needPkg =
   in dtCheckSourceIncremental session.dcCtx label text tool.tcDepIfaces cleanNeeded session.dcAux
     needPkg
 
+-- | 内部：增量精化入口。返回（新会话,（错误, 警告））；会话为 `Nothing` 表示增量不适用、
+-- 调用方应回退全量。成功时把本次 termAux 缓存进会话，并在 buffer == 磁盘时写回模块接口。
 checkIncremental : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> String -> String -> Maybe String -> List Import -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkIncremental session label text modName imports = case session.dcTool of
   Nothing => pure (Pair Nothing (Pair [] []))
@@ -444,7 +476,7 @@ checkIncremental session label text modName imports = case session.dcTool of
             pure (Pair (Just session3) (Pair [] warns))
       else pure (Pair Nothing (Pair [] []))
 
--- 全量精化后的会话：命中既有缓存就沿用，否则用当前时间戳建一个无工具接口的会话。
+-- | 内部：全量精化后的会话——命中既有缓存就沿用，否则按当前时间戳建一个无工具接口的会话。
 sessionForFull : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r => Maybe DiagCache -> PackageContext -> String -> Eff r DiagCache
 sessionForFull (Just c) ctx label = pure c
 sessionForFull Nothing ctx label = do
@@ -453,7 +485,8 @@ sessionForFull Nothing ctx label = do
   base <- pure (toolSessionNewMemory "tool")
   pure (DiagCache label key ctx base Nothing [] builtSec [] Nothing emptyFixityEnv)
 
--- 上下文的精简入口（`dtCheckSourceChecked` 需要 ctx）。
+-- | 内部：全量精化的精简入口（`dtCheckSourceChecked` 需要包上下文），成功后写回当前模块接口。
+-- 返回（会话,（错误, 警告））；原来没有缓存时仍返回 `Nothing`，避免把无接口会话带进后续请求。
 checkFullWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> PackageContext -> String -> String -> Maybe String -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkFullWith cache ctx label text modName = do
   checkedR <- dtCheckSourceChecked ctx label text
@@ -471,6 +504,8 @@ checkFullWith cache ctx label text modName = do
 -- ---------------------------------------------------------------
 -- lint（会话复用 fixity 模块图；外部文件变化会随会话重建清空）
 -- ---------------------------------------------------------------
+-- | 内部：对一份源码跑语法级 lint，返回（更新后的 fixity 环境, finding 转成的诊断）。
+-- fixity 解析失败或 lint 失败时退化为空 finding；外部文件变化会随会话重建清空。
 lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (List Diagnostic))
 lintWithEnv env label text = do
   looked <- fixitiesForFile env label text
@@ -482,14 +517,15 @@ lintWithEnv env label text = do
     )
   )
 
--- lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool）。
+-- | 内部：lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool，
+-- severity 为警告），位置按 finding 的 1-based 行列构造。
 findingToDiagnostic : Finding -> Diagnostic
 findingToDiagnostic f =
   diagAt (Span "" f.findingLine f.findingCol f.findingLine (f.findingCol + 1)) SevWarning PhTool
     CatTool f.findingCode f.findingMessage
 
--- 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：与 publishDiagnostics
--- 的字段集合一致（range/severity/source/code/message），客户端可按 code 关联。
+-- | 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：字段集合与
+-- `publishDiagnostics` 一致（range / severity / source / code / message），客户端可按 code 关联。
 export findingDiagJson : Finding -> Json
 findingDiagJson f =
   JObj
@@ -498,7 +534,7 @@ findingDiagJson f =
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链
 -- ---------------------------------------------------------------
--- DT 诊断：会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
+-- | 内部：DT 诊断——会话可用时走单文件增量精化，否则回退全量（诊断语义不变）。
 checkDiagnostics : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> PackageContext -> String -> Maybe String -> List Import -> Eff r (Pair (Maybe DiagCache) (Pair (List Diagnostic) (List Diagnostic)))
 checkDiagnostics cache label ctx text modName imports = do
   session <- usableSession cache ctx label text modName imports
@@ -510,13 +546,19 @@ checkDiagnostics cache label ctx text modName imports = do
         Just s2 => pure (Pair (Just s2) (secondOf inc))
         Nothing => checkFullWith (Just s) ctx label text modName
 
+-- | 一次诊断请求：URI + buffer 文本 → （新缓存,（路径标签, 诊断列表））。发布链路，
+-- 不包含 `UN_UnusedImport`（见 `lspWarnable`）。
 export diagnosticsForCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForCached = diagnosticsForCachedWith False
 
--- 代码动作路径：包含 `UN_UnusedImport`（编辑器侧虽不回放其诊断，但仍可给出删除 import 的修复）。
+-- | 代码动作路径：与 `diagnosticsForCached` 同一条链，但保留 `UN_UnusedImport`（编辑器侧虽
+-- 不回放其诊断，仍可据此给出删除 import 的修复）。
 export diagnosticsForSuggestions : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForSuggestions = diagnosticsForCachedWith True
 
+-- | 内部：诊断链的实现。URI → 包上下文 → 解析（失败即返该诊断）→ DT 精化 → lint，最后合并
+-- DT 错误 + lint finding + 经 `dedupeWarnings` 与归属过滤的告警。返回（新缓存,（路径标签, 诊断））；
+-- `includeUnused` 决定是否保留 `UN_UnusedImport`。
 diagnosticsForCachedWith : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair String (List Diagnostic)))
 diagnosticsForCachedWith includeUnused cache uri text = do
   ctxR <- contextForDoc uri
@@ -546,14 +588,13 @@ diagnosticsForCachedWith includeUnused cache uri text = do
             in pure
               (Pair cache3 (Pair label (append (firstOf (secondOf checked)) (append (secondOf linted) (filter (diagOwns label) (filter (warnAllowed includeUnused) (dedupeWarnings (secondOf (secondOf checked)))))))))
 
--- 洞目标（hover / case split）。三级来源：
---   1. 增量装配（依赖包接口 + 本包干净模块预置；import 闭包不再逐个从磁盘 parse + 精化）；
---   2. 只精化当前 buffer（与 `vuna goal` 同源；import 名字按源文本呈现，导入类型的签名解不
---      开时得不到目标）——毫秒级，编辑器循环里不会因为冷 store 卡住；
---   3. `allowFull = True` 时才整包从源码加载 + 容错精化（依赖齐全、语义最完整，但大文件
---      上是秒级）：只给真正需要洞上下文的 codeAction case split 用。
--- 返回 (会话, (是否依赖完整, 目标列表))：完整 = 走 1 或 3；服务器按这个标记决定缓存能否
--- 复用给 case split。
+-- | 洞目标（hover / case split）：URI + buffer 文本 → （新缓存,（是否依赖完整, 目标列表））。
+-- 三级来源：1) 增量装配（依赖包接口 + 本包干净模块预置，import 闭包不再逐个从磁盘 parse +
+-- 精化）；2) 只精化当前 buffer（与 `vuna goal` 同源——import 名字按源文本呈现，导入类型的签名
+-- 解不开时得不到目标），毫秒级，编辑器循环里不会因冷 store 卡住；3) `allowFull = True` 时才整包
+-- 从源码加载 + 容错精化（语义最完整，但大文件上是秒级），只给需要洞上下文的 case split 用。
+-- 「依赖是否完整」= 走了 1 或 3；服务器按这个标记决定缓存能否复用给 case split。
+-- `allowBuild` 为 `False` 且没有既有缓存时跳过建会话（建会话要算接口闭包，是秒级固定开销）。
 export goalsForDoc : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe DiagCache -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
 goalsForDoc allowFull allowBuild cache uri text = do
   ctxR <- contextForDoc uri
@@ -587,25 +628,30 @@ goalsForDoc allowFull allowBuild cache uri text = do
               _ <- pure (obsMark "vuna.lsp.session.unavailable")
               goalsLocalOrFull allowFull cache ctx label text
 
+-- | 内部：增量装配路径下的洞目标（依赖接口 + 本包干净模块预置）；`applied = False` 表示
+-- 安全阀判定不适用，调用方应退到本地 / 全量路径。
 goalsIncrementalOf : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => DiagCache -> ToolContext -> String -> String -> Maybe String -> List Import -> Eff r (Check (Pair Bool (Pair (List DtGoalInfo) (Maybe AuxCache))))
 goalsIncrementalOf c tool label text modName imports =
   let
     cleanNeeded = cleanNeededOf c tool imports
   in dtGoalsSourceIncremental c.dcCtx label text tool.tcDepIfaces cleanNeeded c.dcAux
 
--- 没有会话时是否值得尝试建会话（hover 不建：建会话要算接口闭包，秒级；诊断/case split 建）。
+-- | 内部：是否已有缓存。`goalsForDoc` 用它（连同 `allowBuild`）决定要不要建会话——hover
+-- 冷启动不建会话（建会话要算接口闭包，秒级）。
 isJustCache : Maybe DiagCache -> Bool
 isJustCache Nothing = False
 isJustCache (Just c) = True
 
+-- | 内部：替换会话里的 termAux 缓存，其余字段保持不变。
 setAuxCache : DiagCache -> Maybe AuxCache -> DiagCache
 setAuxCache c aux =
   DiagCache c.dcLabel c.dcKey c.dcCtx c.dcDb c.dcTool c.dcClean c.dcBuiltSec c.dcStats aux c.dcFix
 
--- 回退（会话不可用 / 增量装配不适用）：只精化当前 buffer（与 `vuna goal` 同一条路径：
--- 程序级 fixity → reorder → 容错精化）。import 闭包不展开，跨模块名字按源文本解析——
--- 这是 `vuna goal` 的既有语义，比「整包从源码重读重精化」快一个量级。
--- `allowFull` 时（case split 需要完整洞上下文）再退回整包从源码加载。
+-- | 内部：回退路径（会话不可用 / 增量装配不适用）——只精化当前 buffer（与 `vuna goal` 同一条
+-- 路径：程序级 fixity → reorder → 容错精化）；import 闭包不展开，跨模块名字按源文本解析，
+-- 比整包从源码重读重精化快一个量级。`allowFull` 时（case split 需要完整洞上下文）再退回整包
+-- 从源码加载。返回的「依赖是否完整」标记：`allowFull` 时恒为 `True`（已尝试整包加载，失败则
+-- 退回本地目标），否则为 `False`。
 goalsLocalOrFull : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Maybe DiagCache -> PackageContext -> String -> String -> Eff r (Pair (Maybe DiagCache) (Pair Bool (List DtGoalInfo)))
 goalsLocalOrFull allowFull cache ctx label text = do
   _ <- pure (obsMark "vuna.lsp.goals.local")
@@ -630,6 +676,7 @@ goalsLocalOrFull allowFull cache ctx label text = do
     )
   else pure (Pair cache (Pair False localGoals))
 
+-- | 内部：把诊断列表渲染成 `textDocument/publishDiagnostics` 通知（带 version）。
 publishDiagnostics : String -> Int -> String -> List Diagnostic -> Json
 publishDiagnostics uri version text diags =
   let
@@ -638,7 +685,7 @@ publishDiagnostics uri version text diags =
   in notify "textDocument/publishDiagnostics"
     (JObj [Pair "uri" (JStr uri), Pair "version" (JNum version), Pair "diagnostics" (JArr jsonDiags)])
 
--- 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
+-- | 一次请求的完整发布帧 + 更新后的会话缓存（LSP 门面持有缓存，跨请求复用）。
 export publishDiagnosticsCached : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Maybe DiagCache -> String -> Int -> String -> Eff r (Pair (Maybe DiagCache) Json)
 publishDiagnosticsCached cache uri version text = do
   result <- diagnosticsForCached cache uri text
@@ -646,20 +693,21 @@ publishDiagnosticsCached cache uri version text = do
     labeled = secondOf result
   in pure (Pair (firstOf result) (publishDiagnostics uri version text (secondOf labeled)))
 
--- didClose：直接发空诊断（不跑检查链）。
+-- | didClose：直接发空诊断（不跑检查链）。
 export publishDiagnosticsEmpty : String -> Int -> Json
 publishDiagnosticsEmpty uri version = publishDiagnostics uri version "" []
 
--- 无会话的便捷入口（测试 / 一次性请求）。
+-- | 无会话的便捷入口（测试 / 一次性请求）：内部从 `Nothing` 缓存起链，只返回发布帧。
 export publishDiagnosticsFor : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Int -> String -> Eff r Json
 publishDiagnosticsFor uri version text = do
   result <- publishDiagnosticsCached Nothing uri version text
   pure (secondOf result)
 
--- 写回当前模块接口（buffer == 磁盘时才写；只写当前模块、合并进本包 manifest）。
--- 守卫：本包 manifest 里已有「同源内容」的接口时不重写（LSP 增量上下文算出的接口哈希
--- 可能与整包 check 的略有差异——擦除位残 meta 不同；重写会让依赖者的 miDepHashes 失配）。
--- 冷启动（还没有本包 manifest）才用整包接口兜底写。失败静默跳过（不影响诊断）。
+-- | 内部：写回当前模块接口（buffer == 磁盘时才写；只写当前模块、合并进本包 manifest）。
+-- 守卫：本包 manifest 里已有「同源内容」的接口时不重写——LSP 增量上下文算出的接口哈希可能与
+-- 整包 check 的略有差异（擦除位残 meta 不同），重写会让依赖者的 `miDepHashes` 失配。
+-- 冷启动（还没有工具会话）用整包接口兜底写；失败静默跳过，不影响诊断。
+-- 无模块名（`Nothing`）时原样返回会话。
 writeBackModule : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => DiagCache -> String -> String -> CheckedPackage -> Maybe String -> Eff r DiagCache
 writeBackModule session label text checked Nothing = pure session
 writeBackModule session label text checked (Just name) = do
@@ -686,7 +734,6 @@ writeBackModule session label text checked (Just name) = do
             (DiagCache session.dcLabel session.dcKey session.dcCtx session.dcDb session.dcTool (mi :: session.dcClean) session.dcBuiltSec session.dcStats session.dcAux session.dcFix)
   else pure session
 
--- 单文件增量精化（会话可用）：依赖接口 + 本包干净模块预置，只精化当前 buffer。
 -- ---------------------------------------------------------------
 -- Pull diagnostics（LSP 3.17 textDocument/diagnostic）
 -- ---------------------------------------------------------------
@@ -697,7 +744,7 @@ diagReportJson uri text diags =
     lines0 = lines text
   in JObj [Pair "kind" (JStr "full"), Pair "items" (JArr (map (diagnosticJson uri lines0) diags))]
 
--- 告警的 LSP tags：未使用/冗余/不可达 → `1`（Unnecessary）。
+-- | 内部：诊断 code → LSP tags：未使用 / 冗余 / catch-all 之后不可达 → `1`（Unnecessary）。
 lspTagsOf : String -> List Json
 lspTagsOf code =
   if startsWith "UN_Unused" code || startsWith "UN_Redundant" code || code == "UN_BranchAfterCatchAll" then [JNum 1]
@@ -705,18 +752,22 @@ lspTagsOf code =
 
 -- LSP 增量路径不重算 import 使用集：`UN_UnusedImport` 在编辑器侧可能误报，
 -- 故 publish 链路不回放该告警（CLI 全量检查仍报告）。
+-- | 内部：该诊断能否进发布链路（`UN_UnusedImport` 除外）。
 lspWarnable : Diagnostic -> Bool
 lspWarnable d = d.diagCode /= "UN_UnusedImport"
 
+-- | 内部：`includeUnused = True` 时全放行，否则按 `lspWarnable` 过滤。
 warnAllowed : Bool -> Diagnostic -> Bool
 warnAllowed True d = True
 warnAllowed False d = lspWarnable d
 
+-- | 内部：诊断来源 → `data` 项；级联诊断标记 `origin: cascade`，直接诊断不产出。
 originFields : Diagnostic -> List Json
 originFields d = case d.diagOrigin of
   OriginDirect => []
   OriginCascade _ => [JObj [Pair "kind" (JStr "origin"), Pair "value" (JStr "cascade")]]
 
+-- | 内部：有 code 时附一条 `catalog` 指引（`vuna explain <code>`），供客户端跳文档。
 catalogFields : Diagnostic -> List Json
 catalogFields d =
   if d.diagCode == "" then []

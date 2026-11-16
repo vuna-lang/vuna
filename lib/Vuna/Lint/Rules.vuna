@@ -1,24 +1,24 @@
+-- | lint 的规则实现：AST 驱动的 dispatch 规则（`literal-if-chain`、`dispatch-lift`）与列表
+-- 字面量规则（`list-literal`），以及从源码切片的辅助工具。
+--
+-- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文（字面量、模式、
+-- 分支体）时用 span 加 token 边界从源码切片，不重新渲染字符串字面量。产出的编辑用行范围表示
+-- （起始行、结束行、替换行），由 [Vuna.Lint.Fix] 应用。
+--
+-- 改写目标统一为「把 dispatch 提升进外层模式」。`literal-if-chain` 处理 if 分派（`x == 字面量`
+-- 链，或 Bool 变量的 if/else-if）：scrutinee 是外层 clause/alt 的模式变量时提升成多条 clause
+-- 或更细的 alt，字面量链提升不了时回退成 case。`dispatch-lift` 处理 case / let 分派：单 alt
+-- 替换外层变量，多 alt 拆 clause 或拆 alt。`list-literal` 把表达式与类型位置的闭合 cons 链
+-- （`::` / `Cons` 加 `[]` / `Nil`）以及裸 `Nil` 改写成 `[a, b]` / `[]`，模式匹配不动。
+--
+-- 提升只发生在 clause/alt 的直接体上；嵌在表达式里的 dispatch 需要 case-of-case 上下文分发，
+-- 会复制代码，因此不做。clause 拆分要求该名字只有一条 clause，alt 拆分/替换要求该 alt 是最后
+-- 一个，判据不满足时只报告、不给编辑。
+--
+-- 候选按（行, 列）排序，编辑范围被更大编辑包含的内层 finding 会被丢弃，避免同一条链或同一次
+-- 折叠产生互相冲突的编辑。
 module Vuna.Lint.Rules where
 
--- Vuna.Lint.Rules：lint 的 dispatch 规则 + 列表字面量规则（AST 驱动）+ 源码切片工具。
---
--- `lintSourceWith` 先 parseSource 得到 AST，规则判定全部走 AST；需要源码原文
--- （字面量、模式、分支体）时再用 span + token 边界从源码切片，绝不重新渲染
--- 字符串字面量。Edit 用行范围表示（`Edit start stop lines`），由 Vuna.Lint.Fix 应用。
---
--- 规则按 dispatch 源划分，改写目标统一为「把 dispatch 提升进外层模式」：
---   * literal-if-chain：if dispatch（`x == lit` 链，或 `if b then A else B` 的 Bool
---     变量分派）。scrutinee 是外层 clause/alt 模式变量时提升成多条 clause / 更细的
---     alt；字面量链提升不了时回退成 case（`chainFindings`）；
---   * dispatch-lift：case / let dispatch。单 alt 替换外层变量；多 alt 拆 clause / alt。
---   * list-literal：表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸
---     `Nil` 改写为 `[a, b]` / `[]`；模式匹配不动（独立遍历 `walkListLiteral`）。
---
--- 提升只发生在 clause/alt 的**直接体**；嵌套在表达式里的 dispatch 需要上下文分发
--- （case-of-case），会复制代码，不做。clause 拆分要求该名字只有一条 clause；alt
--- 拆分/替换要求该 alt 是最后一个。判据不满足时只报告、不给 Edit。
--- 候选按（行, 列）排序，被更大 Edit 行范围包含的内层 finding 会被丢弃，避免同一链/同一次
--- 折叠产生互相冲突的 Edit。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
@@ -26,51 +26,76 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Lint.Diagnostics
 
--- 工具链 fuel 耗尽不是「部分结果」，而是内部不变量被破坏；与编译器一致硬失败。
+-- | 内部：工具链 fuel 耗尽说明内部不变量被破坏，按硬失败处理（与编译器一致）。
 lintFuelExhausted : String -> a
 lintFuelExhausted what = prim_fail "vuna: internal: lint ${what} fuel exhausted"
 
+-- | 一次源码改写：把 1 基行区间 `[editStart, editEnd]` 整体替换成 `editLines`。
 export record Edit(..) where
+  -- | 替换区间的起始行（1 基，含）。
   editStart : Int
+  -- | 替换区间的结束行（1 基，含）。
   editEnd : Int
+  -- | 替换后的完整行（不含行尾换行）。
   editLines : List String
 
+-- | 一条 lint 结果：位置、规则标识、消息，以及可选的自动修复。
 export record Finding(..) where
+  -- | finding 所在行（1 基）。
   findingLine : Int
+  -- | finding 所在列（1 基）。
   findingCol : Int
+  -- | 规则的稳定符号（`LN_` 前缀）。
   findingCode : String
+  -- | 规则的 kebab 短名（CLI 输出用）。
   findingRule : String
+  -- | 人读消息，由 [Vuna.Lint.Diagnostics] 的消息模板生成。
   findingMessage : String
+  -- | 可自动修复时的编辑方案；`Nothing` 表示只能报告。
   findingEdit : Maybe Edit
 
--- 外层模式上下文：候选提升的目标位置。
--- LClause headLine pats isLast isSingle：外层是顶层子句（isSingle = 该名字只有一条 clause）；
--- LAlt headLine pat isLast：外层是 case alt。
+-- | 外层模式上下文：候选提升的目标位置。
+--
+-- `LClause` 是顶层子句（`isSingle` 标记该名字是否只有一条 clause，`isLast` 标记是否最后
+-- 一条）；`LAlt` 是 case 的一个 alt（`isLast` 标记是否最后一个 alt）。
 data Lane : Type where
+  -- | 顶层 clause：head 行号、clause 的模式列表、是否最后一条、是否该名字唯一的 clause。
   LClause : Int -> List Pat -> Bool -> Bool -> Lane
+  -- | case 的 alt：head 行号、alt 模式、是否最后一个 alt。
   LAlt : Int -> Pat -> Bool -> Lane
 
--- 字面量 if 分支：literal 原文、then 原文、then 表达式。
+-- | 字面量 if 链的一个分支：匹配的字面量原文、then 分支原文、then 表达式。
 record ChainItem where
+  -- | 该分支比较的字面量原文（如 `"a"`、`1`）。
   chainItemLit : String
+  -- | then 分支的源码原文；无法单行切片时为空串。
   chainItemThenText : String
+  -- | then 分支的表达式。
   chainItemThen : Expr
 
--- 链提取结果：scrutinee 名、分支、default 模式原文、default 原文、default 表达式。
+-- | 字面量 if 链的提取结果：scrutinee 名、各分支、default 分支的模式与表达式。
 record ChainRes where
+  -- | 链上所有条件共同比较的变量名。
   chainResName : String
+  -- | 按源码顺序排列的分支。
   chainResItems : List ChainItem
+  -- | default 分支的模式原文；提取不到时为 `"_"`。
   chainResDefaultPat : String
+  -- | default 分支的源码原文。
   chainResDefaultText : String
+  -- | default 分支的表达式。
   chainResDefaultExpr : Expr
 
+-- | 内部：遍历与位置扫描的 fuel 初值；递归函数每层递减，耗尽即硬失败。
 lintFuel : Int
 lintFuel = 1000000
 
+-- | 列表是否为空：判定某个 alt 或 clause 是不是最后一个。
 export isNilList : List a -> Bool
 isNilList [] = True
 isNilList (x :: rest) = False
 
+-- | 内部：列表是否至少有两个元素。
 atLeastTwo : List a -> Bool
 atLeastTwo (x :: y :: rest) = True
 atLeastTwo _ = False
@@ -78,18 +103,23 @@ atLeastTwo _ = False
 -- ---------------------------------------------------------------
 -- 行 / 字符工具
 -- ---------------------------------------------------------------
+-- | 内部：字符码是否为空格或制表符。
 isSpaceChar : Int -> Bool
 isSpaceChar c = c == 32 || c == 9
 
+-- | 内部：n 个空格字符的列表（n <= 0 时为空）。
 spaceChars : Int -> List Int
 spaceChars n = if n <= 0 then [] else 32 :: spaceChars (n - 1)
 
+-- | 内部：n 个空格组成的字符串。
 spaces : Int -> String
 spaces n = strPack (spaceChars n)
 
+-- | 内部：行首缩进宽度（空格与制表符各算一列）。
 indentOf : String -> Int
 indentOf line = indentChars (strUnpack line)
 
+-- | 内部：从行首字符数缩进，遇到非空白字符即停。
 indentChars : List Int -> Int
 indentChars [] = 0
 indentChars (c :: rest) = case c of
@@ -97,125 +127,149 @@ indentChars (c :: rest) = case c of
   9 => 1 + indentChars rest
   _ => 0
 
+-- | 内部：字符序列是否全为空白。
 blankChars : List Int -> Bool
 blankChars [] = True
 blankChars (c :: rest) = isSpaceChar c && blankChars rest
 
+-- | 按换行切分源码；每行不含换行符，末尾换行会补出一个空行。
 export splitLines : String -> List String
 splitLines source = splitLinesFrom (strUnpack source) [] []
 
+-- | 内部：`splitLines` 的累加器实现（当前行按字符逆序累积）。
 splitLinesFrom : List Int -> List String -> List Int -> List String
 splitLinesFrom [] acc cur = reverse (strPack (reverse cur) :: acc)
 splitLinesFrom (c :: rest) acc cur =
   if c == 10 then splitLinesFrom rest (strPack (reverse cur) :: acc) []
   else splitLinesFrom rest acc (c :: cur)
 
+-- | `splitLines` 的逆操作：单元素不追加换行，避免以换行结尾的源码每轮修复都多写一个行尾换行。
 export joinLines : List String -> String
 joinLines [] = ""
--- 单元素列表不加换行：splitLines 对以换行结尾的源码会补一个空行，逐段拼接
--- （`line ++ "\n" ++ joinLines rest`）会让 --fix 每次多写一个行尾换行。
 joinLines ([line]) = line
 joinLines (line :: rest) = "${line}\n${joinLines rest}"
 
+-- | 内部：取第 n 行（1 基）；越界返回空串。
 nthLine : List String -> Int -> String
 nthLine [] n = ""
 nthLine (line :: rest) n = if n <= 1 then line else nthLine rest (n - 1)
 
+-- | 内部：按 1 基行号取行（`nthLine` 的同义入口）。
 lineAt : List String -> Int -> String
 lineAt lines n = nthLine lines n
 
+-- | 内部：前 n 个元素（n <= 0 时为空）。
 takeChars : Int -> List a -> List a
 takeChars n [] = []
 takeChars n (c :: rest) = if n <= 0 then [] else c :: takeChars (n - 1) rest
 
+-- | 内部：去掉前 n 个元素。
 dropChars : Int -> List a -> List a
 dropChars n chars = if n <= 0 then chars
 else case chars of
   [] => []
   c :: rest => dropChars (n - 1) rest
 
+-- | 内部：从 start 起取 count 个元素。
 sliceChars : Int -> Int -> List a -> List a
 sliceChars start count chars = takeChars count (dropChars start chars)
 
+-- | 内部：行内按字符位置切片（0 基起始、count 个字符）。
 sliceLine : Int -> Int -> String -> String
 sliceLine start count line = strPack (sliceChars start count (strUnpack line))
 
+-- | 内部：去掉行首 n 个字符。
 dropIndent : Int -> String -> String
 dropIndent n line = strPack (dropChars n (strUnpack line))
 
--- 源码列 col 之前的部分（col 从 1 开始）。
+-- | 内部：源码列 col（1 基）之前的行首部分。
 prefixBeforeCol : String -> Int -> String
 prefixBeforeCol line col = sliceLine 0 (col - 1) line
 
--- col 起的行尾原文（含 col 处字符）。
+-- | 内部：从列 col（1 基，含该列字符）到行尾的原文。
 tailFromCol : String -> Int -> String
 tailFromCol line col = strPack (dropChars (col - 1) (strUnpack line))
 
--- 列区间 [c1, c2) 的原文（1 基、左闭右开）。
+-- | 内部：列区间 `[c1, c2)` 的原文（1 基、左闭右开）。
 sliceBetween : String -> Int -> Int -> String
 sliceBetween line c1 c2 = sliceLine (c1 - 1) (c2 - c1) line
 
+-- | 内部：第 i 个字符码（0 基）；越界返回 0。
 nthChar : Int -> List Int -> Int
 nthChar i [] = 0
 nthChar i (c :: rest) = if i <= 0 then c else nthChar (i - 1) rest
 
+-- | 内部：去掉尾部空白后的长度。
 trimLen : List Int -> Int -> Int
 trimLen chars n =
   if n <= 0 then 0 else if isSpaceChar (nthChar (n - 1) chars) then trimLen chars (n - 1) else n
 
+-- | 内部：去掉行尾空白。
 trimEnd : String -> String
 trimEnd line =
   strPack (takeChars (trimLen (strUnpack line) (length (strUnpack line))) (strUnpack line))
 
+-- | 内部：字符序列 `p` 是否是 `text` 的前缀。
 prefixChars : List Int -> List Int -> Bool
 prefixChars [] text = True
 prefixChars (p :: prest) text = case text of
   [] => False
   t :: trest => p == t && prefixChars prest trest
 
+-- | 内部：字符序列里是否包含某个子串。
 containsSubChars : List Int -> List Int -> Bool
 containsSubChars pat [] = False
 containsSubChars pat (text@(c :: rest)) = prefixChars pat text || containsSubChars pat rest
 
+-- | 内部：字符序列里是否出现某个字符码。
 containsChar : Int -> List Int -> Bool
 containsChar c [] = False
 containsChar c (x :: rest) = x == c || containsChar c rest
 
+-- | 内部：行内是否出现 `--` 或 `{-`（含注释的行不参与自动修复）。
 hasComment : String -> Bool
 hasComment line =
   containsSubChars (strUnpack "--") (strUnpack line)
     || containsSubChars (strUnpack "{-") (strUnpack line)
 
+-- | 内部：行内是否含制表符或回车（含则不自动修复）。
 hasTabOrCR : String -> Bool
 hasTabOrCR line = containsChar 9 (strUnpack line) || containsChar 13 (strUnpack line)
 
+-- | 内部：去掉前 n 个元素（n <= 0 时原样返回）。
 dropIndex : Int -> List a -> List a
 dropIndex n lines = if n <= 0 then lines
 else case lines of
   [] => []
   x :: rest => dropIndex (n - 1) rest
 
+-- | 内部：前 n 个元素（n <= 0 时为空）。
 takeIndex : Int -> List a -> List a
 takeIndex n lines = if n <= 0 then []
 else case lines of
   [] => []
   x :: rest => x :: takeIndex (n - 1) rest
 
+-- | 内部：取 1 基闭区间 `[start, stop]` 的行。
 rangeLines : List String -> Int -> Int -> List String
 rangeLines lines start stop = takeIndex (stop - start + 1) (dropIndex (start - 1) lines)
 
+-- | 内部：取行区间并统一去掉 n 个行首字符。
 dedentRange : List String -> Int -> Int -> Int -> List String
 dedentRange lines start stop n = map (\line => dropIndent n line) (rangeLines lines start stop)
 
+-- | 内部：行区间内没有注释、制表符与回车（自动修复的先行条件）。
 linesCleanRange : List String -> Int -> Int -> Bool
 linesCleanRange lines start stop = linesCleanGo (rangeLines lines start stop)
 
+-- | 内部：`linesCleanRange` 的逐行判定。
 linesCleanGo : List String -> Bool
 linesCleanGo [] = True
 linesCleanGo (line :: rest) =
   if hasComment line || hasTabOrCR line then False else linesCleanGo rest
 
--- 多行 body 按目标缩进重排：以 body 真实首行缩进减去 target 作为统一 dedent。
+-- | 内部：把多行 body 按目标缩进重排：以 body 真实首行缩进为基准统一 dedent，再补 target
+-- 个空格；body 与位置同行时只取该表达式本身的原文。
 blockBodyLines : List String -> Expr -> Int -> List String
 blockBodyLines lines body target =
   let
@@ -238,44 +292,53 @@ blockBodyLines lines body target =
 -- ---------------------------------------------------------------
 -- token 工具
 -- ---------------------------------------------------------------
+-- | 内部：token 的起始行。
 tokLine : PTok -> Int
 tokLine tok = posLine tok.ptokPos
 
+-- | 内部：token 的起始列。
 tokCol : PTok -> Int
 tokCol tok = posCol tok.ptokPos
 
+-- | 内部：token 是否是指定关键字的 `TKw`。
 tokIsKw : PTok -> String -> Bool
 tokIsKw (PTok (TKw x) p) key = x == key
 tokIsKw _ key = False
 
+-- | 内部：token 是标识符时取出名字。
 tokIdentOf : PTok -> Maybe String
 tokIdentOf (PTok (TIdent x) p) = Just x
 tokIdentOf _ = Nothing
 
+-- | 内部：token 是否是 EOF。
 tokIsEof : PTok -> Bool
 tokIsEof (PTok TEof p) = True
 tokIsEof _ = False
 
+-- | 内部：列表首元素（空列表为 `Nothing`）。
 headToken : List a -> Maybe a
 headToken [] = Nothing
 headToken (t :: rest) = Just t
 
+-- | 内部：按（行, 列）精确位置查 token。
 tokenAt : List PTok -> Int -> Int -> Maybe PTok
 tokenAt [] line col = Nothing
 tokenAt (t :: rest) line col =
   if tokLine t == line && tokCol t == col then Just t else tokenAt rest line col
 
--- span 最后一个 token 之后的第一个 token（EOF 也返回）；用于定位切片右边界。
--- 注意 span 的 end 位置有两种来源：普通 token 的 span 取最后一个 token 的**起点**，
--- 而模板字面量（`TTmpl`）的 span 取字面量结束后的位置。两种都按“源码序严格在
--- (line, col) 之后”查找，不能只做精确位置匹配（否则模板字面量会退化成切到行尾）。
+-- | 内部：源码序严格在（行, 列）之后的第一个 token（EOF 也算），用于定位切片右边界。
+--
+-- span 的结束位置有两种来源：普通 token 的 span 取最后一个 token 的起点，模板字面量
+-- （`TTmpl`）的 span 取字面量结束之后的位置，所以按严格大于比较，不能只做精确位置匹配
+-- （否则模板字面量会退化成切到行尾）。
 nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
 nextTokAfter [] line col = Nothing
 nextTokAfter (t :: rest) line col =
   if tokLine t > line then Just t
   else if tokLine t == line && tokCol t > col then Just t else nextTokAfter rest line col
 
--- span 的原文（单行）。右边界 = span 末 token 之后的下一个 token（或行尾）。
+-- | 内部：span 的单行源码原文；右边界取 span 末 token 之后的下一个 token（或行尾），跨行
+-- 时返回空串。
 spanText : List String -> List PTok -> Span -> String
 spanText lines toks sp = if spanStartLine sp /= spanEndLine sp then ""
 else
@@ -289,24 +352,30 @@ else
       else if tokLine t == spanEndLine sp then trimEnd (sliceBetween line col (tokCol t))
       else trimEnd (tailFromCol line col)
 
+-- | 内部：模式的单行源码原文。
 patText : List String -> List PTok -> Pat -> String
 patText lines toks pat = spanText lines toks (patSpan pat)
 
+-- | 内部：span 是否落在同一行。
 spanSingleLine : Span -> Bool
 spanSingleLine sp = spanStartLine sp == spanEndLine sp
 
--- 表达式的真实起始位置：parser 给中缀表达式（`a + b`）的 span 从运算符开始，
--- 起点会比 `a` 晚，所以取整棵子树里最靠前的 span 起点。
+-- | 内部：表达式的真实起始位置。parser 给中缀表达式（`a + b`）的 span 从运算符开始，起点
+-- 会比 `a` 晚，所以取整棵子树里最靠前的 span 起点。
 exprStartPos : Expr -> Pair Int Int
 exprStartPos e = startExpr lintFuel e
 
+-- | 内部：两对坐标里按（行, 列）较小的一对。
 minPair : Pair Int Int -> Pair Int Int -> Pair Int Int
 minPair (a@(Pair la ca)) (b@(Pair lb cb)) =
   if la < lb then a else if la == lb && ca <= cb then a else b
 
+-- | 内部：span 起点作为坐标对。
 startFromSpan : Span -> Pair Int Int
 startFromSpan sp = Pair (spanStartLine sp) (spanStartCol sp)
 
+-- | 内部：按构造子递归求表达式的最小起始位置（覆盖中缀链、括号、section 等 parser 中间
+-- 产物，不落到兜底坐标）。
 startExpr : Int -> Expr -> Pair Int Int
 startExpr fuel e = if fuel <= 0 then lintFuelExhausted "expression position"
 else case e of
@@ -347,61 +416,71 @@ else case e of
     minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
   EParen inner sp => minPair (startFromSpan sp) (startExpr (fuel - 1) inner)
 
+-- | 内部：一组表达式的最小起始位置；空列表返回极大坐标。
 startExprs : Int -> List Expr -> Pair Int Int
 startExprs fuel exprs = if fuel <= 0 then lintFuelExhausted "expression position"
 else case exprs of
   [] => Pair 1000000000 1000000000
   e :: rest => minPair (startExpr (fuel - 1) e) (startExprs (fuel - 1) rest)
 
+-- | 内部：record 字段值的最小起始位置。
 startFields : Int -> List (Pair String Expr) -> Pair Int Int
 startFields fuel fields = if fuel <= 0 then lintFuelExhausted "expression position"
 else case fields of
   [] => Pair 1000000000 1000000000
   (Pair f e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
 
+-- | 内部：let 绑定右值的最小起始位置。
 startBinds : Int -> List (Pair Pat Expr) -> Pair Int Int
 startBinds fuel binds = if fuel <= 0 then lintFuelExhausted "expression position"
 else case binds of
   [] => Pair 1000000000 1000000000
   (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
 
+-- | 内部：case alt 体的最小起始位置。
 startAlts : Int -> List (Pair Pat Expr) -> Pair Int Int
 startAlts fuel alts = if fuel <= 0 then lintFuelExhausted "expression position"
 else case alts of
   [] => Pair 1000000000 1000000000
   (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
 
+-- | 内部：局部函数 clause 体的最小起始位置。
 startLocalClauses : Int -> List (Pair (List Pat) Expr) -> Pair Int Int
 startLocalClauses fuel clauses = if fuel <= 0 then lintFuelExhausted "expression position"
 else case clauses of
   [] => Pair 1000000000 1000000000
   (Pair pats e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
 
+-- | 内部：do 语句的最小起始位置。
 startStmts : Int -> List DoStmt -> Pair Int Int
 startStmts fuel stmts = if fuel <= 0 then lintFuelExhausted "expression position"
 else case stmts of
   [] => Pair 1000000000 1000000000
   stmt :: rest => minPair (startStmt (fuel - 1) stmt) (startStmts (fuel - 1) rest)
 
+-- | 内部：单条 do 语句的最小起始位置。
 startStmt : Int -> DoStmt -> Pair Int Int
 startStmt fuel stmt = if fuel <= 0 then lintFuelExhausted "expression position"
 else case stmt of
   DBind pat e sp => startExpr (fuel - 1) e
   DExpr e sp => startExpr (fuel - 1) e
 
+-- | 内部：表达式的真实起始行。
 exprStartLine : Expr -> Int
 exprStartLine e = case exprStartPos e of
   Pair line col => line
 
+-- | 内部：表达式的真实起始列。
 exprStartCol : Expr -> Int
 exprStartCol e = case exprStartPos e of
   Pair line col => col
 
--- 表达式的真实单行性：起点用子树最小位置（覆盖中缀 span 起点偏后的情况）。
+-- | 内部：表达式的真实单行性（起点用子树最小位置，覆盖中缀 span 起点偏后的情况）。
 exprSingleLine : Expr -> Bool
 exprSingleLine e = exprStartLine e == spanEndLine (exprSpan e)
 
--- 表达式原文（单行）。左边界用真实起点，右边界 = span 末 token 之后的下一个 token。
+-- | 内部：表达式的单行源码原文；左边界用真实起点，右边界取 span 末 token 之后的下一个
+-- token，跨行时返回空串。
 exprText : List String -> List PTok -> Expr -> String
 exprText lines toks e = if not (exprSingleLine e) then ""
 else
@@ -416,7 +495,8 @@ else
       else if tokLine t == endLine then trimEnd (sliceBetween line col (tokCol t))
       else trimEnd (tailFromCol line col)
 
--- 表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或没有。
+-- | 内部：表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或
+-- 没有。
 segmentOk : List String -> List PTok -> Expr -> Bool
 segmentOk lines toks e = if not (exprSingleLine e) then False
 else case nextTokAfter toks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
@@ -425,6 +505,7 @@ else case nextTokAfter toks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol o
     if tokIsEof t then True
     else if tokLine t == spanEndLine (exprSpan e) then tokIsKw t "else" else True
 
+-- | 内部：把行内某个标识符 token 的出现替换成新文本。
 replaceIdentInLine : String -> PTok -> String -> String
 replaceIdentInLine line tok replacement =
   let
@@ -434,27 +515,31 @@ replaceIdentInLine line tok replacement =
     suffix = tailFromCol line (col + strLength name)
   in prefix ++ replacement ++ suffix
 
+-- | 内部：token 的标识符名字；非标识符为空串。
 identText : PTok -> String
 identText tok = case tokIdentOf tok of
   Just x => x
   Nothing => ""
 
--- 名字是否出现在行首缩进之外的正文前（即该位置之前只有空白）。
+-- | 内部：该位置之前是否只有空白（即名字独占行首）。
 startsOwnLine : List String -> Int -> Int -> Bool
 startsOwnLine lines line col = blankChars (strUnpack (prefixBeforeCol (lineAt lines line) col))
 
 -- ---------------------------------------------------------------
 -- 模式工具（带 fuel，便于相互递归的 SCT 证明）
 -- ---------------------------------------------------------------
+-- | 内部：模式列表里绑定的变量名。
 patVars : List Pat -> List String
 patVars pats = patVarsFuel lintFuel pats
 
+-- | 内部：`patVars` 的 fuel 版本。
 patVarsFuel : Int -> List Pat -> List String
 patVarsFuel fuel pats = if fuel <= 0 then lintFuelExhausted "traversal"
 else case pats of
   [] => []
   p :: rest => append (patVarFuel (fuel - 1) p) (patVarsFuel (fuel - 1) rest)
 
+-- | 内部：单个模式绑定的变量名。
 patVarFuel : Int -> Pat -> List String
 patVarFuel fuel pat = if fuel <= 0 then lintFuelExhausted "traversal"
 else case pat of
@@ -466,21 +551,25 @@ else case pat of
   PStr s sp => []
   PRecord name fields sp => patFieldVarsFuel (fuel - 1) fields
 
+-- | 内部：record 模式各字段绑定的变量名。
 patFieldVarsFuel : Int -> List (Pair String Pat) -> List String
 patFieldVarsFuel fuel fields = if fuel <= 0 then lintFuelExhausted "traversal"
 else case fields of
   [] => []
   (Pair f pat) :: rest => append (patVarFuel (fuel - 1) pat) (patFieldVarsFuel (fuel - 1) rest)
 
+-- | 内部：某个变量名在模式列表里出现的次数。
 countVar : String -> List Pat -> Int
 countVar name pats = countPatsFuel lintFuel name pats
 
+-- | 内部：`countVar` 的模式列表实现。
 countPatsFuel : Int -> String -> List Pat -> Int
 countPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "count"
 else case pats of
   [] => 0
   p :: rest => countPatFuel (fuel - 1) name p + countPatsFuel (fuel - 1) name rest
 
+-- | 内部：单个模式里某变量名出现的次数（只看变量、构造子参数与 record 字段）。
 countPatFuel : Int -> String -> Pat -> Int
 countPatFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "count"
 else case pat of
@@ -489,15 +578,18 @@ else case pat of
   PRecord n fields sp => countFieldsFuel (fuel - 1) name fields
   _ => 0
 
+-- | 内部：record 模式字段里某变量名出现的次数。
 countFieldsFuel : Int -> String -> List (Pair String Pat) -> Int
 countFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "count"
 else case fields of
   [] => 0
   (Pair f pat) :: rest => countPatFuel (fuel - 1) name pat + countFieldsFuel (fuel - 1) name rest
 
+-- | 内部：模式里某变量名第一次出现的 span。
 patVarSpan : String -> Pat -> Maybe Span
 patVarSpan name pat = patVarSpanFuel lintFuel name pat
 
+-- | 内部：`patVarSpan` 的 fuel 版本。
 patVarSpanFuel : Int -> String -> Pat -> Maybe Span
 patVarSpanFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case pat of
@@ -506,9 +598,11 @@ else case pat of
   PRecord n fields sp => patVarSpanInFieldsFuel (fuel - 1) name fields
   _ => Nothing
 
+-- | 内部：模式列表里某变量名第一次出现的 span。
 patVarSpanInPats : String -> List Pat -> Maybe Span
 patVarSpanInPats name pats = patVarSpanInPatsFuel lintFuel name pats
 
+-- | 内部：`patVarSpanInPats` 的 fuel 版本。
 patVarSpanInPatsFuel : Int -> String -> List Pat -> Maybe Span
 patVarSpanInPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case pats of
@@ -517,6 +611,7 @@ else case pats of
     Just sp => Just sp
     Nothing => patVarSpanInPatsFuel (fuel - 1) name rest
 
+-- | 内部：record 模式字段里某变量名第一次出现的 span。
 patVarSpanInFieldsFuel : Int -> String -> List (Pair String Pat) -> Maybe Span
 patVarSpanInFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "pattern variable"
 else case fields of
@@ -525,14 +620,17 @@ else case fields of
     Just sp => Just sp
     Nothing => patVarSpanInFieldsFuel (fuel - 1) name rest
 
+-- | 内部：两个名字列表是否有交集。
 intersectsNames : List String -> List String -> Bool
 intersectsNames [] ys = False
 intersectsNames (x :: rest) ys = memName x ys || intersectsNames rest ys
 
+-- | 内部：从名字列表里删除所有同名项。
 removeName : String -> List String -> List String
 removeName name [] = []
 removeName name (x :: rest) = if x == name then removeName name rest else x :: removeName name rest
 
+-- | 内部：该模式能否作为提升目标：构造子（含参数）、字面量、record 模式。
 liftablePat : Pat -> Bool
 liftablePat (PCon name args sp) = True
 liftablePat (PInt n sp) = True
@@ -540,13 +638,14 @@ liftablePat (PStr s sp) = True
 liftablePat (PRecord name fields sp) = True
 liftablePat _ = False
 
--- 带参数的模式放进 clause 参数位置时必须加括号（`(VBool b)`），否则会被解析成
--- 多个参数模式（0 元构造子与后续模式分开）。无参数构造子/字面量/变量不需要。
+-- | 内部：模式放进 clause 参数位置时是否需要加括号：带参数构造子与 record 模式需要，否则
+-- 会被解析成多个参数模式（0 元构造子与后续模式分开）；无参数构造子、字面量、变量不需要。
 patNeedsParen : Pat -> Bool
 patNeedsParen (PCon _ args _) = notEmptyPatList args
 patNeedsParen (PRecord _ _ _) = True
 patNeedsParen _ = False
 
+-- | 内部：模式列表是否非空。
 notEmptyPatList : List Pat -> Bool
 notEmptyPatList [] = False
 notEmptyPatList _ = True
@@ -554,9 +653,11 @@ notEmptyPatList _ = True
 -- ---------------------------------------------------------------
 -- 表达式 / 模式的自由名引用
 -- ---------------------------------------------------------------
+-- | 内部：表达式是否引用了某个自由名（不区分绑定作用域）。
 exprMentions : String -> Expr -> Bool
 exprMentions name e = mentionsExpr lintFuel name e
 
+-- | 内部：`exprMentions` 的 fuel 版本，覆盖全部表达式构造子。
 mentionsExpr : Int -> String -> Expr -> Bool
 mentionsExpr fuel name e = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case e of
@@ -594,6 +695,7 @@ else case e of
   -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
   EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
 
+-- | 内部：模板字面量各段里的引用（洞内表达式参与扫描）。
 mentionsInterpParts : Int -> String -> List InterpPart -> Bool
 mentionsInterpParts fuel name parts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case parts of
@@ -601,42 +703,49 @@ else case parts of
   (IPText s) :: rest => mentionsInterpParts (fuel - 1) name rest
   (IPHole e) :: rest => mentionsExpr (fuel - 1) name e || mentionsInterpParts (fuel - 1) name rest
 
+-- | 内部：任一表达式是否引用该名字。
 mentionsExprs : Int -> String -> List Expr -> Bool
 mentionsExprs fuel name exprs = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case exprs of
   [] => False
   e :: rest => mentionsExpr (fuel - 1) name e || mentionsExprs (fuel - 1) name rest
 
+-- | 内部：record 字段值是否引用该名字。
 mentionsFields : Int -> String -> List (Pair String Expr) -> Bool
 mentionsFields fuel name fields = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case fields of
   [] => False
   (Pair f e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
 
+-- | 内部：let 绑定右值是否引用该名字。
 mentionsBinds : Int -> String -> List (Pair Pat Expr) -> Bool
 mentionsBinds fuel name binds = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case binds of
   [] => False
   (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
 
+-- | 内部：任一 case alt 体是否引用该名字。
 mentionsAlts : Int -> String -> List (Pair Pat Expr) -> Bool
 mentionsAlts fuel name alts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case alts of
   [] => False
   (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
 
+-- | 内部：任一局部函数 clause 体是否引用该名字。
 mentionsClauses : Int -> String -> List (Pair (List Pat) Expr) -> Bool
 mentionsClauses fuel name clauses = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case clauses of
   [] => False
   (Pair pats e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
 
+-- | 内部：任一 do 语句是否引用该名字。
 mentionsStmts : Int -> String -> List DoStmt -> Bool
 mentionsStmts fuel name stmts = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case stmts of
   [] => False
   stmt :: rest => mentionsStmt (fuel - 1) name stmt || mentionsStmts (fuel - 1) name rest
 
+-- | 内部：单条 do 语句是否引用该名字。
 mentionsStmt : Int -> String -> DoStmt -> Bool
 mentionsStmt fuel name stmt = if fuel <= 0 then lintFuelExhausted "mention scan"
 else case stmt of
@@ -646,6 +755,8 @@ else case stmt of
 -- ---------------------------------------------------------------
 -- 规则 1：literal-if-chain
 -- ---------------------------------------------------------------
+-- | 内部：识别 `x == 字面量` 形式的条件，返回 scrutinee 名与字面量原文；其他条件返回
+-- `Nothing`。
 condShape : List String -> List PTok -> Expr -> Maybe (Pair String String)
 condShape lines toks (EApp (EVar op opSp) args appSp) = if op == "==" then case args of
   [lhs, rhs] => case lhs of
@@ -659,6 +770,7 @@ condShape lines toks (EApp (EVar op opSp) args appSp) = if op == "==" then case 
 else Nothing
 condShape lines toks _ = Nothing
 
+-- | 内部：从 if 表达式提取字面量分派链；条件不是 `==` 字面量比较时返回 `Nothing`。
 chainOf : List String -> List PTok -> Expr -> Maybe ChainRes
 chainOf lines toks (EIf cond yes no sp) = case condShape lines toks cond of
   Nothing => Nothing
@@ -666,9 +778,12 @@ chainOf lines toks (EIf cond yes no sp) = case condShape lines toks cond of
     Just (chainCollect lines toks name [ChainItem lit (exprText lines toks yes) yes] no)
 chainOf lines toks _ = Nothing
 
+-- | 内部：沿 else 分支收集同 scrutinee 的 if/else-if 链。
 chainCollect : List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
 chainCollect lines toks name acc expr = chainCollectFuel lintFuel lines toks name acc expr
 
+-- | 内部：`chainCollect` 的 fuel 版本；scrutinee 变化或遇到非 if 时把剩余表达式当作
+-- default 分支。
 chainCollectFuel : Int -> List String -> List PTok -> String -> List ChainItem -> Expr -> ChainRes
 chainCollectFuel fuel lines toks name acc expr = if fuel <= 0 then lintFuelExhausted "chain collection"
 else case expr of
@@ -680,20 +795,26 @@ else case expr of
     Nothing => ChainRes name (reverse acc) "_" (exprText lines toks expr) expr
   _ => ChainRes name (reverse acc) "_" (exprText lines toks expr) expr
 
+-- | 内部：渲染一条 case 分支（`indent + 2` 个空格下的 `字面量 => then 原文`）。
 renderChainItem : Int -> ChainItem -> String
 renderChainItem indent (ChainItem lit thenText expr) = "${spaces (indent + 2)}${lit} => ${thenText}"
 
+-- | 内部：链上每个 then 分支都能安全地收束在自己的行片段末尾。
 itemsSegmentsOk : List String -> List PTok -> List ChainItem -> Bool
 itemsSegmentsOk lines toks [] = True
 itemsSegmentsOk lines toks ((ChainItem lit thenText expr) :: rest) =
   segmentOk lines toks expr && itemsSegmentsOk lines toks rest
 
+-- | 内部：字面量链可安全改写成 case 的判据：行区间干净、各 then 分支收束行尾、default
+-- 分支也能收束。
 chainFixable : List String -> List PTok -> Span -> List ChainItem -> Expr -> Bool
 chainFixable lines toks sp items defaultExpr =
   linesCleanRange lines (spanStartLine sp) (spanEndLine sp)
     && itemsSegmentsOk lines toks items
     && segmentOk lines toks defaultExpr
 
+-- | 内部：`literal-if-chain` 的 case 回退：链至少两个分支且可修复时，产出把整条链改写成
+-- `case scrut of` 的 finding；否则不产出（仍可能由提升分支处理）。
 chainFindings : List String -> List PTok -> Span -> String -> List ChainItem -> String -> String -> Expr -> List Finding
 chainFindings lines toks sp name items defaultPat defaultText defaultExpr = if not (atLeastTwo items) then []
 else if not (chainFixable lines toks sp items defaultExpr) then []
@@ -711,6 +832,7 @@ else
   in [ Finding startLine (spanStartCol sp) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) edit
   ]
 
+-- | 内部：继续遍历各 then 分支，链内部的 dispatch 仍要检查。
 walkChainItems : Int -> List String -> List PTok -> List ChainItem -> List Finding
 walkChainItems fuel lines toks items = if fuel <= 0 then lintFuelExhausted "traversal"
 else case items of
@@ -722,28 +844,35 @@ else case items of
 -- ---------------------------------------------------------------
 -- 规则 1b：if dispatch 提升（Bool 变量 / 字面量链）
 --
--- 一个 if 分派 = scrutinee + 若干 (模式, body) 叶子。当它正好是外层 clause/alt 的
--- 直接体、且 scrutinee 是外层模式变量时，把叶子提升进外层模式：
---   * clause → 多条同名 clause（要求该名字只有一条 clause）；
---   * alt    → 更细的 alt 模式（要求该 alt 是最后一个）。
--- 这是 lift 语义，不经过 case；字面量链提升失败时仍由 walkIf 走原有 case 回退。
+-- 一个 if 分派 = scrutinee + 若干（模式, body）叶子。当它正好是外层 clause/alt 的直接体、
+-- 且 scrutinee 是外层模式变量时，把叶子提升进外层模式：clause → 多条同名 clause（要求该
+-- 名字只有一条 clause），alt → 更细的 alt 模式（要求该 alt 是最后一个）。提升是 lift 语义，
+-- 不经过 case；字面量链提升失败时仍由 `walkIf` 走 case 回退。
 -- ---------------------------------------------------------------
+-- | 提升后的一条叶子：外层模式变量的替换表，加上该叶子的 body。
 record LiftLeaf where
+  -- | 变量名 → 替换后的模式原文（如 `True`、`"a"`、`Just x`）。
   leafSubsts : List (Pair String String)
+  -- | 提升到 clause/alt 体位置的表达式。
   leafBody : Expr
 
+-- | 内部：替换表里是否已经有该变量名。
 hasSubst : String -> List (Pair String String) -> Bool
 hasSubst name substs = memName name (map (\p => firstOf p) substs)
 
+-- | 内部：外层上下文能否承接拆分：clause 要求是该名字唯一的 clause，alt 要求是最后一个。
 laneSplitOk : Lane -> Bool
 laneSplitOk (LClause line pats last single) = single
 laneSplitOk (LAlt line pat last) = last
 
+-- | 内部：把变量名替换成模式文本：body 引用该变量时用 `name@pat`（`_` 模式保留原名），
+-- 否则只用模式本身。
 substReplacement : String -> String -> Expr -> String
 substReplacement name pat body =
   if exprMentions name body then if pat == "_" then name else "${name}@${pat}" else pat
 
--- (token, 替换文本)：token 来自外层模式里的变量出现点。
+-- | 内部：把替换表映射成（外层模式里的变量 token, 替换文本）对；变量在外层模式里定位不到
+-- token 的项直接跳过。
 substTokenPairs : List PTok -> Lane -> List (Pair String String) -> Expr -> List (Pair PTok String)
 substTokenPairs toks lane [] body = []
 substTokenPairs toks lane ((Pair name pat) :: rest) body = case laneVarSpan name lane of
@@ -752,6 +881,7 @@ substTokenPairs toks lane ((Pair name pat) :: rest) body = case laneVarSpan name
     Nothing => substTokenPairs toks lane rest body
     Just tok => Pair tok (substReplacement name pat body) :: substTokenPairs toks lane rest body
 
+-- | 内部：替换表里的每个变量都能在外层模式里定位到 token（否则不能应用替换）。
 substsApplicable : List PTok -> Lane -> List (Pair String String) -> Bool
 substsApplicable toks lane [] = True
 substsApplicable toks lane ((Pair name pat) :: rest) = case laneVarSpan name lane of
@@ -760,24 +890,29 @@ substsApplicable toks lane ((Pair name pat) :: rest) = case laneVarSpan name lan
     Nothing => False
     Just tok => substsApplicable toks lane rest
 
+-- | 内部：按列号降序排序替换对（同一行内从右往左替换，避免列偏移）。
 sortSubstDesc : List (Pair PTok String) -> List (Pair PTok String)
 sortSubstDesc [] = []
 sortSubstDesc (x :: rest) = insertSubstDesc x (sortSubstDesc rest)
 
+-- | 内部：把一个替换对按列号降序插入已排序列表。
 insertSubstDesc : Pair PTok String -> List (Pair PTok String) -> List (Pair PTok String)
 insertSubstDesc x [] = [x]
 insertSubstDesc x (y :: rest) =
   if tokCol (firstOf x) > tokCol (firstOf y) then x :: y :: rest else y :: insertSubstDesc x rest
 
+-- | 内部：按给定顺序把替换对逐个应用到一行文本。
 applySubstPairs : List (Pair PTok String) -> String -> String
 applySubstPairs [] headText = headText
 applySubstPairs ((Pair tok repl) :: rest) headText =
   applySubstPairs rest (replaceIdentInLine headText tok repl)
 
+-- | 内部：生成该叶子的 clause/alt 头文本（在外层 head 里替换被提升的变量）。
 leafHeadText : List PTok -> Lane -> String -> LiftLeaf -> String
 leafHeadText toks lane headText leaf =
   applySubstPairs (sortSubstDesc (substTokenPairs toks lane leaf.leafSubsts leaf.leafBody)) headText
 
+-- | 内部：为每个叶子生成「头 + body」行；任一 body 不是可切片的单行时整体放弃（`Nothing`）。
 liftLeafLines : List String -> List PTok -> Lane -> String -> List LiftLeaf -> Maybe (List String)
 liftLeafLines lines toks lane headText [] = Just []
 liftLeafLines lines toks lane headText (leaf :: rest) =
@@ -793,9 +928,11 @@ liftLeafLines lines toks lane headText (leaf :: rest) =
       Nothing => Nothing
       Just tailLines => Just ("${head} ${bodyText}" :: tailLines)
 
+-- | 内部：叶子 body 在原位置能否安全改写到新位置。
 leafPlacementOk : List String -> List PTok -> LiftLeaf -> Bool
 leafPlacementOk lines toks leaf = segmentOk lines toks leaf.leafBody
 
+-- | 内部：全部叶子都可放置，且替换表都能在外层模式里定位。
 leavesOk : List String -> List PTok -> Lane -> List LiftLeaf -> Bool
 leavesOk lines toks lane [] = True
 leavesOk lines toks lane (leaf :: rest) =
@@ -803,12 +940,14 @@ leavesOk lines toks lane (leaf :: rest) =
     && substsApplicable toks lane leaf.leafSubsts
     && leavesOk lines toks lane rest
 
+-- | 内部：if 提升可安全应用：外层 head 单行、行区间干净、全部叶子可放置。
 liftLeavesFixable : List String -> List PTok -> Lane -> List LiftLeaf -> Span -> Bool
 liftLeavesFixable lines toks lane leaves sp =
   laneHeadSingleLine lane
     && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
     && leavesOk lines toks lane leaves
 
+-- | 内部：构造把外层 head 行到 if 结束行整体替换的编辑；生成失败时 `Nothing`。
 liftLeavesEdit : List String -> List PTok -> Lane -> List LiftLeaf -> Span -> Maybe Edit
 liftLeavesEdit lines toks lane leaves sp =
   let
@@ -817,8 +956,9 @@ liftLeavesEdit lines toks lane leaves sp =
     Nothing => Nothing
     Just newLines => Just (Edit (laneHeadLine lane) (spanEndLine sp) newLines)
 
--- Bool 变量 if / else-if 链 → 笛卡尔叶子。遇到非外层模式变量、重复 scrutinee 或
--- 非 if 的 else 时，把剩余表达式当作叶子体（保留原 if）。
+-- | 内部：把 Bool 变量 if / else-if 链展开成笛卡尔叶子（True 进 then、False 进 else）。遇到
+-- 非变量条件、已替换过的 scrutinee 或外层出现多次的变量时，把剩余表达式当作叶子体（保留
+-- 原 if）。
 boolIfLeaves : Lane -> List (Pair String String) -> Expr -> List LiftLeaf
 boolIfLeaves lane substs (EIf cond yes no sp) = case cond of
   EVar name _ =>
@@ -828,6 +968,8 @@ boolIfLeaves lane substs (EIf cond yes no sp) = case cond of
   _ => [LiftLeaf substs (EIf cond yes no sp)]
 boolIfLeaves lane substs expr = [LiftLeaf substs expr]
 
+-- | 内部：识别可提升的 if 分派，返回 scrutinee 名与叶子：Bool 变量走 `boolIfLeaves`，其余
+-- 走字面量链。
 ifDispatchLeaves : List String -> List PTok -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
 ifDispatchLeaves lines toks lane (EIf cond yes no sp) = case cond of
   EVar name _ => if countLaneVar name lane == 1 then
@@ -838,9 +980,12 @@ ifDispatchLeaves lines toks lane (EIf cond yes no sp) = case cond of
   _ => literalIfLeaves lines toks lane (EIf cond yes no sp)
 ifDispatchLeaves lines toks lane _ = Nothing
 
+-- | 内部：把一个字面量链分支转成提升叶子。
 literalChainLeaf : String -> ChainItem -> LiftLeaf
 literalChainLeaf name item = LiftLeaf [Pair name item.chainItemLit] item.chainItemThen
 
+-- | 内部：字面量链转提升叶子（default 分支也是一条叶子）；不足两个分支或变量在外层出现
+-- 多次时放弃。
 literalIfLeaves : List String -> List PTok -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
 literalIfLeaves lines toks lane expr = case chainOf lines toks expr of
   Nothing => Nothing
@@ -849,6 +994,8 @@ literalIfLeaves lines toks lane expr = case chainOf lines toks expr of
     else Just
       (Pair name (append (map (literalChainLeaf name) items) [LiftLeaf [Pair name defPat] defExpr]))
 
+-- | 内部：`literal-if-chain` 的提升分支：判据与编辑都成立时产出 finding，否则留给 `walkIf`
+-- 的 case 回退。
 ifLiftFindings : List String -> List PTok -> Lane -> Expr -> List Finding
 ifLiftFindings lines toks lane expr = case ifDispatchLeaves lines toks lane expr of
   Nothing => []
@@ -864,26 +1011,32 @@ ifLiftFindings lines toks lane expr = case ifDispatchLeaves lines toks lane expr
 -- 规则 2：dispatch-lift（case / let）
 -- 单 alt 替换外层变量；多 alt 拆 clause / alt。渲染与安全判据共用同一套 lane 工具。
 -- ---------------------------------------------------------------
+-- | 内部：外层 head 的行号。
 laneHeadLine : Lane -> Int
 laneHeadLine (LClause line pats last single) = line
 laneHeadLine (LAlt line pat last) = line
 
+-- | 内部：该 clause/alt 是否是最后一个。
 laneLast : Lane -> Bool
 laneLast (LClause line pats last single) = last
 laneLast (LAlt line pat last) = last
 
+-- | 内部：外层模式绑定的全部变量名。
 laneVars : Lane -> List String
 laneVars (LClause line pats last single) = patVars pats
 laneVars (LAlt line pat last) = patVarFuel lintFuel pat
 
+-- | 内部：某变量名在外层模式里出现的次数。
 countLaneVar : String -> Lane -> Int
 countLaneVar name (LClause line pats last single) = countVar name pats
 countLaneVar name (LAlt line pat last) = countPatFuel lintFuel name pat
 
+-- | 内部：某变量名在外层模式里第一次出现的 span。
 laneVarSpan : String -> Lane -> Maybe Span
 laneVarSpan name (LClause line pats last single) = patVarSpanInPats name pats
 laneVarSpan name (LAlt line pat last) = patVarSpan name pat
 
+-- | 内部：外层 head 的文本：被提升表达式嵌在同一行时只取它之前的行前缀，否则取整行。
 laneHeadText : List String -> Lane -> Int -> Int -> String
 laneHeadText lines lane startLine startCol =
   let
@@ -891,17 +1044,19 @@ laneHeadText lines lane startLine startCol =
   in if startLine == line then trimEnd (prefixBeforeCol (lineAt lines line) startCol)
   else lineAt lines line
 
+-- | 内部：一组模式是否都落在同一行。
 patsOnLine : List Pat -> Int -> Bool
 patsOnLine [] line = True
 patsOnLine (p :: rest) line =
   spanStartLine (patSpan p) == line && spanEndLine (patSpan p) == line && patsOnLine rest line
 
+-- | 内部：外层 head（clause 的模式 / alt 的模式）是否单行。
 laneHeadSingleLine : Lane -> Bool
 laneHeadSingleLine (LClause line pats last single) = patsOnLine pats line
 laneHeadSingleLine (LAlt line pat last) = spanSingleLine (patSpan pat)
 
--- 把外层 head 里的被提升变量替换成新模式。startLine/startCol 是被提升表达式
--- 的起点：嵌在 head 行内时只保留表达式之前的前缀（避免把 `case p of` 留在 clause 头）。
+-- | 内部：把外层 head 里的被提升变量替换成新模式。`startLine` / `startCol` 是被提升表达式
+-- 的起点：表达式嵌在 head 行内时只保留它之前的前缀（避免把 `case p of` 留在 clause 头）。
 laneReplace : List String -> List PTok -> Lane -> String -> String -> Int -> Int -> String
 laneReplace lines toks lane name replacement startLine startCol =
   let
@@ -912,13 +1067,15 @@ laneReplace lines toks lane name replacement startLine startCol =
       Nothing => headText
       Just tok => replaceIdentInLine headText tok replacement
 
--- 体在原位置的放置是否可安全改写：单行体要收束行片段；多行体要求从独立行开始。
+-- | 内部：体在原位置的放置是否可安全改写：单行体要收束行片段，多行体要求从独立行开始。
 liftBodyPlacementOk : List String -> List PTok -> Pat -> Expr -> Bool
 liftBodyPlacementOk lines toks altPat body =
   if exprSingleLine body then segmentOk lines toks body
   else if exprStartLine body > spanStartLine (patSpan altPat) then True
   else spanStartCol (exprSpan body) > indentOf (lineAt lines (exprStartLine body)) + 1
 
+-- | 内部：case 提升的可行判据：alt 是最后一个、head 与 alt 模式单行、行区间干净、body
+-- 放置安全。
 liftFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
 liftFixable lines toks lane pat body sp =
   laneLast lane
@@ -927,6 +1084,7 @@ liftFixable lines toks lane pat body sp =
     && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
     && liftBodyPlacementOk lines toks pat body
 
+-- | 内部：构造单 alt 提升的编辑：head 里替换变量，body 按单行/多行贴到 head 后或缩进成块。
 liftEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> Edit
 liftEdit lines toks lane pat body name sp =
   let
@@ -944,27 +1102,33 @@ liftEdit lines toks lane pat body name sp =
       else newHead :: blockBodyLines lines body target
   in Edit headLine (spanEndLine sp) newLines
 
+-- | 内部：单 alt case 提升的判据与 finding：变量在外层只出现一次、模式可提升、模式变量不与
+-- 外层其他变量冲突且可安全改写。
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
   if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
 
+-- | 内部：外层上下文是否是顶层 clause。
 laneIsClause : Lane -> Bool
 laneIsClause (LClause line pats last single) = True
 laneIsClause (LAlt line pat last) = False
 
+-- | 内部：`name@pat` 形式的模式文本；带参数或 record 模式加括号。
 asPatText : List String -> List PTok -> String -> Pat -> String
 asPatText lines toks name pat =
   if patNeedsParen pat then "${name}@(${patText lines toks pat})"
   else "${name}@${patText lines toks pat}"
 
+-- | 内部：对 `case x of` 单 alt 形式的提升；scrutinee 不是变量或 alt 不止一个时不产出。
 liftCase : List String -> List PTok -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
 liftCase lines toks lane caseExpr scrut ([Pair pat body]) sp = case scrut of
   EVar name nsp => liftCaseOk lines toks lane pat body name sp
   _ => []
 liftCase lines toks lane caseExpr scrut _ sp = []
 
+-- | 内部：对 `let pat = x` 的提升；右值不是变量或模式不可提升时不产出。
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
   if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftLetEdit lines toks lane pat body name sp))
@@ -972,6 +1136,8 @@ liftLet lines toks lane sp pat (EVar name nsp) body =
   else []
 liftLet lines toks lane sp pat _ body = []
 
+-- | 内部：let 提升的可行判据：alt 是最后一个、head 与 let 模式单行、行区间干净、body 放置
+-- 安全。
 liftLetFixable : List String -> List PTok -> Lane -> Pat -> Expr -> Span -> Bool
 liftLetFixable lines toks lane pat body sp =
   laneLast lane
@@ -980,10 +1146,12 @@ liftLetFixable lines toks lane pat body sp =
     && linesCleanRange lines (laneHeadLine lane) (spanEndLine sp)
     && liftLetPlacementOk lines toks sp body
 
+-- | 内部：let 提升后 body 的放置判据：单行要收束行片段，多行要另起一行。
 liftLetPlacementOk : List String -> List PTok -> Span -> Expr -> Bool
 liftLetPlacementOk lines toks sp body =
   if exprSingleLine body then segmentOk lines toks body else exprStartLine body > spanStartLine sp
 
+-- | 内部：构造 let 提升的编辑：单行 body 与 head 同行，多行 body 按缩进成块。
 liftLetEdit : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> Edit
 liftLetEdit lines toks lane pat body name sp =
   let
@@ -999,6 +1167,7 @@ liftLetEdit lines toks lane pat body name sp =
       else newHead :: blockBodyLines lines body target
   in Edit headLine (spanEndLine sp) newLines
 
+-- | 内部：对直接体分派到 case 提升或 let 提升（递归 let 不处理）。
 liftFindings : List String -> List PTok -> Lane -> Expr -> List Finding
 liftFindings lines toks lane (expr@(ECase scrut alts sp)) =
   liftCase lines toks lane expr scrut alts sp
@@ -1014,23 +1183,29 @@ liftFindings lines toks lane _ = []
 -- 判据不再语法层证明穷尽性：lint 的输入应视为能通过 `vuna check` 的程序，
 -- 而 DT 已强制 `case` 穷尽；`case` 与多 clause 的匹配语义等价（分支/clause 顺序一致）。
 -- 纯映射表（分支体不引用 scrutinee）同样拆成多 clause。
+-- | 内部：模式是否是通配 `_`。
 isWildPat : Pat -> Bool
 isWildPat (PWild sp) = True
 isWildPat _ = False
 
+-- | 内部：该 alt 能否搬进 clause：模式变量不与外层其他变量冲突；引用 scrutinee 时模式必须
+-- 是通配或可提升模式。
 caseAltLiftableOk : String -> List String -> Pair Pat Expr -> Bool
 caseAltLiftableOk x others (Pair pat body) =
   not (intersectsNames (patVarFuel lintFuel pat) others)
     && (if exprMentions x body then isWildPat pat || liftablePat pat else True)
 
+-- | 内部：逐个 alt 检查可拆分性。
 altsLiftableGo : String -> List String -> List (Pair Pat Expr) -> Bool
 altsLiftableGo x others [] = True
 altsLiftableGo x others (alt :: rest) =
   caseAltLiftableOk x others alt && altsLiftableGo x others rest
 
+-- | 内部：全部 alt 都可拆分（外层变量取 clause head 绑定的名字）。
 altsLiftable : String -> List Pat -> List (Pair Pat Expr) -> Bool
 altsLiftable x pats alts = altsLiftableGo x (removeName x (patVars pats)) alts
 
+-- | 内部：把一个 alt 渲染成 clause 行：head 里替换 scrutinee，body 按单行/多行放置。
 caseAltClauseLines : List String -> List PTok -> String -> PTok -> String -> Int -> Pat -> Expr -> List String
 caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   let
@@ -1041,23 +1216,27 @@ caseAltClauseLines lines toks headPrefix varTok x headIndent pat body =
   in if exprSingleLine body then ["${newHead} ${exprText lines toks body}"]
   else newHead :: blockBodyLines lines body (headIndent + 2)
 
+-- | 内部：把全部 alt 渲染成多条 clause 行。
 clausesForAlts : List String -> List PTok -> String -> PTok -> String -> Int -> List (Pair Pat Expr) -> List String
 clausesForAlts lines toks headPrefix varTok x headIndent [] = []
 clausesForAlts lines toks headPrefix varTok x headIndent ((Pair pat body) :: rest) =
   append (caseAltClauseLines lines toks headPrefix varTok x headIndent pat body)
     (clausesForAlts lines toks headPrefix varTok x headIndent rest)
 
+-- | 内部：每个 alt 的 body 在原位置都可安全放置。
 altsPlacementOk : List String -> List PTok -> List (Pair Pat Expr) -> Bool
 altsPlacementOk lines toks [] = True
 altsPlacementOk lines toks ((Pair pat body) :: rest) =
   liftBodyPlacementOk lines toks pat body && altsPlacementOk lines toks rest
 
+-- | 内部：case 拆 clause 的可行判据：head 模式单行、行区间干净、各 body 可放置。
 caseToClausesFixable : List String -> List PTok -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Bool
 caseToClausesFixable lines toks pats headLine sp alts =
   patsOnLine pats headLine
     && linesCleanRange lines headLine (spanEndLine sp)
     && altsPlacementOk lines toks alts
 
+-- | 内部：构造把整个顶层 case 表达式替换成多条 clause 的编辑。
 caseToClausesEdit : List String -> List PTok -> String -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Edit
 caseToClausesEdit lines toks x pats headLine sp alts =
   let
@@ -1074,6 +1253,8 @@ caseToClausesEdit lines toks x pats headLine sp alts =
     headIndent = indentOf headText
   in Edit headLine (spanEndLine sp) (clausesForAlts lines toks headPrefix varTok x headIndent alts)
 
+-- | 内部：函数体是 `case x of`、x 在 head 只出现一次且该名字只有一条 clause 时，产出拆成
+-- 多条同名 clause 的 finding。
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
@@ -1089,6 +1270,8 @@ caseToClauses lines toks headLine name pats _ singleClause = []
 -- 相互递归组统一把 fuel 放在第 0 形参并 `if fuel <= 0` 守卫：这是编译器
 -- `tryFuelThread` 判据能接受的形态（每个环至少一条 `fuel - k` 严格下降边）。
 -- ---------------------------------------------------------------
+-- | 内部：遍历 clause/alt 的直接体：先尝试 dispatch 提升，成功即不再下沉，否则继续递归并
+-- 报告可回退的改写。
 scanBodyPos : Int -> List String -> List PTok -> Maybe Lane -> Expr -> List Finding
 scanBodyPos fuel lines toks maybeLane expr = if fuel <= 0 then lintFuelExhausted "traversal"
 else case maybeLane of
@@ -1099,13 +1282,14 @@ else case maybeLane of
     in if not (isNilList lifted) then append lifted (liftFindings lines toks lane expr)
     else append (liftFindings lines toks lane expr) (walkExpr fuel lines toks expr)
 
--- `handle` 标记载荷识别（编码见 `Frontend/Ast.handleSyntax`）。
+-- | 内部：识别 `handle` 标记载荷（comp / return / op 子句），编码见 `Frontend/Ast.handleSyntax`。
 handlePartsOf : Expr -> Maybe (Pair Expr (Pair Expr Expr))
 handlePartsOf (EApp (EVar name _) ([comp, ret, opH]) _) =
   if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
 handlePartsOf _ = Nothing
 
--- 只遍历用户写的部分（comp / return 体 / op 子句体），不把合成 case 当 lane 来源。
+-- | 内部：只遍历 handle 里用户写的部分（comp、return 体、op 子句体），不把 parser 合成的
+-- case 当成 lane 来源。
 walkHandlePayload : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> List Finding
 walkHandlePayload fuel lines toks comp ret opH = if fuel <= 0 then lintFuelExhausted "traversal"
 else
@@ -1119,6 +1303,7 @@ else
       _ => []
   in append (append (walkExpr (fuel - 1) lines toks comp) retFindings) opFindings
 
+-- | 内部：遍历 op 处理器各 alt 的体。
 walkHandleAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
 walkHandleAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case alts of
@@ -1126,6 +1311,7 @@ else case alts of
   (Pair _ body) :: rest =>
     append (walkExpr (fuel - 1) lines toks body) (walkHandleAlts (fuel - 1) lines toks rest)
 
+-- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> List String -> List PTok -> Expr -> List Finding
 walkExpr fuel lines toks e = if fuel <= 0 then lintFuelExhausted "traversal"
 else case e of
@@ -1167,6 +1353,7 @@ else case e of
   -- 模板字面量：洞内表达式同样参与规则遍历。
   EInterp multi parts sp => walkInterpParts (fuel - 1) lines toks parts
 
+-- | 内部：遍历模板字面量各段里的洞表达式。
 walkInterpParts : Int -> List String -> List PTok -> List InterpPart -> List Finding
 walkInterpParts fuel lines toks parts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case parts of
@@ -1175,6 +1362,7 @@ else case parts of
   (IPHole e) :: rest =>
     append (walkExpr (fuel - 1) lines toks e) (walkInterpParts (fuel - 1) lines toks rest)
 
+-- | 内部：处理 if：可识别的字面量链走 case 回退 finding，否则照常遍历条件与两个分支。
 walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
 walkIf fuel lines toks e cond yes no = if fuel <= 0 then lintFuelExhausted "traversal"
 else case chainOf lines toks e of
@@ -1187,12 +1375,14 @@ else case chainOf lines toks e of
     else append (chainFindings lines toks (exprSpan e) name items defPat defText defExpr)
       (append (walkChainItems (fuel - 1) lines toks items) (walkExpr (fuel - 1) lines toks defExpr))
 
+-- | 内部：遍历一组表达式。
 walkExprs : Int -> List String -> List PTok -> List Expr -> List Finding
 walkExprs fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "traversal"
 else case exprs of
   [] => []
   e :: rest => append (walkExpr (fuel - 1) lines toks e) (walkExprs (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 record 字段值。
 walkFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
 walkFields fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "traversal"
 else case fields of
@@ -1200,6 +1390,7 @@ else case fields of
   (Pair f e) :: rest =>
     append (walkExpr (fuel - 1) lines toks e) (walkFields (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 let 绑定右值。
 walkBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
 walkBinds fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "traversal"
 else case binds of
@@ -1207,6 +1398,7 @@ else case binds of
   (Pair pat e) :: rest =>
     append (walkExpr (fuel - 1) lines toks e) (walkBinds (fuel - 1) lines toks rest)
 
+-- | 内部：逐个 alt 体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
 walkAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
 walkAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case alts of
@@ -1217,6 +1409,7 @@ else case alts of
     in append (scanBodyPos (fuel - 1) lines toks (Just lane) body)
       (walkAlts (fuel - 1) lines toks rest)
 
+-- | 内部：遍历局部函数 clause 体（不提供 lane，因此不做 clause 级提升）。
 walkLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
 walkLocalClauses fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "traversal"
 else case clauses of
@@ -1224,6 +1417,7 @@ else case clauses of
   (Pair pats body) :: rest =>
     append (walkExpr (fuel - 1) lines toks body) (walkLocalClauses (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 do 语句列表。
 walkStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
 walkStmts fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmts of
@@ -1231,6 +1425,7 @@ else case stmts of
   stmt :: rest =>
     append (walkStmt (fuel - 1) lines toks stmt) (walkStmts (fuel - 1) lines toks rest)
 
+-- | 内部：遍历单条 do 语句的表达式。
 walkStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
 walkStmt fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmt of
@@ -1245,30 +1440,36 @@ else case stmt of
 -- 模板插值洞（`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，
 -- 无法用 `exprText` 可靠切片（已知边界，见 docs/reference/lint.md）。
 -- ---------------------------------------------------------------
+-- | 内部：去掉行首空白。
 trimStart : String -> String
 trimStart s = strPack (dropLeadingSpace (strUnpack s))
 
+-- | 内部：去掉开头的空白字符。
 dropLeadingSpace : List Int -> List Int
 dropLeadingSpace [] = []
 dropLeadingSpace (c :: rest) = if isSpaceChar c then dropLeadingSpace rest else c :: rest
 
+-- | 内部：字符串首个字符码；空串为 `Nothing`。
 firstChar : String -> Maybe Int
 firstChar s = case strUnpack s of
   c :: rest => Just c
   [] => Nothing
 
+-- | 内部：字符串最后一个字符码；空串为 `Nothing`。
 lastChar : String -> Maybe Int
 lastChar s = case reverse (strUnpack s) of
   c :: rest => Just c
   [] => Nothing
 
+-- | 内部：去掉最后一个字符。
 dropLastChar : String -> String
 dropLastChar s = strPack (takeChars (strLength s - 1) (strUnpack s))
 
+-- | 内部：去掉第一个字符。
 dropFirstChar : String -> String
 dropFirstChar s = strPack (dropChars 1 (strUnpack s))
 
--- 只剥离**紧邻**表达式的成对括号（可多层）：`f (a :: [])` → `f [a]`；
+-- | 内部：剥掉紧邻表达式的前后缀成对括号（可多层）：`f (a :: [])` → `f [a]`，而
 -- `f (g (a :: []))` 只剥最内层，不会误删属于 `g` 的外层括号。
 stripParens : Int -> String -> String -> Pair String String
 stripParens fuel prefix suffix = if fuel <= 0 then Pair prefix suffix
@@ -1281,6 +1482,7 @@ else
       _ => Pair prefix suffix
     _ => Pair prefix suffix
 
+-- | 内部：token 的源码长度（模板字面量与 EOF 记 0）。
 tokLen : PTok -> Int
 tokLen (PTok (TSym s) p) = strLength s
 tokLen (PTok (TIdent s) p) = strLength s
@@ -1291,13 +1493,14 @@ tokLen (PTok (TStr s) p) = strLength s + 2
 tokLen (PTok (TTmpl multi parts endP) p) = 0
 tokLen (PTok TEof p) = 0
 
--- span 末 token 的**结束列之后**（1-based 列）；找得到末 token 才返回。
+-- | 内部：span 末 token 结束列之后的位置（1 基）；找不到末 token 时 `Nothing`。
 exprEndColAfter : List PTok -> Int -> Int -> Maybe Int
 exprEndColAfter toks line col = case tokenAt toks line col of
   Nothing => Nothing
   Just tok => Just (col + tokLen tok)
 
--- 用源码切片把整个表达式替换成 replacement（单行、行内无注释/tab/CR）。
+-- | 内部：把整个单行表达式替换成 replacement 的编辑；跨行、行区间不干净或定位不到结束列时
+-- `Nothing`。
 exprEdit : List String -> List PTok -> Expr -> String -> Maybe Edit
 exprEdit lines toks e replacement = if not (exprSingleLine e) then Nothing
 else if not (linesCleanRange lines (exprStartLine e) (spanEndLine (exprSpan e))) then Nothing
@@ -1312,16 +1515,18 @@ else case exprEndColAfter toks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCo
     in Just
       (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
 
+-- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Pair Expr Expr)
 consHeadOf (EApp (EVar name _) ([h, t]) sp) =
   if name == "::" || name == "Cons" then Just (Pair h t) else Nothing
 consHeadOf _ = Nothing
 
+-- | 内部：表达式是否为空列表（`Nil` 或 `[]`）。
 isNilExpr : Expr -> Bool
 isNilExpr (EVar name _) = name == "Nil" || isListNilSyntax name
 isNilExpr _ = False
 
--- 闭合链的元素列表；开放链 / 非链返回 Nothing。
+-- | 内部：闭合 cons 链的元素列表；开放链或非链返回 `Nothing`。
 consElems : Int -> Expr -> Maybe (List Expr)
 consElems fuel e = if fuel <= 0 then Nothing
 else case consHeadOf e of
@@ -1330,10 +1535,12 @@ else case consHeadOf e of
     Nothing => Nothing
   Nothing => if isNilExpr e then Just [] else Nothing
 
+-- | 内部：所有切片文本都非空（为空则无法安全生成字面量）。
 allNonEmpty : List String -> Bool
 allNonEmpty [] = True
 allNonEmpty (s :: rest) = s /= "" && allNonEmpty rest
 
+-- | 内部：闭合 cons 链的 finding 与编辑：元素原文齐全时改写成 `[a, b]`，否则只报告 `[...]`。
 consFindings : List String -> List PTok -> Expr -> List Expr -> List Finding
 consFindings lines toks e elems =
   let
@@ -1343,11 +1550,13 @@ consFindings lines toks e elems =
   in [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral suggestion) edit
   ]
 
+-- | 内部：裸 `Nil` 的 finding 与编辑（改写成 `[]`）。
 nilFinding : List String -> List PTok -> Expr -> List Finding
 nilFinding lines toks e =
   [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral "[]") (exprEdit lines toks e "[]")
   ]
 
+-- | 内部：按构造子遍历表达式，收集 list-literal finding（不进入模式）。
 walkListLiteral : Int -> List String -> List PTok -> Expr -> List Finding
 walkListLiteral fuel lines toks e = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case e of
@@ -1396,6 +1605,7 @@ else case e of
   -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
   EInterp multi parts sp => []
 
+-- | 内部：遍历一组表达式的 list-literal。
 walkListLiteralExprs : Int -> List String -> List PTok -> List Expr -> List Finding
 walkListLiteralExprs fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case exprs of
@@ -1404,6 +1614,7 @@ else case exprs of
     append (walkListLiteral (fuel - 1) lines toks e)
       (walkListLiteralExprs (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 record 字段值的 list-literal。
 walkListLiteralFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
 walkListLiteralFields fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case fields of
@@ -1412,6 +1623,7 @@ else case fields of
     append (walkListLiteral (fuel - 1) lines toks e)
       (walkListLiteralFields (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 let 绑定右值的 list-literal。
 walkListLiteralBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
 walkListLiteralBinds fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case binds of
@@ -1420,6 +1632,7 @@ else case binds of
     append (walkListLiteral (fuel - 1) lines toks e)
       (walkListLiteralBinds (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 case alt 体的 list-literal。
 walkListLiteralAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
 walkListLiteralAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case alts of
@@ -1428,6 +1641,7 @@ else case alts of
     append (walkListLiteral (fuel - 1) lines toks body)
       (walkListLiteralAlts (fuel - 1) lines toks rest)
 
+-- | 内部：遍历局部函数 clause 体的 list-literal。
 walkListLiteralLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
 walkListLiteralLocalClauses fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case clauses of
@@ -1436,6 +1650,7 @@ else case clauses of
     append (walkListLiteral (fuel - 1) lines toks body)
       (walkListLiteralLocalClauses (fuel - 1) lines toks rest)
 
+-- | 内部：遍历 do 语句的 list-literal。
 walkListLiteralStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
 walkListLiteralStmts fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case stmts of
@@ -1444,6 +1659,7 @@ else case stmts of
     append (walkListLiteralStmt (fuel - 1) lines toks stmt)
       (walkListLiteralStmts (fuel - 1) lines toks rest)
 
+-- | 内部：遍历单条 do 语句的 list-literal。
 walkListLiteralStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
 walkListLiteralStmt fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "list literal traversal"
 else case stmt of
@@ -1453,38 +1669,44 @@ else case stmt of
 -- ---------------------------------------------------------------
 -- 声明遍历与结果整理
 -- ---------------------------------------------------------------
+-- | 内部：同一名字在后续声明里还有没有函数子句（用于判断是否最后一条 clause）。
 laterHasFun : String -> List Decl -> Bool
 laterHasFun name [] = False
 laterHasFun name (d :: rest) = case d of
   DFun n pats body sp => n == name || laterHasFun name rest
   _ => laterHasFun name rest
 
--- 签名里出现隐式 Pi（`{n : Nat} -> ...`）的函数跳过 clause 级改写：
--- parser 的 clause 模式是所有显式参数，隐式参数由精化器插入；把 case 折叠进 clause
--- 模式会改变模式矩阵与隐式 Pi 的对齐（实测 `vhead : {n : Nat} -> Vec (Succ n) a -> a`
--- 会把 `VCons` 模式错配到 `n : Nat`）。literal-if-chain 与函数参数无关，不受影响。
+-- | 内部：类型里是否出现隐式 Pi（`{n : Nat} -> ...`）。
+--
+-- 这类签名的函数跳过 clause 级改写：parser 的 clause 模式是所有显式参数，隐式参数由精化器
+-- 插入，把 case 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐。literal-if-chain 与函数
+-- 参数无关，不受影响。
 hasImplicitPi : Expr -> Bool
 hasImplicitPi (EPi name implicit _ dom cod sp) = implicit || hasImplicitPi cod
 hasImplicitPi (EApp (EVar "->" _) ([dom, cod]) sp) = hasImplicitPi dom || hasImplicitPi cod
 hasImplicitPi _ = False
 
+-- | 内部：按名字查类型签名。
 sigTyOf : String -> List Decl -> Maybe Expr
 sigTyOf name [] = Nothing
 sigTyOf name (d :: rest) = case d of
   DSig n ctx ty sp => if n == name then Just ty else sigTyOf name rest
   _ => sigTyOf name rest
 
+-- | 内部：该函数的签名是否含隐式 Pi。
 hasImplicitSig : String -> List Decl -> Bool
 hasImplicitSig name decls = case sigTyOf name decls of
   Nothing => False
   Just ty => hasImplicitPi ty
 
+-- | 内部：某名字的函数子句条数。
 countFunClauses : String -> List Decl -> Int
 countFunClauses name [] = 0
 countFunClauses name (d :: rest) = case d of
   DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
   _ => countFunClauses name rest
 
+-- | 内部：扫描 instance 方法：方法体走 dispatch 规则，签名与类型位置走 list-literal。
 scanMethodDecls : List String -> List PTok -> List Decl -> List Finding
 scanMethodDecls lines toks [] = []
 scanMethodDecls lines toks (d :: rest) = case d of
@@ -1498,24 +1720,30 @@ scanMethodDecls lines toks (d :: rest) = case d of
     append (walkListLiteral lintFuel lines toks ty) (scanMethodDecls lines toks rest)
   _ => scanMethodDecls lines toks rest
 
+-- | 内部：record 各字段的类型表达式。
 fieldTypes : List Field -> List Expr
 fieldTypes [] = []
 fieldTypes (f :: rest) = fieldType f :: fieldTypes rest
 
+-- | 内部：data 各构造子的类型表达式。
 ctorTypes : List Ctor -> List Expr
 ctorTypes [] = []
 ctorTypes (c :: rest) = ctorType c :: ctorTypes rest
 
+-- | 内部：trait 各方法的类型表达式。
 traitMethodTypes : List TraitMethod -> List Expr
 traitMethodTypes [] = []
 traitMethodTypes (m :: rest) = m.traitMethodType :: traitMethodTypes rest
 
+-- | 内部：trait 参数的 kind 表达式（未标注 kind 的参数跳过）。
 traitParamKinds : List TraitParam -> List Expr
 traitParamKinds [] = []
 traitParamKinds ((TraitParam name kind) :: rest) = case kind of
   Just e => e :: traitParamKinds rest
   Nothing => traitParamKinds rest
 
+-- | 内部：单条声明的 finding：函数子句做 clause 拆分与直接体扫描（隐式 Pi 签名跳过 clause 级
+-- 改写），签名、axiom、extern、data、record、trait、instance 的类型位置走 list-literal。
 declFindings : List String -> List PTok -> List Decl -> Decl -> List Decl -> List Finding
 declFindings lines toks allDecls (DFun name pats body sp) rest =
   let
@@ -1547,15 +1775,18 @@ declFindings lines toks allDecls (DInstance ctxE head methods sp) rest =
     (append (walkListLiteral lintFuel lines toks head) (scanMethodDecls lines toks methods))
 declFindings lines toks allDecls _ rest = []
 
+-- | 内部：逐条声明收集 finding。
 scanDecls : List String -> List PTok -> List Decl -> List Decl -> List Finding
 scanDecls lines toks allDecls [] = []
 scanDecls lines toks allDecls (d :: rest) =
   append (declFindings lines toks allDecls d rest) (scanDecls lines toks allDecls rest)
 
+-- | 内部：按（行, 列）升序排序 finding（插入排序）。
 sortFindings : List Finding -> List Finding
 sortFindings [] = []
 sortFindings (f :: rest) = insertFinding f (sortFindings rest)
 
+-- | 内部：把一个 finding 按（行, 列）顺序插入。
 insertFinding : Finding -> List Finding -> List Finding
 insertFinding f [] = [f]
 insertFinding f (g :: rest) =
@@ -1563,12 +1794,14 @@ insertFinding f (g :: rest) =
   else if f.findingLine == g.findingLine && f.findingCol <= g.findingCol then f :: g :: rest
   else g :: insertFinding f rest
 
+-- | 内部：big 的替换行范围是否严格包含 small（两端都相等不算包含）。
 editContains : Edit -> Edit -> Bool
 editContains big small =
   big.editStart <= small.editStart
     && big.editEnd >= small.editEnd
     && (big.editStart < small.editStart || big.editEnd > small.editEnd)
 
+-- | 内部：big 的编辑范围是否包含 small 的编辑范围（任一缺编辑则不算）。
 findingHiddenBy : Finding -> Finding -> Bool
 findingHiddenBy big small = case big.findingEdit of
   Nothing => False
@@ -1576,21 +1809,26 @@ findingHiddenBy big small = case big.findingEdit of
     Nothing => False
     Just smallEdit => editContains bigEdit smallEdit
 
+-- | 内部：该 finding 是否被已保留的某个 finding 的编辑范围覆盖。
 coveredBy : List Finding -> Finding -> Bool
 coveredBy [] f = False
 coveredBy (g :: rest) f = findingHiddenBy g f || coveredBy rest f
 
+-- | 内部：丢弃编辑范围被其他 finding 包含的内层 finding（保留外层那条）。
 dedupFindings : List Finding -> List Finding
 dedupFindings findings = dedupGo [] findings
 
+-- | 内部：`dedupFindings` 的累加器实现。
 dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
 
--- lint 的规则看 AST 中缀结构，所以重排必须与程序级 fixity 一致。
--- `programFixities` = 本文件 `infix*` 声明 ++ 该文件 import 闭包可见声明（调用方算）；
--- 这里再把它放在本文件声明（parse 得到的 env）之前——本地优先，与 Loader 一致。
--- 缺声明时严格报 unknown fixity（不静默按默认优先级重排）。
+-- | 解析源码并按全部规则返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
+--
+-- 规则看 AST 的中缀结构，所以重排必须与程序级 fixity 一致：`programFixities` 是本文件的
+-- `infix` 声明加上 import 闭包可见的声明（由调用方算），这里把它放在本文件声明（parse
+-- 得到的 env）之前，本地优先，与 loader 的顺序一致。缺声明时严格报 unknown fixity，不静默
+-- 按默认优先级重排。
 export lintSourceWith : List FixityDecl -> String -> Check (List Finding)
 lintSourceWith programFixities source = case parseSource "<lint>" source of
   ErrC e => ErrC e

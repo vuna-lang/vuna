@@ -1,20 +1,17 @@
+-- | LSP semantic tokens：CST 词法流 + 当前文件声明表 → 语义分类。
+--
+-- 分类来源是 [Vuna.Compiler.Frontend.Cst] 的 `lexCst`（O(bytes)）加同一份源码 parse 得到的
+-- 声明表（模块 / import 前缀、data / record / trait 名、构造子、record 字段、函数 / axiom /
+-- extern、trait 方法、顶层子句参数）。只输出能确定的 token：关键字、数字、标识符分类。
+--
+-- 字符串、注释与运算符不产出语义 token：语义 token 会覆盖 TextMate 语法层，而模板字符串里的
+-- `${}` 插值、转义与运算符只有语法层能正确分层。
+--
+-- 边界：声明表按名字匹配，不做作用域区分（同名遮蔽、跨模块同名符号都按名字归类）；软关键字
+-- （`export` / `alias` / `via` …）与 `_` 不产出 token，留给 TextMate 语法；词法或 parse 失败时
+-- 返回空数组，编辑器继续用 TextMate 语法；列换算按 LSP 要求走 UTF-16。
 module Vuna.Lsp.Semantic where
 
--- Vuna.Lsp.Semantic：LSP semantic tokens（工具链模块，**永不进 seed 闭包**）。
---
--- 分类来源是 **CST 词法流**（`Frontend.Cst.lexCst`，O(bytes)）+ 当前文件的**声明表**
--- （从同一份源码的 parse 结果收集 data/record/trait 名、构造子、record 字段、
--- 函数 / axiom / extern、trait 方法、顶层子句参数与模块前缀）。只输出能确定的 token：
--- 关键字、数字、标识符分类。
---
--- 字符串、注释与运算符**不产出**语义 token：语义 token 会覆盖 TextMate 语法层，而模板
--- 字符串里的 `${}` 插值、转义与运算符只有语法层能正确分层。
---
--- 已知边界：
---   - 声明表按**名字**匹配，不做作用域区分（同名遮蔽、跨模块同名符号都按名字归类）；
---   - 软关键字（`export` / `alias` / `via` …）与 `_` 不产出 token，留给 TextMate 语法；
---   - 词法失败时返回空数组，编辑器继续用 TextMate 语法；
---   - 列换算按 LSP 要求走 UTF-16（`Diagnostics.utf16ColOf`）。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
@@ -26,7 +23,8 @@ import Vuna.Lsp.Protocol
 -- ---------------------------------------------------------------
 -- legend：顺序即 LSP token type 索引
 -- ---------------------------------------------------------------
--- 与 `vscode/package.json` 的 `contributes.semanticTokenScopes` 按名字对应；改顺序必须同步。
+-- | 语义 token 类型名。顺序即 LSP token type 索引，与 `vscode/package.json` 的
+-- `contributes.semanticTokenScopes` 按名字对应；改顺序必须同步。
 export semanticTokenTypes : List String
 semanticTokenTypes =
   [ "namespace",
@@ -42,66 +40,89 @@ semanticTokenTypes =
     "macro"
   ]
 
+-- | 支持的 token modifier 位名（bit0 = `hole`）。
 export semanticTokenModifiers : List String
 semanticTokenModifiers = ["hole"]
 
+-- | token type 索引：模块 / import 前缀。
 tkNamespace : Int
 tkNamespace = 0
 
+-- | token type 索引：类型名。
 tkType : Int
 tkType = 1
 
+-- | token type 索引：构造子。
 tkEnumMember : Int
 tkEnumMember = 2
 
+-- | token type 索引：顶层函数。
 tkFunction : Int
 tkFunction = 3
 
+-- | token type 索引：trait 方法。
 tkMethod : Int
 tkMethod = 4
 
+-- | token type 索引：record 字段。
 tkProperty : Int
 tkProperty = 5
 
+-- | token type 索引：顶层函数子句参数。
 tkParameter : Int
 tkParameter = 6
 
+-- | token type 索引：其余标识符。
 tkVariable : Int
 tkVariable = 7
 
+-- | token type 索引：关键字。
 tkKeyword : Int
 tkKeyword = 8
 
+-- | token type 索引：数字字面量。
 tkNumber : Int
 tkNumber = 9
 
+-- | token type 索引：`name!` 形式的宏。
 tkMacro : Int
 tkMacro = 10
 
--- token modifier 是位掩码：bit0 = hole（命名洞 `?name`）。
+-- | token modifier 位：命名洞 `?name`（bit0）。
 modHole : Int
 modHole = 1
 
 -- ---------------------------------------------------------------
 -- 声明表：按名字归类（不建作用域）
 -- ---------------------------------------------------------------
+-- | 当前文件的声明表：各类声明名按类别分桶，只按名字归类、不建作用域。
 record DeclTable where
+  -- | 模块头、import 与 import alias 的点分前缀。
   dtNamespaces : List String
+  -- | data / record / trait 的声明名。
   dtTypes : List String
+  -- | data 构造子名。
   dtCtors : List String
+  -- | record 字段名。
   dtFields : List String
+  -- | 顶层函数名（签名、定义、axiom、extern）。
   dtFuns : List String
+  -- | trait 方法名。
   dtMethods : List String
+  -- | 顶层函数子句的模式绑定名。
   dtParams : List String
 
+-- | 空表（parse 失败时的退化值）。
 emptyDeclTable : DeclTable
 emptyDeclTable = DeclTable [] [] [] [] [] [] []
 
+-- | 源码文本 → 声明表；parse 失败给空表。
 declTableFor : String -> DeclTable
 declTableFor text = case parseSource "<semantic>" text of
   ErrC _ => emptyDeclTable
   OkC sf => declTableOf sf
 
+-- | 内部：从 parse 结果按类别收集声明名。
 declTableOf : SourceFile -> DeclTable
 declTableOf sf =
   DeclTable (namespaceNames sf) (concatMap declTypeNames sf.sourceFileDecls)
@@ -109,7 +130,7 @@ declTableOf sf =
     (concatMap declFunsOf sf.sourceFileDecls) (concatMap declMethodsOf sf.sourceFileDecls)
     (concatMap declParamsOf sf.sourceFileDecls)
 
--- 模块头 + import + import alias 的全部点分前缀（`Base.List.map` 的 `Base` / `Base.List`）。
+-- | 内部：模块头 + import + import alias 的全部点分前缀（`Base.List.map` 的 `Base` / `Base.List`）。
 namespaceNames : SourceFile -> List String
 namespaceNames sf =
   let
@@ -120,15 +141,19 @@ namespaceNames sf =
     aliases = mapMaybe importAliasOf sf.sourceFileImports
   in concatMap dottedPrefixes (append mods (append imports aliases))
 
+-- | 内部：import 的模块名。
 importNameOf : Import -> String
 importNameOf imp = imp.importName
 
+-- | 内部：import 的别名（无别名给 `Nothing`）。
 importAliasOf : Import -> Maybe String
 importAliasOf imp = imp.importAlias
 
+-- | 内部：点分名的所有前缀（`A.B.C` → `A`、`A.B`、`A.B.C`）。
 dottedPrefixes : String -> List String
 dottedPrefixes name = dottedPrefixesGo (splitOnDot name) ""
 
+-- | 内部：`dottedPrefixes` 的累积实现。
 dottedPrefixesGo : List String -> String -> List String
 dottedPrefixesGo [] acc = []
 dottedPrefixesGo (seg :: rest) acc =
@@ -136,14 +161,17 @@ dottedPrefixesGo (seg :: rest) acc =
     next = if acc == "" then seg else "${acc}.${seg}"
   in next :: dottedPrefixesGo rest next
 
+-- | 内部：data 声明的构造子名（其他声明给 []）。
 declCtorsOf : Decl -> List String
 declCtorsOf (DData _ _ _ ctors _ _ _ _ _) = map ctorName ctors
 declCtorsOf _ = []
 
+-- | 内部：record 声明的字段名（其他声明给 []）。
 declFieldsOf : Decl -> List String
 declFieldsOf (DRecord _ _ fields _ _ _ _ _) = map fieldName fields
 declFieldsOf _ = []
 
+-- | 内部：顶层函数名（签名、定义、axiom、extern；其他声明给 []）。
 declFunsOf : Decl -> List String
 declFunsOf (DSig n _ _ _) = [n]
 declFunsOf (DFun n _ _ _) = [n]
@@ -151,14 +179,17 @@ declFunsOf (DAxiom n _ _) = [n]
 declFunsOf (DExtern n _ _ _) = [n]
 declFunsOf _ = []
 
+-- | 内部：trait 声明的方法名（其他声明给 []）。
 declMethodsOf : Decl -> List String
 declMethodsOf (DTrait _ _ _ methods _) = map traitMethodName methods
 declMethodsOf _ = []
 
+-- | 内部：函数子句模式里绑定的名字（其他声明给 []）。
 declParamsOf : Decl -> List String
 declParamsOf (DFun _ pats _ _) = concatMap patNames pats
 declParamsOf _ = []
 
+-- | 内部：模式里绑定的名字（变量、`as`、构造子参数、记录字段模式）。
 patNames : Pat -> List String
 patNames (PVar n _) = [n]
 patNames (PAs n inner _) = n :: patNames inner
@@ -166,13 +197,14 @@ patNames (PCon _ pats _) = concatMap patNames pats
 patNames (PRecord _ fields _) = concatMap patPairNames fields
 patNames _ = []
 
+-- | 内部：`(字段, 模式)` 里模式绑定的名字。
 patPairNames : Pair String Pat -> List String
 patPairNames (Pair _ pat) = patNames pat
 
 -- ---------------------------------------------------------------
 -- 分类
 -- ---------------------------------------------------------------
--- 软关键字不是 lexer 的 `TKw`：不产出语义 token，避免把 `export` 之类覆盖成 variable。
+-- | 软关键字：lexer 不当 `TKw`，这里也不产出语义 token，避免把 `export` 之类覆盖成 variable。
 export reservedWord : String -> Bool
 reservedWord name =
   name == "export"
@@ -183,17 +215,21 @@ reservedWord name =
     || name == "field"
     || name == "return"
 
+-- | 是否大写字母开头（声明表未命中时兜底按类型名归类）。
 export upperStart : String -> Bool
 upperStart name = case strUnpack name of
   [] => False
   c :: _ => c >= 65 && c <= 90
 
+-- | 内部：token → `(tokenType, modifier)`；不分类的 token 给 `Nothing`。
 kindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
 kindOf table prevTok t rest =
   if t.cstTag == "kw" then Just (Pair tkKeyword 0)
   else if t.cstTag == "int" || t.cstTag == "float" then Just (Pair tkNumber 0)
   else if t.cstTag == "ident" then identKindOf table prevTok t rest else Nothing
 
+-- | 内部：标识符按形态与声明表归类（洞 → variable+hole，`name!` → macro，大写开头兜底
+-- type，其余 variable）。
 identKindOf : DeclTable -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair Int Int)
 identKindOf table prevTok t rest =
   let
@@ -211,7 +247,7 @@ identKindOf table prevTok t rest =
   else if memName name table.dtNamespaces then Just (Pair tkNamespace 0)
   else if upperStart name then Just (Pair tkType 0) else Just (Pair tkVariable 0)
 
--- `?name`：`?` 与名字紧邻（lexer 把它们切成两个 token）。
+-- | 内部：`?name` 的名字 token（`?` 与名字紧邻，lexer 把它们切成两个 token）。
 isHoleTok : Maybe CstToken -> CstToken -> Bool
 isHoleTok Nothing _ = False
 isHoleTok (Just prev) t =
@@ -220,7 +256,7 @@ isHoleTok (Just prev) t =
     && spanEndLine prev.cstSpan == spanStartLine t.cstSpan
     && spanEndCol prev.cstSpan == spanStartCol t.cstSpan
 
--- `name!` 内置宏：`!` 与名字紧邻。
+-- | 内部：`name!` 内置宏（`!` 与名字紧邻）。
 followedByBang : CstToken -> List CstToken -> Bool
 followedByBang _ [] = False
 followedByBang t (next :: _) =
@@ -232,9 +268,11 @@ followedByBang t (next :: _) =
 -- ---------------------------------------------------------------
 -- 输出：LSP 的 delta 编码 [deltaLine, deltaStartChar, length, tokenType, modifiers]
 -- ---------------------------------------------------------------
+-- | 源码文本 → semanticTokens/full 的结果对象 `{"data": [...]}`。
 export semanticTokensJson : String -> Json
 semanticTokensJson text = JObj [Pair "data" (JArr (map JNum (semanticTokenData text)))]
 
+-- | 内部：按 token 顺序展开的 delta 编码整数流；词法失败给空。
 semanticTokenData : String -> List Int
 semanticTokenData text =
   let
@@ -243,6 +281,7 @@ semanticTokenData text =
     Nothing => []
     Just toks => rowsGo (split "\n" text) table 0 0 Nothing toks
 
+-- | 内部：逐 token 累积 `(上一行, 上一列)` 状态，把分类结果拼成 delta 流。
 rowsGo : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> List CstToken -> List Int
 rowsGo lines table prevLine prevStart prevTok [] = []
 rowsGo lines table prevLine prevStart prevTok (t :: rest) = case tokenRow lines table prevLine prevStart prevTok t rest of
@@ -251,6 +290,8 @@ rowsGo lines table prevLine prevStart prevTok (t :: rest) = case tokenRow lines 
     append (firstOf row)
       (rowsGo lines table (firstOf (secondOf row)) (secondOf (secondOf row)) (Just t) rest)
 
+-- | 内部：单个 token 的 `[deltaLine, deltaStart, length, tokenType, modifiers]`（列按 UTF-16）；
+-- 宽度为 0 或相对坐标倒退给 `Nothing`（跳过该 token）。
 tokenRow : List String -> DeclTable -> Int -> Int -> Maybe CstToken -> CstToken -> List CstToken -> Maybe (Pair (List Int) (Pair Int Int))
 tokenRow lines table prevLine prevStart prevTok t rest = case kindOf table prevTok t rest of
   Nothing => Nothing
