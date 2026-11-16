@@ -131,7 +131,9 @@ applyDeclMods mods decl lines =
       DExtern _ _ _ _ => "extern ${name}"
       DSig _ _ _ _ => "${name} :"
       _ => ""
-    afterPrefix = mapFirstLineContaining marker (\line => prefix ++ line) lines
+    afterPrefix = case decl of
+      DTrait _ _ _ _ _ => mapFirstTraitHeader (\line => prefix ++ line) lines
+      _ => mapFirstLineContaining marker (\line => prefix ++ line) lines
   in case decl of
     DData _ _ _ _ _ _ _ _ _ =>
       mapFirstLineContaining marker (\line => insertBeforeMarker " : " members line) afterPrefix

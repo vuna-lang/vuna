@@ -306,15 +306,13 @@ instanceLandingOk allDecls sp cls headExpr =
 -- 实例的直接父类要求：逐个按实例 ctx + 全局实例搜索（只校验，不把父类字典塞进字典值）。
 -- 父类字典作为独立隐式参数在调用点/签名处求解（与普通约束同一套机制）。
 checkSuperClasses : List (Pair String Term) -> Ctx -> Int -> String -> Span -> List Term -> List Term -> Ec -> Check Ec
-checkSuperClasses globals ctx nCtx instName sp args supers ec = case supers of
-  [] => OkC ec
-  s :: rest =>
-    let
-      goal = evalCtx ctx (shift 0 nCtx (substInstParams args s))
-    in case searchInstanceIn globals ctx ec goal sp of
-      ErrC e =>
-        tcErr2 sp (SuperclassNotSatisfied instName (showValue goal)) instName (showValue goal)
-      OkC (Pair t ec1) => checkSuperClasses globals ctx nCtx instName sp args rest ec1
+checkSuperClasses globals ctx nCtx instName sp args [] ec = OkC ec
+checkSuperClasses globals ctx nCtx instName sp args (s :: rest) ec =
+  let
+    goal = evalCtx ctx (shift 0 nCtx (substInstParams args s))
+  in case searchInstanceIn globals ctx ec goal sp of
+    ErrC e => tcErr2 sp (SuperclassNotSatisfied instName (showValue goal)) instName (showValue goal)
+    OkC (Pair t ec1) => checkSuperClasses globals ctx nCtx instName sp args rest ec1
 
 -- 实例落点通过后的正常实例精化（方法检查 + 字典项构造）。
 elabInstanceWithClass : List (Pair String Term) -> List (Pair Decl Span) -> DtClass -> InstSigInfo -> Ec -> Expr -> List Decl -> Span -> Check (Pair (List (Pair String Term)) Ec)
