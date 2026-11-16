@@ -4,12 +4,9 @@ module Base.Bool where
 import Base.Hashable
 import Base.Show
 
--- `&&` / `||` 是短路内建原语；fixity 由编译器固定（过渡期仍接受本模块声明）。
-infixl 3 &&
-infixl 2 ||
-
+-- `&&` / `||` 是短路内建原语；fixity 由编译器固定（`Loader.Fixity.builtinFixityDecls`），
+-- 本模块不声明。
 -- `&&` / `||` 是短路内建值（不是 trait 方法），fixity 声明在本模块。
-
 -- | 布尔类型：`False` / `True`。构造子导出，可直接模式匹配；`&&` / `||` 是短路内建值，[Base.Bool.and] / [Base.Bool.or] 是不短路的函数版本。
 export data Bool(..) : Type where
   -- | 假。

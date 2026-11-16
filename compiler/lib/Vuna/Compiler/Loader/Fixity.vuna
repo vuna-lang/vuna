@@ -43,9 +43,8 @@ builtinFixityDecls =
     FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0)
   ]
 
--- 过渡期：`&&` / `||` 允许库里保留声明（下一条提交删除该声明）。
 export builtinFixityOps : List String
-builtinFixityOps = ["->"]
+builtinFixityOps = map fixityOpOf builtinFixityDecls
 
 fixityOpOf : FixityDecl -> String
 fixityOpOf d = d.fixityOp
