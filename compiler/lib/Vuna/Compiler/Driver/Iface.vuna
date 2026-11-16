@@ -427,12 +427,6 @@ export pkgImplHashOfModules : String -> List ModuleIface -> String
 pkgImplHashOfModules pkg mods =
   digestParts ("vuna-pkg-impl-hash 1" :: pkg :: map miImplHashOf (sortByText miNameOf mods))
 
-export pkgIfaceHashOf : PackageIface -> String
-pkgIfaceHashOf (PackageIface schema compiler pkg env mods) = pkgIfaceHashOfModules pkg mods
-
-export pkgImplHashOf : PackageIface -> String
-pkgImplHashOf (PackageIface schema compiler pkg env mods) = pkgImplHashOfModules pkg mods
-
 -- | 模块按名字排序（产物身份/布局摘要的规范顺序；与聚合摘要同一序）。
 export sortModuleIfaces : List ModuleIface -> List ModuleIface
 sortModuleIfaces mods = sortByText miNameOf mods

@@ -22,16 +22,13 @@ module Vuna.Compiler.Store where
 -- 载荷本身是**显式规范编码**（自定界原子文法，见 `Canonical.Bytes` / `Canonical.*`），
 -- 不随编译器 / OCaml 运行时版本漂移。读侧只在 framing 全部通过后才解码。
 --
--- 读侧校验强度分两档（`storeDecode` / `storeDecodeFast`）：
---   * `storeDecode`：magic/tag/codec/长度/**内容地址**全验。用于 payload 的完整性
---     只靠 framing 兜底的载荷（check marker / ast / split / split-units）。
---   * `storeDecodeFast`：跳过内容地址，但仍验 magic/tag/codec/长度。**唯一使用者是
---     iface 载荷**：它自带 Merkle 语义哈希（`hashOfIface` + `miIfaceHash`），读侧随后
---     逐模块自证，比字节级校验更强；对 9 MB 接口载荷再做一次 SHA-256 会让 warm
---     `check compiler` 多 ~20 ms，属于重复防护。
+-- 读侧校验（`storeDecode` / `storeDecodeAs`）：
+--   * `storeDecode`：magic/tag/codec/长度/**内容地址**全验。对象库与构建产物都走它。
+--   * `storeDecodeAs`：只比头里声明的期望地址（不重算；调用方已按输入摘要知道路径）。
+--     用于 `pkg-source` 对象这类「地址就是期望内容摘要」的载荷。
 --
--- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样（fast 档为 0）。check marker
--- 载荷为 0 字节，split/unit 载荷只在 miss 路径写。
+-- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样。check marker 载荷为 0 字节，
+-- split/unit 载荷只在 miss 路径写。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Hash
 import Base.List
@@ -153,17 +150,12 @@ storeDecodeAs tag codec digest raw = case frameSplit raw of
     in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just digest then Just payload
     else Nothing
 
--- | 解码但不校验内容地址（只验 magic/tag/codec/长度）。仅供**随后会自证**的载荷使用：
--- 解出来的值由调用方按语义哈希逐字段核对（iface 模块文件即如此），字节级摘要留给
--- `storeDecode` / `storeDecodeAs`。
-export storeDecodeFast : String -> String -> String -> Maybe String
-storeDecodeFast tag codec raw = case frameSplit raw of
-  Nothing => Nothing
-  Just p => if headerOk tag codec (firstOf p) (secondOf p) then Just (secondOf p) else Nothing
-
 -- | 存储根（唯一根：对象库 + 视图 + roots）。候选按优先级排列，首个命中者胜出：
 -- `VUNA_STORE` → `$XDG_DATA_HOME/vuna/store` → `~/.vuna/store` → `$TMPDIR/vuna-store`
 -- → `/tmp/vuna-store`。
+--
+-- `HOME` 为空或是 `/homeless-shelter`（Nix 构建沙箱）时**不能**用它：那条路径不可写，
+-- 会让构建在第一次写对象时崩掉。沙箱内回落到 `$TMPDIR`（构建期缓存，天然可弃）。
 export storeDataRootEff : Member nEnv EnvOp r => Eff r String
 storeDataRootEff =
   let
@@ -203,15 +195,6 @@ storeReadEff tag codec path = do
   if exists then do
     raw <- fsReadFile path
     pure (storeDecode tag codec raw)
-  else pure Nothing
-
--- | 读 + 快速校验（跳过内容地址；仅供随后自证的载荷，见模块头）。
-export storeReadFastEff : Member nFs FsOp r => String -> String -> String -> Eff r (Maybe String)
-storeReadFastEff tag codec path = do
-  exists <- fsFileExists path
-  if exists then do
-    raw <- fsReadFile path
-    pure (storeDecodeFast tag codec raw)
   else pure Nothing
 
 -- | 读 + 校验「头里的内容地址 == 期望值」（不重算；见 `storeDecodeAs`）。
