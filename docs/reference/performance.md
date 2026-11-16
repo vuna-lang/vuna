@@ -25,7 +25,8 @@
 | `fmt --check`（各包 + examples） | ~1.4 s |
 | `map`（热缓存命中） | ~0.13 s |
 | `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256） |
-| `lint` / `doc` / `api` / `gen-errors` | 均 <1 s |
+| `lint`（workspace，冷 / 结果缓存热） | ~1.9 s / ~1.2 s（本机；`--no-cache` 强制冷路径） |
+| `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（根包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
 | LSP hover 非洞行（`bench/lsp-probe.py`，根包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–2.5 s） |
