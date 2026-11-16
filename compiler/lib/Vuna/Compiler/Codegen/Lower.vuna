@@ -62,18 +62,18 @@ export record LwEnv where
   -- 的合成程序是 O(n²)（N=2000/4000/8000 的 codegen 段 89/284/1083 ms，逐档 ×3.2/×3.8）。
   -- 表只替换**查找**，不参与排序：组内成员顺序仍来自 `assembleGroupNames`（源码序）。
   lwDefTbl : HashMap String DtDef
-  -- 运行时定义名集合（依赖遍历用）。
-  lwRuntimeNames : HashMap String Bool
+  -- 定义名 → 使用事实（运行时依赖 + 隐藏原语旗标）；分组与 `IrDef` 都吃它。
+  lwFacts : HashMap String TermUse
   -- 当前单元名（`Main` 是入口单元；check 路径为 ""）。
   lwUnit : String
 
 export lwEnvShared : LwEnv -> IrShared
-lwEnvShared (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names unit) =
+lwEnvShared (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts unit) =
   shared
 
 export lwEnvWithUnit : String -> LwEnv -> LwEnv
-lwEnvWithUnit unit (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names oldUnit) =
-  LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl names unit
+lwEnvWithUnit unit (LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts oldUnit) =
+  LwEnv shared datas typs uinfo recs ctors opqs unboxed hasList defs tbl facts unit
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -688,22 +688,28 @@ else case head of
 flattenConcatChainIn _ = Nothing
 
 concatLeavesIn : Term -> List Term
-concatLeavesIn (TApp (TApp head l rl) r rr) = if rigIsErased rl || rigIsErased rr then [TApp (TApp head l rl) r rr]
-else case head of
-  TGlobal g =>
-    if g == "++" then append (concatLeavesIn l) (concatLeavesIn r) else [TApp (TApp head l rl) r rr]
-  _ => [TApp (TApp head l rl) r rr]
-concatLeavesIn t = [t]
+concatLeavesIn t = concatLeavesGo t []
+
+concatLeavesGo : Term -> List Term -> List Term
+concatLeavesGo t acc = case t of
+  TApp (TApp head l rl) r rr => if rigIsErased rl || rigIsErased rr then t :: acc
+  else case head of
+    TGlobal g => if g == "++" then concatLeavesGo l (concatLeavesGo r acc) else t :: acc
+    _ => t :: acc
+  _ => t :: acc
 
 -- `f a1 ... an` 的 head 是内建、且每个实参都未擦除时，收集 (名字, 实参)（左→右）。
+-- 脊只展平一次：长应用链上不按层重复拼接。
 flattenIntrinsicAppIn : Term -> Maybe (Pair String (List (Pair Term Rig)))
-flattenIntrinsicAppIn (TApp f a rig) = if rigIsErased rig then Nothing
-else case f of
-  TGlobal name => if irInlineArity name > 0 then Just (Pair name [Pair a rig]) else Nothing
-  _ => case flattenIntrinsicAppIn f of
-    Just (Pair name args) => Just (Pair name (append args [Pair a rig]))
-    Nothing => Nothing
-flattenIntrinsicAppIn _ = Nothing
+flattenIntrinsicAppIn t = case flattenAppSpine t of
+  Pair head args => if allRuntimeArgs args then case head of
+    TGlobal name => if irInlineArity name > 0 then Just (Pair name args) else Nothing
+    _ => Nothing
+  else Nothing
+
+allRuntimeArgs : List (Pair Term Rig) -> Bool
+allRuntimeArgs [] = True
+allRuntimeArgs ((Pair a rig) :: rest) = not (rigIsErased rig) && allRuntimeArgs rest
 
 inlineArityMatchesIn : String -> List (Pair Term Rig) -> Bool
 inlineArityMatchesIn name args =
@@ -1125,21 +1131,18 @@ lowerDef env st d = case dtDefExtern d of
       ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
       OkC (Pair bodyIr st2) =>
         OkC
-          (Pair (IrDef (dtDefName d) (runtimeArityIn body) (depsWithFloatRender env body) bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
+          (Pair (IrDef (dtDefName d) (runtimeArityIn body) (factsDepsOf env (dtDefName d)) bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
     Nothing =>
       ErrC
         (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
 
--- | `strFromFloat` 在 IR 里落成 `Base.Float.floatRender`，依赖表也要带上它，
---   否则可达性收集会漏掉这条定义。
-depsWithFloatRender : LwEnv -> Term -> List String
-depsWithFloatRender env body =
-  let
-    -- `strFromFloat` 是内建名、不在 `runtimeNames` 里；先把它算成依赖，再改写成
-    -- 实际落到的 `Base.Float.floatRender`。
-    names = Base.HashMap.insert "strFromFloat" True env.lwRuntimeNames
-    ds = termDepsInto names [] body
-  in map (\d => if d == "strFromFloat" then floatRenderRefName else d) ds
+-- | 依赖表里的 `strFromFloat` 落成 `Base.Float.floatRender`（否则可达性收集会漏）。
+factsDepsOf : LwEnv -> String -> List String
+factsDepsOf env name =
+  map (\d => if d == "strFromFloat" then floatRenderRefName else d) (factsOf env name).termUseDeps
+
+factsOf : LwEnv -> String -> TermUse
+factsOf env name = lookupFacts env.lwFacts name
 
 -- extern 类型 → `IrTy`（判据：Int/String/Bool/Array 基本类型，
 -- 显式 Pi 链；隐式参数与非基本类型是内部错）。
@@ -1179,13 +1182,26 @@ lowerDefs env st (d :: rest) = Vuna.Compiler.Common.bind (lowerDef env st d) (\p
 -- ---------------------------------------------------------------
 -- 共享元数据
 -- ---------------------------------------------------------------
-export lowerSharedOf : List DtData -> List DtDef -> IrShared
-lowerSharedOf datas defs =
+export lowerSharedOf : List DtData -> List DtDef -> HashMap String TermUse -> IrShared
+lowerSharedOf datas defs facts =
   let
     runtime = rtDatasOf datas
     locRows = mapSome locRowPair defs
-  in IrShared (recordFieldsOf runtime) (listFamOf runtime) (anyDefUsesFloat defs)
-    (anyDefUsesTrace defs) (anyDefUsesObs defs) locRows
+  in IrShared (recordFieldsOf runtime) (listFamOf runtime)
+    (anyDefFlag (\f => f.termUseFlags.useFlagsFloat || f.termUseFloatLit) defs facts)
+    (anyDefFlag (\f => f.termUseFlags.useFlagsTrace) defs facts)
+    (anyDefFlag (\f => f.termUseFlags.useFlagsObs) defs facts) locRows
+
+-- | 是否有任一可见定义命中旗标（隐藏 runtime 段按此按需追加）。
+anyDefFlag : (TermUse -> Bool) -> List DtDef -> HashMap String TermUse -> Bool
+anyDefFlag pred [] facts = False
+anyDefFlag pred (d :: rest) facts =
+  pred (lookupFacts facts (dtDefName d)) || anyDefFlag pred rest facts
+
+lookupFacts : HashMap String TermUse -> String -> TermUse
+lookupFacts facts name = case Base.HashMap.lookup name facts of
+  Just f => f
+  Nothing => TermUse [] noUseFlags False
 
 listFamOf : List DtData -> Maybe IrListFam
 listFamOf datas = case findListFamilyData datas of
@@ -1215,27 +1231,6 @@ ctorOpaqueTableOf : List DtData -> List (Pair String (List Bool))
 ctorOpaqueTableOf datas =
   concatMap (\d => map (\c => Pair (dtCtorName c) (ctorOpaqueFlagsOf datas c)) (dtDataCtors d))
     datas
-
--- 程序是否用到浮点 / tracing（决定 `Vuna_runtime.ml` 是否追加对应 helper；
--- 不用的程序 runtime 保持逐字节一致）。
-anyDefUsesFloat : List DtDef -> Bool
-anyDefUsesFloat [] = False
-anyDefUsesFloat (d :: rest) = case dtDefBody d of
-  Nothing => anyDefUsesFloat rest
-  Just body => termUsesFloat floatIntrinsicNames body || anyDefUsesFloat rest
-
-anyDefUsesTrace : List DtDef -> Bool
-anyDefUsesTrace [] = False
-anyDefUsesTrace (d :: rest) = case dtDefBody d of
-  Nothing => anyDefUsesTrace rest
-  Just body => termUsesFloat traceIntrinsicNames body || anyDefUsesTrace rest
-
--- 可观测性原语的使用判定（与 tracing 独立：`dbg!` 与 `obs` 各自按需追加 runtime 文本）。
-anyDefUsesObs : List DtDef -> Bool
-anyDefUsesObs [] = False
-anyDefUsesObs (d :: rest) = case dtDefBody d of
-  Nothing => anyDefUsesObs rest
-  Just body => termUsesFloat obsIntrinsicNames body || anyDefUsesObs rest
 
 -- ---------------------------------------------------------------
 -- 单元 lowering
@@ -1435,12 +1430,7 @@ tyNamesInto (IrTyFun d c) acc = tyNamesInto c (tyNamesInto d acc)
 tyNamesInto (IrTyData fam args) acc = foldlTyNames args (pushDep fam acc)
 
 adjOfDef : LwEnv -> DtDef -> Pair String (List String)
-adjOfDef env d = Pair (dtDefName d) (depsWithFloatRender env (bodyOrDummy d))
-
-bodyOrDummy : DtDef -> Term
-bodyOrDummy d = case dtDefBody d of
-  Just body => body
-  Nothing => TInt 0
+adjOfDef env d = Pair (dtDefName d) (factsDepsOf env (dtDefName d))
 
 -- ---------------------------------------------------------------
 -- 入口（main 钩子）的已决策形态
@@ -1531,12 +1521,40 @@ groupOfPair (Pair isRec ds) = IrGroup isRec ds
 export mkLwEnv : List DtData -> List DtDef -> String -> LwEnv
 mkLwEnv datas defs unit =
   let
-    shared = lowerSharedOf datas defs
+    facts = defFactsTblOf defs
+    shared = lowerSharedOf datas defs facts
     runtime = rtDatasOf datas
   in LwEnv shared runtime (strTblOf (tyParamsOf runtime)) (unboxedInfoOf runtime)
     (strTblOf shared.irSharedRecordFields) (strTblOf (ctorTableOf runtime))
     (strTblOf (ctorOpaqueTableOf runtime)) (Base.HashMap.ofNames (unboxedFamilySet runtime))
-    (hasDataNamed listFamilyName datas) defs (defTblOf defs) (nameSetOf (runtimeNamesOf defs)) unit
+    (hasDataNamed listFamilyName datas) defs (defTblOf defs) facts unit
+
+-- | 全部定义的使用事实：每个体只遍历一次（依赖与旗标同源）。
+defFactsTblOf : List DtDef -> HashMap String TermUse
+defFactsTblOf defs =
+  let
+    -- `strFromFloat` 是内建名、不在定义表里；依赖遍历要放行它（落盘时改写成
+    -- `Base.Float.floatRender`）。
+    names = nameSetOf (Base.List.Cons "strFromFloat" (runtimeNamesOf defs))
+  in Base.HashMap.insertAll (map (\d => Pair (dtDefName d) (defFactsOf names d)) defs)
+    (Base.HashMap.fromList [])
+
+defFactsOf : HashMap String Bool -> DtDef -> TermUse
+defFactsOf names d = case dtDefBody d of
+  Nothing => TermUse [] noUseFlags False
+  Just body => termUseInto names useFlagsOfName body
+
+-- 隐藏原语 → 旗标（`Intrinsics` 的三张清单是唯一真源；三类互不重叠）。
+intrinsicUseFlagsTbl : HashMap String UseFlags
+intrinsicUseFlagsTbl =
+  Base.HashMap.insertAll
+    (append (map (\n => Pair n (UseFlags True False False)) floatIntrinsicNames) (append (map (\n => Pair n (UseFlags False True False)) traceIntrinsicNames) (map (\n => Pair n (UseFlags False False True)) obsIntrinsicNames)))
+    (Base.HashMap.fromList [])
+
+useFlagsOfName : String -> UseFlags
+useFlagsOfName name = case Base.HashMap.lookup name intrinsicUseFlagsTbl of
+  Just f => f
+  Nothing => noUseFlags
 
 -- | 字符串键的关联表（程序级表：一次建好，热路径只查）。
 strTblOf : List (Pair String v) -> HashMap String v
