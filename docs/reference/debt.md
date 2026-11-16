@@ -68,6 +68,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
+| D89 | native 续延的嵌套恢复不完整：内层 handler 恢复后，外层 handler 在同一条恢复段里被 `perform` 时，捕获区跨到已挂起的内层 handler 帧，栈迁移后帧重叠（A/B 两个默认实例嵌套、内层 `A -> k (...) `、外层 `B -> k (...)` 的夹具会 segfault）；另外恢复栈段固定 512 KiB slack（约 5k 个常见帧），超出会越过段界，旧段不回收；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn`）；[native.md](native.md) §3.4「嵌套限制」；reproducer：两个 op 族默认实例嵌套，`prog = do x <- perform (A 1); y <- perform (B 2); pure (x + y)`，内层 resume A、外层 resume B | 后续（要么按多层 delimiter 捕获整段，要么在 `perform` 处显式拒绝并 trap） |
 
 ## 相关阅读
 

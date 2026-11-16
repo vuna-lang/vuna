@@ -108,7 +108,7 @@
 - 否则走 `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
 
 `resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获字节拷到
-**堆上的新栈段**（`size + 64 KiB` slack，向下增长留在段内），修正栈内 rbp 链（统一加
+**堆上的新栈段**（`size + 512 KiB` slack，向下增长留在段内），修正栈内 rbp 链（统一加
 `new_start - old_start`），把 comp 顶部返回地址改成 `rt_eff_kdone`，再把 `node.base_rsp`
 指向新栈顶（后续同一 handler 的 perform 继续以它为界）。从 perform 的返回点继续执行。
 
@@ -119,6 +119,10 @@ answer。
 约束：续延一次性（`used` 标记，resume 两次 trap）；迁移后的旧栈段不回收；只支持
 one-shot，不做 multi-shot；`ret`/`opH` 允许在 `k` 返回后继续计算。宿主 handler 的
 「先做宿主操作再 `k`」写法（`consoleOpHIOHost` 等）与用户 `handle` 走同一条路径。
+
+嵌套限制：内层 handler 恢复后，若外层 handler 在同一条恢复段里被 `perform`，捕获区会
+跨到已挂起的内层 handler 帧，栈迁移后帧重叠；当前只保证内层恢复、外层不在恢复段里
+被触发的组合（见 [debt.md](debt.md) D89）。
 
 ## 4. IR 支持面
 
@@ -254,8 +258,8 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 闭包的部分应用（实参个数必须等于 lambda 的运行时 binder 数）。
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把 comp
-  栈帧拷到堆上的新栈段（默认 64 KiB slack），旧段不回收；深递归 + 大量 resume 会消耗
-  arena。
+  栈帧拷到堆上的新栈段（默认 512 KiB slack，约 5k 个常见帧；超出会越过段界），
+  旧段不回收；深递归 + 大量 resume 会消耗 arena。
 - FFI / extern、宿主 syscalls 的通用面（只有 write/exit）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
