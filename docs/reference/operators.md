@@ -55,7 +55,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
   投影名最后一段是运算符名（`Base.Eq.==` → `==`）；`Elab.Dict.opShortOf` 同时认
   旧式标识符拼写（`eq` / `lt` 等），实例与派生体用哪种写法都能命中。
 - Int / String / Float 上的特化（`bi_eq_int` / `bi_eq_str` / `bi_eq_float` / `bi_*_int` /
-  `bi_*_float` / `bi_*_generic`）是 **内建实例实现**，不是运算符的独立语义：它可以发生在
+  `bi_*_float` / `bi_*_str` / `bi_*_bool`）是 **内建实例实现**，不是运算符的独立语义：它可以发生在
   方法投影的饱和应用上，因此手写实例、`deriving` 生成的比较都命中同一条规则；
   特化优先于字典搜索，实例体里写 `==` 不会递归。
 - 无 `Eq` 证据（具体类型无实例、`Eq` 类不在作用域）仍在 check 期报错；没有结构比较兜底。

@@ -54,10 +54,14 @@ let bi_lt_int (a : int) (b : int) = a < b
 let bi_le_int (a : int) (b : int) = a <= b
 let bi_gt_int (a : int) (b : int) = a > b
 let bi_ge_int (a : int) (b : int) = a >= b
-let bi_lt_generic (a : 'a) (b : 'a) = compare a b < 0
-let bi_le_generic (a : 'a) (b : 'a) = compare a b <= 0
-let bi_gt_generic (a : 'a) (b : 'a) = compare a b > 0
-let bi_ge_generic (a : 'a) (b : 'a) = compare a b >= 0
+let bi_lt_str (a : string) (b : string) = a < b
+let bi_le_str (a : string) (b : string) = a <= b
+let bi_gt_str (a : string) (b : string) = a > b
+let bi_ge_str (a : string) (b : string) = a >= b
+let bi_lt_bool (a : bool) (b : bool) = compare a b < 0
+let bi_le_bool (a : bool) (b : bool) = compare a b <= 0
+let bi_gt_bool (a : bool) (b : bool) = compare a b > 0
+let bi_ge_bool (a : bool) (b : bool) = compare a b >= 0
 let bi_concat a b = a ^ b
 let bi_and a b = a && b
 let bi_or a b = a || b
@@ -1560,10 +1564,15 @@ inlineText "bi_lt_int" ([a, b]) = Just "(${a} < ${b})"
 inlineText "bi_le_int" ([a, b]) = Just "(${a} <= ${b})"
 inlineText "bi_gt_int" ([a, b]) = Just "(${a} > ${b})"
 inlineText "bi_ge_int" ([a, b]) = Just "(${a} >= ${b})"
-inlineText "bi_lt_generic" ([a, b]) = Just "(${a} < ${b})"
-inlineText "bi_le_generic" ([a, b]) = Just "(${a} <= ${b})"
-inlineText "bi_gt_generic" ([a, b]) = Just "(${a} > ${b})"
-inlineText "bi_ge_generic" ([a, b]) = Just "(${a} >= ${b})"
+inlineText "bi_lt_str" ([a, b]) = Just "(${a} < ${b})"
+inlineText "bi_le_str" ([a, b]) = Just "(${a} <= ${b})"
+inlineText "bi_gt_str" ([a, b]) = Just "(${a} > ${b})"
+inlineText "bi_ge_str" ([a, b]) = Just "(${a} >= ${b})"
+-- `Bool` 没有 `<`：走 OCaml 的多态 `compare`（`false < true`）。
+inlineText "bi_lt_bool" ([a, b]) = Just "(compare ${a} ${b} < 0)"
+inlineText "bi_le_bool" ([a, b]) = Just "(compare ${a} ${b} <= 0)"
+inlineText "bi_gt_bool" ([a, b]) = Just "(compare ${a} ${b} > 0)"
+inlineText "bi_ge_bool" ([a, b]) = Just "(compare ${a} ${b} >= 0)"
 -- Float：算术/比较直接内联到 OCaml 浮点运算符（除零按 IEEE 语义，不失败）。
 inlineText "bi_add_float" ([a, b]) = Just "(${a} +. ${b})"
 inlineText "bi_sub_float" ([a, b]) = Just "(${a} -. ${b})"

@@ -95,7 +95,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 ## 相等与比较
 
 - **`==` / `/=` 是证据驱动的**，只有两条路径：
-  1. `Int` / `String` 的内建特化（`bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_generic`）；
+  1. `Int` / `String` 的内建特化（`bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_str` / `bi_*_bool`）；
   2. `Eq` 证据：手写实例、`deriving (Eq)` 生成的实例、约束实例。
   具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，

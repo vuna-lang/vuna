@@ -1570,7 +1570,7 @@ rtCmpF64 =
       ]
   in rtFunc "$rt_cmpF64" params [WvI32] [] body
 
--- | `bi_*_generic`：把 `$rt_compare` 的结果映射成 Bool（i31）。
+-- | `bi_*_str` / `bi_*_bool`：把 `$rt_compare` 的结果映射成 Bool（i31）。
 rtGenericCmp : String -> String -> WatFunc
 rtGenericCmp name op =
   let
@@ -1944,10 +1944,10 @@ rtFunctions c =
     rtCmpI32,
     rtCmpI64,
     rtCmpF64,
-    rtGenericCmp "$rt_ltGeneric" "i32.lt_s",
-    rtGenericCmp "$rt_leGeneric" "i32.le_s",
-    rtGenericCmp "$rt_gtGeneric" "i32.gt_s",
-    rtGenericCmp "$rt_geGeneric" "i32.ge_s",
+    rtGenericCmp "$rt_ltValue" "i32.lt_s",
+    rtGenericCmp "$rt_leValue" "i32.le_s",
+    rtGenericCmp "$rt_gtValue" "i32.gt_s",
+    rtGenericCmp "$rt_geValue" "i32.ge_s",
     rtObsSpan,
     rtObsSpanLab,
     rtErase,
@@ -2041,10 +2041,14 @@ rtImplOf "strSubstring" = RtFunc 3 "$rt_substring"
 rtImplOf "strHash" = RtFunc 1 "$rt_strHash"
 rtImplOf "bi_eq_str" = RtFunc 2 "$rt_eqStr"
 rtImplOf "bi_neq_str" = RtFunc 2 "$rt_neqStr"
-rtImplOf "bi_lt_generic" = RtFunc 2 "$rt_ltGeneric"
-rtImplOf "bi_le_generic" = RtFunc 2 "$rt_leGeneric"
-rtImplOf "bi_gt_generic" = RtFunc 2 "$rt_gtGeneric"
-rtImplOf "bi_ge_generic" = RtFunc 2 "$rt_geGeneric"
+rtImplOf "bi_lt_str" = RtFunc 2 "$rt_ltValue"
+rtImplOf "bi_le_str" = RtFunc 2 "$rt_leValue"
+rtImplOf "bi_gt_str" = RtFunc 2 "$rt_gtValue"
+rtImplOf "bi_ge_str" = RtFunc 2 "$rt_geValue"
+rtImplOf "bi_lt_bool" = RtFunc 2 "$rt_ltValue"
+rtImplOf "bi_le_bool" = RtFunc 2 "$rt_leValue"
+rtImplOf "bi_gt_bool" = RtFunc 2 "$rt_gtValue"
+rtImplOf "bi_ge_bool" = RtFunc 2 "$rt_geValue"
 rtImplOf "@vuna@host@print" = RtFunc 1 "$rt_effPrint"
 rtImplOf "prim_eff_print_host" = RtFunc 1 "$rt_effPrint"
 rtImplOf "@vuna@prim_eff_print_host" = RtFunc 1 "$rt_effPrint"

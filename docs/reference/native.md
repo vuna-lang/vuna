@@ -162,7 +162,9 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 - 白名单（`Native.Runtime.nativeRtTarget`）：`+ - * /`、六种位运算（`bitAnd` / `bitOr` /
   `bitXor` / `bitNot` / `bitShl` / `bitShr`）、`++`、`bi_eq_int` /
   `bi_neq_int` / `bi_lt_int` / `bi_le_int` / `bi_gt_int` / `bi_ge_int`、
-  `bi_eq_str` / `bi_neq_str`、`strFromInt` / `strLength` / `strAt` / `strSubstring` /
+  `bi_eq_str` / `bi_neq_str` / `bi_lt_str` / `bi_le_str` / `bi_gt_str` / `bi_ge_str`、
+  `bi_lt_bool` / `bi_le_bool` / `bi_gt_bool` / `bi_ge_bool`、
+  `strFromInt` / `strLength` / `strAt` / `strSubstring` /
   `strHash` / `strShow`、`natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` /
   `natFromInt`、`assert` / `todo` / `prim_fail`、`@vuna@debug@on` / `@vuna@debug@line`、
   可观测性叶子桩。其余 `IrRtApp` 符号拒绝。

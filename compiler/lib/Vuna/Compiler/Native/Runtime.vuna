@@ -245,6 +245,20 @@ strEqFn =
 strNeqFn : NativeFunc
 strNeqFn = rtFunc "str_neq" 0 [ICall (nativeRtLabel "str_eq"), IBin "xor" (OpImm 1), IRet]
 
+-- | `str_compare`：rdi/rsi = 两个字符串 -> rax = -1 / 0 / 1。
+--   语义与 OCaml `compare` 的字符串分支一致：逐字节无符号比较，公共前缀相同则比长度。
+--   `cmpsb` 的 flags 反映 `[rsi] - [rdi]`（第二操作数减第一），所以「a < b」对应 `ja`。
+strCompareFn : NativeFunc
+strCompareFn =
+  rtFunc "str_compare" 16
+    [IMov (OpReg Rax) (OpMem Rdi 0), IMov (OpMem Rbp (0 - 8)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (0 - 16)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (0 - 8)), ICmp (OpReg Rcx) (OpMem Rbp (0 - 16)), IJcc "jle" ".Lrt_sc_len_ok", IMov (OpReg Rcx) (OpMem Rbp (0 - 16)), ILabel ".Lrt_sc_len_ok", ILeaMem Rdi Rdi 8, ILeaMem Rsi Rsi 8, ITest Rcx Rcx, IJcc "jz" ".Lrt_sc_prefix", IRepeCmpsb, IJcc "je" ".Lrt_sc_prefix", IJcc "ja" ".Lrt_sc_less", IJmp ".Lrt_sc_greater", ILabel ".Lrt_sc_prefix", IMov (OpReg Rax) (OpMem Rbp (0 - 8)), ICmp (OpReg Rax) (OpMem Rbp (0 - 16)), IJcc "jl" ".Lrt_sc_less", IJcc "jg" ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_sc_less", IMov (OpReg Rax) (OpImm (0 - 1)), IRet, ILabel ".Lrt_sc_greater", IMov (OpReg Rax) (OpImm 1), IRet]
+
+-- | `str_compare` 的结果映射成 Bool（0/1）。
+strCompareFnOf : String -> String -> NativeFunc
+strCompareFnOf name cond =
+  rtFunc name 0
+    [ICall (nativeRtLabel "str_compare"), ICmp (OpReg Rax) (OpImm 0), ISetcc cond Rax, IMovzxAl, IRet]
+
 -- | `strFromInt`：rdi = Int -> rax = 十进制字符串（含负号）。
 strFromIntFn : NativeFunc
 strFromIntFn =
@@ -705,6 +719,11 @@ nativeRtFuncs =
     strConcatFn,
     strEqFn,
     strNeqFn,
+    strCompareFn,
+    strCompareFnOf "str_lt" "setl",
+    strCompareFnOf "str_le" "setle",
+    strCompareFnOf "str_gt" "setg",
+    strCompareFnOf "str_ge" "setge",
     strFromIntFn,
     strAtFn,
     strSubstringFn,
@@ -792,6 +811,15 @@ nativeRtTarget "bi_gt_int" = Just (nativeRtLabel "gt_int")
 nativeRtTarget "bi_ge_int" = Just (nativeRtLabel "ge_int")
 nativeRtTarget "bi_eq_str" = Just (nativeRtLabel "str_eq")
 nativeRtTarget "bi_neq_str" = Just (nativeRtLabel "str_neq")
+nativeRtTarget "bi_lt_str" = Just (nativeRtLabel "str_lt")
+nativeRtTarget "bi_le_str" = Just (nativeRtLabel "str_le")
+nativeRtTarget "bi_gt_str" = Just (nativeRtLabel "str_gt")
+nativeRtTarget "bi_ge_str" = Just (nativeRtLabel "str_ge")
+-- `Bool` 的值是 0/1，比较直接复用 Int 的比较模板。
+nativeRtTarget "bi_lt_bool" = Just (nativeRtLabel "lt_int")
+nativeRtTarget "bi_le_bool" = Just (nativeRtLabel "le_int")
+nativeRtTarget "bi_gt_bool" = Just (nativeRtLabel "gt_int")
+nativeRtTarget "bi_ge_bool" = Just (nativeRtLabel "ge_int")
 nativeRtTarget "strFromInt" = Just (nativeRtLabel "str_from_int")
 nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
 nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")

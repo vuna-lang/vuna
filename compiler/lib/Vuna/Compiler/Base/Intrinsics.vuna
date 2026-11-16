@@ -375,10 +375,11 @@ export data IntrinsicOp(..) : Type where
   OpGeInt : IntrinsicOp
   OpEqStr : IntrinsicOp
   OpNeqStr : IntrinsicOp
-  OpLtGeneric : IntrinsicOp
-  OpLeGeneric : IntrinsicOp
-  OpGtGeneric : IntrinsicOp
-  OpGeGeneric : IntrinsicOp
+  -- 值级比较：`String` / `Bool` 的特化共用（interp 按运行时值类型分派）。
+  OpLtValue : IntrinsicOp
+  OpLeValue : IntrinsicOp
+  OpGtValue : IntrinsicOp
+  OpGeValue : IntrinsicOp
   OpConcat : IntrinsicOp
   OpAnd : IntrinsicOp
   OpOr : IntrinsicOp
@@ -763,10 +764,14 @@ baseIntrinsics =
     Intrinsic "bi_le_int" (IFun IInt (IFun IInt IBool)) OpLeInt False,
     Intrinsic "bi_gt_int" (IFun IInt (IFun IInt IBool)) OpGtInt False,
     Intrinsic "bi_ge_int" (IFun IInt (IFun IInt IBool)) OpGeInt False,
-    Intrinsic "bi_lt_generic" (IFun IInt (IFun IInt IBool)) OpLtGeneric False,
-    Intrinsic "bi_le_generic" (IFun IInt (IFun IInt IBool)) OpLeGeneric False,
-    Intrinsic "bi_gt_generic" (IFun IInt (IFun IInt IBool)) OpGtGeneric False,
-    Intrinsic "bi_ge_generic" (IFun IInt (IFun IInt IBool)) OpGeGeneric False
+    Intrinsic "bi_lt_str" (IFun IStr (IFun IStr IBool)) OpLtValue False,
+    Intrinsic "bi_le_str" (IFun IStr (IFun IStr IBool)) OpLeValue False,
+    Intrinsic "bi_gt_str" (IFun IStr (IFun IStr IBool)) OpGtValue False,
+    Intrinsic "bi_ge_str" (IFun IStr (IFun IStr IBool)) OpGeValue False,
+    Intrinsic "bi_lt_bool" (IFun IBool (IFun IBool IBool)) OpLtValue False,
+    Intrinsic "bi_le_bool" (IFun IBool (IFun IBool IBool)) OpLeValue False,
+    Intrinsic "bi_gt_bool" (IFun IBool (IFun IBool IBool)) OpGtValue False,
+    Intrinsic "bi_ge_bool" (IFun IBool (IFun IBool IBool)) OpGeValue False
   ]
 
 -- | 浮点相关内建（字面量转换/算术/比较/格式化）。单独成表（见 `baseIntrinsics` 的
