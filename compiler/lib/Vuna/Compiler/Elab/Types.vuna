@@ -106,9 +106,6 @@ export record DtData(..) where
 export dtDataName : DtData -> String
 dtDataName (DtData name params ctors kind viaClasses lin repr fields isRec) = name
 
-export dtDataParams : DtData -> List (Pair String Rig)
-dtDataParams (DtData name params ctors kind viaClasses lin repr fields isRec) = params
-
 export dtDataCtors : DtData -> List DtCtor
 dtDataCtors (DtData name params ctors kind viaClasses lin repr fields isRec) = ctors
 
