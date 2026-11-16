@@ -362,10 +362,14 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   冷 `check compiler` 实测 96k 次回落全部是「不是构造子」，现在不再各扫 285 个族；
   `ctorRefTerm` / `ctorAppTerm` 也改用 Ec 版本（查 `ecCtorTbl`）。
 
-此时自采样的剩余热点：`Base.List.dtp_unpack`（lexer 仍把整串展开成字符表，见 D87 的游标
-重构）、`String.concat`（Canonical/地址编码）、`dtp_strHash`、`nubNames`/`reverseOnto`、
-`Core.Eval.quote`；求解器里还剩 `append pending [c]` 的 O(长度) 追加（旋转语义，
-改动要连语义一起重写）。
+- lexer 的字符游标从 `List Int` 改成「原串 + 偏移」（`Chars { source, offset, pos }`），
+  扫描器按 `charsPeek` / `charsStep` 推进，不再整串 `strUnpack`。实测 `vuna.parse.lex`
+  冷 `check compiler` 194 ms → 174 ms（~10%），占整条冷检查不到 0.3%——**采样里剩下的
+  `dtp_unpack` 主要来自 Canonical/Store/Hash 的字节编码，不是 lexer**。
+
+此时自采样的剩余热点：`dtp_unpack`（Canonical/Store 的字节处理）、`String.concat`
+（Canonical/地址编码）、`dtp_strHash`、`nubNames`/`reverseOnto`、`Core.Eval.quote`；
+求解器里还剩 `append pending [c]` 的 O(长度) 追加（旋转语义，改动要连语义一起重写）。
 
 ## 5. 增长率（合成包）
 
