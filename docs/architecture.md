@@ -235,7 +235,9 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   hover = 洞目标（容错查询，未解洞也给目标+上下文）→ `Vuna.Lsp.Bindings`（模块名 + 局部绑定，
   parse 级、不依赖 Index）→ Index 符号；definition 同序（模块名 → 目标文件 `module` 头 /
   局部 binder → Index）；另有 formatting / documentSymbol / references / completion /
-  codeAction（lint quick fix）/ lint 诊断。
+  codeAction（lint quick fix）/ lint 诊断；`Vuna.Lsp.Semantic` 提供 semanticTokens/full
+  （CST 词法流 + 声明表），`Vuna.Lsp.Highlight` / `Vuna.Lsp.Folding` 提供 documentHighlight
+  与按缩进的 foldingRange。
 - `Vuna.Index`：parse 级索引 v3（`vuna map` / `vuna api`，`symDoc` / `symType`，会话载荷
   落在 `objects/tool/`，按输入摘要判定）；`Vuna.Search` 消费它做名称/doc/类型检索。
 

@@ -29,7 +29,7 @@ Content-Length: <字节数>\r\n
 
 | 方法 | 行为 |
 | --- | --- |
-| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、workspaceSymbol、codeAction（`quickfix` + `refactor.rewrite`）、rename（`prepareProvider: true`）、executeCommand（`vuna.fixAllLint`）、diagnosticProvider（pull）；`serverInfo` |
+| `initialize` | capabilities：Full 同步、hover、completion（`.` 触发）、definition、references、documentSymbol、documentFormatting、documentHighlight、foldingRange、semanticTokens（full；legend 见下）、workspaceSymbol、codeAction（`quickfix` + `refactor.rewrite`）、rename（`prepareProvider: true`）、executeCommand（`vuna.fixAllLint`）、diagnosticProvider（pull）；`serverInfo` |
 | `initialized` | 通知，无响应 |
 | `textDocument/didOpen` / `didChange` / `didClose` | 内存维护打开文档表（Full 同步）；声明 pull 能力的客户端只更新文档表，不触发 push |
 | `textDocument/publishDiagnostics` | 包上下文解析 / DT 精化 / 覆盖性诊断 + lint 诊断（**仅**未声明 pull 能力的客户端；声明了 pull 的客户端只走 `textDocument/diagnostic`，否则客户端 push/pull 两个诊断集合会让同一条诊断显示两遍） |
@@ -37,6 +37,9 @@ Content-Length: <字节数>\r\n
 | `textDocument/hover` | 洞（`_` / `?name`）的目标类型与上下文（容错查询；文本里没有洞 token 时跳过精化）→ 模块引用（`import` / 导出项 `module B` / 模块头 / 限定名前缀；带模块 docstring）→ 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 模式；语法级类型与值）→ 标识符签名 + `-- |` docstring（多行保留）。普通注释不进入 hover。`range` 落在**光标 token** 上（不是符号定义位置）——客户端用它判断 hover 何时失效 |
 | `textDocument/formatting` | `Vuna.Fmt.formatSourceWith` 全文替换 TextEdit（fixity 取程序级可见闭包）（解析失败返回空） |
 | `textDocument/documentSymbol` | AST 声明树（data/record/trait 带子节点）；每个节点带 `detail`（与 `vuna api` 同源的签名文本，如 `fn : Int -> Int` / `data Wrap a`，成员节点是自己的类型），客户端大纲/面包屑据此显示签名 |
+| `textDocument/semanticTokens/full` | 语义 token（delta 编码 `[deltaLine, deltaStartChar, length, tokenType, modifiers]`）：`Vuna.Lsp.Semantic` 用 **CST 词法流**（`Frontend.Cst.lexCst`）+ 当前文件**声明表**（data/record/trait 名 → type、构造子 → enumMember、record 字段 → property、函数/axiom/extern → function、trait 方法 → method、顶层子句参数 → parameter、模块前缀 → namespace、`name!` → macro、`?name` → variable + `hole` modifier）。字符串、注释与运算符**不产出**语义 token（会覆盖 TextMate 的插值/转义分层）。结果按 `(uri, 内容哈希)` 缓存在 `DocCache.dcTokens` |
+| `textDocument/documentHighlight` | 光标符号的当前文件出现位置（`{range, kind:1}`）：局部绑定复用 `Bindings.bindingRenameOccurrences`（作用域精确，与 rename/hover 同源）；顶层符号退化为同名 `ident` token（CST 流，跳过注释/字符串）；关键字 / `_` / 软关键字回空数组 |
+| `textDocument/foldingRange` | 按行首缩进的 offside 块（`Vuna.Lsp.Folding`）：缩进变深开块、回到同级/更浅关闭；空行不参与、不计入块尾；只发 ≥2 行的块（`kind: "region"`） |
 | `textDocument/definition` | 模块引用 → 目标模块文件的 `module` 头名字；局部绑定 → 当前缓冲 binder 名字；否则 Index 符号 → 同文件兜底 |
 | `textDocument/references` | Index：token → 符号；references 用 `Ref` 的精确行 / 列 |
 | `textDocument/prepareRename` | 光标 token 的 range + placeholder；关键字 / base 标准库（`Int` 等）/ 未知符号 / 洞 / 非法新名 → `result: null`，不崩溃 |
@@ -111,6 +114,11 @@ Content-Length: <字节数>\r\n
   索引节点全量重建（仓库级秒级，期间请求排队）；多根 workspace 取首个文档；一次只发首个编译
   错误；`codeAction` 每次重算 fixity + lint（诊断 suggestion 按内容缓存），并产出 quickfix /
   `refactor.rewrite` case split / `vuna.fixAllLint` command；`rename` 的跨文件范围基于 Index（磁盘内容），未保存的其它模块改动不反映，且不跟进类型名在其它模块签名里的使用。
+- semantic tokens / documentHighlight 边界：声明表按**名字**匹配，不做作用域区分（同名遮蔽、
+  跨模块同名符号按名字归类；局部 binder 的精确作用域只在 documentHighlight 的
+  `bindingRenameOccurrences` 路径上）；宏 `name!` 只覆盖紧邻 `!` 的调用形态；词法失败时
+  返回空数组，编辑器继续用 TextMate 语法。语义 token 是**叠加**层：legend 改动必须同步
+  `vscode/package.json` 的 `semanticTokenScopes`，否则非默认主题会退化成默认色。
 - case split 边界：只在请求 range 的行文本里有洞 token 时才取洞目标（目标按 (uri, 文本内容)
   缓存，hover 与 codeAction 共用；同行有洞就会触发，列位置再由 goal span 精确判定）；构造子
   信息是 parse
@@ -206,4 +214,11 @@ record 单分支：本模块 `Pt { ptX = _, ptY = _ }` 与参数化 `Pairing { l
 覆盖整个 token、`axiom` 不透明类型不给动作、索引族 `xs : Vec ...` 跳过而同一洞的
 `n : Nat` 仍给动作）；lint quick fix 的**内嵌完整诊断**（range / severity / source / code /
 message）在第 21 项断言。
+
+再覆盖：**高亮 / 折叠**（第 26g 项）——`semanticTokens/full` 的 5 元组长度、类型覆盖
+（构造子 / 函数 / 字段 / 关键字 / 宏 / 洞 modifier）、`documentHighlight` 的局部 binder
+定义 + 使用两处与关键字回空、`foldingRange` 的 `let` 块与顶层函数体范围。语义 token 的
+legend 与 `vscode/package.json` 的 `contributes.semanticTokenScopes` 按名字对应；改 legend
+顺序必须两边同步（`test/suite/steps/83_vscode_grammar.steps` 锁关键字表同源，smoke 锁
+legend 的形状与覆盖）。
 

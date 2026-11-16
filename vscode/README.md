@@ -7,8 +7,8 @@ Vuna 语言的 VS Code 支持：TextMate 语法高亮、语言配置、代码片
 
 | 能力 | 说明 |
 | --- | --- |
-| 语法高亮 | `source.vuna`：注释（`--` / 可嵌套 `{- -}`）、字符串与转义、整数、关键字、类型/构造子、`prim_*` 内建、运算符、模块/import 名、定义名 |
-| LSP | 诊断、hover（DT 洞目标）、formatting、documentSymbol、definition、references、completion 全部由 `vuna lsp` 服务器提供；扩展只转发服务器在 `initialize` 中声明的能力，不硬编码 capability |
+| 语法高亮 | `source.vuna`：注释（`--` / 可嵌套 `{- -}`）、字符串与转义、模板插值、整数/浮点、全部硬/软关键字（含 `export` / `opaque` / `perform` / `handle` / `infixl` …）、洞（`_` / `?name`）、宏（`name!`）、类型/构造子/字段、运算符、模块/import 名、定义名；语言服务器另外提供语义高亮（类型 / 构造子 / 函数 / 字段 / 参数 / 洞 / 宏） |
+| LSP | 诊断、hover（DT 洞目标）、formatting、documentSymbol、definition、references、completion、documentHighlight、foldingRange、semanticTokens 全部由 `vuna lsp` 服务器提供；扩展只转发服务器在 `initialize` 中声明的能力，不硬编码 capability |
 | 状态栏 | 显示语言服务器状态（启动中 / 运行中 + 版本 / 出错），点击运行 `Vuna: Show Version` |
 | 命令 | restartServer、formatDocument、lintFile、checkFile、buildPackage、showVersion |
 | 保存时 lint | 保存 `.vuna` 文件时运行 `vuna lint <file>`，结果作为诊断进 Problems 面板（`vuna.diagnostics.onSave`） |
@@ -94,11 +94,17 @@ code --extensionDevelopmentPath="$PWD/vscode" "$PWD/.."
 
 `check.sh` 是 POSIX sh，可接进 Nix check：校验 package.json 可解析与 `main` 存在、
 `activationEvents`、`node --check dist/extension.js`、grammar `scopeName == source.vuna`、
-language-configuration / snippets 可解析、dist 含 `vuna lsp` 等：
+**每条 TextMate 规则的正则都能编译**（`scripts/check-grammar.mjs`）、language-configuration /
+snippets 可解析、dist 含 `vuna lsp` 等：
 
 ```console
 sh vscode/check.sh
 ```
+
+语法关键字与 lexer 的**同源校验**在 suite 里（`test/suite/steps/83_vscode_grammar.steps`）：
+它从 `compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna` 的 `isKeyword` 抽出硬关键字表喂给
+`scripts/check-grammar.mjs --keywords`，并确认软关键字（`export` / `alias` / `via` …）仍有
+`keyword` / `support` 作用域——词法表或语法任何一侧漂移都会失败。
 
 退出码非 0 表示失败（需要 PATH 里有 `node`）。脚本会自己定位扩展根目录（脚本所在目录 /
 当前目录 / `<cwd>/vscode`，也可用 `VUNA_VSCODE_ROOT` 显式指定），所以从树内运行和从
@@ -108,8 +114,12 @@ Nix store 拷出的脚本 + `vscode/` 工作树运行都适用；接 Nix 时把 
 ## 已知边界（与服务器实现同步）
 
 - `vuna lsp` 声明全套能力（diagnostics / hover / formatting / documentSymbol / definition /
-  references / completion / workspace symbol），扩展只转发服务器在 `initialize` 里声明的能力。
+  references / completion / documentHighlight / foldingRange / semanticTokens / workspace
+  symbol），扩展只转发服务器在 `initialize` 里声明的能力。
   某个能力没落地时表现为「命令存在但没有输出」，不是扩展错误。
+- 语义高亮（semantic tokens）是 TextMate 语法之上的**叠加层**：token type 的配色由主题的
+  `semanticTokenScopes` 映射决定（见 `package.json`）；字符串与运算符不产出语义 token，
+  仍由 TextMate 语法着色。声明表按名字匹配，不做作用域区分（同名遮蔽按名字归类）。
 - hover 的 `range` 落在光标下的 token；definition / references / completion 依赖
   `$TMPDIR/vuna-cache` 的 `index:<dir>` 节点 + 内容寻址 blob（首次查询可能触发全量重建，
   仓库级秒级）。hover / definition 还覆盖
