@@ -1,7 +1,6 @@
 -- | 持久包 store：内容寻址对象 + 可重建的物化视图。
-module Vuna.PackageStore where
-
--- Vuna.PackageStore：`$VUNA_STORE` 下的两类生命周期（D15 的一个根、两个族）。
+--
+-- `$VUNA_STORE` 下的两类生命周期（一个根、两个族）：
 --
 --   objects/pkg/<64hex>  不可变对象：`pkg-source 1` 规范编码，地址 = 内容摘要（SHA-256）。
 --                        对象是**唯一真源**；写入原子替换（`fsWriteFileAtomic`）。
@@ -10,9 +9,11 @@ module Vuna.PackageStore where
 --
 -- 包对象放在 `objects/pkg/` 这个 kind 目录下，而不是 `objects/<hex>`：缓存族按
 -- `objects/<kind>/` 分目录，`clean --store` / `store gc` 才能按族作用域，不会误删包对象。
--- 对象 framing 复用 `Vuna.Compiler.Base.Store`（同样的 magic/codec/长度/内容地址校验），
--- 但 tag 不含编译器指纹：包对象跨编译器版本复用（它们只是源码字节）。
--- 本模块只做读写与物化；**取包**（git/url）在 `Vuna.Fetch`，两者都不进 seed。
+-- 对象 framing 复用 [Vuna.Compiler.Base.Store]（同样的 magic / codec / 长度 / 内容地址校验），
+-- 但 tag 不含编译器指纹：包对象跨编译器版本复用（它们只是源码字节）。本模块只做读写与
+-- 物化；**取包**（git / url）在 [Vuna.Fetch]，两者都不进 seed。
+module Vuna.PackageStore where
+
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
@@ -41,10 +42,11 @@ packageObjectsDir root = "${root}/objects/pkg"
 export materializedDir : String -> String -> String
 materializedDir root digest = "${root}/pkgs/${digest}"
 
--- 对象 tag/codec：schema 管载荷布局（`pkg-source 1`），不含编译器指纹。
+-- | 对象 tag（`pkg-source/1`）：管载荷 schema 版本，不含编译器指纹。
 packageTag : String
 packageTag = "pkg-source/1"
 
+-- | 对象 codec 名：`storeEncodeAs` / `storeReadAsEff` 的编解码器标识。
 packageCodec : String
 packageCodec = "pkg-source 1"
 
@@ -92,6 +94,7 @@ materializeEff root digest files = do
     _ <- fsWriteFileAtomic "${dir}/.complete" digest
     pure 0
 
+-- | 内部：把包文件列表逐个写进物化目录，每个文件前先建好父目录。
 writePackageFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List PackageFile -> Eff r Int
 writePackageFiles dir [] = pure 0
 writePackageFiles dir (f :: rest) = do
@@ -99,13 +102,14 @@ writePackageFiles dir (f :: rest) = do
   _ <- fsWriteFileAtomic "${dir}/${f.pfPath}" f.pfContent
   writePackageFiles dir rest
 
--- | 路径的父目录（无 `/` ⇒ "."，即当前目录）。
+-- | 内部：路径的父目录（无 `/` ⇒ `"."`，即当前目录）。
 parentDirOf : String -> String
 parentDirOf path = case split "/" path of
   [] => "."
   [only] => "."
   parts => join "/" (take (listLen parts - 1) parts)
 
+-- | 内部：列表长度。
 listLen : List a -> Int
 listLen [] = 0
 listLen (_ :: rest) = 1 + listLen rest

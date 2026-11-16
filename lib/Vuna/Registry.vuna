@@ -1,8 +1,6 @@
 -- | 静态包索引：`index/<name>.toml` 的解析与版本解析（`vuna add` 的查询层）。
-module Vuna.Registry where
-
--- Vuna.Registry：**可选**的静态索引（D14）。它只是 `name [@version] → (源, hash)` 的
--- 便利层，不是身份真源：
+--
+-- 索引是**可选**的静态便利层，只做 `name [@version] → (源, hash)` 的映射，不是身份真源：
 --
 --   index/<name>.toml
 --     [package]
@@ -13,8 +11,10 @@ module Vuna.Registry where
 --     rev = "<commit>"
 --     hash = "sha256:<64hex>"
 --
--- 索引放在任何地方：本地目录、`file://`、`http(s)://`（后者由宿主 `curl` 取一次）。
+-- 索引可以放在任何地方：本地目录、`file://`、`http(s)://`（后者由宿主 `curl` 取一次）。
 -- 索引不可信：写回 manifest 的永远是 `(源, hash)`，之后 fetch/check 只认摘要。
+module Vuna.Registry where
+
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Frontend.Manifest
@@ -31,14 +31,20 @@ import Base.EffEnv
 
 -- | 一条发布：人读版本号 + 不可变源 + 内容摘要 + 可选语义身份。
 export record Release(..) where
+  -- | 人读版本号（`[releases."<version>"]` 的键，按字符串精确匹配）。
   relVersion : String
+  -- | 不可变源：git（url + rev）或直指对象文件的 url。
   relSource : DependencySource
+  -- | 内容摘要（裸 64 位十六进制，`sha256:` 前缀已归一去掉）：校验取到的字节。
   relHash : String
+  -- | 可选语义身份（同样归一成裸 64 位十六进制）：声明面 + 文件摘要的指纹，写回 manifest 后校验。
   relIdentity : Maybe String
 
 -- | 一个包的索引条目（发布顺序 = 文件里的顺序）。
 export record RegistryEntry(..) where
+  -- | 包名（`[package].name`）。
   regName : String
+  -- | 该包的全部发布，保持索引文件里的顺序。
   regReleases : List Release
 
 -- | 取最后一个发布（无版本时的默认）。
@@ -52,27 +58,32 @@ export resolveRelease : RegistryEntry -> Maybe String -> Maybe Release
 resolveRelease entry Nothing = lastRelease entry.regReleases
 resolveRelease entry (Just version) = findRelease version entry.regReleases
 
+-- | 内部：按版本号字符串线性查找。
 findRelease : String -> List Release -> Maybe Release
 findRelease version [] = Nothing
 findRelease version (r :: rest) =
   if r.relVersion == version then Just r else findRelease version rest
 
 -- ---------------------------------------------------------------- 解析
+-- | 内部：取必需字符串键；缺失或类型不对都是 `IndexMalformed` 诊断。
 stringEntry : String -> List String -> String -> List TomlEntry -> Check String
 stringEntry path section key entries = case lookupEntry section key entries of
   Nothing => pkgPath1 path (IndexMalformed "missing ${key} in [${joinDots section}]") key
   Just (TStr s) => OkC s
   Just _ => pkgPath1 path (IndexMalformed "${key} must be a string") key
 
+-- | 内部：取可选字符串键；缺失或类型不对都当 `Nothing`（由调用方决定是缺省还是报错）。
 maybeStringEntry : String -> List String -> String -> List TomlEntry -> Maybe String
 maybeStringEntry path section key entries = case lookupEntry section key entries of
   Just (TStr s) => Just s
   _ => Nothing
 
+-- | 内部：构造一条发布，摘要统一归一成裸十六进制。
 mkRelease : String -> DependencySource -> String -> Maybe String -> Release
 mkRelease version source hash identity = Release version source (normalizeHash hash) identity
 
--- 一条发布：git（url + rev + hash）或 url（+ hash）。
+-- | 内部：解析一条发布——`git`（需 `rev`）或 `url` 二选一，两者都带必需 `hash`；
+-- `identity` 可选但必须是通过校验的摘要文本。
 buildRelease : String -> String -> List TomlEntry -> Check Release
 buildRelease path version entries =
   let
@@ -91,6 +102,7 @@ buildRelease path version entries =
           OkC hash => OkC (mkRelease version (DepUrl url) hash identity)
         Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
 
+-- | 内部：读可选的 `identity`，写进发布前先归一并用 `validHashText` 校验。
 optionalIdentity : String -> List String -> List TomlEntry -> Check (Maybe String)
 optionalIdentity path section entries = case maybeStringEntry path section "identity" entries of
   Nothing => OkC Nothing
@@ -107,6 +119,7 @@ parseRegistryEntry path text = case parseTomlAt path text of
       ErrC e => ErrC e
       OkC releases => OkC (RegistryEntry name releases)
 
+-- | 内部：按文件的发布顺序逐条解析（累积是倒序，结束处一次性 reverse）。
 buildReleases : String -> List String -> List TomlEntry -> List Release -> Check (List Release)
 buildReleases path [] entries acc = OkC (reverse acc)
 buildReleases path (version :: rest) entries acc = case buildRelease path version entries of
@@ -114,16 +127,20 @@ buildReleases path (version :: rest) entries acc = case buildRelease path versio
   OkC release => buildReleases path rest entries (release :: acc)
 
 -- ---------------------------------------------------------------- 读取
+-- | 内部：去掉索引根的尾斜杠，避免拼出 `//<name>.toml`。
 stripIndexSlash : String -> String
 stripIndexSlash s = if endsWith "/" s then substring 0 (natFromInt (strLength s - 1)) s else s
 
+-- | 内部：`http://` / `https://` 前缀判定。
 isHttpUrl : String -> Bool
 isHttpUrl s = startsWith "http://" s || startsWith "https://" s
 
+-- | 内部：`file://` 前缀判定。
 isFileUrl : String -> Bool
 isFileUrl s = startsWith "file://" s
 
 -- | 读索引条目：目录 / `file://` / `http(s)://`（后者经宿主 `curl` 落到临时文件）。
+-- 取不到文件或解析失败都返回 `IndexMalformed` 诊断，不做静默回落。
 export loadRegistryEntryEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check RegistryEntry)
 loadRegistryEntryEff indexRoot name =
   let
