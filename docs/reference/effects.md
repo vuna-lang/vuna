@@ -217,11 +217,11 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 直接调用对应 `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`）。mock/real 可并存（`dt_base/40`） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile`/`FileSize` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；mock/real 可并存（`dt_base/40`） |
 | `Base.EffConsole` | console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`） |
 | `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
-| `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出） |
+| `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
 | `Base.EffError` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
 | `Base.EffExn` | 高阶 scoped Error：标签为无参标记 `Exn`，`ExnOp` 的 `Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
 | `Base.EffMutex` | Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
@@ -320,6 +320,41 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 高阶效应类型是非目标（见 §10）。语言级 `perform`/`handle` 语法在
 `Base.Eff.performCore` / `handleWith`/`handleWithAt`（参数化 op 族 State/Reader 两种语法
 都支持），语法与边界见 [native-effects.md](native-effects.md)。
+
+### 8.7 宿主失败：typed error + 入口收口
+
+宿主操作会失败，失败分四类，**落点不同**：
+
+| 语义 | 载体 | 例子 |
+| --- | --- | --- |
+| 正常值 | `a` | 读到的文件内容、子进程退出码 |
+| 无值（正常流程的一部分） | `Maybe a` / `Bool` | `fsFileExists`、`envGetEnvNonEmpty` |
+| 可恢复的失败（控制流） | **行里的 typed error**（`FsErrorOp` / `ProcessErrorOp`） | 文件不存在、权限不足、磁盘满、cwd 不存在 |
+| 不变式破坏（bug） | 崩溃（exit 2 + 报告器） | 越界、未处理效应、内部句柄非法 |
+
+机制（三段）：
+
+1. **运行时**：`@vuna@host@try*` 原语不抛宿主异常，而是把失败码写进 Domain 局部的
+   状态槽（`@vuna@prim_eff_hostStatus`，0 = 成功），返回默认值。异步任务跨 Domain，
+   所以用 `Domain.DLS` 而不是全局 ref。
+2. **base handler**：真实 handler 读状态槽，失败时 `fsFail` / `processFail` 往行里抛
+   `FsErrorOp` / `ProcessErrorOp`（abort 语义，不恢复续延）。**调用点签名不变**：
+   `fsReadFile p : Eff r String` 不需要解包，只有想恢复的地方才在签名里加
+   `Member n FsErrorOp r` 并 `runFsError n` / `catch`。
+3. **entry 收口**：`Lower` 在内建 family handler 之后追加
+   `runFsErrorHost` / `runProcessErrorHost`（左折 → 最外层），打印
+   `vuna: fs: <path>: <原因>` 并以**退出码 1** 结束（可恢复失败）；exit 2 留给
+   不变式破坏与未处理效应。
+
+`hostRow` 与 `collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
+answer 行里（`[FsErrorOp]`），entry 靠 family 标签决定装哪些收口 handler。
+
+夹具：`dt_base/85_fs_error`（mock 抛 → `runFsError` 收成 `Result`）、
+`steps/111_host_error`（真实 handler：fs 缺失 / process cwd 缺失 → exit 1 + 诊断；
+`false` 的非零退出码仍是值）。
+
+仍未类型的边界：net（`raise` 直调原语、无 handler）、stdin 的 EOF、console 的 EPIPE、
+`fileSize`/`fileMtime` 的「取不到静默 0」——见 [debt.md](debt.md) D90。
 
 ## 9. 仍开放的边界
 

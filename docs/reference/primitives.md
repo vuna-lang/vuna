@@ -309,7 +309,7 @@
 | 分组 | 原语 / 入口 |
 | --- | --- |
 | `console` | `prim_eff_print`、`prim_eff_eprint`、`prim_eff_readLine`、`prim_eff_readBytes` |
-| `fs` | `prim_eff_readFile`、`prim_eff_writeFile`、`prim_eff_writeFileAtomic`、`prim_eff_readDir`、`prim_eff_isDirectory`、`prim_eff_makeDir`、`prim_eff_removeFile`、`prim_eff_fileExists`、`prim_eff_fileMtime`、`prim_eff_fileSize` |
+| `fs` | `prim_eff_readFile`、`prim_eff_writeFile`、`prim_eff_writeFileAtomic`、`prim_eff_readDir`、`prim_eff_isDirectory`、`prim_eff_makeDir`、`prim_eff_removeFile`、`prim_eff_fileExists`、`prim_eff_fileMtime`、`prim_eff_fileSize`；宿主 handler 用 `@vuna@host@tryReadFile`/`tryWriteFile`/`tryWriteFileAtomic`/`tryReadDir`/`tryIsDirectory`/`tryMakeDir`/`tryRemoveFile` + `@vuna@prim_eff_hostStatus`（状态槽：0 = 成功，非 0 = 失败码） |
 | `process` | `prim_eff_getArgs`、`prim_eff_exit`、`prim_eff_runIn`、`prim_eff_spawn`、`prim_eff_wait` |
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
@@ -343,7 +343,7 @@
 | `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.EffConsole.Print` 在 handler 边界转 `Nat`） |
 | `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.EffFs.WriteFile` 在 handler 边界转 `Nat`）；写失败抛宿主异常 |
 | `prim_eff_writeFileAtomic` | 同 `prim_eff_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
-| `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常 |
+| `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常。宿主 handler 走 `@vuna@host@tryReadFile`：失败不抛，写状态槽并返回 `""`，由 base 抛 `FsErrorOp`（typed，entry 收口成诊断 + exit 1） |
 | `prim_eff_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
 | `prim_eff_readBytes` | `Int -> String`：最多读 n 字节，**有数据就立即返回**（可能少于 n），EOF 返回 `""`；调用方负责循环 / 拼接（LSP 帧读取用） |
 | `prim_eff_readDir` | 目录项按字符串排序；目录不存在 / 不可读时抛宿主异常 |

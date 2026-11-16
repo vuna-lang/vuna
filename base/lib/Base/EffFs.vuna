@@ -15,6 +15,7 @@ import Base.Nat
 import Base.Monad
 import Base.Bool
 import Base.List
+import Base.Result
 
 -- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
 export data FsOp(..) : Type where
@@ -176,55 +177,77 @@ fsOpHIO op k = case op of
 -- ---------------------------------------------------------------
 -- 带行的真实 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
--- | 带 `FsOp` 行的 op 解释：映射到对应 `@vuna@prim_eff_*_host` 原语。
-fsOpHIOHost : {a : Type} -> (o : FsOp) -> (resFs o -> Eff (Cons "default" FsOp []) a) -> Eff (Cons "default" FsOp []) a
+-- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里，0 = 成功。
+fsHostStatus : {r : Row} -> Eff r Int
+fsHostStatus = raise @vuna@prim_eff_hostStatus
+
+-- | 带 `FsOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[FsErrorOp]`。
+fsOpHIOHost : {a : Type} -> (o : FsOp) -> (resFs o -> Eff (Cons "fs-error" FsErrorOp []) a) -> Eff (Cons "fs-error" FsErrorOp []) a
 fsOpHIOHost op k = case op of
   ReadFile p => do
-    s <- @vuna@host@readFile p
-    k s
+    s <- raise (@vuna@host@tryReadFile p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k s
   WriteFile p s => do
-    n <- fmap natFromInt (@vuna@host@writeFile p s)
-    k n
+    _ <- raise (@vuna@host@tryWriteFile p s)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k (natFromInt (strLength s))
   WriteFileAtomic p s => do
-    n <- @vuna@host@writeFileAtomic p s
-    k n
+    _ <- raise (@vuna@host@tryWriteFileAtomic p s)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k (strLength s)
   ReadDir p => do
-    xs <- @vuna@host@readDir p
-    k xs
+    xs <- raise (@vuna@host@tryReadDir p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k xs
   IsDirectory p => do
-    b <- @vuna@host@isDirectory p
-    k b
+    b <- raise (@vuna@host@tryIsDirectory p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k b
   MakeDir p => do
-    n <- @vuna@host@makeDir p
-    k n
+    _ <- raise (@vuna@host@tryMakeDir p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k 0
   RemoveFile p => do
-    n <- @vuna@host@removeFile p
-    k n
+    _ <- raise (@vuna@host@tryRemoveFile p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k 0
   FileExists p => do
-    b <- @vuna@host@fileExists p
+    b <- raise (@vuna@host@fileExists p)
     k b
   FileMtime p => do
-    n <- @vuna@host@fileMtime p
+    n <- raise (@vuna@host@fileMtime p)
     k n
   FileSize p => do
-    n <- fmap natFromInt (@vuna@host@fileSize p)
+    n <- fmap natFromInt (raise (@vuna@host@fileSize p))
     k n
 
--- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
-fsErrorOpH : {r : Row} -> {a : Type} -> (o : FsErrorOp) -> (resFsError o -> Eff r a) -> Eff r a
-fsErrorOpH op _ = case op of
-  FsFail e => do
-    _ <- raise (@vuna@prim_eff_eprint "vuna: ${fsErrorText e}\n")
-    _ <- raise (@vuna@prim_eff_exit 1)
-    prim_fail "unreachable: fs error handler"
-
-runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "fs-error" FsErrorOp r) a -> Eff r a
-runFsErrorHost comp = handleCore FsErrorOp "fs-error" "fs-error" (\a => a) fsErrorOpH comp
-
--- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsOp]`（不导出）。
-handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "default" FsOp []) a)
+-- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsErrorOp]`（不导出）。
+handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n FsOp r) a -> Eff r (Eff (Cons "fs-error" FsErrorOp []) a)
 handleFsHostHost n comp = handleFs n (\a => pure a) fsOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic。
-runFsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" FsOp r) a -> Eff (rowAppend r (Cons "default" FsOp [])) a
+runFsHost : {r : Row} -> {a : Type} -> Eff (Cons "default" FsOp r) a -> Eff (rowAppend r (Cons "fs-error" FsErrorOp [])) a
 runFsHost comp = joinEff (handleFsHostHost "default" comp)
+
+-- | 局部恢复：把 fs 失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+fsErrorRet : {a : Type} -> a -> Result a
+fsErrorRet a = Ok a
+
+fsErrorOpHR : {a : Type} -> (o : FsErrorOp) -> (resFsError o -> Result a) -> Result a
+fsErrorOpHR op _ = case op of
+  FsFail e => Err (fsErrorText e)
+
+export runFsError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n FsErrorOp r) a -> Eff r (Result a)
+runFsError n comp = handleCore FsErrorOp "fs-error" n fsErrorRet fsErrorOpHR comp
+
+-- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
+runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "fs-error" FsErrorOp r) a -> Eff r a
+runFsErrorHost comp = do
+  res <- runFsError "fs-error" comp
+  case res of
+    Ok a => pure a
+    Err msg => do
+      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise (@vuna@prim_eff_exit 1)
+      prim_fail "unreachable: fs error handler"

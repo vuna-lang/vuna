@@ -17,6 +17,7 @@ import Base.Eff
 import Base.Eq
 import Base.Monad
 import Base.List
+import Base.Result
 
 -- | process 操作：`Args`（取进程参数）、`Exit c`（以状态码 c 退出）、`RunIn dir args`（在目录下运行命令）、
 -- `Spawn args`（异步启动并返回句柄）、`Wait h`（等句柄并返回退出码）。
@@ -120,17 +121,23 @@ handleProcessHostWith n onExit comp = handleProcess n (\a => pure a) (processOpH
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
-processOpHIOWithHost : (Int -> Eff (Cons "default" ProcessOp []) Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff (Cons "default" ProcessOp []) a) -> Eff (Cons "default" ProcessOp []) a
+-- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里，0 = 成功。
+processHostStatus : {r : Row} -> Eff r Int
+processHostStatus = raise @vuna@prim_eff_hostStatus
+
+-- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
+processOpHIOWithHost : (Int -> Eff (Cons "process-error" ProcessErrorOp []) Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff (Cons "process-error" ProcessErrorOp []) a) -> Eff (Cons "process-error" ProcessErrorOp []) a
 processOpHIOWithHost onExit op k = case op of
   Args => do
-    xs <- @vuna@prim_eff_getArgs_process_host
+    xs <- raise @vuna@prim_eff_getArgs_process_host
     k xs
   Exit c => do
     r <- onExit c
     k r
   RunIn dir args => do
-    c <- @vuna@host@runIn dir args
-    k c
+    c <- raise (@vuna@host@tryRunIn dir args)
+    ok <- processHostStatus
+    if ok /= 0 then processFail (processErrorOfCode dir ok) else k c
   Spawn args => do
     h <- raise (@vuna@prim_eff_spawn args)
     k h
@@ -138,22 +145,34 @@ processOpHIOWithHost onExit op k = case op of
     c <- raise (@vuna@prim_eff_wait h)
     k c
 
-handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Cons "default" ProcessOp []) Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff (Cons "default" ProcessOp []) a)
+handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Cons "process-error" ProcessErrorOp []) Int) -> Eff (Base.Eff.Cons n ProcessOp r) a -> Eff r (Eff (Cons "process-error" ProcessErrorOp []) a)
 handleProcessHostWithHost n onExit comp =
   handleProcess n (\a => pure a) (processOpHIOWithHost onExit) comp
 
--- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
-processErrorOpH : {r : Row} -> {a : Type} -> (o : ProcessErrorOp) -> (resProcessError o -> Eff r a) -> Eff r a
-processErrorOpH op _ = case op of
-  ProcessFail e => do
-    _ <- raise (@vuna@prim_eff_eprint "vuna: ${processErrorText e}\n")
-    _ <- raise (@vuna@prim_eff_exit 1)
-    prim_fail "unreachable: process error handler"
-
-runProcessErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "process-error" ProcessErrorOp r) a -> Eff r a
-runProcessErrorHost comp =
-  handleCore ProcessErrorOp "process-error" "process-error" (\a => a) processErrorOpH comp
-
-runProcessHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ProcessOp r) a -> Eff (rowAppend r (Cons "default" ProcessOp [])) a
+runProcessHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ProcessOp r) a -> Eff (rowAppend r (Cons "process-error" ProcessErrorOp [])) a
 runProcessHost comp =
-  joinEff (handleProcessHostWithHost "default" (\c => @vuna@prim_eff_exit_process_host c) comp)
+  joinEff
+    (handleProcessHostWithHost "default" (\c => raise (@vuna@prim_eff_exit_process_host c)) comp)
+
+-- | 局部恢复：把进程启动失败折叠成 `Result`（`Err` 携带渲染后的文本）。
+processErrorRet : {a : Type} -> a -> Result a
+processErrorRet a = Ok a
+
+processErrorOpHR : {a : Type} -> (o : ProcessErrorOp) -> (resProcessError o -> Result a) -> Result a
+processErrorOpHR op _ = case op of
+  ProcessFail e => Err (processErrorText e)
+
+export runProcessError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Cons n ProcessErrorOp r) a -> Eff r (Result a)
+runProcessError n comp =
+  handleCore ProcessErrorOp "process-error" n processErrorRet processErrorOpHR comp
+
+-- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
+runProcessErrorHost : {r : Row} -> {a : Type} -> Eff (Cons "process-error" ProcessErrorOp r) a -> Eff r a
+runProcessErrorHost comp = do
+  res <- runProcessError "process-error" comp
+  case res of
+    Ok a => pure a
+    Err msg => do
+      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise (@vuna@prim_eff_exit 1)
+      prim_fail "unreachable: process error handler"

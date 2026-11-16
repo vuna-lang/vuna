@@ -1,0 +1,40 @@
+-- 宿主 fs 失败的类型化通道：`fsFail` 抛到行里，`runFsError` 折叠成 `Result`。
+-- 失败是控制流而不是返回值：`fsReadFile` 一类操作的签名不变，只有想恢复的地方才 catch。
+import Prelude
+import Base.Eff
+import Base.EffFs
+import Base.Result
+
+failProg : Eff (Cons "fs-error" FsErrorOp []) Int
+failProg = do
+  _ <- fsFail (FsMissing "/missing")
+  pure 0
+
+okProg : Eff (Cons "fs-error" FsErrorOp []) Int
+okProg = pure 7
+
+failed : Result Int
+failed = runPure (runFsError "fs-error" failProg)
+
+succeeded : Result Int
+succeeded = runPure (runFsError "fs-error" okProg)
+
+-- 错误种类在类型上可区分（`FsError` 构造函数），文本只是渲染。
+kindScore : FsError -> Int
+kindScore (FsMissing _) = 1
+kindScore (FsDenied _) = 2
+kindScore (FsNoSpace _) = 3
+kindScore (FsNotDir _) = 4
+kindScore (FsIsDir _) = 5
+kindScore (FsExists _) = 6
+kindScore (FsIo _) = 7
+
+main : Int
+main = ((case failed of
+  Err msg => if msg == "fs: /missing: no such file or directory" then 1 else 0
+  Ok _ => 0
+) + (case succeeded of
+  Ok 7 => 1
+  _ => 0
+)
+) + kindScore (FsNoSpace "/x")
