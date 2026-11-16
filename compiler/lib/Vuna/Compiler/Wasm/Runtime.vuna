@@ -1525,6 +1525,7 @@ rtConstFalse1 =
   in rtFunc "$rt_constFalse1" params [WvAnyRef] [] (boolValue False)
 
 -- | 三向比较基元（-1 / 0 / 1）；`$rt_compare` 与字符串/数组比较共用。
+--   `i32.sub` 是「先压的减后压的」，所以先算 `x > y`、再算 `x < y`。
 rtCmpI32 : WatFunc
 rtCmpI32 =
   let
@@ -1532,10 +1533,10 @@ rtCmpI32 =
     body =
       [ ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "i32.lt_s",
+        IBinop "i32.gt_s",
         ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "i32.gt_s",
+        IBinop "i32.lt_s",
         IBinop "i32.sub"
       ]
   in rtFunc "$rt_cmpI32" params [WvI32] [] body
@@ -1547,10 +1548,10 @@ rtCmpI64 =
     body =
       [ ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "i64.lt_s",
+        IBinop "i64.gt_s",
         ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "i64.gt_s",
+        IBinop "i64.lt_s",
         IBinop "i32.sub"
       ]
   in rtFunc "$rt_cmpI64" params [WvI32] [] body
@@ -1562,10 +1563,10 @@ rtCmpF64 =
     body =
       [ ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "f64.lt",
+        IBinop "f64.gt",
         ILocalGet "$x",
         ILocalGet "$y",
-        IBinop "f64.gt",
+        IBinop "f64.lt",
         IBinop "i32.sub"
       ]
   in rtFunc "$rt_cmpF64" params [WvI32] [] body
