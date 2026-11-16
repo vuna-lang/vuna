@@ -203,21 +203,10 @@ let dtp_hostCodeAt path (e : exn) : int =
   try ignore (Unix.stat path); dtp_hostCode e
   with e2 -> dtp_hostCode e2
 let dtp_hostFail code = dtp_hostSetStatus (if code = 0 then 9 else code)
-(* 失败位置帧：宿主原语失败的错误在 effect handler 里抛，用户调用栈已在续延里；
-   位置只能在**操作发起处**（base 访问器）记。默认关闭（每次宿主操作一次栈捕获是
-   全局开销），`VUNA_ERR_FRAMES=1` 打开。 *)
-let dtp_hostFramesOn = (try Sys.getenv \"VUNA_ERR_FRAMES\" <> \"\" with Not_found -> false)
-let dtp_hostSiteK = Domain.DLS.new_key (fun () -> ref None)
-let dtp_hostRememberSite () : int =
-  (if dtp_hostFramesOn then
-     (Domain.DLS.get dtp_hostSiteK) := Some (Printexc.get_callstack 24));
-  0
-let dtp_hostBtK = Domain.DLS.new_key (fun () -> ref None)
-let dtp_hostSetBt bt = (Domain.DLS.get dtp_hostBtK) := bt
-let dtp_hostReset () = dtp_hostSetStatus 0; dtp_hostSetBt None
+let dtp_hostReset () = dtp_hostSetStatus 0
 let dtp_hostMark code e =
-  dtp_hostSetStatus (if code = 0 then 9 else code);
-  dtp_hostSetBt (Some (Printexc.get_callstack 128))
+  ignore e;
+  dtp_hostSetStatus (if code = 0 then 9 else code)
 let dtp_readFile path =
   try
     let ch = open_in_bin path in
@@ -1032,13 +1021,6 @@ let dt_bt_labels (bt : Printexc.raw_backtrace) : string list =
          | Some s -> if s = last then go tl shown last acc else go tl (shown + 1) s (s :: acc)
          | None -> go tl shown last acc)
     in go (Array.to_list slots) 0 \"\" []
-let dtp_hostReportFrames () : int =
-  (match !(Domain.DLS.get dtp_hostSiteK) with
-   | Some bt -> List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt)
-   | None -> (match !(Domain.DLS.get dtp_hostBtK) with
-     | None -> ()
-     | Some bt -> List.iter (fun s -> Printf.eprintf \"  at %s\\n%!\" s) (dt_bt_labels bt)));
-  0
 let dt_report_exn e bt =
   let msg = match e with Effect.Unhandled (Perform (key, name, _)) -> Printf.sprintf \"unhandled effect %s (instance %s)\" key name | Failure m -> m | _ -> Printexc.to_string e in
   Printf.eprintf \"vuna: runtime error: %s\\n%!\" msg;

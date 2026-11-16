@@ -15,8 +15,8 @@ out-contains: echo:ping
 out-contains: stale-server-exit:0
 run: "$TMPDIR/net-fixture/.output/bin/net-echo" client "bogus:" 2>&1
 exit: 1
-out-contains: net: bogus:: invalid address
+out-contains: net: connect bogus:: invalid address
 # 连一个不存在的 unix socket：宿主失败是 typed error（不是崩溃），退出码 1。
 run: "$TMPDIR/net-fixture/.output/bin/net-echo" client "unix:$TMPDIR/no-such.sock" 2>&1
 exit: 1
-out-contains: vuna: net: unix:
+out-contains: vuna: net: connect unix:

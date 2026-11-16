@@ -71,7 +71,7 @@
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈，并保留本层栈段（外层 handler 帧在其上），所以 N 层顺序 effect 是 O(N²) 拷贝与内存：500 次 ≈ 22 ms / 35 MiB、1000 次 ≈ 65 ms / 135 MiB、2000 次 ≈ 260 ms / 500 MiB、5000 次 ≈ 1.4 s / 3 GiB；捕获块与栈段已按 2 的幂分档走 free list 复用（`rt_cap_free` / `rt_seg_free`），单次大捕获（> 1 MiB）也能正确扩 mmap；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effAllocCaptureFn` / `effAllocSegmentFn` / `pow2CeilFn`）；[native.md](native.md) §3.4；105 的 `effmany` / `effcap` / `effdeep` / `effovf` | 后续（分段栈/按需扩容；multi-shot 不做） |
-| D90 | 宿主失败已全线类型化：fs / process 启动 / net 都有 typed error 效应（`FsErrorOp` / `ProcessErrorOp` / `NetErrorOp`）+ entry 收口（诊断 + exit 1），`runFsError`/`runProcessError`/`runNetError` 可局部收成 `Result`；无值（`fsFileSize`/`fsFileMtime`、stdin EOF、`netRecv` 对端关闭）统一走 `Maybe`。**仍未覆盖**：(a) entry 收口只有文本，不带 vuna 位置帧（typed error 丢弃宿主 backtrace）；(b) net 的 accept/读写是阻塞式的，没有超时/非阻塞参数；(c) 句柄失效仍按不变式破坏崩溃（`net: invalid handle`） | `base/lib/Base/{EffFs,EffProcess,EffNet,EffStdin}.vuna`；`compiler/lib/Vuna/Compiler/Codegen/{Runtime,Term}.vuna` | 后续（收口带位置需要把 span/backtrace 带进错误载荷；net 超时另立设计） |
+| D90 | 宿主失败通道已完整：fs / process / net 都是 typed error 效应 + entry 收口（诊断 + exit 1），`runFsError`/`runProcessError`/`runNetError` 可局部收成 `Result`；无值统一走 `Maybe`；net 有单次超时变体（`NetStep`）与 `NetBadHandle`。**已知取舍**：(a) 收口文本只有操作上下文（`fs: writeFile /x: …`），没有源码位置帧——typed error 在 handler 里抛，用户 `Eff` 闭包经尾调用链执行，调用栈里没有用户 def 帧（崩溃路径仍有帧）；(b) net 仍是阻塞式单连接，无全局 deadline / 异步 / TLS（非目标）；(c) 事件循环在 accept/recv 上阻塞时无法同时服务其它连接 | `base/lib/Base/{EffFs,EffProcess,EffNet}.vuna`；`compiler/lib/Vuna/Compiler/Codegen/{Runtime,Term}.vuna` | 后续（源码帧需要 per-send 调用点元数据；并发/超时语义另立设计） |
 
 
 ## 相关阅读

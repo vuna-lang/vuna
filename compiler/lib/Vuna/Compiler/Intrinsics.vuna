@@ -943,8 +943,6 @@ effIntrinsics =
     Intrinsic "@vuna@host@tryNetAcceptWithin" (IFun IInt (IFun IInt (IEff IInt))) OpNone False,
     Intrinsic "@vuna@host@tryNetRecvWithin" (IFun IInt (IFun IInt (IFun IInt (IEff IStr)))) OpNone False,
     Intrinsic "@vuna@host@tryNetSendWithin" (IFun IInt (IFun IStr (IFun IInt (IEff IInt)))) OpNone False,
-    Intrinsic "@vuna@prim_eff_hostReportFrames" (IEff IInt) OpNone False,
-    Intrinsic "@vuna@prim_eff_hostRememberSite" (IEff IInt) OpNone False,
     Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone True,

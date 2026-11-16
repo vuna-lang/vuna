@@ -139,7 +139,7 @@ processOpHIOWithHost onExit op k = case op of
   RunIn dir args => do
     c <- raise (@vuna@host@tryRunIn dir args)
     ok <- processHostStatus
-    if ok /= 0 then processFail (processErrorOfCode dir ok) else k c
+    if ok /= 0 then processFail (processErrorOfCode "runIn ${dir}" ok) else k c
   Spawn args => do
     h <- raise (@vuna@prim_eff_spawn args)
     k h
@@ -176,6 +176,5 @@ runProcessErrorHost comp = do
     Ok a => pure a
     Err msg => do
       _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise @vuna@prim_eff_hostReportFrames
       _ <- raise (@vuna@prim_eff_exit 1)
       prim_fail "unreachable: process error handler"

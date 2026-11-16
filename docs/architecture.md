@@ -205,8 +205,9 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
   共用这一层，传输与退出策略由各自传入。
 - 网络：用户面是 `Base.EffNet` 的 `NetOp` 效应（命名实例、可 mock、entry 自动预装真实
-  handler）；宿主失败抛 `NetErrorOp`（typed，`vuna: net: …` + exit 1），`netRecv` 的对端
-  关闭是 `Nothing`。底层 `net` 原语（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
+  handler）；宿主失败抛 `NetErrorOp`（typed，`vuna: net: <op> …` + exit 1），`netRecv` 的
+  对端关闭是 `Nothing`；`netAcceptWithin` / `netRecvWithin` / `netSendWithin` 用 `select`
+  提供单次超时（`NetStep`：ok / closed / timeout）。底层 `net` 原语（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
   句柄是 Int、运行时映射 `Unix.file_descr`）见 [primitives.md](reference/primitives.md) §7。
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
   [tooling.md](reference/tooling.md) §5）。

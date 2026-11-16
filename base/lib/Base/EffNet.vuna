@@ -174,48 +174,48 @@ netOpHIOHost op k = case op of
   Listen addr => do
     h <- raise (@vuna@host@tryNetListen addr)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode addr ok) else k h
+    if ok /= 0 then netFail (netErrorOfCode "listen ${addr}" ok) else k h
   Port h => do
     p <- raise (@vuna@host@tryNetPort h)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k p
+    if ok /= 0 then netFail (netErrorOfCode "port ${handleContext h}" ok) else k p
   Accept h => do
     c <- raise (@vuna@host@tryNetAccept h)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k c
+    if ok /= 0 then netFail (netErrorOfCode "accept ${handleContext h}" ok) else k c
   Recv h n => do
     s <- raise (@vuna@host@tryNetRecv h n)
     ok <- netHostStatus
     if ok == 0 then k (Just s)
-    else if ok == 1 then k Nothing else netFail (netErrorOfCode (handleContext h) ok)
+    else if ok == 1 then k Nothing else netFail (netErrorOfCode "recv ${handleContext h}" ok)
   Send h s => do
     n <- raise (@vuna@host@tryNetSend h s)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k n
+    if ok /= 0 then netFail (netErrorOfCode "send ${handleContext h}" ok) else k n
   Close h => do
     _ <- raise (@vuna@host@tryNetClose h)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode (handleContext h) ok) else k 0
+    if ok /= 0 then netFail (netErrorOfCode "close ${handleContext h}" ok) else k 0
   Connect addr => do
     c <- raise (@vuna@host@tryNetConnect addr)
     ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode addr ok) else k c
+    if ok /= 0 then netFail (netErrorOfCode "connect ${addr}" ok) else k c
   AcceptWithin h micros => do
     c <- raise (@vuna@host@tryNetAcceptWithin h micros)
     ok <- netHostStatus
     if ok == 0 then k (StepOk c)
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "acceptWithin ${handleContext h}" ok)
   RecvWithin h bytes micros => do
     s <- raise (@vuna@host@tryNetRecvWithin h bytes micros)
     ok <- netHostStatus
     if ok == 0 then k (StepOk s)
     else if ok == 1 then k StepClosed
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "recvWithin ${handleContext h}" ok)
   SendWithin h s micros => do
     n <- raise (@vuna@host@tryNetSendWithin h s micros)
     ok <- netHostStatus
     if ok == 0 then k (StepOk n)
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode (handleContext h) ok)
+    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "sendWithin ${handleContext h}" ok)
 
 -- | 带 `NetOp` 行的宿主 handler：删掉 `NetOp`，answer 是 `Eff [NetErrorOp]`（不导出）。
 handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n NetOp r) a -> Eff r (Eff (Cons "net-error" NetErrorOp []) a)
@@ -244,6 +244,5 @@ runNetErrorHost comp = do
     Ok a => pure a
     Err msg => do
       _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise @vuna@prim_eff_hostReportFrames
       _ <- raise (@vuna@prim_eff_exit 1)
       prim_fail "unreachable: net error handler"

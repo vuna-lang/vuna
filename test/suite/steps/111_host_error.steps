@@ -7,14 +7,14 @@ run: sh -c 'rm -rf "$TMPDIR/h111"; mkdir -p "$TMPDIR/h111/app"; printf "[package
 exit: 0
 run: sh -c '"$VUNA" run "$TMPDIR/h111" -- 2>&1'
 exit: 1
-out-contains: vuna: fs: /nonexistent/h111: no such file or directory
+out-contains: vuna: fs: readFile /nonexistent/h111: no such file or directory
 out-not-contains: runtime error
 # process：cwd 不存在 → 启动失败是 typed error，不是 `Sys_error` 崩溃。
 run: sh -c 'printf "%s\n" "import Prelude" "import Base.Eff" "import Base.EffProcess" "import Base.HostRow" "" "main : Eff hostRow Int" "main = processRunIn \"/nonexistent/h111-dir\" [\"true\"]" > "$TMPDIR/h111/app/Main.vuna"'
 exit: 0
 run: sh -c '"$VUNA" run "$TMPDIR/h111" -- 2>&1'
 exit: 1
-out-contains: vuna: process: /nonexistent/h111-dir: no such directory
+out-contains: vuna: process: runIn /nonexistent/h111-dir: no such directory
 # 子进程非零退出码仍是值：`false` 返 1，程序正常结束（退出码 0）并打印 code=1。
 run: sh -c 'printf "%s\n" "import Prelude" "import Base.Eff" "import Base.EffProcess" "import Base.EffConsole" "import Base.HostRow" "" "main : Eff hostRow Int" "main = do" "  code <- processRunIn \"/tmp\" [\"false\"]" "  _ <- consolePrint \"code=\${strFromInt code}\\n\"" "  pure 0" > "$TMPDIR/h111/app/Main.vuna"'
 exit: 0

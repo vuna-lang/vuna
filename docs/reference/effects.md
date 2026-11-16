@@ -342,9 +342,16 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
    `fsReadFile p : Eff r String` 不需要解包，只有想恢复的地方才在签名里加
    `Member n FsErrorOp r` 并 `runFsError n` / `catch`。
 3. **entry 收口**：`Lower` 在内建 family handler 之后追加
-   `runFsErrorHost` / `runProcessErrorHost`（左折 → 最外层），打印
-   `vuna: fs: <path>: <原因>` 并以**退出码 1** 结束（可恢复失败）；exit 2 留给
-   不变式破坏与未处理效应。
+   `runFsErrorHost` / `runProcessErrorHost` / `runNetErrorHost`（左折 → 最外层），打印
+   `vuna: <family>: <op> <上下文>: <原因>`（例如 `vuna: fs: writeFile /x: permission denied`）
+   并以**退出码 1** 结束（可恢复失败）；exit 2 留给不变式破坏与未处理效应。
+   错误载荷带操作名与路径 / 句柄，所以文本能定位「哪个操作、哪个对象」。
+
+   **为什么没有源码位置帧**：typed error 在 effect handler 里抛，用户函数编译成 `Eff`
+   闭包并由调度器经尾调用重的 bind/joinEff 链执行——`get_callstack` / 异常 backtrace
+   都只剩运行时与 base 帧（用户 def 的帧不进栈）。要给出调用点只能给每次宿主操作付
+   栈捕获的代价，且仍拿不到用户帧；因此收口只给操作上下文。崩溃路径（`dt_report_exn`）
+   仍有源码帧，因为它走普通异常栈。
 
 `hostRow` 与 `collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
 answer 行里（`[FsErrorOp]`），entry 靠 family 标签决定装哪些收口 handler。
@@ -362,8 +369,12 @@ net 走同一套：`Base.EffNet` 的 `NetOp` 是普通命名实例效应（可 m
 `runNetHost`），失败抛 `NetErrorOp`（`NetRefused/Timeout/Closed/AddrInUse/BadAddr/Io`），
 `runNetError n` 可局部收成 `Result`；`netRecv` 的对端关闭是 `Nothing`（无值）。
 
-剩余边界：entry 收口只有文本，不带 vuna 位置帧（typed error 丢弃了宿主 backtrace）；
-net 的 accept/读写仍是阻塞式，没有超时参数——见 [debt.md](debt.md) D90。
+net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin` / `netSendWithin`
+返回 `NetStep a`（`StepOk` / `StepClosed` / `StepTimeout`），宿主侧用 `select` 实现。
+句柄失效（重复 close / 伪造句柄）也是 typed `NetBadHandle`（exit 1），不再是崩溃。
+
+剩余边界：没有异步/多连接/TLS（非目标）；超时只覆盖单次 accept/read/write，
+没有全局 deadline——见 [debt.md](debt.md) D90。
 
 ## 9. 仍开放的边界
 

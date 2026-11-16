@@ -161,31 +161,31 @@ fsOpHIOHost op k = case op of
   ReadFile p => do
     s <- raise (@vuna@host@tryReadFile p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k s
+    if ok /= 0 then fsFail (fsErrorOfCode "readFile ${p}" ok) else k s
   WriteFile p s => do
     _ <- raise (@vuna@host@tryWriteFile p s)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k (natFromInt (strLength s))
+    if ok /= 0 then fsFail (fsErrorOfCode "writeFile ${p}" ok) else k (natFromInt (strLength s))
   WriteFileAtomic p s => do
     _ <- raise (@vuna@host@tryWriteFileAtomic p s)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k (strLength s)
+    if ok /= 0 then fsFail (fsErrorOfCode "writeFileAtomic ${p}" ok) else k (strLength s)
   ReadDir p => do
     xs <- raise (@vuna@host@tryReadDir p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k xs
+    if ok /= 0 then fsFail (fsErrorOfCode "readDir ${p}" ok) else k xs
   IsDirectory p => do
     b <- raise (@vuna@host@tryIsDirectory p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k b
+    if ok /= 0 then fsFail (fsErrorOfCode "isDirectory ${p}" ok) else k b
   MakeDir p => do
     _ <- raise (@vuna@host@tryMakeDir p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k 0
+    if ok /= 0 then fsFail (fsErrorOfCode "makeDir ${p}" ok) else k 0
   RemoveFile p => do
     _ <- raise (@vuna@host@tryRemoveFile p)
     ok <- fsHostStatus
-    if ok /= 0 then fsFail (fsErrorOfCode p ok) else k 0
+    if ok /= 0 then fsFail (fsErrorOfCode "removeFile ${p}" ok) else k 0
   FileExists p => do
     b <- raise (@vuna@host@fileExists p)
     k b
@@ -225,6 +225,5 @@ runFsErrorHost comp = do
     Ok a => pure a
     Err msg => do
       _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise @vuna@prim_eff_hostReportFrames
       _ <- raise (@vuna@prim_eff_exit 1)
       prim_fail "unreachable: fs error handler"

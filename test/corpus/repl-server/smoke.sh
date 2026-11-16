@@ -185,7 +185,7 @@ check_contains "非法 --listen 地址给出原因" "$(cat "$tmp/badaddr.out" "$
 printf '%s' '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
   "$VUNA" repl --client "unix:$tmp/nonexistent.sock" >/dev/null 2>"$tmp/noserver.err"
 check_eq "连不上的 --client 退出码 1" "1" "$?"
-check_contains "连不上的 --client 有 stderr 诊断" "$(cat "$tmp/noserver.err")" "net: unix:"
+check_contains "连不上的 --client 有 stderr 诊断" "$(cat "$tmp/noserver.err")" "net: connect unix:"
 
 # ---- 7) TCP 临时端口（沙箱不可用则 SKIP）----
 "$VUNA" repl --listen "tcp:127.0.0.1:0" >"$tmp/tcp.log" 2>"$tmp/tcp.err" &
