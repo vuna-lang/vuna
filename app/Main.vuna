@@ -1,7 +1,11 @@
 -- vuna：统一 CLI 入口（实现在 lib/Vuna/Cli.vuna）。
--- main 必须是具体行（入口不做行泛化）：列出 CLI 实际用到的效应标签。
--- getArgs/exit 走 labeled sender `argsGetArgs` / `exitWith`。
 -- 用法见 `vuna help`。
+--
+-- `main : Eff [] a` 的效应行必须具体（入口不做行泛化），因此下面列出 CLI 实际用到的
+-- 全部效应标签；`argsGetArgs` / `exitWith` 是命名实例上的 labeled sender。
+--
+-- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna obs run --sample ...` 会设置它），
+-- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器；`obsSampleStart` 在 obs 关闭时是空操作。
 import Vuna.Cli
 import Base.Monad
 import Base.Obs
@@ -16,13 +20,13 @@ import Base.EffNet
 import Base.EffProcess
 import Base.EffStdin
 
--- 工具链自采样：只有显式给了 `VUNA_OBS_SAMPLE`（`vuna obs run --sample ...`）才启动，
--- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器。`sampleStart` 在 obs 关闭时是空操作。
+-- | 内部：环境里 `VUNA_OBS_SAMPLE` 非空才返回 True（空串与未设置都算关闭）。
 sampleWanted : Member nEnv EnvOp r => Eff r Bool
 sampleWanted = do
   mode <- envGetEnv "VUNA_OBS_SAMPLE"
   pure (if mode == "" then False else True)
 
+-- | 进程入口：按需启动采样，读 argv 交给 `runCli`，最后以它的返回码 `exitWith` 退出。
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, StdinOp, ArgsOp, NetOp] Int
 main = do
   sample <- sampleWanted

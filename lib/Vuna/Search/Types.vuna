@@ -1,41 +1,61 @@
+-- | 检索结果的数据模型：`SearchHit` 是 `vuna search` 的一条命中，文本与 JSON 输出都从它渲染。
 module Vuna.Search.Types where
 
--- Vuna.Search.Types：检索结果的数据模型（工具链；永不进 seed 闭包）。
 import Vuna.Compiler.Base.Common
 
+-- | 一条检索命中：符号身份、位置、得分与命中来源。`hitScore` 为 0 的条目表示未匹配，
+-- 调用方在排序前过滤掉；`hitMatch` 是给人看的来源标签（`name` / `doc` / `name+doc`，
+-- 类型检索另有 `alpha` / `general` 等）。
 export record SearchHit(..) where
+  -- | 符号的裸名（不含模块前缀）。
   hitName : String
+  -- | 符号所属模块全名。
   hitModule : String
+  -- | 符号种类（`fun` / `data` / `record` / `trait` / `ctor` / `field` / `method` 等，取自索引）。
   hitKind : String
+  -- | 符号签名文本；没有签名时为空串。
   hitSignature : String
+  -- | 符号的 docstring；没有时为空串。
   hitDoc : String
+  -- | 符号定义所在行号。
   hitLine : Int
+  -- | 匹配得分，越大越靠前；0 表示未命中。
   hitScore : Int
+  -- | 命中来源标签，用于输出时展示。
   hitMatch : String
 
+-- | 命中的裸名。
 export hitName : SearchHit -> String
 hitName (SearchHit name mod kind sig doc line score match) = name
 
+-- | 命中符号所属模块全名。
 export hitModule : SearchHit -> String
 hitModule (SearchHit name mod kind sig doc line score match) = mod
 
+-- | 命中符号的种类（`fun` / `data` / `record` / `trait` / `ctor` 等，取自索引）。
 export hitKind : SearchHit -> String
 hitKind (SearchHit name mod kind sig doc line score match) = kind
 
+-- | 命中符号的签名文本；没有签名时为空串。
 export hitSignature : SearchHit -> String
 hitSignature (SearchHit name mod kind sig doc line score match) = sig
 
+-- | 命中符号的 docstring；没有时为空串。
 export hitDoc : SearchHit -> String
 hitDoc (SearchHit name mod kind sig doc line score match) = doc
 
+-- | 命中符号定义所在行号。
 export hitLine : SearchHit -> Int
 hitLine (SearchHit name mod kind sig doc line score match) = line
 
+-- | 命中得分；0 表示未命中。
 export hitScore : SearchHit -> Int
 hitScore (SearchHit name mod kind sig doc line score match) = score
 
+-- | 命中来源标签。
 export hitMatch : SearchHit -> String
 hitMatch (SearchHit name mod kind sig doc line score match) = match
 
+-- | 内部：`模块名.裸名` 形式的全名。
 hitFullName : SearchHit -> String
 hitFullName h = "${hitModule h}.${hitName h}"

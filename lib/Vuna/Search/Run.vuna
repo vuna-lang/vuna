@@ -1,11 +1,10 @@
+-- | `vuna search` 的参数、索引、模式选择与文本 / JSON 输出。
+--
+-- 用法：`vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>`。
+-- 默认模式看查询内容：含 `->` 或 `=>` 走类型检索，否则名称 + doc 检索。退出码：0 有命中、
+-- 1 无命中、2 用法 / 查询解析 / 非 workspace 错误。
 module Vuna.Search.Run where
 
--- Vuna.Search.Run：`vuna search` 的参数、索引、模式选择、文本/JSON 输出。
---
--- 用法：
---   vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
--- 默认：查询含 `->` / `=>` 走类型检索，否则名称+doc 检索。
--- 退出码：0 命中、1 无命中、2 用法/查询解析/非 workspace 错误。
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Index
@@ -19,10 +18,15 @@ import Base.EffEnv
 import Base.EffFs
 import Base.EffProcess
 
+-- | 检索模式：类型检索，或名称 / doc 检索（两个布尔分别表示只算名称分、只算 doc 分）。
 data SearchMode : Type where
+  -- | 类型检索。
   TypeMode : SearchMode
+  -- | 名称 / doc 检索；`nameOnly` 只算名称分，`docOnly` 只算 doc 分，都为 False 时相加。
   NameDocMode : Bool -> Bool -> SearchMode
 
+-- | `vuna search` 的入口：解析参数与模式，加载（或构建）当前 workspace 索引，输出命中。
+-- 用法错误、索引构建失败、查询解析失败都打印 `error: ...` 并返回 2。
 export runSearch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
 runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "name", BoolFlag "doc", ValueFlag "module", ValueFlag "limit", BoolFlag "json"] args of
   ErrC e => toolError (diagText e)
@@ -40,6 +44,7 @@ runSearch args = case parseToolArgs "vuna search" [BoolFlag "type", BoolFlag "na
             ErrC e => toolError (diagText e)
             OkC index => runOnIndex parsed mode query limit index
 
+-- | 内部：在已加载的索引上按模式检索，再交给 `finish` 输出。
 runOnIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Parsed -> SearchMode -> String -> Int -> Index -> Eff r Int
 runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
   ErrC e => toolError (diagText e)
@@ -47,6 +52,7 @@ runOnIndex parsed (mode@TypeMode) query limit index = case searchType index quer
 runOnIndex parsed (mode@(NameDocMode nameOnly docOnly)) query limit index =
   finish parsed mode query (filterHits parsed limit (searchNameDoc index query nameOnly docOnly))
 
+-- | 内部：先按 `--module` 前缀过滤，再取前 `limit` 条。
 filterHits : Parsed -> Int -> List SearchHit -> List SearchHit
 filterHits parsed limit hits =
   let
@@ -55,6 +61,7 @@ filterHits parsed limit hits =
       Nothing => ""
   in takeHits limit (filter (\h => pfx == "" || startsWith pfx (hitModule h)) hits)
 
+-- | 内部：从 flag 组合决定模式；三个模式 flag 互斥，未指定时按查询里有没有 `->` / `=>` 判断。
 modeOf : Parsed -> String -> Check SearchMode
 modeOf parsed query =
   let
@@ -68,10 +75,12 @@ modeOf parsed query =
   else if isDoc then OkC (NameDocMode False True)
   else if contains "->" query || contains "=>" query then OkC TypeMode else OkC (NameDocMode False False)
 
+-- | 内部：Bool 转 0 / 1（数互斥的 flag 个数）。
 boolInt : Bool -> Int
 boolInt True = 1
 boolInt False = 0
 
+-- | 内部：`--limit` 缺省 20，必须是正整数。
 limitOf : Parsed -> Check Int
 limitOf parsed = case flagValue parsed "limit" of
   Nothing => OkC 20
@@ -79,14 +88,17 @@ limitOf parsed = case flagValue parsed "limit" of
     Just n => if n > 0 then OkC n else err "--limit must be a positive integer"
     Nothing => err "--limit is not an integer: ${text}"
 
+-- | 内部：只接受纯十进制数字串的整数解析。
 parseInt : String -> Maybe Int
 parseInt s = parseIntChars (strUnpack s) 0
 
+-- | 内部：`parseInt` 的字符级累加实现；遇到非数字给 `Nothing`。
 parseIntChars : List Int -> Int -> Maybe Int
 parseIntChars [] acc = Just acc
 parseIntChars (c :: rest) acc =
   if c >= 48 && c <= 57 then parseIntChars rest (acc * 10 + (c - 48)) else Nothing
 
+-- | 内部：取前 `n` 条（`n <= 0` 时为空）。
 takeHits : Int -> List SearchHit -> List SearchHit
 takeHits n [] = []
 takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
@@ -94,6 +106,8 @@ takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
 -- ---------------------------------------------------------------
 -- 文本 / JSON
 -- ---------------------------------------------------------------
+-- | 内部：输出命中并给退出码：无命中打印 `no results for ...` 并返回 1；`--json` 输出 JSON 并
+-- 返回 0；否则逐行打印文本并返回 0。
 finish : Member nConsole ConsoleOp r => Parsed -> SearchMode -> String -> List SearchHit -> Eff r Int
 finish parsed mode query hits = if length hits == 0 then do
   _ <- consolePrint "no results for `${query}`\n"
@@ -103,40 +117,48 @@ else if flagSet parsed "json" then do
   pure 0
 else printHits hits
 
+-- | 内部：逐行打印命中的文本形式。
 printHits : Member nConsole ConsoleOp r => List SearchHit -> Eff r Int
 printHits [] = pure 0
 printHits (h :: rest) = do
   _ <- consolePrint "${hitText h}\n"
   printHits rest
 
--- REPL `:search` 复用同一份单条命中渲染。
+-- | 单条命中的文本形式（REPL `:search` 复用同一份渲染）。
 export renderHit : SearchHit -> String
 renderHit h = hitText h
 
+-- | 内部：渲染成 `模块.名字 : 签名  [来源]`（没有签名时省略 `: 签名`），有 doc 时另起一行
+-- 缩进输出首行。
 hitText : SearchHit -> String
 hitText h =
   "${hitModule h}.${hitName h}${if hitSignature h == "" then "" else " : ${hitSignature h}"}  [${hitMatch h}]${if firstDocLine (hitDoc h) == "" then "" else "\n    ${firstDocLine (hitDoc h)}"}"
 
+-- | 内部：docstring 的第一行；空串表示没有 doc。
 firstDocLine : String -> String
 firstDocLine doc = case lines doc of
   first :: rest => first
   [] => ""
 
+-- | 内部：`--json` 的顶层对象（schema `vuna-search/1`）。
 hitsJson : SearchMode -> String -> List SearchHit -> Json
 hitsJson mode query hits =
   JObj
     [Pair "schema" (JStr "vuna-search/1"), Pair "query" (JStr query), Pair "mode" (JStr (modeName mode)), Pair "hits" (JArr (map hitJson hits))]
 
+-- | 内部：模式的输出名（`type` / `name` / `doc` / `name+doc`）。
 modeName : SearchMode -> String
 modeName TypeMode = "type"
 modeName (NameDocMode nameOnly docOnly) =
   if nameOnly then "name" else if docOnly then "doc" else "name+doc"
 
+-- | 内部：单条命中的 JSON 对象。
 hitJson : SearchHit -> Json
 hitJson h =
   JObj
     [Pair "module" (JStr (hitModule h)), Pair "name" (JStr (hitName h)), Pair "kind" (JStr (hitKind h)), Pair "signature" (JStr (hitSignature h)), Pair "doc" (JStr (hitDoc h)), Pair "line" (JNum (hitLine h)), Pair "score" (JNum (hitScore h)), Pair "match" (JStr (hitMatch h))]
 
+-- | 内部：把错误打印成 `error: ...` 并返回退出码 2。
 toolError : Member nConsole ConsoleOp r => String -> Eff r Int
 toolError e = do
   _ <- consolePrint "error: ${e}\n"

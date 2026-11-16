@@ -1,10 +1,8 @@
+-- | `vuna search` 的门面：只重导出 [Vuna.Search.Run] 的 `runSearch`。
+--
+-- 检索分两层：[Vuna.Search.Query] 是名称 / docstring / 类型的纯匹配函数，
+-- [Vuna.Search.Run] 负责参数解析、索引加载与文本 / JSON 输出。类型检索是 parse 级
+-- （把签名文本与查询各自重新解析成结构再比较），不跑类型检查。
 module Vuna.Search where
 
 export import Vuna.Search.Run (runSearch)
-
--- Vuna.Search：`vuna search` 的门面（工具链；永不进 seed 闭包）。
---
---   * Search.Query：名称 / docstring / 类型检索的纯函数；
---   * Search.Run：参数解析、索引加载、文本 / JSON 输出。
---
--- 类型检索是 parse 级（见 docs/reference/api-docs.md），不跑类型检查。

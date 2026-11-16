@@ -1,76 +1,78 @@
+-- | stdio server 的字节级帧层：只做「切帧 / 发帧」，不碰请求语义。
+--
+-- 帧格式（LSP 与 REPL server 共用）：`Content-Length: <body 字节数>\r\n\r\n<body>`，body 后
+-- 没有尾随换行，长度是 **UTF-8 字节数**（vuna 的 `String` 底层是 OCaml string，`strLength`
+-- 即字节数）。读取必须走字节级的 `stdinReadBytes`（`readChunk`）而不能按行读：body 不带换行，
+-- 客户端在拿到响应前也不会写下一帧，行级读会让「客户端等响应、服务器等换行」互等死锁。
+--
+-- 连接循环、坏帧策略与退出码在 [Vuna.Json.Server]（`serveConnection`）。单帧与缓冲都限制在
+-- `maxFrameBytes` 内，坏客户端不能靠超长帧把内存撑爆；`splitHeaderBlock` 同时容忍规范要求的
+-- `\r\n\r\n` 与部分客户端用的裸 `\n\n`。
 module Vuna.Json.Frame where
 
--- Vuna.Json.Frame：stdio server 的字节级帧层（工具链；**永不进 seed 闭包**）。
---
--- 帧格式（LSP 与 REPL server 共用）：`Content-Length: <body 字节数>\r\n\r\n<body>`；
--- body 后面**没有**尾随换行，长度是 **UTF-8 字节数**（vuna 的 String 底层是 OCaml string，
--- `strLength` 即字节数）。读取层是字节级的（`stdinReadBytes`）：**不能按行读**——body
--- 不带换行，客户端在拿到响应前也不会写下一帧，行级读会让「客户端等响应、服务器等换行」
--- 互等死锁（LSP 的 `initialize` 就卡在这里，见 test/corpus/lsp/smoke.sh 用例 18）。
---
--- 本模块只做「切帧 / 发帧」的机械层，不碰请求语义、不决定错误策略；
--- 连接循环与退出策略在 `Vuna.Json.Server`（`serveConnection`）。
---
--- 上界：单帧与缓冲都限制在 `maxFrameBytes` 内（坏客户端不能把内存撑爆；
--- 正常源文件帧远小于此）。`splitHeaderBlock` 同时容忍 `\r\n\r\n` 与裸 `\n\n`。
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Base.EffStdin
 import Base.Eff.Types
 
--- 每次 readChunk 的字节数（帧 body 可能跨多块；缓冲里拼够 Content-Length 再切帧）。
+-- | 每次 `readChunk` 请求的字节数；帧 body 可能跨多块，缓冲里拼够 `Content-Length` 再切帧。
 export frameChunkSize : Int
 frameChunkSize = 65536
 
--- 单帧 / 缓冲上界（16 MiB）。
+-- | 单帧与缓冲的上界（16 MiB）；超限由调用方按传输层错误处理。
 export maxFrameBytes : Int
 maxFrameBytes = 16777216
 
--- 从 stdin 读最多 n 字节（`stdinReadBytes` 的动作值；由 `serveConnection` 执行）。
---
--- 语义：有数据就立即返回已到达的字节（**可能少于 n**），EOF 给 `Nothing`。
--- 调用方（`Vuna.Json.Server.serveConnection`）负责拼接缓冲并重试切帧。
+-- | 从 stdin 读最多 `n` 字节：有数据就立即返回已到达的部分（可能少于 `n`），EOF 给 `Nothing`。
 export readChunk : Member nStdin StdinOp r => Int -> Eff r (Maybe String)
 readChunk n = stdinReadBytes (natFromInt n)
 
--- 把一帧编码成字节串（纯函数；传输层与 socket 传输共用）。
+-- | 把一帧编码成字节串（纯函数，stdio 与 socket 传输共用）；`Content-Length` 取 body 的字节数。
 export renderFrame : Json -> String
 renderFrame payload = renderFrameBody (renderJson payload)
 
--- 同上，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
+-- | 同 `renderFrame`，但 body 已经是编码好的 JSON 文本（`vuna repl --client` 直接透传 stdin 的 body）。
 export renderFrameBody : String -> String
 renderFrameBody body = "Content-Length: ${strLength body}\r\n\r\n${body}"
 
--- 数字 / ASCII 小写工具（`Content-Length` 解析用；`allDigits` / `digitsToInt`
--- 由 `Vuna.Lsp.Protocol` 重导出，保持既有调用点）。
+-- 数字 / ASCII 小写工具（`Content-Length` 解析用；`allDigits` / `digitsToInt` 由
+-- `Vuna.Lsp.Protocol` 重导出）。
+-- | 内部：字节是否为 ASCII 数字。
 isDigitCode : Int -> Bool
 isDigitCode c = c >= 48 && c <= 57
 
+-- | 内部：整串字节是否都是 ASCII 数字（空表按 True 处理，非空判断由调用方做）。
 allDigitCodes : List Int -> Bool
 allDigitCodes [] = True
 allDigitCodes (c :: rest) = isDigitCode c && allDigitCodes rest
 
+-- | 字符串是否非空且全为 ASCII 数字。
 export allDigits : String -> Bool
 allDigits s = s /= "" && allDigitCodes (strUnpack s)
 
+-- | 内部：仅当全为 ASCII 数字时转成整数，否则 `Nothing`。
 parseIntFull : String -> Maybe Int
 parseIntFull s = if allDigits s then Just (digitsToInt (strUnpack s) 0) else Nothing
 
+-- | 把 ASCII 数字字节按十进制累加到初值 `acc` 上（不做合法性检查）。
 export digitsToInt : List Int -> Int -> Int
 digitsToInt [] acc = acc
 digitsToInt (c :: rest) acc = digitsToInt rest (acc * 10 + (c - 48))
 
+-- | 内部：只把 ASCII 大写字母转小写，其余字节原样保留。
 asciiLower : String -> String
 asciiLower s = strPack (map lowerCode (strUnpack s))
 
+-- | 内部：单个字节的 ASCII 小写化。
 lowerCode : Int -> Int
 lowerCode c = if c >= 65 && c <= 90 then c + 32 else c
 
--- 找子串 needle 从 start 起的字节偏移；找不到返回 -1。
+-- | 内部：从字节偏移 `start` 起找子串 `needle`，找不到返回 -1。
 findFrom : String -> Int -> String -> Int
 findFrom needle start hay = findFromGo needle hay (range start (strLength hay))
 
--- 计数器循环改为对候选起点列表的结构递归（range 用倒计数实现）。
+-- 候选起点由 `range` 按升序给出，所以「起点越界」可以直接判定后面都不会匹配。
+-- | 内部：在候选起点列表上找第一个完整匹配的偏移，越界或耗尽给 -1。
 findFromGo : String -> String -> List Int -> Int
 findFromGo needle hay [] = 0 - 1
 findFromGo needle hay (k :: rest) =
@@ -78,31 +80,34 @@ findFromGo needle hay (k :: rest) =
   else if substring (natFromInt k) (byteLength needle) hay == needle then k
   else findFromGo needle hay rest
 
+-- | 内部：`\r\n\r\n` 字节串。
 crlfCrlf : String
 crlfCrlf = strPack [13, 10, 13, 10]
 
+-- | 内部：`\n\n` 字节串。
 lfLf : String
 lfLf = strPack [10, 10]
 
+-- | 内部：在 `at` 处切掉 `gap` 字节的结束符，返回（header 块, 剩余缓冲）。
 cutHeaders : Int -> String -> Int -> Pair String String
 cutHeaders at buf gap =
   Pair (substring 0 (natFromInt at) buf)
     (substring (natFromInt (at + gap)) (natFromInt (strLength buf - at - gap)) buf)
 
--- 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回 (header 块, 之后的缓冲)。
--- 同时容忍规范要求的 CRLF 与部分客户端用的裸 LF（`\n\n`），取**最靠前**的结束符。
--- 不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把后一个 CRLF
--- 结束符圈进同一个 header 块，于是按错误的 Content-Length 切 body。
--- Nothing = 缓冲里还没有完整 header（需要再读一块）。
+-- | 切出 header 块（到第一个 `\r\n\r\n` 或 `\n\n`），返回（header 块, 之后的缓冲）。
+-- 取**最靠前**的结束符，不能「先找 CRLF，找不到再退回 LF」：混合流里前一个 LF 帧的 body 会把
+-- 后一个 CRLF 结束符圈进同一个 header 块，于是按错误的 `Content-Length` 切 body。
+-- `Nothing` 表示缓冲里还没有完整 header，需要再读一块。
 export splitHeaderBlock : String -> Maybe (Pair String String)
 splitHeaderBlock buf = chooseHeaderHit (findFrom crlfCrlf 0 buf) (findFrom lfLf 0 buf) buf
 
+-- | 内部：在两种结束符命中位置里取更靠前的那个并切块；都没命中给 `Nothing`。
 chooseHeaderHit : Int -> Int -> String -> Maybe (Pair String String)
 chooseHeaderHit crlfHit lfHit buf =
   if lfHit >= 0 && (crlfHit < 0 || lfHit < crlfHit) then Just (cutHeaders lfHit buf 2)
   else if crlfHit >= 0 then Just (cutHeaders crlfHit buf 4) else Nothing
 
--- `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 \r）。
+-- | 内部：解析单行 `Content-Length: 123`（大小写不敏感，容忍前后空白与行尾 `\r`）。
 parseContentLength : String -> Maybe Int
 parseContentLength line =
   let
@@ -110,13 +115,14 @@ parseContentLength line =
   in if startsWith "content-length:" (asciiLower trimmed) then parseIntFull (trim (substring 15 (byteLength trimmed - 15) trimmed))
   else Nothing
 
+-- | 内部：在多行 header 里找第一条可解析的 `Content-Length`。
 findLengthLine : List String -> Maybe Int
 findLengthLine [] = Nothing
 findLengthLine (line :: rest) = case parseContentLength line of
   Just n => Just n
   Nothing => findLengthLine rest
 
--- header 块里的 Content-Length（必须 > 0；0 长度或缺失都算 header 无效）。
+-- | header 块里的 `Content-Length`：必须 > 0，0 长度或缺失都算 header 无效（`Nothing`）。
 export contentLengthOf : String -> Maybe Int
 contentLengthOf block = case findLengthLine (split "\n" block) of
   Nothing => Nothing

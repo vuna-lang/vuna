@@ -1,11 +1,12 @@
+-- | 名称 / docstring / 类型检索的纯函数部分（`vuna search` 与 REPL `:search` 共用）。
+--
+-- 名称匹配分级：全名 / 裸名精确 > 裸名前缀 > 裸名子串 > 全名前缀 > 全名子串 > 模块名子串；
+-- doc 匹配按空格分词（连续空格忽略），要求全部 token 出现在 docstring 里，整串也出现时再加分。
+-- 类型匹配是 **parse 级**的结构匹配：签名与查询各自从 `symType` 的可回读文本重新 parse 成
+-- `Ty` 再打分（exact / alpha / general / specific / result / overlap），不做实例或隐式解析，
+-- 也不跑类型检查。
 module Vuna.Search.Query where
 
--- Vuna.Search.Query：名称 / docstring / 类型检索的纯函数部分（工具链；永不进 seed 闭包）。
---
--- 名称：全名/裸名精确 > 前缀 > 子串 > 子序列，doc 命中加分。
--- doc：查询按空白分词，要求全部 token 出现在 docstring 中。
--- 类型：parse 级结构化匹配（exact / alpha / general / specific / result / overlap）。
---       签名与查询都从 `symType` 的**可回读**文本重新 parse；不做实例/隐式解析。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
@@ -17,22 +18,27 @@ import Base.Sort
 -- ---------------------------------------------------------------
 -- 名称 / doc
 -- ---------------------------------------------------------------
+-- | 内部：ASCII 大写字母转小写，其余字符原样。
 lowerAscii : String -> String
 lowerAscii s = lowerAsciiChars (strUnpack s) ""
 
+-- | 内部：`lowerAscii` 的字符级累加实现。
 lowerAsciiChars : List Int -> String -> String
 lowerAsciiChars [] acc = acc
 lowerAsciiChars (c :: rest) acc =
   if c >= 65 && c <= 90 then lowerAsciiChars rest (acc ++ strPack [c + 32])
   else lowerAsciiChars rest (acc ++ strPack [c])
 
+-- | 内部：按单空格切词并丢掉空串（制表与换行不当作分隔符）。
 wordsOf : String -> List String
 wordsOf s = filterNotEmpty (split " " s)
 
+-- | 内部：去掉 `""`，保留其余元素顺序。
 filterNotEmpty : List String -> List String
 filterNotEmpty [] = []
 filterNotEmpty (s :: rest) = if s == "" then filterNotEmpty rest else s :: filterNotEmpty rest
 
+-- | 内部：查询与符号名的匹配得分（0 表示不匹配），全名与裸名都比对（忽略大小写）。
 nameScore : String -> Sym -> Int
 nameScore query s =
   let
@@ -47,6 +53,7 @@ nameScore query s =
   else if startsWith q full then 450
   else if contains q full then 400 else if contains q mod then 200 else 0
 
+-- | 内部：查询与 docstring 的匹配得分：全部 token 命中得 100，整串也出现再加 50。
 docScore : String -> Sym -> Int
 docScore query s =
   let
@@ -55,13 +62,17 @@ docScore query s =
   in if length tokens == 0 then 0
   else if allTokens tokens doc then 100 + (if contains (lowerAscii query) doc then 50 else 0) else 0
 
+-- | 内部：所有 token 是否都作为子串出现在 `doc` 里（空表为 True）。
 allTokens : List String -> String -> Bool
 allTokens [] doc = True
 allTokens (t :: rest) doc = if contains t doc then allTokens rest doc else False
 
+-- | 内部：名字以下划线开头的符号视为私有，检索时不列出。
 privateSym : Sym -> Bool
 privateSym s = startsWith "_" (symName s)
 
+-- | 名称 / doc 检索：给每个非私有符号打分，丢掉 0 分，按得分降序（同分按名字升序）返回。
+-- `nameOnly` 只算名称分，`docOnly` 只算 doc 分；两个都为 False 时相加。
 export searchNameDoc : Index -> String -> Bool -> Bool -> List SearchHit
 searchNameDoc index query nameOnly docOnly =
   let
@@ -69,6 +80,7 @@ searchNameDoc index query nameOnly docOnly =
     scored = map (scoreSym query nameOnly docOnly) syms
   in sortHits (filter (\h => hitScore h > 0) scored)
 
+-- | 内部：把一个符号转成命中记录，`hitScore` 是名称分与 doc 分之和，`hitMatch` 标明来源。
 scoreSym : String -> Bool -> Bool -> Sym -> SearchHit
 scoreSym query nameOnly docOnly s =
   let
@@ -77,9 +89,11 @@ scoreSym query nameOnly docOnly s =
     label = if ns > 0 && ds > 0 then "name+doc" else if ns > 0 then "name" else "doc"
   in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) (ns + ds) label
 
+-- | 内部：按 `hitLe` 排序命中列表。
 sortHits : List SearchHit -> List SearchHit
 sortHits hits = sortBy hitLe hits
 
+-- | 内部：排序比较——得分高的在前，同分按名字字典序升序。
 hitLe : SearchHit -> SearchHit -> Bool
 hitLe a b =
   if hitScore a > hitScore b then True
@@ -88,34 +102,50 @@ hitLe a b =
 -- ---------------------------------------------------------------
 -- 类型：归一化
 -- ---------------------------------------------------------------
+-- | 归一化后的类型：只保留匹配需要的形状（构造子名、应用、箭头、变量、通配）。
 data Ty : Type where
+  -- | 类型变量；编号来自 `NormState` 的分配顺序（同名变量共享编号）。
   TVar : Int -> Ty
+  -- | 类型构造子；可能是 `Mod.name` 全名或裸名，字面量也落在这里。
   TCon : String -> Ty
+  -- | 类型应用：头 + 参数列表。
   TApp : Ty -> List Ty -> Ty
+  -- | 函数箭头（只带值域与陪域两个参数）。
   TArr : Ty -> Ty -> Ty
+  -- | 通配 `_`，匹配时什么都能接受。
   TWild : Ty
 
+-- | 归一化状态：下一个可分配的变量编号 + 已绑定名字到编号的表。
 record NormState where
+  -- | 下一个可分配的变量编号。
   normNext : Int
+  -- | 名字到变量编号的绑定表（新绑定在前）。
   normEnv : List (Pair String Int)
 
+-- | 下一个可分配的变量编号。
 normNext : NormState -> Int
 normNext (NormState n env) = n
 
+-- | 名字到变量编号的绑定表。
 normEnv : NormState -> List (Pair String Int)
 normEnv (NormState n env) = env
 
+-- | 内部：查名字当前绑定的变量编号。
 lookupVar : String -> List (Pair String Int) -> Maybe Int
 lookupVar name [] = Nothing
 lookupVar name ((Pair k v) :: rest) = if k == name then Just v else lookupVar name rest
 
+-- | 内部：给名字分配新编号并绑定；返回（新状态, 编号）。
 allocNamed : String -> NormState -> Pair NormState Int
 allocNamed name st =
   Pair (NormState (normNext st + 1) (Pair name (normNext st) :: normEnv st)) (normNext st)
 
+-- | 内部：把名字绑定到已有编号（不推进计数器，用于显式 binder 的作用域）。
 bindVar : String -> Int -> NormState -> NormState
 bindVar name id st = NormState (normNext st) (Pair name id :: normEnv st)
 
+-- | 类型名表：裸类型名到 `模块.裸名` 的映射。只收录在 data / record / trait 符号中
+-- **恰好出现一次**的裸名，避免同名歧义把签名里的名字映射错。
 export typeNameMap : Index -> List (Pair String String)
 typeNameMap index =
   let
@@ -123,26 +153,33 @@ typeNameMap index =
     entries = map (\s => Pair (symName s) "${symModule s}.${symName s}") types
   in filter (\p => countShort (firstOf p) entries == 1) entries
 
+-- | 内部：索引符号是否为类型声明（`data` / `record` / `trait`）。
 isTypeSym : Sym -> Bool
 isTypeSym s = symKind s == "data" || symKind s == "record" || symKind s == "trait"
 
+-- | 内部：条目表里裸名为 `name` 的条数。
 countShort : String -> List (Pair String String) -> Int
 countShort name entries = toInt (length (filter (\p => firstOf p == name) entries))
 
+-- | 内部：把裸名规范成 `模块.裸名`；表里没有就原样返回。
 canonName : List (Pair String String) -> String -> String
 canonName names name = case lookupName name names of
   Just full => full
   Nothing => name
 
+-- | 内部：在（裸名, 全名）表里查第一个匹配。
 lookupName : String -> List (Pair String String) -> Maybe String
 lookupName name [] = Nothing
 lookupName name ((Pair k v) :: rest) = if k == name then Just v else lookupName name rest
 
+-- | 内部：首字符是小写字母的名字按类型变量处理（其余按构造子名处理）。
 isVarName : String -> Bool
 isVarName name = case strUnpack name of
   c :: rest => c >= 97 && c <= 122
   [] => False
 
+-- | 内部：把 parse 出的表达式归一化成 `Ty`，同时累积变量编号状态；
+-- 不认识的形状返回 `Nothing`（整条签名因此不参与类型检索）。
 normExpr : List (Pair String String) -> NormState -> Expr -> Pair NormState (Maybe Ty)
 normExpr names st (EVar name sp) = if name == "_" then Pair st (Just TWild)
 else case lookupVar name (normEnv st) of
@@ -216,10 +253,12 @@ normExpr names st (EStr s sp) = Pair st (Just (TCon s))
 normExpr names st (EFloat raw sp) = Pair st (Just (TCon raw))
 normExpr names st _ = Pair st Nothing
 
+-- | 内部：头是不是箭头构造子（`EApp` 形如 `(->) a b` 时折叠成 `TArr`）。
 tfIsArrow : Ty -> Bool
 tfIsArrow (TCon "->") = True
 tfIsArrow _ = False
 
+-- | 内部：逐项归一化参数列表；任一项失败则整体 `Nothing`。
 normExprs : List (Pair String String) -> NormState -> List Expr -> Pair NormState (Maybe (List Ty))
 normExprs names st [] = Pair st (Just [])
 normExprs names st (e :: rest) =
@@ -234,42 +273,57 @@ normExprs names st (e :: rest) =
         Nothing => Pair (firstOf pr) Nothing
         Just ts => Pair (firstOf pr) (Just (te :: ts))
 
+-- | 内部：从空状态归一化一个类型表达式。
 schemeOf : List (Pair String String) -> Expr -> Maybe Ty
 schemeOf names e = secondOf (normExpr names (NormState 0 []) e)
 
 -- ---------------------------------------------------------------
 -- 类型：匹配
 -- ---------------------------------------------------------------
+-- | 单方向匹配的替换表：变量编号到已匹配类型的映射（不做 occurs check）。
 record Subst where
+  -- | 已绑定的变量编号与类型（新绑定在前）。
   substList : List (Pair Int Ty)
 
+-- | 已绑定的变量编号与类型。
 substList : Subst -> List (Pair Int Ty)
 substList (Subst xs) = xs
 
+-- | 内部：查变量已绑定的类型。
 lookupSubst : Int -> List (Pair Int Ty) -> Maybe Ty
 lookupSubst id [] = Nothing
 lookupSubst id ((Pair k v) :: rest) = if k == id then Just v else lookupSubst id rest
 
+-- | 内部：追加一条变量绑定（不检查冲突）。
 bindSubst : Int -> Ty -> Subst -> Subst
 bindSubst id ty (Subst xs) = Subst (Pair id ty :: xs)
 
+-- | alpha 等价比较用的状态：变量编号到出现序号的映射 + 下一个序号。
 record AlphaState where
+  -- | 变量编号到出现序号的映射。
   alphaEnv : List (Pair Int Int)
+  -- | 下一个可用的出现序号。
   alphaNext : Int
 
+-- | 变量编号到出现序号的映射。
 alphaEnv : AlphaState -> List (Pair Int Int)
 alphaEnv (AlphaState env next) = env
 
+-- | 下一个可用的出现序号。
 alphaNext : AlphaState -> Int
 alphaNext (AlphaState env next) = next
 
+-- | 内部：查变量已被分配的出现序号。
 lookupInt : Int -> List (Pair Int Int) -> Maybe Int
 lookupInt id [] = Nothing
 lookupInt id ((Pair k v) :: rest) = if k == id then Just v else lookupInt id rest
 
+-- | 内部：类型的 alpha 规范文本；变量按首次出现顺序编号（`$0`、`$1`…），
+-- 因此 alpha 等价的两个类型文本相同。
 alphaKey : Ty -> String
 alphaKey ty = firstOf (alphaGo ty (AlphaState [] 0))
 
+-- | 内部：边渲染边把变量编号换成出现序号，返回（规范文本, 新状态）。
 alphaGo : Ty -> AlphaState -> Pair String AlphaState
 alphaGo (TVar id) st = case lookupInt id (alphaEnv st) of
   Just idx => Pair "$${idx}" st
@@ -288,6 +342,7 @@ alphaGo (TArr a b) st =
     pb = alphaGo b (secondOf pa)
   in Pair "(${firstOf pa}->${firstOf pb})" (secondOf pb)
 
+-- | 内部：把参数列表渲染成空格分隔的文本（前面带一个空格，空列表为空串）。
 alphaArgs : List Ty -> AlphaState -> Pair String AlphaState
 alphaArgs [] st = Pair "" st
 alphaArgs (x :: rest) st =
@@ -296,13 +351,17 @@ alphaArgs (x :: rest) st =
     pr = alphaArgs rest (secondOf px)
   in Pair " ${firstOf px}${firstOf pr}" (secondOf pr)
 
+-- | 内部：两个类型是否 alpha 等价（变量改名不影响结果）。
 alphaEqual : Ty -> Ty -> Bool
 alphaEqual a b = alphaKey a == alphaKey b
 
+-- | 内部：箭头链的最右端（结果类型）；非箭头原样返回。
 resultType : Ty -> Ty
 resultType (TArr a b) = resultType b
 resultType ty = ty
 
+-- | 内部：类型的头与元数：`TApp` 取构造子头与参数个数，箭头记作 `("->", 2)`，
+-- 其他（变量 / 通配 / 非构造子头）记作 `("?", 0)`。
 headKey : Ty -> Pair String Int
 headKey (TCon name) = Pair name 0
 headKey (TApp f args) = case f of
@@ -311,6 +370,7 @@ headKey (TApp f args) = case f of
 headKey (TArr a b) = Pair "->" 2
 headKey _ = Pair "?" 0
 
+-- | 内部：两个类型的头与元数是否相同（粗粒度重叠判断）。
 overlap : Ty -> Ty -> Bool
 overlap a b =
   let
@@ -318,6 +378,9 @@ overlap a b =
     hb = headKey b
   in firstOf ha == firstOf hb && secondOf ha == secondOf hb
 
+-- | 内部：类型得分与标签。依次尝试 alpha 等价（90 `alpha`）、查询匹配签名（80 `general`）、
+-- 签名匹配查询（70 `specific`）、查询匹配结果类型（50 `result`）、头部重叠（20 `overlap`），
+-- 都不成立给（0, ""）。
 typeScore : Ty -> Ty -> Pair Int String
 typeScore query sig = if alphaEqual query sig then Pair 90 "alpha"
 else case unifyFlex 100 (Subst []) query sig of
@@ -331,6 +394,7 @@ else case unifyFlex 100 (Subst []) query sig of
 -- ---------------------------------------------------------------
 -- 类型检索
 -- ---------------------------------------------------------------
+-- | 内部：把查询文本当作签名 `q : <query>` 解析，取它的类型部分。
 parseQuery : String -> Check Expr
 parseQuery query = case parseSource "<type-query>" "q : ${query}" of
   ErrC e => ErrC e
@@ -338,11 +402,14 @@ parseQuery query = case parseSource "<type-query>" "q : ${query}" of
     (DSig name ctx ty sp) :: rest => OkC ty
     _ => err "type query is not a signature"
 
+-- | 内部：把符号的 `symType` 文本解析并归一化；解析失败给 `Nothing`。
 parseSymType : List (Pair String String) -> Sym -> Maybe Ty
 parseSymType names s = case parseExpressionSource (symType s) of
   ErrC e => Nothing
   OkC e => schemeOf names e
 
+-- | 类型检索：把查询解析成 `Ty`，给每个有 `symType` 且非私有的符号打分，丢掉 0 分后排序。
+-- 查询解析失败或无法归一化时返回 `Check` 错误。
 export searchType : Index -> String -> Check (List SearchHit)
 searchType index query = case parseQuery query of
   ErrC e => err "cannot parse type query: ${diagText e}"
@@ -357,6 +424,7 @@ searchType index query = case parseQuery query of
           hits = map (typeHit names query queryTy) syms
         in OkC (sortHits (filter (\h => hitScore h > 0) hits))
 
+-- | 内部：给单个符号算类型分；签名无法解析时得 0 分，`symType` 文本与查询逐字相同时再加 100。
 typeHit : List (Pair String String) -> String -> Ty -> Sym -> SearchHit
 typeHit names query queryTy s = case parseSymType names s of
   Nothing => SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) 0 ""
@@ -367,6 +435,8 @@ typeHit names query queryTy s = case parseSymType names s of
     in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s)
       (firstOf scored + exactBonus) (secondOf scored)
 
+-- | 内部：单方向匹配，`a` 里的变量与通配可以吸收 `b` 的形状，反之不行。
+-- 不做 occurs check；fuel 耗尽或形状不符给 `Nothing`。
 unifyFlex : Int -> Subst -> Ty -> Ty -> Maybe Subst
 unifyFlex fuel s a b = if fuel <= 0 then Nothing
 else case a of
@@ -393,6 +463,7 @@ else case a of
     TWild => Just s
     _ => Nothing
 
+-- | 内部：成对匹配两个参数列表；长度不同给 `Nothing`，同为空时成功。
 unifyFlexList : Int -> Subst -> List Ty -> List Ty -> Maybe Subst
 unifyFlexList fuel s [] [] = if fuel <= 0 then Nothing else Just s
 unifyFlexList fuel s (x :: xs) (y :: ys) = if fuel <= 0 then Nothing
