@@ -1,0 +1,16 @@
+# 83) VS Code 语法高亮：TextMate 关键字表必须与 lexer 同源。
+# 硬关键字直接从 Lexer.isKeyword 抽出（不维护第二份清单）；软关键字逐个确认仍在
+# Parser.vuna 里被按上下文识别。`node` 由 devShell / e2e PATH 提供。
+#
+# 路径：steps 的 cwd 是 <root>/test，仓库根走 $VUNA_SUITE_ROOT（见 testing.md）。
+# CI 的 suite 沙箱由 nix/checks/default.nix 的 testTree 暂存 `vscode/scripts` 与
+# `vscode/syntaxes`，所以关键字对拍在 CI e2e 里同样执行；源码缺席时打印跳过说明并当通过
+# （单独运行 `checks.vscode-ext` 时只跑正则可编译性，不含关键字对拍）。
+
+# 硬关键字：Lexer.isKeyword 的 29 个词，每个都必须被 keyword./storage./support. 覆盖。
+run: set -e; if test -f "$VUNA_SUITE_ROOT/vscode/syntaxes/vuna.tmLanguage.json"; then sed -n '/^isKeyword s =/,/^$/p' "$VUNA_SUITE_ROOT/compiler/lib/Vuna/Compiler/Frontend/Lexer.vuna" | grep -o 's == "[^"]*"' | sed 's/.*"\([^"]*\)"/\1/' | sort -u > "$TMPDIR/grammar-kw.txt"; test "$(wc -l < "$TMPDIR/grammar-kw.txt")" -ge 25; node "$VUNA_SUITE_ROOT/vscode/scripts/check-grammar.mjs" "$VUNA_SUITE_ROOT/vscode/syntaxes/vuna.tmLanguage.json" --keywords "$TMPDIR/grammar-kw.txt"; else printf '%s\n' 'skip: vscode sources not staged, grammar keyword check skipped'; fi
+exit: 0
+
+# 软关键字表：每个仍在 Parser.vuna 里出现，且被打上 keyword/support 作用域。
+run: set -e; if test -f "$VUNA_SUITE_ROOT/vscode/syntaxes/vuna.tmLanguage.json"; then printf '%s\n' export abstract alias boxed via field return > "$TMPDIR/grammar-soft.txt"; for k in $(cat "$TMPDIR/grammar-soft.txt"); do grep -q "\"$k\"" "$VUNA_SUITE_ROOT/compiler/lib/Vuna/Compiler/Frontend/Parser.vuna" || { echo "soft keyword $k no longer in Parser.vuna"; exit 1; }; done; node "$VUNA_SUITE_ROOT/vscode/scripts/check-grammar.mjs" "$VUNA_SUITE_ROOT/vscode/syntaxes/vuna.tmLanguage.json" --soft-keywords "$TMPDIR/grammar-soft.txt"; else printf '%s\n' 'skip: vscode sources not staged, grammar soft-keyword check skipped'; fi
+exit: 0

@@ -49,6 +49,7 @@ for file in \
   tsconfig.json \
   src/extension.ts \
   scripts/build.mjs \
+  scripts/check-grammar.mjs \
   dist/extension.js \
   syntaxes/vuna.tmLanguage.json \
   language-configuration.json \
@@ -207,6 +208,15 @@ then
   :
 else
   FAILED=1
+fi
+
+# --- grammar: every rule compiles, top-level shape holds --------------------
+# Standalone (zero-dependency) checker; reads only files inside this tree so it
+# also works from the Nix store copy where the rest of the repo is absent.
+if [ -f scripts/check-grammar.mjs ]; then
+  if ! node scripts/check-grammar.mjs syntaxes/vuna.tmLanguage.json; then
+    fail 'check-grammar.mjs: grammar rules do not compile or the grammar shape is wrong'
+  fi
 fi
 
 # --- dist bundle -----------------------------------------------------------

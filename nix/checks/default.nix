@@ -52,6 +52,10 @@ let
   testTree = workspace ++ [
     src.test
     src.examples
+    # 83_vscode_grammar 的 keyword/soft-keyword 同源对拍需要这两份源文件
+    # （steps 的 cwd 是 test/，路径走 $VUNA_SUITE_ROOT）。
+    ../../vscode/scripts
+    ../../vscode/syntaxes
   ];
 
   vscodeSrcs = [
