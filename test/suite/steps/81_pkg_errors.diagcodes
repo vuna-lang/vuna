@@ -1,3 +1,5 @@
 PKG_FetchFailed
 PKG_HashMismatch
+PKG_IdentityMismatch
+PKG_IdentityMalformed
 PKG_IndexMalformed

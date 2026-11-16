@@ -51,3 +51,11 @@ run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
 out-contains: cached
 run: sh -c 'VUNA_STORE="$TMPDIR/f68/store" "$VUNA" check "$TMPDIR/f68/app"'
 exit: 0
+
+# 68j) pin 同时写 identity；篡改 identity 后 fetch 即使缓存命中也要报
+#      PKG_IdentityMismatch（缓存命中不能绕过身份校验）。
+run: sh -c 'grep -q "^identity = \"sha256:" "$TMPDIR/f68/app/vuna.toml"'
+exit: 0
+run: sh -c 'sed -i "s|^identity = .*|identity = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"|" "$TMPDIR/f68/app/vuna.toml"; VUNA_STORE="$TMPDIR/f68/store" "$VUNA" fetch "$TMPDIR/f68/app" 2>&1'
+exit: 1
+out-contains: PKG_IdentityMismatch

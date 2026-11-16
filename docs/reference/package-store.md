@@ -12,7 +12,7 @@
 | 名称 | 输入 | 用途 | 何时变 |
 | --- | --- | --- | --- |
 | **内容摘要** `contentHash` | `vuna.toml` + `lib/**/*.vuna` + `app/**/*.vuna` + `test/**/*.vuna` 的 `(相对路径, 字节)`，按路径升序 | 不可变源的完整性校验（manifest 的 `hash`）、包对象地址 | 任何文件字节变化（含注释、测试） |
-| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
+| **语义身份** `identityHash` | 包名 + `[export]` + 各依赖的 `(别名, 摘要)` + 每个文件的 `(路径, 内容摘要)` | 分发/pin 身份：manifest `identity`、registry 条目、`vuna pin` 写回、fetch/check 校验；**不参与缓存失效**（D5 身份模型） | 声明面或任何源码语义变化 |
 | `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
 | `pkgImplHash` | 包内模块 `miImplHash` 聚合 | 产物身份（`splitIdentity`） | `opaque`/`abstract` 体变化也变 |
 

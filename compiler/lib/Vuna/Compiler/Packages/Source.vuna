@@ -119,11 +119,14 @@ exportsOf manifest = case manifest.manifestExports of
   Nothing => []
   Just xs => xs
 
--- `path` 依赖记 `"path"`：它是可变输入，摘要不参与依赖方身份（D12）。
+-- 依赖身份优先取声明的 `identity`（分发/pin 身份）；没有就退回内容摘要。
+-- `path` 依赖两者都没有时记 `"path"`：它是可变输入，摘要不参与依赖方身份（D12）。
 depKeyOf : Dependency -> Pair String String
-depKeyOf dep = Pair (depAliasOf dep) (case depHashOf dep of
-  Nothing => "path"
-  Just h => normalizeHash h
+depKeyOf dep = Pair (depAliasOf dep) (case depIdentityOf dep of
+  Just i => normalizeHash i
+  Nothing => case depHashOf dep of
+    Nothing => "path"
+    Just h => normalizeHash h
 )
 
 -- | 内容摘要：只含 `(相对路径, 字节)`。

@@ -29,20 +29,25 @@ export data DependencySource(..) : Type where
   DepGit : String -> String -> DependencySource
   DepUrl : String -> DependencySource
 
--- | 一条依赖声明：本地别名 + 来源 + 可选摘要。
+-- | 一条依赖声明：本地别名 + 来源 + 内容摘要 + 可选语义身份。
+-- `depIdentity` 是分发/pin 身份（`identityHash`），不是完整性校验；有值时取源后校验。
 export record Dependency(..) where
   depAlias : String
   depSource : DependencySource
   depHash : Maybe String
+  depIdentity : Maybe String
 
 export depAliasOf : Dependency -> String
-depAliasOf (Dependency alias source hash) = alias
+depAliasOf (Dependency alias source hash identity) = alias
 
 export depSourceOf : Dependency -> DependencySource
-depSourceOf (Dependency alias source hash) = source
+depSourceOf (Dependency alias source hash identity) = source
 
 export depHashOf : Dependency -> Maybe String
-depHashOf (Dependency alias source hash) = hash
+depHashOf (Dependency alias source hash identity) = hash
+
+export depIdentityOf : Dependency -> Maybe String
+depIdentityOf (Dependency alias source hash identity) = identity
 
 export record Manifest(..) where
   manifestName : Maybe String
@@ -67,10 +72,11 @@ record DepAcc where
   depAccRev : Maybe String
   depAccUrl : Maybe String
   depAccHash : Maybe String
+  depAccIdentity : Maybe String
   depAccTableLine : Int
 
 emptyDepAcc : String -> Int -> DepAcc
-emptyDepAcc alias line = DepAcc alias Nothing Nothing Nothing Nothing Nothing line
+emptyDepAcc alias line = DepAcc alias Nothing Nothing Nothing Nothing Nothing Nothing line
 
 -- 字符分类（与 Toml 内部约定一致；vuna 无字符字面量，统一用 char code）。
 isDigitChar : Int -> Bool
@@ -149,7 +155,13 @@ depAliasOfSection ([first, second]) = second
 depAliasOfSection _ = ""
 
 isDepSourceKey : String -> Bool
-isDepSourceKey key = key == "path" || key == "git" || key == "rev" || key == "url" || key == "hash"
+isDepSourceKey key =
+  key == "path"
+    || key == "git"
+    || key == "rev"
+    || key == "url"
+    || key == "hash"
+    || key == "identity"
 
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Check Int
@@ -202,6 +214,9 @@ setAccUrl s acc = { acc | depAccUrl = Just s }
 setAccHash : String -> DepAcc -> DepAcc
 setAccHash s acc = { acc | depAccHash = Just s }
 
+setAccIdentity : String -> DepAcc -> DepAcc
+setAccIdentity s acc = { acc | depAccIdentity = Just s }
+
 stringValueOf : String -> String -> TomlValue -> Int -> Check String
 stringValueOf path key (TStr s) line = OkC s
 stringValueOf path key _ line = pkgAt1 path line (ExpectedString key) key
@@ -224,9 +239,12 @@ applyDepEntry path alias key value line acc =
     "url" => case stringValueOf path key value line of
       ErrC e => ErrC e
       OkC s => OkC (mapAcc alias (setAccUrl s) ensured)
-    _ => case stringValueOf path key value line of
+    "hash" => case stringValueOf path key value line of
       ErrC e => ErrC e
       OkC s => OkC (mapAcc alias (setAccHash s) ensured)
+    _ => case stringValueOf path key value line of
+      ErrC e => ErrC e
+      OkC s => OkC (mapAcc alias (setAccIdentity s) ensured)
 
 collectTables : String -> List TomlEntry -> List DepAcc -> Check (List DepAcc)
 collectTables path [] acc = OkC acc
@@ -250,15 +268,16 @@ buildDependency path acc = case acc.depAccPath of
     Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
     Nothing => case acc.depAccUrl of
       Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
-      Nothing => OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash)
+      Nothing => OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash acc.depAccIdentity)
   Nothing => case acc.depAccGit of
     Just url => case acc.depAccRev of
       Nothing => pkgAt1 path acc.depAccTableLine (GitRevRequired acc.depAccAlias) acc.depAccAlias
       Just rev => case acc.depAccUrl of
         Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
-        Nothing => OkC (Dependency acc.depAccAlias (DepGit url rev) acc.depAccHash)
+        Nothing =>
+          OkC (Dependency acc.depAccAlias (DepGit url rev) acc.depAccHash acc.depAccIdentity)
     Nothing => case acc.depAccUrl of
-      Just u => OkC (Dependency acc.depAccAlias (DepUrl u) acc.depAccHash)
+      Just u => OkC (Dependency acc.depAccAlias (DepUrl u) acc.depAccHash acc.depAccIdentity)
       Nothing =>
         pkgAt1 path acc.depAccTableLine (DependencySourceMissing acc.depAccAlias) acc.depAccAlias
 
@@ -277,7 +296,7 @@ collectDependencies path entries = case collectStrings path entries [] of
       ErrC e => ErrC e
       OkC tableDeps =>
         OkC
-          (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing) strings) tableDeps)
+          (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing Nothing) strings) tableDeps)
 
 -- ---------------------------------------------------------------- 依赖校验
 isHexChar : Int -> Bool
@@ -288,7 +307,7 @@ allHex [] = True
 allHex (c :: rest) = isHexChar c && allHex rest
 
 -- | 摘要文本：`sha256:<64 hex>` 或裸 64 位十六进制。
-validHashText : String -> Bool
+export validHashText : String -> Bool
 validHashText s =
   if startsWith "sha256:" s then strLength s == 71 && allHex (strUnpack (substring 7 64 s))
   else strLength s == 64 && allHex (strUnpack s)
@@ -298,23 +317,30 @@ checkHashForm path alias Nothing = OkC 0
 checkHashForm path alias (Just h) =
   if validHashText h then OkC 0 else pkgPath1 path (HashMalformed h) h
 
+checkIdentityForm : String -> Maybe String -> Check Int
+checkIdentityForm path Nothing = OkC 0
+checkIdentityForm path (Just i) =
+  if validHashText i then OkC 0 else pkgPath1 path (IdentityMalformed i) i
+
 validateDependency : String -> Dependency -> Check Int
-validateDependency path (Dependency alias source hashArg) = if alias == "" then pkgPath0 path EmptyDependencyName
-else case source of
-  DepPath rel =>
-    if rel == "" then pkgPath1 path (EmptyDependencyPath alias) alias
-    else checkHashForm path alias hashArg
-  DepGit url rev => case hashArg of
-    Nothing => pkgPath1 path (MissingHash alias) alias
-    Just h =>
-      if url == "" then pkgPath1 path (DependencySourceMissing alias) alias
-      else if rev == "" then pkgPath1 path (GitRevRequired alias) alias
+validateDependency path (Dependency alias source hashArg identityArg) = if alias == "" then pkgPath0 path EmptyDependencyName
+else case checkIdentityForm path identityArg of
+  ErrC e => ErrC e
+  OkC _ => case source of
+    DepPath rel =>
+      if rel == "" then pkgPath1 path (EmptyDependencyPath alias) alias
       else checkHashForm path alias hashArg
-  DepUrl u => case hashArg of
-    Nothing => pkgPath1 path (MissingHash alias) alias
-    Just h =>
-      if u == "" then pkgPath1 path (DependencySourceMissing alias) alias
-      else checkHashForm path alias hashArg
+    DepGit url rev => case hashArg of
+      Nothing => pkgPath1 path (MissingHash alias) alias
+      Just h =>
+        if url == "" then pkgPath1 path (DependencySourceMissing alias) alias
+        else if rev == "" then pkgPath1 path (GitRevRequired alias) alias
+        else checkHashForm path alias hashArg
+    DepUrl u => case hashArg of
+      Nothing => pkgPath1 path (MissingHash alias) alias
+      Just h =>
+        if u == "" then pkgPath1 path (DependencySourceMissing alias) alias
+        else checkHashForm path alias hashArg
 
 validateDepsSeen : String -> List String -> List Dependency -> Check Int
 validateDepsSeen path seen [] = OkC 0

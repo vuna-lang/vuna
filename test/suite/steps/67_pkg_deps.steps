@@ -61,3 +61,14 @@ out-contains: [PKG_NotMaterialized]
 #      可变输入，摘要只属于不可变源；新鲜度由 siHash → miIfaceHash → miDepHashes 链负责）。
 run: sh -c 'rm -rf "$TMPDIR/d67k"; mkdir -p "$TMPDIR/d67k/dep/lib" "$TMPDIR/d67k/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$TMPDIR/d67k/dep/vuna.toml"; printf "module D where\n\nexport v : Int\nv = 1\n" > "$TMPDIR/d67k/dep/lib/D.vuna"; printf "[package]\nname = \"d67k\"\n\n[dependencies]\ndep = \"../dep\"\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/d67k/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$TMPDIR/d67k/app/app/Main.vuna"; "$VUNA" check "$TMPDIR/d67k/app" >/dev/null 2>&1 || exit 1; cp "$TMPDIR/d67k/app/vuna.toml" "$TMPDIR/d67k/before.toml"; printf "module D where\n\nexport v : Int\nv = 2\n" > "$TMPDIR/d67k/dep/lib/D.vuna"; "$VUNA" check "$TMPDIR/d67k/app" >/dev/null 2>&1 || exit 1; cmp "$TMPDIR/d67k/app/vuna.toml" "$TMPDIR/d67k/before.toml"'
 exit: 0
+
+# 67l) path 依赖声明 identity 时校验；不符报 PKG_IdentityMismatch（identity 不是完整性摘要，
+#      但它是对依赖语义面的显式 pin，加载时不能跳过）。
+run: sh -c 'd="$TMPDIR/d67l"; rm -rf "$d"; mkdir -p "$d/dep/lib" "$d/app/app"; printf "[package]\nname = \"dep\"\n[export]\nmodules = [\"D\"]\n" > "$d/dep/vuna.toml"; printf "module D where\n\nexport v : Int\nv = 1\n" > "$d/dep/lib/D.vuna"; printf "[package]\nname = \"d67l\"\n\n[dependencies.dep]\npath = \"../dep\"\nidentity = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$d/app/vuna.toml"; printf "import D\n\nmain : Int\nmain = v\n" > "$d/app/app/Main.vuna"; "$VUNA" check "$d/app" 2>&1'
+exit: 1
+out-contains: [PKG_IdentityMismatch]
+
+# 67m) identity 格式错误 ⇒ PKG_IdentityMalformed（与 hash 同一格式，不静默接受）。
+run: sh -c 'd="$TMPDIR/d67m"; rm -rf "$d"; mkdir -p "$d/app"; printf "[package]\nname = \"d67m\"\n\n[dependencies.foo]\npath = \"../x\"\nidentity = \"nope\"\n" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" check "$d" 2>&1'
+exit: 1
+out-contains: [PKG_IdentityMalformed]

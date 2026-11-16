@@ -644,7 +644,8 @@ depSourceText (DepGit url rev) = "git:${url}@${rev}"
 depSourceText (DepUrl u) = "url:${u}"
 
 depSemanticText : Dependency -> String
-depSemanticText d = "${d.depAlias}|${depSourceText d.depSource}|${maybeSemanticText d.depHash}"
+depSemanticText d =
+  "${d.depAlias}|${depSourceText d.depSource}|${maybeSemanticText d.depHash}|${maybeSemanticText d.depIdentity}"
 
 manifestSemanticText : Maybe Package -> String
 manifestSemanticText Nothing = ""

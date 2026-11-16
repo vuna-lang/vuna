@@ -17,3 +17,12 @@ out-contains: PKG_FetchFailed
 run: sh -c 'S="$TMPDIR/pe"; VUNA_STORE="$S/store" "$VUNA" add ghost "$S/r" --dry-run 2>&1'
 exit: 1
 out-contains: PKG_IndexMalformed
+# path 依赖声明了错误 identity ⇒ PKG_IdentityMismatch（与内容摘要分开校验）。
+run: sh -c 'S="$TMPDIR/pe"; mkdir -p "$S/id/app"; printf "[package]\nname = \"id\"\n\n[dependencies.dep]\npath = \"../dep\"\nidentity = \"sha256:0000000000000000000000000000000000000000000000000000000000000000\"\n" > "$S/id/vuna.toml"; printf "import D\n\nmain : Int\nmain = d\n" > "$S/id/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/id" 2>&1'
+exit: 1
+out-contains: PKG_IdentityMismatch
+
+# identity 格式错误 ⇒ PKG_IdentityMalformed。
+run: sh -c 'S="$TMPDIR/pe"; mkdir -p "$S/badid/app"; printf "[package]\nname = \"badid\"\n\n[dependencies.dep]\npath = \"../dep\"\nidentity = \"nope\"\n" > "$S/badid/vuna.toml"; printf "main : Int\nmain = 1\n" > "$S/badid/app/Main.vuna"; VUNA_STORE="$S/store" "$VUNA" check "$S/badid" 2>&1'
+exit: 1
+out-contains: PKG_IdentityMalformed

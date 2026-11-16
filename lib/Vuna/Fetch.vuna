@@ -102,9 +102,27 @@ dirOfDep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, 
 dirOfDep root pid locked baseDir dep = case depSourceOf dep of
   DepPath rel => do
     abs <- absolutePath (joinPath baseDir rel)
-    files <- packageFilesEff abs
-    code <- verifyPathDep dep (contentHashOf (PackageSource "" [] [] files))
-    if code /= 0 then pure Nothing else pure (Just abs)
+    let
+      manifestPath = "${abs}/vuna.toml"
+    in do
+      exists <- fsFileExists manifestPath
+      if exists then do
+        raw <- fsReadFile manifestPath
+        case parseManifest manifestPath raw of
+          ErrC e => do
+            _ <- printDiagEff e
+            pure Nothing
+          OkC manifest => case validateManifest manifest of
+            ErrC e => do
+              _ <- printDiagEff e
+              pure Nothing
+            OkC valid => do
+              ps <- packageSourceEff abs valid
+              code <- verifyPathDep dep ps
+              if code /= 0 then pure Nothing else pure (Just abs)
+      else do
+        _ <- fetchFailText "missing vuna.toml in ${abs}"
+        pure Nothing
   DepGit url rev => case depHashOf dep of
     Nothing => do
       _ <- fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
@@ -115,9 +133,12 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
       in do
         done <- isMaterializedEff root digest
         if done then do
-          _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-          _ <- storeRootAppendEff pid [digest]
-          pure (Just (materializedDir root digest))
+          ok <- verifyMaterializedIdentityEff root dep digest
+          if ok then do
+            _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
+            _ <- storeRootAppendEff pid [digest]
+            pure (Just (materializedDir root digest))
+          else pure Nothing
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
           pure Nothing
@@ -138,9 +159,12 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
       in do
         done <- isMaterializedEff root digest
         if done then do
-          _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-          _ <- storeRootAppendEff pid [digest]
-          pure (Just (materializedDir root digest))
+          ok <- verifyMaterializedIdentityEff root dep digest
+          if ok then do
+            _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
+            _ <- storeRootAppendEff pid [digest]
+            pure (Just (materializedDir root digest))
+          else pure Nothing
         else if locked then do
           _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
           pure Nothing
@@ -152,15 +176,61 @@ dirOfDep root pid locked baseDir dep = case depSourceOf dep of
               _ <- storeRootAppendEff pid [got]
               pure (Just (materializedDir root got))
 
-verifyPathDep : Member nConsole ConsoleOp r => Dependency -> String -> Eff r Int
-verifyPathDep dep actual = case depHashOf dep of
-  Nothing => do
-    _ <- consolePrint "fetch: ${depAliasOf dep} path unlocked (${actual})\n"
+identityOkOf : Dependency -> PackageSource -> Bool
+identityOkOf dep ps = case depIdentityOf dep of
+  Nothing => True
+  Just expected => normalizeHash expected == identityHashOf ps
+
+identityMismatch : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
+identityMismatch alias expected actual =
+  let
+    detail = "declared ${expected}, actual ${actual}"
+  in case pkgNoLoc (IdentityMismatch alias detail) [alias, detail] of
+    ErrC d => printDiagEff d
+    OkC _ => pure 0
+
+-- 已物化缓存也要校验声明的身份：缓存命中不能绕过 pin/registry 的身份检查。
+verifyMaterializedIdentityEff : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Dependency -> String -> Eff r Bool
+verifyMaterializedIdentityEff root dep digest = case depIdentityOf dep of
+  Nothing => pure True
+  Just _ => do
+    let
+      dir = materializedDir root digest
+      manifestPath = "${dir}/vuna.toml"
+    in do
+      raw <- fsReadFile manifestPath
+      case parseManifest manifestPath raw of
+        ErrC e => do
+          _ <- printDiagEff e
+          pure False
+        OkC manifest => case validateManifest manifest of
+          ErrC e => do
+            _ <- printDiagEff e
+            pure False
+          OkC valid => do
+            ps <- packageSourceEff dir valid
+            if identityOkOf dep ps then pure True
+            else do
+              _ <-
+                identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep))
+                  (identityHashOf ps)
+              pure False
+
+verifyPathDep : Member nConsole ConsoleOp r => Dependency -> PackageSource -> Eff r Int
+verifyPathDep dep ps = case depHashOf dep of
+  Nothing => if identityOkOf dep ps then do
+    _ <- consolePrint "fetch: ${depAliasOf dep} path unlocked (${contentHashOf ps})\n"
     pure 0
-  Just expected => if verifyHash expected actual then do
+  else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+  Just expected => if verifyHash expected (contentHashOf ps) then if identityOkOf dep ps then do
     _ <- consolePrint "fetch: ${depAliasOf dep} path ok\n"
     pure 0
-  else hashMismatch (depAliasOf dep) expected actual
+  else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+  else hashMismatch (depAliasOf dep) expected (contentHashOf ps)
+
+fromMaybeText : Maybe String -> String
+fromMaybeText Nothing = ""
+fromMaybeText (Just s) = s
 
 fetchGit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> Dependency -> String -> String -> String -> Eff r (Maybe String)
 fetchGit root dep url rev expected =
@@ -180,19 +250,35 @@ fetchGit root dep url rev expected =
         _ <- fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
         pure Nothing
       else do
-        files <- packageFilesEff tmp
-        verifyAndStore root dep expected (PackageSource "" [] [] files)
+        let
+          manifestPath = "${tmp}/vuna.toml"
+        in do
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e => do
+              _ <- printDiagEff e
+              pure Nothing
+            OkC manifest => case validateManifest manifest of
+              ErrC e => do
+                _ <- printDiagEff e
+                pure Nothing
+              OkC valid => do
+                ps <- packageSourceEff tmp valid
+                verifyAndStore root dep expected ps
 
--- 校验声明摘要后写对象 + 物化（git 与 url 共用）；成功返回实际摘要。
+-- 校验声明摘要与身份后写对象 + 物化（git 与 url 共用）；成功返回实际摘要。
 verifyAndStore : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> Dependency -> String -> PackageSource -> Eff r (Maybe String)
 verifyAndStore root dep expected ps =
   let
     actual = contentHashOf ps
-  in if verifyHash expected actual then do
+  in if verifyHash expected actual then if identityOkOf dep ps then do
     _ <- writeObjectEff root actual ps.psFiles
     _ <- materializeEff root actual ps.psFiles
     _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
     pure (Just actual)
+  else do
+    _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+    pure Nothing
   else do
     _ <- hashMismatch (depAliasOf dep) expected actual
     pure Nothing
@@ -216,8 +302,30 @@ fetchUrl root dep url expected =
           pure Nothing
         Just files => do
           _ <- materializeEff root expected files
-          _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
-          pure (Just expected)
+          let
+            dir = materializedDir root expected
+            manifestPath = "${dir}/vuna.toml"
+          in do
+            raw <- fsReadFile manifestPath
+            case parseManifest manifestPath raw of
+              ErrC e => do
+                _ <- printDiagEff e
+                pure Nothing
+              OkC manifest => case validateManifest manifest of
+                ErrC e => do
+                  _ <- printDiagEff e
+                  pure Nothing
+                OkC valid => do
+                  ps <- packageSourceEff dir valid
+                  if identityOkOf dep ps then do
+                    _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
+                    pure (Just expected)
+                  else do
+                    _ <-
+                      identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep))
+                        (identityHashOf ps)
+                    _ <- processRunIn root ["rm", "-rf", dir]
+                    pure Nothing
 
 hashMismatch : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
 hashMismatch alias expected actual =
@@ -280,9 +388,14 @@ pinAt dir = do
               pure 0
     else fetchFailText "missing vuna.toml in ${dir}"
 
--- 对每个 git 依赖取实际摘要（clone → 收集 → 写对象 + 物化）。url/path 不参与：
+record PinInfo where
+  pinAlias : String
+  pinHash : String
+  pinIdentity : String
+
+-- 对每个 git 依赖取实际摘要与语义身份（clone → 收集 → 写对象 + 物化）。url/path 不参与：
 -- url 对象文件的地址只能由对象自身给出，path 是可变输入（D12）。
-collectPins : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> List Dependency -> List (Pair String String) -> Eff r (List (Pair String String))
+collectPins : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> List Dependency -> List PinInfo -> Eff r (List PinInfo)
 collectPins root baseDir [] acc = pure (reverse acc)
 collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
   DepPath rel => do
@@ -297,9 +410,10 @@ collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
       Nothing => do
         _ <- fetchFailText "pin: cannot resolve ${depAliasOf dep} (${url}@${rev})"
         pure []
-      Just digest => collectPins root baseDir rest (Pair (depAliasOf dep) digest :: acc)
+      Just p =>
+        collectPins root baseDir rest (PinInfo (depAliasOf dep) (firstOf p) (secondOf p) :: acc)
 
-resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r (Maybe String)
+resolveGitDigest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r (Maybe (Pair String String))
 resolveGitDigest root alias url rev =
   let
     tmp = "${root}/tmp/pin-${alias}"
@@ -317,29 +431,48 @@ resolveGitDigest root alias url rev =
         _ <- consolePrint "pin: git checkout failed for ${alias}\n"
         pure Nothing
       else do
-        files <- packageFilesEff tmp
         let
-          actual = contentHashOf (PackageSource "" [] [] files)
+          manifestPath = "${tmp}/vuna.toml"
         in do
-          _ <- writeObjectEff root actual files
-          _ <- materializeEff root actual files
-          pure (Just actual)
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e => do
+              _ <- printDiagEff e
+              pure Nothing
+            OkC manifest => case validateManifest manifest of
+              ErrC e => do
+                _ <- printDiagEff e
+                pure Nothing
+              OkC valid => do
+                ps <- packageSourceEff tmp valid
+                let
+                  actual = contentHashOf ps
+                in do
+                  _ <- writeObjectEff root actual ps.psFiles
+                  _ <- materializeEff root actual ps.psFiles
+                  pure (Just (Pair actual (identityHashOf ps)))
 
--- 文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行（保留缩进）。
--- 没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：pin 不替用户猜格式。
-applyPins : List (Pair String String) -> String -> String
-applyPins pins raw = join "\n" (pinGo pins (split "\n" raw) Nothing)
+-- 文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行，并在其后写
+-- `identity = ...`。没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：
+-- pin 不替用户猜格式。
+applyPins : List PinInfo -> String -> String
+applyPins pins raw = join "\n" (pinGo pins (split "\n" raw) Nothing False)
 
-pinGo : List (Pair String String) -> List String -> Maybe String -> List String
-pinGo pins [] current = []
-pinGo pins (line :: rest) current = case depSectionAlias (trim line) of
-  Just alias => line :: pinGo pins rest (Just alias)
-  Nothing => if isSectionHeader (trim line) then line :: pinGo pins rest Nothing
+pinGo : List PinInfo -> List String -> Maybe String -> Bool -> List String
+pinGo pins [] current wroteIdentity = []
+pinGo pins (line :: rest) current wroteIdentity = case depSectionAlias (trim line) of
+  Just alias => line :: pinGo pins rest (Just alias) False
+  Nothing => if isSectionHeader (trim line) then line :: pinGo pins rest Nothing False
   else case current of
-    Just alias =>
-      if startsWith "hash" (trim line) then replaceHashLine alias pins line :: pinGo pins rest current
-      else line :: pinGo pins rest current
-    Nothing => line :: pinGo pins rest current
+    Just alias => if startsWith "hash" (trim line) then case lookupPin alias pins of
+      Nothing => line :: pinGo pins rest current wroteIdentity
+      Just info => replaceHashLine info line :: identityLine info :: pinGo pins rest current True
+    else if startsWith "identity" (trim line) && wroteIdentity then pinGo pins rest current wroteIdentity
+    else line :: pinGo pins rest current wroteIdentity
+    Nothing => line :: pinGo pins rest current wroteIdentity
+
+identityLine : PinInfo -> String
+identityLine info = "identity = \"sha256:${info.pinIdentity}\""
 
 depSectionAlias : String -> Maybe String
 depSectionAlias t =
@@ -349,15 +482,12 @@ depSectionAlias t =
 isSectionHeader : String -> Bool
 isSectionHeader t = startsWith "[" t
 
-replaceHashLine : String -> List (Pair String String) -> String -> String
-replaceHashLine alias pins line = case lookupPin alias pins of
-  Nothing => line
-  Just digest => "hash = \"sha256:${digest}\""
+replaceHashLine : PinInfo -> String -> String
+replaceHashLine info _ = "hash = \"sha256:${info.pinHash}\""
 
-lookupPin : String -> List (Pair String String) -> Maybe String
+lookupPin : String -> List PinInfo -> Maybe PinInfo
 lookupPin alias [] = Nothing
-lookupPin alias ((Pair name digest) :: rest) =
-  if name == alias then Just digest else lookupPin alias rest
+lookupPin alias (info :: rest) = if info.pinAlias == alias then Just info else lookupPin alias rest
 
 listLen : List a -> Int
 listLen [] = 0

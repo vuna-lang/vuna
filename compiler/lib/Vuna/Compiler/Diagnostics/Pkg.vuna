@@ -39,6 +39,7 @@ export data PkgErr(..) : Nat -> Type where
   DependencySourceMissing : String -> PkgErr (Succ Zero)
   GitRevRequired : String -> PkgErr (Succ Zero)
   HashMalformed : String -> PkgErr (Succ Zero)
+  IdentityMalformed : String -> PkgErr (Succ Zero)
   MissingHash : String -> PkgErr (Succ Zero)
   SourceConflict : String -> PkgErr (Succ Zero)
   NotMaterialized : String -> PkgErr (Succ Zero)
@@ -50,6 +51,7 @@ export data PkgErr(..) : Nat -> Type where
   UnknownKey : String -> String -> PkgErr (Succ (Succ Zero))
   UnknownSourceKey : String -> String -> PkgErr (Succ (Succ Zero))
   HashMismatch : String -> String -> PkgErr (Succ (Succ Zero))
+  IdentityMismatch : String -> String -> PkgErr (Succ (Succ Zero))
   -- arity 3
   DuplicatePackageName : String -> String -> String -> PkgErr (Succ (Succ (Succ Zero)))
 
@@ -84,12 +86,14 @@ pkgCode (UnknownSourceKey _ _) = "PKG_UnknownSourceKey"
 pkgCode (DependencySourceMissing _) = "PKG_DependencySourceMissing"
 pkgCode (GitRevRequired _) = "PKG_GitRevRequired"
 pkgCode (HashMalformed _) = "PKG_HashMalformed"
+pkgCode (IdentityMalformed _) = "PKG_IdentityMalformed"
 pkgCode (MissingHash _) = "PKG_MissingHash"
 pkgCode (SourceConflict _) = "PKG_SourceConflict"
 pkgCode (NotMaterialized _) = "PKG_NotMaterialized"
 pkgCode (FetchFailed _) = "PKG_FetchFailed"
 pkgCode (IndexMalformed _) = "PKG_IndexMalformed"
 pkgCode (HashMismatch _ _) = "PKG_HashMismatch"
+pkgCode (IdentityMismatch _ _) = "PKG_IdentityMismatch"
 pkgCode (DuplicatePackageName _ _ _) = "PKG_DuplicatePackageName"
 
 -- | 诊断域实现：Vuna.Compiler.Diagnostics.Pkg.pkgTemplate（目录/模板见 diagnostics.md）。
@@ -130,6 +134,7 @@ pkgTemplate (DependencySourceMissing _) =
   "dependency \"<0>\" must specify path, git (with rev) or url"
 pkgTemplate (GitRevRequired _) = "dependency \"<0>\" uses git but has no rev"
 pkgTemplate (HashMalformed _) = "invalid dependency hash \"<0>\" (expected sha256:<64 hex>)"
+pkgTemplate (IdentityMalformed _) = "invalid dependency identity \"<0>\" (expected sha256:<64 hex>)"
 pkgTemplate (MissingHash _) =
   "dependency \"<0>\" must have a hash (only path dependencies may omit it)"
 pkgTemplate (SourceConflict _) =
@@ -138,6 +143,7 @@ pkgTemplate (NotMaterialized _) = "package \"<0>\" is not in the local store (ru
 pkgTemplate (FetchFailed _) = "package fetch failed: <0>"
 pkgTemplate (IndexMalformed _) = "invalid package index: <0>"
 pkgTemplate (HashMismatch _ _) = "package \"<0>\" content hash mismatch: <1>"
+pkgTemplate (IdentityMismatch _ _) = "package \"<0>\" identity mismatch: <1>"
 pkgTemplate (DuplicatePackageName _ _ _) =
   "duplicate package name \"<0>\" in <1> and <2> (package names must be unique within a dependency graph)"
 

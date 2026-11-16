@@ -216,9 +216,31 @@ loadStoreDependency fuel stack dep = case depHashOf dep of
       exists <- fsFileExists "${dir}/.complete"
       if exists then do
         text <- fsReadFile "${dir}/.complete"
-        if text == digest then loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+        if text == digest then do
+          pkgR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+          case pkgR of
+            ErrC e => pure (ErrC e)
+            OkC pkg => do
+              idR <- verifyIdentityEff dep dir pkg.packageManifest
+              case idR of
+                ErrC e => pure (ErrC e)
+                OkC _ => pure (OkC pkg)
         else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
       else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+
+-- 依赖声明了语义身份（`identity`）时校验；未声明则跳过（内容摘要负责完整性）。
+verifyIdentityEff : Member nFs FsOp r => Dependency -> String -> Manifest -> Eff r (Check Int)
+verifyIdentityEff dep dir manifest = case depIdentityOf dep of
+  Nothing => pure (OkC 0)
+  Just expected => do
+    ps <- packageSourceEff dir manifest
+    let
+      actual = identityHashOf ps
+    in if normalizeHash expected == actual then pure (OkC 0)
+    else do
+      let
+        detail = "declared ${expected}, actual ${actual}"
+      in pure (pkgNoLoc (IdentityMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
 -- path 依赖显式写摘要时校验（不写则跳过：可变输入，D12）。
 verifyPathHashEff : Member nFs FsOp r => Dependency -> String -> Eff r (Check Int)
@@ -263,7 +285,11 @@ loadOneDependency fuel stack baseDir dep = case depSourceOf dep of
           hashR <- verifyPathHashEff dep dir
           case hashR of
             ErrC e => pure (ErrC e)
-            OkC _ => pure (OkC dependency)
+            OkC _ => do
+              idR <- verifyIdentityEff dep dir dependency.packageManifest
+              case idR of
+                ErrC e => pure (ErrC e)
+                OkC _ => pure (OkC dependency)
   DepGit url rev => loadStoreDependency fuel stack dep
   DepUrl url => loadStoreDependency fuel stack dep
 
