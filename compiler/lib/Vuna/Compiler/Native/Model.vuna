@@ -43,6 +43,7 @@ export data Reg(..) : Type where
   R9 : Reg
   R10 : Reg
   R11 : Reg
+  R15 : Reg
 
 export regText : Reg -> String
 regText Rax = "rax"
@@ -56,6 +57,7 @@ regText R8 = "r8"
 regText R9 = "r9"
 regText R10 = "r10"
 regText R11 = "r11"
+regText R15 = "r15"
 
 -- | 8-bit 别名（`setcc` / 字节存储用）。
 export reg8Text : Reg -> String
@@ -70,6 +72,7 @@ reg8Text R8 = "r8b"
 reg8Text R9 = "r9b"
 reg8Text R10 = "r10b"
 reg8Text R11 = "r11b"
+reg8Text R15 = "r15b"
 
 -- | 操作数：寄存器 / 立即数 / `[base + off]` / `[base + index + off]`（scale 1）/
 -- `[rip + label]`。`off` 可为负；索引只用于字节访问（字符串数据）。
@@ -126,6 +129,8 @@ export data Instr(..) : Type where
   ILabel : String -> Instr
   -- | `jmp label`。
   IJmp : String -> Instr
+  -- | `jmp reg`（续延恢复时的非局部跳转）。
+  IJmpReg : Reg -> Instr
   -- | `jcc label`。
   IJcc : String -> String -> Instr
   -- | `call label`。

@@ -176,7 +176,9 @@ performCore n key e o = sendCore e key n o
 -- 核心 handler：ret 处理正常返回，opH 处理每个操作；结果行删除 e。
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
 export handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem name e r) b
-handleCore e key name ret opH comp = MkEff (prim_effectHandle key name ret opH (runThunk comp))
+handleCore e key name ret opH comp = MkEff (\u => case comp of
+  MkEff f => prim_effectHandle key name ret opH f u
+)
 
 -- | 线性 continuation（一次性闭包类型）：`Cont a b` 由 `MkCont` 包装限量为 1 的函数，只能被消费一次。
 export linear data Cont a b : Type where

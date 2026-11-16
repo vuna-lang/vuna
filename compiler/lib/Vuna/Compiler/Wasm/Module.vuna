@@ -364,7 +364,10 @@ else case flattenApp ir of
         [a] => genLamApp (fuel - 1) st [b] body [a]
         _ => genApplyValue (fuel - 1) st head args
       _ => genApplyValue (fuel - 1) st head args
-    IrRt s => genRtApp (fuel - 1) st s args
+    IrRt s => if s == "prim_erase" then case args of
+      [] => Err "prim_erase needs an argument"
+      x :: rest => genExpr (fuel - 1) st (applyAllIr x rest)
+    else genRtApp (fuel - 1) st s args
     _ => genApplyValue (fuel - 1) st head args
 
 genGlobalCall : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)

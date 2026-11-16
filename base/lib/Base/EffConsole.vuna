@@ -52,15 +52,16 @@ consoleOpHIO op k = case op of
 consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff (Cons "default" ConsoleOp []) a) -> Eff (Cons "default" ConsoleOp []) a
 consoleOpHIOHost op k = case op of
   Print s => do
-    r <- fmap natFromInt (@vuna@host@print s)
-    k r
+    r <- @vuna@host@print s
+    k (natFromInt r)
   EPrint s => do
     r <- raise (@vuna@prim_eff_eprint s)
     k r
 
 -- | 带行的宿主 handler：删掉 `Console n`，answer 是 `Eff [ConsoleOp]`（不导出）。
 handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff (Cons "default" ConsoleOp []) a)
-handleConsoleHostHost n comp = handleConsole n (\a => pure a) consoleOpHIOHost comp
+handleConsoleHostHost n comp =
+  handleConsole n (\a => pure a) (\o => \k => consoleOpHIOHost o k) comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，
 -- 并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。

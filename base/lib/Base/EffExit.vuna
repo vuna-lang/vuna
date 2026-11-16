@@ -41,7 +41,7 @@ exitOpHIOHost op k = case op of
     k 0
 
 handleExitHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ExitOp r) a -> Eff r (Eff (Cons "default" ExitOp []) a)
-handleExitHostHost n comp = handleExit n (\a => pure a) exitOpHIOHost comp
+handleExitHostHost n comp = handleExit n (\a => pure a) (\o => \k => exitOpHIOHost o k) comp
 
 runExitHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ExitOp r) a -> Eff (rowAppend r (Cons "default" ExitOp [])) a
 runExitHost comp = joinEff (handleExitHostHost "default" comp)
