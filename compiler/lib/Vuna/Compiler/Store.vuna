@@ -329,8 +329,8 @@ storeRootReadyEff = do
   if ok then pure primary
   else do
     alt <- tmpStoreRootEff
-    ok2 <- dirReady alt
-    if ok2 then pure alt else pure alt
+    _ <- dirReady alt
+    pure alt
 
 -- 目录是否存在且是目录（`isDirectory` 在路径不存在时会抛，所以先 `fileExists`）。
 dirReady : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Bool
