@@ -69,7 +69,6 @@
 | --- | --- | --- | --- |
 | D89 | native 续延每次 resume 复制 `[perform_rbp, rt_stack_top)` 整段栈；栈段从 free list 复用、保留 128 KiB slack 并有 `rt_stack_limit` 越界 trap，但**嵌套 effect 的总开销仍随深度增长**（每层复制整段栈，深链会 O(depth²) 拷贝并最终 OOM/trap）；续延仍只 one-shot | `compiler/lib/Vuna/Compiler/Native/Runtime.vuna`（`effPerformFn` / `effResumeFn` / `effAllocSegmentFn` / `effFreeSegmentFn`）；[native.md](native.md) §3.4；105 的 `effmany` / `effdeep` / `effovf` 用例 | 后续（分段栈/按需扩容；multi-shot 不做） |
 
-| D92 | wasm handler 的 handler / opH / k 嵌套会随 effect 次数增长 wasm 调用栈：wasmtime 默认 `max-wasm-stack` 512K 约支持 ~100 次 effect，测试用 64 MiB（200 次），更长循环需更大 `-W max-wasm-stack`；尚未做不嵌套的 handler 运行时/尾调用优化 | `compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna`（`$rt_handleLoop` / `$rt_effResumeClo`）；[wasm-effects.md](wasm-effects.md) §4；109 的 `48_eff_many` | 后续（尾调用/不嵌套 handler 循环） |
 
 ## 相关阅读
 

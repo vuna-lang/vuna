@@ -64,7 +64,10 @@ comp thunk 是 `EffUnit -> a`，用 continuation 类型：
     调 `opH(op, k)`，不匹配时再次 `suspend $eff` 转发给外层，外层 resume 后继续恢复
     自己的 continuation；
   - `$rt_effResumeClo` 把 captured continuation + ret/opH/key/name 包成 `$clo`，供
-    `opH` 的 `k` 调用（经 `$rt_apply`）。
+    `opH` 的 `k` 调用（经 `$rt_apply`）；
+  - handler 运行时全部走尾调用：`$rt_apply` 用 `return_call_ref $ft`，`$rt_handleLoop` /
+    `$rt_effResumeClo` / `$rt_effThunk` 用 `return_call`，因此每次 `perform` 的
+    handleLoop / apply / resumeClo 帧在下一次 effect 前让位，不在调用栈上累积。
 - **`Wasm.Module`**：`prim_effectPerform` / `prim_effectHandle` 接进 `rtImplOf`；
   入口按 `irEntryHandlersOf` 预装宿主 handler（`main : Eff r a` 已支持）；Console/Exit/Ref
   的宿主叶子映射补齐。
@@ -80,9 +83,9 @@ comp thunk 是 `EffUnit -> a`，用 continuation 类型：
   `continuation already resumed` 文本（三端对拍暂不覆盖 double resume）。
 - **宿主效应广度**：Console/Exit/Ref 已接；Fs/Clock/Env/Process/Stdin 等未实现宿主叶子
   仍在 `rtImplOf` 处拒绝。
-- **栈增长**：handler / opH / k 的嵌套会随 effect 次数增长 wasm 调用栈；wasmtime 默认
-  `max-wasm-stack`（512K）约支持 ~100 次 effect，测试用 64 MiB（`48_eff_many` 覆盖 200 次），
-  更长循环需要更大的 `-W max-wasm-stack` 或等待不嵌套的 handler 运行时设计。
+- **栈深度**：effect 次数本身不占调用栈（handler 运行时是尾调用）；能用多少次 effect
+  由被处理计算自己的递归深度决定——默认 `max-wasm-stack`（512K）下 2000 次 perform 正常，
+  同一栈深度的纯递归才是真正的上限（`106` 的 `effdepth` 用例锁 2000 次）。
 - **性能**：每个 effect 至少一次 suspend/resume；符合 one-shot 语义。
 
 ## 5. 相关阅读
@@ -91,4 +94,4 @@ comp thunk 是 `EffUnit -> a`，用 continuation 类型：
 - [native-effects.md](native-effects.md)：native 的栈拷贝续延实现。
 - [effects.md](effects.md)：效应语义与 one-shot 约束。
 - 探针：`test/suite/fixtures/wasm_stack_switch/forward.wat`；
-  `test/suite/steps/106_wasm_backend.steps` 第 11 case。
+  `test/suite/steps/106_wasm_backend.steps` 第 11 case（转发）与第 12 case（2000 次 perform）。

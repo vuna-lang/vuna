@@ -25,9 +25,10 @@
   不回落到 OCaml。
 - 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：产物总是包含
   stack-switching 运行时函数，统一用
-  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`；
-  handler 的嵌套会占 wasm 调用栈，默认 `max-wasm-stack`（512K）约支持 ~100 次 effect，
-  长循环用 `-W max-wasm-stack=67108864`（测试）或更大。
+  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`。
+  handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
+  调用栈；默认 `max-wasm-stack`（512K）够 2000 次 perform，实际上限由被处理计算自己的
+  递归深度决定。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
   `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
 
@@ -162,7 +163,7 @@
 ## 9. 相关阅读
 
 - [ir.md](ir.md)：IR 节点、运行时契约、后端义务。
-- [wasm-effects.md](wasm-effects.md)：stack-switching 探针、handler 运行时映射与实现切分。
+- [wasm-effects.md](wasm-effects.md)：stack-switching 探针、handler 运行时（尾调用）与已知边界。
 - [native.md](native.md)：另一个产品后端（同样的「文本 canonical + 外部工具」策略；
   支持字符串与 bump 堆）。
 - [architecture.md](../architecture.md)：子系统地图与改动定位。
