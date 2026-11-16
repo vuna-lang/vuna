@@ -45,6 +45,13 @@ export record RtConsts(..) where
   -- | 该目标未实现的宿主操作（运行期显式失败，不伪造结果）。
   rtcHostOff : Int
   rtcHostLen : Int
+  -- | 原子写的临时后缀 / cwd 环境名 / "."。
+  rtcTmpOff : Int
+  rtcTmpLen : Int
+  rtcPwdOff : Int
+  rtcPwdLen : Int
+  rtcDotOff : Int
+  rtcDotLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -142,41 +149,812 @@ dataSegmentName = "$d0"
 mkString : Int -> Int -> List Instr
 mkString off len = [IConstI32 off, IConstI32 len, IArrayNewData "$str" dataSegmentName]
 
--- | `rt_write(fd, s, nl)`：把字符串复制到线性内存并 write；只用于输出/错误。
+-- ---------------------------------------------------------------
+-- WASI 线性内存布局（固定 scratch；GC 堆在引擎侧）
+-- ---------------------------------------------------------------
+export wasiIov : Int
+wasiIov = 0
+
+export wasiN : Int
+wasiN = 8
+
+export wasiPath1 : Int
+wasiPath1 = 16
+
+export wasiPath2 : Int
+wasiPath2 = 4112
+
+export wasiIo : Int
+wasiIo = 8208
+
+export wasiIoCap : Int
+wasiIoCap = 65536
+
+export wasiStat : Int
+wasiStat = 73744
+
+export wasiDir : Int
+wasiDir = 74256
+
+export wasiDirCap : Int
+wasiDirCap = 4096
+
+export wasiAux : Int
+wasiAux = 78352
+
+-- WASI preview1 rights：读（含 readdir）与写分别给最小有效集。
+export readRights : Int
+readRights = 136601638
+
+export writeRights : Int
+writeRights = 150994943
+
+emptyStrInstrs : List Instr
+emptyStrInstrs = [IConstI32 0, IArrayNewDefault "$str"]
+
+boxI64 : List Instr
+boxI64 = [IStructNew "$int"]
+
+-- | 路径复制（跳过开头的 `/`，WASI 的 dirfd 版本不接受绝对路径）。
+--   返回复制后的相对长度。
+rtPathCopyRel : WatFunc
+rtPathCopyRel =
+  let
+    params = [Pair "$s" WvAnyRef, Pair "$dst" WvI32]
+    locals = [Pair "$sa" (WvRef "$str"), Pair "$n" WvI32, Pair "$i" WvI32, Pair "$j" WvI32]
+    body =
+      [ ILocalGet "$s",
+        IRefCast "$str",
+        ILocalSet "$sa",
+        ILocalGet "$sa",
+        IArrayLen,
+        ILocalSet "$n",
+        IConstI32 0,
+        ILocalSet "$i",
+        ILocalGet "$n",
+        IConstI32 0,
+        IBinop "i32.gt_s",
+        IIf "" [ILocalGet "$sa", IConstI32 0, IArrayGetU "$str", IConstI32 47, IBinop "i32.eq", IIf "" [IConstI32 1, ILocalSet "$i"] [INop]] [INop],
+        IConstI32 0,
+        ILocalSet "$j",
+        IBlock "$p_done" "" [ILoop "$p_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$p_done", ILocalGet "$dst", ILocalGet "$j", IBinop "i32.add", ILocalGet "$sa", ILocalGet "$i", IArrayGetU "$str", IStore8, ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$j", IBr "$p_l"]],
+        ILocalGet "$j"
+      ]
+  in rtFunc "$rt_pathCopyRel" params [WvI32] locals body
+
+-- | 线性内存字节 → Vuna String。
+rtMemToStr : WatFunc
+rtMemToStr =
+  let
+    params = [Pair "$ptr" WvI32, Pair "$len" WvI32]
+    locals = [Pair "$out" (WvRef "$str"), Pair "$i" WvI32]
+    body =
+      [ ILocalGet "$len",
+        IArrayNewDefault "$str",
+        ILocalSet "$out",
+        IConstI32 0,
+        ILocalSet "$i",
+        IBlock "$m_done" "" [ILoop "$m_l" "" [ILocalGet "$i", ILocalGet "$len", IBinop "i32.ge_s", IBrIf "$m_done", ILocalGet "$out", ILocalGet "$i", ILocalGet "$ptr", ILocalGet "$i", IBinop "i32.add", ILoad8U, IArraySet "$str", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$m_l"]],
+        ILocalGet "$out"
+      ]
+  in rtFunc "$rt_memToStr" params [WvAnyRef] locals body
+
+-- | WASI errno → 与 OCaml `dtp_hostCode` 一致的 1..6 / 9。
+errnoEq : Int -> List Instr -> List Instr -> List Instr
+errnoEq n thenB elseB = [ILocalGet "$e", IConstI32 n, IBinop "i32.eq", IIf "i32" thenB elseB]
+
+rtErrno : WatFunc
+rtErrno =
+  let
+    params = [Pair "$e" WvI32]
+    body =
+      errnoEq 44 [IConstI32 1]
+        (errnoEq 2 [IConstI32 2] (errnoEq 63 [IConstI32 2] (errnoEq 76 [IConstI32 2] (errnoEq 51 [IConstI32 3] (errnoEq 19 [IConstI32 3] (errnoEq 22 [IConstI32 3] (errnoEq 54 [IConstI32 4] (errnoEq 31 [IConstI32 5] (errnoEq 20 [IConstI32 6] [IConstI32 9])))))))))
+  in rtFunc "$rt_errno" params [WvI32] [] body
+
+-- | `rt_writeChunked(fd, s, nl)`：分块写（每次 ≤64 KiB），返回写入字节数或 -1。
+rtWriteChunked : WatFunc
+rtWriteChunked =
+  let
+    params = [Pair "$fd" WvI32, Pair "$s" WvAnyRef, Pair "$nl" WvI32]
+    locals =
+      [ Pair "$sa" (WvRef "$str"),
+        Pair "$total" WvI32,
+        Pair "$off" WvI32,
+        Pair "$chunk" WvI32,
+        Pair "$i" WvI32,
+        Pair "$err" WvI32,
+        Pair "$nw" WvI32
+      ]
+    copyChunk =
+      [ IConstI32 0,
+        ILocalSet "$i",
+        IBlock "$c_done" "" [ILoop "$c_l" "" [ILocalGet "$i", ILocalGet "$chunk", IBinop "i32.ge_s", IBrIf "$c_done", IConstI32 wasiIo, ILocalGet "$i", IBinop "i32.add", ILocalGet "$sa", ILocalGet "$off", ILocalGet "$i", IBinop "i32.add", IArrayGetU "$str", IStore8, ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$c_l"]]
+      ]
+    writeChunk =
+      [ IConstI32 wasiIov,
+        IConstI32 wasiIo,
+        IStore32,
+        IConstI32 (wasiIov + 4),
+        ILocalGet "$chunk",
+        IStore32,
+        ILocalGet "$fd",
+        IConstI32 wasiIov,
+        IConstI32 1,
+        IConstI32 wasiN,
+        ICall "$fd_write",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI32 (0 - 1), IReturn] [INop],
+        IConstI32 wasiN,
+        ILoad32,
+        ILocalSet "$nw",
+        ILocalGet "$nw",
+        IConstI32 0,
+        IBinop "i32.le_s",
+        IIf "" [IConstI32 (0 - 1), IReturn] [INop],
+        ILocalGet "$off",
+        ILocalGet "$nw",
+        IBinop "i32.add",
+        ILocalSet "$off"
+      ]
+    body =
+      [ ILocalGet "$s",
+        IRefCast "$str",
+        ILocalSet "$sa",
+        ILocalGet "$sa",
+        IArrayLen,
+        ILocalSet "$total",
+        IConstI32 0,
+        ILocalSet "$off",
+        IBlock "$w_done" "" [ILoop "$w_l" "" (cat [[ILocalGet "$off", ILocalGet "$total", IBinop "i32.ge_s", IBrIf "$w_done", ILocalGet "$total", ILocalGet "$off", IBinop "i32.sub", ILocalSet "$chunk", ILocalGet "$chunk", IConstI32 wasiIoCap, IBinop "i32.gt_s", IIf "" [IConstI32 wasiIoCap, ILocalSet "$chunk"] [INop]], copyChunk, writeChunk, [IBr "$w_l"]])],
+        ILocalGet "$nl",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [IConstI32 wasiIo, IConstI32 10, IStore8, IConstI32 wasiIov, IConstI32 wasiIo, IStore32, IConstI32 (wasiIov + 4), IConstI32 1, IStore32, ILocalGet "$fd", IConstI32 wasiIov, IConstI32 1, IConstI32 wasiN, ICall "$fd_write", IDrop] [INop],
+        ILocalGet "$total"
+      ]
+  in rtFunc "$rt_writeChunked" params [WvI32] locals body
+
+-- | `rt_write(fd, s, nl)`：分块写 stdout/stderr（不再受 256 KiB 线性内存上限约束）。
 rtWrite : WatFunc
 rtWrite =
   let
     params = [Pair "$fd" WvI32, Pair "$s" WvAnyRef, Pair "$nl" WvI32]
-    locals = [Pair "$n" WvI32, Pair "$i" WvI32]
-    copyLoop =
-      [ IConstI32 0,
-        ILocalSet "$i",
-        IBlock "$done" "" [ILoop "$l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_u", IBrIf "$done", IConstI32 16, ILocalGet "$i", IBinop "i32.add", ILocalGet "$s", IRefCast "$str", ILocalGet "$i", IArrayGetU "$str", IStore8, ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$l"]]
-      ]
-    setNewline =
-      [ ILocalGet "$nl",
-        IIf "" [IConstI32 16, ILocalGet "$n", IBinop "i32.add", IConstI32 10, IStore8] []
-      ]
-    iovec =
-      [ IConstI32 0,
-        IConstI32 16,
-        IStore32,
-        IConstI32 4,
+    body = [ILocalGet "$fd", ILocalGet "$s", ILocalGet "$nl", ICall "$rt_writeChunked", IDrop]
+  in rtFunc "$rt_write" params [] [] body
+
+-- ---------------------------------------------------------------
+-- 宿主文件系统 / 环境 / 参数的 WASI 实现
+-- ---------------------------------------------------------------
+-- 约定：`--dir` 预打开根目录为 fd 3；路径统一去掉开头的 `/`（WASI dirfd 形式）。
+rtPathLen : WatFunc
+rtPathLen =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$sa" (WvRef "$str"), Pair "$n" WvI32]
+    body =
+      [ ILocalGet "$s",
+        IRefCast "$str",
+        ILocalSet "$sa",
+        ILocalGet "$sa",
+        IArrayLen,
+        ILocalSet "$n",
         ILocalGet "$n",
-        ILocalGet "$nl",
-        IBinop "i32.add",
-        IStore32,
+        IConstI32 0,
+        IBinop "i32.gt_s",
+        IIf "i32" [ILocalGet "$sa", IConstI32 0, IArrayGetU "$str", IConstI32 47, IBinop "i32.eq", IIf "i32" [ILocalGet "$n", IConstI32 1, IBinop "i32.sub"] [ILocalGet "$n"]] [ILocalGet "$n"]
+      ]
+  in rtFunc "$rt_pathLen" params [WvI32] locals body
+
+-- | 打开路径，返回 fd（失败 -1，状态槽已写）。
+rtPathOpen : WatFunc
+rtPathOpen =
+  let
+    params = [Pair "$s" WvAnyRef, Pair "$oflags" WvI32, Pair "$rights" WvI64]
+    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    body =
+      [ ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        IConstI32 1,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ILocalGet "$oflags",
+        ILocalGet "$rights",
+        ILocalGet "$rights",
+        IConstI32 0,
+        IConstI32 wasiAux,
+        ICall "$path_open",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI32 (0 - 1), IReturn] [INop],
+        IConstI32 wasiAux,
+        ILoad32,
+        IReturn
+      ]
+  in rtFunc "$rt_pathOpen" params [WvI32] locals body
+
+-- | 从 fd 顺序读到 EOF（或 size 字节），返回 Vuna String；读失败写状态槽并返回空串。
+rtFdReadAll : WatFunc
+rtFdReadAll =
+  let
+    params = [Pair "$fd" WvI32, Pair "$size" WvI32]
+    locals =
+      [ Pair "$out" (WvRef "$str"),
+        Pair "$off" WvI32,
+        Pair "$rem" WvI32,
+        Pair "$chunk" WvI32,
+        Pair "$err" WvI32,
+        Pair "$n" WvI32,
+        Pair "$i" WvI32
+      ]
+    body =
+      [ ILocalGet "$size",
+        IArrayNewDefault "$str",
+        ILocalSet "$out",
+        IConstI32 0,
+        ILocalSet "$off",
+        IBlock "$rd_done" "" [ILoop "$rd_l" "" [ILocalGet "$off", ILocalGet "$size", IBinop "i32.ge_s", IBrIf "$rd_done", ILocalGet "$size", ILocalGet "$off", IBinop "i32.sub", ILocalSet "$rem", ILocalGet "$rem", ILocalSet "$chunk", ILocalGet "$chunk", IConstI32 wasiIoCap, IBinop "i32.gt_s", IIf "" [IConstI32 wasiIoCap, ILocalSet "$chunk"] [INop], IConstI32 wasiIov, IConstI32 wasiIo, IStore32, IConstI32 (wasiIov + 4), ILocalGet "$chunk", IStore32, ILocalGet "$fd", IConstI32 wasiIov, IConstI32 1, IConstI32 wasiN, ICall "$fd_read", ILocalSet "$err", ILocalGet "$err", IConstI32 0, IBinop "i32.ne", IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", ICall "$rt_emptyStr", IReturn] [INop], IConstI32 wasiN, ILoad32, ILocalSet "$n", ILocalGet "$n", IConstI32 0, IBinop "i32.le_s", IBrIf "$rd_done", IConstI32 0, ILocalSet "$i", IBlock "$rc_done" "" [ILoop "$rc_l" "" [ILocalGet "$i", ILocalGet "$n", IBinop "i32.ge_s", IBrIf "$rc_done", ILocalGet "$out", ILocalGet "$off", ILocalGet "$i", IBinop "i32.add", IConstI32 wasiIo, ILocalGet "$i", IBinop "i32.add", ILoad8U, IArraySet "$str", ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$rc_l"]], ILocalGet "$off", ILocalGet "$n", IBinop "i32.add", ILocalSet "$off", IBr "$rd_l"]],
+        ILocalGet "$out"
+      ]
+  in rtFunc "$rt_fdReadAll" params [WvAnyRef] locals body
+
+rtEmptyStr : WatFunc
+rtEmptyStr = rtFunc "$rt_emptyStr" [] [WvAnyRef] [] emptyStrInstrs
+
+-- | `path_filestat_get`，返回 errno。
+rtStatErr : WatFunc
+rtStatErr =
+  let
+    params = [Pair "$s" WvAnyRef, Pair "$follow" WvI32]
+    locals = [Pair "$len" WvI32]
+    body =
+      [ ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        ILocalGet "$follow",
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        IConstI32 wasiStat,
+        ICall "$path_filestat_get"
+      ]
+  in rtFunc "$rt_statErr" params [WvI32] locals body
+
+rtTryReadFile : WatFunc
+rtTryReadFile =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$err" WvI32, Pair "$size" WvI32, Pair "$fd" WvI32, Pair "$out" WvAnyRef]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 1,
+        ICall "$rt_statErr",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", ICall "$rt_emptyStr", IReturn] [INop],
+        IConstI32 (wasiStat + 32),
+        ILoad32,
+        ILocalSet "$size",
+        ILocalGet "$s",
+        IConstI32 0,
+        IConstI64 136601638,
+        ICall "$rt_pathOpen",
+        ILocalSet "$fd",
         ILocalGet "$fd",
         IConstI32 0,
-        IConstI32 1,
-        IConstI32 8,
-        ICall "$fd_write",
-        IDrop
+        IBinop "i32.lt_s",
+        IIf "" [ICall "$rt_emptyStr", IReturn] [INop],
+        ILocalGet "$fd",
+        ILocalGet "$size",
+        ICall "$rt_fdReadAll",
+        ILocalSet "$out",
+        ILocalGet "$fd",
+        ICall "$fd_close",
+        IDrop,
+        ILocalGet "$out"
+      ]
+  in rtFunc "$rt_tryReadFile" params [WvAnyRef] locals body
+
+rtTryWriteFile : WatFunc
+rtTryWriteFile =
+  let
+    params = [Pair "$s" WvAnyRef, Pair "$contents" WvAnyRef]
+    locals = [Pair "$fd" WvI32, Pair "$n" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 9,
+        IConstI64 150994943,
+        ICall "$rt_pathOpen",
+        ILocalSet "$fd",
+        ILocalGet "$fd",
+        IConstI32 0,
+        IBinop "i32.lt_s",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$fd",
+        ILocalGet "$contents",
+        IConstI32 0,
+        ICall "$rt_writeChunked",
+        ILocalSet "$n",
+        ILocalGet "$fd",
+        ICall "$fd_close",
+        IDrop,
+        ILocalGet "$n",
+        IConstI32 0,
+        IBinop "i32.lt_s",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$n",
+        IPlain "i64.extend_i32_u",
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_tryWriteFile" params [WvAnyRef] locals body
+
+rtTryWriteFileAtomic : RtConsts -> WatFunc
+rtTryWriteFileAtomic c =
+  let
+    params = [Pair "$s" WvAnyRef, Pair "$contents" WvAnyRef]
+    locals =
+      [ Pair "$tmp" WvAnyRef,
+        Pair "$lenP" WvI32,
+        Pair "$lenT" WvI32,
+        Pair "$fd" WvI32,
+        Pair "$n" WvI32,
+        Pair "$err" WvI32
       ]
     body =
       cat
-        [[ILocalGet "$s", IRefCast "$str", IArrayLen, ILocalSet "$n"], copyLoop, setNewline, iovec]
-  in rtFunc "$rt_write" params [] locals body
+        [[IConstI32 0, IGlobalSet "$g_hostStatus", ILocalGet "$s"], mkString c.rtcTmpOff c.rtcTmpLen, [ICall "$rt_strConcat", ILocalSet "$tmp", ILocalGet "$s", ICall "$rt_pathLen", ILocalSet "$lenP", ILocalGet "$tmp", ICall "$rt_pathLen", ILocalSet "$lenT", ILocalGet "$tmp", IConstI32 9, IConstI64 150994943, ICall "$rt_pathOpen", ILocalSet "$fd", ILocalGet "$fd", IConstI32 0, IBinop "i32.lt_s", IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop], ILocalGet "$fd", ILocalGet "$contents", IConstI32 0, ICall "$rt_writeChunked", ILocalSet "$n", ILocalGet "$fd", ICall "$fd_close", IDrop, ILocalGet "$n", IConstI32 0, IBinop "i32.lt_s", IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop], ILocalGet "$s", IConstI32 wasiPath2, ICall "$rt_pathCopyRel", IDrop, IConstI32 3, IConstI32 wasiPath1, ILocalGet "$lenT", IConstI32 3, IConstI32 wasiPath2, ILocalGet "$lenP", ICall "$path_rename", ILocalSet "$err", ILocalGet "$err", IConstI32 0, IBinop "i32.ne", IIf "" [IConstI32 3, IConstI32 wasiPath1, ILocalGet "$lenT", ICall "$path_unlink_file", IDrop, ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int", IReturn] [INop], ILocalGet "$n", IPlain "i64.extend_i32_u", IStructNew "$int"]]
+  in rtFunc "$rt_tryWriteFileAtomic" params [WvAnyRef] locals body
+
+rtTryIsDirectory : WatFunc
+rtTryIsDirectory =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 1,
+        ICall "$rt_statErr",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI32 0, II31New, IReturn] [INop],
+        IConstI32 (wasiStat + 16),
+        ILoad8U,
+        IConstI32 3,
+        IBinop "i32.eq",
+        IIf "anyref" [IConstI32 1, II31New] [IConstI32 0, II31New]
+      ]
+  in rtFunc "$rt_tryIsDirectory" params [WvAnyRef] locals body
+
+rtFileExists : WatFunc
+rtFileExists =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$err" WvI32]
+    body =
+      [ ILocalGet "$s",
+        IConstI32 1,
+        ICall "$rt_statErr",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "anyref" [IConstI32 1, II31New] [IConstI32 0, II31New]
+      ]
+  in rtFunc "$rt_fileExists" params [WvAnyRef] locals body
+
+rtFileMtime : WatFunc
+rtFileMtime =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 1,
+        ICall "$rt_statErr",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IConstI32 (wasiStat + 48),
+        ILoad64,
+        IConstI64 1000000000,
+        IBinop "i64.div_u",
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_fileMtime" params [WvAnyRef] locals body
+
+rtFileSize : WatFunc
+rtFileSize =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 1,
+        ICall "$rt_statErr",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IConstI32 (wasiStat + 32),
+        ILoad64,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_fileSize" params [WvAnyRef] locals body
+
+rtTryMakeDir : WatFunc
+rtTryMakeDir =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ICall "$path_create_directory",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 20,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        ICall "$rt_errno",
+        IGlobalSet "$g_hostStatus",
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_tryMakeDir" params [WvAnyRef] locals body
+
+rtTryMakeDirExclusive : WatFunc
+rtTryMakeDirExclusive =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ICall "$path_create_directory",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 20,
+        IBinop "i32.eq",
+        IIf "" [IConstI32 6, IGlobalSet "$g_hostStatus"] [INop],
+        ILocalGet "$err",
+        IConstI32 20,
+        IBinop "i32.ne",
+        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus"] [INop],
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_tryMakeDirExclusive" params [WvAnyRef] locals body
+
+rtTryRemoveFile : WatFunc
+rtTryRemoveFile =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ICall "$path_unlink_file",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 44,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        ICall "$rt_errno",
+        IGlobalSet "$g_hostStatus",
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_tryRemoveFile" params [WvAnyRef] locals body
+
+rtTryRemoveTree : WatFunc
+rtTryRemoveTree =
+  let
+    params = [Pair "$s" WvAnyRef]
+    locals = [Pair "$len" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$s",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len",
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ICall "$path_unlink_file",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 44,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len",
+        ICall "$path_remove_directory",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        IConstI32 44,
+        IBinop "i32.eq",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        ILocalGet "$err",
+        ICall "$rt_errno",
+        IGlobalSet "$g_hostStatus",
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_tryRemoveTree" params [WvAnyRef] locals body
+
+rtTryRename : WatFunc
+rtTryRename =
+  let
+    params = [Pair "$src" WvAnyRef, Pair "$dst" WvAnyRef]
+    locals = [Pair "$len1" WvI32, Pair "$len2" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$src",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len1",
+        ILocalGet "$dst",
+        IConstI32 wasiPath2,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len2",
+        IConstI32 3,
+        IConstI32 wasiPath1,
+        ILocalGet "$len1",
+        IConstI32 3,
+        IConstI32 wasiPath2,
+        ILocalGet "$len2",
+        ICall "$path_rename",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI32 0, IGlobalSet "$g_hostStatus"] [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus"],
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "anyref" [IConstI64 0, IStructNew "$int"] [IConstI64 1, IStructNew "$int"]
+      ]
+  in rtFunc "$rt_tryRename" params [WvAnyRef] locals body
+
+rtTrySymlink : WatFunc
+rtTrySymlink =
+  let
+    params = [Pair "$target" WvAnyRef, Pair "$link" WvAnyRef]
+    locals = [Pair "$len1" WvI32, Pair "$len2" WvI32, Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IGlobalSet "$g_hostStatus",
+        ILocalGet "$target",
+        IConstI32 wasiPath1,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len1",
+        ILocalGet "$link",
+        IConstI32 wasiPath2,
+        ICall "$rt_pathCopyRel",
+        ILocalSet "$len2",
+        IConstI32 wasiPath1,
+        ILocalGet "$len1",
+        IConstI32 3,
+        IConstI32 wasiPath2,
+        ILocalGet "$len2",
+        ICall "$path_symlink",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "" [IConstI32 0, IGlobalSet "$g_hostStatus"] [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus"],
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "anyref" [IConstI64 0, IStructNew "$int"] [IConstI64 1, IStructNew "$int"]
+      ]
+  in rtFunc "$rt_trySymlink" params [WvAnyRef] locals body
+
+rtHostStatus : WatFunc
+rtHostStatus =
+  rtFunc "$rt_hostStatus" [] [WvAnyRef] []
+    [IGlobalGet "$g_hostStatus", IPlain "i64.extend_i32_u", IStructNew "$int"]
+
+-- | 环境变量查找（environ_get 一次读入 scratch；key 前缀 + `=` 匹配）。
+rtGetEnv : WatFunc
+rtGetEnv =
+  let
+    params = [Pair "$key" WvAnyRef]
+    locals =
+      [ Pair "$sa" (WvRef "$str"),
+        Pair "$keyLen" WvI32,
+        Pair "$count" WvI32,
+        Pair "$size" WvI32,
+        Pair "$ptrArr" WvI32,
+        Pair "$buf" WvI32,
+        Pair "$i" WvI32,
+        Pair "$p" WvI32,
+        Pair "$j" WvI32,
+        Pair "$ok" WvI32,
+        Pair "$k" WvI32,
+        Pair "$err" WvI32
+      ]
+    body =
+      [ ILocalGet "$key",
+        IRefCast "$str",
+        ILocalSet "$sa",
+        ILocalGet "$sa",
+        IArrayLen,
+        ILocalSet "$keyLen",
+        IConstI32 wasiAux,
+        IConstI32 (wasiAux + 4),
+        ICall "$environ_sizes_get",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [ICall "$rt_emptyStr", IReturn] [INop],
+        IConstI32 wasiAux,
+        ILoad32,
+        ILocalSet "$count",
+        IConstI32 (wasiAux + 4),
+        ILoad32,
+        ILocalSet "$size",
+        ILocalGet "$size",
+        ILocalGet "$count",
+        IConstI32 4,
+        IBinop "i32.mul",
+        IBinop "i32.add",
+        IConstI32 180000,
+        IBinop "i32.gt_s",
+        IIf "" [ICall "$rt_emptyStr", IReturn] [INop],
+        IConstI32 (wasiAux + 8),
+        ILocalSet "$ptrArr",
+        ILocalGet "$ptrArr",
+        ILocalGet "$count",
+        IConstI32 4,
+        IBinop "i32.mul",
+        IBinop "i32.add",
+        ILocalSet "$buf",
+        ILocalGet "$ptrArr",
+        ILocalGet "$buf",
+        ICall "$environ_get",
+        IDrop,
+        IConstI32 0,
+        ILocalSet "$i",
+        IBlock "$env_done" "" [ILoop "$env_l" "" [ILocalGet "$i", ILocalGet "$count", IBinop "i32.ge_s", IBrIf "$env_done", ILocalGet "$ptrArr", ILocalGet "$i", IConstI32 4, IBinop "i32.mul", IBinop "i32.add", ILoad32, ILocalSet "$p", IConstI32 0, ILocalSet "$j", IConstI32 1, ILocalSet "$ok", IBlock "$cmp_done" "" [ILoop "$cmp_l" "" [ILocalGet "$j", ILocalGet "$keyLen", IBinop "i32.ge_s", IBrIf "$cmp_done", ILocalGet "$p", ILocalGet "$j", IBinop "i32.add", ILoad8U, ILocalGet "$sa", ILocalGet "$j", IArrayGetU "$str", IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$ok", IBr "$cmp_done"] [INop], ILocalGet "$j", IConstI32 1, IBinop "i32.add", ILocalSet "$j", IBr "$cmp_l"]], ILocalGet "$ok", IConstI32 0, IBinop "i32.ne", IIf "" [ILocalGet "$p", ILocalGet "$keyLen", IBinop "i32.add", ILoad8U, IConstI32 61, IBinop "i32.eq", IIf "" [ILocalGet "$keyLen", IConstI32 1, IBinop "i32.add", ILocalSet "$k", IBlock "$nul_done" "" [ILoop "$nul_l" "" [ILocalGet "$p", ILocalGet "$k", IBinop "i32.add", ILoad8U, IConstI32 0, IBinop "i32.eq", IBrIf "$nul_done", ILocalGet "$k", IConstI32 1, IBinop "i32.add", ILocalSet "$k", IBr "$nul_l"]], ILocalGet "$p", ILocalGet "$keyLen", IConstI32 1, IBinop "i32.add", IBinop "i32.add", ILocalGet "$k", ILocalGet "$keyLen", IConstI32 1, IBinop "i32.add", IBinop "i32.sub", ICall "$rt_memToStr", IReturn] [INop]] [INop], ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$env_l"]],
+        ICall "$rt_emptyStr"
+      ]
+  in rtFunc "$rt_getEnv" params [WvAnyRef] locals body
+
+rtGetCwd : RtConsts -> WatFunc
+rtGetCwd c =
+  let
+    locals = [Pair "$v" WvAnyRef]
+    body =
+      append (mkString c.rtcPwdOff c.rtcPwdLen)
+        [ICall "$rt_getEnv", ILocalSet "$v", ILocalGet "$v", IRefCast "$str", IArrayLen, IConstI32 0, IBinop "i32.eq", IIf "anyref" (mkString c.rtcDotOff c.rtcDotLen) [ILocalGet "$v"]]
+  in rtFunc "$rt_getCwd" [] [WvAnyRef] locals body
+
+rtExecPath : WatFunc
+rtExecPath = rtFunc "$rt_execPath" [] [WvAnyRef] [] emptyStrInstrs
+
+rtTimeUs : WatFunc
+rtTimeUs =
+  let
+    locals = [Pair "$err" WvI32]
+    body =
+      [ IConstI32 0,
+        IConstI64 1,
+        IConstI32 wasiAux,
+        ICall "$clock_time_get",
+        ILocalSet "$err",
+        ILocalGet "$err",
+        IConstI32 0,
+        IBinop "i32.ne",
+        IIf "" [IConstI64 0, IStructNew "$int", IReturn] [INop],
+        IConstI32 wasiAux,
+        ILoad64,
+        IConstI64 1000,
+        IBinop "i64.div_u",
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_timeUs" [] [WvAnyRef] locals body
+
+rtSleep : WatFunc
+rtSleep =
+  let
+    params = [Pair "$us" WvAnyRef]
+    locals = [Pair "$start" WvI64, Pair "$now" WvI64, Pair "$target" WvI64]
+    body =
+      [ IConstI32 0,
+        IConstI64 1,
+        IConstI32 wasiAux,
+        ICall "$clock_time_get",
+        IDrop,
+        IConstI32 wasiAux,
+        ILoad64,
+        ILocalSet "$start",
+        ILocalGet "$start",
+        ILocalGet "$us",
+        IRefCast "$int",
+        IStructGet "$int" 0,
+        IConstI64 1000,
+        IBinop "i64.mul",
+        IBinop "i64.add",
+        ILocalSet "$target",
+        IBlock "$s_done" "" [ILoop "$s_l" "" [IConstI32 0, IConstI64 1, IConstI32 wasiAux, ICall "$clock_time_get", IDrop, IConstI32 wasiAux, ILoad64, ILocalSet "$now", ILocalGet "$now", ILocalGet "$target", IBinop "i64.ge_u", IBrIf "$s_done", IBr "$s_l"]],
+        IConstI64 0,
+        IStructNew "$int"
+      ]
+  in rtFunc "$rt_sleep" params [WvAnyRef] locals body
 
 rtPrintln : WatFunc
 rtPrintln =
@@ -232,7 +1010,7 @@ rtEffPrint name fd =
 
 rtEffExit : WatFunc
 rtEffExit =
-  rtFunc "$rt_effExit" [Pair "$p0" WvAnyRef] [] []
+  rtFunc "$rt_effExit" [Pair "$p0" WvAnyRef] [WvAnyRef] []
     [ILocalGet "$p0", IRefCast "$int", IStructGet "$int" 0, IPlain "i32.wrap_i64", ICall "$proc_exit", IUnreachable]
 
 -- ---------------------------------------------------------------
@@ -701,6 +1479,7 @@ rtEqStr =
       [ Pair "$a" (WvRef "$str"),
         Pair "$b" (WvRef "$str"),
         Pair "$na" WvI32,
+        Pair "$nb" WvI32,
         Pair "$i" WvI32,
         Pair "$eq" WvI32
       ]
@@ -708,7 +1487,7 @@ rtEqStr =
       [ IBlock "$eq_done" "" [ILoop "$eq_l" "" [ILocalGet "$i", ILocalGet "$na", IBinop "i32.ge_u", IBrIf "$eq_done", ILocalGet "$a", ILocalGet "$i", IArrayGetU "$str", ILocalGet "$b", ILocalGet "$i", IArrayGetU "$str", IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$eq", IBr "$eq_done"] [], ILocalGet "$i", IConstI32 1, IBinop "i32.add", ILocalSet "$i", IBr "$eq_l"]]
       ]
     lenCheck =
-      [ IBlock "$len_done" "" [ILocalGet "$a", IArrayLen, ILocalSet "$na", ILocalGet "$na", ILocalGet "$b", IArrayLen, IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$eq", IBr "$len_done"] []]
+      [ IBlock "$len_done" "" [ILocalGet "$a", IArrayLen, ILocalSet "$na", ILocalGet "$b", IArrayLen, ILocalSet "$nb", ILocalGet "$na", ILocalGet "$nb", IBinop "i32.ne", IIf "" [IConstI32 0, ILocalSet "$eq", IConstI32 0, ILocalSet "$na", IBr "$len_done"] []]
       ]
     body =
       cat
@@ -1060,6 +1839,34 @@ rtFunctions c =
     rtHandleLoop,
     rtEffHandle,
     rtWrite,
+    rtPathCopyRel,
+    rtPathLen,
+    rtMemToStr,
+    rtErrno,
+    rtWriteChunked,
+    rtPathOpen,
+    rtFdReadAll,
+    rtEmptyStr,
+    rtStatErr,
+    rtTryReadFile,
+    rtTryWriteFile,
+    rtTryWriteFileAtomic c,
+    rtTryIsDirectory,
+    rtFileExists,
+    rtFileMtime,
+    rtFileSize,
+    rtTryMakeDir,
+    rtTryMakeDirExclusive,
+    rtTryRemoveFile,
+    rtTryRemoveTree,
+    rtTryRename,
+    rtTrySymlink,
+    rtHostStatus,
+    rtGetEnv,
+    rtGetCwd c,
+    rtExecPath,
+    rtTimeUs,
+    rtSleep,
     rtPrintln,
     rtEffNewRef,
     rtEffReadRef,
@@ -1269,34 +2076,34 @@ rtImplOf "prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
 rtImplOf "@vuna@prim_eff_eprint" = RtFunc 1 "$rt_effEprint"
 rtImplOf "prim_eff_exit" = RtFunc 1 "$rt_effExit"
 rtImplOf "@vuna@prim_eff_exit" = RtFunc 1 "$rt_effExit"
--- 宿主面：先全部落到显式失败桩，真实实现按族逐步替换。
-rtImplOf "@vuna@host@tryReadFile" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryWriteFile" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "@vuna@host@tryWriteFileAtomic" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "@vuna@host@tryReadDir" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryIsDirectory" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryMakeDir" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryRemoveFile" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryRemoveTree" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@tryRename" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "@vuna@host@trySymlink" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "@vuna@host@tryMakeDirExclusive" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@fileExists" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@fileMtime" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@fileSize" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@prim_eff_hostStatus" = RtFunc 0 "$rt_hostTrap0"
-rtImplOf "@vuna@host@getenv" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@getcwd" = RtFunc 0 "$rt_hostTrap0"
-rtImplOf "@vuna@host@execPath" = RtFunc 0 "$rt_hostTrap0"
-rtImplOf "@vuna@host@getArgs" = RtFunc 0 "$rt_hostTrap0"
+-- 宿主面：已实现的族；其余仍是显式失败桩。
+rtImplOf "@vuna@host@tryReadFile" = RtFunc 1 "$rt_tryReadFile"
+rtImplOf "@vuna@host@tryWriteFile" = RtFunc 2 "$rt_tryWriteFile"
+rtImplOf "@vuna@host@tryWriteFileAtomic" = RtFunc 2 "$rt_tryWriteFileAtomic"
+rtImplOf "@vuna@host@tryReadDir" = RtFunc 1 "$rt_tryReadDir"
+rtImplOf "@vuna@host@tryIsDirectory" = RtFunc 1 "$rt_tryIsDirectory"
+rtImplOf "@vuna@host@tryMakeDir" = RtFunc 1 "$rt_tryMakeDir"
+rtImplOf "@vuna@host@tryRemoveFile" = RtFunc 1 "$rt_tryRemoveFile"
+rtImplOf "@vuna@host@tryRemoveTree" = RtFunc 1 "$rt_tryRemoveTree"
+rtImplOf "@vuna@host@tryRename" = RtFunc 2 "$rt_tryRename"
+rtImplOf "@vuna@host@trySymlink" = RtFunc 2 "$rt_trySymlink"
+rtImplOf "@vuna@host@tryMakeDirExclusive" = RtFunc 1 "$rt_tryMakeDirExclusive"
+rtImplOf "@vuna@host@fileExists" = RtFunc 1 "$rt_fileExists"
+rtImplOf "@vuna@host@fileMtime" = RtFunc 1 "$rt_fileMtime"
+rtImplOf "@vuna@host@fileSize" = RtFunc 1 "$rt_fileSize"
+rtImplOf "@vuna@prim_eff_hostStatus" = RtFunc 0 "$rt_hostStatus"
+rtImplOf "@vuna@host@getenv" = RtFunc 1 "$rt_getEnv"
+rtImplOf "@vuna@host@getcwd" = RtFunc 0 "$rt_getCwd"
+rtImplOf "@vuna@host@execPath" = RtFunc 0 "$rt_execPath"
+rtImplOf "@vuna@host@getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@host@isTty" = RtValue (boolValue False)
-rtImplOf "@vuna@prim_eff_getArgs_process_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_getArgs_process_host" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@prim_eff_readFile" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_writeFile" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@prim_eff_writeFileAtomic" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "@vuna@prim_eff_readDir" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_readDir" = RtFunc 1 "$rt_tryReadDir"
 rtImplOf "@vuna@prim_eff_isDirectory" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_makeDir" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_removeFile" = RtFunc 1 "$rt_hostTrap1"
@@ -1305,7 +2112,7 @@ rtImplOf "@vuna@prim_eff_fileMtime" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_fileSize" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_readLine" = RtFunc 0 "$rt_hostTrap0"
 rtImplOf "@vuna@prim_eff_readBytes" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@prim_eff_getArgs" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "@vuna@prim_eff_getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@prim_eff_getenv" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_getcwd" = RtFunc 0 "$rt_hostTrap0"
 rtImplOf "@vuna@prim_eff_execPath" = RtFunc 0 "$rt_hostTrap0"
@@ -1319,14 +2126,14 @@ rtImplOf "@vuna@prim_eff_readBytes_host" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@host@tryRunIn" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@host@runIn" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
-rtImplOf "prim_eff_getArgs_process_host" = RtFunc 0 "$rt_hostTrap0"
+rtImplOf "prim_eff_getArgs_process_host" = RtFunc 0 "$rt_getArgs"
 rtImplOf "prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "effTimeUs_host" = RtFunc 0 "$rt_hostTrap0"
-rtImplOf "prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
-rtImplOf "@vuna@host@sleep" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "effTimeUs_host" = RtFunc 0 "$rt_timeUs"
+rtImplOf "prim_eff_sleep_host" = RtFunc 1 "$rt_sleep"
+rtImplOf "@vuna@prim_eff_sleep_host" = RtFunc 1 "$rt_sleep"
+rtImplOf "@vuna@host@sleep" = RtFunc 1 "$rt_sleep"
 rtImplOf _ = RtUnsupported

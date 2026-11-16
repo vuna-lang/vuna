@@ -140,6 +140,8 @@ renderInstrFlat ILoad8U = "i32.load8_u"
 renderInstrFlat IStore8 = "i32.store8"
 renderInstrFlat ILoad32 = "i32.load"
 renderInstrFlat IStore32 = "i32.store"
+renderInstrFlat ILoad64 = "i64.load"
+renderInstrFlat IStore64 = "i64.store"
 renderInstrFlat (IComment _) = ""
 
 renderInstrs : Int -> List Instr -> List String

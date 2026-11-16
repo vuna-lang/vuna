@@ -44,6 +44,8 @@ record GenState where
   gsConsts : RtConsts
   -- | `(elem declare func ...)` 的名字表（`ref.func` 需要）。
   gsElems : List String
+  -- | 当前表达式是否在函数体的尾位置（用于发 `return_call`，避免尾递归吃栈）。
+  gsTail : Bool
   -- | 下一个闭包函数编号。
   gsNextLam : Int
 
@@ -98,7 +100,13 @@ beginFuncScope : GenState -> GenState
 beginFuncScope st =
   let
     st1 = { st | gsLocals = [] }
-  in { st1 | gsNextLocal = 0, gsScope = [] }
+  in { st1 | gsNextLocal = 0, gsScope = [], gsTail = False }
+
+noTail : GenState -> GenState
+noTail st = { st | gsTail = False }
+
+withTail : Bool -> GenState -> GenState
+withTail b st = { st | gsTail = b }
 
 -- | 函数生成结束：把外层作用域与局部表还原（函数自己的局部表已取走）。
 endFuncScope : GenState -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> GenState
@@ -298,15 +306,15 @@ else case poolLookup s st.gsPoolTbl of
 
 genIf : Int -> GenState -> Ir -> Ir -> Ir -> Result (Pair (List Instr) GenState)
 genIf fuel st c th el = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st c of
+else case genExpr (fuel - 1) (noTail st) c of
   Err e => Err e
-  Ok pc => case genExpr (fuel - 1) (secondOf pc) th of
+  Ok pc => case genExpr (fuel - 1) (withTail st.gsTail (secondOf pc)) th of
     Err e => Err e
-    Ok pt => case genExpr (fuel - 1) (secondOf pc) el of
+    Ok pt => case genExpr (fuel - 1) (withTail st.gsTail (secondOf pc)) el of
       Err e => Err e
       Ok pe =>
         let
-          merged = mergeArmState (secondOf pt) (secondOf pe)
+          merged = withTail st.gsTail (mergeArmState (secondOf pt) (secondOf pe))
         in Ok
           (Pair (append (firstOf pc) [IRefCast "i31", II31GetU, IIf "anyref" (firstOf pt) (firstOf pe)]) merged)
 
@@ -317,9 +325,11 @@ else
   let
     runtimeBs = runtimeBinders bs
     savedScope = st.gsScope
-  in case genExpr (fuel - 1) st scrut of
+  in case genExpr (fuel - 1) (noTail st) scrut of
     Err e => Err e
-    Ok ps => genLetBound (fuel - 1) (secondOf ps) runtimeBs (firstOf ps) body savedScope
+    Ok ps =>
+      genLetBound (fuel - 1) (withTail st.gsTail (secondOf ps)) runtimeBs (firstOf ps) body
+        savedScope
 
 genLetBound : Int -> GenState -> List IrBinder -> List Instr -> Ir -> List (Pair IrBinder String) -> Result (Pair (List Instr) GenState)
 genLetBound fuel st [] scrutInstrs body savedScope = if fuel <= 0 then Err "wasm codegen fuel exhausted"
@@ -375,7 +385,8 @@ else case Base.HashMap.lookup name st.gsDefTbl of
     let
       arity = irDefArity d
       argc = listLengthB args
-    in if argc == arity then genArgsThen (fuel - 1) st args (ICall (watFuncNameOf name))
+    in if argc == arity then genArgsThen (fuel - 1) st args
+      (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
     else if argc < arity then genApplyValue (fuel - 1) st (IrGlobal name) args
     else case splitAt arity args of
       Pair headArgs rest => case genArgsThen (fuel - 1) st headArgs (ICall (watFuncNameOf name)) of
@@ -417,7 +428,7 @@ restoreFuncScope outer inner =
   let
     a = { inner | gsScope = outer.gsScope }
     b = { a | gsLocals = outer.gsLocals }
-  in { b | gsNextLocal = outer.gsNextLocal }
+  in { b | gsNextLocal = outer.gsNextLocal, gsTail = outer.gsTail }
 
 -- | `IrLam` 作为值：生成单参闭包函数并构造 `$clo`。
 --   多参 lambda 在创建时柯里化成嵌套的单参闭包（与 `$ft` / `$rt_apply` 的单参形状一致）；
@@ -438,7 +449,7 @@ else
     else case bindEnvLocals (beginFuncScope st1) caps 0 of
       Err e => Err e
       Ok cp => case freshLocal (secondOf cp) WvAnyRef of
-        Pair pl stp => case genExpr (fuel - 1) (pushBinder b pl stp) body of
+        Pair pl stp => case genExpr (fuel - 1) (pushBinder b pl (withTail True stp)) body of
           Err e => Err e
           Ok q =>
             let
@@ -460,17 +471,18 @@ else
 -- | 通用闭包应用：逐实参 `call $rt_apply`（左结合）。
 genApplyValue : Int -> GenState -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
 genApplyValue fuel st head args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st head of
+else case genExpr (fuel - 1) (noTail st) head of
   Err e => Err e
-  Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) args
+  Ok p => genApplyArgs (fuel - 1) (withTail st.gsTail (secondOf p)) (firstOf p) args
 
 genApplyArgs : Int -> GenState -> List Instr -> List Ir -> Result (Pair (List Instr) GenState)
 genApplyArgs _ st acc [] = Ok (Pair acc st)
 genApplyArgs fuel st acc (a :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st a of
+else case genExpr (fuel - 1) (noTail st) a of
   Err e => Err e
   Ok p =>
-    genApplyArgs (fuel - 1) (secondOf p) (append acc (append (firstOf p) [ICall "$rt_apply"])) rest
+    genApplyArgs (fuel - 1) (withTail st.gsTail (secondOf p))
+      (append acc (append (firstOf p) [ICall "$rt_apply"])) rest
 
 -- | 立即 lambda 应用：运行时 binder 必须恰好一个、实参恰好一个（`let` 的降级形态）。
 genLamApp : Int -> GenState -> List IrBinder -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
@@ -482,11 +494,11 @@ else
   in if listLengthB rbs /= 1 then Err "wasm target: only single-binder lambdas are supported yet"
   else if listLengthB args /= 1 then Err "wasm target: only saturated single-argument lambda application is supported yet"
   else case args of
-    [a] => case genExpr (fuel - 1) st a of
+    [a] => case genExpr (fuel - 1) (noTail st) a of
       Err e => Err e
       Ok pa => case rbs of
-        [b] => case freshLocal (secondOf pa) WvAnyRef of
-          Pair local st1 => case genExpr (fuel - 1) (pushBinder b local st1) body of
+        [b] => case freshLocal (withTail st.gsTail (secondOf pa)) WvAnyRef of
+          Pair local st1 => case genExpr (fuel - 1) (pushBinder b local (withTail st.gsTail st1)) body of
             Err e => Err e
             Ok pb =>
               Ok
@@ -498,9 +510,9 @@ else
 genArgsThen : Int -> GenState -> List Ir -> Instr -> Result (Pair (List Instr) GenState)
 genArgsThen fuel st [] k = Ok (Pair [k] st)
 genArgsThen fuel st (a :: rest) k = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st a of
+else case genExpr (fuel - 1) (noTail st) a of
   Err e => Err e
-  Ok p => case genArgsThen (fuel - 1) (secondOf p) rest k of
+  Ok p => case genArgsThen (fuel - 1) (withTail st.gsTail (secondOf p)) rest k of
     Err e => Err e
     Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
 
@@ -514,7 +526,7 @@ else case rtImplOf sym of
   RtFunc n name =>
     let
       argc = listLengthB args
-    in if argc == n then genArgsThen (fuel - 1) st args (ICall name)
+    in if argc == n then genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall name else ICall name)
     else if argc < n then genApplyValue (fuel - 1) st (IrRt sym) args
     else case splitAt n args of
       Pair headArgs rest => case genArgsThen (fuel - 1) st headArgs (ICall name) of
@@ -556,9 +568,9 @@ else
 
 genNatCase : Int -> GenState -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> Result (Pair (List Instr) GenState)
 genNatCase fuel st scrut zero succ catch = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st scrut of
+else case genExpr (fuel - 1) (noTail st) scrut of
   Err e => Err e
-  Ok ps => case freshLocal (secondOf ps) WvAnyRef of
+  Ok ps => case freshLocal (withTail st.gsTail (secondOf ps)) WvAnyRef of
     Pair scLocal st1 =>
       let
         zeroAlt = case zero of
@@ -576,7 +588,7 @@ else case genExpr (fuel - 1) st scrut of
           Err e => Err e
           Ok psu =>
             let
-              merged = mergeArmState (secondOf pz) (secondOf psu)
+              merged = withTail st.gsTail (mergeArmState (secondOf pz) (secondOf psu))
               cond = append (unboxLocalInt scLocal) [IConstI64 0, IBinop "i64.eq"]
             in Ok
               (Pair (append (firstOf ps) (append [ILocalSet scLocal] (append cond [IIf "anyref" (firstOf pz) (firstOf psu)]))) merged)
@@ -585,8 +597,8 @@ genConcatMany : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState
 genConcatMany fuel st parts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case parts of
   [] => Ok (Pair emptyStr st)
-  [a] => genExpr (fuel - 1) st a
-  a :: rest => case genExpr (fuel - 1) st a of
+  [a] => genExpr (fuel - 1) (noTail st) a
+  a :: rest => case genExpr (fuel - 1) (noTail st) a of
     Err e => Err e
     Ok pa => case genConcatRest (fuel - 1) (secondOf pa) rest of
       Err e => Err e
@@ -595,9 +607,9 @@ else case parts of
 genConcatRest : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState)
 genConcatRest fuel st [] = Ok (Pair [] st)
 genConcatRest fuel st (b :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st b of
+else case genExpr (fuel - 1) (noTail st) b of
   Err e => Err e
-  Ok p => case genConcatRest (fuel - 1) (secondOf p) rest of
+  Ok p => case genConcatRest (fuel - 1) (withTail st.gsTail (secondOf p)) rest of
     Err e => Err e
     Ok q => Ok (Pair (append (firstOf p) (append [ICall "$rt_strConcat"] (firstOf q))) (secondOf q))
 
@@ -615,9 +627,9 @@ refNullN n = if n <= 0 then [] else IRefNull :: refNullN (n - 1)
 genExprs : Int -> GenState -> List Ir -> Result (Pair (List Instr) GenState)
 genExprs _ st [] = Ok (Pair [] st)
 genExprs fuel st (a :: rest) = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st a of
+else case genExpr (fuel - 1) (noTail st) a of
   Err e => Err e
-  Ok p => case genExprs (fuel - 1) (secondOf p) rest of
+  Ok p => case genExprs (fuel - 1) (withTail st.gsTail (secondOf p)) rest of
     Err e => Err e
     Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
 
@@ -657,20 +669,20 @@ else case famOrFail st family of
   Err e => Err e
   Ok fam => case wasmRecordFieldIndex fam field of
     Nothing => Err "unknown record field in wasm codegen: `${family}.${field}`"
-    Just idx => case genExpr (fuel - 1) st base of
+    Just idx => case genExpr (fuel - 1) (noTail st) base of
       Err e => Err e
       Ok p =>
         Ok
-          (Pair (append (firstOf p) [IRefCast (watFamName family), IStructGet (watFamName family) idx]) (secondOf p))
+          (Pair (append (firstOf p) [IRefCast (watFamName family), IStructGet (watFamName family) idx]) (withTail st.gsTail (secondOf p)))
 
 -- | 更新：按字段表顺序重建一个 struct；被改字段用新值，其余从旧对象 `struct.get`。
 genRecUpd : Int -> GenState -> Ir -> String -> List (Pair String Ir) -> Result (Pair (List Instr) GenState)
 genRecUpd fuel st base family fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case famOrFail st family of
   Err e => Err e
-  Ok fam => case genExpr (fuel - 1) st base of
+  Ok fam => case genExpr (fuel - 1) (noTail st) base of
     Err e => Err e
-    Ok p => case freshLocal (secondOf p) WvAnyRef of
+    Ok p => case freshLocal (withTail st.gsTail (secondOf p)) WvAnyRef of
       Pair bLocal st1 => case genUpdFields (fuel - 1) st1 bLocal (watFamName family) fam.wasmFamRecordFields fields of
         Err e => Err e
         Ok q =>
@@ -681,9 +693,9 @@ genUpdFields : Int -> GenState -> String -> String -> List (Pair Int String) -> 
 genUpdFields _ st _ _ [] _ = Ok (Pair [] st)
 genUpdFields fuel st bLocal ty ((Pair idx name) :: rest) fields = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case lookupFieldIr name fields of
-  Just ir => case genExpr (fuel - 1) st ir of
+  Just ir => case genExpr (fuel - 1) (noTail st) ir of
     Err e => Err e
-    Ok p => case genUpdFields (fuel - 1) (secondOf p) bLocal ty rest fields of
+    Ok p => case genUpdFields (fuel - 1) (withTail st.gsTail (secondOf p)) bLocal ty rest fields of
       Err e => Err e
       Ok q => Ok (Pair (append (firstOf p) (firstOf q)) (secondOf q))
   Nothing => case genUpdFields (fuel - 1) st bLocal ty rest fields of
@@ -700,19 +712,23 @@ lookupFieldIr name (p :: rest) =
 --   先把 scrutinee 求值到 `scLocal`，再拼上分支体（分支生成器只负责 tag/字段读取）。
 genCase : Int -> GenState -> Ir -> List IrAlt -> Result (Pair (List Instr) GenState)
 genCase fuel st scrut alts = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case genExpr (fuel - 1) st scrut of
+else case genExpr (fuel - 1) (noTail st) scrut of
   Err e => Err e
   Ok p =>
     let
-      st1 = ensureLocal scrutSlot WvAnyRef (secondOf p)
+      st1 = ensureLocal scrutSlot WvAnyRef (withTail st.gsTail (secondOf p))
     in case caseFamilyOf alts of
-      Nothing => prepend (scrutInstrs p) (genCatchAllOnly (fuel - 1) st1 scrutSlot alts)
+      Nothing =>
+        prepend (scrutInstrs p) (restoreTail st (genCatchAllOnly (fuel - 1) st1 scrutSlot alts))
       Just family => case famOrFail st1 family of
         Err e => Err e
         Ok fam => case fam.wasmFamKind of
           FamRecord =>
-            prepend (scrutInstrs p) (genRecordCase (fuel - 1) st1 scrutSlot family fam alts)
-          _ => prepend (scrutInstrs p) (genVariantCase (fuel - 1) st1 scrutSlot family fam alts)
+            prepend (scrutInstrs p)
+              (restoreTail st (genRecordCase (fuel - 1) st1 scrutSlot family fam alts))
+          _ =>
+            prepend (scrutInstrs p)
+              (restoreTail st (genVariantCase (fuel - 1) st1 scrutSlot family fam alts))
 
 -- | case 的固定前导槽：scrutinee 求值后 `local.set` 到这里；同名槽在函数内只声明一次。
 scrutSlot : String
@@ -733,6 +749,10 @@ ensureLocal name ty st =
 prepend : List Instr -> Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
 prepend ins (Err e) = Err e
 prepend ins (Ok q) = Ok (Pair (append ins (firstOf q)) (secondOf q))
+
+restoreTail : GenState -> Result (Pair (List Instr) GenState) -> Result (Pair (List Instr) GenState)
+restoreTail _ (Err e) = Err e
+restoreTail st (Ok q) = Ok (Pair (firstOf q) (withTail st.gsTail (secondOf q)))
 
 caseFamilyOf : List IrAlt -> Maybe String
 caseFamilyOf [] = Nothing
@@ -770,7 +790,7 @@ else case alts of
       Nothing => Err "unknown constructor in wasm codegen: `${ctor}`"
       Just tag => case genAltBody (fuel - 1) st scLocal family fam alt of
         Err e => Err e
-        Ok armP => case genVariantCase (fuel - 1) (secondOf armP) scLocal family fam rest of
+        Ok armP => case genVariantCase (fuel - 1) (withTail st.gsTail (secondOf armP)) scLocal family fam rest of
           Err e => Err e
           Ok restP =>
             Ok
@@ -1007,7 +1027,9 @@ wasmBridgeFuncs (Just lf) =
     rtStrArgAtF lf,
     rtStrSubstTemplateF lf,
     rtArrayFromListF lf,
-    rtArrayToListF lf
+    rtArrayToListF lf,
+    rtGetArgsF lf,
+    rtTryReadDirF lf
   ]
 
 rtStrUnpackF : WasmListFam -> WatFunc
@@ -1129,6 +1151,50 @@ rtArrayToListF lf =
   in WatFunc "$rt_arrayToList" "" [Pair "$p0" WvAnyRef] [WvAnyRef] locals
     (catI [[ILocalGet "$p0", IRefCast "$arr", ILocalSet "$arr", ILocalGet "$arr", IArrayLen, ILocalSet "$n", ILocalGet "$n", ILocalSet "$i"], wasmNilCell lf, [ILocalSet "$acc", IBlock "$atl_done" "" [ILoop "$atl_l" "" [ILocalGet "$i", IPlain "i32.eqz", IBrIf "$atl_done", ILocalGet "$i", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", IConstI32 lf.wasmListConsTag, ILocalGet "$arr", ILocalGet "$i", IArrayGet "$arr", ILocalGet "$acc", IStructNew ty, ILocalSet "$acc", IBr "$atl_l"]]], [ILocalGet "$acc"]])
 
+-- | `@vuna@host@getArgs`：WASI argv（跳过 argv[0]）→ `List String`。
+rtGetArgsF : WasmListFam -> WatFunc
+rtGetArgsF lf =
+  let
+    ty = wasmListTy lf
+    locals =
+      [ Pair "$count" WvI32,
+        Pair "$ptr" WvI32,
+        Pair "$buf" WvI32,
+        Pair "$i" WvI32,
+        Pair "$p" WvI32,
+        Pair "$k" WvI32,
+        Pair "$acc" WvAnyRef,
+        Pair "$err" WvI32,
+        Pair "$name" WvAnyRef
+      ]
+    body =
+      append
+        [IConstI32 wasiAux, IConstI32 (wasiAux + 4), ICall "$args_sizes_get", ILocalSet "$err", ILocalGet "$err", IConstI32 0, IBinop "i32.ne", IIf "" (append (wasmNilCell lf) [IReturn]) [INop], IConstI32 wasiAux, ILoad32, ILocalSet "$count", IConstI32 (wasiAux + 8), ILocalSet "$ptr", ILocalGet "$ptr", ILocalGet "$count", IConstI32 4, IBinop "i32.mul", IBinop "i32.add", ILocalSet "$buf", ILocalGet "$ptr", ILocalGet "$buf", ICall "$args_get", IDrop]
+        (append (wasmNilCell lf) [ILocalSet "$acc", ILocalGet "$count", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", IBlock "$a_done" "" [ILoop "$a_l" "" [ILocalGet "$i", IConstI32 1, IBinop "i32.lt_s", IBrIf "$a_done", ILocalGet "$ptr", ILocalGet "$i", IConstI32 4, IBinop "i32.mul", IBinop "i32.add", ILoad32, ILocalSet "$p", ILocalGet "$p", ILocalSet "$k", IBlock "$nul_done" "" [ILoop "$nul_l" "" [ILocalGet "$k", ILoad8U, IConstI32 0, IBinop "i32.eq", IBrIf "$nul_done", ILocalGet "$k", IConstI32 1, IBinop "i32.add", ILocalSet "$k", IBr "$nul_l"]], ILocalGet "$p", ILocalGet "$k", ILocalGet "$p", IBinop "i32.sub", ICall "$rt_memToStr", ILocalSet "$name", IConstI32 lf.wasmListConsTag, ILocalGet "$name", ILocalGet "$acc", IStructNew ty, ILocalSet "$acc", ILocalGet "$i", IConstI32 1, IBinop "i32.sub", ILocalSet "$i", IBr "$a_l"]], ILocalGet "$acc"])
+  in WatFunc "$rt_getArgs" "" [] [WvAnyRef] locals body
+
+-- | `@vuna@host@tryReadDir`：fd_readdir 逐条解析 dirent → `List String`（顺序由 handler 排序）。
+rtTryReadDirF : WasmListFam -> WatFunc
+rtTryReadDirF lf =
+  let
+    ty = wasmListTy lf
+    locals =
+      [ Pair "$fd" WvI32,
+        Pair "$err" WvI32,
+        Pair "$used" WvI32,
+        Pair "$off" WvI32,
+        Pair "$namlen" WvI32,
+        Pair "$acc" WvAnyRef,
+        Pair "$name" WvAnyRef,
+        Pair "$cookie" WvI64,
+        Pair "$parsed" WvI32
+      ]
+    body =
+      append
+        [IConstI32 0, IGlobalSet "$g_hostStatus", ILocalGet "$p0", IConstI32 2, IConstI64 136601638, ICall "$rt_pathOpen", ILocalSet "$fd", ILocalGet "$fd", IConstI32 0, IBinop "i32.lt_s", IIf "" (append (wasmNilCell lf) [IReturn]) [INop]]
+        (append (wasmNilCell lf) [ILocalSet "$acc", IConstI64 0, ILocalSet "$cookie", IBlock "$rd_done" "" [ILoop "$rd_l" "" [ILocalGet "$fd", IConstI32 wasiDir, IConstI32 wasiDirCap, ILocalGet "$cookie", IConstI32 wasiAux, ICall "$fd_readdir", ILocalSet "$err", ILocalGet "$err", IConstI32 0, IBinop "i32.ne", IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IBr "$rd_done"] [INop], IConstI32 wasiAux, ILoad32, ILocalSet "$used", ILocalGet "$used", IConstI32 0, IBinop "i32.eq", IBrIf "$rd_done", IConstI32 0, ILocalSet "$off", IConstI32 0, ILocalSet "$parsed", IBlock "$buf_done" "" [ILoop "$buf_l" "" [ILocalGet "$off", IConstI32 24, IBinop "i32.add", ILocalGet "$used", IBinop "i32.gt_s", IBrIf "$buf_done", IConstI32 wasiDir, ILocalGet "$off", IBinop "i32.add", IConstI32 16, IBinop "i32.add", ILoad32, ILocalSet "$namlen", ILocalGet "$off", IConstI32 24, IBinop "i32.add", ILocalGet "$namlen", IBinop "i32.add", ILocalGet "$used", IBinop "i32.gt_s", IBrIf "$buf_done", IConstI32 wasiDir, ILocalGet "$off", IBinop "i32.add", IConstI32 24, IBinop "i32.add", ILocalGet "$namlen", ICall "$rt_memToStr", ILocalSet "$name", IConstI32 lf.wasmListConsTag, ILocalGet "$name", ILocalGet "$acc", IStructNew ty, ILocalSet "$acc", IConstI32 wasiDir, ILocalGet "$off", IBinop "i32.add", ILoad64, ILocalSet "$cookie", ILocalGet "$off", IConstI32 24, IBinop "i32.add", ILocalGet "$namlen", IBinop "i32.add", ILocalSet "$off", IConstI32 1, ILocalSet "$parsed", IBr "$buf_l"]], ILocalGet "$parsed", IConstI32 0, IBinop "i32.eq", IBrIf "$rd_done", IBr "$rd_l"]], ILocalGet "$fd", ICall "$fd_close", IDrop, ILocalGet "$acc"])
+  in WatFunc "$rt_tryReadDir" "" [Pair "$p0" WvAnyRef] [WvAnyRef] locals body
+
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFunc fuel st (IrExternDef name _ _ _) =
   Err "wasm target: extern definition `${name}` is not supported yet"
@@ -1152,7 +1218,7 @@ genDefFuncBody fuel st name arity body =
 genDefFuncGo : Int -> GenState -> String -> Int -> Ir -> List (Pair IrBinder String) -> List (Pair String WatValTy) -> Int -> List (Pair IrBinder String) -> Result (Pair (List WatFunc) GenState)
 genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScope =
   let
-    st1 = { st | gsScope = paramScope }
+    st1 = { st | gsScope = paramScope, gsTail = True }
   in case genExpr (fuel - 1) st1 inner of
     Err e => Err e
     Ok p =>
@@ -1162,7 +1228,7 @@ genDefFuncGo fuel st name arity inner paramScope savedLocals savedNext savedScop
           WatFunc (watFuncNameOf name) "" (funcParams arity) [WvAnyRef] bodyState.gsLocals
             (firstOf p)
         st2 = endFuncScope bodyState savedLocals savedNext savedScope
-      in Ok (Pair [func] st2)
+      in Ok (Pair [func] (withTail False st2))
 
 genDefFuncs : Int -> GenState -> List IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFuncs fuel st [] = Ok (Pair [] st)
@@ -1257,6 +1323,21 @@ baseTags = [WatTag "$eff" [WvAnyRef] [WvAnyRef]]
 baseImports : List WatImport
 baseImports =
   [ WatImport "wasi_snapshot_preview1" "fd_write" "$fd_write" [WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "fd_read" "$fd_read" [WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "fd_close" "$fd_close" [WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_open" "$path_open" [WvI32, WvI32, WvI32, WvI32, WvI32, WvI64, WvI64, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_filestat_get" "$path_filestat_get" [WvI32, WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_create_directory" "$path_create_directory" [WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_remove_directory" "$path_remove_directory" [WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_unlink_file" "$path_unlink_file" [WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_rename" "$path_rename" [WvI32, WvI32, WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "path_symlink" "$path_symlink" [WvI32, WvI32, WvI32, WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "fd_readdir" "$fd_readdir" [WvI32, WvI32, WvI32, WvI64, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "environ_sizes_get" "$environ_sizes_get" [WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "environ_get" "$environ_get" [WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "args_sizes_get" "$args_sizes_get" [WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "args_get" "$args_get" [WvI32, WvI32] [WvI32],
+    WatImport "wasi_snapshot_preview1" "clock_time_get" "$clock_time_get" [WvI32, WvI64, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "proc_exit" "$proc_exit" [WvI32] []
   ]
 
@@ -1294,7 +1375,10 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
           famTypes = concatMapType st.gsFams
           allTypes = append baseTypes famTypes
-          globals = append [WatGlobal "$g_cleanups" WvAnyRef [IRefNull]] (globalsOf ordered)
+          globals =
+            append
+              [WatGlobal "$g_cleanups" WvAnyRef [IRefNull], WatGlobal "$g_hostStatus" WvI32 [IConstI32 0]]
+              (globalsOf ordered)
           dataText = poolBytes st.gsPool
           dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
         in Ok
@@ -1319,7 +1403,10 @@ build program printResult =
         "assertion failed: ",
         "Invalid_argument(\"index out of bounds\")",
         "continuation already resumed",
-        "wasm host operation is not implemented"
+        "wasm host operation is not implemented",
+        ".tmp",
+        "PWD",
+        "."
       ]
     users = concatMap irStringsOfDef defs
     offsets = poolOf (append statics users)
@@ -1327,7 +1414,7 @@ build program printResult =
     famTbl = Base.HashMap.fromList (map (\f => Pair (famNameOf f) f) fams)
     poolTbl = Base.HashMap.fromList offsets
     consts = mkConsts poolTbl
-    st0 = GenState fams famTbl defs defTbl offsets poolTbl [] [] 0 [] consts [] 0
+    st0 = GenState fams famTbl defs defTbl offsets poolTbl [] [] 0 [] consts [] False 0
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e =>
@@ -1379,7 +1466,8 @@ mkConsts offsets =
     (lenOf "assertion failed: ") (offOf "Invalid_argument(\"index out of bounds\")")
     (lenOf "Invalid_argument(\"index out of bounds\")") (offOf "continuation already resumed")
     (lenOf "continuation already resumed") (offOf "wasm host operation is not implemented")
-    (lenOf "wasm host operation is not implemented")
+    (lenOf "wasm host operation is not implemented") (offOf ".tmp") (lenOf ".tmp") (offOf "PWD")
+    (lenOf "PWD") (offOf ".") (lenOf ".")
 
 joinWith : String -> List String -> String
 joinWith sep xs = Base.String.join sep xs

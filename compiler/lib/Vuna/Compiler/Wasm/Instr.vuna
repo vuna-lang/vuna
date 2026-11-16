@@ -76,6 +76,8 @@ export data Instr(..) : Type where
   IStore8 : Instr
   ILoad32 : Instr
   IStore32 : Instr
+  ILoad64 : Instr
+  IStore64 : Instr
   -- | WAT 行注释（`;; ...`）。
   IComment : String -> Instr
 
