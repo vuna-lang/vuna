@@ -1,4 +1,4 @@
--- | 列表类型与常用操作。`List(..)` 导出构造子（`Nil` / `Cons`，中缀别名 `::`），可直接模式匹配与结构递归；所有操作都是持久、不可变的，返回新列表而不修改入参。`Semigroup` / `Monoid` 以 `append` 为拼接、`[]` 为单位元；`Eq` / `Ord`（字典序）/ `Show` / `Hashable` / `Foldable` / `Traversable` / `Monad` 实例落在本模块。
+-- | 列表类型与常用操作。`List(..)` 导出构造子（`Nil` / `(::)`），可直接模式匹配与结构递归；所有操作都是持久、不可变的，返回新列表而不修改入参。`Semigroup` / `Monoid` 以 `append` 为拼接、`[]` 为单位元；`Eq` / `Ord`（字典序）/ `Show` / `Hashable` / `Foldable` / `Traversable` / `Monad` 实例落在本模块。
 module Base.List where
 
 import Base.Pair
@@ -19,15 +19,15 @@ import Base.Int
 import Base.Show
 import Base.Num
 
--- `::` 是 canonical 构造子 `Cons` 的中缀别名（表达式与 pattern 都走这条声明）。
-infixr 5 :: = Cons
+-- `::` 是 `List` 的构造子本身（表达式与 pattern 同一个名字）。
+infixr 5 ::
 
--- | 单链表：`Nil` 为空，`Cons` 持有头 `a` 与尾 `List a`。构造子导出，`::` 是 `Cons` 的中缀别名（表达式与 pattern 通用）；长度与元素个数不受类型层约束。
+-- | 单链表：`Nil` 为空，`(::)` 持有头 `a` 与尾 `List a`。构造子导出，`(::)` 是构造子名（表达式与 pattern 通用）；长度与元素个数不受类型层约束。
 export data List a(..) : Type where
   -- | 空列表。
   Nil : List a
   -- | 非空列表：头 `a` 与尾 `List a`。
-  Cons : a -> List a -> List a
+  (::) : a -> List a -> List a
 
 -- | 拼接两个列表：复制 `xs` 的全部 cons 单元、共享 `ys`（代价 O(xs 的长度)）。
 export append : List a -> List a -> List a
@@ -173,7 +173,7 @@ instance Functor List where
   fmap f xs = map f xs
 
 instance Monad List where
-  >>= xs f = concatMap f xs
+  (>>=) xs f = concatMap f xs
 
 instance Applicative List where
   pure x = [x]
@@ -197,20 +197,20 @@ instance Show a => Show (List a) where
 
 -- 逐元素相等；`[]` 只等于 `[]`。
 instance Eq a => Eq (List a) where
-  == [] [] = True
-  == (x :: xs) (y :: ys) = x == y && xs == ys
-  == _ _ = False
-  /= xs ys = if xs == ys then False else True
+  (==) [] [] = True
+  (==) (x :: xs) (y :: ys) = x == y && xs == ys
+  (==) _ _ = False
+  (/=) xs ys = if xs == ys then False else True
 
 -- 字典序：`[]` 最小，同头再比尾。
 instance Ord a => Ord (List a) where
-  < [] [] = False
-  < [] (_ :: _) = True
-  < (_ :: _) [] = False
-  < (x :: xs) (y :: ys) = if x < y then True else if y < x then False else xs < ys
-  <= xs ys = xs < ys || not (ys < xs)
-  > xs ys = ys < xs
-  >= xs ys = ys <= xs
+  (<) [] [] = False
+  (<) [] (_ :: _) = True
+  (<) (_ :: _) [] = False
+  (<) (x :: xs) (y :: ys) = if x < y then True else if y < x then False else xs < ys
+  (<=) xs ys = xs < ys || not (ys < xs)
+  (>) xs ys = ys < xs
+  (>=) xs ys = ys <= xs
 
 -- 哈希：`[]` = 0，非空为 head/tail 的结构组合。
 instance Hashable a => Hashable (List a) where

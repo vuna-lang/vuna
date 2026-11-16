@@ -51,7 +51,7 @@ export elabCtors : List (Pair String Term) -> String -> Int -> Level -> Ec -> Li
 elabCtors globals fam arity famLevel ec [] = OkC (Pair [] ec)
 elabCtors globals fam arity famLevel ec (c :: rest) = Vuna.Compiler.Base.Common.bind (elabCtor globals fam arity famLevel ec c) (\p => case p of
   Pair dc ec1 => Vuna.Compiler.Base.Common.bind (elabCtors globals fam arity famLevel ec1 rest) (\q => case q of
-    Pair dcs ec2 => OkC (Pair (Base.List.Cons dc dcs) ec2)
+    Pair dcs ec2 => OkC (Pair ((::) dc dcs) ec2)
   )
 )
 
@@ -410,4 +410,4 @@ export candidateNames : List (Pair String Rig) -> List Bool -> List String
 candidateNames [] ms = []
 candidateNames (p :: rest) [] = []
 candidateNames ((Pair n e) :: rest) (m :: ms) =
-  if m then Base.List.Cons n (candidateNames rest ms) else candidateNames rest ms
+  if m then (::) n (candidateNames rest ms) else candidateNames rest ms

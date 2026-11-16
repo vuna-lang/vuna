@@ -280,7 +280,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
 ## `case` 分支与模式
 
-`case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `Cons x (Cons y ys)`）、
+`case e of` 的每个分支左端是模式：构造子模式（可嵌套，如 `x :: (y :: ys)`）、
 `Int` / `String` 字面量模式、变量或通配。分支按书写顺序匹配，因此：
 
 - **as-pattern**：`x@pat` 匹配 `pat` 并把整个匹配值绑定到 `x`（Idris2 风格；`_@x` 等价于
@@ -382,7 +382,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   open import 的 data/record 构造子），多于一个候选时不立即报歧义，而是交给精化器按
   **期望类型 / scrutinee 族**选 canonical 构造子（值位置、应用实参、类型位置、`case`
   分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.List`
-  的 `Nil`/`Cons` 则默认 List（与 `[]`/`Nil` 的写法一致），否则报
+  的 `Nil`/`(::)` 则默认 List（与 `[]`/`Nil` 的写法一致），否则报
   `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
   同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
 - **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名

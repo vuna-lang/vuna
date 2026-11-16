@@ -1,11 +1,11 @@
 -- Prelude 自动注入 → 用 base 的 `List`（本地同名 data 的解析优先级见 docs/reference/type-system.md）。
 sum : List Int -> Int
-sum Nil = 0
-sum (Cons x xs) = x + sum xs
+sum [] = 0
+sum (x :: xs) = x + sum xs
 
 doubleAll : List Int -> List Int
-doubleAll Nil = Nil
-doubleAll (Cons x xs) = Cons (x * 2) (doubleAll xs)
+doubleAll [] = []
+doubleAll (x :: xs) = (::) (x * 2) (doubleAll xs)
 
 main : Int
 main = sum (doubleAll [1, 2, 3])

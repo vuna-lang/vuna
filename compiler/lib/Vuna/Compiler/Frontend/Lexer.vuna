@@ -191,7 +191,7 @@ trimTrailingSpace s = strPack (reverse (dropTrailingSpace (reverse (strUnpack s)
 export dropTrailingSpace : List Int -> List Int
 dropTrailingSpace [] = []
 dropTrailingSpace (c :: rest) =
-  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else Base.List.Cons c rest
+  if c == 32 || c == 9 || c == 13 then dropTrailingSpace rest else (::) c rest
 
 -- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
 export collectLineBody : Int -> Chars -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))

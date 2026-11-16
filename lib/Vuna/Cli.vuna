@@ -122,14 +122,14 @@ usageFor prog = "usage:\n${compilerUsageLines prog}${toolUsageLines prog}"
 stripPerfFlags : List String -> List String
 stripPerfFlags [] = []
 stripPerfFlags (a :: rest) =
-  if a == "--debug-perf" then stripPerfFlags rest else Base.List.Cons a (stripPerfFlags rest)
+  if a == "--debug-perf" then stripPerfFlags rest else (::) a (stripPerfFlags rest)
 
 -- | 内部：工具命令不接受 `--release`（工具上下文默认 debug 构建），全局旗标在这里被丢弃。
 -- `compile` / `check` / `build` / `run` 不吃这一层，直接把参数透传给编译器。
 stripReleaseArgs : List String -> List String
 stripReleaseArgs [] = []
 stripReleaseArgs (a :: rest) =
-  if a == "--release" then stripReleaseArgs rest else Base.List.Cons a (stripReleaseArgs rest)
+  if a == "--release" then stripReleaseArgs rest else (::) a (stripReleaseArgs rest)
 
 -- | CLI 总入口：help 扫描（`-h` / `--help` 任意位置）优先，然后去掉性能旗标交给
 -- `runCli1`。
@@ -143,7 +143,7 @@ runCli args = if anyHelp (helpSurface args) then help 0 else runCli1 (stripPerfF
 helpSurface : List String -> List String
 helpSurface [] = []
 helpSurface ("--" :: rest) = []
-helpSurface (arg :: rest) = Base.List.Cons arg (helpSurface rest)
+helpSurface (arg :: rest) = (::) arg (helpSurface rest)
 
 -- | 内部：命令分发表——每个命令一行，编译器命令转交 `CompilerCli`，工具命令转交各自模块。
 --

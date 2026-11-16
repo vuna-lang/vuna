@@ -539,7 +539,7 @@ listNilCtor = "Base.List.List.Nil"
 
 -- | canonical `Cons` 构造子的完整符号。
 export listConsCtor : String
-listConsCtor = "Base.List.List.Cons"
+listConsCtor = "Base.List.List.::"
 
 -- ---------------------------------------------------------------
 -- canonical 族表

@@ -43,7 +43,7 @@ else case decls of
   [] => OkC []
   d :: rest =>
     Vuna.Compiler.Base.Common.bind (expandDecl fuel d)
-      (\d2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons d2 rest2)))
+      (\d2 => Vuna.Compiler.Base.Common.bind (expandDeclsGo (fuel - 1) rest) (\rest2 => OkC ((::) d2 rest2)))
 
 expandDecl : Int -> Decl -> Check Decl
 expandDecl fuel d = if fuel <= 0 then icFuel "macro expansion"
@@ -78,7 +78,7 @@ else case ctors of
   [] => OkC []
   c :: rest =>
     Vuna.Compiler.Base.Common.bind (expandCtor (fuel - 1) c)
-      (\c2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons c2 rest2)))
+      (\c2 => Vuna.Compiler.Base.Common.bind (expandCtors (fuel - 1) rest) (\rest2 => OkC ((::) c2 rest2)))
 
 expandCtor : Int -> Ctor -> Check Ctor
 expandCtor fuel (Ctor name ty arity sp) =
@@ -90,7 +90,7 @@ else case fields of
   [] => OkC []
   f :: rest =>
     Vuna.Compiler.Base.Common.bind (expandField (fuel - 1) f)
-      (\f2 => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons f2 rest2)))
+      (\f2 => Vuna.Compiler.Base.Common.bind (expandFields (fuel - 1) rest) (\rest2 => OkC ((::) f2 rest2)))
 
 expandField : Int -> Field -> Check Field
 expandField fuel (Field name ty sp) =
@@ -102,7 +102,7 @@ else case methods of
   [] => OkC []
   m :: rest =>
     Vuna.Compiler.Base.Common.bind (expandTraitMethod (fuel - 1) m)
-      (\m2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons m2 rest2)))
+      (\m2 => Vuna.Compiler.Base.Common.bind (expandTraitMethods (fuel - 1) rest) (\rest2 => OkC ((::) m2 rest2)))
 
 expandTraitMethod : Int -> TraitMethod -> Check TraitMethod
 expandTraitMethod fuel (TraitMethod name ty sp) =
@@ -114,7 +114,7 @@ else case exprs of
   [] => OkC []
   e :: rest =>
     Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) e)
-      (\e2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons e2 rest2)))
+      (\e2 => Vuna.Compiler.Base.Common.bind (expandExprs (fuel - 1) rest) (\rest2 => OkC ((::) e2 rest2)))
 
 expandExpr : Int -> Expr -> Check Expr
 expandExpr fuel e = if fuel <= 0 then icFuel "macro expansion"
@@ -192,7 +192,7 @@ else case pairs of
   [] => OkC []
   (Pair pat value) :: rest =>
     Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value)
-      (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (Pair pat value2) rest2)))
+      (\value2 => Vuna.Compiler.Base.Common.bind (expandPatExprs (fuel - 1) rest) (\rest2 => OkC ((::) (Pair pat value2) rest2)))
 
 expandClauses : Int -> List (Pair (List Pat) Expr) -> Check (List (Pair (List Pat) Expr))
 expandClauses fuel clauses = if fuel <= 0 then icFuel "macro expansion"
@@ -200,7 +200,7 @@ else case clauses of
   [] => OkC []
   (Pair pats body) :: rest =>
     Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) body)
-      (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (Pair pats body2) rest2)))
+      (\body2 => Vuna.Compiler.Base.Common.bind (expandClauses (fuel - 1) rest) (\rest2 => OkC ((::) (Pair pats body2) rest2)))
 
 expandFieldExprs : Int -> List (Pair String Expr) -> Check (List (Pair String Expr))
 expandFieldExprs fuel fields = if fuel <= 0 then icFuel "macro expansion"
@@ -208,7 +208,7 @@ else case fields of
   [] => OkC []
   (Pair fname value) :: rest =>
     Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) value)
-      (\value2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (Pair fname value2) rest2)))
+      (\value2 => Vuna.Compiler.Base.Common.bind (expandFieldExprs (fuel - 1) rest) (\rest2 => OkC ((::) (Pair fname value2) rest2)))
 
 expandDoStmts : Int -> List DoStmt -> Check (List DoStmt)
 expandDoStmts fuel stmts = if fuel <= 0 then icFuel "macro expansion"
@@ -217,10 +217,10 @@ else case stmts of
   stmt :: rest => case stmt of
     DBind pat stmtExpr sp =>
       Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr)
-        (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (DBind pat stmtExpr2 sp) rest2)))
+        (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DBind pat stmtExpr2 sp) rest2)))
     DExpr stmtExpr sp =>
       Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) stmtExpr)
-        (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (DExpr stmtExpr2 sp) rest2)))
+        (\stmtExpr2 => Vuna.Compiler.Base.Common.bind (expandDoStmts (fuel - 1) rest) (\rest2 => OkC ((::) (DExpr stmtExpr2 sp) rest2)))
 
 expandInterpParts : Int -> List InterpPart -> Check (List InterpPart)
 expandInterpParts fuel parts = if fuel <= 0 then icFuel "macro expansion"
@@ -229,10 +229,10 @@ else case parts of
   part :: rest => case part of
     IPText text =>
       Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) rest)
-        (\rest2 => OkC (Base.List.Cons (IPText text) rest2))
+        (\rest2 => OkC ((::) (IPText text) rest2))
     IPHole holeExpr =>
       Vuna.Compiler.Base.Common.bind (expandExpr (fuel - 1) holeExpr)
-        (\holeExpr2 => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) rest) (\rest2 => OkC (Base.List.Cons (IPHole holeExpr2) rest2)))
+        (\holeExpr2 => Vuna.Compiler.Base.Common.bind (expandInterpParts (fuel - 1) rest) (\rest2 => OkC ((::) (IPHole holeExpr2) rest2)))
 
 -- ---------------------------------------------------------------
 -- 内置宏注册表与展开

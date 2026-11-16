@@ -14,7 +14,7 @@ unbox : Box -> Nat
 unbox (MkBox n) = n
 
 v3 : Vec 3 Int
-v3 = 1 :: 2 :: 3 :: []
+v3 = [1, 2, 3]
 
 vsum : Vec 3 Int -> Int
 vsum xs = case xs of

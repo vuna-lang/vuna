@@ -1,4 +1,4 @@
-lookupPair name (Cons p rest) =
+lookupPair name (p :: rest) =
   case p of
     Pair k v => if k == name then v else 0 -- keep
 

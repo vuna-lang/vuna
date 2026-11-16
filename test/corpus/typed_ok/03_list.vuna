@@ -2,7 +2,7 @@
 -- 本地同名 `data List` 的解析优先级见 dt/56_user_list_data。
 sum : List Int -> Int
 sum Nil = 0
-sum (Cons x rest) = x + sum rest
+sum (x :: rest) = x + sum rest
 
 main : Int
-main = sum (Cons 1 (Cons 2 Nil))
+main = sum (1 :: 2 :: Nil)

@@ -40,14 +40,14 @@ else case v of
 -- ---------------------------------------------------------------
 -- 与 context 等长；index 0 是最内层 binder。`Rig0` 表示该 binder 未被使用。
 uZeroOf : Int -> List Rig
-uZeroOf n = if n <= 0 then [] else Base.List.Cons Rig0 (uZeroOf (n - 1))
+uZeroOf n = if n <= 0 then [] else (::) Rig0 (uZeroOf (n - 1))
 
 uVarAt : Int -> Int -> List Rig
 uVarAt depth i = if i < 0 || i >= depth then uZeroOf depth else uVarAtGo depth i
 
 uVarAtGo : Int -> Int -> List Rig
 uVarAtGo n i =
-  if n <= 0 then [] else Base.List.Cons (if i == 0 then Rig1 else Rig0) (uVarAtGo (n - 1) (i - 1))
+  if n <= 0 then [] else (::) (if i == 0 then Rig1 else Rig0) (uVarAtGo (n - 1) (i - 1))
 
 uAdd : List Rig -> List Rig -> List Rig
 uAdd [] ys = ys
@@ -147,7 +147,7 @@ checkTerm ec sp env t = case t of
       ecW =
         if name /= "_" && shadowedByRuntime name env then warnAt1 ec sp (ShadowedBinder name) name
         else ec
-      env2 = Base.List.Cons (Pair name rig) env
+      env2 = (::) (Pair name rig) env
     in Vuna.Compiler.Base.Common.step (checkTerm ecW sp env2 body)
       (\u => \ec2 => Vuna.Compiler.Base.Common.step (checkLamBinder ec2 sp name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
   TApp f a rig =>

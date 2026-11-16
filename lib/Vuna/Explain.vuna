@@ -140,7 +140,7 @@ stripExplainJson : List String -> Pair (List String) Bool
 stripExplainJson [] = Pair [] False
 stripExplainJson ("--json" :: rest) = Pair (firstOf (stripExplainJson rest)) True
 stripExplainJson (arg :: rest) =
-  Pair (Base.List.Cons arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
+  Pair ((::) arg (firstOf (stripExplainJson rest))) (secondOf (stripExplainJson rest))
 
 -- | `vuna explain` 的入口（转发给 [Vuna.Explain.explainArgs]）。
 export runExplain : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int

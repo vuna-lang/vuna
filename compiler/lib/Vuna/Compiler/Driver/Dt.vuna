@@ -205,9 +205,9 @@ sealAbstractAfter : List Decl -> List String -> List Decl
 sealAbstractAfter [] names = []
 sealAbstractAfter (d :: rest) names = case d of
   DFun n pats body sp =>
-    if memName n names then Base.List.Cons d (Base.List.Cons (sealDeclOf (d :: rest) n) (sealAbstractAfter rest names))
-    else Base.List.Cons d (sealAbstractAfter rest names)
-  _ => Base.List.Cons d (sealAbstractAfter rest names)
+    if memName n names then (::) d ((::) (sealDeclOf (d :: rest) n) (sealAbstractAfter rest names))
+    else (::) d (sealAbstractAfter rest names)
+  _ => (::) d (sealAbstractAfter rest names)
 
 sealDeclOf : List Decl -> String -> Decl
 sealDeclOf decls name =
@@ -343,7 +343,7 @@ dtCheckSource ctx label source = do
 missingDepModules : String -> List Module -> List String -> List String
 missingDepModules pkg [] _ = []
 missingDepModules pkg (m :: rest) ifaceNames =
-  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then Base.List.Cons (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
+  if modulePackageOf m /= pkg && memName (moduleNameOf m) ifaceNames == False then (::) (moduleNameOf m) (missingDepModules pkg rest ifaceNames)
   else missingDepModules pkg rest ifaceNames
 
 export dtCheckSourceWithIfaces : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List ModuleIface -> Eff r (Check (List Diagnostic))
@@ -377,7 +377,7 @@ dtCheckSourceWithIfaces ctx label source ifaces =
 --     声明一起精化，否则表达式引用同包定义会报假 `TC_UnknownName <模块>.<定义>`；
 --   ② 组装结果必须补回依赖接口的 datas / defs（`elabProgramFullWithAux` 只返回本次新精化
 --     的 datas，表达式求值 `dtEvalExprIn` 会从 DtProgram 重建 Ec；缺依赖 datas ⇒ 依赖包
---     构造子查不到，`[1, 2, 3]` 这类字面量在 REPL 里报 `TC_UnknownName Base.List.Cons`）；
+--     构造子查不到，`[1, 2, 3]` 这类字面量在 REPL 里报 `TC_UnknownName (::)`）；
 --   ③ termAux（依赖包 decls）跨表达式不变，record/deriving 预处理可复用。
 replCheckParts : Pair Ec (List (Pair String Term)) -> String -> List CachedProgram -> Pair (List Decl) (List Module) -> Check (Pair DtProgram Expr)
 replCheckParts start pkgName deps parts =
@@ -543,8 +543,7 @@ aritiesOf [] decls = OkC []
 aritiesOf (t :: rest) decls = case findArity t decls of
   Nothing => err ("自动签名: 找不到定义 " ++ t ++ "（需要 DFun）")
   Just n =>
-    Vuna.Compiler.Base.Common.bind (aritiesOf rest decls)
-      (\more => OkC (Base.List.Cons (Pair t n) more))
+    Vuna.Compiler.Base.Common.bind (aritiesOf rest decls) (\more => OkC ((::) (Pair t n) more))
 
 findArity : String -> List Decl -> Maybe Int
 findArity name [] = Nothing
@@ -584,7 +583,7 @@ inferEachType (t :: rest) prog ec taken = case findDtDef t (dtProgDefs prog) of
   Nothing => err ("自动签名: 精化结果里找不到定义 " ++ t)
   Just def =>
     Vuna.Compiler.Base.Common.bind (generalizeSignature (zonkTerm ec 0 (dtDefType def)) taken)
-      (\sigText => Vuna.Compiler.Base.Common.bind (inferEachType rest prog ec taken) (\more => OkC (Base.List.Cons (Pair t sigText) more)))
+      (\sigText => Vuna.Compiler.Base.Common.bind (inferEachType rest prog ec taken) (\more => OkC ((::) (Pair t sigText) more)))
 
 findDtDef : String -> List DtDef -> Maybe DtDef
 findDtDef name [] = Nothing
@@ -688,8 +687,7 @@ metaIdsOfAlt (CaseAlt _ _ body) = metaIdsOf body
 
 dedupInts : List Int -> List Int
 dedupInts [] = []
-dedupInts (x :: rest) =
-  if memMetaId x rest then dedupInts rest else Base.List.Cons x (dedupInts rest)
+dedupInts (x :: rest) = if memMetaId x rest then dedupInts rest else (::) x (dedupInts rest)
 
 -- 某个元变量在类型项里被应用的最大元数（决定泛化后的 kind）。
 maxMetaArity : Int -> Term -> Int
@@ -1045,12 +1043,12 @@ dedupSortedNames xs = reverse (dedupSortedGo xs [])
 dedupSortedGo : List String -> List String -> List String
 dedupSortedGo [] acc = acc
 dedupSortedGo (x :: rest) acc = case acc of
-  [] => dedupSortedGo rest (Base.List.Cons x acc)
-  y :: _ => if x == y then dedupSortedGo rest acc else dedupSortedGo rest (Base.List.Cons x acc)
+  [] => dedupSortedGo rest ((::) x acc)
+  y :: _ => if x == y then dedupSortedGo rest acc else dedupSortedGo rest ((::) x acc)
 
 nameSlotTbl : List String -> Int -> List (Pair String Int)
 nameSlotTbl [] _ = []
-nameSlotTbl (x :: rest) i = Base.List.Cons (Pair x i) (nameSlotTbl rest (i + 1))
+nameSlotTbl (x :: rest) i = (::) (Pair x i) (nameSlotTbl rest (i + 1))
 
 shiftedDepProgramsGo : List (Pair String Int) -> List ModuleIface -> Check (List CachedProgram)
 shiftedDepProgramsGo _ [] = OkC []
@@ -1059,7 +1057,7 @@ shiftedDepProgramsGo tbl (m :: rest) = case lookupPair (miNameOf m) tbl of
   Just slot =>
     Vuna.Compiler.Base.Common.bind
       (shiftCachedProgram ((slot + 1) * summaryMetaSegment) (miCachedOf m))
-      (\cp => Vuna.Compiler.Base.Common.bind (shiftedDepProgramsGo tbl rest) (\rest2 => OkC (Base.List.Cons cp rest2)))
+      (\cp => Vuna.Compiler.Base.Common.bind (shiftedDepProgramsGo tbl rest) (\rest2 => OkC ((::) cp rest2)))
 
 modulesOfIfaces : List ModuleIface -> List Module
 modulesOfIfaces ifaces = reverse (map moduleOfIface ifaces)
@@ -1422,7 +1420,7 @@ topoVisit : Int -> List Module -> String -> List String -> List Module -> Pair (
 topoVisit fuel mods name visited acc = if fuel <= 0 then Pair visited acc
 else if memName name visited then Pair visited acc
 else case findModuleNamed mods name of
-  Nothing => Pair (Base.List.Cons name visited) acc
+  Nothing => Pair ((::) name visited) acc
   Just m =>
     let
       step = topoVisitAll (fuel - 1) mods (topoDepsOf mods m) (name :: visited) acc
@@ -1802,7 +1800,7 @@ warnUnusedDefsTbl (d :: rest) usedTbl =
   else if Base.HashMap.member name usedTbl then warnUnusedDefsTbl rest usedTbl
   else case dtDefSpan d of
     Just sp =>
-      Base.List.Cons
+      (::)
         (warnDiagAtMod (\x => withSuggestion (Suggestion "remove unused definition `${name}`" MachineApplicable [DiagEdit sp ""]) x) sp (UnusedDefinition name) [name])
         (warnUnusedDefsTbl rest usedTbl)
     Nothing => warnUnusedDefsTbl rest usedTbl

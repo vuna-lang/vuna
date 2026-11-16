@@ -164,7 +164,7 @@ export tyDeclsGo : HashMap String (List Int) -> List DtData -> List (Pair String
 tyDeclsGo table allDatas unboxed [] = OkC []
 tyDeclsGo table allDatas unboxed (d :: rest) =
   Vuna.Compiler.Base.Common.bind (tyDeclOf table allDatas unboxed d)
-    (\decl => Vuna.Compiler.Base.Common.bind (tyDeclsGo table allDatas unboxed rest) (\tail => OkC (Base.List.Cons decl tail)))
+    (\decl => Vuna.Compiler.Base.Common.bind (tyDeclsGo table allDatas unboxed rest) (\tail => OkC ((::) decl tail)))
 
 export tyDeclOf : HashMap String (List Int) -> List DtData -> List (Pair String (Pair DtCtor Int)) -> DtData -> Check IrTyDecl
 tyDeclOf table allDatas unboxed d =

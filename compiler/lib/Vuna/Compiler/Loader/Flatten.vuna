@@ -199,7 +199,7 @@ findOwnCtorNames name (d :: rest) = case d of
     append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
       (findOwnCtorNames name rest)
   DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then Base.List.Cons (Pair dname dname) (findOwnCtorNames name rest)
+    if dname == name then (::) (Pair dname dname) (findOwnCtorNames name rest)
     else findOwnCtorNames name rest
   DTrait tname params supers methods sp =>
     append
@@ -211,7 +211,7 @@ findOwnCtorNames name (d :: rest) = case d of
 ownCtorEntries : String -> String -> List String -> List ExportEntry
 ownCtorEntries prefix dname [] = []
 ownCtorEntries prefix dname (cname :: rest) =
-  Base.List.Cons
+  (::)
     ExportEntry { kind = "ctor", public = cname, target = mangle prefix cname, parent = mangle prefix dname }
     (ownCtorEntries prefix dname rest)
 
@@ -220,7 +220,7 @@ ownCtorEntries prefix dname (cname :: rest) =
 ownDataCtorEntries : String -> String -> List String -> List ExportEntry
 ownDataCtorEntries prefix dname [] = []
 ownDataCtorEntries prefix dname (cname :: rest) =
-  Base.List.Cons
+  (::)
     ExportEntry { kind = "ctor", public = cname, target = ctorCanonical prefix dname cname, parent = mangle prefix dname }
     (ownDataCtorEntries prefix dname rest)
 
@@ -230,15 +230,15 @@ ownTypeEntries prefix [] name = Nothing
 ownTypeEntries prefix (d :: rest) name = case d of
   DData dname params kind ctors derivings viaField repr lin sp =>
     if dname == name then Just
-      (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
+      ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
     else ownTypeEntries prefix rest name
   DRecord dname params fields derivings viaField repr lin sp =>
     if dname == name then Just
-      (Base.List.Cons ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
+      ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
     else ownTypeEntries prefix rest name
   DTrait tname params supers methods sp =>
     if tname == name then Just
-      (Base.List.Cons ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
+      ((::) ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
     else ownTypeEntries prefix rest name
   _ => ownTypeEntries prefix rest name
 
@@ -247,7 +247,7 @@ ownTypeEntries prefix (d :: rest) name = case d of
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
 ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
-  if e.kind == "ctor" && e.parent == typeTarget then Base.List.Cons e (ctorEntriesOfType typeTarget rest)
+  if e.kind == "ctor" && e.parent == typeTarget then (::) e (ctorEntriesOfType typeTarget rest)
   else ctorEntriesOfType typeTarget rest
 
 -- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
@@ -375,7 +375,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         in let
           tgt = (secondOf p).target
         in Vuna.Compiler.Base.Common.bind (exportsOf modules m)
-          (\es => OkC (Base.List.Cons ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
+          (\es => OkC ((::) ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
         )
       )
     _ =>
@@ -386,7 +386,7 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
         Just m => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
           Just e =>
             OkC
-              (Base.List.Cons ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
+              ((::) ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
           Nothing => rnAt2 sp (TypeNotExported base m) base m
         )
 
@@ -406,7 +406,7 @@ filterExportMembers : List String -> List ExportEntry -> List ExportEntry
 filterExportMembers members [] = []
 filterExportMembers members (e :: rest) =
   if e.kind == "ctor" && not (memName e.public members) then filterExportMembers members rest
-  else Base.List.Cons e (filterExportMembers members rest)
+  else (::) e (filterExportMembers members rest)
 
 hasSamePublicKind : ExportEntry -> List ExportEntry -> Bool
 hasSamePublicKind e [] = False
@@ -508,10 +508,9 @@ validateModuleHeader label (Just (ModDecl declared hasList items _ _ _ sp)) =
 opaqueNamesOf : String -> List OpacitySpec -> List String
 opaqueNamesOf prefix [] = []
 opaqueNamesOf prefix (o :: rest) = case o.opacityKind of
-  OpacityOpaque => Base.List.Cons (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
+  OpacityOpaque => (::) (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
   OpacityTransparent => opaqueNamesOf prefix rest
-  OpacityAbstract =>
-    Base.List.Cons (":" ++ mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
+  OpacityAbstract => (::) (":" ++ mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
 
 export abstractOpaquePrefix : String
 abstractOpaquePrefix = ":"
@@ -645,7 +644,7 @@ loadModule fuel roots importerPkg modules stack imp =
                               let
                                 visible = fixities
                               in pure
-                                (OkC (Base.List.Cons (Module name (rootName root) imports implicit decls exports visible (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
+                                (OkC ((::) (Module name (rootName root) imports implicit decls exports visible (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports)) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
     else pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
@@ -849,9 +848,9 @@ resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Ch
 resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
 resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
   if memName name keep then Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
-    (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
+    (\p2 => OkC (Pair ((::) (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
   else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls)
-    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair (Base.List.Cons (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
+    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。
@@ -882,7 +881,7 @@ unusedImportWarningsGo modules nameSet reexports [] = OkC []
 unusedImportWarningsGo modules nameSet reexports (imp :: rest) = Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (\es => let
   used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es)
 in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet reexports rest)
-  (\more => OkC (if used then more else Base.List.Cons (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
+  (\more => OkC (if used then more else (::) (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
 )
 
 -- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
@@ -901,8 +900,8 @@ declGlobalNames d = concatMap expandGlobalName (declRefNames d)
 expandGlobalName : String -> List String
 expandGlobalName n = if isOverCtorName n then overCtorTargets n
 else case doSyntaxCanonical n of
-  Just canonical => Base.List.Cons canonical []
-  Nothing => Base.List.Cons n []
+  Just canonical => (::) canonical []
+  Nothing => (::) n []
 
 -- | 导出条目的 canonical target。
 exportTargetOf : ExportEntry -> String
@@ -946,15 +945,14 @@ patRefNames : Pat -> List String
 patRefNames (PVar name sp) = []
 patRefNames (PAs name inner sp) = patRefNames inner
 patRefNames (PWild sp) = []
-patRefNames (PCon name pats sp) = Base.List.Cons name (concatMap patRefNames pats)
+patRefNames (PCon name pats sp) = (::) name (concatMap patRefNames pats)
 patRefNames (PInt n sp) = []
 patRefNames (PStr s sp) = []
-patRefNames (PRecord name fields sp) =
-  Base.List.Cons name (concatMap (\f => patRefNames (secondOf f)) fields)
+patRefNames (PRecord name fields sp) = (::) name (concatMap (\f => patRefNames (secondOf f)) fields)
 
 -- | 表达式里出现的引用名（EVar 已由解析期换成 canonical target）。
 exprRefNames : Expr -> List String
-exprRefNames (EVar n sp) = Base.List.Cons n []
+exprRefNames (EVar n sp) = (::) n []
 exprRefNames (EInt n sp) = []
 exprRefNames (EStr s sp) = []
 exprRefNames (EFloat raw sp) = []
@@ -967,18 +965,16 @@ exprRefNames (ECase scrut alts sp) = append (exprRefNames scrut) (concatMap bind
 exprRefNames (EIf c t el sp) = append (exprRefNames c) (append (exprRefNames t) (exprRefNames el))
 exprRefNames (EField base fname sp) = exprRefNames base
 exprRefNames (ERecord name fields sp) =
-  Base.List.Cons name (concatMap (\f => exprRefNames (secondOf f)) fields)
+  (::) name (concatMap (\f => exprRefNames (secondOf f)) fields)
 exprRefNames (ERecUpdate base fields sp) =
   append (exprRefNames base) (concatMap (\f => exprRefNames (secondOf f)) fields)
 exprRefNames (EDo stmts sp) = concatMap doStmtRefNames stmts
-exprRefNames (EInfix op lhs rhs sp) =
-  Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
+exprRefNames (EInfix op lhs rhs sp) = (::) op (append (exprRefNames lhs) (exprRefNames rhs))
 exprRefNames (EParen inner sp) = exprRefNames inner
-exprRefNames (EBacktick op lhs rhs sp) =
-  Base.List.Cons op (append (exprRefNames lhs) (exprRefNames rhs))
-exprRefNames (ESectOp op sp) = Base.List.Cons op []
-exprRefNames (ESectL op rhs sp) = Base.List.Cons op (exprRefNames rhs)
-exprRefNames (ESectR lhs op sp) = Base.List.Cons op (exprRefNames lhs)
+exprRefNames (EBacktick op lhs rhs sp) = (::) op (append (exprRefNames lhs) (exprRefNames rhs))
+exprRefNames (ESectOp op sp) = (::) op []
+exprRefNames (ESectL op rhs sp) = (::) op (exprRefNames rhs)
+exprRefNames (ESectR lhs op sp) = (::) op (exprRefNames lhs)
 exprRefNames (EAnn value ty sp) = append (exprRefNames value) (exprRefNames ty)
 exprRefNames (EInterp multi parts sp) = concatMap interpPartRefNames parts
 

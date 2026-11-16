@@ -643,7 +643,7 @@ ecCounters e = e.ecCounters
 export ecBump : Ec -> String -> Ec
 ecBump (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) k =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings (Base.List.Cons k counters) errors
+    ctortbl haslin mspans uspans warnings ((::) k counters) errors
 
 -- 逐定义恢复时收集的诊断（前插顺序；出口 reverse 成源序）。
 export ecErrors : Ec -> List Diagnostic
@@ -653,7 +653,7 @@ ecErrors (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
 export ecAddError : Ec -> Diagnostic -> Ec
 ecAddError (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) d =
   Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters (Base.List.Cons d errors)
+    ctortbl haslin mspans uspans warnings counters ((::) d errors)
 
 export datasHaveLinear : List DtData -> Bool
 datasHaveLinear [] = False

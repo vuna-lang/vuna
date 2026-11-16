@@ -452,8 +452,7 @@ sortByAge (x :: rest) = insertByAge x (sortByAge rest)
 insertByAge : Pair Int (Pair Int String) -> List (Pair Int (Pair Int String)) -> List (Pair Int (Pair Int String))
 insertByAge x [] = [x]
 insertByAge x ((Pair k v) :: rest) =
-  if firstOf x <= k then Base.List.Cons x (Base.List.Cons (Pair k v) rest)
-  else Base.List.Cons (Pair k v) (insertByAge x rest)
+  if firstOf x <= k then (::) x ((::) (Pair k v) rest) else (::) (Pair k v) (insertByAge x rest)
 
 -- | 内部：容量压力下的挑选：候选已按最旧在前排序，从旧的开始删直到总量落到上限以下。
 -- 上限 0 = 不限容量，候选全删。

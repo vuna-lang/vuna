@@ -335,7 +335,7 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl --client 
 
 **`where` 与 `infix*`**：`where` 块的绑定按源码顺序输出，带签名的绑定先输出签名行；
 `infix*` 声明打印在 imports 之后、第一个声明之前，保持源码顺序、每条一行
-（`infixl 6 +` / `infixr 5 :: = Cons`）。fixity 是**程序级**属性：调用方传入程序可见
+（`infixl 6 +` / `infixr 5 ::`）。fixity 是**程序级**属性：调用方传入程序可见
 的 fixity 闭包（`Loader.Flatten.fixitiesForSource`：本文件声明 + import 闭包的去重
 表）；取不到上下文（依赖加载失败）或遇到未知**符号**运算符时 fmt 报错并停止，不静默按
 默认优先级重排；未知反引号名字按 9 左结合（Haskell 默认）。

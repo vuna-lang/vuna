@@ -6,39 +6,51 @@ import Base.Pair
 import Base.Maybe
 
 showIntList : List Int -> String
-showIntList Nil = "[]"
-showIntList (Cons x xs) = "[" ++ strFromInt x ++ showIntTail xs
+showIntList [] = "[]"
+showIntList (x :: xs) = "[" ++ strFromInt x ++ showIntTail xs
 
 showIntTail : List Int -> String
-showIntTail Nil = "]"
-showIntTail (Cons x xs) = "," ++ strFromInt x ++ showIntTail xs
+showIntTail [] = "]"
+showIntTail (x :: xs) = "," ++ strFromInt x ++ showIntTail xs
 
 showStrList : List String -> String
-showStrList Nil = "[]"
-showStrList (Cons x xs) = "[" ++ x ++ showStrTail xs
+showStrList [] = "[]"
+showStrList (x :: xs) = "[" ++ x ++ showStrTail xs
 
 showStrTail : List String -> String
-showStrTail Nil = "]"
-showStrTail (Cons x xs) = "," ++ x ++ showStrTail xs
+showStrTail [] = "]"
+showStrTail (x :: xs) = "," ++ x ++ showStrTail xs
 
 showMaybeInt : Maybe Int -> String
-showMaybeInt m =
-  case m of
-    Nothing => "Nothing"
-    Just x => "Just " ++ strFromInt x
+showMaybeInt m = case m of
+  Nothing => "Nothing"
+  Just x => "Just " ++ strFromInt x
 
 main : String
 main =
-  let sorted = mergeSort (Cons 3 (Cons 1 (Cons 2 Nil)))
-  in let desc = sortBy (\x, y => x >= y) (Cons 1 (Cons 3 (Cons 2 Nil)))
-     in let m = insert "b" 2 (insert "a" 1 empty)
-        in let m2 = remove "a" m
-           in "s=" ++ showIntList sorted
-                ++ " d=" ++ showIntList desc
-                ++ " k=" ++ showStrList (keys m)
-                ++ " v=" ++ showIntList (values m)
-                ++ " sz=" ++ strFromInt (size m)
-                ++ " lk=" ++ showMaybeInt (lookup "b" m)
-                ++ " rm=" ++ showStrList (keys m2)
-                ++ " fl=" ++ strFromInt (size (fromList (Cons (Pair "x" 9) Nil)))
-                ++ " tl=" ++ showStrList (map (\p => firstOf p ++ "=" ++ strFromInt (secondOf p)) (toList m2))
+  let
+    sorted = mergeSort ((::) 3 ((::) 1 ((::) 2 [])))
+  in let
+    desc = sortBy (\x, y => x >= y) ((::) 1 ((::) 3 ((::) 2 [])))
+  in let
+    m = insert "b" 2 (insert "a" 1 empty)
+  in let
+    m2 = remove "a" m
+  in "s="
+    ++ showIntList sorted
+    ++ " d="
+    ++ showIntList desc
+    ++ " k="
+    ++ showStrList (keys m)
+    ++ " v="
+    ++ showIntList (values m)
+    ++ " sz="
+    ++ strFromInt (size m)
+    ++ " lk="
+    ++ showMaybeInt (lookup "b" m)
+    ++ " rm="
+    ++ showStrList (keys m2)
+    ++ " fl="
+    ++ strFromInt (size (fromList ((::) (Pair "x" 9) [])))
+    ++ " tl="
+    ++ showStrList (map (\p => firstOf p ++ "=" ++ strFromInt (secondOf p)) (toList m2))

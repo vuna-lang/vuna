@@ -465,8 +465,7 @@ patternSpineOf [] = Just []
 patternSpineOf (v :: rest) = case v of
   VNeutral n => case n of
     NVar name level sp => if isNilSpine sp then case patternSpineOf rest of
-      Just more =>
-        if memLevel level more then Nothing else Just (Base.List.Cons (Pair name level) more)
+      Just more => if memLevel level more then Nothing else Just ((::) (Pair name level) more)
       Nothing => Nothing
     else Nothing
     _ => Nothing
@@ -537,7 +536,7 @@ else
   let
     level = depth - 1
     lvl = if level < created then level else 0
-  in Base.List.Cons (VNeutral (NVar "_" lvl [])) (patternEnv created (depth - 1))
+  in (::) (VNeutral (NVar "_" lvl [])) (patternEnv created (depth - 1))
 
 patternSolution : List (Pair String Int) -> Int -> Int -> Term -> Value
 patternSolution [] created depth body = VType levelZero
@@ -568,7 +567,7 @@ splitAtVals : Int -> List Value -> Pair (List Value) (List Value)
 splitAtVals 0 xs = Pair [] xs
 splitAtVals n [] = Pair [] []
 splitAtVals n (x :: xs) = case splitAtVals (n - 1) xs of
-  Pair a b => Pair (Base.List.Cons x a) b
+  Pair a b => Pair ((::) x a) b
 
 solveMetaHoLegacyFuel : Int -> HashMap String Term -> Sols -> Int -> Int -> List Value -> Value -> Check Sols
 solveMetaHoLegacyFuel fuel defs sols depth m sp rhs = if fuel <= 0 then icFuel "conv"

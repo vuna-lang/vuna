@@ -144,7 +144,7 @@ elabMemberConstraintDoms : List (Pair String Term) -> Ctx -> Ec -> List Expr -> 
 elabMemberConstraintDoms globals ctx ec [] sp = OkC (Pair [] ec)
 elabMemberConstraintDoms globals ctx ec (e :: rest) sp = Vuna.Compiler.Base.Common.bind (checkType globals ctx ec e) (\p => case p of
   Pair domTerm (Pair _ ec1) => Vuna.Compiler.Base.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (\q => case q of
-    Pair doms ec2 => OkC (Pair (Base.List.Cons domTerm doms) ec2)
+    Pair doms ec2 => OkC (Pair ((::) domTerm doms) ec2)
   )
 )
 
@@ -212,9 +212,7 @@ declaredDictBindersGo : Ec -> Ctx -> Term -> List DeclDictBinder -> List DeclDic
 declaredDictBindersGo ec ctx (TPi n True rig dom cod) acc =
   let
     domVal = eval (ctxEnv ctx) dom
-    acc2 =
-      if isDictDomain ec domVal then Base.List.Cons (DeclDictBinder n (ctxDepth ctx) domVal) acc
-      else acc
+    acc2 = if isDictDomain ec domVal then (::) (DeclDictBinder n (ctxDepth ctx) domVal) acc else acc
   in declaredDictBindersGo ec (ctxBindValue n domVal ctx) cod acc2
 declaredDictBindersGo ec ctx _ acc = reverse acc
 
@@ -562,8 +560,8 @@ renderReplList fuel ctors (h :: rest) = if fuel <= 0 then "[]"
 else case rest of
   [t] => case renderReplListTail (fuel - 1) ctors t of
     Just tailText => "[" ++ renderReplArg (fuel - 1) ctors h ++ tailText
-    Nothing => renderReplGeneric (fuel - 1) ctors "Cons" [h, t]
-  _ => renderReplGeneric (fuel - 1) ctors "Cons" (h :: rest)
+    Nothing => renderReplGeneric (fuel - 1) ctors "(::)" [h, t]
+  _ => renderReplGeneric (fuel - 1) ctors "(::)" (h :: rest)
 
 renderReplListTail : Int -> List DtCtor -> Term -> Maybe String
 renderReplListTail fuel ctors t = if fuel <= 0 then Nothing
@@ -632,15 +630,15 @@ zipKeptArgs : List (Pair String Rig) -> List (Pair Term Rig) -> List Term
 zipKeptArgs [] args = map (\p => firstOf p) args
 zipKeptArgs (b :: bs) [] = []
 zipKeptArgs (b :: bs) ((Pair a rig) :: rest) =
-  if rigIsErased (secondOf b) then zipKeptArgs bs rest else Base.List.Cons a (zipKeptArgs bs rest)
+  if rigIsErased (secondOf b) then zipKeptArgs bs rest else (::) a (zipKeptArgs bs rest)
 
 -- | `Base.List.Nil` 的构造子全名（REPL 列表显示用）。
 replListNilName : String
 replListNilName = "Base.List.List.Nil"
 
--- | `Base.List.Cons` 的构造子全名（REPL 列表显示用）。
+-- | `(::)` 的构造子全名（REPL 列表显示用）。
 replListConsName : String
-replListConsName = "Base.List.List.Cons"
+replListConsName = "Base.List.List.::"
 
 replPairName : String
 replPairName = "Base.Pair.Pair"
@@ -714,7 +712,7 @@ hasHasFieldDecls (d :: rest) = case d of
 shortRecordMetas : List RecordMeta -> List RecordMeta
 shortRecordMetas [] = []
 shortRecordMetas (r :: rest) =
-  if baseNameOf r.recordMetaName == r.recordMetaName then Base.List.Cons r (shortRecordMetas rest)
+  if baseNameOf r.recordMetaName == r.recordMetaName then (::) r (shortRecordMetas rest)
   else shortRecordMetas rest
 
 -- | 从声明里抽取记录信息，为当前模块的记录字段生成 `HasField` 实例。

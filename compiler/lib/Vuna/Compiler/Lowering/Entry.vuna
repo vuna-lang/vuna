@@ -34,7 +34,7 @@ collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case args of
       rest = collectBuiltinRowTags (firstOf tail)
       tagTerm = firstOf label
     in case tagTerm of
-      TGlobal tag => if isBuiltinEffectTag tag then Base.List.Cons tag rest else rest
+      TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
       _ => rest
   _ => []
 else []

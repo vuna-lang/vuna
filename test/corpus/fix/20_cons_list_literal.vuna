@@ -10,7 +10,7 @@ h : Int -> List Int
 h n = f (n :: [])
 
 i : List Int
-i = Cons 1 (Cons 2 Nil)
+i = 1 :: 2 :: Nil
 
 j : List Int
 j = (Nil)

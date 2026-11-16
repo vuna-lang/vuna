@@ -672,7 +672,7 @@ manifestSemanticText (Just pkg) =
       Nothing => ""
       Just xs => join "," xs
   in join "\n"
-    (Base.List.Cons "name:${maybeSemanticText man.manifestName}" (Base.List.Cons "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
+    ((::) "name:${maybeSemanticText man.manifestName}" ((::) "exports:${exportsText}" (map depSemanticText man.manifestDependencies)))
 
 -- | 语义开关：release 会拒绝 debug-only 构造（诊断集合不同），必须进输入摘要。
 releaseFlagOf : PackageContext -> String
@@ -713,7 +713,7 @@ collectDepPackages seen ps = collectDepPackagesFuel 4096 seen ps
 
 collectDepPackagesFuel : Int -> List String -> List Package -> Pair (List String) (List Package)
 collectDepPackagesFuel fuel seen [] = Pair seen []
-collectDepPackagesFuel fuel seen (p :: rest) = if fuel <= 0 then Pair seen (Base.List.Cons p rest)
+collectDepPackagesFuel fuel seen (p :: rest) = if fuel <= 0 then Pair seen ((::) p rest)
 else if memName (packageName p) seen then collectDepPackagesFuel (fuel - 1) seen rest
 else case collectDepPackagesFuel (fuel - 1) (packageName p :: seen) p.packageDependencies of
   Pair seen1 transitive => case collectDepPackagesFuel (fuel - 1) seen1 rest of

@@ -32,7 +32,7 @@ addDependents src (m :: rest) t =
     cur = case Base.HashMap.lookup m t of
       Just xs => xs
       Nothing => []
-  in addDependents src rest (Base.HashMap.insert m (Base.List.Cons src cur) t)
+  in addDependents src rest (Base.HashMap.insert m ((::) src cur) t)
 
 reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
 reverseAdjTbl [] = Base.HashMap.fromList []
@@ -58,7 +58,7 @@ dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
 dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
 else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
-  Pair visited2 order2 => Pair visited2 (Base.List.Cons n order2)
+  Pair visited2 order2 => Pair visited2 ((::) n order2)
 
 postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 postOrder adjT [] visited order = Pair visited order
@@ -86,7 +86,7 @@ dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
 dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
 else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
-  Pair visited2 comp2 => Pair visited2 (Base.List.Cons n comp2)
+  Pair visited2 comp2 => Pair visited2 ((::) n comp2)
 
 collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
 collectComps adjT [] visited comps = comps
@@ -113,8 +113,7 @@ groupsFromCompsGo compTbl allNames [] emitted = []
 groupsFromCompsGo compTbl allNames (n :: rest) emitted = if Base.HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
 else case Base.HashMap.lookup n compTbl of
   Just g =>
-    Base.List.Cons (groupOf allNames g)
-      (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
+    (::) (groupOf allNames g) (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
   Nothing => groupsFromCompsGo compTbl allNames rest emitted
 
 -- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter。
@@ -128,7 +127,7 @@ groupOf allNames g =
 filterNames : (String -> Bool) -> List String -> List String
 filterNames pred [] = []
 filterNames pred (n :: rest) =
-  if pred n then Base.List.Cons n (filterNames pred rest) else filterNames pred rest
+  if pred n then (::) n (filterNames pred rest) else filterNames pred rest
 
 notIn : String -> List String -> Bool
 notIn name names = not (memName name names)
@@ -205,8 +204,7 @@ lookupDeps tbl k = case Base.HashMap.lookup k tbl of
 -- | 最小下标优先的有序插入（就绪集合通常很小）。
 insertReady : Int -> List Int -> List Int
 insertReady i [] = [i]
-insertReady i (x :: rest) =
-  if i <= x then Base.List.Cons i (Base.List.Cons x rest) else Base.List.Cons x (insertReady i rest)
+insertReady i (x :: rest) = if i <= x then (::) i ((::) x rest) else (::) x (insertReady i rest)
 
 orderGroupsGo : Int -> HashMap Int (List String) -> HashMap Int (List Int) -> HashMap Int Int -> List Int -> Int -> List (List String) -> Check (List (List String))
 orderGroupsGo fuel grpTbl revTbl indeg ready remaining acc = if fuel <= 0 then cgErr0 DependencyCycle
@@ -295,7 +293,7 @@ assembleGroups adjT defs (g :: rest) =
       Nothing => OkC (IrGroup True members)
     else OkC (IrGroup False members)
   in Vuna.Compiler.Base.Common.bind checked
-    (\grp => Vuna.Compiler.Base.Common.bind (assembleGroups adjT defs rest) (\tail => OkC (Base.List.Cons grp tail)))
+    (\grp => Vuna.Compiler.Base.Common.bind (assembleGroups adjT defs rest) (\tail => OkC ((::) grp tail)))
 
 -- ---------------------------------------------------------------
 -- 可达性（后端共用的纯分析）
@@ -406,7 +404,7 @@ assembleGo adjT (g :: rest) recOk spanOf =
       Nothing => OkC (Pair True g)
     else OkC (Pair False g)
   in Vuna.Compiler.Base.Common.bind checked
-    (\grp => Vuna.Compiler.Base.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC (Base.List.Cons grp tail)))
+    (\grp => Vuna.Compiler.Base.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC ((::) grp tail)))
 
 firstBadRecName : List String -> (String -> Bool) -> Maybe String
 firstBadRecName [] recOk = Nothing

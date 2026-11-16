@@ -1,12 +1,12 @@
 -- Prelude 自动注入 → 直接用 base 的 `List`；辅助函数取名 `mapList`，
 -- 避免与 base `Base.List.map` 同名。
 mapList : (a -> b) -> List a -> List b
-mapList f Nil = Nil
-mapList f (Cons x xs) = Cons (f x) (mapList f xs)
+mapList f [] = []
+mapList f (x :: xs) = (::) (f x) (mapList f xs)
 
 sum : List Int -> Int
-sum Nil = 0
-sum (Cons x xs) = x + sum xs
+sum [] = 0
+sum (x :: xs) = x + sum xs
 
 main : Int
 main = sum (mapList (\x => x + 1) [1, 2, 3])

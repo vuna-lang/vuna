@@ -1,16 +1,50 @@
 -- 折行后的程序语义不变：超长列表 / 应用 / 中缀链会被 fmt 折行。
 -- Prelude 自动注入 → 用 base 的 `List`（本地同名 data 的解析优先级见 docs/reference/type-system.md）。
-
 sumAll : List Int -> Int
 sumAll xs = case xs of
-  Nil => 0
-  Cons y rest => y + sumAll rest
+  [] => 0
+  y :: rest => y + sumAll rest
 
 longList : List Int
-longList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+longList =
+  [ 1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28
+  ]
 
 plusThree : Int -> Int -> Int -> Int
 plusThree a b c = a + b + c
 
 main : Int
-main = sumAll longList + plusThree 100 200 300 + plusThree 1 2 3 + plusThree 4 5 6 + plusThree 7 8 9 + plusThree 10 11 12
+main =
+  sumAll longList
+    + plusThree 100 200 300
+    + plusThree 1 2 3
+    + plusThree 4 5 6
+    + plusThree 7 8 9
+    + plusThree 10 11 12

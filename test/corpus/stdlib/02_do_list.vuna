@@ -7,13 +7,13 @@ showPair : Pair Int Int -> String
 showPair (Pair a b) = strFromInt a ++ ":" ++ strFromInt b
 
 showPairs : List (Pair Int Int) -> String
-showPairs Nil = "[]"
-showPairs (Cons p ps) = showPair p ++ " " ++ showPairs ps
+showPairs [] = "[]"
+showPairs (p :: ps) = showPair p ++ " " ++ showPairs ps
 
 pairs : List (Pair Int Int)
 pairs = do
-  x <- Cons 1 (Cons 2 Nil)
-  y <- Cons 10 (Cons 20 Nil)
+  x <- (::) 1 ((::) 2 [])
+  y <- (::) 10 ((::) 20 [])
   pure (Pair x y)
 
 main : String

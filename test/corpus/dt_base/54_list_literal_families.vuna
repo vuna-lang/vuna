@@ -10,7 +10,7 @@ data Tree : Type where
 -- 用户族：名字叫 List 但构造子是 Nil/Cons，与 Base.List 结构同形。
 data MyList a : Type where
   Nil : MyList a
-  Cons : a -> MyList a -> MyList a
+  (::) : a -> MyList a -> MyList a
 
 v : Vec 3 Int
 v = [1, 2, 3]

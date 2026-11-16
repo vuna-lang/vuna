@@ -11,8 +11,8 @@ data Tok : Type where
   TK : Int -> Tok
 
 collect : Chars -> List Tok
-collect (Chars Nil p) = Nil
-collect (Chars (Cons c rest) p) = Cons (TK c) (collect (Chars rest (p + 1)))
+collect (Chars [] p) = []
+collect (Chars (c :: rest) p) = (::) (TK c) (collect (Chars rest (p + 1)))
 
 main : Int
 main = 0

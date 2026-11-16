@@ -7,42 +7,57 @@ showBool : Bool -> String
 showBool b = if b then "True" else "False"
 
 showIntList : List Int -> String
-showIntList Nil = "[]"
-showIntList (Cons x xs) = "[" ++ strFromInt x ++ showIntTail xs
+showIntList [] = "[]"
+showIntList (x :: xs) = "[" ++ strFromInt x ++ showIntTail xs
 
 showIntTail : List Int -> String
-showIntTail Nil = "]"
-showIntTail (Cons x xs) = "," ++ strFromInt x ++ showIntTail xs
+showIntTail [] = "]"
+showIntTail (x :: xs) = "," ++ strFromInt x ++ showIntTail xs
 
 showStrList : List String -> String
-showStrList Nil = "[]"
-showStrList (Cons x xs) = "[" ++ x ++ showStrTail xs
+showStrList [] = "[]"
+showStrList (x :: xs) = "[" ++ x ++ showStrTail xs
 
 showStrTail : List String -> String
-showStrTail Nil = "]"
-showStrTail (Cons x xs) = "," ++ x ++ showStrTail xs
+showStrTail [] = "]"
+showStrTail (x :: xs) = "," ++ x ++ showStrTail xs
 
 showMaybeInt : Maybe Int -> String
-showMaybeInt m =
-  case m of
-    Nothing => "Nothing"
-    Just x => "Just " ++ strFromInt x
+showMaybeInt m = case m of
+  Nothing => "Nothing"
+  Just x => "Just " ++ strFromInt x
 
 main : String
 main =
-  "a=" ++ showIntList (append (Cons 1 (Cons 2 Nil)) (Cons 3 Nil))
-    ++ " r=" ++ showIntList (reverse (Cons 1 (Cons 2 (Cons 3 Nil))))
-    ++ " l=" ++ strFromInt (length (range 2 6))
-    ++ " m=" ++ showIntList (map (\x => x * 3) (range 1 4))
-    ++ " f=" ++ showIntList (filter (\x => x > 2) (range 1 5))
-    ++ " fl=" ++ strFromInt (foldl (\a, b => a + b) 0 (range 1 5))
-    ++ " fr=" ++ strFromInt (foldr (\a, b => a - b) 0 (Cons 1 (Cons 2 (Cons 3 Nil))))
-    ++ " cm=" ++ showIntList (concatMap (\x => Cons x (Cons (x * 10) Nil)) (Cons 1 (Cons 2 Nil)))
-    ++ " fm=" ++ showIntList ((Cons 1 (Cons 2 Nil)) >>= (\x => Cons x (Cons (x + 100) Nil)))
-    ++ " mem=" ++ showBool (mem 3 (range 1 5))
-    ++ " zip=" ++ showStrList (map (\p => strFromInt (firstOf p) ++ secondOf p) (zip (Cons 1 (Cons 2 Nil)) (Cons "a" (Cons "b" Nil))))
-    ++ " tk=" ++ showIntList (take 2 (range 1 5))
-    ++ " dp=" ++ showIntList (drop 3 (range 1 5))
-    ++ " mm=" ++ showIntList (mapMaybe (\x => if x > 2 then Just (x * 2) else Nothing) (range 1 4))
-    ++ " mn=" ++ showBool (memName "b" (Cons "a" (Cons "b" Nil)))
-    ++ " lp=" ++ showMaybeInt (lookupPair "k" (Cons (Pair "k" 9) Nil))
+  "a="
+    ++ showIntList (append ((::) 1 ((::) 2 [])) ((::) 3 []))
+    ++ " r="
+    ++ showIntList (reverse ((::) 1 ((::) 2 ((::) 3 []))))
+    ++ " l="
+    ++ strFromInt (length (range 2 6))
+    ++ " m="
+    ++ showIntList (map (\x => x * 3) (range 1 4))
+    ++ " f="
+    ++ showIntList (filter (\x => x > 2) (range 1 5))
+    ++ " fl="
+    ++ strFromInt (foldl (\a, b => a + b) 0 (range 1 5))
+    ++ " fr="
+    ++ strFromInt (foldr (\a, b => a - b) 0 ((::) 1 ((::) 2 ((::) 3 []))))
+    ++ " cm="
+    ++ showIntList (concatMap (\x => (::) x ((::) (x * 10) [])) ((::) 1 ((::) 2 [])))
+    ++ " fm="
+    ++ showIntList ((::) 1 ((::) 2 []) >>= (\x => (::) x ((::) (x + 100) [])))
+    ++ " mem="
+    ++ showBool (mem 3 (range 1 5))
+    ++ " zip="
+    ++ showStrList (map (\p => strFromInt (firstOf p) ++ secondOf p) (zip ((::) 1 ((::) 2 [])) ((::) "a" ((::) "b" []))))
+    ++ " tk="
+    ++ showIntList (take 2 (range 1 5))
+    ++ " dp="
+    ++ showIntList (drop 3 (range 1 5))
+    ++ " mm="
+    ++ showIntList (mapMaybe (\x => if x > 2 then Just (x * 2) else Nothing) (range 1 4))
+    ++ " mn="
+    ++ showBool (memName "b" ((::) "a" ((::) "b" [])))
+    ++ " lp="
+    ++ showMaybeInt (lookupPair "k" ((::) (Pair "k" 9) []))

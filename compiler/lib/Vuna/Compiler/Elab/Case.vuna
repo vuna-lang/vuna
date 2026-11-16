@@ -134,17 +134,12 @@ else
     VNeutral (NVar an al []) => case b2 of
       VNeutral (NVar bn bl []) =>
         if al == bl then OkC acc
-        else if al < bl then if occursLevel occursFuel depth bl a2 then unifyErr
-        else OkC (Base.List.Cons (Pair bl a2) acc)
-        else if occursLevel occursFuel depth al b2 then unifyErr
-        else OkC (Base.List.Cons (Pair al b2) acc)
-      _ =>
-        if occursLevel occursFuel depth al b2 then unifyErr
-        else OkC (Base.List.Cons (Pair al b2) acc)
+        else if al < bl then if occursLevel occursFuel depth bl a2 then unifyErr else OkC ((::) (Pair bl a2) acc)
+        else if occursLevel occursFuel depth al b2 then unifyErr else OkC ((::) (Pair al b2) acc)
+      _ => if occursLevel occursFuel depth al b2 then unifyErr else OkC ((::) (Pair al b2) acc)
     _ => case b2 of
       VNeutral (NVar bn bl []) =>
-        if occursLevel occursFuel depth bl a2 then unifyErr
-        else OkC (Base.List.Cons (Pair bl a2) acc)
+        if occursLevel occursFuel depth bl a2 then unifyErr else OkC ((::) (Pair bl a2) acc)
       _ => unifyIdxRigid ec acc depth (fuel - 1) a2 b2
 
 -- occurs check：精化成自己会导致无限链。
@@ -268,7 +263,7 @@ export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
 
 export wildArgs : Int -> List Pat
-wildArgs n = if n <= 0 then [] else Base.List.Cons (PWild (Span "" 0 0 0 0)) (wildArgs (n - 1))
+wildArgs n = if n <= 0 then [] else (::) (PWild (Span "" 0 0 0 0)) (wildArgs (n - 1))
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
 export ctorExplicitArity : Term -> Int
@@ -390,8 +385,7 @@ ctorValueIn ctx c =
 
 export teleValsFrom : Int -> Int -> List Value
 teleValsFrom low k =
-  if k <= 0 then []
-  else Base.List.Cons (VNeutral (NVar "_tele" low [])) (teleValsFrom (low + 1) (k - 1))
+  if k <= 0 then [] else (::) (VNeutral (NVar "_tele" low [])) (teleValsFrom (low + 1) (k - 1))
 
 -- **scrutinee 反射**。只把构造子的结果**索引**与 scrutinee 的索引合一是不够的：
 -- `case n of ...`（n 是裸 Nat 形参、族没有索引）或「包装族」上完全拿不到等式，
@@ -574,7 +568,7 @@ missingCtors : Ctx -> Ec -> List Value -> List String -> List DtCtor -> List (Pa
 missingCtors ctx ec idxs written [] = []
 missingCtors ctx ec idxs written (ctor :: rest) =
   if memName (dtCtorName ctor) written then missingCtors ctx ec idxs written rest
-  else if branchReachable ctx ec idxs ctor then Base.List.Cons (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
+  else if branchReachable ctx ec idxs ctor then (::) (Pair (ctorDisplayName (dtCtorName ctor)) ctor.dtCtorSpan)
     (missingCtors ctx ec idxs written rest)
   else missingCtors ctx ec idxs written rest
 

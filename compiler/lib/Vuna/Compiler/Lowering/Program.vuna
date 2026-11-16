@@ -219,7 +219,7 @@ lowerInlineArgsFuel fuel env st binders ((Pair arg rig) :: rest) = if fuel <= 0 
 else if rigIsErased rig then icInternal "erased argument in inlined builtin application"
 else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders arg) (\p => case p of
   Pair ir st2 => Vuna.Compiler.Base.Common.bind (lowerInlineArgsFuel (fuel - 1) env st2 binders rest) (\q => case q of
-    Pair irs st3 => OkC (Pair (Base.List.Cons ir irs) st3)
+    Pair irs st3 => OkC (Pair ((::) ir irs) st3)
   )
 )
 
@@ -228,7 +228,7 @@ lowerTermsFuel fuel env st binders [] = if fuel <= 0 then icFuel "ir-lower" else
 lowerTermsFuel fuel env st binders (t :: rest) = if fuel <= 0 then icFuel "ir-lower"
 else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders t) (\p => case p of
   Pair ir st2 => Vuna.Compiler.Base.Common.bind (lowerTermsFuel (fuel - 1) env st2 binders rest) (\q => case q of
-    Pair irs st3 => OkC (Pair (Base.List.Cons ir irs) st3)
+    Pair irs st3 => OkC (Pair ((::) ir irs) st3)
   )
 )
 
@@ -285,7 +285,7 @@ alignCtorArgs label (keep :: flags) [] =
 alignCtorArgs label (keep :: flags) ((Pair arg rig) :: rest) =
   if keep then if rigIsErased rig then icInternal "constructor ${label}: runtime field marked erased"
   else Vuna.Compiler.Base.Common.bind (alignCtorArgs label flags rest)
-    (\ts => OkC (Base.List.Cons (Pair arg rig) ts))
+    (\ts => OkC ((::) (Pair arg rig) ts))
   else if rigIsErased rig then alignCtorArgs label flags rest
   else alignCtorArgs label flags (Pair arg rig :: rest)
 
@@ -297,7 +297,7 @@ lowerConArgsFuel fuel env st binders [] (_ :: _) =
 lowerConArgsFuel fuel env st binders (opq :: opqs) ((Pair arg rig) :: rest) = if fuel <= 0 then icFuel "ir-lower"
 else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders arg) (\p => case p of
   Pair ir st2 => Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st2 binders opqs rest) (\q => case q of
-    Pair irs st3 => OkC (Pair (Base.List.Cons (ctorArgIr opq ir) irs) st3)
+    Pair irs st3 => OkC (Pair ((::) (ctorArgIr opq ir) irs) st3)
   )
 )
 
@@ -485,7 +485,7 @@ lowerArmsFuel fuel env st outer [] = if fuel <= 0 then icFuel "ir-lower" else Ok
 lowerArmsFuel fuel env st outer (alt :: rest) = if fuel <= 0 then icFuel "ir-lower"
 else Vuna.Compiler.Base.Common.bind (lowerArmFuel (fuel - 1) env st outer alt) (\p => case p of
   Pair arm st2 => Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st2 outer rest) (\q => case q of
-    Pair arms st3 => OkC (Pair (Base.List.Cons arm arms) st3)
+    Pair arms st3 => OkC (Pair ((::) arm arms) st3)
   )
 )
 
@@ -722,7 +722,7 @@ lowerDefs : LwEnv -> LwSt -> List DtDef -> Check (Pair (List IrDef) LwSt)
 lowerDefs env st [] = OkC (Pair [] st)
 lowerDefs env st (d :: rest) = Vuna.Compiler.Base.Common.bind (lowerDef env st d) (\p => case p of
   Pair ir st2 => Vuna.Compiler.Base.Common.bind (lowerDefs env st2 rest) (\q => case q of
-    Pair tail st3 => OkC (Pair (Base.List.Cons ir tail) st3)
+    Pair tail st3 => OkC (Pair ((::) ir tail) st3)
   )
 )
 
@@ -825,7 +825,7 @@ mapMaybeDef : HashMap String DtDef -> List String -> List DtDef
 mapMaybeDef _ [] = []
 mapMaybeDef tbl (n :: rest) = case tblLookup tbl n of
   Nothing => mapMaybeDef tbl rest
-  Just d => Base.List.Cons d (mapMaybeDef tbl rest)
+  Just d => (::) d (mapMaybeDef tbl rest)
 
 -- | 程序级检查（擦除、axiom 运行时使用、作用域、OCaml 名字单射、SCC 递归值形状）。
 --

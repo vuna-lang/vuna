@@ -330,11 +330,11 @@ foldFieldChain base (f :: rest) sp = foldFieldChain (EField base f sp) rest sp
 
 takeSegs : Int -> List a -> List a
 takeSegs n [] = []
-takeSegs n (x :: rest) = if n <= 0 then [] else Base.List.Cons x (takeSegs (n - 1) rest)
+takeSegs n (x :: rest) = if n <= 0 then [] else (::) x (takeSegs (n - 1) rest)
 
 dropSegs : Int -> List a -> List a
 dropSegs n [] = []
-dropSegs n (x :: rest) = if n <= 0 then Base.List.Cons x rest else dropSegs (n - 1) rest
+dropSegs n (x :: rest) = if n <= 0 then (::) x rest else dropSegs (n - 1) rest
 
 resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Check (Maybe Expr)
 resolveQualifiedPath modules label imports segs n sp = if n < 1 then OkC Nothing
@@ -438,7 +438,7 @@ else case pat of
       (\_ => OkC (Pair (PVar name sp) [name]))
   PAs name inner sp =>
     Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports inner)
-      (\p => OkC (Pair (PAs name (firstOf p) sp) (Base.List.Cons name (secondOf p))))
+      (\p => OkC (Pair (PAs name (firstOf p) sp) ((::) name (secondOf p))))
   PInt n sp => OkC (Pair (PInt n sp) [])
   PStr s sp => OkC (Pair (PStr s sp) [])
   PCon name pats sp =>
@@ -484,7 +484,7 @@ resolveLocalPats fuel modules label prefix ns imports [] =
 resolveLocalPats fuel modules label prefix ns imports (pat :: rest) = if fuel <= 0 then icFuel "resolver"
 else Vuna.Compiler.Base.Common.bind (resolvePattern (fuel - 1) modules label prefix ns imports pat) (\p => case p of
   Pair pat2 bound => Vuna.Compiler.Base.Common.bind (resolveLocalPats (fuel - 1) modules label prefix ns imports rest) (\r => case r of
-    Pair rest2 restBound => OkC (Pair (Base.List.Cons pat2 rest2) (append bound restBound))
+    Pair rest2 restBound => OkC (Pair ((::) pat2 rest2) (append bound restBound))
   )
 )
 
@@ -502,7 +502,7 @@ else case binds of
       (resolveExpr (fuel - 1) modules label prefix ns imports scope body) (\b => OkC (Pair [] b))
   (Pair pat value) :: rest => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope value) (\value2 => Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (\p => case p of
     Pair pat2 bound => Vuna.Compiler.Base.Common.bind (resolveLetSeq (fuel - 1) modules label prefix ns imports (append bound scope) rest body) (\r => case r of
-      Pair binds2 body2 => OkC (Pair (Base.List.Cons (Pair pat2 value2) binds2) body2)
+      Pair binds2 body2 => OkC (Pair ((::) (Pair pat2 value2) binds2) body2)
     )
   )
   )
@@ -523,7 +523,7 @@ collectRecBinds : List Module -> String -> String -> Namespaces -> List Import -
 collectRecBinds modules label prefix ns imports [] = OkC (Pair [] [])
 collectRecBinds modules label prefix ns imports ((Pair pat value) :: rest) = Vuna.Compiler.Base.Common.bind (resolvePattern resolveFuelBound modules label prefix ns imports pat) (\pr => case pr of
   Pair pat2 bound => Vuna.Compiler.Base.Common.bind (collectRecBinds modules label prefix ns imports rest) (\r => case r of
-    Pair names tail => OkC (Pair (append bound names) (Base.List.Cons (Pair pat2 value) tail))
+    Pair names tail => OkC (Pair (append bound names) ((::) (Pair pat2 value) tail))
   )
 )
 
@@ -534,7 +534,7 @@ resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) ::
   if fuel <= 0 then icFuel "resolver"
   else Vuna.Compiler.Base.Common.bind
     (resolveExpr (fuel - 1) modules label prefix ns imports scope value)
-    (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC (Base.List.Cons (Pair pat value2) tail)))
+    (\value2 => Vuna.Compiler.Base.Common.bind (resolveRecValues (fuel - 1) modules label prefix ns imports scope rest) (\tail => OkC ((::) (Pair pat value2) tail)))
 
 -- 模板字符串降级（rename 之后、Elab 之前）。
 --
@@ -554,10 +554,9 @@ lowerTemplate sp parts = case templateChunks sp parts of
 templateChunks : Span -> List InterpPart -> List Expr
 templateChunks sp [] = []
 templateChunks sp ((IPText s) :: rest) =
-  if s == "" then templateChunks sp rest else Base.List.Cons (EStr s sp) (templateChunks sp rest)
+  if s == "" then templateChunks sp rest else (::) (EStr s sp) (templateChunks sp rest)
 templateChunks sp ((IPHole e) :: rest) =
-  Base.List.Cons (EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e))
-    (templateChunks sp rest)
+  (::) (EApp (EVar interpMethodName (exprSpan e)) [e] (exprSpan e)) (templateChunks sp rest)
 
 concatLeft : Span -> Expr -> List Expr -> Expr
 concatLeft sp acc [] = acc
@@ -679,10 +678,10 @@ else case parts of
   (IPText s) :: rest =>
     Vuna.Compiler.Base.Common.bind
       (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest)
-      (\ps => OkC (Base.List.Cons (IPText s) ps))
+      (\ps => OkC ((::) (IPText s) ps))
   (IPHole e) :: rest =>
     Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => OkC (Base.List.Cons (IPHole e2) ps)))
+      (\e2 => Vuna.Compiler.Base.Common.bind (resolveInterpParts (fuel - 1) modules label prefix ns imports scope rest) (\ps => OkC ((::) (IPHole e2) ps)))
 
 -- do 块在这里降级成 bind 的普通应用，类型检查与 codegen 无需认识 do。
 -- 最后一条裸表达式即块结果（`do e` = `e`）；裸语句用 `bind e (\_ -> rest)` 顺序化。
@@ -1047,8 +1046,7 @@ ctorPairTargets modules [] = []
 ctorPairTargets modules ((Pair m e) :: rest) =
   let
     isCtor = e.kind == "ctor" || isDataOrRecordCtorTarget modules e.target
-  in if isCtor then Base.List.Cons e.target (ctorPairTargets modules rest)
-  else ctorPairTargets modules rest
+  in if isCtor then (::) e.target (ctorPairTargets modules rest) else ctorPairTargets modules rest
 
 isStringDomainExpr : Expr -> Bool
 isStringDomainExpr (EVar "String" _) = True

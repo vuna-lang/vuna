@@ -96,14 +96,14 @@ run: sh -c 'readelf --debug-dump=decodedline "$TMPDIR/grp-split/prog" 2>/dev/nul
 exit: 0
 out-contains: Main.vuna
 
-run: sh -c 'd="$TMPDIR/boom"; mkdir -p "$d/app"; printf "[package]\nname = \"boom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "boom : List Int -> Int\nboom Nil = 1 / 0\nboom (Cons x xs) = x + boom xs\n\nmain : Int\nmain = boom [1, 2, 3]\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/boom-out" "$d"'
+run: sh -c 'd="$TMPDIR/boom"; mkdir -p "$d/app"; printf "[package]\nname = \"boom\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "boom : List Int -> Int\nboom Nil = 1 / 0\nboom (x :: xs) = x + boom xs\n\nmain : Int\nmain = boom [1, 2, 3]\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/boom-out" "$d"'
 exit: 0
 run: sh -c '"$TMPDIR/boom-out/bin/boom" 2>&1 >/dev/null'
 exit: nonzero
 out-contains: vuna: runtime error
 out-contains: app/Main.vuna
 
-run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.List\nimport Base.Obs.Span\n\nwork : List Int -> Int\nwork Nil = 0\nwork (Cons x xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => work (range 0 400000))\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
+run: sh -c 'd="$TMPDIR/sam"; mkdir -p "$d/app"; printf "[package]\nname = \"sam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.List\nimport Base.Obs.Span\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample \"both\" 1000 (\\_ => work (range 0 400000))\n" > "$d/app/Main.vuna"; "$VUNA" build --out "$TMPDIR/sam-out" "$d"'
 exit: 0
 run: sh -c 'VUNA_OBS=3 VUNA_OBS_DIR="$TMPDIR/sam-trace" "$TMPDIR/sam-out/bin/sam" >/dev/null'
 exit: 0

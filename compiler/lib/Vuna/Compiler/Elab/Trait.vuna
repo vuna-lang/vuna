@@ -132,13 +132,13 @@ traitParamKinds globals ec ((TraitParam pname pkind) :: rest) methods = case pki
 traitKindExplicit : List (Pair String Term) -> Ec -> Expr -> List TraitParam -> List (Pair String Expr) -> Check (Pair (List Term) Ec)
 traitKindExplicit globals ec kexpr rest methods = Vuna.Compiler.Base.Common.bind (checkType globals emptyCtx ec kexpr) (\pk => case pk of
   Pair kterm (Pair _ ec1) => Vuna.Compiler.Base.Common.bind (traitParamKinds globals ec1 rest methods) (\pr => case pr of
-    Pair ks ec2 => OkC (Pair (Base.List.Cons kterm ks) ec2)
+    Pair ks ec2 => OkC (Pair ((::) kterm ks) ec2)
   )
 )
 
 traitKindInfer : List (Pair String Term) -> Ec -> String -> List TraitParam -> List (Pair String Expr) -> Check (Pair (List Term) Ec)
 traitKindInfer globals ec pname rest methods = Vuna.Compiler.Base.Common.bind (traitParamKinds globals ec rest methods) (\pr => case pr of
-  Pair ks ec2 => OkC (Pair (Base.List.Cons (classParamKindOf pname methods) ks) ec2)
+  Pair ks ec2 => OkC (Pair ((::) (classParamKindOf pname methods) ks) ec2)
 )
 
 -- 类参数 binder 的 Pi 链（外到内 = 声明顺序）。binder 是隐式擦除的（字典的类参数）。
@@ -380,8 +380,7 @@ export constraintPartsOf : Span -> List Expr -> Check (List (Pair String (List E
 constraintPartsOf sp [] = OkC []
 constraintPartsOf sp (e :: rest) = case instanceConstraintParts e of
   Nothing => tcErr0 sp ConstraintNotDict
-  Just p =>
-    Vuna.Compiler.Base.Common.bind (constraintPartsOf sp rest) (\ps => OkC (Base.List.Cons p ps))
+  Just p => Vuna.Compiler.Base.Common.bind (constraintPartsOf sp rest) (\ps => OkC ((::) p ps))
 
 -- 约束 `C a1 .. an`：类名 + 全部头实参（N>=1 参数 trait 的签名约束与实例 ctx 共用）。
 instanceConstraintParts : Expr -> Maybe (Pair String (List Expr))
@@ -476,7 +475,7 @@ checkArgsAtKinds : List (Pair String Term) -> Ctx -> Ec -> List Expr -> List Val
 checkArgsAtKinds globals ctx ec [] [] sp = OkC (Pair [] ec)
 checkArgsAtKinds globals ctx ec (a :: arest) (k :: ks) sp = Vuna.Compiler.Base.Common.bind (checkTypeAtKind globals ctx ec a k sp) (\q => case q of
   Pair t ec1 => Vuna.Compiler.Base.Common.bind (checkArgsAtKinds globals ctx ec1 arest ks sp) (\r => case r of
-    Pair ts ec2 => OkC (Pair (Base.List.Cons t ts) ec2)
+    Pair ts ec2 => OkC (Pair ((::) t ts) ec2)
   )
 )
 checkArgsAtKinds globals ctx ec _ _ sp = tcErr0 sp InstanceHeadNotApp
@@ -549,7 +548,7 @@ bareTeleSeeds : List Expr -> List Value -> List (Pair String Term)
 bareTeleSeeds [] kinds = []
 bareTeleSeeds (e :: rest) (k :: ks) = case e of
   EVar n sp =>
-    if isLowerStart n then Base.List.Cons (Pair n (quote 0 k)) (bareTeleSeeds rest ks)
+    if isLowerStart n then (::) (Pair n (quote 0 k)) (bareTeleSeeds rest ks)
     else bareTeleSeeds rest ks
   _ => bareTeleSeeds rest ks
 bareTeleSeeds _ _ = []
@@ -591,8 +590,7 @@ exprFreeLower _ = []
 keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
-  if Base.HashMap.member n tbl then keepOutBanned tbl rest
-  else Base.List.Cons n (keepOutBanned tbl rest)
+  if Base.HashMap.member n tbl then keepOutBanned tbl rest else (::) n (keepOutBanned tbl rest)
 
 -- tele 的局部上下文（声明顺序绑定；`TVar 0` = 最内层 tele）。
 instanceTeleCtx : List (Pair String Term) -> Ctx
@@ -616,7 +614,7 @@ elabConstraintDomains classes globals ctx ((Pair cname argExprs) :: rest) sp ec 
       in if length kindVals /= length argExprs then tcErr0 sp ConstraintNotDict
       else Vuna.Compiler.Base.Common.bind (checkArgsAtKinds globals ctx ec argExprs kindVals sp) (\q => case q of
         Pair argTerms ec1 => Vuna.Compiler.Base.Common.bind (elabConstraintDomains classes globals ctx rest sp ec1) (\r => case r of
-          Pair tvs ec2 => OkC (Pair (Base.List.Cons (ctorResultType cls argTerms) tvs) ec2)
+          Pair tvs ec2 => OkC (Pair ((::) (ctorResultType cls argTerms) tvs) ec2)
         )
       )
 
@@ -980,8 +978,8 @@ freeDictGoalsGo ec (g :: rest) acc = case g of
 addDictGoalGroup : Ec -> Int -> Value -> List DictGoalGroup -> List DictGoalGroup
 addDictGoalGroup ec m dom [] = [DictGoalGroup m dom []]
 addDictGoalGroup ec m dom ((DictGoalGroup rep repDom extras) :: rest) =
-  if domainsEqual ec repDom dom then Base.List.Cons (DictGoalGroup rep repDom (m :: extras)) rest
-  else Base.List.Cons (DictGoalGroup rep repDom extras) (addDictGoalGroup ec m dom rest)
+  if domainsEqual ec repDom dom then (::) (DictGoalGroup rep repDom (m :: extras)) rest
+  else (::) (DictGoalGroup rep repDom extras) (addDictGoalGroup ec m dom rest)
 
 domainsEqual : Ec -> Value -> Value -> Bool
 domainsEqual ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 a b of
@@ -1126,8 +1124,7 @@ insertArgAt n x xs = append (append (take n xs) [x]) (drop n xs)
 export replaceGlobalType : String -> Term -> List (Pair String Term) -> List (Pair String Term)
 replaceGlobalType name ty [] = []
 replaceGlobalType name ty (p :: rest) =
-  if firstOf p == name then Base.List.Cons (Pair name ty) rest
-  else Base.List.Cons p (replaceGlobalType name ty rest)
+  if firstOf p == name then (::) (Pair name ty) rest else (::) p (replaceGlobalType name ty rest)
 
 -- 批量注册实例。
 export foldlAddInst : Ec -> List DtInst -> Ec

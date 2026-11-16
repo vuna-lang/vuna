@@ -6,12 +6,12 @@ data Nat : Type where
   Succ : Nat -> Nat
 
 length2 : List Int -> Int
-length2 Nil = 0
-length2 (Cons x rest) = 1 + length2 rest
+length2 [] = 0
+length2 (x :: rest) = 1 + length2 rest
 
 plus : Nat -> Nat -> Nat
 plus Zero b = b
 plus (Succ k) b = Succ (plus k b)
 
 main : Int
-main = length2 (Cons 1 (Cons 2 Nil))
+main = length2 ((::) 1 ((::) 2 []))

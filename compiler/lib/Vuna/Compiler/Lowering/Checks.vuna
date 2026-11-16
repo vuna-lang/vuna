@@ -66,7 +66,7 @@ isAxiomDef d = not (dtDefHasBody d)
 export axiomNamesOf : List DtDef -> List String
 axiomNamesOf [] = []
 axiomNamesOf (d :: rest) =
-  if isAxiomDef d then Base.List.Cons (dtDefName d) (axiomNamesOf rest) else axiomNamesOf rest
+  if isAxiomDef d then (::) (dtDefName d) (axiomNamesOf rest) else axiomNamesOf rest
 
 isTypeLevelDef : HashMap String Term -> DtDef -> Bool
 isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (dtDefType d)))
@@ -239,8 +239,7 @@ termDepsAltsFuel fuel runtimeNames acc (alt :: rest) =
 
 addName : String -> List String -> List String
 addName name [] = [name]
-addName name (x :: rest) =
-  if x == name then Base.List.Cons x rest else Base.List.Cons x (addName name rest)
+addName name (x :: rest) = if x == name then (::) x rest else (::) x (addName name rest)
 
 -- ---------------------------------------------------------------
 -- 定义体的使用事实：一次遍历同时给出运行时依赖与隐藏原语旗标

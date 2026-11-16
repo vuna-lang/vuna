@@ -4,17 +4,18 @@ import Base.Maybe
 import Base.List
 
 showMaybe : Maybe Int -> String
-showMaybe m =
-  case m of
-    Nothing => "Nothing"
-    Just n => "Just " ++ strFromInt n
+showMaybe m = case m of
+  Nothing => "Nothing"
+  Just n => "Just " ++ strFromInt n
 
 sum : List Int -> Int
-sum Nil = 0
-sum (Cons x xs) = x + sum xs
+sum [] = 0
+sum (x :: xs) = x + sum xs
 
 main : String
 main =
-  let m = fmap (\x => x + 1) (Just 41)
-  in let xs = fmap (\x => x * 2) (Cons 1 (Cons 2 Nil))
+  let
+    m = fmap (\x => x + 1) (Just 41)
+  in let
+    xs = fmap (\x => x * 2) ((::) 1 ((::) 2 []))
   in showMaybe m ++ "/" ++ strFromInt (sum xs)

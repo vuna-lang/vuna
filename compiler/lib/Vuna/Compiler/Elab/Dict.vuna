@@ -159,8 +159,7 @@ viaCandidateExists ec dom = case forceVal ec dom of
 -- | 把值列表第 i 个元素替换成新值（越界时原样返回已走过的前缀）。
 replaceAt : Int -> Value -> List Value -> List Value
 replaceAt i x [] = []
-replaceAt i x (a :: rest) =
-  if i <= 0 then Base.List.Cons x rest else Base.List.Cons a (replaceAt (i - 1) x rest)
+replaceAt i x (a :: rest) = if i <= 0 then (::) x rest else (::) a (replaceAt (i - 1) x rest)
 
 -- | 尝试用 `deriving via field` 委托求字典目标：找到包装候选后逐实参定位字段。
 tryViaDict : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Maybe (Pair Term Ec))
@@ -197,12 +196,12 @@ searchCandidates ec dom =
 specificInstances : List DtInst -> List DtInst
 specificInstances [] = []
 specificInstances (i :: rest) =
-  if isBlanketInst i then specificInstances rest else Base.List.Cons i (specificInstances rest)
+  if isBlanketInst i then specificInstances rest else (::) i (specificInstances rest)
 
 blanketInstances : List DtInst -> List DtInst
 blanketInstances [] = []
 blanketInstances (i :: rest) =
-  if isBlanketInst i then Base.List.Cons i (blanketInstances rest) else blanketInstances rest
+  if isBlanketInst i then (::) i (blanketInstances rest) else blanketInstances rest
 
 finishInstanceSearch : Value -> Span -> List InstMatch -> Ec -> Check (Pair Term Ec)
 finishInstanceSearch dom sp [] ec = missingInstance ec dom sp
@@ -500,7 +499,7 @@ else case forceVal ec rF of
     else
       let
         matched = memberProbe ec depth eF h && memberProbe ec depth nF n1
-        acc2 = if matched then Base.List.Cons (MkMemberCand (memberNameText ec n1) idx) acc else acc
+        acc2 = if matched then (::) (MkMemberCand (memberNameText ec n1) idx) acc else acc
       in memberScan (fuel - 1) depth sols ec nF eF t (idx + 1) acc2
     _ => Nothing
   else Nothing

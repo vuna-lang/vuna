@@ -29,7 +29,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 1. **parser 不做优先级**：任意中缀符号链收成右嵌套的 `EInfix` / `EBacktick`，括号收成
    `EParen`（保留分组边界）；`::` 在 pattern 里也保留符号原形。
 2. **Loader 在名字解析之前重排**：按模块可见 fixity 表做 precedence climbing，把链重排成
-   `EApp` / `EPi`；同一步完成**别名替换**（仅剩 `::`→`Cons` 这类库内别名）与
+   `EApp` / `EPi`；同一步完成**别名替换**（库内别名）与
    **section 展开**。
 3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
@@ -93,7 +93,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 | `+` `-` | 6 左 | — | `Base.Num` | `Num` 方法（`(+)` / `(-)`；实例由精化器特化回内建原语） |
 | `*` `/` | 7 左 | — | `Base.Num` | `Num` 方法（`(*)` / `(/)`） |
 | `++` | 5 右 | — | `Base.String` | String 内建值 |
-| `::` | 5 右 | `Cons` | `Base.List` | `List` 构造子（过渡期仍用别名指向 `Cons`） |
+| `::` | 5 右 | — | `Base.List` | `List` 构造子本身（`(::)`） |
 | `>>=` | 1 右 | — | `Base.Monad` | `Monad` 方法（`(>>=)`） |
 | `>>` | 1 左 | —（do 派生） | `Base.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
 
@@ -113,7 +113,7 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
 - **反引号中缀**：`` a `f` b `` ≡ `f a b`。`f` 可以是标识符或符号名；fixity 按名字查表，
   没有声明时按 9 左结合（Haskell 默认），**不报错**（前缀形式本身无歧义）。
 - **section**（语法糖，Loader 在名字解析前展开）：
-  - `(+)` ≡ 运算符作为值（canonical 名：`(==)`→`eq`、`(::)`→`Cons`、`(>>=)`→`bind`）；
+  - `(+)` ≡ 运算符作为值（canonical 名：`(==)`→`eq` 等库内别名；`(::)` / `(>>=)` 是构造子/方法本身）；
   - `(+ e)` ≡ `\vuna_section => vuna_section + e`；
   - `(e +)` ≡ `\vuna_section => e + vuna_section`。
   - section 不要求运算符有 fixity 声明（`(+)` 是无歧义的前缀使用）。
@@ -160,7 +160,7 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
   `isEqMethod` / `isCmpMethod` 显式接受这些内部名并把它们映射到方法短名。用户源码的 `==`
   一律在 Loader 重排里变成 `eq`，因此内部名不会泄漏到用户语义。
 - **parser 没有固定运算符表**：`Frontend/Parser/Support.vuna` 没有 `infixInfo`；`::` / `>>=` /
-  `>>` 都由声明表的别名处理。`[]` / `[a, b]` 列表字面量与 pattern 仍以 `Cons`/`Nil`
+  `>>` 都由声明表的别名处理。`[]` / `[a, b]` 列表字面量与 pattern 仍以 `(::)`/`Nil`
   折叠（语法糖，不是运算符）。
 - **`&&` / `||`** 是短路内建（不是 trait 方法），fixity 来自 `Base.Bool` 声明。
 - **`++`** 是 String 内建值，fixity 来自 `Base.String` 声明；**`+` / `-` / `*` / `/`** 是

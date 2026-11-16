@@ -91,7 +91,7 @@ stop_serve() {
 pkg=$tmp/app
 mkdir -p "$pkg/app"
 printf '[package]\nname = "cdpapp"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" >"$pkg/vuna.toml"
-printf 'import Base.List\nimport Base.Obs.Span\n\nwork : List Int -> Int\nwork Nil = 0\nwork (Cons x xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample "cpu" 1000 (\\_ => work (range 0 400000))\n' >"$pkg/app/Main.vuna"
+printf 'import Base.List\nimport Base.Obs.Span\n\nwork : List Int -> Int\nwork Nil = 0\nwork (x :: xs) = x * 3 + work xs\n\nmain : Int\nmain = obsSample "cpu" 1000 (\\_ => work (range 0 400000))\n' >"$pkg/app/Main.vuna"
 if ! "$VUNA" build --out "$tmp/app-out" "$pkg" >"$tmp/build.log" 2>&1; then
   cat "$tmp/build.log" >&2
   echo "smoke: build failed" >&2

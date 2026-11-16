@@ -497,7 +497,7 @@ storeRootsPathEff projectId = do
 
 -- 行去重（line 已存在即返回原列表）；roots 文件很小，线性足够。
 insertRootLine : String -> List String -> List String
-insertRootLine line lines = if memName line lines then lines else Base.List.Cons line lines
+insertRootLine line lines = if memName line lines then lines else (::) line lines
 
 mergeRootLines : List String -> List String -> List String
 mergeRootLines lines [] = lines

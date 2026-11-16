@@ -77,7 +77,7 @@ splitGraph [] = []
 splitGraph (f :: rest) =
   let
     name = splitName f
-  in if endsWith ".ml" name then Base.List.Cons (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
+  in if endsWith ".ml" name then (::) (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
   else splitGraph rest
 
 stripMl : String -> String

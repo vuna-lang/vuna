@@ -521,8 +521,7 @@ partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap String (List a) ->
 partitionByOwnerGo ownerOf [] tbl = tbl
 partitionByOwnerGo ownerOf (x :: rest) tbl = case ownerOf x of
   Nothing => partitionByOwnerGo ownerOf rest tbl
-  Just o =>
-    partitionByOwnerGo ownerOf rest (Base.HashMap.insert o (Base.List.Cons x (bucketOf o tbl)) tbl)
+  Just o => partitionByOwnerGo ownerOf rest (Base.HashMap.insert o ((::) x (bucketOf o tbl)) tbl)
 
 bucketOf : String -> HashMap String (List a) -> List a
 bucketOf name tbl = case Base.HashMap.lookup name tbl of

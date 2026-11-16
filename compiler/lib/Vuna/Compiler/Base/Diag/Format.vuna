@@ -208,12 +208,12 @@ relatedBlocks primary ((Label msp text style _) :: rest) = do
         note =
           if text == "" then ""
           else if isContextStyle style then "  = ${text}" else "  = note: ${text}"
-      in if sameAsPrimary primary sp then if note == "" then pure restBlocks else pure (Base.List.Cons note restBlocks)
+      in if sameAsPrimary primary sp then if note == "" then pure restBlocks else pure ((::) note restBlocks)
       else do
         sn <- renderSnippet sp
         let
           block = join "\n" (filter (\x => x /= "") [sn, note])
-        in pure (Base.List.Cons block restBlocks)
+        in pure ((::) block restBlocks)
 
 renderRelated : Member nFs FsOp r => Maybe Span -> List Label -> Eff r String
 renderRelated primary labels = do

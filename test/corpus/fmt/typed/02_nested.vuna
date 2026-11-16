@@ -10,12 +10,12 @@ data Pair a b : Type where
 
 lookup : List (Pair String Int) -> String -> MyMaybe
 lookup Nil key = MyNothing
-lookup (Cons (Pair k v) rest) key =
+lookup ((Pair k v) :: rest) key =
   if k == key then MyJust v else lookup rest key
 
 sumAll : List Int -> Int
 sumAll Nil = 0
-sumAll (Cons x xs) = x + sumAll xs
+sumAll (x :: xs) = x + sumAll xs
 
 main : Int
 main = case lookup [Pair "a" 1, Pair "b" 2] "b" of

@@ -49,7 +49,7 @@ data List : Type -> Type where
 foldList : (Nat -> List Nat -> List Nat) -> List Nat -> List Nat
 foldList f xs = case xs of
   [] => []
-  y :: ys => f y ys
+  Cons y ys => f y ys
 
 built : List Nat
 built = foldList Cons [Succ Zero, Zero]
@@ -57,7 +57,7 @@ built = foldList Cons [Succ Zero, Zero]
 listHead : List Nat -> Nat
 listHead xs = case xs of
   [] => Zero
-  y :: ys => y
+  Cons y ys => y
 
 toIntNat : Nat -> Int
 toIntNat n = case n of

@@ -1,4 +1,4 @@
--- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `Cons` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查。
+-- | 长度索引向量：`Vec n a` 的索引 `n : Nat` 在类型层锁定元素个数（索引在前、值类型在末位，与 `Eff r a` 一致），构造子 `Nil` / `VCons` 与索引同构；`a` / `n` 都是 Rig0，运行时擦除，arity 编译期锁定、运行时零开销。索引排除不可能分支（如 [Base.Vec.vhead] 对 `Nil` 不可达），无需运行期空向量检查。
 module Base.Vec where
 
 import Base.Nat
@@ -8,28 +8,28 @@ import Base.Maybe
 import Base.List
 import Base.Num
 
--- | 长度索引向量：`n : Nat` 在类型层锁定元素个数，`Nil` 对应 `Zero`、`Cons` 对应 `Succ n`；`n` 与 `a` 都是 Rig0，运行时擦除，因此不携带长度字段。
+-- | 长度索引向量：`n : Nat` 在类型层锁定元素个数，`Nil` 对应 `Zero`、`VCons` 对应 `Succ n`；`n` 与 `a` 都是 Rig0，运行时擦除，因此不携带长度字段。
 export data Vec(..) : Nat -> Type -> Type where
   -- | 空向量（长度 `Zero`）。
   Nil : {a : Type} -> Vec Zero a
   -- | 非空向量：头 `a` 与尾 `Vec n a`，长度 `Succ n`。
-  Cons : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
+  VCons : {n : Nat} -> {a : Type} -> a -> Vec n a -> Vec (Succ n) a
 
 -- | 取首元素；签名要求长度至少 1（`Vec (Succ n) a`），`Nil` 分支在类型层被排除，无需运行期空检查。`n` 是隐式 Rig0，由索引反推。
 export vhead : {n : Nat} -> Vec (Succ n) a -> a
 vhead xs = case xs of
-  y :: ys => y
+  VCons y ys => y
 
 -- | 去掉首元素，结果长度为 `n`；同样只对非空向量定义，无需运行期空检查。
 export vtail : {n : Nat} -> Vec (Succ n) a -> Vec n a
 vtail xs = case xs of
-  y :: ys => ys
+  VCons y ys => ys
 
 -- | 返回向量长度（运行时线性递归计数；`n` 是 Rig0 索引，运行时擦除）。
 export vlen : {n : Nat} -> Vec n a -> Nat
 vlen xs = case xs of
   [] => 0
-  y :: ys => 1 + vlen ys
+  VCons y ys => 1 + vlen ys
 
 -- ---------------------------------------------------------------
 -- 模板渲染：占位符 `<0>` `<1>` `<2>`…（序号 = 实参位置）
@@ -43,4 +43,4 @@ substTemplate template args = strSubstTemplate template (vecToList args)
 -- | 内部：把 `Vec n String` 转成 `List String` 交给运行时替换器。
 vecToList : {n : Nat} -> Vec n String -> List String
 vecToList [] = []
-vecToList (x :: rest) = x :: vecToList rest
+vecToList (VCons x rest) = x :: vecToList rest

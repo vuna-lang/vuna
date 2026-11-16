@@ -42,7 +42,7 @@
   | --- | --- | --- | --- |
   | `Bool` | `Base.Bool.Bool` | `base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
   | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
-  | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
+  | `List` | `Base.List.List`（`(::)` / `Nil`） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
   三族的身份、固定构造子与运行时表示类别在 `Base.Intrinsics.canonicalFamilies` 单点声明

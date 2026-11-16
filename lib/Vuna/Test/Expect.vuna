@@ -136,7 +136,7 @@ projectDiag root base caseRel d =
 -- | `ErrC` 的诊断 + 其 children 平铺（与 `--json` 单文档输出同序），并按显示上限
 -- 截断。
 export flattenErr : Diagnostic -> List Diagnostic
-flattenErr e = Base.List.take maxShownDiags (Base.List.Cons e e.diagChildren)
+flattenErr e = Base.List.take maxShownDiags ((::) e e.diagChildren)
 
 -- | 批量投影：按输入顺序逐条走 `projectDiag`。
 export projectDiags : String -> String -> String -> List Diagnostic -> List String
@@ -223,7 +223,7 @@ compareKeys name expected actual =
     pairA = comparePairs name 0 common
     missingA = compareMissing name n (Base.List.drop n expected)
     extraA = compareExtra name n (Base.List.drop n actual)
-  in Base.List.Cons headA (append pairA (append missingA extraA))
+  in (::) headA (append pairA (append missingA extraA))
 
 -- | 内部：公共前缀逐项比对（序号从 `idx` 起）。
 comparePairs : String -> Int -> List (Pair String String) -> List ExpectDiff
@@ -232,21 +232,21 @@ comparePairs name idx (p :: rest) =
   let
     e = firstOf p
     a = secondOf p
-  in Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" (e == a) "expected: ${e}\n  actual:   ${a}")
+  in (::) (ExpectDiff "${name}[${strOfInt idx}]" (e == a) "expected: ${e}\n  actual:   ${a}")
     (comparePairs name (idx + 1) rest)
 
 -- | 内部：期望侧多出来的键逐条报失败（序号从 `idx` 起）。
 compareMissing : String -> Int -> List String -> List ExpectDiff
 compareMissing name _ [] = []
 compareMissing name idx (e :: rest) =
-  Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "missing diagnostic: ${e}")
+  (::) (ExpectDiff "${name}[${strOfInt idx}]" False "missing diagnostic: ${e}")
     (compareMissing name (idx + 1) rest)
 
 -- | 内部：实测侧多出来的键逐条报失败（序号从 `idx` 起）。
 compareExtra : String -> Int -> List String -> List ExpectDiff
 compareExtra name _ [] = []
 compareExtra name idx (a :: rest) =
-  Base.List.Cons (ExpectDiff "${name}[${strOfInt idx}]" False "unexpected diagnostic: ${a}")
+  (::) (ExpectDiff "${name}[${strOfInt idx}]" False "unexpected diagnostic: ${a}")
     (compareExtra name (idx + 1) rest)
 
 -- | 内部：列表长度。

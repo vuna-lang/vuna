@@ -5,7 +5,7 @@ f : Int -> List Int
 f n = n :: 1 :: 2 :: []
 
 g : List Int
-g = Cons 1 (Cons 2 Nil)
+g = 1 :: 2 :: Nil
 
 h : List Int
 h = (Nil)
@@ -17,7 +17,7 @@ q : List Int -> Int
 q (n :: rest) = n
 
 r : List Int -> Int
-r (Cons n Nil) = n
+r (n :: Nil) = n
 
 s : List (Int :: [])
 s = []

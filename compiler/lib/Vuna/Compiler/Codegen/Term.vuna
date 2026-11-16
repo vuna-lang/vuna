@@ -1894,7 +1894,7 @@ genIrArgs : GenSt -> List Ir -> Check (Pair (List String) GenSt)
 genIrArgs st [] = OkC (Pair [] st)
 genIrArgs st (ir :: rest) = Vuna.Compiler.Base.Common.bind (genIr st ir) (\p => case p of
   Pair text st1 => Vuna.Compiler.Base.Common.bind (genIrArgs st1 rest) (\q => case q of
-    Pair texts st2 => OkC (Pair (Base.List.Cons text texts) st2)
+    Pair texts st2 => OkC (Pair ((::) text texts) st2)
   )
 )
 
@@ -1907,7 +1907,7 @@ genAssignedFields st family (f :: rest) = Vuna.Compiler.Base.Common.bind (genIr 
       let
         st3 = gsDepOfFamily st2 family
         label = recordLabelOf st3 family (recordFieldLabel family (firstOf f))
-      in OkC (Pair (Base.List.Cons "${label} = ${text}" texts) st3)
+      in OkC (Pair ((::) "${label} = ${text}" texts) st3)
   )
 )
 
@@ -2016,7 +2016,7 @@ export genGroups : GenSt -> List IrGroup -> Check (Pair (List String) GenSt)
 genGroups st [] = OkC (Pair [] st)
 genGroups st (g :: rest) = Vuna.Compiler.Base.Common.bind (genGroup st g) (\p => case p of
   Pair text st1 => Vuna.Compiler.Base.Common.bind (genGroups st1 rest) (\q => case q of
-    Pair texts st2 => OkC (Pair (Base.List.Cons text texts) st2)
+    Pair texts st2 => OkC (Pair ((::) text texts) st2)
   )
 )
 
@@ -2035,7 +2035,7 @@ genGroup st group = Vuna.Compiler.Base.Common.bind (genGroupBodies st (irGroupDe
 bindGroupOf : GenSt -> IrGroup -> List String -> String
 bindGroupOf st group defs = case Base.List.zip (irGroupDefs group) defs of
   [] => ""
-  p :: rest => joinWith "\n" (Base.List.Cons (bindFirstOf st group p) (map (bindAndOf st) rest))
+  p :: rest => joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
 
 bindFirstOf : GenSt -> IrGroup -> Pair IrDef String -> String
 bindFirstOf st group p = lineDirectiveOf st (firstOf p) ++ bindKeywordOf group ++ secondOf p
@@ -2065,7 +2065,7 @@ genGroupBodies : GenSt -> List IrDef -> Check (Pair (List String) GenSt)
 genGroupBodies st [] = OkC (Pair [] st)
 genGroupBodies st (d :: rest) = Vuna.Compiler.Base.Common.bind (genDef st d) (\p => case p of
   Pair text st1 => Vuna.Compiler.Base.Common.bind (genGroupBodies st1 rest) (\q => case q of
-    Pair texts st2 => OkC (Pair (Base.List.Cons text texts) st2)
+    Pair texts st2 => OkC (Pair ((::) text texts) st2)
   )
 )
 

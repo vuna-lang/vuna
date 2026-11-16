@@ -34,7 +34,7 @@ opaqueBranchIndices ec ctx n tele = opaqueBranchIndicesGo ec ctx n tele 0
 opaqueBranchIndicesGo : Ec -> Ctx -> Int -> List (Pair String Rig) -> Int -> List Int
 opaqueBranchIndicesGo ec ctx n [] j = []
 opaqueBranchIndicesGo ec ctx n (binder :: rest) j =
-  if branchBinderOpaque ec ctx (n - 1 - j) then Base.List.Cons (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
+  if branchBinderOpaque ec ctx (n - 1 - j) then (::) (n - 1 - j) (opaqueBranchIndicesGo ec ctx n rest (j + 1))
   else opaqueBranchIndicesGo ec ctx n rest (j + 1)
 
 branchBinderOpaque : Ec -> Ctx -> Int -> Bool
@@ -500,7 +500,7 @@ handleKindArity _ = 0
 -- | op 族参数（洞）：`?p1 … ?pk`。
 handleHoleArgs : Int -> Span -> List Expr
 handleHoleArgs k sp =
-  if k <= 0 then Base.List.Nil else Base.List.Cons (EVar "_" sp) (handleHoleArgs (k - 1) sp)
+  if k <= 0 then Base.List.Nil else (::) (EVar "_" sp) (handleHoleArgs (k - 1) sp)
 
 -- | op 类型值：`<Op> ?p1 … ?pk`。
 handleOpArg : String -> Int -> Span -> Expr
@@ -706,7 +706,7 @@ recordFieldPats n sp = recordFieldPatsFrom 0 n sp
 recordFieldPatsFrom : Int -> Int -> Span -> List Pat
 recordFieldPatsFrom i remaining sp =
   if remaining <= 0 then []
-  else Base.List.Cons (PVar (recordFieldVarName i) sp) (recordFieldPatsFrom (i + 1) (remaining - 1) sp)
+  else (::) (PVar (recordFieldVarName i) sp) (recordFieldPatsFrom (i + 1) (remaining - 1) sp)
 
 -- | 按名字在结构化字段表里查（字段序号 / 字段总数 / 外层字段类型）。
 recordFieldLookup : String -> DtData -> Maybe (Pair Int (Pair Int Term))
@@ -1149,7 +1149,7 @@ else
           ty2 = applyClosure clo (evalCtx ctx instTerm)
         in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 ty2 args sp hint) (\q => case q of
           Pair argTerms (Pair resTy ec2) =>
-            OkC (Pair (Base.List.Cons (Pair instTerm RigOmega) argTerms) (Pair resTy ec2))
+            OkC (Pair ((::) (Pair instTerm RigOmega) argTerms) (Pair resTy ec2))
         )
       ErrC e =>
         if hasUnsolvedMetaValue (ecSolsP ec0) (forceVal ec0 dom) then deferDictBinderFuel (fuel - 1) globals ctx ec0 dom clo args sp hint
@@ -1159,8 +1159,7 @@ else
     else if isMemberDomain ec dom then case memberLookup 64 (ctxDepth ctx) ec dom of
       MemberFound proof ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo proof) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
-          OkC
-            (Pair (Base.List.Cons (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
+          OkC (Pair ((::) (Pair (quote (ctxDepth ctx) proof) Rig0) argTerms) (Pair resTy ec2))
       )
       MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
       -- 命名行歧义：这里先建 meta + 延迟约束；最终化在 resolveRowGoalsCtxGo
@@ -1174,7 +1173,7 @@ else
               ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
             in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
               Pair argTerms (Pair resTy ec3) =>
-                OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
+                OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
       MemberStuck =>
         let
@@ -1185,30 +1184,30 @@ else
               ec2 = ecAddConstraint ec1 CkRow m dom (Just sp) (ctxDepth ctx)
             in Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec2 (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
               Pair argTerms (Pair resTy ec3) =>
-                OkC (Pair (Base.List.Cons (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
+                OkC (Pair ((::) (Pair metaTerm Rig0) argTerms) (Pair resTy ec3))
             )
     else if isImplicitDomain ctx ec dom then if isStringImplicitDomain ec dom then case args of
       a :: rest => case instArgOperand a of
         Just payload => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec payload dom) (\p => case p of
           Pair payloadTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx payloadTerm)) rest sp hint) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair (Base.List.Cons (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
+              OkC (Pair ((::) (Pair payloadTerm rig) argTerms) (Pair resTy ec2))
           )
         )
         Nothing => case newMetaAt sp ctx ec of
           Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
             Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+              OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
           )
       [] => case newMetaAt sp ctx ec of
         Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
           Pair argTerms (Pair resTy ec2) =>
-            OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+            OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
         )
     else case newMetaAt sp ctx ec of
       Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx metaTerm)) args sp hint) (\p => case p of
         Pair argTerms (Pair resTy ec2) =>
-          OkC (Pair (Base.List.Cons (Pair metaTerm rig) argTerms) (Pair resTy ec2))
+          OkC (Pair ((::) (Pair metaTerm rig) argTerms) (Pair resTy ec2))
       )
     else tcErr0 sp ImplicitParamKind
     else case args of
@@ -1223,7 +1222,7 @@ else
         in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec0 sp name rig dom) (\argRig => Vuna.Compiler.Base.Common.bind (expandArgListLit ec0 dom a) (\a2 => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec0 a2 dom) (\p => case p of
           Pair aTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx ec1 (applyClosure clo (evalCtx ctx aTerm)) rest sp Nothing) (\q => case q of
             Pair argTerms (Pair resTy ec2) =>
-              OkC (Pair (Base.List.Cons (Pair aTerm argRig) argTerms) (Pair resTy ec2))
+              OkC (Pair ((::) (Pair aTerm argRig) argTerms) (Pair resTy ec2))
           )
         )
         )
@@ -1240,7 +1239,7 @@ else
   in case newMetaAt sp ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (inferArgsGo (fuel - 1) globals ctx (ecAddConstraint ec1 CkDict m (forceVal ec1 dom) (Just sp) (ctxDepth ctx)) (applyClosure clo (eval (ctxEnv ctx) metaTerm)) args sp hint) (\p => case p of
       Pair argTerms (Pair resTy ec2) =>
-        OkC (Pair (Base.List.Cons (Pair metaTerm RigOmega) argTerms) (Pair resTy ec2))
+        OkC (Pair ((::) (Pair metaTerm RigOmega) argTerms) (Pair resTy ec2))
     )
 
 -- 用后续显式实参约束 `Dict_C ?a` 里的类参数。先取字典族的**类参数 kind**，
@@ -1927,7 +1926,7 @@ else case forceVal ec row of
   else if consName == effRowConsCtor then case effConsLabelTail (VCon consName cargs) of
     Just (Pair n (Pair h t)) => if hasUnsolvedMetaValue (ecSolsP ec) h then Nothing
     else case rowEffectLabels (fuel - 1) ec t of
-      Just labels => Just (Base.List.Cons (rowEntryText ec n h) labels)
+      Just labels => Just ((::) (rowEntryText ec n h) labels)
       Nothing => Nothing
     Nothing => Nothing
   else Nothing
@@ -2406,7 +2405,7 @@ takeRigs n bs = takeRigsGo n bs
 
 takeRigsGo : Int -> List (Pair String Rig) -> List Rig
 takeRigsGo n [] = []
-takeRigsGo n (b :: bs) = if n <= 0 then [] else Base.List.Cons (secondOf b) (takeRigsGo (n - 1) bs)
+takeRigsGo n (b :: bs) = if n <= 0 then [] else (::) (secondOf b) (takeRigsGo (n - 1) bs)
 
 ctorFamilyArgs : Ec -> Ctx -> DtCtor -> Value -> Maybe (Pair (List (Pair Term Rig)) (Pair Value Ec))
 ctorFamilyArgs ec ctx ctor expected =
@@ -2479,7 +2478,7 @@ resolvePatArgsFuel (Succ k) ec ctx ty args = case args of
       in if implicit then resolvePatArgsFuel k ec ctx2 ty2 (a :: rest)
       else Vuna.Compiler.Base.Common.bind (resolveOverPatFuel k ec ctx dom a) (\p => case p of
         Pair a2 ec1 => Vuna.Compiler.Base.Common.bind (resolvePatArgsFuel k ec1 ctx2 ty2 rest) (\q => case q of
-          Pair rest2 ec2 => OkC (Pair (Base.List.Cons a2 rest2) ec2)
+          Pair rest2 ec2 => OkC (Pair ((::) a2 rest2) ec2)
         )
       )
     _ => OkC (Pair args ec)
@@ -2495,7 +2494,7 @@ resolveOverAltsGo (Succ k) ec ctx ty alts = case alts of
   [] => OkC (Pair [] ec)
   (Pair pat body) :: rest => Vuna.Compiler.Base.Common.bind (resolveOverPatFuel (natFromInt 512) ec ctx ty pat) (\p => case p of
     Pair pat2 ec1 => Vuna.Compiler.Base.Common.bind (resolveOverAltsGo k ec1 ctx ty rest) (\q => case q of
-      Pair rest2 ec2 => OkC (Pair (Base.List.Cons (Pair pat2 body) rest2) ec2)
+      Pair rest2 ec2 => OkC (Pair ((::) (Pair pat2 body) rest2) ec2)
     )
   )
 
@@ -2512,7 +2511,7 @@ resolveOverFunPatsGo (Succ k) ec ctx ty clauses = case clauses of
   [] => OkC (Pair [] ec)
   (Pair pats body) :: rest => Vuna.Compiler.Base.Common.bind (resolveClausePatsFuel (natFromInt 512) ec ctx ty pats) (\q => case q of
     Pair pats2 ec1 => Vuna.Compiler.Base.Common.bind (resolveOverFunPatsGo k ec1 ctx ty rest) (\r => case r of
-      Pair rest2 ec2 => OkC (Pair (Base.List.Cons (Pair pats2 body) rest2) ec2)
+      Pair rest2 ec2 => OkC (Pair ((::) (Pair pats2 body) rest2) ec2)
     )
   )
 
@@ -2530,7 +2529,7 @@ resolveClausePatsFuel (Succ k) ec ctx ty pats = case pats of
       in if implicit then resolveClausePatsFuel k ec ctx2 ty2 (p :: rest)
       else Vuna.Compiler.Base.Common.bind (resolveOverPatFuel k ec ctx dom p) (\q => case q of
         Pair p2 ec1 => Vuna.Compiler.Base.Common.bind (resolveClausePatsFuel k ec1 ctx2 ty2 rest) (\r => case r of
-          Pair rest2 ec2 => OkC (Pair (Base.List.Cons p2 rest2) ec2)
+          Pair rest2 ec2 => OkC (Pair ((::) p2 rest2) ec2)
         )
       )
     _ => OkC (Pair pats ec)

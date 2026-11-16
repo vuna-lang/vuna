@@ -45,7 +45,7 @@ instantiateNullaryCtorFuel fuel ec ctx v = if fuel <= 0 then OkC (Pair v (Pair [
 else case forceVal ec v of
   VPi _ True _ dom clo => if isImplicitDomain ctx ec dom then case newMeta ctx ec of
     Pair metaTerm ec1 => Vuna.Compiler.Base.Common.bind (instantiateNullaryCtorFuel (fuel - 1) ec1 ctx (applyClosure clo (eval (ctxEnv ctx) metaTerm))) (\p => case p of
-      Pair ty (Pair metas ec2) => OkC (Pair ty (Pair (Base.List.Cons metaTerm metas) ec2))
+      Pair ty (Pair metas ec2) => OkC (Pair ty (Pair ((::) metaTerm metas) ec2))
     )
   else OkC (Pair v (Pair [] ec))
   _ => OkC (Pair v (Pair [] ec))
@@ -891,7 +891,7 @@ else case v of
       headOpaque g || valueOpaqueTypeSpine fuel outerNVar headOpaque depth famLevels sp
   VPi name implicit rig dom clo =>
     let
-      fam2 = if isFamilyKindValue dom then Base.List.Cons depth famLevels else famLevels
+      fam2 = if isFamilyKindValue dom then (::) depth famLevels else famLevels
     in valueOpaqueGo (fuel - 1) outerNVar headOpaque depth famLevels dom
       || valueOpaqueGo (fuel - 1) outerNVar headOpaque (depth + 1) fam2 (applyClosure clo (VNeutral (NVar name depth [])))
   -- 类型族展开后卡住的形态（VCase/VIf 悬挂在中性值上）、以及不可能出现在类型位置

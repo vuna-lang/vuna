@@ -245,7 +245,7 @@ mapSpanFile f (Diagnostic did sev phase cat code msg labels fields trace notes s
 -- 递归 children 用直接结构递归（SCT 不接受 map 里的高阶递归边）。
 mapDiagChildren : (String -> String) -> List Diagnostic -> List Diagnostic
 mapDiagChildren f [] = []
-mapDiagChildren f (k :: rest) = Base.List.Cons (mapSpanFile f k) (mapDiagChildren f rest)
+mapDiagChildren f (k :: rest) = (::) (mapSpanFile f k) (mapDiagChildren f rest)
 
 mapLabelFile : (String -> String) -> Label -> Label
 mapLabelFile f (Label msp text style prov) =
@@ -474,8 +474,7 @@ sameDiag a b =
 labelSpanOf : List Label -> List (Pair String (Pair Int (Pair Int Int)))
 labelSpanOf [] = []
 labelSpanOf ((Label msp _ _ _) :: rest) = case msp of
-  Nothing => Base.List.Cons (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
+  Nothing => (::) (Pair "" (Pair 0 (Pair 0 0))) (labelSpanOf rest)
   Just sp =>
-    Base.List.Cons
-      (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp))))
+    (::) (Pair (spanFile sp) (Pair (spanStartLine sp) (Pair (spanStartCol sp) (spanEndLine sp))))
       (labelSpanOf rest)

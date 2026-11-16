@@ -191,7 +191,7 @@ cyclePrefix dir [] = Nothing
 cyclePrefix dir (pair :: rest) = if firstOf pair == dir then Just [pair]
 else case cyclePrefix dir rest of
   Nothing => Nothing
-  Just prefix => Just (Base.List.Cons pair prefix)
+  Just prefix => Just ((::) pair prefix)
 
 cycleMessage : String -> Maybe String -> List (Pair String String) -> String
 cycleMessage dir Nothing stack = "pkg: dependency cycle at ${dir}"
@@ -275,7 +275,7 @@ else case deps of
         restR <- loadDependencyList (fuel - 1) stack baseDir rest
         pure (case restR of
           ErrC e => ErrC e
-          OkC dependencies => OkC (Base.List.Cons dependency dependencies)
+          OkC dependencies => OkC ((::) dependency dependencies)
         )
 
 -- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。

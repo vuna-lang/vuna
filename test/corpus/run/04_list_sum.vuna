@@ -3,7 +3,7 @@
 -- canonical `Base.List.List` 与本地 `data List` 并存时按期望类型解析。
 sum : List Int -> Int
 sum Nil = 0
-sum (Cons x xs) = x + sum xs
+sum (x :: xs) = x + sum xs
 
 main : Int
 main = sum [1, 2, 3]

@@ -4,14 +4,13 @@ import Base.Maybe
 import Base.List
 
 showMaybe : Maybe Int -> String
-showMaybe m =
-  case m of
-    Nothing => "Nothing"
-    Just n => "Just " ++ strFromInt n
+showMaybe m = case m of
+  Nothing => "Nothing"
+  Just n => "Just " ++ strFromInt n
 
 sum : List Int -> Int
-sum Nil = 0
-sum (Cons x xs) = x + sum xs
+sum [] = 0
+sum (x :: xs) = x + sum xs
 
 step1 : Maybe Int
 step1 = Just 1 >>= (\x => pure (x + 41))
@@ -20,7 +19,7 @@ step2 : Maybe Int
 step2 = Nothing >> Just 9
 
 listy : List Int
-listy = Cons 1 (Cons 2 Nil) >>= (\x => Cons (x * 10) (Cons (x * 100) Nil))
+listy = (::) 1 ((::) 2 []) >>= (\x => (::) (x * 10) ((::) (x * 100) []))
 
 main : String
 main = showMaybe step1 ++ "/" ++ showMaybe step2 ++ "/" ++ strFromInt (sum listy)
