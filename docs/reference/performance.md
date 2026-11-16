@@ -85,6 +85,18 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 | 脏模块增量探针 N=8000（`-growth-incremental`） | 4233 ms | 3116 ms | -26% |
 | 冷 `check compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
 
+### Core→IR 段的二次项（已修）
+
+- **SCC 组间定序**（`Ir.Analysis.orderGroups`）：旧实现每产出一组就重扫剩余组并重算
+  `groupDeps`，源码序与依赖序相反的探针（`f0 = f1 + 1 …`）是 O(V²)。改成入度 + 反向边
+  + 最小下标优先出队（与旧输出逐项一致）后，同一探针的 codegen 段
+  **N=4000：1265 ms → 37 ms**（N=2000：22 ms）。构造子 / 类型参数 / record 字段查表
+  从逐次线性扫改成 `LwEnv` 里的哈希索引；程序级不动点与 `unboxedInfo` 只在建环境时算一次
+  （原先 split 路径每单元重算一次）。
+- 回退护栏：`nix/checks/compiler-growth-ctor.sh`（构造子密集 + 反向依赖探针）。它只作
+  粗粒度护栏（阈值 3.5）：该形状里 elab / 前端占主导，codegen 单次 <1 ms，精确读数仍以
+  `bench/compiler.sh` 与本页的 A/B 为准。
+
 1. **入口闭包漏两个导出模块 ⇒ 每轮重复精化**（`compiler/app/Main.vuna`）：`compiler`
    的 `[export].modules` 含 `Vuna.Compiler.Frontend.Canonical.Ast` 与 `Vuna.Compiler.Driver.ToolPayload`，
    但入口没有 import 它们 ⇒ `writeIfaceShadow` 判 `iface-skip partial`（不写包接口）⇒

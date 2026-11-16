@@ -211,6 +211,16 @@ in
     script = ./compiler-growth.sh;
   };
 
+  # 构造子密集 + 反向依赖探针：挡「构造子/类型参数表按名字线性查」与组间定序退化。
+  vuna-compiler-growth-ctor = vunaCheck {
+    name = "vuna-compiler-growth-ctor";
+    srcs = [
+      src.base
+      src.manifest
+    ];
+    script = ./compiler-growth-ctor.sh;
+  };
+
   # 包路径**增量** check 的增长率门槛：单文件探针走全量精化，覆盖不到包级增量收尾
   # （globals 去重 / 写接口 / 终止性 own 判定）的 O(n²) 回归。
   vuna-compiler-growth-incremental = vunaCheck {

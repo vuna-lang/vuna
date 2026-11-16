@@ -104,7 +104,7 @@ nix run .#vuna-run-tests -- --only <章节> # 按章节跑 suite（--list 看章
 sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
 ./result/bin/vuna store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
-nix flake check                           # 3 packages + 19 checks（清单见 testing.md）
+nix flake check                           # 3 packages + 20 checks（清单见 testing.md）
 ./result/bin/vuna map --find <Module.name> # 定位符号；另有 --impact / api
 ```
 

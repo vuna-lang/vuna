@@ -419,10 +419,10 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **22 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 19 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **23 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 20 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
-`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
+`vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
 `vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
 `vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
