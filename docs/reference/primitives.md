@@ -45,12 +45,17 @@
   | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
+  三族的身份、固定构造子与运行时表示类别在 `Intrinsics.canonicalFamilies` 单点声明
+  （`FamilyRepr` = `FamReprBool` / `FamReprNat` / `FamReprBoxed`）：表示判定、IR 类型、
+  展示与 FFI 白名单都查这张表，新增 canonical 族只改这里。
+
 - `Eff`（`Base.Eff.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
   行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
 
 
 - `True` / `False` 精化为核心 `TBool`，codegen 的运行时表示是 OCaml `bool`：canonical Bool
-  族**不生成变体声明**（`Codegen.Decl.runtimeDatas` 按 `boolTypeName` 过滤）。
+  族**不生成变体声明**（`Codegen.Lower.rtDatasOf` 按 canonical 族表剔除 `FamReprBool` /
+  `FamReprNat`）。
 - **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
   `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` /
   `Base.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
