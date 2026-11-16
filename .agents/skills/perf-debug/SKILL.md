@@ -144,7 +144,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
    3. **元变量/字典回填的整表扫描**：`solveMeta`、`resolveDictGoals*`、`relevantMetas`
       一类「每次调用都扫全表」的函数，在 O(def 数) 层调用就是 n²。
    4. **按名字逐个线性查表**：`findDtDef` / `findDefByName` / `memName` / `memList` 放在
-      「每个 def 各调一次」的循环里就是 n²（codegen 分组 `Lowering.appendGroups` 对每级 SCC
+      「每个 def 各调一次」的循环里就是 n²（codegen 分组 `Lowering.Program.appendGroups` 对每级 SCC
       线性过滤全体定义：同一探针 `termination-done → cg-typedecls-done` = 89/284/1083 ms
       （N=2000/4000/8000，逐档 ×3.2/×3.8），而 `bodies` 段是 75/89/127 ms 的线性）。
    5. **插入排序**：`Base.Sort.sortBy` 与 `Driver.Iface.insertByText` 都是插入排序（DT 只接受
@@ -152,7 +152,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
       真实包每模块几十项时收益低——改前先量折叠点。
    6. **「集合成员」却用了线性扫描**：`memName x used` / `memList x members` 出现在
       「对每个元素各查一次」的循环里就是 n²，即使它看着像一次比较。已修两处都属于这类：
-      `Diagnostics.Sink.dedupeWarnings`（`containsDiag` 对新诊断逐个线性扫历史；
+      `Base.Diagnostics.Sink.dedupeWarnings`（`containsDiag` 对新诊断逐个线性扫历史；
       16000 条未使用告警探针里占 ~3 s）与 `Driver.Dt.warnUnusedDefsGo`（逐 def `memName`
       查 `used`）。改法统一：入口 `HashMap.ofNames` / 键表**一次建表**，逐项 `member`。
       **注意键必须与既有等价关系等价**（`dedupeWarnings` 的键 = 码 + 消息 + 严重度 +

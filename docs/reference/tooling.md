@@ -71,15 +71,15 @@ $ vuna search --type "a -> a"
 
 | 域 | 含义 | 真源 |
 | --- | --- | --- |
-| `TC_` | Elab 精化 / 终止性 / 覆盖性诊断 | `compiler/lib/Vuna/Compiler/Diagnostics/Tc.vuna` |
-| `CG_` | Codegen / Driver / Dt 诊断 | `Diagnostics/Cg.vuna` |
-| `LX_` | 词法诊断 | `Frontend/Diagnostics.vuna` |
+| `TC_` | Elab 精化 / 终止性 / 覆盖性诊断 | `compiler/lib/Vuna/Compiler/Base/Diagnostics/Tc.vuna` |
+| `CG_` | Codegen / Driver / Dt 诊断 | `Base/Diagnostics/Cg.vuna` |
+| `LX_` | 词法诊断 | `Base/Diagnostics/Frontend.vuna` |
 | `PS_` | 语法诊断 | 同上 |
-| `RN_` | 名字解析（import/export/限定名/构造子/类型名） | `Diagnostics/Rn.vuna` |
-| `PKG_` | `vuna.toml` 清单解析/校验、包图 | `Diagnostics/Pkg.vuna` |
-| `LD_` | Loader / 包 / 加载诊断 | `Loader/Diagnostics.vuna` |
-| `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Diagnostics/Ic.vuna` |
-| `UN_` | 告警（未使用/冗余/遮蔽；severity = warning） | `Diagnostics/Warning.vuna` |
+| `RN_` | 名字解析（import/export/限定名/构造子/类型名） | `Base/Diagnostics/Rn.vuna` |
+| `PKG_` | `vuna.toml` 清单解析/校验、包图 | `Base/Diagnostics/Pkg.vuna` |
+| `LD_` | Loader / 包 / 加载诊断 | `Base/Diagnostics/Loader.vuna` |
+| `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Base/Diagnostics/Ic.vuna` |
+| `UN_` | 告警（未使用/冗余/遮蔽；severity = warning） | `Base/Diagnostics/Warning.vuna` |
 | `LN_` | lint 规则 | `lib/Vuna/Lint/Diagnostics.vuna` |
 | `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `lib/Vuna/Lint/Diagnostics.vuna` |
 
@@ -91,7 +91,7 @@ $ vuna search --type "a -> a"
 （给下层错误加上下文，如 `in \`<def>\`: <inner>`、`json: <inner>`）、**工具链 CLI 错误**
 （`no such symbol` / `file not found` / `json: ...` 等，不属编译器诊断）。
 
-**真源是域枚举**：`Diagnostics.Tc` / `Diagnostics.Cg` 的 `TcErr` / `CgErr` 是 `Nat` 索引
+**真源是域枚举**：`Base.Diagnostics.Tc` / `Base.Diagnostics.Cg` 的 `TcErr` / `CgErr` 是 `Nat` 索引
 族，构造子携带消息模板（`<0>` / `<1>` 为插值），**arity 由类型索引在编译期锁定**；
 `tcAll` / `cgAll` 是文档遍历源。报错点统一用 `tcErr0/1/2`、`cgErr0/1`、`lexErr0`、
 `psErr0/1` 抛出。

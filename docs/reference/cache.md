@@ -47,7 +47,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 `vuna clean --store` / `vuna store gc` 只碰缓存族，`vuna clean --packages` 只碰包对象族
 （见 [package-store.md](package-store.md)）。
 
-所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Addr`，SHA-256）。
+所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Loader.Addr`，SHA-256）。
 
 ## 命中判定
 
@@ -82,7 +82,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 缓存 key 里的「编译器」段不是二进制指纹，而是**内容身份**：
 
-- 编译器包（本包模块含 `Vuna.Compiler.Fingerprint`）的身份 = 本包源闭包（模块名 → 内容哈希，
+- 编译器包（本包模块含 `Vuna.Compiler.Loader.Fingerprint`）的身份 = 本包源闭包（模块名 → 内容哈希，
   按名排序）+ 依赖身份摘要 + `vuna-compiler-id 1`（`Fingerprint.compilerIdOf`）；
 - 其他包的身份 = 构建它的编译器的身份（继承）。
 
@@ -132,7 +132,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - **地址含全部输入**：任何输入变化 ⇒ 新地址 ⇒ 天然 miss。旧对象留着不会被误用。
 - **删除任何对象都只影响命中率**：输入寻址下「缺了就是未命中、重算」。所以 GC 是性能问题，
   不是正确性问题——这是整套设计的核心性质（包对象族是例外：删了要重新 fetch）。
-- **坏字节进不了解码器**：`Store` 的 framing（magic / tag / codec / 长度 / 内容地址）先校验，
+- **坏字节进不了解码器**：`Base.Store` 的 framing（magic / tag / codec / 长度 / 内容地址）先校验，
   不符即 `Nothing`；调用方按 miss 处理。输入寻址的 blob 用 `storeReadAsEff` 比对期望地址。
 - **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；产物身份
   另把本包 `miDefLocs` 计入布局摘要，行移动必然重建。
@@ -191,14 +191,14 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 **结构化观测**（`VUNA_OBS>=1`，见 [observability.md](observability.md)）走另一条通道：
 `Driver/Compile` 与 `Driver/Dt` 的阶段跨度（`vuna.load` / `vuna.elab` / `vuna.iface.compute` /
 `vuna.codegen.split` …），与上面 `dbg!` 标签**同时可用但独立开关**。对象库读/写本身是
-`ph:"X"` 跨度：`Store` 的 `storeObjectReadEff` / `storeObjectWriteEff`（以及 `storeReadAsEff`）
+`ph:"X"` 跨度：`Base.Store` 的 `storeObjectReadEff` / `storeObjectWriteEff`（以及 `storeReadAsEff`）
 分别发 `vuna.cache.lookup` / `vuna.cache.write`，所以「慢在哪个对象读写」可以直接在 trace
 里归因。排查「为什么 miss」仍靠比对地址：`addrOf` 的输入项都在上面的表里，逐个对即可。
 
 ## 诊断载荷与重放
 
 - **载荷就是结果**：`objects/check/<checkIn>` 存 `CheckPassed ds` / `CheckFailed ds` + 诊断列表
-  （`Diag.Codec` 规范编码）。命中时直接重放：Pass 返回诊断（通常是 warning），Fail 用首条
+  （`Base.Diag.Codec` 规范编码）。命中时直接重放：Pass 返回诊断（通常是 warning），Fail 用首条
   诊断 + children 重建错误通道。失败检查因此也是 O(读对象)，不是每次全量精化。
 - **载荷是输入的纯函数**：落盘前把 label 路径规范化为**包相对**路径；含绝对路径或
   `Volatile`（工具/包图/合成、无源码位置）的诊断**不落盘**，下次 miss 重算。读回时按

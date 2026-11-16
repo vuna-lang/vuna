@@ -16,13 +16,13 @@
    `Base.Eff.*`、宿主 handler）会把库 API 与文档面乘三倍。今天库 API 只剩 handler 一种
    写法，`transformer` 与 `MonadIO` 不存在。
 3. **协议蔓延**：`Row`/`Member`/`rowRem` 名义是库、实为语言机制。编译器介入四处：
-   `Intrinsics.vuna` 的效果协议常量、`Core/Eval.rowRemReduce`（公理归约）、
+   `Base/Intrinsics.vuna` 的效果协议常量、`Core/Eval.rowRemReduce`（公理归约）、
    `Elab/Dict.memberLookupRow`（证明构造）、`Elab/Term/Impl` 的 `perform`/`handle` 降级与
    自动 lift。名字求解规则本质是类型检查器规则，只能以编译器规则维护。
 4. **描述/权威分离**：类型层 `Row` 说「程序经过哪些效应」，「被允许做什么」只剩运行时
    `(key, name)` 路由 + 约定（没有包级特权与能力声明，见 [effects.md](effects.md) §8.6）。
 
-**seed 约束**：`Base.Eff` 在 seed 闭包里（`Vuna.Compiler.Common` import 它；
+**seed 约束**：`Base.Eff` 在 seed 闭包里（`Vuna.Compiler.Base.Common` import 它；
 `nix/seed/files.txt` 含 `Base_dEff.ml`），base 的其余效应模块不在 seed。改标签形状而不
 引入新语法时，旧 seed 仍能编译新源码；rotation 按需触发（规则见
 [bootstrap.md](bootstrap.md)）。
@@ -165,12 +165,12 @@ handle comp {
 | `Frontend/Parser.vuna` `parseLhs` + `parseHandle*` | `perform` → `parsePerform`（单表达式）；`handle` → `parseHandle`（`comp { return-clause? op-clause+ }`）。op 子句头解析成模式后**拆出尾部续延 binder**，再合成 `\o, k => case o of { Ctor pats => body }`；`comp` 为裸标识符且紧跟 `{` 时直接收成 `EVar`（否则会被 `parseAtomBase` 当记录字面量） |
 | `Frontend/Ast.vuna` 保留名区 | `performSyntax` / `handleSyntax` / `handleNoRetSyntax`（无 return 子句的哨兵）+ 判定函数；`Expr` 不加变体 |
 | `Loader` | 无专门分支：parser 已把 handle 降到 markers + 普通 λ/case，Loader 只做常规名字解析（构造子解析成规范名/over 名，供族推断） |
-| `Intrinsics.vuna` 效果协议常量 | `Row.Cons` 3 参、`Member` 3 参（名字槽）、`effDefaultInstance = "default"`；`perform`/`handle` 的 key 由降级点生成 |
+| `Base/Intrinsics.vuna` 效果协议常量 | `Row.Cons` 3 参、`Member` 3 参（名字槽）、`effDefaultInstance = "default"`；`perform`/`handle` 的 key 由降级点生成 |
 | `Elab/Dict.vuna` `memberLookupRow`/`resolveRowGoalsCtx`/`resolveDictGoals` | 3 参模式 + §3.2 探测计数求解（无贪婪匹配；候选文本用实例名；无最终化默认兜底） |
 | `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（跨族报 `TC_HandleClauseFamilyMismatch`）、**标签 = op 族应用**（`handleOpArg canon k`）、res = `res<短名>`、按 op 族 kind 的显式参数个数 `k` 补洞（State/Reader `k = 1`；非宇宙域参数如 `ExnOp` 的 `Row` 报 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
 | `Core/Eval.vuna` `rowRemReduce` | `VCon consName (n :: h :: t :: _)` 双匹配（先名后标签）；比较前对 name/label（含 label 一层 spine 实参）做 `force`——已解 meta 在值里仍是 `VMeta` 节点，不 force 就永远比较不出相等（`handle` 的结果行依赖这一点） |
 | `Elab/Term/Impl.vuna` `rowEffectLabels` | 行条目展示 `<短标签>@<名字>`（`ConsoleOp@default`、`StateOp Nat@counter`）；歧义候选显示实例名 |
-| `Diagnostics/{Tc,Frontend/Diagnostics}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`、`TC_HandleClauseFamilyMismatch`、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
+| `Base/Diagnostics/{Tc,Frontend}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`、`TC_HandleClauseFamilyMismatch`、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
 | `Base.Eff`（在 seed 闭包里） | `defaultInstance = "default"`、`Row.Cons`/`Member` 3 参、`ResFn(..)`/`resFn`/`resOf`/`performCore`/`handleWith`/`handleWithAt`（`e` 同时作标签与 op 类型、`rf` 擦除量、`{w : Member n e r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用 op 族标签 |
 
 不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerform`/`prim_effectHandle` 语义、

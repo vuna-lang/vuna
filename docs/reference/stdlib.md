@@ -6,7 +6,7 @@
   （`HashSet` 本身是泛型，但 `empty` 有签名约束、调用点总带具体类型）；# 标准库（vuna-base）
 
 标准库是独立成员包 `vuna-base`（模块 `Base.*`，模块根 `base/lib/`）。编译器是它的第一个
-用户：`compiler/lib/Vuna/Compiler/Common.vuna` 只是门面（整模块重导出 `Base.Pair` /
+用户：`compiler/lib/Vuna/Compiler/Base/Common.vuna` 只是门面（整模块重导出 `Base.Pair` /
 `Base.Bool` / `Base.List` / `Base.Maybe` / `Base.Result` / `Base.String` + 保留编译器的
 `Pos` / `Span`、模块路径与诊断工具），编译器不再私自重复定义 `Maybe` / `List` 等类型。
 包名 `vuna-base` 与模块命名空间 `Base.*` 是两回事（包名 ≠ 模块名）。
@@ -163,7 +163,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 这里只划「编译器提供什么、库提供什么」。
 
 - **`Int` / `String` 是语言 primitive 类型**：没有 `data` 声明，字面量、`str*` 与**数值
-  语义**由编译器提供（唯一真源 `Vuna.Compiler.Intrinsics`）；`+ - * /` 的**方法面**
+  语义**由编译器提供（唯一真源 `Vuna.Compiler.Base.Intrinsics`）；`+ - * /` 的**方法面**
   在库（`Base.Num`），Int/Nat/Float 实例由精化器特化回内建原语。`data Int` / `data String`
   是重定义错误。`String` 是 UTF-8 字节串、`Int` 是固定的 63 位（见 primitives.md）。
 - **`Bool` 归 `Base.Bool`**：`data Bool` 是唯一权威定义，canonical 身份 `Base.Bool.Bool`；

@@ -13,36 +13,27 @@ roots 与 GC / 工具产物来源；排障用 `VUNA_IFACE_AUDIT=1` 双路径对�
 ## 仓库分层
 
 ```text
-compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
-                                Frontend → Packages → Loader → Core → Elab → Lowering → Ir → Codegen → Driver）
-├─ Source.vuna                底层位置/路径工具（Pos/Span，无 Result）
-├─ Diag.vuna                  结构化诊断模型 + Check 结果通道（ErrC Diagnostic）
-├─ Common.vuna                编译器门面（Source + Diag；bind/step/traverse）
-├─ Intrinsics.vuna            内建语义唯一真源（名字/签名/arity/可见性；运行时文本在 Codegen.Runtime）
-├─ Obs.vuna                  观测插桩适配层（obsCheck / obsDefCheck / obsMarkEff；规范见 reference/observability.md）
-├─ Hash.vuna                  内容寻址摘要原语：SHA-256 + 63-bit 派生键 + 大载荷预哈希（用 Base.Bits 实现）
-├─ Addr.vuna                  输入摘要（地址）唯一构造器：addrOf / header / 项目身份
-├─ Canonical.vuna             规范字节编码门面（自定界文法 + 解码器）；子模块 Term / Ast / Elab / Lex / Pkg
-├─ Store.vuna                 唯一落盘层：framing / 原子写 / 缓存根 / roots / 对象读写
-├─ Fingerprint.vuna           编译器身份（构建期烘焙的内容身份；同源同身份，见 reference/cache.md）
-├─ Frontend/                  Ast Lexer Parser Cst Parser/Support Toml Manifest  词法（含无损 CST）/ 语法 / vuna.toml
-├─ Packages/                  Pkg                              包图与模块根
-├─ Loader.vuna + Loader/      Modules Resolve Flatten          模块图 / 名字解析 / flatten
-├─ Core.vuna + Core/          Term Eval Conv                   Core TT / NbE / 定义性相等
-├─ Elab.vuna + Elab/          Sig Types Meta Case Dict Term
-│                             Data Trait InstName Driver Termination
-│                             Prelude Match Records Derive     双向精化
-├─ Ir.vuna + Ir/            Model Analysis                   擦除后 IR（纯数据 + SCC；无 Core 依赖）
-│                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
-├─ Lowering.vuna + Lowering/ 实现                            Core→IR（擦除 / 表示 / 形态 / 程序级检查）
-│                           Env Ty Entry                    程序级表与使用事实 / 类型表面与声明 / 入口形态
-├─ Checks.vuna               Core 侧检查（擦除 / 作用域 / axiom / 定义体事实），不产生 IR
-├─ Codegen.vuna + Codegen/  Decl Term Assembly Runtime        IR→OCaml 文本（不 import Core / Elab / Intrinsics）
-├─ Native/                  Model Abi Runtime Module Render   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
-└─ Driver/                    Split SplitGen Dt Compile Wasm Native
-                              CompilerCli                      输出模型 / facade / 后端驱动 / CLI
-  PerfCache                          codegen 单元缓存
-                              Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
+compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖方向由 compiler/vuna.toml
+                                的 [layers] 执行，见 reference/packages.md「层约束」）
+├─ Base/        Source Common Diag{,.Format,.Codec} Bytes Hash Version Store Obs Intrinsics
+│               Diagnostics.vuna Diagnostics/{Common,Ic,Cg,Pkg,Rn,Sink,Warning,Tc,Frontend,Loader}
+│                             位置/诊断模型、编码原语、摘要与身份、落盘层、内建真源
+├─ Frontend/    Ast Lexer Cst Parser Parser/Support Toml Manifest
+│               Canonical/{Ast,Lex,Pkg} Packages/{Pkg,Source}
+│                             词法（含无损 CST）/ 语法 / vuna.toml / 规范编码 / 包图
+├─ Loader/      Modules Resolve Flatten Expand Fixity Addr Fingerprint Layers
+│                             模块图 / 名字解析 / flatten / fixity / 地址与身份 / 层约束
+├─ Core/        Term Eval Conv Canonical      Core TT / NbE / 定义性相等 / 规范编码
+├─ Elab/        Sig Types Meta Case Dict Term Data Trait InstName Driver Termination
+│               Prelude Match Records Derive Canonical        双向精化
+├─ Ir/          Model Analysis Runtime Validate
+│                             擦除后 IR（纯数据 + SCC + 运行时契约 + 校验）
+├─ Codegen/     Decl Term Assembly Runtime    IR→OCaml 文本（不 import Core / Elab / Intrinsics）
+├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
+├─ Native/      Abi Model Module Render Runtime   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
+├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
+└─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
+                Split SplitGen Native Wasm                  输出模型 / facade / 后端驱动 / CLI
 根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
@@ -50,8 +41,13 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
 ```
 
-**目录即层**：目录 = 依赖层次，上层可 import 下层、反向禁止。**门面模式**：`X.vuna` 只
-import 子模块并选择性重导出（对外名字面不变），实现只在叶子；**数据定义只在叶子**
+**目录即层，方向由 manifest 声明**：层 = 模块前缀（目录），`compiler/vuna.toml` 的
+`[layers]` 声明哪些层只允许直接依赖哪些层，由 loader 在 import 时强制（见
+[packages.md](reference/packages.md) 的「层约束」）；`checks.ir-boundary` 只留
+「必须 import 某模块」的正向断言与 IR 形状断言。未声明层的包不受约束。
+`Core` / `Elab` / `Loader` / `Codegen` 的纯门面已删除，消费方直接 import 具体子模块
+（如 `Core.Term` / `Core.Eval` / `Core.Conv`、`Loader.Flatten` / `Loader.Modules`、
+`Codegen.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
 `nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
@@ -64,10 +60,10 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
 源文件
  → Frontend.Lexer.lexSource      （token + Pos/Span；lexSourceWithComments 一次给 token + 注释）
  → Frontend.Parser.parseSource   （offside layout → AST + imports；工具用 parseSourceWithComments）
- → Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
+ → Frontend.Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
- → Lowering                      （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
+ → Lowering.Program               （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
  → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Driver.SplitGen.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
@@ -108,7 +104,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 （卡住的类型族应用）另走「不透明擦除值 + 恒等 cast」表示（见 [effects.md](reference/effects.md) §5）；元变量求解在
 `Core.Conv.solveMeta`（created-depth 随 `Sols` 就地检查，非空 spine 走 Miller pattern）；
 已解元变量进项只经 `Elab.Meta.zonkTerm`；`axiom` 是无体擦除定义（`DtAxiom`，运行时使用由
-`Checks.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
+`Lowering.Checks.checkNoAxiomRuntime` 拒绝），定义参数少于签名时按剩余 Pi η 展开。细节见
 [core.md](reference/core.md)。
 
 **相等 / 实例 / 证明**：`==` / 比较是证据驱动的（Int/String 内建或 `Eq` / `Ord` 字典，
@@ -116,13 +112,13 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 构造子 η 展开在 `Elab.Meta`；`DtDef` 带来源 span。trait / 实例语义见
 [records-traits.md](reference/records-traits.md)。
 
-**内建语义单一真源**：`Vuna.Compiler.Intrinsics` 是名字 / 签名 / arity / 归约 /
+**内建语义单一真源**：`Vuna.Compiler.Base.Intrinsics` 是名字 / 签名 / arity / 归约 /
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
-`Core.Eval`（归约）、`Lowering`（名字 → IR 符号）都消费它；OCaml 运行时文本在
+`Core.Eval`（归约）、`Lowering.Program`（名字 → IR 符号）都消费它；OCaml 运行时文本在
 `Codegen.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
 data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
-擦除检查由 `Lowering.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
+擦除检查由 `Lowering.Program.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
 判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
 `Obj.t` / `Obj.magic`。`vuna interp`
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
@@ -131,15 +127,15 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 **入口符号**：`Driver.Dt.dtCheck` / `dtCheckWithProgramParts` / `dtCheckPackageWithIfacesParts` / `dtSplitProjectParts` / `dtEvalFile` /
 `dtEvalExpr`；`Loader.Flatten.loadProject*` / `resolveProject`；`Elab.Driver.elabProgramFull`
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
-`Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`；
-`Lowering.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
+`Core.Eval` / `Core.Conv`；`Base.Intrinsics.findIntrinsic`；
+`Lowering.Program.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
 `Driver.SplitGen.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
 `Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten,Expand}`；类型规则 = `Elab.*` +
 `Elab.{Records,Derive}` + `Codegen`；split = `Driver.SplitGen` + `Driver.Split`；诊断 =
-`Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型见
+`Base.Diag` / `Base.Source` + 各阶段 `Diagnostic` + golden（模型见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；上下文回归见第 39 段。
 
@@ -162,13 +158,13 @@ main.wat`，再由 CLI 的 `build` 分支调 `wasm-tools parse` 汇编成 `main.
 
 ```text
 vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
- → Packages.Pkg.loadPackage / workspacePackages（DAG、模块根）
+ → Frontend.Packages.Pkg.loadPackage / workspacePackages（DAG、模块根）
  → contextForFile（最近 manifest + 依赖闭包）| contextForDir（工具/REPL 从 cwd）
    | locateBase（无 manifest → base-only：`VUNA_BASE` 或 exe 相对布局，失败报错）
  → Loader.loadProject（PackageContext → Project）
 ```
 
-**入口符号**：`Pkg.loadPackage` / `workspacePackages` / `findManifestDirMaybe` /
+**入口符号**：`Frontend.Packages.Pkg.loadPackage` / `workspacePackages` / `findManifestDirMaybe` /
 `contextForFile` / `contextForDir` / `locateBase`
 （`PackageContext` 抽象 + `contextPackage` / `contextRoots` / `contextDir`）；
 `Loader.Flatten.loadProject*` / `resolveProject`；CLI 在
@@ -194,11 +190,11 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Vuna.Run.runRun`（`vuna run`）、`Vuna.TestRunner.runTests`（`TestOpts`：filter/list/verbose/
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
-  `Lint.runLint`；诊断渲染（short/human/JSON）见 `Diag.Format`（模型见
+  `Lint.runLint`；诊断渲染（short/human/JSON）见 `Base.Diag.Format`（模型见
   [diagnostics.md](reference/diagnostics.md)）；效果显式化：`lib` 与 compiler 壳层都是显式
   `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
   `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
-  `CliOpts` 是显式参数；`Diag.Format` 语言也是显式 `lang` 参数。
+  `CliOpts` 是显式参数；`Base.Diag.Format` 语言也是显式 `lang` 参数。
   API 文档与检索见
   [api-docs.md](reference/api-docs.md)，调试工作流见 [debugging.md](reference/debugging.md)。
 - 进程执行只在 `Driver.CompilerCli.runIn`（`prim_eff_runIn`）。

@@ -9,13 +9,13 @@ LSP 映射、错误码目录、测试与门禁。工具链命令语义（退出�
 1. 诊断从产生到消费都是**结构化值**（`Diagnostic`），字符串只在最终渲染器出现。
 2. 位置只放在 `Label` 里（起止 span）；禁止在错误路径拼 `file:line:col`。
 3. 每条用户可见诊断有**稳定错误码**、严重度、阶段、分类、机器可读字段。
-4. 一个结果通道：`Vuna.Compiler.Diag` 的 `Check a = OkC a | ErrC Diagnostic`。
+4. 一个结果通道：`Vuna.Compiler.Base.Diag` 的 `Check a = OkC a | ErrC Diagnostic`。
 5. 三个消费视图（CLI short/human、JSON、LSP）同源；任何下游都不反解析文本。
 
 ## 2. 数据模型
 
-实现：`compiler/lib/Vuna/Compiler/Diag.vuna`（模型 + 结果通道）、
-`compiler/lib/Vuna/Compiler/Source.vuna`（`Pos`/`Span`/路径工具）。
+实现：`compiler/lib/Vuna/Compiler/Base/Diag.vuna`（模型 + 结果通道）、
+`compiler/lib/Vuna/Compiler/Base/Source.vuna`（`Pos`/`Span`/路径工具）。
 
 ```text
 Severity = SevError | SevWarning | SevNote | SevHelp
@@ -48,8 +48,8 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 
 ## 3. 结果通道
 
-- `Vuna.Compiler.Common` 重导出 `Source` + `Diag`；`Err` 载荷是 `Diagnostic`。
-- `Common.bind/step/traverse` 固定作用于 `Check`（`compiler/lib/Vuna/Compiler/Common.vuna`）；
+- `Vuna.Compiler.Base.Common` 重导出 `Source` + `Diag`；`Err` 载荷是 `Diagnostic`。
+- `Common.bind/step/traverse` 固定作用于 `Check`（`compiler/lib/Vuna/Compiler/Base/Common.vuna`）；
   `OkC/ErrC` 构造子避免与 `Prelude` 的 `Base.Result` 冲突。
 - `Base.Result`（字符串错误）只留给 `base/` 标准库内部；compiler 与根工具链统一 `Check`。
 - 构造函数：
@@ -72,15 +72,15 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 
 | 域 | 含义 | 真源 |
 | --- | --- | --- |
-| `LX_` | 词法 | `Frontend/Diagnostics.vuna` |
+| `LX_` | 词法 | `Base/Diagnostics/Frontend.vuna` |
 | `PS_` | 语法 | 同上 |
-| `RN_` | 名字解析（import/export/限定名/构造子）与内置宏展开（未知宏 / arity） | `Diagnostics/Rn.vuna` |
-| `PKG_` | `vuna.toml` 清单/包图 | `Diagnostics/Pkg.vuna` |
-| `LD_` | 模块/包加载 | `Loader/Diagnostics.vuna` |
-| `TC_` | 精化/覆盖性/终止性/用量 | `Diagnostics/Tc.vuna` |
-| `CG_` | codegen/驱动 | `Diagnostics/Cg.vuna` |
-| `IC_` | 编译器内部错误 | `Diagnostics/Ic.vuna` |
-| `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Diagnostics/Warning.vuna` |
+| `RN_` | 名字解析（import/export/限定名/构造子）与内置宏展开（未知宏 / arity） | `Base/Diagnostics/Rn.vuna` |
+| `PKG_` | `vuna.toml` 清单/包图 | `Base/Diagnostics/Pkg.vuna` |
+| `LD_` | 模块/包加载 | `Base/Diagnostics/Loader.vuna` |
+| `TC_` | 精化/覆盖性/终止性/用量 | `Base/Diagnostics/Tc.vuna` |
+| `CG_` | codegen/驱动 | `Base/Diagnostics/Cg.vuna` |
+| `IC_` | 编译器内部错误 | `Base/Diagnostics/Ic.vuna` |
+| `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Base/Diagnostics/Warning.vuna` |
 | `LN_`/`FX_` | lint 规则/修复 | `lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号语义稳定；一个码一种语义。**没有「诊断码只增不删」的约定**：vuna 未发布、
@@ -106,14 +106,14 @@ warning 的**通道**没有进程内全局收集器：Elab 期 `warnAt*`
 `unusedImportWarnings`）与入口路径的 `UN_UnusedDefinition`（`Driver/Dt.vuna`）直接返回
 诊断列表。驱动层把三者按 loader → elab → unused-def 的顺序拼成
 `CheckedPackage.checkedWarnings` / check 入口的返回值；`-W` / `--deny-warnings` / LSP
-在输出前用 `Diagnostics/Sink.vuna` 的 `dedupeWarnings` 去重（按首次出现顺序）。
+在输出前用 `Base/Diagnostics/Sink.vuna` 的 `dedupeWarnings` 去重（按首次出现顺序）。
 解析恢复期的多条 `PS_` 诊断由 `Parser.parseSourceRecovering` 显式返回，加载器把它们挂到
 首条错误的 `Diagnostic.diagChildren` 上（批量错误通道），CLI 逐个输出——两者都不依赖
 跨调用保留的可变状态。
 
 ## 5. 渲染视图
 
-实现：`compiler/lib/Vuna/Compiler/Diag/Format.vuna`。
+实现：`compiler/lib/Vuna/Compiler/Base/Diag/Format.vuna`。
 
 | 视图 | 入口 | 形态 |
 | --- | --- | --- |

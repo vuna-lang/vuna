@@ -402,7 +402,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
   `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，没有 `pureX` / `bindX` / `andThen` 这类重复入口
   （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 不存在）。
-  编译器内部 `Vuna.Compiler.Common.bind` 是固定类型的 `Result` 绑定（限定名调用，
+  编译器内部 `Vuna.Compiler.Base.Common.bind` 是固定类型的 `Result` 绑定（限定名调用，
   不是 base 公开 API；固定类型是内部实现选择）。`Eff` 的 `do` 全面可用；长 do 链的精化
   走单趟字典求解（20 步约 100ms）；期望类型定向与 do 块单 monad 都生效。
 ### Applicative / Foldable / Traversable / Monoid / Hashable

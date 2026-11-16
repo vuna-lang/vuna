@@ -149,18 +149,18 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
   cast 必须用同一判据（`Elab.Meta.valueOpaqueScoped`），两侧不一致就会在 `ocamlopt` 处报
   字段类型错配。
 - **de Bruijn 作用域护栏**：`Core.varIndex` 越界返回 `-1`（不是静默 0）；
-  `Lowering.checkProgramOf` → `Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域
+  `Lowering.Program.checkProgramOf` → `Erase.checkAllDefScopes` 对运行时会生成的定义体做作用域
   校验，越界报内部错误。`IrVar` 携带 binder 身份（不是裸下标），所以「渲染出未绑定名字」
   在 IR 层不可表达。
-- **名字护栏**：`Lowering.ensureUniqueOcamlNamesIn` 对实际生成的 `v_*` / `t_*` / `C_*`
+- **名字护栏**：`Lowering.Program.ensureUniqueOcamlNamesIn` 对实际生成的 `v_*` / `t_*` / `C_*`
   做族内去重。
 - **入口护栏**：`checkResolvedModules` 要求模块声明带模块前缀；入口声明必须不带点、非空、
   不重复；每个运行时 `DtDef` / `DtData` 必须有归属。
 - **依赖分组**：Kosaraju SCC（`Ir.Analysis.assembleGroupNames`）在 Lowering 期算出，结果带
   `irGroupIsRec`；自 / 互递归才用 `let rec ... and ...`；零参顶层定义生成 `let v_x = body`。
-- **边界护栏**：`checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`）静态断言「IR 不 import
-  上游、文本生成层不 import Core/Elab/Intrinsics、Split 必须路由到 `Lowering` 且不碰
-  Core/Intrinsics」。
+- **边界护栏**：依赖方向由 `compiler/vuna.toml` 的 `[layers]` 声明、loader 强制（`Ir` 只依赖
+  `Base`，见 [packages.md](packages.md)「层约束」）；`checks.ir-boundary`
+  （`nix/checks/lib/ir-boundary.sh`）只留正向断言（必须 import 某模块）与 IR 形状断言。
 
 ## 8. 实现入口
 
@@ -168,8 +168,8 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
 | --- | --- |
 | Core | `Core.Eval.eval` / `force` / `normalize` / `quote`；`Core.Conv.conv` / `solveMeta` |
 | Elab | `Elab.Driver.elabProgramFull` / `goalsOfProgram`；`Elab.Term.inferE` / `checkE`；`Elab.Case` / `Elab.Match` / `Elab.Data` / `Elab.Trait` / `Elab.Termination` |
-| IR | `Lowering.lowerTerm` / `lowerUnitOf` / `lowerProgramOf`；`Ir.Model`（数据）/ `Ir.Analysis`（SCC） |
-| Codegen | `Lowering.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Driver.SplitGen.generateDtSplitProgram`；`Checks.*` |
+| IR | `Lowering.Program.lowerTerm` / `lowerUnitOf` / `lowerProgramOf`；`Ir.Model`（数据）/ `Ir.Analysis`（SCC）/ `Ir.Validate`（校验） |
+| Codegen | `Lowering.Program.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Driver.SplitGen.generateDtSplitProgram`；`Lowering.Checks.*` |
 
 数据流与改动定位见 [architecture.md](../architecture.md)；测试标签见
 [testing.md](testing.md)。

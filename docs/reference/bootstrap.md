@@ -153,7 +153,7 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed/rotation.tx
 Vuna_runtime
 Base_dPair ... Base_dString          （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dCommon ... Vuna_dCompiler_dIntrinsics ...
+Vuna_dCompiler_dBase_dCommon ... Vuna_dCompiler_dBase_dIntrinsics ...
   ... Vuna_dCompiler_dElab_dTerm ... Vuna_dCompiler_dDriver_dCompilerCli
                                      （编译器模块，依赖序；点转 _d）
 Main
@@ -163,7 +163,7 @@ Main
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），文件头
   **只** `open Vuna_runtime`（没有 open 链），跨单元引用写成 OCaml 限定名 `Unit.name`
   （值 / 构造子 / 类型一致）；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
-  文件里；`Vuna_dCompiler_dIntrinsics.ml` 是内建声明的唯一真源。
+  文件里；`Vuna_dCompiler_dBase_dIntrinsics.ml` 是内建声明的唯一真源。
 - `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（入口文件里声明的 `data` 也必须发进
   `Main.ml`）。**不生成 `.mli`**。
 - 没有只为形状稳定而保留的空编译单元。

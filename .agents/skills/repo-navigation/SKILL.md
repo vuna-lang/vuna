@@ -22,18 +22,18 @@ description: 在 vuna 仓库中探索代码时的工具选择规则——哪些�
 ## 维度 A：要改的模块 → 整篇 `read`
 
 ```console
-read compiler/lib/Vuna/Compiler/Elab.vuna
+read compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 ```
 
 **不要**试图用查询工具省这一步。理由：
 
-- 改动点通常是**数据流**而非孤立符号。例如 `Elab.vuna` 的 `Ec` 状态如何穿过
+- 改动点通常是**数据流**而非孤立符号。例如 `Elab/Types.vuna` 的 `Ec` 状态如何穿过
   `elabBodies` → `convEc` → `unsolvedMeta`——这类信息不在任何签名里。
 - 改实现必须知道**全部**构造/解构点；`map --impact` 看不到模块**内部**耦合
   （内部类型根本不出现在跨模块签名里）。
 - 反复查询的成本会超过一次读取：650 行文件用 20 次 `map --find` 拼出的信息还不如通读。
 
-**唯一例外**：超长文件（`Elab.vuna` 2000+ 行）可先 `map --find` 拿行号，再
+**唯一例外**：超长文件（`Elab/Trait.vuna`、`Elab/Term/Impl.vuna` 等）可先 `map --find` 拿行号，再
 `read --offset/--limit` 读那一段。但**改动涉及的函数体必须完整读到**。
 
 ## 维度 B：不改、只引用 → `vuna map` / `vuna api`
@@ -43,7 +43,7 @@ read compiler/lib/Vuna/Compiler/Elab.vuna
 **（a）知道名字，不知道在哪** → `vuna map --find`
 
 ```console
-vuna map --find Vuna.Compiler.Elab.elabProgram   # 完全限定名，推荐
+vuna map --find Vuna.Compiler.Elab.Driver.elabProgramFull   # 完全限定名，推荐
 vuna map --find lookupEnv                        # 短名也行，但见下方警告
 ```
 
@@ -56,18 +56,18 @@ vuna map --find lookupEnv                        # 短名也行，但见下方�
 **（b）要一个模块的接口面** → `vuna api <Module>`
 
 ```console
-vuna api Vuna.Compiler.Elab
+vuna api Vuna.Compiler.Elab.Driver
 ```
 
 给 data 定义 + 注释 + 行号。**已知缺陷**：只回显源码里**显式写出**的签名；vuna 大量
 访问器省略签名（如 `dtDefName (DtDef name ty body) = name`），这些条目显示为空
-（实测 `Elab` 的 282 个条目里 37 个签名是空的）。看到空签名就转 `map --find` 或读该行。
+（实测 `Elab.Driver` 的条目里 37 个签名是空的）。看到空签名就转 `map --find` 或读该行。
 
 **（c）改跨模块符号，想知道波及面** → `vuna map --impact`
 
 ```console
-$ vuna map --impact Vuna.Compiler.Elab.elabProgram
-symbol: Vuna.Compiler.Elab.elabProgram
+$ vuna map --impact Vuna.Compiler.Elab.Driver.elabProgramFull
+symbol: Vuna.Compiler.Elab.Driver.elabProgramFull
 readers: Vuna.Compiler.Dt
 tests: run, stdlib
 ```
@@ -121,7 +121,7 @@ tests: run, stdlib
 
 ```console
 # 维度 A：要改的模块 —— 整篇读
-read compiler/lib/Vuna/Compiler/Elab.vuna
+read compiler/lib/Vuna/Compiler/Elab/Driver.vuna
 
 # 维度 B：不改，只查
 vuna map                                        # 主题落在哪些模块

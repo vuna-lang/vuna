@@ -44,7 +44,7 @@
   `strShow`、`Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main`
   的展示钩子。`vuna interp` 只展示 `Int` / `Nat` / `String` / `Bool` 的 `main` 值（interp
   是精化后的纯核心求值，归约边界见 [primitives.md](primitives.md)）；
-- 内建值（`Vuna.Compiler.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
+- 内建值（`Vuna.Compiler.Base.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
   `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
@@ -351,7 +351,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   export trait Show a(..) where
     show : a -> String
 
-  export import Vuna.Compiler.Common       -- 导入 + 整模块重导出
+  export import Vuna.Compiler.Base.Common       -- 导入 + 整模块重导出
   export import B (x, T(..))              -- 选择性重导出
   ```
 

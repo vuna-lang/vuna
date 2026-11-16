@@ -16,8 +16,8 @@
 | `pkgIfaceHash` | 包内模块 `miIfaceHash` 聚合 | 依赖身份（`checkIn`/`splitIn` 的 deps 分量） | 下游可见接口/透明体变化 |
 | `pkgImplHash` | 包内模块 `miImplHash` 聚合 | 产物身份（`splitIdentity`） | `opaque`/`abstract` 体变化也变 |
 
-规范编码在 `Vuna.Compiler.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
-`Canonical.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
+规范编码在 `Vuna.Compiler.Frontend.Canonical.Pkg`（codec `pkg-source 1`，原子文法同
+`Base.Bytes`：`#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0|b1` / `[<n>:…]`）。
 roundtrip 自检：`examples/infra` 的 `pkg-canon-rt` / `pkg-identity-rt`。
 
 **为什么 `path` 依赖不写摘要**（D12）：`path` 是工作树共变的可变输入，正确性由
@@ -39,7 +39,7 @@ $VUNA_STORE                     # 默认 $XDG_DATA_HOME/vuna/store，回退 ~/.v
 
 - **对象是唯一真源**：内容摘要即对象地址；写用 `prim_eff_writeFileAtomic`。
 - **物化视图可丢弃**：读前校验 `.complete`，缺失/不符就重建；并发重复物化幂等。
-- framing 复用 `Vuna.Compiler.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
+- framing 复用 `Vuna.Compiler.Base.Store`，但 tag **不含编译器指纹**（`pkg-source/1`）：
   包对象只是源码字节，跨编译器版本复用。
 - **同一个根、两类生命周期**（D15）：缓存族（`objects/<kind>/`、`blobs/`、`units/`、
   `views/`、`.tmp/`、`roots/`）由 `vuna store gc` / `clean --store` 管理；包对象族
@@ -71,7 +71,7 @@ vuna fetch [--locked] [DIR]
 
 ## 4. 解析与失败模式
 
-`Vuna.Compiler.Packages.Pkg` 的依赖定位：
+`Vuna.Compiler.Frontend.Packages.Pkg` 的依赖定位：
 
 ```text
 DepPath rel      → <包目录>/<rel>
@@ -160,7 +160,7 @@ B 项目的 `--gc` 误删；roots 只追加，删除依赖后旧对象仍受保�
 - **静态索引单根（D14 便利层）**：只有 `[registry].index` 一个入口；多源/优先级/镜像/
   撤销列表不做，需要时单独立项。
 - **git/curl 由宿主提供**：缺失时是宿主错误（与 `vuna build` 依赖 `ocamlopt` 同级）。
-- **导出面**：新模块 `Canonical.Pkg` / `Packages.Source` 在 `compiler/vuna.toml` 的
+- **导出面**：新模块 `Frontend.Canonical.Pkg` / `Frontend.Packages.Source` 在 `compiler/vuna.toml` 的
   `[export]` 列表里，跨包（如 `examples/infra`）可直接 import。
 
 ## 9. 测试标签

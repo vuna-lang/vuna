@@ -437,15 +437,17 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - `vuna-static`：不依赖 vuna 二进制的结构守卫合集（实现见 `nix/checks/lib/`）：
   - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
     `nix/checks/data/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
-  - `ir-boundary`：IR 边界结构性守卫（`Vuna.Compiler.Ir*` 不得 import
-    Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
-    import Core/Elab/Intrinsics；`Lowering.vuna` 是唯一的上游消费者；
-    `Driver.SplitGen` 必须路由到 `Lowering` 且不得 import Core/Intrinsics；生成层必须 import
-    IR），见 [ir.md](ir.md)；
+  - `ir-boundary`：IR 形状与正向断言守卫（方向不在这里：`Vuna.Compiler.Ir` /
+    `Codegen` / `Lowering` / `Native` / `Wasm` 的依赖方向由 `compiler/vuna.toml` 的
+    `[layers]` 声明、loader 强制，见 [packages.md](packages.md)「层约束」）。脚本保留：
+    文本生成层必须 import IR；`Lowering/Program.vuna` 是唯一的上游消费者且必须被
+    `Driver.SplitGen` 路由；IR 数据里没有目标文本；`IrRuntime` / `IrBridge` 不得复活，
+    见 [ir.md](ir.md)；
+  - `layers` 的回归用例是 `test/suite/steps/82_layers.steps`（越层 / 未加引号 / 成环）；
   - `steps-inproc`：进程绑定岛门禁——fixture 用例已全部进程内执行，steps 里仍 spawn
     `$VUNA` 的文件必须逐个登记在 `test/suite/process-bound.txt`，且总数不超过
     `nix/checks/data/steps-inproc.max`（ratchet 只降不增）；
-  - `diag-raw`：compiler 内源码诊断必须走域码，位置渲染只在 `Diag.Format`；
+  - `diag-raw`：compiler 内源码诊断必须走域码，位置渲染只在 `Base.Diag.Format`；
 - `vuna-obs-schema`：观测**结构**门禁——关闭（`VUNA_OBS=0`）不产 trace；`VUNA_OBS=2` 的
   `check compiler` / `check base` 各产出可被 `vuna obs validate` 接受的 trace、
   `summarize --json` 单行且含 `spans`/`wallUs`、编译器自观测仍产出 `vuna.elab` /

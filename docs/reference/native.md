@@ -248,9 +248,11 @@ base 定义即使含不支持构造也不拒绝（与 wasm 的 `collectNeeded` �
 `rt_<name>`、`rt_lit_<n>`、`.L<n>`），不按位置编号；`.L<n>` 的编号**跨定义连续**，
 因为每个函数都重新从 0 起会让两个函数撞名（汇编器报 `symbol .L0 is already defined`）。
 
-`checks.ir-boundary` 的 native 规则（规则 9）守：`Native.*` 不得 import
+依赖方向由 `compiler/vuna.toml` 的 `[layers]` 强制（`"Vuna.Compiler.Native" =
+["Vuna.Compiler.Ir"]`，见 [packages.md](packages.md)「层约束」）：`Native.*` 不得 import
 `Core` / `Elab` / `Intrinsics` / `Codegen` / `Wasm`；`Driver/Native` 不得 import
-`Core` / `Elab` / `Intrinsics`；`Native.Module` 必须 import `Ir`。
+`Core` / `Elab` / `Intrinsics`。`checks.ir-boundary` 保留形状与正向断言
+（`Native.Module` 必须 import `Ir`）。
 
 ## 7. 验证
 

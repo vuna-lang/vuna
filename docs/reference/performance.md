@@ -63,7 +63,7 @@
 `check .` 不是「冷/热」两档：第一遍冷精化、第二遍重写接口/单元、第三遍才全命中
 （实测 18269 → 6141 → 6092 → 57 ms），只报其中一个数会误导。冷 `check compiler` 修前
 ~22 s 里约**一半是重复精化**：入口闭包没覆盖 `[export]` 的全部模块
-（`iface-skip partial ... missing=Vuna.Compiler.Canonical,
+（`iface-skip partial ... missing=Vuna.Compiler.Frontend.Canonical.Ast,
 Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`collectSigs-done` 出现
 两次，两遍各 ~11–12 s）。**已修**（见下），冷 `check compiler` 降到 ~12 s。
 
@@ -86,7 +86,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 | 冷 `check compiler` 的 iface 写 | `iface-skip partial` | `iface-write=107/107` + `check-lib-skip covered=88` | 单遍收尾 |
 
 1. **入口闭包漏两个导出模块 ⇒ 每轮重复精化**（`compiler/app/Main.vuna`）：`compiler`
-   的 `[export].modules` 含 `Vuna.Compiler.Canonical` 与 `Vuna.Compiler.Driver.ToolPayload`，
+   的 `[export].modules` 含 `Vuna.Compiler.Frontend.Canonical.Ast` 与 `Vuna.Compiler.Driver.ToolPayload`，
    但入口没有 import 它们 ⇒ `writeIfaceShadow` 判 `iface-skip partial`（不写包接口）⇒
    `Compile.checkPackage` 的 `check-lib-skip` 永不成立，每轮都补一遍 lib check。补两个
    import 后 `collectSigs-done` 从 2 次降到 1 次。**规则**：入口 import 集合必须覆盖
@@ -99,12 +99,12 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
    ... required=88`）。同轮删掉两处死计算：`summaryCheckExeParts` / `summaryCheckLibParts`
    原先为 `ownCleanModules` 算一遍 `depIfaceHashTable`，而 `ownCleanInfo` 忽略该参数——
    每次 check 白跑一遍整闭包源扫描（`ifaceModsEff`）。
-2. **codegen 分组按 SCC 线性过滤全体定义**（`Lowering.appendGroups`）：每个单点 SCC
+2. **codegen 分组按 SCC 线性过滤全体定义**（`Lowering.Program.appendGroups`）：每个单点 SCC
    都 `filter (memList …) env.lwDefs` ⇒ O(n²)。改为「环境里一次建 `lwDefTbl`、组内按成员名
    查表」；`recOkOfIn`/`spanOfIn` 同为逐名 `findDtDef` 线性扫，改成同一张表。
    合成探针的 codegen 段（`termination-done → cg-typedecls-done`）修前 89/284/1083 ms
    （N=2000/4000/8000，逐档 ×3.2/×3.8），修后随 N 线性。
-3. **告警去重 O(n²)**（`Diagnostics/Sink.dedupeWarnings`）：`containsDiag` 对新诊断逐个
+3. **告警去重 O(n²)**（`Base.Diagnostics.Sink.dedupeWarnings`）：`containsDiag` 对新诊断逐个
    线性扫历史；`UN_UnusedDefinition` 一次上千条时退化（N=16000 探针这部分占 ~3 s）。改为
    按 `sameDiag` 的等价类建一次键表（码 + 消息 + 严重度 + 全部 label 的 span 序列，长度
    前缀拼接），O(n) 且**告警输出逐字节不变**（已对三个探针对拍）。
@@ -371,7 +371,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 | 4000 | 735 ms | 254 ms | 1.36× |
 | 8000 | 2230 ms | 397 ms | 1.56× |
 
-修前 8000 档是 3.03×（越过 2.5× 门槛），修后同一档 1.56×：`Lowering.appendGroups` 的
+修前 8000 档是 3.03×（越过 2.5× 门槛），修后同一档 1.56×：`Lowering.Program.appendGroups` 的
 O(n²) 已去掉（§1）。门槛脚本的上限已提到 N=8000，因此这一类回归现在会被挡住。
 
 ### 5.2 包路径增量 `check`（增量收尾路径）
@@ -517,7 +517,7 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 | gc_pressure | ~1.1x | 已达标 |
 | array | ~0.9x | 不可变 `Array` 与手写 OCaml 持平 |
 
-关键设计决策与改动（`Codegen/Term.vuna`、`Intrinsics` / `Elab.Prelude` / `Codegen.Decl` 与
+关键设计决策与改动（`Codegen/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Codegen.Decl` 与
 `base/`）：
 
 1. **codegen / 运行时改进**：
@@ -566,8 +566,8 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
 | map-hot | 130 |
 | fmt-check | 1139 |
 
-**冷路径的成本来源（显式编码与 `Store` framing 的代价，不是查询图引入的）**：check-compiler /
-build-compiler / build-all 要为每个模块把缓存载荷**显式规范编码 + `Store` framing（含 SHA-256
+**冷路径的成本来源（显式编码与 `Base.Store` framing 的代价，不是查询图引入的）**：check-compiler /
+build-compiler / build-all 要为每个模块把缓存载荷**显式规范编码 + `Base.Store` framing（含 SHA-256
 内容地址）**并算摘要——逐项写字节，而不是 `Obj.magic` 级拷贝。
 
 **build-warm 的归因：`canonicalTopo` + `splitGraph`**。同机 `VUNA_DEBUG_PERF=1` 分段实测
@@ -610,7 +610,7 @@ A/B 读数一致）。`map-cold`（2111）必须清 query store 才算冷：基�
 
 - **iface 哈希去排序（顺序无关折叠）**：把 `hashDefs`/`hashExports`/… 的「按名字插入
   排序 + 整表编码 + 摘要」改成逐项哈希的交换律折叠（双 lane Σh/Σh²）。
-  （摘要用 SHA-256、载荷用 `Canonical` 显式编码，「排序 + 整表编码」的结构不变，
+  （摘要用 SHA-256、载荷用 `Base.Bytes` 显式编码，「排序 + 整表编码」的结构不变，
   结论照此条记录。）
   合成单模块 16k 项档 iface-compute 3.77 s → ~1.0 s，但真实包是「多模块、每模块几十项」：
   逐项哈希的分配放大让 `check compiler` 的 iface-compute 119 → 318 ms（逐项强哈希）

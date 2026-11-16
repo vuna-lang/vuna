@@ -213,7 +213,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 | `Frontend.Parser` | `128*剩余 token 数+1024`；每个循环至少消费 1 token（offside 状态机保留守卫） |
 | `Frontend.Toml` | 逐字符状态机 `2*len+16`；逐行主循环 `4*lines+16` |
 | `Loader.Resolve` | 显式 fuel 而非结构递归：每个子项重新播种 `1073741824`（1G），每步递减（守卫 Int 判据） |
-| `Packages.Pkg` | `pkgFuelBound = 1048576`：每条依赖边 / 展开一个包目录消费 ≥1 步，`memStackDir` 防环 |
+| `Frontend.Packages.Pkg` | `pkgFuelBound = 1048576`：每条依赖边 / 展开一个包目录消费 ≥1 步，`memStackDir` 防环 |
 | `Vuna.Json` | `8*len+64`；互递归组返回剩余输入，SCT 不可见，用同参数位 `fuel - 1` |
 | `Vuna.Fmt.Expr` | 固定预算 `formatFuelBound = 1073741824`（1G）；块级布局同时沿 AST 与缩进 / 模式前进 |
 | `Vuna.Files` / `Index.Scan` | 目录树每下钻一层递减（起点 `1048576`）；上界 = 目录深度，符号链接环被截断 |

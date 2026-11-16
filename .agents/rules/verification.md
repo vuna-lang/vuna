@@ -43,6 +43,8 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
   只允许减少、不允许新增）；编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行。
 - **格式化**：`vuna fmt --check <PATH>`；省略 PATH 时扫 workspace 各包 `lib/app/test`
   （`test/corpus/` 夹具跳过）。
+- **层方向**：`compiler/vuna.toml` 的 `[layers]` 由 loader 在 `vuna check .` 时强制（越层报
+  `LD_LayerViolation`）；`checks.ir-boundary` 只留正向断言与 IR 形状断言。
 - **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `lib/`、`app/`）不进 seed，
   黑名单见 `nix/seed/forbidden.txt`。
 

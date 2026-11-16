@@ -149,7 +149,7 @@ Prelude 的是 trait、实例与 helper。取舍：
   逐字节约定（seed 固定点 / 模块缓存仍由 rotation 保证）。
 * `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「interp 见浮点就拒绝」
   的 guard 不存在；interp / REPL 直接按 `Core/Eval` 的浮点归约求值。
-* `Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），不改变 Int/String 原语面。
+* `Base.Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），不改变 Int/String 原语面。
 
 ## 测试
 

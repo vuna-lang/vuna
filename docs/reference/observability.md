@@ -127,7 +127,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 
 ## 4. 语言层 API
 
-### 4.1 隐藏原语（`Intrinsics` / `Ir.Runtime` / `Codegen.Runtime` 三处对齐）
+### 4.1 隐藏原语（`Base.Intrinsics` / `Ir.Runtime` / `Codegen.Runtime` 三处对齐）
 
 | 名字 | 签名 | 语义（OCaml 运行时） |
 | --- | --- | --- |

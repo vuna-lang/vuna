@@ -130,9 +130,10 @@
 
 ## 6. 实现约束
 
-- `Wasm` 子模块只 import `Base.*`、`Ir`、`Wasm.*`；驱动只经
-  `Driver.Dt.dtCheckWithProgramParts` + `Lowering.lowerProgramOf`，不 import
-  Core/Elab/Intrinsics（`checks.ir-boundary` 规则 10 守护）。
+- `Wasm` 子模块只 import `Base.*`、`Ir.*`、`Wasm.*`（方向由 `compiler/vuna.toml` 的
+  `[layers]` 强制：`"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]`）；驱动只经
+  `Driver.Dt.dtCheckWithProgramParts` + `Lowering.Program.lowerProgramOf`，不 import
+  Core/Elab/Intrinsics（`checks.ir-boundary` 只留形状与正向断言）。
 - `Module.build` 是纯函数；`Driver.Wasm.compileWasm` 负责写文件（`Member nFs FsOp r`
   等行约束下的 `Eff r`，不再用全集行 `hostRow`）。
 - 生成器带 fuel（`genExpr` 等），越界返回 `wasm codegen fuel exhausted`（内部错），不 panic。

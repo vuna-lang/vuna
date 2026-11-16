@@ -8,7 +8,8 @@
 
 - 包元信息用 `vuna.toml`（TOML 子集）：`[package]`（只有 name）、`[workspace]`（members）、
   `[export]`（modules）、`[diagnostics]`（format / warnings / max-errors，见 [diagnostics.md](diagnostics.md) §5.1）、
-  `[dependencies]`（依赖声明，见下节）。TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
+  `[dependencies]`（依赖声明，见下节）、`[layers]`（包内模块的依赖方向，见「层约束」）。
+  TOML 子集支持子表、引号段名（`[releases."1.2.0"]`）、
   点键、内联表、表数组、多行字符串与 `\uXXXX` 转义；**不支持**浮点与日期时间（显式报错，
   不静默近似）。未知 section / key、以及 `[package]` 里出现其他 key 都是错误，不静默忽略
   （`[capabilities]` / `[trust]` / `[privileged]` 均不存在，出现即未知 section/key）。
@@ -81,7 +82,7 @@
     引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool/`，按输入摘要判定
     新鲜度，refs 带行 / 列位置，没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
-    `compiler/lib/Vuna/Compiler/Version.vuna`。
+    `compiler/lib/Vuna/Compiler/Base/Version.vuna`。
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
   CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
@@ -188,6 +189,39 @@ modules = [
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），
 文件 I/O 由调用方负责。
+
+## 层约束（`[layers]`）
+
+包内模块的依赖方向写在 manifest 里：`[layers]` 的键是**层名 = 模块前缀**，值是「该层允许
+**直接**依赖的层」的字符串数组（传递闭包由 loader 计算）。表是 opt-in：**未写的层不约束**，
+没有「Base 恒允许」这类特殊层。
+
+```toml
+[layers]
+"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]
+"Vuna.Compiler.Codegen" = ["Vuna.Compiler.Base", "Vuna.Compiler.Frontend", "Vuna.Compiler.Ir"]
+"Vuna.Compiler.Lowering" = ["Vuna.Compiler.Base", "Vuna.Compiler.Core", "Vuna.Compiler.Elab", "Vuna.Compiler.Ir", "Vuna.Compiler.Codegen"]
+"Vuna.Compiler.Native" = ["Vuna.Compiler.Ir"]
+"Vuna.Compiler.Wasm" = ["Vuna.Compiler.Ir"]
+```
+
+语义（实现 `Vuna.Compiler.Loader.Layers`，由 `Loader.Flatten` 在加载完成后跑一次）：
+
+- **键必须加引号**：写 `"Vuna.Compiler.X" = [...]`。裸 dotted key（`Vuna.Compiler.X = [...]`）
+  会被 TOML 解成嵌套表，报 `PKG_LayerKeyMustBeQuoted`。
+- **模块属于所有匹配它的层前缀**：`Vuna.Compiler.Base.Source` 同时属于 `Vuna.Compiler`
+  与 `Vuna.Compiler.Base`。
+- **import 合法判据**：模块 `m` 可以 import `t`，当且仅当对每个匹配 `m` 的已声明层 `L`，
+  `t` 落在 `L` 自己的子树，或落在 `closure(L.uses)` 中某个层的子树。
+- **未写的层不约束**；不存在恒允许的特殊层。
+- **依赖包的模块恒放行**：跨包方向由 `[export]` 与依赖包自己的 `[layers]` 管。
+- 只看**直接 import 边**；入口文件（`app/Main.vuna`）没有模块名，不参与检查。
+- 错误：manifest 侧 `PKG_LayerInvalidName`（层名不是合法模块前缀）、
+  `PKG_LayerInvalidTarget`（值里的层名不是合法模块前缀）、`PKG_LayerKeyMustBeQuoted`、
+  `PKG_LayerCycle`（层依赖成环）；import 越层报 `LD_LayerViolation`
+  （消息带模块名、目标模块与两侧层名）。
+- 与 `checks.ir-boundary` 的分工：**方向**由 `[layers]` 管；脚本只保留「必须 import 某模块」
+  的正向断言与 IR 形状断言（不变量见 [ir.md](ir.md)）。
 
 ## 构建确定性与增量
 

@@ -8,7 +8,7 @@ REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码�
 ## 1. 编译期诊断：源码片段
 
 `vuna check` / `compile` / `build` / `interp` 的错误在原有
-`<file>:<line>:<col>: [CODE] <消息>` 之后追加源码片段（结构化渲染：`Vuna.Compiler.Diag.Format`
+`<file>:<line>:<col>: [CODE] <消息>` 之后追加源码片段（结构化渲染：`Vuna.Compiler.Base.Diag.Format`
 的 `renderShortSnippetEff` / `renderHuman`，从 label 的 span 取位置，不再反解析消息文本）；
 列按 UTF-8 码点换算成显示列（CJK / tab 不再错位）：
 
@@ -120,7 +120,7 @@ vuna: runtime error: assertion failed: broken invariant
 
 ## 4. 相关原语
 
-`Vuna.Compiler.Intrinsics` 的调试/诊断内建（真源在 Intrinsics，语义见
+`Vuna.Compiler.Base.Intrinsics` 的调试/诊断内建（真源在 Intrinsics，语义见
 [primitives.md](primitives.md) §7）：
 
 - `assert` / `todo`：§3 的语言级调试构造（由 `Loader.Resolve` 在 release 构建拒绝）；
@@ -135,7 +135,7 @@ vuna: runtime error: assertion failed: broken invariant
 编译器的性能/诊断探针分两层：
 
 - **`dbg!`**：单条门控日志行（`--debug-perf`，见 [performance.md](performance.md) §2）；
-- **观测 span / 计数**（`Vuna.Compiler.Obs` 的 `obsCheck` / `obsDefCheck` / `obsMarkEff`）：
+- **观测 span / 计数**（`Vuna.Compiler.Base.Obs` 的 `obsCheck` / `obsDefCheck` / `obsMarkEff`）：
   结构化事件（`VUNA_OBS>=1`），阶段跨度与逐定义跨度见
   [observability.md](observability.md) §3.3 词汇表。两者独立开关，可以只开其一。
 

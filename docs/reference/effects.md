@@ -265,7 +265,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 - **长 do 链**：程序级字典目标求解是单趟 worklist（`Dict.resolveDictGoals` 每个目标
   每趟只处理一次），指数已消除：20 步纯 `Eff []` do 约 100ms、10 层 `Result >>=` 约 77ms、
   20 层 `>>=` 约 77ms（`test/corpus/elab_perf/` 夹具）。期望结果类型定向走前导隐式前缀后
-  early solve 残余结果；do 块按块共享一个 monad/字典。编译器内部用限定 `Common.bind`
+  early solve 残余结果；do 块按块共享一个 monad/字典。编译器内部用限定 `Base.Common.bind`
   （固定类型的内部选择，不是兼容层）。行多态 `Eff r` 的 `do` 不受影响。
 - **一阶效应核**：普通 send op 不含子计算；`Base.EffExn.Try` 支持携带子计算，
   `bracketExn` 提供 Exn 路径的 cleanup；通用 `Base.Eff.bracket`/`finally` 用运行时
@@ -295,7 +295,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 续延是一次性（one-shot）。
 
 - **协议集中**：`Base.Eff.{Row,Nil,Cons,Member,Here,There,rowRem}` 的名字集中在
-  `Vuna.Compiler.Intrinsics` 的效果协议常量（`effRowFamilyName` 等）；`Core/Eval`、
+  `Vuna.Compiler.Base.Intrinsics` 的效果协议常量（`effRowFamilyName` 等）；`Core/Eval`、
   `Elab/Dict` 的行删除归约与 `Member` 证明构造只引用常量，不再各自硬编码名字。
 - **入口收紧**：`runPure : Eff [] a -> a`（行必须 `Nil`）——入口处的未处理效应是类型错误
   （负例 `dt_err/82_unhandled_effect_entry`），运行时 `unhandled effect` 兜底只服务

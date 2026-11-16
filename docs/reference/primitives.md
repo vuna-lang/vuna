@@ -2,7 +2,7 @@
 
 本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、interp 归约边界、
 效果原语与宿主层模型、生成 runtime 的契约。内建声明面只有一份真源
-`Vuna.Compiler.Intrinsics`（`allIntrinsics` / `IntrinsicOp`），消费方是
+`Vuna.Compiler.Base.Intrinsics`（`allIntrinsics` / `IntrinsicOp`），消费方是
 `Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
 映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，类型规则见
 [type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
@@ -13,14 +13,14 @@
 | 术语 | 含义 |
 | --- | --- |
 | primitive 类型 | `Int` / `String`：没有 `data` 声明，表示与字面量由编译器提供 |
-| intrinsic | `Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
+| intrinsic | `Base.Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
 | 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
 | 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；没有别名模块，任何包都可直调，没有 manifest 门控 |
 
 ## 2. 身份与常量
 
-- **`Int` / `String` / `Float` 是语言 primitive 类型**（`Intrinsics.typeIntrinsicNames =
+- **`Int` / `String` / `Float` 是语言 primitive 类型**（`Base.Intrinsics.typeIntrinsicNames =
   [Int, String, Float]`）：prelude 直接提供对应 `Type`；入口 / 未限定名处的 `data Int` /
   `data String` / `data Float` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，
   属于不同符号）。它们的 **Eq / Ord / Show 实例宿主模块**是 `Base.Int` /
@@ -40,12 +40,12 @@
 
   | 声明 | canonical 符号 | 来源 | 常量 |
   | --- | --- | --- | --- |
-  | `Bool` | `Base.Bool.Bool` | `base/lib/Base/Bool.vuna` | `Intrinsics.boolTypeName` |
+  | `Bool` | `Base.Bool.Bool` | `base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
   | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
   | `List` | `Base.List.List`（`Cons` / `Nil` 同理） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
   | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
-  三族的身份、固定构造子与运行时表示类别在 `Intrinsics.canonicalFamilies` 单点声明
+  三族的身份、固定构造子与运行时表示类别在 `Base.Intrinsics.canonicalFamilies` 单点声明
   （`FamilyRepr` = `FamReprBool` / `FamReprNat` / `FamReprBoxed`）：表示判定、IR 类型、
   展示与 FFI 白名单都查这张表，新增 canonical 族只改这里。
 
@@ -187,7 +187,7 @@
 ## 6.1 容器与可变数据原语
 
 **内建类型构造子**（名字恒可见，与 `Int` / `String` 一样不能被用户重定义；参数个数唯一
-真源是 `Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Codegen.Decl`）：
+真源是 `Base.Intrinsics.typeIntrinsicArities`，OCaml 表示的渲染在 `Codegen.Decl`）：
 
 | 类型 | kind | OCaml 表示 |
 | --- | --- | --- |

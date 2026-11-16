@@ -1,7 +1,7 @@
 # IR 参考：擦除后的中间表示与运行时契约
 
-本文描述三层：`Vuna.Compiler.Ir.*`（IR 数据定义与纯分析）、`Vuna.Compiler.Ir.Runtime`
-（IR ↔ 运行时**契约**）与 `Vuna.Compiler.Lowering`（Core → IR 的唯一入口）、
+本文描述三层：`Vuna.Compiler.Ir.*`（IR 数据定义、纯分析与校验）、`Vuna.Compiler.Ir.Runtime`
+（IR ↔ 运行时**契约**）与 `Vuna.Compiler.Lowering.Program`（Core → IR 的唯一入口）、
 `Vuna.Compiler.Codegen.Runtime`（契约的 OCaml 实现）。
 
 子系统位置见 [architecture.md](../architecture.md)，
@@ -29,9 +29,9 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；`Codegen/` 整目录只吃 IR（不 import `Core` / `Elab` / `Intrinsics` / `Driver`），唯一的 Core 消费者是 `Lowering.vuna` 与 `Checks.vuna`。声明归属切分与分文件装配在 `Driver/SplitGen.vuna`：归属表由 `Driver.Owner` + `Driver.Dt` 算好，单元 IR 经 `SplitInput.siLowerUnit` 闭包按需取得，因此 SplitGen 也只吃 IR（不得 import `Core` / `Elab` / `Intrinsics` / `Lowering` / `Checks`） | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
+| 依赖方向 | `Ir.*` 只允许依赖 `Base.*`：方向由 `compiler/vuna.toml` 的 `[layers]` 声明、loader 在 import 时强制（`"Vuna.Compiler.Ir" = ["Vuna.Compiler.Base"]`，见 [packages.md](packages.md)「层约束」）。`Codegen/` 整目录只吃 IR；上游的唯一消费者是 `Lowering.Program`（Core → IR）与 `Lowering.Checks`（Core 侧检查）。声明归属切分与分文件装配在 `Driver.SplitGen`（Driver 层，允许 import `Elab` 的声明表，但必须路由到 `Lowering.Program`、不得自己消费 `Core` / `Intrinsics`） | `[layers]`（方向）+ `checks.ir-boundary`（正向断言与 IR 形状） |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
-| 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 |
+| 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 + `[layers]` |
 
 ## 数据模型（`Vuna.Compiler.Ir.Model`）
 
@@ -106,7 +106,7 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 | 类别 | 条数 | 说明 |
 | --- | --- | --- |
-| 普通内建名 | 223 | 名字 = `Intrinsics.intrinsicName`；`prim_eff_bind1` 除外（走 `IrEffBind` 专用节点） |
+| 普通内建名 | 223 | 名字 = `Base.Intrinsics.intrinsicName`；`prim_eff_bind1` 除外（走 `IrEffBind` 专用节点） |
 | 桥接内建名 | 25 | 运行时模板引用 canonical List 族的 `dtp_*` helper：缺 List 族报 `CG_ListBridgeRequired`，跨单元按 List 族单元限定；`irRtSymBridgesList = True` |
 | 合成符号 | 6 | `@ir@natSucc`、`@ir@show{Int,Nat,Str,Float,Bool}`（入口展示 / Nat 后继，不对应内建） |
 
@@ -124,21 +124,22 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 校验（都在 check/build 路径上，不是文档约定）：
 
-- `Ir.validateUnit` / `validateProgram`：IR 里每个符号必须已声明；`IrRtApp` 的实参个数必须
+- `Ir.Validate.validateUnit` / `validateProgram`：IR 里每个符号必须已声明；`IrRtApp` 的实参个数必须
   等于 `irInlineArity`（违反即 `IC_InvariantViolated`）。
-- `Lowering.checkRuntimeContract`（挂在 `checkProgramOf`）：`Intrinsics` ↔ 契约名字集
+- `Lowering.Program.checkRuntimeContract`（挂在 `checkProgramOf`）：`Base.Intrinsics` ↔ 契约名字集
   相等 + 后端表对契约双向全覆盖。三处任一漂移都是内部错，不新增用户诊断码。
-- `checks.ir-boundary`：规则 6（`IrRuntime` / `IrBridge` 不得复活）、规则 7（IR 数据模块的
-  字面量只能是符号名，不含空格 / 括号）、规则 8（契约与后端表存在、`Lowering` 用后端表做一致性
+- `checks.ir-boundary`：方向交给 `[layers]`；脚本只留形状断言——规则 6（`IrRuntime` / `IrBridge`
+  不得复活）、规则 7（IR 数据模块的
+  字面量只能是符号名，不含空格 / 括号）、规则 8（契约与后端表存在、`Lowering.Program` 用后端表做一致性
   检查）。
 
-改动规则：新增内建要同步三处——`Intrinsics`（语义）+ `Ir.Runtime`（契约名字 / 桥接标记）+
+改动规则：新增内建要同步三处——`Base.Intrinsics`（语义）+ `Ir.Runtime`（契约名字 / 桥接标记）+
 `Codegen.Runtime`（OCaml 文本）。漏任一处会在下一次 `vuna check` 直接报内部错，不会静默
 生成坏代码。
 
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
 
-从 `Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
+从 `Lowering.Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪
 排序），语义与顺序不变（分组顺序决定 `let` / `let rec ... and ...` 的落盘顺序）：
 
 - `groupNames : List (Pair String (List String)) -> List String -> Check (List (List String))`
@@ -171,12 +172,12 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 校验入口
 
-- `Ir.validateUnit` / `Ir.validateProgram`：定义名唯一 + 分组自洽（每个依赖只指向更早的组
+- `Ir.Validate.validateUnit` / `Ir.Validate.validateProgram`：定义名唯一 + 分组自洽（每个依赖只指向更早的组
   或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
   （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
-  `Lowering.lowerUnitChecked` 逐单元跑一次。
-- 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Checks`，由 Lowering
-  调用），因此诊断文本与顺序不变。
+  `Lowering.Program.lowerUnitChecked` 逐单元跑一次。
+- 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Lowering.Checks`，由
+  `Lowering.Program` 调用），因此诊断文本与顺序不变。
 
 ## 预算
 
@@ -197,8 +198,8 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - 现在有三个消费者：OCaml（全量参考实现）、wasm、native。两个产品后端覆盖白名单子集
   （Int/Nat/Bool + String + 用户 data/record/通用 case；见 [wasm.md](wasm.md)、
   [native.md](native.md)），对未实现的符号在编译期报 `WasmUnsupported` /
-  `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由两条守：
-  `Ir.Runtime` 契约（符号面）+ `checks.ir-boundary`（IR 数据不 import 上游、`Ir/` 里没有目标
-  文本、`IrRuntime`/`IrBridge` 不得复活；native 模块只 import IR/Base）。
+  `NativeUnsupported`，不做 trap 兜底。IR 的 target-neutral 性由三条守：
+  `Ir.Runtime` 契约（符号面）+ `[layers]`（依赖方向：`Ir` 只依赖 `Base`）+
+  `checks.ir-boundary`（IR 数据形状、`Ir/` 里没有目标文本、`IrRuntime`/`IrBridge` 不得复活）。
 - 运行时实现（GC / 字符串 / I/O / 一次性续延）只有 OCaml 参考实现是完整的；wasm 与 native
   各自重实现了纯子集。
