@@ -22,3 +22,13 @@ out-contains: binary not found
 run: "$VUNA" run ../base 2>&1
 exit: 2
 out-contains: no executable entry
+
+# --target：run 直接构建并执行对应后端产物；未知目标与 build 一样是用法错误（exit 2）。
+run: sh -c 'mkdir -p "$TMPDIR/m38-run-target/app"; printf "[package]\nname = \"m38-run-target\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" >"$TMPDIR/m38-run-target/vuna.toml"; printf "main : Int\nmain = 42\n" >"$TMPDIR/m38-run-target/app/Main.vuna"'
+run: sh -c '"$VUNA" run "$TMPDIR/m38-run-target" --target wasm 2>&1 | tail -n 1'
+out-equals: 42
+run: sh -c '"$VUNA" run "$TMPDIR/m38-run-target" --target native 2>&1 | tail -n 1'
+out-equals: 42
+run: "$VUNA" run "$TMPDIR/m38-run-target" --target wat 2>&1
+exit: 2
+out-contains: --target ocaml|wasm|native

@@ -72,8 +72,9 @@ toolUsageLines prog = """  ${prog} lint [--fix] <file.vuna>...
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
   ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
       运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核
-  ${prog} run [--no-build] [--release] [--package NAME] [--out DIR] [DIR] [-- ARG]...
-      构建并运行包的可执行入口（`--` 之后的参数原样透传）
+  ${prog} run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR] [DIR] [-- ARG]...
+      构建并运行包的可执行入口（`--target wasm` 用 wasmtime 跑 `<OUT>/main.wasm`；
+      `--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）
   ${prog} repl [FILE|DIR|MODULE]               交互式 REPL（可直接加载文件/目录/模块）
   ${prog} repl --listen ADDR [FILE|DIR|MODULE] 启动常驻 REPL server（JSON-RPC over Content-Length；
