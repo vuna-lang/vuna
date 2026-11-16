@@ -38,6 +38,7 @@ import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Json
 import Vuna.Tool.Session
+import Vuna.Lint.Cache
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
@@ -516,13 +517,15 @@ lintWithEnv env label text = do
     ErrC _ => defaultLintConfig
   )
   looked <- fixitiesForFile env label text
-  pure (case looked of
-    Pair env2 (ErrC _) => Pair env2 []
-    Pair env2 (OkC fx) => Pair env2 (case lintSourceWithConfig cfg fx text of
-      ErrC _ => []
-      OkC findings => map findingToDiagnostic findings
-    )
-  )
+  case looked of
+    Pair env2 (ErrC _) => pure (Pair env2 [])
+    Pair env2 (OkC fx) => do
+      linted <- lintSourceWithCache cfg fx text
+      pure (Pair env2 (case linted of
+        ErrC _ => []
+        OkC findings => map findingToDiagnostic findings
+      )
+      )
 
 -- | 内部：lint 严重度映射到编译器严重度。
 lintSeverityOf : LintSeverity -> Severity

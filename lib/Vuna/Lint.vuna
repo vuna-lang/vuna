@@ -24,6 +24,7 @@ import Vuna.Cli.Args
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Json
+import Vuna.Lint.Cache
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Fix
@@ -432,6 +433,7 @@ lintUsage = """usage: vuna lint [OPTIONS] [PATH]...
   --ignore RULE         关闭给定规则（可重复）
   --config PATH         使用显式 vuna.toml 的 [lint]
   --no-config           不读 vuna.toml，使用默认配置
+  --no-cache            不读/写 lint 结果缓存
   --max-passes N        --fix 最多迭代 N 轮（默认 8）
   --list                列出规则
   --explain RULE        解释单条规则

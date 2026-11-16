@@ -6,4 +6,4 @@ set -eu
 OUT=${1:?usage: vuna-lint.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-"$VUNA" lint --max-warnings 0
+"$VUNA" lint --max-warnings 0 --no-cache

@@ -80,6 +80,7 @@ cacheKindNames =
     "doc",
     "mods",
     "test",
+    "lint",
     "pkgiface",
     "splitptr"
   ]
