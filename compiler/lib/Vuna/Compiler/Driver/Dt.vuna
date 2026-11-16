@@ -1558,6 +1558,7 @@ moduleOfIface : ModuleIface -> Module
 moduleOfIface mi =
   Module (miNameOf mi) (miPackageOf mi) (miImportsOf mi) (miImplicitImportsOf mi) (miDeclsOf mi)
     (miExportsOf mi) (miFixitiesOf mi) [] (cachedOpaqueOf (miCachedOf mi))
+    (exportIndexOf (miExportsOf mi))
 
 -- ---------------------------------------------------------------
 -- 依赖可见性收敛。全量路径只加载 entry/本包模块的 **import 闭包**；

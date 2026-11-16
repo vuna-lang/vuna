@@ -35,6 +35,9 @@ export record Module(..) where
   moduleReexportsOf : List String
   -- D11：本模块声明为 opaque 的定义全名（已 mangle）；下游 depStart 不把它们的体放进 deftbl。
   moduleOpaqueOf : List String
+  -- | 公开名 → 该名字的全部导出条目（保持 `moduleExportsOf` 里的顺序）。解析期按名字
+  -- 查导出走这张表；裸导出表线性扫在每次名字解析里都会重扫一遍。
+  moduleExportIndexOf : HashMap String (List ExportEntry)
 
 -- 已加载项目：入口声明/import + 依赖模块列表（保持 flatten 前的形态）。
 -- entryPkg 用于按包限制 effectful 内建（普通包只能经 Eff + handler 使用效果）。
@@ -48,26 +51,26 @@ export record Project(..) where
   projectEntryFixities : List FixityDecl
 
 export moduleNameOf : Module -> String
-moduleNameOf (Module n p is imps ds es fx _ _) = n
+moduleNameOf (Module n p is imps ds es fx _ _ _) = n
 
 export modulePackageOf : Module -> String
-modulePackageOf (Module n p is imps ds es fx _ _) = p
+modulePackageOf (Module n p is imps ds es fx _ _ _) = p
 
 export moduleAllImportsOf : Module -> List Import
-moduleAllImportsOf (Module n p is imps ds es fx _ _) = append is imps
+moduleAllImportsOf (Module n p is imps ds es fx _ _ _) = append is imps
 
 export moduleDeclsOf : Module -> List Decl
-moduleDeclsOf (Module n p is imps ds es fx _ _) = ds
+moduleDeclsOf (Module n p is imps ds es fx _ _ _) = ds
 
 export moduleFixitiesOf : Module -> List FixityDecl
-moduleFixitiesOf (Module n p is imps ds es fx _ _) = fx
+moduleFixitiesOf (Module n p is imps ds es fx _ _ _) = fx
 
 -- | 模块重导出的 import 名（见 Module 字段注释）。
 export moduleReexportsOf : Module -> List String
-moduleReexportsOf (Module n p is imps ds es fx reexports _) = reexports
+moduleReexportsOf (Module n p is imps ds es fx reexports _ _) = reexports
 
 export moduleOpaqueOf : Module -> List String
-moduleOpaqueOf (Module n p is imps ds es fx reexports opacity) = opacity
+moduleOpaqueOf (Module n p is imps ds es fx reexports opacity _) = opacity
 
 export projectEntryAllImports : Project -> List Import
 projectEntryAllImports (Project ds is imps ms pkg fx) = append is imps
@@ -238,7 +241,7 @@ missingModule name =
 
 export moduleDecls : List Module -> String -> Check (List Decl)
 moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports fx _ _) => OkC decls
+  Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC decls
   Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
@@ -247,7 +250,29 @@ moduleCtors modules name =
 
 export exportsOf : List Module -> String -> Check (List ExportEntry)
 exportsOf modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports fx _ _) => OkC exports
+  Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC exports
+  Nothing => missingModule name
+
+-- | 导出表的公开名索引（保持原顺序；同名的 val/ctor/type 条目并存）。
+export exportIndexOf : List ExportEntry -> HashMap String (List ExportEntry)
+exportIndexOf entries = exportIndexOfGo entries (Base.HashMap.fromList [])
+
+exportIndexOfGo : List ExportEntry -> HashMap String (List ExportEntry) -> HashMap String (List ExportEntry)
+exportIndexOfGo [] idx = idx
+exportIndexOfGo (e :: rest) idx =
+  let
+    tail = exportIndexOfGo rest idx
+  in Base.HashMap.insert e.public (Base.List.Cons e (entriesByName e.public tail)) tail
+
+-- | 索引里某个公开名的全部条目（无则空）。
+entriesByName : String -> HashMap String (List ExportEntry) -> List ExportEntry
+entriesByName name idx = case Base.HashMap.lookup name idx of
+  Just es => es
+  Nothing => []
+
+export exportIndexOfModule : List Module -> String -> Check (HashMap String (List ExportEntry))
+exportIndexOfModule modules name = case findModule modules name of
+  Just m => OkC m.moduleExportIndexOf
   Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
@@ -276,9 +301,21 @@ filterCtors name (e :: rest) =
 export findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
 
+export findExportValueIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
+findExportValueIn idx name = lookupExport ["val", "ctor"] name (entriesByName name idx)
+
+export findExportCtorIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
+findExportCtorIn idx name = lookupExport ["ctor"] name (entriesByName name idx)
+
+export findExportCtorsIn : HashMap String (List ExportEntry) -> String -> List ExportEntry
+findExportCtorsIn idx name = filterCtors name (entriesByName name idx)
+
+export findExportTypeIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
+findExportTypeIn idx name = lookupExport ["type"] name (entriesByName name idx)
+
 modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValueFrom modules [] name = OkC []
-modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportValue es name of
+modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportIndexOfModule modules m) (\idx => case findExportValueIn idx name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingValueFrom modules rest name)
       (\more => OkC (Base.List.Cons (Pair m e) more))
@@ -292,8 +329,8 @@ modulesExportingValue modules imports name =
 -- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
 modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules [] name = OkC []
-modulesExportingCtorFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => let
-  found = findExportCtors es name
+modulesExportingCtorFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportIndexOfModule modules m) (\idx => let
+  found = findExportCtorsIn idx name
 in Vuna.Compiler.Common.bind (modulesExportingCtorFrom modules rest name)
   (\more => OkC (append (map (\e => Pair m e) found) more))
 )
@@ -304,7 +341,7 @@ modulesExportingCtor modules imports name =
 
 modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingTypeFrom modules [] name = OkC []
-modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportsOf modules m) (\es => case findExportType es name of
+modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Common.bind (exportIndexOfModule modules m) (\idx => case findExportTypeIn idx name of
   Just e =>
     Vuna.Compiler.Common.bind (modulesExportingTypeFrom modules rest name)
       (\more => OkC (Base.List.Cons (Pair m e) more))
@@ -382,8 +419,8 @@ findModuleFile roots name importerPkg importerSpan = do
 
 export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
-findModule ((Module mname mpkg imports imps decls exports fx reexports opacity) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports opacity)
+findModule ((Module mname mpkg imports imps decls exports fx reexports opacity idx) :: rest) name =
+  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports opacity idx)
   else findModule rest name
 
 -- target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”

@@ -332,6 +332,13 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
   构造子拼一次 `${mname}.${dname}.${cname}`）；`ConstraintStore.csTried` 从关联表改成
   `HashMap Int Int`（否则尝试记录变长后每次 `ecTriedAt` 线性扫描）。
   冷 `check compiler` 与上一版同一窗口交替对比快 17–20%（负载波动大，只作同机参考）。
+- `Module` 增加 `moduleExportIndexOf`（公开名 → 导出条目，构造时建一次）：解析期按名字查
+  导出不再线性扫整张导出表；`modulesExporting{Value,Ctor,Type}` 走索引。
+  同窗口交替对比冷 `check compiler` 再快 5–10%。
+
+此时自采样的剩余热点：`Elab.Types.ecTriedAt`（求解 worklist 每轮对每个待处理约束都查一次，
+且 `append pending [c]` 是 O(长度) 追加）、`Base.List.dtp_unpack` + `List.init`（lexer 把整串
+展开成字符表，见 D87）、`Elab.Meta.dtCtorLookup` 的回落扫描、`Core.Eval.quote`。
 
 ## 5. 增长率（合成包）
 
