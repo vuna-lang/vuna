@@ -10,7 +10,7 @@ module Vuna.Compiler.Frontend.Canonical.Ast where
 --   * **span 一律不参与编码**。位置只影响诊断，不影响语义；移动代码、换行、改注释
 --     不应让依赖方判脏。`Expr` / `Pat` / `Decl` / `DoStmt` / `Ctor` / `Field` /
 --     `TraitMethod` 的 `Span` 字段全部丢弃，解码时只能还原成 `noSpan`
---     （`Span "" 0 0 0 0`）——所以 roundtrip 的判据是「编码相同」
+--     （`Span "" 0 0 0 0 0 0`）——所以 roundtrip 的判据是「编码相同」
 --     （encode∘decode∘encode = encode），不是原值相等。
 --   * **tag = 构造子声明顺序**，从 0 开始，和 `Frontend.Ast` 的 `data` 声明逐行对应。
 --     新增构造子只能追加在末尾；插入会改变既有 tag 的含义，等于换格式。
@@ -43,7 +43,7 @@ import Vuna.Compiler.Base.Source
 
 -- | span 不参与编码：解码时只能还原空 span（与 `Canonical.Term.noSpan` 一致）。
 noSpan : Span
-noSpan = Span "" 0 0 0 0
+noSpan = Span "" 0 0 0 0 0 0
 
 -- ---------------------------------------------------------------
 -- 编码（累积器风格：`encX x acc` 把 x 的分片前插到 acc）

@@ -646,7 +646,7 @@ asNamePos env sp name =
 -- | 内部：名字 token 是否覆盖光标位置。名字 token 的 span 往往是零宽（end = start），
 -- 按名字长度扩展后再判。
 nameAt : String -> Int -> Int -> Int -> Int -> Bool
-nameAt n l c line col = spanContainsPos (Span "" l c l (c + strLength n)) line col
+nameAt n l c line col = spanContainsPos (Span "" l c l (c + strLength n) 0 0) line col
 
 -- | 内部：模式里是否有覆盖光标的 binder 名（`PVar` / `PAs` 按名字判，其余按 span）。
 patHit : WalkEnv -> Int -> Int -> Pat -> Bool
@@ -819,7 +819,7 @@ lambdaBindsGo env header headerStart (p :: rest) from acc =
 -- | 内部：光标是否落在该 binder 的名字范围内。
 posInBinderRange : LocalBind -> Int -> Int -> Bool
 posInBinderRange b line col =
-  spanContainsPos (Span "" b.lbLine b.lbCol b.lbLine (b.lbCol + strLength b.lbName)) line col
+  spanContainsPos (Span "" b.lbLine b.lbCol b.lbLine (b.lbCol + strLength b.lbName) 0 0) line col
 
 -- | 内部：进入 λ：参数先入 scope，光标在参数名上就命中，否则继续走 body。
 lambdaWalk : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Span -> List String -> Expr -> Maybe LocalBind
@@ -940,7 +940,7 @@ evarCovers n sp line col =
   let
     endSp =
       Span sp.spanFile (spanStartLine sp) (spanStartCol sp) (spanStartLine sp)
-        (spanStartCol sp + strLength n)
+        (spanStartCol sp + strLength n) (spanStartOffset sp) (spanStartOffset sp + strLength n)
   in spanContainsPos endSp line col
 
 -- | 内部：Pi binder 名的位置（0,0 = 不是具名 binder）。Pi 的 span 覆盖整个表达式，所以靠文本

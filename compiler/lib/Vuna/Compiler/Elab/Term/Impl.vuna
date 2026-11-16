@@ -822,7 +822,7 @@ ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy = case forceV
           VStr nm => case nm == fname of
             False => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
             True => case convEc ec (ctxDepth ctx) aVal baseTy of
-              OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0)) (Pair tVal ec2))
+              OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0 0 0)) (Pair tVal ec2))
               ErrC _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
           _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
         _ => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy

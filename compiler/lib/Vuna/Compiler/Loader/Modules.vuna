@@ -162,13 +162,13 @@ withImportSite : Span -> Diagnostic -> Diagnostic
 withImportSite sp d = if spanFile sp == "" then d else withFallbackSpan sp d
 
 spanOfAlias : List Import -> String -> Span
-spanOfAlias [] a = Span "" 0 0 0 0
+spanOfAlias [] a = Span "" 0 0 0 0 0 0
 spanOfAlias (imp :: rest) a = case imp.importAlias of
   Just b => if b == a then imp.importSpan else spanOfAlias rest a
   Nothing => spanOfAlias rest a
 
 duplicateImportSpan : List Import -> Span
-duplicateImportSpan [] = Span "" 0 0 0 0
+duplicateImportSpan [] = Span "" 0 0 0 0 0 0
 duplicateImportSpan (imp :: rest) =
   if memName (importName imp) (importModuleNames rest) then imp.importSpan
   else duplicateImportSpan rest

@@ -1246,9 +1246,9 @@ caseToClausesEdit lines toks x pats headLine sp alts =
       if caseStartLine == headLine then trimEnd (prefixBeforeCol headText (spanStartCol sp))
       else trimEnd headText
     varTok = case laneVarSpan x (LClause headLine pats False False) of
-      Nothing => PTok TEof (Pos 1 1)
+      Nothing => PTok TEof (Pos 1 1 0)
       Just vsp => case tokenAt toks (spanStartLine vsp) (spanStartCol vsp) of
-        Nothing => PTok TEof (Pos 1 1)
+        Nothing => PTok TEof (Pos 1 1 0)
         Just tok => tok
     headIndent = indentOf headText
   in Edit headLine (spanEndLine sp) (clausesForAlts lines toks headPrefix varTok x headIndent alts)

@@ -254,7 +254,8 @@ mapLabelFile f (Label msp text style prov) =
 mapSpanPath : (String -> String) -> Maybe Span -> Maybe Span
 mapSpanPath f Nothing = Nothing
 mapSpanPath f (Just sp) =
-  Just (Span (f sp.spanFile) sp.spanStartLine sp.spanStartCol sp.spanEndLine sp.spanEndCol)
+  Just
+    (Span (f sp.spanFile) sp.spanStartLine sp.spanStartCol sp.spanEndLine sp.spanEndCol sp.spanStartOffset sp.spanEndOffset)
 
 -- | 显式声明「无源码位置」的理由（没有主 span 时由产生点调用）。
 export withAbsent : NoSourceReason -> Diagnostic -> Diagnostic
@@ -405,7 +406,8 @@ withSpanFileIfEmpty path d =
 withLabelFileIfEmpty : String -> Label -> Label
 withLabelFileIfEmpty path (Label Nothing text style prov) = Label Nothing text style prov
 withLabelFileIfEmpty path (Label (Just sp) text style prov) =
-  if spanFile sp == "" then Label (Just (Span path (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp)))
+  if spanFile sp == "" then Label
+    (Just (Span path (spanStartLine sp) (spanStartCol sp) (spanEndLine sp) (spanEndCol sp) (spanStartOffset sp) (spanEndOffset sp)))
     text style prov
   else Label (Just sp) text style prov
 

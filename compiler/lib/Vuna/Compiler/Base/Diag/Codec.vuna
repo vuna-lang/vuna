@@ -17,7 +17,7 @@ import Base.Pair
 
 -- | 载荷 codec 版本（`Store` 的 codec 段；格式变更即 bump）。
 diagCodec : String
-diagCodec = "diagnostics 1"
+diagCodec = "diagnostics 2"
 
 -- ---------------------------------------------------------------
 -- 枚举 tag
@@ -151,12 +151,12 @@ stabilityOfTag _ = Nothing
 encSpan : Span -> List String -> List String
 encSpan sp acc =
   encStr sp.spanFile
-    (encInt sp.spanStartLine (encInt sp.spanStartCol (encInt sp.spanEndLine (encInt sp.spanEndCol acc))))
+    (encInt sp.spanStartLine (encInt sp.spanStartCol (encInt sp.spanEndLine (encInt sp.spanEndCol (encInt sp.spanStartOffset (encInt sp.spanEndOffset acc))))))
 
 decSpan : Int -> Cur -> Maybe (Pair Span Cur)
 decSpan fuel c =
   thenPair (decStr (fuel - 1) c)
-    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => Just (Pair (Span file sl sc el ec) b5))))))
+    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => thenPair (decInt (fuel - 1) b5) (\so, b6 => thenPair (decInt (fuel - 1) b6) (\eo, b7 => Just (Pair (Span file sl sc el ec so eo) b7))))))))
 
 -- 列表头 `[<count>:`（与 `encList` 的字节文法一致）。递归载荷不用 `decList`：
 -- 把递归解码器当高阶实参时终止性判据看不到下降边。

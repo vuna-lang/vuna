@@ -463,7 +463,7 @@ fuelEdgesGo comp defTbl (s :: rest) ok acc = case siteFuelStrict (firstParamOf s
   Nothing => fuelEdgesGo comp defTbl rest False acc
   Just strict =>
     fuelEdgesGo comp defTbl rest ok
-      (Pair (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0)) (Span "" 0 0 0 0) :: acc)
+      (Pair (Pair (Pair s.siteCaller s.siteCallee) (if strict then 1 else 0)) (Span "" 0 0 0 0 0 0) :: acc)
 
 fuelMembersGuarded : List String -> HashMap String (List (Pair (List Pat) Expr)) -> Bool
 fuelMembersGuarded [] defTbl = True

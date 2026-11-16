@@ -30,7 +30,7 @@ import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 
 emptyPatSpan : Span
-emptyPatSpan = Span "" 0 0 0 0
+emptyPatSpan = Span "" 0 0 0 0 0 0
 
 -- 一行等长的通配模式。
 export wilds : Int -> List Pat

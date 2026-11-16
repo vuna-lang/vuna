@@ -81,7 +81,7 @@ paramNamesGo remaining n acc =
 
 wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
-wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0)
+wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0 0 0)
 
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
@@ -99,7 +99,7 @@ else case clauses of
     PWild psp => buildColumnExpr table (stripFirstCol clauses) restParams fb (fuel - 1)
     _ =>
       Vuna.Compiler.Base.Common.bind (litAltExprGo table rest pos restParams fb (fuel - 1))
-        (\restExpr => Vuna.Compiler.Base.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0)) [EVar pos (Span "" 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
+        (\restExpr => Vuna.Compiler.Base.Common.bind (buildColumnExpr table (litBranchClauses p pos clauses) restParams fb (fuel - 1)) (\bodyExpr => OkC (EIf (EApp (EVar "==" (Span "" 0 0 0 0 0 0)) [EVar pos (Span "" 0 0 0 0 0 0), litPatExpr p] (patSpan p)) bodyExpr restExpr (patSpan p))))
   -- 该字面量分支的子矩阵不只是「当前行 + 剩余列」——同一字面量的后续行与
   -- 变量/通配行也匹配这个字面量，必须一起进入子矩阵，否则内层列会缺分支
   -- （`TCon "a" [] => ...; TCon "b" _ => ...; TCon _ _ => ...` 报 missing Cons，
@@ -141,7 +141,7 @@ litPatMatches _ p = False
 litPatExpr : Pat -> Expr
 litPatExpr (PInt n sp) = EInt n sp
 litPatExpr (PStr s sp) = EStr s sp
-litPatExpr _ = EInt 0 (Span "" 0 0 0 0)
+litPatExpr _ = EInt 0 (Span "" 0 0 0 0 0 0)
 
 -- | 模式矩阵的列下降：按当前列（`pos`）的模式形态分派成 case / if 表达式。
 buildColumnExpr : List (Pair String (Pair Bool (List (Pair String Int)))) -> List (Pair (List Pat) Expr) -> List String -> Span -> Int -> Check Expr
@@ -198,7 +198,7 @@ renameAsHead pos p body = body
 -- （用空 span 会把穷尽性诊断报在 :0:0）。
 export firstPatSpan : List (Pair (List Pat) Expr) -> Span
 firstPatSpan ((Pair (p :: ps) body) :: rest) = patSpan p
-firstPatSpan _ = Span "" 0 0 0 0
+firstPatSpan _ = Span "" 0 0 0 0 0 0
 
 -- 构造子列：每个构造子一个分支。**该族构造子已经全覆盖时不再生成兜底分支**——
 -- 变量/通配 head 的 clause 已经被 `clausesForCtor` 分发进每个构造子分支，
@@ -283,7 +283,7 @@ allEmptyPats (c :: rest) = case c of
 
 bodyOfFirst : List (Pair (List Pat) Expr) -> Expr
 bodyOfFirst ((Pair pats body) :: rest) = body
-bodyOfFirst [] = EInt 0 (Span "" 0 0 0 0)
+bodyOfFirst [] = EInt 0 (Span "" 0 0 0 0 0 0)
 
 isVarPatD : Pat -> Bool
 isVarPatD (PVar n sp) = True
@@ -416,10 +416,10 @@ else
     subpatCount = ctorSubPatCount clauses cname
     freshSubs = subNamesFor pos subpatCount
     subParams = append freshSubs restParams
-    branchPats = map (\n => PVar n (Span "" 0 0 0 0)) freshSubs
+    branchPats = map (\n => PVar n (Span "" 0 0 0 0 0 0)) freshSubs
     expanded = clausesForCtor cname branchPats pos clauses
   in Vuna.Compiler.Base.Common.bind (buildColumnExpr table expanded subParams fbSp (fuel - 1))
-    (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Pair (PCon cname branchPats (Span "" 0 0 0 0)) bodyExpr) tail)))
+    (\bodyExpr => Vuna.Compiler.Base.Common.bind (ctorAltListGo table clauses rest pos restParams fbSp (fuel - 1)) (\tail => OkC ((::) (Pair (PCon cname branchPats (Span "" 0 0 0 0 0 0)) bodyExpr) tail)))
 
 -- 该构造子在本列各 clause 里的子模式个数（取第一个匹配 clause 的长度）。
 ctorSubPatCount : List (Pair (List Pat) Expr) -> String -> Int
@@ -488,7 +488,7 @@ else case prepFallbacks pos (filterFallback clauses) of
   [] => OkC []
   fbs =>
     Vuna.Compiler.Base.Common.bind (buildColumnExpr table fbs restParams fbSp (fuel - 1))
-      (\bodyExpr => OkC [Pair (PWild (Span "" 0 0 0 0)) bodyExpr])
+      (\bodyExpr => OkC [Pair (PWild (Span "" 0 0 0 0 0 0)) bodyExpr])
 
 prepFallbacks : String -> List (Pair (List Pat) Expr) -> List (Pair (List Pat) Expr)
 prepFallbacks pos [] = []

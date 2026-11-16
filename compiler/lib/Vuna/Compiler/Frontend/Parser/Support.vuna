@@ -37,7 +37,7 @@ pmodeOf (PState file toks last count mode) = mode
 
 -- | 从文件头开一个状态（`lastPos` 的 `Pos 1 0` 是「尚未消费 token」的哨兵）。
 export mkState : String -> List PTok -> ParseMode -> PState
-mkState file toks mode = PState file toks (Pos 1 0) (length toks) mode
+mkState file toks mode = PState file toks (Pos 1 0 0) (length toks) mode
 
 -- | 指定 `lastPos` / 剩余数（模板洞、同一行的裸表达式等场景）。
 export mkStateAt : String -> List PTok -> Pos -> Int -> ParseMode -> PState
@@ -47,11 +47,11 @@ mkStateAt file toks last count mode = PState file toks last count mode
 export spanOf : PState -> PState -> Span
 spanOf st st2 =
   Span (fileOf st) (posLine (peekPos st)) (posCol (peekPos st)) (posLine (lastPos st2))
-    (posCol (lastPos st2))
+    (posCol (lastPos st2)) (posOffset (peekPos st)) (posOffset (lastPos st2))
 
 export peekTok : PState -> PTok
 peekTok (PState file (t :: rest) last count mode) = t
-peekTok (PState file [] last count mode) = PTok TEof (Pos 1 1)
+peekTok (PState file [] last count mode) = PTok TEof (Pos 1 1 0)
 
 export peekPos : PState -> Pos
 peekPos st = (peekTok st).ptokPos
@@ -63,8 +63,9 @@ tokSpan st = case peekTok st of
   PTok TEof _ =>
     let
       p = lastPos st
-    in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)
-  PTok _ p => Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p)
+    in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
+  PTok _ p =>
+    Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
 
 export lastPos : PState -> Pos
 lastPos (PState file toks last count mode) = last
@@ -108,7 +109,7 @@ stateFuel st = 128 * st.toksLeft + 1024
 
 export sameLineState : PState -> PState
 sameLineState st = case peekPos st of
-  Pos line col => PState (fileOf st) st.toksOf (Pos line 0) st.toksLeft (pmodeOf st)
+  Pos line col _ => PState (fileOf st) st.toksOf (Pos line 0 0) st.toksLeft (pmodeOf st)
 
 export atSym : PState -> String -> Bool
 atSym st s = case peekTok st of
@@ -158,8 +159,8 @@ atKw st k = case peekTok st of
 
 export canContinue : PState -> Int -> Bool
 canContinue st blockCol = case peekPos st of
-  Pos line col => case lastPos st of
-    Pos lastLine lastCol => line == lastLine || col > blockCol
+  Pos line col _ => case lastPos st of
+    Pos lastLine lastCol _ => line == lastLine || col > blockCol
 
 -- | 消费一个符号。返回后的状态即可继续解析（旧实现返回 `Pair Int PState` 的幽灵
 -- `Int`，恒为 0，已删）。
@@ -231,7 +232,7 @@ holeAtomAt st = case peekTok st of
   PTok (TSym "?") p => case peekTokAt st 1 of
     Just (PTok (TIdent n) p2) =>
       if posLine p2 == posLine p && posCol p2 == posCol p + 1 then Just
-        (Pair ("?" ++ n) (Span (fileOf st) (posLine p) (posCol p) (posLine p2) (posCol p2 + strLength n)))
+        (Pair ("?" ++ n) (Span (fileOf st) (posLine p) (posCol p) (posLine p2) (posCol p2 + strLength n) (posOffset p) (posOffset p2 + strLength n)))
       else Nothing
     _ => Nothing
   _ => Nothing
@@ -320,7 +321,7 @@ terminatesExpression _ = False
 export badCaseIndent : PState -> Int -> Bool
 badCaseIndent st altCol = if isEof st then False
 else case peekPos st of
-  Pos line col => if col > altCol then case terminatesExpression (peekTok st) of
+  Pos line col _ => if col > altCol then case terminatesExpression (peekTok st) of
     True => False
     False => True
   else False

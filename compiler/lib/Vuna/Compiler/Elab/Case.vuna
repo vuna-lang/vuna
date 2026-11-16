@@ -263,7 +263,7 @@ export branchReachable : Ctx -> Ec -> List Value -> DtCtor -> Bool
 branchReachable ctx ec idxs ctor = branchIsReachable (branchVerdict ctx ec idxs ctor)
 
 export wildArgs : Int -> List Pat
-wildArgs n = if n <= 0 then [] else (::) (PWild (Span "" 0 0 0 0)) (wildArgs (n - 1))
+wildArgs n = if n <= 0 then [] else (::) (PWild (Span "" 0 0 0 0 0 0)) (wildArgs (n - 1))
 
 -- 构造子类型的显式 binder 个数 = case 分支要写的模式个数（隐式 binder 由 bindCtorTele 自理）。
 export ctorExplicitArity : Term -> Int
@@ -583,6 +583,7 @@ checkCaseDone ec ctx dd idxs alts expected sp scrutTerm altTerms =
 branchRemovalSpan : Span -> Expr -> Span
 branchRemovalSpan patSpan body =
   Span (spanFile patSpan) (spanStartLine patSpan) 1 (spanEndLine (exprSpan body) + 1) 1
+    (spanStartOffset patSpan - (spanStartCol patSpan - 1)) (spanEndOffset (exprSpan body))
 
 -- | 给冗余分支告警附加删除建议。
 removeBranchSuggest : String -> Span -> Expr -> Diagnostic -> Diagnostic

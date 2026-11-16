@@ -967,7 +967,7 @@ synthMainShow ec globals defs = case findDefByName "main" defs of
     let
       sp = case dtDefSpan mainDef of
         Just s => s
-        Nothing => Span "" 0 0 0 0
+        Nothing => Span "" 0 0 0 0 0 0
       ty = dtDefType mainDef
       bodies = matchedBodies defs
       p = mainActionOf ty
@@ -1005,7 +1005,7 @@ synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecC
           tyTerm = quote 0 tyVal
           body =
             TLam "x" Rig1
-              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0)) Rig1)
+              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0 0 0)) Rig1)
           def =
             DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
         in OkC (rezonkDefs ec (append defs [def]))

@@ -857,7 +857,7 @@ quoteNeutralFuel : Int -> Int -> Neutral -> Term
 quoteNeutralFuel fuel depth n = if fuel <= 0 then TType levelZero
 else case n of
   NVar name level sp =>
-    applyTermSpine (TVar name (varIndex depth level) (Span "" 0 0 0 0))
+    applyTermSpine (TVar name (varIndex depth level) (Span "" 0 0 0 0 0 0))
       (map (\a => quoteFuel (fuel - 1) depth a) sp)
   NGlobal g sp => applyTermSpine (TGlobal g) (map (\a => quoteFuel (fuel - 1) depth a) sp)
 

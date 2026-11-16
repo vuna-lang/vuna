@@ -21,7 +21,7 @@ import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
 
 splitNoSpan : Span
-splitNoSpan = Span "" 0 0 0 0
+splitNoSpan = Span "" 0 0 0 0 0 0
 
 -- 入口单元的固定名（入口声明不带模块前缀，统一归到 `Main`）。
 export entryOwner : String

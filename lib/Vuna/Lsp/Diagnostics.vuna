@@ -521,7 +521,7 @@ lintWithEnv env label text = do
 -- severity 为警告），位置按 finding 的 1-based 行列构造。
 findingToDiagnostic : Finding -> Diagnostic
 findingToDiagnostic f =
-  diagAt (Span "" f.findingLine f.findingCol f.findingLine (f.findingCol + 1)) SevWarning PhTool
+  diagAt (Span "" f.findingLine f.findingCol f.findingLine (f.findingCol + 1) 0 0) SevWarning PhTool
     CatTool f.findingCode f.findingMessage
 
 -- | 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：字段集合与

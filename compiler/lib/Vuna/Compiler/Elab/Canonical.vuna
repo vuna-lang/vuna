@@ -61,12 +61,12 @@ encDtDefs ds acc = encList encDtDef ds acc
 encSpan : Span -> List String -> List String
 encSpan s acc =
   encStr s.spanFile
-    (encInt s.spanStartLine (encInt s.spanStartCol (encInt s.spanEndLine (encInt s.spanEndCol acc))))
+    (encInt s.spanStartLine (encInt s.spanStartCol (encInt s.spanEndLine (encInt s.spanEndCol (encInt s.spanStartOffset (encInt s.spanEndOffset acc))))))
 
 decSpan : Int -> Cur -> Maybe (Pair Span Cur)
 decSpan fuel c =
   thenPair (decStr (fuel - 1) c)
-    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => Just (Pair (Span file sl sc el ec) b5))))))
+    (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => thenPair (decInt (fuel - 1) b5) (\so, b6 => thenPair (decInt (fuel - 1) b6) (\eo, b7 => Just (Pair (Span file sl sc el ec so eo) b7))))))))
 
 encMaybeSpan : Maybe Span -> List String -> List String
 encMaybeSpan = encMaybe encSpan
@@ -246,7 +246,7 @@ decExportEntries fuel bytes = if fuel <= 0 then Nothing else decList decExportEn
 export decFixity : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixity fuel bytes =
   thenPair (decStr (fuel - 1) bytes)
-    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target (Span "" 0 0 0 0)) b4)))))
+    (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target (Span "" 0 0 0 0 0 0)) b4)))))
 
 -- | 解析 fixity 表。
 export decFixities : Int -> Cur -> Maybe (Pair (List FixityDecl) Cur)
@@ -256,7 +256,7 @@ decFixities fuel bytes = if fuel <= 0 then Nothing else decList decFixity fuel b
 export decImport : Int -> Cur -> Maybe (Pair Import Cur)
 decImport fuel bytes =
   thenPair (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias (Span "" 0 0 0 0)) b3))))
+    (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias (Span "" 0 0 0 0 0 0)) b3))))
 
 -- | 解析 import 表。
 export decImports : Int -> Cur -> Maybe (Pair (List Import) Cur)

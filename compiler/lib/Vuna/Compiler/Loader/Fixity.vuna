@@ -38,9 +38,9 @@ renameMode (FixityTable r ds) = r
 -- 用户声明会命中 `BuiltinFixity`。
 export builtinFixityDecls : List FixityDecl
 builtinFixityDecls =
-  [ FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0),
-    FixityDecl "&&" 3 1 Nothing (Span "" 0 0 0 0),
-    FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0)
+  [ FixityDecl "->" 1 2 Nothing (Span "" 0 0 0 0 0 0),
+    FixityDecl "&&" 3 1 Nothing (Span "" 0 0 0 0 0 0),
+    FixityDecl "||" 2 1 Nothing (Span "" 0 0 0 0 0 0)
   ]
 
 export builtinFixityOps : List String

@@ -15,15 +15,20 @@ export import Base.List
 export import Base.Maybe
 export import Base.String
 
--- | 源码位置：行、列，均从 1 开始。
+-- | 源码位置：行、列、字节偏移，均从 1 开始（偏移从 0 开始）。
 export record Pos(..) where
   -- | 行号（从 1 开始）。
   posLine : Int
   -- | 列号（从 1 开始；UTF-8 字节）。
   posCol : Int
+  -- | 从源码起始算起的 UTF-8 字节偏移（从 0 开始）。
+  posOffset : Int
 
--- | 源码 span：文件、起始行列、结束行列。文件在解析时由调用方注入，
+-- | 源码 span：文件、起始行列、结束行列与字节偏移。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
+--
+-- 偏移是 `[start, end)` 的字节区间：`spanEndOffset` 沿用与 `spanEndLine` / `spanEndCol`
+-- 相同的「最后一个 token 起点」约定，需要完整 token 文本的调用方用下一个 token 起点收束。
 export record Span(..) where
   -- | 该 span 所在的源文件路径。
   spanFile : String
@@ -35,38 +40,54 @@ export record Span(..) where
   spanEndLine : Int
   -- | 结束列（从 1 开始）。
   spanEndCol : Int
+  -- | 起始字节偏移（从 0 开始）。
+  spanStartOffset : Int
+  -- | 结束字节偏移（从 0 开始；最后一个 token 的起点）。
+  spanEndOffset : Int
 
 -- | 取源码位置的行号。
 export posLine : Pos -> Int
-posLine (Pos l c) = l
+posLine (Pos l c o) = l
 
 -- | 取源码位置的列号。
 export posCol : Pos -> Int
-posCol (Pos l c) = c
+posCol (Pos l c o) = c
+
+-- | 取源码位置的字节偏移。
+export posOffset : Pos -> Int
+posOffset (Pos l c o) = o
 
 -- | 取 span 的起始行。
 export spanStartLine : Span -> Int
-spanStartLine (Span f sl sc el ec) = sl
+spanStartLine (Span f sl sc el ec so eo) = sl
 
 -- | 取 span 的起始列。
 export spanStartCol : Span -> Int
-spanStartCol (Span f sl sc el ec) = sc
+spanStartCol (Span f sl sc el ec so eo) = sc
 
 -- | 取 span 的结束行。
 export spanEndLine : Span -> Int
-spanEndLine (Span f sl sc el ec) = el
+spanEndLine (Span f sl sc el ec so eo) = el
 
 -- | 取 span 的结束列。
 export spanEndCol : Span -> Int
-spanEndCol (Span f sl sc el ec) = ec
+spanEndCol (Span f sl sc el ec so eo) = ec
+
+-- | 取 span 的起始字节偏移。
+export spanStartOffset : Span -> Int
+spanStartOffset (Span f sl sc el ec so eo) = so
+
+-- | 取 span 的结束字节偏移（最后一个 token 的起点）。
+export spanEndOffset : Span -> Int
+spanEndOffset (Span f sl sc el ec so eo) = eo
 
 -- | 取 span 的文件。
 export spanFile : Span -> String
-spanFile (Span f sl sc el ec) = f
+spanFile (Span f sl sc el ec so eo) = f
 
 -- | 把 span 渲染成 `文件:行:列`（错误信息前缀）。
 export showSpanLoc : Span -> String
-showSpanLoc (Span f sl sc el ec) = "${f}:${sl}:${sc}"
+showSpanLoc (Span f sl sc el ec so eo) = "${f}:${sl}:${sc}"
 
 -- | 字符（字节码）是否在列表里；线性扫描，用于小字符集判断。
 memChar : Int -> List Int -> Bool

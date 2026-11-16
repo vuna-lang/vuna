@@ -85,10 +85,11 @@ charsPos2 cs = advanceChar (charsPeek cs) cs.charsPos
 -- | 词法诊断的 span：字符游标当前位置的**点 span**。Lexer 不知道文件名
 -- （`Chars` 只有字符与 Pos），入口 `Loader.Flatten` 用 `withSpanFileIfEmpty` 注入。
 export lexSpanAt : Pos -> Span
-lexSpanAt (Pos line col) = Span "" line col line col
+lexSpanAt (Pos line col off) = Span "" line col line col off off
 
 export advanceChar : Int -> Pos -> Pos
-advanceChar c (Pos line col) = if c == 10 then Pos (line + 1) 1 else Pos line (col + 1)
+advanceChar c (Pos line col off) =
+  if c == 10 then Pos (line + 1) 1 (off + 1) else Pos line (col + 1) (off + 1)
 
 export isUpperChar : Int -> Bool
 isUpperChar c = c >= 65 && c <= 90
@@ -241,7 +242,9 @@ else
   else skipBlockComment (fuel - 1) depth (charsStep c cs)
 
 export commentSpanOf : Pos -> Pos -> Span
-commentSpanOf startP endP = Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP)
+commentSpanOf startP endP =
+  Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP) (posOffset startP)
+    (posOffset endP)
 
 -- ---------------------------------------------------------------
 -- trivia：空白 + 注释
@@ -576,10 +579,10 @@ else case skipTrivia fuel cs of
 -- | 一次扫描的产物：token 流 + 注释表（源码顺序）。注释侧消费者（CST、
 -- `parseSourceWithComments`、`lexComments`）用这一份，避免第二次全量词法。
 export lexSourceWithComments : String -> Check (Pair (List PTok) (List Comment))
-lexSourceWithComments source = lexCharsWith (sourceFuel source) [] (Chars source 0 (Pos 1 1))
+lexSourceWithComments source = lexCharsWith (sourceFuel source) [] (Chars source 0 (Pos 1 1 0))
 
 export lexSource : String -> Check (List PTok)
-lexSource source = lexChars (sourceFuel source) (Chars source 0 (Pos 1 1))
+lexSource source = lexChars (sourceFuel source) (Chars source 0 (Pos 1 1 0))
 
 export lexComments : String -> Check (List Comment)
 lexComments source = case lexSourceWithComments source of

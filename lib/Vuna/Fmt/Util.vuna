@@ -80,7 +80,7 @@ mapMaybeStrings f (x :: rest) = case f x of
 -- ---------------------------------------------------------------
 -- | 占位 span（1 行 1 列的合成位置），用于没有源码位置的合成模式。
 export dummySpan : Span
-dummySpan = Span "" 1 1 1 1
+dummySpan = Span "" 1 1 1 1 0 0
 
 -- | 单行显示宽度上限（列）。
 export maxWidth : Int

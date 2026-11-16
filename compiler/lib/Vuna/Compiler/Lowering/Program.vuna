@@ -570,7 +570,7 @@ else
   let
     n = listLength tele
   in lowerTermFuel (fuel - 1) env st outer
-    (TCase base [CaseAlt c (projBindersIn tele 0) (TVar (recordProjVarIn fi) (n - 1 - fi) (Span "" 0 0 0 0))])
+    (TCase base [CaseAlt c (projBindersIn tele 0) (TVar (recordProjVarIn fi) (n - 1 - fi) (Span "" 0 0 0 0 0 0))])
 
 recordProjVarIn : Int -> String
 recordProjVarIn i = "@vuna@record@proj${i}"

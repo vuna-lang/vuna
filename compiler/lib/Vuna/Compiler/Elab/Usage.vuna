@@ -212,7 +212,7 @@ checkDefUsage ec msp name body =
   let
     sp = case msp of
       Just s => s
-      Nothing => Span "" 0 0 0 0
+      Nothing => Span "" 0 0 0 0 0 0
     ec0 = resetUseSpans ec
   in Vuna.Compiler.Base.Common.step (checkTerm ec0 sp [] body) (\_rest => \ec1 => OkC ec1)
 
@@ -329,7 +329,7 @@ else case dtDefBody d of
 defSpanOf : DtDef -> Span
 defSpanOf d = case dtDefSpan d of
   Just sp => sp
-  Nothing => Span "" 0 0 0 0
+  Nothing => Span "" 0 0 0 0 0 0
 
 -- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
 -- | 未使用 binder 告警（附改名建议）。

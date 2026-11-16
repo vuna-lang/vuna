@@ -51,11 +51,11 @@ import Base.EffProcess
 -- AST/Token 布局不同的二进制各占一套 key 空间）；载荷 = `Canonical.Lex` 的显式编码 +
 -- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器。
 lexCacheSchema : String
-lexCacheSchema = "vuna-lex-cache 1"
+lexCacheSchema = "vuna-lex-cache 2"
 
 -- | lex 载荷编码版本（`Store` 的 codec 段）。
 lexCacheCodec : String
-lexCacheCodec = "lex-tokens 1"
+lexCacheCodec = "lex-tokens 2"
 
 -- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff r` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。
@@ -482,7 +482,7 @@ checkExportItems prefix items = case duplicateExportItem items of
   Nothing => OkC 0
 
 exportItemSpanOfName : String -> List ExportItem -> Span
-exportItemSpanOfName name [] = Span "" 0 0 0 0
+exportItemSpanOfName name [] = Span "" 0 0 0 0 0 0
 exportItemSpanOfName name (i :: rest) =
   if exportItemName i == name then exportItemSpan i else exportItemSpanOfName name rest
 
@@ -530,7 +530,7 @@ computeExports modules prefix hdr imports decls extraExports extraReexports =
     newItems = append (map exportSpecToItem extraExports) extraReexports
     explicit =
       Vuna.Compiler.Base.Common.bind (explicitExports modules prefix decls imports newItems)
-        (\es => Vuna.Compiler.Base.Common.bind (checkExportDuplicates prefix (Span "" 0 0 0 0) es) (\_ => OkC es))
+        (\es => Vuna.Compiler.Base.Common.bind (checkExportDuplicates prefix (Span "" 0 0 0 0 0 0) es) (\_ => OkC es))
   in if notEmpty newItems then case hdr of
     Just (ModDecl _ hasList _ _ _ _ sp) =>
       if hasList then rnAt1 sp (DuplicateExport "module header") "module header" else explicit
@@ -576,7 +576,7 @@ implicitPreludeFrom roots importerPkg = do
 
 implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
-implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0)]
+implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0 0 0)]
 implicitPreludeDeps importerPkg deps =
   onErrDiag (withAbsent NsPackageGraph)
     (rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps))) (joinArrows (map (\c => rootName (secondOf c)) deps)))
@@ -693,7 +693,7 @@ loadProjectModules ctx names = loadProjectModulesWithPreloaded ctx names []
 export loadProjectModulesWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> List Module -> Eff r (Check Project)
 loadProjectModulesWithPreloaded ctx names preloaded =
   let
-    entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0)) names
+    entryImports = map (\n => Import n False Nothing (Span "" 0 0 0 0 0 0)) names
   in do
     modulesR <-
       loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
@@ -886,7 +886,9 @@ in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet reexpo
 
 -- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
 importRemovalSpan : Span -> Span
-importRemovalSpan sp = Span (spanFile sp) (spanStartLine sp) 1 (spanStartLine sp + 1) 1
+importRemovalSpan sp =
+  Span (spanFile sp) (spanStartLine sp) 1 (spanStartLine sp + 1) 1
+    (spanStartOffset sp - (spanStartCol sp - 1)) (spanStartOffset sp - (spanStartCol sp - 1))
 
 -- 已解析声明里出现的全部引用目标（值 / 类型 / 构造子位置）。解析期已把可解析的名字
 -- 换成 canonical target；`@vuna@ctor@短名@t1@t2` 形态（重载构造子）展开成它的候选目标。

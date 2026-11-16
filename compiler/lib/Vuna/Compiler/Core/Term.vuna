@@ -611,7 +611,7 @@ substMetaVar m name q t = substMetaVarGo m name q 0 t
 
 export substMetaVarGo : Int -> String -> Int -> Int -> Term -> Term
 substMetaVarGo m name q depth (t@(TMeta n)) =
-  if n == m then TVar name (depth - q) (Span "" 0 0 0 0) else t
+  if n == m then TVar name (depth - q) (Span "" 0 0 0 0 0 0) else t
 substMetaVarGo m name q depth (TPi n i r d c) =
   TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
 substMetaVarGo m name q depth (TLam n r b) = TLam n r (substMetaVarGo m name q (depth + 1) b)

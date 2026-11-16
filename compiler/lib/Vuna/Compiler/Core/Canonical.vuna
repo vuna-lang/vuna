@@ -23,7 +23,7 @@ import Vuna.Compiler.Base.Source
 
 -- | 解码时给 `TVar` 的位置占位：span 不参与编码，所以解码只能还原空 span。
 noSpan : Span
-noSpan = Span "" 0 0 0 0
+noSpan = Span "" 0 0 0 0 0 0
 
 -- ---------------------------------------------------------------
 -- 编码

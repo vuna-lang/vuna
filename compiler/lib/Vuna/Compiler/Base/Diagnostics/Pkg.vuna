@@ -168,7 +168,7 @@ pkgMsg e args = diagNoLoc SevError PhLoad CatPackage (pkgCode e) (diagBody (pkgT
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgSpan（目录/模板见 diagnostics.md）。
 pkgSpan : String -> Int -> Maybe Span
-pkgSpan path line = if path == "" then Nothing else Just (Span path line 1 line 1)
+pkgSpan path line = if path == "" then Nothing else Just (Span path line 1 line 1 0 0)
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.atSpan（目录/模板见 diagnostics.md）。
 atSpan : Maybe Span -> Diagnostic -> Diagnostic

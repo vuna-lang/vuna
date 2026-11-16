@@ -266,7 +266,7 @@ localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
   let
     v = forceVal ec (varTypeValue ctx i ty)
   in if isDictValue ec v then case conv (ecDefTbl ec) (ecSolsP ec) 0 v dom of
-    OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0)) (ecPutSols ec (solsList sols2)))
+    OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0 0 0)) (ecPutSols ec (solsList sols2)))
     ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
   else localDictLookupGo ctx (i + 1) dom ec rest
 
@@ -545,7 +545,7 @@ else
 ctxMemberProofTermGo : List (Pair String Term) -> Int -> String -> Maybe Term
 ctxMemberProofTermGo [] idx target = Nothing
 ctxMemberProofTermGo ((Pair name ty) :: rest) idx target =
-  if showTerm ty == target then Just (TVar name idx (Span "" 0 0 0 0))
+  if showTerm ty == target then Just (TVar name idx (Span "" 0 0 0 0 0 0))
   else ctxMemberProofTermGo rest (idx + 1) target
 
 ctxMemberProofTerm : Ctx -> Ec -> Value -> Maybe Term
@@ -567,7 +567,7 @@ ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
     olderDepth = length rest
     tyVal = eval (map (refineValue ctx.ctxRefVals defaultFuel) (ctxEnvAt rest 0 olderDepth)) ty
   in case convEc ec (ctxDepth ctx) tyVal dom of
-    OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0)) ec2)
+    OkC ec2 => Just (Pair (TVar name idx (Span "" 0 0 0 0 0 0)) ec2)
     ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
 
 solveRowMeta : Ec -> Int -> Value -> Check Ec
@@ -677,7 +677,7 @@ else case dictClassArgs ec forced of
   [] => Nothing
   args => if anyUnsolvedMetaArg ec args then Nothing
   else if isRigidDictArg ec forced && allInstancesMono (ecInsts ec) then Nothing
-  else case searchInstance ec forced (Span "" 0 0 0 0) of
+  else case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
     OkC (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
       OkC sols2 => Just (ecPutSols ec2 (solsList sols2))
       ErrC e => Nothing

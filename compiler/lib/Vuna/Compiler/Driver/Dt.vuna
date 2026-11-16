@@ -218,7 +218,7 @@ sealDeclOf decls name =
   in DAxiom ("vuna_seal_" ++ name) ty sealSpan
 
 sealSpan : Span
-sealSpan = Span "<seal>" 1 1 1 1
+sealSpan = Span "<seal>" 1 1 1 1 0 0
 
 opaqueSigType : String -> List Decl -> Maybe Expr
 opaqueSigType name [] = Nothing
@@ -764,7 +764,7 @@ dtMainKind ctx entry = do
     OkC loaded => case elabProgram (firstOf loaded) of
       ErrC e => ErrC e
       OkC p => case findMainDef (secondOf p) of
-        Nothing => cgErr0At (Span entry 1 1 1 1) NoMain
+        Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
         Just mainDef => if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
         else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
           VNeutral n => case n of
