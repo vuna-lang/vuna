@@ -7,6 +7,7 @@ module Vuna.Lint.Fix where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Lint.Config
 import Vuna.Lint.Rules
 
 -- | 内部：按 `editStart` 降序排序编辑（插入排序）。
@@ -72,11 +73,11 @@ applyFixes source findings =
 --
 -- 每轮复验沿用首轮的程序级 fixity：修复只做格式与结构改写、不改 imports，换一份 fixity
 -- 重排会退化成 unknown fixity。
-export fixLoop : List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
-fixLoop programFixities source findings passes total = if passes <= 0 then OkC (Pair total source)
+export fixLoop : LintConfig -> List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
+fixLoop cfg programFixities source findings passes total = if passes <= 0 then OkC (Pair total source)
 else case applyFixes source findings of
   ErrC e => ErrC e
   OkC (Pair count newSource) => if count == 0 then OkC (Pair total source)
-  else case lintSourceWith programFixities newSource of
+  else case lintSourceWithConfig cfg programFixities newSource of
     ErrC e => ErrC e
-    OkC remaining => fixLoop programFixities newSource remaining (passes - 1) (total + count)
+    OkC remaining => fixLoop cfg programFixities newSource remaining (passes - 1) (total + count)

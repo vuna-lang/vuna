@@ -24,7 +24,9 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
+import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
+import Vuna.Lint.Suppress
 
 -- | 内部：工具链 fuel 耗尽说明内部不变量被破坏，按硬失败处理（与编译器一致）。
 lintFuelExhausted : String -> a
@@ -39,18 +41,24 @@ export record Edit(..) where
   -- | 替换后的完整行（不含行尾换行）。
   editLines : List String
 
--- | 一条 lint 结果：位置、规则标识、消息，以及可选的自动修复。
+-- | 一条 lint 结果：位置、规则标识、消息、严重度，以及可选的自动修复。
 export record Finding(..) where
   -- | finding 所在行（1 基）。
   findingLine : Int
   -- | finding 所在列（1 基）。
   findingCol : Int
+  -- | finding 结束行（1 基；LSP/JSON 用）。
+  findingEndLine : Int
+  -- | finding 结束列（1 基、开区间；LSP/JSON 用）。
+  findingEndCol : Int
   -- | 规则的稳定符号（`LN_` 前缀）。
   findingCode : String
   -- | 规则的 kebab 短名（CLI 输出用）。
   findingRule : String
   -- | 人读消息，由 [Vuna.Lint.Diagnostics] 的消息模板生成。
   findingMessage : String
+  -- | 规则的严重度（配置可覆盖；off 的 finding 不会产出）。
+  findingSeverity : LintSeverity
   -- | 可自动修复时的编辑方案；`Nothing` 表示只能报告。
   findingEdit : Maybe Edit
 
@@ -829,8 +837,7 @@ else
       append ["${prefix}case ${name} of"]
         (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}${defaultPat} => ${defaultText}"])
     edit = Just (Edit startLine endLine newLines)
-  in [ Finding startLine (spanStartCol sp) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) edit
-  ]
+  in [mkFinding sp LiteralIfChain (lintMsg LiteralIfChain name) edit]
 
 -- | 内部：继续遍历各 then 分支，链内部的 dispatch 仍要检查。
 walkChainItems : Int -> List String -> List PTok -> List ChainItem -> List Finding
@@ -1004,8 +1011,7 @@ ifLiftFindings lines toks lane expr = case ifDispatchLeaves lines toks lane expr
   else case liftLeavesEdit lines toks lane leaves (exprSpan expr) of
     Nothing => []
     Just edit =>
-      [ Finding (spanStartLine (exprSpan expr)) (spanStartCol (exprSpan expr)) (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintMsg LiteralIfChain name) (Just edit)
-      ]
+      [mkFinding (exprSpan expr) LiteralIfChain (lintMsg LiteralIfChain name) (Just edit)]
 
 -- ---------------------------------------------------------------
 -- 规则 2：dispatch-lift（case / let）
@@ -1106,7 +1112,7 @@ liftEdit lines toks lane pat body name sp =
 -- 外层其他变量冲突且可安全改写。
 liftCaseOk : List String -> List PTok -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk lines toks lane pat body name sp =
-  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftEdit lines toks lane pat body name sp))
+  if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable lines toks lane pat body sp then [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftEdit lines toks lane pat body name sp))
   ]
   else []
 
@@ -1131,7 +1137,7 @@ liftCase lines toks lane caseExpr scrut _ sp = []
 -- | 内部：对 `let pat = x` 的提升；右值不是变量或模式不可提升时不产出。
 liftLet : List String -> List PTok -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet lines toks lane sp pat (EVar name nsp) body =
-  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift name) (Just (liftLetEdit lines toks lane pat body name sp))
+  if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable lines toks lane pat body sp then [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftLetEdit lines toks lane pat body name sp))
   ]
   else []
 liftLet lines toks lane sp pat _ body = []
@@ -1258,7 +1264,7 @@ caseToClausesEdit lines toks x pats headLine sp alts =
 caseToClauses : List String -> List PTok -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
 caseToClauses lines toks headLine name pats (ECase scrut alts sp) singleClause = case scrut of
   EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ Finding (spanStartLine sp) (spanStartCol sp) (lintCode DispatchLift) (lintRule DispatchLift) (lintMsg DispatchLift x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
+    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable lines toks pats headLine sp alts then [ mkFinding sp DispatchLift (lintMsg DispatchLift x) (Just (caseToClausesEdit lines toks x pats headLine sp alts))
     ]
     else []
   _ => []
@@ -1547,13 +1553,13 @@ consFindings lines toks e elems =
     texts = map (exprText lines toks) elems
     suggestion = if allNonEmpty texts then "[" ++ join ", " texts ++ "]" else "[...]"
     edit = if allNonEmpty texts then exprEdit lines toks e suggestion else Nothing
-  in [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral suggestion) edit
+  in [ mkFindingAt (exprStartLine e) (exprStartCol e) (exprSpan e) ListLiteral (lintMsg ListLiteral suggestion) edit
   ]
 
 -- | 内部：裸 `Nil` 的 finding 与编辑（改写成 `[]`）。
 nilFinding : List String -> List PTok -> Expr -> List Finding
 nilFinding lines toks e =
-  [ Finding (exprStartLine e) (exprStartCol e) (lintCode ListLiteral) (lintRule ListLiteral) (lintMsg ListLiteral "[]") (exprEdit lines toks e "[]")
+  [ mkFindingAt (exprStartLine e) (exprStartCol e) (exprSpan e) ListLiteral (lintMsg ListLiteral "[]") (exprEdit lines toks e "[]")
   ]
 
 -- | 内部：按构造子遍历表达式，收集 list-literal finding（不进入模式）。
@@ -1781,6 +1787,16 @@ scanDecls lines toks allDecls [] = []
 scanDecls lines toks allDecls (d :: rest) =
   append (declFindings lines toks allDecls d rest) (scanDecls lines toks allDecls rest)
 
+-- | 内部：用主体 span 构造一条 finding（start/end 与默认严重度）。
+mkFinding : Span -> LintRule -> String -> Maybe Edit -> Finding
+mkFinding sp rule msg edit = mkFindingAt (spanStartLine sp) (spanStartCol sp) sp rule msg edit
+
+-- | 内部：显式起始位置（中缀链的 span 从运算符开始，展示位置仍取子树真实起点）。
+mkFindingAt : Int -> Int -> Span -> LintRule -> String -> Maybe Edit -> Finding
+mkFindingAt line col sp rule msg edit =
+  Finding line col (spanEndLine sp) (spanEndCol sp + 1) (lintCode rule) (lintRule rule) msg
+    (lintDefaultSeverity rule) edit
+
 -- | 内部：按（行, 列）升序排序 finding（插入排序）。
 sortFindings : List Finding -> List Finding
 sortFindings [] = []
@@ -1823,20 +1839,38 @@ dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
 
--- | 解析源码并按全部规则返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
+-- | 解析源码并按配置/抑制过滤后返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
 --
 -- 规则看 AST 的中缀结构，所以重排必须与程序级 fixity 一致：`programFixities` 是本文件的
 -- `infix` 声明加上 import 闭包可见的声明（由调用方算），这里把它放在本文件声明（parse
 -- 得到的 env）之前，本地优先，与 loader 的顺序一致。缺声明时严格报 unknown fixity，不静默
 -- 按默认优先级重排。
-export lintSourceWith : List FixityDecl -> String -> Check (List Finding)
-lintSourceWith programFixities source = case parseSource "<lint>" source of
+export lintSourceWithConfig : LintConfig -> List FixityDecl -> String -> Check (List Finding)
+lintSourceWithConfig cfg programFixities source = case parseSourceWithComments "<lint>" source of
   ErrC e => ErrC e
-  OkC (SourceFile _ _ fx decls0 _ _ _) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+  OkC (Pair (SourceFile _ _ fx decls0 _ _ _) comments) => case parseSuppression comments of
     ErrC e => ErrC e
-    OkC decls => case lexSource source of
+    OkC suppression => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
       ErrC e => ErrC e
-      OkC toks =>
-        let
-          lines = splitLines source
-        in OkC (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+      OkC decls => case lexSource source of
+        ErrC e => ErrC e
+        OkC toks =>
+          let
+            lines = splitLines source
+            raw = dedupFindings (sortFindings (scanDecls lines toks decls decls))
+            filtered = filterFindings cfg suppression raw
+          in OkC filtered
+
+-- | 内部：按配置严重度与源码抑制过滤 finding。
+filterFindings : LintConfig -> Suppression -> List Finding -> List Finding
+filterFindings cfg suppression [] = []
+filterFindings cfg suppression (f :: rest) = case lintRuleOfName f.findingRule of
+  Nothing => filterFindings cfg suppression rest
+  Just rule =>
+    if lintRuleSeverity cfg rule == LintOff then filterFindings cfg suppression rest
+    else if isSuppressed suppression f.findingLine rule then filterFindings cfg suppression rest
+    else { f | findingSeverity = lintRuleSeverity cfg rule } :: filterFindings cfg suppression rest
+
+-- | 解析源码并按默认配置返回 finding（兼容入口）。
+export lintSourceWith : List FixityDecl -> String -> Check (List Finding)
+lintSourceWith = lintSourceWithConfig defaultLintConfig

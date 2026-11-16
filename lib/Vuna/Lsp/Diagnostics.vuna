@@ -38,6 +38,8 @@ import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Json
 import Vuna.Tool.Session
+import Vuna.Lint.Config
+import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
 import Base.EffFs
@@ -508,28 +510,44 @@ checkFullWith cache ctx label text modName = do
 -- fixity 解析失败或 lint 失败时退化为空 finding；外部文件变化会随会话重建清空。
 lintWithEnv : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (List Diagnostic))
 lintWithEnv env label text = do
+  cfgR <- loadLintConfigForFile label
+  cfg <- pure (case cfgR of
+    OkC c => c
+    ErrC _ => defaultLintConfig
+  )
   looked <- fixitiesForFile env label text
   pure (case looked of
     Pair env2 (ErrC _) => Pair env2 []
-    Pair env2 (OkC fx) => Pair env2 (case lintSourceWith fx text of
+    Pair env2 (OkC fx) => Pair env2 (case lintSourceWithConfig cfg fx text of
       ErrC _ => []
       OkC findings => map findingToDiagnostic findings
     )
   )
 
--- | 内部：lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool，
--- severity 为警告），位置按 finding 的 1-based 行列构造。
+-- | 内部：lint 严重度映射到编译器严重度。
+lintSeverityOf : LintSeverity -> Severity
+lintSeverityOf LintError = SevError
+lintSeverityOf LintWarn = SevWarning
+lintSeverityOf LintOff = SevWarning
+
+-- | 内部：lint finding 与编译器诊断共用同一个 `Diagnostic` 模型（phase = Tool，category = Tool），
+-- 位置按 finding 的 1-based 行列与结束位置构造。
 findingToDiagnostic : Finding -> Diagnostic
 findingToDiagnostic f =
-  diagAt (Span "" f.findingLine f.findingCol f.findingLine (f.findingCol + 1) 0 0) SevWarning PhTool
-    CatTool f.findingCode f.findingMessage
+  diagAt (Span "" f.findingLine f.findingCol f.findingEndLine f.findingEndCol 0 0)
+    (lintSeverityOf f.findingSeverity) PhTool CatTool f.findingCode f.findingMessage
 
 -- | 单个 lint finding 的 Diagnostic JSON（codeAction 内嵌诊断用）：字段集合与
 -- `publishDiagnostics` 一致（range / severity / source / code / message），客户端可按 code 关联。
 export findingDiagJson : Finding -> Json
 findingDiagJson f =
-  JObj
-    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingLine (f.findingCol + 1)), Pair "severity" (JNum severityWarning), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) [Pair "message" (JStr f.findingMessage)]))
+  let
+    sev = case f.findingSeverity of
+      LintError => 1
+      LintWarn => 2
+      LintOff => 2
+  in JObj
+    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) [Pair "message" (JStr f.findingMessage)]))
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链

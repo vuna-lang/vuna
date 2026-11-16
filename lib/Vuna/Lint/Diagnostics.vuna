@@ -9,6 +9,7 @@
 module Vuna.Lint.Diagnostics where
 
 import Base.Bool
+import Base.Eq
 import Base.List
 import Base.String
 
@@ -74,6 +75,61 @@ export lintFixable : LintRule -> Bool
 lintFixable LiteralIfChain = True
 lintFixable DispatchLift = True
 lintFixable ListLiteral = True
+
+-- | 规则的严重度：off 不参与扫描，warn 只报告，error 计入退出码。
+export data LintSeverity(..) : Type where
+  -- | 关闭。
+  LintOff : LintSeverity
+  -- | 警告。
+  LintWarn : LintSeverity
+  -- | 错误。
+  LintError : LintSeverity
+
+instance Eq LintSeverity where
+  (==) LintOff LintOff = True
+  (==) LintWarn LintWarn = True
+  (==) LintError LintError = True
+  (==) _ _ = False
+  (/=) a b = not (a == b)
+
+-- | 严重度的配置名。
+export lintSeverityName : LintSeverity -> String
+lintSeverityName LintOff = "off"
+lintSeverityName LintWarn = "warn"
+lintSeverityName LintError = "error"
+
+-- | 由配置名解析严重度；未知值给 `Nothing`。
+export lintSeverityOfName : String -> Maybe LintSeverity
+lintSeverityOfName "off" = Just LintOff
+lintSeverityOfName "warn" = Just LintWarn
+lintSeverityOfName "error" = Just LintError
+lintSeverityOfName _ = Nothing
+
+-- | 由 kebab 短名或 `LN_` code 反查规则；未知给 `Nothing`。
+export lintRuleOfName : String -> Maybe LintRule
+lintRuleOfName name = lookupRuleName name lintAllRules
+
+-- | 内部：按 kebab 短名或 code 查规则。
+lookupRuleName : String -> List LintRule -> Maybe LintRule
+lookupRuleName name [] = Nothing
+lookupRuleName name (r :: rest) =
+  if name == lintRule r || name == lintCode r then Just r else lookupRuleName name rest
+
+-- | 规则的默认严重度（未写配置时）。
+export lintDefaultSeverity : LintRule -> LintSeverity
+lintDefaultSeverity LiteralIfChain = LintError
+lintDefaultSeverity DispatchLift = LintError
+lintDefaultSeverity ListLiteral = LintError
+
+-- | 全部规则（配置与默认预设的遍历源）。
+export lintAllRules : List LintRule
+lintAllRules = [LiteralIfChain, DispatchLift, ListLiteral]
+
+-- | 规则是否属于 recommended 预设。
+export lintRecommended : LintRule -> Bool
+lintRecommended LiteralIfChain = True
+lintRecommended DispatchLift = True
+lintRecommended ListLiteral = True
 
 -- | 一条规则的文档条目：code、kebab 短名、说明、是否可修复与修复动作描述。
 export record LintEntry(..) where

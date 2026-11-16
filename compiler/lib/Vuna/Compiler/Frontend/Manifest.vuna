@@ -212,6 +212,12 @@ isDepTableSection : List String -> Bool
 isDepTableSection ([first, second]) = first == "dependencies"
 isDepTableSection _ = False
 
+-- `[lint]` 是工具侧配置：编译器只做 TOML 结构解析并放行，不认规则/键的语义；
+-- 具体 schema 由 `Vuna.Lint.Config` 在 lint 消费时校验（见 docs/reference/lint.md）。
+isLintSection : List String -> Bool
+isLintSection ("lint" :: _) = True
+isLintSection _ = False
+
 depAliasOfSection : List String -> String
 depAliasOfSection ([first, second]) = second
 depAliasOfSection _ = ""
@@ -242,6 +248,7 @@ else if sameSection section ["dependencies"] then OkC 0
 else if sameSection section ["registry"] then if key == "index" then OkC 0 else pkgAt2 path line (UnknownKey key "registry") key "registry"
 else if isDepTableSection section then if isDepSourceKey key then OkC 0
 else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key (depAliasOfSection section)
+else if isLintSection section then OkC 0
 else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
 
 checkEntries : String -> List TomlEntry -> Check Int

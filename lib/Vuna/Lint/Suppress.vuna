@@ -1,0 +1,167 @@
+-- | 源码内的 lint 抑制指令。
+--
+-- 只认注释里的 `vuna-lint:` 前缀（注释文本来自 lexer，不重新扫源码）：
+--
+--   -- vuna-lint: disable-next-line <rules|all>
+--   -- vuna-lint: disable-line <rules|all>
+--   -- vuna-lint: disable [rules|all]
+--   -- vuna-lint: enable [rules|all]
+--   -- vuna-lint: ignore-file
+--
+-- 规则名接受 kebab 短名或 `LN_` code；未知规则是配置错误（不静默忽略）。
+module Vuna.Lint.Suppress where
+
+import Base.Bool
+import Base.List
+import Base.Maybe
+import Base.String
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Lexer
+import Vuna.Lint.Diagnostics
+
+-- | 抑制目标：整个文件/全部规则，或一组规则。
+export data SuppressTarget(..) : Type where
+  -- | 全部规则。
+  SuppressAll : SuppressTarget
+  -- | 指定规则。
+  SuppressSome : List LintRule -> SuppressTarget
+
+-- | 一条区间指令（`disable` / `enable`）。
+export record SuppressEvent(..) where
+  -- | 指令所在行（1 基）。
+  suppressEventLine : Int
+  -- | 目标。
+  suppressEventTarget : SuppressTarget
+  -- | 真 = disable，假 = enable。
+  suppressEventOn : Bool
+
+-- | 一份文件的抑制表。
+export record Suppression(..) where
+  -- | `ignore-file`。
+  suppressionAll : Bool
+  -- | `disable` / `enable` 事件。
+  suppressionEvents : List SuppressEvent
+  -- | 单行抑制（`disable-line` / `disable-next-line`）。
+  suppressionLines : List (Pair Int SuppressTarget)
+
+-- | 空抑制表。
+export emptySuppression : Suppression
+emptySuppression = Suppression False [] []
+
+-- | 解析注释列表；未知指令/规则给带行号的错误。
+export parseSuppression : List Comment -> Check Suppression
+parseSuppression comments = parseComments comments emptySuppression
+
+-- | 内部：逐条注释累积。
+parseComments : List Comment -> Suppression -> Check Suppression
+parseComments [] supp = OkC supp
+parseComments (c :: rest) supp =
+  let
+    line = spanStartLine c.commentSpan
+    text = trim c.commentText
+  in if not (startsWith "vuna-lint:" text) then parseComments rest supp
+  else
+    let
+      body = trim (substring 10 (byteLength text - 10) text)
+    in case directiveOf body of
+      Nothing => err "${line}: unknown vuna-lint directive: ${body}"
+      Just (Pair name arg) => case name of
+        "ignore-file" =>
+          let
+            supp2 = { supp | suppressionAll = True }
+          in parseComments rest supp2
+        "disable-next-line" => case parseTarget arg line of
+          ErrC e => ErrC e
+          OkC target =>
+            let
+              supp2 =
+                { supp | suppressionLines = append supp.suppressionLines [Pair (line + 1) target] }
+            in parseComments rest supp2
+        "disable-line" => case parseTarget arg line of
+          ErrC e => ErrC e
+          OkC target =>
+            let
+              supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair line target] }
+            in parseComments rest supp2
+        "disable" => case parseTarget arg line of
+          ErrC e => ErrC e
+          OkC target =>
+            let
+              supp2 =
+                { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target True] }
+            in parseComments rest supp2
+        "enable" => case parseTarget arg line of
+          ErrC e => ErrC e
+          OkC target =>
+            let
+              supp2 =
+                { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target False] }
+            in parseComments rest supp2
+        _ => err "${line}: unknown vuna-lint directive: ${name}"
+
+-- | 内部：拆出指令名与参数（以第一个空格/制表符为界）。
+directiveOf : String -> Maybe (Pair String String)
+directiveOf body = case firstSpace (strUnpack body) [] of
+  Nothing => Just (Pair (trim body) "")
+  Just (Pair name restChars) =>
+    let
+      nameText = strPack (reverse name)
+      restText = trim (strPack restChars)
+    in Just (Pair nameText restText)
+
+-- | 内部：找第一个空格/制表符；返回（倒序指令名, 参数原文）。
+firstSpace : List Int -> List Int -> Maybe (Pair (List Int) (List Int))
+firstSpace [] acc = Nothing
+firstSpace (c :: rest) acc =
+  if c == 32 || c == 9 then Just (Pair acc rest) else firstSpace rest (c :: acc)
+
+-- | 内部：解析规则目标；空或 `all` = 全部。
+parseTarget : String -> Int -> Check SuppressTarget
+parseTarget arg line =
+  if arg == "" || arg == "all" then OkC SuppressAll else parseRuleNames (words arg) [] line
+
+-- | 内部：逐个解析规则名。
+parseRuleNames : List String -> List LintRule -> Int -> Check SuppressTarget
+parseRuleNames [] acc line = OkC (SuppressSome (reverse acc))
+parseRuleNames (name :: rest) acc line = case lintRuleOfName name of
+  Nothing => err "${line}: unknown lint rule: ${name}"
+  Just rule => parseRuleNames rest (rule :: acc) line
+
+-- | 内部：按逗号与空白拆词。
+words : String -> List String
+words text = filter (\w => w /= "") (concatMap (split " ") (split "," text))
+
+-- | 内部：列表拼接映射。
+concatMap : (a -> List b) -> List a -> List b
+concatMap f [] = []
+concatMap f (x :: rest) = append (f x) (concatMap f rest)
+
+-- | 某条 finding 是否被抑制。
+export isSuppressed : Suppression -> Int -> LintRule -> Bool
+isSuppressed supp line rule =
+  if supp.suppressionAll then True
+  else if anyLineStop supp.suppressionLines line rule then True
+  else eventSuppressed supp.suppressionEvents line rule
+
+-- | 内部：单行抑制是否命中。
+anyLineStop : List (Pair Int SuppressTarget) -> Int -> LintRule -> Bool
+anyLineStop [] line rule = False
+anyLineStop ((Pair l target) :: rest) line rule =
+  l == line && targetHas target rule || anyLineStop rest line rule
+
+-- | 内部：从后往前找第一条作用于该行的区间指令。
+eventSuppressed : List SuppressEvent -> Int -> LintRule -> Bool
+eventSuppressed events line rule = latestEvent (reverse events) line rule
+
+-- | 内部：从后往前找第一条作用于该行的区间指令。
+latestEvent : List SuppressEvent -> Int -> LintRule -> Bool
+latestEvent [] line rule = False
+latestEvent (e :: rest) line rule =
+  if e.suppressEventLine <= line && targetHas e.suppressEventTarget rule then e.suppressEventOn
+  else latestEvent rest line rule
+
+-- | 内部：目标是否包含规则。
+targetHas : SuppressTarget -> LintRule -> Bool
+targetHas SuppressAll rule = True
+targetHas (SuppressSome rules) rule = memName (lintCode rule) (map lintCode rules)

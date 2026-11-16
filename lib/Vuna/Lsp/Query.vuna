@@ -34,6 +34,7 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Fmt
 import Vuna.Index
 import Vuna.Json
+import Vuna.Lint.Config
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 import Vuna.Lsp.Bindings
@@ -334,10 +335,15 @@ codeActionsFor mgoals suggestions uri text reqStart reqStartCol reqEnd reqEndCol
 -- 组装顺序：case split、quick fix、fix all、诊断自带 suggestion；总数不超过 `maxCodeActions`。
 codeActionsForCtx : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe (List DtGoalInfo) -> List (Pair (Pair Int Int) (List Json)) -> String -> String -> PackageContext -> String -> Int -> Int -> Int -> Int -> Maybe (List String) -> Eff r (List Json)
 codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol reqEnd reqEndCol only = do
+  cfgR <- loadLintConfigForFile label
+  cfg <- pure (case cfgR of
+    OkC c => c
+    ErrC _ => defaultLintConfig
+  )
   looked <- fixitiesForFile emptyFixityEnv label text
   case secondOf looked of
     ErrC e => pure []
-    OkC programFixities => case lintSourceWith programFixities text of
+    OkC programFixities => case lintSourceWithConfig cfg programFixities text of
       ErrC e => pure []
       OkC findings => do
         rawSplits <-
@@ -351,7 +357,7 @@ codeActionsForCtx mgoals suggestions uri label ctx text reqStart reqStartCol req
             if quickfixAllowed only then filter (editTouches reqStart reqEnd) findings else []
           singles = mapMaybe (findingQuickFix uri) fixable
           fixAll =
-            if not (isEmptyList fixable) then fixAllActions uri programFixities text findings
+            if not (isEmptyList fixable) then fixAllActions uri cfg programFixities text findings
             else []
           budget = maxOf 0 (maxCodeActions - length splits)
           singles2 = take (if isEmptyList fixAll then budget else maxOf 0 (budget - 1)) singles
@@ -428,14 +434,14 @@ fixAllActionJson uri =
 
 -- | 内部：`fixLoop` 把全部可修复 finding 迭代应用（最多 8 轮，与 CLI `--fix` 一致）；
 -- 无改动时返回 `Nothing`。
-fixAllLintEdit : List FixityDecl -> String -> List Finding -> Maybe String
-fixAllLintEdit programFixities text findings = case fixLoop programFixities text findings 8 0 of
+fixAllLintEdit : LintConfig -> List FixityDecl -> String -> List Finding -> Maybe String
+fixAllLintEdit cfg programFixities text findings = case fixLoop cfg programFixities text findings 8 0 of
   ErrC e => Nothing
   OkC (Pair count newText) => if count == 0 || newText == text then Nothing else Just newText
 
 -- | 内部：fix all 的 codeAction；只有确实有改动时才产生动作。
-fixAllActions : String -> List FixityDecl -> String -> List Finding -> List Json
-fixAllActions uri programFixities text findings = case fixAllLintEdit programFixities text findings of
+fixAllActions : String -> LintConfig -> List FixityDecl -> String -> List Finding -> List Json
+fixAllActions uri cfg programFixities text findings = case fixAllLintEdit cfg programFixities text findings of
   Nothing => []
   Just newText => [fixAllActionJson uri]
 
@@ -447,12 +453,17 @@ fixAllLintWorkspaceEdit uri text = do
   case ctxR of
     ErrC e => pure Nothing
     OkC (Pair label ctx) => do
+      cfgR <- loadLintConfigForFile label
+      cfg <- pure (case cfgR of
+        OkC c => c
+        ErrC _ => defaultLintConfig
+      )
       looked <- fixitiesForFile emptyFixityEnv label text
       pure (case secondOf looked of
         ErrC e => Nothing
-        OkC programFixities => case lintSourceWith programFixities text of
+        OkC programFixities => case lintSourceWithConfig cfg programFixities text of
           ErrC e => Nothing
-          OkC findings => case fixAllLintEdit programFixities text findings of
+          OkC findings => case fixAllLintEdit cfg programFixities text findings of
             Nothing => Nothing
             Just newText =>
               Just

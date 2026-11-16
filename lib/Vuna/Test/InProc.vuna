@@ -24,6 +24,7 @@ import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Base.Diagnostics.Sink
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.FixityEnv
+import Vuna.Lint.Config
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 import Vuna.Test.Session
@@ -226,5 +227,5 @@ fixFile path text = do
     ErrC e => ErrC e
     OkC fixities => case lintSourceWith fixities text of
       ErrC e => ErrC e
-      OkC findings => fixLoop fixities text findings 8 0
+      OkC findings => fixLoop defaultLintConfig fixities text findings 8 0
   )
