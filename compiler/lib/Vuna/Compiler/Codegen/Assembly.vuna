@@ -10,7 +10,7 @@ module Vuna.Compiler.Codegen.Assembly where
 --
 -- 单元文件头只 `open Vuna_runtime`，其余跨单元引用一律由 `Codegen.Decl` /
 -- `Codegen.Term` 生成 `Unit.name` 全限定名；`UnitParts` 同时带出该单元**直接引用**
--- 到的依赖单元（`unitPartsDeps`），供 `Codegen.Split` 写进 `SplitFile` 与 build.sh。
+-- 到的依赖单元（`unitPartsDeps`），供 `Driver.SplitGen` 写进 `SplitFile` 与 build.sh。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Ir
 import Vuna.Compiler.Codegen.Decl

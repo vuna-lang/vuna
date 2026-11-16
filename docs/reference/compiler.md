@@ -66,20 +66,20 @@
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
 | `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
-| `Codegen`（门面） | DT 擦除 codegen 的稳定入口；重导出 `Codegen.Assembly` 与 `Codegen.Split` | `generateDtSplitProgram` |
+| `Codegen`（门面） | IR→文本门面：重导出 `Codegen.Assembly`（`Decl` / `Term` 由装配层使用） | `genUnitParts`、`genUnitText` |
 | `Lowering` | **Core → IR 的唯一入口**：擦除决策（binder 占位、实参/分支丢弃）、表示决策（record 字段表、去装箱族、构造子对齐与不透明 cast、Nat 折回与 Nat case 降级）、形态判定（内建内联、`++` 展平、分支 binder 形状）、入口分类（动作/值、展示函数、宿主 handler）。程序级检查（分区/擦除/axiom/作用域/名字单射/SCC 递归值形状）也在这里；不产文本 | `lowerTerm`、`lowerUnitOf`、`lowerProgramOf`、`lowerEntryOf`、`mkLwEnv`、`checkProgramOf` |
 | `Codegen.Decl` | 纯文本叶子：OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ `IrTy` / `IrTyDecl` → OCaml 类型文本 | `irTyText`、`irTyDeclText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
 | `Checks` | Core 侧检查（不产生 IR）：擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、定义体事实（`termUseInto`：运行时依赖 + float/tracing/obs 旗标，一次遍历） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termUseInto`、`partitionDefs` |
 | `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
 | `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |
-| `Codegen.Split` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Lowering` 出 `IrUnit`） | `generateDtSplitProgram` |
+| `Driver.SplitGen` | **唯一** codegen 生成器：逐模块 split 的声明归属表与分文件装配（每单元经 `Lowering` 出 `IrUnit`） | `generateDtSplitProgram` |
 | `Ir`（门面） | 后端中立的擦除后中间表示：重导出 `Ir.Model`、`Ir.Analysis` 与 `Ir.Runtime`；校验入口 | `validateProgram`、`validateUnit` |
 | `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |
 | `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏、覆盖自证）+ 入口可达性（native / wasm 共用） | `assembleGroups`、`assembleGroupNames`、`groupNames`、`reachableDefs` |
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
-| `Driver.Owner` | **声明归属表**（从 `Codegen.Split` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
+| `Driver.Owner` | **声明归属表**（从 `Driver.SplitGen` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
 | `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miImplHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/iface/<addr>`（Store framing、codec 见 `ifaceSchema`）；包级视图 `PackageIface`（`piEnv` = 包环境指纹）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf`、`pkgImplHashOf` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
@@ -131,7 +131,7 @@
   `lowerUnitOf` 出 `IrUnit`，`lowerEntryOf` 出 `IrEntry`）——它是 **Core 的唯一消费者**；
 - `Codegen.Assembly.genUnitParts` 把 `IrUnit` 装配成「open 头 + 类型 + 桥接 + 正文」；
   `Codegen.Term.genEntryHook` 渲染 main 钩子；
-- `Codegen.Split.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
+- `Driver.SplitGen.generateDtSplitProgram` 按 loader 模块序与声明归属切成逐模块 `SplitFile`
   （每单元经 `Lowering` 出 `IrUnit`；含直接依赖；**唯一输出模型**；`compile` 与 `build` 都走它）。
 
 `check` 只做精化 + 擦除检查并返回警告，不生成代码；包级检查：有 `app/Main.vuna` 的可执行包
@@ -248,7 +248,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 - **字符串拼接**：`++` 走 `bi_concat`（OCaml `^`）；
 - **零参定义求值一次**：零运行时参数的顶层定义直接生成 `let v_x = body`；递归组里零参
   非构造子 RHS 报 `CG_RecursiveValueDefinition`；
-- 唯一输出模型是**逐模块**：`Codegen.Split` 把同一个 `DtProgram` 按模块切成
+- 唯一输出模型是**逐模块**：`Driver.SplitGen` 把同一个 `DtProgram` 按模块切成
   `Vuna_runtime.ml` + 各源码模块 + `Main.ml`（**不生成 `.mli`**）。
 
 编译产物为 OCaml 源码后由 `ocamlopt` 编译链接：`vuna compile` 只产源码目录，由调用方执行
@@ -258,7 +258,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ### 输出模型（唯一：逐模块 split）
 
-`Codegen.Split.generateDtSplitProgram`（入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`））接收 loader 的
+`Driver.SplitGen.generateDtSplitProgram`（入口 `Driver.Dt.dtSplitProjectParts`（接口路径 `dtSplitProjectWithIfaces`））接收 loader 的
 模块序（依赖在前）、entry decls 与完整 `DtProgram`，产出 `List SplitFile`；每个 `SplitFile`
 = 文件名 + 文本 + **直接依赖单元列表**（含 `Vuna_runtime`、不含自身；runtime 单元依赖为空，
 其余依赖只记实际引用到的单元，不是「所有前序单元」）：

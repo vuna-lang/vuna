@@ -144,7 +144,7 @@ Prelude 的是 trait、实例与 helper。取舍：
 * `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToInt` 与 `Show/Eq/Ord Float`
   随 Prelude 自动可见；`deriving (Show, Eq, Ord)` 的包装类型字段是 Float 时也不需要
   额外 import。
-* 代价：Prelude 闭包包含 `Base.Float`，`Codegen.Split` 按**全部定义**扫描浮点用法，
+* 代价：Prelude 闭包包含 `Base.Float`，`Driver.SplitGen` 按**全部定义**扫描浮点用法，
   因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；没有「no-float 程序不追加」的
   逐字节约定（seed 固定点 / 模块缓存仍由 rotation 保证）。
 * `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「interp 见浮点就拒绝」

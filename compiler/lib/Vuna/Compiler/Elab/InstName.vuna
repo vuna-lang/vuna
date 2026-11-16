@@ -3,7 +3,7 @@ module Vuna.Compiler.Elab.InstName where
 
 -- Vuna.Compiler.Elab.InstName：实例名派生（trait 投影/实例字典的符号名）。
 -- 与 `Elab.Trait` 分工：实例名的派生规则单独成模块，避免 Trait 继续膨胀。
--- 纯函数、无状态；Trait 与 Codegen.Split 共用 `instanceName` / `derivedInstName`。
+-- 纯函数、无状态；Trait 与 Driver.SplitGen 共用 `instanceName` / `derivedInstName`。
 import Vuna.Compiler.Common
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Frontend.Ast

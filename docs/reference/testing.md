@@ -440,7 +440,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   - `ir-boundary`：IR 边界结构性守卫（`Vuna.Compiler.Ir*` 不得 import
     Core/Elab/Intrinsics/Codegen；文本生成层 `Codegen.{Decl,Term,Assembly}` 与门面不得
     import Core/Elab/Intrinsics；`Lowering.vuna` 是唯一的上游消费者；
-    `Codegen.Split` 必须路由到 `Lowering` 且不得 import Core/Intrinsics；生成层必须 import
+    `Driver.SplitGen` 必须路由到 `Lowering` 且不得 import Core/Intrinsics；生成层必须 import
     IR），见 [ir.md](ir.md)；
   - `steps-inproc`：进程绑定岛门禁——fixture 用例已全部进程内执行，steps 里仍 spawn
     `$VUNA` 的文件必须逐个登记在 `test/suite/process-bound.txt`，且总数不超过

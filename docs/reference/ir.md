@@ -11,7 +11,7 @@
 ## 位置与形状
 
 ```text
-Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assembly,Split}──> OCaml 文本
+Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assembly}──> OCaml 文本
                           │
                           └── Ir.Runtime：运行时符号契约（符号名 + 桥接标记）
                               Codegen.Runtime：符号 → OCaml 运行时表达式
@@ -29,7 +29,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 
 | 边界 | 规则 | 守护 |
 | --- | --- | --- |
-| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；文本生成层（`Codegen` 门面与 `Decl`/`Term`/`Assembly`/`Runtime`）不 import `Core` / `Elab` / `Intrinsics`，唯一的上游消费者是 `Lowering.vuna`。`Codegen/Split.vuna` 按声明归属切分，因此允许 import `Elab`（`DtProgram`/`DtDef`/`DtData` 是切分单位），但 `Core` / `Intrinsics` 一律不许，且必须路由到 `Lowering` | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
+| 依赖方向 | `Ir*` 不 import `Core` / `Elab` / `Intrinsics` / `Codegen`；`Codegen/` 整目录只吃 IR（不 import `Core` / `Elab` / `Intrinsics` / `Driver`），唯一的 Core 消费者是 `Lowering.vuna` 与 `Checks.vuna`。声明归属切分与分文件装配在 `Driver/SplitGen.vuna`（属 Driver 层，允许 import `Elab` 的声明表，但不得 import `Core` / `Intrinsics`，且必须路由到 `Lowering`） | `checks.ir-boundary`（`nix/checks/lib/ir-boundary.sh`） |
 | 名字 | IR 节点里只有**源码名**与**契约里的运行时符号**（`IrRt` / `IrRtApp`；节点里没有目标文本）；`v_` / `t_` / `C_` / `f_` 前缀、转义、`Unit.` 限定、运行时表达式都属于后端 | 同上 + review |
 | 数据 | IR 只有确定性纯数据（`String` / `Int` / `Bool` / `List` / `Pair` / `Maybe` / `Span`）：不含闭包、`HashMap`、`Value`、`Term` | `Ir.Model` 的 import 面 |
 

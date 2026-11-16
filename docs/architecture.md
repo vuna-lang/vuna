@@ -36,10 +36,9 @@ compiler/lib/Vuna/Compiler/   （106 个源模块；目录即层：
 │                           Runtime                          运行时契约（符号 + 桥接标记；无目标文本）
 ├─ Lowering.vuna             Core→IR 唯一入口（擦除 / 表示 / 形态 / 入口分类 / 程序级检查）
 ├─ Checks.vuna               Core 侧检查（擦除 / 作用域 / axiom / 定义体事实），不产生 IR
-├─ Codegen.vuna + Codegen/  Decl Term Assembly Split
-│                           Runtime                           IR→OCaml 文本（不 import Core / Elab / Intrinsics）
+├─ Codegen.vuna + Codegen/  Decl Term Assembly Runtime        IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Native/                  Model Abi Runtime Module Render   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
-└─ Driver/                    Split Dt Compile Wasm Native
+└─ Driver/                    Split SplitGen Dt Compile Wasm Native
                               CompilerCli                      输出模型 / facade / 后端驱动 / CLI
   PerfCache                          codegen 单元缓存
                               Owner Iface Cache                 归属表 / 模块接口 / 包级摘要
@@ -69,7 +68,7 @@ import 子模块并选择性重导出（对外名字面不变），实现只在�
  → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
  → Lowering                      （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
  → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
- → Codegen.Split.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
+ → Driver.SplitGen.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）
  → sh build.sh                   （Driver.Split：层内并行；ocamlopt 链接）
 ```
 
@@ -133,12 +132,12 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 （洞目标 `goalsOfProgram`）、`Elab.Termination.checkTerminationDecls`、`Elab.Match.multiToExpr`、
 `Core.Eval` / `Core.Conv`；`Intrinsics.findIntrinsic`；
 `Lowering.*`（Core→IR）、`Codegen.Assembly.*`、`Codegen.Term.*`；
-`Codegen.Split.generateDtSplitProgram`；
+`Driver.SplitGen.generateDtSplitProgram`；
 `Driver.Split.SplitFile` / `buildScript`；CLI 经 `Driver.Compile.*` 接 `Driver.CompilerCli`。
 
 **通常连带改动**：语法 = `Frontend.{Lexer,Parser,Ast}` + `Fmt` + `Elab.Term` / `Elab.Match` +
 `Codegen`；名字解析 = `Loader.{Modules,Resolve,Flatten,Expand}`；类型规则 = `Elab.*` +
-`Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
+`Elab.{Records,Derive}` + `Codegen`；split = `Driver.SplitGen` + `Driver.Split`；诊断 =
 `Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
 （见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；上下文回归见第 39 段。

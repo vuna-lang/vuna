@@ -1621,7 +1621,7 @@ let dtp_substTemplate tmpl xs =
 """
 
 -- 定义位置表：OCaml 值名 → (vuna 定义名, 文件:行)。
--- `norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见 `Codegen.Split`）。
+-- `norm` 负责把 span 里的文件路径归一到模块根 / 包目录下（见 `Driver.SplitGen`）。
 -- 确定性：增量路径的干净模块从接口复用，位置行来自接口里持久化的
 -- `miDefLocs`；两条路径的拼接顺序不同，所以这里把行**按文本排序**再拼接——
 -- 全量/增量产物因此逐字节一致，运行时 `assoc_opt` 查找不依赖顺序。

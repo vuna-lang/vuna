@@ -1,4 +1,4 @@
-module Vuna.Compiler.Codegen.Split where
+module Vuna.Compiler.Driver.SplitGen where
 
 -- 逐模块 split 生成（`compile` / `build` / `seed` 的唯一输出模型）。
 --

@@ -165,7 +165,7 @@ obsSampleStop  : Int -> Int
 
 - `Codegen.Term.genGroup` 在每个 `let` / `let rec` 绑定、每个 `and` 绑定、每个单定义 `let`
   前写一行 `# <起始行> "<包相对路径>"`（单行内不插指令，避免破坏布局）。
-- 路径由 `Codegen.Split.splitLocPath roots contextDir` 归一（与 `dt_def_locs` 位置表同一函数），
+- 路径由 `Driver.SplitGen.splitLocPath roots contextDir` 归一（与 `dt_def_locs` 位置表同一函数），
   因此产物**只含包相对路径**（O7）。check 路径（`noQual`）归一为恒等，但文本被丢弃。
 - 效果：`ocamlopt -g` 的 `.debug_line` 直接指向 `.vuna` 文件（`gdb` / `perf` / 异常回栈原生可用）；
   `dt_report_exn` 的 `dt_def_locs` 位置表**保留**（无 DWARF 的裁剪产物仍需可读上报）。

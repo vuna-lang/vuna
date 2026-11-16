@@ -2,7 +2,7 @@ module Vuna.Compiler.Driver.Split where
 
 -- 分离编译的输出文件模型与构建脚本生成。
 --
--- Codegen.Split.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容 +
+-- Driver.SplitGen.generateDtSplitProgram 产出 `List SplitFile`（相对文件名 + 内容 +
 -- 该单元的直接依赖单元名）；本模块负责落盘并生成**分层并行**的增量构建脚本：
 --   - 跨单元引用用全限定 OCaml 名字，每个单元只依赖它真正引用的前序单元，
 --     依赖图不退化为「open 全部前序」的全序链；

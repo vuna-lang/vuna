@@ -41,6 +41,7 @@ import Vuna.Compiler.Driver.Cache
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
 import Vuna.Compiler.Driver.Split
+import Vuna.Compiler.Driver.SplitGen
 import Base.EffConsole
 import Base.EffEnv
 import Base.EffFs

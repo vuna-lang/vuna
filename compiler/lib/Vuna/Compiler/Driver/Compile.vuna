@@ -1,7 +1,7 @@
 module Vuna.Compiler.Driver.Compile where
 
 -- Vuna.Compiler.Driver.Compile：编译入口（供 CompilerCli / 测试使用）。唯一路径是 DT：
--- 精化（Elab）→ 擦除检查 + 逐模块 OCaml 生成（Codegen.Split）；`check*` 只检查不产码。
+-- 精化（Elab）→ 擦除检查 + 逐模块 OCaml 生成（Driver.SplitGen）；`check*` 只检查不产码。
 -- 包上下文（`PackageContext`）是唯一入口形状；`compile` 与 `seed`
 -- rotation 共用 `compileToDir`（目录 + build.sh）。
 -- `build` 在链接成功后写 `build-meta.json`（源/依赖闭包内容哈希 + compiler 版本），

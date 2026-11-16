@@ -169,7 +169,7 @@ Track A 第一步（Core → IR → OCaml）之后这些不变量分两层：**�
 | Core | `Core.Eval.eval` / `force` / `normalize` / `quote`；`Core.Conv.conv` / `solveMeta` |
 | Elab | `Elab.Driver.elabProgramFull` / `goalsOfProgram`；`Elab.Term.inferE` / `checkE`；`Elab.Case` / `Elab.Match` / `Elab.Data` / `Elab.Trait` / `Elab.Termination` |
 | IR | `Lowering.lowerTerm` / `lowerUnitOf` / `lowerProgramOf`；`Ir.Model`（数据）/ `Ir.Analysis`（SCC） |
-| Codegen | `Lowering.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Codegen.Split.generateDtSplitProgram`；`Checks.*` |
+| Codegen | `Lowering.checkProgramOf`（程序级检查）；`Codegen.Assembly.genUnitParts`；`Codegen.Term.genIr` / `genEntryHook`；`Driver.SplitGen.generateDtSplitProgram`；`Checks.*` |
 
 数据流与改动定位见 [architecture.md](../architecture.md)；测试标签见
 [testing.md](testing.md)。

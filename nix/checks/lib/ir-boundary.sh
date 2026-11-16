@@ -57,16 +57,10 @@ for f in compiler/lib/Vuna/Compiler/Ir.vuna compiler/lib/Vuna/Compiler/Ir/*.vuna
   check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Codegen)(\.|$))'
 done
 
-# 规则 2：文本生成层只吃 IR。
-for f in \
-  compiler/lib/Vuna/Compiler/Codegen.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Decl.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Term.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Assembly.vuna \
-  compiler/lib/Vuna/Compiler/Codegen/Runtime.vuna
-do
+# 规则 2：`Codegen/` 只吃 IR（整目录，无例外；也不许向上 import Driver）。
+for f in compiler/lib/Vuna/Compiler/Codegen.vuna compiler/lib/Vuna/Compiler/Codegen/*.vuna; do
   [ -f "$f" ] || continue
-  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics)(\.|$))'
+  check_forbidden "$f" '^(Vuna\.Compiler\.(Core|Elab|Intrinsics|Driver)(\.|$))'
 done
 
 # 规则 3：Lowering 存在且是唯一的 Core 消费者。
@@ -81,16 +75,17 @@ else
   fi
 fi
 
-# 规则 3b：`Codegen/` 目录只放 IR→文本；Core→IR 与 Core 侧检查不得再搬回来。
-for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Compiler/Codegen/Erase.vuna; do
+# 规则 3b：`Codegen/` 目录只放 IR→文本；Core→IR、Core 侧检查与归属切分不得再搬回来。
+for gone in compiler/lib/Vuna/Compiler/Codegen/Lower.vuna compiler/lib/Vuna/Compiler/Codegen/Erase.vuna compiler/lib/Vuna/Compiler/Codegen/Split.vuna; do
   if [ -f "$gone" ]; then
     echo "ir-boundary: $gone must live outside Codegen/ (Codegen is IR -> text only)"
     fail=$((fail + 1))
   fi
 done
 
-# 规则 4：Split 必须路由到 Lowering，且不得自己消费 Core / Intrinsics。
-SPLIT=compiler/lib/Vuna/Compiler/Codegen/Split.vuna
+# 规则 4：SplitGen（声明归属 + 分文件装配，属 Driver 层）必须路由到 Lowering，
+# 且不得自己消费 Core / Intrinsics。
+SPLIT=compiler/lib/Vuna/Compiler/Driver/SplitGen.vuna
 if [ -f "$SPLIT" ]; then
   if ! imports_of "$SPLIT" | grep -qE '^Vuna\.Compiler\.Lowering$'; then
     echo "ir-boundary: $SPLIT does not import Vuna.Compiler.Lowering (must lower per unit)"
