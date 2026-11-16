@@ -139,7 +139,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 `Elab.{Records,Derive}` + `Codegen`；split = `Codegen.Split` + `Driver.Split`；诊断 =
 `Diag` / `Source` + 各阶段 `Diagnostic` + golden（模型见
 [diagnostics.md](reference/diagnostics.md)）。测试标签：第 1–11、13–27、30、34 段
-（见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；快照与上下文回归见第 38/39 段。
+（见 [testing.md](reference/testing.md)）；包构建 / split 见第 28/29/33/34 段；上下文回归见第 39 段。
 
 **native 后端**：`IR --Native.Module.build--> NativeProgram --Native.Render--> main.s`
 再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口

@@ -410,12 +410,6 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - `corpus/term/` / `corpus/term_err/`：终止性正反例（HOF / where / 互递归 / SCT / fuel），
   第 37 段；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查 TC/CG/LN/FX
   分区与幂等。
-- **第 38 段：API / 产物快照**。把重构后必须稳定的对外面与 codegen 形状落成入库基准：
-  `test/snapshots/{exports.txt, modules.txt, split-*.txt}` 分别锁导出面、模块清单与关键
-  split 产物（`split-05_entry_data.txt` / `split-06_entry_trait.txt` /
-  `split-dt_ad_hoc.txt` 等逐文件 `type t_`/`let v_` 名字清单）。golden 由
-  `test/snapshots/update.sh` 重新生成（**有意变更才更新**，diff 必须可解释），断言是
-  「生成结果与 golden 逐字节一致」。
 - **第 39 段：包上下文回归**。覆盖语义边界：无 manifest 的文件只可见 base
   （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、不向上
   找；ad-hoc 单文件自动注入 Prelude；依赖方向（`95_cross_dep`：依赖包不能 import 消费包

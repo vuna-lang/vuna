@@ -39,8 +39,7 @@
 - **测试夹具（`test/corpus/**/*.vuna`）**：注释只写「这条用例锁什么行为」。
   **行数不可变**——`.diag.json` 里存了 `(line, col)`，改写必须就地替换，不能增删行
   （需要增删时同步重新 `--bless-diag`）。
-- **`test/suite/steps/*.steps`、`test/snapshots/*`**：头注释只写章节主题与断言面。
-  快照文件由 `sh test/snapshots/update.sh` 生成，改生成器注释后就重跑一次，别手改产物。
+- **`test/suite/steps/*.steps`**：头注释只写章节主题与断言面。
 - **用户可见字符串**（诊断模板 `tcTemplate`/`cgTemplate`、CLI `help`/`--help`、
   `errors.md` 文案）：不得出现编号；诊断消息描述的是**规则本身**
   （「case on Bool only accepts ...」），不是「哪个里程碑还没做完」。
