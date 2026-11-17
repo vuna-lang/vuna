@@ -117,6 +117,93 @@ runtimeBinders : List IrBinder -> List IrBinder
 runtimeBinders bs = filter (\b => not (isErasedBinder b)) bs
 
 -- ---------------------------------------------------------------
+-- 活槽清理：函数体里最后一次读之后把槽清零
+-- ---------------------------------------------------------------
+-- | 槽读：`[rbp+off]` 且 `off < 0`。生成的函数体没有回边，所以「文本上最后一次读」
+--   就是该槽的最后一次使用；清零让保守 GC 不把活帧里已消费的临时值当根。
+slotReadOff : Operand -> List Int
+slotReadOff op = case op of
+  OpMem Rbp off => if off < 0 then [off] else []
+  _ => []
+
+baseSlotRead : Reg -> Int -> List Int
+baseSlotRead Rbp off = if off < 0 then [off] else []
+baseSlotRead _ _ = []
+
+instrSlotReads : Instr -> List Int
+instrSlotReads i = case i of
+  IMov _ src => slotReadOff src
+  IMovByteOp _ _ => []
+  IMovByteRegOp _ _ => []
+  IMovzx _ op => slotReadOff op
+  IMovzxAl => []
+  ILea _ _ => []
+  ILeaMem _ base off => baseSlotRead base off
+  IBin _ op => slotReadOff op
+  IBinReg _ _ op => slotReadOff op
+  ICmp a b => append (slotReadOff a) (slotReadOff b)
+  ITest _ _ => []
+  ISetcc _ _ => []
+  INeg _ => []
+  ICqo => []
+  IDiv _ => []
+  IDivUnsigned _ => []
+  IRepMovsb => []
+  IRepeCmpsb => []
+  ILabel _ => []
+  IJmp _ => []
+  IJmpReg _ => []
+  IJcc _ _ => []
+  ICall _ => []
+  ICallReg _ => []
+  IXmmLoad _ op => slotReadOff op
+  IXmmStore _ _ => []
+  IXmmFromInt _ _ => []
+  IXmmToInt _ _ => []
+  IXmmBin _ _ _ => []
+  IXmmUnop _ _ => []
+  IXmmCmp _ _ => []
+  IXmmToReg _ _ => []
+  IXmmFromReg _ _ => []
+  IRet => []
+  ISyscall => []
+  IPush _ => []
+  IPop _ => []
+  INop => []
+
+slotUsePut : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
+slotUsePut off idx [] = [Pair off idx]
+slotUsePut off idx (p :: rest) =
+  if firstOf p == off then Pair off idx :: rest else p :: slotUsePut off idx rest
+
+recordReads : Int -> List Int -> List (Pair Int Int) -> List (Pair Int Int)
+recordReads idx [] tbl = tbl
+recordReads idx (off :: rest) tbl = recordReads idx rest (slotUsePut off idx tbl)
+
+buildSlotUse : Int -> List (Pair Int Int) -> List Instr -> List (Pair Int Int)
+buildSlotUse idx tbl [] = tbl
+buildSlotUse idx tbl (i :: rest) =
+  buildSlotUse (idx + 1) (recordReads idx (instrSlotReads i) tbl) rest
+
+clearsAt : Int -> List (Pair Int Int) -> List Instr
+clearsAt idx [] = []
+clearsAt idx (p :: rest) =
+  if secondOf p == idx then IMov (OpMem Rbp (firstOf p)) (OpImm 0) :: clearsAt idx rest
+  else clearsAt idx rest
+
+emitClears : Int -> List (Pair Int Int) -> List Instr -> List Instr
+emitClears idx tbl [] = []
+emitClears idx tbl (i :: rest) =
+  append [i] (append (clearsAt idx tbl) (emitClears (idx + 1) tbl rest))
+
+clearDeadSlots : List Instr -> List Instr
+clearDeadSlots instrs = emitClears 0 (buildSlotUse 0 [] instrs) instrs
+
+-- | 调用点：实参 / 被调闭包的槽在调用返回后一定死，直接清零。
+clearSlotsInstrs : List Int -> List Instr
+clearSlotsInstrs slots = map (\s => IMov (OpMem Rbp (nativeSlotOff s)) (OpImm 0)) slots
+
+-- ---------------------------------------------------------------
 -- 定义查找 / 可达性
 -- -----------------------------------------------------------
 findDef : String -> List IrDef -> Maybe IrDef
@@ -188,7 +275,7 @@ genSaturatedCall fuel st label args = if fuel <= 0 then internal "native codegen
 else nbind (genArgs (fuel - 1) st args) (\p => let
   slots = firstOf (secondOf p)
   st1 = secondOf (secondOf p)
-in NOk (Pair (append (firstOf p) (callSlotsInstrs label slots)) st1)
+in NOk (Pair (append (firstOf p) (append (callSlotsInstrs label slots) (clearSlotsInstrs slots))) st1)
 )
 
 -- | 以**已求值到槽**的实参调用：前 6 个装参数寄存器，其余逆序压栈（SysV AMD64）。
@@ -203,7 +290,7 @@ callSlotsInstrs label slots =
     pad = if k - k / 2 * 2 == 1 then 8 else 0
     popped = 8 * k + pad
   in append (pushStackArgs stackSlots)
-    (append (loadArgRegs nativeArgRegs regSlots) (append [ICall label] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])))
+    (append (loadArgRegs nativeArgRegs regSlots) (append (clearSlotsInstrs slots) (append [ICall label] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)]))))
 
 -- | 栈参数压栈：逆序（最后一个先压），第 7 个参数最终位于 `[rbp+16]`。
 --   `slots` 已按实参顺序排列（从第 7 个起）。先 `sub rsp, 8` 补对齐空洞（若需要）。
@@ -280,7 +367,7 @@ closureCallSlotsInstrs clo slots =
     pad = if k - k / 2 * 2 == 1 then 8 else 0
     popped = 8 * k + pad
   in append (pushStackArgs stackSlots)
-    (append (loadArgRegs closureArgRegs regSlots) (append [IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg R11) (OpMem Rdi 0), ICallReg R11] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])))
+    (append (loadArgRegs closureArgRegs regSlots) (append [IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg R11) (OpMem Rdi 0)] (append (clearSlotsInstrs (clo :: slots)) (append [ICallReg R11] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])))))
 
 -- | 统一应用：运行时先按闭包 arity 走**饱和直调**快路径（栈开销与闭包 ABI 引入前一致），
 --   arity 不匹配才把实参按逆序压栈成升序数组交给 `rt_apply`（部分 / 过度应用）。
@@ -297,13 +384,16 @@ genApplyCall st clo args =
     head = if pad == 0 then [] else [IBinReg "sub" Rsp (OpImm 8)]
     slowPart =
       append head
-        (append pushes [IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg Rsi) (OpImm k), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm (8 * k + pad))])
+        (append pushes
+          (append
+            [IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg Rsi) (OpImm k), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo))]
+            (append (clearSlotsInstrs (clo :: args)) [ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm (8 * k + pad))])))
     fastPart =
       append
         [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg Rax) (OpMem Rax 8), ICmp (OpReg Rax) (OpImm k), IJcc "jne" lSlow]
         (closureCallSlotsInstrs clo args)
   in NOk
-    (Pair (append fastPart (append [IJmp lEnd, ILabel lSlow] (append slowPart [ILabel lEnd]))) st1)
+    (Pair (append fastPart (append [IJmp lEnd, ILabel lSlow] (append slowPart (append [ILabel lEnd] (clearSlotsInstrs (clo :: args)))))) st1)
 
 -- | 求值 head + 实参后统一应用（部分 / 过度 / 运行时闭包都走这里）。
 genApplyHead : Int -> FGen -> Ir -> List Ir -> NRes (Pair (List Instr) FGen)
@@ -618,7 +708,7 @@ else
     frame = nativeFrameBytes stF.fgNextSlot
     lamFunc =
       NativeFunc lamName frame
-        (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf cp) (append (firstOf bp) (append (firstOf q) nativeEpilogue)))))
+        (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf cp) (append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)))))
     allocP = genAlloc st1 (2 + ncap)
     obj = firstOf (secondOf allocP)
     st2 = secondOf (secondOf allocP)
@@ -1044,7 +1134,7 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
   in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
-    instrs = append (firstOf p) nativeEpilogue
+    instrs = append (clearDeadSlots (firstOf p)) nativeEpilogue
     mainF =
       NativeFunc (nativeFuncLabel name) frame
         (append (nativePrologue frame) (append stackGuardInstrs instrs))
@@ -1058,7 +1148,7 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
       else nbind (bindArgs rbs st0) (\bp => nbind (genExpr 100000 (secondOf bp) inner) (\q => let
         st1 = secondOf q
         frame = nativeFrameBytes st1.fgNextSlot
-        instrs = append (firstOf bp) (append (firstOf q) nativeEpilogue)
+        instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)
         mainF =
           NativeFunc (nativeFuncLabel name) frame
             (append (nativePrologue frame) (append stackGuardInstrs instrs))

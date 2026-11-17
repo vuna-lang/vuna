@@ -279,7 +279,7 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 | env | 缺省 | 语义 |
 | --- | --- | --- |
 | `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | **live 堆**上限（含被钉住的续延捕获缓冲）：分配的预留超过它时先做一次完整 GC，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2；`0` = 不限 |
-| `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 触发阈值下限（也是新堆段的最小尺寸）：阈值 = `max(GC_MIN, 2 × live)` |
+| `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 触发阈值下限（也是新堆段的最小尺寸）：阈值 = `max(GC_MIN, 2 × live, 上次 GC 扫到的栈字节数)` |
 | `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节>` |
 | `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次完整 GC（抓漏根的调试开关，不是运行模式） |
 | `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
@@ -318,7 +318,11 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 - **不扫的块**：`leaf`（String / Float，payload 是字节或位型）与 `pin`（续延捕获缓冲，
   由 `rt_cap_free` 自己复用；活跃捕获缓冲经 `record[0]` 被记录标记，再按普通 payload 保守扫描）。
 - **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
-  `threshold = max(GC_MIN, 2 × live)`。非移动、不压缩，也没有分代/增量/并发。
+  `threshold = max(GC_MIN, 2 × live, 本次扫到的栈字节数)`（深递归按扫栈成本摊还）。
+  非移动、不压缩，也没有分代/增量/并发。
+- **死槽清零**（`Native.Module`）：调用点把实参装进寄存器/栈后立即清零实参槽；函数体
+  在「文本上最后一次读」之后清零其余临时槽。生成的函数体没有回边，因此这一步是安全的，
+  效果是活帧不再把已消费的临时对象留给保守扫描（`gc_low_live` 的 319 MiB → 5 MiB）。
 - **标记栈**：首次 GC 时 `mmap` 1 MiB，溢出翻倍并拷贝；GC 内部只用 `mmap`，不走 `alloc`。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /

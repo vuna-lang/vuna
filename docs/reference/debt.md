@@ -83,7 +83,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D102 | native GC 是**保守、非移动、不分代、不压缩**：活帧里用过的栈槽会把最后一个临时对象留住（内存下界随栈深度增长）、形似指针的 `Int` 会多留对象、空闲块按尺寸类复用但不合并（内部碎片最多约 2×）、>64 MiB 的块进首次适配链而不 `munmap`、续延捕获缓冲钉住不回收 | `compiler/lib/Vuna/Compiler/Native/Gc.vuna`（`gc_try` 的候选判据、`gc_sweep` 的尺寸类链）；[native.md](native.md) §5.2/§8 | 后续（压缩/分代与空闲块合并按基准证据再定） |
+| D102 | native GC 是**保守、非移动、不分代、不压缩**：形似指针的 `Int` / 字节型会多留对象、空闲块按尺寸类复用但不合并（内部碎片最多约 2×）、>64 MiB 的块进首次适配链而不 `munmap`、续延捕获缓冲钉住不回收；活帧的死槽在最后一次读后清零（`Native.Module` 的 `clearDeadSlots` / `clearSlotsInstrs`），但保守扫描仍按「字」判定，无法做到精确 | `compiler/lib/Vuna/Compiler/Native/Gc.vuna`（`gc_try` 的候选判据、`gc_sweep` 的尺寸类链）；[native.md](native.md) §5.2/§8 | 后续（压缩/分代与空闲块合并按基准证据再定） |
 
 ## wasm 后端
 

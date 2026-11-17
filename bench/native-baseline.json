@@ -1,118 +1,102 @@
 {
   "schema": 2,
   "meta": {
-    "timestamp": "2026-11-17T10:36:32Z",
-    "repo": "/home/grass/.local/share/opencode/worktree/c1976f/native-gc-baseline",
-    "git_head": "11a07e50db0b62dbc68f6e4ed5bb39bb78f9f70b",
-    "git_dirty": false,
+    "timestamp": "2026-11-17T10:55:26Z",
+    "repo": "/home/grass/.local/share/opencode/worktree/c1976f/native-gc",
+    "git_head": "eabffa01c18322e35d98128df22ddd2dab73c530",
+    "git_dirty": true,
     "compiler": "vuna 0.1.0",
     "ocamlopt": "5.5.1",
     "arch": "x86_64",
     "nproc": 16,
-    "loadavg": "2.08",
-    "runs": 5,
-    "warmup": 2,
-    "target": "both",
+    "loadavg": "6.88",
+    "runs": 3,
+    "warmup": 1,
+    "target": "native",
     "stack_policy": "unlimited",
     "rss_passes": 3,
     "rss_method": "gnu-time max_rss (max of rss_passes)"
   },
   "benchmarks": {
     "arith": {
-      "ocaml_ref": { "median_ms": 5, "rss_kb": 2488 },
-      "vuna_ocaml": { "median_ms": 5, "rss_kb": 4312, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 386, "rss_kb": 421760, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.73 }, "native": { "vs_handwritten": 77.20, "rss_vs_handwritten": 169.52, "vs_ocaml_backend": 77.20, "rss_vs_ocaml_backend": 97.81 } }
+      "ocaml_ref": { "median_ms": 5, "rss_kb": 2596 },
+      "native": { "median_ms": 330, "rss_kb": 421760, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 66.00, "rss_vs_handwritten": 162.47 } }
     },
     "string_ops": {
-      "ocaml_ref": { "median_ms": 3, "rss_kb": 3312 },
-      "vuna_ocaml": { "median_ms": 3, "rss_kb": 4888, "gc": { "minor_words": 905, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 4, "rss_kb": 4252, "default_stack_ok": true },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.48 }, "native": { "vs_handwritten": 1.33, "rss_vs_handwritten": 1.28, "vs_ocaml_backend": 1.33, "rss_vs_ocaml_backend": 0.87 } }
+      "ocaml_ref": { "median_ms": 2, "rss_kb": 3192 },
+      "native": { "median_ms": 4, "rss_kb": 4372, "default_stack_ok": true },
+      "ratios": {"native": { "vs_handwritten": 2.00, "rss_vs_handwritten": 1.37 } }
     },
     "hashmap": {
-      "ocaml_ref": { "median_ms": 3, "rss_kb": 4036 },
-      "vuna_ocaml": { "median_ms": 7, "rss_kb": 9360, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 14, "rss_kb": 4992, "default_stack_ok": true },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.33, "rss_vs_handwritten": 2.32 }, "native": { "vs_handwritten": 4.67, "rss_vs_handwritten": 1.24, "vs_ocaml_backend": 2.00, "rss_vs_ocaml_backend": 0.53 } }
+      "ocaml_ref": { "median_ms": 3, "rss_kb": 4060 },
+      "native": { "median_ms": 13, "rss_kb": 4256, "default_stack_ok": true },
+      "ratios": {"native": { "vs_handwritten": 4.33, "rss_vs_handwritten": 1.05 } }
     },
     "list_recursion": {
-      "ocaml_ref": { "median_ms": 13, "rss_kb": 11524 },
-      "vuna_ocaml": { "median_ms": 10, "rss_kb": 14020, "gc": { "minor_words": 905, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 214, "rss_kb": 52480, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.77, "rss_vs_handwritten": 1.22 }, "native": { "vs_handwritten": 16.46, "rss_vs_handwritten": 4.55, "vs_ocaml_backend": 21.40, "rss_vs_ocaml_backend": 3.74 } }
+      "ocaml_ref": { "median_ms": 13, "rss_kb": 11552 },
+      "native": { "median_ms": 75, "rss_kb": 50688, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 5.77, "rss_vs_handwritten": 4.39 } }
     },
     "gc_pressure": {
-      "ocaml_ref": { "median_ms": 26, "rss_kb": 11496 },
-      "vuna_ocaml": { "median_ms": 29, "rss_kb": 34908, "gc": { "minor_words": 905, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 94, "rss_kb": 56448, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.12, "rss_vs_handwritten": 3.04 }, "native": { "vs_handwritten": 3.62, "rss_vs_handwritten": 4.91, "vs_ocaml_backend": 3.24, "rss_vs_ocaml_backend": 1.62 } }
+      "ocaml_ref": { "median_ms": 26, "rss_kb": 11456 },
+      "native": { "median_ms": 82, "rss_kb": 50944, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 3.15, "rss_vs_handwritten": 4.45 } }
     },
     "array": {
-      "ocaml_ref": { "median_ms": 16, "rss_kb": 15852 },
-      "vuna_ocaml": { "median_ms": 15, "rss_kb": 19980, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 51, "rss_kb": 43776, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.94, "rss_vs_handwritten": 1.26 }, "native": { "vs_handwritten": 3.19, "rss_vs_handwritten": 2.76, "vs_ocaml_backend": 3.40, "rss_vs_ocaml_backend": 2.19 } }
+      "ocaml_ref": { "median_ms": 16, "rss_kb": 15668 },
+      "native": { "median_ms": 39, "rss_kb": 43648, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 2.44, "rss_vs_handwritten": 2.79 } }
     },
     "records": {
-      "ocaml_ref": { "median_ms": 7, "rss_kb": 4796 },
-      "vuna_ocaml": { "median_ms": 14, "rss_kb": 23076, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 395, "rss_kb": 199424, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 2.00, "rss_vs_handwritten": 4.81 }, "native": { "vs_handwritten": 56.43, "rss_vs_handwritten": 41.58, "vs_ocaml_backend": 28.21, "rss_vs_ocaml_backend": 8.64 } }
+      "ocaml_ref": { "median_ms": 7, "rss_kb": 4784 },
+      "native": { "median_ms": 145, "rss_kb": 155008, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 20.71, "rss_vs_handwritten": 32.40 } }
     },
     "closures": {
-      "ocaml_ref": { "median_ms": 9, "rss_kb": 8880 },
-      "vuna_ocaml": { "median_ms": 11, "rss_kb": 13192, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 167, "rss_kb": 45952, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.22, "rss_vs_handwritten": 1.49 }, "native": { "vs_handwritten": 18.56, "rss_vs_handwritten": 5.17, "vs_ocaml_backend": 15.18, "rss_vs_ocaml_backend": 3.48 } }
+      "ocaml_ref": { "median_ms": 8, "rss_kb": 8880 },
+      "native": { "median_ms": 99, "rss_kb": 49152, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 12.38, "rss_vs_handwritten": 5.54 } }
     },
     "sorting": {
-      "ocaml_ref": { "median_ms": 18, "rss_kb": 9688 },
-      "vuna_ocaml": { "median_ms": 24, "rss_kb": 36472, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 49, "rss_kb": 23552, "default_stack_ok": true },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.33, "rss_vs_handwritten": 3.76 }, "native": { "vs_handwritten": 2.72, "rss_vs_handwritten": 2.43, "vs_ocaml_backend": 2.04, "rss_vs_ocaml_backend": 0.65 } }
+      "ocaml_ref": { "median_ms": 17, "rss_kb": 9752 },
+      "native": { "median_ms": 48, "rss_kb": 18432, "default_stack_ok": true },
+      "ratios": {"native": { "vs_handwritten": 2.82, "rss_vs_handwritten": 1.89 } }
     },
     "float_math": {
-      "ocaml_ref": { "median_ms": 7, "rss_kb": 4684 },
-      "vuna_ocaml": { "median_ms": 13, "rss_kb": 19892, "gc": { "minor_words": 905, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 3019, "rss_kb": 458368, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.86, "rss_vs_handwritten": 4.25 }, "native": { "vs_handwritten": 431.29, "rss_vs_handwritten": 97.86, "vs_ocaml_backend": 232.23, "rss_vs_ocaml_backend": 23.04 } }
+      "ocaml_ref": { "median_ms": 7, "rss_kb": 4668 },
+      "native": { "median_ms": 238, "rss_kb": 257792, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 34.00, "rss_vs_handwritten": 55.23 } }
     },
     "text_scan": {
-      "ocaml_ref": { "median_ms": 4, "rss_kb": 3568 },
-      "vuna_ocaml": { "median_ms": 5, "rss_kb": 6520, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 77, "rss_kb": 66560, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.25, "rss_vs_handwritten": 1.83 }, "native": { "vs_handwritten": 19.25, "rss_vs_handwritten": 18.65, "vs_ocaml_backend": 15.40, "rss_vs_ocaml_backend": 10.21 } }
+      "ocaml_ref": { "median_ms": 4, "rss_kb": 3508 },
+      "native": { "median_ms": 49, "rss_kb": 61824, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 12.25, "rss_vs_handwritten": 17.62 } }
     },
     "nat_bits": {
-      "ocaml_ref": { "median_ms": 4, "rss_kb": 2556 },
-      "vuna_ocaml": { "median_ms": 5, "rss_kb": 4380, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 91, "rss_kb": 87424, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.25, "rss_vs_handwritten": 1.71 }, "native": { "vs_handwritten": 22.75, "rss_vs_handwritten": 34.20, "vs_ocaml_backend": 18.20, "rss_vs_ocaml_backend": 19.96 } }
+      "ocaml_ref": { "median_ms": 3, "rss_kb": 2584 },
+      "native": { "median_ms": 61, "rss_kb": 87424, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 20.33, "rss_vs_handwritten": 33.83 } }
     },
     "tco_mutual": {
-      "ocaml_ref": { "median_ms": 5, "rss_kb": 2632 },
-      "vuna_ocaml": { "median_ms": 5, "rss_kb": 4348, "gc": { "minor_words": 905, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 188, "rss_kb": 249856, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.00, "rss_vs_handwritten": 1.65 }, "native": { "vs_handwritten": 37.60, "rss_vs_handwritten": 94.93, "vs_ocaml_backend": 37.60, "rss_vs_ocaml_backend": 57.46 } }
+      "ocaml_ref": { "median_ms": 5, "rss_kb": 2644 },
+      "native": { "median_ms": 157, "rss_kb": 249856, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 31.40, "rss_vs_handwritten": 94.50 } }
     },
     "tco_wide": {
-      "ocaml_ref": { "median_ms": 3, "rss_kb": 2656 },
-      "vuna_ocaml": { "median_ms": 5, "rss_kb": 4392, "gc": { "minor_words": 902, "major_words": 0, "minor_collections": 1, "major_collections": 0, "top_heap_words": 53248 } },
-      "native": { "median_ms": 335, "rss_kb": 452992, "default_stack_ok": false },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.67, "rss_vs_handwritten": 1.65 }, "native": { "vs_handwritten": 111.67, "rss_vs_handwritten": 170.55, "vs_ocaml_backend": 67.00, "rss_vs_ocaml_backend": 103.14 } }
+      "ocaml_ref": { "median_ms": 4, "rss_kb": 2656 },
+      "native": { "median_ms": 340, "rss_kb": 452992, "default_stack_ok": false },
+      "ratios": {"native": { "vs_handwritten": 85.00, "rss_vs_handwritten": 170.55 } }
     },
     "gc_low_live": {
-      "ocaml_ref": { "median_ms": 346, "rss_kb": 250172 },
-      "vuna_ocaml": { "median_ms": 298, "rss_kb": 340004, "gc": { "minor_words": 33555220, "major_words": 13016131, "minor_collections": 3, "major_collections": 0, "top_heap_words": 26152960 } },
-      "native": { "median_ms": 9488, "rss_kb": 354560, "default_stack_ok": true },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 0.86, "rss_vs_handwritten": 1.36 }, "native": { "vs_handwritten": 27.42, "rss_vs_handwritten": 1.42, "vs_ocaml_backend": 31.84, "rss_vs_ocaml_backend": 1.04 } }
+      "ocaml_ref": { "median_ms": 357, "rss_kb": 250384 },
+      "native": { "median_ms": 316, "rss_kb": 5504, "default_stack_ok": true },
+      "ratios": {"native": { "vs_handwritten": 0.89, "rss_vs_handwritten": 0.02 } }
     },
     "gc_array_churn": {
-      "ocaml_ref": { "median_ms": 132, "rss_kb": 84292 },
-      "vuna_ocaml": { "median_ms": 205, "rss_kb": 215424, "gc": { "minor_words": 36908028, "major_words": 15116341, "minor_collections": 5, "major_collections": 2, "top_heap_words": 9596126 } },
-      "native": { "median_ms": 4008, "rss_kb": 381952, "default_stack_ok": true },
-      "ratios": {"vuna_ocaml": { "vs_handwritten": 1.55, "rss_vs_handwritten": 2.56 }, "native": { "vs_handwritten": 30.36, "rss_vs_handwritten": 4.53, "vs_ocaml_backend": 19.55, "rss_vs_ocaml_backend": 1.77 } }
+      "ocaml_ref": { "median_ms": 119, "rss_kb": 84160 },
+      "native": { "median_ms": 1436, "rss_kb": 228096, "default_stack_ok": true },
+      "ratios": {"native": { "vs_handwritten": 12.07, "rss_vs_handwritten": 2.71 } }
     }
   }
 }

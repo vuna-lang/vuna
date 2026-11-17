@@ -66,28 +66,29 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 
 | benchmark | 场景 | OCaml 后端 ratio | native ratio |
 | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.2x | ~77x（深非尾递归；见 §8.1） |
-| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.3x |
-| hashmap | 持久哈希表 + 字典派发 | ~2.0x | ~4.7x |
-| list_recursion | List 非尾递归 / fold / append | ~0.8x | ~16.5x |
-| gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~3.6x |
-| array | 不可变 Array | ~0.9x | ~3.2x |
-| records | record 更新 + variant 分派 | ~2.1x | ~56x |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | ~18.6x |
-| sorting | 归并排序（List + Pair 拆半） | ~1.5x | ~2.7x |
-| float_math | Float 算术 / sqrt / abs | ~1.9x | ~431x |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~19.3x |
-| nat_bits | Nat 饱和算术 + 位运算 | ~1.3x | ~22.8x |
-| tco_mutual | 互递归尾调用 | ~1.0x | ~38x（栈帧；TCO 后应大幅下降） |
-| tco_wide | 9 参数尾递归 | ~1.3x | ~112x（栈帧；TCO 后应大幅下降） |
-| gc_low_live | 低存活集、大累计分配 | ~0.8x | ~27x（GC 后；受深栈钉住） |
-| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~30x（GC 后；受深栈钉住） |
+| arith | Int 算术 + 尾递归 | ~1.2x | ~66x（深非尾递归；见 §8.1）|
+| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~2.0x|
+| hashmap | 持久哈希表 + 字典派发 | ~2.0x | ~4.3x|
+| list_recursion | List 非尾递归 / fold / append | ~0.8x | ~5.8x|
+| gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~3.2x|
+| array | 不可变 Array | ~0.9x | ~2.4x|
+| records | record 更新 + variant 分派 | ~2.1x | ~20.7x|
+| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | ~12.4x|
+| sorting | 归并排序（List + Pair 拆半） | ~1.5x | ~2.8x|
+| float_math | Float 算术 / sqrt / abs | ~1.9x | ~34x|
+| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~12.3x|
+| nat_bits | Nat 饱和算术 + 位运算 | ~1.3x | ~20.3x|
+| tco_mutual | 互递归尾调用 | ~1.0x | ~31x（栈帧；TCO 后应大幅下降）|
+| tco_wide | 9 参数尾递归 | ~1.3x | ~85x（栈帧；TCO 后应大幅下降）|
+| gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.9x（RSS 0.02x；GC 主判据） |
+| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~12x（RSS 2.7x；COW 复制是主成本） |
 
 OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
 与 `default_stack_ok` 见 [performance.md §8](../docs/reference/performance.md)。分配 / GC 统计由
 OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；
-native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 RSS 与默认栈探针；TCO 未做，
-GC 的收益目前受深栈帧钉住限制，判定与读数见 [performance.md §8.2](../docs/reference/performance.md)。
+native 侧 GC 已落地（保守 mark-sweep）但无统计输出，只记峰值 RSS 与默认栈探针。死槽清零后
+`gc_low_live` 的 RSS 降到 5 MiB（0.02x 手写），`gc_array_churn` 仍是 GC 相关的最差项
+（COW 数组复制）；TCO 未做。判定与读数见 [performance.md §8.2](../docs/reference/performance.md)。
 
 ## 编译器基准
 
