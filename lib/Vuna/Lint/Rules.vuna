@@ -1596,21 +1596,16 @@ else
 exprEdit : LintSrc -> Expr -> String -> Maybe Edit
 exprEdit src e replacement = if not (exprSingleLine e) then Nothing
 else if not (linesCleanRange src.lintSrcLines (exprStartLine e) (spanEndLine (exprSpan e))) then Nothing
-else
-  let
-    startOff = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
-    endOff = tokenEndAt src (spanEndOffset (exprSpan e))
-    endCol = if endOff > startOff then exprStartCol e + (endOff - startOff)
-    else case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
-      Just c => c
-      Nothing => exprStartCol e
-  in let
-    line = lineAt src.lintSrcLines (exprStartLine e)
-    prefix = prefixBeforeCol line (exprStartCol e)
-    suffix = tailFromCol line endCol
-    stripped = stripParens (strLength line + 1) prefix suffix
-  in Just
-    (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
+else case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
+  Nothing => Nothing
+  Just endCol =>
+    let
+      line = lineAt src.lintSrcLines (exprStartLine e)
+      prefix = prefixBeforeCol line (exprStartCol e)
+      suffix = tailFromCol line endCol
+      stripped = stripParens (strLength line + 1) prefix suffix
+    in Just
+      (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
 
 -- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Pair Expr Expr)
