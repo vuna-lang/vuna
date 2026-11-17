@@ -464,22 +464,69 @@ else case memberSpine dom of
   Just (MemberDom2 eVal rVal) => memberLookupRowLabel fuel depth ec eVal rVal
   Just (MemberDom3 nVal eVal rVal) => memberLookupRowNamed fuel depth ec nVal eVal rVal
 
--- 二元行（`Member label r`）：按完整标签结构匹配；Named 标签作为整体比较。
+-- 二元行（`Member label r`）：先按标签候选计数，拒绝贪婪匹配；唯一候选才提交合一。
+data LabelCand : Type where
+  MkLabelCand : String -> Int -> LabelCand
+
+labelCandName : LabelCand -> String
+labelCandName (MkLabelCand n _) = n
+
+labelCandIdx : LabelCand -> Int
+labelCandIdx (MkLabelCand _ i) = i
+
+-- 候选展示：Named 标签显示实例名，其它显示标签文本。
+labelCandText : Ec -> Value -> String
+labelCandText ec v = case forceVal ec v of
+  VNeutral (NGlobal g sp) => if g == effNamedName then case sp of
+    n :: _ => memberNameText ec n
+    _ => showValueAt 6 v
+  else showValueAt 6 v
+  _ => showValueAt 6 v
+
+labelScan : Int -> Int -> Sols -> Ec -> Value -> Value -> Int -> List LabelCand -> Maybe (Pair (List LabelCand) Bool)
+labelScan fuel depth sols ec eF rF idx acc = if fuel <= 0 then Nothing
+else case forceVal ec rF of
+  VCon cname cargs => if cname == effRowNilCtor then Just (Pair (reverse acc) True)
+  else if isRowConsName cname then case cargs of
+    h :: t :: _ => if hasUnsolvedMetaValue sols h then Nothing
+    else
+      let
+        matched = memberProbe ec depth eF h
+        acc2 = if matched then (::) (MkLabelCand (labelCandText ec h) idx) acc else acc
+      in labelScan (fuel - 1) depth sols ec eF t (idx + 1) acc2
+    _ => Nothing
+  else Nothing
+  VNeutral _ => Just (Pair (reverse acc) False)
+  _ => Nothing
+
+memberProofAtLabel : Int -> Int -> Ec -> Value -> Value -> Int -> Check (Pair Value Ec)
+memberProofAtLabel fuel depth ec eF rF target = if fuel <= 0 then icFuel "member proof"
+else case forceVal ec rF of
+  VCon cname cargs => if isRowConsName cname then case cargs of
+    h :: t :: _ =>
+      if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h)
+        (\ec1 => OkC (Pair (ctorValue ec1 hereCtorName [eF, t]) ec1))
+      else Vuna.Compiler.Base.Common.bind (memberProofAtLabel (fuel - 1) depth ec eF t (target - 1))
+        (\p => OkC (Pair (ctorValue (secondOf p) thereCtorName [eF, h, t, firstOf p]) (secondOf p)))
+    _ => icInternal "malformed row in member proof"
+  else icInternal "member proof target out of range"
+  _ => icInternal "member proof target out of range"
+
 memberLookupRowLabel : Int -> Int -> Ec -> Value -> Value -> MemberLookup
 memberLookupRowLabel fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
-else case forceVal ec rVal of
-  VCon cname cargs => if cname == effRowNilCtor then MemberAbsent
-  else if cname == effRowConsCtor then case cargs of
-    h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
-    else case convEc ec depth eVal h of
-      OkC ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
-      ErrC _ => case memberLookupRowLabel (fuel - 1) depth ec eVal t of
-        MemberFound subProof ec1 =>
-          MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, subProof]) ec1
-        other => other
-    _ => MemberStuck
-  else MemberStuck
-  _ => MemberStuck
+else
+  let
+    eF = forceVal ec eVal
+    sols = ecSolsP ec
+  in case labelScan 64 depth sols ec eF rVal 0 [] of
+    Nothing => MemberStuck
+    Just (Pair cands closed) => case cands of
+      [] => if closed then MemberAbsent else MemberStuck
+      c :: rest => case rest of
+        [] => case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
+          OkC (Pair proof ec1) => MemberFound proof ec1
+          ErrC _ => MemberStuck
+        _ => MemberAmbiguous (map labelCandName cands)
 
 -- ---------------------------------------------------------------
 -- 命名行：`Member ?n e r` 的名字槽求解

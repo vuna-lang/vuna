@@ -519,12 +519,12 @@ handleResArg resName k sp =
     [ELam [handleResBinder] (EApp (EVar resName sp) (append (handleHoleArgs k sp) [EVar handleResBinder sp]) sp) sp]
     sp
 
--- | 降级调用构造：`headMode` 选 `handleWith`（rowRem 版）或 `handleWithAt`（行首条目版）。
-handleCall : Bool -> String -> String -> Int -> Expr -> Expr -> Expr -> Span -> Expr
-handleCall headMode canon resName k comp ret opH sp =
+-- | 降级调用构造：`headMode` 选 `handleWith`（rowRem 版）或 `handleWithAt`（行首条目版）；
+-- `nameArg` 是该版本的实例名实参（rowRem 版与行首洞版用 `_`，行首默认版用 default）。
+handleCall : Bool -> Expr -> String -> String -> Int -> Expr -> Expr -> Expr -> Span -> Expr
+handleCall headMode nameArg canon resName k comp ret opH sp =
   let
     fnName = if headMode then "Base.Eff.handleWithAt" else "Base.Eff.handleWith"
-    nameArg = if headMode then EStr effDefaultInstance sp else EVar "_" sp
   in EApp (EVar fnName sp)
     [nameArg, EStr canon sp, handleOpArg canon k sp, handleResArg resName k sp, comp, handleRetArg ret, opH]
     sp
@@ -571,32 +571,43 @@ handleFamilyArityOf globals ec canon mod short sp =
 
 -- | 从 handle 标记构造降级调用；`headMode` 选 rowRem 版（`handleWith`）或行首条目版
 -- （`handleWithAt`）。形状校验见 `handleFamilyArityOf`。
-handleCallExprWith : List (Pair String Term) -> Ec -> Expr -> Span -> Bool -> Check Expr
-handleCallExprWith globals ec expr sp headMode = case handleOperand expr of
+handleCallExprWith : List (Pair String Term) -> Ec -> Expr -> Span -> Bool -> Expr -> Check Expr
+handleCallExprWith globals ec expr sp headMode nameArg = case handleOperand expr of
   Nothing => icInternal "handle marker expected"
   Just (Pair comp (Pair ret opH)) => case opH of
     ELam (_ :: _ :: _) (ECase _ alts _) _ => Vuna.Compiler.Base.Common.bind (handleClauseFamilies ec alts) (\fam => case perfFamilyOfCanonical fam of
       Nothing => tcErr1 sp (HandleFamilyUnsupported fam) fam
       Just (PerfFamily canon mod short) =>
         Vuna.Compiler.Base.Common.bind (handleFamilyArityOf globals ec canon mod short sp)
-          (\p => OkC (handleCall headMode canon (firstOf p) (secondOf p) comp ret opH sp))
+          (\p => OkC (handleCall headMode nameArg canon (firstOf p) (secondOf p) comp ret opH sp))
     )
     _ => icInternal "malformed handle marker"
 
 -- | rowRem 版降级入口（infer 路径与 check 的首选）。
 handleCallExpr : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
-handleCallExpr globals ec expr sp = handleCallExprWith globals ec expr sp False
+handleCallExpr globals ec expr sp = handleCallExprWith globals ec expr sp False (EVar "_" sp)
 
--- | 行首条目版降级入口（check 失败后的重试；comp 的行尚未具体化时用）。
+-- | 行首条目版降级入口：名字用默认值（comp 的行尚未具体化时用）。
 handleCallExprAt : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
-handleCallExprAt globals ec expr sp = handleCallExprWith globals ec expr sp True
+handleCallExprAt globals ec expr sp = handleCallExprWith globals ec expr sp True (EStr effDefaultInstance sp)
+
+-- | 行首条目版 + 名字洞：comp 的行首实例名已知时由合一解出。
+handleCallExprAtHole : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
+handleCallExprAtHole globals ec expr sp = handleCallExprWith globals ec expr sp True (EVar "_" sp)
 
 export inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr = if fuel <= 0 then icFuel "inference"
 else case handleOperand expr of
-  Just _ =>
-    Vuna.Compiler.Base.Common.bind (handleCallExpr globals ec expr (exprSpan expr))
-      (\callExpr => inferEFuel (fuel - 1) globals ctx ec callExpr)
+  Just _ => Vuna.Compiler.Base.Common.bind (handleCallExprAt globals ec expr (exprSpan expr)) (\callExpr => case inferEFuel (fuel - 1) globals ctx ec callExpr of
+    OkC r => OkC r
+    ErrC e1 => Vuna.Compiler.Base.Common.bind (handleCallExprAtHole globals ec expr (exprSpan expr)) (\callExpr2 => case inferEFuel (fuel - 1) globals ctx ec callExpr2 of
+      OkC r2 => OkC r2
+      ErrC _ => Vuna.Compiler.Base.Common.bind (handleCallExpr globals ec expr (exprSpan expr)) (\callExpr3 => case inferEFuel (fuel - 1) globals ctx ec callExpr3 of
+        OkC r3 => OkC r3
+        ErrC _ => ErrC e1
+      )
+    )
+  )
   Nothing => case performOperand expr of
     Just (Pair op _) => Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec op) (\p => case p of
       Pair _ (Pair opTy ec1) =>
@@ -1449,6 +1460,11 @@ else case args of
   )
   _ => OkC Nothing
 
+-- | 简单 comp（裸变量）的行通常已具体，优先 rowRem 版；do/pure/内联块优先行首默认版。
+isSimpleComp : Expr -> Bool
+isSimpleComp (EVar _ _) = True
+isSimpleComp _ = False
+
 export checkEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkEFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
 else case handleOperand expr of
@@ -1456,13 +1472,23 @@ else case handleOperand expr of
   -- comp 是行多态表达式（`pure e`/内联 do 块）时 rowRem 的 `r` 仍是未解 meta、结果行在
   -- 调用点 conv 卡住；行首版把期望结果行交给 `{er}`、名字取默认实例名，comp 的行就被定成
   -- `Cons n e er`。comp 的行已具体时行首版只会同样失败，原错误（e1）保留。
-  Just _ => Vuna.Compiler.Base.Common.bind (handleCallExpr globals ec expr (exprSpan expr)) (\callExpr => case checkEFuel (fuel - 1) globals ctx ec callExpr expected of
-    OkC r => OkC r
-    ErrC e1 => Vuna.Compiler.Base.Common.bind (handleCallExprAt globals ec expr (exprSpan expr)) (\callExpr2 => case obsCheck "vuna.elab.term.retry" (\_ => checkEFuel (fuel - 1) globals ctx ec callExpr2 expected) of
-      OkC r2 => OkC r2
-      ErrC _ => ErrC e1
+  Just _ =>
+    let
+      simpleComp = case handleOperand expr of
+        Just (Pair comp _) => isSimpleComp comp
+        Nothing => False
+      firstCall = if simpleComp then handleCallExpr globals ec expr (exprSpan expr) else handleCallExprAt globals ec expr (exprSpan expr)
+      thirdCall = if simpleComp then handleCallExprAt globals ec expr (exprSpan expr) else handleCallExpr globals ec expr (exprSpan expr)
+    in Vuna.Compiler.Base.Common.bind firstCall (\callExpr => case checkEFuel (fuel - 1) globals ctx ec callExpr expected of
+      OkC r => OkC r
+      ErrC e1 => Vuna.Compiler.Base.Common.bind (handleCallExprAtHole globals ec expr (exprSpan expr)) (\callExpr2 => case checkEFuel (fuel - 1) globals ctx ec callExpr2 expected of
+        OkC r2 => OkC r2
+        ErrC _ => Vuna.Compiler.Base.Common.bind thirdCall (\callExpr3 => case obsCheck "vuna.elab.term.retry-third" (\_ => checkEFuel (fuel - 1) globals ctx ec callExpr3 expected) of
+          OkC r3 => OkC r3
+          ErrC _ => ErrC e1
+        )
+      )
     )
-  )
   Nothing => case performOperand expr of
     Just _ =>
       obsCheck "vuna.elab.term.infer"
