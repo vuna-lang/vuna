@@ -516,11 +516,13 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 
 `nix run .#vuna-perf`（逻辑在 `bench/run.sh`）测**生成程序运行时**：每个 benchmark 是一对
 同算法实现（`bench/programs/<name>.vuna` vs `<name>.ml` 手写 OCaml），先校验两侧输出与
-golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS。跨机器只比
-`ratio = vuna/ocaml`（绝对 ms 不可比）。
+golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` 选择被测后端，峰值内存
+用 GNU time 的 max RSS。跨机器只比 `ratio = <backend>/ocaml` 与 `rss_ratio`
+（绝对 ms / KB 不可比）。
 
-口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json` 入库，`--check` 对超阈值项
-软告警。与 `bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
+口径与基线维护见 `bench/README.md`；基线 `bench/baseline.json`（OCaml 后端）与
+`bench/native-baseline.json`（native，§8.1）入库，`--check` 对超阈值项软告警。与
+`bench/bootstrap.sh` 的分工：后者测构建 / 编译墙钟与产物尺寸，本设施测运行期。
 
 当前读数（`--runs 3 --warmup 1`，x86_64 / 16 核 / ocamlopt 5.5.1 非 flambda；绝对 ms 随
 机器变化，只比较 ratio）：
@@ -560,6 +562,40 @@ golden 一致，再 warmup + 多次取中位数；RSS 用 GNU time 的 max RSS�
       两套容器（无 `IntMap`），统一 `fromList []`。
 
 优化后重跑 `--json bench/baseline.json` 更新基线并在这里记录。
+
+### 8.1 native 后端（生成程序）
+
+`nix run .#vuna-perf -- --target native`（或 `--target both`）把同一批基准编到 native
+并测量；基线 `bench/native-baseline.json`。口径：
+
+- 同一份源码、同一 N；native、OCaml 后端与手写 OCaml 在同一窗口交替测量；
+- native 不做尾调用：`arith` / `list_recursion` / `gc_pressure` / `array` 在默认 8 MiB 栈上
+  以 exit 139 结束，所以所有 native 进程统一在 `ulimit -s unlimited` 下运行
+  （JSON `meta.stack_policy` 记录该口径）；
+- native 无 GC/RC，峰值 RSS ≈ 累计分配 + 栈页；`--rss-passes 3` 取最大值，与墙钟分开采样；
+- `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
+
+本机一档（16 核，生成时 `loadavg ≈ 17`，同一窗口）：
+
+| benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| arith | 592 | 8 | 7 | 84.6x | 74.0x | 412 MiB | 2.6 MiB | 161x |
+| string_ops | 5 | 4 | 3 | 1.7x | 1.3x | 4.2 MiB | 3.2 MiB | 1.3x |
+| hashmap | 12 | 8 | 4 | 3.0x | 1.5x | 9.5 MiB | 3.8 MiB | 2.5x |
+| list_recursion | 64 | 13 | 17 | 3.8x | 4.9x | 48 MiB | 11 MiB | 4.2x |
+| gc_pressure | 66 | 44 | 34 | 1.9x | 1.5x | 59 MiB | 11 MiB | 5.2x |
+| array | 73 | 18 | 22 | 3.3x | 4.1x | 41 MiB | 15 MiB | 2.7x |
+
+读法：
+
+- **arith 的 84.6x 与 412 MiB RSS 同源**：300 万层非尾递归，帧不回收；时间主要花在栈页
+  fault，不是指令质量。比较 native codegen 时排除这一项，或按「时间 + 内存」一起读。
+- 其余项的 native/OCaml 后端差距在 **1.3–4.9x**；`string_ops` 最接近，`list_recursion` /
+  `array` 的差距同时来自闭包/对象表示与无 TCO。
+- 峰值 RSS 的语义不同：OCaml 侧是 GC 后高水位，native 侧是只增不减的 arena；两者只作量级
+  参考。`gc_pressure` 的 5.2x RSS 就是「没有回收」的直接读数（D98）。
+- 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
+  `bench/native-baseline.json` 的 ratio 与 rss_ratio 软告警。
 
 ## 9. 编译器基准
 

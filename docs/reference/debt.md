@@ -77,6 +77,12 @@
 | D95 | 命名空间门面只增加路径，不缩减公开模块面：`base/vuna.toml` 仍列全部叶子模块；路径 import 必须写 `as`（裸 `import A.X` 报 `LD_ModuleNotFound`），且没有 `import A.X` 的短名自动绑定 | `base/vuna.toml`、`compiler/lib/Vuna/Compiler/Loader/Flatten.vuna`（`pathPrefixOf`）、`parser`（路径 import） | 后续（是否剪 `[export]` / 支持裸路径 import 另立决策） |
 
 
+## native 后端
+
+| ID | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| D98 | 不做尾调用优化、无 GC/RC：深递归直接消耗宿主栈，默认 8 MiB 栈上 `arith` / `list_recursion` / `gc_pressure` / `array` 基准以 exit 139 结束（`bench/run.sh --target native` 因此统一在 `ulimit -s unlimited` 下测量）；堆是可增长 arena、只增不减，峰值 RSS ≈ 累计分配（`gc_pressure` 是手写 OCaml 的 5.2×、`arith` 因 300 万层非尾递归栈页为 161×） | `compiler/lib/Vuna/Compiler/Native/{Runtime,Module}.vuna`（prologue 无栈检查、`alloc` 只 bump）；[native.md](native.md) §8；`bench/native-baseline.json`；[performance.md](performance.md) §8 | 后续（尾调用 + 栈检查；GC/RC 需先定 §8 记录的三项接口） |
+
 ## wasm 后端
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
