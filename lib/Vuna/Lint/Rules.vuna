@@ -390,6 +390,36 @@ headToken : List a -> Maybe a
 headToken [] = Nothing
 headToken (t :: rest) = Just t
 
+-- | 内部：按（行, 列）精确位置查 token（偏移不可用时的回落）。
+tokenAt : List PTok -> Int -> Int -> Maybe PTok
+tokenAt [] line col = Nothing
+tokenAt (t :: rest) line col =
+  if tokLine t == line && tokCol t == col then Just t else tokenAt rest line col
+
+-- | 内部：token 的源码长度（行列路径回落用）。
+tokLen : PTok -> Int
+tokLen (PTok (TSym s) p) = strLength s
+tokLen (PTok (TIdent s) p) = strLength s
+tokLen (PTok (TKw s) p) = strLength s
+tokLen (PTok (TInt n) p) = strLength (strFromInt n)
+tokLen (PTok (TFloat raw) p) = strLength raw
+tokLen (PTok (TStr s) p) = strLength s + 2
+tokLen (PTok (TTmpl multi parts endP) p) = 0
+tokLen (PTok TEof p) = 0
+
+-- | 内部：旧行列路径的下一 token（仅用于偏移不完整的历史 span 回落）。
+nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
+nextTokAfter [] line col = Nothing
+nextTokAfter (t :: rest) line col =
+  if tokLine t > line then Just t
+  else if tokLine t == line && tokCol t > col then Just t else nextTokAfter rest line col
+
+-- | 内部：行列路径的表达式结束列（偏移不可用时的回落）。
+exprEndColAfter : List PTok -> Int -> Int -> Maybe Int
+exprEndColAfter toks line col = case tokenAt toks line col of
+  Nothing => Nothing
+  Just tok => Just (col + tokLen tok)
+
 -- | 内部：span 的单行源码原文；右边界取 span 末 token 之后的下一个 token（或行尾），跨行
 -- 时返回空串。
 spanText : LintSrc -> Span -> String
@@ -398,7 +428,20 @@ else
   let
     start = spanStartOffset sp
     end = tokenEndAt src (spanEndOffset sp)
-  in trimEnd (sliceOffsets src start end)
+  in if end <= start then spanTextLine src sp else trimEnd (sliceOffsets src start end)
+
+-- | 内部：行列路径的 span 文本（偏移不可用时的回落）。
+spanTextLine : LintSrc -> Span -> String
+spanTextLine src sp =
+  let
+    line = lineAt src.lintSrcLines (spanStartLine sp)
+    col = spanStartCol sp
+  in case nextTokAfter src.lintSrcToks (spanEndLine sp) sp.spanEndCol of
+    Nothing => trimEnd (tailFromCol line col)
+    Just t =>
+      if tokIsEof t then trimEnd (tailFromCol line col)
+      else if tokLine t == spanEndLine sp then trimEnd (sliceBetween line col (tokCol t))
+      else trimEnd (tailFromCol line col)
 
 -- | 内部：模式的单行源码原文。
 patText : LintSrc -> Pat -> String
@@ -535,7 +578,21 @@ else
   let
     start = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
     end = tokenEndAt src (spanEndOffset (exprSpan e))
-  in trimEnd (sliceOffsets src start end)
+  in if end <= start then exprTextLine src e else trimEnd (sliceOffsets src start end)
+
+-- | 内部：行列路径的表达式文本（偏移不可用时的回落）。
+exprTextLine : LintSrc -> Expr -> String
+exprTextLine src e =
+  let
+    line = lineAt src.lintSrcLines (exprStartLine e)
+    col = exprStartCol e
+    endLine = spanEndLine (exprSpan e)
+  in case nextTokAfter src.lintSrcToks endLine (exprSpan e).spanEndCol of
+    Nothing => trimEnd (tailFromCol line col)
+    Just t =>
+      if tokIsEof t then trimEnd (tailFromCol line col)
+      else if tokLine t == endLine then trimEnd (sliceBetween line col (tokCol t))
+      else trimEnd (tailFromCol line col)
 
 -- | 内部：表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或
 -- 没有。
@@ -1537,7 +1594,10 @@ else
   let
     startOff = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
     endOff = tokenEndAt src (spanEndOffset (exprSpan e))
-    endCol = exprStartCol e + (endOff - startOff)
+    endCol = if endOff > startOff then exprStartCol e + (endOff - startOff)
+    else case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
+      Just c => c
+      Nothing => exprStartCol e
   in let
     line = lineAt src.lintSrcLines (exprStartLine e)
     prefix = prefixBeforeCol line (exprStartCol e)
