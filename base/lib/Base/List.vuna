@@ -8,19 +8,17 @@ import Base.Bool
 import Base.Foldable
 import Base.Monad
 import Base.Monoid
+import Base.Operator
 import Base.Traversable
 -- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import 保证类存在与 split 单元顺序。
 import Base.Eq
 import Base.Hashable
 -- `==` / `<=` 是 Eq / Ord 的方法名别名，base 模块不自动注入 Prelude，需要它们可见。
 import Base.Ord
--- `+` / `-` 的 fixity 声明在 Base.Int；range 的算术需要它进入 import 闭包。
+-- 算术运算符的 fixity 在 Base.Operator（经 Base.Int 进入闭包）；range 需要它。
 import Base.Int
 import Base.Show
 import Base.Num
-
--- `::` 是 `List` 的构造子本身（表达式与 pattern 同一个名字）。
-infixr 5 ::
 
 -- | 单链表：`Nil` 为空，`(::)` 持有头 `a` 与尾 `List a`。构造子导出，`(::)` 是构造子名（表达式与 pattern 通用）；长度与元素个数不受类型层约束。
 export data List a(..) : Type where
@@ -183,17 +181,17 @@ instance Applicative List where
 -- | 内部：把已 `show` 的元素拼接成 `[a, b, c]` 的正文（不含方括号），供 `Show` 实例使用。
 showElems : List String -> String
 showElems [] = ""
-showElems (x :: rest) = x `++` (showElemsTail rest)
+showElems (x :: rest) = x `++` showElemsTail rest
 
 -- | 内部：`showElems` 的尾部拼接，每个元素前加 `, `。
 showElemsTail : List String -> String
 showElemsTail [] = ""
-showElemsTail (x :: rest) = ", " `++` x `++` (showElemsTail rest)
+showElemsTail (x :: rest) = ", " `++` x `++` showElemsTail rest
 
 -- 容器 `Show` 实例：元素逐个 `show`，拼接只用 `++` intrinsic（`strConcatMany` 会触发
 -- split 自依赖）；`List` 不能 import `Base.String`，故用反引号形式。
 instance Show a => Show (List a) where
-  show xs = "[" `++` (showElems (map (\x => show x) xs)) `++` "]"
+  show xs = "[" `++` showElems (map (\x => show x) xs) `++` "]"
 
 -- 逐元素相等；`[]` 只等于 `[]`。
 instance Eq a => Eq (List a) where

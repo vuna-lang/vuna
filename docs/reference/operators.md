@@ -34,7 +34,8 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 3. **重排后 AST 里没有 `EInfix` / `EBacktick` / `ESect*` / `EParen`**：Elab / codegen 看到的是
    普通应用；`Resolve` 对残留节点报 internal error（不静默透传）。
 4. **fixity 唯一来源 = 源码里的 `infixl` / `infixr` / `infix` 声明**（库或用户）；
-   编译器只为内建符号（`->`，以及后续收归内建表的短路原语）提供固定声明
+   base 侧的全部声明集中在 `Base.Operator`（定义模块 import 它），用户模块仍就地声明。
+   编译器只为内建符号（`->`、`&&`、`||`）提供固定声明
    （`Loader.Fixity.builtinFixityDecls`），用户对它们声明 fixity 会报 `RN_BuiltinFixity`。
 5. **未知运算符 = 报错**：符号运算符用于中缀、但可见表里没有声明 ⇒
    `unknown fixity for operator <op> (declare it with infixl/infixr/infix)`，check / compile /
@@ -43,6 +44,8 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 6. **fixity 全程序唯一**：一个运算符在加载闭包里只能有一处声明；重复声明报
    `RN_DuplicateFixity`（指向后一处）。`Module` 只存本模块自己的声明，加载完成后拼成
    一张全程序表参与每个模块的重排——import 到定义模块即全局生效，不再有「本模块优先」。
+   base 把声明集中在 `Base.Operator`，因此 import 任一引用它的 base 模块都会让整张
+   base 表进入闭包；代价是用户自定义同名运算符的冲突面变宽（这是有意的取舍）。
 7. **fmt 用同一张表**：`Loader.Flatten.fixitiesForSource` 给出程序级声明表；重复/内建冲突
    在 fmt 路径同样报错，不静默按第一处处理。
 

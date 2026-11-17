@@ -7,16 +7,14 @@ import Base.Bool
 import Base.Eq
 import Base.Hashable
 import Base.Ord
--- `+` / `-` / `*` / `/` 的 fixity 声明在 Base.Int；本模块的算术运算符需要它进入闭包。
+-- `+` / `-` / `*` / `/` 的 fixity 在 Base.Operator；本模块的算术运算符需要它进入闭包。
 import Base.Int
 import Base.Nat
 -- 模板字符串降级引用 Base.Interp.interp（split 依赖需要显式 import）。
 import Base.Interp
 import Base.Monoid
 import Base.Num
-
--- `++` 的 fixity 声明（字符串拼接是内建值）。
-infixr 5 ++
+import Base.Operator
 
 -- | UTF-8 字节长度（度量是 `Nat`；底层 `strLength` 仍是 Int 原语）。
 export byteLength : String -> Nat

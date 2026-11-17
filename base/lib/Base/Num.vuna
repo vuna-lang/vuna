@@ -1,13 +1,10 @@
--- | 数值算术 trait。`+` / `-` / `*` / `/` 是 `Num` 方法 `add` / `sub` / `mul` / `div` 的中缀别名；算术不绑定到 `Int`，用户类型可以实现自己的 `Num` 实例。实例跟类型模块走：`Int` 在 [Base.Int]、`Nat` 在 [Base.Nat]、`Float` 在 [Base.Float]。语义边界：`Nat` 的 `sub` 截断到 0、`div` 向下取整，与 `Int` 的环绕减法 / 向零截断不同。本模块是叶模块（不 import 任何模块）：fixity 与别名声明都在这里，`import Base.Num`（或经 Prelude 自动导入）即对用户可见。
+-- | 数值算术 trait。`+` / `-` / `*` / `/` 是 `Num` 方法 `add` / `sub` / `mul` / `div` 的中缀别名；算术不绑定到 `Int`，用户类型可以实现自己的 `Num` 实例。实例跟类型模块走：`Int` 在 [Base.Int]、`Nat` 在 [Base.Nat]、`Float` 在 [Base.Float]。语义边界：`Nat` 的 `sub` 截断到 0、`div` 向下取整，与 `Int` 的环绕减法 / 向零截断不同。fixity 与别名声明集中在 [Base.Operator]。
 module Base.Num where
+
+import Base.Operator
 
 -- 精化器认 `Base.Num` 的方法投影并映射回内建原语，因此实例体写 `x + y` 不会自递归；
 -- 其它类型回落到普通 trait 方法应用。
-infixl 6 +
-infixl 6 -
-infixl 7 *
-infixl 7 /
-
 -- | 数值算术 trait：`add` / `sub` / `mul` / `div` 对应 `+` / `-` / `*` / `/`（后者是这些方法的中缀别名）。
 export trait Num a(..) where
   -- | 加法（`+`）。
