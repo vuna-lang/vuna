@@ -15,7 +15,7 @@ mockOpH table op k = case op of
 rootWith : List (Pair String String) -> String
 rootWith table = runPure (handleEnv "mock" (\s => s) (mockOpH table) (mockRoot "mock"))
 
-mockRoot : (n : String) -> Eff (Cons n EnvOp []) String
+mockRoot : (n : String) -> Eff ((Named n EnvOp :: [])) String
 mockRoot n = storeDataRootEff
 
 main : Int

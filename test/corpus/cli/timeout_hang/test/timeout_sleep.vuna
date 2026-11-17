@@ -4,5 +4,5 @@
 import Base.Eff
 import Base.EffClock
 
-main : Eff (Cons "default" ClockOp Nil) Int
+main : Eff ([ClockOp]) Int
 main = clockSleepMicros 30000000

@@ -4,7 +4,7 @@ import Base.Eff
 import Base.EffConsole
 import Base.Pair
 
-prog : (n : String) -> Eff (Cons n ConsoleOp Nil) Int
+prog : (n : String) -> Eff ((Named n ConsoleOp :: Nil)) Int
 prog n = do
   _ <- consolePrint@(n) "hello"
   _ <- consoleEprint@(n) "oops"

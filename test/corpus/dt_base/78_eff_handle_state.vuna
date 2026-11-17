@@ -22,7 +22,7 @@ prog = do
   _ <- putOne
   pure n
 
-run : {r : Row} -> Eff (Cons "counter" (StateOp Nat) r) Nat -> Eff r Nat
+run : {r : Row} -> Eff (Named "counter" (StateOp Nat) :: r) Nat -> Eff r Nat
 run comp = handle comp {
   Get k -> k 5
   Put x k -> k 6

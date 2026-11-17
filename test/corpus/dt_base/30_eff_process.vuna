@@ -5,7 +5,7 @@ import Base.EffProcess
 import Base.EffConsole
 import Base.List
 
-prog : (n : String) -> Eff (Cons n ProcessOp []) String
+prog : (n : String) -> Eff ((Named n ProcessOp :: [])) String
 prog n = do
   args <- processArgs@(n)
   code <- processRunIn@(n) "." ["true"]

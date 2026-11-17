@@ -12,12 +12,12 @@ data BOp : Type where
 resB : BOp -> Type
 resB (B n) = Int
 
-prog : Eff (Cons "a" AOp (Cons "b" BOp [])) Int
+prog : Eff (Named "a" AOp :: [BOp@"b"]) Int
 prog = do
   x <- perform (A 1)
   pure x
 
-inner : Eff (Cons "a" AOp (Cons "b" BOp [])) Int -> Eff (Cons "b" BOp []) Int
+inner : Eff (Named "a" AOp :: [BOp@"b"]) Int -> Eff [BOp@"b"] Int
 inner comp = handle comp {
   A n k -> k (n + 10)
 }

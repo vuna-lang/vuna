@@ -11,7 +11,7 @@ prog = do
   n <- perform Print "hello"
   pure (n + 1)
 
-runAnswer : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
+runAnswer : Eff ([ConsoleOp@"audit"]) Nat -> Nat
 runAnswer comp = runPure (runPure (handle comp {
   return x -> pure x
   Print s k -> k 5
@@ -20,7 +20,7 @@ runAnswer comp = runPure (runPure (handle comp {
 )
 )
 
-runAbort : Eff (Cons "audit" ConsoleOp []) Nat -> Nat
+runAbort : Eff ([ConsoleOp@"audit"]) Nat -> Nat
 runAbort comp = runPure (handle comp {
   Print s _ -> 5
   EPrint s _ -> 7

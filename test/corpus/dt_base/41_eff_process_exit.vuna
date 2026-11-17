@@ -6,7 +6,7 @@ import Base.EffProcess
 import Base.EffConsole
 import Base.List
 
-prog : (n : String) -> Eff (Cons n ProcessOp []) Int
+prog : (n : String) -> Eff ((Named n ProcessOp :: [])) Int
 prog n = do
   c <- processExit@(n) 7
   pure c

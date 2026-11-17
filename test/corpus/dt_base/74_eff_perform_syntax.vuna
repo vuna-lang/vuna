@@ -18,9 +18,9 @@ prog = do
   n <- perform Print "hello"
   pure n
 
-runAudit : {a : Type} -> Eff (Cons "audit" ConsoleOp []) a -> a
+runAudit : {a : Type} -> Eff ([ConsoleOp@"audit"]) a -> a
 runAudit comp =
-  runPure (handleCore ConsoleOp "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
+  runPure (handleCore (Named "audit" ConsoleOp) "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
 
 main : Nat
 main = runAudit prog

@@ -1,5 +1,5 @@
 -- 行字面量的显式实例名 `X@name` 展开成
--- `Cons "name" (X "name") Nil`，等价于 `[X "name"]`。
+-- `(Named "name" (X "name") :: Nil)`，等价于 `[X "name"]`。
 import Base.Eff
 import Base.EffConsole
 import Base.List

@@ -12,7 +12,7 @@ data Boom : String -> Type where
 prog : Eff [Boom "default"] Nat
 prog = sendCore (Boom "default") "BoomOp" "default" BoomIt
 
-run : Eff (Cons "default" (Boom "default") Nil) Nat -> Nat
+run : Eff ([(Boom "default")]) Nat -> Nat
 run comp = runPure (handle comp {
   BoomIt k -> k 5
   })

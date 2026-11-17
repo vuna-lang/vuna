@@ -5,7 +5,7 @@ import Base.EffConsole
 import Base.Nat
 
 consoleTest : Member n ConsoleOp r => String -> Eff r Nat
-consoleTest s = sendCore ConsoleOp "console" n (Print s)
+consoleTest s = sendCore (Named n ConsoleOp) "console" n (Print s)
 
 progDefault : Eff [ConsoleOp] Nat
 progDefault = consoleTest "hi"
@@ -19,7 +19,7 @@ progAt = consoleTest@audit "hi"
 progMulti : Eff [ConsoleOp@a, ConsoleOp@b] Nat
 progMulti = consoleTest@b "hi"
 
-withName : (n : String) -> Eff (Cons n ConsoleOp []) Nat
+withName : (n : String) -> Eff ((Named n ConsoleOp :: [])) Nat
 withName n = consoleTest@(n) "hi"
 
 main : Int

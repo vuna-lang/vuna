@@ -10,7 +10,7 @@ prog = do
   n <- perform (Print "hello")
   pure n
 
-run : Eff (Cons "audit" ConsoleOp Nil) Nat -> Nat
+run : Eff ((Named "audit" ConsoleOp :: Nil)) Nat -> Nat
 run comp = runPure (handle comp {
   Print s k -> k 5
   EPrint s j -> j 7

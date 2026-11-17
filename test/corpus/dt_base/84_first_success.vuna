@@ -37,7 +37,7 @@ envScore set empty missing = ((case set of
 ) + (if isNothing empty then 1 else 0)
 ) + (if isNothing missing then 1 else 0)
 
-envProbe : (n : String) -> Eff (Cons n EnvOp []) Int
+envProbe : (n : String) -> Eff ((Named n EnvOp :: [])) Int
 envProbe n = do
   set <- envGetEnvNonEmpty@(n) "SET"
   empty <- envGetEnvNonEmpty@(n) "EMPTY"
