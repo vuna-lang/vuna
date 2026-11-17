@@ -275,18 +275,21 @@ matrixClasses =
 
 -- | 矩阵分类 → 层次标签（`pure` / `effect` / `tool`）。
 export matrixLayer : String -> String
-matrixLayer matrix =
-  if matrix == "pure" || matrix == "pure-cross" then "pure"
-  else if matrix == "effect-common" || matrix == "effect-native" || matrix == "effect-wasm" || matrix == "effect-ocaml" then "effect"
-  else "tool"
+matrixLayer "pure" = "pure"
+matrixLayer "pure-cross" = "pure"
+matrixLayer "effect-common" = "effect"
+matrixLayer "effect-native" = "effect"
+matrixLayer "effect-wasm" = "effect"
+matrixLayer "effect-ocaml" = "effect"
+matrixLayer _ = "tool"
 
 -- | 矩阵分类 → 该用例要执行的目标（含 ocaml oracle；`tool` / `pure` 只在 ocaml 跑）。
 export matrixTargets : String -> List String
-matrixTargets matrix =
-  if matrix == "pure-cross" then ["ocaml", "wasm", "native"]
-  else if matrix == "effect-common" then ["ocaml", "wasm", "native"]
-  else if matrix == "effect-native" then ["ocaml", "native"]
-  else if matrix == "effect-wasm" then ["ocaml", "wasm"] else ["ocaml"]
+matrixTargets "pure-cross" = ["ocaml", "wasm", "native"]
+matrixTargets "effect-common" = ["ocaml", "wasm", "native"]
+matrixTargets "effect-native" = ["ocaml", "native"]
+matrixTargets "effect-wasm" = ["ocaml", "wasm"]
+matrixTargets _ = ["ocaml"]
 
 -- | 派生 tag：`layer:<层次>` 与 `matrix:<分类>`，让 `--filter` 也能按分层筛选。
 export matrixTags : String -> List String
