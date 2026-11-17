@@ -69,7 +69,7 @@ stage1 的 `vuna-compiler build .` 产出 `.output/bin/vuna`。流程见 [bootst
 vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR  # 逐模块 codegen 到目录；成功静默
 vuna check (<entry.vuna> | <package-dir>)
 vuna build [--no-compile] [--out DIR] [PKG-DIR]  # 默认 `<PKG-DIR>/.output`；跑 build.sh → 输出目录/bin/<包名>
-vuna lint [--fix] [--format text|json|github] [PATH]...
+vuna lint [--fix] [--format text|json|github|sarif] [PATH]...
 vuna interp <file.vuna>                   # 精化后核心求值（纯；不执行效果）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
 vuna run [DIR] [--package NAME] [--no-build] [--release] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>

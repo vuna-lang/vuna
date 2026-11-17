@@ -61,7 +61,7 @@ import qualified Vuna.Lint
 
 -- | 内部：工具命令的用法行（`${prog} <cmd> ...`）；`prog` 是程序名原文。
 toolUsageLines : String -> String
-toolUsageLines prog = """  ${prog} lint [--fix] [--dry-run] [--format text|json|github] [--max-warnings N] [--quiet]
+toolUsageLines prog = """  ${prog} lint [--fix] [--dry-run] [--format text|json|github|sarif] [--max-warnings N] [--quiet]
        [--select RULE]... [--ignore RULE]... [--config PATH] [--no-config] [--no-cache]
        [--max-passes N] [--list] [--explain RULE] [PATH]...
        PATH 可为文件或目录；省略时扫 workspace 各包的 lib/ 与 app/；配置读 vuna.toml 的 [lint]
