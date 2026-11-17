@@ -208,13 +208,13 @@ repeatA n = join "" (map (\_ => "a") (range 0 n))
 -- 规范编码（`Vuna.Compiler.Canonical`）自检：roundtrip / span 不敏感 / 字段覆盖
 -- ---------------------------------------------------------------
 sp0 : Span
-sp0 = Span "" 0 0 0 0
+sp0 = Span "" 0 0 0 0 0 0
 
 spA : Span
-spA = Span "a.vuna" 1 1 1 1
+spA = Span "a.vuna" 1 1 1 1 0 0
 
 spB : Span
-spB = Span "b.vuna" 42 7 42 8
+spB = Span "b.vuna" 42 7 42 8 0 0
 
 -- | 只差项内 span 的两个值必须编码成同一串：span 不参与内容寻址。
 spanTermA : Term
