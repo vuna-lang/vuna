@@ -83,7 +83,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D102 | native GC 是**保守、非移动、不分代、不压缩**：形似指针的 `Int` / 字节型会多留对象、空闲块按尺寸类复用但不合并（内部碎片最多约 2×）、>64 MiB 的块进首次适配链而不 `munmap`、续延捕获缓冲钉住不回收；活帧的死槽在最后一次读后清零（`Native.Module` 的 `clearDeadSlots` / `clearSlotsInstrs`），但保守扫描仍按「字」判定，无法做到精确 | `compiler/lib/Vuna/Compiler/Native/Gc.vuna`（`gc_try` 的候选判据、`gc_sweep` 的尺寸类链）；[native.md](native.md) §5.2/§8 | 后续（压缩/分代与空闲块合并按基准证据再定） |
+| D102 | **用户自定义 handler 的 wasm 产物在浏览器不可执行**：可达代码里有 `prim_effectHandle` / `prim_effectSelf` 就带 `$ct` / `$eff` / `$rt_eff*`，默认配置的引擎在编译阶段拒绝（Chromium 开 `--js-flags=--experimental-wasm-wasmfx` 能编译但执行挂住）。**已落地**：纯程序与只有内建宿主效应的程序（Console / Clock / Env / Args / Exit / Stdin）由 `sendCore` 直连改写降到宿主原语，产物不含 `cont`，在 Node（V8）与默认 Chromium 上可跑。仍缺：Fs / Process / Net 的直连（它们的 `opH` 把答案行转投 `*-error` 族，需要先设计错误族的直连语义）；用户 handler 进浏览器需要 stack switching 或 CPS lowering。 | `test/suite/fixtures/wasm_engine_probe/probe.sh`、`test/suite/fixtures/wasm_js_host/smoke.sh`；`compiler/lib/Vuna/Compiler/Wasm/Module.vuna`（`rwSpine` / `directSend` / `reachableByRefs`）、`Ir/Runtime.vuna`（`irHostDirectOf`）；[wasm.md](wasm.md) §8.5/§8.6 | 后续（删除 wasmtime 与 `cont` 的触发条件：wasmfx 在目标浏览器默认可用且本仓运行时在 V8 上真能跑 / CPS lowering 落地 / 宣布 wasm 不支持用户 handler） |
 
 ## wasm 后端
 

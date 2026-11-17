@@ -349,14 +349,23 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | tail calls | `return_call` / `return_call_ref`（handler 运行时） | Chrome 112、Firefox 121、Safari 18.2 起默认 |
 | **stack switching** | `cont` / `resume` / `suspend`（`$ct` / `$eff` / `$rt_eff*`） | **提案仍处 Phase 3，无引擎默认开启**：Chrome 需 `--js-flags=--experimental-wasm-wasmfx`；Firefox 是 pref；JSC 未实现 |
 
-前四项共同覆盖浏览器可跑面；**stack switching 是唯一闸门**，而它只在需要时才出现：可达代码
-引用 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` 时，产物才发射 `$ct` 类型、
-`$eff` tag 与 `$rt_eff*` 运行时函数（`Wasm.Module.effModeOf`）；否则默认配置的引擎直接编译并
-运行。因此"浏览器能不能跑"对**不引用 handler 的程序**成立，对**引用 handler 的程序**不成立。
+前四项共同覆盖浏览器可跑面；**stack switching 只在用户自定义 handler 出现在可达代码里时才
+需要**。两条降低路径：
+
+- **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应（Console /
+  Clock / Env / Args / Exit / Stdin）在「可达代码没有用户 handler」时被降成
+  `MkEff (\_ => runMain (opH op pureK))`——`opH` 是该族的宿主解释器，`pureK` 是模块生成的
+  纯动作续延（`\r => MkEff (\_ => r)`）。入口也不再预装这些家族，产物不含 `$ct`。
+- **续延路径**：用户自定义 handler（`handle` / `handleScoped`）仍走 `$ct` / `$eff` /
+  `$rt_eff*`（需要 stack switching）。
+
+所以"浏览器能不能跑"对**只有宿主效应的程序**成立，对**带用户 handler 的程序**不成立。
+Fs / Process / Net 暂走续延路径（它们的 `opH` 会把答案行转投 `fs-error` / `process-error` /
+`net-error`，需要单独设计直连表）。
 
 实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
 
-| 引擎配置 | 不引用 handler 的产物（`main : Int`） | 需要 handler 的产物（`main : Eff [ConsoleOp] Nat`） |
+| 引擎配置 | 纯程序 / 只有宿主效应 | 用户自定义 handler |
 | --- | --- | --- |
 | Node 默认 | 编译 + 运行通过 | 拒绝（`core stack switching not enabled`） |
 | Node `--experimental-wasm-wasmfx` | 通过 | 拒绝（`rt_effPerform`: `Invalid opcode 0xe2`，V8 的编码与 wasm-tools 不一致） |
@@ -366,8 +375,8 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 `114_wasm_engine_probe.steps` 锁两列的第一行（默认配置下的通过与拒绝）；开启实验特性后的
 结果只作报告，随引擎版本变化，不作门禁。这三条读数的含义：
 
-- 不需要 handler 的产物已经是"浏览器可跑"的；**需要 handler 的产物不含 cont 才算过关**
-  （见 §8.6 的加载契约与 [debt.md](debt.md) D102）；
+- 只有宿主效应的产物已经是"浏览器可跑"的；**带用户 handler 的产物必须等引擎支持 stack
+  switching**（见 §8.6 的加载契约与 [debt.md](debt.md) D102）；
 - Wasmtime 是当前唯一可执行 handler 程序的引擎，定位是**参考/差分执行器**，不是产品运行时；
 - 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`），长列表上的非尾辅助函数要按各引擎的
   实际上限验证，不能以外推的默认值当契约。
@@ -402,6 +411,16 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
   （浏览器用 `WebAssembly.Suspending` + `fetch`，测试宿主用阻塞实现），guest 契约不变；
 - 未实现的操作走 `vuna: runtime error: wasm host operation is not implemented`（exit 2），
   不返回伪造结果。
+
+宿主效应直连的判据与边界（`Wasm.Module`）：
+
+- 入口的每个 handler 都要在 `Ir.Runtime.irHostDirectOf` 表里（表给出 `run*Host` 定义名 →
+  send key + 该族 `opH` 定义名）；缺一个就整体回落到续延路径。
+- 改写按 `sendCore` 的应用脊椎匹配：实参末尾三元组是 (key 字面量, name, op)，key 命中即改写。
+- 改写后按**体引用**重算可达集（静态依赖表会漏掉字典实例等隐式引用，因此保留集用「全依赖
+  闭包 ∩ 不含续延原语」）；`genStartBody` 的初始化列表用同一份集合。
+- 若改写后仍有可达到的 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`，说明
+  存在用户 handler 或未覆盖的族，整体回落续延路径（不静默改语义）。
 
 当前落地：JS 宿主在 `test/suite/fixtures/wasm_js_host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，
 测试资产、不进 seed），suite 用 `VUNA_WASM_HOST=js` 把 wasm 执行器从 Wasmtime 切到
