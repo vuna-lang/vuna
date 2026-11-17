@@ -330,12 +330,31 @@ performOperand : Expr -> Maybe Expr
 performOperand (EApp (EVar name _) ([op]) _) = if isPerformSyntax name then Just op else Nothing
 performOperand _ = Nothing
 
--- | 内部：行字面量的实例名文本：字符串字面量去掉引号（`@"audit"` 与 `@audit` 同义），
--- 变量直接用名字。
+-- | 内部：行字面量的实例名文本。合法的标识符可以去掉引号（`@"audit"` 与 `@audit` 同义），
+-- 其余（`"process-error"`、数字开头、含空格）必须保留字符串字面量，否则重写出的源码无法再解析。
 rowAtNameText : Expr -> Maybe String
-rowAtNameText (EStr s _) = Just s
+rowAtNameText (EStr s _) = Just (instanceNameText s)
 rowAtNameText (EVar n _) = Just n
 rowAtNameText _ = Nothing
+
+-- | 实例名文本：能写成单个标识符 token 的才去引号，否则用字符串字面量。
+instanceNameText : String -> String
+instanceNameText s = if identNameOk s then s else renderStr s
+
+-- | 实例名是否能作为标识符 token 写出（与 lexer 的 `collectIdent` 同规则，允许 `.` 分段）。
+identNameOk : String -> Bool
+identNameOk s = case strUnpack s of
+  [] => False
+  c :: rest => if isIdentStart c then identNameOkGo rest else False
+
+identNameOkGo : List Int -> Bool
+identNameOkGo [] = True
+identNameOkGo (c :: rest) =
+  if isIdentChar c then identNameOkGo rest else if c == 46 then identNameOkDot rest else False
+
+identNameOkDot : List Int -> Bool
+identNameOkDot [] = False
+identNameOkDot (c :: rest) = if isIdentStart c then identNameOkGo rest else False
 
 -- | 内部：行字面量 `X@name` 的 (类型, 实例名)（不是该形态则为 `Nothing`）。
 rowAtParts : Expr -> Maybe (Pair Expr Expr)
@@ -483,7 +502,7 @@ else case e of
       Just fs => case nm of
         EStr s _ => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
           Nothing => Nothing
-          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@" ++ s ++ joinSpace ss))
+          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@" ++ instanceNameText s ++ joinSpace ss))
         EParen e _ => case inlineExprGo (fuel - 1) env e of
           Nothing => Nothing
           Just ps => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
@@ -768,7 +787,9 @@ else case e of
       Nothing => case nm of
         EStr s _ => case renderApplyHeadGo (fuel - 1) env at lineInd f of
           [] => []
-          heads => appendApplyArgsGo (fuel - 1) env at lineInd (appendLast ("@" ++ s) heads) rest
+          heads =>
+            appendApplyArgsGo (fuel - 1) env at lineInd
+              (appendLast ("@" ++ instanceNameText s) heads) rest
         EParen e _ => case inlineExprGo (fuel - 1) env e of
           Just ns => case renderApplyHeadGo (fuel - 1) env at lineInd f of
             [] => []
