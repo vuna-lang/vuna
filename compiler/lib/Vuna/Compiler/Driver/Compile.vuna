@@ -15,7 +15,7 @@ module Vuna.Compiler.Driver.Compile where
 -- 效果显式化：扫描/读文件/写文件/建目录/删除/子进程/时钟/环境/二进制指纹全部显式在
 -- `Eff r` 里；纯逻辑（路径/哈希/序列化/缓存键计算/AST 变换）保持纯函数。下挂模块
 -- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff r`，这里直接调用。
-import Base.Sort
+import Base.HashMap
 import Base.Maybe
 import Base.Obs
 import Vuna.Compiler.Loader.Addr
@@ -862,56 +862,37 @@ isSelfModOf ctx m = m.cmPkg == contextPackageName ctx
 moduleGraphOf : List ClosureMod -> List (Pair String (List String))
 moduleGraphOf mods = map modGraphEntry mods
 
--- 依赖地址：已分配的查表，未分配的用哨兵（外部名字；真实包图里不会出现）。
-depAddrOf : List (Pair String String) -> String -> String
-depAddrOf assign name = case lookupPair name assign of
-  Just a => a
+-- 依赖身份：直接用**依赖的源摘要**（不是已分配地址、也不是排序位置）。
+--
+-- 这里不能用「按模块名排序逐个赋值、未赋值的依赖取 ext:」：compiler 的 import 图有环，
+-- 环内边必须停在一个稳定哨兵上；但按名字排序时，**无环**的前向边（依赖名排在依赖方之后，
+-- 例如 `Base.Common` → `Base.Source`）也会落在 `ext:` 上。那样依赖内容变化时依赖方的
+-- 接口地址不变，`ownCleanModules` 会按旧地址读到陈旧接口（跨 worktree 共享对象库时尤其
+-- 容易踩到）。改把每个 import 的 `pkgKey|源摘要` 编进地址：与遍历顺序/图规模无关，
+-- 依赖内容一变地址就变。传递变化（依赖的依赖改了导出面）由 `ownCleanInfo` 的
+-- 重导出链传播兜住。
+depSrcOf : Base.HashMap.HashMap String String -> String -> String
+depSrcOf tbl name = case Base.HashMap.lookup name tbl of
+  Just src => src
   Nothing => "ext:${name}"
 
--- 地址解析：**按模块名排序**逐个赋值，未赋值的依赖取 `ext:<name>`。
---
--- 为什么不是拓扑序：compiler 包的 import 图**有环**（如 `Vuna.Compiler.Canonical` 与它的
--- 子模块互相 import），环里永远没有「依赖都已赋值」的成员；而拓扑 DFS 的遍历顺序依赖
--- 图规模，导致同一模块在 `check base` 与 `check .` 下算出不同地址（跨包接口永不命中）。
--- 改按全局字典序赋值后，结果只由「模块名集合 + 各自的边」决定，与图规模/遍历顺序无关。
--- 环内被 `ext:` 挡住的那条边是已知近似（该边不参与地址）。
-ifaceAddrIn : List (Pair String String) -> ClosureMod -> String
-ifaceAddrIn assign m =
+-- | 模块源摘要表（模块名 → `包身份|源摘要`）：地址解析用。
+srcTblOf : List ClosureMod -> Base.HashMap.HashMap String String
+srcTblOf mods = Base.HashMap.fromList (map srcPairOf mods)
+
+srcPairOf : ClosureMod -> Pair String String
+srcPairOf m = Pair (modNameOf m) "${m.cmPkgKey}|${m.cmSrc}"
+
+-- | 模块接口地址：包身份 / 模块名 / 自身源摘要 / 包环境 / 每个直接依赖的源摘要。
+ifaceAddrOf : Base.HashMap.HashMap String String -> ClosureMod -> String
+ifaceAddrOf srcTbl m =
   addrOf
-    (append ["iface", ifaceObjectCodec, m.cmPkgKey, m.cmName, m.cmSrc, m.cmPkgEnv] (map (depAddrOf assign) m.cmImports))
+    (append ["iface", ifaceObjectCodec, m.cmPkgKey, m.cmName, m.cmSrc, m.cmPkgEnv] (map (depSrcOf srcTbl) m.cmImports))
 
-addrOfModIn : List (Pair String String) -> ClosureMod -> String
-addrOfModIn assign m = case lookupPair m.cmName assign of
-  Just a => a
-  Nothing => "ext:${m.cmName}"
-
-withAddr : List (Pair String String) -> ClosureMod -> ClosureMod
-withAddr assign m =
+withAddr : Base.HashMap.HashMap String String -> ClosureMod -> ClosureMod
+withAddr srcTbl m =
   ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc m.cmImports
-    (addrOfModIn assign m)
-
--- 字符串升序（稳定）。收敛到 `Base.Sort.sortBy`，不再各模块手写插入排序
--- （`Driver/Dt.vuna` 曾有一份逐字相同的副本）。
-sortNames : List String -> List String
-sortNames = sortBy (\a, b => a <= b)
-
-assignGo : List String -> List ClosureMod -> List (Pair String String) -> List ClosureMod -> List ClosureMod
-assignGo _ mods _ _ =
-  let
-    -- 关键：地址表**只算一次**。写成 `map (withAddr (assignOrdered …)) mods` 时，实参在
-    -- 每个元素上都要重新求值（本语言没有共享 thunk）⇒ 145 个模块 × 一次完整 assign ≈ 1.4s，
-    -- 而 `ifaceModsEff` 一次 check 要跑 6 次以上（实测冷 `check compiler` 里占 ~8s）。
-    assign = assignOrdered (sortNames (map modNameOf mods)) mods []
-  in map (withAddr assign) mods
-
-assignOrdered : List String -> List ClosureMod -> List (Pair String String) -> List (Pair String String)
-assignOrdered [] _ assign = assign
-assignOrdered (n :: rest) mods assign = case findClosureMod n mods of
-  Nothing => assignOrdered rest mods assign
-  Just m =>
-    let
-      a = ifaceAddrIn assign m
-    in assignOrdered rest mods (Pair n a :: assign)
+    (ifaceAddrOf srcTbl m)
 
 -- | 整个依赖闭包的模块 + 各自接口地址（依赖在前，本包在后）。
 export ifaceModsEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List ClosureMod)
@@ -932,66 +913,15 @@ ifaceModsWithEff ctx pkgs = do
   in do
     mods <- mapEff (loadHeaderEff hasPrelude) mods0
     tc <- clockNow
-    -- 地址表是**判定**：同样的闭包（包身份 / 模块名 / 源摘要 / 包环境 / import 名）
-    -- 一定算出同样的地址表，所以按闭包摘要存一个极小对象（145 个模块 ≈ 8 KB）。
-    -- 这层缓存必须留着：`addrOf` 走纯 vuna SHA-256，单次 assign 在 145 个模块上 ≈ 1.35 s。
     let
-      key = modsKeyOf mods
+      srcTbl = srcTblOf mods
+      assigned = map (withAddr srcTbl) mods
     in do
-      cached <- storeObjectReadEff modsKind modsCodec key
-      case cached of
-        Just bytes => case decMods bytes of
-          Just table => do
-            td <- clockNow
-            _ <-
-              pure
-                (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms headers=${strFromInt ((tc - tb) / 1000)}ms assign=cached total=${strFromInt ((td - ta) / 1000)}ms")
-            -- 计数（`ph:"C"`）：命中一次地址表对象。与 `obsMarkEff` 同形态（纯函数经
-            -- `effPrim` 提升到 `Eff r`），关闭时只付一次 `Lazy.force` + 分支。
-            _ <- obsCountEff "vuna.counter.cache.hit" 1
-            _ <- obsMarkEff "vuna.iface.compute"
-            pure (addrsVia table mods)
-          Nothing => assignAndWriteMods key mods ta tb tc
-        Nothing => assignAndWriteMods key mods ta tb tc
-
--- | 地址表对象：`objects/mods/<闭包摘要>`。
-modsKind : String
-modsKind = "mods"
-
-modsCodec : String
-modsCodec = "mods-order 1"
-
-modKeyOf : ClosureMod -> String
-modKeyOf m = "${m.cmPkgKey}|${m.cmName}|${m.cmSrc}|${m.cmPkgEnv}|${join "," m.cmImports}"
-
-modsKeyOf : List ClosureMod -> String
-modsKeyOf mods = addrOf ("mods" :: modsCodec :: map modKeyOf mods)
-
-encMods : List (Pair String String) -> String
-encMods ps = encTop (encList (encPair encStr encStr)) ps
-
-decMods : String -> Maybe (List (Pair String String))
-decMods bytes = case decList (decPair decStr decStr) 65536 (curOf bytes) of
-  Nothing => Nothing
-  Just p => if curAtEnd (secondOf p) then Just (firstOf p) else Nothing
-
-addrsVia : List (Pair String String) -> List ClosureMod -> List ClosureMod
-addrsVia table mods = map (withAddr table) mods
-
-assignAndWriteMods : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List ClosureMod -> Int -> Int -> Int -> Eff r (List ClosureMod)
-assignAndWriteMods key mods ta tb tc = do
-  let
-    table = assignOrdered (sortNames (map modNameOf mods)) mods []
-  in do
-    -- 计数（`ph:"C"`）：地址表未命中（重算 assign）。与 `obsMarkEff` 同形态。
-    _ <- obsCountEff "vuna.counter.cache.miss" 1
-    _ <- storeObjectWriteEff modsKind modsCodec key (encMods table)
-    td <- clockNow
-    _ <-
-      pure
-        (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms headers=${strFromInt ((tc - tb) / 1000)}ms assign=${strFromInt ((td - tc) / 1000)}ms")
-    _ <- obsMarkEff "vuna.iface.compute"
-    pure (addrsVia table mods)
+      _ <-
+        pure
+          (dbg! "iface-mods-phases n=${strFromInt (length mods)} closure=${strFromInt ((tb - ta) / 1000)}ms headers=${strFromInt ((tc - tb) / 1000)}ms assign=direct")
+      _ <- obsMarkEff "vuna.iface.compute"
+      pure assigned
 
 -- | 只有 roots、没有包记录的上下文（单文件夹具 / base-only 会话）：按 root 名建表。
 -- env 与 `packageEnvHash` 在「无依赖」时同口径（`<toml 内容哈希>|<tag>|`）。
@@ -1897,7 +1827,7 @@ auditCompare subject at s f =
     "iface-audit-mismatch subject=${subject} at=${at} summary=${textHash s}/${strLength s} full=${textHash f}/${strLength f}"
 
 -- 依赖模块的「名字 → 输入摘要」表：写本包接口时给 `miDepHashes` 用。
--- 对象库下依赖的标识就是它的接口地址（与 `depAddrOf` 的口径一致）。
+-- 对象库下依赖的标识就是它的接口地址（与 `ifaceAddrOf` 的口径一致）。
 depIfaceHashTable : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (List (Pair String String))
 depIfaceHashTable ctx = do
   mods <- ifaceModsEff ctx
@@ -1921,10 +1851,14 @@ packageEnvHash ctx = do
 -- ---------------------------------------------------------------
 -- 包内逐模块增量的脏/净判定
 --
--- 判据是**接口地址**本身：`ifaceAddrIn` 已把模块源摘要、`pkgEnv` 与每个 import 的
--- 依赖接口地址编进地址，所以「按地址读到了旧接口」就等价于「源 + 依赖链都没变」。
--- 同包依赖是脏模块时它的接口地址也会变，脏性沿 import 边自然传播；不需要在读侧再扫一遍
--- `miDepHashes`（那是工具路径 `toolCleanGo` 在**没有地址表**时的替代判据）。
+-- 两级判据：
+--   1. **接口地址**：`ifaceAddrOf` 把模块源摘要、`pkgEnv` 与每个直接 import 的源摘要
+--      编进地址，「按地址读到接口」⇒ 自身的源与直接依赖的源都没变；
+--   2. **重导出链传播**：地址只编直接依赖的**源**摘要，依赖的依赖改了（依赖的导出面
+--      随之变化）不会改依赖方地址。对 `export import` 的模块，这会读到陈旧接口
+--      （被重导出模块的新导出看不见）——所以按导出条目的**定义处模块**把脏性沿重导出链
+--      传播（A→B→Z 逐轮）。普通 import 只影响已缓存的实现体（与旧路径一致地复用），
+--      不参与判脏，避免把「叶子模块改动 ⇒ 全体传递依赖重精化」的代价带回来。
 -- ---------------------------------------------------------------
 -- 与 `ownCleanModules` 同一次读取，同时回报「已有整包接口是否可完整读回」（按模块跳过
 -- 的前提）：check/build 的写前校验已经解码过整包接口，写回时复用
@@ -1939,14 +1873,52 @@ ownCleanInfo ctx = do
   mods <- ifaceModsEff ctx
   reads <- mapEff readOneModIface (selfModsOf ctx mods)
   let
-    clean = collectClean reads
+    ownNames = map modNameOf (selfModsOf ctx mods)
+    cands = readIfaces reads
+    -- 接口读不到的模块先算脏（源/依赖变了，或还没写过接口）。
+    missing = filter (\n => not (memName n (map miNameOf cands))) ownNames
+    clean = collectClean missing cands
   in pure (Pair True (if length clean == 0 then Nothing else Just clean))
 
-collectClean : List (Pair ClosureMod (Maybe ModuleIface)) -> List ModuleIface
-collectClean [] = []
-collectClean (p :: rest) = case secondOf p of
-  Nothing => collectClean rest
-  Just mi => mi :: collectClean rest
+-- 候选（同包、接口可读）模块的接口列表。
+readIfaces : List (Pair ClosureMod (Maybe ModuleIface)) -> List ModuleIface
+readIfaces [] = []
+readIfaces (p :: rest) = case secondOf p of
+  Nothing => readIfaces rest
+  Just mi => mi :: readIfaces rest
+
+-- 候选接口是否重导出了某个脏模块：导出条目的定义处名以 `<mod>.` 开头。
+-- `export import` 只拷贝条目，所以链式重导出（A→B→Z）的条目目标仍指向最初的定模块，
+-- 用「定义处模块」做脏性传播能一次覆盖直接与间接重导出。
+exportsFromDirty : List String -> ModuleIface -> Bool
+exportsFromDirty dirty mi = anyExportFrom dirty (miExportsOf mi)
+
+anyExportFrom : List String -> List ExportEntry -> Bool
+anyExportFrom dirty [] = False
+anyExportFrom dirty (e :: rest) =
+  if fromDirty dirty e.target then True else anyExportFrom dirty rest
+
+fromDirty : List String -> String -> Bool
+fromDirty [] target = False
+fromDirty (d :: rest) target = if startsWith "${d}." target then True else fromDirty rest target
+
+-- 脏性固定点：接口读不到的同包模块先算脏；重导出了脏模块的也脏（链式重导出逐轮传播）。
+-- 只传播「重导出」边：普通 import 只影响已缓存的实现体（与旧路径一致地复用），
+-- 这样叶子模块改动不会把全体传递依赖都拖进重精化。
+dirtyFix : Int -> List String -> List ModuleIface -> List String
+dirtyFix fuel dirty cands = if fuel <= 0 then dirty
+else
+  let
+    added =
+      map miNameOf
+        (filter (\mi => not (memName (miNameOf mi) dirty) && exportsFromDirty dirty mi) cands)
+  in if length added == 0 then dirty else dirtyFix (fuel - 1) (append added dirty) cands
+
+collectClean : List String -> List ModuleIface -> List ModuleIface
+collectClean dirty0 cands =
+  let
+    dirty = dirtyFix (length cands + 1) dirty0 cands
+  in filter (\mi => not (memName (miNameOf mi) dirty)) cands
 
 ownCleanModules : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> Eff r (Maybe (List ModuleIface))
 ownCleanModules ctx = do

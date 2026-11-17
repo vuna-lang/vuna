@@ -26,7 +26,6 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
   objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
   objects/doc/<doc 输入摘要>         # vuna doc 的渲染产物（codec doc-html 1）
-  objects/mods/<闭包摘要>           # 模块接口地址表（冷 check 的 assign 快路径）
   objects/test/<测试判定 key>       # test verdict（通过/失败计数）
   objects/pkgiface/<key>            # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
   objects/splitptr/<快 splitIn>     # 产物快指针：源输入 → 语义产物身份（注释复用 codegen）
@@ -42,7 +41,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   tmp/                              # 取包中转（可删）
 ```
 
-缓存族 = `objects/{iface,header,lex,order,check,tool,doc,mods,test,pkgiface,splitptr}` + `blobs` + `units` +
+缓存族 = `objects/{iface,header,lex,order,check,tool,doc,test,pkgiface,splitptr}` + `blobs` + `units` +
 `views` + `.tmp`；包对象族 = `objects/pkg` + `pkgs` + `tmp`。两族生命周期不同：
 `vuna clean --store` / `vuna store gc` 只碰缓存族，`vuna clean --packages` 只碰包对象族
 （见 [package-store.md](package-store.md)）。
@@ -131,6 +130,12 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 ## 正确性
 
 - **地址含全部输入**：任何输入变化 ⇒ 新地址 ⇒ 天然 miss。旧对象留着不会被误用。
+  模块接口地址 = 包身份 + 模块名 + 自身源摘要 + 包环境 + **每个直接 import 的源摘要**
+  （`ifaceAddrOf`），所以依赖变了依赖方的地址就变。
+- **同包干净模块复用**（`cache-own-clean`）：接口读得到的模块默认复用；接口读不到的先算脏，
+  脏性再沿**重导出链**传播（导出条目的定义处模块是脏模块 ⇒ 本模块也脏，A→B→Z 逐轮）。
+  普通 import 不传播（只影响已缓存的实现体），所以叶子模块改动不会把全体传递依赖拖进重精化。
+  重导出传播是必须的：依赖的依赖变化不改变依赖方地址，但会改变它重导出的名字集合。
 - **删除任何对象都只影响命中率**：输入寻址下「缺了就是未命中、重算」。所以 GC 是性能问题，
   不是正确性问题——这是整套设计的核心性质（包对象族是例外：删了要重新 fetch）。
 - **坏字节进不了解码器**：`Base.Store` 的 framing（magic / tag / codec / 长度 / 内容地址）先校验，
