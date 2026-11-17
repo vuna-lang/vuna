@@ -91,8 +91,7 @@ unitDepsOf ordered self deps =
 -- 程序的实际引用，read 侧还要过一道本程序的成员校验：旧 key 文件（模块集合变化）或
 -- 载荷与当前程序不一致时回退重算，而不是把不存在的单元写进 build.sh 的依赖/stamp 表。
 cachedUnitOk : List String -> String -> SplitFile -> Bool
-cachedUnitOk known unit sf = case sf of
-  SplitFile name _ deps => name == "${unit}.ml" && depsKnown known deps
+cachedUnitOk known unit (SplitFile name _ deps) = name == "${unit}.ml" && depsKnown known deps
 
 depsKnown : List String -> List String -> Bool
 depsKnown known [] = True
@@ -100,9 +99,8 @@ depsKnown known (d :: rest) = if knownUnit known d then depsKnown known rest els
 
 -- | `Maybe` 缓存条目按当前程序校验后的可复用版本。
 keepCached : List String -> String -> Maybe SplitFile -> Maybe SplitFile
-keepCached known unit cached = case cached of
-  Just sf => if cachedUnitOk known unit sf then Just sf else Nothing
-  Nothing => Nothing
+keepCached known unit (Just sf) = if cachedUnitOk known unit sf then Just sf else Nothing
+keepCached known unit Nothing = Nothing
 
 -- 实际依赖图必须无环：`canonicalTopo` 用迭代松弛算层，环会让层号永远增长、停在燃料
 -- 上界并给出错误的“拓扑序”（build.sh 的分层与链接顺序随之失效）。判定直接复用深度
