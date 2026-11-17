@@ -204,22 +204,30 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
+- 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：默认配置的引擎必须拒绝带 `cont` 的
+  产物（§8.5）；开启 V8 实验特性后的读数只作报告。
 - wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
   `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖
   `vuna-native`（见 [testing.md](testing.md)「后端自举 conformance」）。
 
 ## 8. 后端契约与边界
 
-wasm 的契约上限是**浏览器 WASI（preview2-shim）能提供的能力子集**：纯计算、WasmGC 值、
-wasm 内 handler、经显式 preopen 的文件读写、stdout/stderr、monotonic clock、args/env。
-进程派生 / stdin / raw 网络 / 信号 / 线程 / 符号链接 / 阻塞 sleep 不在契约内。
+wasm 的契约上限是**浏览器能提供的能力子集**：纯计算、WasmGC 值、wasm 内 handler、经显式
+preopen 的文件读写、stdout/stderr、monotonic clock、args/env。进程派生 / stdin / raw 网络 /
+信号 / 线程 / 符号链接 / 阻塞 sleep 不在契约内。
+
+宿主面固定为 WASI preview1（§1 的 import 列表），由宿主自己实现：Wasmtime 内建一份，
+浏览器/Node 由 JS 宿主层实现同一组函数（§8.6）。不引入 preview2-shim / `jco`：它们是
+Component Model 的运行链路，而产物是核心模块，且测试宿主需要确定性（固定时钟、临时目录、
+严格 trap 文本）。
 
 ### 8.1 浏览器 wasm 能力矩阵
 
-口径来源：`@bytecodealliance/preview2-shim` 的 Browser support matrix（0.31.1，
-<https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim>）。运行时仍
-import WASI preview1；浏览器侧由 preview1→preview2 adapter 接到 preview2-shim。下表的
-「允许」指这个交集，不是 Node/Wasmtime 的全部宿主能力。
+能力口径参考 `@bytecodealliance/preview2-shim` 的 Browser support matrix（0.31.1，
+<https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim>），但**不使用该
+shim**（§8 的分层说明）：它描述的是浏览器平台能提供什么，不是我们的实现路径。产物 import
+WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平台的能力交集，不是 Node/Wasmtime
+的全部宿主能力。
 
 | WASI 面 | preview2-shim 浏览器 | Vuna 效应 / 原语 | 当前 wasm 后端 |
 | --- | --- | --- | --- |
@@ -270,11 +278,10 @@ import WASI preview1；浏览器侧由 preview1→preview2 adapter 接到 previe
 - wall clock：当前只暴露 monotonic `clockNow`。
 - outbound HTTP（`wasi:http/outgoing-handler`，fetch-backed）：浏览器允许，但 `NetOp`
   是 raw socket 语义，不能直接映射；需要单独的 HTTP 效应。
-- 持久文件系统：由宿主注入 OPFS / IndexedDB / 自定义 `wasi:filesystem` adapter；guest
-  侧没有额外能力。
-- 可注入 stdin / terminal：preview2-shim 允许 adapter 注入；当前后端仍按不可用处理。
-- 浏览器运行器：`jco` + preview2-shim 的加载/实例化链路尚未接入仓库；当前验证仍在
-  Wasmtime 上跑 `.wasm`。
+- 持久文件系统：由宿主注入 OPFS / IndexedDB 等存储后端；guest 侧没有额外能力。
+- 可注入 stdin / terminal：宿主可以注入；当前后端仍按不可用处理。
+- 浏览器宿主层：JS 侧的 WASI preview1 垫片与端到端用例尚未接入仓库（§8.6）；
+  当前产物只在 Wasmtime 上执行。
 
 ### 8.4 能力表
 
@@ -320,6 +327,76 @@ import WASI preview1；浏览器侧由 preview1→preview2 adapter 接到 previe
 - 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（不做，见
   [architecture-target](../architecture-target.md) D7）、Component Model / WASI 0.2/0.3
   （D16 的终端未决部分）。
+
+## 8.5 引擎支持矩阵
+
+产物用到的引擎特性与浏览器侧状态：
+
+| 特性 | 产物里的用法 | 浏览器状态 |
+| --- | --- | --- |
+| WasmGC | `struct` / `array` / `i31` / `ref.cast` / `ref.test` / `array.new_data` | Chrome 119、Firefox 120、Safari 18.2 起默认（Baseline 2024-12-11） |
+| typed function references | `ref.func` + 直接调用（`$ft` 闭包） | 随 WasmGC 进入 Baseline（Safari 18.0 起） |
+| tail calls | `return_call` / `return_call_ref`（handler 运行时） | Chrome 112、Firefox 121、Safari 18.2 起默认 |
+| **stack switching** | `cont` / `resume` / `suspend`（`$ct` / `$eff` / `$rt_eff*`） | **提案仍处 Phase 3，无引擎默认开启**：Chrome 需 `--js-flags=--experimental-wasm-wasmfx`；Firefox 是 pref；JSC 未实现 |
+
+前四项共同覆盖浏览器可跑面；**stack switching 是唯一闸门**：产物无条件包含 `$ct` 类型、
+`$eff` tag 与 `$rt_effPerform` 等函数（`Wasm.Module.baseTypes` / `baseTags`），所以默认配置
+的引擎会在**编译**阶段拒绝整个模块，与程序是否真的执行 effect 无关。
+
+实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
+
+| 引擎配置 | 纯程序（`main : Int`） | 带 effect 入口（`main : Eff [ConsoleOp] Nat`） |
+| --- | --- | --- |
+| Node 默认 | 拒绝（`core stack switching not enabled`） | 拒绝 |
+| Node `--experimental-wasm-wasmfx` | 拒绝（`rt_effPerform`: `Invalid opcode 0xe2`） | 拒绝 |
+| Chromium 默认 | 拒绝（同上） | 拒绝 |
+| Chromium `--js-flags=--experimental-wasm-wasmfx` | 编译 + 实例化 + 运行通过 | 编译 + 实例化通过，执行 `_start` 无输出（挂住） |
+
+`114_wasm_engine_probe.steps` 只锁第一列的事实（默认配置拒绝）；开启实验特性后的结果作为
+报告打印，随引擎版本变化，不作门禁。这三条读数的含义：
+
+- 浏览器验收口径必须包含**产物不含 cont**，否则"能跑"不成立（见 §8.6 的加载契约与
+  [debt.md](debt.md) D102）；
+- Wasmtime 是当前唯一可执行 effect 程序的引擎，定位是**参考/差分执行器**，不是产品运行时；
+- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`），长列表上的非尾辅助函数要按各引擎的
+  实际上限验证，不能以外推的默认值当契约。
+
+## 8.6 engine / host / loader 分层
+
+"运行时"在这里分四层，只有第一层由平台提供：
+
+| 层 | 提供者 | 内容 |
+| --- | --- | --- |
+| engine | 浏览器 / Node | 校验、编译、GC、尾调用、执行；入口是 `WebAssembly.instantiate` |
+| host | 本仓 | 16 个 `wasi_snapshot_preview1` 函数的实现、capability 表、errno / 退出映射 |
+| loader | 本仓 | 取 `.wasm`、喂 args/env/preopen、接 stdout/stderr、拿退出码 |
+| 语言运行时 | 编进 `.wasm`（`$rt_*`） | GC 对象、字符串、数组、闭包、handler 运行时 |
+
+宿主实现策略：**不内嵌 wasm 运行时**（Wasmtime 编成 wasm、Wasmer、wasmi 都需要自己实现
+GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（组件化前置 + npm 依赖 +
+浏览器默认值不确定）。宿主层是手写的 JS 对象，同一份实现服务 Node（V8，与 Chrome 同引擎）
+与浏览器。
+
+加载/执行契约（宿主与 loader 共同遵守）：
+
+- `WebAssembly.compile(bytes)` 或 `compileStreaming(fetch(...))`（MIME `application/wasm`）；
+- `new WebAssembly.Instance(module, imports)`，`_start()` 调用一次；
+- `proc_exit(n)` → 抛 `ExitError(n)`，由 loader 转成退出码；
+- 引擎级 trap 的文本因引擎而异，**不跨引擎比对**；guest 自己经 `fd_write` 写的
+  `vuna: runtime error: …` 仍逐字节比对；
+- stdout/stderr 走**单一 sink、按到达顺序追加**：guest 单线程，顺序确定，等价于
+  Wasmtime 下合并流的读法；
+- 线性内存只有固定的 4 页 scratch（导出 `memory`），宿主只读写它，不分配；GC 堆归引擎；
+- 宿主 import 的**签名保持同步**。异步能力（如将来的 HTTP）只在宿主实现内部异步
+  （浏览器用 `WebAssembly.Suspending` + `fetch`，测试宿主用阻塞实现），guest 契约不变；
+- 未实现的操作走 `vuna: runtime error: wasm host operation is not implemented`（exit 2），
+  不返回伪造结果。
+
+代价（按引擎管理，不按后端分叉）：
+
+- 无 `-W max-wasm-stack`：栈上限、递归深度、GC 阈值都是引擎参数；
+- 观测面为零：`VUNA_OBS` 在 wasm 上是 no-op 桩，浏览器侧也没有 `vuna obs` 通道；
+- 能力矩阵按宿主取值：浏览器允许 `fetch`、不允许 raw socket；Wasmtime 相反。
 
 ## 9. 相关阅读
 
