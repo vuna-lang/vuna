@@ -4,9 +4,11 @@
 # 用法：sh probe.sh <path-to-vuna>
 #   环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）
 #
-# 事实口径：wasm 产物无条件带 stack-switching 类型（`$ct` / `$eff`），所以默认配置的
-# 引擎（Node / 浏览器）拒绝编译；这是「浏览器能不能跑」的唯一版本闸门。
-# 本脚本断言这条事实，并把「开给 V8 的实验特性后走到哪一步」作为报告打印（不参与判定，
+# 事实口径：产物只在可达代码需要 handler（perform / handle / self）时才发射
+# stack-switching 类型与运行时（`$ct` / `$eff` / `$rt_eff*`）。所以：
+#   - 不引用 handler 的产物在默认配置的引擎（Node / 浏览器）上直接可编译；
+#   - 引用 handler 的产物被默认配置拒绝，这是「浏览器能不能跑 effect」的唯一版本闸门。
+# 本脚本断言这两条，并把「开给 V8 的实验特性后走到哪一步」作为报告打印（不参与判定，
 # 因为引擎侧进展与 Node 版本相关）。
 #
 # 缺 Node 时打印 SKIP，摘要行照常输出（与 108 的桥接冒烟同风格）。
@@ -95,16 +97,21 @@ CONSOLE_WASM=$tmp/console/out/main.wasm
 if ! command -v node >/dev/null 2>&1; then
   echo "SKIP: node not found"
 else
-  # 默认配置：两个产物都必须被拒绝（stack switching 未启用）。
-  for w in "$PURE_WASM" "$CONSOLE_WASM"; do
-    [ -f "$w" ] || {
-      bad "default($w)" "产物缺失"
-      continue
-    }
-    out=$(node --no-warnings "$HERE/probe.mjs" "$w" 2>&1)
-    expect_contains "default($w)" "$out" "validate=false compile=error"
+  # 默认配置：纯程序产物可直接编译；带 handler 的产物被拒绝（stack switching 未启用）。
+  if [ -f "$PURE_WASM" ]; then
+    out=$(node --no-warnings "$HERE/probe.mjs" "$PURE_WASM" 2>&1)
+    expect_contains "default(pure)" "$out" "validate=true compile=ok"
     printf '     %s\n' "$out"
-  done
+  else
+    bad "default(pure)" "产物缺失"
+  fi
+  if [ -f "$CONSOLE_WASM" ]; then
+    out=$(node --no-warnings "$HERE/probe.mjs" "$CONSOLE_WASM" 2>&1)
+    expect_contains "default(console)" "$out" "validate=false compile=error"
+    printf '     %s\n' "$out"
+  else
+    bad "default(console)" "产物缺失"
+  fi
 
   # 开 V8 实验特性：只报告，不判定（引擎侧进展与 Node 版本相关）。
   report='flagged=unavailable'
