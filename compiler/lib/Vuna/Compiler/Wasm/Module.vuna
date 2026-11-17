@@ -1325,6 +1325,7 @@ baseTypes =
     WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
     WatContType "$ct" "$cft",
     WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvI32],
+    WatStructType "$selfNode" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvAnyRef],
     WatStructType "$clean" [WatField False WvAnyRef, WatField False WvAnyRef]
   ]
 
@@ -1388,7 +1389,7 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
           allTypes = append baseTypes famTypes
           globals =
             append
-              [WatGlobal "$g_cleanups" WvAnyRef [IRefNull], WatGlobal "$g_hostStatus" WvI32 [IConstI32 0]]
+              [WatGlobal "$g_cleanups" WvAnyRef [IRefNull], WatGlobal "$g_hostStatus" WvI32 [IConstI32 0], WatGlobal "$g_self" WvAnyRef [IRefNull]]
               (globalsOf ordered)
           dataText = poolBytes st.gsPool
           dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)

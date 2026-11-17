@@ -1773,11 +1773,22 @@ rtHandleLoop =
       ]
     mkKclo = [IRefFunc "$rt_effResumeClo", ILocalGet "$ctx", IStructNew "$clo", ILocalSet "$kclo"]
     callOpH =
-      [ ILocalGet "$opH",
+      [ ILocalGet "$key",
+        ILocalGet "$name",
+        ILocalGet "$ret",
+        ILocalGet "$opH",
+        IGlobalGet "$g_self",
+        IStructNew "$selfNode",
+        IGlobalSet "$g_self",
+        ILocalGet "$opH",
         ILocalGet "$op",
         ICall "$rt_apply",
         ILocalGet "$kclo",
-        IReturnCall "$rt_apply"
+        ICall "$rt_apply",
+        IGlobalGet "$g_self",
+        IRefCast "$selfNode",
+        IStructGet "$selfNode" 4,
+        IGlobalSet "$g_self"
       ]
     forwardToOuter =
       [ ILocalGet "$payload",
@@ -1827,6 +1838,26 @@ rtEffHandle =
       ]
   in rtFunc "$rt_effHandle" params [WvAnyRef] locals body
 
+-- | `prim_effectSelf thunk`：把子计算重新装进当前 opH 所属的 handler。
+--   当前 handler 由 `$rt_handleLoop` 调用 opH 时压入 `$g_self`。
+rtEffSelf : WatFunc
+rtEffSelf =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$cont" (WvRef "$ct"), Pair "$node" (WvRefNull "$selfNode")]
+    body =
+      [ IGlobalGet "$g_self", ILocalSet "$node",
+        ILocalGet "$node", IPlain "ref.is_null", IIf "" [IUnreachable] [INop],
+        IRefFunc "$rt_effThunk", IPlain "cont.new $ct", ILocalSet "$cont",
+        ILocalGet "$cont", ILocalGet "$p0",
+        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 2,
+        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 3,
+        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 0,
+        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 1,
+        IReturnCall "$rt_handleLoop"
+      ]
+  in rtFunc "$rt_effSelf" params [WvAnyRef] locals body
+
 -- ---------------------------------------------------------------
 -- 已实现函数清单（固定顺序）
 -- ---------------------------------------------------------------
@@ -1839,6 +1870,7 @@ rtFunctions c =
     rtEffResumeClo c,
     rtHandleLoop,
     rtEffHandle,
+    rtEffSelf,
     rtWrite,
     rtPathCopyRel,
     rtPathLen,
@@ -2067,6 +2099,7 @@ rtImplOf "prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
 rtImplOf "@vuna@prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
 rtImplOf "prim_effectPerform" = RtFunc 3 "$rt_effPerform"
 rtImplOf "prim_effectHandle" = RtFunc 6 "$rt_effHandle"
+rtImplOf "prim_effectSelf" = RtFunc 1 "$rt_effSelf"
 rtImplOf "prim_cleanupPush" = RtFunc 1 "$rt_cleanupPush"
 rtImplOf "prim_cleanupPop" = RtFunc 1 "$rt_cleanupPop"
 rtImplOf "prim_eff_newRef" = RtFunc 1 "$rt_newRef"

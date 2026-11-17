@@ -170,6 +170,7 @@ nativeBss =
     NativeBss nativeArenaEndLabel 8 8,
     NativeBss handlersLabel 8 8,
     NativeBss stackTopLabel 8 8,
+    NativeBss selfLabel 8 8,
     NativeBss stackLimitLabel 8 8,
     NativeBss segFreeLabel 8 8,
     NativeBss capFreeLabel 8 8,
@@ -486,6 +487,10 @@ handlersLabel = "rt_handlers"
 export stackTopLabel : String
 stackTopLabel = "rt_stack_top"
 
+-- | 当前 opH 所属的 handler 节点（`prim_effectSelf` 用）。
+export selfLabel : String
+selfLabel = "rt_self"
+
 stackLimitLabel : String
 stackLimitLabel = "rt_stack_limit"
 
@@ -531,8 +536,26 @@ trapStackOverflowFn =
 --   回到 handler 帧调用 `opH(op, k)`，再把它的结果作为 `handle` 的结果返回。
 effPerformFn : NativeFunc
 effPerformFn =
-  rtFunc "eff_perform" 96
-    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_eff_perform_scan", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_unhandled", IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_found", ILabel ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rax 40), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_eff_perform_scan", ILabel ".Lrt_eff_perform_unhandled", ICall (nativeRtLabel "trap_unhandled_effect"), ILabel ".Lrt_eff_perform_found", IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rdx 56), IMov (OpMem Rbp (nativeSlotOff 10)) (OpReg Rcx), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg Rax), IBinReg "sub" Rax (OpReg Rbp), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" (nativeRtLabel "trap_bad_stack"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "pow2_ceil"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "eff_alloc_capture"), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 11)) (OpReg Rsi), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rbp), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IRepMovsb, IMov (OpReg Rdi) (OpImm 160), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 11)), IMov (OpMem Rdx 152) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 9)), IMov (OpMem Rdx 120) (OpReg Rcx), IMov (OpReg Rdi) (OpImm 24), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), ILea Rcx (nativeRtLabel "eff_resume"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rax 8) (OpImm 1), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 7)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem R9 24), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpReg R11), IMov (OpReg Rdx) (OpReg R10), IMov (OpReg R9) (OpMem Rdi 0), ICallReg R9, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rcx 56), ITest R8 R8, IJcc "jz" ".Lrt_eff_perform_abort_handle", IMov (OpMem Rcx 56) (OpImm 0), IMov (OpReg R15) (OpReg R8), IMov (OpReg Rdi) (OpReg R8), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_free_segment"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx, ILabel ".Lrt_eff_perform_abort_handle", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 10)), IMov (OpMem Rdx 56) (OpReg Rcx), IMov (OpReg Rbp) (OpMem Rdx 48), IJmp ".Lrt_eff_handle_abort"]
+  rtFunc "eff_perform" 112
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdx), IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_eff_perform_scan", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_unhandled", IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jz" ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "str_eq"), ITest Rax Rax, IJcc "jnz" ".Lrt_eff_perform_found", ILabel ".Lrt_eff_perform_next", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpMem Rax 40), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_eff_perform_scan", ILabel ".Lrt_eff_perform_unhandled", ICall (nativeRtLabel "trap_unhandled_effect"), ILabel ".Lrt_eff_perform_found", IMov (OpReg Rax) (OpRip handlersLabel), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rdx 56), IMov (OpMem Rbp (nativeSlotOff 10)) (OpReg Rcx), IMov (OpMem Rdx 56) (OpImm 0), IMov (OpReg Rcx) (OpMem Rdx 40), IMov (OpRip handlersLabel) (OpReg Rcx), IMov (OpReg Rax) (OpRip stackTopLabel), IMov (OpMem Rbp (nativeSlotOff 9)) (OpReg Rax), IBinReg "sub" Rax (OpReg Rbp), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" (nativeRtLabel "trap_bad_stack"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "pow2_ceil"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "eff_alloc_capture"), IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 11)) (OpReg Rsi), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rbp), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IRepMovsb, IMov (OpReg Rdi) (OpImm 160), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rax), IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 6)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IMov (OpMem Rdx 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 11)), IMov (OpMem Rdx 152) (OpReg Rcx), IMov (OpReg Rcx) (OpReg Rbp), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpMem Rdx 24) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 32) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rdx 40) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 9)), IMov (OpMem Rdx 120) (OpReg Rcx), IMov (OpReg Rdi) (OpImm 24), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), ILea Rcx (nativeRtLabel "eff_resume"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rax 8) (OpImm 1), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 7)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg R10) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg R9) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem R9 24), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rsi) (OpReg R11), IMov (OpReg Rdx) (OpReg R10), IMov (OpReg R11) (OpRip selfLabel), IMov (OpMem Rbp (nativeSlotOff 12)) (OpReg R11), IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 3)), IMov (OpRip selfLabel) (OpReg R11), IMov (OpReg R9) (OpMem Rdi 0), ICallReg R9, IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 12)), IMov (OpRip selfLabel) (OpReg R11), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg R8) (OpMem Rcx 56), ITest R8 R8, IJcc "jz" ".Lrt_eff_perform_abort_handle", IMov (OpMem Rcx 56) (OpImm 0), IMov (OpReg R15) (OpReg R8), IMov (OpReg Rdi) (OpReg R8), ICall (nativeRtLabel "eff_unrelocate"), IMov (OpReg Rdi) (OpReg R15), ICall (nativeRtLabel "eff_free_segment"), IMov (OpReg Rcx) (OpMem R15 64), IMov (OpReg Rbp) (OpMem R15 48), IMov (OpReg Rsp) (OpMem R15 56), IMov (OpReg R10) (OpMem R15 72), IMov (OpReg R15) (OpReg R10), IJmpReg Rcx, ILabel ".Lrt_eff_perform_abort_handle", IMov (OpReg R11) (OpMem Rbp (nativeSlotOff 12)), IMov (OpRip selfLabel) (OpReg R11), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 10)), IMov (OpMem Rdx 56) (OpReg Rcx), IMov (OpReg Rbp) (OpMem Rdx 48), IJmp ".Lrt_eff_handle_abort"]
+
+-- | `prim_effectSelf thunk`：把 thunk 重新装进当前 opH 所属的 handler（`rt_self`）。
+--   当前 handler 由 `eff_perform` 调用 opH 前设置、返回/abort 后恢复。
+effSelfFn : NativeFunc
+effSelfFn =
+  rtFunc "eff_self" 32
+    [ IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi),
+      IMov (OpReg Rax) (OpRip selfLabel),
+      ITest Rax Rax,
+      IJcc "jz" (nativeRtLabel "trap_unhandled_effect"),
+      IMov (OpReg Rdi) (OpMem Rax 0),
+      IMov (OpReg Rsi) (OpMem Rax 8),
+      IMov (OpReg Rdx) (OpMem Rax 16),
+      IMov (OpReg Rcx) (OpMem Rax 24),
+      IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)),
+      IMov (OpReg R9) (OpImm 0),
+      ICall (nativeRtLabel "eff_handle"),
+      IRet ]
 
 -- | `prim_effectHandle key name ret opH th u`（6 参，`u` 只作延迟标记）：安装节点、
 --   执行 thunk，按需弹出，最后把结果交给 `ret`。
@@ -1212,6 +1235,7 @@ nativeRtFuncs =
     arrayMakeFn,
     effPerformFn,
     effHandleFn,
+    effSelfFn,
     pow2CeilFn,
     freeBlockFn,
     freeCaptureFn,
@@ -1309,6 +1333,7 @@ nativeRtTargetHost "@vuna@prim_eff_writeRef_host" = Just (nativeRtLabel "prim_ef
 nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "prim_effectPerform" = Just (nativeRtLabel "eff_perform")
 nativeRtTargetBase "prim_effectHandle" = Just (nativeRtLabel "eff_handle")
+nativeRtTargetBase "prim_effectSelf" = Just (nativeRtLabel "eff_self")
 
 nativeRtTargetHost "prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
 nativeRtTargetHost "@vuna@prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
@@ -1519,6 +1544,7 @@ nativeRtValueArityHost "@vuna@prim_eff_writeRef_host" = 2
 nativeRtValueArityBase "prim_erase" = 1
 nativeRtValueArityBase "prim_effectPerform" = 3
 nativeRtValueArityBase "prim_effectHandle" = 6
+nativeRtValueArityBase "prim_effectSelf" = 1
 
 nativeRtValueArityHost "prim_eff_newRef" = 1
 nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1

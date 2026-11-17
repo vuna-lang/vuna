@@ -104,6 +104,7 @@ irRtPlainNames =
     "arrayMake",
     "prim_effectPerform",
     "prim_effectHandle",
+    "prim_effectSelf",
     "prim_cleanupPush",
     "prim_cleanupPop",
     "prim_schedNewScope",

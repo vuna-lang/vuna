@@ -731,6 +731,7 @@ baseIntrinsics =
     Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone True,
     Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b")))))) OpNone True,
     Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone True,
+    Intrinsic "prim_effectSelf" (IPi "a" (IPi "b" (IFun (IFun IInt (IVar "a")) (IVar "b")))) OpNone True,
     Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone True,
     Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone True,
     Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone True,

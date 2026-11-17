@@ -156,24 +156,38 @@ let dtp_cleanup_reset () =
 
 (* handler 的运行时壳：与旧内联实现等价，但 handler 退出时清掉其 extent 内残留的
    bracket cleanup（abort = 续延被丢弃，库层 finally 不会再跑）。 *)
+(* 当前 handler 的 self 栈（每个 Domain 一份）：opH 执行期间把
+   (key,name,ret,h) 压栈，`prim_effectSelf` 用它把子计算重新装进同一个 handler。 *)
+let dtp_selfK = Domain.DLS.new_key (fun () -> ref ([] : (string * string * Obj.t * Obj.t) list))
+let dtp_effect_run key name ret h th =
+  let mark = dtp_cleanup_mark () in
+  let run_cleanups () = dtp_cleanup_run_to mark in
+  (* 外层 Obj.magic 与旧内联实现一致：effc 的 continue 返回 Obj.t，去掉它会让
+     handler 的 answer 类型被钉成 Obj.t。 *)
+  Obj.magic
+    (match Effect.Deep.match_with th ()
+      { retc = (fun x -> (Obj.magic ret) x);
+        exnc = (fun e -> raise e);
+        effc = (fun (type a) (eff : a Effect.t) -> match eff with
+          | Perform (k, n, payload) when k = key && n = name ->
+            Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
+              let st = Domain.DLS.get dtp_selfK in
+              let saved = !st in
+              st := (key, name, Obj.repr ret, Obj.repr h) :: saved;
+              Fun.protect
+                ~finally:(fun () -> st := saved)
+                (fun () ->
+                  (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v))))
+          | _ -> None) }
+    with
+    | r -> run_cleanups (); r
+    | exception e -> run_cleanups (); raise e)
 let dtp_effect_handle key name ret h th =
-  fun u ->
-    let mark = dtp_cleanup_mark () in
-    let run_cleanups () = dtp_cleanup_run_to mark in
-    (* 外层 Obj.magic 与旧内联实现一致：effc 的 continue 返回 Obj.t，去掉它会让
-       handler 的 answer 类型被钉成 Obj.t。 *)
-    Obj.magic
-      (match Effect.Deep.match_with (fun () -> (Obj.magic th) u) ()
-        { retc = (fun x -> (Obj.magic ret) x);
-          exnc = (fun e -> raise e);
-          effc = (fun (type a) (eff : a Effect.t) -> match eff with
-            | Perform (k, n, payload) when k = key && n = name ->
-              Some (fun (cont : (a, Obj.t) Effect.Deep.continuation) ->
-                (Obj.magic h) payload (fun v -> Effect.Deep.continue cont (Obj.repr v)))
-            | _ -> None) }
-      with
-      | r -> run_cleanups (); r
-      | exception e -> run_cleanups (); raise e)
+  fun u -> dtp_effect_run key name ret h (fun () -> (Obj.magic th) u)
+let dtp_effect_self th =
+  match !(Domain.DLS.get dtp_selfK) with
+  | (key, name, ret, h) :: _ -> dtp_effect_run key name ret h (fun () -> (Obj.magic th) 0)
+  | [] -> failwith "self outside handler"
 let dtp_print s =
   (try print_string s; flush stdout; String.length s
    with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)
