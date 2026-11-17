@@ -1214,6 +1214,25 @@ sortListFn d =
   in bridgeFnExits "sort_list" 4
     [IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ILabel ".Lrt_sl_loop", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rax 0), ICmp (OpReg Rcx) (OpImm d.nlNilTag), IJcc "je" ".Lrt_sl_done", IMov (OpReg Rcx) (OpMem Rax 16), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "insert_sorted"), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_sl_loop", ILabel ".Lrt_sl_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0))]
 
+-- | 把 `List String` 拼成 shell 命令行（每个实参单引号包裹，内部 `'` 写成 `'\''`），
+--   写进 `rt_cmd_buf`；返回命令串起点（C 字符串）。
+buildCmdFn : NListDesc -> NativeFunc
+buildCmdFn d =
+  bridgeFnExits "build_cmd" 3
+    [ILea Rax cmdBufLabel, IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 1), ILabel ".Lrt_bc_loop", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rcx) (OpMem Rax 0), ICmp (OpReg Rcx) (OpImm d.nlNilTag), IJcc "je" ".Lrt_bc_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpImm 1), IJcc "je" ".Lrt_bc_nosep", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovByteOp (OpMem Rcx 0) 32, IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), ILabel ".Lrt_bc_nosep", IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovByteOp (OpMem Rcx 0) 39, IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg R8) (OpMem Rax 8), IMov (OpReg R9) (OpMem R8 0), IBinReg "xor" R10 (OpReg R10), ILeaMem R11 R8 8, ILabel ".Lrt_bc_chars", ICmp (OpReg R10) (OpReg R9), IJcc "jge" ".Lrt_bc_chars_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovzx Rax (OpMemX R11 R10 0), ICmp (OpReg Rax) (OpImm 39), IJcc "je" ".Lrt_bc_quote", IMovByteRegOp (OpMem Rcx 0) Rax, IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), IJmp ".Lrt_bc_next", ILabel ".Lrt_bc_quote", IMovByteOp (OpMem Rcx 0) 39, IMovByteOp (OpMem Rcx 1) 92, IMovByteOp (OpMem Rcx 2) 39, IMovByteOp (OpMem Rcx 3) 39, IBinReg "add" Rcx (OpImm 4), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), ILabel ".Lrt_bc_next", IBinReg "add" R10 (OpImm 1), IJmp ".Lrt_bc_chars", ILabel ".Lrt_bc_chars_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovByteOp (OpMem Rcx 0) 39, IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpMem Rax 16), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IJmp ".Lrt_bc_loop", ILabel ".Lrt_bc_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMovByteOp (OpMem Rcx 0) 0, ILea Rax cmdBufLabel]
+
+-- | `tryRunIn` / `runIn`：`rdi` = dir、`rsi` = `List String` → rax = 退出码（-1 = 失败）。
+tryRunInFn : NListDesc -> NativeFunc
+tryRunInFn d =
+  bridgeFnExits "tryRunIn" 4
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "build_cmd"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ILea Rsi cmdBufLabel, ICall (nativeRtLabel "cmd_run_sh")]
+
+-- | `spawn`：`rdi` = `List String` -> rax = 子进程 pid（argv[0] = 本进程路径）。
+spawnSelfFn : NListDesc -> NativeFunc
+spawnSelfFn d =
+  bridgeFnExits "spawn_self" 5
+    [ILea Rax spawnArgvLabel, ILea Rcx (nativeDataLabel "proc_self_exe"), IMov (OpMem Rax 0) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 0)) (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rdi), ILea Rax spawnBufLabel, IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ILabel ".Lrt_spw_loop", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rcx) (OpMem Rax 0), ICmp (OpReg Rcx) (OpImm d.nlNilTag), IJcc "je" ".Lrt_spw_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdi) (OpMem Rax 8), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rsi), ICall (nativeRtLabel "str_copy_into"), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), ILea Rdx spawnArgvLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IMov (OpMem Rdx 0) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rcx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpMem Rax 16), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IJmp ".Lrt_spw_loop", ILabel ".Lrt_spw_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), ILea Rdx spawnArgvLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpImm 0), ILea Rdi spawnArgvLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "spawn_exec")]
+
 -- | `tryReadDir`：打开目录 → 逐个建 String → 逆序 cons → 插入排序；失败返回空表。
 tryReadDirFn : NListDesc -> NativeFunc
 tryReadDirFn d =
@@ -1323,6 +1342,9 @@ nativeBridgeFuncs lfM fams = case nlistDescOf lfM fams of
     [ strUnpackFn d,
       strPackFn d,
       getArgsFn d,
+      buildCmdFn d,
+      tryRunInFn d,
+      spawnSelfFn d,
       sortListFn d,
       insertSortedFn d,
       tryReadDirFn d,

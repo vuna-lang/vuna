@@ -238,8 +238,10 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
   `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
   32 KiB `getdents64` 缓冲；`tryWriteFileAtomic` 写 `<path>.<pid>.tmp` 再 `rename`。
-- 未实现的宿主面：process（`runIn` / `spawn` / `wait` / `exit_process_host`）、
-  stdin（`readLine` / `readBytes`）与 net。
+- 进程：`runIn` / `tryRunIn`（`chdir` + `fork` + `execve("/bin/sh", ["-c", cmd])` + `wait4`
+  + 恢复 cwd；实参按 shell 单引号转义）、`spawn`（`fork` + `execve("/proc/self/exe", argv)`，
+  argv[0] 是本进程路径）、`wait`（`wait4` 取退出码，被信号杀死按 1）、`exit_process_host`。
+- 未实现的宿主面：stdin 的 `readLine` / `readBytes`（编译器闭包不可达）与 net。
 - 续延：`prim_effectPerform`（`rt_eff_perform`）、`prim_effectHandle`（`rt_eff_handle`）、
   `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
@@ -290,6 +292,8 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
   效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
+- 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
+  clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）
@@ -304,7 +308,12 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
-- FFI / extern；宿主 syscalls 的 process / stdin 面（fs / env / args / clock / tty 已实现）。
+- FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
+- **自举运行**：`vuna build compiler --target native` 已能产出可链接的 `bin/vuna-compiler`
+  （`version` / 帮助可用、审计为 0 个缺口），但真实编译会撞续延栈段：128 KiB slack 在任意
+  输入的 `check` 上都 trap `continuation stack overflow`；直接调大 slack（8 MiB）会触发
+  **保守栈重定位**把落在 `(perform_rbp, stack_top)` 区间里的堆指针当成栈指针平移，导致
+  SIGSEGV。要跑通自举需要分段栈/按需扩容（或精确栈映射），见 [debt.md](debt.md) D89。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
