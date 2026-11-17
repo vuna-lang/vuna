@@ -187,7 +187,7 @@ let dtp_effect_handle key name ret h th =
 let dtp_effect_self th =
   match !(Domain.DLS.get dtp_selfK) with
   | (key, name, ret, h) :: _ -> dtp_effect_run key name ret h (fun () -> (Obj.magic th) 0)
-  | [] -> failwith "self outside handler"
+  | [] -> failwith \"self outside handler\"
 let dtp_print s =
   (try print_string s; flush stdout; String.length s
    with _ -> 0)  (* 写失败（典型 EPIPE：`vuna … | head`）不再是宿主崩溃；输出到此为止 *)

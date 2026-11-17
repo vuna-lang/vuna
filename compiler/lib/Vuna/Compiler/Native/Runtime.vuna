@@ -544,18 +544,7 @@ effPerformFn =
 effSelfFn : NativeFunc
 effSelfFn =
   rtFunc "eff_self" 32
-    [ IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi),
-      IMov (OpReg Rax) (OpRip selfLabel),
-      ITest Rax Rax,
-      IJcc "jz" (nativeRtLabel "trap_unhandled_effect"),
-      IMov (OpReg Rdi) (OpMem Rax 0),
-      IMov (OpReg Rsi) (OpMem Rax 8),
-      IMov (OpReg Rdx) (OpMem Rax 16),
-      IMov (OpReg Rcx) (OpMem Rax 24),
-      IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)),
-      IMov (OpReg R9) (OpImm 0),
-      ICall (nativeRtLabel "eff_handle"),
-      IRet ]
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpReg Rax) (OpRip selfLabel), ITest Rax Rax, IJcc "jz" (nativeRtLabel "trap_unhandled_effect"), IMov (OpReg Rdi) (OpMem Rax 0), IMov (OpReg Rsi) (OpMem Rax 8), IMov (OpReg Rdx) (OpMem Rax 16), IMov (OpReg Rcx) (OpMem Rax 24), IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg R9) (OpImm 0), ICall (nativeRtLabel "eff_handle"), IRet]
 
 -- | `prim_effectHandle key name ret opH th u`（6 参，`u` 只作延迟标记）：安装节点、
 --   执行 thunk，按需弹出，最后把结果交给 `ret`。
