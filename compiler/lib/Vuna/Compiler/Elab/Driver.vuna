@@ -141,16 +141,11 @@ isMemberConstraintExpr (EApp (EVar g _) args _) =
   g == effMemberFamilyName && (length args == 3 || length args == 2)
 isMemberConstraintExpr _ = False
 
--- 新二元行把 `Member n e r` 写成 `Member (Named n e) r`；旧三元行保持原样。
-memberUsesNamed : Ec -> Bool
-memberUsesNamed ec = case dtDataLookup effMemberFamilyName (ecDatas ec) of
-  Just dd => explicitPiArity (dtDataKind dd) <= 2
-  Nothing => False
-
+-- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
 memberSugarExpr ec e = case e of
   EApp (EVar g a) ([n, x, r]) sp =>
-    if g == effMemberFamilyName && memberUsesNamed ec then EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
+    if g == effMemberFamilyName then EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
     else e
   _ => e
 
@@ -936,17 +931,10 @@ builtinHostLabelOf _ = Nothing
 
 isBuiltinHostRowValue : Value -> Bool
 isBuiltinHostRowValue (VCon g args) = if g == effRowNilCtor then True
-else if g == effRowConsCtor then case length args of
-  3 => case args of
-    _ :: label :: tail :: _ => case builtinHostLabelOf label of
-      Just real => isBuiltinHostLabel real && isBuiltinHostRowValue tail
-      Nothing => False
-    _ => False
-  2 => case args of
-    label :: tail :: _ => case builtinHostLabelOf label of
-      Just real => isBuiltinHostLabel real && isBuiltinHostRowValue tail
-      Nothing => False
-    _ => False
+else if g == effRowConsCtor then case args of
+  label :: tail :: _ => case builtinHostLabelOf label of
+    Just real => isBuiltinHostLabel real && isBuiltinHostRowValue tail
+    Nothing => False
   _ => False
 else False
 isBuiltinHostRowValue _ = False

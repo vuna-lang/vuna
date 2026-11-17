@@ -33,13 +33,8 @@ unwrapNamedTerm (t@(TApp (TApp (TGlobal g) _ _) label _)) = if g == effNamedName
 unwrapNamedTerm t = t
 
 collectBuiltinRowTags : Term -> List String
-collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case length args of
-  3 => case args of
-    _ :: label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
-    _ => []
-  2 => case args of
-    label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
-    _ => []
+collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case args of
+  label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
   _ => []
 else []
 collectBuiltinRowTags _ = []

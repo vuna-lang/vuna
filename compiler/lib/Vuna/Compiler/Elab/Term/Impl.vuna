@@ -1106,17 +1106,15 @@ rowLitNameExpr e sp = case rowLitNameArg e of
   Just nExpr => nExpr
   Nothing => EStr effDefaultInstance sp
 
-expandRowListLitGo : Int -> String -> String -> List Expr -> Span -> Check Expr
-expandRowListLitGo arity nilName consName [] sp = OkC (EVar nilName sp)
-expandRowListLitGo arity nilName consName (e :: rest) sp =
-  Vuna.Compiler.Base.Common.bind (expandRowListLitGo arity nilName consName rest sp)
-    (\t => OkC (EApp (EVar consName sp) (rowConsArgs arity e t sp) sp))
+expandRowListLitGo : String -> String -> List Expr -> Span -> Check Expr
+expandRowListLitGo nilName consName [] sp = OkC (EVar nilName sp)
+expandRowListLitGo nilName consName (e :: rest) sp =
+  Vuna.Compiler.Base.Common.bind (expandRowListLitGo nilName consName rest sp)
+    (\t => OkC (EApp (EVar consName sp) (rowConsArgs e t sp) sp))
 
--- | 行 cons 的实参：二元行把实例名包进 `Named`，三元行仍把名字放在首参。
-rowConsArgs : Int -> Expr -> Expr -> Span -> List Expr
-rowConsArgs arity e t sp =
-  if arity <= 2 then [EApp (EVar effNamedName sp) [rowLitNameExpr e sp, rowLitLabel e] sp, t]
-  else [rowLitNameExpr e sp, rowLitLabel e, t]
+-- | 行 cons 的实参：实例名包进 `Named`，标签接尾行。
+rowConsArgs : Expr -> Expr -> Span -> List Expr
+rowConsArgs e t sp = [EApp (EVar effNamedName sp) [rowLitNameExpr e sp, rowLitLabel e] sp, t]
 
 -- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
 litFamilyCons : Ec -> String -> Maybe DtCtor
@@ -1135,8 +1133,7 @@ expandListLit ec fam elems sp = if fam == effRowFamilyName then case litFamilyCt
   Just nilC => case litFamilyCons ec fam of
     Nothing => tcErr1 sp (UnknownName fam) fam
     Just consC =>
-      expandRowListLitGo (explicitPiArity (dtCtorType consC)) (dtCtorName nilC) (dtCtorName consC)
-        elems sp
+      expandRowListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 else case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
   Just nilC => case litFamilyCons ec fam of
@@ -1921,31 +1918,14 @@ isNilRowValue ec v = case forceVal ec v of
   VCon n _ => n == effRowNilCtor
   _ => False
 
--- | 行条目形状：三元行 `Cons n e t`，二元行 `Cons label t`（label 可包 Named）。
-data RowEntry : Type where
-  RowEntry3 : Value -> Value -> Value -> RowEntry
-  RowEntry2 : Value -> Value -> RowEntry
-
--- 长度判别 + 每臂单 Cons 分支，规避深/浅多 Cons 分支回退时的变量串位（debt D53）。
-effConsEntry : Value -> Maybe RowEntry
-effConsEntry v = case v of
-  VCon consName cargs => if consName == effRowConsCtor then case length cargs of
-    3 => case cargs of
-      n :: e :: t :: _ => Just (RowEntry3 n e t)
-      _ => Nothing
-    2 => case cargs of
-      label :: t :: _ => Just (RowEntry2 label t)
-      _ => Nothing
+-- | 行条目的 (标签, 尾行)。
+rowEntryLabelTail : Value -> Maybe (Pair Value Value)
+rowEntryLabelTail v = case v of
+  VCon consName cargs => if consName == effRowConsCtor then case cargs of
+    label :: tail :: _ => Just (Pair label tail)
     _ => Nothing
   else Nothing
   _ => Nothing
-
--- | 行条目的 (标签, 尾行)，两种形状统一。
-rowEntryLabelTail : Value -> Maybe (Pair Value Value)
-rowEntryLabelTail v = case effConsEntry v of
-  Just (RowEntry3 _ label tail) => Just (Pair label tail)
-  Just (RowEntry2 label tail) => Just (Pair label tail)
-  Nothing => Nothing
 
 -- | 全局名的最后一段（诊断里不显示模块前缀）；实现收敛到 `Source.lastSeg`。
 shortGlobalName : String -> String
@@ -1992,12 +1972,8 @@ export rowEffectLabels : Int -> Ec -> Value -> Maybe (List String)
 rowEffectLabels fuel ec row = if fuel <= 0 then Nothing
 else case forceVal ec row of
   VCon consName cargs => if consName == effRowNilCtor then Just []
-  else if consName == effRowConsCtor then case effConsEntry (VCon consName cargs) of
-    Just (RowEntry3 n h t) => if hasUnsolvedMetaValue (ecSolsP ec) h then Nothing
-    else case rowEffectLabels (fuel - 1) ec t of
-      Just labels => Just ((::) (rowEntryText ec n h) labels)
-      Nothing => Nothing
-    Just (RowEntry2 label t) => if hasUnsolvedMetaValue (ecSolsP ec) label then Nothing
+  else if consName == effRowConsCtor then case rowEntryLabelTail (VCon consName cargs) of
+    Just (Pair label t) => if hasUnsolvedMetaValue (ecSolsP ec) label then Nothing
     else case rowEffectLabels (fuel - 1) ec t of
       Just labels => Just ((::) (rowEntryTextOf ec label) labels)
       Nothing => Nothing
@@ -2066,13 +2042,10 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
       d = ctxDepth ctx
     in case effRowAndResult (forceVal ec expected) of
       Nothing => Nothing
-      Just p => case effConsEntry (forceVal ec (firstOf p)) of
+      Just p => case rowEntryLabelTail (forceVal ec (firstOf p)) of
         Nothing => Nothing
-        Just entry =>
+        Just (Pair label tailV) =>
           let
-            tailV = case entry of
-              RowEntry3 _ _ t => t
-              RowEntry2 _ t => t
             tailF = forceVal ec tailV
           in if hasUnsolvedMetaValue (ecSolsP ec) tailF then Nothing
           else case effRowAndResult (forceVal ec actual) of
@@ -2096,19 +2069,12 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
                       (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ecR)
                 else case convEc ecR d actualRow tailF of
                   ErrC _ => Nothing
-                  OkC ec2 => Just (Pair (weakenEntryTerm d entry tailF (secondOf p) term) ec2)
+                  OkC ec2 => Just (Pair (weakenLabelTerm d label tailF (secondOf p) term) ec2)
 
--- | 自动 lift 的 `weaken` 应用：三元行传 (n, e, tail)，二元行传 (label, tail)。
-weakenEntryTerm : Int -> RowEntry -> Value -> Value -> Term -> Term
-weakenEntryTerm d entry tailF result term = case entry of
-  RowEntry3 n e _ =>
-    TApp
-      (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d n) Rig0) (quote d e) Rig0) (quote d tailF) Rig0) (quote d result) Rig0)
-      term RigOmega
-  RowEntry2 label _ =>
-    TApp
-      (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0)
-      term RigOmega
+-- | 自动 lift 的 `weaken` 应用：传 (label, tail, result)。
+weakenLabelTerm : Int -> Value -> Value -> Value -> Term -> Term
+weakenLabelTerm d label tailF result term =
+  TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0) term RigOmega
 
 export checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"

@@ -476,87 +476,33 @@ forceLabelArgs defs sols fuel v = case force defs sols fuel v of
   VNeutral (NVar name lvl sp) => VNeutral (NVar name lvl (map (\a => force defs sols fuel a) sp))
   other => other
 
--- 命名行：`rowRem n e r` 按 (名字, 标签) 双匹配删除条目。
--- 名字或条目名字是未解 meta 时卡住（Nothing）：等名字槽求解后由 force/重推归约；
--- 不做「只匹配标签」的贪婪删除，否则 `[ConsoleOp@mock, ConsoleOp@audit]` 会删错条目。
-rowRemReduceNamed : HashMap String Term -> Sols -> Int -> Value -> Value -> Value -> Maybe Value
-rowRemReduceNamed defs sols fuel n e r = if fuel <= 0 then Nothing
-else
-  let
-    n2 = force defs sols (fuel - 1) n
-    e2 = forceLabelArgs defs sols (fuel - 1) e
-  in if hasUnsolvedMetaValue sols n2 then Nothing
-  else case force defs sols (fuel - 1) r of
-    VCon consName args => if consName == effRowNilCtor then Just (VCon effRowNilCtor [])
-    else if consName == effRowConsCtor then case args of
-      n1 :: h :: t :: _ =>
-        let
-          n1b = force defs sols (fuel - 1) n1
-          h2 = forceLabelArgs defs sols (fuel - 1) h
-        in if hasUnsolvedMetaValue sols n1b then Nothing
-        else case valueEqFuel (fuel - 1) n2 n1b of
-          Nothing => Nothing
-          Just False => case rowRemReduceNamed defs sols (fuel - 1) n2 e2 t of
-            Just t2 => Just (VCon effRowConsCtor [n1b, h2, t2])
-            Nothing => Nothing
-          Just True => case valueEqFuel (fuel - 1) e2 h2 of
-            Just True => Just t
-            Just False => case rowRemReduceNamed defs sols (fuel - 1) n2 e2 t of
-              Just t2 => Just (VCon effRowConsCtor [n1b, h2, t2])
-              Nothing => Nothing
-            Nothing => Nothing
-      _ => Nothing
-    else Nothing
-    _ => Nothing
-
--- 单标签行：`rowRem e r` 按标签值结构相等删除条目（二元行 + Named 标签走这里）。
-rowRemReduceLabel : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
-rowRemReduceLabel defs sols fuel e r = if fuel <= 0 then Nothing
+-- 行删除：`rowRem label r` 按标签值结构相等删除条目。
+rowRemReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
+rowRemReduce defs sols fuel e r = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) r of
   VCon consName (h :: t :: _) => if consName == effRowConsCtor then case valueEqFuel (fuel - 1) e h of
     Just True => Just t
-    Just False => case rowRemReduceLabel defs sols (fuel - 1) e t of
-      Just t2 => Just (VCon effRowConsCtor [h, t2])
+    Just False => case rowRemReduce defs sols (fuel - 1) e t of
+      Just t2 => Just (VCon consName [h, t2])
       Nothing => Nothing
     Nothing => Nothing
   else Nothing
   VCon nilName _ => if nilName == effRowNilCtor then Just (VCon effRowNilCtor []) else Nothing
   _ => Nothing
 
-rowRemReduceDispatch : HashMap String Term -> Sols -> Int -> List Value -> Maybe Value
-rowRemReduceDispatch defs sols fuel sp = case length sp of
-  -- 新形状（2 参）：rowRem label r；旧形状（3 参）：rowRem n e r。
-  2 => case sp of
-    e :: r :: _ => rowRemReduceLabel defs sols (fuel - 1) e r
-    _ => Nothing
-  3 => case sp of
-    n :: e :: r :: _ => rowRemReduceNamed defs sols (fuel - 1) n e r
-    _ => Nothing
-  _ => Nothing
-
 -- 行拼接：`rowAppend r t` 是公理，编译器归约：
---   rowAppend Nil t = t；rowAppend r Nil = r；rowAppend (Cons label tail) t = Cons label (rowAppend tail t)。
+--   rowAppend Nil t = t；rowAppend r Nil = r；rowAppend (label :: tail) t = label :: rowAppend tail t。
 -- 右单位让 `joinEff (handleXHost …)`（answer 行为 Nil 的 handler）保持原签名。
 appendReduce : HashMap String Term -> Sols -> Int -> Value -> Value -> Maybe Value
 appendReduce defs sols fuel a b = if fuel <= 0 then Nothing
 else case force defs sols (fuel - 1) a of
   VCon aca aa => if aca == effRowNilCtor then Just (force defs sols (fuel - 1) b)
-  else if aca == effRowConsCtor then case length aa of
-    3 => case aa of
-      n :: h :: t :: _ => case force defs sols (fuel - 1) b of
-        VCon bcb _ => if bcb == effRowNilCtor then Just (VCon effRowConsCtor [n, h, t])
-        else case appendReduce defs sols (fuel - 1) t b of
-          Just t2 => Just (VCon effRowConsCtor [n, h, t2])
-          Nothing => Nothing
-        _ => Nothing
-      _ => Nothing
-    2 => case aa of
-      label :: t :: _ => case force defs sols (fuel - 1) b of
-        VCon bcb _ => if bcb == effRowNilCtor then Just (VCon effRowConsCtor [label, t])
-        else case appendReduce defs sols (fuel - 1) t b of
-          Just t2 => Just (VCon effRowConsCtor [label, t2])
-          Nothing => Nothing
-        _ => Nothing
+  else if aca == effRowConsCtor then case aa of
+    label :: t :: _ => case force defs sols (fuel - 1) b of
+      VCon bcb _ => if bcb == effRowNilCtor then Just (VCon aca [label, t])
+      else case appendReduce defs sols (fuel - 1) t b of
+        Just t2 => Just (VCon aca [label, t2])
+        Nothing => Nothing
       _ => Nothing
     _ => Nothing
   else Nothing
@@ -564,7 +510,9 @@ else case force defs sols (fuel - 1) a of
 
 export primReduce : HashMap String Term -> Sols -> Int -> String -> List Value -> Maybe Value
 primReduce defs sols fuel g sp = if fuel <= 0 then Nothing
-else if g == effRowRemName then rowRemReduceDispatch defs sols fuel sp
+else if g == effRowRemName then case sp of
+  e :: r :: _ => rowRemReduce defs sols (fuel - 1) e r
+  _ => Nothing
 else if g == effRowAppendName then case sp of
   a :: b :: _ => appendReduce defs sols (fuel - 1) a b
   _ => Nothing
