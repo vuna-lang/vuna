@@ -27,7 +27,8 @@ readerLocalOp env f op k = case op of
 
 -- | 内部：用给定 env 安装一个只对 `comp` 生效的 handler（`weaken` 把结果行放回原行）。
 localWith : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> (env : s) -> Eff (Named n (ReaderOp s) :: r) a -> Eff (Named n (ReaderOp s) :: r) a
-localWith n s f env comp = weaken (handleCoreAt (Named n (ReaderOp s)) "reader" n (\a => a) (readerLocalOp env f) comp)
+localWith n s f env comp =
+  weaken (handleCoreAt (Named n (ReaderOp s)) "reader" n (\a => a) (readerLocalOp env f) comp)
 
 -- | 在 `f` 修改后的环境下运行 `comp`：先 `ask` 取当前 env，再装作用域 handler；改写不逃逸该动作。
 export local : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> Eff (Named n (ReaderOp s) :: r) a -> Eff (Named n (ReaderOp s) :: r) a

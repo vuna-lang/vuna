@@ -591,7 +591,8 @@ handleCallExpr globals ec expr sp = handleCallExprWith globals ec expr sp False 
 
 -- | 行首条目版降级入口：名字用默认值（comp 的行尚未具体化时用）。
 handleCallExprAt : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
-handleCallExprAt globals ec expr sp = handleCallExprWith globals ec expr sp True (EStr effDefaultInstance sp)
+handleCallExprAt globals ec expr sp =
+  handleCallExprWith globals ec expr sp True (EStr effDefaultInstance sp)
 
 -- | 行首条目版 + 名字洞：comp 的行首实例名已知时由合一解出。
 handleCallExprAtHole : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
@@ -1134,8 +1135,7 @@ expandListLit ec fam elems sp = if fam == effRowFamilyName then case litFamilyCt
   Nothing => tcErr1 sp (UnknownName fam) fam
   Just nilC => case litFamilyCons ec fam of
     Nothing => tcErr1 sp (UnknownName fam) fam
-    Just consC =>
-      expandRowListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
+    Just consC => expandRowListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 else case litFamilyCtor ec fam "Nil" of
   Nothing => tcErr1 sp (UnknownName fam) fam
   Just nilC => case litFamilyCons ec fam of
@@ -1476,8 +1476,12 @@ else case handleOperand expr of
       simpleComp = case handleOperand expr of
         Just (Pair comp _) => isSimpleComp comp
         Nothing => False
-      firstCall = if simpleComp then handleCallExpr globals ec expr (exprSpan expr) else handleCallExprAt globals ec expr (exprSpan expr)
-      thirdCall = if simpleComp then handleCallExprAt globals ec expr (exprSpan expr) else handleCallExpr globals ec expr (exprSpan expr)
+      firstCall =
+        if simpleComp then handleCallExpr globals ec expr (exprSpan expr)
+        else handleCallExprAt globals ec expr (exprSpan expr)
+      thirdCall =
+        if simpleComp then handleCallExprAt globals ec expr (exprSpan expr)
+        else handleCallExpr globals ec expr (exprSpan expr)
     in Vuna.Compiler.Base.Common.bind firstCall (\callExpr => case checkEFuel (fuel - 1) globals ctx ec callExpr expected of
       OkC r => OkC r
       ErrC e1 => Vuna.Compiler.Base.Common.bind (handleCallExprAtHole globals ec expr (exprSpan expr)) (\callExpr2 => case checkEFuel (fuel - 1) globals ctx ec callExpr2 expected of
@@ -2078,7 +2082,9 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
 -- | 自动 lift 的 `weaken` 应用：传 (label, tail, result)。
 weakenLabelTerm : Int -> Value -> Value -> Value -> Term -> Term
 weakenLabelTerm d label tailF result term =
-  TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0) term RigOmega
+  TApp
+    (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0)
+    term RigOmega
 
 export checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"

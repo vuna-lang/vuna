@@ -15,11 +15,11 @@ export trait Eq a(..) where
 
 -- `Bool` 的相等用模式匹配直接表达（不依赖 `==` / `eq`，避免实例体自引用）。
 instance Eq Bool where
-  == True True = True
-  == True False = False
-  == False True = False
-  == False False = True
-  /= True True = False
-  /= True False = True
-  /= False True = True
-  /= False False = False
+  (==) True True = True
+  (==) True False = False
+  (==) False True = False
+  (==) False False = True
+  (/=) True True = False
+  (/=) True False = True
+  (/=) False True = True
+  (/=) False False = False

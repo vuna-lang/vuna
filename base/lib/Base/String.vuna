@@ -88,7 +88,8 @@ endsWith suffix text =
     ls = strLength suffix
   in let
     ltLen = strLength text
-  in if ls > ltLen then False else _startsWithChars (strUnpack suffix) (drop (ltLen - ls) (strUnpack text))
+  in if ls > ltLen then False
+  else _startsWithChars (strUnpack suffix) (drop (ltLen - ls) (strUnpack text))
 
 -- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 export repeat : Nat -> String -> String
@@ -123,14 +124,14 @@ else case text of
 
 -- primitive 没有构造子：实例体写内建运算符，由编译器特化，不会自递归。
 instance Eq String where
-  == x y = x == y
-  /= x y = x /= y
+  (==) x y = x == y
+  (/=) x y = x /= y
 
 instance Ord String where
-  < x y = x < y
-  <= x y = x <= y
-  > x y = x > y
-  >= x y = x >= y
+  (<) x y = x < y
+  (<=) x y = x <= y
+  (>) x y = x > y
+  (>=) x y = x >= y
 
 -- 哈希：String 用 `hashStr`（intrinsic `strHash` 的 0..1023 公式）。
 instance Hashable String where

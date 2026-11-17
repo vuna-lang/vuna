@@ -27,8 +27,8 @@ instance Functor Result where
   fmap f (Err e) = Err e
 
 instance Monad Result where
-  >>= (Ok x) k = k x
-  >>= (Err e) k = Err e
+  (>>=) (Ok x) k = k x
+  (>>=) (Err e) k = Err e
 
 instance Applicative Result where
   pure = Ok
@@ -75,10 +75,10 @@ instance Show a => Show (Result a) where
 
 -- 同构造子比 payload：`Ok` 用 `Eq a`，`Err` 用 `Eq String`。
 instance Eq a => Eq (Result a) where
-  == (Ok x) (Ok y) = x == y
-  == (Err x) (Err y) = x == y
-  == _ _ = False
-  /= r s = if r == s then False else True
+  (==) (Ok x) (Ok y) = x == y
+  (==) (Err x) (Err y) = x == y
+  (==) _ _ = False
+  (/=) r s = if r == s then False else True
 
 instance Hashable a => Hashable (Result a) where
   hash r = case r of

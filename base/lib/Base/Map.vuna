@@ -71,4 +71,4 @@ toList (Map pairs) = pairs
 
 -- 经 `toList`；构造器不导出，跨模块不能模式匹配。
 instance Show k, Show v => Show (Map k v) where
-  show m = "fromList " `++` (show (toList m))
+  show m = "fromList " `++` show (toList m)

@@ -30,7 +30,7 @@ instance Functor (State s) where
   )
 
 instance Monad (State s) where
-  >>= st k = State (\s => case st.stateRun s of
+  (>>=) st k = State (\s => case st.stateRun s of
     Pair a s2 => (k a).stateRun s2
   )
 

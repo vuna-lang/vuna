@@ -52,21 +52,21 @@ export isZero : Nat -> Bool
 isZero n = toInt n == 0
 
 instance Eq Nat where
-  == x y = toInt x == toInt y
-  /= x y = toInt x /= toInt y
+  (==) x y = toInt x == toInt y
+  (/=) x y = toInt x /= toInt y
 
 instance Ord Nat where
-  < x y = toInt x < toInt y
-  <= x y = toInt x <= toInt y
-  > x y = toInt x > toInt y
-  >= x y = toInt x >= toInt y
+  (<) x y = toInt x < toInt y
+  (<=) x y = toInt x <= toInt y
+  (>) x y = toInt x > toInt y
+  (>=) x y = toInt x >= toInt y
 
 -- 方法体写内建运算符，由精化器特化成 `natAdd` / `natSub` / `natMul` / `natDiv`（不自递归）。
 instance Num Nat where
-  + x y = x + y
-  - x y = x - y
-  * x y = x * y
-  / x y = x / y
+  (+) x y = x + y
+  (-) x y = x - y
+  (*) x y = x * y
+  (/) x y = x / y
 
 instance Show Nat where
   show n = strFromInt (toInt n)

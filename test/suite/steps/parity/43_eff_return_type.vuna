@@ -3,8 +3,9 @@ import Base.EffConsole
 import Base.Nat
 
 main : Int
-main = runPure (handle (perform (Print "x")) {
+main = runPure (handle (perform Print "x") {
   return n -> natToInt n
   Print s k -> k (natFromInt 5)
   EPrint s k -> k (natFromInt 7)
-})
+}
+)

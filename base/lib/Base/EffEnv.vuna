@@ -70,10 +70,10 @@ envOpHIOHost op k = case op of
     v <- raise (@vuna@host@getenv name)
     k v
   GetCwd => do
-    v <- raise (@vuna@host@getcwd)
+    v <- raise @vuna@host@getcwd
     k v
   ExecPath => do
-    v <- raise (@vuna@host@execPath)
+    v <- raise @vuna@host@execPath
     k v
 
 -- | 带行的宿主 handler：删掉 `EnvOp`，answer 是 `Eff [EnvOp]`（不导出）。

@@ -27,18 +27,18 @@ secondOf (Pair a b) = b
 -- 而 `++` 是恒可见的 String intrinsic。
 instance Show a, Show b => Show (Pair a b) where
   show p = case p of
-    Pair x y => "(" `++` (show x) `++` ", " `++` (show y) `++` ")"
+    Pair x y => "(" `++` show x `++` ", " `++` show y `++` ")"
 
 -- 逐分量比较；`Ord` 是字典序（先比第一个分量，相等再比第二个）。
 instance Eq a, Eq b => Eq (Pair a b) where
-  == (Pair a1 b1) (Pair a2 b2) = a1 == a2 && b1 == b2
-  /= p q = if p == q then False else True
+  (==) (Pair a1 b1) (Pair a2 b2) = a1 == a2 && b1 == b2
+  (/=) p q = if p == q then False else True
 
 instance Ord a, Ord b => Ord (Pair a b) where
-  < (Pair a1 b1) (Pair a2 b2) = if a1 < a2 then True else if a2 < a1 then False else b1 < b2
-  <= p q = p < q || not (q < p)
-  > p q = q < p
-  >= p q = q <= p
+  (<) (Pair a1 b1) (Pair a2 b2) = if a1 < a2 then True else if a2 < a1 then False else b1 < b2
+  (<=) p q = p < q || not (q < p)
+  (>) p q = q < p
+  (>=) p q = q <= p
 
 instance Hashable a, Hashable b => Hashable (Pair a b) where
   hash p = case p of

@@ -36,7 +36,7 @@ argsOpHIO op k = case op of
 argsOpHIOHost : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
 argsOpHIOHost op k = case op of
   GetArgs => do
-    xs <- raise (@vuna@host@getArgs)
+    xs <- raise @vuna@host@getArgs
     k xs
 
 -- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [ArgsOp]`（不导出）。

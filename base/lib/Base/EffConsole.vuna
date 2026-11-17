@@ -60,7 +60,8 @@ consoleOpHIOHost op k = case op of
 -- | 带行的宿主 handler：删掉 `ConsoleOp n`，answer 是 `Eff [ConsoleOp]`（不导出）。
 handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ConsoleOp :: r) a -> Eff r (Eff [ConsoleOp] a)
 handleConsoleHostHost n comp =
-  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) (\o => \k => consoleOpHIOHost o k) comp
+  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) (\o => \k => consoleOpHIOHost o k)
+    comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。
 runConsoleHost : {r : Row} -> {a : Type} -> Eff (Named "default" ConsoleOp :: r) a -> Eff (rowAppend r [ConsoleOp]) a

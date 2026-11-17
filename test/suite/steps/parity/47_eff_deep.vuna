@@ -16,9 +16,12 @@ sum n = case n of
 
 prog : Eff [POp] Int
 prog = do
-  x <- perform (P 1)
+  x <- perform P 1
   y <- sum (natFromInt 300)
   pure (x + y)
 
 main : Int
-main = runPure (handle prog { P n k -> k n })
+main = runPure (handle prog {
+  P n k -> k n
+}
+)

@@ -24,14 +24,14 @@ export trait Ord a(..) where
 
 -- `Bool` 的顺序用模式匹配直接表达：`False < True`。
 instance Ord Bool where
-  < False True = True
-  < _ _ = False
-  <= False _ = True
-  <= True x = x
-  > True False = True
-  > _ _ = False
-  >= True _ = True
-  >= False x = x
+  (<) False True = True
+  (<) _ _ = False
+  (<=) False _ = True
+  (<=) True x = x
+  (>) True False = True
+  (>) _ _ = False
+  (>=) True _ = True
+  (>=) False x = x
 
 -- | 三值比较结果：`LT`（小于）/ `EQ`（相等）/ `GT`（大于）；顺序即 `LT < EQ < GT`。
 export data Ordering(..) : Type where
@@ -43,14 +43,14 @@ export data Ordering(..) : Type where
   GT : Ordering
 
 instance Eq Ordering where
-  == LT LT = True
-  == EQ EQ = True
-  == GT GT = True
-  == _ _ = False
-  /= a b = if a == b then False else True
+  (==) LT LT = True
+  (==) EQ EQ = True
+  (==) GT GT = True
+  (==) _ _ = False
+  (/=) a b = if a == b then False else True
 
 instance Ord Ordering where
-  < a b = case a of
+  (<) a b = case a of
     LT => case b of
       LT => False
       EQ => True
@@ -60,9 +60,9 @@ instance Ord Ordering where
       EQ => False
       GT => True
     GT => False
-  <= a b = a < b || not (b < a)
-  > a b = b < a
-  >= a b = b <= a
+  (<=) a b = a < b || not (b < a)
+  (>) a b = b < a
+  (>=) a b = b <= a
 
 instance Show Ordering where
   show o = case o of

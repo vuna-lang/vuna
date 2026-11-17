@@ -55,7 +55,8 @@ clockOpHIOHost op k = case op of
 
 -- | 带行的宿主 handler：删掉 `ClockOp`，answer 是 `Eff [ClockOp]`（不导出）。
 handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ClockOp :: r) a -> Eff r (Eff [ClockOp] a)
-handleClockHostHost n comp = handleCoreAt (Named n ClockOp) "clock" n (\a => pure a) clockOpHIOHost comp
+handleClockHostHost n comp =
+  handleCoreAt (Named n ClockOp) "clock" n (\a => pure a) clockOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ClockOp` 的 send 翻译成宿主 intrinsic。
 runClockHost : {r : Row} -> {a : Type} -> Eff (Named "default" ClockOp :: r) a -> Eff (rowAppend r [ClockOp]) a

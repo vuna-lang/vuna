@@ -10,7 +10,7 @@ plus2 a b = a + b
 plus3 : Int -> Int -> Int -> Int
 plus3 a b c = a + b + c
 
-idf : Int -> (Int -> Int)
+idf : Int -> Int -> Int
 idf x = \y => x + y
 
 total : List Int -> Int
@@ -28,7 +28,8 @@ s2 = total (map (plus3 10 20) [1, 2, 3])
 
 s3 : Int
 s3 =
-  let g = plus3
+  let
+    g = plus3
   in g 1 2 3
 
 s4 : Int
@@ -36,7 +37,8 @@ s4 = idf 1 2
 
 s5 : Int
 s5 =
-  let g = idf
+  let
+    g = idf
   in g 5 6
 
 s6 : Int

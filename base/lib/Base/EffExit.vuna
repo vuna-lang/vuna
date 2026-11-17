@@ -40,7 +40,8 @@ exitOpHIOHost op k = case op of
 
 -- | 带行的宿主 handler：删掉 `ExitOp`，answer 是 `Eff [ExitOp]`（不导出）。
 handleExitHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ExitOp :: r) a -> Eff r (Eff [ExitOp] a)
-handleExitHostHost n comp = handleCoreAt (Named n ExitOp) "exit" n (\a => pure a) (\o => \k => exitOpHIOHost o k) comp
+handleExitHostHost n comp =
+  handleCoreAt (Named n ExitOp) "exit" n (\a => pure a) (\o => \k => exitOpHIOHost o k) comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ExitOp` 的 send 翻译成宿主 intrinsic。
 runExitHost : {r : Row} -> {a : Type} -> Eff (Named "default" ExitOp :: r) a -> Eff (rowAppend r [ExitOp]) a

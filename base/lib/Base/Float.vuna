@@ -23,21 +23,21 @@ instance FromFloat Float where
   fromFloat x = x
 
 instance Eq Float where
-  == x y = x == y
-  /= x y = x /= y
+  (==) x y = x == y
+  (/=) x y = x /= y
 
 instance Ord Float where
-  < x y = x < y
-  <= x y = x <= y
-  > x y = x > y
-  >= x y = x >= y
+  (<) x y = x < y
+  (<=) x y = x <= y
+  (>) x y = x > y
+  (>=) x y = x >= y
 
 -- 方法体写内建运算符，由精化器特化成 `bi_*_float`（`+` 是 `add` 别名，不自递归）。
 instance Num Float where
-  + x y = x + y
-  - x y = x - y
-  * x y = x * y
-  / x y = x / y
+  (+) x y = x + y
+  (-) x y = x - y
+  (*) x y = x * y
+  (/) x y = x / y
 
 -- `strFromFloat` 在编译期落成 `floatRender`（与 `%.12g` 对齐）；interp 直接用内建归约。
 instance Neg Float where

@@ -53,7 +53,7 @@ stdinOpHIO op k = case op of
 stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [StdinOp] a) -> Eff [StdinOp] a
 stdinOpHIOHost op k = case op of
   ReadLine => do
-    v <- raise (@vuna@host@readLine)
+    v <- raise @vuna@host@readLine
     ok <- raise @vuna@prim_eff_hostStatus
     if ok == 1 then k Nothing else k (Just v)
   ReadBytes n => do
@@ -63,7 +63,8 @@ stdinOpHIOHost op k = case op of
 
 -- | 带行的宿主 handler：删掉 `StdinOp`，answer 是 `Eff [StdinOp]`（不导出）。
 handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n StdinOp :: r) a -> Eff r (Eff [StdinOp] a)
-handleStdinHostHost n comp = handleCoreAt (Named n StdinOp) "stdin" n (\a => pure a) stdinOpHIOHost comp
+handleStdinHostHost n comp =
+  handleCoreAt (Named n StdinOp) "stdin" n (\a => pure a) stdinOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `StdinOp` 的 send 翻译成宿主 intrinsic。
 runStdinHost : {r : Row} -> {a : Type} -> Eff (Named "default" StdinOp :: r) a -> Eff (rowAppend r [StdinOp]) a
