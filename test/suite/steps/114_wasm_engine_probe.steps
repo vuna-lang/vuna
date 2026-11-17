@@ -1,0 +1,11 @@
+# matrix: effect-wasm
+# 114) 引擎支持矩阵：wasm 产物无条件带 stack-switching 类型（`$ct` / `$eff`），
+#      默认配置的引擎（Node / 浏览器）拒绝编译。这条锁定「stack switching 是浏览器
+#      唯一的版本闸门」这个事实；开启 V8 实验特性后走到哪一步只作报告打印。
+#
+# 依赖 PATH 里的 node（devShell 与 e2e 的 nativeBuildInputs 已提供）；缺 Node 时打印 SKIP。
+run: sh "$VUNA_SUITE_ROOT/test/suite/fixtures/wasm_engine_probe/probe.sh" "$VUNA"
+exit: 0
+out-contains: passed, 0 failed
+out-contains: validate=false compile=error
+out-contains: report:
