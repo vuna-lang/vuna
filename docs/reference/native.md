@@ -316,13 +316,13 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
-- **自举运行**：`vuna build compiler --target native` 已能产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用、审计为 0 个缺口）。真实编译（冷 store 的 `check <任意文件>`）仍
-  会 SIGSEGV：coredump 显示在**堆地址上取指**，续延记录字段自洽，但某帧的 saved-rbp /
-  返回地址槽被堆指针覆盖（RSP 在 resume 点下方几十字节）——即某个「闭包」实际是 record
-  （其第 0 槽是另一个闭包指针）。已知与 fs/readDir/parse/sort/HashMap/record update 无关；
-  待查的是 `IrApp` 动态 head 的取值链（`genApplyCall` 的 head 槽）。续延栈段本身已能容纳
-  深递归（32 MiB 预留），见 [debt.md](debt.md) D89。
+- **自举运行**：`vuna build compiler --target native` 产出可链接的 `bin/vuna-compiler`
+  （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断（不再是「任意检查必崩」）。
+  真实工程仍未跑通：`check base` 踩到 `impossible` trap，`check examples/infra` 报
+  `continuation stack overflow`，`check test/corpus/packages/m34_summary/root` 在
+  `rt_str_eq` 里以空指针做 key/name 比较（`mov (%rdi),%rax`，`rdi = 0`）。后三者是
+  取值链 / 实参一侧的独立问题（待查 `IrApp` 动态 head 与 `perform` 的 key/name 实参），
+  见 [debt.md](debt.md) D89。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
