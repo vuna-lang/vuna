@@ -499,7 +499,7 @@ renderReplTerm : Int -> List DtCtor -> Term -> String
 renderReplTerm fuel ctors t = if fuel <= 0 then showTerm t
 else case t of
   TCon c args => renderReplCtor (fuel - 1) ctors c args
-  TLam name rig body => "<函数>"
+  TLam name rig _ body => "<函数>"
   TMeta m => "_"
   TGlobal g => replShortName g
   TApp f a r => renderReplApp (fuel - 1) ctors (TApp f a r)
@@ -1023,7 +1023,7 @@ synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecC
         let
           tyTerm = quote 0 tyVal
           body =
-            TLam "x" Rig1
+            TLam "x" Rig1 spanEmpty
               (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0 0 0)) Rig1)
           def =
             DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
@@ -1161,7 +1161,7 @@ termHasMeta m (TVar n i _) = False
 termHasMeta m (TGlobal n) = False
 termHasMeta m (TType l) = False
 termHasMeta m (TPi n implicit rig dom cod) = termHasMeta m dom || termHasMeta m cod
-termHasMeta m (TLam n rig body) = termHasMeta m body
+termHasMeta m (TLam n rig _ body) = termHasMeta m body
 termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
 termHasMeta m (TCon c args) = anyArgHasMeta m args
 termHasMeta m (TMk c args) = anyArgHasMeta m args
@@ -1191,7 +1191,7 @@ termHasAnyMeta (TVar n i _) = False
 termHasAnyMeta (TGlobal n) = False
 termHasAnyMeta (TType l) = False
 termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMeta cod
-termHasAnyMeta (TLam n rig body) = termHasAnyMeta body
+termHasAnyMeta (TLam n rig _ body) = termHasAnyMeta body
 termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
 termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
 termHasAnyMeta (TMk c args) = anyArgHasAnyMeta args

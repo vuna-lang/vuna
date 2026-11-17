@@ -34,6 +34,7 @@ out-contains: canon-term-rt ok
 out-contains: canon-decl-rt ok
 out-contains: canon-defs-rt ok
 out-contains: canon-span ok
+out-contains: canon-binder-span ok
 out-contains: canon-export-parent ok
 out-contains: canon-fixity-target ok
 # TOML 解析器：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /

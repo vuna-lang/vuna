@@ -62,6 +62,7 @@ main = do
   _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
   _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
   _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
+  _ <- prim_eff_print (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
   _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
   _ <- prim_eff_print (("canon-fixity-target " ++ verdict fixityCovered) ++ "\n")
   -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
@@ -226,6 +227,18 @@ spanTermB = TApp (TGlobal "f") (TVar "x" 0 spB) Rig1
 spanInsensitive : Bool
 spanInsensitive = encTop encTerm spanTermA == encTop encTerm spanTermB
 
+-- | binder 名 span（`TLam` / `CaseAlt` 的 `Binder`）同样不进编码：换位置必须同一串。
+binderSpanTermA : Term
+binderSpanTermA =
+  TLam "x" Rig1 spA (TCase (TVar "x" 0 spA) [CaseAlt "Succ" [Binder "k" Rig1 spA] (TVar "k" 0 spA)])
+
+binderSpanTermB : Term
+binderSpanTermB =
+  TLam "x" Rig1 spB (TCase (TVar "x" 0 spB) [CaseAlt "Succ" [Binder "k" Rig1 spB] (TVar "k" 0 spB)])
+
+binderSpanInsensitive : Bool
+binderSpanInsensitive = encTop encTerm binderSpanTermA == encTop encTerm binderSpanTermB
+
 -- | Core 项夹具：覆盖全部构造子（含 `TProj` / `TRecUpd` / `TRecord` / `TFloat`）。
 termFixtures : List Term
 termFixtures =
@@ -233,11 +246,11 @@ termFixtures =
     TMeta 12,
     TGlobal "Base.Int",
     TType (levelOfInt 2),
-    TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 (TVar "x" 0 spB)),
+    TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 spB (TVar "x" 0 spB)),
     TApp (TGlobal "f") (TInt 7) Rig1,
     TCon "Cons" [Pair (TInt 1) RigOmega, Pair (TStr "s") Rig1],
     TMk "Point" [Pair (TInt 1) RigOmega],
-    TCase (TGlobal "n") [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [Pair "k" Rig1] (TVar "k" 0 sp0)],
+    TCase (TGlobal "n") [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [binderOfPair (Pair "k" Rig1)] (TVar "k" 0 sp0)],
     TProj (TGlobal "p") "Point" [Pair "x" RigOmega] 0 2,
     TRecUpd (TGlobal "p") "Point" [Pair "x" RigOmega] [0] (TInt 9),
     TInt 42,

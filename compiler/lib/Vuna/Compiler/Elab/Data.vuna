@@ -373,7 +373,7 @@ termUsesVar depth (TGlobal g) = False
 termUsesVar depth (TType l) = False
 termUsesVar depth (TPi n implicit rig dom cod) =
   termUsesVar depth dom || termUsesVar (depth + 1) cod
-termUsesVar depth (TLam n erased body) = termUsesVar (depth + 1) body
+termUsesVar depth (TLam n erased _ body) = termUsesVar (depth + 1) body
 termUsesVar depth (TApp f a erased) = termUsesVar depth f || termUsesVar depth a
 termUsesVar depth (TCon c args) = termUsesVarArgs depth args
 termUsesVar depth (TMk c args) = termUsesVarArgs depth args

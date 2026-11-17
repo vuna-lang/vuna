@@ -625,8 +625,8 @@ else case expr of
       (\ps => OkC (lowerTemplate sp ps))
   ELam params body sp =>
     Vuna.Compiler.Base.Common.bind
-      (onErrDiag (withFallbackSpan sp) (Vuna.Compiler.Base.Common.traverse (checkBinder label) params))
-      (\_ => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append params scope) body) (\b => OkC (ELam params b sp)))
+      (onErrDiag (withFallbackSpan sp) (Vuna.Compiler.Base.Common.traverse (checkBinder label) (map firstOf params)))
+      (\_ => Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports (append (map firstOf params) scope) body) (\b => OkC (ELam params b sp)))
   EApp fn args sp =>
     Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope fn)
       (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => resolveExpr (fuel - 1) modules label prefix ns imports scope a) args) (\args2 => OkC (EApp fn2 args2 sp)))
@@ -726,13 +726,13 @@ else case stmts of
   [DExpr e sp] => resolveExpr (fuel - 1) modules label prefix ns imports scope e
   (DExpr e sp) :: rest =>
     Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam [Pair "_" spanEmpty] tail sp] sp)))
   (DBind (PVar name psp) e sp) :: rest =>
     Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [name] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports (name :: scope) bindName rest blockSpan) (\tail => OkC (EApp (EVar (doBindSyntaxName bindName) sp) [e2, ELam [Pair name (spanAtName name psp)] tail sp] sp)))
   (DBind (PWild psp) e sp) :: rest =>
     Vuna.Compiler.Base.Common.bind (resolveExpr (fuel - 1) modules label prefix ns imports scope e)
-      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam ["_"] tail sp] sp)))
+      (\e2 => Vuna.Compiler.Base.Common.bind (resolveDoChain (fuel - 1) modules label prefix ns imports scope bindName rest blockSpan) (\tail => OkC (EApp (EVar (doIgnoreSyntaxName bindName) sp) [e2, ELam [Pair "_" spanEmpty] tail sp] sp)))
   (DBind pat e sp) :: rest => psErr0At sp DoBindPattern
 
 resolveFieldValue : Int -> List Module -> String -> String -> Namespaces -> List Import -> List String -> Pair String Expr -> Check (Pair String Expr)

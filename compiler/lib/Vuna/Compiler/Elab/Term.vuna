@@ -32,11 +32,11 @@ checkTypeInfer a1 a2 a3 a4 = checkTypeInferFuel 256 a1 a2 a3 a4
 export checkByInfer : List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkByInfer a1 a2 a3 a4 a5 = checkByInferFuel 256 a1 a2 a3 a4 a5
 
-export inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
-inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 = inferLetIgnoredFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
+export inferLetIgnored : List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+inferLetIgnored a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetIgnoredFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
 
-export inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
-inferLetBound a1 a2 a3 a4 a5 a6 a7 a8 a9 = inferLetBoundFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
+export inferLetBound : List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+inferLetBound a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = inferLetBoundFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
 export inferLet : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
 inferLet a1 a2 a3 a4 a5 a6 a7 = inferLetFuel 256 a1 a2 a3 a4 a5 a6 a7
@@ -62,7 +62,7 @@ specializeOpApp a1 a2 a3 a4 a5 a6 = specializeOpAppFuel 256 a1 a2 a3 a4 a5 a6
 export specializeBoolApp : List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeBoolApp a1 a2 a3 a4 a5 a6 = specializeBoolAppFuel 256 a1 a2 a3 a4 a5 a6
 
-export checkLam : List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkLam : List (Pair String Term) -> Ctx -> Ec -> List (Pair String Span) -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkLam a1 a2 a3 a4 a5 a6 a7 = checkLamFuel 256 a1 a2 a3 a4 a5 a6 a7
 
 export checkLetOne : List (Pair String Term) -> Ctx -> Ec -> Pair Pat Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
@@ -74,8 +74,9 @@ checkLet a1 a2 a3 a4 a5 a6 a7 a8 = checkLetFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 export checkLetGo : List (Pair String Term) -> Ctx -> Ec -> List (Pair Pat Expr) -> Expr -> Bool -> Value -> Span -> Check (Pair Term Ec)
 checkLetGo a1 a2 a3 a4 a5 a6 a7 a8 = checkLetGoFuel 256 a1 a2 a3 a4 a5 a6 a7 a8
 
-export checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Check (Pair Term Ec)
-checkLitBoundVar a1 a2 a3 a4 a5 a6 a7 a8 a9 = checkLitBoundVarFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9
+export checkLitBoundVar : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
+checkLitBoundVar a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
+  checkLitBoundVarFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
 export litAltStep : List (Pair String Term) -> Ctx -> Ec -> Term -> String -> Term -> Expr -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term (Pair Bool Ec))
 litAltStep a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = litAltStepFuel 256 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10

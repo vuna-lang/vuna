@@ -225,7 +225,7 @@ export encExpr : Expr -> List String -> List String
 encExpr (EVar name _) acc = encTag 0 (encStr name acc)
 encExpr (EInt n _) acc = encTag 1 (encInt n acc)
 encExpr (EStr s _) acc = encTag 2 (encStr s acc)
-encExpr (ELam names body _) acc = encTag 3 (encStrList names (encExpr body acc))
+encExpr (ELam names body _) acc = encTag 3 (encStrList (map firstOf names) (encExpr body acc))
 encExpr (EApp fn args _) acc = encTag 4 (encExpr fn (encExprList args acc))
 encExpr (EPi name implicit qty dom cod _) acc =
   encTag 5 (encStr name (encBool implicit (encMaybeQty qty (encExpr dom (encExpr cod acc)))))
@@ -396,7 +396,7 @@ else case decTag fuel bytes of
       Nothing => Nothing
       Just (Pair v1 b2) => case decExpr (fuel - 1) b2 of
         Nothing => Nothing
-        Just (Pair v2 b3) => Just (Pair (ELam v1 v2 noSpan) b3)
+        Just (Pair v2 b3) => Just (Pair (ELam (map (\n => Pair n noSpan) v1) v2 noSpan) b3)
     4 => case decExpr (fuel - 1) b1 of
       Nothing => Nothing
       Just (Pair v1 b2) => case decExprList (fuel - 1) b2 of

@@ -57,7 +57,7 @@ encBinders bs acc = encList encBinder bs acc
 
 -- | case 分支：构造子名 + binder 表 + 体。
 encAlt : CaseAlt -> List String -> List String
-encAlt (CaseAlt n bs b) acc = encStr n (encBinders bs (encTerm b acc))
+encAlt (CaseAlt n bs b) acc = encStr n (encBinders (binderPairs bs) (encTerm b acc))
 
 -- | 分支表（直接递归，理由同 `encArgs`）。
 encAlts : List CaseAlt -> List String -> List String
@@ -79,7 +79,7 @@ encTerm (TMeta m) acc = encTag 1 (encInt m acc)
 encTerm (TGlobal g) acc = encTag 2 (encStr g acc)
 encTerm (TType l) acc = encTag 3 (encInt (levelToInt l) acc)
 encTerm (TPi n i r d c) acc = encTag 4 (encStr n (encBool i (encRig r (encTerm d (encTerm c acc)))))
-encTerm (TLam n r b) acc = encTag 5 (encStr n (encRig r (encTerm b acc)))
+encTerm (TLam n r _ b) acc = encTag 5 (encStr n (encRig r (encTerm b acc)))
 encTerm (TApp f a r) acc = encTag 6 (encTerm f (encTerm a (encRig r acc)))
 encTerm (TCon c args) acc = encTag 7 (encStr c (encArgs args acc))
 encTerm (TMk c args) acc = encTag 8 (encStr c (encArgs args acc))
@@ -141,7 +141,7 @@ else case decStr (fuel - 1) bytes of
     Nothing => Nothing
     Just (Pair bs b2) => case decTerm (fuel - 1) b2 of
       Nothing => Nothing
-      Just (Pair body b3) => Just (Pair (CaseAlt n bs body) b3)
+      Just (Pair body b3) => Just (Pair (CaseAlt n (bindersOfPairs bs) body) b3)
 
 -- | 解析 Core 项（tag 必须与 `encTerm` 一致；燃料按剩余字节上界递减）。
 export decTerm : Int -> Cur -> Maybe (Pair Term Cur)
@@ -180,7 +180,7 @@ else case decTag fuel bytes of
         Nothing => Nothing
         Just (Pair r b3) => case decTerm (fuel - 1) b3 of
           Nothing => Nothing
-          Just (Pair body b4) => Just (Pair (TLam n r body) b4)
+          Just (Pair body b4) => Just (Pair (TLam n r noSpan body) b4)
     6 => case decTerm (fuel - 1) b1 of
       Nothing => Nothing
       Just (Pair f b2) => case decTerm (fuel - 1) b2 of

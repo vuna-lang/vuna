@@ -52,9 +52,20 @@ out-contains: binder x is never used
 run: "$VUNA" check "$TMPDIR/m38-warn.vuna" --deny-warnings 2>&1
 exit: 1
 out-contains: [UN_UnusedBinder]
-# 拿不到 binder 名位置时不能给 machine-applicable 改名编辑：整段替换会毁掉源码。
-run: "$VUNA" check -W --json "$TMPDIR/m38-warn.vuna" 2>&1
-out-not-contains: "newText"
+# binder 诊断的位置与改名编辑只覆盖 binder 名本身（不是整个定义 / 分支）：
+# 定义参数、λ 参数、case 分支字段各一处。
+run: sh -c 'printf "f : Int -> Int -> Int\nf t x = x\n\nmain : Int\nmain = f 1 2\n" > "$TMPDIR/m46-def-span.vuna"'
+run: "$VUNA" check -W --json "$TMPDIR/m46-def-span.vuna" 2>&1
+out-contains: "start":{"line":2,"column":3},"end":{"line":2,"column":4}
+out-contains: "newText":"_t"
+run: sh -c 'printf "data P2 : Type where\n  MkP : Int -> Int -> P2\n\ng : P2 -> Int\ng p = case p of\n  MkP a b => a\n\nmain : Int\nmain = g (MkP 1 2)\n" > "$TMPDIR/m46-case-span.vuna"'
+run: "$VUNA" check -W --json "$TMPDIR/m46-case-span.vuna" 2>&1
+out-contains: "start":{"line":6,"column":9},"end":{"line":6,"column":10}
+out-contains: "newText":"_b"
+run: sh -c 'printf "h : Int -> Int\nh n = let g : Int -> Int -> Int\n          g = \\\\m, z => m\n      in g n 9\n\nmain : Int\nmain = h 1\n" > "$TMPDIR/m46-lam-span.vuna"'
+run: "$VUNA" check -W --json "$TMPDIR/m46-lam-span.vuna" 2>&1
+out-contains: "start":{"line":3,"column":19},"end":{"line":3,"column":20}
+out-contains: "newText":"_z"
 # shadow warning：内层同名 binder。
 run: sh -c 'printf "f : Int -> Int -> Int\nf x = \\x => x\n\nmain : Int\nmain = f 1 2\n" > "$TMPDIR/m38-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m38-shadow.vuna" 2>&1

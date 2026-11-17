@@ -48,7 +48,7 @@ else case t of
   TType l => VType l
   TPi name implicit rig dom cod =>
     VPi name implicit rig (evalFuel (fuel - 1) env dom) (Closure env cod)
-  TLam name rig body => VLam name rig (Closure env body)
+  TLam name rig _ body => VLam name rig (Closure env body)
   TApp f a rig => applyValueFuel (fuel - 1) (evalFuel (fuel - 1) env f) (evalFuel (fuel - 1) env a)
   TCon c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
   TMk c args => VCon c (evalArgTermsFuel (fuel - 1) env args)
@@ -58,7 +58,8 @@ else case t of
   TProj base c tele i fi => evalProjFuel (fuel - 1) (evalFuel (fuel - 1) env base) c tele i fi
   -- R3：记录更新原语的语义 = 单分支 case。
   TRecUpd base c tele idxs body =>
-    evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env base) [evalAlt env (CaseAlt c tele body)]
+    evalCaseFuel (fuel - 1) (evalFuel (fuel - 1) env base)
+      [evalAlt env (CaseAlt c (bindersOfPairs tele) body)]
   TInt n => VInt n
   TStr s => VStr s
   -- VFloat 载荷统一为 string_of_float 规范文本（定义性相等与展示一致）。
@@ -68,7 +69,7 @@ else case t of
     evalIf (evalFuel (fuel - 1) env c) (evalFuel (fuel - 1) env th) (evalFuel (fuel - 1) env el)
 
 export evalAlt : List Value -> CaseAlt -> VCaseAlt
-evalAlt env (CaseAlt name binders body) = VCaseAlt name binders (Closure env body)
+evalAlt env (CaseAlt name binders body) = VCaseAlt name (binderPairs binders) (Closure env body)
 
 export evalAlts : List Value -> List CaseAlt -> List VCaseAlt
 evalAlts env [] = []
@@ -763,7 +764,8 @@ else case v of
     TPi name implicit rig (quoteFuel (fuel - 1) depth dom)
       (quoteFuel (fuel - 1) (depth + 1) (applyClosure cod (freshVar name depth)))
   VLam name rig clo =>
-    TLam name rig (quoteFuel (fuel - 1) (depth + 1) (applyClosure clo (freshVar name depth)))
+    TLam name rig spanEmpty
+      (quoteFuel (fuel - 1) (depth + 1) (applyClosure clo (freshVar name depth)))
   VNeutral n => quoteNeutralFuel (fuel - 1) depth n
   VMeta m sp => applyTermSpine (TMeta m) (map (\a => quoteFuel (fuel - 1) depth a) sp)
   VCon c args => TCon c (quoteArgValuesFuel (fuel - 1) depth args)
@@ -792,7 +794,7 @@ else case alt0 of
       n = length binders
       argVals = argValsAt binders depth 0
       body = quoteFuel (fuel - 1) (depth + n) (applyClosureBinder clo argVals)
-    in CaseAlt name binders body
+    in CaseAlt name (bindersOfPairs binders) body
 
 export quoteArgValues : Int -> List Value -> List (Pair Term Rig)
 quoteArgValues depth vs = quoteArgValuesFuel 64 depth vs
@@ -853,7 +855,7 @@ substSolvedMetas sols (t@(TMeta m)) = case metaLookupList m sols of
   Nothing => t
 substSolvedMetas sols (TPi n i r d c) =
   TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
-substSolvedMetas sols (TLam n r b) = TLam n r (substSolvedMetas sols b)
+substSolvedMetas sols (TLam n r sp b) = TLam n r sp (substSolvedMetas sols b)
 substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
 substSolvedMetas sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
@@ -889,7 +891,7 @@ substSolvedMetasAtGo depth sols (t@(TMeta m)) = case metaLookupList m sols of
   Nothing => t
 substSolvedMetasAtGo depth sols (TPi n i r d c) =
   TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
-substSolvedMetasAtGo depth sols (TLam n r b) = TLam n r (substSolvedMetasAtGo depth sols b)
+substSolvedMetasAtGo depth sols (TLam n r sp b) = TLam n r sp (substSolvedMetasAtGo depth sols b)
 substSolvedMetasAtGo depth sols (TApp f a r) =
   TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
 substSolvedMetasAtGo depth sols (TCon c args) =
@@ -970,7 +972,7 @@ else case t of
   TPi n i r d c =>
     TPi n i r (substSolvedMetasAtTblFuel (fuel - 1) sols depth d)
       (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) c)
-  TLam n r b => TLam n r (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
+  TLam n r sp b => TLam n r sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
   TApp f a r =>
     TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f)
       (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r

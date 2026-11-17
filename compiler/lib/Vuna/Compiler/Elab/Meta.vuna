@@ -139,7 +139,7 @@ termMetasRuntime (TVar n i _) = []
 termMetasRuntime (TGlobal g) = []
 termMetasRuntime (TType l) = []
 termMetasRuntime (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
-termMetasRuntime (TLam n rig body) = termMetasRuntime body
+termMetasRuntime (TLam n rig _ body) = termMetasRuntime body
 termMetasRuntime (TApp f a rig) =
   if rigIsErased rig then termMetasRuntime f else append (termMetasRuntime f) (termMetasRuntime a)
 termMetasRuntime (TCon c args) =
@@ -167,7 +167,7 @@ termMetasAll (TVar n i _) = []
 termMetasAll (TGlobal g) = []
 termMetasAll (TType l) = []
 termMetasAll (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
-termMetasAll (TLam n rig body) = termMetasAll body
+termMetasAll (TLam n rig _ body) = termMetasAll body
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
 termMetasAll (TMk c args) = concatMap (\p => termMetasAll (firstOf p)) args
@@ -512,7 +512,7 @@ else case t of
     Nothing => t
   TPi n i r d c =>
     TPi n i r (zonkTermFuel (fuel - 1) ec depth d) (zonkTermFuel (fuel - 1) ec (depth + 1) c)
-  TLam n r b => TLam n r (zonkTermFuel (fuel - 1) ec (depth + 1) b)
+  TLam n r sp b => TLam n r sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
   TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
   TCon c args =>
     TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
@@ -625,7 +625,7 @@ methodArgTermsGo (rig :: rest) nFields i arity =
 -- 逐层 lambda 绑定方法参数（x_0 最外），每层用各自 rig。
 export methodArgLams : List Rig -> Int -> Term -> Term
 methodArgLams [] i body = body
-methodArgLams (rig :: rest) i body = TLam "x${i}" rig (methodArgLams rest (i + 1) body)
+methodArgLams (rig :: rest) i body = TLam "x${i}" rig spanEmpty (methodArgLams rest (i + 1) body)
 
 -- 方法显式参数的 multiplicity 表：逐 binder 按域判断（域是宇宙 ⇒ Rig0 擦除）。
 -- 字典字段 binder 用 `_` 前缀（编译器生成的内部 binder，不参与 UN_UnusedBinder /
@@ -962,7 +962,7 @@ else case t of
   TPi name implicit rig dom cod =>
     TPi name implicit rig (wrapOpaqueUsesFuel (fuel - 1) depth idxs dom)
       (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs cod)
-  TLam name rig body => TLam name rig (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
+  TLam name rig sp body => TLam name rig sp (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
   TApp f a rig =>
     TApp (wrapOpaqueUsesFuel (fuel - 1) depth idxs f) (wrapOpaqueUsesFuel (fuel - 1) depth idxs a)
       rig
@@ -1058,7 +1058,7 @@ outerScan ec ctx depth (TVar name i _) = if i > depth then case ctxItemAt (i - d
   Nothing => False
 else False
 outerScan ec ctx depth (TPi n i r dom cod) = False
-outerScan ec ctx depth (TLam n r b) = outerScan ec ctx (depth + 1) b
+outerScan ec ctx depth (TLam n r _ b) = outerScan ec ctx (depth + 1) b
 outerScan ec ctx depth (TApp f a r) = outerScan ec ctx depth f || outerScan ec ctx depth a
 outerScan ec ctx depth (TCon c args) = outerScanArgs ec ctx depth args
 outerScan ec ctx depth (TMk c args) = outerScanArgs ec ctx depth args
@@ -1205,7 +1205,7 @@ etaCtorLa name i [] args = TCon name args
 etaCtorLa name i ((Pair _ rig) :: rest) args =
   let
     binder = "#eta${i}"
-  in TLam binder rig
+  in TLam binder rig spanEmpty
     (etaCtorLa name (i + 1) rest (append args [Pair (TVar binder (length rest) (Span "" 0 0 0 0 0 0)) rig]))
 
 -- 丢掉列表前 n 个元素（构造子已收到的实参前缀）。

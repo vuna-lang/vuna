@@ -427,10 +427,10 @@ else
       appendLast " {" (prefixFirst "handle " (renderHandleCompGo (fuel - 1) env at lineInd comp))
     clauseInd = lineInd + 2
     retLines = case ret of
-      ELam ([x]) body _ => renderHandleRetGo (fuel - 1) env at clauseInd x body
+      ELam ([Pair x _]) body _ => renderHandleRetGo (fuel - 1) env at clauseInd x body
       _ => []
     opLines = case op of
-      ELam (_ :: k :: _) (ECase _ alts _) _ =>
+      ELam ((Pair _ _) :: (Pair k _) :: _) (ECase _ alts _) _ =>
         concatMap (\alt => renderHandleAltGo (fuel - 1) env at clauseInd k alt) alts
       _ => []
   in append headLines (append retLines (append opLines ["${spaces lineInd}}"]))
@@ -476,7 +476,7 @@ else case e of
     else if contains "\n" text then Nothing else Just text
   ELam ps body sp => case inlinePrecGo (fuel - 1) env 0 body of
     Nothing => Nothing
-    Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma ps} => ${b}")
+    Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma (map firstOf ps)} => ${b}")
   EApp fn args sp => case appAtParts (EApp fn args sp) of
     Just (Pair f (Pair nm rest)) => case inlineExprGo (fuel - 1) env f of
       Nothing => Nothing
@@ -795,7 +795,7 @@ else case e of
   EPi name implicit qty dom cod sp =>
     renderPiBlockGo (fuel - 1) env at lineInd qty implicit name dom cod
   ELam ps body sp =>
-    prefixFirst "\\${joinComma ps} => " (renderExprGo (fuel - 1) env at lineInd body)
+    prefixFirst "\\${joinComma (map firstOf ps)} => " (renderExprGo (fuel - 1) env at lineInd body)
   EField base f sp => appendLast ".${f}" (renderAtomExprGo (fuel - 1) env at lineInd base)
   ERecord name fields sp => renderRecordBlockGo (fuel - 1) env at lineInd name fields
   ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) env at lineInd base fields

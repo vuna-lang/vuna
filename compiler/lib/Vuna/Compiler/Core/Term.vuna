@@ -126,7 +126,9 @@ export data Term(..) : Type where
   TType : Level -> Term
   -- Pi：名字、是否隐式、binder 的 multiplicity、域、codomain。
   TPi : String -> Bool -> Rig -> Term -> Term -> Term
-  TLam : String -> Rig -> Term -> Term
+  -- Lambda：名字、multiplicity、binder 自身的源码位置（合成 binder 用 `spanEmpty`）、体。
+  -- binder span 只服务诊断（未使用/遮蔽/线性用量），不参与语义与编码。
+  TLam : String -> Rig -> Span -> Term -> Term
   TApp : Term -> Term -> Rig -> Term
   -- 构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
   TCon : String -> List (Pair Term Rig) -> Term
@@ -151,16 +153,46 @@ export data Term(..) : Type where
   -- 的应用脊；只在精化期存在，codegen 展开回 `TApp` 链（产物逐字节一致）。
   TRecord : String -> List (Pair Term Rig) -> Term
 
--- case 分支：构造子名 + 绑定子（名字 / multiplicity）+ 体。
+-- binder（case 分支的构造子字段）：名字、multiplicity、binder 自身的源码位置。
+-- span 只服务诊断（未使用/遮蔽/线性用量），不参与语义与编码；合成 binder 用 `spanEmpty`。
+export record Binder(..) where
+  binderName : String
+  binderRig : Rig
+  binderSpan : Span
+
+export binderNameOf : Binder -> String
+binderNameOf (Binder n r sp) = n
+
+export binderRigOf : Binder -> Rig
+binderRigOf (Binder n r sp) = r
+
+export binderSpanOf : Binder -> Span
+binderSpanOf (Binder n r sp) = sp
+
+-- | binder → (名字, multiplicity)：给只吃名字/rig 的位置（telescope / codegen / 值层）。
+export binderPair : Binder -> Pair String Rig
+binderPair b = Pair (binderNameOf b) (binderRigOf b)
+
+export binderPairs : List Binder -> List (Pair String Rig)
+binderPairs bs = map binderPair bs
+
+-- | (名字, multiplicity) → 没有源码位置的 binder（telescope / 合成分支）。
+export binderOfPair : Pair String Rig -> Binder
+binderOfPair (Pair n r) = Binder n r spanEmpty
+
+export bindersOfPairs : List (Pair String Rig) -> List Binder
+bindersOfPairs ps = map binderOfPair ps
+
+-- case 分支：构造子名 + 绑定子（名字 / multiplicity / 位置）+ 体。
 export record CaseAlt(..) where
   caseAltName : String
-  caseAltBinders : List (Pair String Rig)
+  caseAltBinders : List Binder
   caseAltBody : Term
 
 export caseAltName : CaseAlt -> String
 caseAltName (CaseAlt name binders body) = name
 
-export caseAltBinders : CaseAlt -> List (Pair String Rig)
+export caseAltBinders : CaseAlt -> List Binder
 caseAltBinders (CaseAlt name binders body) = binders
 
 export caseAltBody : CaseAlt -> Term
@@ -266,7 +298,7 @@ termSize (TMeta _) = 1
 termSize (TGlobal _) = 1
 termSize (TType _) = 1
 termSize (TPi _ _ _ dom cod) = 1 + termSize dom + termSize cod
-termSize (TLam _ _ body) = 1 + termSize body
+termSize (TLam _ _ _ body) = 1 + termSize body
 termSize (TApp f a _) = 1 + termSize f + termSize a
 termSize (TCon _ args) = 1 + termSizeArgs args
 termSize (TMk _ args) = 1 + termSizeArgs args
@@ -352,7 +384,7 @@ termHasUnsolvedMeta sols (TGlobal g) = False
 termHasUnsolvedMeta sols (TType l) = False
 termHasUnsolvedMeta sols (TPi name implicit rig dom cod) =
   termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
-termHasUnsolvedMeta sols (TLam name rig body) = termHasUnsolvedMeta sols body
+termHasUnsolvedMeta sols (TLam name rig _ body) = termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
 termHasUnsolvedMeta sols (TMk c args) = termHasUnsolvedMetaArgs sols args
@@ -388,7 +420,7 @@ termUsesFloat names (TVar n i _) = False
 termUsesFloat names (TMeta m) = False
 termUsesFloat names (TType l) = False
 termUsesFloat names (TPi n i r dom cod) = termUsesFloat names dom || termUsesFloat names cod
-termUsesFloat names (TLam n r b) = termUsesFloat names b
+termUsesFloat names (TLam n r _ b) = termUsesFloat names b
 termUsesFloat names (TApp f a r) = termUsesFloat names f || termUsesFloat names a
 termUsesFloat names (TCon c args) = anyArgUsesFloat names args
 termUsesFloat names (TMk c args) = anyArgUsesFloat names args
@@ -422,7 +454,7 @@ termGlobalNames (TVar n i _) = []
 termGlobalNames (TMeta m) = []
 termGlobalNames (TType l) = []
 termGlobalNames (TPi n i r dom cod) = append (termGlobalNames dom) (termGlobalNames cod)
-termGlobalNames (TLam n r b) = termGlobalNames b
+termGlobalNames (TLam n r _ b) = termGlobalNames b
 termGlobalNames (TApp f a r) = append (termGlobalNames f) (termGlobalNames a)
 termGlobalNames (TCon c args) = concatMap (\p => termGlobalNames (firstOf p)) args
 termGlobalNames (TMk c args) = concatMap (\p => termGlobalNames (firstOf p)) args
@@ -478,7 +510,7 @@ hasFreeVar depth (TGlobal g) = False
 hasFreeVar depth (TType l) = False
 hasFreeVar depth (TPi name implicit rig dom cod) =
   hasFreeVar depth dom || hasFreeVar (depth + 1) cod
-hasFreeVar depth (TLam name rig body) = hasFreeVar (depth + 1) body
+hasFreeVar depth (TLam name rig _ body) = hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
 hasFreeVar depth (TMk c args) = hasFreeVarArgs depth args
@@ -508,7 +540,7 @@ hasMeta m depth (TVar name i _) = False
 hasMeta m depth (TGlobal g) = False
 hasMeta m depth (TType l) = False
 hasMeta m depth (TPi name implicit rig dom cod) = hasMeta m depth dom || hasMeta m (depth + 1) cod
-hasMeta m depth (TLam name rig body) = hasMeta m (depth + 1) body
+hasMeta m depth (TLam name rig _ body) = hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
 hasMeta m depth (TMk c args) = hasMetaArgs m depth args
@@ -543,7 +575,7 @@ shift depth amount (t@(TGlobal g)) = t
 shift depth amount (t@(TType l)) = t
 shift depth amount (TPi name implicit rig dom cod) =
   TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
-shift depth amount (TLam name rig body) = TLam name rig (shift (depth + 1) amount body)
+shift depth amount (TLam name rig sp body) = TLam name rig sp (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
 shift depth amount (TMk c args) = TMk c (shiftArgs depth amount args)
@@ -581,7 +613,7 @@ substVarAt idx arg (t@(TGlobal g)) = t
 substVarAt idx arg (t@(TType l)) = t
 substVarAt idx arg (TPi n implicit rig dom cod) =
   TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
-substVarAt idx arg (TLam n erased body) = TLam n erased (substVarAt (idx + 1) arg body)
+substVarAt idx arg (TLam n erased sp body) = TLam n erased sp (substVarAt (idx + 1) arg body)
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
   TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
@@ -614,7 +646,7 @@ substMetaVarGo m name q depth (t@(TMeta n)) =
   if n == m then TVar name (depth - q) (Span "" 0 0 0 0 0 0) else t
 substMetaVarGo m name q depth (TPi n i r d c) =
   TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
-substMetaVarGo m name q depth (TLam n r b) = TLam n r (substMetaVarGo m name q (depth + 1) b)
+substMetaVarGo m name q depth (TLam n r sp b) = TLam n r sp (substMetaVarGo m name q (depth + 1) b)
 substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
 substMetaVarGo m name q depth (TCon c args) =
@@ -677,20 +709,20 @@ export insertLamBinder : String -> Int -> Term -> Term
 insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
 export insertLamBinderGo : String -> Int -> Int -> Term -> Term
-insertLamBinderGo name idx depth (TLam n r b) =
-  if depth == idx then TLam n r (TLam name RigOmega (shift 0 1 b))
-  else TLam n r (insertLamBinderGo name idx (depth + 1) b)
+insertLamBinderGo name idx depth (TLam n r sp b) =
+  if depth == idx then TLam n r sp (TLam name RigOmega spanEmpty (shift 0 1 b))
+  else TLam n r sp (insertLamBinderGo name idx (depth + 1) b)
 insertLamBinderGo name idx depth t = t
 
 export countLams : Term -> Int
-countLams (TLam n r b) = 1 + countLams b
+countLams (TLam n r _ b) = 1 + countLams b
 countLams _ = 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 export hasFreeTermVar : Int -> Term -> Bool
 hasFreeTermVar d (TVar n i _) = i >= d
 hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
-hasFreeTermVar d (TLam n r b) = hasFreeTermVar (d + 1) b
+hasFreeTermVar d (TLam n r _ b) = hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
 hasFreeTermVar d (TMk c args) = anyPairFree d args
@@ -718,7 +750,7 @@ anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || an
 export hasNegativeVar : Term -> Bool
 hasNegativeVar (TVar n i _) = i < 0
 hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
-hasNegativeVar (TLam n r b) = hasNegativeVar b
+hasNegativeVar (TLam n r _ b) = hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args
 hasNegativeVar (TMk c args) = anyNegativeVarArgs args
@@ -833,7 +865,7 @@ showTerm (TPi name implicit rig dom cod) =
   if name == "_" then "${showTerm dom} -> ${showTerm cod}"
   else if implicit then "{${name} : ${showTerm dom}} -> ${showTerm cod}"
   else "(${name} : ${showTerm dom}) -> ${showTerm cod}"
-showTerm (TLam name rig body) = "\\${name} => ${showTerm body}"
+showTerm (TLam name rig _ body) = "\\${name} => ${showTerm body}"
 showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
 showTerm (TCon c args) = "(${c}${showArgTerms args})"
 showTerm (TMk c args) = "(${c}${showArgTerms args})"
@@ -888,7 +920,7 @@ showSigAppText s ((Pair a _) :: rest) =
 export showCoreAlts : List CaseAlt -> String
 showCoreAlts [] = ""
 showCoreAlts (alt :: rest) =
-  "${caseAltName alt}${showBinders (caseAltBinders alt)} => ${showTerm (caseAltBody alt)} | ${showCoreAlts rest}"
+  "${caseAltName alt}${showBinders (binderPairs (caseAltBinders alt))} => ${showTerm (caseAltBody alt)} | ${showCoreAlts rest}"
 
 export showBinders : List (Pair String Rig) -> String
 showBinders [] = ""

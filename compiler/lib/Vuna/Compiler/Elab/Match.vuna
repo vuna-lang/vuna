@@ -81,7 +81,7 @@ paramNamesGo remaining n acc =
 
 wrapLambdas : List String -> Expr -> Expr
 wrapLambdas [] body = body
-wrapLambdas (n :: rest) body = ELam [n] (wrapLambdas rest body) (Span "" 0 0 0 0 0 0)
+wrapLambdas (n :: rest) body = ELam [Pair n spanEmpty] (wrapLambdas rest body) spanEmpty
 
 -- 按列递归。params 是**尚未消耗**的位置名（与剩余模式列一一对应）。该列含内建字面量模式
 -- （Int / String）：生成嵌套 if 链——`f 0 = a; f 1 = b; f n = c` → `if pos == 0 then a else
@@ -320,7 +320,7 @@ renameExpr oldName newName e = case e of
   EInt n sp => EInt n sp
   EStr s sp => EStr s sp
   EFloat raw sp => EFloat raw sp
-  ELam names body sp => ELam names (renameExprUnless oldName newName names body) sp
+  ELam names body sp => ELam names (renameExprUnless oldName newName (map firstOf names) body) sp
   EApp fn args sp => EApp (renameExpr oldName newName fn) (map (renameExpr oldName newName) args) sp
   EPi nm implicit qty dom cod sp =>
     EPi nm implicit qty (renameExpr oldName newName dom) (renameExprUnless oldName newName [nm] cod)

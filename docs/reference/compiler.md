@@ -75,7 +75,7 @@
 | `Core.Term` | `Term`/`Value`/`Neutral`/`Closure`/`Rig`/`Level`/`Sols` 等数据（唯一真源）与 `shift`/`substVarAt`/显示等纯项变换 | `shift`、`substVarAt`、`rigIsErased` |
 | `Core.Eval` | beta 求值、delta 展开、prelude 原语归约、深度正规化与 quote | `eval`、`force`、`applyClosure`、`normalize`、`quote` |
 | `Core.Conv` | 定义性相等（beta + delta + eta）与元变量求解（Miller pattern + 创建深度就地检查；非 pattern 报 `TC_CannotSolveHigherOrder`） | `conv`、`convBoth`、`solveMeta` |
-| `Core.Canonical` | Core `Term` 的规范编码 / 解析（tag = 构造子声明序；`TVar` 的 span 丢弃） | `encTerm`、`encTermBytes`、`decTermComplete` |
+| `Core.Canonical` | Core `Term` 的规范编码 / 解析（tag = 构造子声明序；`TVar` / `TLam` / `Binder` 的 span 丢弃） | `encTerm`、`encTermBytes`、`decTermComplete` |
 
 ### Elab（双向精化）
 

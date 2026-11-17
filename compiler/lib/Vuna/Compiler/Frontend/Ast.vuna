@@ -64,7 +64,8 @@ export data Expr(..) : Type where
   EVar : String -> Span -> Expr
   EInt : Int -> Span -> Expr
   EStr : String -> Span -> Expr
-  ELam : List String -> Expr -> Span -> Expr
+  -- λ：参数名 + 参数名自身的源码位置（`spanEmpty` = 合成 binder），体与整体 span。
+  ELam : List (Pair String Span) -> Expr -> Span -> Expr
   EApp : Expr -> List Expr -> Span -> Expr
   -- 命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；第三个字段是显式 quantity
   -- （`Nothing` = 默认 ω）。

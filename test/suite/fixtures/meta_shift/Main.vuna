@@ -17,7 +17,7 @@ probeArgs =
   [ Pair (TMk "m" [Pair (TMeta 0) Rig0, Pair (TRecord "r" [Pair (TMeta 1) Rig0]) Rig1]) Rig1,
     Pair (TProj (TMeta 2) "c" [] 0 1) Rig1,
     Pair (TRecUpd (TMeta 3) "c" [Pair "f" Rig1] [0] (TMeta 4)) Rig1,
-    Pair (TCase (TMeta 5) [CaseAlt "k" [Pair "b" Rig1] (TMeta 6)]) Rig1,
+    Pair (TCase (TMeta 5) [CaseAlt "k" [binderOfPair (Pair "b" Rig1)] (TMeta 6)]) Rig1,
     Pair (TIf (TMeta 7) (TMeta 8) (TMeta 9)) Rig1
   ]
 

@@ -1351,13 +1351,19 @@ parseLambda : Int -> PState -> Int -> Check (Pair Expr PState)
 parseLambda fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
   else Vuna.Compiler.Base.Common.bind (expectSym st "\\")
-    (\st1 => Vuna.Compiler.Base.Common.step (expectIdent st1) (\first, st2 => Vuna.Compiler.Base.Common.step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 "=>") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\body, st5 => OkC (Pair (ELam params body (spanOf st st5)) st5))))))
+    (\st1 => Vuna.Compiler.Base.Common.step (parseLambdaParam st1) (\first, st2 => Vuna.Compiler.Base.Common.step (parseLambdaParams (stateFuel st2) st2 [first]) (\params, st3 => Vuna.Compiler.Base.Common.bind (expectSym st3 "=>") (\st4 => Vuna.Compiler.Base.Common.step (parseExpr (fuel - 1) st4 blockCol) (\body, st5 => OkC (Pair (ELam params body (spanOf st st5)) st5))))))
 
-parseLambdaParams : Int -> PState -> List String -> Check (Pair (List String) PState)
+-- | 一个 λ 参数：名字 + 名字自身的 span（单 token）。
+parseLambdaParam : PState -> Check (Pair (Pair String Span) PState)
+parseLambdaParam st =
+  Vuna.Compiler.Base.Common.step (expectIdent st)
+    (\name, st1 => OkC (Pair (Pair name (tokenSpan st)) st1))
+
+parseLambdaParams : Int -> PState -> List (Pair String Span) -> Check (Pair (List (Pair String Span)) PState)
 parseLambdaParams fuel st acc =
   if fuel <= 0 then icFuel "parser"
-  else if atSym st "," then Vuna.Compiler.Base.Common.step (expectIdent (advance st))
-    (\name, st1 => parseLambdaParams (fuel - 1) st1 (append acc [name]))
+  else if atSym st "," then Vuna.Compiler.Base.Common.step (parseLambdaParam (advance st))
+    (\p, st1 => parseLambdaParams (fuel - 1) st1 (append acc [p]))
   else OkC (Pair acc st)
 
 parseLet : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1543,12 +1549,13 @@ handleAlt (HandleOp cname pats psp _ body) = Pair (PCon cname pats psp) body
 -- | ret 实参表达式（缺 return 子句时用哨兵）。
 handleRetExpr : Maybe (Pair String (Pair Expr Span)) -> Span -> Expr
 handleRetExpr Nothing sp = EVar handleNoRetSyntax sp
-handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [x] body rsp
+handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [Pair x rsp] body rsp
 
 -- | 合成 op λ：`\o, k => case o of alts`。
 handleOpLam : List HandleOp -> String -> Span -> Expr
 handleOpLam ops kname sp =
-  ELam [handleOpBinder, kname] (ECase (EVar handleOpBinder sp) (map handleAlt ops) sp) sp
+  ELam [Pair handleOpBinder spanEmpty, Pair kname spanEmpty]
+    (ECase (EVar handleOpBinder sp) (map handleAlt ops) sp) sp
 
 -- | 校验子句并合成 `EApp (EVar "@vuna@handle") [comp, ret, opH]`。
 handleExpr : Expr -> HandleBlock -> Span -> Check Expr

@@ -438,7 +438,8 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 
 ## 10. 已知边界（开放项）
 
-- 表达式级 / 分支级 span：Core 只有 `TVar` 带 span（debt D80），当前只能到「定义级 + 采样」。
+- 表达式级 / 分支级 span：Core 的 `TVar`、`TLam` / `CaseAlt` binder 带 span，应用 / 构造子 /
+  分支体仍没有位置（debt D80），观测当前只能到「定义级 + 采样」。
 - **`Eff` 边界大多仍是零宽度标记**：`vuna.load` / `vuna.resolve` / `vuna.iface.*` /
   `vuna.codegen.split` 走 `obsMarkEff`（瞬时 `ph:"i"`）。对象库读写已经用 `obsSpanEff`
   （`spanBegin` / `spanEnd` token 对）发真正的 `ph:"X"` 跨度：`vuna.cache.lookup` /

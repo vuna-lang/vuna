@@ -792,7 +792,8 @@ patsHaveCursor env line col [] = False
 patsHaveCursor env line col (p :: rest) =
   if patHit env line col p then True else patsHaveCursor env line col rest
 
--- | 内部：λ 参数没有 span（`ELam` 只存名字），位置由 λ 到 body 起点之间的头部文本按序整词推导。
+-- | 内部：λ 参数位置按 λ 到 body 起点之间的头部文本按序整词推导（`ELam` 的参数 span 也能给出位置，
+-- 但这里按文本推导能同时覆盖 `\x y =>` 这类头部里的其它词）。
 lambdaParamBinds : WalkEnv -> Span -> Pair Int Int -> List String -> List LocalBind
 lambdaParamBinds env lamSpan bodyStart params =
   let
@@ -1001,7 +1002,7 @@ else case e of
   EInt n sp => Nothing
   EStr s sp => Nothing
   EFloat raw sp => Nothing
-  ELam params body sp => lambdaWalk fuel env scope line col name sp params body
+  ELam params body sp => lambdaWalk fuel env scope line col name sp (map firstOf params) body
   EApp f args sp => case walkExpr (fuel - 1) env scope line col name f of
     Just hit => Just hit
     Nothing => walkArgs (fuel - 1) env scope line col name args

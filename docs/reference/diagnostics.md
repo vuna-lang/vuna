@@ -100,6 +100,13 @@ bind 目标）+ 模块头 `module X` 重导出」判定（alias 归一到 import
 `-W` / `--deny-warnings` 因此强制本包模块重新精化以避免漏报（见
 [tooling.md](tooling.md) 退出码一节）。
 
+binder 类诊断（`UN_UnusedBinder` / `UN_ShadowedBinder` / `TC_LinearUnused` /
+`TC_LinearOverused` / `TC_ErasedBinderUsed`）的位置是 **binder 名本身**：Core `Term` 的
+`TLam` 与 `CaseAlt` 的 `Binder` 带名字 span，定义参数 / λ 参数 / `let` binder / case 字段 /
+do-binder 都由精化时填入。改名建议的编辑 span 也必须恰好覆盖名字（长度 = 名字字节数），
+否则不给 machine-applicable 编辑；合成 binder（字典、η、derive、handle 降级）用
+`spanEmpty`，诊断回落到定义级位置且不提供编辑。
+
 warning 的**通道**没有进程内全局收集器：Elab 期 `warnAt*`
 （`Elab/Usage.vuna`）把诊断追加进显式状态 `Ec.ecWarnings`，精化出口挂到
 `DtProgram.dtProgWarnings`；loader 的 unused-import（`Loader/Flatten.vuna` 的

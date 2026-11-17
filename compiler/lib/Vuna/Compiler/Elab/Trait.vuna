@@ -209,16 +209,16 @@ projectionBodyOpaque fieldOpaque ctor fieldIdx rigs nFields nParams =
     argPairs = methodArgTerms rigs nFields
     applied0 = foldAppTerms fieldVar argPairs
     applied = if fieldOpaque then wrapOpaqueUses [nFields - 1 - fieldIdx] applied0 else applied0
-    binders = fieldBinderNames nFields
+    binders = bindersOfPairs (fieldBinderNames nFields)
     alt = CaseAlt ctor binders applied
     caseTerm = TCase (TVar "_d" dictIdx (Span "" 0 0 0 0 0 0)) [alt]
     lamArgs = methodArgLams rigs 0 caseTerm
-  in projectionParamLams (projectionParamNames nParams) (TLam "_d" RigOmega lamArgs)
+  in projectionParamLams (projectionParamNames nParams) (TLam "_d" RigOmega spanEmpty lamArgs)
 
 -- 参数 lambda 链：单参数用 `_p`，多参数用 `_p0 .. _p{n-1}`。
 projectionParamLams : List String -> Term -> Term
 projectionParamLams [] body = body
-projectionParamLams (nm :: rest) body = TLam nm Rig0 (projectionParamLams rest body)
+projectionParamLams (nm :: rest) body = TLam nm Rig0 spanEmpty (projectionParamLams rest body)
 
 projectionParamNames : Int -> List String
 projectionParamNames n = if n == 1 then ["_p"] else map (\i => "_p${i}") (range 0 n)
@@ -639,7 +639,7 @@ instValueOf info ctor fields =
 
 instTeleLam : Term -> List (Pair String Term) -> Term
 instTeleLam body [] = body
-instTeleLam body ((Pair n k) :: rest) = TLam n Rig0 (instTeleLam body rest)
+instTeleLam body ((Pair n k) :: rest) = TLam n Rig0 spanEmpty (instTeleLam body rest)
 
 instCtxLam : Term -> Int -> Int -> Term
 instCtxLam body nCtx k = instCtxLamGo body (nCtx - k) k
@@ -647,7 +647,7 @@ instCtxLam body nCtx k = instCtxLamGo body (nCtx - k) k
 instCtxLamGo : Term -> Int -> Int -> Term
 instCtxLamGo body remaining k =
   if remaining <= 0 then body
-  else TLam (ctxDictName k) RigOmega (instCtxLamGo body (remaining - 1) (k + 1))
+  else TLam (ctxDictName k) RigOmega spanEmpty (instCtxLamGo body (remaining - 1) (k + 1))
 
 -- 字典类型：`Π tele(Rig0). Π ctx(Rig1). head`（head/ctx 域里的 tele 引用按嵌在 ctx 之下移位）。
 instTypeOf : InstSigInfo -> Term
@@ -783,8 +783,8 @@ substInstParamsGo n args depth (t@(TVar nm i sp)) =
   else t
 substInstParamsGo n args depth (TPi nm i r dom cod) =
   TPi nm i r (substInstParamsGo n args depth dom) (substInstParamsGo n args (depth + 1) cod)
-substInstParamsGo n args depth (TLam nm r body) =
-  TLam nm r (substInstParamsGo n args (depth + 1) body)
+substInstParamsGo n args depth (TLam nm r sp body) =
+  TLam nm r sp (substInstParamsGo n args (depth + 1) body)
 substInstParamsGo n args depth (TApp f a r) =
   TApp (substInstParamsGo n args depth f) (substInstParamsGo n args depth a) r
 substInstParamsGo n args depth (TCon c cs) =
@@ -922,7 +922,7 @@ substMetaTermGo : Int -> Term -> Int -> Term -> Term
 substMetaTermGo m rep depth (t@(TMeta n)) = if n == m then shift 0 depth rep else t
 substMetaTermGo m rep depth (TPi n i r dom cod) =
   TPi n i r (substMetaTermGo m rep depth dom) (substMetaTermGo m rep (depth + 1) cod)
-substMetaTermGo m rep depth (TLam n r b) = TLam n r (substMetaTermGo m rep (depth + 1) b)
+substMetaTermGo m rep depth (TLam n r sp b) = TLam n r sp (substMetaTermGo m rep (depth + 1) b)
 substMetaTermGo m rep depth (TApp f a r) =
   TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
 substMetaTermGo m rep depth (TCon c args) =
@@ -1064,7 +1064,7 @@ injectDictGo defName dName appPos depth t = injectDictGoFuel 128 defName dName a
 injectDictGoFuel : Int -> String -> String -> Int -> Int -> Term -> Term
 injectDictGoFuel fuel defName dName appPos depth t = if fuel <= 0 then t
 else case t of
-  TLam n r b => TLam n r (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
+  TLam n r sp b => TLam n r sp (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
   TPi n i r d c =>
     TPi n i r (injectDictGoFuel (fuel - 1) defName dName appPos depth d)
       (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) c)
@@ -1280,7 +1280,7 @@ else
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
   in Vuna.Compiler.Base.Common.bind (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
-    Pair inner ec1 => OkC (Pair (TLam name rig inner) ec1)
+    Pair inner ec1 => OkC (Pair (TLam name rig spanEmpty inner) ec1)
   )
 
 -- 隐式索引 binder（`{n : Nat}`）：绑成擦除的 lambda（Rig0），体在扩展上下文里继续。
@@ -1293,7 +1293,7 @@ else
     ctx2 = ctxBindValue name dom ctx
     expected2 = applyClosure clo v
   in Vuna.Compiler.Base.Common.bind (checkBindersFuel (fuel - 1) globals ctx2 ec pats body expected2 sp) (\p => case p of
-    Pair inner ec1 => OkC (Pair (TLam name rig inner) ec1)
+    Pair inner ec1 => OkC (Pair (TLam name rig spanEmpty inner) ec1)
   )
 
 -- 模式用完后仍剩 Pi 时按 η 展开：body 是 lambda 时按 check 处理；
@@ -1322,7 +1322,7 @@ else case body of
         Pair inner ec1 =>
           let
             inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-          in OkC (Pair (TLam etaName etaRig inner2) ec1)
+          in OkC (Pair (TLam etaName etaRig spanEmpty inner2) ec1)
       )
       )
     _ =>
@@ -1338,13 +1338,15 @@ else
     else if isImplicitDomain ctx ec dom then bindIndexBinderFuel (fuel - 1) globals ctx ec rig name dom clo (pat :: rest) body sp
     else tcErr0 sp ImplicitParamKind
     else case pat of
-      PVar pname psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo sp
-      PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig "_" rest body dom clo sp
+      PVar pname psp =>
+        bindOnePatternFuel (fuel - 1) globals ctx ec rig pname rest body dom clo
+          (spanAtName pname psp) sp
+      PWild psp => bindOnePatternFuel (fuel - 1) globals ctx ec rig "_" rest body dom clo psp sp
       _ => tcErr0 (patSpan pat) DefParamsMustBeVars
     _ => tcErr0 sp DefMoreParams
 
-bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Check (Pair Term Ec)
-bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo sp = if fuel <= 0 then icFuel "binder check"
+bindOnePatternFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Span -> Check (Pair Term Ec)
+bindOnePatternFuel fuel globals ctx ec rig pname pats body dom clo binderSp sp = if fuel <= 0 then icFuel "binder check"
 else
   let
     lvl = ctxDepth ctx
@@ -1354,7 +1356,7 @@ else
     Pair inner ec1 =>
       let
         inner2 = if isOpaqueRuntimeTyIn ec1 ctx dom then wrapOpaqueUses [0] inner else inner
-      in OkC (Pair (TLam pname erasure inner2) ec1)
+      in OkC (Pair (TLam pname erasure binderSp inner2) ec1)
   )
   )
 
@@ -1401,6 +1403,6 @@ export bindIndexBinder : List (Pair String Term) -> Ctx -> Ec -> Rig -> String -
 bindIndexBinder a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
   bindIndexBinderFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
 
-export bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Check (Pair Term Ec)
-bindOnePattern a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 =
-  bindOnePatternFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10
+export bindOnePattern : List (Pair String Term) -> Ctx -> Ec -> Rig -> String -> List Pat -> Expr -> Value -> Closure -> Span -> Span -> Check (Pair Term Ec)
+bindOnePattern a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 =
+  bindOnePatternFuel 512 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11

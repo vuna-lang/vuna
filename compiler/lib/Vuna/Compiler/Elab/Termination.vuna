@@ -36,7 +36,7 @@ exprRefsB bound e = case e of
   EVar n sp => if memName n bound then [] else [n]
   EInt n sp => []
   EStr s sp => []
-  ELam ns b sp => exprRefsB (append ns bound) b
+  ELam ns b sp => exprRefsB (append (map firstOf ns) bound) b
   EApp fn args sp => append (exprRefsB bound fn) (concatMap (exprRefsB bound) args)
   EPi n implicit _ dom cod sp => append (exprRefsB bound dom) (exprRefsB (n :: bound) cod)
   ELet binds b rec_ sp =>
@@ -228,7 +228,7 @@ else case groupHead comp fn of
 strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc = if fuel <= 0 then acc
 else case args of
-  [ELam ([v]) body lamsp, lst] =>
+  [ELam ([Pair v _]) body lamsp, lst] =>
     let
       acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
       sizes2 = extendElemSizes sizes lst v

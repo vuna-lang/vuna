@@ -91,7 +91,7 @@ else case t of
       )
     )
   )
-  TLam name rig body => lowerLamFuel (fuel - 1) env st binders name rig body
+  TLam name rig sp body => lowerLamFuel (fuel - 1) env st binders name rig sp body
   TApp f a rig => lowerAppFuel (fuel - 1) env st binders f a rig
   TCon c args => lowerConAppFuel (fuel - 1) env st binders c args
   TMk c args => lowerConAppFuel (fuel - 1) env st binders c args
@@ -102,7 +102,8 @@ else case t of
   -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
   TRecUpd base c tele idxs body => case Base.HashMap.lookup c env.lwRecordFields of
     Just fields => lowerRecordUpdateFuel (fuel - 1) env st binders base c tele fields idxs body
-    Nothing => lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c tele body])
+    Nothing =>
+      lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c (bindersOfPairs tele) body])
   TProj base c tele i fi => case Base.HashMap.lookup c env.lwRecordFields of
     Just fields => Vuna.Compiler.Base.Common.bind (recordFieldNameAt fi fields) (\label => Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
       Pair baseIr st2 => OkC (Pair (IrProj baseIr c label) st2)
@@ -162,13 +163,13 @@ record LamChainIn where
   lamChainBody : Term
 
 collectLamChainIn : Term -> LamChainIn
-collectLamChainIn (TLam name rig body) = case collectLamChainIn body of
+collectLamChainIn (TLam name rig _ body) = case collectLamChainIn body of
   LamChainIn rest inner => LamChainIn (Pair name rig :: rest) inner
 collectLamChainIn t = LamChainIn [] t
 
-lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Term -> Check (Pair Ir LwSt)
-lowerLamFuel fuel env st binders name rig body = if fuel <= 0 then icFuel "ir-lower"
-else case collectLamChainIn (TLam name rig body) of
+lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Span -> Term -> Check (Pair Ir LwSt)
+lowerLamFuel fuel env st binders name rig sp body = if fuel <= 0 then icFuel "ir-lower"
+else case collectLamChainIn (TLam name rig sp body) of
   LamChainIn params inner =>
     let
       bs = map binderOfParam params
@@ -457,7 +458,7 @@ else case caseAltName alt of
   name => case Base.HashMap.lookup name env.lwCtors of
     Nothing => icInternal "no shape for constructor ${name}"
     Just (Pair family keepFlags) => Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
-      Pair scrutIr st1 => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st1 name outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\q => case q of
+      Pair scrutIr st1 => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st1 name outer (binderPairs (caseAltBinders alt)) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\q => case q of
         Pair bodyIr st2 => OkC (Pair (IrLet (aePatsOf bound) scrutIr bodyIr) st2)
       )
       )
@@ -468,13 +469,13 @@ lowerArmFuel : Int -> LwEnv -> LwSt -> List IrBinder -> CaseAlt -> Check (Pair I
 lowerArmFuel fuel env st outer alt = if fuel <= 0 then icFuel "ir-lower"
 else if caseAltName alt == "" then
   let
-    bound = altEnvIn st outer (caseAltBinders alt)
+    bound = altEnvIn st outer (binderPairs (caseAltBinders alt))
   in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (aePatsOf bound) bodyIr) st2)
   )
 else case Base.HashMap.lookup (caseAltName alt) env.lwCtors of
   Nothing => icInternal "unknown constructor ${caseAltName alt}"
-  Just (Pair family keepFlags) => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (caseAltBinders alt) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
+  Just (Pair family keepFlags) => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (binderPairs (caseAltBinders alt)) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 =>
       OkC (Pair (IrAlt (Just (Pair family (caseAltName alt))) (aePatsOf bound) bodyIr) st2)
   )
@@ -525,7 +526,7 @@ lowerNatAltFuel fuel env st outer Nothing = OkC (Pair Nothing st)
 lowerNatAltFuel fuel env st outer (Just alt) = if fuel <= 0 then icFuel "ir-lower"
 else
   let
-    bound = altEnvIn st outer (caseAltBinders alt)
+    bound = altEnvIn st outer (binderPairs (caseAltBinders alt))
   in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 => OkC (Pair (Just (IrAlt Nothing (aePatsOf bound) bodyIr)) st2)
   )
@@ -570,7 +571,7 @@ else
   let
     n = listLength tele
   in lowerTermFuel (fuel - 1) env st outer
-    (TCase base [CaseAlt c (projBindersIn tele 0) (TVar (recordProjVarIn fi) (n - 1 - fi) (Span "" 0 0 0 0 0 0))])
+    (TCase base [CaseAlt c (bindersOfPairs (projBindersIn tele 0)) (TVar (recordProjVarIn fi) (n - 1 - fi) (Span "" 0 0 0 0 0 0))])
 
 recordProjVarIn : Int -> String
 recordProjVarIn i = "@vuna@record@proj${i}"
@@ -657,12 +658,13 @@ else case nthOpqArgIn (secondOf p) opqs args of
 -- ---------------------------------------------------------------
 -- 运行时参数个数：擦除 lambda 不计入。
 runtimeArityIn : Term -> Int
-runtimeArityIn (TLam n r b) = if rigIsErased r then runtimeArityIn b else 1 + runtimeArityIn b
+runtimeArityIn (TLam n r _ b) = if rigIsErased r then runtimeArityIn b else 1 + runtimeArityIn b
 runtimeArityIn _ = 0
 
 -- `let rec` 右值形状护栏。
 recursiveValueAllowedIn : Term -> Bool
-recursiveValueAllowedIn (TLam n rig b) = if rigIsErased rig then recursiveValueAllowedIn b else True
+recursiveValueAllowedIn (TLam n rig _ b) =
+  if rigIsErased rig then recursiveValueAllowedIn b else True
 recursiveValueAllowedIn (TCon c args) = True
 recursiveValueAllowedIn _ = False
 

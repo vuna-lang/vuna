@@ -340,8 +340,8 @@ else case t of
   TPi n i r d c =>
     Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off d)
       (\d2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
-  TLam n r b =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r b2))
+  TLam n r sp b =>
+    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r sp b2))
   TApp f a r =>
     Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off f)
       (\f2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))

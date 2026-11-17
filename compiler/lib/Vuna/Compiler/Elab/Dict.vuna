@@ -687,7 +687,7 @@ substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSolTbl ec) of
       in if hasFreeTermVar depth soln0 || hasNegativeVar soln0 then t else soln0
 substDictTermGo ec depth (TPi n i r dom cod) =
   TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
-substDictTermGo ec depth (TLam n r b) = TLam n r (substDictTermGo ec (depth + 1) b)
+substDictTermGo ec depth (TLam n r sp b) = TLam n r sp (substDictTermGo ec (depth + 1) b)
 substDictTermGo ec depth (TApp f a r) =
   TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
 substDictTermGo ec depth (TCon c args) =

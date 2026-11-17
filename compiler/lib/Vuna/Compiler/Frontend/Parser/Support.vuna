@@ -49,6 +49,16 @@ spanOf st st2 =
   Span (fileOf st) (posLine (peekPos st)) (posCol (peekPos st)) (posLine (lastPos st2))
     (posCol (lastPos st2)) (posOffset (peekPos st)) (posOffset (lastPos st2))
 
+-- | 当前 token 的完整 span（起点到 token 结束字节）。只用于单行 token（标识符 / 符号）：
+-- 列按 UTF-8 字节，所以结束列 = 起始列 + token 字节长度。
+export tokenSpan : PState -> Span
+tokenSpan st =
+  let
+    p = peekPos st
+    len = posEndOffset p - posOffset p
+  in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p + len) (posOffset p)
+    (posEndOffset p)
+
 export peekTok : PState -> PTok
 peekTok (PState file (t :: rest) last count mode) = t
 peekTok (PState file [] last count mode) = PTok TEof (Pos 1 1 0 0)

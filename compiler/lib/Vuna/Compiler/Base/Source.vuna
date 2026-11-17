@@ -95,6 +95,25 @@ spanFile (Span f sl sc el ec so eo) = f
 export showSpanLoc : Span -> String
 showSpanLoc (Span f sl sc el ec so eo) = "${f}:${sl}:${sc}"
 
+-- | 合成节点的占位 span：没有源码来源的 binder / 项用它，诊断侧再回落到外层位置。
+export spanEmpty : Span
+spanEmpty = Span "" 0 0 0 0 0 0
+
+-- | 是否是占位 span（`spanEmpty`）。
+export isSpanEmpty : Span -> Bool
+isSpanEmpty sp = spanStartLine sp == 0
+
+-- | 把「只有起点」的位置扩成覆盖 `name` 的 span（单行；列按 UTF-8 字节）。
+-- 解析器给出的标识符 span 只记起点（见 `Parser/Support.spanOf`），binder 诊断与改名编辑
+-- 需要覆盖名字本身。不是起点位（合成节点借用了外层 span）或 `spanEmpty` 时返回 `spanEmpty`
+-- ——调用方回落到外层位置，也不会给出可能毁掉源码的替换编辑。
+export spanAtName : String -> Span -> Span
+spanAtName name sp =
+  if isSpanEmpty sp then sp
+  else if spanStartOffset sp /= spanEndOffset sp then spanEmpty
+  else Span (spanFile sp) (spanStartLine sp) (spanStartCol sp) (spanStartLine sp)
+    (spanStartCol sp + strLength name) (spanStartOffset sp) (spanStartOffset sp + strLength name)
+
 -- | 字符（字节码）是否在列表里；线性扫描，用于小字符集判断。
 memChar : Int -> List Int -> Bool
 memChar c [] = False

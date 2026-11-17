@@ -339,7 +339,8 @@ renderWhereSigLine env at lineInd pat ty =
 renderWhereBindingBody : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
 renderWhereBindingBody env at lineInd (PVar name psp) value = case value of
   ELocalFun clauses lsp => renderLocalFunClauses env at lineInd name clauses
-  ELam ps inner lsp => renderClause env at lineInd name (map (\n => PVar n dummySpan) ps) inner
+  ELam ps inner lsp =>
+    renderClause env at lineInd name (map (\p => PVar (firstOf p) (secondOf p)) ps) inner
   _ => renderBindingValue env at lineInd "${name} =" value
 renderWhereBindingBody env at lineInd pat value =
   renderBindingValue env at lineInd "${renderPat pat} =" value

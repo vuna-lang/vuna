@@ -67,7 +67,7 @@ else case findCtorIn cname (dtDataCtors dd) of
         Pair bodyTerm ec2 =>
           let
             n = length binders
-            opaqueIdxs = opaqueBranchIndices ec2 branchCtx2 n binders
+            opaqueIdxs = opaqueBranchIndices ec2 branchCtx2 n (binderPairs binders)
             bodyTerm1 = wrapOpaqueUses opaqueIdxs bodyTerm
             bodyTerm2 =
               if isOpaqueRuntimeTyIn ec2 ctx expected then castErased bodyTerm1 else bodyTerm1
@@ -109,7 +109,9 @@ else
       let
         -- 变量兜底要把变量作为分支 binder 记下来：Core 求值器与 codegen 都按 binder
         -- 绑定 scrutinee：不记这个 binder，体里对变量的引用会变成自由变量。
-        binds = if pname == "_" then [] else [Pair pname (rigOfLinearValue ec scrutTy)]
+        binds =
+          if pname == "_" then []
+          else [Binder pname (rigOfLinearValue ec scrutTy) (spanAtName pname psp)]
         -- 兜底 binder 是 scrutinee 类型；不可命名时同分支 binder 一样逐使用 cast。
         bodyTerm1 =
           if pname == "_" then bodyTerm
@@ -228,7 +230,7 @@ else case alt of
       litAltStepFuel (fuel - 1) globals ctx ec scrutTerm tyName (TInt n) body rest expected sp
     PStr s psp =>
       litAltStepFuel (fuel - 1) globals ctx ec scrutTerm tyName (TStr s) body rest expected sp
-    PVar pname psp => Vuna.Compiler.Base.Common.bind (checkLitBoundVarFuel (fuel - 1) globals ctx ec scrutTerm tyName pname body expected sp) (\p => case p of
+    PVar pname psp => Vuna.Compiler.Base.Common.bind (checkLitBoundVarFuel (fuel - 1) globals ctx ec scrutTerm tyName pname body expected (spanAtName pname psp) sp) (\p => case p of
       Pair bodyTerm ec1 => OkC (Pair bodyTerm (Pair True ec1))
     )
     PWild psp => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
@@ -248,8 +250,8 @@ else Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body e
 )
 
 -- fallback 分支的体在「scrutinee 绑成该变量」的上下文里检查。
-export checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Check (Pair Term Ec)
-checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected sp = if fuel <= 0 then icFuel "inference"
+export checkLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> String -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
+checkLitBoundVarFuel fuel globals ctx ec scrutTerm tyName name body expected binderSp sp = if fuel <= 0 then icFuel "inference"
 else
   let
     -- ctxBindValue 的第二个参数是**类型值**——这里绑 scrutinee 的类型，不是值本身。
@@ -258,7 +260,7 @@ else
   in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\p => case p of
     -- 兜底变量必须真的绑到 scrutinee 上，否则体里对它的引用会指向不存在的 binder
     -- （擦除检查：index 落到别的 binder 上，报 type-level binding used at runtime）。
-    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig bodyTerm) scrutTerm Rig1) ec2)
+    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig binderSp bodyTerm) scrutTerm Rig1) ec2)
   )
 
 -- Nat 字面量模式（`case n of 0 => ...; 1 => ...; _ => ...`）。
@@ -290,7 +292,7 @@ else case alt of
     PInt n psp =>
       natLitAltStepFuel (fuel - 1) globals ctx ec cmpTerm bindTerm binderTy (TInt n) body rest
         expected sp
-    PVar pname psp => Vuna.Compiler.Base.Common.bind (checkNatLitBoundVarFuel (fuel - 1) globals ctx ec bindTerm binderTy pname body expected sp) (\p => case p of
+    PVar pname psp => Vuna.Compiler.Base.Common.bind (checkNatLitBoundVarFuel (fuel - 1) globals ctx ec bindTerm binderTy pname body expected (spanAtName pname psp) sp) (\p => case p of
       Pair bodyTerm ec1 => OkC (Pair bodyTerm (Pair True ec1))
     )
     PWild psp => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (\p => case p of
@@ -308,14 +310,14 @@ else Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body e
   )
 )
 
-checkNatLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> Expr -> Value -> Span -> Check (Pair Term Ec)
-checkNatLitBoundVarFuel fuel globals ctx ec bindTerm binderTy name body expected sp = if fuel <= 0 then icFuel "inference"
+checkNatLitBoundVarFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> Expr -> Value -> Span -> Span -> Check (Pair Term Ec)
+checkNatLitBoundVarFuel fuel globals ctx ec bindTerm binderTy name body expected binderSp sp = if fuel <= 0 then icFuel "inference"
 else
   let
     ctx2 = ctxBindValue name binderTy ctx
     rig = binderRig False binderTy
   in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\p => case p of
-    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig bodyTerm) bindTerm Rig1) ec2)
+    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig binderSp bodyTerm) bindTerm Rig1) ec2)
   )
 
 export checkCaseOfFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
@@ -516,7 +518,7 @@ handleResBinder = "@vuna@handle@res"
 handleResArg : String -> Int -> Span -> Expr
 handleResArg resName k sp =
   EApp (EVar "Base.Eff.resFn" sp)
-    [ELam [handleResBinder] (EApp (EVar resName sp) (append (handleHoleArgs k sp) [EVar handleResBinder sp]) sp) sp]
+    [ELam [Pair handleResBinder spanEmpty] (EApp (EVar resName sp) (append (handleHoleArgs k sp) [EVar handleResBinder sp]) sp) sp]
     sp
 
 -- | 降级调用构造：`headMode` 选 `handleWith`（rowRem 版）或 `handleWithAt`（行首条目版）；
@@ -542,7 +544,7 @@ handleDefaultRetBinder = "@vuna@handle@ret"
 -- | ret 实参：无 return 子句的哨兵换成恒等 λ，其余原样。
 handleRetArg : Expr -> Expr
 handleRetArg (EVar nm rsp) =
-  if isHandleNoRetSyntax nm then ELam [handleDefaultRetBinder] (EVar handleDefaultRetBinder rsp) rsp
+  if isHandleNoRetSyntax nm then ELam [Pair handleDefaultRetBinder spanEmpty] (EVar handleDefaultRetBinder rsp) rsp
   else EVar nm rsp
 handleRetArg e = e
 
@@ -890,7 +892,7 @@ else case fields of
       -- 重建体装进 `TRecUpd` 原语（带记录身份）；语义仍是单分支 case。
       Pair alt ec2 =>
         OkC
-          (Pair (TRecUpd baseTerm alt.caseAltName alt.caseAltBinders plan.upFieldIndices alt.caseAltBody) (Pair baseTy ec2))
+          (Pair (TRecUpd baseTerm alt.caseAltName (binderPairs alt.caseAltBinders) plan.upFieldIndices alt.caseAltBody) (Pair baseTy ec2))
     )
     )
   )
@@ -1760,7 +1762,7 @@ else case firstOf bnd of
               bodyTerm2 =
                 if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm
                 else bodyTerm
-            in OkC (Pair (TApp (TLam name rig bodyTerm2) valueTerm Rig1) ec2)
+            in OkC (Pair (TApp (TLam name rig (spanAtName name psp) bodyTerm2) valueTerm Rig1) ec2)
         )
     )
   PWild psp =>
@@ -1774,7 +1776,7 @@ else case firstOf bnd of
           -- 通配 let 的体是在**不 bind 名字**的上下文里检查的，但落项时仍套一层 TLam "_"：
           -- 体的 de Bruijn 索引必须整体 shift 1，否则所有外层引用都会指向错 binder。
           Pair bodyTerm ec2 =>
-            OkC (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm Rig1) ec2)
+            OkC (Pair (TApp (TLam "_" rig psp (shift 0 1 bodyTerm)) valueTerm Rig1) ec2)
         )
     )
   -- let 模式解构（`let (MkPoint x y) = p in ...`）等价单分支 case：
@@ -1791,15 +1793,16 @@ inferLetGoFuel fuel globals ctx ec binds body rec_ sp = if fuel <= 0 then icFuel
 else case binds of
   [] => inferEFuel (fuel - 1) globals ctx ec body
   (Pair pat value) :: rest => case pat of
-    PVar name psp => inferLetBoundFuel (fuel - 1) globals ctx ec name value rest body rec_ sp
-    PWild psp => inferLetIgnoredFuel (fuel - 1) globals ctx ec value rest body rec_ sp
+    PVar name psp =>
+      inferLetBoundFuel (fuel - 1) globals ctx ec name value rest body rec_ (spanAtName name psp) sp
+    PWild psp => inferLetIgnoredFuel (fuel - 1) globals ctx ec value rest body rec_ psp sp
     -- let 模式解构在推断位同样降级为单分支 case（见 checkLetOneFuel 的说明）。
     _ =>
       inferEFuel (fuel - 1) globals ctx ec
         (ECase value [Pair pat (ELet rest body rec_ sp)] (patSpan pat))
 
-export inferLetBoundFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
-inferLetBoundFuel fuel globals ctx ec name value rest body rec_ sp = if fuel <= 0 then icFuel "inference"
+export inferLetBoundFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+inferLetBoundFuel fuel globals ctx ec name value rest body rec_ binderSp sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
     let
@@ -1810,19 +1813,20 @@ else Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value)
         let
           bodyTerm2 =
             if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
-        in OkC (Pair (TApp (TLam name rig bodyTerm2) valueTerm Rig1) (Pair bodyTy ec2))
+        in OkC (Pair (TApp (TLam name rig binderSp bodyTerm2) valueTerm Rig1) (Pair bodyTy ec2))
     )
 )
 
-export inferLetIgnoredFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Check (Pair Term (Pair Value Ec))
-inferLetIgnoredFuel fuel globals ctx ec value rest body rec_ sp = if fuel <= 0 then icFuel "inference"
+export inferLetIgnoredFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> List (Pair Pat Expr) -> Expr -> Bool -> Span -> Span -> Check (Pair Term (Pair Value Ec))
+inferLetIgnoredFuel fuel globals ctx ec value rest body rec_ binderSp sp = if fuel <= 0 then icFuel "inference"
 else Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value) (\pv => case pv of
   Pair valueTerm (Pair valueTy ec1) =>
     let
       rig = rigOfLinearValue ec valueTy
     in Vuna.Compiler.Base.Common.bind (inferLetFuel (fuel - 1) globals ctx ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
-        OkC (Pair (TApp (TLam "_" rig (shift 0 1 bodyTerm)) valueTerm Rig1) (Pair bodyTy ec2))
+        OkC
+          (Pair (TApp (TLam "_" rig binderSp (shift 0 1 bodyTerm)) valueTerm Rig1) (Pair bodyTy ec2))
     )
 )
 
@@ -2093,10 +2097,10 @@ else case inferEFuelHint (fuel - 1) globals ctx ec expr expected of
           Nothing => ErrC (withFallbackSpan (exprSpan expr) e)
       OkC ec2 => OkC (Pair term (resolveDictGoals globals ec2))
 
-export checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List String -> Expr -> Value -> Span -> Check (Pair Term Ec)
+export checkLamFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> List (Pair String Span) -> Expr -> Value -> Span -> Check (Pair Term Ec)
 checkLamFuel fuel globals ctx ec [] body expected sp =
   if fuel <= 0 then icFuel "inference" else checkEFuel (fuel - 1) globals ctx ec body expected
-checkLamFuel fuel globals ctx ec (name :: rest) body expected sp = if fuel <= 0 then icFuel "inference"
+checkLamFuel fuel globals ctx ec ((Pair name nameSp) :: rest) body expected sp = if fuel <= 0 then icFuel "inference"
 else
   let
     forced = forceVal ec expected
@@ -2121,7 +2125,7 @@ else
               if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name
               else name
               else name
-          in OkC (Pair (TLam binderName lamRig inner2) ec1)
+          in OkC (Pair (TLam binderName lamRig nameSp inner2) ec1)
       )
       )
     -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
@@ -2141,7 +2145,7 @@ else
               in case solveMeta (ecDefTbl ec2) (ecSolsP ec2) lvl m [] piVal of
                 OkC sols2 =>
                   checkLamFuel (fuel - 1) globals ctx (ecPutSols ec2 (solsList sols2))
-                    (name :: rest) body piVal sp
+                    (Pair name nameSp :: rest) body piVal sp
                 ErrC _ => tcErr0 sp LambdaTooManyParams
     _ => tcErr0 sp LambdaTooManyParams
 
@@ -2648,7 +2652,7 @@ doMarkerHead _ = False
 -- 链上的一个非末条语句：binder 名 + 语句表达式 + 语句 span。
 -- | do 链上的一个非末条语句：binder 名、语句表达式与其 span。
 data DoChainStep : Type where
-  DoChainStep : String -> Expr -> Span -> DoChainStep
+  DoChainStep : String -> Expr -> Span -> Span -> DoChainStep
 
 -- 拆出来的 do 块：bind canonical 名 + 语句序列 + 末条表达式 + 块 span（= 首条语句 span）。
 -- | 从标记链拆出的 do 块：canonical bind 名、语句序列、末条表达式与块 span。
@@ -2668,8 +2672,8 @@ else case expr of
     Nothing => Just (Pair (reverse acc) expr)
     Just canonical2 => if canonical /= canonical2 then Nothing
     else case args of
-      [e, ELam ([binder]) rest lsp] =>
-        decodeDoChain (fuel - 1) canonical2 (DoChainStep binder e sp :: acc) rest
+      [e, ELam ([Pair binder binderSp]) rest lsp] =>
+        decodeDoChain (fuel - 1) canonical2 (DoChainStep binder e sp binderSp :: acc) rest
       _ => Nothing
   _ => Just (Pair (reverse acc) expr)
 
@@ -2686,8 +2690,9 @@ decodeDoBlock _ = Nothing
 -- | 把语句序列重建成普通 bind 链：do 标记替换成 canonical bind 名。
 doChainBuild : String -> List DoChainStep -> Expr -> Span -> Expr
 doChainBuild canonical [] last lastSp = last
-doChainBuild canonical ((DoChainStep binder e sp) :: rest) last lastSp =
-  EApp (EVar canonical sp) [e, ELam [binder] (doChainBuild canonical rest last lastSp) sp] sp
+doChainBuild canonical ((DoChainStep binder e sp binderSp) :: rest) last lastSp =
+  EApp (EVar canonical sp)
+    [e, ELam [Pair binder binderSp] (doChainBuild canonical rest last lastSp) sp] sp
 
 -- | 把 DoChain 重建为普通 bind 链表达式，交给既有精化路径。
 doChainFallback : DoChain -> Expr
@@ -2803,8 +2808,8 @@ else case shape of
 -- Ec（不透明运行时类型的域判据用解完的 Ec）。
 -- | 组装 bind 应用：隐式 m/字典/a/b、显式 e/λ 的 rig 与 binder 名，
 -- 并对不透明运行时类型的 binder 做擦除包装。
-doBindAppTerm : Ec -> Ec -> Ctx -> Span -> DoPlan -> String -> Value -> Term -> Rig -> Rig -> Term -> Term
-doBindAppTerm ecLinear ecPaper ctx sp plan binder aVal eTerm argRig lamRig inner =
+doBindAppTerm : Ec -> Ec -> Ctx -> Span -> Span -> DoPlan -> String -> Value -> Term -> Rig -> Rig -> Term -> Term
+doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lamRig inner =
   let
     depth = ctxDepth ctx
     ctx2 = ctxBindValue binder aVal ctx
@@ -2812,7 +2817,7 @@ doBindAppTerm ecLinear ecPaper ctx sp plan binder aVal eTerm argRig lamRig inner
     binderName =
       if ctxHasLinear ecLinear ctx then if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
       else binder
-    lamTerm = TLam binderName lamRig inner2
+    lamTerm = TLam binderName lamRig binderSp inner2
     args =
       [ Pair plan.planMTerm Rig0,
         Pair plan.planDictTerm RigOmega,
@@ -2830,7 +2835,7 @@ elabDoChain : Int -> List (Pair String Term) -> Ctx -> Ec -> DoPlan -> List DoCh
 elabDoChain fuel globals ctx ec plan steps last = if fuel <= 0 then icFuel "inference"
 else case steps of
   [] => checkEFuel (fuel - 1) globals ctx ec last (applyValue plan.planMVal plan.planAVal)
-  (DoChainStep binder e sp) :: rest => case newMetaAt sp ctx ec of
+  (DoChainStep binder e sp binderSp) :: rest => case newMetaAt sp ctx ec of
     Pair aTerm ec1 =>
       let
         aVal = evalCtx ctx aTerm
@@ -2839,7 +2844,8 @@ else case steps of
       in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec1 sp "_" plan.planRigE mArgTy) (\argRig => Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec1 e mArgTy) (\p => case p of
         Pair eTerm ec2 => Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec2 sp binder plan.planInnerRig aVal) (\lamRig => Vuna.Compiler.Base.Common.bind (elabDoChain (fuel - 1) globals ctx2 ec2 plan rest last) (\q => case q of
           Pair inner ec3 =>
-            OkC (Pair (doBindAppTerm ec2 ec3 ctx sp plan binder aVal eTerm argRig lamRig inner) ec3)
+            OkC
+              (Pair (doBindAppTerm ec2 ec3 ctx sp binderSp plan binder aVal eTerm argRig lamRig inner) ec3)
         )
         )
       )

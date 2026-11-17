@@ -11,19 +11,20 @@
 
 ```vuna
 data Term where
-  TVar    : String -> Int -> Term          -- 名字（显示用）+ de Bruijn index
+  TVar    : String -> Int -> Span -> Term  -- 名字（显示用）+ de Bruijn index + 使用点 span
   TMeta   : Int -> Term
   TGlobal : String -> Term
   TType   : Level -> Term
   TPi     : String -> Bool -> Rig -> Term -> Term -> Term
-  TLam    : String -> Rig -> Term -> Term
+  TLam    : String -> Rig -> Span -> Term -> Term   -- binder 名 span（合成用 spanEmpty）
   TApp    : Term -> Term -> Rig -> Term
   TCon    : String -> List (Pair Term Rig) -> Term   -- 构造子应用（实参自携 Rig）
   TCase   : Term -> List CaseAlt -> Term
   TInt / TStr / TBool / TIf
 ```
 
-- `CaseAlt` 是「构造子名 + 绑定子（名字 / `Rig`）+ 体」；`VCaseAlt` 把体换成闭包。
+- `CaseAlt` 是「构造子名 + 绑定子（`Binder`：名字 / `Rig` / 名 span）+ 体」；`VCaseAlt`
+  把体换成闭包并把 binder 压成（名字 / `Rig`）。binder span 只服务诊断，编码与哈希里丢弃。
 - 值：`VType` / `VPi` / `VLam`（闭包）/ `VNeutral` / `VMeta` / `VCon` / `VCase` /
   `VApp`（卡住的应用，禁止静默丢实参）/ 字面量 / `VIf`；neutral 头是
   `NVar name level spine` 或 `NGlobal name spine`。

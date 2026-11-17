@@ -129,7 +129,7 @@ fixityOf t c = case lookupFixity t c.chainOp of
 -- 供 fmt 打印（普通运算符仍是 `EApp (EVar op)`，fmt 按 fixity 打回中缀）。
 infixTerm : FixityTable -> ChainOp -> Expr -> Expr -> Span -> Expr
 infixTerm t c lhs rhs sp =
-  if renameMode t then if c.chainOp == ">>" then EApp (EVar ">>=" sp) [lhs, ELam ["_"] rhs sp] sp
+  if renameMode t then if c.chainOp == ">>" then EApp (EVar ">>=" sp) [lhs, ELam [Pair "_" spanEmpty] rhs sp] sp
   else EApp (EVar (aliasOf t c.chainOp) sp) [lhs, rhs] sp
   else if c.chainIsBacktick then EBacktick c.chainOp lhs rhs sp
   else EApp (EVar c.chainOp sp) [lhs, rhs] sp
@@ -195,10 +195,10 @@ reorderExpr t (ESectOp op sp) =
   if renameMode t then OkC (EVar (aliasOf t op) sp) else OkC (ESectOp op sp)
 reorderExpr t (ESectL op e sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [EVar "vuna_section" sp, e2] sp) sp) else OkC (ESectL op e2 sp))
+    (\e2 => if renameMode t then OkC (ELam [Pair "vuna_section" spanEmpty] (EApp (EVar (aliasOf t op) sp) [EVar "vuna_section" sp, e2] sp) sp) else OkC (ESectL op e2 sp))
 reorderExpr t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t e)
-    (\e2 => if renameMode t then OkC (ELam ["vuna_section"] (EApp (EVar (aliasOf t op) sp) [e2, EVar "vuna_section" sp] sp) sp) else OkC (ESectR e2 op sp))
+    (\e2 => if renameMode t then OkC (ELam [Pair "vuna_section" spanEmpty] (EApp (EVar (aliasOf t op) sp) [e2, EVar "vuna_section" sp] sp) sp) else OkC (ESectR e2 op sp))
 reorderExpr t (EParen inner sp) = reorderExpr t inner
 reorderExpr t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))

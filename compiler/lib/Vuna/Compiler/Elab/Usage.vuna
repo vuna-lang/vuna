@@ -85,13 +85,26 @@ checkBinderRig ec sp name Rig1 used = case used of
       (tcErr1 sp (LinearOverused name) name)
 checkBinderRig ec sp name RigOmega used = OkC 0
 
+-- binder 自身的 span 为空（合成 binder）时回落到定义位置：诊断仍有位置，但不提供编辑。
+resolvedBinderSpan : Span -> Span -> Span
+resolvedBinderSpan binderSp fallback = if isSpanEmpty binderSp then fallback else binderSp
+
+-- 可机器应用的改名编辑只对「恰好覆盖 binder 名」的 span 给出：长度必须等于名字的
+-- UTF-8 字节数。定义级回落 span 或借用外层节点的合成 span 一律不给编辑。
+binderEditSpan : String -> Span -> Maybe Span
+binderEditSpan name binderSp =
+  let
+    width = spanEndOffset binderSp - spanStartOffset binderSp
+  in if isSpanEmpty binderSp || width /= strLength name then Nothing else Just binderSp
+
 -- 进入一个 binder：body usage 的头部就是它；检查后 drop（返回更新后的 Ec）。
-checkLamBinder : Ec -> Span -> String -> Rig -> List Rig -> Check (Pair (List Rig) Ec)
-checkLamBinder ec sp name rig [] = icInternal "usage vector lost lambda binder"
-checkLamBinder ec sp name rig (used :: rest) =
+-- `sp` 是已解析的诊断位置（binder 名 span，或回落到定义 span）。
+checkLamBinder : Ec -> Span -> Maybe Span -> String -> Rig -> List Rig -> Check (Pair (List Rig) Ec)
+checkLamBinder ec sp mEdit name rig [] = icInternal "usage vector lost lambda binder"
+checkLamBinder ec sp mEdit name rig (used :: rest) =
   let
     ec1 = if isRigZero used && not (startsWith "_" name) then case rig of
-      RigOmega => warnUnusedBinder ec sp name
+      RigOmega => warnUnusedBinder ec sp mEdit name
       _ => ec
     else ec
   in Vuna.Compiler.Base.Common.bind (checkBinderRig ec1 sp name rig used) (\_ => OkC (Pair rest ec1))
@@ -109,24 +122,31 @@ shadowedByRuntime name ((Pair n rig) :: rest) =
 
 -- case 分支：binders 是 telescope 顺序（第一个字段最外），body usage 的前 k 项按
 -- 逆序对应它们（index 0 = 最后一个字段）。检查完整体 drop。
-checkAltBinders : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (Pair (List Rig) Ec)
+checkAltBinders : Ec -> Span -> List Binder -> List Rig -> Check (Pair (List Rig) Ec)
 checkAltBinders ec sp binders us = checkAltBindersGo ec sp (reverse binders) us
 
-checkAltBindersGo : Ec -> Span -> List (Pair String Rig) -> List Rig -> Check (Pair (List Rig) Ec)
+checkAltBindersGo : Ec -> Span -> List Binder -> List Rig -> Check (Pair (List Rig) Ec)
 checkAltBindersGo ec sp [] us = OkC (Pair us ec)
-checkAltBindersGo ec sp ((Pair name rig) :: rest) us = case us of
-  [] => icInternal "usage vector lost case binder"
-  used :: more =>
-    let
-      ec1 =
-        if name /= "_" && shadowedByRuntime name rest then warnAt1 ec sp (ShadowedBinder name) name
-        else ec
-      ec2 = if isRigZero used && not (startsWith "_" name) then case rig of
-        RigOmega => warnUnusedBinder ec1 sp name
-        _ => ec1
-      else ec1
-    in Vuna.Compiler.Base.Common.bind (checkBinderRig ec2 sp name rig used)
-      (\_ => checkAltBindersGo ec2 sp rest more)
+checkAltBindersGo ec sp (b :: rest) us =
+  let
+    name = binderNameOf b
+    rig = binderRigOf b
+    bsp = resolvedBinderSpan (binderSpanOf b) sp
+    mEdit = binderEditSpan name (binderSpanOf b)
+    restRuntime = binderPairs rest
+  in case us of
+    [] => icInternal "usage vector lost case binder"
+    used :: more =>
+      let
+        ec1 =
+          if name /= "_" && shadowedByRuntime name restRuntime then warnAt1 ec bsp (ShadowedBinder name) name
+          else ec
+        ec2 = if isRigZero used && not (startsWith "_" name) then case rig of
+          RigOmega => warnUnusedBinder ec1 bsp mEdit name
+          _ => ec1
+        else ec1
+      in Vuna.Compiler.Base.Common.bind (checkBinderRig ec2 bsp name rig used)
+        (\_ => checkAltBindersGo ec2 sp rest more)
 
 -- ---------------------------------------------------------------
 -- 项遍历（显式线程 `Ec`：使用点登记进 `ecUseSpans`，诊断就地取用）
@@ -142,14 +162,16 @@ checkTerm ec sp env t = case t of
   TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   -- 类型：0-fragment，里面的 binder 不产生运行时用量。
   TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TLam name rig body =>
+  TLam name rig binderSp body =>
     let
+      bsp = resolvedBinderSpan binderSp sp
+      mEdit = binderEditSpan name binderSp
       ecW =
-        if name /= "_" && shadowedByRuntime name env then warnAt1 ec sp (ShadowedBinder name) name
+        if name /= "_" && shadowedByRuntime name env then warnAt1 ec bsp (ShadowedBinder name) name
         else ec
       env2 = (::) (Pair name rig) env
     in Vuna.Compiler.Base.Common.step (checkTerm ecW sp env2 body)
-      (\u => \ec2 => Vuna.Compiler.Base.Common.step (checkLamBinder ec2 sp name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
+      (\u => \ec2 => Vuna.Compiler.Base.Common.step (checkLamBinder ec2 bsp mEdit name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
   TApp f a rig =>
     Vuna.Compiler.Base.Common.step (checkTerm ec sp env f)
       (\uf => \ec1 => if isRigZero rig then OkC (Pair uf ec1) else Vuna.Compiler.Base.Common.step (checkTerm ec1 sp env a) (\ua => \ec2 => OkC (Pair (uAdd uf (uScale rig ua)) ec2)))
@@ -159,7 +181,7 @@ checkTerm ec sp env t = case t of
   TProj base c tele i fi => checkTerm ec sp env base
   TRecUpd base c tele idxs body =>
     Vuna.Compiler.Base.Common.step (checkTerm ec sp env base)
-      (\ub => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => Vuna.Compiler.Base.Common.step (checkAltBinders ec2 sp tele ua) (\outer => \ec3 => OkC (Pair (uAdd ub outer) ec3))))
+      (\ub => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => Vuna.Compiler.Base.Common.step (checkAltBinders ec2 sp (bindersOfPairs tele) ua) (\outer => \ec3 => OkC (Pair (uAdd ub outer) ec3))))
   TCase scrut alts =>
     Vuna.Compiler.Base.Common.step (checkTerm ec sp env scrut)
       (\us => \ec1 => Vuna.Compiler.Base.Common.step (checkAlts ec1 sp env alts) (\ua => \ec2 => OkC (Pair (uAdd us ua) ec2)))
@@ -190,7 +212,7 @@ checkAltsGo ec sp env [] acc = case acc of
   Nothing => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 checkAltsGo ec sp env ((CaseAlt cname binders body) :: rest) acc =
   let
-    env2 = append (reverse binders) env
+    env2 = append (reverse (binderPairs binders)) env
     k = natToInt (length binders)
   in Vuna.Compiler.Base.Common.step (checkTerm ec sp env2 body) (\u => \ec1 => Vuna.Compiler.Base.Common.step (checkAltBinders ec1 sp binders u) (\outer => \ec2 => checkAltsGo ec2 sp env rest (Just (case acc of
     Just prev => uJoin prev outer
@@ -257,7 +279,7 @@ else case t of
   TType l => OkC 0
   -- 类型层项不产生运行时闭包（λ 只在值层出现）。
   TPi name implicit rig dom cod => OkC 0
-  TLam name rig body =>
+  TLam name rig _ body =>
     if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False
     else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
     else capCheckFuel (fuel - 1) ec sp body False
@@ -331,10 +353,18 @@ defSpanOf d = case dtDefSpan d of
   Just sp => sp
   Nothing => Span "" 0 0 0 0 0 0
 
--- | 未使用 binder 告警。这里的 `sp` 是定义级位置，定位不到 binder 名本身，
--- 所以不给 machine-applicable 改名编辑（在定义级 span 上替换会覆盖整段源码）。
-warnUnusedBinder : Ec -> Span -> String -> Ec
-warnUnusedBinder ec sp name = warnAt1 ec sp (UnusedBinder name) name
+-- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
+-- 只有拿到 binder 名自身的 span（`mEdit`）才给编辑：定义级回落 span 上做替换会毁掉整段源码。
+warnUnusedBinder : Ec -> Span -> Maybe Span -> String -> Ec
+warnUnusedBinder ec sp mEdit name =
+  warnAt1Mod ec (renameSuggestion name mEdit) sp (UnusedBinder name) name
+
+renameSuggestion : String -> Maybe Span -> Diagnostic -> Diagnostic
+renameSuggestion name Nothing d = d
+renameSuggestion name (Just editSp) d =
+  withSuggestion
+    (Suggestion "rename unused binder `${name}` to `_${name}`" MachineApplicable [DiagEdit editSp "_${name}"])
+    d
 
 -- ---------------------------------------------------------------
 -- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到 `Ec.ecUseSpans`，
