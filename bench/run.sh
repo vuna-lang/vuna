@@ -7,7 +7,9 @@
 # 口径（写进 docs/reference/performance.md）：
 #   * 每个 benchmark 一份 `bench/programs/<name>.vuna`（vuna）与 `<name>.ml`（手写
 #     OCaml 等价实现，同算法；个别库基准用标准库上限，见各文件注释）；
-#   * `--target` 选择被测后端：ocaml（默认）/ native / both；
+#   * `--target` 选择被测后端：ocaml（默认）/ native / wasm / both（ocaml+native）/
+#     all（三个都测）。wasm 用仓库里的 JS 宿主（`test/suite/fixtures/wasm_js_host/run.mjs`，
+#     Node/V8，与浏览器同一套 WebAssembly API 与 host 层）执行，不走 wasmtime；
 #   * `.out` 是 golden：每个被测产物与手写实现都必须输出它；
 #   * 每项先 warmup 再跑 --runs 次取**中位数**；峰值内存用 GNU time 的 max RSS，
 #     计时结束后单独跑 --rss-passes 次取**最大值**（不参与计时）；
@@ -43,7 +45,7 @@ options:
   --runs N               计时重复次数（默认 3）
   --warmup N             计时前预热次数（默认 1）
   --rss-passes N         峰值内存采样次数，取最大值（默认 3）
-  --target T             被测后端：ocaml / native / both（默认 ocaml）
+  --target T             被测后端：ocaml / native / wasm / both / all（默认 ocaml）
   --only NAME            只跑一个基准（可重复）
   --compiler PATH        被测 vuna（默认 PATH 里的 vuna / $VUNA）
   --cc PATH              native 链接器（默认 PATH 里的 cc / $CC）
@@ -101,8 +103,10 @@ case $THRESHOLD in ''|*[!0-9]*|0) die "--threshold must be a positive integer (p
 case $TARGET in
   ocaml) TARGETS="vuna_ocaml" ;;
   native) TARGETS="native" ;;
+  wasm) TARGETS="wasm" ;;
   both) TARGETS="vuna_ocaml native" ;;
-  *) die "--target must be ocaml, native or both" ;;
+  all) TARGETS="vuna_ocaml native wasm" ;;
+  *) die "--target must be ocaml, native, wasm, both or all" ;;
 esac
 
 REPO=$PWD
@@ -110,6 +114,13 @@ REPO=$PWD
 [ -d "$REPO/base" ] || die "run from the repo root (base/ not found)"
 command -v "$VUNA_BIN" >/dev/null 2>&1 || die "vuna not found: $VUNA_BIN"
 command -v "$OCAMLOPT_BIN" >/dev/null 2>&1 || die "ocamlopt not found: $OCAMLOPT_BIN"
+# wasm 的执行宿主是仓库自带的 JS 宿主（Node/V8）：与浏览器同一套 WebAssembly API
+# 和 host 层，不依赖 wasmtime（后者的删除条件见 debt D102）。
+WASM_RUNNER=${WASM_RUNNER:-$REPO/test/suite/fixtures/wasm_js_host/run.mjs}
+NODE_BIN=${NODE:-node}
+NODE_VERSION=n/a
+NODE_STARTUP_MS=n/a
+WASM_ENGINE_VERSION=n/a
 case " $TARGETS " in
   *" native "*)
     command -v "$CC_BIN" >/dev/null 2>&1 || die "cc not found: $CC_BIN (native 链接需要)"
@@ -119,11 +130,35 @@ case " $TARGETS " in
     ;;
   *) STACK_POLICY=n/a ;;
 esac
+case " $TARGETS " in
+  *" wasm "*)
+    command -v "$NODE_BIN" >/dev/null 2>&1 || die "node not found（wasm 基准用 JS 宿主执行）"
+    command -v wasm-tools >/dev/null 2>&1 || die "wasm-tools not found（wasm 产物需要 wasm-tools parse）"
+    [ -f "$WASM_RUNNER" ] || die "wasm JS host runner not found: $WASM_RUNNER"
+    NODE_VERSION=$("$NODE_BIN" --version 2>/dev/null || printf 'unknown')
+    # 宿主启动地板：每项测量都包含 node 启动 + 模块实例化，这里单独记一个只含 node 启动的数。
+    _t0=$(date +%s%N)
+    for _i in 1 2 3 4 5; do "$NODE_BIN" -e '' >/dev/null 2>&1; done
+    _t1=$(date +%s%N)
+    NODE_STARTUP_MS=$(( (_t1 - _t0 + 2500000) / 5000000 ))
+    if [ "$STACK_POLICY" = n/a ]; then
+      STACK_POLICY="js-host (V8 wasm stack, no knob)"
+    else
+      STACK_POLICY="$STACK_POLICY; js-host (V8 wasm stack, no knob)"
+    fi
+    ;;
+esac
 
 VUNA_BASE=${VUNA_BASE_OVERRIDE:-$REPO/base}
 export VUNA_BASE
 
-if [ "$CHECK" = 1 ] && [ -z "$BASELINE" ]; then BASELINE=$REPO/bench/baseline.json; fi
+if [ "$CHECK" = 1 ] && [ -z "$BASELINE" ]; then
+  case $TARGET in
+    native) BASELINE=$REPO/bench/native-baseline.json ;;
+    wasm) BASELINE=$REPO/bench/wasm-baseline.json ;;
+    *) BASELINE=$REPO/bench/baseline.json ;;
+  esac
+fi
 if [ -n "$BASELINE" ]; then
   [ -f "$BASELINE" ] || die "baseline not found: $BASELINE"
   command -v jq >/dev/null 2>&1 || die "jq not found (use: nix run .#vuna-perf)"
@@ -192,9 +227,12 @@ rss_of() {
 }
 
 # native 产物在 unlimited 栈下运行（脚本启动时已探测硬上限）。
+# wasm 产物由 JS 宿主执行。注意：必须直接拼成一条命令（`time` 不能执行 shell 函数），
+# 否则 max RSS 会记成 0。
 run_target() { # target program
   case $1 in
     native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" ;;
+    wasm) "$NODE_BIN" "$WASM_RUNNER" "$2" ;;
     *) "$2" ;;
   esac
 }
@@ -202,6 +240,7 @@ run_target() { # target program
 rss_target() { # target program
   case $1 in
     native) rss_of bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" ;;
+    wasm) rss_of "$NODE_BIN" "$WASM_RUNNER" "$2" ;;
     *) rss_of "$2" ;;
   esac
 }
@@ -215,6 +254,7 @@ default_stack_run() { # program
 capture_target() { # target program
   case $1 in
     native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" 2>&1 ;;
+    wasm) "$NODE_BIN" "$WASM_RUNNER" "$2" 2>&1 ;;
     *) "$2" 2>&1 ;;
   esac
 }
@@ -227,7 +267,7 @@ selected() {
 }
 
 declare -A MED RSS GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP
-declare -A RATIO RSS_RATIO DEFAULT_STACK
+declare -A RATIO RSS_RATIO DEFAULT_STACK SKIP
 ORDER=()
 
 # 编译一个被测后端到 <dir>/prog。
@@ -245,11 +285,24 @@ build_target() { # name target dir
       ( cd "$dir" && "$CC_BIN" -static -nostdlib -no-pie -Wl,--build-id=none -o prog main.s ) \
         >"$WORK/$name.$target.build.log" 2>&1 || return 1
       ;;
+    wasm)
+      "$VUNA_BIN" compile "$REPO/bench/programs/$name.vuna" "$dir" --target wasm \
+        >"$WORK/$name.$target.compile.log" 2>&1 || return 1
+      ( cd "$dir" && wasm-tools parse main.wat -o main.wasm ) \
+        >"$WORK/$name.$target.build.log" 2>&1 || return 1
+      ;;
     *) die "unknown target: $target" ;;
   esac
 }
 
-# 校验产物输出与 golden 一致。
+# 校验产物输出与 golden 一致；返回 1 = 不一致或运行失败（调用方决定 die 还是记 skip）。
+out_ok() { # target program golden
+  local actual
+  actual=$(capture_target "$1" "$2") || return 1
+  [ "$actual" = "$3" ] || return 1
+  return 0
+}
+
 expect_out() { # label target program golden
   local label=$1 target=$2 program=$3 golden=$4 actual
   actual=$(capture_target "$target" "$program") || die "$label: program failed: $program"
@@ -293,20 +346,33 @@ run_bench() { # name
   for t in $TARGETS; do
     dir=$WORK/$name-$t
     if ! build_target "$name" "$t" "$dir"; then
+      # wasm 的构建失败记成跳过（后端拒绝该程序）；其余后端仍是硬失败。
+      if [ "$t" = wasm ]; then SKIP["$name:$t"]=build; continue; fi
       die "$name ($t): build failed (see $WORK/$name.$t.*.log)"
     fi
-    PROGS[$t]=$dir/prog
+    case $t in
+      wasm) PROGS[$t]=$dir/main.wasm ;;
+      *) PROGS[$t]=$dir/prog ;;
+    esac
   done
 
   expect_out "$name (ocaml)" ocaml_ref "$oprog" "$golden"
   for t in $TARGETS; do
-    expect_out "$name ($t)" "$t" "${PROGS[$t]}" "$golden"
+    [ -n "${SKIP["$name:$t"]:-}" ] && continue
+    if ! out_ok "$t" "${PROGS[$t]}" "$golden"; then
+      # wasm 在浏览器路径上可能超出 V8 的 wasm 栈（非尾深递归），记跳过而不是中断整轮。
+      if [ "$t" = wasm ]; then SKIP["$name:$t"]=run; continue; fi
+      expect_out "$name ($t)" "$t" "${PROGS[$t]}" "$golden"
+    fi
   done
 
   local i
   for ((i = 0; i < WARMUP; i++)); do
     run_target ocaml_ref "$oprog" >/dev/null 2>&1
-    for t in $TARGETS; do run_target "$t" "${PROGS[$t]}" >/dev/null 2>&1; done
+    for t in $TARGETS; do
+      [ -n "${SKIP["$name:$t"]:-}" ] && continue
+      run_target "$t" "${PROGS[$t]}" >/dev/null 2>&1
+    done
   done
 
   local -A VALS=()
@@ -315,18 +381,21 @@ run_bench() { # name
     ms=$(time_once run_target ocaml_ref "$oprog")
     VALS[ocaml_ref]+=" $ms"
     for t in $TARGETS; do
+      [ -n "${SKIP["$name:$t"]:-}" ] && continue
       ms=$(time_once run_target "$t" "${PROGS[$t]}")
       VALS[$t]+=" $ms"
     done
   done
   MED["$name:ocaml_ref"]=$(median_of ${VALS[ocaml_ref]})
   for t in $TARGETS; do
+    [ -n "${SKIP["$name:$t"]:-}" ] && continue
     MED["$name:$t"]=$(median_of ${VALS[$t]})
   done
 
   # 峰值内存：计时之后单独采样，取最大值。
   RSS["$name:ocaml_ref"]=$(max_rss ocaml_ref "$oprog")
   for t in $TARGETS; do
+    [ -n "${SKIP["$name:$t"]:-}" ] && continue
     RSS["$name:$t"]=$(max_rss "$t" "${PROGS[$t]}")
   done
 
@@ -352,6 +421,7 @@ run_bench() { # name
 
   local base_rss=${RSS["$name:ocaml_ref"]}
   for t in $TARGETS; do
+    [ -n "${SKIP["$name:$t"]:-}" ] && continue
     RATIO["$name:$t"]=$(ratio_of "${MED["$name:$t"]}" "${MED["$name:ocaml_ref"]}")
     RSS_RATIO["$name:$t"]=$(ratio_of "${RSS["$name:$t"]}" "$base_rss")
   done
@@ -359,6 +429,10 @@ run_bench() { # name
 
   note "  ocaml_ref ${MED["$name:ocaml_ref"]} ms  ${RSS["$name:ocaml_ref"]} KB"
   for t in $TARGETS; do
+    if [ -n "${SKIP["$name:$t"]:-}" ]; then
+      note "  $t skipped (${SKIP["$name:$t"]})"
+      continue
+    fi
     note "  $t ${MED["$name:$t"]} ms  ${RSS["$name:$t"]} KB  ratio ${RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x"
   done
   if [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
@@ -377,7 +451,12 @@ done
 # 写一个后端的测量块；$1=name $2=target，$3=缩进。
 emit_backend() {
   local name=$1 target=$2 indent=$3
-  printf '%s"%s": { "median_ms": %s, "rss_kb": %s' \
+  if [ -n "${SKIP["$name:$target"]:-}" ]; then
+    printf '%s"%s": { "run_ok": false, "skip_reason": "%s" }' \
+      "$indent" "$target" "${SKIP["$name:$target"]}"
+    return 0
+  fi
+  printf '%s"%s": { "run_ok": true, "median_ms": %s, "rss_kb": %s' \
     "$indent" "$target" "${MED["$name:$target"]}" "${RSS["$name:$target"]}"
   if [ "$target" = vuna_ocaml ] && [ -n "${GC_MINOR_WORDS[$name]:-}" ]; then
     printf ', "gc": { "minor_words": %s, "major_words": %s, "minor_collections": %s, "major_collections": %s, "top_heap_words": %s }' \
@@ -408,6 +487,10 @@ emit_json() {
   printf '    "warmup": %s,\n' "$WARMUP"
   printf '    "target": "%s",\n' "$TARGET"
   printf '    "stack_policy": "%s",\n' "$STACK_POLICY"
+  printf '    "wasm_host": "js",\n'
+  printf '    "wasm_host_runner": "%s",\n' "$(json_escape "$WASM_RUNNER")"
+  printf '    "node": "%s",\n' "$(json_escape "$NODE_VERSION")"
+  printf '    "node_startup_ms": %s,\n' "$(case $NODE_STARTUP_MS in ''|*[!0-9]*) printf 'null' ;; *) printf '%s' "$NODE_STARTUP_MS" ;; esac)"
   printf '    "rss_passes": %s,\n' "$RSS_PASSES"
   printf '    "rss_method": "gnu-time max_rss (max of rss_passes)"\n'
   printf '  },\n'
@@ -427,12 +510,16 @@ emit_json() {
     for t in $TARGETS; do
       [ "$first_t" = 1 ] || printf ', '
       first_t=0
+      if [ -n "${SKIP["$name:$t"]:-}" ]; then
+        printf '"%s": { "run_ok": false }' "$t"
+        continue
+      fi
       printf '"%s": { "vs_handwritten": %s, "rss_vs_handwritten": %s' \
         "$t" "${RATIO["$name:$t"]}" "${RSS_RATIO["$name:$t"]}"
-      if [ "$t" = native ] && [ -n "${MED["$name:vuna_ocaml"]:-}" ]; then
+      if [ "$t" != vuna_ocaml ] && [ -n "${MED["$name:vuna_ocaml"]:-}" ]; then
         printf ', "vs_ocaml_backend": %s, "rss_vs_ocaml_backend": %s' \
-          "$(ratio_of "${MED["$name:native"]}" "${MED["$name:vuna_ocaml"]}")" \
-          "$(ratio_of "${RSS["$name:native"]}" "${RSS["$name:vuna_ocaml"]}")"
+          "$(ratio_of "${MED["$name:$t"]}" "${MED["$name:vuna_ocaml"]}")" \
+          "$(ratio_of "${RSS["$name:$t"]}" "${RSS["$name:vuna_ocaml"]}")"
       fi
       printf ' }'
     done
@@ -450,6 +537,10 @@ print_table() {
     printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" ocaml_ref \
       "${MED["$name:ocaml_ref"]}" "1.00x" "${RSS["$name:ocaml_ref"]}" "1.00x"
     for t in $TARGETS; do
+      if [ -n "${SKIP["$name:$t"]:-}" ]; then
+        printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" "$t" "-" "skipped" "-" "-"
+        continue
+      fi
       printf '  %-16s %-11s %10s %8s %12s %10s\n' "$name" "$t" \
         "${MED["$name:$t"]}" "${RATIO["$name:$t"]}x" "${RSS["$name:$t"]}" "${RSS_RATIO["$name:$t"]}x"
     done
@@ -505,6 +596,10 @@ compare_baseline() {
   local warns=0 name t cur basev delta verdict
   for name in "${ORDER[@]}"; do
     for t in $TARGETS; do
+      if [ -n "${SKIP["$name:$t"]:-}" ]; then
+        printf '  %-16s %-11s %-7s %10s %10s %10s  %s\n' "$name" "$t" wall "-" "-" "-" "skipped(${SKIP["$name:$t"]})"
+        continue
+      fi
       # 墙钟
       cur=${RATIO["$name:$t"]}
       basev=$(baseline_ratio "$name" "$t" wall)

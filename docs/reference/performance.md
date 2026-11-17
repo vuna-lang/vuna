@@ -658,6 +658,47 @@ native 的 TCO / GC 验证项。**GC 与 TCO 均已落地**；下表「前」列
   （如 `list_recursion` 的拆半递归）仍为 false，那不是 TCO 漏覆盖——闭包调用、
   `rt_apply`、`rt_*` 与源级 `let`（降级成 lambda 应用）都不在覆盖面内。
 
+### 8.3 wasm 后端（浏览器路径：JS 宿主 / V8）
+
+wasm 产物由仓库自带的 JS 宿主执行（`test/suite/fixtures/wasm_js_host/run.mjs`，Node/V8；
+与浏览器同一套 `WebAssembly` API 和 host 层），不走 wasmtime——后者的删除条件见
+[debt.md](debt.md) D102。`--target wasm`（或 `--target all`）跑同一批 16 个程序。
+
+本机一档（`--target all --runs 5 --warmup 2`，同窗口；绝对 ms / RSS 只作同机对比）：
+
+| benchmark | wasm ms | native ms | OCaml 后端 ms | 手写 ms | wasm/手写 | native/手写 |
+| --- | --- | --- | --- | --- | --- | --- |
+| arith | 88 | 48 | 6 | 5 | 17.6x | 9.6x |
+| string_ops | 26 | 5 | 4 | 3 | 8.7x | 1.7x |
+| hashmap | 36 | 14 | 7 | 3 | 12.0x | 4.7x |
+| records | 67 | 50 | 14 | 7 | 9.6x | 7.1x |
+| float_math | 55 | 85 | 14 | 8 | 6.9x | 10.6x |
+| nat_bits | 40 | 17 | 5 | 4 | 10.0x | 4.3x |
+| tco_mutual | 34 | 27 | 5 | 5 | 6.8x | 5.4x |
+| tco_wide | 61 | 31 | 4 | 4 | 15.3x | 7.8x |
+| gc_low_live | 858 | 323 | 295 | 346 | 2.5x | 0.9x |
+| gc_array_churn | 467 | 1399 | 200 | 131 | 3.6x | 10.7x |
+| list_recursion / gc_pressure / array / closures / sorting / text_scan | `run_ok=false` | 71 / 96 / 34 / 92 / 48 / 33 | 11 / 32 / 15 / 12 / 26 / 6 | 13 / 27 / 16 / 9 / 19 / 5 | — | — |
+
+口径（读数前先看）：
+
+- **宿主启动地板**：每项都含 node 启动 + 模块实例化，JSON `meta.node_startup_ms`
+  （本机 ~18 ms）。小项先减地板再看：`tco_mutual` 34 − 18 ≈ 16 ms、`string_ops` ≈ 8 ms。
+- **V8 的 wasm 栈约 1 MB 且没有开关**（`node --stack-size` 不改变 wasm 栈，开大直接
+  SIGSEGV）：上表六个非尾深递归程序以 `Maximum call stack size exceeded` 收口，JSON 记
+  `"run_ok": false, "skip_reason": "run"`。浏览器同此——这是浏览器路径的实际执行边界，
+  不是测量设施的限制。
+- **RSS 不可比**：wasm 列是 node 进程量级（~55 MB 起），`gc_low_live` 的 ~800 MB 是 wasm 侧
+  只增不减的线性内存；与 native「栈页 + live 堆」、OCaml「GC 高水位」不是一个口径。
+- **引擎/宿主版本是一阶变量**：同一份 `main.wasm` 的 `arith` 在 wasmtime 41.0.3 上是 2.1 s、
+  50.0.0 上是 0.11 s。基线只与 `meta.node` + `meta.wasm_host_runner` 同版本可比。
+
+读法（减掉 ~18 ms 地板）：**V8 在 `float_math`（37 vs native 85）、`gc_array_churn`
+（449 vs 1399）与 `tco_mutual`（16 vs 27）上快过 native，`records` 基本持平**；native 领先
+`arith`（70 vs 48）、`string_ops`、`hashmap`、`tco_wide`、`gc_low_live`。差异来源与 native 的
+既有缺口一致：native 无寄存器分配、每个算术/比较都是一次运行时调用，而 V8 有优化编译器；
+native 赢在「调用少、字符串/栈传参多」的形状（§3）。
+
 ## 9. 编译器基准
 
 `sh bench/compiler.sh`（仓库根；`--runs N` / `--check` / `--save-baseline` / `--alloc`）测
