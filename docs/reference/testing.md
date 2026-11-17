@@ -478,9 +478,15 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
     <main.wasm> --expect 'hi2<换行>'
   ```
   沙箱里跑（缺可写 HOME 时 Crashpad 会 SIGTRAP）已经带 `--disable-crash-reporter` /
-  `--disable-breakpad` 与临时 HOME；如果以后要在 CI 里落实，优先接
-  `pkgs.playwright-driver`（nixpkgs 的 Playwright 浏览器是打过补丁、可用
-  `PLAYWRIGHT_BROWSERS_PATH` 驱动的构建）。
+  `--disable-breakpad` 与临时 HOME。浏览器用 **`pkgs.playwright-driver` 的 chromium**
+  （nixpkgs 打过补丁的 Playwright 构建，约 356 MB；`pkgs.chromium` 的闭包是 1.8 GB）：
+  ```console
+  CHROME="$(nix build nixpkgs#playwright-driver.browsers-chromium --no-link --print-out-paths)/chromium-*/chrome-linux64/chrome"
+  VUNA_CHROMIUM=$CHROME node test/suite/fixtures/wasm_js_host/browser.mjs <main.wasm> --expect 'hi2<换行>'
+  ```
+  这条路径**不进 `nix flake check`**：把浏览器放进 derivation/包装脚本时，在这个环境里会撞到
+  两个未收敛的问题——stdout 重定向会让 Playwright 的 chrome 包装脚本挂住；在 `nix run`
+  包装里则会收到 SIGTERM。validate 那一半是硬门，浏览器实跑保持「本地/按需」。
 - `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
   先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
   gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；

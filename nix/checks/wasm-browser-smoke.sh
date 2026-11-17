@@ -8,7 +8,7 @@
 set -eu
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/wasmbr.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT INT HUP TERM
+trap 'rm -rf "$tmp"' EXIT
 
 build_pkg() {
   d=$1
@@ -58,20 +58,25 @@ fi
 # 3) headless Chromium 冒烟（缺浏览器时 SKIP，与 108 的 Node SKIP 同风格）。
 CHROME=${VUNA_CHROMIUM:-}
 if [ -n "$CHROME" ] && [ -x "$CHROME" ]; then
-  if ! VUNA_CHROMIUM="$CHROME" node test/suite/fixtures/wasm_js_host/browser.mjs \
+  # 用命令替换收集输出（`>file` 重定向下 Playwright 的 chromium 包装脚本会挂住）。
+  browser_log=""
+  if browser_log="$(VUNA_CHROMIUM="$CHROME" node test/suite/fixtures/wasm_js_host/browser.mjs \
     "$tmp/host/out/main.wasm" --expect 'hi2
-' >"$tmp/browser.log" 2>&1; then
-    if grep -q "exited early\|endpoint timeout\|ENOENT\|spawn" "$tmp/browser.log"; then
-      # 构建沙箱里浏览器可能起不来（缺 /dev/shm、seccomp 等）：按 SKIP 处理，
-      # validate 那一半仍然是硬门。
-      echo "SKIP chromium cannot start in this environment:"
-      sed 's/^/     /' "$tmp/browser.log" | head -14
-    else
-      sed 's/^/     /' "$tmp/browser.log"
-      exit 1
-    fi
+' 2>&1)"; then
+    printf '%s\n' "$browser_log" | sed 's/^/     /'
   else
-    sed 's/^/     /' "$tmp/browser.log"
+    case "$browser_log" in
+      *"exited early"* | *"endpoint timeout"* | *"ENOENT"* | *"spawn"*)
+        # 构建沙箱里浏览器可能起不来（缺 /dev/shm、seccomp 等）：按 SKIP 处理，
+        # validate 那一半仍然是硬门。
+        echo "SKIP chromium cannot start in this environment:"
+        printf '%s\n' "$browser_log" | sed 's/^/     /' | head -14
+        ;;
+      *)
+        printf '%s\n' "$browser_log" | sed 's/^/     /'
+        exit 1
+        ;;
+    esac
   fi
 else
   echo "SKIP chromium not found"
