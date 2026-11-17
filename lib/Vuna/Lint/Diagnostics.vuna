@@ -24,9 +24,9 @@ export data LintRule(..) : Type where
   DispatchLift : LintRule
   -- | 闭合 cons 链与裸 `Nil` 应写成列表字面量。
   ListLiteral : LintRule
-  -- | 注释里出现 TODO / FIXME / XXX 标记（默认关闭，strict 预设可选）。
+  -- | 注释里出现 TODO / FIXME / XXX 标记（默认关闭，all 预设可选）。
   TodoMarker : LintRule
-  -- | `if True` / `if False` 常量条件（默认关闭，strict 预设可选）。
+  -- | `if True` / `if False` 常量条件（默认关闭，all 预设可选）。
   RedundantIf : LintRule
 
 -- | 规则的稳定符号（`LN_` 前缀 + 驼峰），文档与索引按它引用规则。
@@ -84,9 +84,9 @@ lintDesc DispatchLift =
 lintDesc ListLiteral =
   "表达式/类型位置的闭合 cons 链与裸 `Nil` 应写成 `[a, b]` / `[]`；模式匹配里的 `::`/`Cons` 不受影响。"
 lintDesc TodoMarker =
-  "注释里的 TODO / FIXME / XXX 标记应在合入前处理；默认关闭，strict/all 预设或 --select 启用。"
+  "注释里的 TODO / FIXME / XXX 标记应在合入前处理；默认关闭，all 预设或 --select 启用。"
 lintDesc RedundantIf =
-  "`if True` / `if False` 的常量条件可直接化简；默认关闭，strict/all 预设或 --select 启用。"
+  "`if True` / `if False` 的常量条件可直接化简；默认关闭，all 预设或 --select 启用。"
 
 -- | 该规则是否可自动修复（可修复的规则会派生 `FX_` 修复码）。
 export lintFixable : LintRule -> Bool
