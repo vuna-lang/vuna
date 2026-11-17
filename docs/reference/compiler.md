@@ -278,7 +278,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 与 `if`/`let`（表示类别来自 `Base.Intrinsics.canonicalFamilies` 的 `FamilyRepr`；
 `Lowering.Program` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
-**例外（`res op` 这类擦除依赖）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用）
+**例外（`resIdx i o` 这类擦除依赖）**：运行时类型在 OCaml 里不可命名时（卡住的类型族应用）
 整个字段用不透明值 `Obj.t`、构造子实参插 `Obj.magic`（判据 `ctorOpaqueFlagsOf`）；表达式
 位置的 binder 使用由精化器插隐藏 cast `prim_erase`（求值期恒等消去）。见
 [effects.md](effects.md) §5。`Elab.Usage` 另做整程序用量检查（QTT 0/1/ω，见

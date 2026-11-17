@@ -30,18 +30,15 @@
 ## 2. 表示
 
 ```vuna
--- 效应 = 操作类型 + 结果族
-data ConsoleOp : Type where
-  Print : String -> ConsoleOp
-
-resConsole : ConsoleOp -> Type
-resConsole (Print _) = Int
+-- 效应 = 以结果类型为最后索引的操作族
+data ConsoleOp : Type -> Type where
+  Print : String -> ConsoleOp Nat
 
 -- 实例名可选：`Member n e r =>` 生成隐式 String 名 + 行成员证明；
 -- 名字并进标签（行条目是 `Named n e`），调用点不写名字（行裸标签 = default），
 -- `consolePrint@audit` 显式选。
-consolePrint : Member n ConsoleOp r => String -> Eff r Int
-consolePrint s = perform (Print s)
+consolePrint : Member n ConsoleOp r => String -> Eff r Nat
+consolePrint s = perform (Print s)   -- 结果类型 = op 的索引
 
 -- handle：作用域 handler 块，续延显式（k = one-shot resume）
 runProgram : {n : String} -> {r : Row} -> Eff (Named n ConsoleOp :: r) a -> Eff (rowRem (Named n ConsoleOp) r) a
@@ -61,12 +58,12 @@ main : Eff [] Nat
 | 效应描述 | `Row`（`Nil` / `(::)`）、`Named` / `Member` 是 Type-1 数据；名字求解是编译器规则（§3.2） |
 | 效应执行 | `perform`/`handle` 降级到 `performCore` / `handleWith`（`handleWithAt`），落到同一对 intrinsic `prim_effectPerform` / `prim_effectHandle` |
 | key | op 族规范名（编译器推导，send / handle 两侧由构造保证一致） |
-| 实例名 | 名字进标签 `Named : String -> Type -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
-| 行标签 | 标签 = op 族应用（`ConsoleOp`、`StateOp Nat`），实例名在外层 `Named`；`Exn` 是无参标记类型 |
+| 实例名 | 名字与签名进标签 `Named : String -> (Type -> Type) -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
+| 行标签 | 标签 = 命名后的效应签名（`Named "audit" ConsoleOp`、`Named "counter" (StateOp Nat)`）；op 族以结果类型为最后索引（`ConsoleOp : Type -> Type`、`StateOp : (s : Type) -> Type -> Type`） |
 | 权威 | 宿主 op 构造器不导出；`prim_eff_*` 是宿主层逃生口（无 manifest 门控，见 [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62） |
 | 纯效应 | 库级 monad 与 mock handler 并存；interp 可执行 mock 程序 |
 | 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（[debt.md](debt.md) D42） |
-| `res op` 擦除 | `Obj.t` + 恒等 cast；残留边界见 [debt.md](debt.md) D27 |
+| handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（[debt.md](debt.md) D27） |
 
 决策（本文内以名字互相引用）：
 
@@ -86,8 +83,11 @@ main : Eff [] Nat
 - **key = op 族规范名**：`perform (Print s)` 的 key = `"Base.EffConsole.ConsoleOp"`（op
   数据族的规范名）；handle 侧同规则推导。运行时 `(key, name)` 路由不变，只换 key 的取值
   来源。
-- **res 族协议**：`perform o` 的结果类型 = `res<族短名> o`（沿用
-  `resConsole`/`resFs`/`resExn` 命名约定，作为编译器协议：族模块内查全局 `res ++ 族短名`）。
+- **结果索引协议**：op 族必须以结果类型为最后索引（`<Op> : params… -> Type -> Type`）；
+  `perform o` 的结果类型就是 op 的索引，不再按上下文猜。
+- **效应签名（`EffSig`）**：`handle`/`perform` 的降级点把「族应用」包成擦除量
+  `sigFn (\i => <Op> <params…> i)`；`sigOf sig i` 在类型位置取回族。这样 handler/行解都能
+  拿到族，而族名不会进入运行时。
 - **`handle` 的 op 族从 clause 构造子推断**：所有 clause 头构造子必须同族，否则编译错误；
   族名不需要显式写出。
 - **one-shot 不变**：multi-shot 不做；线性续延由 QTT 管（见 [debt.md](debt.md) D42）。
@@ -102,8 +102,8 @@ main : Eff [] Nat
 
 | 写法 | 降级目标 |
 | --- | --- |
-| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" <op 族应用> (Print s)`，结果类型由上下文定 |
-| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" <op 族应用> (Base.Eff.resFn (\o => <res族> <族参数洞…> o)) comp (\x => e1) (\o, k => case o of { C p => e2 })` |
+| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" (Base.Eff.sigFn (\i => ConsoleOp i)) (Print s)`，结果类型 = op 的索引 |
+| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" (Base.Eff.sigFn (\i => <Op> <族参数洞…> i)) comp (\x => e1) (\i, o, k => case o of { C p => e2 })` |
 | `[ConsoleOp]` | `Named "default" ConsoleOp :: Nil`（裸标签补默认名） |
 | `[ConsoleOp@audit]` | `Named "audit" ConsoleOp :: Nil` |
 | `[StateOp Nat@counter]` | `Named "counter" (StateOp Nat) :: Nil`（参数化标签的 `@` 作用于完整标签表达式） |
@@ -113,22 +113,21 @@ main : Eff [] Nat
 ```vuna
 handle comp {
   return x -> retFn            -- 可省略；省略时 ret = \x => x
-  Ctor pats k -> body          -- \o, k => case o of { Ctor pats => body }
+  Ctor pats k -> body          -- \i, o, k => case o of { Ctor pats => body }
 }
 ```
 
-- 合成 λ 的第二个参数就是续延 `k`：alt 的 pattern **只含构造子实参**，不补通配；
-  `k` 的类型是 `resOf rf (Ctor pats)`，依赖匹配下按构造子索引收窄。续延是 ω，线性化未做
+- 合成 λ 的第一个参数是结果索引（隐式擦除），第二个是 op，第三个是续延 `k`：alt 的
+  pattern **只含构造子实参**，不补通配；`k` 的类型是 `resIdx i (Ctor pats)`（归约到该
+  构造子的结果索引），依赖匹配下按构造子索引收窄。续延是 ω，线性化未做
   （[debt.md](debt.md) D42）。同一 handle 块的所有 op 子句共用一个续延 binder 名。
-- `handleWith` 的 handler 类型显式写成 `(o : e) -> (resOf rf o -> b) -> b`，这是
-  `handleCore` 的裸 `h : Type` 做不到的（否则 clause 里的 `case o of ...` 拿不到族、`k`
-  拿不到续延域）。`rf` 是**擦除量**：结果族 `e -> Type` 不能作显式类型实参（类型域不接受
-  `(0 res : op -> Type)`，不标擦除则把 `resXxx` 名字带进运行时），所以用
-  `Base.Eff.ResFn` 包装、由 base 函数 `resFn` 构造（构造子名在精化期按规范名查不到）。
-- **参数化 op 族**（State/Reader 的 `k = 1`，Console 等 `k = 0`）：族约定一致——
-  `<Op> : <params…> -> Type`、`res<短名> : <params…> -> <Op> -> Type`。标签 = op 族应用，
-  降级点按 `k` 给标签/op 补洞；族参数由行条目（如 `StateOp Nat` 的 `Nat`）与 op 的类型解出；
-  `res` 用 η-λ `\o => res<族> ?p1 … ?pk o` 现场解族参数（不能直接传多态族名）。
+- `handleWith` 的 handler 类型显式写成 `(i : Type) -> (o : sigOf sig i) -> (resIdx i o -> b) -> b`，
+  这是 `handleCore` 的裸 `h : Type` 做不到的（否则 clause 里的 `case o of ...` 拿不到族、`k`
+  拿不到续延域）。`sig` 是**擦除量**（类型级函数不能作显式类型实参）；`resIdx` 是索引投影，
+  让 `k` 的域在分支内可归约、在 codegen 侧保持不透明（见 [effects.md](effects.md) §5）。
+- **参数化 op 族**（State/Reader 的 `k = 1`，Console 等 `k = 0`）：
+  `<Op> : <params…> -> Type -> Type`；标签 = `Named n (<Op> <params…>)`，降级点按 `k` 给
+  族参数补洞；结果索引由构造子匹配收窄。
 - **行多态 comp**（`handle (pure e) { … }`、内联 do 块）：`handleWith` 的 `r` 仍未解、
   结果行 `rowRem (Named n e) r` 归约不了，check 位置失败后改降级到 `Base.Eff.handleWithAt`：
   comp 的行被定成 `Named n e :: er`（条目在行首）、名字取默认实例名（`"default"`）、结果行就是
@@ -173,11 +172,11 @@ handle comp {
 | `Loader` | 无专门分支：parser 已把 handle 降到 markers + 普通 λ/case，Loader 只做常规名字解析（构造子解析成规范名/over 名，供族推断） |
 | `Base/Intrinsics.vuna` 效果协议常量 | `Row.Nil` / `Row.(::)` 二元、`Named`、`Member` 2 参（条目 + 行）、`effDefaultInstance = "default"`；`perform`/`handle` 的 key 由降级点生成 |
 | `Elab/Dict.vuna` `memberLookupRow`/`resolveRowGoalsCtx`/`resolveDictGoals` | 条目索引（`Named n e` 或裸标签）+ §3.2 探测计数求解（无贪婪匹配；候选文本用实例名；无最终化默认兜底） |
-| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（跨族报 `TC_HandleClauseFamilyMismatch`）、**标签 = op 族应用**（`handleOpArg canon k`）、res = `res<短名>`、按 op 族 kind 的显式参数个数 `k` 补洞（State/Reader `k = 1`；非宇宙域参数如 `ExnOp` 的 `Row` 报 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
+| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（跨族报 `TC_HandleClauseFamilyMismatch`）、构造 `sigFn (\i => <Op> ?p… i)`、按 op 族 kind 的显式参数个数 `k` 补洞（State/Reader `k = 1`；非宇宙域参数如 `ExnOp` 的 `Row` 报 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
 | `Core/Eval.vuna` `rowRemReduce` | `VCon consName (h :: t :: _)` 匹配条目与尾行；比较前对条目（含 `Named` 的名字与 label 一层 spine 实参）做 `force`——已解 meta 在值里仍是 `VMeta` 节点，不 force 就永远比较不出相等（`handle` 的结果行依赖这一点） |
 | `Elab/Term/Impl.vuna` `rowEffectLabels` | 行条目展示默认名省略（`ConsoleOp`）、显式名写 `<短标签>@<名字>`（`ConsoleOp@audit`、`StateOp Nat@counter`）；歧义候选显示实例名 |
 | `Base/Diagnostics/{Tc,Frontend}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`、`TC_HandleClauseFamilyMismatch`、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
-| `Base.Eff`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`ResFn(..)`/`resFn`/`resOf`/`performCore`/`handleWith`/`handleWithAt`（`e` 同时作标签与 op 类型、`rf` 擦除量、`{w : Member (Named n e) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用 op 族标签 |
+| `Base.Eff`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`EffSig`/`sigFn`/`sigOf`/`resIdx`、`performCore`/`handleWith`/`handleWithAt`（`sig` 擦除量、`{w : Member (Named n (sigOf sig)) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用「结果类型索引」的 op 族 |
 
 不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerform`/`prim_effectHandle` 语义、
 `Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
@@ -206,8 +205,8 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
   `vuna interp` 可跑 mock 效应程序，mock/real 对拍变成 interp vs 产物。
 - 续延类型化未做：`k` 当前是 ω，线性续延 / 一次性闭包的 QTT 类型化见
   [debt.md](debt.md) D42。
-- `res op` 在用户类型面上的残留（漏 cast 边界、trait 自动 λ 插入点）见
-  [debt.md](debt.md) D27。
+- handler 续延域用索引投影 `resIdx i o` 保持「不透明擦除值」（漏 cast 边界、trait
+  自动 λ 插入点）见 [debt.md](debt.md) D27。
 
 ## 6. 箭头行 direct-style（未实现）
 
@@ -240,7 +239,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 - 歧义负例：`dt_err/108_eff_ambiguous_console`（ConsoleOp 两实例 + 裸 `perform`）与
   `dt_err/109_eff_ambiguous_state`（`StateOp Nat` 两实例，覆盖参数化标签探测计数）
   → `TC_AmbiguousInstance`，候选显示实例名。
-- 负例：res 族缺失 → `TC_EffResFamilyMissing`（`dt_err/98`、`101`）；clause 构造子跨族
+- 负例：op 族不是结果索引 → `TC_HandleFamilyUnsupported`（`dt_err/98`、`101`）；clause 构造子跨族
   → `TC_HandleClauseFamilyMismatch`（`99`）；作用域/高阶 op 族（Exn）
   → `TC_HandleFamilyUnsupported`（`100`）；子句不穷尽 → `TC_NotExhaustive`（`102`）；
   续延 binder 名不一致 → `PS_…`（`103`）；return 子句位置错 →
@@ -293,19 +292,18 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   4. **`performCore` 的签名形状**：保持显式 `(n : String)`；隐式 String 实例名（RigΩ，见
      §10）合法，但类型级函数（label / res）仍不能作为显式参数传（类型域又禁止写
      `(0 x : T)` 显式擦除量）。形状是
-     `(n : String) -> (key : String) -> (e : Type) -> {r} -> {w : Member (Named n e) r} -> {x} ->
-     (o : e) -> Eff r x`（标签与 op 同型）；`handleWith` 的 `{w}` 放在 `comp` 之后、
+     `(n : String) -> (key : String) -> (0 sig : EffSig) -> {r} -> {w : Member (Named n (sigOf sig)) r} ->
+     {i : Type} -> (o : sigOf sig i) -> Eff r i`；`handleWith` 的 `{w}` 放在 `comp` 之后、
      `ret`/`opH` 之前，先由行解出标签参数，避免 handler 体里的字面量先默认成 `Int`。
-     `res` 族只做存在性协议校验。
+     结果类型来自 op 的索引，不再由上下文推断。
   5. **key 配对**：`perform` 与 `handle` 的 key 都是 op 族规范名，二者配对；base 里手写
      `"console"`/`"state"`/`"reader"` 等 key 的 wrapper（`get`/`put`/`ask`/`runConsole`…）
      **不**配对（[debt.md](debt.md) D57），所以参数化族的语法夹具用 `perform` 而不是
      `get`/`ask` 写程序。
-  6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type`、
-     `res<Label> : <params…> -> <Op> -> Type`。降级点按 op 族 kind 数**显式参数个数 `k`**：
-     `k` 给标签/op 补洞，结果族用 η-λ `\o => res<族> ?p1 … ?pk o` 现场解族参数（State/Reader
-     `k = 1`，Console 等 `k = 0`）。标签/结果族 arity 与 `k` 不符即
-     `TC_HandleFamilyUnsupported`：只剩**作用域/高阶族** Exn
+  6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type -> Type`。
+     降级点按 op 族 kind 数**显式参数个数 `k`**（不含末尾结果索引）：`k` 给族参数补洞，
+     签名用 `sigFn (\i => <Op> ?p1 … ?pk i)` 现场解族参数（State/Reader `k = 1`，
+     Console 等 `k = 0`）。族形状不符即 `TC_HandleFamilyUnsupported`：只剩**作用域/高阶族** Exn
      （`ExnOp : String -> Row -> Type -> Type`，第一个显式参数域是 `Row` 而非宇宙）不支持，
      继续用手写 handler（[debt.md](debt.md) D54）。`Exn` 的行标签是无参标记 `Exn`；
      `ExnOp` 保留 String 索引只为构造子参数匹配，不参与 `perform`/`handle`。`perform` 走

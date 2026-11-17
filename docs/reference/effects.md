@@ -3,7 +3,7 @@
 **现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
 入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只有
 `prim_eff_*`（`Eff []`）；宿主层就是直接调用这些原语（任何包都可直调），
-Int/Nat 归一化只留在 `Base.Eff.*` handler 的 result 族（`Print`、`WriteFile`/`FileSize` 返回
+Int/Nat 归一化只留在 `Base.Eff.*` handler 的结果索引（`Print`、`WriteFile`/`FileSize` 返回
 `Nat`，直接调用原语得到 `Int`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
@@ -61,7 +61,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | --- | --- | --- |
 | 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
 | handler 层 | entry 自动预装的行 handler（`@vuna@` 内部名） | 用户面写不出 handler 名字；`main` 行有内建标签时由编译器嵌套预装 |
-| 宿主层 | `@vuna@prim_eff_*`（隐藏 intrinsic，源码写不出） | 直接调用即得 `Eff []` 动作；Int/Nat 归一化只在 Eff handler 的 result 族；没有 manifest 能力/信任门控 |
+| 宿主层 | `@vuna@prim_eff_*`（隐藏 intrinsic，源码写不出） | 直接调用即得 `Eff []` 动作；Int/Nat 归一化只在 Eff handler 的结果索引；没有 manifest 能力/信任门控 |
 
 - **代数**：`Monad (Eff r)` / `Applicative` / `Functor` 实例已内建；用户用 `pure` / `do` /
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。
@@ -90,18 +90,16 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 5. 表示轴：不透明擦除值
 
-目标设计是**签名索引的效应 monad**：
-`Eff (f : Type) (res : f -> Type) (ans : Type) (a : Type)`，op 是 `f` 的值、每个 op 的
-结果类型由 `res` 族给出，handler 是深代数 `(op : f) -> (res op -> ans) -> ans`。
+当前表示是**结果索引的效应行**：`Eff r a` 只是擦除后的 thunk；op 族以结果类型为最后
+索引（`ConsoleOp : Type -> Type`），`perform o` 的结果 = `o` 的索引；handler 形如
+`(i : Type) -> (o : f i) -> (resIdx i o -> b) -> b`。
 
-表示层的障碍在**擦除后端**，不在类型检查——CPS 版生成的 `.ml` 里续延域 `res op` 会被
-渲染成 `unit`，而 handler 里的续延是 `int -> …` → `ocamlopt` 类型错误
-（`C_Eff_MkEff of ((('a2) -> 'a1) -> (('a0) -> ((unit) -> 'a1) -> 'a1) -> 'a1)`）。
-
-**最小实现**：采用 §6 的路线 2「后端不透明擦除值」，异构结果类型的 CPS `Eff` 可
-`check` + `compile` + 运行，且 interp 与产物逐字节一致（夹具
-`test/corpus/dt/82_eff_cps.vuna` / `83_eff_cps_two_instances.vuna` /
-`84_eff_cps_result.vuna`）：
+- **为什么还需要 `resIdx`**：handler 对每个构造子要拿到不同的续延域（`Print` 是 `Nat`、
+  `EPrint` 是 `Int`）。直接写 `i -> b` 时，OCaml 会把同一个 `k` 单态化成第一个分支的
+  `i`（普通 variant 没有 GADT 收窄），生成的 `.ml` 在其它分支类型错。
+- **做法**：`resIdx i o`（`resIdx i o = i`）在类型层可归约到分支索引，但它的类型头是
+  类型族定义 → codegen 按「不可命名的运行时类型」处理，续延域渲染成 `Obj.t`/恒等 cast。
+  这与旧 `res` 族的表示机制相同，只是现在只有一个索引投影，不再每个效应写一份结果族。
 
 | 位置 | 表示 | 机制 |
 | --- | --- | --- |
@@ -112,16 +110,19 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 **判据（elab 与 codegen 同源，`Elab.Meta.valueOpaqueScoped`）**：运行时类型不可命名 ⇔
 类型头不可表示：
 - 全局类型头既不是数据族、也不是 `Int` / `String` / `Array` / `IORef`
-  （即类型族定义 / axiom / 未知全局）；
-- 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`res : f -> Type`；`m : Type -> Type`
-  这类普通类型构造子参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
+  （即类型族定义 / axiom / 未知全局；`resIdx`、`sigOf` 属于这一类）；
+- 或**类型族参数**：kind 的 Pi 链里出现非宇宙域（`m : Type -> Type` 这类普通类型构造子
+  参数**不算**，所以字典方法字段 / base 泛型代码不受影响）；
 - 数据族的**索引值实参**（`Vec (Succ n) a` 的 `Succ n`）是擦除后的索引，不参与判定；
 - 已知边界：精化期未解的元变量按可表示处理（可能漏 cast）；trait 自动生成的 λ
   （方法投影 / 实例 tele）不在插入点覆盖范围内（[debt.md](debt.md) D27）。
 
 **注意这不是 QTT 能解决的**：续延是**真的运行时函数**（要被 handler 以真实值调用），
-`res op` 是类型级、按擦除纪律 0 用量、在 OCaml 里不可命名；QTT 只把 0/1/ω 用量写精确，
-不会让 OCaml 写出 `res op` 的静态类型。表示轴用「不透明值 + 恒等 cast」绕开它。
+`resIdx i o` 是类型级、按擦除纪律 0 用量、在 OCaml 里不可命名；QTT 只把 0/1/ω 用量写精确，
+不会让 OCaml 写出它的静态类型。表示轴用「不透明值 + 恒等 cast」绕开它。
+
+依赖擦除类型的旧 CPS 编码仍由 `test/corpus/dt/82_eff_cps.vuna` / `83_eff_cps_two_instances.vuna` /
+`84_eff_cps_result.vuna` 覆盖；它们验证同一套不透明值机制。
 
 **结论**：表示层的阻塞已消除；剩余边界见 §9 与 [debt.md](debt.md)。
 
@@ -130,7 +131,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 路线 | 解决什么 | 不解决 / 代价 |
 | --- | --- | --- |
 | **完整 QTT**（依赖 multiplicity、线性/唯一） | 线性 record 的「句柄不复制/恰好用一次」、一次性续延（取消/超时）、线性世界令牌 | **不解决**擦除依赖续延的运行时表示（§5）；类型理论 + 编译器 + base + 语法面全量改动 |
-| **后端不透明擦除值**（`Obj.t` 类 + codegen 转换/cast） | 让 `res op` 这类「擦除依赖」位置有统一运行时表示，通用 `Eff` 才可编译 | 声明位置 `Obj.t`、表达式位置恒等 cast（§5）；残留边界见 [debt.md](debt.md) D27 |
+| **后端不透明擦除值**（`Obj.t` 类 + codegen 转换/cast） | 让 `resIdx i o` 这类「擦除依赖」位置有统一运行时表示，秩二 handler 续延才可编译 | 声明位置 `Obj.t`、表达式位置恒等 cast（§5）；残留边界见 [debt.md](debt.md) D27 |
 | **运行时类型码**（Tarski `Ty`/`Tm` 上移为通用机制） | 显式携带类型信息，彻底绕开「不可命名」 | 语言层引入 type codes（当前明确不在终态）、运行时开销、与擦除判据整合 |
 
 - 三者不是互斥：QTT 解决**作用/线性**轴，后两者解决**表示**轴。
@@ -218,11 +219,11 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
+| `Base.Eff` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
 | `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
 | `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
@@ -386,7 +387,7 @@ net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin
 | 缺口 | 内容 | 入口 |
 | --- | --- | --- |
 | 线性 / 依赖 multiplicity | 多射续延不做；通用线性箭头与依赖 multiplicity 未做（线性值经 ω 形参通用函数被拒，库 API 需显式 `(1 x : …)`） | [debt.md](debt.md) D22 |
-| 表示轴残留 | CPS `Eff` 的 `res op` 用不透明值 + 恒等 cast 编译；精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖 | [debt.md](debt.md) D27 |
+| 表示轴残留 | handler 续延域的 `resIdx i o` 用不透明值 + 恒等 cast 编译；精化期未解 meta 的漏 cast 边界、trait 自动生成 λ 的插入点未覆盖 | [debt.md](debt.md) D27 |
 | 信任入口 | `runEff` 内部入口接受任意行；运行时 `unhandled effect` 兜底仍服务库内部路径 | [debt.md](debt.md) D37 |
 | 并行 | 无 Domain 并行、无父 fiber handler 继承 | [debt.md](debt.md) D41 |
 | 调度器边界 | 取消只在挂起点生效、清理有 64 步宽限后硬中止；TaskLin 恰好一次 await/cancel；Mutex/Semaphore/Channel 为 cooperative 忙等；超时是逻辑步数；任务体只能 `Eff Nil a`（`forkTaskWith` 显式 handler，但无法继承父 fiber handler 栈） | [debt.md](debt.md) D44 |

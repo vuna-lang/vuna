@@ -157,8 +157,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   rig 只由精化决定，codegen 不再推导。
 - **类型族**（结果以 `Type` 收尾的 Pi 链，如 `sel : Nat -> Type`）整体擦除，不生成运行时
   定义；在运行时定义里把擦除参数当值用报错。
-- **擦除依赖类型的运行时表示（`res op` 这类位置）**：类型族应用出现在**运行时位置**时
-  （典型是续延的参数类型 `res op -> ans`），OCaml 侧无法命名该类型，按「不透明擦除值」
+- **擦除依赖类型的运行时表示（`resIdx i o` 这类位置）**：类型族应用出现在**运行时位置**时
+  （典型是续延的参数类型 `resIdx i o -> ans`），OCaml 侧无法命名该类型，按「不透明擦除值」
   处理：data 构造子字段渲染成 `Obj.t`，构造子实参插 `Obj.magic`，binder 的每个使用点
   插隐藏 cast `prim_erase`（求值期恒等消去）。判据与 codegen 同源（`valueOpaqueScoped`）：
   不可表示的全局类型头，或 kind 的 Pi 链含非宇宙域的**类型族参数**（`res : f -> Type`）；

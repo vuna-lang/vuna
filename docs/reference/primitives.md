@@ -358,7 +358,7 @@
 | `prim_eff_makeDir` / `prim_eff_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
 | `prim_eff_fileExists` | 路径不存在时为 `False` |
 | `prim_eff_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果族是 `Nat`） |
+| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果索引是 `Nat`） |
 | `prim_eff_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
 | `prim_eff_getcwd` | 失败时返回 `"."` |
 | `prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |

@@ -48,7 +48,7 @@
    Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
    执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
    宿主层 = 直接调用 `prim_eff_*`（`Base.Host` 已删除）；Int/Nat 归一化只在
-   `Base.Eff.*` handler 的 result 族（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
+   `Base.Eff.*` handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    `IORef` 实现全是 `Eff []`。
    **无 manifest 门控**：没有能力/特权/信任机制；任何包（含 ad-hoc 文件）都可直调
    `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Eff.*` 标签 + handler（纪律，不是门控，
