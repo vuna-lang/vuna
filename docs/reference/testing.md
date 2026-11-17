@@ -471,8 +471,8 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
 - `vuna-wasm-browser`：产物在**默认 wasm 特性**（`--features=-stack-switching`）下必须
   validate 通过；用户 handler 的产物必须仍被拒绝。Chromium 冒烟**不进 derivation**
-  （`pkgs.chromium` 的闭包有数千个 store 路径，首次 realization 很贵）；需要真实浏览器时
-  显式给 `VUNA_CHROMIUM`：
+  （`pkgs.chromium` 闭包约 336 个路径 / 1.8 GB；命中二进制缓存，但会进入每个 check 的输入
+  闭包与沙箱）；需要真实浏览器时显式给 `VUNA_CHROMIUM`：
   ```console
   VUNA_CHROMIUM=$(command -v chromium) node test/suite/fixtures/wasm_js_host/browser.mjs \
     <main.wasm> --expect 'hi2<换行>'

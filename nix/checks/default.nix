@@ -225,7 +225,8 @@ in
   };
 
   # 浏览器可跑面：默认特性 validate 是硬门。Chromium 冒烟故意**不进** derivation：
-  # `pkgs.chromium` 的闭包有数千个路径（首次 realization 很贵），普通 check 不背这个成本。
+  # `pkgs.chromium` 的闭包约 336 个路径 / 1.8 GB（命中 cache.nixos.org，但会进入每个
+  # check 的输入闭包与构建期沙箱），普通 check 不背这个体积。
   # 需要跑浏览器冒烟时按 testing.md 里的命令显式给 `VUNA_CHROMIUM`（本地/夜间）。
   vuna-wasm-browser = mkCheck {
     name = "vuna-wasm-browser";
