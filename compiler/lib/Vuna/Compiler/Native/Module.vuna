@@ -606,7 +606,8 @@ else if length (runtimeBinders bs) == 0 then genExpr (fuel - 1) st body
 else
   let
     rbs = runtimeBinders bs
-    caps = st.fgSlots
+    -- 同 wasm：env 按「最外层 → 最内层」排，入口 pushBinder 后最内层同名 binder 在表头。
+    caps = reverse st.fgSlots
     ncap = length caps
     idx = st.fgNextLabel
     lamName = "vuna_lam_${strFromInt idx}"

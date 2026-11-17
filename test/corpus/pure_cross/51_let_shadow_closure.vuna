@@ -1,0 +1,14 @@
+-- let 遮蔽后在其内部建闭包：捕获必须绑定到最内层同名 binder。
+g : Int
+g =
+  let
+    x = 1
+  in let
+    x = 2
+  in let
+    f : Int -> Int
+    f y = x
+  in f 0
+
+main : Int
+main = g

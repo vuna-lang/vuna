@@ -99,8 +99,15 @@ fsErrorText (FsIsDir p) = "fs: ${p}: is a directory"
 fsErrorText (FsExists p) = "fs: ${p}: already exists"
 fsErrorText (FsIo p) = "fs: ${p}: host I/O error"
 
+-- | 目录项规范化：去掉 `.` / `..` 并按字典序排序。
+--
+-- WASI `fd_readdir` 会原样返回这两个伪项，ocaml 的 `Sys.readdir` 与 native 的
+-- `dir_names` 不返回；这里统一在标签 handler 收口，三端 `fsReadDir` 语义一致。
+isDotEntry : String -> Bool
+isDotEntry name = name == "." || name == ".."
+
 sortEntries : List String -> List String
-sortEntries xs = sortBy (\a, b => a <= b) xs
+sortEntries xs = sortBy (\a, b => a <= b) (filter (\name => not (isDotEntry name)) xs)
 
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
 export fsReadFile : Member n FsOp r => String -> Eff r String

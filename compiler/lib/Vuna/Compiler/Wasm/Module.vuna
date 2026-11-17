@@ -449,7 +449,9 @@ genLamValue fuel st bs body = if fuel <= 0 then Err "wasm codegen fuel exhausted
 else
   let
     rbs = runtimeBinders bs
-    caps = st.gsScope
+    -- 捕获列表按「最外层 → 最内层」存 env：入口逐项 pushBinder（前插），
+    -- 反序后同名 binder 的最内层才落在作用域表头。
+    caps = reverse st.gsScope
     ncap = listLengthB caps
     n = st.gsNextLam
     lamName = "$lam${strFromInt n}"
