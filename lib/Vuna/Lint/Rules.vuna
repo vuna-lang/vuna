@@ -1818,27 +1818,30 @@ editContains big small =
     && big.editEnd >= small.editEnd
     && (big.editStart < small.editStart || big.editEnd > small.editEnd)
 
--- | 内部：big 的编辑范围是否包含 small 的编辑范围（任一缺编辑则不算）。
-findingHiddenBy : Finding -> Finding -> Bool
-findingHiddenBy big small = case big.findingEdit of
-  Nothing => False
-  Just bigEdit => case small.findingEdit of
-    Nothing => False
-    Just smallEdit => editContains bigEdit smallEdit
+-- | 内部：该 edit 是否被任一外层 edit 包含。
+coveredByEdit : List Edit -> Edit -> Bool
+coveredByEdit [] e = False
+coveredByEdit (outer :: rest) e = editContains outer e || coveredByEdit rest e
 
--- | 内部：该 finding 是否被已保留的某个 finding 的编辑范围覆盖。
-coveredBy : List Finding -> Finding -> Bool
-coveredBy [] f = False
-coveredBy (g :: rest) f = findingHiddenBy g f || coveredBy rest f
+-- | 内部：丢弃起点已过当前行的外层 edit（它们不可能再包含后续 finding）。
+pruneOpen : Int -> List Edit -> List Edit
+pruneOpen line [] = []
+pruneOpen line (e :: rest) =
+  if e.editEnd >= line then e :: pruneOpen line rest else pruneOpen line rest
 
--- | 内部：丢弃编辑范围被其他 finding 包含的内层 finding（保留外层那条）。
+-- | 内部：按 finding 顺序去重；只保留仍可能包含当前 finding 的外层 edit。
 dedupFindings : List Finding -> List Finding
 dedupFindings findings = dedupGo [] findings
 
 -- | 内部：`dedupFindings` 的累加器实现。
-dedupGo : List Finding -> List Finding -> List Finding
-dedupGo kept [] = reverse kept
-dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
+dedupGo : List Edit -> List Finding -> List Finding
+dedupGo open [] = []
+dedupGo open (f :: rest) =
+  let
+    open2 = pruneOpen f.findingLine open
+  in case f.findingEdit of
+    Nothing => f :: dedupGo open2 rest
+    Just e => if coveredByEdit open2 e then dedupGo open2 rest else f :: dedupGo (e :: open2) rest
 
 -- | 内部：`if True/False` 常量条件（默认关闭）。
 constantIfFindings : List String -> List PTok -> Expr -> List Finding
