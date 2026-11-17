@@ -20,9 +20,12 @@
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
 - native 不做尾调用优化，深递归基准在默认 8 MiB 栈上会崩溃。native 进程统一在
   `ulimit -s unlimited` 下运行，JSON `meta.stack_policy` 记录该口径；栈页计入峰值 RSS。
+- native 每个 benchmark 另记 `default_stack_ok`：固定 8 MiB soft limit 跑一次、记录能否正常
+  退出（探针不参与计时）。TCO 落地后 `tco_mutual` / `tco_wide` 等应从 false 变 true。
 - 跨机器只比较 `ratio = <backend>_median / ocaml_median` 与
   `rss_ratio = <backend>_max_rss / ocaml_max_rss`；绝对 ms/KB 不可比。`--check` 默认读
-  对应基线，对超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`（软告警、退出 0）。
+  对应基线，对超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`（软告警、退出 0），
+  并额外提示 `default_stack_ok` 的变化。
 - 编译器侧基准（`check compiler` / `check .` / `compile .`）与 runtime 基准共用同一脚本与
   JSON 结构；当前先由 `bench/bootstrap.sh` 记录编译墙钟，`bench/run.sh` 的 runtime 段不重复测量
   编译（含 `VN_PERF_STATS` 的分配/GC 读数）。
@@ -63,23 +66,27 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 
 | benchmark | 场景 | OCaml 后端 ratio | native ratio |
 | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.2x | ~82x（深非尾递归；见 §8.1） |
-| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.5x |
-| hashmap | 持久哈希表 + 字典派发 | ~1.8x | ~3.6x |
-| list_recursion | List 非尾递归 / fold / append | ~0.9x | ~3.7x |
-| gc_pressure | 分配压力（字符串 churn） | ~1.1x | ~1.8x |
-| array | 不可变 Array | ~0.9x | ~3.0x |
-| records | record 更新 + variant 分派 | ~2.0x | ~24x |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~1.2x | ~5.9x |
-| sorting | 归并排序（List + Pair 拆半） | ~1.3x | ~2.1x |
-| float_math | Float 算术 / sqrt / abs | ~1.8x | ~35x |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.7x | ~16x |
-| nat_bits | Nat 饱和算术 + 位运算 | ~1.9x | ~27x |
+| arith | Int 算术 + 尾递归 | ~1.2x | ~79x（深非尾递归；见 §8.1） |
+| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.7x |
+| hashmap | 持久哈希表 + 字典派发 | ~2.0x | ~2.8x |
+| list_recursion | List 非尾递归 / fold / append | ~0.8x | ~3.2x |
+| gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~1.7x |
+| array | 不可变 Array | ~0.9x | ~2.7x |
+| records | record 更新 + variant 分派 | ~2.1x | ~23x |
+| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | ~6.1x |
+| sorting | 归并排序（List + Pair 拆半） | ~1.5x | ~1.9x |
+| float_math | Float 算术 / sqrt / abs | ~1.9x | ~33x |
+| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~16x |
+| nat_bits | Nat 饱和算术 + 位运算 | ~1.3x | ~27x |
+| tco_mutual | 互递归尾调用 | ~1.0x | ~36x（栈帧；TCO 后应大幅下降） |
+| tco_wide | 9 参数尾递归 | ~1.3x | ~82x（栈帧；TCO 后应大幅下降） |
+| gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.9x（RSS 主判据） |
+| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~2.0x（RSS 主判据） |
 
-OCaml 后端全部基准在 2× 手写 OCaml 内；native 的绝对值与峰值内存见
-[performance.md §8](../docs/reference/performance.md)。分配 / GC 统计由 OCaml 后端生成
-runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；native 无 GC
-统计，只记峰值 RSS。
+OCaml 后端全部基准在 ~2× 手写 OCaml 内（最高的 `records` 约 2.1×）；native 的绝对值、峰值内存
+与 `default_stack_ok` 见 [performance.md §8](../docs/reference/performance.md)。分配 / GC 统计由
+OCaml 后端生成 runtime 的 `VN_PERF_STATS=1` 输出，`bench/run.sh` 采集进 JSON 的 `gc` 字段；
+native 无 GC 统计，只记峰值 RSS 与默认栈探针。
 
 ## 编译器基准
 

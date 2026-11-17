@@ -350,11 +350,12 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
-  在 12 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
-  [performance.md](performance.md) §8.1。native 不做尾调用，12 个基准里 9 个在默认 8 MiB
+  在 16 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
+  [performance.md](performance.md) §8.1。native 不做尾调用，16 个基准里 11 个在默认 8 MiB
   栈下会崩溃（exit 139），基准因此在 `ulimit -s unlimited` 下运行，JSON 的
-  `meta.stack_policy` 记录该口径；峰值 RSS 计入栈页与只增不减的 arena，需与墙钟一起读
-  （D98）。
+  `meta.stack_policy` 记录该口径、每项另有 `default_stack_ok` 探针；峰值 RSS 计入栈页与
+  只增不减的 arena，需与墙钟一起读（D98）。TCO / GC 落地时看 `tco_mutual` / `tco_wide` /
+  `gc_low_live` / `gc_array_churn` 四组判定项（[performance.md](performance.md) §8.2）。
 - **内存预算的口径依赖「arena 不回收」**：`VUNA_NATIVE_MEM_LIMIT` 现在是堆的累计分配 +
   捕获缓冲的活跃字节。引入 GC 后要收紧为 **live heap 上限 + GC 触发阈值**（完整一次回收
   后仍超限才 trap），否则高 churn、低存活集的程序会被误杀；同时 GC 需要一个核数口径与

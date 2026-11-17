@@ -531,20 +531,24 @@ golden 一致，再 warmup + 多次取中位数；`--target ocaml|native|both` �
 | --- | --- | --- | --- |
 | arith | Int 算术 + 尾递归 | ~1.2x | 饱和内联 + 多参数 lambda 链 |
 | string_ops | 字符串拼接 / repeat / substring | ~1.3x | `++` 链 / `strPack` 批拼为一次 `String.concat`；`strSubstring` + `repeat` 一次 `strConcatMany` |
-| hashmap | 持久哈希表 + 字典派发 | ~1.8x | 桶改 `Array`（`Array.get` O(1) + copy-on-write） |
-| list_recursion | List 非尾递归 / fold / append | ~0.9x | 已达标 |
-| gc_pressure | 分配压力（字符串 churn） | ~1.1x | 已达标 |
+| hashmap | 持久哈希表 + 字典派发 | ~2.0x | 桶改 `Array`（`Array.get` O(1) + copy-on-write） |
+| list_recursion | List 非尾递归 / fold / append | ~0.8x | 已达标 |
+| gc_pressure | 分配压力（字符串 churn） | ~1.2x | 已达标 |
 | array | 不可变 Array（get / set / length） | ~0.9x | 不可变 `Array` 与手写 OCaml 持平 |
-| records | record 更新 + variant 分派 | ~2.0x | record 直接映射 OCaml record；多字段更新无额外分配 |
-| closures | 高阶函数 / 每次迭代新建闭包 | ~1.2x | 多参数 lambda 链 + 饱和调用直调 |
-| sorting | 归并排序（List + Pair 拆半） | ~1.3x | List 单元与模式匹配与手写一致 |
-| float_math | Float 算术 / sqrt / abs / 转换 | ~1.8x | 浮点内建；盒装表示与 OCaml 相同 |
-| text_scan | 逐字节 `strAt` 扫描 | ~1.7x | `strAt` 直调原语，不经 List 桥接 |
-| nat_bits | Nat 饱和算术 + 63-bit 位运算 | ~1.9x | Nat 运行时即 Int；位运算内建 |
+| records | record 更新 + variant 分派 | ~2.1x | record 直接映射 OCaml record；多字段更新无额外分配 |
+| closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | 多参数 lambda 链 + 饱和调用直调 |
+| sorting | 归并排序（List + Pair 拆半） | ~1.5x | List 单元与模式匹配与手写一致 |
+| float_math | Float 算术 / sqrt / abs / 转换 | ~1.9x | 浮点内建；盒装表示与 OCaml 相同 |
+| text_scan | 逐字节 `strAt` 扫描 | ~1.5x | `strAt` 直调原语，不经 List 桥接 |
+| nat_bits | Nat 饱和算术 + 63-bit 位运算 | ~1.3x | Nat 运行时即 Int；位运算内建 |
+| tco_mutual | 互递归（`even`/`odd`） | ~1.0x | 尾调用在 OCaml 侧直接复用栈帧 |
+| tco_wide | 9 参数尾递归（3 个栈参数） | ~1.3x | 尾调用与栈传参 ABI 由 ocamlopt 处理 |
+| gc_low_live | 低存活集、大累计分配 | ~0.8x | OCaml GC 回收；vuna 侧只有 bump 分配 |
+| gc_array_churn | 大对象 churn（Array COW） | ~1.7x | `Array.set` COW 与手写 `Array.copy` 对齐 |
 
 场景覆盖：数值 / 字符串 / 容器 / 分配 / 数组 / 记录与变体 / 高阶函数 / 算法 / 浮点 /
-逐字节文本 / Nat 与位运算。新增场景对应 `bench/programs/{records,closures,sorting,
-float_math,text_scan,nat_bits}.vuna`。
+逐字节文本 / Nat 与位运算 / TCO / GC。新增场景对应 `bench/programs/{records,closures,
+sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_churn}.vuna`。
 
 关键设计决策与改动（`Codegen/Term.vuna`、`Base.Intrinsics` / `Elab.Prelude` / `Codegen.Decl` 与
 `base/`）：
@@ -579,44 +583,72 @@ float_math,text_scan,nat_bits}.vuna`。
 并测量；基线 `bench/native-baseline.json`。口径：
 
 - 同一份源码、同一 N；native、OCaml 后端与手写 OCaml 在同一窗口交替测量；
-- native 不做尾调用：12 个基准里 9 个在默认 8 MiB 栈上 exit 139（只有 `string_ops` /
-  `hashmap` / `sorting` 能过），所以所有 native 进程统一在 `ulimit -s unlimited` 下运行
-  （JSON `meta.stack_policy` 记录该口径）；
+- native 不做尾调用：16 个基准里 11 个在默认 8 MiB 栈上 exit 139（只有 `string_ops` /
+  `hashmap` / `sorting` / `gc_low_live` / `gc_array_churn` 能过），所以所有 native 进程统一在
+  `ulimit -s unlimited` 下运行（JSON `meta.stack_policy` 记录该口径）；每个 native 项另记
+  `default_stack_ok`（8 MiB soft limit 下能否正常退出，探针不参与计时）；
 - native 无 GC/RC，峰值 RSS ≈ 累计分配 + 栈页；`--rss-passes 3` 取最大值，与墙钟分开采样；
 - `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
-本机一档（16 核，生成时 `loadavg ≈ 7.6`，同一窗口）：
+本机一档（16 核，生成时 `loadavg ≈ 3.5`，同一窗口）：
 
 | benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| arith | 734 | 9 | 9 | 81.6x | 81.6x | 412 MiB | 2.5 MiB | 166x |
-| string_ops | 6 | 5 | 4 | 1.5x | 1.2x | 4.2 MiB | 3.2 MiB | 1.3x |
-| hashmap | 18 | 11 | 5 | 3.6x | 1.6x | 9.5 MiB | 4.0 MiB | 2.4x |
-| list_recursion | 66 | 14 | 18 | 3.7x | 4.7x | 48 MiB | 11.3 MiB | 4.2x |
-| gc_pressure | 56 | 48 | 31 | 1.8x | 1.2x | 59 MiB | 11.3 MiB | 5.2x |
-| array | 51 | 16 | 17 | 3.0x | 3.2x | 41 MiB | 15.4 MiB | 2.7x |
-| records | 194 | 15 | 8 | 24.3x | 12.9x | 152 MiB | 4.5 MiB | 33.6x |
-| closures | 53 | 12 | 9 | 5.9x | 4.4x | 56 MiB | 8.6 MiB | 6.6x |
-| sorting | 37 | 24 | 18 | 2.1x | 1.5x | 40 MiB | 9.5 MiB | 4.2x |
-| float_math | 246 | 13 | 7 | 35.1x | 18.9x | 259 MiB | 4.6 MiB | 56.4x |
-| text_scan | 64 | 6 | 4 | 16.0x | 10.7x | 63 MiB | 3.5 MiB | 18.1x |
-| nat_bits | 81 | 5 | 3 | 27.0x | 16.2x | 85 MiB | 2.5 MiB | 34.2x |
+| arith | 393 | 5 | 5 | 78.6x | 78.6x | 412 MiB | 2.6 MiB | 160x |
+| string_ops | 5 | 4 | 3 | 1.7x | 1.3x | 4.2 MiB | 3.1 MiB | 1.3x |
+| hashmap | 11 | 7 | 4 | 2.8x | 1.6x | 9.5 MiB | 3.9 MiB | 2.4x |
+| list_recursion | 41 | 10 | 13 | 3.2x | 4.1x | 48 MiB | 11.3 MiB | 4.3x |
+| gc_pressure | 45 | 31 | 27 | 1.7x | 1.5x | 59 MiB | 11.2 MiB | 5.3x |
+| array | 43 | 15 | 16 | 2.7x | 2.9x | 41 MiB | 15.5 MiB | 2.7x |
+| records | 162 | 14 | 7 | 23.1x | 11.6x | 152 MiB | 4.7 MiB | 32.4x |
+| closures | 49 | 10 | 8 | 6.1x | 4.9x | 56 MiB | 8.6 MiB | 6.5x |
+| sorting | 33 | 23 | 17 | 1.9x | 1.4x | 40 MiB | 9.5 MiB | 4.2x |
+| float_math | 232 | 13 | 7 | 33.1x | 17.9x | 259 MiB | 4.5 MiB | 57.0x |
+| text_scan | 63 | 6 | 4 | 15.8x | 10.5x | 63 MiB | 3.4 MiB | 18.7x |
+| nat_bits | 80 | 5 | 3 | 26.7x | 16.0x | 85 MiB | 2.6 MiB | 33.2x |
+| tco_mutual | 181 | 6 | 5 | 36.2x | 30.2x | 244 MiB | 2.5 MiB | 96x |
+| tco_wide | 327 | 4 | 4 | 81.8x | 81.8x | 443 MiB | 2.5 MiB | 174x |
+| gc_low_live | 312 | 277 | 333 | 0.9x | 1.1x | 289 MiB | 244 MiB | 1.2x |
+| gc_array_churn | 239 | 189 | 118 | 2.0x | 1.3x | 309 MiB | 82 MiB | 3.8x |
 
 读法：
 
-- **arith 的 81.6x 与 412 MiB RSS 同源**：300 万层非尾递归，帧不回收；时间主要花在栈页
+- **arith 的 78.6x 与 412 MiB RSS 同源**：300 万层非尾递归，帧不回收；时间主要花在栈页
   fault，不是指令质量。比较 native codegen 时排除这一项，或按「时间 + 内存」一起读。
-- **native/OCaml 后端 1.2–4.7x**：`string_ops` / `gc_pressure`（1.2x）、`hashmap` / `sorting`
-  （1.5–1.6x）最接近；`array` / `closures` / `list_recursion`（3.2–4.7x）的差距同时来自
+- **native/OCaml 后端 1.3–4.9x**：`string_ops`（1.3x）、`sorting` / `gc_pressure` / `hashmap`
+  （1.4–1.6x）最接近；`array` / `list_recursion` / `closures`（2.9–4.9x）的差距同时来自
   无 TCO、闭包与对象表示、以及「所有中间值占栈槽」的朴素 codegen。
-- **10x 以上的一档各有明确的单一来源**：`text_scan`（10.7x）是逐字节 `strAt` 运行时调用；
-  `nat_bits`（16.2x）是每轮 Nat 模式匹配 + `plus`/`mult` 调用；`records`（12.9x）是 80 万层
-  尾递归帧 + 每步 record 分配 + 两次除法；`float_math`（18.9x）是每次浮点运算的装箱对象。
+- **10x 以上的一档各有明确的单一来源**：`text_scan`（10.5x）是逐字节 `strAt` 运行时调用；
+  `records`（11.6x）是 80 万层尾递归帧 + 每步 record 分配 + 两次除法；`nat_bits`（16.0x）是
+  每轮 Nat 模式匹配 + `plus`/`mult` 调用；`float_math`（17.9x）是每次浮点运算的装箱对象。
   这些是 native 后端的真实成本，不是测量偏差。
+- `tco_mutual`（30.2x / 244 MiB）与 `tco_wide`（81.8x / 443 MiB）几乎全是**栈帧成本**：
+  两者 `default_stack_ok=false`，RSS 与墙钟都随递归深度线性增长。
+- `gc_low_live` / `gc_array_churn` 的墙钟已接近手写 OCaml（0.9x / 2.0x）：native 只有 bump
+  分配，省掉了 GC 时间；代价是 RSS（289 / 309 MiB，手写侧 244 / 82 MiB）随累计分配单调增长。
 - 峰值 RSS 的语义不同：OCaml 侧是 GC 后高水位，native 侧是只增不减的 arena；两者只作量级
-  参考。`float_math` 的 259 MiB 与 `gc_pressure` 的 5.2x 都是「没有回收」的直接读数（D98）。
+  参考。`float_math` 的 259 MiB 与 `gc_pressure` 的 5.3x 都是「没有回收」的直接读数（D98）。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
-  `bench/native-baseline.json` 的 ratio 与 rss_ratio 软告警。
+  `bench/native-baseline.json` 的 ratio、rss_ratio 与 `default_stack_ok` 变化做提示。
+
+### 8.2 TCO / GC 验证项
+
+native 做尾调用与 GC 时，先看这四项；其余基准会连带变化：
+
+| 用例 | 现在（TCO/GC 前） | 落地后预期 | 判定列 |
+| --- | --- | --- | --- |
+| `tco_mutual` | 181 ms / 244 MiB / `default_stack_ok=false` | 10 ms 级 / MB 级 / `true` | wall, rss, stack |
+| `tco_wide` | 327 ms / 443 MiB / `false` | 10 ms 级 / MB 级 / `true` | wall, rss, stack |
+| `gc_low_live` | 312 ms / 289 MiB | RSS 降到存活集量级（<30 MiB）；wall 持平或略升 | rss 优先 |
+| `gc_array_churn` | 239 ms / 309 MiB | RSS 降到存活集量级；wall 持平或略升 | rss 优先 |
+
+- **TCO**：`default_stack_ok` 由 false 翻为 true、RSS 从百 MB 降到 MB 级是主判据；墙钟同时
+  大幅下降。`arith` / `records` 也会一起变，重标时一并更新。
+- **GC**：主判据是 RSS 从「累计分配」降到「存活集」；**墙钟可能持平或略升**（回收本身有
+  成本，当前 native 的 bump 分配已经很快），不要把 wall 上升当回归。`gc_pressure` /
+  `float_math` 的 RSS 也会下降。
+- 重标基线时 `default_stack_ok` 是布尔快照：只要 TCO 后应为 true 的项仍为 false，就说明
+  该形状的尾调用没被覆盖（互递归 / 宽栈参数各有专测）。
 
 ## 9. 编译器基准
 
