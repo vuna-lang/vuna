@@ -94,7 +94,14 @@
   直接写 `ret`。手写分支因此不会「提前 ret 把 rsp 留在 frame 里」，不会崩在返回地址上。
 - 入口 `_start`：初始化堆指针 → `and rsp, -16` → `call vuna_main` → 按入口 show
   打印 → `exit(0)`；不解析 argv，无栈溢出检查。
-- 递归使用机器栈直接 `call`；不做尾调用优化。
+- **尾调用**：结果位置的饱和直调（`IrApp` 的 head 是 `IrGlobal` 且实参个数等于定义 arity，
+  以及零参 `IrGlobal`；`IrLet` 的 body 也算结果位置）把实参写回**调用者的来参区**
+  `[rbp+16...]`，装参数寄存器后 `mov rsp, rbp; pop rbp; jmp 目标`。`pop rbp` 之后 `rsp`
+  正好落在返回地址槽，与 `call` 刚进入时同构（`rsp ≡ 8 mod 16`），所以尾调用自己不需要
+  补对齐洞。空间判据在生成期静态判定：`8 × 栈实参个数 <= 来参区字节数`（`Native.Abi` 的
+  `nativeTailRoomBytes`）；不满足就回退普通 `call`，语义不变（`>6` 参函数的「窄调宽」
+  尾调用因此可能不复用帧）。闭包调用、`rt_apply` 与 `rt_*` 运行时目标都不做尾调用；
+  源级 `let` 降级成 lambda 应用，带 `let` 的递归循环仍走闭包调用。
 
 ### 3.4 效应 handler 与一次性续延
 
@@ -168,9 +175,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | --- | --- | --- |
 | `IrVar` / `IrInt` / `IrBool` / `IrCast` | 支持 | `IrInt` 检查 63-bit 范围 |
 | `IrStr` | 支持 | `.rodata` 里 `{.quad len; .ascii bytes}`，求值成 `lea`（内容去重，首现顺序编号） |
-| `IrGlobal` | 支持 | 零参引用生成 `call vuna_<name>`；作为函数值传递时生成闭包（wrapper） |
-| `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝 |
-| `IrApp` | 支持 | 饱和顶层/运行时调用直调；部分 / 过度应用与动态 head 走 `rt_apply` |
+| `IrGlobal` | 支持 | 零参引用生成 `call vuna_<name>`（结果位置时 `jmp`，§3）；作为函数值传递时生成闭包（wrapper） |
+| `IrLet` | 支持（≤1 运行时 binder） | 多运行时 binder（boxed case 降级）拒绝；body 按结果位置生成 |
+| `IrApp` | 支持 | 饱和顶层直调；结果位置且来参区够用时走尾调用（§3）；部分 / 过度应用、动态 head 与运行时目标走 `rt_apply` |
 | `IrIf` | 支持 | 条件按 0/1 判 |
 | `IrRtApp` | 支持白名单 | 参数左→右；`&&`/`||` 短路 |
 | `IrConcatMany` | 支持 | 左→右两两 `++`（Lowering 对 ≥3 项的 `++` 链发此节点） |
@@ -368,6 +375,11 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 - GC：9y 高 churn 低存活集在 1 MiB live 预算下跑完（GC 前后输出一致、`GC_LOG` 有诊断行）、
   9z `GC_STRESS` 下续延 + List + 字符串输出不变、9aa GC 的 env 开关不影响 `main.s`；
   9t 仍锁「live 超限才 trap」。
+- 尾调用：9ab 互递归 400 万层、9ac 9 参自递归（3 个栈实参）100 万层、9ad `if` / `case` /
+  `natCase` 三种尾位置各 30 万层，都在默认 8 MiB 栈上跑完；9ae 断言「来参区不够」时
+  `main.s` 里是 `call` 而不是 `jmp`（回退正确）；9af 续延 resume 后的尾递归循环在
+  `GC_STRESS` 下输出一致；9ag 带尾调用的 `main.s` 两次编译逐字节一致；9ah 闭包体按
+  闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
@@ -388,12 +400,10 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 - **自举运行**：`vuna build compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
   `check test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
-  大包尚未跑通：`check base` / `check examples/infra` 以 `continuation stack overflow`
-  收口（不再是 SIGSEGV）——native 不做尾调用，深递归耗尽固定 32 MiB 续延窗口，是
-  [debt.md](debt.md) D89 记录的已知限度（真正的解法是按需扩栈或尾调用）。
-  CI 的 `nix run .#backend-check -- --compiler native` 因此是非阻塞任务（口径见
-  [testing.md](testing.md)「后端自举 conformance」）；它的 `selfhost` scope 在整仓
-  `check` 上以 `continuation stack overflow` 收口。
+  整仓 selfhost 的现状按 [debt.md](debt.md) D89 跟踪：尾调用（§3）只覆盖**直接饱和直调**，
+  非尾递归、被闭包包住的递归仍按帧吃宿主栈，续延里的深递归还受固定的 32 MiB 迁移窗口限制。
+  CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见
+  [testing.md](testing.md)「后端自举 conformance」）。
 - **GC 的边界**：保守、非移动、不分代、不压缩。因此
   1. 活帧里**尚未清零的栈槽**仍被保守扫描；调用点实参槽与文本最后读取后会清零，所以
      `gc_low_live` 这类「分配后用掉、再尾递归」的形状不再按栈深度累计保留（死槽清零前
@@ -406,12 +416,11 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   6. 栈段（`resume` 迁移用的 32 MiB 预留窗口）不计入预算，见 §5.1。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
   在 16 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
-  [performance.md](performance.md) §8.1。native 不做尾调用，16 个基准里 11 个在默认 8 MiB
-  栈下会崩溃（exit 139），基准因此在 `ulimit -s unlimited` 下运行，JSON 的
-  `meta.stack_policy` 记录该口径、每项另有 `default_stack_ok` 探针；峰值 RSS = 栈页 +
-  live 堆，需与墙钟一起读。GC 已落地、TCO 未做：当前 GC 的收益受深栈帧钉住限制，
-  `tco_mutual` / `tco_wide` / `gc_low_live` / `gc_array_churn` 的判定与实测读数见
-  [performance.md](performance.md) §8.2；TCO 落地后重标这四组。
+[performance.md](performance.md) §8.1。非尾深递归在默认 8 MiB 栈下仍会崩溃（exit 139），
+  基准因此在 `ulimit -s unlimited` 下运行，JSON 的 `meta.stack_policy` 记录该口径、每项另有
+  `default_stack_ok` 探针；峰值 RSS = 栈页 + live 堆，需与墙钟一起读。TCO 已落地：只覆盖
+  直接饱和直调，`tco_mutual` / `tco_wide` / `arith` / `records` 的判定与实测读数见
+  [performance.md](performance.md) §8.2；§8.1 的 native 列是 TCO 前快照。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

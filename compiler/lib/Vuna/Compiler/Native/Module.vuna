@@ -61,6 +61,9 @@ record FGen where
   fgNextLabel : Int
   -- | 本次生成中遇到的闭包函数（每个 `IrLam` 值一个），最后并入 `npFuncs`。
   fgLams : List NativeFunc
+  -- | 本函数**来参区**可复用的字节数（调用方压的栈实参 + 对齐洞）。
+  --   尾调用把新实参写回 `[rbp+16...]`，超过这段就会踩调用者的帧，只能回退普通调用。
+  fgTailRoom : Int
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -278,6 +281,13 @@ else nbind (genArgs (fuel - 1) st args) (\p => let
 in NOk (Pair (append (firstOf p) (append (callSlotsInstrs label slots) (clearSlotsInstrs slots))) st1)
 )
 
+-- | 尾位置的饱和直调：实参求值到槽后写回来参区、拆帧并 `jmp`（不返回）。
+genTailCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genTailCall fuel st label args =
+  if fuel <= 0 then internal "native codegen fuel exhausted"
+  else nbind (genArgs (fuel - 1) st args)
+    (\p => NOk (Pair (append (firstOf p) (tailCallSlotsInstrs label (firstOf (secondOf p)))) (secondOf (secondOf p))))
+
 -- | 以**已求值到槽**的实参调用：前 6 个装参数寄存器，其余逆序压栈（SysV AMD64）。
 --   调用前 `rsp` 必须 16 字节对齐：栈参数个数为奇数时先 `sub rsp, 8` 补空洞
 --   （空洞在参数**上方**，被调用方忽略）；返回后一次性 `add rsp, 8*k + pad`。
@@ -287,7 +297,7 @@ callSlotsInstrs label slots =
     regSlots = take nativeMaxArgs slots
     stackSlots = drop nativeMaxArgs slots
     k = length stackSlots
-    pad = if k - k / 2 * 2 == 1 then 8 else 0
+    pad = nativeStackPadBytes k
     popped = 8 * k + pad
   in append (pushStackArgs stackSlots)
     (append (loadArgRegs nativeArgRegs regSlots) (append (clearSlotsInstrs slots) (append [ICall label] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)]))))
@@ -298,12 +308,40 @@ pushStackArgs : List Int -> List Instr
 pushStackArgs slots =
   let
     k = length slots
-    pad = if k - k / 2 * 2 == 1 then [IBinReg "sub" Rsp (OpImm 8)] else []
+    pad = if nativeStackPadBytes k == 0 then [] else [IBinReg "sub" Rsp (OpImm 8)]
     pushes = concatMap pushOne (reverse slots)
   in append pad pushes
 
 pushOne : Int -> List Instr
 pushOne slot = [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IPush Rax]
+
+-- ---------------------------------------------------------------
+-- 尾调用
+-- ---------------------------------------------------------------
+-- | 空间判据：把 `kOut` 个栈实参写回调用者来参区所需的字节数不超过 `fgTailRoom`。
+--   不满足时回退普通调用（语义不变，只丢优化）。
+tailCallFits : FGen -> Int -> Bool
+tailCallFits st kOut = 8 * kOut <= st.fgTailRoom
+
+-- | 第 `i`（从 0 起）个实参的栈槽 → 调用者来参区的第 `i-6` 个槽位。
+--   源全在 `rbp` 以下、目标在 `rbp+16` 以上，两者不重叠，拷贝顺序无关。
+tailStackArgMoves : Int -> List Int -> List Instr
+tailStackArgMoves _ [] = []
+tailStackArgMoves i (slot :: rest) =
+  append
+    [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff slot)), IMov (OpMem Rbp (16 + 8 * (i - nativeMaxArgs))) (OpReg Rax)]
+    (tailStackArgMoves (i + 1) rest)
+
+-- | 尾调用：栈实参搬进来参区 → 装参数寄存器 → 拆本帧 → `jmp`。
+--   `pop rbp` 之后 `rsp` 正好落在返回地址槽，与 `call` 刚进入时同构（`rsp ≡ 8 mod 16`），
+--   所以尾调用自己不需要补对齐洞；返回地址仍是本函数自己的那一个。
+tailCallSlotsInstrs : String -> List Int -> List Instr
+tailCallSlotsInstrs label slots =
+  let
+    regSlots = take nativeMaxArgs slots
+    stackSlots = drop nativeMaxArgs slots
+  in append (tailStackArgMoves nativeMaxArgs stackSlots)
+    (append (loadArgRegs nativeArgRegs regSlots) [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IJmp label])
 
 -- ---------------------------------------------------------------
 -- 函数值（顶层函数 / 运行时符号）
@@ -364,7 +402,7 @@ closureCallSlotsInstrs clo slots =
     regSlots = take (length closureArgRegs) slots
     stackSlots = drop (length closureArgRegs) slots
     k = length stackSlots
-    pad = if k - k / 2 * 2 == 1 then 8 else 0
+    pad = nativeStackPadBytes k
     popped = 8 * k + pad
   in append (pushStackArgs stackSlots)
     (append (loadArgRegs closureArgRegs regSlots) (append [IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg R11) (OpMem Rdi 0)] (append (clearSlotsInstrs (clo :: slots)) (append [ICallReg R11] (if popped == 0 then [] else [IBinReg "add" Rsp (OpImm popped)])))))
@@ -379,15 +417,12 @@ genApplyCall st clo args =
     lSlow = nativeJumpLabel idx
     lEnd = nativeJumpLabel (idx + 1)
     st1 = { st | fgNextLabel = idx + 2 }
-    pad = if k - k / 2 * 2 == 1 then 8 else 0
+    pad = nativeStackPadBytes k
     pushes = concatMap pushOne (reverse args)
     head = if pad == 0 then [] else [IBinReg "sub" Rsp (OpImm 8)]
     slowPart =
       append head
-        (append pushes
-          (append
-            [IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg Rsi) (OpImm k), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo))]
-            (append (clearSlotsInstrs (clo :: args)) [ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm (8 * k + pad))])))
+        (append pushes (append [IMov (OpReg Rdx) (OpReg Rsp), IMov (OpReg Rsi) (OpImm k), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff clo))] (append (clearSlotsInstrs (clo :: args)) [ICall (nativeRtLabel "apply"), IBinReg "add" Rsp (OpImm (8 * k + pad))])))
     fastPart =
       append
         [IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff clo)), IMov (OpReg Rax) (OpMem Rax 8), ICmp (OpReg Rax) (OpImm k), IJcc "jne" lSlow]
@@ -406,14 +441,15 @@ in nbind (genArgs (fuel - 1) st1 args)
   (\q => nbind (genApplyCall (secondOf (secondOf q)) clo (firstOf (secondOf q))) (\r => NOk (Pair (cat [firstOf p, storeSlot clo, firstOf q, firstOf r]) (secondOf r))))
 )
 
-genGlobalCall : Int -> FGen -> String -> List Ir -> NRes (Pair (List Instr) FGen)
-genGlobalCall fuel st name args = if fuel <= 0 then internal "native codegen fuel exhausted"
+genGlobalCall : Int -> FGen -> Bool -> String -> List Ir -> NRes (Pair (List Instr) FGen)
+genGlobalCall fuel st isTail name args = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case findDef name st.fgDefs of
   Nothing => internal "undefined global in native codegen: ${name}"
   Just d =>
     let
       arity = irDefArity d
-    in if arity == length args then genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args
+    in if arity == length args then if isTail && tailCallFits st (nativeStackArgCount arity nativeMaxArgs) then genTailCall (fuel - 1) st (nativeFuncLabel name) args
+    else genSaturatedCall (fuel - 1) st (nativeFuncLabel name) args
     else if arity == 0 then internal "zero-argument global used as a function"
     else genApplyHead (fuel - 1) st (IrGlobal name) args
 
@@ -534,8 +570,15 @@ else
     outer = if arity <= 0 then mkEff else IrLam bs mkEff
   in genExpr (fuel - 1) st outer
 
+-- | 值位置生成：结果留在 `rax`，任何调用都正常返回。
 genExpr : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
-genExpr fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
+genExpr fuel st ir = genExprAt fuel st False ir
+
+-- | `isTail` 表示结果位置。只有「结果就是本函数返回值」的位置才允许尾调用：
+--   `IrLet` 的 body、`IrIf` 两支、`IrCase` / `IrNatCase` 各臂、`IrCast` 内层与
+--   `IrApp` 是透明位置；实参、scrutinee、构造字段一律按值位置生成。
+genExprAt : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
+genExprAt fuel st isTail ir = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case ir of
   IrVar b => case lookupBinder b st.fgSlots of
     Just slot => NOk (Pair (loadSlot slot) st)
@@ -543,7 +586,8 @@ else case ir of
   IrGlobal name => case findDef name st.fgDefs of
     Nothing => internal "undefined global in native codegen: ${name}"
     Just d =>
-      if irDefArity d == 0 then NOk (Pair [ICall (nativeFuncLabel name)] st)
+      if irDefArity d == 0 then if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st)
+      else NOk (Pair [ICall (nativeFuncLabel name)] st)
       else genValueClosure st (nativeGlobalValueLabel name) (irDefArity d) (nativeFuncLabel name)
   IrInt n =>
     if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range"
@@ -552,20 +596,20 @@ else case ir of
     Nothing => internal "string literal missing from native pool"
     Just label => NOk (Pair [ILea Rax label] st)
   IrBool b => NOk (Pair [IMov (OpReg Rax) (OpImm (if b then 1 else 0))] st)
-  IrCast inner => genExpr (fuel - 1) st inner
+  IrCast inner => genExprAt (fuel - 1) st isTail inner
   IrLet bs scrut body => nbind (genExpr (fuel - 1) st scrut) (\p => let
     rbs = runtimeBinders bs
     st1 = secondOf p
   in case rbs of
     [] =>
-      nbind (genExpr (fuel - 1) st1 body)
+      nbind (genExprAt (fuel - 1) st1 isTail body)
         (\q => NOk (Pair (append (firstOf p) (firstOf q)) (secondOf q)))
     [b] =>
       let
         slotP = freshSlot st1
         slot = firstOf slotP
         st2 = secondOf slotP
-      in nbind (genExpr (fuel - 1) (pushBinder b slot st2) body)
+      in nbind (genExprAt (fuel - 1) (pushBinder b slot st2) isTail body)
         (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st1.fgSlots)))
     _ => unsupported "native target: let with more than one runtime binder is not supported yet"
   )
@@ -576,7 +620,7 @@ else case ir of
     lEndP = freshLabel st1
     lEnd = firstOf lEndP
     st2 = secondOf lEndP
-  in nbind (genExpr (fuel - 1) st2 t) (\pt => nbind (genExpr (fuel - 1) (secondOf pt) e) (\pe => let
+  in nbind (genExprAt (fuel - 1) st2 isTail t) (\pt => nbind (genExprAt (fuel - 1) (secondOf pt) isTail e) (\pe => let
     body =
       append (firstOf p)
         (append [ITest Rax Rax, IJcc "je" lElse] (append (firstOf pt) (append [IJmp lEnd, ILabel lElse] (append (firstOf pe) [ILabel lEnd]))))
@@ -588,13 +632,12 @@ else case ir of
   IrRecord family fields => genRecord (fuel - 1) st family fields
   IrProj base family field => genProj (fuel - 1) st base family field
   IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
-  IrCase scrut alts => genCase (fuel - 1) st scrut alts
-  IrApp _ _ => genApp (fuel - 1) st ir
+  IrCase scrut alts => genCase (fuel - 1) st isTail scrut alts
+  IrApp _ _ => genApp (fuel - 1) st isTail ir
   IrRtApp sym args => genRtApp (fuel - 1) st sym args
   IrConcatMany parts => genConcatMany (fuel - 1) st parts
-  IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
-  IrCase _ _ => unsupported "native target: case is not supported yet"
-  IrLam bs body => genLamValue (fuel - 1) st bs body
+  IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st isTail scrut zero succ catch
+  IrLam bs body => genLamValue (fuel - 1) st isTail bs body
   IrRt sym =>
     let
       arity = rtValueArityOf sym
@@ -639,17 +682,17 @@ in nbind (genExpr (fuel - 1) (pushBinder b slot st1) body)
   (\q => NOk (Pair (append (firstOf p) (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
 )
 
-genApp : Int -> FGen -> Ir -> NRes (Pair (List Instr) FGen)
-genApp fuel st ir = if fuel <= 0 then internal "native codegen fuel exhausted"
+genApp : Int -> FGen -> Bool -> Ir -> NRes (Pair (List Instr) FGen)
+genApp fuel st isTail ir = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case flattenApp ir of
   Pair head args => case head of
-    IrGlobal name => genGlobalCall (fuel - 1) st name args
+    IrGlobal name => genGlobalCall (fuel - 1) st isTail name args
     IrRt s => if s == irRtNatSucc then case args of
       [a] => genNatSuccCall (fuel - 1) st a
       _ => internal "Nat Succ must have exactly one argument"
     else if s == "prim_erase" then case args of
       [] => internal "prim_erase needs an argument"
-      x :: rest => genExpr (fuel - 1) st (applyAllIr x rest)
+      x :: rest => genExprAt (fuel - 1) st isTail (applyAllIr x rest)
     else genRtValueCall (fuel - 1) st s args
     -- 动态 head：求值成闭包后交给 `rt_apply`（饱和 / 部分 / 过度统一处理）。
     _ => genApplyHead (fuel - 1) st head args
@@ -690,9 +733,9 @@ storeCapsAt obj i (p :: rest) =
   append (setObjFromSlot obj (16 + 8 * i) (secondOf p)) (storeCapsAt obj (i + 1) rest)
 
 -- | `IrLam` 作为值：生成闭包函数体并构造闭包对象。
-genLamValue : Int -> FGen -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
-genLamValue fuel st bs body = if fuel <= 0 then internal "native codegen fuel exhausted"
-else if length (runtimeBinders bs) == 0 then genExpr (fuel - 1) st body
+genLamValue : Int -> FGen -> Bool -> List IrBinder -> Ir -> NRes (Pair (List Instr) FGen)
+genLamValue fuel st isTail bs body = if fuel <= 0 then internal "native codegen fuel exhausted"
+else if length (runtimeBinders bs) == 0 then genExprAt (fuel - 1) st isTail body
 else
   let
     rbs = runtimeBinders bs
@@ -702,8 +745,10 @@ else
     idx = st.fgNextLabel
     lamName = "vuna_lam_${strFromInt idx}"
     st1 = { st | fgNextLabel = idx + 1 }
-    stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel []
-  in nbind (bindCaptures stBody caps 0) (\cp => nbind (bindArgsGo rbs 1 (secondOf cp)) (\bp => nbind (genExpr (fuel - 1) (secondOf bp) body) (\q => let
+    -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
+    lamRoom = nativeTailRoomBytes (nativeStackArgCount (length rbs) (length closureArgRegs))
+    stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom
+  in nbind (bindCaptures stBody caps 0) (\cp => nbind (bindArgsGo rbs 1 (secondOf cp)) (\bp => nbind (genExprAt (fuel - 1) (secondOf bp) True body) (\q => let
     stF = secondOf q
     frame = nativeFrameBytes stF.fgNextSlot
     lamFunc =
@@ -935,23 +980,23 @@ lookupFieldIr name (p :: rest) =
 -- 通用 case
 -- ---------------------------------------------------------------
 -- | 变体按 tag 分派（线性 compare 链）；record 没有 tag，直接按字段序绑定。
-genCase : Int -> FGen -> Ir -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genCase fuel st scrut alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+genCase : Int -> FGen -> Bool -> Ir -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCase fuel st isTail scrut alts = if fuel <= 0 then internal "native codegen fuel exhausted"
 else nbind (genExpr (fuel - 1) st scrut) (\p => let
   scP = freshSlot (secondOf p)
   sc = firstOf scP
-in nbind (genCaseAlts (fuel - 1) (secondOf scP) sc alts)
+in nbind (genCaseAlts (fuel - 1) (secondOf scP) isTail sc alts)
   (\q => NOk (Pair (cat [firstOf p, setLocal sc, firstOf q]) (secondOf q)))
 )
 
-genCaseAlts : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genCaseAlts fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+genCaseAlts : Int -> FGen -> Bool -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCaseAlts fuel st isTail sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case caseFamilyOf alts of
-  Nothing => genDefault fuel st sc alts
+  Nothing => genDefault fuel st isTail sc alts
   Just family => case declOf family st.fgFams of
     Nothing => internal "unknown data family in native codegen: ${family}"
-    Just (IrVariantDecl _ _ ctors) => genVariantAlts fuel st sc ctors alts
-    Just (IrRecordDecl _ _ _ _) => genRecordAlts fuel st sc alts
+    Just (IrVariantDecl _ _ ctors) => genVariantAlts fuel st isTail sc ctors alts
+    Just (IrRecordDecl _ _ _ _) => genRecordAlts fuel st isTail sc alts
     _ => internal "case on an unboxed family is not supported yet"
 
 caseFamilyOf : List IrAlt -> Maybe String
@@ -969,21 +1014,21 @@ findCatchAll (alt :: rest) = case irAltCtorOf alt of
 trapImpossible : List Instr
 trapImpossible = [ICall (nativeRtLabel "trap_impossible")]
 
-genDefault : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genDefault fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+genDefault : Int -> FGen -> Bool -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genDefault fuel st isTail sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case findCatchAll alts of
   Nothing => NOk (Pair trapImpossible st)
-  Just alt => genArm fuel st sc alt
+  Just alt => genArm fuel st isTail sc alt
 
-genArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
-genArm fuel st sc alt = if fuel <= 0 then internal "native codegen fuel exhausted"
+genArm : Int -> FGen -> Bool -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
+genArm fuel st isTail sc alt = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case runtimeBinders (irAltBindersOf alt) of
-  [] => genExpr (fuel - 1) st (irAltBodyOf alt)
+  [] => genExprAt (fuel - 1) st isTail (irAltBodyOf alt)
   [b] =>
     let
       slotP = freshSlot st
       slot = firstOf slotP
-    in nbind (genExpr (fuel - 1) (pushBinder b slot (secondOf slotP)) (irAltBodyOf alt))
+    in nbind (genExprAt (fuel - 1) (pushBinder b slot (secondOf slotP)) isTail (irAltBodyOf alt))
       (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (restoreBinderScope (secondOf q) st.fgSlots)))
   _ => internal "case arm has more than one runtime binder"
 
@@ -993,15 +1038,15 @@ tagOfScrut sc = cat [getLocal sc, [IMov (OpReg Rdx) (OpReg Rax), IMov (OpReg Rax
 -- | 变体分支链：跳过 catch-all（它只作默认臂），其余按 tag 线性比较。
 --   `all` 是原始分支表：链尾必须回到它，才能让 catch-all 兜底（否则嵌套 pattern
 --   的兜底分支会被丢掉，运行时掉进 `trap_impossible`）。
-genVariantAlts : Int -> FGen -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genVariantAlts fuel st sc ctors alts = genVariantAltsGo fuel st sc ctors alts alts
+genVariantAlts : Int -> FGen -> Bool -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantAlts fuel st isTail sc ctors alts = genVariantAltsGo fuel st isTail sc ctors alts alts
 
-genVariantAltsGo : Int -> FGen -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genVariantAltsGo fuel st sc ctors alts all = if fuel <= 0 then internal "native codegen fuel exhausted"
+genVariantAltsGo : Int -> FGen -> Bool -> Int -> List (Pair String (List IrTy)) -> List IrAlt -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantAltsGo fuel st isTail sc ctors alts all = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case alts of
-  [] => genDefault (fuel - 1) st sc all
+  [] => genDefault (fuel - 1) st isTail sc all
   alt :: rest => case irAltCtorOf alt of
-    Nothing => genVariantAltsGo (fuel - 1) st sc ctors rest all
+    Nothing => genVariantAltsGo (fuel - 1) st isTail sc ctors rest all
     Just (Pair _ ctor) => case ctorTagIn ctors ctor of
       Nothing => internal "unknown constructor in native codegen: ${ctor}"
       Just tag =>
@@ -1010,15 +1055,15 @@ else case alts of
           lNext = firstOf lNextP
           lEndP = freshLabel (secondOf lNextP)
           lEnd = firstOf lEndP
-        in nbind (genVariantArm (fuel - 1) (secondOf lEndP) sc alt)
-          (\a => nbind (genVariantAltsGo (fuel - 1) (secondOf a) sc ctors rest all) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
+        in nbind (genVariantArm (fuel - 1) (secondOf lEndP) isTail sc alt)
+          (\a => nbind (genVariantAltsGo (fuel - 1) (secondOf a) isTail sc ctors rest all) (\r => NOk (Pair (cat [tagOfScrut sc, [ICmp (OpReg Rax) (OpImm tag), IJcc "jne" lNext], firstOf a, [IJmp lEnd, ILabel lNext], firstOf r, [ILabel lEnd]]) (secondOf r))))
 
 -- | 变体分支：按 keep 形状绑定字段（tag 占 index 0），再求值分支体。
-genVariantArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
-genVariantArm fuel st sc alt =
+genVariantArm : Int -> FGen -> Bool -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
+genVariantArm fuel st isTail sc alt =
   if fuel <= 0 then internal "native codegen fuel exhausted"
   else nbind (bindFields st sc 1 (runtimeBinders (irAltBindersOf alt)))
-    (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
+    (\bp => nbind (genExprAt (fuel - 1) (secondOf bp) isTail (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
 
 bindFields : FGen -> Int -> Int -> List IrBinder -> NRes (Pair (List Instr) FGen)
 bindFields st _ _ [] = NOk (Pair [] st)
@@ -1030,24 +1075,24 @@ bindFields st sc idx (b :: rest) =
     (\q => NOk (Pair (cat [getObjField sc (8 * idx), setLocal slot, firstOf q]) (secondOf q)))
 
 -- | record 分支只有一个（按字段序绑定）；catch-all 兜底。
-genRecordAlts : Int -> FGen -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genRecordAlts fuel st sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
+genRecordAlts : Int -> FGen -> Bool -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genRecordAlts fuel st isTail sc alts = if fuel <= 0 then internal "native codegen fuel exhausted"
 else case alts of
-  [] => genDefault (fuel - 1) st sc []
+  [] => genDefault (fuel - 1) st isTail sc []
   alt :: rest => case irAltCtorOf alt of
-    Nothing => genDefault (fuel - 1) st sc alts
+    Nothing => genDefault (fuel - 1) st isTail sc alts
     Just _ =>
       nbind (bindFields st sc 0 (runtimeBinders (irAltBindersOf alt)))
-        (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
+        (\bp => nbind (genExprAt (fuel - 1) (secondOf bp) isTail (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
 
-genNatArm : Int -> FGen -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
-genNatArm _ st Nothing _ _ = NOk (Pair [] st)
-genNatArm fuel st (Just alt) mode srcSlot = if fuel <= 0 then internal "native codegen fuel exhausted"
+genNatArm : Int -> FGen -> Bool -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
+genNatArm _ st _ Nothing _ _ = NOk (Pair [] st)
+genNatArm fuel st isTail (Just alt) mode srcSlot = if fuel <= 0 then internal "native codegen fuel exhausted"
 else
   let
     bs = runtimeBinders (irAltBindersOf alt)
   in case bs of
-    [] => genExpr (fuel - 1) st (irAltBodyOf alt)
+    [] => genExprAt (fuel - 1) st isTail (irAltBodyOf alt)
     [b] => if mode == "none" then internal "Nat case arm has a binder but no runtime binding"
     else
       let
@@ -1057,7 +1102,7 @@ else
         bindInstrs =
           if mode == "pred" then append (loadSlot srcSlot) [IBin "sub" (OpImm 1)]
           else loadSlot srcSlot
-      in nbind (genExpr (fuel - 1) (pushBinder b slot st1) (irAltBodyOf alt))
+      in nbind (genExprAt (fuel - 1) (pushBinder b slot st1) isTail (irAltBodyOf alt))
         (\q => NOk (Pair (append bindInstrs (append (storeSlot slot) (firstOf q))) (restoreBinderScope (secondOf q) st.fgSlots)))
     _ => internal "Nat case arm has more than one runtime binder"
 
@@ -1066,8 +1111,8 @@ hasNatBranch (Just _) _ = True
 hasNatBranch Nothing (Just _) = True
 hasNatBranch Nothing Nothing = False
 
-genNatCase : Int -> FGen -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> NRes (Pair (List Instr) FGen)
-genNatCase fuel st scrut zero succ catch = if fuel <= 0 then internal "native codegen fuel exhausted"
+genNatCase : Int -> FGen -> Bool -> Ir -> Maybe IrAlt -> Maybe IrAlt -> Maybe IrAlt -> NRes (Pair (List Instr) FGen)
+genNatCase fuel st isTail scrut zero succ catch = if fuel <= 0 then internal "native codegen fuel exhausted"
 else nbind (genExpr (fuel - 1) st scrut) (\p => let
   st1 = secondOf p
   slotP = freshSlot st1
@@ -1093,7 +1138,7 @@ else nbind (genExpr (fuel - 1) st scrut) (\p => let
     Nothing => "sc"
 in if not (hasNatBranch zero catch) then internal "Nat case has no zero/catch branch"
 else if not (hasNatBranch succ catch) then internal "Nat case has no succ/catch branch"
-else nbind (genNatArm (fuel - 1) st4 zeroAlt zeroMode slotSc) (\z => nbind (genNatArm (fuel - 1) (secondOf z) succAlt succMode slotSc) (\s => let
+else nbind (genNatArm (fuel - 1) st4 isTail zeroAlt zeroMode slotSc) (\z => nbind (genNatArm (fuel - 1) (secondOf z) isTail succAlt succMode slotSc) (\s => let
   body =
     append (firstOf p)
       (append (storeSlot slotSc) (append [ICmp (OpMem Rbp (nativeSlotOff slotSc)) (OpImm 0), IJcc "je" lz] (append (firstOf s) (append [IJmp lend, ILabel lz] (append (firstOf z) [ILabel lend])))))
@@ -1130,8 +1175,10 @@ genDefFunc _defs _pool _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
 genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
   let
-    st0 = FGen defs pool [] fams 0 nextLabel []
-  in if arity == 0 then nbind (genExpr 100000 st0 body) (\p => let
+    -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
+    room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
+    st0 = FGen defs pool [] fams 0 nextLabel [] room
+  in if arity == 0 then nbind (genExprAt 100000 st0 True body) (\p => let
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
     instrs = append (clearDeadSlots (firstOf p)) nativeEpilogue
@@ -1145,7 +1192,7 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
       let
         rbs = runtimeBinders bs
       in if length rbs /= arity then internal "function body lambda arity mismatch: ${name}"
-      else nbind (bindArgs rbs st0) (\bp => nbind (genExpr 100000 (secondOf bp) inner) (\q => let
+      else nbind (bindArgs rbs st0) (\bp => nbind (genExprAt 100000 (secondOf bp) True inner) (\q => let
         st1 = secondOf q
         frame = nativeFrameBytes st1.fgNextSlot
         instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)

@@ -299,3 +299,64 @@ out-equals: 156
 # 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响 `main.s`。
 run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; cmp "$TMPDIR/detgc-a/main.s" "$TMPDIR/detgc-b/main.s"'
 exit: 0
+
+# 9ab) 尾调用：互递归（even/odd）400 万层在默认 8 MiB 栈上跑完（不尾调用会栈溢出）。
+run: sh -c 'd="$TMPDIR/tcomutual"; mkdir -p "$d/app"; printf "[package]\nname = \"tcomutual\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "even : Int -> Bool\neven n = if n <= 0 then True else odd (n - 1)\n\nodd : Int -> Bool\nodd n = if n <= 0 then False else even (n - 1)\n\nmain : Int\nmain = if even 4000000 then 1 else 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcomutual-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcomutual-out/bin/tcomutual" 2>&1
+exit: 0
+out-equals: 1
+file-contains: $TMPDIR/tcomutual-out/main.s jmp vuna_odd
+
+# 9ac) 尾调用的栈传参：9 参自递归（3 个栈参数）每层重写来参区，常量栈跑完 100 万层。
+run: sh -c 'd="$TMPDIR/tcowide"; mkdir -p "$d/app"; printf "[package]\nname = \"tcowide\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "step : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nstep a b c d e f g h n =\n  if n <= 0 then a + b + c + d + e + f + g + h\n  else step (a + 1) b c d e f g h (n - 1)\n\nmain : Int\nmain = step 0 0 0 0 0 0 0 1 1000000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcowide-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcowide-out/bin/tcowide" 2>&1
+exit: 0
+out-equals: 1000001
+file-contains: $TMPDIR/tcowide-out/main.s jmp vuna_step
+
+# 9ad) 尾位置穿透 `if` / `case` / `natCase`：三种形状的深递归都在常量栈上跑完。
+run: sh -c 'd="$TMPDIR/tcopos"; mkdir -p "$d/app"; printf "[package]\nname = \"tcopos\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\ndata Chain : Type where\n  Nil2 : Chain\n  Cons2 : Chain -> Chain\n\nbuild : Int -> Chain -> Chain\nbuild n acc = if n <= 0 then acc else build (n - 1) (Cons2 acc)\n\nifTail : Int -> Int\nifTail n = if n <= 0 then 0 else ifTail (n - 1)\n\nchainTail : Chain -> Int\nchainTail c = case c of\n  Nil2 => 0\n  Cons2 k => chainTail k\n\nnatTail : Nat -> Int\nnatTail n = case n of\n  Zero => 0\n  Succ k => natTail k\n\nmain : Int\nmain = ifTail 300000 + chainTail (build 300000 Nil2) + natTail (natFromInt 300000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcopos-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcopos-out/bin/tcopos" 2>&1
+exit: 0
+out-equals: 0
+
+# 9ae) 来参区不够时不发尾调用：窄函数尾调 8 参宽函数回退普通 `call`，语义不变；
+#      `main.s` 里该调用点是 `call`，而宽函数尾调窄函数（够用）仍是 `jmp`。
+run: sh -c 'd="$TMPDIR/tcofb"; mkdir -p "$d/app"; printf "[package]\nname = \"tcofb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "narrow : Int -> Int\nnarrow n = if n <= 0 then 42 else wide8 (n - 1) 1 2 3 4 5 6 n\n\nwide8 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide8 n a b c d e f g = narrow n\n\nmain : Int\nmain = narrow 50000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcofb-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcofb-out/bin/tcofb" 2>&1
+exit: 0
+out-equals: 42
+run: sh -c 'grep -q "call vuna_wide8" "$TMPDIR/tcofb-out/main.s"'
+exit: 0
+run: sh -c '! grep -q "jmp vuna_wide8" "$TMPDIR/tcofb-out/main.s"'
+exit: 0
+run: sh -c 'grep -q "jmp vuna_narrow" "$TMPDIR/tcofb-out/main.s"'
+exit: 0
+
+# 9af) 尾调用 × 续延 × GC：resume 之后的尾递归循环在 `GC_STRESS` 下输出一致。
+run: sh -c 'd="$TMPDIR/tcoeff"; mkdir -p "$d/app"; printf "[package]\nname = \"tcoeff\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\nimport Base.String\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nloop : Nat -> Int -> Int\nloop n acc = case n of\n  Zero => acc\n  Succ k => loop k (acc + strLength (strFromInt k))\n\nwork : Eff [POp] Int\nwork = do\n  x <- perform (P 1)\n  pure (loop (natFromInt 20000) x)\n\nmain : Int\nmain = runPure (handle work { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcoeff-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcoeff-out/bin/tcoeff" 2>&1
+exit: 0
+out-equals: 88891
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcoeff-out/bin/tcoeff" 2>&1'
+exit: 0
+out-equals: 88891
+
+# 9ag) 尾调用不影响确定性：带尾调用的程序两次 compile 的 `main.s` 逐字节一致。
+run: sh -c '"$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-a" --target native; "$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-b" --target native; cmp "$TMPDIR/dettco-a/main.s" "$TMPDIR/dettco-b/main.s"'
+exit: 0
+
+# 9ah) 闭包体的来参区按闭包 ABI 算（`rdi` 占掉一个寄存器）：8 参 lambda 尾调 10 参函数
+#      正好用满 32 字节来参区，仍然发 `jmp`（两处：lambda 体内 + 宽函数自递归）。
+run: sh -c 'd="$TMPDIR/tcolam"; mkdir -p "$d/app"; printf "[package]\nname = \"tcolam\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "wide10 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide10 a b c d e f g h i n =\n  if n <= 0 then a + b + c + d + e + f + g + h + i\n  else wide10 a b c d e f g h i (n - 1)\n\napply8 : (Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int) -> Int\napply8 f = f 1 2 3 4 5 6 7 8\n\nmain : Int\nmain = apply8 (\\\\a, b, c, d, e, f, g, h => wide10 a b c d e f g h 0 100000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcolam-out" "$d"'
+exit: 0
+run: "$TMPDIR/tcolam-out/bin/tcolam" 2>&1
+exit: 0
+out-equals: 36
+run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/main.s"'
+out-equals: 2

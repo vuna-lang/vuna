@@ -50,6 +50,22 @@ nativeFrameBytes slots =
     raw = 8 * slots
   in if raw == 0 then 0 else (raw + 15) / 16 * 16
 
+-- | 走栈的实参个数（`arity` 个实参里前 `regs` 个在寄存器里）。
+export nativeStackArgCount : Int -> Int -> Int
+nativeStackArgCount arity regs =
+  let
+    k = arity - regs
+  in if k <= 0 then 0 else k
+
+-- | 调用方为 16 字节对齐在栈实参**上方**留的洞：栈实参个数为奇数时 8 字节。
+export nativeStackPadBytes : Int -> Int
+nativeStackPadBytes k = if k - k / 2 * 2 == 1 then 8 else 0
+
+-- | 尾调用可写进调用方来参区的字节数（栈实参区 + 对齐洞）。
+--   尾调用把新实参写回 `[rbp+16...]`；超过这段就会踩调用者的帧。
+export nativeTailRoomBytes : Int -> Int
+nativeTailRoomBytes k = 8 * k + nativeStackPadBytes k
+
 -- ---------------------------------------------------------------
 -- 字符串对象布局、堆与 GC 布局
 -- ---------------------------------------------------------------

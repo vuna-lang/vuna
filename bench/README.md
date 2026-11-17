@@ -66,20 +66,20 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 
 | benchmark | 场景 | OCaml 后端 ratio | native ratio |
 | --- | --- | --- | --- |
-| arith | Int 算术 + 尾递归 | ~1.2x | ~68x（深非尾递归；见 §8.1） |
+| arith | Int 算术 + 尾递归 | ~1.2x | ~9.4x（尾调用后；见 §8.2） |
 | string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.7x |
 | hashmap | 持久哈希表 + 字典派发 | ~2.0x | ~3.3x |
 | list_recursion | List 非尾递归 / fold / append | ~0.8x | ~5.9x |
 | gc_pressure | 分配压力（字符串 churn） | ~1.2x | ~3.3x |
 | array | 不可变 Array | ~0.9x | ~2.5x |
-| records | record 更新 + variant 分派 | ~2.1x | ~21.6x |
+| records | record 更新 + variant 分派 | ~2.1x | ~7.4x（尾调用后；见 §8.2） |
 | closures | 高阶函数 / 每次迭代新建闭包 | ~1.4x | ~11.4x |
 | sorting | 归并排序（List + Pair 拆半） | ~1.5x | ~2.7x |
 | float_math | Float 算术 / sqrt / abs | ~1.9x | ~36.6x |
 | text_scan | 逐字节 `strAt` 扫描 | ~1.5x | ~13.0x |
 | nat_bits | Nat 饱和算术 + 位运算 | ~1.3x | ~15.5x |
-| tco_mutual | 互递归尾调用 | ~1.0x | ~38x（栈帧；TCO 后应大幅下降） |
-| tco_wide | 9 参数尾递归 | ~1.3x | ~114x（栈帧；TCO 后应大幅下降） |
+| tco_mutual | 互递归尾调用 | ~1.0x | ~6.7x（尾调用复用栈帧） |
+| tco_wide | 9 参数尾递归 | ~1.3x | ~10x（尾调用 + 栈实参重写） |
 | gc_low_live | 低存活集、大累计分配 | ~0.8x | ~0.95x（RSS 0.02x；GC 主判据） |
 | gc_array_churn | 大对象 churn（Array COW） | ~1.7x | ~12.6x（RSS 2.7x；COW 复制是主成本） |
 
