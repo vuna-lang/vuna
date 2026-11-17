@@ -19,6 +19,7 @@ import Base.EffEnv
 import Base.EffProcess
 import Base.EffStdin
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Cli.Args
@@ -63,9 +64,10 @@ record LintOpts where
   lintOptIgnore : List String
   lintOptMaxWarnings : Maybe Int
   lintOptNoCache : Bool
+  lintOptDiff : Bool
 
 defaultLintOpts : LintOpts
-defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing False
+defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing False False
 
 -- | 单个文件的结果。
 record FileOutcome where
@@ -246,7 +248,7 @@ else do
 -- 单文件
 -- ---------------------------------------------------------------
 -- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
-lintText : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv FileOutcome)
 lintText opts env displayPath configPath source = do
   cfgR <- configForFile opts configPath
   case cfgR of
@@ -276,7 +278,7 @@ lintText opts env displayPath configPath source = do
                 )
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
-lintOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
 lintOne opts env path = if path == "-" then if opts.lintOptFix then pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
 else do
   source <- readStdinAll
@@ -287,11 +289,36 @@ else do
     ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
     OkC source => lintText opts env path path source
 
+-- | 内部：打印 `--diff`（外部 `diff -u`；只用于人读，不影响退出码）。
+printDiff : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r Int
+printDiff path oldSource newSource = do
+  tmp0 <- envGetEnv "TMPDIR"
+  tmp <- pure (if tmp0 == "" then "/tmp" else tmp0)
+  base <- pure "${tmp}/vuna-lint-diff-${contentAddress path}"
+  oldPath <- pure "${base}.old"
+  newPath <- pure "${base}.new"
+  outPath <- pure "${base}.out"
+  cmd <- pure "diff -u '${oldPath}' '${newPath}' > '${outPath}' || true"
+  _ <- fsWriteFile oldPath oldSource
+  _ <- fsWriteFile newPath newSource
+  _ <- processRunIn "." ["sh", "-c", cmd]
+  exists <- fsFileExists outPath
+  text <- if exists then fsReadFile outPath else pure ""
+  msg <- pure (if text == "" then "" else "${text}\n")
+  _ <- consolePrint msg
+  _ <- fsRemoveFile oldPath
+  _ <- fsRemoveFile newPath
+  _ <- if exists then fsRemoveFile outPath else pure 0
+  pure 0
+
 -- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
-fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
+fixFileWith : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
 fixFileWith opts cfg path programFixities source findings = case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
   ErrC e => pure (ErrC e)
   OkC (Pair count newSource) => if count == 0 then pure (OkC (Pair findings 0))
+  else if opts.lintOptDiff then do
+    _ <- printDiff path source newSource
+    pure (OkC (Pair findings count))
   else if opts.lintOptDry then pure (OkC (Pair findings count))
   else do
     _ <- fsWriteFileAtomic path newSource
@@ -304,7 +331,7 @@ fixFileWith opts cfg path programFixities source findings = case fixLoop cfg pro
 -- 多文件 / 输出
 -- ---------------------------------------------------------------
 -- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
-lintFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
+lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
 lintFiles opts env [] acc = pure (Pair env (reverse acc))
 lintFiles opts env (path :: rest) acc = do
   stepped <- lintOne opts env path
@@ -485,6 +512,7 @@ lintUsage = """usage: vuna lint [OPTIONS] [PATH]...
   PATH 可为文件或目录；省略时扫 workspace 各包的 lib/ 与 app/
   --fix                 应用可自动修复的 finding（原子写）
   --dry-run             与 --fix 同用：只报告会修复多少条，不写盘
+  --diff                与 --fix 同用：打印 unified diff，不写盘
   --format FORMAT       text（默认）| json | github | sarif
   --max-warnings N      warning 超过 N 条时 exit 1（-1 = 不限）
   --quiet               只打印 error finding
@@ -531,7 +559,7 @@ parseLintOpts parsed = case formatOf (flagValue parsed "format") of
       Just maxPasses =>
         if maxPasses <= 0 || maxWarnings /= -2 && maxWarnings < -1 then Nothing
         else Just
-          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache"))
+          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache") (flagSet parsed "diff"))
 
 formatOf : Maybe String -> Maybe LintFormat
 formatOf Nothing = Just LintText
@@ -547,7 +575,7 @@ intOf (Just s) d = parseIntArg s
 
 -- | `vuna lint` 的入口。
 export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => List String -> Eff r Int
-runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", BoolFlag "no-cache", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
+runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", BoolFlag "no-cache", BoolFlag "diff", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
   ErrC e => do
     _ <- consoleEprint "error: ${diagText e}\n"
     pure 2
