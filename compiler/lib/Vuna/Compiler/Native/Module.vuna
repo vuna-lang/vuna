@@ -893,7 +893,7 @@ else case runtimeBinders (irAltBindersOf alt) of
       slotP = freshSlot st
       slot = firstOf slotP
     in nbind (genExpr (fuel - 1) (pushBinder b slot (secondOf slotP)) (irAltBodyOf alt))
-      (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (secondOf q)))
+      (\q => NOk (Pair (cat [getLocal sc, setLocal slot, firstOf q]) (restoreBinderScope (secondOf q) st.fgSlots)))
   _ => internal "case arm has more than one runtime binder"
 
 tagOfScrut : Int -> List Instr
@@ -927,7 +927,7 @@ genVariantArm : Int -> FGen -> Int -> IrAlt -> NRes (Pair (List Instr) FGen)
 genVariantArm fuel st sc alt =
   if fuel <= 0 then internal "native codegen fuel exhausted"
   else nbind (bindFields st sc 1 (runtimeBinders (irAltBindersOf alt)))
-    (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (secondOf q))))
+    (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
 
 bindFields : FGen -> Int -> Int -> List IrBinder -> NRes (Pair (List Instr) FGen)
 bindFields st _ _ [] = NOk (Pair [] st)
@@ -947,7 +947,7 @@ else case alts of
     Nothing => genDefault (fuel - 1) st sc alts
     Just _ =>
       nbind (bindFields st sc 0 (runtimeBinders (irAltBindersOf alt)))
-        (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (secondOf q))))
+        (\bp => nbind (genExpr (fuel - 1) (secondOf bp) (irAltBodyOf alt)) (\q => NOk (Pair (append (firstOf bp) (firstOf q)) (restoreBinderScope (secondOf q) st.fgSlots))))
 
 genNatArm : Int -> FGen -> Maybe IrAlt -> String -> Int -> NRes (Pair (List Instr) FGen)
 genNatArm _ st Nothing _ _ = NOk (Pair [] st)
