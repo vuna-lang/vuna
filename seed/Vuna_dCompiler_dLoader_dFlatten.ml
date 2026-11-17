@@ -1,9 +1,9 @@
 open Vuna_runtime
 # 54 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema = "vuna-lex-cache 2"
+let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema = "vuna-lex-cache 3"
 
 # 58 "Vuna/Compiler/Loader/Flatten.vuna"
-let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec = "lex-tokens 2"
+let v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec = "lex-tokens 3"
 
 # 67 "Vuna/Compiler/Loader/Flatten.vuna"
 let v_Vuna_dCompiler_dLoader_dFlatten_dlexAddrOf = (fun src -> (Vuna_dCompiler_dLoader_dAddr.v_Vuna_dCompiler_dLoader_dAddr_daddrOf (Base_dList.C_Base_dList_dList__x58__x58_ ("lex", (Base_dList.C_Base_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheSchema, (Base_dList.C_Base_dList_dList__x58__x58_ (v_Vuna_dCompiler_dLoader_dFlatten_dlexCacheCodec, (Base_dList.C_Base_dList_dList__x58__x58_ ((Vuna_dCompiler_dBase_dHash.v_Vuna_dCompiler_dBase_dHash_dcontentAddress src), Base_dList.C_Base_dList_dList_Nil))))))))))
