@@ -59,8 +59,17 @@
 | `Base.EffStdin` | 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`（返回 `Maybe String`，EOF = `Nothing`）/`handleStdin`/`handleStdinHost`（真实 handler 用 `prim_eff_readLine`/`prim_eff_readBytes`）；`runStdin n` |
 | `Base.EffExit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `prim_eff_exit`）；`runExit n` |
 | `Base.EffProcess` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
+| `Base.Data` | 数据门面：`Base.Data.List.map` / `Base.Data.Maybe` / `Base.Data.Nat` 等命名空间路径；不改变各模块的导出面 |
+| `Base.Trait` | trait 门面：`Base.Trait.Eq.eq` / `Base.Trait.Monad.bind` 等命名空间路径 |
+| `Base.Container` | 容器门面：`Base.Container.Map` / `HashMap` / `HashSet` / `Array` / `Sort` 用路径区分同名操作 |
+| `Base.Pure` | 纯 monad 门面：`Base.Pure.State` / `Reader` / `Error` / `IORef` |
+| `Base.Host` | 宿主效应门面：`Base.Host.Fs` / `Console` / `Process` / `Net` 等 |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Num` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
+
+推荐入口层：应用默认 `import Base`（或依赖自动 `Prelude`）；需要 effect / 容器 / host
+时用 `Base.Container.Map.insert` 这类门面路径，或 `import Base.Container as C` 后写
+`C.Map.insert`。门面只导出路径，不改变叶子模块仍在 `[export]` 里的现状。
 
 抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Map` / `Base.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
 用哈希容器时显式 `import Base.HashMap` / `Base.HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。

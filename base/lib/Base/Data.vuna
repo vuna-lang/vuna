@@ -1,0 +1,16 @@
+-- | 应用常用数据门面：按命名空间路径访问核心数据类型与 helper。
+module Base.Data where
+
+export module Base.Pair as Pair
+export module Base.Bool as Bool
+export module Base.List as List
+export module Base.Maybe as Maybe
+export module Base.Result as Result
+export module Base.String as String
+export module Base.Unit as Unit
+export module Base.Vec as Vec
+export module Base.Nat as Nat
+export module Base.Int as Int
+export module Base.Float as Float
+export module Base.Bits as Bits
+export module Base.Sort as Sort

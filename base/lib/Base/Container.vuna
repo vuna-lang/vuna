@@ -1,0 +1,8 @@
+-- | 容器门面：Map / 哈希容器 / Array 用命名空间路径区分同名操作。
+module Base.Container where
+
+export module Base.Map as Map
+export module Base.HashMap as HashMap
+export module Base.HashSet as HashSet
+export module Base.Array as Array
+export module Base.Sort as Sort

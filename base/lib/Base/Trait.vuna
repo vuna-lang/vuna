@@ -1,0 +1,17 @@
+-- | trait 门面：按命名空间路径访问 trait 与常用类型层定义。
+module Base.Trait where
+
+export module Base.Eq as Eq
+export module Base.Ord as Ord
+export module Base.Show as Show
+export module Base.Interp as Interp
+export module Base.Hashable as Hashable
+export module Base.Monoid as Monoid
+export module Base.Foldable as Foldable
+export module Base.Traversable as Traversable
+export module Base.Monad as Monad
+export module Base.Record as Record
+export module Base.Num as Num
+export module Base.Neg as Neg
+export module Base.FromInt as FromInt
+export module Base.FromString as FromString

@@ -59,5 +59,10 @@ modules = [
   "Base.Monad",
   "Base.Obs",
   "Base.Obs.Span",
+  "Base.Data",
+  "Base.Trait",
+  "Base.Container",
+  "Base.Pure",
+  "Base.Host",
   "Prelude"
 ]
