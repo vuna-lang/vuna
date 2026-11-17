@@ -509,7 +509,7 @@ printRuleExplain name = case lintRuleOfName name of
 -- | 内部：`vuna lint` 的用法文本。
 lintUsage : String
 lintUsage = """usage: vuna lint [OPTIONS] [PATH]...
-  PATH 可为文件或目录；省略时扫 workspace 各包的 lib/ 与 app/
+  PATH 可为文件或目录，`-` 表示 stdin；省略时扫 workspace 各包的 lib/ 与 app/
   --fix                 应用可自动修复的 finding（原子写）
   --dry-run             与 --fix 同用：只报告会修复多少条，不写盘
   --diff                与 --fix 同用：打印 unified diff，不写盘

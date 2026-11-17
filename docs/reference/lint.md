@@ -13,7 +13,9 @@ code / rule / 消息的唯一真源）。
 vuna lint [PATH]...                     # PATH 可为文件或目录；省略 = workspace 各包 lib/app
 vuna lint --fix [PATH]...               # 逐轮应用可修复 finding，最多 --max-passes 轮
 vuna lint --fix --dry-run [PATH]...     # 只报告会修复多少条，不写盘
-vuna lint --format json [PATH]...       # text（默认）| json | github
+vuna lint --fix --diff [PATH]...        # 打印 unified diff，不写盘
+vuna lint --format json [PATH]...       # text（默认）| json | github | sarif
+vuna lint -                             # 从 stdin 读一份源码
 vuna lint --select list-literal --ignore dispatch-lift [PATH]...
 vuna lint --max-warnings 0 [PATH]...    # warning 超限也 exit 1
 vuna lint --list | --explain <RULE>
