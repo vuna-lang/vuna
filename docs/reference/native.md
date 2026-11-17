@@ -395,10 +395,10 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   [testing.md](testing.md)「后端自举 conformance」）；它的 `selfhost` scope 在整仓
   `check` 上以 `continuation stack overflow` 收口。
 - **GC 的边界**：保守、非移动、不分代、不压缩。因此
-  1. 活帧里**已经用过的栈槽**仍被保守扫描（每个活帧可能多留它最后一个临时对象），
-     内存下界随栈深度增长；没有 TCO 时每层尾调用都留一帧，实测 `gc_low_live`
-     （1 万层尾递归、约 170 MB 总分配）的 `GC_LOG` live 从 0.9 MB 涨到 320 MB，
-     墙钟 0.31 s → 9.5 s（[performance.md](performance.md) §8.2）；
+  1. 活帧里**尚未清零的栈槽**仍被保守扫描；调用点实参槽与文本最后读取后会清零，所以
+     `gc_low_live` 这类「分配后用掉、再尾递归」的形状不再按栈深度累计保留（死槽清零前
+     `GC_LOG` live 从 0.9 MB 涨到 320 MB、墙钟 0.31 s → 9.5 s；清零后 322 ms / 5.4 MiB，
+     见 [performance.md](performance.md) §8.2）。仍在跨调用临时值里的对象会被多留；
   2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
