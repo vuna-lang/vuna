@@ -404,16 +404,24 @@ ctorEntryHits modules ((Pair m rest) :: more) base = case rest of
   else ctorEntryHits modules more base
   _ => ctorEntryHits modules more base
 
+-- | 导出表里「族 parent 下短名 base」的构造子条目（iface 模块没有 decls 时也能用）。
+ctorFamilyEntryOf : String -> String -> ExportEntry -> Bool
+ctorFamilyEntryOf base parent x = x.kind == "ctor" && x.public == base && x.parent == parent
+
 ctorFamilyHits : List Module -> List (Pair String (List String)) -> String -> String -> Check (List (Pair String ExportEntry))
 ctorFamilyHits modules [] fam base = OkC []
 ctorFamilyHits modules ((Pair m rest) :: more) fam base = case rest of
   [f, member] => if f == fam && member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es fam of
-    Just e => Vuna.Compiler.Base.Common.bind (moduleDecls modules m) (\ds => case ctorTargetInDecls m e.target base ds of
-      Just t =>
+    Just e => case filter (ctorFamilyEntryOf base e.target) es of
+      x :: _ =>
         Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base)
-          (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = t, parent = e.target }) hits))
-      Nothing => ctorFamilyHits modules more fam base
-    )
+          (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = x.target, parent = e.target }) hits))
+      [] => Vuna.Compiler.Base.Common.bind (moduleDecls modules m) (\ds => case ctorTargetInDecls m e.target base ds of
+        Just t =>
+          Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base)
+            (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = t, parent = e.target }) hits))
+        Nothing => ctorFamilyHits modules more fam base
+      )
     Nothing => ctorFamilyHits modules more fam base
   )
   else ctorFamilyHits modules more fam base
@@ -994,9 +1002,12 @@ resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Bas
 resolveDottedTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveDottedTypeName modules label prefix ns imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (splitOnDot name)) (\ps => if isEmptyPaths ps then resolveFamilyQualifiedCtor modules label prefix ns imports name
 else Vuna.Compiler.Base.Common.bind (entryHits pickTypeEntries modules ps (memberLabel name ps)) (\hits => case hits of
-  [] =>
-    rnNoLoc2 (TypeNotExported (memberLabel name ps) (firstModuleOf name ps)) (memberLabel name ps)
-      (firstModuleOf name ps)
+  [] => case resolveCtorDotted modules label prefix ns imports name of
+    -- 依赖类型索引里的限定构造子（`Base.Eff.Row.Nil`）：类型查找失败后退化到构造子命名空间。
+    OkC t => OkC t
+    ErrC _ =>
+      rnNoLoc2 (TypeNotExported (memberLabel name ps) (firstModuleOf name ps)) (memberLabel name ps)
+        (firstModuleOf name ps)
   _ =>
     Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "type" (memberLabel name ps) hits)
       (\p => OkC (secondOf p).target)

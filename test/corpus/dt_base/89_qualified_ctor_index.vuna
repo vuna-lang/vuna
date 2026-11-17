@@ -1,0 +1,9 @@
+-- 类型位置里的限定构造子（`Base.Eff.Row.Nil`）：类型命名空间查找失败后回退到构造子。
+import Base.Eff
+import Base.Nat
+
+prog : Base.Eff.Eff Base.Eff.Row.Nil Nat
+prog = pure 1
+
+main : Nat
+main = runPure prog
