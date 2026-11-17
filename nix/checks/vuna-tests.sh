@@ -35,13 +35,23 @@ TIER_ARGS=""
 for tier in ${VUNA_TEST_TIERS:-}; do
   TIER_ARGS="$TIER_ARGS --tier $tier"
 done
+# 后端矩阵：VUNA_TEST_BACKENDS 是空格分隔的目标名（ocaml / wasm / native）。
+# 只跑 `matrix` 声明的允许面（见 test/suite.toml 与 testing.md）。
+BACKEND_ARGS=""
+for backend in ${VUNA_TEST_BACKENDS:-}; do
+  BACKEND_ARGS="$BACKEND_ARGS --backend $backend"
+done
+MATRIX_ARGS=""
+for matrix in ${VUNA_TEST_MATRICES:-}; do
+  MATRIX_ARGS="$MATRIX_ARGS --matrix $matrix"
+done
 # shellcheck disable=SC2086
-"$VUNA" test --suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips $TIER_ARGS
+"$VUNA" test --suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS
 
 # e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
-    "$VUNA" test --suite test/suite.toml --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --no-cache --strict-skips --tier tools
+    "$VUNA" test --suite test/suite.toml --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --no-cache --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS
     ;;
 esac

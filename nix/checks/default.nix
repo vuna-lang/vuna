@@ -193,6 +193,33 @@ in
     script = ./vuna-tests.sh;
   };
 
+  # 后端矩阵：同一份 suite 在两个非默认目标上跑它声明允许的用例
+  # （`matrix = pure-cross / effect-common / effect-wasm`，见 testing.md）。
+  # ocaml 由 gate 覆盖；这里只跑 fast+integration，e2e/steps 仍由 ocaml 承担。
+  vuna-tests-wasm = vunaCheck {
+    name = "vuna-tests-wasm";
+    srcs = testTree;
+    env = {
+      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+      VUNA_TEST_TIERS = "fast integration";
+      VUNA_TEST_BACKENDS = "wasm";
+    };
+    nativeBuildInputs = e2eTools;
+    script = ./vuna-tests.sh;
+  };
+
+  vuna-tests-native = vunaCheck {
+    name = "vuna-tests-native";
+    srcs = testTree;
+    env = {
+      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+      VUNA_TEST_TIERS = "fast integration";
+      VUNA_TEST_BACKENDS = "native";
+    };
+    nativeBuildInputs = e2eTools;
+    script = ./vuna-tests.sh;
+  };
+
   vuna-metrics = vunaCheck {
     name = "vuna-metrics";
     srcs = [

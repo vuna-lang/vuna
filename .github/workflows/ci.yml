@@ -49,6 +49,31 @@ jobs:
   # （口径见 docs/reference/testing.md「后端自举 conformance」）。
   # 不进 nix flake check：整轮成本远高于日常门禁，只在 push 与带 backend 标签的 PR 跑。
 
+  # 后端矩阵：suite 的 matrix 分类决定每个目标跑哪些 case（pure-cross / effect-*）。
+  # 只跑 fast+integration；e2e 的 LSP/REPL/包管理器/seed 是 ocaml 宿主工具链，不跨目标。
+  backend-matrix:
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'backend')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [wasm, native]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Restore Nix store
+        if: github.event_name == 'push'
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ github.sha }}-${{ matrix.backend }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+      - name: vuna-tests-${{ matrix.backend }}
+        run: nix build .#checks.x86_64-linux.vuna-tests-${{ matrix.backend }} -L
+
   # native 自举对真实工程仍不通（debt D89：check base 段错误）。先落地并持续报告，
   # D89 关闭后删掉 continue-on-error 改成阻塞门禁。
   backend-native:
