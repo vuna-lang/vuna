@@ -132,7 +132,7 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 | `TC_CannotSolveOccurs` | 精化 | 解里出现自身 |
 | `TC_CannotSolveHigherOrder` | 精化 | 非 Miller pattern 的元变量应用 |
 | `TC_NoInstanceFound` | 精化 | 接口字典找不到实例 |
-| `TC_AmbiguousInstance` | 精化 | 多个实例头部都能统一 |
+| `TC_AmbiguousInstance` | 精化 | 多个实例头部都能统一；效应行上同一行里重复 `Named "a" Op` 也报这一条，候选文本显示条目实例名（默认名省略、显式名写 `Op@name`） |
 | `TC_UnknownInterface` | 精化 | instance 头 / 签名约束头能解析成名字但不是已声明接口 |
 | `TC_InstanceHeadNotApp` | 精化 | instance 头形态不合法 |
 | `TC_ConstraintNotDict` | 精化 | 约束项不是 trait 应用或参数个数不符 |

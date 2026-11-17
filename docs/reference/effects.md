@@ -34,7 +34,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
 | main 入口 | `main : Eff [] a`；钩子 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)` |
 | 执行 | `runPure : Eff [] a -> a`（行必须 Nil；运行时 `runThunk` 应用 dummy 令牌） |
-| 行 | `Row` / `Cons` / `Nil` + `Member`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
+| 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
 
 - `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
   `TC_UnhandledEffects`；`vuna interp` 遇到动作入口报
@@ -52,8 +52,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   实际用到的标签写 `Member nX XOp r`（`nX` 可省略，由精化器补隐式实例名）；纯逻辑保持纯，
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Eff.Types` 只重导出
-  类型面（`Eff` / `Row` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与 `List.Cons`
-  的 `::` 歧义；`Base.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
+  类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
+  `List` 的 `(::)` 重载；`Base.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
 - **宿主原语**：`@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
   源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 
@@ -164,31 +164,36 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ### 8.1 表示
 
-- `Row` 是 Type-1 数据，存放**效应标签类型**（`Cons : String -> Type -> Row -> Row`：实例名 + 标签 + 尾行）；
+- `Row` 是 Type-1 数据，条目是**效应标签类型**：`Nil` 是空行，`(::) : Type -> Row -> Row`
+  是「标签 + 尾行」。行只是擦除索引，不进入运行时值。
+- **实例名并进标签**：`Named : String -> Type -> Type`，行条目就是 `Named n e`
+  （`Named "audit" ConsoleOp`）。
 - **列表字面量通用展开**：parser 把 `[]` / `[e1, e2]` 解析成保留名
   `@vuna@list@nil` / `@vuna@list@cons`（不是构造子名字解析）；精化器按**期望族**的短名
-  `Nil`/`Cons` 展开，期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的
-  位置 `[Fetch]` 展开为 `Cons "default" Fetch Nil`（裸标签补默认名），`[]` 展开为
-  `Base.Eff.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`Cons` 族同样适用。模式
+  `Nil` / `(::)` 展开（`List`、`Vec`、`Base.Eff.Row` 与用户自定义同形族都走这一条），
+  期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的位置 `[Fetch]` 展开为
+  `Named "default" Fetch :: Nil`（裸标签补默认名），`[]` 展开为
+  `Base.Eff.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`(::)` 族同样适用。模式
   `[]` / `[a, b]` 按 scrutinee 族逐层展开（`Elab/Term/Impl` 的
   `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
   夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
-  行只是擦除索引，不进入运行时值。
 - **标签 = op 族应用**（D2）：`ConsoleOp`、`StateOp Nat`、`ReaderOp Int`、`FsOp`…；
   没有闭合的 `data EffectLabel`，新增效应不需要改中央表。`Exn` 是无参标记类型。
-- **实例名是 Row 里的 String**：行条目 `Cons "counter" (ReaderOp Int) rest`；
-  运行时按 `(key, name)` 的字符串相等找 handler。库不定义固定实例名枚举，使用方自选名字
-  （同一效应族同时安装的实例名必须互不相同）。裸标签 = 默认名 `"default"`；显式名用
-  `[Op]` 或 `Cons n Op r`。
+- **实例名是标签里的 String**：行条目 `Named "counter" (ReaderOp Int)`；运行时按
+  `(key, name)` 的字符串相等找 handler（name 仍作为隐式 String 传给 send/handle）。
+  库不定义固定实例名枚举，使用方自选名字（同一效应族同时安装的实例名必须互不相同）。
+  裸标签 = 默认名 `"default"`；显式名用 `[Op@audit]` 或 `Named "audit" Op`。
 - `Eff r a` 构造子不导出；内部是私有 dummy thunk（`EffUnit -> a`），
   **没有世界令牌**；dummy 只为延迟执行。
-- `Member n e r` 是 Type-1 归纳族（`Here`/`There`），effect wrapper 用
-  `Member n e r =>` 签名糖（隐式 String 名 + `Rig0` 证明 binder）；精化器按行结构构造证明
+- `Member : Type -> Row -> Type 1` 是归纳族（`Here`/`There`），索引是**行条目**（标签，
+  可为 `Named n e`）。effect wrapper 用 `Member n e r =>` 签名糖（内部为
+  `Member (Named n e) r`，生成隐式 String 名 + `Rig0` 证明 binder）；精化器按行结构构造证明
   （定义级 ctx 收尾），调用点默认名 / `@name` 覆盖。
-- `rowRem : Type -> Row -> Row` 去掉一个标签；它不是类型族，由编译器按标签类型值
-  结构相等归约（重复绑定名/非线性格不受支持：parser 直接报 `PS_RepeatedPatternBinder`，
-  见 language.md）。归约前对 name/label 做一次 `force`：解表不改写已构造好的 value，
-  已解 meta 在结果行里仍是 `VMeta` 节点（`handle` 语法依赖这条才让结果行归约掉）。
+- `rowRem : Type -> Row -> Row` 去掉一个标签条目（`rowRem (Named "audit" ConsoleOp) r`）；
+  它不是类型族，由编译器按标签类型值结构相等归约（重复绑定名/非线性格不受支持：parser 直接报
+  `PS_RepeatedPatternBinder`，见 language.md）。归约前对条目（含 `Named` 的名字与标签一层
+  spine 实参）做一次 `force`：解表不改写已构造好的 value，已解 meta 在结果行里仍是
+  `VMeta` 节点（`handle` 语法依赖这条才让结果行归约掉）。
 
 ### 8.2 运行时
 
@@ -213,11 +218,11 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
-| `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名在行条目（`Cons "counter" (ReaderOp Int) r`） |
+| `Base.Eff` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `ResFn(..)`/`resFn`/`resOf`（`handle` 语法的两个降级目标：handler 类型显式、结果族作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
+| `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
 | `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名在行条目，如 `Cons "real" FsOp r`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名在行条目，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `resFs`；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 在 result 族转 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
+| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
 | `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
 | `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
@@ -238,21 +243,22 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 
 ### 8.4 已知边界
 
-- **行成员约束**：`Base.Eff.Member` 是 Type-1 归纳族，effect wrapper 可用
-  `Member n e r =>` 签名糖（定义里也可写显式 `{w : Member n e r}`）；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
+- **行成员约束**：`Base.Eff.Member` 是 Type-1 归纳族（`Member e r`，索引 `e` 是行条目，
+  可为 `Named n e0`）；effect wrapper 可用 `Member n e r =>` 签名糖（内部即
+  `Member (Named n e) r`；定义里也可写显式 `{w : Member (Named n e) r}`）；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
   延迟到**定义体结束**、用定义级 ctx 收尾（可命中 wrapper 的局部证明 binder），缺效应
   报 `TC_NoInstanceFound`（负例 `dt_err/70_effect_missing`）。
   不走 trait 重叠实例（trait 版 `Member` 需要头可合一的重叠实例，已决定不计划；
   行成员约束也不需要它）；`sendCore`/
   `handleCore` 本身不带证明，属于信任边界内的核心原语。
 - **自动行 lift**：`checkByInferFuel` 在 conv 失配时调用独立 `tryEffLift`：
-  期望形如 `Eff (Cons e tail) a`、实际结果行与 `tail` 相等时，直接合成
-  `Base.Eff.weaken {e}{r}{a}` 应用（不 re-check，避免与 `checkByInferFuel` 形成 SCT
+  期望形如 `Eff (label :: tail) a`、实际结果行与 `tail` 相等时，直接合成
+  `Base.Eff.weaken {label}{r}{a}` 应用（不 re-check，避免与 `checkByInferFuel` 形成 SCT
   互递归）；`weaken` 不在作用域或期望是 `Eff []` 时不触发（后者仍报 `TC_UnhandledEffects`）。
   夹具 `dt_base/72_eff_auto_lift`。只在 check 方向；不会自动重排/合并行。
 - **行删除**：`rowRem` 是公理 + 编译器按标签类型值结构相等归约；
   不能写成类型族（重复绑定名的模式会被 parser 以 `PS_RepeatedPatternBinder` 拒绝，
-  见 language.md）。归约前对 name/label（含 label 一层 spine 实参）先 `force`，
+  见 language.md）。归约前对条目（含 `Named` 的名字与 label 一层 spine 实参）先 `force`，
   让已解 meta 参与比较；未解 meta 仍卡住（`Core/Eval.rowRemReduce`）。
 - **`Monad (Eff r)`**：`Base.Eff` 声明 `instance Monad (Eff r)`，实例方法直接构造
   私有 `MkEff`（实例 tele `r : Row` 由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用
@@ -293,8 +299,9 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 行只描述、不授权：没有类型级能力行；宿主层对任何包可见，用户面经 handler（约定）。
 续延是一次性（one-shot）。
 
-- **协议集中**：`Base.Eff.{Row,Nil,Cons,Member,Here,There,rowRem}` 的名字集中在
-  `Vuna.Compiler.Base.Intrinsics` 的效果协议常量（`effRowFamilyName` 等）；`Core/Eval`、
+- **协议集中**：`Base.Eff.{Row,Nil,(::),Named,Member,Here,There,rowRem}` 的名字集中在
+  `Vuna.Compiler.Base.Intrinsics` 的效果协议常量（`effRowFamilyName` / `effNamedName` /
+  `effMemberFamilyName` 等）；`Core/Eval`、
   `Elab/Dict` 的行删除归约与 `Member` 证明构造只引用常量，不再各自硬编码名字。
 - **入口收紧**：`runPure : Eff [] a -> a`（行必须 `Nil`）——入口处的未处理效应是类型错误
   （负例 `dt_err/82_unhandled_effect_entry`），运行时 `unhandled effect` 兜底只服务

@@ -14,13 +14,14 @@
 - **类型表达式里的字面量**：签名、族 kind、构造子索引里可以用 `Int` / `String` 字面量
   （`Vec 3 a`、用户 data 的 String 索引如 `Box "books"`）；只放行这两种（其它字面量，包括浮点，报
   `invalid type expression`）。规则见 [type-system.md](type-system.md)。
-- **列表字面量（运行时效应用法）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind
-  为 `Row`** 的位置分别展开为 `Cons "default" Fetch Nil` /
-  `Cons "default" Fetch (Cons "default" Log Nil)` / `Nil`；`[ConsoleOp@audit]` /
-  `[StateOp Nat@counter]` 用 `@` 指定实例名。普通列表字面量（期望 `List a`）走同一套
-  按族展开的规则。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
-  `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` / `Cons` 链
-  与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` / `Cons` 保持原样。
+- **列表字面量（按期望族展开）**：`[Fetch]` / `[Fetch, Log]` / `[]` 在**期望 kind
+  为 `Row`** 的位置分别展开为 `Named "default" Fetch :: Nil` /
+  `Named "default" Fetch :: (Named "default" Log :: Nil)` / `Nil`；`[ConsoleOp@audit]` /
+  `[StateOp Nat@counter]` 用 `@` 指定实例名（`Named "audit" ConsoleOp` /
+  `Named "counter" (StateOp Nat)`）。普通列表字面量（期望 `List a`）走同一套
+  按族展开的规则（族里的 `Nil` / `(::)`）。例：`String -> Eff [Fetch] String`。构造数据时优先写 `[..]`：
+  `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` 链
+  与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` 保持原样。
 - **模板字符串与多行字面量**："hi ${name}" 插值、"""...""" 多行（内容逐字，
   只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
@@ -64,7 +65,7 @@
 - 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `Nat` 是 base 的
   普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，
   经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
-  `True` / `False` / `Cons` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
+  `True` / `False` / `(::)` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
   构造子放行」；身份规则见 [primitives.md](primitives.md)。
 
 ## `let` / `where` 绑定块与显式签名
@@ -204,20 +205,23 @@ binder 组内的多个名字展开成嵌套 Pi，解析器把这段 Pi 前缀搬
 
 ## 成员约束与实例名（effect wrapper）
 
-`Member n e r => ...` 是签名糖，不是 trait：编译器生成隐式 `{_member : Member n e r}` 证明
+`Member n e r => ...` 是签名糖，不是 trait：它展开成 `Member (Named n e) r`（`Member` 本身
+是 2 个索引的归纳族：行条目 + 行）。编译器生成隐式 `{_member : Member (Named n e) r}` 证明
 binder（`Rig0`），并把 `n`/`r` 的域分别量化为 `String`/`Row`；标签 `e` 的其它自由名仍按
 kind 规则量化。签名例子：
 
 ```vuna
 consolePrint : Member n ConsoleOp r => String -> Eff r Nat
-consolePrint s = sendCore ConsoleOp "console" n (Print s)
+consolePrint s = sendCore (Named n ConsoleOp) "console" n (Print s)
 ```
 
 - 隐式 `String` 实例名按 `RigOmega` 运行（见 [qtt.md](qtt.md)），定义体可按名字引用；
   resolver 只把 String 域隐式名与 `Member` ctx 的自由小写名加进子句作用域。
 - 调用点不写实例名：裸标签行取默认 `"default"`，命名行按行解；多实例行用 `f@name`
-  显式选，变量写 `f@(n)`。`@` 是可选的隐式实参覆盖，不参与位置实参。
-- `Member` 仍是 `Base.Eff` 的 Type-1 data family；约束只允许在顶层签名。
+  显式选（裸标识符是名字字面量）。实例名是静态的（行解或字面量），`@` 是可选的隐式实参
+  覆盖，不参与位置实参。
+- `Member` 仍是 `Base.Eff` 的 Type-1 data family（`Member e r`，`e` 是行条目，可为
+  `Named n e0`）；约束只允许在顶层签名。
 
 ## 源码写法惯例（现代形态）
 
@@ -386,9 +390,16 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
   同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
 - **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名
-  `@vuna@list@nil` / `@vuna@list@cons`，精化器按期望族的短名 `Nil`/`Cons` 展开
+  `@vuna@list@nil` / `@vuna@list@cons`，精化器按期望族的短名 `Nil` / `(::)` 展开
   （`List` / `Vec` / `Base.Eff.Row` / 用户自定义同形族都可用）；期望未知时默认
   `Base.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
+- **`::` 的家族定向解析**：`::` 是普通构造子名，`List` 与 `Base.Eff.Row` 都声明了它；
+  写 `x :: xs` 时按期望族 / scrutinee 族选 canonical 构造子（`Row` 位置选 `Row.(::)`，
+  `List` 位置选 `List.(::)`），期望族未知时默认 `List`，多候选且无法定向时报
+  `[TC_AmbiguousCtor]`。这也是 `Eff [..]` 行字面量与普通列表字面量能共用同一套糖的原因。
+- **`Named` 是普通类型构造子**：`Named : String -> Type -> Type`，在类型位置正常引用
+  （`Named "audit" ConsoleOp`、`Named n Op`）；它只在行条目/`Member` 语境下被编译器当作
+  「带实例名的标签」解读，不做特殊名字放行。
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
   只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
   `export import B` / `export import B (x)` 显式重导出；

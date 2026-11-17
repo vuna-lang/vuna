@@ -8,7 +8,7 @@
 **Layer 2（作用域/高阶组合）**：
 
 - `Base.Eff.Reader.local`：先 `ask` 取外层 env，在临时 handler 中回答 Ask，再用
-  `weaken` 把结果行扩宽回 `Cons e r`；外层 handler 仍在，所以 local 之后该效应仍可用。
+  `weaken` 把结果行扩宽回 `e :: r`；外层 handler 仍在，所以 local 之后该效应仍可用。
 - `Base.EffError`：`throw`/`handleError`/`runError` + `catch`。catch 在 comp 内安装临时
   Error handler；Throw 丢弃一次性续延并返回 `Result`；fallback 在 handler **之外**执行，
   因此嵌套 catch 的 fallback 抛错可被外层 catch 捕获。
@@ -120,18 +120,18 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `ConsoleOp`（实例名在行条目，如 `ConsoleOp`/`ConsoleOp`） | `Print String` / `EPrint String` | `handleConsoleHost` → `prim_eff_print`/`prim_eff_eprint`（`Print` 在 result 族转 `Nat`） | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `ClockOp`（实例名在行条目，`Cons "mock" ClockOp r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `effTimeUs` + **原生 `prim_eff_sleep`** | 固定时间戳 / 忽略 sleep |
-| `Base.EffEnv` | `EnvOp`（实例名在行条目） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath` | 固定字符串 |
-| `Base.EffProcess` | `ProcessOp`（实例名在行条目） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `FsOp`（实例名在行条目，如 `FsOp`/`FsOp`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`） | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.EffConsole` | `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`） | `Print String` / `EPrint String` | `handleConsoleHost` → `prim_eff_print`/`prim_eff_eprint`（`Print` 在 result 族转 `Nat`） | 自定义 `handleConsole`（如收集日志） |
+| `Base.EffClock` | `ClockOp`（实例名并进标签，`Named "mock" ClockOp :: r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `effTimeUs` + **原生 `prim_eff_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.EffEnv` | `EnvOp`（实例名并进标签） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath` | 固定字符串 |
+| `Base.EffProcess` | `ProcessOp`（实例名并进标签） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
+| `Base.EffFs` | `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`） | 自定义 `handleFs n`（纯 answer 内存表） |
 
  - **命名实例**：console/clock/env/process/fs 的标签都是 op 族应用（`ConsoleOp`/`FsOp`…），
-  实例名在行条目里（`Cons "mock" FsOp r` 与 `Cons "real" FsOp r` 是不同条目），因此同一个
+  实例名并进标签（`Named "mock" FsOp` 与 `Named "real" FsOp` 是不同条目），因此同一个
   程序可以同时装 mock 与真实 handler（或两个 mock）；send/handler 用同一对 `(key, name)`
   字符串。实例名由使用方自选，同一效应族同时安装的实例名必须互不相同。fs 的 API 是带
   实例名的形态（`fsReadFile n path`、`handleFsHost n`），夹具 `dt_base/18`/`29`/`40`。
-- **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (Cons e r) a`，
+- **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (e :: r) a`，
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
 - **原生 sleep**：编译器原语 `prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，interp 不归约）。

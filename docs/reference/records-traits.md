@@ -239,7 +239,7 @@ main = pretty Red ++ "/" ++ show Red
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
-  仍被 coherence 拒绝**（`Member e (Cons e r)` 与 `Member e r => Member e (Cons x r)`），
+  仍被 coherence 拒绝**（`Member e (e :: r)` 与 `Member e r => Member e (x :: r)`），
   因此 trait 版 `Member e r` 不可用。**这不是待修债务**：行成员约束用 Type-1 归纳族
   `Base.Eff.Member` 实现（精化器按行结构构造 `Here`/`There`），不需要 trait 重叠实例。
   实例头的 tele 变量 kind 按实参推断：裸变量取对应类参数的 kind，嵌套变量从

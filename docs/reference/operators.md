@@ -84,19 +84,21 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 
 ## 库声明表
 
-声明写在各库模块里，用 `infixl N op` / `infixr N op` / `infix N op`（可选 `= 目标名`）；
-声明位置是模块头与 import 之后、第一个声明之前（fmt 的规范位置），每条一行。
+用 `infixl N op` / `infixr N op` / `infix N op`（可选 `= 目标名`）；声明位置是模块头与
+import 之后、第一个声明之前（fmt 的规范位置），每条一行。base 包的全部源码级 fixity 声明
+集中在 `Base.Operator`（引用这些运算符的模块 import 它）；`->` / `&&` / `||` 的 fixity 由
+编译器固定（`Loader.Fixity.builtinFixityDecls`），不在 `Base.Operator` 里。
 
-| 符号 | 优先级 / 结合 | 别名 | 声明所在模块 | 说明 |
+| 符号 | 优先级 / 结合 | 别名 | 定义所在模块 | 说明 |
 | --- | --- | --- | --- | --- |
 | `==` | 4 左 | — | `Base.Eq` | `Eq` 方法（`(==)`） |
 | `/=` | 4 左 | — | `Base.Eq` | `Eq` 方法（`(/=)`） |
 | `<` `<=` `>` `>=` | 4 左 | — | `Base.Ord` | `Ord` 方法（`(<)` 等） |
-| `&&` `\|\|` | 3 / 2 左 | — | `Base.Bool` | 短路内建（不是 trait 方法） |
+| `&&` `\|\|` | 3 / 2 左 | — | `Base.Bool` | 短路内建（不是 trait 方法）；fixity 由编译器固定 |
 | `+` `-` | 6 左 | — | `Base.Num` | `Num` 方法（`(+)` / `(-)`；实例由精化器特化回内建原语） |
 | `*` `/` | 7 左 | — | `Base.Num` | `Num` 方法（`(*)` / `(/)`） |
 | `++` | 5 右 | — | `Base.String` | String 内建值 |
-| `::` | 5 右 | — | `Base.List` | `List` 构造子本身（`(::)`） |
+| `::` | 5 右 | — | `Base.List` / `Base.Eff.Row` | 两个族各自的 cons 构造子（同名，按期望族定向解析） |
 | `>>=` | 1 右 | — | `Base.Monad` | `Monad` 方法（`(>>=)`） |
 | `>>` | 1 左 | —（do 派生） | `Base.Monad` | `a >> b` 展开为 `(>>=) a (\_ => b)`（Loader 的 do 派生，用调用点可见的 `>>=`） |
 

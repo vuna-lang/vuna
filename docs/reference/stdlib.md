@@ -43,16 +43,16 @@
 | `Base.Float` | `Float` primitive 类型模块（**随 `Prelude` 自动导出**）：`FromFloat` trait + `abs` / `sqrt` / `intToFloat` / `floatToInt` + `Eq` / `Ord` / `Show` / `Num` 实例；字面量、算术/比较、`main : Float`、模板插值本来就不需要 import。Prelude 闭包包含本模块，所有程序的 runtime 都带浮点 helper（[floats.md](floats.md)） |
 | `Base.FromString` / `Base.FromInt` | 字面量转换 trait（`fromString` / `fromInt`）与 `String` / `Int` 恒等实例；`Prelude` 导出，`deriving (FromString)` / `(FromInt)` 为单字段包装类型自动派生（见 [floats.md](floats.md)） |
 | `Base.Bool` | `Bool` 类型与逻辑 helper + `Show` / `Hashable` 实例（`if` 输出 `True` / `False`）；`Eq` / `Ord` 实例因 Bool 是方法返回类型随 trait 留在 `Base.Eq` / `Base.Ord` |
-| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
-| `Base.Eff.Reader` | 标签 `ReaderOp s` + `Ask`（实例名在行条目）：`ask`/`handleReader`/`handleReaderLin`/`local`（作用域问答） |
-| `Base.EffState` | 标签 `StateOp s` + `Get`/`Put`（实例名在行条目）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名在行条目，如 `FsOp@mock`/`FsOp@real`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile`/`fsWriteFile`/…（默认名；显式 `@name`；`handleFs n`/`handleFsHost n` 的 handler 仍显式 n）；`WriteFile` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值）；真实 handler 用 `@vuna@host@try*` 原语，宿主失败抛 `FsErrorOp`（`FsError`：missing/denied/no-space/not-dir/is-dir/exists/io，`fsErrorText` 渲染）；`runFsError n` 把失败收成 `Result`，entry 预装的 `runFsErrorHost` 打印 `vuna: fs: …` 并 exit 1；mock（纯 answer）与 real handler 可并存（`dt_base/37`、`dt_base/85`） |
+| `Base.Eff` | 通用运行时效应核心（Layer 1）：开放行 `Row`（`Nil` / `(::)`）、`Named` 命名标签、抽象动作 `Eff`（无世界令牌）、`Member` 行成员证明/`rowRem`、`weaken`、线性 `Cont`/`resumeCont`/`handleCoreLin`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`；不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`、`runPure`/`joinEff`/`raise`（`runPure`/`joinEff` 要求行已处理干净，入口处未处理效应是类型错误）；OCaml 5 一次性续延；见 [effects.md](effects.md) §8 |
+| `Base.Eff.Reader` | 标签 `ReaderOp s` + `Ask`（实例名并进标签，如 `Named "counter" (ReaderOp Int)`）：`ask`/`handleReader`/`handleReaderLin`/`local`（作用域问答） |
+| `Base.EffState` | 标签 `StateOp s` + `Get`/`Put`（实例名并进标签，如 `Named "counter" (StateOp Nat)`）：`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
+| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`，即 `Named "mock" FsOp`））：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` + `fsReadFile`/`fsWriteFile`/…（默认名；显式 `@name`；`handleFs n`/`handleFsHost n` 的 handler 仍显式 n）；`WriteFile` 的结果是 `Nat`（`WriteFileAtomic` 仍 `Int`）；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值）；真实 handler 用 `@vuna@host@try*` 原语，宿主失败抛 `FsErrorOp`（`FsError`：missing/denied/no-space/not-dir/is-dir/exists/io，`fsErrorText` 渲染）；`runFsError n` 把失败收成 `Result`，entry 预装的 `runFsErrorHost` 打印 `vuna: fs: …` 并 exit 1；mock（纯 answer）与 real handler 可并存（`dt_base/37`、`dt_base/85`） |
 | `Base.EffError` | 一阶 Error 效应 + 作用域 `catch`：`throw`/`handleError`/`runError`/`catch` |
 | `Base.EffExn` | 高阶/作用域 Error：`Try` 操作携带 `Eff` 子计算，`handleExn`/`runExn`/`catchExn`/`bracketExn`；scoped handler |
 | `Base.EffSched` | 单线程 fiber 调度器：不透明 `Task`/`Scope`，`forkTask`/`awaitTask`/`yieldNow`/`isCancelled`/`cancelTask`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`raise`/`forkTaskWith`/线性 `TaskLin`；协作式取消（含清理宽限）、结构化作用域、逻辑步数超时；任务体 `Eff Nil a`；见 [effects.md](effects.md) §8.5 |
 | `Base.EffChannel` | cooperative channel：`send`/`tryRecv`/`recvWait`（忙等 yield，无 Mutex/信号量）；生产者-消费者夹具 `dt_base/36` |
 | `Base.EffMutex` | cooperative Mutex/Semaphore（IORef + yield 忙等；无阻塞原语）；`acquire`/`release`/`semWait`/`semSignal` |
-| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名在行条目）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
+| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`（结果 `Nat`）/`consoleEprint`（仍 `Int`）/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 在 result 族转 `Nat`）；`runConsole n`（`handleConsoleHost` + `joinEff` 单效应入口） |
 | `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`；`runClock n`（单效应入口）（真实 handler 用 `effTimeUs` 与原生 `prim_eff_sleep`） |
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetEnvNonEmpty`（未设置或空串 ⇒ `Nothing`）/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
 | `Base.EffArgs` | 参数标签 `ArgsOp`：`GetArgs`；`argsGetArgs`/`handleArgs`/`handleArgsHost`（真实 handler 用 `prim_eff_getArgs`）；`runArgs n` 单效应入口 |
@@ -231,7 +231,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   monad（**不进入 `Prelude` / `Base` 门面**，显式 import）；`do` 可用；语言级 `perform`/`handle`
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；
-  **效应标签在库层**：`Base.EffFs` 是完整 fs 面并带命名实例（如 `"mock"`/`"real"`），
+  **效应标签在库层**：`Base.EffFs` 是完整 fs 面并带命名实例（`Named "mock" FsOp` / `Named "real" FsOp`），
   `Base.EffConsole`/`EffClock`/`EffEnv`/`EffProcess` 是命名实例 + 宿主 handler，宿主层仍可
   直接调用 `prim_eff_*`；原生 `prim_eff_sleep`（`Base.EffClock` 与直接调用路径都用）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）都在；
