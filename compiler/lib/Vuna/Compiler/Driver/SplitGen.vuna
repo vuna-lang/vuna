@@ -56,36 +56,61 @@ defsInUnit : HashMap String String -> String -> List DtDef -> List DtDef
 defsInUnit ownerT u defs = filter (\d => ownerOfTbl ownerT (dtDefName d) == u) defs
 
 -- ---------------------------------------------------------------
--- 依赖序：每单元的直接依赖必须全部落在更早的模块里。
+-- 依赖：每单元的直接依赖必须都是本次程序的已知单元（`runtime` / 模块 / 入口）。
 -- 生成器累积的依赖来自**实际引用**（`QualCtx` 限定 / 类型声明 / List 桥接 / main
--- 钩子），所以这里只需校验拓扑序并按编译顺序排列（build.sh 的分层吃这份顺序）。
+-- 钩子）；它们不保证落在 import 序的后面（类型声明里的族名引用不要求 import），
+-- 所以位置不在这里比 —— 最终顺序由 `Split.canonicalTopo` 按实际依赖图重算。
 -- ---------------------------------------------------------------
--- 位置以 1 起算，0 = 不在表里（vuna 没有负整数字面量，不用 -1 哨兵）。
-posOfName : String -> List String -> Int
-posOfName name units = posOfNameGo 1 name units
+-- 依赖只校验**成员**：必须是本次程序的已知单元。位置不在这里比：`modules` 是 import
+-- 图的拓扑序，而 codegen 的真实引用可以跨过它（类型声明里的族名引用不要求 import），
+-- 最终文件顺序由 `Split.canonicalTopo` 按**实际依赖图**重算。真实环由
+-- `checkSplitAcyclic` 在返回文件集前报。
+knownUnit : List String -> String -> Bool
+knownUnit units u = memName u units
 
-posOfNameGo : Int -> String -> List String -> Int
-posOfNameGo i name [] = 0
-posOfNameGo i name (u :: rest) = if u == name then i else posOfNameGo (i + 1) name rest
+checkDepsKnown : List String -> String -> List String -> Check Int
+checkDepsKnown known self [] = OkC 0
+checkDepsKnown known self (d :: rest) =
+  if not (knownUnit known d) then icInternal "${self} references unknown unit `${d}`"
+  else if not (knownUnit known self) then icInternal "split unit `${self}` is not in the module order"
+  else checkDepsKnown known self rest
 
-checkDepsOrder : List String -> String -> List String -> Check Int
-checkDepsOrder ordered self [] = OkC 0
-checkDepsOrder ordered self (d :: rest) =
-  let
-    selfPos = posOfName self ordered
-    depPos = posOfName d ordered
-  in if depPos == 0 then icInternal "${self} references unknown unit `${d}`"
-  else if selfPos == 0 then icInternal "split unit `${self}` is not in the module order"
-  else if depPos >= selfPos then icInternal "split dependency is not in topological order: ${self} -> ${d}"
-  else checkDepsOrder ordered self rest
-
+-- 依赖按模块顺序排列并去重（同单元自引用丢弃）；最终顺序仍是 `canonicalTopo` 的事。
 depsInOrder : List String -> String -> List String -> List String
 depsInOrder ordered self deps = filter (\u => not (u == self) && memName u deps) ordered
 
 unitDepsOf : List String -> String -> List String -> Check (List String)
 unitDepsOf ordered self deps =
-  Vuna.Compiler.Base.Common.bind (checkDepsOrder ordered self deps)
+  Vuna.Compiler.Base.Common.bind (checkDepsKnown ordered self deps)
     (\_ => OkC (depsInOrder ordered self deps))
+
+-- ---------------------------------------------------------------
+-- 缓存条目校验与依赖环
+-- ---------------------------------------------------------------
+-- 单元缓存按 `(单元名, 声明+import 链摘要)` 命中，载荷自带依赖表。依赖表是**生成时**
+-- 程序的实际引用，read 侧还要过一道本程序的成员校验：旧 key 文件（模块集合变化）或
+-- 载荷与当前程序不一致时回退重算，而不是把不存在的单元写进 build.sh 的依赖/stamp 表。
+cachedUnitOk : List String -> String -> SplitFile -> Bool
+cachedUnitOk known unit sf = case sf of
+  SplitFile name _ deps => name == "${unit}.ml" && depsKnown known deps
+
+depsKnown : List String -> List String -> Bool
+depsKnown known [] = True
+depsKnown known (d :: rest) = if knownUnit known d then depsKnown known rest else False
+
+-- | `Maybe` 缓存条目按当前程序校验后的可复用版本。
+keepCached : List String -> String -> Maybe SplitFile -> Maybe SplitFile
+keepCached known unit cached = case cached of
+  Just sf => if cachedUnitOk known unit sf then Just sf else Nothing
+  Nothing => Nothing
+
+-- 实际依赖图必须无环：`canonicalTopo` 用迭代松弛算层，环会让层号永远增长、停在燃料
+-- 上界并给出错误的“拓扑序”（build.sh 的分层与链接顺序随之失效）。判定直接复用深度
+-- 松弛：DAG 上不超过 n 轮就收敛。
+checkSplitAcyclic : List SplitFile -> Check Int
+checkSplitAcyclic files =
+  if splitGraphAcyclic files then OkC 0
+  else icInternal "split dependency graph has a cycle (unit order is not a DAG)"
 
 -- 分文件生成的共享上下文（归属表一次建好，所有单元复用）。
 record SplitGenCtx where
@@ -287,7 +312,11 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
         pure (case mainFileR of
           ErrC e => ErrC e
           OkC mainFile =>
-            OkC (SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile])
+            let
+              files = SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile]
+            in case checkSplitAcyclic files of
+              ErrC e => ErrC e
+              OkC _ => OkC files
         )
 
 -- 单模块：按归属过滤名字 → Lowering 出 `IrUnit` → 装配成文件。
@@ -297,8 +326,10 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
   let
     unit = splitUnitOfModule mname
   in do
-    cached <- lookup mname
-    case cached of
+    cached0 <- lookup mname
+    let
+      cached = keepCached ctx.sgcOrdered unit cached0
+    in case cached of
       Just cachedFile => do
         tailR <- splitModuleFilesWith lookup store ctx rest
         pure (case tailR of
@@ -331,8 +362,10 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
 -- 入口文件：`Main` 单元正文 + main 钩子。
 splitMainFileWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> SplitGenCtx -> Bool -> Eff r (Check SplitFile)
 splitMainFileWith lookup store ctx printResult = do
-  cached <- lookup "__entry__"
-  case cached of
+  cached0 <- lookup "__entry__"
+  let
+    cached = keepCached ctx.sgcOrdered (splitUnitOfModule entryOwner) cached0
+  in case cached of
     Just cachedFile => pure (OkC cachedFile)
     Nothing =>
       let

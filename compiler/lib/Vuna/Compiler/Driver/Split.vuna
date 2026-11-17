@@ -235,6 +235,23 @@ joinCmxs [] = ""
 joinCmxs ([name]) = "${name}.cmx"
 joinCmxs (name :: rest) = "${name}.cmx ${joinCmxs rest}"
 
+-- | 实际依赖图是否有环：深度松弛在 DAG 上最多 n 轮收敛（最长路径 ≤ n-1）；环上每轮
+-- 仍在增长，燃料用尽即未收敛。`canonicalTopo` 的前置条件。
+export splitGraphAcyclic : List SplitFile -> Bool
+splitGraphAcyclic files =
+  let
+    graph = splitGraph files
+    baseMemo = Base.HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+  in convergedWithin (length graph + 2) graph baseMemo
+
+convergedWithin : Int -> List (Pair String (List String)) -> HashMap String Int -> Bool
+convergedWithin fuel graph memo = if fuel <= 0 then False
+else
+  let
+    next = stepDepths memo graph
+  in if sameDepthTable memo next then True
+  else convergedWithin (fuel - 1) graph (Base.HashMap.fromList next)
+
 -- 把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
 -- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
 -- 不能因此漂移（否则增量/全量产物不一致）。深度用迭代松弛算（与列表顺序无关）。

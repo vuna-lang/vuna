@@ -16,6 +16,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Base.Bytes
+import Vuna.Compiler.Base.Hash
 import Base.HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Diagnostics.Warning
@@ -1433,8 +1434,22 @@ topoVisitAll fuel mods (n :: rest) visited acc =
     step = topoVisit fuel mods n visited acc
   in topoVisitAll fuel mods rest (firstOf step) (secondOf step)
 
+-- 起点顺序固定：`topoVisitAll` 按起点列表推进，互不依赖（或同在环上）的模块先后随
+-- 输入列表漂移。loader 的列表顺序不是输入的语义（新加载者前插、预置模块在尾），
+-- 所以先按 (内容键, 名字) 做全序排序 —— 同一模块集合在任何缓存状态下得到同一份
+-- 模块顺序，进而同一份单元 key / split 串接顺序 / build.sh 分层。
+moduleOrderLess : Module -> Module -> Bool
+moduleOrderLess a b =
+  let
+    ka = Vuna.Compiler.Base.Hash.contentKey (moduleNameOf a)
+    kb = Vuna.Compiler.Base.Hash.contentKey (moduleNameOf b)
+  in if ka /= kb then ka < kb else moduleNameOf a <= moduleNameOf b
+
 topoModules : List Module -> List Module
-topoModules mods = secondOf (topoVisitAll 8192 mods (map moduleNameOf mods) [] [])
+topoModules mods =
+  let
+    sorted = sortBy moduleOrderLess mods
+  in secondOf (topoVisitAll 8192 sorted (map moduleNameOf sorted) [] [])
 
 -- codegen 单元级缓存。单元 key = 单元名 + 模块声明内容哈希 + 传递依赖
 -- 单元 key 的哈希链（与 build 系统同思路）：依赖接口变化沿链使依赖者失效，无关模块

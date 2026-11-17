@@ -61,6 +61,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | 工具会话（LSP/REPL/`map`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
 | `vuna doc` | `objects/doc/<key>` 存在 | 重新解析 + 渲染 |
 | 模块 header | `objects/header/<addr>` 存在 | 解析源码取 header |
+| 单元级 codegen（`units`） | 文件名存在 + framing 通过 + 载荷依赖 ⊆ 本次单元集 | 重跑该单元 codegen |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
 
@@ -136,6 +137,12 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   不符即 `Nothing`；调用方按 miss 处理。输入寻址的 blob 用 `storeReadAsEff` 比对期望地址。
 - **产物是输入摘要的纯函数**：依赖模块的 `miDefLocs` 并入位置表（§41 回归）；产物身份
   另把本包 `miDefLocs` 计入布局摘要，行移动必然重建。
+- **单元缓存读侧按本次程序校验**：`units` 载荷自带依赖表，命中时还要求「文件名声明的
+  单元名一致 + 每个依赖都是本次程序的已知单元」。模块集合变化留下的旧 key 文件（或载荷
+  与当前程序不一致）按 miss 重算，不会把不存在的单元写进 build.sh 的依赖/stamp 表。
+- **模块顺序与缓存状态无关**：split 串接顺序取 import 图的拓扑序，拓扑排序的**起点**
+  先按 `(名字内容键, 名字)` 全序排好 —— loader 的模块列表顺序（新加载者前插、预置模块
+  在尾）不进语义，同一模块集合在冷/热 store、不同入口下都得到同一份顺序与单元 key。
 
 ## roots 与 GC
 
@@ -165,7 +172,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - **roots**：逐 digest 文件（见上），不需要锁；GC 的宽限窗口覆盖「对象已写、root 还没写」。
 - **units**：只做**当前 entry 桶内**的过期 key 清理；不跨 entry 删目录。并发构建不同入口
   不会互相驱逐。桶的容量由 `vuna store gc`（按 mtime / `--max-size`）或
-  `vuna clean --store` 管理；删除 unit 只是重算，不影响正确性。
+  `vuna clean --store` 管理；删除 unit 只是重算，不影响正确性。split 生成顺序按实际
+  依赖图规范化（`canonicalTopo`：层 = 1 + max(依赖层)，同层按名字内容键），并校验该图
+  无环 —— 命中集合不同不会让产物或 build.sh 分层漂移。
 
 ## 观测
 
