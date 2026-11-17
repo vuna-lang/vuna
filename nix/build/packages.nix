@@ -101,11 +101,20 @@ let
   # 生成程序运行时基准（bench/run.sh；vuna 用 nix 构建的产物）。
   vuna-perf =
     (pkgs.writeShellScriptBin "vuna-perf" ''
-      export PATH="${lib.makeBinPath ([ vuna ] ++ shellTools ++ [ pkgs.time ])}:$PATH"
+      export PATH="${
+        lib.makeBinPath (
+          [ vuna ]
+          ++ shellTools
+          ++ [
+            pkgs.time
+            pkgs.stdenv.cc
+          ]
+        )
+      }:$PATH"
       exec ${pkgs.bash}/bin/bash ${../../bench/run.sh} "$@"
     '')
     // {
-      meta.description = "生成程序与运行时性能基准（vuna 产物 vs 手写 OCaml）";
+      meta.description = "生成程序与运行时性能基准（ocaml / native 产物 vs 手写 OCaml）";
     };
 
   vuna-run-tests = import ./run-tests.nix {
