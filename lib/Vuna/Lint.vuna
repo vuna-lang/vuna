@@ -17,6 +17,7 @@ import Base.EffConsole
 import Base.Eff.Types
 import Base.EffEnv
 import Base.EffProcess
+import Base.EffStdin
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Packages.Pkg
@@ -229,42 +230,62 @@ applyOpts opts cfg =
           Nothing => cfg2
         )
 
+-- | 内部：读完整 stdin（分块，最多 64 MiB 量级）。
+readStdinAll : Member nStdin StdinOp r => Eff r String
+readStdinAll = readStdinGo 1024 []
+
+readStdinGo : Member nStdin StdinOp r => Int -> List String -> Eff r String
+readStdinGo fuel acc = if fuel <= 0 then pure (join "" (reverse acc))
+else do
+  chunk <- stdinReadBytes 65536
+  case chunk of
+    Nothing => pure (join "" (reverse acc))
+    Just s => if s == "" then pure (join "" (reverse acc)) else readStdinGo (fuel - 1) (s :: acc)
+
 -- ---------------------------------------------------------------
 -- 单文件
 -- ---------------------------------------------------------------
--- | 内部：lint 单个文件，返回结果（错误也作为结果，不中断其余文件）。
-lintOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
-lintOne opts env path = do
+-- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
+lintText : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintText opts env displayPath configPath source = do
+  cfgR <- configForFile opts configPath
+  case cfgR of
+    ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+    OkC cfg0 => case applyOpts opts cfg0 of
+      ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+      OkC cfg => if lintExcluded displayPath cfg then pure (Pair env (FileOutcome displayPath [] 0 Nothing))
+      else do
+        looked <- fixitiesForFile env configPath source
+        env2 <- pure (firstOf looked)
+        case secondOf looked of
+          ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+          OkC programFixities => do
+            linted <-
+              if opts.lintOptFix || opts.lintOptNoCache then pure (lintSourceWithConfig cfg programFixities source)
+              else lintSourceWithCache cfg programFixities source
+            case linted of
+              ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+              OkC findings => do
+                fixedR <-
+                  if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings
+                  else pure (OkC (Pair findings 0))
+                pure (case fixedR of
+                  ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
+                  OkC (Pair remaining fixed) =>
+                    Pair env2 (FileOutcome displayPath remaining fixed Nothing)
+                )
+
+-- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
+lintOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
+lintOne opts env path = if path == "-" then if opts.lintOptFix then pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
+else do
+  source <- readStdinAll
+  lintText opts env "<stdin>" "stdin.vuna" source
+else do
   textR <- readText path
   case textR of
     ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
-    OkC source => do
-      cfgR <- configForFile opts path
-      case cfgR of
-        ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
-        OkC cfg0 => case applyOpts opts cfg0 of
-          ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
-          OkC cfg => if lintExcluded path cfg then pure (Pair env (FileOutcome path [] 0 Nothing))
-          else do
-            looked <- fixitiesForFile env path source
-            env2 <- pure (firstOf looked)
-            case secondOf looked of
-              ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
-              OkC programFixities => do
-                linted <-
-                  if opts.lintOptFix || opts.lintOptNoCache then pure (lintSourceWithConfig cfg programFixities source)
-                  else lintSourceWithCache cfg programFixities source
-                case linted of
-                  ErrC e => pure (Pair env2 (FileOutcome path [] 0 (Just (diagText e))))
-                  OkC findings => do
-                    fixedR <-
-                      if opts.lintOptFix then fixFileWith opts cfg path programFixities source findings
-                      else pure (OkC (Pair findings 0))
-                    pure (case fixedR of
-                      ErrC e => Pair env2 (FileOutcome path [] 0 (Just (diagText e)))
-                      OkC (Pair remaining fixed) =>
-                        Pair env2 (FileOutcome path remaining fixed Nothing)
-                    )
+    OkC source => lintText opts env path path source
 
 -- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
 fixFileWith : Member nFs FsOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
@@ -283,7 +304,7 @@ fixFileWith opts cfg path programFixities source findings = case fixLoop cfg pro
 -- 多文件 / 输出
 -- ---------------------------------------------------------------
 -- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
-lintFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
+lintFiles : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
 lintFiles opts env [] acc = pure (Pair env (reverse acc))
 lintFiles opts env (path :: rest) acc = do
   stepped <- lintOne opts env path
@@ -525,7 +546,7 @@ intOf Nothing d = Just d
 intOf (Just s) d = parseIntArg s
 
 -- | `vuna lint` 的入口。
-export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
+export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => List String -> Eff r Int
 runLint args = case parseToolArgs "vuna lint" [BoolFlag "fix", BoolFlag "dry-run", BoolFlag "quiet", BoolFlag "list", BoolFlag "no-config", BoolFlag "no-cache", ValueFlag "format", ValueFlag "max-warnings", ValueFlag "max-passes", ValueFlag "explain", ValueFlag "config", MultiValueFlag "select", MultiValueFlag "ignore"] args of
   ErrC e => do
     _ <- consoleEprint "error: ${diagText e}\n"
