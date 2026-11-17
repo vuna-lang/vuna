@@ -1339,7 +1339,8 @@ else case e of
   ELocalFun clauses sp => walkLocalClauses (fuel - 1) lines toks clauses
   ECase scrut alts sp =>
     append (walkExpr (fuel - 1) lines toks scrut) (walkAlts (fuel - 1) lines toks alts)
-  EIf cond yes no sp => walkIf (fuel - 1) lines toks e cond yes no
+  EIf cond yes no sp =>
+    append (constantIfFindings lines toks e) (walkIf (fuel - 1) lines toks e cond yes no)
   EField base f sp => walkExpr (fuel - 1) lines toks base
   ERecord rname fields sp => walkFields (fuel - 1) lines toks fields
   ERecUpdate base fields sp =>
@@ -1838,6 +1839,23 @@ dedupFindings findings = dedupGo [] findings
 dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
+
+-- | 内部：`if True/False` 常量条件（默认关闭）。
+constantIfFindings : List String -> List PTok -> Expr -> List Finding
+constantIfFindings lines toks (EIf cond yes no sp) = case cond of
+  EVar "True" _ => branchFinding lines toks (EIf cond yes no sp) yes
+  EVar "False" _ => branchFinding lines toks (EIf cond yes no sp) no
+  _ => []
+constantIfFindings lines toks _ = []
+
+-- | 内部：用选中分支替换整个 if；无法切片时只报告。
+branchFinding : List String -> List PTok -> Expr -> Expr -> List Finding
+branchFinding lines toks whole branch =
+  let
+    text = exprText lines toks branch
+  in if text == "" then []
+  else [ mkFindingAt (exprStartLine whole) (exprStartCol whole) (exprSpan whole) RedundantIf (lintMsg RedundantIf text) (exprEdit lines toks whole text)
+  ]
 
 -- | 内部：注释里的 TODO / FIXME / XXX 标记（每个注释最多一条）。
 todoFindings : List Comment -> List Finding

@@ -31,3 +31,11 @@ run: "$VUNA" lint --select todo-marker --max-warnings 0 "$TMPDIR/lint-pkg/lib/Pr
 exit: 1
 out-contains: LN_TodoMarker
 out-contains: TODO
+run: sh -c 'printf "%s\n" "module Probe where" "" "probe : Int -> Int" "probe x = if True then 1 else 2" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --select redundant-if --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_RedundantIf
+run: "$VUNA" lint --fix --select redundant-if "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna probe x = 1

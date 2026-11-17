@@ -28,7 +28,7 @@ import Vuna.Lint.Rules
 
 -- | 缓存 schema；规则实现或 finding 编码变化时 bump。
 lintCacheSchema : String
-lintCacheSchema = "vuna-lint-cache 2"
+lintCacheSchema = "vuna-lint-cache 3"
 
 -- | Store codec 名。
 lintCacheCodec : String
