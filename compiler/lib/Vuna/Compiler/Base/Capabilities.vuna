@@ -1,0 +1,31 @@
+-- | 后端能力：内建宿主效应标签在某个目标上是否可用。
+module Vuna.Compiler.Base.Capabilities where
+
+-- 内建效应家族的清单在 `Vuna.Compiler.Base.Intrinsics`（`builtinEffects`）；这里只声明
+-- 目标对标签的可用性。判据是「该家族的全部叶子都有真实实现」：任何叶子走运行期 trap
+-- 或生成期拒绝，整个标签就是不可用。
+--
+-- 值来源（改运行时实现表时必须同步本表）：
+--   wasm   → `Vuna.Compiler.Wasm.Runtime` 的 `rtImplOf`
+--   ocaml  → `Vuna.Compiler.Codegen.Runtime` 的 `dtp_*`
+--   native → `Vuna.Compiler.Native.Runtime` 的 `nativeRtTargetHost`
+import Vuna.Compiler.Base.Common
+import Base.String
+
+-- | 目标对某个内建效应标签的可用性。
+export data Capability(..) : Type where
+  CapAvailable : Capability
+  CapUnavailable : Capability
+
+-- | 目标 × 内建效应标签 → 能力。未列出的目标按全部可用处理。
+export capabilityOf : String -> String -> Capability
+capabilityOf target tag =
+  if target == "wasm" then wasmCapabilityOf tag else CapAvailable
+
+-- wasm 的不可用面：进程（spawn/wait/runIn）、stdin、网络没有宿主实现。
+wasmCapabilityOf : String -> Capability
+wasmCapabilityOf tag =
+  if tag == "Base.EffProcess.ProcessOp" then CapUnavailable
+  else if tag == "Base.EffStdin.StdinOp" then CapUnavailable
+  else if tag == "Base.EffNet.NetOp" then CapUnavailable
+  else CapAvailable
