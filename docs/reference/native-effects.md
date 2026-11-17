@@ -303,11 +303,12 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type -> Type`。
      降级点按 op 族 kind 数**显式参数个数 `k`**（不含末尾结果索引）：`k` 给族参数补洞，
      签名用 `sigFn (\i => <Op> ?p1 … ?pk i)` 现场解族参数（State/Reader `k = 1`，
-     Console 等 `k = 0`）。族形状不符即 `TC_HandleFamilyUnsupported`：只剩**作用域/高阶族** Exn
-     （`ExnOp : String -> Row -> Type -> Type`，第一个显式参数域是 `Row` 而非宇宙）不支持，
-     继续用手写 handler（[debt.md](debt.md) D54）。`Exn` 的行标签是无参标记 `Exn`；
-     `ExnOp` 保留 String 索引只为构造子参数匹配，不参与 `perform`/`handle`。`perform` 走
-     同一套族推导（`perfFamilyOfValue` 允许族参数是中性 spine）。
+     Console 等 `k = 0`）。族形状不符即 `TC_HandleFamilyUnsupported`：**作用域/高阶族** Exn
+     （`ExnOp : String -> Row -> Type -> Type`，显式参数含 `Row`；行标签是标记 `Exn`）
+     仍不能写 `handle` 块，只能用手写 handler + `Base.Eff.handleSelf`（[debt.md](debt.md) D54）。
+     `handleSelf` 让 opH 在同一 handler 下重跑 `Try` 的子计算，三端（OCaml/WASM/Native）
+     都实现，`Base.EffExn` 不再需要 fuel。`perform` 走同一套族推导
+     （`perfFamilyOfValue` 允许族参数是中性 spine）。
   7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析；其它形态（应用、do 块、
      记录字面量）在源里建议加括号，`fmt` 回渲染时会自动补（`renderHandleCompGo`），否则
      `handle pure x { ... }` 会被解析成记录字面量 `x { ... }`。同一 handle 块的所有 op

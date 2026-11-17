@@ -90,6 +90,9 @@
 - **注释与说明文字只写当下**：源码 / 夹具 / 脚本 / 主题页的注释不写阶段编号、里程碑、
   实现史（「旧实现如何」）与未来计划；能靠测试锁行为就不靠注释叙述
   （[comments.md](.agents/rules/comments.md)）。
+- **跨后端原语/运行时变更必须三端同步**：新增或修改 `prim_*` / 运行时语义时，按
+  **OCaml →（需要时）rotate seed → WASM → Native** 的顺序在同一轮内全部实现并验收；
+  不允许只落一个后端再留 TODO（[verification.md](.agents/rules/verification.md)）。
 - **提交信息**用 `type(scope): 中文描述`（技能 `vuna-commits`）；一次提交只做一件事。
 - 允许 `git add` / `git commit`；`git checkout` / `git reset` 会丢工作树改动，执行前先确认。
 

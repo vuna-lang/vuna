@@ -199,13 +199,16 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 ### 8.2 运行时
 
 - `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t`。
-- 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle`（宿主层原语，常规只由
+- 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`（宿主层原语，常规只由
   `Base.Eff` 包装使用；没有 `unsafe` 门控）：
   - `perform` → `Effect.perform`；
   - `handle` → `Vuna_runtime.dtp_effect_handle`：`Effect.Deep.match_with`，按
     `(key, name)` 过滤；不匹配返回 `None` 交给外层 handler；`retc` 应用 handler 的
     `ret`；`continue` 一次。handler 退出（正常 / 异常 / abort 丢弃续延）时执行该
     extent 内未弹出的 bracket cleanup。
+  - `self` → `Vuna_runtime.dtp_effect_self`：在 opH 执行期间把当前
+    `(key, name, ret, opH)` 压进 Domain 局部的 self 栈；它用同一 handler 重跑子计算
+    （scoped op 的 `Base.Eff.handleSelf`）。三端同语义（OCaml/WASM/Native）。
 - cleanup 机制：`prim_cleanupPush` / `prim_cleanupPop`（隐藏）登记/
   弹出每纤程 cleanup 栈（`dtp_cleanup_*`）；`Base.Eff.bracket`/`finally` 用它保证
   非 `Exn` abort 也跑 release（细节见 [effects-layers.md](effects-layers.md)）。

@@ -48,6 +48,14 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 - **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `lib/`、`app/`）不进 seed，
   黑名单见 `nix/seed/forbidden.txt`。
 
+## 跨后端变更（原语 / 运行时）
+
+- **顺序**：OCaml 驱动 → 需要时 `sh nix/seed/rotate.sh ./result/bin/vuna`（独立
+  `chore(seed)`）→ WASM → Native。OCaml 落地后才能用新原语改 `base/`（seed 闭包）。
+- **验收**：三个后端各自的 effect/run 章节 + 对应 native/wasm 对拍；只落一个后端不算完成。
+- 原语登记点：`Base/Intrinsics.vuna`、`Ir/Runtime.vuna`、`Wasm/Runtime.vuna`
+  （`rtImplOf`）、`Native/Runtime.vuna`（`nativeRtTargetBase` / `nativeRtValueArityBase`）。
+
 ## CI 口径（合并前/Lead）
 
 ```console

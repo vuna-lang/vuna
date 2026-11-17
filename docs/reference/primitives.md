@@ -322,7 +322,7 @@
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
 | `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect`；宿主 handler 用 `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus`（0 = 成功、1 = 对端关闭、2 = refused、3 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、7 = timeout(带超时变体)、8 = bad-handle、其它 = io）；带超时的变体是 `@vuna@host@tryNetAcceptWithin` / `tryNetRecvWithin` / `tryNetSendWithin` |
-| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
+| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
   `prim_eff_*`。没有 manifest `[capabilities]` /
