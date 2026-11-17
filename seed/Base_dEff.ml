@@ -4,6 +4,7 @@ and t_Base_dEff_dRow = C_Base_dEff_dRow_Nil | C_Base_dEff_dRow__x58__x58_ of (t_
 and t_Base_dEff_dMember = C_Base_dEff_dMember_Here | C_Base_dEff_dMember_There of (t_Base_dEff_dMember)
 and t_Base_dEff_dEffUnit = C_Base_dEff_dEffUnit_MkEffUnit
 and 'a0 t_Base_dEff_dEff = C_Base_dEff_dEff_MkEff of ((t_Base_dEff_dEffUnit) -> 'a0)
+and 'a0 t_Base_dEff_dScoped = C_Base_dEff_dScoped_MkScoped of ((int) -> 'a0)
 and t_Base_dEff_dEffSig = C_Base_dEff_dEffSig_MkEffSig
 and ('a0, 'a1) t_Base_dEff_dCont = C_Base_dEff_dCont_MkCont of (('a0) -> 'a1)
 
@@ -61,92 +62,101 @@ let v_Base_dEff_drunPure = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEff
 # 103 "Base/Eff.vuna"
 let v_Base_dEff_drunEff = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
 
-# 109 "Base/Eff.vuna"
-let v_Base_dEff_dhandleSelf = (fun comp -> (dtp_effect_self (fun _u -> ((v_Base_dEff_drunThunk comp) C_Base_dEff_dEffUnit_MkEffUnit))))
+# 113 "Base/Eff.vuna"
+let v_Base_dEff_dscope = (fun comp -> (C_Base_dEff_dScoped_MkScoped ((fun _u -> ((v_Base_dEff_drunThunk comp) C_Base_dEff_dEffUnit_MkEffUnit)))))
 
-# 114 "Base/Eff.vuna"
+# 119 "Base/Eff.vuna"
+let v_Base_dEff_dhandleScoped = (fun mc0 -> (match mc0 with
+  | C_Base_dEff_dScoped_MkScoped (dtb__9) -> (dtp_effect_self dtb__9)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 123 "Base/Eff.vuna"
+let v_Base_dEff_dhandleSelf = (fun comp -> (v_Base_dEff_dhandleScoped (v_Base_dEff_dscope comp)))
+
+# 128 "Base/Eff.vuna"
 let v_Base_dEff_drunMain = (fun e -> ((v_Base_dEff_drunThunk e) C_Base_dEff_dEffUnit_MkEffUnit))
 
-# 120 "Base/Eff.vuna"
+# 134 "Base/Eff.vuna"
 let v_Base_dEff_djoinEff = (fun m -> (C_Base_dEff_dEff_MkEff ((fun u -> (match m with
-  | C_Base_dEff_dEff_MkEff (dtb__9) -> (match (dtb__9 u) with
-  | C_Base_dEff_dEff_MkEff (dtb__10) -> (dtb__10 u)
+  | C_Base_dEff_dEff_MkEff (dtb__10) -> (match (dtb__10 u) with
+  | C_Base_dEff_dEff_MkEff (dtb__11) -> (dtb__11 u)
   | _ -> failwith "DT: impossible branch"
 )
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-# 129 "Base/Eff.vuna"
-let v_Base_dEff_djoinEffNilOuter = (fun m -> (C_Base_dEff_dEff_MkEff ((fun u -> (match m with
-  | C_Base_dEff_dEff_MkEff (dtb__11) -> (match (dtb__11 u) with
-  | C_Base_dEff_dEff_MkEff (dtb__12) -> (dtb__12 u)
-  | _ -> failwith "DT: impossible branch"
-)
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-# 137 "Base/Eff.vuna"
-let v_Base_dEff_dweakenRow = (fun t e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
-  | C_Base_dEff_dEff_MkEff (dtb__13) -> (dtb__13 u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
 # 143 "Base/Eff.vuna"
+let v_Base_dEff_djoinEffNilOuter = (fun m -> (C_Base_dEff_dEff_MkEff ((fun u -> (match m with
+  | C_Base_dEff_dEff_MkEff (dtb__12) -> (match (dtb__12 u) with
+  | C_Base_dEff_dEff_MkEff (dtb__13) -> (dtb__13 u)
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+# 151 "Base/Eff.vuna"
+let v_Base_dEff_dweakenRow = (fun t e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
+  | C_Base_dEff_dEff_MkEff (dtb__14) -> (dtb__14 u)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+# 157 "Base/Eff.vuna"
 let v_Base_dEff_draise = (fun mc0 -> (match mc0 with
-  | C_Base_dEff_dEff_MkEff (dtb__14) -> (C_Base_dEff_dEff_MkEff (dtb__14))
+  | C_Base_dEff_dEff_MkEff (dtb__15) -> (C_Base_dEff_dEff_MkEff (dtb__15))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 148 "Base/Eff.vuna"
+# 162 "Base/Eff.vuna"
 let v_Base_dEff_draiseTo = (fun r e -> (C_Base_dEff_dEff_MkEff ((fun u -> (match e with
-  | C_Base_dEff_dEff_MkEff (dtb__15) -> (dtb__15 u)
+  | C_Base_dEff_dEff_MkEff (dtb__16) -> (dtb__16 u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 154 "Base/Eff.vuna"
+# 168 "Base/Eff.vuna"
 let v_Base_dEff_dsendCore = (fun key name o -> (C_Base_dEff_dEff_MkEff ((fun _u -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v)))) key) name) o)))))
 
-# 164 "Base/Eff.vuna"
+# 178 "Base/Eff.vuna"
 let v_Base_dEff_dsigFn = C_Base_dEff_dEffSig_MkEffSig
 
-# 179 "Base/Eff.vuna"
+# 192 "Base/Eff.vuna"
 let v_Base_dEff_dperformCore = (fun n key o -> (((v_Base_dEff_dsendCore key) n) (Obj.magic o)))
 
-# 183 "Base/Eff.vuna"
+# 196 "Base/Eff.vuna"
 let v_Base_dEff_dhandleCore = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((fun u -> (match comp with
-  | C_Base_dEff_dEff_MkEff (dtb__16) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__16) u)
-  | _ -> failwith "DT: impossible branch"
-)))))
-
-# 189 "Base/Eff.vuna"
-let v_Base_dEff_dhandleCoreAt = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((fun u -> (match comp with
   | C_Base_dEff_dEff_MkEff (dtb__17) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__17) u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 200 "Base/Eff.vuna"
+# 202 "Base/Eff.vuna"
+let v_Base_dEff_dhandleCoreAt = (fun key name ret opH comp -> (C_Base_dEff_dEff_MkEff ((fun u -> (match comp with
+  | C_Base_dEff_dEff_MkEff (dtb__18) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__18) u)
+  | _ -> failwith "DT: impossible branch"
+)))))
+
+# 213 "Base/Eff.vuna"
 let v_Base_dEff_dresumeCont = (fun c x -> (match c with
-  | C_Base_dEff_dCont_MkCont (dtb__18) -> (dtb__18 x)
+  | C_Base_dEff_dCont_MkCont (dtb__19) -> (dtb__19 x)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 205 "Base/Eff.vuna"
+# 218 "Base/Eff.vuna"
 let v_Base_dEff_dcontAdapter = (fun opH o k -> ((opH o) (C_Base_dEff_dCont_MkCont (k))))
 
-# 209 "Base/Eff.vuna"
+# 222 "Base/Eff.vuna"
 let v_Base_dEff_dhandleCoreLin = (fun key name ret opH comp -> (((((v_Base_dEff_dhandleCore key) name) ret) (v_Base_dEff_dcontAdapter opH)) comp))
 
-# 218 "Base/Eff.vuna"
+# 231 "Base/Eff.vuna"
 let v_Base_dEff_dhandleWith = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCore key) n) ret) (Obj.magic opH)) comp))
 
-# 223 "Base/Eff.vuna"
+# 236 "Base/Eff.vuna"
 let v_Base_dEff_dhandleWithAt = (fun n key comp ret opH -> (((((v_Base_dEff_dhandleCoreAt key) n) ret) (Obj.magic opH)) comp))
 
-# 231 "Base/Eff.vuna"
+# 244 "Base/Eff.vuna"
 let v_Base_dEff_dmkCont = (fun k -> (C_Base_dEff_dCont_MkCont (k)))
 
-# 235 "Base/Eff.vuna"
+# 248 "Base/Eff.vuna"
 let v_Base_dEff_dbracket = (fun acquire release use -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEff_uEff_ur) acquire) (fun res -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_push (fun _u -> (v_Base_dEff_drunEff (release res))))))) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEff_uEff_ur) (use res)) (fun a -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEff_uEff_ur) (v_Base_dEff_deffPrim (fun _u -> (dtp_cleanup_pop 0)))) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEff_uEff_ur) (release res)) (fun _u -> ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) a))))))))))))
 
-# 245 "Base/Eff.vuna"
+# 258 "Base/Eff.vuna"
 let v_Base_dEff_dfinally = (fun comp cleanup -> (((v_Base_dEff_dbracket ((Base_dApplicative.v_Base_dApplicative_dpure v_Applicative_uBase_uEff_uEff_ur) 0)) (fun _u -> cleanup)) (fun _u -> comp)))

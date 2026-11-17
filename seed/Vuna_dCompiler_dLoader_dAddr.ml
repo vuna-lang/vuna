@@ -18,7 +18,7 @@ let v_Vuna_dCompiler_dLoader_dAddr_dprojectIdAddrOf = (fun dir -> (v_Vuna_dCompi
 let v_Vuna_dCompiler_dLoader_dAddr_dheaderKind = "header"
 
 # 61 "Vuna/Compiler/Loader/Addr.vuna"
-let v_Vuna_dCompiler_dLoader_dAddr_dheaderCodec = "module-header 1"
+let v_Vuna_dCompiler_dLoader_dAddr_dheaderCodec = "module-header 2"
 
 # 75 "Vuna/Compiler/Loader/Addr.vuna"
 let v_Vuna_dCompiler_dLoader_dAddr_dencFixRow = (fun f acc -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr (f).f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frOp) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencInt (f).f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frLevel) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencInt (f).f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frAssoc) (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencMaybe Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr) (f).f_Vuna_dCompiler_dLoader_dAddr_dFixRow_frTarget) acc)))))
@@ -136,8 +136,22 @@ let v_Vuna_dCompiler_dLoader_dAddr_dimportNameOf = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 168 "Vuna/Compiler/Loader/Addr.vuna"
+# 170 "Vuna/Compiler/Loader/Addr.vuna"
+let v_Vuna_dCompiler_dLoader_dAddr_dexportItemDep = (fun mc0 -> (match mc0 with
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExportItem_XNamespace (dtb__35, dtb__36, dtb__37) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__35, Base_dList.C_Base_dList_dList_Nil))
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExportItem_XModule (dtb__38, dtb__39) -> (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__38, Base_dList.C_Base_dList_dList_Nil))
+  | _ -> Base_dList.C_Base_dList_dList_Nil
+))
+
+# 175 "Vuna/Compiler/Loader/Addr.vuna"
+let rec v_Vuna_dCompiler_dLoader_dAddr_ddedupNames = (fun mc0 -> (match mc0 with
+  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__40, dtb__41) -> (if ((Base_dList.v_Base_dList_dmemName dtb__40) dtb__41) then (v_Vuna_dCompiler_dLoader_dAddr_ddedupNames dtb__41) else (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__40, (v_Vuna_dCompiler_dLoader_dAddr_ddedupNames dtb__41))))
+  | Base_dList.C_Base_dList_dList_Nil -> Base_dList.C_Base_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 181 "Vuna/Compiler/Loader/Addr.vuna"
 let v_Vuna_dCompiler_dLoader_dAddr_dheaderOfSource = (fun mc0 mc1 -> (match mc1 with
-  | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileModDecl = dtb__35; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileImports = dtb__36; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileFixities = dtb__37; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileDecls = dtb__38; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileExports = dtb__39; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileReexports = dtb__40; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileOpacity = dtb__41 } -> { f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhName = mc0; f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhImports = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dLoader_dAddr_dimportNameOf) dtb__36); f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhFixities = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dLoader_dAddr_dfixRowOf) dtb__37) }
+  | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileModDecl = dtb__42; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileImports = dtb__43; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileFixities = dtb__44; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileDecls = dtb__45; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileExports = dtb__46; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileReexports = dtb__47; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dSourceFile_sourceFileOpacity = dtb__48 } -> { f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhName = mc0; f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhImports = (v_Vuna_dCompiler_dLoader_dAddr_ddedupNames ((Base_dList.v_Base_dList_dappend ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dLoader_dAddr_dimportNameOf) dtb__43)) ((Base_dList.v_Base_dList_dconcatMap v_Vuna_dCompiler_dLoader_dAddr_dexportItemDep) dtb__47))); f_Vuna_dCompiler_dLoader_dAddr_dModHeader_mhFixities = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dLoader_dAddr_dfixRowOf) dtb__44) }
   | _ -> failwith "DT: impossible branch"
 ))

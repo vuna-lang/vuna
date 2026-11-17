@@ -44,6 +44,7 @@ Base_dVec.ml
 Main.ml
 Prelude.ml
 Vuna_dCompiler_dBase_dBytes.ml
+Vuna_dCompiler_dBase_dCapabilities.ml
 Vuna_dCompiler_dBase_dCommon.ml
 Vuna_dCompiler_dBase_dDiag.ml
 Vuna_dCompiler_dBase_dDiag_dCodec.ml
