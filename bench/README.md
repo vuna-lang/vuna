@@ -18,10 +18,12 @@
   前各校验一次，输出不一致直接失败（不会拿错误程序刷基线）。
 - 每项先 `--warmup` 次预热，再跑 `--runs` 次取**中位数**；峰值内存用 GNU time 的 max RSS，
   计时结束后单独跑 `--rss-passes` 次取**最大值**（不参与计时）。
-- native 不做尾调用优化，深递归基准在默认 8 MiB 栈上会崩溃。native 进程统一在
-  `ulimit -s unlimited` 下运行，JSON `meta.stack_policy` 记录该口径；栈页计入峰值 RSS。
+- native 只有**直接饱和尾调用**复用栈帧（[native.md](../docs/reference/native.md) §3），
+  非尾深递归仍会耗尽默认栈。native 进程统一在 `ulimit -s unlimited` 下运行，JSON
+  `meta.stack_policy` 记录该口径；栈页计入峰值 RSS。
 - native 每个 benchmark 另记 `default_stack_ok`：固定 8 MiB soft limit 跑一次、记录能否正常
-  退出（探针不参与计时）。TCO 落地后 `tco_mutual` / `tco_wide` 等应从 false 变 true。
+  退出（探针不参与计时）。直接饱和尾调用的项（`tco_mutual` / `tco_wide` / `arith` /
+  `records`）应为 true，非尾深递归项仍为 false。
 - 跨机器只比较 `ratio = <backend>_median / ocaml_median` 与
   `rss_ratio = <backend>_max_rss / ocaml_max_rss`；绝对 ms/KB 不可比。`--check` 默认读
   对应基线，对超过 `--threshold`（默认 20%）的项打 `PERF-CHECK-WARN`（软告警、退出 0），
