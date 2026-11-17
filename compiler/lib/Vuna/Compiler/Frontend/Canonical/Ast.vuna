@@ -824,6 +824,7 @@ encExportItem (XBare name _) acc = encTag 0 (encStr name acc)
 encExportItem (XTypeAll name _) acc = encTag 1 (encStr name acc)
 encExportItem (XTypeSome name members _) acc = encTag 3 (encStr name (encList encStr members acc))
 encExportItem (XModule name _) acc = encTag 2 (encStr name acc)
+encExportItem (XNamespace name alias _) acc = encTag 4 (encStr name (encMaybe encStr alias acc))
 
 encExportMembers : ExportMembers -> List String -> List String
 encExportMembers EMNone acc = encTag 0 acc
@@ -866,7 +867,7 @@ encFixityLike f acc =
   encStr f.fixityOp
     (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
 
--- | 解析 `ExportItem`（tag 0/1/2/3）。
+-- | 解析 `ExportItem`（tag 0/1/2/3/4）。
 export decExportItem : Int -> Cur -> Maybe (Pair ExportItem Cur)
 decExportItem fuel c = if fuel <= 0 then Nothing
 else thenPair (decTag fuel c) (\tag, b1 => case tag of
@@ -876,6 +877,9 @@ else thenPair (decTag fuel c) (\tag, b1 => case tag of
     thenPair (decStr (fuel - 1) b1)
       (\n, b2 => thenPair (decList decStr (fuel - 1) b2) (\ms, b3 => Just (Pair (XTypeSome n ms noSpan) b3)))
   2 => thenPair (decStr (fuel - 1) b1) (\n, b2 => Just (Pair (XModule n noSpan) b2))
+  4 =>
+    thenPair (decStr (fuel - 1) b1)
+      (\n, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (XNamespace n alias noSpan) b3)))
   _ => Nothing
 )
 

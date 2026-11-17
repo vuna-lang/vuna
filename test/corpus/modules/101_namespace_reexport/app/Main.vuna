@@ -1,0 +1,10 @@
+import Facade
+import Flat
+
+x : Facade.Names.T
+x = Facade.Names.C 40
+
+main : Int
+main = Facade.Names.foo + Facade.Inner.foo + Flat.foo + foo - 38 + (case x of
+  C n => n - 40
+)

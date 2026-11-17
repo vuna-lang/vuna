@@ -357,12 +357,19 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
   export import Vuna.Compiler.Base.Common       -- 导入 + 整模块重导出
   export import B (x, T(..))              -- 选择性重导出
+  export module Base.Map                  -- 导入 + 平铺重导出 Base.Map 的全部导出项
+  export module Base.Map as Map           -- 导入 + 只导出命名空间路径 Map（A.Map.* / A.Base.Map.*）
   ```
 
   `export data T` 只导出类型（抽象，构造器不可见）；`T(..)` 导出全部公开构造器，
   `T(A, B)` 只导出子集；record / trait 同理（`R(..)` / `C(m1, m2)`）。`export` 可写在
-  `opaque` / `transparent` 之前或之后；`export import` 直接替换同模块的普通 `import`，
-  不会重复导入。导出项顺序不是语义，`vuna fmt` 会规范化。
+  `opaque` / `transparent` 之前或之后；`export import` / `export module` 直接替换同模块的
+  普通 `import`，不会重复导入。导出项顺序不是语义，`vuna fmt` 会规范化。
+
+  `export module C` 与 `export module C as X` 是两种模式：不带 alias 时把 C 的导出项
+  **平铺**进本模块（下游 `A.insert` / 裸名）；带 alias 时**只导出命名空间路径**
+  （下游 `A.X.insert`，同时保留完整路径 `A.C.insert`），不平铺。路径条目按最长点号前缀
+  匹配；符号的 canonical 身份仍是定义处（`A.X.insert` 的 target 是 `C.insert`）。
 
 - **私有性只看 `export`**：模块默认 module-private；`_` 前缀没有特殊私有含义，
   `export _helper` 是合法的。裸 `_` 仍不能作顶层名（它是通配符）；
@@ -402,7 +409,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   「带实例名的标签」解读，不做特殊名字放行。
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
   只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
-  `export import B` / `export import B (x)` 显式重导出；
+  `export import B` / `export import B (x)` / `export module B [as X]` 显式重导出；
+  `export module B as X` 导出的命名空间路径可以继续向下重导出，形成 `A.X.Y.name`。
 - Loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；
   `show` 只显示最后一段，所以输出与包内程序一致。

@@ -1,0 +1,7 @@
+module Inner where
+
+export data T(..) : Type where
+  C : Int -> T
+
+export foo : Int
+foo = 40

@@ -424,10 +424,12 @@ renderExportItem (XBare name _) = name
 renderExportItem (XTypeAll name _) = "${name}(..)"
 renderExportItem (XTypeSome name members _) = "${name}(${joinComma members})"
 renderExportItem (XModule name _) = "module ${name}"
+renderExportItem (XNamespace name _ _) = "module ${name}"
 
 -- | 内部：排序分组前缀（`module B` 整模块重导出 = 1，其余 = 0）。
 exportRank : ExportItem -> Int
 exportRank (XModule _ _) = 1
+exportRank (XNamespace _ _ _) = 2
 exportRank _ = 0
 
 -- | 内部：排序键 = 分组前缀 ++ 项的字面文本（稳定排序保证幂等）。
@@ -524,6 +526,7 @@ itemMatchesPrefix prefix item =
     dotted = "${prefix}."
   in case item of
     XModule n _ => n == prefix
+    XNamespace _ _ _ => False
     XBare n _ => startsWith dotted n
     XTypeAll n _ => startsWith dotted n
     XTypeSome n _ _ => startsWith dotted n
@@ -542,6 +545,7 @@ renderSelectiveItem prefix item =
     XTypeAll n _ => "${dropPrefixText p n}(..)"
     XTypeSome n members _ => "${dropPrefixText p n}(${joinComma members})"
     XModule n _ => n
+    XNamespace n _ _ => n
 
 -- | 内部：是否整模块重导出（`module M`）。
 isWholeModuleReexport : ExportItem -> Bool
@@ -559,12 +563,26 @@ renderReexportLine imp items =
   if anyWholeModule items then "export ${renderImport imp}"
   else "export ${renderImport imp} (${joinComma (map (renderSelectiveItem (importPrefixText imp)) items)})"
 
--- | 内部：import section；带重导出项的 import 渲染成 `export import` 行。
+-- | 内部：是否 `export module ...` 命名空间重导出。
+isNamespaceReexport : ExportItem -> Bool
+isNamespaceReexport (XNamespace _ _ _) = True
+isNamespaceReexport _ = False
+
+-- | 内部：`export module C [as X]` 行。
+renderNamespaceReexport : ExportItem -> String
+renderNamespaceReexport (XNamespace target alias _) = case alias of
+  Just name => "export module ${target} as ${name}"
+  Nothing => "export module ${target}"
+renderNamespaceReexport _ = ""
+
+-- | 内部：import section；带重导出项的 import 渲染成 `export import` 行，
+-- `export module` 行单独追加在 import 之后。
 renderImportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List Import -> List String
-renderImportLines at hdr imports = concatMap (\imp => case itemsForImport imp (headerReexports hdr) of
+renderImportLines at hdr imports = append (concatMap (\imp => case itemsForImport imp (headerReexports hdr) of
   [] => renderImportLine at imp
   items => attachAt at imp.importSpan 0 [renderReexportLine imp items]
 ) imports
+) (concatMap (\item => attachAt at (exportItemSpan item) 0 [renderNamespaceReexport item]) (filter isNamespaceReexport (headerReexports hdr)))
 
 -- | 内部：文件末尾的注释行（顶格）。
 renderEofComments : List Comment -> List String

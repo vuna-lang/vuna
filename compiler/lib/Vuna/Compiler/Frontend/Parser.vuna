@@ -135,6 +135,13 @@ parseExportImport st =
   Vuna.Compiler.Base.Common.step (expectIdent st)
     (\_, st1 => if atKw st1 "import" then Vuna.Compiler.Base.Common.bind (expectKw st1 "import") (\st2 => Vuna.Compiler.Base.Common.step (parseImportAfterKeyword st2) (\imp, st3 => parseReexportTail imp st3)) else ps0 st1 ExpectedTopLevelDecl)
 
+-- | `export module C [as X]`：整模块重导出；带 alias 时导出命名空间路径。
+-- 不带 Import：加载期按需合成/复用 `import C [as X]`。
+parseExportNamespace : PState -> Check (Pair ExportItem PState)
+parseExportNamespace st =
+  Vuna.Compiler.Base.Common.step (expectIdent st)
+    (\_, st1 => Vuna.Compiler.Base.Common.bind (expectKw st1 "module") (\st2 => Vuna.Compiler.Base.Common.step (expectIdent st2) (\name, st3 => if atKw st3 "as" then Vuna.Compiler.Base.Common.bind (expectKw st3 "as") (\st4 => Vuna.Compiler.Base.Common.step (expectIdent st4) (\alias, st5 => OkC (Pair (XNamespace name (Just alias) (spanOf st st5)) st5))) else OkC (Pair (XNamespace name Nothing (spanOf st st3)) st3))))
+
 -- 复用 `import` 之后的 qualified/模块名/as 解析。
 parseImportAfterKeyword : PState -> Check (Pair Import PState)
 parseImportAfterKeyword st =
@@ -158,6 +165,7 @@ qualifyExportItem prefix (XBare name sp) = XBare "${prefix}.${name}" sp
 qualifyExportItem prefix (XTypeAll name sp) = XTypeAll "${prefix}.${name}" sp
 qualifyExportItem prefix (XTypeSome name members sp) = XTypeSome "${prefix}.${name}" members sp
 qualifyExportItem prefix (XModule name sp) = XModule name sp
+qualifyExportItem prefix (XNamespace name alias sp) = XNamespace name alias sp
 
 parseImportSpec : PState -> Check (Pair Import PState)
 parseImportSpec st =
@@ -181,6 +189,10 @@ else if atIdentName st "export" && atKw (advance st) "import" then Vuna.Compiler
     Pair imports reexports2 =>
       OkC (Pair (Pair ((::) imp imports) (append reexports reexports2)) st2)
   )
+)
+else if atIdentName st "export" && atKw (advance st) "module" then Vuna.Compiler.Base.Common.step (parseExportNamespace st) (\item, st1 => Vuna.Compiler.Base.Common.step (parseImports (fuel - 1) st1) (\rest, st2 => case rest of
+  Pair imports reexports2 => OkC (Pair (Pair imports ((::) item reexports2)) st2)
+)
 )
 else OkC (Pair (Pair [] []) st)
 

@@ -218,6 +218,11 @@ reexportedImportNamesGo imports ((XModule name _) :: rest) acc = case findImport
   Just m =>
     if memName m acc then reexportedImportNamesGo imports rest acc
     else reexportedImportNamesGo imports rest ((::) m acc)
+reexportedImportNamesGo imports ((XNamespace name _ _) :: rest) acc = case findImportModule imports name of
+  Nothing => reexportedImportNamesGo imports rest acc
+  Just m =>
+    if memName m acc then reexportedImportNamesGo imports rest acc
+    else reexportedImportNamesGo imports rest ((::) m acc)
 reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo imports rest acc
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
@@ -300,6 +305,13 @@ filterCtors name (e :: rest) =
 
 export findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
+
+-- | `export module` 命名空间路径条目（kind = "module"，public 是路径文本）。
+export findExportModule : List ExportEntry -> String -> Maybe ExportEntry
+findExportModule entries name = lookupExport ["module"] name entries
+
+export findExportModuleIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
+findExportModuleIn idx name = lookupExport ["module"] name (entriesByName name idx)
 
 export findExportValueIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
 findExportValueIn idx name = lookupExport ["val", "ctor"] name (entriesByName name idx)

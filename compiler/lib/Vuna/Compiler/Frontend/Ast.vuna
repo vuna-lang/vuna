@@ -157,11 +157,13 @@ export data Decl(..) : Type where
 -- 模块头与导出项。
 -- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
 -- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
+-- XNamespace 是 `export module C [as X]`：不带 alias 时平铺重导出 C，带 alias 时只导出命名空间路径。
 export data ExportItem(..) : Type where
   XBare : String -> Span -> ExportItem
   XTypeAll : String -> Span -> ExportItem
   XTypeSome : String -> List String -> Span -> ExportItem
   XModule : String -> Span -> ExportItem
+  XNamespace : String -> Maybe String -> Span -> ExportItem
 
 -- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
 export data ExportMembers(..) : Type where
@@ -304,6 +306,7 @@ exportItemSpan (XBare name sp) = sp
 exportItemSpan (XTypeAll name sp) = sp
 exportItemSpan (XTypeSome name members sp) = sp
 exportItemSpan (XModule name sp) = sp
+exportItemSpan (XNamespace name _ sp) = sp
 
 export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []

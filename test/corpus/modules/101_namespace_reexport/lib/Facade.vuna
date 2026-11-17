@@ -1,0 +1,3 @@
+module Facade where
+
+export module Inner as Names
