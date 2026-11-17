@@ -1166,6 +1166,18 @@ nlistDescOf (Just lf) fams = case declOf (irListFamilyOf lf) fams of
   _ => Nothing
 
 -- | 一个桥接运行时函数：固定 prologue/epilogue（结果在 rax，体内不写 `ret`）。
+-- | 同 `bridgeFn`，但把体内 `IRet` 改写成跳到尾部（单出口，与 `Native.Runtime.rtFunc` 同语义）。
+bridgeFnExits : String -> Int -> List Instr -> NativeFunc
+bridgeFnExits name slots body =
+  let
+    endLabel = "${nativeRtLabel name}_end"
+  in bridgeFn name slots (append (mapRetToLocal endLabel body) [ILabel endLabel])
+
+mapRetToLocal : String -> List Instr -> List Instr
+mapRetToLocal label [] = []
+mapRetToLocal label (IRet :: rest) = IJmp label :: mapRetToLocal label rest
+mapRetToLocal label (i :: rest) = i :: mapRetToLocal label rest
+
 bridgeFn : String -> Int -> List Instr -> NativeFunc
 bridgeFn name slots body =
   let
@@ -1184,8 +1196,31 @@ getArgsFn d =
     acc = nativeSlotOff 0
     idx = nativeSlotOff 1
     s = nativeSlotOff 2
-  in bridgeFn "getArgs" 3
+  in bridgeFnExits "getArgs" 3
     [IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpReg Rax) (OpRip argcLabel), IBinReg "sub" Rax (OpImm 1), IMov (OpMem Rbp idx) (OpReg Rax), ILabel ".Lrt_getargs_loop", IMov (OpReg Rcx) (OpMem Rbp idx), ICmp (OpReg Rcx) (OpImm 1), IJcc "jl" ".Lrt_getargs_done", IMov (OpReg Rdx) (OpRip argvLabel), IMov (OpReg Rax) (OpReg Rcx), IBinReg "shl" Rax (OpImm 3), IBinReg "add" Rax (OpReg Rdx), IMov (OpReg Rdi) (OpMem Rax 0), ICall (nativeRtLabel "str_from_c"), IMov (OpMem Rbp s) (OpReg Rax), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpReg Rcx) (OpMem Rbp s), IMov (OpMem Rax 8) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp acc), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp idx), IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp idx) (OpReg Rcx), IJmp ".Lrt_getargs_loop", ILabel ".Lrt_getargs_done", IMov (OpReg Rax) (OpMem Rbp acc)]
+
+-- | 插入排序的一个节点：`rdi` = 已排序表头（nil 是 nil 单元）、`rsi` = 待插入单元
+--   （tail 已指向 nil 单元）-> rax = 新表头。
+insertSortedFn : NListDesc -> NativeFunc
+insertSortedFn d =
+  bridgeFn "insert_sorted" 3
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rdi 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_is_before", IMov (OpReg Rax) (OpMem Rsi 8), IMov (OpReg Rcx) (OpMem Rdi 8), IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rcx), ICall (nativeRtLabel "str_compare"), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_is_before", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ILabel ".Lrt_is_walk", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rcx 16), IMov (OpReg Rax) (OpMem Rdx 0), ICmp (OpReg Rax) (OpImm d.nlNilTag), IJcc "je" ".Lrt_is_append", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rdi) (OpMem Rdi 8), IMov (OpReg Rsi) (OpMem Rdx 8), ICall (nativeRtLabel "str_compare"), ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_is_splice", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rcx) (OpMem Rcx 16), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_is_walk", ILabel ".Lrt_is_splice", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg R8) (OpMem Rcx 16), IMov (OpMem Rdx 16) (OpReg R8), IMov (OpMem Rcx 16) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IRet, ILabel ".Lrt_is_append", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rcx 16) (OpReg Rdx), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0)), IRet, ILabel ".Lrt_is_before", IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 0)), IMov (OpMem Rdx 16) (OpReg Rcx), IMov (OpReg Rax) (OpReg Rdx)]
+
+-- | 对一条 List 做插入排序（`Sys.readdir` 的 `List.sort compare` 语义）；单元原地改接。
+sortListFn : NListDesc -> NativeFunc
+sortListFn d =
+  let
+    cell = nlistCellBytes d
+  in bridgeFnExits "sort_list" 4
+    [IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rdi), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), ILabel ".Lrt_sl_loop", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rcx) (OpMem Rax 0), ICmp (OpReg Rcx) (OpImm d.nlNilTag), IJcc "je" ".Lrt_sl_done", IMov (OpReg Rcx) (OpMem Rax 16), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "insert_sorted"), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IJmp ".Lrt_sl_loop", ILabel ".Lrt_sl_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 0))]
+
+-- | `tryReadDir`：打开目录 → 逐个建 String → 逆序 cons → 插入排序；失败返回空表。
+tryReadDirFn : NListDesc -> NativeFunc
+tryReadDirFn d =
+  let
+    cell = nlistCellBytes d
+  in bridgeFnExits "tryReadDir" 5
+    [IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "dir_open"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rd_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "dir_names"), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ICall (nativeRtLabel "dir_close"), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rd_fail", IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rax (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), ILabel ".Lrt_rd_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), ICmp (OpReg Rcx) (OpImm 0), IJcc "jl" ".Lrt_rd_built", IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IBinReg "shl" Rcx (OpImm 3), ILea Rdx dirNamesLabel, IBinReg "add" Rdx (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rdx 0), IMov (OpMem Rax 8) (OpReg Rdx), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rax 16) (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rcx), IJmp ".Lrt_rd_loop", ILabel ".Lrt_rd_built", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), ICall (nativeRtLabel "sort_list"), IRet, ILabel ".Lrt_rd_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlNilTag)]
 
 -- | `strUnpack`：rdi = String -> rax = List Int（从末字节向前构造 cons）。
 strUnpackFn : NListDesc -> NativeFunc
@@ -1288,6 +1323,9 @@ nativeBridgeFuncs lfM fams = case nlistDescOf lfM fams of
     [ strUnpackFn d,
       strPackFn d,
       getArgsFn d,
+      sortListFn d,
+      insertSortedFn d,
+      tryReadDirFn d,
       strConcatManyFn d,
       strArgAtFn,
       strSubstTemplateFn d,

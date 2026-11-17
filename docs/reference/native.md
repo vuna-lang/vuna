@@ -230,9 +230,16 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 - 时钟与 tty：`effTimeUs`（`clock_gettime`，syscall 228）、`prim_eff_sleep`（`nanosleep`，
   syscall 35）、`@vuna@host@isTty`（`ioctl(0, TCGETS)`）、`@vuna@prim_eff_hostStatus`
   （读 `rt_host_status` 槽；fs / process 的 `try*` 后续写入）。
-- 未实现的宿主面：fs（14 个 `try*` / `exists` / `mtime` / `size`）、process
-  （`runIn` / `spawn` / `wait` / `exit_process_host`）、stdin（`readLine` / `readBytes`）、
-  以及 net 与 `prim_cleanupPush/Pop`。
+- 文件系统：14 个叶子（`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` /
+  `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` /
+  `tryRemoveTree` / `tryRename` / `trySymlink` / `fileExists` / `fileMtime` / `fileSize`）
+  走 `openat` / `read` / `write` / `fstat` / `getdents64` / `mkdirat` / `unlinkat` / `rmdir` /
+  `rename` / `symlinkat`；失败写 `rt_host_status`（errno → 码表与 `dtp_hostCode` 一致：
+  ENOENT=1、EACCES/EPERM=2、ENOSPC=3、ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
+  `tryReadDir` 返回**字典序** `List String`；`tryRemoveTree` 递归删除时每层用自己的
+  32 KiB `getdents64` 缓冲；`tryWriteFileAtomic` 写 `<path>.<pid>.tmp` 再 `rename`。
+- 未实现的宿主面：process（`runIn` / `spawn` / `wait` / `exit_process_host`）、
+  stdin（`readLine` / `readBytes`）与 net。
 - 续延：`prim_effectPerform`（`rt_eff_perform`）、`prim_effectHandle`（`rt_eff_handle`）、
   `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
@@ -297,7 +304,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
-- FFI / extern；宿主 syscalls 的 fs / process / stdin 面（env / args / clock / tty 已实现）。
+- FFI / extern；宿主 syscalls 的 process / stdin 面（fs / env / args / clock / tty 已实现）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

@@ -205,3 +205,25 @@ run: sh -c 'd="$TMPDIR/bracket"; mkdir -p "$d/app"; printf "[package]\nname = \"
 exit: 0
 run: "$TMPDIR/bracket-out/bin/bracket" 2>&1
 out-equals: 42
+
+# 9q) 宿主 fs：建/写/读/原子写/目录列举（排序）/stat/rename/symlink/递归删除。
+#     a="hello"(5) + b="atomic"(6) + entries 2 + isDir 1 + exists 1 + size 5 + mtime 1 = 21。
+run: sh -c 'd="$TMPDIR/fsops"; mkdir -p "$d/app"; printf "[package]\nname = \"fsops\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Bool\nimport Base.Eff\nimport Base.EffFs\nimport Base.Int\nimport Base.List\nimport Base.Maybe\nimport Base.Nat\nimport Base.String\n\ndir : String\ndir = \"$TMPDIR/fs-tree\"\n\nmain : Eff [FsOp] Int\nmain = do\n  _ <- fsRemoveTree dir\n  _ <- fsMakeDir dir\n  _ <- fsWriteFile (dir ++ \"/a.txt\") \"hello\"\n  _ <- fsWriteFileAtomic (dir ++ \"/b.txt\") \"atomic\"\n  a <- fsReadFile (dir ++ \"/a.txt\")\n  b <- fsReadFile (dir ++ \"/b.txt\")\n  entries <- fsReadDir dir\n  isd <- fsIsDirectory dir\n  ex <- fsFileExists (dir ++ \"/a.txt\")\n  sz <- fsFileSize (dir ++ \"/a.txt\")\n  mt <- fsFileMtime (dir ++ \"/a.txt\")\n  _ <- fsRename (dir ++ \"/b.txt\") (dir ++ \"/c.txt\")\n  _ <- fsSymlink (dir ++ \"/a.txt\") (dir ++ \"/link\")\n  _ <- fsRemoveFile (dir ++ \"/c.txt\")\n  _ <- fsRemoveTree dir\n  pure (strLength a + strLength b + length entries + (if isd then 1 else 0) + (if ex then 1 else 0) + maybe 0 (\\\\n => natToInt n) sz + maybe 0 (\\\\_ => 1) mt)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fsops-out" "$d"'
+exit: 0
+run: "$TMPDIR/fsops-out/bin/fsops" 2>&1
+out-equals: 21
+run: sh -c 'test ! -e "$TMPDIR/fs-tree" && echo cleaned'
+out-equals: cleaned
+
+# 9r) readDir 按字典序（`Sys.readdir` + `sort compare` 语义）：建 c/a/b -> "abc"。
+run: sh -c 'd="$TMPDIR/fsdir"; mkdir -p "$d/app"; printf "[package]\nname = \"fsdir\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\nimport Base.Int\nimport Base.List\nimport Base.String\n\ndir : String\ndir = \"$TMPDIR/fs-dir\"\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsRemoveTree dir\n  _ <- fsMakeDir dir\n  _ <- fsWriteFile (dir ++ \"/c\") \"\"\n  _ <- fsWriteFile (dir ++ \"/a\") \"\"\n  _ <- fsWriteFile (dir ++ \"/b\") \"\"\n  xs <- fsReadDir dir\n  pure (case xs of\n    x :: y :: z :: _ => x ++ y ++ z\n    _ => \"?\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fsdir-out" "$d"'
+exit: 0
+run: "$TMPDIR/fsdir-out/bin/fsdir" 2>&1
+out-equals: "abc"
+
+# 9s) fs 失败路径：读不存在的文件 -> typed error 收口（诊断 + exit 1），不伪造内容。
+run: sh -c 'd="$TMPDIR/fsmiss"; mkdir -p "$d/app"; printf "[package]\nname = \"fsmiss\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\nimport Base.Int\nimport Base.String\n\nmain : Eff [FsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/fs-missing-file\"\n  pure (strLength s)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/fsmiss-out" "$d"'
+exit: 0
+run: sh -c '"$TMPDIR/fsmiss-out/bin/fsmiss" 2>&1'
+exit: 1
+out-contains: fs: readFile

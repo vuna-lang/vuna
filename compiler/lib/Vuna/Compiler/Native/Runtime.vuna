@@ -73,7 +73,8 @@ nativeRodata =
     NativeRodata (nativeDataLabel "resume_twice") resumeTwiceMessage,
     NativeRodata (nativeDataLabel "bad_stack") badStackMessage,
     NativeRodata (nativeDataLabel "stack_overflow") stackOverflowMessage,
-    NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0])
+    NativeRodata (nativeDataLabel "proc_self_exe") ("/proc/self/exe" ++ strPack [0]),
+    NativeRodata (nativeDataLabel "tmp_suffix") (".tmp" ++ strPack [0])
   ]
 
 -- | `_start` 从初始栈拷下来的进程入参（`argc` / `argv` / `envp`）。
@@ -106,6 +107,26 @@ termiosLabel = "rt_termios"
 export cleanupHeadLabel : String
 cleanupHeadLabel = "rt_cleanups"
 
+-- | 第二个路径缓冲（`rename` / `symlink` / 原子写的 tmp 路径要同时持有两个 C 路径）。
+export pathBuf2Label : String
+pathBuf2Label = "rt_path_buf2"
+
+-- | `stat` / `lstat` 的 `struct stat`（x86-64 144 B；`st_size` 在 +48、`st_mode` 在 +24、
+--   `st_mtim.tv_sec` 在 +88）。
+export statBufLabel : String
+statBufLabel = "rt_stat_buf"
+
+-- | `getdents64` 的读取缓冲（32 KiB）与 `tryReadDir` 的名字数组。
+export dirBufLabel : String
+dirBufLabel = "rt_dir_buf"
+
+export dirNamesLabel : String
+dirNamesLabel = "rt_dir_names_buf"
+
+-- | `tryReadFile` 的读缓冲（8 MiB；`.bss` 零填充，不占 ELF 体积）。
+export readBufLabel : String
+readBufLabel = "rt_read_buf"
+
 -- | `.bss`：bump 堆缓冲 → 堆结束标记 → 堆指针（由 `_start` 初始化）→ 进程入参 → 宿主槽。
 export nativeBss : List NativeBss
 nativeBss =
@@ -125,7 +146,12 @@ nativeBss =
     NativeBss pathBufLabel 4096 8,
     NativeBss tsLabel 16 8,
     NativeBss termiosLabel 64 8,
-    NativeBss cleanupHeadLabel 8 8
+    NativeBss cleanupHeadLabel 8 8,
+    NativeBss pathBuf2Label 4096 8,
+    NativeBss statBufLabel 256 8,
+    NativeBss dirBufLabel 32768 8,
+    NativeBss dirNamesLabel 32256 8,
+    NativeBss readBufLabel 8388608 8
   ]
 
 -- ---------------------------------------------------------------
@@ -838,6 +864,155 @@ cleanupPopFn =
     [IMov (OpReg Rax) (OpRip cleanupHeadLabel), ITest Rax Rax, IJcc "jz" ".Lrt_cpop_done", IMov (OpReg Rax) (OpMem Rax 8), IMov (OpRip cleanupHeadLabel) (OpReg Rax), ILabel ".Lrt_cpop_done", IMov (OpReg Rax) (OpImm 0)]
 
 -- ---------------------------------------------------------------
+-- 宿主层：文件系统（syscalls + errno → 状态码）
+-- ---------------------------------------------------------------
+-- 语义参考 `Codegen.Term.dtp_try*`：失败不抛，写 `rt_host_status` 后返回默认值。
+-- errno → 码表与 `dtp_hostCode` 一致（ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
+-- ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
+-- | `rdi` = 负 errno（syscall 返回值）→ rax = 宿主码，并写状态槽。
+fsFailFn : NativeFunc
+fsFailFn =
+  rtFunc "fs_fail" 0
+    [INeg Rdi, IMov (OpReg Rax) (OpImm 9), ICmp (OpReg Rdi) (OpImm 2), IJcc "je" ".Lrt_fs_e1", ICmp (OpReg Rdi) (OpImm 1), IJcc "je" ".Lrt_fs_e2", ICmp (OpReg Rdi) (OpImm 13), IJcc "je" ".Lrt_fs_e2", ICmp (OpReg Rdi) (OpImm 28), IJcc "je" ".Lrt_fs_e3", ICmp (OpReg Rdi) (OpImm 20), IJcc "je" ".Lrt_fs_e4", ICmp (OpReg Rdi) (OpImm 21), IJcc "je" ".Lrt_fs_e5", ICmp (OpReg Rdi) (OpImm 17), IJcc "je" ".Lrt_fs_e6", IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e1", IMov (OpReg Rax) (OpImm 1), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e2", IMov (OpReg Rax) (OpImm 2), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e3", IMov (OpReg Rax) (OpImm 3), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e4", IMov (OpReg Rax) (OpImm 4), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e5", IMov (OpReg Rax) (OpImm 5), IJmp ".Lrt_fs_edone", ILabel ".Lrt_fs_e6", IMov (OpReg Rax) (OpImm 6), ILabel ".Lrt_fs_edone", IMov (OpRip hostStatusLabel) (OpReg Rax)]
+
+-- | `rdi` = Vuna String → rax = `rt_path_buf` 里的 NUL 结尾副本。
+strToCFn : NativeFunc
+strToCFn =
+  rtFunc "str_to_c" 0
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, ILea Rdi pathBufLabel, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBufLabel]
+
+-- | 同 `str_to_c`，写到 `rt_path_buf2`。
+strToC2Fn : NativeFunc
+strToC2Fn =
+  rtFunc "str_to_c2" 0
+    [IMov (OpReg Rcx) (OpMem Rdi 0), ILeaMem Rsi Rdi 8, ILea Rdi pathBuf2Label, IRepMovsb, IMovByteOp (OpMem Rdi 0) 0, ILea Rax pathBuf2Label]
+
+-- | `rdi` = 源、`rsi` = 目的；拷到 NUL 并返回目的端（指向新 NUL）。
+cStrCpyFn : NativeFunc
+cStrCpyFn =
+  rtFunc "c_strcpy" 0
+    [ILabel ".Lrt_ccpy", IMovzx Rax (OpMem Rdi 0), IMovByteRegOp (OpMem Rsi 0) Rax, ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_ccpy_done", IBinReg "add" Rdi (OpImm 1), IBinReg "add" Rsi (OpImm 1), IJmp ".Lrt_ccpy", ILabel ".Lrt_ccpy_done", IMov (OpReg Rax) (OpReg Rsi)]
+
+-- | `rdi` = 非负整数、`rsi` = 目的缓冲 → rax = 目的端（十进制，NUL 结尾）。
+u64ToDecFn : NativeFunc
+u64ToDecFn =
+  rtFunc "u64_to_dec" 32
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), ICmp (OpReg Rdi) (OpImm 0), IJcc "jne" ".Lrt_u64_nonzero", IMovByteOp (OpMem Rsi 0) 48, IMovByteOp (OpMem Rsi 1) 0, IMov (OpReg Rax) (OpReg Rsi), IBinReg "add" Rax (OpImm 1), IRet, ILabel ".Lrt_u64_nonzero", IBinReg "xor" Rcx (OpReg Rcx), IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), ILabel ".Lrt_u64_count", IBinReg "add" Rcx (OpImm 1), IMov (OpReg Rax) (OpReg R8), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R9) (OpImm 10), IDivUnsigned R9, IMov (OpReg R8) (OpReg Rax), ICmp (OpReg R8) (OpImm 0), IJcc "jne" ".Lrt_u64_count", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rdi (OpReg Rcx), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rdi), IMovByteOp (OpMem Rdi 0) 0, IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 0)), ILabel ".Lrt_u64_write", IMov (OpReg Rax) (OpReg R8), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg R9) (OpImm 10), IDivUnsigned R9, IMov (OpReg R8) (OpReg Rax), IBinReg "add" Rdx (OpImm 48), IBinReg "sub" Rdi (OpImm 1), IMovByteRegOp (OpMem Rdi 0) Rdx, ICmp (OpReg R8) (OpImm 0), IJcc "jne" ".Lrt_u64_write", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2))]
+
+-- | `rdi` = C path → rax = 0 / 负 errno；结果写 `rt_stat_buf`。
+statPathFn : NativeFunc
+statPathFn =
+  rtFunc "stat_path" 0
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rdx statBufLabel, IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 262), ISyscall]
+
+-- | 同 `stat_path`，但不跟随符号链接（`AT_SYMLINK_NOFOLLOW = 256`）。
+lstatPathFn : NativeFunc
+lstatPathFn =
+  rtFunc "lstat_path" 0
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rdx statBufLabel, IMov (OpReg R10) (OpImm 256), IMov (OpReg Rax) (OpImm 262), ISyscall]
+
+-- | `rdi` = Vuna String path → rax = 0/1（存在；不改状态槽）。
+fileExistsFn : NativeFunc
+fileExistsFn =
+  rtFunc "file_exists" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), ISetcc "setge" Rax, IMovzxAl]
+
+-- | `rdi` = Vuna String path → rax = mtime（秒）；失败写状态槽并返回 0。
+fileMtimeFn : NativeFunc
+fileMtimeFn =
+  rtFunc "file_mtime" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_mtime_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 88), IRet, ILabel ".Lrt_mtime_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = Vuna String path → rax = 文件字节数；失败写状态槽并返回 0。
+fileSizeFn : NativeFunc
+fileSizeFn =
+  rtFunc "file_size" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_fsize_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 48), IRet, ILabel ".Lrt_fsize_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = Vuna String path → rax = 0/1（是否目录）；失败写状态槽并返回 0。
+tryIsDirFn : NativeFunc
+tryIsDirFn =
+  rtFunc "try_is_dir" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "stat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_isdir_fail", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 24), IBinReg "and" Rax (OpImm 61440), ICmp (OpReg Rax) (OpImm 16384), ISetcc "sete" Rax, IMovzxAl, IRet, ILabel ".Lrt_isdir_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = Vuna String path → rax = 文件内容；失败写状态槽并返回空串。
+tryReadFileFn : NativeFunc
+tryReadFileFn =
+  rtFunc "try_read_file" 16
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rf_loop", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), ILea Rsi readBufLabel, IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpImm 8388608), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 0), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rf_read_fail", IJcc "je" ".Lrt_rf_done", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), ICmp (OpReg Rcx) (OpImm 8388608), IJcc "jl" ".Lrt_rf_loop", ILabel ".Lrt_rf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi readBufLabel, IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 2)), ICall (nativeRtLabel "str_from_bytes"), IRet, ILabel ".Lrt_rf_read_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet, ILabel ".Lrt_rf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), ICall (nativeRtLabel "str_empty"), IRet]
+
+-- | `rdi` = path、`rsi` = contents → rax = 写入字节数（Nat）；失败写状态槽并返回 0。
+tryWriteFileFn : NativeFunc
+tryWriteFileFn =
+  rtFunc "try_write_file" 48
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 577), IMov (OpReg R10) (OpImm 438), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wf_fail", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpImm 0), ILabel ".Lrt_wf_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wf_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 4)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rcx), IJmp ".Lrt_wf_loop", ILabel ".Lrt_wf_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wf_write_fail", IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 3)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wf_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = path、`rsi` = contents → rax = 写入字节数；先写 `<path>.<pid>.tmp` 再 rename。
+tryWriteFileAtomicFn : NativeFunc
+tryWriteFileAtomicFn =
+  rtFunc "try_write_file_atomic" 64
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rsi), IMov (OpReg Rax) (OpMem Rsi 0), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rax), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMovByteOp (OpMem Rax 0) 46, IBinReg "add" Rax (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpReg Rax) (OpImm 39), ISyscall, IMov (OpReg Rdi) (OpReg Rax), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 3)), ICall (nativeRtLabel "u64_to_dec"), IMov (OpReg Rsi) (OpReg Rax), ILea Rdi (nativeDataLabel "tmp_suffix"), ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rdi) (OpImm (0 - 100)), ILea Rsi pathBuf2Label, IMov (OpReg Rdx) (OpImm 577), IMov (OpReg R10) (OpImm 438), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_open_fail", IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpImm 0), ILabel ".Lrt_wfa_loop", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IJcc "jge" ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rsi (OpImm 8), IBinReg "add" Rsi (OpReg Rcx), IMov (OpReg Rdx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "sub" Rdx (OpReg Rcx), IMov (OpReg Rax) (OpImm 1), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jle" ".Lrt_wfa_write_fail", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 5)), IBinReg "add" Rcx (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg Rcx), IJmp ".Lrt_wfa_loop", ILabel ".Lrt_wfa_written", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi pathBuf2Label, ILea Rsi pathBufLabel, IMov (OpReg Rax) (OpImm 82), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_wfa_rename_fail", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 2)), IRet, ILabel ".Lrt_wfa_rename_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_write_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 4)), IMov (OpReg Rax) (OpImm 3), ISyscall, ILea Rdi pathBuf2Label, ICall (nativeRtLabel "remove_tree"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0), IRet, ILabel ".Lrt_wfa_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = path → rax = 0/1（0 = 成功或已存在）。
+tryMakeDirFn : NativeFunc
+tryMakeDirFn =
+  rtFunc "try_make_dir" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 493), IMov (OpReg Rax) (OpImm 258), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdir_ok", ICmp (OpReg Rax) (OpImm (0 - 17)), IJcc "je" ".Lrt_mkdir_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdir_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = path → rax = 0/1（0 = 成功；已存在算失败）。
+tryMakeDirExclusiveFn : NativeFunc
+tryMakeDirExclusiveFn =
+  rtFunc "try_make_dir_excl" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 493), IMov (OpReg Rax) (OpImm 258), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_mkdirx_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_mkdirx_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = path → rax = 0/1（0 = 成功或本来就不存在）。
+tryRemoveFileFn : NativeFunc
+tryRemoveFileFn =
+  rtFunc "try_remove_file" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 263), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rmf_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rmf_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rmf_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = src、`rsi` = dst → rax = 0/1。
+tryRenameFn : NativeFunc
+tryRenameFn =
+  rtFunc "try_rename" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, ILea Rsi pathBuf2Label, IMov (OpReg Rax) (OpImm 82), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_ren_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_ren_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = target、`rsi` = link → rax = 0/1。
+trySymlinkFn : NativeFunc
+trySymlinkFn =
+  rtFunc "try_symlink" 8
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rsi), IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ICall (nativeRtLabel "str_to_c2"), ILea Rdi pathBufLabel, IMov (OpReg Rsi) (OpImm (0 - 100)), ILea Rdx pathBuf2Label, IMov (OpReg Rax) (OpImm 266), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_sym_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_sym_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | 递归删除：`rdi` = C path → rax = 0/1。目录走 `getdents64` + 递归 + `rmdir`，
+--   其余 `unlinkat`；每层的 ENOENT 都按成功处理。
+removeTreeFn : NativeFunc
+removeTreeFn =
+  rtFunc "remove_tree" 96
+    [IBinReg "sub" Rsp (OpImm 40960), IMov (OpMem Rbp (nativeSlotOff 7)) (OpReg Rsp), IMov (OpReg Rax) (OpReg Rsp), IBinReg "add" Rax (OpImm 8192), IMov (OpMem Rbp (nativeSlotOff 8)) (OpReg Rax), IMov (OpReg Rsi) (OpReg Rsp), ICall (nativeRtLabel "c_strcpy"), IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ICall (nativeRtLabel "lstat_path"), ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_stat_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_stat_ok", ILea Rcx statBufLabel, IMov (OpReg Rax) (OpMem Rcx 24), IBinReg "and" Rax (OpImm 61440), ICmp (OpReg Rax) (OpImm 16384), IJcc "jne" ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_open_fail", IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rax), ILabel ".Lrt_rt_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 8)), IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_rt_read_fail", IJcc "je" ".Lrt_rt_dir_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_rt_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_rt_outer", IMov (OpReg R8) (OpMem Rbp (nativeSlotOff 8)), IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_rt_child", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_rt_skip", ILabel ".Lrt_rt_child", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), ILea Rsi pathBufLabel, ICall (nativeRtLabel "c_strcpy"), IMov (OpReg Rsi) (OpReg Rax), IMov (OpReg Rcx) (OpReg Rsi), IBinReg "sub" Rcx (OpImm 1), IMovzx Rax (OpMem Rcx 0), ICmp (OpReg Rax) (OpImm 47), IJcc "je" ".Lrt_rt_sep_done", IMovByteOp (OpMem Rsi 0) 47, IBinReg "add" Rsi (OpImm 1), ILabel ".Lrt_rt_sep_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "c_strcpy"), ILea Rdi pathBufLabel, ICall (nativeRtLabel "remove_tree"), ICmp (OpReg Rax) (OpImm 0), IJcc "jne" ".Lrt_rt_child_fail", ILabel ".Lrt_rt_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_rt_entry", ILabel ".Lrt_rt_child_fail", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_dir_done", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rax) (OpImm 84), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_file", IMov (OpReg Rsi) (OpMem Rbp (nativeSlotOff 7)), IMov (OpReg Rdi) (OpImm (0 - 100)), IBinReg "xor" Rdx (OpReg Rdx), IMov (OpReg Rax) (OpImm 263), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_rt_ok", ICmp (OpReg Rax) (OpImm (0 - 2)), IJcc "je" ".Lrt_rt_ok", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_read_fail", IMov (OpMem Rbp (nativeSlotOff 6)) (OpReg Rax), IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 1)), IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 6)), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_open_fail", IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "fs_fail"), IMov (OpReg Rax) (OpImm 1), IRet, ILabel ".Lrt_rt_ok", IMov (OpReg Rax) (OpImm 0)]
+
+-- | `rdi` = Vuna String path → rax = 0/1（递归删除；`remove_tree` 吃 C 路径）。
+tryRemoveTreeFn : NativeFunc
+tryRemoveTreeFn =
+  rtFunc "try_remove_tree" 0
+    [IBinReg "xor" Rax (OpReg Rax), IMov (OpRip hostStatusLabel) (OpReg Rax), ICall (nativeRtLabel "str_to_c"), IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "remove_tree")]
+
+-- | `rdi` = C path → rax = fd（<0 = -errno）。
+dirOpenFn : NativeFunc
+dirOpenFn =
+  rtFunc "dir_open" 0
+    [IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpImm (0 - 100)), IMov (OpReg Rdx) (OpImm 65536), IBinReg "xor" R10 (OpReg R10), IMov (OpReg Rax) (OpImm 257), ISyscall]
+
+-- | `rdi` = fd → rax = 名字个数（写 `rt_dir_names`），失败返回负 errno。
+dirNamesFn : NativeFunc
+dirNamesFn =
+  rtFunc "dir_names" 48
+    [IMov (OpMem Rbp (nativeSlotOff 0)) (OpReg Rdi), IMov (OpMem Rbp (nativeSlotOff 1)) (OpImm 0), ILabel ".Lrt_dn_outer", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 0)), ILea Rsi dirBufLabel, IMov (OpReg Rdx) (OpImm 32768), IMov (OpReg Rax) (OpImm 217), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" ".Lrt_dn_ret", IJcc "je" ".Lrt_dn_done", IMov (OpMem Rbp (nativeSlotOff 3)) (OpReg Rax), IMov (OpMem Rbp (nativeSlotOff 2)) (OpImm 0), ILabel ".Lrt_dn_entry", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), ICmp (OpReg Rcx) (OpMem Rbp (nativeSlotOff 3)), IJcc "jge" ".Lrt_dn_outer", ILea R8 dirBufLabel, IBinReg "add" R8 (OpReg Rcx), IMov (OpReg Rax) (OpMem R8 16), IBinReg "and" Rax (OpImm 65535), IMov (OpMem Rbp (nativeSlotOff 4)) (OpReg Rax), ILeaMem R9 R8 19, IMov (OpMem Rbp (nativeSlotOff 5)) (OpReg R9), IMovzx Rax (OpMem R9 0), ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 1), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ICmp (OpReg Rax) (OpImm 46), IJcc "jne" ".Lrt_dn_take", IMovzx Rax (OpMem R9 2), ICmp (OpReg Rax) (OpImm 0), IJcc "je" ".Lrt_dn_skip", ILabel ".Lrt_dn_take", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ICmp (OpReg Rcx) (OpImm 4032), IJcc "jge" ".Lrt_dn_skip", IMov (OpReg Rdi) (OpMem Rbp (nativeSlotOff 5)), ICall (nativeRtLabel "str_from_c"), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), ILea Rdx dirNamesLabel, IBinReg "shl" Rcx (OpImm 3), IBinReg "add" Rdx (OpReg Rcx), IMov (OpMem Rdx 0) (OpReg Rax), IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 1)), IBinReg "add" Rcx (OpImm 1), IMov (OpMem Rbp (nativeSlotOff 1)) (OpReg Rcx), ILabel ".Lrt_dn_skip", IMov (OpReg Rcx) (OpMem Rbp (nativeSlotOff 2)), IBinReg "add" Rcx (OpMem Rbp (nativeSlotOff 4)), IMov (OpMem Rbp (nativeSlotOff 2)) (OpReg Rcx), IJmp ".Lrt_dn_entry", ILabel ".Lrt_dn_done", IMov (OpReg Rax) (OpMem Rbp (nativeSlotOff 1)), IRet, ILabel ".Lrt_dn_ret", IRet]
+
+-- | `rdi` = fd → rax = 0（忽略关闭失败）。
+dirCloseFn : NativeFunc
+dirCloseFn = rtFunc "dir_close" 0 [IMov (OpReg Rax) (OpImm 3), ISyscall, IMov (OpReg Rax) (OpImm 0)]
+
+-- ---------------------------------------------------------------
 -- 函数表与 IR 符号映射
 -- ---------------------------------------------------------------
 export nativeRtFuncs : List NativeFunc
@@ -918,6 +1093,30 @@ nativeRtFuncs =
     hostStatusFn,
     cleanupPushFn,
     cleanupPopFn,
+    fsFailFn,
+    strToCFn,
+    strToC2Fn,
+    cStrCpyFn,
+    u64ToDecFn,
+    statPathFn,
+    lstatPathFn,
+    fileExistsFn,
+    fileMtimeFn,
+    fileSizeFn,
+    tryIsDirFn,
+    tryReadFileFn,
+    tryWriteFileFn,
+    tryWriteFileAtomicFn,
+    tryMakeDirFn,
+    tryMakeDirExclusiveFn,
+    tryRemoveFileFn,
+    tryRenameFn,
+    trySymlinkFn,
+    removeTreeFn,
+    tryRemoveTreeFn,
+    dirOpenFn,
+    dirNamesFn,
+    dirCloseFn,
     trapImpossibleFn,
     trapDivZeroFn,
     trapArrayOobFn,
@@ -967,235 +1166,384 @@ nativeRtFuncs =
 
 -- | IR 符号 -> 运行时函数标签。白名单之外返回 Nothing（Module 报 NativeUnsupported）。
 --   `&&` / `||` 由 Module 生成短路控制流；`@ir@natSucc` 与入口 show 由 Module 特化。
-export nativeRtTarget : String -> Maybe String
-nativeRtTarget "+" = Just (nativeRtLabel "add")
-nativeRtTarget "-" = Just (nativeRtLabel "sub")
-nativeRtTarget "*" = Just (nativeRtLabel "mul")
-nativeRtTarget "/" = Just (nativeRtLabel "div")
-nativeRtTarget "bitAnd" = Just (nativeRtLabel "bit_and")
-nativeRtTarget "bitOr" = Just (nativeRtLabel "bit_or")
-nativeRtTarget "bitXor" = Just (nativeRtLabel "bit_xor")
-nativeRtTarget "bitNot" = Just (nativeRtLabel "bit_not")
-nativeRtTarget "bitShl" = Just (nativeRtLabel "bit_shl")
-nativeRtTarget "bitShr" = Just (nativeRtLabel "bit_shr")
-nativeRtTarget "++" = Just (nativeRtLabel "str_concat")
-nativeRtTarget "assert" = Just (nativeRtLabel "assert")
-nativeRtTarget "prim_fail" = Just (nativeRtLabel "prim_fail")
-nativeRtTarget "todo" = Just (nativeRtLabel "todo")
-nativeRtTarget "bi_eq_int" = Just (nativeRtLabel "eq_int")
-nativeRtTarget "bi_neq_int" = Just (nativeRtLabel "neq_int")
-nativeRtTarget "bi_lt_int" = Just (nativeRtLabel "lt_int")
-nativeRtTarget "bi_le_int" = Just (nativeRtLabel "le_int")
-nativeRtTarget "bi_gt_int" = Just (nativeRtLabel "gt_int")
-nativeRtTarget "bi_ge_int" = Just (nativeRtLabel "ge_int")
-nativeRtTarget "bi_eq_str" = Just (nativeRtLabel "str_eq")
-nativeRtTarget "bi_neq_str" = Just (nativeRtLabel "str_neq")
-nativeRtTarget "bi_lt_str" = Just (nativeRtLabel "str_lt")
-nativeRtTarget "bi_le_str" = Just (nativeRtLabel "str_le")
-nativeRtTarget "bi_gt_str" = Just (nativeRtLabel "str_gt")
-nativeRtTarget "bi_ge_str" = Just (nativeRtLabel "str_ge")
+nativeRtTargetBase : String -> Maybe String
+nativeRtTargetBase "+" = Just (nativeRtLabel "add")
+nativeRtTargetBase "-" = Just (nativeRtLabel "sub")
+nativeRtTargetBase "*" = Just (nativeRtLabel "mul")
+nativeRtTargetBase "/" = Just (nativeRtLabel "div")
+nativeRtTargetBase "bitAnd" = Just (nativeRtLabel "bit_and")
+nativeRtTargetBase "bitOr" = Just (nativeRtLabel "bit_or")
+nativeRtTargetBase "bitXor" = Just (nativeRtLabel "bit_xor")
+nativeRtTargetBase "bitNot" = Just (nativeRtLabel "bit_not")
+nativeRtTargetBase "bitShl" = Just (nativeRtLabel "bit_shl")
+nativeRtTargetBase "bitShr" = Just (nativeRtLabel "bit_shr")
+nativeRtTargetBase "++" = Just (nativeRtLabel "str_concat")
+nativeRtTargetBase "assert" = Just (nativeRtLabel "assert")
+nativeRtTargetBase "prim_fail" = Just (nativeRtLabel "prim_fail")
+nativeRtTargetBase "todo" = Just (nativeRtLabel "todo")
+nativeRtTargetBase "bi_eq_int" = Just (nativeRtLabel "eq_int")
+nativeRtTargetBase "bi_neq_int" = Just (nativeRtLabel "neq_int")
+nativeRtTargetBase "bi_lt_int" = Just (nativeRtLabel "lt_int")
+nativeRtTargetBase "bi_le_int" = Just (nativeRtLabel "le_int")
+nativeRtTargetBase "bi_gt_int" = Just (nativeRtLabel "gt_int")
+nativeRtTargetBase "bi_ge_int" = Just (nativeRtLabel "ge_int")
+nativeRtTargetBase "bi_eq_str" = Just (nativeRtLabel "str_eq")
+nativeRtTargetBase "bi_neq_str" = Just (nativeRtLabel "str_neq")
+nativeRtTargetBase "bi_lt_str" = Just (nativeRtLabel "str_lt")
+nativeRtTargetBase "bi_le_str" = Just (nativeRtLabel "str_le")
+nativeRtTargetBase "bi_gt_str" = Just (nativeRtLabel "str_gt")
+nativeRtTargetBase "bi_ge_str" = Just (nativeRtLabel "str_ge")
 -- `Bool` 的值是 0/1，比较直接复用 Int 的比较模板。
-nativeRtTarget "bi_lt_bool" = Just (nativeRtLabel "lt_int")
-nativeRtTarget "bi_le_bool" = Just (nativeRtLabel "le_int")
-nativeRtTarget "bi_gt_bool" = Just (nativeRtLabel "gt_int")
-nativeRtTarget "bi_ge_bool" = Just (nativeRtLabel "ge_int")
-nativeRtTarget "strFromInt" = Just (nativeRtLabel "str_from_int")
-nativeRtTarget "strLength" = Just (nativeRtLabel "str_length")
-nativeRtTarget "strAt" = Just (nativeRtLabel "str_at")
-nativeRtTarget "strSubstring" = Just (nativeRtLabel "str_substring")
-nativeRtTarget "strHash" = Just (nativeRtLabel "str_hash")
-nativeRtTarget "@vuna@host@print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTarget "prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTarget "@vuna@prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTarget "@vuna@host@exitOp" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTarget "prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTarget "@vuna@prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTarget "@vuna@host@newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTarget "prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTarget "@vuna@prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTarget "@vuna@host@readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTarget "prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTarget "@vuna@prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTarget "@vuna@host@writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTarget "prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTarget "@vuna@prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTarget "prim_erase" = Just (nativeRtLabel "prim_erase")
-nativeRtTarget "prim_effectPerform" = Just (nativeRtLabel "eff_perform")
-nativeRtTarget "prim_effectHandle" = Just (nativeRtLabel "eff_handle")
-nativeRtTarget "prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTarget "@vuna@prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
-nativeRtTarget "prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTarget "@vuna@prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
-nativeRtTarget "prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTarget "@vuna@prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
-nativeRtTarget "prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTarget "@vuna@prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
-nativeRtTarget "prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
-nativeRtTarget "@vuna@prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
-nativeRtTarget "prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
-nativeRtTarget "@vuna@prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTargetBase "bi_lt_bool" = Just (nativeRtLabel "lt_int")
+nativeRtTargetBase "bi_le_bool" = Just (nativeRtLabel "le_int")
+nativeRtTargetBase "bi_gt_bool" = Just (nativeRtLabel "gt_int")
+nativeRtTargetBase "bi_ge_bool" = Just (nativeRtLabel "ge_int")
+nativeRtTargetBase "strFromInt" = Just (nativeRtLabel "str_from_int")
+nativeRtTargetBase "strLength" = Just (nativeRtLabel "str_length")
+nativeRtTargetBase "strAt" = Just (nativeRtLabel "str_at")
+nativeRtTargetBase "strSubstring" = Just (nativeRtLabel "str_substring")
+nativeRtTargetBase "strHash" = Just (nativeRtLabel "str_hash")
+
+nativeRtTargetHost : String -> Maybe String
+nativeRtTargetHost "@vuna@host@print" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTargetHost "prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTargetHost "@vuna@prim_eff_print_host" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTargetHost "@vuna@host@exitOp" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTargetHost "prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTargetHost "@vuna@prim_eff_exitOp_host" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTargetHost "@vuna@host@newRef" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTargetHost "prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTargetHost "@vuna@prim_eff_newRef_host" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTargetHost "@vuna@host@readRef" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTargetHost "prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTargetHost "@vuna@prim_eff_readRef_host" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTargetHost "@vuna@host@writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTargetHost "prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTargetHost "@vuna@prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
+
+nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "prim_effectPerform" = Just (nativeRtLabel "eff_perform")
+nativeRtTargetBase "prim_effectHandle" = Just (nativeRtLabel "eff_handle")
+
+nativeRtTargetHost "prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTargetHost "@vuna@prim_eff_newRef" = Just (nativeRtLabel "prim_eff_new_ref")
+nativeRtTargetHost "prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTargetHost "@vuna@prim_eff_readRef" = Just (nativeRtLabel "prim_eff_read_ref")
+nativeRtTargetHost "prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTargetHost "@vuna@prim_eff_writeRef" = Just (nativeRtLabel "prim_eff_write_ref")
+nativeRtTargetHost "prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTargetHost "@vuna@prim_eff_print" = Just (nativeRtLabel "prim_eff_print")
+nativeRtTargetHost "prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
+nativeRtTargetHost "@vuna@prim_eff_eprint" = Just (nativeRtLabel "prim_eff_eprint")
+nativeRtTargetHost "prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
+nativeRtTargetHost "@vuna@prim_eff_exit" = Just (nativeRtLabel "prim_eff_exit")
 -- 宿主：环境 / 入参 / 目录 / 时钟 / tty（`_host` 与 `@vuna@host@*` 是同一组叶子）。
-nativeRtTarget "effTimeUs" = Just (nativeRtLabel "now_us")
-nativeRtTarget "effTimeUs_host" = Just (nativeRtLabel "now_us")
-nativeRtTarget "prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTarget "@vuna@prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTarget "prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
-nativeRtTarget "@vuna@prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
-nativeRtTarget "@vuna@host@sleep" = Just (nativeRtLabel "sleep_us")
-nativeRtTarget "prim_eff_getenv" = Just (nativeRtLabel "getenv")
-nativeRtTarget "@vuna@prim_eff_getenv" = Just (nativeRtLabel "getenv")
-nativeRtTarget "prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
-nativeRtTarget "@vuna@prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
-nativeRtTarget "@vuna@host@getenv" = Just (nativeRtLabel "getenv")
-nativeRtTarget "prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTarget "@vuna@prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTarget "prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
-nativeRtTarget "@vuna@prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
-nativeRtTarget "@vuna@host@getcwd" = Just (nativeRtLabel "getcwd")
-nativeRtTarget "prim_eff_execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTarget "@vuna@prim_eff_execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTarget "prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
-nativeRtTarget "@vuna@prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
-nativeRtTarget "@vuna@host@execPath" = Just (nativeRtLabel "exec_path")
-nativeRtTarget "prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "@vuna@prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "@vuna@prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "@vuna@host@getArgs" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "@vuna@prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
-nativeRtTarget "@vuna@host@isTty" = Just (nativeRtLabel "is_tty")
-nativeRtTarget "@vuna@prim_eff_hostStatus" = Just (nativeRtLabel "host_status_get")
-nativeRtTarget "prim_cleanupPush" = Just (nativeRtLabel "cleanup_push")
-nativeRtTarget "prim_cleanupPop" = Just (nativeRtLabel "cleanup_pop")
-nativeRtTarget "floatFromInt" = Just (nativeRtLabel "float_from_int")
-nativeRtTarget "intFromFloat" = Just (nativeRtLabel "int_from_float")
-nativeRtTarget "floatAbs" = Just (nativeRtLabel "float_abs")
-nativeRtTarget "floatSqrt" = Just (nativeRtLabel "float_sqrt")
-nativeRtTarget "bi_add_float" = Just (nativeRtLabel "float_add")
-nativeRtTarget "bi_sub_float" = Just (nativeRtLabel "float_sub")
-nativeRtTarget "bi_mul_float" = Just (nativeRtLabel "float_mul")
-nativeRtTarget "bi_div_float" = Just (nativeRtLabel "float_div")
-nativeRtTarget "bi_eq_float" = Just (nativeRtLabel "float_eq")
-nativeRtTarget "bi_neq_float" = Just (nativeRtLabel "float_neq")
-nativeRtTarget "bi_lt_float" = Just (nativeRtLabel "float_lt")
-nativeRtTarget "bi_le_float" = Just (nativeRtLabel "float_le")
-nativeRtTarget "bi_gt_float" = Just (nativeRtLabel "float_gt")
-nativeRtTarget "bi_ge_float" = Just (nativeRtLabel "float_ge")
-nativeRtTarget "arrayLength" = Just (nativeRtLabel "array_length")
-nativeRtTarget "arrayGet" = Just (nativeRtLabel "array_get")
-nativeRtTarget "arraySet" = Just (nativeRtLabel "array_set")
-nativeRtTarget "arrayMake" = Just (nativeRtLabel "array_make")
-nativeRtTarget "arrayFromList" = Just (nativeRtLabel "arrayFromList")
-nativeRtTarget "arrayToList" = Just (nativeRtLabel "arrayToList")
+nativeRtTargetHost "effTimeUs" = Just (nativeRtLabel "now_us")
+nativeRtTargetHost "effTimeUs_host" = Just (nativeRtLabel "now_us")
+nativeRtTargetHost "prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTargetHost "@vuna@prim_eff_sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTargetHost "prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
+nativeRtTargetHost "@vuna@prim_eff_sleep_host" = Just (nativeRtLabel "sleep_us")
+nativeRtTargetHost "@vuna@host@sleep" = Just (nativeRtLabel "sleep_us")
+nativeRtTargetHost "prim_eff_getenv" = Just (nativeRtLabel "getenv")
+nativeRtTargetHost "@vuna@prim_eff_getenv" = Just (nativeRtLabel "getenv")
+nativeRtTargetHost "prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
+nativeRtTargetHost "@vuna@prim_eff_getenv_host" = Just (nativeRtLabel "getenv")
+nativeRtTargetHost "@vuna@host@getenv" = Just (nativeRtLabel "getenv")
+nativeRtTargetHost "prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTargetHost "@vuna@prim_eff_getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTargetHost "prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
+nativeRtTargetHost "@vuna@prim_eff_getcwd_host" = Just (nativeRtLabel "getcwd")
+nativeRtTargetHost "@vuna@host@getcwd" = Just (nativeRtLabel "getcwd")
+nativeRtTargetHost "prim_eff_execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTargetHost "@vuna@prim_eff_execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTargetHost "prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
+nativeRtTargetHost "@vuna@prim_eff_execPath_host" = Just (nativeRtLabel "exec_path")
+nativeRtTargetHost "@vuna@host@execPath" = Just (nativeRtLabel "exec_path")
+nativeRtTargetHost "prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "@vuna@prim_eff_getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "@vuna@prim_eff_getArgs_host" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "@vuna@host@getArgs" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "@vuna@prim_eff_getArgs_process_host" = Just (nativeRtLabel "getArgs")
+nativeRtTargetHost "@vuna@host@isTty" = Just (nativeRtLabel "is_tty")
+nativeRtTargetHost "@vuna@prim_eff_hostStatus" = Just (nativeRtLabel "host_status_get")
+nativeRtTargetHost "prim_cleanupPush" = Just (nativeRtLabel "cleanup_push")
+nativeRtTargetHost "prim_cleanupPop" = Just (nativeRtLabel "cleanup_pop")
+-- 宿主：文件系统（try* 是真实叶子；`prim_eff_*` / `_host` / `@vuna@host@*` 是同一实现）。
+nativeRtTargetHost "@vuna@host@tryReadFile" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "prim_eff_readFile" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "@vuna@prim_eff_readFile" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "prim_eff_readFile_host" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "@vuna@prim_eff_readFile_host" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "@vuna@host@readFile" = Just (nativeRtLabel "try_read_file")
+nativeRtTargetHost "@vuna@host@tryWriteFile" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "prim_eff_writeFile" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "@vuna@prim_eff_writeFile" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "prim_eff_writeFile_host" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "@vuna@prim_eff_writeFile_host" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "@vuna@host@writeFile" = Just (nativeRtLabel "try_write_file")
+nativeRtTargetHost "@vuna@host@tryWriteFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "prim_eff_writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "@vuna@prim_eff_writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "prim_eff_writeFileAtomic_host" = Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "@vuna@prim_eff_writeFileAtomic_host" =
+  Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "@vuna@host@writeFileAtomic" = Just (nativeRtLabel "try_write_file_atomic")
+nativeRtTargetHost "@vuna@host@tryReadDir" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "prim_eff_readDir" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "@vuna@prim_eff_readDir" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "prim_eff_readDir_host" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "@vuna@prim_eff_readDir_host" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "@vuna@host@readDir" = Just (nativeRtLabel "tryReadDir")
+nativeRtTargetHost "@vuna@host@tryIsDirectory" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "prim_eff_isDirectory" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "@vuna@prim_eff_isDirectory" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "prim_eff_isDirectory_host" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "@vuna@prim_eff_isDirectory_host" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "@vuna@host@isDirectory" = Just (nativeRtLabel "try_is_dir")
+nativeRtTargetHost "@vuna@host@tryMakeDir" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "prim_eff_makeDir" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "@vuna@prim_eff_makeDir" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "prim_eff_makeDir_host" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "@vuna@prim_eff_makeDir_host" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "@vuna@host@makeDir" = Just (nativeRtLabel "try_make_dir")
+nativeRtTargetHost "@vuna@host@tryMakeDirExclusive" = Just (nativeRtLabel "try_make_dir_excl")
+nativeRtTargetHost "@vuna@host@tryRemoveFile" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "prim_eff_removeFile" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "@vuna@prim_eff_removeFile" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "prim_eff_removeFile_host" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "@vuna@prim_eff_removeFile_host" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "@vuna@host@removeFile" = Just (nativeRtLabel "try_remove_file")
+nativeRtTargetHost "@vuna@host@tryRemoveTree" = Just (nativeRtLabel "try_remove_tree")
+nativeRtTargetHost "@vuna@host@tryRename" = Just (nativeRtLabel "try_rename")
+nativeRtTargetHost "@vuna@host@trySymlink" = Just (nativeRtLabel "try_symlink")
+nativeRtTargetHost "@vuna@host@fileExists" = Just (nativeRtLabel "file_exists")
+nativeRtTargetHost "prim_eff_fileExists" = Just (nativeRtLabel "file_exists")
+nativeRtTargetHost "@vuna@prim_eff_fileExists" = Just (nativeRtLabel "file_exists")
+nativeRtTargetHost "prim_eff_fileExists_host" = Just (nativeRtLabel "file_exists")
+nativeRtTargetHost "@vuna@prim_eff_fileExists_host" = Just (nativeRtLabel "file_exists")
+nativeRtTargetHost "@vuna@host@fileMtime" = Just (nativeRtLabel "file_mtime")
+nativeRtTargetHost "prim_eff_fileMtime" = Just (nativeRtLabel "file_mtime")
+nativeRtTargetHost "@vuna@prim_eff_fileMtime" = Just (nativeRtLabel "file_mtime")
+nativeRtTargetHost "prim_eff_fileMtime_host" = Just (nativeRtLabel "file_mtime")
+nativeRtTargetHost "@vuna@prim_eff_fileMtime_host" = Just (nativeRtLabel "file_mtime")
+nativeRtTargetHost "@vuna@host@fileSize" = Just (nativeRtLabel "file_size")
+nativeRtTargetHost "prim_eff_fileSize" = Just (nativeRtLabel "file_size")
+nativeRtTargetHost "@vuna@prim_eff_fileSize" = Just (nativeRtLabel "file_size")
+nativeRtTargetHost "prim_eff_fileSize_host" = Just (nativeRtLabel "file_size")
+nativeRtTargetHost "@vuna@prim_eff_fileSize_host" = Just (nativeRtLabel "file_size")
+
+nativeRtTargetBase "floatFromInt" = Just (nativeRtLabel "float_from_int")
+nativeRtTargetBase "intFromFloat" = Just (nativeRtLabel "int_from_float")
+nativeRtTargetBase "floatAbs" = Just (nativeRtLabel "float_abs")
+nativeRtTargetBase "floatSqrt" = Just (nativeRtLabel "float_sqrt")
+nativeRtTargetBase "bi_add_float" = Just (nativeRtLabel "float_add")
+nativeRtTargetBase "bi_sub_float" = Just (nativeRtLabel "float_sub")
+nativeRtTargetBase "bi_mul_float" = Just (nativeRtLabel "float_mul")
+nativeRtTargetBase "bi_div_float" = Just (nativeRtLabel "float_div")
+nativeRtTargetBase "bi_eq_float" = Just (nativeRtLabel "float_eq")
+nativeRtTargetBase "bi_neq_float" = Just (nativeRtLabel "float_neq")
+nativeRtTargetBase "bi_lt_float" = Just (nativeRtLabel "float_lt")
+nativeRtTargetBase "bi_le_float" = Just (nativeRtLabel "float_le")
+nativeRtTargetBase "bi_gt_float" = Just (nativeRtLabel "float_gt")
+nativeRtTargetBase "bi_ge_float" = Just (nativeRtLabel "float_ge")
+nativeRtTargetBase "arrayLength" = Just (nativeRtLabel "array_length")
+nativeRtTargetBase "arrayGet" = Just (nativeRtLabel "array_get")
+nativeRtTargetBase "arraySet" = Just (nativeRtLabel "array_set")
+nativeRtTargetBase "arrayMake" = Just (nativeRtLabel "array_make")
+nativeRtTargetBase "arrayFromList" = Just (nativeRtLabel "arrayFromList")
+nativeRtTargetBase "arrayToList" = Just (nativeRtLabel "arrayToList")
 -- List 桥接（M3b）：函数体在 `Native.Module`（需要 List 族的 tag）。
-nativeRtTarget "strUnpack" = Just (nativeRtLabel "strUnpack")
-nativeRtTarget "strPack" = Just (nativeRtLabel "strPack")
-nativeRtTarget "strConcatMany" = Just (nativeRtLabel "strConcatMany")
-nativeRtTarget "strSubstTemplate" = Just (nativeRtLabel "strSubstTemplate")
-nativeRtTarget "strShow" = Just (nativeRtLabel "show_str")
-nativeRtTarget "natAdd" = Just (nativeRtLabel "nat_add")
-nativeRtTarget "natSub" = Just (nativeRtLabel "nat_sub")
-nativeRtTarget "natMul" = Just (nativeRtLabel "nat_mul")
-nativeRtTarget "natDiv" = Just (nativeRtLabel "nat_div")
-nativeRtTarget "natToInt" = Just (nativeRtLabel "nat_to_int")
-nativeRtTarget "natFromInt" = Just (nativeRtLabel "nat_from_int")
+nativeRtTargetBase "strUnpack" = Just (nativeRtLabel "strUnpack")
+nativeRtTargetBase "strPack" = Just (nativeRtLabel "strPack")
+nativeRtTargetBase "strConcatMany" = Just (nativeRtLabel "strConcatMany")
+nativeRtTargetBase "strSubstTemplate" = Just (nativeRtLabel "strSubstTemplate")
+nativeRtTargetBase "strShow" = Just (nativeRtLabel "show_str")
+nativeRtTargetBase "natAdd" = Just (nativeRtLabel "nat_add")
+nativeRtTargetBase "natSub" = Just (nativeRtLabel "nat_sub")
+nativeRtTargetBase "natMul" = Just (nativeRtLabel "nat_mul")
+nativeRtTargetBase "natDiv" = Just (nativeRtLabel "nat_div")
+nativeRtTargetBase "natToInt" = Just (nativeRtLabel "nat_to_int")
+nativeRtTargetBase "natFromInt" = Just (nativeRtLabel "nat_from_int")
 -- 可观测性叶子原语：no-op 桩（返回 0）。`@vuna@obs@span` 故意缺席（高阶，需闭包）。
-nativeRtTarget "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
-nativeRtTarget "@vuna@obs@log" = Just (nativeRtLabel "obs_log")
-nativeRtTarget "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
-nativeRtTarget "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
-nativeRtTarget "@vuna@obs@spanBegin" = Just (nativeRtLabel "obs_span_begin")
-nativeRtTarget "@vuna@obs@spanEnd" = Just (nativeRtLabel "obs_span_end")
-nativeRtTarget "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
-nativeRtTarget "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
-nativeRtTarget "@vuna@obs@span" = Just (nativeRtLabel "obs_span_run")
-nativeRtTarget "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
-nativeRtTarget "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
-nativeRtTarget "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
-nativeRtTarget _ = Nothing
+nativeRtTargetBase "@vuna@obs@level" = Just (nativeRtLabel "obs_level")
+nativeRtTargetBase "@vuna@obs@log" = Just (nativeRtLabel "obs_log")
+nativeRtTargetBase "@vuna@obs@counter" = Just (nativeRtLabel "obs_counter")
+nativeRtTargetBase "@vuna@obs@mark" = Just (nativeRtLabel "obs_mark")
+nativeRtTargetBase "@vuna@obs@spanBegin" = Just (nativeRtLabel "obs_span_begin")
+nativeRtTargetBase "@vuna@obs@spanEnd" = Just (nativeRtLabel "obs_span_end")
+nativeRtTargetBase "@vuna@obs@sampleStart" = Just (nativeRtLabel "obs_sample_start")
+nativeRtTargetBase "@vuna@obs@sampleStop" = Just (nativeRtLabel "obs_sample_stop")
+nativeRtTargetBase "@vuna@obs@span" = Just (nativeRtLabel "obs_span_run")
+nativeRtTargetBase "@vuna@obs@spanLab" = Just (nativeRtLabel "obs_span_lab_run")
+nativeRtTargetBase "@vuna@debug@on" = Just (nativeRtLabel "debug_on")
+nativeRtTargetBase "@vuna@debug@line" = Just (nativeRtLabel "debug_line")
+nativeRtTargetBase _ = Nothing
+
+nativeRtTargetHost _ = Nothing
+
+export nativeRtTarget : String -> Maybe String
+nativeRtTarget sym = case nativeRtTargetHost sym of
+  Just label => Just label
+  Nothing => nativeRtTargetBase sym
 
 -- | 以**运行时值**（非 `IrRtApp`）出现的符号的 arity（`irInlineArity` 为 0 的那些）。
 --   `IrApp (IrRt sym) args` 只有饱和到这个 arity 才生成调用；部分应用仍拒绝。
-export nativeRtValueArity : String -> Int
-nativeRtValueArity "strFromInt" = 1
-nativeRtValueArity "strLength" = 1
-nativeRtValueArity "strHash" = 1
-nativeRtValueArity "strShow" = 1
-nativeRtValueArity "strUnpack" = 1
-nativeRtValueArity "strPack" = 1
-nativeRtValueArity "strConcatMany" = 1
-nativeRtValueArity "strSubstTemplate" = 2
-nativeRtValueArity "@vuna@host@print" = 1
-nativeRtValueArity "prim_eff_print_host" = 1
-nativeRtValueArity "@vuna@prim_eff_print_host" = 1
-nativeRtValueArity "@vuna@host@exitOp" = 1
-nativeRtValueArity "prim_eff_exitOp_host" = 1
-nativeRtValueArity "@vuna@prim_eff_exitOp_host" = 1
-nativeRtValueArity "@vuna@host@newRef" = 1
-nativeRtValueArity "prim_eff_newRef_host" = 1
-nativeRtValueArity "@vuna@prim_eff_newRef_host" = 1
-nativeRtValueArity "@vuna@host@readRef" = 1
-nativeRtValueArity "prim_eff_readRef_host" = 1
-nativeRtValueArity "@vuna@prim_eff_readRef_host" = 1
-nativeRtValueArity "@vuna@host@writeRef" = 2
-nativeRtValueArity "prim_eff_writeRef_host" = 2
-nativeRtValueArity "@vuna@prim_eff_writeRef_host" = 2
-nativeRtValueArity "prim_erase" = 1
-nativeRtValueArity "prim_effectPerform" = 3
-nativeRtValueArity "prim_effectHandle" = 6
-nativeRtValueArity "prim_eff_newRef" = 1
-nativeRtValueArity "@vuna@prim_eff_newRef" = 1
-nativeRtValueArity "prim_eff_readRef" = 1
-nativeRtValueArity "@vuna@prim_eff_readRef" = 1
-nativeRtValueArity "prim_eff_writeRef" = 2
-nativeRtValueArity "@vuna@prim_eff_writeRef" = 2
-nativeRtValueArity "prim_eff_print" = 1
-nativeRtValueArity "@vuna@prim_eff_print" = 1
-nativeRtValueArity "prim_eff_eprint" = 1
-nativeRtValueArity "@vuna@prim_eff_eprint" = 1
-nativeRtValueArity "prim_eff_exit" = 1
-nativeRtValueArity "@vuna@prim_eff_exit" = 1
-nativeRtValueArity "floatFromInt" = 1
-nativeRtValueArity "intFromFloat" = 1
-nativeRtValueArity "floatAbs" = 1
-nativeRtValueArity "floatSqrt" = 1
-nativeRtValueArity "arrayLength" = 1
-nativeRtValueArity "arrayGet" = 2
-nativeRtValueArity "arraySet" = 3
-nativeRtValueArity "arrayMake" = 2
-nativeRtValueArity "arrayFromList" = 1
-nativeRtValueArity "arrayToList" = 1
-nativeRtValueArity "strAt" = 2
-nativeRtValueArity "strSubstring" = 3
-nativeRtValueArity "bi_eq_str" = 2
-nativeRtValueArity "bi_neq_str" = 2
-nativeRtValueArity "assert" = 3
-nativeRtValueArity "prim_fail" = 1
-nativeRtValueArity "todo" = 1
-nativeRtValueArity "@vuna@debug@on" = 1
-nativeRtValueArity "@vuna@debug@line" = 1
+nativeRtValueArityBase : String -> Int
+nativeRtValueArityBase "strFromInt" = 1
+nativeRtValueArityBase "strLength" = 1
+nativeRtValueArityBase "strHash" = 1
+nativeRtValueArityBase "strShow" = 1
+nativeRtValueArityBase "strUnpack" = 1
+nativeRtValueArityBase "strPack" = 1
+nativeRtValueArityBase "strConcatMany" = 1
+nativeRtValueArityBase "strSubstTemplate" = 2
+
+nativeRtValueArityHost "@vuna@host@print" = 1
+nativeRtValueArityHost "prim_eff_print_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_print_host" = 1
+nativeRtValueArityHost "@vuna@host@exitOp" = 1
+nativeRtValueArityHost "prim_eff_exitOp_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_exitOp_host" = 1
+nativeRtValueArityHost "@vuna@host@newRef" = 1
+nativeRtValueArityHost "prim_eff_newRef_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_newRef_host" = 1
+nativeRtValueArityHost "@vuna@host@readRef" = 1
+nativeRtValueArityHost "prim_eff_readRef_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readRef_host" = 1
+nativeRtValueArityHost "@vuna@host@writeRef" = 2
+nativeRtValueArityHost "prim_eff_writeRef_host" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeRef_host" = 2
+
+nativeRtValueArityBase "prim_erase" = 1
+nativeRtValueArityBase "prim_effectPerform" = 3
+nativeRtValueArityBase "prim_effectHandle" = 6
+
+nativeRtValueArityHost "prim_eff_newRef" = 1
+nativeRtValueArityHost "@vuna@prim_eff_newRef" = 1
+nativeRtValueArityHost "prim_eff_readRef" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readRef" = 1
+nativeRtValueArityHost "prim_eff_writeRef" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeRef" = 2
+nativeRtValueArityHost "prim_eff_print" = 1
+nativeRtValueArityHost "@vuna@prim_eff_print" = 1
+nativeRtValueArityHost "prim_eff_eprint" = 1
+nativeRtValueArityHost "@vuna@prim_eff_eprint" = 1
+nativeRtValueArityHost "prim_eff_exit" = 1
+nativeRtValueArityHost "@vuna@prim_eff_exit" = 1
+
+nativeRtValueArityBase "floatFromInt" = 1
+nativeRtValueArityBase "intFromFloat" = 1
+nativeRtValueArityBase "floatAbs" = 1
+nativeRtValueArityBase "floatSqrt" = 1
+nativeRtValueArityBase "arrayLength" = 1
+nativeRtValueArityBase "arrayGet" = 2
+nativeRtValueArityBase "arraySet" = 3
+nativeRtValueArityBase "arrayMake" = 2
+nativeRtValueArityBase "arrayFromList" = 1
+nativeRtValueArityBase "arrayToList" = 1
+nativeRtValueArityBase "strAt" = 2
+nativeRtValueArityBase "strSubstring" = 3
+nativeRtValueArityBase "bi_eq_str" = 2
+nativeRtValueArityBase "bi_neq_str" = 2
+nativeRtValueArityBase "assert" = 3
+nativeRtValueArityBase "prim_fail" = 1
+nativeRtValueArityBase "todo" = 1
+nativeRtValueArityBase "@vuna@debug@on" = 1
+nativeRtValueArityBase "@vuna@debug@line" = 1
 -- 可观测性叶子原语（`irInlineArity` 为 0 ⇒ 以运行时值形态出现，`IrApp (IrRt sym) args`）。
-nativeRtValueArity "@vuna@obs@level" = 1
-nativeRtValueArity "@vuna@obs@log" = 1
-nativeRtValueArity "@vuna@obs@counter" = 2
-nativeRtValueArity "@vuna@obs@mark" = 1
-nativeRtValueArity "@vuna@obs@spanBegin" = 2
-nativeRtValueArity "@vuna@obs@spanEnd" = 1
-nativeRtValueArity "@vuna@obs@sampleStart" = 2
-nativeRtValueArity "@vuna@obs@sampleStop" = 1
-nativeRtValueArity "prim_eff_getenv" = 1
-nativeRtValueArity "@vuna@prim_eff_getenv" = 1
-nativeRtValueArity "prim_eff_getenv_host" = 1
-nativeRtValueArity "@vuna@prim_eff_getenv_host" = 1
-nativeRtValueArity "@vuna@host@getenv" = 1
-nativeRtValueArity "prim_eff_sleep" = 1
-nativeRtValueArity "@vuna@prim_eff_sleep" = 1
-nativeRtValueArity "prim_eff_sleep_host" = 1
-nativeRtValueArity "@vuna@prim_eff_sleep_host" = 1
-nativeRtValueArity "@vuna@host@sleep" = 1
-nativeRtValueArity "prim_cleanupPush" = 1
-nativeRtValueArity "prim_cleanupPop" = 1
-nativeRtValueArity "@vuna@obs@span" = 3
-nativeRtValueArity "@vuna@obs@spanLab" = 4
-nativeRtValueArity _ = 0
+nativeRtValueArityBase "@vuna@obs@level" = 1
+nativeRtValueArityBase "@vuna@obs@log" = 1
+nativeRtValueArityBase "@vuna@obs@counter" = 2
+nativeRtValueArityBase "@vuna@obs@mark" = 1
+nativeRtValueArityBase "@vuna@obs@spanBegin" = 2
+nativeRtValueArityBase "@vuna@obs@spanEnd" = 1
+nativeRtValueArityBase "@vuna@obs@sampleStart" = 2
+nativeRtValueArityBase "@vuna@obs@sampleStop" = 1
+
+nativeRtValueArityHost : String -> Int
+nativeRtValueArityHost "prim_eff_getenv" = 1
+nativeRtValueArityHost "@vuna@prim_eff_getenv" = 1
+nativeRtValueArityHost "prim_eff_getenv_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_getenv_host" = 1
+nativeRtValueArityHost "@vuna@host@getenv" = 1
+nativeRtValueArityHost "prim_eff_sleep" = 1
+nativeRtValueArityHost "@vuna@prim_eff_sleep" = 1
+nativeRtValueArityHost "prim_eff_sleep_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_sleep_host" = 1
+nativeRtValueArityHost "@vuna@host@sleep" = 1
+nativeRtValueArityHost "prim_cleanupPush" = 1
+nativeRtValueArityHost "prim_cleanupPop" = 1
+nativeRtValueArityHost "@vuna@host@tryReadFile" = 1
+nativeRtValueArityHost "prim_eff_readFile" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readFile" = 1
+nativeRtValueArityHost "prim_eff_readFile_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readFile_host" = 1
+nativeRtValueArityHost "@vuna@host@readFile" = 1
+nativeRtValueArityHost "@vuna@host@tryWriteFile" = 2
+nativeRtValueArityHost "prim_eff_writeFile" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeFile" = 2
+nativeRtValueArityHost "prim_eff_writeFile_host" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeFile_host" = 2
+nativeRtValueArityHost "@vuna@host@writeFile" = 2
+nativeRtValueArityHost "@vuna@host@tryWriteFileAtomic" = 2
+nativeRtValueArityHost "prim_eff_writeFileAtomic" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic" = 2
+nativeRtValueArityHost "prim_eff_writeFileAtomic_host" = 2
+nativeRtValueArityHost "@vuna@prim_eff_writeFileAtomic_host" = 2
+nativeRtValueArityHost "@vuna@host@writeFileAtomic" = 2
+nativeRtValueArityHost "@vuna@host@tryReadDir" = 1
+nativeRtValueArityHost "prim_eff_readDir" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readDir" = 1
+nativeRtValueArityHost "prim_eff_readDir_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_readDir_host" = 1
+nativeRtValueArityHost "@vuna@host@readDir" = 1
+nativeRtValueArityHost "@vuna@host@tryIsDirectory" = 1
+nativeRtValueArityHost "prim_eff_isDirectory" = 1
+nativeRtValueArityHost "@vuna@prim_eff_isDirectory" = 1
+nativeRtValueArityHost "prim_eff_isDirectory_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_isDirectory_host" = 1
+nativeRtValueArityHost "@vuna@host@isDirectory" = 1
+nativeRtValueArityHost "@vuna@host@tryMakeDir" = 1
+nativeRtValueArityHost "prim_eff_makeDir" = 1
+nativeRtValueArityHost "@vuna@prim_eff_makeDir" = 1
+nativeRtValueArityHost "prim_eff_makeDir_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_makeDir_host" = 1
+nativeRtValueArityHost "@vuna@host@makeDir" = 1
+nativeRtValueArityHost "@vuna@host@tryMakeDirExclusive" = 1
+nativeRtValueArityHost "@vuna@host@tryRemoveFile" = 1
+nativeRtValueArityHost "prim_eff_removeFile" = 1
+nativeRtValueArityHost "@vuna@prim_eff_removeFile" = 1
+nativeRtValueArityHost "prim_eff_removeFile_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_removeFile_host" = 1
+nativeRtValueArityHost "@vuna@host@removeFile" = 1
+nativeRtValueArityHost "@vuna@host@tryRemoveTree" = 1
+nativeRtValueArityHost "@vuna@host@tryRename" = 2
+nativeRtValueArityHost "@vuna@host@trySymlink" = 2
+nativeRtValueArityHost "@vuna@host@fileExists" = 1
+nativeRtValueArityHost "prim_eff_fileExists" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileExists" = 1
+nativeRtValueArityHost "prim_eff_fileExists_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileExists_host" = 1
+nativeRtValueArityHost "@vuna@host@fileMtime" = 1
+nativeRtValueArityHost "prim_eff_fileMtime" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileMtime" = 1
+nativeRtValueArityHost "prim_eff_fileMtime_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileMtime_host" = 1
+nativeRtValueArityHost "@vuna@host@fileSize" = 1
+nativeRtValueArityHost "prim_eff_fileSize" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileSize" = 1
+nativeRtValueArityHost "prim_eff_fileSize_host" = 1
+nativeRtValueArityHost "@vuna@prim_eff_fileSize_host" = 1
+
+nativeRtValueArityBase "@vuna@obs@span" = 3
+nativeRtValueArityBase "@vuna@obs@spanLab" = 4
+nativeRtValueArityBase _ = 0
+
+nativeRtValueArityHost _ = 0
+
+export nativeRtValueArity : String -> Int
+nativeRtValueArity sym =
+  if nativeRtValueArityHost sym > 0 then nativeRtValueArityHost sym else nativeRtValueArityBase sym
