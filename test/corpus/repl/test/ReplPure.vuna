@@ -3,8 +3,7 @@
 -- （`vuna test` 以进程退出码判定效果测试；exit 走 Exit 效应，entry 自动预装 handler）。
 import Base.Eff
 import Base.EffExit
-import Base.HostRow
 import ReplGapsPure
 
-main : Eff hostRow Int
+main : Eff [ExitOp] Int
 main = pure (if checks == 0 then 0 else 1)

@@ -1,6 +1,6 @@
 # 112) stdin 的 EOF 是 `Nothing`（无值），不再与空串/空行混在一起：
 #      `stdinReadLine` / `stdinReadBytes` 都返回 `Maybe String`。
-run: sh -c 'rm -rf "$TMPDIR/s112"; mkdir -p "$TMPDIR/s112/app"; printf "[package]\nname = \"s112\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/s112/vuna.toml"; printf "%s\n" "import Prelude" "import Base.Eff" "import Base.EffStdin" "import Base.EffConsole" "import Base.HostRow" "import Base.Maybe" "" "tag : Maybe String -> String" "tag m = if isNothing m then \"eof\" else \"val\"" "" "main : Eff hostRow Int" "main = do" "  l <- stdinReadLine" "  b <- stdinReadBytes 4" "  _ <- consolePrint \"line=\${tag l} bytes=\${tag b}\\n\"" "  pure 0" > "$TMPDIR/s112/app/Main.vuna"'
+run: sh -c 'rm -rf "$TMPDIR/s112"; mkdir -p "$TMPDIR/s112/app"; printf "[package]\nname = \"s112\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/s112/vuna.toml"; printf "%s\n" "import Prelude" "import Base.Eff" "import Base.EffStdin" "import Base.EffConsole" "import Base.Maybe" "" "tag : Maybe String -> String" "tag m = if isNothing m then \"eof\" else \"val\"" "" "main : Eff [ConsoleOp, StdinOp] Int" "main = do" "  l <- stdinReadLine" "  b <- stdinReadBytes 4" "  _ <- consolePrint \"line=\${tag l} bytes=\${tag b}\\n\"" "  pure 0" > "$TMPDIR/s112/app/Main.vuna"'
 exit: 0
 # 空 stdin：两次读都是 EOF。
 run: sh -c 'printf "" | "$VUNA" run "$TMPDIR/s112" -- 2>&1'

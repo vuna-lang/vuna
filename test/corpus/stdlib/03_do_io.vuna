@@ -1,14 +1,13 @@
--- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff hostRow Int 由运行器执行。
+-- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff [ConsoleOp] Int 由运行器执行。
 -- 用户面直接带行（entry 自动预装 Console handler），不显式 runConsole。
 import Base.Eff
 import Base.EffConsole
-import Base.HostRow
 
-program : Eff hostRow Int
+program : Eff [ConsoleOp] Int
 program = do
   _ <- consolePrint "abc"
   n <- pure 3
   pure n
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp] Int
 main = program

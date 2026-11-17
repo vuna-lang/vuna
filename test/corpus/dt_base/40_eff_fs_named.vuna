@@ -6,7 +6,6 @@ import Base.Nat
 import Base.Maybe
 import Base.EffFs
 import Base.EffConsole
-import Base.HostRow
 import Base.List
 
 dir : String
@@ -29,7 +28,7 @@ prog n = do
   _ <- fsRemoveFile@(n) path
   pure (join "," (strFromInt w :: s :: strFromInt (b2i e) :: strFromInt sz :: []))
 
-progReal : Eff hostRow String
+progReal : Eff [FsOp, ConsoleOp] String
 progReal = do
   _ <- fsMakeDir dir
   _ <- fsRemoveFile path
@@ -60,7 +59,7 @@ mopH op k = case op of
   Symlink t l => k 0
   MakeDirExclusive p => k True
 
-main : Eff hostRow Int
+main : Eff [FsOp, ConsoleOp] Int
 main = do
   _ <- consolePrint ("mock " ++ runPure (handleFs "mock" mret mopH (prog "mock")) ++ "\n")
   real <- progReal

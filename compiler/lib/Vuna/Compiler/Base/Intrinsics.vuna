@@ -167,13 +167,6 @@ builtinEffectImplOfRest tag (e :: rest) =
 export isBuiltinEffectTag : String -> Bool
 isBuiltinEffectTag tag = builtinEffectExistsRest tag builtinEffects
 
--- | 工具链统一行（`Base.HostRow` 的公理；编译器在 `Core.Eval` 里归约成具体行）。
-export hostRowName : String
-hostRowName = "Base.HostRow.hostRow"
-
-export hostTailName : String
-hostTailName = "Base.HostRow.hostTail"
-
 builtinEffectExistsRest : String -> List BuiltinEffect -> Bool
 builtinEffectExistsRest tag [] = False
 builtinEffectExistsRest tag (e :: rest) =

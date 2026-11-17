@@ -2,7 +2,6 @@
 -- 睡眠走 Clock 效应（entry 自动预装 handler），不直接调用宿主原语。
 import Base.Eff
 import Base.EffClock
-import Base.HostRow
 
 main : Eff (Cons "default" ClockOp Nil) Int
 main = clockSleepMicros 1000

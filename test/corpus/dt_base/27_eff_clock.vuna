@@ -3,7 +3,6 @@
 import Base.Eff
 import Base.EffClock
 import Base.EffConsole
-import Base.HostRow
 
 prog : (n : String) -> Eff (Cons n ClockOp Nil) Int
 prog n = do
@@ -12,7 +11,7 @@ prog n = do
   t1 <- clockNow@(n)
   pure (t1 - t0)
 
-progReal : Eff hostRow Int
+progReal : Eff [ConsoleOp, ClockOp] Int
 progReal = do
   t0 <- clockNow
   _ <- clockSleepMicros 2000
@@ -27,7 +26,7 @@ mopH op k = case op of
   Now => k 1000
   SleepMicros us => k 0
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ClockOp] Int
 main = case runPure (handleClock "mock" mret mopH (prog "mock")) of
   mockElapsed => do
     _ <- consolePrint ("mock " ++ strFromInt mockElapsed ++ "\n")

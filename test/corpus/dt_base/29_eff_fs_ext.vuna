@@ -6,7 +6,6 @@ import Base.Nat
 import Base.Maybe
 import Base.EffFs
 import Base.EffConsole
-import Base.HostRow
 
 dir : String
 dir = "/tmp/vuna_w10_fs"
@@ -20,7 +19,7 @@ pathB = "/tmp/vuna_w10_fs/b.txt"
 b2i : Bool -> Int
 b2i b = if b then 1 else 0
 
-prepare : Eff hostRow Int
+prepare : Eff [FsOp, ConsoleOp] Int
 prepare = do
   _ <- fsRemoveFile pathA
   _ <- fsRemoveFile pathB
@@ -30,7 +29,7 @@ prepare = do
   _ <- fsRemoveFile pathB
   pure written
 
-inspectFs : Int -> Eff hostRow String
+inspectFs : Int -> Eff [FsOp, ConsoleOp] String
 inspectFs written = do
   exists <- fsFileExists pathA
   content <- fsReadFile pathA
@@ -42,13 +41,13 @@ inspectFs written = do
   pure
     (strFromInt written ++ ":" ++ content ++ ":" ++ strFromInt size ++ ":" ++ strFromInt (b2i isdir) ++ ":" ++ join "," files ++ ":" ++ strFromInt (b2i exists2))
 
-prog : Eff hostRow String
+prog : Eff [FsOp, ConsoleOp] String
 prog = do
   written <- prepare
   result <- inspectFs written
   pure result
 
-main : Eff hostRow Int
+main : Eff [FsOp, ConsoleOp] Int
 main = do
   summary <- prog
   _ <- consolePrint (summary ++ "\n")

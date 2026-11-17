@@ -1,6 +1,5 @@
 -- Error 效应栈（`Base.EffError`）。
 -- `throw` 被作用域 `catch` 恢复；结果用 `Result` 观察。
-import Base.HostRow
 import Base.EffExit
 import Base.EffConsole
 import Base.Eff
@@ -10,7 +9,7 @@ import Base.Result
 prog : Eff [ErrorOp@e] Int
 prog = throw@e "boom"
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ExitOp] Int
 main = do
   _ <- consolePrint "error\n"
   r <- pure (runPure (runError "e" (catch "e" prog (\msg => pure 7))))

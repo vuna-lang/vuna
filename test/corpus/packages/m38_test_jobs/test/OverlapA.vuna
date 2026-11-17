@@ -1,13 +1,13 @@
 
-import Base.HostRow
 import Base.EffClock
 import Base.EffConsole
 import Base.Eff
 -- 重叠探针 A：打印 START-A 后睡 3s 再打印 END-A。
 -- 与 OverlapB 一起用 `--filter Overlap --jobs 2` 驱动：并行时两个 START 都出现在
 -- 第一个 END 之前；串行时第一个 END 出现在第二个 START 之前。
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ClockOp] Int
 main = do
   _ <- consolePrint "START-A\n"
   _ <- clockSleepMicros 3000000
-  consolePrint "END-A\n"
+  _ <- consolePrint "END-A\n"
+  pure 0

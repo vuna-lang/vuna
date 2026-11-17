@@ -5,15 +5,14 @@ import Base.Eff
 import Base.Maybe
 import Base.EffConsole
 import Base.EffFs
-import Base.HostRow
 import Base.Nat
 
-prog : Eff hostRow Nat
+prog : Eff [FsOp, ConsoleOp] Nat
 prog = do
   written <- fsWriteFile "/tmp/vuna_d25_measure.txt" "hello"
   size <- fmap (fromMaybe Zero) (fsFileSize "/tmp/vuna_d25_measure.txt")
   printed <- consolePrint "p\n"
   pure (written + size + printed)
 
-main : Eff hostRow Nat
+main : Eff [FsOp, ConsoleOp] Nat
 main = prog

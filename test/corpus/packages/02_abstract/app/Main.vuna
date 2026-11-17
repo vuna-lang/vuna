@@ -1,13 +1,12 @@
 import Vuna.Box
 import Base.Eff
 import Base.EffConsole
-import Base.HostRow
 
--- 宿主 console 走 Eff hostRow（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
-prog : Eff hostRow Int
+-- 宿主 console 走 Eff [ConsoleOp]（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
+prog : Eff [ConsoleOp] Int
 prog = do
   _ <- consolePrint (strFromInt (boxValue (makeBox 42)))
   pure 0
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp] Int
 main = prog

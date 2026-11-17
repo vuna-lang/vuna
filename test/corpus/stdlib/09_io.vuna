@@ -1,15 +1,14 @@
 -- stdlib：宿主 console 效应（print/println 的 typed 版本）+ Eff 的 do/pure。
--- main : Eff hostRow Int 由运行时执行；所有效果放进单个 Eff 动作，保证输出顺序一致。
+-- main : Eff [ConsoleOp] Int 由运行时执行；所有效果放进单个 Eff 动作，保证输出顺序一致。
 import Base.Eff
 import Base.EffConsole
-import Base.HostRow
 
-program : Eff hostRow Int
+program : Eff [ConsoleOp] Int
 program = do
   n <- consolePrint "abc"
   m <- consolePrint "de"
   x <- consolePrint "x\n"
   pure (n + m + x + 10)
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp] Int
 main = program

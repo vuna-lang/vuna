@@ -4,7 +4,6 @@
 import Base.Eff
 import Base.EffProcess
 import Base.EffConsole
-import Base.HostRow
 import Base.List
 
 prog : (n : String) -> Eff (Cons n ProcessOp []) Int
@@ -23,12 +22,12 @@ mopH op k = case op of
   Spawn args => k 9
   Wait h => k 0
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ProcessOp] Int
 main = do
   _ <-
     consolePrint
       ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
   observed <-
-    raiseTo hostRow (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
+    raiseTo [ConsoleOp, ProcessOp] (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
   _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
   pure 0

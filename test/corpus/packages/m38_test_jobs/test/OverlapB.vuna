@@ -1,5 +1,4 @@
 
-import Base.HostRow
 import Base.EffClock
 import Base.EffConsole
 import Base.Eff
@@ -8,8 +7,9 @@ import Base.Eff
 -- 睡眠取秒级：全量 suite 在 `--jobs auto` 下会同时跑几十个 case，并行 worker 的进程
 -- 启动/调度延迟可能到秒级，短睡眠会让「A 还没来得及打印 START」被误判成「没有重叠」
 -- （高负载下该断言会偶发失败）。2s 仍远小于 A 的 3s，串行/并行判据不变。
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ClockOp] Int
 main = do
   _ <- consolePrint "START-B\n"
   _ <- clockSleepMicros 2000000
-  consolePrint "END-B\n"
+  _ <- consolePrint "END-B\n"
+  pure 0

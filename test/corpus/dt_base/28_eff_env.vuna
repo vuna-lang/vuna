@@ -3,7 +3,6 @@
 import Base.Eff
 import Base.EffEnv
 import Base.EffConsole
-import Base.HostRow
 
 prog : (n : String) -> Eff (Cons n EnvOp Nil) Int
 prog n = do
@@ -12,7 +11,7 @@ prog n = do
   e <- envExecPath@(n)
   pure ((if m == "" then 1 else 0) + (if c /= "" then 1 else 0) + (if e /= "" then 1 else 0))
 
-progReal : Eff hostRow Int
+progReal : Eff [ConsoleOp, EnvOp] Int
 progReal = do
   m <- envGetEnv "VUNA_W10_MISSING_ENV_VAR"
   c <- envGetCwd
@@ -28,7 +27,7 @@ mopH op k = case op of
   GetCwd => k "/mock/cwd"
   ExecPath => k "/mock/exe"
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp, EnvOp] Int
 main = case runPure (handleEnv "mock" mret mopH (prog "mock")) of
   mockScore => do
     _ <- consolePrint ("mock " ++ strFromInt mockScore ++ "\n")

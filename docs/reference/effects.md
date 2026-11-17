@@ -54,7 +54,6 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Eff.Types` 只重导出
   类型面（`Eff` / `Row` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与 `List.Cons`
   的 `::` 歧义；`Base.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
-  `Base.HostRow.hostRow` / `hostTail` 只保留给内建 `effTimeUs` 的 intrinsic 类型。
   宿主原语是 `@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
   源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 
@@ -352,7 +351,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
    都只剩运行时与 base 帧（用户 def 的帧不进栈）。要给出调用点只能给每次宿主操作付
    栈捕获的代价，且仍拿不到用户帧；因此收口只给操作上下文。崩溃路径（`dt_report_exn`）
    仍有源码帧，因为它走普通异常栈。
-`hostRow` 与 `collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
+`collectBuiltinRowTags` 不需要认识错误标签：错误只出现在 family handler 的
 answer 行里（`[FsErrorOp]`），entry 靠 family 标签决定装哪些收口 handler。
 
 「无值」永远进 `Maybe`，不进错误通道：`fsFileSize` / `fsFileMtime` 取不到给 `Nothing`，

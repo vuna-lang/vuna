@@ -1,7 +1,8 @@
 
-import Base.HostRow
 import Base.EffConsole
 import Base.Eff
 -- 效果测试（通过）：第二个效果测试，验证多个效果测试文件并行时各自独立编译运行。
-main : Eff hostRow Int
-main = consolePrint "m38-test-jobs: io-two\n"
+main : Eff [ConsoleOp] Int
+main = do
+  _ <- consolePrint "m38-test-jobs: io-two\n"
+  pure 0

@@ -2,7 +2,6 @@
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
 -- `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
 -- 直接调用原语得到 `Int`。
-import Base.HostRow
 import Base.EffStdin
 import Base.EffExit
 import Base.EffArgs
@@ -11,41 +10,41 @@ import Base.Eff
 import Base.List
 import Base.Nat
 
-readProbe : Eff hostRow String
+readProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] String
 readProbe = fsReadFile "x"
 
-writeProbe : Eff hostRow Nat
+writeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Nat
 writeProbe = fsWriteFile "x" "y"
 
-lineProbe : Eff hostRow (Maybe String)
+lineProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe String)
 lineProbe = stdinReadLine
 
-dirProbe : Eff hostRow (List String)
+dirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (List String)
 dirProbe = fsReadDir "."
 
-isDirProbe : Eff hostRow Bool
+isDirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Bool
 isDirProbe = fsIsDirectory "."
 
-makeDirProbe : Eff hostRow Int
+makeDirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
 makeDirProbe = fsMakeDir "x"
 
-removeProbe : Eff hostRow Int
+removeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
 removeProbe = fsRemoveFile "x"
 
-existsProbe : Eff hostRow Bool
+existsProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Bool
 existsProbe = fsFileExists "x"
 
-mtimeProbe : Eff hostRow (Maybe Int)
+mtimeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe Int)
 mtimeProbe = fsFileMtime "x"
 
-sizeProbe : Eff hostRow (Maybe Nat)
+sizeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe Nat)
 sizeProbe = fsFileSize "x"
 
-argsProbe : Eff hostRow (List String)
+argsProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (List String)
 argsProbe = argsGetArgs
 
-exitProbe : Eff hostRow Int
+exitProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
 exitProbe = exitWith 0
 
-main : Eff hostRow Int
+main : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
 main = pure 0

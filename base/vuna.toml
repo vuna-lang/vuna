@@ -25,7 +25,6 @@ modules = [
   "Base.Sort",
   "Base.Map",
   "Base.HashMap",
-  "Base.HostRow",
   "Base.HashSet",
   "Base.Unit",
   "Base.Applicative",

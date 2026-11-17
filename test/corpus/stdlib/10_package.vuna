@@ -1,8 +1,7 @@
 -- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad）。
--- 宿主 console 走 Eff hostRow（entry 自动预装 handler）。
+-- 宿主 console 走 Eff [ConsoleOp]（entry 自动预装 handler）。
 import Base.Eff
 import Base.EffConsole
-import Base.HostRow
 import Base
 
 sum : List Int -> Int
@@ -23,10 +22,10 @@ result =
     ++ "/"
     ++ strFromInt (strLength "p")
 
-prog : Eff hostRow String
+prog : Eff [ConsoleOp] String
 prog = do
   _ <- consolePrint "p"
   pure result
 
-main : Eff hostRow String
+main : Eff [ConsoleOp] String
 main = prog

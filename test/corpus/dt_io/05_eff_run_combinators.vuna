@@ -2,12 +2,11 @@
 -- 用户面只经 `Eff` + handler，不需要 import 宿主层。
 import Base.Eff
 import Base.EffConsole
-import Base.HostRow
 
-prog : Eff hostRow Int
+prog : Eff [ConsoleOp] Int
 prog = do
   _ <- consolePrint "hi"
   pure 7
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp] Int
 main = prog

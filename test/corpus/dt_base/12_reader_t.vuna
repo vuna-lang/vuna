@@ -1,6 +1,5 @@
 -- Reader 效应栈（`Base.Eff.Reader`）。
 -- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
-import Base.HostRow
 import Base.EffExit
 import Base.EffConsole
 import Base.Eff
@@ -15,7 +14,7 @@ opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
 opH op k = case op of
   Ask => k 41
 
-main : Eff hostRow Int
+main : Eff [ConsoleOp, ExitOp] Int
 main = do
   _ <- consolePrint "reader\n"
   a <- pure (runPure (handleReader "counter" Int (\x => x) opH prog))
