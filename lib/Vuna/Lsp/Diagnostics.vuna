@@ -189,8 +189,13 @@ diagnosticJson label lines d =
         Pair "message" (JStr (messageWithExtras d))
       ]
     withCode = if d.diagCode == "" then base else append base [Pair "code" (JStr d.diagCode)]
+    withDescription =
+      if startsWith "LN_" d.diagCode then append withCode
+        [Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]
+      else withCode
     tags = lspTagsOf d.diagCode
-    withTags = if length tags == 0 then withCode else append withCode [Pair "tags" (JArr tags)]
+    withTags =
+      if length tags == 0 then withDescription else append withDescription [Pair "tags" (JArr tags)]
     withRelated =
       if length related == 0 then withTags
       else append withTags [Pair "relatedInformation" (JArr related)]
@@ -550,7 +555,7 @@ findingDiagJson f =
       LintWarn => 2
       LintOff => 2
   in JObj
-    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) [Pair "message" (JStr f.findingMessage)]))
+    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode), Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]) [Pair "message" (JStr f.findingMessage)]))
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链
