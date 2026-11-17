@@ -81,7 +81,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D98 | 不做尾调用优化、无 GC/RC：深递归直接消耗宿主栈，默认 8 MiB 栈上 `arith` / `list_recursion` / `gc_pressure` / `array` 基准以 exit 139 结束（`bench/run.sh --target native` 因此统一在 `ulimit -s unlimited` 下测量）；堆是可增长 arena、只增不减，峰值 RSS ≈ 累计分配（`gc_pressure` 是手写 OCaml 的 5.2×、`arith` 因 300 万层非尾递归栈页为 161×） | `compiler/lib/Vuna/Compiler/Native/{Runtime,Module}.vuna`（prologue 无栈检查、`alloc` 只 bump）；[native.md](native.md) §8；`bench/native-baseline.json`；[performance.md](performance.md) §8 | 后续（尾调用 + 栈检查；GC/RC 需先定 §8 记录的三项接口） |
+| D98 | 不做尾调用优化、无 GC/RC：深递归直接消耗宿主栈，12 个生成程序基准里 9 个在默认 8 MiB 栈上以 exit 139 结束（`bench/run.sh --target native` 因此统一在 `ulimit -s unlimited` 下测量）；堆是可增长 arena、只增不减，峰值 RSS ≈ 累计分配（`gc_pressure` 是手写 OCaml 的 5.2×、`float_math` 的每次浮点装箱为 56×、`arith` 因 300 万层非尾递归栈页为 166×） | `compiler/lib/Vuna/Compiler/Native/{Runtime,Module}.vuna`（prologue 无栈检查、`alloc` 只 bump）；[native.md](native.md) §8；`bench/native-baseline.json`；[performance.md](performance.md) §8.1 | 后续（尾调用 + 栈检查；GC/RC 需先定 §8 记录的三项接口） |
 
 ## wasm 后端
 

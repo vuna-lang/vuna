@@ -61,14 +61,20 @@ VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3
 `--runs 3 --warmup 1`（native 列用 `--runs 5 --warmup 2`），x86_64 / 16 核 / ocamlopt 5.5.1
 （非 flambda）。读数见 [docs/reference/performance.md §8](../docs/reference/performance.md)：
 
-| benchmark | OCaml 后端 ratio | native ratio |
-| --- | --- | --- |
-| arith | ~1.2x | ~85x（深非尾递归；见 §8.1 口径） |
-| string_ops | ~1.0x | ~1.3x |
-| hashmap | ~2.0x | ~3x |
-| list_recursion | ~0.8x | ~4x |
-| gc_pressure | ~1.1x | ~2x |
-| array | ~0.9x | ~3x |
+| benchmark | 场景 | OCaml 后端 ratio | native ratio |
+| --- | --- | --- | --- |
+| arith | Int 算术 + 尾递归 | ~1.2x | ~82x（深非尾递归；见 §8.1） |
+| string_ops | 字符串拼接 / repeat / substring | ~1.3x | ~1.5x |
+| hashmap | 持久哈希表 + 字典派发 | ~1.8x | ~3.6x |
+| list_recursion | List 非尾递归 / fold / append | ~0.9x | ~3.7x |
+| gc_pressure | 分配压力（字符串 churn） | ~1.1x | ~1.8x |
+| array | 不可变 Array | ~0.9x | ~3.0x |
+| records | record 更新 + variant 分派 | ~2.0x | ~24x |
+| closures | 高阶函数 / 每次迭代新建闭包 | ~1.2x | ~5.9x |
+| sorting | 归并排序（List + Pair 拆半） | ~1.3x | ~2.1x |
+| float_math | Float 算术 / sqrt / abs | ~1.8x | ~35x |
+| text_scan | 逐字节 `strAt` 扫描 | ~1.7x | ~16x |
+| nat_bits | Nat 饱和算术 + 位运算 | ~1.9x | ~27x |
 
 OCaml 后端全部基准在 2× 手写 OCaml 内；native 的绝对值与峰值内存见
 [performance.md §8](../docs/reference/performance.md)。分配 / GC 统计由 OCaml 后端生成
