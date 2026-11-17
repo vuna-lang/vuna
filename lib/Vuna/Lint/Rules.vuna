@@ -584,7 +584,7 @@ exprText src e = if not (exprSingleLine e) then ""
 else
   let
     start = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
-    end = tokenEndAt src (spanEndOffset (exprSpan e))
+    end = tokenEndAt src (offsetOfLineCol src (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)))
   in if end <= start then exprTextLine src e else trimEnd (sliceOffsets src start end)
 
 -- | 内部：行列路径的表达式文本（偏移不可用时的回落）。
