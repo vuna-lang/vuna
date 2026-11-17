@@ -364,7 +364,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   export trait Show a(..) where
     show : a -> String
 
-  export import Vuna.Compiler.Base.Common       -- 导入 + 整模块重导出
+  export module Vuna.Compiler.Base.Common       -- 导入 + 整模块重导出
   export import B (x, T(..))              -- 选择性重导出
   export module Base.Map                  -- 导入 + 平铺重导出 Base.Map 的全部导出项
   export module Base.Map as Map           -- 导入 + 只导出命名空间路径 Map（A.Map.* / A.Base.Map.*）
@@ -418,7 +418,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   「带实例名的标签」解读，不做特殊名字放行。
 - 限定名用**完整模块名**或 alias，永远不会歧义，但同样只解析目标模块的导出项；import
   只算直接依赖，**不传递**：A import B，C import A 看不到 B 的名字——除非 A 用
-  `export import B` / `export import B (x)` / `export module B [as X]` 显式重导出；
+  `export module B [as X]` / `export import B (x)` 显式重导出；
   `export module B as X` 导出的命名空间路径可以继续向下重导出，形成 `A.X.Y.name`。
 - Loader 解析 import 图、做名字解析后 **flatten** 成一个 program（内部名字带模块前缀，
   如 `Vuna.Compiler.Frontend.Parser.parseSource`），解释器与 codegen 复用同一份实现；

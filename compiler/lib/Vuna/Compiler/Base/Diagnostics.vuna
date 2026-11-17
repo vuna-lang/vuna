@@ -29,18 +29,18 @@ module Vuna.Compiler.Base.Diagnostics where
 -- 对外名字集合是下面三个模块的并集，调用点只认本门面。
 -- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。根包 Lint/Diagnostics 与
 -- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import 根包。
-export import Vuna.Compiler.Base.Common
-export import Base.Nat
 import Base.String
-export import Base.Vec
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Base.Diagnostics.Loader
-export import Vuna.Compiler.Base.Diagnostics.Cg as Cg
-export import Vuna.Compiler.Base.Diagnostics.Ic as Ic
-export import Vuna.Compiler.Base.Diagnostics.Tc as Tc
+export module Vuna.Compiler.Base.Common
+export module Base.Nat
+export module Base.Vec
+export module Vuna.Compiler.Base.Diagnostics.Cg
+export module Vuna.Compiler.Base.Diagnostics.Ic
+export module Vuna.Compiler.Base.Diagnostics.Tc
 
 -- ---------------------------------------------------------------
 -- 目录元数据：severity/phase/category 由码域推导（单点映射，不另建真源）。

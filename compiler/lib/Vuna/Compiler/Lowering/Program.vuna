@@ -16,9 +16,6 @@ module Vuna.Compiler.Lowering.Program where
 -- 门禁：产物逐字节确定（[architecture-target.md] 的 IR 门禁）。因此本模块的遍历顺序、
 -- fresh 编号分配顺序、分支与实参顺序都不能随实现方式变化。
 import Vuna.Compiler.Base.Common
-export import Vuna.Compiler.Lowering.Env
-export import Vuna.Compiler.Lowering.Ty
-export import Vuna.Compiler.Lowering.Entry
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Base.Diagnostics
 import Base.HashMap
@@ -37,6 +34,9 @@ import Vuna.Compiler.Lowering.Checks
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
 import Base.Eff.Types
+export module Vuna.Compiler.Lowering.Env
+export module Vuna.Compiler.Lowering.Ty
+export module Vuna.Compiler.Lowering.Entry
 
 -- 小工具
 -- ---------------------------------------------------------------

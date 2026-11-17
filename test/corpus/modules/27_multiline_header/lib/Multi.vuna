@@ -1,7 +1,7 @@
 module Multi where
 
-export import Helper
 export import Helper2 (choice)
+export module Helper
 
 -- 裸名 / 值名导出
 export foo : Int

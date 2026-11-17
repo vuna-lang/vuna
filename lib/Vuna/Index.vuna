@@ -22,7 +22,7 @@
 -- 文本渲染是纯函数。
 module Vuna.Index where
 
-export import Vuna.Index.Query
-export import Vuna.Index.Render
-export import Vuna.Index.Scan
-export import Vuna.Index.Types
+export module Vuna.Index.Query
+export module Vuna.Index.Render
+export module Vuna.Index.Scan
+export module Vuna.Index.Types

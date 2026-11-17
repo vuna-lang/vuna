@@ -8,10 +8,10 @@ module Vuna.Compiler.Base.Diagnostics.Frontend where
 --
 -- 域：`LX_`（词法）、`PS_`（语法）。arity 由 `Nat` 索引在编译期锁定（同 TC 机制）。
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
-export import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-export import Base.Nat
-export import Base.Vec
+export module Vuna.Compiler.Base.Common
+export module Base.Nat
+export module Base.Vec
 
 -- ---------------------------------------------------------------
 -- LX_：词法诊断

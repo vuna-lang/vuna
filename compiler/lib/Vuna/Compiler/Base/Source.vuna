@@ -1,6 +1,12 @@
 -- | 编译器底层源码位置与路径工具（不含 `Result`；诊断结果类型在 `Diag`）。
 module Vuna.Compiler.Base.Source where
 
+export module Base.Pair
+export module Base.Bool
+export module Base.List
+export module Base.Maybe
+export module Base.String
+
 -- 位置/路径层。
 --
 -- 分层原因：`Diag` 需要 `Span` 构造诊断，`Common` 需要 `Diag` 提供
@@ -9,12 +15,6 @@ module Vuna.Compiler.Base.Source where
 --
 -- 位置约定：行、列均从 1 开始；列 = UTF-8 字节（与 lexer 的 `advanceChar` 一致）。
 -- LSP 的 UTF-16 换算只在 LSP 适配器做。
-export import Base.Pair
-export import Base.Bool
-export import Base.List
-export import Base.Maybe
-export import Base.String
-
 -- | 源码位置：行、列、字节偏移，均从 1 开始（偏移从 0 开始）。
 export record Pos(..) where
   -- | 行号（从 1 开始）。

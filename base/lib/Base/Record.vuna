@@ -8,7 +8,7 @@
 -- 每个 record 字段的实例由编译器在为「导入了 `Base.Record` 的模块」里自动生成，实例落在定义 record 的模块（满足孤儿规则）。
 module Base.Record where
 
-export import Base.Field
+export module Base.Field
 
 -- | 泛型读访问：`HasField (Field "f") a t` 表示类型 `a` 含字段 `f : t`；`getField` 是该字段的投影。签名里带该约束时，调用点的字段访问按约束字典投影。
 export trait HasField (l : Type) (a : Type) (t : Type)(..) where

@@ -3,7 +3,7 @@
 -- `pure` 归本模块而不是 `Base.Monad`：`do` 只依赖 `bind`，而 `pure` 是 Applicative 的能力。`Base.Monad` 重导出本模块，`import Base.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 module Base.Applicative where
 
-export import Base.Functor
+export module Base.Functor
 
 -- `liftA2` 是 trait 方法而不是由 `ap` 派生的顶层函数：字典投影在生成的 OCaml 里是无类型
 -- 标注的元组字段，`pure` 的返回类型与 `ap` 的首参会被错误统一，派生体

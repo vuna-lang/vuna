@@ -1,30 +1,31 @@
 -- | 标准库包门面：整模块重导出核心模块，保留各模块的抽象性（例如 `Map` 的构造器不因门面而公开）。编译器与用户程序可以只 `import Base`。
 module Base where
 
-export import Base.Pair
-export import Base.Bits
-export import Base.Bool
-export import Base.Show
-export import Base.Eq
-export import Base.Ord
 -- 加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
-export import Base.Interp
-export import Base.Foldable
-export import Base.Float
-export import Base.Hashable
-export import Base.List
-export import Base.Monoid
+export module Base.Pair
+export module Base.Bits
+export module Base.Bool
+export module Base.Show
+export module Base.Eq
+export module Base.Ord
+export module Base.Interp
+export module Base.Foldable
+export module Base.Float
+export module Base.Hashable
+export module Base.List
+export module Base.Monoid
+export module Base.Num
+export module Base.Maybe
+export module Base.Nat
+export module Base.Result
+export module Base.String
+export module Base.Sort
+export module Base.Traversable
+export module Base.Unit
+export module Base.Map
+export module Base.Monad
+export module Base.Obs
+export module Base.Obs.Span
+
 -- 算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Num）。
-export import Base.Num
-export import Base.Maybe
-export import Base.Nat
-export import Base.Result
-export import Base.String
-export import Base.Sort
-export import Base.Traversable
-export import Base.Unit
-export import Base.Map
-export import Base.Monad
-export import Base.Obs
-export import Base.Obs.Span

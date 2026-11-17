@@ -3,29 +3,29 @@
 -- `Base.Float` 也随 Prelude 可见：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import。代价是 Prelude 闭包包含 `Base.Float`，所有程序生成的运行时都会带浮点 helper（见 docs/reference/floats.md）。
 module Prelude where
 
-export import Base.Pair
-export import Base.Bool
-export import Base.Show
-export import Base.Eq
-export import Base.Ord
 -- 加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
 import Base.Int
-export import Base.Interp
-export import Base.Foldable
-export import Base.Float
-export import Base.FromInt
-export import Base.FromString
-export import Base.Hashable
-export import Base.List
-export import Base.Monoid
-export import Base.Neg
 -- 算术运算符 `+ - * /` 是 `Num` 方法的别名；fixity 与别名真源在 Base.Num。
-export import Base.Num
-export import Base.Maybe
-export import Base.Result
-export import Base.String
-export import Base.Monad
-export import Base.Traversable
 -- 只 import 不重导出：保证每个程序加载 Base.Eff（宿主原语签名与 codegen 的 MkEff 需要）；短名 `Eff` / `Row` 仍需显式 import。
 import Base.Eff
-export import Base.Unit
+export module Base.Pair
+export module Base.Bool
+export module Base.Show
+export module Base.Eq
+export module Base.Ord
+export module Base.Interp
+export module Base.Foldable
+export module Base.Float
+export module Base.FromInt
+export module Base.FromString
+export module Base.Hashable
+export module Base.List
+export module Base.Monoid
+export module Base.Neg
+export module Base.Num
+export module Base.Maybe
+export module Base.Result
+export module Base.String
+export module Base.Monad
+export module Base.Traversable
+export module Base.Unit

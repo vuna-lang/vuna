@@ -1,4 +1,4 @@
 module Facade where
 
-export import A
-export import B
+export module A
+export module B

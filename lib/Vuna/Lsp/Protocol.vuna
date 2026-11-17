@@ -14,8 +14,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Base.EffFs
 import Base.Eff.Types
-export import Vuna.Json.Frame
-export import Vuna.Json.Rpc
+export module Vuna.Json.Frame
+export module Vuna.Json.Rpc
 
 -- ---------------------------------------------------------------
 -- 小工具

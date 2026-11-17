@@ -15,10 +15,10 @@ module Vuna.Compiler.Base.Common where
 -- `Row(..)` 构造子），避免与 `Base.List` 的 `Cons`/`Nil` 在无期望类型的列表表达式上
 -- 产生 TC_AmbiguousCtor，也避免每个模块重复 `import Base.Eff`。需要行/续延等接口的模块
 -- 仍显式 `import Base.Eff`。
-export import Vuna.Compiler.Base.Source
-export import Vuna.Compiler.Base.Diag
 export import Base.Eff (Eff)
 import Base.Monad
+export module Vuna.Compiler.Base.Source
+export module Vuna.Compiler.Base.Diag
 
 -- | 编译器内部的 `Check` 绑定（固定类型）：与 `Base.Check` 的 `Monad` 实例 `bind` 同义，
 -- 错误载荷是新诊断模型。限定名调用 `Vuna.Compiler.Base.Common.bind` 保持不变。

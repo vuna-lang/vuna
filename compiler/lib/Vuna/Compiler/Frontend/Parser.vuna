@@ -152,7 +152,7 @@ parseReexportTail : Import -> PState -> Check (Pair (Pair Import (List ExportIte
 parseReexportTail imp st =
   if atSym st "(" then Vuna.Compiler.Base.Common.step (parseExportItems st)
     (\items, st1 => OkC (Pair (Pair imp (map (qualifyExportItem (reexportPrefix imp)) items)) st1))
-  else OkC (Pair (Pair imp [XModule (reexportPrefix imp) imp.importSpan]) st)
+  else Vuna.Compiler.Base.Common.bind (expectSym st "(") (\st1 => OkC (Pair (Pair imp []) st1))
 
 -- 重导出项里的模块前缀：写了 alias 用 alias，否则用全名。
 reexportPrefix : Import -> String

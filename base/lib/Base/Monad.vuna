@@ -3,8 +3,8 @@
 -- `pure` 来自父类 `Applicative`（其父类为 `Functor`）：本模块**重导出** `Base.Applicative`（以及它重导出的 `Base.Functor`），因此 `import Base.Monad` 的代码仍能看到 `fmap` / `pure` / `liftA2` / `ap`；父类链也保证 `Monad m =>` 的代码可以直接用这些方法。
 module Base.Monad where
 
-export import Base.Applicative
 import Base.Operator
+export module Base.Applicative
 
 -- `>>=` 是 `bind` 的别名；`>>` 的 fixity 在 [Base.Operator]，但**不**是普通别名——`a >> b`
 -- 由 Loader 按 do 派生展开成 `bind a (\_ -> b)`（丢弃结果需要调用点可见的 `bind`，写成全局
