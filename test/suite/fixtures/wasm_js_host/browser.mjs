@@ -28,8 +28,13 @@ const wasmB64 = readFileSync(wasmPath).toString("base64");
 const hostSrc = readFileSync(join(here, "host.mjs"), "utf8").replace(/^export /gm, "");
 const profile = mkdtempSync(join(tmpdir(), "vchromium-"));
 
+const extraFlags = (process.env.VUNA_CHROMIUM_FLAGS || "").split(/\s+/).filter(Boolean);
 const args = [
+  ...extraFlags,
   "--headless=new",
+  "--disable-crash-reporter",
+  "--disable-breakpad",
+  "--no-crash-upload",
   "--no-sandbox",
   "--disable-gpu",
   "--disable-dev-shm-usage",
@@ -40,7 +45,11 @@ const args = [
   "about:blank",
 ];
 
-const child = spawn(chromium, args, { stdio: ["ignore", "ignore", "pipe"] });
+// 构建沙箱里没有可写的 HOME：crashpad 会因此 SIGTRAP，所以显式给一个临时 HOME。
+const child = spawn(chromium, args, {
+  stdio: ["ignore", "ignore", "pipe"],
+  env: { ...process.env, HOME: profile, XDG_RUNTIME_DIR: profile },
+});
 let stderr = "";
 const cleanup = () => {
   try {
@@ -70,9 +79,10 @@ const wsUrl = await new Promise((resolve, reject) => {
     clearTimeout(timer);
     reject(e);
   });
-  child.on("exit", (code) => {
+  child.on("exit", (code, signal) => {
     clearTimeout(timer);
-    reject(new Error(`chromium exited early (${code})`));
+    const tail = stderr.trim().split("\n").slice(-8).join("\n");
+    reject(new Error(`chromium exited early (code=${code} signal=${signal})\n${tail}`));
   });
 });
 

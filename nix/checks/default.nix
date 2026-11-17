@@ -224,15 +224,16 @@ in
     script = ./vuna-tests.sh;
   };
 
-  # 浏览器可跑面：默认特性 validate + headless Chromium 冒烟（缺浏览器时 SKIP）。
+  # 浏览器可跑面：默认特性 validate 是硬门。Chromium 冒烟故意**不进** derivation：
+  # `pkgs.chromium` 的闭包有数千个路径（首次 realization 很贵），普通 check 不背这个成本。
+  # 需要跑浏览器冒烟时按 testing.md 里的命令显式给 `VUNA_CHROMIUM`（本地/夜间）。
   vuna-wasm-browser = mkCheck {
     name = "vuna-wasm-browser";
     srcs = testTree;
     env = {
       VUNA = "${vuna}/bin/vuna";
-      VUNA_CHROMIUM = "${pkgs.chromium}/bin/chromium";
     };
-    nativeBuildInputs = e2eTools ++ [ pkgs.chromium ];
+    nativeBuildInputs = e2eTools;
     script = ./wasm-browser-smoke.sh;
   };
 

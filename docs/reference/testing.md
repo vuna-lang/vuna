@@ -470,8 +470,17 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计
   （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
 - `vuna-wasm-browser`：产物在**默认 wasm 特性**（`--features=-stack-switching`）下必须
-  validate 通过；用户 handler 的产物必须仍被拒绝；有 Chromium 时再跑一次 headless
-  Chromium（CDP）实跑并比对 stdout（沙箱里浏览器起不来时 SKIP，validate 仍是硬门）。
+  validate 通过；用户 handler 的产物必须仍被拒绝。Chromium 冒烟**不进 derivation**
+  （`pkgs.chromium` 的闭包有数千个 store 路径，首次 realization 很贵）；需要真实浏览器时
+  显式给 `VUNA_CHROMIUM`：
+  ```console
+  VUNA_CHROMIUM=$(command -v chromium) node test/suite/fixtures/wasm_js_host/browser.mjs \
+    <main.wasm> --expect 'hi2<换行>'
+  ```
+  沙箱里跑（缺可写 HOME 时 Crashpad 会 SIGTRAP）已经带 `--disable-crash-reporter` /
+  `--disable-breakpad` 与临时 HOME；如果以后要在 CI 里落实，优先接
+  `pkgs.playwright-driver`（nixpkgs 的 Playwright 浏览器是打过补丁、可用
+  `PLAYWRIGHT_BROWSERS_PATH` 驱动的构建）。
 - `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
   先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
   gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；

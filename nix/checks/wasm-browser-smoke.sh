@@ -65,7 +65,7 @@ if [ -n "$CHROME" ] && [ -x "$CHROME" ]; then
       # 构建沙箱里浏览器可能起不来（缺 /dev/shm、seccomp 等）：按 SKIP 处理，
       # validate 那一半仍然是硬门。
       echo "SKIP chromium cannot start in this environment:"
-      sed 's/^/     /' "$tmp/browser.log" | head -5
+      sed 's/^/     /' "$tmp/browser.log" | head -14
     else
       sed 's/^/     /' "$tmp/browser.log"
       exit 1

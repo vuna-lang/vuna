@@ -213,7 +213,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   `VUNA_WASM_HOST=js` 切换执行器。
 - CI 门禁：`checks.vuna-tests-wasm-js`（同一份 wasm matrix 在 V8 上跑，参考通道独有用例
   见 `test/suite/wasm-js-allow-fail.txt`）与 `checks.vuna-wasm-browser`（默认特性
-  validate + headless Chromium 冒烟）见 [testing.md](testing.md)「Nix checks 清单」。
+  validate 是硬门；Chromium 冒烟按需用 `VUNA_CHROMIUM` 显式跑，见
+  [testing.md](testing.md)「Nix checks 清单」）。
 - wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
   `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖
   `vuna-native`（见 [testing.md](testing.md)「后端自举 conformance」）。
