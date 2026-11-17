@@ -20,9 +20,10 @@
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：产物总是包含
-  stack-switching 运行时函数，统一用
-  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`。
+- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：**需要 handler 的产物**包含
+  stack-switching 运行时函数，用
+  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`；
+  不需要 handler 的产物不含 `cont`，默认配置的引擎即可直接运行（见 §8.5）。
   handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
   调用栈。
 - **栈要按输入配**：默认 `max-wasm-stack`（512 KiB）对长列表不够，会以
@@ -204,8 +205,12 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
-- 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：默认配置的引擎必须拒绝带 `cont` 的
-  产物（§8.5）；开启 V8 实验特性后的读数只作报告。
+- 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：不需要 handler 的产物必须在默认配置
+  下可编译运行，需要 handler 的产物在默认配置下被拒绝（§8.5）；开启 V8 实验特性后的读数
+  只作报告。
+- JS 宿主（`test/suite/fixtures/wasm_js_host/`）由 `115_wasm_js_host.steps` 冒烟：同一份
+  `.wasm` 在 Node（V8）上的 stdout / exit / 失败文本与 Wasmtime 同口径；suite 侧用
+  `VUNA_WASM_HOST=js` 切换执行器。
 - wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
   `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖
   `vuna-native`（见 [testing.md](testing.md)「后端自举 conformance」）。
@@ -339,25 +344,26 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | tail calls | `return_call` / `return_call_ref`（handler 运行时） | Chrome 112、Firefox 121、Safari 18.2 起默认 |
 | **stack switching** | `cont` / `resume` / `suspend`（`$ct` / `$eff` / `$rt_eff*`） | **提案仍处 Phase 3，无引擎默认开启**：Chrome 需 `--js-flags=--experimental-wasm-wasmfx`；Firefox 是 pref；JSC 未实现 |
 
-前四项共同覆盖浏览器可跑面；**stack switching 是唯一闸门**：产物无条件包含 `$ct` 类型、
-`$eff` tag 与 `$rt_effPerform` 等函数（`Wasm.Module.baseTypes` / `baseTags`），所以默认配置
-的引擎会在**编译**阶段拒绝整个模块，与程序是否真的执行 effect 无关。
+前四项共同覆盖浏览器可跑面；**stack switching 是唯一闸门**，而它只在需要时才出现：可达代码
+引用 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` 时，产物才发射 `$ct` 类型、
+`$eff` tag 与 `$rt_eff*` 运行时函数（`Wasm.Module.effModeOf`）；否则默认配置的引擎直接编译并
+运行。因此"浏览器能不能跑"对**不引用 handler 的程序**成立，对**引用 handler 的程序**不成立。
 
 实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
 
-| 引擎配置 | 纯程序（`main : Int`） | 带 effect 入口（`main : Eff [ConsoleOp] Nat`） |
+| 引擎配置 | 不引用 handler 的产物（`main : Int`） | 需要 handler 的产物（`main : Eff [ConsoleOp] Nat`） |
 | --- | --- | --- |
-| Node 默认 | 拒绝（`core stack switching not enabled`） | 拒绝 |
-| Node `--experimental-wasm-wasmfx` | 拒绝（`rt_effPerform`: `Invalid opcode 0xe2`） | 拒绝 |
-| Chromium 默认 | 拒绝（同上） | 拒绝 |
-| Chromium `--js-flags=--experimental-wasm-wasmfx` | 编译 + 实例化 + 运行通过 | 编译 + 实例化通过，执行 `_start` 无输出（挂住） |
+| Node 默认 | 编译 + 运行通过 | 拒绝（`core stack switching not enabled`） |
+| Node `--experimental-wasm-wasmfx` | 通过 | 拒绝（`rt_effPerform`: `Invalid opcode 0xe2`，V8 的编码与 wasm-tools 不一致） |
+| Chromium 默认 | 编译 + 运行通过 | 拒绝 |
+| Chromium `--js-flags=--experimental-wasm-wasmfx` | 通过 | 编译 + 实例化通过，执行 `_start` 无输出（挂住） |
 
-`114_wasm_engine_probe.steps` 只锁第一列的事实（默认配置拒绝）；开启实验特性后的结果作为
-报告打印，随引擎版本变化，不作门禁。这三条读数的含义：
+`114_wasm_engine_probe.steps` 锁两列的第一行（默认配置下的通过与拒绝）；开启实验特性后的
+结果只作报告，随引擎版本变化，不作门禁。这三条读数的含义：
 
-- 浏览器验收口径必须包含**产物不含 cont**，否则"能跑"不成立（见 §8.6 的加载契约与
-  [debt.md](debt.md) D102）；
-- Wasmtime 是当前唯一可执行 effect 程序的引擎，定位是**参考/差分执行器**，不是产品运行时；
+- 不需要 handler 的产物已经是"浏览器可跑"的；**需要 handler 的产物不含 cont 才算过关**
+  （见 §8.6 的加载契约与 [debt.md](debt.md) D102）；
+- Wasmtime 是当前唯一可执行 handler 程序的引擎，定位是**参考/差分执行器**，不是产品运行时；
 - 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`），长列表上的非尾辅助函数要按各引擎的
   实际上限验证，不能以外推的默认值当契约。
 
@@ -391,6 +397,11 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
   （浏览器用 `WebAssembly.Suspending` + `fetch`，测试宿主用阻塞实现），guest 契约不变；
 - 未实现的操作走 `vuna: runtime error: wasm host operation is not implemented`（exit 2），
   不返回伪造结果。
+
+当前落地：JS 宿主在 `test/suite/fixtures/wasm_js_host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，
+测试资产、不进 seed），suite 用 `VUNA_WASM_HOST=js` 把 wasm 执行器从 Wasmtime 切到
+`node run.mjs`；不引用 handler 的产物在该宿主上的 stdout / exit / 失败文本与 Wasmtime
+同口径（`115_wasm_js_host.steps`）。
 
 代价（按引擎管理，不按后端分叉）：
 
