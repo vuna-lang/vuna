@@ -163,6 +163,13 @@ export data Ir(..) : Type where
   -- | 线性 bind 的装箱实现：族名、构造子名、`EffUnit` 运行时类型。
   IrEffBind : String -> String -> IrTy -> Ir
 
+-- | `Eff` 的运行时类型名与构造子名：宿主效应直连时后端构造纯动作（`MkEff (\\u => r)`）用。
+export irEffTypeName : String
+irEffTypeName = "Base.Eff.Eff"
+
+export irEffMkCtor : String
+irEffMkCtor = "Base.Eff.Eff.MkEff"
+
 -- ---------------------------------------------------------------
 -- 类型声明
 -- ---------------------------------------------------------------

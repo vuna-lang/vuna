@@ -458,3 +458,20 @@ irSymbolsOfUnit u =
 irSymbolsOfEntry : Maybe IrEntry -> List (Pair String (Maybe Int))
 irSymbolsOfEntry Nothing = []
 irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)
+
+-- ---------------------------------------------------------------
+-- 宿主效应直连（wasm）
+-- ---------------------------------------------------------------
+-- 转发式宿主 handler：`run*Host` 定义名 → (send key, 该族 op 解释器定义名)。
+-- 这些 handler 的 opH 只做「宿主调用 + 尾位置回写 k」，因此可以在「可达代码里没有用户
+-- 自定义 handler」时把 send 直接降成宿主调用（不需要续延）。答案行仍是同一族
+-- （`[ConsoleOp]` 等）的家族才在表内；Fs / Process / Net 的 opH 会转投别的族，暂不列入。
+export irHostDirectOf : String -> Maybe (Pair String String)
+irHostDirectOf name =
+  if name == "Base.EffConsole.runConsoleHost" then Just (Pair "console" "Base.EffConsole.consoleOpHIOHost")
+  else if name == "Base.EffClock.runClockHost" then Just (Pair "clock" "Base.EffClock.clockOpHIOHost")
+  else if name == "Base.EffEnv.runEnvHost" then Just (Pair "env" "Base.EffEnv.envOpHIOHost")
+  else if name == "Base.EffArgs.runArgsHost" then Just (Pair "args" "Base.EffArgs.argsOpHIOHost")
+  else if name == "Base.EffExit.runExitHost" then Just (Pair "exit" "Base.EffExit.exitOpHIOHost")
+  else if name == "Base.EffStdin.runStdinHost" then Just (Pair "stdin" "Base.EffStdin.stdinOpHIOHost")
+  else Nothing

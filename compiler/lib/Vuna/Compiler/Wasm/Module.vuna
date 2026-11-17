@@ -1284,8 +1284,8 @@ entryShowFunc (IrRt s) = case s of
   _ => Nothing
 entryShowFunc _ = Nothing
 
-genStartBody : Int -> GenState -> Maybe IrEntry -> Bool -> Result (Pair (List Instr) GenState)
-genStartBody fuel st entry printResult = if fuel <= 0 then Err "wasm codegen fuel exhausted"
+genStartBody : Int -> GenState -> Maybe IrEntry -> List IrDef -> Bool -> Result (Pair (List Instr) GenState)
+genStartBody fuel st entry ordered printResult = if fuel <= 0 then Err "wasm codegen fuel exhausted"
 else case entry of
   Nothing => Ok (Pair [] st)
   Just e =>
@@ -1295,7 +1295,6 @@ else case entry of
         Just rm => if irEntryIsActionOf e then [rm] else []
         Nothing => []
       handlerSeeds = irEntryHandlersOf e
-      ordered = reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) st1.gsDefs
       runInstrs = case irEntryRunMainOf e of
         Just rm => if irEntryIsActionOf e then [ICall (watFuncNameOf rm)] else []
         Nothing => []
@@ -1491,7 +1490,7 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
     let
       userFuncs = firstOf pf
       stFuncs = secondOf pf
-    in case genStartBody (fuel - 1) stFuncs entry printResult of
+    in case genStartBody (fuel - 1) stFuncs entry ordered printResult of
       Err msg => Err msg
       Ok p =>
         let
@@ -1526,6 +1525,190 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           (WasmModule allTypes tags baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
 
 -- ---------------------------------------------------------------
+-- 宿主效应直连（静态改写）
+-- ---------------------------------------------------------------
+-- 入口预装的 `run*Host` 是转发式 handler：`opH op k = k (hostOp op)`。可达代码里没有用户
+-- handler 时，把每个 `sendCore key name op`（key 是字面量、落在表内）直接改写成
+--   `MkEff (\\_ => runMain (opH op pureK))`
+-- 其中 `pureK = \\r => MkEff (\\_ => r)`。续延参数因此是模块自己的纯动作，不再需要
+-- stack switching；入口也不再预装这些家族。
+hcSendCore : String
+hcSendCore = "Base.Eff.sendCore"
+
+hcPureK : String
+hcPureK = "@vuna@host@pureK"
+
+-- | `f a b c` 的应用脊椎：头 + 实参表。
+spineOf : Ir -> Pair Ir (List Ir)
+spineOf ir = case ir of
+  IrApp f a => case spineOf f of
+    Pair h args => Pair h (append args [a])
+  _ => Pair ir []
+
+-- | key → opH 定义名。
+opHOf : String -> List (Pair String String) -> Maybe String
+opHOf key [] = Nothing
+opHOf key ((Pair k v) :: rest) = if key == k then Just v else opHOf key rest
+
+-- | 纯动作续延：`MkEff (\\_ => runMain (opH op pureK))`。
+directSend : String -> String -> Ir -> Ir
+directSend runName opHName op =
+  let
+    u = mkIrBinder "hostUnit"
+    applied = IrApp (IrApp (IrGlobal opHName) op) (IrGlobal hcPureK)
+    ran = IrApp (IrGlobal runName) applied
+  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] ran]
+
+-- | 一个节点：先改写子项，再把脊椎是 `sendCore` 的节点换成直连调用。
+rw : List (Pair String String) -> String -> Ir -> Ir
+rw h n (IrCtor f c args) = rwSpine h n (IrCtor f c (map (rw h n) args))
+rw h n (IrRecord f fields) = rwSpine h n (IrRecord f (map (rwField h n) fields))
+rw h n (IrProj b f fd) = rwSpine h n (IrProj (rw h n b) f fd)
+rw h n (IrRecUpd b f fields) = rwSpine h n (IrRecUpd (rw h n b) f (map (rwField h n) fields))
+rw h n (IrRtApp sym args) = rwSpine h n (IrRtApp sym (map (rw h n) args))
+rw h n (IrCast e) = rwSpine h n (IrCast (rw h n e))
+rw h n (IrLet bs v body) = rwSpine h n (IrLet bs (rw h n v) (rw h n body))
+rw h n (IrLam bs body) = rwSpine h n (IrLam bs (rw h n body))
+rw h n (IrApp f a) = rwSpine h n (IrApp (rw h n f) (rw h n a))
+rw h n (IrIf c t e) = rwSpine h n (IrIf (rw h n c) (rw h n t) (rw h n e))
+rw h n (IrCase sc alts) = rwSpine h n (IrCase (rw h n sc) (map (rwAlt h n) alts))
+rw h n (IrNatCase sc i z su c) =
+  rwSpine h n (IrNatCase (rw h n sc) i (rwAltMaybe h n z) (rwAltMaybe h n su) (rwAltMaybe h n c))
+rw h n (IrConcatMany xs) = rwSpine h n (IrConcatMany (map (rw h n) xs))
+rw h n (IrEffThunk f c t a p) = rwSpine h n (IrEffThunk f c t a (rw h n p))
+rw h n ir = rwSpine h n ir
+
+-- | `sendCore` 的尾部三参：key（字面量）、name、op。擦除实参可能在前，按后缀取。
+sendTailOf : List Ir -> Maybe (Pair String Ir)
+sendTailOf args = case reverse args of
+  op :: name :: k :: _ => case stripIrCasts k of
+    IrStr key => Just (Pair key op)
+    _ => Nothing
+  _ => Nothing
+
+-- | 剥掉表现层 cast（运行时无操作），让 `sendCore` 的应用脊椎可见。
+stripIrCasts : Ir -> Ir
+stripIrCasts ir = case ir of
+  IrCast inner => stripIrCasts inner
+  _ => ir
+
+rwSpine : List (Pair String String) -> String -> Ir -> Ir
+rwSpine h n ir0 =
+  let
+    ir = stripIrCasts ir0
+  in case spineOf ir of
+    Pair (IrGlobal g) args => if g == hcSendCore then case sendTailOf args of
+      Just p => case opHOf (firstOf p) h of
+        Just opHName => directSend n opHName (secondOf p)
+        Nothing => ir
+      Nothing => ir
+    else ir
+    _ => ir
+
+rwField : List (Pair String String) -> String -> Pair String Ir -> Pair String Ir
+rwField h n (Pair k v) = Pair k (rw h n v)
+
+rwAlt : List (Pair String String) -> String -> IrAlt -> IrAlt
+rwAlt h n (IrAlt c bs b) = IrAlt c bs (rw h n b)
+
+rwAltMaybe : List (Pair String String) -> String -> Maybe IrAlt -> Maybe IrAlt
+rwAltMaybe h n Nothing = Nothing
+rwAltMaybe h n (Just a) = Just (rwAlt h n a)
+
+rwDef : List (Pair String String) -> String -> IrDef -> IrDef
+rwDef h n d = case irDefBody d of
+  Nothing => d
+  Just b =>
+    IrDef (irDefName d) (irDefArity d) (irDefDeps d) (rw h n b) (irDefRecValueOk d)
+      (irDefInitGuard d) (irDefSpan d)
+
+-- | `@vuna@host@pureK = \\r => MkEff (\\_ => r)`（直连改写的续延参数）。
+pureKDef : IrDef
+pureKDef =
+  let
+    r = mkIrBinder "pureKR"
+    u = mkIrBinder "pureKU"
+  in IrDef hcPureK 1 [] (IrLam [r] (IrCtor irEffTypeName irEffMkCtor [IrLam [u] (IrVar r)])) True False
+    Nothing
+
+-- | 表达式里引用的顶层定义名（按体计算，改写后用它重算可达集）。
+irGlobalsOf : Ir -> List String
+irGlobalsOf (IrGlobal n) = [n]
+irGlobalsOf (IrCtor _ _ args) = concatMap irGlobalsOf args
+irGlobalsOf (IrRecord _ fields) = concatMap globalsOfField fields
+irGlobalsOf (IrProj b _ _) = irGlobalsOf b
+irGlobalsOf (IrRecUpd b _ fields) = append (irGlobalsOf b) (concatMap globalsOfField fields)
+irGlobalsOf (IrRtApp _ args) = concatMap irGlobalsOf args
+irGlobalsOf (IrCast e) = irGlobalsOf e
+irGlobalsOf (IrLet _ v body) = append (irGlobalsOf v) (irGlobalsOf body)
+irGlobalsOf (IrLam _ body) = irGlobalsOf body
+irGlobalsOf (IrApp f a) = append (irGlobalsOf f) (irGlobalsOf a)
+irGlobalsOf (IrIf c t e) = append (irGlobalsOf c) (append (irGlobalsOf t) (irGlobalsOf e))
+irGlobalsOf (IrCase sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)
+irGlobalsOf (IrNatCase sc _ z su c) =
+  append (irGlobalsOf sc)
+    (append (globalsOfAltMaybe z) (append (globalsOfAltMaybe su) (globalsOfAltMaybe c)))
+irGlobalsOf (IrConcatMany xs) = concatMap irGlobalsOf xs
+irGlobalsOf (IrEffThunk _ _ _ _ p) = irGlobalsOf p
+irGlobalsOf _ = []
+
+globalsOfField : Pair String Ir -> List String
+globalsOfField p = irGlobalsOf (secondOf p)
+
+globalsOfAlt : IrAlt -> List String
+globalsOfAlt a = irGlobalsOf (irAltBodyOf a)
+
+globalsOfAltMaybe : Maybe IrAlt -> List String
+globalsOfAltMaybe m = case m of
+  Nothing => []
+  Just a => globalsOfAlt a
+
+-- | 依赖表里的名字是否还该跟：目标是不含续延原语的定义才跟——依赖表包含字典实例等
+-- 只在 Core 侧可见的隐式引用，纯按体扫描会漏掉它们；而 `sendCore` 这类会被改写掉的定义
+-- 必须在这里断开，否则它会把续延运行时拽回来。
+depKeeps : HashMap String IrDef -> String -> Bool
+depKeeps tbl n = case Base.HashMap.lookup n tbl of
+  Nothing => True
+  Just t => not (defUsesSyms performSyms t)
+
+refsOf : IrDef -> HashMap String IrDef -> List String
+refsOf d tbl = case irDefBody d of
+  Nothing => []
+  Just b => append (irGlobalsOf b) (filter (depKeeps tbl) (irDefDeps d))
+
+closeRefs : Int -> HashMap String IrDef -> List String -> List String -> List String
+closeRefs fuel tbl work acc = if fuel <= 0 then acc
+else case work of
+  [] => acc
+  name :: rest => if memName name acc then closeRefs (fuel - 1) tbl rest acc
+  else case Base.HashMap.lookup name tbl of
+    Nothing => closeRefs (fuel - 1) tbl rest (name :: acc)
+    Just d => closeRefs (fuel - 1) tbl (append (refsOf d tbl) rest) (name :: acc)
+
+-- | 同上的“全依赖”版本：不剪依赖表（用于最终保留集，避免丢字典实例这类隐式定义）。
+refsAllOf : IrDef -> List String
+refsAllOf d = case irDefBody d of
+  Nothing => []
+  Just b => append (irGlobalsOf b) (irDefDeps d)
+
+closeRefsAll : Int -> HashMap String IrDef -> List String -> List String -> List String
+closeRefsAll fuel tbl work acc = if fuel <= 0 then acc
+else case work of
+  [] => acc
+  name :: rest => if memName name acc then closeRefsAll (fuel - 1) tbl rest acc
+  else case Base.HashMap.lookup name tbl of
+    Nothing => closeRefsAll (fuel - 1) tbl rest (name :: acc)
+    Just d => closeRefsAll (fuel - 1) tbl (append (refsAllOf d) rest) (name :: acc)
+
+-- | 按「体引用」重算可达集（保留原顺序）。
+reachableByRefs : Int -> List String -> List IrDef -> List IrDef
+reachableByRefs fuel roots defs =
+  let
+    tbl = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
+    names = closeRefs fuel tbl roots []
+  in filter (\d => memName (irDefName d) names) defs
+
+-- ---------------------------------------------------------------
 -- 入口
 -- ---------------------------------------------------------------
 export build : IrProgram -> Bool -> WasmOutcome
@@ -1550,11 +1733,12 @@ build program printResult =
       ]
     users = concatMap irStringsOfDef defs
     offsets = poolOf (append statics users)
-    defTbl = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
+    defsAll = append defs [pureKDef]
+    defTbl = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) defsAll)
     famTbl = Base.HashMap.fromList (map (\f => Pair (famNameOf f) f) fams)
     poolTbl = Base.HashMap.fromList offsets
     consts = mkConsts poolTbl
-    st0 = GenState fams famTbl defs defTbl offsets poolTbl [] [] 0 [] consts [] False 0
+    st0 = GenState fams famTbl defsAll defTbl offsets poolTbl [] [] 0 [] consts [] False 0
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e =>
@@ -1569,7 +1753,37 @@ build program printResult =
               defs
           _ => reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
-      in case buildModule 100000 st0 ordered (Just e) printResult (effModeOf (Just e) ordered) listFamM of
+        hosts = mapMaybe irHostDirectOf handlerSeeds
+        runName = case irEntryRunMainOf e of
+          Just rm => rm
+          Nothing => ""
+        roots = append [irEntryMainOf e] runSeeds
+        rewrittenAll = map (rwDef hosts runName) defs
+        rewritten = reachableByRefs 100000 roots rewrittenAll
+        live = rewritten
+        tblAll = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
+        namesAll = closeRefsAll 100000 tblAll roots []
+        dropNames =
+          [ "Base.Eff.sendCore",
+            "Base.Eff.handleCore",
+            "Base.Eff.handleCoreAt",
+            "Base.Eff.handleCoreLin",
+            "Base.Eff.performCore",
+            "Base.Eff.handleScoped",
+            "Base.Eff.handleSelf"
+          ]
+        kept = filter (\d => not (defUsesSyms performSyms d)) rewrittenAll
+        directable =
+          if listNull handlerSeeds then False
+          else if listLengthB hosts /= listLengthB handlerSeeds then False
+          else if runName == "" then False else not (defsUseSyms performSyms live)
+        entryClean =
+          IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
+            (irEntryRowTagsOf e)
+      in if directable then case buildModule 100000 st0 (append rewritten [pureKDef]) (Just entryClean) printResult 0 listFamM of
+        Ok m => WasmOk m
+        Err msg => WasmRejected (classifyWasmErr msg)
+      else case buildModule 100000 st0 ordered (Just e) printResult (effModeOf (Just e) ordered) listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
 
