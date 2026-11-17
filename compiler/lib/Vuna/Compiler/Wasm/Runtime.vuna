@@ -1773,22 +1773,11 @@ rtHandleLoop =
       ]
     mkKclo = [IRefFunc "$rt_effResumeClo", ILocalGet "$ctx", IStructNew "$clo", ILocalSet "$kclo"]
     callOpH =
-      [ ILocalGet "$key",
-        ILocalGet "$name",
-        ILocalGet "$ret",
-        ILocalGet "$opH",
-        IGlobalGet "$g_self",
-        IStructNew "$selfNode",
-        IGlobalSet "$g_self",
-        ILocalGet "$opH",
+      [ ILocalGet "$opH",
         ILocalGet "$op",
         ICall "$rt_apply",
         ILocalGet "$kclo",
-        ICall "$rt_apply",
-        IGlobalGet "$g_self",
-        IRefCast "$selfNode",
-        IStructGet "$selfNode" 4,
-        IGlobalSet "$g_self"
+        IReturnCall "$rt_apply"
       ]
     forwardToOuter =
       [ ILocalGet "$payload",
@@ -1823,9 +1812,18 @@ rtEffHandle =
         Pair "$comp" WvAnyRef,
         Pair "$u" WvAnyRef
       ]
-    locals = [Pair "$cont" (WvRef "$ct")]
+    locals = [Pair "$cont" (WvRef "$ct"), Pair "$oldSelf" WvAnyRef]
     body =
-      [ IRefFunc "$rt_effThunk",
+      [ IGlobalGet "$g_self",
+        ILocalSet "$oldSelf",
+        ILocalGet "$key",
+        ILocalGet "$name",
+        ILocalGet "$ret",
+        ILocalGet "$opH",
+        ILocalGet "$oldSelf",
+        IStructNew "$selfNode",
+        IGlobalSet "$g_self",
+        IRefFunc "$rt_effThunk",
         IPlain "cont.new $ct",
         ILocalSet "$cont",
         ILocalGet "$cont",
@@ -1834,7 +1832,10 @@ rtEffHandle =
         ILocalGet "$opH",
         ILocalGet "$key",
         ILocalGet "$name",
-        IReturnCall "$rt_handleLoop"
+        ICall "$rt_handleLoop",
+        ILocalGet "$oldSelf",
+        IGlobalSet "$g_self",
+        IReturn
       ]
   in rtFunc "$rt_effHandle" params [WvAnyRef] locals body
 
@@ -1844,16 +1845,30 @@ rtEffSelf : WatFunc
 rtEffSelf =
   let
     params = [Pair "$p0" WvAnyRef]
-    locals = [Pair "$cont" (WvRef "$ct"), Pair "$node" (WvRefNull "$selfNode")]
+    locals = [Pair "$cont" (WvRef "$ct"), Pair "$node" WvAnyRef]
     body =
-      [ IGlobalGet "$g_self", ILocalSet "$node",
-        ILocalGet "$node", IPlain "ref.is_null", IIf "" [IUnreachable] [INop],
-        IRefFunc "$rt_effThunk", IPlain "cont.new $ct", ILocalSet "$cont",
-        ILocalGet "$cont", ILocalGet "$p0",
-        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 2,
-        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 3,
-        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 0,
-        ILocalGet "$node", IRefCast "$selfNode", IStructGet "$selfNode" 1,
+      [ IGlobalGet "$g_self",
+        ILocalSet "$node",
+        ILocalGet "$node",
+        IPlain "ref.is_null",
+        IIf "" [IUnreachable] [INop],
+        IRefFunc "$rt_effThunk",
+        IPlain "cont.new $ct",
+        ILocalSet "$cont",
+        ILocalGet "$cont",
+        ILocalGet "$p0",
+        ILocalGet "$node",
+        IRefCast "$selfNode",
+        IStructGet "$selfNode" 2,
+        ILocalGet "$node",
+        IRefCast "$selfNode",
+        IStructGet "$selfNode" 3,
+        ILocalGet "$node",
+        IRefCast "$selfNode",
+        IStructGet "$selfNode" 0,
+        ILocalGet "$node",
+        IRefCast "$selfNode",
+        IStructGet "$selfNode" 1,
         IReturnCall "$rt_handleLoop"
       ]
   in rtFunc "$rt_effSelf" params [WvAnyRef] locals body
