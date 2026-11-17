@@ -6,7 +6,7 @@ import Base.EffProcess
 import Base.EffConsole
 import Base.List
 
-prog : (n : String) -> Eff ((Named n ProcessOp :: [])) Int
+prog : (n : String) -> Eff (Named n ProcessOp :: []) Int
 prog n = do
   c <- processExit@(n) 7
   pure c
@@ -14,8 +14,8 @@ prog n = do
 mret : Int -> Int
 mret a = a
 
-mopH : (o : ProcessOp) -> (Base.EffProcess.resProcess o -> Int) -> Int
-mopH op k = case op of
+mopH : (i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+mopH i op k = case op of
   Args => k []
   Exit c => k c
   RunIn dir args => k 0
@@ -28,6 +28,7 @@ main = do
     consolePrint
       ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
   observed <-
-    raiseTo [ConsoleOp, ProcessOp] (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
+    raiseTo [ConsoleOp, ProcessOp]
+      (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
   _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
   pure 0

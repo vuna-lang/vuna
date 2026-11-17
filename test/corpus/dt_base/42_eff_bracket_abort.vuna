@@ -5,25 +5,24 @@ import Base.Eff
 import Base.EffState
 import Base.Pair
 
-data AbortE : Type where
+data AbortE : Type -> Type where
 
-data AbortOp : Type where
-  Abort : AbortOp
+data AbortOp : Type -> Type where
+  Abort : AbortOp Int
 
 abort : {r : Row} -> Eff (Named "default" AbortE :: r) Int
 abort = sendCore (Named "default" AbortE) "abort" "default" Abort
 
-handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : AbortOp) -> (Int -> b) -> b) -> Eff (Named "default" AbortE :: r) a -> Eff r b
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : AbortOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff (Named "default" AbortE :: r) a -> Eff r b
 handleAbort ret opH comp = handleCore (Named "default" AbortE) "abort" "default" ret opH comp
 
-abortH : (o : AbortOp) -> (Int -> Int) -> Int
-abortH Abort k = 7
+abortH : (i : Type) -> (o : AbortOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+abortH i Abort k = 7
 
 prog : Eff [AbortE, StateOp Int@counter] Int
 prog = bracket (do
   _ <- put "counter" Int 0
   pure 0
-
 ) (\_ => put "counter" Int 42) (\_ => do
   _ <- abort
   pure 1
@@ -32,8 +31,8 @@ prog = bracket (do
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
 
-opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
-opH op k s = case op of
+opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH i op k s = case op of
   Get => k s s
   Put x => k 0 x
 

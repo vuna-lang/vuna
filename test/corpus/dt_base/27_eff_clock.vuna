@@ -4,7 +4,7 @@ import Base.Eff
 import Base.EffClock
 import Base.EffConsole
 
-prog : (n : String) -> Eff ((Named n ClockOp :: Nil)) Int
+prog : (n : String) -> Eff (Named n ClockOp :: []) Int
 prog n = do
   t0 <- clockNow@(n)
   _ <- clockSleepMicros@(n) 2000
@@ -21,8 +21,8 @@ progReal = do
 mret : Int -> Int
 mret a = a
 
-mopH : (o : ClockOp) -> (Base.EffClock.resClock o -> Int) -> Int
-mopH op k = case op of
+mopH : (i : Type) -> (o : ClockOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+mopH i op k = case op of
   Now => k 1000
   SleepMicros us => k 0
 

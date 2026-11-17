@@ -10,19 +10,13 @@ import Base.Maybe
 import Base.Monad
 
 -- | env 操作：`GetEnv` 带变量名、`GetCwd`、`ExecPath`。
-export data EnvOp(..) : Type where
+export data EnvOp(..) : Type -> Type where
   -- | 读环境变量（参数是变量名）。
-  GetEnv : String -> EnvOp
+  GetEnv : String -> EnvOp String
   -- | 读当前工作目录。
-  GetCwd : EnvOp
+  GetCwd : EnvOp String
   -- | 读可执行文件路径。
-  ExecPath : EnvOp
-
--- | 操作的结果类型族：三个操作都返回 `String`。
-export resEnv : EnvOp -> Type
-resEnv (GetEnv k) = String
-resEnv GetCwd = String
-resEnv ExecPath = String
+  ExecPath : EnvOp String
 
 -- | 通过命名实例取环境变量；真实 handler 走 `@vuna@prim_eff_getenv`（未设置或为空串都返回空串）。
 export envGetEnv : Member n EnvOp r => String -> Eff r String
@@ -44,12 +38,12 @@ export envExecPath : Member n EnvOp r => Eff r String
 envExecPath = sendCore (Named n EnvOp) "env" n ExecPath
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `EnvOp`。
-export handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n EnvOp) r} -> (a -> b) -> ((o : EnvOp) -> (resEnv o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n EnvOp) r) b
+export handleEnv : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n EnvOp) r} -> (a -> b) -> ((i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n EnvOp) r) b
 handleEnv n ret opH comp = handleCore (Named n EnvOp) "env" n ret opH comp
 
 -- | 真实 handler 的操作解释：把三个操作映射到 `@vuna@prim_eff_getenv` / `@vuna@prim_eff_getcwd` / `@vuna@prim_eff_execPath`。
-envOpHIO : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [] a) -> Eff [] a
-envOpHIO op k = case op of
+envOpHIO : {a : Type} -> (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+envOpHIO i op k = case op of
   GetEnv name => do
     v <- @vuna@prim_eff_getenv name
     k v
@@ -64,8 +58,8 @@ envOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `EnvOp` 行的 op 解释：宿主原语取值后写穿继续（answer 行是 `[EnvOp]`）。
-envOpHIOHost : {a : Type} -> (o : EnvOp) -> (resEnv o -> Eff [EnvOp] a) -> Eff [EnvOp] a
-envOpHIOHost op k = case op of
+envOpHIOHost : {a : Type} -> (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> Eff [EnvOp] a) -> Eff [EnvOp] a
+envOpHIOHost i op k = case op of
   GetEnv name => do
     v <- raise (@vuna@host@getenv name)
     k v

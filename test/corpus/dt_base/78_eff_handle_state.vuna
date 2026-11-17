@@ -1,6 +1,6 @@
 -- 参数化 op 族（State 的 k = 1）。op 族
--- `StateOp : Type -> Type`、标签 `State n s`、结果族 `resState s op`；handle 按族参数补洞，
--- 续延拿到 `resState s Get = s`。
+-- `StateOp : Type -> Type -> Type`、标签 `StateOp s`、结果索引由构造子给出；handle 按族参数补洞，
+-- 续延在 `Get` 分支拿到索引 `s`。
 import Base.Eff
 import Base.EffState
 import Base.List
@@ -13,7 +13,7 @@ oneN = 1
 getN : Eff [StateOp Nat@counter] Nat
 getN = perform Get
 
-putOne : Eff [StateOp Nat@counter] Nat
+putOne : Eff [StateOp Nat@counter] Int
 putOne = perform Put oneN
 
 prog : Eff [StateOp Nat@counter] Nat

@@ -4,7 +4,7 @@
 import Base.Eff
 import Base.List
 
-data Fs : Type where
+data Fs : Type -> Type where
 
 r1 : Row
 r1 = [Fs]

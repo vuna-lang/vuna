@@ -3,7 +3,7 @@
 -- 不触发（那要报 TC_UnhandledEffects，见 dt_err/82）。
 import Base.Eff
 
-data Fetch : Type where
+data Fetch : Type -> Type where
 
 prog : Eff [] Int
 prog = pure 21

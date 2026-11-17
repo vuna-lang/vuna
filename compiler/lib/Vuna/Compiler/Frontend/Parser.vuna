@@ -1416,7 +1416,7 @@ rowAtNameExpr (EVar nm sp) = EStr nm sp
 rowAtNameExpr e = e
 
 -- `perform <expr>`：保留名单实参应用；Elab 侧按 op 族
--- 推导 key / 实例名 / res 族后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
+-- 推导 key / 实例名 / 效应签名后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
 parsePerform : Int -> PState -> Int -> Check (Pair Expr PState)
 parsePerform fuel st blockCol =
   if fuel <= 0 then icFuel "parser"
@@ -1432,8 +1432,8 @@ parsePerform fuel st blockCol =
 --                   ... }
 -- 编码（不新增 Expr 构造子）：`EApp (EVar "@vuna@handle") [comp, ret, opH]`
 --   * ret = `ELam [x] body`；缺 return 子句时是哨兵 `EVar "@vuna@handle@noret"`；
---   * opH = `ELam [o, k] (ECase (EVar o) alts)`：alt pattern 只含构造子实参（续延 binder
---     是 λ 的第二个参数）；op 族、实例名、结果族全部由 Elab 从 clause 构造子推导。
+--   * opH = `ELam [i, o, k] (ECase (EVar o) alts)`：alt pattern 只含构造子实参（续延 binder
+--     是 λ 的第三个参数，第二个是结果索引 binder）；op 族、实例名、效应签名全部由 Elab 从 clause 构造子推导。
 -- | 一个 `handle` op 子句：构造子名、实参模式、子句 span、续延 binder 名、子句体。
 data HandleOp : Type where
   HandleOp : String -> List Pat -> Span -> String -> Expr -> HandleOp
@@ -1445,6 +1445,10 @@ data HandleBlock : Type where
 -- | `handle` 块合成的 op λ 的 scrutinee binder 名（保留名，用户写不出）。
 handleOpBinder : String
 handleOpBinder = "@vuna@handle@o"
+
+-- | 合成 handler λ 的结果索引 binder 名（保留名，用户写不出）。
+handleOpIndexBinder : String
+handleOpIndexBinder = "@vuna@handle@ix"
 
 -- | `handle comp { return? op-clause+ }`：解析并降到保留名标记。
 parseHandle : Int -> PState -> Int -> Check (Pair Expr PState)
@@ -1554,7 +1558,7 @@ handleRetExpr (Just (Pair x (Pair body rsp))) sp = ELam [Pair x rsp] body rsp
 -- | 合成 op λ：`\o, k => case o of alts`。
 handleOpLam : List HandleOp -> String -> Span -> Expr
 handleOpLam ops kname sp =
-  ELam [Pair handleOpBinder spanEmpty, Pair kname spanEmpty]
+  ELam [Pair handleOpIndexBinder spanEmpty, Pair handleOpBinder spanEmpty, Pair kname spanEmpty]
     (ECase (EVar handleOpBinder sp) (map handleAlt ops) sp) sp
 
 -- | 校验子句并合成 `EApp (EVar "@vuna@handle") [comp, ret, opH]`。

@@ -11,25 +11,17 @@ import Base.Result
 
 -- | process 操作：`Args`（取进程参数）、`Exit c`（以状态码 c 退出）、`RunIn dir args`（在目录下运行命令）、
 -- `Spawn args`（异步启动并返回句柄）、`Wait h`（等句柄并返回退出码）。
-export data ProcessOp(..) : Type where
+export data ProcessOp(..) : Type -> Type where
   -- | 取进程参数（不含 argv[0]）。
-  Args : ProcessOp
+  Args : ProcessOp (List String)
   -- | 以状态码 `c` 退出进程。
-  Exit : Int -> ProcessOp
+  Exit : Int -> ProcessOp Int
   -- | 在目录 `dir` 下运行命令 `args`，返回退出码。
-  RunIn : String -> List String -> ProcessOp
+  RunIn : String -> List String -> ProcessOp Int
   -- | 异步启动命令 `args`，返回句柄。
-  Spawn : List String -> ProcessOp
+  Spawn : List String -> ProcessOp Int
   -- | 等待 `Spawn` 返回的句柄 `h`，返回退出码。
-  Wait : Int -> ProcessOp
-
--- | 结果族：`Args` 返回 `List String`，其余（`Exit` / `RunIn` / `Spawn` / `Wait`）返回 `Int`。
-export resProcess : ProcessOp -> Type
-resProcess Args = List String
-resProcess (Exit c) = Int
-resProcess (RunIn dir args) = Int
-resProcess (Spawn args) = Int
-resProcess (Wait h) = Int
+  Wait : Int -> ProcessOp Int
 
 -- | 通过命名实例取进程参数（`@vuna@prim_eff_getArgs`，**不含** `argv[0]`）。
 export processArgs : Member n ProcessOp r => Eff r (List String)
@@ -63,13 +55,9 @@ export data ProcessError(..) : Type where
   ProcessHostIo : String -> ProcessError
 
 -- | 进程错误效应：单操作 `ProcessFail`（abort，不恢复续延）。
-export data ProcessErrorOp(..) : Type where
+export data ProcessErrorOp(..) : Type -> Type where
   -- | 抛出进程启动失败。
-  ProcessFail : ProcessError -> ProcessErrorOp
-
--- | 结果族：`ProcessFail` 不恢复续延，返回类型任意（占位 `Int`）。
-export resProcessError : ProcessErrorOp -> Type
-resProcessError _ = Int
+  ProcessFail : {a : Type} -> ProcessError -> ProcessErrorOp a
 
 -- | 抛出一个进程启动失败（由真实 handler 使用）。
 export processFail : Member n ProcessErrorOp r => ProcessError -> Eff r a
@@ -88,12 +76,12 @@ processErrorText (ProcessLaunchDenied p) = "process: ${p}: permission denied"
 processErrorText (ProcessHostIo p) = "process: ${p}: host I/O error"
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ProcessOp`。
-export handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ProcessOp) r} -> (a -> b) -> ((o : ProcessOp) -> (resProcess o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ProcessOp) r) b
+export handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ProcessOp) r} -> (a -> b) -> ((i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ProcessOp) r) b
 handleProcess n ret opH comp = handleCore (Named n ProcessOp) "process" n ret opH comp
 
 -- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。
-processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff [] a) -> Eff [] a
-processOpHIOWith onExit op k = case op of
+processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+processOpHIOWith onExit i op k = case op of
   Args => do
     xs <- @vuna@prim_eff_getArgs
     k xs
@@ -123,8 +111,8 @@ processHostStatus : {r : Row} -> Eff r Int
 processHostStatus = raise @vuna@prim_eff_hostStatus
 
 -- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
-processOpHIOWithHost : (Int -> Eff (Named "process-error" ProcessErrorOp :: []) Int) -> {a : Type} -> (o : ProcessOp) -> (resProcess o -> Eff (Named "process-error" ProcessErrorOp :: []) a) -> Eff (Named "process-error" ProcessErrorOp :: []) a
-processOpHIOWithHost onExit op k = case op of
+processOpHIOWithHost : (Int -> Eff (Named "process-error" ProcessErrorOp :: []) Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> Eff (Named "process-error" ProcessErrorOp :: []) a) -> Eff (Named "process-error" ProcessErrorOp :: []) a
+processOpHIOWithHost onExit i op k = case op of
   Args => do
     xs <- raise @vuna@prim_eff_getArgs_process_host
     k xs
@@ -158,8 +146,8 @@ processErrorRet : {a : Type} -> a -> Result a
 processErrorRet a = Ok a
 
 -- | 内部：`runProcessError` 的 op 解释——`ProcessFail e` 直接变 `Err (processErrorText e)`（不恢复续延）。
-processErrorOpHR : {a : Type} -> (o : ProcessErrorOp) -> (resProcessError o -> Result a) -> Result a
-processErrorOpHR op _ = case op of
+processErrorOpHR : {a : Type} -> (i : Type) -> (o : ProcessErrorOp i) -> (Base.Eff.resIdx i o -> Result a) -> Result a
+processErrorOpHR i op _ = case op of
   ProcessFail e => Err (processErrorText e)
 
 -- | 把进程启动失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `ProcessErrorOp`。

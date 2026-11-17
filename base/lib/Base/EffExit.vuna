@@ -5,25 +5,21 @@ import Base.Eff
 import Base.Monad
 
 -- | 退出操作：`ExitWith` 带状态码。
-export data ExitOp(..) : Type where
+export data ExitOp(..) : Type -> Type where
   -- | 以给定状态码退出进程。
-  ExitWith : Int -> ExitOp
-
--- | 操作的结果类型族：`ExitWith` 声明返回 `Int`（执行即退出，不返回）。
-export resExit : ExitOp -> Type
-resExit (ExitWith _) = Int
+  ExitWith : Int -> ExitOp Int
 
 -- | 通过命名实例退出进程（原语类型 `Int -> Eff [] Int`，执行即退出、不返回）。
 export exitWith : Member n ExitOp r => Int -> Eff r Int
 exitWith code = sendCore (Named n ExitOp) "exit" n (ExitWith code)
 
 -- | 一阶 handler：结果行删除 `ExitOp`。
-export handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ExitOp) r} -> (a -> b) -> ((o : ExitOp) -> (resExit o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ExitOp) r) b
+export handleExit : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ExitOp) r} -> (a -> b) -> ((i : Type) -> (o : ExitOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ExitOp) r) b
 handleExit n ret opH comp = handleCore (Named n ExitOp) "exit" n ret opH comp
 
 -- | 真实 handler 的操作解释：执行 `@vuna@prim_eff_exit code`；`k 0` 不可达，只为类型闭合。
-exitOpHIO : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff [] a) -> Eff [] a
-exitOpHIO op k = case op of
+exitOpHIO : {a : Type} -> (i : Type) -> (o : ExitOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+exitOpHIO i op k = case op of
   ExitWith code => do
     _ <- @vuna@prim_eff_exit code
     k 0
@@ -32,16 +28,15 @@ exitOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ExitOp` 行的 op 解释：执行 `@vuna@host@exitOp code`；`k 0` 不可达，只为类型闭合。
-exitOpHIOHost : {a : Type} -> (o : ExitOp) -> (resExit o -> Eff [ExitOp] a) -> Eff [ExitOp] a
-exitOpHIOHost op k = case op of
+exitOpHIOHost : {a : Type} -> (i : Type) -> (o : ExitOp i) -> (Base.Eff.resIdx i o -> Eff [ExitOp] a) -> Eff [ExitOp] a
+exitOpHIOHost i op k = case op of
   ExitWith code => do
     _ <- raise (@vuna@host@exitOp code)
     k 0
 
 -- | 带行的宿主 handler：删掉 `ExitOp`，answer 是 `Eff [ExitOp]`（不导出）。
 handleExitHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ExitOp :: r) a -> Eff r (Eff [ExitOp] a)
-handleExitHostHost n comp =
-  handleCoreAt (Named n ExitOp) "exit" n (\a => pure a) (\o => \k => exitOpHIOHost o k) comp
+handleExitHostHost n comp = handleCoreAt (Named n ExitOp) "exit" n (\a => pure a) exitOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ExitOp` 的 send 翻译成宿主 intrinsic。
 runExitHost : {r : Row} -> {a : Type} -> Eff (Named "default" ExitOp :: r) a -> Eff (rowAppend r [ExitOp]) a

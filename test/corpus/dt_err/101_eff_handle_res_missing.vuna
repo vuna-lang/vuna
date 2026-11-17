@@ -1,4 +1,4 @@
--- 负例：op 族没有同模块的 `res<族短名>` 结果族。
+-- 负例：handle 的 op 族没有结果索引（kind 是 `Type`，不是 `params… -> Type -> Type`）。
 import Base.Eff
 import Base.List
 import Base.Monad
@@ -7,12 +7,13 @@ import Base.Nat
 data BoomOp : Type where
   BoomIt : BoomOp
 
-data Boom : String -> Type where
+data Boom : String -> Type -> Type where
 
 prog : Eff [Boom "default"] Nat
-prog = sendCore (Boom "default") "BoomOp" "default" BoomIt
+prog = sendCore (Named "default" (Boom "default")) "BoomOp" "default" BoomIt
 
-run : Eff ([(Boom "default")]) Nat -> Nat
+run : Eff [Boom "default"] Nat -> Nat
 run comp = runPure (handle comp {
   BoomIt k -> k 5
-  })
+}
+)

@@ -18,8 +18,8 @@ prog = do
       x <- ask "counter" Int
       pure (x + 100)
 
-opH : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
-opH op k = case op of
+opH : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+opH i op k = case op of
   Ask => k 7
 
 main : Int

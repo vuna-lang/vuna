@@ -101,10 +101,10 @@ export data TcErr(..) : Nat -> Type where
   DebugConstructInRelease : String -> TcErr (Succ Zero)
   -- D17：入口 `main` 不能带参数（结果类型拆掉动作层后是函数类型即 arity 错误）。
   MainArity : String -> TcErr (Succ Zero)
-  -- `perform` 找不到 res 族（`res<族短名>`）。
+  -- `perform` 找不到 op 族（`<Op> : params… -> Type -> Type`）。
   EffResFamilyMissing : String -> TcErr (Succ Zero)
-  -- `handle` 的 op 族不满足降级协议（nullary op 族 +
-  -- `<Label> : String -> Type` + `res<Label> : Op -> Type`；State/Reader/Exn 等参数化族）。
+  -- `perform` / `handle` 的 op 族不满足降级协议：必须以结果类型为最后索引
+  -- （`<Op> : params… -> Type -> Type`），且显式参数都是类型。
   HandleFamilyUnsupported : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
@@ -326,9 +326,9 @@ tcTemplate (UnsolvedHole _) = "unsolved hole <0>"
 tcTemplate (UnsolvedMetavarInfer _) =
   "cannot infer a type for this expression without an annotation (unsolved metavariable ?<0>)"
 tcTemplate (EffResFamilyMissing _) =
-  "cannot find the result family for <0> (expected res<family> : params -> Op -> Type in the same module as the op family)"
+  "cannot find the op family for <0> (expected <Op> : params -> Type -> Type)"
 tcTemplate (HandleFamilyUnsupported _) =
-  "effect syntax (perform / handle) supports only op families whose explicit parameters are types and that define a res<family> result family (got <0>)"
+  "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
 tcTemplate (AmbiguousCtor _ _) = "ambiguous constructor <0> (candidates: <1>)"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
 tcTemplate (HandleClauseFamilyMismatch _ _) =

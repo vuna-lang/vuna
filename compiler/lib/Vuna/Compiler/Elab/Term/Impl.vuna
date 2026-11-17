@@ -361,10 +361,10 @@ else case checkEFuel (fuel - 1) globals ctx ec c boolTyValue of
 -- ---------------------------------------------------------------
 -- `perform <op>` 降级
 -- ---------------------------------------------------------------
--- 族约定：op 族 `M.XxxOp`；标签 = 同族应用（按 kind 的显式参数个数 k 补洞）；res = `M.res<短名>`
--- ↔ 结果族 `M.resXxx`（这里只做存在性协议校验）；key = op 族规范名。
--- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (<M.Xxx> <n=洞>) <op>`；
--- 名字洞由 `{w : Member (Named n e) r}` 隐式求解从行条目合一解出，行里没有该条目即缺实例错误。
+-- 族约定：op 族 `M.XxxOp : <params…> -> Type -> Type`（最后一个是结果索引）；标签 =
+-- `Named n (<M.Xxx> <params…>)`（按 kind 的显式参数个数 k 补洞）；key = op 族规范名。
+-- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (sigFn (\i => <M.Xxx> <params…> i)) <op>`；
+-- 结果类型 = op 的索引。名字洞由 `{w : Member (Named n (sigOf sig)) r}` 从行条目解出。
 data PerfFamily : Type where
   PerfFamily : String -> String -> String -> PerfFamily
 
@@ -412,19 +412,16 @@ appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
   OkC (EApp f (EApp (EVar instArgSyntax sp) [nm] sp :: rest) sp)
 appAtCallExpr _ = icInternal "malformed @ marker"
 
-qualifyShort : String -> String -> String
-qualifyShort mod short = if mod == "" then short else "${mod}.${short}"
-
--- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <op 族应用> <op>`。
--- 标签 = op 族应用，按显式参数个数（k）补洞：`ConsoleOp` k=0、`StateOp` k=1（族参数由行解）；
--- 标签与 op 同型，`performCore` 的 `o : e` 直接由 op 值约束。
+-- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <sig> <op>`。
+-- 效应签名 `sig` 包住 op 族（按显式参数个数 k 补洞：`ConsoleOp` k=0、`StateOp` k=1），
+-- 结果类型由 op 的索引决定（`o : sigOf sig i` ⇒ `Eff r i`）。
 -- 纯函数（不递归、不调精化器），避免把大段逻辑塞进 inferEFuel 体内。
 performCallExpr : List (Pair String Term) -> Ec -> Value -> Expr -> Span -> Check Expr
 performCallExpr globals ec opTy op sp = case perfFamilyOfValue ec opTy of
   Nothing => tcErr1 sp (EffResFamilyMissing (showValueAt 6 opTy)) (showValueAt 6 opTy)
-  Just (PerfFamily canon mod short) =>
-    Vuna.Compiler.Base.Common.bind (handleFamilyArityOf globals ec canon mod short sp)
-      (\p => OkC (EApp (EVar "Base.Eff.performCore" sp) [EVar "_" sp, EStr canon sp, handleOpArg canon (secondOf p) sp, op] sp))
+  Just (PerfFamily canon _ _) =>
+    Vuna.Compiler.Base.Common.bind (opFamilyArityOf globals ec canon sp)
+      (\k => OkC (EApp (EVar "Base.Eff.performCore" sp) [EVar "_" sp, EStr canon sp, handleSigArg canon k sp, op] sp))
 
 -- ---------------------------------------------------------------
 -- 标记：`EApp (EVar "@vuna@handle") [comp, ret, opH]`（Ast.handleSyntax）。`opH` 是
@@ -434,8 +431,8 @@ performCallExpr globals ec opTy op sp = case perfFamilyOfValue ec opTy of
 --     （条目可以在行中任意位置）。
 --   * `handleWithAt`：被处理条目在 comp 的行首，名字取默认实例名，结果行就是剩下的行；
 --     只在 check 位置 rowRem 版失败后重试（comp 是行多态表达式时用）。
--- 两版都按 `<Op> : <params…> -> Type` 推族参数个数（State/Reader k = 1，标签/结果族
--- 按 k 补洞；标签首参始终是实例名）。
+-- 两版都按 `<Op> : <params…> -> Type -> Type` 推族参数个数（State/Reader k = 1；
+-- 标签/签名按 k 补洞，结果索引由构造子匹配收窄）。
 handleOperand : Expr -> Maybe (Pair Expr (Pair Expr Expr))
 handleOperand (EApp (EVar name _) ([comp, ret, opH]) _) =
   if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
@@ -479,25 +476,26 @@ handleClauseFamilies ec ((Pair pat _) :: rest) = case handleClauseFamilyOfPat ec
 -- | op 族 kind 的显式参数个数（链尾必须是 `Type`，且每个显式参数的域必须是宇宙）：
 -- `ConsoleOp : Type` → 0，`StateOp : Type -> Type` → 1；`ExnOp : Row -> Type -> Type`
 -- 的 `Row` 域在此被拒（Nothing）→ TC_HandleFamilyUnsupported（规避 debt D54）。
+-- 显式宇宙域 Pi 的个数减去末尾的结果索引箭头：`<params…> -> Type -> Type` 的
+-- params 个数（Console = 0，State/Reader = 1）。至少要有结果箭头。
 handleOpArity : Term -> Maybe Int
-handleOpArity (TPi name implicit rig dom cod) = if implicit then handleOpArity cod
-else if isUniverseTerm dom then case handleOpArity cod of
+handleOpArity kind = case countOpArrows kind of
+  Just n => if n >= 1 then Just (n - 1) else Nothing
+  Nothing => Nothing
+
+countOpArrows : Term -> Maybe Int
+countOpArrows (TPi name implicit rig dom cod) = if implicit then countOpArrows cod
+else if isUniverseTerm dom then case countOpArrows cod of
   Just n => Just (n + 1)
   Nothing => Nothing
 else Nothing
-handleOpArity (TType _) = Just 0
-handleOpArity _ = Nothing
+countOpArrows (TType _) = Just 0
+countOpArrows _ = Nothing
 
 -- | 宇宙域判定（op 族显式参数的域必须是 `Type`）。
 isUniverseTerm : Term -> Bool
 isUniverseTerm (TType _) = True
 isUniverseTerm _ = False
-
--- | kind 里显式 Pi 的个数（不要求链尾是 `Type`；标签/结果族形状校验用）。
-handleKindArity : Term -> Int
-handleKindArity (TPi name implicit rig dom cod) =
-  if implicit then handleKindArity cod else 1 + handleKindArity cod
-handleKindArity _ = 0
 
 -- | op 族参数（洞）：`?p1 … ?pk`。
 handleHoleArgs : Int -> Span -> List Expr
@@ -509,27 +507,26 @@ handleOpArg : String -> Int -> Span -> Expr
 handleOpArg canon k sp =
   if k <= 0 then EVar canon sp else EApp (EVar canon sp) (handleHoleArgs k sp) sp
 
--- | 结果族 λ 的 binder 名（保留名，用户写不出）。
-handleResBinder : String
-handleResBinder = "@vuna@handle@res"
+-- | 效应签名 λ 的 binder 名（保留名，用户写不出）。
+handleSigBinder : String
+handleSigBinder = "@vuna@handle@sig"
 
--- | 结果族包装值：`resFn (\o => res<Label> ?p1 … ?pk o)`。必须用 λ 现场解族参数
--- （`resState s op` 的 `s` 由 `o` 的类型定），不能直接传多态族名。
-handleResArg : String -> Int -> Span -> Expr
-handleResArg resName k sp =
-  EApp (EVar "Base.Eff.resFn" sp)
-    [ELam [Pair handleResBinder spanEmpty] (EApp (EVar resName sp) (append (handleHoleArgs k sp) [EVar handleResBinder sp]) sp) sp]
+-- | 效应签名包装值：`sigFn (\i => <Op> ?p1 … ?pk i)`。必须用 λ 现场解族参数
+-- （`StateOp s` 的 `s` 由 `o` 的类型定），不能直接传多态族名。
+handleSigArg : String -> Int -> Span -> Expr
+handleSigArg canon k sp =
+  EApp (EVar "Base.Eff.sigFn" sp)
+    [ELam [Pair handleSigBinder spanEmpty] (EApp (handleOpArg canon k sp) [EVar handleSigBinder sp] sp) sp]
     sp
 
 -- | 降级调用构造：`headMode` 选 `handleWith`（rowRem 版）或 `handleWithAt`（行首条目版）；
 -- `nameArg` 是该版本的实例名实参（rowRem 版与行首洞版用 `_`，行首默认版用 default）。
-handleCall : Bool -> Expr -> String -> String -> Int -> Expr -> Expr -> Expr -> Span -> Expr
-handleCall headMode nameArg canon resName k comp ret opH sp =
+handleCall : Bool -> Expr -> String -> Int -> Expr -> Expr -> Expr -> Span -> Expr
+handleCall headMode nameArg canon k comp ret opH sp =
   let
     fnName = if headMode then "Base.Eff.handleWithAt" else "Base.Eff.handleWith"
   in EApp (EVar fnName sp)
-    [nameArg, EStr canon sp, handleOpArg canon k sp, handleResArg resName k sp, comp, handleRetArg ret, opH]
-    sp
+    [nameArg, EStr canon sp, handleSigArg canon k sp, comp, handleRetArg ret, opH] sp
 
 -- | op 族的 kind：data 族优先（含导入模块），否则查 globals。
 handleOpKind : List (Pair String Term) -> Ec -> String -> Maybe Term
@@ -548,40 +545,27 @@ handleRetArg (EVar nm rsp) =
   else EVar nm rsp
 handleRetArg e = e
 
--- | 结果族形状校验：存在且显式参数个数为 `k + 1`（`<params…> -> <Op> -> Type`）。
-handleResFamilyOf : List (Pair String Term) -> Ec -> String -> String -> Int -> Span -> Check (Pair String Int)
-handleResFamilyOf globals ec canon resName k sp = case globalsLookup resName globals ec of
-  Nothing => tcErr1 sp (EffResFamilyMissing canon) canon
-  Just resKind =>
-    if handleKindArity resKind == k + 1 then OkC (Pair resName k)
-    else tcErr1 sp (HandleFamilyUnsupported canon) canon
-
--- | 族形状校验：返回 `(结果族名, op 族显式参数个数)`；形状不符报
--- TC_EffResFamilyMissing / TC_HandleFamilyUnsupported。标签 = op 族应用：
--- `<Op> : <params…> -> Type`、`res<短名> : <params…> -> <Op> -> Type`；
--- State/Reader 的 params 是状态/环境类型（k = 1），Console 等 k = 0；
--- Exn 是作用域/高阶族（op 族 kind 的显式参数域不是 Type）→ TC_HandleFamilyUnsupported。
-handleFamilyArityOf : List (Pair String Term) -> Ec -> String -> String -> String -> Span -> Check (Pair String Int)
-handleFamilyArityOf globals ec canon mod short sp =
-  let
-    resName = qualifyShort mod ("res" ++ short)
-  in case handleOpKind globals ec canon of
+-- | 族形状校验：op 族 kind 必须是 `<params…> -> Type -> Type`，返回显式参数个数
+-- （不含末尾的结果索引箭头）。State/Reader 的 params 是状态/环境类型（k = 1），
+-- Console 等 k = 0。形状不符报 `TC_HandleFamilyUnsupported`。
+opFamilyArityOf : List (Pair String Term) -> Ec -> String -> Span -> Check Int
+opFamilyArityOf globals ec canon sp = case handleOpKind globals ec canon of
+  Nothing => tcErr1 sp (HandleFamilyUnsupported canon) canon
+  Just opKind => case handleOpArity opKind of
     Nothing => tcErr1 sp (HandleFamilyUnsupported canon) canon
-    Just opKind => case handleOpArity opKind of
-      Nothing => tcErr1 sp (HandleFamilyUnsupported canon) canon
-      Just k => handleResFamilyOf globals ec canon resName k sp
+    Just k => OkC k
 
 -- | 从 handle 标记构造降级调用；`headMode` 选 rowRem 版（`handleWith`）或行首条目版
--- （`handleWithAt`）。形状校验见 `handleFamilyArityOf`。
+-- （`handleWithAt`）。形状校验见 `opFamilyArityOf`。
 handleCallExprWith : List (Pair String Term) -> Ec -> Expr -> Span -> Bool -> Expr -> Check Expr
 handleCallExprWith globals ec expr sp headMode nameArg = case handleOperand expr of
   Nothing => icInternal "handle marker expected"
   Just (Pair comp (Pair ret opH)) => case opH of
     ELam (_ :: _ :: _) (ECase _ alts _) _ => Vuna.Compiler.Base.Common.bind (handleClauseFamilies ec alts) (\fam => case perfFamilyOfCanonical fam of
       Nothing => tcErr1 sp (HandleFamilyUnsupported fam) fam
-      Just (PerfFamily canon mod short) =>
-        Vuna.Compiler.Base.Common.bind (handleFamilyArityOf globals ec canon mod short sp)
-          (\p => OkC (handleCall headMode nameArg canon (firstOf p) (secondOf p) comp ret opH sp))
+      Just (PerfFamily canon _ _) =>
+        Vuna.Compiler.Base.Common.bind (opFamilyArityOf globals ec canon sp)
+          (\k => OkC (handleCall headMode nameArg canon k comp ret opH sp))
     )
     _ => icInternal "malformed handle marker"
 

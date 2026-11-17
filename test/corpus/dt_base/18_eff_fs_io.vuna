@@ -13,8 +13,8 @@ prog = do
 ret : Int -> Eff [FsOp] Int
 ret a = pure a
 
-opH : (o : FsOp) -> (Base.EffFs.resFs o -> Eff [FsOp] Int) -> Eff [FsOp] Int
-opH op k = case op of
+opH : (i : Type) -> (o : FsOp i) -> (Base.Eff.resIdx i o -> Eff [FsOp] Int) -> Eff [FsOp] Int
+opH i op k = case op of
   ReadFile p => do
     s <- fsReadFile p
     k s

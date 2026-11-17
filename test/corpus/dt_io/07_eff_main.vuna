@@ -12,8 +12,8 @@ prog = do
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
 
-opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair Int Int) -> Int -> Pair Int Int
-opH op k s = case op of
+opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH i op k s = case op of
   Get => k s s
   Put x => k 0 x
 

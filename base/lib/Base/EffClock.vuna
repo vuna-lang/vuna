@@ -7,16 +7,11 @@ import Base.Eff
 import Base.Monad
 
 -- | clock 操作：`Now`（微秒时间戳）与 `SleepMicros`（睡眠微秒数）。
-export data ClockOp(..) : Type where
+export data ClockOp(..) : Type -> Type where
   -- | 读当前时间戳（微秒）。
-  Now : ClockOp
-  -- | 睡眠给定微秒数。
-  SleepMicros : Int -> ClockOp
-
--- | 操作的结果类型族：`Now` 与 `SleepMicros` 都返回 `Int`。
-export resClock : ClockOp -> Type
-resClock Now = Int
-resClock (SleepMicros us) = Int
+  Now : ClockOp Int
+  -- | 睡眠给定微秒数（结果：`Int` 占位）。
+  SleepMicros : Int -> ClockOp Int
 
 -- | 通过命名实例读当前时间戳（微秒）。
 export clockNow : Member n ClockOp r => Eff r Int
@@ -27,12 +22,12 @@ export clockSleepMicros : Member n ClockOp r => Int -> Eff r Int
 clockSleepMicros us = sendCore (Named n ClockOp) "clock" n (SleepMicros us)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ClockOp`。
-export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ClockOp) r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ClockOp) r) b
+export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ClockOp) r} -> (a -> b) -> ((i : Type) -> (o : ClockOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ClockOp) r) b
 handleClock n ret opH comp = handleCore (Named n ClockOp) "clock" n ret opH comp
 
 -- | 真实 handler 的操作解释：`Now` 走 `effTimeUs`，`SleepMicros` 走 `@vuna@prim_eff_sleep`（阻塞睡眠）。
-clockOpHIO : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff [] a) -> Eff [] a
-clockOpHIO op k = case op of
+clockOpHIO : {a : Type} -> (i : Type) -> (o : ClockOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+clockOpHIO i op k = case op of
   Now => do
     t <- effTimeUs
     k t
@@ -44,8 +39,8 @@ clockOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ClockOp` 行的 op 解释：时间走 `effTimeUs_host`，睡眠走 `@vuna@host@sleep` 后写穿继续（answer 行是 `[ClockOp]`）。
-clockOpHIOHost : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff [ClockOp] a) -> Eff [ClockOp] a
-clockOpHIOHost op k = case op of
+clockOpHIOHost : {a : Type} -> (i : Type) -> (o : ClockOp i) -> (Base.Eff.resIdx i o -> Eff [ClockOp] a) -> Eff [ClockOp] a
+clockOpHIOHost i op k = case op of
   Now => do
     t <- raise effTimeUs_host
     k t

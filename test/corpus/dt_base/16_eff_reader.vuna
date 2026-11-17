@@ -8,12 +8,12 @@ prog = do
   y <- ask "config" Int
   pure (x * 10 + y)
 
-op1 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
-op1 op k = case op of
+op1 : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+op1 i op k = case op of
   Ask => k 3
 
-op2 : (o : ReaderOp Int) -> (Base.Eff.Reader.resReader Int o -> Int) -> Int
-op2 op k = case op of
+op2 : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+op2 i op k = case op of
   Ask => k 4
 
 main : Int

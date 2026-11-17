@@ -8,8 +8,8 @@ import Base.List
 import Base.Monad
 import Base.Nat
 
-mockOpH : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> a) -> a
-mockOpH op k = case op of
+mockOpH : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> a) -> a
+mockOpH i op k = case op of
   Print s => k 5
   EPrint s => k 0
 
@@ -18,9 +18,10 @@ prog = do
   n <- perform Print "hello"
   pure n
 
-runAudit : {a : Type} -> Eff ([ConsoleOp@"audit"]) a -> a
+runAudit : {a : Type} -> Eff [ConsoleOp@audit] a -> a
 runAudit comp =
-  runPure (handleCore (Named "audit" ConsoleOp) "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
+  runPure
+    (handleCore (Named "audit" ConsoleOp) "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
 
 main : Nat
 main = runAudit prog

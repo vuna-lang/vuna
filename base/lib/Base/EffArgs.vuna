@@ -6,25 +6,21 @@ import Base.Monad
 import Base.List
 
 -- | 参数操作：`GetArgs`（不含 argv[0] 的命令行参数）。
-export data ArgsOp(..) : Type where
+export data ArgsOp(..) : Type -> Type where
   -- | 取命令行参数（不含 argv[0]）。
-  GetArgs : ArgsOp
-
--- | 操作的结果类型族：`GetArgs` 返回 `List String`。
-export resArgs : ArgsOp -> Type
-resArgs GetArgs = List String
+  GetArgs : ArgsOp (List String)
 
 -- | 通过命名实例取命令行参数。
 export argsGetArgs : Member n ArgsOp r => Eff r (List String)
 argsGetArgs = sendCore (Named n ArgsOp) "args" n GetArgs
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ArgsOp`。
-export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ArgsOp) r} -> (a -> b) -> ((o : ArgsOp) -> (resArgs o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ArgsOp) r) b
+export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ArgsOp) r} -> (a -> b) -> ((i : Type) -> (o : ArgsOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ArgsOp) r) b
 handleArgs n ret opH comp = handleCore (Named n ArgsOp) "args" n ret opH comp
 
 -- | 真实 handler 的操作解释：取 `@vuna@prim_eff_getArgs` 后继续。
-argsOpHIO : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff [] a) -> Eff [] a
-argsOpHIO op k = case op of
+argsOpHIO : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+argsOpHIO i op k = case op of
   GetArgs => do
     xs <- @vuna@prim_eff_getArgs
     k xs
@@ -33,8 +29,8 @@ argsOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是 `[ArgsOp]`）。
-argsOpHIOHost : {a : Type} -> (o : ArgsOp) -> (resArgs o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
-argsOpHIOHost op k = case op of
+argsOpHIOHost : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Eff.resIdx i o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
+argsOpHIOHost i op k = case op of
   GetArgs => do
     xs <- raise @vuna@host@getArgs
     k xs

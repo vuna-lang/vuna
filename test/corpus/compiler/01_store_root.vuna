@@ -6,8 +6,8 @@ import Base.Eff
 import Base.EffEnv
 import Vuna.Compiler.Base.Store
 
-mockOpH : List (Pair String String) -> (o : EnvOp) -> (Base.EffEnv.resEnv o -> String) -> String
-mockOpH table op k = case op of
+mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> String) -> String
+mockOpH table i op k = case op of
   GetEnv name => k (fromMaybe "" (lookupPair name table))
   GetCwd => k "/mock/cwd"
   ExecPath => k "/mock/exec"
@@ -15,7 +15,7 @@ mockOpH table op k = case op of
 rootWith : List (Pair String String) -> String
 rootWith table = runPure (handleEnv "mock" (\s => s) (mockOpH table) (mockRoot "mock"))
 
-mockRoot : (n : String) -> Eff ((Named n EnvOp :: [])) String
+mockRoot : (n : String) -> Eff (Named n EnvOp :: []) String
 mockRoot n = storeDataRootEff
 
 main : Int

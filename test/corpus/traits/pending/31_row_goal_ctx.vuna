@@ -14,8 +14,8 @@ askTwice = do
 prog : Eff [ReaderOp Int@r] Int
 prog = askTwice
 
-opH : (o : ReaderOp Int) -> (resReader Int o -> Int) -> Int
-opH op k = case op of
+opH : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+opH i op k = case op of
   Ask => k 21
 
 main : String

@@ -9,18 +9,12 @@ import Base.Eff
 import Base.Nat
 import Base.Monad
 
--- | console 操作：`Print` / `EPrint` 各带一个 `String`。
-export data ConsoleOp(..) : Type where
-  -- | 写 stdout。
-  Print : String -> ConsoleOp
-  -- | 写 stderr。
-  EPrint : String -> ConsoleOp
-
--- | 操作的结果类型族：`Print` 返回写入字节数（`Nat`）；`EPrint` 仍返回 `Int`
--- （`@vuna@prim_eff_eprint` 未做 Nat 归一化）。
-export resConsole : ConsoleOp -> Type
-resConsole (Print s) = Nat
-resConsole (EPrint s) = Int
+-- | console 操作：`Print` / `EPrint` 各带一个 `String`，结果类型是构造子索引。
+export data ConsoleOp(..) : Type -> Type where
+  -- | 写 stdout（结果：写入字节数 `Nat`）。
+  Print : String -> ConsoleOp Nat
+  -- | 写 stderr（结果：仍返回 `Int`，`@vuna@prim_eff_eprint` 未做 Nat 归一化）。
+  EPrint : String -> ConsoleOp Int
 
 -- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member (Named n ConsoleOp) r` 证明（由精化器按行结构构造）。
 export consolePrint : Member n ConsoleOp r => String -> Eff r Nat
@@ -31,12 +25,12 @@ export consoleEprint : Member n ConsoleOp r => String -> Eff r Int
 consoleEprint s = sendCore (Named n ConsoleOp) "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
-export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ConsoleOp) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ConsoleOp) r) b
+export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ConsoleOp) r} -> (a -> b) -> ((i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ConsoleOp) r) b
 handleConsole n ret opH comp = handleCore (Named n ConsoleOp) "console" n ret opH comp
 
 -- | 真实 handler 的操作解释：在续延前执行 `@vuna@prim_eff_print` / `@vuna@prim_eff_eprint`（answer 是 `Eff []` 动作；`Print` 的结果在边界转回 `Nat`）。
-consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [] a) -> Eff [] a
-consoleOpHIO op k = case op of
+consoleOpHIO : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Eff [] a) -> Eff [] a
+consoleOpHIO i op k = case op of
   Print s => do
     r <- fmap natFromInt (@vuna@prim_eff_print s)
     k r
@@ -48,8 +42,8 @@ consoleOpHIO op k = case op of
 -- 带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
 -- ---------------------------------------------------------------
 -- | 带 `ConsoleOp` 行的 op 解释：真实打印后写穿继续（answer 行是 `[ConsoleOp]`）。
-consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [ConsoleOp] a) -> Eff [ConsoleOp] a
-consoleOpHIOHost op k = case op of
+consoleOpHIOHost : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Eff [ConsoleOp] a) -> Eff [ConsoleOp] a
+consoleOpHIOHost i op k = case op of
   Print s => do
     r <- raise (@vuna@host@print s)
     k (natFromInt r)
@@ -60,7 +54,7 @@ consoleOpHIOHost op k = case op of
 -- | 带行的宿主 handler：删掉 `ConsoleOp n`，answer 是 `Eff [ConsoleOp]`（不导出）。
 handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ConsoleOp :: r) a -> Eff r (Eff [ConsoleOp] a)
 handleConsoleHostHost n comp =
-  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) (\o => \k => consoleOpHIOHost o k)
+  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) consoleOpHIOHost
     comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。

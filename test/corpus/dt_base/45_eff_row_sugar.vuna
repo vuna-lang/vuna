@@ -4,15 +4,10 @@ import Base.Eff
 import Base.List
 import Base.String
 
-data Fetch : Type where
+data Fetch : Type -> Type where
+  FetchUrl : String -> Fetch String
 
-data Log : Type where
-
-data FetchOp : Type where
-  FetchUrl : String -> FetchOp
-
-resFetch : FetchOp -> Type
-resFetch (FetchUrl _) = String
+data Log : Type -> Type where
 
 fetch : String -> {r : Row} -> {w : Member (Named "default" Fetch) r} -> Eff r String
 fetch url = sendCore (Named "default" Fetch) "fetch" "default" (FetchUrl url)
@@ -37,11 +32,11 @@ xs = [1, 2, 3]
 getPage : String -> Eff [Fetch] String
 getPage url = fetch url
 
-handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((o : FetchOp) -> (resFetch o -> b) -> b) -> Eff (Named "default" Fetch :: r) a -> Eff r b
+handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : Fetch i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff (Named "default" Fetch :: r) a -> Eff r b
 handleFetch ret opH comp = handleCore (Named "default" Fetch) "fetch" "default" ret opH comp
 
-opH : (o : FetchOp) -> (resFetch o -> String) -> String
-opH op k = case op of
+opH : (i : Type) -> (o : Fetch i) -> (Base.Eff.resIdx i o -> String) -> String
+opH i op k = case op of
   FetchUrl url => k ("body of " ++ url)
 
 prog : Eff [Fetch] String

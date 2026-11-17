@@ -18,27 +18,27 @@ import Base.Result
 import Base.String
 
 -- | 网络操作描述：监听 / 取端口 / 接受 / 收 / 发 / 关 / 连接。
-export data NetOp(..) : Type where
+export data NetOp(..) : Type -> Type where
   -- | 绑定并监听地址 `addr`。
-  Listen : String -> NetOp
+  Listen : String -> NetOp Int
   -- | 取监听句柄 `h` 的端口。
-  Port : Int -> NetOp
+  Port : Int -> NetOp Int
   -- | 在监听句柄 `h` 上接受连接。
-  Accept : Int -> NetOp
+  Accept : Int -> NetOp Int
   -- | 从句柄 `h` 最多收 `n` 字节。
-  Recv : Int -> Int -> NetOp
+  Recv : Int -> Int -> NetOp (Maybe String)
   -- | 向句柄 `h` 发送整串 `s`。
-  Send : Int -> String -> NetOp
+  Send : Int -> String -> NetOp Int
   -- | 关闭句柄 `h`（幂等）。
-  Close : Int -> NetOp
+  Close : Int -> NetOp Int
   -- | 连接地址 `addr`。
-  Connect : String -> NetOp
+  Connect : String -> NetOp Int
   -- | 在句柄 `h` 上带超时 `micros`（微秒）接受连接。
-  AcceptWithin : Int -> Int -> NetOp
+  AcceptWithin : Int -> Int -> NetOp (NetStep Int)
   -- | 从句柄 `h` 最多收 `bytes` 字节，超时 `micros`（微秒）。
-  RecvWithin : Int -> Int -> Int -> NetOp
+  RecvWithin : Int -> Int -> Int -> NetOp (NetStep String)
   -- | 向句柄 `h` 发送整串 `s`，超时 `micros`（微秒）。
-  SendWithin : Int -> String -> Int -> NetOp
+  SendWithin : Int -> String -> Int -> NetOp (NetStep Int)
 
 -- | 带超时的单步结果：正常完成 / 对端关闭 / 超时。
 export data NetStep a(..) : Type where
@@ -48,20 +48,6 @@ export data NetStep a(..) : Type where
   StepClosed : NetStep a
   -- | 到超时为止没有进展。
   StepTimeout : NetStep a
-
--- | 操作的结果类型族：`Recv` 返回 `Maybe String`（`Nothing` = 对端关闭），
--- `*Within` 返回 `NetStep`（区分完成 / 关闭 / 超时），其余返回 `Int`。
-export resNet : NetOp -> Type
-resNet (Listen _) = Int
-resNet (Port _) = Int
-resNet (Accept _) = Int
-resNet (Recv _ _) = Maybe String
-resNet (Send _ _) = Int
-resNet (Close _) = Int
-resNet (Connect _) = Int
-resNet (AcceptWithin _ _) = NetStep Int
-resNet (RecvWithin _ _ _) = NetStep String
-resNet (SendWithin _ _ _) = NetStep Int
 
 -- | 绑定并监听地址，返回句柄。
 export netListen : Member n NetOp r => String -> Eff r Int
@@ -131,13 +117,9 @@ export data NetError(..) : Type where
   NetIo : String -> NetError
 
 -- | 网络错误效应：单操作 `NetFail`（abort，不恢复续延）。
-export data NetErrorOp(..) : Type where
+export data NetErrorOp(..) : Type -> Type where
   -- | 抛出网络失败。
-  NetFail : NetError -> NetErrorOp
-
--- | 结果族：`NetFail` 不恢复续延，返回类型任意（占位 `Int`）。
-export resNetError : NetErrorOp -> Type
-resNetError _ = Int
+  NetFail : {a : Type} -> NetError -> NetErrorOp a
 
 -- | 抛出一个网络失败（由真实 handler 使用；想局部恢复的调用方 catch 它）。
 export netFail : Member n NetErrorOp r => NetError -> Eff r a
@@ -165,7 +147,7 @@ netErrorText (NetBadHandle ctx) = "net: ${ctx}: invalid handle (closed or unknow
 netErrorText (NetIo ctx) = "net: ${ctx}: host I/O error"
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `NetOp`。
-export handleNet : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n NetOp) r} -> (a -> b) -> ((o : NetOp) -> (resNet o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n NetOp) r) b
+export handleNet : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n NetOp) r} -> (a -> b) -> ((i : Type) -> (o : NetOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n NetOp) r) b
 handleNet n ret opH comp = handleCore (Named n NetOp) "net" n ret opH comp
 
 -- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里。
@@ -177,8 +159,8 @@ handleContext : Int -> String
 handleContext h = "handle ${strFromInt h}"
 
 -- | 带 `NetOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[NetErrorOp]`。
-netOpHIOHost : {a : Type} -> (o : NetOp) -> (resNet o -> Eff (Named "net-error" NetErrorOp :: []) a) -> Eff (Named "net-error" NetErrorOp :: []) a
-netOpHIOHost op k = case op of
+netOpHIOHost : {a : Type} -> (i : Type) -> (o : NetOp i) -> (Base.Eff.resIdx i o -> Eff (Named "net-error" NetErrorOp :: []) a) -> Eff (Named "net-error" NetErrorOp :: []) a
+netOpHIOHost i op k = case op of
   Listen addr => do
     h <- raise (@vuna@host@tryNetListen addr)
     ok <- netHostStatus
@@ -238,8 +220,8 @@ netErrorRet : {a : Type} -> a -> Result a
 netErrorRet a = Ok a
 
 -- | 内部：`runNetError` 的 op 解释——`NetFail e` 直接变 `Err (netErrorText e)`（不恢复续延）。
-netErrorOpHR : {a : Type} -> (o : NetErrorOp) -> (resNetError o -> Result a) -> Result a
-netErrorOpHR op _ = case op of
+netErrorOpHR : {a : Type} -> (i : Type) -> (o : NetErrorOp i) -> (Base.Eff.resIdx i o -> Result a) -> Result a
+netErrorOpHR i op _ = case op of
   NetFail e => Err (netErrorText e)
 
 -- | 把网络失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `NetErrorOp`。

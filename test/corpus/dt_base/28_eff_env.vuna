@@ -4,7 +4,7 @@ import Base.Eff
 import Base.EffEnv
 import Base.EffConsole
 
-prog : (n : String) -> Eff ((Named n EnvOp :: Nil)) Int
+prog : (n : String) -> Eff (Named n EnvOp :: []) Int
 prog n = do
   m <- envGetEnv@(n) "VUNA_W10_MISSING_ENV_VAR"
   c <- envGetCwd@(n)
@@ -21,8 +21,8 @@ progReal = do
 mret : Int -> Int
 mret a = a
 
-mopH : (o : EnvOp) -> (Base.EffEnv.resEnv o -> Int) -> Int
-mopH op k = case op of
+mopH : (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+mopH i op k = case op of
   GetEnv name => k ""
   GetCwd => k "/mock/cwd"
   ExecPath => k "/mock/exe"

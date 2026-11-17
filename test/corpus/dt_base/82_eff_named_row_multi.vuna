@@ -6,7 +6,7 @@ import Base.Monad
 import Base.Nat
 
 progA : Eff [ConsoleOp@a] Nat
-progA = perform (Print "a")
+progA = perform Print "a"
 
 runA : Nat
 runA = runPure (handle progA {
@@ -18,13 +18,13 @@ runA = runPure (handle progA {
 multi : Eff [ConsoleOp@a, ConsoleOp@b] Nat
 multi = consolePrint@a "b"
 
-aH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
-aH op k = case op of
+aH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Nat) -> Nat
+aH i op k = case op of
   Print s => k 5
   EPrint s => k 6
 
-bH : (o : ConsoleOp) -> (resConsole o -> Nat) -> Nat
-bH op k = case op of
+bH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Nat) -> Nat
+bH i op k = case op of
   Print s => k 7
   EPrint s => k 8
 

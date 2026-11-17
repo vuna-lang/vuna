@@ -515,7 +515,7 @@ isListConsSyntax name = name == listConsSyntax
 -- `bind` 应用——语义与今天的降级逐字一致。
 -- `perform <op>` 的保留名编码。parser 产出
 -- `EApp (EVar "@vuna@perform") [op]`；Elab 按 op 族推导 key（族规范名）、实例名
--- （行解 / 默认名）与 res 族（`res<族短名>`），再降级到 `Base.Eff.performCore`。
+-- （行解 / 默认名）与效应签名（`sigFn (\i => <Op> <params…> i)`），再降级到 `Base.Eff.performCore`。
 -- 用户源码写不出 `@vuna@` 开头的标识符，所以标记不会与用户名字冲突。
 -- | `perform <op>` 的保留名（parser 产出、Elab 展开）。
 export performSyntax : String

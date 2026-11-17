@@ -7,9 +7,9 @@ module Base.EffRef where
 import Base.Eff
 
 -- | Ref 行标签（无载荷；操作直接映射到带行原语）。
-export data RefOp(..) : Type where
+export data RefOp(..) : Type -> Type where
   -- | 唯一的行标签值。
-  RefTag : RefOp
+  RefTag : RefOp Int
 
 -- | 创建引用（带 `RefOp` 行）。
 export refNew : a -> Eff [RefOp] (IORef a)

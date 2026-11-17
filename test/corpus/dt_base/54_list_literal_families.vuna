@@ -7,6 +7,8 @@ data Tree : Type where
   Leaf : Tree
   Node : Tree -> Tree -> Tree
 
+data TreeEff : Type -> Type where
+
 -- 用户族：名字叫 List 但构造子是 Nil/Cons，与 Base.List 结构同形。
 data MyList a : Type where
   Nil : MyList a
@@ -29,7 +31,7 @@ r : Row
 r = []
 
 r2 : Row
-r2 = [Tree]
+r2 = [TreeEff]
 
 xs : List Int
 xs = [1, 2]

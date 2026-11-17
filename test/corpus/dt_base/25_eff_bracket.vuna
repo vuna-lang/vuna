@@ -14,8 +14,8 @@ prog = bracketExn "default" (pure 0) (\_ => put "counter" Int 99) (\_ => do
 ret : Base.Result.Result Int -> Int -> Pair (Base.Result.Result Int) Int
 ret a s = Pair a s
 
-opH : (o : StateOp Int) -> (Base.EffState.resState Int o -> Int -> Pair (Base.Result.Result Int) Int) -> Int -> Pair (Base.Result.Result Int) Int
-opH op k s = case op of
+opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair (Base.Result.Result Int) Int) -> Int -> Pair (Base.Result.Result Int) Int
+opH i op k s = case op of
   Get => k s s
   Put x => k 0 x
 

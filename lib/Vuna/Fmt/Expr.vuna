@@ -356,8 +356,8 @@ handleParts (EApp (EVar name _) ([comp, ret, opH]) _) =
   if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
 handleParts _ = Nothing
 
--- | 内部：handle 子句模式的逐项渲染（无前导空格）。合成形态把续延 binder 拆成了 λ 的
--- 第二个参数，所以 alt 的 pattern 就是构造子的全部实参；续延名由调用方另行拼上。
+-- | 内部：handle 子句模式的逐项渲染（无前导空格）。合成形态把结果索引与续延 binder 拆成了
+-- λ 的前两个参数，所以 alt 的 pattern 就是构造子的全部实参；续延名由调用方另行拼上。
 renderHandlePats : Int -> List Pat -> String
 renderHandlePats fuel pats = renderHandlePatsGo fuel pats
 
@@ -430,7 +430,7 @@ else
       ELam ([Pair x _]) body _ => renderHandleRetGo (fuel - 1) env at clauseInd x body
       _ => []
     opLines = case op of
-      ELam ((Pair _ _) :: (Pair k _) :: _) (ECase _ alts _) _ =>
+      ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) _ =>
         concatMap (\alt => renderHandleAltGo (fuel - 1) env at clauseInd k alt) alts
       _ => []
   in append headLines (append retLines (append opLines ["${spaces lineInd}}"]))
