@@ -143,11 +143,10 @@ isMemberConstraintExpr _ = False
 
 -- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
-memberSugarExpr ec e = case e of
-  EApp (EVar g a) ([n, x, r]) sp =>
-    if g == effMemberFamilyName then EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
-    else e
-  _ => e
+memberSugarExpr ec (e@(EApp (EVar g a) ([n, x, r]) sp)) =
+  if g == effMemberFamilyName then EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
+  else e
+memberSugarExpr ec e = e
 
 elabMemberConstraintDoms : List (Pair String Term) -> Ctx -> Ec -> List Expr -> Span -> Check (Pair (List Term) Ec)
 elabMemberConstraintDoms globals ctx ec [] sp = OkC (Pair [] ec)

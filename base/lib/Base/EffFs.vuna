@@ -177,11 +177,11 @@ fsHostStatus : {r : Row} -> Eff r Int
 fsHostStatus = raise @vuna@prim_eff_hostStatus
 
 -- | 带行解释内部用的 typed 失败：标签已是行首的固定实例，直接 send，不经过 Member 求解。
-fsFailAt : {a : Type} -> FsError -> Eff (Named "fs-error" FsErrorOp :: []) a
+fsFailAt : {a : Type} -> FsError -> Eff [FsErrorOp@"fs-error"] a
 fsFailAt e = sendCore (Named "fs-error" FsErrorOp) "fs-error" "fs-error" (FsFail e)
 
 -- | 带 `FsOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[FsErrorOp]`。
-fsOpHIOHost : {a : Type} -> (i : Type) -> (o : FsOp i) -> (Base.Eff.resIdx i o -> Eff (Named "fs-error" FsErrorOp :: []) a) -> Eff (Named "fs-error" FsErrorOp :: []) a
+fsOpHIOHost : {a : Type} -> (i : Type) -> (o : FsOp i) -> (Base.Eff.resIdx i o -> Eff [FsErrorOp@"fs-error"] a) -> Eff [FsErrorOp@"fs-error"] a
 fsOpHIOHost i op k = case op of
   ReadFile p => do
     s <- raise (@vuna@host@tryReadFile p)
@@ -241,11 +241,11 @@ fsOpHIOHost i op k = case op of
     if ok /= 0 then k Nothing else k (Just n)
 
 -- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsErrorOp]`（不导出）。
-handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n FsOp :: r) a -> Eff r (Eff (Named "fs-error" FsErrorOp :: []) a)
+handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n FsOp :: r) a -> Eff r (Eff [FsErrorOp@"fs-error"] a)
 handleFsHostHost n comp = handleCoreAt (Named n FsOp) "fs" n (\a => pure a) fsOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic，并把失败收口行 `FsErrorOp` 接到行尾。
-runFsHost : {r : Row} -> {a : Type} -> Eff (Named "default" FsOp :: r) a -> Eff (rowAppend r (Named "fs-error" FsErrorOp :: [])) a
+runFsHost : {r : Row} -> {a : Type} -> Eff (Named "default" FsOp :: r) a -> Eff (rowAppend r [FsErrorOp@"fs-error"]) a
 runFsHost comp = joinEff (handleFsHostHost "default" comp)
 
 -- | 内部：`runFsError` 的成功侧 `ret`——值包装成 `Ok`。

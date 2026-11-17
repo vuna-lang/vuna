@@ -171,8 +171,7 @@ resIdx i o = i
 
 -- | 从包装里取出签名族：`sigOf sig i` 在类型位置按 `sig` 的族求值（NbE 归约）。
 export sigOf : (0 sig : EffSig) -> Type -> Type
-sigOf sig = case sig of
-  MkEffSig f => f
+sigOf (MkEffSig f) = f
 
 -- | `perform <op>` 的降级目标：`o : sigOf sig i` 是操作值，结果类型就是它的索引 `i`；行条目必须是 `Named n (sigOf sig)`，`n` 是运行时路由值。
 export performCore : (n : String) -> (key : String) -> (0 sig : EffSig) -> {r : Row} -> {w : Member (Named n (sigOf sig)) r} -> {i : Type} -> (o : sigOf sig i) -> Eff r i

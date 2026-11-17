@@ -1941,12 +1941,11 @@ isNilRowValue ec v = case forceVal ec v of
 
 -- | 行条目的 (标签, 尾行)。
 rowEntryLabelTail : Value -> Maybe (Pair Value Value)
-rowEntryLabelTail v = case v of
-  VCon consName cargs => if consName == effRowConsCtor then case cargs of
-    label :: tail :: _ => Just (Pair label tail)
-    _ => Nothing
-  else Nothing
+rowEntryLabelTail (VCon consName cargs) = if consName == effRowConsCtor then case cargs of
+  label :: tail :: _ => Just (Pair label tail)
   _ => Nothing
+else Nothing
+rowEntryLabelTail _ = Nothing
 
 -- | 全局名的最后一段（诊断里不显示模块前缀）；实现收敛到 `Source.lastSeg`。
 shortGlobalName : String -> String

@@ -159,7 +159,7 @@ handleContext : Int -> String
 handleContext h = "handle ${strFromInt h}"
 
 -- | 带 `NetOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[NetErrorOp]`。
-netOpHIOHost : {a : Type} -> (i : Type) -> (o : NetOp i) -> (Base.Eff.resIdx i o -> Eff (Named "net-error" NetErrorOp :: []) a) -> Eff (Named "net-error" NetErrorOp :: []) a
+netOpHIOHost : {a : Type} -> (i : Type) -> (o : NetOp i) -> (Base.Eff.resIdx i o -> Eff [NetErrorOp@"net-error"] a) -> Eff [NetErrorOp@"net-error"] a
 netOpHIOHost i op k = case op of
   Listen addr => do
     h <- raise (@vuna@host@tryNetListen addr)
@@ -208,11 +208,11 @@ netOpHIOHost i op k = case op of
     else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "sendWithin ${handleContext h}" ok)
 
 -- | 带 `NetOp` 行的宿主 handler：删掉 `NetOp`，answer 是 `Eff [NetErrorOp]`（不导出）。
-handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n NetOp :: r) a -> Eff r (Eff (Named "net-error" NetErrorOp :: []) a)
+handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n NetOp :: r) a -> Eff r (Eff [NetErrorOp@"net-error"] a)
 handleNetHostHost n comp = handleCoreAt (Named n NetOp) "net" n (\a => pure a) netOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `NetOp` 的 send 翻译成宿主 intrinsic。
-runNetHost : {r : Row} -> {a : Type} -> Eff (Named "default" NetOp :: r) a -> Eff (rowAppend r (Named "net-error" NetErrorOp :: [])) a
+runNetHost : {r : Row} -> {a : Type} -> Eff (Named "default" NetOp :: r) a -> Eff (rowAppend r [NetErrorOp@"net-error"]) a
 runNetHost comp = joinEff (handleNetHostHost "default" comp)
 
 -- | 内部：`runNetError` 的成功侧 `ret`——值包装成 `Ok`。

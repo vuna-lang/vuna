@@ -111,7 +111,7 @@ processHostStatus : {r : Row} -> Eff r Int
 processHostStatus = raise @vuna@prim_eff_hostStatus
 
 -- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
-processOpHIOWithHost : (Int -> Eff (Named "process-error" ProcessErrorOp :: []) Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> Eff (Named "process-error" ProcessErrorOp :: []) a) -> Eff (Named "process-error" ProcessErrorOp :: []) a
+processOpHIOWithHost : (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Eff.resIdx i o -> Eff [ProcessErrorOp@"process-error"] a) -> Eff [ProcessErrorOp@"process-error"] a
 processOpHIOWithHost onExit i op k = case op of
   Args => do
     xs <- raise @vuna@prim_eff_getArgs_process_host
@@ -131,12 +131,12 @@ processOpHIOWithHost onExit i op k = case op of
     k c
 
 -- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
-handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff (Named "process-error" ProcessErrorOp :: []) Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff (Named "process-error" ProcessErrorOp :: []) a)
+handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [ProcessErrorOp@"process-error"] a)
 handleProcessHostWithHost n onExit comp =
   handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) (processOpHIOWithHost onExit) comp
 
 -- | entry 自动预装用（泛化 r）：真实退出路径 `Exit` 走 `@vuna@prim_eff_exit_process_host`，失败收口行 `ProcessErrorOp` 接到行尾。
-runProcessHost : {r : Row} -> {a : Type} -> Eff (Named "default" ProcessOp :: r) a -> Eff (rowAppend r (Named "process-error" ProcessErrorOp :: [])) a
+runProcessHost : {r : Row} -> {a : Type} -> Eff (Named "default" ProcessOp :: r) a -> Eff (rowAppend r [ProcessErrorOp@"process-error"]) a
 runProcessHost comp =
   joinEff
     (handleProcessHostWithHost "default" (\c => raise (@vuna@prim_eff_exit_process_host c)) comp)
