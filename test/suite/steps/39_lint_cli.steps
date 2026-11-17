@@ -39,3 +39,9 @@ out-contains: LN_RedundantIf
 run: "$VUNA" lint --fix --select redundant-if "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
 exit: 0
 file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna probe x = 1
+run: sh -c 'printf "%s\n" "module Probe where" "" "probe : Int -> Int" "probe x = if True then 1 else 2" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --format sarif --no-cache --select redundant-if "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: "version":"2.1.0"
+out-contains: "ruleId":"LN_RedundantIf"
