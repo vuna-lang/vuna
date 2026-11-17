@@ -1,0 +1,4 @@
+module B where
+
+export foo : Bool
+foo = True

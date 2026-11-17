@@ -1,0 +1,11 @@
+import A
+import B
+
+x : Int
+x = foo
+
+y : Bool
+y = foo
+
+main : Int
+main = x

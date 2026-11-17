@@ -1,1 +1,4 @@
-export dup x = x
+module B where
+
+export dup : Int -> Int
+dup x = x

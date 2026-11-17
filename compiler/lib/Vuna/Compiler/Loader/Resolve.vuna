@@ -502,6 +502,12 @@ else Vuna.Compiler.Base.Common.bind (pathEntryHits modules ps (memberLabel "" ps
 )
 )
 
+allEmptyTails : List (Pair String (List String)) -> Bool
+allEmptyTails [] = True
+allEmptyTails ((Pair _ tail) :: rest) = case tail of
+  [] => allEmptyTails rest
+  _ => False
+
 isEmptyPaths : List a -> Bool
 isEmptyPaths [] = True
 isEmptyPaths (_ :: _) = False
@@ -540,11 +546,16 @@ else case localCtorTargets prefix ns name of
       _ => OkC (pickCtorOrOver name cands)
     )
     _ => case ctorPairTargets modules pairs of
-      [] =>
-        Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "name" name pairs)
-          (\p => OkC (secondOf p).target)
+      [] => OkC (pickValueOrOver name pairs)
       targets => OkC (pickCtorOrOver name (nubNames targets))
   )
+
+-- | 从候选 target 里选唯一名；多个不同 target 编码成重载值标记名，交给精化器按期望类型选。
+pickValueOrOver : String -> List (Pair String ExportEntry) -> String
+pickValueOrOver name pairs = case nubNames (map pairExportTarget pairs) of
+  [] => name
+  [t] => t
+  targets => overValueName name targets
 
 -- | 从候选 target 里选唯一名；0 个或多个都编码成重载候选名。
 pickCtorOrOver : String -> List String -> String

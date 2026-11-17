@@ -634,6 +634,8 @@ else case expr of
       else if isOverCtorName name then Vuna.Compiler.Base.Common.bind
         (resolveOverCtor ec sp Nothing (overCtorShort name) (overCtorTargets name))
         (\t => inferVarRef globals ctx ec t sp)
+      else if isOverValueName name then tcErr2 sp (AmbiguousName (overValueShort name) (joinWithAt (overValueTargets name)))
+        (overValueShort name) (joinWithAt (overValueTargets name))
       else inferVarRef globals ctx ec name sp
   EInt n sp => OkC (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
   EStr s sp => OkC (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
@@ -1544,6 +1546,20 @@ else if doMarkerHead expr then case decodeDoBlock expr of
 else checkEFuelNoRowPlain fuel globals ctx ec expr expected
 
 -- | check 模式的形状分派核心：处理洞、字面量、λ、应用与 let 等，不再试 do 标记链。
+-- | 重载值在 check 位的候选选择：逐个按期望类型尝试，恰好一个成功才取它。
+overValueCandidateMatches : List (Pair String Term) -> Ctx -> Ec -> Value -> String -> Bool
+overValueCandidateMatches globals ctx ec expected target = case valueLookup globals ec target of
+  Just (VEDef ty) => case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (ctxEnv ctx) ty) expected of
+    OkC _ => True
+    ErrC _ => False
+  _ => False
+
+-- | 重载值在 check 位按期望类型挑唯一候选（只选 target，不回溯候选体）。
+resolveOverValueTarget : List (Pair String Term) -> Ctx -> Ec -> String -> List String -> Value -> Span -> Check String
+resolveOverValueTarget globals ctx ec short targets expected sp = case filter (overValueCandidateMatches globals ctx ec expected) targets of
+  [t] => OkC t
+  _ => tcErr2 sp (AmbiguousName short (joinWithAt targets)) short (joinWithAt targets)
+
 checkEFuelNoRowPlain : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkEFuelNoRowPlain fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
 else case expr of
@@ -1554,6 +1570,9 @@ else case expr of
       Pair metaTerm ec1 => OkC (Pair metaTerm ec1)
   else if isOverCtorName name then Vuna.Compiler.Base.Common.bind
     (resolveOverCtor ec sp (Just expected) (overCtorShort name) (overCtorTargets name))
+    (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t sp) [] expected sp)
+  else if isOverValueName name then Vuna.Compiler.Base.Common.bind
+    (resolveOverValueTarget globals ctx ec (overValueShort name) (overValueTargets name) expected sp)
     (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t sp) [] expected sp)
   else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
   EInt n sp => case forceVal ec expected of

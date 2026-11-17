@@ -1,0 +1,5 @@
+import A
+import B
+
+main : Int
+main = foo

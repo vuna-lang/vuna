@@ -484,6 +484,26 @@ overCtorTargets name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) 
 export isOverCtorName : String -> Bool
 isOverCtorName name = startsWith overCtorPrefix name
 
+-- | 重载值标记前缀（`@vuna@value@`）：多个不同 target 的值候选，由精化器按期望类型选择。
+export overValuePrefix : String
+overValuePrefix = "@vuna@value@"
+
+export overValueName : String -> List String -> String
+overValueName short targets = "${overValuePrefix}${short}@${joinWithAt targets}"
+
+export overValueShort : String -> String
+overValueShort name = case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+  [] => ""
+  s :: rest => s
+
+export overValueTargets : String -> List String
+overValueTargets name = case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+  [] => []
+  s :: rest => rest
+
+export isOverValueName : String -> Bool
+isOverValueName name = startsWith overValuePrefix name
+
 -- 列表字面量的保留名（parser 产出；Loader 原样放行；Elab 按期望族的 Nil/Cons
 -- 通用展开）。不借裸 `Nil`/`Cons` 走构造子名字解析。
 -- | 列表字面量展开出的 nil 保留名。

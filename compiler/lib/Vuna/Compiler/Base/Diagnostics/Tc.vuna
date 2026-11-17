@@ -108,6 +108,7 @@ export data TcErr(..) : Nat -> Type where
   HandleFamilyUnsupported : String -> TcErr (Succ Zero)
   -- arity 2
   AmbiguousCtor : String -> String -> TcErr (Succ (Succ Zero))
+  AmbiguousName : String -> String -> TcErr (Succ (Succ Zero))
   AmbiguousInstance : String -> String -> TcErr (Succ (Succ Zero))
   -- 同一个 `handle` 块的 clause 构造子跨 op 族。
   HandleClauseFamilyMismatch : String -> String -> TcErr (Succ (Succ Zero))
@@ -221,6 +222,7 @@ tcCode (UnsolvedMetavarInfer _) = "TC_UnsolvedMetavarInfer"
 tcCode (EffResFamilyMissing _) = "TC_EffResFamilyMissing"
 tcCode (HandleFamilyUnsupported _) = "TC_HandleFamilyUnsupported"
 tcCode (AmbiguousCtor _ _) = "TC_AmbiguousCtor"
+tcCode (AmbiguousName _ _) = "TC_AmbiguousName"
 tcCode (AmbiguousInstance _ _) = "TC_AmbiguousInstance"
 tcCode (HandleClauseFamilyMismatch _ _) = "TC_HandleClauseFamilyMismatch"
 tcCode (AppliedNotType _) = "TC_AppliedNotType"
@@ -330,6 +332,7 @@ tcTemplate (EffResFamilyMissing _) =
 tcTemplate (HandleFamilyUnsupported _) =
   "effect syntax (perform / handle) supports only op families indexed by their result type (<Op> : params -> Type -> Type with type-valued params); got <0>"
 tcTemplate (AmbiguousCtor _ _) = "ambiguous constructor <0> (candidates: <1>)"
+tcTemplate (AmbiguousName _ _) = "ambiguous name <0> (candidates: <1>)"
 tcTemplate (AmbiguousInstance _ _) = "ambiguous instance for <0> (candidates: <1>)"
 tcTemplate (HandleClauseFamilyMismatch _ _) =
   "all handle clauses must use constructors of the same operation family (got <0> and <1>)"
@@ -492,6 +495,7 @@ tcChunk8 =
     TcEntry (tcCode (EffResFamilyMissing "")) (tcTemplate (EffResFamilyMissing "")) "找不到效应结果族",
     TcEntry (tcCode (HandleFamilyUnsupported "")) (tcTemplate (HandleFamilyUnsupported "")) "handle 语法不支持该 op 族形状",
     TcEntry (tcCode (AmbiguousCtor "" "")) (tcTemplate (AmbiguousCtor "" "")) "构造子歧义：存在多个候选",
+    TcEntry (tcCode (AmbiguousName "" "")) (tcTemplate (AmbiguousName "" "")) "名字歧义：存在多个候选",
     TcEntry (tcCode (AmbiguousInstance "" "")) (tcTemplate (AmbiguousInstance "" "")) "实例歧义：存在多个候选",
     TcEntry (tcCode (HandleClauseFamilyMismatch "" "")) (tcTemplate (HandleClauseFamilyMismatch "" "")) "handle 子句的构造子跨 op 族",
     TcEntry (tcCode (AppliedNotType "")) (tcTemplate (AppliedNotType "")) "应用结果不是类型",
