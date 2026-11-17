@@ -140,3 +140,41 @@ file-absent: $TMPDIR/cap-deny/main.wasm
 run: sh -c 'd="$TMPDIR/cap-ok"; mkdir -p "$d/app"; printf "[package]\nname = \"capok\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffConsole\nimport Base.Nat\n\nmain : Eff [ConsoleOp] Nat\nmain = consolePrint \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-ok-out" "$d" 2>&1'
 exit: 0
 out-not-contains: UN_TargetEffectUnavailable
+
+# 18) 浏览器安全 import 面：不引入 path_symlink。
+run: sh -c 'grep -c path_symlink "$TMPDIR/min-out/main.wat" || true'
+exit: 0
+out-equals: 0
+
+# 19) symlink 不在浏览器契约内：产物可生成，执行到叶子时显式失败。
+run: sh -c 'd="$TMPDIR/symlink"; mkdir -p "$d/app"; printf "[package]\nname = \"symlink\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\n\nmain : Eff [FsOp] Int\nmain = fsSymlink \"target\" \"link\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/symlink-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/symlink-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: wasm host operation is not implemented
+
+# 20) 阻塞 sleep 不在浏览器契约内：执行时显式失败。
+run: sh -c 'd="$TMPDIR/sleep"; mkdir -p "$d/app"; printf "[package]\nname = \"sleep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffClock\n\nmain : Eff [ClockOp] Int\nmain = clockSleepMicros 1000\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sleep-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/sleep-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: wasm host operation is not implemented
+
+# 21) cwd 是虚拟 preopen 根，不读 PWD。
+run: sh -c 'd="$TMPDIR/cwd"; mkdir -p "$d/app"; printf "[package]\nname = \"cwd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetCwd\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cwd-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/cwd-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 0
+out-equals: "/"
+
+# 22) mtime 在浏览器契约内不可靠：写文件后仍得到 Nothing。
+run: sh -c 'd="$TMPDIR/mtime"; mkdir -p "$d/app" "$TMPDIR/mtime-root"; printf "[package]\nname = \"mtime\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\nimport Base.Maybe\nimport Base.String\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsWriteFile \"mtime-probe\" \"x\"\n  m <- fsFileMtime \"mtime-probe\"\n  pure (case m of\\n    Nothing => \"none\"\\n    Just _ => \"some\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/mtime-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/mtime-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y --dir "$TMPDIR/mtime-root" main.wasm 2>&1'
+exit: 0
+out-equals: "none"
+
+# 23) stdin 仍不可用：入口行产生能力告警。
+run: sh -c 'd="$TMPDIR/cap-stdin"; mkdir -p "$d/app"; printf "[package]\nname = \"capstdin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffStdin\n\nmain : Eff [StdinOp] Int\nmain = do\n  _ <- stdinReadLine\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-stdin-out" "$d" 2>&1'
+exit: 0
+out-contains: [UN_TargetEffectUnavailable]

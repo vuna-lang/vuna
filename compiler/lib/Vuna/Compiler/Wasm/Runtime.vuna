@@ -45,13 +45,11 @@ export record RtConsts(..) where
   -- | 该目标未实现的宿主操作（运行期显式失败，不伪造结果）。
   rtcHostOff : Int
   rtcHostLen : Int
-  -- | 原子写的临时后缀 / cwd 环境名 / "."。
+  -- | 原子写的临时后缀 / 虚拟根路径。
   rtcTmpOff : Int
   rtcTmpLen : Int
-  rtcPwdOff : Int
-  rtcPwdLen : Int
-  rtcDotOff : Int
-  rtcDotLen : Int
+  rtcRootOff : Int
+  rtcRootLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -361,7 +359,7 @@ rtPathOpen =
         ICall "$rt_pathCopyRel",
         ILocalSet "$len",
         IConstI32 3,
-        IConstI32 1,
+        IConstI32 0,
         IConstI32 wasiPath1,
         ILocalGet "$len",
         ILocalGet "$oflags",
@@ -413,7 +411,7 @@ rtEmptyStr = rtFunc "$rt_emptyStr" [] [WvAnyRef] [] emptyStrInstrs
 rtStatErr : WatFunc
 rtStatErr =
   let
-    params = [Pair "$s" WvAnyRef, Pair "$follow" WvI32]
+    params = [Pair "$s" WvAnyRef]
     locals = [Pair "$len" WvI32]
     body =
       [ ILocalGet "$s",
@@ -421,7 +419,7 @@ rtStatErr =
         ICall "$rt_pathCopyRel",
         ILocalSet "$len",
         IConstI32 3,
-        ILocalGet "$follow",
+        IConstI32 0,
         IConstI32 wasiPath1,
         ILocalGet "$len",
         IConstI32 wasiStat,
@@ -438,7 +436,6 @@ rtTryReadFile =
       [ IConstI32 0,
         IGlobalSet "$g_hostStatus",
         ILocalGet "$s",
-        IConstI32 1,
         ICall "$rt_statErr",
         ILocalSet "$err",
         ILocalGet "$err",
@@ -529,7 +526,6 @@ rtTryIsDirectory =
       [ IConstI32 0,
         IGlobalSet "$g_hostStatus",
         ILocalGet "$s",
-        IConstI32 1,
         ICall "$rt_statErr",
         ILocalSet "$err",
         ILocalGet "$err",
@@ -551,7 +547,6 @@ rtFileExists =
     locals = [Pair "$err" WvI32]
     body =
       [ ILocalGet "$s",
-        IConstI32 1,
         ICall "$rt_statErr",
         ILocalSet "$err",
         ILocalGet "$err",
@@ -561,29 +556,13 @@ rtFileExists =
       ]
   in rtFunc "$rt_fileExists" params [WvAnyRef] locals body
 
+-- | 浏览器/边缘契约没有可靠的 mtime：显式置不可用状态，`FsOp.FileMtime` 得到 `Nothing`。
 rtFileMtime : WatFunc
 rtFileMtime =
   let
     params = [Pair "$s" WvAnyRef]
-    locals = [Pair "$err" WvI32]
-    body =
-      [ IConstI32 0,
-        IGlobalSet "$g_hostStatus",
-        ILocalGet "$s",
-        IConstI32 1,
-        ICall "$rt_statErr",
-        ILocalSet "$err",
-        ILocalGet "$err",
-        IConstI32 0,
-        IBinop "i32.ne",
-        IIf "" [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int", IReturn] [INop],
-        IConstI32 (wasiStat + 48),
-        ILoad64,
-        IConstI64 1000000000,
-        IBinop "i64.div_u",
-        IStructNew "$int"
-      ]
-  in rtFunc "$rt_fileMtime" params [WvAnyRef] locals body
+    body = [IConstI32 1, IGlobalSet "$g_hostStatus", IConstI64 0, IStructNew "$int"]
+  in rtFunc "$rt_fileMtime" params [WvAnyRef] [] body
 
 rtFileSize : WatFunc
 rtFileSize =
@@ -594,7 +573,6 @@ rtFileSize =
       [ IConstI32 0,
         IGlobalSet "$g_hostStatus",
         ILocalGet "$s",
-        IConstI32 1,
         ICall "$rt_statErr",
         ILocalSet "$err",
         ILocalGet "$err",
@@ -788,40 +766,6 @@ rtTryRename =
       ]
   in rtFunc "$rt_tryRename" params [WvAnyRef] locals body
 
-rtTrySymlink : WatFunc
-rtTrySymlink =
-  let
-    params = [Pair "$target" WvAnyRef, Pair "$link" WvAnyRef]
-    locals = [Pair "$len1" WvI32, Pair "$len2" WvI32, Pair "$err" WvI32]
-    body =
-      [ IConstI32 0,
-        IGlobalSet "$g_hostStatus",
-        ILocalGet "$target",
-        IConstI32 wasiPath1,
-        ICall "$rt_pathCopyRel",
-        ILocalSet "$len1",
-        ILocalGet "$link",
-        IConstI32 wasiPath2,
-        ICall "$rt_pathCopyRel",
-        ILocalSet "$len2",
-        IConstI32 wasiPath1,
-        ILocalGet "$len1",
-        IConstI32 3,
-        IConstI32 wasiPath2,
-        ILocalGet "$len2",
-        ICall "$path_symlink",
-        ILocalSet "$err",
-        ILocalGet "$err",
-        IConstI32 0,
-        IBinop "i32.eq",
-        IIf "" [IConstI32 0, IGlobalSet "$g_hostStatus"] [ILocalGet "$err", ICall "$rt_errno", IGlobalSet "$g_hostStatus"],
-        ILocalGet "$err",
-        IConstI32 0,
-        IBinop "i32.eq",
-        IIf "anyref" [IConstI64 0, IStructNew "$int"] [IConstI64 1, IStructNew "$int"]
-      ]
-  in rtFunc "$rt_trySymlink" params [WvAnyRef] locals body
-
 rtHostStatus : WatFunc
 rtHostStatus =
   rtFunc "$rt_hostStatus" [] [WvAnyRef] []
@@ -894,14 +838,9 @@ rtGetEnv =
       ]
   in rtFunc "$rt_getEnv" params [WvAnyRef] locals body
 
+-- | 浏览器/边缘没有宿主 cwd：返回虚拟 preopen 根 `/`，相对路径由调用方按该根归一。
 rtGetCwd : RtConsts -> WatFunc
-rtGetCwd c =
-  let
-    locals = [Pair "$v" WvAnyRef]
-    body =
-      append (mkString c.rtcPwdOff c.rtcPwdLen)
-        [ICall "$rt_getEnv", ILocalSet "$v", ILocalGet "$v", IRefCast "$str", IArrayLen, IConstI32 0, IBinop "i32.eq", IIf "anyref" (mkString c.rtcDotOff c.rtcDotLen) [ILocalGet "$v"]]
-  in rtFunc "$rt_getCwd" [] [WvAnyRef] locals body
+rtGetCwd c = rtFunc "$rt_getCwd" [] [WvAnyRef] [] (mkString c.rtcRootOff c.rtcRootLen)
 
 rtExecPath : WatFunc
 rtExecPath = rtFunc "$rt_execPath" [] [WvAnyRef] [] emptyStrInstrs
@@ -927,34 +866,6 @@ rtTimeUs =
         IStructNew "$int"
       ]
   in rtFunc "$rt_timeUs" [] [WvAnyRef] locals body
-
-rtSleep : WatFunc
-rtSleep =
-  let
-    params = [Pair "$us" WvAnyRef]
-    locals = [Pair "$start" WvI64, Pair "$now" WvI64, Pair "$target" WvI64]
-    body =
-      [ IConstI32 0,
-        IConstI64 1,
-        IConstI32 wasiAux,
-        ICall "$clock_time_get",
-        IDrop,
-        IConstI32 wasiAux,
-        ILoad64,
-        ILocalSet "$start",
-        ILocalGet "$start",
-        ILocalGet "$us",
-        IRefCast "$int",
-        IStructGet "$int" 0,
-        IConstI64 1000,
-        IBinop "i64.mul",
-        IBinop "i64.add",
-        ILocalSet "$target",
-        IBlock "$s_done" "" [ILoop "$s_l" "" [IConstI32 0, IConstI64 1, IConstI32 wasiAux, ICall "$clock_time_get", IDrop, IConstI32 wasiAux, ILoad64, ILocalSet "$now", ILocalGet "$now", ILocalGet "$target", IBinop "i64.ge_u", IBrIf "$s_done", IBr "$s_l"]],
-        IConstI64 0,
-        IStructNew "$int"
-      ]
-  in rtFunc "$rt_sleep" params [WvAnyRef] locals body
 
 rtPrintln : WatFunc
 rtPrintln =
@@ -1908,13 +1819,11 @@ rtFunctions c =
     rtTryRemoveFile,
     rtTryRemoveTree,
     rtTryRename,
-    rtTrySymlink,
     rtHostStatus,
     rtGetEnv,
     rtGetCwd c,
     rtExecPath,
     rtTimeUs,
-    rtSleep,
     rtPrintln,
     rtEffNewRef,
     rtEffReadRef,
@@ -2139,7 +2048,7 @@ rtImplOf "@vuna@host@tryMakeDir" = RtFunc 1 "$rt_tryMakeDir"
 rtImplOf "@vuna@host@tryRemoveFile" = RtFunc 1 "$rt_tryRemoveFile"
 rtImplOf "@vuna@host@tryRemoveTree" = RtFunc 1 "$rt_tryRemoveTree"
 rtImplOf "@vuna@host@tryRename" = RtFunc 2 "$rt_tryRename"
-rtImplOf "@vuna@host@trySymlink" = RtFunc 2 "$rt_trySymlink"
+rtImplOf "@vuna@host@trySymlink" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@host@tryMakeDirExclusive" = RtFunc 1 "$rt_tryMakeDirExclusive"
 rtImplOf "@vuna@host@fileExists" = RtFunc 1 "$rt_fileExists"
 rtImplOf "@vuna@host@fileMtime" = RtFunc 1 "$rt_fileMtime"
@@ -2151,7 +2060,7 @@ rtImplOf "@vuna@host@execPath" = RtFunc 0 "$rt_execPath"
 rtImplOf "@vuna@host@getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@host@isTty" = RtValue (boolValue False)
 rtImplOf "@vuna@prim_eff_getArgs_process_host" = RtFunc 0 "$rt_getArgs"
-rtImplOf "@vuna@prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_exit_process_host" = RtFunc 1 "$rt_effExit"
 rtImplOf "@vuna@prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@prim_eff_readFile" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_writeFile" = RtFunc 2 "$rt_hostTrap2"
@@ -2169,7 +2078,7 @@ rtImplOf "@vuna@prim_eff_getArgs" = RtFunc 0 "$rt_getArgs"
 rtImplOf "@vuna@prim_eff_getenv" = RtFunc 1 "$rt_getEnv"
 rtImplOf "@vuna@prim_eff_getcwd" = RtFunc 0 "$rt_getCwd"
 rtImplOf "@vuna@prim_eff_execPath" = RtFunc 0 "$rt_execPath"
-rtImplOf "@vuna@prim_eff_sleep" = RtFunc 1 "$rt_sleep"
+rtImplOf "@vuna@prim_eff_sleep" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@host@readLine" = RtFunc 0 "$rt_hostTrap0"
 rtImplOf "@vuna@host@readBytes" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "prim_eff_readLine_host" = RtFunc 0 "$rt_hostTrap0"
@@ -2180,13 +2089,13 @@ rtImplOf "@vuna@host@tryRunIn" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "@vuna@host@runIn" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "prim_eff_runIn_host" = RtFunc 2 "$rt_hostTrap2"
 rtImplOf "prim_eff_getArgs_process_host" = RtFunc 0 "$rt_getArgs"
-rtImplOf "prim_eff_exit_process_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "prim_eff_exit_process_host" = RtFunc 1 "$rt_effExit"
 rtImplOf "prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_spawn" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "@vuna@prim_eff_wait" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf "effTimeUs_host" = RtFunc 0 "$rt_timeUs"
-rtImplOf "prim_eff_sleep_host" = RtFunc 1 "$rt_sleep"
-rtImplOf "@vuna@prim_eff_sleep_host" = RtFunc 1 "$rt_sleep"
-rtImplOf "@vuna@host@sleep" = RtFunc 1 "$rt_sleep"
+rtImplOf "prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@prim_eff_sleep_host" = RtFunc 1 "$rt_hostTrap1"
+rtImplOf "@vuna@host@sleep" = RtFunc 1 "$rt_hostTrap1"
 rtImplOf _ = RtUnsupported

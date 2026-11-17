@@ -50,7 +50,7 @@ warnTemplate (UnusedDefinition _) = "definition <0> is never used"
 warnTemplate (UnusedImport _) = "module <0> is imported but never used"
 warnTemplate (ShadowedBinder _) = "binder <0> shadows an outer binder"
 warnTemplate (TargetEffectUnavailable _ _) =
-  "target <0> does not implement effect <1>: performing it traps at runtime"
+  "target <0> does not fully implement effect <1>: unsupported operations trap at runtime"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
 export warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic

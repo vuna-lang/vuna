@@ -2,8 +2,9 @@
 module Vuna.Compiler.Base.Capabilities where
 
 -- 内建效应家族的清单在 `Vuna.Compiler.Base.Intrinsics`（`builtinEffects`）；这里只声明
--- 目标对标签的可用性。判据是「该家族的全部叶子都有真实实现」：任何叶子走运行期 trap
--- 或生成期拒绝，整个标签就是不可用。
+-- 目标对标签的可用性。粒度是**家族**：`CapUnavailable` 表示该家族的核心操作在目标上会
+-- 运行期 trap；`CapAvailable` 表示核心可用，逐操作缺口（例如 wasm 的 symlink / mtime /
+-- 阻塞 sleep）记在 `docs/reference/wasm.md` §8.1，不在告警层重复。
 --
 -- 值来源（改运行时实现表时必须同步本表）：
 --   wasm   → `Vuna.Compiler.Wasm.Runtime` 的 `rtImplOf`
@@ -21,7 +22,8 @@ export data Capability(..) : Type where
 export capabilityOf : String -> String -> Capability
 capabilityOf target tag = if target == "wasm" then wasmCapabilityOf tag else CapAvailable
 
--- wasm 的不可用面：进程（spawn/wait/runIn）、stdin、网络没有宿主实现。
+-- wasm 的不可用面：进程派生 / stdin / raw 网络没有浏览器宿主实现；`ProcessOp` 的
+-- Args / Exit 可用，但家族按 spawn/wait/runIn 判为不可用。
 wasmCapabilityOf : String -> Capability
 wasmCapabilityOf tag =
   if tag == "Base.EffProcess.ProcessOp" then CapUnavailable

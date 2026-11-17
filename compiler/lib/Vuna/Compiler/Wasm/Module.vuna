@@ -1343,7 +1343,6 @@ baseImports =
     WatImport "wasi_snapshot_preview1" "path_remove_directory" "$path_remove_directory" [WvI32, WvI32, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "path_unlink_file" "$path_unlink_file" [WvI32, WvI32, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "path_rename" "$path_rename" [WvI32, WvI32, WvI32, WvI32, WvI32, WvI32] [WvI32],
-    WatImport "wasi_snapshot_preview1" "path_symlink" "$path_symlink" [WvI32, WvI32, WvI32, WvI32, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "fd_readdir" "$fd_readdir" [WvI32, WvI32, WvI32, WvI64, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "environ_sizes_get" "$environ_sizes_get" [WvI32, WvI32] [WvI32],
     WatImport "wasi_snapshot_preview1" "environ_get" "$environ_get" [WvI32, WvI32] [WvI32],
@@ -1417,8 +1416,7 @@ build program printResult =
         "continuation already resumed",
         "wasm host operation is not implemented",
         ".tmp",
-        "PWD",
-        "."
+        "/"
       ]
     users = concatMap irStringsOfDef defs
     offsets = poolOf (append statics users)
@@ -1478,8 +1476,8 @@ mkConsts offsets =
     (lenOf "assertion failed: ") (offOf "Invalid_argument(\"index out of bounds\")")
     (lenOf "Invalid_argument(\"index out of bounds\")") (offOf "continuation already resumed")
     (lenOf "continuation already resumed") (offOf "wasm host operation is not implemented")
-    (lenOf "wasm host operation is not implemented") (offOf ".tmp") (lenOf ".tmp") (offOf "PWD")
-    (lenOf "PWD") (offOf ".") (lenOf ".")
+    (lenOf "wasm host operation is not implemented") (offOf ".tmp") (lenOf ".tmp") (offOf "/")
+    (lenOf "/")
 
 joinWith : String -> List String -> String
 joinWith sep xs = Base.String.join sep xs
