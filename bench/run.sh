@@ -273,10 +273,12 @@ run_bench() { # name
   golden=$(cat "$REPO/bench/programs/$name.out")
 
   note "== $name =="
-  local oprog=$WORK/$name-ocaml
-  local mlcopy=$WORK/$name.ml
+  local mldir=$WORK/$name-ml
+  mkdir -p "$mldir"
+  local oprog=$mldir/prog
+  local mlcopy=$mldir/$name.ml
   cp "$ml" "$mlcopy"
-  if ! ( cd "$WORK" && "$OCAMLOPT_BIN" -o "$oprog" "$name.ml" ) >"$WORK/$name.ocamlopt.log" 2>&1; then
+  if ! ( cd "$mldir" && "$OCAMLOPT_BIN" -o "$oprog" "$name.ml" ) >"$WORK/$name.ocamlopt.log" 2>&1; then
     die "$name: ocamlopt failed for $ml"
   fi
 
