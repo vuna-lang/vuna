@@ -3,13 +3,13 @@ type t_Base_dEffFs_dFsOp = C_Base_dEffFs_dFsOp_ReadFile of (string) | C_Base_dEf
 and t_Base_dEffFs_dFsError = C_Base_dEffFs_dFsError_FsMissing of (string) | C_Base_dEffFs_dFsError_FsDenied of (string) | C_Base_dEffFs_dFsError_FsNoSpace of (string) | C_Base_dEffFs_dFsError_FsNotDir of (string) | C_Base_dEffFs_dFsError_FsIsDir of (string) | C_Base_dEffFs_dFsError_FsExists of (string) | C_Base_dEffFs_dFsError_FsIo of (string)
 and t_Base_dEffFs_dFsErrorOp = C_Base_dEffFs_dFsErrorOp_FsFail of (t_Base_dEffFs_dFsError)
 
-# 101 "Base/EffFs.vuna"
+# 80 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFail = (fun n e -> (((Base_dEff.v_Base_dEff_dsendCore "fs-error") n) (C_Base_dEffFs_dFsErrorOp_FsFail (e))))
 
-# 105 "Base/EffFs.vuna"
+# 84 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsErrorOfCode = (fun mc0 mc1 -> (if (mc1 = 1) then (C_Base_dEffFs_dFsError_FsMissing (mc0)) else (if (mc1 = 2) then (C_Base_dEffFs_dFsError_FsDenied (mc0)) else (if (mc1 = 3) then (C_Base_dEffFs_dFsError_FsNoSpace (mc0)) else (if (mc1 = 4) then (C_Base_dEffFs_dFsError_FsNotDir (mc0)) else (if (mc1 = 5) then (C_Base_dEffFs_dFsError_FsIsDir (mc0)) else (if (mc1 = 6) then (C_Base_dEffFs_dFsError_FsExists (mc0)) else (C_Base_dEffFs_dFsError_FsIo (mc0)))))))))
 
-# 115 "Base/EffFs.vuna"
+# 94 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsErrorText = (fun mc0 -> (match mc0 with
   | C_Base_dEffFs_dFsError_FsIo (dtb__0) -> (String.concat "" ["fs: "; dtb__0; ": host I/O error"])
   | C_Base_dEffFs_dFsError_FsExists (dtb__1) -> (String.concat "" ["fs: "; dtb__1; ": already exists"])
@@ -21,61 +21,61 @@ let v_Base_dEffFs_dfsErrorText = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 124 "Base/EffFs.vuna"
+# 103 "Base/EffFs.vuna"
 let v_Base_dEffFs_dsortEntries = (fun xs -> ((Base_dSort.v_Base_dSort_dsortBy (fun a b -> (((Base_dOrd.v_Base_dOrd_d_x60__x61_ Base_dString.v_Ord_uString) a) b))) xs))
 
-# 128 "Base/EffFs.vuna"
+# 107 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsReadFile = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_ReadFile (p))))
 
-# 133 "Base/EffFs.vuna"
+# 112 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsWriteFile = (fun n p s -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_WriteFile (p, s))))
 
-# 138 "Base/EffFs.vuna"
+# 117 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsWriteFileAtomic = (fun n p s -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_WriteFileAtomic (p, s))))
 
-# 143 "Base/EffFs.vuna"
+# 122 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsReadDir = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_ReadDir (p))))
 
-# 148 "Base/EffFs.vuna"
+# 127 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsIsDirectory = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_IsDirectory (p))))
 
-# 153 "Base/EffFs.vuna"
+# 132 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsMakeDir = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_MakeDir (p))))
 
-# 158 "Base/EffFs.vuna"
+# 137 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsRemoveFile = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_RemoveFile (p))))
 
-# 163 "Base/EffFs.vuna"
+# 142 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileExists = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileExists (p))))
 
-# 167 "Base/EffFs.vuna"
+# 146 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileMtime = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileMtime (p))))
 
-# 171 "Base/EffFs.vuna"
+# 150 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFileSize = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_FileSize (p))))
 
-# 175 "Base/EffFs.vuna"
+# 154 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsRemoveTree = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_RemoveTree (p))))
 
-# 179 "Base/EffFs.vuna"
+# 158 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsRename = (fun n src dst -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_Rename (src, dst))))
 
-# 183 "Base/EffFs.vuna"
+# 162 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsSymlink = (fun n target link -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_Symlink (target, link))))
 
-# 187 "Base/EffFs.vuna"
+# 166 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsMakeDirExclusive = (fun n p -> (((Base_dEff.v_Base_dEff_dsendCore "fs") n) (C_Base_dEffFs_dFsOp_MakeDirExclusive (p))))
 
-# 191 "Base/EffFs.vuna"
+# 170 "Base/EffFs.vuna"
 let v_Base_dEffFs_dhandleFs = (fun n ret opH comp -> (((((Base_dEff.v_Base_dEff_dhandleCore "fs") n) ret) (Obj.magic opH)) comp))
 
-# 198 "Base/EffFs.vuna"
+# 177 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsHostStatus = (Base_dEff.v_Base_dEff_draise (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_hostStatus ()))))
 
-# 202 "Base/EffFs.vuna"
+# 181 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsFailAt = (fun e -> (((Base_dEff.v_Base_dEff_dsendCore "fs-error") "fs-error") (C_Base_dEffFs_dFsErrorOp_FsFail (e))))
 
-# 206 "Base/EffFs.vuna"
+# 185 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsOpHIOHost = (fun op k -> (match op with
   | C_Base_dEffFs_dFsOp_ReadFile (dtb__7) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_tryReadFile dtio_0)) dtb__7))) (fun s -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) v_Base_dEffFs_dfsHostStatus) (fun ok -> (if (ok <> 0) then (v_Base_dEffFs_dfsFailAt ((v_Base_dEffFs_dfsErrorOfCode ("readFile " ^ dtb__7)) ok)) else ((Obj.magic k) s))))))
   | C_Base_dEffFs_dFsOp_WriteFile (dtb__8, dtb__9) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise (((fun dtio_0 dtio_1 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_tryWriteFile dtio_0 dtio_1)) dtb__8) dtb__9))) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) v_Base_dEffFs_dfsHostStatus) (fun ok -> (if (ok <> 0) then (v_Base_dEffFs_dfsFailAt ((v_Base_dEffFs_dfsErrorOfCode ("writeFile " ^ dtb__8)) ok)) else ((Obj.magic k) (bi_natFromInt (bi_strLength dtb__9))))))))
@@ -94,25 +94,25 @@ let v_Base_dEffFs_dfsOpHIOHost = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 266 "Base/EffFs.vuna"
+# 245 "Base/EffFs.vuna"
 let v_Base_dEffFs_dhandleFsHostHost = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "fs") n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffFs_dfsOpHIOHost) comp))
 
-# 270 "Base/EffFs.vuna"
+# 249 "Base/EffFs.vuna"
 let v_Base_dEffFs_drunFsHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff ((v_Base_dEffFs_dhandleFsHostHost "default") comp)))
 
-# 274 "Base/EffFs.vuna"
+# 253 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsErrorRet = (fun a -> (Base_dResult.C_Base_dResult_dResult_Ok (a)))
 
-# 278 "Base/EffFs.vuna"
+# 257 "Base/EffFs.vuna"
 let v_Base_dEffFs_dfsErrorOpHR = (fun op _u -> (match op with
   | C_Base_dEffFs_dFsErrorOp_FsFail (dtb__25) -> (Base_dResult.C_Base_dResult_dResult_Err ((v_Base_dEffFs_dfsErrorText dtb__25)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 283 "Base/EffFs.vuna"
+# 262 "Base/EffFs.vuna"
 let v_Base_dEffFs_drunFsError = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "fs-error") n) v_Base_dEffFs_dfsErrorRet) v_Base_dEffFs_dfsErrorOpHR) comp))
 
-# 287 "Base/EffFs.vuna"
+# 266 "Base/EffFs.vuna"
 let v_Base_dEffFs_drunFsErrorHost = (fun comp -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Base_dEffFs_drunFsError "fs-error") comp)) (fun res -> (match res with
   | Base_dResult.C_Base_dResult_dResult_Ok (dtb__26) -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) dtb__26)
   | Base_dResult.C_Base_dResult_dResult_Err (dtb__27) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0)) dtio_0)) (String.concat "" ["vuna: "; dtb__27; "\n"])))) (fun _u -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_exit dtio_0)) 1))) (fun _u -> ((fun msg -> failwith msg) "unreachable: fs error handler")))))

@@ -1,22 +1,22 @@
 open Vuna_runtime
 type t_Base_dEffEnv_dEnvOp = C_Base_dEffEnv_dEnvOp_GetEnv of (string) | C_Base_dEffEnv_dEnvOp_GetCwd | C_Base_dEffEnv_dEnvOp_ExecPath
 
-# 29 "Base/EffEnv.vuna"
+# 23 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvGetEnv = (fun n k -> (((Base_dEff.v_Base_dEff_dsendCore "env") n) (C_Base_dEffEnv_dEnvOp_GetEnv (k))))
 
-# 34 "Base/EffEnv.vuna"
+# 28 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvGetEnvNonEmpty = (fun n k -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Base_dEffEnv_denvGetEnv n) k)) (fun v -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) (if (v = "") then Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing else (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (v)))))))
 
-# 40 "Base/EffEnv.vuna"
+# 34 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvGetCwd = (fun n -> (((Base_dEff.v_Base_dEff_dsendCore "env") n) C_Base_dEffEnv_dEnvOp_GetCwd))
 
-# 44 "Base/EffEnv.vuna"
+# 38 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvExecPath = (fun n -> (((Base_dEff.v_Base_dEff_dsendCore "env") n) C_Base_dEffEnv_dEnvOp_ExecPath))
 
-# 48 "Base/EffEnv.vuna"
+# 42 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_dhandleEnv = (fun n ret opH comp -> (((((Base_dEff.v_Base_dEff_dhandleCore "env") n) ret) (Obj.magic opH)) comp))
 
-# 52 "Base/EffEnv.vuna"
+# 46 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvOpHIO = (fun op k -> (match op with
   | C_Base_dEffEnv_dEnvOp_GetEnv (dtb__0) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_getenv dtio_0)) dtb__0)) (fun v -> ((Obj.magic k) v)))
   | C_Base_dEffEnv_dEnvOp_GetCwd -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_getcwd ())))) (fun v -> ((Obj.magic k) v)))
@@ -24,7 +24,7 @@ let v_Base_dEffEnv_denvOpHIO = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 68 "Base/EffEnv.vuna"
+# 62 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvOpHIOHost = (fun op k -> (match op with
   | C_Base_dEffEnv_dEnvOp_GetEnv (dtb__1) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_getenv dtio_0)) dtb__1))) (fun v -> ((Obj.magic k) v)))
   | C_Base_dEffEnv_dEnvOp_GetCwd -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_getcwd ()))))) (fun v -> ((Obj.magic k) v)))
@@ -32,8 +32,8 @@ let v_Base_dEffEnv_denvOpHIOHost = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 81 "Base/EffEnv.vuna"
+# 75 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_dhandleEnvHostHost = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "env") n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffEnv_denvOpHIOHost) comp))
 
-# 85 "Base/EffEnv.vuna"
+# 79 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_drunEnvHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff ((v_Base_dEffEnv_dhandleEnvHostHost "default") comp)))
