@@ -102,6 +102,12 @@ runPure e = runThunk e MkEffUnit
 export runEff : {r : Row} -> {a : Type} -> Eff r a -> a
 runEff e = runThunk e MkEffUnit
 
+-- | 在当前 handler 下重新运行子计算（scoped op 用）：运行时用 opH 执行期间记下的
+-- (key, name, ret, opH) 重新装同一层 handler，返回该 handler 的 answer。
+-- 只在 handler 的 opH 内有效；`a` 与 answer 类型由调用点决定（信任入口）。
+export handleSelf : {e : Type} -> {r : Row} -> {a : Type} -> {b : Type} -> Eff (e :: r) a -> b
+handleSelf comp = prim_effectSelf (\_ => runThunk comp MkEffUnit)
+
 -- codegen 的 main 钩子引用这个名字；不导出，用户源码拿不到。
 -- | 入口执行：执行任意行（含内建宿主效应行 `Eff [ConsoleOp]`）的 `main`，运行时直接走 thunk。
 runMain : {r : Row} -> {a : Type} -> Eff r a -> a

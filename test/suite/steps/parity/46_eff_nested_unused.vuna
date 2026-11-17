@@ -1,16 +1,10 @@
 import Base.Eff
 
-data AOp : Type where
-  A : Int -> AOp
+data AOp : Type -> Type where
+  A : Int -> AOp Int
 
-resA : AOp -> Type
-resA (A n) = Int
-
-data BOp : Type where
-  B : Int -> BOp
-
-resB : BOp -> Type
-resB (B n) = Int
+data BOp : Type -> Type where
+  B : Int -> BOp Int
 
 prog : Eff (Named "a" AOp :: [BOp@b]) Int
 prog = do

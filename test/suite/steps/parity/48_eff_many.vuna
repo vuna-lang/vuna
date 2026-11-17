@@ -1,11 +1,8 @@
 import Base.Eff
 import Base.Nat
 
-data POp : Type where
-  P : Int -> POp
-
-resP : POp -> Type
-resP (P n) = Int
+data POp : Type -> Type where
+  P : Int -> POp Int
 
 many : Nat -> Eff [POp] Int
 many n = case n of

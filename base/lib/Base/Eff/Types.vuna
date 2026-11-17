@@ -6,4 +6,4 @@
 -- 仍导入 `Base.Eff`。
 module Base.Eff.Types where
 
-export import Base.Eff (Eff, Row, Named, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow, raise, raiseTo, sendCore, performCore, handleCore, handleCoreLin, Cont, resumeCont, EffSig, sigFn, sigOf, handleWith, handleWithAt, mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter)
+export import Base.Eff (Eff, Row, Named, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow, raise, raiseTo, handleSelf, sendCore, performCore, handleCore, handleCoreLin, Cont, resumeCont, EffSig, sigFn, sigOf, handleWith, handleWithAt, mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter)

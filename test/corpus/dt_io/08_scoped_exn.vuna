@@ -1,0 +1,17 @@
+-- `Base.Eff.handleSelf`：`Try` 的子计算在同一 exn handler 下重跑（无 fuel）。
+import Base.Eff
+import Base.EffExn
+import Base.Nat
+import Base.Result
+
+prog : Eff [Exn@boom] Nat
+prog = do
+  r <- tryWith "boom" (throwExn "boom" "inner")
+  case r of
+    Ok n => pure n
+    Err _ => pure 7
+
+main : Nat
+main = case runPure (runExn "boom" prog) of
+  Ok n => n
+  Err _ => 0

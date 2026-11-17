@@ -106,7 +106,7 @@ exit: 0
 out-equals: 101
 
 # 13) one-shot：同一续延第二次 resume 在运行期 trap（exit 2，文本与 native 一致）。
-run: sh -c 'd="$TMPDIR/efftwice"; mkdir -p "$d/app"; printf "[package]\nname = \"efftwice\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nmain : Int\nmain = runPure (handle (perform (P 3)) { P n k -> k (n + 1) + k 0 })\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/efftwice-out" "$d"'
+run: sh -c 'd="$TMPDIR/efftwice"; mkdir -p "$d/app"; printf "[package]\nname = \"efftwice\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nmain : Int\nmain = runPure (handle (perform (P 3)) { P n k -> k (n + 1) + k 0 })\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/efftwice-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/efftwice-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
