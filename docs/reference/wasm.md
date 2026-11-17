@@ -226,9 +226,21 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
     --dir / --env VUNA_BASE="$PWD/base" --env VUNA_STORE=/tmp/vuna-wasm-store \
     /tmp/wasm-compiler/main.wasm check "$PWD" --error-format json
   ```
-  两条 `check` 的预期是 exit 0、诊断为空（整仓那次耗时约 20 分钟）。同一二进制跑
+  两条 `check` 的预期是 exit 0、诊断为空（整仓那次实测 31m36s，32 MiB 栈、暖 store）。同一二进制跑
   `build "$PWD/compiler" --target ocaml --no-compile --out DIR2` 的产物与 OCaml 版编译器
   同参数产物逐字节一致（154 个文件；唯一差异是 `build-id`，见页首）。
+- **`vuna-wasm` 包**（`nix build .#vuna-wasm`）：把上面这段口径固化成一个可执行入口——
+  由 stage 1 编译器把 `compiler` 包编到 wasm（`--no-compile`）并 `wasm-tools parse`，
+  再装一个 `bin/vuna-wasm` 包装脚本（固定 `wasmtime` 路径与
+  `-W max-wasm-stack` / stack-switching / gc / function-references，`--dir ${VUNA_WASM_DIR:-/}`，
+  转发 `VUNA_BASE` / `VUNA_STORE`，并烘入 `VUNA_COMPILER_TAG`——WASI 下 `execPath` 是空串，
+  读不到 `build-id`）。WASI 没有 `exec`，脚本对不带 `--no-compile` 的 `build` 直接拒绝
+  （exit 2）并提示在宿主跑 `build.sh`。用时不需要手写上面的命令行：
+  `nix run .#vuna-wasm -- check <绝对路径>`。
+  读数：`check compiler` 冷 store 13m04s（8 MiB 栈）、单夹具 `check` 暖 store 3.5–4.6 s
+  （含每次重新编译 26 MB 模块；`$HOME/.cache/wasmtime` 命中后约 1 s）。
+  跨编译器 conformance 的完整口径（selfhost / parity / corpus）见
+  [testing.md](testing.md)「后端自举 conformance」。
 - **wasm→wasm 生成**：同一二进制跑
   `build "$PWD/compiler" --target wasm --no-compile --out DIR3`（`max-wasm-stack` 给
   256 MiB）产出的 `main.wat` 与 `./result/bin/vuna` 同参数产物逐字节一致

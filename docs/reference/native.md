@@ -323,6 +323,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   大包尚未跑通：`check base` / `check examples/infra` 以 `continuation stack overflow`
   收口（不再是 SIGSEGV）——native 不做尾调用，深递归耗尽固定 32 MiB 续延窗口，是
   [debt.md](debt.md) D89 记录的已知限度（真正的解法是按需扩栈或尾调用）。
+  CI 的 `nix run .#backend-check -- --compiler native` 因此是非阻塞任务（口径见
+  [testing.md](testing.md)「后端自举 conformance」）；它的 `selfhost` scope 在整仓
+  `check` 上以 `continuation stack overflow` 收口。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
