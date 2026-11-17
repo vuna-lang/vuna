@@ -840,13 +840,13 @@ else
   in [mkFinding sp LiteralIfChain (lintMsg LiteralIfChain name) edit]
 
 -- | 内部：继续遍历各 then 分支，链内部的 dispatch 仍要检查。
-walkChainItems : Int -> List String -> List PTok -> List ChainItem -> List Finding
-walkChainItems fuel lines toks items = if fuel <= 0 then lintFuelExhausted "traversal"
+walkChainItems : Bool -> Int -> List String -> List PTok -> List ChainItem -> List Finding
+walkChainItems allow fuel lines toks items = if fuel <= 0 then lintFuelExhausted "traversal"
 else case items of
   [] => []
   item :: rest =>
-    append (walkExpr (fuel - 1) lines toks item.chainItemThen)
-      (walkChainItems (fuel - 1) lines toks rest)
+    append (walkExprGo allow (fuel - 1) lines toks item.chainItemThen)
+      (walkChainItems allow (fuel - 1) lines toks rest)
 
 -- ---------------------------------------------------------------
 -- 规则 1b：if dispatch 提升（Bool 变量 / 字面量链）
@@ -1296,148 +1296,174 @@ handlePartsOf _ = Nothing
 
 -- | 内部：只遍历 handle 里用户写的部分（comp、return 体、op 子句体），不把 parser 合成的
 -- case 当成 lane 来源。
-walkHandlePayload : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> List Finding
-walkHandlePayload fuel lines toks comp ret opH = if fuel <= 0 then lintFuelExhausted "traversal"
+walkHandlePayload : Bool -> Int -> List String -> List PTok -> Expr -> Expr -> Expr -> List Finding
+walkHandlePayload allow fuel lines toks comp ret opH = if fuel <= 0 then lintFuelExhausted "traversal"
 else
   let
     retFindings = case ret of
-      ELam _ body _ => walkExpr (fuel - 1) lines toks body
+      ELam _ body _ => walkExprGo allow (fuel - 1) lines toks body
       _ => []
     opFindings = case opH of
-      ELam _ (ECase _ alts _) _ => walkHandleAlts (fuel - 1) lines toks alts
-      ELam _ body _ => walkExpr (fuel - 1) lines toks body
+      ELam _ (ECase _ alts _) _ => walkHandleAlts allow (fuel - 1) lines toks alts
+      ELam _ body _ => walkExprGo allow (fuel - 1) lines toks body
       _ => []
-  in append (append (walkExpr (fuel - 1) lines toks comp) retFindings) opFindings
+  in append (append (walkExprGo allow (fuel - 1) lines toks comp) retFindings) opFindings
 
 -- | 内部：遍历 op 处理器各 alt 的体。
-walkHandleAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
-walkHandleAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
+walkHandleAlts : Bool -> Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkHandleAlts allow fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case alts of
   [] => []
   (Pair _ body) :: rest =>
-    append (walkExpr (fuel - 1) lines toks body) (walkHandleAlts (fuel - 1) lines toks rest)
+    append (walkExprGo allow (fuel - 1) lines toks body)
+      (walkHandleAlts allow (fuel - 1) lines toks rest)
 
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> List String -> List PTok -> Expr -> List Finding
-walkExpr fuel lines toks e = if fuel <= 0 then lintFuelExhausted "traversal"
+walkExpr fuel lines toks e = walkExprGo True fuel lines toks e
+
+walkExprGo : Bool -> Int -> List String -> List PTok -> Expr -> List Finding
+walkExprGo allow fuel lines toks e = if fuel <= 0 then lintFuelExhausted "traversal"
 else case e of
-  EVar name sp => []
+  EVar name sp => if allow && name == "Nil" then nilFinding lines toks e else []
   EInt n sp => []
   EStr s sp => []
   EFloat raw sp => []
-  ELam ps body sp => walkExpr (fuel - 1) lines toks body
+  ELam ps body sp => walkExprGo allow (fuel - 1) lines toks body
   -- `handle` 标记的载荷是 parser 合成的 λ + case；合成 case
   -- 不能当 dispatch-lift 的 lane 来源，否则会给出改写子句头的错误建议。只遍历用户写的
   -- comp、return 体和各 op 子句体。
   EApp fn args sp => case handlePartsOf (EApp fn args sp) of
-    Just (Pair comp (Pair ret opH)) => walkHandlePayload (fuel - 1) lines toks comp ret opH
-    Nothing => append (walkExpr (fuel - 1) lines toks fn) (walkExprs (fuel - 1) lines toks args)
+    Just (Pair comp (Pair ret opH)) => walkHandlePayload allow (fuel - 1) lines toks comp ret opH
+    Nothing =>
+      if allow then walkAppList allow (fuel - 1) lines toks e
+      else append (walkExprGo allow (fuel - 1) lines toks fn)
+        (walkExprs allow (fuel - 1) lines toks args)
   EPi name implicit _ dom cod sp =>
-    append (walkExpr (fuel - 1) lines toks dom) (walkExpr (fuel - 1) lines toks cod)
+    append (walkExprGo allow (fuel - 1) lines toks dom) (walkExprGo allow (fuel - 1) lines toks cod)
   ELet binds body recFlag sp =>
-    append (walkBinds (fuel - 1) lines toks binds) (walkExpr (fuel - 1) lines toks body)
-  ELocalFun clauses sp => walkLocalClauses (fuel - 1) lines toks clauses
+    append (walkBinds allow (fuel - 1) lines toks binds)
+      (walkExprGo allow (fuel - 1) lines toks body)
+  ELocalFun clauses sp => walkLocalClauses allow (fuel - 1) lines toks clauses
   ECase scrut alts sp =>
-    append (walkExpr (fuel - 1) lines toks scrut) (walkAlts (fuel - 1) lines toks alts)
+    append (walkExprGo allow (fuel - 1) lines toks scrut)
+      (walkAlts allow (fuel - 1) lines toks alts)
   EIf cond yes no sp =>
-    append (constantIfFindings lines toks e) (walkIf (fuel - 1) lines toks e cond yes no)
-  EField base f sp => walkExpr (fuel - 1) lines toks base
-  ERecord rname fields sp => walkFields (fuel - 1) lines toks fields
+    append (constantIfFindings lines toks e) (walkIf allow (fuel - 1) lines toks e cond yes no)
+  EField base f sp => walkExprGo allow (fuel - 1) lines toks base
+  ERecord rname fields sp => walkFields allow (fuel - 1) lines toks fields
   ERecUpdate base fields sp =>
-    append (walkExpr (fuel - 1) lines toks base) (walkFields (fuel - 1) lines toks fields)
-  EDo stmts sp => walkStmts (fuel - 1) lines toks stmts
+    append (walkExprGo allow (fuel - 1) lines toks base)
+      (walkFields allow (fuel - 1) lines toks fields)
+  EDo stmts sp => walkStmts allow (fuel - 1) lines toks stmts
   EAnn value ty sp =>
-    append (walkExpr (fuel - 1) lines toks value) (walkExpr (fuel - 1) lines toks ty)
+    append (walkExprGo allow (fuel - 1) lines toks value)
+      (walkExprGo allow (fuel - 1) lines toks ty)
   -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
-  EInfix op l r sp => append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
-  EParen inner sp => walkExpr (fuel - 1) lines toks inner
+  EInfix op l r sp =>
+    append (walkExprGo allow (fuel - 1) lines toks l) (walkExprGo allow (fuel - 1) lines toks r)
+  EParen inner sp => walkExprGo allow (fuel - 1) lines toks inner
   -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
   EBacktick nm l r sp =>
-    append (walkExpr (fuel - 1) lines toks l) (walkExpr (fuel - 1) lines toks r)
+    append (walkExprGo allow (fuel - 1) lines toks l) (walkExprGo allow (fuel - 1) lines toks r)
   ESectOp op sp => []
-  ESectL op rhs sp => walkExpr (fuel - 1) lines toks rhs
-  ESectR lhs op sp => walkExpr (fuel - 1) lines toks lhs
+  ESectL op rhs sp => walkExprGo allow (fuel - 1) lines toks rhs
+  ESectR lhs op sp => walkExprGo allow (fuel - 1) lines toks lhs
   -- 模板字面量：洞内表达式同样参与规则遍历。
-  EInterp multi parts sp => walkInterpParts (fuel - 1) lines toks parts
+  EInterp multi parts sp => walkInterpParts allow (fuel - 1) lines toks parts
+
+-- | 内部：应用位置的 list-literal 检查；闭合链只产出一次并继续遍历元素。
+walkAppList : Bool -> Int -> List String -> List PTok -> Expr -> List Finding
+walkAppList allow fuel lines toks e = case consHeadOf e of
+  Just (Pair h t) => case consElems fuel e of
+    Just elems => append (consFindings lines toks e elems) (walkExprs allow fuel lines toks elems)
+    Nothing => append (walkExprGo allow fuel lines toks h) (walkExprGo allow fuel lines toks t)
+  Nothing => case e of
+    EApp fn args sp =>
+      append (walkExprGo allow fuel lines toks fn) (walkExprs allow fuel lines toks args)
+    _ => []
 
 -- | 内部：遍历模板字面量各段里的洞表达式。
-walkInterpParts : Int -> List String -> List PTok -> List InterpPart -> List Finding
-walkInterpParts fuel lines toks parts = if fuel <= 0 then lintFuelExhausted "traversal"
+walkInterpParts : Bool -> Int -> List String -> List PTok -> List InterpPart -> List Finding
+walkInterpParts allow fuel lines toks parts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case parts of
   [] => []
-  (IPText s) :: rest => walkInterpParts (fuel - 1) lines toks rest
+  (IPText s) :: rest => walkInterpParts allow (fuel - 1) lines toks rest
   (IPHole e) :: rest =>
-    append (walkExpr (fuel - 1) lines toks e) (walkInterpParts (fuel - 1) lines toks rest)
+    append (walkExprGo False (fuel - 1) lines toks e)
+      (walkInterpParts allow (fuel - 1) lines toks rest)
 
 -- | 内部：处理 if：可识别的字面量链走 case 回退 finding，否则照常遍历条件与两个分支。
-walkIf : Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
-walkIf fuel lines toks e cond yes no = if fuel <= 0 then lintFuelExhausted "traversal"
+walkIf : Bool -> Int -> List String -> List PTok -> Expr -> Expr -> Expr -> Expr -> List Finding
+walkIf allow fuel lines toks e cond yes no = if fuel <= 0 then lintFuelExhausted "traversal"
 else case chainOf lines toks e of
   Nothing =>
-    append (walkExpr (fuel - 1) lines toks cond)
-      (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
+    append (walkExprGo allow (fuel - 1) lines toks cond)
+      (append (walkExprGo allow (fuel - 1) lines toks yes) (walkExprGo allow (fuel - 1) lines toks no))
   Just (ChainRes name items defPat defText defExpr) =>
-    if not (atLeastTwo items) then append (walkExpr (fuel - 1) lines toks cond)
-      (append (walkExpr (fuel - 1) lines toks yes) (walkExpr (fuel - 1) lines toks no))
+    if not (atLeastTwo items) then append (walkExprGo allow (fuel - 1) lines toks cond)
+      (append (walkExprGo allow (fuel - 1) lines toks yes) (walkExprGo allow (fuel - 1) lines toks no))
     else append (chainFindings lines toks (exprSpan e) name items defPat defText defExpr)
-      (append (walkChainItems (fuel - 1) lines toks items) (walkExpr (fuel - 1) lines toks defExpr))
+      (append (walkChainItems allow (fuel - 1) lines toks items) (walkExprGo allow (fuel - 1) lines toks defExpr))
 
 -- | 内部：遍历一组表达式。
-walkExprs : Int -> List String -> List PTok -> List Expr -> List Finding
-walkExprs fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "traversal"
+walkExprs : Bool -> Int -> List String -> List PTok -> List Expr -> List Finding
+walkExprs allow fuel lines toks exprs = if fuel <= 0 then lintFuelExhausted "traversal"
 else case exprs of
   [] => []
-  e :: rest => append (walkExpr (fuel - 1) lines toks e) (walkExprs (fuel - 1) lines toks rest)
+  e :: rest =>
+    append (walkExprGo allow (fuel - 1) lines toks e) (walkExprs allow (fuel - 1) lines toks rest)
 
 -- | 内部：遍历 record 字段值。
-walkFields : Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
-walkFields fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "traversal"
+walkFields : Bool -> Int -> List String -> List PTok -> List (Pair String Expr) -> List Finding
+walkFields allow fuel lines toks fields = if fuel <= 0 then lintFuelExhausted "traversal"
 else case fields of
   [] => []
   (Pair f e) :: rest =>
-    append (walkExpr (fuel - 1) lines toks e) (walkFields (fuel - 1) lines toks rest)
+    append (walkExprGo allow (fuel - 1) lines toks e) (walkFields allow (fuel - 1) lines toks rest)
 
 -- | 内部：遍历 let 绑定右值。
-walkBinds : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
-walkBinds fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "traversal"
+walkBinds : Bool -> Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkBinds allow fuel lines toks binds = if fuel <= 0 then lintFuelExhausted "traversal"
 else case binds of
   [] => []
   (Pair pat e) :: rest =>
-    append (walkExpr (fuel - 1) lines toks e) (walkBinds (fuel - 1) lines toks rest)
+    append (walkExprGo allow (fuel - 1) lines toks e) (walkBinds allow (fuel - 1) lines toks rest)
 
 -- | 内部：逐个 alt 体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
-walkAlts : Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
-walkAlts fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
+walkAlts : Bool -> Int -> List String -> List PTok -> List (Pair Pat Expr) -> List Finding
+walkAlts allow fuel lines toks alts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case alts of
   [] => []
   (Pair pat body) :: rest =>
     let
       lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
     in append (scanBodyPos (fuel - 1) lines toks (Just lane) body)
-      (walkAlts (fuel - 1) lines toks rest)
+      (walkAlts allow (fuel - 1) lines toks rest)
 
 -- | 内部：遍历局部函数 clause 体（不提供 lane，因此不做 clause 级提升）。
-walkLocalClauses : Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
-walkLocalClauses fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "traversal"
+walkLocalClauses : Bool -> Int -> List String -> List PTok -> List (Pair (List Pat) Expr) -> List Finding
+walkLocalClauses allow fuel lines toks clauses = if fuel <= 0 then lintFuelExhausted "traversal"
 else case clauses of
   [] => []
   (Pair pats body) :: rest =>
-    append (walkExpr (fuel - 1) lines toks body) (walkLocalClauses (fuel - 1) lines toks rest)
+    append (walkExprGo allow (fuel - 1) lines toks body)
+      (walkLocalClauses allow (fuel - 1) lines toks rest)
 
 -- | 内部：遍历 do 语句列表。
-walkStmts : Int -> List String -> List PTok -> List DoStmt -> List Finding
-walkStmts fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "traversal"
+walkStmts : Bool -> Int -> List String -> List PTok -> List DoStmt -> List Finding
+walkStmts allow fuel lines toks stmts = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmts of
   [] => []
   stmt :: rest =>
-    append (walkStmt (fuel - 1) lines toks stmt) (walkStmts (fuel - 1) lines toks rest)
+    append (walkStmt allow (fuel - 1) lines toks stmt) (walkStmts allow (fuel - 1) lines toks rest)
 
 -- | 内部：遍历单条 do 语句的表达式。
-walkStmt : Int -> List String -> List PTok -> DoStmt -> List Finding
-walkStmt fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "traversal"
+walkStmt : Bool -> Int -> List String -> List PTok -> DoStmt -> List Finding
+walkStmt allow fuel lines toks stmt = if fuel <= 0 then lintFuelExhausted "traversal"
 else case stmt of
-  DBind pat e sp => walkExpr (fuel - 1) lines toks e
-  DExpr e sp => walkExpr (fuel - 1) lines toks e
+  DBind pat e sp => walkExprGo allow (fuel - 1) lines toks e
+  DExpr e sp => walkExprGo allow (fuel - 1) lines toks e
 
 -- ---------------------------------------------------------------
 -- 规则 4：list-literal（闭合 cons 链 / 裸 Nil → 列表字面量）
@@ -1718,8 +1744,7 @@ scanMethodDecls : List String -> List PTok -> List Decl -> List Finding
 scanMethodDecls lines toks [] = []
 scanMethodDecls lines toks (d :: rest) = case d of
   DFun name pats body sp =>
-    append (walkListLiteral lintFuel lines toks body)
-      (append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest))
+    append (walkExpr lintFuel lines toks body) (scanMethodDecls lines toks rest)
   DSig name ctx ty sp =>
     append (walkListLiteralExprs lintFuel lines toks ctx)
       (append (walkListLiteral lintFuel lines toks ty) (scanMethodDecls lines toks rest))
@@ -1754,7 +1779,6 @@ traitParamKinds ((TraitParam name kind) :: rest) = case kind of
 declFindings : List String -> List PTok -> List Decl -> Decl -> List Decl -> List Finding
 declFindings lines toks allDecls (DFun name pats body sp) rest =
   let
-    listFindings = walkListLiteral lintFuel lines toks body
     lifted = if hasImplicitSig name allDecls then []
     else
       let
@@ -1763,7 +1787,7 @@ declFindings lines toks allDecls (DFun name pats body sp) rest =
         lane = LClause (spanStartLine sp) pats lastForName singleClause
       in append (caseToClauses lines toks (spanStartLine sp) name pats body singleClause)
         (scanBodyPos lintFuel lines toks (Just lane) body)
-  in append listFindings lifted
+  in lifted
 declFindings lines toks allDecls (DSig name ctx ty sp) rest =
   append (walkListLiteralExprs lintFuel lines toks ctx) (walkListLiteral lintFuel lines toks ty)
 declFindings lines toks allDecls (DAxiom name ty sp) rest = walkListLiteral lintFuel lines toks ty
