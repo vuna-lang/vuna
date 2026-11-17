@@ -1999,23 +1999,30 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
           let
             tailF = forceVal ec tailV
           in if hasUnsolvedMetaValue (ecSolsP ec) tailF then Nothing
-          else case effRowOfValue (forceVal ec actual) of
+          else case effRowAndResult (forceVal ec actual) of
             -- 期望的尾行必须已经具体：尾行是未解元变量时不做 lift——否则 conv 会把它解成
             -- 「实际行」，把真正的行不匹配（如 handler 实例名 `Fs "mock"` vs 程序 `Fs
             -- "real"`）伪装成合法 lift，错误被推迟到入口才暴露（dt_err/78 回归）。
             Nothing => Nothing
-            Just actualRow => if rowSubValue ec 64 actualRow (firstOf p) then Just (Pair term ec)
-            else if isNilRowValue ec actualRow then case globalsLookup "Base.Eff.raise" globals ec of
-              -- 行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
-              Nothing => Nothing
-              Just _ =>
-                Just
-                  (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec)
-            else case convEc ec d actualRow tailF of
+            Just actualP => case convEc ec d (secondOf p) (secondOf actualP) of
+              -- 行 lift 只改行；结果类型对不上时不是 lift 场景。先比结果类型，
+              -- 否则行元变量会被解成期望尾行，真正的结果类型错误被行目标错误掩盖。
               ErrC _ => Nothing
-              OkC ec2 =>
-                Just
-                  (Pair (TApp (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d nV) Rig0) (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
+              OkC ecR =>
+                let
+                  actualRow = firstOf actualP
+                in if rowSubValue ecR 64 actualRow (firstOf p) then Just (Pair term ecR)
+                else if isNilRowValue ecR actualRow then case globalsLookup "Base.Eff.raise" globals ecR of
+                  -- 行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
+                  Nothing => Nothing
+                  Just _ =>
+                    Just
+                      (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ecR)
+                else case convEc ecR d actualRow tailF of
+                  ErrC _ => Nothing
+                  OkC ec2 =>
+                    Just
+                      (Pair (TApp (TApp (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d nV) Rig0) (quote d eV) Rig0) (quote d tailF) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ec2)
 
 export checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
 checkByInferFuel fuel globals ctx ec expr expected = if fuel <= 0 then icFuel "inference"
