@@ -18863,7 +18863,7 @@ async function lintDocument(document, quiet) {
   if (lintInFlight.has(key)) return;
   lintInFlight.add(key);
   try {
-    const result = await runVuna(["lint", document.uri.fsPath], { timeoutMs: DEFAULT_TIMEOUT_MS });
+    const result = await runVuna(["lint", "--format", "json", document.uri.fsPath], { timeoutMs: DEFAULT_TIMEOUT_MS });
     publishLintDiagnostics(document, result);
     if (!quiet) {
       outputChannel?.show(true);
@@ -18904,7 +18904,36 @@ ${result.stderr}`);
   }
   lintDiagnostics?.set(document.uri, diagnostics);
 }
+function parseLintJson(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return void 0;
+  try {
+    const doc = JSON.parse(text.slice(start));
+    if (!Array.isArray(doc.findings)) return void 0;
+    return doc.findings.flatMap((raw) => {
+      if (typeof raw !== "object" || raw === null) return [];
+      const f = raw;
+      if (typeof f.path !== "string" || typeof f.line !== "number" || typeof f.message !== "string") {
+        return [];
+      }
+      return [{
+        file: f.path,
+        line: f.line,
+        column: typeof f.column === "number" ? f.column : 1,
+        endLine: typeof f.endLine === "number" ? f.endLine : void 0,
+        endColumn: typeof f.endColumn === "number" ? f.endColumn : void 0,
+        message: f.message,
+        code: typeof f.code === "string" ? f.code : void 0,
+        severity: typeof f.severity === "string" ? f.severity : void 0
+      }];
+    });
+  } catch {
+    return void 0;
+  }
+}
 function parseLintOutput(text) {
+  const jsonFindings = parseLintJson(text);
+  if (jsonFindings) return jsonFindings;
   const findings = [];
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
@@ -18932,16 +18961,17 @@ function toDiagnostic(document, finding) {
   const lineIndex = Math.max(0, Math.min(document.lineCount - 1, finding.line - 1));
   const line = document.lineAt(lineIndex);
   const startCharacter = Math.max(0, Math.min(line.text.length, finding.column - 1));
-  const range = new vscode.Range(
+  const endLineIndex = Math.max(
     lineIndex,
-    startCharacter,
-    lineIndex,
-    Math.max(startCharacter, line.text.length)
+    Math.min(document.lineCount - 1, (finding.endLine ?? finding.line) - 1)
   );
+  const endLine = document.lineAt(endLineIndex);
+  const endCharacter = endLineIndex === lineIndex ? Math.max(startCharacter, Math.min(endLine.text.length, (finding.endColumn ?? finding.column + 1) - 1)) : Math.max(0, Math.min(endLine.text.length, (finding.endColumn ?? 1) - 1));
+  const range = new vscode.Range(lineIndex, startCharacter, endLineIndex, endCharacter);
   const diagnostic = new vscode.Diagnostic(
     range,
     finding.message,
-    vscode.DiagnosticSeverity.Warning
+    finding.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
   );
   diagnostic.source = LINT_SOURCE;
   if (finding.code) diagnostic.code = finding.code;
