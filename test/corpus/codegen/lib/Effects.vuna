@@ -6,13 +6,14 @@ module Effects where
 import Base.EffConsole
 import Base.Monad
 import Base.Eff
+import Base.Nat
 
 export program : Eff [ConsoleOp] Int
 program = do
   _ <- consolePrint "codegen"
   pure 0
 
-export probe : Eff [ConsoleOp] Int
+export probe : Eff [ConsoleOp] Nat
 probe = consolePrint "codegen"
 
 export marker : Int

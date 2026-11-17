@@ -10,41 +10,41 @@ import Base.Eff
 import Base.List
 import Base.Nat
 
-readProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] String
+readProbe : Eff [FsOp] String
 readProbe = fsReadFile "x"
 
-writeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Nat
+writeProbe : Eff [FsOp] Nat
 writeProbe = fsWriteFile "x" "y"
 
-lineProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe String)
+lineProbe : Eff [StdinOp] (Maybe String)
 lineProbe = stdinReadLine
 
-dirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (List String)
+dirProbe : Eff [FsOp] (List String)
 dirProbe = fsReadDir "."
 
-isDirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Bool
+isDirProbe : Eff [FsOp] Bool
 isDirProbe = fsIsDirectory "."
 
-makeDirProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
+makeDirProbe : Eff [FsOp] Int
 makeDirProbe = fsMakeDir "x"
 
-removeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
+removeProbe : Eff [FsOp] Int
 removeProbe = fsRemoveFile "x"
 
-existsProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Bool
+existsProbe : Eff [FsOp] Bool
 existsProbe = fsFileExists "x"
 
-mtimeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe Int)
+mtimeProbe : Eff [FsOp] (Maybe Int)
 mtimeProbe = fsFileMtime "x"
 
-sizeProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (Maybe Nat)
+sizeProbe : Eff [FsOp] (Maybe Nat)
 sizeProbe = fsFileSize "x"
 
-argsProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] (List String)
+argsProbe : Eff [ArgsOp] (List String)
 argsProbe = argsGetArgs
 
-exitProbe : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
+exitProbe : Eff [ExitOp] Int
 exitProbe = exitWith 0
 
-main : Eff [FsOp, ExitOp, StdinOp, ArgsOp] Int
+main : Eff [] Int
 main = pure 0
