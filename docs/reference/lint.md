@@ -43,6 +43,7 @@ exclude = ["test/**", "examples/**"]
 literal-if-chain = "error"      # off | warn | error
 dispatch-lift = "error"
 list-literal = "error"
+todo-marker = "off"              # 默认关闭；strict 预设可开
 ```
 
 配置从文件所在目录向上收集 manifest：外层（workspace 根）先应用，内层覆盖；命令行
@@ -127,6 +128,7 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_LiteralIfChain` | `literal-if-chain` | 是 | if dispatch（`x == lit` 链 / Bool 变量）在可提升位置；字面量链提升失败时改写为 case |
 | `LN_DispatchLift` | `dispatch-lift` | 是 | case / let dispatch 在可提升位置（单 alt 替换、多 alt 拆 clause / alt） |
 | `LN_ListLiteral` | `list-literal` | 是 | 表达式/类型位置的闭合 cons 链（`::` / `Cons` + `[]` / `Nil`）与裸 `Nil`；**模式匹配不动** |
+| `LN_TodoMarker` | `todo-marker` | 否 | 注释里的 `TODO` / `FIXME` / `XXX`；默认关闭，`--select` / strict/all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
 渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` 是独立的表达式遍历
