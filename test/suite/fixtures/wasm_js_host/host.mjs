@@ -8,6 +8,7 @@
 //   stat(abs) -> { isDirectory(): Bool, size: Int }   失败抛带 `code` 的错误
 //   mkdir / rmdir / unlink / rename(a, b) / truncate(abs) / createEmpty(abs)
 //   readFile(abs) -> Uint8Array
+//   writeFile(abs, bytes)
 //   listDir(abs) -> Array<{ name: String, type: 3|4 }>
 //
 // 用法：
@@ -137,15 +138,35 @@ export function createHost({ rootDir, env = {}, args = [], fs, sink }) {
     }
   };
 
+  // | 写进打开的文件：容量不足时按需翻倍，`pos` 前进，`size` 取最大值。
+  const writeInto = (entry, ptr, len) => {
+    const need = entry.pos + len;
+    if (need > entry.data.length) {
+      let cap = entry.data.length === 0 ? 64 : entry.data.length;
+      while (cap < need) cap *= 2;
+      const grown = new Uint8Array(cap);
+      grown.set(entry.data.subarray(0, entry.size));
+      entry.data = grown;
+    }
+    entry.data.set(readBytes(ptr, len), entry.pos);
+    entry.pos = need;
+    if (need > entry.size) entry.size = need;
+    entry.dirty = true;
+  };
+
   const imports = {
     wasi_snapshot_preview1: {
       fd_write: (fd, iovsPtr, iovsLen, nwrittenPtr) => {
+        const entry = fd === 1 || fd === 2 ? null : open.get(fd);
+        if (entry === undefined) return ERRNO.BADF;
+        if (entry !== null && entry.kind === "dir") return ERRNO.ISDIR;
         let total = 0;
         for (let i = 0; i < iovsLen; i++) {
           const ptr = view().getUint32(iovsPtr + i * 8, true);
           const len = view().getUint32(iovsPtr + i * 8 + 4, true);
           if (len === 0) continue;
-          sink(fd, readBytes(ptr, len));
+          if (entry === null) sink(fd, readBytes(ptr, len));
+          else writeInto(entry, ptr, len);
           total += len;
         }
         view().setUint32(nwrittenPtr, total, true);
@@ -177,7 +198,17 @@ export function createHost({ rootDir, env = {}, args = [], fs, sink }) {
       },
       fd_close: (fd) => {
         if (fd === 0 || fd === 1 || fd === 2) return ERRNO.SUCCESS;
-        return open.delete(fd) ? ERRNO.SUCCESS : ERRNO.BADF;
+        const entry = open.get(fd);
+        if (entry === undefined) return ERRNO.BADF;
+        if (entry.kind === "file" && entry.dirty) {
+          try {
+            fs.writeFile(entry.absPath, entry.data.subarray(0, entry.size));
+          } catch (e) {
+            return errnoOf(e);
+          }
+        }
+        open.delete(fd);
+        return ERRNO.SUCCESS;
       },
       path_open: (dirfd, _dirflags, pathPtr, pathLen, oflags, _rightsBase, _rightsInh, _fdflags, openedPtr) => {
         const r = resolve(dirfd, pathPtr, pathLen);

@@ -969,7 +969,7 @@ verdictKeyOf env c source expected = do
     expHash = strOfInt (absHash (hashTextStrong (join "|" expTexts)))
     input =
       join "|"
-        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, c.caseMatrix, join "," targets, strOfInt fp, strOfInt env.envBaseHash]
+        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, c.caseMatrix, join "," targets, env.envWasmHost, strOfInt fp, strOfInt env.envBaseHash]
   in pure (strOfInt (absHash (hashTextStrong input)))
 
 -- ---------------------------------------------------------------

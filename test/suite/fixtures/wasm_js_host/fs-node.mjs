@@ -35,6 +35,7 @@ export function createNodeFs() {
     truncate: wired((abs) => fs.truncateSync(abs, 0)),
     createEmpty: wired((abs) => fs.writeFileSync(abs, new Uint8Array(0))),
     readFile: (abs) => new Uint8Array(fs.readFileSync(abs)),
+    writeFile: wired((abs, bytes) => fs.writeFileSync(abs, bytes)),
     listDir: wired(listDir),
   };
 }
