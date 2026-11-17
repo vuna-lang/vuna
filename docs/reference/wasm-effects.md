@@ -80,7 +80,7 @@ comp thunk 是 `EffUnit -> a` 的闭包；运行期闭包 code 的类型是 `$ft
   这样两臂各自的 lambda 不会撞同一个 `$lamN`，`ref.func` 不会指向另一臂的函数体
   （细节见 [wasm.md](wasm.md) §6）。
 - **测试**：效果夹具 `35_eff_*`–`48_eff_*` 与分支闭包夹具 `49_if_branch_closures` /
-  `50_nat_branch_closures`（各 `11110`）都由 `109_backend_parity` 对拍三端；
+  `50_nat_branch_closures`（各 `11110`）都由 suite `pure-cross` 分类对拍三端；
   `106` 保留 stack-switching 工具链探针。所有 wasm 运行统一带
   `-W stack-switching=y -W gc=y -W function-references=y`。
 

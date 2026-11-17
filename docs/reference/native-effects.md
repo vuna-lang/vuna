@@ -223,7 +223,7 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
 | 命名效应模块 | 12 个（`base/lib/Base/Eff*.vuna` + `Eff/Reader.vuna`）：标签是 op 族应用 |
 | `Eff [` 闭行 | `base/lib` 与 `test` 的行字面量写成 `Named n <Op> :: …` / `[<Op>@name]` |
 | `rowRem`/`Member (` | `base/lib` 约 50 处按行条目（`Named n <Op>` 或裸标签）写 |
-| 测试夹具 | `dt_base/11–45,74–82`、`dt_io/01–07`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
+| 测试夹具 | `dt_base/11–45,74–82`、`corpus/effect/*`、`corpus/pure_cross/07_eff_main`、`dt_err/70–109`、`packages/01–04`、`stdlib/03,09,10`、`run/16–17`、`traits/pending/31`；`run_err/04` 的 key 文案 |
 | 文档 | `effects.md`、`effects-layers.md`、`stdlib.md`、`language.md`、`type-system.md`、`debt.md`、本文 |
 
 ## 8. 测试与验收
@@ -395,5 +395,5 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
   （[debt.md](debt.md) D89）。
 
 wasm 后端用 stack switching 实现了 handler（见 [wasm-effects.md](wasm-effects.md)）；
-效应语义的三端对拍在 `109_backend_parity.steps`（`38_eff_*`–`47_eff_*`），native 的
+效应语义的三端对拍在 suite `pure-cross` 分类（`test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的
 机制用例在 `105_native_backend.steps`。

@@ -184,8 +184,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   （`resumeArm` 只把作用域回到条件后的基线）。`gsNextLam` 与函数表单调累加，
   `mergeArmState` 按名字取并集。若两臂都从条件后的状态起步，两臂各自的 lambda 会拿到
   同一个 `$lamN`，后一臂的闭包函数在按名去重时被丢掉，else 臂的 `ref.func` 便指向 then
-  臂的函数体。回归夹具：`test/suite/steps/parity/49_if_branch_closures.vuna`
-  （期望 `11110`），由 `109_backend_parity` 对拍三端。
+  臂的函数体。回归夹具：`test/corpus/pure_cross/49_if_branch_closures.vuna`
+  （期望 `11110`），由 suite 的 `pure-cross` 分类对拍三端。
 - 闭包函数先插到 `gsFuncs` 头部、装配时 reverse；elem 名字同样 reverse 后追加固定的
   `$rt_effThunk` / `$rt_effResumeClo`。`$lam<n>` 只由生成顺序决定且不复用，所以生成顺序
   必须固定，WAT 才能逐字节确定。
@@ -201,8 +201,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   文件锁住：`path_symlink` 不出现在 import、symlink/sleep 运行期 trap、mtime 得
   `Nothing`、cwd 恒 `/`、stdin 能力告警。
 - 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
-  `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
-  新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。生成器的两臂顺序约束由
+  suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
+  新增共享能力先加 `test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
 - wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
   `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖

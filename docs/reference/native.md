@@ -324,9 +324,9 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
-  `test/suite/steps/109_backend_parity.steps` 对拍三端，OCaml 是语义 oracle。
+  suite 的 `pure-cross` 分类（`test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）
-  已并入 `test/suite/steps/109_backend_parity.steps` 的三端对拍。
+  已并入 suite `pure-cross` 分类的三端对拍。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
   `ocamlTools`（gcc/binutils）。
 

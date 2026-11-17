@@ -20,6 +20,9 @@ vuna test --suite test/suite.toml --only 34       # 纯数字按 section 精确�
 vuna test --suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
 vuna test --suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
 vuna test --suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
+vuna test --suite test/suite.toml --backend wasm   # 只跑 matrix 允许 wasm 的 case
+vuna test --suite test/suite.toml --matrix pure-cross        # 只跑三端差分精选集
+vuna test --suite test/suite.toml --filter layer:effect      # 按层次 tag 筛选
 vuna test --suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
 vuna test --suite test/suite.toml --json          # 机器可读汇总
 ```
@@ -53,6 +56,34 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 负例只用结构化返回值（见下节「进程内断言」），不比对诊断文本：`warning` 由
 `.diag.json` 里 `severity = "warning"` 的条目表达；「warning 让退出码变 1」是
 `--deny-warnings` 的 CLI 语义，由 steps 覆盖，fixture 不表达。
+
+### 后端矩阵分层
+
+三个后端的能力面不同，suite 用 family 的 `matrix` 键（steps 用 `# matrix:` 头）把用例分成
+两层六类；分类决定该 case 参与哪些目标，而不是靠注释约定：
+
+| matrix | 层 | 执行目标 | 内容 |
+| --- | --- | --- | --- |
+| `tool`（缺省） | 前端 / 工具 | ocaml | lint / fix / type_* / term / 诊断；不产生目标代码 |
+| `pure` | L1 纯 | ocaml（全量门禁） | 纯函数与纯代数效应 |
+| `pure-cross` | L1 纯 | ocaml + wasm + native | 三端差分精选集 |
+| `effect-common` | L2 副作用 | ocaml + wasm + native | Console / IORef / getenv / getArgs / exit / 经标签的相对路径 FS |
+| `effect-native` | L2 副作用 | ocaml + native | process / sleep / mtime / 真实 cwd |
+| `effect-wasm` | L2 副作用 | ocaml + wasm | preopen 根、cwd=`/`、execPath=`""`、mtime=`Nothing` |
+| `effect-ocaml` | L2 副作用 | ocaml | stdin / raw net（另两端没有宿主实现） |
+
+- 取值在 `[family.<name>]` 的 `matrix` 键；steps 用任意位置的 `# matrix: <分类>` 覆盖 family
+  默认。未知取值是配置错误（`matrix must be tool/pure/...`）。
+- `--backend ocaml|wasm|native|all` 选执行目标：只保留 `matrixTargets` 允许该目标的 case；
+  未选中是**排除**，不是 skip（不影响 `--strict-skips`）。
+- `--matrix <分类>` 精确筛选，`--filter layer:pure|effect` 按层次筛选；每个 case 自动带
+  `layer:<层次>` 与 `matrix:<分类>` 两个 tag。
+- 跨后端 golden：夹具写进 case 私有包目录（`app/Main.vuna` + 指向 base 的 `vuna.toml`），
+  对每个目标 `build --target` 后执行；wasm 走 `wasmtime ... --dir <case-dir>`（WASI
+  preopen），native 直接跑静态产物，三者都以 case 私有目录为 cwd，FS 用例不污染源码树。
+- 期望文件按目标覆盖：`<base>.<backend>.out` 优先，否则共享 `<base>.out`——共享期望即三端
+  差分。没有 `--backend` 时只跑 ocaml；`effect-*` 分类即使只跑 ocaml 也走私有包目录。
+- 机制断言（trap 文本、WAT / ELF 形状、import 缺失、ABI）留在 steps 的单后端用例，不进差分。
 
 ### 声明式步进用例（`*.steps`）
 
@@ -152,7 +183,7 @@ end:
 
 ### suite 的组成
 
-- 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_io/dt_compiler 与 run/modules/
+- 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_compiler、pure_cross 与 effect/*、run/modules/
   records/traits/monad/stdlib/lint/fix/term 等）。`dt_compiler` 是编译器包 API 的函数级夹具
   （mock handler + `runPure`，不碰真实文件系统），只跑 run。
 - 工具链/包/REPL/LSP/net/缓存/iface 段是 `test/suite/steps/*.steps` 声明式用例。
@@ -222,7 +253,7 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 - `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
   否则注入一个失败 case。`--audit` 另有全 corpus 的宽松报告（steps 文件里
   提到目录名就算认领），两者互不替代。
-- `audit/min-cases`：`[suite] min_cases = 760` 是 case 总数下限。整族从 `suite.toml`
+- `audit/min-cases`：`[suite] min_cases = 870` 是 case 总数下限。整族从 `suite.toml`
   消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
   新增夹具无需调整；批量删除夹具时同步下调。
 
@@ -396,17 +427,16 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   编译并跑出结果（用例 `103_ir_lowering.steps`）；
   `104_ir_runtime_contract.steps` 钉住 IR 运行时符号到 OCaml 文本的代表性映射
   （入口展示 / 裸符号 / 内联 / `++` 展平 / List 桥接 / 动作 thunk）。
-  `109_backend_parity.steps` 是三端**共享语义**的唯一来源：`suite/steps/parity/*.vuna`
-  每份程序配一个 `.out`，同一次运行对拍 OCaml / wasm / native 的输出；新增共享能力先加
-  夹具，再实现两个后端（一侧缺失即失败）。`38_eff_*`–`47_eff_*` 覆盖 resume / abort /
-  嵌套 handler / return 改类型 / 宿主 console / 深递归；wasm 侧需要
-  `-W stack-switching=y`。`105_native_backend.steps` 只保留 native 机制
+  `corpus/pure_cross/`（family `pure-cross`）是三端**共享语义**的唯一来源：每份程序配一个
+  `.out`，`--backend all` 时对拍 OCaml / wasm / native 的输出；新增共享能力先加夹具，再
+  实现两个后端（一侧缺失即失败）。`35_eff_*`–`50_eff_*` 覆盖 resume / abort / 嵌套
+  handler / return 改类型 / 宿主 console / 深递归；wasm 侧需要 `-W stack-switching=y`。`105_native_backend.steps` 只保留 native 机制
   （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
   行宽、trap、拒绝面、`--target` 校验、stack-switching 探针与 2000 次 perform）；
   wasm 不自举（浏览器能力矩阵见 [wasm.md](wasm.md) §8）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
-  等）。`corpus/dt_base/`、`corpus/dt_io/`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
+  等）。`corpus/dt_base/`、`corpus/pure_cross/`、`corpus/effect/*`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；
 - `corpus/term/` / `corpus/term_err/`：终止性正反例（HOF / where / 互递归 / SCT / fuel），
   第 37 段；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查 TC/CG/LN/FX
@@ -420,17 +450,20 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **23 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 20 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **25 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 22 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
 `vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
-`vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
+`vuna-tests-native`、`vuna-tests-wasm`、`vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
+- `vuna-tests-wasm` / `vuna-tests-native`：同一份 suite 在 `--backend wasm|native` 下跑
+  `fast integration`，只覆盖 matrix 允许该目标的 case（`pure-cross` + 对应 `effect-*`）；
+  ocaml 的完整门禁仍由 `vuna-tests-gate` 承担。
 - `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
   先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
   gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；
@@ -507,7 +540,7 @@ runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 | scope | 断言 |
 | --- | --- |
 | `selfhost` | `check . --error-format json` 在整仓（workspace 根）零 error 诊断、exit 0；机器格式走进程内顺序检查，避开文本格式对成员包的 `processSpawn` |
-| `parity` | `test/suite/steps/parity/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `compile` + 宿主构建/执行，输出与 `.out` 逐字相等 |
+| `parity` | `test/corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out` 逐字相等（与 suite 的 `pure-cross` 分类同源） |
 | `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
 
 `--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`

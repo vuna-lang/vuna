@@ -84,6 +84,22 @@ runner 直接调用编译器/工具链的导出函数并断言返回值（细节
 tier 过滤：`--tier fast|integration|e2e|tools`（可重复）；`*.steps` 默认 `e2e`，
 seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 
+### 3.1 后端维度（与 tier 正交）
+
+| matrix | 层 | 目标 | 门禁 |
+| --- | --- | --- | --- |
+| `tool` | 前端/工具 | ocaml | gate |
+| `pure` | L1 纯 | ocaml（全量） | gate |
+| `pure-cross` | L1 纯 | ocaml + wasm + native | gate（ocaml）+ `vuna-tests-wasm` / `vuna-tests-native` |
+| `effect-common` | L2 | ocaml + wasm + native | 同上 |
+| `effect-native` | L2 | ocaml + native | gate + `vuna-tests-native` |
+| `effect-wasm` | L2 | ocaml + wasm | gate + `vuna-tests-wasm` |
+| `effect-ocaml` | L2 | ocaml | gate |
+
+`--backend` 与 `matrix` 只决定「在哪些目标上执行」，不改变 tier；跨后端 case 仍按
+`fast`/`integration` 归属。wasm / native 门禁只跑 `fast integration`——e2e 的
+LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
+
 调度：LPT 只用于非 e2e tier（gate：`fast integration`）——父/worker 读
 `.local/test-suite/costs.tsv`（上次每 case 的 ms），按成本降序把重 case 放到当前负载最小
 的 worker；worker 确定性重算同一组 bins，再取自己的 bin。全量（空 tier）与 e2e tier 按
@@ -110,7 +126,7 @@ seed/runtime 归 `integration`，golden/error/lint/fix/check 归 `fast`。
 
 ## 6. CI
 
-- build 阶段一次构建 vuna/seed 并预热 store；test 阶段 suite 与 18 个 check 共享只读
+- build 阶段一次构建 vuna/seed 并预热 store；test 阶段 suite 与 check 共享只读
   store + 每 check 可写 overlay。
 - 全局 token 池替代每 check 内部 `--jobs auto`；重 check 串行/分批。
 - 去掉 suite 与 Nix checks 重叠的 `check .` / fmt / package / lint 重复执行。
