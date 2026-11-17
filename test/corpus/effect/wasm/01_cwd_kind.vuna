@@ -1,0 +1,11 @@
+-- cwd 在 WASI 上是 "/"，ocaml / native 宿主返回真实路径。夹具只断言分类，
+-- 不打印机器相关的绝对路径。
+import Base.Eff
+import Base.EffEnv
+import Base.EffConsole
+
+main : Eff [EnvOp, ConsoleOp] Int
+main = do
+  cwd <- envGetCwd
+  _ <- consolePrint (if cwd == "/" then "wasm-root\n" else "host-root\n")
+  pure 0

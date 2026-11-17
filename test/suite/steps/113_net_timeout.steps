@@ -1,3 +1,4 @@
+# matrix: effect-ocaml
 # 113) net 超时与句柄失效：
 #      - `netAcceptWithin` / `netRecvWithin` 到点给 `StepTimeout`（不阻塞）；
 #        `netSendWithin` 对小载荷正常完成（`StepOk`）。

@@ -64,6 +64,10 @@ export record SuiteOpts(..) where
   suiteAudit : Bool
   -- | 可重复的 `--tier`；空 = 全部。
   suiteTiers : List String
+  -- | 可重复的 `--matrix`；空 = 全部。
+  suiteMatrices : List String
+  -- | 可重复的 `--backend`；空 = 只跑声明里的默认目标（ocaml）。
+  suiteBackends : List String
 
 -- | 一个 family：目录约定 + 各阶段的上限开关（后缀决定实际参与；family 旗标是上限，关掉即不跑，但 `.interp.out` 分支例外——它强制 interp）。
 export record Family(..) where
@@ -96,6 +100,9 @@ export record Family(..) where
   familyExclude : List String
   -- | 文件名子串白名单（非空时只收命中的文件）。
   familyInclude : List String
+  -- | 后端矩阵分类（`matrix` 键）：`tool`（缺省，不产生目标代码）/ `pure` /
+  -- `pure-cross` / `effect-common` / `effect-native` / `effect-wasm`。
+  familyMatrix : String
 
 -- | suite 全局配置与解析出的 family 列表。
 export record Suite(..) where
@@ -148,6 +155,8 @@ export record Case(..) where
   caseTimeout : Int
   -- | fast | integration | e2e | tools（用于 --tier 过滤与 CI 分层）。
   caseTier : String
+  -- | 后端矩阵分类（见 `Family.familyMatrix`）。
+  caseMatrix : String
 
 -- ---------------------------------------------------------------
 -- 路径与读盘
@@ -255,8 +264,33 @@ familyKeys =
     "tags",
     "timeout",
     "exclude",
-    "include"
+    "include",
+    "matrix"
   ]
+
+-- | 矩阵分类的合法取值（第一个是缺省值）。
+export matrixClasses : List String
+matrixClasses =
+  ["tool", "pure", "pure-cross", "effect-common", "effect-native", "effect-wasm", "effect-ocaml"]
+
+-- | 矩阵分类 → 层次标签（`pure` / `effect` / `tool`）。
+export matrixLayer : String -> String
+matrixLayer matrix =
+  if matrix == "pure" || matrix == "pure-cross" then "pure"
+  else if matrix == "effect-common" || matrix == "effect-native" || matrix == "effect-wasm" || matrix == "effect-ocaml" then "effect"
+  else "tool"
+
+-- | 矩阵分类 → 该用例要执行的目标（含 ocaml oracle；`tool` / `pure` 只在 ocaml 跑）。
+export matrixTargets : String -> List String
+matrixTargets matrix =
+  if matrix == "pure-cross" then ["ocaml", "wasm", "native"]
+  else if matrix == "effect-common" then ["ocaml", "wasm", "native"]
+  else if matrix == "effect-native" then ["ocaml", "native"]
+  else if matrix == "effect-wasm" then ["ocaml", "wasm"] else ["ocaml"]
+
+-- | 派生 tag：`layer:<层次>` 与 `matrix:<分类>`，让 `--filter` 也能按分层筛选。
+export matrixTags : String -> List String
+matrixTags matrix = ["layer:${matrixLayer matrix}", "matrix:${matrix}"]
 
 -- | 内部：校验 family 段落的键都在 `familyKeys` 里（其它段落的条目忽略）。
 checkFamilyKeys : List String -> List TomlEntry -> Check Int
@@ -278,6 +312,8 @@ record FamilyOpts where
   familyOptKind : Maybe String
   -- | `entry` 键（目录型 family 的入口文件名）。
   familyOptEntry : Maybe String
+  -- | `matrix` 键（缺省按 `tool` 处理）。
+  familyOptMatrix : Maybe String
 
 -- | family 的各阶段旗标、tag 与超时的原始取值（`Nothing` = 未配置）。
 record FamilyFlags where
@@ -296,11 +332,11 @@ record FamilyFlags where
   -- | `timeout` 键。
   familyFlagTimeout : Maybe Int
 
--- | 内部：读 `kind` / `entry`。
+-- | 内部：读 `kind` / `entry` / `matrix`。
 readFamilyOpts : List String -> List TomlEntry -> Check FamilyOpts
 readFamilyOpts section entries =
   getStr section "kind" entries
-    >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => OkC (FamilyOpts kindOpt entryOpt)))
+    >>= (\kindOpt => getStr section "entry" entries >>= (\entryOpt => getStr section "matrix" entries >>= (\matrixOpt => OkC (FamilyOpts kindOpt entryOpt matrixOpt))))
 
 -- | 内部：读各阶段旗标、`compare_interp`、`tags` 与 `timeout`。
 readFamilyFlags : List String -> List TomlEntry -> Check FamilyFlags
@@ -335,8 +371,12 @@ buildFamily suite entries name =
                     Just (TArray xs) => fromMaybe [] (arrayStrings xs)
                     _ => []
                   kind = strOr "auto" opts.familyOptKind
-                in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then OkC
-                  (Family name (strOr "" sectionOpt) dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) (listOr [] flags.familyFlagTags) (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList)
+                  matrix = strOr "tool" opts.familyOptMatrix
+                  tags = append (listOr [] flags.familyFlagTags) (matrixTags matrix)
+                in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then if memName matrix matrixClasses then OkC
+                  (Family name (strOr "" sectionOpt) dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix)
+                else err
+                  (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
                 else err
                   (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
 
@@ -495,21 +535,21 @@ wantCaseWith family source id want exitCode =
       -- 0 = 遗留语义（断言非 0）。
       code = if hasOpt want.fwRunExit then if exitCode == 0 then 256 else exitCode else 0
     in OkC
-      (Case id family.familySection family.familyTags (CRuntime source expect code) family.familyTimeout "integration")
+      (Case id family.familySection family.familyTags (CRuntime source expect code) family.familyTimeout "integration" family.familyMatrix)
   else if hasOpt want.fwDiag then
     let
       diagPath = fromMaybe "" want.fwDiag
       interpOn = family.familyInterp
       compileOn = family.familyCompile
     in OkC
-      (Case id family.familySection family.familyTags (CError source diagPath interpOn family.familyCheck family.familyCompile) family.familyTimeout "fast")
+      (Case id family.familySection family.familyTags (CError source diagPath interpOn family.familyCheck family.familyCompile) family.familyTimeout "fast" family.familyMatrix)
   else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then err "family does not allow compile+run"
   else OkC
-    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout "fast")
+    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout "fast" family.familyMatrix)
   else if hasOpt want.fwSharedOut then OkC
-    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout "fast")
+    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout "fast" family.familyMatrix)
   else if hasOpt want.fwInterpOut then OkC
-    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast")
+    (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast" family.familyMatrix)
   else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
 
 -- | 内部：负例期望路径 `<base>.diag.json`（结构化诊断是唯一真源）。
@@ -612,7 +652,7 @@ fileCase family source base rel =
     in do
       exists <- pathExistsFile expected
       if exists then pure
-        (OkC (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout "fast"))
+        (OkC (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout "fast" family.familyMatrix))
       else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "fix" then
     let
@@ -620,17 +660,17 @@ fileCase family source base rel =
     in do
       exists <- pathExistsFile expected
       if exists then pure
-        (OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout "fast"))
+        (OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout "fast" family.familyMatrix))
       else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "steps" then pure
-    (OkC (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout "e2e"))
+    (OkC (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout "e2e" family.familyMatrix))
   else if family.familyKind == "check-ok" then pure
-    (OkC (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout "fast"))
+    (OkC (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout "fast" family.familyMatrix))
   else if family.familyKind == "check-error" then do
     expected <- expectPath base
     exists <- pathExistsFile expected
     if exists then pure
-      (OkC (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout "fast"))
+      (OkC (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout "fast" family.familyMatrix))
     else pure (err "expected file not found: ${expected}")
   else do
     want <- parseWant base
@@ -640,7 +680,7 @@ fileCase family source base rel =
 brokenFamilyCase : Family -> String -> Case
 brokenFamilyCase family msg =
   Case "${family.familySection}/${family.familyName}/__missing__" family.familySection
-    family.familyTags (CBroken msg) family.familyTimeout "e2e"
+    family.familyTags (CBroken msg) family.familyTimeout "e2e" family.familyMatrix
 
 -- | 内部：steps family——目录里每个 `*.steps` 一个声明式 case。
 discoverStepsFamily : Member nFs FsOp r => Suite -> Family -> Eff r (List Case)
@@ -663,7 +703,7 @@ else do
     rel = substring 0 (byteLength name - 6) name
     id = "${family.familySection}/${family.familyName}/${rel}"
   in pure
-    [Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text)]
+    [Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text) (stepsMatrixOf family.familyMatrix text)]
 
 -- | steps 文件任意位置出现 `# tier: tools|integration|fast` 即覆盖默认 tier；没有声明则归 `e2e`。
 stepsTierOf : String -> String
@@ -671,6 +711,16 @@ stepsTierOf text =
   if contains "# tier: tools" text then "tools"
   else if contains "# tier: integration" text then "integration"
   else if contains "# tier: fast" text then "fast" else "e2e"
+
+-- | steps 文件的 `# matrix: <分类>` 覆盖 family 的矩阵分类；没有声明就用 family 的。
+stepsMatrixOf : String -> String -> String
+stepsMatrixOf familyMatrix text =
+  if contains "# matrix: effect-common" text then "effect-common"
+  else if contains "# matrix: effect-native" text then "effect-native"
+  else if contains "# matrix: effect-wasm" text then "effect-wasm"
+  else if contains "# matrix: pure-cross" text then "pure-cross"
+  else if contains "# matrix: pure" text then "pure"
+  else if contains "# matrix: effect-ocaml" text then "effect-ocaml" else familyMatrix
 
 -- | 内部：按 kind 与 entry 选 discovery 方式（steps → 目录里找 `*.steps`；有 entry →
 -- 目录型；否则文件型）。
@@ -708,7 +758,7 @@ discoverCases suite =
   let
     seedPath = "${suite.suiteRoot}/test/corpus/run/12_fact.vuna"
     seed =
-      [ Case "13/seed" "13" ["seed"] (CSeed seedPath "${suite.suiteRoot}/test/corpus/run/12_fact.out") 900 "integration"
+      [ Case "13/seed" "13" ["seed"] (CSeed seedPath "${suite.suiteRoot}/test/corpus/run/12_fact.out") 900 "integration" "tool"
       ]
   in do
     base <- concatMapEff (discoverFamily suite) suite.suiteFamilies

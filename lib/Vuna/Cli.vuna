@@ -290,7 +290,7 @@ interpEmit path = do
 -- ---------------------------------------------------------------
 -- | 内部：解析 `vuna test` 的参数——出现 `--suite FILE` 走原生 suite，否则按包内测试运行。
 testArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "bless-diag", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", MultiValueFlag "tier", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
+testArgs args = case parseToolArgs "vuna test" [BoolFlag "list", BoolFlag "verbose", BoolFlag "fail-fast", BoolFlag "json", BoolFlag "no-cache", BoolFlag "audit", BoolFlag "strict-skips", BoolFlag "timings", BoolFlag "last-failed", BoolFlag "bless", BoolFlag "bless-diag", BoolFlag "watch", BoolFlag "quiet", MultiValueFlag "filter", MultiValueFlag "only", MultiValueFlag "tier", MultiValueFlag "matrix", MultiValueFlag "backend", ValueFlag "jobs", ValueFlag "only-file", ValueFlag "suite", ValueFlag "timeout", ValueFlag "worker", ValueFlag "results-dir", ValueFlag "cache-dir", ValueFlag "changed"] args of
   ErrC e => toolError (diagText e)
   OkC parsed => case flagValue parsed "suite" of
     Just suitePath => suiteRun parsed suitePath
@@ -333,6 +333,7 @@ suiteOptsOf parsed jobs timeout worker suitePath =
     (flagSet parsed "bless") (flagSet parsed "bless-diag") (flagValue parsed "changed")
     (flagValue parsed "cache-dir") (flagSet parsed "watch") (flagSet parsed "timings")
     (flagSet parsed "strict-skips") (flagSet parsed "audit") (flagValues parsed "tier")
+    (flagValues parsed "matrix") (flagValues parsed "backend")
 
 -- | 内部：suite 的 `--jobs`——缺省 0（auto）；`auto` 也映射到 0；其余必须是 >= 1 的整数。
 suiteJobsOf : Parsed -> Check Int

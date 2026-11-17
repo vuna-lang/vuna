@@ -1,3 +1,4 @@
+# matrix: effect-ocaml
 # 55) net 效应：Unix domain socket echo / TCP 临时端口 / stale socket 重绑 / 错误路径。
 #     非法地址是 typed error（`NetErrorOp`）：entry 收口成 `vuna: net: …` + 退出码 1。
 #     说明：TCP loopback 在部分 Nix 沙箱不可用（用 unix socket 覆盖协议面），此时打印 SKIP。

@@ -1,0 +1,10 @@
+-- execPath 在 WASI 上恒为空串（没有可执行文件路径的概念），宿主目标非空。
+import Base.Eff
+import Base.EffEnv
+import Base.EffConsole
+
+main : Eff [EnvOp, ConsoleOp] Int
+main = do
+  p <- envExecPath
+  _ <- consolePrint (if p == "" then "wasm-none\n" else "host-some\n")
+  pure 0

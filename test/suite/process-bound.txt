@@ -13,7 +13,6 @@
 106_wasm_backend.steps	build,compile,run	artifact-exec;build-link;cli-text
 107_observability.steps	build,compile,obs	artifact-exec;build-link;cli-render;cli-text;obs-transport
 108_obs_cdp.steps	(indirect)	cli-text
-109_backend_parity.steps	build	artifact-exec;build-link
 111_host_error.steps	run	artifact-exec;build-link;cli-text
 112_stdin_eof.steps	run	artifact-exec;stdin-eof
 113_net_timeout.steps	build	artifact-exec;build-link

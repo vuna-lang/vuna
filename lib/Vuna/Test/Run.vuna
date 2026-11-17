@@ -83,6 +83,8 @@ record Env where
   -- | 进程内精化会话（per worker）：base 依赖接口 + 增量精化的 termAux 缓存。
   -- 命中时 golden 的 check/interp 不再 spawn CLI（~200ms → ~10ms），未命中回退子进程。
   envSession : IORef Session
+  -- | 本次 run 选中的后端（`--backend`；空 = 只跑 ocaml）。
+  envBackends : List String
 
 -- | 一次子进程调用：退出码、分离的 stdout/stderr、是否被判为超时。
 record CmdResult where
@@ -659,6 +661,92 @@ goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCo
   else pure base
 
 -- ---------------------------------------------------------------
+-- 跨后端 golden（matrix = pure-cross / effect-*）
+-- ---------------------------------------------------------------
+-- | 内部：去掉 `.out` 后缀，用于推导 per-backend golden。
+stripOutSuffix : String -> String
+stripOutSuffix path = if endsWith ".out" path then substring 0 (byteLength path - 4) path else path
+
+-- | 内部：某后端的期望文件——`<base>.<backend>.out` 优先，否则共享 `<base>.out`。
+expectedForBackend : Member nFs FsOp r => String -> String -> Eff r String
+expectedForBackend backend expected =
+  let
+    per = "${stripOutSuffix expected}.${backend}.out"
+  in do
+    exists <- pathExistsFile per
+    pure (if exists then per else expected)
+
+-- | 本次 run 实际执行的目标：`--backend` 与分类允许面取交集；空 = 只跑 ocaml。
+selectedTargets : Env -> Case -> List String
+selectedTargets env c =
+  let
+    allowed = matrixTargets c.caseMatrix
+    wanted = if env.envBackends == [] then ["ocaml"] else env.envBackends
+  in if memName "all" wanted then allowed else filter (\b => memName b allowed) wanted
+
+-- | 内部：跨后端 golden 的 case 私有包目录（`app/Main.vuna` + 指向 base 的 manifest）。
+prepareCrossPackage : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> Case -> String -> Eff r String
+prepareCrossPackage env c source =
+  let
+    dir = "${env.envTmp}/x-${safeName c.caseId}"
+  in do
+    _ <- removeTree dir
+    _ <- ensureDirPath "${dir}/app"
+    _ <-
+      fsWriteFile "${dir}/vuna.toml"
+        "[package]\nname = \"p\"\n\n[dependencies]\nvuna-base = \"${env.envBase}\"\n"
+    text <- fsReadFile source
+    _ <- fsWriteFile "${dir}/app/Main.vuna" text
+    pure dir
+
+-- | 内部：跑一个目标的构建 + 执行，返回断言。wasm 用 wasmtime + preopen 根，native /
+-- ocaml 直接执行静态产物；三种目标都以 case 私有目录为 cwd。
+runCrossTarget : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> String -> Eff r (List Assertion)
+runCrossTarget env c dir backend expected =
+  let
+    out = "${dir}/${backend}"
+    buildTag = "${c.caseId}-build-${backend}"
+    prog =
+      if backend == "wasm" then [ "wasmtime",
+        "run",
+        "-W",
+        "stack-switching=y",
+        "-W",
+        "gc=y",
+        "-W",
+        "function-references=y",
+        "--dir",
+        dir,
+        "${out}/main.wasm"
+      ]
+      else ["${out}/bin/p"]
+  in do
+    expectedPath <- expectedForBackend backend expected
+    expectedText <- fmap trimNewlines (fsReadFile expectedPath)
+    build <-
+      runCmdMerged env buildTag dir c.caseTimeout
+        (withStepsEnv env dir False [env.envVuna, "build", "--target", backend, "--out", out, dir])
+    if build.cmdCode /= 0 then pure
+      [Assertion "build[${backend}]" False "exit ${strOfInt build.cmdCode}:\n${combinedOut build}"]
+    else do
+      run <-
+        runCmdMerged env "${c.caseId}-run-${backend}" dir c.caseTimeout
+          (withStepsEnv env dir False prog)
+      pure
+        [Assertion "run[${backend}]" (run.cmdCode == 0) "exit ${strOfInt run.cmdCode}:\n${combinedOut run}", assertEq "output[${backend}]" expectedText (trimNewlines (combinedOut run))]
+
+-- | 执行跨后端 golden：同一份夹具在声明的每个目标上构建并运行，逐个比对期望
+-- （`<base>.<backend>.out` 优先，否则共享 `<base>.out`，因此共享期望即三端差分）。
+goldenCrossCase : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> String -> String -> List String -> Eff r CaseResult
+goldenCrossCase env c source expected targets = do
+  start <- clockNow
+  dir <- prepareCrossPackage env c source
+  asserts <- concatMapEff (\b => runCrossTarget env c dir b expected) targets
+  _ <- removeTree dir
+  end <- clockNow
+  finishCase c.caseId start (timeoutAssert c ((end - start) / 1000) :: asserts)
+
+-- ---------------------------------------------------------------
 -- error（负例：结构化诊断断言）
 -- ---------------------------------------------------------------
 -- | 一次 error case 的全部读数。断言口径：`severity|code|file|line|col` 序列 + 条数 +
@@ -833,11 +921,11 @@ fileTreeHash source expected = do
 -- ---------------------------------------------------------------
 -- | 内部：test verdict 输入串的 schema 前缀（改格式时与 codec 一并改）。
 testVerdictSchema : String
-testVerdictSchema = "vuna-test-verdict 1"
+testVerdictSchema = "vuna-test-verdict 2"
 
 -- | 内部：对象库 codec 标签。
 testVerdictCodec : String
-testVerdictCodec = "test-verdict 1"
+testVerdictCodec = "test-verdict 2"
 
 -- | 内部：哈希取绝对值（对象 key 用非负数）。
 absHash : Int -> Int
@@ -860,19 +948,20 @@ else case c.caseKind of
 verdictKeyOf : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Case -> String -> String -> Eff r String
 verdictKeyOf env c source expected = do
   srcText <- hashFileText source
-  expText <- hashFileText expected
+  targets <- pure (selectedTargets env c)
+  expPaths <- mapEff (\b => expectedForBackend b expected) targets
+  expTexts <- mapEff hashFileText expPaths
   fp <- toolCompilerFingerprint
-  tag <- pure ""
   let
     kindTag = case c.caseKind of
       CGolden _ _ _ _ _ _ _ => "golden"
       CError _ _ _ _ _ => "error"
       _ => "other"
     srcHash = strOfInt (absHash (hashTextStrong srcText))
-    expHash = strOfInt (absHash (hashTextStrong expText))
+    expHash = strOfInt (absHash (hashTextStrong (join "|" expTexts)))
     input =
       join "|"
-        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, strOfInt fp, strOfInt env.envBaseHash, tag]
+        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, c.caseMatrix, join "," targets, strOfInt fp, strOfInt env.envBaseHash]
   in pure (strOfInt (absHash (hashTextStrong input)))
 
 -- ---------------------------------------------------------------
@@ -1592,7 +1681,13 @@ seedCase env c source expected =
 runCaseGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> Eff r CaseResult
 runCaseGo env c = case c.caseKind of
   CGolden source expected wantInterp wantCheck wantCompile wantRun wantCompare =>
-    goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare
+    let
+      targets = selectedTargets env c
+    in if matrixLayer c.caseMatrix == "effect" then goldenCrossCase env c source expected targets
+    else case targets of
+      ["ocaml"] =>
+        goldenCase env c source expected wantInterp wantCheck wantCompile wantRun wantCompare
+      others => goldenCrossCase env c source expected others
   CError source diagPath wantInterp wantCheck wantCompile =>
     errorCase env c source diagPath wantInterp wantCheck wantCompile
   CCheck source expectPass expectedErr => checkCase env c source expectPass expectedErr
@@ -1642,7 +1737,34 @@ caseMatches opts c =
     tierOk = case opts.suiteTiers of
       [] => True
       tiers => memName c.caseTier tiers
-  in onlyOk && filterOk && tierOk
+    matrixOk = case opts.suiteMatrices of
+      [] => True
+      pats => matchAnyMatrix pats c.caseMatrix
+    backendOk = case opts.suiteBackends of
+      [] => True
+      wanted => backendSelected wanted c.caseMatrix
+  in onlyOk && filterOk && tierOk && matrixOk && backendOk
+
+-- | 内部：矩阵模式匹配——`layer:<层次>` 前缀按派生层匹配，其余按分类名精确匹配。
+matchMatrixPattern : String -> String -> Bool
+matchMatrixPattern pat matrix =
+  if startsWith "layer:" pat then pat == "layer:${matrixLayer matrix}" else pat == matrix
+
+-- | 内部：任一矩阵模式命中。
+matchAnyMatrix : List String -> String -> Bool
+matchAnyMatrix [] matrix = False
+matchAnyMatrix (pat :: rest) matrix =
+  if matchMatrixPattern pat matrix then True else matchAnyMatrix rest matrix
+
+-- | 内部：`--backend` 是否选中该矩阵分类——`all` 恒真，其余按 `matrixTargets` 判定。
+backendSelected : List String -> String -> Bool
+backendSelected wanted matrix = anyBackend wanted (matrixTargets matrix)
+
+-- | 内部：任一后端命中。
+anyBackend : List String -> List String -> Bool
+anyBackend [] targets = False
+anyBackend (b :: rest) targets =
+  if b == "all" then True else if memName b targets then True else anyBackend rest targets
 
 -- | 内部：按 `SuiteOpts` 的过滤条件筛选用例列表。
 filterCases : SuiteOpts -> List Case -> List Case
@@ -1945,7 +2067,7 @@ else
     workerArg = "${strOfInt index}/${strOfInt jobs}"
     filters =
       append (concatMap (\p => ["--only", p]) opts.suiteOnly)
-        (append (concatMap (\p => ["--filter", p]) opts.suiteFilter) (concatMap (\p => ["--tier", p]) opts.suiteTiers))
+        (append (concatMap (\p => ["--filter", p]) opts.suiteFilter) (append (concatMap (\p => ["--tier", p]) opts.suiteTiers) (append (concatMap (\p => ["--matrix", p]) opts.suiteMatrices) (concatMap (\p => ["--backend", p]) opts.suiteBackends))))
     cacheArgs = case opts.suiteCacheDir of
       Just dir => ["--cache-dir", dir]
       Nothing => []
@@ -2280,7 +2402,7 @@ auditOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref []
       fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
@@ -2343,7 +2465,7 @@ familyOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref []
     in pure (filter (familyOrphan env cases) fixtures)
 
 -- | 内部：逗号拼接。
@@ -2355,7 +2477,7 @@ commaJoin xs = join ", " xs
 auditCases : List String -> List Case
 auditCases [] = []
 auditCases paths =
-  [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0 "e2e"
+  [ Case "audit/orphans" "audit" ["audit"] (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}") 0 "e2e" "tool"
   ]
 
 -- | `--audit`：列出未认领的夹具，返回退出码（有孤儿即 1）。
@@ -2458,12 +2580,12 @@ runSuiteOnce opts suite =
       env =
         Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir
           (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash
-          opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref
+          opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
       minCase =
-        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e"
+        if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [ Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"
         ]
         else []
       cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)

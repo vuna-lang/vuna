@@ -1,3 +1,4 @@
+# matrix: effect-native
 # 105) native 后端机制：x86-64 汇编 -> 静态可执行、产物形状、确定性、trap、ABI 与拒绝面。
 #
 # 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由

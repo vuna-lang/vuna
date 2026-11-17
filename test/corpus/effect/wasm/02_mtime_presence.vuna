@@ -1,0 +1,14 @@
+-- mtime 是 per-target 能力：WASI 适配层不返回时间（`Nothing`），宿主目标返回 `Just`。
+import Base.Eff
+import Base.EffFs
+import Base.EffConsole
+
+main : Eff [FsOp, ConsoleOp] Int
+main = do
+  _ <- fsWriteFile "mtime-probe.txt" "x"
+  m <- fsFileMtime "mtime-probe.txt"
+  _ <- consolePrint (case m of
+    Just _ => "just\n"
+    Nothing => "nothing\n"
+  )
+  pure 0

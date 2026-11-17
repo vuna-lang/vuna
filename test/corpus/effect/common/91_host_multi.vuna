@@ -5,7 +5,7 @@ import Base.EffFs
 
 main : Eff [FsOp, ConsoleOp] Int
 main = do
-  _ <- fsWriteFile "/tmp/vuna-host-multi.txt" "multi\n"
-  s <- fsReadFile "/tmp/vuna-host-multi.txt"
+  _ <- fsWriteFile "vuna-host-multi.txt" "multi\n"
+  s <- fsReadFile "vuna-host-multi.txt"
   _ <- consolePrint s
   pure 0

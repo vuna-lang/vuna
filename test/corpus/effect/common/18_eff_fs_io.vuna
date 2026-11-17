@@ -1,13 +1,13 @@
--- Layer 1：宿主-backed Fs 效应（handler 直调 @vuna@prim_eff_* 原语；answer = `Eff [] Int`）。
--- `Fs` 是命名实例，操作与 handler 显式带实例名（本夹具用 "real"）。
+-- 宿主-backed Fs 效应：命名实例 "real" 的 handler 把操作转给入口预装的标签 handler。
+-- 路径是相对的，三端都以 case 私有目录为 cwd。
 import Base.Eff
 import Base.EffFs
 import Base.Nat
 
 prog : Eff [FsOp@real] Int
 prog = do
-  _ <- fsWriteFile@real "/tmp/vuna_eff_fs.txt" "hello"
-  s <- fsReadFile@real "/tmp/vuna_eff_fs.txt"
+  _ <- fsWriteFile@real "eff_fs_io.txt" "hello"
+  s <- fsReadFile@real "eff_fs_io.txt"
   pure (toInt (byteLength s))
 
 ret : Int -> Eff [FsOp] Int

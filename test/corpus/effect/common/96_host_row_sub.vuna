@@ -6,7 +6,7 @@ import Base.EffFs
 
 fsHelper : Eff [FsOp] Int
 fsHelper = do
-  _ <- fsWriteFile "/tmp/vuna-row-sub.txt" "sub\n"
+  _ <- fsWriteFile "vuna-row-sub.txt" "sub\n"
   pure 0
 
 main : Eff [FsOp, ConsoleOp] Int

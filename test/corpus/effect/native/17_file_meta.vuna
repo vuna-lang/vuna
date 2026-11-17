@@ -6,10 +6,11 @@ import Base.Maybe
 
 prog : Eff [FsOp] Int
 prog = do
-  self <- fsFileSize "corpus/run/17_file_meta.vuna"
-  stamp <- fsFileMtime "corpus/run/17_file_meta.vuna"
-  missingSize <- fsFileSize "/vuna/definitely-not-a-file-xyz"
-  missingMtime <- fsFileMtime "/vuna/definitely-not-a-file-xyz"
+  _ <- fsWriteFile "meta-probe.txt" "abc"
+  self <- fsFileSize "meta-probe.txt"
+  stamp <- fsFileMtime "meta-probe.txt"
+  missingSize <- fsFileSize "definitely-not-a-file-xyz"
+  missingMtime <- fsFileMtime "definitely-not-a-file-xyz"
   pure ((((case self of
     Just n => if natToInt n > 0 then 1 else 0
     Nothing => 0

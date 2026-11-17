@@ -3,7 +3,7 @@
 #
 # 三个 scope（口径见 docs/reference/testing.md「后端自举 conformance」）：
 #   selfhost  用该编译器检查整个仓库（workspace 根；机器格式诊断走进程内顺序检查）
-#   parity    test/suite/steps/parity/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
+#   parity    test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
 #   corpus    test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
 #
 # 用法:
@@ -132,9 +132,9 @@ run_selfhost() {
 # ---------------------------------------------------------------------------
 parity_one() {
   local stem=$1 target=$2
-  local fixture="$suite/steps/parity/$stem.vuna"
+  local fixture="$repo/test/corpus/pure_cross/$stem.vuna"
   local outdir="$work/parity/$stem-$target" want got status=0
-  want=$(cat "$suite/steps/parity/$stem.out")
+  want=$(cat "$repo/test/corpus/pure_cross/$stem.out")
   mkdir -p "$outdir"
   cp "$fixture" "$outdir/src.vuna"
 
@@ -333,8 +333,8 @@ if needs selfhost; then
 fi
 
 if needs parity; then
-  printf '== parity: %s x target(s) %s\n' "$(find "$suite/steps/parity" -name '*.vuna' | wc -l)" "$targets"
-  for fixture in "$suite"/steps/parity/*.vuna; do
+  printf '== parity: %s x target(s) %s\n' "$(find "$repo/test/corpus/pure_cross" -name '*.vuna' | wc -l)" "$targets"
+  for fixture in "$repo"/test/corpus/pure_cross/*.vuna; do
     matches_filter "$fixture" || continue
     stem=$(basename "$fixture" .vuna)
     for target in ${targets//,/ }; do printf '%s\t%s\n' "$stem" "$target"; done

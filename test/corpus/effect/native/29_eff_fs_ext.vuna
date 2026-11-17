@@ -8,13 +8,13 @@ import Base.EffFs
 import Base.EffConsole
 
 dir : String
-dir = "/tmp/vuna_w10_fs"
+dir = "vuna_w10_fs"
 
 pathA : String
-pathA = "/tmp/vuna_w10_fs/a.txt"
+pathA = "vuna_w10_fs/a.txt"
 
 pathB : String
-pathB = "/tmp/vuna_w10_fs/b.txt"
+pathB = "vuna_w10_fs/b.txt"
 
 b2i : Bool -> Int
 b2i b = if b then 1 else 0

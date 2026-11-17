@@ -9,8 +9,8 @@ import Base.Nat
 
 prog : Eff [FsOp, ConsoleOp] Nat
 prog = do
-  written <- fsWriteFile "/tmp/vuna_d25_measure.txt" "hello"
-  size <- fmap (fromMaybe Zero) (fsFileSize "/tmp/vuna_d25_measure.txt")
+  written <- fsWriteFile "vuna_d25_measure.txt" "hello"
+  size <- fmap (fromMaybe Zero) (fsFileSize "vuna_d25_measure.txt")
   printed <- consolePrint "p\n"
   pure (written + size + printed)
 

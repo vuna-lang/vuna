@@ -9,10 +9,10 @@ import Base.EffConsole
 import Base.List
 
 dir : String
-dir = "/tmp/vuna_w10_fs_named"
+dir = "vuna_w10_fs_named"
 
 path : String
-path = "/tmp/vuna_w10_fs_named/a.txt"
+path = "vuna_w10_fs_named/a.txt"
 
 b2i : Bool -> Int
 b2i b = if b then 1 else 0

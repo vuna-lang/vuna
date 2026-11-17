@@ -1,3 +1,4 @@
+# matrix: effect-wasm
 # 106) wasm 后端机制：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime。
 #
 # 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由

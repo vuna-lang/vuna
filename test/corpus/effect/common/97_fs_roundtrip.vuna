@@ -1,0 +1,14 @@
+-- 经标签的相对路径 FS：写 → 读 → 判存在 → 取大小。三端都走 case 私有目录，
+-- 因此在 ocaml / wasm / native 上输出一致。
+import Base.Eff
+import Base.EffFs
+import Base.EffConsole
+
+main : Eff [FsOp, ConsoleOp] Int
+main = do
+  _ <- fsWriteFile "roundtrip.txt" "hello"
+  s <- fsReadFile "roundtrip.txt"
+  ok <- fsFileExists "roundtrip.txt"
+  _ <- consolePrint (s ++ "\n")
+  _ <- consolePrint (if ok then "exists\n" else "missing\n")
+  pure 0
