@@ -252,6 +252,8 @@ export record IrEntry(..) where
   irEntryRunMain : Maybe String
   -- | 动作行里的内建宿主效应 handler（源码名，行顺序：后出现的包在外层）。
   irEntryHandlers : List String
+  -- | 动作行里的内建宿主效应标签（行顺序，供目标能力检查）。
+  irEntryRowTags : List String
 
 -- ---------------------------------------------------------------
 -- 共享元数据 / 单元 / 程序
@@ -385,23 +387,27 @@ irAltBodyOf (IrAlt ctor bs body) = body
 
 -- | 入口展示函数节点。
 export irEntryShowOf : IrEntry -> Ir
-irEntryShowOf (IrEntry show main isAction runMain handlers) = show
+irEntryShowOf (IrEntry show main isAction runMain handlers rowTags) = show
 
 -- | 入口 main 的源码名。
 export irEntryMainOf : IrEntry -> String
-irEntryMainOf (IrEntry show main isAction runMain handlers) = main
+irEntryMainOf (IrEntry show main isAction runMain handlers rowTags) = main
 
 -- | main 是否是动作。
 export irEntryIsActionOf : IrEntry -> Bool
-irEntryIsActionOf (IrEntry show main isAction runMain handlers) = isAction
+irEntryIsActionOf (IrEntry show main isAction runMain handlers rowTags) = isAction
 
 -- | 动作 main 的 `runMain` 源码名。
 export irEntryRunMainOf : IrEntry -> Maybe String
-irEntryRunMainOf (IrEntry show main isAction runMain handlers) = runMain
+irEntryRunMainOf (IrEntry show main isAction runMain handlers rowTags) = runMain
 
 -- | 动作行的内建宿主 handler（源码名表）。
 export irEntryHandlersOf : IrEntry -> List String
-irEntryHandlersOf (IrEntry show main isAction runMain handlers) = handlers
+irEntryHandlersOf (IrEntry show main isAction runMain handlers rowTags) = handlers
+
+-- | 动作行的内建宿主效应标签。
+export irEntryRowTagsOf : IrEntry -> List String
+irEntryRowTagsOf (IrEntry show main isAction runMain handlers rowTags) = rowTags
 
 -- | 程序级共享元数据。
 export irProgSharedOf : IrProgram -> IrShared

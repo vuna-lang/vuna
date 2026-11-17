@@ -82,8 +82,8 @@ lowerEntryOf defs = case findDtDef "main" defs of
         innerTy = secondOf p
         tags = mainRowTags (dtDefType mainDef)
         handlers = append (filterMapRunHost tags) (filterMapErrorRunHost tags)
-      in OkC (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers))
-    Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing []))
+      in OkC (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers tags))
+    Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing [] []))
 
 -- 只保留有宿主实现的内建标签（`builtinEffectImplOf` 为空则跳过）。
 filterMapRunHost : List String -> List String

@@ -118,3 +118,25 @@ exit: 0
 run: sh -c 'cd "$TMPDIR/effdepth-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 0
 out-equals: 2000
+
+# 14) 目标能力告警：入口行含 wasm 不实现的效应（进程）→ 产物照常生成，`-W` 下告警。
+run: sh -c 'd="$TMPDIR/cap"; mkdir -p "$d/app"; printf "[package]\nname = \"cap\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-out" "$d" 2>&1'
+exit: 0
+out-contains: [UN_TargetEffectUnavailable]
+file-exists: $TMPDIR/cap-out/main.wasm
+
+# 15) 同一程序不加 `-W`：告警默认静默，构建照常成功。
+run: sh -c 'printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cap-quiet" "$TMPDIR/cap" 2>&1'
+exit: 0
+out-not-contains: UN_TargetEffectUnavailable
+
+# 16) `--deny-warnings` 把能力告警提升为失败，且不留产物。
+run: sh -c 'printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --deny-warnings --out "$TMPDIR/cap-deny" "$TMPDIR/cap" 2>&1'
+exit: 1
+out-contains: [UN_TargetEffectUnavailable]
+file-absent: $TMPDIR/cap-deny/main.wasm
+
+# 17) 可用的效应（console）不产生能力告警。
+run: sh -c 'd="$TMPDIR/cap-ok"; mkdir -p "$d/app"; printf "[package]\nname = \"capok\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffConsole\nimport Base.Nat\n\nmain : Eff [ConsoleOp] Nat\nmain = consolePrint \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-ok-out" "$d" 2>&1'
+exit: 0
+out-not-contains: UN_TargetEffectUnavailable

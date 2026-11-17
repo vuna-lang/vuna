@@ -24,6 +24,8 @@ export data WarnErr(..) : Nat -> Type where
   UnusedDefinition : String -> WarnErr (Succ Zero)
   UnusedImport : String -> WarnErr (Succ Zero)
   ShadowedBinder : String -> WarnErr (Succ Zero)
+  -- arity 2
+  TargetEffectUnavailable : String -> String -> WarnErr (Succ (Succ Zero))
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnCode（目录/模板见 diagnostics.md）。
 export warnCode : {n : Nat} -> WarnErr n -> String
@@ -34,6 +36,7 @@ warnCode (UnusedBinder _) = "UN_UnusedBinder"
 warnCode (UnusedDefinition _) = "UN_UnusedDefinition"
 warnCode (UnusedImport _) = "UN_UnusedImport"
 warnCode (ShadowedBinder _) = "UN_ShadowedBinder"
+warnCode (TargetEffectUnavailable _ _) = "UN_TargetEffectUnavailable"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnTemplate（目录/模板见 diagnostics.md）。
 export warnTemplate : {n : Nat} -> WarnErr n -> String
@@ -46,6 +49,8 @@ warnTemplate (UnusedBinder _) = "binder <0> is never used"
 warnTemplate (UnusedDefinition _) = "definition <0> is never used"
 warnTemplate (UnusedImport _) = "module <0> is imported but never used"
 warnTemplate (ShadowedBinder _) = "binder <0> shadows an outer binder"
+warnTemplate (TargetEffectUnavailable _ _) =
+  "target <0> does not implement effect <1>: performing it traps at runtime"
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnMsg（目录/模板见 diagnostics.md）。
 export warnMsg : {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
@@ -59,6 +64,13 @@ warnDiagAt sp e args = withLabel (Label (Just sp) "" LabelPrimary Nothing) (warn
 -- | 带后处理（如附加 suggestion）的 span warning（纯函数）。
 export warnDiagAtMod : (Diagnostic -> Diagnostic) -> Span -> {n : Nat} -> WarnErr n -> Vec n String -> Diagnostic
 warnDiagAtMod f sp e args = f (warnDiagAt sp e args)
+
+-- | 目标能力告警：入口行在目标上不可用。无源码位置（判据是 `main` 的类型），
+-- 消息点名目标与效应标签。
+export targetEffectWarn : String -> String -> Diagnostic
+targetEffectWarn target tag =
+  diagNoLoc SevWarning PhCodegen CatCodegen (warnCode (TargetEffectUnavailable target tag))
+    (diagBody (warnTemplate (TargetEffectUnavailable target tag)) [target, tag])
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
 export record WarnEntry(..) where
@@ -75,5 +87,6 @@ warnAll =
     WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "未使用的 binder",
     WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "未使用的定义",
     WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "未使用的导入",
-    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "遮蔽外层同名 binder"
+    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "遮蔽外层同名 binder",
+    WarnEntry (warnCode (TargetEffectUnavailable "" "")) (warnTemplate (TargetEffectUnavailable "" "")) "目标不实现入口行声明的内建效应"
   ]

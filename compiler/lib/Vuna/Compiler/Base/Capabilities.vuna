@@ -19,13 +19,11 @@ export data Capability(..) : Type where
 
 -- | 目标 × 内建效应标签 → 能力。未列出的目标按全部可用处理。
 export capabilityOf : String -> String -> Capability
-capabilityOf target tag =
-  if target == "wasm" then wasmCapabilityOf tag else CapAvailable
+capabilityOf target tag = if target == "wasm" then wasmCapabilityOf tag else CapAvailable
 
 -- wasm 的不可用面：进程（spawn/wait/runIn）、stdin、网络没有宿主实现。
 wasmCapabilityOf : String -> Capability
 wasmCapabilityOf tag =
   if tag == "Base.EffProcess.ProcessOp" then CapUnavailable
   else if tag == "Base.EffStdin.StdinOp" then CapUnavailable
-  else if tag == "Base.EffNet.NetOp" then CapUnavailable
-  else CapAvailable
+  else if tag == "Base.EffNet.NetOp" then CapUnavailable else CapAvailable

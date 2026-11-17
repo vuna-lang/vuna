@@ -247,7 +247,25 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   （26,202,591 字节）；它汇编出的 `main.wasm` 也能继续 `check` 包。生成器的输出是确定性
   的，所以产物层面已是 fixed point。32 MiB 栈跑这条会 `call stack exhausted`（见 §8）。
 
-## 8. 已知边界
+## 8. 后端契约与边界
+
+wasm 是**受限后端**：纯计算、WasmGC 值、wasm 内 handler、经预打开目录（fd 3）的
+文件读写、stdout/stderr。进程 / stdin / 网络 / 信号 / 线程不在契约内。
+
+| 能力 | 状态 | 构建期 / 运行期 |
+| --- | --- | --- |
+| 纯计算、WasmGC 值、结构化比较 | 支持 | — |
+| `Eff` 的 handler（cont/resume/suspend） | 支持 | 运行需要 wasmtime 开 stack-switching |
+| `FsOp`（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 失败经 errno 走 `FsOp` 错误通道 |
+| `ConsoleOp` / `ExitOp` / `ArgsOp` / `ClockOp` / `EnvOp` / `RefOp` | 支持 | `isTty` 恒 `False`、`execPath` 空串（子操作降级） |
+| `ProcessOp` / `StdinOp` / `NetOp` | 不支持 | 构建期告警 `UN_TargetEffectUnavailable`；执行到叶子时运行期 trap（exit 2） |
+| 网络宿主原语 / extern / FFI | 不支持 | 生成期拒绝（exit 1） |
+
+入口行的能力检查在构建期给出：`vuna build --target wasm -W` 显示
+`UN_TargetEffectUnavailable`，`--deny-warnings` 提升为失败（不留产物）。产物本身仍然
+生成——**声明了不可用效应但从不执行**的程序可以正常跑；执行到对应叶子时以
+`vuna: runtime error: wasm host operation is not implemented` 退出（exit 2），不返回
+伪造结果。能力表在 `Vuna.Compiler.Base.Capabilities`，与 §5 的运行时实现表同步。
 
 - 闭包是**单参**形状（`$ft = (anyref anyref) -> anyref`）：多参 lambda 创建时柯里化，
   应用侧每多一个实参就多一次 `call $rt_apply`。零参 lambda 内联，不产生闭包。
@@ -268,7 +286,8 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   （`check compiler` 8 MiB；整仓 `check` 32 MiB；wasm→wasm 生成 compiler 包 256 MiB）。
   栈深来自长列表上的非尾辅助函数（`append` 之类 `1 + f rest`），与列表长度成正比。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
-- 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（D7）、
+- 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（暂缓，见
+  [architecture-target](../architecture-target.md) D7）、
   Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
 
 ## 9. 相关阅读

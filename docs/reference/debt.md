@@ -77,6 +77,13 @@
 | D95 | 命名空间门面只增加路径，不缩减公开模块面：`base/vuna.toml` 仍列全部叶子模块；路径 import 必须写 `as`（裸 `import A.X` 报 `LD_ModuleNotFound`），且没有 `import A.X` 的短名自动绑定 | `base/vuna.toml`、`compiler/lib/Vuna/Compiler/Loader/Flatten.vuna`（`pathPrefixOf`）、`parser`（路径 import） | 后续（是否剪 `[export]` / 支持裸路径 import 另立决策） |
 
 
+## wasm 后端
+
+| ID | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| D96 | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `compiler/lib/Vuna/Compiler/Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续（硬拒绝落地时补一致性测试） |
+| D97 | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p` bootstrap 存储根，所以 `compiler/app/Main.vuna` 的行必须带 `ProcessOp`，按符号生成期拒绝会把编译器自己拒掉 | `compiler/lib/Vuna/Compiler/Base/Store.vuna`（`dirReady`）、`compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：该调用改成 FsOp 逐级建目录，并清理签名链上的 `Member nProcess ProcessOp r`） |
+
 ## 相关阅读
 
 - 规则与语义：各主题参考页（见 `AGENTS.md` 的「文档导航」）

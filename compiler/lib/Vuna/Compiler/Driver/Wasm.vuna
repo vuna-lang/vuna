@@ -8,11 +8,14 @@ module Vuna.Compiler.Driver.Wasm where
 import Base.Eff.Types
 import Base.Int
 import Base.Pair
+import Vuna.Compiler.Base.Capabilities
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
+import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Module
@@ -24,7 +27,24 @@ import Base.EffProcess
 wasmErrDiag : WasmErr -> Diagnostic
 wasmErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (wasmErrText err)
 
-export compileWasm : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check Int)
+-- | 入口行里在当前目标上不可用的内建效应：产物能生成，但这些效应一旦执行就 trap，
+-- 所以在构建期给出告警。
+entryCapabilityWarnings : String -> IrProgram -> List Diagnostic
+entryCapabilityWarnings target program = case program.irProgUnit.irUnitEntry of
+  Nothing => []
+  Just entry => capWarnings target entry.irEntryRowTags
+
+capWarnings : String -> List String -> List Diagnostic
+capWarnings target [] = []
+capWarnings target (tag :: rest) =
+  if isUnavailable (capabilityOf target tag) then targetEffectWarn target tag :: capWarnings target rest
+  else capWarnings target rest
+
+isUnavailable : Capability -> Bool
+isUnavailable CapUnavailable = True
+isUnavailable CapAvailable = False
+
+export compileWasm : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileWasm ctx entry printResult outDir = do
   _ <- ensureDirPath outDir
   checked <- dtCheckWithProgramParts ctx entry
@@ -39,4 +59,4 @@ compileWasm ctx entry printResult outDir = do
           WasmRejected err => pure (ErrC (wasmErrDiag err))
           WasmOk m => do
             _ <- fsWriteFile "${outDir}/main.wat" (renderModule m)
-            pure (OkC 1)
+            pure (OkC (Pair 1 (entryCapabilityWarnings "wasm" program)))

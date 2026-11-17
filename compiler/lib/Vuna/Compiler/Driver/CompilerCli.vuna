@@ -650,10 +650,7 @@ compileRun printResult entry outDir o = do
 compileToTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
 compileToTarget ctx entry printResult outDir target = if target == "wasm" then do
   r <- compileWasm ctx entry printResult outDir
-  pure (case r of
-    ErrC e => ErrC e
-    OkC n => OkC (Pair n [])
-  )
+  pure r
 else if target == "native" then do
   r <- compileNative ctx entry printResult outDir
   pure (case r of
@@ -1037,19 +1034,20 @@ buildWasmOne noCompile outM pkg o =
         outDir
     case r of
       ErrC e => printDiag o e
-      OkC _ => do
+      OkC p => do
         _ <- fsWriteFile "${outDir}/build.sh" script
-        if noCompile then do
+        code <- if noCompile then do
           _ <- consolePrint "wrote ${watPath}\n"
-          pure (Pair 0 o)
+          pure 0
         else do
-          code <- processRunIn outDir args
-          if code == 0 then do
+          c <- processRunIn outDir args
+          if c == 0 then do
             _ <- consolePrint "wrote ${wasmPath}\n"
-            pure (Pair 0 o)
+            pure 0
           else do
-            _ <- consolePrint "wasm assembly failed: wasm-tools exited ${strFromInt code}\n"
-            pure (Pair 1 o)
+            _ <- consolePrint "wasm assembly failed: wasm-tools exited ${strFromInt c}\n"
+            pure 1
+        if code == 0 then finishWarningsDir (secondOf p) o outDir 0 else pure (Pair 1 o)
 
 buildOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
 buildOne noCompile multiOut outM pkg o = if o.optTarget == "wasm" then buildWasmOne noCompile outM pkg o

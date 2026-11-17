@@ -13,6 +13,7 @@ name = "vuna-compiler"
 [export]
 modules = [
   "Vuna.Compiler.Base.Bytes",
+  "Vuna.Compiler.Base.Capabilities",
   "Vuna.Compiler.Base.Common",
   "Vuna.Compiler.Base.Diag",
   "Vuna.Compiler.Base.Diag.Codec",
