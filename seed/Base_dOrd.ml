@@ -2,10 +2,10 @@ open Vuna_runtime
 type t_Base_dOrd_dOrdering = C_Base_dOrd_dOrdering_LT | C_Base_dOrd_dOrdering_EQ | C_Base_dOrd_dOrdering_GT
 and 'a0 t_Dict_uBase_dOrd_dOrd = C_Dict_uBase_dOrd_dOrd_Ord of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
-# 30 "Base/Ord.vuna"
+# 26 "Base/Ord.vuna"
 let v_Ord_uBase_uBool_uBool = (C_Dict_uBase_dOrd_dOrd_Ord ((fun mc0 mc1 -> (if mc0 then false else (if mc1 then true else false))), (fun mc0 mc1 -> (if mc0 then mc1 else true)), (fun mc0 mc1 -> (if mc0 then (if mc1 then false else true) else false)), (fun mc0 mc1 -> (if mc0 then true else mc1))))
 
-# 49 "Base/Ord.vuna"
+# 45 "Base/Ord.vuna"
 let rec v_Eq_uBase_uOrd_uOrdering = (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
   | C_Base_dOrd_dOrdering_GT -> (match mc1 with
   | C_Base_dOrd_dOrdering_GT -> true
@@ -22,7 +22,7 @@ let rec v_Eq_uBase_uOrd_uOrdering = (Base_dEq.C_Dict_uBase_dEq_dEq_Eq ((fun mc0 
   | _ -> failwith "DT: impossible branch"
 )), (fun a b -> (if (((Base_dEq.v_Base_dEq_d_x61__x61_ v_Eq_uBase_uOrd_uOrdering) a) b) then false else true))))
 
-# 71 "Base/Ord.vuna"
+# 67 "Base/Ord.vuna"
 let v_Show_uBase_uOrd_uOrdering = (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fun o -> (match o with
   | C_Base_dOrd_dOrdering_LT -> "LT"
   | C_Base_dOrd_dOrdering_EQ -> "EQ"
@@ -30,7 +30,7 @@ let v_Show_uBase_uOrd_uOrdering = (Base_dShow.C_Dict_uBase_dShow_dShow_Show ((fu
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 89 "Base/Ord.vuna"
+# 85 "Base/Ord.vuna"
 let v_Hashable_uBase_uOrd_uOrdering = (Base_dHashable.C_Dict_uBase_dHashable_dHashable_Hashable ((fun o -> (match o with
   | C_Base_dOrd_dOrdering_LT -> 0
   | C_Base_dOrd_dOrdering_EQ -> 1
@@ -38,19 +38,19 @@ let v_Hashable_uBase_uOrd_uOrdering = (Base_dHashable.C_Dict_uBase_dHashable_dHa
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 21 "Base/Ord.vuna"
+# 17 "Base/Ord.vuna"
 let v_Base_dOrd_d_x60_ = (fun _ud x0 x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_Ord (dtb__0, dtb__1, dtb__2, dtb__3) -> ((dtb__0 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 23 "Base/Ord.vuna"
+# 19 "Base/Ord.vuna"
 let v_Base_dOrd_d_x60__x61_ = (fun _ud x0 x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_Ord (dtb__4, dtb__5, dtb__6, dtb__7) -> ((dtb__5 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 56 "Base/Ord.vuna"
+# 52 "Base/Ord.vuna"
 let rec v_Ord_uBase_uOrd_uOrdering = (C_Dict_uBase_dOrd_dOrd_Ord ((fun a b -> (match a with
   | C_Base_dOrd_dOrdering_LT -> (match b with
   | C_Base_dOrd_dOrdering_LT -> false
@@ -68,23 +68,23 @@ let rec v_Ord_uBase_uOrd_uOrdering = (C_Dict_uBase_dOrd_dOrd_Ord ((fun a b -> (m
   | _ -> failwith "DT: impossible branch"
 )), (fun a b -> (if (((v_Base_dOrd_d_x60_ v_Ord_uBase_uOrd_uOrdering) a) b) then true else (Base_dBool.v_Base_dBool_dnot (((v_Base_dOrd_d_x60_ v_Ord_uBase_uOrd_uOrdering) b) a)))), (fun a b -> (((v_Base_dOrd_d_x60_ v_Ord_uBase_uOrd_uOrdering) b) a)), (fun a b -> (((v_Base_dOrd_d_x60__x61_ v_Ord_uBase_uOrd_uOrdering) b) a))))
 
-# 25 "Base/Ord.vuna"
+# 21 "Base/Ord.vuna"
 let v_Base_dOrd_d_x62_ = (fun _ud x0 x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_Ord (dtb__8, dtb__9, dtb__10, dtb__11) -> ((dtb__10 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 27 "Base/Ord.vuna"
+# 23 "Base/Ord.vuna"
 let v_Base_dOrd_d_x62__x61_ = (fun _ud x0 x1 -> (match _ud with
   | C_Dict_uBase_dOrd_dOrd_Ord (dtb__12, dtb__13, dtb__14, dtb__15) -> ((dtb__15 x0) x1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 79 "Base/Ord.vuna"
+# 75 "Base/Ord.vuna"
 let v_Base_dOrd_dcompare = (fun _uctx0 x y -> (if (((v_Base_dOrd_d_x60_ _uctx0) x) y) then C_Base_dOrd_dOrdering_LT else (if (((v_Base_dOrd_d_x60_ _uctx0) y) x) then C_Base_dOrd_dOrdering_GT else C_Base_dOrd_dOrdering_EQ)))
 
-# 83 "Base/Ord.vuna"
+# 79 "Base/Ord.vuna"
 let v_Base_dOrd_dmin = (fun _uctx0 x y -> (if (((v_Base_dOrd_d_x60__x61_ _uctx0) x) y) then x else y))
 
-# 87 "Base/Ord.vuna"
+# 83 "Base/Ord.vuna"
 let v_Base_dOrd_dmax = (fun _uctx0 x y -> (if (((v_Base_dOrd_d_x60__x61_ _uctx0) x) y) then y else x))

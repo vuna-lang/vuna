@@ -46,7 +46,7 @@ let v_Base_dEffProcess_dprocessOpHIOWith = (fun onExit op k -> (match op with
 ))
 
 # 115 "Base/EffProcess.vuna"
-let v_Base_dEffProcess_dhandleProcessHostWith = (fun n onExit comp -> ((((v_Base_dEffProcess_dhandleProcess n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWith onExit)) comp))
+let v_Base_dEffProcess_dhandleProcessHostWith = (fun n onExit comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "process") n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWith onExit)) comp))
 
 # 122 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_dprocessHostStatus = (Base_dEff.v_Base_dEff_draise (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_hostStatus ()))))
@@ -62,7 +62,7 @@ let v_Base_dEffProcess_dprocessOpHIOWithHost = (fun onExit op k -> (match op wit
 ))
 
 # 146 "Base/EffProcess.vuna"
-let v_Base_dEffProcess_dhandleProcessHostWithHost = (fun n onExit comp -> ((((v_Base_dEffProcess_dhandleProcess n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWithHost onExit)) comp))
+let v_Base_dEffProcess_dhandleProcessHostWithHost = (fun n onExit comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "process") n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) (v_Base_dEffProcess_dprocessOpHIOWithHost onExit)) comp))
 
 # 151 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_drunProcessHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff (((v_Base_dEffProcess_dhandleProcessHostWithHost "default") (fun c -> (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_exit dtio_0)) c)))) comp)))
@@ -77,7 +77,7 @@ let v_Base_dEffProcess_dprocessErrorOpHR = (fun op _u -> (match op with
 ))
 
 # 166 "Base/EffProcess.vuna"
-let v_Base_dEffProcess_drunProcessError = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCore "process-error") n) v_Base_dEffProcess_dprocessErrorRet) v_Base_dEffProcess_dprocessErrorOpHR) comp))
+let v_Base_dEffProcess_drunProcessError = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "process-error") n) v_Base_dEffProcess_dprocessErrorRet) v_Base_dEffProcess_dprocessErrorOpHR) comp))
 
 # 171 "Base/EffProcess.vuna"
 let v_Base_dEffProcess_drunProcessErrorHost = (fun comp -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((v_Base_dEffProcess_drunProcessError "process-error") comp)) (fun res -> (match res with

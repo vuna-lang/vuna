@@ -26,14 +26,14 @@ let v_Base_dEffEnv_denvOpHIO = (fun op k -> (match op with
 
 # 68 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_denvOpHIOHost = (fun op k -> (match op with
-  | C_Base_dEffEnv_dEnvOp_GetEnv (dtb__1) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_getenv dtio_0)) dtb__1)) (fun v -> ((Obj.magic k) v)))
-  | C_Base_dEffEnv_dEnvOp_GetCwd -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_getcwd ())))) (fun v -> ((Obj.magic k) v)))
-  | C_Base_dEffEnv_dEnvOp_ExecPath -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_execPath ())))) (fun v -> ((Obj.magic k) v)))
+  | C_Base_dEffEnv_dEnvOp_GetEnv (dtb__1) -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise ((fun dtio_0 -> Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> dtp_getenv dtio_0)) dtb__1))) (fun v -> ((Obj.magic k) v)))
+  | C_Base_dEffEnv_dEnvOp_GetCwd -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_getcwd ()))))) (fun v -> ((Obj.magic k) v)))
+  | C_Base_dEffEnv_dEnvOp_ExecPath -> (((Base_dMonad.v_Base_dMonad_d_x62__x62__x61_ Base_dEff.v_Monad_uBase_uEff_uEff_ur) (Base_dEff.v_Base_dEff_draise (Base_dEff.C_Base_dEff_dEff_MkEff (fun (_ : Base_dEff.t_Base_dEff_dEffUnit) -> (dtp_execPath ()))))) (fun v -> ((Obj.magic k) v)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 81 "Base/EffEnv.vuna"
-let v_Base_dEffEnv_dhandleEnvHostHost = (fun n comp -> ((((v_Base_dEffEnv_dhandleEnv n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffEnv_denvOpHIOHost) comp))
+let v_Base_dEffEnv_dhandleEnvHostHost = (fun n comp -> (((((Base_dEff.v_Base_dEff_dhandleCoreAt "env") n) (fun a -> ((Base_dApplicative.v_Base_dApplicative_dpure Base_dEff.v_Applicative_uBase_uEff_uEff_ur) a))) v_Base_dEffEnv_denvOpHIOHost) comp))
 
 # 85 "Base/EffEnv.vuna"
 let v_Base_dEffEnv_drunEnvHost = (fun comp -> (Base_dEff.v_Base_dEff_djoinEff ((v_Base_dEffEnv_dhandleEnvHostHost "default") comp)))

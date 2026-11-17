@@ -20,15 +20,15 @@ resClock (SleepMicros us) = Int
 
 -- | 通过命名实例读当前时间戳（微秒）。
 export clockNow : Member n ClockOp r => Eff r Int
-clockNow = sendCore ClockOp "clock" n Now
+clockNow = sendCore (Named n ClockOp) "clock" n Now
 
 -- | 通过命名实例睡 `us` 微秒；真实 handler 走编译器原生 `@vuna@prim_eff_sleep`（阻塞睡眠，不是忙等）。
 export clockSleepMicros : Member n ClockOp r => Int -> Eff r Int
-clockSleepMicros us = sendCore ClockOp "clock" n (SleepMicros us)
+clockSleepMicros us = sendCore (Named n ClockOp) "clock" n (SleepMicros us)
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ClockOp`。
-export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ClockOp r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ClockOp r) b
-handleClock n ret opH comp = handleCore ClockOp "clock" n ret opH comp
+export handleClock : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ClockOp) r} -> (a -> b) -> ((o : ClockOp) -> (resClock o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ClockOp) r) b
+handleClock n ret opH comp = handleCore (Named n ClockOp) "clock" n ret opH comp
 
 -- | 真实 handler 的操作解释：`Now` 走 `effTimeUs`，`SleepMicros` 走 `@vuna@prim_eff_sleep`（阻塞睡眠）。
 clockOpHIO : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff [] a) -> Eff [] a
@@ -44,19 +44,19 @@ clockOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ClockOp` 行的 op 解释：时间走 `effTimeUs_host`，睡眠走 `@vuna@host@sleep` 后写穿继续（answer 行是 `[ClockOp]`）。
-clockOpHIOHost : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff (Cons "default" ClockOp []) a) -> Eff (Cons "default" ClockOp []) a
+clockOpHIOHost : {a : Type} -> (o : ClockOp) -> (resClock o -> Eff [ClockOp] a) -> Eff [ClockOp] a
 clockOpHIOHost op k = case op of
   Now => do
-    t <- effTimeUs_host
+    t <- raise effTimeUs_host
     k t
   SleepMicros us => do
-    _ <- @vuna@host@sleep us
+    _ <- raise (@vuna@host@sleep us)
     k 0
 
 -- | 带行的宿主 handler：删掉 `ClockOp`，answer 是 `Eff [ClockOp]`（不导出）。
-handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ClockOp r) a -> Eff r (Eff (Cons "default" ClockOp []) a)
-handleClockHostHost n comp = handleClock n (\a => pure a) clockOpHIOHost comp
+handleClockHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ClockOp :: r) a -> Eff r (Eff [ClockOp] a)
+handleClockHostHost n comp = handleCoreAt (Named n ClockOp) "clock" n (\a => pure a) clockOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ClockOp` 的 send 翻译成宿主 intrinsic。
-runClockHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ClockOp r) a -> Eff (rowAppend r (Cons "default" ClockOp [])) a
+runClockHost : {r : Row} -> {a : Type} -> Eff (Named "default" ClockOp :: r) a -> Eff (rowAppend r [ClockOp]) a
 runClockHost comp = joinEff (handleClockHostHost "default" comp)

@@ -31,6 +31,7 @@ Base_dNeg.ml
 Base_dNum.ml
 Base_dObs.ml
 Base_dObs_dSpan.ml
+Base_dOperator.ml
 Base_dOrd.ml
 Base_dPair.ml
 Base_dResult.ml

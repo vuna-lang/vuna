@@ -1,4 +1,4 @@
--- | 一阶 console 效应：行标签 = `ConsoleOp`，实例名在行的 `Cons n ConsoleOp r` 条目里，操作只有 `Print` / `EPrint`。
+-- | 一阶 console 效应：行标签 = `ConsoleOp`，实例名在行的 `Named n ConsoleOp :: r` 条目里，操作只有 `Print` / `EPrint`。
 --
 -- 同一程序里可以同时安装多个 console handler（例如 "mock" = 收集器、"real" = 真实
 -- stdout/stderr），行里按实例名区分。真实 handler 直调 `@vuna@prim_eff_print` /
@@ -22,17 +22,17 @@ export resConsole : ConsoleOp -> Type
 resConsole (Print s) = Nat
 resConsole (EPrint s) = Int
 
--- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member n ConsoleOp r` 证明（由精化器按行结构构造）。
+-- | 通过命名实例 `n` 发送 `Print`；返回写入字节数（`Nat`）。行里需要 `Member (Named n ConsoleOp) r` 证明（由精化器按行结构构造）。
 export consolePrint : Member n ConsoleOp r => String -> Eff r Nat
-consolePrint s = sendCore ConsoleOp "console" n (Print s)
+consolePrint s = sendCore (Named n ConsoleOp) "console" n (Print s)
 
 -- | 通过命名实例 `n` 发送 `EPrint`（stderr）；其余同 `consolePrint`。
 export consoleEprint : Member n ConsoleOp r => String -> Eff r Int
-consoleEprint s = sendCore ConsoleOp "console" n (EPrint s)
+consoleEprint s = sendCore (Named n ConsoleOp) "console" n (EPrint s)
 
 -- | 一阶 handler：`ret` 处理正常返回、`opH` 解释每个操作，结果行删除 `Console n`。`(key, name)` 与对应的 send 匹配。
-export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n ConsoleOp r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n ConsoleOp r) b
-handleConsole n ret opH comp = handleCore ConsoleOp "console" n ret opH comp
+export handleConsole : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ConsoleOp) r} -> (a -> b) -> ((o : ConsoleOp) -> (resConsole o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ConsoleOp) r) b
+handleConsole n ret opH comp = handleCore (Named n ConsoleOp) "console" n ret opH comp
 
 -- | 真实 handler 的操作解释：在续延前执行 `@vuna@prim_eff_print` / `@vuna@prim_eff_eprint`（answer 是 `Eff []` 动作；`Print` 的结果在边界转回 `Nat`）。
 consoleOpHIO : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [] a) -> Eff [] a
@@ -48,20 +48,20 @@ consoleOpHIO op k = case op of
 -- 带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
 -- ---------------------------------------------------------------
 -- | 带 `ConsoleOp` 行的 op 解释：真实打印后写穿继续（answer 行是 `[ConsoleOp]`）。
-consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff (Cons "default" ConsoleOp []) a) -> Eff (Cons "default" ConsoleOp []) a
+consoleOpHIOHost : {a : Type} -> (o : ConsoleOp) -> (resConsole o -> Eff [ConsoleOp] a) -> Eff [ConsoleOp] a
 consoleOpHIOHost op k = case op of
   Print s => do
-    r <- @vuna@host@print s
+    r <- raise (@vuna@host@print s)
     k (natFromInt r)
   EPrint s => do
     r <- raise (@vuna@prim_eff_eprint s)
     k r
 
 -- | 带行的宿主 handler：删掉 `ConsoleOp n`，answer 是 `Eff [ConsoleOp]`（不导出）。
-handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n ConsoleOp r) a -> Eff r (Eff (Cons "default" ConsoleOp []) a)
+handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ConsoleOp :: r) a -> Eff r (Eff [ConsoleOp] a)
 handleConsoleHostHost n comp =
-  handleConsole n (\a => pure a) (\o => \k => consoleOpHIOHost o k) comp
+  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) (\o => \k => consoleOpHIOHost o k) comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。
-runConsoleHost : {r : Row} -> {a : Type} -> Eff (Cons "default" ConsoleOp r) a -> Eff (rowAppend r (Cons "default" ConsoleOp [])) a
+runConsoleHost : {r : Row} -> {a : Type} -> Eff (Named "default" ConsoleOp :: r) a -> Eff (rowAppend r [ConsoleOp]) a
 runConsoleHost comp = joinEff (handleConsoleHostHost "default" comp)

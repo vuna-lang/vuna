@@ -1,43 +1,48 @@
 -- | 库级通用效应的核心：效应行 `Row`、抽象动作 `Eff r a`、行成员证明 `Member`，以及一阶 handler 原语 `sendCore` / `handleCore`。
 --
--- 表示：行是 Type-1 数据，只存**效应标签类型**（`Type`），本身是擦除索引；运行时靠
--- `send` / `handle` 的 (key, name) 找到已安装的 handler。`Eff r a` 是不导出构造子的
--- 抽象动作，内部只是私有 dummy thunk——没有世界令牌，dummy 参数只用于延迟执行。
+-- 表示：行是 Type-1 数据，只存**效应标签类型**（`Type`），本身是擦除索引；实例名用
+-- `Named n e` 并进标签，运行时靠 `send` / `handle` 的 (key, name) 找到已安装的 handler。
+-- `Eff r a` 是不导出构造子的抽象动作，内部只是私有 dummy thunk——没有世界令牌，dummy
+-- 参数只用于延迟执行。
 -- 续延由 OCaml 5 的运行时 delimited continuations（`Effect.Deep`）提供，语义是**一次性**：
 -- resume 两次由运行时拒绝；线性版 `Cont` 在用量检查阶段就拒绝。行条目是
 -- (实例名, 标签类型) 对——标签就是 `Type`，用户可以声明自己的效应并追加到行里。
 --
 -- 边界：只支持一阶效应——op 是普通值，不包含子计算；高阶 / 作用域需求由具体效应模块
--- 用嵌套 handler 实现（如 `Base.EffExn`）。`Member n e r` 是 Type-1 归纳族
+-- 用嵌套 handler 实现（如 `Base.EffExn`）。`Member e r` 是 Type-1 归纳族
 -- （`Here` / `There`），效应 wrapper 用隐式证明参数，精化器按行结构构造证明；
 -- `sendCore` / `handleCore` 是信任边界内的核心原语。handler 的结果行用 `rowRem`：
 -- 它不是类型族，由编译器按标签类型的值结构相等归约。
 module Base.Eff where
 
 import Base.Monad
+import Base.Operator
 
--- | 开放世界的效应行（Type-1 数据）：`Nil` 是空行，`Cons` 是 `Type` 标签 + 尾行。行只是擦除索引，运行时靠 `send` / `handle` 的 (key, name) 找 handler。
+-- | 命名标签：把实例名并进效应标签类型（`Named "audit" ConsoleOp`）。行条目只是这个类型；运行时实例名仍作为隐式 String 传给 send/handle。
+export data Named : String -> Type -> Type where
+
+-- | 开放世界的效应行（Type-1 数据）：`Nil` 是空行，`(::)` 是标签类型 + 尾行。行只是擦除索引，运行时靠 `send` / `handle` 的 (key, name) 找 handler。
 export data Row(..) : Type 1 where
   -- | 空行。
   Nil : Row
-  -- | 命名行条目：`n` 是实例名（String 值），`e` 是效应标签类型。
-  Cons : String -> Type -> Row -> Row
+  -- | 行条目：标签类型（可包 `Named`）接尾行。
+  (::) : Type -> Row -> Row
 
--- | 行成员证明 `Member n e r`（Type-1 归纳族）：`Here` 在头部同时命中名字与标签，`There` 跳过头部。隐式参数 `{w : Member n e r}` 由精化器按 (名字, 标签) 结构构造证明。
-export data Member(..) : String -> Type -> Row -> Type 1 where
-  -- | 头部命中：名字与标签都匹配。
-  Here : {n : String} -> {e : Type} -> {r : Row} -> Member n e (Cons n e r)
-  -- | 跳过头部条目 `Cons m x r`，在尾部继续找。
-  There : {n : String} -> {e : Type} -> {m : String} -> {x : Type} -> {r : Row} -> Member n e r -> Member n e (Cons m x r)
+-- | 行成员证明 `Member e r`（Type-1 归纳族）：`Here` 命中头部标签，`There` 跳过头部。隐式参数 `{w : Member e r}` 由精化器按标签结构构造证明。
+export data Member(..) : Type -> Row -> Type 1 where
+  -- | 头部命中。
+  Here : {e : Type} -> {r : Row} -> Member e (e :: r)
+  -- | 跳过头部条目 `x :: r`，在尾部继续找。
+  There : {e : Type} -> {x : Type} -> {r : Row} -> Member e r -> Member e (x :: r)
 
 -- | 从行 `r` 中删除标签 `e` 并保留顺序（handler 的结果行）。它不是类型族：由编译器按标签类型的值结构相等归约（`Core.Eval.rowRemReduce`）。
-export axiom rowRem : String -> Type -> Row -> Row
+export axiom rowRem : Type -> Row -> Row
 
--- | 行拼接 `rowAppend r t`（axiom，由编译器归约：`Nil` 单位 + `Cons` 递归）；`joinEff` 用它把 handler answer 的行并到外层行。
+-- | 行拼接 `rowAppend r t`（axiom，由编译器归约：`Nil` 单位 + `(::)` 递归）；`joinEff` 用它把 handler answer 的行并到外层行。
 export axiom rowAppend : Row -> Row -> Row
 
 -- 编译器侧镜像 `Intrinsics.effDefaultInstance`。
--- | 默认实例名：裸标签条目 = `Cons "default" e Nil`；行字面量展开与 `handleWithAt` 共用。
+-- | 默认实例名：行字面量的裸标签展开为 `Named "default" e`；`handleWithAt` 共用。
 export defaultInstance : String
 defaultInstance = "default"
 
@@ -58,7 +63,7 @@ instance Functor (Eff r) where
   )
 
 instance Monad (Eff r) where
-  >>= e k = MkEff (\u => case e of
+  (>>=) e k = MkEff (\u => case e of
     MkEff f => case k (f u) of
       MkEff g => g u
   )
@@ -78,10 +83,9 @@ instance Applicative (Eff r) where
 export effPrim : {r : Row} -> {a : Type} -> (Int -> a) -> Eff r a
 effPrim f = MkEff (\_ => f 0)
 
--- `(0 n)` 让名字在 codegen 擦除（只作类型索引）；精化器拒绝值类型的隐式 binder（`{n : String}`），所以这里写成显式参数，与自动 lift 生成的 Rig0 实参一致。
--- | 行扩宽：动作在更大的行 `Cons n e r` 下仍可执行（不安装也不删除 handler，运行时无操作）。
-export weaken : (0 n : String) -> {e : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (Cons n e r) a
-weaken n comp = case comp of
+-- | 行扩宽：动作在更大的行 `label :: r` 下仍可执行（不安装也不删除 handler，运行时无操作）。
+export weaken : {label : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (label :: r) a
+weaken comp = case comp of
   MkEff f => MkEff f
 
 -- | 内部：取出 Eff 动作的底层 thunk 并应用 dummy 参数（`runPure` / `runEff` 共用）。
@@ -142,14 +146,20 @@ raiseTo r e = MkEff (\u => case e of
 export sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (o : op) -> Eff r x
 sendCore e key name o = MkEff (\_ => prim_effectPerform key name o)
 
--- 名字、key、标签与 res 族都由编译器按 op 族推导：key = op 族规范名；标签 = op 族应用（`ConsoleOp`、`StateOp Nat`）；res = `res<短名>`。结果元素类型 `{x}` 由上下文定；`res` 族目前只作存在性协议校验，精确化受语言规则限制（见 debt D54）。
--- | `perform <op>` 的降级目标：标签与 op 同型（`o : e`，不单独传 `{op}`），名字是运行时路由值；`{w : Member n e r}` 要求行里存在该 (名字, 标签) 条目。
-export performCore : (n : String) -> (key : String) -> (e : Type) -> {r : Row} -> {w : Member n e r} -> {x : Type} -> (o : e) -> Eff r x
-performCore n key e o = sendCore e key n o
+-- 名字、key、标签与 res 族都由编译器按 op 族推导：key = op 族规范名；标签 = `Named n (op 族应用)`（`Named "default" ConsoleOp`）；res = `res<短名>`。结果元素类型 `{x}` 由上下文定；`res` 族目前只作存在性协议校验，精确化受语言规则限制（见 debt D54）。
+-- | `perform <op>` 的降级目标：`e` 是 op 族应用，行条目必须是 `Named n e`；`n` 是运行时路由值。
+export performCore : (n : String) -> (key : String) -> (e : Type) -> {r : Row} -> {w : Member (Named n e) r} -> {x : Type} -> (o : e) -> Eff r x
+performCore n key e o = sendCore (Named n e) key n o
 
--- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
-export handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem name e r) b
+-- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除标签 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
+export handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
 handleCore e key name ret opH comp = MkEff (\u => case comp of
+  MkEff f => prim_effectHandle key name ret opH f u
+)
+
+-- | 行首条目版核心 handler：`comp` 的行首就是被处理的标签，结果行直接是 `er`，不需要 `rowRem` 归约。用于 comp 的行尚未具体化的降级路径。
+export handleCoreAt : (e : Type) -> {er : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff (e :: er) a -> Eff er b
+handleCoreAt e key name ret opH comp = MkEff (\u => case comp of
   MkEff f => prim_effectHandle key name ret opH f u
 )
 
@@ -168,7 +178,7 @@ contAdapter : {op : Type} -> {res : op -> Type} -> {b : Type} -> ((o : op) -> (1
 contAdapter opH o k = opH o (MkCont k)
 
 -- | 线性版核心 handler：`opH` 接收线性 `Cont (res o) b`（一次性续延），其余同 `handleCore`；供需要线性续延的效应使用。
-export handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem name e r) b
+export handleCoreLin : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {res : op -> Type} -> (key : String) -> (name : String) -> (a -> b) -> ((o : op) -> (1 k : Cont (res o) b) -> b) -> Eff r a -> Eff (rowRem e r) b
 handleCoreLin e key name ret opH comp = handleCore e key name ret (contAdapter opH) comp
 
 -- ---------------------------------------------------------------
@@ -191,13 +201,13 @@ resOf rf o = case rf of
 
 -- 参数顺序是求解顺序的一部分：`comp` 在 `ret` 之前，先由 comp 解出 `a`，ret 体才不会被 Numeric 默认成 `Int`；`{w}` 放最后，`r` 已由 comp 解出，`rowRem` 的归约需要 name/label 当场解掉（`Core.Eval.rowRemReduce`）。
 -- | 核心 handler 的类型化包装：handler 类型为 `(o : op) -> (resOf rf o -> b) -> b`（`handleCore` 的 `h` 是裸类型变量，合成代码里的 `case o of ...` 拿不到 op 族与续延域）；`rf` 是擦除量。
-export handleWith : (n : String) -> (key : String) -> (e : Type) -> {r : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn e) -> Eff r a -> {w : Member n e r} -> (a -> b) -> ((o : e) -> (resOf rf o -> b) -> b) -> Eff (rowRem n e r) b
-handleWith n key e rf comp ret opH = handleCore e key n ret opH comp
+export handleWith : (n : String) -> (key : String) -> (e : Type) -> {r : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn e) -> Eff r a -> {w : Member (Named n e) r} -> (a -> b) -> ((o : e) -> (resOf rf o -> b) -> b) -> Eff (rowRem (Named n e) r) b
+handleWith n key e rf comp ret opH = handleCore (Named n e) key n ret opH comp
 
--- 用于 comp 行仍是未解 meta 的场合（`handle (pure e) { ... }`、内联 do 块）：此时 `handleWith` 的结果行 `rowRem n e r` 在调用点 conv 卡住；这里把被处理条目放行首、名字取默认实例名，comp 的行被定成 `Cons n e er`。
--- | 行首条目版核心 handler：`comp : Eff (Cons n e er) a`，结果行即 `er`，不需要 `rowRem` 归约；支持条目在行首时用这个，条目在行中任意位置用 `handleWith`。
-export handleWithAt : (n : String) -> (key : String) -> (e : Type) -> {er : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn e) -> Eff (Cons n e er) a -> (a -> b) -> ((o : e) -> (resOf rf o -> b) -> b) -> Eff er b
-handleWithAt n key e rf comp ret opH = handleCore e key n ret opH comp
+-- 用于 comp 行仍是未解 meta 的场合（`handle (pure e) { ... }`、内联 do 块）：此时 `handleWith` 的结果行 `rowRem (Named n e) r` 在调用点 conv 卡住；这里把被处理条目放行首、名字取默认实例名。
+-- | 行首条目版核心 handler：`comp : Eff (Named n e :: er) a`，结果行即 `er`，不需要 `rowRem` 归约；支持条目在行首时用这个，条目在行中任意位置用 `handleWith`。
+export handleWithAt : (n : String) -> (key : String) -> (e : Type) -> {er : Row} -> {a : Type} -> {b : Type} -> (0 rf : ResFn e) -> Eff (Named n e :: er) a -> (a -> b) -> ((o : e) -> (resOf rf o -> b) -> b) -> Eff er b
+handleWithAt n key e rf comp ret opH = handleCoreAt (Named n e) key n ret opH comp
 
 -- ---------------------------------------------------------------
 -- 线性函数（一次性闭包）与通用 bracket

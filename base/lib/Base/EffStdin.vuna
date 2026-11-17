@@ -24,15 +24,15 @@ resStdin (ReadBytes _) = Maybe String
 
 -- | 通过命名实例读一行；EOF 给 `Nothing`（空行是 `Just ""`）。
 export stdinReadLine : Member n StdinOp r => Eff r (Maybe String)
-stdinReadLine = sendCore StdinOp "stdin" n ReadLine
+stdinReadLine = sendCore (Named n StdinOp) "stdin" n ReadLine
 
 -- | 通过命名实例最多读 `k` 个字节；有数据就立即返回（可能少于 k），EOF 给 `Nothing`。
 export stdinReadBytes : Member n StdinOp r => Nat -> Eff r (Maybe String)
-stdinReadBytes k = sendCore StdinOp "stdin" n (ReadBytes k)
+stdinReadBytes k = sendCore (Named n StdinOp) "stdin" n (ReadBytes k)
 
 -- | 一阶 handler：结果行删除 `StdinOp`。
-export handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member n StdinOp r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (Base.Eff.rowRem n StdinOp r) b
-handleStdin n ret opH comp = handleCore StdinOp "stdin" n ret opH comp
+export handleStdin : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n StdinOp) r} -> (a -> b) -> ((o : StdinOp) -> (resStdin o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n StdinOp) r) b
+handleStdin n ret opH comp = handleCore (Named n StdinOp) "stdin" n ret opH comp
 
 -- | 真实 handler 的操作解释：读 stdin 后继续。
 stdinOpHIO : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [] a) -> Eff [] a
@@ -50,21 +50,21 @@ stdinOpHIO op k = case op of
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `StdinOp` 行的 op 解释：宿主原语读入后按状态槽区分 EOF，再写穿继续（answer 行是 `[StdinOp]`）。
-stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff (Cons "default" StdinOp []) a) -> Eff (Cons "default" StdinOp []) a
+stdinOpHIOHost : {a : Type} -> (o : StdinOp) -> (resStdin o -> Eff [StdinOp] a) -> Eff [StdinOp] a
 stdinOpHIOHost op k = case op of
   ReadLine => do
-    v <- @vuna@host@readLine
+    v <- raise (@vuna@host@readLine)
     ok <- raise @vuna@prim_eff_hostStatus
     if ok == 1 then k Nothing else k (Just v)
   ReadBytes n => do
-    v <- @vuna@host@readBytes (natToInt n)
+    v <- raise (@vuna@host@readBytes (natToInt n))
     ok <- raise @vuna@prim_eff_hostStatus
     if ok == 1 then k Nothing else k (Just v)
 
 -- | 带行的宿主 handler：删掉 `StdinOp`，answer 是 `Eff [StdinOp]`（不导出）。
-handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Base.Eff.Cons n StdinOp r) a -> Eff r (Eff (Cons "default" StdinOp []) a)
-handleStdinHostHost n comp = handleStdin n (\a => pure a) stdinOpHIOHost comp
+handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n StdinOp :: r) a -> Eff r (Eff [StdinOp] a)
+handleStdinHostHost n comp = handleCoreAt (Named n StdinOp) "stdin" n (\a => pure a) stdinOpHIOHost comp
 
 -- | entry 自动预装用（泛化 r）：把行头 `StdinOp` 的 send 翻译成宿主 intrinsic。
-runStdinHost : {r : Row} -> {a : Type} -> Eff (Cons "default" StdinOp r) a -> Eff (rowAppend r (Cons "default" StdinOp [])) a
+runStdinHost : {r : Row} -> {a : Type} -> Eff (Named "default" StdinOp :: r) a -> Eff (rowAppend r [StdinOp]) a
 runStdinHost comp = joinEff (handleStdinHostHost "default" comp)
