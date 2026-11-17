@@ -151,6 +151,36 @@ let
         printf '%s' "vuna-native-$(sha256sum "$out/bin/vuna-native" | cut -d' ' -f1)" > "$out/build-id"
       '';
 
+  # 浏览器可跑面冒烟（e2e / 按需；**不进 `nix flake check`**）：Playwright 驱动
+  # `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐），
+  # 在构建里跑默认特性 validate + headless 实跑（`chromium.launch` + `page.evaluate`）。
+  vuna-wasm-browser-smoke =
+    pkgs.runCommand "vuna-wasm-browser-smoke"
+      {
+        nativeBuildInputs = [ vuna ] ++ e2eTools ++ [ pkgs.playwright-driver.browsers-chromium ];
+        VUNA = "${vuna}/bin/vuna";
+        VUNA_BASE = "${../../base}";
+        VUNA_PLAYWRIGHT = "${pkgs.playwright}";
+        PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers-chromium}";
+        allowSubstitutes = false;
+        meta.description = "浏览器可跑面冒烟（默认特性 validate + Playwright chromium 实跑）";
+      }
+      ''
+        cp -r ${../../.} repo
+        cd repo
+        chmod -R u+w .
+        export VUNA_CHROMIUM="$(ls -d ${pkgs.playwright-driver.browsers-chromium}/chromium-*/chrome-linux64/chrome)"
+        export TMPDIR="$PWD/.tmp"
+        # 浏览器需要可写的 HOME/XDG：崩溃上报器（crashpad）没有 database 目录会 SIGTRAP。
+        export HOME="$PWD/.home"
+        export XDG_CONFIG_HOME="$HOME/.config"
+        export XDG_CACHE_HOME="$HOME/.cache"
+        export VUNA_STORE="$PWD/.store"
+        mkdir -p "$TMPDIR" "$VUNA_STORE" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+        sh nix/checks/wasm-browser-smoke.sh "$PWD/out"
+        touch "$out"
+      '';
+
   # 跨编译器 conformance runner：在 native 自举编译器上跑 selfhost / parity / corpus。
   backend-check =
     (pkgs.writeShellScriptBin "backend-check" ''
@@ -182,6 +212,7 @@ in
     vuna-perf
     vuna-run-tests
     vuna-native
+    vuna-wasm-browser-smoke
     backend-check
     ;
 }
