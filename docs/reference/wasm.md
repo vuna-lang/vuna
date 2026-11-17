@@ -25,21 +25,15 @@
   `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`。
   handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
   调用栈。
-- **栈要按编译器级输入配**：默认 `max-wasm-stack`（512 KiB）对编译器级输入不够，
-  长列表上会以 `call stack exhausted` 失败。编译器在长列表上
-  会用到**非尾递归**辅助函数（`map` / `append` / `Bytes.lenOf` 这类 `1 + f rest` 形状），
-  栈深与输入规模成正比。口径是「与 OCaml 默认 8 MiB 栈同量级」：在仓库根跑
-  `check <绝对路径>/compiler` 在 `-W max-wasm-stack=8388608` 下完成；整仓
-  `check <绝对路径> --error-format json` 在 32 MiB 下完成，故跑编译器产物推荐
-  ```console
-  wasmtime run -W max-wasm-stack=33554432 -W stack-switching=y -W gc=y \
-    -W function-references=y --dir / main.wasm ARGS...
-  ```
-  词法主循环（`Lexer.lexChars` / `lexCharsWith`）是尾递归（逆序累积 + 一次 reverse），
-  不按 token 数吃栈；effect 次数也不吃栈，剩余上限由被处理计算自身的递归深度决定。
-- 产物把预打开目录的 **fd 3** 当作根（见 §5），因此需要文件系统的运行要带
-  `--dir <root>`；多个 `--dir` 时只用第一个。路径按 fd 3 解析而**不按 `PWD`**，
-  所以给编译器传包路径时用绝对路径（相对路径会被当成相对 fd 3 的根）。
+- **栈要按输入配**：默认 `max-wasm-stack`（512 KiB）对长列表不够，会以
+  `call stack exhausted` 失败。长列表上的**非尾递归**辅助函数（`map` / `append` /
+  `Bytes.lenOf` 这类 `1 + f rest` 形状）让栈深与输入规模成正比；按实际输入给
+  `-W max-wasm-stack=<bytes>`，不要依赖默认值。词法主循环（`Lexer.lexChars` /
+  `lexCharsWith`）是尾递归（逆序累积 + 一次 reverse），不按 token 数吃栈；effect 次数
+  也不吃栈，剩余上限由被处理计算自身的递归深度决定。
+- 产物把预打开目录的 **fd 3** 当作唯一 preopen 根（见 §5）：Wasmtime 下用
+  `--dir <root>`，浏览器下由宿主注入 preopen/adapter。路径按 fd 3 解析而**不按 `PWD`**；
+  绝对路径会去掉开头的 `/` 再按根解析。多个 preopen 时只使用 fd 3，不做多根映射。
 - 工具链是**构建期/测试期外部工具**，不进 TCB、不进 seed（与 native 侧 `cc` 同构）：
   `nix/common.nix` 的 `wasmTools`（devShell、`vuna-run-tests`、`vuna-tests-*` 的 PATH）。
 
@@ -122,8 +116,9 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | String | `++`（`array.copy`）、`strFromInt`、`strShow`（`"` 包裹，按 `dt_show_string` 转义引号/反斜杠/换行/制表/回车；两遍扫描先定长度）、`strLength`、`strAt`（越界 `-1`）、`strSubstring(start, len, s)`（钳位后复制）、`strHash`（`(h*33+byte)&1023`）、`bi_eq_str` / `bi_neq_str`、List 桥接 `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` / `arrayFromList` / `arrayToList` |
 | 结构化比较 | `$rt_compare` 给三向 i32（`-1` / `0` / `1`），`bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool` 包装成 Bool。分派按运行时类型：`i31` → `$int` → `$float` → `$str` → `$arr` → 用户族（声明序逐个 `ref.test`）；`null` 参与排序；分派末端与不可比的值对走 `$rt_cmpTrap`（`wasm host operation is not implemented` + exit 2），跨族的 `ref.cast` 也可能直接 trap |
 | 入口 / 诊断 | `@ir@showInt` / `showNat` / `showBool` / `showStr`、`prim_erase`、`assert`、`prim_fail`、`todo` |
-| 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`path_symlink`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
-| 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename` / `trySymlink`、`fileExists` / `fileMtime` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
+| 宿主（WASI preview1 import） | `fd_write`（经 `$rt_writeChunked`，每次 ≤64 KiB）、`fd_read`、`fd_close`、`path_open`、`path_filestat_get`、`path_create_directory`、`path_remove_directory`、`path_unlink_file`、`path_rename`、`fd_readdir`、`environ_get` / `environ_sizes_get`、`args_get` / `args_sizes_get`、`clock_time_get`、`proc_exit` |
+| 宿主叶子（`@vuna@host@*`） | `tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、`fileExists` / `fileSize`、`getenv` / `getcwd` / `execPath` / `getArgs`、`print` / `exitOp`、`newRef` / `readRef` / `writeRef`、`isTty`（恒 `False`） |
+| 显式降级 / 拒绝的叶子 | `trySymlink`（trap）、`fileMtime`（状态置不可用，`FsOp.FileMtime` 得 `Nothing`）、`sleep`（trap）、`readLine` / `readBytes`（trap）、`runIn` / `spawn` / `wait`（trap） |
 | 其它 | `arrayEmpty`（空数组值）；`@vuna@debug@on`（恒 `False`）/ `@vuna@debug@line`（桩）；obs 叶子桩（见下） |
 
 - **运行时错误报告**统一为 `vuna: runtime error: <msg>\n`（stderr，exit 2），与 OCaml
@@ -147,21 +142,22 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 
 **宿主层**：直接实现 WASI preview1，不引入自定义 host import。线性内存只有固定 scratch
 （iov、两条路径区、64 KiB 读写缓冲、`filestat`、4 KiB `readdir` 缓冲），GC 堆在引擎侧；
-预打开目录的 **fd 3** 是唯一的根，路径统一去掉开头的 `/`（WASI dirfd 形式）。写走
-`$rt_writeChunked`（每次 ≤64 KiB，stdout/stderr 大输出不受线性内存大小限制）；读按
-`filestat` 的 size 分块；`fd_readdir` 用 cookie 续读。WASI errno 映射成与 `dtp_hostCode`
-一致的 1..6 / 9，写进 `$g_hostStatus` 供 `@vuna@prim_eff_hostStatus` 读取。
+预打开目录的 **fd 3** 是唯一的根，路径统一去掉开头的 `/`（WASI dirfd 形式）；`path_open`
+与 `path_filestat_get` 都关掉 symlink follow。写走 `$rt_writeChunked`（每次 ≤64 KiB，
+stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的 size 分块；`fd_readdir`
+用 cookie 续读。WASI errno 映射成与 `dtp_hostCode` 一致的 1..6 / 9，写进
+`$g_hostStatus` 供 `@vuna@prim_eff_hostStatus` 读取。
 
 - **env / cwd / execPath / 时间**：`getenv` 一次 `environ_get` 进 scratch 后按 `KEY=`
-  前缀匹配；`getcwd` 读 `PWD`（空则 `"."`）；`execPath` 返回空串（WASI preview1 没有
-  可执行路径）；`sleep` 用 `clock_time_get` 轮询到目标微秒；`isTty` 恒 `False`。
+  前缀匹配；`getcwd` 返回固定 `"/"`（虚拟 preopen 根，不读 `PWD`）；`execPath` 返回空串
+  （WASI preview1 没有可执行路径）；`clockNow` 读 monotonic clock；`sleep` 是运行期 trap
+  （浏览器不能用同步忙等阻塞事件循环）；`isTty` 恒 `False`。
 - **未实现的宿主操作**走 `$rt_hostTrap<n>`：运行期 `vuna: runtime error: wasm host
   operation is not implemented` + exit 2，不返回伪造结果。直接调用多数
   `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / `writeFileAtomic` /
   `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `fileMtime` / `fileSize`）
   是这条路径；base 的 `FsOp` handler 不走它们，而是走 `@vuna@host@try*`，属于可用路径。
-  `@vuna@prim_eff_readDir` / `getArgs` / `getenv` / `getcwd` / `execPath` / `sleep`
-  直连真实实现。
+  `@vuna@prim_eff_readDir` / `getArgs` / `getenv` / `getcwd` / `execPath` 直连真实实现。
 
 **明确拒绝**（`RtUnsupported` → 引用点 `WasmUnsupported`，带符号名）：未列入符号表的
 契约符号，例如 Sched 家族（`prim_sched*`）与网络宿主原语（`@vuna@host@tryNet*`）。
@@ -201,7 +197,9 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   WAT 确定性 + 每行 ≤100 列、除零 / 数组越界 / `assert` / `prim_fail` / `todo` 的错误
   文本、`--no-compile`、拒绝面、`--target` 取值校验；stack-switching 探针验证
   `cont`/`resume`/`suspend` 与 handler 转发；另有 2000 次 perform（默认栈不增长）与
-  重复 resume 的 one-shot trap（`continuation already resumed`）。
+  重复 resume 的 one-shot trap（`continuation already resumed`）。浏览器能力裁剪由同一
+  文件锁住：`path_symlink` 不出现在 import、symlink/sleep 运行期 trap、mtime 得
+  `Nothing`、cwd 恒 `/`、stdin 能力告警。
 - 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
   `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。生成器的两臂顺序约束由
@@ -212,46 +210,116 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 
 ## 8. 后端契约与边界
 
-wasm 是**受限后端**：纯计算、WasmGC 值、wasm 内 handler、经预打开目录（fd 3）的
-文件读写、stdout/stderr。进程 / stdin / 网络 / 信号 / 线程不在契约内。
+wasm 的契约上限是**浏览器 WASI（preview2-shim）能提供的能力子集**：纯计算、WasmGC 值、
+wasm 内 handler、经显式 preopen 的文件读写、stdout/stderr、monotonic clock、args/env。
+进程派生 / stdin / raw 网络 / 信号 / 线程 / 符号链接 / 阻塞 sleep 不在契约内。
+
+### 8.1 浏览器 wasm 能力矩阵
+
+口径来源：`@bytecodealliance/preview2-shim` 的 Browser support matrix（0.31.1，
+<https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim>）。运行时仍
+import WASI preview1；浏览器侧由 preview1→preview2 adapter 接到 preview2-shim。下表的
+「允许」指这个交集，不是 Node/Wasmtime 的全部宿主能力。
+
+| WASI 面 | preview2-shim 浏览器 | Vuna 效应 / 原语 | 当前 wasm 后端 |
+| --- | --- | --- | --- |
+| stdout / stderr | console-backed，保留 UTF-8 分片 | `ConsoleOp` / `prim_eff_print` | 支持 |
+| stdin | adapter-backed，默认 closed | `StdinOp` | 不支持（trap） |
+| args / env / initial cwd | 可配置；默认空快照 | `ArgsOp` / `EnvOp` | 支持；cwd 固定 `/`，env 可空 |
+| exit | cli/exit（`ComponentExit`） | `ExitOp` / `ProcessOp.Exit` | 支持 |
+| clocks | wall + monotonic + timer | `ClockOp.Now` / `SleepMicros` | `Now` 支持；`Sleep` trap |
+| random | `crypto.getRandomValues` | 无 | 未实现 |
+| filesystem | adapter + 显式 preopen；默认 ephemeral | `FsOp` / `@vuna@host@try*` | 核心支持；见 §8.2 |
+| 持久 filesystem | 宿主注入 OPFS / IndexedDB 等 | 无 | 未实现（宿主侧能力） |
+| io streams / poll | 浏览器资源；非阻塞 | 无 | 未实现（无异步/流效应） |
+| outbound HTTP | `fetch`；请求体缓冲，无 streaming/trailers | 无（`NetOp` 不映射） | 未实现 |
+| incoming HTTP | adapter / service worker | 无 | 非目标 |
+| TCP / UDP | 无 raw socket；仅 in-memory adapter | `NetOp` | 不支持（生成期拒绝） |
+| DNS | 需宿主 adapter | 无 | 非目标 |
+| terminal | adapter-backed；默认无资源 | `isTty` | 恒 `False` |
+| process spawn / exec | 无 | `ProcessOp.Spawn` / `Wait` / `RunIn` | 不支持（trap） |
+| threads / signals | 无 | 无 | 非目标 |
+
+### 8.2 当前 wasm 多出来、已砍 / 降级的能力
+
+- **符号链接**：`path_symlink` import 移除，`@vuna@host@trySymlink` 走
+  `$rt_hostTrap2`；`path_open` / `path_filestat_get` 都关闭 symlink follow。
+  `FsOp.Symlink` 在 wasm 上运行期失败。
+- **mtime**：浏览器 adapter 的修改时间通常是 epoch 或 no-op；
+  `@vuna@host@fileMtime` 直接置不可用状态，`FsOp.FileMtime` 得到 `Nothing`。
+- **阻塞 sleep**：`SleepMicros` 及所有 `*_sleep*` 符号映射到 `$rt_hostTrap1`；
+  `clockNow`（monotonic）保留。浏览器不能用同步忙等占住事件循环。
+- **cwd**：`getcwd` 返回 `/`，不读 `PWD`；`execPath` 返回空串。相对路径按这个虚拟根
+  归一。
+- **fd 3 主机根**：fd 3 只是 preview1 的 preopen 约定，不是主机 `/`。浏览器没有隐含
+  根；文件访问必须在宿主注入的 preopen 内，多个 preopen 不支持。
+- **原子写**：`WriteFileAtomic` 保留「写临时文件 + rename」的 best-effort 语义；
+  浏览器 adapter 不承诺 rename 的原子性。
+- **递归删除**：`RemoveTree` 只做 unlink 文件或删空目录，不递归（见下）。
+- **进程**：`ProcessOp.Args` / `Exit` 可用（`Exit` 走 `proc_exit`）；`Spawn` / `Wait` /
+  `RunIn` 运行期 trap。家族整体仍按不可用告警。
+- **stdin / raw 网络**：分别 trap 与生成期拒绝；浏览器默认 stdin closed，raw TCP/UDP/DNS
+  不暴露。
+- **直接 `prim_eff_*` 文件系统原语**：多数仍是 trap；base 的 `FsOp` handler 走
+  `@vuna@host@try*`，是可用路径。
+
+### 8.3 浏览器允许但当前未实现
+
+- `wasi:random`（secure / insecure bytes 与 seed）：浏览器有
+  `crypto.getRandomValues`，Vuna 还没有随机效应。
+- wall clock：当前只暴露 monotonic `clockNow`。
+- outbound HTTP（`wasi:http/outgoing-handler`，fetch-backed）：浏览器允许，但 `NetOp`
+  是 raw socket 语义，不能直接映射；需要单独的 HTTP 效应。
+- 持久文件系统：由宿主注入 OPFS / IndexedDB / 自定义 `wasi:filesystem` adapter；guest
+  侧没有额外能力。
+- 可注入 stdin / terminal：preview2-shim 允许 adapter 注入；当前后端仍按不可用处理。
+- 浏览器运行器：`jco` + preview2-shim 的加载/实例化链路尚未接入仓库；当前验证仍在
+  Wasmtime 上跑 `.wasm`。
+
+### 8.4 能力表
 
 | 能力 | 状态 | 构建期 / 运行期 |
 | --- | --- | --- |
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
 | `Eff` 的 handler（cont/resume/suspend） | 支持 | 运行需要 wasmtime 开 stack-switching |
-| `FsOp`（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 失败经 errno 走 `FsOp` 错误通道 |
-| `ConsoleOp` / `ExitOp` / `ArgsOp` / `ClockOp` / `EnvOp` / `RefOp` | 支持 | `isTty` 恒 `False`、`execPath` 空串（子操作降级） |
-| `ProcessOp` / `StdinOp` / `NetOp` | 不支持 | 构建期告警 `UN_TargetEffectUnavailable`；执行到叶子时运行期 trap（exit 2） |
+| `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
+| `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` / `RefOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
+| `ClockOp.Now` | 支持 | monotonic clock |
+| `ClockOp.SleepMicros` | 不支持 | 运行期 trap（浏览器不能阻塞事件循环） |
+| `ProcessOp` | 部分 | `Args` / `Exit` 可用；`Spawn` / `Wait` / `RunIn` trap；家族告警 |
+| `StdinOp` | 不支持 | 构建期告警；执行到叶子 trap（exit 2） |
+| `NetOp` | 不支持 | 构建期告警；raw socket 生成期拒绝 |
+| `FsOp.Symlink` / `FsOp.FileMtime` | 降级 | symlink trap；mtime 得 `Nothing` |
 | 网络宿主原语 / extern / FFI | 不支持 | 生成期拒绝（exit 1） |
 
 入口行的能力检查在构建期给出：`vuna build --target wasm -W` 显示
 `UN_TargetEffectUnavailable`，`--deny-warnings` 提升为失败（不留产物）。产物本身仍然
 生成——**声明了不可用效应但从不执行**的程序可以正常跑；执行到对应叶子时以
 `vuna: runtime error: wasm host operation is not implemented` 退出（exit 2），不返回
-伪造结果。能力表在 `Vuna.Compiler.Base.Capabilities`，与 §5 的运行时实现表同步。
+伪造结果。能力表在 `Vuna.Compiler.Base.Capabilities`，粒度是效应家族；逐操作缺口以
+§8.1–§8.3 为准。
 
 - 闭包是**单参**形状（`$ft = (anyref anyref) -> anyref`）：多参 lambda 创建时柯里化，
   应用侧每多一个实参就多一次 `call $rt_apply`。零参 lambda 内联，不产生闭包。
 - 变体分支只按 tag 一次线性分派（不做多模式矩阵）；结构化比较的用户族也按声明序线性
   `ref.test`。
-- **进程派生**：WASI preview1 没有 `fork`/`exec`。文本格式的多包 workspace `check` 会为
-  成员包 `processSpawn` 子进程再 `processWait`，wasm 版编译器在这种调用下以
-  `vuna: runtime error: wasm host operation is not implemented` 退出（exit 2）。
-  可行替代：`--error-format json`（机器格式走进程内顺序检查）或按包单独
-  `check <pkg-dir>`。
-- stdin（`readLine` / `readBytes`）、`runIn` / `spawn` / `wait` 在运行期 trap；
-  网络（`@vuna@host@tryNet*`）与 extern / FFI 在生成期拒绝。
+- **进程派生**：WASI preview1 没有 `fork`/`exec`。任何调用 `processSpawn` /
+  `processWait` / `processRunIn` 的程序在 wasm 上以
+  `vuna: runtime error: wasm host operation is not implemented` 退出（exit 2）；
+  文本格式的多包 workspace `check` 若走这个路径同样失败。可行替代：
+  `--error-format json`（机器格式走进程内顺序检查）或按包单独 `check <pkg-dir>`。
+- stdin（`readLine` / `readBytes`）在运行期 trap；网络（`@vuna@host@tryNet*`）与
+  extern / FFI 在生成期拒绝。
 - 直接调用 `@vuna@prim_eff_*` 文件系统原语（`readFile` / `writeFile` / …）是运行期
   trap；base 的 `FsOp` handler 走 `@vuna@host@try*`，是可用路径（见 §5）。
 - wasm 的 `tryRemoveTree` 只做「unlink 文件」或「删空目录」（`path_unlink_file` +
   `path_remove_directory`），不递归；要删非空树需调用方逐层处理。
-- 栈：默认 512 KiB 不够编译器级输入；按 §1 的口径给 `max-wasm-stack`
-  （`check compiler` 8 MiB；整仓 `check` 32 MiB；wasm→wasm 生成 compiler 包 256 MiB）。
-  栈深来自长列表上的非尾辅助函数（`append` 之类 `1 + f rest`），与列表长度成正比。
+- 栈：默认 512 KiB 对长输入不够；按 §1 的口径给 `max-wasm-stack`。栈深来自长列表上的
+  非尾辅助函数（`append` 之类 `1 + f rest`），与列表长度成正比。
 - 线性内存只有固定 scratch（4 页），没有 bump 堆；GC 堆由引擎管理。
-- 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（暂缓，见
-  [architecture-target](../architecture-target.md) D7）、
-  Component Model / WASI 0.2/0.3（D16 的终端未决部分）。
+- 多单元链接、WAT 缓存、`vuna run --target`、wasm seed（不做，见
+  [architecture-target](../architecture-target.md) D7）、Component Model / WASI 0.2/0.3
+  （D16 的终端未决部分）。
 
 ## 9. 相关阅读
 

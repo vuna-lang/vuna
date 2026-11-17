@@ -94,32 +94,32 @@ comp thunk 是 `EffUnit -> a` 的闭包；运行期闭包 code 的类型是 `$ft
   Exit / Stdin / Args / Net（清单见 `Intrinsics.builtinEffects`）；`Ref` 不是 handler
   家族，`refNew` / `refRead` / `refWrite` 直调 `@vuna@host@*Ref`。每个操作能否落地取决于
   wasm 符号表：
-  - 直连实现的：Console（`print` / `eprint`）、Exit（`exitOp` → `proc_exit`）、
-    Args（`getArgs`）、Fs（`tryReadFile` / `tryWriteFile` / `tryWriteFileAtomic` /
-    `tryReadDir` / `tryIsDirectory` / `tryMakeDir` / `tryMakeDirExclusive` /
-    `tryRemoveFile` / `tryRemoveTree` / `tryRename` / `trySymlink`、`fileExists` /
-    `fileMtime` / `fileSize`）、Env（`getenv` / `getcwd` / `execPath`）、Clock
-    （`effTimeUs_host` / `@vuna@host@sleep`）、Ref（`newRef` / `readRef` / `writeRef`）。
-    `execPath` 返回空串；`tryRemoveTree` 只 unlink 文件或删空目录，不递归。
+  - 直连实现的：Console（`print` / `eprint`）、Exit（`exitOp` → `proc_exit`、Process 的
+    `exit_process_host`）、Args（`getArgs`）、Fs（`tryReadFile` / `tryWriteFile` /
+    `tryWriteFileAtomic` / `tryReadDir` / `tryIsDirectory` / `tryMakeDir` /
+    `tryMakeDirExclusive` / `tryRemoveFile` / `tryRemoveTree` / `tryRename`、
+    `fileExists` / `fileSize`）、Env（`getenv` / `getcwd` / `execPath`）、Clock
+    （`effTimeUs_host`）、Ref（`newRef` / `readRef` / `writeRef`）。
+    `execPath` 返回空串；`getcwd` 返回 `/`；`tryRemoveTree` 只 unlink 文件或删空目录，
+    不递归；`fileMtime` 置不可用状态（`FsOp.FileMtime` 得 `Nothing`）。
   - 运行期失败（`$rt_hostTrap*`，文本 `vuna: runtime error: wasm host operation is not
-    implemented`，exit 2）：Stdin（`readLine` / `readBytes`）与 Process 的 `runIn` /
-    `spawn` / `wait` / `exit_process_host`。
+    implemented`，exit 2）：Stdin（`readLine` / `readBytes`）、Clock 的
+    `@vuna@host@sleep`、Fs 的 `trySymlink`，以及 Process 的 `runIn` / `spawn` / `wait`。
   - 生成期拒绝（符号表外，`WasmUnsupported`）：Net 的 `@vuna@host@tryNet*`。
 - **直接调用 `@vuna@prim_eff_*`**：`readDir` / `getArgs` / `getenv` / `getcwd` /
-  `execPath` / `sleep` / `print` / `eprint` / `exit` / `newRef` / `readRef` /
-  `writeRef` / `hostStatus` 直连真实实现；`readFile` / `writeFile` /
-  `writeFileAtomic` / `isDirectory` / `makeDir` / `removeFile` / `fileExists` /
-  `fileMtime` / `fileSize` / `readLine` / `readBytes` / `spawn` / `wait` 是运行期
-  trap。base 的 `FsOp` handler 走 `@vuna@host@try*`，不经过这些 trap 原语。
+  `execPath` / `print` / `eprint` / `exit` / `newRef` / `readRef` / `writeRef` /
+  `hostStatus` 直连真实实现；`readFile` / `writeFile` / `writeFileAtomic` /
+  `isDirectory` / `makeDir` / `removeFile` / `fileExists` / `fileMtime` / `fileSize` /
+  `readLine` / `readBytes` / `spawn` / `wait` / `sleep` 是运行期 trap。base 的 `FsOp`
+  handler 走 `@vuna@host@try*`，不经过这些 trap 原语。
 - **进程派生**：WASI preview1 没有 `fork` / `exec`，所以多包 workspace 的文本格式
   `check`（成员包 `processSpawn` + `processWait`）在 wasm 上会以运行期错误退出；
   机器格式 `--error-format json` 走进程内顺序检查。
 - **栈深度**：effect 次数本身不占调用栈（handler 运行时是尾调用）；能用多少次 effect
   由被处理计算自己的递归深度决定——默认 `max-wasm-stack`（512K）下 2000 次 perform 正常
-  （`106` 的 `effdepth` 用例锁 2000 次）。编译器级输入还要考虑长列表的**非尾**辅助
-  （`map` / `append` 这类 `1 + f rest` 形态）：它们按输入规模吃栈，需要把
-  `max-wasm-stack` 提到与 OCaml 默认 8 MiB 栈同量级；词法主循环 `Lexer.lexChars` /
-  `lexCharsWith` 是尾递归（逆序累积 + 一次 reverse），不按 token 数吃栈。
+  （`106` 的 `effdepth` 用例锁 2000 次）。长列表上的**非尾**辅助（`map` / `append` 这类
+  `1 + f rest` 形态）按输入规模吃栈，需要按实际输入提高 `max-wasm-stack`；词法主循环
+  `Lexer.lexChars` / `lexCharsWith` 是尾递归（逆序累积 + 一次 reverse），不按 token 数吃栈。
 - **性能**：每个 effect 至少一次 suspend/resume；符合 one-shot 语义。
 
 ## 5. 相关阅读
