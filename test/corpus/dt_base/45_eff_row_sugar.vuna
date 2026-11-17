@@ -23,6 +23,13 @@ r2 = [Fetch, Log]
 r3 : Row
 r3 = [Fetch]
 
+-- 显式 `Named` 条目：列表字面量不再包一层默认名（与 `Named ... :: []` 等价）。
+r4 : Row
+r4 = [Named "default" Fetch]
+
+r5 : Row
+r5 = [Named "audit" Fetch, Log]
+
 r0 : Row
 r0 = []
 

@@ -183,7 +183,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - **实例名是标签里的 String**：行条目 `Named "counter" (ReaderOp Int)`；运行时按
   `(key, name)` 的字符串相等找 handler（name 仍作为隐式 String 传给 send/handle）。
   库不定义固定实例名枚举，使用方自选名字（同一效应族同时安装的实例名必须互不相同）。
-  裸标签 = 默认名 `"default"`；显式名用 `[Op@audit]` 或 `Named "audit" Op`。
+  裸标签 = 默认名 `"default"`；显式名用 `[Op@audit]`、`Named "audit" Op`，列表字面量里
+  也可直接写 `[Named "audit" Op]`（条目已是 `Named` 时不再套默认名）。
 - `Eff r a` 构造子不导出；内部是私有 dummy thunk（`EffUnit -> a`），
   **没有世界令牌**；dummy 只为延迟执行。
 - `Member : Type -> Row -> Type 1` 是归纳族（`Here`/`There`），索引是**行条目**（标签，

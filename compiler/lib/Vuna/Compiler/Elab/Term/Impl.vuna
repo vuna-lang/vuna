@@ -1101,9 +1101,19 @@ expandRowListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Base.Common.bind (expandRowListLitGo nilName consName rest sp)
     (\t => OkC (EApp (EVar consName sp) (rowConsArgs e t sp) sp))
 
--- | 行 cons 的实参：实例名包进 `Named`，标签接尾行。
+-- | 行 cons 的实参：条目已经是显式 `Named <name> <label>` 时原样使用（列表字面量不再
+-- 包一层默认名，`[Named "audit" Op]` 与 `Named "audit" Op :: []` 等价）；否则把实例名
+-- 包进 `Named`，标签接尾行。
 rowConsArgs : Expr -> Expr -> Span -> List Expr
-rowConsArgs e t sp = [EApp (EVar effNamedName sp) [rowLitNameExpr e sp, rowLitLabel e] sp, t]
+rowConsArgs e t sp = [rowConsEntry e sp, t]
+
+rowConsEntry : Expr -> Span -> Expr
+rowConsEntry (e@(EApp (EVar n _) ([_, _]) _)) sp =
+  if n == effNamedName then e else wrapRowEntry e sp
+rowConsEntry e sp = wrapRowEntry e sp
+
+wrapRowEntry : Expr -> Span -> Expr
+wrapRowEntry e sp = EApp (EVar effNamedName sp) [rowLitNameExpr e sp, rowLitLabel e] sp
 
 -- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
 litFamilyCons : Ec -> String -> Maybe DtCtor
