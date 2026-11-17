@@ -451,7 +451,7 @@ spanTextLine src sp =
 
 -- | 内部：模式的单行源码原文。
 patText : LintSrc -> Pat -> String
-patText src pat = spanText src (patSpan pat)
+patText src pat = spanTextLine src (patSpan pat)
 
 -- | 内部：span 是否落在同一行。
 spanSingleLine : Span -> Bool
