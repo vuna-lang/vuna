@@ -51,11 +51,11 @@ import Base.EffProcess
 -- AST/Token 布局不同的二进制各占一套 key 空间）；载荷 = `Canonical.Lex` 的显式编码 +
 -- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器。
 lexCacheSchema : String
-lexCacheSchema = "vuna-lex-cache 2"
+lexCacheSchema = "vuna-lex-cache 3"
 
 -- | lex 载荷编码版本（`Store` 的 codec 段）。
 lexCacheCodec : String
-lexCacheCodec = "lex-tokens 2"
+lexCacheCodec = "lex-tokens 3"
 
 -- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff r` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。

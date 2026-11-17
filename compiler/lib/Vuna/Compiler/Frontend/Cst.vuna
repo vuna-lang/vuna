@@ -79,7 +79,7 @@ lineCurStart : LineCur
 lineCurStart = LineCur 0 1 1 0
 
 curPos : LineCur -> Pos
-curPos c = Pos c.lcLine c.lcCol c.lcOffset
+curPos c = Pos c.lcLine c.lcCol c.lcOffset c.lcOffset
 
 -- | 前进一个字节（换行把列复位）。
 stepCur : String -> LineCur -> LineCur
@@ -178,10 +178,10 @@ toTrivComments fuel src cur ((Comment kind _ sp) :: rest) =
 
 -- | 注释 span 的起点（`Span` 的字段投影写成具名 helper，避免模式匹配噪音）。
 spanStartOf : Span -> Pos
-spanStartOf sp = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp)
+spanStartOf sp = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp) (spanStartOffset sp)
 
 spanEndOf : Span -> Pos
-spanEndOf sp = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp)
+spanEndOf sp = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
 
 -- | 空白 trivia：区间非空时一项；span 用区间两端的位置。
 spaceTrivia : String -> Pair Int Pos -> Pair Int Pos -> List Trivia
@@ -284,7 +284,7 @@ lexCstGo source = case lexSourceWithComments source of
     let
       fuel = strLength source + 1
       tcs = toTrivComments fuel source lineCurStart comments
-    in Just (buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0)) toks)
+    in Just (buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks)
 
 -- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
 triviaTextOf : Trivia -> String

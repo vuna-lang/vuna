@@ -33,9 +33,10 @@ import Vuna.Compiler.Base.Source
 -- ---------------------------------------------------------------
 -- 编码
 -- ---------------------------------------------------------------
--- | 位置 `(行, 列, 字节偏移)`：三个整数（列是 UTF-8 字节，与 lexer 一致）。
+-- | 位置 `(行, 列, 起点偏移, 终点偏移)`：四个整数（列/偏移都是 UTF-8 字节）。
 export encPos : Pos -> List String -> List String
-encPos p acc = encInt (posLine p) (encInt (posCol p) (encInt (posOffset p) acc))
+encPos p acc =
+  encInt (posLine p) (encInt (posCol p) (encInt (posOffset p) (encInt (posEndOffset p) acc)))
 
 -- | `TmplPart`：文本块（tag 0）/ 插值洞（tag 1，洞内 token 列表）。
 export encTmplPart : TmplPart -> List String -> List String
@@ -83,7 +84,7 @@ encPTokListGo (x :: rest) acc = encPTok x (encPTokListGo rest acc)
 export decPos : Int -> Cur -> Maybe (Pair Pos Cur)
 decPos fuel c =
   thenPair (decInt (fuel - 1) c)
-    (\line, b1 => thenPair (decInt (fuel - 1) b1) (\col, b2 => thenPair (decInt (fuel - 1) b2) (\off, b3 => Just (Pair (Pos line col off) b3))))
+    (\line, b1 => thenPair (decInt (fuel - 1) b1) (\col, b2 => thenPair (decInt (fuel - 1) b2) (\off, b3 => thenPair (decInt (fuel - 1) b3) (\end, b4 => Just (Pair (Pos line col off end) b4)))))
 
 -- | 解析列表头 `[<n>:`（`Bytes.decNumStop` 私有；这里自带）。
 decListHead : Int -> Cur -> Maybe (Pair Int Cur)

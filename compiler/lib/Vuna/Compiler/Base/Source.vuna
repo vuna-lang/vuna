@@ -23,6 +23,8 @@ export record Pos(..) where
   posCol : Int
   -- | 从源码起始算起的 UTF-8 字节偏移（从 0 开始）。
   posOffset : Int
+  -- | token 的结束字节偏移（从 0 开始，开区间）；非 token 位置等于 `posOffset`。
+  posEndOffset : Int
 
 -- | 源码 span：文件、起始行列、结束行列与字节偏移。文件在解析时由调用方注入，
 -- 供跨模块 flatten 后仍能追溯每个表达式来自哪个源文件。
@@ -47,15 +49,19 @@ export record Span(..) where
 
 -- | 取源码位置的行号。
 export posLine : Pos -> Int
-posLine (Pos l c o) = l
+posLine (Pos l c o e) = l
 
 -- | 取源码位置的列号。
 export posCol : Pos -> Int
-posCol (Pos l c o) = c
+posCol (Pos l c o e) = c
 
 -- | 取源码位置的字节偏移。
 export posOffset : Pos -> Int
-posOffset (Pos l c o) = o
+posOffset (Pos l c o e) = o
+
+-- | 取 token 的结束字节偏移（非 token 位置等于起点）。
+export posEndOffset : Pos -> Int
+posEndOffset (Pos l c o e) = e
 
 -- | 取 span 的起始行。
 export spanStartLine : Span -> Int
