@@ -91,6 +91,7 @@
 | --- | --- | --- | --- |
 | D96 | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `compiler/lib/Vuna/Compiler/Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续（硬拒绝落地时补一致性测试） |
 | D97 | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p` bootstrap 存储根，所以 `compiler/app/Main.vuna` 的行必须带 `ProcessOp`，按符号生成期拒绝会把编译器自己拒掉 | `compiler/lib/Vuna/Compiler/Base/Store.vuna`（`dirReady`）、`compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：该调用改成 FsOp 逐级建目录，并清理签名链上的 `Member nProcess ProcessOp r`） |
+| D102 | wasm 产物在浏览器上不可执行：产物无条件含 stack-switching 类型与指令（`$ct` / `$eff` / `$rt_effPerform`），默认配置的引擎在**编译**阶段拒绝整个模块；开 V8 实验特性后 Chromium 145 能编译、纯程序能跑，但 effect 入口执行挂死，Node 24 连编译都失败。当前唯一可执行 effect 程序的是 Wasmtime（参考/差分执行器）；浏览器侧宿主层（手写 WASI preview1 垫片）与端到端用例尚未接入 | `test/suite/fixtures/wasm_engine_probe/probe.sh`、`test/suite/steps/114_wasm_engine_probe.steps`；`compiler/lib/Vuna/Compiler/Wasm/Module.vuna`（`baseTypes` / `baseTags`）；[wasm.md](wasm.md) §8.5/§8.6 | 后续（删除 wasmtime 与 `cont` 的触发条件：wasmfx 在目标浏览器默认可用且本仓运行时在 V8 上真能跑 / CPS lowering 落地 / 宣布 wasm 不支持用户自定义 handler） |
 
 ## 相关阅读
 
