@@ -576,9 +576,10 @@ moduleSplitIn roots modName tyName = do
       ErrC e => pure Nothing
       OkC dep => pure (findSplitIn dep.sourceFileDecls tyName)
 
--- | 内部：单个导出项 `module B` 是否提供该类型（其余导出项不贡献类型）。
+-- | 内部：单个整模块重导出项（`export module B` / 旧式 `module B`）是否提供该类型。
 exportedSplit : Member nFs FsOp r => List Root -> String -> ExportItem -> Eff r (Maybe SplitTy)
 exportedSplit roots tyName (XModule name sp) = moduleSplitIn roots name tyName
+exportedSplit roots tyName (XNamespace name Nothing sp) = moduleSplitIn roots name tyName
 exportedSplit roots tyName item = pure Nothing
 
 -- | 内部：在 Prelude 的整模块重导出面里找该类型。
@@ -592,9 +593,10 @@ preludeSplit roots tyName = do
       OkC sf =>
         firstMaybeEff (map (\m => moduleSplitIn roots m tyName) (preludeReexportModuleNames sf))
 
--- | 内部：导出项 `module B` 贡献的模块名；其余导出项为空。
+-- | 内部：整模块重导出项贡献的模块名；其余导出项为空。
 reexportModuleName : ExportItem -> List String
 reexportModuleName (XModule name sp) = [name]
+reexportModuleName (XNamespace name Nothing sp) = [name]
 reexportModuleName _ = []
 
 -- | 内部：Prelude 的整模块重导出模块名（新的 `sourceFileReexports` 优先，为空时退回 module 头
@@ -680,9 +682,11 @@ matchImportQualified : String -> Import -> Maybe Bool
 matchImportQualified name imp =
   if imp.importName == name then Just imp.importIsQualified else Nothing
 
--- | 内部：导出项 `module B` 的模块名；其余导出项为 `Nothing`。
+-- | 内部：整模块重导出的模块名（`export module B` / 旧式 `export (module B)`）。
+-- 带 alias 的 `export module B as X` 只暴露命名空间路径 X、不提供短名，因此不算。
 exportModuleName : ExportItem -> Maybe String
 exportModuleName (XModule name sp) = Just name
+exportModuleName (XNamespace name Nothing sp) = Just name
 exportModuleName item = Nothing
 
 -- | 内部：Prelude 的整模块重导出面（`module Base.Bool` 等）——这些模块的短名在任意模块里
