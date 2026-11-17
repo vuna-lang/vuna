@@ -9,7 +9,7 @@
 -- `checkProgram` 复查，失败则回滚并提示手写签名。重定义同名 DFun 会移除旧块；`:delete NAME`
 -- 删除 REPL 内定义；`:load` 文件来源的块拒绝重定义 / 删除（改文件后 `:reload`）。
 --
--- 输入：非 tty 走 `prim_eff_readLine`（管道测试不感知行编辑）；tty 且 `:set editing`
+-- 输入：非 tty 走 `@vuna@prim_eff_readLine`（管道测试不感知行编辑）；tty 且 `:set editing`
 -- 未关闭时走 [Vuna.Repl.Edit]（原始模式行编辑、方向键、Ctrl-R、括号粘贴、resize 重绘），
 -- 历史单元的单行 / 多行编码在 [Vuna.Repl.History]。
 --

@@ -16,6 +16,7 @@
 109_backend_parity.steps	build	artifact-exec;build-link
 111_host_error.steps	run	artifact-exec;build-link;cli-text
 112_stdin_eof.steps	run	artifact-exec;stdin-eof
+113_net_timeout.steps	build	artifact-exec;build-link
 14_cli.steps	build,check,compile,corpus,help,interp,lint,seed,--typed	seed-binary;build-link;cli-text;tooling-output;corpus-selfcheck
 14b_binary_fingerprint.steps	build	build-link;cli-text
 17_diagnostics.steps	check,compile,interp	cli-render;cli-text
@@ -30,6 +31,7 @@
 34d_build_split.steps	build,compile,fmt,interp	artifact-exec;build-link;cli-text;fmt-text
 35_goal_lsp.steps	check,fmt,goal,lint	cli-text;fmt-text;goal-session
 36_gen_errors.steps	gen-errors	tooling-output
+39_lint_cli.steps	lint	cli-text;tooling-output
 39_context.steps	build,check,compile,help,interp	build-link;cli-text;tooling-output
 40_eff_main_entry.steps	interp	cli-text
 40_toolchain_m30.steps	doc	tooling-output
@@ -88,4 +90,5 @@
 78_determinism.steps	build,check	artifact-exec;build-link
 79_dep_identity.steps	check	cli-text
 80_code_identity.steps	build	build-link;cli-text
+82_layers.steps	check,fmt	cli-text
 81_pkg_errors.steps	add,check,fetch	pkg-store;cli-text
