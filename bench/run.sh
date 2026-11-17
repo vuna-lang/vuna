@@ -31,7 +31,7 @@ OCAMLOPT_BIN=${OCAMLOPT:-ocamlopt}
 CC_BIN=${CC:-cc}
 VUNA_BASE_OVERRIDE=${VUNA_BASE:-}
 
-BENCHES="arith string_ops hashmap list_recursion gc_pressure array records closures sorting float_math text_scan nat_bits"
+BENCHES="arith string_ops hashmap list_recursion gc_pressure array records closures sorting float_math text_scan nat_bits tco_mutual tco_wide gc_low_live gc_array_churn"
 
 usage() {
   cat <<'EOF'
@@ -206,6 +206,12 @@ rss_target() { # target program
   esac
 }
 
+# native 默认栈探针：固定 8 MiB soft limit，记录程序能否正常退出（TCO 落地后
+# 深尾递归项从 false 变 true）。与计时/峰值内存无关。
+default_stack_run() { # program
+  bash -c 'ulimit -s 8192 2>/dev/null; exec "$1"' _ "$1"
+}
+
 capture_target() { # target program
   case $1 in
     native) bash -c 'ulimit -s unlimited; exec "$1"' _ "$2" 2>&1 ;;
@@ -221,7 +227,7 @@ selected() {
 }
 
 declare -A MED RSS GC_MINOR_WORDS GC_MAJOR_WORDS GC_MINOR_COLLECTIONS GC_MAJOR_COLLECTIONS GC_TOP_HEAP
-declare -A RATIO RSS_RATIO
+declare -A RATIO RSS_RATIO DEFAULT_STACK
 ORDER=()
 
 # 编译一个被测后端到 <dir>/prog。
@@ -324,6 +330,15 @@ run_bench() { # name
     RSS["$name:$t"]=$(max_rss "$t" "${PROGS[$t]}")
   done
 
+  # native 默认栈探针：只在计时之外记录，崩溃不中断基线。
+  if [ -n "${PROGS[native]:-}" ]; then
+    if default_stack_run "${PROGS[native]}" >/dev/null 2>&1; then
+      DEFAULT_STACK["$name:native"]=true
+    else
+      DEFAULT_STACK["$name:native"]=false
+    fi
+  fi
+
   # 分配 / GC 统计只来自 OCaml 后端的生成 runtime（VN_PERF_STATS=1 退出打印）。
   if [ -n "${PROGS[vuna_ocaml]:-}" ]; then
     local gc_line
@@ -346,6 +361,9 @@ run_bench() { # name
   for t in $TARGETS; do
     note "  $t ${MED["$name:$t"]} ms  ${RSS["$name:$t"]} KB  ratio ${RATIO["$name:$t"]}x  rss ${RSS_RATIO["$name:$t"]}x"
   done
+  if [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
+    note "  native default_stack_ok=${DEFAULT_STACK["$name:native"]}"
+  fi
   if [ -n "${GC_MINOR_WORDS[$name]:-}" ]; then
     note "  gc    minor_words=${GC_MINOR_WORDS[$name]} major_words=${GC_MAJOR_WORDS[$name]} top_heap=${GC_TOP_HEAP[$name]}"
   fi
@@ -365,6 +383,9 @@ emit_backend() {
     printf ', "gc": { "minor_words": %s, "major_words": %s, "minor_collections": %s, "major_collections": %s, "top_heap_words": %s }' \
       "${GC_MINOR_WORDS[$name]:-0}" "${GC_MAJOR_WORDS[$name]:-0}" \
       "${GC_MINOR_COLLECTIONS[$name]:-0}" "${GC_MAJOR_COLLECTIONS[$name]:-0}" "${GC_TOP_HEAP[$name]:-0}"
+  fi
+  if [ "$target" = native ] && [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
+    printf ', "default_stack_ok": %s' "${DEFAULT_STACK["$name:native"]}"
   fi
   printf ' }'
 }
@@ -511,6 +532,16 @@ compare_baseline() {
         }')"
         if [ "$verdict" = WARN ]; then warns=$((warns + 1)); fi
         printf '  %-16s %-11s %-7s %10s %10s %10s  %s\n' "$name" "$t" rss "${cur}x" "${basev}x" "${delta}%" "$verdict"
+      fi
+      # 默认栈探针（TCO 落地后由 false 变 true；信息性，不算回归）
+      if [ "$t" = native ] && [ -n "${DEFAULT_STACK["$name:native"]:-}" ]; then
+        cur=${DEFAULT_STACK["$name:native"]}
+        basev=$(jq -r --arg n "$name" '.benchmarks[$n].native | if has("default_stack_ok") then (.default_stack_ok | tostring) else empty end' "$BASELINE")
+        if [ -n "$basev" ]; then
+          verdict=ok
+          [ "$cur" != "$basev" ] && verdict=changed
+          printf '  %-16s %-11s %-7s %10s %10s %10s  %s\n' "$name" "$t" stack "$cur" "$basev" "-" "$verdict"
+        fi
       fi
     done
   done

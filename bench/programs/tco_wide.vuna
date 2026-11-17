@@ -1,0 +1,9 @@
+-- 宽尾递归：9 个参数（3 个走栈）的尾位置自调用。
+-- 手写 OCaml 对照见 tco_wide.ml（同算法）。
+step : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+step a b c d e f g h n =
+  if n <= 0 then a + b + c + d + e + f + g + h
+  else step (a + 1) (b + 2) (c + 3) (d + 4) (e + 5) (f + 6) (g + 7) (h + n) (n - 1)
+
+main : Int
+main = step 0 0 0 0 0 0 0 0 1000000

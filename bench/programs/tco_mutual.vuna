@@ -1,0 +1,10 @@
+-- 互递归尾调用：even / odd 交替，每层都是尾位置调用。
+-- 手写 OCaml 对照见 tco_mutual.ml（同算法）。
+even : Int -> Bool
+even n = if n <= 0 then True else odd (n - 1)
+
+odd : Int -> Bool
+odd n = if n <= 0 then False else even (n - 1)
+
+main : Int
+main = if even 4000000 then 1 else 0

@@ -1,0 +1,16 @@
+-- 大对象 GC 压力：每轮 fromList 建数组 + Array.set 的 copy-on-write 复制后丢弃。
+-- 手写 OCaml 对照见 gc_array_churn.ml（同算法：Array.of_list + Array.copy/set）。
+import Base.Array
+import Base.List
+import Base.Nat
+
+churn : Int -> Int
+churn n = if n <= 0 then 0
+else
+  let
+    a = Base.Array.fromList (range 0 1000)
+    b = Base.Array.set a (Base.Nat.fromInt 0) n
+  in Base.Nat.toInt (Base.Array.length b) + Base.Array.get b (Base.Nat.fromInt 0) + churn (n - 1)
+
+main : Int
+main = churn 8000
