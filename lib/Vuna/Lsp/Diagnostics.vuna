@@ -555,7 +555,7 @@ findingDiagJson f =
       LintWarn => 2
       LintOff => 2
   in JObj
-    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode), Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]) [Pair "message" (JStr f.findingMessage)]))
+    (append [Pair "range" (lspRange f.findingLine f.findingCol f.findingEndLine f.findingEndCol), Pair "severity" (JNum sev), Pair "source" (JStr "vuna")] (append (if f.findingCode == "" then [] else [Pair "code" (JStr f.findingCode)]) (append [Pair "message" (JStr f.findingMessage)] (if f.findingCode == "" then [] else [Pair "codeDescription" (JObj [Pair "href" (JStr "https://github.com/vuna-lang/vuna/blob/main/docs/reference/lint.md")])]))))
 
 -- ---------------------------------------------------------------
 -- 一次请求的完整诊断链
