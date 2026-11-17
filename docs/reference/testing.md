@@ -470,60 +470,24 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计
   （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
 - `vuna-wasm-browser`：产物在**默认 wasm 特性**（`--features=-stack-switching`）下必须
-  validate 通过；用户 handler 的产物必须仍被拒绝。Chromium 冒烟**不进 derivation**
-  （`pkgs.chromium` 闭包约 336 个路径 / 1.8 GB；命中二进制缓存，但会进入每个 check 的输入
-  闭包与沙箱）；需要真实浏览器时显式给 `VUNA_CHROMIUM`：
+  validate 通过；宿主效应与用户 handler 的组合产物必须仍被拒绝（纯用户 handler 已由 CPS
+  lowering 覆盖，不再需要 stack switching）。默认不跑浏览器（保持 `nix flake check` 秒级）。
+- `vuna-wasm-browser-smoke`（**package，不在 `nix flake check` 里**）：用 Playwright 驱动
+  `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐，约 356 MB）做
+  headless 实跑，跑法与本地一致：
   ```console
-  VUNA_CHROMIUM=$(command -v chromium) node test/suite/fixtures/wasm_js_host/browser.mjs \
-    <main.wasm> --expect 'hi2<换行>'
+  nix build .#vuna-wasm-browser-smoke
   ```
-  沙箱里跑（缺可写 HOME 时 Crashpad 会 SIGTRAP）已经带 `--disable-crash-reporter` /
-  `--disable-breakpad` 与临时 HOME。浏览器用 **`pkgs.playwright-driver` 的 chromium**
-  （nixpkgs 打过补丁的 Playwright 构建，约 356 MB；`pkgs.chromium` 的闭包是 1.8 GB）：
+  注意构建里必须给可写的 `HOME` / `XDG_*`：浏览器崩溃上报器（crashpad）没有 database 目录会
+  `SIGTRAP`。本地单跑一条产物：
   ```console
-  CHROME="$(nix build nixpkgs#playwright-driver.browsers-chromium --no-link --print-out-paths)/chromium-*/chrome-linux64/chrome"
-  VUNA_CHROMIUM=$CHROME node test/suite/fixtures/wasm_js_host/browser.mjs <main.wasm> --expect 'hi2<换行>'
+  VUNA_PLAYWRIGHT=$(nix build --impure --no-link --print-out-paths \
+    --expr 'let f = builtins.getFlake (toString ./.); in f.inputs.nixpkgs.legacyPackages.x86_64-linux.playwright')
+  VUNA_CHROMIUM=$(nix build nixpkgs#playwright-driver.browsers-chromium --no-link --print-out-paths)/chromium-*/chrome-linux64/chrome
+  VUNA_PLAYWRIGHT=$VUNA_PLAYWRIGHT VUNA_CHROMIUM=$VUNA_CHROMIUM \
+    node test/suite/fixtures/wasm_js_host/browser.mjs <main.wasm> --expect 'hi2<换行>'
   ```
-  这条路径**不进 `nix flake check`**：把浏览器放进 derivation/包装脚本时，在这个环境里会撞到
-  两个未收敛的问题——stdout 重定向会让 Playwright 的 chrome 包装脚本挂住；在 `nix run`
-  包装里则会收到 SIGTERM。validate 那一半是硬门，浏览器实跑保持「本地/按需」。
-- `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
-  先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
-  gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；
-- `vuna-typecheck` / `vuna-lint`：`vuna check .` 自检、lint 零 finding；
-- `vuna-static`：不依赖 vuna 二进制的结构守卫合集（实现见 `nix/checks/lib/`）：
-  - `eff-boundary`：隐藏效果守卫，`runPure` 调用点只降不增（基线
-    `nix/checks/data/eff-boundary.allowlist`，当前为空），见 [effects.md](effects.md)；
-  - `ir-boundary`：IR 形状与正向断言守卫（方向不在这里：`Vuna.Compiler.Ir` /
-    `Codegen` / `Lowering` / `Native` / `Wasm` 的依赖方向由 `compiler/vuna.toml` 的
-    `[layers]` 声明、loader 强制，见 [packages.md](packages.md)「层约束」）。脚本保留：
-    文本生成层必须 import IR；`Lowering/Program.vuna` 是唯一的上游消费者且必须被
-    `Driver.SplitGen` 路由；IR 数据里没有目标文本；`IrRuntime` / `IrBridge` 不得复活，
-    见 [ir.md](ir.md)；
-  - `layers` 的回归用例是 `test/suite/steps/82_layers.steps`（越层 / 未加引号 / 成环）；
-  - `steps-inproc`：进程绑定岛门禁——fixture 用例已全部进程内执行，steps 里仍 spawn
-    `$VUNA` 的文件必须逐个登记在 `test/suite/process-bound.txt`，且总数不超过
-    `nix/checks/data/steps-inproc.max`（ratchet 只降不增）；
-  - `diag-raw`：compiler 内源码诊断必须走域码，位置渲染只在 `Base.Diag.Format`；
-- `vuna-obs-schema`：观测**结构**门禁——关闭（`VUNA_OBS=0`）不产 trace；`VUNA_OBS=2` 的
-  `check compiler` / `check base` 各产出可被 `vuna obs validate` 接受的 trace、
-  `summarize --json` 单行且含 `spans`/`wallUs`、编译器自观测仍产出 `vuna.elab` /
-  `vuna.codegen.check` 两个阶段跨度，见 [observability.md](observability.md)；
-- `vuna-obs-dwarf`：`#line` 门禁——split 产物每个绑定前的指令是**包相对** `.vuna` 路径，
-  且 `-g` 编出的可执行文件在 DWARF `.debug_line` 里真的指向 `.vuna`（不需要 gdb/perf）；
-- `vuna-obs-overhead`：关闭口径门禁——`VUNA_OBS=0` 与不设观测的产物逐字节一致、关闭时不写
-  trace、生成运行时的 obs 入口都以关闭快速路径开头（不在关闭路径读时钟/分配）；
-- `vuna-diag`：诊断策略三件套（实现见 `nix/checks/lib/`）——`diag-coverage` 码覆盖基线、
-  `diag-located` 无位置诊断逐码登记、`diag-style` 文案模板规范（见
-  [diagnostics.md](diagnostics.md)）；
-- **`check` 的覆盖边界**：`vuna check <pkg>` 只检查**该包入口的 import 闭包**——可执行包
-  （有 `app/Main.vuna`）检查入口闭包，库包以 `[export].modules` 为根。因此可执行包里
-  **未被入口引用的新模块不会被 `check` 覆盖**，而包 iface 也只覆盖被精化的模块（依赖
-  iface 校验要求「iface 模块集合 == 源码模块集合」，缺件会让依赖方回退 full 路径）。这类
-  模块要么进入口闭包，要么有自己的门禁：被验收包（如 `examples/infra`）引用并走 build/run，
-  或用 `vuna repl` 的 `:load` 精化。`compiler` 包的导出面已全部进入 `app/Main.vuna` 闭包
-  （Hash / Frontend.Cst 等导出模块显式 import），所以 `vuna check compiler` 覆盖全部导出模块、
-  iface 也是完整模块面；
+
 - `vuna-fmt`：workspace 全包与 `examples/`；
 - `vuna-nix-fmt`：`flake.nix` 与 `nix/` 下的 Nix 文件必须与 `nixfmt` 输出一致；
 - `vuna-checks-inventory`：顶层 `nix/checks/*.sh` 与 `default.nix` 的登记一一对应
