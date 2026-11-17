@@ -362,7 +362,7 @@ else case checkEFuel (fuel - 1) globals ctx ec c boolTyValue of
 -- 族约定：op 族 `M.XxxOp`；标签 = 同族应用（按 kind 的显式参数个数 k 补洞）；res = `M.res<短名>`
 -- ↔ 结果族 `M.resXxx`（这里只做存在性协议校验）；key = op 族规范名。
 -- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (<M.Xxx> <n=洞>) <op>`；
--- 名字洞由 `{w : Member n e r}` 隐式求解从行条目合一解出，行里没有该条目即缺实例错误。
+-- 名字洞由 `{w : Member (Named n e) r}` 隐式求解从行条目合一解出，行里没有该条目即缺实例错误。
 data PerfFamily : Type where
   PerfFamily : String -> String -> String -> PerfFamily
 
@@ -428,7 +428,7 @@ performCallExpr globals ec opTy op sp = case perfFamilyOfValue ec opTy of
 -- 标记：`EApp (EVar "@vuna@handle") [comp, ret, opH]`（Ast.handleSyntax）。`opH` 是
 -- `ELam [o, k] (ECase (EVar o) alts)` 的合成形态；族由 alts 的构造子推出来。
 -- 两个降级目标（顺序 = base 侧签名）：
---   * `handleWith`：`n`/标签名是洞，由 `{w : Member n e r}` 行解；结果行 `rowRem n e r`
+--   * `handleWith`：`n`/标签名是洞，由 `{w : Member (Named n e) r}` 行解；结果行 `rowRem (Named n e) r`
 --     （条目可以在行中任意位置）。
 --   * `handleWithAt`：被处理条目在 comp 的行首，名字取默认实例名，结果行就是剩下的行；
 --     只在 check 位置 rowRem 版失败后重试（comp 是行多态表达式时用）。

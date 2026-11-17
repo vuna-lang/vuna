@@ -106,7 +106,7 @@ leadingImplicitCtxGo ctx _ = ctx
 -- 正好落在 prefix 的 de Bruijn 环境里，可以直接作为新 Pi 的 domain。
 --
 -- 额外形状：`Member n e r => ...`（实例名/行约束糖）不是 trait；生成隐式 **Rig0** 的
--- 证明 binder `{_memberK : Member n e r}`，同样插在前导隐式 binder 之后。n/r 的域由
+-- 证明 binder `{_memberK : Member (Named n e) r}`，同样插在前导隐式 binder 之后。n/r 的域由
 -- `Elab.Sig` 的量化覆盖给出（String/Row）；这里只负责把约束表达式精化成证明类型。
 elabSigDictBinders : List (Pair String Term) -> Ec -> Term -> List Expr -> Span -> Check (Pair Term Ec)
 elabSigDictBinders globals ec tyTerm [] sp = OkC (Pair tyTerm ec)

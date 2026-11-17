@@ -970,7 +970,7 @@ resolveProgram modules label prefix ns imports decls =
   in Vuna.Compiler.Base.Common.traverse
     (resolveDeclWithImplicitScopes implicitScopes modules label prefix ns imports) decls
 
--- 签名里隐式 binder 的名字（`{n : String}` / `{r : Row}` / `{w : Member n e r}`），
+-- 签名里隐式 binder 的名字（`{n : String}` / `{r : Row}` / `{w : Member (Named n e) r}`），
 -- 以及约束 ctx 里自由的小写名（`Member n e r => ...` 的 n/r）。这些名字在定义体里
 -- 可引用：resolver 把它们加进子句作用域，elaborator 的 `checkBinders` 会绑定它们。
 -- 只在同一模块的源码名上匹配（DFun 与 DSig 同名）。
