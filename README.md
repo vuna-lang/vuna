@@ -41,7 +41,7 @@ examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可�
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
-nix run .#backend-check -- --compiler wasm --scope parity   # 自举编译器跑 parity（CI 同款；见 testing.md）
+nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
 ./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
 ./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
 ./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）

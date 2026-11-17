@@ -124,7 +124,7 @@ comp thunk 是 `EffUnit -> a` 的闭包；运行期闭包 code 的类型是 `$ft
 
 ## 5. 相关阅读
 
-- [wasm.md](wasm.md)：wasm 后端现状、宿主符号总表、栈口径与自举口径。
+- [wasm.md](wasm.md)：wasm 后端现状、浏览器能力范围、宿主符号总表与栈口径。
 - [native-effects.md](native-effects.md)：native 的栈拷贝续延实现。
 - [effects.md](effects.md)：效应语义与 one-shot 约束。
 - 探针：`test/suite/fixtures/wasm_stack_switch/forward.wat`；

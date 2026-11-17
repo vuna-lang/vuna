@@ -54,9 +54,9 @@
 - **分层表示**：无损 CST、Core、擦除后 IR、后端 IR，一种表示只服务一个抽象层。
 - **擦除后 IR**：显式、带类型、well-scoped、无元变量、无燃料预算，是所有后端的唯一输入。
 - **两个产品后端**：native（自研运行时，产出服务器与桌面二进制）与 wasm（浏览器 / 边缘）；
-  另有一个不发货的 OCaml 后端，只用于自举与互验。wasm 是**受限后端**：进程、信号、
-  网络、线程、stdin 不在契约内，也不承诺能在浏览器直接运行（契约与现状见
-  [reference/wasm.md](reference/wasm.md)「后端契约与边界」）。
+  另有一个不发货的 OCaml 后端，只用于自举与互验。wasm 是**受限后端**：契约上限是浏览器
+  WASI 能提供的能力子集；进程、信号、raw 网络、线程、stdin、符号链接、阻塞 sleep 不在
+  契约内（契约与现状见 [reference/wasm.md](reference/wasm.md)「后端契约与边界」）。
 - **语义优先的工具**：语法高亮、补全、跳转、格式化都从编译器的语义结果派生，
   不从文本模式派生。
 - **宏与自定义 DSL**：语法是数据、按模块作用域；用户可定义宏与 DSL 语法，工具自动跟上。
@@ -98,8 +98,8 @@
 | D14 | registry = 内容寻址对象集 + **可选**静态索引；无服务器、无账户、无签名 | 当前无 TLS 能力；网络/账户不进 TCB 或 seed；传输外置给 `git`/`curl`/Nix | 来源可信性由用户选定的 URL 决定；无撤销；索引只是便利层 |
 | D15 | 单一 store 根、两类生命周期：缓存族（派生、可删）与包对象族（取源、显式获取、跨项目存活）；获取显式、构建离线 | 缓存可删可重建，包对象必须跨会话/跨项目存活；一个根才有单一 framing/地址与 GC 口径 | 仍是同一棵树：clean/gc 必须按族作用域（包对象在 `objects/pkg/`），且无引用计数 GC（roots 只追加） |
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
-| D7 | 自举锚点保持 OCaml（`seed/` 与语义 oracle）；wasm seed 暂缓 | 现行 wasm 编码依赖 stack-switching（Tier 3、仅 x86_64 Linux），比 OCaml 更不可移植，不能充当信任根；wasm 的目标角色是浏览器 / 边缘，不是自举 | 自举链继续依赖 OCaml 工具链；wasm 二进制根要等 wasm 编码不依赖 stack-switching 之后再议 |
-| D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由 `wasm-tools parse` 生成；WAT 暂不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖工具版本；wasm seed 的 WAT 布局/提交策略未定 |
+| D7 | 自举锚点保持 OCaml（`seed/` 与语义 oracle）；wasm 不做自举、不设 wasm seed | 现行 wasm 只能跑浏览器/边缘可提供的能力子集（symlink、阻塞 sleep、可靠 mtime 等不在契约内），不能承担编译器自举所需的宿主面；wasm 的目标角色是浏览器 / 边缘产物 | 自举链继续依赖 OCaml 工具链；wasm 侧只保留产物与语义测试，不建二进制信任根 |
+| D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由 `wasm-tools parse` 生成；WAT 暂不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖工具版本；WAT 布局不承诺跨版本稳定 |
 | D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 可在 run 路径成熟后退 | 保留 normalization，去掉语义分叉 | REPL / test / goal 需改接对象库与后端 |
 | D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |

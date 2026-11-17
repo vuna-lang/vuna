@@ -1,20 +1,13 @@
 # wasm 后端
 
-> 状态：**端到端工作，并已支撑编译器自举**。wasm 版编译器能编译 `compiler` 包：
-> `vuna build compiler --target wasm --no-compile --out DIR` 产出的 `main.wat` 可被
-> `wasm-tools parse` 汇编；该二进制在仓库根（`--dir` 指向根）跑 `check compiler`（exit 0）、
-> `check . --error-format json`（整仓：根包 + compiler + base，诊断为空）均成功；
-> `build compiler --target ocaml --no-compile --out DIR2` 产出 154 个文件，与
-> OCaml 版编译器同参数产物逐字节一致（唯一差异是 `build-id`：包 identity 含依赖包
-> identity，依赖包 identity 继承构建它的编译器身份，不同构建器必然不同）。
-> 能力面：Int / Nat / String / Bool / Float；`let` / `if` / 用户 `data` / record /
-> 通用 `case`；饱和顶层调用、eta 展开与多参柯里化闭包（`$clo` +
-> `(elem declare func ...)`，应用逐实参 `call $rt_apply`）；内建饱和应用；结构化比较
-> `bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool`（`$rt_compare`）；`main : Eff r a` 与 handler（stack
-> switching，见 [wasm-effects.md](wasm-effects.md)）；WASI preview1 宿主层
-> （fs / env / args / clock）。未实现的宿主操作在运行期显式失败（不伪造结果）；
-> 符号表外的原语（extern、网络等）在引用点拒绝。
-> 实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
+> 状态：**端到端工作；浏览器/边缘受限后端，不承担自举**。能力面：Int / Nat / String / Bool / Float；
+> `let` / `if` / 用户 `data` / record / 通用 `case`；饱和顶层调用、eta 展开与多参柯里化
+> 闭包（`$clo` + `(elem declare func ...)`，应用逐实参 `call $rt_apply`）；内建饱和应用；
+> 结构化比较 `bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool`（`$rt_compare`）；
+> `main : Eff r a` 与 handler（stack switching，见 [wasm-effects.md](wasm-effects.md)）；
+> WASI preview1 宿主层（fs / env / args / clock），能力上限是浏览器 WASI 可提供的子集。
+> 未实现的宿主操作在运行期显式失败（不伪造结果）；符号表外的原语（extern、网络等）
+> 在引用点拒绝。实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Wasm`。
 
 ## 1. 产物与工具链
@@ -213,39 +206,9 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `test/suite/steps/109_backend_parity.steps` 对拍三端（OCaml 是语义 oracle）；
   新增共享能力先加 `suite/steps/parity/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
-- **自举口径**（wasm 版编译器编译自身）：先从仓库根生成并汇编 wasm 编译器，再用它跑
-  `check` 与 `build` 对拍。产物用 fd 3 当根且路径按 fd 3 解析，所以包参数用绝对路径。
-  ```console
-  cd <仓库根>
-  ./result/bin/vuna build compiler --target wasm --no-compile --out /tmp/wasm-compiler
-  wasm-tools parse /tmp/wasm-compiler/main.wat -o /tmp/wasm-compiler/main.wasm
-  wasmtime run -W max-wasm-stack=8388608 -W stack-switching=y -W gc=y -W function-references=y \
-    --dir / --env VUNA_BASE="$PWD/base" --env VUNA_STORE=/tmp/vuna-wasm-store \
-    /tmp/wasm-compiler/main.wasm check "$PWD/compiler"
-  wasmtime run -W max-wasm-stack=33554432 -W stack-switching=y -W gc=y -W function-references=y \
-    --dir / --env VUNA_BASE="$PWD/base" --env VUNA_STORE=/tmp/vuna-wasm-store \
-    /tmp/wasm-compiler/main.wasm check "$PWD" --error-format json
-  ```
-  两条 `check` 的预期是 exit 0、诊断为空（整仓那次实测 31m36s，32 MiB 栈、暖 store）。同一二进制跑
-  `build "$PWD/compiler" --target ocaml --no-compile --out DIR2` 的产物与 OCaml 版编译器
-  同参数产物逐字节一致（154 个文件；唯一差异是 `build-id`，见页首）。
-- **`vuna-wasm` 包**（`nix build .#vuna-wasm`）：把上面这段口径固化成一个可执行入口——
-  由 stage 1 编译器把 `compiler` 包编到 wasm（`--no-compile`）并 `wasm-tools parse`，
-  再装一个 `bin/vuna-wasm` 包装脚本（固定 `wasmtime` 路径与
-  `-W max-wasm-stack` / stack-switching / gc / function-references，`--dir ${VUNA_WASM_DIR:-/}`，
-  转发 `VUNA_BASE` / `VUNA_STORE`，并烘入 `VUNA_COMPILER_TAG`——WASI 下 `execPath` 是空串，
-  读不到 `build-id`）。WASI 没有 `exec`，脚本对不带 `--no-compile` 的 `build` 直接拒绝
-  （exit 2）并提示在宿主跑 `build.sh`。用时不需要手写上面的命令行：
-  `nix run .#vuna-wasm -- check <绝对路径>`。
-  读数：`check compiler` 冷 store 13m04s（8 MiB 栈）、单夹具 `check` 暖 store 3.5–4.6 s
-  （含每次重新编译 26 MB 模块；`$HOME/.cache/wasmtime` 命中后约 1 s）。
-  跨编译器 conformance 的完整口径（selfhost / parity / corpus）见
-  [testing.md](testing.md)「后端自举 conformance」。
-- **wasm→wasm 生成**：同一二进制跑
-  `build "$PWD/compiler" --target wasm --no-compile --out DIR3`（`max-wasm-stack` 给
-  256 MiB）产出的 `main.wat` 与 `./result/bin/vuna` 同参数产物逐字节一致
-  （26,202,591 字节）；它汇编出的 `main.wasm` 也能继续 `check` 包。生成器的输出是确定性
-  的，所以产物层面已是 fixed point。32 MiB 栈跑这条会 `call stack exhausted`（见 §8）。
+- wasm **不自举**：没有 wasm 版编译器产物、没有 wasm seed，也不跑 `backend-check`。
+  `--target wasm` 只作为产品产物与三端语义对拍的目标；自举 conformance 只覆盖
+  `vuna-native`（见 [testing.md](testing.md)「后端自举 conformance」）。
 
 ## 8. 后端契约与边界
 

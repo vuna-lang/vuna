@@ -45,41 +45,9 @@ jobs:
       - name: nix flake check
         run: sh nix/ci.sh
 
-  # 自举后端 conformance：用「由自身编出来的」wasm / native 编译器跑 check 与夹具
+  # 自举后端 conformance：用「由自身编出来的」native 编译器跑 check 与夹具
   # （口径见 docs/reference/testing.md「后端自举 conformance」）。
   # 不进 nix flake check：整轮成本远高于日常门禁，只在 push 与带 backend 标签的 PR 跑。
-  backend-wasm:
-    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'backend')
-    runs-on: ubuntu-latest
-    timeout-minutes: 150
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - name: Restore and save Nix store
-        if: github.event_name == 'push'
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ github.sha }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          purge: true
-          purge-prefixes: nix-${{ runner.os }}-
-          purge-created: 0
-          purge-primary-key: never
-      # wasmtime 的模块编译缓存（只认 $HOME/.cache）与 WASI 侧对象库：
-      # 冷启动单夹具约 4 s，暖后约 1 s。
-      - name: Cache wasmtime + WASI store
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/wasmtime
-            ~/.vuna/wasm-store
-          key: wasm-${{ runner.os }}-${{ hashFiles('compiler/**', 'base/**') }}
-          restore-keys: wasm-${{ runner.os }}-
-      - name: backend-check (wasm)
-        run: nix run .#backend-check -- --compiler wasm --scope all --jobs 8
 
   # native 自举对真实工程仍不通（debt D89：check base 段错误）。先落地并持续报告，
   # D89 关闭后删掉 continue-on-error 改成阻塞门禁。

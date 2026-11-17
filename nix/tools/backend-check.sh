@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 跨编译器 conformance：用自举出来的 wasm / native 编译器跑 check 与夹具。
+# 跨编译器 conformance：用自举出来的 native 编译器跑 check 与夹具。
 #
 # 三个 scope（口径见 docs/reference/testing.md「后端自举 conformance」）：
 #   selfhost  用该编译器检查整个仓库（workspace 根；机器格式诊断走进程内顺序检查）
@@ -7,7 +7,7 @@
 #   corpus    test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
 #
 # 用法:
-#   backend-check --compiler wasm|native [--scope selfhost,parity,corpus] [--jobs N]
+#   backend-check --compiler native [--scope selfhost,parity,corpus] [--jobs N]
 #                 [--target ocaml,wasm,native] [--filter PAT] [--compiler-bin PATH]
 #                 [--keep] [--list]
 #
@@ -44,8 +44,8 @@ while [ $# -gt 0 ]; do
 done
 
 case $compiler in
-  wasm|native) ;;
-  "") printf 'backend-check: --compiler wasm|native is required\n' >&2; usage 2 ;;
+  native) ;;
+  "") printf 'backend-check: --compiler native is required\n' >&2; usage 2 ;;
   *) printf 'backend-check: unknown compiler %s\n' "$compiler" >&2; exit 2 ;;
 esac
 
@@ -83,10 +83,6 @@ fi
 alt=$compiler_bin
 
 export VUNA_BASE="$base"
-# wasm 编译器要把整仓 check 跑完：默认 512 KiB 栈不够（口径见 wasm.md §1）。
-if [ "$compiler" = wasm ]; then
-  export VUNA_WASM_STACK=${VUNA_WASM_STACK:-33554432}
-fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-backend-check.XXXXXX")
 cleanup() {
@@ -110,7 +106,6 @@ matches_filter() {
 run_selfhost() {
   printf '== selfhost: %s check . (workspace root)\n' "$compiler"
   local out="$work/selfhost.json" err="$work/selfhost.err" status=0 errors
-  # 传绝对路径：wasm 版编译器按 fd 3（`--dir /`）解析路径，`.` 会被当成宿主根。
   ( cd "$repo" && "$alt" check "$repo" --error-format json >"$out" 2>"$err" ) || status=$?
   if [ ! -s "$out" ]; then
     printf 'FAIL selfhost: no json document (exit %s)\n' "$status" >&2
@@ -260,7 +255,7 @@ corpus_one() {
 
 # corpus 里只跑「程序语义」夹具：工具链家族（fmt/lint/fix/doc/cli/repl/search/codegen/cst）
 # 的 `.out` 是工具输出而非程序输出；pkg_err / packages 是包诊断与多包/workspace 语义，
-# 期望路径与运行方式由 suite 的包上下文夹具专门覆盖（wasm 侧也无法派生进程）。
+# 期望路径与运行方式由 suite 的包上下文夹具专门覆盖（runner 侧也无法派生进程）。
 corpus_skip_family() {
   case $1 in
     fmt|lint|fix|doc|cli|repl|search|lsp|codegen|cst|packages) return 0 ;;

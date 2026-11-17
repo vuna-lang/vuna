@@ -491,18 +491,18 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - `vscode-ext`：提交的 `vscode/dist/extension.js` 与清单 / 语法文件的离线自检，不跑
   `npm install`。
 
-## 后端自举 conformance（`vuna-wasm` / `vuna-native`）
+## 后端自举 conformance（`vuna-native`）
 
-两个 package 把「编译器编译自己」固化成可执行入口，CI 用它们跑与 OCaml 版同规格的检查。
-它们**不进 `nix flake check`**：整轮成本远高于日常门禁，只在 push 与带 `backend` 标签的
-PR 上跑（`.github/workflows/ci.yml` 的 `backend-wasm` / `backend-native`）。
+`vuna-native` 把「编译器编译自己」固化成可执行入口，CI 用它跑与 OCaml 版同规格的检查。
+wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
+自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁，
+只在 push 与带 `backend` 标签的 PR 上跑（`.github/workflows/ci.yml` 的 `backend-native`）。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
-| `vuna-wasm` | `bin/vuna-wasm` + `lib/main.wasm` + `base/` | 包装脚本固定 wasmtime 参数与预打开根；`build` 必须 `--no-compile`（WASI 没有 `exec`），链接交回宿主 `build.sh` |
 | `vuna-native` | `bin/vuna-native` + `base/` | 原生可执行文件；编译器身份写 `$out/build-id` |
 
-runner 是 `nix run .#backend-check -- --compiler wasm|native`，三个 scope：
+runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 
 | scope | 断言 |
 | --- | --- |
@@ -514,20 +514,17 @@ runner 是 `nix run .#backend-check -- --compiler wasm|native`，三个 scope：
 只跑匹配的夹具，`--target` 收窄 parity 的输出目标。
 
 ```console
-nix run .#backend-check -- --compiler wasm --scope parity --jobs 8
-nix run .#backend-check -- --compiler wasm --scope all --jobs 8
+nix run .#backend-check -- --compiler native --scope parity --jobs 8
+nix run .#backend-check -- --compiler native --scope all --jobs 8
 nix run .#backend-check -- --compiler native --scope selfhost
 ```
 
-读数（16 核）：单夹具 wasm `check` 3.5–4.6 s（含每次重新编译 26 MB 模块；
-`$HOME/.cache/wasmtime` 命中后约 1 s）；整仓 `check .` 31m36s（32 MiB 栈、暖 store，
-冷 store 更久）；parity 53×3 在 wasm 编译器上约 10 min（8 路并行，159/159 与 OCaml
-逐字一致）；corpus 686 条断言 8 路并行 5m50s（wasm 编译器，暖 store）。CI 里 wasm
-任务阻塞、native 任务 `continue-on-error`（D89：`check base` / `check examples/infra`
+读数（16 核）：parity 53×3 在 native 编译器上按 `--jobs` 并行；corpus 686 条断言
+8 路并行。CI 里 native 任务 `continue-on-error`（D89：`check base` / `check examples/infra`
 以 `continuation stack overflow` 收口，见 [native.md](native.md) §8）。
 
 **口径约束**：编译器必须与被测源码同一棵树构建——Nix 派生天然满足；手工跑时先
-`nix build .#vuna-wasm`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是
+`nix build .#vuna-native`，不要拿旧二进制去跑新源码（诊断会指向编译器的能力差异，而不是
 夹具问题）。
 
 ## Nix 命令与本地开发
