@@ -413,75 +413,8 @@ hasImportOf (imp :: rest) name = importName imp == name || hasImportOf rest name
 -- | 路径 import：字面名不是真实模块时，按「最长真实模块前缀 + 命名空间路径」解析成
 -- 目标模块；返回重写后的 imports（目标模块 + 提供路径的依赖模块）与已加载模块。
 expandPathImports : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List String -> List Module -> List Import -> Eff r (Check (Pair (List Import) (Pair (List String) (List Module))))
-expandPathImports fuel roots importerPkg stack modules [] = pure (OkC (Pair [] (Pair [] modules)))
-expandPathImports fuel roots importerPkg stack modules (imp :: rest) = if fuel <= 0 then pure (icFuel "path import")
-else do
-  collected <- collectModuleFiles roots (importName imp) importerPkg [] []
-  let
-    allowed = firstOf collected
-    hidden = secondOf collected
-  in if notEmpty allowed || notEmpty hidden then expandContinue fuel roots importerPkg stack rest (Pair [imp] (Pair [] modules))
-  else expandPathOne fuel roots importerPkg stack modules imp rest
-
-expandContinue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List String -> List Import -> Pair (List Import) (Pair (List String) (List Module)) -> Eff r (Check (Pair (List Import) (Pair (List String) (List Module))))
-expandContinue fuel roots importerPkg stack rest acc = do
-  tailR <- expandPathImports (fuel - 1) roots importerPkg stack (secondOf (secondOf acc)) rest
-  pure (case tailR of
-    ErrC e => ErrC e
-    OkC (Pair imports2 (Pair providers2 modules2)) =>
-      OkC
-        (Pair (append (firstOf acc) imports2) (Pair (append (firstOf (secondOf acc)) providers2) modules2))
-  )
-
-expandPathOne : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List String -> List Module -> Import -> List Import -> Eff r (Check (Pair (List Import) (Pair (List String) (List Module))))
-expandPathOne fuel roots importerPkg stack modules imp rest = do
-  let
-    segs = splitOnDot (importName imp)
-  in case imp.importAlias of
-    Nothing => expandContinue fuel roots importerPkg stack rest (Pair [imp] (Pair [] modules))
-    Just alias => do
-      prefixR <- findPathPrefix roots importerPkg segs (Base.List.length segs - 1)
-      case prefixR of
-        Nothing => expandContinue fuel roots importerPkg stack rest (Pair [imp] (Pair [] modules))
-        Just (Pair prefix n) => do
-          modsR <-
-            loadModule (fuel - 1) roots importerPkg modules stack
-              (Import prefix False Nothing imp.importSpan)
-          case modsR of
-            ErrC e => pure (ErrC e)
-            OkC modules1 => case findModule modules1 prefix of
-              Nothing =>
-                expandContinue fuel roots importerPkg stack rest (Pair [imp] (Pair [] modules))
-              Just provider => case walkNamespaceIndex modules1 prefix (nsDrop n segs) of
-                Nothing =>
-                  expandContinue fuel roots importerPkg stack rest (Pair [imp] (Pair [] modules))
-                Just target => do
-                  modsR2 <-
-                    loadModule (fuel - 1) roots (modulePackageOf provider) modules1 stack
-                      (Import target True Nothing imp.importSpan)
-                  case modsR2 of
-                    ErrC e => pure (ErrC e)
-                    OkC modules2 =>
-                      let
-                        rewritten =
-                          [Import target imp.importIsQualified (Just alias) imp.importSpan]
-                      in expandContinue fuel roots importerPkg stack rest
-                        (Pair rewritten (Pair [prefix] modules2))
-
-findPathPrefix : Member nFs FsOp r => List Root -> String -> List String -> Int -> Eff r (Maybe (Pair String Int))
-findPathPrefix roots importerPkg segs n = if n < 1 then pure Nothing
-else do
-  collected <- collectModuleFiles roots (joinDots (nsTake n segs)) importerPkg [] []
-  if notEmpty (firstOf collected) then pure (Just (Pair (joinDots (nsTake n segs)) n))
-  else findPathPrefix roots importerPkg segs (n - 1)
-
-nsTake : Int -> List String -> List String
-nsTake n [] = []
-nsTake n (x :: rest) = if n <= 0 then [] else (::) x (nsTake (n - 1) rest)
-
-nsDrop : Int -> List String -> List String
-nsDrop n [] = []
-nsDrop n (x :: rest) = if n <= 0 then (::) x rest else nsDrop (n - 1) rest
+expandPathImports fuel roots importerPkg stack modules imports =
+  pure (OkC (Pair imports (Pair [] modules)))
 
 -- | 导出项里的模块前缀：必须唯一（重复 alias/弱短名在导出定义处报歧义）。
 resolveImportPrefix : List Import -> String -> Check String
@@ -649,6 +582,21 @@ else case imports of
       ErrC e => pure (ErrC e)
       OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
+pathPrefixOf : Member nFs FsOp r => List Root -> String -> List String -> Int -> Eff r (Maybe (Pair String Int))
+pathPrefixOf roots importerPkg segs n = if n < 1 then pure Nothing
+else do
+  collected <- collectModuleFiles roots (joinDots (nsTakeLocal n segs)) importerPkg [] []
+  if notEmpty (firstOf collected) then pure (Just (Pair (joinDots (nsTakeLocal n segs)) n))
+  else pathPrefixOf roots importerPkg segs (n - 1)
+
+nsTakeLocal : Int -> List String -> List String
+nsTakeLocal n [] = []
+nsTakeLocal n (x :: rest) = if n <= 0 then [] else (::) x (nsTakeLocal (n - 1) rest)
+
+nsDropLocal : Int -> List String -> List String
+nsDropLocal n [] = []
+nsDropLocal n (x :: rest) = if n <= 0 then (::) x rest else nsDropLocal (n - 1) rest
+
 loadModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> Import -> Eff r (Check (List Module))
 loadModule fuel roots importerPkg modules stack imp =
   let
@@ -661,7 +609,27 @@ loadModule fuel roots importerPkg modules stack imp =
     else if validModuleName name then do
       foundR <- findModuleFile roots name importerPkg imp.importSpan
       case foundR of
-        ErrC e => pure (ErrC e)
+        ErrC e => case imp.importAlias of
+          Nothing => pure (ErrC e)
+          Just alias => do
+            prefixR <-
+              pathPrefixOf roots importerPkg (splitOnDot name)
+                (Base.List.length (splitOnDot name) - 1)
+            case prefixR of
+              Nothing => pure (ErrC e)
+              Just (Pair prefix n) => do
+                modsR <-
+                  loadModule (fuel - 1) roots importerPkg modules stack
+                    (Import prefix False Nothing imp.importSpan)
+                case modsR of
+                  ErrC e2 => pure (ErrC e2)
+                  OkC modules1 => case findModule modules1 prefix of
+                    Nothing => pure (ErrC e)
+                    Just provider => case walkNamespaceIndex modules1 prefix (nsDropLocal n (splitOnDot name)) of
+                      Nothing => pure (ErrC e)
+                      Just target =>
+                        loadModule (fuel - 1) roots (modulePackageOf provider) modules1 stack
+                          (Import target True Nothing imp.importSpan)
         OkC found =>
           let
             path = firstOf found

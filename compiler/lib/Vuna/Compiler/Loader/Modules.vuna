@@ -249,10 +249,28 @@ moduleCtors : List Module -> String -> Check (List String)
 moduleCtors modules name =
   Vuna.Compiler.Base.Common.bind (moduleDecls modules name) (\decls => OkC (ctorsOf decls))
 
+-- | 把 import/限定名里的路径解析成真实模块名：先查直接模块；不是真实模块时按
+-- 「最长已加载模块前缀 + 命名空间路径」解析。供 `exportsOf` / 索引查询使用。
+export resolveModuleName : List Module -> String -> Maybe String
+resolveModuleName modules name = case findModule modules name of
+  Just _ => Just name
+  Nothing => resolvePathModule modules (splitOnDot name) (Base.List.length (splitOnDot name) - 1)
+
+resolvePathModule : List Module -> List String -> Int -> Maybe String
+resolvePathModule modules segs n = if n < 1 then Nothing
+else case findModule modules (joinDots (takeSegsLocal n segs)) of
+  Just _ => walkNamespaceIndex modules (joinDots (takeSegsLocal n segs)) (dropFirst n segs)
+  Nothing => resolvePathModule modules segs (n - 1)
+
 export exportsOf : List Module -> String -> Check (List ExportEntry)
-exportsOf modules name = case findModule modules name of
+exportsOf modules name = case findModule modules (resolvedName modules name) of
   Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC exports
   Nothing => missingModule name
+
+resolvedName : List Module -> String -> String
+resolvedName modules name = case resolveModuleName modules name of
+  Just real => real
+  Nothing => name
 
 -- | 导出表的公开名索引（保持原顺序；同名的 val/ctor/type 条目并存）。
 export exportIndexOf : List ExportEntry -> HashMap String (List ExportEntry)
@@ -272,7 +290,7 @@ entriesByName name idx = case Base.HashMap.lookup name idx of
   Nothing => []
 
 export exportIndexOfModule : List Module -> String -> Check (HashMap String (List ExportEntry))
-exportIndexOfModule modules name = case findModule modules name of
+exportIndexOfModule modules name = case findModule modules (resolvedName modules name) of
   Just m => OkC m.moduleExportIndexOf
   Nothing => missingModule name
 

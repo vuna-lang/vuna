@@ -1,0 +1,4 @@
+module NamespaceExport where
+
+export module Base.Map as Map
+export module Base.List
