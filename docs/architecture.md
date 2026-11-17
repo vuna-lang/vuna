@@ -30,7 +30,7 @@ compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖�
 │                             擦除后 IR（纯数据 + SCC + 运行时契约 + 校验）
 ├─ Codegen/     Decl Term Assembly Runtime    IR→OCaml 文本（不 import Core / Elab / Intrinsics）
 ├─ Lowering/    Program Env Ty Entry Checks    Core→IR 唯一入口（程序级表/类型表面/入口形态）+ Core 侧检查
-├─ Native/      Abi Model Module Render Runtime   native 后端（x86-64 汇编文本 + 字符串 / bump 堆）
+├─ Native/      Abi Gc Model Module Render Runtime   native 后端（x86-64 汇编文本 + 保守标记-清扫 GC）
 ├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
                 Split SplitGen Native Wasm                  输出模型 / facade / 后端驱动 / CLI
@@ -143,7 +143,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 再由 CLI 的 `build` 分支调 `cc` 链接成静态 ELF；驱动入口
 `Vuna.Compiler.Driver.Native.compileNative`。覆盖 Int/Nat/Bool 纯值 + String
 （字面量 / `++` / `strFromInt` / `strLength` / `strAt` / `strSubstring` / `strHash` /
-`strShow` / 字符串相等 / String 入口）与 `.bss` 里的 bump 堆（无 GC/RC）；支持面、
+`strShow` / 字符串相等 / String 入口）与堆段 + 尺寸类复用 + 保守标记-清扫 GC；支持面、
 ABI、值表示、运行时符号与边界见 [native.md](reference/native.md)。
 
 **wasm 后端**：`IR --Wasm.Module.build--> WasmModule --Wasm.Render.renderModule-->

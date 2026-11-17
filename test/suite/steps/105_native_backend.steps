@@ -272,3 +272,30 @@ out-equals: 0
 # 9x) 限制只在启动时读 env：设与不设生成的 `main.s` 逐字节一致。
 run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; cmp "$TMPDIR/detlim-a/main.s" "$TMPDIR/detlim-b/main.s"'
 exit: 0
+
+# 9y) GC 回收：高 churn、低存活集的程序在 1 MiB live 预算下跑完（累计分配约 3.8 MB），
+#     输出与无预算时逐字一致；`VUNA_NATIVE_GC_LOG` 打出的诊断行含次数与 live 字节。
+run: sh -c 'd="$TMPDIR/gcgrow"; mkdir -p "$d/app"; printf "[package]\nname = \"gcgrow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\nimport Base.String\n\nwork : Int -> Int\nwork x = strLength (\"abcdefghij\" ++ strFromInt x) + strLength (strFromInt (x + 1))\n\ngo : Nat -> Int -> Int\ngo n acc = case n of\n  Zero => acc\n  Succ k => go k (acc + work k)\n\nmain : Int\nmain = go (natFromInt 40000) 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gcgrow-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1
+out-equals: 777784
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1048576 "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1'
+exit: 0
+out-equals: 777784
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1048576 VUNA_NATIVE_GC_LOG=1 "$TMPDIR/gcgrow-out/bin/gcgrow" 2>&1'
+out-contains: gc n=
+out-contains: live=
+
+# 9z) `VUNA_NATIVE_GC_STRESS=1`（每次分配都完整 GC）：续延 + List + 字符串的程序
+#     输出与正常模式一致，说明根集（栈 / handler / 续延记录 / 捕获缓冲）没有漏项。
+run: sh -c 'd="$TMPDIR/gcstress"; mkdir -p "$d/app"; printf "[package]\nname = \"gcstress\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\nimport Base.String\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\npad : String -> Int\npad s = strLength (s ++ \"0123456789\")\n\nmany : Nat -> Eff [POp] Int\nmany n = case n of\n  Zero => pure 0\n  Succ m => do\n    x <- perform (P (pad \"abc\"))\n    y <- many m\n    pure (x + y)\n\nmain : Int\nmain = runPure (handle (many (natFromInt 12)) { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/gcstress-out" "$d"'
+exit: 0
+run: "$TMPDIR/gcstress-out/bin/gcstress" 2>&1
+out-equals: 156
+run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcstress-out/bin/gcstress" 2>&1'
+exit: 0
+out-equals: 156
+
+# 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响 `main.s`。
+run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; cmp "$TMPDIR/detgc-a/main.s" "$TMPDIR/detgc-b/main.s"'
+exit: 0

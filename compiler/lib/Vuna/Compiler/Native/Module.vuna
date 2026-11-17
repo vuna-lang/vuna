@@ -1108,16 +1108,25 @@ startFunc printResult kind mainName runMainM handlers =
         IMov (OpRip envpLabel) (OpReg Rcx)
       ]
     initHeap =
-      [ ILea Rax nativeHeapLabel,
-        IMov (OpRip nativeHeapPtrLabel) (OpReg Rax),
-        IMov (OpReg Rcx) (OpReg Rax),
+      [ ILea Rax nativeHeapSegLabel,
+        ILea Rdx nativeHeapLabel,
+        IMov (OpReg Rcx) (OpImm 0),
+        IMov (OpMem Rax 0) (OpReg Rcx),
+        IMov (OpMem Rax 24) (OpReg Rcx),
+        IMov (OpRip nativeSegsLabel) (OpReg Rax),
+        IMov (OpRip nativeCurSegLabel) (OpReg Rax),
+        IMov (OpReg Rcx) (OpReg Rdx),
         IBinReg "add" Rcx (OpImm nativeHeapBytes),
-        IMov (OpRip nativeArenaEndLabel) (OpReg Rcx)
+        IMov (OpMem Rax 8) (OpReg Rcx),
+        IMov (OpMem Rax 16) (OpReg Rdx),
+        IMov (OpRip nativeArenaEndLabel) (OpReg Rcx),
+        IMov (OpRip nativeHeapPtrLabel) (OpReg Rdx)
       ]
-    -- 资源限制：全部来自 env（缺省 1 GiB / auto 核数 / 超时不限），不进 codegen。
+    -- 资源限制：全部来自 env（缺省 1 GiB live / auto 核数 / 超时不限），不进 codegen。
     initLimits =
       [ IBinReg "and" Rsp (OpImm (0 - 16)),
         ICall (nativeRtLabel "init_mem"),
+        ICall (nativeRtLabel "init_gc"),
         ICall (nativeRtLabel "init_cpus"),
         ICall (nativeRtLabel "init_timeout")
       ]
@@ -1128,7 +1137,7 @@ startFunc printResult kind mainName runMainM handlers =
       concatMap (\h => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]) handlers
     callMain =
       append
-        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip stackTopLabel) (OpReg Rsp), ICall (nativeFuncLabel mainName)]
+        [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp), ICall (nativeFuncLabel mainName)]
         (append handlerPart runPart)
     printer = if printResult then case kind of
       "bool" => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeRtLabel "print_bool")]

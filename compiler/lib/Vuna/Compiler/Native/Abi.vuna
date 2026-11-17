@@ -13,7 +13,9 @@ module Vuna.Compiler.Native.Abi where
 --   * `Int` / `Nat` 是 63-bit 有符号；
 --   * `String` 值是**指向长度头的指针**：`[ptr]` = 字节数（i64），`[ptr+8 ..]` = 字节；
 --     字符串不可变，所有构造都分配新对象；
---   * 堆是 `.bss` 里的一段固定缓冲 + 一个 bump 指针（无 GC/RC；耗尽即 trap OOM）。
+--   * 堆对象前有一个 8 字节块头 `[size | flags]`（见下），指针指向块头之后的 payload；
+--   * 堆是段链表（`.bss` 起始段 + `mmap` 新段），空闲块按尺寸类复用，标记-清扫 GC
+--     见 `Vuna.Compiler.Native.Gc`。
 --
 -- 边界：只 import Base 与 `Native.Model`。
 import Base.Bool
@@ -49,31 +51,113 @@ nativeFrameBytes slots =
   in if raw == 0 then 0 else (raw + 15) / 16 * 16
 
 -- ---------------------------------------------------------------
--- 字符串对象布局与堆
+-- 字符串对象布局、堆与 GC 布局
 -- ---------------------------------------------------------------
 -- | 字符串长度头的大小（字节）；数据紧跟在头之后。
 export nativeStrHeaderBytes : Int
 nativeStrHeaderBytes = 8
 
--- | bump 堆缓冲大小（1 MiB；`.bss` 零填充，不占 ELF 文件体积）。
+-- | 每个堆对象前的块头字节数（对象指针 = 块头 + 8）。
+export nativeBlockHeaderBytes : Int
+nativeBlockHeaderBytes = 8
+
+-- | 块头低 4 位是标志；高位是块总字节数（16 对齐）。
+export nativeMarkFlag : Int
+nativeMarkFlag = 1
+
+export nativeFreeFlag : Int
+nativeFreeFlag = 2
+
+-- | payload 里没有指针（字符串、Float），标记时不扫。
+export nativeLeafFlag : Int
+nativeLeafFlag = 4
+
+-- | 永不回收的块（续延捕获缓冲由 `rt_cap_free` 自己复用）。
+export nativePinFlag : Int
+nativePinFlag = 8
+
+-- | 最小块（块头 + 8 字节 payload）。
+export nativeMinBlockBytes : Int
+nativeMinBlockBytes = 16
+
+-- | 尺寸类上限：更大的块进 `rt_huge_free` 首次适配链。
+export nativeMaxClassBytes : Int
+nativeMaxClassBytes = 67108864
+
+-- | 尺寸类个数（16 B .. 64 MiB，2 的幂）。
+export nativeClassCount : Int
+nativeClassCount = 23
+
+-- | 尺寸类空闲链表的字节数（按类序号索引）。
+export nativeFreeTableBytes : Int
+nativeFreeTableBytes = 256
+
+-- | 段头字节数：`[0]=next [8]=end [16]=bump [24]=kind`；块区从段头之后开始。
+export nativeSegHeaderBytes : Int
+nativeSegHeaderBytes = 32
+
+-- | 初始堆缓冲大小（1 MiB；`.bss` 零填充，不占 ELF 文件体积）。
 export nativeHeapBytes : Int
 nativeHeapBytes = 1048576
+
+-- | 初始堆段的段头标签（紧跟 1 MiB 缓冲）。
+export nativeHeapSegLabel : String
+nativeHeapSegLabel = "rt_heap_seg"
 
 -- | 堆缓冲标签（`.bss`）。
 export nativeHeapLabel : String
 nativeHeapLabel = "rt_heap"
 
--- | 堆结束标签（`.bss` 里紧跟缓冲；分配时与它比较判 OOM）。
+-- | 堆结束标签（`.bss` 里紧跟缓冲）。
 export nativeHeapEndLabel : String
 nativeHeapEndLabel = "rt_heap_end"
 
--- | 堆指针槽标签（`.bss` 里的 8 字节；运行时启动时初始化）。
+-- | 当前段的分配指针（bump）。
 export nativeHeapPtrLabel : String
 nativeHeapPtrLabel = "rt_heap_ptr"
 
--- | 当前 arena 段的结束地址（越界时 `rt_alloc` 用 `mmap` 开新段并更新它）。
+-- | 当前 arena 段的结束地址。
 export nativeArenaEndLabel : String
 nativeArenaEndLabel = "rt_arena_end"
+
+-- | 段链表头（新段插在表头）。
+export nativeSegsLabel : String
+nativeSegsLabel = "rt_segs"
+
+-- | 当前 bump 段（段头地址）。
+export nativeCurSegLabel : String
+nativeCurSegLabel = "rt_cur_seg"
+
+-- | 尺寸类空闲链表（`nativeClassCount` 项）。
+export nativeFreeTableLabel : String
+nativeFreeTableLabel = "rt_free_tbl"
+
+-- | 超大块空闲链（首次适配）。
+export nativeHugeFreeLabel : String
+nativeHugeFreeLabel = "rt_huge_free"
+
+-- | GC 缺省下限（也是缺省触发阈值）：1 MiB。
+export nativeGcMinDefaultBytes : Int
+nativeGcMinDefaultBytes = 1048576
+
+-- ---------------------------------------------------------------
+-- GC 根槽（保守标记的 `.bss` 白名单）
+-- ---------------------------------------------------------------
+-- | 最内层 handler 节点（`rt_handlers`，堆对象）。
+export nativeHandlersLabel : String
+nativeHandlersLabel = "rt_handlers"
+
+-- | 当前 active 栈的栈顶（GC 扫描 `[rsp, rt_stack_top)`）。
+export nativeStackTopLabel : String
+nativeStackTopLabel = "rt_stack_top"
+
+-- | 当前 opH 所属的 handler 节点（`prim_effectSelf` 用）。
+export nativeSelfLabel : String
+nativeSelfLabel = "rt_self"
+
+-- | `bracket` / `finally` 的 cleanup 登记表头（堆对象）。
+export nativeCleanupHeadLabel : String
+nativeCleanupHeadLabel = "rt_cleanups"
 
 -- ---------------------------------------------------------------
 -- 函数框架
@@ -87,6 +171,30 @@ nativePrologue frame =
 -- | 固定 epilogue：mov rsp, rbp; pop rbp; ret。
 export nativeEpilogue : List Instr
 nativeEpilogue = [IMov (OpReg Rsp) (OpReg Rbp), IPop Rbp, IRet]
+
+-- | 迁移栈段上的栈溢出守卫：`rt_stack_limit` 为 0 时不触发（主栈）。
+export stackGuardInstrs : List Instr
+stackGuardInstrs =
+  [ICmp (OpReg Rsp) (OpRip "rt_stack_limit"), IJcc "jb" (nativeRtLabel "trap_stack_overflow")]
+
+-- | 把体内 `IRet` 改写成跳到 `endLabel`（单出口）。
+export mapRetTo : String -> List Instr -> List Instr
+mapRetTo label [] = []
+mapRetTo label (i :: rest) = case i of
+  IRet => IJmp label :: mapRetTo label rest
+  _ => i :: mapRetTo label rest
+
+-- | 有 prologue/epilogue 的运行时函数：**单出口**。
+export rtFunc : String -> Int -> List Instr -> NativeFunc
+rtFunc name frame body =
+  let
+    endLabel = "${nativeRtLabel name}_end"
+  in NativeFunc (nativeRtLabel name) frame
+    (append (nativePrologue frame) (append stackGuardInstrs (append (mapRetTo endLabel body) (append [ILabel endLabel] nativeEpilogue))))
+
+-- | 直接以 ret/exit 结束、无 prologue 的入口/陷阱。
+export rtRawFunc : String -> List Instr -> NativeFunc
+rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body
 
 -- ---------------------------------------------------------------
 -- 稳定命名

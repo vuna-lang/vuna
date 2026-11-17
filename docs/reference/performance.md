@@ -587,10 +587,12 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
   `hashmap` / `sorting` / `gc_low_live` / `gc_array_churn` 能过），所以所有 native 进程统一在
   `ulimit -s unlimited` 下运行（JSON `meta.stack_policy` 记录该口径）；每个 native 项另记
   `default_stack_ok`（8 MiB soft limit 下能否正常退出，探针不参与计时）；
-- native 无 GC/RC，峰值 RSS ≈ 累计分配 + 栈页；`--rss-passes 3` 取最大值，与墙钟分开采样；
+- native 有**保守标记-清扫 GC**（[native.md](native.md) §5.2），峰值 RSS = 栈页 + live 堆；
+  `--rss-passes 3` 取最大值，与墙钟分开采样；
 - `--runs 5 --warmup 2` 取中位数；基线记录生成时的 `meta.loadavg`，跨机器只比 ratio。
 
-本机一档（16 核，生成时 `loadavg ≈ 3.5`，同一窗口）：
+本机一档（16 核，生成时 `loadavg ≈ 3.5`，同一窗口）。**native 列是 GC 落地前的快照**
+（`bench/native-baseline.json` 待重标）；OCaml 后端 / 手写列不受 native 改动影响：
 
 | benchmark | native ms | OCaml 后端 ms | 手写 OCaml ms | native/手写 | native/OCaml 后端 | native RSS | 手写 RSS | RSS 比 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -624,16 +626,18 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
   这些是 native 后端的真实成本，不是测量偏差。
 - `tco_mutual`（30.2x / 244 MiB）与 `tco_wide`（81.8x / 443 MiB）几乎全是**栈帧成本**：
   两者 `default_stack_ok=false`，RSS 与墙钟都随递归深度线性增长。
-- `gc_low_live` / `gc_array_churn` 的墙钟已接近手写 OCaml（0.9x / 2.0x）：native 只有 bump
-  分配，省掉了 GC 时间；代价是 RSS（289 / 309 MiB，手写侧 244 / 82 MiB）随累计分配单调增长。
-- 峰值 RSS 的语义不同：OCaml 侧是 GC 后高水位，native 侧是只增不减的 arena；两者只作量级
-  参考。`float_math` 的 259 MiB 与 `gc_pressure` 的 5.3x 都是「没有回收」的直接读数（D98）。
+- `gc_low_live` / `gc_array_churn` 的墙钟已接近手写 OCaml（0.9x / 2.0x）。这两行是 GC 前
+  读数：当时 native 只有 bump 分配、省掉了 GC 时间，代价是 RSS（289 / 309 MiB）随累计分配
+  单调增长；GC 落地后按 §8.2 的判定重标（主判据是 RSS 降到存活集量级）。
+- 峰值 RSS 的语义不同：OCaml 侧是 GC 后高水位，native 侧是栈页 + live 堆；两者只作量级
+  参考。表里 `float_math` 的 259 MiB 与 `gc_pressure` 的 5.3x 是 GC 前的「没有回收」读数。
 - 这组数不是 CI 门槛：跨机器、跨负载不可比；回归判断用 `--target native --check` 对
   `bench/native-baseline.json` 的 ratio、rss_ratio 与 `default_stack_ok` 变化做提示。
 
 ### 8.2 TCO / GC 验证项
 
-native 做尾调用与 GC 时，先看这四项；其余基准会连带变化：
+native 的 TCO / GC 验证项；**GC 已落地**（§8.1 的 native 列仍待按其主判据重标），
+TCO 未做。其余基准会连带变化：
 
 | 用例 | 现在（TCO/GC 前） | 落地后预期 | 判定列 |
 | --- | --- | --- | --- |

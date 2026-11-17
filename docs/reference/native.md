@@ -7,10 +7,11 @@
 > `@vuna@debug@on` / `@vuna@debug@line`、**栈传参**（arity > 6）+ 用户 `data`（变体 tag
 > 分派）、record 构造/投影/更新与通用 `case` + List 桥接（`strUnpack` / `strPack` /
 > `strConcatMany` / `strSubstTemplate`）+ 闭包与高阶应用 + Float（算术/比较/转换/展示）。
-> 堆是可增长 arena（`mmap` 新段，不做 RC/复用）。`main : Eff r a`（含带行的宿主效应，
+> 堆是段链表 + 尺寸类复用 + **保守标记-清扫 GC**（非移动）；对象布局见 §2，回收契约见 §5.2。
+> `main : Eff r a`（含带行的宿主效应，
 > 入口自动预装 `runXHost`）与 `IORef` 可用；`perform` / `handle` 用**栈拷贝 + 续延栈迁移**
 > 实现一次性续延（§3.4）。FFI / extern 仍被明确拒绝（`NativeUnsupported`）。
-> 实现入口：`Vuna.Compiler.Native.{Model,Abi,Runtime,Module,Render}`，
+> 实现入口：`Vuna.Compiler.Native.{Model,Abi,Gc,Runtime,Module,Render}`，
 > 驱动 `Vuna.Compiler.Driver.Native`。边界见 §8。
 
 ## 1. 产物与工具链
@@ -42,8 +43,9 @@
   字符串不可变，任何构造（`++` / `strFromInt` / `strSubstring` / `strShow`）都分配新
   对象。字符是字节（UTF-8 字面量按字节存放，`strLength` 返回**字节数**，与 OCaml
   `String.length` 一致）。
-- **堆**：`.bss` 里 1 MiB 起始段 + bump 指针 `rt_heap_ptr`（`_start` 初始化为段起点）；
-  当前段不够时 `mmap` 新段并更新 `rt_arena_end`，旧段不回收。无 GC、无 RC、无复用。
+- **堆**：段链表（`.bss` 里的 1 MiB 起始段 + 按需 `mmap` 的新段，段按 2 的幂增长）。
+  每个块前有 8 字节块头 `[size | flags]`（标志：mark / free / leaf / pin），对象指针指向
+  块头之后。空闲块按 2 的幂尺寸类复用；**保守标记-清扫 GC**（非移动）见 §5.2。
 - 入口打印：`Int`/`Nat` 十进制 + `\n`，`Bool` 为 `True`/`False`，`String` 走
   `show`（`strShow` 带引号 + 转义）再打印，全部与 OCaml 入口钩子的
   `print_endline (show main)` 逐字一致。
@@ -225,7 +227,9 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `trap_todo`。失败路径**不分配**：前缀是 `.rodata` 裸文本，msg 是带长度头的字符串，
   逐段 `write` 到 stderr 后 exit 2。
 - 入口打印：`print_int` / `print_bool` / `print_str`（栈上 itoa / 原样字节 + 换行）。
-- 对象与分配：`alloc`（`rdi`=字节数 → `rax`，bump 堆，越界 trap OOM）；变体对象
+- 对象与分配：`alloc`（`rdi` = payload 字节数 → `rax` = 对象地址；尺寸类空闲链 → bump →
+  新段，越界 trap OOM）；`alloc_leaf`（字符串 / Float）与 `alloc_pinned`（续延捕获缓冲）
+  在块头上打对应标志。变体对象
   `[0]`=tag、`[8]` 起字段；record 对象 `[0]` 起就是字段；字段按最大 arity 补齐（补 0）。
   `trap_impossible` 是 case 无匹配臂时的兜底 trap（与 OCaml 的 `DT: impossible branch` 同义）。
 - 效应叶子：`prim_eff_newRef` / `readRef` / `writeRef`（`IORef`，单槽对象）、
@@ -264,17 +268,20 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 
 ### 5.1 资源限制（内存 / 核数 / 超时）
 
-`_start` 在 `vuna_main` 之前调用 `init_mem` / `init_cpus` / `init_timeout`；配置全部来自
+`_start` 在 `vuna_main` 之前调用 `init_mem` / `init_gc` / `init_cpus` / `init_timeout`；配置全部来自
 env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失败一律回落缺省，不阻断启动。
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
-| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | `.bss` 堆的**累计**分配字节 + 续延捕获缓冲的**活跃**字节；超限 `memory limit exceeded` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | **live 堆**上限（含被钉住的续延捕获缓冲）：分配的预留超过它时先做一次完整 GC，GC 后 `live + 本次` 仍超限才 `memory limit exceeded` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_GC_MIN` | `1048576`（1 MiB） | 触发阈值下限（也是新堆段的最小尺寸）：阈值 = `max(GC_MIN, 2 × live)` |
+| `VUNA_NATIVE_GC_LOG` | 关 | 存在即向 stderr 打诊断行 `gc n=<次数> live=<字节> alloc=<自上次 GC 起的分配字节>` |
+| `VUNA_NATIVE_GC_STRESS` | 关 | 存在即每次分配前都做一次完整 GC（抓漏根的调试开关，不是运行模式） |
 | `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
 | `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩），handler 只 `write` + exit 2；`0` = 不限 |
 
-- 预算检查在 `alloc` 的预留之前（1 条 `cmp`/`ja`，无限制时 0 开销之外只多一次 load）；
-  捕获缓冲在分配时累加、`free_capture` 归还时递减。
+- 预算检查在 `alloc` 里分配之前（`live + 已分配 + 本次 > limit` → 先 GC；GC 后仍超才 trap）；
+  `live` 由清扫阶段累计（见 §5.2）。
 - **续延栈段不计入预算**：`resume` 的段按 `pow2_ceil(len + 32 MiB + 16)` 预留（页惰性提交），
   按预留算会让 500 层嵌套一上来就爆；段耗尽仍由 `continuation stack overflow` / `mmap`
   失败（`out of memory`）单独收口。
@@ -282,6 +289,32 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
 - 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
   挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
+
+### 5.2 GC（保守标记-清扫，非移动）
+
+实现在 `Native.Gc`，由 `Native.Runtime.alloc` 在预算或阈值处调用 `rt_gc_collect`。
+
+- **块头**：8 字节 `[size | flags]` 放在 payload 之前；`size` 16 对齐，低 4 位是
+  `mark` / `free` / `leaf` / `pin`。对象指针 = 块头 + 8，因此 payload 布局
+  （`[0]=len/tag`、`[8]=字段`）不变。
+- **段**：段头 32 字节 `[next][end][bump][kind]`，块区从段头之后开始；`rt_segs` 串起全部段，
+  `rt_cur_seg` 是当前 bump 段。清扫按段线性走块头（空闲块保留自己的块头）。
+- **尺寸类**：块大小向上取整到 2 的幂（16 B … 64 MiB），清扫把死块挂回对应类的链表，
+  分配先弹表再 bump。大于 64 MiB 的块单独占一个段，死块进 `rt_huge_free` 首次适配链。
+- **根集**（没有栈图，全部保守扫描）：
+  1. 机器栈 `[rsp, rt_stack_top)`；GC 入口先把通用寄存器（含 `r15`）溢进自己的帧；
+  2. `.bss` 白名单：`rt_handlers`、`rt_self`、`rt_cleanups`，以及 `alloc` 的调用方寄存器
+     快照（`rt_alloc_save_rdi/rsi/r8/r9`：`alloc` 不建栈帧，这四个寄存器靠 `.bss` 保活）；
+  3. 活动续延记录链（`rt_active_recs`，`record[160]` 是 next）：记录本身，以及它挂起的那段
+     旧栈 `[record+56, record+88)`。活动记录在 `resume` 入链、`eff_free_segment` 出链，
+     所以嵌套 resume 的每一层旧栈都会被扫到。
+- **候选判据**：字必须指向某个已注册堆段内、16 对齐、块头合法且非空闲的 payload 起点。
+  `Int` / 字节型偶然形似指针只会多留对象（非移动，不会失效）；`.rodata` 字面量不进堆，天然忽略。
+- **不扫的块**：`leaf`（String / Float，payload 是字节或位型）与 `pin`（续延捕获缓冲，
+  由 `rt_cap_free` 自己复用；活跃捕获缓冲经 `record[0]` 被记录标记，再按普通 payload 保守扫描）。
+- **清扫**：清 mark、把未标记块按尺寸类回收、累计 `live`；之后
+  `threshold = max(GC_MIN, 2 × live)`。非移动、不压缩，也没有分代/增量/并发。
+- **标记栈**：首次 GC 时 `mmap` 1 MiB，溢出翻倍并拷贝；GC 内部只用 `mmap`，不走 `alloc`。
 
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回 `Int 0`）；
@@ -295,6 +328,8 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   `NativeStrLit` / `NativeBss`。
 - `Native.Abi`：参数寄存器、栈槽偏移、frame 对齐、字符串头大小、堆大小与标签、
   prologue/epilogue、稳定命名（函数 / 运行时 / 字面量 / 内部 label / 数据标签）。
+- `Native.Gc`：标记-清扫 GC——块头判据、根集扫描、标记栈（倍增 mmap）、清扫与尺寸类
+  回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity。
 - `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、字面量池、
@@ -321,6 +356,9 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
   效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
+- GC：9y 高 churn 低存活集在 1 MiB live 预算下跑完（GC 前后输出一致、`GC_LOG` 有诊断行）、
+  9z `GC_STRESS` 下续延 + List + 字符串输出不变、9aa GC 的 env 开关不影响 `main.s`；
+  9t 仍锁「live 超限才 trap」。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
@@ -347,20 +385,21 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   CI 的 `nix run .#backend-check -- --compiler native` 因此是非阻塞任务（口径见
   [testing.md](testing.md)「后端自举 conformance」）；它的 `selfhost` scope 在整仓
   `check` 上以 `continuation stack overflow` 收口。
-- 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
-  段不回收。
+- **GC 的边界**：保守、非移动、不分代、不压缩。因此
+  1. 活帧里**已经用过的栈槽**仍被保守扫描（每个活帧可能多留它最后一个临时对象），
+     内存下界随栈深度增长；
+  2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
+  3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
+  4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
+  5. 续延捕获缓冲是钉住块（`rt_cap_free` 自己复用），GC 不回收；
+  6. 栈段（`resume` 迁移用的 32 MiB 预留窗口）不计入预算，见 §5.1。
 - **运行期性能与内存**：`nix run .#vuna-perf -- --target native`（或 `--target both`）
   在 16 个生成程序基准上测 native 产物；基线 `bench/native-baseline.json`，读数与口径见
   [performance.md](performance.md) §8.1。native 不做尾调用，16 个基准里 11 个在默认 8 MiB
   栈下会崩溃（exit 139），基准因此在 `ulimit -s unlimited` 下运行，JSON 的
-  `meta.stack_policy` 记录该口径、每项另有 `default_stack_ok` 探针；峰值 RSS 计入栈页与
-  只增不减的 arena，需与墙钟一起读（D98）。TCO / GC 落地时看 `tco_mutual` / `tco_wide` /
+  `meta.stack_policy` 记录该口径、每项另有 `default_stack_ok` 探针；峰值 RSS = 栈页 +
+  live 堆，需与墙钟一起读。TCO / GC 落地时看 `tco_mutual` / `tco_wide` /
   `gc_low_live` / `gc_array_churn` 四组判定项（[performance.md](performance.md) §8.2）。
-- **内存预算的口径依赖「arena 不回收」**：`VUNA_NATIVE_MEM_LIMIT` 现在是堆的累计分配 +
-  捕获缓冲的活跃字节。引入 GC 后要收紧为 **live heap 上限 + GC 触发阈值**（完整一次回收
-  后仍超限才 trap），否则高 churn、低存活集的程序会被误杀；同时 GC 需要一个核数口径与
-  亲和性共用（§5.1 的 `auto` 结果），并且续延捕获栈的保守扫描要与 GC 的扫描约定合并。
-  这三项是 GC 落地时必须一起改的接口，不是限制器单独能收的。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
