@@ -450,13 +450,14 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 ## Nix checks 清单
 
-`nix flake check` 实测 **25 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
-`vuna-seed`，同时暴露为 checks）+ 22 个 check 语义项（`context-budget`、
+`nix flake check` 实测 **27 项**：3 个 package 构建（`vuna` / `vuna-compiler` /
+`vuna-seed`，同时暴露为 checks）+ 24 个 check 语义项（`context-budget`、
 `seed-selfhost`、`vscode-ext`、`vuna-checks-inventory`、`vuna-compiler-growth`、
 `vuna-compiler-growth-ctor`、`vuna-compiler-growth-incremental`、`vuna-diag`、`vuna-fmt`、`vuna-frontend-growth`、
 `vuna-lint`、`vuna-metrics`、`vuna-nix-fmt`、`vuna-obs-dwarf`、`vuna-obs-overhead`、
 `vuna-obs-schema`、`vuna-static`、`vuna-tests-e2e`、`vuna-tests-gate`、
-`vuna-tests-native`、`vuna-tests-wasm`、`vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
+`vuna-tests-native`、`vuna-tests-wasm`、`vuna-tests-wasm-js`、`vuna-wasm-browser`、
+`vuna-typecheck`；主体是 `nix/checks/<name>.sh`，共享实现与并入门禁的实现放在
 `nix/checks/lib/`）。语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
@@ -464,6 +465,13 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 - `vuna-tests-wasm` / `vuna-tests-native`：同一份 suite 在 `--backend wasm|native` 下跑
   `fast integration`，只覆盖 matrix 允许该目标的 case（`pure-cross` + 对应 `effect-*`）；
   ocaml 的完整门禁仍由 `vuna-tests-gate` 承担。
+- `vuna-tests-wasm-js`：同一份 wasm matrix 在 **Node（V8）+ JS 宿主**上跑
+  （`VUNA_WASM_HOST=js`），是「浏览器可跑面」的行为门禁。用户自定义 handler 的用例
+  （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计
+  （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
+- `vuna-wasm-browser`：产物在**默认 wasm 特性**（`--features=-stack-switching`）下必须
+  validate 通过；用户 handler 的产物必须仍被拒绝；有 Chromium 时再跑一次 headless
+  Chromium（CDP）实跑并比对 stdout（沙箱里浏览器起不来时 SKIP，validate 仍是硬门）。
 - `vuna-tests-gate` 与 `vuna-tests-e2e`：gate 跑 `--tier fast integration`；e2e check
   先跑 `--tier e2e`（8 worker），再串行跑 `--tier tools`（2 worker，47c/54b）。
   gate 最长 case 1.8 s，e2e 15.7 s，tools 22.6 s，均 ≤25 s；
