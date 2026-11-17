@@ -139,7 +139,7 @@ run: "$TMPDIR/effmany-out/bin/effmany" 2>&1
 out-equals: 500
 
 # 9h) 嵌套 handler（外层未被触发）：恢复内层时链上仍有外层节点。
-run: sh -c 'd="$TMPDIR/effnest"; mkdir -p "$d/app"; printf "[package]\nname = \"effnest\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int\nprog = do\n  x <- perform (A 1)\n  pure x\n\ninner : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int -> Eff (Cons \"b\" BOp []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnest-out" "$d"'
+run: sh -c 'd="$TMPDIR/effnest"; mkdir -p "$d/app"; printf "[package]\nname = \"effnest\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Named \"a\" AOp :: (Named \"b\" BOp :: [])) Int\nprog = do\n  x <- perform (A 1)\n  pure x\n\ninner : Eff (Named \"a\" AOp :: (Named \"b\" BOp :: [])) Int -> Eff (Named \"b\" BOp :: []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnest-out" "$d"'
 exit: 0
 run: "$TMPDIR/effnest-out/bin/effnest" 2>&1
 out-equals: 11
@@ -157,7 +157,7 @@ run: "$TMPDIR/effdeep-out/bin/effdeep" 2>&1
 out-equals: 501
 
 # 9k) 嵌套 handler 的内层恢复段里触发外层 perform：整段栈迁移后仍回到 211。
-run: sh -c 'd="$TMPDIR/effnested"; mkdir -p "$d/app"; printf "[package]\nname = \"effnested\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int\nprog = do\n  x <- perform (A 1)\n  y <- perform (B 2)\n  pure (x + y)\n\ninner : Eff (Cons \"a\" AOp (Cons \"b\" BOp [])) Int -> Eff (Cons \"b\" BOp []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnested-out" "$d"'
+run: sh -c 'd="$TMPDIR/effnested"; mkdir -p "$d/app"; printf "[package]\nname = \"effnested\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata AOp : Type where\n  A : Int -> AOp\n\nresA : AOp -> Type\nresA (A n) = Int\n\ndata BOp : Type where\n  B : Int -> BOp\n\nresB : BOp -> Type\nresB (B n) = Int\n\nprog : Eff (Named \"a\" AOp :: (Named \"b\" BOp :: [])) Int\nprog = do\n  x <- perform (A 1)\n  y <- perform (B 2)\n  pure (x + y)\n\ninner : Eff (Named \"a\" AOp :: (Named \"b\" BOp :: [])) Int -> Eff (Named \"b\" BOp :: []) Int\ninner comp = handle comp {\n  A n k -> k (n + 10)\n}\n\nmain : Int\nmain = runPure (handle (inner prog) { B n k -> k (n * 100) })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnested-out" "$d"'
 exit: 0
 run: "$TMPDIR/effnested-out/bin/effnested" 2>&1
 out-equals: 211
