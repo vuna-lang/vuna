@@ -1839,6 +1839,22 @@ dedupGo : List Finding -> List Finding -> List Finding
 dedupGo kept [] = reverse kept
 dedupGo kept (f :: rest) = if coveredBy kept f then dedupGo kept rest else dedupGo (f :: kept) rest
 
+-- | 内部：注释里的 TODO / FIXME / XXX 标记（每个注释最多一条）。
+todoFindings : List Comment -> List Finding
+todoFindings [] = []
+todoFindings (c :: rest) = case markerOf c.commentText of
+  Nothing => todoFindings rest
+  Just marker =>
+    mkFindingAt (spanStartLine c.commentSpan) (spanStartCol c.commentSpan) c.commentSpan TodoMarker (lintMsg TodoMarker marker) Nothing
+      :: todoFindings rest
+
+-- | 内部：识别注释文本里的标记（按固定顺序取第一个）。
+markerOf : String -> Maybe String
+markerOf text =
+  if contains "TODO" text then Just "TODO"
+  else if contains "FIXME" text then Just "FIXME"
+  else if contains "XXX" text then Just "XXX" else Nothing
+
 -- | 解析源码并按配置/抑制过滤后返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
 --
 -- 规则看 AST 的中缀结构，所以重排必须与程序级 fixity 一致：`programFixities` 是本文件的

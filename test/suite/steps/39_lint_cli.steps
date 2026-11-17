@@ -23,3 +23,11 @@ exit: 0
 run: "$VUNA" lint "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
 exit: 2
 out-contains: unknown lint rule: unknown-rule
+run: sh -c 'printf "[package]\nname = \"lint-pkg\"\n\n[dependencies]\nvuna-base = \"%s\"\n\n[lint]\npreset = \"recommended\"\nmax-warnings = 0\n" "$VUNA_BASE" > "$TMPDIR/lint-pkg/vuna.toml"; printf "%s\n" "module Probe where" "" "-- TODO: remove before merge" "probe : Int -> Int" "probe x = x" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+run: "$VUNA" lint --select todo-marker --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 1
+out-contains: LN_TodoMarker
+out-contains: TODO

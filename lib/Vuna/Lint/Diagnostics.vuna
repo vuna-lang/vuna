@@ -24,25 +24,30 @@ export data LintRule(..) : Type where
   DispatchLift : LintRule
   -- | 闭合 cons 链与裸 `Nil` 应写成列表字面量。
   ListLiteral : LintRule
+  -- | 注释里出现 TODO / FIXME / XXX 标记（默认关闭，strict 预设可选）。
+  TodoMarker : LintRule
 
 -- | 规则的稳定符号（`LN_` 前缀 + 驼峰），文档与索引按它引用规则。
 export lintCode : LintRule -> String
 lintCode LiteralIfChain = "LN_LiteralIfChain"
 lintCode DispatchLift = "LN_DispatchLift"
 lintCode ListLiteral = "LN_ListLiteral"
+lintCode TodoMarker = "LN_TodoMarker"
 
 -- | 规则的 kebab 短名，用于 CLI 与 finding 输出；与 `lintCode` 一一对应。
 export lintRule : LintRule -> String
 lintRule LiteralIfChain = "literal-if-chain"
 lintRule DispatchLift = "dispatch-lift"
 lintRule ListLiteral = "list-literal"
+lintRule TodoMarker = "todo-marker"
 
 -- | 由 `LN_` code 反查 kebab 短名（gen-errors 与输出层按 code 反查时用）；未知 code 返回空串。
 export lintRuleCode : String -> String
 lintRuleCode code =
   if code == lintCode LiteralIfChain then lintRule LiteralIfChain
   else if code == lintCode DispatchLift then lintRule DispatchLift
-  else if code == lintCode ListLiteral then lintRule ListLiteral else ""
+  else if code == lintCode ListLiteral then lintRule ListLiteral
+  else if code == lintCode TodoMarker then lintRule TodoMarker else ""
 
 -- | 规则的消息模板；参数是被检查主体的描述，模板里用它插值。
 export lintMsg : LintRule -> String -> String
@@ -51,6 +56,7 @@ lintMsg LiteralIfChain scrutinee =
 lintMsg DispatchLift scrutinee =
   "dispatch on `${scrutinee}` can be lifted into the enclosing pattern"
 lintMsg ListLiteral suggestion = "list construction can be written as `${suggestion}`"
+lintMsg TodoMarker marker = "comment contains `${marker}` marker"
 
 -- | 规则的修复动作描述（`vuna lint --explain` 与文档用）。
 export lintEdit : LintRule -> String
@@ -60,6 +66,7 @@ lintEdit DispatchLift =
   "把 case / let 分派提升进外层模式（单 alt 替换；多 alt 拆 clause 或拆 alt）"
 lintEdit ListLiteral =
   "把闭合 `::` / `Cons` 链与裸 `Nil` 改写为 `[a, b]` / `[]`（模式匹配不动）"
+lintEdit TodoMarker = "删除或处理注释里的 TODO / FIXME / XXX 标记"
 
 -- | 规则的一句话说明（文档用）。
 export lintDesc : LintRule -> String
@@ -69,12 +76,15 @@ lintDesc DispatchLift =
   "case / let 分派可提升进外层 clause/alt 模式（单 alt 替换、多 alt 拆分）。"
 lintDesc ListLiteral =
   "表达式/类型位置的闭合 cons 链与裸 `Nil` 应写成 `[a, b]` / `[]`；模式匹配里的 `::`/`Cons` 不受影响。"
+lintDesc TodoMarker =
+  "注释里的 TODO / FIXME / XXX 标记应在合入前处理；默认关闭，strict/all 预设或 --select 启用。"
 
 -- | 该规则是否可自动修复（可修复的规则会派生 `FX_` 修复码）。
 export lintFixable : LintRule -> Bool
 lintFixable LiteralIfChain = True
 lintFixable DispatchLift = True
 lintFixable ListLiteral = True
+lintFixable TodoMarker = False
 
 -- | 规则的严重度：off 不参与扫描，warn 只报告，error 计入退出码。
 export data LintSeverity(..) : Type where
@@ -120,16 +130,18 @@ export lintDefaultSeverity : LintRule -> LintSeverity
 lintDefaultSeverity LiteralIfChain = LintWarn
 lintDefaultSeverity DispatchLift = LintWarn
 lintDefaultSeverity ListLiteral = LintWarn
+lintDefaultSeverity TodoMarker = LintWarn
 
 -- | 全部规则（配置与默认预设的遍历源）。
 export lintAllRules : List LintRule
-lintAllRules = [LiteralIfChain, DispatchLift, ListLiteral]
+lintAllRules = [LiteralIfChain, DispatchLift, ListLiteral, TodoMarker]
 
 -- | 规则是否属于 recommended 预设。
 export lintRecommended : LintRule -> Bool
 lintRecommended LiteralIfChain = True
 lintRecommended DispatchLift = True
 lintRecommended ListLiteral = True
+lintRecommended TodoMarker = False
 
 -- | 一条规则的文档条目：code、kebab 短名、说明、是否可修复与修复动作描述。
 export record LintEntry(..) where
@@ -149,5 +161,6 @@ export lintAll : List LintEntry
 lintAll =
   [ LintEntry (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintDesc LiteralIfChain) (lintFixable LiteralIfChain) (lintEdit LiteralIfChain),
     LintEntry (lintCode DispatchLift) (lintRule DispatchLift) (lintDesc DispatchLift) (lintFixable DispatchLift) (lintEdit DispatchLift),
-    LintEntry (lintCode ListLiteral) (lintRule ListLiteral) (lintDesc ListLiteral) (lintFixable ListLiteral) (lintEdit ListLiteral)
+    LintEntry (lintCode ListLiteral) (lintRule ListLiteral) (lintDesc ListLiteral) (lintFixable ListLiteral) (lintEdit ListLiteral),
+    LintEntry (lintCode TodoMarker) (lintRule TodoMarker) (lintDesc TodoMarker) (lintFixable TodoMarker) (lintEdit TodoMarker)
   ]
