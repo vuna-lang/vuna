@@ -1550,6 +1550,12 @@ opHOf : String -> List (Pair String String) -> Maybe String
 opHOf key [] = Nothing
 opHOf key ((Pair k v) :: rest) = if key == k then Just v else opHOf key rest
 
+-- | 单构造子 op 的字段：`FsFail e` 的 `e`。
+opFieldOf : Ir -> Ir
+opFieldOf ir = case ir of
+  IrCtor _ _ ([x]) => x
+  _ => ir
+
 -- | 纯动作续延：`MkEff (\\_ => runMain (opH op pureK))`。
 directSend : String -> String -> Ir -> Ir
 directSend runName opHName op =
@@ -1559,24 +1565,37 @@ directSend runName opHName op =
     ran = IrApp (IrGlobal runName) applied
   in IrCtor irEffTypeName irEffMkCtor [IrLam [u] ran]
 
+-- | 收口式错误族：`eprint ("vuna: " ++ text e ++ "\n"); exit 1`（不返回）。
+abortSend : String -> Ir -> Ir
+abortSend textName op =
+  let
+    u = mkIrBinder "hostUnit"
+    dead = mkIrBinder "hostDead"
+    msg = IrConcatMany [IrStr "vuna: ", IrApp (IrGlobal textName) (opFieldOf op), IrStr "\n"]
+    eprinted = IrRtApp "@vuna@prim_eff_eprint" [msg]
+    exited = IrRtApp "@vuna@prim_eff_exit" [IrInt 1]
+  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] (IrApp (IrLam [dead] exited) eprinted)]
+
 -- | 一个节点：先改写子项，再把脊椎是 `sendCore` 的节点换成直连调用。
-rw : List (Pair String String) -> String -> Ir -> Ir
-rw h n (IrCtor f c args) = rwSpine h n (IrCtor f c (map (rw h n) args))
-rw h n (IrRecord f fields) = rwSpine h n (IrRecord f (map (rwField h n) fields))
-rw h n (IrProj b f fd) = rwSpine h n (IrProj (rw h n b) f fd)
-rw h n (IrRecUpd b f fields) = rwSpine h n (IrRecUpd (rw h n b) f (map (rwField h n) fields))
-rw h n (IrRtApp sym args) = rwSpine h n (IrRtApp sym (map (rw h n) args))
-rw h n (IrCast e) = rwSpine h n (IrCast (rw h n e))
-rw h n (IrLet bs v body) = rwSpine h n (IrLet bs (rw h n v) (rw h n body))
-rw h n (IrLam bs body) = rwSpine h n (IrLam bs (rw h n body))
-rw h n (IrApp f a) = rwSpine h n (IrApp (rw h n f) (rw h n a))
-rw h n (IrIf c t e) = rwSpine h n (IrIf (rw h n c) (rw h n t) (rw h n e))
-rw h n (IrCase sc alts) = rwSpine h n (IrCase (rw h n sc) (map (rwAlt h n) alts))
-rw h n (IrNatCase sc i z su c) =
-  rwSpine h n (IrNatCase (rw h n sc) i (rwAltMaybe h n z) (rwAltMaybe h n su) (rwAltMaybe h n c))
-rw h n (IrConcatMany xs) = rwSpine h n (IrConcatMany (map (rw h n) xs))
-rw h n (IrEffThunk f c t a p) = rwSpine h n (IrEffThunk f c t a (rw h n p))
-rw h n ir = rwSpine h n ir
+rw : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
+rw h ab n (IrCtor f c args) = rwSpine h ab n (IrCtor f c (map (rw h ab n) args))
+rw h ab n (IrRecord f fields) = rwSpine h ab n (IrRecord f (map (rwField h ab n) fields))
+rw h ab n (IrProj b f fd) = rwSpine h ab n (IrProj (rw h ab n b) f fd)
+rw h ab n (IrRecUpd b f fields) =
+  rwSpine h ab n (IrRecUpd (rw h ab n b) f (map (rwField h ab n) fields))
+rw h ab n (IrRtApp sym args) = rwSpine h ab n (IrRtApp sym (map (rw h ab n) args))
+rw h ab n (IrCast e) = rwSpine h ab n (IrCast (rw h ab n e))
+rw h ab n (IrLet bs v body) = rwSpine h ab n (IrLet bs (rw h ab n v) (rw h ab n body))
+rw h ab n (IrLam bs body) = rwSpine h ab n (IrLam bs (rw h ab n body))
+rw h ab n (IrApp f a) = rwSpine h ab n (IrApp (rw h ab n f) (rw h ab n a))
+rw h ab n (IrIf c t e) = rwSpine h ab n (IrIf (rw h ab n c) (rw h ab n t) (rw h ab n e))
+rw h ab n (IrCase sc alts) = rwSpine h ab n (IrCase (rw h ab n sc) (map (rwAlt h ab n) alts))
+rw h ab n (IrNatCase sc i z su c) =
+  rwSpine h ab n
+    (IrNatCase (rw h ab n sc) i (rwAltMaybe h ab n z) (rwAltMaybe h ab n su) (rwAltMaybe h ab n c))
+rw h ab n (IrConcatMany xs) = rwSpine h ab n (IrConcatMany (map (rw h ab n) xs))
+rw h ab n (IrEffThunk f c t a p) = rwSpine h ab n (IrEffThunk f c t a (rw h ab n p))
+rw h ab n ir = rwSpine h ab n ir
 
 -- | `sendCore` 的尾部三参：key（字面量）、name、op。擦除实参可能在前，按后缀取。
 sendTailOf : List Ir -> Maybe (Pair String Ir)
@@ -1592,34 +1611,36 @@ stripIrCasts ir = case ir of
   IrCast inner => stripIrCasts inner
   _ => ir
 
-rwSpine : List (Pair String String) -> String -> Ir -> Ir
-rwSpine h n ir0 =
+rwSpine : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
+rwSpine h ab n ir0 =
   let
     ir = stripIrCasts ir0
   in case spineOf ir of
     Pair (IrGlobal g) args => if g == hcSendCore then case sendTailOf args of
       Just p => case opHOf (firstOf p) h of
         Just opHName => directSend n opHName (secondOf p)
-        Nothing => ir
+        Nothing => case opHOf (firstOf p) ab of
+          Just textName => abortSend textName (secondOf p)
+          Nothing => ir
       Nothing => ir
     else ir
     _ => ir
 
-rwField : List (Pair String String) -> String -> Pair String Ir -> Pair String Ir
-rwField h n (Pair k v) = Pair k (rw h n v)
+rwField : List (Pair String String) -> List (Pair String String) -> String -> Pair String Ir -> Pair String Ir
+rwField h ab n (Pair k v) = Pair k (rw h ab n v)
 
-rwAlt : List (Pair String String) -> String -> IrAlt -> IrAlt
-rwAlt h n (IrAlt c bs b) = IrAlt c bs (rw h n b)
+rwAlt : List (Pair String String) -> List (Pair String String) -> String -> IrAlt -> IrAlt
+rwAlt h ab n (IrAlt c bs b) = IrAlt c bs (rw h ab n b)
 
-rwAltMaybe : List (Pair String String) -> String -> Maybe IrAlt -> Maybe IrAlt
-rwAltMaybe h n Nothing = Nothing
-rwAltMaybe h n (Just a) = Just (rwAlt h n a)
+rwAltMaybe : List (Pair String String) -> List (Pair String String) -> String -> Maybe IrAlt -> Maybe IrAlt
+rwAltMaybe h ab n Nothing = Nothing
+rwAltMaybe h ab n (Just a) = Just (rwAlt h ab n a)
 
-rwDef : List (Pair String String) -> String -> IrDef -> IrDef
-rwDef h n d = case irDefBody d of
+rwDef : List (Pair String String) -> List (Pair String String) -> String -> IrDef -> IrDef
+rwDef h ab n d = case irDefBody d of
   Nothing => d
   Just b =>
-    IrDef (irDefName d) (irDefArity d) (irDefDeps d) (rw h n b) (irDefRecValueOk d)
+    IrDef (irDefName d) (irDefArity d) (irDefDeps d) (rw h ab n b) (irDefRecValueOk d)
       (irDefInitGuard d) (irDefSpan d)
 
 -- | `@vuna@host@pureK = \\r => MkEff (\\_ => r)`（直连改写的续延参数）。
@@ -1754,11 +1775,12 @@ build program printResult =
           _ => reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
         hosts = mapMaybe irHostDirectOf handlerSeeds
+        aborts = mapMaybe irHostAbortOf handlerSeeds
         runName = case irEntryRunMainOf e of
           Just rm => rm
           Nothing => ""
         roots = append [irEntryMainOf e] runSeeds
-        rewrittenAll = map (rwDef hosts runName) defs
+        rewrittenAll = map (rwDef hosts aborts runName) defs
         rewritten = reachableByRefs 100000 roots rewrittenAll
         live = rewritten
         tblAll = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
@@ -1775,7 +1797,7 @@ build program printResult =
         kept = filter (\d => not (defUsesSyms performSyms d)) rewrittenAll
         directable =
           if listNull handlerSeeds then False
-          else if listLengthB hosts /= listLengthB handlerSeeds then False
+          else if listLengthB hosts + listLengthB aborts /= listLengthB handlerSeeds then False
           else if runName == "" then False else not (defsUseSyms performSyms live)
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
