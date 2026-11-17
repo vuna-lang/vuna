@@ -429,19 +429,24 @@ export data MemberLookup(..) : Type where
 
 export isMemberDomain : Ec -> Value -> Bool
 isMemberDomain ec dom = case quote 0 dom of
-  -- 命名行：`Member n e r`（实例名、标签、行）。
+  -- 双形状：旧 `Member n e r`（3 索引）、新 `Member label r`（2 索引，label 可为 Named）。
   TApp (TApp (TApp (TGlobal g) _ _) _ _) _ _ => g == memberDomName
+  TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
   _ => False
 
--- Member 约束的域形状：3 索引（实例名、标签、行）。
+-- Member 约束的域形状：3 索引（实例名、标签、行）或 2 索引（标签、行）。
 data MemberDom : Type where
+  MemberDom2 : Value -> Value -> MemberDom
   MemberDom3 : Value -> Value -> Value -> MemberDom
 
 memberSpine : Value -> Maybe MemberDom
 memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case length sp of
-  -- 3 索引用单 Cons 分支，规避深/浅多 Cons 分支回退时的变量串位（规避 debt D53）。
+  -- 长度判别 + 每臂单 Cons 分支，规避深/浅多 Cons 分支回退时的变量串位（debt D53）。
   3 => case sp of
     n :: e :: r :: _ => Just (MemberDom3 n e r)
+    _ => Nothing
+  2 => case sp of
+    e :: r :: _ => Just (MemberDom2 e r)
     _ => Nothing
   _ => Nothing
 else Nothing
@@ -456,7 +461,25 @@ export memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
 memberLookup fuel depth ec dom = if fuel <= 0 then MemberStuck
 else case memberSpine dom of
   Nothing => MemberStuck
-  Just (MemberDom3 nVal eVal rVal) => memberLookupRow fuel depth ec nVal eVal rVal
+  Just (MemberDom2 eVal rVal) => memberLookupRowLabel fuel depth ec eVal rVal
+  Just (MemberDom3 nVal eVal rVal) => memberLookupRowNamed fuel depth ec nVal eVal rVal
+
+-- 二元行（`Member label r`）：按完整标签结构匹配；Named 标签作为整体比较。
+memberLookupRowLabel : Int -> Int -> Ec -> Value -> Value -> MemberLookup
+memberLookupRowLabel fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
+else case forceVal ec rVal of
+  VCon cname cargs => if cname == effRowNilCtor then MemberAbsent
+  else if cname == effRowConsCtor then case cargs of
+    h :: t :: _ => if hasUnsolvedMetaValue (ecSolsP ec) eVal || hasUnsolvedMetaValue (ecSolsP ec) h then MemberStuck
+    else case convEc ec depth eVal h of
+      OkC ec1 => MemberFound (ctorValue ec1 hereCtorName [eVal, t]) ec1
+      ErrC _ => case memberLookupRowLabel (fuel - 1) depth ec eVal t of
+        MemberFound subProof ec1 =>
+          MemberFound (ctorValue ec1 thereCtorName [eVal, h, t, subProof]) ec1
+        other => other
+    _ => MemberStuck
+  else MemberStuck
+  _ => MemberStuck
 
 -- ---------------------------------------------------------------
 -- 命名行：`Member ?n e r` 的名字槽求解
@@ -524,8 +547,8 @@ else case forceVal ec rF of
 --   0 候选 + 具体行尾 → 缺效应；0 候选 + 开放尾 → 推迟；
 --   ≥2 候选（名字未解，或同名重复）→ MemberAmbiguous（最终化报 TC_AmbiguousInstance）；
 --   唯一候选 → 在目标条目上提交 label/name 合一并构造 Here/There。
-memberLookupRow : Int -> Int -> Ec -> Value -> Value -> Value -> MemberLookup
-memberLookupRow fuel depth ec nVal eVal rVal = if fuel <= 0 then MemberStuck
+memberLookupRowNamed : Int -> Int -> Ec -> Value -> Value -> Value -> MemberLookup
+memberLookupRowNamed fuel depth ec nVal eVal rVal = if fuel <= 0 then MemberStuck
 else
   let
     nF = forceVal ec nVal

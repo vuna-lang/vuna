@@ -294,7 +294,8 @@ isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
 -- 通用效应系统把行/成员证明/行删除编码在 `vuna-base` 的数据里；编译器
 -- 按**这些全名**识别该编码（不是内建：base 是唯一真源，名字集中在此处，不再散落）。
 -- 消费方：`Core/Eval.rowRemReduce`（行删除归约）、`Elab/Dict`（行成员证明构造）。
--- 形状：`Row : Type 1`（`Nil`/`Cons`），`Member : Type -> Row -> Type 1`（`Here`/`There`），
+-- 形状：`Row : Type 1`（`Nil`/`Cons`；二元行的标签可包 `Named`），
+-- `Member` 3 索引（实例名、标签、行）或 2 索引（标签、行），
 -- `rowRem : Type -> Row -> Row`（axiom，由编译器按标签值结构相等归约）。
 -- | 效应行族 `Base.Eff.Row`（Type-1 数据）。
 export effRowFamilyName : String
@@ -307,6 +308,10 @@ effRowNilCtor = "Base.Eff.Row.Nil"
 -- | 行扩展构造子 `Base.Eff.Row.Cons`（标签 + 尾行）。
 export effRowConsCtor : String
 effRowConsCtor = "Base.Eff.Row.Cons"
+
+-- | 命名标签 `Base.Eff.Named`（二元行）：`Named n e` 把实例名并进标签类型。
+export effNamedName : String
+effNamedName = "Base.Eff.Named"
 
 -- | 行删除 `Base.Eff.rowRem`（axiom，由编译器归约）。
 export effRowRemName : String

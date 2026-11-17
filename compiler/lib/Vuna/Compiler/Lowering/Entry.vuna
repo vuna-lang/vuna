@@ -27,18 +27,27 @@ actionResultTyIn (TApp (TApp fn row _) arg _) = case fn of
   _ => Nothing
 actionResultTyIn _ = Nothing
 
+-- | 二元行的 Named 标签拆出效应标签项；其它形态原样返回。
+unwrapNamedTerm : Term -> Term
+unwrapNamedTerm (t@(TApp (TApp (TGlobal g) _ _) label _)) = if g == effNamedName then label else t
+unwrapNamedTerm t = t
+
 collectBuiltinRowTags : Term -> List String
-collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case args of
-  _ :: label :: tail :: _ =>
-    let
-      rest = collectBuiltinRowTags (firstOf tail)
-      tagTerm = firstOf label
-    in case tagTerm of
-      TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
-      _ => rest
+collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case length args of
+  3 => case args of
+    _ :: label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
+    _ => []
+  2 => case args of
+    label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
+    _ => []
   _ => []
 else []
 collectBuiltinRowTags _ = []
+
+tagOf : Pair Term Rig -> List String -> List String
+tagOf label rest = case unwrapNamedTerm (firstOf label) of
+  TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
+  _ => rest
 
 mainRowTags : Term -> List String
 mainRowTags (TApp (TApp fn row _) _ _) = case fn of
