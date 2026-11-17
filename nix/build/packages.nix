@@ -113,6 +113,122 @@ let
     # 与 checks 的 e2e 同一份 PATH：wasm-tools/wasmtime/cc/node 都在。
     tools = e2eTools;
   };
+
+  # 自举后端编译器：由 stage 1 编译器把自己的源码编到另一个目标。
+  # 两者都是开发 / CI 产物（不进 seed、不进 TCB），口径见 docs/reference/testing.md。
+  #
+  # wasm：WASI 没有 fork/exec，`build` 必须 `--no-compile`，链接/汇编交回宿主
+  # build.sh；包装脚本固定 wasmtime 参数、预打开目录与编译器身份。
+  vuna-wasm =
+    pkgs.runCommand "vuna-wasm-${version}"
+      {
+        nativeBuildInputs = [
+          vuna-compiler
+          pkgs.wasm-tools
+        ];
+        allowSubstitutes = false;
+        meta = {
+          description = "vuna compiler built for wasm (wasmtime wrapper, self-host checks)";
+          mainProgram = "vuna-wasm";
+          license = lib.licenses.mit;
+        };
+      }
+      ''
+            cp -r ${../../compiler} compiler
+            cp -r ${../../base} base
+            cp ${../../vuna.toml} vuna.toml
+            chmod -R u+w .
+            export VUNA_STORE="$TMPDIR/store"
+            ${vuna-compiler}/bin/vuna-compiler build compiler --target wasm --no-compile --out "$out/lib"
+            wasm-tools parse "$out/lib/main.wat" -o "$out/lib/main.wasm"
+            cp -r base "$out/base"
+
+            tag="vuna-wasm-$(sha256sum "$out/lib/main.wasm" | cut -d' ' -f1)"
+            mkdir -p "$out/bin"
+            cat > "$out/bin/vuna-wasm" <<'WRAP'
+        #!/bin/sh
+        # wasm 版编译器的宿主包装：固定 wasmtime 参数与预打开根，转发编译器参数。
+        # 用法与 vuna-compiler 相同（check / compile / build --no-compile）。
+        set -eu
+        case " $* " in
+          *" build "*)
+            case " $* " in
+              *" --no-compile "*) ;;
+              *)
+                printf 'vuna-wasm: build needs --no-compile (WASI has no exec); run build.sh on the host\n' >&2
+                exit 2
+                ;;
+            esac
+            ;;
+        esac
+        root=''${VUNA_WASM_DIR:-/}
+        store=''${VUNA_STORE:-''${HOME:-/tmp}/.vuna/wasm-store}
+        mkdir -p "$store"
+        exec @wasmtime@ run \
+          -W max-wasm-stack="''${VUNA_WASM_STACK:-33554432}" \
+          -W stack-switching=y -W gc=y -W function-references=y \
+          --dir "$root" \
+          --env VUNA_BASE="''${VUNA_BASE:-@base@}" \
+          --env VUNA_STORE="$store" \
+          --env VUNA_OCAML_ID="''${VUNA_OCAML_ID:-none}" \
+          --env VUNA_COMPILER_TAG="''${VUNA_COMPILER_TAG:-@tag@}" \
+          --env HOME="''${HOME:-/tmp}" \
+          @wasm@ "$@"
+        WRAP
+            chmod +x "$out/bin/vuna-wasm"
+            substituteInPlace "$out/bin/vuna-wasm" \
+              --replace '@wasmtime@' "${pkgs.wasmtime}/bin/wasmtime" \
+              --replace '@wasm@' "$out/lib/main.wasm" \
+              --replace '@base@' "$out/base" \
+              --replace '@tag@' "$tag"
+      '';
+
+  # native：产物直接是原生可执行文件；身份写 `$out/build-id`（Loader.Fingerprint 读它）。
+  vuna-native =
+    pkgs.runCommand "vuna-native-${version}"
+      {
+        nativeBuildInputs = ocamlTools ++ [ vuna-compiler ];
+        allowSubstitutes = false;
+        meta = {
+          description = "vuna compiler built for x86-64 native (self-host checks)";
+          mainProgram = "vuna-native";
+          license = lib.licenses.mit;
+        };
+      }
+      ''
+        cp -r ${../../compiler} compiler
+        cp -r ${../../base} base
+        cp ${../../vuna.toml} vuna.toml
+        chmod -R u+w .
+        export VUNA_STORE="$TMPDIR/store"
+        ${vuna-compiler}/bin/vuna-compiler build compiler --target native --out "$out/out"
+        mkdir -p "$out/bin"
+        cp "$out/out/bin/vuna-compiler" "$out/bin/vuna-native"
+        cp -r base "$out/base"
+        printf '%s' "vuna-native-$(sha256sum "$out/bin/vuna-native" | cut -d' ' -f1)" > "$out/build-id"
+      '';
+
+  # 跨编译器 conformance runner：selfhost / parity / corpus 三个 scope。
+  backend-check =
+    (pkgs.writeShellScriptBin "backend-check" ''
+      export PATH="${
+        lib.makeBinPath (
+          shellTools
+          ++ e2eTools
+          ++ [
+            pkgs.bash
+            vuna-wasm
+            vuna-native
+          ]
+        )
+      }:$PATH"
+      export VUNA_ALT_WASM="${vuna-wasm}/bin/vuna-wasm"
+      export VUNA_ALT_NATIVE="${vuna-native}/bin/vuna-native"
+      exec ${pkgs.bash}/bin/bash ${../../nix/tools/backend-check.sh} "$@"
+    '')
+    // {
+      meta.description = "跨编译器 conformance（wasm/native 自举；CI 与本地按需）";
+    };
 in
 {
   default = vuna;
@@ -124,5 +240,8 @@ in
     vuna-bench
     vuna-perf
     vuna-run-tests
+    vuna-wasm
+    vuna-native
+    backend-check
     ;
 }
