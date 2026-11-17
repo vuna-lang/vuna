@@ -1,0 +1,29 @@
+-- `handle` 语法直接写 Exn：`Try` 子句用 `handleScoped` 在同一 handler 下重跑子计算。
+-- 用 `perform` 发送（key = op 族规范名，与 `handle` 语法一致；wrapper 的 "exn" key 见 D57）。
+import Base.Eff
+import Base.EffExn
+import Base.Nat
+import Base.Result
+
+sub : Eff [ExnOp@boom] Nat
+sub = perform ThrowExn "inner"
+
+prog : Eff [ExnOp@boom] Nat
+prog = do
+  r <- perform Try (scope sub)
+  case r of
+    Ok n => pure n
+    Err _ => pure 7
+
+run : Eff [ExnOp@boom] Nat -> Result Nat
+run comp = runPure (handle comp {
+  return x -> Ok x
+  ThrowExn msg k -> Err msg
+  Try sub k -> k (handleScoped sub)
+}
+)
+
+main : Nat
+main = case run prog of
+  Ok n => n
+  Err _ => 0

@@ -1,17 +1,15 @@
--- 负例：作用域/高阶 op 族（Exn：op 携带 Row、标签 arity 与
--- op arity 不匹配）不在 handle 语法支持范围。
+-- 负例：op 族的显式参数不是类型（含 Row），handle 语法仍不支持。
 import Base.Eff
-import Base.EffExn
 import Base.List
-import Base.Monad
-import Base.Nat
 
-prog : Eff [Exn@boom] Nat
+data Boom : Row -> Type -> Type where
+  BoomIt : {r : Row} -> Boom r Int
+
+prog : Eff [] Int
 prog = pure 1
 
-run : Eff ([Exn@"boom"]) Nat -> Nat
+run : Eff [] Int -> Int
 run comp = runPure (handle comp {
-  ThrowExn msg k -> k 0
-  Try sub k -> k 0
+  BoomIt k -> k 0
 }
 )
