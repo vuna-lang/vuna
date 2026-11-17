@@ -27,14 +27,14 @@ run: sh -c 'grep -vE "^DEBUG " "$TMPDIR/incr-bad.log" > "$TMPDIR/incr-bad-diag";
 read: $TMPDIR/incr-bad-diag
 out-contains: TC_TypeMismatch
 out-equals-file: $TMPDIR/incr-bad-full-diag
-# 依赖排在本模块**之后**（A < Z）时也必须失效：A `export import Z`，Z 新增导出后
+# 依赖排在本模块**之后**（A < Z）时也必须失效：A `export module Z`，Z 新增导出后
 # Main 要能立刻用上。旧实现按模块名排序分配依赖地址，前向边停在 `ext:` 哨兵，
 # A 的接口地址不随 Z 变化 ⇒ 读到陈旧 A 接口（unbound variable）。
-run: sh -c 'rm -rf "$TMPDIR/stale-direct" "$TMPDIR/stale-store1"; mkdir -p "$TMPDIR/stale-direct/lib" "$TMPDIR/stale-direct/app"; printf "[package]\nname = \"staledirect\"\n" > "$TMPDIR/stale-direct/vuna.toml"; printf "module A where\n\nexport import Z\n" > "$TMPDIR/stale-direct/lib/A.vuna"; printf "module Z where\n\nexport zx : Int\nzx = 1\n" > "$TMPDIR/stale-direct/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zx\n" > "$TMPDIR/stale-direct/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store1" "$VUNA" check "$TMPDIR/stale-direct" >/dev/null 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/stale-direct" "$TMPDIR/stale-store1"; mkdir -p "$TMPDIR/stale-direct/lib" "$TMPDIR/stale-direct/app"; printf "[package]\nname = \"staledirect\"\n" > "$TMPDIR/stale-direct/vuna.toml"; printf "module A where\n\nexport module Z\n" > "$TMPDIR/stale-direct/lib/A.vuna"; printf "module Z where\n\nexport zx : Int\nzx = 1\n" > "$TMPDIR/stale-direct/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zx\n" > "$TMPDIR/stale-direct/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store1" "$VUNA" check "$TMPDIR/stale-direct" >/dev/null 2>&1'
 run: sh -c 'printf "module Z where\n\nexport zx : Int\nzx = 1\n\nexport zy : Int\nzy = 2\n" > "$TMPDIR/stale-direct/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zy\n" > "$TMPDIR/stale-direct/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store1" "$VUNA" check "$TMPDIR/stale-direct" 2>&1'
 exit: 0
 # 传递重导出：A → B → Z，只有 Z 的源变化（B 的源不变，A 的地址也不会变）⇒
 # 靠候选接口记录的 `miDepHashes` 与当前地址表比对把 A 判脏。
-run: sh -c 'rm -rf "$TMPDIR/stale-trans" "$TMPDIR/stale-store2"; mkdir -p "$TMPDIR/stale-trans/lib" "$TMPDIR/stale-trans/app"; printf "[package]\nname = \"staletrans\"\n" > "$TMPDIR/stale-trans/vuna.toml"; printf "module A where\n\nexport import B\n" > "$TMPDIR/stale-trans/lib/A.vuna"; printf "module B where\n\nexport import Z\n" > "$TMPDIR/stale-trans/lib/B.vuna"; printf "module Z where\n\nexport zx : Int\nzx = 1\n" > "$TMPDIR/stale-trans/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zx\n" > "$TMPDIR/stale-trans/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store2" "$VUNA" check "$TMPDIR/stale-trans" >/dev/null 2>&1'
+run: sh -c 'rm -rf "$TMPDIR/stale-trans" "$TMPDIR/stale-store2"; mkdir -p "$TMPDIR/stale-trans/lib" "$TMPDIR/stale-trans/app"; printf "[package]\nname = \"staletrans\"\n" > "$TMPDIR/stale-trans/vuna.toml"; printf "module A where\n\nexport module B\n" > "$TMPDIR/stale-trans/lib/A.vuna"; printf "module B where\n\nexport module Z\n" > "$TMPDIR/stale-trans/lib/B.vuna"; printf "module Z where\n\nexport zx : Int\nzx = 1\n" > "$TMPDIR/stale-trans/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zx\n" > "$TMPDIR/stale-trans/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store2" "$VUNA" check "$TMPDIR/stale-trans" >/dev/null 2>&1'
 run: sh -c 'printf "module Z where\n\nexport zx : Int\nzx = 1\n\nexport zy : Int\nzy = 2\n" > "$TMPDIR/stale-trans/lib/Z.vuna"; printf "import A\n\nmain : Int\nmain = zy\n" > "$TMPDIR/stale-trans/app/Main.vuna"; VUNA_STORE="$TMPDIR/stale-store2" "$VUNA" check "$TMPDIR/stale-trans" 2>&1'
 exit: 0

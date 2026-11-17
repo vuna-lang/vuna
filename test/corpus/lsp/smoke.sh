@@ -640,13 +640,13 @@ VEOF
 cat >"$tmp/modws/lib/Reexp.vuna" <<'VEOF'
 module Reexp where
 
-export import ModDoc
+export module ModDoc
 export useIt : Int
 useIt = helper2 7
 VEOF
 moddoc_uri="file://$tmp/modws/lib/ModDoc.vuna"
 reexp_uri="file://$tmp/modws/lib/Reexp.vuna"
-reexp_text='module Reexp where\n\nexport import ModDoc\nexport useIt : Int\nuseIt = helper2 7\n'
+reexp_text='module Reexp where\n\nexport module ModDoc\nexport useIt : Int\nuseIt = helper2 7\n'
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
   frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$reexp_uri"'","languageId":"vuna","version":1,"text":"'"$reexp_text"'"}}}'
