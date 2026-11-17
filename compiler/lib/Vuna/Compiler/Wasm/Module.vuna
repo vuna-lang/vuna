@@ -20,6 +20,7 @@ import Base.String
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
+import Vuna.Compiler.Ir.Anf
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
@@ -1803,11 +1804,21 @@ build program printResult =
     users = concatMap irStringsOfDef defs
     offsets = poolOf (append statics users)
     defsAll = append defs [pureKDef]
-    defTbl = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) defsAll)
     famTbl = Base.HashMap.fromList (map (\f => Pair (famNameOf f) f) fams)
     poolTbl = Base.HashMap.fromList offsets
     consts = mkConsts poolTbl
-    st0 = GenState fams famTbl defsAll defTbl offsets poolTbl [] [] 0 [] consts [] False 0
+    mkSt : List IrDef -> GenState
+    mkSt ds =
+      let
+        dt = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) ds)
+      in GenState fams famTbl ds dt offsets poolTbl [] [] 0 [] consts [] False 0
+    st0 = mkSt defsAll
+    buildAnf : List IrDef -> Int -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
+    buildAnf ds mode entry0 lf = case anfProgramDefs ds of
+      Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
+      Ok ds1 => case buildModule 100000 (mkSt ds1) ds1 entry0 printResult mode lf of
+        Ok m => WasmOk m
+        Err msg => WasmRejected (classifyWasmErr msg)
   in case entry of
     Nothing => WasmRejected (WasmUnsupported "wasm target: no main definition")
     Just e =>
@@ -1850,19 +1861,13 @@ build program printResult =
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
-      in if directable then case buildModule 100000 st0 (append rewritten [pureKDef]) (Just entryClean) printResult 0 listFamM of
-        Ok m => WasmOk m
-        Err msg => WasmRejected (classifyWasmErr msg)
+      in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
       else if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
         -- 纯用户 handler（入口行 []）走 CPS；入口行还有内建宿主 handler 时，opH 内的
         -- 外层 perform 需要可恢复的内层 frame，暂回落 stack switching（见 debt D102）。
         Err msg => WasmRejected (WasmUnsupported msg)
-        Ok cpsOrdered => case buildModule 100000 st0 cpsOrdered (Just e) printResult 3 listFamM of
-          Ok m => WasmOk m
-          Err msg => WasmRejected (classifyWasmErr msg)
-      else case buildModule 100000 st0 ordered (Just e) printResult (effModeOf (Just e) ordered) listFamM of
-        Ok m => WasmOk m
-        Err msg => WasmRejected (classifyWasmErr msg)
+        Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
+      else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
 
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
