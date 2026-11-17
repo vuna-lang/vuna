@@ -1873,7 +1873,9 @@ lintSourceWithConfig cfg programFixities source = case parseSourceWithComments "
         OkC toks =>
           let
             lines = splitLines source
-            raw = dedupFindings (sortFindings (scanDecls lines toks decls decls))
+            raw =
+              append (dedupFindings (sortFindings (scanDecls lines toks decls decls)))
+                (todoFindings comments)
             filtered = filterFindings cfg suppression raw
           in OkC filtered
 
