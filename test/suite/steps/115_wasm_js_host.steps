@@ -1,6 +1,6 @@
 # matrix: effect-wasm
 # 115) JS 宿主（Node / V8）冒烟：纯程序与「只有内建宿主效应」的产物都在默认引擎上跑；
-#      用户自定义 handler 的产物仍被拒绝（exit 2）；guest 自己的失败文本原样透出。
+#      用户自定义 handler 的产物经 CPS lowering 也在默认引擎上跑；guest 失败文本原样透出。
 #
 # 依赖 PATH 里的 node（devShell 与 e2e 的 nativeBuildInputs 已提供）；缺 Node 时打印 SKIP。
 run: sh "$VUNA_SUITE_ROOT/test/suite/fixtures/wasm_js_host/smoke.sh" "$VUNA"
@@ -8,4 +8,4 @@ exit: 0
 out-contains: passed, 0 failed
 out-contains: pure/no-cont
 out-contains: host/no-cont
-out-contains: user/rejected
+out-contains: user/no-cont

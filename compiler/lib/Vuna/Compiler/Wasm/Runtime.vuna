@@ -50,6 +50,9 @@ export record RtConsts(..) where
   rtcTmpLen : Int
   rtcRootOff : Int
   rtcRootLen : Int
+  -- | CPS 模式下没有匹配 handler 的 perform。
+  rtcUnhandledOff : Int
+  rtcUnhandledLen : Int
 
 -- | 运行时符号的实现形态。
 export data RtImpl(..) : Type where
@@ -1516,6 +1519,10 @@ rtCleanupPush =
         IGlobalGet "$g_cleanups",
         IStructNew "$clean",
         IGlobalSet "$g_cleanups",
+        IGlobalGet "$g_cleanDepth",
+        IConstI32 1,
+        IBinop "i32.add",
+        IGlobalSet "$g_cleanDepth",
         IConstI64 0,
         IStructNew "$int"
       ]
@@ -1528,7 +1535,7 @@ rtCleanupPop =
     body =
       [ IGlobalGet "$g_cleanups",
         IPlain "ref.is_null",
-        IIf "" [INop] [IGlobalGet "$g_cleanups", IRefCast "$clean", IStructGet "$clean" 1, IGlobalSet "$g_cleanups"],
+        IIf "" [INop] [IGlobalGet "$g_cleanups", IRefCast "$clean", IStructGet "$clean" 1, IGlobalSet "$g_cleanups", IGlobalGet "$g_cleanDepth", IConstI32 1, IBinop "i32.sub", IGlobalSet "$g_cleanDepth"],
         IConstI64 0,
         IStructNew "$int"
       ]
@@ -1588,6 +1595,10 @@ rtBitShr =
         [unboxInt 0, [ILocalSet "$a"], unboxInt 1, [ILocalSet "$n"], shiftCountOk, [IIf "i64" [IConstI64 0] [ILocalGet "$a", IConstI64 1, IBinop "i64.shl", IConstI64 1, IBinop "i64.shr_u", ILocalGet "$n", IBinop "i64.shr_u"]], boxInt]
   in rtFunc "$rt_bitShr" params [WvAnyRef] locals body
 
+-- ---------------------------------------------------------------
+-- 效应 handler（CPS）
+-- ---------------------------------------------------------------
+-- 这些函数由 `Ir.Cps` 产生的 `@ir@cps@*` 调用；具体实现见下方 `rtCps*`。
 -- ---------------------------------------------------------------
 -- 效应 handler（stack switching）
 -- ---------------------------------------------------------------
@@ -1785,11 +1796,283 @@ rtEffSelf =
   in rtFunc "$rt_effSelf" params [WvAnyRef] locals body
 
 -- ---------------------------------------------------------------
+-- CPS 效应运行时
+-- ---------------------------------------------------------------
+cpsParams : Int -> List (Pair String WatValTy)
+cpsParams n = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
+
+-- | 没有匹配 handler 的 perform。
+rtCpsUnhandled : RtConsts -> WatFunc
+rtCpsUnhandled c =
+  rtFunc "$rt_cpsUnhandled" [] [] [] (failWithConst c.rtcUnhandledOff c.rtcUnhandledLen)
+
+-- | 未匹配 handler：把 key/name 拼进错误文本，便于定位实例名。
+rtCpsUnhandled2 : RtConsts -> WatFunc
+rtCpsUnhandled2 c =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$m" WvAnyRef]
+    body =
+      cat
+        [mkString c.rtcUnhandledOff c.rtcUnhandledLen, [ILocalGet "$p0", ICall "$rt_strConcat"], [ILocalGet "$p1", ICall "$rt_strConcat"], [ILocalSet "$m"], [ILocalGet "$m", ICall "$rt_failStr", IUnreachable]]
+  in rtFunc "$rt_cpsUnhandled2" params [] locals body
+
+-- | 一次性 continuation：第二次调用直接 trap。
+rtCpsResumeClo : RtConsts -> WatFunc
+rtCpsResumeClo c =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$ctx" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$cpsK",
+        ILocalSet "$ctx",
+        ILocalGet "$ctx",
+        IRefCast "$cpsK",
+        IStructGet "$cpsK" 1,
+        IIf "" [ICall "$rt_resumeTwice"] [INop],
+        ILocalGet "$ctx",
+        IRefCast "$cpsK",
+        IConstI32 1,
+        IStructSet "$cpsK" 1,
+        ILocalGet "$ctx",
+        IRefCast "$cpsK",
+        IStructGet "$cpsK" 0,
+        ILocalGet "$p1",
+        ICall "$rt_apply",
+        IReturn
+      ]
+  in rtFunc "$rt_cpsResumeClo" params [WvAnyRef] locals body
+
+-- | 正常返回时对 handler 的 `ret`：handler loop 的 kNormal。
+rtCpsRet : WatFunc
+rtCpsRet =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 2,
+        ILocalGet "$p1",
+        ICall "$rt_apply",
+        IReturn
+      ]
+  in rtFunc "$rt_cpsRet" params [WvAnyRef] [] body
+
+-- | 从当前 `$g_cleanups` 退到 frame 记录的位置，逐项执行 cleanup。
+rtCpsCleanup : WatFunc
+rtCpsCleanup =
+  let
+    params = [Pair "$p0" WvAnyRef]
+    locals = [Pair "$f" WvAnyRef, Pair "$c" (WvRef "$clean")]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$hframe",
+        ILocalSet "$f",
+        IBlock "$done" "" [ILoop "$l" "" [IGlobalGet "$g_cleanDepth", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 6, IBinop "i32.eq", IBrIf "$done", IGlobalGet "$g_cleanups", IPlain "ref.is_null", IBrIf "$done", IGlobalGet "$g_cleanups", IRefCast "$clean", ILocalSet "$c", ILocalGet "$c", IStructGet "$clean" 1, IGlobalSet "$g_cleanups", IGlobalGet "$g_cleanDepth", IConstI32 1, IBinop "i32.sub", IGlobalSet "$g_cleanDepth", ILocalGet "$c", IStructGet "$clean" 0, IConstI64 0, IStructNew "$int", ICall "$rt_apply", IDrop, IBr "$l"]]
+      ]
+  in rtFunc "$rt_cpsCleanup" params [] locals body
+
+-- | `@ir@cps@perform key name op k`：找最内层匹配 frame，调用 `opH op k'`；opH 返回后
+-- 把结果包成 abort payload 抛给匹配的 handle（abort 与「handler clause 正常返回」同一路）。
+rtCpsPerform : WatFunc
+rtCpsPerform =
+  let
+    params = cpsParams 4
+    locals =
+      [ Pair "$cur" WvAnyRef,
+        Pair "$f" WvAnyRef,
+        Pair "$msg" WvAnyRef,
+        Pair "$kctx" WvAnyRef,
+        Pair "$kclo" WvAnyRef,
+        Pair "$res" WvAnyRef,
+        Pair "$oldSelf" WvAnyRef
+      ]
+    keyEq =
+      [ ILocalGet "$cur",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 0,
+        ILocalGet "$p0",
+        ICall "$rt_eqStr",
+        IRefCast "i31",
+        II31GetU
+      ]
+    nameEq =
+      [ ILocalGet "$cur",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 1,
+        ILocalGet "$p1",
+        ICall "$rt_eqStr",
+        IRefCast "i31",
+        II31GetU
+      ]
+    body =
+      [ IGlobalGet "$g_handlers",
+        ILocalSet "$cur",
+        IBlock "$found" "" [ILoop "$l" "" (cat [[ILocalGet "$cur", IPlain "ref.is_null", IIf "" [ILocalGet "$p0", ILocalGet "$p1", ICall "$rt_cpsUnhandled2", IUnreachable] [INop]], keyEq, nameEq, [IBinop "i32.and", IIf "" [IBr "$found"] [INop]], [ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$l"]])],
+        ILocalGet "$cur",
+        ILocalSet "$f",
+        IGlobalGet "$g_self",
+        ILocalSet "$oldSelf",
+        ILocalGet "$f",
+        IGlobalSet "$g_self",
+        ILocalGet "$p3",
+        IConstI32 0,
+        IStructNew "$cpsK",
+        ILocalSet "$kctx",
+        IRefFunc "$rt_cpsResumeClo",
+        ILocalGet "$kctx",
+        IStructNew "$clo",
+        ILocalSet "$kclo",
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 3,
+        ILocalGet "$p2",
+        ICall "$rt_apply",
+        ILocalGet "$kclo",
+        ICall "$rt_apply",
+        ILocalSet "$res",
+        ILocalGet "$oldSelf",
+        IGlobalSet "$g_self",
+        ILocalGet "$f",
+        ILocalGet "$res",
+        IStructNew "$abortMsg",
+        IThrow "$abort"
+      ]
+  in rtFunc "$rt_cpsPerform" params [WvAnyRef] locals body
+
+-- | `@ir@cps@handle key name ret opH comp u k`：push frame，运行 comp；正常返回走
+-- `ret` 后交 `k`，abort 走 catch（目标是自己则交 `k`，否则重抛给外层）。
+rtCpsHandle : WatFunc
+rtCpsHandle =
+  let
+    params = cpsParams 7
+    locals =
+      [Pair "$f" WvAnyRef, Pair "$res" WvAnyRef, Pair "$msg" WvAnyRef, Pair "$kcomp" WvAnyRef]
+    popFrame =
+      [ ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 5,
+        IGlobalSet "$g_handlers",
+        ILocalGet "$f",
+        ICall "$rt_cpsCleanup",
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 7,
+        IGlobalSet "$g_self"
+      ]
+    body =
+      [ ILocalGet "$p0",
+        ILocalGet "$p1",
+        ILocalGet "$p2",
+        ILocalGet "$p3",
+        ILocalGet "$p6",
+        IGlobalGet "$g_handlers",
+        IGlobalGet "$g_cleanDepth",
+        IGlobalGet "$g_self",
+        IStructNew "$hframe",
+        ILocalSet "$f",
+        ILocalGet "$f",
+        IGlobalSet "$g_handlers",
+        IRefFunc "$rt_cpsRet",
+        ILocalGet "$f",
+        IStructNew "$clo",
+        ILocalSet "$kcomp",
+        ITryTable "$catch" "$abort" [ILocalGet "$p4", ILocalGet "$p5", ICall "$rt_apply", ILocalGet "$kcomp", ICall "$rt_apply"] (cat [[ILocalSet "$res"], popFrame, [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$res", ICall "$rt_apply", IReturn]]),
+        ILocalSet "$msg",
+        ILocalGet "$msg",
+        IRefCast "$abortMsg",
+        IStructGet "$abortMsg" 0,
+        IRefCast "$hframe",
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IPlain "ref.eq",
+        IIf "" (cat [popFrame, [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$msg", IRefCast "$abortMsg", IStructGet "$abortMsg" 1, ICall "$rt_apply", IReturn]]) (append popFrame [ILocalGet "$msg", IThrow "$abort"]),
+        IUnreachable
+      ]
+  in rtFunc "$rt_cpsHandle" params [WvAnyRef] locals body
+
+-- | `@ir@cps@self th k`：用当前 opH 的 handler 重跑 scoped 子计算，结果交 `k`。
+rtCpsSelf : WatFunc
+rtCpsSelf =
+  let
+    params = cpsParams 2
+    locals =
+      [ Pair "$oldSelf" WvAnyRef,
+        Pair "$f" WvAnyRef,
+        Pair "$copy" WvAnyRef,
+        Pair "$kcomp" WvAnyRef,
+        Pair "$res" WvAnyRef,
+        Pair "$msg" WvAnyRef
+      ]
+    popCopy =
+      [ ILocalGet "$copy",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 5,
+        IGlobalSet "$g_handlers",
+        ILocalGet "$copy",
+        ICall "$rt_cpsCleanup",
+        ILocalGet "$oldSelf",
+        IGlobalSet "$g_self"
+      ]
+    body =
+      [ IGlobalGet "$g_self",
+        ILocalSet "$oldSelf",
+        ILocalGet "$oldSelf",
+        IPlain "ref.is_null",
+        IIf "" [ICall "$rt_cpsUnhandled", IUnreachable] [INop],
+        ILocalGet "$oldSelf",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 0,
+        ILocalGet "$oldSelf",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 1,
+        ILocalGet "$oldSelf",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 2,
+        ILocalGet "$oldSelf",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 3,
+        ILocalGet "$p1",
+        IGlobalGet "$g_handlers",
+        IGlobalGet "$g_cleanDepth",
+        ILocalGet "$oldSelf",
+        IStructNew "$hframe",
+        ILocalSet "$copy",
+        ILocalGet "$copy",
+        IGlobalSet "$g_handlers",
+        IRefFunc "$rt_cpsRet",
+        ILocalGet "$copy",
+        IStructNew "$clo",
+        ILocalSet "$kcomp",
+        ITryTable "$catch" "$abort" [ILocalGet "$p0", IConstI64 0, IStructNew "$int", ICall "$rt_apply", ILocalGet "$kcomp", ICall "$rt_apply"] (cat [[ILocalSet "$res"], popCopy, [ILocalGet "$p1", ILocalGet "$res", ICall "$rt_apply", IReturn]]),
+        ILocalSet "$msg",
+        ILocalGet "$msg",
+        IRefCast "$abortMsg",
+        IStructGet "$abortMsg" 0,
+        IRefCast "$hframe",
+        ILocalGet "$copy",
+        IRefCast "$hframe",
+        IPlain "ref.eq",
+        IIf "" (cat [popCopy, [ILocalGet "$p1", ILocalGet "$msg", IRefCast "$abortMsg", IStructGet "$abortMsg" 1, ICall "$rt_apply", IReturn]]) (append popCopy [ILocalGet "$msg", IThrow "$abort"]),
+        IUnreachable
+      ]
+  in rtFunc "$rt_cpsSelf" params [WvAnyRef] locals body
+
+-- ---------------------------------------------------------------
 -- 已实现函数清单（固定顺序）
 -- ---------------------------------------------------------------
 export rtFunctions : RtConsts -> List WatFunc
 rtFunctions c =
   [ rtApply,
+    rtCpsUnhandled c,
+    rtCpsUnhandled2 c,
+    rtCpsResumeClo c,
+    rtCpsRet,
+    rtCpsCleanup,
+    rtCpsPerform,
+    rtCpsHandle,
+    rtCpsSelf,
     rtEffPerform,
     rtEffThunk,
     rtResumeTwice c,
@@ -2021,6 +2304,9 @@ rtImplOf "@vuna@prim_eff_readRef_host" = RtFunc 1 "$rt_readRef"
 rtImplOf "@vuna@host@writeRef" = RtFunc 2 "$rt_writeRef"
 rtImplOf "prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
 rtImplOf "@vuna@prim_eff_writeRef_host" = RtFunc 2 "$rt_writeRef"
+rtImplOf "@ir@cps@perform" = RtFunc 4 "$rt_cpsPerform"
+rtImplOf "@ir@cps@handle" = RtFunc 7 "$rt_cpsHandle"
+rtImplOf "@ir@cps@self" = RtFunc 2 "$rt_cpsSelf"
 rtImplOf "prim_effectPerform" = RtFunc 3 "$rt_effPerform"
 rtImplOf "prim_effectHandle" = RtFunc 6 "$rt_effHandle"
 rtImplOf "prim_effectSelf" = RtFunc 1 "$rt_effSelf"

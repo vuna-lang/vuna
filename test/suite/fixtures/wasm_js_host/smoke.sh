@@ -7,7 +7,7 @@
 # 覆盖：
 #   1) 纯程序（无 `cont`）：宿主 stdout 与 wasmtime 同口径；
 #   2) 入口行只有内建宿主效应（无用户 handler）：send 直接降成宿主调用，同样无 `cont`；
-#   3) 用户自定义 handler：仍需 stack switching，默认引擎拒绝编译（runner exit 2）；
+#   3) 用户自定义 handler：CPS lowering 后默认引擎可直接运行；
 #   4) 运行时失败经 `$rt_failStr` 走 guest 自己的文本 + exit 2（宿主不重写）。
 #
 # 缺 Node 时打印 SKIP，摘要行照常输出。
@@ -114,11 +114,13 @@ main = runPure (handle (perform P 3) {
 ' || bad "build(user)" "$(cat "$tmp/user/build.log")"
 out=$(node "$RUNNER" "$tmp/user/out/main.wasm" 2>&1)
 code=$?
-case "$out" in
-  *"stack switching not enabled"*) ok "user/rejected" ;;
-  *) bad "user/rejected" "$out" ;;
-esac
-expect_output "user/exit" "2" "$code"
+expect_output "user/stdout" "4" "$out"
+expect_output "user/exit" "0" "$code"
+if grep -q 'cont \$cft' "$tmp/user/out/main.wat"; then
+  bad "user/no-cont" "产物仍含续延类型"
+else
+  ok "user/no-cont"
+fi
 
 # 3) guest 自己的失败文本 + exit 2。
 build_pkg "$tmp/fail" "fail" 'main : Int

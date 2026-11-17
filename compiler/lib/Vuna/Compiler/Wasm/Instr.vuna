@@ -64,6 +64,12 @@ export data Instr(..) : Type where
   II31GetS : Instr
   -- | `if`：结果类型文本（空串 = 无结果），then/else 体。
   IIf : String -> List Instr -> List Instr -> Instr
+  -- | `throw $tag`（异常处理；CPS 效应 abort 用）。
+  IThrow : String -> Instr
+  -- | `block $label (result anyref)` + `try_table (catch $tag $label)`：
+  --   `body` 正常返回一个 anyref；抛 `$tag` 时带 one anyref payload 跳到 `$label`。
+  --   `normal` 是 try_table 之后的正常路径（消费 body 的结果）。
+  ITryTable : String -> String -> List Instr -> List Instr -> Instr
   -- | `block $label (result T) ...`。
   IBlock : String -> String -> List Instr -> Instr
   -- | `loop $label (result T) ...`。

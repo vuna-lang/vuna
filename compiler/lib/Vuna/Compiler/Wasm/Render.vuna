@@ -129,6 +129,8 @@ renderInstrFlat (IArrayCopy d s) = "array.copy ${d} ${s}"
 renderInstrFlat II31New = "ref.i31"
 renderInstrFlat II31GetU = "i31.get_u"
 renderInstrFlat II31GetS = "i31.get_s"
+renderInstrFlat (IThrow tag) = "throw ${tag}"
+renderInstrFlat (ITryTable _ _ _ _) = ""
 renderInstrFlat (IIf _ _ _) = ""
 renderInstrFlat (IBlock _ _ _) = ""
 renderInstrFlat (ILoop _ _ _) = ""
@@ -149,6 +151,7 @@ renderInstrs indent instrs = concatMap (renderInstr indent) instrs
 
 renderInstr : Int -> Instr -> List String
 renderInstr indent (IIf resultTy th el) = renderIf indent resultTy th el
+renderInstr indent (ITryTable label tag body normal) = renderTryTable indent label tag body normal
 renderInstr indent (IBlock label resultTy body) = renderBlock indent label resultTy body
 renderInstr indent (ILoop label resultTy body) = renderLoop indent label resultTy body
 renderInstr indent (IComment text) = map (lineOf indent) (wrapComment 0 (";; " ++ text))
@@ -175,6 +178,20 @@ renderLoop indent label resultTy body =
   let
     openLine = [lineOf indent ("loop ${label}" ++ resultSuffix resultTy)]
   in append openLine (append (renderInstrs (indent + 2) body) [lineOf indent "end"])
+
+-- | `block $label (result anyref)` + `try_table (catch $tag $label)` + 正常路径。
+--   `normal` 在 try_table 之后、block 之内；正常路径通常以 `return` 结束。
+renderTryTable : Int -> String -> String -> List Instr -> List Instr -> List String
+renderTryTable indent label tag body normal =
+  let
+    openLine = [lineOf indent "block ${label} (result anyref)"]
+    tryOpen = [lineOf (indent + 2) "try_table (result anyref) (catch ${tag} ${label})"]
+    bodyLines = renderInstrs (indent + 4) body
+    tryClose = [lineOf (indent + 2) "end"]
+    normalLines = renderInstrs (indent + 2) normal
+    closeLine = [lineOf indent "end"]
+  in append openLine
+    (append tryOpen (append bodyLines (append tryClose (append normalLines closeLine))))
 
 -- ---------------------------------------------------------------
 -- 类型

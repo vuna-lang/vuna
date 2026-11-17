@@ -83,7 +83,6 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D102 | **用户自定义 handler 的 wasm 产物在浏览器不可执行**：可达代码里有 `prim_effectHandle` / `prim_effectSelf` 就带 `$ct` / `$eff` / `$rt_eff*`，默认配置的引擎在编译阶段拒绝（Chromium 开 `--js-flags=--experimental-wasm-wasmfx` 能编译但执行挂住）。**已落地**：纯程序与只有内建宿主效应的程序（Console / Clock / Env / Args / Exit / Stdin）由 `sendCore` 直连改写降到宿主原语，产物不含 `cont`，在 Node（V8）与默认 Chromium 上可跑。仍缺：Fs / Process / Net 的直连（它们的 `opH` 把答案行转投 `*-error` 族，需要先设计错误族的直连语义）；用户 handler 进浏览器需要 stack switching 或 CPS lowering。 | `test/suite/fixtures/wasm_engine_probe/probe.sh`、`test/suite/fixtures/wasm_js_host/smoke.sh`；`compiler/lib/Vuna/Compiler/Wasm/Module.vuna`（`rwSpine` / `directSend` / `reachableByRefs`）、`Ir/Runtime.vuna`（`irHostDirectOf`）；[wasm.md](wasm.md) §8.5/§8.6 | 后续（删除 wasmtime 与 `cont` 的触发条件：wasmfx 在目标浏览器默认可用且本仓运行时在 V8 上真能跑 / CPS lowering 落地 / 宣布 wasm 不支持用户 handler） |
 
 ## wasm 后端
 
@@ -91,7 +90,8 @@
 | --- | --- | --- | --- |
 | D96 | 能力矩阵是手写表，与三张运行时实现表的一致性靠人工同步；改 `rtImplOf` / `dtp_*` / `nativeRtTargetHost` 时必须同步改矩阵，没有自动校验 | `compiler/lib/Vuna/Compiler/Base/Capabilities.vuna`；[wasm.md](wasm.md) §8 | 后续（硬拒绝落地时补一致性测试） |
 | D97 | 入口行的不可用效应只能构建期告警 + 运行期 trap，不能构建期拒绝：`Base/Store.vuna` 的 `dirReady` 用 `processRunIn mkdir -p` bootstrap 存储根，所以 `compiler/app/Main.vuna` 的行必须带 `ProcessOp`，按符号生成期拒绝会把编译器自己拒掉 | `compiler/lib/Vuna/Compiler/Base/Store.vuna`（`dirReady`）、`compiler/app/Main.vuna`；[wasm.md](wasm.md) §8 | 后续（前置：该调用改成 FsOp 逐级建目录，并清理签名链上的 `Member nProcess ProcessOp r`） |
-| D102 | **需要 handler 的 wasm 产物在浏览器不可执行**：可达代码引用 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` 时，产物带 `$ct` / `$eff` / `$rt_eff*`，默认配置的引擎在编译阶段拒绝（Chromium 开 `--js-flags=--experimental-wasm-wasmfx` 能编译但执行 effect 挂住）。不需要 handler 的产物已不含 `cont`，由 JS 宿主在 Node 上跑通并进 `115_wasm_js_host.steps`。缺的是入口宿主效应的直连（`run*Host` 都是尾位置回写 `k`，可在不捕获续延的前提下执行 `opH`）：难点是 base 的两层 `Eff`（`k : i -> Eff [] a`，`perform` 的运行时值是动作而非标量），需要把 `perform`/`handle` 的直连版与 `k` 的形状对齐后再落地 | `test/suite/fixtures/wasm_engine_probe/probe.sh`、`test/suite/fixtures/wasm_js_host/smoke.sh`；`compiler/lib/Vuna/Compiler/Wasm/Module.vuna`（`effModeOf`）、`Wasm/Runtime.vuna`；[wasm.md](wasm.md) §8.5/§8.6 | 后续（直连落地后，wasmtime 与 `cont` 的删除触发条件：wasmfx 在目标浏览器默认可用且本仓运行时在 V8 上真能跑 / CPS lowering 落地 / 宣布 wasm 不支持用户自定义 handler） |
+| D102 | **wasm handler 的 CPS 覆盖仍不完整**：入口行是 `[]` 的纯用户 handler 已由 `Ir.Cps` 降成显式 `k`（`$hframe` + `$abort` + `try_table`），产物不含 `cont`，在 Node/Chromium 默认引擎跑通（`114`/`115` 已锁）；入口行同时有内建宿主 handler 与用户 handler 的程序仍回落 stack switching（`effMode = 2`），因为 opH 内再执行外层宿主 effect 时，外层 perform 的 abort 会穿过并提前弹出内层 handler frame。缺的是可恢复 handler 帧的 CPS driver，以及 Fs / Process / Net 的直连。 | `test/suite/fixtures/wasm_engine_probe/probe.sh`、`test/suite/fixtures/wasm_js_host/smoke.sh`；`compiler/lib/Vuna/Compiler/Ir/Cps.vuna`、`compiler/lib/Vuna/Compiler/Wasm/Module.vuna`（`cpsDefs` / `effMode`）、`Wasm/Runtime.vuna`（`$rt_cps*`）；[wasm-effects.md](wasm-effects.md) §4、[wasm.md](wasm.md) §8.5 | 后续（删除 wasmtime 与 `cont` 的触发条件：CPS driver 覆盖嵌套 opH / wasmfx 在目标浏览器默认可用且本仓运行时在 V8 上真能跑 / 宣布 wasm 不支持宿主+用户 handler 组合） |
+| D103 | **naive CPS 的 resume 栈增长**：`$rt_cpsPerform` 调用 opH 后要等它返回，顺序 perform 会保留 `perform`/`opH` 帧；2000 次 perform 在 wasmtime 上约需 4 MiB 栈（`106` 的 `effdepth` 用 `-W max-wasm-stack=4194304`），浏览器没有等价旗标。CPS driver/trampoline 落地后应回到常量栈。 | `compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna`（`$rt_cpsPerform` / `$rt_cpsHandle`）；`test/suite/steps/106_wasm_backend.steps` | 后续（driver/trampoline） |
 
 ## 相关阅读
 

@@ -93,6 +93,7 @@ modules = [
   "Vuna.Compiler.Frontend.Parser.Support",
   "Vuna.Compiler.Frontend.Toml",
   "Vuna.Compiler.Ir.Analysis",
+  "Vuna.Compiler.Ir.Cps",
   "Vuna.Compiler.Ir.Model",
   "Vuna.Compiler.Ir.Runtime",
   "Vuna.Compiler.Ir.Validate",

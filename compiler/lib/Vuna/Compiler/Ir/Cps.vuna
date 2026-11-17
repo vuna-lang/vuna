@@ -1,0 +1,413 @@
+module Vuna.Compiler.Ir.Cps where
+
+-- Vuna.Compiler.Ir.Cps：把 `Eff` / `Scoped` 的 thunk 降到显式 CPS。
+--
+-- 只改写**效应 thunk**，纯代码保持直接风格：
+--   * `MkEff` / `MkScoped` 的 lambda 增加 continuation 参数 `k`；
+--   * thunk 的运行点（`case e of MkEff f => f u`、`runThunk e u`）追加 `k`；
+--   * `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` 换成 CPS
+--     运行时符号（`@ir@cps@*`），由后端实现；
+--   * `runPure` / `runEff` / `runMain` / `handleScoped` 是 trampoline 边界，传 identity。
+--
+-- `cpsExpr` 的 continuation 是**运行时值**（`Ir` 表达式），不是编译器函数：这样递归
+-- 只发生在子项上，终止性检查能看到结构下降。纯代码只重建，不改调用约定。
+--
+-- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import Core / Elab /
+-- Intrinsics / 任何后端。输出仍是 `Ir`；CPS 符号只由本模块产生，后端按需实现。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.Result
+import Base.String
+import Vuna.Compiler.Ir.Model
+
+-- ---------------------------------------------------------------
+-- 协议名字
+-- ---------------------------------------------------------------
+-- | CPS 版 perform / handle / self。只有本模块产生；不在 `Ir.Runtime` 契约里，
+-- 因为它们是后端 lowering 的内部约定，不是用户面内建。
+export irCpsPerformName : String
+irCpsPerformName = "@ir@cps@perform"
+
+export irCpsHandleName : String
+irCpsHandleName = "@ir@cps@handle"
+
+export irCpsSelfName : String
+irCpsSelfName = "@ir@cps@self"
+
+-- | `Scoped` 的运行时类型 / 构造子名（`Base.Eff.Scoped`）。
+export irScopedTypeName : String
+irScopedTypeName = "Base.Eff.Scoped"
+
+export irScopedMkCtor : String
+irScopedMkCtor = "Base.Eff.Scoped.MkScoped"
+
+-- | trampoline 边界的定义名。
+runThunkName : String
+runThunkName = "Base.Eff.runThunk"
+
+runPureName : String
+runPureName = "Base.Eff.runPure"
+
+runEffName : String
+runEffName = "Base.Eff.runEff"
+
+runMainName : String
+runMainName = "Base.Eff.runMain"
+
+handleScopedName : String
+handleScopedName = "Base.Eff.handleScoped"
+
+-- | 燃料：固定预算 + `fuel <= 0` 守卫是终止性证书。
+startFuel : Int
+startFuel = 200000
+
+-- ---------------------------------------------------------------
+-- 小工具
+-- ---------------------------------------------------------------
+bNameEq : IrBName -> IrBName -> Bool
+bNameEq (IrBUser x) (IrBUser y) = x == y
+bNameEq (IrBArm x) (IrBArm y) = x == y
+bNameEq (IrBNat x) (IrBNat y) = x == y
+bNameEq IrBWild IrBWild = True
+bNameEq _ _ = False
+
+binderEq : IrBinder -> IrBinder -> Bool
+binderEq (IrBinder na ea) (IrBinder nb eb) = bNameEq na nb && ea == eb
+
+memBinder : IrBinder -> List IrBinder -> Bool
+memBinder _ [] = False
+memBinder b (x :: rest) = binderEq b x || memBinder b rest
+
+binderErased : IrBinder -> Bool
+binderErased b = case b of
+  IrBinder _ erased => erased
+
+-- | 运行时 binder（擦除占位不进作用域）。
+runtimeBinders : List IrBinder -> List IrBinder
+runtimeBinders bs = filter (\b => not (binderErased b)) bs
+
+mkBinder : String -> IrBinder
+mkBinder name = mkIrBinder name
+
+-- binder 名字带燃料编号：同一路径上燃料严格递减，嵌套 binder 不会撞名
+-- （binder 身份是 name + erased，纯同名会被内层遮蔽）。
+freshV : Int -> IrBinder
+freshV fuel = mkBinder ("__cpsV" ++ strFromInt fuel)
+
+freshK : Int -> IrBinder
+freshK fuel = mkBinder ("__cpsK" ++ strFromInt fuel)
+
+freshU : Int -> IrBinder
+freshU fuel = mkBinder ("__cpsU" ++ strFromInt fuel)
+
+freshA : Int -> Int -> IrBinder
+freshA fuel i = mkBinder ("__cpsA" ++ strFromInt fuel ++ "_" ++ strFromInt i)
+
+applyAll : Ir -> List Ir -> Ir
+applyAll f [] = f
+applyAll f (a :: rest) = applyAll (IrApp f a) rest
+
+flattenApp : Ir -> Pair Ir (List Ir)
+flattenApp (IrApp f a) =
+  let
+    p = flattenApp f
+  in Pair (firstOf p) (append (secondOf p) [a])
+flattenApp x = Pair x []
+
+-- | 直接递归的列表映射：避免把递归调用藏在 `map` 的 lambda 里（SCT 看不到）。
+mapDirect : Int -> List Ir -> List Ir
+mapDirect fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => transformDirect (fuel - 1) x :: mapDirect (fuel - 1) rest
+
+mapAltDirect : Int -> List IrAlt -> List IrAlt
+mapAltDirect fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  a :: rest => transformAltDirect (fuel - 1) a :: mapAltDirect (fuel - 1) rest
+
+mapAltCps : Int -> List IrBinder -> List IrAlt -> Ir -> List IrAlt
+mapAltCps fuel env xs k = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  a :: rest => cpsAlt (fuel - 1) env a k :: mapAltCps (fuel - 1) env rest k
+
+mapFieldsDirect : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mapFieldsDirect fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  p :: rest =>
+    Pair (firstOf p) (transformDirect (fuel - 1) (secondOf p)) :: mapFieldsDirect (fuel - 1) rest
+
+-- | thunk 构造子：`MkEff` 或 `MkScoped`。
+isThunkCtor : String -> String -> Bool
+isThunkCtor family ctor =
+  family == irEffTypeName && ctor == irEffMkCtor
+    || family == irScopedTypeName && ctor == irScopedMkCtor
+
+isThunkAlt : IrAlt -> Bool
+isThunkAlt alt = case alt.irAltCtor of
+  Just (Pair family ctor) => isThunkCtor family ctor
+  Nothing => False
+
+-- | 一个 case 分支引入的 thunk binder（只对 `MkEff` / `MkScoped` 分支）。
+thunkBindersOfAlt : IrAlt -> List IrBinder
+thunkBindersOfAlt alt = if isThunkAlt alt then runtimeBinders alt.irAltBinders else []
+
+-- | identity continuation：`\v => v`。
+identityCont : Ir
+identityCont =
+  let
+    v = mkBinder "__cpsId"
+  in IrLam [v] (IrVar v)
+
+-- ---------------------------------------------------------------
+-- CPS 变换
+-- ---------------------------------------------------------------
+-- `cpsExpr env e k`：`k` 是运行时 continuation 值。返回的 IR 求值 `e` 后把结果交给
+-- `k`；thunk 运行点会把 `k` 作为被调 thunk 的最后一个实参。
+cpsExpr : Int -> List IrBinder -> Ir -> Ir -> Ir
+cpsExpr fuel env e k = if fuel <= 0 then IrApp k (transformDirect (fuel - 1) e)
+else case e of
+  IrApp _ _ => cpsApp (fuel - 1) env e k
+  IrCase scrut alts =>
+    let
+      v = freshV fuel
+      kCase = IrLam [v] (IrCase (IrVar v) (mapAltCps (fuel - 1) env alts k))
+    in cpsExpr (fuel - 1) env scrut kCase
+  IrNatCase scrut fresh zero succ catch =>
+    let
+      v = freshV fuel
+      kCase =
+        IrLam [v]
+          (IrNatCase (IrVar v) fresh (cpsAltMaybe (fuel - 1) env zero k) (cpsAltMaybe (fuel - 1) env succ k) (cpsAltMaybe (fuel - 1) env catch k))
+    in cpsExpr (fuel - 1) env scrut kCase
+  IrIf c t el =>
+    let
+      v = freshV fuel
+      kIf = IrLam [v] (IrIf (IrVar v) (cpsExpr (fuel - 1) env t k) (cpsExpr (fuel - 1) env el k))
+    in cpsExpr (fuel - 1) env c kIf
+  IrLet bs scrut body =>
+    let
+      v = freshV fuel
+      kLet = IrLam [v] (IrLet bs (IrVar v) (cpsExpr (fuel - 1) env body k))
+    in cpsExpr (fuel - 1) env scrut kLet
+  IrCast inner => IrCast (cpsExpr (fuel - 1) env inner k)
+  _ => IrApp k (transformDirect (fuel - 1) e)
+
+cpsAlt : Int -> List IrBinder -> IrAlt -> Ir -> IrAlt
+cpsAlt fuel env alt k = if fuel <= 0 then alt
+else
+  let
+    env1 = append (thunkBindersOfAlt alt) env
+  in IrAlt alt.irAltCtor alt.irAltBinders (cpsExpr (fuel - 1) env1 alt.irAltBody k)
+
+cpsAltMaybe : Int -> List IrBinder -> Maybe IrAlt -> Ir -> Maybe IrAlt
+cpsAltMaybe fuel env m k = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just alt => Just (cpsAlt (fuel - 1) env alt k)
+
+-- | 纯应用的实参求值（左→右）。`head` 已求值；最后 `applyAll head args` 交给 `k`。
+cpsArgs : Int -> List IrBinder -> List Ir -> Ir -> List Ir -> Ir -> Ir
+cpsArgs fuel env args head acc k = if fuel <= 0 then IrApp k (applyAll head (reverse acc))
+else case args of
+  [] => IrApp k (applyAll head (reverse acc))
+  a :: rest =>
+    let
+      v = freshV fuel
+    in cpsExpr (fuel - 1) env a (IrLam [v] (cpsArgs (fuel - 1) env rest head (IrVar v :: acc) k))
+
+-- | thunk 运行点：把 `k` 追加为最后一个实参。
+cpsThunkCall : Int -> Ir -> List Ir -> Ir -> Ir
+cpsThunkCall fuel head args k =
+  if fuel <= 0 then applyAll head (append args [k])
+  else applyAll (transformDirect (fuel - 1) head) (append (mapDirect (fuel - 1) args) [k])
+
+-- | 应用脊椎：识别 thunk 运行 / CPS 原语；其余按纯应用处理（按值序 CPS）。
+cpsApp : Int -> List IrBinder -> Ir -> Ir -> Ir
+cpsApp fuel env e k = if fuel <= 0 then IrApp k e
+else
+  let
+    p = flattenApp e
+    head = firstOf p
+    args = secondOf p
+    v = freshV fuel
+  in case head of
+    IrVar b =>
+      if memBinder b env then cpsThunkCall (fuel - 1) head args k
+      else cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+    IrGlobal name =>
+      if name == runThunkName then cpsThunkCall (fuel - 1) head args k
+      else cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+    IrRt sym =>
+      if sym == "prim_effectPerform" then cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
+      else if sym == "prim_effectHandle" then cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
+      else if sym == "prim_effectSelf" then cpsThunkCall (fuel - 1) (IrRt irCpsSelfName) args k
+      else cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+    _ => cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+
+-- ---------------------------------------------------------------
+-- 直接风格部分：只改写嵌套的 thunk 构造
+-- ---------------------------------------------------------------
+transformDirect : Int -> Ir -> Ir
+transformDirect fuel e = if fuel <= 0 then e
+else case e of
+  IrCtor family ctor args => if isThunkCtor family ctor then case args of
+    [IrLam bs body] =>
+      let
+        k = freshK fuel
+        body1 = cpsExpr (fuel - 1) [] body (IrVar k)
+      in IrCtor family ctor [IrLam (append bs [k]) body1]
+    _ => IrCtor family ctor (mapDirect (fuel - 1) args)
+  else IrCtor family ctor (mapDirect (fuel - 1) args)
+  IrEffThunk family ctor _unitTy arity prim =>
+    let
+      u = freshU fuel
+      k = freshK fuel
+      argBs = map (\i => freshA fuel i) (range 0 arity)
+      applied = applyAll (transformDirect (fuel - 1) prim) (map IrVar argBs)
+      inner = IrCtor family ctor [IrLam [u, k] (IrApp (IrVar k) applied)]
+    in if arity <= 0 then inner else IrLam argBs inner
+  IrRecord family fields => IrRecord family (mapFieldsDirect (fuel - 1) fields)
+  IrProj base family field => IrProj (transformDirect (fuel - 1) base) family field
+  IrRecUpd base family fields =>
+    IrRecUpd (transformDirect (fuel - 1) base) family (mapFieldsDirect (fuel - 1) fields)
+  IrRtApp sym args => IrRtApp sym (mapDirect (fuel - 1) args)
+  IrCast inner => IrCast (transformDirect (fuel - 1) inner)
+  IrLet bs scrut body =>
+    IrLet bs (transformDirect (fuel - 1) scrut) (transformDirect (fuel - 1) body)
+  IrLam bs body => IrLam bs (transformDirect (fuel - 1) body)
+  IrApp g a => IrApp (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
+  IrIf c t el =>
+    IrIf (transformDirect (fuel - 1) c) (transformDirect (fuel - 1) t)
+      (transformDirect (fuel - 1) el)
+  IrCase scrut alts => IrCase (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
+  IrNatCase scrut fresh zero succ catch =>
+    IrNatCase (transformDirect (fuel - 1) scrut) fresh (transformAltMaybe (fuel - 1) zero)
+      (transformAltMaybe (fuel - 1) succ) (transformAltMaybe (fuel - 1) catch)
+  IrConcatMany parts => IrConcatMany (mapDirect (fuel - 1) parts)
+  IrVar _ => e
+  IrGlobal _ => e
+  IrRt _ => e
+  IrInt _ => e
+  IrStr _ => e
+  IrBool _ => e
+  IrFloatLit _ => e
+  IrEffBind _ _ _ => e
+
+transformAltDirect : Int -> IrAlt -> IrAlt
+transformAltDirect fuel alt =
+  if fuel <= 0 then alt
+  else IrAlt alt.irAltCtor alt.irAltBinders (transformDirect (fuel - 1) alt.irAltBody)
+
+transformAltMaybe : Int -> Maybe IrAlt -> Maybe IrAlt
+transformAltMaybe fuel m = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just alt => Just (transformAltDirect (fuel - 1) alt)
+
+-- ---------------------------------------------------------------
+-- 定义级：trampoline 边界
+-- ---------------------------------------------------------------
+-- `runPure e` / `runEff e` / `runMain e` 的体是 `runThunk e MkEffUnit`；在 CPS 里
+-- 这个运行点需要 identity continuation。
+trampolineBody : String -> Ir -> Result Ir
+trampolineBody name body = case body of
+  IrLam bs inner => case trampolineBody name inner of
+    Err msg => Err msg
+    Ok inner1 => Ok (IrLam bs inner1)
+  IrCast inner => case trampolineBody name inner of
+    Err msg => Err msg
+    Ok inner1 => Ok (IrCast inner1)
+  IrApp (IrApp (IrGlobal g) e) u =>
+    if g == runThunkName then Ok (applyAll (IrGlobal g) [e, u, identityCont])
+    else Err ("CPS: unexpected trampoline shape: " ++ name)
+  _ => Err ("CPS: unexpected trampoline shape: " ++ name)
+
+-- `handleScoped (MkScoped th) = prim_effectSelf th`：identity continuation。
+selfAlt : Int -> IrAlt -> String -> Result IrAlt
+selfAlt fuel alt name = if fuel <= 0 then Ok alt
+else case selfBody (fuel - 1) alt.irAltBody name of
+  Err msg => Err msg
+  Ok body1 => Ok (IrAlt alt.irAltCtor alt.irAltBinders body1)
+
+selfAlts : Int -> List IrAlt -> String -> Result (List IrAlt)
+selfAlts fuel alts name = if fuel <= 0 then Ok alts
+else case alts of
+  [] => Ok []
+  a :: rest => case selfAlt (fuel - 1) a name of
+    Err msg => Err msg
+    Ok a1 => case selfAlts (fuel - 1) rest name of
+      Err msg => Err msg
+      Ok rest1 => Ok (a1 :: rest1)
+
+selfBody : Int -> Ir -> String -> Result Ir
+selfBody fuel body name = if fuel <= 0 then Ok body
+else case body of
+  IrLam bs inner => case selfBody (fuel - 1) inner name of
+    Err msg => Err msg
+    Ok inner1 => Ok (IrLam bs inner1)
+  IrCast inner => case selfBody (fuel - 1) inner name of
+    Err msg => Err msg
+    Ok inner1 => Ok (IrCast inner1)
+  IrCase scrut alts => case selfAlts (fuel - 1) alts name of
+    Err msg => Err msg
+    Ok alts1 => Ok (IrCase scrut alts1)
+  IrApp (IrRt sym) th =>
+    if sym == "prim_effectSelf" then Ok (applyAll (IrRt irCpsSelfName) [th, identityCont])
+    else Err ("CPS: unexpected handleScoped shape: " ++ name)
+  _ => Err ("CPS: unexpected handleScoped shape: " ++ name)
+
+transformDef : Int -> IrDef -> Result IrDef
+transformDef fuel d = if fuel <= 0 then Ok d
+else case d of
+  IrExternDef _ _ _ _ => Ok d
+  IrDef name arity deps body recOk initGuard span => if name == runPureName || name == runEffName || name == runMainName then case trampolineBody name body of
+    Err msg => Err msg
+    Ok body1 => Ok (IrDef name arity deps body1 recOk initGuard span)
+  else if name == handleScopedName then case selfBody (fuel - 1) body name of
+    Err msg => Err msg
+    Ok body1 => Ok (IrDef name arity deps body1 recOk initGuard span)
+  else Ok (IrDef name arity deps (transformDirect (fuel - 1) body) recOk initGuard span)
+
+transformDefs : Int -> List IrDef -> Result (List IrDef)
+transformDefs fuel xs = if fuel <= 0 then Ok xs
+else case xs of
+  [] => Ok []
+  d :: rest => case transformDef (fuel - 1) d of
+    Err msg => Err msg
+    Ok d1 => case transformDefs (fuel - 1) rest of
+      Err msg => Err msg
+      Ok rest1 => Ok (d1 :: rest1)
+
+transformGroup : Int -> IrGroup -> Result IrGroup
+transformGroup fuel g = if fuel <= 0 then Ok g
+else case transformDefs (fuel - 1) g.irGroupDefs of
+  Err msg => Err msg
+  Ok defs1 => Ok (IrGroup g.irGroupIsRec defs1)
+
+transformGroups : Int -> List IrGroup -> Result (List IrGroup)
+transformGroups fuel xs = if fuel <= 0 then Ok xs
+else case xs of
+  [] => Ok []
+  g :: rest => case transformGroup (fuel - 1) g of
+    Err msg => Err msg
+    Ok g1 => case transformGroups (fuel - 1) rest of
+      Err msg => Err msg
+      Ok rest1 => Ok (g1 :: rest1)
+
+-- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
+export cpsUnit : IrUnit -> Result IrUnit
+cpsUnit u = case transformGroups startFuel u.irUnitGroups of
+  Err msg => Err msg
+  Ok groups1 =>
+    Ok (IrUnit u.irUnitTyDecls groups1 u.irUnitHasListFamily u.irUnitTypeRefs u.irUnitEntry)
+
+-- | 定义列表入口（后端只持有可达 defs 时用）。
+export cpsDefs : List IrDef -> Result (List IrDef)
+cpsDefs defs = transformDefs startFuel defs

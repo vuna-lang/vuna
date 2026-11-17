@@ -4,7 +4,7 @@
 > `let` / `if` / 用户 `data` / record / 通用 `case`；饱和顶层调用、eta 展开与多参柯里化
 > 闭包（`$clo` + `(elem declare func ...)`，应用逐实参 `call $rt_apply`）；内建饱和应用；
 > 结构化比较 `bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool`（`$rt_compare`）；
-> `main : Eff r a` 与 handler（stack switching，见 [wasm-effects.md](wasm-effects.md)）；
+> `main : Eff r a` 与 handler（纯用户 handler 走 CPS lowering；宿主+用户组合暂回落 stack switching，见 [wasm-effects.md](wasm-effects.md)）；
 > WASI preview1 宿主层（fs / env / args / clock），能力上限是浏览器 WASI 可提供的子集。
 > 未实现的宿主操作在运行期显式失败（不伪造结果）；符号表外的原语（extern、网络等）
 > 在引用点拒绝。实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
@@ -20,10 +20,10 @@
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：**需要 handler 的产物**包含
-  stack-switching 运行时函数，用
-  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`；
-  不需要 handler 的产物不含 `cont`，默认配置的引擎即可直接运行（见 §8.5）。
+- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：纯用户 handler 产物走 CPS，
+  不含 `cont`，默认配置的引擎即可直接运行；入口行同时带内建宿主 handler 的程序暂回落
+  stack switching，仍用
+  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`（见 §8.5）。
   handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
   调用栈。
 - **栈要按输入配**：默认 `max-wasm-stack`（512 KiB）对长列表不够，会以
@@ -302,7 +302,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | 能力 | 状态 | 构建期 / 运行期 |
 | --- | --- | --- |
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
-| `Eff` 的 handler（cont/resume/suspend） | 支持 | 运行需要 wasmtime 开 stack-switching |
+| `Eff` 的 handler | 纯用户 handler 走 CPS；宿主+用户组合暂回落 cont/resume/suspend | CPS 产物默认引擎可跑；回落产物需要 wasmtime 开 stack-switching |
 | `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
 | `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` / `RefOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
 | `ClockOp.Now` | 支持 | monotonic clock |
@@ -351,39 +351,39 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | WasmGC | `struct` / `array` / `i31` / `ref.cast` / `ref.test` / `array.new_data` | Chrome 119、Firefox 120、Safari 18.2 起默认（Baseline 2024-12-11） |
 | typed function references | `ref.func` + 直接调用（`$ft` 闭包） | 随 WasmGC 进入 Baseline（Safari 18.0 起） |
 | tail calls | `return_call` / `return_call_ref`（handler 运行时） | Chrome 112、Firefox 121、Safari 18.2 起默认 |
+| exception handling | `tag $abort` / `throw` / `try_table`（CPS abort） | Chrome 137、Firefox 147、Safari 26.2 起（legacy EH 从 2022 起已可用） |
 | **stack switching** | `cont` / `resume` / `suspend`（`$ct` / `$eff` / `$rt_eff*`） | **提案仍处 Phase 3，无引擎默认开启**：Chrome 需 `--js-flags=--experimental-wasm-wasmfx`；Firefox 是 pref；JSC 未实现 |
 
-前四项共同覆盖浏览器可跑面；**stack switching 只在用户自定义 handler 出现在可达代码里时才
-需要**。两条降低路径：
+前五项共同覆盖浏览器可跑面；stack switching 只服务「入口行有内建宿主 handler、同时有用户
+handler」的回落路径（见 [wasm-effects.md](wasm-effects.md) §4）。三条降低路径：
 
 - **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应（Console /
   Clock / Env / Args / Exit / Stdin）在「可达代码没有用户 handler」时被降成
   `MkEff (\_ => runMain (opH op pureK))`——`opH` 是该族的宿主解释器，`pureK` 是模块生成的
   纯动作续延（`\r => MkEff (\_ => r)`）。入口也不再预装这些家族，产物不含 `$ct`。
-- **续延路径**：用户自定义 handler（`handle` / `handleScoped`）仍走 `$ct` / `$eff` /
-  `$rt_eff*`（需要 stack switching）。
-
-所以"浏览器能不能跑"对**只有宿主效应的程序**成立，对**带用户 handler 的程序**不成立。
-Fs / Process / Net 暂走续延路径（它们的 `opH` 会把答案行转投 `fs-error` / `process-error` /
-`net-error`，需要单独设计直连表）。
+- **CPS lowering**（`Ir.Cps`）：入口行是 `[]` 的用户 handler 程序，thunk 带显式 `k`；
+  运行时用 `$hframe` handler 栈 + `$abort`。产物不含 `cont`。
+- **续延回落**：入口行同时有内建宿主 handler 与用户 handler 时，opH 内的外层宿主 effect
+  仍需要可恢复的 handler 帧；暂走 `$ct` / `$eff` / `$rt_eff*`（需要 stack switching）。
 
 实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
 
-| 引擎配置 | 纯程序 / 只有宿主效应 | 用户自定义 handler |
-| --- | --- | --- |
-| Node 默认 | 编译 + 运行通过 | 拒绝（`core stack switching not enabled`） |
-| Node `--experimental-wasm-wasmfx` | 通过 | 拒绝（`rt_effPerform`: `Invalid opcode 0xe2`，V8 的编码与 wasm-tools 不一致） |
-| Chromium 默认 | 编译 + 运行通过 | 拒绝 |
-| Chromium `--js-flags=--experimental-wasm-wasmfx` | 通过 | 编译 + 实例化通过，执行 `_start` 无输出（挂住） |
+| 引擎配置 | 纯程序 / 只有宿主效应 | 纯用户 handler（CPS） | 宿主+用户回落（stack switching） |
+| --- | --- | --- | --- |
+| Node 默认 | 编译 + 运行通过 | 编译 + 运行通过 | 拒绝（`core stack switching not enabled`） |
+| Chromium 默认 | 编译 + 运行通过 | 编译 + 运行通过 | 拒绝 |
+| Node / Chromium + wasmfx | 通过 | 通过 | 报告用，不判定 |
 
-`114_wasm_engine_probe.steps` 锁两列的第一行（默认配置下的通过与拒绝）；开启实验特性后的
-结果只作报告，随引擎版本变化，不作门禁。这三条读数的含义：
+`114_wasm_engine_probe.steps` 锁默认列；`115_wasm_js_host.steps` 用 Node 锁 CPS 用户
+handler 的 stdout/exit 与「无 cont」。
 
-- 只有宿主效应的产物已经是"浏览器可跑"的；**带用户 handler 的产物必须等引擎支持 stack
-  switching**（见 §8.6 的加载契约与 [debt.md](debt.md) D102）；
-- Wasmtime 是当前唯一可执行 handler 程序的引擎，定位是**参考/差分执行器**，不是产品运行时；
-- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`），长列表上的非尾辅助函数要按各引擎的
-  实际上限验证，不能以外推的默认值当契约。
+- 只有宿主效应的产物与**纯用户 handler（CPS）** 产物已是"浏览器可跑"的；
+- 入口行同时有内建宿主 handler 与用户 handler 的产物仍需要 stack switching（见 §8.6 的
+  加载契约与 [debt.md](debt.md) D102）；
+- Wasmtime 是参考/差分执行器，也是上述回落路径的运行器；它不是产品运行时；
+- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`）：CPS 每次 resume 会保留
+  `perform`/`opH` 帧，2000 次顺序 perform 在 wasmtime 上需要约 4 MiB；长列表上的非尾
+  辅助函数仍按输入规模吃栈。
 
 ## 8.6 engine / host / loader 分层
 

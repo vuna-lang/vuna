@@ -131,7 +131,7 @@ else
   fi
   if [ -f "$USER_WASM" ]; then
     out=$(node --no-warnings "$HERE/probe.mjs" "$USER_WASM" 2>&1)
-    expect_contains "default(user)" "$out" "validate=false compile=error"
+    expect_contains "default(user)" "$out" "validate=true compile=ok"
     printf '     %s\n' "$out"
   else
     bad "default(user)" "产物缺失"

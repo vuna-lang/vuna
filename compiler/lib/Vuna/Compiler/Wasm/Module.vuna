@@ -19,6 +19,7 @@ import Base.Result
 import Base.String
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
+import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
@@ -1340,8 +1341,19 @@ selfNodeType =
   WatStructType "$selfNode"
     [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
 
+-- | CPS 效应运行时类型：一次性续延、handler frame、abort payload。
+cpsTypes : List WatType
+cpsTypes =
+  [ WatStructType "$cpsK" [WatField False WvAnyRef, WatField True WvI32],
+    WatStructType "$hframe" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvI32, WatField False WvAnyRef],
+    WatStructType "$abortMsg" [WatField False WvAnyRef, WatField False WvAnyRef]
+  ]
+
 baseTags : List WatTag
 baseTags = [WatTag "$eff" [WvAnyRef] [WvAnyRef]]
+
+cpsTags : List WatTag
+cpsTags = [WatTag "$abort" [WvAnyRef] []]
 
 baseImports : List WatImport
 baseImports =
@@ -1476,12 +1488,34 @@ listNull : List a -> Bool
 listNull [] = True
 listNull (_ :: _) = False
 
+-- | CPS 效应运行时的函数名（与 stack-switching 那组互斥）。
+cpsRuntimeFuncs : List String
+cpsRuntimeFuncs =
+  [ "$rt_cpsUnhandled",
+    "$rt_cpsUnhandled2",
+    "$rt_cpsResumeClo",
+    "$rt_cpsRet",
+    "$rt_cpsCleanup",
+    "$rt_cpsPerform",
+    "$rt_cpsHandle",
+    "$rt_cpsSelf"
+  ]
+
 -- | 无续延时从固定运行时函数表里剔掉 handler 那几个。
 isEffRtFunc : WatFunc -> Bool
 isEffRtFunc f = memName f.watFuncName effRuntimeFuncs
 
+isCpsRtFunc : WatFunc -> Bool
+isCpsRtFunc f = memName f.watFuncName cpsRuntimeFuncs
+
 selectRtFuncs : Bool -> List WatFunc -> List WatFunc
 selectRtFuncs needEff funcs = if needEff then funcs else filter (\f => not (isEffRtFunc f)) funcs
+
+-- | CPS 模式：去掉旧的 stack-switching 函数，保留 CPS 组；`$rt_resumeTwice` 是
+-- CPS 一次性续延复用的 trap，不能删。
+selectRtFuncsCps : List WatFunc -> List WatFunc
+selectRtFuncsCps funcs =
+  filter (\f => not (isEffRtFunc f) || f.watFuncName == "$rt_resumeTwice") funcs
 
 buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
 buildModule fuel st ordered entry printResult effMode listFamM = case genDefFuncs fuel st ordered of
@@ -1499,23 +1533,36 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           lamFuncs = reverse startState.gsFuncs
           elems = reverse startState.gsElems
           elemNames =
-            if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"] else elems
+            if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
+            else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"] else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
-          rtSelected = if effMode == 2 then rtFunctions st.gsConsts else rtBase
+          rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
+          rtSelected =
+            if effMode == 2 then filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
+            else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts) else rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
           famTypes = concatMapType st.gsFams
           allTypes =
             if effMode == 2 then append baseTypes (append effTypes (selfNodeType :: famTypes))
+            else if effMode == 3 then append baseTypes (append cpsTypes famTypes)
             else append baseTypes famTypes
-          tags = if effMode == 2 then baseTags else []
+          tags = if effMode == 2 then baseTags else if effMode == 3 then cpsTags else []
           baseGlobals =
             if effMode == 0 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0]
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0]
+            ]
+            else if effMode == 3 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
+              WatGlobal "$g_self" WvAnyRef [IRefNull],
+              WatGlobal "$g_handlers" WvAnyRef [IRefNull]
             ]
             else [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
               WatGlobal "$g_self" WvAnyRef [IRefNull]
             ]
           globals = append baseGlobals (globalsOf ordered)
@@ -1748,6 +1795,7 @@ build program printResult =
         "assertion failed: ",
         "Invalid_argument(\"index out of bounds\")",
         "continuation already resumed",
+        "unhandled effect",
         "wasm host operation is not implemented",
         ".tmp",
         "/"
@@ -1805,6 +1853,13 @@ build program printResult =
       in if directable then case buildModule 100000 st0 (append rewritten [pureKDef]) (Just entryClean) printResult 0 listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
+      else if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
+        -- 纯用户 handler（入口行 []）走 CPS；入口行还有内建宿主 handler 时，opH 内的
+        -- 外层 perform 需要可恢复的内层 frame，暂回落 stack switching（见 debt D102）。
+        Err msg => WasmRejected (WasmUnsupported msg)
+        Ok cpsOrdered => case buildModule 100000 st0 cpsOrdered (Just e) printResult 3 listFamM of
+          Ok m => WasmOk m
+          Err msg => WasmRejected (classifyWasmErr msg)
       else case buildModule 100000 st0 ordered (Just e) printResult (effModeOf (Just e) ordered) listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
@@ -1843,7 +1898,7 @@ mkConsts offsets =
     (lenOf "Invalid_argument(\"index out of bounds\")") (offOf "continuation already resumed")
     (lenOf "continuation already resumed") (offOf "wasm host operation is not implemented")
     (lenOf "wasm host operation is not implemented") (offOf ".tmp") (lenOf ".tmp") (offOf "/")
-    (lenOf "/")
+    (lenOf "/") (offOf "unhandled effect") (lenOf "unhandled effect")
 
 joinWith : String -> List String -> String
 joinWith sep xs = Base.String.join sep xs
