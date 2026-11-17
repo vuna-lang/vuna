@@ -103,9 +103,11 @@
 - **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 64 B：
   `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶（base_rsp）`
   `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无；`perform` 调 `opH` 期间暂存在帧内）`。
-- **续延记录** 88 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
+- **续延记录** 176 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
   `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
-  `[80]=恢复值 v`。
+  `[80]=恢复值 v [88]=prev stack_top [96..112]=段迁移的 lo/hi/delta`
+  `[128]=栈段基址 [136]=段大小 [144]=prev stack_limit [152]=捕获字节数`
+  `[160]=活动续延链 next`（GC 根集按此链扫记录与挂起的旧栈）。
 - **续延闭包** 24 B：`[0]=rt_eff_resume [8]=arity(1) [16]=记录`；调用约定与普通闭包一致。
 
 `perform`：按 `(key, name)` 扫链；找到后把节点弹出（`rt_handlers = node.prev`），把
@@ -114,20 +116,23 @@
 帧落进捕获区）。调用 `opH` 前先把 `node[56]` 摘到本帧槽位并清零：同一个节点可以在它自己
 的续延里再次 `perform`（续延副本里 handler 帧仍在），内层 `resume` 会覆盖该槽；不摘走的话，
 外层 `perform` 在 `opH` 返回时会拿到内层的记录，把 answer 交给一个已经放弃的栈段。
-`opH` 返回时：
-- 若节点出现新的 resume 记录（`node[56] != 0`，说明本次 `opH` 发起的续延还在运行），把
-  返回值当作答案交回该 resume 的调用点；
-- 否则把先前摘下的记录写回 `node[56]`（外层 `kdone` 还要靠它配对），走
-  `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
+`opH` 返回时按 `node[56]` 三路分派：
+- `0`：本次 `opH` 没有 resume，返回值直接作为 handler answer（走
+  `rt_eff_handle_end`，`ret` 不应用）；
+- `1`：`kdone` 已完成一次 resume（`ret` 已在 `kdone` 应用过）；沿 `rt_active_recs`
+  找 `record[32] == node` 的最近记录，取它的 `kdone_bubble` 入口撤销迁移、归还段并把答案
+  交回外层 `k` 的调用点；链上没有同节点记录时把答案交回 `handle` 的调用点；
+- 其它（真实记录）：把返回值交回该 resume 的调用点。
 
 `resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获的整段栈
 拷到**新栈段**（预留 `nativeSegSlackBytes = 32 MiB` 向下空间，向下增长留在段内），把 rbp 链和所有活动
 handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 handler 的顶部返回地址
 改成 `rt_eff_kdone`；`rt_stack_top` 指向新栈顶，从 perform 的返回点继续执行。
 
-`rt_eff_kdone`：comp 正常结束后按需弹掉节点、应用 `ret`，再**撤销**节点地址平移、
-恢复 `rt_stack_top`，把答案交回 `k` 的调用点。abort（opH 不调用 `k`）不经过 `kdone`，
-直接把 opH 返回值当作 answer。
+`rt_eff_kdone`：comp 正常结束后按需弹掉节点、应用一次 `ret`，再**撤销**节点地址平移、
+恢复 `rt_stack_top`，把答案交回 `k` 的调用点。后续嵌套 resume 的答案经
+`kdone_bubble` 入口冒泡（不重复应用 `ret`）。abort（opH 不调用 `k`）不经过 `kdone`，
+直接把 opH 返回值当作 answer，`ret` 不应用。
 
 因为捕获/迁移的是**整段栈**，内层续延恢复后触发外层 handler 也能正确穿过已挂起的内层
 handler 帧（节点地址随段平移，返回时再撤销）。
