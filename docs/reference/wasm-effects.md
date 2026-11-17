@@ -62,7 +62,7 @@ comp thunk 是 `EffUnit -> a` 的闭包；运行期闭包 code 的类型是 `$ft
   - `$rt_effPerform` = 构造 payload 后 `suspend $eff`；
   - `$rt_effHandle` = `cont.new $ct (ref.func $rt_effThunk)` + `$rt_handleLoop`；
   - `$rt_effSelf` = 用 `$g_self` 链顶的 `(key,name,ret,opH)` 重跑 `$rt_handleLoop`
-    （`prim_effectSelf` / `Base.Eff.handleSelf`）；`$rt_handleLoop` 调 opH 前压链、返回后弹链；
+    （`prim_effectSelf` / `Base.Eff.handleScoped`）；`$rt_handleLoop` 调 opH 前压链、返回后弹链；
   - `$rt_handleLoop`：`resume` 的 `(on $eff $on)` 块；正常返回走 `ret`，匹配时
     调 `opH(op, k)`，不匹配时再次 `suspend $eff` 转发给外层，外层 resume 后继续恢复
     自己的 continuation；

@@ -71,8 +71,8 @@ main : Eff [] Nat
   `(::) : Type -> Row -> Row`，条目是 `Named n e`。运行时仍是 `(key, name)` 路由，
   name 只作隐式 String 传给 send/handle，不是行里的运行时值。
 - **效应定义不出现 `String`**：标签 = op 族应用（`ConsoleOp`、`StateOp Nat`、
-  `ReaderOp Int`…）；`Exn` 保留无参标记类型 `Exn : Type`，`ExnOp` 仍带 String 索引
-  （构造子参数匹配需要，见 §9）。
+  `ReaderOp Int`…）；scope 族用 `Scoped a` 一等子计算（`ExnOp : Type -> Type`，
+  `Try : {a} -> Scoped a -> ExnOp (Result a)`），不再有标记类型或 `Row` 参数。
 - **裸标签 = 默认名 `"default"`**：单点定义 `Base.Eff.defaultInstance`。
 - **多实例显式 `[ConsoleOp@audit]`**：行条目即 `Named "audit" ConsoleOp`；`@` 右侧裸标识符是
   **名字字面量**（字符串原样）。**实例名都是静态的**：要么由行解出，要么是字面量。
@@ -303,11 +303,12 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type -> Type`。
      降级点按 op 族 kind 数**显式参数个数 `k`**（不含末尾结果索引）：`k` 给族参数补洞，
      签名用 `sigFn (\i => <Op> ?p1 … ?pk i)` 现场解族参数（State/Reader `k = 1`，
-     Console 等 `k = 0`）。族形状不符即 `TC_HandleFamilyUnsupported`：**作用域/高阶族** Exn
-     （`ExnOp : String -> Row -> Type -> Type`，显式参数含 `Row`；行标签是标记 `Exn`）
-     仍不能写 `handle` 块，只能用手写 handler + `Base.Eff.handleSelf`（[debt.md](debt.md) D54）。
-     `handleSelf` 让 opH 在同一 handler 下重跑 `Try` 的子计算，三端（OCaml/WASM/Native）
-     都实现，`Base.EffExn` 不再需要 fuel。`perform` 走同一套族推导
+     Console 等 `k = 0`）。scope op 用 `Base.Eff.Scoped a`（一等擦除子计算）作为字段：
+     `ExnOp : Type -> Type`、`Try : {a} -> Scoped a -> ExnOp (Result a)`；`handle` 块里
+     `Try sub k -> k (handleScoped sub)`，标签就是 `Named n ExnOp`，不再需要标记类型或
+     `Row` 参数。族形状不符（显式参数不是类型，如 `Boom : Row -> Type -> Type`）仍报
+     `TC_HandleFamilyUnsupported`（[debt.md](debt.md) D54）。`handleScoped` 三端
+     （OCaml/WASM/Native）同语义，`Base.EffExn` 不再需要 fuel。`perform` 走同一套族推导
      （`perfFamilyOfValue` 允许族参数是中性 spine）。
   7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析；其它形态（应用、do 块、
      记录字面量）在源里建议加括号，`fmt` 回渲染时会自动补（`renderHandleCompGo`），否则

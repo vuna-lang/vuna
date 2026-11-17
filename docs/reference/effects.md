@@ -179,7 +179,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
   夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
 - **标签 = op 族应用**（D2）：`ConsoleOp`、`StateOp Nat`、`ReaderOp Int`、`FsOp`…；
-  没有闭合的 `data EffectLabel`，新增效应不需要改中央表。`Exn` 是无参标记类型。
+  没有闭合的 `data EffectLabel`，新增效应不需要改中央表。scope 族的 `Try` 字段是 `Scoped a`（标签仍是普通 `Named n ExnOp`）。
 - **实例名是标签里的 String**：行条目 `Named "counter" (ReaderOp Int)`；运行时按
   `(key, name)` 的字符串相等找 handler（name 仍作为隐式 String 传给 send/handle）。
   库不定义固定实例名枚举，使用方自选名字（同一效应族同时安装的实例名必须互不相同）。
@@ -208,8 +208,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
     `ret`；`continue` 一次。handler 退出（正常 / 异常 / abort 丢弃续延）时执行该
     extent 内未弹出的 bracket cleanup。
   - `self` → `Vuna_runtime.dtp_effect_self`：在 opH 执行期间把当前
-    `(key, name, ret, opH)` 压进 Domain 局部的 self 栈；它用同一 handler 重跑子计算
-    （scoped op 的 `Base.Eff.handleSelf`）。三端同语义（OCaml/WASM/Native）。
+    `(key, name, ret, opH)` 压进 Domain 局部的 self 栈；它用同一 handler 重跑子计算。
+    `Base.Eff.Scoped a` 是 op 里的一等子计算值（行只在 `scope` 处检查一次，之后擦除），
+    handler 用 `handleScoped` 运行它（`handleSelf` 是 `handleScoped ∘ scope` 的便捷形式）。
+    三端同语义（OCaml/WASM/Native）。
 - cleanup 机制：`prim_cleanupPush` / `prim_cleanupPop`（隐藏）登记/
   弹出每纤程 cleanup 栈（`dtp_cleanup_*`）；`Base.Eff.bracket`/`finally` 用它保证
   非 `Exn` abort 也跑 release（细节见 [effects-layers.md](effects-layers.md)）。
@@ -232,7 +234,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
 | `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
 | `Base.EffError` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
-| `Base.EffExn` | 高阶 scoped Error：标签为无参标记 `Exn`，`ExnOp` 的 `Try` 携带子计算；`tryWith`/`runExn`/`catchExn`/`bracketExn` |
+| `Base.EffExn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
 | `Base.EffMutex` | Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | cooperative Channel：`send`/`tryRecv`/`recvWait` |
 | `Base.EffSched` | 单线程 fiber 调度器：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
@@ -400,11 +402,11 @@ net 的阻塞操作有对应的超时变体：`netAcceptWithin` / `netRecvWithin
 
 - 多射续延：`perform`/`handle` 只有 one-shot 续延；`Cont` 的线性类型化见
   [debt.md](debt.md) D42。
-- 高阶效应类型（当前 `catch`/`local`/`bracket`/scoped `Exn` 是库层 + 行约束的组合）：
-  **作用域/高阶 op 族（Exn，op 携带 Row）不能写 `handle` 块**，只能用手写 handler
-  （`TC_HandleFamilyUnsupported`，[debt.md](debt.md) D54）；自动 lift 只在 check 方向
+- 完整的**高阶效应类型**（对子计算的行/answer 做 rank-2 量化、multi-shot）不做：
+  scope op 用 `Scoped a` 的一等擦除子计算 + `handleScoped`（行在 `scope` 处检查）；
+  `handle` 语法支持结果索引族（含 scope 族），但显式参数不是类型的族仍报
+  `TC_HandleFamilyUnsupported`（[debt.md](debt.md) D54）。自动 lift 只在 check 方向
   （`tryEffLift`，见 §8.4）。
-- 高阶/作用域效应的**类型系统**未做（库层 + 行约束只覆盖当前用法）。
 - 类型级能力行（`Eff [caps] r a`）。
 - 并行/多核（OCaml `Domain` 并行、内存模型）：只有**单线程**调度器；通道/互斥量等并发
   数据结构与网络/服务端框架不在本层范围（[debt.md](debt.md) D41）。
