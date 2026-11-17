@@ -331,13 +331,10 @@ defSpanOf d = case dtDefSpan d of
   Just sp => sp
   Nothing => Span "" 0 0 0 0 0 0
 
--- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
--- | 未使用 binder 告警（附改名建议）。
+-- | 未使用 binder 告警。这里的 `sp` 是定义级位置，定位不到 binder 名本身，
+-- 所以不给 machine-applicable 改名编辑（在定义级 span 上替换会覆盖整段源码）。
 warnUnusedBinder : Ec -> Span -> String -> Ec
-warnUnusedBinder ec sp name =
-  warnAt1Mod ec
-    (\d => withSuggestion (Suggestion "rename unused binder `${name}` to `_${name}`" MachineApplicable [DiagEdit sp "_${name}"]) d)
-    sp (UnusedBinder name) name
+warnUnusedBinder ec sp name = warnAt1 ec sp (UnusedBinder name) name
 
 -- ---------------------------------------------------------------
 -- QTT 使用点：Core `TVar` 现在携带源 span；检查期记录到 `Ec.ecUseSpans`，

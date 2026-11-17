@@ -52,6 +52,9 @@ out-contains: binder x is never used
 run: "$VUNA" check "$TMPDIR/m38-warn.vuna" --deny-warnings 2>&1
 exit: 1
 out-contains: [UN_UnusedBinder]
+# 拿不到 binder 名位置时不能给 machine-applicable 改名编辑：整段替换会毁掉源码。
+run: "$VUNA" check -W --json "$TMPDIR/m38-warn.vuna" 2>&1
+out-not-contains: "newText"
 # shadow warning：内层同名 binder。
 run: sh -c 'printf "f : Int -> Int -> Int\nf x = \\x => x\n\nmain : Int\nmain = f 1 2\n" > "$TMPDIR/m38-shadow.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m38-shadow.vuna" 2>&1
