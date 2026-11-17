@@ -151,7 +151,8 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 
 ## 4. `vuna run` 与 REPL 调试命令
 
-`vuna run [DIR] [--package NAME] [--no-build] [--release] [--target ocaml|wasm|native] [--out DIR] [-- ARGS...]`：
+`vuna run [DIR] [--package NAME] [--no-build] [--release] [--target ocaml|wasm|native] [--out DIR]
+[--cpus auto|0|N] [--mem-limit SIZE] [--timeout SECS] [-- ARGS...]`：
 in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>/.output/bin/<包名>`；`--out DIR`
 时构建到 `DIR/` 并从该处执行（相对 DIR 按调用方 cwd 解析），`--no-build` 直接使用现有产物；
 `--target wasm` 执行 `<OUT>/main.wasm`（`wasmtime run -W stack-switching=y -W gc=y
@@ -159,6 +160,15 @@ in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>
 未知 target 与 `build` 一样是用法的错（exit 2）。`--` 之后的参数原样透传，子进程退出码原样返回。目标包选择：`--package` → workspace 根包（可执行时）→ 唯一可执行成员 →
 否则列出候选并 exit 2；库包 / 缺产物 / 构建失败都给出可操作错误。实现入口
 `Vuna.Run.runRun`。
+
+资源限制 flag 只是**启动方式**，不进产物、不改 `main.s`：
+
+- `--mem-limit SIZE`（`512K` / `512M` / `512G` / 字节数）与 `--cpus auto|0|N` 只对
+  `--target native` 生效（其他目标报用法错），分别转成子进程的
+  `VUNA_NATIVE_MEM_LIMIT` / `VUNA_NATIVE_CPUS`（语义见 [native.md](native.md) §5.1）；
+- `--timeout SECS` 对**所有**目标额外包一层 coreutils `timeout -s TERM -k 5`（硬兜底），
+  同时（native）设置 `VUNA_NATIVE_TIMEOUT_MS`，让产物自己报
+  `vuna: runtime error: timeout exceeded` + exit 2。
 
 `vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
 `main : Eff [] a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是

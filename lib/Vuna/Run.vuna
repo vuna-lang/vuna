@@ -1,8 +1,9 @@
 -- | `vuna run`：构建并运行包的可执行入口（工具链，永不进 seed 闭包）。
 --
 -- 参数模型：`vuna run [--no-build] [--release] [--target ocaml|wasm|native]
--- [--package NAME] [--out DIR] [DIR] [-- ARG]...`。按**第一个** `--` 切分：前段是 vuna
--- 自己的参数，后段原样透传给被运行的程序（参数与子进程退出码都不改）。`DIR` 默认 `.`，
+-- [--package NAME] [--out DIR] [--cpus auto|0|N] [--mem-limit SIZE] [--timeout SECS]
+-- [DIR] [-- ARG]...`。按**第一个** `--` 切分：前段是 vuna 自己的参数，后段原样透传给
+-- 被运行的程序（参数与子进程退出码都不改）。`DIR` 默认 `.`，
 -- 可以是包目录，也可以是 workspace 根。
 --
 -- 目标包选择：
@@ -48,14 +49,117 @@ runRun args =
     parts = splitPassthrough args
     own = firstOf parts
     passthrough = secondOf parts
-  in case parseToolArgs "vuna run" [BoolFlag "no-build", BoolFlag "release", ValueFlag "target", ValueFlag "package", ValueFlag "out"] own of
+  in case parseToolArgs "vuna run" [BoolFlag "no-build", BoolFlag "release", ValueFlag "target", ValueFlag "package", ValueFlag "out", ValueFlag "cpus", ValueFlag "mem-limit", ValueFlag "timeout"] own of
     ErrC e => runError (diagText e)
-    OkC parsed => case parsed.positionals of
-      [] => runGo parsed passthrough "."
-      [dir] => runGo parsed passthrough dir
-      _ =>
-        runError
-          "usage: vuna run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR] [DIR] [-- ARG]..."
+    OkC parsed => case validateLimits parsed of
+      ErrC e => runError (diagText e)
+      OkC _ => case parsed.positionals of
+        [] => runGo parsed passthrough "."
+        [dir] => runGo parsed passthrough dir
+        _ =>
+          runError
+            "usage: vuna run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR] [--cpus auto|0|N] [--mem-limit SIZE] [--timeout SECS] [DIR] [-- ARG]..."
+
+-- | 内部：十进制解析：字符必须全是数字（至少一位），否则 `Nothing`。
+--   `acc` 用 -1 表示「还没见到数字」。
+parseDecFrom : List Int -> Int -> Maybe Int
+parseDecFrom [] acc = if acc < 0 then Nothing else Just acc
+parseDecFrom (c :: rest) acc =
+  if c >= 48 && c <= 57 then parseDecFrom rest ((if acc < 0 then 0 else acc) * 10 + c - 48)
+  else Nothing
+
+-- | 内部：`--cpus` 的取值：`auto` / `0`（不限）/ 正整数。
+parseCpus : String -> Check Int
+parseCpus v = if v == "auto" then OkC 0
+else case parseDecFrom (strUnpack v) (0 - 1) of
+  Nothing => err "--cpus requires auto, 0 (unlimited) or a positive integer, got `${v}`"
+  Just n => OkC n
+
+-- | 内部：`--mem-limit` 的尺寸单位（1024 进制；`K` / `M` / `G`，大小写均可）。
+memUnitOf : Int -> Int
+memUnitOf c =
+  if c == 75 || c == 107 then 1024
+  else if c == 77 || c == 109 then 1048576 else if c == 71 || c == 103 then 1073741824 else 1
+
+-- | 内部：`--mem-limit` 的取值：字节数，或 `<n>K` / `<n>M` / `<n>G`（1024 进制）。
+parseMemLimit : String -> Check Int
+parseMemLimit v = case reverse (strUnpack v) of
+  [] => err "--mem-limit requires a size such as 512M or 1073741824"
+  last :: rest => case memUnitOf last of
+    1 => case parseDecFrom (strUnpack v) (0 - 1) of
+      Nothing => err "--mem-limit requires a size such as 512M or 1073741824, got `${v}`"
+      Just bytes => OkC bytes
+    unit => case parseDecFrom (reverse rest) (0 - 1) of
+      Nothing => err "--mem-limit requires a size such as 512M or 1073741824, got `${v}`"
+      Just k => OkC (k * unit)
+
+-- | 内部：`--timeout` 的取值：整秒（0 = 不限制）。
+parseTimeout : String -> Check Int
+parseTimeout v = case parseDecFrom (strUnpack v) (0 - 1) of
+  Nothing => err "--timeout requires an integer number of seconds, got `${v}`"
+  Just secs => OkC secs
+
+-- | 内部：限制参数的语法校验（`auto` / 尺寸后缀 / 整数）。
+validateLimits : Parsed -> Check Int
+validateLimits parsed = case flagValue parsed "cpus" of
+  Just v => case parseCpus v of
+    ErrC e => ErrC e
+    OkC _ => case flagValue parsed "mem-limit" of
+      Just m => case parseMemLimit m of
+        ErrC e => ErrC e
+        OkC _ => case flagValue parsed "timeout" of
+          Just t => case parseTimeout t of
+            ErrC e => ErrC e
+            OkC _ => OkC 0
+          Nothing => OkC 0
+      Nothing => case flagValue parsed "timeout" of
+        Just t => case parseTimeout t of
+          ErrC e => ErrC e
+          OkC _ => OkC 0
+        Nothing => OkC 0
+  Nothing => case flagValue parsed "mem-limit" of
+    Just m => case parseMemLimit m of
+      ErrC e => ErrC e
+      OkC _ => case flagValue parsed "timeout" of
+        Just t => case parseTimeout t of
+          ErrC e => ErrC e
+          OkC _ => OkC 0
+        Nothing => OkC 0
+    Nothing => case flagValue parsed "timeout" of
+      Just t => case parseTimeout t of
+        ErrC e => ErrC e
+        OkC _ => OkC 0
+      Nothing => OkC 0
+
+-- | 内部：启动前缀。native 目标通过 env 传内存/核数/超时（不进 codegen）；
+-- 任何目标的 `--timeout` 都额外包一层 coreutils `timeout`（硬兜底）。
+launchPrefix : Parsed -> String -> List String
+launchPrefix parsed targetName =
+  let
+    envAssigns = if targetName == "native" then append (case flagValue parsed "mem-limit" of
+      Nothing => []
+      Just m => case parseMemLimit m of
+        OkC bytes => ["VUNA_NATIVE_MEM_LIMIT=${strFromInt bytes}"]
+        ErrC _ => []
+    ) (append (case flagValue parsed "cpus" of
+      Nothing => []
+      Just v => ["VUNA_NATIVE_CPUS=${v}"]
+    ) (case flagValue parsed "timeout" of
+      Nothing => []
+      Just t => case parseTimeout t of
+        OkC secs => if secs <= 0 then [] else ["VUNA_NATIVE_TIMEOUT_MS=${strFromInt (secs * 1000)}"]
+        ErrC _ => []
+    )
+    )
+    else []
+    envPrefix = if length envAssigns == 0 then [] else "env" :: envAssigns
+    timeoutPrefix = case flagValue parsed "timeout" of
+      Nothing => []
+      Just t => case parseTimeout t of
+        OkC secs =>
+          if secs <= 0 then [] else ["timeout", "-s", "TERM", "-k", "5", "${strFromInt secs}s"]
+        ErrC _ => []
+  in append timeoutPrefix envPrefix
 
 -- | 内部：校验 `--target` 后进入正式流程（不合法时打印用法错误并返回 2）。
 runGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Eff r Int
@@ -156,6 +260,15 @@ findPackageByName name [] = Nothing
 findPackageByName name (pkg :: rest) =
   if packageName pkg == name then Just pkg else findPackageByName name rest
 
+-- | 内部：非 native 目标上出现只对 native 有意义的 flag 时返回它。
+nonNativeLimitFlag : Parsed -> String -> Maybe String
+nonNativeLimitFlag parsed targetName = if targetName == "native" then Nothing
+else case flagValue parsed "mem-limit" of
+  Just _ => Just "--mem-limit"
+  Nothing => case flagValue parsed "cpus" of
+    Just _ => Just "--cpus"
+    Nothing => Nothing
+
 -- | 构建（in-process，与 `vuna build` 完全同一条路径）后执行目标产物。
 -- `--no-build` 跳过构建直接执行；构建失败时原样返回其退出码。
 runTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> String -> Package -> Eff r Int
@@ -171,16 +284,19 @@ runTarget parsed passthrough dir target =
     targetArgs = case flagValue parsed "target" of
       Nothing => []
       Just t => ["--target", t]
-  in do
-    executable <- isExecutable target
-    if not executable then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
-    else if flagSet parsed "no-build" then execTarget (targetNameOf parsed) passthrough target (flagValue parsed "out")
-    else do
-      buildCode <-
-        runCompilerCliFor "vuna"
-          (append ["build", dir] (append targetArgs (append releaseFlag (append pkgFlag outFlag))))
-      if buildCode /= 0 then pure buildCode
-      else execTarget (targetNameOf parsed) passthrough target (flagValue parsed "out")
+    prefix = launchPrefix parsed (targetNameOf parsed)
+  in case nonNativeLimitFlag parsed (targetNameOf parsed) of
+    Just f => runError "${f} is only supported with --target native"
+    Nothing => do
+      executable <- isExecutable target
+      if not executable then runError "package ${packageLabel target} has no executable entry (app/Main.vuna)"
+      else if flagSet parsed "no-build" then execTarget prefix (targetNameOf parsed) passthrough target (flagValue parsed "out")
+      else do
+        buildCode <-
+          runCompilerCliFor "vuna"
+            (append ["build", dir] (append targetArgs (append releaseFlag (append pkgFlag outFlag))))
+        if buildCode /= 0 then pure buildCode
+        else execTarget prefix (targetNameOf parsed) passthrough target (flagValue parsed "out")
 
 -- | 内部：`--target` 的值，缺省为 `ocaml`。
 targetNameOf : Parsed -> String
@@ -192,16 +308,17 @@ targetNameOf parsed = case flagValue parsed "target" of
 -- 再执行，传 `packageDir ++ "/.output/bin/..."` 会在相对 DIR 下被拼成两遍）。
 -- `--out DIR` 时产物在 DIR 下；相对 DIR 按调用方 cwd 解析成绝对路径
 -- （`processRunIn` 会 chdir 到包目录，绝对路径不受影响）。
-execTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Package -> Maybe String -> Eff r Int
-execTarget targetName passthrough target outM =
+execTarget : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> String -> List String -> Package -> Maybe String -> Eff r Int
+execTarget prefix targetName passthrough target outM =
   let
     pkgDir = packageDir target
     name = packageName target
   in case outM of
-    Nothing => execArtifact targetName passthrough pkgDir name ".output" "${pkgDir}/.output"
+    Nothing => execArtifact prefix targetName passthrough pkgDir name ".output" "${pkgDir}/.output"
     Just out => do
       cwd <- envGetCwd
-      execArtifact targetName passthrough pkgDir name (resolveOut cwd out) (resolveOut cwd out)
+      execArtifact prefix targetName passthrough pkgDir name (resolveOut cwd out)
+        (resolveOut cwd out)
 
 -- | 内部：相对输出目录按 cwd 补成绝对路径。
 resolveOut : String -> String -> String
@@ -210,16 +327,16 @@ resolveOut cwd out = if startsWith "/" out then out else "${cwd}/${out}"
 -- | 内部：执行产物 —— wasm 目标跑 `wasmtime run <OUT>/main.wasm`（启用 stack-switching /
 -- gc / function-references）；ocaml / native 跑 `<OUT>/bin/<包名>`。产物缺失时打印
 -- 提示（先构建或去掉 `--no-build`）并返回 2。
-execArtifact : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> String -> String -> String -> String -> Eff r Int
-execArtifact targetName passthrough pkgDir name relOut absOut = if targetName == "wasm" then do
+execArtifact : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> String -> List String -> String -> String -> String -> String -> Eff r Int
+execArtifact prefix targetName passthrough pkgDir name relOut absOut = if targetName == "wasm" then do
   exists <- pathExistsFile "${absOut}/main.wasm"
   if exists then processRunIn pkgDir
-    (append ["wasmtime", "run", "-W", "stack-switching=y", "-W", "gc=y", "-W", "function-references=y", "${relOut}/main.wasm"] passthrough)
+    (append prefix (append ["wasmtime", "run", "-W", "stack-switching=y", "-W", "gc=y", "-W", "function-references=y", "${relOut}/main.wasm"] passthrough))
   else runError
     "wasm artifact not found: ${absOut}/main.wasm (build the package first, or drop --no-build)"
 else do
   exists <- pathExistsFile "${absOut}/bin/${name}"
-  if exists then processRunIn pkgDir ("${relOut}/bin/${name}" :: passthrough)
+  if exists then processRunIn pkgDir (append prefix (append ["${relOut}/bin/${name}"] passthrough))
   else runError "binary not found: ${absOut}/bin/${name} (build the package first, or drop --no-build)"
 
 -- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。

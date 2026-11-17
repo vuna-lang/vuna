@@ -235,3 +235,39 @@ exit: 0
 run: sh -c '"$TMPDIR/fsmiss-out/bin/fsmiss" 2>&1'
 exit: 1
 out-contains: fs: readFile
+
+# 9t) 内存预算：缺省 1 GiB（`main.s` 里的常量），`VUNA_NATIVE_MEM_LIMIT` 生效时
+#     trap `memory limit exceeded` + exit 2；未超限时输出不变。
+run: sh -c 'd="$TMPDIR/memlim"; mkdir -p "$d/app"; printf "[package]\nname = \"memlim\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : Int\nmain = strLength (rep (natFromInt 5000) \"0123456789abcdef\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/memlim-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/memlim-out/main.s 1073741824
+run: "$TMPDIR/memlim-out/bin/memlim" 2>&1
+out-equals: 80000
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1000 "$TMPDIR/memlim-out/bin/memlim" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: memory limit exceeded
+
+# 9u) 总超时：`VUNA_NATIVE_TIMEOUT_MS` 到点由 SIGALRM 写固定文本 + exit 2
+#     （阻塞在 nanosleep 里也能被打断）。
+run: sh -c 'd="$TMPDIR/sleepy"; mkdir -p "$d/app"; printf "[package]\nname = \"sleepy\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffClock\n\nmain : Eff [ClockOp] Int\nmain = do\n  _ <- clockSleepMicros 1000000\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/sleepy-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_TIMEOUT_MS=100 "$TMPDIR/sleepy-out/bin/sleepy" 2>&1'
+exit: 2
+out-equals: vuna: runtime error: timeout exceeded
+
+# 9v) 核数：`VUNA_NATIVE_CPUS=1` 把进程钉到一个可用核上（`Cpus_allowed_list` 单项）。
+run: sh -c 'VUNA_NATIVE_CPUS=1 "$TMPDIR/sleepy-out/bin/sleepy" >/dev/null & p=$!; sleep 0.3; taskset -pc $p | sed "s/.*: //" | awk -F, "{print NF}"; wait'
+out-equals: 1
+
+# 9w) 限制相关 env 不传给 `runIn` / `spawn` 的子进程；`VUNA_NATIVE_INHERIT=1` 才继承。
+#     子命令 `printenv KEY` 的存在与否直接反映为退出码（不依赖 shell 变量展开）。
+run: sh -c 'd="$TMPDIR/envinh"; mkdir -p "$d/app"; printf "[package]\nname = \"envinh\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"sh\", \"-c\", \"printenv VUNA_NATIVE_MEM_LIMIT >/dev/null\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/envinh-out" "$d"'
+exit: 0
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=12345 "$TMPDIR/envinh-out/bin/envinh"'
+out-equals: 1
+run: sh -c 'VUNA_NATIVE_MEM_LIMIT=12345 VUNA_NATIVE_INHERIT=1 "$TMPDIR/envinh-out/bin/envinh"'
+out-equals: 0
+
+# 9x) 限制只在启动时读 env：设与不设生成的 `main.s` 逐字节一致。
+run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; cmp "$TMPDIR/detlim-a/main.s" "$TMPDIR/detlim-b/main.s"'
+exit: 0

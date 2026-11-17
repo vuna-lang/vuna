@@ -71,7 +71,9 @@ toolUsageLines prog = """  ${prog} lint [--fix] [--dry-run] [--format text|json|
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
   ${prog} test --suite FILE [--only PAT] [--filter PAT] [--list] [--json] [--jobs auto|N]
       运行原生 suite（test/suite.toml）；--jobs auto 用探测到的全部可用核
-  ${prog} run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR] [DIR] [-- ARG]...
+  ${prog} run [--no-build] [--release] [--target ocaml|wasm|native] [--package NAME] [--out DIR]
+       [--cpus auto|0|N] [--mem-limit SIZE] [--timeout SECS] [DIR] [-- ARG]...
+       --cpus / --mem-limit 只对 --target native 生效（运行时 env）；--timeout 对所有目标包一层 timeout
       构建并运行包的可执行入口（`--target wasm` 用 wasmtime 跑 `<OUT>/main.wasm`；
       `--` 之后的参数原样透传）
   ${prog} fmt [--check] [PATH]...              格式化（PATH 可为文件或目录；省略 = workspace 内各包的 lib/app/test）

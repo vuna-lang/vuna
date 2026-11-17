@@ -1113,6 +1113,13 @@ startFunc printResult kind mainName runMainM handlers =
         IBinReg "add" Rcx (OpImm nativeHeapBytes),
         IMov (OpRip nativeArenaEndLabel) (OpReg Rcx)
       ]
+    -- 资源限制：全部来自 env（缺省 1 GiB / auto 核数 / 超时不限），不进 codegen。
+    initLimits =
+      [ IBinReg "and" Rsp (OpImm (0 - 16)),
+        ICall (nativeRtLabel "init_mem"),
+        ICall (nativeRtLabel "init_cpus"),
+        ICall (nativeRtLabel "init_timeout")
+      ]
     runPart = case runMainM of
       Just rm => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel rm)]
       Nothing => []
@@ -1140,7 +1147,7 @@ startFunc printResult kind mainName runMainM handlers =
     else []
     exitInstrs = [IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 0), ISyscall]
   in NativeFunc nativeEntryLabel 0
-    (append captureArgs (append initHeap (append callMain (append printer exitInstrs))))
+    (append captureArgs (append initHeap (append initLimits (append callMain (append printer exitInstrs)))))
 
 -- ---------------------------------------------------------------
 -- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate

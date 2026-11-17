@@ -262,6 +262,27 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `Native.Runtime.nativeRodata` 提供。字符串字面量由 `Native.Module` 收集成
   `NativeStrLit`（`npStrLits`）。
 
+### 5.1 资源限制（内存 / 核数 / 超时）
+
+`_start` 在 `vuna_main` 之前调用 `init_mem` / `init_cpus` / `init_timeout`；配置全部来自
+env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失败一律回落缺省，不阻断启动。
+
+| env | 缺省 | 语义 |
+| --- | --- | --- |
+| `VUNA_NATIVE_MEM_LIMIT` | `1073741824`（1 GiB） | `.bss` 堆的**累计**分配字节 + 续延捕获缓冲的**活跃**字节；超限 `memory limit exceeded` + exit 2；`0` = 不限 |
+| `VUNA_NATIVE_CPUS` | `auto` | `auto` = min(`sched_getaffinity` 计数, cgroup v2 `cpu.max` 的 `ceil(quota/period)`)，下限 1；`N` = 取前 N 个可用核；`0` = 不动亲和性；只缩小不放大 |
+| `VUNA_NATIVE_TIMEOUT_MS` | 不限 | wall-clock 总超时；`setitimer(ITIMER_REAL)` + SIGALRM（`SA_RESTORER` + `rt_sigreturn` 桩），handler 只 `write` + exit 2；`0` = 不限 |
+
+- 预算检查在 `alloc` 的预留之前（1 条 `cmp`/`ja`，无限制时 0 开销之外只多一次 load）；
+  捕获缓冲在分配时累加、`free_capture` 归还时递减。
+- **续延栈段不计入预算**：`resume` 的段按 `pow2_ceil(len + 32 MiB + 16)` 预留（页惰性提交），
+  按预留算会让 500 层嵌套一上来就爆；段耗尽仍由 `continuation stack overflow` / `mmap`
+  失败（`out of memory`）单独收口。
+- 亲和性是进程级：`fork` / `execve` 后子进程继承；`spawn` / `runIn` 的 env 默认**剔除**
+  `VUNA_NATIVE_*`（`VUNA_NATIVE_INHERIT=1` 时原样传），避免子进程继承父进程的预算。
+- 口径边界：核数限制**不是 CPU 配额**（不限制单核跑多久，要限速用超时）；cgroup 只读 v2
+  挂载根的 `cpu.max`（v1 或读不到时退化为 `sched_getaffinity` 计数）；超时是启动快照。
+
 **可观测性**（规范见 [observability.md](observability.md)）：`@vuna@obs@level` /
 `log` / `counter` / `mark` / `sampleStart` / `sampleStop` 是 **no-op 桩**（返回 `Int 0`）；
 高阶的 `@vuna@obs@span` / `spanLab` 调 thunk（闭包，实参 `0`）后原样返回结果，不写事件。
@@ -328,6 +349,13 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `check` 上以 `continuation stack overflow` 收口。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
+- **内存预算的口径依赖「arena 不回收」**：`VUNA_NATIVE_MEM_LIMIT` 现在是堆的累计分配 +
+  捕获缓冲的活跃字节。引入 GC 后要收紧为 **live heap 上限 + GC 触发阈值**（完整一次回收
+  后仍超限才 trap），否则高 churn、低存活集的程序会被误杀；同时 GC 需要一个核数口径与
+  亲和性共用（§5.1 的 `auto` 结果），并且续延捕获栈的保守扫描要与 GC 的扫描约定合并。
+  这三项是 GC 落地时必须一起改的接口，不是限制器单独能收的。
+- 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
+  `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
 - 多文件目标链接/对象文件：IR 已经是整程序单单元；不需要独立目标文件。
 - 对象库/增量缓存、`vuna run --target`、`--target native` 的 release 差异。
