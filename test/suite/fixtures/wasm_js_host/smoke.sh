@@ -5,9 +5,10 @@
 #   环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）
 #
 # 覆盖：
-#   1) 不引用 handler 的产物（无 `cont`）：宿主 stdout 与 wasmtime 同口径；
-#   2) 带 handler 的产物（入口行非空）：默认引擎拒绝编译，runner 以 exit 2 报同一原因；
-#   3) 运行时失败经 `$rt_failStr` 走 guest 自己的文本 + exit 2（宿主不重写）。
+#   1) 纯程序（无 `cont`）：宿主 stdout 与 wasmtime 同口径；
+#   2) 入口行只有内建宿主效应（无用户 handler）：send 直接降成宿主调用，同样无 `cont`；
+#   3) 用户自定义 handler：仍需 stack switching，默认引擎拒绝编译（runner exit 2）；
+#   4) 运行时失败经 `$rt_failStr` 走 guest 自己的文本 + exit 2（宿主不重写）。
 #
 # 缺 Node 时打印 SKIP，摘要行照常输出。
 
@@ -81,21 +82,43 @@ else
   ok "pure/no-cont"
 fi
 
-# 2) 入口行非空：产物带续延，默认引擎拒绝编译。
-build_pkg "$tmp/effect" "effect" 'import Base.Eff
+# 2) 入口行只有内建宿主效应：send 直连宿主原语，产物无续延，默认引擎可跑。
+build_pkg "$tmp/host" "host" 'import Base.Eff
 import Base.EffConsole
 import Base.Nat
 
 main : Eff [ConsoleOp] Nat
 main = consolePrint "hi"
-' || bad "build(effect)" "$(cat "$tmp/effect/build.log")"
-out=$(node "$RUNNER" "$tmp/effect/out/main.wasm" 2>&1)
+' || bad "build(host)" "$(cat "$tmp/host/build.log")"
+out=$(node "$RUNNER" "$tmp/host/out/main.wasm" 2>&1)
+code=$?
+expect_output "host/stdout" 'hi2' "$out"
+expect_output "host/exit" "0" "$code"
+if grep -q 'cont \$cft' "$tmp/host/out/main.wat"; then
+  bad "host/no-cont" "产物仍含续延类型"
+else
+  ok "host/no-cont"
+fi
+
+# 3) 用户自定义 handler：仍需要 stack switching，默认引擎拒绝编译。
+build_pkg "$tmp/user" "user" 'import Base.Eff
+
+data POp : Type -> Type where
+  P : Int -> POp Int
+
+main : Int
+main = runPure (handle (perform P 3) {
+  P n k -> k (n + 1)
+}
+)
+' || bad "build(user)" "$(cat "$tmp/user/build.log")"
+out=$(node "$RUNNER" "$tmp/user/out/main.wasm" 2>&1)
 code=$?
 case "$out" in
-  *"stack switching not enabled"*) ok "effect/rejected" ;;
-  *) bad "effect/rejected" "$out" ;;
+  *"stack switching not enabled"*) ok "user/rejected" ;;
+  *) bad "user/rejected" "$out" ;;
 esac
-expect_output "effect/exit" "2" "$code"
+expect_output "user/exit" "2" "$code"
 
 # 3) guest 自己的失败文本 + exit 2。
 build_pkg "$tmp/fail" "fail" 'main : Int

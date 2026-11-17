@@ -6,8 +6,8 @@
 #
 # 事实口径：产物只在可达代码需要 handler（perform / handle / self）时才发射
 # stack-switching 类型与运行时（`$ct` / `$eff` / `$rt_eff*`）。所以：
-#   - 不引用 handler 的产物在默认配置的引擎（Node / 浏览器）上直接可编译；
-#   - 引用 handler 的产物被默认配置拒绝，这是「浏览器能不能跑 effect」的唯一版本闸门。
+#   - 纯程序与只有内建宿主效应的程序（send 直连）在默认配置的引擎上直接可编译；
+#   - 用户自定义 handler 的产物仍带 stack switching，被默认配置拒绝。
 # 本脚本断言这两条，并把「开给 V8 的实验特性后走到哪一步」作为报告打印（不参与判定，
 # 因为引擎侧进展与 Node 版本相关）。
 #
@@ -91,8 +91,25 @@ main = consolePrint "hello"
   fail=$((fail + 1))
 }
 
+build_pkg "$tmp/user" "user" 'import Base.Eff
+
+data POp : Type -> Type where
+  P : Int -> POp Int
+
+main : Int
+main = runPure (handle (perform P 3) {
+  P n k -> k (n + 1)
+}
+)
+' || {
+  echo "FAIL build(user)"
+  sed 's/^/     /' "$tmp/user/build.log"
+  fail=$((fail + 1))
+}
+
 PURE_WASM=$tmp/pure/out/main.wasm
 CONSOLE_WASM=$tmp/console/out/main.wasm
+USER_WASM=$tmp/user/out/main.wasm
 
 if ! command -v node >/dev/null 2>&1; then
   echo "SKIP: node not found"
@@ -107,10 +124,17 @@ else
   fi
   if [ -f "$CONSOLE_WASM" ]; then
     out=$(node --no-warnings "$HERE/probe.mjs" "$CONSOLE_WASM" 2>&1)
-    expect_contains "default(console)" "$out" "validate=false compile=error"
+    expect_contains "default(console)" "$out" "validate=true compile=ok"
     printf '     %s\n' "$out"
   else
     bad "default(console)" "产物缺失"
+  fi
+  if [ -f "$USER_WASM" ]; then
+    out=$(node --no-warnings "$HERE/probe.mjs" "$USER_WASM" 2>&1)
+    expect_contains "default(user)" "$out" "validate=false compile=error"
+    printf '     %s\n' "$out"
+  else
+    bad "default(user)" "产物缺失"
   fi
 
   # 开 V8 实验特性：只报告，不判定（引擎侧进展与 Node 版本相关）。

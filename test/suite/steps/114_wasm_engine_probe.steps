@@ -1,7 +1,7 @@
 # matrix: effect-wasm
-# 114) 引擎支持矩阵：产物只在需要 handler 时发射 stack-switching 运行时。
-#      不引用 handler 的产物在默认配置的引擎（Node / 浏览器）上直接可编译；
-#      引用 handler 的产物被默认配置拒绝——这是「浏览器能不能跑 effect」的唯一闸门。
+# 114) 引擎支持矩阵：产物只在「用户自定义 handler」时才发射 stack-switching 运行时。
+#      纯程序与只有内建宿主效应的程序（send 直连）在默认配置的引擎上直接可编译；
+#      用户 handler 的产物被默认配置拒绝——这是「浏览器能不能跑 effect」的唯一闸门。
 #      开启 V8 实验特性后走到哪一步只作报告打印。
 #
 # 依赖 PATH 里的 node（devShell 与 e2e 的 nativeBuildInputs 已提供）；缺 Node 时打印 SKIP。
@@ -10,3 +10,4 @@ exit: 0
 out-contains: passed, 0 failed
 out-contains: default(pure)
 out-contains: default(console)
+out-contains: default(user)

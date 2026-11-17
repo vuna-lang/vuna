@@ -1,11 +1,11 @@
 # matrix: effect-wasm
-# 115) JS 宿主（Node / V8）冒烟：不引用 handler 的产物在 `wasm_js_host/run.mjs` 上的
-#      stdout / exit 与 wasmtime 同口径；带 handler 的产物在默认引擎上被拒绝（exit 2）；
-#      guest 自己的失败文本（`vuna: runtime error:`）原样透出。
+# 115) JS 宿主（Node / V8）冒烟：纯程序与「只有内建宿主效应」的产物都在默认引擎上跑；
+#      用户自定义 handler 的产物仍被拒绝（exit 2）；guest 自己的失败文本原样透出。
 #
 # 依赖 PATH 里的 node（devShell 与 e2e 的 nativeBuildInputs 已提供）；缺 Node 时打印 SKIP。
 run: sh "$VUNA_SUITE_ROOT/test/suite/fixtures/wasm_js_host/smoke.sh" "$VUNA"
 exit: 0
 out-contains: passed, 0 failed
 out-contains: pure/no-cont
-out-contains: effect/rejected
+out-contains: host/no-cont
+out-contains: user/rejected
