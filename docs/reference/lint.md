@@ -95,9 +95,9 @@ token 的起点，模板字面量（`TTmpl`）的 span end 是字面量结束后
 遍历相互递归组把 `fuel` 放在第 0 形参并 `if fuel <= 0` 守卫，这是编译器
 `tryFuelThread` 判据能接受的形态。
 
-`list-literal` 用**独立的表达式遍历**（`walkListLiteral`），不进入 pattern，也不与
-dispatch 的 lane 判定耦合；类型位置（签名、axiom/extern、data kind/构造子、record 字段、
-trait 方法、instance 上下文/head/方法）由 `declFindings` 分别扫描。模板插值洞
+`list-literal` 在 `walkExprGo` 的应用/变量位置与 dispatch 同趟检查（模板插值洞用
+`allow=False` 跳过）；类型位置（签名、axiom/extern、data kind/构造子、record 字段、
+trait 方法、instance 上下文/head/方法）仍由 `declFindings` 的 `walkListLiteral` 扫描。模板插值洞
 （`EInterp` 的 `IPHole`）跳过：lint 的顶层 token 列表不含洞内 token，`exprText` 无法
 可靠切片（已知边界，见 §6）。
 
@@ -135,8 +135,8 @@ let 值里的 if）需要上下文分发（case-of-case），会复制代码与�
 | `LN_RedundantIf` | `redundant-if` | 是 | `if True/False then a else b` 的常量条件；默认关闭，`--select` / all 预设启用 |
 
 dispatch 两条规则（`literal-if-chain` / `dispatch-lift`）共用同一套 lane 判定与 as-pattern
-渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` 是独立的表达式遍历
-（不是 dispatch 提升），见 §3.3。
+渲染，区别只在 dispatch 源（if 链 vs case / let）。`list-literal` 与 dispatch 同趟遍历，
+但判据独立（不是 dispatch 提升），见 §3.3。
 
 ### 3.1 `literal-if-chain`
 
