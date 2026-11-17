@@ -1324,12 +1324,22 @@ baseTypes =
     WatStructType "$float" [WatField False WvF64],
     WatArrayType "$str" True WvI8,
     WatArrayType "$arr" True WvAnyRef,
-    WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
-    WatContType "$ct" "$cft",
-    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvI32],
-    WatStructType "$selfNode" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvAnyRef],
     WatStructType "$clean" [WatField False WvAnyRef, WatField False WvAnyRef]
   ]
+
+-- | 续延相关的类型：只有需要 stack switching 的产物才发射。
+effTypes : List WatType
+effTypes =
+  [ WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
+    WatContType "$ct" "$cft",
+    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvI32]
+  ]
+
+-- | handler 链节点：key、name、ret、opH、旧链。直连与续延两种模式共用。
+selfNodeType : WatType
+selfNodeType =
+  WatStructType "$selfNode"
+    [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
 
 baseTags : List WatTag
 baseTags = [WatTag "$eff" [WvAnyRef] [WvAnyRef]]
@@ -1368,8 +1378,114 @@ concatMapType (f :: rest) = case wasmFamType f of
   Nothing => concatMapType rest
   Just t => t :: concatMapType rest
 
-buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Maybe WasmListFam -> Result WasmModule
-buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel st ordered of
+-- ---------------------------------------------------------------
+-- 续延运行时是否发射
+-- ---------------------------------------------------------------
+-- stack switching 是浏览器支持的唯一闸门：不需要 handler 的产物不发射 `$ct` /
+-- `$eff` / `$rt_eff*`，模块因此在默认配置的引擎上可编译。判定保守（宁可多发）：
+-- 入口预装了 handler，或可达代码引用任一续延原语 / 装箱动作，就必须发射。
+-- | 只用 handler 的运行时函数名。
+effRuntimeFuncs : List String
+effRuntimeFuncs =
+  [ "$rt_effPerform",
+    "$rt_effThunk",
+    "$rt_resumeTwice",
+    "$rt_effResumeClo",
+    "$rt_handleLoop",
+    "$rt_effHandle",
+    "$rt_effSelf"
+  ]
+
+-- | 需要续延的运行时符号。
+effSymbols : List String
+effSymbols = ["prim_effectPerform", "prim_effectHandle", "prim_effectSelf"]
+
+-- | 扫描预算：超过即按「需要」处理（保守）。
+effScanFuel : Int
+effScanFuel = 100000
+
+anyIrSym : Int -> List String -> List Ir -> Bool
+anyIrSym fuel syms [] = False
+anyIrSym fuel syms (x :: rest) =
+  if irUsesSyms (fuel - 1) syms x then True else anyIrSym (fuel - 1) syms rest
+
+anyAltSym : Int -> List String -> List IrAlt -> Bool
+anyAltSym fuel syms [] = False
+anyAltSym fuel syms (a :: rest) =
+  if irUsesSyms (fuel - 1) syms a.irAltBody then True else anyAltSym (fuel - 1) syms rest
+
+altMaybeSym : Int -> List String -> Maybe IrAlt -> Bool
+altMaybeSym fuel syms Nothing = False
+altMaybeSym fuel syms (Just a) = irUsesSyms (fuel - 1) syms a.irAltBody
+
+fieldSym : Int -> List String -> List (Pair String Ir) -> Bool
+fieldSym fuel syms [] = False
+fieldSym fuel syms ((Pair _ v) :: rest) =
+  if irUsesSyms (fuel - 1) syms v then True else fieldSym (fuel - 1) syms rest
+
+-- | 表达式是否引用给定的运行时符号。
+irUsesSyms : Int -> List String -> Ir -> Bool
+irUsesSyms fuel syms ir = if fuel <= 0 then True
+else case ir of
+  IrVar _ => False
+  IrGlobal _ => False
+  IrCtor _ _ args => anyIrSym fuel syms args
+  IrRecord _ fields => fieldSym fuel syms fields
+  IrProj b _ _ => irUsesSyms (fuel - 1) syms b
+  IrRecUpd b _ fields => if irUsesSyms (fuel - 1) syms b then True else fieldSym fuel syms fields
+  IrRt name => memName name syms
+  IrRtApp name args => if memName name syms then True else anyIrSym fuel syms args
+  IrCast e => irUsesSyms (fuel - 1) syms e
+  IrInt _ => False
+  IrStr _ => False
+  IrBool _ => False
+  IrFloatLit _ => False
+  IrLet _ v body => if irUsesSyms (fuel - 1) syms v then True else irUsesSyms (fuel - 1) syms body
+  IrLam _ body => irUsesSyms (fuel - 1) syms body
+  IrApp f a => if irUsesSyms (fuel - 1) syms f then True else irUsesSyms (fuel - 1) syms a
+  IrIf c t e =>
+    if irUsesSyms (fuel - 1) syms c then True
+    else if irUsesSyms (fuel - 1) syms t then True else irUsesSyms (fuel - 1) syms e
+  IrCase s alts => if irUsesSyms (fuel - 1) syms s then True else anyAltSym fuel syms alts
+  IrNatCase s _ z su c =>
+    if irUsesSyms (fuel - 1) syms s then True
+    else if altMaybeSym fuel syms z then True
+    else if altMaybeSym fuel syms su then True else altMaybeSym fuel syms c
+  IrConcatMany xs => anyIrSym fuel syms xs
+  IrEffThunk _ _ _ _ e => False
+  IrEffBind _ _ _ => False
+
+-- | 需要 handler 的任何一项（perform / handle / self）。
+performSyms : List String
+performSyms = ["prim_effectPerform", "prim_effectHandle", "prim_effectSelf"]
+
+defUsesSyms : List String -> IrDef -> Bool
+defUsesSyms syms d = case irDefBody d of
+  Nothing => False
+  Just body => irUsesSyms effScanFuel syms body
+
+defsUseSyms : List String -> List IrDef -> Bool
+defsUseSyms syms [] = False
+defsUseSyms syms (d :: rest) = if defUsesSyms syms d then True else defsUseSyms syms rest
+
+-- | handler 运行时模式：0 = 不发射，2 = stack switching。
+-- 判定保守（宁可多发）：可达代码引用任一续延原语（perform / handle / self）就发射。
+effModeOf : Maybe IrEntry -> List IrDef -> Int
+effModeOf entry ordered = if defsUseSyms performSyms ordered then 2 else 0
+
+listNull : List a -> Bool
+listNull [] = True
+listNull (_ :: _) = False
+
+-- | 无续延时从固定运行时函数表里剔掉 handler 那几个。
+isEffRtFunc : WatFunc -> Bool
+isEffRtFunc f = memName f.watFuncName effRuntimeFuncs
+
+selectRtFuncs : Bool -> List WatFunc -> List WatFunc
+selectRtFuncs needEff funcs = if needEff then funcs else filter (\f => not (isEffRtFunc f)) funcs
+
+buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
+buildModule fuel st ordered entry printResult effMode listFamM = case genDefFuncs fuel st ordered of
   Err msg => Err msg
   Ok pf =>
     let
@@ -1382,20 +1498,32 @@ buildModule fuel st ordered entry printResult listFamM = case genDefFuncs fuel s
           startState = secondOf p
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
           lamFuncs = reverse startState.gsFuncs
-          elemNames = append (reverse startState.gsElems) ["$rt_effThunk", "$rt_effResumeClo"]
+          elems = reverse startState.gsElems
+          elemNames =
+            if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"] else elems
+          rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
+          rtSelected = if effMode == 2 then rtFunctions st.gsConsts else rtBase
           funcs =
-            append (rtFunctions st.gsConsts)
+            append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
           famTypes = concatMapType st.gsFams
-          allTypes = append baseTypes famTypes
-          globals =
-            append
-              [WatGlobal "$g_cleanups" WvAnyRef [IRefNull], WatGlobal "$g_hostStatus" WvI32 [IConstI32 0], WatGlobal "$g_self" WvAnyRef [IRefNull]]
-              (globalsOf ordered)
+          allTypes =
+            if effMode == 2 then append baseTypes (append effTypes (selfNodeType :: famTypes))
+            else append baseTypes famTypes
+          tags = if effMode == 2 then baseTags else []
+          baseGlobals =
+            if effMode == 0 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0]
+            ]
+            else [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_self" WvAnyRef [IRefNull]
+            ]
+          globals = append baseGlobals (globalsOf ordered)
           dataText = poolBytes st.gsPool
           dataM = if strLength dataText == 0 then Nothing else Just (WatData "$d0" dataText)
         in Ok
-          (WasmModule allTypes baseTags baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
+          (WasmModule allTypes tags baseImports globals funcs elemNames dataM [WatExport "func" "_start" "$_start"] 4)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -1441,7 +1569,7 @@ build program printResult =
               defs
           _ => reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
-      in case buildModule 100000 st0 ordered (Just e) printResult listFamM of
+      in case buildModule 100000 st0 ordered (Just e) printResult (effModeOf (Just e) ordered) listFamM of
         Ok m => WasmOk m
         Err msg => WasmRejected (classifyWasmErr msg)
 
