@@ -85,6 +85,8 @@ record Env where
   envSession : IORef Session
   -- | 本次 run 选中的后端（`--backend`；空 = 只跑 ocaml）。
   envBackends : List String
+  -- | wasm 的执行宿主：`wasmtime`（默认）或 `js`（`test/suite/fixtures/wasm_js_host`）。
+  envWasmHost : String
 
 -- | 一次子进程调用：退出码、分离的 stdout/stderr、是否被判为超时。
 record CmdResult where
@@ -707,7 +709,13 @@ runCrossTarget env c dir backend expected =
     out = "${dir}/${backend}"
     buildTag = "${c.caseId}-build-${backend}"
     prog =
-      if backend == "wasm" then [ "wasmtime",
+      if backend == "wasm" then if env.envWasmHost == "js" then [ "node",
+        "${env.envRoot}/test/suite/fixtures/wasm_js_host/run.mjs",
+        "${out}/main.wasm",
+        "--dir",
+        dir
+      ]
+      else [ "wasmtime",
         "run",
         "-W",
         "stack-switching=y",
@@ -2402,7 +2410,7 @@ auditOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref []
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
       fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
@@ -2465,7 +2473,7 @@ familyOrphans suite =
     let
       env =
         Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref []
+          False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
     in pure (filter (familyOrphan env cases) fixtures)
 
 -- | 内部：逗号拼接。
@@ -2570,6 +2578,7 @@ runSuiteOnce opts suite =
     vuna <- envExecPath
     vunaSeed <- envOr "VUNA_SEED" "vuna-seed"
     ocamlopt <- envOr "OCAMLOPT" "ocamlopt"
+    wasmHost <- envOr "VUNA_WASM_HOST" "wasmtime"
     -- 跨 run 的构建桶：base 的 .cmx 只编译一次，后续 run 直接命中 stamp。
     buildFp <- toolCompilerFingerprint
     buildDir <- pure "${cacheDir}/build/${scope}-${strOfInt buildFp}-${strOfInt baseHash}"
@@ -2581,6 +2590,7 @@ runSuiteOnce opts suite =
         Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir
           (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash
           opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends
+          wasmHost
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
