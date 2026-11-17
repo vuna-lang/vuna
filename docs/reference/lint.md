@@ -81,8 +81,9 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 
 规则判定全部走 AST：`lintSourceWithConfig` 先 `parseSourceWithComments`，再按声明遍历 `Expr`（覆盖全部构造子，
 含 `ELocalFun` / `EAnn`），同时携带外层模式上下文（clause 模式列表或外层 case 的 alt
-模式）。需要源码原文（字面量、模式、分支体）时用 span + token 边界从源码切片
-（`exprText` / `patText`），**不重新渲染 / 转义字符串字面量**。
+模式）。需要源码原文（字面量、表达式体）时按 `Span` / token 的字节偏移直接切片
+（`exprText` / `spanText`），**不重新渲染 / 转义字符串字面量**；模式文本在 parser pattern
+span 偏移不完整时回落到行/列路径（`patText`）。
 
 切片右边界按「源码序严格在 span end 之后」找 token：普通 token 的 span end 是最后一个
 token 的起点，模板字面量（`TTmpl`）的 span end 是字面量结束后的位置，两种都能取到正确的
