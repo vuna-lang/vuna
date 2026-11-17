@@ -1,0 +1,34 @@
+-- 归并排序：Pair 拆半 + 合并；fuel 让终止性检查看到结构递归。
+-- 手写 OCaml 对照见 sorting.ml（同算法）。
+split : List Int -> List Int -> List Int -> Pair (List Int) (List Int)
+split left right xs = case xs of
+  [] => Pair left right
+  x :: rest => case rest of
+    [] => Pair (x :: left) right
+    y :: more => split (x :: left) (y :: right) more
+
+merge : List Int -> List Int -> List Int
+merge a b = case a of
+  [] => b
+  x :: xs => case b of
+    [] => a
+    y :: ys => if x <= y then x :: merge xs b else y :: merge a ys
+
+msort : Int -> List Int -> List Int
+msort fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  [_] => xs
+  _ :: _ :: _ => case split [] [] xs of
+    Pair left right => merge (msort (fuel - 1) left) (msort (fuel - 1) right)
+
+sum : List Int -> Int
+sum xs = case xs of
+  [] => 0
+  x :: rest => x + sum rest
+
+desc : Int -> Int -> List Int
+desc i k = if k <= 0 then [] else i :: desc (i + 1) (k - 1)
+
+main : Int
+main = sum (msort 40000 (desc 0 40000))

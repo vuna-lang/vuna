@@ -1,0 +1,29 @@
+-- 记录与变体：record 构造 / 更新 / 投影 + data 按 tag 分派。
+-- 手写 OCaml 对照见 records.ml（同算法：record + variant + 记录更新）。
+data Op : Type where
+  Add : Op
+  Mul : Op
+
+record Point where
+  x : Int
+  y : Int
+
+apply : Op -> Int -> Int -> Int
+apply op a b = case op of
+  Add => a + b
+  Mul => a * b
+
+bound : Int -> Int
+bound n = n - n / 1000 * 1000
+
+step : Op -> Point -> Point
+step op p = { p | x = bound (apply op p.x p.y), y = bound (apply op p.y p.x) }
+
+stepN : Int -> Point -> Point
+stepN k p = if k <= 0 then p else stepN (k - 1) (step (if k - k / 2 * 2 == 0 then Add else Mul) p)
+
+main : Int
+main =
+  let
+    p = stepN 800000 Point { x = 1, y = 2 }
+  in p.x + p.y

@@ -1,0 +1,15 @@
+-- 文本扫描：strAt / strLength 逐字节读取并累积（不经过 List 桥接）；fuel 保证终止。
+-- 手写 OCaml 对照见 text_scan.ml（同算法）。
+scan : Int -> String -> Int -> Int -> Int -> Int
+scan fuel s i n acc = if fuel <= 0 then acc
+else if i >= n then acc
+else
+  let
+    next = acc * 31 + strAt s i
+  in scan (fuel - 1) s (i + 1) n (next - next / 1000003 * 1000003)
+
+main : Int
+main =
+  let
+    s = repeat 16000 "0123456789"
+  in scan (strLength s) s 0 (strLength s) 0

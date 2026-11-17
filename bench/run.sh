@@ -31,7 +31,7 @@ OCAMLOPT_BIN=${OCAMLOPT:-ocamlopt}
 CC_BIN=${CC:-cc}
 VUNA_BASE_OVERRIDE=${VUNA_BASE:-}
 
-BENCHES="arith string_ops hashmap list_recursion gc_pressure array"
+BENCHES="arith string_ops hashmap list_recursion gc_pressure array records closures sorting float_math text_scan nat_bits"
 
 usage() {
   cat <<'EOF'

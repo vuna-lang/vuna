@@ -1,0 +1,13 @@
+-- 高阶函数与闭包：twice 的闭包传参、动态应用、foldl 累积 lambda。
+-- 手写 OCaml 对照见 closures.ml（同算法）。
+twice : (Int -> Int) -> Int -> Int
+twice f x = f (f x)
+
+dbl : Int -> Int
+dbl x = x * 2
+
+pipeline : Int -> Int
+pipeline x = twice (\y => y + 3) (twice dbl x)
+
+main : Int
+main = foldl (\acc, x => acc + pipeline x) 0 (range 0 200000)
