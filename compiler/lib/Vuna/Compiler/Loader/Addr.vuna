@@ -58,7 +58,7 @@ export headerKind : String
 headerKind = "header"
 
 export headerCodec : String
-headerCodec = "module-header 1"
+headerCodec = "module-header 2"
 
 export record FixRow(..) where
   frOp : String
@@ -163,7 +163,22 @@ fixRowOf f = FixRow f.fixityOp f.fixityLevel f.fixityAssoc f.fixityTarget
 importNameOf : Import -> String
 importNameOf (Import n _ _ _) = n
 
--- | 模块名 + 显式 import 名单 + fixity 表。隐式导入由调用方在算摘要时并入（见模块头）。
+-- `export module C [as X]` 在加载期会合成 `import C`（Flatten 的 namespaceImportsOf），
+-- 但源码 import 表里没有它。header 是接口闭包的依赖边来源，漏掉它会让依赖方的接口闭包
+-- 缺 C（构造子/类型的 canonical 名查不到）。
+exportItemDep : ExportItem -> List String
+exportItemDep (XModule name _) = [name]
+exportItemDep (XNamespace name _ _) = [name]
+exportItemDep _ = []
+
+dedupNames : List String -> List String
+dedupNames [] = []
+dedupNames (x :: rest) = if memName x rest then dedupNames rest else (::) x (dedupNames rest)
+
+-- | 模块名 + 显式 import 名单（含 `export module` 合成的 import）+ fixity 表。
+-- 隐式导入由调用方在算摘要时并入（见模块头）。
 export headerOfSource : String -> SourceFile -> ModHeader
-headerOfSource name (SourceFile _ imports fixities _ _ _ _) =
-  ModHeader name (map importNameOf imports) (map fixRowOf fixities)
+headerOfSource name (SourceFile _ imports fixities _ _ reexports _) =
+  ModHeader name
+    (dedupNames (append (map importNameOf imports) (concatMap exportItemDep reexports)))
+    (map fixRowOf fixities)
