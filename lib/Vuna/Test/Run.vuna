@@ -1827,6 +1827,10 @@ isFailed r = r.resStatus == "fail"
 isSkipped : CaseResult -> Bool
 isSkipped r = r.resStatus == "skip"
 
+-- | 内部：状态是否为 `allow`（参考通道独有、允许失败；不算 skip，`--strict-skips` 不抓）。
+isAllowed : CaseResult -> Bool
+isAllowed r = r.resStatus == "allow"
+
 -- | 汇总一行：全通过时给 checks 总数，否则给 checks 数 + 失败 case 列表。
 summarize : List CaseResult -> String
 summarize results =
@@ -2150,15 +2154,76 @@ resultJson r =
 
 -- | 收尾：写耗时表与上次失败列表，按需打印 timings / JSON / 汇总，返回退出码
 -- （`--strict-skips` 时 `skip` 也算失败）。
-finishResults : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> List CaseResult -> Eff r Int
-finishResults env opts results =
+-- | 「允许失败」清单（`VUNA_TEST_ALLOW_FAIL` 指向的文件，一行一条、`#` 注释）：
+-- 命中且失败的结果按 `skip` 计。用于把参考通道独有用例从浏览器可跑面门禁里排除。
+allowFailIds : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Eff r (List String)
+allowFailIds env = do
+  path <- envVar "VUNA_TEST_ALLOW_FAIL"
+  if path == "" then pure []
+  else do
+    exists <- pathExistsFile path
+    if exists then do
+      text <- fsReadFile path
+      pure (filter isAllowLine (linesOf text))
+    else pure []
+
+isAllowLine : String -> Bool
+isAllowLine line = if line == "" then False else if startsWith "#" line then False else True
+
+linesOf : String -> List String
+linesOf text = map trim (splitOnChar 10 text)
+
+splitOnChar : Int -> String -> List String
+splitOnChar c s = splitOnChars c (strUnpack s) []
+
+splitOnChars : Int -> List Int -> List Int -> List String
+splitOnChars c [] acc = [strPack (reverse acc)]
+splitOnChars c (x :: rest) acc =
+  if x == c then strPack (reverse acc) :: splitOnChars c rest [] else splitOnChars c rest (x :: acc)
+
+containsText : String -> String -> Bool
+containsText needle hay = containsFrom (strLength hay + 1) needle hay 0
+
+containsFrom : Int -> String -> String -> Int -> Bool
+containsFrom fuel needle hay i =
   let
+    n = strLength needle
+    h = strLength hay
+  in if fuel <= 0 then False
+  else if n == 0 then True
+  else if i + n > h then False
+  else if substring (natFromInt i) (natFromInt n) hay == needle then True
+  else containsFrom (fuel - 1) needle hay (i + 1)
+
+-- | 命中「允许失败」清单的失败结果按 `skip` 计。
+allowedResult : List String -> CaseResult -> CaseResult
+allowedResult allowIds r =
+  if r.resStatus /= "fail" then r
+  else if anyIdMatches allowIds r.resId then { r | resStatus = "allow", resMessages = append ["allowed-fail（参考通道用例）"] r.resMessages }
+  else r
+
+anyIdMatches : List String -> String -> Bool
+anyIdMatches ids rid = anyMatch ids rid
+
+anyMatch : List String -> String -> Bool
+anyMatch [] rid = False
+anyMatch (id :: rest) rid = if id /= "" && containsText id rid then True else anyMatch rest rid
+
+finishResults : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> SuiteOpts -> List CaseResult -> Eff r Int
+finishResults env opts rawResults = do
+  allowIds <- allowFailIds env
+  let
+    results = map (allowedResult allowIds) rawResults
     bad = listLength (filter isFailed results)
     skipped = listLength (filter isSkipped results)
+    allowed = listLength (filter isAllowed results)
     strictBad = if opts.suiteStrictSkips then skipped else 0
   in do
     _ <-
       if strictBad > 0 then printLine "strict-skips: ${strOfInt skipped} skipped case(s)"
+      else pure 0
+    _ <-
+      if allowed > 0 then printLine "allowed-fail: ${strOfInt allowed} case(s)（参考通道独有）"
       else pure 0
     _ <- recordCosts env results
     _ <- recordLastFailed env results
