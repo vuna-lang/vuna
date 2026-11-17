@@ -100,7 +100,7 @@
 
 - **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 64 B：
   `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶（base_rsp）`
-  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无）`。
+  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无；`perform` 调 `opH` 期间暂存在帧内）`。
 - **续延记录** 88 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
   `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
   `[80]=恢复值 v`。
@@ -109,10 +109,14 @@
 `perform`：按 `(key, name)` 扫链；找到后把节点弹出（`rt_handlers = node.prev`），把
 `[perform_rbp, rt_stack_top)` 的**整段栈**（含所有外层 handler 的挂起帧）拷到堆，
 分配记录与续延闭包，然后**在当前栈上**调用 `opH(op, k)`（不切到 handler 帧，避免 opH
-帧落进捕获区）。`opH` 返回时：
-- 若节点有活动 resume 记录（`node[56] != 0`，说明当前 comp 已在续延上运行），把返回值
-  当作答案交回该 resume 的调用点；
-- 否则走 `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
+帧落进捕获区）。调用 `opH` 前先把 `node[56]` 摘到本帧槽位并清零：同一个节点可以在它自己
+的续延里再次 `perform`（续延副本里 handler 帧仍在），内层 `resume` 会覆盖该槽；不摘走的话，
+外层 `perform` 在 `opH` 返回时会拿到内层的记录，把 answer 交给一个已经放弃的栈段。
+`opH` 返回时：
+- 若节点出现新的 resume 记录（`node[56] != 0`，说明本次 `opH` 发起的续延还在运行），把
+  返回值当作答案交回该 resume 的调用点；
+- 否则把先前摘下的记录写回 `node[56]`（外层 `kdone` 还要靠它配对），走
+  `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
 
 `resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获的整段栈
 拷到**新栈段**（预留 `nativeSegSlackBytes = 32 MiB` 向下空间，向下增长留在段内），把 rbp 链和所有活动

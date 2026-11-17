@@ -132,6 +132,14 @@ exit: 0
 run: "$TMPDIR/effexit-out/bin/effexit" 2>&1
 exit: 3
 
+# 9g) 同一 handler 节点在自己的续延内再次 perform（外层交替另一个 handler）：
+#     perform 入口要清掉节点上的「当前 resume 记录」并在 opH 返回时恢复，否则内层
+#     resume 覆盖外层的记录后，外层 opH 返回时会把答案交给已放弃的续延栈段。
+run: sh -c 'd="$TMPDIR/effnest"; mkdir -p "$d/app"; printf "[package]\nname = \"effnest\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "hi" > "$TMPDIR/effnest-in.txt"; printf "import Base.Eff\nimport Base.EffArgs\nimport Base.EffFs\nimport Base.Int\nimport Base.String\n\nmain : Eff [FsOp, ArgsOp] Int\nmain = do\n  s <- fsReadFile \"$TMPDIR/effnest-in.txt\"\n  _ <- argsGetArgs\n  t <- fsReadFile \"$TMPDIR/effnest-in.txt\"\n  _ <- argsGetArgs\n  pure (strLength s + strLength t)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effnest-out" "$d"'
+exit: 0
+run: "$TMPDIR/effnest-out/bin/effnest" 2>&1
+out-equals: 4
+
 # 9g) 连续 500 次 perform：续延反复迁移/恢复，handler 链与返回值保持。
 run: sh -c 'd="$TMPDIR/effmany"; mkdir -p "$d/app"; printf "[package]\nname = \"effmany\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nmany : Nat -> Eff [POp] Int\nmany n = case n of\n  Zero => pure 0\n  Succ m => do\n    x <- perform (P 1)\n    y <- many m\n    pure (x + y)\n\nmain : Int\nmain = runPure (handle (many (natFromInt 500)) { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effmany-out" "$d"'
 exit: 0
