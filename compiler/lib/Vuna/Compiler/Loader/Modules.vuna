@@ -147,53 +147,52 @@ importName (Import name isQualified alias sp) = name
 export importModuleNames : List Import -> List String
 importModuleNames imports = map importName imports
 
-hasDuplicateName : List String -> Bool
-hasDuplicateName [] = False
-hasDuplicateName (x :: rest) = memName x rest || hasDuplicateName rest
-
-importAliases : List Import -> List (Pair String String)
-importAliases [] = []
-importAliases (imp :: rest) = case imp.importAlias of
-  Nothing => importAliases rest
-  Just alias => Pair alias (importName imp) :: importAliases rest
-
 -- 导入点 span：隐式我们自己的合成 Import 没有真实位置（file = ""）时不加。
 withImportSite : Span -> Diagnostic -> Diagnostic
 withImportSite sp d = if spanFile sp == "" then d else withFallbackSpan sp d
 
-spanOfAlias : List Import -> String -> Span
-spanOfAlias [] a = Span "" 0 0 0 0 0 0
-spanOfAlias (imp :: rest) a = case imp.importAlias of
-  Just b => if b == a then imp.importSpan else spanOfAlias rest a
-  Nothing => spanOfAlias rest a
+-- | 限定名候选：显式 alias / 完整模块名是强候选；最后一段是弱候选。
+-- 强候选非空时只用强候选（强限定优先），否则回落到弱候选。结果按出现顺序去重。
+export qualifierCandidates : List Import -> String -> List String
+qualifierCandidates imports q =
+  let
+    strong =
+      nubNames
+        (append (map importName (filter (\imp => importName imp == q) imports)) (map importName (filter (\imp => aliasIs q imp) imports)))
+  in if notEmptyList strong then strong
+  else nubNames (map importName (filter (\imp => lastSegment (importName imp) == q) imports))
 
-duplicateImportSpan : List Import -> Span
-duplicateImportSpan [] = Span "" 0 0 0 0 0 0
-duplicateImportSpan (imp :: rest) =
-  if memName (importName imp) (importModuleNames rest) then imp.importSpan
-  else duplicateImportSpan rest
+aliasIs : String -> Import -> Bool
+aliasIs q imp = case imp.importAlias of
+  Just alias => alias == q
+  Nothing => False
 
-checkImportAliases : List Import -> List String -> List (Pair String String) -> Check (List a)
-checkImportAliases imports moduleNames [] = OkC []
-checkImportAliases imports moduleNames ((Pair alias m) :: rest) =
-  if validSegment alias then if memName alias (map firstOf rest) then onErrDiag (withImportSite (spanOfAlias imports alias))
-    (rnNoLoc1 (DuplicateModuleAlias alias) alias)
-  else if memName alias moduleNames then if alias == m then checkImportAliases imports moduleNames rest
-  else onErrDiag (withImportSite (spanOfAlias imports alias))
-    (rnNoLoc1 (ModuleAliasConflict alias) alias)
-  else checkImportAliases imports moduleNames rest
-  else onErrDiag (withImportSite (spanOfAlias imports alias)) (rnNoLoc1 (InvalidModuleAlias alias) alias)
+lastSegment : String -> String
+lastSegment name = case splitLastDot (splitOnDot name) of
+  Pair _ base => base
 
+notEmptyList : List a -> Bool
+notEmptyList [] = False
+notEmptyList (_ :: _) = True
+
+-- | 校验 alias 语法（单个合法大写段）；重复 alias / 与模块名冲突不再在 import 期报错，
+-- 由使用点的限定名候选集判定。
 export validateImports : String -> List Import -> Check (List a)
-validateImports label imports =
-  if hasDuplicateName (importModuleNames imports) then onErrDiag (withImportSite (duplicateImportSpan imports)) (rnNoLoc0 DuplicateImport)
-  else checkImportAliases imports (importModuleNames imports) (importAliases imports)
+validateImports label imports = checkImportAliasSyntax imports
+
+checkImportAliasSyntax : List Import -> Check (List a)
+checkImportAliasSyntax [] = OkC []
+checkImportAliasSyntax (imp :: rest) = case imp.importAlias of
+  Nothing => checkImportAliasSyntax rest
+  Just alias =>
+    if validSegment alias then checkImportAliasSyntax rest
+    else onErrDiag (withImportSite imp.importSpan) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
 openModuleNames : List Import -> List String
 openModuleNames [] = []
 openModuleNames (imp :: rest) =
   if imp.importIsQualified then openModuleNames rest
-  else (::) (importName imp) (openModuleNames rest)
+  else nubNames ((::) (importName imp) (openModuleNames rest))
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
 export findImportModule : List Import -> String -> Maybe String
@@ -202,9 +201,6 @@ findImportModule (imp :: rest) name = if importName imp == name then Just (impor
 else case imp.importAlias of
   Just alias => if alias == name then Just (importName imp) else findImportModule rest name
   Nothing => findImportModule rest name
-
-export findImportPrefix : List Import -> String -> Maybe String
-findImportPrefix imports prefix = findImportModule imports prefix
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
 -- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合。

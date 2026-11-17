@@ -1,5 +1,0 @@
-import Base.List
-import Base.List
-
-main : Int
-main = 0

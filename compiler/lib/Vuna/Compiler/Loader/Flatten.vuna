@@ -344,9 +344,8 @@ exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot 
     _ =>
       let
         mprefix = joinDots revPrefix
-      in case findImportPrefix imports mprefix of
-        Nothing => rnAt1 sp (ModuleNotImported mprefix) mprefix
-        Just m => exportSelective modules prefix m base name sp
+      in Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports mprefix)
+        (\m => exportSelective modules prefix m base name sp)
 
 -- | 从指定模块按短名选择性导出：命中多个同名构造子时报歧义。
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Check (List ExportEntry)
@@ -381,14 +380,13 @@ exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnD
     _ =>
       let
         mprefix = joinDots revPrefix
-      in case findImportPrefix imports mprefix of
-        Nothing => rnAt1 sp (ModuleNotImported mprefix) mprefix
-        Just m => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
-          Just e =>
-            OkC
-              ((::) ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
-          Nothing => rnAt2 sp (TypeNotExported base m) base m
-        )
+      in Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports mprefix) (\m => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
+        Just e =>
+          OkC
+            ((::) ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
+        Nothing => rnAt2 sp (TypeNotExported base m) base m
+      )
+      )
 
 -- | `export module C [as X]` 对应的 import：已 import 过 C 就复用，否则合成
 -- `import C [as X]`（保持 import 区的 open 语义；不写进 AST，Fmt 仍按 `export module` 渲染）。
@@ -406,17 +404,27 @@ hasImportOf : List Import -> String -> Bool
 hasImportOf [] name = False
 hasImportOf (imp :: rest) name = importName imp == name || hasImportOf rest name
 
+-- | 导出项里的模块前缀：必须唯一（重复 alias/弱短名在导出定义处报歧义）。
+resolveImportPrefix : List Import -> String -> Check String
+resolveImportPrefix imports prefix = case qualifierCandidates imports prefix of
+  [m] => OkC m
+  [] => rnNoLoc1 (ModuleNotImported prefix) prefix
+  ms => rnNoLoc2 (AmbiguousModule prefix (joinCommaNames ms)) prefix (joinCommaNames ms)
+
+joinCommaNames : List String -> String
+joinCommaNames [] = ""
+joinCommaNames ([x]) = x
+joinCommaNames (x :: rest) = "${x}, ${joinCommaNames rest}"
+
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Check (List ExportEntry)
-exportItemEntries modules prefix decls imports (XModule name sp) = case findImportPrefix imports name of
-  Nothing => rnAt1 sp (ModuleNotImported name) name
-  Just m => exportsOf modules m
-exportItemEntries modules prefix decls imports (XNamespace name alias sp) = case findImportPrefix imports name of
-  Nothing => rnAt1 sp (ModuleNotImported name) name
-  Just m => case alias of
-    Nothing => exportsOf modules m
-    Just path =>
-      if path == name then OkC [namespaceEntry name m]
-      else OkC [namespaceEntry name m, namespaceEntry path m]
+exportItemEntries modules prefix decls imports (XModule name sp) =
+  Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports name) (\m => exportsOf modules m)
+exportItemEntries modules prefix decls imports (XNamespace name alias sp) = Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports name) (\m => case alias of
+  Nothing => exportsOf modules m
+  Just path =>
+    if path == name then OkC [namespaceEntry name m]
+    else OkC [namespaceEntry name m, namespaceEntry path m]
+)
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
   exportTypeAll modules prefix decls imports name sp
 exportItemEntries modules prefix decls imports (XTypeSome name members sp) =

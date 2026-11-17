@@ -1,0 +1,6 @@
+import Ops
+import Ops as O
+import qualified Ops
+
+main : Int
+main = add 1 2 + O.add 2 3 + Ops.add 3 4 + O.add 4 5 + Ops.add 5 6 + add 6 7 - 48

@@ -198,35 +198,93 @@ else case findExportModule es (joinDots (takeSegs k segs)) of
   Just e => Just (Pair e.target k)
   Nothing => longestNamespaceEntryGo es segs (k - 1)
 
--- | 把名字的前缀解析成目标模块 + 剩余段：先找最长真实 import 前缀，再走命名空间路径。
-resolvePathPrefix : List Module -> List Import -> List String -> Check (Maybe (Pair String (List String)))
-resolvePathPrefix modules imports segs =
-  resolvePathPrefixTry modules imports segs (Base.List.length segs - 1)
+-- | 把名字的前缀解析成若干「目标模块 + 剩余段」候选：先找最长真实 import 前缀
+-- （强/弱限定候选），再逐候选走命名空间路径。歧义留到成员查找之后再判定。
+resolvePathPrefixes : List Module -> List Import -> List String -> Check (List (Pair String (List String)))
+resolvePathPrefixes modules imports segs =
+  resolvePathPrefixesTry modules imports segs (Base.List.length segs - 1)
 
-resolvePathPrefixTry : List Module -> List Import -> List String -> Int -> Check (Maybe (Pair String (List String)))
-resolvePathPrefixTry modules imports segs n = if n < 1 then OkC Nothing
-else case findImportPrefix imports (joinDots (takeSegs n segs)) of
-  Just m =>
-    Vuna.Compiler.Base.Common.bind (walkNamespacePaths modules m (dropSegs n segs))
-      (\p => OkC (Just p))
-  Nothing => resolvePathPrefixTry modules imports segs (n - 1)
+resolvePathPrefixesTry : List Module -> List Import -> List String -> Int -> Check (List (Pair String (List String)))
+resolvePathPrefixesTry modules imports segs n = if n < 1 then OkC []
+else case qualifierCandidates imports (joinDots (takeSegs n segs)) of
+  [] => resolvePathPrefixesTry modules imports segs (n - 1)
+  mods => Vuna.Compiler.Base.Common.bind (walkNamespaceCandidates modules mods (dropSegs n segs) []) (\rs => case uniqPathResults rs of
+    [] => resolvePathPrefixesTry modules imports segs (n - 1)
+    ps => OkC ps
+  )
+
+walkNamespaceCandidates : List Module -> List String -> List String -> List (Pair String (List String)) -> Check (List (Pair String (List String)))
+walkNamespaceCandidates modules [] segs acc = OkC (reverse acc)
+walkNamespaceCandidates modules (m :: rest) segs acc =
+  Vuna.Compiler.Base.Common.bind (walkNamespacePaths modules m segs)
+    (\p => walkNamespaceCandidates modules rest segs ((::) p acc))
+
+uniqPathResults : List (Pair String (List String)) -> List (Pair String (List String))
+uniqPathResults [] = []
+uniqPathResults (p :: rest) =
+  if memPathKey (pathKey p) rest then uniqPathResults rest else (::) p (uniqPathResults rest)
+
+pathKey : Pair String (List String) -> String
+pathKey (Pair m segs) = "${m}|${joinDots segs}"
+
+memPathKey : String -> List (Pair String (List String)) -> Bool
+memPathKey key [] = False
+memPathKey key (p :: rest) = pathKey p == key || memPathKey key rest
+
+commaJoin : List String -> String
+commaJoin [] = ""
+commaJoin ([x]) = x
+commaJoin (x :: rest) = "${x}, ${commaJoin rest}"
+
+lastSegmentOf : String -> String
+lastSegmentOf name = case splitLastDot (splitOnDot name) of
+  Pair _ base => base
+
+-- | 候选里第一个剩余段的名字（用于诊断）。
+memberLabel : String -> List (Pair String (List String)) -> String
+memberLabel fallback [] = fallback
+memberLabel fallback ((Pair _ rest) :: more) = case rest of
+  base :: _ => base
+  [] => memberLabel fallback more
+
+firstModuleOf : String -> List (Pair String (List String)) -> String
+firstModuleOf fallback [] = fallback
+firstModuleOf fallback ((Pair m _) :: _) = m
+
+-- | 在候选模块里按短名收集导出条目（只接受剩余段恰好是 `[base]` 的候选）。
+entryHits : (List ExportEntry -> String -> Maybe ExportEntry) -> List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String ExportEntry))
+entryHits pick modules [] base = OkC []
+entryHits pick modules ((Pair m rest) :: more) base = case rest of
+  [member] => if member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case pick es base of
+    Just e =>
+      Vuna.Compiler.Base.Common.bind (entryHits pick modules more base)
+        (\hits => OkC ((::) (Pair m e) hits))
+    Nothing => entryHits pick modules more base
+  )
+  else entryHits pick modules more base
+  _ => entryHits pick modules more base
+
+pickValueEntry : List ExportEntry -> String -> Maybe ExportEntry
+pickValueEntry es base = case findExportValue es base of
+  Just e => Just e
+  Nothing => findExportType es base
+
+pickTypeEntry : List ExportEntry -> String -> Maybe ExportEntry
+pickTypeEntry es base = case findExportType es base of
+  Just e => Just e
+  Nothing => findExportValue es base
 
 resolveQualified : List Module -> String -> List Import -> String -> Check String
-resolveQualified modules label imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefix modules imports (splitOnDot name)) (\p => case p of
-  Nothing => rnNoLoc1 (ModuleNotImported name) name
-  Just (Pair m rest) => case rest of
-    [base] => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportValue es base of
-      Just e => OkC e.target
-      Nothing => case findExportCtor es base of
-        Just e => OkC e.target
-        -- 类型作为项：导入模块的类型名与本地类型名一样可以出现在值位置
-        -- （显式 `(a : Type)` 实参），排在值 / 构造子之后。
-        Nothing => case findExportType es base of
-          Just e => OkC e.target
-          Nothing => rnNoLoc2 (ValueNotExported base m) base m
-    )
-    base :: _ => rnNoLoc2 (ValueNotExported base m) base m
-    [] => rnNoLoc1 (ModuleNotImported name) name
+resolveQualified modules label imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (splitOnDot name)) (\ps => case ps of
+  [] => rnNoLoc1 (ModuleNotImported name) name
+  _ => Vuna.Compiler.Base.Common.bind (entryHits pickValueEntry modules ps (memberLabel name ps)) (\hits => case hits of
+    [] =>
+      rnNoLoc2 (ValueNotExported (memberLabel name ps) (firstModuleOf name ps))
+        (memberLabel name ps) (firstModuleOf name ps)
+    _ =>
+      Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "value" (memberLabel name ps) hits)
+        (\p => OkC (secondOf p).target)
+  )
 )
 
 -- `Family.Ctor` / `Module.Data.Ctor`：前缀先按类型命名空间解析，再在族里找短名。
@@ -283,17 +341,15 @@ else Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) 
 
 -- | 只按模块限定的类型名解析（不走构造子退化）。
 resolveDottedTypeTargetOnly : List Module -> String -> List Import -> String -> Check String
-resolveDottedTypeTargetOnly modules label imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefix modules imports (splitOnDot name)) (\p => case p of
-  Nothing => rnNoLoc1 (ModuleNotImported name) name
-  Just (Pair m rest) => case rest of
-    [base] => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
-      Just e => OkC e.target
-      Nothing => case findExportValue es base of
-        Just e => OkC e.target
-        Nothing => rnNoLoc2 (TypeNotExported base m) base m
-    )
-    base :: _ => rnNoLoc2 (TypeNotExported base m) base m
-    [] => rnNoLoc1 (ModuleNotImported name) name
+resolveDottedTypeTargetOnly modules label imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (splitOnDot name)) (\ps => if isEmptyPaths ps then rnNoLoc1 (ModuleNotImported name) name
+else Vuna.Compiler.Base.Common.bind (entryHits pickTypeEntry modules ps (memberLabel name ps)) (\hits => case hits of
+  [] =>
+    rnNoLoc2 (TypeNotExported (memberLabel name ps) (firstModuleOf name ps)) (memberLabel name ps)
+      (firstModuleOf name ps)
+  _ =>
+    Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "type" (memberLabel name ps) hits)
+      (\p => OkC (secondOf p).target)
+)
 )
 
 -- | 解析 `Family.Ctor`：先解析族名，再在族里找短名。
@@ -331,22 +387,46 @@ allEq x (y :: rest) = x == y && allEq x rest
 
 -- 模式里的限定名：import 模块前缀优先，其次 data family 前缀。
 -- | 模式里的限定构造子：import 模块前缀优先，其次 data family 前缀。
+ctorEntryHits : List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String ExportEntry))
+ctorEntryHits modules [] base = OkC []
+ctorEntryHits modules ((Pair m rest) :: more) base = case rest of
+  [member] => if member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportCtors es member of
+    [] => ctorEntryHits modules more base
+    entries =>
+      Vuna.Compiler.Base.Common.bind (ctorEntryHits modules more base)
+        (\hits => OkC (append (map (\e => Pair m e) entries) hits))
+  )
+  else ctorEntryHits modules more base
+  _ => ctorEntryHits modules more base
+
+ctorFamilyHits : List Module -> List (Pair String (List String)) -> String -> String -> Check (List (Pair String ExportEntry))
+ctorFamilyHits modules [] fam base = OkC []
+ctorFamilyHits modules ((Pair m rest) :: more) fam base = case rest of
+  [f, member] => if f == fam && member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es fam of
+    Just e => Vuna.Compiler.Base.Common.bind (moduleDecls modules m) (\ds => case ctorTargetInDecls m e.target base ds of
+      Just t =>
+        Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules more fam base)
+          (\hits => OkC ((::) (Pair m ExportEntry { kind = "ctor", public = base, target = t, parent = e.target }) hits))
+      Nothing => ctorFamilyHits modules more fam base
+    )
+    Nothing => ctorFamilyHits modules more fam base
+  )
+  else ctorFamilyHits modules more fam base
+  _ => ctorFamilyHits modules more fam base
+
 resolveCtorDotted : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
-resolveCtorDotted modules label prefix ns imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefix modules imports (splitOnDot name)) (\p => case p of
-  Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
-  Just (Pair m rest) => case rest of
-    [base] => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportCtors es base of
-      [] => rnNoLoc2 (ValueNotExported base m) base m
-      entries => uniqueCtorTarget label base entries
-    )
-    [fam, base] => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es fam of
-      Just e => Vuna.Compiler.Base.Common.bind (moduleDecls modules m) (\ds => case ctorTargetInDecls m e.target base ds of
-        Just t => OkC t
-        Nothing => rnNoLoc2 (TypeHasNoConstructor fam base) fam base
-      )
-      Nothing => rnNoLoc2 (TypeNotExported fam m) fam m
-    )
-    _ => resolveFamilyQualifiedCtor modules label prefix ns imports name
+resolveCtorDotted modules label prefix ns imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (splitOnDot name)) (\ps => if isEmptyPaths ps then resolveFamilyQualifiedCtor modules label prefix ns imports name
+else Vuna.Compiler.Base.Common.bind (ctorEntryHits modules ps (memberLabel name ps)) (\hits => if notEmptyList hits then uniqueCtorTarget label (memberLabel name ps) (map secondOf hits)
+else Vuna.Compiler.Base.Common.bind (ctorFamilyHits modules ps (memberLabel name ps) (lastSegmentOf name)) (\familyHits => case familyHits of
+  [] =>
+    rnNoLoc2 (ValueNotExported (memberLabel name ps) (firstModuleOf name ps)) (memberLabel name ps)
+      (firstModuleOf name ps)
+  _ =>
+    Vuna.Compiler.Base.Common.bind
+      (unifyEntryPairs label "constructor" (lastSegmentOf name) familyHits)
+      (\p => OkC (secondOf p).target)
+)
+)
 )
 
 -- 带点表达式的解析：先按「最长可解析模块前缀」尝试限定名/限定值+字段链，
@@ -379,23 +459,47 @@ dropSegs : Int -> List a -> List a
 dropSegs n [] = []
 dropSegs n (x :: rest) = if n <= 0 then (::) x rest else dropSegs (n - 1) rest
 
-resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Check (Maybe Expr)
-resolveQualifiedPath modules label imports segs n sp = Vuna.Compiler.Base.Common.bind (resolvePathPrefix modules imports (takeSegs n segs)) (\p => case p of
-  Nothing => OkC Nothing
-  Just (Pair m rest) => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case rest of
-    [member] => case findExportValue es member of
-      Just e => OkC (Just (EVar e.target sp))
-      Nothing => case findExportCtor es member of
-        Just e => OkC (Just (EVar e.target sp))
-        Nothing => case findExportType es member of
-          Just e => OkC (Just (EVar e.target sp))
-          Nothing => rnNoLoc2 (ValueNotExported member m) member m
-    member :: tail => case findExportValue es member of
-      Just e => OkC (Just (foldFieldChain (EVar e.target sp) tail sp))
-      Nothing => rnNoLoc2 (ValueNotExported member m) member m
-    [] => OkC Nothing
+pathEntryHits : List Module -> List (Pair String (List String)) -> String -> Check (List (Pair String (List String)))
+pathEntryHits modules [] base = OkC []
+pathEntryHits modules ((Pair m rest) :: more) base = case rest of
+  [member] => if member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case pickValueEntry es base of
+    Just e =>
+      Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base)
+        (\hits => OkC ((::) (Pair e.target []) hits))
+    Nothing => pathEntryHits modules more base
   )
+  else pathEntryHits modules more base
+  member :: tail => if member == base then Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportValue es base of
+    Just e =>
+      Vuna.Compiler.Base.Common.bind (pathEntryHits modules more base)
+        (\hits => OkC ((::) (Pair e.target tail) hits))
+    Nothing => pathEntryHits modules more base
+  )
+  else pathEntryHits modules more base
+  [] => pathEntryHits modules more base
+
+uniqPathTargets : List (Pair String (List String)) -> List (Pair String (List String))
+uniqPathTargets [] = []
+uniqPathTargets (p :: rest) =
+  if memPathKey (pathKey p) rest then uniqPathTargets rest else (::) p (uniqPathTargets rest)
+
+resolveQualifiedPath : List Module -> String -> List Import -> List String -> Int -> Span -> Check (Maybe Expr)
+resolveQualifiedPath modules label imports segs n sp = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (takeSegs n segs)) (\ps => if isEmptyPaths ps then OkC Nothing
+else Vuna.Compiler.Base.Common.bind (pathEntryHits modules ps (memberLabel "" ps)) (\hits => case uniqPathTargets hits of
+  [] =>
+    rnNoLoc2 (ValueNotExported (memberLabel "" ps) (firstModuleOf "" ps)) (memberLabel "" ps)
+      (firstModuleOf "" ps)
+  [Pair target []] => OkC (Just (EVar target sp))
+  [Pair target tail] => OkC (Just (foldFieldChain (EVar target sp) tail sp))
+  multiple =>
+    rnNoLoc2 (AmbiguousModule (memberLabel "" ps) (commaJoin (map firstOf multiple)))
+      (memberLabel "" ps) (commaJoin (map firstOf multiple))
 )
+)
+
+isEmptyPaths : List a -> Bool
+isEmptyPaths [] = True
+isEmptyPaths (_ :: _) = False
 
 -- 值位置的裸名：值命名空间（def → ctor）优先；**类型作为项**是最后退路
 -- （`data T ...` 的 `T` 可以当类型层实参传给显式 `(a : Type)` 参数）。
@@ -872,17 +976,15 @@ resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Bas
 
 -- | 限定名（`M.T` / `Family.Ctor`）的类型位置解析。
 resolveDottedTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
-resolveDottedTypeName modules label prefix ns imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefix modules imports (splitOnDot name)) (\p => case p of
-  Nothing => resolveFamilyQualifiedCtor modules label prefix ns imports name
-  Just (Pair m rest) => case rest of
-    [base] => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
-      Just e => OkC e.target
-      -- 类型位置的值（axiom / 类型层 def）在限定名下也可用；是否为合法类型由 Elab 判定。
-      Nothing => case findExportValue es base of
-        Just e => OkC e.target
-        Nothing => rnNoLoc2 (TypeNotExported base m) base m
-    )
-    _ => resolveFamilyQualifiedCtor modules label prefix ns imports name
+resolveDottedTypeName modules label prefix ns imports name = Vuna.Compiler.Base.Common.bind (resolvePathPrefixes modules imports (splitOnDot name)) (\ps => if isEmptyPaths ps then resolveFamilyQualifiedCtor modules label prefix ns imports name
+else Vuna.Compiler.Base.Common.bind (entryHits pickTypeEntry modules ps (memberLabel name ps)) (\hits => case hits of
+  [] =>
+    rnNoLoc2 (TypeNotExported (memberLabel name ps) (firstModuleOf name ps)) (memberLabel name ps)
+      (firstModuleOf name ps)
+  _ =>
+    Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "type" (memberLabel name ps) hits)
+      (\p => OkC (secondOf p).target)
+)
 )
 
 -- 约束项（签名 ctx / 实例 ctx）的接口名单独报错。`C a` 的 `C` 未绑定时若直接走

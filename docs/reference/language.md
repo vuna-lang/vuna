@@ -328,7 +328,9 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   跨包只看得见依赖包 `[export]` 里的模块）；`app/` 是纯入口目录，不是模块根；
   包内每个模块（入口文件除外）**自动导入 `Prelude`**（依赖包 `base` 的顶层模块），
   显式 `import Prelude` 时不重复注入，Prelude 自身不注入；
-- `import` 只能在文件顶部，是**直接依赖**；循环导入、重复 import、重复 alias 都是硬错误；
+- `import` 只能在文件顶部，是**直接依赖**；循环导入是硬错误。重复 import 合并；重复 alias
+  或 alias 与模块名同名不再在 import 期报错，而是形成限定名候选集，只在**使用点**无法
+  唯一确定时报歧义；
 - import 的四种形式：
 
   ```vuna
@@ -338,8 +340,10 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   import qualified Vuna.Compiler.Frontend.Lexer as L  -- 只依赖，并可用 L.PTok
   ```
 
-  alias 只是额外的限定前缀，原全名仍然可用；alias 必须是单个大写段、全文件唯一，且不能
-  与另一个被 import 的模块名冲突；
+  每个 import 产生四种引用形式：裸名（非 `qualified`）、最后一段短名（弱限定，`as` 不抑制）、
+  显式 alias（强限定）、完整模块名（强限定）。强限定优先；多个弱候选里只有一个模块导出该
+  成员时才解析，否则在使用点报歧义。未使用的 import 不参与冲突判定；alias 必须是单个大写段。
+  例：`import Base.Map` 后 `insert` / `Map.insert` / `Base.Map.insert` 都可用。
 - **逐定义导出**：模块默认 **module-private**，只有 `export` 标在定义前的
   名字对下游可见。
 
