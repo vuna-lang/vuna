@@ -295,6 +295,7 @@ printOutcomes opts outcomes = case opts.lintOptFormat of
   LintText => printTextOutcomes opts outcomes
   LintGithub => printGithubOutcomes opts outcomes
   LintJson => pure 0
+  LintSarif => pure 0
 
 printTextOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
 printTextOutcomes opts [] = pure 0
