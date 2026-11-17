@@ -1270,8 +1270,27 @@ startFunc printResult kind mainName runMainM handlers =
     runPart = case runMainM of
       Just rm => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel rm)]
       Nothing => []
-    handlerPart =
-      concatMap (\h => [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]) handlers
+    hostHandlerFlags : List String
+    hostHandlerFlags =
+      [ "Base.EffConsole.runConsoleHost",
+        "Base.EffFs.runFsHost",
+        "Base.EffClock.runClockHost",
+        "Base.EffEnv.runEnvHost",
+        "Base.EffArgs.runArgsHost",
+        "Base.EffExit.runExitHost",
+        "Base.EffStdin.runStdinHost"
+      ]
+    markHost : String -> List Instr
+    markHost h =
+      if memName h hostHandlerFlags then [ IMov (OpReg Rcx) (OpImm 1),
+        IMov (OpRip nextHostLabel) (OpReg Rcx),
+        IMov (OpReg Rdi) (OpReg Rax),
+        ICall (nativeFuncLabel h),
+        IMov (OpReg Rcx) (OpImm 0),
+        IMov (OpRip nextHostLabel) (OpReg Rcx)
+      ]
+      else [IMov (OpReg Rdi) (OpReg Rax), ICall (nativeFuncLabel h)]
+    handlerPart = concatMap markHost handlers
     callMain =
       append
         [IBinReg "and" Rsp (OpImm (0 - 16)), IMov (OpRip nativeStackTopLabel) (OpReg Rsp), ICall (nativeFuncLabel mainName)]

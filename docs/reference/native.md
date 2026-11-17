@@ -107,9 +107,10 @@
 
 运行时表示（`Native.Runtime`）：
 
-- **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 64 B：
+- **handler 链**：`.bss` 的 `rt_handlers` 指向最内层节点。节点 96 B：
   `[0]=key [8]=name [16]=ret [24]=opH [32]=当前 comp 栈顶（base_rsp）`
-  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无；`perform` 调 `opH` 期间暂存在帧内）`。
+  `[40]=prev [48]=base_rbp [56]=当前 resume 记录（0 = 无；`perform` 调 `opH` 期间暂存在帧内）`
+  `[64]=宿主直连标志（入口预装的宿主 handler 为 1）`。
 - **续延记录** 176 B：`[0]=捕获字节 [8]=字节数 [16]=perform 的 rbp [24]=used`
   `[32]=节点 [40]=perform 时的链顶 [48..72]=resume 调用者的 rbp/rsp/ret/r15`
   `[80]=恢复值 v [88]=prev stack_top [96..112]=段迁移的 lo/hi/delta`
@@ -123,6 +124,11 @@
 帧落进捕获区）。调用 `opH` 前先把 `node[56]` 摘到本帧槽位并清零：同一个节点可以在它自己
 的续延里再次 `perform`（续延副本里 handler 帧仍在），内层 `resume` 会覆盖该槽；不摘走的话，
 外层 `perform` 在 `opH` 返回时会拿到内层的记录，把 answer 交给一个已经放弃的栈段。
+**宿主效应直连**：入口预装 handler 的 `run*Host` 调用前把 `rt_next_host` 置 1，`eff_handle`
+在节点创建时把它写进 `node[64]` 并清零。`perform` 命中 `node[64] != 0` 时不捕获、不迁移、
+不弹节点，直接用 `rt_eff_pure_k`（`\r => r` 的续延闭包）调用 `opH(op, k)` 并把结果作为本次
+send 的结果返回——宿主 `opH` 都只在尾位置调用一次 `k`，所以等价于纯动作。
+
 `opH` 返回时按 `node[56]` 三路分派：
 - `0`：本次 `opH` 没有 resume，返回值直接作为 handler answer（走
   `rt_eff_handle_end`，`ret` 不应用）；
@@ -135,6 +141,11 @@
 拷到**新栈段**（预留 `nativeSegSlackBytes = 32 MiB` 向下空间，向下增长留在段内），把 rbp 链和所有活动
 handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 handler 的顶部返回地址
 改成 `rt_eff_kdone`；`rt_stack_top` 指向新栈顶，从 perform 的返回点继续执行。
+
+**abort 跨段恢复**：`opH` 不 resume、或答案需要交回外层调用点时，`perform` 的 abort
+路径会先在 `rt_active_recs` 里找包含目标帧（`node[48]`）的段，按 `limit = base+16`、
+`top = record[104]` 恢复，再返回 `handle` 的调用点；否则会拿着新段的 `limit` 回到旧段，
+在下一次函数 prologue 误报栈溢出。
 
 `rt_eff_kdone`：comp 正常结束后按需弹掉节点、应用一次 `ret`，再**撤销**节点地址平移、
 恢复 `rt_stack_top`，把答案交回 `k` 的调用点。后续嵌套 resume 的答案经
