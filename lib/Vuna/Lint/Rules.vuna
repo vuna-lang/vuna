@@ -434,7 +434,8 @@ else
   let
     start = spanStartOffset sp
     end = tokenEndAt src (spanEndOffset sp)
-  in if end <= start then spanTextLine src sp else trimEnd (sliceOffsets src start end)
+  in if end <= start || start == 0 && spanStartLine sp > 1 then spanTextLine src sp
+  else trimEnd (sliceOffsets src start end)
 
 -- | 内部：行列路径的 span 文本（偏移不可用时的回落）。
 spanTextLine : LintSrc -> Span -> String
