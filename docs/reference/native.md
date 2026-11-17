@@ -387,7 +387,9 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   `check` 上以 `continuation stack overflow` 收口。
 - **GC 的边界**：保守、非移动、不分代、不压缩。因此
   1. 活帧里**已经用过的栈槽**仍被保守扫描（每个活帧可能多留它最后一个临时对象），
-     内存下界随栈深度增长；
+     内存下界随栈深度增长；没有 TCO 时每层尾调用都留一帧，实测 `gc_low_live`
+     （1 万层尾递归、约 170 MB 总分配）的 `GC_LOG` live 从 0.9 MB 涨到 320 MB，
+     墙钟 0.31 s → 9.5 s（[performance.md](performance.md) §8.2）；
   2. 形似指针的 `Int` 会多留对象；非移动所以不会让指针失效；
   3. 空闲块按 2 的幂尺寸类复用、不合并相邻空块，内部碎片最多约 2×；
   4. 超过 64 MiB 的块单独占段、死块进 `rt_huge_free` 首次适配链（可复用，不 `munmap`）；
@@ -398,8 +400,9 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   [performance.md](performance.md) §8.1。native 不做尾调用，16 个基准里 11 个在默认 8 MiB
   栈下会崩溃（exit 139），基准因此在 `ulimit -s unlimited` 下运行，JSON 的
   `meta.stack_policy` 记录该口径、每项另有 `default_stack_ok` 探针；峰值 RSS = 栈页 +
-  live 堆，需与墙钟一起读。TCO / GC 落地时看 `tco_mutual` / `tco_wide` /
-  `gc_low_live` / `gc_array_churn` 四组判定项（[performance.md](performance.md) §8.2）。
+  live 堆，需与墙钟一起读。GC 已落地、TCO 未做：当前 GC 的收益受深栈帧钉住限制，
+  `tco_mutual` / `tco_wide` / `gc_low_live` / `gc_array_churn` 的判定与实测读数见
+  [performance.md](performance.md) §8.2；TCO 落地后重标这四组。
 - 核数限制是**亲和性**，不是 CPU 配额：单核跑多久不管，长时间占用用
   `VUNA_NATIVE_TIMEOUT_MS`；cgroup 只读 v2 挂载根的 `cpu.max`。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。
