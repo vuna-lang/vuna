@@ -318,13 +318,11 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build compiler --target native` 产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断（不再是「任意检查必崩」）。
-  真实工程仍未跑通（native 自举暂不阻塞主线）：当前 HEAD 上 `check base` 约 30–60 s 后
-  SIGSEGV（exit 139，原先记录的「踩 `impossible` trap」读数已不成立）；
-  `check examples/infra` 报 `continuation stack overflow`；`check
-  test/corpus/packages/m34_summary/root` 也是 SIGSEGV（`rt_str_eq` 里以空指针做
-  key/name 比较，`mov (%rdi),%rax`，`rdi = 0`）。后两者是取值链 / 实参一侧的独立问题
-  （待查 `IrApp` 动态 head 与 `perform` 的 key/name 实参），见 [debt.md](debt.md) D89。
+  （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
+  `check test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
+  大包尚未跑通：`check base` / `check examples/infra` 以 `continuation stack overflow`
+  收口（不再是 SIGSEGV）——native 不做尾调用，深递归耗尽固定 32 MiB 续延窗口，是
+  [debt.md](debt.md) D89 记录的已知限度（真正的解法是按需扩栈或尾调用）。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

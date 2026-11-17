@@ -1301,8 +1301,9 @@ arrayToListFn d =
     n = nativeSlotOff 1
     i = nativeSlotOff 2
     acc = nativeSlotOff 3
-  in bridgeFn "arrayToList" 4
-    [IMov (OpMem Rbp arr) (OpReg Rdi), IMov (OpReg Rcx) (OpMem Rdi 0), IMov (OpMem Rbp n) (OpReg Rcx), IMov (OpMem Rbp i) (OpReg Rcx), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rax 8) (OpImm 0), IMov (OpMem Rax 16) (OpImm 0), ILabel ".Lrt_bridge_atl_loop", IMov (OpReg Rcx) (OpMem Rbp i), ITest Rcx Rcx, IJcc "jz" ".Lrt_bridge_atl_done", IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp i) (OpReg Rcx), IBinReg "shl" Rcx (OpImm 3), IMov (OpReg Rdx) (OpMem Rbp arr), ILeaMem Rdx Rdx 8, IMov (OpReg R8) (OpMemX Rdx Rcx 0), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpMem Rax 8) (OpReg R8), IMov (OpReg Rdx) (OpMem Rbp acc), IMov (OpMem Rax 16) (OpReg Rdx), IMov (OpMem Rbp acc) (OpReg Rax), IJmp ".Lrt_bridge_atl_loop", ILabel ".Lrt_bridge_atl_done", IMov (OpReg Rax) (OpMem Rbp acc)]
+    elem = nativeSlotOff 4
+  in bridgeFn "arrayToList" 5
+    [IMov (OpMem Rbp arr) (OpReg Rdi), IMov (OpReg Rcx) (OpMem Rdi 0), IMov (OpMem Rbp n) (OpReg Rcx), IMov (OpMem Rbp i) (OpReg Rcx), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rbp acc) (OpReg Rax), IMov (OpMem Rax 0) (OpImm d.nlNilTag), IMov (OpMem Rax 8) (OpImm 0), IMov (OpMem Rax 16) (OpImm 0), ILabel ".Lrt_bridge_atl_loop", IMov (OpReg Rcx) (OpMem Rbp i), ITest Rcx Rcx, IJcc "jz" ".Lrt_bridge_atl_done", IBinReg "sub" Rcx (OpImm 1), IMov (OpMem Rbp i) (OpReg Rcx), IBinReg "shl" Rcx (OpImm 3), IMov (OpReg Rdx) (OpMem Rbp arr), ILeaMem Rdx Rdx 8, IMov (OpReg R8) (OpMemX Rdx Rcx 0), IMov (OpMem Rbp elem) (OpReg R8), IMov (OpReg Rdi) (OpImm cell), ICall (nativeRtLabel "alloc"), IMov (OpMem Rax 0) (OpImm d.nlConsTag), IMov (OpReg R8) (OpMem Rbp elem), IMov (OpMem Rax 8) (OpReg R8), IMov (OpReg Rdx) (OpMem Rbp acc), IMov (OpMem Rax 16) (OpReg Rdx), IMov (OpMem Rbp acc) (OpReg Rax), IJmp ".Lrt_bridge_atl_loop", ILabel ".Lrt_bridge_atl_done", IMov (OpReg Rax) (OpMem Rbp acc)]
 
 -- | 内部 helper：rdi = List、rsi = k -> rax = 第 k 个元素（调用方保证 k < 长度）。
 strArgAtFn : NativeFunc
