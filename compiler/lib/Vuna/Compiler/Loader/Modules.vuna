@@ -285,6 +285,22 @@ lookupExport kinds name (e :: rest) =
 export findExportValue : List ExportEntry -> String -> Maybe ExportEntry
 findExportValue entries name = lookupExport ["val", "ctor"] name entries
 
+-- | 同名值/构造子条目的全部候选（重导出后可能来自不同 target）。
+export findExportValues : List ExportEntry -> String -> List ExportEntry
+findExportValues entries name = filterKinds ["val", "ctor"] name entries
+
+export findExportTypes : List ExportEntry -> String -> List ExportEntry
+findExportTypes entries name = filterKinds ["type"] name entries
+
+export findExportModules : List ExportEntry -> String -> List ExportEntry
+findExportModules entries name = filterKinds ["module"] name entries
+
+filterKinds : List String -> String -> List ExportEntry -> List ExportEntry
+filterKinds kinds name [] = []
+filterKinds kinds name (e :: rest) =
+  if memName e.kind kinds && e.public == name then (::) e (filterKinds kinds name rest)
+  else filterKinds kinds name rest
+
 export findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
 findExportCtor entries name = lookupExport ["ctor"] name entries
 
@@ -312,6 +328,12 @@ findExportModuleIn idx name = lookupExport ["module"] name (entriesByName name i
 export findExportValueIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
 findExportValueIn idx name = lookupExport ["val", "ctor"] name (entriesByName name idx)
 
+export findExportValuesIn : HashMap String (List ExportEntry) -> String -> List ExportEntry
+findExportValuesIn idx name = filterKinds ["val", "ctor"] name (entriesByName name idx)
+
+export findExportTypesIn : HashMap String (List ExportEntry) -> String -> List ExportEntry
+findExportTypesIn idx name = filterKinds ["type"] name (entriesByName name idx)
+
 export findExportCtorIn : HashMap String (List ExportEntry) -> String -> Maybe ExportEntry
 findExportCtorIn idx name = lookupExport ["ctor"] name (entriesByName name idx)
 
@@ -323,11 +345,11 @@ findExportTypeIn idx name = lookupExport ["type"] name (entriesByName name idx)
 
 modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValueFrom modules [] name = OkC []
-modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportValueIn idx name of
-  Just e =>
+modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportValuesIn idx name of
+  [] => modulesExportingValueFrom modules rest name
+  entries =>
     Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom modules rest name)
-      (\more => OkC ((::) (Pair m e) more))
-  Nothing => modulesExportingValueFrom modules rest name
+      (\more => OkC (append (map (\e => Pair m e) entries) more))
 )
 
 export modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
@@ -349,11 +371,11 @@ modulesExportingCtor modules imports name =
 
 modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingTypeFrom modules [] name = OkC []
-modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportTypeIn idx name of
-  Just e =>
+modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportTypesIn idx name of
+  [] => modulesExportingTypeFrom modules rest name
+  entries =>
     Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom modules rest name)
-      (\more => OkC ((::) (Pair m e) more))
-  Nothing => modulesExportingTypeFrom modules rest name
+      (\more => OkC (append (map (\e => Pair m e) entries) more))
 )
 
 export modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
@@ -424,6 +446,38 @@ findModuleFile roots name importerPkg importerSpan = do
       onErrDiag (withImporterSpan importerSpan)
         (rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name (_joinNames (map candidateDir allowed)))
   )
+
+-- | 在模块 `m` 的命名空间导出里按最长点号前缀走路径，返回最终目标模块名。
+-- 目标模块必须已加载（它是 m 的依赖）。
+export walkNamespaceIndex : List Module -> String -> List String -> Maybe String
+walkNamespaceIndex modules m segs =
+  walkNamespaceIndexFuel (1 + Base.List.length segs) modules m segs
+
+export moduleExportIndexOfOf : Module -> HashMap String (List ExportEntry)
+moduleExportIndexOfOf (Module _ _ _ _ _ _ _ _ _ idx) = idx
+
+walkNamespaceIndexFuel : Int -> List Module -> String -> List String -> Maybe String
+walkNamespaceIndexFuel fuel modules m segs = if fuel <= 0 then Nothing
+else case findModule modules m of
+  Nothing => Nothing
+  Just md => if Base.List.length segs <= 0 then Just (moduleNameOf md)
+  else case longestIndexPrefix (moduleExportIndexOfOf md) segs (Base.List.length segs) of
+    Nothing => Nothing
+    Just (Pair target k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
+
+longestIndexPrefix : HashMap String (List ExportEntry) -> List String -> Int -> Maybe (Pair String Int)
+longestIndexPrefix idx segs k = if k <= 0 then Nothing
+else case findExportModuleIn idx (joinDots (takeSegsLocal k segs)) of
+  Just e => Just (Pair e.target k)
+  Nothing => longestIndexPrefix idx segs (k - 1)
+
+takeSegsLocal : Int -> List String -> List String
+takeSegsLocal n [] = []
+takeSegsLocal n (x :: rest) = if n <= 0 then [] else (::) x (takeSegsLocal (n - 1) rest)
+
+dropFirst : Int -> List String -> List String
+dropFirst n [] = []
+dropFirst n (x :: rest) = if n <= 0 then (::) x rest else dropFirst (n - 1) rest
 
 export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing

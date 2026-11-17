@@ -1,5 +1,0 @@
-module M5 where
-
-export foo : Int
-foo = 1
-export foo : Int

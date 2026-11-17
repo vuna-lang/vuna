@@ -1,4 +1,0 @@
-import M5
-
-main : Int
-main = 0

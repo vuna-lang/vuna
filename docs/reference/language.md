@@ -344,6 +344,9 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   显式 alias（强限定）、完整模块名（强限定）。强限定优先；多个弱候选里只有一个模块导出该
   成员时才解析，否则在使用点报歧义。未使用的 import 不参与冲突判定；alias 必须是单个大写段。
   例：`import Base.Map` 后 `insert` / `Map.insert` / `Base.Map.insert` 都可用。
+
+  命名空间路径也可以直接作为 import：`import A.X as Y`（必须写 `as`）等价于按 A 导出的
+  命名空间路径 X 找到目标模块并以 Y 限定使用；目标模块可以不在依赖包的 `[export]` 里。
 - **逐定义导出**：模块默认 **module-private**，只有 `export` 标在定义前的
   名字对下游可见。
 

@@ -62,7 +62,7 @@
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Num` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
 
-抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Map` / `Base.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会触发 `duplicate export` 硬错误。
+抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Map` / `Base.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
 用哈希容器时显式 `import Base.HashMap` / `Base.HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
 跨包使用时只可见 `base/vuna.toml` `[export]` 列出的模块。
 
@@ -129,7 +129,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 - **有符号 / 算法内部量保留 Int**：源码位置/span、行/列、fuel/终止性度量、de Bruijn
   level、meta id、哈希、退出码/状态、时间、`-1` 哨兵、`List.take/drop/range` 的计数参数。
 - `String.byteLength` 而非 `String.length`：`Base` / `Prelude` 同时重导出 `Base.List`，
-  同名 `length` 会触发 `duplicate export` 硬错误。
+  同名 `length` 会让裸名解析产生歧义（`Base` 门面仍只平铺 `Base.List` 一侧）。
 - `Nat` 可隐式提升为 `Int`（`natToInt`）；反向必须显式 `fromInt`/`fromIntMaybe`。
   算术与模式匹配规则见 [primitives.md](primitives.md) / [operators.md](operators.md)。
 
