@@ -208,6 +208,34 @@ in
     script = ./vuna-tests.sh;
   };
 
+  # JS 宿主（V8）跑 wasm 后端矩阵：浏览器可跑面的行为门禁。
+  # 参考通道独有用例（用户自定义 handler）在 allowlist 里按 skip 计。
+  vuna-tests-wasm-js = vunaCheck {
+    name = "vuna-tests-wasm-js";
+    srcs = testTree;
+    env = {
+      VUNA_SEED = "${vuna-seed}/bin/vuna-seed";
+      VUNA_TEST_TIERS = "fast integration";
+      VUNA_TEST_BACKENDS = "wasm";
+      VUNA_WASM_HOST = "js";
+      VUNA_TEST_ALLOW_FAIL = "test/suite/wasm-js-allow-fail.txt";
+    };
+    nativeBuildInputs = e2eTools;
+    script = ./vuna-tests.sh;
+  };
+
+  # 浏览器可跑面：默认特性 validate + headless Chromium 冒烟（缺浏览器时 SKIP）。
+  vuna-wasm-browser = mkCheck {
+    name = "vuna-wasm-browser";
+    srcs = testTree;
+    env = {
+      VUNA = "${vuna}/bin/vuna";
+      VUNA_CHROMIUM = "${pkgs.chromium}/bin/chromium";
+    };
+    nativeBuildInputs = e2eTools ++ [ pkgs.chromium ];
+    script = ./wasm-browser-smoke.sh;
+  };
+
   vuna-tests-native = vunaCheck {
     name = "vuna-tests-native";
     srcs = testTree;

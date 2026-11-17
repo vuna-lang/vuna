@@ -1,0 +1,20 @@
+# JS 宿主（浏览器可跑面）门禁的「允许失败」清单（`VUNA_TEST_ALLOW_FAIL`）。
+# 一行一条、按 case id 子串匹配；命中且失败的用例按 skip 计。
+#
+# 这里只放**参考通道（wasmtime）独有**的用例：用户自定义 handler / 命名实例 mock handler
+# 走 stack switching，默认引擎拒绝编译（见 docs/reference/wasm.md §8.5 与 debt D102）。
+# 浏览器一旦支持 stack switching（或做选择性 CPS），这张表应该清空。
+pure_cross/08_scoped_exn
+pure_cross/09_handle_exn
+pure_cross/38_eff_resume
+pure_cross/39_eff_post_k
+pure_cross/40_eff_abort
+pure_cross/41_eff_two_performs
+pure_cross/42_eff_nested
+pure_cross/43_eff_return_type
+pure_cross/45_eff_normal_ret
+pure_cross/46_eff_nested_unused
+pure_cross/47_eff_deep
+pure_cross/48_eff_many
+effect_common/26_eff_console
+effect_common/40_eff_fs_named
