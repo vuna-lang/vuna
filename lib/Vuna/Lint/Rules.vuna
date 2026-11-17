@@ -407,6 +407,12 @@ tokLen (PTok (TStr s) p) = strLength s + 2
 tokLen (PTok (TTmpl multi parts endP) p) = 0
 tokLen (PTok TEof p) = 0
 
+-- | 内部：按 span 查 token；偏移缺失时回落到行列。
+tokenAtSpan : LintSrc -> Span -> Maybe PTok
+tokenAtSpan src sp = case tokenAtOffset src (spanStartOffset sp) of
+  Just t => Just t
+  Nothing => tokenAt src.lintSrcToks (spanStartLine sp) (spanStartCol sp)
+
 -- | 内部：旧行列路径的下一 token（仅用于偏移不完整的历史 span 回落）。
 nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
 nextTokAfter [] line col = Nothing
@@ -973,7 +979,7 @@ substTokenPairs : LintSrc -> Lane -> List (Pair String String) -> Expr -> List (
 substTokenPairs src lane [] body = []
 substTokenPairs src lane ((Pair name pat) :: rest) body = case laneVarSpan name lane of
   Nothing => substTokenPairs src lane rest body
-  Just sp => case tokenAtOffset src (spanStartOffset sp) of
+  Just sp => case tokenAtSpan src sp of
     Nothing => substTokenPairs src lane rest body
     Just tok => Pair tok (substReplacement name pat body) :: substTokenPairs src lane rest body
 
@@ -982,7 +988,7 @@ substsApplicable : LintSrc -> Lane -> List (Pair String String) -> Bool
 substsApplicable src lane [] = True
 substsApplicable src lane ((Pair name pat) :: rest) = case laneVarSpan name lane of
   Nothing => False
-  Just sp => case tokenAtOffset src (spanStartOffset sp) of
+  Just sp => case tokenAtSpan src sp of
     Nothing => False
     Just tok => substsApplicable src lane rest
 
@@ -1156,7 +1162,7 @@ laneReplace src lane name replacement startLine startCol =
     headText = laneHeadText src.lintSrcLines lane startLine startCol
   in case laneVarSpan name lane of
     Nothing => headText
-    Just sp => case tokenAtOffset src (spanStartOffset sp) of
+    Just sp => case tokenAtSpan src sp of
       Nothing => headText
       Just tok => replaceIdentInLine headText tok replacement
 
