@@ -115,7 +115,7 @@
 - 否则走 `rt_eff_handle_end`，返回值就是 handler answer，`ret` 不再应用。
 
 `resume`（`k v`）：检查 one-shot；保存调用者的 rbp/rsp/ret/r15 到记录；把捕获的整段栈
-拷到**堆上的新栈段**（`len + 128 KiB` slack，向下增长留在段内），把 rbp 链和所有活动
+拷到**新栈段**（预留 `nativeSegSlackBytes = 32 MiB` 向下空间，向下增长留在段内），把 rbp 链和所有活动
 handler 节点的 `base_rsp` / 同源 `base_rbp` 平移 `delta`，把匹配 handler 的顶部返回地址
 改成 `rt_eff_kdone`；`rt_stack_top` 指向新栈顶，从 perform 的返回点继续执行。
 
@@ -128,9 +128,12 @@ handler 帧（节点地址随段平移，返回时再撤销）。
 
 捕获缓冲与迁移栈段各有一条 free list（`rt_cap_free` / `rt_seg_free`），块大小向上取整到
 2 的幂：`perform` 的捕获块在 `resume` 拷走后立即归还，`kdone` / abort 归还栈段，因此
-顺序 effect 只复用固定的几档块，不会每次新 `mmap`。每个 resume 的 slack 固定 128 KiB
-（约 500 个常见帧）；函数 prologue 比较 `rt_stack_limit`，越界 trap
-`continuation stack overflow` 而不是踩堆。
+顺序 effect 只复用固定的几档块，不会每次新 `mmap`。每个 resume 预留 32 MiB 向下空间
+（页惰性提交：没有真正用到的页不计 RSS；段大小 `pow2_ceil(len + 32 MiB + 16)`）；函数
+prologue 比较 `rt_stack_limit`，越过段基址 trap `continuation stack overflow` 而不是踩堆。
+栈段从**专用高地址区间**（`0x2000_0000_0000` 起、`MAP_FIXED_NOREPLACE`）分配：resume 的
+重定位是保守扫描，落在 `(perform_rbp, stack_top)` 里的字一律当栈指针平移，堆/arena 指针
+如果也在这个区间里就会被误平移——固定区间让两者不相交。
 
 嵌套 effect 的总开销仍随深度增长：每次 resume 复制当前整段栈并保留自己的栈段（外层
 handler 帧还在上面），所以 N 层顺序 perform 是 O(N²) 拷贝 / 内存（500 次约 22 ms、
@@ -305,15 +308,17 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 
 - 变体分支的**嵌套深匹配**：case 只按 tag 做一次线性分派，不做多模式矩阵。
 - 续延是**一次性**（one-shot）：resume 两次 trap；multi-shot 不做。每次 resume 把
-  `[perform_rbp, rt_stack_top)` 整段栈拷到堆上的新栈段（128 KiB slack，约 500 个常见帧；
+  `[perform_rbp, rt_stack_top)` 整段栈拷到新栈段（32 MiB 预留，页惰性提交；
   越界 trap）；捕获块与栈段都按 2 的幂分档复用，但嵌套 resume 会同时保留多层栈段，
   因此 N 层顺序 effect 仍是 O(N²) 时间与内存（见 §3.4 的读数）。
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build compiler --target native` 已能产出可链接的 `bin/vuna-compiler`
-  （`version` / 帮助可用、审计为 0 个缺口），但真实编译会撞续延栈段：128 KiB slack 在任意
-  输入的 `check` 上都 trap `continuation stack overflow`；直接调大 slack（8 MiB）会触发
-  **保守栈重定位**把落在 `(perform_rbp, stack_top)` 区间里的堆指针当成栈指针平移，导致
-  SIGSEGV。要跑通自举需要分段栈/按需扩容（或精确栈映射），见 [debt.md](debt.md) D89。
+  （`version` / 帮助可用、审计为 0 个缺口）。真实编译（冷 store 的 `check <任意文件>`）仍
+  会 SIGSEGV：coredump 显示在**堆地址上取指**，续延记录字段自洽，但某帧的 saved-rbp /
+  返回地址槽被堆指针覆盖（RSP 在 resume 点下方几十字节）——即某个「闭包」实际是 record
+  （其第 0 槽是另一个闭包指针）。已知与 fs/readDir/parse/sort/HashMap/record update 无关；
+  待查的是 `IrApp` 动态 head 的取值链（`genApplyCall` 的 head 槽）。续延栈段本身已能容纳
+  深递归（32 MiB 预留），见 [debt.md](debt.md) D89。
 - 无 GC/RC：字符串只增不减；堆是可增长 arena（初始 1 MiB，越界 `mmap` 新段），
   段不回收。
 - `Int`/`Nat`/`Bool` 的 heap 布局、对象头/复用（Perceus RC 依赖这一层）。

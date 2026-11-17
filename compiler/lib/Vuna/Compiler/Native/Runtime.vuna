@@ -109,9 +109,20 @@ termiosLabel = "rt_termios"
 export cleanupHeadLabel : String
 cleanupHeadLabel = "rt_cleanups"
 
--- | `resume` 迁移栈段的向下可用空间（字节）：128 KiB ≈ 500 个常见帧。
+-- | `resume` 迁移栈段的向下可用空间（字节）。段按 `pow2_ceil(len + slack + 16)` 预留，
+--   页惰性提交：嵌套 handler 各占一段时，只有真正用到的页计入 RSS。
 export nativeSegSlackBytes : Int
-nativeSegSlackBytes = 131072
+nativeSegSlackBytes = 33554432
+
+-- | 迁移栈段的专用地址区间起点。栈段必须**远离 arena / 堆**（`mmap(NULL)` 的 0x7f... 一带）：
+--   `effResume` 的重定位是保守扫描——落在 `(perform_rbp, stack_top)` 里的字一律当栈指针
+--   平移，堆指针如果也在这个区间里就会被误平移。固定高地址区间让两者不相交。
+export nativeStackArenaBase : Int
+nativeStackArenaBase = 35184372088832
+
+-- | 栈段区间的 bump 指针（0 = 尚未使用）。
+export stackArenaLabel : String
+stackArenaLabel = "rt_stack_arena"
 
 -- | 第二个路径缓冲（`rename` / `symlink` / 原子写的 tmp 路径要同时持有两个 C 路径）。
 export pathBuf2Label : String
@@ -170,6 +181,7 @@ nativeBss =
     NativeBss tsLabel 16 8,
     NativeBss termiosLabel 64 8,
     NativeBss cleanupHeadLabel 8 8,
+    NativeBss stackArenaLabel 8 8,
     NativeBss pathBuf2Label 4096 8,
     NativeBss statBufLabel 256 8,
     NativeBss dirBufLabel 32768 8,
@@ -553,7 +565,7 @@ freeBlockFn =
 effAllocSegmentFn : NativeFunc
 effAllocSegmentFn =
   rtRawFunc "eff_alloc_segment"
-    [IMov (OpReg R8) (OpImm 0), IMov (OpReg R9) (OpRip segFreeLabel), ILabel ".Lrt_alloc_seg_loop", ITest R9 R9, IJcc "jz" ".Lrt_alloc_seg_fresh", IMov (OpReg R10) (OpMem R9 8), ICmp (OpReg R10) (OpReg Rdi), IJcc "jae" ".Lrt_alloc_seg_found", IMov (OpReg R8) (OpReg R9), IMov (OpReg R9) (OpMem R9 0), IJmp ".Lrt_alloc_seg_loop", ILabel ".Lrt_alloc_seg_found", IMov (OpReg Rsi) (OpMem R9 8), IMov (OpReg R10) (OpMem R9 0), ITest R8 R8, IJcc "jz" ".Lrt_alloc_seg_head", IMov (OpMem R8 0) (OpReg R10), IJmp ".Lrt_alloc_seg_ret", ILabel ".Lrt_alloc_seg_head", IMov (OpRip segFreeLabel) (OpReg R10), ILabel ".Lrt_alloc_seg_ret", IMov (OpReg Rax) (OpReg R9), IRet, ILabel ".Lrt_alloc_seg_fresh", IPush Rdi, ICall (nativeRtLabel "alloc"), IPop Rsi, IRet]
+    [IMov (OpReg R8) (OpImm 0), IMov (OpReg R9) (OpRip segFreeLabel), ILabel ".Lrt_alloc_seg_loop", ITest R9 R9, IJcc "jz" ".Lrt_alloc_seg_fresh", IMov (OpReg R10) (OpMem R9 8), ICmp (OpReg R10) (OpReg Rdi), IJcc "jae" ".Lrt_alloc_seg_found", IMov (OpReg R8) (OpReg R9), IMov (OpReg R9) (OpMem R9 0), IJmp ".Lrt_alloc_seg_loop", ILabel ".Lrt_alloc_seg_found", IMov (OpReg Rsi) (OpMem R9 8), IMov (OpReg R10) (OpMem R9 0), ITest R8 R8, IJcc "jz" ".Lrt_alloc_seg_head", IMov (OpMem R8 0) (OpReg R10), IJmp ".Lrt_alloc_seg_ret", ILabel ".Lrt_alloc_seg_head", IMov (OpRip segFreeLabel) (OpReg R10), ILabel ".Lrt_alloc_seg_ret", IMov (OpReg Rax) (OpReg R9), IRet, ILabel ".Lrt_alloc_seg_fresh", IMov (OpReg R8) (OpRip stackArenaLabel), ITest R8 R8, IJcc "jnz" ".Lrt_alloc_seg_arena_ok", IMov (OpReg R8) (OpImm nativeStackArenaBase), IMov (OpRip stackArenaLabel) (OpReg R8), ILabel ".Lrt_alloc_seg_arena_ok", IMov (OpReg R9) (OpReg R8), IBinReg "add" R9 (OpReg Rdi), IMov (OpRip stackArenaLabel) (OpReg R9), IMov (OpReg Rsi) (OpReg Rdi), IMov (OpReg Rdi) (OpReg R8), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 1048610), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jge" ".Lrt_alloc_seg_new_done", IBinReg "xor" Rdi (OpReg Rdi), IMov (OpReg Rdx) (OpImm 3), IMov (OpReg R10) (OpImm 34), IMov (OpReg R8) (OpImm (0 - 1)), IBinReg "xor" R9 (OpReg R9), IMov (OpReg Rax) (OpImm 9), ISyscall, ICmp (OpReg Rax) (OpImm 0), IJcc "jl" (nativeRtLabel "trap_oom"), ILabel ".Lrt_alloc_seg_new_done", IRet]
 
 -- | 归还迁移栈段：`rdi` = 续延记录；块基址/大小在 `[128]` / `[136]`。保留 rax。
 effFreeSegmentFn : NativeFunc
@@ -903,6 +915,7 @@ cleanupPopFn =
 -- 语义参考 `Codegen.Term.dtp_try*`：失败不抛，写 `rt_host_status` 后返回默认值。
 -- errno → 码表与 `dtp_hostCode` 一致（ENOENT=1、EACCES/EPERM=2、ENOSPC=3、
 -- ENOTDIR=4、EISDIR=5、EEXIST=6、其它=9）。
+-- | 临时诊断：SIGSEGV 处理（把 RIP/RSP/RBP 原样写到 stderr 后 exit 70）。
 -- | `rdi` = 负 errno（syscall 返回值）→ rax = 宿主码，并写状态槽。
 fsFailFn : NativeFunc
 fsFailFn =

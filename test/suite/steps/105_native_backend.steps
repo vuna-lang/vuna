@@ -163,7 +163,7 @@ run: "$TMPDIR/effnested-out/bin/effnested" 2>&1
 out-equals: 211
 
 # 9l) 续延栈段越界：恢复后的深递归超过 slack 时 trap（exit 2），不踩堆。
-run: sh -c 'd="$TMPDIR/effovf"; mkdir -p "$d/app"; printf "[package]\nname = \"effovf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 3000)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effovf-out" "$d"'
+run: sh -c 'd="$TMPDIR/effovf"; mkdir -p "$d/app"; printf "[package]\nname = \"effovf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.Nat\n\ndata POp : Type where\n  P : Int -> POp\n\nresP : POp -> Type\nresP (P n) = Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 400000)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effovf-out" "$d"'
 exit: 0
 run: "$TMPDIR/effovf-out/bin/effovf" 2>&1
 exit: 2
