@@ -353,7 +353,7 @@ export data Control v(..) : Type where
 
 -- | handler frame：key、name、ret、opH、comp、kOuter、prev。
 export data Frame v(..) : Type where
-  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Int -> Frame v
+  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Int -> Int -> Frame v
 
 -- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文。
 export data Ctx v(..) : Type where
@@ -374,42 +374,47 @@ emptySt = MSt Nothing Nothing (HashMap arrayEmpty) 0 [] 0
 frameKey : Frame v -> String
 frameKey f =
   case f of
-    MkFrame key _ _ _ _ _ _ _ => key
+    MkFrame key _ _ _ _ _ _ _ _ => key
 
 frameName : Frame v -> String
 frameName f =
   case f of
-    MkFrame _ name _ _ _ _ _ _ => name
+    MkFrame _ name _ _ _ _ _ _ _ => name
 
 frameRet : Frame v -> (v -> v)
 frameRet f =
   case f of
-    MkFrame _ _ ret _ _ _ _ _ => ret
+    MkFrame _ _ ret _ _ _ _ _ _ => ret
 
 frameOpH : Frame v -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v)
 frameOpH f =
   case f of
-    MkFrame _ _ _ opH _ _ _ _ => opH
+    MkFrame _ _ _ opH _ _ _ _ _ => opH
 
 frameComp : Frame v -> (v -> (v -> Control v) -> Control v)
 frameComp f =
   case f of
-    MkFrame _ _ _ _ comp _ _ _ => comp
+    MkFrame _ _ _ _ comp _ _ _ _ => comp
 
 frameKOuter : Frame v -> (v -> Control v)
 frameKOuter f =
   case f of
-    MkFrame _ _ _ _ _ kOuter _ _ => kOuter
+    MkFrame _ _ _ _ _ kOuter _ _ _ => kOuter
 
 framePrev : Frame v -> Maybe (Frame v)
 framePrev f =
   case f of
-    MkFrame _ _ _ _ _ _ prev _ => prev
+    MkFrame _ _ _ _ _ _ prev _ _ => prev
 
 frameCleanDepth : Frame v -> Int
 frameCleanDepth f =
   case f of
-    MkFrame _ _ _ _ _ _ _ d => d
+    MkFrame _ _ _ _ _ _ _ d _ => d
+
+frameIdOf : Frame v -> Int
+frameIdOf f =
+  case f of
+    MkFrame _ _ _ _ _ _ _ _ i => i
 
 ctxPrompt : Ctx v -> Frame v
 ctxPrompt c =
@@ -427,7 +432,7 @@ ctxPrev c =
     MkCtx _ _ prev => prev
 
 samePrompt : Frame v -> Frame v -> Bool
-samePrompt a b = frameKey a == frameKey b && frameName a == frameName b
+samePrompt a b = frameIdOf a == frameIdOf b
 
 depth : Int -> Maybe (Frame v) -> Int
 depth n chain =
@@ -451,7 +456,7 @@ inChain fuel f chain =
 reinstall : Frame v -> Maybe (Frame v) -> Frame v
 reinstall f chain =
   case f of
-    MkFrame key name ret opH comp kOuter _ d => MkFrame key name ret opH comp kOuter chain d
+    MkFrame key name ret opH comp kOuter _ d i => MkFrame key name ret opH comp kOuter chain d i
 
 reinstallIfMissing : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
 reinstallIfMissing fuel f chain = if inChain fuel f chain then chain else Just (reinstall f chain)
@@ -484,9 +489,10 @@ machineScoped fuel st f sc =
             (\x => MkDone x)
             (Just f)
             st.msCleanDepth
+            st.msNext
       in runGo
         (fuel - 1)
-        (MSt (Just frame) Nothing st.msUsed st.msNext st.msCleanups st.msCleanDepth)
+        (MSt (Just frame) Nothing st.msUsed (st.msNext + 1) st.msCleanups st.msCleanDepth)
         ((th 0) (\x => MkReturn frame x))
 
 -- | 驱动到 `Done`：单层循环。`step` 只做一次派发，把「新状态 + 下一个 Control」
@@ -552,14 +558,15 @@ step fuel st c =
                 k
                 st.msFrames
                 st.msCleanDepth
+                st.msNext
           in Pair
-            (MSt (Just frame) st.msCtx st.msUsed st.msNext st.msCleanups st.msCleanDepth)
+            (MSt (Just frame) st.msCtx st.msUsed (st.msNext + 1) st.msCleanups st.msCleanDepth)
             ((th (toObj 0)) (\x => MkReturn frame x))
     MkHandle key name ret opH comp kOuter =>
       let
-        frame = MkFrame key name ret opH comp kOuter st.msFrames st.msCleanDepth
+        frame = MkFrame key name ret opH comp kOuter st.msFrames st.msCleanDepth st.msNext
       in Pair
-        (MSt (Just frame) st.msCtx st.msUsed st.msNext st.msCleanups st.msCleanDepth)
+        (MSt (Just frame) st.msCtx st.msUsed (st.msNext + 1) st.msCleanups st.msCleanDepth)
         ((comp (toObj 0)) (\x => MkReturn frame x))
 
 -- | 交出一个答案：resume 期间（ctx 命中同一帧）先回到该次 resume 的 kRest，

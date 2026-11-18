@@ -420,6 +420,15 @@ main : Eff [ConsoleOp, ClockOp] Int   -- 先 runPure(handleClock "mock" …)，�
 ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较（而不是 key+name），
 或在 `MkResume` 重装时保留整条链；然后用该复现验证，再跑 native 矩阵与全量。
 
+- **帧身份（已落地）**：`Frame` 增加 `frameId`（`MkHandle`/`MkSelf`/`machineScoped`
+  从 `st.msNext` 分配），`samePrompt`/`inChain`/重装改用它比较——wat 的 `ref.eq` 语义。
+  wasm 337 / 全量 7209 绿。
+- **native 仍卡在同一处**：帧身份修好后，`console+clock` 复现依旧报
+  `unhandled console/default | clock/default#0`——外层 console 帧已经**被 finish 弹掉**
+  （链上只剩 clock#0），说明某个 `MkReturn`/`MkKDone` 拿着 console 帧走到了非 ctx 路径。
+  下一步：给 `finish` 与 `unwind` 加临时日志（帧 id + 来源），确认是哪次返回把 console
+  弹掉的（怀疑与嵌套 `runPure` 后 `progReal` 的 resume/unwind 交互）。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
