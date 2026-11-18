@@ -452,6 +452,29 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   信息时按 Eff 返回处理），或在 `processOpHIOWith` 里把 `onExit` 的调用改成显式
   `runEff` 形式。
 
+### 9.2.5 native 已切到库机器（D89 栈拷贝删除）
+
+`Native/Module.build` 现在对 `ordered` 调 `cpsDefsMachine`，seeds 加
+`Base.Effect.Core.machineRun`：native 与 wasm 跑同一份机器代码。随后把
+`nativeRtFuncs` 里的栈拷贝家族（`eff_perform/eff_handle/eff_self/eff_alloc_capture/
+eff_alloc_segment/eff_free_segment/eff_translate_nodes/eff_unrelocate/eff_resume/
+eff_kdone/eff_pure_k/free_capture/trap_unhandled_effect/trap_resume_twice/trap_bad_stack`）
+与 `prim_effectPerform/Handle/Self` 的符号映射一并移除——用户代码已不引用它们
+（生成的模块 `.s` 里 0 处 `rt_eff_*`）。
+
+读数：
+
+```text
+--backend native：445 checks 全绿
+wasm：337 checks 全绿
+全量：7206 checks 全绿
+```
+
+`105_native_backend` 按库机器改写：删掉「续延栈段越界」用例（段已不存在），增量编译
+计数从 3 改为 8。`30_eff_process` 随 process handler 简化一起通过。
+
+剩余：OCaml 仍用 `Effect.Deep`；`Wasm/Step.vuna` 的 `$rt_m*` 死表仍静态发射。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
