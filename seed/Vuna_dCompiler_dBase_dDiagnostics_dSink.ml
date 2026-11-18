@@ -13,15 +13,15 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart = (fun s -> (String.conca
 
 # 42 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart = (fun mc0 -> (match mc0 with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__0) -> (String.concat "" ["1:"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine); ","])
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> "0,"
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__0) -> (String.concat "" ["1:"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol); ":"; (bi_strFromInt (dtb__0).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine); ","])
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> "0,"
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 36 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__1, dtb__2) -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart (dtb__1).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan) ^ (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey dtb__2))
-  | Base_dList.C_Base_dList_dList_Nil -> ""
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__1, dtb__2) -> ((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspanPart (dtb__1).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan) ^ (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey dtb__2))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -30,14 +30,14 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey = (fun d -> (String.conca
 
 # 56 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun mc0 mc1 mc2 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, dtb__4) -> ((fun key -> (match ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) key) mc1) with
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__5) -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) mc1) mc2)
-  | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) ((((Base_dHashMap.v_Base_dHashMap_dinsert Base_dString.v_Hashable_uString) key) true) mc1)) (Base_dList.C_Base_dList_dList__x58__x58_ (dtb__3, mc2)))
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__3, dtb__4) -> ((fun key -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) key) mc1) with
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__5) -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) mc1) mc2)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) key) true) mc1)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__3, mc2)))
   | _ -> failwith "DT: impossible branch"
 )) (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey dtb__3))
-  | Base_dList.C_Base_dList_dList_Nil -> (Base_dList.v_Base_dList_dreverse mc2)
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 66 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings = (fun ds -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo ds) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil)) Base_dList.C_Base_dList_dList_Nil))
+let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings = (fun ds -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo ds) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil))

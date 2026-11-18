@@ -2,20 +2,20 @@ open Vuna_runtime
 # 13 "Vuna/Compiler/Elab/InstName.vuna"
 let v_Vuna_dCompiler_dElab_dInstName_dinstanceHeadName = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp (dtb__0, dtb__1, dtb__2) -> (match dtb__0 with
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__3, dtb__4) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__3))
-  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__3, dtb__4) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__3))
+  | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
 )
-  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__5, dtb__6) -> (Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__5))
-  | _ -> Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing
+  | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__5, dtb__6) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__5))
+  | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
 ))
 
 # 36 "Vuna/Compiler/Elab/InstName.vuna"
-let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun s -> ((Base_dString.v_Base_dString_djoin "_") ((Base_dString.v_Base_dString_dsplit ".") s)))
+let v_Vuna_dCompiler_dElab_dInstName_dsanitizeInstName = (fun s -> ((Base_dData_dString.v_Base_dData_dString_djoin "_") ((Base_dData_dString.v_Base_dData_dString_dsplit ".") s)))
 
 # 51 "Vuna/Compiler/Elab/InstName.vuna"
 let rec v_Vuna_dCompiler_dElab_dInstName_dargSuffix = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__7, dtb__8) -> (String.concat "" ["_"; (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__7); (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__8)])
-  | Base_dList.C_Base_dList_dList_Nil -> ""
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__7, dtb__8) -> (String.concat "" ["_"; (v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__7); (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__8)])
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 # 57 "Vuna/Compiler/Elab/InstName.vuna"
@@ -29,8 +29,8 @@ and v_Vuna_dCompiler_dElab_dInstName_dexprNameFor = (fun e -> (match e with
 
 # 46 "Vuna/Compiler/Elab/InstName.vuna"
 let v_Vuna_dCompiler_dElab_dInstName_dargSuffixTail = (fun mc0 -> (match mc0 with
-  | Base_dList.C_Base_dList_dList__x58__x58_ (dtb__18, dtb__19) -> ((v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__18) ^ (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__19))
-  | Base_dList.C_Base_dList_dList_Nil -> ""
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__18, dtb__19) -> ((v_Vuna_dCompiler_dElab_dInstName_dexprNameFor dtb__18) ^ (v_Vuna_dCompiler_dElab_dInstName_dargSuffix dtb__19))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
