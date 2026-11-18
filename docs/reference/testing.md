@@ -469,6 +469,11 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 避免同一 sha 上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` /
 `CI_EXCLUDE`（按 flake 求值枚举，新增 check 不用手工同步列表）。
 
+`flake-check` 的 checks 步是 `continue-on-error`，失败也按成功收尾：cache action 的
+保存是 `post-if: success()`，job 一红就不存 store，下一次 push 只能从更旧的 cache 冷
+构建。代价是 job 状态不再表示门禁结论，因此单独有 `ci-status` job 汇总三个 job 的
+结果（`needs.<job>.result` + `flake-check` 的 step outcome），它才是唯一失败点。
+
 语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、

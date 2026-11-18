@@ -31,6 +31,10 @@ jobs:
   flake-check:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # 门禁结论经 ci-status 汇总：本 job 的 checks 步失败时仍要让 job 收尾成功，
+    # 否则 cache 的 post 步骤（post-if: success()）不会保存 store。
+    outputs:
+      checks: ${{ steps.checks.outcome }}
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v27
@@ -61,6 +65,11 @@ jobs:
       - name: flake 求值
         run: env NIX_CONFIG='eval-cache = false' nix flake check --no-build
       - name: checks
+        id: checks
+        # 失败也要让 job 成功收尾：cache-nix-action 的 post 步骤是
+        # `post-if: success()`——job 一红就不存 store，下次 run 只能从更旧的
+        # cache 冷构建（实测 3 min → 17 min）。门禁结论由 ci-status 汇总。
+        continue-on-error: true
         env:
           CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e"
         run: sh nix/ci.sh
@@ -109,6 +118,31 @@ jobs:
           CI_JOBS: 1
           CI_CHECKS: "vuna-tests-e2e"
         run: sh nix/ci.sh
+
+  # 门禁结论汇总：三个 job 的实际结果在这里变成唯一失败点。flake-check 用
+  # continue-on-error 保住 store cache，所以它的失败不会体现在 job 状态上，
+  # 必须由本 job 读 step outcome 才能表达「红」。
+  ci-status:
+    needs: [flake-check, tests-gate, tests-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 汇总门禁结论
+        env:
+          FLAKE_JOB: ${{ needs.flake-check.result }}
+          FLAKE_CHECKS: ${{ needs.flake-check.outputs.checks }}
+          GATE_JOB: ${{ needs.tests-gate.result }}
+          E2E_JOB: ${{ needs.tests-e2e.result }}
+        run: |
+          rc=0
+          if [ "$FLAKE_JOB" != success ] || [ "$FLAKE_CHECKS" != success ]; then
+            echo "flake-check: job=$FLAKE_JOB checks=$FLAKE_CHECKS"
+            rc=1
+          fi
+          [ "$GATE_JOB" = success ] || { echo "tests-gate: $GATE_JOB"; rc=1; }
+          [ "$E2E_JOB" = success ] || { echo "tests-e2e: $E2E_JOB"; rc=1; }
+          exit "$rc"
 
   # 自举后端 conformance：用「由自身编出来的」native 编译器跑 check 与夹具
   # （口径见 docs/reference/testing.md「后端自举 conformance」）。
