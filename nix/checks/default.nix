@@ -146,6 +146,10 @@ let
       src.compiler
       src.base
       src.cli
+      # 行为抽查在仓库根编译：根清单是 workspace，成员清单必须齐全。
+      src.http
+      src.web
+      src.webCli
       src.manifest
       ../../test/corpus/run/12_fact.vuna
       ../../test/corpus/dt/01_id.vuna
@@ -379,6 +383,7 @@ in
       ./lib
       ../../nix/checks/data/eff-boundary.allowlist
       ../../nix/checks/data/steps-inproc.max
+      ../../nix/checks/data/store-domains.txt
     ];
     nativeBuildInputs = [
       pkgs.gnugrep
