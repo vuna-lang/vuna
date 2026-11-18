@@ -339,6 +339,21 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
 在 3 个缺口关闭前，wasm 仍走 `Wasm/Step.vuna` 的 wat 机器（`$rt_m*`），
 `cpsDefsMachine` 里的 `map mStepsDef` 保持关闭；上面 4 条协议修复与 lowering 的应用脊
 修复都已在库里，接入时直接生效。
+- **cleanup（52、53）**：已进 base——`MSt` 带 cleanup 栈 + 深度，`Frame` 记安装时
+  深度；`Control.MkPushCleanup`/`MkPopCleanup` 直接改状态，`finish` 弹帧前用
+  `dropCleanups` 按深度跑（thunk 宿主直调、结果丢弃）；`bracket` 改走
+  `pushCleanup`/`popCleanup`（类型层仍是宿主原语，机器 lowering 里按名字改写成上述
+  Control 步骤，代码已就位、随接线启用）。手搭夹具 `pure_cross/57_machine_cleanup`
+  覆盖「push → 帧退出 → cleanup 执行」，三端 6 checks 绿。接线状态下 52、53 通过。
+
+- **栈深度（106 的 effdepth）是唯一剩余缺口**：2000 次顺序 perform 在引擎默认栈下
+  `call stack exhausted`；把 `max-wasm-stack` 提到 16 MiB 就能正常输出 `2000`，
+  说明是**线性栈深度**而不是死循环。回溯是 `step → 续延闭包 → step` 每 perform 一轮：
+  续延在 `step` 的实参位置被调用（`step … (k v)`），调用者的大帧（`step` 有上百个
+  local）在续延求值期间一直被保留。wat 机器靠单层循环 + 「续延转移返回 step」规避；
+  纯机器要等价，需要把转移做成尾路径（work item 队列 / `return_call_ref` 级别的改造），
+  或让续延调用不再保留 `step` 帧。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
