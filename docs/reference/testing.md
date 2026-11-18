@@ -438,8 +438,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/pure_cross/`、`corpus/effect/*`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
   专项夹具；
-- `corpus/term/` / `corpus/term_err/`：终止性正反例（HOF / where / 互递归 / SCT / fuel），
-  第 37 段；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查 TC/CG/LN/FX
+- `corpus/term/` / `corpus/term_err/`：终止性正反例（HOF / where / 互递归 / SCT / fuel /
+  `let` 别名），第 37 段；SCT 第三级的正例是 `09_ack`（第 0/1 位各自覆盖部分环）与
+  `10_lex_mutual`（互递归字典序），`let` 别名是 `11_let_bind`；错误码段（第 36 段）用 `vuna gen-errors`（真源是诊断域枚举）检查 TC/CG/LN/FX
   分区与幂等。
 - **第 39 段：包上下文回归**。覆盖语义边界：无 manifest 的文件只可见 base
   （`VUNA_BASE` 生效、找不到 base 明确报错）；目录入口只认该目录自己的 manifest、不向上

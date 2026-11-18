@@ -137,7 +137,7 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 | `TC_InstanceHeadNotApp` | 精化 | instance 头形态不合法 |
 | `TC_ConstraintNotDict` | 精化 | 约束项不是 trait 应用或参数个数不符 |
 | `TC_InstanceMissingMethod` | 精化 | 实例漏实现方法 |
-| `TC_CannotProveTermination` | 终止性 | 递归调用没有结构下降 |
+| `TC_CannotProveTermination` | 终止性 | 递归调用没有结构下降（`fields.call` 附被测位置与关系原因） |
 | `TC_NotExhaustive` | 覆盖性 | 漏写可达分支 |
 | `TC_ImpossibleBranchIndex` | 覆盖性 | 写了索引不可达分支 |
 | `TC_NotInductiveFamily` | 精化 | 对非归纳族做 case |
