@@ -1878,9 +1878,12 @@ build program printResult =
         noStepUnsupported =
           not (defsUseSyms ["prim_effectSelf", "prim_cleanupPush", "prim_cleanupPop"] ordered)
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
-        -- 选择性 CPS（mode 3）。mode 5 的 Step driver 仍在调试（见 debt D105），
-        -- 通过 `cpsDefsStep` 接入；默认仍走 mode 3。
+      else if listNull (irEntryRowTagsOf e) then if noStepUnsupported then case cpsDefsStep ordered of
+        Ok cpsOrdered => buildAnf cpsOrdered 5 (Just e) listFamM
+        Err _ => case cpsDefs ordered of
+          Err msg => WasmRejected (WasmUnsupported msg)
+          Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
+      else case cpsDefs ordered of
         Err msg => WasmRejected (WasmUnsupported msg)
         Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
       else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM

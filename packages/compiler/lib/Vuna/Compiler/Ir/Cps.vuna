@@ -466,27 +466,115 @@ else case m of
   Nothing => Nothing
   Just a => Just (handlerAlt (fuel - 1) r kd a)
 
+bNameText : IrBName -> String
+bNameText n = case n of
+  IrBUser x => x
+  IrBArm i => "arm" ++ strFromInt i
+  IrBNat i => "nat" ++ strFromInt i
+  IrBWild => "wild"
+
+eraseHead : Ir -> Ir
+eraseHead e = case e of
+  IrApp (IrRt s) x => if s == "prim_erase" then eraseHead x else e
+  IrCast x => eraseHead x
+  _ => e
+
+unsupportedSym : String
+unsupportedSym = "@ir@sel@UNSUPPORTED"
+
+isResumeApp : IrBinder -> Ir -> Bool
+isResumeApp r e = case e of
+  IrApp _ _ =>
+    let
+      p = flattenApp e
+      head = eraseHead (firstOf p)
+      args = secondOf p
+    in case head of
+      IrVar b => bNameText b.irBinderName == bNameText r.irBinderName
+      _ => case args of
+        x :: _ => case eraseHead x of
+          IrVar b => bNameText b.irBinderName == bNameText r.irBinderName
+          _ => False
+        [] => False
+  _ => False
+
+containsResume : Int -> IrBinder -> Ir -> Bool
+containsResume fuel r e = if fuel <= 0 then True
+else if isResumeApp r e then True
+else case e of
+  IrCtor _ _ args => anyResume (fuel - 1) r args
+  IrRecord _ fs => anyResumeField (fuel - 1) r fs
+  IrProj b _ _ => containsResume (fuel - 1) r b
+  IrRecUpd b _ fs => containsResume (fuel - 1) r b || anyResumeField (fuel - 1) r fs
+  IrRtApp _ args => anyResume (fuel - 1) r args
+  IrCast x => containsResume (fuel - 1) r x
+  IrLet _ rhs body => containsResume (fuel - 1) r rhs || containsResume (fuel - 1) r body
+  IrLam _ body => containsResume (fuel - 1) r body
+  IrApp f a => containsResume (fuel - 1) r f || containsResume (fuel - 1) r a
+  IrIf c t el =>
+    containsResume (fuel - 1) r c || containsResume (fuel - 1) r t || containsResume (fuel - 1) r el
+  IrCase s alts => containsResume (fuel - 1) r s || anyResumeAlt (fuel - 1) r alts
+  IrNatCase s _ z su ca =>
+    containsResume (fuel - 1) r s
+      || anyResumeAltM (fuel - 1) r z
+      || anyResumeAltM (fuel - 1) r su
+      || anyResumeAltM (fuel - 1) r ca
+  IrConcatMany xs => anyResume (fuel - 1) r xs
+  IrEffThunk _ _ _ _ p => containsResume (fuel - 1) r p
+  _ => False
+
+anyResume : Int -> IrBinder -> List Ir -> Bool
+anyResume fuel r xs = if fuel <= 0 then True
+else case xs of
+  [] => False
+  x :: rest => containsResume (fuel - 1) r x || anyResume (fuel - 1) r rest
+
+anyResumeField : Int -> IrBinder -> List (Pair String Ir) -> Bool
+anyResumeField fuel r xs = if fuel <= 0 then True
+else case xs of
+  [] => False
+  p :: rest => containsResume (fuel - 1) r (secondOf p) || anyResumeField (fuel - 1) r rest
+
+anyResumeAlt : Int -> IrBinder -> List IrAlt -> Bool
+anyResumeAlt fuel r alts = if fuel <= 0 then True
+else case alts of
+  [] => False
+  a :: rest => containsResume (fuel - 1) r a.irAltBody || anyResumeAlt (fuel - 1) r rest
+
+anyResumeAltM : Int -> IrBinder -> Maybe IrAlt -> Bool
+anyResumeAltM fuel r m = if fuel <= 0 then True
+else case m of
+  Nothing => False
+  Just a => containsResume (fuel - 1) r a.irAltBody
+
 handlerBody : Int -> IrBinder -> IrBinder -> Ir -> Ir
 handlerBody fuel r kd e = if fuel <= 0 then IrApp (IrVar kd) (transformDirect (fuel - 1) e)
 else case e of
   IrApp _ _ =>
     let
       p = flattenApp e
-    in case firstOf p of
-      IrVar b =>
-        if binderEq b r then transformDirect (fuel - 1) e
-        else IrApp (IrVar kd) (transformDirect (fuel - 1) e)
-      _ => IrApp (IrVar kd) (transformDirect (fuel - 1) e)
+      head = eraseHead (firstOf p)
+      args = secondOf p
+    in if isResumeApp r e then transformDirect (fuel - 1) e
+    else if containsResume (fuel - 1) r e then IrApp (IrRt unsupportedSym) (IrInt 0)
+    else IrApp (IrVar kd) (transformDirect (fuel - 1) e)
   IrCast x => IrCast (handlerBody (fuel - 1) r kd x)
-  IrLet bs rhs body => IrLet bs (transformDirect (fuel - 1) rhs) (handlerBody (fuel - 1) r kd body)
-  IrCase scrut alts => IrCase (transformDirect (fuel - 1) scrut) (handlerAlts (fuel - 1) r kd alts)
+  IrLet bs rhs body =>
+    if containsResume (fuel - 1) r rhs then IrApp (IrRt unsupportedSym) (IrInt 0)
+    else IrLet bs (transformDirect (fuel - 1) rhs) (handlerBody (fuel - 1) r kd body)
+  IrCase scrut alts =>
+    if containsResume (fuel - 1) r scrut then IrApp (IrRt unsupportedSym) (IrInt 0)
+    else IrCase (transformDirect (fuel - 1) scrut) (handlerAlts (fuel - 1) r kd alts)
   IrIf c t el =>
-    IrIf (transformDirect (fuel - 1) c) (handlerBody (fuel - 2) r kd t)
+    if containsResume (fuel - 1) r c then IrApp (IrRt unsupportedSym) (IrInt 0)
+    else IrIf (transformDirect (fuel - 1) c) (handlerBody (fuel - 2) r kd t)
       (handlerBody (fuel - 2) r kd el)
   IrNatCase scrut fr z su ca =>
     IrNatCase (transformDirect (fuel - 1) scrut) fr (handlerAltM (fuel - 2) r kd z)
       (handlerAltM (fuel - 2) r kd su) (handlerAltM (fuel - 2) r kd ca)
-  _ => IrApp (IrVar kd) (transformDirect (fuel - 1) e)
+  _ =>
+    if containsResume (fuel - 1) r e then IrApp (IrRt unsupportedSym) (IrInt 0)
+    else IrApp (IrVar kd) (transformDirect (fuel - 1) e)
 
 selHandlers : Int -> Ir -> Ir
 selHandlers fuel e = if fuel <= 0 then e
@@ -661,10 +749,73 @@ else case defs of
       Ok rest1 => Ok (d1 :: rest1)
 
 -- | 选择性 CPS + Step 入口：先做现有 thunk lowering，再改 handler clause / 符号 / trampoline。
+usesUnsupported : Int -> Ir -> Bool
+usesUnsupported fuel e = if fuel <= 0 then False
+else case e of
+  IrRt s => s == unsupportedSym
+  IrRtApp s args => s == unsupportedSym || anyUnsupported (fuel - 1) args
+  IrCtor _ _ args => anyUnsupported (fuel - 1) args
+  IrRecord _ fs => anyUnsupportedField (fuel - 1) fs
+  IrProj b _ _ => usesUnsupported (fuel - 1) b
+  IrRecUpd b _ fs => usesUnsupported (fuel - 1) b || anyUnsupportedField (fuel - 1) fs
+  IrCast x => usesUnsupported (fuel - 1) x
+  IrLet _ a b => usesUnsupported (fuel - 1) a || usesUnsupported (fuel - 1) b
+  IrLam _ b => usesUnsupported (fuel - 1) b
+  IrApp f a => usesUnsupported (fuel - 1) f || usesUnsupported (fuel - 1) a
+  IrIf c t el =>
+    usesUnsupported (fuel - 1) c || usesUnsupported (fuel - 1) t || usesUnsupported (fuel - 1) el
+  IrCase s alts => usesUnsupported (fuel - 1) s || anyUnsupportedAlt (fuel - 1) alts
+  IrNatCase s _ z su ca =>
+    usesUnsupported (fuel - 1) s
+      || anyUnsupportedAltM (fuel - 1) z
+      || anyUnsupportedAltM (fuel - 1) su
+      || anyUnsupportedAltM (fuel - 1) ca
+  IrConcatMany xs => anyUnsupported (fuel - 1) xs
+  IrEffThunk _ _ _ _ p => usesUnsupported (fuel - 1) p
+  _ => False
+
+anyUnsupported : Int -> List Ir -> Bool
+anyUnsupported fuel xs = if fuel <= 0 then False
+else case xs of
+  [] => False
+  x :: rest => usesUnsupported (fuel - 1) x || anyUnsupported (fuel - 1) rest
+
+anyUnsupportedField : Int -> List (Pair String Ir) -> Bool
+anyUnsupportedField fuel xs = if fuel <= 0 then False
+else case xs of
+  [] => False
+  p :: rest => usesUnsupported (fuel - 1) (secondOf p) || anyUnsupportedField (fuel - 1) rest
+
+anyUnsupportedAlt : Int -> List IrAlt -> Bool
+anyUnsupportedAlt fuel alts = if fuel <= 0 then False
+else case alts of
+  [] => False
+  a :: rest => usesUnsupported (fuel - 1) a.irAltBody || anyUnsupportedAlt (fuel - 1) rest
+
+anyUnsupportedAltM : Int -> Maybe IrAlt -> Bool
+anyUnsupportedAltM fuel m = if fuel <= 0 then False
+else case m of
+  Nothing => False
+  Just a => usesUnsupported (fuel - 1) a.irAltBody
+
+defsUnsupported : Int -> List IrDef -> Bool
+defsUnsupported fuel defs = if fuel <= 0 then False
+else case defs of
+  [] => False
+  d :: rest => usesUnsupported (fuel - 1) (irDefBodyOrUnit d) || defsUnsupported (fuel - 1) rest
+
+export irDefBodyOrUnit : IrDef -> Ir
+irDefBodyOrUnit d = case irDefBody d of
+  Just b => b
+  Nothing => IrInt 0
+
 export cpsDefsStep : List IrDef -> Result (List IrDef)
 cpsDefsStep defs = case cpsDefs defs of
   Err msg => Err msg
-  Ok ds => selDefs startFuel ds
+  Ok ds => case selDefs startFuel ds of
+    Err msg => Err msg
+    Ok ds1 =>
+      if defsUnsupported 100000 ds1 then Err "selective CPS: non-tail resumption" else Ok ds1
 
 -- | 单元级入口：改写所有组；入口展示节点是纯值，不需要 CPS。
 export cpsUnit : IrUnit -> Result IrUnit

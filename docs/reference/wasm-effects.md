@@ -1,7 +1,7 @@
 # wasm 效应 handler（CPS lowering）
 
-> 状态：**纯用户 handler 仍走选择性 CPS lowerng（mode 3），Step driver（mode 5）
-> 已接线但未收敛（debt D105），默认不启用**。路线是
+> 状态：**纯用户 handler 默认走选择性 CPS + Step driver（mode 5，tail-resume）；
+> 非 tail resume 自动回落 mode 3（debt D105）**。路线是
 > 「选择性 CPS + Step trampoline」：只 CPS 化效应 thunk 与 handler clause，
 > `Eff` 仍是数据；全片段 CPS 不是路线（相关代码已删除）。带内建宿主 handler 行、同时又出现
 > 用户 handler 的程序仍回落到 stack switching（见 §4）。
@@ -16,19 +16,19 @@ stack-switching 回落。
 
 阶段（每阶段独立可验收）：
 
-1. **handler clause 显式 CPS（IR only，默认休眠）**
+1. **handler clause 显式 CPS（已完成）**
    - 识别 `@vuna@handle@o` / `@vuna@handle@ret` binder；
    - `opH: \o k -> body` 改成 `\o k kDone -> body'`：`k v` 是 resumption（直接返回
      Step，不追加 k），其余结果/控制流交给 `kDone`；`ret` 保持原样（driver 先 `ret`
      再 `kOuter`）；
    - 入口是 `Ir.Cps.cpsDefsStep`，默认不切换，先锁 IR 形状与编译自检。
-2. **Step 选择性模式（effMode = 5）**
+2. **Step 选择性模式（effMode = 5，已完成 tail-resume 子集）**
    - `@ir@cps@perform` / `@ir@cps@handle` 与 Step 构造器同 arity（4 / 7），直接映射；
    - trampoline：`runPure = stepRun (runThunk e unit stepDone)`；
    - driver：Perform 用 `opH op k kDone`（`k` 为 perform 点续延），Handle 用
      `comp u handleDone`，Done / Abort 复用；
    - 最小复现（`perform` + `>>=` + 纯用户 handler）通过后，跑 `pure_cross` 全组。
-3. **常量栈验收（D103）**
+3. **常量栈验收（D103，部分）**
    - `effdepth` 的 2000 次顺序 perform 在很小的 `-W max-wasm-stack` 下通过；
    - 纯用户 handler 用例默认切到 mode 5，旧 mode 3 保留为回滚路径。
 4. **宿主+用户组合（D102）**
