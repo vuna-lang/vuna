@@ -376,6 +376,7 @@ irInlineArity "bi_lt_float" = 2
 irInlineArity "bi_le_float" = 2
 irInlineArity "bi_gt_float" = 2
 irInlineArity "bi_ge_float" = 2
+irInlineArity "@ir@m@runEff" = 2
 irInlineArity "natToInt" = 1
 irInlineArity "natFromInt" = 1
 irInlineArity "natAdd" = 2

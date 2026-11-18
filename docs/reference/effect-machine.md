@@ -398,6 +398,28 @@ effdepth 的 2000 次顺序 perform 在引擎默认栈下输出 2000。
 之后按 native（`prim_effectPerform/Handle/Self` → `Control` + `machineRun`，D89 消失）
 → OCaml（保留 `Effect.Deep` 作差分 oracle）推进。
 
+### 9.2.4 native 切换的进展与卡点
+
+native 侧已经具备切换所需的两块支撑（已入库）：`@ir@m@runEff` 的运行时实现
+（`rt_m_run_eff`：thunk 应用 unit 再交 k）与 `irInlineArity` 条目。
+
+试切（`build` 里对 `ordered` 调 `cpsDefsMachine`、seeds 加 `machineRun`）的结果：
+`--backend native` 448 checks 里 5 个失败。其中 27/28/30/52/53 在**未切**的当前
+main 上同样失败（`git stash` 复核过），属于既有问题；切换后新增的失败只剩
+"多重入口 handler 的帧链"一类，可用最小复现：
+
+```text
+main : Eff [ConsoleOp, ClockOp] Int   -- 先 runPure(handleClock "mock" …)，再 progReal，再 consolePrint
+失败：unhandled effect console/default | chain: clock/default
+```
+
+即：穿过一次 `progReal`（clock 多次 perform/resume）后，外层 console 帧从链上消失，
+只剩 clock 帧。wat 机器下同一程序通过，说明是 `reinstallIfMissing`/`samePrompt` 与
+「同 key 多帧 + 入口 handler 安装顺序」的交互（wat 用帧的**引用相等**判 inChain，
+且 res
+ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较（而不是 key+name），
+或在 `MkResume` 重装时保留整条链；然后用该复现验证，再跑 native 矩阵与全量。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
