@@ -198,12 +198,80 @@ else case m of
       b = anf (fuel - 1) next a.irAltBody
     in AnfAltM (Just (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr))) b.anfNext
 
+-- | 统计本定义里已有的 `__anf<n>` binder 个数。第二次 ANF（CPS 输出再规范化）必须从
+--   高一位的编号开始，否则会与第一次 ANF 的 binder 同名，后端按名字解析时会静默错绑。
+countAnfBinders : Int -> Ir -> Int
+countAnfBinders fuel e = if fuel <= 0 then 0
+else case e of
+  IrVar _ => 0
+  IrGlobal _ => 0
+  IrRt _ => 0
+  IrInt _ => 0
+  IrStr _ => 0
+  IrBool _ => 0
+  IrFloatLit _ => 0
+  IrCtor _ _ args => countAnfList (fuel - 1) args
+  IrRecord _ fs => countAnfFields (fuel - 1) fs
+  IrProj b _ _ => countAnfBinders (fuel - 1) b
+  IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
+  IrRtApp _ args => countAnfList (fuel - 1) args
+  IrCast x => countAnfBinders (fuel - 1) x
+  IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
+  IrLam bs body => countBs bs + countAnfBinders (fuel - 1) body
+  IrApp f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
+  IrIf c t el =>
+    countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
+  IrCase s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
+  IrNatCase s _ z su ca =>
+    countAnfBinders (fuel - 1) s
+      + countAltM (fuel - 1) z
+      + countAltM (fuel - 1) su
+      + countAltM (fuel - 1) ca
+  IrConcatMany xs => countAnfList (fuel - 1) xs
+  IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p
+  IrEffBind _ _ _ => 0
+
+countBs : List IrBinder -> Int
+countBs bs = case bs of
+  [] => 0
+  b :: rest => (if isAnfBinder b then 1 else 0) + countBs rest
+
+isAnfBinder : IrBinder -> Bool
+isAnfBinder b = case b.irBinderName of
+  IrBUser n => Base.String.startsWith "__anf" n
+  _ => False
+
+countAnfList : Int -> List Ir -> Int
+countAnfList fuel xs = if fuel <= 0 then 0
+else case xs of
+  [] => 0
+  x :: rest => countAnfBinders (fuel - 1) x + countAnfList (fuel - 1) rest
+
+countAnfFields : Int -> List (Pair String Ir) -> Int
+countAnfFields fuel xs = if fuel <= 0 then 0
+else case xs of
+  [] => 0
+  p :: rest => countAnfBinders (fuel - 1) (secondOf p) + countAnfFields (fuel - 1) rest
+
+countAnfAlts : Int -> List IrAlt -> Int
+countAnfAlts fuel alts = if fuel <= 0 then 0
+else case alts of
+  [] => 0
+  a :: rest =>
+    countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody + countAnfAlts (fuel - 1) rest
+
+countAltM : Int -> Maybe IrAlt -> Int
+countAltM fuel m = if fuel <= 0 then 0
+else case m of
+  Nothing => 0
+  Just a => countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody
+
 anfDef : Int -> IrDef -> IrDef
 anfDef fuel d = case d of
   IrExternDef _ _ _ _ => d
   IrDef name arity deps body recOk initGuard span =>
     let
-      b = anf (fuel - 1) fuel body
+      b = anf (fuel - 1) (fuel + countAnfBinders (fuel - 1) body) body
     in IrDef name arity deps (letsIn b.anfLets b.anfExpr) recOk initGuard span
 
 anfDefs : Int -> List IrDef -> List IrDef
