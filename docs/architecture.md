@@ -120,7 +120,7 @@ data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
 
 擦除检查由 `Lowering.Program.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
 判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
-`Obj.t` / `Obj.magic`。`vuna interp`
+`Obj.t` / `Obj.magic`。核心求值路径（`vuna test` 纯测试 / REPL）
 走同一精化链后由 `Driver.Dt.dtEvalFile` 求 `main`（纯求值：只展示 `Int`/`String`/`Bool`，
 任何 `main : Eff [] a` 报错并提示 `compile`）。
 
@@ -183,7 +183,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 
 **何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade。
 
-- `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/interpretExpr`（`PackageContext` 入参，
+- `Vuna.Cli.runCli` 分发；`Vuna.Interp.interpretFile/evalExprInfoWithAux`（`PackageContext` 入参，
   实际 `Driver.Dt.dtEvalFile`）、`Vuna.Repl.runRepl`（`:type/:load/:reload/:browse`）、
   `Vuna.Repl.Server.runReplServer` / `Vuna.Repl.Client.runReplClient`（`--listen` / `--client`；
   协议与 agent 配方见 [tooling.md](reference/tooling.md) §5）、
@@ -217,7 +217,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Base.Eff.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
   运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏
   `prim_sched*`；`Base.EffSched` 的 fork/yield/await/取消/结构化 scope/步数超时，main
-  钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；`vuna interp` 不执行运行时效应（见
+  钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；核心求值路径不执行运行时效应（见
   [effects.md](reference/effects.md) §8）。
 - **TCB**：工具链永不进 seed（`packages/compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/seed/forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有

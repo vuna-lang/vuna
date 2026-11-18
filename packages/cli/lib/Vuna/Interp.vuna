@@ -1,16 +1,16 @@
--- | `vuna interp` 的解释器 facade（工具链侧；编译入口见 [Vuna.Compiler.Driver.Compile]）。
+-- | 工具链侧的核心求值 facade（编译入口见 [Vuna.Compiler.Driver.Compile]）。
 --
 -- 语义是**精化后的核心求值**：按包上下文（最近 `vuna.toml` 的依赖闭包；无 manifest 时
 -- base-only）加载，经 DT 精化器检查，再用 Core 的 NbE 求 `main` 的值。因此子句元数、类型、
 -- 覆盖性等错误都在求值前报出，错误位置与 `check` 一致。
 --
--- 入口吃 `PackageContext`（没有环境根 / `List Root`）；调用方（CLI / REPL / test runner）
+-- 入口吃 `PackageContext`（没有环境根 / `List Root`）；调用方（REPL / test runner）
 -- 负责从文件、cwd 或包构造上下文。求值是**纯**的：不执行效果，`main : Eff r a` 一律报错；
 -- 真正带 `consolePrint` / 文件效果的 `main` 请用 `compile` + 运行产物。
 --
 -- 两条工具链能力（都不属于编译器 seed 闭包）：
 --
--- - `evalExprInfo`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
+-- - `evalExprInfoWithAux`：表达式值 + zonk 后类型文本（REPL 用类型判断是否动作）；
 -- - `runEffectProgram`：把「带 main 的完整入口源码」放进临时包，走 `compileToDir` +
 --   `runBuildScript` + 运行（REPL 的动作表达式与 `vuna test` 的效果测试共用这条执行路径）。
 --   效果的输出直接写终端，判定只看进程退出码。
@@ -29,8 +29,7 @@ import Base.Eff.Types
 import Base.EffArgs
 import Base.EffExit
 
--- | 解释一个入口文件（`vuna interp`）：成功返回值的渲染文本，失败返回 `error: <诊断>`
--- 文本。
+-- | 求值一个入口文件：成功返回值的渲染文本，失败返回 `error: <诊断>` 文本。
 export interpretFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
 interpretFile ctx entry = do
   result <- dtEvalFile ctx entry
@@ -38,26 +37,6 @@ interpretFile ctx entry = do
     ErrC e => "error: ${diagText e}"
     OkC output => output
   )
-
--- | REPL 用：`program`（imports + 定义，定义必须已写签名）与表达式都在内存里求值，
--- 不需要临时文件；表达式类型由 DT 精化器推断，值用 `showValue` 展示。
--- 有依赖接口时走带 ifaces 的路径，否则退回不需要接口的求值。
-export interpretExpr : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Eff r String
-interpretExpr ctx program expr = do
-  ifaces <- depIfacesForToolProgram ctx program
-  case ifaces of
-    Just ifaces2 => do
-      result <- dtEvalExprWithIfaces ctx program expr ifaces2
-      pure (case result of
-        ErrC e => "error: ${diagText e}"
-        OkC output => output
-      )
-    Nothing => do
-      result <- dtEvalExpr ctx program expr
-      pure (case result of
-        ErrC e => "error: ${diagText e}"
-        OkC output => output
-      )
 
 -- | 值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名），并带回可复用的
 -- `AuxCache`。类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；
@@ -74,14 +53,6 @@ evalExprInfoWithAux ctx program expr aux = do
         ErrC e => ErrC e
         OkC i => OkC (Pair i aux)
       )
-
--- | 值文本 + zonk 后的类型文本（不返回缓存）；有依赖接口时走带 ifaces 的路径。
-export evalExprInfo : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Eff r (Check (Pair String String))
-evalExprInfo ctx program expr = do
-  ifaces <- depIfacesForToolProgram ctx program
-  case ifaces of
-    Just ifaces2 => dtEvalExprInfoWithIfaces ctx program expr ifaces2
-    Nothing => dtEvalExprInfo ctx program expr
 
 -- ---------------------------------------------------------------
 -- REPL v2：定义工具（自动签名 / 绑定类型 / 回写签名复查）

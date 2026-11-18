@@ -37,7 +37,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 | 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
 
 - `main : Eff [] a` 的**行检查在类型期**：entry 处仍有未处理行报
-  `TC_UnhandledEffects`；`vuna interp` 遇到动作入口报
+  `TC_UnhandledEffects`；核心求值路径遇到动作入口报
   `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
 - `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
   有真实宿主操作。宿主副作用没有 manifest 能力/特权门控；用户面应经
@@ -154,7 +154,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
    `Codegen.Decl` 的 `isTypeHeadOpaqueDatas` / `ctorOpaqueFlagsOf` 必须同步；
    `Obj.t` 字段 ↔ `prim_erase` / `Obj.magic` 两侧缺一就会在 `ocamlopt` 处错配。
 7. **cast 对语义透明**：`prim_erase` 求值期归约为实参本身（`OpIdentity` +
-   `applyValueFuel` 的恒等消去），对定义性相等 / 正规化 / interp 不可见；用量检查里
+   `applyValueFuel` 的恒等消去），对定义性相等 / 正规化 / 核心求值不可见；用量检查里
    cast 应用记 `Rig1`，不放大线性值的使用。
 
 ## 8. 运行时效应核心
@@ -218,8 +218,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - 语义是**一次性（one-shot）**：resume 两次抛 `Continuation_already_resumed`；
   多射续延不做。
 - 未处理的 `Perform` 由 `main` 钩子的异常报告器兜底（`vuna: runtime error: ...`）。
-- `vuna interp` 是纯求值器，不执行运行时效应；效果程序只能 `check` + `compile` + run
-  （夹具带 `.nointerp`）。
+- 核心求值路径是纯求值器，不执行运行时效应；效果程序只能 `check` + `compile` + run
+  （测试夹具关闭 interp 阶段，只做 compile + run）。
 
 ### 8.3 效应模块
 

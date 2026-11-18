@@ -184,8 +184,8 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ prett
 - 没有 `newtype` / `type` 关键字：`record` 提供名义类型，`alias` / 缺省推断负责表示，
   `deriving via field` 负责实例；结构 `deriving` 保持逐字段比较 / 展示。
 - 实现：`Elab.Dict.searchInstFuel` 的 `tryViaDict` 在实例搜索期替换类参数；
-  `Elab.Data.checkViaDataDecls` 校验表示条件。因为 `interp` 是纯 Core 求值器（不做
-  codegen 去装箱），`vuna interp` 对依赖表示委托的 `show` 等程序不适用；这些夹具用
+  `Elab.Data.checkViaDataDecls` 校验表示条件。因为核心求值是纯 Core 求值器（不做
+  codegen 去装箱），对依赖表示委托的 `show` 等程序不适用；这些夹具用
   compile + run 验证。
 
 ### `HasField`：nominal 记录的泛型读访问（`Base.Record`）
@@ -210,7 +210,7 @@ getCreated p = p.created
 - 具体 record 的 `p.f` 仍是内联投影（零字典）；只有 base 类型是刚性类型变量时，`p.f`
   使用签名里的 `HasField` 约束字典（调用点由自动生成或显式实例填充）。
 - 没有运行时按标签查找；没有行类型 / 结构子类型 / 字段重排。自动实例只生成在定义 record 的模块且该模块需 `import Base.Record`；其他模块的 record 需要显式实例。
-- **状态**：具体 record 的 `p.f`、泛型函数体里的约束字典、自动生成实例在 interp 与 compile 路径都可用；归属表按 record 声明为生成的实例补了模块归属，`10_has_field` 已回到 `records_files`（compile + interp 对比）。限制：自动实例只覆盖定义 record 且 `import Base.Record` 的模块；显式实例存在时跳过自动生成；仍未支持行类型 / 跨包自动实例。
+- **状态**：具体 record 的 `p.f`、泛型函数体里的约束字典、自动生成实例在核心求值与 compile 路径都可用；归属表按 record 声明为生成的实例补了模块归属，`10_has_field` 已回到 `records_files`（compile + 核心求值对比）。限制：自动实例只覆盖定义 record 且 `import Base.Record` 的模块；显式实例存在时跳过自动生成；仍未支持行类型 / 跨包自动实例。
 - `{ p | f = ... }` 更新仍要求具体 record 类型（未知行的更新没有 `SetField` 支持）。
 
 
@@ -360,7 +360,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
 
 `deriving` 只接受单构造子、单字段、字段类型正好是 `String` / `Int` / `Float` 的包装
 类型（record 由字段表判断）；多构造子/多字段/字段不匹配都报可解释错误。跨类型语义需手写
-实例。完整语义与 interp/REPL 限制见 [floats.md](floats.md)。
+实例。完整语义与核心求值 / REPL 限制见 [floats.md](floats.md)。
 
 ## do、Monad 与 Functor
 
@@ -432,8 +432,8 @@ main = case (MkEmail "x@y") of MkEmail s => s
   `prim_eff_getArgs : Eff [] (List String)`、`prim_eff_print : String -> Eff [] Int`）。
   宿主层对任何包可见：源码里可直接调用 `prim_*` / `prim_eff_*`（没有 manifest 能力声明；
   用户面**应**经 `Base.Eff.*` + handler，见 [primitives.md](primitives.md)）。
-- 可执行包 / `vuna build` 要求 `main : Eff [] a`；`vuna interp` 是纯核心求值，任何
-  `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
+- 可执行包 / `vuna build` 要求 `main : Eff [] a`；核心求值路径（`vuna test` 纯测试 /
+  REPL）是纯核心求值，任何 `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
   `main : Eff [] ...` 走 compile + 运行；REPL 的动作表达式经临时包 compile + 运行。
 - 实现：`Elab/Dict`、`Elab/Trait`、`Elab/Derive`；record 精化与字典编码在
   [core.md](core.md)。

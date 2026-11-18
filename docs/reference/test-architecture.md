@@ -75,7 +75,7 @@ runner 直接调用编译器/工具链的导出函数并断言返回值（细节
 
 | tier | 内容 | 目标 | 触发 |
 | --- | --- | --- | --- |
-| `fast` | 进程内 check/interp 语义、诊断、term | < 10 s | 每次保存 / commit |
+| `fast` | 进程内 check/核心求值语义、诊断、term | < 10 s | 每次保存 / commit |
 | `integration` | compile+run golden、CLI/lint/fix、模块/包 | < 30 s | PR / pre-push |
 | `e2e` | `check .`、LSP/REPL、workspace/build、seed | < 60 s | 合并前 / nightly |
 | `tools` | `vuna test --jobs`、REPL 工具 case | < 25 s | e2e check 内固定 2 worker |

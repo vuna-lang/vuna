@@ -115,7 +115,7 @@ data Term where
   `test/corpus/dt/74_ctor_check_index.vuna`，ocamlopt 报类型错）。
 - **表现层 cast**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
   让求值期把它归约为唯一实参；`Core.Eval.applyValueFuel` 另外在**函数位置**直接消去，
-  避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / interp
+  避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / 核心求值
   完全透明，不改变 0/1/ω 判据（应用记 `Rig1`，不放大线性用量）。
 
 ## 6. case 规范形与可达性

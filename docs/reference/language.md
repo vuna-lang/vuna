@@ -43,12 +43,12 @@
   表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` / `Nat` → 十进制、`String` →
   `strShow`、`Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main`
-  的展示钩子。`vuna interp` 只展示 `Int` / `Nat` / `String` / `Bool` 的 `main` 值（interp
-  是精化后的纯核心求值，归约边界见 [primitives.md](primitives.md)）；
+  的展示钩子。核心求值路径只展示 `Int` / `Nat` / `String` / `Bool` 的 `main` 值
+  （精化后的纯核心求值，归约边界见 [primitives.md](primitives.md)）；
 - 内建值（`Vuna.Compiler.Base.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
   `&& ||`、`++`、`strFromInt` / `strUnpack` / `strPack` /
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
-  `timeUs`。宽度、编码、转义与 interp 边界见 [primitives.md](primitives.md)；
+  `timeUs`。宽度、编码、转义与核心求值边界见 [primitives.md](primitives.md)；
 - **运算符 = 方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
   而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
   **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时

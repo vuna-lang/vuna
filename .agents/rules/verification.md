@@ -20,7 +20,7 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
   改动下返回旧求值（`Output paths:` 里是同一个 store 路径、也没有 `building ...` 行）。
   加 `--option eval-cache false`；判据是产物里能看到刚加的字符串（或 store 路径变了）。
 - 测试别为验证一处改动跑全量：先 `--only <章节>`，必要时再 `--filter PAT`。
-- 只有纯 `Int`/`String`/`Bool` 的夹具能走 `vuna interp`；`main : Eff [] a` 走
+- 只有纯 `Int`/`String`/`Bool` 的夹具能走核心求值（进程内 interp 阶段）；`main : Eff [] a` 走
   `compile`/`build` + 运行产物。
 
 ## 按改动面选验证

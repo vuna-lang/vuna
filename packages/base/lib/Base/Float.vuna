@@ -1,4 +1,4 @@
--- | `Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。运行时表示是 OCaml IEEE-754 double（编译器内建，没有 data 声明）。本模块随 `Prelude` 自动导出：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import（显式 import 仍允许）。代价是 Prelude 闭包包含本模块，所有程序生成的运行时都会带浮点 helper；`main` 不含浮点的纯程序在 `vuna interp` 下不受影响，细节见 docs/reference/floats.md。
+-- | `Float` primitive 类型的宿主模块（实例 + 字面量转换 trait + 转换 helper）。运行时表示是 OCaml IEEE-754 double（编译器内建，没有 data 声明）。本模块随 `Prelude` 自动导出：`FromFloat`、转换 helper 与 `Eq` / `Ord` / `Show Float` 实例都不需要显式 import（显式 import 仍允许）。代价是 Prelude 闭包包含本模块，所有程序生成的运行时都会带浮点 helper；`main` 不含浮点的纯程序在核心求值路径（`vuna test` 纯测试 / REPL）下不受影响，细节见 docs/reference/floats.md。
 module Base.Float where
 
 import Base.Eq

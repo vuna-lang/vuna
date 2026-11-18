@@ -168,7 +168,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
 
 ## 内建与库的边界
 
-权威语义（宽度、编码、转义、错误行为、interp 边界）见 [primitives.md](primitives.md)；
+权威语义（宽度、编码、转义、错误行为、核心求值边界）见 [primitives.md](primitives.md)；
 这里只划「编译器提供什么、库提供什么」。
 
 - **`Int` / `String` 是语言 primitive 类型**：没有 `data` 声明，字面量、`str*` 与**数值
@@ -199,7 +199,7 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   在 Loader 被解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（fixity 与别名全部来自库模块里的
   `infix*` 声明），因此 `a == b` 与 `eq a b`
   是同一条路径；**`+` / `-` / `*` / `/` 同样是 `Base.Num` 方法 `add` / `sub` / `mul` /
-  `div` 的别名**（内建 `+ - * /` 只留给 codegen / interp 的 runtime 映射，对源码不可见）。
+  `div` 的别名**（内建 `+ - * /` 只留给 codegen / 核心求值的 runtime 映射，对源码不可见）。
   **相等证据驱动**：`eq`（含运算符写法）只有 Int/String 内建特化或 `Eq` 证据
   （实例 / `deriving` / 约束实例），无实例与函数相等在 check 期报错；参数化类型的
   `deriving` 展开成约束实例（`instance Eq a => Eq (F a)`），库里可写的容器实例也按这个

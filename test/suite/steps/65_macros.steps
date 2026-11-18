@@ -17,7 +17,9 @@ exit: 0
 run: mkdir -p "$TMPDIR/mac-infix/app"
 run: printf '[package]\nname = "mac-infix"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-infix/vuna.toml"
 run: sh -c 'printf "%s\n" "infixl 6 ! = plusInt" "" "plusInt : Int -> Int -> Int" "plusInt a b = a + b" "" "main : Int" "main = 1 ! 2" > "$TMPDIR/mac-infix/app/Main.vuna"'
-run: "$VUNA" interp "$TMPDIR/mac-infix/app/Main.vuna" 2>&1
+run: "$VUNA" build "$TMPDIR/mac-infix" 2>&1
+out-contains: built
+run: "$TMPDIR/mac-infix/.output/bin/mac-infix" 2>&1
 out-equals: 3
 
 # 65c) 错误边界：未知宏 / arity 不符。`dbg!` 不依赖任何库模块，base-only 包也能用。
@@ -32,7 +34,7 @@ exit: nonzero
 out-contains: RN_MacroArity
 out-contains: macro dbg expects 1 argument(s), got 2
 
-# 65d) e2e（base-only 包，不需要 compiler 依赖）：开关、输出协议、惰性、interp 静默。
+# 65d) e2e（base-only 包，不需要 compiler 依赖）：开关、输出协议、惰性。
 run: mkdir -p "$TMPDIR/mac-e2e/app" "$TMPDIR/mac-e2e/tmp"
 run: printf '[package]\nname = "mac-app"\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/mac-e2e/vuna.toml"
 run: printf 'main : Int\nmain = let _ = dbg! "probe=${42}" in 43\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
@@ -54,9 +56,6 @@ exit: 0
 run: "$TMPDIR/mac-e2e/.output/bin/mac-app" --debug-perf >/dev/null 2>"$TMPDIR/mac-e2e/argv.err"
 run: grep -E '^DEBUG [0-9]+ probe=42$' "$TMPDIR/mac-e2e/argv.err"
 exit: 0
-# interp 不执行 tracing：静默、结果正确。
-run: "$VUNA" interp "$TMPDIR/mac-e2e/app/Main.vuna" 2>&1
-out-equals: 43
 # 惰性：关闭时 dbg! 的实参不求值（prim_fail 不触发），开启时才求值并失败。
 run: printf 'main : Int\nmain = let _ = dbg! (prim_fail "eager") in 7\n' > "$TMPDIR/mac-e2e/app/Main.vuna"
 run: TMPDIR="$TMPDIR/mac-e2e/tmp" "$VUNA" build "$TMPDIR/mac-e2e" 2>&1

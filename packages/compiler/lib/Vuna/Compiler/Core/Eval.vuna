@@ -597,7 +597,7 @@ else case findIntrinsic g of
         else if g == debugLineIntrinsicName then Just (VInt 0) else Nothing
   Nothing => Nothing
 
--- 可观测性原语在 `vuna interp` 里的归约（永远静默：不写文件、不读时钟、不采样）。
+-- 可观测性原语在核心求值里的归约（永远静默：不写文件、不读时钟、不采样）。
 --
 -- `span` / `spanLab` 是高阶原语：把 thunk 应用到 0（关闭语义），保持「纯 + 不求值副作用」形态。
 obsReduce : String -> List Value -> Maybe Value

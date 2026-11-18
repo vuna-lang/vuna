@@ -1,10 +1,10 @@
 # 原语语义规范（Int / String / Show / 效果原语与宿主层）
 
-本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、interp 归约边界、
+本文是 vuna **原语语义的唯一权威**：值域与宽度、字符串编码、错误行为、核心求值归约边界、
 效果原语与宿主层模型、生成 runtime 的契约。内建声明面只有一份真源
 `Vuna.Compiler.Base.Intrinsics`（`allIntrinsics` / `IntrinsicOp`），消费方是
 `Loader.Resolve`（解析）、`Elab.Prelude`（签名）、`Codegen.Term`（runtime
-映射）、`Core.Eval`（interp 归约）。语法见 [language.md](language.md)，类型规则见
+映射）、`Core.Eval`（核心求值归约）。语法见 [language.md](language.md)，类型规则见
 [type-system.md](type-system.md)，库的边界见 [stdlib.md](stdlib.md)，开放债务见
 [debt.md](debt.md)。
 
@@ -13,7 +13,7 @@
 | 术语 | 含义 |
 | --- | --- |
 | primitive 类型 | `Int` / `String`：没有 `data` 声明，表示与字面量由编译器提供 |
-| intrinsic | `Base.Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、interp 归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
+| intrinsic | `Base.Intrinsics.allIntrinsics` 的一条：名字、签名形状（`IType`）、核心求值归约标签（`IntrinsicOp`）、runtime 表达式、是否对源码可见 |
 | runtime helper | 生成产物 `Vuna_runtime.ml` 里的 OCaml 函数（`bi_*` / `dtp_*` / `dt_show_string`）；`bi_*` 不对用户源码可见 |
 | 效果原语 | `intrinsicReturnsEff` 的 intrinsic：返回 `Eff [] a`，名字只有 `prim_eff_*`，外加 `effTimeUs` |
 | 宿主层 | 直接调用 `prim_eff_*`（外加 `effTimeUs`）；没有别名模块，任何包都可直调，没有 manifest 门控 |
@@ -90,7 +90,7 @@
 - 没有 `bitRor` 原语：32-bit 固定宽度算术（`mask8` / `mask32` / `add32` / `rotr32` /
   `rol32` / `shl32` / `shr32`）在 `Base.Bits` 库层；宽度策略留在库里，不进原语。
 - 没有运算符形式（`&` / `|` / `^` / `<<` / `>>`）：需要时用命名函数，或自己声明 `infixl`。
-- interp 与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
+- 核心求值与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
   `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。三个后端都走
   `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）；wasm/native 已实现，见
   [wasm.md](wasm.md) §5、[native.md](native.md) §5。
@@ -106,7 +106,7 @@
   if 链（`case n of 0 => a; k => b` 的 `k` 绑回原始 Nat）；与构造子模式混用仍报 `TC_OnlyCtorPatterns`，
   混用时改用 `Zero` / `Succ` 或 `isZero`。
 - **纯 intrinsic**：`natAdd` / `natSub` / `natMul` / `natDiv`（饱和、减截断到 0、除零与 Int
-  同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。interp 与产物同语义；
+  同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。核心求值与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
 - **提升**：只允许 `Nat → Int`（精化期插入 `natToInt`，零成本）；`Int → Nat` 必须显式
   `Base.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
@@ -121,7 +121,7 @@
   直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`。
   `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
   字节计数中间量）保留 `Int`。
-- **展示**：`main : Nat` 与 interp 都输出十进制。
+- **展示**：`main : Nat` 与核心求值都输出十进制。
 
 ## 4. String
 
@@ -154,7 +154,7 @@
 - **其它类型走 `Show` 实例**：精化收尾（`Elab.Driver.finishCore`）对非内建的结果
   类型（`main : Eff [] a` 先剥掉动作层取 `a`）搜索 `Dict_Show a`，合成
   `@vuna@main_show : a -> String`（body 是方法投影 `\x -> show {a} {dict} x`）。
-  `mainShow` 对它回退到这条定义名；interp（`Driver.Dt.evalDtMainCore`）对 main 值应用
+  `mainShow` 对它回退到这条定义名；核心求值（`Driver.Dt.evalDtMainCore`）对 main 值应用
   同一份定义后打印。找不到实例在**精化期**报
   `[TC_NoInstanceFound] no instance found for <T>`；`@vuna@main_show` 在 split 归属里固定
   归入口单元 `Main`。
@@ -162,10 +162,10 @@
   `Int` / `Nat` / `String` / `Bool`（按返回 0/空串/True 判通过）与动作入口（退出码 0）；
   其它类型报 `unsupported test main type`。展示规则不改变测试通过判据——
   需要按 `Show` 类型写「纯测试」只能显式转成 `String` 判定。
-- interp 展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
-  同规则、逐字节一致，因此 `main : String` 在 interp 与产物中输出相同。非内建类型经
+- 核心求值展示（`Core.Eval.showValue`，字符串走 `Core.Term.showCoreString`）与 `strShow`
+  同规则、逐字节一致，因此 `main : String` 在核心求值与产物中输出相同。非内建类型经
   `@vuna@main_show` 得到的是 `String`，两侧都直接 `print_endline`（**不加引号**）。
-- `main : Eff [] a` 的 interp 仍是一律报错（纯核心求值器不执行效果，夹具用 `.nointerp`）；
+- `main : Eff [] a` 的核心求值仍是一律报错（纯核心求值器不执行效果，测试夹具关闭 interp 阶段）；
   产物侧先执行动作（`runPure`），再按上面的规则展示结果。
 - `Show Bool` 库实例用 `if` 输出 `True` / `False`，与 `dt_show_bool` 同语义。
 
@@ -180,9 +180,9 @@
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
 | `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
 | `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语（clock 组） |
-| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；interp 不归约 |
+| `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；核心求值不归约 |
 
-`strHash` 的 interp 实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
+`strHash` 的核心求值实现（`Core.Eval.strHashOf`）与 runtime `dtp_strHash` 是同一公式。
 
 ## 6.1 容器与可变数据原语
 
@@ -218,7 +218,7 @@
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
 - `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（契约里
   `irRtBridgesList = True`，实现见 `Codegen.Runtime`）；完整的桥接清单与缺失时的诊断见 §9。
-- **interp 不归约**全部容器原语（`OpNone`）：夹具带 `.nointerp`，只 compile + 运行。
+- **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
   -1 哨兵，也没有语言层诊断）；`Array.set` 先 `Array.copy`，原数组不变。
 - 可变数据的安全边界：`IORef` 的公开操作与实现都返回 `Eff []`；没有局部可变入口
@@ -266,9 +266,9 @@
 - `todo : String -> a`（debug-only）：以 `TODO: <msg>` 抛 `Failure`；
 - `@vuna@debug@on : Int -> Bool` / `@vuna@debug@line : String -> Int`：编译器 tracing 的
   **隐藏 runtime 原语**（`visible = False`，源码不可写；只由 `dbg!` 展开引用；
-  `vuna interp` 归约为 no-op）；
+  核心求值归约为 no-op）；
 - 观测原语 7 条（同样是隐藏 runtime 原语，`visible = False`；只由 `obs!` / `mark!` 或
-  `Base.Obs` / `Base.Obs.Span` 引用；`vuna interp` 归约为 no-op，wasm/native 是 no-op 桩）：
+  `Base.Obs` / `Base.Obs.Span` 引用；核心求值归约为 no-op，wasm/native 是 no-op 桩）：
   `@vuna@obs@level`（读当前级别，`Int -> Int`）、`@vuna@obs@log`（结构化日志 →
   `vuna.log`）、`@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
   `@vuna@obs@mark`（瞬时标记 `ph:"i"`）、`@vuna@obs@span`（`String -> String ->
@@ -384,9 +384,9 @@
 `prim_eff_readLine` / `prim_eff_getcwd` / `effTimeUs`）是动作**值**：引用不执行、不重新求值；
 需要快照 / 执行时显式 `let t = runPure effTimeUs` 或在 `do` 里 `<-`。
 
-## 9. interp 归约边界
+## 9. 核心求值归约边界
 
-`vuna interp` 是精化后的纯核心求值器（`Core.Eval.primReduce` 按 `IntrinsicOp` 归约）。
+核心求值路径是精化后的纯求值器（`Core.Eval.primReduce` 按 `IntrinsicOp` 归约）。
 语言运算符 `+ - * /`、`== /= < <= > >=`、`++`、`&&`、`||` 全部归约（`/` 除零例外）。
 边界按**显式分类**处理，不是静默错值：
 
@@ -402,16 +402,16 @@
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
 - 不可归约时 `main` 报 `[CG_MainNotValue] main does not reduce to a value`。
-- `main : Eff [] a` / `main : Eff [] a` 一律报
-  `error: [CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
-  （退出码 2；无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
+- `main : Eff [] a` 一律报
+  `[CG_InterpCannotExecuteEffects] interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
+  （无 `DT:` 前缀），不做「纯动作求值、效果丢弃」。
 - **List 桥接**：codegen 把返回或接收 `List` 的 10 个原语映射到桥接 helper（`dtp_unpack` /
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：
   `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_eff_getArgs` /
   `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` / `arrayToList`。桥接只为
   canonical `Base.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
   ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.List.List` declaration ...``。
-- 相关夹具带 `.nointerp` 标记，只做 `compile` + 运行产物。
+- 相关夹具关闭 interp 阶段，只做 `compile` + 运行产物。
 
 ## 10. 受限 FFI
 
@@ -435,7 +435,7 @@ extern c_add "vuna_add" : Int -> Int -> Int
   `String_val`（只读，不保证 NUL 结尾之外的布局）。不要用 32 位 `int` / `intnat`
   直接接 OCaml 的 `int`。
 - **边界**：没有回调 / GC root / pin、没有字符串 / 数组的双向可变共享（String 只读传递）、
-  没有 C 头文件解析（符号名与签名都要手写）；interp 不执行 extern（`main` 里用到时
+  没有 C 头文件解析（符号名与签名都要手写）；核心求值不执行 extern（`main` 里用到时
   只走 compile + 运行）。
 - C 实现是包的一部分：`ffi/` 目录随包走，不改变 `vuna.toml` 形状。
 
@@ -445,7 +445,7 @@ extern c_add "vuna_add" : Int -> Int -> Int
 - 无 Unicode 码点 API / 无 UTF-8 校验；`String` 是字节串，`strPack` 越界是宿主错误。
 - `prim_execPath` 依赖 `/proc/self/exe`（Linux），其它平台走 `Sys.executable_name`。
 - `strPack` / `strUnpack` 的 List 桥接、`strSubstTemplate` 的模板扫描均在 runtime 里实现，
-  interp 不覆盖（§9）。
+  核心求值不覆盖（§9）。
 - 原语的失败（宿主错误、`strPack` 越界、`/0`、`exit`）都是**宿主异常 / 进程退出**，
   由生成的运行时报告器统一报告（见 [debugging.md](debugging.md)），不是语言的可捕获错误。
 - `net` 只有 TCP（数字 IPv4）与 Unix domain socket：无 DNS、TLS、异步/超时、并发；

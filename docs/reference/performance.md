@@ -204,7 +204,7 @@ vuna obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 关闭时每个探针只做一次 `Lazy.force`。逐定义探针照常打印，冷 build 的 DEBUG 输出量约
 15.8 万行（全量精化），实测冷 build 墙钟膨胀 ~60%：
 阶段比例可用，**绝对读数必须用无 `--debug-perf` / `VUNA_OBS=0` 口径**（§7）。
-`vuna interp` 不执行 tracing / 观测（原语归约为 no-op），输出只发生在 compile+run 的 runtime。
+核心求值不执行 tracing / 观测（原语归约为 no-op），输出只发生在 compile+run 的 runtime。
 
 结构化观测的成本纪律（关闭路径、事件缓冲、采样开销的实测口径）在
 [observability.md](observability.md) §6；那里也有 `#line` 让 `perf`/`gdb` 直接看到
@@ -308,7 +308,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 - 桶数 1024 → 4096（64×64，只为 Int 键降碰撞）：同窗口 6 次交替最小 14.10 s vs
   14.05 s，**≈0.3%，噪声量级**，撤。容器真正的上限在「固定 1024 桶 + 桶内链表」：
   27k 条解表平均桶长 ~26，`toList`/`size` 还是 O(n·桶长)。要动就得换 HAMT（稀疏节点 +
-  完整哈希位）或加宽 `strHash`（intrinsic，涉及 interp/native/wasm 三份实现 + 主题页），
+  完整哈希位）或加宽 `strHash`（intrinsic，涉及核心求值/native/wasm 三份实现 + 主题页），
   并重新 rotation；按当前读数不值得。
 - 把 binder 类型在绑定点求值成 Value 直接复用（省 `shift`+`eval`）：会改变不透明/擦除
   决策（`isOpaqueRuntimeTyIn` 按**当前**精化重算类型），属语义改动，撤，并把该不变式
@@ -565,7 +565,7 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
       `unlines` 改一次 `strConcatMany`。
    4. **GC 统计**：生成 runtime 支持 `VN_PERF_STATS=1`（退出打印 `Gc.quick_stat` 的
       minor/major words、collections、top_heap_words），`bench/run.sh` 采集进 JSON。
-2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；interp 也
+2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；核心求值也
    归约 `OpStrSubstring`），`Base.String.substring` 不走 List 桥接；`Base.String.repeat` 改一次
    `strConcatMany`；可变数据（`IORef`）保持 `Eff []` 隔离，不引入线性
    类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。

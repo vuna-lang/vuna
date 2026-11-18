@@ -18,7 +18,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | # | 决策 | 理由 / 代价 |
 | --- | --- | --- |
 | O1 | **规范格式 = Chrome Trace Event JSONL**（schema `vuna-obs 1`）；`.cpuprofile` / speedscope / folded / HTML 都是它的**换算** | Perfetto / `chrome://tracing` 原生可开；每行一事件，崩溃可截断容忍 |
-| O2 | 观测是**运行时契约的一部分**（隐藏原语 `@vuna@obs@*`），不是工具链私有 hack | 与 `dbg!` 同策略：纯函数可调用（深部纯核心探针不需要把签名 effect 化，见 debt D68）、`vuna interp` 归约 no-op、任何包可用 |
+| O2 | 观测是**运行时契约的一部分**（隐藏原语 `@vuna@obs@*`），不是工具链私有 hack | 与 `dbg!` 同策略：纯函数可调用（深部纯核心探针不需要把签名 effect 化，见 debt D68）、核心求值归约 no-op、任何包可用 |
 | O3 | **默认关闭**，显式打开（`VUNA_OBS=1..3` / `--obs` / `--obs-level N`） | 绝对性能读数必须来自关闭口径；关闭路径 = 一次 `Lazy.force` |
 | O4 | 分级：`0` 关；`1` 阶段 span + 计数；`2` 逐定义 span + 日志；`3` 采样（CPU/内存） | 每级成本有上界，见 §6 |
 | O5 | trace 是**普通文件**，绝不进对象库 / 缓存载荷 / 包产物 | 时间戳使产物非确定性；进缓存会污染命中 |
@@ -139,8 +139,8 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 | `@vuna@obs@sampleStart` | `String -> Int -> Int` | `"cpu"`/`"mem"`/`"both"` + 间隔 µs |
 | `@vuna@obs@sampleStop` | `Int -> Int` | 停止采样并 flush |
 
-`vuna interp`（`Core.Eval`）把 `level`/`counter`/`log`/`mark`/`sampleStart`/`sampleStop` 归约成
-`VInt 0`，`span` 归约成「把 thunk 应用到 0」——interp 永远静默（同 `dbg!`）。wasm/native
+核心求值（`Core.Eval`）把 `level`/`counter`/`log`/`mark`/`sampleStart`/`sampleStop` 归约成
+`VInt 0`，`span` 归约成「把 thunk 应用到 0」——核心求值永远静默（同 `dbg!`）。wasm/native
 后端：叶子原语为 no-op，`span` 编译期 `unsupported`（O12）。
 
 ### 4.2 库层 `Base.Obs`（所有 vuna 应用）

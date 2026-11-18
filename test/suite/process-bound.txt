@@ -5,7 +5,7 @@
 # 数量由 nix/checks/data/steps-inproc.max 做 ratchet（只允许下降，迁移走一个就删一行并下调上限）。
 
 100_export.steps	check	cli-text
-101_opaque.steps	check,interp	cli-text
+101_opaque.steps	check	cli-text
 102_abstract.steps	check	cli-text
 103_ir_lowering.steps	check,compile	artifact-exec;cli-text
 104_ir_runtime_contract.steps	check,compile	artifact-exec;cli-text
@@ -16,23 +16,22 @@
 111_host_error.steps	run	artifact-exec;build-link;cli-text
 112_stdin_eof.steps	run	artifact-exec;stdin-eof
 113_net_timeout.steps	build	artifact-exec;build-link
-14_cli.steps	build,check,compile,corpus,help,interp,lint,seed,--typed	seed-binary;build-link;cli-text;tooling-output;corpus-selfcheck
+14_cli.steps	build,check,compile,corpus,help,lint,seed,--typed	seed-binary;build-link;cli-text;tooling-output;corpus-selfcheck
 14b_binary_fingerprint.steps	build	build-link;cli-text
-17_diagnostics.steps	check,compile,interp	cli-render;cli-text
+17_diagnostics.steps	check,compile	cli-render;cli-text
 28_packages.steps	build,check,test	artifact-exec;build-link;cli-text
 29_package_errors.steps	build	build-link
-30_fmt_roundtrip.steps	check,fmt,interp	cli-text;fmt-text
+30_fmt_roundtrip.steps	check,fmt	cli-text;fmt-text
 31_doc_repl_smoke.steps	doc,repl	repl-session;cli-text;tooling-output
 33_package_split.steps	compile	artifact-exec;cli-text
 34a_repr.steps	compile	cli-text
 34b_ffi.steps	build	artifact-exec;build-link;cli-text
-34c_dt_pkg.steps	check,compile,help,interp	artifact-exec;cli-text;tooling-output
-34d_build_split.steps	build,compile,fmt,interp	artifact-exec;build-link;cli-text;fmt-text
+34c_dt_pkg.steps	check,compile,help	artifact-exec;cli-text;tooling-output
+34d_build_split.steps	build,compile,fmt	artifact-exec;build-link;cli-text;fmt-text
 35_goal_lsp.steps	check,fmt,goal,lint	cli-text;fmt-text;goal-session
 36_gen_errors.steps	gen-errors	tooling-output
 39_lint_cli.steps	lint	cli-text;tooling-output
-39_context.steps	build,check,compile,help,interp	build-link;cli-text;tooling-output
-40_eff_main_entry.steps	interp	cli-text
+39_context.steps	build,check,compile,help	build-link;cli-text;tooling-output
 40_toolchain_m30.steps	doc	tooling-output
 41_workspace_build.steps	build,check,test,fmt,doc,lint,compile	artifact-exec;build-link;cli-text;tooling-output
 42_repl_test_ws.steps	repl,test	repl-session;artifact-exec;cli-text
@@ -75,7 +74,7 @@
 63_debug_release.steps	check	cli-text
 64_infra.steps	check,run	artifact-exec;cli-text
 64_lsp_pull.steps	check,lsp	lsp-stdio;cli-text
-65_macros.steps	build,check,fmt,interp	build-link;cli-text;fmt-text
+65_macros.steps	build,check,fmt	build-link;cli-text;fmt-text
 65_warn_cache_reexport.steps	check	cli-render;cli-text
 66_meta_shift.steps	build,check,run	artifact-exec;build-link;cli-text
 67_pkg_deps.steps	check	cli-text

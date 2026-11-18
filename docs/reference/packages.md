@@ -66,8 +66,6 @@
     模块头显式导出列表逐项一行并按名排序，项注释随项移动；`infix*` 声明按源码顺序打印在
     imports 之后；fixity 取**程序级**可见闭包，见 [operators.md](operators.md)）；省略 PATH
     时格式化 workspace 内所有包的 `lib/app/test`；
-  - `vuna interp <file.vuna>`：DT 精化 + 核心求值（纯；不执行效果；入口文件按最近 manifest
-    获得包上下文，无则 base-only）；
   - `vuna repl [FILE|DIR|MODULE]`：REPL，定义累积、表达式经 DT 求值（支持 import/记录/
     trait/do；缺签名的 `DFun` 自动推断并回写，失败回滚；与 CLI 同一包上下文）；未闭合
     括号 / 尾随 `=` / `where` / `do` 等自动续行，`:{ ... :}` 块输入；动作表达式经临时包
@@ -99,8 +97,8 @@
 - 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.EffExit`）。
   没有 manifest 级能力/特权/信任门控：effectful `prim_*` / `prim_eff_*` 宿主层
   对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Eff.*` 标签 +
-  handler 使用效果——这是约定与文档纪律，不是强制门控。`vuna interp` 是纯核心求值
-  （不执行效果），效果程序用 `compile` + 运行产物。
+  handler 使用效果——这是约定与文档纪律，不是强制门控。纯测试的核心求值不执行效果；
+  效果程序用 `compile` + 运行产物。
 
 ## 效应边界（无 manifest 门控）
 
@@ -114,7 +112,7 @@
   base 的 Eff handler、编译器与根工具链内部直接使用它们——不由编译器强制，只是约定。
 - **显式接受的损失**（[debt.md](debt.md) D62）：宿主层 import 门控、
   每包原语白名单、`unsafe` 定义级审计、网络仅根包可用。仍然有效的边界决策：唯一动作类型
-  是 `Eff r a`，入口 `main : Eff [] a`，`vuna interp` 不执行运行时效应。
+  是 `Eff r a`，入口 `main : Eff [] a`，核心求值路径不执行运行时效应。
 - **base 的宿主层直接使用点**：13 个真实使用点见 [effects.md](effects.md) §8.6。
 
 ## 依赖声明（源 + 摘要）
@@ -261,7 +259,6 @@ modules = [
 | `vuna check (<file.vuna> \| <package-dir>)` | 类型检查（workspace 根检查所有成员；单文件带 `module` 头 = 库模块检查；不生成代码） |
 | `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]` | 逐模块 codegen（默认 `<PKG-DIR>/.output`）+ 执行 `build.sh` → `DIR/bin/<包名>`；workspace 根建所有可执行成员 |
 | `vuna lint [--fix] <file.vuna>...` | 风格检查与自动修复 |
-| `vuna interp <file.vuna>` | DT 精化 + 核心求值（纯；只展示 `Int`/`String`/`Bool`） |
 | `vuna test [DIR]` | 纯测试走核心求值；`main : Eff [] ...` 走 compile+运行（退出码 0 通过） |
 | `vuna fmt [--check] [PATH]...` | 格式化 |
 | `vuna repl [FILE\|DIR\|MODULE]` | 交互式 REPL（自动签名、行编辑/Ctrl-R、颜色；动作表达式经 compile+运行） |
@@ -277,7 +274,7 @@ modules = [
 | `vuna help`, `vuna -h` | 用法 |
 
 每个命令都必须显式书写（没有「无子命令 = compile」的回退）。没有可选的检查器开关：
-所有编译命令都走 DT 精化 + 擦除 codegen，`vuna interp` 总是 DT 精化 + 核心求值。包目录
+所有编译命令都走 DT 精化 + 擦除 codegen，纯测试求值总是 DT 精化 + 核心求值。包目录
 入口直接作为入口文件交给 `compile` / `check`；`compile`/`build` 的产物统一是逐模块目录
 （`--out` 指定 build 的输出目录），seed rotation 用 `build --no-compile --out` +
 `nix/seed/rotate.sh`。工具命令的退出码约定：0 成功、1 运行期错误、2 用法 / 参数错误；

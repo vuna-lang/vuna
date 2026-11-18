@@ -121,7 +121,7 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed/rotation.tx
    package manager 都不进 TCB；
 4. 编译器自检：当前编译器必须能类型检查自己的源码（`checks.vuna-typecheck`，`vuna check .`
    走 DT）；
-5. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
+5. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT（精化 + 擦除 codegen），
    没有可切换的检查器，也没有第二套 codegen。
 
 ## 效应边界（无 manifest 门控）

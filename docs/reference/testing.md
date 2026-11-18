@@ -41,7 +41,7 @@ vuna test --suite test/suite.toml --json          # 机器可读汇总
 | --- | --- |
 | `<base>.diag.json` | **负例的唯一期望载体**：结构化诊断（`check --json` 聚合文档）。断言 `(severity, code, file, line, col)` 多重集 + 条数，**不比对文案**；`--bless-diag` 生成 |
 | `<base>.interp.out` | 只跑 interp golden（无 compile/run） |
-| `<base>.run.out` | 只做 compile+build+run golden（原 `.nointerp` 场景） |
+| `<base>.run.out` | 只做 compile+build+run golden |
 | `<base>.run.err` | 产物运行期错误片段；退出码断言非 0 |
 | `<base>.run.exit` | 期望退出码（n=0 断言恰好 0；n>0 断言恰好 n） |
 | `<base>.out` | **共享** golden：interp 与 compile+run 都开，断言输出一致 |

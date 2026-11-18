@@ -8,7 +8,7 @@
 #   * PKG_NotMaterialized / PKG_Invalid：依赖物化状态（外部输入），无源文件行；
 #     应对方式是标记 `SiteAbsent NsPackageGraph`。
 #   * IC_InvariantViolated：编译器内部不变量，按约定不伪造用户位置。
-#   * CG_NoMain：`vuna interp` 的核心求值路径没有入口文件上下文；包检查路径已定位。
+#   * CG_NoMain：核心求值路径没有入口文件上下文；包检查路径已定位。
 
 # --- 无用户书写点 / 外部输入 ---
 RN_AmbiguousPrelude

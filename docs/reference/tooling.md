@@ -1,7 +1,7 @@
 # 工具链：goal、LSP、doc、fmt 与错误码
 
 本文覆盖 DT 路径的**工具链**：洞目标显示、LSP server、`vuna doc`、`vuna fmt`，以及
-`vuna run` / `vuna interp` / REPL 的命令语义、诊断错误码与 CLI 退出码。
+`vuna run` / REPL 的命令语义、诊断错误码与 CLI 退出码。
 语言语义见 [language.md](language.md) / [type-system.md](type-system.md)，实现边界见
 [core.md](core.md)，模块与 TCB 边界见 [architecture.md](../architecture.md)。
 
@@ -109,12 +109,11 @@ CLI 统一使用 0 / 1 / 2 三档：
 | --- | --- | --- |
 | 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 error finding 或 warning 超过 `max-warnings`；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
-| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `interp` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
 
 约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。`vuna build` / `vuna compile` 的入口能力告警（`UN_TargetEffectUnavailable`）走同一条显示与退出码策略；`--deny-warnings` 失败时按「编译失败不留产物」删除输出目录。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 可能不完整**：诊断列表会随 check 结果（Pass/Fail）一起落盘并在命中时重放；但「干净模块复用」的那次运行只拿到被精化模块的 warning，所以 `-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）仍跳过 check 结果缓存、并让**本包**模块全部重新精化（依赖包仍复用接口摘要）——热缓存下告警完整，代价是该次 check 从「缓存命中 ~ms」回到「本包精化秒级」。普通 `vuna check` 的命中/失败重放照常（不显示 warning）。
 
-约定之外：`vuna interp` 把任何检查 / 求值失败报成 2（输出以 `error:` 开头）；`vuna
-search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
+约定之外：`vuna search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vuna run` 透传子进程退出
 码；`vuna repl` 的启动目标既不存在也不是模块名时为 1、加载失败为 2。（ICE 的独立退出码为 70，见 [diagnostics.md](diagnostics.md) §7。）
 
 产物运行期未捕获
@@ -147,7 +146,7 @@ search` 无命中为 1（用法 / 查询解析 / 非 workspace 仍为 2）；`vu
 | `CG_TypeLevelBindingRuntime` | codegen | 运行时用到被擦除绑定 |
 | `CG_TypeUsedAtRuntime` | codegen | 运行时出现类型项 |
 | `CG_AxiomAtRuntime` | codegen | 运行时使用 axiom |
-| `CG_InterpCannotExecuteEffects` | codegen | `vuna interp` 遇到 `main : Eff [] a` |
+| `CG_InterpCannotExecuteEffects` | codegen | 核心求值路径遇到 `main : Eff [] a`（纯求值的库内守卫） |
 
 ## 4. `vuna run` 与 REPL 调试命令
 
@@ -169,12 +168,6 @@ in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>
 - `--timeout SECS` 对**所有**目标额外包一层 coreutils `timeout -s TERM -k 5`（硬兜底），
   同时（native）设置 `VUNA_NATIVE_TIMEOUT_MS`，让产物自己报
   `vuna: runtime error: timeout exceeded` + exit 2。
-
-`vuna interp <file.vuna>` 走同一条 DT 精化后再做**纯核心求值**，不执行效果：任何
-`main : Eff [] a` / `main : Eff [] a` 一律报 `[CG_InterpCannotExecuteEffects]`，消息是
-`interp cannot execute effects (main : Eff [] a), so compile and run the program instead`
-（exit 2）；纯 `main` 只展示 `Int` / `Nat` / `String` / `Bool`，需要效果或其它展示时用
-`compile` + 运行产物。
 
 REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编辑在
 `Vuna.Repl.Edit` / 终端层在 `Vuna.Repl.Term`；server / 客户端在 `Vuna.Repl.Server` /

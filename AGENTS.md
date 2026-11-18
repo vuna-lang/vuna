@@ -59,7 +59,7 @@
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
    `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；
    tracing 走隐藏 runtime 原语。
-6. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT（精化 + 擦除
+6. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT（精化 + 擦除
    codegen，`vuna check .` 也是 DT 自检）；没有可切换的检查器，也没有第二套 codegen；
 7. 编译器自检通过：`vuna check .` 必须能检查自身源码（`checks.vuna-typecheck`）。
 8. **包内层方向**：`packages/compiler/` 的层依赖由 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader

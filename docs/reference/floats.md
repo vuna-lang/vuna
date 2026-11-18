@@ -53,14 +53,14 @@ import（显式 `import Base.Float` 仍允许）。`show` 的文本规则与 OCa
 `main : Float` 的展示同样走 `floatRender`；模板插值 `${1.5}` 与 `show` 同文本。
 代价见「Prelude 与产物影响」。
 
-### interp / REPL
+### 核心求值 / REPL
 
-核心求值器**支持浮点**：`vuna interp` 与 REPL 求值按 IEEE-754 double 归约
+核心求值器**支持浮点**：`vuna test` 的纯测试与 REPL 求值按 IEEE-754 double 归约
 全部浮点原语（`+ - * /`、`< <= > >=`、`==`、`/=`、`abs` / `sqrt` → `floatAbs` /
 `floatSqrt`、`floatFromInt` / `intFromFloat`），语义与编译产物一致
 （除零得 `infinity`、`0.0 / 0.0` 得 `nan`、`nan == nan` 为 False、`+0.0 == -0.0` 为
 True）。`VFloat` 的载荷与展示都走同一份 `%.12g` 文本（字面量在求值入口规范化），
-因此 interp 展示、定义性相等与编译产物三处同文本：
+因此核心求值展示、定义性相等与编译产物三处同文本：
 
 ```console
 vuna> 1.5 + 2.25
@@ -71,7 +71,7 @@ vuna> 1.0 / 0.0
 inf
 ```
 
-`main : Float` 的 interp 展示同样用 `%.12g` 规范文本（与编译路径一致）。
+`main : Float` 的核心求值展示同样用 `%.12g` 规范文本（与编译路径一致）。
 REPL 的 `:type` 仍只做类型检查，不等价于求值。**类型表达式里的浮点字面量仍被拒绝**
 （类型语法不接受 `Float` 字面量，见负例 `09_float_in_type`）。
 
@@ -147,8 +147,8 @@ Prelude 的是 trait、实例与 helper。取舍：
 * 代价：Prelude 闭包包含 `Base.Float`，`Driver.SplitGen` 按**全部定义**扫描浮点用法，
   因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；没有「no-float 程序不追加」的
   逐字节约定（seed 固定点 / 模块缓存仍由 rotation 保证）。
-* `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「interp 见浮点就拒绝」
-  的 guard 不存在；interp / REPL 直接按 `Core/Eval` 的浮点归约求值。
+* `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「核心求值见浮点就拒绝」
+  的 guard 不存在；核心求值 / REPL 直接按 `Core/Eval` 的浮点归约求值。
 * `Base.Intrinsics` 里浮点内建单独成表（`floatIntrinsics`），不改变 Int/String 原语面。
 
 ## 测试
@@ -156,4 +156,4 @@ Prelude 的是 trait、实例与 helper。取舍：
 `test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
 模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float`、Prelude 默认
 可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。浮点夹具
-不带 `.nointerp`：interp 与 run 都与同一份 golden 逐字节比较。
+同时走核心求值与 run，二者都与同一份 golden 逐字节比较。

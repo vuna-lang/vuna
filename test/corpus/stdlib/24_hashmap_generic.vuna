@@ -1,5 +1,5 @@
 -- stdlib：泛型 HashMap / HashSet（任意 Eq + Hashable 键）。
--- 需要 strHash intrinsic → 标 .nointerp，只 check + compile + run。
+-- 需要 strHash intrinsic；只 check + compile + run（.run.out）。
 import Base.Eq
 import Base.HashMap
 import Base.HashSet

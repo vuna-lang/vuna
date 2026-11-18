@@ -12,7 +12,7 @@
 
 比较 / 相等 `==` `/=` `<` `<=` `>` `>=` **就是** `Base.Eq` / `Base.Ord` 的方法名；
 算术 `+` / `-` / `*` / `/` **就是** `Base.Num` 的方法名（内建四则对用户不可见，
-codegen / interp 仍按 runtime 映射；用户实现 `Num` 配 `FromInt` 即可重载）。
+codegen / 核心求值仍按 runtime 映射；用户实现 `Num` 配 `FromInt` 即可重载）。
 trait 方法、instance 方法与 data 构造子都可以用符号名声明。
 
 **声明位带括号，使用位裸写**：`(==) : a -> a -> Bool`、`(<+>) x y = ...`、
@@ -38,8 +38,8 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
    编译器只为内建符号（`->`、`&&`、`||`）提供固定声明
    （`Loader.Fixity.builtinFixityDecls`），用户对它们声明 fixity 会报 `RN_BuiltinFixity`。
 5. **未知运算符 = 报错**：符号运算符用于中缀、但可见表里没有声明 ⇒
-   `unknown fixity for operator <op> (declare it with infixl/infixr/infix)`，check / compile /
-   interp 非 0。**不静默默认优先级**——否则漏声明时 `a + b * c` 会静默变成 `(a + b) * c`。
+   `unknown fixity for operator <op> (declare it with infixl/infixr/infix)`，check / compile
+   非 0。**不静默默认优先级**——否则漏声明时 `a + b * c` 会静默变成 `(a + b) * c`。
    只有反引号名字没有声明时按 9 左结合（与 Haskell 一致）。
 6. **fixity 全程序唯一**：一个运算符在加载闭包里只能有一处声明；重复声明报
    `RN_DuplicateFixity`（指向后一处）。`Module` 只存本模块自己的声明，加载完成后拼成
@@ -169,7 +169,7 @@ codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` �
   折叠（语法糖，不是运算符）。
 - **`&&` / `||`** 是短路内建（不是 trait 方法），fixity 来自 `Base.Bool` 声明。
 - **`++`** 是 String 内建值，fixity 来自 `Base.String` 声明；**`+` / `-` / `*` / `/`** 是
-  `Base.Num` 方法（fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / interp
+  `Base.Num` 方法（fixity 来自 `Base.Num` 声明），内建名只保留给 codegen / 核心求值
   的 runtime 映射（`intrinsicVisible=False`）。
 
 ## 实例落点规则

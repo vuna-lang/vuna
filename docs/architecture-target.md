@@ -100,7 +100,7 @@
 | D6 | client/server 由框架切分；边界用类型表达；切分在构建图里做 | 胶水与平台演进不该进编译器 | 切分正确性靠构建图检查与测试，不再由编译器保证 |
 | D7 | 自举锚点保持 OCaml（`seed/` 与语义 oracle）；wasm 不做自举、不设 wasm seed | 现行 wasm 只能跑浏览器/边缘可提供的能力子集（symlink、阻塞 sleep、可靠 mtime 等不在契约内），不能承担编译器自举所需的宿主面；wasm 的目标角色是浏览器 / 边缘产物 | 自举链继续依赖 OCaml 工具链；wasm 侧只保留产物与语义测试，不建二进制信任根 |
 | D16 | wasm 产物以 WAT 为 canonical；`.wasm` 由 `wasm-tools parse` 生成；WAT 暂不进 Git | 文本可审查、布局稳定可 diff；二进制交给成熟工具 | `.wasm` 字节依赖工具版本；WAT 布局不承诺跨版本稳定 |
-| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 可在 run 路径成熟后退 | 保留 normalization，去掉语义分叉 | REPL / test / goal 需改接对象库与后端 |
+| D8 | interp 保留"纯求值"，退役"第二执行语义"；`vuna interp` 命令已删除，纯求值只在 `vuna test` / REPL 内部使用 | 保留 normalization，去掉 CLI 语义分叉 | 第二执行语义（`runEffectProgram` 临时包）仍待清理；REPL / test 需改接对象库与后端 |
 | D9 | 单一输入寻址对象库是横切基础设施，所有消费者是客户端 | 消灭多套缓存与多个入口 | 目录视图与 roots 需要并发/GC 规则 |
 | D10 | vuna-web 是生态层、是核心的验收测试，永不进 TCB | 框架不得倒灌核心 | 每个 web 需求都必须先翻译成通用语言特性 |
 | D17 | 包内依赖方向是**包格式的一部分**：`vuna.toml` 的 `[layers]` 声明层（= 模块前缀 = 目录）及允许的直接依赖，由 loader 在 import 时强制；不用「拆包」表达方向（[packages.md](reference/packages.md)「层约束」） | 方向是包的语义契约，应该随包一起被校验、被缓存身份覆盖；拆包会把一个编译单元切成多个包，代价远大于收益 | 层内 / 向下但跨子系统的 import 不受约束；只在需要严格方向的层上写表；层表与目录不同构时只能靠改目录（不改表）来纠正 |

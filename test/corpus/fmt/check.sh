@@ -4,7 +4,7 @@
 # 结构（本目录）：
 #   *.vuna + *.fmt          —— 格式化 golden：format 结果与 .fmt 逐字节一致，
 #                              且 format→parse→format 幂等（fmt --check）。
-#   run/*.vuna + *.out      —— 可解释程序：格式化前后 `vuna interp`（DT 核心求值）输出一致且等于 golden。
+#   run/*.vuna + *.out      —— 纯程序：格式化前后 compile（目录式 + build.sh）产物运行输出一致且等于 golden。
 #   typed/*.vuna + *.out    —— 编译期语义程序（辅助函数 / 自递归，定义都在顶层）：
 #                              格式化前后 compile（目录式 + build.sh）产物运行输出一致且等于 golden。
 #
@@ -91,7 +91,7 @@ for file in "$HERE"/*.vuna; do
   fi
 done
 
-# ---- 2) 解释器语义：格式化前后 interp 输出一致 ----
+# ---- 2) 纯程序语义：格式化前后编译运行输出一致 ----
 for file in "$HERE"/run/*.vuna; do
   [ -f "$file" ] || continue
   name=$(basename "$file")
@@ -109,11 +109,33 @@ for file in "$HERE"/run/*.vuna; do
   else
     ok
   fi
-  before=$(cd "$REPO" && "$VUNA" interp "$file" 2>&1)
-  after=$(cd "$REPO" && "$VUNA" interp "$formatted" 2>&1)
   expected_text=$(cat "$expected")
-  check_eq "$name (interp golden)" "$expected_text" "$before"
-  check_eq "$name (interp after format)" "$before" "$after"
+  rm -rf "$tmp/r1" "$tmp/r1.exe"
+  if ! ( cd "$REPO" && "$VUNA" compile "$file" "$tmp/r1" ) >"$tmp/r1.log" 2>&1; then
+    bad "$name (compile)"
+    cat "$tmp/r1.log"
+    continue
+  fi
+  if ! ( cd "$tmp/r1" && OCAMLOPT="$OCAMLOPT" sh build.sh "$tmp/r1.exe" ) >"$tmp/r1.opt.log" 2>&1; then
+    bad "$name (ocamlopt)"
+    cat "$tmp/r1.opt.log"
+    continue
+  fi
+  before=$("$tmp/r1.exe" 2>&1)
+  check_eq "$name (run golden)" "$expected_text" "$before"
+  rm -rf "$tmp/r2" "$tmp/r2.exe"
+  if ! ( cd "$REPO" && "$VUNA" compile "$formatted" "$tmp/r2" ) >"$tmp/r2.log" 2>&1; then
+    bad "$name (compile after format)"
+    cat "$tmp/r2.log"
+    continue
+  fi
+  if ! ( cd "$tmp/r2" && OCAMLOPT="$OCAMLOPT" sh build.sh "$tmp/r2.exe" ) >"$tmp/r2.opt.log" 2>&1; then
+    bad "$name (ocamlopt after format)"
+    cat "$tmp/r2.opt.log"
+    continue
+  fi
+  after=$("$tmp/r2.exe" 2>&1)
+  check_eq "$name (run after format)" "$before" "$after"
 done
 
 # ---- 3) typed codegen 语义：格式化前后编译运行输出一致 ----

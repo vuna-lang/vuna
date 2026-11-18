@@ -61,7 +61,7 @@ main : Eff [] Nat
 | 实例名 | 名字与签名进标签 `Named : String -> (Type -> Type) -> Type`（行条目 `Named "audit" ConsoleOp`），默认 `"default"`，显式 `@` 名；运行时仍是 `(key, name)` 路由，name 作隐式 String 传给 send/handle |
 | 行标签 | 标签 = 命名后的效应签名（`Named "audit" ConsoleOp`、`Named "counter" (StateOp Nat)`）；op 族以结果类型为最后索引（`ConsoleOp : Type -> Type`、`StateOp : (s : Type) -> Type -> Type`） |
 | 权威 | 宿主 op 构造器不导出；`prim_eff_*` 是宿主层逃生口（无 manifest 门控，见 [effects.md](effects.md) §8.6 与 [debt.md](debt.md) D62） |
-| 纯效应 | 库级 monad 与 mock handler 并存；interp 可执行 mock 程序 |
+| 纯效应 | 库级 monad 与 mock handler 并存；核心求值可执行 mock 程序 |
 | 一次性续延 | 运行时 one-shot；resume 两次抛 `Continuation_already_resumed`，线性类型化未做（[debt.md](debt.md) D42） |
 | handler 续延域 | `i -> b` 是秩二的；codegen 用索引投影 `resIdx i o`（`resIdx i o = i`）让续延域保持类型族头 → 不透明值 + 恒等 cast（[debt.md](debt.md) D27） |
 
@@ -202,7 +202,7 @@ stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）
 ## 5. 表示收敛
 
 - 纯 handler（不触宿主 op）在 NbE 内执行（delimited continuation 的 NbE 实现）；
-  `vuna interp` 可跑 mock 效应程序，mock/real 对拍变成 interp vs 产物。
+  核心求值可跑 mock 效应程序，mock/real 对拍变成核心求值 vs 产物。
 - 续延类型化未做：`k` 当前是 ω，线性续延 / 一次性闭包的 QTT 类型化见
   [debt.md](debt.md) D42。
 - handler 续延域用索引投影 `resIdx i o` 保持「不透明擦除值」（漏 cast 边界、trait

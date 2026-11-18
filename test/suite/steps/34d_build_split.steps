@@ -43,8 +43,7 @@ run: mkdir -p "$TMPDIR/fmt-pkg"; printf '[package]\nname = "fmt-roundtrip"\n\n[d
 exit: 0
 run: "$VUNA" fmt "$TMPDIR/fmt-pkg/dt_fmt.vuna" 2>&1
 exit: 0
-run: "$VUNA" interp "$TMPDIR/fmt-pkg/dt_fmt.vuna" 2>&1
+run: "$VUNA" check "$TMPDIR/fmt-pkg/dt_fmt.vuna" 2>&1
 exit: 0
-out-equals: 41
 run: "$VUNA" fmt --check "$TMPDIR/fmt-pkg/dt_fmt.vuna" 2>&1
 exit: 0

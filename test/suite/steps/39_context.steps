@@ -18,9 +18,8 @@ out-equals:
 run: VUNA_BASE=/nonexistent "$VUNA" check "$TMPDIR/ctx/simple.vuna" 2>&1
 exit: nonzero
 out-contains: /nonexistent
-run: "$VUNA" interp corpus/dt_ad_hoc/Main.vuna 2>&1
+run: "$VUNA" check corpus/dt_ad_hoc/Main.vuna 2>&1
 exit: 0
-out-equals: 42
 run: "$VUNA" build "$TMPDIR/cross/b" 2>&1
 exit: nonzero
 out-contains: cannot find module A

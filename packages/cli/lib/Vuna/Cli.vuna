@@ -2,7 +2,7 @@
 --
 -- 编译器命令（`compile` / `check` / `build` / `seed`）由
 -- `Vuna.Compiler.Driver.CompilerCli` 实现，这里只做 in-process 分发；工具命令（`lint` /
--- `interp` / `test` / `fmt` / `repl` / `doc` / `search` / `add` / `pin` / `fetch` / `clean` /
+-- `test` / `fmt` / `repl` / `doc` / `search` / `add` / `pin` / `fetch` / `clean` /
 -- `store` / `map` / `api` / `goal` / `obs` / `lsp` 等）的实现在本包或各自模块。
 -- `app/Main.vuna` 只是 `main = do args <- getArgs; code <- runCli args; exit code`。
 --
@@ -21,7 +21,6 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Base.Version
-import Vuna.Interp
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
@@ -65,7 +64,6 @@ toolUsageLines prog = """  ${prog} lint [--fix] [--dry-run] [--format text|json|
        [--select RULE]... [--ignore RULE]... [--config PATH] [--no-config] [--no-cache]
        [--max-passes N] [--list] [--explain RULE] [PATH]...
        PATH 可为文件或目录；省略时扫 workspace 各包的 lib/ 与 app/；配置读 vuna.toml 的 [lint]
-  ${prog} interp <file.vuna>                   精化后核心求值（纯；不执行效果）
   ${prog} test [--list] [--filter PAT]... [--verbose] [--fail-fast] [--jobs N] [DIR]
       运行包内 test/*.vuna（纯 String/Int/Bool 走核心求值；main : Eff [] a ... 走 compile+运行；
       --jobs N 每个测试文件一个子进程、最多 N 并发，默认 1）
@@ -164,7 +162,6 @@ runCli1 args = case args of
     "build" => runCompilerCliFor "vuna" (arg :: rest)
     "seed" => runCompilerCliFor "vuna" (arg :: rest)
     "lint" => Vuna.Lint.runLint (stripReleaseArgs rest)
-    "interp" => interpArgs (stripReleaseArgs rest)
     "test" => testArgs (stripReleaseArgs rest)
     "run" => Vuna.Run.runRun rest
     "fmt" => fmtArgs (stripReleaseArgs rest)
@@ -246,43 +243,6 @@ firstMissingPath [] = pure Nothing
 firstMissingPath (path :: rest) = do
   exists <- fsFileExists path
   if exists then firstMissingPath rest else pure (Just path)
-
--- ---------------------------------------------------------------
--- interp
--- ---------------------------------------------------------------
--- | 内部：解析 `vuna interp` 的参数：只接受一个位置参数（源文件）。
-interpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-interpArgs args = case parseToolArgs "vuna interp" [] args of
-  ErrC e => toolError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [file] => interpFile file
-    _ => usageError 0
-
--- | 内部：interp 只接受单文件；包目录的入口是 `check` / `compile`。
-interpFile : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
-interpFile path = do
-  existsR <- requireExists path
-  case existsR of
-    ErrC e => toolError (diagText e)
-    OkC _ => do
-      isDir <- fsIsDirectory path
-      if isDir then interpDirErr path else interpEmit path
-
--- | 内部：把包目录传给 interp 的用法错误出口。
-interpDirErr : Member nConsole ConsoleOp r => String -> Eff r Int
-interpDirErr path = toolError "interp takes a single file, not a package directory: ${path}"
-
--- | 内部：取文件所在的包上下文后精化求值并打印结果；结果以 `error:` 开头视为失败（exit 2），
--- 上下文解析失败 exit 1。
-interpEmit : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
-interpEmit path = do
-  ctxR <- contextForFile path
-  case ctxR of
-    ErrC e => toolFailure (diagText e)
-    OkC ctx => do
-      output <- interpretFile ctx path
-      _ <- consolePrint "${output}\n"
-      pure (if startsWith "error:" output then 2 else 0)
 
 -- ---------------------------------------------------------------
 -- test（包模式；--list / --filter / --verbose / --fail-fast；

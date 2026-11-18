@@ -87,7 +87,7 @@ API（`packages/base/lib/Base/EffSched.vuna`）：
 - **Mutex/Semaphore**：`Base.EffMutex` 用 IORef + yield 忙等；`acquire/release`、
   `newSemaphore/semWait/semSignal`；夹具 `dt_base/37`（2）。
 
-夹具（均 `.nointerp`，只 `check` + `compile` + 运行）：
+夹具（均关闭 interp 阶段，只 `check` + `compile` + 运行）：
 
 - `dt_base/42_eff_bracket_abort`：自定义 Abort handler 丢弃续延，`Base.Eff.bracket` 的 release 写入被外层 State handler 看到（4207）。
 - `dt_base/43_eff_sched_bracket`：调度器取消后 `use` 正常返回，带内 release（`acquire/release/3`）。
@@ -134,7 +134,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 - **宿主 handler 的形态**：`handleXHost` 接受行首为对应标签的 `Eff (e :: r) a`，
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
 - **原生 sleep**：编译器原语 `prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
-  `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，interp 不归约）。
+  `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，核心求值不归约）。
   `Base.EffClock` 的 `SleepMicros` 直接走 `prim_eff_sleep`。
 - **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = prim_eff_exit`，调用即
   结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
@@ -152,7 +152,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   都可用；编译器自身在 seed 闭包里必须做宿主操作（`prim_eff_*`、`Codegen`）。纪律面可在
   `vuna lint` 增加模块级规则（如禁止 `packages/cli/lib/Vuna/**` 新增直接 `prim_*`/`prim_eff_*` 使用，
   白名单 `Vuna.Cli.consoleLine` 一类的点），而不是改类型检查器。
-- **对拍夹具**（`.nointerp`，只 check + compile + run）：
+- **对拍夹具**（关闭 interp 阶段，只 check + compile + run）：
   - `dt_base/26_eff_console`：同一 `prog n` 在 `ConsoleOp@mock`（mock，纯 answer 收集日志）
     与 `ConsoleOp@real`（real，`prim_eff_print`/`prim_eff_eprint`）下各跑一次；
   - `dt_base/27_eff_clock`：mock 固定时间 → elapsed 0；real 断言 sleep 后时间推进

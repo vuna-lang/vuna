@@ -7,7 +7,7 @@ REPL `:type`）。语言语义见 [language.md](language.md)，诊断错误码�
 
 ## 1. 编译期诊断：源码片段
 
-`vuna check` / `compile` / `build` / `interp` 的错误在原有
+`vuna check` / `compile` / `build` 的错误在原有
 `<file>:<line>:<col>: [CODE] <消息>` 之后追加源码片段（结构化渲染：`Vuna.Compiler.Base.Diag.Format`
 的 `renderShortSnippetEff` / `renderHuman`，从 label 的 span 取位置，不再反解析消息文本）；
 列按 UTF-8 码点换算成显示列（CJK / tab 不再错位）：
@@ -84,7 +84,7 @@ vuna: runtime error: division by zero
 
 `dbg!` 展开为隐藏 runtime 原语（`@vuna@debug@on` / `@vuna@debug@line`，见
 [primitives.md](primitives.md)），`obs!` / `mark!` 展开为 `@vuna@obs@log` / `@vuna@obs@mark`，
-所以源码里没有“假纯值”；`vuna interp` 不执行 tracing / 观测（都归约为 no-op），
+所以源码里没有“假纯值”；核心求值路径（`vuna test` 纯测试 / REPL）不执行 tracing / 观测（都归约为 no-op），
 输出只发生在 compile+run 的 runtime。
 
 `DebugShow` 在 `Base.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，

@@ -27,7 +27,6 @@ main : Int
 main = 1 + 2 * 3
 EOF
 nix run .#vuna -- check hello.vuna               # 类型检查
-nix run .#vuna -- interp hello.vuna              # -> 7
 nix run .#vuna -- compile hello.vuna hello-out   # 逐模块 .ml + build.sh 写到 hello-out/
 sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 
@@ -35,7 +34,7 @@ sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 nix run .#vuna -- build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
 examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可覆盖输出目录）
 nix run .#vuna -- check examples/multi         # 包级类型检查
-nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走 interp；main : Eff [] ... 走 compile+运行
+nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走核心求值；main : Eff [] ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
@@ -72,7 +71,6 @@ vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR  # 逐模块 cod
 vuna check (<entry.vuna> | <package-dir>)
 vuna build [--no-compile] [--out DIR] [PKG-DIR]  # 默认 `<PKG-DIR>/.output`；跑 build.sh → 输出目录/bin/<包名>
 vuna lint [--fix] [--format text|json|github|sarif] [PATH]...
-vuna interp <file.vuna>                   # 精化后核心求值（纯；不执行效果）
 vuna test [DIR] [--list|--filter PAT|--verbose|--fail-fast]  # 运行 test/*.vuna（main : String 空串通过）
 vuna run [DIR] [--package NAME] [--no-build] [--release] [-- ARGS...]    # 增量 build + 执行 .output/bin/<包名>
 vuna fmt [--check] [PATH]...
@@ -88,9 +86,7 @@ vuna help, -h
 `vuna-compiler` 是同一套编译器命令的独立 CLI（seed 的来源），参数与 `vuna` 的同名命令一致。
 `vuna` 的编译命令直接调用 `Vuna.Compiler.Driver.CompilerCli` 的库实现（in-process 调库，不
 fork `vuna-compiler`）；`vuna build` 在 codegen 后执行生成的 `build.sh`（经受限进程执行内建
-`prim_eff_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。`vuna interp` 是
-**DT 精化 + 核心求值**：先按 DT 检查再求 `main` 的值，只展示 `Int`/`String`/`Bool`；任何
-`main : Eff [] a` 一律明确报错（核心求值器不执行效果），请改用 `compile` + 运行产物。
+`prim_eff_runIn` 调 `ocamlopt`）产出 `DIR/bin/<包名>`，无额外运行时依赖。
 
 **包上下文是唯一的加载语义**：每个源文件向上找最近的 `vuna.toml`（该包 + 依赖闭包解析
 import）；无 manifest 时只有 base 上下文（`VUNA_BASE` 覆盖，否则按可执行文件相对布局
@@ -133,7 +129,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
    门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Eff` +
    handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
    入口 `main : Eff [] a`）；
-4. **唯一路径**：语言夹具、`vuna interp`、包构建与 seed 全部走 DT；没有第二套
+4. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT；没有第二套
    checker/codegen；
 5. 编译器自检通过（`vuna check .`）；`seed/` 是生成物，禁止手改。
 
@@ -155,7 +151,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/effects.md](docs/reference/effects.md) | 效应：Eff 统一动作与行/命名/一次性续延、ST/region、宿主 handler |
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
-| [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与 interp 限制 |
+| [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与核心求值限制 |
 | [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Eff.*` handler 用法 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna fetch` / `clean --packages`、内容摘要与语义身份 |

@@ -1,7 +1,7 @@
 # 类型系统（依赖类型）
 
 vuna 只有一套类型检查器：依赖类型（DT）的双向精化 + NbE 定义性相等。没有可切换的
-检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` / `interp` /
+检查器，也没有「DT 子集」开关；所有命令（`check` / `compile` / `build` /
 LSP / 测试夹具）都走它。本文是类型规则的语义页；语法与模块系统见
 [language.md](language.md)，记录 / trait / `do` 见 [records-traits.md](records-traits.md)，
 quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页为准）；Core 表示与
@@ -99,7 +99,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   2. `Eq` 证据：手写实例、`deriving (Eq)` 生成的实例、约束实例。
   具体类型没有实例、函数类型相等、`Eq` 类不在作用域，都在 `check` 期报错
   （`TC_NoInstanceFound` / `TC_EqRequiresEvidence`）。**没有泛型结构比较兜底**，
-  interp 与编译产物也没有第二套相等算法。
+  核心求值与编译产物也没有第二套相等算法。
 - **运算符是方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是独立的语义
   入口，Loader 把它们解析成 `eq` / `neq` / `lt` / `le` / `gt` / `ge`（统一在
   `Loader.Fixity` 的重排与别名表里）。`a == b`、`eq a b`、``a `eq` b`` 是同一个调用；
@@ -201,8 +201,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   `CG_RecursiveValueDefinition`。
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
   `Int` / `Nat` / `String` / `Bool` 或 `Eff [] a`（`Eff` 是 `Base.Eff` 的动作类型）。
-  `vuna interp` 是纯核心求值，只展示 `Int` / `Nat` / `String` / `Bool`，任何
-  `main : Eff [] a` 一律明确报错。
+  核心求值路径（`vuna test` 纯测试 / REPL）是纯核心求值，只展示 `Int` / `Nat` /
+  `String` / `Bool`，任何 `main : Eff [] a` 一律明确报错。
 - 洞 `_` / 命名洞 `?name` 未解时报 `TC_UnsolvedHole`（带位置与目标类型，命名洞带洞名）；
   `vuna goal` 与 LSP hover 用**容错**目标查询（`goalsOfProgramTolerant` / `dtGoalsSourceTolerant`），
   所以未解的洞也能列出目标与上下文（[tooling.md](tooling.md)）。

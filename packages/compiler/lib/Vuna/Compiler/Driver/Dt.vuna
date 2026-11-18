@@ -817,7 +817,7 @@ evalDtMain program = evalDtMainCore program
 --   - `main : Eff [] a`：**一律报错**。核心求值器是纯的、不执行效果；即使动作结果不依赖
 --     效果（`do consolePrint "hi"; pure 7`），效果也会被静默丢弃——误导用户。所以不做
 --     「尝试归约、卡住才报错」这种不可靠的判定。效果程序只走 compile + 运行
---     （夹具用 `.nointerp` 标记）。动作 main 的识别按精化后类型的动作层（`mainActionKind`）。
+--     （夹具关闭 interp 阶段）。动作 main 的识别按精化后类型的动作层（`mainActionKind`）。
 -- | 核心求值器对 `main` 的求值边界：纯 Int/String/Bool/Nat/Float 归约并展示，动作 main 一律报错。
 evalDtMainCore : DtProgram -> Check String
 evalDtMainCore program = case findMainDef (dtProgDefs program) of

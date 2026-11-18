@@ -168,7 +168,7 @@ interpFileSessioned ref base source = do
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
--- | `vuna interp <file>` 的进程内形态：DT 精化 + 核心求值，返回展示文本。
+-- | 全量核心求值路径（测试夹具与纯测试共用）：DT 精化 + 核心求值，返回展示文本。
 export interpFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check String)
 interpFile path = do
   ctxR <- contextForFile path
