@@ -883,8 +883,45 @@ mTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
   else Err ("machine CPS: unexpected trampoline shape: " ++ name)
 mTrampolineBody name _ = Err ("machine CPS: unexpected trampoline shape: " ++ name)
 
-collectHandleOps : Int -> Ir -> List String
-collectHandleOps fuel e = if fuel <= 0 then []
+-- ---------------------------------------------------------------
+-- handler clause 收集（按 arity 判定，不依赖组合子名字的白名单）
+-- ---------------------------------------------------------------
+-- handler clause 的运行时形状是 `o -> k -> b`（`i` 已擦除），所以运行时参数个数
+-- 至少 2；`ret`（`a -> b`）只有 1。任何 `Base.Effect.*handle*` 组合子的实参里
+-- 满足这个形状的全局，都按 clause 处理。这样 `runExn`/`handleExn` 这类包装层
+-- 不必逐个列名。
+mBodyOf : IrDef -> Ir
+mBodyOf d = case irDefBody d of
+  Just b => b
+  Nothing => IrInt 0
+
+defArities : Int -> List IrDef -> List (Pair String Int)
+defArities fuel ds = if fuel <= 0 then []
+else case ds of
+  [] => []
+  d :: rest => Pair (irDefName d) (irDefArity d) :: defArities (fuel - 1) rest
+
+arityOf : List (Pair String Int) -> String -> Int
+arityOf [] _ = 0
+arityOf (x :: rest) n = if firstOf x == n then secondOf x else arityOf rest n
+
+isHandleCombinator : String -> Bool
+isHandleCombinator n = String.startsWith "Base.Effect." n && String.contains "handle" n
+
+clauseGlobals : List (Pair String Int) -> List Ir -> List String
+clauseGlobals arities args = if fuelOf args <= 0 then []
+else case args of
+  [] => []
+  a :: rest => case a of
+    IrGlobal h =>
+      if arityOf arities h >= 2 then h :: clauseGlobals arities rest else clauseGlobals arities rest
+    _ => clauseGlobals arities rest
+
+fuelOf : List Ir -> Int
+fuelOf _ = 1
+
+collectHandlerGlobals : List (Pair String Int) -> Int -> Ir -> List String
+collectHandlerGlobals arities fuel e = if fuel <= 0 then []
 else case e of
   IrApp _ _ =>
     let
@@ -892,75 +929,77 @@ else case e of
       head = firstOf p
       args = secondOf p
       here = case head of
-        IrGlobal n => if n == "Base.Effect.Core.handleWithAt" then case args of
-          _ :: _ :: _ :: _ :: (IrGlobal h) :: _ => [h]
-          _ => []
-        else if n == "Base.Effect.Core.handleCoreAt" || n == "Base.Effect.Core.handleCore" then case args of
-          _ :: _ :: _ :: (IrGlobal h) :: _ => [h]
-          _ => []
-        else if n == "Base.Effect.Console.handleConsole" || n == "Base.Effect.Fs.handleFs" || n == "Base.Effect.Clock.handleClock" then
-          case args of
-            _ :: _ :: (IrGlobal h) :: _ => [h]
-            _ => []
-        else []
+        IrGlobal n => if isHandleCombinator n then clauseGlobals arities args else []
         _ => []
-    in append here (append (collectHandleOps (fuel - 1) head) (collectHandleOpsList (fuel - 1) args))
-  IrCtor _ _ args => collectHandleOpsList (fuel - 1) args
-  IrRecord _ fs => collectHandleOpsFields (fuel - 1) fs
-  IrProj b _ _ => collectHandleOps (fuel - 1) b
-  IrRecUpd b _ fs => append (collectHandleOps (fuel - 1) b) (collectHandleOpsFields (fuel - 1) fs)
-  IrRtApp _ args => collectHandleOpsList (fuel - 1) args
-  IrCast x => collectHandleOps (fuel - 1) x
-  IrLet _ a b => append (collectHandleOps (fuel - 1) a) (collectHandleOps (fuel - 1) b)
-  IrLam _ b => collectHandleOps (fuel - 1) b
+    in append here
+      (append (collectHandlerGlobals arities (fuel - 1) head) (collectHandlerGlobalsList arities (fuel - 1) args))
+  IrCtor _ _ args => collectHandlerGlobalsList arities (fuel - 1) args
+  IrRecord _ fs => collectHandlerGlobalsFields arities (fuel - 1) fs
+  IrProj b _ _ => collectHandlerGlobals arities (fuel - 1) b
+  IrRecUpd b _ fs =>
+    append (collectHandlerGlobals arities (fuel - 1) b)
+      (collectHandlerGlobalsFields arities (fuel - 1) fs)
+  IrRtApp _ args => collectHandlerGlobalsList arities (fuel - 1) args
+  IrCast x => collectHandlerGlobals arities (fuel - 1) x
+  IrLet _ a b =>
+    append (collectHandlerGlobals arities (fuel - 1) a) (collectHandlerGlobals arities (fuel - 1) b)
+  IrLam _ b => collectHandlerGlobals arities (fuel - 1) b
   IrIf c t el =>
-    append (collectHandleOps (fuel - 1) c)
-      (append (collectHandleOps (fuel - 1) t) (collectHandleOps (fuel - 1) el))
-  IrCase s alts => append (collectHandleOps (fuel - 1) s) (collectHandleOpsAlts (fuel - 1) alts)
+    append (collectHandlerGlobals arities (fuel - 1) c)
+      (append (collectHandlerGlobals arities (fuel - 1) t) (collectHandlerGlobals arities (fuel - 1) el))
+  IrCase s alts =>
+    append (collectHandlerGlobals arities (fuel - 1) s)
+      (collectHandlerGlobalsAlts arities (fuel - 1) alts)
   IrNatCase s _ z su ca =>
-    append (collectHandleOps (fuel - 1) s)
-      (append (collectHandleOpsAltM (fuel - 1) z) (append (collectHandleOpsAltM (fuel - 1) su) (collectHandleOpsAltM (fuel - 1) ca)))
-  IrConcatMany xs => collectHandleOpsList (fuel - 1) xs
-  IrEffThunk _ _ _ _ pr => collectHandleOps (fuel - 1) pr
+    append (collectHandlerGlobals arities (fuel - 1) s)
+      (append (collectHandlerGlobalsAltM arities (fuel - 1) z) (append (collectHandlerGlobalsAltM arities (fuel - 1) su) (collectHandlerGlobalsAltM arities (fuel - 1) ca)))
+  IrConcatMany xs => collectHandlerGlobalsList arities (fuel - 1) xs
+  IrEffThunk _ _ _ _ pr => collectHandlerGlobals arities (fuel - 1) pr
   _ => []
 
-collectHandleOpsList : Int -> List Ir -> List String
-collectHandleOpsList fuel xs = if fuel <= 0 then []
+collectHandlerGlobalsList : List (Pair String Int) -> Int -> List Ir -> List String
+collectHandlerGlobalsList arities fuel xs = if fuel <= 0 then []
 else case xs of
   [] => []
-  x :: rest => append (collectHandleOps (fuel - 1) x) (collectHandleOpsList (fuel - 1) rest)
+  x :: rest =>
+    append (collectHandlerGlobals arities (fuel - 1) x)
+      (collectHandlerGlobalsList arities (fuel - 1) rest)
 
-collectHandleOpsFields : Int -> List (Pair String Ir) -> List String
-collectHandleOpsFields fuel fs = if fuel <= 0 then []
+collectHandlerGlobalsFields : List (Pair String Int) -> Int -> List (Pair String Ir) -> List String
+collectHandlerGlobalsFields arities fuel fs = if fuel <= 0 then []
 else case fs of
   [] => []
   p :: rest =>
-    append (collectHandleOps (fuel - 1) (secondOf p)) (collectHandleOpsFields (fuel - 1) rest)
+    append (collectHandlerGlobals arities (fuel - 1) (secondOf p))
+      (collectHandlerGlobalsFields arities (fuel - 1) rest)
 
-collectHandleOpsAlts : Int -> List IrAlt -> List String
-collectHandleOpsAlts fuel alts = if fuel <= 0 then []
+collectHandlerGlobalsAlts : List (Pair String Int) -> Int -> List IrAlt -> List String
+collectHandlerGlobalsAlts arities fuel alts = if fuel <= 0 then []
 else case alts of
   [] => []
   a :: rest =>
-    append (collectHandleOps (fuel - 1) a.irAltBody) (collectHandleOpsAlts (fuel - 1) rest)
+    append (collectHandlerGlobals arities (fuel - 1) a.irAltBody)
+      (collectHandlerGlobalsAlts arities (fuel - 1) rest)
 
-collectHandleOpsAltM : Int -> Maybe IrAlt -> List String
-collectHandleOpsAltM fuel m = if fuel <= 0 then []
+collectHandlerGlobalsAltM : List (Pair String Int) -> Int -> Maybe IrAlt -> List String
+collectHandlerGlobalsAltM arities fuel m = if fuel <= 0 then []
 else case m of
   Nothing => []
-  Just a => collectHandleOps (fuel - 1) a.irAltBody
-
-mBodyOf : IrDef -> Ir
-mBodyOf d = case irDefBody d of
-  Just b => b
-  Nothing => IrInt 0
+  Just a => collectHandlerGlobals arities (fuel - 1) a.irAltBody
 
 collectHandleOpsDefs : Int -> List IrDef -> List String
-collectHandleOpsDefs fuel ds = if fuel <= 0 then []
+collectHandleOpsDefs fuel ds =
+  let
+    arities = defArities 100000 ds
+  in collectHandleOpsDefsGo fuel arities ds
+
+collectHandleOpsDefsGo : Int -> List (Pair String Int) -> List IrDef -> List String
+collectHandleOpsDefsGo fuel arities ds = if fuel <= 0 then []
 else case ds of
   [] => []
   d :: rest =>
-    append (collectHandleOps (fuel - 1) (mBodyOf d)) (collectHandleOpsDefs (fuel - 1) rest)
+    append (collectHandlerGlobals arities (fuel - 1) (mBodyOf d))
+      (collectHandleOpsDefsGo (fuel - 1) arities rest)
 
 memName : String -> List String -> Bool
 memName x [] = False
@@ -1071,6 +1110,9 @@ else case e of
     if isEffContLambda bs && not (isEffThunkBody body) then
       mEffContLambda (fuel - 1) mNoResumption bs body
     else IrLam bs (mMarked (fuel - 1) body)
+  -- `handleScoped`：`self th id` 的值语义边界 => `run (self th doneCont)`
+  IrApp (IrApp (IrRt "@ir@m@self") th) (IrLam ([_]) _) =>
+    IrApp (IrRt irMRunName) (IrApp (IrApp (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
   IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
   IrCtor fam ctor args => IrCtor fam ctor (mMarkedList (fuel - 1) args)
   IrRecord fam fs => IrRecord fam (mMarkedFields (fuel - 1) fs)

@@ -1906,7 +1906,7 @@ build program printResult =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
         noStepUnsupported =
-          not (defsUseSyms ["prim_effectSelf", "prim_cleanupPush", "prim_cleanupPop"] ordered)
+          not (defsUseSyms ["prim_cleanupPush", "prim_cleanupPop"] ordered)
         fallbackEff = if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
           Err msg => WasmRejected (WasmUnsupported msg)
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM

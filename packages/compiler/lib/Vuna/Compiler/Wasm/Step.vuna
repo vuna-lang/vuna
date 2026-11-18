@@ -237,6 +237,39 @@ rtMInChain =
       ]
   in rtFunc "$rt_mInChain" params [WvI32] locals body
 
+-- | `handleScoped`/`handleSelf`：把当前最内层 handler 帧重新装到 th 上跑，
+-- answer 交给当前续延（等价于 kOuter = k 的 Handle）。
+rtMSelf : WatFunc
+rtMSelf =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$f" WvAnyRef]
+    body =
+      [ IGlobalGet "$g_stepHandlers",
+        ILocalSet "$f",
+        ILocalGet "$f",
+        IPlain "ref.is_null",
+        IIf "" [IUnreachable] [INop],
+        IConstI32 2,
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 0,
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 1,
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 2,
+        ILocalGet "$f",
+        IRefCast "$hframe",
+        IStructGet "$hframe" 3,
+        ILocalGet "$p0",
+        IRefNull,
+        ILocalGet "$p1",
+        IStructNew "$step"
+      ]
+  in rtFunc "$rt_mSelf" params [WvAnyRef] locals body
+
 rtMKDone : WatFunc
 rtMKDone =
   let
@@ -382,6 +415,7 @@ mFunctions =
     rtMKComp,
     rtMApply,
     rtMInChain,
+    rtMSelf,
     rtMRunEff,
     rtMKDone,
     rtMRes1,
