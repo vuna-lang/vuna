@@ -36,6 +36,8 @@ results =
     Pair "response-roundtrip" responseRoundtrip,
     Pair "no-content-length-on-204" noLengthOn204,
     Pair "header-case-insensitive" headerCaseInsensitive,
+    Pair "header-injection-value" headerInjectionValue,
+    Pair "header-injection-name" headerInjectionName,
     Pair "index-of" indexOfCheck,
     Pair "hex-value" hexValueCheck,
     Pair "decimal" decimalCheck
@@ -119,6 +121,20 @@ headerCaseInsensitive =
   let
     r = Req.Request "GET" "/" "HTTP/1.1" [Pair "Host" "Example.com"] ""
   in Req.header "host" r == Just "Example.com" && Hdr.countHeader "HOST" r.headers == 1
+
+-- | 值里的 CRLF 不能变成额外头部。
+headerInjectionValue : Bool
+headerInjectionValue =
+  let
+    r = Res.Response 200 "OK" [Pair "X-A" "v\r\nInjected: 1"] ""
+  in not (contains "Injected:" (R.renderResponse r))
+
+-- | 名字不是 token 的头部不渲染。
+headerInjectionName : Bool
+headerInjectionName =
+  let
+    r = Res.Response 200 "OK" [Pair "Bad Name" "v"] ""
+  in not (contains "Bad Name" (R.renderResponse r))
 
 -- | 子串定位。
 indexOfCheck : Bool

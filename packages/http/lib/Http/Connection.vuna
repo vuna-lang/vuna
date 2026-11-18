@@ -4,6 +4,7 @@ module Http.Connection where
 
 import Base
 import Base.Effect.Core
+import Base.Effect.Net as EffNet
 import Http.Header as Hdr
 import Http.Parse as P
 import Http.Render as R
@@ -27,6 +28,22 @@ writeAllOf (Dup _ wr _) = wr
 -- | 关闭连接。
 export closeOf : Duplex r -> Eff r Int
 closeOf (Dup _ _ cl) = cl
+
+-- | 从 net 句柄构造 duplex：`Nothing`（EOF）映射成空串，`close` 关句柄。
+-- | 地址 / TLS 仍在调用方手里，本包只消费句柄。
+export fromNet : Member nNet NetOp r => Int -> Duplex r
+fromNet conn =
+  Dup (\size => eofToEmpty (EffNet.netRecv conn) size) (\s => EffNet.netSend conn s)
+    (EffNet.netClose conn)
+
+-- | EOF 映射成空串（`Duplex` 的读约定）。
+eofToEmpty : (Int -> Eff r (Maybe String)) -> Int -> Eff r String
+eofToEmpty readN n = do
+  m <- readN n
+  pure (case m of
+    Nothing => ""
+    Just s => s
+  )
 
 -- | 读循环的返回值。
 export data Next(..) : Type where

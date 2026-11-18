@@ -29,7 +29,25 @@ hasHeader name hs = isJust (headerValue name hs)
 export countHeader : String -> List (Pair String String) -> Int
 countHeader name hs = natToInt (length (filter (isNamed name) hs))
 
+-- | 头部值是否可安全渲染（不含 CR / LF / NUL）。
+export isSafeValue : String -> Bool
+isSafeValue v = allBytes isSafeByte (strUnpack v)
+
+-- | 单个字节是否可出现在头部值里。
+isSafeByte : Int -> Bool
+isSafeByte c = c /= 13 && c /= 10 && c /= 0
+
+-- | 过滤掉无法安全渲染的头部：名字不是 token、或值含 CR / LF / NUL。
+-- | 渲染一律经这里，避免用 CRLF 在响应里注入额外头部或体。
+export safeHeaders : List (Pair String String) -> List (Pair String String)
+safeHeaders hs = filter isSafeHeader hs
+
+-- | 单个头部是否可安全渲染。
+isSafeHeader : Pair String String -> Bool
+isSafeHeader h = isToken h.first && isSafeValue h.second
+
 -- | 渲染头部块：每个头一行 `name: value\r\n`，不含结尾空行。
+-- | 调用方应先经 [safeHeaders] 过滤（`Http.Render` 的两个入口都这么做）。
 export renderHeaders : List (Pair String String) -> String
 renderHeaders hs = strConcatMany (map renderHeader hs)
 

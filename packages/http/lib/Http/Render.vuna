@@ -1,5 +1,6 @@
 -- | HTTP/1.1 消息渲染。`Content-Length` 由这里按体字节数补齐（调用方显式给出时不覆盖）；
--- | 无体状态码（1xx / 204 / 304）不补。
+-- | 无体状态码（1xx / 204 / 304）不补。头部一律先经 [Http.Header.safeHeaders] 过滤：
+-- | 名字不是 token、或值含 CR / LF / NUL 的头部不会被渲染（防止响应头注入）。
 module Http.Render where
 
 import Base
@@ -11,7 +12,7 @@ import Http.Response as Response
 export renderRequest : Request -> String
 renderRequest r =
   let
-    hs = withLength r.headers r.body
+    hs = withLength (Header.safeHeaders r.headers) r.body
   in r.method
     ++ " "
     ++ r.target
@@ -26,7 +27,9 @@ renderRequest r =
 export renderResponse : Response -> String
 renderResponse r =
   let
-    hs = if statusHasBody r.status then withLength r.headers r.body else r.headers
+    hs =
+      if statusHasBody r.status then withLength (Header.safeHeaders r.headers) r.body
+      else Header.safeHeaders r.headers
   in "HTTP/1.1 "
     ++ strFromInt r.status
     ++ " "

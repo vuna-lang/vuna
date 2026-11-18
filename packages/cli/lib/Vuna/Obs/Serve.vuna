@@ -180,7 +180,7 @@ else do
     StepClosed => finishServe st addr h 0
     StepOk conn => do
       wsBase <- wsBaseOf addr h
-      outcome <- serveSession (netRecv conn) (\s => netSend conn s) wsBase st
+      outcome <- serveSession (HttpConn.fromNet conn) wsBase st
       _ <- netClose conn
       case firstOf outcome of
         SessionFatal msg => do
@@ -222,22 +222,9 @@ httpFuel = 1024
 wsFuel : Int
 wsFuel = 1073741824
 
--- | 内部：把 `readN`（`Maybe`，`Nothing` = EOF）包成 duplex 的读操作。
-duplexOf : (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> HttpConn.Duplex r
-duplexOf readN writeS = HttpConn.Dup (\n => eofToEmpty readN n) writeS (pure 0)
-
--- | 内部：EOF 映射成空串（`Duplex` 的约定），其余原样。
-eofToEmpty : (Int -> Eff r (Maybe String)) -> Int -> Eff r String
-eofToEmpty readN n = do
-  m <- readN n
-  pure (case m of
-    Nothing => ""
-    Just s => s
-  )
-
 -- | 内部：会话入口——先 HTTP，升级后进 WS。
-serveSession : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
-serveSession readN writeS wsBase st = httpLoop (duplexOf readN writeS) wsBase httpFuel "" st
+serveSession : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
+serveSession d wsBase st = httpLoop d wsBase httpFuel "" st
 
 -- | 内部：HTTP 阶段——发现端点直接应答并继续，升级请求切到 WS，其余 404。
 httpLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> Int -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
