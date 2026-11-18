@@ -1,0 +1,32 @@
+-- | 服务端根：读参数、监听、服务。适配包只需要 `Web.Main.main App.app`。
+-- | 参数与默认地址只在这里维护，应用与生成的入口都不重复这套语义。
+module Web.Main where
+
+import Base
+import Base.Effect.Core
+import Base.Effect.Args as EffArgs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Web.App as App
+import Web.Server as Server
+
+-- | 缺省监听地址（只绑 loopback）。
+export defaultAddr : String
+defaultAddr = "tcp:127.0.0.1:8080"
+
+-- | 在给定地址上服务应用。
+export serve : App.App -> String -> Eff [NetOp, ConsoleOp, FsOp] Int
+serve a addr = Server.serve a.appRoutes addr
+
+-- | 进程入口：第一个参数是监听地址（缺省 [defaultAddr]；`:0` 由服务端打印实际端口）。
+export main : App.App -> Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int
+main a = do
+  args <- argsGetArgs
+  serve a (addrOf args)
+
+-- | 取第一个参数作为监听地址。
+addrOf : List String -> String
+addrOf args = case args of
+  a :: _ => a
+  [] => defaultAddr

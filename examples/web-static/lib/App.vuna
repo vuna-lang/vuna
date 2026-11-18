@@ -1,34 +1,14 @@
--- 静态页面 + 路由：三条 GET 路由、一条 POST 路由，`tcp:127.0.0.1:PORT` 串行服务。
--- 参数是监听地址（缺省 `tcp:127.0.0.1:8080`；`:0` 由服务端打印实际端口）。
+-- 静态页面 + 路由：应用就是一张路由表。
+-- 三条 GET 路由、一条 POST 路由与一条回显路由；入口由 `vuna-web-cli` 生成。
 import Base
-import Base.Effect.Core
-import Base.Effect.Args as EffArgs
-import Base.Effect.Console as EffConsole
-import Base.Effect.Fs as EffFs
-import Base.Effect.Net as EffNet
+import Web.App as WebApp
 import Web.Route as Route
-import Web.Server as Server
 import Web.View as View
 
-main : Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int
-main = do
-  args <- argsGetArgs
-  Server.serve routes (addrOf args)
-
--- | 第一个参数是监听地址。
-addrOf : List String -> String
-addrOf args = case args of
-  a :: _ => a
-  [] => "tcp:127.0.0.1:8080"
-
-routes : List Route.Route
-routes =
-  [ Route.route "GET" "/" home,
-    Route.route "GET" "/about" about,
-    Route.route "GET" "/users/:id" userPage,
-    Route.route "POST" "/users/:id" createUser,
-    Route.route "GET" "/echo/:msg" echo
-  ]
+export app : WebApp.App
+app =
+  WebApp.app
+    [Route.route "GET" "/" home, Route.route "GET" "/about" about, Route.route "GET" "/users/:id" userPage, Route.route "POST" "/users/:id" createUser, Route.route "GET" "/echo/:msg" echo]
 
 home : List (Pair String String) -> View.View
 home _ =

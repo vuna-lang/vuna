@@ -1,0 +1,171 @@
+-- | `vuna-web-cli build`：把一个「应用包」（只导出 `App.app`）接到 `Web.Main` 上，
+-- | 生成适配包、调用编译器的构建入口、把二进制放到产物目录。
+-- | 不写第二套 codegen：编译、split、缓存、目标选择全部复用 `Driver.CompilerCli`。
+module Vuna.Web.Build where
+
+import Base
+import Base.Effect.Core
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.Compile as Compile
+import Vuna.Compiler.Driver.CompilerCli
+import Vuna.Compiler.Frontend.Packages.Pkg as Pkg
+
+-- | 构建选项。
+export record BuildOpts(..) where
+  -- | 产物根目录；空串 = `<app>/.vuna-web`。
+  outDir : String
+  -- | 后端：`ocaml` 或 `native`（服务端没有 wasm）。
+  target : String
+  -- | 是否发布构建（透传 `--release`）。
+  release : Bool
+
+-- | 一次构建的布局。
+export record Layout(..) where
+  appName : String
+  appDir : String
+  outDir : String
+  adapterDir : String
+  buildDir : String
+  binDir : String
+  adapterName : String
+
+-- | 构建应用：返回进程退出码（0 成功、1 构建失败、2 输入/环境错误）。
+export buildApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> BuildOpts -> Eff r Int
+buildApp appDir opts = do
+  ctxR <- Pkg.contextForDir appDir
+  case ctxR of
+    ErrC e => failWith 2 (diagText e)
+    OkC ctx => do
+      dirsR <- depDirsOf ctx
+      case dirsR of
+        ErrC e => failWith 2 (diagText e)
+        OkC dirs => do
+          l <-
+            prepareLayout (Pkg.contextDir ctx) (Pkg.contextPackageName ctx) (firstOf dirs)
+              (secondOf dirs) opts
+          case l of
+            ErrC e => failWith 2 (diagText e)
+            OkC layout => do
+              rc <- runCompilerCliFor "vuna-web-cli" (compilerArgs layout opts)
+              if rc /= 0 then pure 1 else finishBuild layout
+
+-- | 打印 `error: ...` 并返回给定退出码。
+failWith : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
+failWith code msg = do
+  _ <- consoleEprint "error: ${msg}\n"
+  pure code
+
+-- | 取应用依赖闭包里的 `vuna-web` 与 `vuna-base` 包目录（`Pair webDir baseDir`）。
+-- | 用应用自己那一份实例，避免同一张图里出现重名包；`VUNA_WEB` 可覆盖框架目录。
+depDirsOf : Member nEnv EnvOp r => Pkg.PackageContext -> Eff r (Check (Pair String String))
+depDirsOf ctx = do
+  override <- envGetEnv "VUNA_WEB"
+  case depDirOf "vuna-base" ctx of
+    Nothing => pure (err "application must depend on vuna-base")
+    Just base => case webChoice override ctx of
+      Nothing => pure (err "application must depend on vuna-web")
+      Just web => pure (OkC (Pair web base))
+
+-- | `VUNA_WEB` 优先，否则取依赖闭包里的 `vuna-web`。
+webChoice : String -> Pkg.PackageContext -> Maybe String
+webChoice override ctx = if strLength override > 0 then Just override else depDirOf "vuna-web" ctx
+
+-- | 依赖闭包里某个包的目录（模块根去掉 `/lib`）。
+depDirOf : String -> Pkg.PackageContext -> Maybe String
+depDirOf name ctx = case rootDirNamed name (Pkg.contextRoots ctx) of
+  Nothing => Nothing
+  Just libDir => Just (stripLibSuffix libDir)
+
+-- | 模块根里名为 `name` 的目录。
+rootDirNamed : String -> List Pkg.Root -> Maybe String
+rootDirNamed name roots = case roots of
+  [] => Nothing
+  r :: rest => if Pkg.rootName r == name then Just (Pkg.rootDir r) else rootDirNamed name rest
+
+-- | 去掉模块根的 `/lib` 尾巴，得到包目录。
+stripLibSuffix : String -> String
+stripLibSuffix dir =
+  if endsWith "/lib" dir then substring (natFromInt 0) (natFromInt (strLength dir - 4)) dir else dir
+
+-- | 计算并准备好产物目录布局（会创建目录、写适配包）。
+prepareLayout : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> BuildOpts -> Eff r (Check Layout)
+prepareLayout appAbs appName webDir baseDir opts = do
+  _ <- Compile.ensureDirPath (adapterDirOf appAbs opts)
+  _ <- Compile.ensureDirPath (adapterDirOf appAbs opts ++ "/app")
+  _ <- Compile.ensureDirPath (binDirOf appAbs opts)
+  _ <-
+    fsWriteFile (adapterDirOf appAbs opts ++ "/vuna.toml")
+      (adapterManifest (layoutOf appAbs appName opts) webDir baseDir)
+  _ <- fsWriteFile (adapterDirOf appAbs opts ++ "/app/Main.vuna") adapterSource
+  pure (OkC (layoutOf appAbs appName opts))
+
+-- | 产物根目录。
+outDirOf : String -> BuildOpts -> String
+outDirOf appAbs opts = if strLength opts.outDir > 0 then opts.outDir else "${appAbs}/.vuna-web"
+
+-- | 适配包目录。
+adapterDirOf : String -> BuildOpts -> String
+adapterDirOf appAbs opts = "${outDirOf appAbs opts}/adapter"
+
+-- | 编译器产物目录。
+buildDirOf : String -> BuildOpts -> String
+buildDirOf appAbs opts = "${outDirOf appAbs opts}/build"
+
+-- | 可交付产物目录。
+binDirOf : String -> BuildOpts -> String
+binDirOf appAbs opts = "${outDirOf appAbs opts}/bin"
+
+-- | 布局（纯构造，便于多处复用）。
+layoutOf : String -> String -> BuildOpts -> Layout
+layoutOf appAbs appName opts =
+  Layout appName appAbs (outDirOf appAbs opts) (adapterDirOf appAbs opts) (buildDirOf appAbs opts)
+    (binDirOf appAbs opts) "${appName}-vunaweb"
+
+-- | 生成的适配包 manifest：依赖写应用与它用的 base / 框架实例（绝对路径）。
+adapterManifest : Layout -> String -> String -> String
+adapterManifest l webDir baseDir =
+  "[package]\n"
+    ++ "name = \"${l.adapterName}\"\n\n"
+    ++ "[dependencies]\n"
+    ++ "${l.appName} = \"${l.appDir}\"\n"
+    ++ "vuna-base = \"${baseDir}\"\n"
+    ++ "vuna-web = \"${webDir}\"\n"
+
+-- | 生成的入口：把应用接到 `Web.Main`。
+adapterSource : String
+adapterSource =
+  "-- 由 vuna-web-cli 生成（不要手改）：把应用接到 Web.Main。\n"
+    ++ "import Base\n"
+    ++ "import Base.Effect.Core\n"
+    ++ "import Base.Effect.Args as EffArgs\n"
+    ++ "import Base.Effect.Console as EffConsole\n"
+    ++ "import Base.Effect.Fs as EffFs\n"
+    ++ "import Base.Effect.Net as EffNet\n"
+    ++ "import App\n"
+    ++ "import Web.Main\n\n"
+    ++ "main : Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int\n"
+    ++ "main = Web.Main.main App.app\n"
+
+-- | 交给编译器的参数（与 `vuna build` 同一套口径）。
+compilerArgs : Layout -> BuildOpts -> List String
+compilerArgs l opts =
+  append ["build", l.adapterDir, "--out", l.buildDir, "--target", opts.target]
+    (if opts.release then ["--release"] else [])
+
+-- | 把适配包产物改名成应用名，并打印可交付路径。
+finishBuild : Member nFs FsOp r, Member nConsole ConsoleOp r => Layout -> Eff r Int
+finishBuild l = do
+  _ <- fsRename "${l.buildDir}/bin/${l.adapterName}" "${l.binDir}/${l.appName}"
+  _ <- consolePrint "built ${l.binDir}/${l.appName}\n"
+  pure 0
+
+-- | `check`：只对应用包做类型检查（不生成产物）。
+export checkApp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r Int
+checkApp appDir = runCompilerCliFor "vuna-web-cli" ["check", appDir]

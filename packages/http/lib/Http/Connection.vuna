@@ -39,7 +39,7 @@ fromNet conn =
     (EffNet.netClose conn)
 
 -- | EOF 映射成空串（`Duplex` 的读约定）。
-eofToEmpty : (Int -> Eff r (Maybe String)) -> Int -> Eff r String
+eofToEmpty : {r : Row} -> (Int -> Eff r (Maybe String)) -> Int -> Eff r String
 eofToEmpty readN n = do
   m <- readN n
   pure (case m of

@@ -115,9 +115,35 @@ let
     };
 
   vuna-run-tests = import ./run-tests.nix {
-    inherit pkgs vuna vuna-seed;
+    inherit
+      pkgs
+      vuna
+      vuna-seed
+      vuna-web-cli
+      ;
     # 与 checks 的 e2e 同一份 PATH：wasm-tools/wasmtime/cc/node 都在。
     tools = e2eTools;
+  };
+
+  # vuna-web 的编排工具（生态层，不进 seed）：把应用包接到 Web.Main 上，
+  # 复用同一个 stage 1 编译器构建产物；运行期需要 base / http / web 的源码做适配包依赖。
+  vuna-web-cli = mkStage {
+    name = "vuna-web-cli-${version}";
+    description = "vuna-web full-stack build orchestrator (server artifacts)";
+    mainProgram = "vuna-web-cli";
+    build = ''
+      mkdir -p "$out/bin"
+      cp -r ${../../packages} packages
+      cp ${../../vuna.toml} vuna.toml
+      chmod -R u+w .
+      export VUNA_STORE="$TMPDIR/vuna-store"
+      ${vuna-compiler}/bin/vuna-compiler build --package vuna-web-cli .
+      cp packages/web-cli/.output/bin/vuna-web-cli "$out/bin/vuna-web-cli"
+      cp -r packages/base "$out/base"
+      cp -r packages/http "$out/http"
+      cp -r packages/web "$out/web"
+      if [ -f packages/web-cli/.output/build-id ]; then cp packages/web-cli/.output/build-id "$out/build-id"; fi
+    '';
   };
 
   # 自举后端编译器：由 stage 1 编译器把自己的源码编到 native。
@@ -210,6 +236,7 @@ in
     vuna-bench
     vuna-perf
     vuna-run-tests
+    vuna-web-cli
     vuna-native
     vuna-wasm-browser-smoke
     backend-check

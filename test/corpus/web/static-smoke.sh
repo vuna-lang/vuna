@@ -1,19 +1,19 @@
 #!/bin/sh
 # vuna-web 静态页面 + 路由的冒烟（suite e2e tier 用）。
 #
-# 用法：sh test/corpus/web/static-smoke.sh <path-to-vuna>
-# 覆盖：build examples/web-static → 起 `tcp:127.0.0.1:0` → 用 curl 断言状态码、正文、
+# 用法：sh test/corpus/web/static-smoke.sh <path-to-vuna-web-cli>
+# 覆盖：`vuna-web-cli build` examples/web-static → 起 `tcp:127.0.0.1:0` → 用 curl 断言状态码、正文、
 # Content-Type、405 的 Allow、HEAD、尾斜杠归一、百分号解码 + 文本转义。
 # 没有 curl 时打印 SKIP（与 obs-cdp 缺 Node 时同风格）；端口在沙箱不保证，故不进 nix flake check。
 set -u
 
 [ "$#" -ge 1 ] || {
-  echo "usage: sh test/corpus/web/static-smoke.sh <path-to-vuna>" >&2
+  echo "usage: sh test/corpus/web/static-smoke.sh <path-to-vuna-web-cli>" >&2
   exit 2
 }
-VUNA=$1
-[ -x "$VUNA" ] || {
-  echo "smoke: not an executable vuna: $VUNA" >&2
+WEB_CLI=$1
+[ -x "$WEB_CLI" ] || {
+  echo "smoke: not an executable vuna-web-cli: $WEB_CLI" >&2
   exit 2
 }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -41,7 +41,7 @@ no() {
   if [ "$#" -gt 1 ]; then shift; printf '%s\n' "$*" | head -6; fi
 }
 
-if ! "$VUNA" build --out "$tmp/out" "$APP" >"$tmp/build.log" 2>&1; then
+if ! "$WEB_CLI" build --out "$tmp/out" "$APP" >"$tmp/build.log" 2>&1; then
   cat "$tmp/build.log" >&2
   echo "smoke: build failed" >&2
   exit 2

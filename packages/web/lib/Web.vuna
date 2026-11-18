@@ -8,3 +8,7 @@ export module Web.Route
 export module Web.Route as Route
 export module Web.Server
 export module Web.Server as Server
+export module Web.App
+export module Web.App as App
+export module Web.Main
+export module Web.Main as Main

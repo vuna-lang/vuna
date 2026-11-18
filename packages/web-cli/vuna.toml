@@ -1,0 +1,12 @@
+# vuna-web-cli：vuna-web 的编排工具（二进制 vuna-web-cli）。
+# 依赖编译器包以复用同一条构建链（compile/split/cache），不自己写 codegen。
+[package]
+name = "vuna-web-cli"
+
+[dependencies]
+vuna-base = "../base"
+vuna-compiler = "../compiler"
+vuna-web = "../web"
+
+[export]
+modules = ["Vuna.Web.Cli"]

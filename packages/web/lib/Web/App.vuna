@@ -1,0 +1,14 @@
+-- | 应用：路由表就是应用的全部描述（服务端与客户端共用同一份）。
+module Web.App where
+
+import Base
+import Web.Route as Route
+
+-- | 一个全栈应用。
+export record App(..) where
+  -- | 路由表。
+  appRoutes : List Route.Route
+
+-- | 用路由表构造应用。
+export app : List Route.Route -> App
+app routes = App routes

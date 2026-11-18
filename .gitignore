@@ -61,6 +61,9 @@ examples/**/main
 # vuna 包级 compile 输出（`.output` 是 vuna 建的软链，指向 store view），不入库。
 .output
 .output/
+# vuna-web-cli 的构建目录（生成的适配包 + 产物）
+.vuna-web
+.vuna-web/
 /seed/program
 .local-tmp/
 

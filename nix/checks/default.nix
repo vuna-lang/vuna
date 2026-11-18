@@ -28,6 +28,7 @@ let
     cli = ../../packages/cli;
     http = ../../packages/http;
     web = ../../packages/web;
+    webCli = ../../packages/web-cli;
     test = ../../test;
     examples = ../../examples;
     docs = ../../docs;
@@ -48,6 +49,7 @@ let
     src.cli
     src.http
     src.web
+    src.webCli
     src.manifest
   ];
 

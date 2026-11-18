@@ -7,4 +7,4 @@ vuna-base = "../base"
 vuna-http = "../http"
 
 [export]
-modules = ["Web", "Web.View", "Web.Route", "Web.Server"]
+modules = ["Web", "Web.View", "Web.Route", "Web.Server", "Web.App", "Web.Main"]
