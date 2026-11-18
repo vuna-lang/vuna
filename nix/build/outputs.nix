@@ -40,14 +40,19 @@ let
           # 测试用独立根（`nix/build/run-tests.nix`），因为 suite 会故意破坏对象。
           shellHook = ''
             export VUNA_OCAML_ID="''${VUNA_OCAML_ID:-$(ocamlopt -version 2>/dev/null || echo none)}"
-            echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=''${VUNA_STORE:-默认根 ~/.vuna/store}；VUNA_OCAML_ID=$VUNA_OCAML_ID）"
+            # 横幅只在交互式终端出现：`nix develop --command` 之类调用（含 VUNA_QUIET_SHELL=1）保持静默。
+            if [ -t 1 ] && [ -z "''${VUNA_QUIET_SHELL:-}" ]; then
+              echo "vuna dev shell — OCaml $(ocaml -version)（VUNA_STORE=''${VUNA_STORE:-默认根 ~/.vuna/store}；VUNA_OCAML_ID=$VUNA_OCAML_ID）"
+            fi
           '';
         };
 
         ocaml = pkgs.mkShell {
           packages = ocamlTools ++ wasmTools;
           shellHook = ''
-            echo "vuna OCaml shell — OCaml $(ocaml -version)（不含 vuna-seed；需要时用 nix develop .#default）"
+            if [ -t 1 ] && [ -z "''${VUNA_QUIET_SHELL:-}" ]; then
+              echo "vuna OCaml shell — OCaml $(ocaml -version)（不含 vuna-seed；需要时用 nix develop .#default）"
+            fi
           '';
         };
       };
