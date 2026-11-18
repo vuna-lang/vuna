@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 178.85 45.5" width="358" height="91">
-  <g transform="translate(-8.95 -8)"><path d="M13 10 L32 49 L51 10" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/><path d="M40.55 31.45 L51 10" fill="none" stroke="#2ED3A8" stroke-width="9" stroke-linecap="butt"/></g>
-  <g transform="translate(60.6 -8)"><path d="M0 10 L0 34 A11 11 0 0 0 22 34 L22 10" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
-  <g transform="translate(104.6 -8)"><path d="M0 49 L0 10 M0 25 A11 11 0 0 1 22 25 L22 49" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
-  <g transform="translate(142.35 -8)"><path d="M32 10 L32 49 M32 20 A15.5 15.5 0 1 0 32 39" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 178.45 40" width="357" height="80">
+  <g transform="translate(-9.15 -9.5)"><path d="M13 12.4 L32 44.5 L51 12.4" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/><path d="M40.55 30.06 L51 12.4" fill="none" stroke="#2ED3A8" stroke-width="9" stroke-linecap="butt"/></g>
+  <g transform="translate(60.20 -9.5)"><path d="M0 10 L0 34 A11 11 0 0 0 22 34 L22 10" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+  <g transform="translate(104.20 -9.5)"><path d="M0 49 L0 10 M0 25 A11 11 0 0 1 22 25 L22 49" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+  <g transform="translate(141.95 -9.5)"><path d="M32 10 L32 49 M32 20 A15.5 15.5 0 1 0 32 39" fill="none" stroke="#14161A" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
 </svg>
