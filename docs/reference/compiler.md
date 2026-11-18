@@ -120,7 +120,9 @@
 | `Lowering.Ty` | 类型表面：`IrTy` 渲染与类型声明（纯函数，不进项） | `irTyOf`、`irTyDeclsOf` |
 | `Lowering.Entry` | 入口形态：动作行 / 值入口分类、展示函数、宿主 handler 序列 | `lowerEntryOf`、`entryShapeOf` |
 | `Lowering.Checks` | Core 侧检查（不产生 IR）：擦除检查、axiom 运行时使用检查、de Bruijn 作用域护栏、定义体事实（`termUseInto`：运行时依赖 + float/tracing/obs 旗标，一次遍历） | `checkAllErasure`、`checkAllDefScopes`、`checkNoAxiomRuntime`、`termUseInto`、`partitionDefs` |
-| `Codegen.Decl` | 纯文本叶子：OCaml 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ `IrTy` / `IrTyDecl` → OCaml 类型文本 | `irTyText`、`irTyDeclText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
+| `Codegen.Decl` | 名字编码（sanitize/前缀/保留字）+ 跨单元引用限定（`Unit.name`）+ IR 类型/声明 → 后端模型；类型文本由 `Codegen.Ocaml.Render` 输出 | `irTyText`、`irTypeDeclsText`、`ctorOcamlName`、`qualValueText` |
+| `Codegen.Ocaml.Model` | OCaml 后端类型面（`OTy` / `OCtor` / `ODecl`）：**不含目标文本**，只搬形状；名字编码、限定与括号在渲染侧 | `OTy`、`ODecl`、`OCtor` |
+| `Codegen.Ocaml.Render` | 类型面的文本渲染：参数槽、构造子/字段布局、`type ... and ...` 块 | `renderTy`、`renderDecl`、`renderDecls` |
 | `Codegen.Term` | IR → OCaml 文本 + DT 运行时模板（`bi_*`、`dtp_*`、宿主原语桥接）+ 定义位置表/异常报告器 + main 钩子模板；`IrRt` 的文本从 `Codegen.Runtime` 查表；**不感知 Core** | `dtRuntime`、`dtRuntimeWith`、`dtObsRuntime`、`dtDefLocTable`、`genIr`、`genGroups`、`genEntryHook`、`lineDirectiveOf`（`#line` 注入） |
 | `Codegen.Runtime` | **契约的 OCaml 实现**：符号 → OCaml 运行时表达式（`ocamlRtText`）+ List 桥接 helper 名单；对 `Ir.Runtime` 契约双向全覆盖（gaps/extras），由 `Lowering.Program.checkRuntimeContract` 在 check 路径上断言 | `ocamlRtText`、`ocamlRtHelperNames`、`rtTextGaps`、`rtTextExtras` |
 | `Codegen.Assembly` | `IrUnit` 装配：open 头 + 类型声明 + List 桥接 + 分组正文 + 直接依赖表 | `genUnitParts`、`genUnitText`、`unitPartsDeps` |

@@ -1,0 +1,32 @@
+-- | OCaml 后端的声明面：类型表达式与类型声明。
+--
+-- 模型里**没有目标文本**：名字编码（`v_` / `t_` / `C_` / `f_`）、跨单元限定与括号
+-- 都在 [Vuna.Compiler.Codegen.Ocaml.Render] 里完成。表示决策（族参数槽、去装箱、
+-- 不透明字段）在 Lowering 已经定好，这里只搬形状。
+module Vuna.Compiler.Codegen.Ocaml.Model where
+
+import Vuna.Compiler.Base.Common
+
+-- | 签名级运行时类型。`OTData` 只带族名与实参，限定由渲染侧按归属表决定。
+export data OTy(..) : Type where
+  OTVar : Int -> OTy
+  OTInt : OTy
+  OTStr : OTy
+  OTBool : OTy
+  OTFloat : OTy
+  OTOpaque : OTy
+  OTArray : OTy -> OTy
+  OTRef : OTy -> OTy
+  OTFun : OTy -> OTy -> OTy
+  OTData : String -> List OTy -> OTy
+
+-- | 变体构造子：已编码的名字 + 字段类型。
+export record OCtor(..) where
+  ocName : String
+  ocFields : List OTy
+
+-- | 一条类型声明。`odParams` 是参数槽个数（渲染成 `'a0` / `('a0, 'a1)`）。
+export data ODecl(..) : Type where
+  ODVariant : Int -> String -> List OCtor -> ODecl
+  ODRecord : Int -> String -> List (Pair String OTy) -> ODecl
+  ODAlias : Int -> String -> OTy -> ODecl

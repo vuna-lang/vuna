@@ -16,6 +16,8 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
+import Vuna.Compiler.Codegen.Ocaml.Model
+import Vuna.Compiler.Codegen.Ocaml.Render as Render
 
 -- ---------------------------------------------------------------
 -- 名字编码
@@ -193,41 +195,7 @@ ocamlBinderName name =
 -- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
 -- `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝。
 export joinWith : String -> List String -> String
-joinWith sep xs = strConcatMany (interpose sep xs)
-
-interpose : String -> List String -> List String
-interpose sep [] = []
-interpose sep ([x]) = [x]
-interpose sep (x :: rest) = x :: sep :: interpose sep rest
-
-typeParamName : Int -> String
-typeParamName i = "'a${i}"
-
-typeParamNames : Int -> List String
-typeParamNames n = map typeParamName (range 0 n)
-
-typeParamDecl : Int -> String
-typeParamDecl 0 = ""
-typeParamDecl n = case typeParamNames n of
-  [only] => "${only} "
-  names => "(${joinWith ", " names}) "
-
-familyTyText : QualCtx -> String -> List String -> String
-familyTyText qc name [] = firstOf (qualTypeText qc name)
-familyTyText qc name ([a]) = "${a} ${firstOf (qualTypeText qc name)}"
-familyTyText qc name args = "(${joinWith ", " args}) ${firstOf (qualTypeText qc name)}"
-
-ctorDeclText : String -> List String -> String
-ctorDeclText name [] = name
-ctorDeclText name ([t]) = "${name} of ${parenOne t}"
-ctorDeclText name ts = "${name} of ${joinWith " * " (parenList ts)}"
-
-parenList : List String -> List String
-parenList [] = []
-parenList (t :: rest) = append [parenOne t] (parenList rest)
-
-parenOne : String -> String
-parenOne t = "(${t})"
+joinWith = Render.joinWith
 
 -- ---------------------------------------------------------------
 -- IR 类型 / 类型声明 → OCaml 文本
@@ -243,43 +211,44 @@ irBinderText (IrBinder (IrBNat n) erased) = "dtnat__${strFromInt n}"
 irBinderText (IrBinder IrBWild erased) = "_"
 
 export irTyText : QualCtx -> IrTy -> String
-irTyText qc (IrTyVar i) = typeParamName i
-irTyText qc IrTyInt = "int"
-irTyText qc IrTyStr = "string"
-irTyText qc IrTyBool = "bool"
-irTyText qc IrTyFloat = "float"
-irTyText qc IrTyOpaque = "Obj.t"
-irTyText qc (IrTyArray a) = "(${irTyText qc a} array)"
-irTyText qc (IrTyRef a) = "(${irTyText qc a} ref)"
-irTyText qc (IrTyFun d c) = "(${irTyText qc d}) -> ${irTyText qc c}"
-irTyText qc (IrTyData fam args) = familyTyText qc fam (map (irTyText qc) args)
+irTyText qc ty = Render.renderTy (qualFamOf qc) (toOTy ty)
 
--- | 单条 IR 类型声明（不带 `type ` 前缀、不带 `\nand ` 连接符）。
-export irTyDeclText : QualCtx -> IrTyDecl -> String
-irTyDeclText qc (IrVariantDecl name n ctors) =
-  "${typeParamDecl n}${typeName name} = ${ctorBodyOf qc name ctors}"
-irTyDeclText qc (IrRecordDecl name n fields tys) =
-  "${typeParamDecl n}${typeName name} = { ${joinWith "; " (recordFieldDecls qc name fields tys)} }"
-irTyDeclText qc (IrUnboxedDecl name n ty) = "${typeParamDecl n}${typeName name} = ${irTyText qc ty}"
+-- | 族名 → 已限定的类型名（同单元裸名，跨单元 `Unit.t_*`）。
+qualFamOf : QualCtx -> String -> String
+qualFamOf qc fam = firstOf (qualTypeText qc fam)
 
-ctorBodyOf : QualCtx -> String -> List (Pair String (List IrTy)) -> String
-ctorBodyOf qc family [] = "|"
-ctorBodyOf qc family ctors = joinWith " | " (map (ctorDeclOf qc family) ctors)
+toOTy : IrTy -> OTy
+toOTy ty = case ty of
+  IrTyVar i => OTVar i
+  IrTyInt => OTInt
+  IrTyStr => OTStr
+  IrTyBool => OTBool
+  IrTyFloat => OTFloat
+  IrTyOpaque => OTOpaque
+  IrTyArray a => OTArray (toOTy a)
+  IrTyRef a => OTRef (toOTy a)
+  IrTyFun d c => OTFun (toOTy d) (toOTy c)
+  IrTyData fam args => OTData fam (map toOTy args)
 
-ctorDeclOf : QualCtx -> String -> Pair String (List IrTy) -> String
-ctorDeclOf qc family (Pair ctor tys) =
-  ctorDeclText (ctorOcamlName family ctor) (map (irTyText qc) tys)
+toODecl : IrTyDecl -> ODecl
+toODecl decl = case decl of
+  IrVariantDecl name n ctors => ODVariant n (typeName name) (map (toOCtor name) ctors)
+  IrRecordDecl name n fields tys => ODRecord n (typeName name) (recordFieldsOf name fields tys)
+  IrUnboxedDecl name n ty => ODAlias n (typeName name) (toOTy ty)
 
-recordFieldDecls : QualCtx -> String -> List (Pair Int String) -> List IrTy -> List String
-recordFieldDecls qc family [] tys = []
-recordFieldDecls qc family fields [] = []
-recordFieldDecls qc family (f :: fs) (t :: ts) =
-  "${recordFieldLabel family (secondOf f)} : ${irTyText qc t}" :: recordFieldDecls qc family fs ts
+toOCtor : String -> Pair String (List IrTy) -> OCtor
+toOCtor family (Pair ctor tys) = OCtor (ctorOcamlName family ctor) (map toOTy tys)
+
+recordFieldsOf : String -> List (Pair Int String) -> List IrTy -> List (Pair String OTy)
+recordFieldsOf family fields tys = case fields of
+  [] => []
+  f :: fs => case tys of
+    [] => []
+    t :: ts => Pair (recordFieldLabel family (secondOf f)) (toOTy t) :: recordFieldsOf family fs ts
 
 -- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行固定，保证产物逐字节稳定）。
 export irTypeDeclsText : QualCtx -> List IrTyDecl -> String
-irTypeDeclsText qc [] = ""
-irTypeDeclsText qc decls = "type ${joinWith "\nand " (map (irTyDeclText qc) decls)}\n\n"
+irTypeDeclsText qc decls = Render.renderDecls (qualFamOf qc) (map toODecl decls)
 
 -- | 类型声明里引用到的**运行时族**归属单元（去重、首现顺序；同单元与未知归属跳过）。
 export irTyDeclDeps : QualCtx -> List IrTy -> List String

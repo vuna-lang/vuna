@@ -1,0 +1,71 @@
+-- | OCaml 后端的文本渲染：把 [Vuna.Compiler.Codegen.Ocaml.Model] 的类型面渲染成
+-- OCaml 文本。这里只做括号、分隔符与布局，不做任何表示决策。
+--
+-- `qualFamily` 由调用方给：族名 → 该族在本单元里的类型名（同单元裸名，跨单元
+-- `Unit.t_*`）。渲染器不持有归属表。
+module Vuna.Compiler.Codegen.Ocaml.Render where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Codegen.Ocaml.Model
+
+-- | 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
+export joinWith : String -> List String -> String
+joinWith sep xs = strConcatMany (interpose sep xs)
+
+interpose : String -> List String -> List String
+interpose sep [] = []
+interpose sep ([x]) = [x]
+interpose sep (x :: rest) = x :: sep :: interpose sep rest
+
+typeParamName : Int -> String
+typeParamName i = "'a${strFromInt i}"
+
+typeParamDecl : Int -> String
+typeParamDecl 0 = ""
+typeParamDecl n = case map typeParamName (range 0 n) of
+  [only] => "${only} "
+  names => "(${joinWith ", " names}) "
+
+familyTy : String -> List String -> String
+familyTy name [] = name
+familyTy name ([a]) = "${a} ${name}"
+familyTy name args = "(${joinWith ", " args}) ${name}"
+
+-- | 渲染类型表达式；`qualFamily` 把族名映射成已限定的类型名。
+export renderTy : (String -> String) -> OTy -> String
+renderTy qual ty = case ty of
+  OTVar i => typeParamName i
+  OTInt => "int"
+  OTStr => "string"
+  OTBool => "bool"
+  OTFloat => "float"
+  OTOpaque => "Obj.t"
+  OTArray a => "(${renderTy qual a} array)"
+  OTRef a => "(${renderTy qual a} ref)"
+  OTFun d c => "(${renderTy qual d}) -> ${renderTy qual c}"
+  OTData fam args => familyTy (qual fam) (map (renderTy qual) args)
+
+ctorDecl : (String -> String) -> OCtor -> String
+ctorDecl qual c = case c.ocFields of
+  [] => c.ocName
+  [t] => "${c.ocName} of (${renderTy qual t})"
+  ts => "${c.ocName} of ${joinWith " * " (map (\t => "(${renderTy qual t})") ts)}"
+
+-- | 单条声明（不带 `type ` 前缀与 `and ` 连接符）。
+export renderDecl : (String -> String) -> ODecl -> String
+renderDecl qual d = case d of
+  ODVariant n name [] => "${typeParamDecl n}${name} = |"
+  ODVariant n name ctors =>
+    "${typeParamDecl n}${name} = ${joinWith " | " (map (ctorDecl qual) ctors)}"
+  ODRecord n name fields =>
+    "${typeParamDecl n}${name} = { ${joinWith "; " (map (fieldDecl qual) fields)} }"
+  ODAlias n name ty => "${typeParamDecl n}${name} = ${renderTy qual ty}"
+
+fieldDecl : (String -> String) -> Pair String OTy -> String
+fieldDecl qual (Pair label ty) = "${label} : ${renderTy qual ty}"
+
+-- | 一个单元的类型声明块：空表 → `""`；否则 `type ... \nand ...\n\n`（末尾空行固定）。
+export renderDecls : (String -> String) -> List ODecl -> String
+renderDecls qual decls = case decls of
+  [] => ""
+  _ => "type ${joinWith "\nand " (map (renderDecl qual) decls)}\n\n"

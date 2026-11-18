@@ -37,6 +37,8 @@ modules = [
   "Vuna.Compiler.Base.Version",
   "Vuna.Compiler.Codegen.Assembly",
   "Vuna.Compiler.Codegen.Decl",
+  "Vuna.Compiler.Codegen.Ocaml.Model",
+  "Vuna.Compiler.Codegen.Ocaml.Render",
   "Vuna.Compiler.Codegen.Runtime",
   "Vuna.Compiler.Codegen.Term",
   "Vuna.Compiler.Core.Canonical",
