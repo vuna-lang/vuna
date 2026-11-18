@@ -229,11 +229,13 @@ spanInsensitive = encTop encTerm spanTermA == encTop encTerm spanTermB
 -- | binder 名 span（`TLam` / `CaseAlt` 的 `Binder`）同样不进编码：换位置必须同一串。
 binderSpanTermA : Term
 binderSpanTermA =
-  TLam "x" Rig1 spA (TCase (TVar "x" 0 spA) [CaseAlt "Succ" [Binder "k" Rig1 spA] (TVar "k" 0 spA)])
+  TLam "x" Rig1 Nothing spA
+    (TCase (TVar "x" 0 spA) [CaseAlt "Succ" [Binder "k" Rig1 spA] (TVar "k" 0 spA)])
 
 binderSpanTermB : Term
 binderSpanTermB =
-  TLam "x" Rig1 spB (TCase (TVar "x" 0 spB) [CaseAlt "Succ" [Binder "k" Rig1 spB] (TVar "k" 0 spB)])
+  TLam "x" Rig1 Nothing spB
+    (TCase (TVar "x" 0 spB) [CaseAlt "Succ" [Binder "k" Rig1 spB] (TVar "k" 0 spB)])
 
 binderSpanInsensitive : Bool
 binderSpanInsensitive = encTop encTerm binderSpanTermA == encTop encTerm binderSpanTermB
@@ -245,7 +247,7 @@ termFixtures =
     TMeta 12,
     TGlobal "Base.Data.Int",
     TType (levelOfInt 2),
-    TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 spB (TVar "x" 0 spB)),
+    TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 Nothing spB (TVar "x" 0 spB)),
     TApp (TGlobal "f") (TInt 7) Rig1,
     TCon "Cons" [Pair (TInt 1) RigOmega, Pair (TStr "s") Rig1],
     TMk "Point" [Pair (TInt 1) RigOmega],
