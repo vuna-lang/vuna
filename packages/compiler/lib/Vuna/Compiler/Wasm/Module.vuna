@@ -625,6 +625,12 @@ genRtApp : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) Gen
 genRtApp fuel st sym args =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
+  else if sym == "prim_erase" then
+    case args of
+      -- 擦除包装是恒等：直接生成被包住的表达式，才能保留尾位置（否则会被当成
+      -- 实参用 noTail 生成，机器自递归/续延转移就退化成普通调用）。
+      [] => Err "prim_erase needs an argument"
+      x :: rest => genExpr (fuel - 1) st (applyAllIr x rest)
   else
     case rtImplOf sym of
       RtUnsupported => Err "wasm target: runtime symbol `${sym}` is not supported yet"
