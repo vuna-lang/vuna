@@ -432,4 +432,3 @@ nameIdentityOk =
         _ => False
     holeOk = rnameIsHole (classifyName "?h") && rnameIsHole (classifyName "_")
   in localOk && globalOk && intrinsicOk && macroOk && holeOk
-
