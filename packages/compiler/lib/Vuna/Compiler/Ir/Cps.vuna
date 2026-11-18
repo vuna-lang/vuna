@@ -113,8 +113,7 @@ memBinder _ [] = False
 memBinder b (x :: rest) = binderEq b x || memBinder b rest
 
 binderErased : IrBinder -> Bool
-binderErased b = case b of
-  IrBinder _ erased => erased
+binderErased (IrBinder _ erased) = erased
 
 -- | 运行时 binder（擦除占位不进作用域）。
 runtimeBinders : List IrBinder -> List IrBinder
@@ -275,11 +274,11 @@ else
     IrGlobal name =>
       if name == runThunkName then cpsThunkCall (fuel - 1) head args k
       else cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
-    IrRt sym =>
-      if sym == "prim_effectPerform" then cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
-      else if sym == "prim_effectHandle" then cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
-      else if sym == "prim_effectSelf" then cpsThunkCall (fuel - 1) (IrRt irCpsSelfName) args k
-      else cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
+    IrRt sym => case sym of
+      "prim_effectPerform" => cpsThunkCall (fuel - 1) (IrRt irCpsPerformName) args k
+      "prim_effectHandle" => cpsThunkCall (fuel - 1) (IrRt irCpsHandleName) args k
+      "prim_effectSelf" => cpsThunkCall (fuel - 1) (IrRt irCpsSelfName) args k
+      _ => cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
     _ => cpsExpr (fuel - 1) env head (IrLam [v] (cpsArgs (fuel - 1) env args (IrVar v) [] k))
 
 -- ---------------------------------------------------------------
@@ -348,17 +347,16 @@ else case m of
 -- `runPure e` / `runEff e` / `runMain e` 的体是 `runThunk e MkEffUnit`；在 CPS 里
 -- 这个运行点需要 identity continuation。
 trampolineBody : String -> Ir -> Result Ir
-trampolineBody name body = case body of
-  IrLam bs inner => case trampolineBody name inner of
-    Err msg => Err msg
-    Ok inner1 => Ok (IrLam bs inner1)
-  IrCast inner => case trampolineBody name inner of
-    Err msg => Err msg
-    Ok inner1 => Ok (IrCast inner1)
-  IrApp (IrApp (IrGlobal g) e) u =>
-    if g == runThunkName then Ok (applyAll (IrGlobal g) [e, u, identityCont])
-    else Err ("CPS: unexpected trampoline shape: " ++ name)
-  _ => Err ("CPS: unexpected trampoline shape: " ++ name)
+trampolineBody name (IrLam bs inner) = case trampolineBody name inner of
+  Err msg => Err msg
+  Ok inner1 => Ok (IrLam bs inner1)
+trampolineBody name (IrCast inner) = case trampolineBody name inner of
+  Err msg => Err msg
+  Ok inner1 => Ok (IrCast inner1)
+trampolineBody name (IrApp (IrApp (IrGlobal g) e) u) =
+  if g == runThunkName then Ok (applyAll (IrGlobal g) [e, u, identityCont])
+  else Err ("CPS: unexpected trampoline shape: " ++ name)
+trampolineBody name _ = Err ("CPS: unexpected trampoline shape: " ++ name)
 
 -- `handleScoped (MkScoped th) = prim_effectSelf th`：identity continuation。
 selfAlt : Int -> IrAlt -> String -> Result IrAlt
@@ -499,17 +497,16 @@ stepDoneCont =
   in IrLam [v] (IrApp (IrRt irSelDoneName) (IrVar v))
 
 selTrampolineBody : String -> Ir -> Result Ir
-selTrampolineBody name body = case body of
-  IrLam bs inner => case selTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrLam bs b)
-  IrCast inner => case selTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrCast b)
-  IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc =>
-    if g == runThunkName then Ok (IrApp (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
-    else Err ("selective CPS: unexpected trampoline shape: " ++ name)
-  _ => Err ("selective CPS: unexpected trampoline shape: " ++ name)
+selTrampolineBody name (IrLam bs inner) = case selTrampolineBody name inner of
+  Err msg => Err msg
+  Ok b => Ok (IrLam bs b)
+selTrampolineBody name (IrCast inner) = case selTrampolineBody name inner of
+  Err msg => Err msg
+  Ok b => Ok (IrCast b)
+selTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
+  if g == runThunkName then Ok (IrApp (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
+  else Err ("selective CPS: unexpected trampoline shape: " ++ name)
+selTrampolineBody name _ = Err ("selective CPS: unexpected trampoline shape: " ++ name)
 
 -- | `handleScoped`：`@ir@sel@self th stepDone`。
 selSelfBody : Int -> Ir -> Result Ir
@@ -569,11 +566,10 @@ else case defs of
 -- 机器化 handler CPS（方案 2 第一层）：resumption 改成 (v, kRest)
 -- ---------------------------------------------------------------
 mBNameText : IrBName -> String
-mBNameText n = case n of
-  IrBUser x => x
-  IrBArm i => "arm" ++ strFromInt i
-  IrBNat i => "nat" ++ strFromInt i
-  IrBWild => "wild"
+mBNameText (IrBUser x) = x
+mBNameText (IrBArm i) = "arm" ++ strFromInt i
+mBNameText (IrBNat i) = "nat" ++ strFromInt i
+mBNameText IrBWild = "wild"
 
 mIsOp : IrBinder -> Bool
 mIsOp b = case b.irBinderName of
@@ -584,32 +580,29 @@ mResumption : List IrBinder -> Maybe IrBinder
 mResumption bs = mResumeGo (runtimeBinders bs)
 
 mResumeGo : List IrBinder -> Maybe IrBinder
-mResumeGo xs = case xs of
+mResumeGo [] = Nothing
+mResumeGo (b :: rest) = if mIsOp b then case rest of
+  r :: _ => Just r
   [] => Nothing
-  b :: rest => if mIsOp b then case rest of
-    r :: _ => Just r
-    [] => Nothing
-  else mResumeGo rest
+else mResumeGo rest
 
 mEraseHead : Ir -> Ir
-mEraseHead e = case e of
-  IrApp (IrRt s) x => if s == "prim_erase" then mEraseHead x else e
-  IrCast x => mEraseHead x
-  _ => e
+mEraseHead (e@(IrApp (IrRt s) x)) = if s == "prim_erase" then mEraseHead x else e
+mEraseHead (IrCast x) = mEraseHead x
+mEraseHead e = e
 
 mIsResumeApp : IrBinder -> Ir -> Bool
-mIsResumeApp r e = case e of
-  IrApp _ _ =>
-    let
-      p = flattenApp e
-    in case mEraseHead (firstOf p) of
-      IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
-      _ => case secondOf p of
-        x :: _ => case mEraseHead x of
-          IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
-          _ => False
-        [] => False
-  _ => False
+mIsResumeApp r (e@(IrApp _ _)) =
+  let
+    p = flattenApp e
+  in case mEraseHead (firstOf p) of
+    IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
+    _ => case secondOf p of
+      x :: _ => case mEraseHead x of
+        IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
+        _ => False
+      [] => False
+mIsResumeApp r _ = False
 
 mFreshV : Int -> IrBinder
 mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
@@ -632,11 +625,10 @@ else case m of
   Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k a.irAltBody))
 
 mIsControl : Ir -> Bool
-mIsControl e = case e of
-  IrCase _ _ => True
-  IrIf _ _ _ => True
-  IrNatCase _ _ _ _ _ => True
-  _ => False
+mIsControl (IrCase _ _) = True
+mIsControl (IrIf _ _ _) = True
+mIsControl (IrNatCase _ _ _ _ _) = True
+mIsControl _ = False
 
 -- | 逐个 CPS 实参，最后把运行时符号应用交给 k。
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
@@ -816,17 +808,16 @@ mDoneCont =
   in IrLam [v] (IrApp (IrRt irMDoneName) (IrVar v))
 
 mTrampolineBody : String -> Ir -> Result Ir
-mTrampolineBody name body = case body of
-  IrLam bs inner => case mTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrLam bs b)
-  IrCast inner => case mTrampolineBody name inner of
-    Err msg => Err msg
-    Ok b => Ok (IrCast b)
-  IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc =>
-    if g == runThunkName then Ok (IrApp (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
-    else Err ("machine CPS: unexpected trampoline shape: " ++ name)
-  _ => Err ("machine CPS: unexpected trampoline shape: " ++ name)
+mTrampolineBody name (IrLam bs inner) = case mTrampolineBody name inner of
+  Err msg => Err msg
+  Ok b => Ok (IrLam bs b)
+mTrampolineBody name (IrCast inner) = case mTrampolineBody name inner of
+  Err msg => Err msg
+  Ok b => Ok (IrCast b)
+mTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
+  if g == runThunkName then Ok (IrApp (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
+  else Err ("machine CPS: unexpected trampoline shape: " ++ name)
+mTrampolineBody name _ = Err ("machine CPS: unexpected trampoline shape: " ++ name)
 
 collectHandleOps : Int -> Ir -> List String
 collectHandleOps fuel e = if fuel <= 0 then []
@@ -907,9 +898,8 @@ else case ds of
     append (collectHandleOps (fuel - 1) (mBodyOf d)) (collectHandleOpsDefs (fuel - 1) rest)
 
 memName : String -> List String -> Bool
-memName x xs = case xs of
-  [] => False
-  y :: rest => if x == y then True else memName x rest
+memName x [] = False
+memName x (y :: rest) = if x == y then True else memName x rest
 
 mHandlerFun : Int -> Ir -> Ir
 mHandlerFun fuel body = if fuel <= 0 then body

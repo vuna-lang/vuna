@@ -450,12 +450,11 @@ startsWithSection (first :: rest) name = first == name
 
 -- workspace 根的形态校验：没有 `[package]` 时只允许 `[workspace]` + 工具配置段。
 validateRootShape : String -> List TomlEntry -> Maybe String -> List String -> Check Int
-validateRootShape path entries name members = case name of
-  Just _ => OkC 0
-  Nothing =>
-    if not (sectionPresent entries "workspace") then pkgPath0 path MissingPackageName
-    else if members == [] then pkgPath0 path EmptyWorkspace
-    else checkRootSections path entries ["export", "layers", "dependencies"]
+validateRootShape path entries (Just _) members = OkC 0
+validateRootShape path entries Nothing members =
+  if not (sectionPresent entries "workspace") then pkgPath0 path MissingPackageName
+  else if members == [] then pkgPath0 path EmptyWorkspace
+  else checkRootSections path entries ["export", "layers", "dependencies"]
 
 checkRootSections : String -> List TomlEntry -> List String -> Check Int
 checkRootSections path entries [] = OkC 0

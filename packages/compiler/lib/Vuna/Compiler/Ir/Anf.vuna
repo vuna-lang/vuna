@@ -51,16 +51,15 @@ record AnfAltM where
   anfNext : Int
 
 isSimple : Ir -> Bool
-isSimple e = case e of
-  IrVar _ => True
-  IrGlobal _ => True
-  IrRt _ => True
-  IrInt _ => True
-  IrStr _ => True
-  IrBool _ => True
-  IrFloatLit _ => True
-  IrCtor _ _ [] => True
-  _ => False
+isSimple (IrVar _) = True
+isSimple (IrGlobal _) = True
+isSimple (IrRt _) = True
+isSimple (IrInt _) = True
+isSimple (IrStr _) = True
+isSimple (IrBool _) = True
+isSimple (IrFloatLit _) = True
+isSimple (IrCtor _ _ []) = True
+isSimple _ = False
 
 freshBinder : Int -> IrBinder
 freshBinder n = mkIrBinder ("__anf" ++ strFromInt n)
@@ -232,9 +231,8 @@ else case e of
   IrEffBind _ _ _ => 0
 
 countBs : List IrBinder -> Int
-countBs bs = case bs of
-  [] => 0
-  b :: rest => (if isAnfBinder b then 1 else 0) + countBs rest
+countBs [] = 0
+countBs (b :: rest) = (if isAnfBinder b then 1 else 0) + countBs rest
 
 isAnfBinder : IrBinder -> Bool
 isAnfBinder b = case b.irBinderName of
@@ -267,12 +265,11 @@ else case m of
   Just a => countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody
 
 anfDef : Int -> IrDef -> IrDef
-anfDef fuel d = case d of
-  IrExternDef _ _ _ _ => d
-  IrDef name arity deps body recOk initGuard span =>
-    let
-      b = anf (fuel - 1) (fuel + countAnfBinders (fuel - 1) body) body
-    in IrDef name arity deps (letsIn b.anfLets b.anfExpr) recOk initGuard span
+anfDef fuel (d@(IrExternDef _ _ _ _)) = d
+anfDef fuel (IrDef name arity deps body recOk initGuard span) =
+  let
+    b = anf (fuel - 1) (fuel + countAnfBinders (fuel - 1) body) body
+  in IrDef name arity deps (letsIn b.anfLets b.anfExpr) recOk initGuard span
 
 anfDefs : Int -> List IrDef -> List IrDef
 anfDefs fuel defs = if fuel <= 0 then defs

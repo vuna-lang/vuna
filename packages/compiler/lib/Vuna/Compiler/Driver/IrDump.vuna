@@ -29,9 +29,9 @@ dumpIr after ctx entry = do
   )
 
 dumpAfter : String -> IrProgram -> Check String
-dumpAfter after program =
-  if after == "cps" then dumpCps program
-  else if after == "machine" then dumpMachine program else OkC (renderProgram program)
+dumpAfter "cps" program = dumpCps program
+dumpAfter "machine" program = dumpMachine program
+dumpAfter _ program = OkC (renderProgram program)
 
 dumpMachine : IrProgram -> Check String
 dumpMachine program =

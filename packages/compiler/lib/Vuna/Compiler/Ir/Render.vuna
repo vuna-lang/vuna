@@ -11,11 +11,10 @@ import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 
 bNameText : IrBName -> String
-bNameText n = case n of
-  IrBUser s => s
-  IrBArm i => "a" ++ strFromInt i
-  IrBNat i => "n" ++ strFromInt i
-  IrBWild => "_"
+bNameText (IrBUser s) = s
+bNameText (IrBArm i) = "a" ++ strFromInt i
+bNameText (IrBNat i) = "n" ++ strFromInt i
+bNameText IrBWild = "_"
 
 binderText : IrBinder -> String
 binderText b = if b.irBinderErased then "_" else bNameText b.irBinderName
@@ -24,22 +23,20 @@ binderList : List IrBinder -> String
 binderList bs = String.join " " (map binderText bs)
 
 ctorText : Maybe (Pair String String) -> String
-ctorText m = case m of
-  Nothing => "*"
-  Just p => firstOf p ++ "." ++ secondOf p
+ctorText Nothing = "*"
+ctorText (Just p) = firstOf p ++ "." ++ secondOf p
 
 tyText : IrTy -> String
-tyText t = case t of
-  IrTyVar i => "'" ++ strFromInt i
-  IrTyInt => "Int"
-  IrTyStr => "String"
-  IrTyBool => "Bool"
-  IrTyFloat => "Float"
-  IrTyOpaque => "Opaque"
-  IrTyArray x => "Array " ++ tyText x
-  IrTyRef x => "Ref " ++ tyText x
-  IrTyData n args => n ++ " " ++ String.join " " (map tyText args)
-  IrTyFun a b => "(" ++ tyText a ++ " -> " ++ tyText b ++ ")"
+tyText (IrTyVar i) = "'" ++ strFromInt i
+tyText IrTyInt = "Int"
+tyText IrTyStr = "String"
+tyText IrTyBool = "Bool"
+tyText IrTyFloat = "Float"
+tyText IrTyOpaque = "Opaque"
+tyText (IrTyArray x) = "Array " ++ tyText x
+tyText (IrTyRef x) = "Ref " ++ tyText x
+tyText (IrTyData n args) = n ++ " " ++ String.join " " (map tyText args)
+tyText (IrTyFun a b) = "(" ++ tyText a ++ " -> " ++ tyText b ++ ")"
 
 renderAlt : Int -> IrAlt -> String
 renderAlt fuel a =
@@ -149,22 +146,21 @@ else case e of
   IrEffBind fam ctor _ => "(effbind " ++ fam ++ "." ++ ctor ++ ")"
 
 export renderDef : IrDef -> String
-renderDef d = case d of
-  IrExternDef n ty c _ => "extern " ++ n ++ " : " ++ tyText ty ++ " = " ++ c
-  IrDef n ar _ body _ _ _ => "def " ++ n ++ "/" ++ strFromInt ar ++ " = " ++ renderIr 2000 body
+renderDef (IrExternDef n ty c _) = "extern " ++ n ++ " : " ++ tyText ty ++ " = " ++ c
+renderDef (IrDef n ar _ body _ _ _) =
+  "def " ++ n ++ "/" ++ strFromInt ar ++ " = " ++ renderIr 2000 body
 
 renderTyDecl : IrTyDecl -> String
-renderTyDecl d = case d of
-  IrVariantDecl n p ctors =>
-    "variant "
-      ++ n
-      ++ "/"
-      ++ strFromInt p
-      ++ " "
-      ++ String.join " " (map (\c => firstOf c ++ "(" ++ String.join "," (map tyText (secondOf c)) ++ ")") ctors)
-  IrRecordDecl n p _ tys =>
-    "record " ++ n ++ "/" ++ strFromInt p ++ " " ++ String.join "," (map tyText tys)
-  IrUnboxedDecl n p ty => "unboxed " ++ n ++ "/" ++ strFromInt p ++ " " ++ tyText ty
+renderTyDecl (IrVariantDecl n p ctors) =
+  "variant "
+    ++ n
+    ++ "/"
+    ++ strFromInt p
+    ++ " "
+    ++ String.join " " (map (\c => firstOf c ++ "(" ++ String.join "," (map tyText (secondOf c)) ++ ")") ctors)
+renderTyDecl (IrRecordDecl n p _ tys) =
+  "record " ++ n ++ "/" ++ strFromInt p ++ " " ++ String.join "," (map tyText tys)
+renderTyDecl (IrUnboxedDecl n p ty) = "unboxed " ++ n ++ "/" ++ strFromInt p ++ " " ++ tyText ty
 
 export renderDefs : List IrDef -> String
 renderDefs defs = String.join "\n" (map renderDef defs)

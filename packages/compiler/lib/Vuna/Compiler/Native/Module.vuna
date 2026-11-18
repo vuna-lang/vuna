@@ -147,54 +147,52 @@ runtimeBinders bs = filter (\b => not (isErasedBinder b)) bs
 -- | 槽读：`[rbp+off]` 且 `off < 0`。生成的函数体没有回边，所以「文本上最后一次读」
 --   就是该槽的最后一次使用；清零让保守 GC 不把活帧里已消费的临时值当根。
 slotReadOff : Operand -> List Int
-slotReadOff op = case op of
-  OpMem Rbp off => if off < 0 then [off] else []
-  _ => []
+slotReadOff (OpMem Rbp off) = if off < 0 then [off] else []
+slotReadOff _ = []
 
 baseSlotRead : Reg -> Int -> List Int
 baseSlotRead Rbp off = if off < 0 then [off] else []
 baseSlotRead _ _ = []
 
 instrSlotReads : Instr -> List Int
-instrSlotReads i = case i of
-  IMov _ src => slotReadOff src
-  IMovByteOp _ _ => []
-  IMovByteRegOp _ _ => []
-  IMovzx _ op => slotReadOff op
-  IMovzxAl => []
-  ILea _ _ => []
-  ILeaMem _ base off => baseSlotRead base off
-  IBin _ op => slotReadOff op
-  IBinReg _ _ op => slotReadOff op
-  ICmp a b => append (slotReadOff a) (slotReadOff b)
-  ITest _ _ => []
-  ISetcc _ _ => []
-  INeg _ => []
-  ICqo => []
-  IDiv _ => []
-  IDivUnsigned _ => []
-  IRepMovsb => []
-  IRepeCmpsb => []
-  ILabel _ => []
-  IJmp _ => []
-  IJmpReg _ => []
-  IJcc _ _ => []
-  ICall _ => []
-  ICallReg _ => []
-  IXmmLoad _ op => slotReadOff op
-  IXmmStore _ _ => []
-  IXmmFromInt _ _ => []
-  IXmmToInt _ _ => []
-  IXmmBin _ _ _ => []
-  IXmmUnop _ _ => []
-  IXmmCmp _ _ => []
-  IXmmToReg _ _ => []
-  IXmmFromReg _ _ => []
-  IRet => []
-  ISyscall => []
-  IPush _ => []
-  IPop _ => []
-  INop => []
+instrSlotReads (IMov _ src) = slotReadOff src
+instrSlotReads (IMovByteOp _ _) = []
+instrSlotReads (IMovByteRegOp _ _) = []
+instrSlotReads (IMovzx _ op) = slotReadOff op
+instrSlotReads IMovzxAl = []
+instrSlotReads (ILea _ _) = []
+instrSlotReads (ILeaMem _ base off) = baseSlotRead base off
+instrSlotReads (IBin _ op) = slotReadOff op
+instrSlotReads (IBinReg _ _ op) = slotReadOff op
+instrSlotReads (ICmp a b) = append (slotReadOff a) (slotReadOff b)
+instrSlotReads (ITest _ _) = []
+instrSlotReads (ISetcc _ _) = []
+instrSlotReads (INeg _) = []
+instrSlotReads ICqo = []
+instrSlotReads (IDiv _) = []
+instrSlotReads (IDivUnsigned _) = []
+instrSlotReads IRepMovsb = []
+instrSlotReads IRepeCmpsb = []
+instrSlotReads (ILabel _) = []
+instrSlotReads (IJmp _) = []
+instrSlotReads (IJmpReg _) = []
+instrSlotReads (IJcc _ _) = []
+instrSlotReads (ICall _) = []
+instrSlotReads (ICallReg _) = []
+instrSlotReads (IXmmLoad _ op) = slotReadOff op
+instrSlotReads (IXmmStore _ _) = []
+instrSlotReads (IXmmFromInt _ _) = []
+instrSlotReads (IXmmToInt _ _) = []
+instrSlotReads (IXmmBin _ _ _) = []
+instrSlotReads (IXmmUnop _ _) = []
+instrSlotReads (IXmmCmp _ _) = []
+instrSlotReads (IXmmToReg _ _) = []
+instrSlotReads (IXmmFromReg _ _) = []
+instrSlotReads IRet = []
+instrSlotReads ISyscall = []
+instrSlotReads (IPush _) = []
+instrSlotReads (IPop _) = []
+instrSlotReads INop = []
 
 slotUsePut : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int)
 slotUsePut off idx [] = [Pair off idx]

@@ -490,16 +490,15 @@ unguardedOf (f :: rest) defTbl =
 -- 只问「有没有环」：严格边也参与，否则同一对之间的严格边会让弱邻接丢失。
 allWeakEdges : List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
 allWeakEdges [] = []
-allWeakEdges (e :: rest) = case e of
-  Pair (Pair (Pair c g) m) sp => Pair (Pair (Pair c g) 0) sp :: allWeakEdges rest
+allWeakEdges ((Pair (Pair (Pair c g) m) sp) :: rest) =
+  Pair (Pair (Pair c g) 0) sp :: allWeakEdges rest
 
 onlyUnguarded : List String -> List (Pair (Pair (Pair String String) Int) Span) -> List (Pair (Pair (Pair String String) Int) Span)
 onlyUnguarded unguarded [] = []
-onlyUnguarded unguarded (e :: rest) = case e of
-  Pair (Pair (Pair c g) m) sp =>
-    if memName c unguarded then if memName g unguarded then Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
-    else onlyUnguarded unguarded rest
-    else onlyUnguarded unguarded rest
+onlyUnguarded unguarded ((Pair (Pair (Pair c g) m) sp) :: rest) =
+  if memName c unguarded then if memName g unguarded then Pair (Pair (Pair c g) m) sp :: onlyUnguarded unguarded rest
+  else onlyUnguarded unguarded rest
+  else onlyUnguarded unguarded rest
 
 -- 不含守卫的子图是否有环：有环 ⇒ 存在一条永不触底的路径，判据不成立。
 unguardedCycle : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Bool

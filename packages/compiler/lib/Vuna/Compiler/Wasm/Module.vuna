@@ -1511,7 +1511,8 @@ isCpsRtFunc : WatFunc -> Bool
 isCpsRtFunc f = memName f.watFuncName cpsRuntimeFuncs
 
 selectRtFuncs : Bool -> List WatFunc -> List WatFunc
-selectRtFuncs needEff funcs = if needEff then funcs else filter (\f => not (isEffRtFunc f)) funcs
+selectRtFuncs True funcs = funcs
+selectRtFuncs False funcs = filter (\f => not (isEffRtFunc f)) funcs
 
 -- | CPS 模式：去掉旧的 stack-switching 函数，保留 CPS 组；`$rt_resumeTwice` 是
 -- CPS 一次性续延复用的 trap，不能删。
@@ -1547,30 +1548,34 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
           lamFuncs = reverse startState.gsFuncs
           elems = reverse startState.gsElems
-          elemNames =
-            if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
-            else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
-            else if effMode == 5 then append elems ["$rt_selKComp", "$rt_selKValue"]
-            else if effMode == 6 then append elems ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2"]
-            else elems
+          elemNames = case effMode of
+            2 => append elems ["$rt_effThunk", "$rt_effResumeClo"]
+            3 => append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
+            5 => append elems ["$rt_selKComp", "$rt_selKValue"]
+            6 => append elems ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2"]
+            _ => elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
-          rtSelected =
-            if effMode == 2 then filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
-            else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts)
-            else if effMode == 5 then selectRtFuncsSel (rtFunctions st.gsConsts)
-            else if effMode == 6 then selectRtFuncsM (rtFunctions st.gsConsts) else rtBase0
+          rtSelected = case effMode of
+            2 => filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
+            3 => selectRtFuncsCps (rtFunctions st.gsConsts)
+            5 => selectRtFuncsSel (rtFunctions st.gsConsts)
+            6 => selectRtFuncsM (rtFunctions st.gsConsts)
+            _ => rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
           famTypes = concatMapType st.gsFams
-          allTypes =
-            if effMode == 2 then append baseTypes (append effTypes (selfNodeType :: famTypes))
-            else if effMode == 3 then append baseTypes (append cpsTypes famTypes)
-            else if effMode == 5 then append baseTypes (append stepTypes famTypes)
-            else if effMode == 6 then append baseTypes (append stepTypes famTypes)
-            else append baseTypes famTypes
-          tags = if effMode == 2 then baseTags else if effMode == 3 then cpsTags else []
+          allTypes = case effMode of
+            2 => append baseTypes (append effTypes (selfNodeType :: famTypes))
+            3 => append baseTypes (append cpsTypes famTypes)
+            5 => append baseTypes (append stepTypes famTypes)
+            6 => append baseTypes (append stepTypes famTypes)
+            _ => append baseTypes famTypes
+          tags = case effMode of
+            2 => baseTags
+            3 => cpsTags
+            _ => []
           baseGlobals =
             if effMode == 0 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
@@ -1620,10 +1625,9 @@ hcPureK = "@vuna@host@pureK"
 
 -- | `f a b c` 的应用脊椎：头 + 实参表。
 spineOf : Ir -> Pair Ir (List Ir)
-spineOf ir = case ir of
-  IrApp f a => case spineOf f of
-    Pair h args => Pair h (append args [a])
-  _ => Pair ir []
+spineOf (IrApp f a) = case spineOf f of
+  Pair h args => Pair h (append args [a])
+spineOf ir = Pair ir []
 
 -- | key → opH 定义名。
 opHOf : String -> List (Pair String String) -> Maybe String
@@ -1632,9 +1636,8 @@ opHOf key ((Pair k v) :: rest) = if key == k then Just v else opHOf key rest
 
 -- | 单构造子 op 的字段：`FsFail e` 的 `e`。
 opFieldOf : Ir -> Ir
-opFieldOf ir = case ir of
-  IrCtor _ _ ([x]) => x
-  _ => ir
+opFieldOf (IrCtor _ _ ([x])) = x
+opFieldOf ir = ir
 
 -- | 纯动作续延：`MkEff (\\_ => runMain (opH op pureK))`。
 directSend : String -> String -> Ir -> Ir
@@ -1687,9 +1690,8 @@ sendTailOf args = case reverse args of
 
 -- | 剥掉表现层 cast（运行时无操作），让 `sendCore` 的应用脊椎可见。
 stripIrCasts : Ir -> Ir
-stripIrCasts ir = case ir of
-  IrCast inner => stripIrCasts inner
-  _ => ir
+stripIrCasts (IrCast inner) = stripIrCasts inner
+stripIrCasts ir = ir
 
 rwSpine : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
 rwSpine h ab n ir0 =
@@ -1760,9 +1762,8 @@ globalsOfAlt : IrAlt -> List String
 globalsOfAlt a = irGlobalsOf (irAltBodyOf a)
 
 globalsOfAltMaybe : Maybe IrAlt -> List String
-globalsOfAltMaybe m = case m of
-  Nothing => []
-  Just a => globalsOfAlt a
+globalsOfAltMaybe Nothing = []
+globalsOfAltMaybe (Just a) = globalsOfAlt a
 
 -- | 依赖表里的名字是否还该跟：目标是不含续延原语的定义才跟——依赖表包含字典实例等
 -- 只在 Core 侧可见的隐式引用，纯按体扫描会漏掉它们；而 `sendCore` 这类会被改写掉的定义

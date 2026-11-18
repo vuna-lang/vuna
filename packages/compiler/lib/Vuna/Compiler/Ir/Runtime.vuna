@@ -467,15 +467,15 @@ irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)
 -- 自定义 handler」时把 send 直接降成宿主调用（不需要续延）。答案行仍是同一族
 -- （`[ConsoleOp]` 等）的家族才在表内；Fs / Process / Net 的 opH 会转投别的族，暂不列入。
 export irHostDirectOf : String -> Maybe (Pair String String)
-irHostDirectOf name =
-  if name == "Base.EffConsole.runConsoleHost" then Just (Pair "console" "Base.EffConsole.consoleOpHIOHost")
-  else if name == "Base.EffFs.runFsHost" then Just (Pair "fs" "Base.EffFs.fsOpHIOHost")
-  else if name == "Base.EffClock.runClockHost" then Just (Pair "clock" "Base.EffClock.clockOpHIOHost")
-  else if name == "Base.EffEnv.runEnvHost" then Just (Pair "env" "Base.EffEnv.envOpHIOHost")
-  else if name == "Base.EffArgs.runArgsHost" then Just (Pair "args" "Base.EffArgs.argsOpHIOHost")
-  else if name == "Base.EffExit.runExitHost" then Just (Pair "exit" "Base.EffExit.exitOpHIOHost")
-  else if name == "Base.EffStdin.runStdinHost" then Just (Pair "stdin" "Base.EffStdin.stdinOpHIOHost")
-  else Nothing
+irHostDirectOf "Base.EffConsole.runConsoleHost" =
+  Just (Pair "console" "Base.EffConsole.consoleOpHIOHost")
+irHostDirectOf "Base.EffFs.runFsHost" = Just (Pair "fs" "Base.EffFs.fsOpHIOHost")
+irHostDirectOf "Base.EffClock.runClockHost" = Just (Pair "clock" "Base.EffClock.clockOpHIOHost")
+irHostDirectOf "Base.EffEnv.runEnvHost" = Just (Pair "env" "Base.EffEnv.envOpHIOHost")
+irHostDirectOf "Base.EffArgs.runArgsHost" = Just (Pair "args" "Base.EffArgs.argsOpHIOHost")
+irHostDirectOf "Base.EffExit.runExitHost" = Just (Pair "exit" "Base.EffExit.exitOpHIOHost")
+irHostDirectOf "Base.EffStdin.runStdinHost" = Just (Pair "stdin" "Base.EffStdin.stdinOpHIOHost")
+irHostDirectOf _ = Nothing
 
 -- | 只做「诊断 + 退出」的错误族：send key → 渲染错误文本的定义名。入口的这类 handler
 -- 不恢复续延（打印诊断后退出），所以直连时把 send 降成同样的收口序列。
