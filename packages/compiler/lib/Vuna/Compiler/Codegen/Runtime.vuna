@@ -49,6 +49,8 @@ ocamlRtTextTable =
     Pair "strSubstring" "dtp_substring",
     Pair "strShow" "dt_show_string",
     Pair "prim_erase" "Obj.magic",
+    Pair "@vuna@prim@toObj" "Obj.repr",
+    Pair "@vuna@prim@fromObj" "Obj.obj",
     Pair "natAdd" "bi_natAdd",
     Pair "natSub" "bi_natSub",
     Pair "natMul" "bi_natMul",

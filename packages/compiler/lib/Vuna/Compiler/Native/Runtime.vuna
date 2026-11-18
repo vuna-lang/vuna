@@ -1489,6 +1489,8 @@ nativeRtTargetHost "prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_writ
 nativeRtTargetHost "@vuna@prim_eff_writeRef_host" = Just (nativeRtLabel "prim_eff_write_ref")
 
 nativeRtTargetBase "prim_erase" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "@vuna@prim@toObj" = Just (nativeRtLabel "prim_erase")
+nativeRtTargetBase "@vuna@prim@fromObj" = Just (nativeRtLabel "prim_erase")
 nativeRtTargetBase "prim_effectPerform" = Just (nativeRtLabel "eff_perform")
 nativeRtTargetBase "prim_effectHandle" = Just (nativeRtLabel "eff_handle")
 nativeRtTargetBase "prim_effectSelf" = Just (nativeRtLabel "eff_self")

@@ -725,6 +725,7 @@ baseIntrinsics : List Intrinsic
 -- `+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等由 Loader
 -- 换成 `Base.Trait.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
 -- 位运算（可见：库与编译器直接用；语义见 `IntrinsicOp` 的注释与 primitives.md）。
+-- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Internal.Obj）。
 baseIntrinsics =
   [
     Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd False,
@@ -751,6 +752,8 @@ baseIntrinsics =
     Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring True,
     Intrinsic "strShow" (IFun IStr IStr) OpStrShow True,
     Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity False,
+    Intrinsic "@vuna@prim@toObj" (IPi "a" (IFun (IVar "a") (IGlobal "Base.Effect.Core.Obj"))) OpNone False,
+    Intrinsic "@vuna@prim@fromObj" (IPi "a" (IFun (IGlobal "Base.Effect.Core.Obj") (IVar "a"))) OpNone False,
     Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd True,
     Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub True,
     Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul True,

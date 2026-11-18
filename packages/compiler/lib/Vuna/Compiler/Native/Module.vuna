@@ -865,7 +865,7 @@ genApp fuel st isTail ir =
               case args of
                 [a] => genNatSuccCall (fuel - 1) st a
                 _ => internal "Nat Succ must have exactly one argument"
-            else if s == "prim_erase" then
+            else if s == "prim_erase" || s == "@vuna@prim@toObj" || s == "@vuna@prim@fromObj" then
               case args of
                 [] => internal "prim_erase needs an argument"
                 x :: rest => genExprAt (fuel - 1) st isTail (applyAllIr x rest)

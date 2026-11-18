@@ -92,6 +92,8 @@ irRtPlainNames =
     "strSubstring",
     "strShow",
     "prim_erase",
+    "@vuna@prim@toObj",
+    "@vuna@prim@fromObj",
     "natAdd",
     "natSub",
     "natMul",
