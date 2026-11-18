@@ -635,6 +635,36 @@ mIsControl e = case e of
   IrNatCase _ _ _ _ _ => True
   _ => False
 
+-- | 逐个 CPS 实参，最后把运行时符号应用交给 k。
+mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
+mCpsArgs fuel r k sym args acc = if fuel <= 0 then IrApp k (IrRtApp sym (reverse acc))
+else case args of
+  [] => IrApp k (IrRtApp sym (reverse acc))
+  a :: rest =>
+    let
+      v = mFreshV fuel
+    in mCps (fuel - 1) r (IrLam [v] (mCpsArgs (fuel - 1) r k sym rest (IrVar v :: acc))) a
+
+-- | 逐个 CPS 一个应用脊（head :: args），最后 applyAll 交给 k。
+mCpsApply : Int -> IrBinder -> Ir -> List Ir -> Ir
+mCpsApply fuel r k parts = if fuel <= 0 then IrApp k (IrGlobal "?")
+else case parts of
+  [] => IrApp k (IrGlobal "?")
+  [x] => mCps (fuel - 1) r k x
+  x :: rest =>
+    let
+      v = mFreshV fuel
+    in mCps (fuel - 1) r (IrLam [v] (mCpsApplyArgs (fuel - 1) r k rest [] v)) x
+
+mCpsApplyArgs : Int -> IrBinder -> Ir -> List Ir -> List Ir -> IrBinder -> Ir
+mCpsApplyArgs fuel r k args acc headV = if fuel <= 0 then IrApp k (IrGlobal "?")
+else case args of
+  [] => IrApp k (applyAll (IrVar headV) (reverse acc))
+  a :: rest =>
+    let
+      v = mFreshV fuel
+    in mCps (fuel - 1) r (IrLam [v] (mCpsApplyArgs (fuel - 1) r k rest (IrVar v :: acc) headV)) a
+
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e = if fuel <= 0 then IrApp k (transformDirect (fuel - 1) e)
 else if mIsResumeApp r e then IrApp e k
@@ -652,6 +682,11 @@ else case e of
     IrNatCase (transformDirect (fuel - 1) scrut) fr (mCpsAltM (fuel - 2) r k z)
       (mCpsAltM (fuel - 2) r k su) (mCpsAltM (fuel - 2) r k ca)
   IrCast x => IrCast (mCps (fuel - 1) r k x)
+  IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
+  IrApp _ _ =>
+    let
+      p = flattenApp e
+    in mCpsApply (fuel - 1) r k (append [firstOf p] (secondOf p))
   _ => IrApp k (transformDirect (fuel - 1) e)
 
 mHandlerLam : Int -> List IrBinder -> Ir -> Ir
@@ -662,15 +697,27 @@ mHandlerLam fuel bs body = case mResumption bs of
       kd = freshK fuel
     in IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) body)
 
+mListH : Int -> List Ir -> List Ir
+mListH fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => mHandlers (fuel - 1) x :: mListH (fuel - 1) rest
+
+mFieldsH : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mFieldsH fuel fs = if fuel <= 0 then fs
+else case fs of
+  [] => []
+  p :: rest => Pair (firstOf p) (mHandlers (fuel - 1) (secondOf p)) :: mFieldsH (fuel - 1) rest
+
 mHandlers : Int -> Ir -> Ir
 mHandlers fuel e = if fuel <= 0 then e
 else case e of
   IrLam bs body => mHandlerLam (fuel - 1) bs body
-  IrCtor fam ctor args => IrCtor fam ctor (mapDirect (fuel - 1) args)
-  IrRecord fam fs => IrRecord fam (mapFieldsDirect (fuel - 1) fs)
+  IrCtor fam ctor args => IrCtor fam ctor (mListH (fuel - 1) args)
+  IrRecord fam fs => IrRecord fam (mFieldsH (fuel - 1) fs)
   IrProj b fam f => IrProj (mHandlers (fuel - 1) b) fam f
-  IrRecUpd b fam fs => IrRecUpd (mHandlers (fuel - 1) b) fam (mapFieldsDirect (fuel - 1) fs)
-  IrRtApp sym args => IrRtApp sym (mapDirect (fuel - 1) args)
+  IrRecUpd b fam fs => IrRecUpd (mHandlers (fuel - 1) b) fam (mFieldsH (fuel - 1) fs)
+  IrRtApp sym args => IrRtApp sym (mListH (fuel - 1) args)
   IrCast x => IrCast (mHandlers (fuel - 1) x)
   IrLet bs rhs body => IrLet bs (mHandlers (fuel - 1) rhs) (mHandlers (fuel - 1) body)
   IrApp f a => IrApp (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
@@ -679,7 +726,7 @@ else case e of
   IrNatCase s fr z su ca =>
     IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su)
       (mHandlersAltM (fuel - 1) ca)
-  IrConcatMany xs => IrConcatMany (mapDirect (fuel - 1) xs)
+  IrConcatMany xs => IrConcatMany (mListH (fuel - 1) xs)
   IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (mHandlers (fuel - 1) prim)
   _ => e
 

@@ -1519,6 +1519,12 @@ selectRtFuncsCps : List WatFunc -> List WatFunc
 selectRtFuncsCps funcs =
   filter (\f => not (isEffRtFunc f) || f.watFuncName == "$rt_resumeTwice") funcs
 
+selectRtFuncsM : List WatFunc -> List WatFunc
+selectRtFuncsM funcs =
+  append
+    (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f) || f.watFuncName == "$rt_resumeTwice" || f.watFuncName == "$rt_cpsUnhandled2") funcs)
+    mFunctions
+
 -- | 选择性 CPS：base 运行时 + 选择性 Step driver。
 selectRtFuncsSel : List WatFunc -> List WatFunc
 selectRtFuncsSel funcs =
@@ -1544,13 +1550,16 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           elemNames =
             if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
             else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
-            else if effMode == 5 then append elems ["$rt_selKComp", "$rt_selKValue"] else elems
+            else if effMode == 5 then append elems ["$rt_selKComp", "$rt_selKValue"]
+            else if effMode == 6 then append elems ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2"]
+            else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
           rtSelected =
             if effMode == 2 then filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
             else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts)
-            else if effMode == 5 then selectRtFuncsSel (rtFunctions st.gsConsts) else rtBase0
+            else if effMode == 5 then selectRtFuncsSel (rtFunctions st.gsConsts)
+            else if effMode == 6 then selectRtFuncsM (rtFunctions st.gsConsts) else rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
@@ -1559,6 +1568,7 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
             if effMode == 2 then append baseTypes (append effTypes (selfNodeType :: famTypes))
             else if effMode == 3 then append baseTypes (append cpsTypes famTypes)
             else if effMode == 5 then append baseTypes (append stepTypes famTypes)
+            else if effMode == 6 then append baseTypes (append stepTypes famTypes)
             else append baseTypes famTypes
           tags = if effMode == 2 then baseTags else if effMode == 3 then cpsTags else []
           baseGlobals =
@@ -1576,6 +1586,12 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
               WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
               WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull]
+            ]
+            else if effMode == 6 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
+              WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull],
+              WatGlobal "$g_mctx" WvAnyRef [IRefNull]
             ]
             else [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
@@ -1884,8 +1900,8 @@ build program printResult =
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
         else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if listNull (irEntryRowTagsOf e) && noStepUnsupported then case cpsDefsStep ordered of
-        Ok cpsOrdered => buildAnf cpsOrdered 5 (Just e) listFamM
+      else if listNull (irEntryRowTagsOf e) && noStepUnsupported then case cpsDefsMachine ordered of
+        Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
         Err _ => fallbackEff
       else fallbackEff
 

@@ -92,9 +92,10 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 1. **wasm 先行**：
    - 1a（已落地，休眠）：`Ir.Cps.cpsDefsMachine` 把 handler clause 改成
      `\o k kDone -> ...`，resumption 调用追加 `kRest`；
-   - 1b（待做）：`Wasm` 内实现 `@ir@m@*` 原语、显式 ContStack 与单层 trampoline，
-     并改发 `@ir@m@*`。先用 `26_eff_console` / `18_eff_fs_io` / `40_eff_fs_named`
-     的宿主组合验收，再跑 `106` 的常量栈（去掉大栈旗标）。
+   - 1b（已落地，纯行）：wasm 的 `@ir@m@*` 原语、`Return`/`Resume`、`$g_mctx`
+     续延上下文与 `$rt_mRun` 已接通，纯用户 handler 默认走 mode 6；
+   - 1c（待做）：宿主+用户组合（answer row 的 frame 生命周期）与常量栈
+     （当前 CPS 续延仍在 wasm 调用栈上，2000 次 perform 需 1 MiB）。
 2. **native**：实现同一组原语（显式帧 + 续延栈，替代栈拷贝路径的 handler 部分）；
    用 `effect-common` 三端矩阵验收。
 3. **OCaml**：用同一协议映射到 `Effect.Deep` 或显式 trampoline；验收同矩阵。
