@@ -82,17 +82,15 @@ export handleProcess : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> 
 handleProcess n ret opH comp = handleCore (Named n ProcessOp) "process" n ret opH comp
 
 -- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。
-processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-processOpHIOWith onExit i op k =
+processOpHIOWith : {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
+processOpHIOWith i op k =
   case op of
     Args =>
       do
         xs <- @vuna@prim_eff_getArgs
         k xs
     Exit c =>
-      do
-        r <- onExit c
-        k r
+      k c
     RunIn dir args =>
       do
         c <- @vuna@prim_eff_runIn dir args
@@ -107,9 +105,9 @@ processOpHIOWith onExit i op k =
         k c
 
 -- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是已处理干净的 `Eff []` 动作。
-export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [] a)
-handleProcessHostWith n onExit comp =
-  handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) (processOpHIOWith onExit) comp
+export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [] a)
+handleProcessHostWith n comp =
+  handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) processOpHIOWith comp
 
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
@@ -119,17 +117,15 @@ processHostStatus : {r : Row} -> Eff r Int
 processHostStatus = raise @vuna@prim_eff_hostStatus
 
 -- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
-processOpHIOWithHost : (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ProcessErrorOp@"process-error"] a) -> Eff [ProcessErrorOp@"process-error"] a
-processOpHIOWithHost onExit i op k =
+processOpHIOWithHost : {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ProcessErrorOp@"process-error"] a) -> Eff [ProcessErrorOp@"process-error"] a
+processOpHIOWithHost i op k =
   case op of
     Args =>
       do
         xs <- raise @vuna@prim_eff_getArgs_process_host
         k xs
     Exit c =>
-      do
-        r <- onExit c
-        k r
+      k (runPure (@vuna@prim_eff_exit_process_host c))
     RunIn dir args =>
       do
         c <- raise (@vuna@host@tryRunIn dir args)
@@ -145,15 +141,15 @@ processOpHIOWithHost onExit i op k =
         k c
 
 -- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
-handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [ProcessErrorOp@"process-error"] a)
-handleProcessHostWithHost n onExit comp =
-  handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) (processOpHIOWithHost onExit) comp
+handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [ProcessErrorOp@"process-error"] a)
+handleProcessHostWithHost n comp =
+  handleCoreAt (Named n ProcessOp) "process" n (\a => pure a) processOpHIOWithHost comp
 
 -- | entry 自动预装用（泛化 r）：真实退出路径 `Exit` 走 `@vuna@prim_eff_exit_process_host`，失败收口行 `ProcessErrorOp` 接到行尾。
 runProcessHost : {r : Row} -> {a : Type} -> Eff (Named "default" ProcessOp :: r) a -> Eff (rowAppend r [ProcessErrorOp@"process-error"]) a
 runProcessHost comp =
   joinEff
-    (handleProcessHostWithHost "default" (\c => raise (@vuna@prim_eff_exit_process_host c)) comp)
+    (handleProcessHostWithHost "default" comp)
 
 -- | 内部：`runProcessError` 的成功侧 `ret`——值包装成 `Ok`。
 processErrorRet : {a : Type} -> a -> Result a

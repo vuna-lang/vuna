@@ -29,6 +29,6 @@ main = do
       ("mock " ++ strFromInt (runPure (handleProcess "mock" mret mopH (prog "mock"))) ++ "\n")
   observed <-
     raiseTo [ConsoleOp, ProcessOp]
-      (joinEff (handleProcessHostWith "observed" (\c => pure c) (prog "observed")))
+      (joinEff (handleProcessHostWith "observed" (prog "observed")))
   _ <- consolePrint ("observed " ++ strFromInt observed ++ "\n")
   pure 0
