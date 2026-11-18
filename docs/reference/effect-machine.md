@@ -191,3 +191,56 @@ Control       = Done value
    （`case (k V) of MkEff a2 => a2 u V3`），而 resume 的 answer 由 `kRest` 交付——
    两者对「这里的值是什么」的假设还不一致。这条要在 lowering 侧统一（管道也走
    `Control` 转移），不是在 `kDone` 里再加分支。
+
+### 7.2 最小复现：`Eff` answer + resume（不需要宿主，纯 Console）
+
+```vuna
+prog : Eff [ConsoleOp@real] Int
+prog = do
+  _ <- consolePrint@real "a"
+  pure 1
+
+ret : Int -> Eff [ConsoleOp] Int
+ret a = pure a
+
+opH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Eff [ConsoleOp] Int) -> Eff [ConsoleOp] Int
+opH i op k = case op of
+  Print s => do
+    _ <- consolePrint ("log:" ++ s ++ "\n")
+    k 0
+  EPrint s => k 0
+
+main : Eff [ConsoleOp] Int
+main = joinEff (handleConsole "real" ret opH prog)
+```
+
+期望：打印 `log:a`，最终值 `1`。现状：打印了 `log:a`，然后在机器循环派出的一次
+continuation 调用里 cast 失败（该 continuation 把收到的值当 `Eff` 做 `case`，
+拿到的却不是 `Eff`）。定位结果：
+
+- `kDone`/`Return` 两侧都正常（`Return` 甚至没被走到）；
+- 失败点在 `Monad (Eff r)` 的 `>>=` 体里：它把 continuation 的**返回值**再当 `Eff`
+  继续 `case`（`case (k V) of MkEff a2 => a2 u K`），而 mode 6 里这个 continuation
+  已经被降成 `\v kRest -> …`（饱和后返回 `Control`），于是「半应用」与「Eff 值」
+  两种形状混在了一起。
+
+结论：这不是再加一个运行时分支能解决的，而是 `>>=` / `pure` / `fmap` 这一层
+**组合子本身**还在「拿值、返回值」的约定里。下一步的最小可行改法是把 bind 变成
+机器原语（见 §7.3），让 `Eff` 的组合子不再依赖 CPS 后的库代码互相猜测形状。
+
+### 7.3 下一步：把 bind 作为机器原语
+
+```text
+Control = Done value | Apply cont value | Perform key name op cont
+        | Handle key name ret opH comp unit cont
+        | Bind thunk k cont          -- 新的：压一帧，跑 thunk，再把值交 k
+```
+
+- base 侧：`Monad (Eff r)` 的 `>>=` 降成 `MkEff (\u K -> @ir@m@bind e k u K)`
+  （新增信任边界原语；OCaml/native 仍可映射成现在的展开，行为不变）；
+- wasm：`$rt_mBind` 只构造一个 `Bind` step；循环里 `Bind` 帧入堆栈，
+  跑 `thunk unit (cont = \v -> push k 帧)`；
+- 好处：组合子不再「运行 continuation 的返回值」，`Eff` answer + resume 的形状
+  与普通 handler 一致，`>>=` 也不再是栈增长的来源（每一层是堆帧）。
+- 验收：上面的 §7.2 复现打印 `log:a` 且返回 `1`；`106` 用默认栈；
+  `18_eff_fs_io` / `40_eff_fs_named` 在打开全行 mode 6 后通过。
