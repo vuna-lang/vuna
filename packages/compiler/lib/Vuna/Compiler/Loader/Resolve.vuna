@@ -5,18 +5,18 @@ module Vuna.Compiler.Loader.Resolve where
 -- 从模块/导出表查询（`Loader.Modules`）出发，把 parse 后的声明与表达式解析成带模块前缀
 -- 的名字；同时负责 DT prelude 名字放行（`builtinArity` 也在这里）。
 -- 导出表计算、加载流程与 flatten 在 `Loader.Flatten`。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Vuna.Compiler.Base.Diagnostics.Pkg
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Base.Intrinsics
-import Base.Eff.Types
+import Base.Effect.EffTypes as EffTypes
 
 -- 解析器递归的显式 fuel（保留 1G，逐点写清楚 measure 与上界）。
 --
@@ -123,7 +123,7 @@ namespacesOfWith release decls =
     cts = ctorsOf decls
     tys = typeNamesOf decls
     cands = ctorCandsOf decls
-  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = Base.HashMap.ofNames vals, nsCtorSet = Base.HashMap.ofNames cts, nsTypeSet = Base.HashMap.ofNames tys, nsCtorCands = cands, nsRelease = release }
+  in Namespaces { nsValues = vals, nsCtors = cts, nsTypes = tys, nsValueSet = HashMap.ofNames vals, nsCtorSet = HashMap.ofNames cts, nsTypeSet = HashMap.ofNames tys, nsCtorCands = cands, nsRelease = release }
 
 -- | 工具默认（debug 构建）。
 export namespacesOf : List Decl -> Namespaces
@@ -177,8 +177,7 @@ notEmptyList (_ :: rest) = True
 -- | 命名空间路径：在模块 `m` 的导出表里按最长点号前缀匹配 `kind = "module"` 条目，
 -- 连续走到最后一个模块；返回目标模块与未消费的剩余段。
 walkNamespacePaths : List Module -> String -> List String -> Check (Pair String (List String))
-walkNamespacePaths modules m segs =
-  walkNamespacePathsFuel (1 + Base.List.length segs) modules m segs
+walkNamespacePaths modules m segs = walkNamespacePathsFuel (1 + List.length segs) modules m segs
 
 walkNamespacePathsFuel : Int -> List Module -> String -> List String -> Check (Pair String (List String))
 walkNamespacePathsFuel fuel modules m segs = if fuel <= 0 then icFuel "namespace path"
@@ -190,7 +189,7 @@ else OkC (Pair m segs)
 
 -- | 在导出表里找最长匹配的点号路径前缀（`Map` / `Base.Map`），返回 target 与消费的段数。
 longestNamespaceEntry : List ExportEntry -> List String -> Maybe (Pair String Int)
-longestNamespaceEntry es segs = longestNamespaceEntryGo es segs (Base.List.length segs)
+longestNamespaceEntry es segs = longestNamespaceEntryGo es segs (List.length segs)
 
 longestNamespaceEntryGo : List ExportEntry -> List String -> Int -> Maybe (Pair String Int)
 longestNamespaceEntryGo es segs k = if k <= 0 then Nothing
@@ -202,13 +201,20 @@ else case findExportModule es (joinDots (takeSegs k segs)) of
 -- （强/弱限定候选），再逐候选走命名空间路径。歧义留到成员查找之后再判定。
 resolvePathPrefixes : List Module -> List Import -> List String -> Check (List (Pair String (List String)))
 resolvePathPrefixes modules imports segs =
-  resolvePathPrefixesTry modules imports segs (Base.List.length segs - 1)
+  resolvePathPrefixesTry modules imports segs (List.length segs - 1)
+
+-- | 构造子族查找拿到的前缀可能是路径 import 名（`Base.Effect.EffFs`），
+-- 先归一成真实模块名再用导出表/声明表。
+realModuleName : List Module -> String -> String
+realModuleName modules name = case resolveModuleName modules name of
+  Just real => real
+  Nothing => name
 
 resolvePathPrefixesTry : List Module -> List Import -> List String -> Int -> Check (List (Pair String (List String)))
 resolvePathPrefixesTry modules imports segs n = if n < 1 then OkC []
 else case qualifierCandidates imports (joinDots (takeSegs n segs)) of
   [] => resolvePathPrefixesTry modules imports segs (n - 1)
-  mods => Vuna.Compiler.Base.Common.bind (walkNamespaceCandidates modules mods (dropSegs n segs) []) (\rs => case uniqPathResults rs of
+  mods => Vuna.Compiler.Base.Common.bind (walkNamespaceCandidates modules (map (realModuleName modules) mods) (dropSegs n segs) []) (\rs => case uniqPathResults rs of
     [] => resolvePathPrefixesTry modules imports segs (n - 1)
     ps => OkC ps
   )
@@ -333,7 +339,7 @@ ctorTargetInFamily modules prefix ns famTarget base = case filter (\p => firstOf
 -- 终止性上无法证明的互递归。
 -- | 解析类型位置的 target（本模块类型、内建类型、限定名、import 导出的类型）。
 resolveTypeTarget : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
-resolveTypeTarget modules label prefix ns imports name = if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
+resolveTypeTarget modules label prefix ns imports name = if HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
 else if isIntrinsicTypeName name then OkC name
 else if name == "Type" || name == "->" then OkC name
 else if containsDot name then resolveDottedTypeTargetOnly modules label imports name
@@ -450,7 +456,7 @@ resolveDottedExpr modules label prefix ns imports scope name sp = case splitOnDo
   head :: rest => if memName head scope then OkC (foldFieldChain (EVar head sp) rest sp)
   else Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (resolveQualifiedPath modules label imports (splitOnDot name) (length (splitOnDot name)) sp)) (\q => case q of
     Just e => OkC e
-    Nothing => if Base.HashMap.member head ns.nsValueSet then OkC (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
+    Nothing => if HashMap.member head ns.nsValueSet then OkC (foldFieldChain (EVar (mangle prefix head) sp) rest sp)
     else if isBuiltinName head then OkC (foldFieldChain (EVar head sp) rest sp)
     else if startsUpperName head then case resolveCtorDotted modules label prefix ns imports name of
       OkC t => OkC (EVar t sp)
@@ -527,19 +533,19 @@ isEmptyPaths (_ :: _) = False
 -- 这样 `:type Maybe` / `f Bool` 这类「类型构造子当项」对导入名也成立（REPL 依赖它）。
 resolveGlobal : List Module -> String -> String -> Namespaces -> List Import -> List String -> String -> Check String
 resolveGlobal modules label prefix ns imports scope name = if memName name scope then OkC name
-else if Base.HashMap.member name ns.nsValueSet then OkC (mangle prefix name)
+else if HashMap.member name ns.nsValueSet then OkC (mangle prefix name)
 else case localCtorTargets prefix ns name of
   t :: rest =>
     Vuna.Compiler.Base.Common.bind (ctorCandidates modules prefix ns imports name)
       (\cands => OkC (pickCtorOrOver name cands))
-  [] => if Base.HashMap.member name ns.nsCtorSet then OkC (mangle prefix name)
+  [] => if HashMap.member name ns.nsCtorSet then OkC (mangle prefix name)
   else if containsDot name then resolveQualified modules label imports name
   else if isBuiltinName name then OkC name
   else if isDtPreludeName name then OkC name
   else Vuna.Compiler.Base.Common.bind (modulesExportingValue modules imports name) (\pairs => case pairs of
     [] => Vuna.Compiler.Base.Common.bind (ctorCandidates modules prefix ns imports name) (\cands => case cands of
       [] => Vuna.Compiler.Base.Common.bind (modulesExportingCtor modules imports name) (\cpairs => case cpairs of
-        [] => if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
+        [] => if HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
         else Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (\tpairs => case tpairs of
           [] =>
             onErrDiag
@@ -577,7 +583,7 @@ pickCtorOrOver name cands = overCtorName name cands
 resolveCtor : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveCtor modules label prefix ns imports name = if containsDot name then resolveCtorDotted modules label prefix ns imports name
 else Vuna.Compiler.Base.Common.bind (ctorCandidates modules prefix ns imports name) (\cands => case cands of
-  [] => if Base.HashMap.member name ns.nsCtorSet then OkC (mangle prefix name)
+  [] => if HashMap.member name ns.nsCtorSet then OkC (mangle prefix name)
   else if isIntrinsicName name then OkC name
   else Vuna.Compiler.Base.Common.bind (modulesExportingCtor modules imports name) (\pairs => case pairs of
     [] =>
@@ -943,7 +949,7 @@ startsUpperName name = case strUnpack name of
 -- | 类型名解析：本模块类型 → 内建类型 → 小写（类型变量/退化）→ 非小写（索引构造子等）。
 resolveTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
 resolveTypeName modules label prefix ns imports name =
-  if Base.HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
+  if HashMap.member name ns.nsTypeSet then OkC (mangle prefix name)
   else if isIntrinsicTypeName name then OkC name
   else if name == "Type" || name == "->" then OkC name
   else if isLowerTypeName name then resolveLowerTypeName modules label prefix ns imports name
@@ -959,7 +965,7 @@ localCtorResult label prefix ns name = case localCtorTargets prefix ns name of
 
 -- | 小写名的类型位置解析（隐式量化的类型变量 / 值定义 / 构造子 / 导入类型）。
 resolveLowerTypeName : List Module -> String -> String -> Namespaces -> List Import -> String -> Check String
-resolveLowerTypeName modules label prefix ns imports name = if Base.HashMap.member name ns.nsValueSet then OkC (mangle prefix name)
+resolveLowerTypeName modules label prefix ns imports name = if HashMap.member name ns.nsValueSet then OkC (mangle prefix name)
 else Vuna.Compiler.Base.Common.bind (localCtorResult label prefix ns name) (\mc => case mc of
   Just t => OkC t
   Nothing => Vuna.Compiler.Base.Common.bind (modulesExportingValue modules imports name) (\vp => case vp of
@@ -991,7 +997,7 @@ resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Bas
     -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子已在上面处理）。
     [] => case resolveCtor modules label prefix ns imports name of
       OkC c => OkC c
-      ErrC e => if Base.HashMap.member name ns.nsValueSet then OkC (mangle prefix name) else ErrC e
+      ErrC e => if HashMap.member name ns.nsValueSet then OkC (mangle prefix name) else ErrC e
     _ =>
       Vuna.Compiler.Base.Common.bind (unifyEntryPairs label "type" name pairs)
         (\p => OkC (secondOf p).target)

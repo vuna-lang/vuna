@@ -8,14 +8,14 @@ module Vuna.Compiler.Loader.Modules where
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Base.Eq
+import Base.Trait.Eq as Eq
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.EffFs
-import Base.Eff.Types
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
@@ -208,7 +208,7 @@ export reexportedImportNames : List Import -> List ExportItem -> List String
 reexportedImportNames imports items = reexportedImportNamesGo imports items []
 
 reexportedImportNamesGo : List Import -> List ExportItem -> List String -> List String
-reexportedImportNamesGo imports [] acc = Base.List.reverse acc
+reexportedImportNamesGo imports [] acc = List.reverse acc
 reexportedImportNamesGo imports ((XModule name _) :: rest) acc = case findImportModule imports name of
   Nothing => reexportedImportNamesGo imports rest acc
   Just m =>
@@ -254,7 +254,7 @@ moduleCtors modules name =
 export resolveModuleName : List Module -> String -> Maybe String
 resolveModuleName modules name = case findModule modules name of
   Just _ => Just name
-  Nothing => resolvePathModule modules (splitOnDot name) (Base.List.length (splitOnDot name) - 1)
+  Nothing => resolvePathModule modules (splitOnDot name) (List.length (splitOnDot name) - 1)
 
 resolvePathModule : List Module -> List String -> Int -> Maybe String
 resolvePathModule modules segs n = if n < 1 then Nothing
@@ -272,20 +272,31 @@ resolvedName modules name = case resolveModuleName modules name of
   Just real => real
   Nothing => name
 
+-- | 把 import 里写的路径名（`Base.Effect.EffTypes`）归一成真实模块名
+-- （`Base.Eff.Types`）。加载后的模块表按真实模块名索引，后续按 import 名查模块表的地方
+-- （未使用 import 告警、层检查、构造子族查找）必须看到同一套名字。
+export normalizeImports : List Module -> List Import -> List Import
+normalizeImports modules [] = []
+normalizeImports modules ((Import nm q al sp) :: rest) = case resolveModuleName modules nm of
+  Nothing => Import nm q al sp :: normalizeImports modules rest
+  Just real =>
+    if real == nm then Import nm q al sp :: normalizeImports modules rest
+    else Import real q al sp :: normalizeImports modules rest
+
 -- | 导出表的公开名索引（保持原顺序；同名的 val/ctor/type 条目并存）。
 export exportIndexOf : List ExportEntry -> HashMap String (List ExportEntry)
-exportIndexOf entries = exportIndexOfGo entries (Base.HashMap.fromList [])
+exportIndexOf entries = exportIndexOfGo entries (HashMap.fromList [])
 
 exportIndexOfGo : List ExportEntry -> HashMap String (List ExportEntry) -> HashMap String (List ExportEntry)
 exportIndexOfGo [] idx = idx
 exportIndexOfGo (e :: rest) idx =
   let
     tail = exportIndexOfGo rest idx
-  in Base.HashMap.insert e.public ((::) e (entriesByName e.public tail)) tail
+  in HashMap.insert e.public ((::) e (entriesByName e.public tail)) tail
 
 -- | 索引里某个公开名的全部条目（无则空）。
 entriesByName : String -> HashMap String (List ExportEntry) -> List ExportEntry
-entriesByName name idx = case Base.HashMap.lookup name idx of
+entriesByName name idx = case HashMap.lookup name idx of
   Just es => es
   Nothing => []
 
@@ -468,8 +479,7 @@ findModuleFile roots name importerPkg importerSpan = do
 -- | 在模块 `m` 的命名空间导出里按最长点号前缀走路径，返回最终目标模块名。
 -- 目标模块必须已加载（它是 m 的依赖）。
 export walkNamespaceIndex : List Module -> String -> List String -> Maybe String
-walkNamespaceIndex modules m segs =
-  walkNamespaceIndexFuel (1 + Base.List.length segs) modules m segs
+walkNamespaceIndex modules m segs = walkNamespaceIndexFuel (1 + List.length segs) modules m segs
 
 export moduleExportIndexOfOf : Module -> HashMap String (List ExportEntry)
 moduleExportIndexOfOf (Module _ _ _ _ _ _ _ _ _ idx) = idx
@@ -478,8 +488,8 @@ walkNamespaceIndexFuel : Int -> List Module -> String -> List String -> Maybe St
 walkNamespaceIndexFuel fuel modules m segs = if fuel <= 0 then Nothing
 else case findModule modules m of
   Nothing => Nothing
-  Just md => if Base.List.length segs <= 0 then Just (moduleNameOf md)
-  else case longestIndexPrefix (moduleExportIndexOfOf md) segs (Base.List.length segs) of
+  Just md => if List.length segs <= 0 then Just (moduleNameOf md)
+  else case longestIndexPrefix (moduleExportIndexOfOf md) segs (List.length segs) of
     Nothing => Nothing
     Just (Pair target k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
 

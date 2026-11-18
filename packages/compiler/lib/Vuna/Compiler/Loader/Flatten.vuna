@@ -6,7 +6,7 @@ module Vuna.Compiler.Loader.Flatten where
 -- 导出表，再按 import 图递归加载（含隐式 Prelude）。
 -- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
 -- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Loader.Layers
 import Vuna.Compiler.Base.Bytes
@@ -19,8 +19,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Rn
-import Base.HashMap
-import Base.Obs.Span
+import Base.Container.HashMap as HashMap
+import Base.Data.ObsSpan as ObsSpan
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
@@ -30,10 +30,10 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffProcess
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
 
 -- imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
@@ -127,16 +127,16 @@ visibleFixitiesOf modules imports = concatMap moduleFixitiesOf modules
 -- 只保留一份；不同模块对同一运算符的声明都保留，交给 `checkUniqueFixities` 报重复。
 -- 去重后长度是 O(不同声明数)，闭包拼接保持线性（import 图有大量 diamond）。
 dedupeFixities : List FixityDecl -> List FixityDecl
-dedupeFixities ds = dedupeFixitiesGo ds (Base.HashMap.fromList []) []
+dedupeFixities ds = dedupeFixitiesGo ds (HashMap.fromList []) []
 
 dedupeFixitiesGo : List FixityDecl -> HashMap String Int -> List FixityDecl -> List FixityDecl
 dedupeFixitiesGo [] seen acc = reverse acc
 dedupeFixitiesGo (d :: rest) seen acc =
   let
     key = fixityDeclKey d
-  in case Base.HashMap.lookup key seen of
+  in case HashMap.lookup key seen of
     Just _ => dedupeFixitiesGo rest seen acc
-    Nothing => dedupeFixitiesGo rest (Base.HashMap.insert key 1 seen) (d :: acc)
+    Nothing => dedupeFixitiesGo rest (HashMap.insert key 1 seen) (d :: acc)
 
 -- 声明身份键：**运算符 + 声明处位置**。iface 里 span 被归一化成空，位置相同的不同
 -- 运算符不能互相去重，所以 op 必须进键；同一模块对同一运算符声明两次（值相同）在
@@ -451,7 +451,7 @@ filterExportMembers members (e :: rest) =
   else (::) e (filterExportMembers members rest)
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
-dedupeExportEntries entries = dedupeByFullKey entries (Base.HashMap.fromList []) []
+dedupeExportEntries entries = dedupeByFullKey entries (HashMap.fromList []) []
 
 exportEntryKey : ExportEntry -> String
 exportEntryKey e = "${e.kind}|${e.public}|${e.target}|${e.parent}"
@@ -461,9 +461,9 @@ dedupeByFullKey [] seen acc = reverse acc
 dedupeByFullKey (e :: rest) seen acc =
   let
     key = exportEntryKey e
-  in case Base.HashMap.lookup key seen of
+  in case HashMap.lookup key seen of
     Just _ => dedupeByFullKey rest seen acc
-    Nothing => dedupeByFullKey rest (Base.HashMap.insert key 1 seen) (e :: acc)
+    Nothing => dedupeByFullKey rest (HashMap.insert key 1 seen) (e :: acc)
 
 explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
 explicitExports modules prefix decls imports [] = OkC []
@@ -607,8 +607,7 @@ loadModule fuel roots importerPkg modules stack imp =
           Nothing => pure (ErrC e)
           Just alias => do
             prefixR <-
-              pathPrefixOf roots importerPkg (splitOnDot name)
-                (Base.List.length (splitOnDot name) - 1)
+              pathPrefixOf roots importerPkg (splitOnDot name) (List.length (splitOnDot name) - 1)
             case prefixR of
               Nothing => pure (ErrC e)
               Just (Pair prefix n) => do
@@ -654,13 +653,16 @@ loadModule fuel roots importerPkg modules stack imp =
                               (append imports implicit)
                           case modulesR of
                             ErrC e => pure (ErrC e)
-                            OkC modules2 => case computeExports modules2 name hdr imports decls exports reexports of
-                              ErrC e => pure (ErrC e)
-                              OkC exports =>
-                                let
-                                  visible = fixities
-                                in pure
-                                  (OkC ((::) (Module name (rootName root) imports implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports hdr) (reexportedImportNames imports reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
+                            OkC modules2 =>
+                              let
+                                imports2 = normalizeImports modules2 imports
+                              in case computeExports modules2 name hdr imports2 decls exports reexports of
+                                ErrC e => pure (ErrC e)
+                                OkC exports =>
+                                  let
+                                    visible = fixities
+                                  in pure
+                                    (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
     else pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
@@ -792,13 +794,16 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
                     (append imports implicit)
                 case modulesR of
                   ErrC e => pure (ErrC e)
-                  OkC modules => case computeExports modules name hdr imports decls exports reexports of
-                    ErrC e => pure (ErrC e)
-                    OkC exports =>
-                      let
-                        visible = fixities
-                      in pure
-                        (withLayerCheck (contextRoots ctx) (Project [] imports implicit (Module name (contextPackageName ctx) imports implicit decls exports visible (append providers (reexportedImportNames imports (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
+                  OkC modules =>
+                    let
+                      imports2 = normalizeImports modules imports
+                    in case computeExports modules name hdr imports2 decls exports reexports of
+                      ErrC e => pure (ErrC e)
+                      OkC exports =>
+                        let
+                          visible = fixities
+                        in pure
+                          (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -834,7 +839,7 @@ fixitiesForSourceIn ctx modules0 label source = do
                   ErrC e => ErrC e
                   OkC modules =>
                     OkC
-                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))))
+                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
                 )
         Just (ModDecl name hasList items _ _ _ sp) => case validateImports name imports of
           ErrC e => pure (ErrC e)
@@ -850,7 +855,7 @@ fixitiesForSourceIn ctx modules0 label source = do
                   ErrC e => ErrC e
                   OkC modules =>
                     OkC
-                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append imports implicit)))))
+                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
                 )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
@@ -901,7 +906,7 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
     names =
       if interpReferencedInSource sourceDecls then names0
       else filter (\n => n /= interpMethodName) names0
-    nameSet = Base.HashMap.ofNames names
+    nameSet = HashMap.ofNames names
   in unusedImportWarningsGo modules nameSet reexports imports
 
 -- | 源码里是否显式提到 `interp` / `Base.Interp.interp`（未解析 AST 的名字扫描）。
@@ -948,7 +953,7 @@ exportTargetOf e = e.target
 anyTargetIn : HashMap String Bool -> List String -> Bool
 anyTargetIn nameSet [] = False
 anyTargetIn nameSet (t :: rest) =
-  if Base.HashMap.member t nameSet then True else anyTargetIn nameSet rest
+  if HashMap.member t nameSet then True else anyTargetIn nameSet rest
 
 -- | 声明里出现的引用名（不递归展开 over-ctor；构造子/类型/值位置都收集）。
 declRefNames : Decl -> List String
