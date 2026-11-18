@@ -1,5 +1,12 @@
 # vuna
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/vuna-wordmark-reversed.svg">
+    <img src="docs/assets/logo/vuna-wordmark.svg" alt="vuna" width="240">
+  </picture>
+</p>
+
 vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 > **vuna 尚未发布任何版本**：没有外部用户、下游生态与历史包袱，全部源码都在本仓库内，
