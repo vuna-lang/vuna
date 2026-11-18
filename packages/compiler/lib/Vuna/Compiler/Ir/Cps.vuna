@@ -890,7 +890,8 @@ mHandlerLam fuel bs body =
     Just r =>
       let
         kd = mFreshK fuel
-      in IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) body)
+        rs = mFreshR fuel
+      in IrLam (append bs [kd, rs]) (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) body))
 
 mListH : Int -> List Ir -> List Ir
 mListH fuel xs =
@@ -1286,7 +1287,8 @@ mHandlerFun fuel body =
           _ :: r :: _ =>
             let
               kd = mFreshK fuel
-            in IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) inner)
+              rs = mFreshR fuel
+            in IrLam (append bs [kd, rs]) (mScopedCalls (fuel - 1) rs (mCps (fuel - 1) r (IrVar kd) inner))
           _ => body
       _ => body
 
@@ -1300,8 +1302,11 @@ mDef handlers fuel d =
       IrDef n ar deps body r g sp =>
         let
           marked = memName n handlers
-          h = if marked then mHandlerFun (fuel - 1) body else body
-          ar2 = if marked then ar + 1 else ar
+          h =
+            case mCleanupDef n body of
+              Just b1 => b1
+              Nothing => if marked then mHandlerFun (fuel - 1) body else body
+          ar2 = if marked then ar + 2 else ar
           b = mSyms (fuel - 1) (mHandlers (fuel - 1) h)
         in if n == runPureName || n == runEffName || n == runMainName then
           case mTrampolineBody n b of
@@ -1599,7 +1604,8 @@ cpsDefsMachine defs =
   case cpsDefs defs of
     Err msg => Err msg
     Ok ds =>
-      Ok (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds)))
+      Ok
+        (map mStepsDef (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds))))
 
 export cpsDefsStep : List IrDef -> Result (List IrDef)
 cpsDefsStep defs =
