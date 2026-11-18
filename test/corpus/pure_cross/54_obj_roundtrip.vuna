@@ -1,0 +1,24 @@
+-- `Obj`（运行时不可命名的值）：装/拆箱在三端都是恒等。效应机器用它装异质帧内容，
+-- 这条先把信任边界锁住：Int / 闭包 / 数据值往返不变。
+import Base.Effect.Core as Eff
+import Base.Data.Maybe as Maybe
+
+addOne : Int -> Int
+addOne x = x + 1
+
+useInt : Int -> Int
+useInt n = n
+
+useFun : (Int -> Int) -> Int
+useFun f = f 1
+
+useMaybe : Maybe Int -> Int
+useMaybe m =
+  case m of
+    Just v => v
+    Nothing => 0
+
+main : Int
+main =
+  useInt (Eff.fromObj (Eff.toObj 40))
+    + useFun (Eff.fromObj (Eff.toObj addOne)) + useMaybe (Eff.fromObj (Eff.toObj (Just 2)))

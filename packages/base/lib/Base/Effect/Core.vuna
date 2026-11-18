@@ -240,6 +240,24 @@ handleCoreAt e key name ret opH comp =
           MkEff f => prim_effectHandle key name ret opH f u
     )
 
+-- ---------------------------------------------------------------
+-- 显式效应机器的「任意值」载体（信任边界）
+-- ---------------------------------------------------------------
+-- 机器帧要装异质值（任意值、续延、opH、ret），但语言里没有源码级 any 类型。
+-- 这里用 `axiom` 声明一个**运行时类型不可命名**的类型：Lowering 渲染成
+-- `IrTyOpaque`（wasm `anyref` / OCaml `Obj.t` / native boxed 指针）。
+-- `toObj` / `fromObj` 是运行时恒等的原语，只给效应机器用；与 `Cont` 同级，
+-- 属于信任边界，不是给用户用的抽象。
+export axiom Obj : Type
+
+-- | 装箱：运行时恒等。
+export toObj : {a : Type} -> a -> Obj
+toObj x = @vuna@prim@toObj x
+
+-- | 拆箱：运行时恒等（调用点自己保证它确实装着目标类型）。
+export fromObj : {a : Type} -> Obj -> a
+fromObj o = @vuna@prim@fromObj o
+
 -- | 线性 continuation（一次性闭包类型）：`Cont a b` 由 `MkCont` 包装限量为 1 的函数，只能被消费一次。
 export linear data Cont a b : Type where
   -- | 包住一个 quantity 1 的续延函数 `a -> b`。
