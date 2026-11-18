@@ -56,3 +56,24 @@ exit: 1
 out-contains: ---
 out-contains: +++
 file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna probe x = if x == 1
+# --fix 的切片回归：AST span 会漏掉括号（EParen 取内层）、右边界落在紧贴前一个
+# token 的符号上（`]` / `)`）、中缀 span 从运算符开始。任一处漏掉都会产出不能解析
+# 的代码，修复必须整体拒绝写回。
+run: sh -c 'printf "%s\n" "module Probe where" "" "count : List Int -> Int" "count xs = case xs of" "  [] => 0" "  y :: ys => (if y == 1 then 1 else 0) + count ys" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --fix "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna count (y :: ys) = (if y == 1 then 1 else 0) + count ys
+run: sh -c 'printf "%s\n" "module Probe where" "" "pick : List Int -> List Int" "pick xs = case xs of" "  [] => [0]" "  _ => [1, 2]" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --fix "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna pick _ = [1, 2]
+run: sh -c 'printf "%s\n" "module Probe where" "" "label : Int -> String" "label n = case n of" "  1 =>" "    \"one\"" "      ++ \"!\"" "  _ => \"other\"" > "$TMPDIR/lint-pkg/lib/Probe.vuna"'
+exit: 0
+run: "$VUNA" lint --fix "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna label 1 =
+file-contains: $TMPDIR/lint-pkg/lib/Probe.vuna "one"
+run: "$VUNA" lint --max-warnings 0 "$TMPDIR/lint-pkg/lib/Probe.vuna" 2>&1
+exit: 0

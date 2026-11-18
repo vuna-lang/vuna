@@ -71,9 +71,14 @@ tokenAtOffsetGo off [] = Nothing
 tokenAtOffsetGo off (t :: rest) =
   if posOffset t.ptokPos == off then Just t else tokenAtOffsetGo off rest
 
--- | 内部：覆盖该偏移的 token（start <= off <= end）的结束偏移；找不到回落到 off。
+-- | 内部：span 右边界（落在末 token 的起点）→ 该 token 的结束偏移。
+-- 先找「起点正好等于 off」的 token：紧贴前一个 token 的符号（`]` / `)`）与前一个
+-- token 之间没有空白，只按区间覆盖判断会命中前一个 token，把右边界停在符号之前
+-- （`[1, 2]` 被切成 `[1, 2`）。找不到精确起点时才回落到区间覆盖。
 tokenEndAt : LintSrc -> Int -> Int
-tokenEndAt src off = tokenEndCovering off src.lintSrcToks
+tokenEndAt src off = case tokenAtOffset src off of
+  Just t => posEndOffset t.ptokPos
+  Nothing => tokenEndCovering off src.lintSrcToks
 
 tokenEndCovering : Int -> List PTok -> Int
 tokenEndCovering off [] = off
@@ -345,7 +350,7 @@ blockBodyLines lines body target =
   let
     start = exprStartLine body
     stop = spanEndLine (exprSpan body)
-    startCol = spanStartCol (exprSpan body)
+    startCol = exprStartCol body
     firstIndent = indentOf (lineAt lines start)
     inline = startCol > firstIndent + 1
     raw =
@@ -579,12 +584,61 @@ exprSingleLine e = exprStartLine e == spanEndLine (exprSpan e)
 
 -- | 内部：表达式的单行源码原文；左边界用真实起点，右边界取 span 末 token 之后的下一个
 -- token，跨行时返回空串。
+-- | 内部：范围内括号 token 的净差（`)` 数 - `(` 数）。
+parenDeficit : LintSrc -> Int -> Int -> Int
+parenDeficit src start end = parenDeficitGo src.lintSrcToks start end 0
+
+parenDeficitGo : List PTok -> Int -> Int -> Int -> Int
+parenDeficitGo [] start end acc = acc
+parenDeficitGo (t :: rest) start end acc =
+  let
+    off = posOffset t.ptokPos
+  in if off < start || off >= end then parenDeficitGo rest start end acc
+  else case t of
+    PTok (TSym "(") _ => parenDeficitGo rest start end (acc - 1)
+    PTok (TSym ")") _ => parenDeficitGo rest start end (acc + 1)
+    _ => parenDeficitGo rest start end acc
+
+-- | 内部：AST 的 `EParen` span 不含括号本身（`Ast.exprSpan` 取内层），所以父节点
+-- 由它派生的 span 可能从括号内部开始；直接按 span 切会漏掉左括号、留下孤立的 `)`。
+-- 按 token 净差把紧邻的 `(`（或 `)`）补回切片。
+widenStart : LintSrc -> Int -> Int -> Int
+widenStart src start end =
+  let
+    deficit = parenDeficit src start end
+  in if deficit <= 0 then start else widenStartGo (reverse src.lintSrcToks) start deficit
+
+widenStartGo : List PTok -> Int -> Int -> Int
+widenStartGo [] start n = start
+widenStartGo (t :: rest) start n = if n <= 0 then start
+else if posOffset t.ptokPos >= start then widenStartGo rest start n
+else case t of
+  PTok (TSym "(") _ => widenStartGo rest (posOffset t.ptokPos) (n - 1)
+  _ => start
+
+-- | 内部：反向不平衡（切片里多出左括号）时把紧跟的 `)` 补进末偏移。
+widenEnd : LintSrc -> Int -> Int -> Int
+widenEnd src start end =
+  let
+    deficit = parenDeficit src start end
+  in if deficit >= 0 then end else widenEndGo src.lintSrcToks end deficit
+
+widenEndGo : List PTok -> Int -> Int -> Int
+widenEndGo [] end n = end
+widenEndGo (t :: rest) end n = if n >= 0 then end
+else if posOffset t.ptokPos < end then widenEndGo rest end n
+else case t of
+  PTok (TSym ")") _ => widenEndGo rest (posEndOffset t.ptokPos) (n + 1)
+  _ => end
+
 exprText : LintSrc -> Expr -> String
 exprText src e = if not (exprSingleLine e) then ""
 else
   let
-    start = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
-    end = tokenEndAt src (offsetOfLineCol src (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)))
+    start0 = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
+    end0 = tokenEndAt src (offsetOfLineCol src (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)))
+    start = if end0 <= start0 then start0 else widenStart src start0 end0
+    end = if end0 <= start0 then end0 else widenEnd src start0 end0
   in if end <= start then exprTextLine src e else trimEnd (sliceOffsets src start end)
 
 -- | 内部：行列路径的表达式文本（偏移不可用时的回落）。
@@ -1172,7 +1226,7 @@ liftBodyPlacementOk : LintSrc -> Pat -> Expr -> Bool
 liftBodyPlacementOk src altPat body =
   if exprSingleLine body then segmentOk src body
   else if exprStartLine body > spanStartLine (patSpan altPat) then True
-  else spanStartCol (exprSpan body) > indentOf (lineAt src.lintSrcLines (exprStartLine body)) + 1
+  else exprStartCol body > indentOf (lineAt src.lintSrcLines (exprStartLine body)) + 1
 
 -- | 内部：case 提升的可行判据：alt 是最后一个、head 与 alt 模式单行、行区间干净、body
 -- 放置安全。
