@@ -84,7 +84,7 @@ let v_Vuna_dCompiler_dCore_dCanonical_ddecRig = (fun fuel bytes -> (if (fuel <= 
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) bytes))))
 
-# 128 "Vuna/Compiler/Core/Canonical.vuna"
+# 136 "Vuna/Compiler/Core/Canonical.vuna"
 let v_Vuna_dCompiler_dCore_dCanonical_ddecBinder = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__58) -> (match dtb__58 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__59; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__60 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -101,7 +101,7 @@ let v_Vuna_dCompiler_dCore_dCanonical_ddecBinder = (fun fuel bytes -> (if (fuel 
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr (fuel - 1)) bytes))))
 
-# 119 "Vuna/Compiler/Core/Canonical.vuna"
+# 123 "Vuna/Compiler/Core/Canonical.vuna"
 let rec v_Vuna_dCompiler_dCore_dCanonical_ddecArg = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__64) -> (match dtb__64 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__65; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__66 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -117,7 +117,7 @@ let rec v_Vuna_dCompiler_dCore_dCanonical_ddecArg = (fun fuel bytes -> (if (fuel
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dCore_dCanonical_ddecTerm (fuel - 1)) bytes))))
-# 137 "Vuna/Compiler/Core/Canonical.vuna"
+# 149 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_ddecAlt = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__70) -> (match dtb__70 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__71; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__72 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -140,7 +140,7 @@ and v_Vuna_dCompiler_dCore_dCanonical_ddecAlt = (fun fuel bytes -> (if (fuel <= 
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr (fuel - 1)) bytes))))
-# 148 "Vuna/Compiler/Core/Canonical.vuna"
+# 165 "Vuna/Compiler/Core/Canonical.vuna"
 and v_Vuna_dCompiler_dCore_dCanonical_ddecTerm = (fun fuel bytes -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__79) -> (match dtb__79 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__80; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__81 } -> (if (dtb__80 = 0) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -437,7 +437,7 @@ and v_Vuna_dCompiler_dCore_dCanonical_ddecTerm = (fun fuel bytes -> (if (fuel <=
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) bytes))))
 
-# 256 "Vuna/Compiler/Core/Canonical.vuna"
+# 318 "Vuna/Compiler/Core/Canonical.vuna"
 let v_Vuna_dCompiler_dCore_dCanonical_ddecTermComplete = (fun s -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__205) -> (match dtb__205 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__206; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__207 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__207) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__206)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)

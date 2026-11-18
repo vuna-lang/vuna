@@ -21,17 +21,17 @@ let v_Vuna_dCompiler_dElab_dCoverage_dheadCtorName = (fun (mc0 : Vuna_dCompiler_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 52 "Vuna/Compiler/Elab/Coverage.vuna"
+# 53 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dctorHeadsOf = (fun rows -> (Base_dData_dList.v_Base_dData_dList_dnubNames ((Base_dData_dList.v_Base_dData_dList_dmapMaybe v_Vuna_dCompiler_dElab_dCoverage_dheadCtorName) rows)))
 
-# 56 "Vuna/Compiler/Elab/Coverage.vuna"
+# 57 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_disWildHead = (fun p -> (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead p) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__8, dtb__9) -> true
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PWild (dtb__10) -> true
   | _ -> false
 ))
 
-# 63 "Vuna/Compiler/Elab/Coverage.vuna"
+# 65 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_ddefaultRows = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__11, dtb__12) -> (match dtb__11 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (v_Vuna_dCompiler_dElab_dCoverage_ddefaultRows dtb__12)
@@ -42,14 +42,14 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_ddefaultRows = (fun (mc0 : Vuna_dCompil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 73 "Vuna/Compiler/Elab/Coverage.vuna"
+# 76 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dconcatMapRow = (fun (mc0 : (Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList) -> Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__15, dtb__16) -> ((Base_dData_dList.v_Base_dData_dList_dappend (mc0 dtb__15)) ((v_Vuna_dCompiler_dElab_dCoverage_dconcatMapRow mc0) dtb__16))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 77 "Vuna/Compiler/Elab/Coverage.vuna"
+# 80 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dspecializeRow = (fun (mc0 : int) (mc1 : string) (mc2 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__17, dtb__18) -> (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead dtb__17) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__19, dtb__20, dtb__21) -> (if (dtb__19 = mc1) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((Base_dData_dList.v_Base_dData_dList_dappend dtb__20) dtb__18), Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil)
@@ -61,10 +61,10 @@ let v_Vuna_dCompiler_dElab_dCoverage_dspecializeRow = (fun (mc0 : int) (mc1 : st
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 70 "Vuna/Compiler/Elab/Coverage.vuna"
+# 73 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dspecializeCtor = (fun ar cname rows -> ((v_Vuna_dCompiler_dElab_dCoverage_dconcatMapRow ((v_Vuna_dCompiler_dElab_dCoverage_dspecializeRow ar) cname)) rows))
 
-# 85 "Vuna/Compiler/Elab/Coverage.vuna"
+# 89 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dhasNilRow = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__25, dtb__26) -> (match dtb__25 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> true
@@ -74,7 +74,7 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_dhasNilRow = (fun (mc0 : Vuna_dCompiler
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 91 "Vuna/Compiler/Elab/Coverage.vuna"
+# 96 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry = (fun (mc0 : string) (mc1 : (string, int) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__27, dtb__28) -> (match dtb__27 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__29; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__30 } -> (if (dtb__29 = mc0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__30)) else ((v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry mc0) dtb__28))
@@ -84,7 +84,7 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry = (fun (mc0 : string) (mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 96 "Vuna/Compiler/Elab/Coverage.vuna"
+# 101 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dfamilyCtors = (fun table cname -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__31, dtb__32) -> (match dtb__32 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (if (Base_dData_dPair.v_Base_dData_dPair_dfirstOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dtb__31)) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Base_dData_dPair.v_Base_dData_dPair_dsecondOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dtb__31)))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
@@ -93,24 +93,24 @@ let v_Vuna_dCompiler_dElab_dCoverage_dfamilyCtors = (fun table cname -> ((fun nd
   | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
 )) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (e : (string, (bool, (string, int) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (((Base_dTrait_dEq.v_Base_dTrait_dEq_d_x47__x61_ (Base_dData_dMaybe.v_Eq_uBase_uData_uMaybe_uMaybe_ua Base_dData_dInt.v_Eq_uInt)) ((v_Vuna_dCompiler_dElab_dCoverage_dlookupEntry cname) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf (Base_dData_dPair.v_Base_dData_dPair_dsecondOf e)))) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))) table)))
 
-# 103 "Vuna/Compiler/Elab/Coverage.vuna"
+# 109 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dorderedCtors = (fun ctors heads -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (e : (string, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Base_dData_dBool.v_Base_dData_dBool_dnot ((Base_dData_dList.v_Base_dData_dList_dmemName (Base_dData_dPair.v_Base_dData_dPair_dfirstOf e)) heads)))) ctors)) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (e : (string, int) Base_dData_dPair.t_Base_dData_dPair_dPair) -> ((Base_dData_dList.v_Base_dData_dList_dmemName (Base_dData_dPair.v_Base_dData_dPair_dfirstOf e)) heads))) ctors)))
 
-# 108 "Vuna/Compiler/Elab/Coverage.vuna"
+# 115 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dtakePats = (fun n xs -> (if (n <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (match xs with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__33, dtb__34) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__33, ((v_Vuna_dCompiler_dElab_dCoverage_dtakePats (n - 1)) dtb__34)))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 114 "Vuna/Compiler/Elab/Coverage.vuna"
+# 124 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_ddropPats = (fun n xs -> (if (n <= 0) then xs else (match xs with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__35, dtb__36) -> ((v_Vuna_dCompiler_dElab_dCoverage_ddropPats (n - 1)) dtb__36)
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 126 "Vuna/Compiler/Elab/Coverage.vuna"
+# 139 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness = (fun table fuel pending rows qs -> (let dtnat__37 = fuel in (if (dtnat__37 = 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (let dtb__38 = (dtnat__37 - 1) in (match pending with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__39) -> (match dtb__39 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
@@ -141,31 +141,31 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness = (fun table fuel pend
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 166 "Vuna/Compiler/Elab/Coverage.vuna"
+# 187 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_dallSameLen = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__49, dtb__50) -> (if ((Base_dData_dList.v_Base_dData_dList_dlength dtb__49) = mc0) then ((v_Vuna_dCompiler_dElab_dCoverage_dallSameLen mc0) dtb__50) else false)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 162 "Vuna/Compiler/Elab/Coverage.vuna"
+# 183 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_duniformArity = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__51, dtb__52) -> ((v_Vuna_dCompiler_dElab_dCoverage_dallSameLen (Base_dData_dList.v_Base_dData_dList_dlength dtb__51)) dtb__52)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 170 "Vuna/Compiler/Elab/Coverage.vuna"
+# 191 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dmatrixArity = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__53, dtb__54) -> (Base_dData_dList.v_Base_dData_dList_dlength dtb__53)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 155 "Vuna/Compiler/Elab/Coverage.vuna"
+# 175 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dmatrixWitness = (fun table clauses -> (if (v_Vuna_dCompiler_dElab_dCoverage_duniformArity clauses) then (((((v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness table) (bi_natFromInt 256)) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) clauses) (v_Vuna_dCompiler_dElab_dCoverage_dwilds (v_Vuna_dCompiler_dElab_dCoverage_dmatrixArity clauses))) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
 
-# 198 "Vuna/Compiler/Elab/Coverage.vuna"
+# 224 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__55, dtb__56) -> (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead dtb__55) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__57, dtb__58, dtb__59) -> true
@@ -175,7 +175,7 @@ let v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor = (fun (mc0 : Vuna_dCompi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 209 "Vuna/Compiler/Elab/Coverage.vuna"
+# 236 "Vuna/Compiler/Elab/Coverage.vuna"
 let rec v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn = (fun fuel paren p -> (if (fuel <= 0) then "_" else (match (v_Vuna_dCompiler_dElab_dCoverage_dpatHead p) with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PCon (dtb__60, dtb__61, dtb__62) -> (if ((Base_dData_dList.v_Base_dData_dList_dlength dtb__61) = 0) then dtb__60 else ((fun body -> (if paren then (String.concat "" ["("; body; ")"]) else body)) (String.concat "" [dtb__60; " "; ((Base_dData_dString.v_Base_dData_dString_djoin " ") ((Base_dData_dList.v_Base_dData_dList_dmap ((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn (fuel - 1)) true)) dtb__61))])))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dPat_PVar (dtb__63, dtb__64) -> "_"
@@ -187,20 +187,20 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn = (fun fuel paren p -> (if
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 206 "Vuna/Compiler/Elab/Coverage.vuna"
+# 233 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_drenderPat = (fun p -> (((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn 64) false) p))
 
-# 224 "Vuna/Compiler/Elab/Coverage.vuna"
+# 256 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_drenderWitness = (fun ws -> ((Base_dData_dString.v_Base_dData_dString_djoin " ") ((Base_dData_dList.v_Base_dData_dList_dmap ((v_Vuna_dCompiler_dElab_dCoverage_drenderPatIn 64) true)) ws)))
 
-# 186 "Vuna/Compiler/Elab/Coverage.vuna"
+# 207 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dimproveDiag = (fun table clauses sp d -> (if ((d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode <> "TC_NotExhaustive") then d else (match ((v_Vuna_dCompiler_dElab_dCoverage_dmatrixWitness table) clauses) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__76) -> (if (v_Vuna_dCompiler_dElab_dCoverage_dwitnessNamesCtor dtb__76) then ((fun rx -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan sp) ((Vuna_dCompiler_dBase_dDiagnostics_dTc.v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcMsg (Vuna_dCompiler_dBase_dDiagnostics_dTc.C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_NotExhaustive (rx))) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (rx, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))))) (v_Vuna_dCompiler_dElab_dCoverage_drenderWitness dtb__76)) else d)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> d
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 182 "Vuna/Compiler/Elab/Coverage.vuna"
+# 203 "Vuna/Compiler/Elab/Coverage.vuna"
 let v_Vuna_dCompiler_dElab_dCoverage_dimproveExhaustive = (fun (mc0 : (string, (bool, (string, int) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (int) -> Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dPat Base_dData_dList.t_Base_dData_dList_dList Base_dData_dList.t_Base_dData_dList_dList) (mc2 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) mc3 -> (match mc3 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__77) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (((((v_Vuna_dCompiler_dElab_dCoverage_dimproveDiag mc0) (mc1 0)) mc2) dtb__77)))
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__78) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__78))

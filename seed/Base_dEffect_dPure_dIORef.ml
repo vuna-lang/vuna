@@ -9,4 +9,4 @@ let v_Base_dEffect_dPure_dIORef_dreadRef = (fun r -> (Base_dEffect_dCore.v_Base_
 let v_Base_dEffect_dPure_dIORef_dwriteRef = (fun r v -> (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (((fun dtio_0 dtio_1 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (fun r v -> r := v; 0) dtio_0 dtio_1)) r) v)))
 
 # 23 "Base/Effect/Pure/IORef.vuna"
-let v_Base_dEffect_dPure_dIORef_dmodifyRef = (fun r f -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dPure_dIORef_dreadRef r)) (fun _x64_vuna_x64_effK_u24_u3_u4_x58_x -> ((v_Base_dEffect_dPure_dIORef_dwriteRef r) (f _x64_vuna_x64_effK_u24_u3_u4_x58_x)))))
+let v_Base_dEffect_dPure_dIORef_dmodifyRef = (fun r f -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dPure_dIORef_dreadRef r)) (fun _x64_vuna_x64_effK_u25_u5_u4_x58_x -> ((v_Base_dEffect_dPure_dIORef_dwriteRef r) (f _x64_vuna_x64_effK_u25_u5_u4_x58_x)))))

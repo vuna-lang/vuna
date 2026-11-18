@@ -28,7 +28,7 @@ let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey = (fun (mc0 : Vuna_d
 # 31 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddiagKey = (fun d -> (String.concat "" [(v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dseverityTag (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dtagPart (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage); "|"; (v_Vuna_dCompiler_dBase_dDiagnostics_dSink_dspansKey (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)]))
 
-# 56 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
+# 52 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun (mc0 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, bool) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) (mc2 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__3, dtb__4) -> ((fun key -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) key) mc1) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__5) -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo dtb__4) mc1) mc2)
@@ -39,5 +39,5 @@ let rec v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo = (fun (mc0 : Vuna_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 66 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
+# 62 "Vuna/Compiler/Base/Diagnostics/Sink.vuna"
 let v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings = (fun ds -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeGo ds) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)) Base_dData_dList.C_Base_dData_dList_dList_Nil))

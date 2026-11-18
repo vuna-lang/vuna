@@ -14,7 +14,7 @@ let v_Functor_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dFunctor.C_Dict_uBase_d
   | _ -> failwith "DT: impossible branch"
 ))))))))
 
-# 66 "Base/Effect/Core.vuna"
+# 69 "Base/Effect/Core.vuna"
 let v_Monad_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun e k -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__1) -> (match (k (dtb__1 u)) with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__2) -> (dtb__2 u)
@@ -23,7 +23,7 @@ let v_Monad_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dMonad.C_Dict_uBase_dTrai
   | _ -> failwith "DT: impossible branch"
 ))))))))
 
-# 72 "Base/Effect/Core.vuna"
+# 79 "Base/Effect/Core.vuna"
 let v_Applicative_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun x -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (_u : t_Base_dEffect_dCore_dEffUnit) -> x))))), (Obj.magic (fun mf mx -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match mf with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__3) -> (match mx with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__4) -> ((dtb__3 u) (dtb__4 u))
@@ -41,43 +41,43 @@ let v_Applicative_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dApplicative.C_Dict
 # 48 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_ddefaultInstance = "default"
 
-# 85 "Base/Effect/Core.vuna"
+# 100 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_deffPrim = (fun f -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (_u : t_Base_dEffect_dCore_dEffUnit) -> (f 0)))))
 
-# 89 "Base/Effect/Core.vuna"
+# 104 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dweaken = (fun comp -> (match comp with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__7) -> (C_Base_dEffect_dCore_dEff_MkEff (dtb__7))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 94 "Base/Effect/Core.vuna"
+# 110 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_drunThunk = (fun e _uarity3 -> ((match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__8) -> dtb__8
   | _ -> failwith "DT: impossible branch"
 ) _uarity3))
 
-# 99 "Base/Effect/Core.vuna"
+# 116 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_drunPure = (fun e -> ((v_Base_dEffect_dCore_drunThunk e) C_Base_dEffect_dCore_dEffUnit_MkEffUnit))
 
-# 103 "Base/Effect/Core.vuna"
+# 120 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_drunEff = (fun e -> ((v_Base_dEffect_dCore_drunThunk e) C_Base_dEffect_dCore_dEffUnit_MkEffUnit))
 
-# 113 "Base/Effect/Core.vuna"
+# 130 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dscope = (fun comp -> (C_Base_dEffect_dCore_dScoped_MkScoped ((fun (_u : int) -> ((v_Base_dEffect_dCore_drunThunk comp) C_Base_dEffect_dCore_dEffUnit_MkEffUnit)))))
 
-# 119 "Base/Effect/Core.vuna"
+# 136 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleScoped = (fun mc0 -> (match mc0 with
   | C_Base_dEffect_dCore_dScoped_MkScoped (dtb__9) -> (dtp_effect_self dtb__9)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 123 "Base/Effect/Core.vuna"
+# 140 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleSelf = (fun comp -> (v_Base_dEffect_dCore_dhandleScoped (v_Base_dEffect_dCore_dscope comp)))
 
-# 128 "Base/Effect/Core.vuna"
+# 145 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_drunMain = (fun e -> ((v_Base_dEffect_dCore_drunThunk e) C_Base_dEffect_dCore_dEffUnit_MkEffUnit))
 
-# 134 "Base/Effect/Core.vuna"
+# 151 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_djoinEff = (fun m -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match m with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__10) -> (match (dtb__10 u) with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__11) -> (dtb__11 u)
@@ -86,7 +86,7 @@ let v_Base_dEffect_dCore_djoinEff = (fun m -> (C_Base_dEffect_dCore_dEff_MkEff (
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 143 "Base/Effect/Core.vuna"
+# 164 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_djoinEffNilOuter = (fun m -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match m with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__12) -> (match (dtb__12 u) with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__13) -> (dtb__13 u)
@@ -95,68 +95,68 @@ let v_Base_dEffect_dCore_djoinEffNilOuter = (fun m -> (C_Base_dEffect_dCore_dEff
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 151 "Base/Effect/Core.vuna"
+# 176 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dweakenRow = (fun t e -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__14) -> (dtb__14 u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 157 "Base/Effect/Core.vuna"
+# 185 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_draise = (fun mc0 -> (match mc0 with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__15) -> (C_Base_dEffect_dCore_dEff_MkEff (dtb__15))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 162 "Base/Effect/Core.vuna"
+# 190 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_draiseTo = (fun r e -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__16) -> (dtb__16 u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 168 "Base/Effect/Core.vuna"
+# 199 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dsendCore = (fun key name o -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (_u : t_Base_dEffect_dCore_dEffUnit) -> ((((fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v)))) key) name) o)))))
 
-# 178 "Base/Effect/Core.vuna"
+# 209 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dsigFn = C_Base_dEffect_dCore_dEffSig_MkEffSig
 
-# 192 "Base/Effect/Core.vuna"
+# 223 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dperformCore = (fun n key o -> (((v_Base_dEffect_dCore_dsendCore key) n) (Obj.magic o)))
 
-# 196 "Base/Effect/Core.vuna"
+# 227 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleCore = (fun key name ret opH comp -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match comp with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__17) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__17) u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 202 "Base/Effect/Core.vuna"
+# 236 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleCoreAt = (fun key name ret opH comp -> (C_Base_dEffect_dCore_dEff_MkEff ((fun (u : t_Base_dEffect_dCore_dEffUnit) -> (match comp with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__18) -> ((((((dtp_effect_handle key) name) ret) opH) dtb__18) u)
   | _ -> failwith "DT: impossible branch"
 )))))
 
-# 213 "Base/Effect/Core.vuna"
+# 250 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dresumeCont = (fun c x -> (match c with
   | C_Base_dEffect_dCore_dCont_MkCont (dtb__19) -> (dtb__19 x)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 218 "Base/Effect/Core.vuna"
+# 256 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dcontAdapter = (fun opH o k -> ((opH o) (C_Base_dEffect_dCore_dCont_MkCont (k))))
 
-# 222 "Base/Effect/Core.vuna"
+# 260 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleCoreLin = (fun key name ret opH comp -> (((((v_Base_dEffect_dCore_dhandleCore key) name) ret) (v_Base_dEffect_dCore_dcontAdapter opH)) comp))
 
-# 231 "Base/Effect/Core.vuna"
+# 269 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleWith = (fun n key comp ret opH -> (((((v_Base_dEffect_dCore_dhandleCore key) n) ret) (Obj.magic opH)) comp))
 
-# 236 "Base/Effect/Core.vuna"
+# 274 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dhandleWithAt = (fun n key comp ret opH -> (((((v_Base_dEffect_dCore_dhandleCoreAt key) n) ret) (Obj.magic opH)) comp))
 
-# 244 "Base/Effect/Core.vuna"
+# 282 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dmkCont = (fun k -> (C_Base_dEffect_dCore_dCont_MkCont (k)))
 
-# 248 "Base/Effect/Core.vuna"
-let v_Base_dEffect_dCore_dbracket = (fun acquire release use -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) acquire) (fun _x64_vuna_x64_effK_u249_u3_u6_x58_res -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dCore_deffPrim (fun (_u : int) -> (dtp_cleanup_push (fun (_u : int) -> (v_Base_dEffect_dCore_drunEff (release _x64_vuna_x64_effK_u249_u3_u6_x58_res))))))) (fun _x64_vuna_x64_effK_u0_u0_u7_x58__u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (use _x64_vuna_x64_effK_u249_u3_u6_x58_res)) (fun _x64_vuna_x64_effK_u251_u3_u8_x58_a -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dCore_deffPrim (fun (_u : int) -> (dtp_cleanup_pop 0)))) (fun _x64_vuna_x64_effK_u0_u0_u9_x58__u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (release _x64_vuna_x64_effK_u249_u3_u6_x58_res)) (fun _x64_vuna_x64_effK_u0_u0_u10_x58__u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure v_Applicative_uBase_uEffect_uCore_uEff_ur) _x64_vuna_x64_effK_u251_u3_u8_x58_a))))))))))))
+# 286 "Base/Effect/Core.vuna"
+let v_Base_dEffect_dCore_dbracket = (fun acquire release use -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) acquire) (fun _x64_vuna_x64_effK_u288_u5_u6_x58_res -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dCore_deffPrim (fun (_u : int) -> (dtp_cleanup_push (fun (_u : int) -> (v_Base_dEffect_dCore_drunEff (release _x64_vuna_x64_effK_u288_u5_u6_x58_res))))))) (fun _x64_vuna_x64_effK_u0_u0_u7_x58__u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (use _x64_vuna_x64_effK_u288_u5_u6_x58_res)) (fun _x64_vuna_x64_effK_u290_u5_u8_x58_a -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (v_Base_dEffect_dCore_deffPrim (fun (_u : int) -> (dtp_cleanup_pop 0)))) (fun _x64_vuna_x64_effK_u0_u0_u9_x58__u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ v_Monad_uBase_uEffect_uCore_uEff_ur) (release _x64_vuna_x64_effK_u288_u5_u6_x58_res)) (fun _x64_vuna_x64_effK_u0_u0_u10_x58__u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure v_Applicative_uBase_uEffect_uCore_uEff_ur) _x64_vuna_x64_effK_u290_u5_u8_x58_a))))))))))))
 
-# 258 "Base/Effect/Core.vuna"
+# 297 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_dfinally = (fun comp cleanup -> (((v_Base_dEffect_dCore_dbracket ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)) (fun (_u : int) -> cleanup)) (fun (_u : int) -> comp)))

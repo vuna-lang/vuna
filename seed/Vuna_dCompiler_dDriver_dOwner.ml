@@ -25,7 +25,7 @@ let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDeclNames = (fun (mc0 : Vuna_dComp
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 49 "Vuna/Compiler/Driver/Owner.vuna"
+# 50 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDataNames = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__36, dtb__37) -> (match dtb__36 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__38, dtb__39, dtb__40, dtb__41, dtb__42, dtb__43, dtb__44, dtb__45, dtb__46) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__38, (v_Vuna_dCompiler_dDriver_dOwner_dsplitDataNames dtb__37)))
@@ -36,7 +36,7 @@ let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDataNames = (fun (mc0 : Vuna_dComp
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 56 "Vuna/Compiler/Driver/Owner.vuna"
+# 58 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dheadClassName = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExpr) -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (dtb__55, dtb__56) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__55))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp (dtb__57, dtb__58, dtb__59) -> (match dtb__57 with
@@ -46,30 +46,30 @@ let v_Vuna_dCompiler_dDriver_dOwner_dheadClassName = (fun (mc0 : Vuna_dCompiler_
   | _ -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
 ))
 
-# 76 "Vuna/Compiler/Driver/Owner.vuna"
+# 81 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dhasFieldRecordTypeExpr = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (mc0, v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan))
   | _ -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (mc0, v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)), ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : string) -> (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar (p, v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)))) mc1), v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan))
 ))
 
-# 81 "Vuna/Compiler/Driver/Owner.vuna"
+# 86 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dhasFieldOwnerOf = (fun owner dname params f -> ((fun fname -> ((fun fty -> ((fun label -> ((fun head -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((Vuna_dCompiler_dElab_dInstName.v_Vuna_dCompiler_dElab_dInstName_dinstanceName "Base.Trait.Record.HasField") head); Base_dData_dPair.f_Base_dData_dPair_dPair_second = owner }) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Trait.Record.HasField", v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (label, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dDriver_dOwner_dhasFieldRecordTypeExpr dname) params), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (fty, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))), v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("Base.Trait.Field.Field", v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EStr (fname, v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)), Base_dData_dList.C_Base_dData_dList_dList_Nil)), v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)))) (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldType f))) (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dfieldName f)))
 
-# 92 "Vuna/Compiler/Driver/Owner.vuna"
+# 99 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitHasFieldOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) (mc3 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dField Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__62, dtb__63) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((((v_Vuna_dCompiler_dDriver_dOwner_dhasFieldOwnerOf mc0) mc1) mc2) dtb__62), ((((v_Vuna_dCompiler_dDriver_dOwner_dsplitHasFieldOwners mc0) mc1) mc2) dtb__63)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 97 "Vuna/Compiler/Driver/Owner.vuna"
+# 104 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDerivedOwners = (fun (mc0 : string) (mc1 : string) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) (mc3 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__64, dtb__65) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((Vuna_dCompiler_dElab_dInstName.v_Vuna_dCompiler_dElab_dInstName_dinstanceName dtb__64) ((((Vuna_dCompiler_dElab_dDerive.v_Vuna_dCompiler_dElab_dDerive_dinstHead dtb__64) mc1) mc2) v_Vuna_dCompiler_dDriver_dOwner_dsplitNoSpan)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc0 }, ((((v_Vuna_dCompiler_dDriver_dOwner_dsplitDerivedOwners mc0) mc1) mc2) dtb__65)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 65 "Vuna/Compiler/Driver/Owner.vuna"
+# 68 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnerOf = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl) -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DRecord (dtb__66, dtb__67, dtb__68, dtb__69, dtb__70, dtb__71, dtb__72, dtb__73) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((((v_Vuna_dCompiler_dDriver_dOwner_dsplitDerivedOwners mc0) dtb__66) dtb__67) dtb__69)) ((((v_Vuna_dCompiler_dDriver_dOwner_dsplitHasFieldOwners mc0) dtb__66) dtb__67) dtb__68))
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__74, dtb__75, dtb__76, dtb__77, dtb__78, dtb__79, dtb__80, dtb__81, dtb__82) -> ((((v_Vuna_dCompiler_dDriver_dOwner_dsplitDerivedOwners mc0) dtb__74) dtb__75) dtb__78)
@@ -81,32 +81,32 @@ let v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnerOf = (fun (mc0 : string) 
   | _ -> Base_dData_dList.C_Base_dData_dList_dList_Nil
 ))
 
-# 105 "Vuna/Compiler/Driver/Owner.vuna"
+# 112 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitTraitDefOwnerOf = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl) -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DTrait (dtb__88, dtb__89, dtb__90, dtb__91, dtb__92) -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (m : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dTraitMethod) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dtraitMethodName m); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc0 })) dtb__91)
   | _ -> Base_dData_dList.C_Base_dData_dList_dList_Nil
 ))
 
-# 110 "Vuna/Compiler/Driver/Owner.vuna"
+# 117 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitTraitDataOwnerOf = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl) -> (match mc1 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DTrait (dtb__93, dtb__94, dtb__95, dtb__96, dtb__97) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = ("Dict_" ^ dtb__93); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc0 }, Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> Base_dData_dList.C_Base_dData_dList_dList_Nil
 ))
 
-# 114 "Vuna/Compiler/Driver/Owner.vuna"
+# 121 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnersGo = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__98, dtb__99) -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnerOf mc0) dtb__98)) ((v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnersGo mc0) dtb__99))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 119 "Vuna/Compiler/Driver/Owner.vuna"
+# 126 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOf = (fun owner decls -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = owner })) (v_Vuna_dCompiler_dDriver_dOwner_dsplitDeclNames decls))) ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dDriver_dOwner_dsplitInstanceOwnersGo owner) decls)) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dDriver_dOwner_dsplitTraitDefOwnerOf owner)) decls))))
 
-# 124 "Vuna/Compiler/Driver/Owner.vuna"
+# 132 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOf = (fun owner decls -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = owner })) (v_Vuna_dCompiler_dDriver_dOwner_dsplitDataNames decls))) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dDriver_dOwner_dsplitTraitDataOwnerOf owner)) decls)))
 
-# 129 "Vuna/Compiler/Driver/Owner.vuna"
+# 138 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOfModules = (fun (mc0 : (string, Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__100, dtb__101) -> (match dtb__100 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__102; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__103 } -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOf dtb__102) dtb__103)) (v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOfModules dtb__101))
@@ -116,7 +116,7 @@ let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOfModules = (fun (mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 134 "Vuna/Compiler/Driver/Owner.vuna"
+# 143 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOfModules = (fun (mc0 : (string, Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__104, dtb__105) -> (match dtb__104 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__106; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__107 } -> ((Base_dData_dList.v_Base_dData_dList_dappend ((v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOf dtb__106) dtb__107)) (v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOfModules dtb__105))
@@ -126,40 +126,40 @@ let rec v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOfModules = (fun (
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 149 "Vuna/Compiler/Driver/Owner.vuna"
+# 158 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitMetaOf = (fun modules entryDecls -> ((fun knownModules -> ((fun defOwners -> ((fun dataOwners -> { f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDefOwners = defOwners; f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDataOwners = dataOwners; f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smKnownModules = knownModules; f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDefOwnerT = ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) defOwners); f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDataOwnerT = ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) dataOwners) }) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOfModules modules)) ((v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerEntriesOf v_Vuna_dCompiler_dDriver_dOwner_dentryOwner) entryDecls)))) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOfModules modules)) ((v_Vuna_dCompiler_dDriver_dOwner_dsplitOwnerEntriesOf v_Vuna_dCompiler_dDriver_dOwner_dentryOwner) entryDecls)))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (string, Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) modules)))
 
-# 161 "Vuna/Compiler/Driver/Owner.vuna"
+# 175 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dlookupModuleOf = (fun pairs name -> ((Base_dData_dList.v_Base_dData_dList_dlookupPair name) pairs))
 
-# 164 "Vuna/Compiler/Driver/Owner.vuna"
+# 178 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dknownModuleOrErr = (fun knownModules what name -> ((fun prefix -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName prefix) knownModules) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (prefix)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["DT split: `"; what; "` "; name; " has module prefix `"; prefix; "` but no such module"])))) (v_Vuna_dCompiler_dDriver_dOwner_dmodulePrefixOfName name)))
 
-# 171 "Vuna/Compiler/Driver/Owner.vuna"
+# 187 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerOf = (fun meta d -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) (meta).f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDataOwnerT) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__108) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__108))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dcontainsDot (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) then (((v_Vuna_dCompiler_dDriver_dOwner_dknownModuleOrErr (meta).f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smKnownModules) "data") (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["DT split: cannot determine module for data `"; (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d); "`"])))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 181 "Vuna/Compiler/Driver/Owner.vuna"
+# 200 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_disSyntheticInternalName = (fun name -> (if (name = Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dmainShowDefName) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "@vuna@") name)))
 
-# 184 "Vuna/Compiler/Driver/Owner.vuna"
+# 203 "Vuna/Compiler/Driver/Owner.vuna"
 let v_Vuna_dCompiler_dDriver_dOwner_dsplitDefOwnerOf = (fun meta name -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) (meta).f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smDefOwnerT) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__109) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__109))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (if (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dcontainsDot name) then (((v_Vuna_dCompiler_dDriver_dOwner_dknownModuleOrErr (meta).f_Vuna_dCompiler_dDriver_dOwner_dSplitMeta_smKnownModules) "definition") name) else (if (v_Vuna_dCompiler_dDriver_dOwner_disSyntheticInternalName name) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (v_Vuna_dCompiler_dDriver_dOwner_dentryOwner)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["DT split: cannot determine module for definition `"; name; "`"]))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 192 "Vuna/Compiler/Driver/Owner.vuna"
+# 215 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dnameOwnerPairsOfDefs = (fun (mc0 : t_Vuna_dCompiler_dDriver_dOwner_dSplitMeta) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__110, dtb__111) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dOwner_dsplitDefOwnerOf mc0) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__110))) (fun (o : string) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dOwner_dnameOwnerPairsOfDefs mc0) dtb__111)) (fun (ps : (string, string) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDefName dtb__110); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }, ps))))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 198 "Vuna/Compiler/Driver/Owner.vuna"
+# 222 "Vuna/Compiler/Driver/Owner.vuna"
 let rec v_Vuna_dCompiler_dDriver_dOwner_dnameOwnerPairsOfDatas = (fun (mc0 : t_Vuna_dCompiler_dDriver_dOwner_dSplitMeta) (mc1 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtData Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__112, dtb__113) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dOwner_dsplitDataOwnerOf mc0) dtb__112)) (fun (o : string) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dDriver_dOwner_dnameOwnerPairsOfDatas mc0) dtb__113)) (fun (ps : (string, string) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName dtb__112); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }, ps))))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dData_dList.C_Base_dData_dList_dList_Nil))

@@ -30,10 +30,10 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencStrPair = (fun p acc -> ((Vun
 # 70 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencIdentity = (fun pi acc -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTag v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_didentityTag) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr (pi).f_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dPackageIdentity_piName) (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencStr) (pi).f_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dPackageIdentity_piExports) (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencStrPair) (pi).f_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dPackageIdentity_piDeps) (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencList v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencStrPair) (pi).f_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dPackageIdentity_piFiles) acc))))))
 
-# 76 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 77 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencPackageIdentity = (fun pi -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTop v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dencIdentity) pi))
 
-# 80 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 81 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecFile = (fun fuel c -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__0) -> (match dtb__0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__2 } -> ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -50,7 +50,7 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecFile = (fun fuel c -> ((fun n
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr fuel) c)))
 
-# 87 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 90 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecContentAt = (fun fuel c -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__6) -> (match dtb__6 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__7; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__8 } -> (if (dtb__7 = v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_dcontentTag) then (((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecList v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecFile) fuel) dtb__8) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
@@ -60,7 +60,7 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecContentAt = (fun fuel c -> ((
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) c)))
 
-# 93 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 97 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecPackageContent = (fun raw -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__9) -> (match dtb__9 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__10; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__11) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__10)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
@@ -70,10 +70,10 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecPackageContent = (fun raw -> 
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecContentAt ((2 * (bi_strLength raw)) + 16)) (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurOf raw))))
 
-# 98 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 103 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecStrPair = (fun fuel c -> ((((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecPair Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr) Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecStr) fuel) c))
 
-# 101 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 106 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecIdentityAt = (fun fuel c -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__12) -> (match dtb__12 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__13; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__14 } -> (if (dtb__13 = v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_didentityTag) then ((fun nd_uscrut9 -> (match nd_uscrut9 with
@@ -111,7 +111,7 @@ let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecIdentityAt = (fun fuel c -> (
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag fuel) c)))
 
-# 116 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
+# 128 "Vuna/Compiler/Frontend/Canonical/Pkg.vuna"
 let v_Vuna_dCompiler_dFrontend_dCanonical_dPkg_ddecPackageIdentity = (fun raw -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__27) -> (match dtb__27 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__28; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__29 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__29) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__28)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)

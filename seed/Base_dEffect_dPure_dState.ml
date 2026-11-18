@@ -7,13 +7,13 @@ let v_Functor_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dFunctor.C_Dic
   | _ -> failwith "DT: impossible branch"
 )) }))))
 
-# 32 "Base/Effect/Pure/State.vuna"
+# 35 "Base/Effect/Pure/State.vuna"
 let v_Monad_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun st k -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((st).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__2; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__3 } -> (((k dtb__2)).f_Base_dEffect_dPure_dState_dState_stateRun dtb__3)
   | _ -> failwith "DT: impossible branch"
 )) }))))
 
-# 37 "Base/Effect/Pure/State.vuna"
+# 43 "Base/Effect/Pure/State.vuna"
 let v_Applicative_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun a -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = a; Base_dData_dPair.f_Base_dData_dPair_dPair_second = s }) })), (Obj.magic (fun mf mx -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((mf).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__4; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__5 } -> (match ((mx).f_Base_dEffect_dPure_dState_dState_stateRun dtb__5) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__6; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__7 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (dtb__4 dtb__6); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__7 }
@@ -40,11 +40,11 @@ let v_Base_dEffect_dPure_dState_devalState = (fun st s -> (Base_dData_dPair.v_Ba
 # 25 "Base/Effect/Pure/State.vuna"
 let v_Base_dEffect_dPure_dState_dexecState = (fun st s -> (Base_dData_dPair.v_Base_dData_dPair_dsecondOf ((v_Base_dEffect_dPure_dState_drunState st) s)))
 
-# 50 "Base/Effect/Pure/State.vuna"
+# 64 "Base/Effect/Pure/State.vuna"
 let v_Base_dEffect_dPure_dState_dget = { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = s; Base_dData_dPair.f_Base_dData_dPair_dPair_second = s }) }
 
-# 54 "Base/Effect/Pure/State.vuna"
+# 68 "Base/Effect/Pure/State.vuna"
 let v_Base_dEffect_dPure_dState_dput = (fun s -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun _u -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = s }) })
 
-# 58 "Base/Effect/Pure/State.vuna"
+# 72 "Base/Effect/Pure/State.vuna"
 let v_Base_dEffect_dPure_dState_dmodify = (fun f -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (f s) }) })

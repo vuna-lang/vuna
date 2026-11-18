@@ -22,7 +22,7 @@ let rec v_Eq_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dEq.C_Dict_uBase_dTrait_
   | _ -> failwith "DT: impossible branch"
 )), (fun a b -> (if (((Base_dTrait_dEq.v_Base_dTrait_dEq_d_x61__x61_ v_Eq_uBase_uTrait_uOrd_uOrdering) a) b) then false else true))))
 
-# 67 "Base/Trait/Ord.vuna"
+# 70 "Base/Trait/Ord.vuna"
 let v_Show_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dShow.C_Dict_uBase_dTrait_dShow_dShow_Show ((fun o -> (match o with
   | C_Base_dTrait_dOrd_dOrdering_LT -> "LT"
   | C_Base_dTrait_dOrd_dOrdering_EQ -> "EQ"
@@ -30,7 +30,7 @@ let v_Show_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dShow.C_Dict_uBase_dTrait_
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 85 "Base/Trait/Ord.vuna"
+# 89 "Base/Trait/Ord.vuna"
 let v_Hashable_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dHashable.C_Dict_uBase_dTrait_dHashable_dHashable_Hashable ((fun o -> (match o with
   | C_Base_dTrait_dOrd_dOrdering_LT -> 0
   | C_Base_dTrait_dOrd_dOrdering_EQ -> 1
@@ -80,11 +80,11 @@ let v_Base_dTrait_dOrd_d_x62__x61_ = (fun _ud x0 x1 -> (match _ud with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 75 "Base/Trait/Ord.vuna"
+# 79 "Base/Trait/Ord.vuna"
 let v_Base_dTrait_dOrd_dcompare = (fun _uctx0 x y -> (if (((v_Base_dTrait_dOrd_d_x60_ _uctx0) x) y) then C_Base_dTrait_dOrd_dOrdering_LT else (if (((v_Base_dTrait_dOrd_d_x60_ _uctx0) y) x) then C_Base_dTrait_dOrd_dOrdering_GT else C_Base_dTrait_dOrd_dOrdering_EQ)))
 
-# 79 "Base/Trait/Ord.vuna"
+# 83 "Base/Trait/Ord.vuna"
 let v_Base_dTrait_dOrd_dmin = (fun _uctx0 x y -> (if (((v_Base_dTrait_dOrd_d_x60__x61_ _uctx0) x) y) then x else y))
 
-# 83 "Base/Trait/Ord.vuna"
+# 87 "Base/Trait/Ord.vuna"
 let v_Base_dTrait_dOrd_dmax = (fun _uctx0 x y -> (if (((v_Base_dTrait_dOrd_d_x60__x61_ _uctx0) x) y) then y else x))

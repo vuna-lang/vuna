@@ -16,15 +16,15 @@ let v_Base_dEffect_dError_derrorOpH = (fun op k -> (match op with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 32 "Base/Effect/Error.vuna"
+# 33 "Base/Effect/Error.vuna"
 let v_Base_dEffect_dError_dcatchResult = (fun n fallback res -> (match res with
   | Base_dData_dResult.C_Base_dData_dResult_dResult_Ok (dtb__1) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) dtb__1)
   | Base_dData_dResult.C_Base_dData_dResult_dResult_Err (dtb__2) -> (fallback dtb__2)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 38 "Base/Effect/Error.vuna"
+# 40 "Base/Effect/Error.vuna"
 let v_Base_dEffect_dError_drunError = (fun n comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "error") n) v_Base_dEffect_dError_derrorRet) v_Base_dEffect_dError_derrorOpH) comp))
 
-# 42 "Base/Effect/Error.vuna"
-let v_Base_dEffect_dError_dcatch = (fun n comp fallback -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_dweaken ((((v_Base_dEffect_dError_dhandleError n) v_Base_dEffect_dError_derrorRet) v_Base_dEffect_dError_derrorOpH) comp))) (fun _x64_vuna_x64_effK_u43_u3_u5_x58_res -> (((v_Base_dEffect_dError_dcatchResult n) fallback) _x64_vuna_x64_effK_u43_u3_u5_x58_res))))
+# 44 "Base/Effect/Error.vuna"
+let v_Base_dEffect_dError_dcatch = (fun n comp fallback -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_dweaken ((((v_Base_dEffect_dError_dhandleError n) v_Base_dEffect_dError_derrorRet) v_Base_dEffect_dError_derrorOpH) comp))) (fun _x64_vuna_x64_effK_u46_u5_u5_x58_res -> (((v_Base_dEffect_dError_dcatchResult n) fallback) _x64_vuna_x64_effK_u46_u5_u5_x58_res))))

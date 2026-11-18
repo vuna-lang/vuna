@@ -16,54 +16,54 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dclosureGo = (fun fuel layers todo acc 
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 41 "Vuna/Compiler/Loader/Layers.vuna"
+# 42 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dallowedByRow = (fun layers l -> ((((v_Vuna_dCompiler_dLoader_dLayers_dclosureGo ((Base_dData_dList.v_Base_dData_dList_dlength layers) + 2)) layers) (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerUses) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName, Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
-# 44 "Vuna/Compiler/Loader/Layers.vuna"
+# 45 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dcovered = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (if ((v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix dtb__4) mc1) then true else ((v_Vuna_dCompiler_dLoader_dLayers_dcovered dtb__5) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 49 "Vuna/Compiler/Loader/Layers.vuna"
+# 50 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dimportAllowed = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__6, dtb__7) -> (if ((v_Vuna_dCompiler_dLoader_dLayers_dcovered ((v_Vuna_dCompiler_dLoader_dLayers_dallowedByRow mc0) dtb__6)) mc2) then (((v_Vuna_dCompiler_dLoader_dLayers_dimportAllowed mc0) dtb__7) mc2) else false)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 54 "Vuna/Compiler/Loader/Layers.vuna"
+# 55 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches = (fun name l -> ((v_Vuna_dCompiler_dLoader_dLayers_disLayerPrefix (l).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName) name))
 
-# 57 "Vuna/Compiler/Loader/Layers.vuna"
+# 58 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers = (fun rules name -> ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dLoader_dLayers_dlayerMatches name)) rules))
 
-# 66 "Vuna/Compiler/Loader/Layers.vuna"
+# 68 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dlabelBest = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer) (mc1 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, dtb__9) -> (if ((bi_strLength (dtb__8).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName) > (bi_strLength (mc0).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName)) then ((v_Vuna_dCompiler_dLoader_dLayers_dlabelBest dtb__8) dtb__9) else ((v_Vuna_dCompiler_dLoader_dLayers_dlabelBest mc0) dtb__9))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (mc0).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dLayer_layerName
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 61 "Vuna/Compiler/Loader/Layers.vuna"
+# 62 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dlabelOf = (fun rules name -> (match ((v_Vuna_dCompiler_dLoader_dLayers_dmatchingLayers rules) name) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dprefixOfName name)
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__10, dtb__11) -> ((v_Vuna_dCompiler_dLoader_dLayers_dlabelBest dtb__10) dtb__11)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 71 "Vuna/Compiler/Loader/Layers.vuna"
+# 73 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dlayersOfRoot = (fun (mc0 : Vuna_dCompiler_dFrontend_dPackages_dPkg.t_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__12, dtb__13) -> (if ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootName dtb__12) = mc1) then (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootLayers dtb__12) else ((v_Vuna_dCompiler_dLoader_dLayers_dlayersOfRoot dtb__13) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 75 "Vuna/Compiler/Loader/Layers.vuna"
+# 77 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dwithImportSpan = (fun imp e -> (if ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) = "") then e else ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan) e)))
 
-# 79 "Vuna/Compiler/Loader/Layers.vuna"
+# 81 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckImports = (fun (mc0 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dManifest.t_Vuna_dCompiler_dFrontend_dManifest_dLayer Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) (mc3 : string) (mc4 : Vuna_dCompiler_dLoader_dModules.t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc5 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) -> (match mc5 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__14, dtb__15) -> (match ((Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dfindModule mc4) (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dimportName dtb__14)) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((((((v_Vuna_dCompiler_dLoader_dLayers_dcheckImports mc0) mc1) mc2) mc3) mc4) dtb__15)
@@ -74,7 +74,7 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckImports = (fun (mc0 : Vuna_dCompi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 90 "Vuna/Compiler/Loader/Layers.vuna"
+# 96 "Vuna/Compiler/Loader/Layers.vuna"
 let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckModules = (fun (mc0 : Vuna_dCompiler_dFrontend_dPackages_dPkg.t_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dLoader_dModules.t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc2 : Vuna_dCompiler_dLoader_dModules.t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__17, dtb__18) -> ((fun rules -> ((fun matched -> (if ((Base_dData_dList.v_Base_dData_dList_dlength matched) = 0) then (((v_Vuna_dCompiler_dLoader_dLayers_dcheckModules mc0) mc1) dtb__18) else (match ((((((v_Vuna_dCompiler_dLoader_dLayers_dcheckImports rules) matched) (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmoduleNameOf dtb__17)) (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmodulePackageOf dtb__17)) mc1) (Vuna_dCompiler_dLoader_dModules.v_Vuna_dCompiler_dLoader_dModules_dmoduleAllImportsOf dtb__17)) with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__19) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__19))
@@ -85,5 +85,5 @@ let rec v_Vuna_dCompiler_dLoader_dLayers_dcheckModules = (fun (mc0 : Vuna_dCompi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 103 "Vuna/Compiler/Loader/Layers.vuna"
+# 110 "Vuna/Compiler/Loader/Layers.vuna"
 let v_Vuna_dCompiler_dLoader_dLayers_dcheckProjectLayers = (fun roots project -> (((v_Vuna_dCompiler_dLoader_dLayers_dcheckModules roots) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules) (project).Vuna_dCompiler_dLoader_dModules.f_Vuna_dCompiler_dLoader_dModules_dProject_projectModules))

@@ -4,32 +4,35 @@ and t_Vuna_dCompiler_dFrontend_dCst_dTrivia = { f_Vuna_dCompiler_dFrontend_dCst_
 and t_Vuna_dCompiler_dFrontend_dCst_dCstToken = { f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstTag : string; f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstText : string; f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan; f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstLeading : t_Vuna_dCompiler_dFrontend_dCst_dTrivia Base_dData_dList.t_Base_dData_dList_dList }
 and t_Vuna_dCompiler_dFrontend_dCst_dLineCur = { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff : int; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine : int; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol : int; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset : int }
 and t_Vuna_dCompiler_dFrontend_dCst_dTrivComment = { f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommKind : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dCKind; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommSpan : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart : int; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommEnd : int }
-
-# 79 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_Vuna_dCompiler_dFrontend_dCst_dlineCurStart = { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = 0; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = 0 }
-
-# 82 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_Vuna_dCompiler_dFrontend_dCst_dcurPos = (fun c -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset })
+and t_Vuna_dCompiler_dFrontend_dCst_dCstKind = C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstFileKind | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstBlockKind | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstDeclKind | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstGroupKind
+and t_Vuna_dCompiler_dFrontend_dCst_dCstNode = C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf of (t_Vuna_dCompiler_dFrontend_dCst_dCstToken) | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch of (t_Vuna_dCompiler_dFrontend_dCst_dCstKind) * (Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) * (t_Vuna_dCompiler_dFrontend_dCst_dCstNode Base_dData_dList.t_Base_dData_dList_dList)
+and t_Vuna_dCompiler_dFrontend_dCst_dFrame = { f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind : t_Vuna_dCompiler_dFrontend_dCst_dCstKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol : int; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids : t_Vuna_dCompiler_dFrontend_dCst_dCstNode Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted : bool; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose : string }
 
 # 86 "Vuna/Compiler/Frontend/Cst.vuna"
-let v_Vuna_dCompiler_dFrontend_dCst_dstepCur = (fun src c -> (if (((dtp_strAt src) (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff) = 10) then { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset + 1) } else { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset + 1) }))
+let v_Vuna_dCompiler_dFrontend_dCst_dlineCurStart = { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = 0; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = 0 }
+
+# 89 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dcurPos = (fun c -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset })
 
 # 93 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dstepCur = (fun src c -> (if (((dtp_strAt src) (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff) = 10) then { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = 1; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset + 1) } else { f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = (c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine; f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol + 1); f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset = ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOffset + 1) }))
+
+# 102 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo = (fun fuel src c target -> (if (fuel <= 0) then c else (if (if ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine > (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine target)) then true else (if ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine target)) then ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcCol >= (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol target)) else false)) then c else (if ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff >= (bi_strLength src)) then c else ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo (fuel - 1)) src) ((v_Vuna_dCompiler_dFrontend_dCst_dstepCur src) c)) target)))))
 
-# 100 "Vuna/Compiler/Frontend/Cst.vuna"
+# 111 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dadvanceBy = (fun fuel src c n -> (if (fuel <= 0) then c else (if (n <= 0) then c else (if ((c).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff >= (bi_strLength src)) then c else ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceBy (fuel - 1)) src) ((v_Vuna_dCompiler_dFrontend_dCst_dstepCur src) c)) (n - 1))))))
 
-# 107 "Vuna/Compiler/Frontend/Cst.vuna"
+# 120 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dsliceText = (fun src from to_ -> (if (to_ <= from) then "" else (((dtp_substring from) (to_ - from)) src)))
 
-# 114 "Vuna/Compiler/Frontend/Cst.vuna"
+# 127 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dscanDigitsEnd = (fun fuel src i -> (if (fuel <= 0) then i else (if (Vuna_dCompiler_dFrontend_dLexer.v_Vuna_dCompiler_dFrontend_dLexer_disDigit ((dtp_strAt src) i)) then (((v_Vuna_dCompiler_dFrontend_dCst_dscanDigitsEnd (fuel - 1)) src) (i + 1)) else i)))
 
-# 120 "Vuna/Compiler/Frontend/Cst.vuna"
+# 133 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dscanStringEnd = (fun fuel src i -> (if (fuel <= 0) then i else (if (((dtp_strAt src) i) = 92) then (((v_Vuna_dCompiler_dFrontend_dCst_dscanStringEnd (fuel - 2)) src) (i + 2)) else (if (((dtp_strAt src) i) = 34) then (i + 1) else (((v_Vuna_dCompiler_dFrontend_dCst_dscanStringEnd (fuel - 1)) src) (i + 1))))))
 
-# 127 "Vuna/Compiler/Frontend/Cst.vuna"
+# 142 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dtokTag = (fun (mc0 : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dTok) -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TEof -> "eof"
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__0) -> "sym"
@@ -42,7 +45,7 @@ let v_Vuna_dCompiler_dFrontend_dCst_dtokTag = (fun (mc0 : Vuna_dCompiler_dFronte
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 139 "Vuna/Compiler/Frontend/Cst.vuna"
+# 154 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dtokText = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dFrontend_dCst_dLineCur) (mc2 : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dTok) -> (match mc2 with
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TEof -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ""; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (mc1).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff }
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dTok_TTmpl (dtb__9, dtb__10, dtb__11) -> ((fun endCur -> ((fun end_ -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (((v_Vuna_dCompiler_dFrontend_dCst_dsliceText mc0) (mc1).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff) end_); Base_dData_dPair.f_Base_dData_dPair_dPair_second = end_ }) ((endCur).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff + 1))) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo (bi_strLength mc0)) mc0) mc1) dtb__11))
@@ -55,13 +58,13 @@ let v_Vuna_dCompiler_dFrontend_dCst_dtokText = (fun (mc0 : string) (mc1 : t_Vuna
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 181 "Vuna/Compiler/Frontend/Cst.vuna"
+# 196 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dspanStartOf = (fun sp -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp) })
 
-# 184 "Vuna/Compiler/Frontend/Cst.vuna"
+# 199 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dspanEndOf = (fun sp -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp) })
 
-# 170 "Vuna/Compiler/Frontend/Cst.vuna"
+# 185 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dtoTrivComments = (fun (mc0 : int) (mc1 : string) (mc2 : t_Vuna_dCompiler_dFrontend_dCst_dLineCur) (mc3 : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dComment Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__18, dtb__19) -> (match dtb__18 with
   | { Vuna_dCompiler_dFrontend_dLexer.f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentKind = dtb__20; Vuna_dCompiler_dFrontend_dLexer.f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentText = dtb__21; Vuna_dCompiler_dFrontend_dLexer.f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentSpan = dtb__22 } -> ((fun c1 -> ((fun c2 -> ((fun c3 -> ((fun tailRes -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommKind = dtb__20; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommSpan = dtb__22; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart = (c1).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff; f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommEnd = (c3).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff }, (Base_dData_dPair.v_Base_dData_dPair_dfirstOf tailRes))); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf tailRes) }) ((((v_Vuna_dCompiler_dFrontend_dCst_dtoTrivComments mc0) mc1) c3) dtb__19))) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceBy mc0) mc1) c2) 1))) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo mc0) mc1) c1) (v_Vuna_dCompiler_dFrontend_dCst_dspanEndOf dtb__22)))) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo mc0) mc1) mc2) (v_Vuna_dCompiler_dFrontend_dCst_dspanStartOf dtb__22)))
@@ -71,50 +74,50 @@ let rec v_Vuna_dCompiler_dFrontend_dCst_dtoTrivComments = (fun (mc0 : int) (mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 188 "Vuna/Compiler/Frontend/Cst.vuna"
+# 203 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dspaceTrivia = (fun src from to_ -> ((fun fo -> ((fun to2 -> (if (to2 <= fo) then Base_dData_dList.C_Base_dData_dList_dList_Nil else ((fun fp -> ((fun tp -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaKind = C_Vuna_dCompiler_dFrontend_dCst_dTriviaKind_TrivSpace; f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaText = (((v_Vuna_dCompiler_dFrontend_dCst_dsliceText src) fo) to2); f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaSpan = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine fp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol fp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine tp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol tp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset fp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset tp) } }, Base_dData_dList.C_Base_dData_dList_dList_Nil))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf to_))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf from)))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf to_))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf from)))
 
-# 202 "Vuna/Compiler/Frontend/Cst.vuna"
+# 217 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dcommentTriviaKind = (fun (mc0 : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dCKind) -> (match mc0 with
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dCKind_CBlock -> C_Vuna_dCompiler_dFrontend_dCst_dTriviaKind_TrivBlockComment
   | Vuna_dCompiler_dFrontend_dLexer.C_Vuna_dCompiler_dFrontend_dLexer_dCKind_CLine -> C_Vuna_dCompiler_dFrontend_dCst_dTriviaKind_TrivLineComment
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 208 "Vuna/Compiler/Frontend/Cst.vuna"
+# 223 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dcommentTrivia = (fun src tc -> ((fun start -> { f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaKind = (v_Vuna_dCompiler_dFrontend_dCst_dcommentTriviaKind (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommKind); f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaText = (((v_Vuna_dCompiler_dFrontend_dCst_dsliceText src) start) (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommEnd); f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaSpan = (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommSpan }) (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart))
 
-# 215 "Vuna/Compiler/Frontend/Cst.vuna"
+# 230 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dcommentEndPos = (fun tc -> ((fun endSp -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommEnd; Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Vuna_dCompiler_dFrontend_dLexer.v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar 0) (v_Vuna_dCompiler_dFrontend_dCst_dspanEndOf endSp)) }) (tc).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommSpan))
 
-# 222 "Vuna/Compiler/Frontend/Cst.vuna"
+# 237 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dgapTrivia = (fun (mc0 : string) (mc1 : (int, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos) Base_dData_dPair.t_Base_dData_dPair_dPair) (mc2 : (int, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos) Base_dData_dPair.t_Base_dData_dPair_dPair) (mc3 : t_Vuna_dCompiler_dFrontend_dCst_dTrivComment Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__23, dtb__24) -> ((fun cStart -> ((Base_dData_dList.v_Base_dData_dList_dappend (((v_Vuna_dCompiler_dFrontend_dCst_dspaceTrivia mc0) mc1) cStart)) ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dFrontend_dCst_dcommentTrivia mc0) dtb__23), Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((((v_Vuna_dCompiler_dFrontend_dCst_dgapTrivia mc0) (v_Vuna_dCompiler_dFrontend_dCst_dcommentEndPos dtb__23)) mc2) dtb__24)))) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (dtb__23).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dCst_dspanStartOf (dtb__23).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommSpan) })
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((v_Vuna_dCompiler_dFrontend_dCst_dspaceTrivia mc0) mc1) mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 231 "Vuna/Compiler/Frontend/Cst.vuna"
+# 247 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dtakeCommentsBefore = (fun (mc0 : int) (mc1 : t_Vuna_dCompiler_dFrontend_dCst_dTrivComment Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__25, dtb__26) -> (if ((dtb__25).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart < mc0) then ((fun taken -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__25, (Base_dData_dPair.v_Base_dData_dPair_dfirstOf taken))); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf taken) }) ((v_Vuna_dCompiler_dFrontend_dCst_dtakeCommentsBefore mc0) dtb__26)) else { Base_dData_dPair.f_Base_dData_dPair_dPair_first = Base_dData_dList.C_Base_dData_dList_dList_Nil; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__25, dtb__26)) })
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = Base_dData_dList.C_Base_dData_dList_dList_Nil; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dList.C_Base_dData_dList_dList_Nil }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 240 "Vuna/Compiler/Frontend/Cst.vuna"
+# 258 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dcommentStartsAtOrAfter = (fun bound c -> ((c).f_Vuna_dCompiler_dFrontend_dCst_dTrivComment_tcommStart >= bound))
 
-# 248 "Vuna/Compiler/Frontend/Cst.vuna"
+# 266 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dtokenNode = (fun src curStart prevEnd comments tok -> ((fun textEnd -> ((fun text -> ((fun end_ -> ((fun curEnd -> ((fun startPos -> ((fun sp -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = { f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstTag = (v_Vuna_dCompiler_dFrontend_dCst_dtokTag tok); f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstText = text; f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan = sp; f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstLeading = ((((v_Vuna_dCompiler_dFrontend_dCst_dgapTrivia src) prevEnd) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (curStart).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff; Base_dData_dPair.f_Base_dData_dPair_dPair_second = startPos }) comments) }; Base_dData_dPair.f_Base_dData_dPair_dPair_second = curEnd }) { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine startPos); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol startPos); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine (v_Vuna_dCompiler_dFrontend_dCst_dcurPos curEnd)); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol (v_Vuna_dCompiler_dFrontend_dCst_dcurPos curEnd)); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset startPos); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset (v_Vuna_dCompiler_dFrontend_dCst_dcurPos curEnd)) })) (v_Vuna_dCompiler_dFrontend_dCst_dcurPos curStart))) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceBy (bi_strLength src)) src) curStart) (end_ - (curStart).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf textEnd))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf textEnd))) (((v_Vuna_dCompiler_dFrontend_dCst_dtokText src) curStart) tok)))
 
-# 264 "Vuna/Compiler/Frontend/Cst.vuna"
+# 288 "Vuna/Compiler/Frontend/Cst.vuna"
 let rec v_Vuna_dCompiler_dFrontend_dCst_dbuildTokens = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dFrontend_dCst_dTrivComment Base_dData_dList.t_Base_dData_dList_dList) (mc2 : t_Vuna_dCompiler_dFrontend_dCst_dLineCur) (mc3 : (int, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos) Base_dData_dPair.t_Base_dData_dPair_dPair) (mc4 : Vuna_dCompiler_dFrontend_dLexer.t_Vuna_dCompiler_dFrontend_dLexer_dPTok Base_dData_dList.t_Base_dData_dList_dList) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__27, dtb__28) -> ((fun curStart -> ((fun start -> ((fun before -> ((fun live -> ((fun node -> ((fun curEnd -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf node), (((((v_Vuna_dCompiler_dFrontend_dCst_dbuildTokens mc0) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf before)) curEnd) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (curEnd).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Vuna_dCompiler_dFrontend_dCst_dcurPos curEnd) }) dtb__28)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf node))) (((((v_Vuna_dCompiler_dFrontend_dCst_dtokenNode mc0) curStart) mc3) live) (dtb__27).Vuna_dCompiler_dFrontend_dLexer.f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokTok))) ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dFrontend_dCst_dcommentStartsAtOrAfter (Base_dData_dPair.v_Base_dData_dPair_dfirstOf mc3))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf before)))) ((v_Vuna_dCompiler_dFrontend_dCst_dtakeCommentsBefore start) mc1))) (curStart).f_Vuna_dCompiler_dFrontend_dCst_dLineCur_lcOff)) ((((v_Vuna_dCompiler_dFrontend_dCst_dadvanceTo (bi_strLength mc0)) mc0) mc2) (dtb__27).Vuna_dCompiler_dFrontend_dLexer.f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokPos))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 281 "Vuna/Compiler/Frontend/Cst.vuna"
+# 306 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dlexCstGo = (fun source -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__29) -> (match dtb__29 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__30; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__31 } -> ((fun fuel -> ((fun tcs -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((((((v_Vuna_dCompiler_dFrontend_dCst_dbuildTokens source) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf tcs)) v_Vuna_dCompiler_dFrontend_dCst_dlineCurStart) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 } }) dtb__30)))) ((((v_Vuna_dCompiler_dFrontend_dCst_dtoTrivComments fuel) source) v_Vuna_dCompiler_dFrontend_dCst_dlineCurStart) dtb__31))) ((bi_strLength source) + 1))
@@ -124,21 +127,200 @@ let v_Vuna_dCompiler_dFrontend_dCst_dlexCstGo = (fun source -> ((fun nd_uscrut1 
   | _ -> failwith "DT: impossible branch"
 )) (Vuna_dCompiler_dFrontend_dLexer.v_Vuna_dCompiler_dFrontend_dLexer_dlexSourceWithComments source)))
 
-# 278 "Vuna/Compiler/Frontend/Cst.vuna"
+# 303 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dlexCst = (fun source -> (((Base_dData_dObs_dSpan.v_Base_dData_dObs_dSpan_dobsSpan "vuna.parse.cst") "vuna.phase") (fun (_u : int) -> (v_Vuna_dCompiler_dFrontend_dCst_dlexCstGo source))))
 
-# 291 "Vuna/Compiler/Frontend/Cst.vuna"
+# 317 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_dtriviaTextOf = (fun tr -> (tr).f_Vuna_dCompiler_dFrontend_dCst_dTrivia_triviaText)
 
-# 295 "Vuna/Compiler/Frontend/Cst.vuna"
+# 321 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_drenderParts = (fun t -> ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dFrontend_dCst_dtriviaTextOf) (t).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstLeading)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((t).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstText, Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
-# 299 "Vuna/Compiler/Frontend/Cst.vuna"
+# 325 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_drenderCst = (fun toks -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dFrontend_dCst_drenderParts) toks)))
 
-# 303 "Vuna/Compiler/Frontend/Cst.vuna"
+# 329 "Vuna/Compiler/Frontend/Cst.vuna"
 let v_Vuna_dCompiler_dFrontend_dCst_droundtripOk = (fun s -> (match (v_Vuna_dCompiler_dFrontend_dCst_dlexCst s) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__33) -> ((v_Vuna_dCompiler_dFrontend_dCst_drenderCst dtb__33) = s)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 357 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dnodeSpan = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__34, dtb__35, dtb__36) -> dtb__35
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__37) -> (dtb__37).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 362 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dnodeKind = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__38, dtb__39, dtb__40) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__38))
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__41) -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 367 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dnodeChildren = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__42, dtb__43, dtb__44) -> dtb__44
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__45) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 372 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dnodeToken = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__46, dtb__47, dtb__48) -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__49) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__49))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 382 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dcstKindTag = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstKind) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstGroupKind -> "group"
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstBlockKind -> "block"
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstDeclKind -> "decl"
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstFileKind -> "file"
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 378 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dnodeKindTag = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__50, dtb__51, dtb__52) -> (v_Vuna_dCompiler_dFrontend_dCst_dcstKindTag dtb__50)
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__53) -> "leaf"
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 402 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dattachLeaf = (fun t f -> ((fun sp -> ((fun start -> ((fun end_ -> { f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = (if (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted then (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart else start); f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = end_; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (t)), (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids)); f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = true; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose }) { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp) })) { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp) })) (t).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan))
+
+# 418 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dattachLeafTop = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstToken) (mc1 : t_Vuna_dCompiler_dFrontend_dCst_dFrame Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__54, dtb__55) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dFrontend_dCst_dattachLeaf mc0) dtb__54), dtb__55))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 423 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dcloseFrame = (fun f -> (C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch ((f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind, { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd) }, (Base_dData_dList.v_Base_dData_dList_dreverse (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids))))
+
+# 431 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dattachNode = (fun node f -> ((fun sp -> ((fun start -> ((fun end_ -> { f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = (if (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted then (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart else start); f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = end_; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (node, (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids)); f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = true; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = (f).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose }) { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndOffset sp) })) { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartCol sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartOffset sp) })) (v_Vuna_dCompiler_dFrontend_dCst_dnodeSpan node)))
+
+# 447 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dcloseTop = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dFrame Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__56, dtb__57) -> (match dtb__57 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__58, dtb__59) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dFrontend_dCst_dattachNode (v_Vuna_dCompiler_dFrontend_dCst_dcloseFrame dtb__56)) dtb__58), dtb__59))
+  | _ -> mc0
+)
+  | _ -> mc0
+))
+
+# 471 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dkindIsBlock = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstKind) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstBlockKind -> true
+  | _ -> false
+))
+
+# 452 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_dcloseBlocks = (fun fuel col frames -> (if (fuel <= 0) then frames else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__60, dtb__61) -> (match dtb__61 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__62, dtb__63) -> (if (if (v_Vuna_dCompiler_dFrontend_dCst_dkindIsBlock (dtb__60).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind) then (col < (dtb__60).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol) else false) then (((v_Vuna_dCompiler_dFrontend_dCst_dcloseBlocks (fuel - 1)) col) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dFrontend_dCst_dattachNode (v_Vuna_dCompiler_dFrontend_dCst_dcloseFrame dtb__60)) dtb__62), dtb__63))) else frames)
+  | _ -> frames
+)
+  | _ -> frames
+)) frames)))
+
+# 475 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dkindIsDecl = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstKind) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstDeclKind -> true
+  | _ -> false
+))
+
+# 462 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_dcloseDecls = (fun fuel col frames -> (if (fuel <= 0) then frames else ((fun nd_uscrut3 -> (match nd_uscrut3 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__64, dtb__65) -> (match dtb__65 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__66, dtb__67) -> (if (if (v_Vuna_dCompiler_dFrontend_dCst_dkindIsDecl (dtb__64).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind) then (col <= (dtb__64).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol) else false) then (((v_Vuna_dCompiler_dFrontend_dCst_dcloseDecls (fuel - 1)) col) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dFrontend_dCst_dattachNode (v_Vuna_dCompiler_dFrontend_dCst_dcloseFrame dtb__64)) dtb__66), dtb__67))) else frames)
+  | _ -> frames
+)
+  | _ -> frames
+)) frames)))
+
+# 479 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dkindIsGroup = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstKind) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstGroupKind -> true
+  | _ -> false
+))
+
+# 483 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dkindIsFile = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstKind) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstFileKind -> true
+  | _ -> false
+))
+
+# 488 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dlayoutStep = (fun col frames -> ((fun f1 -> ((fun f2 -> (match f2 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__68, dtb__69) -> (if (v_Vuna_dCompiler_dFrontend_dCst_dkindIsGroup (dtb__68).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind) then f2 else (if (v_Vuna_dCompiler_dFrontend_dCst_dkindIsFile (dtb__68).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstDeclKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = col; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = false; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = "" }, f2)) else (if (col > (dtb__68).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstBlockKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = col; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = false; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = "" }, f2)) else f2)))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> f2
+  | _ -> failwith "DT: impossible branch"
+)) (((v_Vuna_dCompiler_dFrontend_dCst_dcloseDecls 4096) col) f1))) (((v_Vuna_dCompiler_dFrontend_dCst_dcloseBlocks 4096) col) frames)))
+
+# 506 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dgroupCloseOf = (fun (mc0 : string) -> (if (mc0 = "(") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (")")) else (if (mc0 = "[") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("]")) else (if (mc0 = "{") then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("}")) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))))
+
+# 513 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_disSymText = (fun s t -> ((t).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstText = s))
+
+# 517 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_disLineStart = (fun prevLine t -> ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine (t).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan) > prevLine))
+
+# 521 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames = (fun fuel frames prevLine toks -> (if (fuel <= 0) then frames else (match toks with
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> frames
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__70, dtb__71) -> (match frames with
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((((v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames (fuel - 1)) frames) prevLine) dtb__71)
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__72, dtb__73) -> (if (if (v_Vuna_dCompiler_dFrontend_dCst_dkindIsGroup (dtb__72).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind) then ((v_Vuna_dCompiler_dFrontend_dCst_disSymText (dtb__72).f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose) dtb__70) else false) then ((((v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames (fuel - 1)) (v_Vuna_dCompiler_dFrontend_dCst_dcloseTop ((v_Vuna_dCompiler_dFrontend_dCst_dattachLeafTop dtb__70) frames))) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine (dtb__70).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan)) dtb__71) else ((fun line -> ((fun frames1 -> (match (v_Vuna_dCompiler_dFrontend_dCst_dgroupCloseOf (dtb__70).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstText) with
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__74) -> ((((v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames (fuel - 1)) ((v_Vuna_dCompiler_dFrontend_dCst_dattachLeafTop dtb__70) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstGroupKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = 0; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = false; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = dtb__74 }, frames1)))) line) dtb__71)
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((((v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames (fuel - 1)) ((v_Vuna_dCompiler_dFrontend_dCst_dattachLeafTop dtb__70) frames1)) line) dtb__71)
+  | _ -> failwith "DT: impossible branch"
+)) (if (if ((v_Vuna_dCompiler_dFrontend_dCst_disLineStart prevLine) dtb__70) then (Base_dData_dBool.v_Base_dData_dBool_dnot ((dtb__70).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstTag = "eof")) else false) then ((v_Vuna_dCompiler_dFrontend_dCst_dlayoutStep (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartCol (dtb__70).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan)) frames) else frames))) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine (dtb__70).f_Vuna_dCompiler_dFrontend_dCst_dCstToken_cstSpan)))
+  | _ -> failwith "DT: impossible branch"
+)
+  | _ -> failwith "DT: impossible branch"
+)))
+
+# 543 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_dcloseAll = (fun fuel frames -> (if (fuel <= 0) then frames else ((fun nd_uscrut2 -> (match nd_uscrut2 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__75, dtb__76) -> (match dtb__76 with
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__75, Base_dData_dList.C_Base_dData_dList_dList_Nil))
+  | _ -> ((v_Vuna_dCompiler_dFrontend_dCst_dcloseAll (fuel - 1)) (v_Vuna_dCompiler_dFrontend_dCst_dcloseTop frames))
+)
+  | _ -> ((v_Vuna_dCompiler_dFrontend_dCst_dcloseAll (fuel - 1)) (v_Vuna_dCompiler_dFrontend_dCst_dcloseTop frames))
+)) frames)))
+
+# 564 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_dcstTokCount = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstToken Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__77, dtb__78) -> (1 + (v_Vuna_dCompiler_dFrontend_dCst_dcstTokCount dtb__78))
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 553 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dbuildCst = (fun toks -> ((fun root -> ((fun fuel -> ((fun frames -> (match frames with
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__79, dtb__80) -> (v_Vuna_dCompiler_dFrontend_dCst_dcloseFrame dtb__79)
+  | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstFileKind, { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = 0 }, Base_dData_dList.C_Base_dData_dList_dList_Nil))
+  | _ -> failwith "DT: impossible branch"
+)) ((v_Vuna_dCompiler_dFrontend_dCst_dcloseAll fuel) ((((v_Vuna_dCompiler_dFrontend_dCst_dbuildFrames fuel) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (root, Base_dData_dList.C_Base_dData_dList_dList_Nil))) 0) toks)))) (((v_Vuna_dCompiler_dFrontend_dCst_dcstTokCount toks) * 4) + 64))) { f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKind = C_Vuna_dCompiler_dFrontend_dCst_dCstKind_CstFileKind; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameCol = 1; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStart = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameEnd = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = 0 }; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameKids = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameStarted = false; f_Vuna_dCompiler_dFrontend_dCst_dFrame_frameClose = "" }))
+
+# 569 "Vuna/Compiler/Frontend/Cst.vuna"
+let rec v_Vuna_dCompiler_dFrontend_dCst_drenderCstTree = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dCst_dCstNode) -> (match mc0 with
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstBranch (dtb__81, dtb__82, dtb__83) -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dFrontend_dCst_drenderCstTree) dtb__83))
+  | C_Vuna_dCompiler_dFrontend_dCst_dCstNode_CstLeaf (dtb__84) -> (Base_dData_dList.dtp_concatMany (v_Vuna_dCompiler_dFrontend_dCst_drenderParts dtb__84))
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 574 "Vuna/Compiler/Frontend/Cst.vuna"
+let v_Vuna_dCompiler_dFrontend_dCst_dtreeRoundtripOk = (fun s -> (match (v_Vuna_dCompiler_dFrontend_dCst_dlexCst s) with
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__85) -> ((v_Vuna_dCompiler_dFrontend_dCst_drenderCstTree (v_Vuna_dCompiler_dFrontend_dCst_dbuildCst dtb__85)) = s)
   | _ -> failwith "DT: impossible branch"
 ))

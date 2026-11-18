@@ -47,28 +47,28 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl = (fun tbl name -> (match ((((Bas
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 108 "Vuna/Compiler/Codegen/Decl.vuna"
+# 109 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualOf = (fun unit defs datas -> { f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit = unit; f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDefs = (v_Vuna_dCompiler_dCodegen_dDecl_dunitTblOf defs); f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas = (v_Vuna_dCompiler_dCodegen_dDecl_dunitTblOf datas) })
 
-# 112 "Vuna/Compiler/Codegen/Decl.vuna"
+# 113 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualPrefix = (fun qc owner text -> (if (if (owner = "") then true else (owner = (qc).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = text; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "" } else { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (String.concat "" [owner; "."; text]); Base_dData_dPair.f_Base_dData_dPair_dPair_second = owner }))
 
-# 117 "Vuna/Compiler/Codegen/Decl.vuna"
+# 118 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualValueText = (fun qc name -> (((v_Vuna_dCompiler_dCodegen_dDecl_dqualPrefix qc) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (qc).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDefs) name)) (v_Vuna_dCompiler_dCodegen_dDecl_dvalueName name)))
 
-# 120 "Vuna/Compiler/Codegen/Decl.vuna"
+# 121 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualCtorText = (fun qc family ctor -> (((v_Vuna_dCompiler_dCodegen_dDecl_dqualPrefix qc) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (qc).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) family)) ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName family) ctor)))
 
-# 124 "Vuna/Compiler/Codegen/Decl.vuna"
+# 125 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText = (fun qc name -> (((v_Vuna_dCompiler_dCodegen_dDecl_dqualPrefix qc) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (qc).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) name)) (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName name)))
 
-# 130 "Vuna/Compiler/Codegen/Decl.vuna"
+# 131 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("and", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("as", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("assert", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("asr", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("begin", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("class", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("constraint", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("do", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("done", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("downto", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("else", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("end", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("exception", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("external", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("false", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("for", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("fun", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("function", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("functor", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("if", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("in", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("include", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("inherit", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("initializer", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("land", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("lazy", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("let", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("lor", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("lsl", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("lsr", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("lxor", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("match", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("method", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("mod", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("module", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("mutable", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("new", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("nonrec", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("object", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("of", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("open", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("or", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("private", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("rec", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("sig", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("struct", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("then", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("to", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("true", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("try", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("type", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("val", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("virtual", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("when", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("while", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("with", Base_dData_dList.C_Base_dData_dList_dList_Nil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
-# 190 "Vuna/Compiler/Codegen/Decl.vuna"
+# 192 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_docamlBinderName = (fun name -> ((fun oc -> (if ((Base_dData_dList.v_Base_dData_dList_dmemName oc) v_Vuna_dCompiler_dCodegen_dDecl_docamlReservedWords) then (oc ^ "_") else oc)) (v_Vuna_dCompiler_dCodegen_dDecl_dsanitizeName name)))
 
-# 203 "Vuna/Compiler/Codegen/Decl.vuna"
+# 205 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dirBinderText = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder) -> (match mc0 with
   | { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderName = dtb__1; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderErased = dtb__2; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrBinder_irBinderTy = dtb__3 } -> (match dtb__1 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrBName_IrBWild -> "_"
@@ -80,10 +80,10 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dirBinderText = (fun (mc0 : Vuna_dCompiler_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 213 "Vuna/Compiler/Codegen/Decl.vuna"
+# 215 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dqualFamOf = (fun qc fam -> (Base_dData_dPair.v_Base_dData_dPair_dfirstOf ((v_Vuna_dCompiler_dCodegen_dDecl_dqualTypeText qc) fam)))
 
-# 216 "Vuna/Compiler/Codegen/Decl.vuna"
+# 218 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__7, dtb__8) -> (Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy_OTData (dtb__7, ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy) dtb__8)))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__9, dtb__10) -> (Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy_OTFun ((v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy dtb__9), (v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy dtb__10)))
@@ -98,16 +98,16 @@ let rec v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy = (fun (mc0 : Vuna_dCompiler_dIr_
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 209 "Vuna/Compiler/Codegen/Decl.vuna"
+# 211 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dirTyText = (fun qc ty -> ((Vuna_dCompiler_dCodegen_dOcaml_dRender.v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy (v_Vuna_dCompiler_dCodegen_dDecl_dqualFamOf qc)) (v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy ty)))
 
-# 234 "Vuna/Compiler/Codegen/Decl.vuna"
+# 236 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dtoOCtor = (fun (mc0 : string) (mc1 : (string, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc1 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__14; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__15 } -> { Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocName = ((v_Vuna_dCompiler_dCodegen_dDecl_dctorOcamlName mc0) dtb__14); Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocFields = ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy) dtb__15) }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 237 "Vuna/Compiler/Codegen/Decl.vuna"
+# 239 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldsOf = (fun (mc0 : string) (mc1 : (int, string) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc2 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__16, dtb__17) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
@@ -118,7 +118,7 @@ let rec v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldsOf = (fun (mc0 : string) (m
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 228 "Vuna/Compiler/Codegen/Decl.vuna"
+# 230 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dtoODecl = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTyDecl) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl (dtb__20, dtb__21, dtb__22) -> (Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl_ODAlias (dtb__21, (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__20), (v_Vuna_dCompiler_dCodegen_dDecl_dtoOTy dtb__22)))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl (dtb__23, dtb__24, dtb__25, dtb__26) -> (Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl_ODRecord (dtb__24, (v_Vuna_dCompiler_dCodegen_dDecl_dtypeName dtb__23), (((v_Vuna_dCompiler_dCodegen_dDecl_drecordFieldsOf dtb__23) dtb__25) dtb__26)))
@@ -126,10 +126,10 @@ let v_Vuna_dCompiler_dCodegen_dDecl_dtoODecl = (fun (mc0 : Vuna_dCompiler_dIr_dM
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 244 "Vuna/Compiler/Codegen/Decl.vuna"
+# 247 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dirTypeDeclsText = (fun qc decls -> ((Vuna_dCompiler_dCodegen_dOcaml_dRender.v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderDecls (v_Vuna_dCompiler_dCodegen_dDecl_dqualFamOf qc)) ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dDecl_dtoODecl) decls)))
 
-# 251 "Vuna/Compiler/Codegen/Decl.vuna"
+# 254 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrTy) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__30, dtb__31) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__30, ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) dtb__31)))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__32, dtb__33) -> ((Base_dData_dList.v_Base_dData_dList_dappend (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__32)) (v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames dtb__33))
@@ -144,12 +144,12 @@ let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames = (fun (mc0 : Vuna_dCom
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 263 "Vuna/Compiler/Codegen/Decl.vuna"
+# 266 "Vuna/Compiler/Codegen/Decl.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo = (fun (mc0 : t_Vuna_dCompiler_dCodegen_dDecl_dQualCtx) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__37, dtb__38) -> ((fun owner -> (if (if (owner = "") then true else (owner = (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcUnit)) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__38) mc2) else (if ((Base_dData_dList.v_Base_dData_dList_dmemName owner) mc2) then (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__38) mc2) else (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo mc0) dtb__38) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (owner, mc2)))))) ((v_Vuna_dCompiler_dCodegen_dDecl_dunitOfTbl (mc0).f_Vuna_dCompiler_dCodegen_dDecl_dQualCtx_qcDatas) dtb__37))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse mc2)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 248 "Vuna/Compiler/Codegen/Decl.vuna"
+# 251 "Vuna/Compiler/Codegen/Decl.vuna"
 let v_Vuna_dCompiler_dCodegen_dDecl_dirTyDeclDeps = (fun qc tys -> (((v_Vuna_dCompiler_dCodegen_dDecl_dirTyDepsGo qc) ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dCodegen_dDecl_dirTyGlobalNames) tys)) Base_dData_dList.C_Base_dData_dList_dList_Nil))

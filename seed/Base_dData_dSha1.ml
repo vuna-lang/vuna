@@ -14,7 +14,7 @@ let v_Base_dData_dSha1_dbigEndian64 = (fun bits -> ((fun hi -> ((fun lo -> ((Bas
 # 33 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dpadMessage = (fun bs n -> ((fun padded -> ((fun zeros -> ((Base_dData_dList.v_Base_dData_dList_dappend bs) ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (128, Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((Base_dData_dList.v_Base_dData_dList_dappend (v_Base_dData_dSha1_dzeroBytes zeros)) (v_Base_dData_dSha1_dbigEndian64 (n * 8)))))) ((padded - n) - 9))) ((if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64) * 64)))
 
-# 73 "Base/Data/Sha1.vuna"
+# 75 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dpack4 = (fun xs -> ((fun nd_uscrut1 -> (match nd_uscrut1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, dtb__3) -> (match dtb__3 with
@@ -29,29 +29,29 @@ let v_Base_dData_dSha1_dpack4 = (fun xs -> ((fun nd_uscrut1 -> (match nd_uscrut1
   | _ -> 0
 )) xs))
 
-# 69 "Base/Data/Sha1.vuna"
+# 71 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dwordsOf = (fun blk -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : int) -> (v_Base_dData_dSha1_dpack4 ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 4)) blk)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) 16)))
 
-# 91 "Base/Data/Sha1.vuna"
+# 94 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dheadAfter = (fun k xs -> (match ((Base_dData_dList.v_Base_dData_dList_ddrop k) xs) with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, dtb__9) -> dtb__8
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 83 "Base/Data/Sha1.vuna"
+# 86 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dexpandStep = (fun w _u -> ((fun rev -> ((fun x -> ((Base_dData_dList.v_Base_dData_dList_dappend w) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((Base_dData_dBits.v_Base_dData_dBits_drol32 x) 1), Base_dData_dList.C_Base_dData_dList_dList_Nil)))) ((Base_dData_dBits.v_Base_dData_dBits_dbxor ((Base_dData_dBits.v_Base_dData_dBits_dbxor ((Base_dData_dBits.v_Base_dData_dBits_dbxor ((v_Base_dData_dSha1_dheadAfter 2) rev)) ((v_Base_dData_dSha1_dheadAfter 7) rev))) ((v_Base_dData_dSha1_dheadAfter 13) rev))) ((v_Base_dData_dSha1_dheadAfter 15) rev)))) (Base_dData_dList.v_Base_dData_dList_dreverse w)))
 
-# 79 "Base/Data/Sha1.vuna"
+# 82 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dexpand = (fun w -> (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Base_dData_dSha1_dexpandStep) w) ((Base_dData_dList.v_Base_dData_dList_drange 0) 64)))
 
-# 109 "Base/Data/Sha1.vuna"
+# 116 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_droundF = (fun t b c d -> (if (t < 20) then ((Base_dData_dBits.v_Base_dData_dBits_dbor ((Base_dData_dBits.v_Base_dData_dBits_dband b) c)) ((Base_dData_dBits.v_Base_dData_dBits_dband (Base_dData_dBits.v_Base_dData_dBits_dbnot b)) d)) else (if (t < 40) then ((Base_dData_dBits.v_Base_dData_dBits_dbxor b) ((Base_dData_dBits.v_Base_dData_dBits_dbxor c) d)) else (if (t < 60) then ((Base_dData_dBits.v_Base_dData_dBits_dbor ((Base_dData_dBits.v_Base_dData_dBits_dbor ((Base_dData_dBits.v_Base_dData_dBits_dband b) c)) ((Base_dData_dBits.v_Base_dData_dBits_dband b) d))) ((Base_dData_dBits.v_Base_dData_dBits_dband c) d)) else ((Base_dData_dBits.v_Base_dData_dBits_dbxor b) ((Base_dData_dBits.v_Base_dData_dBits_dbxor c) d))))))
 
-# 116 "Base/Data/Sha1.vuna"
+# 125 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_droundK = (fun t -> (if (t < 20) then 1518500249 else (if (t < 40) then 1859775393 else (if (t < 60) then 2400959708 else 3395469782))))
 
-# 97 "Base/Data/Sha1.vuna"
+# 101 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dsha1Round = (fun st t -> (match st with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__10; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 } -> (match dtb__10 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__10; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 }
@@ -121,16 +121,16 @@ let v_Base_dData_dSha1_dcompressBlock = (fun hs blk -> ((fun nd_uscrut2 -> (matc
   | _ -> hs
 )) hs))
 
-# 122 "Base/Data/Sha1.vuna"
+# 132 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dwordsToBytes = (fun hs -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Base_dData_dSha1_dbigEndian32) hs))
 
 # 20 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dsha1Raw = (fun s -> ((fun n -> ((fun body -> ((fun blocks -> (v_Base_dData_dSha1_dwordsToBytes (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Base_dData_dSha1_dcompressBlock) v_Base_dData_dSha1_dsha1Init) blocks))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : int) -> ((Base_dData_dList.v_Base_dData_dList_dtake 64) ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 64)) body)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) (if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64))))) ((v_Base_dData_dSha1_dpadMessage (Base_dData_dList.dtp_unpack s)) n))) (bi_strLength s)))
 
-# 130 "Base/Data/Sha1.vuna"
+# 140 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dhexDigit = (fun d -> (if (d < 10) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((48 + d), Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((87 + d), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
 
-# 126 "Base/Data/Sha1.vuna"
+# 136 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dhexByte = (fun b -> (Base_dData_dList.dtp_concatMany (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Base_dData_dSha1_dhexDigit (if 16 = 0 then failwith "division by zero" else b / 16)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Base_dData_dSha1_dhexDigit (b - ((if 16 = 0 then failwith "division by zero" else b / 16) * 16))), Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
 # 16 "Base/Data/Sha1.vuna"

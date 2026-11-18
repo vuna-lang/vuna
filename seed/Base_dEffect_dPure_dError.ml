@@ -47,7 +47,7 @@ let v_Base_dEffect_dPure_dError_dthrowError = (fun e -> (C_Base_dEffect_dPure_dE
 # 26 "Base/Effect/Pure/Error.vuna"
 let v_Base_dEffect_dPure_dError_dok = (fun a -> (C_Base_dEffect_dPure_dError_dError_MkOk (a)))
 
-# 49 "Base/Effect/Pure/Error.vuna"
+# 51 "Base/Effect/Pure/Error.vuna"
 let v_Base_dEffect_dPure_dError_dcatchError = (fun mc0 mc1 -> (match mc0 with
   | C_Base_dEffect_dPure_dError_dError_MkErr (dtb__14) -> (mc1 dtb__14)
   | C_Base_dEffect_dPure_dError_dError_MkOk (dtb__15) -> (C_Base_dEffect_dPure_dError_dError_MkOk (dtb__15))

@@ -24,7 +24,7 @@ let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamDecl = (fun (mc0 : int) -
   | _ -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith ", ") nd_uscrut1); ") "])
 )) ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamName) ((Base_dData_dList.v_Base_dData_dList_drange 0) mc0)))))
 
-# 30 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 31 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfamilyTy = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (match dtb__5 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (String.concat "" [dtb__4; " "; mc0])
@@ -34,7 +34,7 @@ let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfamilyTy = (fun (mc0 : string) (mc
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 36 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 37 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy = (fun (mc0 : (string) -> string) (mc1 : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy) -> (match mc1 with
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy_OTData (dtb__6, dtb__7) -> ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfamilyTy (mc0 dtb__6)) ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy mc0)) dtb__7))
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy_OTFun (dtb__8, dtb__9) -> (String.concat "" ["("; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy mc0) dtb__8); ") -> "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy mc0) dtb__9)])
@@ -49,7 +49,7 @@ let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy = (fun (mc0 : (string
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 48 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 49 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dctorDecl = (fun qual c -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__13, dtb__14) -> (match dtb__14 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (String.concat "" [(c).Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocName; " of ("; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy qual) dtb__13); ")"])
@@ -59,13 +59,13 @@ let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dctorDecl = (fun qual c -> ((fun nd
   | _ -> failwith "DT: impossible branch"
 )) (c).Vuna_dCompiler_dCodegen_dOcaml_dModel.f_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOCtor_ocFields))
 
-# 63 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 65 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfieldDecl = (fun (mc0 : (string) -> string) (mc1 : (string, Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTy) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc1 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__15; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__16 } -> (String.concat "" [dtb__15; " : "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy mc0) dtb__16)])
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 55 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 57 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderDecl = (fun (mc0 : (string) -> string) (mc1 : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl) -> (match mc1 with
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl_ODAlias (dtb__17, dtb__18, dtb__19) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamDecl dtb__17); dtb__18; " = "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTy mc0) dtb__19)])
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl_ODRecord (dtb__20, dtb__21, dtb__22) -> (String.concat "" [(v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dtypeParamDecl dtb__20); dtb__21; " = { "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith "; ") ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfieldDecl mc0)) dtb__22)); " }"])
@@ -76,13 +76,13 @@ let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderDecl = (fun (mc0 : (string) 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 67 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 69 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderDecls = (fun (mc0 : (string) -> string) (mc1 : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dODecl Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> (String.concat "" ["type "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith "\nand ") ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderDecl mc0)) mc1)); "\n\n"])
 ))
 
-# 76 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 78 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderPat = (fun (mc0 : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat) -> (match mc0 with
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat_OPRecordPat (dtb__26) -> (String.concat "" ["{ "; ((v_Vuna_dCompiler_dCodegen_dOcaml_dRender_djoinWith "; ") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfieldAssign) dtb__26)); " }"])
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat_OPCtorPat (dtb__27, dtb__28) -> (match dtb__28 with
@@ -93,13 +93,13 @@ let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderPat = (fun (mc0 : Vuna_d
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat_OPVar (dtb__29) -> dtb__29
   | _ -> failwith "DT: impossible branch"
 ))
-# 83 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 85 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dfieldAssign = (fun (mc0 : (string, Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__30; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__31 } -> (String.concat "" [dtb__30; " = "; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderPat dtb__31)])
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 86 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 88 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dbinderText = (fun (mc0 : (string, string Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__32; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__33 } -> (match dtb__33 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__34) -> (String.concat "" ["("; dtb__32; " : "; dtb__34; ")"])
@@ -109,7 +109,7 @@ let v_Vuna_dCompiler_dCodegen_dOcaml_dRender_dbinderText = (fun (mc0 : (string, 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 90 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 92 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm = (fun (mc0 : Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm) -> (match mc0 with
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm_OAnnot (dtb__35, dtb__36) -> (String.concat "" ["("; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm dtb__35); " : "; dtb__36; ")"])
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm_OCast (dtb__37) -> (String.concat "" ["(Obj.magic "; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm dtb__37); ")"])
@@ -137,15 +137,15 @@ let rec v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm = (fun (mc0 : Vuna_
   | Vuna_dCompiler_dCodegen_dOcaml_dModel.C_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm_OName (dtb__62) -> dtb__62
   | _ -> failwith "DT: impossible branch"
 ))
-# 115 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 117 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderArm = (fun (mc0 : (Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOPat, Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__63; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__64 } -> (String.concat "" ["  | "; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderPat dtb__63); " -> "; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm dtb__64); "\n"])
   | _ -> failwith "DT: impossible branch"
 ))
-# 118 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 120 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordField = (fun (mc0 : (string, Vuna_dCompiler_dCodegen_dOcaml_dModel.t_Vuna_dCompiler_dCodegen_dOcaml_dModel_dOTerm) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__65; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__66 } -> (String.concat "" [dtb__65; " = "; (v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drenderTerm dtb__66)])
   | _ -> failwith "DT: impossible branch"
 ))
-# 121 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
+# 123 "Vuna/Compiler/Codegen/Ocaml/Render.vuna"
 and v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordFields = (fun fields -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dCodegen_dOcaml_dRender_drecordField) fields))

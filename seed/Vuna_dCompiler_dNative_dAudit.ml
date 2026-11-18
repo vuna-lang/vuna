@@ -12,10 +12,10 @@ let v_Vuna_dCompiler_dNative_dAudit_dauditSymSupported = (fun sym -> (if (if (sy
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 39 "Vuna/Compiler/Native/Audit.vuna"
+# 43 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditRtAppKeys = (fun sym args -> (if (if (sym = "&&") then true else (sym = "||")) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (if (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Vuna_dCompiler_dNative_dAudit_dauditSymSupported sym)) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("symbol " ^ sym), Base_dData_dList.C_Base_dData_dList_dList_Nil)) else (if ((Base_dData_dList.v_Base_dData_dList_dlength args) <> (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirInlineArity sym)) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("rt-app-arity " ^ sym), Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil))))
 
-# 48 "Vuna/Compiler/Native/Audit.vuna"
+# 54 "Vuna/Compiler/Native/Audit.vuna"
 let rec v_Vuna_dCompiler_dNative_dAudit_dauditKeys = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (match mc1 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffBind (dtb__1, dtb__2, dtb__3) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("effect-bind", Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrEffThunk (dtb__4, dtb__5, dtb__6, dtb__7, dtb__8) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys mc0) dtb__8)
@@ -41,73 +41,73 @@ let rec v_Vuna_dCompiler_dNative_dAudit_dauditKeys = (fun (mc0 : Vuna_dCompiler_
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (dtb__47) -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
-# 81 "Vuna/Compiler/Native/Audit.vuna"
+# 88 "Vuna/Compiler/Native/Audit.vuna"
 and v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys = (fun defs alt -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys defs) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirAltBodyOf alt)))
-# 84 "Vuna/Compiler/Native/Audit.vuna"
+# 91 "Vuna/Compiler/Native/Audit.vuna"
 and v_Vuna_dCompiler_dNative_dAudit_dauditAltMaybeKeys = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrAlt Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__48) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditAltKeys mc0) dtb__48)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 88 "Vuna/Compiler/Native/Audit.vuna"
+# 95 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditDefKeys = (fun defs d -> (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefBody d) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("extern " ^ (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirDefName d)), Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__49) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditKeys defs) dtb__49)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 100 "Vuna/Compiler/Native/Audit.vuna"
+# 108 "Vuna/Compiler/Native/Audit.vuna"
 let rec v_Vuna_dCompiler_dNative_dAudit_dmemKey = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__50, dtb__51) -> (if (mc0 = dtb__50) then true else ((v_Vuna_dCompiler_dNative_dAudit_dmemKey mc0) dtb__51))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 96 "Vuna/Compiler/Native/Audit.vuna"
+# 104 "Vuna/Compiler/Native/Audit.vuna"
 let rec v_Vuna_dCompiler_dNative_dAudit_dauditUniq = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__52, dtb__53) -> (if ((v_Vuna_dCompiler_dNative_dAudit_dmemKey dtb__52) dtb__53) then (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__53) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__52, (v_Vuna_dCompiler_dNative_dAudit_dauditUniq dtb__53))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 105 "Vuna/Compiler/Native/Audit.vuna"
+# 113 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditPrefixOf = (fun key -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit " ") key) with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__54, dtb__55) -> dtb__54
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> key
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 111 "Vuna/Compiler/Native/Audit.vuna"
+# 120 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditRestOf = (fun key -> (match ((Base_dData_dString.v_Base_dData_dString_dsplit " ") key) with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__56, dtb__57) -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (part : string) -> (if ((bi_strLength acc) = 0) then part else (String.concat "" [acc; " "; part])))) "") dtb__57)
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 117 "Vuna/Compiler/Native/Audit.vuna"
+# 128 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditCategories = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("symbol", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("rt-app-arity", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("multi-binder-let", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("effect-bind", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("extern", Base_dData_dList.C_Base_dData_dList_dList_Nil))))))))))
 
-# 120 "Vuna/Compiler/Native/Audit.vuna"
+# 131 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditInCategory = (fun cat key -> ((v_Vuna_dCompiler_dNative_dAudit_dauditPrefixOf key) = cat))
 
-# 123 "Vuna/Compiler/Native/Audit.vuna"
+# 134 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditCategoryExamples = (fun cat keys -> ((Base_dData_dList.v_Base_dData_dList_dtake 3) (v_Vuna_dCompiler_dNative_dAudit_dauditUniq ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dNative_dAudit_dauditRestOf) ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dNative_dAudit_dauditInCategory cat)) keys)))))
 
-# 127 "Vuna/Compiler/Native/Audit.vuna"
+# 138 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditExamplesText = (fun cat keys -> (match ((v_Vuna_dCompiler_dNative_dAudit_dauditCategoryExamples cat) keys) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__58, dtb__59) -> (String.concat "" [" ("; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (e : string) -> (String.concat "" [acc; ", "; e]))) dtb__58) dtb__59); ")"])
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 132 "Vuna/Compiler/Native/Audit.vuna"
+# 144 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dauditCategoryLine = (fun cat keys -> ((fun hits -> (if ((Base_dData_dList.v_Base_dData_dList_dlength hits) = 0) then "" else (String.concat "" ["    "; cat; " x"; (bi_strFromInt (Base_dData_dList.v_Base_dData_dList_dlength hits)); ((v_Vuna_dCompiler_dNative_dAudit_dauditExamplesText cat) keys)]))) ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dNative_dAudit_dauditInCategory cat)) keys)))
 
-# 141 "Vuna/Compiler/Native/Audit.vuna"
+# 155 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dnativeAuditLines = (fun defs -> ((fun keys -> ((fun uniqs -> ((fun catLines -> (if ((Base_dData_dList.v_Base_dData_dList_dlength keys) = 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["  native audit: "; (bi_strFromInt (Base_dData_dList.v_Base_dData_dList_dlength keys)); " unsupported reference(s), "; (bi_strFromInt (Base_dData_dList.v_Base_dData_dList_dlength uniqs)); " kind(s)"]), Base_dData_dList.C_Base_dData_dList_dList_Nil))) catLines))) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (l : string) -> ((bi_strLength l) > 0))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : string) -> ((v_Vuna_dCompiler_dNative_dAudit_dauditCategoryLine c) keys))) v_Vuna_dCompiler_dNative_dAudit_dauditCategories)))) (v_Vuna_dCompiler_dNative_dAudit_dauditUniq keys))) ((Base_dData_dList.v_Base_dData_dList_dconcatMap (v_Vuna_dCompiler_dNative_dAudit_dauditDefKeys defs)) defs)))
 
-# 153 "Vuna/Compiler/Native/Audit.vuna"
+# 169 "Vuna/Compiler/Native/Audit.vuna"
 let v_Vuna_dCompiler_dNative_dAudit_dnativeAuditEnrich = (fun (mc0 : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dNativeErr) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeInternal (dtb__60) -> mc0
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported (dtb__61) -> ((fun lines -> (if ((Base_dData_dList.v_Base_dData_dList_dlength lines) = 0) then mc0 else (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported ((String.concat "" [dtb__61; "\n"; (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (l : string) -> (String.concat "" [acc; "\n"; l]))) "") lines)]))))) (v_Vuna_dCompiler_dNative_dAudit_dnativeAuditLines mc1))

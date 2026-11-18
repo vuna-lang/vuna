@@ -12,20 +12,20 @@ let v_Base_dEffect_dClock_dhandleClock = (fun n ret opH comp -> (((((Base_dEffec
 
 # 30 "Base/Effect/Clock.vuna"
 let v_Base_dEffect_dClock_dclockOpHIO = (fun op k -> (match op with
-  | C_Base_dEffect_dClock_dClockOp_Now -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_timeUs ())))) (fun _x64_vuna_x64_effK_u32_u5_u5_x58_t -> ((Obj.magic k) _x64_vuna_x64_effK_u32_u5_u5_x58_t)))
+  | C_Base_dEffect_dClock_dClockOp_Now -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_timeUs ())))) (fun _x64_vuna_x64_effK_u34_u9_u5_x58_t -> ((Obj.magic k) _x64_vuna_x64_effK_u34_u9_u5_x58_t)))
   | C_Base_dEffect_dClock_dClockOp_SleepMicros (dtb__0) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((fun dtio_0 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> dtp_sleep dtio_0)) dtb__0)) (fun _x64_vuna_x64_effK_u0_u0_u6_x58__u -> ((Obj.magic k) 0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 43 "Base/Effect/Clock.vuna"
+# 46 "Base/Effect/Clock.vuna"
 let v_Base_dEffect_dClock_dclockOpHIOHost = (fun op k -> (match op with
-  | C_Base_dEffect_dClock_dClockOp_Now -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_timeUs ()))))) (fun _x64_vuna_x64_effK_u45_u5_u5_x58_t -> ((Obj.magic k) _x64_vuna_x64_effK_u45_u5_u5_x58_t)))
+  | C_Base_dEffect_dClock_dClockOp_Now -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_timeUs ()))))) (fun _x64_vuna_x64_effK_u50_u9_u5_x58_t -> ((Obj.magic k) _x64_vuna_x64_effK_u50_u9_u5_x58_t)))
   | C_Base_dEffect_dClock_dClockOp_SleepMicros (dtb__1) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (Base_dEffect_dCore.v_Base_dEffect_dCore_draise ((fun dtio_0 -> Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> dtp_sleep dtio_0)) dtb__1))) (fun _x64_vuna_x64_effK_u0_u0_u6_x58__u -> ((Obj.magic k) 0)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 53 "Base/Effect/Clock.vuna"
+# 59 "Base/Effect/Clock.vuna"
 let v_Base_dEffect_dClock_dhandleClockHostHost = (fun n comp -> (((((Base_dEffect_dCore.v_Base_dEffect_dCore_dhandleCoreAt "clock") n) (fun a -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) a))) v_Base_dEffect_dClock_dclockOpHIOHost) comp))
 
-# 58 "Base/Effect/Clock.vuna"
+# 64 "Base/Effect/Clock.vuna"
 let v_Base_dEffect_dClock_drunClockHost = (fun comp -> (Base_dEffect_dCore.v_Base_dEffect_dCore_djoinEff ((v_Base_dEffect_dClock_dhandleClockHostHost "default") comp)))

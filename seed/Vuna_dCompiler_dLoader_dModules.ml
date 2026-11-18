@@ -76,7 +76,7 @@ let v_Vuna_dCompiler_dLoader_dModules_dvalidSegment = (fun seg -> (match (Base_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 125 "Vuna/Compiler/Loader/Modules.vuna"
+# 126 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dallSegmentsValid = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__88, dtb__89) -> (if (v_Vuna_dCompiler_dLoader_dModules_dvalidSegment dtb__88) then (match dtb__89 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> true
@@ -86,54 +86,54 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dallSegmentsValid = (fun (mc0 : string
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 132 "Vuna/Compiler/Loader/Modules.vuna"
+# 136 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dvalidModuleName = (fun name -> (match (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | dtb__90 -> (v_Vuna_dCompiler_dLoader_dModules_dallSegmentsValid dtb__90)
 ))
 
-# 137 "Vuna/Compiler/Loader/Modules.vuna"
+# 142 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmangle = (fun prefix name -> (if (prefix = "") then name else (String.concat "" [prefix; "."; name])))
 
-# 142 "Vuna/Compiler/Loader/Modules.vuna"
+# 147 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dctorCanonical = (fun prefix dname cname -> ((v_Vuna_dCompiler_dLoader_dModules_dmangle prefix) (String.concat "" [dname; "."; cname])))
 
-# 145 "Vuna/Compiler/Loader/Modules.vuna"
+# 150 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dimportName = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) -> (match mc0 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importName = dtb__91; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importIsQualified = dtb__92; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importAlias = dtb__93; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan = dtb__94 } -> dtb__91
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 148 "Vuna/Compiler/Loader/Modules.vuna"
+# 153 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dimportModuleNames = (fun imports -> ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dimportName) imports))
 
-# 152 "Vuna/Compiler/Loader/Modules.vuna"
+# 157 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dwithImportSite = (fun sp d -> (if ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile sp) = "") then d else ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan sp) d)))
 
-# 166 "Vuna/Compiler/Loader/Modules.vuna"
+# 173 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_daliasIs = (fun q imp -> (match (imp).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importAlias with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__95) -> (dtb__95 = q)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 171 "Vuna/Compiler/Loader/Modules.vuna"
+# 179 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dlastSegment = (fun name -> (match (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitLastDot (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__96; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__97 } -> dtb__97
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 175 "Vuna/Compiler/Loader/Modules.vuna"
+# 184 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dnotEmptyList = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__98, dtb__99) -> true
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 157 "Vuna/Compiler/Loader/Modules.vuna"
+# 162 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dqualifierCandidates = (fun imports q -> ((fun strong -> (if (v_Vuna_dCompiler_dLoader_dModules_dnotEmptyList strong) then strong else (Base_dData_dList.v_Base_dData_dList_dnubNames ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dimportName) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (imp : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) -> ((v_Vuna_dCompiler_dLoader_dModules_dlastSegment (v_Vuna_dCompiler_dLoader_dModules_dimportName imp)) = q))) imports))))) (Base_dData_dList.v_Base_dData_dList_dnubNames ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dimportName) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (imp : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) -> ((v_Vuna_dCompiler_dLoader_dModules_dimportName imp) = q))) imports))) ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dimportName) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun (imp : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport) -> ((v_Vuna_dCompiler_dLoader_dModules_daliasIs q) imp))) imports))))))
 
-# 184 "Vuna/Compiler/Loader/Modules.vuna"
+# 193 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dcheckImportAliasSyntax = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__100, dtb__101) -> (match (dtb__100).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importAlias with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dLoader_dModules_dcheckImportAliasSyntax dtb__101)
@@ -144,17 +144,17 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dcheckImportAliasSyntax = (fun (mc0 : 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 181 "Vuna/Compiler/Loader/Modules.vuna"
+# 190 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dvalidateImports = (fun label imports -> (v_Vuna_dCompiler_dLoader_dModules_dcheckImportAliasSyntax imports))
 
-# 192 "Vuna/Compiler/Loader/Modules.vuna"
+# 204 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__103, dtb__104) -> (if (dtb__103).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importIsQualified then (v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames dtb__104) else (Base_dData_dList.v_Base_dData_dList_dnubNames (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dLoader_dModules_dimportName dtb__103), (v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames dtb__104)))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 199 "Vuna/Compiler/Loader/Modules.vuna"
+# 213 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dfindImportModule = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__105, dtb__106) -> (if ((v_Vuna_dCompiler_dLoader_dModules_dimportName dtb__105) = mc1) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dLoader_dModules_dimportName dtb__105))) else (match (dtb__105).Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importAlias with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__107) -> (if (dtb__107 = mc1) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dLoader_dModules_dimportName dtb__105))) else ((v_Vuna_dCompiler_dLoader_dModules_dfindImportModule dtb__106) mc1))
@@ -165,7 +165,7 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dfindImportModule = (fun (mc0 : Vuna_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 211 "Vuna/Compiler/Loader/Modules.vuna"
+# 228 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNamesGo = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dExportItem Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__108, dtb__109) -> (match dtb__108 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExportItem_XNamespace (dtb__110, dtb__111, dtb__112) -> (match ((v_Vuna_dCompiler_dLoader_dModules_dfindImportModule mc0) dtb__110) with
@@ -184,10 +184,10 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNamesGo = (fun (mc0 :
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 208 "Vuna/Compiler/Loader/Modules.vuna"
+# 225 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNames = (fun imports items -> (((v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNamesGo imports) items) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
-# 226 "Vuna/Compiler/Loader/Modules.vuna"
+# 249 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNamesOfHeader = (fun (mc0 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dModDecl Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) -> (match mc1 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__117) -> (match dtb__117 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclName = dtb__118; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclHasExportList = dtb__119; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclExportItems = dtb__120; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclExports = dtb__121; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclReexports = dtb__122; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclOpacity = dtb__123; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dModDecl_modDeclSpan = dtb__124 } -> (if dtb__119 then ((v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNames mc0) dtb__120) else Base_dData_dList.C_Base_dData_dList_dList_Nil)
@@ -196,7 +196,7 @@ let v_Vuna_dCompiler_dLoader_dModules_dreexportedImportNamesOfHeader = (fun (mc0
   | _ -> Base_dData_dList.C_Base_dData_dList_dList_Nil
 ))
 
-# 231 "Vuna/Compiler/Loader/Modules.vuna"
+# 254 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__125, dtb__126) -> (match dtb__126 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> dtb__125
@@ -206,93 +206,93 @@ let rec v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames = (fun (mc0 : string Base
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 240 "Vuna/Compiler/Loader/Modules.vuna"
+# 263 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmissingModule = (fun name -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal (String.concat "" ["module "; name; " is not loaded (import list and module table disagree)"])))
 
-# 299 "Vuna/Compiler/Loader/Modules.vuna"
+# 332 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dentriesByName = (fun name idx -> (match ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dlookup Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) name) idx) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__127) -> dtb__127
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 291 "Vuna/Compiler/Loader/Modules.vuna"
+# 324 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfGo = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) (mc1 : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__128, dtb__129) -> ((fun tail -> ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dinsert Base_dData_dString.v_Hashable_uString) (dtb__128).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_public) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__128, ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName (dtb__128).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_public) tail)))) tail)) ((v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfGo dtb__129) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 288 "Vuna/Compiler/Loader/Modules.vuna"
+# 321 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dexportIndexOf = (fun entries -> ((v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfGo entries) ((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
-# 310 "Vuna/Compiler/Loader/Modules.vuna"
+# 345 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dlookupExport = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) (mc2 : t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__130, dtb__131) -> (if (if ((Base_dData_dList.v_Base_dData_dList_dmemName (dtb__130).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_kind) mc0) then ((dtb__130).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_public = mc1) else false) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__130)) else (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport mc0) mc1) dtb__131))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 315 "Vuna/Compiler/Loader/Modules.vuna"
+# 350 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportValue = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("val", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))))) name) entries))
 
-# 328 "Vuna/Compiler/Loader/Modules.vuna"
+# 363 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dfilterKinds = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) (mc2 : t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__132, dtb__133) -> (if (if ((Base_dData_dList.v_Base_dData_dList_dmemName (dtb__132).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_kind) mc0) then ((dtb__132).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_public = mc1) else false) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__132, (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds mc0) mc1) dtb__133))) else (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds mc0) mc1) dtb__133))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 319 "Vuna/Compiler/Loader/Modules.vuna"
+# 354 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportValues = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("val", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))))) name) entries))
 
-# 322 "Vuna/Compiler/Loader/Modules.vuna"
+# 357 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportTypes = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("type", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) entries))
 
-# 325 "Vuna/Compiler/Loader/Modules.vuna"
+# 360 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportModules = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("module", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) entries))
 
-# 334 "Vuna/Compiler/Loader/Modules.vuna"
+# 371 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportCtor = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) entries))
 
-# 342 "Vuna/Compiler/Loader/Modules.vuna"
+# 379 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dfilterCtors = (fun (mc0 : string) (mc1 : t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__134, dtb__135) -> (if (if ((dtb__134).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_kind = "ctor") then ((dtb__134).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_public = mc0) else false) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__134, ((v_Vuna_dCompiler_dLoader_dModules_dfilterCtors mc0) dtb__135))) else ((v_Vuna_dCompiler_dLoader_dModules_dfilterCtors mc0) dtb__135))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 338 "Vuna/Compiler/Loader/Modules.vuna"
+# 375 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportCtors = (fun entries name -> ((v_Vuna_dCompiler_dLoader_dModules_dfilterCtors name) entries))
 
-# 348 "Vuna/Compiler/Loader/Modules.vuna"
+# 387 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportType = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("type", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) entries))
 
-# 352 "Vuna/Compiler/Loader/Modules.vuna"
+# 391 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportModule = (fun entries name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("module", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) entries))
 
-# 355 "Vuna/Compiler/Loader/Modules.vuna"
+# 394 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportModuleIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("module", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 358 "Vuna/Compiler/Loader/Modules.vuna"
+# 397 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportValueIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("val", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 361 "Vuna/Compiler/Loader/Modules.vuna"
+# 400 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportValuesIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("val", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 364 "Vuna/Compiler/Loader/Modules.vuna"
+# 403 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportTypesIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dfilterKinds (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("type", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 367 "Vuna/Compiler/Loader/Modules.vuna"
+# 406 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportCtorIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("ctor", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 370 "Vuna/Compiler/Loader/Modules.vuna"
+# 409 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportCtorsIn = (fun idx name -> ((v_Vuna_dCompiler_dLoader_dModules_dfilterCtors name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 373 "Vuna/Compiler/Loader/Modules.vuna"
+# 412 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dfindExportTypeIn = (fun idx name -> (((v_Vuna_dCompiler_dLoader_dModules_dlookupExport (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("type", Base_dData_dList.C_Base_dData_dList_dList_Nil))) name) ((v_Vuna_dCompiler_dLoader_dModules_dentriesByName name) idx)))
 
-# 416 "Vuna/Compiler/Loader/Modules.vuna"
+# 459 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dsameTargetRest = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dExportEntry) mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__136, dtb__137) -> (match dtb__136 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__138; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__139 } -> (if ((mc0).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_target = (dtb__139).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_target) then ((v_Vuna_dCompiler_dLoader_dModules_dsameTargetRest mc0) dtb__137) else false)
@@ -302,41 +302,41 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dsameTargetRest = (fun (mc0 : t_Vuna_d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 420 "Vuna/Compiler/Loader/Modules.vuna"
+# 463 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dunifyEntryPairs = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3 : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__140, dtb__141) -> (if ((v_Vuna_dCompiler_dLoader_dModules_dsameTargetRest (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dtb__140)) dtb__141) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__140)) else (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_derr (String.concat "" [mc0; ": ambiguous "; mc1; " "; mc2; " (imported from "; (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames ((Base_dData_dList.v_Base_dData_dList_dmap Base_dData_dPair.v_Base_dData_dPair_dfirstOf) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__140, dtb__141)))); "); qualify it"])))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "unifyEntryPairs: empty candidates")
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 427 "Vuna/Compiler/Loader/Modules.vuna"
+# 472 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmodulePath = (fun root name -> (String.concat "" [(Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootDir root); "/"; (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_djoinSlashes (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)); ".vuna"]))
 
-# 431 "Vuna/Compiler/Loader/Modules.vuna"
+# 476 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_drootAllows = (fun importerPkg root name -> (match (root).Vuna_dCompiler_dFrontend_dPackages_dPkg.f_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot_rootExports with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> true
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__142) -> (if ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootName root) = importerPkg) then true else ((Base_dData_dList.v_Base_dData_dList_dmemName name) dtb__142))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 438 "Vuna/Compiler/Loader/Modules.vuna"
+# 484 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles = (fun nFs (mc0 : Vuna_dCompiler_dFrontend_dPackages_dPkg.t_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) (mc2 : string) (mc3 : (string, Vuna_dCompiler_dFrontend_dPackages_dPkg.t_Vuna_dCompiler_dFrontend_dPackages_dPkg_dRoot) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc4 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
-  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__143, dtb__144) -> ((fun path -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) path)) (fun _x64_vuna_x64_effK_u444_u5_u12_x58_exists -> (if _x64_vuna_x64_effK_u444_u5_u12_x58_exists then (if (((v_Vuna_dCompiler_dLoader_dModules_drootAllows mc2) dtb__143) mc1) then ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = path; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__143 }, mc3))) mc4) else ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) mc3) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootName dtb__143), mc4)))) else ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) mc3) mc4))))) ((v_Vuna_dCompiler_dLoader_dModules_dmodulePath dtb__143) mc1))
+  | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__143, dtb__144) -> ((fun path -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) path)) (fun _x64_vuna_x64_effK_u490_u5_u12_x58_exists -> (if _x64_vuna_x64_effK_u490_u5_u12_x58_exists then (if (((v_Vuna_dCompiler_dLoader_dModules_drootAllows mc2) dtb__143) mc1) then ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = path; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__143 }, mc3))) mc4) else ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) mc3) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootName dtb__143), mc4)))) else ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) dtb__144) mc1) mc2) mc3) mc4))))) ((v_Vuna_dCompiler_dLoader_dModules_dmodulePath dtb__143) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.v_Base_dData_dList_dreverse mc3); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dList.v_Base_dData_dList_dreverse mc4) })
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 452 "Vuna/Compiler/Loader/Modules.vuna"
+# 500 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_d_ujoinRootDirs = (fun roots -> (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames ((Base_dData_dList.v_Base_dData_dList_dmap Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootDir) roots)))
 
-# 455 "Vuna/Compiler/Loader/Modules.vuna"
+# 503 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dcandidateDir = (fun candidate -> (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_drootDir (Base_dData_dPair.v_Base_dData_dPair_dsecondOf candidate)))
 
-# 459 "Vuna/Compiler/Loader/Modules.vuna"
+# 507 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dwithImporterSpan = (fun sp d -> (if ((Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile sp) = "") then d else ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithFallbackSpan sp) d)))
 
-# 462 "Vuna/Compiler/Loader/Modules.vuna"
-let v_Vuna_dCompiler_dLoader_dModules_dfindModuleFile = (fun nFs roots name importerPkg importerSpan -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) roots) name) importerPkg) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)) (fun _x64_vuna_x64_effK_u463_u3_u7_x58_collected -> ((fun allowed -> ((fun hidden -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ((fun nd_uscrut10 -> (match nd_uscrut10 with
+# 510 "Vuna/Compiler/Loader/Modules.vuna"
+let v_Vuna_dCompiler_dLoader_dModules_dfindModuleFile = (fun nFs roots name importerPkg importerSpan -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((v_Vuna_dCompiler_dLoader_dModules_dcollectModuleFiles nFs) roots) name) importerPkg) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)) (fun _x64_vuna_x64_effK_u512_u5_u7_x58_collected -> ((fun allowed -> ((fun hidden -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ((fun nd_uscrut10 -> (match nd_uscrut10 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__145, dtb__146) -> (match dtb__146 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__145))
   | _ -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_donErrDiag (v_Vuna_dCompiler_dLoader_dModules_dwithImporterSpan importerSpan)) (((Vuna_dCompiler_dBase_dDiagnostics_dRn.v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnNoLoc2 (Vuna_dCompiler_dBase_dDiagnostics_dRn.C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_AmbiguousModule (name, (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dcandidateDir) allowed))))) name) (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLoader_dModules_dcandidateDir) allowed))))
@@ -346,36 +346,36 @@ let v_Vuna_dCompiler_dLoader_dModules_dfindModuleFile = (fun nFs roots name impo
   | dtb__147 -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_donErrDiag (v_Vuna_dCompiler_dLoader_dModules_dwithImporterSpan importerSpan)) (((Vuna_dCompiler_dBase_dDiagnostics_dLoader.v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldErr2 (Vuna_dCompiler_dBase_dDiagnostics_dLoader.C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_ModuleNotExported (name, (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames hidden)))) name) (v_Vuna_dCompiler_dLoader_dModules_d_ujoinNames hidden)))
 )
   | _ -> failwith "DT: impossible branch"
-)) allowed))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf _x64_vuna_x64_effK_u463_u3_u7_x58_collected))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf _x64_vuna_x64_effK_u463_u3_u7_x58_collected)))))
+)) allowed))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf _x64_vuna_x64_effK_u512_u5_u7_x58_collected))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf _x64_vuna_x64_effK_u512_u5_u7_x58_collected)))))
 
-# 487 "Vuna/Compiler/Loader/Modules.vuna"
+# 532 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmoduleExportIndexOfOf = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule) -> (match mc0 with
   | { f_Vuna_dCompiler_dLoader_dModules_dModule_moduleNameOf = dtb__148; f_Vuna_dCompiler_dLoader_dModules_dModule_modulePackageOf = dtb__149; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImportsOf = dtb__150; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImplicitImportsOf = dtb__151; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleDeclsOf = dtb__152; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportsOf = dtb__153; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleFixitiesOf = dtb__154; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleReexportsOf = dtb__155; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleOpaqueOf = dtb__156; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportIndexOf = dtb__157 } -> dtb__157
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 505 "Vuna/Compiler/Loader/Modules.vuna"
+# 559 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dtakeSegsLocal = (fun (mc0 : int) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__158, dtb__159) -> (if (mc0 <= 0) then Base_dData_dList.C_Base_dData_dList_dList_Nil else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__158, ((v_Vuna_dCompiler_dLoader_dModules_dtakeSegsLocal (mc0 - 1)) dtb__159))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 499 "Vuna/Compiler/Loader/Modules.vuna"
+# 550 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dlongestIndexPrefix = (fun idx segs k -> (if (k <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match ((v_Vuna_dCompiler_dLoader_dModules_dfindExportModuleIn idx) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_djoinDots ((v_Vuna_dCompiler_dLoader_dModules_dtakeSegsLocal k) segs))) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__160) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (dtb__160).f_Vuna_dCompiler_dLoader_dModules_dExportEntry_target; Base_dData_dPair.f_Base_dData_dPair_dPair_second = k }))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dLoader_dModules_dlongestIndexPrefix idx) segs) (k - 1))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 509 "Vuna/Compiler/Loader/Modules.vuna"
+# 563 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_ddropFirst = (fun (mc0 : int) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__161, dtb__162) -> (if (mc0 <= 0) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__161, dtb__162)) else ((v_Vuna_dCompiler_dLoader_dModules_ddropFirst (mc0 - 1)) dtb__162))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 513 "Vuna/Compiler/Loader/Modules.vuna"
+# 567 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dfindModule = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__163, dtb__164) -> (match dtb__163 with
   | { f_Vuna_dCompiler_dLoader_dModules_dModule_moduleNameOf = dtb__165; f_Vuna_dCompiler_dLoader_dModules_dModule_modulePackageOf = dtb__166; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImportsOf = dtb__167; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImplicitImportsOf = dtb__168; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleDeclsOf = dtb__169; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportsOf = dtb__170; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleFixitiesOf = dtb__171; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleReexportsOf = dtb__172; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleOpaqueOf = dtb__173; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportIndexOf = dtb__174 } -> (if (dtb__165 = mc1) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ f_Vuna_dCompiler_dLoader_dModules_dModule_moduleNameOf = dtb__165; f_Vuna_dCompiler_dLoader_dModules_dModule_modulePackageOf = dtb__166; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImportsOf = dtb__167; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleImplicitImportsOf = dtb__168; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleDeclsOf = dtb__169; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportsOf = dtb__170; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleFixitiesOf = dtb__171; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleReexportsOf = dtb__172; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleOpaqueOf = dtb__173; f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportIndexOf = dtb__174 })) else ((v_Vuna_dCompiler_dLoader_dModules_dfindModule dtb__164) mc1))
@@ -385,7 +385,7 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dfindModule = (fun (mc0 : t_Vuna_dComp
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 244 "Vuna/Compiler/Loader/Modules.vuna"
+# 267 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmoduleDecls = (fun modules name -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dLoader_dModules_dmissingModule name)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__175) -> (match dtb__175 with
@@ -395,10 +395,10 @@ let v_Vuna_dCompiler_dLoader_dModules_dmoduleDecls = (fun modules name -> ((fun 
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) name)))
 
-# 249 "Vuna/Compiler/Loader/Modules.vuna"
+# 273 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmoduleCtors = (fun modules name -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dModules_dmoduleDecls modules) name)) (fun (decls : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dctorsOf decls))))))
 
-# 490 "Vuna/Compiler/Loader/Modules.vuna"
+# 535 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dwalkNamespaceIndexFuel = (fun fuel modules m segs -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) m) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__186) -> (if ((Base_dData_dList.v_Base_dData_dList_dlength segs) <= 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((v_Vuna_dCompiler_dLoader_dModules_dmoduleNameOf dtb__186))) else ((fun nd_uscrut6 -> (match nd_uscrut6 with
@@ -412,31 +412,31 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dwalkNamespaceIndexFuel = (fun fuel mo
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 484 "Vuna/Compiler/Loader/Modules.vuna"
+# 529 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dwalkNamespaceIndex = (fun modules m segs -> ((((v_Vuna_dCompiler_dLoader_dModules_dwalkNamespaceIndexFuel (1 + (Base_dData_dList.v_Base_dData_dList_dlength segs))) modules) m) segs))
 
-# 260 "Vuna/Compiler/Loader/Modules.vuna"
+# 285 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dresolvePathModule = (fun modules segs n -> (if (n < 1) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (match ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_djoinDots ((v_Vuna_dCompiler_dLoader_dModules_dtakeSegsLocal n) segs))) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__190) -> (((v_Vuna_dCompiler_dLoader_dModules_dwalkNamespaceIndex modules) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_djoinDots ((v_Vuna_dCompiler_dLoader_dModules_dtakeSegsLocal n) segs))) ((v_Vuna_dCompiler_dLoader_dModules_ddropFirst n) segs))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dLoader_dModules_dresolvePathModule modules) segs) (n - 1))
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 255 "Vuna/Compiler/Loader/Modules.vuna"
+# 279 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dresolveModuleName = (fun modules name -> (match ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__191) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (name))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (((v_Vuna_dCompiler_dLoader_dModules_dresolvePathModule modules) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)) ((Base_dData_dList.v_Base_dData_dList_dlength (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dsplitOnDot name)) - 1))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 271 "Vuna/Compiler/Loader/Modules.vuna"
+# 300 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dresolvedName = (fun modules name -> (match ((v_Vuna_dCompiler_dLoader_dModules_dresolveModuleName modules) name) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__192) -> dtb__192
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> name
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 266 "Vuna/Compiler/Loader/Modules.vuna"
+# 294 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dexportsOf = (fun modules name -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dLoader_dModules_dmissingModule name)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__193) -> (match dtb__193 with
@@ -446,7 +446,7 @@ let v_Vuna_dCompiler_dLoader_dModules_dexportsOf = (fun modules name -> ((fun nd
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) ((v_Vuna_dCompiler_dLoader_dModules_dresolvedName modules) name))))
 
-# 279 "Vuna/Compiler/Loader/Modules.vuna"
+# 309 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dnormalizeImports = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dImport Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__204, dtb__205) -> (match dtb__204 with
   | { Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importName = dtb__206; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importIsQualified = dtb__207; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importAlias = dtb__208; Vuna_dCompiler_dFrontend_dAst.f_Vuna_dCompiler_dFrontend_dAst_dImport_importSpan = dtb__209 } -> (match ((v_Vuna_dCompiler_dLoader_dModules_dresolveModuleName mc0) dtb__206) with
@@ -460,14 +460,14 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dnormalizeImports = (fun (mc0 : t_Vuna
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 304 "Vuna/Compiler/Loader/Modules.vuna"
+# 338 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfModule = (fun modules name -> (match ((v_Vuna_dCompiler_dLoader_dModules_dfindModule modules) ((v_Vuna_dCompiler_dLoader_dModules_dresolvedName modules) name)) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__211) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((dtb__211).f_Vuna_dCompiler_dLoader_dModules_dModule_moduleExportIndexOf))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (v_Vuna_dCompiler_dLoader_dModules_dmissingModule name)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 376 "Vuna/Compiler/Loader/Modules.vuna"
+# 415 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingValueFrom = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__212, dtb__213) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfModule mc0) dtb__212)) (fun (idx : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match ((v_Vuna_dCompiler_dLoader_dModules_dfindExportValuesIn idx) mc2) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingValueFrom mc0) dtb__213) mc2)
@@ -477,20 +477,20 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingValueFrom = (fun (mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 385 "Vuna/Compiler/Loader/Modules.vuna"
+# 425 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingValue = (fun modules imports name -> (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingValueFrom modules) (v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames imports)) name))
 
-# 390 "Vuna/Compiler/Loader/Modules.vuna"
+# 430 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingCtorFrom = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__215, dtb__216) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfModule mc0) dtb__215)) (fun (idx : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> ((fun found -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingCtorFrom mc0) dtb__216) mc2)) (fun (more : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dmap (fun (e : t_Vuna_dCompiler_dLoader_dModules_dExportEntry) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__215; Base_dData_dPair.f_Base_dData_dPair_dPair_second = e })) found)) more)))))) ((v_Vuna_dCompiler_dLoader_dModules_dfindExportCtorsIn idx) mc2))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 398 "Vuna/Compiler/Loader/Modules.vuna"
+# 440 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingCtor = (fun modules imports name -> (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingCtorFrom modules) (v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames imports)) name))
 
-# 402 "Vuna/Compiler/Loader/Modules.vuna"
+# 444 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingTypeFrom = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) (mc2 : string) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__217, dtb__218) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dLoader_dModules_dexportIndexOfModule mc0) dtb__217)) (fun (idx : (string, t_Vuna_dCompiler_dLoader_dModules_dExportEntry Base_dData_dList.t_Base_dData_dList_dList) Base_dContainer_dHashMap.t_Base_dContainer_dHashMap_dHashMap) -> (match ((v_Vuna_dCompiler_dLoader_dModules_dfindExportTypesIn idx) mc2) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingTypeFrom mc0) dtb__218) mc2)
@@ -500,17 +500,17 @@ let rec v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingTypeFrom = (fun (mc0 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 411 "Vuna/Compiler/Loader/Modules.vuna"
+# 454 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingType = (fun modules imports name -> (((v_Vuna_dCompiler_dLoader_dModules_dmodulesExportingTypeFrom modules) (v_Vuna_dCompiler_dLoader_dModules_dopenModuleNames imports)) name))
 
-# 551 "Vuna/Compiler/Loader/Modules.vuna"
+# 611 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_danyCtorNamed = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dCtor Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__220, dtb__221) -> (if ((Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__220) = mc0) then true else ((v_Vuna_dCompiler_dLoader_dModules_danyCtorNamed mc0) dtb__221))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 541 "Vuna/Compiler/Loader/Modules.vuna"
+# 599 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_disCtorTargetInDecls = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3 : string) (mc4 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dDecl Base_dData_dList.t_Base_dData_dList_dList) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__222, dtb__223) -> (match dtb__222 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DData (dtb__224, dtb__225, dtb__226, dtb__227, dtb__228, dtb__229, dtb__230, dtb__231, dtb__232) -> (if (if (((v_Vuna_dCompiler_dLoader_dModules_dmangle mc0) dtb__224) = mc2) then ((v_Vuna_dCompiler_dLoader_dModules_danyCtorNamed mc3) dtb__227) else false) then true else (((((v_Vuna_dCompiler_dLoader_dModules_disCtorTargetInDecls mc0) mc1) mc2) mc3) dtb__223))
@@ -521,17 +521,17 @@ let rec v_Vuna_dCompiler_dLoader_dModules_disCtorTargetInDecls = (fun (mc0 : str
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 529 "Vuna/Compiler/Loader/Modules.vuna"
+# 585 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_danyModuleCtorTarget = (fun (mc0 : t_Vuna_dCompiler_dLoader_dModules_dModule Base_dData_dList.t_Base_dData_dList_dList) (mc1 : string) (mc2 : string) (mc3 : string) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__241, dtb__242) -> ((fun mname -> (if (Base_dData_dBool.v_Base_dData_dBool_dnot ((Base_dData_dString.v_Base_dData_dString_dstartsWith mname) mc1)) then ((((v_Vuna_dCompiler_dLoader_dModules_danyModuleCtorTarget dtb__242) mc1) mc2) mc3) else (if (((((v_Vuna_dCompiler_dLoader_dModules_disCtorTargetInDecls mname) mc1) mc2) mc3) (v_Vuna_dCompiler_dLoader_dModules_dmoduleDeclsOf dtb__241)) then true else ((((v_Vuna_dCompiler_dLoader_dModules_danyModuleCtorTarget dtb__242) mc1) mc2) mc3)))) (v_Vuna_dCompiler_dLoader_dModules_dmoduleNameOf dtb__241))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 522 "Vuna/Compiler/Loader/Modules.vuna"
+# 578 "Vuna/Compiler/Loader/Modules.vuna"
 let v_Vuna_dCompiler_dLoader_dModules_disDataOrRecordCtorTarget = (fun modules target -> ((fun cname -> ((fun dprefix -> (if (dprefix = "") then false else ((((v_Vuna_dCompiler_dLoader_dModules_danyModuleCtorTarget modules) target) dprefix) cname))) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dprefixOfName target))) (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dlastSeg target)))
 
-# 556 "Vuna/Compiler/Loader/Modules.vuna"
+# 616 "Vuna/Compiler/Loader/Modules.vuna"
 let rec v_Vuna_dCompiler_dLoader_dModules_danyCtorTarget = (fun (mc0 : string) (mc1 : string) (mc2 : string) (mc3 : Vuna_dCompiler_dFrontend_dAst.t_Vuna_dCompiler_dFrontend_dAst_dCtor Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__243, dtb__244) -> (if ((((v_Vuna_dCompiler_dLoader_dModules_dctorCanonical mc0) mc1) (Vuna_dCompiler_dFrontend_dAst.v_Vuna_dCompiler_dFrontend_dAst_dctorName dtb__243)) = mc2) then true else ((((v_Vuna_dCompiler_dLoader_dModules_danyCtorTarget mc0) mc1) mc2) dtb__244))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
