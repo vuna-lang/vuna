@@ -181,7 +181,9 @@ else case e of
         (strWalk (fuel - 1) comp ctors projs p sizes caller facts region t (strWalk (fuel - 1) comp ctors projs p sizes caller facts region c acc))
   ELam ns b sp => strWalk (fuel - 1) comp ctors projs p sizes caller facts region b acc
   ELet binds body rec_ sp =>
-    strWalk (fuel - 1) comp ctors projs p sizes caller facts region body
+    let
+      sizes2 = extendByBinds binds sizes
+    in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body
       (strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region binds acc)
   EPi n implicit _ dom cod sp =>
     strWalk (fuel - 1) comp ctors projs p sizes caller facts region cod
@@ -291,8 +293,8 @@ strWalkBinds fuel comp ctors projs p sizes caller facts region [] acc =
   if fuel <= 0 then acc else acc
 strWalkBinds fuel comp ctors projs p sizes caller facts region ((Pair pat val) :: rest) acc =
   if fuel <= 0 then acc
-  else strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region rest
-    (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
+  else strWalkBinds (fuel - 1) comp ctors projs p (extendSizesStrict sizes val pat) caller facts region
+    rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region val acc)
 
 strWalkFields : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> List (Pair String Expr) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkFields fuel comp ctors projs p sizes caller facts region [] acc =
@@ -308,8 +310,8 @@ strWalkStmts fuel comp ctors projs p sizes caller facts region [] acc =
 strWalkStmts fuel comp ctors projs p sizes caller facts region (s :: rest) acc = if fuel <= 0 then acc
 else case s of
   DBind pat e sp =>
-    strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest
-      (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
+    strWalkStmts (fuel - 1) comp ctors projs p (extendSizesStrict sizes e pat) caller facts region
+      rest (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)
   DExpr e sp =>
     strWalkStmts (fuel - 1) comp ctors projs p sizes caller facts region rest
       (strWalk (fuel - 1) comp ctors projs p sizes caller facts region e acc)

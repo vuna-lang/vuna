@@ -48,8 +48,8 @@ siteCollectBinds fuel comp ctors projs caller facts sizes region [] acc =
   if fuel <= 0 then acc else acc
 siteCollectBinds fuel comp ctors projs caller facts sizes region ((Pair pat val) :: rest) acc =
   if fuel <= 0 then acc
-  else siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region rest
-    (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
+  else siteCollectBinds (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes val pat) region
+    rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region val acc)
 
 siteCollectStmts : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List DoStmt -> List Site -> List Site
 siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
@@ -57,8 +57,8 @@ siteCollectStmts fuel comp ctors projs caller facts sizes region [] acc =
 siteCollectStmts fuel comp ctors projs caller facts sizes region (s :: rest) acc = if fuel <= 0 then acc
 else case s of
   DBind pat e sp =>
-    siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest
-      (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
+    siteCollectStmts (fuel - 1) comp ctors projs caller facts (extendSizesStrict sizes e pat) region
+      rest (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
   DExpr e sp =>
     siteCollectStmts (fuel - 1) comp ctors projs caller facts sizes region rest
       (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region e acc)
@@ -81,7 +81,7 @@ else case e of
         (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region t (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region c acc))
   ELam ns b sp => siteWalkC (fuel - 1) comp ctors projs caller facts sizes region b acc
   ELet binds body rec_ sp =>
-    siteWalkC (fuel - 1) comp ctors projs caller facts sizes region body
+    siteWalkC (fuel - 1) comp ctors projs caller facts (extendByBinds binds sizes) region body
       (siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region binds acc)
   EPi n implicit _ dom cod sp =>
     siteWalkC (fuel - 1) comp ctors projs caller facts sizes region cod

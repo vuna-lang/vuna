@@ -192,11 +192,19 @@ export extendSizesStrict : List (Pair String (Pair Int (Pair Int (List Int)))) -
 extendSizesStrict sizes (EVar vname vsp) pat = case sizeOfVarStrict vname sizes of
   Just sz => case sz of
     Pair base (Pair depth path) => case pat of
+      -- `let ys = xs` / `do ys <- xs`：别名继承被绑定变量的尺寸。
+      PVar n nsp => Pair n sz :: sizes
+      PAs n inner asp => extendSizesStrict (Pair n sz :: sizes) (EVar vname vsp) inner
       PCon c ps sp2 => append sizes (patsSizeStrict ps base path 0 [])
       PRecord rn fields sp2 => append sizes (fieldsSizeStrict fields base path 0 [])
       _ => sizes
   Nothing => sizes
 extendSizesStrict sizes _ pat = sizes
+
+-- | 顺序绑定块：第 k 条的尺寸只对后面的绑定与 body 可见。
+export extendByBinds : List (Pair Pat Expr) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List (Pair String (Pair Int (Pair Int (List Int))))
+extendByBinds [] sizes = sizes
+extendByBinds ((Pair pat val) :: rest) sizes = extendByBinds rest (extendSizesStrict sizes val pat)
 
 export sizeOfVarStrict : String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Maybe (Pair Int (Pair Int (List Int)))
 sizeOfVarStrict name [] = Nothing

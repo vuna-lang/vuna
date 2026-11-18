@@ -1,0 +1,14 @@
+-- 正例：`let ys = xs` 之后在 `case ys of` 里递归。别名要继承 xs 的尺寸，
+-- 否则 `rest` 拿不到「形参真子项」的身份，整条链断在 let 上。
+import Prelude
+
+sumL : List Int -> Int
+sumL xs =
+  let
+    ys = xs
+  in case ys of
+    [] => 0
+    y :: rest => y + sumL rest
+
+main : Int
+main = sumL [1, 2, 3]
