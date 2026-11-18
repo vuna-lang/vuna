@@ -27,47 +27,59 @@ clientFuelBound = 1073741824
 -- | 内部：读 stdin 全部字节（一次调用的请求 body），每次最多 `clientChunkSize` 字节，
 -- 直到 EOF 或 fuel 耗尽。
 readStdinAll : Member nStdin StdinOp r => String -> Int -> Eff r String
-readStdinAll acc fuel = if fuel <= 0 then pure acc
-else do
-  chunk <- stdinReadBytes (natFromInt clientChunkSize)
-  case chunk of
-    Nothing => pure acc
-    Just bytes => readStdinAll (acc ++ bytes) (fuel - 1)
+readStdinAll acc fuel =
+  if fuel <= 0 then
+    pure acc
+  else
+    do
+      chunk <- stdinReadBytes (natFromInt clientChunkSize)
+      case chunk of
+        Nothing => pure acc
+        Just bytes => readStdinAll (acc ++ bytes) (fuel - 1)
 
 -- | 内部：从连接读一帧的 body（只处理一个响应，帧后的多余字节丢弃）；帧头缺失、连接中断
 -- 或 fuel 耗尽给 `Nothing`。
 readOneFrame : Member nNet NetOp r => Int -> String -> Int -> Eff r (Maybe String)
-readOneFrame conn buf fuel = if fuel <= 0 then pure Nothing
-else case splitHeaderBlock buf of
-  Just (Pair header rest) => case contentLengthOf header of
-    Just len => if strLength rest >= len then pure (Just (substring 0 (natFromInt len) rest))
-    else do
-      chunk <- netRecv conn clientChunkSize
-      case chunk of
-        Nothing => pure Nothing
-        Just bytes => readOneFrame conn (rest ++ bytes) (fuel - 1)
-    Nothing => pure Nothing
-  Nothing => do
-    chunk <- netRecv conn clientChunkSize
-    case chunk of
-      Nothing => pure Nothing
-      Just bytes => readOneFrame conn (buf ++ bytes) (fuel - 1)
+readOneFrame conn buf fuel =
+  if fuel <= 0 then
+    pure Nothing
+  else
+    case splitHeaderBlock buf of
+      Just (Pair header rest) =>
+        case contentLengthOf header of
+          Just len =>
+            if strLength rest >= len then
+              pure (Just (substring 0 (natFromInt len) rest))
+            else
+              do
+                chunk <- netRecv conn clientChunkSize
+                case chunk of
+                  Nothing => pure Nothing
+                  Just bytes => readOneFrame conn (rest ++ bytes) (fuel - 1)
+          Nothing => pure Nothing
+      Nothing =>
+        do
+          chunk <- netRecv conn clientChunkSize
+          case chunk of
+            Nothing => pure Nothing
+            Just bytes => readOneFrame conn (buf ++ bytes) (fuel - 1)
 
 -- | CLI 入口：读 stdin 作请求 body，给 `addr` 发一帧，把响应 body 打到 stdout 并返回退出码
 -- （0 = 收到响应，2 = 响应不完整）。
 export runReplClient : Member nConsole ConsoleOp r, Member nStdin StdinOp r, Member nNet NetOp r => String -> Eff r Int
-runReplClient addr = do
-  body <- readStdinAll "" clientFuelBound
-  conn <- netConnect addr
-  _ <- netSend conn (renderFrameBody body)
-  resp <- readOneFrame conn "" clientFuelBound
-  _ <- netClose conn
-  case resp of
-    Nothing => do
-      _ <-
-        consoleEprint
-          "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n"
-      pure 2
-    Just body2 => do
-      _ <- consolePrint "${body2}\n"
-      pure 0
+runReplClient addr =
+  do
+    body <- readStdinAll "" clientFuelBound
+    conn <- netConnect addr
+    _ <- netSend conn (renderFrameBody body)
+    resp <- readOneFrame conn "" clientFuelBound
+    _ <- netClose conn
+    case resp of
+      Nothing =>
+        do
+          _ <- consoleEprint "[vuna-repl-client] ${addr}: 响应不完整（连接中断或协议错误）\n"
+          pure 2
+      Just body2 =>
+        do
+          _ <- consolePrint "${body2}\n"
+          pure 0

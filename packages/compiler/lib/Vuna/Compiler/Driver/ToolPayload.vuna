@@ -45,20 +45,26 @@ encToolContext ctx = encTop encToolContextPayload ctx
 
 -- | 规范字节 → `ToolContext`（任何一步不符即 `Nothing`）。
 export decToolContextComplete : String -> Maybe ToolContext
-decToolContextComplete s = case decToolContextPayload (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair ctx rest) => if curAtEnd rest then Just ctx else Nothing
+decToolContextComplete s =
+  case decToolContextPayload (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair ctx rest) => if curAtEnd rest then Just ctx else Nothing
 
 decToolContextPayload : Int -> Cur -> Maybe (Pair ToolContext Cur)
-decToolContextPayload fuel c = case decList decSourceInfo (fuel - 1) c of
-  Nothing => Nothing
-  Just (Pair stats b0) => case decList decStr (fuel - 1) b0 of
+decToolContextPayload fuel c =
+  case decList decSourceInfo (fuel - 1) c of
     Nothing => Nothing
-    Just (Pair ownNames b1) => case decList decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair needed b2) => case decList decDepPair (fuel - 1) b2 of
+    Just (Pair stats b0) =>
+      case decList decStr (fuel - 1) b0 of
         Nothing => Nothing
-        Just (Pair depHashes b3) => case decList decModuleIfaceAt (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair depIfaces b4) =>
-            Just (Pair (ToolContext depIfaces depHashes needed ownNames stats) b4)
+        Just (Pair ownNames b1) =>
+          case decList decStr (fuel - 1) b1 of
+            Nothing => Nothing
+            Just (Pair needed b2) =>
+              case decList decDepPair (fuel - 1) b2 of
+                Nothing => Nothing
+                Just (Pair depHashes b3) =>
+                  case decList decModuleIfaceAt (fuel - 1) b3 of
+                    Nothing => Nothing
+                    Just (Pair depIfaces b4) =>
+                      Just (Pair (ToolContext depIfaces depHashes needed ownNames stats) b4)

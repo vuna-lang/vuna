@@ -22,34 +22,39 @@ toolFuelExhausted what = prim_fail "vuna: internal: ${what} fuel exhausted"
 -- | 内部：效果列表遍历（本模块自用；顺序与纯 `map` 一致）。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
-mapEff f (x :: rest) = do
-  y <- f x
-  ys <- mapEff f rest
-  pure (y :: ys)
+mapEff f (x :: rest) =
+  do
+    y <- f x
+    ys <- mapEff f rest
+    pure (y :: ys)
 
 -- | 内部：效果列表映射并拼接（本模块自用；顺序与纯 `concatMap` 一致）。
 concatMapEff : {r : Row} -> (a -> Eff r (List b)) -> List a -> Eff r (List b)
 concatMapEff f [] = pure []
-concatMapEff f (x :: rest) = do
-  xs <- f x
-  ys <- concatMapEff f rest
-  pure (append xs ys)
+concatMapEff f (x :: rest) =
+  do
+    xs <- f x
+    ys <- concatMapEff f rest
+    pure (append xs ys)
 
 -- | 遍历时按条目名跳过的目录：生成物、本地缓存、工具产物与夹具目录。它们可能包含符号链接或
 -- 超大文件，既不该被格式化，也不该被 doc / test 扫描；`corpus` 下的 `.vuna` 大量是故意
 -- 不合法的源码（解析 / 缩进 / 类型错误用例），格式化器与文档生成器不应扫到。
 skipGenerated : String -> Bool
 skipGenerated name =
-  name == ".git"
-    || name == ".local"
-    || name == ".output"
-    || name == ".direnv"
-    || name == "node_modules"
-    || name == ".vscode"
-    || name == "_scratch"
-    || name == ".dsh-plugins"
-    || name == "result"
-    || name == "corpus"
+  name
+    == ".git"
+    || name
+    == ".local"
+    || name
+    == ".output"
+    || name
+    == ".direnv"
+    || name
+    == "node_modules"
+    || name
+    == ".vscode"
+    || name == "_scratch" || name == ".dsh-plugins" || name == "result" || name == "corpus"
 
 -- | 递归收集目录下所有 `.vuna` 文件（跳过 `.` / `..`、`skipGenerated` 命中的目录与非
 -- `.vuna` 文件）；目录不存在返回空列表。
@@ -59,28 +64,37 @@ collectVunaFiles dir = collectVunaFilesGo 1048576 dir
 -- | 内部：带 fuel 的 `.vuna` 收集。目录树是文件系统图（符号链接可成环），递归无法用结构下降
 -- 证明，因此用显式 fuel：每进入下一层目录消耗 1，触底硬失败（合法目录树远小于该上限）。
 collectVunaFilesGo : Member n FsOp r => Int -> String -> Eff r (List String)
-collectVunaFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
-else do
-  exists <- pathExistsDir dir
-  if exists then do
-    names <- fsReadDir dir
-    concatMapEff (walkVunaGo (fuel - 1) dir) names
-  else pure []
+collectVunaFilesGo fuel dir =
+  if fuel <= 0 then
+    toolFuelExhausted "directory walk"
+  else
+    do
+      exists <- pathExistsDir dir
+      if exists then
+        do
+          names <- fsReadDir dir
+          concatMapEff (walkVunaGo (fuel - 1) dir) names
+      else
+        pure []
 
 -- | 内部：`collectVunaFilesGo` 的单条目步进——目录下钻，文件按后缀 `".vuna"` 保留。
 walkVunaGo : Member n FsOp r => Int -> String -> String -> Eff r (List String)
-walkVunaGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
-else case name of
-  "." => pure []
-  ".." => pure []
-  _ => if skipGenerated name then pure []
+walkVunaGo fuel dir name =
+  if fuel <= 0 then
+    toolFuelExhausted "directory walk"
   else
-    let
-      path = "${dir}/${name}"
-    in do
-      exists <- pathExistsDir path
-      if exists then collectVunaFilesGo (fuel - 1) path
-      else pure (if endsWith ".vuna" name then [path] else [])
+    case name of
+      "." => pure []
+      ".." => pure []
+      _ =>
+        if skipGenerated name then
+          pure []
+        else
+          let
+            path = "${dir}/${name}"
+          in do
+            exists <- pathExistsDir path
+            if exists then collectVunaFilesGo (fuel - 1) path else pure (if endsWith ".vuna" name then [path] else [])
 
 -- | 递归收集目录下所有非隐藏项（文件与目录，同样跳过 `skipGenerated`）；用于不按后缀筛选的
 -- 通用遍历。目录不存在返回空列表。
@@ -89,33 +103,44 @@ collectSourceFiles dir = collectSourceFilesGo 1048576 dir
 
 -- | 内部：带 fuel 的通用收集（fuel 语义与 `collectVunaFilesGo` 相同）。
 collectSourceFilesGo : Member n FsOp r => Int -> String -> Eff r (List String)
-collectSourceFilesGo fuel dir = if fuel <= 0 then toolFuelExhausted "directory walk"
-else do
-  exists <- pathExistsDir dir
-  if exists then do
-    names <- fsReadDir dir
-    concatMapEff (walkAnyGo (fuel - 1) dir) names
-  else pure []
+collectSourceFilesGo fuel dir =
+  if fuel <= 0 then
+    toolFuelExhausted "directory walk"
+  else
+    do
+      exists <- pathExistsDir dir
+      if exists then
+        do
+          names <- fsReadDir dir
+          concatMapEff (walkAnyGo (fuel - 1) dir) names
+      else
+        pure []
 
 -- | 内部：`collectSourceFilesGo` 的单条目步进——目录下钻，文件原样返回（不过滤后缀）。
 walkAnyGo : Member n FsOp r => Int -> String -> String -> Eff r (List String)
-walkAnyGo fuel dir name = if fuel <= 0 then toolFuelExhausted "directory walk"
-else case name of
-  "." => pure []
-  ".." => pure []
-  _ => if skipGenerated name then pure []
+walkAnyGo fuel dir name =
+  if fuel <= 0 then
+    toolFuelExhausted "directory walk"
   else
-    let
-      path = "${dir}/${name}"
-    in do
-      exists <- pathExistsDir path
-      if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
+    case name of
+      "." => pure []
+      ".." => pure []
+      _ =>
+        if skipGenerated name then
+          pure []
+        else
+          let
+            path = "${dir}/${name}"
+          in do
+            exists <- pathExistsDir path
+            if exists then collectSourceFilesGo (fuel - 1) path else pure [path]
 
 -- | 安全的目录判定：不存在返回 `False`，而不是抛异常（`fsIsDirectory` 的前置守卫）。
 export pathExistsDir : Member n FsOp r => String -> Eff r Bool
-pathExistsDir path = do
-  exists <- pathExistsFile path
-  if exists then fsIsDirectory path else pure False
+pathExistsDir path =
+  do
+    exists <- pathExistsFile path
+    if exists then fsIsDirectory path else pure False
 
 -- | 路径存在性判定（文件或目录均可）。
 export pathExistsFile : Member n FsOp r => String -> Eff r Bool
@@ -126,43 +151,57 @@ pathExistsFile path = fsFileExists path
 -- ---------------------------------------------------------------
 -- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
 export exampleOf : Member n FsOp r => String -> Eff r (Maybe String)
-exampleOf code = do
-  here <- findDiagExample 512 "test/corpus" code
-  case here of
-    Just p => pure (Just p)
-    Nothing => do
-      cwdHere <- findDiagExample 512 "corpus" code
-      case cwdHere of
-        Just p => pure (Just p)
-        Nothing => findDiagExample 512 "../test/corpus" code
+exampleOf code =
+  do
+    here <- findDiagExample 512 "test/corpus" code
+    case here of
+      Just p => pure (Just p)
+      Nothing =>
+        do
+          cwdHere <- findDiagExample 512 "corpus" code
+          case cwdHere of
+            Just p => pure (Just p)
+            Nothing => findDiagExample 512 "../test/corpus" code
 
 -- | 内部：带 fuel 的递归搜索；每个条目按字典序展开，先命中的先返回。
 findDiagExample : Member n FsOp r => Int -> String -> String -> Eff r (Maybe String)
-findDiagExample fuel dir code = if fuel <= 0 then pure Nothing
-else do
-  exists <- pathExistsDir dir
-  if not exists then pure Nothing
-  else do
-    names <- fsReadDir dir
-    fmap firstJustExamples (mapEff (oneEntry (fuel - 1) dir code) names)
+findDiagExample fuel dir code =
+  if fuel <= 0 then
+    pure Nothing
+  else
+    do
+      exists <- pathExistsDir dir
+      if not exists then
+        pure Nothing
+      else
+        do
+          names <- fsReadDir dir
+          fmap firstJustExamples (mapEff (oneEntry (fuel - 1) dir code) names)
 
 -- | 内部：`findDiagExample` 的单条目步进——目录递归，`.diag.json` 文件按文本里的
 -- `"code":"<码>"` 匹配。
 oneEntry : Member n FsOp r => Int -> String -> String -> String -> Eff r (Maybe String)
-oneEntry fuel dir code name = if name == "." || name == ".." || name == ".git" || name == ".local" then pure Nothing
-else
-  let
-    path = "${dir}/${name}"
-  in do
-    exists <- pathExistsDir path
-    if exists then findDiagExample fuel path code
-    else if not (endsWith ".diag.json" name) then pure Nothing
-    else do
-      isFile <- pathExistsFile path
-      if isFile then do
-        text <- fsReadFile path
-        pure (if contains "\"code\":\"${code}\"" text then Just path else Nothing)
-      else pure Nothing
+oneEntry fuel dir code name =
+  if name == "." || name == ".." || name == ".git" || name == ".local" then
+    pure Nothing
+  else
+    let
+      path = "${dir}/${name}"
+    in do
+      exists <- pathExistsDir path
+      if exists then
+        findDiagExample fuel path code
+      else if not (endsWith ".diag.json" name) then
+        pure Nothing
+      else
+        do
+          isFile <- pathExistsFile path
+          if isFile then
+            do
+              text <- fsReadFile path
+              pure (if contains "\"code\":\"${code}\"" text then Just path else Nothing)
+          else
+            pure Nothing
 
 -- | 内部：取第一个 `Just`。
 firstJustExamples : List (Maybe String) -> Maybe String

@@ -18,9 +18,10 @@ import Vuna.Compiler.Ir.Model
 -- 邻接表
 -- ---------------------------------------------------------------
 export neighborsOf : HashMap String (List String) -> String -> List String
-neighborsOf adjT name = case HashMap.lookup name adjT of
-  Just ns => ns
-  Nothing => []
+neighborsOf adjT name =
+  case HashMap.lookup name adjT of
+    Just ns => ns
+    Nothing => []
 
 export adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
 adjTblOf adj = HashMap.insertAll adj (HashMap.fromList [])
@@ -29,9 +30,10 @@ addDependents : String -> List String -> HashMap String (List String) -> HashMap
 addDependents src [] t = t
 addDependents src (m :: rest) t =
   let
-    cur = case HashMap.lookup m t of
-      Just xs => xs
-      Nothing => []
+    cur =
+      case HashMap.lookup m t of
+        Just xs => xs
+        Nothing => []
   in addDependents src rest (HashMap.insert m ((::) src cur) t)
 
 reverseAdjTbl : List (Pair String (List String)) -> HashMap String (List String)
@@ -45,26 +47,38 @@ foldNeighborsPost : HashMap String (List String) -> List String -> HashMap Strin
 foldNeighborsPost adjT ms visited order = foldNeighborsPostFuel 100000 adjT ms visited order
 
 foldNeighborsPostFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsPostFuel fuel adjT ms visited order = if fuel <= 0 then Pair visited order
-else case ms of
-  [] => Pair visited order
-  m :: rest => if HashMap.member m visited then foldNeighborsPostFuel (fuel - 1) adjT rest visited order
-  else case dfsPostFuel (fuel - 1) adjT m (HashMap.insert m True visited) order of
-    Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
+foldNeighborsPostFuel fuel adjT ms visited order =
+  if fuel <= 0 then
+    Pair visited order
+  else
+    case ms of
+      [] => Pair visited order
+      m :: rest =>
+        if HashMap.member m visited then
+          foldNeighborsPostFuel (fuel - 1) adjT rest visited order
+        else
+          case dfsPostFuel (fuel - 1) adjT m (HashMap.insert m True visited) order of
+            Pair visited2 order2 => foldNeighborsPostFuel (fuel - 1) adjT rest visited2 order2
 
 dfsPost : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsPost adjT n visited order = dfsPostFuel 100000 adjT n visited order
 
 dfsPostFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsPostFuel fuel adjT n visited order = if fuel <= 0 then Pair visited order
-else case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
-  Pair visited2 order2 => Pair visited2 ((::) n order2)
+dfsPostFuel fuel adjT n visited order =
+  if fuel <= 0 then
+    Pair visited order
+  else
+    case foldNeighborsPostFuel (fuel - 1) adjT (neighborsOf adjT n) visited order of
+      Pair visited2 order2 => Pair visited2 ((::) n order2)
 
 postOrder : HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 postOrder adjT [] visited order = Pair visited order
-postOrder adjT (n :: rest) visited order = if HashMap.member n visited then postOrder adjT rest visited order
-else case dfsPost adjT n (HashMap.insert n True visited) order of
-  Pair visited2 order2 => postOrder adjT rest visited2 order2
+postOrder adjT (n :: rest) visited order =
+  if HashMap.member n visited then
+    postOrder adjT rest visited order
+  else
+    case dfsPost adjT n (HashMap.insert n True visited) order of
+      Pair visited2 order2 => postOrder adjT rest visited2 order2
 
 -- ---------------------------------------------------------------
 -- 反向图收集分量
@@ -73,26 +87,38 @@ foldNeighborsCollect : HashMap String (List String) -> List String -> HashMap St
 foldNeighborsCollect adjT ms visited comp = foldNeighborsCollectFuel 100000 adjT ms visited comp
 
 foldNeighborsCollectFuel : Int -> HashMap String (List String) -> List String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-foldNeighborsCollectFuel fuel adjT ms visited comp = if fuel <= 0 then Pair visited comp
-else case ms of
-  [] => Pair visited comp
-  m :: rest => if HashMap.member m visited then foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
-  else case dfsCollectFuel (fuel - 1) adjT m (HashMap.insert m True visited) comp of
-    Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
+foldNeighborsCollectFuel fuel adjT ms visited comp =
+  if fuel <= 0 then
+    Pair visited comp
+  else
+    case ms of
+      [] => Pair visited comp
+      m :: rest =>
+        if HashMap.member m visited then
+          foldNeighborsCollectFuel (fuel - 1) adjT rest visited comp
+        else
+          case dfsCollectFuel (fuel - 1) adjT m (HashMap.insert m True visited) comp of
+            Pair visited2 comp2 => foldNeighborsCollectFuel (fuel - 1) adjT rest visited2 comp2
 
 dfsCollect : HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 dfsCollect adjT n visited comp = dfsCollectFuel 100000 adjT n visited comp
 
 dfsCollectFuel : Int -> HashMap String (List String) -> String -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
-dfsCollectFuel fuel adjT n visited comp = if fuel <= 0 then Pair visited comp
-else case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
-  Pair visited2 comp2 => Pair visited2 ((::) n comp2)
+dfsCollectFuel fuel adjT n visited comp =
+  if fuel <= 0 then
+    Pair visited comp
+  else
+    case foldNeighborsCollectFuel (fuel - 1) adjT (neighborsOf adjT n) visited comp of
+      Pair visited2 comp2 => Pair visited2 ((::) n comp2)
 
 collectComps : HashMap String (List String) -> List String -> HashMap String Bool -> List (List String) -> List (List String)
 collectComps adjT [] visited comps = comps
-collectComps adjT (n :: rest) visited comps = if HashMap.member n visited then collectComps adjT rest visited comps
-else case dfsCollect adjT n (HashMap.insert n True visited) [] of
-  Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
+collectComps adjT (n :: rest) visited comps =
+  if HashMap.member n visited then
+    collectComps adjT rest visited comps
+  else
+    case dfsCollect adjT n (HashMap.insert n True visited) [] of
+      Pair visited2 comp => collectComps adjT rest visited2 (comp :: comps)
 
 -- 名字 → 所属分量（一次构建，O(1) 查）。
 componentTblOf : List (List String) -> HashMap String (List String)
@@ -110,11 +136,13 @@ groupsFromComps comps names =
 
 groupsFromCompsGo : HashMap String (List String) -> List String -> List String -> HashMap String Bool -> List (List String)
 groupsFromCompsGo compTbl allNames [] emitted = []
-groupsFromCompsGo compTbl allNames (n :: rest) emitted = if HashMap.member n emitted then groupsFromCompsGo compTbl allNames rest emitted
-else case HashMap.lookup n compTbl of
-  Just g =>
-    (::) (groupOf allNames g) (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
-  Nothing => groupsFromCompsGo compTbl allNames rest emitted
+groupsFromCompsGo compTbl allNames (n :: rest) emitted =
+  if HashMap.member n emitted then
+    groupsFromCompsGo compTbl allNames rest emitted
+  else
+    case HashMap.lookup n compTbl of
+      Just g => (::) (groupOf allNames g) (groupsFromCompsGo compTbl allNames rest (addAllNames g emitted))
+      Nothing => groupsFromCompsGo compTbl allNames rest emitted
 
 -- 单成员分量（大程序里占绝对多数）直接返回，免掉对全程序名字的一次 filter。
 groupOf : List String -> List String -> List String
@@ -149,8 +177,10 @@ orderGroups adjT groups =
     depPairs = map (\p => Pair (firstOf p) (groupDepIdx adjT groupIdxT p)) indexed
     revTbl = reverseDepTbl depPairs
     indeg =
-      foldl (\acc, p => HashMap.insert (firstOf p) (countList (secondOf p)) acc)
-        (HashMap.fromList []) depPairs
+      foldl
+        (\acc, p => HashMap.insert (firstOf p) (countList (secondOf p)) acc)
+        (HashMap.fromList [])
+        depPairs
     ready = filter (\n => lookupInt indeg n == 0) (map firstOf indexed)
   in orderGroupsGo (countList groups + 1) grpTbl revTbl indeg ready (countList groups) []
 
@@ -160,7 +190,8 @@ indexGroups i (g :: rest) acc = indexGroups (i + 1) rest (Pair i g :: acc)
 
 groupIndexTbl : List (Pair Int (List String)) -> HashMap String Int
 groupIndexTbl indexed =
-  HashMap.insertAll (concatMap (\p => map (\n => Pair n (firstOf p)) (secondOf p)) indexed)
+  HashMap.insertAll
+    (concatMap (\p => map (\n => Pair n (firstOf p)) (secondOf p)) indexed)
     (HashMap.fromList [])
 
 -- | 组的下标依赖：把组内各成员在邻接表里的依赖映射成组下标（去重、去自环）。
@@ -171,11 +202,14 @@ groupDepIdx adjT gIdxT (Pair i g) =
 
 groupDepIdxGo : Int -> HashMap String Int -> List String -> HashMap Int Bool -> List Int -> List Int
 groupDepIdxGo i gIdxT [] seen acc = reverse acc
-groupDepIdxGo i gIdxT (n :: rest) seen acc = case HashMap.lookup n gIdxT of
-  Just j =>
-    if j == i || HashMap.member j seen then groupDepIdxGo i gIdxT rest seen acc
-    else groupDepIdxGo i gIdxT rest (HashMap.insert j True seen) (j :: acc)
-  Nothing => groupDepIdxGo i gIdxT rest seen acc
+groupDepIdxGo i gIdxT (n :: rest) seen acc =
+  case HashMap.lookup n gIdxT of
+    Just j =>
+      if j == i || HashMap.member j seen then
+        groupDepIdxGo i gIdxT rest seen acc
+      else
+        groupDepIdxGo i gIdxT rest (HashMap.insert j True seen) (j :: acc)
+    Nothing => groupDepIdxGo i gIdxT rest seen acc
 
 reverseDepTbl : List (Pair Int (List Int)) -> HashMap Int (List Int)
 reverseDepTbl pairs = foldl addReverseEdges (HashMap.fromList []) pairs
@@ -186,19 +220,22 @@ addReverseEdges tbl (Pair i deps) =
   foldl (\acc, d => HashMap.insert d (append (lookupDeps acc d) [i]) acc) tbl deps
 
 lookupInt : HashMap Int Int -> Int -> Int
-lookupInt tbl k = case HashMap.lookup k tbl of
-  Just v => v
-  Nothing => 0
+lookupInt tbl k =
+  case HashMap.lookup k tbl of
+    Just v => v
+    Nothing => 0
 
 lookupNames : HashMap Int (List String) -> Int -> List String
-lookupNames tbl k = case HashMap.lookup k tbl of
-  Just v => v
-  Nothing => []
+lookupNames tbl k =
+  case HashMap.lookup k tbl of
+    Just v => v
+    Nothing => []
 
 lookupDeps : HashMap Int (List Int) -> Int -> List Int
-lookupDeps tbl k = case HashMap.lookup k tbl of
-  Just v => v
-  Nothing => []
+lookupDeps tbl k =
+  case HashMap.lookup k tbl of
+    Just v => v
+    Nothing => []
 
 -- | 最小下标优先的有序插入（就绪集合通常很小）。
 insertReady : Int -> List Int -> List Int
@@ -206,17 +243,20 @@ insertReady i [] = [i]
 insertReady i (x :: rest) = if i <= x then (::) i ((::) x rest) else (::) x (insertReady i rest)
 
 orderGroupsGo : Int -> HashMap Int (List String) -> HashMap Int (List Int) -> HashMap Int Int -> List Int -> Int -> List (List String) -> Check (List (List String))
-orderGroupsGo fuel grpTbl revTbl indeg ready remaining acc = if fuel <= 0 then cgErr0 DependencyCycle
-else if remaining == 0 then OkC (reverse acc)
-else case ready of
-  [] => cgErr0 DependencyCycle
-  i :: rest =>
-    let
-      deps = lookupDeps revTbl i
-      indeg2 = foldl (\acc2, d => HashMap.insert d (lookupInt indeg d - 1) acc2) indeg deps
-      ready2 = foldl (\r, d => if lookupInt indeg2 d == 0 then insertReady d r else r) rest deps
-    in orderGroupsGo (fuel - 1) grpTbl revTbl indeg2 ready2 (remaining - 1)
-      (lookupNames grpTbl i :: acc)
+orderGroupsGo fuel grpTbl revTbl indeg ready remaining acc =
+  if fuel <= 0 then
+    cgErr0 DependencyCycle
+  else if remaining == 0 then
+    OkC (reverse acc)
+  else
+    case ready of
+      [] => cgErr0 DependencyCycle
+      i :: rest =>
+        let
+          deps = lookupDeps revTbl i
+          indeg2 = foldl (\acc2, d => HashMap.insert d (lookupInt indeg d - 1) acc2) indeg deps
+          ready2 = foldl (\r, d => if lookupInt indeg2 d == 0 then insertReady d r else r) rest deps
+        in orderGroupsGo (fuel - 1) grpTbl revTbl indeg2 ready2 (remaining - 1) (lookupNames grpTbl i :: acc)
 
 -- ---------------------------------------------------------------
 -- 对外分组入口
@@ -236,7 +276,8 @@ groupNames adj names =
       let
         comps = collectComps revT order (HashMap.fromList []) []
         groups = groupsFromComps comps names
-      in Vuna.Compiler.Base.Common.bind (orderGroups adjT groups)
+      in Vuna.Compiler.Base.Common.bind
+        (orderGroups adjT groups)
         (\ordered => checkGroupsCover ordered names)
 
 -- | 分组必须覆盖全部名字：DFS 预算耗尽或分组算法异常时，宁可报内部错也不能
@@ -245,8 +286,10 @@ checkGroupsCover : List (List String) -> List String -> Check (List (List String
 checkGroupsCover groups names =
   let
     covered = HashMap.ofNames (concatMap (\g => g) groups)
-  in if allCovered covered names then OkC groups
-  else icInternal "SCC grouping dropped definitions (DFS budget exhausted?)"
+  in if allCovered covered names then
+    OkC groups
+  else
+    icInternal "SCC grouping dropped definitions (DFS budget exhausted?)"
 
 allCovered : HashMap String Bool -> List String -> Bool
 allCovered covered [] = True
@@ -265,7 +308,8 @@ firstBadRecursiveValue [] = Nothing
 firstBadRecursiveValue (d :: rest) =
   if irDefArity d == 0 then
     if irDefRecValueOk d then firstBadRecursiveValue rest else Just (irDefName d)
-  else firstBadRecursiveValue rest
+  else
+    firstBadRecursiveValue rest
 
 findDefByName : String -> List IrDef -> Maybe IrDef
 findDefByName name [] = Nothing
@@ -273,9 +317,10 @@ findDefByName name (d :: rest) = if irDefName d == name then Just d else findDef
 
 groupDefsOf : List IrDef -> List String -> List IrDef
 groupDefsOf defs [] = []
-groupDefsOf defs (n :: rest) = case findDefByName n defs of
-  Nothing => groupDefsOf defs rest
-  Just d => d :: groupDefsOf defs rest
+groupDefsOf defs (n :: rest) =
+  case findDefByName n defs of
+    Nothing => groupDefsOf defs rest
+    Just d => d :: groupDefsOf defs rest
 
 -- | 把一个定义表按给定分组序列落成分组，并对递归组做右值形状护栏（顺序与迁移前
 -- `genGroups` 一致：先护栏、再生成）。
@@ -285,13 +330,18 @@ assembleGroups adjT defs (g :: rest) =
   let
     members = groupDefsOf defs g
     isRec = groupNeedsRec adjT g
-    checked = if isRec then case firstBadRecursiveValue members of
-      Just name => case findDefByName name members of
-        Just d => cgErrDefAt (irDefSpan d) name (RecursiveValueDefinition name) [name]
-        Nothing => cgErr1 (RecursiveValueDefinition name) name
-      Nothing => OkC (IrGroup True members)
-    else OkC (IrGroup False members)
-  in Vuna.Compiler.Base.Common.bind checked
+    checked =
+      if isRec then
+        case firstBadRecursiveValue members of
+          Just name =>
+            case findDefByName name members of
+              Just d => cgErrDefAt (irDefSpan d) name (RecursiveValueDefinition name) [name]
+              Nothing => cgErr1 (RecursiveValueDefinition name) name
+          Nothing => OkC (IrGroup True members)
+      else
+        OkC (IrGroup False members)
+  in Vuna.Compiler.Base.Common.bind
+    checked
     (\grp => Vuna.Compiler.Base.Common.bind (assembleGroups adjT defs rest) (\tail => OkC ((::) grp tail)))
 
 -- ---------------------------------------------------------------
@@ -316,16 +366,21 @@ countList [] = 0
 countList (_ :: rest) = 1 + countList rest
 
 reachableNames : Int -> List String -> HashMap String IrDef -> HashMap String Bool -> HashMap String Bool
-reachableNames fuel pending defTbl seen = if fuel <= 0 then seen
-else case pending of
-  [] => seen
-  n :: rest => if HashMap.member n seen then reachableNames (fuel - 1) rest defTbl seen
+reachableNames fuel pending defTbl seen =
+  if fuel <= 0 then
+    seen
   else
-    let
-      seen2 = HashMap.insert n True seen
-    in case HashMap.lookup n defTbl of
-      Nothing => reachableNames (fuel - 1) rest defTbl seen2
-      Just d => reachableNames (fuel - 1) (append (irDefDeps d) rest) defTbl seen2
+    case pending of
+      [] => seen
+      n :: rest =>
+        if HashMap.member n seen then
+          reachableNames (fuel - 1) rest defTbl seen
+        else
+          let
+            seen2 = HashMap.insert n True seen
+          in case HashMap.lookup n defTbl of
+            Nothing => reachableNames (fuel - 1) rest defTbl seen2
+            Just d => reachableNames (fuel - 1) (append (irDefDeps d) rest) defTbl seen2
 
 -- ---------------------------------------------------------------
 -- 节点遍历（后端共用的纯分析）
@@ -346,7 +401,8 @@ irStringsOf (IrApp f a) = append (irStringsOf f) (irStringsOf a)
 irStringsOf (IrIf c t e) = append (irStringsOf c) (append (irStringsOf t) (irStringsOf e))
 irStringsOf (IrCase scrut alts) = append (irStringsOf scrut) (concatMap irStringsOfAlt alts)
 irStringsOf (IrNatCase scrut _ z s c) =
-  append (irStringsOf scrut)
+  append
+    (irStringsOf scrut)
     (append (irStringsOfAltMaybe z) (append (irStringsOfAltMaybe s) (irStringsOfAltMaybe c)))
 irStringsOf (IrConcatMany parts) = concatMap irStringsOf parts
 irStringsOf (IrEffThunk _ _ _ _ prim) = irStringsOf prim
@@ -364,9 +420,10 @@ irStringsOfAltMaybe (Just alt) = irStringsOfAlt alt
 
 -- | 一个运行时定义体的字符串字面量（extern / 无体定义为空）。
 export irStringsOfDef : IrDef -> List String
-irStringsOfDef d = case irDefBody d of
-  Nothing => []
-  Just body => irStringsOf body
+irStringsOfDef d =
+  case irDefBody d of
+    Nothing => []
+    Just body => irStringsOf body
 
 -- | 单元内定义名不得重复（迁移前在 OCaml 名字层校验；IR 层先按源码名去重，
 -- 后端再按渲染名去重）。
@@ -376,8 +433,10 @@ checkUniqueDefNames defs = checkUniqueDefNamesGo (map irDefName defs) (HashMap.f
 checkUniqueDefNamesGo : List String -> HashMap String Bool -> Check Int
 checkUniqueDefNamesGo [] seen = OkC 0
 checkUniqueDefNamesGo (n :: rest) seen =
-  if HashMap.member n seen then icInternal "duplicate runtime definition name in IR: `${n}`"
-  else checkUniqueDefNamesGo rest (HashMap.insert n True seen)
+  if HashMap.member n seen then
+    icInternal "duplicate runtime definition name in IR: `${n}`"
+  else
+    checkUniqueDefNamesGo rest (HashMap.insert n True seen)
 
 -- | 名字级分组 + 递归组右值护栏（不消费 `IrDef`）。
 --
@@ -397,11 +456,15 @@ assembleGo adjT [] recOk spanOf = OkC []
 assembleGo adjT (g :: rest) recOk spanOf =
   let
     isRec = groupNeedsRec adjT g
-    checked = if isRec then case firstBadRecName g recOk of
-      Just name => cgErrDefAt (spanOf name) name (RecursiveValueDefinition name) [name]
-      Nothing => OkC (Pair True g)
-    else OkC (Pair False g)
-  in Vuna.Compiler.Base.Common.bind checked
+    checked =
+      if isRec then
+        case firstBadRecName g recOk of
+          Just name => cgErrDefAt (spanOf name) name (RecursiveValueDefinition name) [name]
+          Nothing => OkC (Pair True g)
+      else
+        OkC (Pair False g)
+  in Vuna.Compiler.Base.Common.bind
+    checked
     (\grp => Vuna.Compiler.Base.Common.bind (assembleGo adjT rest recOk spanOf) (\tail => OkC ((::) grp tail)))
 
 firstBadRecName : List String -> (String -> Bool) -> Maybe String

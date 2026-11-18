@@ -52,8 +52,10 @@ wrapWords indent cur [] = if cur == "" then [] else [lineOf indent cur]
 wrapWords indent cur (w :: rest) =
   let
     cand = if cur == "" then w else cur ++ " " ++ w
-  in if fitsLine (lineOf indent cand) then wrapWords indent cand rest
-  else lineOf indent cur :: wrapWords indent w rest
+  in if fitsLine (lineOf indent cand) then
+    wrapWords indent cand rest
+  else
+    lineOf indent cur :: wrapWords indent w rest
 
 -- ---------------------------------------------------------------
 -- 字符串转义
@@ -191,7 +193,8 @@ renderTryTable indent label tag body normal =
     tryClose = [lineOf (indent + 2) "end"]
     normalLines = renderInstrs (indent + 2) normal
     closeLine = [lineOf indent "end"]
-  in append openLine
+  in append
+    openLine
     (append tryOpen (append bodyLines (append tryClose (append normalLines closeLine))))
 
 -- ---------------------------------------------------------------
@@ -207,8 +210,10 @@ renderField : WatField -> String
 renderField f =
   let
     tyText =
-      if f.watFieldMut then "(mut " ++ watValTyText f.watFieldTy ++ ")"
-      else watValTyText f.watFieldTy
+      if f.watFieldMut then
+        "(mut " ++ watValTyText f.watFieldTy ++ ")"
+      else
+        watValTyText f.watFieldTy
   in "(field " ++ tyText ++ ")"
 
 funcTypeOne : String -> List WatValTy -> List WatValTy -> String
@@ -227,7 +232,8 @@ funcTypeMulti name params results =
     resultLines = map (lineOf 6) (map renderResult results)
     closeFunc = [lineOf 4 ")"]
     closeType = [lineOf 2 ")"]
-  in append openLine
+  in append
+    openLine
     (append funcLine (append paramLines (append resultLines (append closeFunc closeType))))
 
 structTypeOne : String -> List WatField -> String
@@ -254,13 +260,17 @@ renderType (WatContType name funcTy) = [lineOf 2 "(type ${name} (cont ${funcTy})
 
 renderFuncType : String -> List WatValTy -> List WatValTy -> List String
 renderFuncType name params results =
-  if fitsLine (funcTypeOne name params results) then [funcTypeOne name params results]
-  else funcTypeMulti name params results
+  if fitsLine (funcTypeOne name params results) then
+    [funcTypeOne name params results]
+  else
+    funcTypeMulti name params results
 
 renderStructType : String -> List WatField -> List String
 renderStructType name fields =
-  if fitsLine (structTypeOne name fields) then [structTypeOne name fields]
-  else structTypeMulti name fields
+  if fitsLine (structTypeOne name fields) then
+    [structTypeOne name fields]
+  else
+    structTypeMulti name fields
 
 renderArrayType : String -> Bool -> WatValTy -> List String
 renderArrayType name mut elemTy =
@@ -276,7 +286,8 @@ importOne imp =
   let
     paramsText = joinWith "" (map (\p => " (param " ++ watValTyText p ++ ")") imp.watImportParams)
     resultsText = joinWith "" (map (\r => " " ++ renderResult r) imp.watImportResults)
-  in lineOf 2
+  in lineOf
+    2
     ("(import \"${imp.watImportModule}\" \"${imp.watImportName}\" (func ${imp.watImportFunc}" ++ paramsText ++ resultsText ++ "))")
 
 importMulti : WatImport -> List String
@@ -288,7 +299,8 @@ importMulti imp =
     resultLines = map (lineOf 6) (map renderResult imp.watImportResults)
     closeFunc = [lineOf 4 ")"]
     closeImport = [lineOf 2 ")"]
-  in append openLine
+  in append
+    openLine
     (append funcLine (append paramLines (append resultLines (append closeFunc closeImport))))
 
 renderTag : WatTag -> List String
@@ -329,7 +341,8 @@ renderFunc f =
   let
     opening = if fitsLine (funcOpeningOne f) then [funcOpeningOne f] else funcOpeningMulti f
     locals =
-      map (lineOf 4)
+      map
+        (lineOf 4)
         (map (\p => "(local ${firstOf p} ${watValTyText (secondOf p)})") f.watFuncLocals)
     body = renderInstrs 4 f.watFuncBody
     closeLine = [lineOf 2 ")"]
@@ -339,15 +352,18 @@ renderExport : WatExport -> List String
 renderExport e =
   if e.watExportKind == "memory" then
     [lineOf 2 "(memory (export \"${e.watExportName}\") ${e.watExportRef})"]
-  else [lineOf 2 "(export \"${e.watExportName}\" (${e.watExportKind} ${e.watExportRef}))"]
+  else
+    [lineOf 2 "(export \"${e.watExportName}\" (${e.watExportKind} ${e.watExportRef}))"]
 
 renderElem : List String -> List String
 renderElem [] = []
 renderElem names =
   let
     one = lineOf 2 ("(elem declare func " ++ joinWith " " names ++ ")")
-  in if fitsLine one then [one]
-  else append [lineOf 2 "(elem declare func"] (append (map (lineOf 4) names) [lineOf 2 ")"])
+  in if fitsLine one then
+    [one]
+  else
+    append [lineOf 2 "(elem declare func"] (append (map (lineOf 4) names) [lineOf 2 ")"])
 
 renderData : WatData -> List String
 renderData d =
@@ -355,8 +371,10 @@ renderData d =
     chunks = chunkBytes (strUnpack d.watDataBytes)
     quoted = map (\c => "\"" ++ watString (strPack c) ++ "\"") chunks
     one = lineOf 2 ("(data ${d.watDataName} " ++ joinWith " " quoted ++ ")")
-  in if fitsLine one then [one]
-  else append [lineOf 2 "(data ${d.watDataName}"] (append (map (lineOf 4) quoted) [lineOf 2 ")"])
+  in if fitsLine one then
+    [one]
+  else
+    append [lineOf 2 "(data ${d.watDataName}"] (append (map (lineOf 4) quoted) [lineOf 2 ")"])
 
 -- ---------------------------------------------------------------
 -- 模块
@@ -373,12 +391,14 @@ moduleLines m =
     globalLines = concatMap renderGlobal m.wmGlobals
     funcLines = concatMap renderFunc m.wmFuncs
     elemLines = renderElem m.wmElems
-    dataLines = case m.wmData of
-      Nothing => []
-      Just d => renderData d
+    dataLines =
+      case m.wmData of
+        Nothing => []
+        Just d => renderData d
     exportLines = concatMap renderExport m.wmExports
     memoryLines = [lineOf 2 "(memory (export \"memory\") ${strFromInt m.wmMemPages})"]
-  in append ["(module"]
+  in append
+    ["(module"]
     (append (sectionComment "types") (append typeLines (append (sectionComment "tags") (append tagLines (append (sectionComment "imports") (append importLines (append (sectionComment "memory") (append memoryLines (append (sectionComment "globals") (append globalLines (append (sectionComment "functions") (append funcLines (append (sectionComment "elements") (append elemLines (append (sectionComment "data") (append dataLines (append (sectionComment "exports") (append exportLines [")", ""]))))))))))))))))))
 
 export renderModule : WasmModule -> String

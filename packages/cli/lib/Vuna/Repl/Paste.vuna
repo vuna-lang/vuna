@@ -21,17 +21,22 @@ import Base.Effect.Stdin as EffStdin
 -- （`termReadByte` 返回 -1）为止，返回粘贴内容（`\r` 已规范化为 `\n`）。fuel 是 1 MiB 的
 -- 字节数守卫，防终端异常时无限读。
 export readPasteBody : Member nStdin StdinOp r => Int -> Eff r String
-readPasteBody _ = do
-  st <- readPasteGo 1048576 emptyPasteState
-  pure (strPack (reverse st.pasteContent))
+readPasteBody _ =
+  do
+    st <- readPasteGo 1048576 emptyPasteState
+    pure (strPack (reverse st.pasteContent))
 
 -- | 内部：读循环——已读到终止序列或 fuel 耗尽即返回当前状态。
 readPasteGo : Member nStdin StdinOp r => Int -> PasteState -> Eff r PasteState
-readPasteGo fuel st = if fuel <= 0 then pure st
-else if pasteIsDone st then pure st
-else do
-  b <- termReadByte 0
-  if b < 0 then pure st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
+readPasteGo fuel st =
+  if fuel <= 0 then
+    pure st
+  else if pasteIsDone st then
+    pure st
+  else
+    do
+      b <- termReadByte 0
+      if b < 0 then pure st else readPasteGo (fuel - 1) (pasteFeed st (normalizePasteByte b))
 
 -- | 内部：终端粘贴的行尾可能是 CR / CRLF 的前半，缓冲里只保留裸 LF。
 normalizePasteByte : Int -> Int

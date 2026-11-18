@@ -60,55 +60,59 @@ parseComments (c :: rest) supp =
   let
     line = spanStartLine c.commentSpan
     text = trim c.commentText
-  in if not (startsWith "vuna-lint:" text) then parseComments rest supp
+  in if not (startsWith "vuna-lint:" text) then
+    parseComments rest supp
   else
     let
       body = trim (substring 10 (byteLength text - 10) text)
     in case directiveOf body of
       Nothing => err "${line}: unknown vuna-lint directive: ${body}"
-      Just (Pair name arg) => case name of
-        "ignore-file" =>
-          let
-            supp2 = { supp | suppressionAll = True }
-          in parseComments rest supp2
-        "disable-next-line" => case parseTarget arg line of
-          ErrC e => ErrC e
-          OkC target =>
+      Just (Pair name arg) =>
+        case name of
+          "ignore-file" =>
             let
-              supp2 =
-                { supp | suppressionLines = append supp.suppressionLines [Pair (line + 1) target] }
+              supp2 = { supp | suppressionAll = True }
             in parseComments rest supp2
-        "disable-line" => case parseTarget arg line of
-          ErrC e => ErrC e
-          OkC target =>
-            let
-              supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair line target] }
-            in parseComments rest supp2
-        "disable" => case parseTarget arg line of
-          ErrC e => ErrC e
-          OkC target =>
-            let
-              supp2 =
-                { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target True] }
-            in parseComments rest supp2
-        "enable" => case parseTarget arg line of
-          ErrC e => ErrC e
-          OkC target =>
-            let
-              supp2 =
-                { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target False] }
-            in parseComments rest supp2
-        _ => err "${line}: unknown vuna-lint directive: ${name}"
+          "disable-next-line" =>
+            case parseTarget arg line of
+              ErrC e => ErrC e
+              OkC target =>
+                let
+                  supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair (line + 1) target] }
+                in parseComments rest supp2
+          "disable-line" =>
+            case parseTarget arg line of
+              ErrC e => ErrC e
+              OkC target =>
+                let
+                  supp2 = { supp | suppressionLines = append supp.suppressionLines [Pair line target] }
+                in parseComments rest supp2
+          "disable" =>
+            case parseTarget arg line of
+              ErrC e => ErrC e
+              OkC target =>
+                let
+                  supp2 = { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target True] }
+                in parseComments rest supp2
+          "enable" =>
+            case parseTarget arg line of
+              ErrC e => ErrC e
+              OkC target =>
+                let
+                  supp2 = { supp | suppressionEvents = append supp.suppressionEvents [SuppressEvent line target False] }
+                in parseComments rest supp2
+          _ => err "${line}: unknown vuna-lint directive: ${name}"
 
 -- | 内部：拆出指令名与参数（以第一个空格/制表符为界）。
 directiveOf : String -> Maybe (Pair String String)
-directiveOf body = case firstSpace (strUnpack body) [] of
-  Nothing => Just (Pair (trim body) "")
-  Just (Pair name restChars) =>
-    let
-      nameText = strPack (reverse name)
-      restText = trim (strPack restChars)
-    in Just (Pair nameText restText)
+directiveOf body =
+  case firstSpace (strUnpack body) [] of
+    Nothing => Just (Pair (trim body) "")
+    Just (Pair name restChars) =>
+      let
+        nameText = strPack (reverse name)
+        restText = trim (strPack restChars)
+      in Just (Pair nameText restText)
 
 -- | 内部：找第一个空格/制表符；返回（倒序指令名, 参数原文）。
 firstSpace : List Int -> List Int -> Maybe (Pair (List Int) (List Int))
@@ -124,9 +128,10 @@ parseTarget arg line =
 -- | 内部：逐个解析规则名。
 parseRuleNames : List String -> List LintRule -> Int -> Check SuppressTarget
 parseRuleNames [] acc line = OkC (SuppressSome (reverse acc))
-parseRuleNames (name :: rest) acc line = case lintRuleOfName name of
-  Nothing => err "${line}: unknown lint rule: ${name}"
-  Just rule => parseRuleNames rest (rule :: acc) line
+parseRuleNames (name :: rest) acc line =
+  case lintRuleOfName name of
+    Nothing => err "${line}: unknown lint rule: ${name}"
+    Just rule => parseRuleNames rest (rule :: acc) line
 
 -- | 内部：按逗号与空白拆词。
 words : String -> List String
@@ -140,9 +145,12 @@ concatMap f (x :: rest) = append (f x) (concatMap f rest)
 -- | 某条 finding 是否被抑制。
 export isSuppressed : Suppression -> Int -> LintRule -> Bool
 isSuppressed supp line rule =
-  if supp.suppressionAll then True
-  else if anyLineStop supp.suppressionLines line rule then True
-  else eventSuppressed supp.suppressionEvents line rule
+  if supp.suppressionAll then
+    True
+  else if anyLineStop supp.suppressionLines line rule then
+    True
+  else
+    eventSuppressed supp.suppressionEvents line rule
 
 -- | 内部：单行抑制是否命中。
 anyLineStop : List (Pair Int SuppressTarget) -> Int -> LintRule -> Bool
@@ -158,8 +166,10 @@ eventSuppressed events line rule = latestEvent (reverse events) line rule
 latestEvent : List SuppressEvent -> Int -> LintRule -> Bool
 latestEvent [] line rule = False
 latestEvent (e :: rest) line rule =
-  if e.suppressEventLine <= line && targetHas e.suppressEventTarget rule then e.suppressEventOn
-  else latestEvent rest line rule
+  if e.suppressEventLine <= line && targetHas e.suppressEventTarget rule then
+    e.suppressEventOn
+  else
+    latestEvent rest line rule
 
 -- | 内部：目标是否包含规则。
 targetHas : SuppressTarget -> LintRule -> Bool

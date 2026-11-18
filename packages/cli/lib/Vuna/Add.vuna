@@ -27,17 +27,18 @@ import Base.Effect.Process as EffProcess
 -- | `vuna deps add` 的入口：解析 `--dry-run` / `--no-fetch` 与位置参数（`<name>[@<version>]`，
 -- 可选 `DIR`，默认 `.`）；参数个数或用法错误打印 `error: ...` 并返回 2。
 export runAdd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runAdd args = case parseCmdArgs ["deps", "add"] args of
-  ErrC e => addFailText (diagText e)
-  OkC parsed =>
-    let
-      dry = flagSet parsed "dry-run"
-      noFetch = flagSet parsed "no-fetch"
-    in case parsed.positionals of
-      [] => addFailText "usage: vuna deps add <name>[@<version>] [DIR]"
-      [spec] => addAt "." spec dry noFetch
-      [spec, dir] => addAt dir spec dry noFetch
-      _ => addFailText "too many arguments; expected <name>[@<version>] [DIR]"
+runAdd args =
+  case parseCmdArgs ["deps", "add"] args of
+    ErrC e => addFailText (diagText e)
+    OkC parsed =>
+      let
+        dry = flagSet parsed "dry-run"
+        noFetch = flagSet parsed "no-fetch"
+      in case parsed.positionals of
+        [] => addFailText "usage: vuna deps add <name>[@<version>] [DIR]"
+        [spec] => addAt "." spec dry noFetch
+        [spec, dir] => addAt dir spec dry noFetch
+        _ => addFailText "too many arguments; expected <name>[@<version>] [DIR]"
 
 -- | 内部：解析 `name[@version]` —— `greet@1.2.0` → (`greet`, `Just "1.2.0"`)，无 `@` 时版本
 -- 为 `Nothing`。
@@ -48,57 +49,69 @@ splitSpec spec = splitSpecGo (strUnpack spec) []
 splitSpecGo : List Int -> List Int -> Pair String (Maybe String)
 splitSpecGo [] acc = Pair (strPack (reverse acc)) Nothing
 splitSpecGo (c :: rest) acc =
-  if c == 64 then Pair (strPack (reverse acc)) (Just (strPack rest))
-  else splitSpecGo rest (c :: acc)
+  if c == 64 then
+    Pair (strPack (reverse acc)) (Just (strPack rest))
+  else
+    splitSpecGo rest (c :: acc)
 
 -- | 内部：在 `dir` 的 manifest 里加上 `spec` 声明的依赖：先按 `[registry].index` 查条目与发布，
 -- 再交给 [Vuna.Add.writeAndFetch] 写回并（可选）取包。缺 manifest / 缺索引 / 索引里没有
 -- 该包或该版本都打印 `error:` 并返回非零退出码。
 addAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Bool -> Bool -> Eff r Int
-addAt dir spec dry noFetch = do
-  abs <- absolutePath dir
-  let
-    named = splitSpec spec
-    alias = firstOf named
-    version = secondOf named
-    manifestPath = "${abs}/vuna.toml"
-  in do
-    exists <- fsFileExists manifestPath
-    if exists then do
-      raw <- fsReadFile manifestPath
-      case parseManifest manifestPath raw of
-        ErrC e => printAddDiag e
-        OkC manifest => case manifest.manifestRegistryIndex of
-          Nothing => addFailText "manifest has no [registry].index (add it first)"
-          Just indexRoot => do
-            entryR <- loadRegistryEntryEff indexRoot alias
-            case entryR of
-              ErrC e => printAddDiag e
-              OkC entry => case resolveRelease entry version of
-                Nothing => addFailText "no release for ${spec} in index"
-                Just release => writeAndFetch manifestPath raw alias release dry noFetch abs
-    else addFailText "missing vuna.toml in ${dir}"
+addAt dir spec dry noFetch =
+  do
+    abs <- absolutePath dir
+    let
+      named = splitSpec spec
+      alias = firstOf named
+      version = secondOf named
+      manifestPath = "${abs}/vuna.toml"
+    in do
+      exists <- fsFileExists manifestPath
+      if exists then
+        do
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e => printAddDiag e
+            OkC manifest =>
+              case manifest.manifestRegistryIndex of
+                Nothing => addFailText "manifest has no [registry].index (add it first)"
+                Just indexRoot =>
+                  do
+                    entryR <- loadRegistryEntryEff indexRoot alias
+                    case entryR of
+                      ErrC e => printAddDiag e
+                      OkC entry =>
+                        case resolveRelease entry version of
+                          Nothing => addFailText "no release for ${spec} in index"
+                          Just release => writeAndFetch manifestPath raw alias release dry noFetch abs
+      else
+        addFailText "missing vuna.toml in ${dir}"
 
 -- | 内部：写回依赖行并按需取包：`--dry-run` 只打印将要写入的行；内容未变时只提示已是最新；
 -- 否则原子写回 manifest。三种成功路径都按 `--no-fetch` 决定是否继续调用 `fetchAt`。
 -- 别名已是子表形式（`[dependencies.<alias>]`）时报错让用户手改。
 writeAndFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Release -> Bool -> Bool -> String -> Eff r Int
-writeAndFetch manifestPath raw alias release dry noFetch abs = if hasSubtable alias raw then
-  addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
-else
-  let
-    newLine = dependencyLine alias release
-    updated = upsertDependencyLine alias newLine raw
-  in if dry then do
-    _ <- consolePrint "add: would write ${newLine}\n"
-    pure 0
-  else if updated == raw then do
-    _ <- consolePrint "add: ${alias} already up to date\n"
-    if noFetch then pure 0 else fetchAt abs False
-  else do
-    _ <- fsWriteFileAtomic manifestPath updated
-    _ <- consolePrint "add: wrote ${newLine}\n"
-    if noFetch then pure 0 else fetchAt abs False
+writeAndFetch manifestPath raw alias release dry noFetch abs =
+  if hasSubtable alias raw then
+    addFailText "dependency ${alias} is a subtable; edit [dependencies.${alias}] manually"
+  else
+    let
+      newLine = dependencyLine alias release
+      updated = upsertDependencyLine alias newLine raw
+    in if dry then
+      do
+        _ <- consolePrint "add: would write ${newLine}\n"
+        pure 0
+    else if updated == raw then
+      do
+        _ <- consolePrint "add: ${alias} already up to date\n"
+        if noFetch then pure 0 else fetchAt abs False
+    else
+      do
+        _ <- fsWriteFileAtomic manifestPath updated
+        _ <- consolePrint "add: wrote ${newLine}\n"
+        if noFetch then pure 0 else fetchAt abs False
 
 -- | 内部：内联表依赖行（一行；别名即包名）：源（`git` + `rev` / `url` / `path`）、`hash`，
 -- 索引给了语义身份时再加 `identity`。
@@ -106,13 +119,15 @@ dependencyLine : String -> Release -> String
 dependencyLine alias release =
   let
     hashText = "sha256:${release.relHash}"
-    identityText = case release.relIdentity of
-      Nothing => ""
-      Just i => ", identity = \"sha256:${i}\""
-    sourceText = case release.relSource of
-      DepGit url rev => "git = \"${url}\", rev = \"${rev}\", "
-      DepUrl u => "url = \"${u}\", "
-      DepPath p => "path = \"${p}\", "
+    identityText =
+      case release.relIdentity of
+        Nothing => ""
+        Just i => ", identity = \"sha256:${i}\""
+    sourceText =
+      case release.relSource of
+        DepGit url rev => "git = \"${url}\", rev = \"${rev}\", "
+        DepUrl u => "url = \"${u}\", "
+        DepPath p => "path = \"${p}\", "
   in "${alias} = { ${sourceText}hash = \"${hashText}\"${identityText} }"
 
 -- ---------------------------------------------------------------- 段级写回
@@ -121,8 +136,10 @@ dependencyLine alias release =
 -- 若别名已是子表段会被当成「追加」并产生重复定义。
 upsertDependencyLine : String -> String -> String -> String
 upsertDependencyLine alias newLine raw =
-  if hasSubtable alias raw then raw
-  else join "\n" (upsertGo alias newLine (split "\n" raw) False False)
+  if hasSubtable alias raw then
+    raw
+  else
+    join "\n" (upsertGo alias newLine (split "\n" raw) False False)
 
 -- | 内部：manifest 文本里是否有 `[dependencies.<alias>]` 段头行。
 hasSubtable : String -> String -> Bool
@@ -144,13 +161,17 @@ upsertGo alias newLine [] inDeps done = if inDeps && not done then [newLine] els
 upsertGo alias newLine (line :: rest) inDeps done =
   let
     t = trim line
-  in if t == "[dependencies]" then line :: upsertGo alias newLine rest True False
+  in if t == "[dependencies]" then
+    line :: upsertGo alias newLine rest True False
   else if inDeps then
     if isSectionHeader t then
       append (if done then [] else [newLine]) (line :: upsertGo alias newLine rest False True)
-    else if isAliasLine alias t then newLine :: upsertGo alias newLine rest True True
-    else line :: upsertGo alias newLine rest inDeps done
-  else line :: upsertGo alias newLine rest False done
+    else if isAliasLine alias t then
+      newLine :: upsertGo alias newLine rest True True
+    else
+      line :: upsertGo alias newLine rest inDeps done
+  else
+    line :: upsertGo alias newLine rest False done
 
 -- | 内部：该行（已 trim）是否是段头。
 isSectionHeader : String -> Bool
@@ -158,21 +179,24 @@ isSectionHeader t = startsWith "[" t
 
 -- | 内部：该行（已 trim）是否是别名 key 行：以别名开头，且剩余部分 trim 后以 `=` 开始。
 isAliasLine : String -> String -> Bool
-isAliasLine alias t = if startsWith alias t then
-  let
-    remainder =
-      substring (natFromInt (strLength alias)) (natFromInt (strLength t - strLength alias)) t
-  in startsWith "=" (trim remainder)
-else False
+isAliasLine alias t =
+  if startsWith alias t then
+    let
+      remainder = substring (natFromInt (strLength alias)) (natFromInt (strLength t - strLength alias)) t
+    in startsWith "=" (trim remainder)
+  else
+    False
 
 -- | 内部：打印诊断文本并返回退出码 1。
 printAddDiag : Member nConsole ConsoleOp r => Diagnostic -> Eff r Int
-printAddDiag d = do
-  _ <- consolePrint (diagText d ++ "\n")
-  pure 1
+printAddDiag d =
+  do
+    _ <- consolePrint (diagText d ++ "\n")
+    pure 1
 
 -- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 addFailText : Member nConsole ConsoleOp r => String -> Eff r Int
-addFailText msg = do
-  _ <- consolePrint "error: ${msg}\n"
-  pure 2
+addFailText msg =
+  do
+    _ <- consolePrint "error: ${msg}\n"
+    pure 2

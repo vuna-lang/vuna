@@ -119,25 +119,28 @@ isSpace c = c == 32 || c == 9 || c == 10 || c == 13
 
 export isOpChar : Int -> Bool
 isOpChar c =
-  c == 33
-    || c == 36
-    || c == 37
-    || c == 38
-    || c == 42
-    || c == 43
-    || c == 45
-    || c == 46
-    || c == 47
-    || c == 60
-    || c == 61
-    || c == 62
-    || c == 63
-    || c == 64
-    || c == 92
-    || c == 94
-    || c == 124
-    || c == 126
-    || c == 58
+  c
+    == 33
+    || c
+    == 36
+    || c
+    == 37
+    || c
+    == 38
+    || c
+    == 42
+    || c
+    == 43
+    || c
+    == 45
+    || c
+    == 46
+    || c
+    == 47
+    || c
+    == 60
+    || c
+    == 61 || c == 62 || c == 63 || c == 64 || c == 92 || c == 94 || c == 124 || c == 126 || c == 58
 
 -- 关键字表（含 `axiom`、`infixl` / `infixr` / `infix`）。
 export isKeyword : String -> Bool
@@ -146,35 +149,54 @@ export isKeyword : String -> Bool
 -- 标识符（编译器源码里就有 `alias` 等 binder）冲突。
 -- `transparent` / `opaque` 是硬关键字（`export` 位置紧跟 record 时也作档位前缀）。
 isKeyword s =
-  s == "data"
-    || s == "axiom"
-    || s == "extern"
-    || s == "case"
-    || s == "of"
-    || s == "let"
-    || s == "in"
-    || s == "if"
-    || s == "then"
-    || s == "else"
-    || s == "where"
-    || s == "linear"
-    || s == "transparent"
-    || s == "opaque"
-    || s == "Type"
-    || s == "import"
-    || s == "module"
-    || s == "qualified"
-    || s == "as"
-    || s == "record"
-    || s == "trait"
-    || s == "instance"
-    || s == "deriving"
-    || s == "do"
-    || s == "perform"
-    || s == "handle"
-    || s == "infixl"
-    || s == "infixr"
-    || s == "infix"
+  s
+    == "data"
+    || s
+    == "axiom"
+    || s
+    == "extern"
+    || s
+    == "case"
+    || s
+    == "of"
+    || s
+    == "let"
+    || s
+    == "in"
+    || s
+    == "if"
+    || s
+    == "then"
+    || s
+    == "else"
+    || s
+    == "where"
+    || s
+    == "linear"
+    || s
+    == "transparent"
+    || s
+    == "opaque"
+    || s
+    == "Type"
+    || s
+    == "import"
+    || s
+    == "module"
+    || s
+    == "qualified"
+    || s
+    == "as"
+    || s
+    == "record"
+    || s
+    == "trait"
+    || s
+    == "instance"
+    || s
+    == "deriving"
+    || s
+    == "do" || s == "perform" || s == "handle" || s == "infixl" || s == "infixr" || s == "infix"
 
 export classifyIdent : String -> Tok
 classifyIdent s = if isKeyword s then TKw s else TIdent s
@@ -204,57 +226,63 @@ dropTrailingSpace (c :: rest) =
 
 -- 行注释正文：从 `--` 之后扫到行尾（不消费换行）；endP 是最后一个正文字符位置。
 export collectLineBody : Int -> Chars -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
-collectLineBody fuel cs acc endP = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) (Pair cs endP))
-else
-  let
-    c = charsPeek cs
-  in if c == 10 then OkC (Pair (strPack (reverse acc)) (Pair cs endP))
-  else collectLineBody (fuel - 1) (charsStep c cs) (c :: acc) (charsPos cs)
+collectLineBody fuel cs acc endP =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) (Pair cs endP))
+  else
+    let
+      c = charsPeek cs
+    in if c == 10 then OkC (Pair (strPack (reverse acc)) (Pair cs endP)) else collectLineBody (fuel - 1) (charsStep c cs) (c :: acc) (charsPos cs)
 
 -- 块注释正文：深度从 1 开始，返回 `{-` 与 `-}` 之间的原文；endP 是 `}` 的位置。
 export collectBlockBody : Int -> Chars -> Int -> List Int -> Pos -> Check (Pair String (Pair Chars Pos))
-collectBlockBody fuel cs depth acc endP = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then lexErr0At (lexSpanAt (charsPos cs)) UnterminatedBlockComment
-else
-  let
-    c = charsPeek cs
-    c2 = charsPeekAt 1 cs
-  in if c2 < 0 then collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs)
-  else if c == 123 && c2 == 45 then
-    collectBlockBody (fuel - 1) (charsNext2 cs) (depth + 1) (c2 :: c :: acc) (charsPos2 cs)
-  else if c == 45 && c2 == 125 then
-    if depth == 1 then OkC (Pair (strPack (reverse acc)) (Pair (charsNext2 cs) (charsPos2 cs)))
-    else collectBlockBody (fuel - 1) (charsNext2 cs) (depth - 1) (c2 :: c :: acc) (charsPos2 cs)
-  else collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs)
+collectBlockBody fuel cs depth acc endP =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    lexErr0At (lexSpanAt (charsPos cs)) UnterminatedBlockComment
+  else
+    let
+      c = charsPeek cs
+      c2 = charsPeekAt 1 cs
+    in if c2 < 0 then collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs) else if c == 123 && c2 == 45 then collectBlockBody (fuel - 1) (charsNext2 cs) (depth + 1) (c2 :: c :: acc) (charsPos2 cs) else if c == 45 && c2 == 125 then if depth == 1 then OkC (Pair (strPack (reverse acc)) (Pair (charsNext2 cs) (charsPos2 cs))) else collectBlockBody (fuel - 1) (charsNext2 cs) (depth - 1) (c2 :: c :: acc) (charsPos2 cs) else collectBlockBody (fuel - 1) (charsStep c cs) depth (c :: acc) (charsPos cs)
 
 -- | 跳过行注释正文（`--` 之后），返回其后位置。
 export skipLineComment : Int -> Chars -> Check Chars
-skipLineComment fuel cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC cs
-else
-  let
-    c = charsPeek cs
-  in if c == 10 then OkC cs else skipLineComment (fuel - 1) (charsStep c cs)
+skipLineComment fuel cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC cs
+  else
+    let
+      c = charsPeek cs
+    in if c == 10 then OkC cs else skipLineComment (fuel - 1) (charsStep c cs)
 
 -- | 跳过块注释（`{-` 之后，depth 从 1 开始；可嵌套）。
 export skipBlockComment : Int -> Int -> Chars -> Check Chars
-skipBlockComment fuel depth cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then lexErr0At (lexSpanAt (charsPos cs)) UnterminatedBlockComment
-else
-  let
-    c = charsPeek cs
-    c2 = charsPeekAt 1 cs
-  in if c2 < 0 then skipBlockComment (fuel - 1) depth (charsStep c cs)
-  else if c == 123 && c2 == 45 then skipBlockComment (fuel - 1) (depth + 1) (charsNext2 cs)
-  else if c == 45 && c2 == 125 then
-    if depth == 1 then OkC (charsNext2 cs)
-    else skipBlockComment (fuel - 1) (depth - 1) (charsNext2 cs)
-  else skipBlockComment (fuel - 1) depth (charsStep c cs)
+skipBlockComment fuel depth cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    lexErr0At (lexSpanAt (charsPos cs)) UnterminatedBlockComment
+  else
+    let
+      c = charsPeek cs
+      c2 = charsPeekAt 1 cs
+    in if c2 < 0 then skipBlockComment (fuel - 1) depth (charsStep c cs) else if c == 123 && c2 == 45 then skipBlockComment (fuel - 1) (depth + 1) (charsNext2 cs) else if c == 45 && c2 == 125 then if depth == 1 then OkC (charsNext2 cs) else skipBlockComment (fuel - 1) (depth - 1) (charsNext2 cs) else skipBlockComment (fuel - 1) depth (charsStep c cs)
 
 export commentSpanOf : Pos -> Pos -> Span
 commentSpanOf startP endP =
-  Span "" (posLine startP) (posCol startP) (posLine endP) (posCol endP) (posOffset startP)
+  Span
+    ""
+    (posLine startP)
+    (posCol startP)
+    (posLine endP)
+    (posCol endP)
+    (posOffset startP)
     (posOffset endP)
 
 -- ---------------------------------------------------------------
@@ -273,46 +301,59 @@ commentSpanOf startP endP =
 -- fuel 按字符/注释段递减（所有扫描器都不回传 fuel：主循环与各扫描器各自持有一个
 -- 够用的显式 fuel，终止性走「守卫 Int + 严格递减」）。
 export skipTrivia : Int -> Chars -> Check Chars
-skipTrivia fuel cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC cs
-else
-  let
-    c = charsPeek cs
-    c2 = charsPeekAt 1 cs
-  in if isSpace c then skipTrivia (fuel - 1) (charsStep c cs)
-  else if c2 < 0 then OkC cs
-  else if c == 45 && c2 == 45 then case skipLineComment (fuel - 1) (charsStep c cs) of
-    ErrC e => ErrC e
-    OkC cs3 => skipTrivia (fuel - 1) cs3
-  else if c == 123 && c2 == 45 then case skipBlockComment (fuel - 1) 1 (charsStep c cs) of
-    ErrC e => ErrC e
-    OkC cs2 => skipTrivia (fuel - 1) cs2
-  else OkC cs
+skipTrivia fuel cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC cs
+  else
+    let
+      c = charsPeek cs
+      c2 = charsPeekAt 1 cs
+    in if isSpace c then
+      skipTrivia (fuel - 1) (charsStep c cs)
+    else if c2 < 0 then
+      OkC cs
+    else if c == 45 && c2 == 45 then
+      case skipLineComment (fuel - 1) (charsStep c cs) of
+        ErrC e => ErrC e
+        OkC cs3 => skipTrivia (fuel - 1) cs3
+    else if c == 123 && c2 == 45 then
+      case skipBlockComment (fuel - 1) 1 (charsStep c cs) of
+        ErrC e => ErrC e
+        OkC cs2 => skipTrivia (fuel - 1) cs2
+    else
+      OkC cs
 
 -- | 同 `skipTrivia`，但把注释按源码顺序收集（`lexComments` / CST trivia 用）。
 export skipTriviaComments : Int -> Chars -> Check (Pair Chars (List Comment))
 skipTriviaComments fuel cs = skipTriviaCommentsGo fuel [] cs
 
 skipTriviaCommentsGo : Int -> List Comment -> Chars -> Check (Pair Chars (List Comment))
-skipTriviaCommentsGo fuel acc cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair cs (reverse acc))
-else
-  let
-    c = charsPeek cs
-    c2 = charsPeekAt 1 cs
-    p = charsPos cs
-  in if isSpace c then skipTriviaCommentsGo (fuel - 1) acc (charsStep c cs)
-  else if c2 < 0 then OkC (Pair cs (reverse acc))
-  else if c == 45 && c2 == 45 then case collectLineBody (fuel - 1) (charsNext2 cs) [] (charsPos2 cs) of
-    ErrC e => ErrC e
-    OkC (Pair text (Pair csLine endP)) =>
-      skipTriviaCommentsGo (fuel - 1)
-        (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc) csLine
-  else if c == 123 && c2 == 45 then case collectBlockBody (fuel - 1) (charsNext2 cs) 1 [] (charsPos2 cs) of
-    ErrC e => ErrC e
-    OkC (Pair text (Pair csBlock endP)) =>
-      skipTriviaCommentsGo (fuel - 1) (Comment CBlock text (commentSpanOf p endP) :: acc) csBlock
-  else OkC (Pair cs (reverse acc))
+skipTriviaCommentsGo fuel acc cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair cs (reverse acc))
+  else
+    let
+      c = charsPeek cs
+      c2 = charsPeekAt 1 cs
+      p = charsPos cs
+    in if isSpace c then
+      skipTriviaCommentsGo (fuel - 1) acc (charsStep c cs)
+    else if c2 < 0 then
+      OkC (Pair cs (reverse acc))
+    else if c == 45 && c2 == 45 then
+      case collectLineBody (fuel - 1) (charsNext2 cs) [] (charsPos2 cs) of
+        ErrC e => ErrC e
+        OkC (Pair text (Pair csLine endP)) => skipTriviaCommentsGo (fuel - 1) (Comment CLine (trimTrailingSpace text) (commentSpanOf p endP) :: acc) csLine
+    else if c == 123 && c2 == 45 then
+      case collectBlockBody (fuel - 1) (charsNext2 cs) 1 [] (charsPos2 cs) of
+        ErrC e => ErrC e
+        OkC (Pair text (Pair csBlock endP)) => skipTriviaCommentsGo (fuel - 1) (Comment CBlock text (commentSpanOf p endP) :: acc) csBlock
+    else
+      OkC (Pair cs (reverse acc))
 
 -- ---------------------------------------------------------------
 -- 标识符 / 数字 / 运算符
@@ -321,31 +362,32 @@ else
 -- 单个标识符收集；其余 `@` 仍是操作符（保持模式 `name@pat` 的语法不变）。
 startsWithVunaAt : Chars -> Bool
 startsWithVunaAt cs =
-  charsPeekAt 0 cs == 118
-    && charsPeekAt 1 cs == 117
-    && charsPeekAt 2 cs == 110
-    && charsPeekAt 3 cs == 97
-    && charsPeekAt 4 cs == 64
+  charsPeekAt 0 cs
+    == 118
+    && charsPeekAt 1 cs
+    == 117 && charsPeekAt 2 cs == 110 && charsPeekAt 3 cs == 97 && charsPeekAt 4 cs == 64
 
 collectInternalIdent : Int -> Chars -> List Int -> Check (Pair String Chars)
-collectInternalIdent fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) cs)
-else
-  let
-    c = charsPeek cs
-  in if isIdentChar c || c == 64 then collectInternalIdent (fuel - 1) (charsStep c cs) (c :: acc)
-  else OkC (Pair (strPack (reverse acc)) cs)
+collectInternalIdent fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) cs)
+  else
+    let
+      c = charsPeek cs
+    in if isIdentChar c || c == 64 then collectInternalIdent (fuel - 1) (charsStep c cs) (c :: acc) else OkC (Pair (strPack (reverse acc)) cs)
 
 export collectIdent : Int -> Chars -> List Int -> Check (Pair String Chars)
-collectIdent fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) cs)
-else
-  let
-    c = charsPeek cs
-  in if isIdentChar c then collectIdent (fuel - 1) (charsStep c cs) (c :: acc)
-  else if c == 46 && isIdentStart (charsPeekAt 1 cs) then
-    collectIdent (fuel - 1) (charsStep c cs) (c :: acc)
-  else OkC (Pair (strPack (reverse acc)) cs)
+collectIdent fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) cs)
+  else
+    let
+      c = charsPeek cs
+    in if isIdentChar c then collectIdent (fuel - 1) (charsStep c cs) (c :: acc) else if c == 46 && isIdentStart (charsPeekAt 1 cs) then collectIdent (fuel - 1) (charsStep c cs) (c :: acc) else OkC (Pair (strPack (reverse acc)) cs)
 
 -- 63 位宿主 int 的上界（2^62 - 1）。字面量累加超过它就无法表示：在词法期报
 -- `LX_IntLiteralOutOfRange`，不再让 `acc * 10 + d` 静默回绕成小值或负数。
@@ -355,17 +397,20 @@ maxIntLiteral = 4611686018427387903
 -- 十进制字面量的累加。每位先判「再乘 10 加 d 是否会超出 maxIntLiteral」，越界即报错；
 -- 因此 `4611686018427387903` 仍合法，`...904` 起报 `LX_IntLiteralOutOfRange`。
 export collectInt : Int -> Chars -> Int -> Check (Pair Int Chars)
-collectInt fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair acc cs)
-else
-  let
-    c = charsPeek cs
-  in if isDigit c then
+collectInt fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair acc cs)
+  else
     let
-      d = c - 48
-    in if acc > (maxIntLiteral - d) / 10 then lexErr0At (lexSpanAt (charsPos cs)) IntLiteralOutOfRange
-    else collectInt (fuel - 1) (charsStep c cs) (acc * 10 + d)
-  else OkC (Pair acc cs)
+      c = charsPeek cs
+    in if isDigit c then
+      let
+        d = c - 48
+      in if acc > (maxIntLiteral - d) / 10 then lexErr0At (lexSpanAt (charsPos cs)) IntLiteralOutOfRange else collectInt (fuel - 1) (charsStep c cs) (acc * 10 + d)
+    else
+      OkC (Pair acc cs)
 
 -- ---------------------------------------------------------------
 -- 浮点字面量（`digits '.' digits`）
@@ -374,44 +419,51 @@ else
 -- （含 `LX_IntLiteralOutOfRange` 语义）。这样普通整数路径没有额外分配。
 -- | 数字串后面是否紧跟「`.` + 数字」：是则整段按浮点字面量扫描，否则走整数路径。
 export digitRunIsFloat : Int -> Chars -> Check Bool
-digitRunIsFloat fuel cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC False
-else
-  let
-    c = charsPeek cs
-  in if isDigit c then digitRunIsFloat (fuel - 1) (charsStep c cs)
-  else if c == 46 then OkC (isDigit (charsPeekAt 1 cs)) else OkC False
+digitRunIsFloat fuel cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC False
+  else
+    let
+      c = charsPeek cs
+    in if isDigit c then digitRunIsFloat (fuel - 1) (charsStep c cs) else if c == 46 then OkC (isDigit (charsPeekAt 1 cs)) else OkC False
 
 -- 收集 `digits '.' digits` 的原始文本（首字符已消费，acc 是逆序的数字字符）。
 -- | 收集浮点字面量 `digits . digits` 的原始文本；遇到 `.` 后交给 `collectFrac`。
 export collectFloat : Int -> Chars -> List Int -> Check (Pair String Chars)
-collectFloat fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) cs)
-else
-  let
-    c = charsPeek cs
-  in if isDigit c then collectFloat (fuel - 1) (charsStep c cs) (c :: acc)
-  else if c == 46 then collectFrac (fuel - 1) (charsStep c cs) (c :: acc)
-  else OkC (Pair (strPack (reverse acc)) cs)
+collectFloat fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) cs)
+  else
+    let
+      c = charsPeek cs
+    in if isDigit c then collectFloat (fuel - 1) (charsStep c cs) (c :: acc) else if c == 46 then collectFrac (fuel - 1) (charsStep c cs) (c :: acc) else OkC (Pair (strPack (reverse acc)) cs)
 
 -- | 收集浮点字面量的小数部分（`.` 已消费），遇到非数字即停止。
 export collectFrac : Int -> Chars -> List Int -> Check (Pair String Chars)
-collectFrac fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) cs)
-else
-  let
-    c = charsPeek cs
-  in if isDigit c then collectFrac (fuel - 1) (charsStep c cs) (c :: acc)
-  else OkC (Pair (strPack (reverse acc)) cs)
+collectFrac fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) cs)
+  else
+    let
+      c = charsPeek cs
+    in if isDigit c then collectFrac (fuel - 1) (charsStep c cs) (c :: acc) else OkC (Pair (strPack (reverse acc)) cs)
 
 export collectOp : Int -> Chars -> List Int -> Check (Pair String Chars)
-collectOp fuel cs acc = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then OkC (Pair (strPack (reverse acc)) cs)
-else
-  let
-    c = charsPeek cs
-  in if isOpChar c then collectOp (fuel - 1) (charsStep c cs) (c :: acc)
-  else OkC (Pair (strPack (reverse acc)) cs)
+collectOp fuel cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    OkC (Pair (strPack (reverse acc)) cs)
+  else
+    let
+      c = charsPeek cs
+    in if isOpChar c then collectOp (fuel - 1) (charsStep c cs) (c :: acc) else OkC (Pair (strPack (reverse acc)) cs)
 
 -- ---------------------------------------------------------------
 -- 字符串 / 模板字面量
@@ -436,11 +488,13 @@ decodeEscape 36 = Just 36
 decodeEscape other = Nothing
 
 export dropOpeningNewline : Chars -> Chars
-dropOpeningNewline cs = if charsEmpty cs then cs
-else
-  let
-    c = charsPeek cs
-  in if c == 10 then charsStep c cs else cs
+dropOpeningNewline cs =
+  if charsEmpty cs then
+    cs
+  else
+    let
+      c = charsPeek cs
+    in if c == 10 then charsStep c cs else cs
 
 export flushText : List Int -> List TmplPart -> List TmplPart
 flushText [] parts = parts
@@ -450,53 +504,62 @@ flushText acc parts = TPText (strPack (reverse acc)) :: parts
 -- 返回：(parts（正序）、(字面量之后的 Chars, 结束引号位置))。
 export scanTemplateText : Int -> Bool -> Chars -> List Int -> List TmplPart -> Check (Pair (List TmplPart) (Pair Chars Pos))
 -- 单行结束 `"`；单行不允许原始换行
-scanTemplateText fuel multi cs acc parts = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then lexErr0At (lexSpanAt (charsPos cs)) UnterminatedString
-else
-  let
-    c = charsPeek cs
-    c2 = charsPeekAt 1 cs
-    c3 = charsPeekAt 2 cs
-    p = charsPos cs
-  in if c == 36 then
-    if c2 == 123 then case lexHoleTokens (fuel - 1) 0 (charsNext2 cs) [] of
-      -- 插值洞：`${`
-      ErrC e => ErrC e
-      OkC (Pair toks cs2) =>
-        if charsPeek cs2 == 125 then
-          scanTemplateText (fuel - 1) multi (charsNext cs2) [] (TPHole toks :: flushText acc parts)
-        else lexErr0At (lexSpanAt p) UnterminatedInterpolation
-    else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
-  else if c == 92 then
-    if c2 < 0 then lexErr0At (lexSpanAt p) UnterminatedString
-    else case decodeEscape c2 of
-      -- 转义
-      Nothing => lexErr0At (lexSpanAt p) UnknownEscape
-      Just d => scanTemplateText (fuel - 1) multi (charsNext2 cs) (d :: acc) parts
-  else if multi && c == 34 then
-    if c2 == 34 && c3 == 34 then
-      let
-        -- 多行结束 `"""`
-        pos3 = charsPos2 cs
-      in OkC (Pair (reverse (flushText acc parts)) (Pair (charsNext2 (charsNext cs)) pos3))
-    else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
-  else if not multi && c == 34 then OkC (Pair (reverse (flushText acc parts)) (Pair (charsStep c cs) p))
-  else if not multi && c == 10 then lexErr0At (lexSpanAt p) UnterminatedString
-  else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
+scanTemplateText fuel multi cs acc parts =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    lexErr0At (lexSpanAt (charsPos cs)) UnterminatedString
+  else
+    let
+      c = charsPeek cs
+      c2 = charsPeekAt 1 cs
+      c3 = charsPeekAt 2 cs
+      p = charsPos cs
+    in if c == 36 then
+      if c2 == 123 then
+        case lexHoleTokens (fuel - 1) 0 (charsNext2 cs) [] of
+          -- 插值洞：`${`
+          ErrC e => ErrC e
+          OkC (Pair toks cs2) => if charsPeek cs2 == 125 then scanTemplateText (fuel - 1) multi (charsNext cs2) [] (TPHole toks :: flushText acc parts) else lexErr0At (lexSpanAt p) UnterminatedInterpolation
+      else
+        scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
+    else if c == 92 then
+      if c2 < 0 then
+        lexErr0At (lexSpanAt p) UnterminatedString
+      else
+        case decodeEscape c2 of
+          -- 转义
+          Nothing => lexErr0At (lexSpanAt p) UnknownEscape
+          Just d => scanTemplateText (fuel - 1) multi (charsNext2 cs) (d :: acc) parts
+    else if multi && c == 34 then
+      if c2 == 34 && c3 == 34 then
+        let
+          -- 多行结束 `"""`
+          pos3 = charsPos2 cs
+        in OkC (Pair (reverse (flushText acc parts)) (Pair (charsNext2 (charsNext cs)) pos3))
+      else
+        scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
+    else if not multi && c == 34 then OkC (Pair (reverse (flushText acc parts)) (Pair (charsStep c cs) p)) else if not multi && c == 10 then lexErr0At (lexSpanAt p) UnterminatedString else scanTemplateText (fuel - 1) multi (charsStep c cs) (c :: acc) parts
 
 -- 洞内 token 扫描：从 `${` 之后开始，`{`/`}` 计深度，深度 0 的 `}` 不消费。
 -- 内部字符串/注释由 token 词法（`lexOneToken` / `skipTrivia`）整体跳过。
 export lexHoleTokens : Int -> Int -> Chars -> List PTok -> Check (Pair (List PTok) Chars)
-lexHoleTokens fuel depth cs acc = if fuel <= 0 then icFuel "lexer"
-else case skipTrivia (fuel - 1) cs of
-  ErrC e => ErrC e
-  -- 洞内注释随 trivia 丢弃（不进 AST / 注释表）：已知边界，见模块头。
-  OkC cs2 => if charsEmpty cs2 then lexErr0At (lexSpanAt (charsPos cs2)) UnterminatedInterpolation
-  else if charsPeek cs2 == 125 && depth == 0 then OkC (Pair (reverse acc) cs2)
-  else case lexOneToken (fuel - 1) cs2 of
-    ErrC e => ErrC e
-    OkC (Pair tok cs3) =>
-      lexHoleTokens (fuel - 1) (depthAfter depth tok.ptokTok) cs3 (setTokEnd cs3 tok :: acc)
+lexHoleTokens fuel depth cs acc =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else
+    case skipTrivia (fuel - 1) cs of
+      ErrC e => ErrC e
+      -- 洞内注释随 trivia 丢弃（不进 AST / 注释表）：已知边界，见模块头。
+      OkC cs2 =>
+        if charsEmpty cs2 then
+          lexErr0At (lexSpanAt (charsPos cs2)) UnterminatedInterpolation
+        else if charsPeek cs2 == 125 && depth == 0 then
+          OkC (Pair (reverse acc) cs2)
+        else
+          case lexOneToken (fuel - 1) cs2 of
+            ErrC e => ErrC e
+            OkC (Pair tok cs3) => lexHoleTokens (fuel - 1) (depthAfter depth tok.ptokTok) cs3 (setTokEnd cs3 tok :: acc)
 
 -- 洞的深度更新：`{` 加深、`}` 变浅；其它 token 不变。
 export depthAfter : Int -> Tok -> Int
@@ -506,55 +569,74 @@ depthAfter depth _ = depth
 
 -- 消费一个 token（调用方保证已 skipTrivia 且输入非空）。
 export lexOneToken : Int -> Chars -> Check (Pair PTok Chars)
-lexOneToken fuel cs = if fuel <= 0 then icFuel "lexer"
-else if charsEmpty cs then icInternal "lexOneToken on empty input"
-else
-  let
-    c = charsPeek cs
-    p = charsPos cs
-    next = charsStep c cs
-  in if c == 64 && startsWithVunaAt next then case collectInternalIdent (fuel - 1) next [c] of
-    ErrC e => ErrC e
-    OkC (Pair name cs2) => OkC (Pair (PTok (classifyIdent name) p) cs2)
-  else if isIdentStart c then case collectIdent (fuel - 1) next [c] of
-    ErrC e => ErrC e
-    OkC (Pair name cs2) => OkC (Pair (PTok (classifyIdent name) p) cs2)
-  else if isDigit c then case digitRunIsFloat (fuel - 1) next of
-    ErrC e => ErrC e
-    OkC True => case collectFloat (fuel - 1) next [c] of
-      ErrC e => ErrC e
-      OkC (Pair raw cs2) => OkC (Pair (PTok (TFloat raw) p) cs2)
-    OkC False => case collectInt (fuel - 1) next (c - 48) of
-      ErrC e => ErrC e
-      OkC (Pair n cs2) => OkC (Pair (PTok (TInt n) p) cs2)
-  else if c == 34 then lexStringToken (fuel - 1) next p
-  else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
-    OkC (Pair (PTok (TSym (strPack [c])) p) next)
-  else if c == 96 then OkC (Pair (PTok (TSym "`") p) next)
-  else if isOpChar c then case collectOp (fuel - 1) next [c] of
-    -- 反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
-    -- 单独识别成 `TSym "`"`，由 parser 配对消费。
-    ErrC e => ErrC e
-    OkC (Pair op cs2) => OkC (Pair (PTok (TSym op) p) cs2)
-  else lexErr0At (lexSpanAt p) UnexpectedCharacter
+lexOneToken fuel cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsEmpty cs then
+    icInternal "lexOneToken on empty input"
+  else
+    let
+      c = charsPeek cs
+      p = charsPos cs
+      next = charsStep c cs
+    in if c == 64 && startsWithVunaAt next then
+      case collectInternalIdent (fuel - 1) next [c] of
+        ErrC e => ErrC e
+        OkC (Pair name cs2) => OkC (Pair (PTok (classifyIdent name) p) cs2)
+    else if isIdentStart c then
+      case collectIdent (fuel - 1) next [c] of
+        ErrC e => ErrC e
+        OkC (Pair name cs2) => OkC (Pair (PTok (classifyIdent name) p) cs2)
+    else if isDigit c then
+      case digitRunIsFloat (fuel - 1) next of
+        ErrC e => ErrC e
+        OkC True =>
+          case collectFloat (fuel - 1) next [c] of
+            ErrC e => ErrC e
+            OkC (Pair raw cs2) => OkC (Pair (PTok (TFloat raw) p) cs2)
+        OkC False =>
+          case collectInt (fuel - 1) next (c - 48) of
+            ErrC e => ErrC e
+            OkC (Pair n cs2) => OkC (Pair (PTok (TInt n) p) cs2)
+    else if c == 34 then
+      lexStringToken (fuel - 1) next p
+    else if c == 40 || c == 41 || c == 91 || c == 93 || c == 44 || c == 123 || c == 125 then
+      OkC (Pair (PTok (TSym (strPack [c])) p) next)
+    else if c == 96 then
+      OkC (Pair (PTok (TSym "`") p) next)
+    else if isOpChar c then
+      case collectOp (fuel - 1) next [c] of
+        -- 反引号中缀的定界符。`96` 不在 isOpChar 里（否则会与相邻符号粘成一个 token），
+        -- 单独识别成 `TSym "`"`，由 parser 配对消费。
+        ErrC e => ErrC e
+        OkC (Pair op cs2) => OkC (Pair (PTok (TSym op) p) cs2)
+    else
+      lexErr0At (lexSpanAt p) UnexpectedCharacter
 
 -- `"..."` / `"""..."""`：判定形式后走模板扫描，再决定 token 形态。
 -- 单行且无洞 → `TStr`；其余（多行 / 含洞）→ `TTmpl`。
 export lexStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
-lexStringToken fuel cs p = if fuel <= 0 then icFuel "lexer"
-else if charsPeek cs == 34 && charsPeekAt 1 cs == 34 then
-  case scanTemplateText (fuel - 1) True (dropOpeningNewline (charsNext2 cs)) [] [] of
-    ErrC e => ErrC e
-    OkC (Pair parts (Pair cs2 endP)) => OkC (Pair (PTok (TTmpl True parts endP) p) cs2)
-else lexSingleStringToken (fuel - 1) cs p
+lexStringToken fuel cs p =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else if charsPeek cs == 34 && charsPeekAt 1 cs == 34 then
+    case scanTemplateText (fuel - 1) True (dropOpeningNewline (charsNext2 cs)) [] [] of
+      ErrC e => ErrC e
+      OkC (Pair parts (Pair cs2 endP)) => OkC (Pair (PTok (TTmpl True parts endP) p) cs2)
+  else
+    lexSingleStringToken (fuel - 1) cs p
 
 export lexSingleStringToken : Int -> Chars -> Pos -> Check (Pair PTok Chars)
-lexSingleStringToken fuel body p = if fuel <= 0 then icFuel "lexer"
-else case scanTemplateText (fuel - 1) False body [] [] of
-  ErrC e => ErrC e
-  OkC (Pair parts (Pair cs2 endP)) => case parts of
-    [TPText s] => OkC (Pair (PTok (TStr s) p) cs2)
-    _ => OkC (Pair (PTok (TTmpl False parts endP) p) cs2)
+lexSingleStringToken fuel body p =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else
+    case scanTemplateText (fuel - 1) False body [] [] of
+      ErrC e => ErrC e
+      OkC (Pair parts (Pair cs2 endP)) =>
+        case parts of
+          [TPText s] => OkC (Pair (PTok (TStr s) p) cs2)
+          _ => OkC (Pair (PTok (TTmpl False parts endP) p) cs2)
 
 -- ---------------------------------------------------------------
 -- 主循环
@@ -565,36 +647,48 @@ else case scanTemplateText (fuel - 1) False body [] [] of
 -- 主循环是**尾递归**（token 逆序累积，出口一次 `reverse`）：递归深度等于源码 token 数，
 -- 非尾形式在固定大小的 wasm 栈上会被大文件（如编译器自身的模块）耗尽。
 export lexCharsWith : Int -> List Comment -> Chars -> Check (Pair (List PTok) (List Comment))
-lexCharsWith fuel acc0 cs = case lexCharsWithRev fuel acc0 [] cs of
-  ErrC e => ErrC e
-  OkC (Pair toks comments) => OkC (Pair (reverse toks) comments)
+lexCharsWith fuel acc0 cs =
+  case lexCharsWithRev fuel acc0 [] cs of
+    ErrC e => ErrC e
+    OkC (Pair toks comments) => OkC (Pair (reverse toks) comments)
 
 lexCharsWithRev : Int -> List Comment -> List PTok -> Chars -> Check (Pair (List PTok) (List Comment))
-lexCharsWithRev fuel acc toks cs = if fuel <= 0 then icFuel "lexer"
-else case skipTriviaComments fuel cs of
-  ErrC e => ErrC e
-  OkC (Pair cs2 comments) => if charsEmpty cs2 then OkC
-    (Pair (PTok TEof (posWithEnd (charsPos cs2) (charsOffset cs2)) :: toks) (reverse (append (reverse comments) acc)))
-  else case lexOneToken fuel cs2 of
-    -- 末尾 trivia 里的注释也要收（否则文件尾注释会从注释表里消失）。
-    ErrC e => ErrC e
-    OkC (Pair tok cs3) =>
-      lexCharsWithRev (fuel - 1) (append (reverse comments) acc) (setTokEnd cs3 tok :: toks) cs3
+lexCharsWithRev fuel acc toks cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else
+    case skipTriviaComments fuel cs of
+      ErrC e => ErrC e
+      OkC (Pair cs2 comments) =>
+        if charsEmpty cs2 then
+          OkC (Pair (PTok TEof (posWithEnd (charsPos cs2) (charsOffset cs2)) :: toks) (reverse (append (reverse comments) acc)))
+        else
+          case lexOneToken fuel cs2 of
+            -- 末尾 trivia 里的注释也要收（否则文件尾注释会从注释表里消失）。
+            ErrC e => ErrC e
+            OkC (Pair tok cs3) => lexCharsWithRev (fuel - 1) (append (reverse comments) acc) (setTokEnd cs3 tok :: toks) cs3
 
 -- | token 流主循环（不收集注释）：编译器热路径只走这一条。尾递归，见 `lexCharsWith`。
 export lexChars : Int -> Chars -> Check (List PTok)
-lexChars fuel cs = case lexCharsRev fuel [] cs of
-  ErrC e => ErrC e
-  OkC toks => OkC (reverse toks)
+lexChars fuel cs =
+  case lexCharsRev fuel [] cs of
+    ErrC e => ErrC e
+    OkC toks => OkC (reverse toks)
 
 lexCharsRev : Int -> List PTok -> Chars -> Check (List PTok)
-lexCharsRev fuel acc cs = if fuel <= 0 then icFuel "lexer"
-else case skipTrivia fuel cs of
-  ErrC e => ErrC e
-  OkC cs2 => if charsEmpty cs2 then OkC (PTok TEof (posWithEnd (charsPos cs2) (charsOffset cs2)) :: acc)
-  else case lexOneToken fuel cs2 of
-    ErrC e => ErrC e
-    OkC (Pair tok cs3) => lexCharsRev (fuel - 1) (setTokEnd cs3 tok :: acc) cs3
+lexCharsRev fuel acc cs =
+  if fuel <= 0 then
+    icFuel "lexer"
+  else
+    case skipTrivia fuel cs of
+      ErrC e => ErrC e
+      OkC cs2 =>
+        if charsEmpty cs2 then
+          OkC (PTok TEof (posWithEnd (charsPos cs2) (charsOffset cs2)) :: acc)
+        else
+          case lexOneToken fuel cs2 of
+            ErrC e => ErrC e
+            OkC (Pair tok cs3) => lexCharsRev (fuel - 1) (setTokEnd cs3 tok :: acc) cs3
 
 -- | 一次扫描的产物：token 流 + 注释表（源码顺序）。注释侧消费者（CST、
 -- `parseSourceWithComments`、`lexComments`）用这一份，避免第二次全量词法。
@@ -605,9 +699,10 @@ export lexSource : String -> Check (List PTok)
 lexSource source = lexChars (sourceFuel source) (Chars source 0 (Pos 1 1 0 0))
 
 export lexComments : String -> Check (List Comment)
-lexComments source = case lexSourceWithComments source of
-  ErrC e => ErrC e
-  OkC (Pair toks comments) => OkC comments
+lexComments source =
+  case lexSourceWithComments source of
+    ErrC e => ErrC e
+    OkC (Pair toks comments) => OkC comments
 
 -- 显式 fuel 的初值。
 --

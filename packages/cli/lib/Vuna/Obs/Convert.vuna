@@ -43,18 +43,22 @@ record ConvertOpts where
 
 -- | 内部：把已解析的 flag 收成 `ConvertOpts`。
 convertOptsOf : Parsed -> Check ConvertOpts
-convertOptsOf parsed = do
-  fmt <- formatOf parsed
-  out <- outOf parsed
-  pure (ConvertOpts fmt out)
+convertOptsOf parsed =
+  do
+    fmt <- formatOf parsed
+    out <- outOf parsed
+    pure (ConvertOpts fmt out)
 
 -- | 内部：读 `--to`（必填），未知格式报错。
 formatOf : Parsed -> Check String
-formatOf parsed = case flagValue parsed "to" of
-  Nothing => err "missing required flag `--to` (cpuprofile | speedscope | folded | jsonl)"
-  Just text =>
-    if isConvertFormat text then OkC text
-    else err "unknown `--to` format `${text}` (expected cpuprofile, speedscope, folded or jsonl)"
+formatOf parsed =
+  case flagValue parsed "to" of
+    Nothing => err "missing required flag `--to` (cpuprofile | speedscope | folded | jsonl)"
+    Just text =>
+      if isConvertFormat text then
+        OkC text
+      else
+        err "unknown `--to` format `${text}` (expected cpuprofile, speedscope, folded or jsonl)"
 
 -- | 内部：`--to` 的四个合法取值判定。
 isConvertFormat : String -> Bool
@@ -63,9 +67,11 @@ isConvertFormat text =
 
 -- | 内部：读 `--out`（空串 = 用法错误）。
 outOf : Parsed -> Check (Maybe String)
-outOf parsed = case flagValue parsed "out" of
-  Nothing => OkC Nothing
-  Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
+outOf parsed =
+  case flagValue parsed "out" of
+    Nothing => OkC Nothing
+    Just text =>
+      if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
 
 -- ---------------------------------------------------------------
 -- 入口
@@ -73,14 +79,17 @@ outOf parsed = case flagValue parsed "out" of
 -- | `vuna dev obs convert` 的入口：解析 `--to` / `--out` 与单个 TRACE。
 -- 用法/读盘错误退出码 2，无 cpu 采样退出码 1。
 export runObsConvert : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsConvert args = case parseCmdArgs ["dev", "obs", "convert"] args of
-  ErrC e => convertFail 2 (diagText e)
-  OkC parsed => case convertOptsOf parsed of
+runObsConvert args =
+  case parseCmdArgs ["dev", "obs", "convert"] args of
     ErrC e => convertFail 2 (diagText e)
-    OkC opts => case parsed.positionals of
-      [path] => convertTrace opts path
-      [] => convertFail 2 convertUsage
-      _ => convertFail 2 "${convertUsage} (exactly one TRACE)"
+    OkC parsed =>
+      case convertOptsOf parsed of
+        ErrC e => convertFail 2 (diagText e)
+        OkC opts =>
+          case parsed.positionals of
+            [path] => convertTrace opts path
+            [] => convertFail 2 convertUsage
+            _ => convertFail 2 "${convertUsage} (exactly one TRACE)"
 
 -- | `convert` 的用法文本。
 convertUsage : String
@@ -89,30 +98,35 @@ convertUsage =
 
 -- | 内部：读一个 trace、按格式换算并写出；读盘失败 ⇒ 2，内容失败（无 CPU 采样等）⇒ 1。
 convertTrace : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => ConvertOpts -> String -> Eff r Int
-convertTrace opts path = do
-  traceR <- readTraceFull path
-  case traceR of
-    ErrC e => convertFail 2 (diagText e)
-    OkC trace => case convertContent opts.convertFormat trace of
-      ErrC e => convertFail 1 (diagText e)
-      OkC content => emitContent opts.convertOut content
+convertTrace opts path =
+  do
+    traceR <- readTraceFull path
+    case traceR of
+      ErrC e => convertFail 2 (diagText e)
+      OkC trace =>
+        case convertContent opts.convertFormat trace of
+          ErrC e => convertFail 1 (diagText e)
+          OkC content => emitContent opts.convertOut content
 
 -- | 内部：打印 `error: ...` 并返回给定退出码。
 convertFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
-convertFail code e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure code
+convertFail code e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure code
 
 -- | 内部：`Nothing` 打到 stdout；`Just path` 先建父目录、写文件，再打印 `wrote <path>`。
 emitContent : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> String -> Eff r Int
-emitContent Nothing content = do
-  _ <- consolePrint content
-  pure 0
-emitContent (Just path) content = do
-  _ <- ensureDirPath (parentOf path)
-  _ <- fsWriteFile path content
-  _ <- consolePrint "wrote ${path}\n"
-  pure 0
+emitContent Nothing content =
+  do
+    _ <- consolePrint content
+    pure 0
+emitContent (Just path) content =
+  do
+    _ <- ensureDirPath (parentOf path)
+    _ <- fsWriteFile path content
+    _ <- consolePrint "wrote ${path}\n"
+    pure 0
 
 -- ---------------------------------------------------------------
 -- 换算分派
@@ -122,18 +136,20 @@ emitContent (Just path) content = do
 convertContent : String -> ObsTrace -> Check String
 convertContent "jsonl" trace = OkC (jsonlText trace)
 convertContent "cpuprofile" trace = fmap renderJson (cpuProfileOf trace.traceEvents)
-convertContent fmt trace = case cpuSamplesOf trace.traceEvents of
-  ErrC e => ErrC e
-  OkC [] => err (noCpuSamplesText fmt)
-  OkC samples => OkC (sampledFormatContent fmt samples)
+convertContent fmt trace =
+  case cpuSamplesOf trace.traceEvents of
+    ErrC e => ErrC e
+    OkC [] => err (noCpuSamplesText fmt)
+    OkC samples => OkC (sampledFormatContent fmt samples)
 
 -- | trace 事件 -> CDP Profile（`convert --to cpuprofile` 与 `obs serve --cdp` 的唯一构造点）。
 -- 空 CPU 采样 = 内容性错误（`ErrC`，调用方映射退出码 1 / JSON-RPC content 错误）。
 export cpuProfileOf : List (Pair Int ObsEvent) -> Check Json
-cpuProfileOf rows = case cpuSamplesOf rows of
-  ErrC e => ErrC e
-  OkC [] => err (noCpuSamplesText "cpuprofile")
-  OkC samples => OkC (cpuProfileJson samples)
+cpuProfileOf rows =
+  case cpuSamplesOf rows of
+    ErrC e => ErrC e
+    OkC [] => err (noCpuSamplesText "cpuprofile")
+    OkC samples => OkC (cpuProfileJson samples)
 
 -- | 内部：`speedscope` 与 folded 的渲染分派（`cpuprofile` 已在 `convertContent` 单独处理）。
 sampledFormatContent : String -> List CpuSample -> String
@@ -170,13 +186,16 @@ record FrameLoc where
 
 -- | 内部：把 `Name@file:line` 拆成 `FrameLoc`；按最后一个 `:` 分文件与行号，行号转 0-based。
 frameLocOf : String -> FrameLoc
-frameLocOf frame = case splitFirstAt frame of
-  Nothing => FrameLoc frame "" (0 - 1)
-  Just (Pair name rest) => case splitLastColon rest of
-    Nothing => FrameLoc name "" (0 - 1)
-    Just (Pair url lineText) => case nonNegIntOf lineText of
-      Just line => FrameLoc name url (line - 1)
-      Nothing => FrameLoc name "" (0 - 1)
+frameLocOf frame =
+  case splitFirstAt frame of
+    Nothing => FrameLoc frame "" (0 - 1)
+    Just (Pair name rest) =>
+      case splitLastColon rest of
+        Nothing => FrameLoc name "" (0 - 1)
+        Just (Pair url lineText) =>
+          case nonNegIntOf lineText of
+            Just line => FrameLoc name url (line - 1)
+            Nothing => FrameLoc name "" (0 - 1)
 
 -- | 内部：在第一个 `@` 处切成两段。
 splitFirstAt : String -> Maybe (Pair String String)
@@ -186,14 +205,17 @@ splitFirstAt s = splitFirstAtChars (strUnpack s) []
 splitFirstAtChars : List Int -> List Int -> Maybe (Pair String String)
 splitFirstAtChars [] _ = Nothing
 splitFirstAtChars (c :: rest) acc =
-  if c == 64 then Just (Pair (strPack (reverse acc)) (strPack rest))
-  else splitFirstAtChars rest (c :: acc)
+  if c == 64 then
+    Just (Pair (strPack (reverse acc)) (strPack rest))
+  else
+    splitFirstAtChars rest (c :: acc)
 
 -- | 内部：在最后一个 `:` 处切成两段（反转后找第一个 `:` 再反转回来）。
 splitLastColon : String -> Maybe (Pair String String)
-splitLastColon s = case splitFirstColon (reverseString s) of
-  Nothing => Nothing
-  Just (Pair revLine revUrl) => Just (Pair (reverseString revUrl) (reverseString revLine))
+splitLastColon s =
+  case splitFirstColon (reverseString s) of
+    Nothing => Nothing
+    Just (Pair revLine revUrl) => Just (Pair (reverseString revUrl) (reverseString revLine))
 
 -- | 内部：在第一个 `:` 处切成两段。
 splitFirstColon : String -> Maybe (Pair String String)
@@ -203,8 +225,10 @@ splitFirstColon s = splitFirstColonChars (strUnpack s) []
 splitFirstColonChars : List Int -> List Int -> Maybe (Pair String String)
 splitFirstColonChars [] _ = Nothing
 splitFirstColonChars (c :: rest) acc =
-  if c == 58 then Just (Pair (strPack (reverse acc)) (strPack rest))
-  else splitFirstColonChars rest (c :: acc)
+  if c == 58 then
+    Just (Pair (strPack (reverse acc)) (strPack rest))
+  else
+    splitFirstColonChars rest (c :: acc)
 
 -- | 内部：按字符反转字符串。
 reverseString : String -> String
@@ -258,8 +282,9 @@ cdpInitial = CdpBuild (CdpTable 2 [CdpNode 1 "(root)" "" 0 0 []]) []
 
 -- | 内部：把一个采样（叶在前的栈）插进树，并记下命中的叶节点 id。
 addConvertSample : CdpBuild -> CpuSample -> CdpBuild
-addConvertSample build sample = case insertFramePath (reverse sample.cpuSampleFrames) 1 build.cdpTable of
-  Pair table leaf => CdpBuild table (leaf :: build.cdpLeavesRev)
+addConvertSample build sample =
+  case insertFramePath (reverse sample.cpuSampleFrames) 1 build.cdpTable of
+    Pair table leaf => CdpBuild table (leaf :: build.cdpLeavesRev)
 
 -- | 内部：按 root-first 的帧序列建父链；节点按首次出现顺序编号（2 起，1 = root），返回
 -- 新建/命中的叶节点 id。栈在输入里是叶在前，调用方先反转。
@@ -279,18 +304,22 @@ insertFramePath (frame :: rest) parent table =
 
 -- | 内部：父节点下已存在的 `(name, url, line)` 相同子节点 id。
 childNodeOf : Int -> FrameLoc -> List CdpNode -> Maybe Int
-childNodeOf parent loc nodes = case nodeById parent nodes of
-  Nothing => Nothing
-  Just parentNode => findChildNode loc nodes parentNode.cdpChildrenRev
+childNodeOf parent loc nodes =
+  case nodeById parent nodes of
+    Nothing => Nothing
+    Just parentNode => findChildNode loc nodes parentNode.cdpChildrenRev
 
 -- | 内部：在子 id 列表里按 `(name, url, line)` 找节点。
 findChildNode : FrameLoc -> List CdpNode -> List Int -> Maybe Int
 findChildNode loc nodes [] = Nothing
-findChildNode loc nodes (id :: rest) = case nodeById id nodes of
-  Just n =>
-    if n.cdpName == loc.frameName && n.cdpUrl == loc.frameUrl && n.cdpLine == loc.frameLine then Just id
-    else findChildNode loc nodes rest
-  Nothing => findChildNode loc nodes rest
+findChildNode loc nodes (id :: rest) =
+  case nodeById id nodes of
+    Just n =>
+      if n.cdpName == loc.frameName && n.cdpUrl == loc.frameUrl && n.cdpLine == loc.frameLine then
+        Just id
+      else
+        findChildNode loc nodes rest
+    Nothing => findChildNode loc nodes rest
 
 -- | 内部：按 id 查节点（线性扫描）。
 nodeById : Int -> List CdpNode -> Maybe CdpNode
@@ -303,7 +332,8 @@ attachChild id child [] = []
 attachChild id child (n :: rest) =
   if n.cdpId == id then
     CdpNode n.cdpId n.cdpName n.cdpUrl n.cdpLine n.cdpParent (child :: n.cdpChildrenRev) :: rest
-  else n :: attachChild id child rest
+  else
+    n :: attachChild id child rest
 
 -- | 内部：采样序列 -> CDP Profile JSON（`nodes` / `startTime` / `endTime` / `samples` /
 -- `timeDeltas`；`samples` 是每次命中的叶节点 id）。
@@ -311,12 +341,14 @@ cpuProfileJson : List CpuSample -> Json
 cpuProfileJson samples =
   let
     build = foldl addConvertSample cdpInitial samples
-    start = case samples of
-      s :: _ => s.cpuSampleTs
-      [] => 0
-    end = case reverse samples of
-      s :: _ => s.cpuSampleTs
-      [] => 0
+    start =
+      case samples of
+        s :: _ => s.cpuSampleTs
+        [] => 0
+    end =
+      case reverse samples of
+        s :: _ => s.cpuSampleTs
+        [] => 0
     leaves = reverse build.cdpLeavesRev
   in JObj
     [Pair "nodes" (JArr (map cdpNodeJson build.cdpTable.cdpNodes)), Pair "startTime" (JNum start), Pair "endTime" (JNum end), Pair "samples" (JArr (map JNum leaves)), Pair "timeDeltas" (JArr (map JNum (deltasOf start samples)))]
@@ -345,12 +377,14 @@ speedscopeJson : List CpuSample -> Json
 speedscopeJson samples =
   let
     frames = distinctFramesOf samples
-    start = case samples of
-      s :: _ => s.cpuSampleTs
-      [] => 0
-    end = case reverse samples of
-      s :: _ => s.cpuSampleTs
-      [] => 0
+    start =
+      case samples of
+        s :: _ => s.cpuSampleTs
+        [] => 0
+    end =
+      case reverse samples of
+        s :: _ => s.cpuSampleTs
+        [] => 0
     profile =
       JObj
         [Pair "type" (JStr "evented"), Pair "name" (JStr "vuna"), Pair "unit" (JStr "microseconds"), Pair "startValue" (JNum start), Pair "endValue" (JNum end), Pair "events" (JArr (map (speedscopeEvent frames) samples))]
@@ -377,10 +411,11 @@ addFrame acc frame = if memName frame acc then acc else frame :: acc
 -- | 内部：一个采样的 O 事件（`at` = 采样 ts，`frame` = 叶帧在帧表里的下标）；空栈退化
 -- 为帧 0。
 speedscopeEvent : List String -> CpuSample -> Json
-speedscopeEvent frames sample = case sample.cpuSampleFrames of
-  leaf :: _ =>
-    JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum (frameIndexOf leaf frames))]
-  [] => JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum 0)]
+speedscopeEvent frames sample =
+  case sample.cpuSampleFrames of
+    leaf :: _ =>
+      JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum (frameIndexOf leaf frames))]
+    [] => JObj [Pair "at" (JNum sample.cpuSampleTs), Pair "frame" (JNum 0)]
 
 -- | 内部：帧在帧表里的下标（未命中给 0）。
 frameIndexOf : String -> List String -> Int

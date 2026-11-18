@@ -76,15 +76,18 @@ tokenAtOffsetGo off (t :: rest) =
 -- token 之间没有空白，只按区间覆盖判断会命中前一个 token，把右边界停在符号之前
 -- （`[1, 2]` 被切成 `[1, 2`）。找不到精确起点时才回落到区间覆盖。
 tokenEndAt : LintSrc -> Int -> Int
-tokenEndAt src off = case tokenAtOffset src off of
-  Just t => posEndOffset t.ptokPos
-  Nothing => tokenEndCovering off src.lintSrcToks
+tokenEndAt src off =
+  case tokenAtOffset src off of
+    Just t => posEndOffset t.ptokPos
+    Nothing => tokenEndCovering off src.lintSrcToks
 
 tokenEndCovering : Int -> List PTok -> Int
 tokenEndCovering off [] = off
 tokenEndCovering off (t :: rest) =
-  if posOffset t.ptokPos <= off && posEndOffset t.ptokPos >= off then posEndOffset t.ptokPos
-  else tokenEndCovering off rest
+  if posOffset t.ptokPos <= off && posEndOffset t.ptokPos >= off then
+    posEndOffset t.ptokPos
+  else
+    tokenEndCovering off rest
 
 -- | 内部：起点严格大于 off 的第一个 token。
 nextTokenAfterOffset : LintSrc -> Int -> Maybe PTok
@@ -197,10 +200,11 @@ indentOf line = indentChars (strUnpack line)
 -- | 内部：从行首字符数缩进，遇到非空白字符即停。
 indentChars : List Int -> Int
 indentChars [] = 0
-indentChars (c :: rest) = case c of
-  32 => 1 + indentChars rest
-  9 => 1 + indentChars rest
-  _ => 0
+indentChars (c :: rest) =
+  case c of
+    32 => 1 + indentChars rest
+    9 => 1 + indentChars rest
+    _ => 0
 
 -- | 内部：字符序列是否全为空白。
 blankChars : List Int -> Bool
@@ -215,8 +219,10 @@ splitLines source = splitLinesFrom (strUnpack source) [] []
 splitLinesFrom : List Int -> List String -> List Int -> List String
 splitLinesFrom [] acc cur = reverse (strPack (reverse cur) :: acc)
 splitLinesFrom (c :: rest) acc cur =
-  if c == 10 then splitLinesFrom rest (strPack (reverse cur) :: acc) []
-  else splitLinesFrom rest acc (c :: cur)
+  if c == 10 then
+    splitLinesFrom rest (strPack (reverse cur) :: acc) []
+  else
+    splitLinesFrom rest acc (c :: cur)
 
 -- | `splitLines` 的逆操作：单元素不追加换行，避免以换行结尾的源码每轮修复都多写一个行尾换行。
 export joinLines : List String -> String
@@ -240,10 +246,13 @@ takeChars n (c :: rest) = if n <= 0 then [] else c :: takeChars (n - 1) rest
 
 -- | 内部：去掉前 n 个元素。
 dropChars : Int -> List a -> List a
-dropChars n chars = if n <= 0 then chars
-else case chars of
-  [] => []
-  c :: rest => dropChars (n - 1) rest
+dropChars n chars =
+  if n <= 0 then
+    chars
+  else
+    case chars of
+      [] => []
+      c :: rest => dropChars (n - 1) rest
 
 -- | 内部：从 start 起取 count 个元素。
 sliceChars : Int -> Int -> List a -> List a
@@ -287,9 +296,10 @@ trimEnd line =
 -- | 内部：字符序列 `p` 是否是 `text` 的前缀。
 prefixChars : List Int -> List Int -> Bool
 prefixChars [] text = True
-prefixChars (p :: prest) text = case text of
-  [] => False
-  t :: trest => p == t && prefixChars prest trest
+prefixChars (p :: prest) text =
+  case text of
+    [] => False
+    t :: trest => p == t && prefixChars prest trest
 
 -- | 内部：字符序列里是否包含某个子串。
 containsSubChars : List Int -> List Int -> Bool
@@ -313,17 +323,23 @@ hasTabOrCR line = containsChar 9 (strUnpack line) || containsChar 13 (strUnpack 
 
 -- | 内部：去掉前 n 个元素（n <= 0 时原样返回）。
 dropIndex : Int -> List a -> List a
-dropIndex n lines = if n <= 0 then lines
-else case lines of
-  [] => []
-  x :: rest => dropIndex (n - 1) rest
+dropIndex n lines =
+  if n <= 0 then
+    lines
+  else
+    case lines of
+      [] => []
+      x :: rest => dropIndex (n - 1) rest
 
 -- | 内部：前 n 个元素（n <= 0 时为空）。
 takeIndex : Int -> List a -> List a
-takeIndex n lines = if n <= 0 then []
-else case lines of
-  [] => []
-  x :: rest => x :: takeIndex (n - 1) rest
+takeIndex n lines =
+  if n <= 0 then
+    []
+  else
+    case lines of
+      [] => []
+      x :: rest => x :: takeIndex (n - 1) rest
 
 -- | 内部：取 1 基闭区间 `[start, stop]` 的行。
 rangeLines : List String -> Int -> Int -> List String
@@ -356,13 +372,15 @@ blockBodyLines lines body target =
     raw =
       if inline then
         append [tailFromCol (lineAt lines start) startCol] (rangeLines lines (start + 1) stop)
-      else rangeLines lines start stop
+      else
+        rangeLines lines start stop
   in case raw of
     [] => []
     first :: rest =>
       let
         firstText = if inline then first else dropIndent firstIndent first
-      in append [spaces target ++ firstText]
+      in append
+        [spaces target ++ firstText]
         (map (\line => spaces target ++ dropIndent firstIndent line) rest)
 
 -- ---------------------------------------------------------------
@@ -415,33 +433,37 @@ tokLen (PTok TEof p) = 0
 
 -- | 内部：按 span 查 token；偏移缺失时回落到行列。
 tokenAtSpan : LintSrc -> Span -> Maybe PTok
-tokenAtSpan src sp = case tokenAtOffset src (spanStartOffset sp) of
-  Just t => Just t
-  Nothing => tokenAt src.lintSrcToks (spanStartLine sp) (spanStartCol sp)
+tokenAtSpan src sp =
+  case tokenAtOffset src (spanStartOffset sp) of
+    Just t => Just t
+    Nothing => tokenAt src.lintSrcToks (spanStartLine sp) (spanStartCol sp)
 
 -- | 内部：旧行列路径的下一 token（仅用于偏移不完整的历史 span 回落）。
 nextTokAfter : List PTok -> Int -> Int -> Maybe PTok
 nextTokAfter [] line col = Nothing
 nextTokAfter (t :: rest) line col =
-  if tokLine t > line then Just t
+  if tokLine t > line then
+    Just t
   else if tokLine t == line && tokCol t > col then Just t else nextTokAfter rest line col
 
 -- | 内部：行列路径的表达式结束列（偏移不可用时的回落）。
 exprEndColAfter : List PTok -> Int -> Int -> Maybe Int
-exprEndColAfter toks line col = case tokenAt toks line col of
-  Nothing => Nothing
-  Just tok => Just (col + tokLen tok)
+exprEndColAfter toks line col =
+  case tokenAt toks line col of
+    Nothing => Nothing
+    Just tok => Just (col + tokLen tok)
 
 -- | 内部：span 的单行源码原文；右边界取 span 末 token 之后的下一个 token（或行尾），跨行
 -- 时返回空串。
 spanText : LintSrc -> Span -> String
-spanText src sp = if spanStartLine sp /= spanEndLine sp then ""
-else
-  let
-    start = spanStartOffset sp
-    end = tokenEndAt src (spanEndOffset sp)
-  in if end <= start || start == 0 && spanStartLine sp > 1 then spanTextLine src sp
-  else trimEnd (sliceOffsets src start end)
+spanText src sp =
+  if spanStartLine sp /= spanEndLine sp then
+    ""
+  else
+    let
+      start = spanStartOffset sp
+      end = tokenEndAt src (spanEndOffset sp)
+    in if end <= start || start == 0 && spanStartLine sp > 1 then spanTextLine src sp else trimEnd (sliceOffsets src start end)
 
 -- | 内部：行列路径的 span 文本（偏移不可用时的回落）。
 spanTextLine : LintSrc -> Span -> String
@@ -452,9 +474,12 @@ spanTextLine src sp =
   in case nextTokAfter src.lintSrcToks (spanEndLine sp) sp.spanEndCol of
     Nothing => trimEnd (tailFromCol line col)
     Just t =>
-      if tokIsEof t then trimEnd (tailFromCol line col)
-      else if tokLine t == spanEndLine sp then trimEnd (sliceBetween line col (tokCol t))
-      else trimEnd (tailFromCol line col)
+      if tokIsEof t then
+        trimEnd (tailFromCol line col)
+      else if tokLine t == spanEndLine sp then
+        trimEnd (sliceBetween line col (tokCol t))
+      else
+        trimEnd (tailFromCol line col)
 
 -- | 内部：模式的单行源码原文。
 patText : LintSrc -> Pat -> String
@@ -481,103 +506,119 @@ startFromSpan sp = Pair (spanStartLine sp) (spanStartCol sp)
 -- | 内部：按构造子递归求表达式的最小起始位置（覆盖中缀链、括号、section 等 parser 中间
 -- 产物，不落到兜底坐标）。
 startExpr : Int -> Expr -> Pair Int Int
-startExpr fuel e = if fuel <= 0 then lintFuelExhausted "expression position"
-else case e of
-  EVar n sp => startFromSpan sp
-  EInt n sp => startFromSpan sp
-  EStr s sp => startFromSpan sp
-  EFloat raw sp => startFromSpan sp
-  EInterp multi parts sp => startFromSpan sp
-  ELam ps body sp => minPair (startFromSpan sp) (startExpr (fuel - 1) body)
-  EApp fn args sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
-  EPi n implicit _ dom cod sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
-  ELet binds body recFlag sp =>
-    minPair (startFromSpan sp) (minPair (startBinds (fuel - 1) binds) (startExpr (fuel - 1) body))
-  ELocalFun clauses sp => minPair (startFromSpan sp) (startLocalClauses (fuel - 1) clauses)
-  ECase scrut alts sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) scrut) (startAlts (fuel - 1) alts))
-  EIf c t el sp =>
-    minPair (startFromSpan sp)
-      (minPair (startExpr (fuel - 1) c) (minPair (startExpr (fuel - 1) t) (startExpr (fuel - 1) el)))
-  EField base f sp => minPair (startFromSpan sp) (startExpr (fuel - 1) base)
-  ERecord rn fields sp => minPair (startFromSpan sp) (startFields (fuel - 1) fields)
-  ERecUpdate base fields sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
-  EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
-  EAnn value ty sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
-  -- keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
-  -- 起始位置要递归到操作数（中缀 span 从运算符开始，lhs 可能更靠前）。
-  EBacktick nm l r sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
-  ESectOp op sp => startFromSpan sp
-  ESectL op rhs sp => minPair (startFromSpan sp) (startExpr (fuel - 1) rhs)
-  ESectR lhs op sp => minPair (startFromSpan sp) (startExpr (fuel - 1) lhs)
-  -- 中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
-  EInfix op l r sp =>
-    minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
-  EParen inner sp => minPair (startFromSpan sp) (startExpr (fuel - 1) inner)
+startExpr fuel e =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case e of
+      EVar n sp => startFromSpan sp
+      EInt n sp => startFromSpan sp
+      EStr s sp => startFromSpan sp
+      EFloat raw sp => startFromSpan sp
+      EInterp multi parts sp => startFromSpan sp
+      ELam ps body sp => minPair (startFromSpan sp) (startExpr (fuel - 1) body)
+      EApp fn args sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) fn) (startExprs (fuel - 1) args))
+      EPi n implicit _ dom cod sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) dom) (startExpr (fuel - 1) cod))
+      ELet binds body recFlag sp => minPair (startFromSpan sp) (minPair (startBinds (fuel - 1) binds) (startExpr (fuel - 1) body))
+      ELocalFun clauses sp => minPair (startFromSpan sp) (startLocalClauses (fuel - 1) clauses)
+      ECase scrut alts sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) scrut) (startAlts (fuel - 1) alts))
+      EIf c t el sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) c) (minPair (startExpr (fuel - 1) t) (startExpr (fuel - 1) el)))
+      EField base f sp => minPair (startFromSpan sp) (startExpr (fuel - 1) base)
+      ERecord rn fields sp => minPair (startFromSpan sp) (startFields (fuel - 1) fields)
+      ERecUpdate base fields sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) base) (startFields (fuel - 1) fields))
+      EDo stmts sp => minPair (startFromSpan sp) (startStmts (fuel - 1) stmts)
+      EAnn value ty sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) value) (startExpr (fuel - 1) ty))
+      -- keep 模式（lint 的 parse 后阶段）下反引号中缀 / section 保留原形；
+      -- 起始位置要递归到操作数（中缀 span 从运算符开始，lhs 可能更靠前）。
+      EBacktick nm l r sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
+      ESectOp op sp => startFromSpan sp
+      ESectL op rhs sp => minPair (startFromSpan sp) (startExpr (fuel - 1) rhs)
+      ESectR lhs op sp => minPair (startFromSpan sp) (startExpr (fuel - 1) lhs)
+      -- 中缀链 / 括号（parser 中间产物）也要给出真实起点，不能落到兜底 (0,0)。
+      EInfix op l r sp => minPair (startFromSpan sp) (minPair (startExpr (fuel - 1) l) (startExpr (fuel - 1) r))
+      EParen inner sp => minPair (startFromSpan sp) (startExpr (fuel - 1) inner)
 
 -- | 内部：一组表达式的最小起始位置；空列表返回极大坐标。
 startExprs : Int -> List Expr -> Pair Int Int
-startExprs fuel exprs = if fuel <= 0 then lintFuelExhausted "expression position"
-else case exprs of
-  [] => Pair 1000000000 1000000000
-  e :: rest => minPair (startExpr (fuel - 1) e) (startExprs (fuel - 1) rest)
+startExprs fuel exprs =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case exprs of
+      [] => Pair 1000000000 1000000000
+      e :: rest => minPair (startExpr (fuel - 1) e) (startExprs (fuel - 1) rest)
 
 -- | 内部：record 字段值的最小起始位置。
 startFields : Int -> List (Pair String Expr) -> Pair Int Int
-startFields fuel fields = if fuel <= 0 then lintFuelExhausted "expression position"
-else case fields of
-  [] => Pair 1000000000 1000000000
-  (Pair f e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
+startFields fuel fields =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case fields of
+      [] => Pair 1000000000 1000000000
+      (Pair f e) :: rest => minPair (startExpr (fuel - 1) e) (startFields (fuel - 1) rest)
 
 -- | 内部：let 绑定右值的最小起始位置。
 startBinds : Int -> List (Pair Pat Expr) -> Pair Int Int
-startBinds fuel binds = if fuel <= 0 then lintFuelExhausted "expression position"
-else case binds of
-  [] => Pair 1000000000 1000000000
-  (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
+startBinds fuel binds =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case binds of
+      [] => Pair 1000000000 1000000000
+      (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startBinds (fuel - 1) rest)
 
 -- | 内部：case alt 体的最小起始位置。
 startAlts : Int -> List (Pair Pat Expr) -> Pair Int Int
-startAlts fuel alts = if fuel <= 0 then lintFuelExhausted "expression position"
-else case alts of
-  [] => Pair 1000000000 1000000000
-  (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
+startAlts fuel alts =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case alts of
+      [] => Pair 1000000000 1000000000
+      (Pair pat e) :: rest => minPair (startExpr (fuel - 1) e) (startAlts (fuel - 1) rest)
 
 -- | 内部：局部函数 clause 体的最小起始位置。
 startLocalClauses : Int -> List (Pair (List Pat) Expr) -> Pair Int Int
-startLocalClauses fuel clauses = if fuel <= 0 then lintFuelExhausted "expression position"
-else case clauses of
-  [] => Pair 1000000000 1000000000
-  (Pair pats e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
+startLocalClauses fuel clauses =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case clauses of
+      [] => Pair 1000000000 1000000000
+      (Pair pats e) :: rest => minPair (startExpr (fuel - 1) e) (startLocalClauses (fuel - 1) rest)
 
 -- | 内部：do 语句的最小起始位置。
 startStmts : Int -> List DoStmt -> Pair Int Int
-startStmts fuel stmts = if fuel <= 0 then lintFuelExhausted "expression position"
-else case stmts of
-  [] => Pair 1000000000 1000000000
-  stmt :: rest => minPair (startStmt (fuel - 1) stmt) (startStmts (fuel - 1) rest)
+startStmts fuel stmts =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case stmts of
+      [] => Pair 1000000000 1000000000
+      stmt :: rest => minPair (startStmt (fuel - 1) stmt) (startStmts (fuel - 1) rest)
 
 -- | 内部：单条 do 语句的最小起始位置。
 startStmt : Int -> DoStmt -> Pair Int Int
-startStmt fuel stmt = if fuel <= 0 then lintFuelExhausted "expression position"
-else case stmt of
-  DBind pat e sp => startExpr (fuel - 1) e
-  DExpr e sp => startExpr (fuel - 1) e
+startStmt fuel stmt =
+  if fuel <= 0 then
+    lintFuelExhausted "expression position"
+  else
+    case stmt of
+      DBind pat e sp => startExpr (fuel - 1) e
+      DExpr e sp => startExpr (fuel - 1) e
 
 -- | 内部：表达式的真实起始行。
 exprStartLine : Expr -> Int
-exprStartLine e = case exprStartPos e of
-  Pair line col => line
+exprStartLine e =
+  case exprStartPos e of
+    Pair line col => line
 
 -- | 内部：表达式的真实起始列。
 exprStartCol : Expr -> Int
-exprStartCol e = case exprStartPos e of
-  Pair line col => col
+exprStartCol e =
+  case exprStartPos e of
+    Pair line col => col
 
 -- | 内部：表达式的真实单行性（起点用子树最小位置，覆盖中缀 span 起点偏后的情况）。
 exprSingleLine : Expr -> Bool
@@ -594,11 +635,13 @@ parenDeficitGo [] start end acc = acc
 parenDeficitGo (t :: rest) start end acc =
   let
     off = posOffset t.ptokPos
-  in if off < start || off >= end then parenDeficitGo rest start end acc
-  else case t of
-    PTok (TSym "(") _ => parenDeficitGo rest start end (acc - 1)
-    PTok (TSym ")") _ => parenDeficitGo rest start end (acc + 1)
-    _ => parenDeficitGo rest start end acc
+  in if off < start || off >= end then
+    parenDeficitGo rest start end acc
+  else
+    case t of
+      PTok (TSym "(") _ => parenDeficitGo rest start end (acc - 1)
+      PTok (TSym ")") _ => parenDeficitGo rest start end (acc + 1)
+      _ => parenDeficitGo rest start end acc
 
 -- | 内部：AST 的 `EParen` span 不含括号本身（`Ast.exprSpan` 取内层），所以父节点
 -- 由它派生的 span 可能从括号内部开始；直接按 span 切会漏掉左括号、留下孤立的 `)`。
@@ -611,11 +654,15 @@ widenStart src start end =
 
 widenStartGo : List PTok -> Int -> Int -> Int
 widenStartGo [] start n = start
-widenStartGo (t :: rest) start n = if n <= 0 then start
-else if posOffset t.ptokPos >= start then widenStartGo rest start n
-else case t of
-  PTok (TSym "(") _ => widenStartGo rest (posOffset t.ptokPos) (n - 1)
-  _ => start
+widenStartGo (t :: rest) start n =
+  if n <= 0 then
+    start
+  else if posOffset t.ptokPos >= start then
+    widenStartGo rest start n
+  else
+    case t of
+      PTok (TSym "(") _ => widenStartGo rest (posOffset t.ptokPos) (n - 1)
+      _ => start
 
 -- | 内部：反向不平衡（切片里多出左括号）时把紧跟的 `)` 补进末偏移。
 widenEnd : LintSrc -> Int -> Int -> Int
@@ -626,21 +673,27 @@ widenEnd src start end =
 
 widenEndGo : List PTok -> Int -> Int -> Int
 widenEndGo [] end n = end
-widenEndGo (t :: rest) end n = if n >= 0 then end
-else if posOffset t.ptokPos < end then widenEndGo rest end n
-else case t of
-  PTok (TSym ")") _ => widenEndGo rest (posEndOffset t.ptokPos) (n + 1)
-  _ => end
+widenEndGo (t :: rest) end n =
+  if n >= 0 then
+    end
+  else if posOffset t.ptokPos < end then
+    widenEndGo rest end n
+  else
+    case t of
+      PTok (TSym ")") _ => widenEndGo rest (posEndOffset t.ptokPos) (n + 1)
+      _ => end
 
 exprText : LintSrc -> Expr -> String
-exprText src e = if not (exprSingleLine e) then ""
-else
-  let
-    start0 = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
-    end0 = tokenEndAt src (offsetOfLineCol src (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)))
-    start = if end0 <= start0 then start0 else widenStart src start0 end0
-    end = if end0 <= start0 then end0 else widenEnd src start0 end0
-  in if end <= start then exprTextLine src e else trimEnd (sliceOffsets src start end)
+exprText src e =
+  if not (exprSingleLine e) then
+    ""
+  else
+    let
+      start0 = offsetOfLineCol src (exprStartLine e) (exprStartCol e)
+      end0 = tokenEndAt src (offsetOfLineCol src (spanEndLine (exprSpan e)) (spanEndCol (exprSpan e)))
+      start = if end0 <= start0 then start0 else widenStart src start0 end0
+      end = if end0 <= start0 then end0 else widenEnd src start0 end0
+    in if end <= start then exprTextLine src e else trimEnd (sliceOffsets src start end)
 
 -- | 内部：行列路径的表达式文本（偏移不可用时的回落）。
 exprTextLine : LintSrc -> Expr -> String
@@ -652,19 +705,23 @@ exprTextLine src e =
   in case nextTokAfter src.lintSrcToks endLine (exprSpan e).spanEndCol of
     Nothing => trimEnd (tailFromCol line col)
     Just t =>
-      if tokIsEof t then trimEnd (tailFromCol line col)
-      else if tokLine t == endLine then trimEnd (sliceBetween line col (tokCol t))
-      else trimEnd (tailFromCol line col)
+      if tokIsEof t then
+        trimEnd (tailFromCol line col)
+      else if tokLine t == endLine then
+        trimEnd (sliceBetween line col (tokCol t))
+      else
+        trimEnd (tailFromCol line col)
 
 -- | 内部：表达式是否收束在自己的行片段末尾：同行后随 token 只能是 `else`（inline 链尾）或
 -- 没有。
 segmentOk : LintSrc -> Expr -> Bool
-segmentOk src e = if not (exprSingleLine e) then False
-else case nextTokenAfterOffset src (spanEndOffset (exprSpan e)) of
-  Nothing => True
-  Just t =>
-    if tokIsEof t then True
-    else if tokLine t == spanEndLine (exprSpan e) then tokIsKw t "else" else True
+segmentOk src e =
+  if not (exprSingleLine e) then
+    False
+  else
+    case nextTokenAfterOffset src (spanEndOffset (exprSpan e)) of
+      Nothing => True
+      Just t => if tokIsEof t then True else if tokLine t == spanEndLine (exprSpan e) then tokIsKw t "else" else True
 
 -- | 内部：把行内某个标识符 token 的出现替换成新文本。
 replaceIdentInLine : String -> PTok -> String -> String
@@ -678,9 +735,10 @@ replaceIdentInLine line tok replacement =
 
 -- | 内部：token 的标识符名字；非标识符为空串。
 identText : PTok -> String
-identText tok = case tokIdentOf tok of
-  Just x => x
-  Nothing => ""
+identText tok =
+  case tokIdentOf tok of
+    Just x => x
+    Nothing => ""
 
 -- | 内部：该位置之前是否只有空白（即名字独占行首）。
 startsOwnLine : List String -> Int -> Int -> Bool
@@ -695,29 +753,38 @@ patVars pats = patVarsFuel lintFuel pats
 
 -- | 内部：`patVars` 的 fuel 版本。
 patVarsFuel : Int -> List Pat -> List String
-patVarsFuel fuel pats = if fuel <= 0 then lintFuelExhausted "traversal"
-else case pats of
-  [] => []
-  p :: rest => append (patVarFuel (fuel - 1) p) (patVarsFuel (fuel - 1) rest)
+patVarsFuel fuel pats =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case pats of
+      [] => []
+      p :: rest => append (patVarFuel (fuel - 1) p) (patVarsFuel (fuel - 1) rest)
 
 -- | 内部：单个模式绑定的变量名。
 patVarFuel : Int -> Pat -> List String
-patVarFuel fuel pat = if fuel <= 0 then lintFuelExhausted "traversal"
-else case pat of
-  PVar name sp => [name]
-  PAs name inner sp => name :: patVarFuel (fuel - 1) inner
-  PWild sp => []
-  PCon name args sp => patVarsFuel (fuel - 1) args
-  PInt n sp => []
-  PStr s sp => []
-  PRecord name fields sp => patFieldVarsFuel (fuel - 1) fields
+patVarFuel fuel pat =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case pat of
+      PVar name sp => [name]
+      PAs name inner sp => name :: patVarFuel (fuel - 1) inner
+      PWild sp => []
+      PCon name args sp => patVarsFuel (fuel - 1) args
+      PInt n sp => []
+      PStr s sp => []
+      PRecord name fields sp => patFieldVarsFuel (fuel - 1) fields
 
 -- | 内部：record 模式各字段绑定的变量名。
 patFieldVarsFuel : Int -> List (Pair String Pat) -> List String
-patFieldVarsFuel fuel fields = if fuel <= 0 then lintFuelExhausted "traversal"
-else case fields of
-  [] => []
-  (Pair f pat) :: rest => append (patVarFuel (fuel - 1) pat) (patFieldVarsFuel (fuel - 1) rest)
+patFieldVarsFuel fuel fields =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case fields of
+      [] => []
+      (Pair f pat) :: rest => append (patVarFuel (fuel - 1) pat) (patFieldVarsFuel (fuel - 1) rest)
 
 -- | 内部：某个变量名在模式列表里出现的次数。
 countVar : String -> List Pat -> Int
@@ -725,26 +792,35 @@ countVar name pats = countPatsFuel lintFuel name pats
 
 -- | 内部：`countVar` 的模式列表实现。
 countPatsFuel : Int -> String -> List Pat -> Int
-countPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "count"
-else case pats of
-  [] => 0
-  p :: rest => countPatFuel (fuel - 1) name p + countPatsFuel (fuel - 1) name rest
+countPatsFuel fuel name pats =
+  if fuel <= 0 then
+    lintFuelExhausted "count"
+  else
+    case pats of
+      [] => 0
+      p :: rest => countPatFuel (fuel - 1) name p + countPatsFuel (fuel - 1) name rest
 
 -- | 内部：单个模式里某变量名出现的次数（只看变量、构造子参数与 record 字段）。
 countPatFuel : Int -> String -> Pat -> Int
-countPatFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "count"
-else case pat of
-  PVar n sp => if n == name then 1 else 0
-  PCon n args sp => countPatsFuel (fuel - 1) name args
-  PRecord n fields sp => countFieldsFuel (fuel - 1) name fields
-  _ => 0
+countPatFuel fuel name pat =
+  if fuel <= 0 then
+    lintFuelExhausted "count"
+  else
+    case pat of
+      PVar n sp => if n == name then 1 else 0
+      PCon n args sp => countPatsFuel (fuel - 1) name args
+      PRecord n fields sp => countFieldsFuel (fuel - 1) name fields
+      _ => 0
 
 -- | 内部：record 模式字段里某变量名出现的次数。
 countFieldsFuel : Int -> String -> List (Pair String Pat) -> Int
-countFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "count"
-else case fields of
-  [] => 0
-  (Pair f pat) :: rest => countPatFuel (fuel - 1) name pat + countFieldsFuel (fuel - 1) name rest
+countFieldsFuel fuel name fields =
+  if fuel <= 0 then
+    lintFuelExhausted "count"
+  else
+    case fields of
+      [] => 0
+      (Pair f pat) :: rest => countPatFuel (fuel - 1) name pat + countFieldsFuel (fuel - 1) name rest
 
 -- | 内部：模式里某变量名第一次出现的 span。
 patVarSpan : String -> Pat -> Maybe Span
@@ -752,12 +828,15 @@ patVarSpan name pat = patVarSpanFuel lintFuel name pat
 
 -- | 内部：`patVarSpan` 的 fuel 版本。
 patVarSpanFuel : Int -> String -> Pat -> Maybe Span
-patVarSpanFuel fuel name pat = if fuel <= 0 then lintFuelExhausted "pattern variable"
-else case pat of
-  PVar n sp => if n == name then Just sp else Nothing
-  PCon n args sp => patVarSpanInPatsFuel (fuel - 1) name args
-  PRecord n fields sp => patVarSpanInFieldsFuel (fuel - 1) name fields
-  _ => Nothing
+patVarSpanFuel fuel name pat =
+  if fuel <= 0 then
+    lintFuelExhausted "pattern variable"
+  else
+    case pat of
+      PVar n sp => if n == name then Just sp else Nothing
+      PCon n args sp => patVarSpanInPatsFuel (fuel - 1) name args
+      PRecord n fields sp => patVarSpanInFieldsFuel (fuel - 1) name fields
+      _ => Nothing
 
 -- | 内部：模式列表里某变量名第一次出现的 span。
 patVarSpanInPats : String -> List Pat -> Maybe Span
@@ -765,21 +844,29 @@ patVarSpanInPats name pats = patVarSpanInPatsFuel lintFuel name pats
 
 -- | 内部：`patVarSpanInPats` 的 fuel 版本。
 patVarSpanInPatsFuel : Int -> String -> List Pat -> Maybe Span
-patVarSpanInPatsFuel fuel name pats = if fuel <= 0 then lintFuelExhausted "pattern variable"
-else case pats of
-  [] => Nothing
-  p :: rest => case patVarSpanFuel (fuel - 1) name p of
-    Just sp => Just sp
-    Nothing => patVarSpanInPatsFuel (fuel - 1) name rest
+patVarSpanInPatsFuel fuel name pats =
+  if fuel <= 0 then
+    lintFuelExhausted "pattern variable"
+  else
+    case pats of
+      [] => Nothing
+      p :: rest =>
+        case patVarSpanFuel (fuel - 1) name p of
+          Just sp => Just sp
+          Nothing => patVarSpanInPatsFuel (fuel - 1) name rest
 
 -- | 内部：record 模式字段里某变量名第一次出现的 span。
 patVarSpanInFieldsFuel : Int -> String -> List (Pair String Pat) -> Maybe Span
-patVarSpanInFieldsFuel fuel name fields = if fuel <= 0 then lintFuelExhausted "pattern variable"
-else case fields of
-  [] => Nothing
-  (Pair f pat) :: rest => case patVarSpanFuel (fuel - 1) name pat of
-    Just sp => Just sp
-    Nothing => patVarSpanInFieldsFuel (fuel - 1) name rest
+patVarSpanInFieldsFuel fuel name fields =
+  if fuel <= 0 then
+    lintFuelExhausted "pattern variable"
+  else
+    case fields of
+      [] => Nothing
+      (Pair f pat) :: rest =>
+        case patVarSpanFuel (fuel - 1) name pat of
+          Just sp => Just sp
+          Nothing => patVarSpanInFieldsFuel (fuel - 1) name rest
 
 -- | 内部：两个名字列表是否有交集。
 intersectsNames : List String -> List String -> Bool
@@ -820,98 +907,118 @@ exprMentions name e = mentionsExpr lintFuel name e
 
 -- | 内部：`exprMentions` 的 fuel 版本，覆盖全部表达式构造子。
 mentionsExpr : Int -> String -> Expr -> Bool
-mentionsExpr fuel name e = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case e of
-  EVar n sp => n == name
-  EInt n sp => False
-  EStr s sp => False
-  EFloat raw sp => False
-  ELam ps body sp => mentionsExpr (fuel - 1) name body
-  EApp fn args sp => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
-  EPi n implicit _ dom cod sp =>
-    mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
-  ELet binds body recFlag sp =>
-    mentionsBinds (fuel - 1) name binds || mentionsExpr (fuel - 1) name body
-  ELocalFun clauses sp => mentionsClauses (fuel - 1) name clauses
-  ECase scrut alts sp => mentionsExpr (fuel - 1) name scrut || mentionsAlts (fuel - 1) name alts
-  EIf cond yes no sp =>
-    mentionsExpr (fuel - 1) name cond
-      || mentionsExpr (fuel - 1) name yes
-      || mentionsExpr (fuel - 1) name no
-  EField base f sp => mentionsExpr (fuel - 1) name base
-  ERecord rname fields sp => mentionsFields (fuel - 1) name fields
-  ERecUpdate base fields sp =>
-    mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
-  EDo stmts sp => mentionsStmts (fuel - 1) name stmts
-  EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
-  -- 中缀链与括号（parser 中间产物）：操作数继续递归。
-  EInfix op l r sp => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
-  EParen inner sp => mentionsExpr (fuel - 1) name inner
-  -- 反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
-  EBacktick nm l r sp =>
-    nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
-  ESectOp op sp => op == name
-  ESectL op rhs sp => op == name || mentionsExpr (fuel - 1) name rhs
-  ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
-  -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
-  EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
+mentionsExpr fuel name e =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case e of
+      EVar n sp => n == name
+      EInt n sp => False
+      EStr s sp => False
+      EFloat raw sp => False
+      ELam ps body sp => mentionsExpr (fuel - 1) name body
+      EApp fn args sp => mentionsExpr (fuel - 1) name fn || mentionsExprs (fuel - 1) name args
+      EPi n implicit _ dom cod sp => mentionsExpr (fuel - 1) name dom || mentionsExpr (fuel - 1) name cod
+      ELet binds body recFlag sp => mentionsBinds (fuel - 1) name binds || mentionsExpr (fuel - 1) name body
+      ELocalFun clauses sp => mentionsClauses (fuel - 1) name clauses
+      ECase scrut alts sp => mentionsExpr (fuel - 1) name scrut || mentionsAlts (fuel - 1) name alts
+      EIf cond yes no sp => mentionsExpr (fuel - 1) name cond || mentionsExpr (fuel - 1) name yes || mentionsExpr (fuel - 1) name no
+      EField base f sp => mentionsExpr (fuel - 1) name base
+      ERecord rname fields sp => mentionsFields (fuel - 1) name fields
+      ERecUpdate base fields sp => mentionsExpr (fuel - 1) name base || mentionsFields (fuel - 1) name fields
+      EDo stmts sp => mentionsStmts (fuel - 1) name stmts
+      EAnn value ty sp => mentionsExpr (fuel - 1) name value || mentionsExpr (fuel - 1) name ty
+      -- 中缀链与括号（parser 中间产物）：操作数继续递归。
+      EInfix op l r sp => mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
+      EParen inner sp => mentionsExpr (fuel - 1) name inner
+      -- 反引号里的名字与 section 的 op 都是值引用，操作数继续递归。
+      EBacktick nm l r sp => nm == name || mentionsExpr (fuel - 1) name l || mentionsExpr (fuel - 1) name r
+      ESectOp op sp => op == name
+      ESectL op rhs sp => op == name || mentionsExpr (fuel - 1) name rhs
+      ESectR lhs op sp => op == name || mentionsExpr (fuel - 1) name lhs
+      -- 模板字面量：洞内引用照常算 mention（否则 where 变量会被误报未使用）。
+      EInterp multi parts sp => mentionsInterpParts (fuel - 1) name parts
 
 -- | 内部：模板字面量各段里的引用（洞内表达式参与扫描）。
 mentionsInterpParts : Int -> String -> List InterpPart -> Bool
-mentionsInterpParts fuel name parts = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case parts of
-  [] => False
-  (IPText s) :: rest => mentionsInterpParts (fuel - 1) name rest
-  (IPHole e) :: rest => mentionsExpr (fuel - 1) name e || mentionsInterpParts (fuel - 1) name rest
+mentionsInterpParts fuel name parts =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case parts of
+      [] => False
+      (IPText s) :: rest => mentionsInterpParts (fuel - 1) name rest
+      (IPHole e) :: rest => mentionsExpr (fuel - 1) name e || mentionsInterpParts (fuel - 1) name rest
 
 -- | 内部：任一表达式是否引用该名字。
 mentionsExprs : Int -> String -> List Expr -> Bool
-mentionsExprs fuel name exprs = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case exprs of
-  [] => False
-  e :: rest => mentionsExpr (fuel - 1) name e || mentionsExprs (fuel - 1) name rest
+mentionsExprs fuel name exprs =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case exprs of
+      [] => False
+      e :: rest => mentionsExpr (fuel - 1) name e || mentionsExprs (fuel - 1) name rest
 
 -- | 内部：record 字段值是否引用该名字。
 mentionsFields : Int -> String -> List (Pair String Expr) -> Bool
-mentionsFields fuel name fields = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case fields of
-  [] => False
-  (Pair f e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
+mentionsFields fuel name fields =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case fields of
+      [] => False
+      (Pair f e) :: rest => mentionsExpr (fuel - 1) name e || mentionsFields (fuel - 1) name rest
 
 -- | 内部：let 绑定右值是否引用该名字。
 mentionsBinds : Int -> String -> List (Pair Pat Expr) -> Bool
-mentionsBinds fuel name binds = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case binds of
-  [] => False
-  (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
+mentionsBinds fuel name binds =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case binds of
+      [] => False
+      (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsBinds (fuel - 1) name rest
 
 -- | 内部：任一 case alt 体是否引用该名字。
 mentionsAlts : Int -> String -> List (Pair Pat Expr) -> Bool
-mentionsAlts fuel name alts = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case alts of
-  [] => False
-  (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
+mentionsAlts fuel name alts =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case alts of
+      [] => False
+      (Pair pat e) :: rest => mentionsExpr (fuel - 1) name e || mentionsAlts (fuel - 1) name rest
 
 -- | 内部：任一局部函数 clause 体是否引用该名字。
 mentionsClauses : Int -> String -> List (Pair (List Pat) Expr) -> Bool
-mentionsClauses fuel name clauses = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case clauses of
-  [] => False
-  (Pair pats e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
+mentionsClauses fuel name clauses =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case clauses of
+      [] => False
+      (Pair pats e) :: rest => mentionsExpr (fuel - 1) name e || mentionsClauses (fuel - 1) name rest
 
 -- | 内部：任一 do 语句是否引用该名字。
 mentionsStmts : Int -> String -> List DoStmt -> Bool
-mentionsStmts fuel name stmts = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case stmts of
-  [] => False
-  stmt :: rest => mentionsStmt (fuel - 1) name stmt || mentionsStmts (fuel - 1) name rest
+mentionsStmts fuel name stmts =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case stmts of
+      [] => False
+      stmt :: rest => mentionsStmt (fuel - 1) name stmt || mentionsStmts (fuel - 1) name rest
 
 -- | 内部：单条 do 语句是否引用该名字。
 mentionsStmt : Int -> String -> DoStmt -> Bool
-mentionsStmt fuel name stmt = if fuel <= 0 then lintFuelExhausted "mention scan"
-else case stmt of
-  DBind pat e sp => mentionsExpr (fuel - 1) name e
-  DExpr e sp => mentionsExpr (fuel - 1) name e
+mentionsStmt fuel name stmt =
+  if fuel <= 0 then
+    lintFuelExhausted "mention scan"
+  else
+    case stmt of
+      DBind pat e sp => mentionsExpr (fuel - 1) name e
+      DExpr e sp => mentionsExpr (fuel - 1) name e
 
 -- ---------------------------------------------------------------
 -- 规则 1：literal-if-chain
@@ -919,23 +1026,29 @@ else case stmt of
 -- | 内部：识别 `x == 字面量` 形式的条件，返回 scrutinee 名与字面量原文；其他条件返回
 -- `Nothing`。
 condShape : LintSrc -> Expr -> Maybe (Pair String String)
-condShape src (EApp (EVar op opSp) args appSp) = if op == "==" then case args of
-  [lhs, rhs] => case lhs of
-    EVar name nsp => case rhs of
-      EStr s rsp => Just (Pair name (spanText src (exprSpan rhs)))
-      EInt n rsp => Just (Pair name (spanText src (exprSpan rhs)))
-      EFloat raw rsp => Just (Pair name (spanText src (exprSpan rhs)))
+condShape src (EApp (EVar op opSp) args appSp) =
+  if op == "==" then
+    case args of
+      [lhs, rhs] =>
+        case lhs of
+          EVar name nsp =>
+            case rhs of
+              EStr s rsp => Just (Pair name (spanText src (exprSpan rhs)))
+              EInt n rsp => Just (Pair name (spanText src (exprSpan rhs)))
+              EFloat raw rsp => Just (Pair name (spanText src (exprSpan rhs)))
+              _ => Nothing
+          _ => Nothing
       _ => Nothing
-    _ => Nothing
-  _ => Nothing
-else Nothing
+  else
+    Nothing
 condShape src _ = Nothing
 
 -- | 内部：从 if 表达式提取字面量分派链；条件不是 `==` 字面量比较时返回 `Nothing`。
 chainOf : LintSrc -> Expr -> Maybe ChainRes
-chainOf src (EIf cond yes no sp) = case condShape src cond of
-  Nothing => Nothing
-  Just (Pair name lit) => Just (chainCollect src name [ChainItem lit (exprText src yes) yes] no)
+chainOf src (EIf cond yes no sp) =
+  case condShape src cond of
+    Nothing => Nothing
+    Just (Pair name lit) => Just (chainCollect src name [ChainItem lit (exprText src yes) yes] no)
 chainOf src _ = Nothing
 
 -- | 内部：沿 else 分支收集同 scrutinee 的 if/else-if 链。
@@ -945,15 +1058,16 @@ chainCollect src name acc expr = chainCollectFuel lintFuel src name acc expr
 -- | 内部：`chainCollect` 的 fuel 版本；scrutinee 变化或遇到非 if 时把剩余表达式当作
 -- default 分支。
 chainCollectFuel : Int -> LintSrc -> String -> List ChainItem -> Expr -> ChainRes
-chainCollectFuel fuel src name acc expr = if fuel <= 0 then lintFuelExhausted "chain collection"
-else case expr of
-  EIf cond yes no sp => case condShape src cond of
-    Just (Pair other lit) =>
-      if other == name then
-        chainCollectFuel (fuel - 1) src name (ChainItem lit (exprText src yes) yes :: acc) no
-      else ChainRes name (reverse acc) "_" (exprText src expr) expr
-    Nothing => ChainRes name (reverse acc) "_" (exprText src expr) expr
-  _ => ChainRes name (reverse acc) "_" (exprText src expr) expr
+chainCollectFuel fuel src name acc expr =
+  if fuel <= 0 then
+    lintFuelExhausted "chain collection"
+  else
+    case expr of
+      EIf cond yes no sp =>
+        case condShape src cond of
+          Just (Pair other lit) => if other == name then chainCollectFuel (fuel - 1) src name (ChainItem lit (exprText src yes) yes :: acc) no else ChainRes name (reverse acc) "_" (exprText src expr) expr
+          Nothing => ChainRes name (reverse acc) "_" (exprText src expr) expr
+      _ => ChainRes name (reverse acc) "_" (exprText src expr) expr
 
 -- | 内部：渲染一条 case 分支（`indent + 2` 个空格下的 `字面量 => then 原文`）。
 renderChainItem : Int -> ChainItem -> String
@@ -970,35 +1084,36 @@ itemsSegmentsOk src ((ChainItem lit thenText expr) :: rest) =
 chainFixable : LintSrc -> Span -> List ChainItem -> Expr -> Bool
 chainFixable src sp items defaultExpr =
   linesCleanRange src.lintSrcLines (spanStartLine sp) (spanEndLine sp)
-    && itemsSegmentsOk src items
-    && segmentOk src defaultExpr
+    && itemsSegmentsOk src items && segmentOk src defaultExpr
 
 -- | 内部：`literal-if-chain` 的 case 回退：链至少两个分支且可修复时，产出把整条链改写成
 -- `case scrut of` 的 finding；否则不产出（仍可能由提升分支处理）。
 chainFindings : LintSrc -> Span -> String -> List ChainItem -> String -> String -> Expr -> List Finding
-chainFindings src sp name items defaultPat defaultText defaultExpr = if not (atLeastTwo items) then []
-else if not (chainFixable src sp items defaultExpr) then []
-else
-  let
-    startLine = spanStartLine sp
-    endLine = spanEndLine sp
-    line = lineAt src.lintSrcLines startLine
-    indent = indentOf line
-    prefix = prefixBeforeCol line (spanStartCol sp)
-    newLines =
-      append ["${prefix}case ${name} of"]
-        (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}${defaultPat} => ${defaultText}"])
-    edit = Just (Edit startLine endLine newLines)
-  in [mkFinding sp LiteralIfChain (lintMsg LiteralIfChain name) edit]
+chainFindings src sp name items defaultPat defaultText defaultExpr =
+  if not (atLeastTwo items) then
+    []
+  else if not (chainFixable src sp items defaultExpr) then
+    []
+  else
+    let
+      startLine = spanStartLine sp
+      endLine = spanEndLine sp
+      line = lineAt src.lintSrcLines startLine
+      indent = indentOf line
+      prefix = prefixBeforeCol line (spanStartCol sp)
+      newLines = append ["${prefix}case ${name} of"] (append (map (\item => renderChainItem indent item) items) ["${spaces (indent + 2)}${defaultPat} => ${defaultText}"])
+      edit = Just (Edit startLine endLine newLines)
+    in [mkFinding sp LiteralIfChain (lintMsg LiteralIfChain name) edit]
 
 -- | 内部：继续遍历各 then 分支，链内部的 dispatch 仍要检查。
 walkChainItems : Bool -> Int -> LintSrc -> List ChainItem -> List Finding
-walkChainItems allow fuel src items = if fuel <= 0 then lintFuelExhausted "traversal"
-else case items of
-  [] => []
-  item :: rest =>
-    append (walkExprGo allow (fuel - 1) src item.chainItemThen)
-      (walkChainItems allow (fuel - 1) src rest)
+walkChainItems allow fuel src items =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case items of
+      [] => []
+      item :: rest => append (walkExprGo allow (fuel - 1) src item.chainItemThen) (walkChainItems allow (fuel - 1) src rest)
 
 -- ---------------------------------------------------------------
 -- 规则 1b：if dispatch 提升（Bool 变量 / 字面量链）
@@ -1034,20 +1149,24 @@ substReplacement name pat body =
 -- token 的项直接跳过。
 substTokenPairs : LintSrc -> Lane -> List (Pair String String) -> Expr -> List (Pair PTok String)
 substTokenPairs src lane [] body = []
-substTokenPairs src lane ((Pair name pat) :: rest) body = case laneVarSpan name lane of
-  Nothing => substTokenPairs src lane rest body
-  Just sp => case tokenAtSpan src sp of
+substTokenPairs src lane ((Pair name pat) :: rest) body =
+  case laneVarSpan name lane of
     Nothing => substTokenPairs src lane rest body
-    Just tok => Pair tok (substReplacement name pat body) :: substTokenPairs src lane rest body
+    Just sp =>
+      case tokenAtSpan src sp of
+        Nothing => substTokenPairs src lane rest body
+        Just tok => Pair tok (substReplacement name pat body) :: substTokenPairs src lane rest body
 
 -- | 内部：替换表里的每个变量都能在外层模式里定位到 token（否则不能应用替换）。
 substsApplicable : LintSrc -> Lane -> List (Pair String String) -> Bool
 substsApplicable src lane [] = True
-substsApplicable src lane ((Pair name pat) :: rest) = case laneVarSpan name lane of
-  Nothing => False
-  Just sp => case tokenAtSpan src sp of
+substsApplicable src lane ((Pair name pat) :: rest) =
+  case laneVarSpan name lane of
     Nothing => False
-    Just tok => substsApplicable src lane rest
+    Just sp =>
+      case tokenAtSpan src sp of
+        Nothing => False
+        Just tok => substsApplicable src lane rest
 
 -- | 内部：按列号降序排序替换对（同一行内从右往左替换，避免列偏移）。
 sortSubstDesc : List (Pair PTok String) -> List (Pair PTok String)
@@ -1078,14 +1197,17 @@ liftLeafLines src lane headText (leaf :: rest) =
   let
     head = leafHeadText src lane headText leaf
     body = leaf.leafBody
-  in if not (exprSingleLine body) then Nothing
+  in if not (exprSingleLine body) then
+    Nothing
   else
     let
       bodyText = exprText src body
-    in if bodyText == "" then Nothing
-    else case liftLeafLines src lane headText rest of
-      Nothing => Nothing
-      Just tailLines => Just ("${head} ${bodyText}" :: tailLines)
+    in if bodyText == "" then
+      Nothing
+    else
+      case liftLeafLines src lane headText rest of
+        Nothing => Nothing
+        Just tailLines => Just ("${head} ${bodyText}" :: tailLines)
 
 -- | 内部：叶子 body 在原位置能否安全改写到新位置。
 leafPlacementOk : LintSrc -> LiftLeaf -> Bool
@@ -1117,24 +1239,31 @@ liftLeavesEdit src lane leaves sp =
 -- 非变量条件、已替换过的 scrutinee 或外层出现多次的变量时，把剩余表达式当作叶子体（保留
 -- 原 if）。
 boolIfLeaves : Lane -> List (Pair String String) -> Expr -> List LiftLeaf
-boolIfLeaves lane substs (EIf cond yes no sp) = case cond of
-  EVar name _ =>
-    if hasSubst name substs || countLaneVar name lane /= 1 then [LiftLeaf substs (EIf cond yes no sp)]
-    else append [LiftLeaf (append substs [Pair name "True"]) yes]
-      (boolIfLeaves lane (append substs [Pair name "False"]) no)
-  _ => [LiftLeaf substs (EIf cond yes no sp)]
+boolIfLeaves lane substs (EIf cond yes no sp) =
+  case cond of
+    EVar name _ =>
+      if hasSubst name substs || countLaneVar name lane /= 1 then
+        [LiftLeaf substs (EIf cond yes no sp)]
+      else
+        append
+          [LiftLeaf (append substs [Pair name "True"]) yes]
+          (boolIfLeaves lane (append substs [Pair name "False"]) no)
+    _ => [LiftLeaf substs (EIf cond yes no sp)]
 boolIfLeaves lane substs expr = [LiftLeaf substs expr]
 
 -- | 内部：识别可提升的 if 分派，返回 scrutinee 名与叶子：Bool 变量走 `boolIfLeaves`，其余
 -- 走字面量链。
 ifDispatchLeaves : LintSrc -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
-ifDispatchLeaves src lane (EIf cond yes no sp) = case cond of
-  EVar name _ => if countLaneVar name lane == 1 then
-    let
-      leaves = boolIfLeaves lane [] (EIf cond yes no sp)
-    in if atLeastTwo leaves then Just (Pair name leaves) else Nothing
-  else literalIfLeaves src lane (EIf cond yes no sp)
-  _ => literalIfLeaves src lane (EIf cond yes no sp)
+ifDispatchLeaves src lane (EIf cond yes no sp) =
+  case cond of
+    EVar name _ =>
+      if countLaneVar name lane == 1 then
+        let
+          leaves = boolIfLeaves lane [] (EIf cond yes no sp)
+        in if atLeastTwo leaves then Just (Pair name leaves) else Nothing
+      else
+        literalIfLeaves src lane (EIf cond yes no sp)
+    _ => literalIfLeaves src lane (EIf cond yes no sp)
 ifDispatchLeaves src lane _ = Nothing
 
 -- | 内部：把一个字面量链分支转成提升叶子。
@@ -1144,24 +1273,31 @@ literalChainLeaf name item = LiftLeaf [Pair name item.chainItemLit] item.chainIt
 -- | 内部：字面量链转提升叶子（default 分支也是一条叶子）；不足两个分支或变量在外层出现
 -- 多次时放弃。
 literalIfLeaves : LintSrc -> Lane -> Expr -> Maybe (Pair String (List LiftLeaf))
-literalIfLeaves src lane expr = case chainOf src expr of
-  Nothing => Nothing
-  Just (ChainRes name items defPat _ defExpr) =>
-    if not (atLeastTwo items) || countLaneVar name lane /= 1 then Nothing
-    else Just
-      (Pair name (append (map (literalChainLeaf name) items) [LiftLeaf [Pair name defPat] defExpr]))
+literalIfLeaves src lane expr =
+  case chainOf src expr of
+    Nothing => Nothing
+    Just (ChainRes name items defPat _ defExpr) =>
+      if not (atLeastTwo items) || countLaneVar name lane /= 1 then
+        Nothing
+      else
+        Just
+          (Pair name (append (map (literalChainLeaf name) items) [LiftLeaf [Pair name defPat] defExpr]))
 
 -- | 内部：`literal-if-chain` 的提升分支：判据与编辑都成立时产出 finding，否则留给 `walkIf`
 -- 的 case 回退。
 ifLiftFindings : LintSrc -> Lane -> Expr -> List Finding
-ifLiftFindings src lane expr = case ifDispatchLeaves src lane expr of
-  Nothing => []
-  Just (Pair name leaves) => if not (laneSplitOk lane) then []
-  else if not (liftLeavesFixable src lane leaves (exprSpan expr)) then []
-  else case liftLeavesEdit src lane leaves (exprSpan expr) of
+ifLiftFindings src lane expr =
+  case ifDispatchLeaves src lane expr of
     Nothing => []
-    Just edit =>
-      [mkFinding (exprSpan expr) LiteralIfChain (lintMsg LiteralIfChain name) (Just edit)]
+    Just (Pair name leaves) =>
+      if not (laneSplitOk lane) then
+        []
+      else if not (liftLeavesFixable src lane leaves (exprSpan expr)) then
+        []
+      else
+        case liftLeavesEdit src lane leaves (exprSpan expr) of
+          Nothing => []
+          Just edit => [mkFinding (exprSpan expr) LiteralIfChain (lintMsg LiteralIfChain name) (Just edit)]
 
 -- ---------------------------------------------------------------
 -- 规则 2：dispatch-lift（case / let）
@@ -1197,8 +1333,10 @@ laneHeadText : List String -> Lane -> Int -> Int -> String
 laneHeadText lines lane startLine startCol =
   let
     line = laneHeadLine lane
-  in if startLine == line then trimEnd (prefixBeforeCol (lineAt lines line) startCol)
-  else lineAt lines line
+  in if startLine == line then
+    trimEnd (prefixBeforeCol (lineAt lines line) startCol)
+  else
+    lineAt lines line
 
 -- | 内部：一组模式是否都落在同一行。
 patsOnLine : List Pat -> Int -> Bool
@@ -1219,16 +1357,20 @@ laneReplace src lane name replacement startLine startCol =
     headText = laneHeadText src.lintSrcLines lane startLine startCol
   in case laneVarSpan name lane of
     Nothing => headText
-    Just sp => case tokenAtSpan src sp of
-      Nothing => headText
-      Just tok => replaceIdentInLine headText tok replacement
+    Just sp =>
+      case tokenAtSpan src sp of
+        Nothing => headText
+        Just tok => replaceIdentInLine headText tok replacement
 
 -- | 内部：体在原位置的放置是否可安全改写：单行体要收束行片段，多行体要求从独立行开始。
 liftBodyPlacementOk : LintSrc -> Pat -> Expr -> Bool
 liftBodyPlacementOk src altPat body =
-  if exprSingleLine body then segmentOk src body
-  else if exprStartLine body > spanStartLine (patSpan altPat) then True
-  else exprStartCol body > indentOf (lineAt src.lintSrcLines (exprStartLine body)) + 1
+  if exprSingleLine body then
+    segmentOk src body
+  else if exprStartLine body > spanStartLine (patSpan altPat) then
+    True
+  else
+    exprStartCol body > indentOf (lineAt src.lintSrcLines (exprStartLine body)) + 1
 
 -- | 内部：case 提升的可行判据：alt 是最后一个、head 与 alt 模式单行、行区间干净、body
 -- 放置安全。
@@ -1252,10 +1394,14 @@ liftEdit src lane pat body name sp =
       if ownLine then spanStartCol sp - 1 else indentOf (lineAt src.lintSrcLines headLine) + 2
     newLines =
       if ownLine then
-        if exprSingleLine body then [newHead, spaces target ++ exprText src body]
-        else newHead :: blockBodyLines src.lintSrcLines body target
-      else if exprSingleLine body then ["${newHead} ${exprText src body}"]
-      else newHead :: blockBodyLines src.lintSrcLines body target
+        if exprSingleLine body then
+          [newHead, spaces target ++ exprText src body]
+        else
+          newHead :: blockBodyLines src.lintSrcLines body target
+      else if exprSingleLine body then
+        ["${newHead} ${exprText src body}"]
+      else
+        newHead :: blockBodyLines src.lintSrcLines body target
   in Edit headLine (spanEndLine sp) newLines
 
 -- | 内部：单 alt case 提升的判据与 finding：变量在外层只出现一次、模式可提升、模式变量不与
@@ -1263,9 +1409,15 @@ liftEdit src lane pat body name sp =
 liftCaseOk : LintSrc -> Lane -> Pat -> Expr -> String -> Span -> List Finding
 liftCaseOk src lane pat body name sp =
   if countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftablePat pat && liftFixable src lane pat body sp then
-    [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftEdit src lane pat body name sp))
+    [
+      mkFinding
+        sp
+        DispatchLift
+        (lintMsg DispatchLift name)
+        (Just (liftEdit src lane pat body name sp))
     ]
-  else []
+  else
+    []
 
 -- | 内部：外层上下文是否是顶层 clause。
 laneIsClause : Lane -> Bool
@@ -1279,18 +1431,25 @@ asPatText src name pat =
 
 -- | 内部：对 `case x of` 单 alt 形式的提升；scrutinee 不是变量或 alt 不止一个时不产出。
 liftCase : LintSrc -> Lane -> Expr -> Expr -> List (Pair Pat Expr) -> Span -> List Finding
-liftCase src lane caseExpr scrut ([Pair pat body]) sp = case scrut of
-  EVar name nsp => liftCaseOk src lane pat body name sp
-  _ => []
+liftCase src lane caseExpr scrut ([Pair pat body]) sp =
+  case scrut of
+    EVar name nsp => liftCaseOk src lane pat body name sp
+    _ => []
 liftCase src lane caseExpr scrut _ sp = []
 
 -- | 内部：对 `let pat = x` 的提升；右值不是变量或模式不可提升时不产出。
 liftLet : LintSrc -> Lane -> Span -> Pat -> Expr -> Expr -> List Finding
 liftLet src lane sp pat (EVar name nsp) body =
   if liftablePat pat && countLaneVar name lane == 1 && True && not (intersectsNames (patVarFuel lintFuel pat) (removeName name (laneVars lane))) && liftLetFixable src lane pat body sp then
-    [ mkFinding sp DispatchLift (lintMsg DispatchLift name) (Just (liftLetEdit src lane pat body name sp))
+    [
+      mkFinding
+        sp
+        DispatchLift
+        (lintMsg DispatchLift name)
+        (Just (liftLetEdit src lane pat body name sp))
     ]
-  else []
+  else
+    []
 liftLet src lane sp pat _ body = []
 
 -- | 内部：let 提升的可行判据：alt 是最后一个、head 与 let 模式单行、行区间干净、body 放置
@@ -1318,17 +1477,22 @@ liftLetEdit src lane pat body name sp =
     target = indentOf (lineAt src.lintSrcLines headLine) + 2
     -- let 解构没有既有语料约束，单行 body 直接按 fmt 规范形态与 clause/alt 头同行。
     newLines =
-      if exprSingleLine body then ["${newHead} ${exprText src body}"]
-      else newHead :: blockBodyLines src.lintSrcLines body target
+      if exprSingleLine body then
+        ["${newHead} ${exprText src body}"]
+      else
+        newHead :: blockBodyLines src.lintSrcLines body target
   in Edit headLine (spanEndLine sp) newLines
 
 -- | 内部：对直接体分派到 case 提升或 let 提升（递归 let 不处理）。
 liftFindings : LintSrc -> Lane -> Expr -> List Finding
 liftFindings src lane (expr@(ECase scrut alts sp)) = liftCase src lane expr scrut alts sp
-liftFindings src lane (ELet binds body recFlag sp) = if not recFlag then case binds of
-  [Pair pat value] => liftLet src lane sp pat value body
-  _ => []
-else []
+liftFindings src lane (ELet binds body recFlag sp) =
+  if not recFlag then
+    case binds of
+      [Pair pat value] => liftLet src lane sp pat value body
+      _ => []
+  else
+    []
 liftFindings src lane _ = []
 
 -- ---------------------------------------------------------------
@@ -1364,17 +1528,21 @@ caseAltClauseLines : LintSrc -> String -> PTok -> String -> Int -> Pat -> Expr -
 caseAltClauseLines src headPrefix varTok x headIndent pat body =
   let
     replacement =
-      if exprMentions x body then if isWildPat pat then x else asPatText src x pat
+      if exprMentions x body then
+        if isWildPat pat then x else asPatText src x pat
       else if patNeedsParen pat then "(${patText src pat})" else patText src pat
     newHead = replaceIdentInLine headPrefix varTok replacement
-  in if exprSingleLine body then ["${newHead} ${exprText src body}"]
-  else newHead :: blockBodyLines src.lintSrcLines body (headIndent + 2)
+  in if exprSingleLine body then
+    ["${newHead} ${exprText src body}"]
+  else
+    newHead :: blockBodyLines src.lintSrcLines body (headIndent + 2)
 
 -- | 内部：把全部 alt 渲染成多条 clause 行。
 clausesForAlts : LintSrc -> String -> PTok -> String -> Int -> List (Pair Pat Expr) -> List String
 clausesForAlts src headPrefix varTok x headIndent [] = []
 clausesForAlts src headPrefix varTok x headIndent ((Pair pat body) :: rest) =
-  append (caseAltClauseLines src headPrefix varTok x headIndent pat body)
+  append
+    (caseAltClauseLines src headPrefix varTok x headIndent pat body)
     (clausesForAlts src headPrefix varTok x headIndent rest)
 
 -- | 内部：每个 alt 的 body 在原位置都可安全放置。
@@ -1387,8 +1555,7 @@ altsPlacementOk src ((Pair pat body) :: rest) =
 caseToClausesFixable : LintSrc -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Bool
 caseToClausesFixable src pats headLine sp alts =
   patsOnLine pats headLine
-    && linesCleanRange src.lintSrcLines headLine (spanEndLine sp)
-    && altsPlacementOk src alts
+    && linesCleanRange src.lintSrcLines headLine (spanEndLine sp) && altsPlacementOk src alts
 
 -- | 内部：构造把整个顶层 case 表达式替换成多条 clause 的编辑。
 caseToClausesEdit : LintSrc -> String -> List Pat -> Int -> Span -> List (Pair Pat Expr) -> Edit
@@ -1397,26 +1564,37 @@ caseToClausesEdit src x pats headLine sp alts =
     headText = lineAt src.lintSrcLines headLine
     caseStartLine = spanStartLine sp
     headPrefix =
-      if caseStartLine == headLine then trimEnd (prefixBeforeCol headText (spanStartCol sp))
-      else trimEnd headText
-    varTok = case laneVarSpan x (LClause headLine pats False False) of
-      Nothing => PTok TEof (Pos 1 1 0 0)
-      Just vsp => case tokenAtOffset src (spanStartOffset vsp) of
+      if caseStartLine == headLine then
+        trimEnd (prefixBeforeCol headText (spanStartCol sp))
+      else
+        trimEnd headText
+    varTok =
+      case laneVarSpan x (LClause headLine pats False False) of
         Nothing => PTok TEof (Pos 1 1 0 0)
-        Just tok => tok
+        Just vsp =>
+          case tokenAtOffset src (spanStartOffset vsp) of
+            Nothing => PTok TEof (Pos 1 1 0 0)
+            Just tok => tok
     headIndent = indentOf headText
   in Edit headLine (spanEndLine sp) (clausesForAlts src headPrefix varTok x headIndent alts)
 
 -- | 内部：函数体是 `case x of`、x 在 head 只出现一次且该名字只有一条 clause 时，产出拆成
 -- 多条同名 clause 的 finding。
 caseToClauses : LintSrc -> Int -> String -> List Pat -> Expr -> Bool -> List Finding
-caseToClauses src headLine name pats (ECase scrut alts sp) singleClause = case scrut of
-  EVar x xsp =>
-    if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable src pats headLine sp alts then
-      [ mkFinding sp DispatchLift (lintMsg DispatchLift x) (Just (caseToClausesEdit src x pats headLine sp alts))
-      ]
-    else []
-  _ => []
+caseToClauses src headLine name pats (ECase scrut alts sp) singleClause =
+  case scrut of
+    EVar x xsp =>
+      if singleClause && countVar x pats == 1 && atLeastTwo alts && altsLiftable x pats alts && caseToClausesFixable src pats headLine sp alts then
+        [
+          mkFinding
+            sp
+            DispatchLift
+            (lintMsg DispatchLift x)
+            (Just (caseToClausesEdit src x pats headLine sp alts))
+        ]
+      else
+        []
+    _ => []
 caseToClauses src headLine name pats _ singleClause = []
 
 -- ---------------------------------------------------------------
@@ -1428,14 +1606,16 @@ caseToClauses src headLine name pats _ singleClause = []
 -- | 内部：遍历 clause/alt 的直接体：先尝试 dispatch 提升，成功即不再下沉，否则继续递归并
 -- 报告可回退的改写。
 scanBodyPos : Int -> LintSrc -> Maybe Lane -> Expr -> List Finding
-scanBodyPos fuel src maybeLane expr = if fuel <= 0 then lintFuelExhausted "traversal"
-else case maybeLane of
-  Nothing => walkExpr fuel src expr
-  Just lane =>
-    let
-      lifted = ifLiftFindings src lane expr
-    in if not (isNilList lifted) then append lifted (liftFindings src lane expr)
-    else append (liftFindings src lane expr) (walkExpr fuel src expr)
+scanBodyPos fuel src maybeLane expr =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case maybeLane of
+      Nothing => walkExpr fuel src expr
+      Just lane =>
+        let
+          lifted = ifLiftFindings src lane expr
+        in if not (isNilList lifted) then append lifted (liftFindings src lane expr) else append (liftFindings src lane expr) (walkExpr fuel src expr)
 
 -- | 内部：识别 `handle` 标记载荷（comp / return / op 子句），编码见 `Frontend/Ast.handleSyntax`。
 handlePartsOf : Expr -> Maybe (Pair Expr (Pair Expr Expr))
@@ -1446,160 +1626,181 @@ handlePartsOf _ = Nothing
 -- | 内部：只遍历 handle 里用户写的部分（comp、return 体、op 子句体），不把 parser 合成的
 -- case 当成 lane 来源。
 walkHandlePayload : Bool -> Int -> LintSrc -> Expr -> Expr -> Expr -> List Finding
-walkHandlePayload allow fuel src comp ret opH = if fuel <= 0 then lintFuelExhausted "traversal"
-else
-  let
-    retFindings = case ret of
-      ELam _ body _ => walkExprGo allow (fuel - 1) src body
-      _ => []
-    opFindings = case opH of
-      ELam _ (ECase _ alts _) _ => walkHandleAlts allow (fuel - 1) src alts
-      ELam _ body _ => walkExprGo allow (fuel - 1) src body
-      _ => []
-  in append (append (walkExprGo allow (fuel - 1) src comp) retFindings) opFindings
+walkHandlePayload allow fuel src comp ret opH =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    let
+      retFindings =
+        case ret of
+          ELam _ body _ => walkExprGo allow (fuel - 1) src body
+          _ => []
+      opFindings =
+        case opH of
+          ELam _ (ECase _ alts _) _ => walkHandleAlts allow (fuel - 1) src alts
+          ELam _ body _ => walkExprGo allow (fuel - 1) src body
+          _ => []
+    in append (append (walkExprGo allow (fuel - 1) src comp) retFindings) opFindings
 
 -- | 内部：遍历 op 处理器各 alt 的体。
 walkHandleAlts : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkHandleAlts allow fuel src alts = if fuel <= 0 then lintFuelExhausted "traversal"
-else case alts of
-  [] => []
-  (Pair _ body) :: rest =>
-    append (walkExprGo allow (fuel - 1) src body) (walkHandleAlts allow (fuel - 1) src rest)
+walkHandleAlts allow fuel src alts =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case alts of
+      [] => []
+      (Pair _ body) :: rest => append (walkExprGo allow (fuel - 1) src body) (walkHandleAlts allow (fuel - 1) src rest)
 
 -- | 内部：按构造子遍历表达式，收集各规则的 finding（不静默丢子树）。
 walkExpr : Int -> LintSrc -> Expr -> List Finding
 walkExpr fuel src e = walkExprGo True fuel src e
 
 walkExprGo : Bool -> Int -> LintSrc -> Expr -> List Finding
-walkExprGo allow fuel src e = if fuel <= 0 then lintFuelExhausted "traversal"
-else case e of
-  EVar name sp => if allow && name == "Nil" then nilFinding src e else []
-  EInt n sp => []
-  EStr s sp => []
-  EFloat raw sp => []
-  ELam ps body sp => walkExprGo allow (fuel - 1) src body
-  -- `handle` 标记的载荷是 parser 合成的 λ + case；合成 case
-  -- 不能当 dispatch-lift 的 lane 来源，否则会给出改写子句头的错误建议。只遍历用户写的
-  -- comp、return 体和各 op 子句体。
-  EApp fn args sp => case handlePartsOf (EApp fn args sp) of
-    Just (Pair comp (Pair ret opH)) => walkHandlePayload allow (fuel - 1) src comp ret opH
-    Nothing =>
-      if allow then walkAppList allow (fuel - 1) src e
-      else append (walkExprGo allow (fuel - 1) src fn) (walkExprs allow (fuel - 1) src args)
-  EPi name implicit _ dom cod sp =>
-    append (walkExprGo allow (fuel - 1) src dom) (walkExprGo allow (fuel - 1) src cod)
-  ELet binds body recFlag sp =>
-    append (walkBinds allow (fuel - 1) src binds) (walkExprGo allow (fuel - 1) src body)
-  ELocalFun clauses sp => walkLocalClauses allow (fuel - 1) src clauses
-  ECase scrut alts sp =>
-    append (walkExprGo allow (fuel - 1) src scrut) (walkAlts allow (fuel - 1) src alts)
-  EIf cond yes no sp =>
-    append (constantIfFindings src e) (walkIf allow (fuel - 1) src e cond yes no)
-  EField base f sp => walkExprGo allow (fuel - 1) src base
-  ERecord rname fields sp => walkFields allow (fuel - 1) src fields
-  ERecUpdate base fields sp =>
-    append (walkExprGo allow (fuel - 1) src base) (walkFields allow (fuel - 1) src fields)
-  EDo stmts sp => walkStmts allow (fuel - 1) src stmts
-  EAnn value ty sp =>
-    append (walkExprGo allow (fuel - 1) src value) (walkExprGo allow (fuel - 1) src ty)
-  -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
-  EInfix op l r sp => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
-  EParen inner sp => walkExprGo allow (fuel - 1) src inner
-  -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
-  EBacktick nm l r sp =>
-    append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
-  ESectOp op sp => []
-  ESectL op rhs sp => walkExprGo allow (fuel - 1) src rhs
-  ESectR lhs op sp => walkExprGo allow (fuel - 1) src lhs
-  -- 模板字面量：洞内表达式同样参与规则遍历。
-  EInterp multi parts sp => walkInterpParts allow (fuel - 1) src parts
+walkExprGo allow fuel src e =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case e of
+      EVar name sp => if allow && name == "Nil" then nilFinding src e else []
+      EInt n sp => []
+      EStr s sp => []
+      EFloat raw sp => []
+      ELam ps body sp => walkExprGo allow (fuel - 1) src body
+      -- `handle` 标记的载荷是 parser 合成的 λ + case；合成 case
+      -- 不能当 dispatch-lift 的 lane 来源，否则会给出改写子句头的错误建议。只遍历用户写的
+      -- comp、return 体和各 op 子句体。
+      EApp fn args sp =>
+        case handlePartsOf (EApp fn args sp) of
+          Just (Pair comp (Pair ret opH)) => walkHandlePayload allow (fuel - 1) src comp ret opH
+          Nothing => if allow then walkAppList allow (fuel - 1) src e else append (walkExprGo allow (fuel - 1) src fn) (walkExprs allow (fuel - 1) src args)
+      EPi name implicit _ dom cod sp => append (walkExprGo allow (fuel - 1) src dom) (walkExprGo allow (fuel - 1) src cod)
+      ELet binds body recFlag sp => append (walkBinds allow (fuel - 1) src binds) (walkExprGo allow (fuel - 1) src body)
+      ELocalFun clauses sp => walkLocalClauses allow (fuel - 1) src clauses
+      ECase scrut alts sp => append (walkExprGo allow (fuel - 1) src scrut) (walkAlts allow (fuel - 1) src alts)
+      EIf cond yes no sp => append (constantIfFindings src e) (walkIf allow (fuel - 1) src e cond yes no)
+      EField base f sp => walkExprGo allow (fuel - 1) src base
+      ERecord rname fields sp => walkFields allow (fuel - 1) src fields
+      ERecUpdate base fields sp => append (walkExprGo allow (fuel - 1) src base) (walkFields allow (fuel - 1) src fields)
+      EDo stmts sp => walkStmts allow (fuel - 1) src stmts
+      EAnn value ty sp => append (walkExprGo allow (fuel - 1) src value) (walkExprGo allow (fuel - 1) src ty)
+      -- parser 中间产物（中缀链 / 括号）：显式递归，不静默丢子树。
+      EInfix op l r sp => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
+      EParen inner sp => walkExprGo allow (fuel - 1) src inner
+      -- keep 模式下保留的反引号中缀 / section：结构递归，不静默丢子树。
+      EBacktick nm l r sp => append (walkExprGo allow (fuel - 1) src l) (walkExprGo allow (fuel - 1) src r)
+      ESectOp op sp => []
+      ESectL op rhs sp => walkExprGo allow (fuel - 1) src rhs
+      ESectR lhs op sp => walkExprGo allow (fuel - 1) src lhs
+      -- 模板字面量：洞内表达式同样参与规则遍历。
+      EInterp multi parts sp => walkInterpParts allow (fuel - 1) src parts
 
 -- | 内部：应用位置的 list-literal 检查；闭合链只产出一次并继续遍历元素。
 walkAppList : Bool -> Int -> LintSrc -> Expr -> List Finding
-walkAppList allow fuel src e = case consHeadOf e of
-  Just (Pair h t) => case consElems fuel e of
-    Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
-    Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
-  Nothing => case e of
-    EApp fn args sp => append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
-    _ => []
+walkAppList allow fuel src e =
+  case consHeadOf e of
+    Just (Pair h t) =>
+      case consElems fuel e of
+        Just elems => append (consFindings src e elems) (walkExprs allow fuel src elems)
+        Nothing => append (walkExprGo allow fuel src h) (walkExprGo allow fuel src t)
+    Nothing =>
+      case e of
+        EApp fn args sp => append (walkExprGo allow fuel src fn) (walkExprs allow fuel src args)
+        _ => []
 
 -- | 内部：遍历模板字面量各段里的洞表达式。
 walkInterpParts : Bool -> Int -> LintSrc -> List InterpPart -> List Finding
-walkInterpParts allow fuel src parts = if fuel <= 0 then lintFuelExhausted "traversal"
-else case parts of
-  [] => []
-  (IPText s) :: rest => walkInterpParts allow (fuel - 1) src rest
-  (IPHole e) :: rest =>
-    append (walkExprGo False (fuel - 1) src e) (walkInterpParts allow (fuel - 1) src rest)
+walkInterpParts allow fuel src parts =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case parts of
+      [] => []
+      (IPText s) :: rest => walkInterpParts allow (fuel - 1) src rest
+      (IPHole e) :: rest => append (walkExprGo False (fuel - 1) src e) (walkInterpParts allow (fuel - 1) src rest)
 
 -- | 内部：处理 if：可识别的字面量链走 case 回退 finding，否则照常遍历条件与两个分支。
 walkIf : Bool -> Int -> LintSrc -> Expr -> Expr -> Expr -> Expr -> List Finding
-walkIf allow fuel src e cond yes no = if fuel <= 0 then lintFuelExhausted "traversal"
-else case chainOf src e of
-  Nothing =>
-    append (walkExprGo allow (fuel - 1) src cond)
-      (append (walkExprGo allow (fuel - 1) src yes) (walkExprGo allow (fuel - 1) src no))
-  Just (ChainRes name items defPat defText defExpr) =>
-    if not (atLeastTwo items) then append (walkExprGo allow (fuel - 1) src cond)
-      (append (walkExprGo allow (fuel - 1) src yes) (walkExprGo allow (fuel - 1) src no))
-    else append (chainFindings src (exprSpan e) name items defPat defText defExpr)
-      (append (walkChainItems allow (fuel - 1) src items) (walkExprGo allow (fuel - 1) src defExpr))
+walkIf allow fuel src e cond yes no =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case chainOf src e of
+      Nothing => append (walkExprGo allow (fuel - 1) src cond) (append (walkExprGo allow (fuel - 1) src yes) (walkExprGo allow (fuel - 1) src no))
+      Just (ChainRes name items defPat defText defExpr) => if not (atLeastTwo items) then append (walkExprGo allow (fuel - 1) src cond) (append (walkExprGo allow (fuel - 1) src yes) (walkExprGo allow (fuel - 1) src no)) else append (chainFindings src (exprSpan e) name items defPat defText defExpr) (append (walkChainItems allow (fuel - 1) src items) (walkExprGo allow (fuel - 1) src defExpr))
 
 -- | 内部：遍历一组表达式。
 walkExprs : Bool -> Int -> LintSrc -> List Expr -> List Finding
-walkExprs allow fuel src exprs = if fuel <= 0 then lintFuelExhausted "traversal"
-else case exprs of
-  [] => []
-  e :: rest => append (walkExprGo allow (fuel - 1) src e) (walkExprs allow (fuel - 1) src rest)
+walkExprs allow fuel src exprs =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case exprs of
+      [] => []
+      e :: rest => append (walkExprGo allow (fuel - 1) src e) (walkExprs allow (fuel - 1) src rest)
 
 -- | 内部：遍历 record 字段值。
 walkFields : Bool -> Int -> LintSrc -> List (Pair String Expr) -> List Finding
-walkFields allow fuel src fields = if fuel <= 0 then lintFuelExhausted "traversal"
-else case fields of
-  [] => []
-  (Pair f e) :: rest =>
-    append (walkExprGo allow (fuel - 1) src e) (walkFields allow (fuel - 1) src rest)
+walkFields allow fuel src fields =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case fields of
+      [] => []
+      (Pair f e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkFields allow (fuel - 1) src rest)
 
 -- | 内部：遍历 let 绑定右值。
 walkBinds : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkBinds allow fuel src binds = if fuel <= 0 then lintFuelExhausted "traversal"
-else case binds of
-  [] => []
-  (Pair pat e) :: rest =>
-    append (walkExprGo allow (fuel - 1) src e) (walkBinds allow (fuel - 1) src rest)
+walkBinds allow fuel src binds =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case binds of
+      [] => []
+      (Pair pat e) :: rest => append (walkExprGo allow (fuel - 1) src e) (walkBinds allow (fuel - 1) src rest)
 
 -- | 内部：逐个 alt 体按 lane 上下文扫描（最后一个 alt 标记为 isLast）。
 walkAlts : Bool -> Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkAlts allow fuel src alts = if fuel <= 0 then lintFuelExhausted "traversal"
-else case alts of
-  [] => []
-  (Pair pat body) :: rest =>
-    let
-      lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
-    in append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest)
+walkAlts allow fuel src alts =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case alts of
+      [] => []
+      (Pair pat body) :: rest =>
+        let
+          lane = LAlt (spanStartLine (patSpan pat)) pat (isNilList rest)
+        in append (scanBodyPos (fuel - 1) src (Just lane) body) (walkAlts allow (fuel - 1) src rest)
 
 -- | 内部：遍历局部函数 clause 体（不提供 lane，因此不做 clause 级提升）。
 walkLocalClauses : Bool -> Int -> LintSrc -> List (Pair (List Pat) Expr) -> List Finding
-walkLocalClauses allow fuel src clauses = if fuel <= 0 then lintFuelExhausted "traversal"
-else case clauses of
-  [] => []
-  (Pair pats body) :: rest =>
-    append (walkExprGo allow (fuel - 1) src body) (walkLocalClauses allow (fuel - 1) src rest)
+walkLocalClauses allow fuel src clauses =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case clauses of
+      [] => []
+      (Pair pats body) :: rest => append (walkExprGo allow (fuel - 1) src body) (walkLocalClauses allow (fuel - 1) src rest)
 
 -- | 内部：遍历 do 语句列表。
 walkStmts : Bool -> Int -> LintSrc -> List DoStmt -> List Finding
-walkStmts allow fuel src stmts = if fuel <= 0 then lintFuelExhausted "traversal"
-else case stmts of
-  [] => []
-  stmt :: rest => append (walkStmt allow (fuel - 1) src stmt) (walkStmts allow (fuel - 1) src rest)
+walkStmts allow fuel src stmts =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case stmts of
+      [] => []
+      stmt :: rest => append (walkStmt allow (fuel - 1) src stmt) (walkStmts allow (fuel - 1) src rest)
 
 -- | 内部：遍历单条 do 语句的表达式。
 walkStmt : Bool -> Int -> LintSrc -> DoStmt -> List Finding
-walkStmt allow fuel src stmt = if fuel <= 0 then lintFuelExhausted "traversal"
-else case stmt of
-  DBind pat e sp => walkExprGo allow (fuel - 1) src e
-  DExpr e sp => walkExprGo allow (fuel - 1) src e
+walkStmt allow fuel src stmt =
+  if fuel <= 0 then
+    lintFuelExhausted "traversal"
+  else
+    case stmt of
+      DBind pat e sp => walkExprGo allow (fuel - 1) src e
+      DExpr e sp => walkExprGo allow (fuel - 1) src e
 
 -- ---------------------------------------------------------------
 -- 规则 4：list-literal（闭合 cons 链 / 裸 Nil → 列表字面量）
@@ -1620,15 +1821,17 @@ dropLeadingSpace (c :: rest) = if isSpaceChar c then dropLeadingSpace rest else 
 
 -- | 内部：字符串首个字符码；空串为 `Nothing`。
 firstChar : String -> Maybe Int
-firstChar s = case strUnpack s of
-  c :: rest => Just c
-  [] => Nothing
+firstChar s =
+  case strUnpack s of
+    c :: rest => Just c
+    [] => Nothing
 
 -- | 内部：字符串最后一个字符码；空串为 `Nothing`。
 lastChar : String -> Maybe Int
-lastChar s = case reverse (strUnpack s) of
-  c :: rest => Just c
-  [] => Nothing
+lastChar s =
+  case reverse (strUnpack s) of
+    c :: rest => Just c
+    [] => Nothing
 
 -- | 内部：去掉最后一个字符。
 dropLastChar : String -> String
@@ -1641,32 +1844,38 @@ dropFirstChar s = strPack (dropChars 1 (strUnpack s))
 -- | 内部：剥掉紧邻表达式的前后缀成对括号（可多层）：`f (a :: [])` → `f [a]`，而
 -- `f (g (a :: []))` 只剥最内层，不会误删属于 `g` 的外层括号。
 stripParens : Int -> String -> String -> Pair String String
-stripParens fuel prefix suffix = if fuel <= 0 then Pair prefix suffix
-else
-  let
-    p = trimEnd prefix
-  in case lastChar p of
-    Just 40 => case firstChar (trimStart suffix) of
-      Just 41 => stripParens (fuel - 1) (dropLastChar p) (dropFirstChar (trimStart suffix))
+stripParens fuel prefix suffix =
+  if fuel <= 0 then
+    Pair prefix suffix
+  else
+    let
+      p = trimEnd prefix
+    in case lastChar p of
+      Just 40 =>
+        case firstChar (trimStart suffix) of
+          Just 41 => stripParens (fuel - 1) (dropLastChar p) (dropFirstChar (trimStart suffix))
+          _ => Pair prefix suffix
       _ => Pair prefix suffix
-    _ => Pair prefix suffix
 
 -- | 内部：span 末 token 结束列之后的位置（1 基）；找不到末 token 时 `Nothing`。
 -- | 内部：把整个单行表达式替换成 replacement 的编辑；跨行、行区间不干净或定位不到结束列时
 -- `Nothing`。
 exprEdit : LintSrc -> Expr -> String -> Maybe Edit
-exprEdit src e replacement = if not (exprSingleLine e) then Nothing
-else if not (linesCleanRange src.lintSrcLines (exprStartLine e) (spanEndLine (exprSpan e))) then Nothing
-else case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
-  Nothing => Nothing
-  Just endCol =>
-    let
-      line = lineAt src.lintSrcLines (exprStartLine e)
-      prefix = prefixBeforeCol line (exprStartCol e)
-      suffix = tailFromCol line endCol
-      stripped = stripParens (strLength line + 1) prefix suffix
-    in Just
-      (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
+exprEdit src e replacement =
+  if not (exprSingleLine e) then
+    Nothing
+  else if not (linesCleanRange src.lintSrcLines (exprStartLine e) (spanEndLine (exprSpan e))) then
+    Nothing
+  else
+    case exprEndColAfter src.lintSrcToks (spanEndLine (exprSpan e)) (exprSpan e).spanEndCol of
+      Nothing => Nothing
+      Just endCol =>
+        let
+          line = lineAt src.lintSrcLines (exprStartLine e)
+          prefix = prefixBeforeCol line (exprStartCol e)
+          suffix = tailFromCol line endCol
+          stripped = stripParens (strLength line + 1) prefix suffix
+        in Just (Edit (exprStartLine e) (exprStartLine e) [firstOf stripped ++ replacement ++ secondOf stripped])
 
 -- | 内部：识别 `::` / `Cons` 应用，返回头与尾。
 consHeadOf : Expr -> Maybe (Pair Expr Expr)
@@ -1681,12 +1890,16 @@ isNilExpr _ = False
 
 -- | 内部：闭合 cons 链的元素列表；开放链或非链返回 `Nothing`。
 consElems : Int -> Expr -> Maybe (List Expr)
-consElems fuel e = if fuel <= 0 then Nothing
-else case consHeadOf e of
-  Just (Pair h t) => case consElems (fuel - 1) t of
-    Just rest => Just (h :: rest)
-    Nothing => Nothing
-  Nothing => if isNilExpr e then Just [] else Nothing
+consElems fuel e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case consHeadOf e of
+      Just (Pair h t) =>
+        case consElems (fuel - 1) t of
+          Just rest => Just (h :: rest)
+          Nothing => Nothing
+      Nothing => if isNilExpr e then Just [] else Nothing
 
 -- | 内部：所有切片文本都非空（为空则无法安全生成字面量）。
 allNonEmpty : List String -> Bool
@@ -1700,109 +1913,136 @@ consFindings src e elems =
     texts = map (exprText src) elems
     suggestion = if allNonEmpty texts then "[" ++ join ", " texts ++ "]" else "[...]"
     edit = if allNonEmpty texts then exprEdit src e suggestion else Nothing
-  in [ mkFindingAt (exprStartLine e) (exprStartCol e) (exprSpan e) ListLiteral (lintMsg ListLiteral suggestion) edit
+  in [
+    mkFindingAt
+      (exprStartLine e)
+      (exprStartCol e)
+      (exprSpan e)
+      ListLiteral
+      (lintMsg ListLiteral suggestion)
+      edit
   ]
 
 -- | 内部：裸 `Nil` 的 finding 与编辑（改写成 `[]`）。
 nilFinding : LintSrc -> Expr -> List Finding
 nilFinding src e =
-  [ mkFindingAt (exprStartLine e) (exprStartCol e) (exprSpan e) ListLiteral (lintMsg ListLiteral "[]") (exprEdit src e "[]")
+  [
+    mkFindingAt
+      (exprStartLine e)
+      (exprStartCol e)
+      (exprSpan e)
+      ListLiteral
+      (lintMsg ListLiteral "[]")
+      (exprEdit src e "[]")
   ]
 
 -- | 内部：按构造子遍历表达式，收集 list-literal finding（不进入模式）。
 walkListLiteral : Int -> LintSrc -> Expr -> List Finding
-walkListLiteral fuel src e = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case e of
-  EVar name sp => if name == "Nil" then nilFinding src e else []
-  EInt n sp => []
-  EStr s sp => []
-  EFloat raw sp => []
-  ELam ps body sp => walkListLiteral (fuel - 1) src body
-  EApp fn args sp => case consHeadOf e of
-    Just (Pair h t) => case consElems (fuel - 1) e of
-      Just elems => append (consFindings src e elems) (walkListLiteralExprs (fuel - 1) src elems)
-      Nothing => append (walkListLiteral (fuel - 1) src h) (walkListLiteral (fuel - 1) src t)
-    Nothing => append (walkListLiteral (fuel - 1) src fn) (walkListLiteralExprs (fuel - 1) src args)
-  EPi name implicit qty dom cod sp =>
-    append (walkListLiteral (fuel - 1) src dom) (walkListLiteral (fuel - 1) src cod)
-  ELet binds body recFlag sp =>
-    append (walkListLiteralBinds (fuel - 1) src binds) (walkListLiteral (fuel - 1) src body)
-  ELocalFun clauses sp => walkListLiteralLocalClauses (fuel - 1) src clauses
-  ECase scrut alts sp =>
-    append (walkListLiteral (fuel - 1) src scrut) (walkListLiteralAlts (fuel - 1) src alts)
-  EIf cond yes no sp =>
-    append (walkListLiteral (fuel - 1) src cond)
-      (append (walkListLiteral (fuel - 1) src yes) (walkListLiteral (fuel - 1) src no))
-  EField base f sp => walkListLiteral (fuel - 1) src base
-  ERecord rname fields sp => walkListLiteralFields (fuel - 1) src fields
-  ERecUpdate base fields sp =>
-    append (walkListLiteral (fuel - 1) src base) (walkListLiteralFields (fuel - 1) src fields)
-  EDo stmts sp => walkListLiteralStmts (fuel - 1) src stmts
-  EAnn value ty sp =>
-    append (walkListLiteral (fuel - 1) src value) (walkListLiteral (fuel - 1) src ty)
-  EInfix op l r sp => append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
-  EParen inner sp => walkListLiteral (fuel - 1) src inner
-  EBacktick nm l r sp =>
-    append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
-  ESectOp op sp => []
-  ESectL op rhs sp => walkListLiteral (fuel - 1) src rhs
-  ESectR lhs op sp => walkListLiteral (fuel - 1) src lhs
-  -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
-  EInterp multi parts sp => []
+walkListLiteral fuel src e =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case e of
+      EVar name sp => if name == "Nil" then nilFinding src e else []
+      EInt n sp => []
+      EStr s sp => []
+      EFloat raw sp => []
+      ELam ps body sp => walkListLiteral (fuel - 1) src body
+      EApp fn args sp =>
+        case consHeadOf e of
+          Just (Pair h t) =>
+            case consElems (fuel - 1) e of
+              Just elems => append (consFindings src e elems) (walkListLiteralExprs (fuel - 1) src elems)
+              Nothing => append (walkListLiteral (fuel - 1) src h) (walkListLiteral (fuel - 1) src t)
+          Nothing => append (walkListLiteral (fuel - 1) src fn) (walkListLiteralExprs (fuel - 1) src args)
+      EPi name implicit qty dom cod sp => append (walkListLiteral (fuel - 1) src dom) (walkListLiteral (fuel - 1) src cod)
+      ELet binds body recFlag sp => append (walkListLiteralBinds (fuel - 1) src binds) (walkListLiteral (fuel - 1) src body)
+      ELocalFun clauses sp => walkListLiteralLocalClauses (fuel - 1) src clauses
+      ECase scrut alts sp => append (walkListLiteral (fuel - 1) src scrut) (walkListLiteralAlts (fuel - 1) src alts)
+      EIf cond yes no sp => append (walkListLiteral (fuel - 1) src cond) (append (walkListLiteral (fuel - 1) src yes) (walkListLiteral (fuel - 1) src no))
+      EField base f sp => walkListLiteral (fuel - 1) src base
+      ERecord rname fields sp => walkListLiteralFields (fuel - 1) src fields
+      ERecUpdate base fields sp => append (walkListLiteral (fuel - 1) src base) (walkListLiteralFields (fuel - 1) src fields)
+      EDo stmts sp => walkListLiteralStmts (fuel - 1) src stmts
+      EAnn value ty sp => append (walkListLiteral (fuel - 1) src value) (walkListLiteral (fuel - 1) src ty)
+      EInfix op l r sp => append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
+      EParen inner sp => walkListLiteral (fuel - 1) src inner
+      EBacktick nm l r sp => append (walkListLiteral (fuel - 1) src l) (walkListLiteral (fuel - 1) src r)
+      ESectOp op sp => []
+      ESectL op rhs sp => walkListLiteral (fuel - 1) src rhs
+      ESectR lhs op sp => walkListLiteral (fuel - 1) src lhs
+      -- 模板插值洞：token 切片不可靠，跳过（见本段头注释）。
+      EInterp multi parts sp => []
 
 -- | 内部：遍历一组表达式的 list-literal。
 walkListLiteralExprs : Int -> LintSrc -> List Expr -> List Finding
-walkListLiteralExprs fuel src exprs = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case exprs of
-  [] => []
-  e :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralExprs (fuel - 1) src rest)
+walkListLiteralExprs fuel src exprs =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case exprs of
+      [] => []
+      e :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralExprs (fuel - 1) src rest)
 
 -- | 内部：遍历 record 字段值的 list-literal。
 walkListLiteralFields : Int -> LintSrc -> List (Pair String Expr) -> List Finding
-walkListLiteralFields fuel src fields = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case fields of
-  [] => []
-  (Pair f e) :: rest =>
-    append (walkListLiteral (fuel - 1) src e) (walkListLiteralFields (fuel - 1) src rest)
+walkListLiteralFields fuel src fields =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case fields of
+      [] => []
+      (Pair f e) :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralFields (fuel - 1) src rest)
 
 -- | 内部：遍历 let 绑定右值的 list-literal。
 walkListLiteralBinds : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkListLiteralBinds fuel src binds = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case binds of
-  [] => []
-  (Pair pat e) :: rest =>
-    append (walkListLiteral (fuel - 1) src e) (walkListLiteralBinds (fuel - 1) src rest)
+walkListLiteralBinds fuel src binds =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case binds of
+      [] => []
+      (Pair pat e) :: rest => append (walkListLiteral (fuel - 1) src e) (walkListLiteralBinds (fuel - 1) src rest)
 
 -- | 内部：遍历 case alt 体的 list-literal。
 walkListLiteralAlts : Int -> LintSrc -> List (Pair Pat Expr) -> List Finding
-walkListLiteralAlts fuel src alts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case alts of
-  [] => []
-  (Pair pat body) :: rest =>
-    append (walkListLiteral (fuel - 1) src body) (walkListLiteralAlts (fuel - 1) src rest)
+walkListLiteralAlts fuel src alts =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case alts of
+      [] => []
+      (Pair pat body) :: rest => append (walkListLiteral (fuel - 1) src body) (walkListLiteralAlts (fuel - 1) src rest)
 
 -- | 内部：遍历局部函数 clause 体的 list-literal。
 walkListLiteralLocalClauses : Int -> LintSrc -> List (Pair (List Pat) Expr) -> List Finding
-walkListLiteralLocalClauses fuel src clauses = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case clauses of
-  [] => []
-  (Pair pats body) :: rest =>
-    append (walkListLiteral (fuel - 1) src body) (walkListLiteralLocalClauses (fuel - 1) src rest)
+walkListLiteralLocalClauses fuel src clauses =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case clauses of
+      [] => []
+      (Pair pats body) :: rest => append (walkListLiteral (fuel - 1) src body) (walkListLiteralLocalClauses (fuel - 1) src rest)
 
 -- | 内部：遍历 do 语句的 list-literal。
 walkListLiteralStmts : Int -> LintSrc -> List DoStmt -> List Finding
-walkListLiteralStmts fuel src stmts = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case stmts of
-  [] => []
-  stmt :: rest =>
-    append (walkListLiteralStmt (fuel - 1) src stmt) (walkListLiteralStmts (fuel - 1) src rest)
+walkListLiteralStmts fuel src stmts =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case stmts of
+      [] => []
+      stmt :: rest => append (walkListLiteralStmt (fuel - 1) src stmt) (walkListLiteralStmts (fuel - 1) src rest)
 
 -- | 内部：遍历单条 do 语句的 list-literal。
 walkListLiteralStmt : Int -> LintSrc -> DoStmt -> List Finding
-walkListLiteralStmt fuel src stmt = if fuel <= 0 then lintFuelExhausted "list literal traversal"
-else case stmt of
-  DBind pat e sp => walkListLiteral (fuel - 1) src e
-  DExpr e sp => walkListLiteral (fuel - 1) src e
+walkListLiteralStmt fuel src stmt =
+  if fuel <= 0 then
+    lintFuelExhausted "list literal traversal"
+  else
+    case stmt of
+      DBind pat e sp => walkListLiteral (fuel - 1) src e
+      DExpr e sp => walkListLiteral (fuel - 1) src e
 
 -- ---------------------------------------------------------------
 -- 声明遍历与结果整理
@@ -1810,9 +2050,10 @@ else case stmt of
 -- | 内部：同一名字在后续声明里还有没有函数子句（用于判断是否最后一条 clause）。
 laterHasFun : String -> List Decl -> Bool
 laterHasFun name [] = False
-laterHasFun name (d :: rest) = case d of
-  DFun n pats body sp => n == name || laterHasFun name rest
-  _ => laterHasFun name rest
+laterHasFun name (d :: rest) =
+  case d of
+    DFun n pats body sp => n == name || laterHasFun name rest
+    _ => laterHasFun name rest
 
 -- | 内部：类型里是否出现隐式 Pi（`{n : Nat} -> ...`）。
 --
@@ -1827,33 +2068,38 @@ hasImplicitPi _ = False
 -- | 内部：按名字查类型签名。
 sigTyOf : String -> List Decl -> Maybe Expr
 sigTyOf name [] = Nothing
-sigTyOf name (d :: rest) = case d of
-  DSig n ctx ty sp => if n == name then Just ty else sigTyOf name rest
-  _ => sigTyOf name rest
+sigTyOf name (d :: rest) =
+  case d of
+    DSig n ctx ty sp => if n == name then Just ty else sigTyOf name rest
+    _ => sigTyOf name rest
 
 -- | 内部：该函数的签名是否含隐式 Pi。
 hasImplicitSig : String -> List Decl -> Bool
-hasImplicitSig name decls = case sigTyOf name decls of
-  Nothing => False
-  Just ty => hasImplicitPi ty
+hasImplicitSig name decls =
+  case sigTyOf name decls of
+    Nothing => False
+    Just ty => hasImplicitPi ty
 
 -- | 内部：某名字的函数子句条数。
 countFunClauses : String -> List Decl -> Int
 countFunClauses name [] = 0
-countFunClauses name (d :: rest) = case d of
-  DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
-  _ => countFunClauses name rest
+countFunClauses name (d :: rest) =
+  case d of
+    DFun n pats body sp => (if n == name then 1 else 0) + countFunClauses name rest
+    _ => countFunClauses name rest
 
 -- | 内部：扫描 instance 方法：方法体走 dispatch 规则，签名与类型位置走 list-literal。
 scanMethodDecls : LintSrc -> List Decl -> List Finding
 scanMethodDecls src [] = []
-scanMethodDecls src (d :: rest) = case d of
-  DFun name pats body sp => append (walkExpr lintFuel src body) (scanMethodDecls src rest)
-  DSig name ctx ty sp =>
-    append (walkListLiteralExprs lintFuel src ctx)
-      (append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest))
-  DAxiom name ty sp => append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest)
-  _ => scanMethodDecls src rest
+scanMethodDecls src (d :: rest) =
+  case d of
+    DFun name pats body sp => append (walkExpr lintFuel src body) (scanMethodDecls src rest)
+    DSig name ctx ty sp =>
+      append
+        (walkListLiteralExprs lintFuel src ctx)
+        (append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest))
+    DAxiom name ty sp => append (walkListLiteral lintFuel src ty) (scanMethodDecls src rest)
+    _ => scanMethodDecls src rest
 
 -- | 内部：record 各字段的类型表达式。
 fieldTypes : List Field -> List Expr
@@ -1873,23 +2119,25 @@ traitMethodTypes (m :: rest) = m.traitMethodType :: traitMethodTypes rest
 -- | 内部：trait 参数的 kind 表达式（未标注 kind 的参数跳过）。
 traitParamKinds : List TraitParam -> List Expr
 traitParamKinds [] = []
-traitParamKinds ((TraitParam name kind) :: rest) = case kind of
-  Just e => e :: traitParamKinds rest
-  Nothing => traitParamKinds rest
+traitParamKinds ((TraitParam name kind) :: rest) =
+  case kind of
+    Just e => e :: traitParamKinds rest
+    Nothing => traitParamKinds rest
 
 -- | 内部：单条声明的 finding：函数子句做 clause 拆分与直接体扫描（隐式 Pi 签名跳过 clause 级
 -- 改写），签名、axiom、extern、data、record、trait、instance 的类型位置走 list-literal。
 declFindings : LintSrc -> List Decl -> Decl -> List Decl -> List Finding
 declFindings src allDecls (DFun name pats body sp) rest =
   let
-    lifted = if hasImplicitSig name allDecls then []
-    else
-      let
-        lastForName = not (laterHasFun name rest)
-        singleClause = countFunClauses name allDecls == 1
-        lane = LClause (spanStartLine sp) pats lastForName singleClause
-      in append (caseToClauses src (spanStartLine sp) name pats body singleClause)
-        (scanBodyPos lintFuel src (Just lane) body)
+    lifted =
+      if hasImplicitSig name allDecls then
+        []
+      else
+        let
+          lastForName = not (laterHasFun name rest)
+          singleClause = countFunClauses name allDecls == 1
+          lane = LClause (spanStartLine sp) pats lastForName singleClause
+        in append (caseToClauses src (spanStartLine sp) name pats body singleClause) (scanBodyPos lintFuel src (Just lane) body)
   in lifted
 declFindings src allDecls (DSig name ctx ty sp) rest =
   append (walkListLiteralExprs lintFuel src ctx) (walkListLiteral lintFuel src ty)
@@ -1900,10 +2148,12 @@ declFindings src allDecls (DData name params kind ctors derivings viaField repr 
 declFindings src allDecls (DRecord name params fields derivings viaField repr lin sp) rest =
   walkListLiteralExprs lintFuel src (fieldTypes fields)
 declFindings src allDecls (DTrait name params supers methods sp) rest =
-  append (walkListLiteralExprs lintFuel src supers)
+  append
+    (walkListLiteralExprs lintFuel src supers)
     (append (walkListLiteralExprs lintFuel src (traitParamKinds params)) (walkListLiteralExprs lintFuel src (traitMethodTypes methods)))
 declFindings src allDecls (DInstance ctxE head methods sp) rest =
-  append (walkListLiteralExprs lintFuel src ctxE)
+  append
+    (walkListLiteralExprs lintFuel src ctxE)
     (append (walkListLiteral lintFuel src head) (scanMethodDecls src methods))
 declFindings src allDecls _ rest = []
 
@@ -1920,8 +2170,16 @@ mkFinding sp rule msg edit = mkFindingAt (spanStartLine sp) (spanStartCol sp) sp
 -- | 内部：显式起始位置（中缀链的 span 从运算符开始，展示位置仍取子树真实起点）。
 mkFindingAt : Int -> Int -> Span -> LintRule -> String -> Maybe Edit -> Finding
 mkFindingAt line col sp rule msg edit =
-  Finding line col (spanEndLine sp) (spanEndCol sp + 1) (lintCode rule) (lintRule rule) msg
-    (lintDefaultSeverity rule) edit
+  Finding
+    line
+    col
+    (spanEndLine sp)
+    (spanEndCol sp + 1)
+    (lintCode rule)
+    (lintRule rule)
+    msg
+    (lintDefaultSeverity rule)
+    edit
 
 -- | 内部：按（行, 列）升序排序 finding（插入排序）。
 sortFindings : List Finding -> List Finding
@@ -1932,16 +2190,20 @@ sortFindings (f :: rest) = insertFinding f (sortFindings rest)
 insertFinding : Finding -> List Finding -> List Finding
 insertFinding f [] = [f]
 insertFinding f (g :: rest) =
-  if f.findingLine < g.findingLine then f :: g :: rest
-  else if f.findingLine == g.findingLine && f.findingCol <= g.findingCol then f :: g :: rest
-  else g :: insertFinding f rest
+  if f.findingLine < g.findingLine then
+    f :: g :: rest
+  else if f.findingLine == g.findingLine && f.findingCol <= g.findingCol then
+    f :: g :: rest
+  else
+    g :: insertFinding f rest
 
 -- | 内部：big 的替换行范围是否严格包含 small（两端都相等不算包含）。
 editContains : Edit -> Edit -> Bool
 editContains big small =
-  big.editStart <= small.editStart
-    && big.editEnd >= small.editEnd
-    && (big.editStart < small.editStart || big.editEnd > small.editEnd)
+  big.editStart
+    <= small.editStart
+    && big.editEnd
+    >= small.editEnd && (big.editStart < small.editStart || big.editEnd > small.editEnd)
 
 -- | 内部：该 edit 是否被任一外层 edit 包含。
 coveredByEdit : List Edit -> Edit -> Bool
@@ -1970,10 +2232,11 @@ dedupGo open (f :: rest) =
 
 -- | 内部：`if True/False` 常量条件（默认关闭）。
 constantIfFindings : LintSrc -> Expr -> List Finding
-constantIfFindings src (EIf cond yes no sp) = case cond of
-  EVar "True" _ => branchFinding src (EIf cond yes no sp) yes
-  EVar "False" _ => branchFinding src (EIf cond yes no sp) no
-  _ => []
+constantIfFindings src (EIf cond yes no sp) =
+  case cond of
+    EVar "True" _ => branchFinding src (EIf cond yes no sp) yes
+    EVar "False" _ => branchFinding src (EIf cond yes no sp) no
+    _ => []
 constantIfFindings src _ = []
 
 -- | 内部：用选中分支替换整个 if；无法切片时只报告。
@@ -1981,25 +2244,41 @@ branchFinding : LintSrc -> Expr -> Expr -> List Finding
 branchFinding src whole branch =
   let
     text = exprText src branch
-  in if text == "" then []
+  in if text == "" then
+    []
   else
-    [ mkFindingAt (exprStartLine whole) (exprStartCol whole) (exprSpan whole) RedundantIf (lintMsg RedundantIf text) (exprEdit src whole text)
+    [
+      mkFindingAt
+        (exprStartLine whole)
+        (exprStartCol whole)
+        (exprSpan whole)
+        RedundantIf
+        (lintMsg RedundantIf text)
+        (exprEdit src whole text)
     ]
 
 -- | 内部：注释里的 TODO / FIXME / XXX 标记（每个注释最多一条）。
 todoFindings : List Comment -> List Finding
 todoFindings [] = []
-todoFindings (c :: rest) = case markerOf c.commentText of
-  Nothing => todoFindings rest
-  Just marker =>
-    mkFindingAt (spanStartLine c.commentSpan) (spanStartCol c.commentSpan) c.commentSpan TodoMarker (lintMsg TodoMarker marker) Nothing
-      :: todoFindings rest
+todoFindings (c :: rest) =
+  case markerOf c.commentText of
+    Nothing => todoFindings rest
+    Just marker =>
+      mkFindingAt
+        (spanStartLine c.commentSpan)
+        (spanStartCol c.commentSpan)
+        c.commentSpan
+        TodoMarker
+        (lintMsg TodoMarker marker)
+        Nothing :: todoFindings rest
 
 -- | 内部：识别注释文本里的标记（按固定顺序取第一个）。
 markerOf : String -> Maybe String
 markerOf text =
-  if contains "TODO" text then Just "TODO"
-  else if contains "FIXME" text then Just "FIXME"
+  if contains "TODO" text then
+    Just "TODO"
+  else if contains "FIXME" text then
+    Just "FIXME"
   else if contains "XXX" text then Just "XXX" else Nothing
 
 -- | 解析源码并按配置/抑制过滤后返回 finding（按（行, 列）排序、去掉被包含的内层结果）。
@@ -2009,32 +2288,41 @@ markerOf text =
 -- 得到的 env）之前，本地优先，与 loader 的顺序一致。缺声明时严格报 unknown fixity，不静默
 -- 按默认优先级重排。
 export lintSourceWithConfig : LintConfig -> List FixityDecl -> String -> Check (List Finding)
-lintSourceWithConfig cfg programFixities source = case parseSourceWithComments "<lint>" source of
-  ErrC e => ErrC e
-  OkC (Pair (SourceFile _ _ fx decls0 _ _ _) comments) => case parseSuppression comments of
+lintSourceWithConfig cfg programFixities source =
+  case parseSourceWithComments "<lint>" source of
     ErrC e => ErrC e
-    OkC suppression => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
-      ErrC e => ErrC e
-      OkC decls => case lexSource source of
+    OkC (Pair (SourceFile _ _ fx decls0 _ _ _) comments) =>
+      case parseSuppression comments of
         ErrC e => ErrC e
-        OkC toks =>
-          let
-            src = mkLintSrc source toks
-            raw =
-              append (dedupFindings (sortFindings (scanDecls src decls decls)))
-                (todoFindings comments)
-            filtered = filterFindings cfg suppression raw
-          in OkC filtered
+        OkC suppression =>
+          case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+            ErrC e => ErrC e
+            OkC decls =>
+              case lexSource source of
+                ErrC e => ErrC e
+                OkC toks =>
+                  let
+                    src = mkLintSrc source toks
+                    raw =
+                      append
+                        (dedupFindings (sortFindings (scanDecls src decls decls)))
+                        (todoFindings comments)
+                    filtered = filterFindings cfg suppression raw
+                  in OkC filtered
 
 -- | 内部：按配置严重度与源码抑制过滤 finding。
 filterFindings : LintConfig -> Suppression -> List Finding -> List Finding
 filterFindings cfg suppression [] = []
-filterFindings cfg suppression (f :: rest) = case lintRuleOfName f.findingRule of
-  Nothing => filterFindings cfg suppression rest
-  Just rule =>
-    if lintRuleSeverity cfg rule == LintOff then filterFindings cfg suppression rest
-    else if isSuppressed suppression f.findingLine rule then filterFindings cfg suppression rest
-    else { f | findingSeverity = lintRuleSeverity cfg rule } :: filterFindings cfg suppression rest
+filterFindings cfg suppression (f :: rest) =
+  case lintRuleOfName f.findingRule of
+    Nothing => filterFindings cfg suppression rest
+    Just rule =>
+      if lintRuleSeverity cfg rule == LintOff then
+        filterFindings cfg suppression rest
+      else if isSuppressed suppression f.findingLine rule then
+        filterFindings cfg suppression rest
+      else
+        { f | findingSeverity = lintRuleSeverity cfg rule } :: filterFindings cfg suppression rest
 
 -- | 解析源码并按默认配置返回 finding（兼容入口）。
 export lintSourceWith : List FixityDecl -> String -> Check (List Finding)

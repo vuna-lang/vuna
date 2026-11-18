@@ -25,25 +25,39 @@ export execState : State s a -> s -> s
 execState st s = secondOf (runState st s)
 
 instance Functor (State s) where
-  fmap f st = State (\s => case st.stateRun s of
-    Pair a s2 => Pair (f a) s2
-  )
+  fmap f st =
+    State (
+        \s =>
+          case st.stateRun s of
+            Pair a s2 => Pair (f a) s2
+      )
 
 instance Monad (State s) where
-  (>>=) st k = State (\s => case st.stateRun s of
-    Pair a s2 => (k a).stateRun s2
-  )
+  (>>=) st k =
+    State (
+        \s =>
+          case st.stateRun s of
+            Pair a s2 => (k a).stateRun s2
+      )
 
 instance Applicative (State s) where
   pure a = State (\s => Pair a s)
-  ap mf mx = State (\s => case mf.stateRun s of
-    Pair g s1 => case mx.stateRun s1 of
-      Pair b s2 => Pair (g b) s2
-  )
-  liftA2 f sa sb = State (\s => case sa.stateRun s of
-    Pair a s1 => case sb.stateRun s1 of
-      Pair b s2 => Pair (f a b) s2
-  )
+  ap mf mx =
+    State (
+        \s =>
+          case mf.stateRun s of
+            Pair g s1 =>
+              case mx.stateRun s1 of
+                Pair b s2 => Pair (g b) s2
+      )
+  liftA2 f sa sb =
+    State (
+        \s =>
+          case sa.stateRun s of
+            Pair a s1 =>
+              case sb.stateRun s1 of
+                Pair b s2 => Pair (f a b) s2
+      )
 
 -- | 取当前状态（结果与状态相同）。
 export get : State s s

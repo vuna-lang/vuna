@@ -39,17 +39,19 @@ shellEscaped (c :: rest) =
 
 -- | 会话级临时路径（`stty` 状态 / 尺寸文件）；同一进程内用 `clockNow` 保证不撞名。
 export termTmpPath : Member nClock ClockOp r, Member nEnv EnvOp r => Int -> Eff r String
-termTmpPath _ = do
-  base <- termTempBase 0
-  now <- clockNow
-  pure "${base}/vuna-repl-term-${now}"
+termTmpPath _ =
+  do
+    base <- termTempBase 0
+    now <- clockNow
+    pure "${base}/vuna-repl-term-${now}"
 
 -- | 内部：临时目录根——`TMPDIR`（去掉尾随 `/`），未设置时用 `/tmp`。
 termTempBase : Member nEnv EnvOp r => Int -> Eff r String
-termTempBase _ = do
-  env <- envGetEnv "TMPDIR"
-  pure
-    (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
+termTempBase _ =
+  do
+    env <- envGetEnv "TMPDIR"
+    pure
+      (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
 -- | 删除文件（`rm -f`），返回子命令退出码。
 export rmFile : Member nProcess ProcessOp r => String -> Eff r Int
@@ -57,25 +59,30 @@ rmFile path = processRunIn "/" ["rm", "-f", path]
 
 -- | `stty -g > path`：把终端状态保存到 `path`；成功且文件存在给 0，否则给非 0。
 export termSaveState : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
-termSaveState path = do
-  code <- processRunIn "." ["sh", "-c", "stty -g > ${shellQuote path}"]
-  if code == 0 then do
-    exists <- fsFileExists path
-    pure (if exists then 0 else 1)
-  else pure 1
+termSaveState path =
+  do
+    code <- processRunIn "." ["sh", "-c", "stty -g > ${shellQuote path}"]
+    if code == 0 then
+      do
+        exists <- fsFileExists path
+        pure (if exists then 0 else 1)
+    else
+      pure 1
 
 -- | `stty <saved>`：按保存的状态恢复终端（并删掉状态文件）；失败再试 `stty sane`。
 export termRestoreState : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
-termRestoreState path = do
-  textR <- readText path
-  let
-    saved = case textR of
-      ErrC e => ""
-      OkC s => trim s
-  in do
-    code <- if saved == "" then pure 1 else processRunIn "." ["stty", saved]
-    _ <- rmFile path
-    if code == 0 then pure 0 else processRunIn "." ["stty", "sane"]
+termRestoreState path =
+  do
+    textR <- readText path
+    let
+      saved =
+        case textR of
+          ErrC e => ""
+          OkC s => trim s
+    in do
+      code <- if saved == "" then pure 1 else processRunIn "." ["stty", saved]
+      _ <- rmFile path
+      if code == 0 then pure 0 else processRunIn "." ["stty", "sane"]
 
 -- | `stty raw -echo min 1 time 0`：进入原始模式（不回显），逐字节阻塞读。
 export termEnterRaw : Member nProcess ProcessOp r => Int -> Eff r Int
@@ -92,37 +99,44 @@ termReadBlock _ = processRunIn "." ["stty", "min", "1", "time", "0"]
 
 -- | 读 1 字节；EOF 或超时返回 -1（没有读到字节）。
 export termReadByte : Member nStdin StdinOp r => Int -> Eff r Int
-termReadByte _ = do
-  s <- stdinReadBytes (natFromInt 1)
-  pure (case s of
-    Nothing => 0 - 1
-    Just bytes => case strUnpack bytes of
-      [] => 0 - 1
-      b :: rest => b
-  )
+termReadByte _ =
+  do
+    s <- stdinReadBytes (natFromInt 1)
+    pure (
+        case s of
+          Nothing => 0 - 1
+          Just bytes =>
+            case strUnpack bytes of
+              [] => 0 - 1
+              b :: rest => b
+      )
 
 -- | 终端列数：`stty size` 的第二列；查询失败、非数字或非正数时给缺省值 80。
 export termWidth : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> Eff r Int
-termWidth _ = do
-  base <- termTmpPath 0
-  let
-    path = "${base}.size"
-  in do
-    _ <- processRunIn "." ["sh", "-c", "stty size > ${shellQuote path}"]
-    textR <- readText path
+termWidth _ =
+  do
+    base <- termTmpPath 0
     let
-      text = case textR of
-        ErrC e => ""
-        OkC s => trim s
-      parts = filter (\p => p /= "") (split " " text)
+      path = "${base}.size"
     in do
-      _ <- rmFile path
-      pure (case parts of
-        _ :: cols :: rest => case parseDigitsInt cols of
-          Just n => if n > 0 then n else 80
-          Nothing => 80
-        _ => 80
-      )
+      _ <- processRunIn "." ["sh", "-c", "stty size > ${shellQuote path}"]
+      textR <- readText path
+      let
+        text =
+          case textR of
+            ErrC e => ""
+            OkC s => trim s
+        parts = filter (\p => p /= "") (split " " text)
+      in do
+        _ <- rmFile path
+        pure (
+            case parts of
+              _ :: cols :: rest =>
+                case parseDigitsInt cols of
+                  Just n => if n > 0 then n else 80
+                  Nothing => 80
+              _ => 80
+          )
 
 -- | 内部：把纯数字串解析成非负整数；空串或含非数字字符给 `Nothing`。
 parseDigitsInt : String -> Maybe Int

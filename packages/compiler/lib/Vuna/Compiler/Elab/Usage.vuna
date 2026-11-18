@@ -28,12 +28,14 @@ export isTypeForming : Value -> Bool
 isTypeForming v = isTypeFormingFuel 128 v
 
 isTypeFormingFuel : Int -> Value -> Bool
-isTypeFormingFuel fuel v = if fuel <= 0 then False
-else case v of
-  VType l => True
-  VPi name implicit rig dom clo =>
-    isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
-  _ => False
+isTypeFormingFuel fuel v =
+  if fuel <= 0 then
+    False
+  else
+    case v of
+      VType l => True
+      VPi name implicit rig dom clo => isTypeFormingFuel (fuel - 1) (applyClosure clo (VNeutral (NVar name 0 [])))
+      _ => False
 
 -- ---------------------------------------------------------------
 -- 用量向量
@@ -63,26 +65,35 @@ uJoin xs [] = xs
 uJoin (x :: xs) (y :: ys) = rigJoin x y :: uJoin xs ys
 
 uDrop : Int -> List Rig -> List Rig
-uDrop n us = if n <= 0 then us
-else case us of
-  [] => []
-  _ :: rest => uDrop (n - 1) rest
+uDrop n us =
+  if n <= 0 then
+    us
+  else
+    case us of
+      [] => []
+      _ :: rest => uDrop (n - 1) rest
 
 -- 声明与实测是否相符；不符时给 TC 诊断。返回的 Int 只是占位（错误已短路）。
 -- `ec` 是当前显式状态：使用点登记在 `Ec.ecUseSpans` 上，诊断在此就地取。
 checkBinderRig : Ec -> Span -> String -> Rig -> Rig -> Check Int
 checkBinderRig ec sp name Rig0 used =
-  if isRigZero used then OkC 0
-  else onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 0 1) d))
-    (tcErr1 sp (ErasedBinderUsed name) name)
-checkBinderRig ec sp name Rig1 used = case used of
-  Rig0 =>
-    onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 1 0) d))
-      (tcErr1 sp (LinearUnused name) name)
-  Rig1 => OkC 0
-  RigOmega =>
-    onErrDiag (\d => withUseFields ec name (withField (FieldQuantity name 1 2) d))
-      (tcErr1 sp (LinearOverused name) name)
+  if isRigZero used then
+    OkC 0
+  else
+    onErrDiag
+      (\d => withUseFields ec name (withField (FieldQuantity name 0 1) d))
+      (tcErr1 sp (ErasedBinderUsed name) name)
+checkBinderRig ec sp name Rig1 used =
+  case used of
+    Rig0 =>
+      onErrDiag
+        (\d => withUseFields ec name (withField (FieldQuantity name 1 0) d))
+        (tcErr1 sp (LinearUnused name) name)
+    Rig1 => OkC 0
+    RigOmega =>
+      onErrDiag
+        (\d => withUseFields ec name (withField (FieldQuantity name 1 2) d))
+        (tcErr1 sp (LinearOverused name) name)
 checkBinderRig ec sp name RigOmega used = OkC 0
 
 -- binder 自身的 span 为空（合成 binder）时回落到定义位置：诊断仍有位置，但不提供编辑。
@@ -103,11 +114,16 @@ checkLamBinder : Ec -> Span -> Maybe Span -> String -> Rig -> List Rig -> Check 
 checkLamBinder ec sp mEdit name rig [] = icInternal "usage vector lost lambda binder"
 checkLamBinder ec sp mEdit name rig (used :: rest) =
   let
-    ec1 = if isRigZero used && not (startsWith "_" name) then case rig of
-      RigOmega => warnUnusedBinder ec sp mEdit name
-      _ => ec
-    else ec
-  in Vuna.Compiler.Base.Common.bind (checkBinderRig ec1 sp name rig used) (\_ => OkC (Pair rest ec1))
+    ec1 =
+      if isRigZero used && not (startsWith "_" name) then
+        case rig of
+          RigOmega => warnUnusedBinder ec sp mEdit name
+          _ => ec
+      else
+        ec
+  in Vuna.Compiler.Base.Common.bind
+    (checkBinderRig ec1 sp name rig used)
+    (\_ => OkC (Pair rest ec1))
 
 -- 外层 env 里是否有同名、且**参与运行时**的 binder 吗（UN_ShadowedBinder 的比较对象）。
 --
@@ -139,59 +155,73 @@ checkAltBindersGo ec sp (b :: rest) us =
     used :: more =>
       let
         ec1 =
-          if name /= "_" && shadowedByRuntime name restRuntime then warnAt1 ec bsp (ShadowedBinder name) name
-          else ec
-        ec2 = if isRigZero used && not (startsWith "_" name) then case rig of
-          RigOmega => warnUnusedBinder ec1 bsp mEdit name
-          _ => ec1
-        else ec1
-      in Vuna.Compiler.Base.Common.bind (checkBinderRig ec2 bsp name rig used)
+          if name /= "_" && shadowedByRuntime name restRuntime then
+            warnAt1 ec bsp (ShadowedBinder name) name
+          else
+            ec
+        ec2 =
+          if isRigZero used && not (startsWith "_" name) then
+            case rig of
+              RigOmega => warnUnusedBinder ec1 bsp mEdit name
+              _ => ec1
+          else
+            ec1
+      in Vuna.Compiler.Base.Common.bind
+        (checkBinderRig ec2 bsp name rig used)
         (\_ => checkAltBindersGo ec2 sp rest more)
 
 -- ---------------------------------------------------------------
 -- 项遍历（显式线程 `Ec`：使用点登记进 `ecUseSpans`，诊断就地取用）
 -- ---------------------------------------------------------------
 checkTerm : Ec -> Span -> List (Pair String Rig) -> Term -> Check (Pair (List Rig) Ec)
-checkTerm ec sp env t = case t of
-  TVar name i usp =>
-    let
-      ec2 = if usp.spanStartLine == 0 then ec else recordUseSpan ec name usp
-    in OkC (Pair (uVarAt (natToInt (length env)) i) ec2)
-  TMeta m => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TGlobal g => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  -- 类型：0-fragment，里面的 binder 不产生运行时用量。
-  TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TLam name rig _ binderSp body =>
-    let
-      bsp = resolvedBinderSpan binderSp sp
-      mEdit = binderEditSpan name binderSp
-      ecW =
-        if name /= "_" && shadowedByRuntime name env then warnAt1 ec bsp (ShadowedBinder name) name
-        else ec
-      env2 = (::) (Pair name rig) env
-    in Vuna.Compiler.Base.Common.step (checkTerm ecW sp env2 body)
-      (\u => \ec2 => Vuna.Compiler.Base.Common.step (checkLamBinder ec2 bsp mEdit name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
-  TApp f a rig =>
-    Vuna.Compiler.Base.Common.step (checkTerm ec sp env f)
-      (\uf => \ec1 => if isRigZero rig then OkC (Pair uf ec1) else Vuna.Compiler.Base.Common.step (checkTerm ec1 sp env a) (\ua => \ec2 => OkC (Pair (uAdd uf (uScale rig ua)) ec2)))
-  TCon c args => checkArgs ec sp env args
-  TMk c args => checkArgs ec sp env args
-  TRecord c args => checkArgs ec sp env args
-  TProj base c tele i fi => checkTerm ec sp env base
-  TRecUpd base c tele idxs body =>
-    Vuna.Compiler.Base.Common.step (checkTerm ec sp env base)
-      (\ub => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => Vuna.Compiler.Base.Common.step (checkAltBinders ec2 sp (bindersOfPairs tele) ua) (\outer => \ec3 => OkC (Pair (uAdd ub outer) ec3))))
-  TCase scrut alts =>
-    Vuna.Compiler.Base.Common.step (checkTerm ec sp env scrut)
-      (\us => \ec1 => Vuna.Compiler.Base.Common.step (checkAlts ec1 sp env alts) (\ua => \ec2 => OkC (Pair (uAdd us ua) ec2)))
-  TIf c th el =>
-    Vuna.Compiler.Base.Common.step (checkTerm ec sp env c)
-      (\uc => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp env th) (\ut => \ec2 => Vuna.Compiler.Base.Common.step (checkTerm ec2 sp env el) (\ue => \ec3 => OkC (Pair (uAdd uc (uJoin ut ue)) ec3))))
-  TInt n => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TStr s => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TFloat raw => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TBool b => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+checkTerm ec sp env t =
+  case t of
+    TVar name i usp =>
+      let
+        ec2 = if usp.spanStartLine == 0 then ec else recordUseSpan ec name usp
+      in OkC (Pair (uVarAt (natToInt (length env)) i) ec2)
+    TMeta m => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TGlobal g => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    -- 类型：0-fragment，里面的 binder 不产生运行时用量。
+    TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TLam name rig _ binderSp body =>
+      let
+        bsp = resolvedBinderSpan binderSp sp
+        mEdit = binderEditSpan name binderSp
+        ecW =
+          if name /= "_" && shadowedByRuntime name env then
+            warnAt1 ec bsp (ShadowedBinder name) name
+          else
+            ec
+        env2 = (::) (Pair name rig) env
+      in Vuna.Compiler.Base.Common.step
+        (checkTerm ecW sp env2 body)
+        (\u => \ec2 => Vuna.Compiler.Base.Common.step (checkLamBinder ec2 bsp mEdit name rig u) (\rest => \ec3 => OkC (Pair rest ec3)))
+    TApp f a rig =>
+      Vuna.Compiler.Base.Common.step
+        (checkTerm ec sp env f)
+        (\uf => \ec1 => if isRigZero rig then OkC (Pair uf ec1) else Vuna.Compiler.Base.Common.step (checkTerm ec1 sp env a) (\ua => \ec2 => OkC (Pair (uAdd uf (uScale rig ua)) ec2)))
+    TCon c args => checkArgs ec sp env args
+    TMk c args => checkArgs ec sp env args
+    TRecord c args => checkArgs ec sp env args
+    TProj base c tele i fi => checkTerm ec sp env base
+    TRecUpd base c tele idxs body =>
+      Vuna.Compiler.Base.Common.step
+        (checkTerm ec sp env base)
+        (\ub => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp (append (reverse tele) env) body) (\ua => \ec2 => Vuna.Compiler.Base.Common.step (checkAltBinders ec2 sp (bindersOfPairs tele) ua) (\outer => \ec3 => OkC (Pair (uAdd ub outer) ec3))))
+    TCase scrut alts =>
+      Vuna.Compiler.Base.Common.step
+        (checkTerm ec sp env scrut)
+        (\us => \ec1 => Vuna.Compiler.Base.Common.step (checkAlts ec1 sp env alts) (\ua => \ec2 => OkC (Pair (uAdd us ua) ec2)))
+    TIf c th el =>
+      Vuna.Compiler.Base.Common.step
+        (checkTerm ec sp env c)
+        (\uc => \ec1 => Vuna.Compiler.Base.Common.step (checkTerm ec1 sp env th) (\ut => \ec2 => Vuna.Compiler.Base.Common.step (checkTerm ec2 sp env el) (\ue => \ec3 => OkC (Pair (uAdd uc (uJoin ut ue)) ec3))))
+    TInt n => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TStr s => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TFloat raw => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+    TBool b => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 
 checkArgs : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> Check (Pair (List Rig) Ec)
 checkArgs ec sp env args = checkArgsGo ec sp env args (uZeroOf (natToInt (length env)))
@@ -199,28 +229,40 @@ checkArgs ec sp env args = checkArgsGo ec sp env args (uZeroOf (natToInt (length
 checkArgsGo : Ec -> Span -> List (Pair String Rig) -> List (Pair Term Rig) -> List Rig -> Check (Pair (List Rig) Ec)
 checkArgsGo ec sp env [] acc = OkC (Pair acc ec)
 checkArgsGo ec sp env ((Pair arg rig) :: rest) acc =
-  if isRigZero rig then checkArgsGo ec sp env rest acc
-  else Vuna.Compiler.Base.Common.step (checkTerm ec sp env arg)
-    (\ua => \ec1 => checkArgsGo ec1 sp env rest (uAdd acc (uScale rig ua)))
+  if isRigZero rig then
+    checkArgsGo ec sp env rest acc
+  else
+    Vuna.Compiler.Base.Common.step
+      (checkTerm ec sp env arg)
+      (\ua => \ec1 => checkArgsGo ec1 sp env rest (uAdd acc (uScale rig ua)))
 
 checkAlts : Ec -> Span -> List (Pair String Rig) -> List CaseAlt -> Check (Pair (List Rig) Ec)
 checkAlts ec sp env alts = checkAltsGo ec sp env alts Nothing
 
 checkAltsGo : Ec -> Span -> List (Pair String Rig) -> List CaseAlt -> Maybe (List Rig) -> Check (Pair (List Rig) Ec)
-checkAltsGo ec sp env [] acc = case acc of
-  Just u => OkC (Pair u ec)
-  Nothing => OkC (Pair (uZeroOf (natToInt (length env))) ec)
+checkAltsGo ec sp env [] acc =
+  case acc of
+    Just u => OkC (Pair u ec)
+    Nothing => OkC (Pair (uZeroOf (natToInt (length env))) ec)
 checkAltsGo ec sp env ((CaseAlt cname binders body) :: rest) acc =
   let
     env2 = append (reverse (binderPairs binders)) env
     k = natToInt (length binders)
-  in Vuna.Compiler.Base.Common.step (checkTerm ec sp env2 body) (\u => \ec1 => Vuna.Compiler.Base.Common.step (checkAltBinders ec1 sp binders u) (\outer => \ec2 => checkAltsGo ec2 sp env rest (Just (case acc of
-    Just prev => uJoin prev outer
-    Nothing => outer
-  )
-  )
-  )
-  )
+  in Vuna.Compiler.Base.Common.step (checkTerm ec sp env2 body) (
+      \u =>
+        \ec1 =>
+          Vuna.Compiler.Base.Common.step (checkAltBinders ec1 sp binders u) (
+              \outer =>
+                \ec2 =>
+                  checkAltsGo ec2 sp env rest (
+                      Just (
+                          case acc of
+                            Just prev => uJoin prev outer
+                            Nothing => outer
+                        )
+                    )
+            )
+    )
 
 -- `Rig` 没有 Eq 实例；这里用显式模式匹配判断「0 实参」。
 isRigZero : Rig -> Bool
@@ -232,9 +274,10 @@ isRigZero _ = False
 export checkDefUsage : Ec -> Maybe Span -> String -> Term -> Check Ec
 checkDefUsage ec msp name body =
   let
-    sp = case msp of
-      Just s => s
-      Nothing => Span "" 0 0 0 0 0 0
+    sp =
+      case msp of
+        Just s => s
+        Nothing => Span "" 0 0 0 0 0 0
     ec0 = resetUseSpans ec
   in Vuna.Compiler.Base.Common.step (checkTerm ec0 sp [] body) (\_rest => \ec1 => OkC ec1)
 
@@ -267,39 +310,30 @@ capCheckFuelMax : Int
 capCheckFuelMax = 1000000
 
 capCheckFuel : Int -> Ec -> Span -> Term -> Bool -> Check Int
-capCheckFuel fuel ec sp t allowed = if fuel <= 0 then icInternal "capture check fuel exhausted"
-else case t of
-  TVar name i _ => OkC 0
-  TGlobal g => OkC 0
-  TInt n => OkC 0
-  TStr s => OkC 0
-  TFloat raw => OkC 0
-  TBool b => OkC 0
-  TMeta m => OkC 0
-  TType l => OkC 0
-  -- 类型层项不产生运行时闭包（λ 只在值层出现）。
-  TPi name implicit rig dom cod => OkC 0
-  TLam name rig _ _ body =>
-    if isLinClosureName name then
-      if allowed then capCheckFuel (fuel - 1) ec sp body False
-      else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)
-    else capCheckFuel (fuel - 1) ec sp body False
-  TApp f a rig =>
-    Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp f True)
-      (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
-  TCon c args => capArgsFuel fuel ec sp c args
-  TMk c args => capArgsFuel fuel ec sp c args
-  TRecord c args => capArgsFuel fuel ec sp c args
-  TIf c th el =>
-    Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp c True)
-      (\_ => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))
-  TProj base c tele i fi => capCheckFuel (fuel - 1) ec sp base True
-  TRecUpd base c tele idxs body =>
-    Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp base True)
-      (\_ => capCheckFuel (fuel - 1) ec sp body allowed)
-  TCase scrut alts =>
-    Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp scrut True)
-      (\_ => capAltsFuel fuel ec sp allowed alts)
+capCheckFuel fuel ec sp t allowed =
+  if fuel <= 0 then
+    icInternal "capture check fuel exhausted"
+  else
+    case t of
+      TVar name i _ => OkC 0
+      TGlobal g => OkC 0
+      TInt n => OkC 0
+      TStr s => OkC 0
+      TFloat raw => OkC 0
+      TBool b => OkC 0
+      TMeta m => OkC 0
+      TType l => OkC 0
+      -- 类型层项不产生运行时闭包（λ 只在值层出现）。
+      TPi name implicit rig dom cod => OkC 0
+      TLam name rig _ _ body => if isLinClosureName name then if allowed then capCheckFuel (fuel - 1) ec sp body False else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name) else capCheckFuel (fuel - 1) ec sp body False
+      TApp f a rig => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp f True) (\_ => if isRigZero rig then capCheckFuel (fuel - 1) ec sp a False else capCheckFuel (fuel - 1) ec sp a (rigIsLinear rig))
+      TCon c args => capArgsFuel fuel ec sp c args
+      TMk c args => capArgsFuel fuel ec sp c args
+      TRecord c args => capArgsFuel fuel ec sp c args
+      TIf c th el => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp c True) (\_ => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp th allowed) (\_ => capCheckFuel (fuel - 1) ec sp el allowed))
+      TProj base c tele i fi => capCheckFuel (fuel - 1) ec sp base True
+      TRecUpd base c tele idxs body => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp base True) (\_ => capCheckFuel (fuel - 1) ec sp body allowed)
+      TCase scrut alts => Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp scrut True) (\_ => capAltsFuel fuel ec sp allowed alts)
 
 capArgsFuel : Int -> Ec -> Span -> String -> List (Pair Term Rig) -> Check Int
 capArgsFuel fuel ec sp c args = capArgsGo fuel ec sp (ctorFamilyLinear ec c) args
@@ -309,22 +343,26 @@ capArgsGo fuel ec sp famLin [] = OkC 0
 capArgsGo fuel ec sp famLin ((Pair arg rig) :: rest) =
   let
     allowed = famLin && rigIsLinear rig
-  in Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp arg allowed)
+  in Vuna.Compiler.Base.Common.bind
+    (capCheckFuel (fuel - 1) ec sp arg allowed)
     (\_ => capArgsGo (fuel - 1) ec sp famLin rest)
 
 capAltsFuel : Int -> Ec -> Span -> Bool -> List CaseAlt -> Check Int
 capAltsFuel fuel ec sp allowed [] = OkC 0
 capAltsFuel fuel ec sp allowed ((CaseAlt cname binders body) :: rest) =
-  Vuna.Compiler.Base.Common.bind (capCheckFuel (fuel - 1) ec sp body allowed)
+  Vuna.Compiler.Base.Common.bind
+    (capCheckFuel (fuel - 1) ec sp body allowed)
     (\_ => capAltsFuel (fuel - 1) ec sp allowed rest)
 
 -- 构造子所属族是不是 `linear data`（决定 rig-1 字段的一次性承诺是否可靠）。
 ctorFamilyLinear : Ec -> String -> Bool
-ctorFamilyLinear ec c = case dtCtorLookupEc ec c of
-  Just ctor => case dtDataLookup (dtCtorFamily ctor) (ecDatas ec) of
-    Just d => dtDataLinear d
+ctorFamilyLinear ec c =
+  case dtCtorLookupEc ec c of
+    Just ctor =>
+      case dtDataLookup (dtCtorFamily ctor) (ecDatas ec) of
+        Just d => dtDataLinear d
+        Nothing => False
     Nothing => False
-  Nothing => False
 
 -- 顶层入口：定义体是闭项；根位置按「不受限使用」检查（返回值可能被调用方复制）。
 checkDefCapture : Ec -> DtDef -> Term -> Check Int
@@ -341,19 +379,21 @@ checkProgramUsage ec defs = checkProgramUsageGo ec defs
 
 checkProgramUsageGo : Ec -> List DtDef -> Check Ec
 checkProgramUsageGo ec [] = OkC ec
-checkProgramUsageGo ec (d :: rest) = if isTypeLevelDef ec d then checkProgramUsageGo ec rest
-else if isLinearType ec (eval [] (dtDefType d)) then
-  tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
-else case dtDefBody d of
-  Nothing => checkProgramUsageGo ec rest
-  Just body =>
-    Vuna.Compiler.Base.Common.bind (checkDefCapture ec d body)
-      (\_ => Vuna.Compiler.Base.Common.bind (checkDefUsage ec (dtDefSpan d) (dtDefName d) body) (\ec2 => checkProgramUsageGo ec2 rest))
+checkProgramUsageGo ec (d :: rest) =
+  if isTypeLevelDef ec d then
+    checkProgramUsageGo ec rest
+  else if isLinearType ec (eval [] (dtDefType d)) then
+    tcErr1 (defSpanOf d) (LinearTopLevel (dtDefName d)) (dtDefName d)
+  else
+    case dtDefBody d of
+      Nothing => checkProgramUsageGo ec rest
+      Just body => Vuna.Compiler.Base.Common.bind (checkDefCapture ec d body) (\_ => Vuna.Compiler.Base.Common.bind (checkDefUsage ec (dtDefSpan d) (dtDefName d) body) (\ec2 => checkProgramUsageGo ec2 rest))
 
 defSpanOf : DtDef -> Span
-defSpanOf d = case dtDefSpan d of
-  Just sp => sp
-  Nothing => Span "" 0 0 0 0 0 0
+defSpanOf d =
+  case dtDefSpan d of
+    Just sp => sp
+    Nothing => Span "" 0 0 0 0 0 0
 
 -- 未使用 binder → `_<name>` 的 machine-applicable 改名建议（无引用，改名安全）。
 -- 只有拿到 binder 名自身的 span（`mEdit`）才给编辑：定义级回落 span 上做替换会毁掉整段源码。

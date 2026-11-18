@@ -103,10 +103,19 @@ isSpanEmpty sp = spanStartLine sp == 0
 -- ——调用方回落到外层位置，也不会给出可能毁掉源码的替换编辑。
 export spanAtName : String -> Span -> Span
 spanAtName name sp =
-  if isSpanEmpty sp then sp
-  else if spanStartOffset sp /= spanEndOffset sp then spanEmpty
-  else Span (spanFile sp) (spanStartLine sp) (spanStartCol sp) (spanStartLine sp)
-    (spanStartCol sp + strLength name) (spanStartOffset sp) (spanStartOffset sp + strLength name)
+  if isSpanEmpty sp then
+    sp
+  else if spanStartOffset sp /= spanEndOffset sp then
+    spanEmpty
+  else
+    Span
+      (spanFile sp)
+      (spanStartLine sp)
+      (spanStartCol sp)
+      (spanStartLine sp)
+      (spanStartCol sp + strLength name)
+      (spanStartOffset sp)
+      (spanStartOffset sp + strLength name)
 
 -- | 字符（字节码）是否在列表里；线性扫描，用于小字符集判断。
 memChar : Int -> List Int -> Bool
@@ -129,22 +138,27 @@ splitOnChar sep s = splitCharsOn sep (strUnpack s) [] []
 splitCharsOn : Int -> List Int -> List String -> List Int -> List String
 splitCharsOn sep [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitCharsOn sep (c :: rest) acc seg =
-  if c == sep then splitCharsOn sep rest (strPack (reverse seg) :: acc) []
-  else splitCharsOn sep rest acc (c :: seg)
+  if c == sep then
+    splitCharsOn sep rest (strPack (reverse seg) :: acc) []
+  else
+    splitCharsOn sep rest acc (c :: seg)
 
 -- | 把字符流按 `.` 切成段列表：`splitOnDot` 内部的展开实现，空段也保留。
 splitCharsOnDot : List Int -> List String -> List Int -> List String
 splitCharsOnDot [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitCharsOnDot (c :: rest) acc seg =
-  if c == 46 then splitCharsOnDot rest (strPack (reverse seg) :: acc) []
-  else splitCharsOnDot rest acc (c :: seg)
+  if c == 46 then
+    splitCharsOnDot rest (strPack (reverse seg) :: acc) []
+  else
+    splitCharsOnDot rest acc (c :: seg)
 
 -- | 把已拆分的段列表的**最后一段**单独分出来：`["A","B"]` → `(["A"], "B")`；
 -- 空列表返回 `([], "")`。
 export splitLastDot : List String -> Pair (List String) String
-splitLastDot parts = case reverse parts of
-  [] => Pair [] ""
-  last :: rest => Pair (reverse rest) last
+splitLastDot parts =
+  case reverse parts of
+    [] => Pair [] ""
+    last :: rest => Pair (reverse rest) last
 
 -- | 用 `.` 拼接模块路径段；空列表得空串，单段原样返回。
 export joinDots : List String -> String
@@ -160,8 +174,9 @@ lastSeg name = secondOf (splitLastDot (splitOnDot name))
 
 -- | 名字的**模块前缀**（`Base.Trait.Monad.fmap` → `Base.Trait.Monad`；无点时返回 `""`）。
 export prefixOfName : String -> String
-prefixOfName name = case splitLastDot (splitOnDot name) of
-  Pair revSegs _ => joinDots revSegs
+prefixOfName name =
+  case splitLastDot (splitOnDot name) of
+    Pair revSegs _ => joinDots revSegs
 
 -- | 用 `/` 拼接文件路径段；空列表得空串，单段原样返回。
 export joinSlashes : List String -> String
@@ -201,12 +216,12 @@ parentOfPath path =
     chars = strUnpack path
     rev = reverse chars
     after = dropPastSlash rev
-  in if length after == length rev then "."
+  in if length after == length rev then
+    "."
   else
     let
       parent = strPack (reverse after)
-    in if parent == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
+    in if parent == "" then if startsWith "/" path then "/" else "." else if startsWith "/" path && not (startsWith "/" parent) then "/${parent}" else parent
 
 dropPastSlash : List Int -> List Int
 dropPastSlash [] = []
@@ -221,15 +236,19 @@ suggest name (c :: rest) =
 -- | 近似名判定（供 `suggest`）：相等不算（那是精确命中），其余按前缀包含、
 -- 长度差 ≤2 且公共前缀 ≥2 判为相似。
 _similarName : String -> String -> Bool
-_similarName a b = if a == b then False
-else if startsWith a b then True
-else if startsWith b a then True
-else
-  let
-    la = strUnpack a
-  in let
-    lb = strUnpack b
-  in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
+_similarName a b =
+  if a == b then
+    False
+  else if startsWith a b then
+    True
+  else if startsWith b a then
+    True
+  else
+    let
+      la = strUnpack a
+    in let
+      lb = strUnpack b
+    in lengthDiffLE (length la) (length lb) 2 && prefixLen2 la lb >= 2
 
 -- | 两个码点列表的公共前缀长度。
 prefixLen2 : List Int -> List Int -> Int

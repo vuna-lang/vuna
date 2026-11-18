@@ -101,8 +101,12 @@ fieldTargets parent (f :: rest) =
 methodTargets : String -> List TraitMethod -> List DocTarget
 methodTargets parent [] = []
 methodTargets parent (m :: rest) =
-  DocTarget (spanStartLine (traitMethodSpan m)) (spanStartCol (traitMethodSpan m)) "member" (traitMethodName m) parent
-    :: methodTargets parent rest
+  DocTarget
+    (spanStartLine (traitMethodSpan m))
+    (spanStartCol (traitMethodSpan m))
+    "member"
+    (traitMethodName m)
+    parent :: methodTargets parent rest
 
 -- ---------------------------------------------------------------
 -- 识别 doc block
@@ -132,26 +136,37 @@ trailBlocksOf comments = reverse (docBlocksGo "^" comments Nothing [])
 -- | 内部：收集 `marker`（`"|"` 或 `"^"`）这一轮的 doc block；行块按同列连续行续接，块注释整体成块。
 docBlocksGo : String -> List Comment -> Maybe OpenLineBlock -> List DocBlock -> List DocBlock
 docBlocksGo marker [] open acc = closeOpenBlock open acc
-docBlocksGo marker (c :: rest) open acc = case c.commentKind of
-  CLine => case lineDocMarker c.commentText of
-    Just (Pair m body) => if not (m == marker) then docBlocksGo marker rest Nothing (closeOpenBlock open acc)
-    else case open of
-      Just ob =>
-        if continuesOpen ob c then docBlocksGo marker rest (Just (appendOpenLine ob body)) acc
-        else docBlocksGo marker rest (Just (newOpenBlock body c)) (closeOpenBlock open acc)
-      Nothing => docBlocksGo marker rest (Just (newOpenBlock body c)) acc
-    Nothing => case open of
-      Just ob =>
-        if continuesOpen ob c then
-          docBlocksGo marker rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
-        else docBlocksGo marker rest Nothing (closeOpenBlock open acc)
-      Nothing => docBlocksGo marker rest Nothing acc
-  CBlock => case blockDocMarker c.commentText of
-    Just (Pair m body) =>
-      if m == marker then docBlocksGo marker rest Nothing
-        (DocBlock body (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c)) (spanStartCol (commentSpan c)) :: closeOpenBlock open acc)
-      else docBlocksGo marker rest Nothing (closeOpenBlock open acc)
-    Nothing => docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+docBlocksGo marker (c :: rest) open acc =
+  case c.commentKind of
+    CLine =>
+      case lineDocMarker c.commentText of
+        Just (Pair m body) =>
+          if not (m == marker) then
+            docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+          else
+            case open of
+              Just ob => if continuesOpen ob c then docBlocksGo marker rest (Just (appendOpenLine ob body)) acc else docBlocksGo marker rest (Just (newOpenBlock body c)) (closeOpenBlock open acc)
+              Nothing => docBlocksGo marker rest (Just (newOpenBlock body c)) acc
+        Nothing =>
+          case open of
+            Just ob =>
+              if continuesOpen ob c then
+                docBlocksGo marker rest (Just (appendOpenLine ob (stripOneSpace c.commentText))) acc
+              else
+                docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+            Nothing => docBlocksGo marker rest Nothing acc
+    CBlock =>
+      case blockDocMarker c.commentText of
+        Just (Pair m body) =>
+          if m == marker then
+            docBlocksGo
+              marker
+              rest
+              Nothing
+              (DocBlock body (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c)) (spanStartCol (commentSpan c)) :: closeOpenBlock open acc)
+          else
+            docBlocksGo marker rest Nothing (closeOpenBlock open acc)
+        Nothing => docBlocksGo marker rest Nothing (closeOpenBlock open acc)
 
 -- | 内部：该注释是否延续当前行块（同列且行号连续）。
 continuesOpen : OpenLineBlock -> Comment -> Bool
@@ -161,7 +176,10 @@ continuesOpen ob c =
 -- | 内部：用注释首行开一个新的行块。
 newOpenBlock : String -> Comment -> OpenLineBlock
 newOpenBlock body c =
-  OpenLineBlock [body] (spanStartLine (commentSpan c)) (spanStartLine (commentSpan c))
+  OpenLineBlock
+    [body]
+    (spanStartLine (commentSpan c))
+    (spanStartLine (commentSpan c))
     (spanStartCol (commentSpan c))
 
 -- | 内部：给行块追加一行并推进末行号。
@@ -182,20 +200,23 @@ lineDocMarker : String -> Maybe (Pair String String)
 lineDocMarker text =
   let
     t = trimLeft text
-  in if startsWith "|" t then Just (Pair "|" (stripOneSpace (dropFirstChar t)))
+  in if startsWith "|" t then
+    Just (Pair "|" (stripOneSpace (dropFirstChar t)))
   else if startsWith "^" t then Just (Pair "^" (stripOneSpace (dropFirstChar t))) else Nothing
 
 -- | 内部：去掉一个前导空格；更深的缩进保留给代码块。
 stripOneSpace : String -> String
-stripOneSpace s = case strUnpack s of
-  32 :: rest => strPack rest
-  _ => s
+stripOneSpace s =
+  case strUnpack s of
+    32 :: rest => strPack rest
+    _ => s
 
 -- | 内部：去掉第一个字符。
 dropFirstChar : String -> String
-dropFirstChar s = case strUnpack s of
-  c :: rest => strPack rest
-  [] => s
+dropFirstChar s =
+  case strUnpack s of
+    c :: rest => strPack rest
+    [] => s
 
 -- | 内部：识别块注释的 `|` / `^` 标记，返回（标记, dedent 后的正文）。
 --
@@ -204,7 +225,8 @@ blockDocMarker : String -> Maybe (Pair String String)
 blockDocMarker text =
   let
     t = trimLeft text
-  in if startsWith "|" t then Just (Pair "|" (dedent (dropFirstChar t)))
+  in if startsWith "|" t then
+    Just (Pair "|" (dedent (dropFirstChar t)))
   else if startsWith "^" t then Just (Pair "^" (dedent (dropFirstChar t))) else Nothing
 
 -- | 内部：去掉首尾空行，再按非空行的最小前导空格整体左移（块注释常整体缩进在 record/trait 内）。
@@ -231,11 +253,13 @@ minIndent ls = minIndentGo ls 1000000
 -- | 内部：`minIndent` 的累加实现，初始哨兵是 1000000。
 minIndentGo : List String -> Int -> Int
 minIndentGo [] acc = if acc == 1000000 then 0 else acc
-minIndentGo (l :: rest) acc = if trim l == "" then minIndentGo rest acc
-else
-  let
-    n = leadingSpaces l
-  in if n < acc then minIndentGo rest n else minIndentGo rest acc
+minIndentGo (l :: rest) acc =
+  if trim l == "" then
+    minIndentGo rest acc
+  else
+    let
+      n = leadingSpaces l
+    in if n < acc then minIndentGo rest n else minIndentGo rest acc
 
 -- | 内部：前导空格与制表符的个数。
 leadingSpaces : String -> Int
@@ -255,10 +279,13 @@ dropLeadingSpaces n s = strPack (dropLeadingSpacesChars n (strUnpack s))
 -- | 内部：`dropLeadingSpaces` 的字符层实现。
 dropLeadingSpacesChars : Int -> List Int -> List Int
 dropLeadingSpacesChars n [] = []
-dropLeadingSpacesChars n chars = if n <= 0 then chars
-else case chars of
-  c :: rest => if c == 32 || c == 9 then dropLeadingSpacesChars (n - 1) rest else chars
-  [] => []
+dropLeadingSpacesChars n chars =
+  if n <= 0 then
+    chars
+  else
+    case chars of
+      c :: rest => if c == 32 || c == 9 then dropLeadingSpacesChars (n - 1) rest else chars
+      [] => []
 
 -- ---------------------------------------------------------------
 -- 关联
@@ -313,33 +340,46 @@ assignBlocks comments targets blocks = assignBlocksGo comments targets blocks (A
 -- | 内部：前置关联主循环；模块头只认第一个 doc，成员键是 `父名<TAB>成员名`。
 assignBlocksGo : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
 assignBlocksGo comments targets [] acc = acc
-assignBlocksGo comments targets (b :: rest) acc = case pickTarget comments targets acc.assignUsed b of
-  Nothing => assignBlocksGo comments targets rest acc
-  Just (Pair idx t) =>
-    let
-      acc2 = case targetKind t of
-        "module" =>
-          if acc.assignModuleDoc == "" then
-            Assign acc.assignUsed acc.assignDecls acc.assignMembers b.docBlockText
-          else acc
-        "member" =>
-          Assign acc.assignUsed acc.assignDecls
-            (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
-            acc.assignModuleDoc
-        _ =>
-          Assign acc.assignUsed (insertDoc (targetName t) b.docBlockText acc.assignDecls)
-            acc.assignMembers acc.assignModuleDoc
-    in assignBlocksGo comments targets rest
-      (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
+assignBlocksGo comments targets (b :: rest) acc =
+  case pickTarget comments targets acc.assignUsed b of
+    Nothing => assignBlocksGo comments targets rest acc
+    Just (Pair idx t) =>
+      let
+        acc2 =
+          case targetKind t of
+            "module" =>
+              if acc.assignModuleDoc == "" then
+                Assign acc.assignUsed acc.assignDecls acc.assignMembers b.docBlockText
+              else
+                acc
+            "member" =>
+              Assign
+                acc.assignUsed
+                acc.assignDecls
+                (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
+                acc.assignModuleDoc
+            _ =>
+              Assign
+                acc.assignUsed
+                (insertDoc (targetName t) b.docBlockText acc.assignDecls)
+                acc.assignMembers
+                acc.assignModuleDoc
+      in assignBlocksGo
+        comments
+        targets
+        rest
+        (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
 
 -- | 内部：为该块选第一个合格的前置目标（行号更大、同列、行距不超过 2、中间无其他注释），已占用的目标跳过。
 pickTarget : List Comment -> List (Pair Int DocTarget) -> List Int -> DocBlock -> Maybe (Pair Int DocTarget)
 pickTarget comments [] used b = Nothing
 pickTarget comments ((Pair idx t) :: rest) used b =
-  if memInt idx used then pickTarget comments rest used b
+  if memInt idx used then
+    pickTarget comments rest used b
   else if targetLine t > b.docBlockEndLine && targetCol t == b.docBlockCol && targetLine t - b.docBlockEndLine <= 2 && not (commentStartsBetween comments b.docBlockEndLine (targetLine t)) then
     Just (Pair idx t)
-  else pickTarget comments rest used b
+  else
+    pickTarget comments rest used b
 
 -- | 内部：在前置关联的结果上追加尾随 doc；只认非模块目标（模块头不参与），被前置占用的
 -- 目标不复用。同一目标两种位置都有时前置优先（`insertDoc` 先到先得）。
@@ -349,20 +389,30 @@ assignTrailBlocks comments targets blocks acc = assignTrailBlocksGo comments tar
 -- | 内部：尾随关联主循环。
 assignTrailBlocksGo : List Comment -> List (Pair Int DocTarget) -> List DocBlock -> Assign -> Assign
 assignTrailBlocksGo comments targets [] acc = acc
-assignTrailBlocksGo comments targets (b :: rest) acc = case pickTrailTarget comments targets acc.assignUsed b of
-  Nothing => assignTrailBlocksGo comments targets rest acc
-  Just (Pair idx t) =>
-    let
-      acc2 = case targetKind t of
-        "member" =>
-          Assign acc.assignUsed acc.assignDecls
-            (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
-            acc.assignModuleDoc
-        _ =>
-          Assign acc.assignUsed (insertDoc (targetName t) b.docBlockText acc.assignDecls)
-            acc.assignMembers acc.assignModuleDoc
-    in assignTrailBlocksGo comments targets rest
-      (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
+assignTrailBlocksGo comments targets (b :: rest) acc =
+  case pickTrailTarget comments targets acc.assignUsed b of
+    Nothing => assignTrailBlocksGo comments targets rest acc
+    Just (Pair idx t) =>
+      let
+        acc2 =
+          case targetKind t of
+            "member" =>
+              Assign
+                acc.assignUsed
+                acc.assignDecls
+                (insertDoc "${targetParent t}\t${targetName t}" b.docBlockText acc.assignMembers)
+                acc.assignModuleDoc
+            _ =>
+              Assign
+                acc.assignUsed
+                (insertDoc (targetName t) b.docBlockText acc.assignDecls)
+                acc.assignMembers
+                acc.assignModuleDoc
+      in assignTrailBlocksGo
+        comments
+        targets
+        rest
+        (Assign (idx :: acc2.assignUsed) acc2.assignDecls acc2.assignMembers acc2.assignModuleDoc)
 
 -- | 内部：选最近的合格尾随目标（同一行、列在目标右侧）。
 pickTrailTarget : List Comment -> List (Pair Int DocTarget) -> List Int -> DocBlock -> Maybe (Pair Int DocTarget)
@@ -371,18 +421,21 @@ pickTrailTarget comments targets used b = pickTrailTargetGo used b targets Nothi
 -- | 内部：`pickTrailTarget` 的扫描实现，`best` 保存当前最近的目标。
 pickTrailTargetGo : List Int -> DocBlock -> List (Pair Int DocTarget) -> Maybe (Pair Int DocTarget) -> Maybe (Pair Int DocTarget)
 pickTrailTargetGo used b [] best = best
-pickTrailTargetGo used b ((Pair idx t) :: rest) best = if memInt idx used || targetKind t == "module" then pickTrailTargetGo used b rest best
-else if not (trailAdjacent b t) then pickTrailTargetGo used b rest best
-else case best of
-  Nothing => pickTrailTargetGo used b rest (Just (Pair idx t))
-  Just (Pair _ bt) =>
-    if targetAfter t bt then pickTrailTargetGo used b rest (Just (Pair idx t))
-    else pickTrailTargetGo used b rest best
+pickTrailTargetGo used b ((Pair idx t) :: rest) best =
+  if memInt idx used || targetKind t == "module" then
+    pickTrailTargetGo used b rest best
+  else if not (trailAdjacent b t) then
+    pickTrailTargetGo used b rest best
+  else
+    case best of
+      Nothing => pickTrailTargetGo used b rest (Just (Pair idx t))
+      Just (Pair _ bt) => if targetAfter t bt then pickTrailTargetGo used b rest (Just (Pair idx t)) else pickTrailTargetGo used b rest best
 
 -- | 内部：`t` 是否比 `bt` 更靠近注释（行号更大；同行取列更大）。
 targetAfter : DocTarget -> DocTarget -> Bool
 targetAfter t bt =
-  if targetLine t > targetLine bt then True
+  if targetLine t > targetLine bt then
+    True
   else if targetLine t == targetLine bt then targetCol t > targetCol bt else False
 
 -- | 内部：尾随关系只接受与目标同一行、且列在目标右侧的块。
@@ -407,9 +460,10 @@ commentStartsBetween (c :: rest) start end =
 
 -- | 内部：写入一条 doc；同一键先到先得，已有非空 doc 时不覆盖，空 doc 可被非空替换。
 insertDoc : String -> String -> List (Pair String String) -> List (Pair String String)
-insertDoc key doc entries = case lookupDoc key entries of
-  Nothing => Pair key doc :: entries
-  Just old => if old == "" && doc /= "" then Pair key doc :: removeDoc key entries else entries
+insertDoc key doc entries =
+  case lookupDoc key entries of
+    Nothing => Pair key doc :: entries
+    Just old => if old == "" && doc /= "" then Pair key doc :: removeDoc key entries else entries
 
 -- | 内部：按键查 doc。
 lookupDoc : String -> List (Pair String String) -> Maybe String
@@ -435,7 +489,9 @@ docTableOf hdr decls comments =
     targets = indexTargets (append (moduleTargets hdr) (targetsOfDecls decls)) 0 []
     assigned = assignBlocks comments targets blocks
     assigned2 = assignTrailBlocks comments targets trailBlocks assigned
-  in DocTable assigned2.assignModuleDoc (reverse assigned2.assignDecls)
+  in DocTable
+    assigned2.assignModuleDoc
+    (reverse assigned2.assignDecls)
     (reverse assigned2.assignMembers)
 
 -- | 内部：给目标表编号，供 `assignUsed` 标记已占用目标。

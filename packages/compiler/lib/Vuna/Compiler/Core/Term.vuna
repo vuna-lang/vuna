@@ -260,23 +260,32 @@ export natChainValue : Term -> Maybe Int
 natChainValue t = natChainGo 1000000 t
 
 natChainGo : Int -> Term -> Maybe Int
-natChainGo fuel t = if fuel <= 0 then Nothing
-else case flattenTermApp t of
-  Pair head args => case head of
-    TCon c cargs => natChainArgs (fuel - 1) c (append cargs args)
-    TGlobal c => natChainArgs (fuel - 1) c args
-    _ => Nothing
+natChainGo fuel t =
+  if fuel <= 0 then
+    Nothing
+  else
+    case flattenTermApp t of
+      Pair head args =>
+        case head of
+          TCon c cargs => natChainArgs (fuel - 1) c (append cargs args)
+          TGlobal c => natChainArgs (fuel - 1) c args
+          _ => Nothing
 
 natChainArgs : Int -> String -> List (Pair Term Rig) -> Maybe Int
-natChainArgs fuel c args = if c == natZeroCtor then case args of
-  [] => Just 0
-  _ => Nothing
-else if c == natSuccCtor then case args of
-  [Pair a _] => case natChainGo fuel a of
-    Just n => Just (natChainNext n)
-    Nothing => Nothing
-  _ => Nothing
-else Nothing
+natChainArgs fuel c args =
+  if c == natZeroCtor then
+    case args of
+      [] => Just 0
+      _ => Nothing
+  else if c == natSuccCtor then
+    case args of
+      [Pair a _] =>
+        case natChainGo fuel a of
+          Just n => Just (natChainNext n)
+          Nothing => Nothing
+      _ => Nothing
+  else
+    Nothing
 
 -- 饱和 +1（与 `Core.Eval.natSatAdd` / codegen 的 nat 折回一致）。
 natChainNext : Int -> Int
@@ -381,9 +390,10 @@ solsCons i v (Sols t xs d) = Sols (HashMap.insert i v t) (Pair i v :: xs) d
 -- 项里是否有**未解**元变量（值共享的安全条件之一：含未解 meta 的体不缓存）。
 -- 已解的 TMeta 不算：缓存里留下的是已解值，再求解也不会改写既有解。
 export termHasUnsolvedMeta : Sols -> Term -> Bool
-termHasUnsolvedMeta sols (TMeta m) = case solsLookup m sols of
-  Just _ => False
-  Nothing => True
+termHasUnsolvedMeta sols (TMeta m) =
+  case solsLookup m sols of
+    Just _ => False
+    Nothing => True
 termHasUnsolvedMeta sols (TVar name i _) = False
 termHasUnsolvedMeta sols (TGlobal g) = False
 termHasUnsolvedMeta sols (TType l) = False
@@ -492,17 +502,21 @@ termReachesFloat defs names t = reachesTermsFuel 4096 defs names [t]
 reachesTermsFuel : Int -> List (Pair String Term) -> List String -> List Term -> Bool
 reachesTermsFuel fuel defs names [] = False
 reachesTermsFuel fuel defs names (t :: rest) =
-  if fuel <= 0 then False
-  else if termUsesFloat names t then True
-  else reachesTermsFuel (fuel - 1) defs names (append rest (bodyTermsOf defs (termGlobalNames t)))
+  if fuel <= 0 then
+    False
+  else if termUsesFloat names t then
+    True
+  else
+    reachesTermsFuel (fuel - 1) defs names (append rest (bodyTermsOf defs (termGlobalNames t)))
 
 -- 全局名 → 有体定义的体（未知/axiom 跳过）。
 -- | 把全局名列表解析成有体定义的定义体列表（未知/无体公理跳过）。
 bodyTermsOf : List (Pair String Term) -> List String -> List Term
 bodyTermsOf defs [] = []
-bodyTermsOf defs (n :: rest) = case lookupPair n defs of
-  Just body => body :: bodyTermsOf defs rest
-  Nothing => bodyTermsOf defs rest
+bodyTermsOf defs (n :: rest) =
+  case lookupPair n defs of
+    Just body => body :: bodyTermsOf defs rest
+    Nothing => bodyTermsOf defs rest
 
 -- | 在 (名字, 项) 关联表里按名字查第一个匹配项，找不到返回 `Nothing`。
 lookupPair : String -> List (Pair String Term) -> Maybe Term
@@ -601,9 +615,10 @@ shift depth amount (TPi name implicit rig dom cod) =
   TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
 shift depth amount (TLam name rig mty sp body) =
   let
-    mty2 = case mty of
-      Nothing => Nothing
-      Just ty => Just (shift depth amount ty)
+    mty2 =
+      case mty of
+        Nothing => Nothing
+        Just ty => Just (shift depth amount ty)
   in TLam name rig mty2 sp (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
@@ -644,9 +659,10 @@ substVarAt idx arg (TPi n implicit rig dom cod) =
   TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
 substVarAt idx arg (TLam n erased mty sp body) =
   let
-    mty2 = case mty of
-      Nothing => Nothing
-      Just ty => Just (substVarAt idx arg ty)
+    mty2 =
+      case mty of
+        Nothing => Nothing
+        Just ty => Just (substVarAt idx arg ty)
   in TLam n erased mty2 sp (substVarAt (idx + 1) arg body)
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
@@ -669,7 +685,9 @@ substVarAt idx arg (TIf c th el) =
 
 export substAltAt : Int -> Term -> CaseAlt -> CaseAlt
 substAltAt idx arg alt =
-  CaseAlt (caseAltName alt) (caseAltBinders alt)
+  CaseAlt
+    (caseAltName alt)
+    (caseAltBinders alt)
     (substVarAt (idx + length (caseAltBinders alt)) arg (caseAltBody alt))
 
 export substMetaVar : Int -> String -> Int -> Term -> Term
@@ -682,9 +700,10 @@ substMetaVarGo m name q depth (TPi n i r d c) =
   TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
 substMetaVarGo m name q depth (TLam n r mty sp b) =
   let
-    mty2 = case mty of
-      Nothing => Nothing
-      Just ty => Just (substMetaVarGo m name q depth ty)
+    mty2 =
+      case mty of
+        Nothing => Nothing
+        Just ty => Just (substMetaVarGo m name q depth ty)
   in TLam n r mty2 sp (substMetaVarGo m name q (depth + 1) b)
 substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
@@ -699,7 +718,9 @@ substMetaVarGo m name q depth (TProj base c tele i fi) =
 substMetaVarGo m name q depth (TCase s alts) =
   TCase (substMetaVarGo m name q depth s) (map (substMetaVarAlt m name q depth) alts)
 substMetaVarGo m name q depth (TIf c th el) =
-  TIf (substMetaVarGo m name q depth c) (substMetaVarGo m name q depth th)
+  TIf
+    (substMetaVarGo m name q depth c)
+    (substMetaVarGo m name q depth th)
     (substMetaVarGo m name q depth el)
 substMetaVarGo m name q depth t = t
 
@@ -717,8 +738,10 @@ insertDictBinder name idx dictDom t = insertDictBinderGo name idx dictDom 0 t
 -- 内会把 cutoff 自动抬高 1，正好让「插入点之后才绑定的变量」保持不变。
 export insertDictBinderGo : String -> Int -> Term -> Int -> Term -> Term
 insertDictBinderGo name idx dictDom depth (TPi n i r d c) =
-  if depth == idx then TPi n i r d (TPi name True RigOmega dictDom (shift 0 1 c))
-  else TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
+  if depth == idx then
+    TPi n i r d (TPi name True RigOmega dictDom (shift 0 1 c))
+  else
+    TPi n i r d (insertDictBinderGo name idx dictDom (depth + 1) c)
 insertDictBinderGo name idx dictDom depth t = t
 
 -- 同 `insertDictBinder`，但 binder 的 rig 由调用方给（签名 `Member` 证明是 Rig0）。
@@ -727,8 +750,10 @@ insertImplicitBinder name idx rig dom t = insertImplicitBinderGo name idx rig do
 
 export insertImplicitBinderGo : String -> Int -> Rig -> Term -> Int -> Term -> Term
 insertImplicitBinderGo name idx rig dom depth (TPi n i r d c) =
-  if depth == idx then TPi n i r d (TPi name True rig dom (shift 0 1 c))
-  else TPi n i r d (insertImplicitBinderGo name idx rig dom (depth + 1) c)
+  if depth == idx then
+    TPi n i r d (TPi name True rig dom (shift 0 1 c))
+  else
+    TPi n i r d (insertImplicitBinderGo name idx rig dom (depth + 1) c)
 insertImplicitBinderGo name idx rig dom depth t = t
 
 -- 导出面快照仍引用该名字，故保留导出（本模块自己不用）。
@@ -749,8 +774,10 @@ insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
 export insertLamBinderGo : String -> Int -> Int -> Term -> Term
 insertLamBinderGo name idx depth (TLam n r mty sp b) =
-  if depth == idx then TLam n r mty sp (TLam name RigOmega Nothing spanEmpty (shift 0 1 b))
-  else TLam n r mty sp (insertLamBinderGo name idx (depth + 1) b)
+  if depth == idx then
+    TLam n r mty sp (TLam name RigOmega Nothing spanEmpty (shift 0 1 b))
+  else
+    TLam n r mty sp (insertLamBinderGo name idx (depth + 1) b)
 insertLamBinderGo name idx depth t = t
 
 export countLams : Term -> Int
@@ -821,45 +848,50 @@ export hasUnsolvedMetaValue : Sols -> Value -> Bool
 hasUnsolvedMetaValue sols v = hasUnsolvedMetaValueFuel 64 sols v
 
 hasUnsolvedMetaValueFuel : Int -> Sols -> Value -> Bool
-hasUnsolvedMetaValueFuel fuel sols v = if fuel <= 0 then False
-else case v of
-  VMeta m sp => case solsLookup m sols of
-    Just solved => hasUnsolvedMetaValueFuel (fuel - 1) sols solved
-    Nothing => True
-  VNeutral n => case n of
-    NVar name lvl sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
-    NGlobal g sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
-  VPi name implicit rig dom clo =>
-    hasUnsolvedMetaValueFuel (fuel - 1) sols dom || hasUnsolvedMetaCloFuel (fuel - 1) sols clo
-  VLam name rig clo => hasUnsolvedMetaCloFuel (fuel - 1) sols clo
-  VCon c args => hasUnsolvedMetaListFuel (fuel - 1) sols args
-  VApp f a =>
-    hasUnsolvedMetaValueFuel (fuel - 1) sols f || hasUnsolvedMetaValueFuel (fuel - 1) sols a
-  VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut
-  VProj base c i fi n => hasUnsolvedMetaValueFuel (fuel - 1) sols base
-  VIf c th el =>
-    hasUnsolvedMetaValueFuel (fuel - 1) sols c
-      || hasUnsolvedMetaValueFuel (fuel - 1) sols th
-      || hasUnsolvedMetaValueFuel (fuel - 1) sols el
-  _ => False
+hasUnsolvedMetaValueFuel fuel sols v =
+  if fuel <= 0 then
+    False
+  else
+    case v of
+      VMeta m sp =>
+        case solsLookup m sols of
+          Just solved => hasUnsolvedMetaValueFuel (fuel - 1) sols solved
+          Nothing => True
+      VNeutral n =>
+        case n of
+          NVar name lvl sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
+          NGlobal g sp => hasUnsolvedMetaListFuel (fuel - 1) sols sp
+      VPi name implicit rig dom clo => hasUnsolvedMetaValueFuel (fuel - 1) sols dom || hasUnsolvedMetaCloFuel (fuel - 1) sols clo
+      VLam name rig clo => hasUnsolvedMetaCloFuel (fuel - 1) sols clo
+      VCon c args => hasUnsolvedMetaListFuel (fuel - 1) sols args
+      VApp f a => hasUnsolvedMetaValueFuel (fuel - 1) sols f || hasUnsolvedMetaValueFuel (fuel - 1) sols a
+      VCase scrut alts => hasUnsolvedMetaValueFuel (fuel - 1) sols scrut
+      VProj base c i fi n => hasUnsolvedMetaValueFuel (fuel - 1) sols base
+      VIf c th el => hasUnsolvedMetaValueFuel (fuel - 1) sols c || hasUnsolvedMetaValueFuel (fuel - 1) sols th || hasUnsolvedMetaValueFuel (fuel - 1) sols el
+      _ => False
 
 export hasUnsolvedMetaList : Sols -> List Value -> Bool
 hasUnsolvedMetaList sols vs = hasUnsolvedMetaListFuel 64 sols vs
 
 hasUnsolvedMetaListFuel : Int -> Sols -> List Value -> Bool
-hasUnsolvedMetaListFuel fuel sols vs = if fuel <= 0 then False
-else case vs of
-  [] => False
-  v :: rest =>
-    hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
+hasUnsolvedMetaListFuel fuel sols vs =
+  if fuel <= 0 then
+    False
+  else
+    case vs of
+      [] => False
+      v :: rest => hasUnsolvedMetaValueFuel (fuel - 1) sols v || hasUnsolvedMetaListFuel (fuel - 1) sols rest
 
 export hasUnsolvedMetaClo : Sols -> Closure -> Bool
 hasUnsolvedMetaClo sols clo = hasUnsolvedMetaCloFuel 64 sols clo
 
 hasUnsolvedMetaCloFuel : Int -> Sols -> Closure -> Bool
-hasUnsolvedMetaCloFuel fuel sols clo = if fuel <= 0 then False
-else case clo of
-  Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
+hasUnsolvedMetaCloFuel fuel sols clo =
+  if fuel <= 0 then
+    False
+  else
+    case clo of
+      Closure env body => hasUnsolvedMetaListFuel (fuel - 1) sols env
 
 -- ---------------------------------------------------------------
 -- 宇宙 helper
@@ -877,9 +909,10 @@ typeLevelOf _ = Nothing
 -- ---------------------------------------------------------------
 -- 解里是否出现 level ≥ limit 的局部变量（即创建该元变量之后才绑定的变量）。
 export levelEscapes : Int -> Int -> Value -> Bool
-levelEscapes limit depth (VNeutral n) = case n of
-  NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
-  NGlobal g sp => levelEscapesList limit sp
+levelEscapes limit depth (VNeutral n) =
+  case n of
+    NVar name lvl sp => lvl >= limit || levelEscapesList limit sp
+    NGlobal g sp => levelEscapesList limit sp
 levelEscapes limit depth (VPi name implicit rig dom clo) =
   levelEscapes limit depth dom || levelEscapesClo limit clo
 levelEscapes limit depth (VLam name rig clo) = levelEscapesClo limit clo
@@ -909,9 +942,12 @@ showTerm (TMeta m) = "?${m}"
 showTerm (TGlobal g) = g
 showTerm (TType l) = if levelToInt l == 0 then "Type" else "Type ${levelToInt l}"
 showTerm (TPi name implicit rig dom cod) =
-  if name == "_" then "${showTerm dom} -> ${showTerm cod}"
-  else if implicit then "{${name} : ${showTerm dom}} -> ${showTerm cod}"
-  else "(${name} : ${showTerm dom}) -> ${showTerm cod}"
+  if name == "_" then
+    "${showTerm dom} -> ${showTerm cod}"
+  else if implicit then
+    "{${name} : ${showTerm dom}} -> ${showTerm cod}"
+  else
+    "(${name} : ${showTerm dom}) -> ${showTerm cod}"
 showTerm (TLam name rig _ _ body) = "\\${name} => ${showTerm body}"
 showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
 showTerm (TCon c args) = "(${c}${showArgTerms args})"
@@ -934,9 +970,12 @@ showTerm (TIf c th el) = "if ${showTerm c} then ${showTerm th} else ${showTerm e
 -- 重新拼出来后递归」当成结构下降（那不是下降）。
 showPiSig : String -> Bool -> Term -> Term -> String
 showPiSig name implicit dom cod =
-  if name == "_" then showSigParenIfPi dom ++ " -> " ++ showTypeSig cod
-  else if implicit then "{" ++ name ++ " : " ++ showTypeSig dom ++ "} -> " ++ showTypeSig cod
-  else "(" ++ name ++ " : " ++ showTypeSig dom ++ ") -> " ++ showTypeSig cod
+  if name == "_" then
+    showSigParenIfPi dom ++ " -> " ++ showTypeSig cod
+  else if implicit then
+    "{" ++ name ++ " : " ++ showTypeSig dom ++ "} -> " ++ showTypeSig cod
+  else
+    "(" ++ name ++ " : " ++ showTypeSig dom ++ ") -> " ++ showTypeSig cod
 
 export showTypeSig : Term -> String
 showTypeSig (TPi name implicit rig dom cod) = showPiSig name implicit dom cod
@@ -983,10 +1022,11 @@ showCoreString s = "\"${showCoreChars (strUnpack s)}\""
 
 export showCoreChars : List Int -> String
 showCoreChars [] = ""
-showCoreChars (c :: rest) = case c of
-  34 => "\\\"${showCoreChars rest}"
-  92 => "\\\\${showCoreChars rest}"
-  10 => "\\n${showCoreChars rest}"
-  9 => "\\t${showCoreChars rest}"
-  13 => "\\r${showCoreChars rest}"
-  _ => strPack [c] ++ showCoreChars rest
+showCoreChars (c :: rest) =
+  case c of
+    34 => "\\\"${showCoreChars rest}"
+    92 => "\\\\${showCoreChars rest}"
+    10 => "\\n${showCoreChars rest}"
+    9 => "\\t${showCoreChars rest}"
+    13 => "\\r${showCoreChars rest}"
+    _ => strPack [c] ++ showCoreChars rest

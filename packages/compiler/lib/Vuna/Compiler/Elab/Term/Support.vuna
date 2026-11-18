@@ -17,19 +17,23 @@ import Vuna.Compiler.Frontend.Ast
 -- 值位置只查值命名空间（`valueLookup`：构造子优先，再全局定义）。
 -- 类型名只在没有任何值候选时作为「类型作为项」命中（数据族名在 globals 里有 kind）。
 export inferVarRef : List (Pair String Term) -> Ctx -> Ec -> String -> Span -> Check (Pair Term (Pair Value Ec))
-inferVarRef globals ctx ec name sp = case ctxLookup name ctx of
-  Just (Pair idx tyTerm) => OkC (Pair (TVar name idx sp) (Pair (varTypeValue ctx idx tyTerm) ec))
-  Nothing => case valueLookup globals ec name of
-    Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
-    -- 全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
-    -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
-    -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
-    Just (VEDef tyTerm) => if allImplicitPrefix tyTerm then
-      let
-        inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
-      in OkC inst
-    else OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
-    Nothing => tcErr1 sp (UnknownName name) name
+inferVarRef globals ctx ec name sp =
+  case ctxLookup name ctx of
+    Just (Pair idx tyTerm) => OkC (Pair (TVar name idx sp) (Pair (varTypeValue ctx idx tyTerm) ec))
+    Nothing =>
+      case valueLookup globals ec name of
+        Just (VECtor ctor) => inferCtorRef ec ctx name (dtCtorType ctor)
+        -- 全隐式前缀的全局值（HM 泛化出的 unifyErr : Result a、empty : Map k v）
+        -- 必须在引用处实例化隐式参数，否则拿到的是 Pi 类型（{a} -> Result a），
+        -- 在 if/分支/实参位置与期望类型对不上。构造子另有 inferCtorRef 处理。
+        Just (VEDef tyTerm) =>
+          if allImplicitPrefix tyTerm then
+            let
+              inst = instantiateAllImplicit ctx ec (ctorRefTerm (ecDatas ec) name) (eval [] tyTerm) []
+            in OkC inst
+          else
+            OkC (Pair (ctorRefTerm (ecDatas ec) name) (Pair (eval [] tyTerm) ec))
+        Nothing => tcErr1 sp (UnknownName name) name
 
 -- 签名项是否以隐式 Pi 开头并最终落到值（{a : Type} -> Result a）；显式 Pi 不算。
 export allImplicitPrefix : Term -> Bool
@@ -41,17 +45,20 @@ export instantiateAllImplicit : Ctx -> Ec -> Term -> Value -> List (Pair Term Ri
 instantiateAllImplicit ctx ec head ty acc = instantiateAllImplicitFuel 64 ctx ec head ty acc
 
 export instantiateAllImplicitFuel : Int -> Ctx -> Ec -> Term -> Value -> List (Pair Term Rig) -> Pair Term (Pair Value Ec)
-instantiateAllImplicitFuel fuel ctx ec head ty acc = if fuel <= 0 then Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
-else case forceVal ec ty of
-  VPi name implicit rig dom clo => if implicit then
-    let
-      m = ecNext ec
-    in case newMeta ctx ec of
-      Pair mt ec1 =>
-        instantiateAllImplicitFuel (fuel - 1) ctx ec1 head (applyClosure clo (VMeta m []))
-          (Pair mt rig :: acc)
-  else Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
-  _ => Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+instantiateAllImplicitFuel fuel ctx ec head ty acc =
+  if fuel <= 0 then
+    Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+  else
+    case forceVal ec ty of
+      VPi name implicit rig dom clo =>
+        if implicit then
+          let
+            m = ecNext ec
+          in case newMeta ctx ec of
+            Pair mt ec1 => instantiateAllImplicitFuel (fuel - 1) ctx ec1 head (applyClosure clo (VMeta m [])) (Pair mt rig :: acc)
+        else
+          Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
+      _ => Pair (foldAppTerms head (reverse acc)) (Pair ty ec)
 
 -- where 块（parser 的 `ELet .. True`）要求每个绑定都有签名行；普通 `let` 的签名可选。
 -- 两者共用同一套绑定块模型（parser 的 `bindingItemsToBinds`），这里只收口「是否强制」，
@@ -62,12 +69,13 @@ checkBindingSigs False binds = OkC 0
 
 export checkWhereSigs : List (Pair Pat Expr) -> Check Int
 checkWhereSigs [] = OkC 0
-checkWhereSigs (bnd :: rest) = case secondOf bnd of
-  EAnn value ty annSp => checkWhereSigs rest
-  _ =>
-    let
-      name = whereBindingName (firstOf bnd)
-    in tcErr2 (patSpan (firstOf bnd)) (WhereNeedsSig name name) name name
+checkWhereSigs (bnd :: rest) =
+  case secondOf bnd of
+    EAnn value ty annSp => checkWhereSigs rest
+    _ =>
+      let
+        name = whereBindingName (firstOf bnd)
+      in tcErr2 (patSpan (firstOf bnd)) (WhereNeedsSig name name) name name
 
 export whereBindingName : Pat -> String
 whereBindingName (PVar name sp) = name

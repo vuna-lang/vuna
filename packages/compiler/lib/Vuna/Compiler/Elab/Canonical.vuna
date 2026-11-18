@@ -44,7 +44,8 @@ encDtFieldMeta (DtFieldMeta name idx ty) acc = encStr name (encInt idx (encTerm 
 -- | `DtData`：名字 / 参数 / 构造子 / kind / via 类 / 线性 / 表示档位 / 字段表 / 是否 record。
 export encDtData : DtData -> List String -> List String
 encDtData (DtData name params ctors kind viaClasses lin repr fields isRec) acc =
-  encStr name
+  encStr
+    name
     (encList encBinder params (encList encDtCtor ctors (encTerm kind (encList encStr viaClasses (encBool lin (encReprTier repr (encList encDtFieldMeta fields (encBool isRec acc))))))))
 
 -- | `DtDef`：三类定义（有体 / axiom / extern），tag 0/1/2；span 丢弃。
@@ -60,12 +61,14 @@ encDtDefs ds acc = encList encDtDef ds acc
 -- | 源码 span（只进**载荷**，不进接口语义哈希；路径/行号变化不应让依赖方失效）。
 encSpan : Span -> List String -> List String
 encSpan s acc =
-  encStr s.spanFile
+  encStr
+    s.spanFile
     (encInt s.spanStartLine (encInt s.spanStartCol (encInt s.spanEndLine (encInt s.spanEndCol (encInt s.spanStartOffset (encInt s.spanEndOffset acc))))))
 
 decSpan : Int -> Cur -> Maybe (Pair Span Cur)
 decSpan fuel c =
-  thenPair (decStr (fuel - 1) c)
+  thenPair
+    (decStr (fuel - 1) c)
     (\file, b1 => thenPair (decInt (fuel - 1) b1) (\sl, b2 => thenPair (decInt (fuel - 1) b2) (\sc, b3 => thenPair (decInt (fuel - 1) b3) (\el, b4 => thenPair (decInt (fuel - 1) b4) (\ec, b5 => thenPair (decInt (fuel - 1) b5) (\so, b6 => thenPair (decInt (fuel - 1) b6) (\eo, b7 => Just (Pair (Span file sl sc el ec so eo) b7))))))))
 
 encMaybeSpan : Maybe Span -> List String -> List String
@@ -84,13 +87,15 @@ encDtInst (DtInst name tele ctxE head sp) acc =
 -- | `DtClass` 的**语义**编码：名字 / 参数名 / 方法投影 / 字段类型（span 丢弃）。
 export encDtClassSem : DtClass -> List String -> List String
 encDtClassSem (DtClass name params supers projs fieldTys _) acc =
-  encStr name
+  encStr
+    name
     (encList encStr params (encList encTerm supers (encList encTelePair projs (encList encTerm fieldTys acc))))
 
 -- | `DtClass` 载荷编码：语义字段 + 方法 span 表。
 export encDtClass : DtClass -> List String -> List String
 encDtClass (DtClass name params supers projs fieldTys spans) acc =
-  encStr name
+  encStr
+    name
     (encList encStr params (encList encTerm supers (encList encTelePair projs (encList encTerm fieldTys (encList (encPair encStr encSpan) spans acc)))))
 
 -- | 闭合项对（`(名字, 项)`）：实例 telescope / 类方法投影共用。
@@ -125,7 +130,8 @@ encExportEntries es acc = encList encExportEntry es acc
 -- | `FixityDecl`：运算符 / 级别 / 结合性 / **别名目标**（span 丢弃）。
 export encFixity : FixityDecl -> List String -> List String
 encFixity f acc =
-  encStr f.fixityOp
+  encStr
+    f.fixityOp
     (encInt f.fixityLevel (encInt f.fixityAssoc (encMaybe encStr f.fixityTarget acc)))
 
 -- | fixity 表。
@@ -149,7 +155,8 @@ encRecordFieldMeta f acc =
 -- | `RecordMeta`：名字 / 参数 / 字段表 / 派生 / via / 档位 / 合成构造子 / 线性。
 export encRecordMeta : RecordMeta -> List String -> List String
 encRecordMeta r acc =
-  encStr r.recordMetaName
+  encStr
+    r.recordMetaName
     (encList encStr r.recordMetaParams (encList encRecordFieldMeta r.recordMetaFields (encList encStr r.recordMetaDerivings (encBool r.recordMetaDerivingVia (encReprTier r.recordMetaRepr (encStr r.recordMetaCtor (encBool r.recordMetaLinear acc)))))))
 
 -- | record 头表。
@@ -162,59 +169,70 @@ encRecordMetas rs acc = encList encRecordMeta rs acc
 -- | 解析 `(名字, multiplicity)` binder（`DtCtor.telescope` / `DtData.params`）。
 decBinder : Int -> Cur -> Maybe (Pair (Pair String Rig) Cur)
 decBinder fuel bytes =
-  if fuel <= 0 then Nothing
-  else thenPair (decStr (fuel - 1) bytes)
-    (\n, b1 => thenPair (decRig (fuel - 1) b1) (\r, b2 => Just (Pair (Pair n r) b2)))
+  if fuel <= 0 then
+    Nothing
+  else
+    thenPair
+      (decStr (fuel - 1) bytes)
+      (\n, b1 => thenPair (decRig (fuel - 1) b1) (\r, b2 => Just (Pair (Pair n r) b2)))
 
 -- | 解析 `(名字, 项)` 对（实例 telescope / 类方法投影）。
 decTelePair : Int -> Cur -> Maybe (Pair (Pair String Term) Cur)
 decTelePair fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just (Pair (Pair n t) b2)))
 
 -- | 解析表示档位 tag（0/1/2 = Auto/Transparent/Opaque）。
 decReprTier : Int -> Cur -> Maybe (Pair ReprTier Cur)
-decReprTier fuel bytes = if fuel <= 0 then Nothing
-else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
-  0 => Just (Pair ReprAuto b1)
-  1 => Just (Pair ReprAlias b1)
-  2 => Just (Pair ReprBoxed b1)
-  _ => Nothing
-)
+decReprTier fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    thenPair (decTag fuel bytes) (
+        \tag, b1 =>
+          case tag of
+            0 => Just (Pair ReprAuto b1)
+            1 => Just (Pair ReprAlias b1)
+            2 => Just (Pair ReprBoxed b1)
+            _ => Nothing
+      )
 
 -- | 解析 `DtCtor`。
 decDtCtor : Int -> Cur -> Maybe (Pair DtCtor Cur)
 decDtCtor fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decStr (fuel - 1) b1) (\family, b2 => thenPair (decList decBinder (fuel - 1) b2) (\tele, b3 => thenPair (decTerm (fuel - 1) b3) (\ty, b4 => Just (Pair (DtCtor name family tele ty Nothing) b4)))))
 
 -- | 解析 `DtFieldMeta`。
 decDtFieldMeta : Int -> Cur -> Maybe (Pair DtFieldMeta Cur)
 decDtFieldMeta fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => Just (Pair (DtFieldMeta name idx ty) b3))))
 
 -- | 解析 `DtData`。
 export decDtData : Int -> Cur -> Maybe (Pair DtData Cur)
 decDtData fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decList decBinder (fuel - 1) b1) (\params, b2 => thenPair (decList decDtCtor (fuel - 1) b2) (\ctors, b3 => thenPair (decTerm (fuel - 1) b3) (\kind, b4 => thenPair (decList decStr (fuel - 1) b4) (\viaClasses, b5 => thenPair (decBool (fuel - 1) b5) (\lin, b6 => thenPair (decReprTier (fuel - 1) b6) (\repr, b7 => thenPair (decList decDtFieldMeta (fuel - 1) b7) (\fields, b8 => thenPair (decBool (fuel - 1) b8) (\isRec, b9 => Just (Pair (DtData name params ctors kind viaClasses lin repr fields isRec) b9))))))))))
 
 -- | 解析 `DtDef`（tag 0/1/2）。
 export decDtDef : Int -> Cur -> Maybe (Pair DtDef Cur)
-decDtDef fuel bytes = if fuel <= 0 then Nothing
-else thenPair (decTag fuel bytes) (\tag, b1 => case tag of
-  0 =>
-    thenPair (decStr (fuel - 1) b1)
-      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decTerm (fuel - 1) b3) (\body, b4 => Just (Pair (DtDef name ty body Nothing) b4))))
-  1 =>
-    thenPair (decStr (fuel - 1) b1)
-      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => Just (Pair (DtAxiom name ty Nothing) b3)))
-  2 =>
-    thenPair (decStr (fuel - 1) b1)
-      (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decStr (fuel - 1) b3) (\cName, b4 => Just (Pair (DtExtern name ty cName Nothing) b4))))
-  _ => Nothing
-)
+decDtDef fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    thenPair (decTag fuel bytes) (
+        \tag, b1 =>
+          case tag of
+            0 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decTerm (fuel - 1) b3) (\body, b4 => Just (Pair (DtDef name ty body Nothing) b4))))
+            1 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => Just (Pair (DtAxiom name ty Nothing) b3)))
+            2 => thenPair (decStr (fuel - 1) b1) (\name, b2 => thenPair (decTerm (fuel - 1) b2) (\ty, b3 => thenPair (decStr (fuel - 1) b3) (\cName, b4 => Just (Pair (DtExtern name ty cName Nothing) b4))))
+            _ => Nothing
+      )
 
 -- | 解析定义表。
 export decDtDefs : Int -> Cur -> Maybe (Pair (List DtDef) Cur)
@@ -223,19 +241,22 @@ decDtDefs fuel bytes = if fuel <= 0 then Nothing else decList decDtDef fuel byte
 -- | 解析 `DtInst`（含可选声明 span）。
 export decDtInst : Int -> Cur -> Maybe (Pair DtInst Cur)
 decDtInst fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decList decTelePair (fuel - 1) b1) (\tele, b2 => thenPair (decList decTerm (fuel - 1) b2) (\ctxE, b3 => thenPair (decTerm (fuel - 1) b3) (\head, b4 => thenPair (decMaybe decSpan (fuel - 1) b4) (\sp, b5 => Just (Pair (DtInst name tele ctxE head sp) b5))))))
 
 -- | 解析 `DtClass`（含方法 span 表）。
 export decDtClass : Int -> Cur -> Maybe (Pair DtClass Cur)
 decDtClass fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decTerm (fuel - 1) b2) (\supers, b3 => thenPair (decList decTelePair (fuel - 1) b3) (\projs, b4 => thenPair (decList decTerm (fuel - 1) b4) (\fieldTys, b5 => thenPair (decList (decPair decStr decSpan) (fuel - 1) b5) (\spans, b6 => Just (Pair (DtClass name params supers projs fieldTys spans) b6)))))))
 
 -- | 解析 `ExportEntry`。
 export decExportEntry : Int -> Cur -> Maybe (Pair ExportEntry Cur)
 decExportEntry fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\kind, b1 => thenPair (decStr (fuel - 1) b1) (\public, b2 => thenPair (decStr (fuel - 1) b2) (\target, b3 => thenPair (decStr (fuel - 1) b3) (\parent, b4 => Just (Pair (ExportEntry kind public target parent) b4)))))
 
 -- | 解析导出表。
@@ -245,7 +266,8 @@ decExportEntries fuel bytes = if fuel <= 0 then Nothing else decList decExportEn
 -- | 解析 `FixityDecl`。
 export decFixity : Int -> Cur -> Maybe (Pair FixityDecl Cur)
 decFixity fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\op, b1 => thenPair (decInt (fuel - 1) b1) (\level, b2 => thenPair (decInt (fuel - 1) b2) (\assoc, b3 => thenPair (decMaybe decStr (fuel - 1) b3) (\target, b4 => Just (Pair (FixityDecl op level assoc target (Span "" 0 0 0 0 0 0)) b4)))))
 
 -- | 解析 fixity 表。
@@ -255,7 +277,8 @@ decFixities fuel bytes = if fuel <= 0 then Nothing else decList decFixity fuel b
 -- | 解析 `Import`。
 export decImport : Int -> Cur -> Maybe (Pair Import Cur)
 decImport fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decBool (fuel - 1) b1) (\q, b2 => thenPair (decMaybe decStr (fuel - 1) b2) (\alias, b3 => Just (Pair (Import name q alias (Span "" 0 0 0 0 0 0)) b3))))
 
 -- | 解析 import 表。
@@ -265,13 +288,15 @@ decImports fuel bytes = if fuel <= 0 then Nothing else decList decImport fuel by
 -- | 解析 record 字段元数据。
 decRecordFieldMeta : Int -> Cur -> Maybe (Pair RecordFieldMeta Cur)
 decRecordFieldMeta fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decExpr (fuel - 1) b2) (\ty, b3 => Just (Pair (RecordFieldMeta name ty idx) b3))))
 
 -- | 解析 `RecordMeta`。
 export decRecordMeta : Int -> Cur -> Maybe (Pair RecordMeta Cur)
 decRecordMeta fuel bytes =
-  thenPair (decStr (fuel - 1) bytes)
+  thenPair
+    (decStr (fuel - 1) bytes)
     (\name, b1 => thenPair (decList decStr (fuel - 1) b1) (\params, b2 => thenPair (decList decRecordFieldMeta (fuel - 1) b2) (\fields, b3 => thenPair (decList decStr (fuel - 1) b3) (\derivings, b4 => thenPair (decBool (fuel - 1) b4) (\via, b5 => thenPair (decReprTier (fuel - 1) b5) (\repr, b6 => thenPair (decStr (fuel - 1) b6) (\ctor, b7 => thenPair (decBool (fuel - 1) b7) (\lin, b8 => Just (Pair (RecordMeta name params fields derivings via repr ctor lin) b8)))))))))
 
 -- | 解析 record 头表。
@@ -280,6 +305,7 @@ decRecordMetas fuel bytes = if fuel <= 0 then Nothing else decList decRecordMeta
 
 -- | 定义表整串 roundtrip 入口。
 export decDtDefsComplete : String -> Maybe (List DtDef)
-decDtDefsComplete s = case decDtDefs (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair ds rest) => if curAtEnd rest then Just ds else Nothing
+decDtDefsComplete s =
+  case decDtDefs (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair ds rest) => if curAtEnd rest then Just ds else Nothing

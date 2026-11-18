@@ -24,9 +24,10 @@ export isDictDomain : Ec -> Value -> Bool
 isDictDomain ec dom = isDictValue ec (forceVal ec dom)
 
 isDictValue : Ec -> Value -> Bool
-isDictValue ec (VNeutral n) = case n of
-  NGlobal g sp => isDictFamily ec g
-  _ => False
+isDictValue ec (VNeutral n) =
+  case n of
+    NGlobal g sp => isDictFamily ec g
+    _ => False
 isDictValue ec _ = False
 
 isDictFamily : Ec -> String -> Bool
@@ -62,23 +63,26 @@ searchInstFuel : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span ->
 searchInstFuel globals ctx fuel ec0 dom sp =
   let
     ec = ecBump ec0 "elab.inst.search"
-  in if fuel <= 0 then missingInstance ec dom sp
+  in if fuel <= 0 then
+    missingInstance ec dom sp
   else
     let
-      _ =
-        dbg!
-          "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
+      _ = dbg! "search: dom=${showValue dom} rigid=${if rigidSearchFast ec dom then "T" else "F"} insts=${length (ecInsts ec)}"
     in case localDictLookup ctx 0 dom ec of
       Just pair => OkC pair
-      Nothing => if rigidSearchFast ec dom && not (viaCandidateExists ec dom) then missingInstance ec dom sp
-      else
-        case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
-          Pair [] ec1 => case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
-            OkC (Just pair) => OkC pair
-            OkC Nothing => case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
-              Pair matches ec2 => finishInstanceSearch dom sp matches ec2
-            ErrC e => ErrC e
-          Pair matches ec1 => finishInstanceSearch dom sp matches ec1
+      Nothing =>
+        if rigidSearchFast ec dom && not (viaCandidateExists ec dom) then
+          missingInstance ec dom sp
+        else
+          case matchInstances globals ctx fuel ec dom sp (specificInstances (searchCandidates ec dom)) [] of
+            Pair [] ec1 =>
+              case tryViaDict globals ctx (fuel - 1) ec1 dom sp of
+                OkC (Just pair) => OkC pair
+                OkC Nothing =>
+                  case matchInstances globals ctx fuel ec1 dom sp (blanketInstances (searchCandidates ec dom)) [] of
+                    Pair matches ec2 => finishInstanceSearch dom sp matches ec2
+                ErrC e => ErrC e
+            Pair matches ec1 => finishInstanceSearch dom sp matches ec1
 
 -- ---------------------------------------------------------------
 -- `deriving via field` 的字典委托（通用 GND：class 集合由底层实例决定）
@@ -92,16 +96,18 @@ findClass cn (c :: rest) = if dtClassName c == cn then Just c else findClass cn 
 
 -- | 由类名求出它的字典类型族名（`Dict_<类>`）；类未声明时返回 Nothing。
 famOfClass : Ec -> String -> Maybe String
-famOfClass ec cn = case findClass cn (ecClasses ec) of
-  Just c => Just (dictTypeName (dtClassName c))
-  Nothing => Nothing
+famOfClass ec cn =
+  case findClass cn (ecClasses ec) of
+    Just c => Just (dictTypeName (dtClassName c))
+    Nothing => Nothing
 
 -- | 判断类名列表里是否有某个类的字典族名等于给定族名。
 anyViaClassFam : Ec -> String -> List String -> Bool
 anyViaClassFam ec fam [] = False
-anyViaClassFam ec fam (cn :: rest) = case famOfClass ec cn of
-  Just f => if f == fam then True else anyViaClassFam ec fam rest
-  Nothing => anyViaClassFam ec fam rest
+anyViaClassFam ec fam (cn :: rest) =
+  case famOfClass ec cn of
+    Just f => if f == fam then True else anyViaClassFam ec fam rest
+    Nothing => anyViaClassFam ec fam rest
 
 -- | 判断数据族的 `deriving via field` 类集合是否允许给定字典族委托。
 viaAllowsFam : Ec -> DtData -> String -> Bool
@@ -109,53 +115,68 @@ viaAllowsFam ec d fam = anyViaClassFam ec fam d.dtDataViaClasses
 
 -- | 把数据族的前 n 个参数 Pi 依次应用到实参上；参数不足或形状不符返回 Nothing。
 applyDataPis : Ec -> Int -> Value -> List Value -> Maybe Value
-applyDataPis ec n v args = if n <= 0 then Just v
-else case args of
-  [] => Nothing
-  a :: rest => case forceVal ec v of
-    VPi _ _ _ _ clo => applyDataPis ec (n - 1) (applyClosure clo a) rest
-    _ => Nothing
+applyDataPis ec n v args =
+  if n <= 0 then
+    Just v
+  else
+    case args of
+      [] => Nothing
+      a :: rest =>
+        case forceVal ec v of
+          VPi _ _ _ _ clo => applyDataPis ec (n - 1) (applyClosure clo a) rest
+          _ => Nothing
 
 -- | 求 via 字段的类型：用族参数实例化构造子类型后，取紧接着的那个 Pi 域。
 viaFieldType : Ec -> DtData -> DtCtor -> List Value -> Maybe Value
-viaFieldType ec d c args = if length args /= length d.dtDataParams then Nothing
-else case applyDataPis ec (length d.dtDataParams) (eval [] (dtCtorType c)) args of
-  Just v => case forceVal ec v of
-    VPi _ _ _ dom _ => Just dom
-    _ => Nothing
-  Nothing => Nothing
+viaFieldType ec d c args =
+  if length args /= length d.dtDataParams then
+    Nothing
+  else
+    case applyDataPis ec (length d.dtDataParams) (eval [] (dtCtorType c)) args of
+      Just v =>
+        case forceVal ec v of
+          VPi _ _ _ dom _ => Just dom
+          _ => Nothing
+      Nothing => Nothing
 
 -- | 若值是指向某个全局包装族的应用，尝试解析它能提供的 via 字段类型。
 viaWrapperOf : Ec -> String -> Value -> Maybe Value
-viaWrapperOf ec fam arg = case forceVal ec arg of
-  VNeutral (NGlobal w wargs) => viaWrapperData ec fam w wargs
-  _ => Nothing
+viaWrapperOf ec fam arg =
+  case forceVal ec arg of
+    VNeutral (NGlobal w wargs) => viaWrapperData ec fam w wargs
+    _ => Nothing
 
 -- | 在数据表里查包装族，并在它允许给定字典族时继续按形状取 via 字段类型。
 viaWrapperData : Ec -> String -> String -> List Value -> Maybe Value
-viaWrapperData ec fam w wargs = case findDtData w (ecDatas ec) of
-  Nothing => Nothing
-  Just d => if viaAllowsFam ec d fam then viaWrapperShape ec d wargs else Nothing
+viaWrapperData ec fam w wargs =
+  case findDtData w (ecDatas ec) of
+    Nothing => Nothing
+    Just d => if viaAllowsFam ec d fam then viaWrapperShape ec d wargs else Nothing
 
 -- | 对可去装箱的单构造子包装族，取唯一保留字段的域作为 via 字段类型。
 viaWrapperShape : Ec -> DtData -> List Value -> Maybe Value
-viaWrapperShape ec d wargs = if memName (dtDataName d) (unboxedFamilySet (ecDatas ec)) then case dtDataCtors d of
-  [] => Nothing
-  c :: _ => viaFieldType ec d c wargs
-else Nothing
+viaWrapperShape ec d wargs =
+  if memName (dtDataName d) (unboxedFamilySet (ecDatas ec)) then
+    case dtDataCtors d of
+      [] => Nothing
+      c :: _ => viaFieldType ec d c wargs
+  else
+    Nothing
 
 -- | 判断实参列表里是否有某个实参能为给定字典族提供 via 字段。
 anyViaWrapper : Ec -> String -> List Value -> Bool
 anyViaWrapper ec fam [] = False
-anyViaWrapper ec fam (a :: rest) = case viaWrapperOf ec fam a of
-  Just _ => True
-  Nothing => anyViaWrapper ec fam rest
+anyViaWrapper ec fam (a :: rest) =
+  case viaWrapperOf ec fam a of
+    Just _ => True
+    Nothing => anyViaWrapper ec fam rest
 
 -- | 目标字典值是否有可用的 via 包装候选（用于实例搜索早退）。
 viaCandidateExists : Ec -> Value -> Bool
-viaCandidateExists ec dom = case forceVal ec dom of
-  VNeutral (NGlobal fam args) => anyViaWrapper ec fam args
-  _ => False
+viaCandidateExists ec dom =
+  case forceVal ec dom of
+    VNeutral (NGlobal fam args) => anyViaWrapper ec fam args
+    _ => False
 
 -- | 把值列表第 i 个元素替换成新值（越界时原样返回已走过的前缀）。
 replaceAt : Int -> Value -> List Value -> List Value
@@ -164,24 +185,26 @@ replaceAt i x (a :: rest) = if i <= 0 then (::) x rest else (::) a (replaceAt (i
 
 -- | 尝试用 `deriving via field` 委托求字典目标：找到包装候选后逐实参定位字段。
 tryViaDict : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> Check (Maybe (Pair Term Ec))
-tryViaDict globals ctx fuel ec dom sp = if fuel <= 0 then OkC Nothing
-else case forceVal ec dom of
-  VNeutral (NGlobal fam args) =>
-    if viaCandidateExists ec dom then tryViaArgs globals ctx (fuel - 1) ec sp fam args 0
-    else OkC Nothing
-  _ => OkC Nothing
+tryViaDict globals ctx fuel ec dom sp =
+  if fuel <= 0 then
+    OkC Nothing
+  else
+    case forceVal ec dom of
+      VNeutral (NGlobal fam args) => if viaCandidateExists ec dom then tryViaArgs globals ctx (fuel - 1) ec sp fam args 0 else OkC Nothing
+      _ => OkC Nothing
 
 -- | 在目标实参里找可用的 via 包装；用替换后的字段类型重新搜索字典实例。
 tryViaArgs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> String -> List Value -> Int -> Check (Maybe (Pair Term Ec))
-tryViaArgs globals ctx fuel ec sp fam args idx = if fuel <= 0 then OkC Nothing
-else case args of
-  [] => OkC Nothing
-  arg :: rest => case viaWrapperOf ec fam arg of
-    Nothing => tryViaArgs globals ctx (fuel - 1) ec sp fam rest (idx + 1)
-    Just fieldTy =>
-      Vuna.Compiler.Base.Common.bind
-        (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp)
-        (\p => OkC (Just p))
+tryViaArgs globals ctx fuel ec sp fam args idx =
+  if fuel <= 0 then
+    OkC Nothing
+  else
+    case args of
+      [] => OkC Nothing
+      arg :: rest =>
+        case viaWrapperOf ec fam arg of
+          Nothing => tryViaArgs globals ctx (fuel - 1) ec sp fam rest (idx + 1)
+          Just fieldTy => Vuna.Compiler.Base.Common.bind (searchInstFuel globals ctx (fuel - 1) ec (VNeutral (NGlobal fam (replaceAt idx fieldTy args))) sp) (\p => OkC (Just p))
 
 -- 实例搜索的候选集合——按 `dom` 的字典族**精确取桶**，不扫全实例表。
 -- 族名取 force 后的头部（`Dict_<类>`）；族名不确定时（未解元变量、非字典头）回落全表：
@@ -223,11 +246,13 @@ missingInstance ec dom sp =
     sd = showValue forced
   in if valueDictFamily forced == dictTypeName interpTypeName then
     let
-      td = case dictClassArg ec forced of
-        Just argTy => showResolvedValue ec argTy
-        Nothing => sd
+      td =
+        case dictClassArg ec forced of
+          Just argTy => showResolvedValue ec argTy
+          Nothing => sd
     in tcErr1 sp (InterpNoInstance td) td
-  else tcErr1 sp (NoInstanceFound sd) sd
+  else
+    tcErr1 sp (NoInstanceFound sd) sd
 
 -- 诊断用：把值按当前解渲染成类型文本。`showValue` 不解元变量，会把已解出的类型显示成
 -- `?N`（插值缺实例时最需要的是真实类型名，例如 `Foo`）。
@@ -241,35 +266,42 @@ firstUnsolvedInterpGoal ec = firstUnsolvedInterpGoalGo ec (ecPending ec)
 
 firstUnsolvedInterpGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedInterpGoalGo ec [] = Nothing
-firstUnsolvedInterpGoalGo ec ((Constraint cid kind m dom span depth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedInterpGoalGo ec rest
-  Nothing =>
-    let
-      forced = forceVal ec dom
-    in if valueDictFamily forced == dictTypeName interpTypeName then Just (case dictClassArg ec forced of
-      Just argTy => showResolvedValue ec argTy
-      Nothing => showResolvedValue ec forced
-    )
-    else firstUnsolvedInterpGoalGo ec rest
+firstUnsolvedInterpGoalGo ec ((Constraint cid kind m dom span depth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedInterpGoalGo ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if valueDictFamily forced == dictTypeName interpTypeName then
+        Just (
+            case dictClassArg ec forced of
+              Just argTy => showResolvedValue ec argTy
+              Nothing => showResolvedValue ec forced
+          )
+      else
+        firstUnsolvedInterpGoalGo ec rest
 
 -- 局部上下文查找：ctxItems 最近的 binder 在前，其 de Bruijn index 就是下标 i。
 localDictLookup : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
 localDictLookup ctx i dom ec = localDictLookupExact ctx i dom ec
 
 localDictLookupExact : Ctx -> Int -> Value -> Ec -> Maybe (Pair Term Ec)
-localDictLookupExact ctx i dom ec = case ctx.ctxItems of
-  [] => Nothing
-  _ => localDictLookupGo ctx i dom ec ctx.ctxItems
+localDictLookupExact ctx i dom ec =
+  case ctx.ctxItems of
+    [] => Nothing
+    _ => localDictLookupGo ctx i dom ec ctx.ctxItems
 
 localDictLookupGo : Ctx -> Int -> Value -> Ec -> List (Pair String Term) -> Maybe (Pair Term Ec)
 localDictLookupGo ctx i dom ec [] = Nothing
 localDictLookupGo ctx i dom ec ((Pair name ty) :: rest) =
   let
     v = forceVal ec (varTypeValue ctx i ty)
-  in if isDictValue ec v then case conv (ecDefTbl ec) (ecSolsP ec) 0 v dom of
-    OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0 0 0)) (ecPutSols ec (solsList sols2)))
-    ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
-  else localDictLookupGo ctx (i + 1) dom ec rest
+  in if isDictValue ec v then
+    case conv (ecDefTbl ec) (ecSolsP ec) 0 v dom of
+      OkC sols2 => Just (Pair (TVar name i (Span "" 0 0 0 0 0 0)) (ecPutSols ec (solsList sols2)))
+      ErrC e => localDictLookupGo ctx (i + 1) dom ec rest
+  else
+    localDictLookupGo ctx (i + 1) dom ec rest
 
 -- 刚性类参数快路径：只有当**同一字典族**的实例都是单态（tele/ctx 均空）时才可确定
 -- 匹配不上。按类过滤：blanket 实例（如 `Interp`）只让它自己的类退回全量搜索，
@@ -280,9 +312,10 @@ rigidSearchFast ec dom = isRigidDictArg ec dom && allInstancesMono (searchCandid
 
 -- 字典/实例头的族名（`Dict_<类>`）；非字典形态返回空串。
 export valueDictFamily : Value -> String
-valueDictFamily (VNeutral n) = case n of
-  NGlobal g sp => g
-  _ => ""
+valueDictFamily (VNeutral n) =
+  case n of
+    NGlobal g sp => g
+    _ => ""
 valueDictFamily _ = ""
 
 -- primitive `interp` 快捷路径的语义护栏——若程序里存在**具体** `Interp <ty>`
@@ -296,24 +329,29 @@ hasSpecificInterpInstance ec tyName =
 hasSpecificInterpInstanceGo : String -> List DtInst -> Bool
 hasSpecificInterpInstanceGo tyName [] = False
 hasSpecificInterpInstanceGo tyName (i :: rest) =
-  if not (isBlanketInst i) && instHeadArgTypeName i == tyName then True
-  else hasSpecificInterpInstanceGo tyName rest
+  if not (isBlanketInst i) && instHeadArgTypeName i == tyName then
+    True
+  else
+    hasSpecificInterpInstanceGo tyName rest
 
 instHeadArgTypeName : DtInst -> String
-instHeadArgTypeName i = case flattenTaggedApp i.dtInstHead of
-  Just (Pair g (arg :: rest)) => termTypeNameOf (firstOf arg)
-  _ => ""
+instHeadArgTypeName i =
+  case flattenTaggedApp i.dtInstHead of
+    Just (Pair g (arg :: rest)) => termTypeNameOf (firstOf arg)
+    _ => ""
 
 termTypeNameOf : Term -> String
 termTypeNameOf (TGlobal g) = g
 termTypeNameOf _ = ""
 
 isMonoInst : DtInst -> Bool
-isMonoInst i = case i.dtInstTele of
-  [] => case i.dtInstCtx of
-    [] => True
+isMonoInst i =
+  case i.dtInstTele of
+    [] =>
+      case i.dtInstCtx of
+        [] => True
+        _ => False
     _ => False
-  _ => False
 
 -- 全部实例都是单态（tele/ctx 均空）：刚性类参数保证匹配不上，可提前返回。
 allInstancesMono : List DtInst -> Bool
@@ -322,48 +360,50 @@ allInstancesMono (i :: rest) = if isMonoInst i then allInstancesMono rest else F
 
 matchInstances : List (Pair String Term) -> Ctx -> Int -> Ec -> Value -> Span -> List DtInst -> List InstMatch -> Pair (List InstMatch) Ec
 matchInstances globals ctx fuel ec dom sp [] acc = Pair (reverse acc) ec
-matchInstances globals ctx fuel ec dom sp (i :: rest) acc = case tryMatchInst globals ctx fuel ec i dom sp of
-  Just (Pair term ec1) => matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
-  Nothing => matchInstances globals ctx fuel ec dom sp rest acc
+matchInstances globals ctx fuel ec dom sp (i :: rest) acc =
+  case tryMatchInst globals ctx fuel ec i dom sp of
+    Just (Pair term ec1) =>
+      matchInstances globals ctx fuel ec1 dom sp rest (InstMatch i term :: acc)
+    Nothing => matchInstances globals ctx fuel ec dom sp rest acc
 
 -- 单个候选：alloc tele metas → conv 结果头 → 读 tele 解 → 递归解 ctx → 组装
 -- `TGlobal inst <typeArgs(Rig0)> <dictArgs(Rig1)>`。
 tryMatchInst : List (Pair String Term) -> Ctx -> Int -> Ec -> DtInst -> Value -> Span -> Maybe (Pair Term Ec)
-tryMatchInst globals ctx fuel ec inst dom sp = if fuel <= 0 then Nothing
-else case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
-  Pair metas ec1 =>
-    let
-      _ =
-        dbg!
-          "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
-      hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
-    in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
-      ErrC e =>
+tryMatchInst globals ctx fuel ec inst dom sp =
+  if fuel <= 0 then
+    Nothing
+  else
+    case allocTeleMetas inst.dtInstSpan ctx ec inst.dtInstTele of
+      Pair metas ec1 =>
         let
-          _ = dbg! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
-        in Nothing
-      OkC sols2 =>
-        let
-          ec2 = ecPutSols ec1 (solsList sols2)
-        in case solveTeleMetas ec2 metas of
-          Nothing => Nothing
-          Just solved =>
+          _ = dbg! "inst-try: ${dtInstName inst} head=${showTerm inst.dtInstHead} tele=${length inst.dtInstTele}"
+          hd = eval (map (\m => VMeta m []) metas) inst.dtInstHead
+        in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 dom hd of
+          ErrC e =>
             let
-              teleArgs =
-                map (\v => Pair (quote (ctxDepth ctx) (forceVal ec2 v)) Rig0) (reverse solved)
-              env2 = map (\v => forceVal ec2 v) solved
-              ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
-            in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
+              _ = dbg! "inst-conv-err: ${dtInstName inst} dom=${showValue dom} hd=${showValue hd}"
+            in Nothing
+          OkC sols2 =>
+            let
+              ec2 = ecPutSols ec1 (solsList sols2)
+            in case solveTeleMetas ec2 metas of
               Nothing => Nothing
-              Just (Pair dictArgs ec3) =>
-                Just
-                  (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
+              Just solved =>
+                let
+                  teleArgs = map (\v => Pair (quote (ctxDepth ctx) (forceVal ec2 v)) Rig0) (reverse solved)
+                  env2 = map (\v => forceVal ec2 v) solved
+                  ctxVals = map (\t => forceVal ec2 (eval env2 t)) inst.dtInstCtx
+                in case solveDictCtxs globals ctx (fuel - 1) ec2 sp ctxVals [] of
+                  Nothing => Nothing
+                  Just (Pair dictArgs ec3) => Just (Pair (foldAppTerms (TGlobal (dtInstName inst)) (append teleArgs dictArgs)) ec3)
 
 export allocTeleMetas : Maybe Span -> Ctx -> Ec -> List (Pair String Term) -> Pair (List Int) Ec
 allocTeleMetas msp ctx ec [] = Pair [] ec
-allocTeleMetas msp ctx ec (t :: rest) = case allocMetaAt msp ctx ec of
-  Pair tm ec1 => case allocTeleMetas msp ctx ec1 rest of
-    Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
+allocTeleMetas msp ctx ec (t :: rest) =
+  case allocMetaAt msp ctx ec of
+    Pair tm ec1 =>
+      case allocTeleMetas msp ctx ec1 rest of
+        Pair ids ec2 => Pair (termMetaId tm :: ids) ec2
 
 allocMetaAt : Maybe Span -> Ctx -> Ec -> Pair Term Ec
 allocMetaAt Nothing ctx ec = newMeta ctx ec
@@ -375,17 +415,20 @@ termMetaId _ = 0
 
 solveTeleMetas : Ec -> List Int -> Maybe (List Value)
 solveTeleMetas ec [] = Just []
-solveTeleMetas ec (m :: rest) = case metaLookup m (ecSolTbl ec) of
-  Nothing => Nothing
-  Just v => case solveTeleMetas ec rest of
+solveTeleMetas ec (m :: rest) =
+  case metaLookup m (ecSolTbl ec) of
     Nothing => Nothing
-    Just vs => Just (v :: vs)
+    Just v =>
+      case solveTeleMetas ec rest of
+        Nothing => Nothing
+        Just vs => Just (v :: vs)
 
 solveDictCtxs : List (Pair String Term) -> Ctx -> Int -> Ec -> Span -> List Value -> List (Pair Term Rig) -> Maybe (Pair (List (Pair Term Rig)) Ec)
 solveDictCtxs globals ctx fuel ec sp [] acc = Just (Pair (reverse acc) ec)
-solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel globals ctx fuel ec cv sp of
-  ErrC e => Nothing
-  OkC (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
+solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc =
+  case searchInstFuel globals ctx fuel ec cv sp of
+    ErrC e => Nothing
+    OkC (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
 
 -- 行成员约束：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
 -- 这些名字来自受信任的 Base.Effect.Core（见 effects.md §8）；编译器只认这三个头名。
@@ -429,39 +472,49 @@ export data MemberLookup(..) : Type where
   MemberAmbiguous : List String -> MemberLookup
 
 export isMemberDomain : Ec -> Value -> Bool
-isMemberDomain ec dom = case quote 0 dom of
-  TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
-  _ => False
+isMemberDomain ec dom =
+  case quote 0 dom of
+    TApp (TApp (TGlobal g) _ _) _ _ => g == memberDomName
+    _ => False
 
 memberSpine : Value -> Maybe (Pair Value Value)
-memberSpine (VNeutral (NGlobal g sp)) = if g == memberDomName then case sp of
-  e :: r :: _ => Just (Pair e r)
-  _ => Nothing
-else Nothing
+memberSpine (VNeutral (NGlobal g sp)) =
+  if g == memberDomName then
+    case sp of
+      e :: r :: _ => Just (Pair e r)
+      _ => Nothing
+  else
+    Nothing
 memberSpine _ = Nothing
 
 ctorValue : Ec -> String -> List Value -> Value
-ctorValue ec name vals = case dtCtorLookupEc ec name of
-  Just ctor => VCon (dtCtorName ctor) vals
-  Nothing => VCon name vals
+ctorValue ec name vals =
+  case dtCtorLookupEc ec name of
+    Just ctor => VCon (dtCtorName ctor) vals
+    Nothing => VCon name vals
 
 export memberLookup : Int -> Int -> Ec -> Value -> MemberLookup
-memberLookup fuel depth ec dom = if fuel <= 0 then MemberStuck
-else case memberSpine dom of
-  Nothing => MemberStuck
-  Just (Pair eVal rVal) => memberLookupRowLabel fuel depth ec eVal rVal
+memberLookup fuel depth ec dom =
+  if fuel <= 0 then
+    MemberStuck
+  else
+    case memberSpine dom of
+      Nothing => MemberStuck
+      Just (Pair eVal rVal) => memberLookupRowLabel fuel depth ec eVal rVal
 
 -- | 探测：convEc 在给定 Ec 上跑，只取成功与否（解表不回传）。
 memberProbe : Ec -> Int -> Value -> Value -> Bool
-memberProbe ec depth a b = case convEc ec depth a b of
-  OkC _ => True
-  ErrC _ => False
+memberProbe ec depth a b =
+  case convEc ec depth a b of
+    OkC _ => True
+    ErrC _ => False
 
 -- | 行条目的实例名文本：String 字面量去引号，其余用值展示。
 memberNameText : Ec -> Value -> String
-memberNameText ec v = case forceVal ec v of
-  VStr s => s
-  _ => showValueAt 6 v
+memberNameText ec v =
+  case forceVal ec v of
+    VStr s => s
+    _ => showValueAt 6 v
 
 -- 二元行（`Member label r`）：先按标签候选计数，拒绝贪婪匹配；唯一候选才提交合一。
 data LabelCand : Type where
@@ -475,64 +528,86 @@ labelCandIdx (MkLabelCand _ i) = i
 
 -- 候选展示：Named 标签显示实例名，其它显示标签文本。
 labelCandText : Ec -> Value -> String
-labelCandText ec v = case forceVal ec v of
-  VNeutral (NGlobal g sp) => if g == effNamedName then case sp of
-    n :: _ => memberNameText ec n
+labelCandText ec v =
+  case forceVal ec v of
+    VNeutral (NGlobal g sp) =>
+      if g == effNamedName then
+        case sp of
+          n :: _ => memberNameText ec n
+          _ => showValueAt 6 v
+      else
+        showValueAt 6 v
     _ => showValueAt 6 v
-  else showValueAt 6 v
-  _ => showValueAt 6 v
 
 labelScan : Int -> Int -> Sols -> Ec -> Value -> Value -> Int -> List LabelCand -> Maybe (Pair (List LabelCand) Bool)
-labelScan fuel depth sols ec eF rF idx acc = if fuel <= 0 then Nothing
-else case forceVal ec rF of
-  VCon cname cargs => if cname == effRowNilCtor then Just (Pair (reverse acc) True)
-  else if cname == effRowConsCtor then case cargs of
-    h :: t :: _ => if hasUnsolvedMetaValue sols h then Nothing
-    else
-      let
-        matched = memberProbe ec depth eF h
-        acc2 = if matched then (::) (MkLabelCand (labelCandText ec h) idx) acc else acc
-      in labelScan (fuel - 1) depth sols ec eF t (idx + 1) acc2
-    _ => Nothing
-  else Nothing
-  VNeutral _ => Just (Pair (reverse acc) False)
-  _ => Nothing
+labelScan fuel depth sols ec eF rF idx acc =
+  if fuel <= 0 then
+    Nothing
+  else
+    case forceVal ec rF of
+      VCon cname cargs =>
+        if cname == effRowNilCtor then
+          Just (Pair (reverse acc) True)
+        else if cname == effRowConsCtor then
+          case cargs of
+            h :: t :: _ =>
+              if hasUnsolvedMetaValue sols h then
+                Nothing
+              else
+                let
+                  matched = memberProbe ec depth eF h
+                  acc2 = if matched then (::) (MkLabelCand (labelCandText ec h) idx) acc else acc
+                in labelScan (fuel - 1) depth sols ec eF t (idx + 1) acc2
+            _ => Nothing
+        else
+          Nothing
+      VNeutral _ => Just (Pair (reverse acc) False)
+      _ => Nothing
 
 memberProofAtLabel : Int -> Int -> Ec -> Value -> Value -> Int -> Check (Pair Value Ec)
-memberProofAtLabel fuel depth ec eF rF target = if fuel <= 0 then icFuel "member proof"
-else case forceVal ec rF of
-  VCon cname cargs => if cname == effRowConsCtor then case cargs of
-    h :: t :: _ =>
-      if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h)
-        (\ec1 => OkC (Pair (ctorValue ec1 hereCtorName [eF, t]) ec1))
-      else Vuna.Compiler.Base.Common.bind (memberProofAtLabel (fuel - 1) depth ec eF t (target - 1))
-        (\p => OkC (Pair (ctorValue (secondOf p) thereCtorName [eF, h, t, firstOf p]) (secondOf p)))
-    _ => icInternal "malformed row in member proof"
-  else icInternal "member proof target out of range"
-  _ => icInternal "member proof target out of range"
+memberProofAtLabel fuel depth ec eF rF target =
+  if fuel <= 0 then
+    icFuel "member proof"
+  else
+    case forceVal ec rF of
+      VCon cname cargs =>
+        if cname == effRowConsCtor then
+          case cargs of
+            h :: t :: _ => if target <= 0 then Vuna.Compiler.Base.Common.bind (convEc ec depth eF h) (\ec1 => OkC (Pair (ctorValue ec1 hereCtorName [eF, t]) ec1)) else Vuna.Compiler.Base.Common.bind (memberProofAtLabel (fuel - 1) depth ec eF t (target - 1)) (\p => OkC (Pair (ctorValue (secondOf p) thereCtorName [eF, h, t, firstOf p]) (secondOf p)))
+            _ => icInternal "malformed row in member proof"
+        else
+          icInternal "member proof target out of range"
+      _ => icInternal "member proof target out of range"
 
 memberLookupRowLabel : Int -> Int -> Ec -> Value -> Value -> MemberLookup
-memberLookupRowLabel fuel depth ec eVal rVal = if fuel <= 0 then MemberStuck
-else
-  let
-    eF = forceVal ec eVal
-    sols = ecSolsP ec
-  in case labelScan 64 depth sols ec eF rVal 0 [] of
-    Nothing => MemberStuck
-    Just (Pair cands closed) => case cands of
-      [] => if closed then MemberAbsent else MemberStuck
-      c :: rest => case rest of
-        [] => case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
-          OkC (Pair proof ec1) => MemberFound proof ec1
-          ErrC _ => MemberStuck
-        _ => MemberAmbiguous (map labelCandName cands)
+memberLookupRowLabel fuel depth ec eVal rVal =
+  if fuel <= 0 then
+    MemberStuck
+  else
+    let
+      eF = forceVal ec eVal
+      sols = ecSolsP ec
+    in case labelScan 64 depth sols ec eF rVal 0 [] of
+      Nothing => MemberStuck
+      Just (Pair cands closed) =>
+        case cands of
+          [] => if closed then MemberAbsent else MemberStuck
+          c :: rest =>
+            case rest of
+              [] =>
+                case memberProofAtLabel (fuel - 1) depth ec eF rVal (labelCandIdx c) of
+                  OkC (Pair proof ec1) => MemberFound proof ec1
+                  ErrC _ => MemberStuck
+              _ => MemberAmbiguous (map labelCandName cands)
 
 -- 在局部上下文里找同类型的隐式证明 binder（wrapper 体里 `{w : Member e r}`）。
 ctxMemberProofTermGo : List (Pair String Term) -> Int -> String -> Maybe Term
 ctxMemberProofTermGo [] idx target = Nothing
 ctxMemberProofTermGo ((Pair name ty) :: rest) idx target =
-  if showTerm ty == target then Just (TVar name idx (Span "" 0 0 0 0 0 0))
-  else ctxMemberProofTermGo rest (idx + 1) target
+  if showTerm ty == target then
+    Just (TVar name idx (Span "" 0 0 0 0 0 0))
+  else
+    ctxMemberProofTermGo rest (idx + 1) target
 
 ctxMemberProofTerm : Ctx -> Ec -> Value -> Maybe Term
 ctxMemberProofTerm ctx ec dom =
@@ -557,118 +632,147 @@ ctxMemberProofUnifyGo ctx ((Pair name ty) :: rest) idx ec dom =
     ErrC _ => ctxMemberProofUnifyGo ctx rest (idx + 1) ec dom
 
 solveRowMeta : Ec -> Int -> Value -> Check Ec
-solveRowMeta ec m v = case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of
-  OkC sols2 => OkC (ecPutSols ec (solsList sols2))
-  ErrC e => ErrC e
+solveRowMeta ec m v =
+  case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] v of
+    OkC sols2 => OkC (ecPutSols ec (solsList sols2))
+    ErrC e => ErrC e
 
 export resolveRowGoalsCtx : List (Pair String Term) -> Ctx -> Ec -> Span -> Check Ec
 resolveRowGoalsCtx globals ctx ec sp = resolveRowGoalsCtxGo globals ctx sp (ecPending ec) ec []
 
 resolveRowGoalsCtxGo : List (Pair String Term) -> Ctx -> Span -> List Constraint -> Ec -> List Constraint -> Check Ec
 resolveRowGoalsCtxGo globals ctx sp [] ec kept = OkC (ecPutPending ec (reverse kept))
-resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)) :: rest) ec kept = case isMemberDomain ec dom of
-  True => case memberLookup 64 (ctxDepth ctx) ec dom of
-    MemberFound proof ec2 => case solveRowMeta ec2 m proof of
-      OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
-      ErrC e => ErrC e
-    MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
-    -- 命名行：同标签多实例且名字未定 → 显式歧义诊断，不间接退化为缺实例。
-    MemberAmbiguous cands =>
-      tcErr2 sp (AmbiguousInstance "effect instance" (join ", " cands)) "effect instance"
-        (join ", " cands)
-    MemberStuck => case ctxMemberProofTerm ctx ec dom of
-      Just proofTerm => case solveRowMeta ec m (eval (ctxEnv ctx) proofTerm) of
-        OkC ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
-        ErrC e => ErrC e
-      Nothing => case ctxMemberProofUnify ctx ec dom of
-        Just (Pair proofTerm ec2) => case solveRowMeta ec2 m (eval (ctxEnv ctx) proofTerm) of
-          OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
-          ErrC e => ErrC e
-        Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
-  False => case dictClassArgs ec dom of
-    [] => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-    args => if anyUnsolvedMetaArg ec args then resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-    else if isRigidDictArg ec dom && allInstancesMono (ecInsts ec) then
-      resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-    else case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
-      OkC (Pair instTerm ec1) => case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) instTerm) of
-        OkC sols2 => resolveRowGoalsCtxGo globals ctx sp rest (ecPutSols ec1 (solsList sols2)) kept
-        ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
-      ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+resolveRowGoalsCtxGo globals ctx sp ((c@(Constraint cid kind m dom cspan cdepth)) :: rest) ec kept =
+  case isMemberDomain ec dom of
+    True =>
+      case memberLookup 64 (ctxDepth ctx) ec dom of
+        MemberFound proof ec2 =>
+          case solveRowMeta ec2 m proof of
+            OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
+            ErrC e => ErrC e
+        MemberAbsent => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+        -- 命名行：同标签多实例且名字未定 → 显式歧义诊断，不间接退化为缺实例。
+        MemberAmbiguous cands =>
+          tcErr2
+            sp
+            (AmbiguousInstance "effect instance" (join ", " cands))
+            "effect instance"
+            (join ", " cands)
+        MemberStuck =>
+          case ctxMemberProofTerm ctx ec dom of
+            Just proofTerm =>
+              case solveRowMeta ec m (eval (ctxEnv ctx) proofTerm) of
+                OkC ec2 => resolveRowGoalsCtxGo globals ctx sp rest ec2 kept
+                ErrC e => ErrC e
+            Nothing =>
+              case ctxMemberProofUnify ctx ec dom of
+                Just (Pair proofTerm ec2) =>
+                  case solveRowMeta ec2 m (eval (ctxEnv ctx) proofTerm) of
+                    OkC ec3 => resolveRowGoalsCtxGo globals ctx sp rest ec3 kept
+                    ErrC e => ErrC e
+                Nothing => tcErr1 sp (NoInstanceFound "row membership") "row membership"
+    False =>
+      case dictClassArgs ec dom of
+        [] => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+        args =>
+          if anyUnsolvedMetaArg ec args then
+            resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+          else if isRigidDictArg ec dom && allInstancesMono (ecInsts ec) then
+            resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+          else
+            case searchInstanceIn globals ctx ec (forceVal ec dom) sp of
+              OkC (Pair instTerm ec1) =>
+                case solveMeta (ecDefTbl ec1) (ecSolsP ec1) 0 m [] (eval (ctxEnv ctx) instTerm) of
+                  OkC sols2 => resolveRowGoalsCtxGo globals ctx sp rest (ecPutSols ec1 (solsList sols2)) kept
+                  ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
+              ErrC e => resolveRowGoalsCtxGo globals ctx sp rest ec (c :: kept)
 
 export resolveDictGoals : List (Pair String Term) -> Ec -> Ec
 resolveDictGoals globals ec =
-  if ecDictPassIdle ec then ec
-  else ecPutPassMarker (resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec)
+  if ecDictPassIdle ec then
+    ec
+  else
+    ecPutPassMarker (resolveDictGoalsFuel (length (ecPending ec) + 1) globals ec)
 
 -- 单趟 worklist：逐个处理表头，成功即提交；未解目标按原顺序追加到表尾（旋转语义：
 -- 每趟从头部取一个目标）。把“处理尾部”算两遍（keep + 成功分支再递归）在目标同时可解时是 2^k；
 -- 这里每个目标每趟只处理一次，指数消除。
 resolveDictGoalsFuel : Int -> List (Pair String Term) -> Ec -> Ec
-resolveDictGoalsFuel fuel globals ec0 = if fuel <= 0 then ec0
-else case ecPending ec0 of
-  [] => ec0
-  (c@(Constraint cid kind m dom cspan cdepth)) :: rest =>
-    let
-      ec = ecBump ec0 "elab.dict.round"
-      ec1 = ecPutPending ec rest
-    in case metaLookup m (ecSolTbl ec1) of
-      -- 已解/已提升的约束直接摘除（settled），不再占用后续轮次的扫描。
-      Just _ => resolveDictGoalsFuel (fuel - 1) globals ec1
-      Nothing =>
+resolveDictGoalsFuel fuel globals ec0 =
+  if fuel <= 0 then
+    ec0
+  else
+    case ecPending ec0 of
+      [] => ec0
+      (c@(Constraint cid kind m dom cspan cdepth)) :: rest =>
         let
-          solsNow = ecSolsCountOf ec1
-        in case ecTriedAt ec1 cid of
-          -- 上次尝试后解表没增长 ⇒ 结果不会变，跳过搜索，原地保留。
-          Just tried => if tried == solsNow then
-            let
-              ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
-            in ecPutPending ec2 (append (ecPending ec2) [c])
-          else
-            let
-              forced = forceVal ec1 dom
-              kept =
-                Constraint cid kind m (if isMemberDomain ec1 dom then dom else forced) cspan cdepth
-              solsTried = ecSolsCountOf ec1
-            in case tryResolveDictGoal globals ec1 c forced of
-              Just ec2 => resolveDictGoalsFuel (fuel - 1) globals ec2
-              Nothing =>
-                let
-                  ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
-                  ec3 = ecRecordTried ec2 cid solsTried
-                in ecPutPending ec3 (append (ecPending ec3) [kept])
+          ec = ecBump ec0 "elab.dict.round"
+          ec1 = ecPutPending ec rest
+        in case metaLookup m (ecSolTbl ec1) of
+          -- 已解/已提升的约束直接摘除（settled），不再占用后续轮次的扫描。
+          Just _ => resolveDictGoalsFuel (fuel - 1) globals ec1
           Nothing =>
             let
-              forced = forceVal ec1 dom
-              kept =
-                Constraint cid kind m (if isMemberDomain ec1 dom then dom else forced) cspan cdepth
-              solsTried = length (ecSols ec1)
-            in case tryResolveDictGoal globals ec1 c forced of
-              Just ec2 => resolveDictGoalsFuel (fuel - 1) globals ec2
+              solsNow = ecSolsCountOf ec1
+            in case ecTriedAt ec1 cid of
+              -- 上次尝试后解表没增长 ⇒ 结果不会变，跳过搜索，原地保留。
+              Just tried =>
+                if tried == solsNow then
+                  let
+                    ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
+                  in ecPutPending ec2 (append (ecPending ec2) [c])
+                else
+                  let
+                    forced = forceVal ec1 dom
+                    kept = Constraint cid kind m (if isMemberDomain ec1 dom then dom else forced) cspan cdepth
+                    solsTried = ecSolsCountOf ec1
+                  in case tryResolveDictGoal globals ec1 c forced of
+                    Just ec2 => resolveDictGoalsFuel (fuel - 1) globals ec2
+                    Nothing =>
+                      let
+                        ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
+                        ec3 = ecRecordTried ec2 cid solsTried
+                      in ecPutPending ec3 (append (ecPending ec3) [kept])
               Nothing =>
                 let
-                  ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
-                  ec3 = ecRecordTried ec2 cid solsTried
-                in ecPutPending ec3 (append (ecPending ec3) [kept])
+                  forced = forceVal ec1 dom
+                  kept = Constraint cid kind m (if isMemberDomain ec1 dom then dom else forced) cspan cdepth
+                  solsTried = length (ecSols ec1)
+                in case tryResolveDictGoal globals ec1 c forced of
+                  Just ec2 => resolveDictGoalsFuel (fuel - 1) globals ec2
+                  Nothing =>
+                    let
+                      ec2 = resolveDictGoalsFuel (fuel - 1) globals ec1
+                      ec3 = ecRecordTried ec2 cid solsTried
+                    in ecPutPending ec3 (append (ecPending ec3) [kept])
 
 -- | 尝试求解一条延迟约束：行成员走 memberLookup，字典目标走实例搜索并回填元变量。
 tryResolveDictGoal : List (Pair String Term) -> Ec -> Constraint -> Value -> Maybe Ec
-tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced = if isMemberDomain ec dom then case memberLookup 64 0 ec dom of
-  MemberFound proof ec2 => case solveRowMeta ec2 m proof of
-    OkC ec3 => Just ec3
-    ErrC e => Nothing
-  MemberAbsent => Nothing
-  MemberAmbiguous _ => Nothing
-  MemberStuck => Nothing
-else case dictClassArgs ec forced of
-  [] => Nothing
-  args => if anyUnsolvedMetaArg ec args then Nothing
-  else if isRigidDictArg ec forced && allInstancesMono (ecInsts ec) then Nothing
-  else case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
-    OkC (Pair instTerm ec2) => case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
-      OkC sols2 => Just (ecPutSols ec2 (solsList sols2))
-      ErrC e => Nothing
-    ErrC e => Nothing
+tryResolveDictGoal globals ec (Constraint cid kind m dom cspan cdepth) forced =
+  if isMemberDomain ec dom then
+    case memberLookup 64 0 ec dom of
+      MemberFound proof ec2 =>
+        case solveRowMeta ec2 m proof of
+          OkC ec3 => Just ec3
+          ErrC e => Nothing
+      MemberAbsent => Nothing
+      MemberAmbiguous _ => Nothing
+      MemberStuck => Nothing
+  else
+    case dictClassArgs ec forced of
+      [] => Nothing
+      args =>
+        if anyUnsolvedMetaArg ec args then
+          Nothing
+        else if isRigidDictArg ec forced && allInstancesMono (ecInsts ec) then
+          Nothing
+        else
+          case searchInstance ec forced (Span "" 0 0 0 0 0 0) of
+            OkC (Pair instTerm ec2) =>
+              case solveMeta (ecDefTbl ec2) (ecSolsP ec2) 0 m [] (eval [] instTerm) of
+                OkC sols2 => Just (ecPutSols ec2 (solsList sols2))
+                ErrC e => Nothing
+            ErrC e => Nothing
 
 -- 字典解的 term 化要**保留 multiplicity**：参数化实例的字典项形如
 -- `TApp (TApp (TGlobal inst) <typeArg>) <dictArg>`，而 Value spine 不含 rig；
@@ -678,22 +782,25 @@ export substDictTerm : Ec -> Term -> Term
 substDictTerm ec t = substDictTermGo ec 0 t
 
 substDictTermGo : Ec -> Int -> Term -> Term
-substDictTermGo ec depth (t@(TMeta m)) = case metaLookup m (ecSolTbl ec) of
-  Nothing => t
-  Just v => case dictTermOfValueAt ec depth v of
-    -- 解按**出现点深度** quote 成项；越界/负索引说明它引用了出现点之外的 binder，保留元变量。
-    Just soln => if hasFreeTermVar depth soln || hasNegativeVar soln then t else soln
-    Nothing =>
-      let
-        soln0 = quote depth v
-      in if hasFreeTermVar depth soln0 || hasNegativeVar soln0 then t else soln0
+substDictTermGo ec depth (t@(TMeta m)) =
+  case metaLookup m (ecSolTbl ec) of
+    Nothing => t
+    Just v =>
+      case dictTermOfValueAt ec depth v of
+        -- 解按**出现点深度** quote 成项；越界/负索引说明它引用了出现点之外的 binder，保留元变量。
+        Just soln => if hasFreeTermVar depth soln || hasNegativeVar soln then t else soln
+        Nothing =>
+          let
+            soln0 = quote depth v
+          in if hasFreeTermVar depth soln0 || hasNegativeVar soln0 then t else soln0
 substDictTermGo ec depth (TPi n i r dom cod) =
   TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
 substDictTermGo ec depth (TLam n r mty sp b) =
   let
-    mty2 = case mty of
-      Nothing => Nothing
-      Just ty => Just (substDictTermGo ec depth ty)
+    mty2 =
+      case mty of
+        Nothing => Nothing
+        Just ty => Just (substDictTermGo ec depth ty)
   in TLam n r mty2 sp (substDictTermGo ec (depth + 1) b)
 substDictTermGo ec depth (TApp f a r) =
   TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
@@ -726,32 +833,40 @@ dictTermOfValueAt : Ec -> Int -> Value -> Maybe Term
 dictTermOfValueAt ec depth v = renderDictTermAt 64 ec depth (DictTermValue v)
 
 renderDictTermAt : Int -> Ec -> Int -> DictTermTask -> Maybe Term
-renderDictTermAt fuel ec depth task = if fuel <= 0 then Nothing
-else case task of
-  DictTermValue v => case v of
-    VNeutral n => case n of
-      NGlobal g sp =>
-        renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TGlobal g) sp (piRigsOfGlobal ec g))
-      _ => Nothing
-    _ => case forceVal ec v of
-      VNeutral n => case n of
-        NGlobal g sp =>
-          renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TGlobal g) sp (piRigsOfGlobal ec g))
-        _ => Nothing
-      _ => Nothing
-  DictTermSpine fn [] rigs => Just fn
-  DictTermSpine fn (v :: rest) rigs =>
-    let
-      argTerm = case renderDictTermAt (fuel - 1) ec depth (DictTermValue v) of
-        Just t => t
-        Nothing => quote depth v
-      r = case rigs of
-        x :: xs => x
-        [] => RigOmega
-      restRigs = case rigs of
-        x :: xs => xs
-        [] => []
-    in renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TApp fn argTerm r) rest restRigs)
+renderDictTermAt fuel ec depth task =
+  if fuel <= 0 then
+    Nothing
+  else
+    case task of
+      DictTermValue v =>
+        case v of
+          VNeutral n =>
+            case n of
+              NGlobal g sp => renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TGlobal g) sp (piRigsOfGlobal ec g))
+              _ => Nothing
+          _ =>
+            case forceVal ec v of
+              VNeutral n =>
+                case n of
+                  NGlobal g sp => renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TGlobal g) sp (piRigsOfGlobal ec g))
+                  _ => Nothing
+              _ => Nothing
+      DictTermSpine fn [] rigs => Just fn
+      DictTermSpine fn (v :: rest) rigs =>
+        let
+          argTerm =
+            case renderDictTermAt (fuel - 1) ec depth (DictTermValue v) of
+              Just t => t
+              Nothing => quote depth v
+          r =
+            case rigs of
+              x :: xs => x
+              [] => RigOmega
+          restRigs =
+            case rigs of
+              x :: xs => xs
+              [] => []
+        in renderDictTermAt (fuel - 1) ec depth (DictTermSpine (TApp fn argTerm r) rest restRigs)
 
 -- 实例字典函数的 Pi 前缀：tele 一律 Rig0（类型参数擦除）、ctx 一律 RigOmega。
 -- 先查 `ecInsts`（实例签名的真源），再回退 globals：体阶段 globals 表可能被同名项
@@ -764,14 +879,17 @@ piRigsOfInstGo g [] = Nothing
 piRigsOfInstGo g (i :: rest) =
   if dtInstName i == g then
     Just (append (map (\p => Rig0) i.dtInstTele) (map (\t => RigOmega) i.dtInstCtx))
-  else piRigsOfInstGo g rest
+  else
+    piRigsOfInstGo g rest
 
 piRigsOfGlobal : Ec -> String -> List Rig
-piRigsOfGlobal ec g = case piRigsOfInst ec g of
-  Just rigs => rigs
-  Nothing => case HashMap.lookup g (ecGlobalsTbl ec) of
-    Just ty => piRigs ty
-    Nothing => []
+piRigsOfGlobal ec g =
+  case piRigsOfInst ec g of
+    Just rigs => rigs
+    Nothing =>
+      case HashMap.lookup g (ecGlobalsTbl ec) of
+        Just ty => piRigs ty
+        Nothing => []
 
 piRigs : Term -> List Rig
 piRigs (TPi n i r dom cod) = r :: piRigs cod
@@ -788,49 +906,56 @@ joinRestInstNames (i :: rest) = ", ${dtInstName i}${joinRestInstNames rest}"
 -- 字典族的类参数 kind：字典 data `Dict_C` 的构造子类型的前导隐式 Pi 域
 -- （`MkDict_C : {p1 : K1} -> {p2 : K2} -> <字段>` 里的 `K1, K2, ...`）。
 export dictArgKinds : Ec -> Value -> Maybe (List Value)
-dictArgKinds ec dom = case dictFamilyNameOf ec dom of
-  Nothing => Nothing
-  Just fam => case dtDataLookup fam (ecDatas ec) of
+dictArgKinds ec dom =
+  case dictFamilyNameOf ec dom of
     Nothing => Nothing
-    Just dd => case dtDataCtors dd of
-      [] => Nothing
-      c :: _ => Just (ctorParamKinds ec (forceVal ec (eval [] (dtCtorType c))) 0 [])
+    Just fam =>
+      case dtDataLookup fam (ecDatas ec) of
+        Nothing => Nothing
+        Just dd =>
+          case dtDataCtors dd of
+            [] => Nothing
+            c :: _ => Just (ctorParamKinds ec (forceVal ec (eval [] (dtCtorType c))) 0 [])
 
 -- 构造子类型的前导隐式 binder 就是类参数（字段 binder 都显式，`foldPiFieldTys` 保证）。
 ctorParamKinds : Ec -> Value -> Int -> List Value -> List Value
 ctorParamKinds ec v lvl acc = ctorParamKindsFuel 64 ec v lvl acc
 
 ctorParamKindsFuel : Int -> Ec -> Value -> Int -> List Value -> List Value
-ctorParamKindsFuel fuel ec v lvl acc = if fuel <= 0 then reverse acc
-else case v of
-  VPi name implicit rig dom clo =>
-    if implicit then
-      ctorParamKindsFuel (fuel - 1) ec
-        (forceVal ec (applyClosure clo (VNeutral (NVar name lvl [])))) (lvl + 1) (dom :: acc)
-    else reverse acc
-  _ => reverse acc
+ctorParamKindsFuel fuel ec v lvl acc =
+  if fuel <= 0 then
+    reverse acc
+  else
+    case v of
+      VPi name implicit rig dom clo => if implicit then ctorParamKindsFuel (fuel - 1) ec (forceVal ec (applyClosure clo (VNeutral (NVar name lvl [])))) (lvl + 1) (dom :: acc) else reverse acc
+      _ => reverse acc
 
 -- 第一个类参数的 kind（单参数路径与诊断共用）。
 export dictArgKind : Ec -> Value -> Maybe Value
-dictArgKind ec dom = case dictArgKinds ec dom of
-  Just (k :: rest) => Just k
-  _ => Nothing
+dictArgKind ec dom =
+  case dictArgKinds ec dom of
+    Just (k :: rest) => Just k
+    _ => Nothing
 
 dictFamilyNameOf : Ec -> Value -> Maybe String
-dictFamilyNameOf ec dom = case forceVal ec dom of
-  VNeutral (NGlobal g sp) => Just g
-  _ => Nothing
+dictFamilyNameOf ec dom =
+  case forceVal ec dom of
+    VNeutral (NGlobal g sp) => Just g
+    _ => Nothing
 
 -- 实参头部 `g` 的 kind 与类参数 kind 一致（`Color` 对 `Show`，`Maybe` 对 `Monad`）才约束。
 -- 头部是元变量（`?m' Int`）或 Pi 都不是具体构造子 ⇒ 不约束。
 export argHeadMatchesKind : List (Pair String Term) -> Ec -> Ctx -> Value -> Value -> Bool
-argHeadMatchesKind globals ec ctx forced argKind = case neutralHeadOrSelf forced of
-  VNeutral (NGlobal g []) => case typeHeadLookup globals ec g of
-    Just dictSig => case convEc ec (ctxDepth ctx) argKind (forceVal ec (eval [] dictSig)) of
-      OkC ec2 => True
-      ErrC e => False
-    Nothing => True
-  _ => False
+argHeadMatchesKind globals ec ctx forced argKind =
+  case neutralHeadOrSelf forced of
+    VNeutral (NGlobal g []) =>
+      case typeHeadLookup globals ec g of
+        Just dictSig =>
+          case convEc ec (ctxDepth ctx) argKind (forceVal ec (eval [] dictSig)) of
+            OkC ec2 => True
+            ErrC e => False
+        Nothing => True
+    _ => False
 
 -- 中性应用的头部（`Box Int` ⇒ `Box`）；非应用原样返回。
 export neutralHeadOrSelf : Value -> Value
@@ -840,14 +965,16 @@ neutralHeadOrSelf v = v
 -- 字典域的全部类参数（`Dict_C p1 .. pn` 的 spine）。单参数 trait 只有一个元素；
 -- 单参数入口 `dictClassArg` 仍返回第一个参数（Interp 等单参数特化路径依赖它）。
 export dictClassArgs : Ec -> Value -> List Value
-dictClassArgs ec dom = case forceVal ec dom of
-  VNeutral (NGlobal g sp) => sp
-  _ => []
+dictClassArgs ec dom =
+  case forceVal ec dom of
+    VNeutral (NGlobal g sp) => sp
+    _ => []
 
 export dictClassArg : Ec -> Value -> Maybe Value
-dictClassArg ec dom = case dictClassArgs ec dom of
-  arg :: rest => Just arg
-  [] => Nothing
+dictClassArg ec dom =
+  case dictClassArgs ec dom of
+    arg :: rest => Just arg
+    [] => Nothing
 
 -- 字典域类参数是否依赖**刚性局部变量**（绑定于当前定义/实例 tele 的类型变量）。
 -- 判定是**结构化**的——`a`、`Box a`、`List (Box a)` 都算刚性（只看裸 NVar
@@ -865,19 +992,20 @@ isRigidClassArg : Ec -> Value -> Bool
 isRigidClassArg ec arg = valueHasRigidNVar ec 64 arg
 
 valueHasRigidNVar : Ec -> Int -> Value -> Bool
-valueHasRigidNVar ec fuel v = if fuel <= 0 then False
-else case forceVal ec v of
-  VNeutral n => case n of
-    NVar name lvl sp => True
-    NGlobal g sp => anyValueHasRigidNVar ec (fuel - 1) sp
-  VCon c args => anyValueHasRigidNVar ec (fuel - 1) args
-  VApp f a => valueHasRigidNVar ec (fuel - 1) f || valueHasRigidNVar ec (fuel - 1) a
-  VCase s alts => valueHasRigidNVar ec (fuel - 1) s
-  VIf c t e =>
-    valueHasRigidNVar ec (fuel - 1) c
-      || valueHasRigidNVar ec (fuel - 1) t
-      || valueHasRigidNVar ec (fuel - 1) e
-  _ => False
+valueHasRigidNVar ec fuel v =
+  if fuel <= 0 then
+    False
+  else
+    case forceVal ec v of
+      VNeutral n =>
+        case n of
+          NVar name lvl sp => True
+          NGlobal g sp => anyValueHasRigidNVar ec (fuel - 1) sp
+      VCon c args => anyValueHasRigidNVar ec (fuel - 1) args
+      VApp f a => valueHasRigidNVar ec (fuel - 1) f || valueHasRigidNVar ec (fuel - 1) a
+      VCase s alts => valueHasRigidNVar ec (fuel - 1) s
+      VIf c t e => valueHasRigidNVar ec (fuel - 1) c || valueHasRigidNVar ec (fuel - 1) t || valueHasRigidNVar ec (fuel - 1) e
+      _ => False
 
 anyValueHasRigidNVar : Ec -> Int -> List Value -> Bool
 anyValueHasRigidNVar ec fuel [] = False
@@ -888,9 +1016,10 @@ anyValueHasRigidNVar ec fuel (v :: rest) =
 -- 是方法投影的完整名（如 `Base.Trait.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
 -- 判定（从类表取投影名，不硬编码模块前缀），没有运算符名判断。
 classHasProjection : String -> String -> String -> Ec -> Bool
-classHasProjection className short name ec = case findClassByShortName className (ecClasses ec) of
-  Nothing => False
-  Just cls => classMethodProjection cls.dtClassMethods short == name
+classHasProjection className short name ec =
+  case findClassByShortName className (ecClasses ec) of
+    Nothing => False
+    Just cls => classMethodProjection cls.dtClassMethods short == name
 
 -- 投影名/符号名的最后一段（`Base.Trait.Eq.==` → `==`）。
 opShortOf : String -> String
@@ -901,25 +1030,35 @@ export isEqMethod : Ec -> String -> Bool
 -- 直接构造 `EVar "=="` / `EVar "/="`，不经过 Loader 别名；用户源码的 `==` 一律在
 -- Loader 被换成 `eq`，所以内部名不会泄漏到用户语义。
 isEqMethod ec name =
-  opShortOf name == "=="
-    || opShortOf name == "/="
-    || opShortOf name == "eq"
-    || opShortOf name == "neq"
+  opShortOf name
+    == "=="
+    || opShortOf name
+    == "/="
+    || opShortOf name
+    == "eq"
+    || opShortOf name
+    == "neq"
     || classHasProjection "Eq" "eq" name ec
-    || classHasProjection "Eq" "neq" name ec
-    || name == "=="
-    || name == "/="
+    || classHasProjection "Eq" "neq" name ec || name == "==" || name == "/="
 
 export isCmpMethod : Ec -> String -> Bool
 isCmpMethod ec name =
-  baseNameOf name == "<"
-    || baseNameOf name == "<="
-    || baseNameOf name == ">"
-    || baseNameOf name == ">="
-    || baseNameOf name == "lt"
-    || baseNameOf name == "le"
-    || baseNameOf name == "gt"
-    || baseNameOf name == "ge"
+  baseNameOf name
+    == "<"
+    || baseNameOf name
+    == "<="
+    || baseNameOf name
+    == ">"
+    || baseNameOf name
+    == ">="
+    || baseNameOf name
+    == "lt"
+    || baseNameOf name
+    == "le"
+    || baseNameOf name
+    == "gt"
+    || baseNameOf name
+    == "ge"
     || classHasProjection "Ord" "lt" name ec
     || classHasProjection "Ord" "le" name ec
     || classHasProjection "Ord" "gt" name ec
@@ -928,14 +1067,11 @@ isCmpMethod ec name =
     || classHasProjection "Ord" "<=" name ec
     || classHasProjection "Ord" ">" name ec
     || classHasProjection "Ord" ">=" name ec
-    || name == "<"
-    || name == "<="
-    || name == ">"
-    || name == ">="
-    || name == "lt"
-    || name == "le"
-    || name == "gt"
-    || name == "ge"
+    || name
+    == "<"
+    || name
+    == "<="
+    || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge"
 
 -- `Base.Trait.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
@@ -947,10 +1083,14 @@ export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
   if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then
     Just "+"
-  else if classHasProjection "Num" "sub" name ec || classHasProjection "Num" "-" name ec then Just "-"
-  else if classHasProjection "Num" "mul" name ec || classHasProjection "Num" "*" name ec then Just "*"
-  else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then Just "/"
-  else Nothing
+  else if classHasProjection "Num" "sub" name ec || classHasProjection "Num" "-" name ec then
+    Just "-"
+  else if classHasProjection "Num" "mul" name ec || classHasProjection "Num" "*" name ec then
+    Just "*"
+  else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then
+    Just "/"
+  else
+    Nothing
 
 -- 方法投影的**短名**（`Base.Trait.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String
@@ -996,12 +1136,13 @@ hasMethodShort methods short = classMethodProjection methods short /= short
 
 -- 类方法投影名：先按同名找，找不到再按等价写法找；都没有时回落短名。
 projectionFor : DtClass -> String -> String
-projectionFor cls short = if hasMethodShort cls.dtClassMethods short then classMethodProjection cls.dtClassMethods short
-else case methodNameAliases short of
-  alt :: rest =>
-    if hasMethodShort cls.dtClassMethods alt then classMethodProjection cls.dtClassMethods alt
-    else short
-  [] => short
+projectionFor cls short =
+  if hasMethodShort cls.dtClassMethods short then
+    classMethodProjection cls.dtClassMethods short
+  else
+    case methodNameAliases short of
+      alt :: rest => if hasMethodShort cls.dtClassMethods alt then classMethodProjection cls.dtClassMethods alt else short
+      [] => short
 
 -- `eq` / `neq` 的饱和应用（运算符是方法别名）：`Int` / `String`
 -- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
@@ -1014,33 +1155,35 @@ else case methodNameAliases short of
 -- 在 check 期报错（`TC_EqRequiresEvidence` / `TC_NoInstanceFound`），不退回
 -- `bi_eq_generic`（OCaml 多态相等）或 interp 的另一套 `valueEqDeep`。
 export specializeEqTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
-specializeEqTy globals ctx name aTerm bTerm sp aTy ec = case builtinEqTyName (forceVal ec aTy) of
-  Just tyName =>
-    Vuna.Compiler.Base.Common.bind (eqRuntimeName (eqMethodShortOf name) tyName)
-      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
-  Nothing => case findClassByShortName "Eq" (ecClasses ec) of
+specializeEqTy globals ctx name aTerm bTerm sp aTy ec =
+  case builtinEqTyName (forceVal ec aTy) of
+    Just tyName =>
+      Vuna.Compiler.Base.Common.bind
+        (eqRuntimeName (eqMethodShortOf name) tyName)
+        (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
-      let
-        st = showValue (forceVal ec aTy)
-      in tcErr1 sp (EqRequiresEvidence st) st
-    Just cls =>
-      let
-        mname =
-          if name == "==" || name == "/=" || name == "eq" || name == "neq" then
-            projectionFor cls (eqMethodShortOf name)
-          else name
-        -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
-        -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
-        tyTerm = quote (ctxDepth ctx) aTy
-        dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
-      in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-      else case searchInstanceIn globals ctx ec dictTy sp of
-        OkC (Pair dictTerm ec1) =>
-          OkC
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
-        ErrC e =>
-          if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-          else ErrC e
+      case findClassByShortName "Eq" (ecClasses ec) of
+        Nothing =>
+          let
+            st = showValue (forceVal ec aTy)
+          in tcErr1 sp (EqRequiresEvidence st) st
+        Just cls =>
+          let
+            mname =
+              if name == "==" || name == "/=" || name == "eq" || name == "neq" then
+                projectionFor cls (eqMethodShortOf name)
+              else
+                name
+            -- 类型项必须按**当前上下文深度** quote：`quote 0` 会把刚性变量拍成 level 0，
+            -- 字典的类参数就会指向错误的 binder（两个以上类型参数时提到别的参数上）。
+            tyTerm = quote (ctxDepth ctx) aTy
+            dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
+          in if dictArgUnsolvedMeta ec dictTy then
+            deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+          else
+            case searchInstanceIn globals ctx ec dictTy sp of
+              OkC (Pair dictTerm ec1) => OkC (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
+              ErrC e => if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec else ErrC e
 
 -- 刚性类参数（如 `mem` 的 `a`）没有可搜实例：延迟成裸元变量 + 记录自由字典目标，
 -- 等定义体精化完由 `liftFreeDictGoals` 提升成 `{d : Dict_Eq a}` 隐式参数。
@@ -1064,23 +1207,32 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
 -- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Check String
 cmpRuntimeName sp method "Int" =
-  if isLtShort method then OkC "bi_lt_int"
-  else if isLeShort method then OkC "bi_le_int"
+  if isLtShort method then
+    OkC "bi_lt_int"
+  else if isLeShort method then
+    OkC "bi_le_int"
   else if isGtShort method then OkC "bi_gt_int" else OkC "bi_ge_int"
 cmpRuntimeName sp method "String" =
-  if isLtShort method then OkC "bi_lt_str"
-  else if isLeShort method then OkC "bi_le_str"
+  if isLtShort method then
+    OkC "bi_lt_str"
+  else if isLeShort method then
+    OkC "bi_le_str"
   else if isGtShort method then OkC "bi_gt_str" else OkC "bi_ge_str"
 cmpRuntimeName sp method "Float" =
-  if isLtShort method then OkC "bi_lt_float"
-  else if isLeShort method then OkC "bi_le_float"
+  if isLtShort method then
+    OkC "bi_lt_float"
+  else if isLeShort method then
+    OkC "bi_le_float"
   else if isGtShort method then OkC "bi_gt_float" else OkC "bi_ge_float"
 cmpRuntimeName sp method tyName =
   if isBoolCanonical tyName then
-    if isLtShort method then OkC "bi_lt_bool"
-    else if isLeShort method then OkC "bi_le_bool"
+    if isLtShort method then
+      OkC "bi_lt_bool"
+    else if isLeShort method then
+      OkC "bi_le_bool"
     else if isGtShort method then OkC "bi_gt_bool" else OkC "bi_ge_bool"
-  else tcErr2 sp (OpNotDefinedFor method tyName) method tyName
+  else
+    tcErr2 sp (OpNotDefinedFor method tyName) method tyName
 
 isLtShort : String -> Bool
 isLtShort m = m == "<" || m == "lt"
@@ -1111,31 +1263,33 @@ export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Ter
 -- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），字典分支直接使用。
 -- **没有「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
 -- （`Ord instance required`），不生成 `bi_lt_str` / `bi_lt_bool` 等对用户 data 的 `compare`。
-specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of
-  Just tyName =>
-    Vuna.Compiler.Base.Common.bind (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
-      (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
-  Nothing => case findClassByShortName "Ord" (ecClasses ec) of
+specializeCmpTy globals ctx name aTerm bTerm sp aTy ec =
+  case cmpBuiltinTyName (forceVal ec aTy) of
+    Just tyName =>
+      Vuna.Compiler.Base.Common.bind
+        (cmpRuntimeName sp (cmpMethodShortOf name) tyName)
+        (\rt => OkC (Just (Pair (TApp (TApp (TGlobal rt) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec))))
     Nothing =>
-      let
-        st = showValue (forceVal ec aTy)
-      in tcErr2 sp (OpNotDefinedFor (cmpMethodShortOf name) st) (cmpMethodShortOf name) st
-    Just cls =>
-      let
-        mname =
-          if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then
-            projectionFor cls (cmpMethodShortOf name)
-          else name
-        tyTerm = quote (ctxDepth ctx) aTy
-        dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
-      in if dictArgUnsolvedMeta ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-      else case searchInstanceIn globals ctx ec dictTy sp of
-        OkC (Pair dictTerm ec1) =>
-          OkC
-            (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
-        ErrC e =>
-          if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
-          else ErrC e
+      case findClassByShortName "Ord" (ecClasses ec) of
+        Nothing =>
+          let
+            st = showValue (forceVal ec aTy)
+          in tcErr2 sp (OpNotDefinedFor (cmpMethodShortOf name) st) (cmpMethodShortOf name) st
+        Just cls =>
+          let
+            mname =
+              if name == "<" || name == "<=" || name == ">" || name == ">=" || name == "lt" || name == "le" || name == "gt" || name == "ge" then
+                projectionFor cls (cmpMethodShortOf name)
+              else
+                name
+            tyTerm = quote (ctxDepth ctx) aTy
+            dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [aTy])
+          in if dictArgUnsolvedMeta ec dictTy then
+            deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec
+          else
+            case searchInstanceIn globals ctx ec dictTy sp of
+              OkC (Pair dictTerm ec1) => OkC (Just (Pair (TApp (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) aTerm Rig1) bTerm Rig1) (Pair boolTyValue ec1)))
+              ErrC e => if isRigidDictArg ec dictTy then deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec else ErrC e
 
 export boolShortCircuit : String -> Term -> Term -> Term
 boolShortCircuit name a b = if name == "&&" then TIf a b (TBool False) else TIf a (TBool True) b
@@ -1146,10 +1300,13 @@ firstUnsolvedMemberGoal ec = firstUnsolvedMemberGoalGo ec (ecPending ec)
 
 firstUnsolvedMemberGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedMemberGoalGo ec [] = Nothing
-firstUnsolvedMemberGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = if isMemberDomain ec dom then case metaLookup m (ecSolTbl ec) of
-  Nothing => Just (showValue (forceVal ec dom))
-  Just _ => firstUnsolvedMemberGoalGo ec rest
-else firstUnsolvedMemberGoalGo ec rest
+firstUnsolvedMemberGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  if isMemberDomain ec dom then
+    case metaLookup m (ecSolTbl ec) of
+      Nothing => Just (showValue (forceVal ec dom))
+      Just _ => firstUnsolvedMemberGoalGo ec rest
+  else
+    firstUnsolvedMemberGoalGo ec rest
 
 -- 收尾检查——类参数**已解出**但实例搜索确实失败的延迟字典目标。这类目标在收尾时
 -- 只剩一个未解 meta，混在 `unsolved metavariable` 里分不出来；这里把它识别成「缺实例」。
@@ -1160,16 +1317,22 @@ firstUnsolvedDictGoal ec = firstUnsolvedDictGoalGo ec (ecPending ec)
 
 firstUnsolvedDictGoalGo : Ec -> List Constraint -> Maybe String
 firstUnsolvedDictGoalGo ec [] = Nothing
-firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedDictGoalGo ec rest
-  Nothing =>
-    let
-      forced = forceVal ec dom
-    in if valueDictFamily forced == dictTypeName interpTypeName then firstUnsolvedDictGoalGo ec rest
-    else if isMemberDomain ec forced then firstUnsolvedDictGoalGo ec rest
-    else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictGoalGo ec rest
-    else if isRigidDictArg ec forced then firstUnsolvedDictGoalGo ec rest
-    else Just (showResolvedValue ec forced)
+firstUnsolvedDictGoalGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedDictGoalGo ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if valueDictFamily forced == dictTypeName interpTypeName then
+        firstUnsolvedDictGoalGo ec rest
+      else if isMemberDomain ec forced then
+        firstUnsolvedDictGoalGo ec rest
+      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
+        firstUnsolvedDictGoalGo ec rest
+      else if isRigidDictArg ec forced then
+        firstUnsolvedDictGoalGo ec rest
+      else
+        Just (showResolvedValue ec forced)
 
 -- 第一条未解约束的延迟点 span（只用于给诊断加位置；与 `firstUnsolved*` 选中
 -- 的第一条未解约束一致：都按 pending 顺序扫描、跳过已解 meta）。
@@ -1181,13 +1344,16 @@ firstUnsolvedInterpGoalSpan ec = firstUnsolvedInterpSpanGo ec (ecPending ec)
 -- | firstUnsolvedInterpGoalSpan 的递归实现：只保留 Interp 类目标的 span。
 firstUnsolvedInterpSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedInterpSpanGo ec [] = Nothing
-firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedInterpSpanGo ec rest
-  Nothing =>
-    let
-      forced = forceVal ec dom
-    in if valueDictFamily forced == dictTypeName interpTypeName then cspan
-    else firstUnsolvedInterpSpanGo ec rest
+firstUnsolvedInterpSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedInterpSpanGo ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if valueDictFamily forced == dictTypeName interpTypeName then
+        cspan
+      else
+        firstUnsolvedInterpSpanGo ec rest
 
 -- | 第一条未解行成员目标的延迟点 span（按 pending 顺序扫描，跳过已解 meta）。
 export firstUnsolvedMemberGoalSpan : Ec -> Maybe Span
@@ -1196,10 +1362,13 @@ firstUnsolvedMemberGoalSpan ec = firstUnsolvedMemberSpanGo ec (ecPending ec)
 -- | firstUnsolvedMemberGoalSpan 的递归实现：只保留行成员目标的 span。
 firstUnsolvedMemberSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedMemberSpanGo ec [] = Nothing
-firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = if isMemberDomain ec dom then case metaLookup m (ecSolTbl ec) of
-  Nothing => cspan
-  Just _ => firstUnsolvedMemberSpanGo ec rest
-else firstUnsolvedMemberSpanGo ec rest
+firstUnsolvedMemberSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  if isMemberDomain ec dom then
+    case metaLookup m (ecSolTbl ec) of
+      Nothing => cspan
+      Just _ => firstUnsolvedMemberSpanGo ec rest
+  else
+    firstUnsolvedMemberSpanGo ec rest
 
 -- | 第一条未解普通字典目标的延迟点 span（跳过 Interp、行成员、含未解 meta 与刚性参数的目标）。
 export firstUnsolvedDictGoalSpan : Ec -> Maybe Span
@@ -1208,15 +1377,19 @@ firstUnsolvedDictGoalSpan ec = firstUnsolvedDictSpanGo ec (ecPending ec)
 -- | firstUnsolvedDictGoalSpan 的递归实现，按与 firstUnsolvedDictGoal 相同的类别过滤。
 firstUnsolvedDictSpanGo : Ec -> List Constraint -> Maybe Span
 firstUnsolvedDictSpanGo ec [] = Nothing
-firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedDictSpanGo ec rest
-  Nothing =>
-    let
-      forced = forceVal ec dom
-    in if valueDictFamily forced == dictTypeName interpTypeName then firstUnsolvedDictSpanGo ec rest
-    else if isMemberDomain ec forced then firstUnsolvedDictSpanGo ec rest
-    else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictSpanGo ec rest
-    else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan
+firstUnsolvedDictSpanGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedDictSpanGo ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if valueDictFamily forced == dictTypeName interpTypeName then
+        firstUnsolvedDictSpanGo ec rest
+      else if isMemberDomain ec forced then
+        firstUnsolvedDictSpanGo ec rest
+      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
+        firstUnsolvedDictSpanGo ec rest
+      else if isRigidDictArg ec forced then firstUnsolvedDictSpanGo ec rest else cspan
 
 -- | 第一条未解字典目标对应的元变量 id（供创建点溯源；与 `firstUnsolvedDictGoal` 同一条）。
 export firstUnsolvedDictGoalMeta : Ec -> Maybe Int
@@ -1225,12 +1398,16 @@ firstUnsolvedDictGoalMeta ec = firstUnsolvedDictGoalMetaGo ec (ecPending ec)
 -- | 扫描实现：跳过已解/非字典目标。
 firstUnsolvedDictGoalMetaGo : Ec -> List Constraint -> Maybe Int
 firstUnsolvedDictGoalMetaGo ec [] = Nothing
-firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) = case metaLookup m (ecSolTbl ec) of
-  Just _ => firstUnsolvedDictGoalMetaGo ec rest
-  Nothing =>
-    let
-      forced = forceVal ec dom
-    in if valueDictFamily forced == dictTypeName interpTypeName then firstUnsolvedDictGoalMetaGo ec rest
-    else if isMemberDomain ec forced then firstUnsolvedDictGoalMetaGo ec rest
-    else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then firstUnsolvedDictGoalMetaGo ec rest
-    else if isRigidDictArg ec forced then firstUnsolvedDictGoalMetaGo ec rest else Just m
+firstUnsolvedDictGoalMetaGo ec ((Constraint cid kind m dom cspan cdepth) :: rest) =
+  case metaLookup m (ecSolTbl ec) of
+    Just _ => firstUnsolvedDictGoalMetaGo ec rest
+    Nothing =>
+      let
+        forced = forceVal ec dom
+      in if valueDictFamily forced == dictTypeName interpTypeName then
+        firstUnsolvedDictGoalMetaGo ec rest
+      else if isMemberDomain ec forced then
+        firstUnsolvedDictGoalMetaGo ec rest
+      else if anyUnsolvedMetaArg ec (dictClassArgs ec forced) then
+        firstUnsolvedDictGoalMetaGo ec rest
+      else if isRigidDictArg ec forced then firstUnsolvedDictGoalMetaGo ec rest else Just m

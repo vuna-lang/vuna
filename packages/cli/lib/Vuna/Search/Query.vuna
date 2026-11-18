@@ -26,8 +26,10 @@ lowerAscii s = lowerAsciiChars (strUnpack s) ""
 lowerAsciiChars : List Int -> String -> String
 lowerAsciiChars [] acc = acc
 lowerAsciiChars (c :: rest) acc =
-  if c >= 65 && c <= 90 then lowerAsciiChars rest (acc ++ strPack [c + 32])
-  else lowerAsciiChars rest (acc ++ strPack [c])
+  if c >= 65 && c <= 90 then
+    lowerAsciiChars rest (acc ++ strPack [c + 32])
+  else
+    lowerAsciiChars rest (acc ++ strPack [c])
 
 -- | 内部：按单空格切词并丢掉空串（制表与换行不当作分隔符）。
 wordsOf : String -> List String
@@ -46,11 +48,16 @@ nameScore query s =
     full = lowerAscii "${symModule s}.${symName s}"
     bare = lowerAscii (symName s)
     mod = lowerAscii (symModule s)
-  in if q == full then 1000
-  else if q == bare then 900
-  else if startsWith q bare then 700
-  else if contains q bare then 500
-  else if startsWith q full then 450
+  in if q == full then
+    1000
+  else if q == bare then
+    900
+  else if startsWith q bare then
+    700
+  else if contains q bare then
+    500
+  else if startsWith q full then
+    450
   else if contains q full then 400 else if contains q mod then 200 else 0
 
 -- | 内部：查询与 docstring 的匹配得分：全部 token 命中得 100，整串也出现再加 50。
@@ -59,7 +66,8 @@ docScore query s =
   let
     tokens = wordsOf (lowerAscii query)
     doc = lowerAscii (symDoc s)
-  in if length tokens == 0 then 0
+  in if length tokens == 0 then
+    0
   else if allTokens tokens doc then 100 + (if contains (lowerAscii query) doc then 50 else 0) else 0
 
 -- | 内部：所有 token 是否都作为子串出现在 `doc` 里（空表为 True）。
@@ -87,7 +95,15 @@ scoreSym query nameOnly docOnly s =
     ns = if docOnly then 0 else nameScore query s
     ds = if nameOnly then 0 else docScore query s
     label = if ns > 0 && ds > 0 then "name+doc" else if ns > 0 then "name" else "doc"
-  in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) (ns + ds) label
+  in SearchHit
+    (symName s)
+    (symModule s)
+    (symKind s)
+    (symSig s)
+    (symDoc s)
+    (symLine s)
+    (ns + ds)
+    label
 
 -- | 内部：按 `hitLe` 排序命中列表。
 sortHits : List SearchHit -> List SearchHit
@@ -96,7 +112,8 @@ sortHits hits = sortBy hitLe hits
 -- | 内部：排序比较——得分高的在前，同分按名字字典序升序。
 hitLe : SearchHit -> SearchHit -> Bool
 hitLe a b =
-  if hitScore a > hitScore b then True
+  if hitScore a > hitScore b then
+    True
   else if hitScore a < hitScore b then False else hitName a <= hitName b
 
 -- ---------------------------------------------------------------
@@ -163,9 +180,10 @@ countShort name entries = toInt (length (filter (\p => firstOf p == name) entrie
 
 -- | 内部：把裸名规范成 `模块.裸名`；表里没有就原样返回。
 canonName : List (Pair String String) -> String -> String
-canonName names name = case lookupName name names of
-  Just full => full
-  Nothing => name
+canonName names name =
+  case lookupName name names of
+    Just full => full
+    Nothing => name
 
 -- | 内部：在（裸名, 全名）表里查第一个匹配。
 lookupName : String -> List (Pair String String) -> Maybe String
@@ -174,21 +192,27 @@ lookupName name ((Pair k v) :: rest) = if k == name then Just v else lookupName 
 
 -- | 内部：首字符是小写字母的名字按类型变量处理（其余按构造子名处理）。
 isVarName : String -> Bool
-isVarName name = case strUnpack name of
-  c :: rest => c >= 97 && c <= 122
-  [] => False
+isVarName name =
+  case strUnpack name of
+    c :: rest => c >= 97 && c <= 122
+    [] => False
 
 -- | 内部：把 parse 出的表达式归一化成 `Ty`，同时累积变量编号状态；
 -- 不认识的形状返回 `Nothing`（整条签名因此不参与类型检索）。
 normExpr : List (Pair String String) -> NormState -> Expr -> Pair NormState (Maybe Ty)
-normExpr names st (EVar name sp) = if name == "_" then Pair st (Just TWild)
-else case lookupVar name (normEnv st) of
-  Just id => Pair st (Just (TVar id))
-  Nothing => if isVarName name then
-    let
-      paired = allocNamed name st
-    in Pair (firstOf paired) (Just (TVar (secondOf paired)))
-  else Pair st (Just (TCon (canonName names name)))
+normExpr names st (EVar name sp) =
+  if name == "_" then
+    Pair st (Just TWild)
+  else
+    case lookupVar name (normEnv st) of
+      Just id => Pair st (Just (TVar id))
+      Nothing =>
+        if isVarName name then
+          let
+            paired = allocNamed name st
+          in Pair (firstOf paired) (Just (TVar (secondOf paired)))
+        else
+          Pair st (Just (TCon (canonName names name)))
 normExpr names st (EParen inner sp) = normExpr names st inner
 normExpr names st (EApp f args sp) =
   let
@@ -200,54 +224,63 @@ normExpr names st (EApp f args sp) =
         pargs = normExprs names (firstOf pf) args
       in case secondOf pargs of
         Nothing => Pair (firstOf pargs) Nothing
-        Just targs => if tfIsArrow tf && length targs == 2 then case targs of
-          [ta, tb] => Pair (firstOf pargs) (Just (TArr ta tb))
-          _ => Pair (firstOf pargs) (Just (TApp tf targs))
-        else Pair (firstOf pargs) (Just (TApp tf targs))
-normExpr names st (EPi name implicit _ dom cod sp) = if implicit then
-  let
-    id = normNext st
-    st2 = bindVar name id st
-    pc = normExpr names st2 cod
-  in Pair (firstOf pc) (secondOf pc)
-else
-  let
-    pd = normExpr names st dom
-    id = normNext (firstOf pd)
-    st2 = bindVar name id (firstOf pd)
-    pc = normExpr names st2 cod
-  in case secondOf pd of
-    Nothing => Pair (firstOf pc) Nothing
-    Just td => case secondOf pc of
+        Just targs =>
+          if tfIsArrow tf && length targs == 2 then
+            case targs of
+              [ta, tb] => Pair (firstOf pargs) (Just (TArr ta tb))
+              _ => Pair (firstOf pargs) (Just (TApp tf targs))
+          else
+            Pair (firstOf pargs) (Just (TApp tf targs))
+normExpr names st (EPi name implicit _ dom cod sp) =
+  if implicit then
+    let
+      id = normNext st
+      st2 = bindVar name id st
+      pc = normExpr names st2 cod
+    in Pair (firstOf pc) (secondOf pc)
+  else
+    let
+      pd = normExpr names st dom
+      id = normNext (firstOf pd)
+      st2 = bindVar name id (firstOf pd)
+      pc = normExpr names st2 cod
+    in case secondOf pd of
       Nothing => Pair (firstOf pc) Nothing
-      Just tc => Pair (firstOf pc) (Just (TArr td tc))
-normExpr names st (EInfix op l r sp) = if op == "->" then
-  let
-    pl = normExpr names st l
-    pr = normExpr names (firstOf pl) r
-  in case secondOf pl of
-    Nothing => Pair (firstOf pr) Nothing
-    Just tl => case secondOf pr of
+      Just td =>
+        case secondOf pc of
+          Nothing => Pair (firstOf pc) Nothing
+          Just tc => Pair (firstOf pc) (Just (TArr td tc))
+normExpr names st (EInfix op l r sp) =
+  if op == "->" then
+    let
+      pl = normExpr names st l
+      pr = normExpr names (firstOf pl) r
+    in case secondOf pl of
       Nothing => Pair (firstOf pr) Nothing
-      Just tr => Pair (firstOf pr) (Just (TArr tl tr))
-else
-  let
-    pl = normExpr names st l
-    pr = normExpr names (firstOf pl) r
-  in case secondOf pl of
-    Nothing => Pair (firstOf pr) Nothing
-    Just tl => case secondOf pr of
+      Just tl =>
+        case secondOf pr of
+          Nothing => Pair (firstOf pr) Nothing
+          Just tr => Pair (firstOf pr) (Just (TArr tl tr))
+  else
+    let
+      pl = normExpr names st l
+      pr = normExpr names (firstOf pl) r
+    in case secondOf pl of
       Nothing => Pair (firstOf pr) Nothing
-      Just tr => Pair (firstOf pr) (Just (TApp (TCon op) [tl, tr]))
+      Just tl =>
+        case secondOf pr of
+          Nothing => Pair (firstOf pr) Nothing
+          Just tr => Pair (firstOf pr) (Just (TApp (TCon op) [tl, tr]))
 normExpr names st (EBacktick nm l r sp) =
   let
     pl = normExpr names st l
     pr = normExpr names (firstOf pl) r
   in case secondOf pl of
     Nothing => Pair (firstOf pr) Nothing
-    Just tl => case secondOf pr of
-      Nothing => Pair (firstOf pr) Nothing
-      Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
+    Just tl =>
+      case secondOf pr of
+        Nothing => Pair (firstOf pr) Nothing
+        Just tr => Pair (firstOf pr) (Just (TApp (TCon nm) [tl, tr]))
 normExpr names st (EInt n sp) = Pair st (Just (TCon (strFromInt n)))
 normExpr names st (EStr s sp) = Pair st (Just (TCon s))
 normExpr names st (EFloat raw sp) = Pair st (Just (TCon raw))
@@ -325,10 +358,13 @@ alphaKey ty = firstOf (alphaGo ty (AlphaState [] 0))
 
 -- | 内部：边渲染边把变量编号换成出现序号，返回（规范文本, 新状态）。
 alphaGo : Ty -> AlphaState -> Pair String AlphaState
-alphaGo (TVar id) st = case lookupInt id (alphaEnv st) of
-  Just idx => Pair "$${idx}" st
-  Nothing =>
-    Pair "$${alphaNext st}" (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
+alphaGo (TVar id) st =
+  case lookupInt id (alphaEnv st) of
+    Just idx => Pair "$${idx}" st
+    Nothing =>
+      Pair
+        "$${alphaNext st}"
+        (AlphaState (Pair id (alphaNext st) :: alphaEnv st) (alphaNext st + 1))
 alphaGo TWild st = Pair "_" st
 alphaGo (TCon name) st = Pair name st
 alphaGo (TApp f args) st =
@@ -364,9 +400,10 @@ resultType ty = ty
 -- 其他（变量 / 通配 / 非构造子头）记作 `("?", 0)`。
 headKey : Ty -> Pair String Int
 headKey (TCon name) = Pair name 0
-headKey (TApp f args) = case f of
-  TCon name => Pair name (toInt (length args))
-  _ => Pair "?" 0
+headKey (TApp f args) =
+  case f of
+    TCon name => Pair name (toInt (length args))
+    _ => Pair "?" 0
 headKey (TArr a b) = Pair "->" 2
 headKey _ = Pair "?" 0
 
@@ -382,92 +419,125 @@ overlap a b =
 -- 签名匹配查询（70 `specific`）、查询匹配结果类型（50 `result`）、头部重叠（20 `overlap`），
 -- 都不成立给（0, ""）。
 typeScore : Ty -> Ty -> Pair Int String
-typeScore query sig = if alphaEqual query sig then Pair 90 "alpha"
-else case unifyFlex 100 (Subst []) query sig of
-  Just _ => Pair 80 "general"
-  Nothing => case unifyFlex 100 (Subst []) sig query of
-    Just _ => Pair 70 "specific"
-    Nothing => case unifyFlex 100 (Subst []) query (resultType sig) of
-      Just _ => Pair 50 "result"
-      Nothing => if overlap query (resultType sig) then Pair 20 "overlap" else Pair 0 ""
+typeScore query sig =
+  if alphaEqual query sig then
+    Pair 90 "alpha"
+  else
+    case unifyFlex 100 (Subst []) query sig of
+      Just _ => Pair 80 "general"
+      Nothing =>
+        case unifyFlex 100 (Subst []) sig query of
+          Just _ => Pair 70 "specific"
+          Nothing =>
+            case unifyFlex 100 (Subst []) query (resultType sig) of
+              Just _ => Pair 50 "result"
+              Nothing => if overlap query (resultType sig) then Pair 20 "overlap" else Pair 0 ""
 
 -- ---------------------------------------------------------------
 -- 类型检索
 -- ---------------------------------------------------------------
 -- | 内部：把查询文本当作签名 `q : <query>` 解析，取它的类型部分。
 parseQuery : String -> Check Expr
-parseQuery query = case parseSource "<type-query>" "q : ${query}" of
-  ErrC e => ErrC e
-  OkC (SourceFile hdr imports fx decls _ _ _) => case decls of
-    (DSig name ctx ty sp) :: rest => OkC ty
-    _ => err "type query is not a signature"
+parseQuery query =
+  case parseSource "<type-query>" "q : ${query}" of
+    ErrC e => ErrC e
+    OkC (SourceFile hdr imports fx decls _ _ _) =>
+      case decls of
+        (DSig name ctx ty sp) :: rest => OkC ty
+        _ => err "type query is not a signature"
 
 -- | 内部：把符号的 `symType` 文本解析并归一化；解析失败给 `Nothing`。
 parseSymType : List (Pair String String) -> Sym -> Maybe Ty
-parseSymType names s = case parseExpressionSource (symType s) of
-  ErrC e => Nothing
-  OkC e => schemeOf names e
+parseSymType names s =
+  case parseExpressionSource (symType s) of
+    ErrC e => Nothing
+    OkC e => schemeOf names e
 
 -- | 类型检索：把查询解析成 `Ty`，给每个有 `symType` 且非私有的符号打分，丢掉 0 分后排序。
 -- 查询解析失败或无法归一化时返回 `Check` 错误。
 export searchType : Index -> String -> Check (List SearchHit)
-searchType index query = case parseQuery query of
-  ErrC e => err "cannot parse type query: ${diagText e}"
-  OkC queryExpr =>
-    let
-      names = typeNameMap index
-    in case schemeOf names queryExpr of
-      Nothing => err "cannot normalize type query"
-      Just queryTy =>
-        let
-          syms = filter (\s => symType s /= "" && not (privateSym s)) index.indexSymbols
-          hits = map (typeHit names query queryTy) syms
-        in OkC (sortHits (filter (\h => hitScore h > 0) hits))
+searchType index query =
+  case parseQuery query of
+    ErrC e => err "cannot parse type query: ${diagText e}"
+    OkC queryExpr =>
+      let
+        names = typeNameMap index
+      in case schemeOf names queryExpr of
+        Nothing => err "cannot normalize type query"
+        Just queryTy =>
+          let
+            syms = filter (\s => symType s /= "" && not (privateSym s)) index.indexSymbols
+            hits = map (typeHit names query queryTy) syms
+          in OkC (sortHits (filter (\h => hitScore h > 0) hits))
 
 -- | 内部：给单个符号算类型分；签名无法解析时得 0 分，`symType` 文本与查询逐字相同时再加 100。
 typeHit : List (Pair String String) -> String -> Ty -> Sym -> SearchHit
-typeHit names query queryTy s = case parseSymType names s of
-  Nothing => SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) 0 ""
-  Just sigTy =>
-    let
-      scored = typeScore queryTy sigTy
-      exactBonus = if symType s == query then 100 else 0
-    in SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s)
-      (firstOf scored + exactBonus) (secondOf scored)
+typeHit names query queryTy s =
+  case parseSymType names s of
+    Nothing =>
+      SearchHit (symName s) (symModule s) (symKind s) (symSig s) (symDoc s) (symLine s) 0 ""
+    Just sigTy =>
+      let
+        scored = typeScore queryTy sigTy
+        exactBonus = if symType s == query then 100 else 0
+      in SearchHit
+        (symName s)
+        (symModule s)
+        (symKind s)
+        (symSig s)
+        (symDoc s)
+        (symLine s)
+        (firstOf scored + exactBonus)
+        (secondOf scored)
 
 -- | 内部：单方向匹配，`a` 里的变量与通配可以吸收 `b` 的形状，反之不行。
 -- 不做 occurs check；fuel 耗尽或形状不符给 `Nothing`。
 unifyFlex : Int -> Subst -> Ty -> Ty -> Maybe Subst
-unifyFlex fuel s a b = if fuel <= 0 then Nothing
-else case a of
-  TWild => Just s
-  TVar i => case lookupSubst i (substList s) of
-    Just bound => unifyFlex (fuel - 1) s bound b
-    Nothing => Just (bindSubst i b s)
-  TCon x => case b of
-    TCon y => if x == y then Just s else Nothing
-    _ => case b of
+unifyFlex fuel s a b =
+  if fuel <= 0 then
+    Nothing
+  else
+    case a of
       TWild => Just s
-      _ => Nothing
-  TApp f args => case b of
-    TApp g args2 => if length args == length args2 then case unifyFlex (fuel - 1) s f g of
-      Nothing => Nothing
-      Just s2 => unifyFlexList (fuel - 1) s2 args args2
-    else Nothing
-    TWild => Just s
-    _ => Nothing
-  TArr x y => case b of
-    TArr c d => case unifyFlex (fuel - 1) s x c of
-      Nothing => Nothing
-      Just s2 => unifyFlex (fuel - 1) s2 y d
-    TWild => Just s
-    _ => Nothing
+      TVar i =>
+        case lookupSubst i (substList s) of
+          Just bound => unifyFlex (fuel - 1) s bound b
+          Nothing => Just (bindSubst i b s)
+      TCon x =>
+        case b of
+          TCon y => if x == y then Just s else Nothing
+          _ =>
+            case b of
+              TWild => Just s
+              _ => Nothing
+      TApp f args =>
+        case b of
+          TApp g args2 =>
+            if length args == length args2 then
+              case unifyFlex (fuel - 1) s f g of
+                Nothing => Nothing
+                Just s2 => unifyFlexList (fuel - 1) s2 args args2
+            else
+              Nothing
+          TWild => Just s
+          _ => Nothing
+      TArr x y =>
+        case b of
+          TArr c d =>
+            case unifyFlex (fuel - 1) s x c of
+              Nothing => Nothing
+              Just s2 => unifyFlex (fuel - 1) s2 y d
+          TWild => Just s
+          _ => Nothing
 
 -- | 内部：成对匹配两个参数列表；长度不同给 `Nothing`，同为空时成功。
 unifyFlexList : Int -> Subst -> List Ty -> List Ty -> Maybe Subst
 unifyFlexList fuel s [] [] = if fuel <= 0 then Nothing else Just s
-unifyFlexList fuel s (x :: xs) (y :: ys) = if fuel <= 0 then Nothing
-else case unifyFlex (fuel - 1) s x y of
-  Nothing => Nothing
-  Just s2 => unifyFlexList (fuel - 1) s2 xs ys
+unifyFlexList fuel s (x :: xs) (y :: ys) =
+  if fuel <= 0 then
+    Nothing
+  else
+    case unifyFlex (fuel - 1) s x y of
+      Nothing => Nothing
+      Just s2 => unifyFlexList (fuel - 1) s2 xs ys
 unifyFlexList fuel s _ _ = Nothing

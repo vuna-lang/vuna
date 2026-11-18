@@ -35,16 +35,18 @@ renderModules index =
 --
 -- 模块是否存在以 `indexModules` 为准：没有符号的模块也给标题与文档，不报错。
 export renderApi : Index -> String -> Check String
-renderApi index modQuery = case filter (\m => modName m == modQuery) index.indexModules of
-  [] => err "no such module: ${modQuery}"
-  mi :: rest =>
-    let
-      syms = filter (\s => symModule s == modQuery) index.indexSymbols
-      docBlock = case modDoc mi of
-        "" => ""
-        d => "\n\n${join "\n" (map (\l => "  ${l}") (lines d))}"
-      symBlock = if length syms == 0 then "" else "\n\n${join "\n" (map apiRow syms)}"
-    in OkC "## ${modQuery}${docBlock}${symBlock}"
+renderApi index modQuery =
+  case filter (\m => modName m == modQuery) index.indexModules of
+    [] => err "no such module: ${modQuery}"
+    mi :: rest =>
+      let
+        syms = filter (\s => symModule s == modQuery) index.indexSymbols
+        docBlock =
+          case modDoc mi of
+            "" => ""
+            d => "\n\n${join "\n" (map (\l => "  ${l}") (lines d))}"
+        symBlock = if length syms == 0 then "" else "\n\n${join "\n" (map apiRow syms)}"
+      in OkC "## ${modQuery}${docBlock}${symBlock}"
 
 -- | 内部：一个符号的 API 行（`名字 : 签名  -- line 行号`），有 doc 时缩进续写。
 apiRow : Sym -> String

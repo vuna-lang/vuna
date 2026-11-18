@@ -20,17 +20,19 @@ import Base.Effect.Env as EffEnv
 import Base.Effect.Process as EffProcess
 
 export dumpIr : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> PackageContext -> String -> Eff r (Check String)
-dumpIr after ctx entry = do
-  checked <- dtCheckWithProgramParts ctx entry
-  pure (case checked of
-    ErrC e => ErrC e
-    OkC pair =>
-      let
-        pkg = secondOf pair
-      in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs of
-        ErrC e => ErrC e
-        OkC program => dumpAfter after program
-  )
+dumpIr after ctx entry =
+  do
+    checked <- dtCheckWithProgramParts ctx entry
+    pure (
+        case checked of
+          ErrC e => ErrC e
+          OkC pair =>
+            let
+              pkg = secondOf pair
+            in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs of
+              ErrC e => ErrC e
+              OkC program => dumpAfter after program
+      )
 
 dumpAfter : String -> IrProgram -> Check String
 dumpAfter "cps" program = dumpCps program
@@ -61,12 +63,13 @@ dumpMachine program =
     Ok ds => OkC (renderDefs ds)
 
 dumpCps : IrProgram -> Check String
-dumpCps program = case cpsUnit program.irProgUnit of
-  Err msg => OkC ("CPS ERROR: " ++ msg)
-  Ok u1 =>
-    let
-      shared = program.irProgShared
-    in OkC (renderProgram (IrProgram shared u1))
+dumpCps program =
+  case cpsUnit program.irProgUnit of
+    Err msg => OkC ("CPS ERROR: " ++ msg)
+    Ok u1 =>
+      let
+        shared = program.irProgShared
+      in OkC (renderProgram (IrProgram shared u1))
 
 -- | ANF 幂等门禁的调试面：`--after anf` / `--after anf2` 分别对定义做 1 / 2 次
 -- `anfProgramDefs`，两份文本逐字节相同才算幂等。
@@ -79,7 +82,10 @@ dumpAnf times program =
     Ok ds => OkC (renderDefs ds)
 
 anfTimes : Int -> List IrDef -> Result (List IrDef)
-anfTimes n defs = if n <= 0 then Ok defs
-else case anfProgramDefs defs of
-  Err msg => Err msg
-  Ok ds => anfTimes (n - 1) ds
+anfTimes n defs =
+  if n <= 0 then
+    Ok defs
+  else
+    case anfProgramDefs defs of
+      Err msg => Err msg
+      Ok ds => anfTimes (n - 1) ds

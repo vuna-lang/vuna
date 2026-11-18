@@ -11,9 +11,10 @@ import Vuna.Compiler.Frontend.Ast
 -- | 实例头 `Show Int` 的类名与实参。
 export instanceHeadName : Expr -> Maybe String
 instanceHeadName (EVar n sp) = Just n
-instanceHeadName (EApp fn args sp) = case fn of
-  EVar n fsp => Just n
-  _ => Nothing
+instanceHeadName (EApp fn args sp) =
+  case fn of
+    EVar n fsp => Just n
+    _ => Nothing
 instanceHeadName _ = Nothing
 
 -- | 实例定义名：**单类前缀 + 完整 head 名**（`Eq_Int`、`Eq_Base.Bool.Bool`、`Show_Box_a`）。
@@ -54,13 +55,14 @@ argSuffix (a :: rest) = "_${exprNameFor a}${argSuffix rest}"
 -- | 类型表达式的完整名：`EVar` 直接用解析后的全名（库模块 = `<模块>.<名字>`，入口 = 裸名；
 -- 不能再取最后一段，否则不同模块的同名 data 会撞名）。
 export exprNameFor : Expr -> String
-exprNameFor e = case e of
-  EVar n sp => n
-  EInt n sp => strFromInt n
-  EStr s sp => s
-  -- 参数化实例名要能区分 `Box a` / `Pair a b`（一律取 "X" 会让 `Eq_X` 撞名）。
-  EApp fn args sp => exprNameFor fn ++ argSuffix args
-  _ => "X"
+exprNameFor e =
+  case e of
+    EVar n sp => n
+    EInt n sp => strFromInt n
+    EStr s sp => s
+    -- 参数化实例名要能区分 `Box a` / `Pair a b`（一律取 "X" 会让 `Eq_X` 撞名）。
+    EApp fn args sp => exprNameFor fn ++ argSuffix args
+    _ => "X"
 
 -- | 实例头实参的名字（`Pretty Color` 里的 `Color`）。
 export argNameOf : Expr -> String

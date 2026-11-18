@@ -18,19 +18,32 @@ export record Response(..) where
 -- | 按状态码取原因短语；未知码给空串（渲染仍合法）。
 export statusText : Int -> String
 statusText code =
-  if code == 200 then "OK"
-  else if code == 201 then "Created"
-  else if code == 204 then "No Content"
-  else if code == 301 then "Moved Permanently"
-  else if code == 302 then "Found"
-  else if code == 304 then "Not Modified"
-  else if code == 400 then "Bad Request"
-  else if code == 404 then "Not Found"
-  else if code == 405 then "Method Not Allowed"
-  else if code == 408 then "Request Timeout"
-  else if code == 413 then "Payload Too Large"
-  else if code == 431 then "Request Header Fields Too Large"
-  else if code == 500 then "Internal Server Error"
+  if code == 200 then
+    "OK"
+  else if code == 201 then
+    "Created"
+  else if code == 204 then
+    "No Content"
+  else if code == 301 then
+    "Moved Permanently"
+  else if code == 302 then
+    "Found"
+  else if code == 304 then
+    "Not Modified"
+  else if code == 400 then
+    "Bad Request"
+  else if code == 404 then
+    "Not Found"
+  else if code == 405 then
+    "Method Not Allowed"
+  else if code == 408 then
+    "Request Timeout"
+  else if code == 413 then
+    "Payload Too Large"
+  else if code == 431 then
+    "Request Header Fields Too Large"
+  else if code == 500 then
+    "Internal Server Error"
   else if code == 501 then "Not Implemented" else if code == 503 then "Service Unavailable" else ""
 
 -- | 用状态码与其标准原因短语构造响应。

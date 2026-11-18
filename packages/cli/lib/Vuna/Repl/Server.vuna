@@ -39,23 +39,28 @@ import Base.Effect.Process as EffProcess
 -- | 地址校验（CLI 层）：只接受 `unix:PATH` 或 `tcp:127.0.0.1:PORT`，其余给带说明的错误。
 export checkReplAddr : String -> Check String
 checkReplAddr addr =
-  if startsWith "unix:" addr && strLength addr > 5 then OkC addr
-  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then OkC addr
-  else err
-    "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
+  if startsWith "unix:" addr && strLength addr > 5 then
+    OkC addr
+  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then
+    OkC addr
+  else
+    err
+      "地址必须是 unix:PATH 或 tcp:127.0.0.1:PORT（只允许本机 loopback / Unix socket；任意地址 = 任意代码执行）"
 
 -- | 内部：写一行 `[vuna-repl-server] ...` 诊断到 stderr（stdout 只留给 `listening` 行），
 -- 状态原样返回便于串接。
 serverLog : Member nConsole ConsoleOp r => String -> ReplState -> Eff r ReplState
-serverLog m st = do
-  _ <- consoleEprint "[vuna-repl-server] ${m}\n"
-  pure st
+serverLog m st =
+  do
+    _ <- consoleEprint "[vuna-repl-server] ${m}\n"
+    pure st
 
 -- | 内部：传输告警——写 stderr 日志，并回 `-32700` 错误帧让客户端不会空等。
 replWarn : Member nConsole ConsoleOp r => String -> ReplState -> Eff r (Pair ReplState (List Json))
-replWarn m st = do
-  st2 <- serverLog m st
-  pure (Pair st2 [responseErr JNull errParse "parse error / bad frame: ${m}"])
+replWarn m st =
+  do
+    st2 <- serverLog m st
+    pure (Pair st2 [responseErr JNull errParse "parse error / bad frame: ${m}"])
 
 -- | 内部：JSON-RPC result 载荷（`status` / `ok` / `output` / `error`；前后端共同契约）。
 replResult : String -> Bool -> String -> String -> Json
@@ -66,9 +71,10 @@ replResult status ok output err =
 -- | 内部：把多行 code 切成行——末尾换行不额外产生空行（`"x\n"` ≡ `"x"`），其余空行保留
 -- （交给 `inputStep` 的交互语义：提交待续输入 / 块内空行）。
 codeLines : String -> List String
-codeLines code = case reverse (split "\n" code) of
-  "" :: rest => reverse rest
-  parts => reverse parts
+codeLines code =
+  case reverse (split "\n" code) of
+    "" :: rest => reverse rest
+    parts => reverse parts
 
 -- | 逐行喂入的结果：继续（带新状态）或请求结束进程。
 data FeedResult : Type where
@@ -80,40 +86,43 @@ data FeedResult : Type where
 -- | 内部：把多行依次喂给 `inputStep`；`:q` / `:quit` 直接返回 `FeedExit`。
 feedLines : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => ReplState -> List String -> Eff r FeedResult
 feedLines st [] = pure (FeedContinue st)
-feedLines st (line :: rest) = do
-  outcome <- inputStep st line
-  case outcome of
-    ReplExit _ => pure FeedExit
-    ReplContinue st2 => feedLines st2 rest
+feedLines st (line :: rest) =
+  do
+    outcome <- inputStep st line
+    case outcome of
+      ReplExit _ => pure FeedExit
+      ReplContinue st2 => feedLines st2 rest
 
 -- | 内部：处理 `eval`——code（必需，字符串）+ close（可选，默认 true）。返回
 -- (是否结束进程, (新状态, 响应帧))；`status` 为 `ok` / `incomplete` / `exit`。
 evalRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
-evalRequest msg st = case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
-  Nothing =>
-    pure
-      (Pair False (Pair st [responseErr (idOf msg) errInvalidParams "missing params.code (string)"]))
-  Just code =>
-    let
-      close = fromMaybe True (jsonGetIn ["params", "close"] msg >>= jsonAsBool)
-    in do
-      fed <- feedLines st (codeLines code)
-      case fed of
-        FeedExit => do
-          drained <- replOutputDrain st
-          pure
-            (Pair True (Pair st [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
-        FeedContinue st2 => do
-          finished <- if close then finishInput st2 else pure (ReplContinue st2)
-          case finished of
-            ReplExit _ => do
-              drained <- replOutputDrain st2
-              pure
-                (Pair True (Pair st2 [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
-            ReplContinue st3 => do
-              drained <- replOutputDrain st3
-              pure
-                (Pair False (Pair st3 [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))]))
+evalRequest msg st =
+  case jsonGetIn ["params", "code"] msg >>= jsonAsStr of
+    Nothing =>
+      pure
+        (Pair False (Pair st [responseErr (idOf msg) errInvalidParams "missing params.code (string)"]))
+    Just code =>
+      let
+        close = fromMaybe True (jsonGetIn ["params", "close"] msg >>= jsonAsBool)
+      in do
+        fed <- feedLines st (codeLines code)
+        case fed of
+          FeedExit =>
+            do
+              drained <- replOutputDrain st
+              pure (Pair True (Pair st [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
+          FeedContinue st2 =>
+            do
+              finished <- if close then finishInput st2 else pure (ReplContinue st2)
+              case finished of
+                ReplExit _ =>
+                  do
+                    drained <- replOutputDrain st2
+                    pure (Pair True (Pair st2 [responseOk (idOf msg) (replResult "exit" True (firstOf drained) (secondOf drained))]))
+                ReplContinue st3 =>
+                  do
+                    drained <- replOutputDrain st3
+                    pure (Pair False (Pair st3 [responseOk (idOf msg) (replResult (if replPendingOpen st3 then "incomplete" else "ok") (secondOf drained == "") (firstOf drained) (secondOf drained))]))
 
 -- | 内部：处理 `ping`——返回版本与包名（`base-only` 表示没有包上下文），不改状态。
 pingRequest : Json -> ReplState -> Pair Bool (Pair ReplState (List Json))
@@ -127,22 +136,27 @@ pingRequest msg st =
 -- | 内部：请求分发——`eval` / `ping` / `shutdown`；未知方法回 `-32601`（不结束进程），
 -- 缺 `method` 回 `-32600`。
 handleRequest : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Json -> ReplState -> Eff r (Pair Bool (Pair ReplState (List Json)))
-handleRequest msg st = case methodOf msg of
-  Nothing => pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
-  Just m => case m of
-    "eval" => evalRequest msg st
-    "ping" => pure (pingRequest msg st)
-    "shutdown" => pure (Pair True (Pair st [responseOk (idOf msg) (replResult "ok" True "" "")]))
-    _ =>
-      pure
-        (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
+handleRequest msg st =
+  case methodOf msg of
+    Nothing =>
+      pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
+    Just m =>
+      case m of
+        "eval" => evalRequest msg st
+        "ping" => pure (pingRequest msg st)
+        "shutdown" =>
+          pure (Pair True (Pair st [responseOk (idOf msg) (replResult "ok" True "" "")]))
+        _ =>
+          pure
+            (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
 
 -- | 内部：就绪行里显示的地址——`tcp:...:0` 换成实际绑定的临时端口。
 listeningText : Member nNet NetOp r => String -> Int -> Eff r String
-listeningText addr h = do
-  port <- netPort h
-  pure
-    (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
+listeningText addr h =
+  do
+    port <- netPort h
+    pure
+      (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 -- | 内部：`unix:PATH` 里的 `PATH` 部分。
 unixPathOf : String -> String
@@ -155,22 +169,25 @@ cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr
 -- | CLI 入口：起会话 → 监听 `addr` → 打印一行 `listening <地址>` → accept 循环。会话初始化失败
 -- 写 stderr 并给退出码 2。
 export runReplServer : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => PackageContext -> ReplStart -> String -> Eff r Int
-runReplServer ctx start addr = do
-  outRef <- newRef ""
-  errRef <- newRef ""
-  let
-    sink = SinkCapture outRef errRef
-  in do
-    session <- startReplSession ctx start sink
-    case session of
-      ErrC e => do
-        _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
-        pure 2
-      OkC (Pair st0 _) => do
-        h <- netListen addr
-        ready <- listeningText addr h
-        _ <- consolePrint "listening ${ready}\n"
-        acceptLoop serverFuelBound addr h st0
+runReplServer ctx start addr =
+  do
+    outRef <- newRef ""
+    errRef <- newRef ""
+    let
+      sink = SinkCapture outRef errRef
+    in do
+      session <- startReplSession ctx start sink
+      case session of
+        ErrC e =>
+          do
+            _ <- consoleEprint "[vuna-repl-server] ${diagText e}\n"
+            pure 2
+        OkC (Pair st0 _) =>
+          do
+            h <- netListen addr
+            ready <- listeningText addr h
+            _ <- consolePrint "listening ${ready}\n"
+            acceptLoop serverFuelBound addr h st0
 
 -- | 连接循环的 fuel 上限（1G 个连接）。
 serverFuelBound : Int
@@ -179,17 +196,22 @@ serverFuelBound = 1073741824
 -- | 内部：accept 循环——每个连接跑一次 `serveConnection` 再关连接；退出请求则关监听、清理
 -- socket 路径并返回 0，对端关闭 / 致命错误则记录后继续 accept。
 acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => Int -> String -> Int -> ReplState -> Eff r Int
-acceptLoop fuel addr h st = if fuel <= 0 then pure 0
-else do
-  conn <- netAccept h
-  outcome <- serveConnection (netRecv conn) (\s => netSend conn s) replWarn handleRequest st
-  _ <- netClose conn
-  case firstOf outcome of
-    ExitRequested => do
-      _ <- netClose h
-      _ <- cleanupAddr addr
-      pure 0
-    ExitClosed => acceptLoop (fuel - 1) addr h (secondOf outcome)
-    ExitFatal msg => do
-      st2 <- serverLog msg (secondOf outcome)
-      acceptLoop (fuel - 1) addr h st2
+acceptLoop fuel addr h st =
+  if fuel <= 0 then
+    pure 0
+  else
+    do
+      conn <- netAccept h
+      outcome <- serveConnection (netRecv conn) (\s => netSend conn s) replWarn handleRequest st
+      _ <- netClose conn
+      case firstOf outcome of
+        ExitRequested =>
+          do
+            _ <- netClose h
+            _ <- cleanupAddr addr
+            pure 0
+        ExitClosed => acceptLoop (fuel - 1) addr h (secondOf outcome)
+        ExitFatal msg =>
+          do
+            st2 <- serverLog msg (secondOf outcome)
+            acceptLoop (fuel - 1) addr h st2

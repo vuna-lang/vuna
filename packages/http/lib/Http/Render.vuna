@@ -14,30 +14,23 @@ renderRequest r =
   let
     hs = withLength (Header.safeHeaders r.headers) r.body
   in r.method
-    ++ " "
-    ++ r.target
-    ++ " "
-    ++ r.version
-    ++ "\r\n"
-    ++ Header.renderHeaders hs
-    ++ "\r\n"
-    ++ r.body
+    ++ " " ++ r.target ++ " " ++ r.version ++ "\r\n" ++ Header.renderHeaders hs ++ "\r\n" ++ r.body
 
 -- | 渲染响应（服务端方向）。
 export renderResponse : Response -> String
 renderResponse r =
   let
     hs =
-      if statusHasBody r.status then withLength (Header.safeHeaders r.headers) r.body
-      else Header.safeHeaders r.headers
+      if statusHasBody r.status then
+        withLength (Header.safeHeaders r.headers) r.body
+      else
+        Header.safeHeaders r.headers
   in "HTTP/1.1 "
     ++ strFromInt r.status
     ++ " "
     ++ r.reason
     ++ "\r\n"
-    ++ Header.renderHeaders hs
-    ++ "\r\n"
-    ++ (if statusHasBody r.status then r.body else "")
+    ++ Header.renderHeaders hs ++ "\r\n" ++ (if statusHasBody r.status then r.body else "")
 
 -- | 该状态码是否携带体。
 export statusHasBody : Int -> Bool
@@ -47,5 +40,7 @@ statusHasBody code =
 -- | 缺 `Content-Length` 时按体字节数补一个（保序追加在末尾）。
 export withLength : List (Pair String String) -> String -> List (Pair String String)
 withLength hs body =
-  if Header.hasHeader "content-length" hs then hs
-  else append hs [Pair "Content-Length" (strFromInt (strLength body))]
+  if Header.hasHeader "content-length" hs then
+    hs
+  else
+    append hs [Pair "Content-Length" (strFromInt (strLength body))]

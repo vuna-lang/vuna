@@ -35,17 +35,21 @@ closeOf (Dup _ _ cl) = cl
 -- | 不要再重复 `netClose` 同一个句柄（重复关闭是 `net: close handle …: invalid handle`）。
 export fromNet : Member nNet NetOp r => Int -> Duplex r
 fromNet conn =
-  Dup (\size => eofToEmpty (EffNet.netRecv conn) size) (\s => EffNet.netSend conn s)
+  Dup
+    (\size => eofToEmpty (EffNet.netRecv conn) size)
+    (\s => EffNet.netSend conn s)
     (EffNet.netClose conn)
 
 -- | EOF 映射成空串（`Duplex` 的读约定）。
 eofToEmpty : {r : Row} -> (Int -> Eff r (Maybe String)) -> Int -> Eff r String
-eofToEmpty readN n = do
-  m <- readN n
-  pure (case m of
-    Nothing => ""
-    Just s => s
-  )
+eofToEmpty readN n =
+  do
+    m <- readN n
+    pure (
+        case m of
+          Nothing => ""
+          Just s => s
+      )
 
 -- | 读循环的返回值。
 export data Next(..) : Type where
@@ -78,14 +82,19 @@ readNext d buf = readLoop d buf readIterations
 
 -- | `readNext` 的读循环：`fuel` 每轮减一保证终止，字节预算另行检查。
 readLoop : Duplex r -> String -> Int -> Eff r Next
-readLoop d buf fuel = if fuel <= 0 then pure (NextMalformed "message too large")
-else if strLength buf > messageBudget then pure (NextMalformed "message too large")
-else case P.parseRequest buf of
-  P.Complete req rest => pure (NextRequest req rest)
-  P.Invalid e => pure (NextMalformed e)
-  P.Incomplete => do
-    chunk <- readSomeOf d readChunk
-    if strLength chunk == 0 then pure NextClosed else readLoop d (buf ++ chunk) (fuel - 1)
+readLoop d buf fuel =
+  if fuel <= 0 then
+    pure (NextMalformed "message too large")
+  else if strLength buf > messageBudget then
+    pure (NextMalformed "message too large")
+  else
+    case P.parseRequest buf of
+      P.Complete req rest => pure (NextRequest req rest)
+      P.Invalid e => pure (NextMalformed e)
+      P.Incomplete =>
+        do
+          chunk <- readSomeOf d readChunk
+          if strLength chunk == 0 then pure NextClosed else readLoop d (buf ++ chunk) (fuel - 1)
 
 -- | 服务连接：最多处理 `maxRequests` 条请求，返回实际处理的条数。
 export serveWith : Duplex r -> Int -> (Req.Request -> Eff r Res.Response) -> Eff r Int
@@ -97,31 +106,38 @@ serve d handler = serveWith d defaultMaxRequests handler
 
 -- | 服务循环：每条已处理的请求消耗一格预算。
 serveLoop : Duplex r -> (Req.Request -> Eff r Res.Response) -> Int -> String -> Int -> Eff r Int
-serveLoop d handler fuel buf served = if fuel <= 0 then closeAnd d served
-else do
-  next <- readNext d buf
-  case next of
-    NextClosed => closeAnd d served
-    NextMalformed e => do
-      _ <- writeAllOf d (R.renderResponse (Res.response 400 e))
-      closeAnd d served
-    NextRequest req rest => do
-      resp <- handler req
-      _ <- writeAllOf d (R.renderResponse resp)
-      if shouldClose req resp then closeAnd d (served + 1)
-      else serveLoop d handler (fuel - 1) rest (served + 1)
+serveLoop d handler fuel buf served =
+  if fuel <= 0 then
+    closeAnd d served
+  else
+    do
+      next <- readNext d buf
+      case next of
+        NextClosed => closeAnd d served
+        NextMalformed e =>
+          do
+            _ <- writeAllOf d (R.renderResponse (Res.response 400 e))
+            closeAnd d served
+        NextRequest req rest =>
+          do
+            resp <- handler req
+            _ <- writeAllOf d (R.renderResponse resp)
+            if shouldClose req resp then closeAnd d (served + 1) else serveLoop d handler (fuel - 1) rest (served + 1)
 
 -- | 关闭连接并返回已处理条数。
 closeAnd : Duplex r -> Int -> Eff r Int
-closeAnd d n = do
-  _ <- closeOf d
-  pure n
+closeAnd d n =
+  do
+    _ <- closeOf d
+    pure n
 
 -- | 这条请求/响应之后是否必须关闭连接。
 export shouldClose : Req.Request -> Res.Response -> Bool
 shouldClose req resp =
-  if hasClose req.headers then True
-  else if hasClose resp.headers then True
+  if hasClose req.headers then
+    True
+  else if hasClose resp.headers then
+    True
   else if req.version == "HTTP/1.0" then not (hasKeepAlive req.headers) else False
 
 -- | 头部里是否声明 `Connection: close`。
@@ -134,6 +150,7 @@ hasKeepAlive hs = isConnectionValue "keep-alive" hs
 
 -- | `Connection` 头是否等于给定值（大小写不敏感）。
 isConnectionValue : String -> List (Pair String String) -> Bool
-isConnectionValue v hs = case Hdr.headerValue "connection" hs of
-  Just got => Hdr.lowerString got == v
-  Nothing => False
+isConnectionValue v hs =
+  case Hdr.headerValue "connection" hs of
+    Just got => Hdr.lowerString got == v
+    Nothing => False

@@ -46,17 +46,19 @@ export genUnitParts : QualCtx -> IrShared -> IrUnit -> Check UnitParts
 genUnitParts qc shared unitIr = genUnitPartsWith (\p => p) qc shared unitIr
 
 export genUnitPartsWith : (String -> String) -> QualCtx -> IrShared -> IrUnit -> Check UnitParts
-genUnitPartsWith norm qc shared unitIr = Vuna.Compiler.Base.Common.bind (genTypePart qc unitIr) (\typeText => let
-  _ = dbg! "cg-typedecls-done"
-in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
-  ErrC e => ErrC e
-  OkC (Pair bodies st) =>
-    let
-      _ = dbg! "cg-genGroups-done"
-      deps =
-        uniqueDeps (append (append [runtimeUnit] (typeRefDeps qc unitIr.irUnitTypeRefs)) st.gsDeps)
-    in OkC (UnitParts [openHeader qc, typeText, listBridgeFor shared unitIr] bodies st deps)
-)
+genUnitPartsWith norm qc shared unitIr =
+  Vuna.Compiler.Base.Common.bind (genTypePart qc unitIr) (
+      \typeText =>
+        let
+          _ = dbg! "cg-typedecls-done"
+        in case genGroups (mkGenStWith norm qc shared) unitIr.irUnitGroups of
+          ErrC e => ErrC e
+          OkC (Pair bodies st) =>
+            let
+              _ = dbg! "cg-genGroups-done"
+              deps = uniqueDeps (append (append [runtimeUnit] (typeRefDeps qc unitIr.irUnitTypeRefs)) st.gsDeps)
+            in OkC (UnitParts [openHeader qc, typeText, listBridgeFor shared unitIr] bodies st deps)
+    )
 
 -- | check 路径的结构检查：只验证「每个运行时定义都有体」（生成期唯一的错误点），
 -- 不拼任何文本。文本生成是纯渲染（`Codegen.Term` 只有这一处 `ErrC`），
@@ -67,18 +69,21 @@ checkUnitParts shared unitIr = checkGroupsForBuild unitIr.irUnitGroups
 checkGroupsForBuild : List IrGroup -> Check Int
 checkGroupsForBuild [] = OkC 0
 checkGroupsForBuild (g :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkDefsForBuild (irGroupDefs g))
+  Vuna.Compiler.Base.Common.bind
+    (checkDefsForBuild (irGroupDefs g))
     (\_ => checkGroupsForBuild rest)
 
 checkDefsForBuild : List IrDef -> Check Int
 checkDefsForBuild [] = OkC 0
-checkDefsForBuild (d :: rest) = case irDefExtern d of
-  Just _ => checkDefsForBuild rest
-  Nothing => case irDefBody d of
-    Nothing =>
-      ErrC
-        (withContext (irDefSpan d) (irDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
+checkDefsForBuild (d :: rest) =
+  case irDefExtern d of
     Just _ => checkDefsForBuild rest
+    Nothing =>
+      case irDefBody d of
+        Nothing =>
+          ErrC
+            (withContext (irDefSpan d) (irDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))
+        Just _ => checkDefsForBuild rest
 
 genTypePart : QualCtx -> IrUnit -> Check String
 genTypePart qc unitIr = OkC (irTypeDeclsText qc unitIr.irUnitTyDecls)
@@ -114,5 +119,9 @@ typeRefDeps qc [] = []
 typeRefDeps qc (n :: rest) =
   let
     owner = unitOfTbl qc.qcDatas n
-  in if owner == "" || owner == qc.qcUnit then typeRefDeps qc rest
-  else if memName owner (typeRefDeps qc rest) then typeRefDeps qc rest else owner :: typeRefDeps qc rest
+  in if owner == "" || owner == qc.qcUnit then
+    typeRefDeps qc rest
+  else if memName owner (typeRefDeps qc rest) then
+    typeRefDeps qc rest
+  else
+    owner :: typeRefDeps qc rest

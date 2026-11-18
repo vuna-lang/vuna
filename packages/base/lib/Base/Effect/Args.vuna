@@ -20,20 +20,24 @@ handleArgs n ret opH comp = handleCore (Named n ArgsOp) "args" n ret opH comp
 
 -- | 真实 handler 的操作解释：取 `@vuna@prim_eff_getArgs` 后继续。
 argsOpHIO : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-argsOpHIO i op k = case op of
-  GetArgs => do
-    xs <- @vuna@prim_eff_getArgs
-    k xs
+argsOpHIO i op k =
+  case op of
+    GetArgs =>
+      do
+        xs <- @vuna@prim_eff_getArgs
+        k xs
 
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是 `[ArgsOp]`）。
 argsOpHIOHost : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
-argsOpHIOHost i op k = case op of
-  GetArgs => do
-    xs <- raise @vuna@host@getArgs
-    k xs
+argsOpHIOHost i op k =
+  case op of
+    GetArgs =>
+      do
+        xs <- raise @vuna@host@getArgs
+        k xs
 
 -- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [ArgsOp]`（不导出）。
 handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ArgsOp :: r) a -> Eff r (Eff [ArgsOp] a)

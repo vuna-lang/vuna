@@ -21,9 +21,10 @@ export data Exchange(..) : Type where
 
 -- | 发一条请求并读到完整响应。
 export request : Conn.Duplex r -> Req.Request -> Eff r Exchange
-request d req = do
-  _ <- Conn.writeAllOf d (R.renderRequest req)
-  readResponse d ""
+request d req =
+  do
+    _ <- Conn.writeAllOf d (R.renderRequest req)
+    readResponse d ""
 
 -- | 从 `buf` 起继续读，直到解析出一条完整响应。
 export readResponse : Conn.Duplex r -> String -> Eff r Exchange
@@ -31,11 +32,16 @@ readResponse d buf = readLoop d buf Conn.readIterations
 
 -- | `readResponse` 的读循环：`fuel` 每轮减一保证终止，字节预算另行检查。
 readLoop : Conn.Duplex r -> String -> Int -> Eff r Exchange
-readLoop d buf fuel = if fuel <= 0 then pure (BadResponse "response too large")
-else if strLength buf > Conn.messageBudget then pure (BadResponse "response too large")
-else case P.parseResponse buf of
-  P.Complete resp rest => pure (GotResponse resp rest)
-  P.Invalid e => pure (BadResponse e)
-  P.Incomplete => do
-    chunk <- Conn.readSomeOf d Conn.readChunk
-    if strLength chunk == 0 then pure PeerClosed else readLoop d (buf ++ chunk) (fuel - 1)
+readLoop d buf fuel =
+  if fuel <= 0 then
+    pure (BadResponse "response too large")
+  else if strLength buf > Conn.messageBudget then
+    pure (BadResponse "response too large")
+  else
+    case P.parseResponse buf of
+      P.Complete resp rest => pure (GotResponse resp rest)
+      P.Invalid e => pure (BadResponse e)
+      P.Incomplete =>
+        do
+          chunk <- Conn.readSomeOf d Conn.readChunk
+          if strLength chunk == 0 then pure PeerClosed else readLoop d (buf ++ chunk) (fuel - 1)

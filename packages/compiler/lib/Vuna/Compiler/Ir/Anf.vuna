@@ -65,204 +65,230 @@ freshBinder : Int -> IrBinder
 freshBinder n = mkIrBinder ("__anf" ++ strFromInt n)
 
 bindSimple : Int -> List (Pair IrBinder Ir) -> Ir -> Bound
-bindSimple next lets e = if isSimple e then Bound lets e next
-else
-  let
-    b = freshBinder next
-  in Bound (append lets [Pair b e]) (IrVar b) (next + 1)
+bindSimple next lets e =
+  if isSimple e then
+    Bound lets e next
+  else
+    let
+      b = freshBinder next
+    in Bound (append lets [Pair b e]) (IrVar b) (next + 1)
 
 letsIn : List (Pair IrBinder Ir) -> Ir -> Ir
 letsIn [] body = body
 letsIn (p :: rest) body = IrLet [firstOf p] (secondOf p) (letsIn rest body)
 
 anf : Int -> Int -> Ir -> Anf
-anf fuel next e = if fuel <= 0 then mkAnf [] e next
-else case e of
-  IrVar _ => mkAnf [] e next
-  IrGlobal _ => mkAnf [] e next
-  IrRt _ => mkAnf [] e next
-  IrInt _ => mkAnf [] e next
-  IrStr _ => mkAnf [] e next
-  IrBool _ => mkAnf [] e next
-  IrFloatLit _ => mkAnf [] e next
-  IrEffBind _ _ _ => mkAnf [] e next
-  IrLam bs body =>
-    let
-      b = anf (fuel - 1) next body
-    in mkAnf [] (IrLam bs (letsIn b.anfLets b.anfExpr)) b.anfNext
-  IrCast inner =>
-    let
-      a = anf (fuel - 1) next inner
-    in mkAnf a.anfLets (IrCast a.anfExpr) a.anfNext
-  IrProj base family field =>
-    let
-      a = anf (fuel - 1) next base
-    in mkAnf a.anfLets (IrProj a.anfExpr family field) a.anfNext
-  IrConcatMany parts =>
-    let
-      p = anfList (fuel - 1) next parts
-    in mkAnf p.anfLets (IrConcatMany p.anfExprs) p.anfNext
-  IrCtor family ctor args =>
-    let
-      p = anfList (fuel - 1) next args
-    in mkAnf p.anfLets (IrCtor family ctor p.anfExprs) p.anfNext
-  IrRecord family fields =>
-    let
-      p = anfFields (fuel - 1) next fields
-    in mkAnf p.anfLets (IrRecord family p.anfValues) p.anfNext
-  IrRecUpd base family fields =>
-    let
-      b = anf (fuel - 1) next base
-      p = anfFields (fuel - 1) b.anfNext fields
-    in mkAnf (append b.anfLets p.anfLets) (IrRecUpd b.anfExpr family p.anfValues) p.anfNext
-  IrRtApp sym args =>
-    let
-      p = anfList (fuel - 1) next args
-    in mkAnf p.anfLets (IrRtApp sym p.anfExprs) p.anfNext
-  IrLet bs scrut body =>
-    let
-      s = anf (fuel - 1) next scrut
-      bScrut = bindSimple s.anfNext s.anfLets s.anfExpr
-      b = anf (fuel - 1) bScrut.boundNext body
-    in mkAnf bScrut.boundLets (IrLet bs bScrut.boundExpr (letsIn b.anfLets b.anfExpr)) b.anfNext
-  IrApp f a =>
-    let
-      fa = anf (fuel - 1) next f
-      aa = anf (fuel - 1) fa.anfNext a
-      bf = bindSimple aa.anfNext (append fa.anfLets aa.anfLets) fa.anfExpr
-      ba = bindSimple bf.boundNext bf.boundLets aa.anfExpr
-    in mkAnf ba.boundLets (IrApp bf.boundExpr ba.boundExpr) ba.boundNext
-  IrIf c t el =>
-    let
-      ca = anf (fuel - 1) next c
-      ta = anf (fuel - 1) ca.anfNext t
-      ea = anf (fuel - 1) ta.anfNext el
-    in mkAnf ca.anfLets (IrIf ca.anfExpr (letsIn ta.anfLets ta.anfExpr) (letsIn ea.anfLets ea.anfExpr))
-      ea.anfNext
-  IrCase scrut alts =>
-    let
-      s = anf (fuel - 1) next scrut
-      alts1 = anfAlts (fuel - 1) s.anfNext alts
-    in mkAnf s.anfLets (IrCase s.anfExpr alts1.anfAlts) alts1.anfNext
-  IrNatCase scrut fresh zero succ catch =>
-    let
-      s = anf (fuel - 1) next scrut
-      z = anfAltMaybe (fuel - 1) s.anfNext zero
-      su = anfAltMaybe (fuel - 1) z.anfNext succ
-      ca = anfAltMaybe (fuel - 1) su.anfNext catch
-    in mkAnf s.anfLets (IrNatCase s.anfExpr fresh z.anfAltM su.anfAltM ca.anfAltM) ca.anfNext
-  IrEffThunk family ctor unitTy arity prim =>
-    let
-      p = anf (fuel - 1) next prim
-    in mkAnf p.anfLets (IrEffThunk family ctor unitTy arity p.anfExpr) p.anfNext
+anf fuel next e =
+  if fuel <= 0 then
+    mkAnf [] e next
+  else
+    case e of
+      IrVar _ => mkAnf [] e next
+      IrGlobal _ => mkAnf [] e next
+      IrRt _ => mkAnf [] e next
+      IrInt _ => mkAnf [] e next
+      IrStr _ => mkAnf [] e next
+      IrBool _ => mkAnf [] e next
+      IrFloatLit _ => mkAnf [] e next
+      IrEffBind _ _ _ => mkAnf [] e next
+      IrLam bs body =>
+        let
+          b = anf (fuel - 1) next body
+        in mkAnf [] (IrLam bs (letsIn b.anfLets b.anfExpr)) b.anfNext
+      IrCast inner =>
+        let
+          a = anf (fuel - 1) next inner
+        in mkAnf a.anfLets (IrCast a.anfExpr) a.anfNext
+      IrProj base family field =>
+        let
+          a = anf (fuel - 1) next base
+        in mkAnf a.anfLets (IrProj a.anfExpr family field) a.anfNext
+      IrConcatMany parts =>
+        let
+          p = anfList (fuel - 1) next parts
+        in mkAnf p.anfLets (IrConcatMany p.anfExprs) p.anfNext
+      IrCtor family ctor args =>
+        let
+          p = anfList (fuel - 1) next args
+        in mkAnf p.anfLets (IrCtor family ctor p.anfExprs) p.anfNext
+      IrRecord family fields =>
+        let
+          p = anfFields (fuel - 1) next fields
+        in mkAnf p.anfLets (IrRecord family p.anfValues) p.anfNext
+      IrRecUpd base family fields =>
+        let
+          b = anf (fuel - 1) next base
+          p = anfFields (fuel - 1) b.anfNext fields
+        in mkAnf (append b.anfLets p.anfLets) (IrRecUpd b.anfExpr family p.anfValues) p.anfNext
+      IrRtApp sym args =>
+        let
+          p = anfList (fuel - 1) next args
+        in mkAnf p.anfLets (IrRtApp sym p.anfExprs) p.anfNext
+      IrLet bs scrut body =>
+        let
+          s = anf (fuel - 1) next scrut
+          bScrut = bindSimple s.anfNext s.anfLets s.anfExpr
+          b = anf (fuel - 1) bScrut.boundNext body
+        in mkAnf bScrut.boundLets (IrLet bs bScrut.boundExpr (letsIn b.anfLets b.anfExpr)) b.anfNext
+      IrApp f a =>
+        let
+          fa = anf (fuel - 1) next f
+          aa = anf (fuel - 1) fa.anfNext a
+          bf = bindSimple aa.anfNext (append fa.anfLets aa.anfLets) fa.anfExpr
+          ba = bindSimple bf.boundNext bf.boundLets aa.anfExpr
+        in mkAnf ba.boundLets (IrApp bf.boundExpr ba.boundExpr) ba.boundNext
+      IrIf c t el =>
+        let
+          ca = anf (fuel - 1) next c
+          ta = anf (fuel - 1) ca.anfNext t
+          ea = anf (fuel - 1) ta.anfNext el
+        in mkAnf ca.anfLets (IrIf ca.anfExpr (letsIn ta.anfLets ta.anfExpr) (letsIn ea.anfLets ea.anfExpr)) ea.anfNext
+      IrCase scrut alts =>
+        let
+          s = anf (fuel - 1) next scrut
+          alts1 = anfAlts (fuel - 1) s.anfNext alts
+        in mkAnf s.anfLets (IrCase s.anfExpr alts1.anfAlts) alts1.anfNext
+      IrNatCase scrut fresh zero succ catch =>
+        let
+          s = anf (fuel - 1) next scrut
+          z = anfAltMaybe (fuel - 1) s.anfNext zero
+          su = anfAltMaybe (fuel - 1) z.anfNext succ
+          ca = anfAltMaybe (fuel - 1) su.anfNext catch
+        in mkAnf s.anfLets (IrNatCase s.anfExpr fresh z.anfAltM su.anfAltM ca.anfAltM) ca.anfNext
+      IrEffThunk family ctor unitTy arity prim =>
+        let
+          p = anf (fuel - 1) next prim
+        in mkAnf p.anfLets (IrEffThunk family ctor unitTy arity p.anfExpr) p.anfNext
 
 anfList : Int -> Int -> List Ir -> AnfList
-anfList fuel next xs = if fuel <= 0 then AnfList [] xs next
-else case xs of
-  [] => AnfList [] [] next
-  x :: rest =>
-    let
-      a = anf (fuel - 1) next x
-      b = bindSimple a.anfNext a.anfLets a.anfExpr
-      r = anfList (fuel - 1) b.boundNext rest
-    in AnfList (append b.boundLets r.anfLets) (b.boundExpr :: r.anfExprs) r.anfNext
+anfList fuel next xs =
+  if fuel <= 0 then
+    AnfList [] xs next
+  else
+    case xs of
+      [] => AnfList [] [] next
+      x :: rest =>
+        let
+          a = anf (fuel - 1) next x
+          b = bindSimple a.anfNext a.anfLets a.anfExpr
+          r = anfList (fuel - 1) b.boundNext rest
+        in AnfList (append b.boundLets r.anfLets) (b.boundExpr :: r.anfExprs) r.anfNext
 
 anfFields : Int -> Int -> List (Pair String Ir) -> AnfFields
-anfFields fuel next fields = if fuel <= 0 then AnfFields [] fields next
-else case fields of
-  [] => AnfFields [] [] next
-  p :: rest =>
-    let
-      a = anf (fuel - 1) next (secondOf p)
-      b = bindSimple a.anfNext a.anfLets a.anfExpr
-      r = anfFields (fuel - 1) b.boundNext rest
-    in AnfFields (append b.boundLets r.anfLets) (Pair (firstOf p) b.boundExpr :: r.anfValues) r.anfNext
+anfFields fuel next fields =
+  if fuel <= 0 then
+    AnfFields [] fields next
+  else
+    case fields of
+      [] => AnfFields [] [] next
+      p :: rest =>
+        let
+          a = anf (fuel - 1) next (secondOf p)
+          b = bindSimple a.anfNext a.anfLets a.anfExpr
+          r = anfFields (fuel - 1) b.boundNext rest
+        in AnfFields (append b.boundLets r.anfLets) (Pair (firstOf p) b.boundExpr :: r.anfValues) r.anfNext
 
 anfAlts : Int -> Int -> List IrAlt -> AnfAlts
-anfAlts fuel next alts = if fuel <= 0 then AnfAlts alts next
-else case alts of
-  [] => AnfAlts [] next
-  a :: rest =>
-    let
-      b = anf (fuel - 1) next a.irAltBody
-      r = anfAlts (fuel - 1) b.anfNext rest
-    in AnfAlts (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr) :: r.anfAlts) r.anfNext
+anfAlts fuel next alts =
+  if fuel <= 0 then
+    AnfAlts alts next
+  else
+    case alts of
+      [] => AnfAlts [] next
+      a :: rest =>
+        let
+          b = anf (fuel - 1) next a.irAltBody
+          r = anfAlts (fuel - 1) b.anfNext rest
+        in AnfAlts (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr) :: r.anfAlts) r.anfNext
 
 anfAltMaybe : Int -> Int -> Maybe IrAlt -> AnfAltM
-anfAltMaybe fuel next m = if fuel <= 0 then AnfAltM m next
-else case m of
-  Nothing => AnfAltM Nothing next
-  Just a =>
-    let
-      b = anf (fuel - 1) next a.irAltBody
-    in AnfAltM (Just (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr))) b.anfNext
+anfAltMaybe fuel next m =
+  if fuel <= 0 then
+    AnfAltM m next
+  else
+    case m of
+      Nothing => AnfAltM Nothing next
+      Just a =>
+        let
+          b = anf (fuel - 1) next a.irAltBody
+        in AnfAltM (Just (IrAlt a.irAltCtor a.irAltBinders (letsIn b.anfLets b.anfExpr))) b.anfNext
 
 -- | 统计本定义里已有的 `__anf<n>` binder 个数。第二次 ANF（CPS 输出再规范化）必须从
 --   高一位的编号开始，否则会与第一次 ANF 的 binder 同名，后端按名字解析时会静默错绑。
 countAnfBinders : Int -> Ir -> Int
-countAnfBinders fuel e = if fuel <= 0 then 0
-else case e of
-  IrVar _ => 0
-  IrGlobal _ => 0
-  IrRt _ => 0
-  IrInt _ => 0
-  IrStr _ => 0
-  IrBool _ => 0
-  IrFloatLit _ => 0
-  IrCtor _ _ args => countAnfList (fuel - 1) args
-  IrRecord _ fs => countAnfFields (fuel - 1) fs
-  IrProj b _ _ => countAnfBinders (fuel - 1) b
-  IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
-  IrRtApp _ args => countAnfList (fuel - 1) args
-  IrCast x => countAnfBinders (fuel - 1) x
-  IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
-  IrLam bs body => countBs bs + countAnfBinders (fuel - 1) body
-  IrApp f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
-  IrIf c t el =>
-    countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
-  IrCase s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
-  IrNatCase s _ z su ca =>
-    countAnfBinders (fuel - 1) s
-      + countAltM (fuel - 1) z
-      + countAltM (fuel - 1) su
-      + countAltM (fuel - 1) ca
-  IrConcatMany xs => countAnfList (fuel - 1) xs
-  IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p
-  IrEffBind _ _ _ => 0
+countAnfBinders fuel e =
+  if fuel <= 0 then
+    0
+  else
+    case e of
+      IrVar _ => 0
+      IrGlobal _ => 0
+      IrRt _ => 0
+      IrInt _ => 0
+      IrStr _ => 0
+      IrBool _ => 0
+      IrFloatLit _ => 0
+      IrCtor _ _ args => countAnfList (fuel - 1) args
+      IrRecord _ fs => countAnfFields (fuel - 1) fs
+      IrProj b _ _ => countAnfBinders (fuel - 1) b
+      IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
+      IrRtApp _ args => countAnfList (fuel - 1) args
+      IrCast x => countAnfBinders (fuel - 1) x
+      IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
+      IrLam bs body => countBs bs + countAnfBinders (fuel - 1) body
+      IrApp f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
+      IrIf c t el => countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
+      IrCase s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
+      IrNatCase s _ z su ca => countAnfBinders (fuel - 1) s + countAltM (fuel - 1) z + countAltM (fuel - 1) su + countAltM (fuel - 1) ca
+      IrConcatMany xs => countAnfList (fuel - 1) xs
+      IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p
+      IrEffBind _ _ _ => 0
 
 countBs : List IrBinder -> Int
 countBs [] = 0
 countBs (b :: rest) = (if isAnfBinder b then 1 else 0) + countBs rest
 
 isAnfBinder : IrBinder -> Bool
-isAnfBinder b = case b.irBinderName of
-  IrBUser n => String.startsWith "__anf" n
-  _ => False
+isAnfBinder b =
+  case b.irBinderName of
+    IrBUser n => String.startsWith "__anf" n
+    _ => False
 
 countAnfList : Int -> List Ir -> Int
-countAnfList fuel xs = if fuel <= 0 then 0
-else case xs of
-  [] => 0
-  x :: rest => countAnfBinders (fuel - 1) x + countAnfList (fuel - 1) rest
+countAnfList fuel xs =
+  if fuel <= 0 then
+    0
+  else
+    case xs of
+      [] => 0
+      x :: rest => countAnfBinders (fuel - 1) x + countAnfList (fuel - 1) rest
 
 countAnfFields : Int -> List (Pair String Ir) -> Int
-countAnfFields fuel xs = if fuel <= 0 then 0
-else case xs of
-  [] => 0
-  p :: rest => countAnfBinders (fuel - 1) (secondOf p) + countAnfFields (fuel - 1) rest
+countAnfFields fuel xs =
+  if fuel <= 0 then
+    0
+  else
+    case xs of
+      [] => 0
+      p :: rest => countAnfBinders (fuel - 1) (secondOf p) + countAnfFields (fuel - 1) rest
 
 countAnfAlts : Int -> List IrAlt -> Int
-countAnfAlts fuel alts = if fuel <= 0 then 0
-else case alts of
-  [] => 0
-  a :: rest =>
-    countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody + countAnfAlts (fuel - 1) rest
+countAnfAlts fuel alts =
+  if fuel <= 0 then
+    0
+  else
+    case alts of
+      [] => 0
+      a :: rest => countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody + countAnfAlts (fuel - 1) rest
 
 countAltM : Int -> Maybe IrAlt -> Int
-countAltM fuel m = if fuel <= 0 then 0
-else case m of
-  Nothing => 0
-  Just a => countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody
+countAltM fuel m =
+  if fuel <= 0 then
+    0
+  else
+    case m of
+      Nothing => 0
+      Just a => countBs a.irAltBinders + countAnfBinders (fuel - 1) a.irAltBody
 
 anfDef : Int -> IrDef -> IrDef
 anfDef fuel (d@(IrExternDef _ _ _ _)) = d
@@ -272,10 +298,13 @@ anfDef fuel (IrDef name arity deps body recOk initGuard span) =
   in IrDef name arity deps (letsIn b.anfLets b.anfExpr) recOk initGuard span
 
 anfDefs : Int -> List IrDef -> List IrDef
-anfDefs fuel defs = if fuel <= 0 then defs
-else case defs of
-  [] => []
-  d :: rest => anfDef (fuel - 1) d :: anfDefs (fuel - 1) rest
+anfDefs fuel defs =
+  if fuel <= 0 then
+    defs
+  else
+    case defs of
+      [] => []
+      d :: rest => anfDef (fuel - 1) d :: anfDefs (fuel - 1) rest
 
 anfGroup : IrGroup -> IrGroup
 anfGroup g = IrGroup g.irGroupIsRec (anfDefs startFuel g.irGroupDefs)

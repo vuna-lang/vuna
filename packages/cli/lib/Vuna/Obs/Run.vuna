@@ -45,59 +45,73 @@ export record RunOpts(..) where
 
 -- | 执行 `vuna dev obs run`：打印 trace 路径，返回子命令退出码；用法错误返回 2。
 export runObsRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsRun args = case parseCmdArgs ["dev", "obs", "run"] args of
-  ErrC e => obsRunError (diagText e)
-  OkC parsed => case runOptsOf parsed of
+runObsRun args =
+  case parseCmdArgs ["dev", "obs", "run"] args of
     ErrC e => obsRunError (diagText e)
-    OkC opts => case parsed.positionals of
-      [] =>
-        obsRunError
-          "usage: vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>"
-      cmd :: rest => runChild opts (cmd :: rest)
+    OkC parsed =>
+      case runOptsOf parsed of
+        ErrC e => obsRunError (diagText e)
+        OkC opts =>
+          case parsed.positionals of
+            [] =>
+              obsRunError
+                "usage: vuna dev obs run [--level N] [--sample cpu|mem|both] [--interval US] [--out FILE] [--] <cmd...>"
+            cmd :: rest => runChild opts (cmd :: rest)
 
 -- ---------------------------------------------------------------
 -- 选项校验
 -- ---------------------------------------------------------------
 -- | 内部：把命令行 flag 校验并解析成 `RunOpts`。
 runOptsOf : Parsed -> Check RunOpts
-runOptsOf parsed = do
-  level <- levelOf parsed
-  sample <- sampleOf parsed
-  interval <- intervalOf parsed
-  out <- outOf parsed
-  pure (RunOpts level sample interval out)
+runOptsOf parsed =
+  do
+    level <- levelOf parsed
+    sample <- sampleOf parsed
+    interval <- intervalOf parsed
+    out <- outOf parsed
+    pure (RunOpts level sample interval out)
 
 -- | 内部：`--level`（0..3，缺省 2）。
 levelOf : Parsed -> Check Int
-levelOf parsed = case flagValue parsed "level" of
-  Nothing => OkC 2
-  Just text => case parseIntText text of
-    Just n => if n >= 0 && n <= 3 then OkC n else err "--level must be 0..3, got `${text}`"
-    Nothing => err "--level is not an integer: `${text}`"
+levelOf parsed =
+  case flagValue parsed "level" of
+    Nothing => OkC 2
+    Just text =>
+      case parseIntText text of
+        Just n => if n >= 0 && n <= 3 then OkC n else err "--level must be 0..3, got `${text}`"
+        Nothing => err "--level is not an integer: `${text}`"
 
 -- | 内部：`--sample`（`cpu` / `mem` / `both`；缺省空串 = 不设置该 env）。
 sampleOf : Parsed -> Check String
-sampleOf parsed = case flagValue parsed "sample" of
-  Nothing => OkC ""
-  Just text =>
-    if text == "cpu" || text == "mem" || text == "both" then OkC text
-    else err "--sample must be cpu, mem or both, got `${text}`"
+sampleOf parsed =
+  case flagValue parsed "sample" of
+    Nothing => OkC ""
+    Just text =>
+      if text == "cpu" || text == "mem" || text == "both" then
+        OkC text
+      else
+        err "--sample must be cpu, mem or both, got `${text}`"
 
 -- | 内部：`--interval`（正整数微秒）。
 intervalOf : Parsed -> Check (Maybe Int)
-intervalOf parsed = case flagValue parsed "interval" of
-  Nothing => OkC Nothing
-  Just text => case parseIntText text of
-    Just n =>
-      if n > 0 then OkC (Just n)
-      else err "--interval must be a positive integer (microseconds), got `${text}`"
-    Nothing => err "--interval is not an integer: `${text}`"
+intervalOf parsed =
+  case flagValue parsed "interval" of
+    Nothing => OkC Nothing
+    Just text =>
+      case parseIntText text of
+        Just n =>
+          if n > 0 then
+            OkC (Just n)
+          else
+            err "--interval must be a positive integer (microseconds), got `${text}`"
+        Nothing => err "--interval is not an integer: `${text}`"
 
 -- | 内部：`--out`（非空路径）。
 outOf : Parsed -> Check (Maybe String)
-outOf parsed = case flagValue parsed "out" of
-  Nothing => OkC Nothing
-  Just text => if text == "" then err "--out requires a non-empty file path" else OkC (Just text)
+outOf parsed =
+  case flagValue parsed "out" of
+    Nothing => OkC Nothing
+    Just text => if text == "" then err "--out requires a non-empty file path" else OkC (Just text)
 
 -- | 内部：十进制整数解析；空串或含非数字（前导 `-` 除外）= `Nothing`。
 parseIntText : String -> Maybe Int
@@ -107,7 +121,8 @@ parseIntText s = if s == "" then Nothing else parseDigits (strUnpack s) 0 False
 parseDigits : List Int -> Int -> Bool -> Maybe Int
 parseDigits [] acc neg = Just (if neg then 0 - acc else acc)
 parseDigits (c :: rest) acc neg =
-  if c == 45 && not neg then parseDigits rest acc True
+  if c == 45 && not neg then
+    parseDigits rest acc True
   else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
 
 -- ---------------------------------------------------------------
@@ -115,25 +130,29 @@ parseDigits (c :: rest) acc neg =
 -- ---------------------------------------------------------------
 -- | 内部：算好输出位置与 env 前缀，跑子进程，打印 trace 路径并返回其退出码。
 runChild : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> List String -> Eff r Int
-runChild opts argv = do
-  cwd <- envGetCwd
-  target <- targetOf opts cwd
-  envArgs <- envArgsOf opts cwd target
-  code <- processRunIn cwd (append envArgs argv)
-  _ <- printTracePaths target
-  pure code
+runChild opts argv =
+  do
+    cwd <- envGetCwd
+    target <- targetOf opts cwd
+    envArgs <- envArgsOf opts cwd target
+    code <- processRunIn cwd (append envArgs argv)
+    _ <- printTracePaths target
+    pure code
 
 -- | 内部：输出目标是 `Pair (Maybe 精确文件) 目录`——`--out` 时第一项是绝对文件路径、目录为空；
 -- 否则第一项是 `Nothing`、第二项是本次运行的临时目录。
 targetOf : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => RunOpts -> String -> Eff r (Pair (Maybe String) String)
-targetOf opts cwd = case opts.runOptsOut of
-  Just out => do
-    path <- absoluteOut out cwd
-    _ <- ensureDirPath (parentOf path)
-    pure (Pair (Just path) "")
-  Nothing => do
-    dir <- freshRunDir
-    pure (Pair Nothing dir)
+targetOf opts cwd =
+  case opts.runOptsOut of
+    Just out =>
+      do
+        path <- absoluteOut out cwd
+        _ <- ensureDirPath (parentOf path)
+        pure (Pair (Just path) "")
+    Nothing =>
+      do
+        dir <- freshRunDir
+        pure (Pair Nothing dir)
 
 -- | 内部：`--out` 相对化——相对路径按调用方 cwd 拼成绝对路径（`runIn` 会先 chdir）。
 absoluteOut : {r : Row} -> String -> String -> Eff r String
@@ -142,28 +161,33 @@ absoluteOut out cwd = pure (if startsWith "/" out then out else "${cwd}/${out}")
 -- | 内部：本次运行的临时目录 `${TMPDIR:-/tmp}/vuna-obs-run-<epoch-us>`；时间戳保证唯一，
 -- 不会混入上一轮的 trace。
 freshRunDir : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
-freshRunDir = do
-  tmp <- envGetEnv "TMPDIR"
-  stamp <- clockNow
-  dir <- runDirPath tmp stamp
-  _ <- ensureDirPath dir
-  pure dir
+freshRunDir =
+  do
+    tmp <- envGetEnv "TMPDIR"
+    stamp <- clockNow
+    dir <- runDirPath tmp stamp
+    _ <- ensureDirPath dir
+    pure dir
 
 -- | 内部：临时目录路径（`TMPDIR` 为空用 `/tmp`，末尾斜杠先去掉）。
 runDirPath : {r : Row} -> String -> Int -> Eff r String
 runDirPath tmp stamp =
   let
     base =
-      if tmp == "" then "/tmp"
-      else if endsWith "/" tmp then substring (natFromInt 0) (natFromInt (strLength tmp - 1)) tmp
-      else tmp
+      if tmp == "" then
+        "/tmp"
+      else if endsWith "/" tmp then
+        substring (natFromInt 0) (natFromInt (strLength tmp - 1)) tmp
+      else
+        tmp
   in pure "${base}/vuna-obs-run-${strFromInt stamp}"
 
 -- | 内部：前置 `env VAR=VAL ...` 参数（`processRunIn` 经 shell 执行，子进程继承）。
 envArgsOf : {r : Row} -> RunOpts -> String -> Pair (Maybe String) String -> Eff r (List String)
-envArgsOf opts cwd target = do
-  vars <- envVarsOf opts target
-  pure (append ["env"] (map envPairText vars))
+envArgsOf opts cwd target =
+  do
+    vars <- envVarsOf opts target
+    pure (append ["env"] (map envPairText vars))
 
 -- | 内部：变量集 = 级别 + 输出位置（`--out` 给 `VUNA_OBS_FILE`，否则给 `VUNA_OBS_DIR`）+ 采样。
 envVarsOf : {r : Row} -> RunOpts -> Pair (Maybe String) String -> Eff r (List (Pair String String))
@@ -171,15 +195,17 @@ envVarsOf opts target =
   let
     levelText = if opts.runOptsLevel <= 0 then "0" else strFromInt opts.runOptsLevel
     vars =
-      append [Pair "VUNA_OBS" levelText]
+      append
+        [Pair "VUNA_OBS" levelText]
         (append (sinkVars target) (append (sampleVar opts) (intervalVar opts)))
   in pure vars
 
 -- | 内部：输出位置对应的 env（精确文件 `VUNA_OBS_FILE` / 目录 `VUNA_OBS_DIR`，二选一）。
 sinkVars : Pair (Maybe String) String -> List (Pair String String)
-sinkVars target = case firstOf target of
-  Just path => [Pair "VUNA_OBS_FILE" path]
-  Nothing => [Pair "VUNA_OBS_DIR" (secondOf target)]
+sinkVars target =
+  case firstOf target of
+    Just path => [Pair "VUNA_OBS_FILE" path]
+    Nothing => [Pair "VUNA_OBS_DIR" (secondOf target)]
 
 -- | 内部：`VUNA_OBS_SAMPLE`；未指定采样种类时不设置。
 sampleVar : RunOpts -> List (Pair String String)
@@ -188,9 +214,10 @@ sampleVar opts =
 
 -- | 内部：`VUNA_OBS_INTERVAL`；未指定间隔时不设置。
 intervalVar : RunOpts -> List (Pair String String)
-intervalVar opts = case opts.runOptsInterval of
-  Just us => [Pair "VUNA_OBS_INTERVAL" (strFromInt us)]
-  Nothing => []
+intervalVar opts =
+  case opts.runOptsInterval of
+    Just us => [Pair "VUNA_OBS_INTERVAL" (strFromInt us)]
+    Nothing => []
 
 -- | 内部：`VAR=VAL` 文本（`env` 命令的参数形态）。
 envPairText : Pair String String -> String
@@ -199,26 +226,33 @@ envPairText kv = "${firstOf kv}=${secondOf kv}"
 -- | 内部：跑完打印 trace 路径——`--out` 直接给出文件；否则列临时目录里的 `vuna-*.jsonl`
 -- （多进程 = 多个文件，目录序即字典序，输出确定）。
 printTracePaths : Member nFs FsOp r, Member nConsole ConsoleOp r => Pair (Maybe String) String -> Eff r Int
-printTracePaths target = case firstOf target of
-  Just out => printOutTrace out
-  Nothing => printDirTraces (secondOf target)
+printTracePaths target =
+  case firstOf target of
+    Just out => printOutTrace out
+    Nothing => printDirTraces (secondOf target)
 
 -- | 内部：`--out` 模式的收尾行：文件存在则打印路径，否则说明为什么没产出（仍不算错误）。
 printOutTrace : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
-printOutTrace out = do
-  exists <- pathExistsFile out
-  if exists then obsLine "trace: ${out}"
-  else obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
+printOutTrace out =
+  do
+    exists <- pathExistsFile out
+    if exists then
+      obsLine "trace: ${out}"
+    else
+      obsLine "no trace file produced: ${out} (level 0, or the command did not honor VUNA_OBS*)"
 
 -- | 内部：临时目录模式的收尾行：目录不存在或没有 trace 文件也打印诊断。
 printDirTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
-printDirTraces dir = do
-  exists <- pathExistsDir dir
-  if not exists then obsLine "no trace file produced (obs dir was not created: ${dir})"
-  else do
-    names <- fsReadDir dir
-    printer <- pure (tracesAfter dir names)
-    printer
+printDirTraces dir =
+  do
+    exists <- pathExistsDir dir
+    if not exists then
+      obsLine "no trace file produced (obs dir was not created: ${dir})"
+    else
+      do
+        names <- fsReadDir dir
+        printer <- pure (tracesAfter dir names)
+        printer
 
 -- | 内部：一条 `trace: <dir>/<name>` 行。
 traceLine : String -> String -> String
@@ -226,11 +260,13 @@ traceLine dir name = "trace: ${dir}/${name}"
 
 -- | 内部：过滤目录里的 trace 文件名；一个都没有则打印「没产出」，否则逐行打印路径。
 tracesAfter : Member nConsole ConsoleOp r => String -> List String -> Eff r Int
-tracesAfter dir names = do
-  printers <- pure (map (traceLine dir) (filter isTraceName names))
-  if length printers == 0 then
-    obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
-  else obsLines printers
+tracesAfter dir names =
+  do
+    printers <- pure (map (traceLine dir) (filter isTraceName names))
+    if length printers == 0 then
+      obsLine "no trace file produced in ${dir} (level 0, or the command did not honor VUNA_OBS*)"
+    else
+      obsLines printers
 
 -- | 内部：目录项是否是 trace 文件（`vuna-` 前缀 + `.jsonl` 后缀）。
 isTraceName : String -> Bool
@@ -241,19 +277,22 @@ isTraceName name = startsWith "vuna-" name && endsWith ".jsonl" name
 -- ---------------------------------------------------------------
 -- | 内部：打印一行并返回退出码 0。
 obsLine : Member nConsole ConsoleOp r => String -> Eff r Int
-obsLine s = do
-  _ <- consolePrint "${s}\n"
-  pure 0
+obsLine s =
+  do
+    _ <- consolePrint "${s}\n"
+    pure 0
 
 -- | 内部：逐行打印，返回退出码 0。
 obsLines : Member nConsole ConsoleOp r => List String -> Eff r Int
 obsLines [] = pure 0
-obsLines (s :: rest) = do
-  _ <- obsLine s
-  obsLines rest
+obsLines (s :: rest) =
+  do
+    _ <- obsLine s
+    obsLines rest
 
 -- | 内部：打印 `error: ...` 并返回用法错误的退出码 2。
 obsRunError : Member nConsole ConsoleOp r => String -> Eff r Int
-obsRunError e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure 2
+obsRunError e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure 2

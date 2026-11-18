@@ -91,22 +91,28 @@ curPos c = Pos c.lcLine c.lcCol c.lcOffset c.lcOffset
 -- | 前进一个字节（换行把列复位）。
 stepCur : String -> LineCur -> LineCur
 stepCur src c =
-  if strAt src c.lcOff == 10 then LineCur (c.lcOff + 1) (c.lcLine + 1) 1 (c.lcOffset + 1)
-  else LineCur (c.lcOff + 1) c.lcLine (c.lcCol + 1) (c.lcOffset + 1)
+  if strAt src c.lcOff == 10 then
+    LineCur (c.lcOff + 1) (c.lcLine + 1) 1 (c.lcOffset + 1)
+  else
+    LineCur (c.lcOff + 1) c.lcLine (c.lcCol + 1) (c.lcOffset + 1)
 
 -- | 前进到目标位置（目标在游标之后；已在目标或越界时钳住）。
 -- | fuel 是终止性证据（游标前进不体现在参数结构上）；调用方给「剩余字节数」量级的值。
 advanceTo : Int -> String -> LineCur -> Pos -> LineCur
 advanceTo fuel src c target =
-  if fuel <= 0 then c
-  else if c.lcLine > posLine target || c.lcLine == posLine target && c.lcCol >= posCol target then c
+  if fuel <= 0 then
+    c
+  else if c.lcLine > posLine target || c.lcLine == posLine target && c.lcCol >= posCol target then
+    c
   else if c.lcOff >= strLength src then c else advanceTo (fuel - 1) src (stepCur src c) target
 
 -- | 前进 `n` 个字节（用于按原文长度求 token 结束位置）。
 advanceBy : Int -> String -> LineCur -> Int -> LineCur
 advanceBy fuel src c n =
-  if fuel <= 0 then c
-  else if n <= 0 then c
+  if fuel <= 0 then
+    c
+  else if n <= 0 then
+    c
   else if c.lcOff >= strLength src then c else advanceBy (fuel - 1) src (stepCur src c) (n - 1)
 
 -- | `[from, to)` 的源码原文（空区间给空串）。
@@ -125,8 +131,10 @@ scanDigitsEnd fuel src i =
 -- 未转义的 `"` 是结束引号（含在文本里）。
 scanStringEnd : Int -> String -> Int -> Int
 scanStringEnd fuel src i =
-  if fuel <= 0 then i
-  else if strAt src i == 92 then scanStringEnd (fuel - 2) src (i + 2)
+  if fuel <= 0 then
+    i
+  else if strAt src i == 92 then
+    scanStringEnd (fuel - 2) src (i + 2)
   else if strAt src i == 34 then i + 1 else scanStringEnd (fuel - 1) src (i + 1)
 
 -- | token 形态 tag（`TEof` 是空串原文）。
@@ -196,13 +204,13 @@ spaceTrivia src from to =
   let
     fo = firstOf from
     to2 = firstOf to
-  in if to2 <= fo then []
+  in if to2 <= fo then
+    []
   else
     let
       fp = secondOf from
       tp = secondOf to
-    in [ Trivia TrivSpace (sliceText src fo to2) (Span "" (posLine fp) (posCol fp) (posLine tp) (posCol tp) (posOffset fp) (posOffset tp))
-    ]
+    in [Trivia TrivSpace (sliceText src fo to2) (Span "" (posLine fp) (posCol fp) (posLine tp) (posCol tp) (posOffset fp) (posOffset tp))]
 
 -- | `CKind` → `TriviaKind`。
 commentTriviaKind : CKind -> TriviaKind
@@ -230,17 +238,20 @@ gapTrivia src from to [] = spaceTrivia src from to
 gapTrivia src from to (c :: rest) =
   let
     cStart = Pair c.tcommStart (spanStartOf c.tcommSpan)
-  in append (spaceTrivia src from cStart)
+  in append
+    (spaceTrivia src from cStart)
     (append [commentTrivia src c] (gapTrivia src (commentEndPos c) to rest))
 
 -- | 取起始偏移严格小于 `bound` 的注释前缀，其余留给后续 token。
 takeCommentsBefore : Int -> List TrivComment -> Pair (List TrivComment) (List TrivComment)
 takeCommentsBefore bound [] = Pair [] []
-takeCommentsBefore bound (c :: rest) = if c.tcommStart < bound then
-  let
-    taken = takeCommentsBefore bound rest
-  in Pair (c :: firstOf taken) (secondOf taken)
-else Pair [] (c :: rest)
+takeCommentsBefore bound (c :: rest) =
+  if c.tcommStart < bound then
+    let
+      taken = takeCommentsBefore bound rest
+    in Pair (c :: firstOf taken) (secondOf taken)
+  else
+    Pair [] (c :: rest)
 
 -- | 丢弃落在上一 token 内部的注释（保守过滤；模板洞内的注释本就不报告）。
 commentStartsAtOrAfter : Int -> TrivComment -> Bool
@@ -260,8 +271,14 @@ tokenNode src curStart prevEnd comments tok =
     curEnd = advanceBy (strLength src) src curStart (end - curStart.lcOff)
     startPos = curPos curStart
     sp =
-      Span "" (posLine startPos) (posCol startPos) (posLine (curPos curEnd))
-        (posCol (curPos curEnd)) (posOffset startPos) (posOffset (curPos curEnd))
+      Span
+        ""
+        (posLine startPos)
+        (posCol startPos)
+        (posLine (curPos curEnd))
+        (posCol (curPos curEnd))
+        (posOffset startPos)
+        (posOffset (curPos curEnd))
   in Pair
     (CstToken (tokTag tok) text sp (gapTrivia src prevEnd (Pair curStart.lcOff startPos) comments))
     curEnd
@@ -277,7 +294,8 @@ buildTokens src comments cur prevEnd (t :: rest) =
     live = filter (commentStartsAtOrAfter (firstOf prevEnd)) (firstOf before)
     node = tokenNode src curStart prevEnd live t.ptokTok
     curEnd = secondOf node
-  in firstOf node :: buildTokens src (secondOf before) curEnd (Pair curEnd.lcOff (curPos curEnd)) rest
+  in firstOf node
+    :: buildTokens src (secondOf before) curEnd (Pair curEnd.lcOff (curPos curEnd)) rest
 
 -- | 把源码切成无损 token 流（每个 token 带前置 trivia）；编译器 lexer 拒绝源码
 -- （词法错误）时返回 `Nothing`。
@@ -285,13 +303,14 @@ export lexCst : String -> Maybe (List CstToken)
 lexCst source = obsSpan "vuna.parse.cst" "vuna.phase" (\_ => lexCstGo source)
 
 lexCstGo : String -> Maybe (List CstToken)
-lexCstGo source = case lexSourceWithComments source of
-  ErrC _ => Nothing
-  OkC (Pair toks comments) =>
-    let
-      fuel = strLength source + 1
-      tcs = toTrivComments fuel source lineCurStart comments
-    in Just (buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks)
+lexCstGo source =
+  case lexSourceWithComments source of
+    ErrC _ => Nothing
+    OkC (Pair toks comments) =>
+      let
+        fuel = strLength source + 1
+        tcs = toTrivComments fuel source lineCurStart comments
+      in Just (buildTokens source (firstOf tcs) lineCurStart (Pair 0 (Pos 1 1 0 0)) toks)
 
 -- | 取 trivia 的原文（`renderCst` 用；具名函数而非 lambda，字段投影需要已知的记录类型）。
 triviaTextOf : Trivia -> String
@@ -307,9 +326,10 @@ renderCst toks = strConcatMany (concatMap renderParts toks)
 
 -- | `renderCst (lexCst s)` 是否逐字节等于 `s`；词法失败时为 `False`。
 export roundtripOk : String -> Bool
-roundtripOk s = case lexCst s of
-  Nothing => False
-  Just toks => renderCst toks == s
+roundtripOk s =
+  case lexCst s of
+    Nothing => False
+    Just toks => renderCst toks == s
 
 -- ---------------------------------------------------------------
 -- 节点树
@@ -384,8 +404,14 @@ attachLeaf t f =
     sp = t.cstSpan
     start = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp) (spanStartOffset sp)
     end = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
-  in Frame f.frameKind f.frameCol (if f.frameStarted then f.frameStart else start) end
-    (CstLeaf t :: f.frameKids) True f.frameClose
+  in Frame
+    f.frameKind
+    f.frameCol
+    (if f.frameStarted then f.frameStart else start)
+    end
+    (CstLeaf t :: f.frameKids)
+    True
+    f.frameClose
 
 -- | 叶节点并进栈顶 frame（栈为空时原样返回）。
 attachLeafTop : CstToken -> List Frame -> List Frame
@@ -395,7 +421,8 @@ attachLeafTop t [] = []
 -- | 关闭一个 frame：children 反转成源码顺序，span 由累积的首尾位置给出。
 closeFrame : Frame -> CstNode
 closeFrame f =
-  CstBranch f.frameKind
+  CstBranch
+    f.frameKind
     (Span "" (posLine f.frameStart) (posCol f.frameStart) (posLine f.frameEnd) (posCol f.frameEnd) (posOffset f.frameStart) (posOffset f.frameEnd))
     (reverse f.frameKids)
 
@@ -406,8 +433,14 @@ attachNode node f =
     sp = nodeSpan node
     start = Pos (spanStartLine sp) (spanStartCol sp) (spanStartOffset sp) (spanStartOffset sp)
     end = Pos (spanEndLine sp) (spanEndCol sp) (spanEndOffset sp) (spanEndOffset sp)
-  in Frame f.frameKind f.frameCol (if f.frameStarted then f.frameStart else start) end
-    (node :: f.frameKids) True f.frameClose
+  in Frame
+    f.frameKind
+    f.frameCol
+    (if f.frameStarted then f.frameStart else start)
+    end
+    (node :: f.frameKids)
+    True
+    f.frameClose
 
 -- | 关闭栈顶 frame，把结果并入父 frame。
 closeTop : List Frame -> List Frame
@@ -416,23 +449,23 @@ closeTop frames = frames
 
 -- | 关掉所有缩进块（当前 token 列小于块的起始列）。
 closeBlocks : Int -> Int -> List Frame -> List Frame
-closeBlocks fuel col frames = if fuel <= 0 then frames
-else case frames of
-  f :: parent :: rest =>
-    if kindIsBlock f.frameKind && col < f.frameCol then
-      closeBlocks (fuel - 1) col (attachNode (closeFrame f) parent :: rest)
-    else frames
-  _ => frames
+closeBlocks fuel col frames =
+  if fuel <= 0 then
+    frames
+  else
+    case frames of
+      f :: parent :: rest => if kindIsBlock f.frameKind && col < f.frameCol then closeBlocks (fuel - 1) col (attachNode (closeFrame f) parent :: rest) else frames
+      _ => frames
 
 -- | 关掉顶层声明（当前 token 列不大于声明的起始列）。
 closeDecls : Int -> Int -> List Frame -> List Frame
-closeDecls fuel col frames = if fuel <= 0 then frames
-else case frames of
-  f :: parent :: rest =>
-    if kindIsDecl f.frameKind && col <= f.frameCol then
-      closeDecls (fuel - 1) col (attachNode (closeFrame f) parent :: rest)
-    else frames
-  _ => frames
+closeDecls fuel col frames =
+  if fuel <= 0 then
+    frames
+  else
+    case frames of
+      f :: parent :: rest => if kindIsDecl f.frameKind && col <= f.frameCol then closeDecls (fuel - 1) col (attachNode (closeFrame f) parent :: rest) else frames
+      _ => frames
 
 kindIsBlock : CstKind -> Bool
 kindIsBlock CstBlockKind = True
@@ -458,10 +491,14 @@ layoutStep col frames =
     f2 = closeDecls 4096 col f1
   in case f2 of
     f :: rest =>
-      if kindIsGroup f.frameKind then f2
-      else if kindIsFile f.frameKind then Frame CstDeclKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
-      else if col > f.frameCol then Frame CstBlockKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
-      else f2
+      if kindIsGroup f.frameKind then
+        f2
+      else if kindIsFile f.frameKind then
+        Frame CstDeclKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
+      else if col > f.frameCol then
+        Frame CstBlockKind col (Pos 1 1 0 0) (Pos 1 1 0 0) [] False "" :: f2
+      else
+        f2
     [] => f2
 
 -- | 开括号 → 对应的闭括号。
@@ -481,32 +518,35 @@ isLineStart prevLine t = spanStartLine t.cstSpan > prevLine
 
 -- | 逐 token 建树：括号组优先闭合，其次处理行首布局，最后并入叶节点。
 buildFrames : Int -> List Frame -> Int -> List CstToken -> List Frame
-buildFrames fuel frames prevLine toks = if fuel <= 0 then frames
-else case toks of
-  [] => frames
-  t :: rest => case frames of
-    [] => buildFrames (fuel - 1) frames prevLine rest
-    f :: topRest => if kindIsGroup f.frameKind && isSymText f.frameClose t then
-      buildFrames (fuel - 1) (closeTop (attachLeafTop t frames)) (spanStartLine t.cstSpan) rest
-    else
-      let
-        line = spanStartLine t.cstSpan
-        frames1 =
-          if isLineStart prevLine t && not (t.cstTag == "eof") then layoutStep (spanStartCol t.cstSpan) frames
-          else frames
-      in case groupCloseOf t.cstText of
-        Just close =>
-          buildFrames (fuel - 1)
-            (attachLeafTop t (Frame CstGroupKind 0 (Pos 1 1 0 0) (Pos 1 1 0 0) [] False close :: frames1))
-            line rest
-        Nothing => buildFrames (fuel - 1) (attachLeafTop t frames1) line rest
+buildFrames fuel frames prevLine toks =
+  if fuel <= 0 then
+    frames
+  else
+    case toks of
+      [] => frames
+      t :: rest =>
+        case frames of
+          [] => buildFrames (fuel - 1) frames prevLine rest
+          f :: topRest =>
+            if kindIsGroup f.frameKind && isSymText f.frameClose t then
+              buildFrames (fuel - 1) (closeTop (attachLeafTop t frames)) (spanStartLine t.cstSpan) rest
+            else
+              let
+                line = spanStartLine t.cstSpan
+                frames1 = if isLineStart prevLine t && not (t.cstTag == "eof") then layoutStep (spanStartCol t.cstSpan) frames else frames
+              in case groupCloseOf t.cstText of
+                Just close => buildFrames (fuel - 1) (attachLeafTop t (Frame CstGroupKind 0 (Pos 1 1 0 0) (Pos 1 1 0 0) [] False close :: frames1)) line rest
+                Nothing => buildFrames (fuel - 1) (attachLeafTop t frames1) line rest
 
 -- | 关闭剩余 frame，留下文件根。
 closeAll : Int -> List Frame -> List Frame
-closeAll fuel frames = if fuel <= 0 then frames
-else case frames of
-  [f] => [f]
-  _ => closeAll (fuel - 1) (closeTop frames)
+closeAll fuel frames =
+  if fuel <= 0 then
+    frames
+  else
+    case frames of
+      [f] => [f]
+      _ => closeAll (fuel - 1) (closeTop frames)
 
 -- | token 流 → 节点树（根是 `CstFileKind`）。空流得到空根。
 export buildCst : List CstToken -> CstNode
@@ -531,6 +571,7 @@ renderCstTree (CstBranch _ _ kids) = strConcatMany (map renderCstTree kids)
 
 -- | `renderCstTree (buildCst (lexCst s)) == s`；词法失败时为 `False`。
 export treeRoundtripOk : String -> Bool
-treeRoundtripOk s = case lexCst s of
-  Nothing => False
-  Just toks => renderCstTree (buildCst toks) == s
+treeRoundtripOk s =
+  case lexCst s of
+    Nothing => False
+    Just toks => renderCstTree (buildCst toks) == s

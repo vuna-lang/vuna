@@ -52,62 +52,69 @@ packageCodec = "pkg-source 1"
 
 -- | 写对象（原子替换；地址由调用方给出并已在写前校验）。
 export writeObjectEff : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> List PackageFile -> Eff r Int
-writeObjectEff root digest files = do
-  _ <- ensureDirPath (packageObjectsDir root)
-  let
-    payload = encPackageContent files
-  in do
-    _ <-
-      fsWriteFileAtomic (objectPathOf root digest)
-        (storeEncodeAs packageTag packageCodec digest payload)
-    pure 0
+writeObjectEff root digest files =
+  do
+    _ <- ensureDirPath (packageObjectsDir root)
+    let
+      payload = encPackageContent files
+    in do
+      _ <- fsWriteFileAtomic (objectPathOf root digest) (storeEncodeAs packageTag packageCodec digest payload)
+      pure 0
 
 -- | 读对象（framing + 内容地址校验后解码）；缺失/损坏 ⇒ `Nothing`。
 export readObjectEff : Member nFs FsOp r => String -> String -> Eff r (Maybe (List PackageFile))
-readObjectEff root digest = do
-  payload <- storeReadAsEff packageTag packageCodec digest (objectPathOf root digest)
-  pure (case payload of
-    Nothing => Nothing
-    Just raw => decPackageContent raw
-  )
+readObjectEff root digest =
+  do
+    payload <- storeReadAsEff packageTag packageCodec digest (objectPathOf root digest)
+    pure (
+        case payload of
+          Nothing => Nothing
+          Just raw => decPackageContent raw
+      )
 
 -- | 物化视图是否完整（`.complete` 内容必须等于摘要）。
 export isMaterializedEff : Member nFs FsOp r => String -> String -> Eff r Bool
-isMaterializedEff root digest = do
-  let
-    marker = "${materializedDir root digest}/.complete"
-  in do
-    exists <- fsFileExists marker
-    if exists then do
-      text <- fsReadFile marker
-      pure (text == digest)
-    else pure False
+isMaterializedEff root digest =
+  do
+    let
+      marker = "${materializedDir root digest}/.complete"
+    in do
+      exists <- fsFileExists marker
+      if exists then
+        do
+          text <- fsReadFile marker
+          pure (text == digest)
+      else
+        pure False
 
 -- | 物化：逐文件写盘，最后写 `.complete`（提交点）；并发重复物化是幂等的。
 export materializeEff : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> List PackageFile -> Eff r Int
-materializeEff root digest files = do
-  let
-    dir = materializedDir root digest
-  in do
-    _ <- ensureDirPath dir
-    _ <- writePackageFiles dir files
-    _ <- fsWriteFileAtomic "${dir}/.complete" digest
-    pure 0
+materializeEff root digest files =
+  do
+    let
+      dir = materializedDir root digest
+    in do
+      _ <- ensureDirPath dir
+      _ <- writePackageFiles dir files
+      _ <- fsWriteFileAtomic "${dir}/.complete" digest
+      pure 0
 
 -- | 内部：把包文件列表逐个写进物化目录，每个文件前先建好父目录。
 writePackageFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List PackageFile -> Eff r Int
 writePackageFiles dir [] = pure 0
-writePackageFiles dir (f :: rest) = do
-  _ <- ensureDirPath (parentDirOf "${dir}/${f.pfPath}")
-  _ <- fsWriteFileAtomic "${dir}/${f.pfPath}" f.pfContent
-  writePackageFiles dir rest
+writePackageFiles dir (f :: rest) =
+  do
+    _ <- ensureDirPath (parentDirOf "${dir}/${f.pfPath}")
+    _ <- fsWriteFileAtomic "${dir}/${f.pfPath}" f.pfContent
+    writePackageFiles dir rest
 
 -- | 内部：路径的父目录（无 `/` ⇒ `"."`，即当前目录）。
 parentDirOf : String -> String
-parentDirOf path = case split "/" path of
-  [] => "."
-  [only] => "."
-  parts => join "/" (take (listLen parts - 1) parts)
+parentDirOf path =
+  case split "/" path of
+    [] => "."
+    [only] => "."
+    parts => join "/" (take (listLen parts - 1) parts)
 
 -- | 内部：列表长度。
 listLen : List a -> Int

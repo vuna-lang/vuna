@@ -123,74 +123,95 @@ isDigit c = c >= 48 && c <= 57
 -- | 读十进制数字直到 `stop` 字节（`:` = 58 / `;` = 59）。
 -- 返回累计值 + 停在 stop 之后的光标；遇见非数字或燃料耗尽返回 Nothing。
 decNumStop : Int -> Int -> Int -> Cur -> Maybe (Pair Int Cur)
-decNumStop fuel stop acc c = if fuel <= 0 then Nothing
-else case curChar c of
-  Nothing => Nothing
-  Just b =>
-    if b == stop then Just (Pair acc (curSkip c))
-    else if isDigit b then decNumStop (fuel - 1) stop (acc * 10 + (b - 48)) (curSkip c) else Nothing
+decNumStop fuel stop acc c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Nothing => Nothing
+      Just b => if b == stop then Just (Pair acc (curSkip c)) else if isDigit b then decNumStop (fuel - 1) stop (acc * 10 + (b - 48)) (curSkip c) else Nothing
 
 -- | 解析 tag：`#<n>;`。
 export decTag : Int -> Cur -> Maybe (Pair Int Cur)
-decTag fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 35 => decNumStop (fuel - 1) 59 0 (curSkip c)
-  _ => Nothing
+decTag fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 35 => decNumStop (fuel - 1) 59 0 (curSkip c)
+      _ => Nothing
 
 -- | 解析整数：`i[-]<n>;`。
 export decInt : Int -> Cur -> Maybe (Pair Int Cur)
-decInt fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 105 => case curChar (curSkip c) of
-    Just 45 =>
-      thenPair (decNumStop (fuel - 1) 59 0 (curSkip (curSkip c))) (\n, b => Just (Pair (0 - n) b))
-    _ => thenPair (decNumStop (fuel - 1) 59 0 (curSkip c)) (\n, b => Just (Pair n b))
-  _ => Nothing
+decInt fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 105 =>
+        case curChar (curSkip c) of
+          Just 45 => thenPair (decNumStop (fuel - 1) 59 0 (curSkip (curSkip c))) (\n, b => Just (Pair (0 - n) b))
+          _ => thenPair (decNumStop (fuel - 1) 59 0 (curSkip c)) (\n, b => Just (Pair n b))
+      _ => Nothing
 
 -- | 解析布尔：`b1` / `b0`。
 export decBool : Int -> Cur -> Maybe (Pair Bool Cur)
-decBool fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 98 => case curChar (curSkip c) of
-    Just 49 => Just (Pair True (curSkip (curSkip c)))
-    Just 48 => Just (Pair False (curSkip (curSkip c)))
-    _ => Nothing
-  _ => Nothing
+decBool fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 98 =>
+        case curChar (curSkip c) of
+          Just 49 => Just (Pair True (curSkip (curSkip c)))
+          Just 48 => Just (Pair False (curSkip (curSkip c)))
+          _ => Nothing
+      _ => Nothing
 
 -- | 解析字符串：`s<n>:<n 个字节>`（按字节取，不重新解码 UTF-8）。
 export decStr : Int -> Cur -> Maybe (Pair String Cur)
-decStr fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 115 =>
-    thenPair (decNumStop (fuel - 1) 58 0 (curSkip c))
-      (\n, b => if n < 0 || b.curI + n > strLength b.curS then Nothing else Just (Pair (curSlice b b.curI n) (Cur b.curS (b.curI + n))))
-  _ => Nothing
+decStr fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 115 => thenPair (decNumStop (fuel - 1) 58 0 (curSkip c)) (\n, b => if n < 0 || b.curI + n > strLength b.curS then Nothing else Just (Pair (curSlice b b.curI n) (Cur b.curS (b.curI + n))))
+      _ => Nothing
 
 -- | 解析列表：`[<n>:<n 个元素>`。
 export decList : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (List a) Cur)
-decList fp fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 91 =>
-    thenPair (decNumStop (fuel - 1) 58 0 (curSkip c)) (\n, b => decItems fp n (fuel - 1) b [])
-  _ => Nothing
+decList fp fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 91 => thenPair (decNumStop (fuel - 1) 58 0 (curSkip c)) (\n, b => decItems fp n (fuel - 1) b [])
+      _ => Nothing
 
 -- | 列表元素的循环（`n` 个，fuel 每步递减）。
 decItems : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Int -> Cur -> List a -> Maybe (Pair (List a) Cur)
 decItems fp n fuel c acc =
-  if n <= 0 then Just (Pair (reverse acc) c)
-  else if fuel <= 0 then Nothing
-  else thenPair (fp fuel c) (\x, b => decItems fp (n - 1) (fuel - 1) b (x :: acc))
+  if n <= 0 then
+    Just (Pair (reverse acc) c)
+  else if fuel <= 0 then
+    Nothing
+  else
+    thenPair (fp fuel c) (\x, b => decItems fp (n - 1) (fuel - 1) b (x :: acc))
 
 -- | 解析 Maybe：`0` = Nothing；`1<item>` = Just。
 export decMaybe : (Int -> Cur -> Maybe (Pair a Cur)) -> Int -> Cur -> Maybe (Pair (Maybe a) Cur)
-decMaybe fp fuel c = if fuel <= 0 then Nothing
-else case curChar c of
-  Just 48 => Just (Pair Nothing (curSkip c))
-  Just 49 => thenPair (fp (fuel - 1) (curSkip c)) (\x, b => Just (Pair (Just x) b))
-  _ => Nothing
+decMaybe fp fuel c =
+  if fuel <= 0 then
+    Nothing
+  else
+    case curChar c of
+      Just 48 => Just (Pair Nothing (curSkip c))
+      Just 49 => thenPair (fp (fuel - 1) (curSkip c)) (\x, b => Just (Pair (Just x) b))
+      _ => Nothing
 
 -- | 解析二元组：两个分量按编码顺序消费。
 export decPair : (Int -> Cur -> Maybe (Pair a Cur)) -> (Int -> Cur -> Maybe (Pair b Cur)) -> Int -> Cur -> Maybe (Pair (Pair a b) Cur)
 decPair fa fb fuel c =
-  thenPair (fa (fuel - 1) c)
+  thenPair
+    (fa (fuel - 1) c)
     (\x, b1 => thenPair (fb (fuel - 1) b1) (\y, b2 => Just (Pair (Pair x y) b2)))

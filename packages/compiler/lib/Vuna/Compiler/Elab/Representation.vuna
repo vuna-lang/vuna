@@ -58,10 +58,12 @@ findDtData name (d :: rest) = if dtDataName d == name then Just d else findDtDat
 
 -- | 类型头是否为可命名类型（Int/Str/Bool/Nat、Type 构造子或已声明数据族）。
 knownTypeHead : List DtData -> String -> Bool
-knownTypeHead datas g = g == intTypeName || g == strTypeName || isUnboxedCanonical g || isTypeConstructorName g || (case findDtData g datas of
-  Just _ => True
-  Nothing => False
-)
+knownTypeHead datas g =
+  g == intTypeName || g == strTypeName || isUnboxedCanonical g || isTypeConstructorName g || (
+      case findDtData g datas of
+        Just _ => True
+        Nothing => False
+    )
 
 -- 运行时字段类型是否可由现有字段渲染规则忠实命名（不做定义性展开）。
 -- | 运行时字段类型能否由现有渲染规则忠实命名；函数与未知名保守拒绝。
@@ -88,11 +90,13 @@ ctorFieldDomainTerm c i = ctorFieldDomainTermGo 512 i (dtCtorType c)
 
 -- | ctorFieldDomainTerm 的带 fuel 递归实现：沿 Pi 链走到第 i 个 binder。
 ctorFieldDomainTermGo : Int -> Int -> Term -> Maybe Term
-ctorFieldDomainTermGo fuel i t = if fuel <= 0 then Nothing
-else case t of
-  TPi name implicit rig dom cod =>
-    if i <= 0 then Just dom else ctorFieldDomainTermGo (fuel - 1) (i - 1) cod
-  _ => Nothing
+ctorFieldDomainTermGo fuel i t =
+  if fuel <= 0 then
+    Nothing
+  else
+    case t of
+      TPi name implicit rig dom cod => if i <= 0 then Just dom else ctorFieldDomainTermGo (fuel - 1) (i - 1) cod
+      _ => Nothing
 
 -- 函数 / Pi 字段保持装箱：OCaml 值限制会让零参顶层定义的别名函数类型出现弱类型变量。
 -- | 项是否为函数/Pi 类型（这类字段保持装箱，避免 OCaml 弱类型变量）。
@@ -115,23 +119,32 @@ reprIsBoxed _ = False
 -- | 判定单个数据族能否去装箱：特殊族、非 record、非单构造子、多保留字段、函数或
 -- 未知名、递归候选都拒绝。自动去装箱只服务 `record`；普通 `data` 恒装箱。
 unboxedCandidateOfData : List DtData -> DtData -> List UnboxedCand
-unboxedCandidateOfData datas d = if not (dtDataIsRecord d) then []
-else if isSpecialUnboxFamily (dtDataName d) then []
-else if reprIsBoxed (dtDataRepr d) then []
-else case dtDataCtors d of
-  [] => []
-  c :: rest => case rest of
-    [] => case keptIndices (ctorKeepFlags c) of
+unboxedCandidateOfData datas d =
+  if not (dtDataIsRecord d) then
+    []
+  else if isSpecialUnboxFamily (dtDataName d) then
+    []
+  else if reprIsBoxed (dtDataRepr d) then
+    []
+  else
+    case dtDataCtors d of
       [] => []
-      i :: more => case more of
-        [] => if i >= length d.dtDataParams then case ctorFieldDomainTerm c i of
-          Just dom =>
-            if termIsFunction dom then []
-            else if termRepresentable datas dom then [UnboxedCand (dtDataName d) c i] else []
-          Nothing => []
-        else []
-        _ => []
-    _ => []
+      c :: rest =>
+        case rest of
+          [] =>
+            case keptIndices (ctorKeepFlags c) of
+              [] => []
+              i :: more =>
+                case more of
+                  [] =>
+                    if i >= length d.dtDataParams then
+                      case ctorFieldDomainTerm c i of
+                        Just dom => if termIsFunction dom then [] else if termRepresentable datas dom then [UnboxedCand (dtDataName d) c i] else []
+                        Nothing => []
+                    else
+                      []
+                  _ => []
+          _ => []
 
 -- | 扫描全部数据族，收集所有可去装箱候选。
 unboxedCandidates : List DtData -> List UnboxedCand
@@ -148,9 +161,10 @@ candidateEdges datas names cands =
 
 -- | 候选保留字段类型里引用到的其它候选族名（用于递归检测）。
 candidateRefs : List DtData -> List String -> UnboxedCand -> List String
-candidateRefs datas names cand = case ctorFieldDomainTerm (unboxedCandCtor cand) (unboxedCandIndex cand) of
-  Just dom => filter (\n => memName n names) (termGlobalNames dom)
-  Nothing => []
+candidateRefs datas names cand =
+  case ctorFieldDomainTerm (unboxedCandCtor cand) (unboxedCandIndex cand) of
+    Just dom => filter (\n => memName n names) (termGlobalNames dom)
+    Nothing => []
 
 -- | 在依赖邻接表里查某个节点的后继列表；未知节点返回空表。
 lookupNeighbors : String -> List (Pair String (List String)) -> List String
@@ -161,18 +175,25 @@ lookupNeighbors name (p :: rest) =
 -- | 沿候选依赖边做有界搜索，判断从 node 出发能否回到 target（燃料耗尽时保守判 True）。
 reachesBackTo : Int -> List (Pair String (List String)) -> List String -> String -> String -> Bool
 reachesBackTo fuel edges visited target node =
-  if fuel <= 0 then True
-  else anyReachBack (fuel - 1) edges visited target (lookupNeighbors node edges)
+  if fuel <= 0 then
+    True
+  else
+    anyReachBack (fuel - 1) edges visited target (lookupNeighbors node edges)
 
 -- | reachesBackTo 的邻居遍历辅助：检查一组后继里是否有能回到 target 的路径。
 anyReachBack : Int -> List (Pair String (List String)) -> List String -> String -> List String -> Bool
 anyReachBack fuel edges visited target [] = False
 anyReachBack fuel edges visited target (n :: rest) =
-  if n == target then True
-  else if memName n visited then anyReachBack fuel edges visited target rest
-  else if fuel <= 0 then True
-  else if reachesBackTo (fuel - 1) edges (n :: visited) target n then True
-  else anyReachBack (fuel - 1) edges visited target rest
+  if n == target then
+    True
+  else if memName n visited then
+    anyReachBack fuel edges visited target rest
+  else if fuel <= 0 then
+    True
+  else if reachesBackTo (fuel - 1) edges (n :: visited) target n then
+    True
+  else
+    anyReachBack (fuel - 1) edges visited target rest
 
 -- | 计算最终可去装箱的族到 (构造子, 保留字段下标) 的映射，滤掉自身或互递归候选。
 export unboxedInfoOf : List DtData -> List (Pair String (Pair DtCtor Int))
@@ -182,7 +203,8 @@ unboxedInfoOf datas =
     names = candidateNames cands
     edges = candidateEdges datas names cands
     fuel = length names + 2
-  in map (\cand => Pair (unboxedCandName cand) (Pair (unboxedCandCtor cand) (unboxedCandIndex cand)))
+  in map
+    (\cand => Pair (unboxedCandName cand) (Pair (unboxedCandCtor cand) (unboxedCandIndex cand)))
     (filter (\cand => not (reachesBackTo fuel edges [unboxedCandName cand] (unboxedCandName cand) (unboxedCandName cand))) cands)
 
 -- | 可去装箱族的名字集合（unboxedInfoOf 的键）。

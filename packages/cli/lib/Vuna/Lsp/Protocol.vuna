@@ -64,15 +64,17 @@ stripTrailingDots s = strPack (reverse (dropDotCodes (reverse (strUnpack s))))
 -- | 列表最后一个元素。
 export lastElem : List a -> Maybe a
 lastElem [] = Nothing
-lastElem (x :: rest) = case rest of
-  [] => Just x
-  _ => lastElem rest
+lastElem (x :: rest) =
+  case rest of
+    [] => Just x
+    _ => lastElem rest
 
 -- | 点分名的最后一段（`Base.Data.List.map` → `map`）。
 export lastSegment : String -> String
-lastSegment token = case lastElem (splitOnDot token) of
-  Nothing => token
-  Just x => x
+lastSegment token =
+  case lastElem (splitOnDot token) of
+    Nothing => token
+    Just x => x
 
 -- ---------------------------------------------------------------
 -- URI：file:// + %XX 解码/编码
@@ -84,7 +86,8 @@ fileScheme = "file://"
 -- | 十六进制字符的数值；非十六进制字符返回 -1。
 export hexValue : Int -> Int
 hexValue c =
-  if c >= 48 && c <= 57 then c - 48
+  if c >= 48 && c <= 57 then
+    c - 48
   else if c >= 97 && c <= 102 then c - 87 else if c >= 65 && c <= 70 then c - 55 else 0 - 1
 
 -- | 0..15 → 小写十六进制字符的字节码。
@@ -98,15 +101,17 @@ percentDecode s = percentDecodeChars (strUnpack s) []
 -- | `percentDecode` 的字符级实现（`acc` 逆序累积）。
 export percentDecodeChars : List Int -> List Int -> String
 percentDecodeChars [] acc = strPack (reverse acc)
-percentDecodeChars (c :: rest) acc = if c == 37 then case rest of
-  h :: l :: more =>
-    let
-      hv = hexValue h
-      lv = hexValue l
-    in if hv >= 0 && lv >= 0 then percentDecodeChars more (hv * 16 + lv :: acc)
-    else percentDecodeChars rest (37 :: acc)
-  _ => percentDecodeChars rest (37 :: acc)
-else percentDecodeChars rest (c :: acc)
+percentDecodeChars (c :: rest) acc =
+  if c == 37 then
+    case rest of
+      h :: l :: more =>
+        let
+          hv = hexValue h
+          lv = hexValue l
+        in if hv >= 0 && lv >= 0 then percentDecodeChars more (hv * 16 + lv :: acc) else percentDecodeChars rest (37 :: acc)
+      _ => percentDecodeChars rest (37 :: acc)
+  else
+    percentDecodeChars rest (c :: acc)
 
 -- | URI 路径里无需编码的字符（字母数字、`/`、`.`、`-`、`~`）。
 export uriSafe : Int -> Bool
@@ -120,7 +125,8 @@ percentEncode s = strPack (reverse (percentEncodeChars (strUnpack s) []))
 export percentEncodeChars : List Int -> List Int -> List Int
 percentEncodeChars [] acc = acc
 percentEncodeChars (c :: rest) acc =
-  if uriSafe c then percentEncodeChars rest (c :: acc)
+  if uriSafe c then
+    percentEncodeChars rest (c :: acc)
   else
     percentEncodeChars rest (hexDigitCode (c - c / 16 * 16) :: hexDigitCode (c / 16) :: 37 :: acc)
 
@@ -146,15 +152,19 @@ lastSlashIndex s = lastSlashGo (strUnpack s) 0 (0 - 1)
 
 -- | 目录部分（无 `/` 时返回 "."；根 `/` 返回 "/"）。
 export dirOfPath : String -> String
-dirOfPath path = case lastSlashIndex path of
-  i => if i < 0 then "." else if i == 0 then "/" else substring 0 (natFromInt i) path
+dirOfPath path =
+  case lastSlashIndex path of
+    i => if i < 0 then "." else if i == 0 then "/" else substring 0 (natFromInt i) path
 
 -- | 最后一段（文件名或目录名）。
 export fileNameOf : String -> String
-fileNameOf path = case lastSlashIndex path of
-  i =>
-    if i < 0 then path
-    else substring (natFromInt (i + 1)) (natFromInt (strLength path - i - 1)) path
+fileNameOf path =
+  case lastSlashIndex path of
+    i =>
+      if i < 0 then
+        path
+      else
+        substring (natFromInt (i + 1)) (natFromInt (strLength path - i - 1)) path
 
 -- | 上一级目录（已在根上时原样返回）。
 export parentDir : String -> String
@@ -203,7 +213,8 @@ tokenAtCursor text line col =
     right = drop p0 chars
     startP = p0 - qualPrefixLen left
     endP = p0 + qualPrefixLen right
-  in if endP - startP <= 0 then Nothing
+  in if endP - startP <= 0 then
+    Nothing
   else
     let
       token = stripTrailingDots (substring (natFromInt startP) (natFromInt (endP - startP)) ln)
@@ -241,22 +252,28 @@ isPrefixChars (x :: xs) (y :: ys) = x == y && isPrefixChars xs ys
 -- | 在 span 覆盖的行范围里找名字的起始位置（1-based line / col）。
 export findNamePos : List String -> Span -> String -> Maybe (Pair Int Int)
 findNamePos lines sp name =
-  scanNameLines (spanStartLine sp) True (spanStartCol sp) (spanEndLine sp)
-    (drop (spanStartLine sp - 1) lines) name
+  scanNameLines
+    (spanStartLine sp)
+    True
+    (spanStartCol sp)
+    (spanEndLine sp)
+    (drop (spanStartLine sp - 1) lines)
+    name
 
 -- | 逐行扫描名字；首行从 `spanStartCol` 起找，之后每行从行首起找。
 export scanNameLines : Int -> Bool -> Int -> Int -> List String -> String -> Maybe (Pair Int Int)
-scanNameLines lineNo isFirst firstCol lastLine remaining name = if lineNo > lastLine then Nothing
-else case remaining of
-  [] => Nothing
-  ln :: rest =>
-    let
-      from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
-      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
-    in case findSubstring name tailPart of
-      hit =>
-        if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
-        else scanNameLines (lineNo + 1) False firstCol lastLine rest name
+scanNameLines lineNo isFirst firstCol lastLine remaining name =
+  if lineNo > lastLine then
+    Nothing
+  else
+    case remaining of
+      [] => Nothing
+      ln :: rest =>
+        let
+          from0 = clampInt 0 (if isFirst then firstCol - 1 else 0) (strLength ln)
+          tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
+        in case findSubstring name tailPart of
+          hit => if hit >= 0 then Just (Pair lineNo (hit + from0 + 1)) else scanNameLines (lineNo + 1) False firstCol lastLine rest name
 
 -- 逐行写 `/dev/stderr` 每次打开都会截断前面的行，所以内存累积、退出时 join 一次。
 -- | 日志行前缀（`[vuna-lsp] ...`）。

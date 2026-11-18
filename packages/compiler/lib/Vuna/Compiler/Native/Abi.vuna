@@ -185,7 +185,8 @@ nativeCleanupHeadLabel = "rt_cleanups"
 -- | 固定 prologue：push rbp; mov rbp, rsp; sub rsp, frame（frame=0 时省略）。
 export nativePrologue : Int -> List Instr
 nativePrologue frame =
-  append [IPush Rbp, IMov (OpReg Rbp) (OpReg Rsp)]
+  append
+    [IPush Rbp, IMov (OpReg Rbp) (OpReg Rsp)]
     (if frame == 0 then [] else [IBinReg "sub" Rsp (OpImm frame)])
 
 -- | 固定 epilogue：mov rsp, rbp; pop rbp; ret。
@@ -200,16 +201,19 @@ stackGuardInstrs =
 -- | 把体内 `IRet` 改写成跳到 `endLabel`（单出口）。
 export mapRetTo : String -> List Instr -> List Instr
 mapRetTo label [] = []
-mapRetTo label (i :: rest) = case i of
-  IRet => IJmp label :: mapRetTo label rest
-  _ => i :: mapRetTo label rest
+mapRetTo label (i :: rest) =
+  case i of
+    IRet => IJmp label :: mapRetTo label rest
+    _ => i :: mapRetTo label rest
 
 -- | 有 prologue/epilogue 的运行时函数：**单出口**。
 export rtFunc : String -> Int -> List Instr -> NativeFunc
 rtFunc name frame body =
   let
     endLabel = "${nativeRtLabel name}_end"
-  in NativeFunc (nativeRtLabel name) frame
+  in NativeFunc
+    (nativeRtLabel name)
+    frame
     (append (nativePrologue frame) (append stackGuardInstrs (append (mapRetTo endLabel body) (append [ILabel endLabel] nativeEpilogue))))
     nativeRuntimeModule
 

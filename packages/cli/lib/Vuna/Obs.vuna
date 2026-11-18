@@ -38,18 +38,20 @@ import Base.Effect.Process as EffProcess
 -- 打印用法并返回退出码 2。
 export runObs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nNet NetOp r => List String -> Eff r Int
 runObs [] = obsUsage
-runObs (obs :: rest) = case obs of
-  "run" => Vuna.Obs.Run.runObsRun rest
-  "summarize" => obsSummarizeArgs rest
-  "validate" => obsValidateArgs rest
-  "convert" => Vuna.Obs.Convert.runObsConvert rest
-  "render" => Vuna.Obs.Render.runObsRender rest
-  "merge" => Vuna.Obs.Merge.runObsMerge rest
-  "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
-  "serve" => Vuna.Obs.Serve.runObsServe rest
-  _ => do
-    _ <- consolePrint "error: unknown `vuna dev obs` subcommand `${obs}`\n${obsUsageText}"
-    pure 2
+runObs (obs :: rest) =
+  case obs of
+    "run" => Vuna.Obs.Run.runObsRun rest
+    "summarize" => obsSummarizeArgs rest
+    "validate" => obsValidateArgs rest
+    "convert" => Vuna.Obs.Convert.runObsConvert rest
+    "render" => Vuna.Obs.Render.runObsRender rest
+    "merge" => Vuna.Obs.Merge.runObsMerge rest
+    "symbols" => Vuna.Obs.Symbols.runObsSymbols rest
+    "serve" => Vuna.Obs.Serve.runObsServe rest
+    _ =>
+      do
+        _ <- consolePrint "error: unknown `vuna dev obs` subcommand `${obs}`\n${obsUsageText}"
+        pure 2
 
 -- | 全部子命令的用法文本（无参数与未知子命令时打印）。
 obsUsageText : String
@@ -66,49 +68,53 @@ obsUsageText = """usage:
 
 -- | 内部：打印用法文本并返回退出码 2（没有子命令）。
 obsUsage : Member nConsole ConsoleOp r => Eff r Int
-obsUsage = do
-  _ <- consolePrint obsUsageText
-  pure 2
+obsUsage =
+  do
+    _ <- consolePrint obsUsageText
+    pure 2
 
 -- ---------------------------------------------------------------
 -- validate
 -- ---------------------------------------------------------------
 -- | 内部：解析 `validate` 的参数：必须恰好一个 TRACE，否则用法错误（退出码 2）。
 obsValidateArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-obsValidateArgs args = case parseCmdArgs ["dev", "obs", "validate"] args of
-  ErrC e => obsError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [path] => obsValidateFile path
-    [] => obsError "usage: vuna dev obs validate TRACE"
-    _ => obsError "usage: vuna dev obs validate TRACE (exactly one trace)"
+obsValidateArgs args =
+  case parseCmdArgs ["dev", "obs", "validate"] args of
+    ErrC e => obsError (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [path] => obsValidateFile path
+        [] => obsError "usage: vuna dev obs validate TRACE"
+        _ => obsError "usage: vuna dev obs validate TRACE (exactly one trace)"
 
 -- | 内部：校验一个 trace 文件并打印每条问题；有 error ⇒ 退出码 1，否则打印通过摘要与
 -- warning 条数 ⇒ 0。
 obsValidateFile : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Eff r Int
-obsValidateFile path = do
-  reportR <- validateTraceFile path
-  case reportR of
-    ErrC e => obsError (diagText e)
-    OkC report => do
-      _ <- printIssues report.validateIssues
-      errors <- pure (countErrors report)
-      if errors > 0 then do
-        _ <-
-          consolePrint
-            "error: ${strFromInt errors} error(s), ${strFromInt (countWarnings report)} warning(s) (${path})\n"
-        pure 1
-      else do
-        _ <-
-          consolePrint
-            "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n"
-        pure 0
+obsValidateFile path =
+  do
+    reportR <- validateTraceFile path
+    case reportR of
+      ErrC e => obsError (diagText e)
+      OkC report =>
+        do
+          _ <- printIssues report.validateIssues
+          errors <- pure (countErrors report)
+          if errors > 0 then
+            do
+              _ <- consolePrint "error: ${strFromInt errors} error(s), ${strFromInt (countWarnings report)} warning(s) (${path})\n"
+              pure 1
+          else
+            do
+              _ <- consolePrint "${verifySummary report}, ${strFromInt (countWarnings report)} warning(s) (${path})\n"
+              pure 0
 
 -- | 内部：逐条打印校验问题（返回值恒为 0，只为配合 `do` 串联）。
 printIssues : Member nConsole ConsoleOp r => List ValidateIssue -> Eff r Int
 printIssues [] = pure 0
-printIssues (i :: rest) = do
-  _ <- consolePrint "${issueText i}\n"
-  printIssues rest
+printIssues (i :: rest) =
+  do
+    _ <- consolePrint "${issueText i}\n"
+    printIssues rest
 
 -- ---------------------------------------------------------------
 -- summarize
@@ -116,27 +122,33 @@ printIssues (i :: rest) = do
 -- | 内部：解析 `summarize` 的参数（`--json` / `--baseline` / `--threshold` + TRACE 列表）；
 -- 没有 TRACE 是用法错误。
 obsSummarizeArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-obsSummarizeArgs args = case parseCmdArgs ["dev", "obs", "summarize"] args of
-  ErrC e => obsError (diagText e)
-  OkC parsed => case thresholdOf parsed of
+obsSummarizeArgs args =
+  case parseCmdArgs ["dev", "obs", "summarize"] args of
     ErrC e => obsError (diagText e)
-    OkC threshold => case parsed.positionals of
-      [] =>
-        obsError
-          "usage: vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
-      traces => do
-        baseR <- baselineOf parsed
-        case baseR of
-          ErrC e => obsError (diagText e)
-          OkC base => summarizeTraces parsed threshold base traces
+    OkC parsed =>
+      case thresholdOf parsed of
+        ErrC e => obsError (diagText e)
+        OkC threshold =>
+          case parsed.positionals of
+            [] =>
+              obsError
+                "usage: vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
+            traces =>
+              do
+                baseR <- baselineOf parsed
+                case baseR of
+                  ErrC e => obsError (diagText e)
+                  OkC base => summarizeTraces parsed threshold base traces
 
 -- | 内部：解析 `--threshold`（百分比整数，缺省 10）。
 thresholdOf : Parsed -> Check Int
-thresholdOf parsed = case flagValue parsed "threshold" of
-  Nothing => OkC 10
-  Just text => case parseNonNegIntText text of
-    Just n => OkC n
-    Nothing => err "--threshold must be a non-negative integer (percent), got `${text}`"
+thresholdOf parsed =
+  case flagValue parsed "threshold" of
+    Nothing => OkC 10
+    Just text =>
+      case parseNonNegIntText text of
+        Just n => OkC n
+        Nothing => err "--threshold must be a non-negative integer (percent), got `${text}`"
 
 -- | 内部：十进制整数文本解析（空串 = `Nothing`）。
 parseNonNegIntText : String -> Maybe Int
@@ -146,42 +158,48 @@ parseNonNegIntText s = if s == "" then Nothing else parseDigits (strUnpack s) 0 
 parseDigits : List Int -> Int -> Bool -> Maybe Int
 parseDigits [] acc neg = Just (if neg then 0 - acc else acc)
 parseDigits (c :: rest) acc neg =
-  if c == 45 && not neg then parseDigits rest acc True
+  if c == 45 && not neg then
+    parseDigits rest acc True
   else if c >= 48 && c <= 57 then parseDigits rest (acc * 10 + (c - 48)) neg else Nothing
 
 -- | 内部：读 `--baseline` 指定的 trace 并摘要；未给基线 ⇒ `Nothing`，读盘失败 ⇒ `ErrC`。
 baselineOf : Member nFs FsOp r => Parsed -> Eff r (Check (Maybe ObsSummary))
-baselineOf parsed = case flagValue parsed "baseline" of
-  Nothing => pure (OkC Nothing)
-  Just path => do
-    traceR <- readTraceFull path
-    case traceR of
-      ErrC e => pure (err "baseline: ${diagText e}")
-      OkC trace => pure (OkC (Just (summarizeTrace trace)))
+baselineOf parsed =
+  case flagValue parsed "baseline" of
+    Nothing => pure (OkC Nothing)
+    Just path =>
+      do
+        traceR <- readTraceFull path
+        case traceR of
+          ErrC e => pure (err "baseline: ${diagText e}")
+          OkC trace => pure (OkC (Just (summarizeTrace trace)))
 
 -- | 内部：逐个 TRACE 读入并输出摘要；首个非 0 退出码即停（不吞错误）。空列表返回 0，
 -- 「没有 TRACE」的用法错误由调用方挡掉。
 summarizeTraces : Member nFs FsOp r, Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> List String -> Eff r Int
 summarizeTraces parsed threshold base [] = pure 0
-summarizeTraces parsed threshold base (path :: rest) = do
-  traceR <- readTraceFull path
-  case traceR of
-    ErrC e => obsError (diagText e)
-    OkC trace => do
-      code <- emitSummary parsed threshold base path (summarizeTrace trace)
-      if code /= 0 then pure code else summarizeTraces parsed threshold base rest
+summarizeTraces parsed threshold base (path :: rest) =
+  do
+    traceR <- readTraceFull path
+    case traceR of
+      ErrC e => obsError (diagText e)
+      OkC trace =>
+        do
+          code <- emitSummary parsed threshold base path (summarizeTrace trace)
+          if code /= 0 then pure code else summarizeTraces parsed threshold base rest
 
 -- | 内部：输出一份摘要：无基线走阶段/计数/采样表（或 `--json`），有基线走差值。
 emitSummary : Member nConsole ConsoleOp r => Parsed -> Int -> Maybe ObsSummary -> String -> ObsSummary -> Eff r Int
-emitSummary parsed threshold Nothing path summary = if flagSet parsed "json" then do
-  _ <- obsLine (renderJson (summaryJson summary))
-  pure 0
-else do
-  rows <-
-    pure
-      (append (append ["trace: ${path}"] (renderStageTable summary)) (append (renderCounterTable summary) (renderSampleSection summary)))
-  _ <- printRows rows
-  pure 0
+emitSummary parsed threshold Nothing path summary =
+  if flagSet parsed "json" then
+    do
+      _ <- obsLine (renderJson (summaryJson summary))
+      pure 0
+  else
+    do
+      rows <- pure (append (append ["trace: ${path}"] (renderStageTable summary)) (append (renderCounterTable summary) (renderSampleSection summary)))
+      _ <- printRows rows
+      pure 0
 emitSummary parsed threshold (Just baseSummary) path summary =
   emitDelta parsed threshold baseSummary path summary
 
@@ -196,35 +214,37 @@ emitDeltaGo parsed threshold summary path deltas =
   let
     maxPct = maxAbsDeltaPct deltas
     exceeds = maxPct > threshold
-  in if flagSet parsed "json" then do
-    _ <- obsLine (renderJson (summaryWithBaselineJson summary deltas))
-    pure (if exceeds then 1 else 0)
-  else do
-    rows <-
-      pure (append ["trace: ${path}"] (append (renderStageTable summary) (renderDeltaTable deltas)))
-    _ <- printRows rows
-    if exceeds then do
-      _ <-
-        consolePrint
-          "error: regression exceeds --threshold ${strFromInt threshold}% (max ${strFromInt maxPct}%)\n"
-      pure 1
-    else do
-      _ <-
-        consolePrint "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n"
-      pure 0
+  in if flagSet parsed "json" then
+    do
+      _ <- obsLine (renderJson (summaryWithBaselineJson summary deltas))
+      pure (if exceeds then 1 else 0)
+  else
+    do
+      rows <- pure (append ["trace: ${path}"] (append (renderStageTable summary) (renderDeltaTable deltas)))
+      _ <- printRows rows
+      if exceeds then
+        do
+          _ <- consolePrint "error: regression exceeds --threshold ${strFromInt threshold}% (max ${strFromInt maxPct}%)\n"
+          pure 1
+      else
+        do
+          _ <- consolePrint "ok: max delta ${strFromInt maxPct}% (--threshold ${strFromInt threshold}%)\n"
+          pure 0
 
 -- | 内部：在摘要 JSON 上再嵌一个 `baseline` 字段（仍是单行 JSON）。
 summaryWithBaselineJson : ObsSummary -> List StageDelta -> Json
-summaryWithBaselineJson summary deltas = case summaryJson summary of
-  JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
-  other => other
+summaryWithBaselineJson summary deltas =
+  case summaryJson summary of
+    JObj kvs => JObj (append kvs [Pair "baseline" (deltasJson deltas)])
+    other => other
 
 -- | 内部：逐行打印（每行补一个换行）。
 printRows : Member nConsole ConsoleOp r => List String -> Eff r Int
 printRows [] = pure 0
-printRows (row :: rest) = do
-  _ <- consolePrint "${row}\n"
-  printRows rest
+printRows (row :: rest) =
+  do
+    _ <- consolePrint "${row}\n"
+    printRows rest
 
 -- | 内部：打印一行（带换行），返回写入字节数（`Nat` 转 `Int`）。
 obsLine : Member nConsole ConsoleOp r => String -> Eff r Int
@@ -235,6 +255,7 @@ obsLine s = fmap natToInt (consolePrint "${s}\n")
 -- ---------------------------------------------------------------
 -- | 内部：错误出口：打印 `error: ...` 并返回退出码 2（用法 / 前提不满足）。
 obsError : Member nConsole ConsoleOp r => String -> Eff r Int
-obsError e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure 2
+obsError e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure 2

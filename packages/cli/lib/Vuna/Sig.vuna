@@ -18,17 +18,22 @@ import Vuna.Compiler.Frontend.Ast
 -- | 打印一个类型表达式（无签名约束前缀）：箭头右结合、应用参数与嵌套类型加括号。
 export renderType : Expr -> String
 renderType (EVar name sp) = if isListNilSyntax name then "[]" else name
-renderType (ty@(EApp (EVar op _) ([a, b]) _)) = if op == "->" then "${renderTypeArg a} -> ${renderType b}"
-else if isListConsSyntax op then case listTailText b of
-  Just rest => "[" ++ renderType a ++ rest
-  Nothing => renderTypePlain ty
-else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
+renderType (ty@(EApp (EVar op _) ([a, b]) _)) =
+  if op == "->" then
+    "${renderTypeArg a} -> ${renderType b}"
+  else if isListConsSyntax op then
+    case listTailText b of
+      Just rest => "[" ++ renderType a ++ rest
+      Nothing => renderTypePlain ty
+  else if op == "::" then "${renderTypeArg a} :: ${renderType b}" else renderTypePlain ty
 renderType (EInfix "->" a b sp) = "${renderTypeArg a} -> ${renderType b}"
 renderType (EPi name implicit qty dom cod sp) =
   let
     binder =
-      if implicit then "{${renderQty qty}${name} : ${renderType dom}}"
-      else "(${renderQty qty}${name} : ${renderType dom})"
+      if implicit then
+        "{${renderQty qty}${name} : ${renderType dom}}"
+      else
+        "(${renderQty qty}${name} : ${renderType dom})"
   in "${binder} -> ${renderType cod}"
 renderType ty = renderTypePlain ty
 
@@ -36,10 +41,13 @@ renderType ty = renderTypePlain ty
 -- （parser 的 `[..]` 形状）；`::` 链不走这里，保持中缀。
 listTailText : Expr -> Maybe String
 listTailText (EVar name sp) = if isListNilSyntax name then Just "]" else Nothing
-listTailText (EApp (EVar cons _) ([h, t]) _) = if isListConsSyntax cons then case listTailText t of
-  Just rest => Just (", " ++ renderType h ++ rest)
-  Nothing => Nothing
-else Nothing
+listTailText (EApp (EVar cons _) ([h, t]) _) =
+  if isListConsSyntax cons then
+    case listTailText t of
+      Just rest => Just (", " ++ renderType h ++ rest)
+      Nothing => Nothing
+  else
+    Nothing
 listTailText _ = Nothing
 
 -- | 内部：quantity 前缀（与 Fmt 同形，保证输出可回读）。

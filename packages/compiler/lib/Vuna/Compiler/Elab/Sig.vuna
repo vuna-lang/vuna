@@ -34,8 +34,10 @@ maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 export exprMaxAppArity : String -> Expr -> Int
 exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
-  if f == pname then maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
-  else maxIntList (map (exprMaxAppArity pname) args)
+  if f == pname then
+    maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
+  else
+    maxIntList (map (exprMaxAppArity pname) args)
 exprMaxAppArity pname (EApp fn args sp) =
   maxIntList (exprMaxAppArity pname fn :: map (exprMaxAppArity pname) args)
 exprMaxAppArity pname (ELam names body sp) = exprMaxAppArity pname body
@@ -93,8 +95,13 @@ quantify (n :: rest) e sp = EPi n True Nothing (EVar "Type" sp) (quantify rest e
 quantifyTopKinds : List String -> Expr -> Expr -> Span -> Expr
 quantifyTopKinds [] sigExpr e sp = e
 quantifyTopKinds (n :: rest) sigExpr e sp =
-  EPi n True Nothing (kindArrowExpr (exprMaxAppArity n sigExpr) sp)
-    (quantifyTopKinds rest sigExpr e sp) sp
+  EPi
+    n
+    True
+    Nothing
+    (kindArrowExpr (exprMaxAppArity n sigExpr) sp)
+    (quantifyTopKinds rest sigExpr e sp)
+    sp
 
 -- 带域覆盖的量化：`Member n e r => ...` 里的 n 是 String、r 是 Row（不是按应用次数
 -- 推出的 Type）。其余名字仍按 `quantifyTopKinds` 的 kind 规则。
@@ -102,9 +109,10 @@ quantifyTopKindsWith : (String -> Maybe Expr) -> List String -> Expr -> Expr -> 
 quantifyTopKindsWith domOf [] sigExpr e sp = e
 quantifyTopKindsWith domOf (n :: rest) sigExpr e sp =
   let
-    dom = case domOf n of
-      Just d => d
-      Nothing => kindArrowExpr (exprMaxAppArity n sigExpr) sp
+    dom =
+      case domOf n of
+        Just d => d
+        Nothing => kindArrowExpr (exprMaxAppArity n sigExpr) sp
   in EPi n True Nothing dom (quantifyTopKindsWith domOf rest sigExpr e sp) sp
 
 -- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
@@ -114,16 +122,20 @@ memberDomainOverrides [] = []
 memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
 
 memberDomainOverridesOne : Expr -> List (Pair String Expr)
-memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) = if g == effMemberFamilyName then
-  let
-    nPart = case nExpr of
-      EVar n nsp => [Pair n (EVar strTypeName nsp)]
-      _ => []
-    rPart = case rExpr of
-      EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
-      _ => []
-  in append nPart rPart
-else []
+memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) =
+  if g == effMemberFamilyName then
+    let
+      nPart =
+        case nExpr of
+          EVar n nsp => [Pair n (EVar strTypeName nsp)]
+          _ => []
+      rPart =
+        case rExpr of
+          EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
+          _ => []
+    in append nPart rPart
+  else
+    []
 memberDomainOverridesOne _ = []
 
 memberDomainOf : List (Pair String Expr) -> String -> Maybe Expr
@@ -132,8 +144,10 @@ memberDomainOf ((Pair k v) :: rest) n = if k == n then Just v else memberDomainO
 
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
-  if k <= 0 then EVar "Type" sp
-  else EPi "_" False Nothing (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
+  if k <= 0 then
+    EVar "Type" sp
+  else
+    EPi "_" False Nothing (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
 
 piBoundNames : Expr -> List String
 piBoundNames (EPi n implicit _ dom cod sp) = n :: piBoundNames cod
@@ -158,9 +172,10 @@ exprLowerVars (ERecUpdate b fields sp) = exprLowerVars b
 exprLowerVars _ = []
 
 isLowerIdent : String -> Bool
-isLowerIdent n = case strUnpack n of
-  [] => False
-  c :: rest => c >= 97 && c <= 122
+isLowerIdent n =
+  case strUnpack n of
+    [] => False
+    c :: rest => c >= 97 && c <= 122
 
 dropPiBound : List String -> List String -> List String
 dropPiBound names [] = names
@@ -181,20 +196,23 @@ quantifyTopSig banned ty sp =
 -- 只看「被应用了几次」会把 `f` 判成 `Type`（`Box f` 于是报 kind 不匹配）。
 export dataParamKindTbl : List Decl -> List (Pair String (List Expr))
 dataParamKindTbl [] = []
-dataParamKindTbl (d :: rest) = case d of
-  DData name params kind ctors derivings viaField repr lin sp =>
-    Pair name (kindDomains kind) :: dataParamKindTbl rest
-  _ => dataParamKindTbl rest
+dataParamKindTbl (d :: rest) =
+  case d of
+    DData name params kind ctors derivings viaField repr lin sp =>
+      Pair name (kindDomains kind) :: dataParamKindTbl rest
+    _ => dataParamKindTbl rest
 
 -- 两种箭头编码都要认：binder 形态是 `EPi`，匿名 `A -> B` 是 `EApp (EVar "->") [A, B]`
 -- （见 `Frontend/Ast` 的编码约定）。
 kindDomains : Expr -> List Expr
 kindDomains (EPi n implicit _ dom cod sp) = dom :: kindDomains cod
-kindDomains (EApp fn args sp) = case fn of
-  EVar "->" _ => case args of
-    dom :: cod :: rest => dom :: kindDomains cod
+kindDomains (EApp fn args sp) =
+  case fn of
+    EVar "->" _ =>
+      case args of
+        dom :: cod :: rest => dom :: kindDomains cod
+        _ => []
     _ => []
-  _ => []
 kindDomains _ = []
 
 -- 签名里「自由名作为某个族的第 i 个实参」出现的位置 ⇒ 该位置的参数 kind。
@@ -231,9 +249,10 @@ zipArgKinds (Just doms) args = zipArgKindsGo doms args
 zipArgKindsGo : List Expr -> List Expr -> List (Pair String Expr)
 zipArgKindsGo [] args = []
 zipArgKindsGo doms [] = []
-zipArgKindsGo (dom :: drest) (a :: arest) = case a of
-  EVar n nsp => Pair n dom :: zipArgKindsGo drest arest
-  _ => zipArgKindsGo drest arest
+zipArgKindsGo (dom :: drest) (a :: arest) =
+  case a of
+    EVar n nsp => Pair n dom :: zipArgKindsGo drest arest
+    _ => zipArgKindsGo drest arest
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
 export topQuantBanned : List String -> HashMap String Bool
@@ -248,13 +267,16 @@ bannedForModule sigName defined = topQuantBanned (filterNamesInModule sigName de
 filterNamesInModule : String -> List String -> List String
 filterNamesInModule sigName [] = []
 filterNamesInModule sigName (n :: rest) =
-  if modulePrefixOf n == modulePrefixOf sigName then n :: filterNamesInModule sigName rest
-  else filterNamesInModule sigName rest
+  if modulePrefixOf n == modulePrefixOf sigName then
+    n :: filterNamesInModule sigName rest
+  else
+    filterNamesInModule sigName rest
 
 -- 名字的模块前缀（`Base.Data.Nat.succ` → `Base.Data.Nat`；入口顶层的 `main` → ""）。
 export modulePrefixOf : String -> String
-modulePrefixOf name = case splitLastDot (splitOnDot name) of
-  Pair rev base => joinDots rev
+modulePrefixOf name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev base => joinDots rev
 
 -- ---------------------------------------------------------------
 -- 签名量化的**共享 banned 表**
@@ -267,7 +289,8 @@ modulePrefixOf name = case splitLastDot (splitOnDot name) of
 -- 分隔符取 `\t`（标识符只允许字母/数字/下划线/撇号，mangle 前缀只含点，绝不会撞）。
 export qualifiedBannedTbl : List String -> HashMap String Bool
 qualifiedBannedTbl defined =
-  HashMap.insertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
+  HashMap.insertAll
+    (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
     (HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
@@ -276,7 +299,10 @@ qualifiedKey prefix name = "${prefix}\t${name}"
 -- 与 `quantifyTopSig` 同义，但 banned 用共享的 qualified 表 + 全局 prelude 表。
 export quantifyTopSigCached : String -> HashMap String Bool -> HashMap String Bool -> Expr -> Span -> Expr
 quantifyTopSigCached prefix banned preludeBanned ty sp =
-  quantifyTopKinds (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty)) ty ty
+  quantifyTopKinds
+    (keepOutQualified prefix banned preludeBanned (freeNames (\n => False) ty))
+    ty
+    ty
     sp
 
 -- 带 trait 约束的顶层签名量化。约束实参与返回类型**一起**参与自由名扫描与
@@ -309,9 +335,10 @@ quantifyTopSigCtxCachedKinds prefix banned preludeBanned paramKinds ctx ty sp =
 
 -- kind 来源优先级：`Member` 域覆盖 > 参数位置 kind > 按应用次数（后者由调用点兜底）。
 kindOverrideOf : List (Pair String Expr) -> List (Pair String Expr) -> String -> Maybe Expr
-kindOverrideOf memberOverrides argOverrides n = case memberDomainOf memberOverrides n of
-  Just d => Just d
-  Nothing => paramKindOf argOverrides n
+kindOverrideOf memberOverrides argOverrides n =
+  case memberDomainOf memberOverrides n of
+    Just d => Just d
+    Nothing => paramKindOf argOverrides n
 
 paramKindOf : List (Pair String Expr) -> String -> Maybe Expr
 paramKindOf [] n = Nothing
@@ -320,10 +347,12 @@ paramKindOf ((Pair k d) :: rest) n = if k == n then Just d else paramKindOf rest
 keepOutQualified : String -> HashMap String Bool -> HashMap String Bool -> List String -> List String
 keepOutQualified prefix banned preludeBanned [] = []
 keepOutQualified prefix banned preludeBanned (n :: rest) =
-  if HashMap.member n preludeBanned then keepOutQualified prefix banned preludeBanned rest
+  if HashMap.member n preludeBanned then
+    keepOutQualified prefix banned preludeBanned rest
   else if HashMap.member (qualifiedKey prefix n) banned then
     keepOutQualified prefix banned preludeBanned rest
-  else n :: keepOutQualified prefix banned preludeBanned rest
+  else
+    n :: keepOutQualified prefix banned preludeBanned rest
 
 keepOutTbl : HashMap String Bool -> List String -> List String
 keepOutTbl banned [] = []
@@ -336,8 +365,9 @@ topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeV
 -- 本程序里另有定义（DFun / DAxiom）的顶层名字：签名里的这些名字不是类型变量。
 export definedNames : List Decl -> List String
 definedNames [] = []
-definedNames (d :: rest) = case d of
-  DFun n pats body sp => n :: definedNames rest
-  DAxiom n ty sp => n :: definedNames rest
-  DExtern n c ty sp => n :: definedNames rest
-  _ => definedNames rest
+definedNames (d :: rest) =
+  case d of
+    DFun n pats body sp => n :: definedNames rest
+    DAxiom n ty sp => n :: definedNames rest
+    DExtern n c ty sp => n :: definedNames rest
+    _ => definedNames rest

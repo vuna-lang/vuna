@@ -26,9 +26,10 @@ topLevelNames = nubNames (map headName (overviewCommands commands))
 
 -- | 内部：路径的第一段。
 headName : Cmd -> String
-headName c = case c.cmdPath of
-  [] => ""
-  name :: _ => name
+headName c =
+  case c.cmdPath of
+    [] => ""
+    name :: _ => name
 
 -- | 内部：按分组渲染总览行；`curTitle` 记录已输出的节标题（空串 = 还没输出）。
 renderSections : String -> List Cmd -> String
@@ -36,8 +37,10 @@ renderSections curTitle [] = ""
 renderSections curTitle (c :: rest) =
   let
     title = groupTitle c.cmdGroup
-  in if title == curTitle then "${rowText c}${renderSections title rest}"
-  else "\n${title}\n${rowText c}${renderSections title rest}"
+  in if title == curTitle then
+    "${rowText c}${renderSections title rest}"
+  else
+    "\n${title}\n${rowText c}${renderSections title rest}"
 
 -- | 内部：总览里的一行——命令名左对齐到固定宽度，后接摘要。
 rowText : Cmd -> String
@@ -45,15 +48,17 @@ rowText c = "  ${padRight 20 (join " " c.cmdPath)} ${c.cmdSummary}\n"
 
 -- | 某个命令路径的帮助正文；路径不在表里给 `Nothing`。
 export helpForPath : List String -> Maybe String
-helpForPath path = case findCmd path of
-  Nothing => Nothing
-  Just c => Just (if c.cmdDelegated then delegatedHelp c else commandHelp c)
+helpForPath path =
+  case findCmd path of
+    Nothing => Nothing
+    Just c => Just (if c.cmdDelegated then delegatedHelp c else commandHelp c)
 
 -- | 某个命令路径的用法行（`Nothing` = 未登记）。
 export synopsisOf : List String -> Maybe String
-synopsisOf path = case findCmd path of
-  Nothing => Nothing
-  Just c => Just c.cmdSynopsis
+synopsisOf path =
+  case findCmd path of
+    Nothing => Nothing
+    Just c => Just c.cmdSynopsis
 
 -- | 内部：编译器命令的帮助——转发编译器用法文本（flag 真源在编译器包里）。
 delegatedHelp : Cmd -> String
@@ -64,9 +69,7 @@ delegatedHelp c =
 commandHelp : Cmd -> String
 commandHelp c =
   "${join " " c.cmdPath} — ${c.cmdSummary}\n\nusage:\n  ${c.cmdSynopsis}\n"
-    ++ renderChildren (childrenOf c.cmdPath)
-    ++ renderFlags c.cmdFlags
-    ++ renderNotes c.cmdNotes
+    ++ renderChildren (childrenOf c.cmdPath) ++ renderFlags c.cmdFlags ++ renderNotes c.cmdNotes
 
 -- | 内部：`commands` 里的直接子命令。
 childrenOf : List String -> List Cmd
@@ -90,13 +93,15 @@ isDirectChild parent child = prefixOf parent child && extraOne parent child
 
 -- | 内部：`child` 去掉 `parent` 前缀后是否只剩一项。
 extraOne : List String -> List String -> Bool
-extraOne [] child = case child of
-  [] => False
-  [_] => True
-  _ => False
-extraOne (_ :: ps) child = case child of
-  [] => False
-  _ :: cs => extraOne ps cs
+extraOne [] child =
+  case child of
+    [] => False
+    [_] => True
+    _ => False
+extraOne (_ :: ps) child =
+  case child of
+    [] => False
+    _ :: cs => extraOne ps cs
 
 -- | 内部：是否空表。
 isEmpty : List String -> Bool
@@ -122,9 +127,10 @@ renderChildRows (c :: rest) =
 
 -- | 内部：子命令显示名——路径最后一段 + 用法里剩下的占位。
 childLabel : Cmd -> String
-childLabel c = case lastOf c.cmdPath of
-  "" => join " " c.cmdPath
-  name => name
+childLabel c =
+  case lastOf c.cmdPath of
+    "" => join " " c.cmdPath
+    name => name
 
 -- | 内部：路径最后一段。
 lastOf : List String -> String
@@ -143,11 +149,12 @@ renderFlagRows (f :: rest) = "  ${padRight 26 (flagUsage f)} ${f.flagHelp}\n${re
 
 -- | 内部：flag 的用法片段——开关只有名字，取值 flag 带占位（可重复的加 `...`）。
 flagUsage : FlagDoc -> String
-flagUsage f = case f.flagSpec of
-  BoolFlag name => "--${name}"
-  ValueFlag name => if f.flagMeta == "" then "--${name} VALUE" else "--${name} ${f.flagMeta}"
-  MultiValueFlag name =>
-    if f.flagMeta == "" then "--${name} VALUE..." else "--${name} ${f.flagMeta}..."
+flagUsage f =
+  case f.flagSpec of
+    BoolFlag name => "--${name}"
+    ValueFlag name => if f.flagMeta == "" then "--${name} VALUE" else "--${name} ${f.flagMeta}"
+    MultiValueFlag name =>
+      if f.flagMeta == "" then "--${name} VALUE..." else "--${name} ${f.flagMeta}..."
 
 -- | 内部：notes 小节。
 renderNotes : List String -> String

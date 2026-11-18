@@ -35,16 +35,18 @@ export unitCacheCodec : String
 unitCacheCodec = "split-file 1"
 
 export unitCacheTag : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
-unitCacheTag = do
-  tag <- compilerTagEff
-  pure "${unitCacheSchema}/${tag}"
+unitCacheTag =
+  do
+    tag <- compilerTagEff
+    pure "${unitCacheSchema}/${tag}"
 
 -- split-unit 缓存目录：与对象库同一棵树（`$VUNA_STORE/units/<包哈希>/`），
 -- 这样 GC 只需要认识一个根。
 export unitCacheDir : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
-unitCacheDir pkg = do
-  root <- storeRootReadyEff
-  pure "${root}/units/${hashTextOf pkg}"
+unitCacheDir pkg =
+  do
+    root <- storeRootReadyEff
+    pure "${root}/units/${hashTextOf pkg}"
 
 hashTextOf : String -> String
 hashTextOf s = strFromInt (textHashOf s)
@@ -75,45 +77,53 @@ unitCacheEntryDir base entryKey =
   "${base}/e-${textHashOf "entry:${entryKey}"}-${textHashOf "entry2:${entryKey}"}"
 
 export unitCacheEntryKeyOf : List (Pair String String) -> String
-unitCacheEntryKeyOf keys = case lookupPair "__entry__" keys of
-  Just k => k
-  Nothing => ""
+unitCacheEntryKeyOf keys =
+  case lookupPair "__entry__" keys of
+    Just k => k
+    Nothing => ""
 
 -- | 删除文件；`fsRemoveFile` 本身幂等（不存在返回 0），多进程 GC 同一桶也安全。
 safeRemoveFile : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
 safeRemoveFile path = fsRemoveFile path
 
 export unitCacheGc : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-unitCacheGc base keepDir = do
-  _ <- storeEnsureDirEff base
-  names <- fsReadDir base
-  gcEntries base keepDir names
+unitCacheGc base keepDir =
+  do
+    _ <- storeEnsureDirEff base
+    names <- fsReadDir base
+    gcEntries base keepDir names
 
 gcEntries : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> List String -> Eff r Int
 gcEntries base keepDir [] = pure 0
 gcEntries base keepDir (n :: rest) =
   let
     path = "${base}/${n}"
-  in if path == keepDir then gcEntries base keepDir rest
-  else do
-    isDir <- fsIsDirectory path
-    if isDir then do
-      _ <- dropDirFiles path
-      gcEntries base keepDir rest
-    else do
-      _ <- safeRemoveFile path
-      gcEntries base keepDir rest
+  in if path == keepDir then
+    gcEntries base keepDir rest
+  else
+    do
+      isDir <- fsIsDirectory path
+      if isDir then
+        do
+          _ <- dropDirFiles path
+          gcEntries base keepDir rest
+      else
+        do
+          _ <- safeRemoveFile path
+          gcEntries base keepDir rest
 
 dropDirFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Int
-dropDirFiles dir = do
-  names <- fsReadDir dir
-  dropFiles dir names
+dropDirFiles dir =
+  do
+    names <- fsReadDir dir
+    dropFiles dir names
 
 dropFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
 dropFiles dir [] = pure 0
-dropFiles dir (f :: rest) = do
-  _ <- safeRemoveFile "${dir}/${f}"
-  dropFiles dir rest
+dropFiles dir (f :: rest) =
+  do
+    _ <- safeRemoveFile "${dir}/${f}"
+    dropFiles dir rest
 
 -- **桶内 GC**。同一 entry 桶只清「本次构建仍会引用」的 unit 文件之外
 -- 的旧条目：`keepNames` = 本次全部单元 key（含 entry）算出的文件名，所以即将查询/命中的
@@ -121,36 +131,44 @@ dropFiles dir (f :: rest) = do
 -- 全部清掉 ⇒ 桶内文件数有界（≤ 单元数 + 1）。
 -- key 的传递依赖链保证「依赖接口变化 ⇒ 依赖者 key 变化」，旧 key 文件不再可能被命中。
 export unitCacheBucketGc : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
-unitCacheBucketGc dir keepNames = do
-  _ <- storeEnsureDirEff dir
-  names <- fsReadDir dir
-  bucketGcGo dir keepNames names
+unitCacheBucketGc dir keepNames =
+  do
+    _ <- storeEnsureDirEff dir
+    names <- fsReadDir dir
+    bucketGcGo dir keepNames names
 
 bucketGcGo : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> List String -> Eff r Int
 bucketGcGo dir keepNames [] = pure 0
 bucketGcGo dir keepNames (f :: rest) =
   let
     path = "${dir}/${f}"
-  in if memName f keepNames then bucketGcGo dir keepNames rest
-  else do
-    exists <- fsFileExists path
-    isDir <- if exists then fsIsDirectory path else pure False
-    if exists && isDir then bucketGcGo dir keepNames rest
-    else do
-      _ <- safeRemoveFile path
-      bucketGcGo dir keepNames rest
+  in if memName f keepNames then
+    bucketGcGo dir keepNames rest
+  else
+    do
+      exists <- fsFileExists path
+      isDir <- if exists then fsIsDirectory path else pure False
+      if exists && isDir then
+        bucketGcGo dir keepNames rest
+      else
+        do
+          _ <- safeRemoveFile path
+          bucketGcGo dir keepNames rest
 
 export unitCacheRead : Member nFs FsOp r, Member nEnv EnvOp r => String -> String -> String -> Eff r (Maybe SplitFile)
-unitCacheRead dir name key = do
-  tag <- unitCacheTag
-  payload <- storeReadEff tag unitCacheCodec (unitCachePath dir name key)
-  pure (case payload of
-    Just bytes => decSplitFileComplete bytes
-    Nothing => Nothing
-  )
+unitCacheRead dir name key =
+  do
+    tag <- unitCacheTag
+    payload <- storeReadEff tag unitCacheCodec (unitCachePath dir name key)
+    pure (
+        case payload of
+          Just bytes => decSplitFileComplete bytes
+          Nothing => Nothing
+      )
 
 export unitCacheWrite : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> SplitFile -> Eff r Int
-unitCacheWrite dir name key sf = do
-  _ <- storeEnsureDirEff dir
-  tag <- unitCacheTag
-  storeWriteEff tag unitCacheCodec (unitCachePath dir name key) (encTop encSplitFile sf)
+unitCacheWrite dir name key sf =
+  do
+    _ <- storeEnsureDirEff dir
+    tag <- unitCacheTag
+    storeWriteEff tag unitCacheCodec (unitCachePath dir name key) (encTop encSplitFile sf)

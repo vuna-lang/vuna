@@ -5,12 +5,14 @@ import Web.Route as R
 import Web.View as V
 
 main : Eff [] String
-main = case filter (\p => not (isPassing p)) results of
-  [] => pure ""
-  bad => do
-    _ <- prim_eff_print ("web route failed: " ++ join "; " (map nameOf bad) ++ "\n")
-    _ <- prim_eff_exit 1
-    pure ""
+main =
+  case filter (\p => not (isPassing p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("web route failed: " ++ join "; " (map nameOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
 
 -- | 一条检查是否通过。
 isPassing : Pair String Bool -> Bool
@@ -22,7 +24,8 @@ nameOf p = p.first
 
 routes : List R.Route
 routes =
-  [ R.route "GET" "/" home,
+  [
+    R.route "GET" "/" home,
     R.route "GET" "/users/:id" userPage,
     R.route "POST" "/users/:id" userPost
   ]
@@ -35,16 +38,18 @@ userPage params = V.Text (paramOf params)
 
 -- | 第一个参数的值（没有参数时为空串）。
 paramOf : List (Pair String String) -> String
-paramOf params = case params of
-  p :: _ => p.second
-  [] => ""
+paramOf params =
+  case params of
+    p :: _ => p.second
+    [] => ""
 
 userPost : List (Pair String String) -> V.View
 userPost _ = V.Text "post"
 
 results : List (Pair String Bool)
 results =
-  [ Pair "split-query" (R.splitPath "/a/b?x=1" == ["a", "b"]),
+  [
+    Pair "split-query" (R.splitPath "/a/b?x=1" == ["a", "b"]),
     Pair "split-trailing" (R.splitPath "/a/" == ["a"]),
     Pair "split-root" (R.splitPath "/" == []),
     Pair "split-double" (R.splitPath "//a//b" == ["a", "b"]),

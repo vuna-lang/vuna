@@ -22,9 +22,10 @@ typeParamName i = "'a${strFromInt i}"
 
 typeParamDecl : Int -> String
 typeParamDecl 0 = ""
-typeParamDecl n = case map typeParamName (range 0 n) of
-  [only] => "${only} "
-  names => "(${joinWith ", " names}) "
+typeParamDecl n =
+  case map typeParamName (range 0 n) of
+    [only] => "${only} "
+    names => "(${joinWith ", " names}) "
 
 familyTy : String -> List String -> String
 familyTy name [] = name
@@ -45,10 +46,11 @@ renderTy qual (OTFun d c) = "(${renderTy qual d}) -> ${renderTy qual c}"
 renderTy qual (OTData fam args) = familyTy (qual fam) (map (renderTy qual) args)
 
 ctorDecl : (String -> String) -> OCtor -> String
-ctorDecl qual c = case c.ocFields of
-  [] => c.ocName
-  [t] => "${c.ocName} of (${renderTy qual t})"
-  ts => "${c.ocName} of ${joinWith " * " (map (\t => "(${renderTy qual t})") ts)}"
+ctorDecl qual c =
+  case c.ocFields of
+    [] => c.ocName
+    [t] => "${c.ocName} of (${renderTy qual t})"
+    ts => "${c.ocName} of ${joinWith " * " (map (\t => "(${renderTy qual t})") ts)}"
 
 -- | 单条声明（不带 `type ` 前缀与 `and ` 连接符）。
 export renderDecl : (String -> String) -> ODecl -> String

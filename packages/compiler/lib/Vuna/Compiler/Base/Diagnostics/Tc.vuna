@@ -397,159 +397,409 @@ export record TcEntry(..) where
 -- ---------------------------------------------------------------
 tcChunk0 : List TcEntry
 tcChunk0 =
-  [ TcEntry (tcCode BoolCaseRestriction) (tcTemplate BoolCaseRestriction) "Bool 的 case 只接受 True、False 或变量模式",
-    TcEntry (tcCode (AxiomWithDefinition "")) (tcTemplate (AxiomWithDefinition "")) "axiom 不能带定义体",
-    TcEntry (tcCode CaseBranchTooFewArgs) (tcTemplate CaseBranchTooFewArgs) "case 分支的实参少于构造子字段",
+  [
+    TcEntry
+      (tcCode BoolCaseRestriction)
+      (tcTemplate BoolCaseRestriction)
+      "Bool 的 case 只接受 True、False 或变量模式",
+    TcEntry
+      (tcCode (AxiomWithDefinition ""))
+      (tcTemplate (AxiomWithDefinition ""))
+      "axiom 不能带定义体",
+    TcEntry
+      (tcCode CaseBranchTooFewArgs)
+      (tcTemplate CaseBranchTooFewArgs)
+      "case 分支的实参少于构造子字段",
     TcEntry (tcCode CatchAllNotLast) (tcTemplate CatchAllNotLast) "兜底分支必须在最后",
-    TcEntry (tcCode ClauseTooManyPatterns) (tcTemplate ClauseTooManyPatterns) "子句的模式多于函数元数",
-    TcEntry (tcCode DataKindArrows) (tcTemplate DataKindArrows) "data 声明的 kind 必须是以 Type 结尾的箭头链"
+    TcEntry
+      (tcCode ClauseTooManyPatterns)
+      (tcTemplate ClauseTooManyPatterns)
+      "子句的模式多于函数元数",
+    TcEntry
+      (tcCode DataKindArrows)
+      (tcTemplate DataKindArrows)
+      "data 声明的 kind 必须是以 Type 结尾的箭头链"
   ]
 
 tcChunk1 : List TcEntry
 tcChunk1 =
-  [ TcEntry (tcCode DefMoreParams) (tcTemplate DefMoreParams) "定义的形参多于签名",
-    TcEntry (tcCode DefParamsMustBeVars) (tcTemplate DefParamsMustBeVars) "定义的形参必须是变量",
-    TcEntry (tcCode DoUnsupported) (tcTemplate DoUnsupported) "do 块未降级为 bind 应用就进入精化（内部不变量）",
+  [
+    TcEntry (tcCode DefMoreParams) (tcTemplate DefMoreParams) "定义的形参多于签名",
+    TcEntry
+      (tcCode DefParamsMustBeVars)
+      (tcTemplate DefParamsMustBeVars)
+      "定义的形参必须是变量",
+    TcEntry
+      (tcCode DoUnsupported)
+      (tcTemplate DoUnsupported)
+      "do 块未降级为 bind 应用就进入精化（内部不变量）",
     TcEntry (tcCode FunctionNoClauses) (tcTemplate FunctionNoClauses) "函数没有子句",
     TcEntry (tcCode HoleNoExpectedType) (tcTemplate HoleNoExpectedType) "洞缺少期望类型",
-    TcEntry (tcCode ImplicitParamKind) (tcTemplate ImplicitParamKind) "隐式形参必须是类型或归纳族",
-    TcEntry (tcCode ImpossibleBranchEmptyCtx) (tcTemplate ImpossibleBranchEmptyCtx) "分支不可达（上下文含空归纳族）"
+    TcEntry
+      (tcCode ImplicitParamKind)
+      (tcTemplate ImplicitParamKind)
+      "隐式形参必须是类型或归纳族",
+    TcEntry
+      (tcCode ImpossibleBranchEmptyCtx)
+      (tcTemplate ImpossibleBranchEmptyCtx)
+      "分支不可达（上下文含空归纳族）"
   ]
 
 tcChunk2 : List TcEntry
 tcChunk2 =
-  [ TcEntry (tcCode ImpossibleBranchIndex) (tcTemplate ImpossibleBranchIndex) "分支不可达（索引约束不可满足）",
+  [
+    TcEntry
+      (tcCode ImpossibleBranchIndex)
+      (tcTemplate ImpossibleBranchIndex)
+      "分支不可达（索引约束不可满足）",
     TcEntry (tcCode IndexFuel) (tcTemplate IndexFuel) "索引归一化耗尽归约燃料",
-    TcEntry (tcCode InstanceHeadNotApp) (tcTemplate InstanceHeadNotApp) "instance 头必须是接口应用",
+    TcEntry
+      (tcCode InstanceHeadNotApp)
+      (tcTemplate InstanceHeadNotApp)
+      "instance 头必须是接口应用",
     TcEntry (tcCode ConstraintNotDict) (tcTemplate ConstraintNotDict) "约束必须是接口应用",
-    TcEntry (tcCode InstanceMissingMethod) (tcTemplate InstanceMissingMethod) "instance 缺少接口方法实现",
-    TcEntry (tcCode OrphanInstance) (tcTemplate OrphanInstance) "实例应声明在 trait 或 head 类型的定义模块",
+    TcEntry
+      (tcCode InstanceMissingMethod)
+      (tcTemplate InstanceMissingMethod)
+      "instance 缺少接口方法实现",
+    TcEntry
+      (tcCode OrphanInstance)
+      (tcTemplate OrphanInstance)
+      "实例应声明在 trait 或 head 类型的定义模块",
     TcEntry (tcCode InterfaceNoParam) (tcTemplate InterfaceNoParam) "接口至少需要一个参数",
     TcEntry (tcCode NoInstParam) (tcTemplate NoInstParam) "@ 覆盖需要隐式 String 实例参数",
-    TcEntry (tcCode IntStringCaseNeedsFallback) (tcTemplate IntStringCaseNeedsFallback) "Int、String、Nat 的 case 需要变量或通配符兜底分支"
+    TcEntry
+      (tcCode IntStringCaseNeedsFallback)
+      (tcTemplate IntStringCaseNeedsFallback)
+      "Int、String、Nat 的 case 需要变量或通配符兜底分支"
   ]
 
 tcChunk3 : List TcEntry
 tcChunk3 =
-  [ TcEntry (tcCode IntStringCaseRestriction) (tcTemplate IntStringCaseRestriction) "Int、String、Nat 的 case 只接受字面量或变量模式",
+  [
+    TcEntry
+      (tcCode IntStringCaseRestriction)
+      (tcTemplate IntStringCaseRestriction)
+      "Int、String、Nat 的 case 只接受字面量或变量模式",
     TcEntry (tcCode InvalidArrowType) (tcTemplate InvalidArrowType) "箭头类型不合法",
     TcEntry (tcCode LambdaNoSignature) (tcTemplate LambdaNoSignature) "lambda 缺少类型签名",
-    TcEntry (tcCode LambdaTooManyParams) (tcTemplate LambdaTooManyParams) "lambda 的形参多于期望的函数类型",
-    TcEntry (tcCode NatLiteralOutOfRange) (tcTemplate NatLiteralOutOfRange) "Nat 字面量超出范围",
-    TcEntry (tcCode NestedPatterns) (tcTemplate NestedPatterns) "嵌套模式必须是构造子模式",
-    TcEntry (tcCode NotInductiveFamily) (tcTemplate NotInductiveFamily) "case 的检查项不是归纳族",
+    TcEntry
+      (tcCode LambdaTooManyParams)
+      (tcTemplate LambdaTooManyParams)
+      "lambda 的形参多于期望的函数类型",
+    TcEntry
+      (tcCode NatLiteralOutOfRange)
+      (tcTemplate NatLiteralOutOfRange)
+      "Nat 字面量超出范围",
+    TcEntry
+      (tcCode NestedPatterns)
+      (tcTemplate NestedPatterns)
+      "嵌套模式必须是构造子模式",
+    TcEntry
+      (tcCode NotInductiveFamily)
+      (tcTemplate NotInductiveFamily)
+      "case 的检查项不是归纳族",
     TcEntry (tcCode OnlyCtorPatterns) (tcTemplate OnlyCtorPatterns) "case 只支持构造子模式"
   ]
 
 tcChunk4 : List TcEntry
 tcChunk4 =
-  [ TcEntry (tcCode PatternFuel) (tcTemplate PatternFuel) "模式矩阵递归耗尽燃料",
-    TcEntry (tcCode RecordsUnsupported) (tcTemplate RecordsUnsupported) "record 字面量未降级为构造子就进入精化（内部不变量）",
+  [
+    TcEntry (tcCode PatternFuel) (tcTemplate PatternFuel) "模式矩阵递归耗尽燃料",
+    TcEntry
+      (tcCode RecordsUnsupported)
+      (tcTemplate RecordsUnsupported)
+      "record 字面量未降级为构造子就进入精化（内部不变量）",
     TcEntry (tcCode TooManyArgs) (tcTemplate TooManyArgs) "实参过多（不是函数）",
-    TcEntry (tcCode TypeLevelArg) (tcTemplate TypeLevelArg) "Type 需要恰好一个非负层级或不带层级",
-    TcEntry (tcCode TypeMismatchCaseCount) (tcTemplate TypeMismatchCaseCount) "类型不匹配：case 分支数量不同",
-    TcEntry (tcCode TypeMismatchCtorArity) (tcTemplate TypeMismatchCtorArity) "类型不匹配：构造子实参个数不同"
+    TcEntry
+      (tcCode TypeLevelArg)
+      (tcTemplate TypeLevelArg)
+      "Type 需要恰好一个非负层级或不带层级",
+    TcEntry
+      (tcCode TypeMismatchCaseCount)
+      (tcTemplate TypeMismatchCaseCount)
+      "类型不匹配：case 分支数量不同",
+    TcEntry
+      (tcCode TypeMismatchCtorArity)
+      (tcTemplate TypeMismatchCtorArity)
+      "类型不匹配：构造子实参个数不同"
   ]
 
 tcChunk5 : List TcEntry
 tcChunk5 =
-  [ TcEntry (tcCode UniverseLevelNonNegative) (tcTemplate UniverseLevelNonNegative) "宇宙层级必须非负",
-    TcEntry (tcCode (BranchTooManyArgs "")) (tcTemplate (BranchTooManyArgs "")) "分支的实参多于构造子字段",
-    TcEntry (tcCode (CannotProveTermination "")) (tcTemplate (CannotProveTermination "")) "无法证明终止性",
-    TcEntry (tcCode (CannotRedefineBuiltin "")) (tcTemplate (CannotRedefineBuiltin "")) "不能重定义内建名",
-    TcEntry (tcCode (CannotSolveMetavar "")) (tcTemplate (CannotSolveMetavar "")) "元变量的解会逃逸其作用域",
-    TcEntry (tcCode (CannotSolveHigherOrder "")) (tcTemplate (CannotSolveHigherOrder "")) "高阶元变量无法求解",
-    TcEntry (tcCode (CannotSolveOccurs "")) (tcTemplate (CannotSolveOccurs "")) "解中出现自身（occurs check）",
-    TcEntry (tcCode (TypeMismatchCaseVars "")) (tcTemplate (TypeMismatchCaseVars "")) "类型不匹配：case 分支绑定的变量数不同"
+  [
+    TcEntry
+      (tcCode UniverseLevelNonNegative)
+      (tcTemplate UniverseLevelNonNegative)
+      "宇宙层级必须非负",
+    TcEntry
+      (tcCode (BranchTooManyArgs ""))
+      (tcTemplate (BranchTooManyArgs ""))
+      "分支的实参多于构造子字段",
+    TcEntry
+      (tcCode (CannotProveTermination ""))
+      (tcTemplate (CannotProveTermination ""))
+      "无法证明终止性",
+    TcEntry
+      (tcCode (CannotRedefineBuiltin ""))
+      (tcTemplate (CannotRedefineBuiltin ""))
+      "不能重定义内建名",
+    TcEntry
+      (tcCode (CannotSolveMetavar ""))
+      (tcTemplate (CannotSolveMetavar ""))
+      "元变量的解会逃逸其作用域",
+    TcEntry
+      (tcCode (CannotSolveHigherOrder ""))
+      (tcTemplate (CannotSolveHigherOrder ""))
+      "高阶元变量无法求解",
+    TcEntry
+      (tcCode (CannotSolveOccurs ""))
+      (tcTemplate (CannotSolveOccurs ""))
+      "解中出现自身（occurs check）",
+    TcEntry
+      (tcCode (TypeMismatchCaseVars ""))
+      (tcTemplate (TypeMismatchCaseVars ""))
+      "类型不匹配：case 分支绑定的变量数不同"
   ]
 
 tcChunk6 : List TcEntry
 tcChunk6 =
-  [ TcEntry (tcCode (DuplicateInstance "")) (tcTemplate (DuplicateInstance "")) "重复的实例",
-    TcEntry (tcCode (InstanceContextMissing "")) (tcTemplate (InstanceContextMissing "")) "实例上下文无法满足",
-    TcEntry (tcCode (SuperclassNotSatisfied "" "")) (tcTemplate (SuperclassNotSatisfied "" "")) "实例缺少所需的父类实例",
-    TcEntry (tcCode (OverlappingInstances "")) (tcTemplate (OverlappingInstances "")) "重叠的实例",
+  [
+    TcEntry (tcCode (DuplicateInstance "")) (tcTemplate (DuplicateInstance "")) "重复的实例",
+    TcEntry
+      (tcCode (InstanceContextMissing ""))
+      (tcTemplate (InstanceContextMissing ""))
+      "实例上下文无法满足",
+    TcEntry
+      (tcCode (SuperclassNotSatisfied "" ""))
+      (tcTemplate (SuperclassNotSatisfied "" ""))
+      "实例缺少所需的父类实例",
+    TcEntry
+      (tcCode (OverlappingInstances ""))
+      (tcTemplate (OverlappingInstances ""))
+      "重叠的实例",
     TcEntry (tcCode (DuplicateSignature "")) (tcTemplate (DuplicateSignature "")) "重复的签名",
     TcEntry (tcCode (ExpectedSignature "")) (tcTemplate (ExpectedSignature "")) "缺少类型签名",
-    TcEntry (tcCode (ExpectedType "")) (tcTemplate (ExpectedType "")) "需要类型（该表达式不是类型）",
-    TcEntry (tcCode (FfiTypeUnsupported "")) (tcTemplate (FfiTypeUnsupported "")) "extern 类型超出受限的 FFI 子集",
-    TcEntry (tcCode (EqRequiresEvidence "")) (tcTemplate (EqRequiresEvidence "")) "相等比较需要 Eq 实例（没有泛型兜底）"
+    TcEntry
+      (tcCode (ExpectedType ""))
+      (tcTemplate (ExpectedType ""))
+      "需要类型（该表达式不是类型）",
+    TcEntry
+      (tcCode (FfiTypeUnsupported ""))
+      (tcTemplate (FfiTypeUnsupported ""))
+      "extern 类型超出受限的 FFI 子集",
+    TcEntry
+      (tcCode (EqRequiresEvidence ""))
+      (tcTemplate (EqRequiresEvidence ""))
+      "相等比较需要 Eq 实例（没有泛型兜底）"
   ]
 
 tcChunk7 : List TcEntry
 tcChunk7 =
-  [ TcEntry (tcCode (InstanceUnknownMethod "")) (tcTemplate (InstanceUnknownMethod "")) "instance 含未知的接口方法",
+  [
+    TcEntry
+      (tcCode (InstanceUnknownMethod ""))
+      (tcTemplate (InstanceUnknownMethod ""))
+      "instance 含未知的接口方法",
     TcEntry (tcCode (NeedsTwoArgs "")) (tcTemplate (NeedsTwoArgs "")) "需要恰好两个实参",
     TcEntry (tcCode (NoInstanceFound "")) (tcTemplate (NoInstanceFound "")) "找不到实例",
-    TcEntry (tcCode (InterpNoInstance "")) (tcTemplate (InterpNoInstance "")) "插值缺少 Interp 或 Show 实例",
-    TcEntry (tcCode (NotExhaustive "")) (tcTemplate (NotExhaustive "")) "case 覆盖性不足：缺少分支",
-    TcEntry (tcCode (SignatureNoDef "")) (tcTemplate (SignatureNoDef "")) "签名没有对应的定义",
+    TcEntry
+      (tcCode (InterpNoInstance ""))
+      (tcTemplate (InterpNoInstance ""))
+      "插值缺少 Interp 或 Show 实例",
+    TcEntry
+      (tcCode (NotExhaustive ""))
+      (tcTemplate (NotExhaustive ""))
+      "case 覆盖性不足：缺少分支",
+    TcEntry
+      (tcCode (SignatureNoDef ""))
+      (tcTemplate (SignatureNoDef ""))
+      "签名没有对应的定义",
     TcEntry (tcCode (UnknownInterface "")) (tcTemplate (UnknownInterface "")) "未知接口"
   ]
 
 tcChunk8 : List TcEntry
 tcChunk8 =
-  [ TcEntry (tcCode (UnknownName "")) (tcTemplate (UnknownName "")) "引用了未绑定的名字",
+  [
+    TcEntry (tcCode (UnknownName "")) (tcTemplate (UnknownName "")) "引用了未绑定的名字",
     TcEntry (tcCode (UnsolvedHole "")) (tcTemplate (UnsolvedHole "")) "未填写的洞",
-    TcEntry (tcCode (UnsolvedMetavarInfer "")) (tcTemplate (UnsolvedMetavarInfer "")) "无法推断类型（存在未求解的元变量）",
-    TcEntry (tcCode (EffResFamilyMissing "")) (tcTemplate (EffResFamilyMissing "")) "找不到效应结果族",
-    TcEntry (tcCode (HandleFamilyUnsupported "")) (tcTemplate (HandleFamilyUnsupported "")) "handle 语法不支持该 op 族形状",
-    TcEntry (tcCode (AmbiguousCtor "" "")) (tcTemplate (AmbiguousCtor "" "")) "构造子歧义：存在多个候选",
-    TcEntry (tcCode (AmbiguousName "" "")) (tcTemplate (AmbiguousName "" "")) "名字歧义：存在多个候选",
-    TcEntry (tcCode (AmbiguousInstance "" "")) (tcTemplate (AmbiguousInstance "" "")) "实例歧义：存在多个候选",
-    TcEntry (tcCode (HandleClauseFamilyMismatch "" "")) (tcTemplate (HandleClauseFamilyMismatch "" "")) "handle 子句的构造子跨 op 族",
+    TcEntry
+      (tcCode (UnsolvedMetavarInfer ""))
+      (tcTemplate (UnsolvedMetavarInfer ""))
+      "无法推断类型（存在未求解的元变量）",
+    TcEntry
+      (tcCode (EffResFamilyMissing ""))
+      (tcTemplate (EffResFamilyMissing ""))
+      "找不到效应结果族",
+    TcEntry
+      (tcCode (HandleFamilyUnsupported ""))
+      (tcTemplate (HandleFamilyUnsupported ""))
+      "handle 语法不支持该 op 族形状",
+    TcEntry
+      (tcCode (AmbiguousCtor "" ""))
+      (tcTemplate (AmbiguousCtor "" ""))
+      "构造子歧义：存在多个候选",
+    TcEntry
+      (tcCode (AmbiguousName "" ""))
+      (tcTemplate (AmbiguousName "" ""))
+      "名字歧义：存在多个候选",
+    TcEntry
+      (tcCode (AmbiguousInstance "" ""))
+      (tcTemplate (AmbiguousInstance "" ""))
+      "实例歧义：存在多个候选",
+    TcEntry
+      (tcCode (HandleClauseFamilyMismatch "" ""))
+      (tcTemplate (HandleClauseFamilyMismatch "" ""))
+      "handle 子句的构造子跨 op 族",
     TcEntry (tcCode (AppliedNotType "")) (tcTemplate (AppliedNotType "")) "应用结果不是类型",
-    TcEntry (tcCode (CtorDoesNotReturn "" "")) (tcTemplate (CtorDoesNotReturn "" "")) "构造子没有返回所声明的族",
-    TcEntry (tcCode (CtorError "" "")) (tcTemplate (CtorError "" "")) "构造子应用形态不合法"
+    TcEntry
+      (tcCode (CtorDoesNotReturn "" ""))
+      (tcTemplate (CtorDoesNotReturn "" ""))
+      "构造子没有返回所声明的族",
+    TcEntry
+      (tcCode (CtorError "" ""))
+      (tcTemplate (CtorError "" ""))
+      "构造子应用形态不合法"
   ]
 
 tcChunk9 : List TcEntry
 tcChunk9 =
-  [ TcEntry (tcCode (CtorWrongIndices "" "")) (tcTemplate (CtorWrongIndices "" "")) "构造子索引个数不符",
-    TcEntry (tcCode (NotTraitMethod "" "")) (tcTemplate (NotTraitMethod "" "")) "名字不是该 trait 的方法",
-    TcEntry (tcCode (OpNotDefinedFor "" "")) (tcTemplate (OpNotDefinedFor "" "")) "运算符未对该类型定义",
-    TcEntry (tcCode (OpOnlyIntString "" "")) (tcTemplate (OpOnlyIntString "" "")) "运算符只对 Int 和 String 定义",
-    TcEntry (tcCode (UnknownConstructorInCase "" "")) (tcTemplate (UnknownConstructorInCase "" "")) "分支的构造子不属于该族",
-    TcEntry (tcCode (UnsolvedMetavar "" "")) (tcTemplate (UnsolvedMetavar "" "")) "未求解的元变量",
+  [
+    TcEntry
+      (tcCode (CtorWrongIndices "" ""))
+      (tcTemplate (CtorWrongIndices "" ""))
+      "构造子索引个数不符",
+    TcEntry
+      (tcCode (NotTraitMethod "" ""))
+      (tcTemplate (NotTraitMethod "" ""))
+      "名字不是该 trait 的方法",
+    TcEntry
+      (tcCode (OpNotDefinedFor "" ""))
+      (tcTemplate (OpNotDefinedFor "" ""))
+      "运算符未对该类型定义",
+    TcEntry
+      (tcCode (OpOnlyIntString "" ""))
+      (tcTemplate (OpOnlyIntString "" ""))
+      "运算符只对 Int 和 String 定义",
+    TcEntry
+      (tcCode (UnknownConstructorInCase "" ""))
+      (tcTemplate (UnknownConstructorInCase "" ""))
+      "分支的构造子不属于该族",
+    TcEntry
+      (tcCode (UnsolvedMetavar "" ""))
+      (tcTemplate (UnsolvedMetavar "" ""))
+      "未求解的元变量",
     TcEntry (tcCode (TypeMismatch "" "")) (tcTemplate (TypeMismatch "" "")) "类型不匹配",
-    TcEntry (tcCode (TypeMismatchCaseBranch "" "")) (tcTemplate (TypeMismatchCaseBranch "" "")) "类型不匹配：case 分支之间不一致"
+    TcEntry
+      (tcCode (TypeMismatchCaseBranch "" ""))
+      (tcTemplate (TypeMismatchCaseBranch "" ""))
+      "类型不匹配：case 分支之间不一致"
   ]
 
 tcChunk10 : List TcEntry
 tcChunk10 =
-  [ TcEntry (tcCode (WhereNeedsSig "" "")) (tcTemplate (WhereNeedsSig "" "")) "where 绑定缺少类型签名",
-    TcEntry (tcCode DerivingViaUnboxedRequired) (tcTemplate DerivingViaUnboxedRequired) "deriving via field 需要自动去装箱的单字段包装",
-    TcEntry (tcCode DerivingViaOnlyRecord) (tcTemplate DerivingViaOnlyRecord) "deriving via field 只允许 record 声明（data 不再具有记录语义）",
-    TcEntry (tcCode ReprAliasInvalid) (tcTemplate ReprAliasInvalid) "alias record 要求擦除后恰好一个非递归运行时字段",
+  [
+    TcEntry
+      (tcCode (WhereNeedsSig "" ""))
+      (tcTemplate (WhereNeedsSig "" ""))
+      "where 绑定缺少类型签名",
+    TcEntry
+      (tcCode DerivingViaUnboxedRequired)
+      (tcTemplate DerivingViaUnboxedRequired)
+      "deriving via field 需要自动去装箱的单字段包装",
+    TcEntry
+      (tcCode DerivingViaOnlyRecord)
+      (tcTemplate DerivingViaOnlyRecord)
+      "deriving via field 只允许 record 声明（data 不再具有记录语义）",
+    TcEntry
+      (tcCode ReprAliasInvalid)
+      (tcTemplate ReprAliasInvalid)
+      "alias record 要求擦除后恰好一个非递归运行时字段",
     TcEntry (tcCode RecordDuplicateField) (tcTemplate RecordDuplicateField) "record 字段重复",
-    TcEntry (tcCode (RecordMissingField "")) (tcTemplate (RecordMissingField "")) "record 缺少字段",
-    TcEntry (tcCode (RecordUnknownField "")) (tcTemplate (RecordUnknownField "")) "record 有未知字段",
+    TcEntry
+      (tcCode (RecordMissingField ""))
+      (tcTemplate (RecordMissingField ""))
+      "record 缺少字段",
+    TcEntry
+      (tcCode (RecordUnknownField ""))
+      (tcTemplate (RecordUnknownField ""))
+      "record 有未知字段",
     TcEntry (tcCode (UnknownRecord "")) (tcTemplate (UnknownRecord "")) "未知的 record",
-    TcEntry (tcCode (DeriveCtorFieldCount "")) (tcTemplate (DeriveCtorFieldCount "")) "deriving 需要单字段构造子",
-    TcEntry (tcCode (DeriveFieldType "" "" "")) (tcTemplate (DeriveFieldType "" "" "")) "deriving 的字段类型不符",
-    TcEntry (tcCode (DeriveSingleCtor "")) (tcTemplate (DeriveSingleCtor "")) "deriving 需要单构造子",
-    TcEntry (tcCode (DeriveUnsupportedKind "")) (tcTemplate (DeriveUnsupportedKind "")) "不支持该 deriving 类型"
+    TcEntry
+      (tcCode (DeriveCtorFieldCount ""))
+      (tcTemplate (DeriveCtorFieldCount ""))
+      "deriving 需要单字段构造子",
+    TcEntry
+      (tcCode (DeriveFieldType "" "" ""))
+      (tcTemplate (DeriveFieldType "" "" ""))
+      "deriving 的字段类型不符",
+    TcEntry
+      (tcCode (DeriveSingleCtor ""))
+      (tcTemplate (DeriveSingleCtor ""))
+      "deriving 需要单构造子",
+    TcEntry
+      (tcCode (DeriveUnsupportedKind ""))
+      (tcTemplate (DeriveUnsupportedKind ""))
+      "不支持该 deriving 类型"
   ]
 
 tcChunk11 : List TcEntry
 tcChunk11 =
-  [ TcEntry (tcCode (LinearUnused "")) (tcTemplate (LinearUnused "")) "用量为 1 的 binder 在运行时未使用",
-    TcEntry (tcCode (LinearOverused "")) (tcTemplate (LinearOverused "")) "用量为 1 的 binder 在运行时使用多于一次",
-    TcEntry (tcCode (ErasedBinderUsed "")) (tcTemplate (ErasedBinderUsed "")) "用量为 0 的 binder 在运行时被使用",
-    TcEntry (tcCode (MultiplicityImplicit "")) (tcTemplate (MultiplicityImplicit "")) "隐式 binder 的用量必须为 0",
-    TcEntry (tcCode (MultiplicityTypeDomain "")) (tcTemplate (MultiplicityTypeDomain "")) "类型层 binder 的用量必须为 0",
-    TcEntry (tcCode (LinearTypeNeedsOne "")) (tcTemplate (LinearTypeNeedsOne "")) "线性类型的 binder 用量必须为 1",
-    TcEntry (tcCode (LinearValueNeedsLinearBinder "")) (tcTemplate (LinearValueNeedsLinearBinder "")) "线性值只能在用量为 1 的 binder 处绑定或传递",
-    TcEntry (tcCode (LinearTopLevel "")) (tcTemplate (LinearTopLevel "")) "顶层定义不能是线性类型",
-    TcEntry (tcCode (LinearCaptureEscapes "")) (tcTemplate (LinearCaptureEscapes "")) "lambda 捕获线性值且可能逃逸"
+  [
+    TcEntry
+      (tcCode (LinearUnused ""))
+      (tcTemplate (LinearUnused ""))
+      "用量为 1 的 binder 在运行时未使用",
+    TcEntry
+      (tcCode (LinearOverused ""))
+      (tcTemplate (LinearOverused ""))
+      "用量为 1 的 binder 在运行时使用多于一次",
+    TcEntry
+      (tcCode (ErasedBinderUsed ""))
+      (tcTemplate (ErasedBinderUsed ""))
+      "用量为 0 的 binder 在运行时被使用",
+    TcEntry
+      (tcCode (MultiplicityImplicit ""))
+      (tcTemplate (MultiplicityImplicit ""))
+      "隐式 binder 的用量必须为 0",
+    TcEntry
+      (tcCode (MultiplicityTypeDomain ""))
+      (tcTemplate (MultiplicityTypeDomain ""))
+      "类型层 binder 的用量必须为 0",
+    TcEntry
+      (tcCode (LinearTypeNeedsOne ""))
+      (tcTemplate (LinearTypeNeedsOne ""))
+      "线性类型的 binder 用量必须为 1",
+    TcEntry
+      (tcCode (LinearValueNeedsLinearBinder ""))
+      (tcTemplate (LinearValueNeedsLinearBinder ""))
+      "线性值只能在用量为 1 的 binder 处绑定或传递",
+    TcEntry
+      (tcCode (LinearTopLevel ""))
+      (tcTemplate (LinearTopLevel ""))
+      "顶层定义不能是线性类型",
+    TcEntry
+      (tcCode (LinearCaptureEscapes ""))
+      (tcTemplate (LinearCaptureEscapes ""))
+      "lambda 捕获线性值且可能逃逸"
   ]
 
 -- | 效果与调试构造相关的诊断条目（效果行未处理、release 里的 debug-only 构造）。
 tcChunk12 : List TcEntry
 tcChunk12 =
-  [ TcEntry (tcCode (UnhandledEffects "")) (tcTemplate (UnhandledEffects "")) "效果运行入口仍有未处理效应（行必须为 Nil）",
-    TcEntry (tcCode (DebugConstructInRelease "")) (tcTemplate (DebugConstructInRelease "")) "release 构建里使用 assert、todo 等 debug-only 构造",
-    TcEntry (tcCode (MainArity "")) (tcTemplate (MainArity "")) "main 带形参（入口必须零参）"
+  [
+    TcEntry
+      (tcCode (UnhandledEffects ""))
+      (tcTemplate (UnhandledEffects ""))
+      "效果运行入口仍有未处理效应（行必须为 Nil）",
+    TcEntry
+      (tcCode (DebugConstructInRelease ""))
+      (tcTemplate (DebugConstructInRelease ""))
+      "release 构建里使用 assert、todo 等 debug-only 构造",
+    TcEntry
+      (tcCode (MainArity ""))
+      (tcTemplate (MainArity ""))
+      "main 带形参（入口必须零参）"
   ]
 
 export tcAll : List TcEntry
@@ -625,7 +875,8 @@ tcCoverageMissing sp ctors =
   let
     joined = join ", " (map firstOf ctors)
     cands = map coverageCandidate ctors
-  in ErrC (withField (FieldCandidates cands) (withDiagSpan sp (tcMsg (NotExhaustive joined) [joined])))
+  in ErrC
+    (withField (FieldCandidates cands) (withDiagSpan sp (tcMsg (NotExhaustive joined) [joined])))
 
 -- | 单个缺失构造子 → 候选（带声明 span）。
 coverageCandidate : Pair String (Maybe Span) -> Candidate

@@ -47,9 +47,10 @@ identCode c = c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 ||
 
 -- | 内部：名字是否以大写字母开头（模块名前缀的判定）。
 upperStart : String -> Bool
-upperStart name = case strUnpack name of
-  c :: _ => c >= 65 && c <= 90
-  [] => False
+upperStart name =
+  case strUnpack name of
+    c :: _ => c >= 65 && c <= 90
+    [] => False
 
 -- | 内部：在 `(键, 值)` 表里查第一个匹配项的值。
 lookupPair : String -> List (Pair String String) -> Maybe String
@@ -110,32 +111,40 @@ record WalkEnv where
 -- `buffers` 是服务器里打开中的文档（path → 文本）；模块 docstring 优先取它，其次走 `isSelf`
 -- 分支，最后才读盘，否则同一模块在它自己的文件与引用它的文件里会显示两个版本。
 export bindingHoverAt : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> Eff r (Maybe Json)
-bindingHoverAt buffers uri line col text = case parseSource "<lsp>" text of
-  ErrC e => pure Nothing
-  OkC sf => case tokenAtCursor text line col of
-    Nothing => pure Nothing
-    Just (Pair tokStart token) => do
-      mref <- moduleRefAt buffers uri line col text sf tokStart token
-      case mref of
-        Just ref => pure (Just (moduleHoverJson ref line tokStart token))
-        Nothing => case localBindAt line col text sf tokStart token of
-          Nothing => pure Nothing
-          Just lb => pure (Just (localHoverJson lb line tokStart token))
+bindingHoverAt buffers uri line col text =
+  case parseSource "<lsp>" text of
+    ErrC e => pure Nothing
+    OkC sf =>
+      case tokenAtCursor text line col of
+        Nothing => pure Nothing
+        Just (Pair tokStart token) =>
+          do
+            mref <- moduleRefAt buffers uri line col text sf tokStart token
+            case mref of
+              Just ref => pure (Just (moduleHoverJson ref line tokStart token))
+              Nothing =>
+                case localBindAt line col text sf tokStart token of
+                  Nothing => pure Nothing
+                  Just lb => pure (Just (localHoverJson lb line tokStart token))
 
 -- | 光标处的模块引用 / 局部绑定的 definition 位置；两类绑定都未命中或目标无法定位时返回
 -- `Nothing`（调用方继续走 Index）。
 export bindingDefinitionAt : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> Eff r (Maybe Json)
-bindingDefinitionAt buffers uri line col text = case parseSource "<lsp>" text of
-  ErrC e => pure Nothing
-  OkC sf => case tokenAtCursor text line col of
-    Nothing => pure Nothing
-    Just (Pair tokStart token) => do
-      mref <- moduleRefAt buffers uri line col text sf tokStart token
-      case mref of
-        Just ref => pure (moduleLocationJson ref)
-        Nothing => case localBindAt line col text sf tokStart token of
-          Nothing => pure Nothing
-          Just lb => pure (Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]]))
+bindingDefinitionAt buffers uri line col text =
+  case parseSource "<lsp>" text of
+    ErrC e => pure Nothing
+    OkC sf =>
+      case tokenAtCursor text line col of
+        Nothing => pure Nothing
+        Just (Pair tokStart token) =>
+          do
+            mref <- moduleRefAt buffers uri line col text sf tokStart token
+            case mref of
+              Just ref => pure (moduleLocationJson ref)
+              Nothing =>
+                case localBindAt line col text sf tokStart token of
+                  Nothing => pure Nothing
+                  Just lb => pure (Just (JArr [JObj [Pair "uri" (JStr uri), Pair "range" (localRange lb)]]))
 
 -- ---------------------------------------------------------------
 -- rename：局部绑定的身份与全部出现位置
@@ -144,23 +153,28 @@ bindingDefinitionAt buffers uri line col text = case parseSource "<lsp>" text of
 -- 绑定上时返回 `Nothing`，调用方继续走顶层符号。参数带已解析的 `SourceFile`：rename 要在同一份
 -- 文档上判定多个位置，避免重复 parse。
 export localBindingAtSf : SourceFile -> String -> Int -> Int -> Maybe (Pair Int Int)
-localBindingAtSf sf text line col = case tokenAtCursor text line col of
-  Nothing => Nothing
-  Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
+localBindingAtSf sf text line col =
+  case tokenAtCursor text line col of
     Nothing => Nothing
-    Just lb => Just (Pair lb.lbLine lb.lbCol)
+    Just (Pair tokStart token) =>
+      case localBindAt line col text sf tokStart token of
+        Nothing => Nothing
+        Just lb => Just (Pair lb.lbLine lb.lbCol)
 
 -- | 光标处局部绑定的全部出现位置（binder 定义 + 作用域内的使用），按文档顺序。
 -- 对全文里该名字的每个整词出现位置重新跑一次局部解析，只有解析到同一个 binder 才计入——
 -- 遮蔽与作用域顺序直接复用 `localBindAt`，不另写一套判断。
 export bindingRenameOccurrences : Int -> Int -> String -> Maybe (List (Pair Int Int))
-bindingRenameOccurrences line col text = case parseSource "<lsp>" text of
-  ErrC e => Nothing
-  OkC sf => case tokenAtCursor text line col of
-    Nothing => Nothing
-    Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
-      Nothing => Nothing
-      Just target => Just (filter (sameBinding sf text target) (wordOccurrences text token))
+bindingRenameOccurrences line col text =
+  case parseSource "<lsp>" text of
+    ErrC e => Nothing
+    OkC sf =>
+      case tokenAtCursor text line col of
+        Nothing => Nothing
+        Just (Pair tokStart token) =>
+          case localBindAt line col text sf tokStart token of
+            Nothing => Nothing
+            Just target => Just (filter (sameBinding sf text target) (wordOccurrences text token))
 
 -- | 内部：位置 `pos` 上的名字是否解析到同一个 binder（名字与定义位置都相同）。
 sameBinding : SourceFile -> String -> LocalBind -> Pair Int Int -> Bool
@@ -170,20 +184,23 @@ sameBinding sf text target pos =
     col = secondOf pos
   in case tokenAtCursor text line col of
     Nothing => False
-    Just (Pair tokStart token) => case localBindAt line col text sf tokStart token of
-      Nothing => False
-      Just lb =>
-        lb.lbName == target.lbName && lb.lbLine == target.lbLine && lb.lbCol == target.lbCol
+    Just (Pair tokStart token) =>
+      case localBindAt line col text sf tokStart token of
+        Nothing => False
+        Just lb =>
+          lb.lbName == target.lbName && lb.lbLine == target.lbLine && lb.lbCol == target.lbCol
 
 -- | 内部：全文里 `word` 的整词出现位置（1-based 行 / 列），按文档顺序。
 wordOccurrences : String -> String -> List (Pair Int Int)
-wordOccurrences text word = if word == "" then []
-else
-  let
-    lines = split "\n" text
-    starts = lineStarts lines
-    chars = strUnpack text
-  in reverse (wordOccurrencesGo chars (strUnpack word) (0 - 1) 0 starts [])
+wordOccurrences text word =
+  if word == "" then
+    []
+  else
+    let
+      lines = split "\n" text
+      starts = lineStarts lines
+      chars = strUnpack text
+    in reverse (wordOccurrencesGo chars (strUnpack word) (0 - 1) 0 starts [])
 
 -- | 内部：`wordOccurrences` 的扫描循环，`acc` 为逆序累积的结果。
 wordOccurrencesGo : List Int -> List Int -> Int -> Int -> List Int -> List (Pair Int Int) -> List (Pair Int Int)
@@ -191,16 +208,18 @@ wordOccurrencesGo [] needle prev idx starts acc = acc
 wordOccurrencesGo (c :: rest) needle prev idx starts acc =
   if (prev < 0 || not (identCode prev)) && isPrefixChars needle (c :: rest) && afterBoundary (drop (length needle) (c :: rest)) then
     wordOccurrencesGo rest needle c (idx + 1) starts (posOfAbs starts idx :: acc)
-  else wordOccurrencesGo rest needle c (idx + 1) starts acc
+  else
+    wordOccurrencesGo rest needle c (idx + 1) starts acc
 
 -- ---------------------------------------------------------------
 -- 模块引用
 -- ---------------------------------------------------------------
 -- | 内部：当前文件的 module 头名字；没有 `module` 头时为 ""。
 currentModuleNameOfSf : SourceFile -> String
-currentModuleNameOfSf sf = case sf.sourceFileModDecl of
-  Nothing => ""
-  Just m => m.modDeclName
+currentModuleNameOfSf sf =
+  case sf.sourceFileModDecl of
+    Nothing => ""
+    Just m => m.modDeclName
 
 -- | 内部：import 的 alias 表（alias → 模块全名）。
 aliasTable : List Import -> List (Pair String String)
@@ -208,62 +227,74 @@ aliasTable imports = mapMaybe importAliasEntry imports
 
 -- | 内部：单条 import 贡献的 alias 条目；没有 alias 时为 `Nothing`。
 importAliasEntry : Import -> Maybe (Pair String String)
-importAliasEntry imp = case imp.importAlias of
-  Nothing => Nothing
-  Just a => Just (Pair a imp.importName)
+importAliasEntry imp =
+  case imp.importAlias of
+    Nothing => Nothing
+    Just a => Just (Pair a imp.importName)
 
 -- | 内部：名字是 alias 时换成模块全名，否则原样返回。
 resolveModuleName : List Import -> String -> String
-resolveModuleName imports name = case lookupPair name (aliasTable imports) of
-  Nothing => name
-  Just full => full
+resolveModuleName imports name =
+  case lookupPair name (aliasTable imports) of
+    Nothing => name
+    Just full => full
 
 -- | 内部：按模块名探测源文件路径；本包根在前、依赖闭包在后（与 Loader 的可见性顺序一致），
 -- 都找不到返回 ""。
 probeRoots : Member nFs FsOp r => List Root -> String -> Eff r String
 probeRoots [] name = pure ""
-probeRoots (root :: rest) name = do
-  let
-    path = "${rootDir root}/${join "/" (splitOnDot name)}.vuna"
-  in do
-    exists <- pathExistsFile path
-    if exists then pure path else probeRoots rest name
+probeRoots (root :: rest) name =
+  do
+    let
+      path = "${rootDir root}/${join "/" (splitOnDot name)}.vuna"
+    in do
+      exists <- pathExistsFile path
+      if exists then pure path else probeRoots rest name
 
 -- | 内部：由文档 uri 求包上下文，再按模块名探测源文件路径；上下文不可用或探测失败返回 ""。
 modulePathOf : Member nFs FsOp r, Member nEnv EnvOp r => String -> String -> Eff r String
-modulePathOf uri name = do
-  ctxR <- contextForDoc uri
-  case ctxR of
-    ErrC e => pure ""
-    OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
+modulePathOf uri name =
+  do
+    ctxR <- contextForDoc uri
+    case ctxR of
+      ErrC e => pure ""
+      OkC (Pair label ctx) => probeRoots (contextRoots ctx) name
 
 -- | 模块名 → 源文本：按给定模块根探测（`probeRoots`），找不到返回 `Nothing`；读盘失败由宿主层硬失败。
 -- 调用方持有一份 `PackageContext`，直接传它的 roots，避免每个 binder 都重算一次上下文；
 -- 依赖模块每次读盘，未保存的改动不反映。
 export moduleSourceIn : Member nFs FsOp r => List Root -> String -> Eff r (Maybe String)
-moduleSourceIn roots name = do
-  path <- probeRoots roots name
-  if path == "" then pure Nothing
-  else do
-    exists <- fsFileExists path
-    if exists then do
-      source <- fsReadFile path
-      pure (Just source)
-    else pure Nothing
+moduleSourceIn roots name =
+  do
+    path <- probeRoots roots name
+    if path == "" then
+      pure Nothing
+    else
+      do
+        exists <- fsFileExists path
+        if exists then
+          do
+            source <- fsReadFile path
+            pure (Just source)
+        else
+          pure Nothing
 
 -- | 内部：从源文本的注释里取模块级 docstring；词法失败时返回 ""。
 moduleDocOf : SourceFile -> String -> String
-moduleDocOf sf text = case lexComments text of
-  ErrC e => ""
-  OkC comments => docTableModuleDoc (docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments)
+moduleDocOf sf text =
+  case lexComments text of
+    ErrC e => ""
+    OkC comments => docTableModuleDoc (docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments)
 
 -- | 内部：module 头里模块名的起始位置；没有 `module` 头或找不到名字时为 (1, 1)。
 moduleHeaderPos : SourceFile -> List String -> String -> Pair Int Int
-moduleHeaderPos sf lines name = case sf.sourceFileModDecl of
-  Nothing => Pair 1 1
-  Just m => case findNamePos lines m.modDeclSpan name of
+moduleHeaderPos sf lines name =
+  case sf.sourceFileModDecl of
     Nothing => Pair 1 1
-    Just (Pair l c) => Pair l c
+    Just m =>
+      case findNamePos lines m.modDeclSpan name of
+        Nothing => Pair 1 1
+        Just (Pair l c) => Pair l c
 
 -- | 内部：打开中的缓冲里该路径的源文本（`buffers` 是 path → 文本，服务器状态里唯一的
 -- 未保存改动来源）；未打开或路径为 "" 时返回 `Nothing`。
@@ -276,17 +307,19 @@ bufferedSource buffers path = if path == "" then Nothing else lookupPair path bu
 -- 名字返回 `Nothing`，调用方保留 Index 的 `symDoc`——否则成员（构造子 / 字段 / 方法，doc 记在
 -- `parent\tmember` 键下）会被顶层 doc 查询覆盖成空。
 export bufferSymDoc : List (Pair String String) -> String -> String -> String -> Maybe String
-bufferSymDoc buffers path kind name = case bufferedSource buffers path of
-  Nothing => Nothing
-  Just source => case parseSourceWithComments "<lsp>" source of
-    ErrC e => Nothing
-    OkC (Pair sf comments) =>
-      let
-        table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
-        decls = sf.sourceFileDecls
-      in if isMemberKind kind then
-        if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
-      else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
+bufferSymDoc buffers path kind name =
+  case bufferedSource buffers path of
+    Nothing => Nothing
+    Just source =>
+      case parseSourceWithComments "<lsp>" source of
+        ErrC e => Nothing
+        OkC (Pair sf comments) =>
+          let
+            table = docTableOf sf.sourceFileModDecl sf.sourceFileDecls comments
+            decls = sf.sourceFileDecls
+          in if isMemberKind kind then
+            if hasMemberNamed decls name then Just (memberDocByName table name) else Nothing
+          else if hasDeclNamed decls name then Just (docForDecl table name) else Nothing
 
 -- | 内部：符号种类标签是否属于「成员」（构造子 / record 字段 / trait 方法）。
 isMemberKind : String -> Bool
@@ -334,24 +367,32 @@ memberDocGo suffix ((Pair k v) :: rest) = if endsWith suffix k then v else membe
 -- | 内部：目标文件的模块 docstring 与 module 头名字位置：优先取打开中的缓冲；否则 `isSelf`
 -- 时把传入的 `uri` 交给 `docAndPosOf`；再否则读盘。都取不到时为 ("", (1, 1))。
 moduleFileInfo : Member nFs FsOp r => List (Pair String String) -> Bool -> String -> String -> String -> Eff r (Pair String (Pair Int Int))
-moduleFileInfo buffers isSelf uri path name = case bufferedSource buffers path of
-  Just buffered => pure (docAndPosOf name buffered)
-  Nothing => if isSelf then pure (docAndPosOf name uri)
-  else if path == "" then pure (Pair "" (Pair 1 1))
-  else do
-    exists <- fsFileExists path
-    if exists then do
-      source <- fsReadFile path
-      pure (docAndPosOf name source)
-    else pure (Pair "" (Pair 1 1))
+moduleFileInfo buffers isSelf uri path name =
+  case bufferedSource buffers path of
+    Just buffered => pure (docAndPosOf name buffered)
+    Nothing =>
+      if isSelf then
+        pure (docAndPosOf name uri)
+      else if path == "" then
+        pure (Pair "" (Pair 1 1))
+      else
+        do
+          exists <- fsFileExists path
+          if exists then
+            do
+              source <- fsReadFile path
+              pure (docAndPosOf name source)
+          else
+            pure (Pair "" (Pair 1 1))
 
 -- | 内部：解析源文本，返回模块 docstring 与 module 头里模块名的位置；解析失败按空源处理。
 docAndPosOf : String -> String -> Pair String (Pair Int Int)
 docAndPosOf name source =
   let
-    sf = case parseSource "<lsp>" source of
-      ErrC e => SourceFile Nothing [] [] [] [] [] []
-      OkC parsed => parsed
+    sf =
+      case parseSource "<lsp>" source of
+        ErrC e => SourceFile Nothing [] [] [] [] [] []
+        OkC parsed => parsed
   in Pair (moduleDocOf sf source) (moduleHeaderPos sf (split "\n" source) name)
 
 -- | 内部：组装一个模块引用的解析结果。当前文件自有模块（模块头名字 == 引用名）不探测路径，
@@ -380,54 +421,72 @@ importMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String
 importMatch buffers uri line text sf tokStart token imp =
   let
     lines = split "\n" text
-  in if not (spanContainsPos imp.importSpan line tokStart) then pure Nothing
-  else case findNamePos lines imp.importSpan imp.importName of
-    Just (Pair nl nc) => if nl == line && nc == tokStart && token == imp.importName then do
-      ref <- mkModuleRef buffers uri text sf imp.importName
-      pure (Just ref)
-    else case imp.importAlias of
+  in if not (spanContainsPos imp.importSpan line tokStart) then
+    pure Nothing
+  else
+    case findNamePos lines imp.importSpan imp.importName of
+      Just (Pair nl nc) =>
+        if nl == line && nc == tokStart && token == imp.importName then
+          do
+            ref <- mkModuleRef buffers uri text sf imp.importName
+            pure (Just ref)
+        else
+          case imp.importAlias of
+            Nothing => pure Nothing
+            Just alias =>
+              case findWordFromPos lines nl (nc + strLength imp.importName) (spanEndLine imp.importSpan) alias of
+                Just (Pair al ac) =>
+                  if al == line && ac == tokStart && token == alias then
+                    do
+                      ref <- mkModuleRef buffers uri text sf imp.importName
+                      pure (Just ref)
+                  else
+                    pure Nothing
+                Nothing => pure Nothing
       Nothing => pure Nothing
-      Just alias => case findWordFromPos lines nl (nc + strLength imp.importName) (spanEndLine imp.importSpan) alias of
-        Just (Pair al ac) => if al == line && ac == tokStart && token == alias then do
-          ref <- mkModuleRef buffers uri text sf imp.importName
-          pure (Just ref)
-        else pure Nothing
-        Nothing => pure Nothing
-    Nothing => pure Nothing
 
 -- | 内部：module 头导出项 `module B`（B 可以是全名或 alias）上的模块引用。
 exportModuleRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
-exportModuleRef buffers uri line text sf tokStart token = case sf.sourceFileModDecl of
-  Nothing => pure Nothing
-  Just m =>
-    let
-      lines = split "\n" text
-    in firstSuccess
-      (map (exportItemMatch buffers uri line text sf tokStart token lines) m.modDeclExportItems)
+exportModuleRef buffers uri line text sf tokStart token =
+  case sf.sourceFileModDecl of
+    Nothing => pure Nothing
+    Just m =>
+      let
+        lines = split "\n" text
+      in firstSuccess
+        (map (exportItemMatch buffers uri line text sf tokStart token lines) m.modDeclExportItems)
 
 -- | 内部：单个导出项是否命中光标；只有 `module B` 形式可解析成模块引用。
 exportItemMatch : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> List String -> ExportItem -> Eff r (Maybe ModuleRef)
-exportItemMatch buffers uri line text sf tokStart token lines (XModule name sp) = case findNamePos lines sp name of
-  Just (Pair nl nc) => if nl == line && nc == tokStart && token == name then do
-    ref <- mkModuleRef buffers uri text sf (resolveModuleName sf.sourceFileImports name)
-    pure (Just ref)
-  else pure Nothing
-  Nothing => pure Nothing
+exportItemMatch buffers uri line text sf tokStart token lines (XModule name sp) =
+  case findNamePos lines sp name of
+    Just (Pair nl nc) =>
+      if nl == line && nc == tokStart && token == name then
+        do
+          ref <- mkModuleRef buffers uri text sf (resolveModuleName sf.sourceFileImports name)
+          pure (Just ref)
+      else
+        pure Nothing
+    Nothing => pure Nothing
 exportItemMatch buffers uri line text sf tokStart token lines item = pure Nothing
 
 -- | 内部：module 头上的模块名本身（光标在 `module Foo` 的 `Foo` 上）。
 headerModuleRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
-headerModuleRef buffers uri line text sf tokStart token = case sf.sourceFileModDecl of
-  Nothing => pure Nothing
-  Just m =>
-    let
-      lines = split "\n" text
-    in case findNamePos lines m.modDeclSpan m.modDeclName of
-      Just (Pair nl nc) => if nl == line && nc == tokStart && token == m.modDeclName then do
-        ref <- mkModuleRef buffers uri text sf m.modDeclName
-        pure (Just ref)
-      else pure Nothing
-      Nothing => pure Nothing
+headerModuleRef buffers uri line text sf tokStart token =
+  case sf.sourceFileModDecl of
+    Nothing => pure Nothing
+    Just m =>
+      let
+        lines = split "\n" text
+      in case findNamePos lines m.modDeclSpan m.modDeclName of
+        Just (Pair nl nc) =>
+          if nl == line && nc == tokStart && token == m.modDeclName then
+            do
+              ref <- mkModuleRef buffers uri text sf m.modDeclName
+              pure (Just ref)
+          else
+            pure Nothing
+        Nothing => pure Nothing
 
 -- | 内部：token 的模块前缀候选（不含完整 token，按由短到长）：`A.B.c` → A, A.B。
 prefixCandidates : String -> List String
@@ -451,10 +510,13 @@ moduleCandidates token = append (prefixCandidates token) [token]
 
 -- | 内部：模块名能否在本包上下文里探测到源文件。
 knownModule : Member nFs FsOp r, Member nEnv EnvOp r => String -> String -> Eff r Bool
-knownModule uri name = if name == "" then pure False
-else do
-  p <- modulePathOf uri name
-  pure (p /= "")
+knownModule uri name =
+  if name == "" then
+    pure False
+  else
+    do
+      p <- modulePathOf uri name
+      pure (p /= "")
 
 -- | 内部：限定名里的模块前缀：`Base.Data.List.map` 光标在 `List` ⇒ `Base.Data.List`；在 `map` ⇒ 不命中。
 qualifiedRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
@@ -466,33 +528,41 @@ qualifiedRef buffers uri line col text sf tokStart token =
 -- 1-based，名字占列 `tokStart .. tokStart+len-1`）；落在名字外面（含紧跟其后的 `.`）不算命中，
 -- 否则 `Base.Data.List.map` 光标停在 `.` 上会误报 `module Base`，`Base.Data.Maybe Int` 的空格处也会误报。
 tryPrefix : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Eff r (Maybe ModuleRef)
-tryPrefix buffers uri line col text sf tokStart token prefix = if not (upperStart prefix) then pure Nothing
-else if col < tokStart || col > tokStart + strLength prefix - 1 then pure Nothing
-else
-  let
-    name = resolveModuleName sf.sourceFileImports prefix
-  in do
-    known <- knownModule uri name
-    if known then do
-      ref <- mkModuleRef buffers uri text sf name
-      pure (Just ref)
-    else pure Nothing
+tryPrefix buffers uri line col text sf tokStart token prefix =
+  if not (upperStart prefix) then
+    pure Nothing
+  else if col < tokStart || col > tokStart + strLength prefix - 1 then
+    pure Nothing
+  else
+    let
+      name = resolveModuleName sf.sourceFileImports prefix
+    in do
+      known <- knownModule uri name
+      if known then
+        do
+          ref <- mkModuleRef buffers uri text sf name
+          pure (Just ref)
+      else
+        pure Nothing
 
 -- | 内部：按「import 行 → 导出项 → module 头 → 限定名前缀」的顺序找光标处的模块引用。
 moduleRefAt : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
-moduleRefAt buffers uri line col text sf tokStart token = do
-  imported <- importModuleRef buffers uri line text sf tokStart token
-  case imported of
-    Just ref => pure (Just ref)
-    Nothing => do
-      exported <- exportModuleRef buffers uri line text sf tokStart token
-      case exported of
-        Just ref => pure (Just ref)
-        Nothing => do
-          headerRef <- headerModuleRef buffers uri line text sf tokStart token
-          case headerRef of
+moduleRefAt buffers uri line col text sf tokStart token =
+  do
+    imported <- importModuleRef buffers uri line text sf tokStart token
+    case imported of
+      Just ref => pure (Just ref)
+      Nothing =>
+        do
+          exported <- exportModuleRef buffers uri line text sf tokStart token
+          case exported of
             Just ref => pure (Just ref)
-            Nothing => qualifiedRef buffers uri line col text sf tokStart token
+            Nothing =>
+              do
+                headerRef <- headerModuleRef buffers uri line text sf tokStart token
+                case headerRef of
+                  Just ref => pure (Just ref)
+                  Nothing => qualifiedRef buffers uri line col text sf tokStart token
 
 -- | 内部：模块 hover 的 markdown 正文：`module <全名>` 代码块，有 docstring 时追加在代码块之后。
 moduleHoverBody : ModuleRef -> String
@@ -510,9 +580,11 @@ moduleHoverJson ref line tokStart token =
 -- | 内部：definition 的 Location 数组，跳目标模块 module 头里的模块名；无法定位时为 `Nothing`。
 moduleLocationJson : ModuleRef -> Maybe Json
 moduleLocationJson ref =
-  if ref.modRefUri == "" then Nothing
-  else Just
-    (JArr [JObj [Pair "uri" (JStr ref.modRefUri), Pair "range" (lspRange ref.modRefLine ref.modRefCol ref.modRefLine (ref.modRefCol + strLength ref.modRefName))]])
+  if ref.modRefUri == "" then
+    Nothing
+  else
+    Just
+      (JArr [JObj [Pair "uri" (JStr ref.modRefUri), Pair "range" (lspRange ref.modRefLine ref.modRefCol ref.modRefLine (ref.modRefCol + strLength ref.modRefName))]])
 
 -- ---------------------------------------------------------------
 -- 文本 / span 小工具
@@ -546,9 +618,10 @@ absOffset starts line col = lineStartAt starts line + (col - 1)
 -- | 内部：字节偏移 → (行, 列)，两者都是 1-based。
 posAbsGo : List Int -> Int -> Int -> Pair Int Int
 posAbsGo [] off line = Pair 1 1
-posAbsGo (start :: rest) off line = case rest of
-  [] => Pair line (off - start + 1)
-  next :: more => if off < next then Pair line (off - start + 1) else posAbsGo rest off (line + 1)
+posAbsGo (start :: rest) off line =
+  case rest of
+    [] => Pair line (off - start + 1)
+    next :: more => if off < next then Pair line (off - start + 1) else posAbsGo rest off (line + 1)
 
 -- | 内部：字节偏移 → (行, 列)。
 posOfAbs : List Int -> Int -> Pair Int Int
@@ -557,7 +630,8 @@ posOfAbs starts off = posAbsGo starts off 1
 -- | 内部：整词匹配判定：needle 前后都不是标识符字符（避免 alias `F` 命中 `Foo` 里的 F）。
 wordOk : List Int -> List Int -> Int -> Bool
 wordOk hay needle prev =
-  if prev >= 0 && identCode prev then False
+  if prev >= 0 && identCode prev then
+    False
   else if isPrefixChars needle hay then afterBoundary (drop (length needle) hay) else False
 
 -- | 内部：接下来这段字符是否已到词边界（空 = 已到）。
@@ -572,10 +646,13 @@ findWordChars hay needle from = findWordGo (drop from hay) needle (0 - 1) from
 -- | 内部：`findWordChars` 的扫描循环。
 findWordGo : List Int -> List Int -> Int -> Int -> Int
 findWordGo [] needle prev idx = 0 - 1
-findWordGo hay needle prev idx = if wordOk hay needle prev then idx
-else case hay of
-  [] => 0 - 1
-  c :: rest => findWordGo rest needle c (idx + 1)
+findWordGo hay needle prev idx =
+  if wordOk hay needle prev then
+    idx
+  else
+    case hay of
+      [] => 0 - 1
+      c :: rest => findWordGo rest needle c (idx + 1)
 
 -- | 内部：从 (startLine, startCol) 起、在 lastLine 范围内的行文本里找整词。
 -- 不能按 span 切文本：parser 的 span end 是最后一个 token 的起点，直接切会漏掉最后一个 token
@@ -586,17 +663,18 @@ findWordFromPos lines startLine startCol lastLine word =
 
 -- | 内部：`findWordFromPos` 的逐行扫描。
 scanWordFrom : Int -> Int -> Int -> List String -> List Int -> Maybe (Pair Int Int)
-scanWordFrom lineNo startCol lastLine remaining word = if lineNo > lastLine then Nothing
-else case remaining of
-  [] => Nothing
-  ln :: rest =>
-    let
-      from0 = clampInt 0 (startCol - 1) (strLength ln)
-      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
-    in case findWordChars (strUnpack tailPart) word 0 of
-      hit =>
-        if hit >= 0 then Just (Pair lineNo (hit + from0 + 1))
-        else scanWordFrom (lineNo + 1) 1 lastLine rest word
+scanWordFrom lineNo startCol lastLine remaining word =
+  if lineNo > lastLine then
+    Nothing
+  else
+    case remaining of
+      [] => Nothing
+      ln :: rest =>
+        let
+          from0 = clampInt 0 (startCol - 1) (strLength ln)
+          tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
+        in case findWordChars (strUnpack tailPart) word 0 of
+          hit => if hit >= 0 then Just (Pair lineNo (hit + from0 + 1)) else scanWordFrom (lineNo + 1) 1 lastLine rest word
 
 -- | 内部：行范围内 `@name` 的 name 位置（as-pattern 后缀形 `(pat)@x`）。
 findAfterAt : List String -> Int -> Int -> Int -> String -> Maybe (Pair Int Int)
@@ -605,16 +683,19 @@ findAfterAt lines startLine startCol lastLine word =
 
 -- | 内部：`findAfterAt` 的逐行扫描。
 scanAfterAt : Int -> Int -> Int -> List String -> List Int -> Maybe (Pair Int Int)
-scanAfterAt lineNo startCol lastLine remaining word = if lineNo > lastLine then Nothing
-else case remaining of
-  [] => Nothing
-  ln :: rest =>
-    let
-      from0 = clampInt 0 (startCol - 1) (strLength ln)
-      tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
-    in case scanAtChars (strUnpack tailPart) word (0 - 1) 0 of
-      Just idx => Just (Pair lineNo (idx + from0 + 1))
-      Nothing => scanAfterAt (lineNo + 1) 1 lastLine rest word
+scanAfterAt lineNo startCol lastLine remaining word =
+  if lineNo > lastLine then
+    Nothing
+  else
+    case remaining of
+      [] => Nothing
+      ln :: rest =>
+        let
+          from0 = clampInt 0 (startCol - 1) (strLength ln)
+          tailPart = substring (natFromInt from0) (natFromInt (strLength ln - from0)) ln
+        in case scanAtChars (strUnpack tailPart) word (0 - 1) 0 of
+          Just idx => Just (Pair lineNo (idx + from0 + 1))
+          Nothing => scanAfterAt (lineNo + 1) 1 lastLine rest word
 
 -- | 内部：扫描紧跟在 `@` 之后的整词，返回其 0-based 偏移。
 scanAtChars : List Int -> List Int -> Int -> Int -> Maybe Int
@@ -622,7 +703,8 @@ scanAtChars [] word prev idx = Nothing
 scanAtChars (c :: rest) word prev idx =
   if prev == 64 && isPrefixChars word (c :: rest) && afterBoundary (drop (length word) (c :: rest)) then
     Just idx
-  else scanAtChars rest word c (idx + 1)
+  else
+    scanAtChars rest word c (idx + 1)
 
 -- | 内部：as-pattern 的名字位置：`x@pat`（span 起点）或 `(pat)@x`（`@` 之后）；都推导不出时
 -- 退回 span 起点。
@@ -634,13 +716,15 @@ asNamePos env sp name =
     lastLine = spanEndLine sp
     first = findWordFromPos env.weLines startLine startCol lastLine name
   in case first of
-    Just (Pair l c) => if l == startLine && c == startCol then Pair l c
-    else
-      let
-        afterAt = findAfterAt env.weLines startLine startCol lastLine name
-      in case afterAt of
-        Just pos => pos
-        Nothing => Pair startLine startCol
+    Just (Pair l c) =>
+      if l == startLine && c == startCol then
+        Pair l c
+      else
+        let
+          afterAt = findAfterAt env.weLines startLine startCol lastLine name
+        in case afterAt of
+          Just pos => pos
+          Nothing => Pair startLine startCol
     Nothing => Pair startLine startCol
 
 -- ---------------------------------------------------------------
@@ -674,13 +758,15 @@ fieldPatBinders env kind mval (Pair fname pat) = patBinders env kind pat mval
 patBinders : WalkEnv -> String -> Pat -> Maybe Expr -> List LocalBind
 patBinders env kind (PVar n sp) mval =
   let
-    t = case mval of
-      Just (EAnn value ty annSp) => renderType ty
-      _ => ""
-    v = case mval of
-      Just (EAnn value ty annSp) => renderValueText env value
-      Just value => renderValueText env value
-      Nothing => ""
+    t =
+      case mval of
+        Just (EAnn value ty annSp) => renderType ty
+        _ => ""
+    v =
+      case mval of
+        Just (EAnn value ty annSp) => renderValueText env value
+        Just value => renderValueText env value
+        Nothing => ""
   in [LocalBind n kind (spanStartLine sp) (spanStartCol sp) t v]
 patBinders env kind (PAs n inner sp) mval =
   let
@@ -692,15 +778,17 @@ patBinders env kind pat mval = []
 
 -- | 内部：单行值文本（取 `inlineExpr` 的第一行并截断；块结构返回 ""）。
 renderValueText : WalkEnv -> Expr -> String
-renderValueText env e = case inlineExpr env.weFx e of
-  Nothing => ""
-  Just s => truncateValue (firstLineOf s)
+renderValueText env e =
+  case inlineExpr env.weFx e of
+    Nothing => ""
+    Just s => truncateValue (firstLineOf s)
 
 -- | 内部：字符串的第一行。
 firstLineOf : String -> String
-firstLineOf s = case split "\n" s of
-  [] => ""
-  l :: _ => l
+firstLineOf s =
+  case split "\n" s of
+    [] => ""
+    l :: _ => l
 
 -- | 内部：按 `maxValueChars` 截断。
 truncateValue : String -> String
@@ -727,9 +815,10 @@ nthExpr i (x :: rest) = if i <= 0 then Just x else nthExpr (i - 1) rest
 -- 没有同名签名时为 `Nothing`。
 signatureOfDecl : List Decl -> String -> Maybe (List Expr)
 signatureOfDecl [] name = Nothing
-signatureOfDecl (d :: rest) name = case d of
-  DSig n ctx ty sp => if n == name then Just (arrowDomains ty) else signatureOfDecl rest name
-  _ => signatureOfDecl rest name
+signatureOfDecl (d :: rest) name =
+  case d of
+    DSig n ctx ty sp => if n == name then Just (arrowDomains ty) else signatureOfDecl rest name
+    _ => signatureOfDecl rest name
 
 -- | 内部：顶层函数的完整签名类型表达式（区别于 `signatureOfDecl` 的 `arrowDomains`——后者只取
 -- 参数 domain 给模式当签名、丢掉了 binder 名）。签名里的 Pi binder（`(f : Int -> Int) -> ...`
@@ -737,9 +826,10 @@ signatureOfDecl (d :: rest) name = case d of
 -- 不会误报。
 declSigType : List Decl -> String -> Maybe Expr
 declSigType [] name = Nothing
-declSigType (d :: rest) name = case d of
-  DSig n ctx ty sp => if n == name then Just ty else declSigType rest name
-  _ => declSigType rest name
+declSigType (d :: rest) name =
+  case d of
+    DSig n ctx ty sp => if n == name then Just ty else declSigType rest name
+    _ => declSigType rest name
 
 -- ---------------------------------------------------------------
 -- 作用域遍历
@@ -747,9 +837,10 @@ declSigType (d :: rest) name = case d of
 -- | 内部：在作用域里按名字查找，最内层优先（较早的 binder 在列表前、较新的在末尾）。
 lookupScope : List LocalBind -> String -> Maybe LocalBind
 lookupScope [] name = Nothing
-lookupScope (b :: rest) name = case lookupScope rest name of
-  Just inner => Just inner
-  Nothing => if b.lbName == name then Just b else Nothing
+lookupScope (b :: rest) name =
+  case lookupScope rest name of
+    Just inner => Just inner
+    Nothing => if b.lbName == name then Just b else Nothing
 
 -- | 内部：binder 还没有类型时补上给定类型（已有类型不覆盖）。
 withType : String -> LocalBind -> LocalBind
@@ -765,11 +856,13 @@ patBindersIdx : WalkEnv -> String -> Maybe (List Expr) -> List Pat -> Int -> Lis
 patBindersIdx env kind mSig [] i = []
 patBindersIdx env kind mSig (p :: rest) i =
   let
-    domType = case mSig of
-      Nothing => ""
-      Just domains => case nthExpr i domains of
+    domType =
+      case mSig of
         Nothing => ""
-        Just dom => renderType dom
+        Just domains =>
+          case nthExpr i domains of
+            Nothing => ""
+            Just dom => renderType dom
     binders = map (\b => withType domType b) (patBinders env kind p Nothing)
   in append binders (patBindersIdx env kind mSig rest (i + 1))
 
@@ -778,16 +871,20 @@ binderInPatList : WalkEnv -> Int -> Int -> String -> String -> Maybe (List Expr)
 binderInPatList env line col name kind mSig [] i = Nothing
 binderInPatList env line col name kind mSig (p :: rest) i =
   let
-    domType = case mSig of
-      Nothing => ""
-      Just domains => case nthExpr i domains of
+    domType =
+      case mSig of
         Nothing => ""
-        Just dom => renderType dom
+        Just domains =>
+          case nthExpr i domains of
+            Nothing => ""
+            Just dom => renderType dom
     binders = map (\b => withType domType b) (patBinders env kind p Nothing)
-  in if patHit env line col p then case binderNamed name binders of
-    Just hit => Just hit
-    Nothing => binderInPatList env line col name kind mSig rest (i + 1)
-  else binderInPatList env line col name kind mSig rest (i + 1)
+  in if patHit env line col p then
+    case binderNamed name binders of
+      Just hit => Just hit
+      Nothing => binderInPatList env line col name kind mSig rest (i + 1)
+  else
+    binderInPatList env line col name kind mSig rest (i + 1)
 
 -- | 内部：参数列表里是否有模式覆盖光标。
 patsHaveCursor : WalkEnv -> Int -> Int -> List Pat -> Bool
@@ -813,7 +910,8 @@ lambdaBindsGo env header headerStart (p :: rest) from acc =
   let
     hit = findWordChars (strUnpack header) (strUnpack p) from
     nextFrom = if hit < 0 then from else hit + strLength p
-  in if hit < 0 then lambdaBindsGo env header headerStart rest nextFrom acc
+  in if hit < 0 then
+    lambdaBindsGo env header headerStart rest nextFrom acc
   else
     let
       pos = posOfAbs env.weStarts (headerStart + hit)
@@ -833,8 +931,10 @@ lambdaWalk fuel env scope line col name lamSp params body =
     scope2 = append scope paramBinds
   in case binderNamed name paramBinds of
     Just hit =>
-      if posInBinderRange hit line col then Just hit
-      else walkExpr (fuel - 1) env scope2 line col name body
+      if posInBinderRange hit line col then
+        Just hit
+      else
+        walkExpr (fuel - 1) env scope2 line col name body
     Nothing => walkExpr (fuel - 1) env scope2 line col name body
 
 -- | 内部：依次遍历实参（第一个命中即停）。
@@ -865,24 +965,30 @@ walkInterpParts fuel env scope line col name parts =
 -- | 内部：遍历绑定块（`let` / `where`）。作用域是顺序的——第 k 条的值只看得到前 k-1 个 binder；
 -- body 看全部（由调用方追加）。
 walkBinds : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> String -> List (Pair Pat Expr) -> Maybe LocalBind
-walkBinds fuel env scope line col name kind binds = if fuel <= 0 then Nothing
-else case binds of
-  [] => Nothing
-  (Pair pat value) :: rest =>
-    let
-      binders = patBinders env kind pat (Just value)
-    in if patHit env line col pat then case binderNamed name binders of
-      Just hit => Just hit
-      Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
-    else case walkBindValue (fuel - 1) env scope line col name value of
-      Just hit => Just hit
-      Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
+walkBinds fuel env scope line col name kind binds =
+  if fuel <= 0 then
+    Nothing
+  else
+    case binds of
+      [] => Nothing
+      (Pair pat value) :: rest =>
+        let
+          binders = patBinders env kind pat (Just value)
+        in if patHit env line col pat then
+          case binderNamed name binders of
+            Just hit => Just hit
+            Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
+        else
+          case walkBindValue (fuel - 1) env scope line col name value of
+            Just hit => Just hit
+            Nothing => walkBinds (fuel - 1) env (append scope binders) line col name kind rest
 
 -- | 内部：遍历一个绑定的值；`EAnn (ELocalFun ...) ty` 时把签名下传给局部函数参数（语法级类型）。
 walkBindValue : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe LocalBind
-walkBindValue fuel env scope line col name (EAnn (ELocalFun clauses sp) ty annSp) = case walkClauses fuel env scope line col name (Just (arrowDomains ty)) clauses of
-  Just hit => Just hit
-  Nothing => walkExpr (fuel - 1) env scope line col name ty
+walkBindValue fuel env scope line col name (EAnn (ELocalFun clauses sp) ty annSp) =
+  case walkClauses fuel env scope line col name (Just (arrowDomains ty)) clauses of
+    Just hit => Just hit
+    Nothing => walkExpr (fuel - 1) env scope line col name ty
 walkBindValue fuel env scope line col name (EAnn inner ty annSp) =
   walkExpr (fuel - 1) env scope line col name (EAnn inner ty annSp)
 walkBindValue fuel env scope line col name (ELocalFun clauses sp) =
@@ -891,51 +997,66 @@ walkBindValue fuel env scope line col name value = walkExpr (fuel - 1) env scope
 
 -- | 内部：遍历 `case` 分支：每个分支的模式 binder 只在该分支 body 里可见。
 walkAlts : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List (Pair Pat Expr) -> Maybe LocalBind
-walkAlts fuel env scope line col name alts = if fuel <= 0 then Nothing
-else case alts of
-  [] => Nothing
-  (Pair pat body) :: rest =>
-    let
-      binders = patBinders env "case" pat Nothing
-    in if patHit env line col pat then case binderNamed name binders of
-      Just hit => Just hit
-      Nothing => walkAlts (fuel - 1) env scope line col name rest
-    else case walkExpr (fuel - 1) env (append scope binders) line col name body of
-      Just hit => Just hit
-      Nothing => walkAlts (fuel - 1) env scope line col name rest
+walkAlts fuel env scope line col name alts =
+  if fuel <= 0 then
+    Nothing
+  else
+    case alts of
+      [] => Nothing
+      (Pair pat body) :: rest =>
+        let
+          binders = patBinders env "case" pat Nothing
+        in if patHit env line col pat then
+          case binderNamed name binders of
+            Just hit => Just hit
+            Nothing => walkAlts (fuel - 1) env scope line col name rest
+        else
+          case walkExpr (fuel - 1) env (append scope binders) line col name body of
+            Just hit => Just hit
+            Nothing => walkAlts (fuel - 1) env scope line col name rest
 
 -- | 内部：遍历 `do` 块：`x <- ...` 的 binder 对后续语句可见；语句本身在绑定前的 scope 里求值。
 walkDo : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> List DoStmt -> Maybe LocalBind
-walkDo fuel env scope line col name stmts = if fuel <= 0 then Nothing
-else case stmts of
-  [] => Nothing
-  (DBind pat value sp) :: rest =>
-    let
-      binders = patBinders env "do" pat (Just value)
-    in if patHit env line col pat then case binderNamed name binders of
-      Just hit => Just hit
-      Nothing => walkDo (fuel - 1) env (append scope binders) line col name rest
-    else case walkExpr (fuel - 1) env scope line col name value of
-      Just hit => Just hit
-      Nothing => walkDo (fuel - 1) env (append scope binders) line col name rest
-  (DExpr value sp) :: rest => case walkExpr (fuel - 1) env scope line col name value of
-    Just hit => Just hit
-    Nothing => walkDo (fuel - 1) env scope line col name rest
+walkDo fuel env scope line col name stmts =
+  if fuel <= 0 then
+    Nothing
+  else
+    case stmts of
+      [] => Nothing
+      (DBind pat value sp) :: rest =>
+        let
+          binders = patBinders env "do" pat (Just value)
+        in if patHit env line col pat then
+          case binderNamed name binders of
+            Just hit => Just hit
+            Nothing => walkDo (fuel - 1) env (append scope binders) line col name rest
+        else
+          case walkExpr (fuel - 1) env scope line col name value of
+            Just hit => Just hit
+            Nothing => walkDo (fuel - 1) env (append scope binders) line col name rest
+      (DExpr value sp) :: rest =>
+        case walkExpr (fuel - 1) env scope line col name value of
+          Just hit => Just hit
+          Nothing => walkDo (fuel - 1) env scope line col name rest
 
 -- | 内部：遍历函数子句：参数 binder（可按 `mSig` 的 domain 列表补类型）只在该子句 body 里可见。
 -- kind 固定为 `parameter`（顶层函数与局部函数同口径）。
 walkClauses : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Maybe (List Expr) -> List (Pair (List Pat) Expr) -> Maybe LocalBind
-walkClauses fuel env scope line col name mSig clauses = if fuel <= 0 then Nothing
-else case clauses of
-  [] => Nothing
-  (Pair pats body) :: rest => case binderInPatList env line col name "parameter" mSig pats 0 of
-    Just hit => Just hit
-    Nothing =>
-      let
-        scope2 = append scope (patBindersWithSig env "parameter" mSig pats)
-      in case walkExpr (fuel - 1) env scope2 line col name body of
-        Just hit => Just hit
-        Nothing => walkClauses (fuel - 1) env scope line col name mSig rest
+walkClauses fuel env scope line col name mSig clauses =
+  if fuel <= 0 then
+    Nothing
+  else
+    case clauses of
+      [] => Nothing
+      (Pair pats body) :: rest =>
+        case binderInPatList env line col name "parameter" mSig pats 0 of
+          Just hit => Just hit
+          Nothing =>
+            let
+              scope2 = append scope (patBindersWithSig env "parameter" mSig pats)
+            in case walkExpr (fuel - 1) env scope2 line col name body of
+              Just hit => Just hit
+              Nothing => walkClauses (fuel - 1) env scope line col name mSig rest
 
 -- | 内部：`EVar` 的名字是否覆盖光标。parser 的 `EVar` span 是零宽（end = start），按名字长度
 -- 扩展到 `[startCol, startCol + len)` 再判；绑定解析只看名字 token，不需要子树包含判定。
@@ -943,8 +1064,14 @@ evarCovers : String -> Span -> Int -> Int -> Bool
 evarCovers n sp line col =
   let
     endSp =
-      Span sp.spanFile (spanStartLine sp) (spanStartCol sp) (spanStartLine sp)
-        (spanStartCol sp + strLength n) (spanStartOffset sp) (spanStartOffset sp + strLength n)
+      Span
+        sp.spanFile
+        (spanStartLine sp)
+        (spanStartCol sp)
+        (spanStartLine sp)
+        (spanStartCol sp + strLength n)
+        (spanStartOffset sp)
+        (spanStartOffset sp + strLength n)
   in spanContainsPos endSp line col
 
 -- | 内部：Pi binder 名的位置（0,0 = 不是具名 binder）。Pi 的 span 覆盖整个表达式，所以靠文本
@@ -952,40 +1079,43 @@ evarCovers n sp line col =
 -- 字符定出名字左界，再与 binder 名比对（避免把 domain 里紧邻的 token 误判成名字）。
 -- 匿名箭头（`A -> B`，名字是 `_`）回扫先遇 `-` 即停，返回零位，调用方据此跳过。
 piNamePos : WalkEnv -> Expr -> String -> Pair Int Int
-piNamePos env dom name = if name == "" || name == "_" then Pair 0 0
-else
-  let
-    Pair dl dc = exprStartOf dom
-    ln = lineText env.weText dl
-    len = strLength ln
-  in case piNameStart walkFuelBound ln len (dc - 2) [] of
-    Nothing => Pair 0 0
-    Just (Pair startIdx got) => if got == name then Pair dl (startIdx + 1) else Pair 0 0
+piNamePos env dom name =
+  if name == "" || name == "_" then
+    Pair 0 0
+  else
+    let
+      Pair dl dc = exprStartOf dom
+      ln = lineText env.weText dl
+      len = strLength ln
+    in case piNameStart walkFuelBound ln len (dc - 2) [] of
+      Nothing => Pair 0 0
+      Just (Pair startIdx got) => if got == name then Pair dl (startIdx + 1) else Pair 0 0
 
 -- | 内部：从 domain 起点左侧（0-based 索引 `i`）向左回扫：先跳过空格 / tab / `:`，再收集连续
 -- ident 字符。`acc` 反向累积已收集的字符（prepend，join 后即正序名字）；遇到非 ident 的代码字符
 -- （`-` / `(` / `{` / `,`）即停。返回 (名字起始索引, 名字文本)；fuel 耗尽、行首越界或先遇代码
 -- 字符且无累积时返回 `Nothing`。
 piNameStart : Int -> String -> Int -> Int -> List String -> Maybe (Pair Int String)
-piNameStart fuel ln len i acc = if fuel <= 0 then Nothing
-else if i < 0 then Nothing
-else if i >= len then Nothing
-else
-  let
-    ch = substring (natFromInt i) 1 ln
-    isId = case strUnpack ch of
-      c :: _ => identCode c
-      [] => False
-  in case acc of
-    [] =>
-      if ch == " " || ch == "\t" || ch == ":" then piNameStart (fuel - 1) ln len (i - 1) []
-      else if isId then piNameStart (fuel - 1) ln len (i - 1) [ch] else Nothing
-    collected =>
-      let
-        got = join "" collected
-      in if ch == " " || ch == "\t" || ch == ":" then Just (Pair (i + 1) got)
-      else if isId then piNameStart (fuel - 1) ln len (i - 1) (ch :: collected)
-      else Just (Pair (i + 1) got)
+piNameStart fuel ln len i acc =
+  if fuel <= 0 then
+    Nothing
+  else if i < 0 then
+    Nothing
+  else if i >= len then
+    Nothing
+  else
+    let
+      ch = substring (natFromInt i) 1 ln
+      isId =
+        case strUnpack ch of
+          c :: _ => identCode c
+          [] => False
+    in case acc of
+      [] => if ch == " " || ch == "\t" || ch == ":" then piNameStart (fuel - 1) ln len (i - 1) [] else if isId then piNameStart (fuel - 1) ln len (i - 1) [ch] else Nothing
+      collected =>
+        let
+          got = join "" collected
+        in if ch == " " || ch == "\t" || ch == ":" then Just (Pair (i + 1) got) else if isId then piNameStart (fuel - 1) ln len (i - 1) (ch :: collected) else Just (Pair (i + 1) got)
 
 -- | 内部：表达式首 token 位置（`EInfix` 等的 span 从运算符开始，body 起点要取左操作数）。
 exprStartOf : Expr -> Pair Int Int
@@ -999,66 +1129,78 @@ exprStartOf e = Pair (spanStartLine (exprSpan e)) (spanStartCol (exprSpan e))
 -- 就返回该 binder；未命中返回 `Nothing`。`fuel` 限制递归深度。`EPi` 的具名 binder 也按局部绑定
 -- 处理（domain 里不可见，codomain 里可见）。
 walkExpr : Int -> WalkEnv -> List LocalBind -> Int -> Int -> String -> Expr -> Maybe LocalBind
-walkExpr fuel env scope line col name e = if fuel <= 0 then Nothing
-else case e of
-  EVar n sp => if evarCovers n sp line col then lookupScope scope name else Nothing
-  EInt n sp => Nothing
-  EStr s sp => Nothing
-  EFloat raw sp => Nothing
-  ELam params body sp => lambdaWalk fuel env scope line col name sp (map firstOf params) body
-  EApp f args sp => case walkExpr (fuel - 1) env scope line col name f of
-    Just hit => Just hit
-    Nothing => walkArgs (fuel - 1) env scope line col name args
-  EPi n implicit qty dom cod sp =>
-    let
-      -- Pi / 类型级 binder 可解析——光标落在 binder 名（domain 左侧隔着 ` : `）上时，把该
-      -- binder 当局部绑定返回，类型 = domain 的语法类型（`renderType dom`）。否则按原样走
-      -- domain（binder 尚不可见）/ codomain（binder 已入 scope，故 cod 里引用它也能解析）。
-      -- `piNamePos` 对匿名 binder（`_` / `A -> B`）返回零位 ⇒ `nl == 0` 不等于任何真实行（1-based），
-      -- 自然跳过，回落到 domain/codomain 遍历。
-      Pair nl ncol = piNamePos env dom n
-      domTy = renderType dom
-      piBind = LocalBind n "Pi" nl ncol domTy ""
-    in if nl == line && ncol <= col && col <= ncol + strLength n then binderNamed name [piBind]
-    else case walkExpr (fuel - 1) env scope line col name dom of
-      Just hit => Just hit
-      Nothing => walkExpr (fuel - 1) env (append scope [piBind]) line col name cod
-  ELet binds body isRec sp =>
-    let
-      kind = if isRec then "where" else "let"
-    in case walkBinds (fuel - 1) env scope line col name kind binds of
-      Just hit => Just hit
-      Nothing =>
-        walkExpr (fuel - 1) env (append scope (bindersOfBinds env kind binds)) line col name body
-  ELocalFun clauses sp => walkClauses (fuel - 1) env scope line col name Nothing clauses
-  ECase scrut alts sp => case walkExpr (fuel - 1) env scope line col name scrut of
-    Just hit => Just hit
-    Nothing => walkAlts (fuel - 1) env scope line col name alts
-  EIf c t f sp => case walkExpr (fuel - 1) env scope line col name c of
-    Just hit => Just hit
-    Nothing => case walkExpr (fuel - 1) env scope line col name t of
-      Just hit => Just hit
-      Nothing => walkExpr (fuel - 1) env scope line col name f
-  EField base f sp => walkExpr (fuel - 1) env scope line col name base
-  ERecord rname fields sp => walkExprFields (fuel - 1) env scope line col name fields
-  ERecUpdate base fields sp => case walkExpr (fuel - 1) env scope line col name base of
-    Just hit => Just hit
-    Nothing => walkExprFields (fuel - 1) env scope line col name fields
-  EDo stmts sp => walkDo (fuel - 1) env scope line col name stmts
-  EInfix op lhs rhs sp => case walkExpr (fuel - 1) env scope line col name lhs of
-    Just hit => Just hit
-    Nothing => walkExpr (fuel - 1) env scope line col name rhs
-  EParen inner sp => walkExpr (fuel - 1) env scope line col name inner
-  EBacktick nm lhs rhs sp => case walkExpr (fuel - 1) env scope line col name lhs of
-    Just hit => Just hit
-    Nothing => walkExpr (fuel - 1) env scope line col name rhs
-  ESectOp op sp => Nothing
-  ESectL op inner sp => walkExpr (fuel - 1) env scope line col name inner
-  ESectR inner op sp => walkExpr (fuel - 1) env scope line col name inner
-  EAnn value ty sp => case walkExpr (fuel - 1) env scope line col name value of
-    Just hit => Just hit
-    Nothing => walkExpr (fuel - 1) env scope line col name ty
-  EInterp multi parts sp => walkInterpParts (fuel - 1) env scope line col name parts
+walkExpr fuel env scope line col name e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case e of
+      EVar n sp => if evarCovers n sp line col then lookupScope scope name else Nothing
+      EInt n sp => Nothing
+      EStr s sp => Nothing
+      EFloat raw sp => Nothing
+      ELam params body sp => lambdaWalk fuel env scope line col name sp (map firstOf params) body
+      EApp f args sp =>
+        case walkExpr (fuel - 1) env scope line col name f of
+          Just hit => Just hit
+          Nothing => walkArgs (fuel - 1) env scope line col name args
+      EPi n implicit qty dom cod sp =>
+        let
+          -- Pi / 类型级 binder 可解析——光标落在 binder 名（domain 左侧隔着 ` : `）上时，把该
+          -- binder 当局部绑定返回，类型 = domain 的语法类型（`renderType dom`）。否则按原样走
+          -- domain（binder 尚不可见）/ codomain（binder 已入 scope，故 cod 里引用它也能解析）。
+          -- `piNamePos` 对匿名 binder（`_` / `A -> B`）返回零位 ⇒ `nl == 0` 不等于任何真实行（1-based），
+          -- 自然跳过，回落到 domain/codomain 遍历。
+          Pair nl ncol = piNamePos env dom n
+          domTy = renderType dom
+          piBind = LocalBind n "Pi" nl ncol domTy ""
+        in if nl == line && ncol <= col && col <= ncol + strLength n then
+          binderNamed name [piBind]
+        else
+          case walkExpr (fuel - 1) env scope line col name dom of
+            Just hit => Just hit
+            Nothing => walkExpr (fuel - 1) env (append scope [piBind]) line col name cod
+      ELet binds body isRec sp =>
+        let
+          kind = if isRec then "where" else "let"
+        in case walkBinds (fuel - 1) env scope line col name kind binds of
+          Just hit => Just hit
+          Nothing => walkExpr (fuel - 1) env (append scope (bindersOfBinds env kind binds)) line col name body
+      ELocalFun clauses sp => walkClauses (fuel - 1) env scope line col name Nothing clauses
+      ECase scrut alts sp =>
+        case walkExpr (fuel - 1) env scope line col name scrut of
+          Just hit => Just hit
+          Nothing => walkAlts (fuel - 1) env scope line col name alts
+      EIf c t f sp =>
+        case walkExpr (fuel - 1) env scope line col name c of
+          Just hit => Just hit
+          Nothing =>
+            case walkExpr (fuel - 1) env scope line col name t of
+              Just hit => Just hit
+              Nothing => walkExpr (fuel - 1) env scope line col name f
+      EField base f sp => walkExpr (fuel - 1) env scope line col name base
+      ERecord rname fields sp => walkExprFields (fuel - 1) env scope line col name fields
+      ERecUpdate base fields sp =>
+        case walkExpr (fuel - 1) env scope line col name base of
+          Just hit => Just hit
+          Nothing => walkExprFields (fuel - 1) env scope line col name fields
+      EDo stmts sp => walkDo (fuel - 1) env scope line col name stmts
+      EInfix op lhs rhs sp =>
+        case walkExpr (fuel - 1) env scope line col name lhs of
+          Just hit => Just hit
+          Nothing => walkExpr (fuel - 1) env scope line col name rhs
+      EParen inner sp => walkExpr (fuel - 1) env scope line col name inner
+      EBacktick nm lhs rhs sp =>
+        case walkExpr (fuel - 1) env scope line col name lhs of
+          Just hit => Just hit
+          Nothing => walkExpr (fuel - 1) env scope line col name rhs
+      ESectOp op sp => Nothing
+      ESectL op inner sp => walkExpr (fuel - 1) env scope line col name inner
+      ESectR inner op sp => walkExpr (fuel - 1) env scope line col name inner
+      EAnn value ty sp =>
+        case walkExpr (fuel - 1) env scope line col name value of
+          Just hit => Just hit
+          Nothing => walkExpr (fuel - 1) env scope line col name ty
+      EInterp multi parts sp => walkInterpParts (fuel - 1) env scope line col name parts
 
 -- | 内部：单个绑定引入的 binder（`kind` 标签 + 值作为单行值 / 语法类型来源）。
 bindBinders : WalkEnv -> String -> Pair Pat Expr -> List LocalBind
@@ -1084,16 +1226,20 @@ findDeclBind env line col name (DFun fn pats body sp) =
   let
     sigSig = signatureOfDecl env.weDecls fn
     paramBinds = patBindersWithSig env "parameter" sigSig pats
-    sigHit = case declSigType env.weDecls fn of
-      Just sigTy => sigPiBind env line col name sigTy
-      Nothing => Nothing
+    sigHit =
+      case declSigType env.weDecls fn of
+        Just sigTy => sigPiBind env line col name sigTy
+        Nothing => Nothing
   in case sigHit of
     Just hit => Just hit
-    Nothing => case binderNamed name paramBinds of
-      Just paramHit =>
-        if patsHaveCursor env line col pats then Just paramHit
-        else walkExpr walkFuelBound env paramBinds line col name body
-      Nothing => walkExpr walkFuelBound env paramBinds line col name body
+    Nothing =>
+      case binderNamed name paramBinds of
+        Just paramHit =>
+          if patsHaveCursor env line col pats then
+            Just paramHit
+          else
+            walkExpr walkFuelBound env paramBinds line col name body
+        Nothing => walkExpr walkFuelBound env paramBinds line col name body
 findDeclBind env line col name (DInstance ctxE head methods sp) =
   firstJust (map (findDeclBind env line col name) methods)
 findDeclBind env line col name d = Nothing
@@ -1101,22 +1247,30 @@ findDeclBind env line col name d = Nothing
 -- | 内部：光标处的局部绑定：要求 token 非空、不是限定名、左侧没有 `?`（命名洞交给洞 hover），
 -- 然后在顶层声明里逐个找覆盖光标的 binder。
 localBindAt : Int -> Int -> String -> SourceFile -> Int -> String -> Maybe LocalBind
-localBindAt line col text sf tokStart token = if token == "" then Nothing
-else if containsDot token then Nothing
-else if namedHoleBefore text line tokStart then Nothing
-else
-  let
-    lines = split "\n" text
-    env = WalkEnv text lines (lineStarts lines) sf.sourceFileDecls sf.sourceFileFixities
-  in firstJust (map (findDeclBind env line col token) sf.sourceFileDecls)
+localBindAt line col text sf tokStart token =
+  if token == "" then
+    Nothing
+  else if containsDot token then
+    Nothing
+  else if namedHoleBefore text line tokStart then
+    Nothing
+  else
+    let
+      lines = split "\n" text
+      env = WalkEnv text lines (lineStarts lines) sf.sourceFileDecls sf.sourceFileFixities
+    in firstJust (map (findDeclBind env line col token) sf.sourceFileDecls)
 
 -- | 内部：光标 token 左侧紧邻 `?` ⇒ 这是命名洞（`?name`），交给洞 hover 处理，不按局部名解析。
 namedHoleBefore : String -> Int -> Int -> Bool
 namedHoleBefore text line tokStart =
   let
     ln = lineText text line
-  in if tokStart <= 1 then False
-  else if tokStart - 2 >= strLength ln then False else substring (natFromInt (tokStart - 2)) 1 ln == "?"
+  in if tokStart <= 1 then
+    False
+  else if tokStart - 2 >= strLength ln then
+    False
+  else
+    substring (natFromInt (tokStart - 2)) 1 ln == "?"
 
 -- ---------------------------------------------------------------
 -- 局部绑定 hover / definition
@@ -1127,7 +1281,8 @@ localHoverBody : LocalBind -> String
 localHoverBody b =
   let
     head =
-      if b.lbType /= "" then "${b.lbName} : ${b.lbType}"
+      if b.lbType /= "" then
+        "${b.lbName} : ${b.lbType}"
       else if b.lbValue /= "" then "${b.lbName} = ${b.lbValue}" else b.lbName
   in "```vuna\n${head}\n```\n\nlocal binding (${b.lbKind})"
 

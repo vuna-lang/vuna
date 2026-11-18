@@ -34,7 +34,9 @@ export defaultLintConfig : LintConfig
 defaultLintConfig =
   LintConfig
     (map (\r => Pair r (if lintRecommended r then lintDefaultSeverity r else LintOff)) lintAllRules)
-    (Just 0) [] ""
+    (Just 0)
+    []
+    ""
 
 -- | 某种预设下的规则表。
 presetRules : String -> List (Pair LintRule LintSeverity)
@@ -45,9 +47,10 @@ presetRules preset =
 
 -- | 配置里某规则的严重度；配置表覆盖全部规则，缺失时回落默认值。
 export lintRuleSeverity : LintConfig -> LintRule -> LintSeverity
-lintRuleSeverity cfg rule = case lookupRule rule cfg.lintCfgRules of
-  Just sev => sev
-  Nothing => lintDefaultSeverity rule
+lintRuleSeverity cfg rule =
+  case lookupRule rule cfg.lintCfgRules of
+    Just sev => sev
+    Nothing => lintDefaultSeverity rule
 
 -- | 内部：在规则表里查规则。
 lookupRule : LintRule -> List (Pair LintRule LintSeverity) -> Maybe LintSeverity
@@ -64,9 +67,10 @@ lintEnabledRules cfg = filter (\r => lintRuleSeverity cfg r /= LintOff) lintAllR
 
 -- | 有效 `max-warnings`；未设置时 -1（不限）。
 export lintMaxWarnings : LintConfig -> Int
-lintMaxWarnings cfg = case cfg.lintCfgMaxWarnings of
-  Just n => n
-  Nothing => -1
+lintMaxWarnings cfg =
+  case cfg.lintCfgMaxWarnings of
+    Just n => n
+    Nothing => -1
 
 -- | 路径是否被配置排除（当前支持目录/文件前缀与 `*` 通配；模式相对 manifest 目录）。
 export lintExcluded : String -> LintConfig -> Bool
@@ -96,23 +100,30 @@ matchPatternCharsGo fuel [] [] = True
 matchPatternCharsGo fuel [] _ = False
 matchPatternCharsGo fuel (42 :: 42 :: rest) path = matchAnyTail fuel rest path
 matchPatternCharsGo fuel (42 :: rest) path = matchStar fuel rest path
-matchPatternCharsGo fuel (p :: prest) path = case path of
-  c :: cret => p == c && matchPatternChars fuel prest cret
-  [] => False
+matchPatternCharsGo fuel (p :: prest) path =
+  case path of
+    c :: cret => p == c && matchPatternChars fuel prest cret
+    [] => False
 
 -- | 内部：`**` 之后可从任意位置继续匹配。
 matchAnyTail : Int -> List Int -> List Int -> Bool
 matchAnyTail fuel rest path =
-  if fuel <= 0 then False
-  else matchPatternChars fuel rest path || matchAnyTail (fuel - 1) rest (dropOne path)
+  if fuel <= 0 then
+    False
+  else
+    matchPatternChars fuel rest path || matchAnyTail (fuel - 1) rest (dropOne path)
 
 -- | 内部：`*` 匹配不跨 `/` 的一段。
 matchStar : Int -> List Int -> List Int -> Bool
-matchStar fuel rest path = if fuel <= 0 then False
-else matchPatternChars fuel rest path || (case path of
-  c :: cret => c /= 47 && matchStar (fuel - 1) rest cret
-  [] => False
-)
+matchStar fuel rest path =
+  if fuel <= 0 then
+    False
+  else
+    matchPatternChars fuel rest path || (
+        case path of
+          c :: cret => c /= 47 && matchStar (fuel - 1) rest cret
+          [] => False
+      )
 
 -- | 内部：丢弃一个字符。
 dropOne : List Int -> List Int
@@ -121,15 +132,17 @@ dropOne (c :: rest) = rest
 
 -- | 命令行 `--select`：只保留给定规则（默认严重度），其余关闭。
 export selectRules : List String -> LintConfig -> Check LintConfig
-selectRules names cfg = case resolveRules names [] of
-  ErrC e => ErrC e
-  OkC selected => OkC (applySelection (map (\r => Pair r LintOff) lintAllRules) selected cfg)
+selectRules names cfg =
+  case resolveRules names [] of
+    ErrC e => ErrC e
+    OkC selected => OkC (applySelection (map (\r => Pair r LintOff) lintAllRules) selected cfg)
 
 -- | 命令行 `--ignore`：关闭给定规则。
 export ignoreRules : List String -> LintConfig -> Check LintConfig
-ignoreRules names cfg = case resolveRules names [] of
-  ErrC e => ErrC e
-  OkC selected => OkC (applyIgnored selected cfg)
+ignoreRules names cfg =
+  case resolveRules names [] of
+    ErrC e => ErrC e
+    OkC selected => OkC (applyIgnored selected cfg)
 
 -- | 命令行 `--max-warnings`。
 export withMaxWarnings : Int -> LintConfig -> LintConfig
@@ -138,19 +151,25 @@ withMaxWarnings n cfg = { cfg | lintCfgMaxWarnings = Just n }
 -- | 内部：解析规则名列表。
 resolveRules : List String -> List LintRule -> Check (List LintRule)
 resolveRules [] acc = OkC (reverse acc)
-resolveRules (name :: rest) acc = case lintRuleOfName name of
-  Nothing => err "unknown lint rule: ${name}"
-  Just rule => resolveRules rest (rule :: acc)
+resolveRules (name :: rest) acc =
+  case lintRuleOfName name of
+    Nothing => err "unknown lint rule: ${name}"
+    Just rule => resolveRules rest (rule :: acc)
 
 -- | 内部：按选中规则生成规则表（选中项取默认严重度）。
 applySelection : List (Pair LintRule LintSeverity) -> List LintRule -> LintConfig -> LintConfig
 applySelection base selected cfg =
-  { cfg | lintCfgRules = foldl (\rules, rule => setRule rules rule (lintDefaultSeverity rule)) base selected }
+  { cfg
+    | lintCfgRules =
+      foldl (\rules, rule => setRule rules rule (lintDefaultSeverity rule)) base selected
+  }
 
 -- | 内部：关闭指定规则。
 applyIgnored : List LintRule -> LintConfig -> LintConfig
 applyIgnored selected cfg =
-  { cfg | lintCfgRules = foldl (\rules, rule => setRule rules rule LintOff) cfg.lintCfgRules selected }
+  { cfg
+    | lintCfgRules = foldl (\rules, rule => setRule rules rule LintOff) cfg.lintCfgRules selected
+  }
 
 -- ---------------------------------------------------------------
 -- 解析单个 manifest 的 `[lint]`
@@ -163,9 +182,10 @@ parseLintConfig path text =
 -- | 内部：只取 `[lint]` 下的条目。
 lintEntriesOf : List TomlEntry -> List TomlEntry
 lintEntriesOf [] = []
-lintEntriesOf (e :: rest) = case e.tomlEntrySection of
-  "lint" :: _ => e :: lintEntriesOf rest
-  _ => lintEntriesOf rest
+lintEntriesOf (e :: rest) =
+  case e.tomlEntrySection of
+    "lint" :: _ => e :: lintEntriesOf rest
+    _ => lintEntriesOf rest
 
 -- | 内部：`TomlEntry` 的 section 投影（字段名只在 Toml 里定义一次）。
 sectionOfEntry : TomlEntry -> List String
@@ -173,11 +193,13 @@ sectionOfEntry (TomlEntry section key value line) = section
 
 -- | 内部：校验并构造配置。
 parseLintEntries : String -> List TomlEntry -> Check (Maybe LintConfig)
-parseLintEntries path entries = case lintEntriesOf entries of
-  [] => OkC Nothing
-  lints =>
-    Vuna.Compiler.Base.Common.bind (lintAcc path lints initAcc)
-      (\acc => OkC (Just (finishAcc path acc)))
+parseLintEntries path entries =
+  case lintEntriesOf entries of
+    [] => OkC Nothing
+    lints =>
+      Vuna.Compiler.Base.Common.bind
+        (lintAcc path lints initAcc)
+        (\acc => OkC (Just (finishAcc path acc)))
 
 -- | 内部：累积器。
 record LintAcc where
@@ -199,41 +221,56 @@ lintAcc path (e :: rest) acc =
     value = e.tomlEntryValue
     line = e.tomlEntryLine
   in case section of
-    ["lint"] => case key of
-      "preset" => case value of
-        TStr p => if p == "recommended" || p == "all" || p == "none" then
-          let
-            acc2 = { acc | lintAccPreset = p }
-          in lintAcc path rest acc2
-        else cfgErr path line "invalid lint preset: ${p} (expected recommended/all/none)"
-        _ => cfgErr path line "lint.preset must be a string"
-      "max-warnings" => case value of
-        TInt n => if n >= -1 then
-          let
-            acc2 = { acc | lintAccMaxWarnings = Just n }
-          in lintAcc path rest acc2
-        else cfgErr path line "lint.max-warnings must be >= -1"
-        _ => cfgErr path line "lint.max-warnings must be an integer"
-      "exclude" => case value of
-        TArray xs => case arrayStrings xs of
-          Just ys =>
-            let
-              acc2 = { acc | lintAccExclude = append acc.lintAccExclude ys }
-            in lintAcc path rest acc2
-          Nothing => cfgErr path line "lint.exclude must be an array of strings"
-        _ => cfgErr path line "lint.exclude must be an array of strings"
-      other => cfgErr path line "unknown lint key: ${other}"
-    ["lint", "rules"] => case value of
-      TStr sevName => case lintRuleOfName key of
-        Nothing => cfgErr path line "unknown lint rule: ${key}"
-        Just rule => case lintSeverityOfName sevName of
-          Nothing =>
-            cfgErr path line "invalid severity for ${key}: ${sevName} (expected off/warn/error)"
-          Just sev =>
-            let
-              acc2 = { acc | lintAccRules = setRule acc.lintAccRules rule sev }
-            in lintAcc path rest acc2
-      _ => cfgErr path line "lint rule severity must be a string"
+    ["lint"] =>
+      case key of
+        "preset" =>
+          case value of
+            TStr p =>
+              if p == "recommended" || p == "all" || p == "none" then
+                let
+                  acc2 = { acc | lintAccPreset = p }
+                in lintAcc path rest acc2
+              else
+                cfgErr path line "invalid lint preset: ${p} (expected recommended/all/none)"
+            _ => cfgErr path line "lint.preset must be a string"
+        "max-warnings" =>
+          case value of
+            TInt n =>
+              if n >= -1 then
+                let
+                  acc2 = { acc | lintAccMaxWarnings = Just n }
+                in lintAcc path rest acc2
+              else
+                cfgErr path line "lint.max-warnings must be >= -1"
+            _ => cfgErr path line "lint.max-warnings must be an integer"
+        "exclude" =>
+          case value of
+            TArray xs =>
+              case arrayStrings xs of
+                Just ys =>
+                  let
+                    acc2 = { acc | lintAccExclude = append acc.lintAccExclude ys }
+                  in lintAcc path rest acc2
+                Nothing => cfgErr path line "lint.exclude must be an array of strings"
+            _ => cfgErr path line "lint.exclude must be an array of strings"
+        other => cfgErr path line "unknown lint key: ${other}"
+    ["lint", "rules"] =>
+      case value of
+        TStr sevName =>
+          case lintRuleOfName key of
+            Nothing => cfgErr path line "unknown lint rule: ${key}"
+            Just rule =>
+              case lintSeverityOfName sevName of
+                Nothing =>
+                  cfgErr
+                    path
+                    line
+                    "invalid severity for ${key}: ${sevName} (expected off/warn/error)"
+                Just sev =>
+                  let
+                    acc2 = { acc | lintAccRules = setRule acc.lintAccRules rule sev }
+                  in lintAcc path rest acc2
+        _ => cfgErr path line "lint rule severity must be a string"
     _ => cfgErr path line "unknown [lint] section: ${join "." section}"
 
 -- | 内部：设置规则严重度（保留首次出现的位置）。
@@ -247,7 +284,9 @@ finishAcc : String -> LintAcc -> LintConfig
 finishAcc path acc =
   LintConfig
     (foldl (\rules, p => setRule rules (firstOf p) (secondOf p)) (presetRules acc.lintAccPreset) acc.lintAccRules)
-    acc.lintAccMaxWarnings acc.lintAccExclude path
+    acc.lintAccMaxWarnings
+    acc.lintAccExclude
+    path
 
 -- | 内部：配置错误带 `路径:行`。
 cfgErr : String -> Int -> String -> Check a
@@ -257,9 +296,10 @@ cfgErr path line msg =
 -- | 内部：`TArray` 里的字符串（非字符串项给 `Nothing`）。
 arrayStrings : List TomlValue -> Maybe (List String)
 arrayStrings [] = Just []
-arrayStrings ((TStr s) :: rest) = case arrayStrings rest of
-  Just ys => Just (s :: ys)
-  Nothing => Nothing
+arrayStrings ((TStr s) :: rest) =
+  case arrayStrings rest of
+    Just ys => Just (s :: ys)
+    Nothing => Nothing
 arrayStrings (_ :: rest) = Nothing
 
 -- ---------------------------------------------------------------
@@ -272,38 +312,51 @@ readManifestLint dir =
     path = "${dir}/vuna.toml"
   in do
     exists <- fsFileExists path
-    if not exists then pure (OkC Nothing)
-    else do
-      text <- fsReadFile path
-      pure (parseLintConfig path text)
+    if not exists then
+      pure (OkC Nothing)
+    else
+      do
+        text <- fsReadFile path
+        pure (parseLintConfig path text)
 
 -- | 从文件所在目录向上收集 manifest 目录（内层在前）。
 manifestDirsUp : Member nFs FsOp r => Int -> String -> List String -> Eff r (List String)
-manifestDirsUp fuel dir seen = if fuel <= 0 then pure []
-else do
-  found <- findManifestDirMaybe dir
-  case found of
-    Nothing => pure []
-    Just d => if memName d seen then pure []
-    else do
-      let
-        parent = parentOf d
-      in if parent == d then pure [d]
-      else do
-        rest <- manifestDirsUp (fuel - 1) parent (d :: seen)
-        pure (d :: rest)
+manifestDirsUp fuel dir seen =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      found <- findManifestDirMaybe dir
+      case found of
+        Nothing => pure []
+        Just d =>
+          if memName d seen then
+            pure []
+          else
+            do
+              let
+                parent = parentOf d
+              in if parent == d then
+                pure [d]
+              else
+                do
+                  rest <- manifestDirsUp (fuel - 1) parent (d :: seen)
+                  pure (d :: rest)
 
 -- | 显式 `--config PATH`：读该文件的 `[lint]`；没有 `[lint]` 是配置错误。
 export loadLintConfigAt : Member nFs FsOp r => String -> Eff r (Check LintConfig)
-loadLintConfigAt path = do
-  textR <- readText path
-  pure (case textR of
-    ErrC e => ErrC e
-    OkC text => case parseLintConfig path text of
-      ErrC e => ErrC e
-      OkC Nothing => err "${path}: no [lint] section"
-      OkC (Just cfg) => OkC cfg
-  )
+loadLintConfigAt path =
+  do
+    textR <- readText path
+    pure (
+        case textR of
+          ErrC e => ErrC e
+          OkC text =>
+            case parseLintConfig path text of
+              ErrC e => ErrC e
+              OkC Nothing => err "${path}: no [lint] section"
+              OkC (Just cfg) => OkC cfg
+      )
 
 -- | 读一个文件的有效 lint 配置：外层 manifest 先应用，内层覆盖；没有配置时用默认。
 export loadLintConfigForFile : Member nFs FsOp r => String -> Eff r (Check LintConfig)
@@ -317,16 +370,23 @@ loadLintConfigForFile path =
 -- | 内部：按外层→内层顺序合并 manifest 配置。
 mergeManifests : Member nFs FsOp r => List String -> LintConfig -> Eff r (Check LintConfig)
 mergeManifests [] cfg = pure (OkC cfg)
-mergeManifests (dir :: rest) cfg = do
-  loaded <- readManifestLint dir
-  case loaded of
-    ErrC e => pure (ErrC e)
-    OkC Nothing => mergeManifests rest cfg
-    OkC (Just inner) => mergeManifests rest (mergeConfig cfg inner)
+mergeManifests (dir :: rest) cfg =
+  do
+    loaded <- readManifestLint dir
+    case loaded of
+      ErrC e => pure (ErrC e)
+      OkC Nothing => mergeManifests rest cfg
+      OkC (Just inner) => mergeManifests rest (mergeConfig cfg inner)
 
 -- | 合并两份配置：`inner` 的规则/上限/排除覆盖 `base`。
 export mergeConfig : LintConfig -> LintConfig -> LintConfig
-mergeConfig base inner = LintConfig (foldl (\rules, p => setRule rules (firstOf p) (secondOf p)) base.lintCfgRules inner.lintCfgRules) (case inner.lintCfgMaxWarnings of
-  Just _ => inner.lintCfgMaxWarnings
-  Nothing => base.lintCfgMaxWarnings
-) (append base.lintCfgExclude inner.lintCfgExclude) (if inner.lintCfgSource == "" then base.lintCfgSource else inner.lintCfgSource)
+mergeConfig base inner =
+  LintConfig
+    (foldl (\rules, p => setRule rules (firstOf p) (secondOf p)) base.lintCfgRules inner.lintCfgRules)
+    (
+      case inner.lintCfgMaxWarnings of
+        Just _ => inner.lintCfgMaxWarnings
+        Nothing => base.lintCfgMaxWarnings
+    )
+    (append base.lintCfgExclude inner.lintCfgExclude)
+    (if inner.lintCfgSource == "" then base.lintCfgSource else inner.lintCfgSource)

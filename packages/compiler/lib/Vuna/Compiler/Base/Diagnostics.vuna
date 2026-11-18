@@ -46,9 +46,10 @@ export module Vuna.Compiler.Base.Diagnostics.Tc
 -- ---------------------------------------------------------------
 -- | 码的域前缀（`TC_TypeMismatch` → `TC`）。
 export codeDomain : String -> String
-codeDomain code = case split "_" code of
-  [] => code
-  d :: _ => d
+codeDomain code =
+  case split "_" code of
+    [] => code
+    d :: _ => d
 
 -- | 码域 → 诊断阶段。
 export diagPhaseOf : String -> String
@@ -139,7 +140,8 @@ ldDescPairs (e :: rest) = Pair e.ldEntryCode e.ldEntryDesc :: ldDescPairs rest
 -- | 全部目录条目的 (code,desc) 对。
 allDescPairs : List (Pair String String)
 allDescPairs =
-  append (tcDescPairs tcAll)
+  append
+    (tcDescPairs tcAll)
     (append (cgDescPairs cgAll) (append (icDescPairs icAll) (append (lexDescPairs lexAll) (append (psDescPairs psAll) (append (rnDescPairs rnAll) (append (pkgDescPairs pkgAll) (append (warnDescPairs warnAll) (ldDescPairs ldAll))))))))
 
 -- | 按 code 查说明。

@@ -31,28 +31,33 @@ import Base.Effect.Exit as EffExit
 
 -- | 求值一个入口文件：成功返回值的渲染文本，失败返回 `error: <诊断>` 文本。
 export interpretFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
-interpretFile ctx entry = do
-  result <- dtEvalFile ctx entry
-  pure (case result of
-    ErrC e => "error: ${diagText e}"
-    OkC output => output
-  )
+interpretFile ctx entry =
+  do
+    result <- dtEvalFile ctx entry
+    pure (
+        case result of
+          ErrC e => "error: ${diagText e}"
+          OkC output => output
+      )
 
 -- | 值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名），并带回可复用的
 -- `AuxCache`。类型文本形如 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`（canonical 全名）；
 -- REPL 据此决定是否走效果执行。缓存复用依赖包 decls 的 record / deriving 预处理结果，
 -- key 由接口哈希决定（依赖接口不变时一直命中），失败路径不缓存。
 export evalExprInfoWithAux : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Maybe AuxCache -> Eff r (Check (Pair (Pair String String) (Maybe AuxCache)))
-evalExprInfoWithAux ctx program expr aux = do
-  ifaces <- depIfacesForToolProgram ctx program
-  case ifaces of
-    Just ifaces2 => dtEvalExprInfoWithAuxCache ctx program expr ifaces2 aux
-    Nothing => do
-      info <- dtEvalExprInfo ctx program expr
-      pure (case info of
-        ErrC e => ErrC e
-        OkC i => OkC (Pair i aux)
-      )
+evalExprInfoWithAux ctx program expr aux =
+  do
+    ifaces <- depIfacesForToolProgram ctx program
+    case ifaces of
+      Just ifaces2 => dtEvalExprInfoWithAuxCache ctx program expr ifaces2 aux
+      Nothing =>
+        do
+          info <- dtEvalExprInfo ctx program expr
+          pure (
+              case info of
+                ErrC e => ErrC e
+                OkC i => OkC (Pair i aux)
+            )
 
 -- ---------------------------------------------------------------
 -- REPL v2：定义工具（自动签名 / 绑定类型 / 回写签名复查）
@@ -91,18 +96,20 @@ effectBinaryName = "vuna-effect"
 -- | 内部：对列表逐项做效应计算并保持顺序。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
-mapEff f (x :: rest) = do
-  y <- f x
-  ys <- mapEff f rest
-  pure (y :: ys)
+mapEff f (x :: rest) =
+  do
+    y <- f x
+    ys <- mapEff f rest
+    pure (y :: ys)
 
 -- | 内部：临时目录根：`$TMPDIR`（去尾部 `/`），没有就用 `/tmp`。
 -- 读环境是启动期动作，函数化（零参顶层值会在模块初始化时求值）。
 tempBase : Member nEnv EnvOp r => Int -> Eff r String
-tempBase _ = do
-  env <- envGetEnv "TMPDIR"
-  pure
-    (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
+tempBase _ =
+  do
+    env <- envGetEnv "TMPDIR"
+    pure
+      (if env == "" then "/tmp" else if endsWith "/" env then substring 0 (byteLength env - 1) env else env)
 
 -- | 内部：微秒时间戳命名 + 冲突探测：同一进程内连续执行不会撞名。探测走 `range` 生成的
 -- 有界列表（结构下降），异常情况最多换 1000 个后缀，都不行就用基名（失败由编译报）。
@@ -112,24 +119,30 @@ freshTempDir base = pickTempDir base (range 0 1001)
 -- | 内部：依次探测 `<base>`、`<base>-1`…，返回第一个不存在的路径。
 pickTempDir : Member nFs FsOp r => String -> List Int -> Eff r String
 pickTempDir base [] = pure base
-pickTempDir base (n :: rest) = do
-  exists <- fsFileExists (if n == 0 then base else "${base}-${n}")
-  if exists then pickTempDir base rest else pure (if n == 0 then base else "${base}-${n}")
+pickTempDir base (n :: rest) =
+  do
+    exists <- fsFileExists (if n == 0 then base else "${base}-${n}")
+    if exists then pickTempDir base rest else pure (if n == 0 then base else "${base}-${n}")
 
 -- | 内部：上下文依赖根 → 临时包的 `[dependencies]` 条目（包名 → 包目录）。
 -- base-only 上下文（包名为空）只有 base 一个根，必须全部带上；普通上下文跳过第一个
 -- 根（它是当前包自己的 lib：临时包不能依赖「自己」，否则触发依赖环）。
 effectDeps : Member nEnv EnvOp r => PackageContext -> Eff r (List (Pair String String))
-effectDeps ctx = case contextRoots ctx of
-  [] => pure []
-  roots =>
-    if contextPackageName ctx == "" then mapEff effectDep roots else mapEff effectDep (drop 1 roots)
+effectDeps ctx =
+  case contextRoots ctx of
+    [] => pure []
+    roots =>
+      if contextPackageName ctx == "" then
+        mapEff effectDep roots
+      else
+        mapEff effectDep (drop 1 roots)
 
 -- | 内部：单个依赖根 → `(包名, 绝对包目录)`。
 effectDep : Member nEnv EnvOp r => Root -> Eff r (Pair String String)
-effectDep root = do
-  dir <- absoluteDir (rootPackageDir (rootDir root))
-  pure (Pair (rootName root) dir)
+effectDep root =
+  do
+    dir <- absoluteDir (rootPackageDir (rootDir root))
+    pure (Pair (rootName root) dir)
 
 -- | 内部：模块根固定是 `<包目录>/lib`；去掉后缀得到包目录（manifest 的 `[dependencies]`
 -- 吃包目录）。
@@ -139,9 +152,10 @@ rootPackageDir dir = if endsWith "/lib" dir then substring 0 (byteLength dir - 4
 -- | 内部：相对路径按 cwd 补成绝对路径（依赖路径必须是绝对路径：临时包不在调用方的
 -- 工作目录下，相对路径会解析错）。
 absoluteDir : Member nEnv EnvOp r => String -> Eff r String
-absoluteDir dir = do
-  cwd <- envGetCwd
-  pure (if startsWith "/" dir then dir else "${cwd}/${dir}")
+absoluteDir dir =
+  do
+    cwd <- envGetCwd
+    pure (if startsWith "/" dir then dir else "${cwd}/${dir}")
 
 -- | 内部：TOML 双引号字符串。
 tomlQuote : String -> String
@@ -173,18 +187,19 @@ ${join "" (map depLine deps)}"""
 
 -- | 内部：临时包的 manifest 文本：`[package]` 段 + 从上下文继承的依赖。
 effectManifest : Member nEnv EnvOp r => PackageContext -> Eff r String
-effectManifest ctx = do
-  deps <- effectDeps ctx
-  pure ("""[package]
+effectManifest ctx =
+  do
+    deps <- effectDeps ctx
+    pure ("""[package]
 name = ${tomlQuote effectPackageName}
-${depsSection deps}"""
-  )
+${depsSection deps}""")
 
 -- | 内部：`ocamlopt` 是否在 PATH 里（链接阶段需要）。探针的 stdout / stderr 全部丢弃。
 hasOcamlopt : Member nProcess ProcessOp r => Int -> Eff r Bool
-hasOcamlopt _ = do
-  code <- processRunIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]
-  pure (code == 0)
+hasOcamlopt _ =
+  do
+    code <- processRunIn "." ["sh", "-c", "command -v ocamlopt >/dev/null 2>&1"]
+    pure (code == 0)
 
 -- | 内部：缺 `ocamlopt` 时的可操作提示。
 noOcamloptMessage : String
@@ -193,15 +208,17 @@ noOcamloptMessage =
 
 -- | 内部：删掉临时目录并原样返回进程退出码。
 cleanupTemp : Member nProcess ProcessOp r => String -> Int -> Eff r Int
-cleanupTemp dir code = do
-  _ <- processRunIn "/" ["rm", "-rf", dir]
-  pure code
+cleanupTemp dir code =
+  do
+    _ <- processRunIn "/" ["rm", "-rf", dir]
+    pure code
 
 -- | 内部：删掉临时目录并返回带消息的 `Err`。
 cleanupErr : Member nProcess ProcessOp r => String -> String -> Eff r (Check Int)
-cleanupErr dir e = do
-  _ <- processRunIn "/" ["rm", "-rf", dir]
-  pure (err e)
+cleanupErr dir e =
+  do
+    _ <- processRunIn "/" ["rm", "-rf", dir]
+    pure (err e)
 
 -- | 把带 main 的入口源码编译成临时包里的可执行文件并运行，返回进程退出码。
 -- `printResult` 透传给 codegen 的 main 钩子（动作 main 先跑动作、再按结果类型打印）；
@@ -209,31 +226,37 @@ cleanupErr dir e = do
 -- 失败都是可读的 `Err`（临时目录已清理）：manifest / 精化 / 代码生成错误来自 compiler；
 -- 链接失败带包名 / 目录 / 退出码；缺 `ocamlopt` 时给「进 nix develop」的可操作提示。
 export runEffectProgram : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> Eff r (Check Int)
-runEffectProgram ctx source printResult = do
-  base <- tempBase 0
-  now <- clockNow
-  dir <- freshTempDir "${base}/vuna-effect-${strFromInt now}"
-  manifest <- effectManifest ctx
-  _ <- fsMakeDir dir
-  _ <- fsMakeDir "${dir}/app"
-  _ <- fsWriteFile "${dir}/vuna.toml" manifest
-  _ <- fsWriteFile "${dir}/app/Main.vuna" source
-  ctxR <- contextForDir dir
-  case ctxR of
-    ErrC e => cleanupErr dir (diagText e)
-    OkC ctxTmp => do
-      compiled <- compileToDir ctxTmp "${dir}/app/Main.vuna" printResult "${dir}/.output"
-      case compiled of
-        ErrC e => cleanupErr dir (diagText e)
-        OkC _ => do
-          _ <- fsMakeDir "${dir}/.output/bin"
-          has <- hasOcamlopt 0
-          if has then do
-            built <- runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName
-            case built of
-              ErrC e => cleanupErr dir (diagText e)
-              OkC _ => do
-                code <- processRunIn "${dir}/.output" ["bin/${effectBinaryName}"]
-                c <- cleanupTemp dir code
-                pure (OkC c)
-          else cleanupErr dir noOcamloptMessage
+runEffectProgram ctx source printResult =
+  do
+    base <- tempBase 0
+    now <- clockNow
+    dir <- freshTempDir "${base}/vuna-effect-${strFromInt now}"
+    manifest <- effectManifest ctx
+    _ <- fsMakeDir dir
+    _ <- fsMakeDir "${dir}/app"
+    _ <- fsWriteFile "${dir}/vuna.toml" manifest
+    _ <- fsWriteFile "${dir}/app/Main.vuna" source
+    ctxR <- contextForDir dir
+    case ctxR of
+      ErrC e => cleanupErr dir (diagText e)
+      OkC ctxTmp =>
+        do
+          compiled <- compileToDir ctxTmp "${dir}/app/Main.vuna" printResult "${dir}/.output"
+          case compiled of
+            ErrC e => cleanupErr dir (diagText e)
+            OkC _ =>
+              do
+                _ <- fsMakeDir "${dir}/.output/bin"
+                has <- hasOcamlopt 0
+                if has then
+                  do
+                    built <- runBuildScript "${dir}/.output" "bin/${effectBinaryName}" effectBinaryName
+                    case built of
+                      ErrC e => cleanupErr dir (diagText e)
+                      OkC _ =>
+                        do
+                          code <- processRunIn "${dir}/.output" ["bin/${effectBinaryName}"]
+                          c <- cleanupTemp dir code
+                          pure (OkC c)
+                else
+                  cleanupErr dir noOcamloptMessage

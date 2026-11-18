@@ -26,8 +26,9 @@ secondOf (Pair a b) = b
 -- 拼接用 `++` 的反引号形式：`Pair` 不能 import `Base.Data.List`（List → Pair 已存在），
 -- 而 `++` 是恒可见的 String intrinsic。
 instance Show a, Show b => Show (Pair a b) where
-  show p = case p of
-    Pair x y => "(" `++` show x `++` ", " `++` show y `++` ")"
+  show p =
+    case p of
+      Pair x y => "(" `++` show x `++` ", " `++` show y `++` ")"
 
 -- 逐分量比较；`Ord` 是字典序（先比第一个分量，相等再比第二个）。
 instance Eq a, Eq b => Eq (Pair a b) where
@@ -41,5 +42,6 @@ instance Ord a, Ord b => Ord (Pair a b) where
   (>=) p q = q <= p
 
 instance Hashable a, Hashable b => Hashable (Pair a b) where
-  hash p = case p of
-    Pair a b => hashCombine (hash a) (hash b)
+  hash p =
+    case p of
+      Pair a b => hashCombine (hash a) (hash b)

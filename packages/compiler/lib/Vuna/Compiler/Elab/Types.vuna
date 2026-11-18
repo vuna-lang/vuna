@@ -174,9 +174,10 @@ dtInstName (DtInst name tele ctxE head sp) = name
 -- 非全局头（元变量/局部变量/lambda/…）返回 Nothing。实例头识别、族名提取共用它。
 -- | 把项拆成「全局头 + 带 multiplicity 的实参表」（如 `Dict_C a` 拆成 `(Dict_C, [a])`）；头不是全局名时返回 Nothing。
 export flattenTaggedApp : Term -> Maybe (Pair String (List (Pair Term Rig)))
-flattenTaggedApp (TApp f a rig) = case flattenTaggedApp f of
-  Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
-  Nothing => Nothing
+flattenTaggedApp (TApp f a rig) =
+  case flattenTaggedApp f of
+    Just (Pair g args) => Just (Pair g (append args [Pair a rig]))
+    Nothing => Nothing
 flattenTaggedApp (TGlobal g) = Just (Pair g [])
 flattenTaggedApp _ = Nothing
 
@@ -195,9 +196,10 @@ export record InstStore where
 -- 实例头的族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串（理论上实例头都合法）。
 -- | 实例头的字典族名（`Dict_<类>` 全局名）；头不是全局应用时返回空串。
 export instFamilyOf : DtInst -> String
-instFamilyOf i = case flattenTaggedApp i.dtInstHead of
-  Just (Pair g args) => g
-  Nothing => ""
+instFamilyOf i =
+  case flattenTaggedApp i.dtInstHead of
+    Just (Pair g args) => g
+    Nothing => ""
 
 -- | 空实例登记表：权威列表与族索引都为空。
 export instStoreEmpty : InstStore
@@ -214,18 +216,21 @@ export instStorePush : InstStore -> DtInst -> InstStore
 instStorePush store i =
   let
     fam = instFamilyOf i
-    bucket = case HashMap.lookup fam store.instsByFamily of
-      Just b => b
-      Nothing => []
-  in InstStore (append store.instsList [i])
+    bucket =
+      case HashMap.lookup fam store.instsByFamily of
+        Just b => b
+        Nothing => []
+  in InstStore
+    (append store.instsList [i])
     (HashMap.insert fam (append bucket [i]) store.instsByFamily)
 
 -- 精确族桶（不回落全表；未知族 = 空表）。
 -- | 精确取某个头族的实例桶；未知族返回空表（不回落全表）。
 instStoreFamily : InstStore -> String -> List DtInst
-instStoreFamily store fam = case HashMap.lookup fam store.instsByFamily of
-  Just b => b
-  Nothing => []
+instStoreFamily store fam =
+  case HashMap.lookup fam store.instsByFamily of
+    Just b => b
+    Nothing => []
 
 -- 精化状态：下一个元变量编号、已解元变量（level 形态的 Value）、已精化的定义体、
 -- 已声明的归纳族（case 精化需要知道族的构造子 telescope）。
@@ -308,13 +313,55 @@ export ecNext : Ec -> Int
 
 export ecPutNext : Ec -> Int -> Ec
 ecPutNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) n =
-  Ec n sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl
-    haslin mspans uspans warnings counters errors
+  Ec
+    n
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecPutClausesTbl : Ec -> HashMap String (List (Pair (List Pat) Expr)) -> Ec
 ecPutClausesTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) ctbl2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl2
-    ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl2
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 ecNext (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   next
@@ -341,8 +388,29 @@ ecGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl g
 
 export ecPutGlobalsTbl : Ec -> HashMap String Term -> Ec
 ecPutGlobalsTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) gtbl2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl2 soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl2
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecDatas : Ec -> List DtData
 ecDatas (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
@@ -357,8 +425,29 @@ ecDepthTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtb
 -- （实测 16k 次/单次 check、每次扫 ~2500 项；未命中的都是数据族名）。
 export ecSetGlobalsComplete : Ec -> Bool -> Ec
 ecSetGlobalsComplete (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) g =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl g ctbl ctortbl
-    haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    g
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecGoals : Ec -> List DtGoal
 ecGoals (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
@@ -412,8 +501,29 @@ ecClasses (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl
 
 export ecAddGoal : Ec -> DtGoal -> Ec
 ecAddGoal (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) g =
-  Ec next sols defs datas depths (append goals [g]) insts classes dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    (append goals [g])
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecAddInst : Ec -> DtInst -> Ec
 ecAddInst ec i = if hasInstName (dtInstName i) (ecInsts ec) then ec else ecAddInstRaw ec i
@@ -424,13 +534,55 @@ hasInstName name (i :: rest) = dtInstName i == name || hasInstName name rest
 
 export ecAddInstRaw : Ec -> DtInst -> Ec
 ecAddInstRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) i =
-  Ec next sols defs datas depths goals (instStorePush insts i) classes dgoals deftbl gtbl soltbl
-    dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    (instStorePush insts i)
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecAddClass : Ec -> DtClass -> Ec
 ecAddClass (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) c =
-  Ec next sols defs datas depths goals insts (append classes [c]) dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    (append classes [c])
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 -- 约束存储读写（所有入口直接使用）。
 -- | 读取当前统一约束存储。
@@ -441,45 +593,93 @@ ecConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gt
 -- | 写回统一约束存储。
 export ecPutConstraints : Ec -> ConstraintStore -> Ec
 ecPutConstraints (Ec next sols defs datas depths goals insts classes cons deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) cons2 =
-  Ec next sols defs datas depths goals insts classes cons2 deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    cons2
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 -- | 取约束存储里的待处理约束列表（维持原有顺序）。
 export ecPending : Ec -> List Constraint
-ecPending ec = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok => pending
+ecPending ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => pending
 
 -- | 替换待处理约束列表，保留下一个 id 与已尝试记录。
 export ecPutPending : Ec -> List Constraint -> Ec
-ecPutPending ec pending2 = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok =>
-    ecPutConstraints ec (ConstraintStore pending2 next tried cnt passNext passSols ctorok)
+ecPutPending ec pending2 =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      ecPutConstraints ec (ConstraintStore pending2 next tried cnt passNext passSols ctorok)
 
 -- | 分配新 id 并把一条约束追加到待处理列表末尾。
 export ecAddConstraint : Ec -> ConstraintKind -> Int -> Value -> Maybe Span -> Int -> Ec
-ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok =>
-    ecPutConstraints ec
-      (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried cnt passNext passSols ctorok)
+ecAddConstraint ec kind meta dom span depth =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      ecPutConstraints
+        ec
+        (ConstraintStore (append pending [Constraint next kind meta dom span depth]) (next + 1) tried cnt passNext passSols ctorok)
 
 -- 已尝试记录（epoch = 解表长度）。
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 export ecTriedAt : Ec -> Int -> Maybe Int
-ecTriedAt ec cid = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok => HashMap.lookup cid tried
+ecTriedAt ec cid =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => HashMap.lookup cid tried
 
 -- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
 export ecRecordTried : Ec -> Int -> Int -> Ec
-ecRecordTried ec cid epoch = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok =>
-    ecPutConstraints ec
-      (ConstraintStore pending next (HashMap.insert cid epoch tried) cnt passNext passSols ctorok)
+ecRecordTried ec cid epoch =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      ecPutConstraints
+        ec
+        (ConstraintStore pending next (HashMap.insert cid epoch tried) cnt passNext passSols ctorok)
 
 export ecEmpty : Ec
 ecEmpty =
-  Ec 0 [] [] [] [] [] instStoreEmpty [] csEmpty (HashMap.fromList []) (HashMap.fromList [])
-    (HashMap.fromList []) (HashMap.fromList []) False (HashMap.fromList []) (HashMap.fromList [])
-    False [] [] [] [] []
+  Ec
+    0
+    []
+    []
+    []
+    []
+    []
+    instStoreEmpty
+    []
+    csEmpty
+    (HashMap.fromList [])
+    (HashMap.fromList [])
+    (HashMap.fromList [])
+    (HashMap.fromList [])
+    False
+    (HashMap.fromList [])
+    (HashMap.fromList [])
+    False
+    []
+    []
+    []
+    []
+    []
 
 -- 解表的哈希索引（键 = 元变量编号的十进制串）：`substDictTerm`/`rezonkDefs` 会对每个
 -- 定义体的每个元变量查解，关联表是 O(#解) 一次；索引把它降到 O(1)。
@@ -503,40 +703,67 @@ ecPutSols ec sols2 =
 
 -- | O(1) 读解表条目数（求解器的 epoch 判据）。
 export ecSolsCountOf : Ec -> Int
-ecSolsCountOf ec = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok => cnt
+ecSolsCountOf ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => cnt
 
 ecPutSolsCount : Ec -> Int -> Ec
-ecPutSolsCount ec cnt = case ecConstraints ec of
-  ConstraintStore pending next tried old passNext passSols ctorok =>
-    ecPutConstraints ec (ConstraintStore pending next tried cnt passNext passSols ctorok)
+ecPutSolsCount ec cnt =
+  case ecConstraints ec of
+    ConstraintStore pending next tried old passNext passSols ctorok =>
+      ecPutConstraints ec (ConstraintStore pending next tried cnt passNext passSols ctorok)
 
 ecPutSolsRaw : Ec -> List (Pair Int Value) -> HashMap Int Value -> Ec
 ecPutSolsRaw (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) sols2 soltbl2 =
-  Ec next sols2 defs datas depths goals insts classes dgoals deftbl gtbl soltbl2 dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols2
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl2
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 -- | 记录一轮求解结束时的 (id, 解表数)，供下一轮的空转判据。
 export ecPutPassMarker : Ec -> Ec
-ecPutPassMarker ec = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok =>
-    ecPutConstraints ec (ConstraintStore pending next tried cnt next cnt ctorok)
+ecPutPassMarker ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      ecPutConstraints ec (ConstraintStore pending next tried cnt next cnt ctorok)
 
 -- | 构造子索引是否覆盖全部已加载 data。
 export ecCtorIndexComplete : Ec -> Bool
-ecCtorIndexComplete ec = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok => ctorok
+ecCtorIndexComplete ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok => ctorok
 
 ecPutCtorIndexComplete : Ec -> Bool -> Ec
-ecPutCtorIndexComplete ec ok = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols _ =>
-    ecPutConstraints ec (ConstraintStore pending next tried cnt passNext passSols ok)
+ecPutCtorIndexComplete ec ok =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols _ =>
+      ecPutConstraints ec (ConstraintStore pending next tried cnt passNext passSols ok)
 
 -- | 自上次求解轮以来没有新约束、解表也没增长 ⇒ 这一轮必然全部跳过，可整体省掉。
 export ecDictPassIdle : Ec -> Bool
-ecDictPassIdle ec = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok =>
-    passNext == next && passSols == cnt
+ecDictPassIdle ec =
+  case ecConstraints ec of
+    ConstraintStore pending next tried cnt passNext passSols ctorok =>
+      passNext == next && passSols == cnt
 
 -- 新解是前插的：旧表头编号之前的条目就是本次新增的解。
 solsDelta : List (Pair Int Value) -> List (Pair Int Value) -> List (Pair Int Value)
@@ -560,22 +787,85 @@ export ecAddDef : Ec -> Pair String Term -> Ec
 ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) d =
   let
     delta =
-      if memDataNameIn (firstOf d) datas then deftbl
-      else HashMap.insert (firstOf d) (secondOf d) deftbl
-  in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
-    ctbl ctortbl haslin mspans uspans warnings counters errors
+      if memDataNameIn (firstOf d) datas then
+        deftbl
+      else
+        HashMap.insert (firstOf d) (secondOf d) deftbl
+  in Ec
+    next
+    sols
+    (d :: defs)
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    delta
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecRemoveDefTbl : String -> Ec -> Ec
 ecRemoveDefTbl name (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
-  Ec next sols defs datas depths goals insts classes dgoals
-    (HashMap.fromList (filter (\p => not (firstOf p == name)) (HashMap.toList deftbl))) gtbl soltbl
-    dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    (HashMap.fromList (filter (\p => not (firstOf p == name)) (HashMap.toList deftbl)))
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 export ecAddData : Ec -> DtData -> Ec
 ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) d =
-  Ec next sols defs (append datas [d]) depths goals insts classes dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl (HashMap.insertAll (dataCtorPairs d) ctortbl)
-    (if dtDataLinear d then True else haslin) mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    (append datas [d])
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    (HashMap.insertAll (dataCtorPairs d) ctortbl)
+    (if dtDataLinear d then True else haslin)
+    mspans
+    uspans
+    warnings
+    counters
+    errors
 
 -- 构造子索引：名字 → DtCtor（唯一真相仍是 `ecDatas`；表只是可重建缓存）。
 export ctorTblOfDatas : List DtData -> HashMap String DtCtor
@@ -605,8 +895,29 @@ ecMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gt
 -- | 写回元变量创建点登记表。
 export ecPutMetaSpans : Ec -> List (Pair Int Span) -> Ec
 ecPutMetaSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) mspans2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans2 uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans2
+    uspans
+    warnings
+    counters
+    errors
 
 -- | 读取 QTT 使用点登记表（新记录在前）。
 export ecUseSpans : Ec -> List (Pair String Span)
@@ -616,8 +927,29 @@ ecUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtb
 -- | 写回 QTT 使用点登记表。
 export ecPutUseSpans : Ec -> List (Pair String Span) -> Ec
 ecPutUseSpans (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) uspans2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans2 warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans2
+    warnings
+    counters
+    errors
 
 -- warning 列表的读写（精化期就地追加；精化出口把最终列表挂到 DtProgram）。
 -- | 读取本次精化已发射的 warning（发射顺序）。
@@ -628,8 +960,29 @@ ecWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl gtb
 -- | 写回 warning 列表。
 export ecPutWarnings : Ec -> List Diagnostic -> Ec
 ecPutWarnings (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) warnings2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings2 counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings2
+    counters
+    errors
 
 -- | 追加一条 warning（保持发射顺序；warning 数量小，尾部 append 足够）。
 export ecAddWarning : Ec -> Diagnostic -> Ec
@@ -641,8 +994,29 @@ ecCounters e = e.ecCounters
 
 export ecBump : Ec -> String -> Ec
 ecBump (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) k =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings ((::) k counters) errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    ((::) k counters)
+    errors
 
 -- 逐定义恢复时收集的诊断（前插顺序；出口 reverse 成源序）。
 export ecErrors : Ec -> List Diagnostic
@@ -651,8 +1025,29 @@ ecErrors (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
 
 export ecAddError : Ec -> Diagnostic -> Ec
 ecAddError (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) d =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters ((::) d errors)
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    ((::) d errors)
 
 export datasHaveLinear : List DtData -> Bool
 datasHaveLinear [] = False
@@ -722,24 +1117,26 @@ ctxEnvRefined ctx = refinedEnv ctx.ctxRefVals (ctxEnv ctx)
 -- 把精化代入一个值。精化是「level ↦ Value」，而求值环境里的 binder 都是中性变量，
 -- 求值后做一次重写即可（索引位置上出现的基本是中性变量或构造子值）。resolveLevel 处理链式精化。
 export refineValue : List (Pair Int Value) -> Int -> Value -> Value
-refineValue refs fuel v = if fuel <= 0 then v
-else case v of
-  VNeutral n => case n of
-    NVar name lvl sp =>
-      let
-        sp2 = map (refineValue refs (fuel - 1)) sp
-      in case refineLookup lvl refs of
-        Just r => applySpine (refineValue refs (fuel - 1) r) sp2
-        Nothing => VNeutral (NVar name lvl sp2)
-    NGlobal g sp => VNeutral (NGlobal g (map (refineValue refs (fuel - 1)) sp))
-  VCon c args => VCon c (map (refineValue refs (fuel - 1)) args)
-  VApp f a => VApp (refineValue refs (fuel - 1) f) (refineValue refs (fuel - 1) a)
-  VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) alts
-  VIf c th el =>
-    VIf (refineValue refs (fuel - 1) c) (refineValue refs (fuel - 1) th)
-      (refineValue refs (fuel - 1) el)
-  VMeta m sp => VMeta m (map (refineValue refs (fuel - 1)) sp)
-  _ => v
+refineValue refs fuel v =
+  if fuel <= 0 then
+    v
+  else
+    case v of
+      VNeutral n =>
+        case n of
+          NVar name lvl sp =>
+            let
+              sp2 = map (refineValue refs (fuel - 1)) sp
+            in case refineLookup lvl refs of
+              Just r => applySpine (refineValue refs (fuel - 1) r) sp2
+              Nothing => VNeutral (NVar name lvl sp2)
+          NGlobal g sp => VNeutral (NGlobal g (map (refineValue refs (fuel - 1)) sp))
+      VCon c args => VCon c (map (refineValue refs (fuel - 1)) args)
+      VApp f a => VApp (refineValue refs (fuel - 1) f) (refineValue refs (fuel - 1) a)
+      VCase scrut alts => VCase (refineValue refs (fuel - 1) scrut) alts
+      VIf c th el => VIf (refineValue refs (fuel - 1) c) (refineValue refs (fuel - 1) th) (refineValue refs (fuel - 1) el)
+      VMeta m sp => VMeta m (map (refineValue refs (fuel - 1)) sp)
+      _ => v
 
 export refineLookup : Int -> List (Pair Int Value) -> Maybe Value
 refineLookup lvl [] = Nothing
@@ -766,7 +1163,8 @@ errAt sp msg = rawAt sp msg
 -- 新建元变量并记录创建深度（求解时的作用域检查用）。
 export newMeta : Ctx -> Ec -> Pair Term Ec
 newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
-  Pair (TMeta next)
+  Pair
+    (TMeta next)
     (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl haslin mspans uspans warnings counters errors)
 
 export forceVal : Ec -> Value -> Value
@@ -821,5 +1219,26 @@ solsToTbl sols = HashMap.insertAll sols (HashMap.fromList [])
 
 export ecPutDefTbl : Ec -> HashMap String Term -> Ec
 ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) deftbl2 =
-  Ec next sols defs datas depths goals insts classes dgoals deftbl2 gtbl soltbl dptbl gcomp ctbl
-    ctortbl haslin mspans uspans warnings counters errors
+  Ec
+    next
+    sols
+    defs
+    datas
+    depths
+    goals
+    insts
+    classes
+    dgoals
+    deftbl2
+    gtbl
+    soltbl
+    dptbl
+    gcomp
+    ctbl
+    ctortbl
+    haslin
+    mspans
+    uspans
+    warnings
+    counters
+    errors

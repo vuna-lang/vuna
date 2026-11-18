@@ -75,17 +75,29 @@ fixFieldMeta : HashMap Int Value -> DtFieldMeta -> DtFieldMeta
 fixFieldMeta tbl (DtFieldMeta fn fi fty) = DtFieldMeta fn fi (fixTerm tbl 0 fty)
 
 fixData tbl (DtData n ps ctors kind viaClasses lin repr fields isRec) =
-  DtData n ps (map (fixCtor tbl) ctors) (fixTerm tbl 0 kind) viaClasses lin repr
-    (map (fixFieldMeta tbl) fields) isRec
+  DtData
+    n
+    ps
+    (map (fixCtor tbl) ctors)
+    (fixTerm tbl 0 kind)
+    viaClasses
+    lin
+    repr
+    (map (fixFieldMeta tbl) fields)
+    isRec
 
 -- 投影签名是闭合的 Pi 链（`{p} -> {d} -> <方法类型>`）；字段类型精化在**全部类参数** binder
 -- 之下（深度 = 类参数个数；单参数类是 1，多参数 trait 必须按个数，否则会被误判 free-var），
 -- 自定义实例时由 `substInstParam` 把类参数换成头实参。
 fixClass : HashMap Int Value -> DtClass -> DtClass
 fixClass tbl (DtClass n ps supers projs tys spans) =
-  DtClass n ps (map (fixTerm tbl (length ps)) supers)
+  DtClass
+    n
+    ps
+    (map (fixTerm tbl (length ps)) supers)
     (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) projs)
-    (map (fixTerm tbl (length ps)) tys) spans
+    (map (fixTerm tbl (length ps)) tys)
+    spans
 
 -- 实例 telescope：tele 第 i 项在 i 个 tele binder 之下；ctx 域与结果头在全部 tele binder 之下。
 fixTele : HashMap Int Value -> Int -> List (Pair String Term) -> List (Pair String Term)
@@ -107,9 +119,13 @@ cachedOfProgram prog = cachedOfProgramWith (HashMap.fromList (dtProgSols prog)) 
 -- （逐模块重建是 O(#模块 × #sols)）。
 export cachedOfProgramWith : HashMap Int Value -> DtProgram -> CachedProgram
 cachedOfProgramWith tbl prog =
-  CachedProgram (map (fixData tbl) (dtProgDatas prog)) (map (fixDef tbl) (dtProgDefs prog))
+  CachedProgram
+    (map (fixData tbl) (dtProgDatas prog))
+    (map (fixDef tbl) (dtProgDefs prog))
     (map (\p => Pair (firstOf p) (fixTerm tbl 0 (secondOf p))) (dtProgGlobals prog))
-    (map (fixInst tbl) (dtProgInsts prog)) (map (fixClass tbl) (dtProgClasses prog)) []
+    (map (fixInst tbl) (dtProgInsts prog))
+    (map (fixClass tbl) (dtProgClasses prog))
+    []
 
 -- ---------------------------------------------------------------
 -- 读摘要前的校验：闭合 + 无 meta + 无负索引
@@ -131,11 +147,12 @@ datasValid (d :: rest) =
 
 defsValid : List DtDef -> Bool
 defsValid [] = True
-defsValid (d :: rest) = case dtDefBody d of
-  -- body 里**擦除位置**的未解 meta 允许保留（精化器本来就不要求它们有解）：读摘要时按
-  -- 包段重编号，消费方当作新的未解元变量（只能出现在不生成代码/不被比较的位置）。
-  Just body => termValidAt 0 (dtDefType d) && bodyValid body && defsValid rest
-  Nothing => termValidAt 0 (dtDefType d) && defsValid rest
+defsValid (d :: rest) =
+  case dtDefBody d of
+    -- body 里**擦除位置**的未解 meta 允许保留（精化器本来就不要求它们有解）：读摘要时按
+    -- 包段重编号，消费方当作新的未解元变量（只能出现在不生成代码/不被比较的位置）。
+    Just body => termValidAt 0 (dtDefType d) && bodyValid body && defsValid rest
+    Nothing => termValidAt 0 (dtDefType d) && defsValid rest
 
 bodyValid : Term -> Bool
 bodyValid t = length (termMetasRuntime t) == 0 && not (hasFreeTermVar 0 t) && not (hasNegativeVar t)
@@ -158,9 +175,7 @@ instsValid (i :: rest) =
   let
     nTele = length i.dtInstTele
   in teleValid 0 i.dtInstTele
-    && termsValidAt nTele i.dtInstCtx
-    && termValidAt nTele i.dtInstHead
-    && instsValid rest
+    && termsValidAt nTele i.dtInstCtx && termValidAt nTele i.dtInstHead && instsValid rest
 
 classesValid : List DtClass -> Bool
 classesValid [] = True
@@ -169,24 +184,23 @@ classesValid (c :: rest) =
     projs = map (\p => secondOf p) c.dtClassMethods
   in termsValidAt 0 projs
     && termsValidAt (length c.dtClassParams) c.dtClassSupers
-    && termsValidAt (length c.dtClassParams) c.dtClassFieldTys
-    && classesValid rest
+    && termsValidAt (length c.dtClassParams) c.dtClassFieldTys && classesValid rest
 
 export cachedProgramValid : CachedProgram -> Bool
 cachedProgramValid (CachedProgram datas defs globals insts classes _) =
   datasValid datas
-    && defsValid defs
-    && globalsValid globals
-    && instsValid insts
-    && classesValid classes
+    && defsValid defs && globalsValid globals && instsValid insts && classesValid classes
 
 -- ---------------------------------------------------------------
 -- 诊断（仅摘要被判无效时调用）：指出第一个不可用项，便于 --debug-perf 定位
 -- ---------------------------------------------------------------
 termIssueAt : Int -> Term -> String
 termIssueAt depth t =
-  if length (termMetasAll t) > 0 then "meta"
-  else if hasNegativeVar t then "negative-index" else if hasFreeTermVar depth t then "free-var" else ""
+  if length (termMetasAll t) > 0 then
+    "meta"
+  else if hasNegativeVar t then
+    "negative-index"
+  else if hasFreeTermVar depth t then "free-var" else ""
 
 dataIssue : DtData -> String
 dataIssue d =
@@ -210,20 +224,23 @@ datasIssue (d :: rest) =
 
 bodyIssueAt : Term -> String
 bodyIssueAt t =
-  if length (termMetasRuntime t) > 0 then "meta"
+  if length (termMetasRuntime t) > 0 then
+    "meta"
   else if hasNegativeVar t then "negative-index" else if hasFreeTermVar 0 t then "free-var" else ""
 
 defIssue : DtDef -> String
 defIssue d =
   let
     typeIssue = termIssueAt 0 (dtDefType d)
-  in if typeIssue == "" then case dtDefBody d of
-    Just body =>
-      let
-        bodyIssue = bodyIssueAt body
-      in if bodyIssue == "" then "" else "${dtDefName d} body:${bodyIssue}"
-    Nothing => ""
-  else "${dtDefName d} type:${typeIssue}"
+  in if typeIssue == "" then
+    case dtDefBody d of
+      Just body =>
+        let
+          bodyIssue = bodyIssueAt body
+        in if bodyIssue == "" then "" else "${dtDefName d} body:${bodyIssue}"
+      Nothing => ""
+  else
+    "${dtDefName d} type:${typeIssue}"
 
 defsIssue : List DtDef -> String
 defsIssue [] = ""
@@ -244,11 +261,13 @@ instIssue i =
   let
     nTele = length i.dtInstTele
     teleIssue = teleIssueGo 0 i.dtInstTele
-  in if teleIssue /= "" then "${dtInstName i} tele:${teleIssue}"
+  in if teleIssue /= "" then
+    "${dtInstName i} tele:${teleIssue}"
   else
     let
       ctxIssue = ctxIssues nTele i.dtInstCtx
-    in if ctxIssue /= "" then "${dtInstName i} ctx:${ctxIssue}"
+    in if ctxIssue /= "" then
+      "${dtInstName i} ctx:${ctxIssue}"
     else
       let
         headIssue = termIssueAt nTele i.dtInstHead
@@ -279,11 +298,13 @@ classIssue : DtClass -> String
 classIssue c =
   let
     projIssue = ctxIssues 0 (map (\p => secondOf p) c.dtClassMethods)
-  in if projIssue /= "" then "${dtClassName c} proj:${projIssue}"
+  in if projIssue /= "" then
+    "${dtClassName c} proj:${projIssue}"
   else
     let
       superIssue = ctxIssues (length c.dtClassParams) c.dtClassSupers
-    in if superIssue /= "" then "${dtClassName c} super:${superIssue}"
+    in if superIssue /= "" then
+      "${dtClassName c} super:${superIssue}"
     else
       let
         fieldIssue = ctxIssues (length c.dtClassParams) c.dtClassFieldTys
@@ -304,10 +325,15 @@ cachedProgramIssue (CachedProgram datas defs globals insts classes _) =
     globalsI = globalsIssue globals
     instsI = instsIssue insts
     classesI = classesIssue classes
-  in if datasI /= "" then "datas ${datasI}"
-  else if defsI /= "" then "defs ${defsI}"
-  else if globalsI /= "" then "globals ${globalsI}"
-  else if instsI /= "" then "insts ${instsI}" else if classesI /= "" then "classes ${classesI}" else ""
+  in if datasI /= "" then
+    "datas ${datasI}"
+  else if defsI /= "" then
+    "defs ${defsI}"
+  else if globalsI /= "" then
+    "globals ${globalsI}"
+  else if instsI /= "" then
+    "insts ${instsI}"
+  else if classesI /= "" then "classes ${classesI}" else ""
 
 -- ---------------------------------------------------------------
 -- 包段重编号：摘要里允许残留的「擦除位置未解 meta」
@@ -331,43 +357,29 @@ shiftTerm : Int -> Term -> Check Term
 shiftTerm off t = shiftTermFuel defaultFuel off t
 
 shiftTermFuel : Int -> Int -> Term -> Check Term
-shiftTermFuel fuel off t = if fuel <= 0 then icFuel "meta-shift"
-else case t of
-  TVar n i sp => OkC (TVar n i sp)
-  TMeta m => OkC (TMeta (m + off))
-  TGlobal g => OkC (TGlobal g)
-  TType l => OkC (TType l)
-  TPi n i r d c =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off d)
-      (\d2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
-  TLam n r mty sp b =>
-    Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel (fuel - 1) off mty)
-      (\mty2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r mty2 sp b2)))
-  TApp f a r =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off f)
-      (\f2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))
-  TCon c args =>
-    Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TCon c args2))
-  TMk c args =>
-    Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TMk c args2))
-  TRecord c args =>
-    Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TRecord c args2))
-  TCase s alts =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off s)
-      (\s2 => Vuna.Compiler.Base.Common.bind (shiftAlts (fuel - 1) off alts) (\alts2 => OkC (TCase s2 alts2)))
-  TProj base c tele i fi =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off base)
-      (\base2 => OkC (TProj base2 c tele i fi))
-  TRecUpd base c tele idxs body =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off base)
-      (\base2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off body) (\body2 => OkC (TRecUpd base2 c tele idxs body2)))
-  TInt n => OkC (TInt n)
-  TStr s => OkC (TStr s)
-  TBool b => OkC (TBool b)
-  TIf c th el =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c)
-      (\c2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off th) (\th2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off el) (\el2 => OkC (TIf c2 th2 el2))))
-  TFloat raw => OkC (TFloat raw)
+shiftTermFuel fuel off t =
+  if fuel <= 0 then
+    icFuel "meta-shift"
+  else
+    case t of
+      TVar n i sp => OkC (TVar n i sp)
+      TMeta m => OkC (TMeta (m + off))
+      TGlobal g => OkC (TGlobal g)
+      TType l => OkC (TType l)
+      TPi n i r d c => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off d) (\d2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
+      TLam n r mty sp b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel (fuel - 1) off mty) (\mty2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r mty2 sp b2)))
+      TApp f a r => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off f) (\f2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))
+      TCon c args => Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TCon c args2))
+      TMk c args => Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TMk c args2))
+      TRecord c args => Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TRecord c args2))
+      TCase s alts => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off s) (\s2 => Vuna.Compiler.Base.Common.bind (shiftAlts (fuel - 1) off alts) (\alts2 => OkC (TCase s2 alts2)))
+      TProj base c tele i fi => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off base) (\base2 => OkC (TProj base2 c tele i fi))
+      TRecUpd base c tele idxs body => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off base) (\base2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off body) (\body2 => OkC (TRecUpd base2 c tele idxs body2)))
+      TInt n => OkC (TInt n)
+      TStr s => OkC (TStr s)
+      TBool b => OkC (TBool b)
+      TIf c th el => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off th) (\th2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off el) (\el2 => OkC (TIf c2 th2 el2))))
+      TFloat raw => OkC (TFloat raw)
 
 -- λ binder 类型槽的 meta 移位（`Nothing` 不动）。
 shiftTermMaybeFuel : Int -> Int -> Maybe Term -> Check (Maybe Term)
@@ -379,18 +391,21 @@ shiftTermMaybeFuel fuel off (Just t) =
 shiftArgs : Int -> Int -> List (Pair Term Rig) -> Check (List (Pair Term Rig))
 shiftArgs fuel off [] = OkC []
 shiftArgs fuel off ((Pair a r) :: rest) =
-  Vuna.Compiler.Base.Common.bind (shiftTermFuel fuel off a)
+  Vuna.Compiler.Base.Common.bind
+    (shiftTermFuel fuel off a)
     (\a2 => Vuna.Compiler.Base.Common.bind (shiftArgs fuel off rest) (\rest2 => OkC (Pair a2 r :: rest2)))
 
 shiftAlts : Int -> Int -> List CaseAlt -> Check (List CaseAlt)
 shiftAlts fuel off [] = OkC []
 shiftAlts fuel off ((CaseAlt n bs b) :: rest) =
-  Vuna.Compiler.Base.Common.bind (shiftTermFuel fuel off b)
+  Vuna.Compiler.Base.Common.bind
+    (shiftTermFuel fuel off b)
     (\b2 => Vuna.Compiler.Base.Common.bind (shiftAlts fuel off rest) (\rest2 => OkC (CaseAlt n bs b2 :: rest2)))
 
 shiftDef : Int -> DtDef -> Check DtDef
 shiftDef off (DtDef n ty body sp) =
-  Vuna.Compiler.Base.Common.bind (shiftTerm off ty)
+  Vuna.Compiler.Base.Common.bind
+    (shiftTerm off ty)
     (\ty2 => Vuna.Compiler.Base.Common.bind (shiftTerm off body) (\body2 => OkC (DtDef n ty2 body2 sp)))
 shiftDef off (DtAxiom n ty sp) =
   Vuna.Compiler.Base.Common.bind (shiftTerm off ty) (\ty2 => OkC (DtAxiom n ty2 sp))
@@ -407,23 +422,27 @@ shiftFieldMeta off (DtFieldMeta fn fi fty) =
 
 shiftData : Int -> DtData -> Check DtData
 shiftData off (DtData n ps ctors kind viaClasses lin repr fields isRec) =
-  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftCtor off) ctors)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (shiftCtor off) ctors)
     (\ctors2 => Vuna.Compiler.Base.Common.bind (shiftTerm off kind) (\kind2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftFieldMeta off) fields) (\fields2 => OkC (DtData n ps ctors2 kind2 viaClasses lin repr fields2 isRec))))
 
 shiftTele : Int -> List (Pair String Term) -> Check (List (Pair String Term))
 shiftTele off [] = OkC []
 shiftTele off ((Pair n t) :: rest) =
-  Vuna.Compiler.Base.Common.bind (shiftTerm off t)
+  Vuna.Compiler.Base.Common.bind
+    (shiftTerm off t)
     (\t2 => Vuna.Compiler.Base.Common.bind (shiftTele off rest) (\rest2 => OkC (Pair n t2 :: rest2)))
 
 shiftClass : Int -> DtClass -> Check DtClass
 shiftClass off (DtClass n ps supers projs tys spans) =
-  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) supers)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (shiftTerm off) supers)
     (\supers2 => Vuna.Compiler.Base.Common.bind (shiftTele off projs) (\projs2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) tys) (\tys2 => OkC (DtClass n ps supers2 projs2 tys2 spans))))
 
 shiftInst : Int -> DtInst -> Check DtInst
 shiftInst off (DtInst n tele ctxE head sp) =
-  Vuna.Compiler.Base.Common.bind (shiftTele off tele)
+  Vuna.Compiler.Base.Common.bind
+    (shiftTele off tele)
     (\tele2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftTerm off) ctxE) (\ctx2 => Vuna.Compiler.Base.Common.bind (shiftTerm off head) (\head2 => OkC (DtInst n tele2 ctx2 head2 sp))))
 
 shiftGlobal : Int -> Pair String Term -> Check (Pair String Term)
@@ -432,7 +451,8 @@ shiftGlobal off (Pair n t) =
 
 export shiftCachedProgram : Int -> CachedProgram -> Check CachedProgram
 shiftCachedProgram off (CachedProgram datas defs globals insts classes _) =
-  Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftData off) datas)
+  Vuna.Compiler.Base.Common.bind
+    (Vuna.Compiler.Base.Common.traverse (shiftData off) datas)
     (\datas2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftDef off) defs) (\defs2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftGlobal off) globals) (\globals2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftInst off) insts) (\insts2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (shiftClass off) classes) (\classes2 => OkC (CachedProgram datas2 defs2 globals2 insts2 classes2 []))))))
 
 -- ---------------------------------------------------------------
@@ -447,7 +467,9 @@ shiftCachedProgram off (CachedProgram datas defs globals insts classes _) =
 -- | `CachedProgram` 的规范编码。
 export encCachedProgram : CachedProgram -> List String -> List String
 encCachedProgram cp acc =
-  encList encDtData cp.cachedDatas
+  encList
+    encDtData
+    cp.cachedDatas
     (encList encDtDef cp.cachedDefs (encList encGlobalPair cp.cachedGlobals (encList encDtInst cp.cachedInsts (encList encDtClass cp.cachedClasses (encList encStr cp.cachedOpaque acc)))))
 
 encGlobalPair : Pair String Term -> List String -> List String
@@ -455,16 +477,19 @@ encGlobalPair (Pair n t) acc = encStr n (encTerm t acc)
 
 -- | 解析 `CachedProgram`（整串入口：要求恰好消费完）。
 export decCachedProgramComplete : String -> Maybe CachedProgram
-decCachedProgramComplete s = case decCachedProgram (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair cp rest) => if curAtEnd rest then Just cp else Nothing
+decCachedProgramComplete s =
+  case decCachedProgram (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair cp rest) => if curAtEnd rest then Just cp else Nothing
 
 export decCachedProgram : Int -> Cur -> Maybe (Pair CachedProgram Cur)
 decCachedProgram fuel c =
-  thenPair (decList decDtData (fuel - 1) c)
+  thenPair
+    (decList decDtData (fuel - 1) c)
     (\datas, b1 => thenPair (decList decDtDef (fuel - 1) b1) (\defs, b2 => thenPair (decList decGlobalPair (fuel - 1) b2) (\globals, b3 => thenPair (decList decDtInst (fuel - 1) b3) (\insts, b4 => thenPair (decList decDtClass (fuel - 1) b4) (\classes, b5 => thenPair (decList decStr (fuel - 1) b5) (\names, b6 => Just (Pair (CachedProgram datas defs globals insts classes names) b6)))))))
 
 decGlobalPair : Int -> Cur -> Maybe (Pair (Pair String Term) Cur)
 decGlobalPair fuel c =
-  thenPair (decStr (fuel - 1) c)
+  thenPair
+    (decStr (fuel - 1) c)
     (\n, b1 => thenPair (decTerm (fuel - 1) b1) (\t, b2 => Just (Pair (Pair n t) b2)))

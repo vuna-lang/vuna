@@ -39,36 +39,43 @@ splitDeps (SplitFile name text deps) = deps
 -- 落盘是宿主动作，显式在 `Eff []` 里；文件内容/依赖图计算保持纯。
 export writeSplitFiles : Member nFs FsOp r => String -> List SplitFile -> Eff r (Check Int)
 writeSplitFiles dir [] = pure (OkC 0)
-writeSplitFiles dir (f :: rest) = do
-  restR <- writeSplitFiles dir rest
-  case restR of
-    ErrC e => pure (ErrC e)
-    OkC n => do
-      _ <- fsWriteFile "${dir}/${splitName f}" (splitText f)
-      pure (OkC (n + 1))
+writeSplitFiles dir (f :: rest) =
+  do
+    restR <- writeSplitFiles dir rest
+    case restR of
+      ErrC e => pure (ErrC e)
+      OkC n =>
+        do
+          _ <- fsWriteFile "${dir}/${splitName f}" (splitText f)
+          pure (OkC (n + 1))
 
 -- 只写内容变化的文件（build 的逐模块增量写盘；内容相同不 touch）。
 export writeSplitFilesIfChanged : Member nFs FsOp r => String -> List SplitFile -> Eff r (Check Int)
 writeSplitFilesIfChanged dir [] = pure (OkC 0)
-writeSplitFilesIfChanged dir (f :: rest) = do
-  restR <- writeSplitFilesIfChanged dir rest
-  case restR of
-    ErrC e => pure (ErrC e)
-    OkC n =>
-      let
-        path = "${dir}/${splitName f}"
-        text = splitText f
-      in do
-        exists <- fsFileExists path
-        if exists then do
-          old <- fsReadFile path
-          if old == text then pure (OkC (n + 1))
-          else do
-            _ <- fsWriteFile path text
-            pure (OkC (n + 1))
-        else do
-          _ <- fsWriteFile path text
-          pure (OkC (n + 1))
+writeSplitFilesIfChanged dir (f :: rest) =
+  do
+    restR <- writeSplitFilesIfChanged dir rest
+    case restR of
+      ErrC e => pure (ErrC e)
+      OkC n =>
+        let
+          path = "${dir}/${splitName f}"
+          text = splitText f
+        in do
+          exists <- fsFileExists path
+          if exists then
+            do
+              old <- fsReadFile path
+              if old == text then
+                pure (OkC (n + 1))
+              else
+                do
+                  _ <- fsWriteFile path text
+                  pure (OkC (n + 1))
+          else
+            do
+              _ <- fsWriteFile path text
+              pure (OkC (n + 1))
 
 -- 编译单元依赖图：按输出顺序取 .ml（跳过 .mli），unit = 文件名去掉 ".ml"；
 -- deps 原样保留（已是直接依赖单元名，保持顺序、不去重）。
@@ -77,8 +84,10 @@ splitGraph [] = []
 splitGraph (f :: rest) =
   let
     name = splitName f
-  in if endsWith ".ml" name then (::) (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
-  else splitGraph rest
+  in if endsWith ".ml" name then
+    (::) (Pair (stripMl name) (splitDeps f)) (splitGraph rest)
+  else
+    splitGraph rest
 
 stripMl : String -> String
 stripMl name = substring 0 (byteLength name - 3) name
@@ -106,9 +115,10 @@ depthOfDeps depths [] = 0
 depthOfDeps depths (dep :: rest) = maxInt (depthOfUnit depths dep + 1) (depthOfDeps depths rest)
 
 depthOfUnit : HashMap String Int -> String -> Int
-depthOfUnit depths unit = case HashMap.lookup unit depths of
-  Just d => d
-  Nothing => 0
+depthOfUnit depths unit =
+  case HashMap.lookup unit depths of
+    Just d => d
+    Nothing => 0
 
 graphMaxDepth : List (Pair String (List String)) -> HashMap String Int -> Int -> Int
 graphMaxDepth [] depths acc = acc
@@ -245,12 +255,13 @@ splitGraphAcyclic files =
   in convergedWithin (length graph + 2) graph baseMemo
 
 convergedWithin : Int -> List (Pair String (List String)) -> HashMap String Int -> Bool
-convergedWithin fuel graph memo = if fuel <= 0 then False
-else
-  let
-    next = stepDepths memo graph
-  in if sameDepthTable memo next then True
-  else convergedWithin (fuel - 1) graph (HashMap.fromList next)
+convergedWithin fuel graph memo =
+  if fuel <= 0 then
+    False
+  else
+    let
+      next = stepDepths memo graph
+    in if sameDepthTable memo next then True else convergedWithin (fuel - 1) graph (HashMap.fromList next)
 
 -- 把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
 -- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
@@ -282,9 +293,10 @@ tieTableOf graph =
     (map (\n => Pair n (unitTieKey n)) (map firstOf (HashMap.toList (nameSetOf graph (HashMap.fromList [])))))
 
 tieOf : HashMap String Int -> String -> Int
-tieOf ties name = case HashMap.lookup name ties of
-  Just k => k
-  Nothing => 0
+tieOf ties name =
+  case HashMap.lookup name ties of
+    Just k => k
+    Nothing => 0
 
 -- 迭代松弛到不动点：depth(u) = 1 + max(depth(dep))（无依赖 = 0；dep 不在 graph 按 0）。
 -- 每轮用上一轮的 depth 同步更新；HashMap 让每轮查找 O(1)。
@@ -310,17 +322,21 @@ sameDepthTable memo (p :: rest) =
   depthOfUnit memo (firstOf p) == secondOf p && sameDepthTable memo rest
 
 fixDepths : Int -> List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
-fixDepths fuel graph memo = if fuel <= 0 then memo
-else
-  let
-    next = stepDepths memo graph
-  in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (HashMap.fromList next)
+fixDepths fuel graph memo =
+  if fuel <= 0 then
+    memo
+  else
+    let
+      next = stepDepths memo graph
+    in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (HashMap.fromList next)
 
 -- 排序键 = (depth, tieKey)；预计算后比较只碰 Int。
 depthEntryLess : Pair (Pair Int Int) String -> Pair (Pair Int Int) String -> Bool
 depthEntryLess a b =
-  if firstOf (firstOf a) /= firstOf (firstOf b) then firstOf (firstOf a) < firstOf (firstOf b)
-  else secondOf (firstOf a) <= secondOf (firstOf b)
+  if firstOf (firstOf a) /= firstOf (firstOf b) then
+    firstOf (firstOf a) < firstOf (firstOf b)
+  else
+    secondOf (firstOf a) <= secondOf (firstOf b)
 
 sortDepthEntries : List (Pair (Pair Int Int) String) -> List (Pair (Pair Int Int) String)
 sortDepthEntries xs = sortBy depthEntryLess xs
@@ -328,9 +344,10 @@ sortDepthEntries xs = sortBy depthEntryLess xs
 -- 文件名索引：查 `${unit}.ml`；非 .ml 项不参与。
 filesOfDepthEntries : HashMap String SplitFile -> List String -> List SplitFile
 filesOfDepthEntries table [] = []
-filesOfDepthEntries table (unit :: rest) = case HashMap.lookup "${unit}.ml" table of
-  Just f => f :: filesOfDepthEntries table rest
-  Nothing => filesOfDepthEntries table rest
+filesOfDepthEntries table (unit :: rest) =
+  case HashMap.lookup "${unit}.ml" table of
+    Just f => f :: filesOfDepthEntries table rest
+    Nothing => filesOfDepthEntries table rest
 
 export canonicalTopo : List SplitFile -> List SplitFile
 canonicalTopo files =
@@ -341,7 +358,8 @@ canonicalTopo files =
     baseMemo = HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
     depths = fixDepths (length graph + 2) graph baseMemo
     keyed =
-      map (\p => Pair (Pair (depthOfUnit depths (firstOf p)) (tieOf ties (firstOf p))) (firstOf p))
+      map
+        (\p => Pair (Pair (depthOfUnit depths (firstOf p)) (tieOf ties (firstOf p))) (firstOf p))
         graph
     ordered = map secondOf (sortDepthEntries keyed)
   in map (normalizeFileDeps ties) (filesOfDepthEntries fileTable ordered)
@@ -367,11 +385,12 @@ export encSplitFile : SplitFile -> List String -> List String
 encSplitFile f acc = encStr f.splitName (encStr f.splitText (encList encStr f.splitDeps acc))
 
 decSplitFile : Int -> Cur -> Maybe (Pair SplitFile Cur)
-decSplitFile fuel c = do
-  p1 <- decStr (fuel - 1) c
-  p2 <- decStr (fuel - 1) (secondOf p1)
-  p3 <- decList decStr (fuel - 1) (secondOf p2)
-  pure (Pair (SplitFile (firstOf p1) (firstOf p2) (firstOf p3)) (secondOf p3))
+decSplitFile fuel c =
+  do
+    p1 <- decStr (fuel - 1) c
+    p2 <- decStr (fuel - 1) (secondOf p1)
+    p3 <- decList decStr (fuel - 1) (secondOf p2)
+    pure (Pair (SplitFile (firstOf p1) (firstOf p2) (firstOf p3)) (secondOf p3))
 
 -- | `List SplitFile` 的规范编码（split 缓存载荷）。
 export encSplitFiles : List SplitFile -> List String -> List String
@@ -379,12 +398,14 @@ encSplitFiles fs acc = encList encSplitFile fs acc
 
 -- | 整串解析 `List SplitFile`（split 缓存载荷入口）。
 export decSplitFilesComplete : String -> Maybe (List SplitFile)
-decSplitFilesComplete s = case decList decSplitFile (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair fs rest) => if curAtEnd rest then Just fs else Nothing
+decSplitFilesComplete s =
+  case decList decSplitFile (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair fs rest) => if curAtEnd rest then Just fs else Nothing
 
 -- | 整串解析单个 `SplitFile`（单元缓存载荷入口）。
 export decSplitFileComplete : String -> Maybe SplitFile
-decSplitFileComplete s = case decSplitFile (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair f rest) => if curAtEnd rest then Just f else Nothing
+decSplitFileComplete s =
+  case decSplitFile (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair f rest) => if curAtEnd rest then Just f else Nothing

@@ -45,26 +45,32 @@ symbolsSchemaVersion = "vuna-symbols 1"
 
 -- | `vuna dev obs symbols` 的入口：解析 `--out` 与可选 OUTDIR，写出或打印符号表。
 export runObsSymbols : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsSymbols args = case parseCmdArgs ["dev", "obs", "symbols"] args of
-  ErrC e => symbolsFail 2 (diagText e)
-  OkC parsed => case outOf parsed of
+runObsSymbols args =
+  case parseCmdArgs ["dev", "obs", "symbols"] args of
     ErrC e => symbolsFail 2 (diagText e)
-    OkC out => case parsed.positionals of
-      [] => symbolsDir out ".output"
-      [dir] => symbolsDir out dir
-      _ => symbolsFail 2 "usage: vuna dev obs symbols [--out FILE] [OUTDIR]"
+    OkC parsed =>
+      case outOf parsed of
+        ErrC e => symbolsFail 2 (diagText e)
+        OkC out =>
+          case parsed.positionals of
+            [] => symbolsDir out ".output"
+            [dir] => symbolsDir out dir
+            _ => symbolsFail 2 "usage: vuna dev obs symbols [--out FILE] [OUTDIR]"
 
 -- | 内部：`--out`（非空文件路径）。
 outOf : Parsed -> Check (Maybe String)
-outOf parsed = case flagValue parsed "out" of
-  Nothing => OkC Nothing
-  Just text => if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
+outOf parsed =
+  case flagValue parsed "out" of
+    Nothing => OkC Nothing
+    Just text =>
+      if text == "" then err "`--out` requires a non-empty file path" else OkC (Just text)
 
 -- | 内部：打印 `error: ...` 并返回给定退出码。
 symbolsFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
-symbolsFail code e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure code
+symbolsFail code e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure code
 
 -- ---------------------------------------------------------------
 -- 读取产物目录
@@ -72,21 +78,24 @@ symbolsFail code e = do
 -- | 内部：读产物目录里的全部 `.ml`、逐文件取符号定义，再排序输出；目录不存在或没有 `.ml`
 -- 都按用法错误退出 2，读盘失败退出 1。
 symbolsDir : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => Maybe String -> String -> Eff r Int
-symbolsDir out dir = do
-  dirR <- requireDirectory dir
-  case dirR of
-    ErrC e => symbolsFail 2 (diagText e)
-    OkC _ => do
-      files <- collectSourceFiles dir
-      units <- mlFilesOf (filter isMlName files)
-      if length units == 0 then symbolsFail 2
-        "no .ml split artifacts under ${dir} (run `vuna build --no-compile --out ${dir} <pkg>` first)"
-      else do
-        -- 没有 `.ml` 时给出可操作提示，而不是「成功但空表」。
-        defsR <- scanUnits (sortBy unitLe units) []
-        case defsR of
-          ErrC e => symbolsFail 1 (diagText e)
-          OkC defs => emitSymbols out (sortDefs defs)
+symbolsDir out dir =
+  do
+    dirR <- requireDirectory dir
+    case dirR of
+      ErrC e => symbolsFail 2 (diagText e)
+      OkC _ =>
+        do
+          files <- collectSourceFiles dir
+          units <- mlFilesOf (filter isMlName files)
+          if length units == 0 then
+            symbolsFail 2 "no .ml split artifacts under ${dir} (run `vuna build --no-compile --out ${dir} <pkg>` first)"
+          else
+            do
+              -- 没有 `.ml` 时给出可操作提示，而不是「成功但空表」。
+              defsR <- scanUnits (sortBy unitLe units) []
+              case defsR of
+                ErrC e => symbolsFail 1 (diagText e)
+                OkC defs => emitSymbols out (sortDefs defs)
 
 -- | 内部：路径是否是 `.ml` 文件。
 isMlName : String -> Bool
@@ -107,11 +116,12 @@ unitLe a b = firstOf a <= firstOf b
 -- | 内部：逐文件扫描并累积定义；唯一的错误来源是读盘失败，原样交给调用方。
 scanUnits : Member nFs FsOp r => List (Pair String String) -> List SymbolDef -> Eff r (Check (List SymbolDef))
 scanUnits [] acc = pure (OkC (reverse acc))
-scanUnits ((Pair unit path) :: rest) acc = do
-  textR <- readText path
-  case textR of
-    ErrC e => pure (ErrC e)
-    OkC text => scanUnits rest (append (defsOfUnit unit (lines text)) acc)
+scanUnits ((Pair unit path) :: rest) acc =
+  do
+    textR <- readText path
+    case textR of
+      ErrC e => pure (ErrC e)
+      OkC text => scanUnits rest (append (defsOfUnit unit (lines text)) acc)
 
 -- | 内部：输出符号表——`--out` 省略时打印 JSON，否则写文件并只打印
 -- `wrote <path> (<N> defs)`。
@@ -120,14 +130,16 @@ emitSymbols out defs =
   let
     payload = renderJson (symbolsJson defs)
   in case out of
-    Nothing => do
-      _ <- consolePrint "${payload}\n"
-      pure 0
-    Just path => do
-      _ <- ensureDirPath (parentOf path)
-      _ <- fsWriteFile path "${payload}\n"
-      _ <- consolePrint "wrote ${path} (${strFromInt (length defs)} defs)\n"
-      pure 0
+    Nothing =>
+      do
+        _ <- consolePrint "${payload}\n"
+        pure 0
+    Just path =>
+      do
+        _ <- ensureDirPath (parentOf path)
+        _ <- fsWriteFile path "${payload}\n"
+        _ <- consolePrint "wrote ${path} (${strFromInt (length defs)} defs)\n"
+        pure 0
 
 -- ---------------------------------------------------------------
 -- 文本抽取（纯）
@@ -140,14 +152,17 @@ defsOfUnit unit textLines = defsOfUnitGo unit textLines Nothing []
 -- 下一行生效（中间隔了别的行就作废），这样 `#line` 与绑定名严格配对，不会跨声明错配。
 defsOfUnitGo : String -> List String -> Maybe (Pair String Int) -> List SymbolDef -> List SymbolDef
 defsOfUnitGo unit [] pending acc = reverse acc
-defsOfUnitGo unit (line :: rest) pending acc = case directiveOf line of
-  Just position => defsOfUnitGo unit rest (Just position) acc
-  Nothing => case bindingNameOf line of
-    Just name => case pending of
-      Just (Pair file srcLine) =>
-        defsOfUnitGo unit rest Nothing (SymbolDef name unit file srcLine :: acc)
-      Nothing => defsOfUnitGo unit rest Nothing acc
-    Nothing => defsOfUnitGo unit rest Nothing acc
+defsOfUnitGo unit (line :: rest) pending acc =
+  case directiveOf line of
+    Just position => defsOfUnitGo unit rest (Just position) acc
+    Nothing =>
+      case bindingNameOf line of
+        Just name =>
+          case pending of
+            Just (Pair file srcLine) =>
+              defsOfUnitGo unit rest Nothing (SymbolDef name unit file srcLine :: acc)
+            Nothing => defsOfUnitGo unit rest Nothing acc
+        Nothing => defsOfUnitGo unit rest Nothing acc
 
 -- | `# <line> "<file>"`（行首 `#` + 空白 + 十进制 + 空白 + 双引号字符串）。
 export directiveOf : String -> Maybe (Pair String Int)
@@ -160,19 +175,25 @@ directiveOf line =
 
 -- | 内部：`#` 之后的部分——跳过空白后必须是十进制数字。
 directiveTailLine : List Int -> Maybe (Pair String Int)
-directiveTailLine chars = case skipBlanks chars of
-  [] => Nothing
-  c :: _ => if isDigitChar c then digitsDirective (skipBlanks chars) else Nothing
+directiveTailLine chars =
+  case skipBlanks chars of
+    [] => Nothing
+    c :: _ => if isDigitChar c then digitsDirective (skipBlanks chars) else Nothing
 
 -- | 内部：取行号后跳过空白，要求紧跟双引号包裹的文件名。
 digitsDirective : List Int -> Maybe (Pair String Int)
-digitsDirective chars = case takeDigits chars [] of
-  Pair n rest => case skipBlanks rest of
-    [] => Nothing
-    c :: quoteRest => if c == 34 then case takeUntilQuote quoteRest [] of
-      Nothing => Nothing
-      Just (Pair fileChars _) => Just (Pair (strPack fileChars) n)
-    else Nothing
+digitsDirective chars =
+  case takeDigits chars [] of
+    Pair n rest =>
+      case skipBlanks rest of
+        [] => Nothing
+        c :: quoteRest =>
+          if c == 34 then
+            case takeUntilQuote quoteRest [] of
+              Nothing => Nothing
+              Just (Pair fileChars _) => Just (Pair (strPack fileChars) n)
+          else
+            Nothing
 
 -- | 内部：跳过空格与制表符。
 skipBlanks : List Int -> List Int
@@ -186,8 +207,10 @@ isDigitChar c = c >= 48 && c <= 57
 -- | 内部：取十进制数字（正序），返回解析出的整数与剩余字符。
 takeDigits : List Int -> List Int -> Pair Int (List Int)
 takeDigits (c :: rest) acc =
-  if isDigitChar c then takeDigits rest (c :: acc)
-  else Pair (digitsToInt (reverse acc) 0) (c :: rest)
+  if isDigitChar c then
+    takeDigits rest (c :: acc)
+  else
+    Pair (digitsToInt (reverse acc) 0) (c :: rest)
 takeDigits [] acc = Pair (digitsToInt (reverse acc) 0) []
 
 -- | 内部：十进制数字逐位累积成整数。
@@ -240,10 +263,14 @@ defLe : SymbolDef -> SymbolDef -> Bool
 defLe a b =
   if a.symbolOcaml == b.symbolOcaml then
     if a.symbolUnit == b.symbolUnit then
-      if a.symbolFile == b.symbolFile then a.symbolLine <= b.symbolLine
-      else a.symbolFile <= b.symbolFile
-    else a.symbolUnit <= b.symbolUnit
-  else a.symbolOcaml <= b.symbolOcaml
+      if a.symbolFile == b.symbolFile then
+        a.symbolLine <= b.symbolLine
+      else
+        a.symbolFile <= b.symbolFile
+    else
+      a.symbolUnit <= b.symbolUnit
+  else
+    a.symbolOcaml <= b.symbolOcaml
 
 -- | 内部：符号表载荷（`{"schema":"vuna-symbols 1","defs":[...]}`，键序固定）。
 symbolsJson : List SymbolDef -> Json

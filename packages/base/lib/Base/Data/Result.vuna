@@ -32,11 +32,13 @@ instance Monad Result where
 
 instance Applicative Result where
   pure = Ok
-  ap mf mx = case mf of
-    Ok g => case mx of
-      Ok b => Ok (g b)
+  ap mf mx =
+    case mf of
+      Ok g =>
+        case mx of
+          Ok b => Ok (g b)
+          Err e => Err e
       Err e => Err e
-    Err e => Err e
   liftA2 f (Ok x) (Ok y) = Ok (f x y)
   liftA2 f (Err e) _ = Err e
   liftA2 f _ (Err e) = Err e
@@ -44,11 +46,13 @@ instance Applicative Result where
 -- | 对列表逐项执行 `Result` 计算；遇到第一个 `Err` 立即返回。
 export traverse : (a -> Result b) -> List a -> Result (List b)
 traverse f [] = Ok []
-traverse f (x :: xs) = case f x of
-  Err e => Err e
-  Ok y => case traverse f xs of
+traverse f (x :: xs) =
+  case f x of
     Err e => Err e
-    Ok ys => Ok (y :: ys)
+    Ok y =>
+      case traverse f xs of
+        Err e => Err e
+        Ok ys => Ok (y :: ys)
 
 -- `do` 的 pattern 只支持变量/通配，因此不能写成 `bind` 别名。
 -- | 处理 `Result (Pair a b)` 的双参数绑定（常用作状态传递）：解构 `Pair`，把两个分量一起交给 `k`，`Err` 直接短路。
@@ -69,9 +73,10 @@ withDefault d (Err e) = d
 -- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
 -- `Err` 的消息按 `Show String` 加引号转义（`Err "bad"`）；拼接用 `++` intrinsic。
 instance Show a => Show (Result a) where
-  show r = case r of
-    Ok x => "Ok " `++` show x
-    Err e => "Err " `++` show e
+  show r =
+    case r of
+      Ok x => "Ok " `++` show x
+      Err e => "Err " `++` show e
 
 -- 同构造子比 payload：`Ok` 用 `Eq a`，`Err` 用 `Eq String`。
 instance Eq a => Eq (Result a) where
@@ -81,16 +86,19 @@ instance Eq a => Eq (Result a) where
   (/=) r s = if r == s then False else True
 
 instance Hashable a => Hashable (Result a) where
-  hash r = case r of
-    Ok x => hashCombine 1 (hash x)
-    Err e => hashCombine 2 (hashStr e)
+  hash r =
+    case r of
+      Ok x => hashCombine 1 (hash x)
+      Err e => hashCombine 2 (hashStr e)
 
 instance Foldable Result where
-  fold f z r = case r of
-    Ok x => f x z
-    Err _ => z
+  fold f z r =
+    case r of
+      Ok x => f x z
+      Err _ => z
 
 instance Applicative f => Traversable Result f where
-  mapM fun r = case r of
-    Ok x => liftA2 (\y, _ => Ok y) (fun x) (pure x)
-    Err e => pure (Err e)
+  mapM fun r =
+    case r of
+      Ok x => liftA2 (\y, _ => Ok y) (fun x) (pure x)
+      Err e => pure (Err e)

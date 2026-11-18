@@ -69,7 +69,11 @@ warnDiagAtMod f sp e args = f (warnDiagAt sp e args)
 -- 消息点名目标与效应标签。
 export targetEffectWarn : String -> String -> Diagnostic
 targetEffectWarn target tag =
-  diagNoLoc SevWarning PhCodegen CatCodegen (warnCode (TargetEffectUnavailable target tag))
+  diagNoLoc
+    SevWarning
+    PhCodegen
+    CatCodegen
+    (warnCode (TargetEffectUnavailable target tag))
     (diagBody (warnTemplate (TargetEffectUnavailable target tag)) [target, tag])
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnEntry（目录/模板见 diagnostics.md）。
@@ -81,12 +85,31 @@ export record WarnEntry(..) where
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.warnAll（目录/模板见 diagnostics.md）。
 export warnAll : List WarnEntry
 warnAll =
-  [ WarnEntry (warnCode WarnBranchAfterCatchAll) (warnTemplate WarnBranchAfterCatchAll) "兜底分支之后的分支不可达",
-    WarnEntry (warnCode (WarnRedundantCtorBranch "")) (warnTemplate (WarnRedundantCtorBranch "")) "冗余构造子分支",
-    WarnEntry (warnCode (WarnRedundantLiteralBranch "")) (warnTemplate (WarnRedundantLiteralBranch "")) "冗余字面量分支",
+  [
+    WarnEntry
+      (warnCode WarnBranchAfterCatchAll)
+      (warnTemplate WarnBranchAfterCatchAll)
+      "兜底分支之后的分支不可达",
+    WarnEntry
+      (warnCode (WarnRedundantCtorBranch ""))
+      (warnTemplate (WarnRedundantCtorBranch ""))
+      "冗余构造子分支",
+    WarnEntry
+      (warnCode (WarnRedundantLiteralBranch ""))
+      (warnTemplate (WarnRedundantLiteralBranch ""))
+      "冗余字面量分支",
     WarnEntry (warnCode (UnusedBinder "")) (warnTemplate (UnusedBinder "")) "未使用的 binder",
-    WarnEntry (warnCode (UnusedDefinition "")) (warnTemplate (UnusedDefinition "")) "未使用的定义",
+    WarnEntry
+      (warnCode (UnusedDefinition ""))
+      (warnTemplate (UnusedDefinition ""))
+      "未使用的定义",
     WarnEntry (warnCode (UnusedImport "")) (warnTemplate (UnusedImport "")) "未使用的导入",
-    WarnEntry (warnCode (ShadowedBinder "")) (warnTemplate (ShadowedBinder "")) "遮蔽外层同名 binder",
-    WarnEntry (warnCode (TargetEffectUnavailable "" "")) (warnTemplate (TargetEffectUnavailable "" "")) "目标不实现入口行声明的内建效应"
+    WarnEntry
+      (warnCode (ShadowedBinder ""))
+      (warnTemplate (ShadowedBinder ""))
+      "遮蔽外层同名 binder",
+    WarnEntry
+      (warnCode (TargetEffectUnavailable "" ""))
+      (warnTemplate (TargetEffectUnavailable "" ""))
+      "目标不实现入口行声明的内建效应"
   ]

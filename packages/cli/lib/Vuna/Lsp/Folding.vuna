@@ -18,19 +18,23 @@ foldingRangesJson text =
 -- | 内部：逐行维护缩进栈（每层缩进 + 起始行，均 1-based），`lastContent` 是上一条非空行的行号。
 foldLines : List String -> Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> List (Pair Int Int)
 foldLines [] _ lastContent stack acc = popAll stack lastContent acc
-foldLines (ln :: rest) lineNo lastContent stack acc = if isBlankLine ln then foldLines rest (lineNo + 1) lastContent stack acc
-else
-  let
-    indent = indentOf ln
-    popped = popBlocks indent lastContent stack acc
-  in foldLines rest (lineNo + 1) lineNo (Pair indent lineNo :: firstOf popped) (secondOf popped)
+foldLines (ln :: rest) lineNo lastContent stack acc =
+  if isBlankLine ln then
+    foldLines rest (lineNo + 1) lastContent stack acc
+  else
+    let
+      indent = indentOf ln
+      popped = popBlocks indent lastContent stack acc
+    in foldLines rest (lineNo + 1) lineNo (Pair indent lineNo :: firstOf popped) (secondOf popped)
 
 -- | 内部：关闭缩进 ≥ 当前行的块（同级兄弟不折叠）。
 popBlocks : Int -> Int -> List (Pair Int Int) -> List (Pair Int Int) -> Pair (List (Pair Int Int)) (List (Pair Int Int))
 popBlocks indent end [] acc = Pair [] acc
 popBlocks indent end (entry :: rest) acc =
-  if firstOf entry >= indent then popBlocks indent end rest (closeBlock (secondOf entry) end acc)
-  else Pair (entry :: rest) acc
+  if firstOf entry >= indent then
+    popBlocks indent end rest (closeBlock (secondOf entry) end acc)
+  else
+    Pair (entry :: rest) acc
 
 -- | 内部：文件结束时关闭栈里所有块（止行取最后一条非空行）。
 popAll : List (Pair Int Int) -> Int -> List (Pair Int Int) -> List (Pair Int Int)

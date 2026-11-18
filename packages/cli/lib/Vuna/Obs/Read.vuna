@@ -33,17 +33,19 @@ export record ObsTrace(..) where
 -- `ErrC` 的情况：文件不存在/是目录/不可读（调用方映射到退出码 2）、非末行解析或结构不合法；
 -- 末尾半个 JSON 行只记 warning（见模块头）。
 export readTraceFull : Member nFs FsOp r => String -> Eff r (Check ObsTrace)
-readTraceFull path = do
-  textR <- readText path
-  case textR of
-    ErrC e => pure (ErrC e)
-    OkC text => pure (parseTraceText text)
+readTraceFull path =
+  do
+    textR <- readText path
+    case textR of
+      ErrC e => pure (ErrC e)
+      OkC text => pure (parseTraceText text)
 
 -- | 读 trace 的事件部分（行号 + 事件）；warning 丢弃（需要 warning 时用 `readTraceFull`）。
 export readTrace : Member nFs FsOp r => String -> Eff r (Check (List (Pair Int ObsEvent)))
-readTrace path = do
-  traceR <- readTraceFull path
-  pure (fmap traceEventRows traceR)
+readTrace path =
+  do
+    traceR <- readTraceFull path
+    pure (fmap traceEventRows traceR)
 
 -- | 内部：取事件表（`readTrace` 的收尾）。
 traceEventRows : ObsTrace -> List (Pair Int ObsEvent)
@@ -66,14 +68,19 @@ parseTraceText text = readLines (collectLines 1 (lines text)) [] []
 -- | 内部：逐行解析并累积事件与 warning；末行坏走截断恢复，中间行坏直接报错。
 readLines : List (Pair Int String) -> List (Pair Int ObsEvent) -> List String -> Check ObsTrace
 readLines [] events warnings = OkC (ObsTrace (reverse events) (reverse warnings))
-readLines ((Pair line raw) :: rest) events warnings = case parseJson raw of
-  ErrC e => if length rest == 0 then case tryTailEvent line raw of
-    Just ev => tailRepaired line ev events warnings
-    Nothing => tailWarning line events warnings
-  else err "line ${strFromInt line}: ${diagText e}"
-  OkC json => case parseEvent line json of
-    ErrC e => ErrC e
-    OkC ev => readLines rest (Pair line ev :: events) warnings
+readLines ((Pair line raw) :: rest) events warnings =
+  case parseJson raw of
+    ErrC e =>
+      if length rest == 0 then
+        case tryTailEvent line raw of
+          Just ev => tailRepaired line ev events warnings
+          Nothing => tailWarning line events warnings
+      else
+        err "line ${strFromInt line}: ${diagText e}"
+    OkC json =>
+      case parseEvent line json of
+        ErrC e => ErrC e
+        OkC ev => readLines rest (Pair line ev :: events) warnings
 
 -- | 内部：末行无法恢复：丢弃该行并记 warning，直接收尾（末行已是最后一行，不再回调
 -- `readLines`，避免互递归）。
@@ -88,13 +95,16 @@ tailRepaired line ev events warnings =
 
 -- | 内部：末行恢复尝试：返回 `Just 事件`（补全并解析成功）或 `Nothing`（按截断丢弃）。
 tryTailEvent : Int -> String -> Maybe ObsEvent
-tryTailEvent line raw = case repairTruncatedJson raw of
-  Nothing => Nothing
-  Just fixed => case parseJson fixed of
-    ErrC _ => Nothing
-    OkC json => case parseEvent line json of
-      ErrC _ => Nothing
-      OkC ev => Just ev
+tryTailEvent line raw =
+  case repairTruncatedJson raw of
+    Nothing => Nothing
+    Just fixed =>
+      case parseJson fixed of
+        ErrC _ => Nothing
+        OkC json =>
+          case parseEvent line json of
+            ErrC _ => Nothing
+            OkC ev => Just ev
 
 -- | 内部：丢弃截断行的 warning 文案。
 dropWarning : Int -> String
@@ -125,22 +135,29 @@ scanBrackets chars = scanGo chars (BracketScan [] False False False)
 -- | 内部：`scanBrackets` 的逐字符状态机。
 scanGo : List Int -> BracketScan -> BracketScan
 scanGo [] scan = scan
-scanGo (c :: rest) scan = if scan.scanBroken then scan
-else if scan.scanEscaped then scanGo rest (BracketScan scan.scanOpen scan.scanInString False False)
-else if scan.scanInString then case c of
-  92 => scanGo rest (BracketScan scan.scanOpen True True False)
-  34 => scanGo rest (BracketScan scan.scanOpen False False False)
-  _ => scanGo rest scan
-else if c == 34 then scanGo rest (BracketScan scan.scanOpen True False False)
-else if c == 123 || c == 91 then scanGo rest (BracketScan (c :: scan.scanOpen) False False False)
-else if c == 125 || c == 93 then case scan.scanOpen of
-  open :: more =>
-    let
-      matched = open == 123 && c == 125 || open == 91 && c == 93
-    in if matched then scanGo rest (BracketScan more False False False)
-    else scanGo rest (BracketScan scan.scanOpen False False True)
-  [] => scanGo rest (BracketScan [] False False True)
-else scanGo rest scan
+scanGo (c :: rest) scan =
+  if scan.scanBroken then
+    scan
+  else if scan.scanEscaped then
+    scanGo rest (BracketScan scan.scanOpen scan.scanInString False False)
+  else if scan.scanInString then
+    case c of
+      92 => scanGo rest (BracketScan scan.scanOpen True True False)
+      34 => scanGo rest (BracketScan scan.scanOpen False False False)
+      _ => scanGo rest scan
+  else if c == 34 then
+    scanGo rest (BracketScan scan.scanOpen True False False)
+  else if c == 123 || c == 91 then
+    scanGo rest (BracketScan (c :: scan.scanOpen) False False False)
+  else if c == 125 || c == 93 then
+    case scan.scanOpen of
+      open :: more =>
+        let
+          matched = open == 123 && c == 125 || open == 91 && c == 93
+        in if matched then scanGo rest (BracketScan more False False False) else scanGo rest (BracketScan scan.scanOpen False False True)
+      [] => scanGo rest (BracketScan [] False False True)
+  else
+    scanGo rest scan
 
 -- | 尝试给被截断的一行补上缺失的闭括号；不可恢复 = `Nothing`。
 export repairTruncatedJson : String -> Maybe String
@@ -149,7 +166,8 @@ repairTruncatedJson raw =
     scan = scanBrackets (strUnpack raw)
   in if scan.scanBroken || scan.scanInString || scan.scanEscaped || length scan.scanOpen == 0 then
     Nothing
-  else Just (raw ++ join "" (map closerOf scan.scanOpen))
+  else
+    Just (raw ++ join "" (map closerOf scan.scanOpen))
 
 -- | 内部：未闭合开括号对应的闭括号文本（其余一律 `]`，由调用方保证只传 `{` / `[`）。
 closerOf : Int -> String

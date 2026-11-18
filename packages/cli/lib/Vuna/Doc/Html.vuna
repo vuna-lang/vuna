@@ -26,8 +26,10 @@ slug s = slugChars (strUnpack s) ""
 slugChars : List Int -> String -> String
 slugChars [] acc = acc
 slugChars (c :: rest) acc =
-  if c >= 65 && c <= 90 then slugChars rest (concat2 acc (strPack [c + 32]))
-  else if c >= 97 && c <= 122 || c >= 48 && c <= 57 then slugChars rest (concat2 acc (strPack [c]))
+  if c >= 65 && c <= 90 then
+    slugChars rest (concat2 acc (strPack [c + 32]))
+  else if c >= 97 && c <= 122 || c >= 48 && c <= 57 then
+    slugChars rest (concat2 acc (strPack [c]))
   else if c == 32 || c == 45 then slugChars rest (concat2 acc "-") else slugChars rest acc
 
 -- | 内部：模块锚点，由模块全名生成。
@@ -63,7 +65,8 @@ itemLinks modName item =
 -- | 内部：一个成员的链接项。
 memberLink : String -> String -> DocItem -> Pair String String
 memberLink modName parent member =
-  Pair (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
+  Pair
+    (concat2 modName (concat2 "." (concat2 parent (concat2 "." (itemName member)))))
     (memberAnchor modName parent member)
 
 -- ---------------------------------------------------------------
@@ -135,8 +138,10 @@ renderMember links modName parent member =
 -- | 内部：签名块；空签名不输出。
 renderSignature : String -> String
 renderSignature sig =
-  if sig == "" then ""
-  else strConcatMany ["<pre class='sig'><code>", htmlEscape sig, "</code></pre>\n"]
+  if sig == "" then
+    ""
+  else
+    strConcatMany ["<pre class='sig'><code>", htmlEscape sig, "</code></pre>\n"]
 
 -- | 内部：docstring 块；空 docstring 不输出。
 renderDoc : List (Pair String String) -> String -> String
@@ -153,20 +158,37 @@ searchEntries book = concatMap moduleEntries (bookModules book)
 -- | 内部：一个模块及其条目 / 成员的搜索条目。
 moduleEntries : DocModule -> List Json
 moduleEntries m =
-  entryJson (moduleName m) (moduleName m) (modulePackage m) "module" "" (moduleDoc m) (moduleAnchor m)
-    :: concatMap (itemEntries m) (moduleItems m)
+  entryJson
+    (moduleName m)
+    (moduleName m)
+    (modulePackage m)
+    "module"
+    ""
+    (moduleDoc m)
+    (moduleAnchor m) :: concatMap (itemEntries m) (moduleItems m)
 
 -- | 内部：一个条目及其成员的搜索条目。
 itemEntries : DocModule -> DocItem -> List Json
 itemEntries m item =
-  entryJson (concat2 (moduleName m) (concat2 "." (itemName item))) (moduleName m) (modulePackage m) (itemKind item) (itemSignature item) (itemDoc item) (itemAnchor (moduleName m) item)
-    :: map (memberEntry m item) (itemMembers item)
+  entryJson
+    (concat2 (moduleName m) (concat2 "." (itemName item)))
+    (moduleName m)
+    (modulePackage m)
+    (itemKind item)
+    (itemSignature item)
+    (itemDoc item)
+    (itemAnchor (moduleName m) item) :: map (memberEntry m item) (itemMembers item)
 
 -- | 内部：一个成员的搜索条目。
 memberEntry : DocModule -> DocItem -> DocItem -> Json
 memberEntry m parent member =
-  entryJson (concat2 (moduleName m) (concat2 "." (itemName member))) (moduleName m)
-    (modulePackage m) (itemKind member) (itemSignature member) (itemDoc member)
+  entryJson
+    (concat2 (moduleName m) (concat2 "." (itemName member)))
+    (moduleName m)
+    (modulePackage m)
+    (itemKind member)
+    (itemSignature member)
+    (itemDoc member)
     (memberAnchor (moduleName m) (itemName parent) member)
 
 -- | 内部：一条搜索记录的 JSON：`n` 名 / `m` 模块 / `p` 包 / `k` 种类 / `s` 签名 / `d` doc / `a` 锚点。
@@ -183,8 +205,10 @@ scriptSafe s = scriptSafeChars (strUnpack s) ""
 scriptSafeChars : List Int -> String -> String
 scriptSafeChars [] acc = acc
 scriptSafeChars (c :: rest) acc =
-  if c == 60 then scriptSafeChars rest (concat2 acc "\\u003c")
-  else scriptSafeChars rest (concat2 acc (strPack [c]))
+  if c == 60 then
+    scriptSafeChars rest (concat2 acc "\\u003c")
+  else
+    scriptSafeChars rest (concat2 acc (strPack [c]))
 
 -- ---------------------------------------------------------------
 -- 统计 / 包

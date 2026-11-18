@@ -68,7 +68,8 @@ encStrPair p acc = encStr (firstOf p) (encStr (secondOf p) acc)
 
 encIdentity : PackageIdentity -> List String -> List String
 encIdentity pi acc =
-  encTag identityTag
+  encTag
+    identityTag
     (encStr pi.piName (encList encStr pi.piExports (encList encStrPair pi.piDeps (encList encStrPair pi.piFiles acc))))
 
 -- | 身份编码：`#2;(name, exports, (alias, hash)*, (path, hash)*)`。
@@ -77,42 +78,54 @@ encPackageIdentity pi = encTop encIdentity pi
 
 -- ---------------------------------------------------------------- 解码
 decFile : Int -> Cur -> Maybe (Pair PackageFile Cur)
-decFile fuel c = case decStr fuel c of
-  Nothing => Nothing
-  Just (Pair path c1) => case decStr fuel c1 of
+decFile fuel c =
+  case decStr fuel c of
     Nothing => Nothing
-    Just (Pair content c2) => Just (Pair (PackageFile path content) c2)
+    Just (Pair path c1) =>
+      case decStr fuel c1 of
+        Nothing => Nothing
+        Just (Pair content c2) => Just (Pair (PackageFile path content) c2)
 
 decContentAt : Int -> Cur -> Maybe (Pair (List PackageFile) Cur)
-decContentAt fuel c = case decTag fuel c of
-  Nothing => Nothing
-  Just (Pair tag c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
+decContentAt fuel c =
+  case decTag fuel c of
+    Nothing => Nothing
+    Just (Pair tag c1) => if tag == contentTag then decList decFile fuel c1 else Nothing
 
 -- | 内容解码（供 roundtrip 与 store 读回）。
 export decPackageContent : String -> Maybe (List PackageFile)
-decPackageContent raw = case decContentAt (2 * strLength raw + 16) (curOf raw) of
-  Nothing => Nothing
-  Just (Pair files c2) => if curAtEnd c2 then Just files else Nothing
+decPackageContent raw =
+  case decContentAt (2 * strLength raw + 16) (curOf raw) of
+    Nothing => Nothing
+    Just (Pair files c2) => if curAtEnd c2 then Just files else Nothing
 
 decStrPair : Int -> Cur -> Maybe (Pair (Pair String String) Cur)
 decStrPair fuel c = decPair decStr decStr fuel c
 
 decIdentityAt : Int -> Cur -> Maybe (Pair PackageIdentity Cur)
-decIdentityAt fuel c = case decTag fuel c of
-  Nothing => Nothing
-  Just (Pair tag c1) => if tag == identityTag then case decStr fuel c1 of
+decIdentityAt fuel c =
+  case decTag fuel c of
     Nothing => Nothing
-    Just (Pair name c2) => case decList decStr fuel c2 of
-      Nothing => Nothing
-      Just (Pair exports c3) => case decList decStrPair fuel c3 of
-        Nothing => Nothing
-        Just (Pair deps c4) => case decList decStrPair fuel c4 of
+    Just (Pair tag c1) =>
+      if tag == identityTag then
+        case decStr fuel c1 of
           Nothing => Nothing
-          Just (Pair files c5) => Just (Pair (PackageIdentity name exports deps files) c5)
-  else Nothing
+          Just (Pair name c2) =>
+            case decList decStr fuel c2 of
+              Nothing => Nothing
+              Just (Pair exports c3) =>
+                case decList decStrPair fuel c3 of
+                  Nothing => Nothing
+                  Just (Pair deps c4) =>
+                    case decList decStrPair fuel c4 of
+                      Nothing => Nothing
+                      Just (Pair files c5) => Just (Pair (PackageIdentity name exports deps files) c5)
+      else
+        Nothing
 
 -- | 身份解码（供 roundtrip 与缓存键读回）。
 export decPackageIdentity : String -> Maybe PackageIdentity
-decPackageIdentity raw = case decIdentityAt (2 * strLength raw + 16) (curOf raw) of
-  Nothing => Nothing
-  Just (Pair ident c2) => if curAtEnd c2 then Just ident else Nothing
+decPackageIdentity raw =
+  case decIdentityAt (2 * strLength raw + 16) (curOf raw) of
+    Nothing => Nothing
+    Just (Pair ident c2) => if curAtEnd c2 then Just ident else Nothing

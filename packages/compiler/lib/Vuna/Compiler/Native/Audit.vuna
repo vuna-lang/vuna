@@ -28,17 +28,23 @@ auditRuntimeBinders bs = length (filter (\b => not (auditErased b)) bs)
 
 -- | 符号名是否可作为 `IrRtApp` 的目标（`&&` / `||` 由生成器特化，不查表）。
 auditSymSupported : String -> Bool
-auditSymSupported sym = if sym == "&&" || sym == "||" then True
-else if sym == irRtNatSucc then True
-else case nativeRtTarget sym of
-  Just _ => True
-  Nothing => False
+auditSymSupported sym =
+  if sym == "&&" || sym == "||" then
+    True
+  else if sym == irRtNatSucc then
+    True
+  else
+    case nativeRtTarget sym of
+      Just _ => True
+      Nothing => False
 
 -- | `IrRtApp`：arity 必须等于 `irInlineArity`，且符号必须在白名单里。
 auditRtAppKeys : String -> List Ir -> List String
 auditRtAppKeys sym args =
-  if sym == "&&" || sym == "||" then []
-  else if not (auditSymSupported sym) then ["symbol " ++ sym]
+  if sym == "&&" || sym == "||" then
+    []
+  else if not (auditSymSupported sym) then
+    ["symbol " ++ sym]
   else if length args /= irInlineArity sym then ["rt-app-arity " ++ sym] else []
 
 -- ---------------------------------------------------------------
@@ -66,7 +72,8 @@ auditKeys defs (IrRecUpd base _ fields) =
 auditKeys defs (IrCase scrut alts) =
   append (auditKeys defs scrut) (concatMap (auditAltKeys defs) alts)
 auditKeys defs (IrNatCase scrut _ z s c) =
-  append (auditKeys defs scrut)
+  append
+    (auditKeys defs scrut)
     (append (auditAltMaybeKeys defs z) (append (auditAltMaybeKeys defs s) (auditAltMaybeKeys defs c)))
 auditKeys defs (IrConcatMany parts) = concatMap (auditKeys defs) parts
 auditKeys defs (IrLam _ body) = auditKeys defs body
@@ -85,9 +92,10 @@ auditAltMaybeKeys defs Nothing = []
 auditAltMaybeKeys defs (Just alt) = auditAltKeys defs alt
 
 auditDefKeys : List IrDef -> IrDef -> List String
-auditDefKeys defs d = case irDefBody d of
-  Nothing => ["extern " ++ irDefName d]
-  Just body => auditKeys defs body
+auditDefKeys defs d =
+  case irDefBody d of
+    Nothing => ["extern " ++ irDefName d]
+    Just body => auditKeys defs body
 
 -- ---------------------------------------------------------------
 -- 计数与格式化
@@ -102,15 +110,18 @@ memKey x (y :: rest) = if x == y then True else memKey x rest
 
 -- | key 的第一段是类别（`symbol` / `effect-bind` …）。
 auditPrefixOf : String -> String
-auditPrefixOf key = case split " " key of
-  p :: _ => p
-  [] => key
+auditPrefixOf key =
+  case split " " key of
+    p :: _ => p
+    [] => key
 
 -- | key 去掉类别后的其余部分（符号名 / 定义名）。
 auditRestOf : String -> String
-auditRestOf key = case split " " key of
-  _ :: rest => foldl (\acc, part => if strLength acc == 0 then part else acc ++ " " ++ part) "" rest
-  [] => ""
+auditRestOf key =
+  case split " " key of
+    _ :: rest =>
+      foldl (\acc, part => if strLength acc == 0 then part else acc ++ " " ++ part) "" rest
+    [] => ""
 
 -- 输出顺序：先缺失符号，再形状缺口。
 auditCategories : List String
@@ -124,16 +135,19 @@ auditCategoryExamples cat keys =
   take 3 (auditUniq (map auditRestOf (filter (auditInCategory cat) keys)))
 
 auditExamplesText : String -> List String -> String
-auditExamplesText cat keys = case auditCategoryExamples cat keys of
-  [] => ""
-  ex :: rest => " (" ++ foldl (\acc, e => acc ++ ", " ++ e) ex rest ++ ")"
+auditExamplesText cat keys =
+  case auditCategoryExamples cat keys of
+    [] => ""
+    ex :: rest => " (" ++ foldl (\acc, e => acc ++ ", " ++ e) ex rest ++ ")"
 
 auditCategoryLine : String -> List String -> String
 auditCategoryLine cat keys =
   let
     hits = filter (auditInCategory cat) keys
-  in if length hits == 0 then ""
-  else "    " ++ cat ++ " x" ++ strFromInt (length hits) ++ auditExamplesText cat keys
+  in if length hits == 0 then
+    ""
+  else
+    "    " ++ cat ++ " x" ++ strFromInt (length hits) ++ auditExamplesText cat keys
 
 -- | 附在诊断后面的审计块；没有缺口时返回空表。
 --   每类一行（计数 + 最多三个例子），类别内不按出现次数细分，避免几百行的清单。
@@ -143,16 +157,20 @@ nativeAuditLines defs =
     keys = concatMap (auditDefKeys defs) defs
     uniqs = auditUniq keys
     catLines = filter (\l => strLength l > 0) (map (\c => auditCategoryLine c keys) auditCategories)
-  in if length keys == 0 then []
-  else append
-    ["  native audit: ${strFromInt (length keys)} unsupported reference(s), ${strFromInt (length uniqs)} kind(s)"]
-    catLines
+  in if length keys == 0 then
+    []
+  else
+    append
+      ["  native audit: ${strFromInt (length keys)} unsupported reference(s), ${strFromInt (length uniqs)} kind(s)"]
+      catLines
 
 -- | 把审计块接在 unsupported 文本后面（诊断仍是第一条失败的文本）。
 export nativeAuditEnrich : NativeErr -> List IrDef -> NativeErr
 nativeAuditEnrich (err@(NativeUnsupported msg)) defs =
   let
     lines = nativeAuditLines defs
-  in if length lines == 0 then err
-  else NativeUnsupported (msg ++ "\n" ++ foldl (\acc, l => acc ++ "\n" ++ l) "" lines)
+  in if length lines == 0 then
+    err
+  else
+    NativeUnsupported (msg ++ "\n" ++ foldl (\acc, l => acc ++ "\n" ++ l) "" lines)
 nativeAuditEnrich (err@(NativeInternal _)) defs = err

@@ -57,10 +57,11 @@ renderHeader h = h.first ++ ": " ++ h.second ++ "\r\n"
 
 -- | 解析一行 `name: value`。名字必须是 RFC 7230 token；冒号后的首尾 OWS 被裁掉。
 export parseHeaderLine : String -> Maybe (Pair String String)
-parseHeaderLine line = case split ":" line of
-  name :: rest =>
-    if isToken name && rest /= [] then Just (Pair name (trim (join ":" rest))) else Nothing
-  [] => Nothing
+parseHeaderLine line =
+  case split ":" line of
+    name :: rest =>
+      if isToken name && rest /= [] then Just (Pair name (trim (join ":" rest))) else Nothing
+    [] => Nothing
 
 -- | RFC 7230 token：非空，且只含可见字符中除去分隔符的那些。
 export isToken : String -> Bool
@@ -92,6 +93,7 @@ mapBytes f xs = map f xs
 
 -- | 全部字节满足谓词。
 export allBytes : (Int -> Bool) -> List Int -> Bool
-allBytes p xs = case xs of
-  [] => True
-  c :: rest => if p c then allBytes p rest else False
+allBytes p xs =
+  case xs of
+    [] => True
+    c :: rest => if p c then allBytes p rest else False

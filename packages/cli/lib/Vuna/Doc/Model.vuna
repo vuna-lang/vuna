@@ -109,29 +109,34 @@ bookModules (DocBook modules) = modules
 -- ---------------------------------------------------------------
 -- | 包名 + 源文件列表 -> 模块列表（按输入文件顺序）；调用方负责 `[export]` 过滤。
 export buildModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List String -> Eff r (Check (List DocModule))
-buildModules pkg files = do
-  built <- buildModulesGo emptyFixityEnv pkg files []
-  pure (secondOf built)
+buildModules pkg files =
+  do
+    built <- buildModulesGo emptyFixityEnv pkg files []
+    pure (secondOf built)
 
 -- | 内部：逐个文件构建模块并串接 fixity 环境；首个错误即返回。
 buildModulesGo : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> List String -> List DocModule -> Eff r (Pair FixityEnv (Check (List DocModule)))
 buildModulesGo env pkg [] acc = pure (Pair env (OkC (reverse acc)))
-buildModulesGo env pkg (path :: rest) acc = do
-  stepped <- buildModule env pkg path
-  case stepped of
-    Pair env2 result => case result of
-      ErrC e => pure (Pair env2 (ErrC e))
-      OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
+buildModulesGo env pkg (path :: rest) acc =
+  do
+    stepped <- buildModule env pkg path
+    case stepped of
+      Pair env2 result =>
+        case result of
+          ErrC e => pure (Pair env2 (ErrC e))
+          OkC module0 => buildModulesGo env2 pkg rest (module0 :: acc)
 
 -- | 内部：读一个源文件，算出它的 fixity 上下文后构建模块。
 buildModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => FixityEnv -> String -> String -> Eff r (Pair FixityEnv (Check DocModule))
-buildModule env pkg path = do
-  textR <- readText path
-  case textR of
-    ErrC e => pure (Pair env (ErrC e))
-    OkC source => do
-      looked <- fixitiesForFile env path source
-      pure (buildModuleWith pkg path source looked)
+buildModule env pkg path =
+  do
+    textR <- readText path
+    case textR of
+      ErrC e => pure (Pair env (ErrC e))
+      OkC source =>
+        do
+          looked <- fixitiesForFile env path source
+          pure (buildModuleWith pkg path source looked)
 
 -- | 内部：解析已读入的源码并转成 `DocModule`；fixity 重排失败与解析失败都带路径进 `ErrC`。
 buildModuleWith : String -> String -> String -> Pair FixityEnv (Check (List FixityDecl)) -> Pair FixityEnv (Check DocModule)
@@ -140,15 +145,18 @@ buildModuleWith pkg path source looked =
     env2 = firstOf looked
   in case secondOf looked of
     ErrC e => Pair env2 (err "${path}: cannot load package fixity context: ${diagText e}")
-    OkC programFixities => case parseSourceWithComments path source of
-      ErrC e => Pair env2 (err "${path}: ${diagText e}")
-      OkC (Pair (SourceFile hdr imports fx decls0 _ _ _) comments) => case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+    OkC programFixities =>
+      case parseSourceWithComments path source of
         ErrC e => Pair env2 (err "${path}: ${diagText e}")
-        OkC decls =>
-          let
-            table = docTableOf hdr decls comments
-          in Pair env2
-            (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
+        OkC (Pair (SourceFile hdr imports fx decls0 _ _ _) comments) =>
+          case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
+            ErrC e => Pair env2 (err "${path}: ${diagText e}")
+            OkC decls =>
+              let
+                table = docTableOf hdr decls comments
+              in Pair
+                env2
+                (OkC (DocModule pkg (moduleNameOfPath path hdr) path (docTableModuleDoc table) (itemsOfDecls table decls)))
 
 -- | 内部：优先取 `module X where` 的名字；没有模块头时用文件名去掉 `.vuna`。
 moduleNameOfPath : String -> Maybe ModDecl -> String
@@ -172,39 +180,95 @@ itemsOfDecls table decls = dedupeItems (concatMap (itemsOfDecl table decls) decl
 -- 私有（`_` 开头）跳过；`DFun` 在有同名签名时跳过（签名条目已覆盖）；`instance` 不产生条目。
 itemsOfDecl : DocTable -> List Decl -> Decl -> List DocItem
 itemsOfDecl table decls (DSig name ctx ty sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "fun" "${name} : ${renderTypeInCtx ctx ty}" (docForDecl table name) (spanStartLine sp) []
+    [
+      DocItem
+        name
+        "fun"
+        "${name} : ${renderTypeInCtx ctx ty}"
+        (docForDecl table name)
+        (spanStartLine sp)
+        []
     ]
 itemsOfDecl table decls (DFun name pats body sp) =
-  if isPrivate name || hasSig name decls then []
+  if isPrivate name || hasSig name decls then
+    []
   else
-    [ DocItem name "fun" "${name} : ${renderType (EVar name sp)}" (docForDecl table name) (spanStartLine sp) []
+    [
+      DocItem
+        name
+        "fun"
+        "${name} : ${renderType (EVar name sp)}"
+        (docForDecl table name)
+        (spanStartLine sp)
+        []
     ]
 itemsOfDecl table decls (DData name params kind ctors derivings viaField repr lin sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "data" (dataSignature name params kind ctors derivings) (docForDecl table name) (spanStartLine sp) (ctorItems table name ctors)
+    [
+      DocItem
+        name
+        "data"
+        (dataSignature name params kind ctors derivings)
+        (docForDecl table name)
+        (spanStartLine sp)
+        (ctorItems table name ctors)
     ]
 itemsOfDecl table decls (DRecord name params fields derivings viaField repr lin sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "record" (recordSignature name params fields derivings) (docForDecl table name) (spanStartLine sp) (fieldItems table name fields)
+    [
+      DocItem
+        name
+        "record"
+        (recordSignature name params fields derivings)
+        (docForDecl table name)
+        (spanStartLine sp)
+        (fieldItems table name fields)
     ]
 itemsOfDecl table decls (DTrait name params supers methods sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "trait" (traitSignature name params supers methods) (docForDecl table name) (spanStartLine sp) (methodItems table name methods)
+    [
+      DocItem
+        name
+        "trait"
+        (traitSignature name params supers methods)
+        (docForDecl table name)
+        (spanStartLine sp)
+        (methodItems table name methods)
     ]
 itemsOfDecl table decls (DAxiom name ty sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "axiom" "axiom ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
+    [
+      DocItem
+        name
+        "axiom"
+        "axiom ${name} : ${renderType ty}"
+        (docForDecl table name)
+        (spanStartLine sp)
+        []
     ]
 itemsOfDecl table decls (DExtern name cName ty sp) =
-  if isPrivate name then []
+  if isPrivate name then
+    []
   else
-    [ DocItem name "extern" "extern ${name} : ${renderType ty}" (docForDecl table name) (spanStartLine sp) []
+    [
+      DocItem
+        name
+        "extern"
+        "extern ${name} : ${renderType ty}"
+        (docForDecl table name)
+        (spanStartLine sp)
+        []
     ]
 itemsOfDecl table decls (DInstance ctxE head methods sp) = []
 
@@ -214,9 +278,10 @@ itemsOfDecl table decls (DInstance ctxE head methods sp) = []
 -- （`vuna check` 会先报缺签名）。
 hasSig : String -> List Decl -> Bool
 hasSig name [] = False
-hasSig name (d :: rest) = case d of
-  DSig n ctx ty sp => if n == name then True else hasSig name rest
-  _ => hasSig name rest
+hasSig name (d :: rest) =
+  case d of
+    DSig n ctx ty sp => if n == name then True else hasSig name rest
+    _ => hasSig name rest
 
 -- | 内部：按名字去重，保留首次出现。
 dedupeItems : List DocItem -> List DocItem
@@ -226,14 +291,17 @@ dedupeItems items = dedupeItemsGo items []
 dedupeItemsGo : List DocItem -> List String -> List DocItem
 dedupeItemsGo [] seen = []
 dedupeItemsGo (i :: rest) seen =
-  if memName (itemName i) seen then dedupeItemsGo rest seen
-  else i :: dedupeItemsGo rest (itemName i :: seen)
+  if memName (itemName i) seen then
+    dedupeItemsGo rest seen
+  else
+    i :: dedupeItemsGo rest (itemName i :: seen)
 
 -- | 内部：名字是否以 `_` 开头（私有项不收录）。
 isPrivate : String -> Bool
-isPrivate name = case strUnpack name of
-  c :: rest => c == 95
-  [] => False
+isPrivate name =
+  case strUnpack name of
+    c :: rest => c == 95
+    [] => False
 
 -- ---------------------------------------------------------------
 -- 签名块
@@ -251,19 +319,22 @@ derivingLines derivings = ["deriving (${join ", " derivings})"]
 -- | 内部：`data ... where` 签名块（构造子 + deriving）。
 dataSignature : String -> List String -> Expr -> List Ctor -> List String -> String
 dataSignature name params kind ctors derivings =
-  join "\n"
+  join
+    "\n"
     ("data ${name}${paramSuffix params} : ${renderType kind} where" :: append (map ctorLine ctors) (derivingLines derivings))
 
 -- | 内部：`record ... where` 签名块（字段 + deriving）。
 recordSignature : String -> List String -> List Field -> List String -> String
 recordSignature name params fields derivings =
-  join "\n"
+  join
+    "\n"
     ("record ${name}${paramSuffix params} where" :: append (map fieldLine fields) (derivingLines derivings))
 
 -- | 内部：`trait` 签名块（父类上下文 + 方法）。
 traitSignature : String -> List TraitParam -> List Expr -> List TraitMethod -> String
 traitSignature name params supers methods =
-  join "\n"
+  join
+    "\n"
     ("trait ${ctxText supers}${name}${traitParamSuffix params} where" :: map methodLine methods)
 
 -- | 内部：trait 的父类上下文前缀；没有父类时为空串。

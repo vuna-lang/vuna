@@ -33,13 +33,15 @@ processExit c = sendCore (Named n ProcessOp) "process" n (Exit c)
 
 -- | 通过命名实例在目录 `dir` 下运行命令 `args`，返回退出码；执行后恢复原 cwd。
 export processRunIn : Member n ProcessOp r => String -> List String -> Eff r Int
-processRunIn dir args = do
-  sendCore (Named n ProcessOp) "process" n (RunIn dir args)
+processRunIn dir args =
+  do
+    sendCore (Named n ProcessOp) "process" n (RunIn dir args)
 
 -- | 通过命名实例异步启动命令 `args`，返回句柄；用 `processWait` 等退出码（并行 jobs 用）。
 export processSpawn : Member n ProcessOp r => List String -> Eff r Int
-processSpawn args = do
-  sendCore (Named n ProcessOp) "process" n (Spawn args)
+processSpawn args =
+  do
+    sendCore (Named n ProcessOp) "process" n (Spawn args)
 
 -- | 通过命名实例等待 `processSpawn` 返回的句柄，返回退出码。
 export processWait : Member n ProcessOp r => Int -> Eff r Int
@@ -81,22 +83,28 @@ handleProcess n ret opH comp = handleCore (Named n ProcessOp) "process" n ret op
 
 -- | 内部：以 `onExit` 决定 `Exit c` 语义的宿主操作解释——真实路径传 `exit`（进程结束、不返回），观察路径传 `pure`（退出码交给续延）。
 processOpHIOWith : (Int -> Eff [] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-processOpHIOWith onExit i op k = case op of
-  Args => do
-    xs <- @vuna@prim_eff_getArgs
-    k xs
-  Exit c => do
-    r <- onExit c
-    k r
-  RunIn dir args => do
-    c <- @vuna@prim_eff_runIn dir args
-    k c
-  Spawn args => do
-    h <- @vuna@prim_eff_spawn args
-    k h
-  Wait h => do
-    c <- @vuna@prim_eff_wait h
-    k c
+processOpHIOWith onExit i op k =
+  case op of
+    Args =>
+      do
+        xs <- @vuna@prim_eff_getArgs
+        k xs
+    Exit c =>
+      do
+        r <- onExit c
+        k r
+    RunIn dir args =>
+      do
+        c <- @vuna@prim_eff_runIn dir args
+        k c
+    Spawn args =>
+      do
+        h <- @vuna@prim_eff_spawn args
+        k h
+    Wait h =>
+      do
+        c <- @vuna@prim_eff_wait h
+        k c
 
 -- | 宿主 handler：由调用方传入 `onExit`，结果行删除 `ProcessOp`，answer 是已处理干净的 `Eff []` 动作。
 export handleProcessHostWith : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [] Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [] a)
@@ -112,23 +120,29 @@ processHostStatus = raise @vuna@prim_eff_hostStatus
 
 -- | 带 `ProcessOp` 行的 op 解释：启动失败读状态槽抛 typed error，答案行是 `[ProcessErrorOp]`。
 processOpHIOWithHost : (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> {a : Type} -> (i : Type) -> (o : ProcessOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ProcessErrorOp@"process-error"] a) -> Eff [ProcessErrorOp@"process-error"] a
-processOpHIOWithHost onExit i op k = case op of
-  Args => do
-    xs <- raise @vuna@prim_eff_getArgs_process_host
-    k xs
-  Exit c => do
-    r <- onExit c
-    k r
-  RunIn dir args => do
-    c <- raise (@vuna@host@tryRunIn dir args)
-    ok <- processHostStatus
-    if ok /= 0 then processFail (processErrorOfCode "runIn ${dir}" ok) else k c
-  Spawn args => do
-    h <- raise (@vuna@prim_eff_spawn args)
-    k h
-  Wait h => do
-    c <- raise (@vuna@prim_eff_wait h)
-    k c
+processOpHIOWithHost onExit i op k =
+  case op of
+    Args =>
+      do
+        xs <- raise @vuna@prim_eff_getArgs_process_host
+        k xs
+    Exit c =>
+      do
+        r <- onExit c
+        k r
+    RunIn dir args =>
+      do
+        c <- raise (@vuna@host@tryRunIn dir args)
+        ok <- processHostStatus
+        if ok /= 0 then processFail (processErrorOfCode "runIn ${dir}" ok) else k c
+    Spawn args =>
+      do
+        h <- raise (@vuna@prim_eff_spawn args)
+        k h
+    Wait h =>
+      do
+        c <- raise (@vuna@prim_eff_wait h)
+        k c
 
 -- | 带行的宿主 handler（`onExit` 由调用方给出）：删掉 `ProcessOp`，answer 是 `Eff [ProcessErrorOp]`（不导出）。
 handleProcessHostWithHost : {a : Type} -> {r : Row} -> (n : String) -> (Int -> Eff [ProcessErrorOp@"process-error"] Int) -> Eff (Named n ProcessOp :: r) a -> Eff r (Eff [ProcessErrorOp@"process-error"] a)
@@ -147,8 +161,9 @@ processErrorRet a = Ok a
 
 -- | 内部：`runProcessError` 的 op 解释——`ProcessFail e` 直接变 `Err (processErrorText e)`（不恢复续延）。
 processErrorOpHR : {a : Type} -> (i : Type) -> (o : ProcessErrorOp i) -> (Base.Effect.Core.resIdx i o -> Result a) -> Result a
-processErrorOpHR i op _ = case op of
-  ProcessFail e => Err (processErrorText e)
+processErrorOpHR i op _ =
+  case op of
+    ProcessFail e => Err (processErrorText e)
 
 -- | 把进程启动失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `ProcessErrorOp`。
 export runProcessError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n ProcessErrorOp :: r) a -> Eff r (Result a)
@@ -157,11 +172,13 @@ runProcessError n comp =
 
 -- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
 runProcessErrorHost : {r : Row} -> {a : Type} -> Eff (Named "process-error" ProcessErrorOp :: r) a -> Eff r a
-runProcessErrorHost comp = do
-  res <- runProcessError "process-error" comp
-  case res of
-    Ok a => pure a
-    Err msg => do
-      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise (@vuna@prim_eff_exit 1)
-      prim_fail "unreachable: process error handler"
+runProcessErrorHost comp =
+  do
+    res <- runProcessError "process-error" comp
+    case res of
+      Ok a => pure a
+      Err msg =>
+        do
+          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- raise (@vuna@prim_eff_exit 1)
+          prim_fail "unreachable: process error handler"

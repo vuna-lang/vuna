@@ -26,15 +26,21 @@ indent line = "  " ++ line
 
 memText : Reg -> Int -> String
 memText base off =
-  if off == 0 then "[${regText base}]"
-  else if off < 0 then "[${regText base}-${strFromInt (0 - off)}]"
-  else "[${regText base}+${strFromInt off}]"
+  if off == 0 then
+    "[${regText base}]"
+  else if off < 0 then
+    "[${regText base}-${strFromInt (0 - off)}]"
+  else
+    "[${regText base}+${strFromInt off}]"
 
 memXText : Reg -> Reg -> Int -> String
 memXText base idx off =
-  if off == 0 then "[${regText base}+${regText idx}]"
-  else if off < 0 then "[${regText base}+${regText idx}-${strFromInt (0 - off)}]"
-  else "[${regText base}+${regText idx}+${strFromInt off}]"
+  if off == 0 then
+    "[${regText base}+${regText idx}]"
+  else if off < 0 then
+    "[${regText base}+${regText idx}-${strFromInt (0 - off)}]"
+  else
+    "[${regText base}+${regText idx}+${strFromInt off}]"
 
 renderOperand : Operand -> String
 renderOperand (OpReg r) = regText r
@@ -50,16 +56,20 @@ isMemOperand _ = False
 
 renderMov : Operand -> Operand -> String
 renderMov dst src =
-  if isMemOperand dst then "mov qword ptr ${renderOperand dst}, ${renderOperand src}"
-  else "mov ${renderOperand dst}, ${renderOperand src}"
+  if isMemOperand dst then
+    "mov qword ptr ${renderOperand dst}, ${renderOperand src}"
+  else
+    "mov ${renderOperand dst}, ${renderOperand src}"
 
 isShiftOp : String -> Bool
 isShiftOp op = op == "shl" || op == "shr" || op == "sar"
 
 renderBinReg : String -> Reg -> Operand -> String
 renderBinReg op r (OpReg Rcx) =
-  if isShiftOp op then "${op} ${regText r}, cl"
-  else "${op} ${regText r}, ${renderOperand (OpReg Rcx)}"
+  if isShiftOp op then
+    "${op} ${regText r}, cl"
+  else
+    "${op} ${regText r}, ${renderOperand (OpReg Rcx)}"
 renderBinReg op r operand = "${op} ${regText r}, ${renderOperand operand}"
 
 renderByteOp : Operand -> String
@@ -76,8 +86,10 @@ renderInstr (ILeaMem dst base off) = "lea ${regText dst}, ${memText base off}"
 renderInstr (IBin op operand) = "${op} rax, ${renderOperand operand}"
 renderInstr (IBinReg op r operand) = renderBinReg op r operand
 renderInstr (ICmp dst src) =
-  if isMemOperand dst then "cmp qword ptr ${renderOperand dst}, ${renderOperand src}"
-  else "cmp ${renderOperand dst}, ${renderOperand src}"
+  if isMemOperand dst then
+    "cmp qword ptr ${renderOperand dst}, ${renderOperand src}"
+  else
+    "cmp ${renderOperand dst}, ${renderOperand src}"
 renderInstr (ITest a b) = "test ${regText a}, ${regText b}"
 renderInstr (ISetcc cond r) = "${cond} ${reg8Text r}"
 renderInstr (INeg r) = "neg ${regText r}"
@@ -134,7 +146,8 @@ renderRodata d = [".globl ${d.nrLabel}", "${d.nrLabel}:", indent ".ascii \"${asm
 -- | 字符串字面量：长度头（`.quad` 字节数）+ `.ascii` 体；运行时值是头地址。
 renderStrLit : NativeStrLit -> List String
 renderStrLit l =
-  [ "${l.nsLabel}:",
+  [
+    "${l.nsLabel}:",
     indent ".quad ${strFromInt (strLength l.nsText)}",
     indent ".ascii \"${asmString l.nsText}\""
   ]

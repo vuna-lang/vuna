@@ -129,13 +129,13 @@ displayColOf line byteCol =
 
 -- 插入符宽度：同一行用显示列差；跨行或退化时至少 1。
 caretWidthIn : String -> Span -> Int
-caretWidthIn line sp = if spanEndLine sp /= spanStartLine sp then 1
-else
-  let
-    w =
-      displayColOf line (if spanEndCol sp <= 0 then 1 else spanEndCol sp)
-        - displayColOf line (if spanStartCol sp <= 0 then 1 else spanStartCol sp)
-  in if w > 0 then w else 1
+caretWidthIn line sp =
+  if spanEndLine sp /= spanStartLine sp then
+    1
+  else
+    let
+      w = displayColOf line (if spanEndCol sp <= 0 then 1 else spanEndCol sp) - displayColOf line (if spanStartCol sp <= 0 then 1 else spanStartCol sp)
+    in if w > 0 then w else 1
 
 -- 单个源码片段块。
 snippetOf : Span -> String -> String
@@ -156,33 +156,41 @@ snippetOf sp text =
 
 -- 文件可读才渲染片段（失败静默退回无片段）。
 renderSnippet : Member nFs FsOp r => Span -> Eff r String
-renderSnippet sp = do
-  exists <- fsFileExists (spanFile sp)
-  if exists then do
-    isDir <- fsIsDirectory (spanFile sp)
-    if isDir then pure ""
-    else do
-      text <- fsReadFile (spanFile sp)
-      pure (snippetOf sp text)
-  else pure ""
+renderSnippet sp =
+  do
+    exists <- fsFileExists (spanFile sp)
+    if exists then
+      do
+        isDir <- fsIsDirectory (spanFile sp)
+        if isDir then
+          pure ""
+        else
+          do
+            text <- fsReadFile (spanFile sp)
+            pure (snippetOf sp text)
+    else
+      pure ""
 
 -- | short 视图的源码片段（结构化：只读 label 的 span，不反解析消息文本）。
 -- 文件不可读/无主 span 时返回空串（与旧行为一致：静默退回无片段）。
 export renderShortSnippetEff : Member nFs FsOp r => Diagnostic -> Eff r String
-renderShortSnippetEff d = case primarySpan d.diagLabels of
-  Nothing => pure ""
-  Just sp => do
-    block <- renderSnippet sp
-    pure (if block == "" then "" else "\n" ++ block)
+renderShortSnippetEff d =
+  case primarySpan d.diagLabels of
+    Nothing => pure ""
+    Just sp =>
+      do
+        block <- renderSnippet sp
+        pure (if block == "" then "" else "\n" ++ block)
 
 -- 相关标签（secondary / context）各出片段；与主 span 相同的不重复。
 sameSpan : Span -> Span -> Bool
 sameSpan a b =
-  a.spanFile == b.spanFile
-    && a.spanStartLine == b.spanStartLine
-    && a.spanStartCol == b.spanStartCol
-    && a.spanEndLine == b.spanEndLine
-    && a.spanEndCol == b.spanEndCol
+  a.spanFile
+    == b.spanFile
+    && a.spanStartLine
+    == b.spanStartLine
+    && a.spanStartCol
+    == b.spanStartCol && a.spanEndLine == b.spanEndLine && a.spanEndCol == b.spanEndCol
 
 sameAsPrimary : Maybe Span -> Span -> Bool
 sameAsPrimary Nothing _ = False
@@ -198,27 +206,31 @@ isContextStyle _ = False
 
 relatedBlocks : Member nFs FsOp r => Maybe Span -> List Label -> Eff r (List String)
 relatedBlocks primary [] = pure []
-relatedBlocks primary ((Label msp text style _) :: rest) = do
-  restBlocks <- relatedBlocks primary rest
-  if isPrimaryStyle style then pure restBlocks
-  else case msp of
-    Nothing => pure restBlocks
-    Just sp =>
-      let
-        note =
-          if text == "" then ""
-          else if isContextStyle style then "  = ${text}" else "  = note: ${text}"
-      in if sameAsPrimary primary sp then if note == "" then pure restBlocks else pure ((::) note restBlocks)
-      else do
-        sn <- renderSnippet sp
-        let
-          block = join "\n" (filter (\x => x /= "") [sn, note])
-        in pure ((::) block restBlocks)
+relatedBlocks primary ((Label msp text style _) :: rest) =
+  do
+    restBlocks <- relatedBlocks primary rest
+    if isPrimaryStyle style then
+      pure restBlocks
+    else
+      case msp of
+        Nothing => pure restBlocks
+        Just sp =>
+          let
+            note = if text == "" then "" else if isContextStyle style then "  = ${text}" else "  = note: ${text}"
+          in if sameAsPrimary primary sp then
+            if note == "" then pure restBlocks else pure ((::) note restBlocks)
+          else
+            do
+              sn <- renderSnippet sp
+              let
+                block = join "\n" (filter (\x => x /= "") [sn, note])
+              in pure ((::) block restBlocks)
 
 renderRelated : Member nFs FsOp r => Maybe Span -> List Label -> Eff r String
-renderRelated primary labels = do
-  blocks <- relatedBlocks primary labels
-  pure (join "\n" (filter (\x => x /= "") blocks))
+renderRelated primary labels =
+  do
+    blocks <- relatedBlocks primary labels
+    pure (join "\n" (filter (\x => x /= "") blocks))
 
 -- GitHub Actions workflow annotation（一行一条；位置来自结构化 primary span）。
 -- 转义按 GitHub 约定：% / CR / LF。
@@ -243,17 +255,22 @@ renderGithub d =
 
 -- 头部：`error[CODE]: 消息`（无 code 时 `error: 消息`）。
 localizedMessage : String -> Diagnostic -> String
-localizedMessage lang d = if lang == "zh" then case Vuna.Compiler.Base.Diagnostics.diagDescOf d.diagCode of
-  Just s => s
-  Nothing => d.diagMessage
-else d.diagMessage
+localizedMessage lang d =
+  if lang == "zh" then
+    case Vuna.Compiler.Base.Diagnostics.diagDescOf d.diagCode of
+      Just s => s
+      Nothing => d.diagMessage
+  else
+    d.diagMessage
 
 headerOf : String -> Diagnostic -> String
 headerOf lang d =
   let
     msg = localizedMessage lang d
-  in if d.diagCode == "" then "${severityName d.diagSeverity}: ${msg}"
-  else "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
+  in if d.diagCode == "" then
+    "${severityName d.diagSeverity}: ${msg}"
+  else
+    "${severityName d.diagSeverity}[${d.diagCode}]: ${msg}"
 
 -- `lang` 只是显式参数（`en` / `zh`）：没有 ambient 语言状态；片段读取是 Eff。
 export renderHuman : Member nFs FsOp r => String -> Diagnostic -> Eff r String
@@ -262,22 +279,20 @@ renderHuman lang d =
     primary = primarySpan d.diagLabels
     ptext = primaryText d.diagLabels
   in do
-    snippet <- case primary of
-      Just sp => renderSnippet sp
-      Nothing => pure ""
+    snippet <-
+      case primary of
+        Just sp => renderSnippet sp
+        Nothing => pure ""
     related <- renderRelated primary d.diagLabels
     let
       labelNote = if ptext == "" then "" else "  = note: ${ptext}"
       notes = join "\n" (map (\n => "  = note: ${n}") d.diagNotes)
       descLine = diagDescLine d
-      origLine =
-        if localizedMessage lang d == d.diagMessage then "" else "  = message: ${d.diagMessage}"
+      origLine = if localizedMessage lang d == d.diagMessage then "" else "  = message: ${d.diagMessage}"
       fieldBlock = join "\n" (map fieldLine d.diagFields)
       traceBlock = join "\n" (traceLines 0 d.diagTrace)
       helpBlock = join "\n" (map suggestionLine d.diagSuggestions)
-      block =
-        join "\n"
-          [headerOf lang d, snippet, related, labelNote, origLine, notes, fieldBlock, traceBlock, helpBlock, descLine]
+      block = join "\n" [headerOf lang d, snippet, related, labelNote, origLine, notes, fieldBlock, traceBlock, helpBlock, descLine]
     in pure (trim block)
 
 -- ---------------------------------------------------------------
@@ -300,8 +315,10 @@ hex2 n =
 
 hexDigit : Int -> String
 hexDigit n =
-  if n < 10 then substring (natFromInt n) 1 "0123456789abcdef"
-  else substring (natFromInt n) 1 "0123456789abcdef"
+  if n < 10 then
+    substring (natFromInt n) 1 "0123456789abcdef"
+  else
+    substring (natFromInt n) 1 "0123456789abcdef"
 
 jsonEscape : String -> String
 jsonEscape s = join "" (map jsonEscapeChar (strUnpack s))
@@ -365,7 +382,8 @@ jsonTrace t = jsonTraceFuel 64 t
 
 jsonTraceFuel : Int -> TraceFrame -> String
 jsonTraceFuel fuel t =
-  if fuel <= 0 then "{\"phase\":\"truncated\"}"
+  if fuel <= 0 then
+    "{\"phase\":\"truncated\"}"
   else
     "{\"phase\":${jsonStr (phaseName t.tracePhase)},\"text\":${jsonStr t.traceText},\"span\":${maybeJsonSpan t.traceSpan},\"children\":[${join "," (map (jsonTraceFuel (fuel - 1)) t.traceChildren)}]}"
 
@@ -398,7 +416,8 @@ jsonAbsent (Just r) = ",\"absent\":${jsonStr (absentName r)}"
 
 jsonDiag : String -> Diagnostic -> String
 jsonDiag lang d =
-  join ""
+  join
+    ""
     ["{\"code\":${jsonStr d.diagCode}", ",\"severity\":${jsonStr (severityName d.diagSeverity)}", ",\"phase\":${jsonStr (phaseName d.diagPhase)}", ",\"category\":${jsonStr (categoryName d.diagCategory)}", ",\"message\":${jsonStr d.diagMessage}${localizedJsonField lang d}", ",\"labels\":[${join "," (map jsonLabel d.diagLabels)}]", ",\"fields\":[${join "," (map jsonField d.diagFields)}]", ",\"trace\":[${join "," (map jsonTrace d.diagTrace)}]", ",\"notes\":[${join "," (map jsonStr d.diagNotes)}]", ",\"suggestions\":[${join "," (map jsonSuggestion d.diagSuggestions)}]", ",\"origin\":${originJson d.diagOrigin}", ",\"internal\":${if d.diagInternal then "true" else "false"}", ",\"ice\":${maybeJsonIce d.diagIce}${jsonAbsent d.diagAbsent}}"]
 
 export renderJson : String -> Diagnostic -> String
@@ -445,29 +464,34 @@ sarifLocation file sp =
   "{\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr file}},\"region\":${sarifRegion sp}}}"
 
 sarifRelated : String -> Label -> String
-sarifRelated file l = case l.labelSpan of
-  Nothing => "{\"message\":{\"text\":${jsonStr l.labelText}}}"
-  Just sp =>
-    "{\"message\":{\"text\":${jsonStr l.labelText}},\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr (spanFile sp)}},\"region\":${sarifRegion sp}}}"
+sarifRelated file l =
+  case l.labelSpan of
+    Nothing => "{\"message\":{\"text\":${jsonStr l.labelText}}}"
+    Just sp =>
+      "{\"message\":{\"text\":${jsonStr l.labelText}},\"physicalLocation\":{\"artifactLocation\":{\"uri\":${jsonStr (spanFile sp)}},\"region\":${sarifRegion sp}}}"
 
 sarifResult : Diagnostic -> String
 sarifResult d =
   let
-    primary = case primarySpan d.diagLabels of
-      Nothing => ""
-      Just sp => ",\"locations\":[${sarifLocation (spanFile sp) sp}]"
+    primary =
+      case primarySpan d.diagLabels of
+        Nothing => ""
+        Just sp => ",\"locations\":[${sarifLocation (spanFile sp) sp}]"
     related = filter (\l => not (isPrimaryLabel l)) d.diagLabels
     relJson =
-      if length related == 0 then ""
-      else ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
+      if length related == 0 then
+        ""
+      else
+        ",\"relatedLocations\":[${join "," (map (sarifRelated (diagFileOf d)) related)}]"
     notesText = join "\n" (map (\n => "note: ${n}") d.diagNotes)
     msg = if notesText == "" then d.diagMessage else "${d.diagMessage}\n${notesText}"
   in "{\"ruleId\":${jsonStr (sarifRuleId d)},\"level\":${jsonStr (sarifLevel d.diagSeverity)},\"message\":{\"text\":${jsonStr msg}}${primary}${relJson},\"properties\":{\"vuna.origin\":${jsonStr (originName d.diagOrigin)}}}"
 
 isPrimaryLabel : Label -> Bool
-isPrimaryLabel l = case l.labelStyle of
-  LabelPrimary => True
-  _ => False
+isPrimaryLabel l =
+  case l.labelStyle of
+    LabelPrimary => True
+    _ => False
 
 -- 规则表：按 code 去重（首次出现的消息作为 shortDescription）。
 sarifRules : List Diagnostic -> String
@@ -475,7 +499,9 @@ sarifRules ds = join "," (map ruleJson (uniqueCodes ds))
 
 uniqueCodes : List Diagnostic -> List String
 uniqueCodes ds =
-  foldl (\acc => \d => if memCode (sarifRuleId d) acc then acc else append acc [sarifRuleId d]) []
+  foldl
+    (\acc => \d => if memCode (sarifRuleId d) acc then acc else append acc [sarifRuleId d])
+    []
     ds
 
 memCode : String -> List String -> Bool
@@ -485,9 +511,10 @@ memCode c (x :: xs) = if c == x then True else memCode c xs
 ruleJson : String -> String
 ruleJson code =
   let
-    desc = case Vuna.Compiler.Base.Diagnostics.diagDescOf code of
-      Just s => s
-      Nothing => code
+    desc =
+      case Vuna.Compiler.Base.Diagnostics.diagDescOf code of
+        Just s => s
+        Nothing => code
     sev =
       Vuna.Compiler.Base.Diagnostics.diagSeverityOf (Vuna.Compiler.Base.Diagnostics.codeDomain code)
     phase =
@@ -537,15 +564,17 @@ callFieldBlock ds = join "\n" (map fieldLine (callFieldsOf ds))
 
 -- | `short` 格式的后缀：有 call 边时另起一行块，没有时为空串。
 export callFieldSuffix : List DiagField -> String
-callFieldSuffix ds = case callFieldsOf ds of
-  [] => ""
-  _ => "\n" ++ callFieldBlock ds
+callFieldSuffix ds =
+  case callFieldsOf ds of
+    [] => ""
+    _ => "\n" ++ callFieldBlock ds
 
 callFieldsOf : List DiagField -> List DiagField
 callFieldsOf [] = []
-callFieldsOf (d :: rest) = case d of
-  FieldCall c => d :: callFieldsOf rest
-  _ => callFieldsOf rest
+callFieldsOf (d :: rest) =
+  case d of
+    FieldCall c => d :: callFieldsOf rest
+    _ => callFieldsOf rest
 
 traceLines : Int -> List TraceFrame -> List String
 traceLines depth [] = []

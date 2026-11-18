@@ -47,9 +47,10 @@ import Base.Effect.Types as EffTypes
 
 -- | CLI 总入口：去掉隐藏的性能旗标，`-h` / `--help` 优先，其余交给命令分发。
 export runCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
-runCli args = case helpPath args of
-  Just path => printHelp path
-  Nothing => dispatch (stripPerfFlags args)
+runCli args =
+  case helpPath args of
+    Just path => printHelp path
+    Nothing => dispatch (stripPerfFlags args)
 
 -- | 内部：`--debug-perf` 由 runtime 原语读原始 argv/env，不参与子命令分发。
 stripPerfFlags : List String -> List String
@@ -62,9 +63,10 @@ stripPerfFlags (a :: rest) =
 -- `vuna lint --help` → `["lint"]`；`vuna --help` → `[]`；`vuna run pkg -- --help`
 -- 的 `--help` 在 `--` 之后，不触发帮助。
 helpPath : List String -> Maybe (List String)
-helpPath args = case beforeHelp (helpSurface args) of
-  Nothing => Nothing
-  Just tokens => Just (resolvedPath tokens)
+helpPath args =
+  case beforeHelp (helpSurface args) of
+    Nothing => Nothing
+    Just tokens => Just (resolvedPath tokens)
 
 -- | 内部：帮助扫描的可见区间——`--` 之前的部分。
 helpSurface : List String -> List String
@@ -77,28 +79,32 @@ beforeHelp : List String -> Maybe (List String)
 beforeHelp [] = Nothing
 beforeHelp ("-h" :: _) = Just []
 beforeHelp ("--help" :: _) = Just []
-beforeHelp (arg :: rest) = case beforeHelp rest of
-  Nothing => Nothing
-  Just prior => Just (arg :: prior)
+beforeHelp (arg :: rest) =
+  case beforeHelp rest of
+    Nothing => Nothing
+    Just prior => Just (arg :: prior)
 
 -- | 内部：把帮助旗标之前的参数收敛成已登记的命令路径（匹配不到就是总览）。
 resolvedPath : List String -> List String
-resolvedPath tokens = case matchCommand tokens of
-  Just (Pair c _) => c.cmdPath
-  Nothing => []
+resolvedPath tokens =
+  case matchCommand tokens of
+    Just (Pair c _) => c.cmdPath
+    Nothing => []
 
 -- | 内部：打印某个路径的帮助；`[]` 是总览。
 printHelp : Member nConsole ConsoleOp r => List String -> Eff r Int
 printHelp [] = printText overviewText
-printHelp path = case helpForPath path of
-  Just text => printText text
-  Nothing => unknownCommand (joinWords path)
+printHelp path =
+  case helpForPath path of
+    Just text => printText text
+    Nothing => unknownCommand (joinWords path)
 
 -- | 内部：打印文本并返回 0。
 printText : Member nConsole ConsoleOp r => String -> Eff r Int
-printText text = do
-  _ <- consolePrint text
-  pure 0
+printText text =
+  do
+    _ <- consolePrint text
+    pure 0
 
 -- | 内部：打印一行并返回 0。
 consoleLine : Member nConsole ConsoleOp r => String -> Eff r Int
@@ -110,41 +116,45 @@ printVersion _ = consoleLine "vuna ${vunaVersion}\n"
 
 -- | 内部：命令分发表——每条命令一行；编译器命令原样转交 `CompilerCli`。
 dispatch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
-dispatch args = case args of
-  [] => do
-    _ <- consolePrint overviewText
-    pure 2
-  "help" :: rest => helpCommand rest
-  "version" :: _ => printVersion 0
-  "--version" :: _ => printVersion 0
-  "compile" :: rest => runCompilerCliFor "vuna" ("compile" :: rest)
-  "check" :: rest => runCompilerCliFor "vuna" ("check" :: rest)
-  "build" :: rest => runCompilerCliFor "vuna" ("build" :: rest)
-  "run" :: rest => Vuna.Run.runRun rest
-  "test" :: rest => testArgs rest
-  "fmt" :: rest => fmtArgs rest
-  "lint" :: rest => Vuna.Lint.runLint rest
-  "doc" :: rest => Vuna.Doc.runDoc rest
-  "search" :: rest => Vuna.Search.runSearch rest
-  "map" :: rest => mapArgs rest
-  "api" :: rest => apiArgs rest
-  "goal" :: rest => goalArgs rest
-  "errors" :: rest => errorsArgs rest
-  "deps" :: rest => depsArgs rest
-  "store" :: rest => storeArgs rest
-  "repl" :: rest => replArgs rest
-  "lsp" :: rest => Vuna.Lsp.runLspTool rest
-  "dev" :: rest => devArgs rest
-  arg :: _ => case removedHint arg of
-    Just hint => removedCommand arg hint
-    Nothing => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
+dispatch args =
+  case args of
+    [] =>
+      do
+        _ <- consolePrint overviewText
+        pure 2
+    "help" :: rest => helpCommand rest
+    "version" :: _ => printVersion 0
+    "--version" :: _ => printVersion 0
+    "compile" :: rest => runCompilerCliFor "vuna" ("compile" :: rest)
+    "check" :: rest => runCompilerCliFor "vuna" ("check" :: rest)
+    "build" :: rest => runCompilerCliFor "vuna" ("build" :: rest)
+    "run" :: rest => Vuna.Run.runRun rest
+    "test" :: rest => testArgs rest
+    "fmt" :: rest => fmtArgs rest
+    "lint" :: rest => Vuna.Lint.runLint rest
+    "doc" :: rest => Vuna.Doc.runDoc rest
+    "search" :: rest => Vuna.Search.runSearch rest
+    "map" :: rest => mapArgs rest
+    "api" :: rest => apiArgs rest
+    "goal" :: rest => goalArgs rest
+    "errors" :: rest => errorsArgs rest
+    "deps" :: rest => depsArgs rest
+    "store" :: rest => storeArgs rest
+    "repl" :: rest => replArgs rest
+    "lsp" :: rest => Vuna.Lsp.runLspTool rest
+    "dev" :: rest => devArgs rest
+    arg :: _ =>
+      case removedHint arg of
+        Just hint => removedCommand arg hint
+        Nothing => if startsWith "-" arg then runCompilerCliFor "vuna" args else unknownCommand arg
 
 -- | 内部：`vuna help <command>...`——解析成已登记路径后打印。
 helpCommand : Member nConsole ConsoleOp r => List String -> Eff r Int
 helpCommand [] = printText overviewText
-helpCommand rest = case matchCommand rest of
-  Just (Pair c _) => printHelp c.cmdPath
-  Nothing => unknownCommand (joinWords rest)
+helpCommand rest =
+  case matchCommand rest of
+    Just (Pair c _) => printHelp c.cmdPath
+    Nothing => unknownCommand (joinWords rest)
 
 -- | 内部：`vuna errors` 子命令。
 errorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
@@ -171,25 +181,33 @@ storeArgs (bad :: _) = unknownSubcommand ["store"] bad ["gc", "clean"]
 -- | 内部：已改名命令的迁移提示（旧名字不再分发）。
 removedHint : String -> Maybe String
 removedHint name =
-  if name == "seed" then Just "use `vuna build --out OUT [DIR]` or `vuna compile DIR OUT`"
-  else if name == "gen-errors" then Just "run `vuna dev errors gen [ROOT]`"
-  else if name == "explain" then Just "run `vuna errors explain <CODE>` or `vuna errors list`"
-  else if name == "fetch" then Just "run `vuna deps fetch`"
-  else if name == "add" then Just "run `vuna deps add <name>[@<version>] [DIR]`"
-  else if name == "pin" then Just "run `vuna deps pin [DIR]`"
+  if name == "seed" then
+    Just "use `vuna build --out OUT [DIR]` or `vuna compile DIR OUT`"
+  else if name == "gen-errors" then
+    Just "run `vuna dev errors gen [ROOT]`"
+  else if name == "explain" then
+    Just "run `vuna errors explain <CODE>` or `vuna errors list`"
+  else if name == "fetch" then
+    Just "run `vuna deps fetch`"
+  else if name == "add" then
+    Just "run `vuna deps add <name>[@<version>] [DIR]`"
+  else if name == "pin" then
+    Just "run `vuna deps pin [DIR]`"
   else if name == "clean" then Just "run `vuna store clean`" else Nothing
 
 -- | 内部：未知命令（附最近候选与帮助提示），返回 2。
 unknownCommand : Member nConsole ConsoleOp r => String -> Eff r Int
-unknownCommand arg = do
-  _ <- consolePrint (unknownCommandText arg)
-  pure 2
+unknownCommand arg =
+  do
+    _ <- consolePrint (unknownCommandText arg)
+    pure 2
 
 -- | 内部：未知命令文案。
 unknownCommandText : String -> String
-unknownCommandText arg = case suggestOne topLevelNames arg of
-  Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
-  Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
+unknownCommandText arg =
+  case suggestOne topLevelNames arg of
+    Just guess => "error: unknown command `${arg}`; did you mean `${guess}`?\nrun `vuna help`\n"
+    Nothing => "error: unknown command `${arg}`\nrun `vuna help`\n"
 
 -- | 内部：路径用空格拼接。
 joinWords : List String -> String

@@ -17,19 +17,22 @@ export data Vec(..) : Nat -> Type -> Type where
 
 -- | 取首元素；签名要求长度至少 1（`Vec (Succ n) a`），`Nil` 分支在类型层被排除，无需运行期空检查。`n` 是隐式 Rig0，由索引反推。
 export vhead : {n : Nat} -> Vec (Succ n) a -> a
-vhead xs = case xs of
-  VCons y ys => y
+vhead xs =
+  case xs of
+    VCons y ys => y
 
 -- | 去掉首元素，结果长度为 `n`；同样只对非空向量定义，无需运行期空检查。
 export vtail : {n : Nat} -> Vec (Succ n) a -> Vec n a
-vtail xs = case xs of
-  VCons y ys => ys
+vtail xs =
+  case xs of
+    VCons y ys => ys
 
 -- | 返回向量长度（运行时线性递归计数；`n` 是 Rig0 索引，运行时擦除）。
 export vlen : {n : Nat} -> Vec n a -> Nat
-vlen xs = case xs of
-  [] => 0
-  VCons y ys => 1 + vlen ys
+vlen xs =
+  case xs of
+    [] => 0
+    VCons y ys => 1 + vlen ys
 
 -- ---------------------------------------------------------------
 -- 模板渲染：占位符 `<0>` `<1>` `<2>`…（序号 = 实参位置）

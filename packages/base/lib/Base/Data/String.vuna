@@ -23,25 +23,32 @@ byteLength s = natFromInt (strLength s)
 -- | 按分隔符切分，分隔符本身不保留；空分隔符退化为逐字符切分。用显式 fuel 计步（`2*len(text)+len(sep)+2`）让终止性可证。
 export split : String -> String -> List String
 split sep text =
-  if strLength sep == 0 then map (\c => strPack [c]) (strUnpack text)
-  else splitAcc (strUnpack sep) (strUnpack text) (2 * strLength text + strLength sep + 2) [] []
+  if strLength sep == 0 then
+    map (\c => strPack [c]) (strUnpack text)
+  else
+    splitAcc (strUnpack sep) (strUnpack text) (2 * strLength text + strLength sep + 2) [] []
 
 -- | 内部：`split` 的扫描循环——每次消费一个字符，命中分隔符时交给 `skipSep`；`fuel` 每步减一保证终止。
 splitAcc : List Int -> List Int -> Int -> List Int -> List String -> List String
 splitAcc sep [] fuel acc parts = reverse (strPack (reverse acc) :: parts)
 splitAcc sep (chars@(c :: rest)) fuel acc parts =
-  if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
+  if fuel <= 0 then
+    reverse (strPack (reverse acc) :: parts)
   else if _startsWithChars sep chars then
     skipSep sep chars (fuel - 1) (length sep) [] (strPack (reverse acc) :: parts)
-  else splitAcc sep rest (fuel - 1) (c :: acc) parts
+  else
+    splitAcc sep rest (fuel - 1) (c :: acc) parts
 
 -- | 内部：`split` 命中分隔符后逐个跳过 `n` 个字符，然后回到 `splitAcc`。
 skipSep : List Int -> List Int -> Int -> Int -> List Int -> List String -> List String
 skipSep sep [] fuel n acc parts = reverse (strPack (reverse acc) :: parts)
 skipSep sep (chars@(c :: rest)) fuel n acc parts =
-  if fuel <= 0 then reverse (strPack (reverse acc) :: parts)
-  else if n <= 0 then splitAcc sep chars (fuel - 1) acc parts
-  else skipSep sep rest (fuel - 1) (n - 1) acc parts
+  if fuel <= 0 then
+    reverse (strPack (reverse acc) :: parts)
+  else if n <= 0 then
+    splitAcc sep chars (fuel - 1) acc parts
+  else
+    skipSep sep rest (fuel - 1) (n - 1) acc parts
 
 -- | 用 `sep` 连接字符串列表（一次 `strConcatMany` 单遍分配，避免逐段拼接的 O(n²) 拷贝）。
 export join : String -> List String -> String
@@ -89,8 +96,10 @@ endsWith suffix text =
     ls = strLength suffix
   in let
     ltLen = strLength text
-  in if ls > ltLen then False
-  else _startsWithChars (strUnpack suffix) (drop (ltLen - ls) (strUnpack text))
+  in if ls > ltLen then
+    False
+  else
+    _startsWithChars (strUnpack suffix) (drop (ltLen - ls) (strUnpack text))
 
 -- | 把 `s` 重复 `n` 次（一次 `strConcatMany`，避免 O(n²) 拷贝）。
 export repeat : Nat -> String -> String
@@ -112,16 +121,20 @@ _dropSpace (c :: rest) = if _isSpace c then _dropSpace rest else c :: rest
 -- | 内部：字符列表版本的前缀判定。
 _startsWithChars : List Int -> List Int -> Bool
 _startsWithChars [] text = True
-_startsWithChars (p :: prest) text = case text of
-  [] => False
-  t :: trest => p == t && _startsWithChars prest trest
+_startsWithChars (p :: prest) text =
+  case text of
+    [] => False
+    t :: trest => p == t && _startsWithChars prest trest
 
 -- | 内部：字符列表版本的子串判定（逐位置试前缀）。
 _containsChars : List Int -> List Int -> Bool
-_containsChars needle text = if _startsWithChars needle text then True
-else case text of
-  [] => False
-  c :: rest => _containsChars needle rest
+_containsChars needle text =
+  if _startsWithChars needle text then
+    True
+  else
+    case text of
+      [] => False
+      c :: rest => _containsChars needle rest
 
 -- primitive 没有构造子：实例体写内建运算符，由编译器特化，不会自递归。
 instance Eq String where

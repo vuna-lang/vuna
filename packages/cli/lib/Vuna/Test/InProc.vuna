@@ -62,8 +62,7 @@ ownedByPackage pkg d =
     file = stripDotSlash (diagFileOf d)
     prefix = if dir == "." || dir == "" then "" else "${dir}/"
   in startsWith (prefix ++ "lib/") file
-    || startsWith (prefix ++ "app/") file
-    || startsWith (prefix ++ "test/") file
+    || startsWith (prefix ++ "app/") file || startsWith (prefix ++ "test/") file
 
 -- | 内部：单文件入口的裁剪链——去重 warning、按文件归属过滤、截断到 `diagCap`。
 fileShown : String -> List Diagnostic -> List Diagnostic
@@ -79,62 +78,77 @@ packageShown pkg ds = List.take diagCap (filter (ownedByPackage pkg) (dedupeWarn
 -- | 单文件 check：与 `vuna check <file>` 同一分派（`module` 头 → 库模块语义）。返回
 -- 裁剪后的诊断列表（`OkC` 时可能只有 warning；`ErrC` 时首错 + children）。
 export checkFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Diagnostic))
-checkFile path = do
-  ctxR <- contextForFile path
-  case ctxR of
-    ErrC e => pure (ErrC e)
-    OkC ctx => do
-      moduleFile <- dtFileHasModuleHeader path
-      if moduleFile then do
-        checked <- dtCheckModuleFile ctx path
-        pure (case checked of
-          ErrC e => ErrC e
-          OkC ws => OkC (fileShown path ws)
-        )
-      else do
-        checked <- dtCheck ctx path
-        pure (case checked of
-          ErrC e => ErrC e
-          OkC ws => OkC (fileShown path ws)
-        )
+checkFile path =
+  do
+    ctxR <- contextForFile path
+    case ctxR of
+      ErrC e => pure (ErrC e)
+      OkC ctx =>
+        do
+          moduleFile <- dtFileHasModuleHeader path
+          if moduleFile then
+            do
+              checked <- dtCheckModuleFile ctx path
+              pure (
+                  case checked of
+                    ErrC e => ErrC e
+                    OkC ws => OkC (fileShown path ws)
+                )
+          else
+            do
+              checked <- dtCheck ctx path
+              pure (
+                  case checked of
+                    ErrC e => ErrC e
+                    OkC ws => OkC (fileShown path ws)
+                )
 
 -- | 包目录 check：`vuna check <dir>` 的单包路径（workspace 展开由调用方决定）。
 -- `wantWarnings = True`：warning 不持久化，负例断言必须看到它们，绕开一切缓存判定。
 export checkPackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => String -> Eff r (Check (List Diagnostic))
-checkPackageAt dir = do
-  pkgR <- loadPackage dir
-  case pkgR of
-    ErrC e => pure (ErrC e)
-    OkC pkg => do
-      checked <- checkPackage False True pkg
-      case checked of
-        ErrC e => pure (ErrC e)
-        OkC ws => pure (OkC (packageShown pkg ws))
+checkPackageAt dir =
+  do
+    pkgR <- loadPackage dir
+    case pkgR of
+      ErrC e => pure (ErrC e)
+      OkC pkg =>
+        do
+          checked <- checkPackage False True pkg
+          case checked of
+            ErrC e => pure (ErrC e)
+            OkC ws => pure (OkC (packageShown pkg ws))
 
 -- | 目录是否为包目录（含 `vuna.toml`）；`vuna check <dir>` 与 `vuna check <file>`
 -- 的分派依据。
 export isPackageDir : Member nFs FsOp r => String -> Eff r Bool
-isPackageDir path = do
-  isDir <- pathExistsDirEff path
-  if not isDir then pure False
-  else do
-    hasManifest <- pathExistsFileEff "${path}/vuna.toml"
-    pure hasManifest
+isPackageDir path =
+  do
+    isDir <- pathExistsDirEff path
+    if not isDir then
+      pure False
+    else
+      do
+        hasManifest <- pathExistsFileEff "${path}/vuna.toml"
+        pure hasManifest
 
 -- | 内部：路径存在且是目录。
 pathExistsDirEff : Member nFs FsOp r => String -> Eff r Bool
-pathExistsDirEff path = do
-  exists <- fsFileExists path
-  if not exists then pure False else fsIsDirectory path
+pathExistsDirEff path =
+  do
+    exists <- fsFileExists path
+    if not exists then pure False else fsIsDirectory path
 
 -- | 内部：路径存在且不是目录。
 pathExistsFileEff : Member nFs FsOp r => String -> Eff r Bool
-pathExistsFileEff path = do
-  exists <- fsFileExists path
-  if not exists then pure False
-  else do
-    isDir <- fsIsDirectory path
-    pure (not isDir)
+pathExistsFileEff path =
+  do
+    exists <- fsFileExists path
+    if not exists then
+      pure False
+    else
+      do
+        isDir <- fsIsDirectory path
+        pure (not isDir)
 
 -- ---------------------------------------------------------------
 -- 会话优先的 check / interp
@@ -146,35 +160,40 @@ pathExistsFileEff path = do
 -- 不跑全量路径尾部的 `warnUnusedDefsIn`；负例夹具要断言「未使用定义 / 遮蔽」这类
 -- warning，必须走全量 `checkFile`。
 export checkFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check (List Diagnostic))
-checkFileSessioned ref base source = do
-  probed <- sessionCheckSample ref base source
-  case probed of
-    Nothing => checkFile source
-    Just sample => case sample.csErr of
-      Just e => pure (ErrC e)
-      Nothing => pure (OkC sample.csDiags)
+checkFileSessioned ref base source =
+  do
+    probed <- sessionCheckSample ref base source
+    case probed of
+      Nothing => checkFile source
+      Just sample =>
+        case sample.csErr of
+          Just e => pure (ErrC e)
+          Nothing => pure (OkC sample.csDiags)
 
 -- | 会话优先的 interp：增量会话命中就用求值展示文本，返回 `Nothing` 时退回全量
 -- `interpFile`。
 export interpFileSessioned : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nClock ClockOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Check String)
-interpFileSessioned ref base source = do
-  probed <- sessionEvalSample ref base source
-  case probed of
-    Nothing => interpFile source
-    Just sample => case sample.esErr of
-      Just e => pure (ErrC e)
-      Nothing => pure (OkC sample.esText)
+interpFileSessioned ref base source =
+  do
+    probed <- sessionEvalSample ref base source
+    case probed of
+      Nothing => interpFile source
+      Just sample =>
+        case sample.esErr of
+          Just e => pure (ErrC e)
+          Nothing => pure (OkC sample.esText)
 
 -- ---------------------------------------------------------------
 -- interp
 -- ---------------------------------------------------------------
 -- | 全量核心求值路径（测试夹具与纯测试共用）：DT 精化 + 核心求值，返回展示文本。
 export interpFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check String)
-interpFile path = do
-  ctxR <- contextForFile path
-  case ctxR of
-    ErrC e => pure (ErrC e)
-    OkC ctx => dtEvalFile ctx path
+interpFile path =
+  do
+    ctxR <- contextForFile path
+    case ctxR of
+      ErrC e => pure (ErrC e)
+      OkC ctx => dtEvalFile ctx path
 
 -- ---------------------------------------------------------------
 -- compile
@@ -183,37 +202,41 @@ interpFile path = do
 -- 复制），返回模块数与诊断。`printResult = True` 与 CLI 默认一致（影响 codegen 的
 -- 入口展示，进输入摘要）。
 export compileFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
-compileFile path outDir = do
-  ctxR <- contextForFile path
-  case ctxR of
-    ErrC e => pure (ErrC e)
-    OkC ctx => compileToDir ctx path True outDir
+compileFile path outDir =
+  do
+    ctxR <- contextForFile path
+    case ctxR of
+      ErrC e => pure (ErrC e)
+      OkC ctx => compileToDir ctx path True outDir
 
 -- | 包目录 compile（`vuna compile <dir> <outDir>`）：先要求可执行包（入口文件存在），
 -- 再编入口。
 export compilePackageAt : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => String -> String -> Eff r (Check (Pair Int (List Diagnostic)))
-compilePackageAt dir outDir = do
-  pkgR <- loadPackage dir
-  case pkgR of
-    ErrC e => pure (ErrC e)
-    OkC pkg => do
-      entries <- pure (packageEntry pkg)
-      exists <- pathExistsFileEff entries
-      if exists then compileToDir (packageContext pkg) entries True outDir
-      else pure (err "package ${packageName pkg} has no app entry")
+compilePackageAt dir outDir =
+  do
+    pkgR <- loadPackage dir
+    case pkgR of
+      ErrC e => pure (ErrC e)
+      OkC pkg =>
+        do
+          entries <- pure (packageEntry pkg)
+          exists <- pathExistsFileEff entries
+          if exists then compileToDir (packageContext pkg) entries True outDir else pure (err "package ${packageName pkg} has no app entry")
 
 -- ---------------------------------------------------------------
 -- lint / fix
 -- ---------------------------------------------------------------
 -- | `vuna lint <file>` 的进程内形态：返回 findings（顺序与 CLI 打印一致）。
 export lintFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Check (List Finding))
-lintFile path = do
-  textR <- fsReadFile path
-  looked <- fixitiesForFile emptyFixityEnv path textR
-  pure (case secondOf looked of
-    ErrC e => ErrC e
-    OkC fixities => lintSourceWith fixities textR
-  )
+lintFile path =
+  do
+    textR <- fsReadFile path
+    looked <- fixitiesForFile emptyFixityEnv path textR
+    pure (
+        case secondOf looked of
+          ErrC e => ErrC e
+          OkC fixities => lintSourceWith fixities textR
+      )
 
 -- | `vuna lint --fix <file>` 的进程内形态（与 `Lint.fixReport` 同一条 `fixLoop` 路径）：
 -- 返回（修复数, 新源码），调用方负责把新源码写回工作副本。
@@ -221,11 +244,14 @@ lintFile path = do
 -- 必须先取程序级 fixity（`fixitiesForFile`）：`fixLoop` 每轮都用 fixities 重新 lint
 -- 结果源码，空表会让已知运算符退化成 unknown fixity，第二轮起直接放弃修复。
 export fixFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check (Pair Int String))
-fixFile path text = do
-  looked <- fixitiesForFile emptyFixityEnv path text
-  pure (case secondOf looked of
-    ErrC e => ErrC e
-    OkC fixities => case lintSourceWith fixities text of
-      ErrC e => ErrC e
-      OkC findings => fixLoop defaultLintConfig fixities text findings 8 0
-  )
+fixFile path text =
+  do
+    looked <- fixitiesForFile emptyFixityEnv path text
+    pure (
+        case secondOf looked of
+          ErrC e => ErrC e
+          OkC fixities =>
+            case lintSourceWith fixities text of
+              ErrC e => ErrC e
+              OkC findings => fixLoop defaultLintConfig fixities text findings 8 0
+      )

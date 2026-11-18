@@ -31,11 +31,14 @@ newline = 10
 -- | 解析整份历史文件（空行一律丢弃），返回旧→新的单元列表；首行去掉首尾空白后等于
 -- `historyHeader` 时按 v2 解码，否则整份按 v1 纯文本读入。
 export parseHistoryFile : String -> List String
-parseHistoryFile text = case lines text of
-  [] => []
-  first :: rest =>
-    if trim first == historyHeader then filterNonEmpty (map decodeUnit rest)
-    else filterNonEmpty (first :: rest)
+parseHistoryFile text =
+  case lines text of
+    [] => []
+    first :: rest =>
+      if trim first == historyHeader then
+        filterNonEmpty (map decodeUnit rest)
+      else
+        filterNonEmpty (first :: rest)
 
 -- | 渲染成 v2 文件文本：首行头 + 每条一行，总是以换行结尾（空历史也写出头，保证格式判别
 -- 稳定）。
@@ -58,9 +61,12 @@ encodeUnit s = encodeChars (strUnpack s)
 encodeChars : List Int -> String
 encodeChars [] = ""
 encodeChars (c :: rest) =
-  if c == newline then "${strPack [backslash]}n${encodeChars rest}"
-  else if c == backslash then "${strPack [backslash]}${strPack [backslash]}${encodeChars rest}"
-  else "${strPack [c]}${encodeChars rest}"
+  if c == newline then
+    "${strPack [backslash]}n${encodeChars rest}"
+  else if c == backslash then
+    "${strPack [backslash]}${strPack [backslash]}${encodeChars rest}"
+  else
+    "${strPack [c]}${encodeChars rest}"
 
 -- | 内部：把一行文本解码回单元（v2 反转义）。
 decodeUnit : String -> String
@@ -70,9 +76,10 @@ decodeUnit s = strPack (decodeChars (strUnpack s) [])
 -- 时按字面保留（宽容解码，不报错）。
 decodeChars : List Int -> List Int -> List Int
 decodeChars [] acc = reverse acc
-decodeChars (c :: rest) acc = if c == backslash then case rest of
-  next :: rest2 =>
-    if next == 110 then decodeChars rest2 (newline :: acc)
-    else if next == backslash then decodeChars rest2 (backslash :: acc) else decodeChars rest (c :: acc)
-  [] => reverse (backslash :: acc)
-else decodeChars rest (c :: acc)
+decodeChars (c :: rest) acc =
+  if c == backslash then
+    case rest of
+      next :: rest2 => if next == 110 then decodeChars rest2 (newline :: acc) else if next == backslash then decodeChars rest2 (backslash :: acc) else decodeChars rest (c :: acc)
+      [] => reverse (backslash :: acc)
+  else
+    decodeChars rest (c :: acc)

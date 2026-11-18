@@ -35,15 +35,13 @@ pasteIsDone st = st.pasteDone
 
 -- | 解码一步：吃一个字节、返回新状态；已完成的状态不再消费字节。
 export pasteFeed : PasteState -> Int -> PasteState
-pasteFeed st b = if st.pasteDone then st
-else
-  let
-    cand = append st.pasteMatch [b]
-  in if lenInt cand == lenInt pasteTerminator then
-    if isPrefixOf cand pasteTerminator then PasteState st.pasteContent [] True
-    else pasteFeedMismatch st cand
-  else if isPrefixOf cand pasteTerminator then PasteState st.pasteContent cand False
-  else pasteFeedMismatch st cand
+pasteFeed st b =
+  if st.pasteDone then
+    st
+  else
+    let
+      cand = append st.pasteMatch [b]
+    in if lenInt cand == lenInt pasteTerminator then if isPrefixOf cand pasteTerminator then PasteState st.pasteContent [] True else pasteFeedMismatch st cand else if isPrefixOf cand pasteTerminator then PasteState st.pasteContent cand False else pasteFeedMismatch st cand
 
 -- | 内部：失配处理——候选串的最长真后缀若仍是终止序列前缀就挂起，其余字节按内容回吐。
 pasteFeedMismatch : PasteState -> List Int -> PasteState
@@ -61,11 +59,13 @@ longestSuffixPrefix cand = longestSuffixGo cand (lenInt cand - 1)
 
 -- | 内部：从长到短试后缀长度，第一个「是终止序列前缀」的真后缀即结果；没有给 0。
 longestSuffixGo : List Int -> Int -> Int
-longestSuffixGo cand k = if k <= 0 then 0
-else
-  let
-    suffix = takeLast k cand
-  in if isPrefixOf suffix pasteTerminator then k else longestSuffixGo cand (k - 1)
+longestSuffixGo cand k =
+  if k <= 0 then
+    0
+  else
+    let
+      suffix = takeLast k cand
+    in if isPrefixOf suffix pasteTerminator then k else longestSuffixGo cand (k - 1)
 
 -- | 内部：取列表末尾 `n` 个元素（不足 `n` 个给全部）。
 takeLast : Int -> List a -> List a

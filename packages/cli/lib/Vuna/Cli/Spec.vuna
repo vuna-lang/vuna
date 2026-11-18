@@ -101,49 +101,236 @@ delegatedCmd name summary synopsis = mkCmd [name] GCore summary synopsis [] [] T
 -- | 全部命令与分支，按帮助分组顺序排列。
 export commands : List Cmd
 commands =
-  [ delegatedCmd "check" "检查包或文件的类型" "vuna check (<file.vuna> | <package-dir>)",
-    delegatedCmd "build" "构建包的可执行入口" "vuna build [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]",
-    delegatedCmd "compile" "编译包或入口文件到输出目录" "vuna compile (<entry.vuna> | <package-dir>) <out-dir>",
-    topCmd ["run"] GCore "构建并运行包入口" "vuna run [--no-build] [--target ocaml|wasm|native] [DIR] [-- ARG]..." [boolFlag "no-build" "跳过构建，直接运行已有产物", boolFlag "release" "发布构建（拒绝 assert / todo）", valueFlag "target" "ocaml|wasm|native" "执行目标（缺省 ocaml）", valueFlag "package" "NAME" "显式选择要运行的包", valueFlag "out" "DIR" "构建输出目录", valueFlag "cpus" "auto|0|N" "运行时 CPU 上限（仅 native）", valueFlag "mem-limit" "SIZE" "运行时内存上限，如 512M（仅 native）", valueFlag "timeout" "SECS" "整个运行过程的超时"] ["`--` 之后的参数原样透传给被运行的程序，退出码也原样返回。"],
-    topCmd ["test"] GCore "运行包内测试" "vuna test [--list] [--filter PAT]... [--jobs N] [DIR]" [boolFlag "list" "只列出测试文件，不执行", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", multiFlag "filter" "PAT" "只跑路径含 PAT 的测试", valueFlag "jobs" "N" "每个测试文件一个子进程，最多 N 并发（缺省 1）", valueFlag "only-file" "PATH" "内部：只跑单个测试文件（--jobs 的子进程模式）"] ["跑包内 `test/*.vuna`；仓库原生 suite 见 `vuna dev suite`。"],
-    topCmd ["fmt"] GCore "格式化源码" "vuna fmt [--check] [PATH]..." [boolFlag "check" "只报告需要重排的文件，不改盘"] ["PATH 可为文件或目录；省略时格式化 workspace 内各包的 lib/ 与 app/。"],
-    topCmd ["lint"] GCore "按规则检查并修复源码" "vuna lint [--fix] [--format text|json|github|sarif] [PATH]..." [boolFlag "fix" "应用可自动修复的规则", boolFlag "dry-run" "配合 --fix：只报告将改什么", boolFlag "quiet" "只输出 error 级 finding", boolFlag "list" "列出全部规则", boolFlag "no-config" "忽略 manifest 的 [lint] 配置", boolFlag "diff" "只检查相对 HEAD 改动的文件", valueFlag "format" "text|json|github|sarif" "输出格式（缺省 text）", valueFlag "max-warnings" "N" "warning 超过 N 条即失败", valueFlag "max-passes" "N" "修复迭代上限", valueFlag "explain" "RULE" "打印一条规则的说明后退出", valueFlag "config" "PATH" "使用指定配置文件", multiFlag "select" "RULE" "只启用指定规则（可重复）", multiFlag "ignore" "RULE" "忽略指定规则（可重复）"] ["省略 PATH 时扫 workspace 各包的 lib/ 与 app/。"],
-    topCmd ["doc"] GInspect "生成单文件交互式 API 文档" "vuna doc [--check] [--package NAME] [DIR [OUT]]" [boolFlag "check" "报告缺 docstring 的导出项，不写文件", valueFlag "package" "NAME" "只渲染指定包"] ["默认输出 `DIR/docs/api.html`。"],
-    topCmd ["search"] GInspect "按名称 / docstring / 类型检索" "vuna search [--name|--type|--doc] <query>..." [boolFlag "name" "按名字检索（缺省）", boolFlag "type" "按类型检索（parse 级）", boolFlag "doc" "按 docstring 检索", valueFlag "module" "PFX" "限定模块前缀", valueFlag "limit" "N" "最多返回 N 条", boolFlag "json" "输出单行 JSON"] ["无命中退出码 1。"],
-    topCmd ["map"] GInspect "源码索引：模块总览 / 符号定位 / 影响面" "vuna map | vuna map find <Module.name> | vuna map impact <Module.name>" [] ["无子命令时打印模块总览。详见 `vuna help map find`。"],
-    subCmd ["map", "find"] GInspect "定位符号的定义与引用" "vuna map find <Module.name>" [] [],
+  [
+    delegatedCmd "check" "检查包或文件的类型" "vuna check (<file.vuna> | <package-dir>)",
+    delegatedCmd
+      "build"
+      "构建包的可执行入口"
+      "vuna build [--out DIR] [--package NAME] [--target ocaml|wasm|native] [DIR]",
+    delegatedCmd
+      "compile"
+      "编译包或入口文件到输出目录"
+      "vuna compile (<entry.vuna> | <package-dir>) <out-dir>",
+    topCmd
+      ["run"]
+      GCore
+      "构建并运行包入口"
+      "vuna run [--no-build] [--target ocaml|wasm|native] [DIR] [-- ARG]..."
+      [boolFlag "no-build" "跳过构建，直接运行已有产物", boolFlag "release" "发布构建（拒绝 assert / todo）", valueFlag "target" "ocaml|wasm|native" "执行目标（缺省 ocaml）", valueFlag "package" "NAME" "显式选择要运行的包", valueFlag "out" "DIR" "构建输出目录", valueFlag "cpus" "auto|0|N" "运行时 CPU 上限（仅 native）", valueFlag "mem-limit" "SIZE" "运行时内存上限，如 512M（仅 native）", valueFlag "timeout" "SECS" "整个运行过程的超时"]
+      ["`--` 之后的参数原样透传给被运行的程序，退出码也原样返回。"],
+    topCmd
+      ["test"]
+      GCore
+      "运行包内测试"
+      "vuna test [--list] [--filter PAT]... [--jobs N] [DIR]"
+      [boolFlag "list" "只列出测试文件，不执行", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", multiFlag "filter" "PAT" "只跑路径含 PAT 的测试", valueFlag "jobs" "N" "每个测试文件一个子进程，最多 N 并发（缺省 1）", valueFlag "only-file" "PATH" "内部：只跑单个测试文件（--jobs 的子进程模式）"]
+      ["跑包内 `test/*.vuna`；仓库原生 suite 见 `vuna dev suite`。"],
+    topCmd
+      ["fmt"]
+      GCore
+      "格式化源码"
+      "vuna fmt [--check] [PATH]..."
+      [boolFlag "check" "只报告需要重排的文件，不改盘"]
+      ["PATH 可为文件或目录；省略时格式化 workspace 内各包的 lib/ 与 app/。"],
+    topCmd
+      ["lint"]
+      GCore
+      "按规则检查并修复源码"
+      "vuna lint [--fix] [--format text|json|github|sarif] [PATH]..."
+      [boolFlag "fix" "应用可自动修复的规则", boolFlag "dry-run" "配合 --fix：只报告将改什么", boolFlag "quiet" "只输出 error 级 finding", boolFlag "list" "列出全部规则", boolFlag "no-config" "忽略 manifest 的 [lint] 配置", boolFlag "diff" "只检查相对 HEAD 改动的文件", valueFlag "format" "text|json|github|sarif" "输出格式（缺省 text）", valueFlag "max-warnings" "N" "warning 超过 N 条即失败", valueFlag "max-passes" "N" "修复迭代上限", valueFlag "explain" "RULE" "打印一条规则的说明后退出", valueFlag "config" "PATH" "使用指定配置文件", multiFlag "select" "RULE" "只启用指定规则（可重复）", multiFlag "ignore" "RULE" "忽略指定规则（可重复）"]
+      ["省略 PATH 时扫 workspace 各包的 lib/ 与 app/。"],
+    topCmd
+      ["doc"]
+      GInspect
+      "生成单文件交互式 API 文档"
+      "vuna doc [--check] [--package NAME] [DIR [OUT]]"
+      [boolFlag "check" "报告缺 docstring 的导出项，不写文件", valueFlag "package" "NAME" "只渲染指定包"]
+      ["默认输出 `DIR/docs/api.html`。"],
+    topCmd
+      ["search"]
+      GInspect
+      "按名称 / docstring / 类型检索"
+      "vuna search [--name|--type|--doc] <query>..."
+      [boolFlag "name" "按名字检索（缺省）", boolFlag "type" "按类型检索（parse 级）", boolFlag "doc" "按 docstring 检索", valueFlag "module" "PFX" "限定模块前缀", valueFlag "limit" "N" "最多返回 N 条", boolFlag "json" "输出单行 JSON"]
+      ["无命中退出码 1。"],
+    topCmd
+      ["map"]
+      GInspect
+      "源码索引：模块总览 / 符号定位 / 影响面"
+      "vuna map | vuna map find <Module.name> | vuna map impact <Module.name>"
+      []
+      ["无子命令时打印模块总览。详见 `vuna help map find`。"],
+    subCmd
+      ["map", "find"]
+      GInspect
+      "定位符号的定义与引用"
+      "vuna map find <Module.name>"
+      []
+      [],
     subCmd ["map", "impact"] GInspect "改动影响面" "vuna map impact <Module.name>" [] [],
     topCmd ["api"] GInspect "打印模块的签名面" "vuna api <Module.name>" [] [],
     topCmd ["goal"] GInspect "列出洞的目标与上下文" "vuna goal <file.vuna>" [] [],
-    topCmd ["errors"] GInspect "查询错误码目录" "vuna errors list [PREFIX] | vuna errors explain <CODE>" [] [],
-    subCmd ["errors", "list"] GInspect "列出错误码" "vuna errors list [PREFIX]" [boolFlag "json" "输出单行 JSON"] [],
-    subCmd ["errors", "explain"] GInspect "解释一条错误码" "vuna errors explain <CODE>" [boolFlag "json" "输出单行 JSON"] [],
+    topCmd
+      ["errors"]
+      GInspect
+      "查询错误码目录"
+      "vuna errors list [PREFIX] | vuna errors explain <CODE>"
+      []
+      [],
+    subCmd
+      ["errors", "list"]
+      GInspect
+      "列出错误码"
+      "vuna errors list [PREFIX]"
+      [boolFlag "json" "输出单行 JSON"]
+      [],
+    subCmd
+      ["errors", "explain"]
+      GInspect
+      "解释一条错误码"
+      "vuna errors explain <CODE>"
+      [boolFlag "json" "输出单行 JSON"]
+      [],
     topCmd ["deps"] GDeps "管理依赖" "vuna deps add|fetch|pin ..." [] [],
-    subCmd ["deps", "add"] GDeps "查索引、写回 manifest 并取包" "vuna deps add <name>[@<version>] [DIR]" [boolFlag "dry-run" "只打印将写入的依赖", boolFlag "no-fetch" "只改 manifest，不取包"] [],
-    subCmd ["deps", "fetch"] GDeps "取依赖闭包到持久 store" "vuna deps fetch [--locked] [DIR]" [boolFlag "locked" "只校验不联网"] [],
-    subCmd ["deps", "pin"] GDeps "把 git 依赖的实际内容摘要写回 manifest" "vuna deps pin [DIR]" [] [],
+    subCmd
+      ["deps", "add"]
+      GDeps
+      "查索引、写回 manifest 并取包"
+      "vuna deps add <name>[@<version>] [DIR]"
+      [boolFlag "dry-run" "只打印将写入的依赖", boolFlag "no-fetch" "只改 manifest，不取包"]
+      [],
+    subCmd
+      ["deps", "fetch"]
+      GDeps
+      "取依赖闭包到持久 store"
+      "vuna deps fetch [--locked] [DIR]"
+      [boolFlag "locked" "只校验不联网"]
+      [],
+    subCmd
+      ["deps", "pin"]
+      GDeps
+      "把 git 依赖的实际内容摘要写回 manifest"
+      "vuna deps pin [DIR]"
+      []
+      [],
     topCmd ["store"] GDeps "缓存与包对象管理" "vuna store gc|clean ..." [] [],
-    subCmd ["store", "gc"] GDeps "按 roots + 宽限 + 容量淘汰缓存族" "vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]" [boolFlag "dry-run" "只统计不删除", valueFlag "older-than" "SEC" "宽限窗口（缺省 3600）", valueFlag "max-size" "BYTES" "容量上限（0 = 不限）"] [],
-    subCmd ["store", "clean"] GDeps "清空缓存族 / 包对象族" "vuna store clean [--dry-run] [--store|--packages|--gc|--all]" [boolFlag "dry-run" "只报数量", boolFlag "store" "清理缓存族（objects/<kind>、blobs、units、views/bin、.tmp）", boolFlag "packages" "清理包对象族（objects/pkg、pkgs、tmp）", boolFlag "gc" "配合 --packages：只删未被 roots 引用的对象", boolFlag "all" "等价 --store --packages"] ["不带 flag 时只清缓存族。"],
+    subCmd
+      ["store", "gc"]
+      GDeps
+      "按 roots + 宽限 + 容量淘汰缓存族"
+      "vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]"
+      [boolFlag "dry-run" "只统计不删除", valueFlag "older-than" "SEC" "宽限窗口（缺省 3600）", valueFlag "max-size" "BYTES" "容量上限（0 = 不限）"]
+      [],
+    subCmd
+      ["store", "clean"]
+      GDeps
+      "清空缓存族 / 包对象族"
+      "vuna store clean [--dry-run] [--store|--packages|--gc|--all]"
+      [boolFlag "dry-run" "只报数量", boolFlag "store" "清理缓存族（objects/<kind>、blobs、units、views/bin、.tmp）", boolFlag "packages" "清理包对象族（objects/pkg、pkgs、tmp）", boolFlag "gc" "配合 --packages：只删未被 roots 引用的对象", boolFlag "all" "等价 --store --packages"]
+      ["不带 flag 时只清缓存族。"],
     topCmd ["repl"] GService "交互式 REPL" "vuna repl [FILE|DIR|MODULE]" [] [],
-    subCmd ["repl", "serve"] GService "常驻 REPL server（JSON-RPC over Content-Length）" "vuna repl serve --listen ADDR [FILE|DIR|MODULE]" [valueFlag "listen" "ADDR" "tcp:127.0.0.1:PORT 或 unix:PATH"] [],
-    subCmd ["repl", "client"] GService "把 stdin 的一个 JSON-RPC 请求发给 server" "vuna repl client --addr ADDR" [valueFlag "addr" "ADDR" "server 地址"] [],
+    subCmd
+      ["repl", "serve"]
+      GService
+      "常驻 REPL server（JSON-RPC over Content-Length）"
+      "vuna repl serve --listen ADDR [FILE|DIR|MODULE]"
+      [valueFlag "listen" "ADDR" "tcp:127.0.0.1:PORT 或 unix:PATH"]
+      [],
+    subCmd
+      ["repl", "client"]
+      GService
+      "把 stdin 的一个 JSON-RPC 请求发给 server"
+      "vuna repl client --addr ADDR"
+      [valueFlag "addr" "ADDR" "server 地址"]
+      [],
     topCmd ["lsp"] GService "启动 LSP server（JSON-RPC over stdio）" "vuna lsp" [] [],
     topCmd ["version"] GMeta "显示版本" "vuna version | --version" [] [],
     topCmd ["help"] GMeta "显示帮助" "vuna help [<command>...]" [] [],
-    topCmd ["dev"] GDev "开发/维护命令（本仓库专用）" "vuna dev suite|obs|errors ..." [] [],
-    subCmd ["dev", "suite"] GDev "跑原生 suite（test/suite.toml）" "vuna dev suite [FILE] [--only PAT]... [--jobs auto|N]" [boolFlag "list" "只列 case", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", boolFlag "json" "汇总输出单行 JSON", boolFlag "audit" "跑全部 case 并报告跳过项", boolFlag "strict-skips" "跳过项视为失败", boolFlag "timings" "输出计时表", boolFlag "last-failed" "只跑上次失败", boolFlag "bless" "重写 golden", boolFlag "bless-diag" "重写诊断夹具", boolFlag "watch" "变更后重跑", boolFlag "quiet" "只输出失败", multiFlag "only" "PAT" "按章节 / case 过滤（可重复）", multiFlag "filter" "PAT" "按 id / tag 子串过滤（可重复）", multiFlag "tier" "NAME" "按层级过滤（可重复）", multiFlag "matrix" "NAME" "只跑指定矩阵（可重复）", multiFlag "backend" "ocaml|wasm|native" "后端矩阵（可重复）", valueFlag "jobs" "auto|N" "并行度（缺省 auto）", valueFlag "timeout" "SECS" "单个 case 超时", valueFlag "worker" "i/N" "内部分片（测试运行器自己用）", valueFlag "results-dir" "DIR" "结果目录", valueFlag "cache-dir" "DIR" "测试对象库与构建桶根", valueFlag "changed" "REV" "只跑相对 REV 改动覆盖的 case"] [],
+    topCmd
+      ["dev"]
+      GDev
+      "开发/维护命令（本仓库专用）"
+      "vuna dev suite|obs|errors ..."
+      []
+      [],
+    subCmd
+      ["dev", "suite"]
+      GDev
+      "跑原生 suite（test/suite.toml）"
+      "vuna dev suite [FILE] [--only PAT]... [--jobs auto|N]"
+      [boolFlag "list" "只列 case", boolFlag "verbose" "结果行尾追加耗时", boolFlag "fail-fast" "首个失败即停止", boolFlag "json" "汇总输出单行 JSON", boolFlag "audit" "跑全部 case 并报告跳过项", boolFlag "strict-skips" "跳过项视为失败", boolFlag "timings" "输出计时表", boolFlag "last-failed" "只跑上次失败", boolFlag "bless" "重写 golden", boolFlag "bless-diag" "重写诊断夹具", boolFlag "watch" "变更后重跑", boolFlag "quiet" "只输出失败", multiFlag "only" "PAT" "按章节 / case 过滤（可重复）", multiFlag "filter" "PAT" "按 id / tag 子串过滤（可重复）", multiFlag "tier" "NAME" "按层级过滤（可重复）", multiFlag "matrix" "NAME" "只跑指定矩阵（可重复）", multiFlag "backend" "ocaml|wasm|native" "后端矩阵（可重复）", valueFlag "jobs" "auto|N" "并行度（缺省 auto）", valueFlag "timeout" "SECS" "单个 case 超时", valueFlag "worker" "i/N" "内部分片（测试运行器自己用）", valueFlag "results-dir" "DIR" "结果目录", valueFlag "cache-dir" "DIR" "测试对象库与构建桶根", valueFlag "changed" "REV" "只跑相对 REV 改动覆盖的 case"]
+      [],
     subCmd ["dev", "errors"] GDev "错误码文档生成" "vuna dev errors gen [ROOT]" [] [],
-    subCmd ["dev", "errors", "gen"] GDev "从枚举真源生成错误码文档" "vuna dev errors gen [ROOT]" [] ["输出 `ROOT/docs/.generated/errors.md` 与同源 JSON；生成物不入 git。"],
-    subCmd ["dev", "obs"] GDev "观测工具链" "vuna dev obs run|summarize|validate|convert|render|merge|symbols|serve ..." [] [],
-    subCmd ["dev", "obs", "run"] GDev "在开启观测的前提下跑子命令" "vuna dev obs run [--level N] [--sample cpu|mem|both] [--out FILE] -- <cmd...>" [valueFlag "level" "N" "观测级别 0..3（缺省 2）", valueFlag "sample" "cpu|mem|both" "采样种类", valueFlag "interval" "US" "采样间隔（微秒）", valueFlag "out" "FILE" "trace 输出文件"] ["`--` 之后的命令与参数原样透传。"],
-    subCmd ["dev", "obs", "summarize"] GDev "span 折叠与阶段摘要" "vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]" [boolFlag "json" "输出单行 JSON", valueFlag "baseline" "FILE" "基线 trace（输出差值）", valueFlag "threshold" "PCT" "差值超过 PCT 即退出 1"] [],
-    subCmd ["dev", "obs", "validate"] GDev "校验 trace 的字段与时序" "vuna dev obs validate TRACE" [] [],
-    subCmd ["dev", "obs", "convert"] GDev "采样栈换算为其它 profile 格式" "vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE" [valueFlag "to" "cpuprofile|speedscope|folded|jsonl" "目标格式", valueFlag "out" "PATH" "输出路径"] [],
-    subCmd ["dev", "obs", "render"] GDev "渲染单文件 HTML（瀑布 + 火焰图）" "vuna dev obs render --out FILE TRACE" [valueFlag "out" "FILE" "输出 HTML"] [],
-    subCmd ["dev", "obs", "merge"] GDev "按 t0 合并多份 trace" "vuna dev obs merge [--out FILE] TRACE..." [valueFlag "out" "FILE" "输出文件"] [],
-    subCmd ["dev", "obs", "symbols"] GDev "从 split 产物抽符号表" "vuna dev obs symbols [--out FILE] [OUTDIR]" [valueFlag "out" "FILE" "输出文件"] [],
-    subCmd ["dev", "obs", "serve"] GDev "CDP Profiler 子集 server（离线，数据来自 trace）" "vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]" [valueFlag "cdp" "ADDR" "监听地址", boolFlag "allow-slow" "接受较慢的 trace"] []
+    subCmd
+      ["dev", "errors", "gen"]
+      GDev
+      "从枚举真源生成错误码文档"
+      "vuna dev errors gen [ROOT]"
+      []
+      ["输出 `ROOT/docs/.generated/errors.md` 与同源 JSON；生成物不入 git。"],
+    subCmd
+      ["dev", "obs"]
+      GDev
+      "观测工具链"
+      "vuna dev obs run|summarize|validate|convert|render|merge|symbols|serve ..."
+      []
+      [],
+    subCmd
+      ["dev", "obs", "run"]
+      GDev
+      "在开启观测的前提下跑子命令"
+      "vuna dev obs run [--level N] [--sample cpu|mem|both] [--out FILE] -- <cmd...>"
+      [valueFlag "level" "N" "观测级别 0..3（缺省 2）", valueFlag "sample" "cpu|mem|both" "采样种类", valueFlag "interval" "US" "采样间隔（微秒）", valueFlag "out" "FILE" "trace 输出文件"]
+      ["`--` 之后的命令与参数原样透传。"],
+    subCmd
+      ["dev", "obs", "summarize"]
+      GDev
+      "span 折叠与阶段摘要"
+      "vuna dev obs summarize [--json] [--baseline FILE] [--threshold PCT] [TRACE...]"
+      [boolFlag "json" "输出单行 JSON", valueFlag "baseline" "FILE" "基线 trace（输出差值）", valueFlag "threshold" "PCT" "差值超过 PCT 即退出 1"]
+      [],
+    subCmd
+      ["dev", "obs", "validate"]
+      GDev
+      "校验 trace 的字段与时序"
+      "vuna dev obs validate TRACE"
+      []
+      [],
+    subCmd
+      ["dev", "obs", "convert"]
+      GDev
+      "采样栈换算为其它 profile 格式"
+      "vuna dev obs convert --to cpuprofile|speedscope|folded|jsonl [--out PATH] TRACE"
+      [valueFlag "to" "cpuprofile|speedscope|folded|jsonl" "目标格式", valueFlag "out" "PATH" "输出路径"]
+      [],
+    subCmd
+      ["dev", "obs", "render"]
+      GDev
+      "渲染单文件 HTML（瀑布 + 火焰图）"
+      "vuna dev obs render --out FILE TRACE"
+      [valueFlag "out" "FILE" "输出 HTML"]
+      [],
+    subCmd
+      ["dev", "obs", "merge"]
+      GDev
+      "按 t0 合并多份 trace"
+      "vuna dev obs merge [--out FILE] TRACE..."
+      [valueFlag "out" "FILE" "输出文件"]
+      [],
+    subCmd
+      ["dev", "obs", "symbols"]
+      GDev
+      "从 split 产物抽符号表"
+      "vuna dev obs symbols [--out FILE] [OUTDIR]"
+      [valueFlag "out" "FILE" "输出文件"]
+      [],
+    subCmd
+      ["dev", "obs", "serve"]
+      GDev
+      "CDP Profiler 子集 server（离线，数据来自 trace）"
+      "vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]"
+      [valueFlag "cdp" "ADDR" "监听地址", boolFlag "allow-slow" "接受较慢的 trace"]
+      []
   ]
 
 -- | 按路径精确查找一条命令。
@@ -161,10 +348,13 @@ matchCommand args = matchDepth 3 args
 
 -- | 内部：按深度从 3 到 1 尝试精确路径匹配（最长优先）。
 matchDepth : Int -> List String -> Maybe (Pair Cmd (List String))
-matchDepth n args = if n <= 0 then Nothing
-else case findCmd (take n args) of
-  Just c => Just (Pair c (drop n args))
-  Nothing => matchDepth (n - 1) args
+matchDepth n args =
+  if n <= 0 then
+    Nothing
+  else
+    case findCmd (take n args) of
+      Just c => Just (Pair c (drop n args))
+      Nothing => matchDepth (n - 1) args
 
 -- | 一条命令允许的 flag 形态。
 export flagSpecsOf : Cmd -> List ArgSpec
@@ -190,9 +380,10 @@ pathsOf (c :: rest) = c.cmdPath :: pathsOf rest
 
 -- | 按路径解析工具命令参数：flag 表来自本表，未知 flag 附带最近候选。
 export parseCmdArgs : List String -> List String -> Check Parsed
-parseCmdArgs path args = case findCmd path of
-  Nothing => err "internal: command not described in Vuna.Cli.Spec: ${commandLabel path}"
-  Just c => parseCmdArgsOf "vuna ${commandLabel path}" (flagSpecsOf c) args
+parseCmdArgs path args =
+  case findCmd path of
+    Nothing => err "internal: command not described in Vuna.Cli.Spec: ${commandLabel path}"
+    Just c => parseCmdArgsOf "vuna ${commandLabel path}" (flagSpecsOf c) args
 
 -- | 内部：命令路径的显示文本。
 commandLabel : List String -> String

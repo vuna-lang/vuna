@@ -45,9 +45,10 @@ ownerTblOf : List (Pair String String) -> HashMap String String
 ownerTblOf pairs = HashMap.insertAll pairs (HashMap.fromList [])
 
 ownerOfTbl : HashMap String String -> String -> String
-ownerOfTbl t name = case HashMap.lookup name t of
-  Just o => o
-  Nothing => ""
+ownerOfTbl t name =
+  case HashMap.lookup name t of
+    Just o => o
+    Nothing => ""
 
 datasInUnit : HashMap String String -> String -> List DtData -> List DtData
 datasInUnit ownerT u datas = filter (\d => ownerOfTbl ownerT (dtDataName d) == u) datas
@@ -71,9 +72,12 @@ knownUnit units u = memName u units
 checkDepsKnown : List String -> String -> List String -> Check Int
 checkDepsKnown known self [] = OkC 0
 checkDepsKnown known self (d :: rest) =
-  if not (knownUnit known d) then icInternal "${self} references unknown unit `${d}`"
-  else if not (knownUnit known self) then icInternal "split unit `${self}` is not in the module order"
-  else checkDepsKnown known self rest
+  if not (knownUnit known d) then
+    icInternal "${self} references unknown unit `${d}`"
+  else if not (knownUnit known self) then
+    icInternal "split unit `${self}` is not in the module order"
+  else
+    checkDepsKnown known self rest
 
 -- 依赖按模块顺序排列并去重（同单元自引用丢弃）；最终顺序仍是 `canonicalTopo` 的事。
 depsInOrder : List String -> String -> List String -> List String
@@ -81,7 +85,8 @@ depsInOrder ordered self deps = filter (\u => not (u == self) && memName u deps)
 
 unitDepsOf : List String -> String -> List String -> Check (List String)
 unitDepsOf ordered self deps =
-  Vuna.Compiler.Base.Common.bind (checkDepsKnown ordered self deps)
+  Vuna.Compiler.Base.Common.bind
+    (checkDepsKnown ordered self deps)
     (\_ => OkC (depsInOrder ordered self deps))
 
 -- ---------------------------------------------------------------
@@ -107,8 +112,10 @@ keepCached known unit Nothing = Nothing
 -- 松弛：DAG 上不超过 n 轮就收敛。
 checkSplitAcyclic : List SplitFile -> Check Int
 checkSplitAcyclic files =
-  if splitGraphAcyclic files then OkC 0
-  else icInternal "split dependency graph has a cycle (unit order is not a DAG)"
+  if splitGraphAcyclic files then
+    OkC 0
+  else
+    icInternal "split dependency graph has a cycle (unit order is not a DAG)"
 
 -- 分文件生成的共享上下文（归属表一次建好，所有单元复用）。
 record SplitGenCtx where
@@ -133,22 +140,27 @@ mapToUnit pairs = map (\q => Pair (firstOf q) (splitUnitOfModule (secondOf q))) 
 checkModuleDeclName : List String -> String -> String -> Check Int
 checkModuleDeclName knownModules mname name =
   if containsDot name then
-    if memName (modulePrefixOfName name) knownModules then OkC 0
-    else err
-      "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
-  else err
-    "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
+    if memName (modulePrefixOfName name) knownModules then
+      OkC 0
+    else
+      err
+        "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
+  else
+    err
+      "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
 checkModuleDeclNames : List String -> String -> List String -> Check Int
 checkModuleDeclNames knownModules mname [] = OkC 0
 checkModuleDeclNames knownModules mname (n :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkModuleDeclName knownModules mname n)
+  Vuna.Compiler.Base.Common.bind
+    (checkModuleDeclName knownModules mname n)
     (\_ => checkModuleDeclNames knownModules mname rest)
 
 checkModuleDecls : List String -> List (Pair String (List Decl)) -> Check Int
 checkModuleDecls knownModules [] = OkC 0
 checkModuleDecls knownModules ((Pair mname decls) :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkModuleDeclNames knownModules mname (splitDeclNames decls))
+  Vuna.Compiler.Base.Common.bind
+    (checkModuleDeclNames knownModules mname (splitDeclNames decls))
     (\_ => checkModuleDecls knownModules rest)
 
 -- 入口的**声明身份**：签名/定义同名是正常形态（DSig + 多 clause DFun），所以只看
@@ -157,15 +169,16 @@ checkModuleDecls knownModules ((Pair mname decls) :: rest) =
 -- 只有同一命名空间内重名才是重复。
 entryDeclIdentities : List Decl -> List (Pair Bool String)
 entryDeclIdentities [] = []
-entryDeclIdentities (d :: rest) = case d of
-  DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
-  DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
-  DData name params kind ctors derivings viaField repr lin sp =>
-    Pair True name :: entryDeclIdentities rest
-  DRecord name params fields derivings viaField repr lin sp =>
-    Pair True name :: entryDeclIdentities rest
-  DTrait name params supers methods sp => Pair True name :: entryDeclIdentities rest
-  _ => entryDeclIdentities rest
+entryDeclIdentities (d :: rest) =
+  case d of
+    DSig name ctx ty sp => Pair False name :: entryDeclIdentities rest
+    DExtern name cName ty sp => Pair False name :: entryDeclIdentities rest
+    DData name params kind ctors derivings viaField repr lin sp =>
+      Pair True name :: entryDeclIdentities rest
+    DRecord name params fields derivings viaField repr lin sp =>
+      Pair True name :: entryDeclIdentities rest
+    DTrait name params supers methods sp => Pair True name :: entryDeclIdentities rest
+    _ => entryDeclIdentities rest
 
 entryDeclKey : Pair Bool String -> String
 entryDeclKey (Pair True name) = "type\t${name}"
@@ -176,15 +189,18 @@ checkEntryDeclName seen identity =
   let
     name = secondOf identity
     key = entryDeclKey identity
-  in if name == "" then icInternal "entry declaration has an empty name"
-  else if containsDot name then err
-    "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
+  in if name == "" then
+    icInternal "entry declaration has an empty name"
+  else if containsDot name then
+    err
+      "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
   else if memName key seen then icInternal "duplicate entry declaration `${name}`" else OkC 0
 
 checkEntryDeclsGo : List String -> List (Pair Bool String) -> Check Int
 checkEntryDeclsGo seen [] = OkC 0
 checkEntryDeclsGo seen (n :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkEntryDeclName seen n)
+  Vuna.Compiler.Base.Common.bind
+    (checkEntryDeclName seen n)
     (\_ => checkEntryDeclsGo (entryDeclKey n :: seen) rest)
 
 checkEntryDecls : List Decl -> Check Int
@@ -195,7 +211,8 @@ checkEntryDecls decls = checkEntryDeclsGo [] (entryDeclIdentities decls)
 checkDefOwners : SplitMeta -> List DtDef -> Check Int
 checkDefOwners meta [] = OkC 0
 checkDefOwners meta (d :: rest) =
-  Vuna.Compiler.Base.Common.bind (splitDefOwnerOf meta (dtDefName d))
+  Vuna.Compiler.Base.Common.bind
+    (splitDefOwnerOf meta (dtDefName d))
     (\_ => checkDefOwners meta rest)
 
 checkDataOwners : SplitMeta -> List DtData -> Check Int
@@ -205,7 +222,8 @@ checkDataOwners meta (d :: rest) =
 
 checkResolvedModules : SplitMeta -> List (Pair String (List Decl)) -> List Decl -> List DtDef -> List DtData -> Check Int
 checkResolvedModules meta modules entryDecls runtime datas =
-  Vuna.Compiler.Base.Common.bind (checkModuleDecls meta.smKnownModules modules)
+  Vuna.Compiler.Base.Common.bind
+    (checkModuleDecls meta.smKnownModules modules)
     (\_ => Vuna.Compiler.Base.Common.bind (checkEntryDecls entryDecls) (\_ => Vuna.Compiler.Base.Common.bind (checkDefOwners meta runtime) (\_ => checkDataOwners meta datas)))
 
 -- ---------------------------------------------------------------
@@ -216,10 +234,12 @@ checkResolvedModules meta modules entryDecls runtime datas =
 -- 「模块根 → 包目录 → 前导 ./」顺序尽量剥成短路径；都不匹配则保留原样。
 splitStripPrefix : String -> String -> String
 splitStripPrefix prefix path =
-  if prefix == "" then path
+  if prefix == "" then
+    path
   else if startsWith "${prefix}/" path then
     strSubstring (strLength "${prefix}/") (strLength path - strLength "${prefix}/") path
-  else path
+  else
+    path
 
 splitStripRoots : List String -> String -> String
 splitStripRoots [] path = path
@@ -246,8 +266,16 @@ noUnitStore _ _ = pure 0
 -- 纯生成逻辑（归属表、分文件、依赖序校验）保持纯函数。
 export generateDtSplitProgram : {r : Row} -> List (Pair String (List Decl)) -> List Decl -> DtProgram -> Bool -> List String -> String -> List (Pair String (Pair String Int)) -> Eff r (Check (List SplitFile))
 generateDtSplitProgram modules entryDecls prog printResult roots contextDir extraDefLocs =
-  generateDtSplitProgramWith noUnitLookup noUnitStore modules entryDecls prog printResult roots
-    contextDir extraDefLocs
+  generateDtSplitProgramWith
+    noUnitLookup
+    noUnitStore
+    modules
+    entryDecls
+    prog
+    printResult
+    roots
+    contextDir
+    extraDefLocs
 
 -- 带**单元级缓存**的生成入口（`lookup` 按模块名，入口用 `__entry__`；
 -- 命中即跳过该单元的 lowering + 文本生成，`store` 只对重新生成的单元调用）。
@@ -271,26 +299,60 @@ generateDtSplitProgramWith lookup store modules entryDecls prog printResult root
     runtimeText =
       dtRuntimeWith locTbl shared.irSharedUsesFloat shared.irSharedUsesTrace shared.irSharedUsesObs
     _ = dbg! "cg-runtimeText-done"
-  in splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta
-    (splitLocPath roots contextDir) runtimeText
+  in splitProgramFilesWith
+    lookup
+    store
+    env
+    modules
+    entryDecls
+    printResult
+    runtimeDefs
+    allDatas
+    meta
+    (splitLocPath roots contextDir)
+    runtimeText
 
 splitProgramFilesWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff r (Check (List SplitFile))
-splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText = case checkProgramOf env of
-  ErrC e => pure (ErrC e)
-  OkC _ =>
-    splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas
-      meta normPath runtimeText
+splitProgramFilesWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText =
+  case checkProgramOf env of
+    ErrC e => pure (ErrC e)
+    OkC _ =>
+      splitProgramCheckedWith
+        lookup
+        store
+        env
+        modules
+        entryDecls
+        printResult
+        runtimeDefs
+        allDatas
+        meta
+        normPath
+        runtimeText
 
 splitProgramCheckedWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> LwEnv -> List (Pair String (List Decl)) -> List Decl -> Bool -> List DtDef -> List DtData -> SplitMeta -> (String -> String) -> String -> Eff r (Check (List SplitFile))
-splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText = case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
-  ErrC e => pure (ErrC e)
-  OkC _ => case nameOwnerPairsOfDefs meta runtimeDefs of
+splitProgramCheckedWith lookup store env modules entryDecls printResult runtimeDefs allDatas meta normPath runtimeText =
+  case checkResolvedModules meta modules entryDecls runtimeDefs allDatas of
     ErrC e => pure (ErrC e)
-    OkC defPairs => case nameOwnerPairsOfDatas meta allDatas of
-      ErrC e => pure (ErrC e)
-      OkC dataPairs =>
-        splitWithOwnersWith lookup store env modules printResult allDatas runtimeDefs defPairs
-          dataPairs normPath runtimeText
+    OkC _ =>
+      case nameOwnerPairsOfDefs meta runtimeDefs of
+        ErrC e => pure (ErrC e)
+        OkC defPairs =>
+          case nameOwnerPairsOfDatas meta allDatas of
+            ErrC e => pure (ErrC e)
+            OkC dataPairs =>
+              splitWithOwnersWith
+                lookup
+                store
+                env
+                modules
+                printResult
+                allDatas
+                runtimeDefs
+                defPairs
+                dataPairs
+                normPath
+                runtimeText
 
 splitWithOwnersWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> LwEnv -> List (Pair String (List Decl)) -> Bool -> List DtData -> List DtDef -> List (Pair String String) -> List (Pair String String) -> (String -> String) -> String -> Eff r (Check (List SplitFile))
 splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPairs dataPairs normPath runtimeText =
@@ -298,26 +360,37 @@ splitWithOwnersWith lookup store env modules printResult allDatas allDefs defPai
     defUnitT = unitTblOf (mapToUnit defPairs)
     dataUnitT = unitTblOf (mapToUnit dataPairs)
     ordered =
-      append (append [runtimeUnit] (map (\q => splitUnitOfModule (firstOf q)) modules))
+      append
+        (append [runtimeUnit] (map (\q => splitUnitOfModule (firstOf q)) modules))
         [splitUnitOfModule entryOwner]
     ctx =
-      SplitGenCtx env allDatas allDefs (ownerTblOf defPairs) (ownerTblOf dataPairs) defUnitT
-        dataUnitT ordered normPath
+      SplitGenCtx
+        env
+        allDatas
+        allDefs
+        (ownerTblOf defPairs)
+        (ownerTblOf dataPairs)
+        defUnitT
+        dataUnitT
+        ordered
+        normPath
   in do
     moduleFilesR <- splitModuleFilesWith lookup store ctx modules
     case moduleFilesR of
       ErrC e => pure (ErrC e)
-      OkC moduleFiles => do
-        mainFileR <- splitMainFileWith lookup store ctx printResult
-        pure (case mainFileR of
-          ErrC e => ErrC e
-          OkC mainFile =>
-            let
-              files = SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile]
-            in case checkSplitAcyclic files of
-              ErrC e => ErrC e
-              OkC _ => OkC files
-        )
+      OkC moduleFiles =>
+        do
+          mainFileR <- splitMainFileWith lookup store ctx printResult
+          pure (
+              case mainFileR of
+                ErrC e => ErrC e
+                OkC mainFile =>
+                  let
+                    files = SplitFile "Vuna_runtime.ml" runtimeText [] :: append moduleFiles [mainFile]
+                  in case checkSplitAcyclic files of
+                    ErrC e => ErrC e
+                    OkC _ => OkC files
+            )
 
 -- 单模块：按归属过滤名字 → Lowering 出 `IrUnit` → 装配成文件。
 splitModuleFilesWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> SplitGenCtx -> List (Pair String (List Decl)) -> Eff r (Check (List SplitFile))
@@ -330,12 +403,14 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
     let
       cached = keepCached ctx.sgcOrdered unit cached0
     in case cached of
-      Just cachedFile => do
-        tailR <- splitModuleFilesWith lookup store ctx rest
-        pure (case tailR of
-          ErrC e => ErrC e
-          OkC tail => OkC (cachedFile :: tail)
-        )
+      Just cachedFile =>
+        do
+          tailR <- splitModuleFilesWith lookup store ctx rest
+          pure (
+              case tailR of
+                ErrC e => ErrC e
+                OkC tail => OkC (cachedFile :: tail)
+            )
       Nothing =>
         let
           unitDatas = datasInUnit ctx.sgcDataOwnerT mname ctx.sgcAllDatas
@@ -344,53 +419,60 @@ splitModuleFilesWith lookup store ctx ((Pair mname decls) :: rest) =
           envU = lwEnvWithUnit unit ctx.sgcEnv
         in case lowerUnitChecked envU (map dtDefName unitDefs) (map dtDataName unitDatas) of
           ErrC e => pure (ErrC e)
-          OkC unitIr => case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
-            ErrC e => pure (ErrC e)
-            OkC parts => do
-              tailR <- splitModuleFilesWith lookup store ctx rest
-              case tailR of
-                ErrC e => pure (ErrC e)
-                OkC tail => case unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts) of
-                  ErrC e => pure (ErrC e)
-                  OkC deps =>
-                    let
-                      sf = SplitFile "${unit}.ml" "${genUnitText parts}\n" deps
-                    in do
-                      _ <- store mname sf
-                      pure (OkC (sf :: tail))
+          OkC unitIr =>
+            case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
+              ErrC e => pure (ErrC e)
+              OkC parts =>
+                do
+                  tailR <- splitModuleFilesWith lookup store ctx rest
+                  case tailR of
+                    ErrC e => pure (ErrC e)
+                    OkC tail =>
+                      case unitDepsOf ctx.sgcOrdered unit (unitPartsDeps parts) of
+                        ErrC e => pure (ErrC e)
+                        OkC deps =>
+                          let
+                            sf = SplitFile "${unit}.ml" "${genUnitText parts}\n" deps
+                          in do
+                            _ <- store mname sf
+                            pure (OkC (sf :: tail))
 
 -- 入口文件：`Main` 单元正文 + main 钩子。
 splitMainFileWith : {r : Row} -> (String -> Eff r (Maybe SplitFile)) -> (String -> SplitFile -> Eff r Int) -> SplitGenCtx -> Bool -> Eff r (Check SplitFile)
-splitMainFileWith lookup store ctx printResult = do
-  cached0 <- lookup "__entry__"
-  let
-    cached = keepCached ctx.sgcOrdered (splitUnitOfModule entryOwner) cached0
-  in case cached of
-    Just cachedFile => pure (OkC cachedFile)
-    Nothing =>
-      let
-        entryUnit = splitUnitOfModule entryOwner
-        entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
-        entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
-        qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
-        envU = lwEnvWithUnit entryUnit ctx.sgcEnv
-      in case lowerUnitChecked envU (map dtDefName entryDefs) (map dtDataName entryDatas) of
-        ErrC e => pure (ErrC e)
-        OkC unitIr => case lowerEntryOf ctx.sgcAllDefs of
+splitMainFileWith lookup store ctx printResult =
+  do
+    cached0 <- lookup "__entry__"
+    let
+      cached = keepCached ctx.sgcOrdered (splitUnitOfModule entryOwner) cached0
+    in case cached of
+      Just cachedFile => pure (OkC cachedFile)
+      Nothing =>
+        let
+          entryUnit = splitUnitOfModule entryOwner
+          entryDefs = defsInUnit ctx.sgcDefOwnerT entryOwner ctx.sgcAllDefs
+          entryDatas = datasInUnit ctx.sgcDataOwnerT entryOwner ctx.sgcAllDatas
+          qc = QualCtx entryUnit ctx.sgcDefUnitT ctx.sgcDataUnitT
+          envU = lwEnvWithUnit entryUnit ctx.sgcEnv
+        in case lowerUnitChecked envU (map dtDefName entryDefs) (map dtDataName entryDatas) of
           ErrC e => pure (ErrC e)
-          OkC entryM => case entryM of
-            Nothing => pure (cgErr0 NoMain)
-            Just entryIr => case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
+          OkC unitIr =>
+            case lowerEntryOf ctx.sgcAllDefs of
               ErrC e => pure (ErrC e)
-              OkC parts => case genEntryHook (mkGenStWith ctx.sgcNormPath qc (lwEnvShared envU)) entryIr printResult of
-                ErrC e => pure (ErrC e)
-                OkC hook => case unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook)) of
-                  ErrC e => pure (ErrC e)
-                  OkC deps =>
-                    let
-                      sf =
-                        SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook)
-                          deps
-                    in do
-                      _ <- store "__entry__" sf
-                      pure (OkC sf)
+              OkC entryM =>
+                case entryM of
+                  Nothing => pure (cgErr0 NoMain)
+                  Just entryIr =>
+                    case genUnitPartsWith ctx.sgcNormPath qc (lwEnvShared envU) unitIr of
+                      ErrC e => pure (ErrC e)
+                      OkC parts =>
+                        case genEntryHook (mkGenStWith ctx.sgcNormPath qc (lwEnvShared envU)) entryIr printResult of
+                          ErrC e => pure (ErrC e)
+                          OkC hook =>
+                            case unitDepsOf ctx.sgcOrdered entryUnit (append (unitPartsDeps parts) (secondOf hook)) of
+                              ErrC e => pure (ErrC e)
+                              OkC deps =>
+                                let
+                                  sf = SplitFile "Main.ml" (mainInitPrologue ++ genUnitText parts ++ firstOf hook) deps
+                                in do
+                                  _ <- store "__entry__" sf
+                                  pure (OkC sf)

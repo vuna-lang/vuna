@@ -12,7 +12,8 @@ app =
 
 home : List (Pair String String) -> View.View
 home _ =
-  page "Home"
+  page
+    "Home"
     [View.Element "h1" [] [View.Text "Home"], View.Element "p" [] [View.Text "静态页面 + 路由"]]
 
 about : List (Pair String String) -> View.View
@@ -31,9 +32,10 @@ echo params = View.Text (paramOf "msg" params)
 
 -- | 取命名参数的值；缺参数时为空串。
 paramOf : String -> List (Pair String String) -> String
-paramOf name params = case params of
-  p :: rest => if p.first == name then p.second else paramOf name rest
-  [] => ""
+paramOf name params =
+  case params of
+    p :: rest => if p.first == name then p.second else paramOf name rest
+    [] => ""
 
 -- | 页面骨架。
 page : String -> List View.View -> View.View

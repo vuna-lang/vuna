@@ -61,20 +61,24 @@ textHashOf s = Vuna.Compiler.Base.Hash.contentKey s
 
 -- | 当前程序的编译器身份（缓存 tag；`Int` 形态见 `compilerFingerprintEff`）。
 export compilerTagEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r String
-compilerTagEff = do
-  override <- envGetEnv "VUNA_COMPILER_TAG"
-  if override /= "" then pure override
-  else do
-    exe <- envExecPath
-    saved <- readBuildIdNear exe
-    case saved of
-      Just id => pure id
-      Nothing => do
-        sizeOpt <- fsFileSize exe
-        mtime <- fmap (fromMaybe 0) (fsFileMtime exe)
-        case sizeOpt of
-          Nothing => pure vunaVersion
-          Just size => pure "stat:${strFromInt (fingerprintOfStat exe (natToInt size) mtime)}"
+compilerTagEff =
+  do
+    override <- envGetEnv "VUNA_COMPILER_TAG"
+    if override /= "" then
+      pure override
+    else
+      do
+        exe <- envExecPath
+        saved <- readBuildIdNear exe
+        case saved of
+          Just id => pure id
+          Nothing =>
+            do
+              sizeOpt <- fsFileSize exe
+              mtime <- fmap (fromMaybe 0) (fsFileMtime exe)
+              case sizeOpt of
+                Nothing => pure vunaVersion
+                Just size => pure "stat:${strFromInt (fingerprintOfStat exe (natToInt size) mtime)}"
 
 -- 可执行文件旁的 `build-id`：安装布局 `$out/bin/<prog>` + `$out/build-id`，
 -- 构建布局 `--out DIR` 下 `DIR/build-id`（`DIR/bin/<prog>` 或 `DIR/<pkg>/bin/<prog>`）。
@@ -87,15 +91,19 @@ readBuildIdNear exe =
 
 readFirstBuildId : Member nFs FsOp r => List String -> Eff r (Maybe String)
 readFirstBuildId [] = pure Nothing
-readFirstBuildId (path :: rest) = do
-  exists <- fsFileExists path
-  if exists then do
-    raw <- fsReadFile path
-    pure (if trim raw == "" then Nothing else Just (trim raw))
-  else readFirstBuildId rest
+readFirstBuildId (path :: rest) =
+  do
+    exists <- fsFileExists path
+    if exists then
+      do
+        raw <- fsReadFile path
+        pure (if trim raw == "" then Nothing else Just (trim raw))
+    else
+      readFirstBuildId rest
 
 -- | 当前编译器指纹（`Int` 形态；缓存 key 的算术段用）。
 export compilerFingerprintEff : Member nFs FsOp r, Member nEnv EnvOp r => Eff r Int
-compilerFingerprintEff = do
-  tag <- compilerTagEff
-  pure (textHashOf tag)
+compilerFingerprintEff =
+  do
+    tag <- compilerTagEff
+    pure (textHashOf tag)

@@ -75,7 +75,8 @@ lintInfo e = Info e.lintEntryCode "" e.lintEntryDesc
 -- | 内部：所有域的条目，按 TC_ / CG_ / IC_ / LX_ / PS_ / RN_ / PKG_ / UN_ / LD_ / LN_ 的顺序拼接。
 allInfos : List Info
 allInfos =
-  append (map tcInfo tcAll)
+  append
+    (map tcInfo tcAll)
     (append (map cgInfo cgAll) (append (map icInfo icAll) (append (map lexInfo lexAll) (append (map psInfo psAll) (append (map rnInfo rnAll) (append (map pkgInfo pkgAll) (append (map warnInfo warnAll) (append (map ldInfo ldAll) (map lintInfo lintAll)))))))))
 
 -- | 内部：按错误码精确查找。
@@ -89,81 +90,98 @@ matchesPrefix prefix code = startsWith prefix code
 
 -- | 内部：打印一条条目的完整信息：码、消息、说明、严重度 / 阶段 / 分类，有示例时附示例路径。
 printInfo : Member nFs FsOp r, Member nConsole ConsoleOp r => Info -> Eff r Int
-printInfo i = do
-  _ <- consolePrint "${i.infoCode}\n"
-  _ <- consolePrint "  message: ${i.infoTemplate}\n"
-  _ <- consolePrint "  meaning: ${i.infoDesc}\n"
-  _ <- consolePrint "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n"
-  _ <- consolePrint "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n"
-  _ <- consolePrint "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n"
-  example <- exampleOf i.infoCode
-  case example of
-    Just p => do
-      _ <- consolePrint "  example: ${p}\n"
-      pure 0
-    Nothing => pure 0
+printInfo i =
+  do
+    _ <- consolePrint "${i.infoCode}\n"
+    _ <- consolePrint "  message: ${i.infoTemplate}\n"
+    _ <- consolePrint "  meaning: ${i.infoDesc}\n"
+    _ <- consolePrint "  severity: ${diagSeverityOf (codeDomain i.infoCode)}\n"
+    _ <- consolePrint "  phase: ${diagPhaseOf (codeDomain i.infoCode)}\n"
+    _ <- consolePrint "  category: ${diagCategoryOf (codeDomain i.infoCode)}\n"
+    example <- exampleOf i.infoCode
+    case example of
+      Just p =>
+        do
+          _ <- consolePrint "  example: ${p}\n"
+          pure 0
+      Nothing => pure 0
 
 -- | 内部：逐条打印 `code  desc`；`prefix` 非空时只打印码以它开头的条目。
 listInfos : Member nConsole ConsoleOp r => List Info -> String -> Eff r Int
 listInfos [] prefix = pure 0
-listInfos (i :: rest) prefix = do
-  _ <-
-    if prefix == "" || matchesPrefix prefix i.infoCode then
-      fmap natToInt (consolePrint "${i.infoCode}  ${i.infoDesc}\n")
-    else pure 0
-  listInfos rest prefix
+listInfos (i :: rest) prefix =
+  do
+    _ <-
+      if prefix == "" || matchesPrefix prefix i.infoCode then
+        fmap natToInt (consolePrint "${i.infoCode}  ${i.infoDesc}\n")
+      else
+        pure 0
+    listInfos rest prefix
 
 -- | 内部：查询一条错误码；不存在时打印错误并返回 2。
 explainCode : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Bool -> Eff r Int
-explainCode code json = case findInfo code allInfos of
-  Nothing => do
-    _ <-
-      if json then fmap natToInt
-        (consolePrint "{\"error\":\"unknown diagnostic code\",\"code\":${jsonQuote code}}\n")
-      else fmap natToInt
-        (consolePrint "error: unknown diagnostic code `${code}` (try `vuna errors list`)\n")
-    pure 2
-  Just i => if json then printInfoJson i else printInfo i
+explainCode code json =
+  case findInfo code allInfos of
+    Nothing =>
+      do
+        _ <-
+          if json then
+            fmap
+              natToInt
+              (consolePrint "{\"error\":\"unknown diagnostic code\",\"code\":${jsonQuote code}}\n")
+          else
+            fmap
+              natToInt
+              (consolePrint "error: unknown diagnostic code `${code}` (try `vuna errors list`)\n")
+        pure 2
+    Just i => if json then printInfoJson i else printInfo i
 
 -- | `vuna errors list [PREFIX] [--json]` 的入口。
 export runExplainList : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-runExplainList args = case parseCmdArgs ["errors", "list"] args of
-  ErrC e => explainUsageError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [] => if flagSet parsed "json" then listInfosJson allInfos "" else listInfos allInfos ""
-    prefix :: _ =>
-      if flagSet parsed "json" then listInfosJson allInfos prefix else listInfos allInfos prefix
+runExplainList args =
+  case parseCmdArgs ["errors", "list"] args of
+    ErrC e => explainUsageError (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [] => if flagSet parsed "json" then listInfosJson allInfos "" else listInfos allInfos ""
+        prefix :: _ =>
+          if flagSet parsed "json" then listInfosJson allInfos prefix else listInfos allInfos prefix
 
 -- | `vuna errors explain <CODE> [--json]` 的入口。
 export runExplainCode : Member nFs FsOp r, Member nConsole ConsoleOp r => List String -> Eff r Int
-runExplainCode args = case parseCmdArgs ["errors", "explain"] args of
-  ErrC e => explainUsageError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [code] => explainCode code (flagSet parsed "json")
-    [] => explainUsageError "missing diagnostic code"
-    _ => explainUsageError "exactly one diagnostic code expected"
+runExplainCode args =
+  case parseCmdArgs ["errors", "explain"] args of
+    ErrC e => explainUsageError (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [code] => explainCode code (flagSet parsed "json")
+        [] => explainUsageError "missing diagnostic code"
+        _ => explainUsageError "exactly one diagnostic code expected"
 
 -- | 内部：参数错误的统一出口（exit 2）。
 explainUsageError : Member nConsole ConsoleOp r => String -> Eff r Int
-explainUsageError msg = do
-  _ <- consolePrint "error: ${msg}\n"
-  pure 2
+explainUsageError msg =
+  do
+    _ <- consolePrint "error: ${msg}\n"
+    pure 2
 
 -- | 内部：JSON 输出一条条目（`vuna errors explain --json`）。本地转义，不依赖 `Vuna.Json`
 -- （避免把 Explain 加进 Json 的依赖扇出）。
 printInfoJson : Member nFs FsOp r, Member nConsole ConsoleOp r => Info -> Eff r Int
-printInfoJson i = do
-  json <- infoJson i
-  _ <- consolePrint (json ++ "\n")
-  pure 0
+printInfoJson i =
+  do
+    json <- infoJson i
+    _ <- consolePrint (json ++ "\n")
+    pure 0
 
 -- | 内部：一条条目的 JSON 对象：`code` / `message` / `meaning` / `severity` / `phase` /
 -- `category` / `example`（无示例为 `null`）。
 infoJson : Member nFs FsOp r => Info -> Eff r String
-infoJson i = do
-  example <- exampleOf i.infoCode
-  pure
-    ("{" ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString example)] ++ "}")
+infoJson i =
+  do
+    example <- exampleOf i.infoCode
+    pure
+      ("{" ++ join "," [field "code" (jsonQuote i.infoCode), field "message" (jsonQuote i.infoTemplate), field "meaning" (jsonQuote i.infoDesc), field "severity" (jsonQuote (diagSeverityOf (codeDomain i.infoCode))), field "phase" (jsonQuote (diagPhaseOf (codeDomain i.infoCode))), field "category" (jsonQuote (diagCategoryOf (codeDomain i.infoCode))), field "example" (maybeJsonString example)] ++ "}")
 
 -- | 内部：`"key":value` 片段（`value` 已渲染好，可以是字符串、`null` 或 `true`/`false`）。
 field : String -> String -> String
@@ -199,17 +217,19 @@ hexDigit n = if n < 10 then 48 + n else 87 + n
 -- | 内部：对列表逐项做效应计算并保持顺序。
 mapEff : {r : Row} -> (a -> Eff r b) -> List a -> Eff r (List b)
 mapEff f [] = pure []
-mapEff f (x :: rest) = do
-  y <- f x
-  ys <- mapEff f rest
-  pure (y :: ys)
+mapEff f (x :: rest) =
+  do
+    y <- f x
+    ys <- mapEff f rest
+    pure (y :: ys)
 
 -- | 内部：`--list --json`：`{"codes":[...]}`，元素与 [Vuna.Explain.infoJson] 同一形状。
 listInfosJson : Member nFs FsOp r, Member nConsole ConsoleOp r => List Info -> String -> Eff r Int
-listInfosJson infos prefix = do
-  rendered <- mapEff infoJson (filter (matchesInfoPrefix prefix) infos)
-  _ <- consolePrint ("{\"codes\":[" ++ join "," rendered ++ "]}\n")
-  pure 0
+listInfosJson infos prefix =
+  do
+    rendered <- mapEff infoJson (filter (matchesInfoPrefix prefix) infos)
+    _ <- consolePrint ("{\"codes\":[" ++ join "," rendered ++ "]}\n")
+    pure 0
 
 -- | 内部：`--list` 的前缀过滤（空前缀 = 全要）。
 matchesInfoPrefix : String -> Info -> Bool

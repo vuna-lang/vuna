@@ -18,8 +18,9 @@ ask n s = sendCore (Named n (ReaderOp s)) "reader" n Ask
 
 -- | 内部：`local` 的操作解释——`Ask` 返回 `f env`（即在修改后的环境下读）。
 readerLocalOp : {s : Type} -> {a : Type} -> (env : s) -> (s -> s) -> (i : Type) -> (o : ReaderOp s i) -> (Base.Effect.Core.resIdx i o -> a) -> a
-readerLocalOp env f i op k = case op of
-  Ask => k (f env)
+readerLocalOp env f i op k =
+  case op of
+    Ask => k (f env)
 
 -- | 内部：用给定 env 安装一个只对 `comp` 生效的 handler（`weaken` 把结果行放回原行）。
 localWith : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> (env : s) -> Eff (Named n (ReaderOp s) :: r) a -> Eff (Named n (ReaderOp s) :: r) a
@@ -28,9 +29,10 @@ localWith n s f env comp =
 
 -- | 在 `f` 修改后的环境下运行 `comp`：先 `ask` 取当前 env，再装作用域 handler；改写不逃逸该动作。
 export local : (n : String) -> (s : Type) -> {a : Type} -> {r : Row} -> (s -> s) -> Eff (Named n (ReaderOp s) :: r) a -> Eff (Named n (ReaderOp s) :: r) a
-local n s f comp = do
-  env <- ask n s
-  localWith n s f env comp
+local n s f comp =
+  do
+    env <- ask n s
+    localWith n s f env comp
 
 -- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ReaderOp s`。
 export handleReader : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> (s : Type) -> {w : Member (Named n (ReaderOp s)) r} -> (a -> b) -> ((i : Type) -> (o : ReaderOp s i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n (ReaderOp s)) r) b

@@ -100,9 +100,10 @@ export unitTblOf : List (Pair String String) -> HashMap String String
 unitTblOf pairs = HashMap.insertAll pairs (HashMap.fromList [])
 
 export unitOfTbl : HashMap String String -> String -> String
-unitOfTbl tbl name = case HashMap.lookup name tbl of
-  Just u => u
-  Nothing => ""
+unitOfTbl tbl name =
+  case HashMap.lookup name tbl of
+    Just u => u
+    Nothing => ""
 
 export qualOf : String -> List (Pair String String) -> List (Pair String String) -> QualCtx
 qualOf unit defs datas = QualCtx unit (unitTblOf defs) (unitTblOf datas)
@@ -128,7 +129,8 @@ qualTypeText qc name = qualPrefix qc (unitOfTbl qc.qcDatas name) (typeName name)
 -- 加后缀 `_` 转义，保证「能 check 就能 compile」。
 ocamlReservedWords : List String
 ocamlReservedWords =
-  [ "and",
+  [
+    "and",
     "as",
     "assert",
     "asr",
@@ -235,9 +237,10 @@ toOCtor family (Pair ctor tys) = OCtor (ctorOcamlName family ctor) (map toOTy ty
 
 recordFieldsOf : String -> List (Pair Int String) -> List IrTy -> List (Pair String OTy)
 recordFieldsOf family [] tys = []
-recordFieldsOf family (f :: fs) tys = case tys of
-  [] => []
-  t :: ts => Pair (recordFieldLabel family (secondOf f)) (toOTy t) :: recordFieldsOf family fs ts
+recordFieldsOf family (f :: fs) tys =
+  case tys of
+    [] => []
+    t :: ts => Pair (recordFieldLabel family (secondOf f)) (toOTy t) :: recordFieldsOf family fs ts
 
 -- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行固定，保证产物逐字节稳定）。
 export irTypeDeclsText : QualCtx -> List IrTyDecl -> String
@@ -264,5 +267,6 @@ irTyDepsGo qc [] acc = reverse acc
 irTyDepsGo qc (n :: rest) acc =
   let
     owner = unitOfTbl qc.qcDatas n
-  in if owner == "" || owner == qc.qcUnit then irTyDepsGo qc rest acc
+  in if owner == "" || owner == qc.qcUnit then
+    irTyDepsGo qc rest acc
   else if memName owner acc then irTyDepsGo qc rest acc else irTyDepsGo qc rest (owner :: acc)

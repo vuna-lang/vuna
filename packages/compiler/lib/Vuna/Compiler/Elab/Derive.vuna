@@ -32,10 +32,12 @@ traitShortName tname = secondOf (splitLastDot (splitOnDot tname))
 -- 类方法的投影全局名：Loader 把 trait 方法 mangle 成 `<模块前缀>.<方法短名>`
 -- （`resolveTraitMethod`）；单文件内联 trait 没有模块前缀时就是短名。
 traitMethodGlobal : String -> String -> String
-traitMethodGlobal tname methodName = case splitLastDot (splitOnDot tname) of
-  Pair rev base => case rev of
-    [] => methodName
-    _ => "${joinDots rev}.${methodName}"
+traitMethodGlobal tname methodName =
+  case splitLastDot (splitOnDot tname) of
+    Pair rev base =>
+      case rev of
+        [] => methodName
+        _ => "${joinDots rev}.${methodName}"
 
 -- ---------------------------------------------------------------
 -- 展开 `deriving (T1, T2)` ⇒ 等价 instance 声明
@@ -54,32 +56,45 @@ expandDerivings decls =
 -- 只要任意一处声明了符号方法就用符号名，否则回落标识符名。
 traitMethodOf : List Decl -> String -> String -> String -> String
 traitMethodOf decls classShort symbolName identName =
-  if anyTraitHasMethod decls classShort symbolName then symbolName
+  if anyTraitHasMethod decls classShort symbolName then
+    symbolName
   else if anyTraitHasMethod decls classShort identName then identName else symbolName
 
 anyTraitHasMethod : List Decl -> String -> String -> Bool
 anyTraitHasMethod [] cls m = False
-anyTraitHasMethod (d :: rest) cls m = case d of
-  DTrait tname params supers methods sp =>
-    if traitShortName tname == cls && memName m (map traitMethodName methods) then True
-    else anyTraitHasMethod rest cls m
-  _ => anyTraitHasMethod rest cls m
+anyTraitHasMethod (d :: rest) cls m =
+  case d of
+    DTrait tname params supers methods sp =>
+      if traitShortName tname == cls && memName m (map traitMethodName methods) then
+        True
+      else
+        anyTraitHasMethod rest cls m
+    _ => anyTraitHasMethod rest cls m
 
 collectDerivings : List Decl -> List Decl -> Check (List Decl)
 collectDerivings all [] = OkC []
-collectDerivings all (d :: rest) = case d of
-  DData name params kind ctors derivings viaField repr lin sp =>
-    if viaField then collectDerivings all rest
-    else if length derivings == 0 then collectDerivings all rest
-    else Vuna.Compiler.Base.Common.bind (derivingsFor all name params ctors derivings sp)
-      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
-  -- record 不再降级成 DData，派生直接从字段表合成单构造子骨架。
-  DRecord name params fields derivings viaField repr lin sp =>
-    if viaField then collectDerivings all rest
-    else if length derivings == 0 then collectDerivings all rest
-    else Vuna.Compiler.Base.Common.bind (recordDerivingsFor all name params fields derivings sp)
-      (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
-  _ => collectDerivings all rest
+collectDerivings all (d :: rest) =
+  case d of
+    DData name params kind ctors derivings viaField repr lin sp =>
+      if viaField then
+        collectDerivings all rest
+      else if length derivings == 0 then
+        collectDerivings all rest
+      else
+        Vuna.Compiler.Base.Common.bind
+          (derivingsFor all name params ctors derivings sp)
+          (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
+    -- record 不再降级成 DData，派生直接从字段表合成单构造子骨架。
+    DRecord name params fields derivings viaField repr lin sp =>
+      if viaField then
+        collectDerivings all rest
+      else if length derivings == 0 then
+        collectDerivings all rest
+      else
+        Vuna.Compiler.Base.Common.bind
+          (recordDerivingsFor all name params fields derivings sp)
+          (\insts => Vuna.Compiler.Base.Common.bind (collectDerivings all rest) (\more => OkC (append insts more)))
+    _ => collectDerivings all rest
 
 -- | record 的派生骨架——字段箭头（不含族参数 Pi）+ 返回记录类型；构造子名 = record 名。
 recordCtorOf : String -> List String -> List Field -> Span -> Ctor
@@ -101,15 +116,18 @@ derivingsForGo all dname params ctors [] sp acc = OkC (reverse acc)
 -- ctx 只包含「在某个构造子字段类型里出现过」的类型参数（顺序 = 声明顺序），
 -- 与实例 tele 一一对应；`deriving (Ord)` 的字段比较只用 lt/le，因此只要求 Ord ctx。
 derivingsForGo all dname params ctors (t :: rest) sp acc =
-  Vuna.Compiler.Base.Common.bind (deriveInstance all dname params ctors t sp)
+  Vuna.Compiler.Base.Common.bind
+    (deriveInstance all dname params ctors t sp)
     (\decl => derivingsForGo all dname params ctors rest sp (decl :: acc))
 
 -- ctx 参数：data 参数里在构造子字段类型中出现过的（保持声明顺序）。
 deriveCtxParams : List String -> List Ctor -> List String
 deriveCtxParams [] ctors = []
 deriveCtxParams (p :: rest) ctors =
-  if anyCtorMentions p ctors then (::) p (deriveCtxParams rest ctors)
-  else deriveCtxParams rest ctors
+  if anyCtorMentions p ctors then
+    (::) p (deriveCtxParams rest ctors)
+  else
+    deriveCtxParams rest ctors
 
 anyCtorMentions : String -> List Ctor -> Bool
 anyCtorMentions p [] = False
@@ -146,7 +164,8 @@ deriveInstance all dname params ctors tn sp =
         eqName = traitMethodOf all "Eq" "==" "eq"
         neqName = traitMethodOf all "Eq" "/=" "neq"
         ms =
-          [ DFun eqName [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
+          [
+            DFun eqName [PVar "sx" sp, PVar "sy" sp] (eqBody ctors sp) sp,
             DFun neqName [PVar "sx" sp, PVar "sy" sp] (neqBody "==" sp) sp
           ]
       in OkC (DInstance ctxExprs hd ms sp)
@@ -157,7 +176,8 @@ deriveInstance all dname params ctors tn sp =
         gtName = traitMethodOf all "Ord" ">" "gt"
         geName = traitMethodOf all "Ord" ">=" "ge"
         ms =
-          [ DFun ltName [PVar "sx" sp, PVar "sy" sp] (ordBody "<=" ctors sp) sp,
+          [
+            DFun ltName [PVar "sx" sp, PVar "sy" sp] (ordBody "<=" ctors sp) sp,
             DFun leName [PVar "sx" sp, PVar "sy" sp] (leBody "<" sp) sp,
             DFun gtName [PVar "sx" sp, PVar "sy" sp] (gtBody "<" sp) sp,
             DFun geName [PVar "sx" sp, PVar "sy" sp] (geBody "<=" sp) sp
@@ -184,23 +204,24 @@ deriveInstance all dname params ctors tn sp =
 deriveWrapper : String -> String -> String -> List Ctor -> Expr -> Span -> Check Decl
 deriveWrapper tn methodName wantTy [] hd sp =
   tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
-deriveWrapper tn methodName wantTy (c :: rest) hd sp = case rest of
-  [] => deriveWrapperCtor tn methodName wantTy c hd sp
-  _ => tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
+deriveWrapper tn methodName wantTy (c :: rest) hd sp =
+  case rest of
+    [] => deriveWrapperCtor tn methodName wantTy c hd sp
+    _ => tcErr1 sp (DeriveSingleCtor (traitShortName tn)) (traitShortName tn)
 
 -- | `deriveWrapper` 的单构造子分支：校验构造子 arity 为 1、字段类型等于目标类型名，
 -- 然后生成转发到构造子的实例方法。
 deriveWrapperCtor : String -> String -> String -> Ctor -> Expr -> Span -> Check Decl
-deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp = if ar == 1 then case deriveFieldTypes ty of
-  dom :: rest => case rest of
-    [] =>
-      if deriveFieldTypeName dom == wantTy then OkC
-        (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar cn sp) [EVar "sx" sp] sp) sp] sp)
-      else tcErr3 sp (DeriveFieldType (traitShortName tn) wantTy (deriveFieldTypeName dom))
-        (traitShortName tn) wantTy (deriveFieldTypeName dom)
-    _ => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
-  [] => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
-else tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+deriveWrapperCtor tn methodName wantTy (Ctor cn ty ar cnsp) hd sp =
+  if ar == 1 then
+    case deriveFieldTypes ty of
+      dom :: rest =>
+        case rest of
+          [] => if deriveFieldTypeName dom == wantTy then OkC (DInstance [] hd [DFun methodName [PVar "sx" sp] (EApp (EVar cn sp) [EVar "sx" sp] sp) sp] sp) else tcErr3 sp (DeriveFieldType (traitShortName tn) wantTy (deriveFieldTypeName dom)) (traitShortName tn) wantTy (deriveFieldTypeName dom)
+          _ => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+      [] => tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
+  else
+    tcErr1 sp (DeriveCtorFieldCount (traitShortName tn)) (traitShortName tn)
 
 -- | 把箭头链（`EApp (EVar "->")` 或 `EPi`）拆成字段类型列表：依次取出域类型。
 deriveFieldTypes : Expr -> List Expr
@@ -246,11 +267,14 @@ showCtor proj cn vs sp =
 
 showFields : String -> List String -> Span -> Expr
 showFields proj [] sp = EStr ")" sp
-showFields proj (v :: rest) sp = case rest of
-  [] => EApp (EVar "++" sp) [showOne proj v sp, EStr ")" sp] sp
-  _ =>
-    EApp (EVar "++" sp)
-      [showOne proj v sp, EApp (EVar "++" sp) [EStr " " sp, showFields proj rest sp] sp] sp
+showFields proj (v :: rest) sp =
+  case rest of
+    [] => EApp (EVar "++" sp) [showOne proj v sp, EStr ")" sp] sp
+    _ =>
+      EApp
+        (EVar "++" sp)
+        [showOne proj v sp, EApp (EVar "++" sp) [EStr " " sp, showFields proj rest sp] sp]
+        sp
 
 showOne : String -> String -> Span -> Expr
 showOne proj v sp = EApp (EVar proj sp) [EVar v sp] sp
@@ -278,8 +302,12 @@ hashAlts proj combineProj ((Ctor cn ty ar cnsp) :: rest) i sp =
 hashFields : String -> String -> List String -> Expr -> Span -> Expr
 hashFields proj combineProj [] acc sp = acc
 hashFields proj combineProj (v :: rest) acc sp =
-  hashFields proj combineProj rest
-    (EApp (EVar combineProj sp) [acc, EApp (EVar proj sp) [EVar v sp] sp] sp) sp
+  hashFields
+    proj
+    combineProj
+    rest
+    (EApp (EVar combineProj sp) [acc, EApp (EVar proj sp) [EVar v sp] sp] sp)
+    sp
 
 -- ---------------------------------------------------------------
 -- Eq
@@ -298,16 +326,20 @@ eqAlt (Ctor cn ty ar cnsp) sp =
 
 eqInner : String -> Int -> Span -> List (Pair Pat Expr)
 eqInner cn ar sp =
-  [ Pair (PCon cn (map (\v => PVar v sp) (varNames "fb" ar)) sp) (conjFields (varNames "fa" ar) (varNames "fb" ar) sp),
+  [
+    Pair
+      (PCon cn (map (\v => PVar v sp) (varNames "fb" ar)) sp)
+      (conjFields (varNames "fa" ar) (varNames "fb" ar) sp),
     Pair (PWild sp) (boolFalse sp)
   ]
 
 -- `f0 == g0 && f1 == g1 && ..`；无字段 ⇒ `True`。
 conjFields : List String -> List String -> Span -> Expr
 conjFields [] gs sp = boolTrue sp
-conjFields (f :: fs) (g :: gs) sp = case fs of
-  [] => EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp
-  _ => EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, conjFields fs gs sp] sp
+conjFields (f :: fs) (g :: gs) sp =
+  case fs of
+    [] => EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp
+    _ => EApp (EVar "&&" sp) [EApp (EVar "==" sp) [EVar f sp, EVar g sp] sp, conjFields fs gs sp] sp
 conjFields fs gs sp = boolFalse sp
 
 -- `neq sx sy = if eq sx sy then False else True`（`eq` 用解析后的投影名）。
@@ -341,7 +373,8 @@ ordInnerGo leProj i ar ((Ctor cn ty car cnsp) :: rest) j sp =
     gs = varNames "fb" car
     pat = PCon cn (map (\v => PVar v sp) gs) sp
     body =
-      if j == i then ltFields leProj (varNames "fa" ar) gs sp
+      if j == i then
+        ltFields leProj (varNames "fa" ar) gs sp
       else if j < i then boolFalse sp else boolTrue sp
   in Pair pat body :: ordInnerGo leProj i ar rest (j + 1) sp
 
@@ -349,12 +382,14 @@ ordInnerGo leProj i ar ((Ctor cn ty car cnsp) :: rest) j sp =
 -- 只用 Ord 的 lt/le（不用 `==`），因此 `deriving (Ord)` 只需 Ord ctx。
 ltFields : String -> List String -> List String -> Span -> Expr
 ltFields leProj [] gs sp = boolFalse sp
-ltFields leProj (f :: fs) (g :: gs) sp = case fs of
-  [] => EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp
-  _ =>
-    EApp (EVar "||" sp)
-      [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar g sp, EVar f sp] sp, ltFields leProj fs gs sp] sp] sp]
-      sp
+ltFields leProj (f :: fs) (g :: gs) sp =
+  case fs of
+    [] => EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp
+    _ =>
+      EApp
+        (EVar "||" sp)
+        [EApp (EVar "<" sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar f sp, EVar g sp] sp, EApp (EVar "&&" sp) [EApp (EVar leProj sp) [EVar g sp, EVar f sp] sp, ltFields leProj fs gs sp] sp] sp]
+        sp
 -- 字段数不匹配的组合走不到（derive 生成的字段表按构造子对齐），但 DT 要求模式矩阵穷尽。
 ltFields leProj _ _ sp = boolFalse sp
 
@@ -362,7 +397,8 @@ ltFields leProj _ _ sp = boolFalse sp
 -- （`deriving (Ord)` 不要求同时 derive `Eq`）。`lt` 用解析后的投影名。
 leBody : String -> Span -> Expr
 leBody ltProj sp =
-  EApp (EVar "||" sp)
+  EApp
+    (EVar "||" sp)
     [EApp (EVar ltProj sp) [EVar "sx" sp, EVar "sy" sp] sp, EIf (EApp (EVar ltProj sp) [EVar "sy" sp, EVar "sx" sp] sp) (boolFalse sp) (boolTrue sp) sp]
     sp
 
@@ -374,8 +410,10 @@ varNamesAt prefix i n = varNamesAtGo (n - i) prefix n
 
 varNamesAtGo : Int -> String -> Int -> List String
 varNamesAtGo remaining prefix n =
-  if remaining <= 0 then []
-  else (::) (prefix ++ strFromInt (n - remaining)) (varNamesAtGo (remaining - 1) prefix n)
+  if remaining <= 0 then
+    []
+  else
+    (::) (prefix ++ strFromInt (n - remaining)) (varNamesAtGo (remaining - 1) prefix n)
 
 -- `gt sx sy = lt sy sx`；`ge sx sy = le sy sx`（都用已生成的 `lt` / `le`）。
 gtBody : String -> Span -> Expr

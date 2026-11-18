@@ -67,21 +67,44 @@ cgAll = concatLists [cgChunk0, cgChunk1]
 
 cgChunk0 : List CgEntry
 cgChunk0 =
-  [ CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
-    CgEntry (cgCode InterpCannotExecuteEffects) (cgTemplate InterpCannotExecuteEffects) "interp 不能执行效应",
+  [
+    CgEntry (cgCode DependencyCycle) (cgTemplate DependencyCycle) "运行时定义间依赖成环",
+    CgEntry
+      (cgCode InterpCannotExecuteEffects)
+      (cgTemplate InterpCannotExecuteEffects)
+      "interp 不能执行效应",
     CgEntry (cgCode MainNotValue) (cgTemplate MainNotValue) "main 未归约为值",
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型出现在运行时",
-    CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 出现在运行时（它没有运行时定义）",
-    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 vuna-base 的 Base.Data.List.List 声明才能桥接，但包内没有 base 依赖"
+    CgEntry
+      (cgCode (AxiomAtRuntime ""))
+      (cgTemplate (AxiomAtRuntime ""))
+      "axiom 出现在运行时（它没有运行时定义）",
+    CgEntry
+      (cgCode (ListBridgeRequired ""))
+      (cgTemplate (ListBridgeRequired ""))
+      "内建需要 vuna-base 的 Base.Data.List.List 声明才能桥接，但包内没有 base 依赖"
   ]
 
 cgChunk1 : List CgEntry
 cgChunk1 =
-  [ CgEntry (cgCode (RecursiveValueDefinition "")) (cgTemplate (RecursiveValueDefinition "")) "递归组中的零参值定义无法安全生成",
-    CgEntry (cgCode (TypeLevelBindingRuntime "")) (cgTemplate (TypeLevelBindingRuntime "")) "类型级绑定出现在运行时",
-    CgEntry (cgCode (TypeLevelNameRuntime "")) (cgTemplate (TypeLevelNameRuntime "")) "类型级名字出现在运行时",
-    CgEntry (cgCode (UnsolvedMetavarRuntime "")) (cgTemplate (UnsolvedMetavarRuntime "")) "运行时代码中存在未解元变量"
+  [
+    CgEntry
+      (cgCode (RecursiveValueDefinition ""))
+      (cgTemplate (RecursiveValueDefinition ""))
+      "递归组中的零参值定义无法安全生成",
+    CgEntry
+      (cgCode (TypeLevelBindingRuntime ""))
+      (cgTemplate (TypeLevelBindingRuntime ""))
+      "类型级绑定出现在运行时",
+    CgEntry
+      (cgCode (TypeLevelNameRuntime ""))
+      (cgTemplate (TypeLevelNameRuntime ""))
+      "类型级名字出现在运行时",
+    CgEntry
+      (cgCode (UnsolvedMetavarRuntime ""))
+      (cgTemplate (UnsolvedMetavarRuntime ""))
+      "运行时代码中存在未解元变量"
   ]
 
 -- ---------------------------------------------------------------

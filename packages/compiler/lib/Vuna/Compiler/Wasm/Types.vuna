@@ -131,24 +131,27 @@ wasmRecordFieldGo name (p :: rest) =
   if secondOf p == name then Just (firstOf p) else wasmRecordFieldGo name rest
 
 export wasmIsRecordFam : WasmFam -> Bool
-wasmIsRecordFam fam = case fam.wasmFamKind of
-  FamRecord => True
-  _ => False
+wasmIsRecordFam fam =
+  case fam.wasmFamKind of
+    FamRecord => True
+    _ => False
 
 export wasmFamFields : WasmFam -> List WatField
-wasmFamFields fam = case fam.wasmFamKind of
-  FamVariant => WatField False WvI32 :: repeatField fam.wasmFamMaxFields
-  FamRecord => repeatField (length fam.wasmFamRecordFields)
-  FamUnboxed => []
+wasmFamFields fam =
+  case fam.wasmFamKind of
+    FamVariant => WatField False WvI32 :: repeatField fam.wasmFamMaxFields
+    FamRecord => repeatField (length fam.wasmFamRecordFields)
+    FamUnboxed => []
 
 repeatField : Int -> List WatField
 repeatField n = if n <= 0 then [] else WatField False WvAnyRef :: repeatField (n - 1)
 
 -- | 族的 wasm 类型（去装箱族没有）。
 export wasmFamType : WasmFam -> Maybe WatType
-wasmFamType fam = case fam.wasmFamKind of
-  FamUnboxed => Nothing
-  _ => Just (WatStructType (watFamName fam.wasmFamName) (wasmFamFields fam))
+wasmFamType fam =
+  case fam.wasmFamKind of
+    FamUnboxed => Nothing
+    _ => Just (WatStructType (watFamName fam.wasmFamName) (wasmFamFields fam))
 
 -- ---------------------------------------------------------------
 -- canonical List 族（运行时的桥接 helper 需要）
@@ -168,10 +171,13 @@ wasmListFamFromFams (Just lf) fams =
     consName = irListConsOf lf
   in case wasmFamLookup fams family of
     Nothing => Nothing
-    Just fam => case wasmCtorTagOf fam nilName of
-      Nothing => Nothing
-      Just nilTag => case wasmCtorTagOf fam consName of
+    Just fam =>
+      case wasmCtorTagOf fam nilName of
         Nothing => Nothing
-        Just consTag => case wasmCtorFieldCountOf fam consName of
-          Nothing => Nothing
-          Just consN => Just (WasmListFam family nilTag consTag consN)
+        Just nilTag =>
+          case wasmCtorTagOf fam consName of
+            Nothing => Nothing
+            Just consTag =>
+              case wasmCtorFieldCountOf fam consName of
+                Nothing => Nothing
+                Just consN => Just (WasmListFam family nilTag consTag consN)

@@ -33,24 +33,26 @@ import Base.Effect.Env as EffEnv
 -- | `vuna deps fetch` 的入口：解析 `--locked` 与可选目录（默认 `.`）；参数过多打印
 -- `error: ...` 并返回 2。
 export runFetch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runFetch args = case parseCmdArgs ["deps", "fetch"] args of
-  ErrC e => fetchFailText (diagText e)
-  OkC parsed =>
-    let
-      locked = flagSet parsed "locked"
-    in case parsed.positionals of
-      [] => fetchAt "." locked
-      [dir] => fetchAt dir locked
-      _ => fetchFailText "too many arguments; expected at most one directory"
+runFetch args =
+  case parseCmdArgs ["deps", "fetch"] args of
+    ErrC e => fetchFailText (diagText e)
+    OkC parsed =>
+      let
+        locked = flagSet parsed "locked"
+      in case parsed.positionals of
+        [] => fetchAt "." locked
+        [dir] => fetchAt dir locked
+        _ => fetchFailText "too many arguments; expected at most one directory"
 
 -- | 取一个包目录声明的**完整依赖闭包**。path 依赖递归进工作树目录；git / url 依赖
 -- 物化后递归进 `pkgs/<digest>`。实现是「待处理目录队列 + visited」：`fetchAll` 与
 -- `dirsOfDeps` 各自结构递归，不做函数间互递归（SCT 只认结构下降）。
 export fetchAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> Eff r Int
-fetchAt dir locked = do
-  abs <- absolutePath dir
-  root <- Vuna.PackageStore.storeRootEff
-  fetchAll fetchFuel root (projectIdAddrOf abs) abs locked [abs] []
+fetchAt dir locked =
+  do
+    abs <- absolutePath dir
+    root <- Vuna.PackageStore.storeRootEff
+    fetchAll fetchFuel root (projectIdAddrOf abs) abs locked [abs] []
 
 -- | 内部：依赖图的**访问预算**（不是语义深度限制）：`visited` 已防环，这里只挡失控 / 恶意图。
 -- 正常包图远小于此；超了说明输入不是有限 DAG，报可读错误而不是静默截断。
@@ -61,139 +63,177 @@ fetchFuel = 4096
 -- 任一包失败即返回 1。
 fetchAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> String -> String -> String -> Bool -> List String -> List String -> Eff r Int
 fetchAll fuel root pid proj locked [] visited = pure 0
-fetchAll fuel root pid proj locked (dir :: rest) visited = if fuel <= 0 then
-  fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
-else if memName dir visited then do
-  _ <- consolePrint "fetch: ${dir} (cycle skipped)\n"
-  fetchAll (fuel - 1) root pid proj locked rest visited
-else do
-  mdirs <- dirsOfPackage root pid proj locked dir
-  case mdirs of
-    Nothing => pure 1
-    Just dirs => fetchAll (fuel - 1) root pid proj locked (append dirs rest) (dir :: visited)
+fetchAll fuel root pid proj locked (dir :: rest) visited =
+  if fuel <= 0 then
+    fetchFailText "fetch: dependency graph exceeds ${strFromInt fetchFuel} package visits"
+  else if memName dir visited then
+    do
+      _ <- consolePrint "fetch: ${dir} (cycle skipped)\n"
+      fetchAll (fuel - 1) root pid proj locked rest visited
+  else
+    do
+      mdirs <- dirsOfPackage root pid proj locked dir
+      case mdirs of
+        Nothing => pure 1
+        Just dirs => fetchAll (fuel - 1) root pid proj locked (append dirs rest) (dir :: visited)
 
 -- | 内部：读并校验一个包目录的 manifest，再逐个处理它的依赖（[Vuna.Fetch.dirsOfDeps]）。
 -- 缺 manifest 或 parse / 校验失败时打印诊断并返回 `Nothing`。
 dirsOfPackage : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> Eff r (Maybe (List String))
-dirsOfPackage root pid proj locked dir = do
-  let
-    manifestPath = "${dir}/vuna.toml"
-  in do
-    exists <- fsFileExists manifestPath
-    if exists then do
-      raw <- fsReadFile manifestPath
-      case parseManifest manifestPath raw of
-        ErrC e => do
-          _ <- printDiagEff e
+dirsOfPackage root pid proj locked dir =
+  do
+    let
+      manifestPath = "${dir}/vuna.toml"
+    in do
+      exists <- fsFileExists manifestPath
+      if exists then
+        do
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e =>
+              do
+                _ <- printDiagEff e
+                pure Nothing
+            OkC manifest =>
+              case validateManifest manifest of
+                ErrC e =>
+                  do
+                    _ <- printDiagEff e
+                    pure Nothing
+                OkC valid => dirsOfDeps root pid proj locked dir valid.manifestDependencies
+      else
+        do
+          _ <- fetchFailText "missing vuna.toml in ${dir}"
           pure Nothing
-        OkC manifest => case validateManifest manifest of
-          ErrC e => do
-            _ <- printDiagEff e
-            pure Nothing
-          OkC valid => dirsOfDeps root pid proj locked dir valid.manifestDependencies
-    else do
-      _ <- fetchFailText "missing vuna.toml in ${dir}"
-      pure Nothing
 
 -- | 内部：逐个依赖求其目录（[Vuna.Fetch.dirOfDep]），任一个失败即整体失败。
 dirsOfDeps : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> List Dependency -> Eff r (Maybe (List String))
 dirsOfDeps root pid proj locked baseDir [] = pure (Just [])
-dirsOfDeps root pid proj locked baseDir (dep :: rest) = do
-  here <- dirOfDep root pid proj locked baseDir dep
-  case here of
-    Nothing => pure Nothing
-    Just d => do
-      there <- dirsOfDeps root pid proj locked baseDir rest
-      case there of
-        Nothing => pure Nothing
-        Just ds => pure (Just (d :: ds))
+dirsOfDeps root pid proj locked baseDir (dep :: rest) =
+  do
+    here <- dirOfDep root pid proj locked baseDir dep
+    case here of
+      Nothing => pure Nothing
+      Just d =>
+        do
+          there <- dirsOfDeps root pid proj locked baseDir rest
+          case there of
+            Nothing => pure Nothing
+            Just ds => pure (Just (d :: ds))
 
 -- | 内部：单个依赖 → 可递归的目录：path 依赖校验后返回工作树里的绝对路径；git / url 依赖
 -- 命中缓存或取包成功时返回物化目录，并把摘要追加到项目 root。失败（缺摘要、摘要 /
 -- 身份不符、`--locked` 下未物化、取包失败）打印诊断并返回 `Nothing`。
 dirOfDep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Bool -> String -> Dependency -> Eff r (Maybe String)
-dirOfDep root pid proj locked baseDir dep = case depSourceOf dep of
-  DepPath rel => do
-    abs <- absolutePath (joinPath baseDir rel)
-    let
-      manifestPath = "${abs}/vuna.toml"
-    in do
-      exists <- fsFileExists manifestPath
-      if exists then do
-        raw <- fsReadFile manifestPath
-        case parseManifest manifestPath raw of
-          ErrC e => do
-            _ <- printDiagEff e
-            pure Nothing
-          OkC manifest => case validateManifest manifest of
-            ErrC e => do
-              _ <- printDiagEff e
+dirOfDep root pid proj locked baseDir dep =
+  case depSourceOf dep of
+    DepPath rel =>
+      do
+        abs <- absolutePath (joinPath baseDir rel)
+        let
+          manifestPath = "${abs}/vuna.toml"
+        in do
+          exists <- fsFileExists manifestPath
+          if exists then
+            do
+              raw <- fsReadFile manifestPath
+              case parseManifest manifestPath raw of
+                ErrC e =>
+                  do
+                    _ <- printDiagEff e
+                    pure Nothing
+                OkC manifest =>
+                  case validateManifest manifest of
+                    ErrC e =>
+                      do
+                        _ <- printDiagEff e
+                        pure Nothing
+                    OkC valid =>
+                      do
+                        ps <- packageSourceEff abs valid
+                        code <- verifyPathDep dep ps
+                        if code /= 0 then pure Nothing else pure (Just abs)
+          else
+            do
+              _ <- fetchFailText "missing vuna.toml in ${abs}"
               pure Nothing
-            OkC valid => do
-              ps <- packageSourceEff abs valid
-              code <- verifyPathDep dep ps
-              if code /= 0 then pure Nothing else pure (Just abs)
-      else do
-        _ <- fetchFailText "missing vuna.toml in ${abs}"
-        pure Nothing
-  DepGit url rev => case depHashOf dep of
-    Nothing => do
-      _ <- fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
-      pure Nothing
-    Just expected => do
-      let
-        digest = normalizeHash expected
-      in do
-        done <- isMaterializedEff root digest
-        if done then do
-          ok <- verifyMaterializedIdentityEff root dep digest
-          if ok then do
-            _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-            _ <- storeRootAppendEff pid proj [digest]
-            pure (Just (materializedDir root digest))
-          else pure Nothing
-        else if locked then do
-          _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
-          pure Nothing
-        else do
-          stored <- fetchGit root dep url rev digest
-          case stored of
-            Nothing => pure Nothing
-            Just got => do
-              _ <- storeRootAppendEff pid proj [got]
-              pure (Just (materializedDir root got))
-  DepUrl u => case depHashOf dep of
-    Nothing => do
-      _ <- fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
-      pure Nothing
-    Just expected => do
-      let
-        digest = normalizeHash expected
-      in do
-        done <- isMaterializedEff root digest
-        if done then do
-          ok <- verifyMaterializedIdentityEff root dep digest
-          if ok then do
-            _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
-            _ <- storeRootAppendEff pid proj [digest]
-            pure (Just (materializedDir root digest))
-          else pure Nothing
-        else if locked then do
-          _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
-          pure Nothing
-        else do
-          stored <- fetchUrl root dep u digest
-          case stored of
-            Nothing => pure Nothing
-            Just got => do
-              _ <- storeRootAppendEff pid proj [got]
-              pure (Just (materializedDir root got))
+    DepGit url rev =>
+      case depHashOf dep of
+        Nothing =>
+          do
+            _ <- fetchFailText "dependency ${depAliasOf dep}: git source needs hash"
+            pure Nothing
+        Just expected =>
+          do
+            let
+              digest = normalizeHash expected
+            in do
+              done <- isMaterializedEff root digest
+              if done then
+                do
+                  ok <- verifyMaterializedIdentityEff root dep digest
+                  if ok then
+                    do
+                      _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
+                      _ <- storeRootAppendEff pid proj [digest]
+                      pure (Just (materializedDir root digest))
+                  else
+                    pure Nothing
+              else if locked then
+                do
+                  _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+                  pure Nothing
+              else
+                do
+                  stored <- fetchGit root dep url rev digest
+                  case stored of
+                    Nothing => pure Nothing
+                    Just got =>
+                      do
+                        _ <- storeRootAppendEff pid proj [got]
+                        pure (Just (materializedDir root got))
+    DepUrl u =>
+      case depHashOf dep of
+        Nothing =>
+          do
+            _ <- fetchFailText "dependency ${depAliasOf dep}: url source needs hash"
+            pure Nothing
+        Just expected =>
+          do
+            let
+              digest = normalizeHash expected
+            in do
+              done <- isMaterializedEff root digest
+              if done then
+                do
+                  ok <- verifyMaterializedIdentityEff root dep digest
+                  if ok then
+                    do
+                      _ <- consolePrint "fetch: ${depAliasOf dep} cached\n"
+                      _ <- storeRootAppendEff pid proj [digest]
+                      pure (Just (materializedDir root digest))
+                  else
+                    pure Nothing
+              else if locked then
+                do
+                  _ <- fetchFail (NotMaterialized (depAliasOf dep)) (depAliasOf dep)
+                  pure Nothing
+              else
+                do
+                  stored <- fetchUrl root dep u digest
+                  case stored of
+                    Nothing => pure Nothing
+                    Just got =>
+                      do
+                        _ <- storeRootAppendEff pid proj [got]
+                        pure (Just (materializedDir root got))
 
 -- | 内部：声明的 `identity` 与实际语义身份是否一致（未声明 `identity` 视为通过）。
 identityOkOf : Dependency -> PackageSource -> Bool
-identityOkOf dep ps = case depIdentityOf dep of
-  Nothing => True
-  Just expected => normalizeHash expected == identityHashOf ps
+identityOkOf dep ps =
+  case depIdentityOf dep of
+    Nothing => True
+    Just expected => normalizeHash expected == identityHashOf ps
 
 -- | 内部：打印 `PKG_IdentityMismatch`（声明值与实际值并列）。
 identityMismatch : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
@@ -207,45 +247,59 @@ identityMismatch alias expected actual =
 -- | 内部：已物化缓存也要校验声明的身份：缓存命中不能绕过 pin / registry 的身份检查。
 -- 读物化目录的 manifest 求实际身份，不符时打印诊断并返回 False。
 verifyMaterializedIdentityEff : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> Dependency -> String -> Eff r Bool
-verifyMaterializedIdentityEff root dep digest = case depIdentityOf dep of
-  Nothing => pure True
-  Just _ => do
-    let
-      dir = materializedDir root digest
-      manifestPath = "${dir}/vuna.toml"
-    in do
-      raw <- fsReadFile manifestPath
-      case parseManifest manifestPath raw of
-        ErrC e => do
-          _ <- printDiagEff e
-          pure False
-        OkC manifest => case validateManifest manifest of
-          ErrC e => do
-            _ <- printDiagEff e
-            pure False
-          OkC valid => do
-            ps <- packageSourceEff dir valid
-            if identityOkOf dep ps then pure True
-            else do
-              _ <-
-                identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep))
-                  (identityHashOf ps)
-              pure False
+verifyMaterializedIdentityEff root dep digest =
+  case depIdentityOf dep of
+    Nothing => pure True
+    Just _ =>
+      do
+        let
+          dir = materializedDir root digest
+          manifestPath = "${dir}/vuna.toml"
+        in do
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e =>
+              do
+                _ <- printDiagEff e
+                pure False
+            OkC manifest =>
+              case validateManifest manifest of
+                ErrC e =>
+                  do
+                    _ <- printDiagEff e
+                    pure False
+                OkC valid =>
+                  do
+                    ps <- packageSourceEff dir valid
+                    if identityOkOf dep ps then
+                      pure True
+                    else
+                      do
+                        _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+                        pure False
 
 -- | 内部：校验 path 依赖：有 `hash` 就比对内容摘要，无 `hash` 视为未锁定（只打印内容摘要）；
 -- 两种情况都继续比对 `identity`。成功返回 0，失败打印诊断并返回非零。
 verifyPathDep : Member nConsole ConsoleOp r => Dependency -> PackageSource -> Eff r Int
-verifyPathDep dep ps = case depHashOf dep of
-  Nothing => if identityOkOf dep ps then do
-    _ <- consolePrint "fetch: ${depAliasOf dep} path unlocked (${contentHashOf ps})\n"
-    pure 0
-  else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-  Just expected => if verifyHash expected (contentHashOf ps) then
-    if identityOkOf dep ps then do
-      _ <- consolePrint "fetch: ${depAliasOf dep} path ok\n"
-      pure 0
-    else identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
-  else hashMismatch (depAliasOf dep) expected (contentHashOf ps)
+verifyPathDep dep ps =
+  case depHashOf dep of
+    Nothing =>
+      if identityOkOf dep ps then
+        do
+          _ <- consolePrint "fetch: ${depAliasOf dep} path unlocked (${contentHashOf ps})\n"
+          pure 0
+      else
+        identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+    Just expected =>
+      if verifyHash expected (contentHashOf ps) then
+        if identityOkOf dep ps then
+          do
+            _ <- consolePrint "fetch: ${depAliasOf dep} path ok\n"
+            pure 0
+        else
+          identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+      else
+        hashMismatch (depAliasOf dep) expected (contentHashOf ps)
 
 -- | 内部：`Maybe String` → 文本，`Nothing` 给空串（用于诊断里的「声明值」）。
 fromMaybeText : Maybe String -> String
@@ -263,30 +317,38 @@ fetchGit root dep url rev expected =
     _ <- processRunIn root ["rm", "-rf", tmp]
     _ <- ensureDirPath tmp
     cloneCode <- processRunIn tmp ["git", "clone", "--quiet", url, "."]
-    if cloneCode /= 0 then do
-      _ <- fetchFail (FetchFailed url) url
-      pure Nothing
-    else do
-      checkoutCode <- processRunIn tmp ["git", "checkout", "--quiet", rev]
-      if checkoutCode /= 0 then do
-        _ <- fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
+    if cloneCode /= 0 then
+      do
+        _ <- fetchFail (FetchFailed url) url
         pure Nothing
-      else do
-        let
-          manifestPath = "${tmp}/vuna.toml"
-        in do
-          raw <- fsReadFile manifestPath
-          case parseManifest manifestPath raw of
-            ErrC e => do
-              _ <- printDiagEff e
-              pure Nothing
-            OkC manifest => case validateManifest manifest of
-              ErrC e => do
-                _ <- printDiagEff e
-                pure Nothing
-              OkC valid => do
-                ps <- packageSourceEff tmp valid
-                verifyAndStore root dep expected ps
+    else
+      do
+        checkoutCode <- processRunIn tmp ["git", "checkout", "--quiet", rev]
+        if checkoutCode /= 0 then
+          do
+            _ <- fetchFail (FetchFailed "${url}@${rev}") "${url}@${rev}"
+            pure Nothing
+        else
+          do
+            let
+              manifestPath = "${tmp}/vuna.toml"
+            in do
+              raw <- fsReadFile manifestPath
+              case parseManifest manifestPath raw of
+                ErrC e =>
+                  do
+                    _ <- printDiagEff e
+                    pure Nothing
+                OkC manifest =>
+                  case validateManifest manifest of
+                    ErrC e =>
+                      do
+                        _ <- printDiagEff e
+                        pure Nothing
+                    OkC valid =>
+                      do
+                        ps <- packageSourceEff tmp valid
+                        verifyAndStore root dep expected ps
 
 -- | 内部：校验声明摘要与身份后写对象 + 物化（git 与 url 共用）；成功返回实际摘要，
 -- 摘要或身份不符时打印诊断并返回 `Nothing`。
@@ -295,17 +357,20 @@ verifyAndStore root dep expected ps =
   let
     actual = contentHashOf ps
   in if verifyHash expected actual then
-    if identityOkOf dep ps then do
-      _ <- writeObjectEff root actual ps.psFiles
-      _ <- materializeEff root actual ps.psFiles
-      _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
-      pure (Just actual)
-    else do
-      _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+    if identityOkOf dep ps then
+      do
+        _ <- writeObjectEff root actual ps.psFiles
+        _ <- materializeEff root actual ps.psFiles
+        _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
+        pure (Just actual)
+    else
+      do
+        _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+        pure Nothing
+  else
+    do
+      _ <- hashMismatch (depAliasOf dep) expected actual
       pure Nothing
-  else do
-    _ <- hashMismatch (depAliasOf dep) expected actual
-    pure Nothing
 
 -- | 内部：url 取包 —— 用 `curl -fsSL` 把对象文件下到 `objects/pkg/<摘要>`，读回对象
 -- （framing + 内容地址校验）后物化并校验身份；身份不符时删掉物化目录。
@@ -316,41 +381,49 @@ fetchUrl root dep url expected =
   in do
     _ <- ensureDirPath (packageObjectsDir root)
     code <- processRunIn root ["curl", "-fsSL", url, "-o", obj]
-    if code /= 0 then do
-      _ <- fetchFail (FetchFailed url) url
-      pure Nothing
-    else do
-      got <- readObjectEff root expected
-      case got of
-        Nothing => do
-          _ <- fetchFail (FetchFailed url) url
-          pure Nothing
-        Just files => do
-          _ <- materializeEff root expected files
-          let
-            dir = materializedDir root expected
-            manifestPath = "${dir}/vuna.toml"
-          in do
-            raw <- fsReadFile manifestPath
-            case parseManifest manifestPath raw of
-              ErrC e => do
-                _ <- printDiagEff e
-                pure Nothing
-              OkC manifest => case validateManifest manifest of
-                ErrC e => do
-                  _ <- printDiagEff e
-                  pure Nothing
-                OkC valid => do
-                  ps <- packageSourceEff dir valid
-                  if identityOkOf dep ps then do
-                    _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
-                    pure (Just expected)
-                  else do
-                    _ <-
-                      identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep))
-                        (identityHashOf ps)
-                    _ <- processRunIn root ["rm", "-rf", dir]
-                    pure Nothing
+    if code /= 0 then
+      do
+        _ <- fetchFail (FetchFailed url) url
+        pure Nothing
+    else
+      do
+        got <- readObjectEff root expected
+        case got of
+          Nothing =>
+            do
+              _ <- fetchFail (FetchFailed url) url
+              pure Nothing
+          Just files =>
+            do
+              _ <- materializeEff root expected files
+              let
+                dir = materializedDir root expected
+                manifestPath = "${dir}/vuna.toml"
+              in do
+                raw <- fsReadFile manifestPath
+                case parseManifest manifestPath raw of
+                  ErrC e =>
+                    do
+                      _ <- printDiagEff e
+                      pure Nothing
+                  OkC manifest =>
+                    case validateManifest manifest of
+                      ErrC e =>
+                        do
+                          _ <- printDiagEff e
+                          pure Nothing
+                      OkC valid =>
+                        do
+                          ps <- packageSourceEff dir valid
+                          if identityOkOf dep ps then
+                            do
+                              _ <- consolePrint "fetch: ${depAliasOf dep} ok\n"
+                              pure (Just expected)
+                          else
+                            do
+                              _ <- identityMismatch (depAliasOf dep) (fromMaybeText (depIdentityOf dep)) (identityHashOf ps)
+                              _ <- processRunIn root ["rm", "-rf", dir]
+                              pure Nothing
 
 -- | 内部：打印 `PKG_HashMismatch`（声明值与实际值并列）。
 hashMismatch : Member nConsole ConsoleOp r => String -> String -> String -> Eff r Int
@@ -363,62 +436,74 @@ hashMismatch alias expected actual =
 
 -- | 内部：构造并打印单参数包诊断（`PKG_NotMaterialized` / `PKG_FetchFailed`）。
 fetchFail : Member nConsole ConsoleOp r => PkgErr (Succ Zero) -> String -> Eff r Int
-fetchFail e arg = case pkgNoLoc1 e arg of
-  ErrC d => printDiagEff d
-  OkC _ => pure 0
+fetchFail e arg =
+  case pkgNoLoc1 e arg of
+    ErrC d => printDiagEff d
+    OkC _ => pure 0
 
 -- | 内部：打印 `error: <msg>` 并返回退出码 2（用法 / 输入错误）。
 fetchFailText : Member nConsole ConsoleOp r => String -> Eff r Int
-fetchFailText msg = do
-  _ <- consolePrint "error: ${msg}\n"
-  pure 2
+fetchFailText msg =
+  do
+    _ <- consolePrint "error: ${msg}\n"
+    pure 2
 
 -- | 内部：打印诊断文本并返回退出码 1。
 printDiagEff : Member nConsole ConsoleOp r => Diagnostic -> Eff r Int
-printDiagEff d = do
-  _ <- consolePrint (diagText d ++ "\n")
-  pure 1
+printDiagEff d =
+  do
+    _ <- consolePrint (diagText d ++ "\n")
+    pure 1
 
 -- ---------------------------------------------------------------
 -- vuna deps pin：把 git 依赖的实际内容摘要写回 manifest（只改已有 `hash = ...` 行）
 -- ---------------------------------------------------------------
 -- | `vuna deps pin` 的入口：解析可选目录（默认 `.`）；参数过多打印 `error: ...` 并返回 2。
 export runPin : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runPin args = case parseCmdArgs ["deps", "pin"] args of
-  ErrC e => fetchFailText (diagText e)
-  OkC parsed => case parsed.positionals of
-    [] => pinAt "."
-    [dir] => pinAt dir
-    _ => fetchFailText "too many arguments; expected at most one directory"
+runPin args =
+  case parseCmdArgs ["deps", "pin"] args of
+    ErrC e => fetchFailText (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [] => pinAt "."
+        [dir] => pinAt dir
+        _ => fetchFailText "too many arguments; expected at most one directory"
 
 -- | 内部：在 `dir` 的 manifest 里把 git 依赖的 `hash` / `identity` 更新为实际值。内容未变时只
 -- 提示 up to date，否则原子写回。缺 manifest 或诊断失败返回非零。
 pinAt : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
-pinAt dir = do
-  abs <- absolutePath dir
-  let
-    manifestPath = "${abs}/vuna.toml"
-  in do
-    exists <- fsFileExists manifestPath
-    if exists then do
-      raw <- fsReadFile manifestPath
-      case parseManifest manifestPath raw of
-        ErrC e => printDiagEff e
-        OkC manifest => case validateManifest manifest of
-          ErrC e => printDiagEff e
-          OkC valid => do
-            root <- Vuna.PackageStore.storeRootEff
-            pins <- collectPins root (manifestDir manifestPath) valid.manifestDependencies []
-            let
-              updated = applyPins pins raw
-            in if updated == raw then do
-              _ <- consolePrint "pin: up to date\n"
-              pure 0
-            else do
-              _ <- fsWriteFileAtomic manifestPath updated
-              _ <- consolePrint "pin: updated ${strFromInt (listLen pins)} dependency hash(es)\n"
-              pure 0
-    else fetchFailText "missing vuna.toml in ${dir}"
+pinAt dir =
+  do
+    abs <- absolutePath dir
+    let
+      manifestPath = "${abs}/vuna.toml"
+    in do
+      exists <- fsFileExists manifestPath
+      if exists then
+        do
+          raw <- fsReadFile manifestPath
+          case parseManifest manifestPath raw of
+            ErrC e => printDiagEff e
+            OkC manifest =>
+              case validateManifest manifest of
+                ErrC e => printDiagEff e
+                OkC valid =>
+                  do
+                    root <- Vuna.PackageStore.storeRootEff
+                    pins <- collectPins root (manifestDir manifestPath) valid.manifestDependencies []
+                    let
+                      updated = applyPins pins raw
+                    in if updated == raw then
+                      do
+                        _ <- consolePrint "pin: up to date\n"
+                        pure 0
+                    else
+                      do
+                        _ <- fsWriteFileAtomic manifestPath updated
+                        _ <- consolePrint "pin: updated ${strFromInt (listLen pins)} dependency hash(es)\n"
+                        pure 0
+      else
+        fetchFailText "missing vuna.toml in ${dir}"
 
 -- | 一条待写回的 pin 结果。
 record PinInfo where
@@ -433,21 +518,26 @@ record PinInfo where
 -- 参与：url 对象文件的地址由对象自身给出，path 是可变输入；两者打印 skipped 后跳过。
 collectPins : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> List Dependency -> List PinInfo -> Eff r (List PinInfo)
 collectPins root baseDir [] acc = pure (reverse acc)
-collectPins root baseDir (dep :: rest) acc = case depSourceOf dep of
-  DepPath rel => do
-    _ <- consolePrint "pin: ${depAliasOf dep} path (skipped)\n"
-    collectPins root baseDir rest acc
-  DepUrl u => do
-    _ <- consolePrint "pin: ${depAliasOf dep} url (skipped: url objects carry their own address)\n"
-    collectPins root baseDir rest acc
-  DepGit url rev => do
-    actual <- resolveGitDigest root (depAliasOf dep) url rev
-    case actual of
-      Nothing => do
-        _ <- fetchFailText "pin: cannot resolve ${depAliasOf dep} (${url}@${rev})"
-        pure []
-      Just p =>
-        collectPins root baseDir rest (PinInfo (depAliasOf dep) (firstOf p) (secondOf p) :: acc)
+collectPins root baseDir (dep :: rest) acc =
+  case depSourceOf dep of
+    DepPath rel =>
+      do
+        _ <- consolePrint "pin: ${depAliasOf dep} path (skipped)\n"
+        collectPins root baseDir rest acc
+    DepUrl u =>
+      do
+        _ <-
+          consolePrint "pin: ${depAliasOf dep} url (skipped: url objects carry their own address)\n"
+        collectPins root baseDir rest acc
+    DepGit url rev =>
+      do
+        actual <- resolveGitDigest root (depAliasOf dep) url rev
+        case actual of
+          Nothing =>
+            do
+              _ <- fetchFailText "pin: cannot resolve ${depAliasOf dep} (${url}@${rev})"
+              pure []
+          Just p => collectPins root baseDir rest (PinInfo (depAliasOf dep) (firstOf p) (secondOf p) :: acc)
 
 -- | 内部：clone 到 `tmp/pin-<别名>`、checkout rev、读 manifest 求内容摘要与身份，并写
 -- 对象 + 物化。clone / checkout / manifest 失败时打印原因并返回 `Nothing`。
@@ -460,35 +550,43 @@ resolveGitDigest root alias url rev =
     _ <- processRunIn root ["rm", "-rf", tmp]
     _ <- ensureDirPath tmp
     cloneCode <- processRunIn tmp ["git", "clone", "--quiet", url, "."]
-    if cloneCode /= 0 then do
-      _ <- consolePrint "pin: git clone failed for ${alias}\n"
-      pure Nothing
-    else do
-      checkoutCode <- processRunIn tmp ["git", "checkout", "--quiet", rev]
-      if checkoutCode /= 0 then do
-        _ <- consolePrint "pin: git checkout failed for ${alias}\n"
+    if cloneCode /= 0 then
+      do
+        _ <- consolePrint "pin: git clone failed for ${alias}\n"
         pure Nothing
-      else do
-        let
-          manifestPath = "${tmp}/vuna.toml"
-        in do
-          raw <- fsReadFile manifestPath
-          case parseManifest manifestPath raw of
-            ErrC e => do
-              _ <- printDiagEff e
-              pure Nothing
-            OkC manifest => case validateManifest manifest of
-              ErrC e => do
-                _ <- printDiagEff e
-                pure Nothing
-              OkC valid => do
-                ps <- packageSourceEff tmp valid
-                let
-                  actual = contentHashOf ps
-                in do
-                  _ <- writeObjectEff root actual ps.psFiles
-                  _ <- materializeEff root actual ps.psFiles
-                  pure (Just (Pair actual (identityHashOf ps)))
+    else
+      do
+        checkoutCode <- processRunIn tmp ["git", "checkout", "--quiet", rev]
+        if checkoutCode /= 0 then
+          do
+            _ <- consolePrint "pin: git checkout failed for ${alias}\n"
+            pure Nothing
+        else
+          do
+            let
+              manifestPath = "${tmp}/vuna.toml"
+            in do
+              raw <- fsReadFile manifestPath
+              case parseManifest manifestPath raw of
+                ErrC e =>
+                  do
+                    _ <- printDiagEff e
+                    pure Nothing
+                OkC manifest =>
+                  case validateManifest manifest of
+                    ErrC e =>
+                      do
+                        _ <- printDiagEff e
+                        pure Nothing
+                    OkC valid =>
+                      do
+                        ps <- packageSourceEff tmp valid
+                        let
+                          actual = contentHashOf ps
+                        in do
+                          _ <- writeObjectEff root actual ps.psFiles
+                          _ <- materializeEff root actual ps.psFiles
+                          pure (Just (Pair actual (identityHashOf ps)))
 
 -- | 内部：文本写回：只替换 `[dependencies.<alias>]` 段内已有的 `hash = ...` 行，并在其后写
 -- `identity = ...`。没有 hash 行（内联表 / 字符串简写 / 尚未写摘要）时不动该段：
@@ -500,16 +598,21 @@ applyPins pins raw = join "\n" (pinGo pins (split "\n" raw) Nothing False)
 -- `wroteIdentity` 表示本段已写过 `identity`（旧的丢弃）。
 pinGo : List PinInfo -> List String -> Maybe String -> Bool -> List String
 pinGo pins [] current wroteIdentity = []
-pinGo pins (line :: rest) current wroteIdentity = case depSectionAlias (trim line) of
-  Just alias => line :: pinGo pins rest (Just alias) False
-  Nothing => if isSectionHeader (trim line) then line :: pinGo pins rest Nothing False
-  else case current of
-    Just alias => if startsWith "hash" (trim line) then case lookupPin alias pins of
-      Nothing => line :: pinGo pins rest current wroteIdentity
-      Just info => replaceHashLine info line :: identityLine info :: pinGo pins rest current True
-    else if startsWith "identity" (trim line) && wroteIdentity then pinGo pins rest current wroteIdentity
-    else line :: pinGo pins rest current wroteIdentity
-    Nothing => line :: pinGo pins rest current wroteIdentity
+pinGo pins (line :: rest) current wroteIdentity =
+  case depSectionAlias (trim line) of
+    Just alias => line :: pinGo pins rest (Just alias) False
+    Nothing =>
+      if isSectionHeader (trim line) then
+        line :: pinGo pins rest Nothing False
+      else
+        case current of
+          Just alias =>
+            if startsWith "hash" (trim line) then
+              case lookupPin alias pins of
+                Nothing => line :: pinGo pins rest current wroteIdentity
+                Just info => replaceHashLine info line :: identityLine info :: pinGo pins rest current True
+            else if startsWith "identity" (trim line) && wroteIdentity then pinGo pins rest current wroteIdentity else line :: pinGo pins rest current wroteIdentity
+          Nothing => line :: pinGo pins rest current wroteIdentity
 
 -- | 内部：pin 要写入的 `identity` 行。
 identityLine : PinInfo -> String
@@ -520,7 +623,8 @@ depSectionAlias : String -> Maybe String
 depSectionAlias t =
   if startsWith "[dependencies." t && endsWith "]" t then
     Just (substring 14 (natFromInt (strLength t - 15)) t)
-  else Nothing
+  else
+    Nothing
 
 -- | 内部：该行（已 trim）是否是段头。
 isSectionHeader : String -> Bool

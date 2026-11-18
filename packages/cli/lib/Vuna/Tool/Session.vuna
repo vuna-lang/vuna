@@ -45,27 +45,30 @@ toolMarkerCodec = "tool-marker 1"
 -- | 查对象是否存在：命中给 `Just (Just 地址)`（调用方拿它去读载荷），未命中给 `Nothing`；
 -- marker 读不出载荷，调用方按未命中重算。
 export toolHitValue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> Eff r (Maybe (Maybe String))
-toolHitValue ts key deps = do
-  let
-    addr = toolSessionAddrOf ts key deps
-  in do
-    exists <- storeObjectExistsEff "tool-context" addr
-    pure (if exists then Just (Just addr) else Nothing)
+toolHitValue ts key deps =
+  do
+    let
+      addr = toolSessionAddrOf ts key deps
+    in do
+      exists <- storeObjectExistsEff "tool-context" addr
+      pure (if exists then Just (Just addr) else Nothing)
 
 -- | 提交 marker 节点（成功但载荷在调用方手里）。
 export toolCommitValue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> Eff r ToolSession
-toolCommitValue ts key deps = do
-  _ <- storeObjectWriteEff "tool-context" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
-  pure ts
+toolCommitValue ts key deps =
+  do
+    _ <- storeObjectWriteEff "tool-context" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
+    pure ts
 
 -- | 写载荷对象（同一输入同一地址；内容未变则不写盘），返回地址。
 export toolStorePayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> String -> String -> Eff r (Pair ToolSession String)
-toolStorePayload ts key deps codec payload = do
-  let
-    addr = toolSessionAddrOf ts key deps
-  in do
-    _ <- storeObjectWriteEff "tool-context" codec addr payload
-    pure (Pair ts addr)
+toolStorePayload ts key deps codec payload =
+  do
+    let
+      addr = toolSessionAddrOf ts key deps
+    in do
+      _ <- storeObjectWriteEff "tool-context" codec addr payload
+      pure (Pair ts addr)
 
 -- | 读载荷（codec 不符 / 坏字节 ⇒ `Nothing` ⇒ 调用方重算）。
 export toolLoadPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Maybe String)

@@ -72,13 +72,16 @@ lookupImports name ((Pair n deps) :: rest) = if n == name then deps else lookupI
 
 topoVisitGo : Int -> List (Pair String (List String)) -> List String -> List String -> List String -> Pair (List String) (List String)
 topoVisitGo fuel graph [] visited order = Pair visited order
-topoVisitGo fuel graph (name :: rest) visited order = if fuel <= 0 then Pair visited order
-else if memName name visited then topoVisitGo fuel graph rest visited order
-else
-  let
-    deps = lookupImports name graph
-    after = topoVisitGo (fuel - 1) graph deps visited order
-  in topoVisitGo (fuel - 1) graph rest (name :: firstOf after) (name :: secondOf after)
+topoVisitGo fuel graph (name :: rest) visited order =
+  if fuel <= 0 then
+    Pair visited order
+  else if memName name visited then
+    topoVisitGo fuel graph rest visited order
+  else
+    let
+      deps = lookupImports name graph
+      after = topoVisitGo (fuel - 1) graph deps visited order
+    in topoVisitGo (fuel - 1) graph rest (name :: firstOf after) (name :: secondOf after)
 
 -- | 依赖在前的模块顺序（未出现在表里的名字被跳过）。
 --
@@ -113,6 +116,7 @@ dedupNames (x :: rest) = if memName x rest then dedupNames rest else (::) x (ded
 -- 隐式导入由调用方在算摘要时并入（见模块头）。
 export headerOfSource : String -> SourceFile -> ModHeader
 headerOfSource name (SourceFile _ imports fixities _ _ reexports _) =
-  ModHeader name
+  ModHeader
+    name
     (dedupNames (append (map importNameOf imports) (concatMap exportItemDep reexports)))
     (map fixRowOf fixities)

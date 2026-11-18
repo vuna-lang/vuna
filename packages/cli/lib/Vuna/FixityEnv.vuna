@@ -68,22 +68,24 @@ fixitiesForFile (FixityEnv ctxCache modCache) path source =
   let
     dir = dirKey path
   in do
-    ctxRes <- case cacheLookup dir ctxCache of
-      Just ctx => pure (OkC ctx)
-      Nothing => contextForFile path
+    ctxRes <-
+      case cacheLookup dir ctxCache of
+        Just ctx => pure (OkC ctx)
+        Nothing => contextForFile path
     case ctxRes of
       ErrC e => pure (Pair (FixityEnv ctxCache modCache) (ErrC e))
       OkC ctx =>
         let
           ctxCache2 = cachePut dir ctx ctxCache
           modKey = contextDir ctx
-          mods = case cacheLookup modKey modCache of
-            Just ms => ms
-            Nothing => []
+          mods =
+            case cacheLookup modKey modCache of
+              Just ms => ms
+              Nothing => []
         in do
           fxR <- fixitiesForSourceIn ctx mods path source
-          pure (case fxR of
-            ErrC e => Pair (FixityEnv ctxCache2 modCache) (ErrC e)
-            OkC (Pair mods2 fx) =>
-              Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (OkC fx)
-          )
+          pure (
+              case fxR of
+                ErrC e => Pair (FixityEnv ctxCache2 modCache) (ErrC e)
+                OkC (Pair mods2 fx) => Pair (FixityEnv ctxCache2 (cachePut modKey mods2 modCache)) (OkC fx)
+            )

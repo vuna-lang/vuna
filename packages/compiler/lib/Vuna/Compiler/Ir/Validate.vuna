@@ -24,7 +24,8 @@ validateUnit u =
   let
     defs = concatMap irGroupDefs u.irUnitGroups
     nameTbl = HashMap.ofNames (map irDefName defs)
-  in Vuna.Compiler.Base.Common.bind (checkUniqueDefNames defs)
+  in Vuna.Compiler.Base.Common.bind
+    (checkUniqueDefNames defs)
     (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => checkBinderTys u.irUnitTyDecls defs))))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
@@ -48,31 +49,38 @@ firstUnorderedDep nameTbl visible defs = firstUnorderedDepGo nameTbl visible def
 
 firstUnorderedDepGo : HashMap String Bool -> HashMap String Bool -> List IrDef -> Maybe (Pair String String)
 firstUnorderedDepGo nameTbl visible [] = Nothing
-firstUnorderedDepGo nameTbl visible (d :: rest) = case firstMissingDep nameTbl visible (irDefName d) (irDefDeps d) of
-  Just bad => Just bad
-  Nothing => firstUnorderedDepGo nameTbl visible rest
+firstUnorderedDepGo nameTbl visible (d :: rest) =
+  case firstMissingDep nameTbl visible (irDefName d) (irDefDeps d) of
+    Just bad => Just bad
+    Nothing => firstUnorderedDepGo nameTbl visible rest
 
 firstMissingDep : HashMap String Bool -> HashMap String Bool -> String -> List String -> Maybe (Pair String String)
 firstMissingDep nameTbl visible self [] = Nothing
 firstMissingDep nameTbl visible self (dep :: rest) =
   if HashMap.member dep nameTbl then
-    if HashMap.member dep visible then firstMissingDep nameTbl visible self rest
-    else Just (Pair self dep)
-  else firstMissingDep nameTbl visible self rest
+    if HashMap.member dep visible then
+      firstMissingDep nameTbl visible self rest
+    else
+      Just (Pair self dep)
+  else
+    firstMissingDep nameTbl visible self rest
 
 -- | 每个运行时符号都必须在 `Ir.Runtime` 契约里；饱和应用还必须与 `irInlineArity` 一致。
 -- 违反即编译器 bug（内部错），不是用户面诊断。
 checkSymbolRefs : List (Pair String (Maybe Int)) -> Check Int
 checkSymbolRefs [] = OkC 0
-checkSymbolRefs (p :: rest) = case irRtLookup (firstOf p) of
-  Nothing => icInternal "IR references an undeclared runtime symbol: `${firstOf p}`"
-  Just _ => case secondOf p of
-    Nothing => checkSymbolRefs rest
-    Just n =>
-      if n > 0 && irInlineArity (firstOf p) == n then checkSymbolRefs rest
-      else
-        icInternal
-          "IR saturated runtime symbol `${firstOf p}` has the wrong arity (${strFromInt n})"
+checkSymbolRefs (p :: rest) =
+  case irRtLookup (firstOf p) of
+    Nothing => icInternal "IR references an undeclared runtime symbol: `${firstOf p}`"
+    Just _ =>
+      case secondOf p of
+        Nothing => checkSymbolRefs rest
+        Just n =>
+          if n > 0 && irInlineArity (firstOf p) == n then
+            checkSymbolRefs rest
+          else
+            icInternal
+              "IR saturated runtime symbol `${firstOf p}` has the wrong arity (${strFromInt n})"
 
 -- | 程序级校验：单元级校验 + 入口引用的 main 必须在本单元定义里。
 export validateProgram : IrProgram -> Check Int
@@ -83,8 +91,10 @@ validateProgram p =
   in case u.irUnitEntry of
     Nothing => validateUnit u
     Just e =>
-      if memName e.irEntryMain (map irDefName defs) then validateUnit u
-      else icInternal "IR entry references an undefined main: `${e.irEntryMain}`"
+      if memName e.irEntryMain (map irDefName defs) then
+        validateUnit u
+      else
+        icInternal "IR entry references an undefined main: `${e.irEntryMain}`"
 
 -- ---------------------------------------------------------------
 -- binder 类型槽校验
@@ -93,44 +103,52 @@ validateProgram p =
 -- 要与本单元声明的运行时类型参数个数一致。跨单元类型只递归检查实参，不检查 arity。
 checkBinderTys : List IrTyDecl -> List IrDef -> Check Int
 checkBinderTys decls [] = OkC 0
-checkBinderTys decls (d :: rest) = case irDefBody d of
-  Nothing => checkBinderTys decls rest
-  Just body =>
-    Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body])
-      (\_ => checkBinderTys decls rest)
+checkBinderTys decls (d :: rest) =
+  case irDefBody d of
+    Nothing => checkBinderTys decls rest
+    Just body =>
+      Vuna.Compiler.Base.Common.bind
+        (checkBinderTysWork (8 * irSize body + 64) decls [body])
+        (\_ => checkBinderTys decls rest)
 
 checkBinderTysWork : Int -> List IrTyDecl -> List Ir -> Check Int
-checkBinderTysWork fuel decls work = if fuel <= 0 then icFuel "ir-binder-ty"
-else case work of
-  [] => OkC 0
-  ir :: rest =>
-    Vuna.Compiler.Base.Common.bind (checkNodeBinderTys decls ir)
-      (\_ => checkBinderTysWork (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
+checkBinderTysWork fuel decls work =
+  if fuel <= 0 then
+    icFuel "ir-binder-ty"
+  else
+    case work of
+      [] => OkC 0
+      ir :: rest => Vuna.Compiler.Base.Common.bind (checkNodeBinderTys decls ir) (\_ => checkBinderTysWork (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
 
 checkNodeBinderTys : List IrTyDecl -> Ir -> Check Int
-checkNodeBinderTys decls ir = case ir of
-  IrLam bs body => checkBinderTysOf decls bs
-  IrLet bs scrut body => checkBinderTysOf decls bs
-  IrCase scrut alts => checkAltBinderTys decls alts
-  IrNatCase scrut fresh zero succ catch =>
-    Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls zero)
-      (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
-  _ => OkC 0
+checkNodeBinderTys decls ir =
+  case ir of
+    IrLam bs body => checkBinderTysOf decls bs
+    IrLet bs scrut body => checkBinderTysOf decls bs
+    IrCase scrut alts => checkAltBinderTys decls alts
+    IrNatCase scrut fresh zero succ catch =>
+      Vuna.Compiler.Base.Common.bind
+        (checkAltBinderTysM decls zero)
+        (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
+    _ => OkC 0
 
 checkBinderTysOf : List IrTyDecl -> List IrBinder -> Check Int
 checkBinderTysOf decls [] = OkC 0
-checkBinderTysOf decls (b :: rest) = if b.irBinderErased then case b.irBinderTy of
-  Nothing => checkBinderTysOf decls rest
-  Just _ => icInternal "erased binder carries a runtime type annotation"
-else case b.irBinderTy of
-  Nothing => checkBinderTysOf decls rest
-  Just ty =>
-    Vuna.Compiler.Base.Common.bind (checkTyArity decls ty) (\_ => checkBinderTysOf decls rest)
+checkBinderTysOf decls (b :: rest) =
+  if b.irBinderErased then
+    case b.irBinderTy of
+      Nothing => checkBinderTysOf decls rest
+      Just _ => icInternal "erased binder carries a runtime type annotation"
+  else
+    case b.irBinderTy of
+      Nothing => checkBinderTysOf decls rest
+      Just ty => Vuna.Compiler.Base.Common.bind (checkTyArity decls ty) (\_ => checkBinderTysOf decls rest)
 
 checkAltBinderTys : List IrTyDecl -> List IrAlt -> Check Int
 checkAltBinderTys decls [] = OkC 0
 checkAltBinderTys decls (alt :: rest) =
-  Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls (irAltBindersOf alt))
+  Vuna.Compiler.Base.Common.bind
+    (checkBinderTysOf decls (irAltBindersOf alt))
     (\_ => checkAltBinderTys decls rest)
 
 checkAltBinderTysM : List IrTyDecl -> Maybe IrAlt -> Check Int
@@ -149,11 +167,14 @@ checkTyArity decls (IrTyArray a) = checkTyArity decls a
 checkTyArity decls (IrTyRef a) = checkTyArity decls a
 checkTyArity decls (IrTyFun d c) =
   Vuna.Compiler.Base.Common.bind (checkTyArity decls d) (\_ => checkTyArity decls c)
-checkTyArity decls (IrTyData fam args) = case tyDeclArityOf decls fam of
-  Just n =>
-    if listLength args == n then checkTyArityList decls args
-    else icInternal "binder type annotation has the wrong type argument count for `${fam}`"
-  Nothing => checkTyArityList decls args
+checkTyArity decls (IrTyData fam args) =
+  case tyDeclArityOf decls fam of
+    Just n =>
+      if listLength args == n then
+        checkTyArityList decls args
+      else
+        icInternal "binder type annotation has the wrong type argument count for `${fam}`"
+    Nothing => checkTyArityList decls args
 
 checkTyArityList : List IrTyDecl -> List IrTy -> Check Int
 checkTyArityList decls [] = OkC 0
@@ -187,46 +208,51 @@ checkScopedUnit u = checkScopedDefs (concatMap irGroupDefs u.irUnitGroups)
 
 checkScopedDefs : List IrDef -> Check Int
 checkScopedDefs [] = OkC 0
-checkScopedDefs (d :: rest) = case irDefBody d of
-  Nothing => checkScopedDefs rest
-  Just body =>
-    Vuna.Compiler.Base.Common.bind (checkScopedWork (scopedFuelOf body + 1) [Pair [] body])
-      (\_ => checkScopedDefs rest)
+checkScopedDefs (d :: rest) =
+  case irDefBody d of
+    Nothing => checkScopedDefs rest
+    Just body =>
+      Vuna.Compiler.Base.Common.bind
+        (checkScopedWork (scopedFuelOf body + 1) [Pair [] body])
+        (\_ => checkScopedDefs rest)
 
 scopedFuelOf : Ir -> Int
 scopedFuelOf body = 8 * irSize body + 64
 
 checkScopedWork : Int -> List (Pair (List IrBinder) Ir) -> Check Int
-checkScopedWork fuel work = if fuel <= 0 then icFuel "ir-scope"
-else case work of
-  [] => OkC 0
-  (Pair scope ir) :: rest => case ir of
-    IrVar b =>
-      if b.irBinderErased then icInternal "erased binder reached runtime IR"
-      else if memBinder b scope then checkScopedWork (fuel - 1) rest
-      else icInternal "IR variable references a binder outside its scope"
-    _ => checkScopedWork (fuel - 1) (append (scopedChildren scope ir) rest)
+checkScopedWork fuel work =
+  if fuel <= 0 then
+    icFuel "ir-scope"
+  else
+    case work of
+      [] => OkC 0
+      (Pair scope ir) :: rest =>
+        case ir of
+          IrVar b => if b.irBinderErased then icInternal "erased binder reached runtime IR" else if memBinder b scope then checkScopedWork (fuel - 1) rest else icInternal "IR variable references a binder outside its scope"
+          _ => checkScopedWork (fuel - 1) (append (scopedChildren scope ir) rest)
 
 -- 子节点 + 它们的作用域：只有 `IrLam` / `IrLet` / `IrCase` / `IrNatCase` 引入 binder。
 scopedChildren : List IrBinder -> Ir -> List (Pair (List IrBinder) Ir)
-scopedChildren scope ir = case ir of
-  IrCtor family ctor args => map (\a => Pair scope a) args
-  IrRecord family fields => map (\p => Pair scope (secondOf p)) fields
-  IrProj base family field => [Pair scope base]
-  IrRecUpd base family fields => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
-  IrRtApp sym args => map (\a => Pair scope a) args
-  IrCast inner => [Pair scope inner]
-  IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
-  IrLam bs body => [Pair (append bs scope) body]
-  IrApp f a => [Pair scope f, Pair scope a]
-  IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
-  IrCase scrut alts => Pair scope scrut :: altWork scope alts
-  IrNatCase scrut fresh zero succ catch =>
-    append [Pair scope scrut]
-      (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
-  IrConcatMany parts => map (\a => Pair scope a) parts
-  IrEffThunk family ctor unitTy arity prim => [Pair scope prim]
-  _ => []
+scopedChildren scope ir =
+  case ir of
+    IrCtor family ctor args => map (\a => Pair scope a) args
+    IrRecord family fields => map (\p => Pair scope (secondOf p)) fields
+    IrProj base family field => [Pair scope base]
+    IrRecUpd base family fields => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
+    IrRtApp sym args => map (\a => Pair scope a) args
+    IrCast inner => [Pair scope inner]
+    IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
+    IrLam bs body => [Pair (append bs scope) body]
+    IrApp f a => [Pair scope f, Pair scope a]
+    IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
+    IrCase scrut alts => Pair scope scrut :: altWork scope alts
+    IrNatCase scrut fresh zero succ catch =>
+      append
+        [Pair scope scrut]
+        (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
+    IrConcatMany parts => map (\a => Pair scope a) parts
+    IrEffThunk family ctor unitTy arity prim => [Pair scope prim]
+    _ => []
 
 maybeAlts : Maybe IrAlt -> List IrAlt
 maybeAlts Nothing = []
@@ -256,23 +282,24 @@ irSize : Ir -> Int
 irSize ir = 1 + irSizeChildren ir
 
 irSizeChildren : Ir -> Int
-irSizeChildren ir = case ir of
-  IrCtor family ctor args => irSizeList args
-  IrRecord family fields => irSizeFields fields
-  IrProj base family field => irSize base
-  IrRecUpd base family fields => irSize base + irSizeFields fields
-  IrRtApp sym args => irSizeList args
-  IrCast inner => irSize inner
-  IrLet bs scrut body => irSize scrut + irSize body
-  IrLam bs body => irSize body
-  IrApp f a => irSize f + irSize a
-  IrIf c th el => irSize c + irSize th + irSize el
-  IrCase scrut alts => irSize scrut + irSizeAlts alts
-  IrNatCase scrut fresh zero succ catch =>
-    irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
-  IrConcatMany parts => irSizeList parts
-  IrEffThunk family ctor unitTy arity prim => irSize prim
-  _ => 0
+irSizeChildren ir =
+  case ir of
+    IrCtor family ctor args => irSizeList args
+    IrRecord family fields => irSizeFields fields
+    IrProj base family field => irSize base
+    IrRecUpd base family fields => irSize base + irSizeFields fields
+    IrRtApp sym args => irSizeList args
+    IrCast inner => irSize inner
+    IrLet bs scrut body => irSize scrut + irSize body
+    IrLam bs body => irSize body
+    IrApp f a => irSize f + irSize a
+    IrIf c th el => irSize c + irSize th + irSize el
+    IrCase scrut alts => irSize scrut + irSizeAlts alts
+    IrNatCase scrut fresh zero succ catch =>
+      irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
+    IrConcatMany parts => irSizeList parts
+    IrEffThunk family ctor unitTy arity prim => irSize prim
+    _ => 0
 
 irSizeList : List Ir -> Int
 irSizeList [] = 0

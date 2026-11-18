@@ -11,20 +11,25 @@ import Base.Data.Bool as Bool
 -- | 在候选里找与输入最近的一个；没有就 `Nothing`（空输入与单字符输入不建议）。
 export suggestOne : List String -> String -> Maybe String
 suggestOne candidates input =
-  if strLength input < 2 then Nothing
-  else firstJust (map (\c => if closeEnough input c then Just c else Nothing) candidates)
+  if strLength input < 2 then
+    Nothing
+  else
+    firstJust (map (\c => if closeEnough input c then Just c else Nothing) candidates)
 
 -- | 内部：两个标识符是否近到值得提示。
 closeEnough : String -> String -> Bool
 closeEnough input candidate =
-  strLength candidate >= 2 && (startsWith input candidate || startsWith candidate input)
-    || oneEditApart input candidate
+  strLength candidate
+    >= 2
+    && (startsWith input candidate || startsWith candidate input) || oneEditApart input candidate
 
 -- | 内部：长度相同且只差一位，或长度差一且删掉一位就相同。
 oneEditApart : String -> String -> Bool
 oneEditApart a b =
-  if strLength a == strLength b then differOnce (strUnpack a) (strUnpack b)
-  else if strLength a + 1 == strLength b then deletionApart a b
+  if strLength a == strLength b then
+    differOnce (strUnpack a) (strUnpack b)
+  else if strLength a + 1 == strLength b then
+    deletionApart a b
   else if strLength b + 1 == strLength a then deletionApart b a else False
 
 -- | 内部：逐字符比较，最多允许一处不同。

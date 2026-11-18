@@ -77,7 +77,8 @@ shaInit =
 -- | SHA-256 轮常量 K（前 64 个素数立方根小数部分的前 32 位）。
 shaK : List Int
 shaK =
-  [ 1116352408,
+  [
+    1116352408,
     1899447441,
     3049323471,
     3921009573,
@@ -160,7 +161,8 @@ zeros n = map (\_ => 0) (range 0 n)
 -- | 8 字节大端（SHA-256 的 64-bit 消息长度字段）。
 lenBytes : Int -> List Int
 lenBytes n =
-  [ band (shr n 56) 255,
+  [
+    band (shr n 56) 255,
     band (shr n 48) 255,
     band (shr n 40) 255,
     band (shr n 32) 255,
@@ -230,15 +232,17 @@ schedule w16 = append w16 (scheduleGo 48 (reverse w16))
 
 -- | 追加剩余 `k` 个字（`window` = 最近 16 字，最新在前）。
 scheduleGo : Int -> List Int -> List Int
-scheduleGo k window = if k <= 0 then []
-else
-  let
-    w2 = atWindow 1 window
-    w7 = atWindow 6 window
-    w15 = atWindow 14 window
-    w16 = atWindow 15 window
-    next = add32 (add32 (sigma1Small w2) w7) (add32 w16 (sigma0Small w15))
-  in next :: scheduleGo (k - 1) (next :: take 15 window)
+scheduleGo k window =
+  if k <= 0 then
+    []
+  else
+    let
+      w2 = atWindow 1 window
+      w7 = atWindow 6 window
+      w15 = atWindow 14 window
+      w16 = atWindow 15 window
+      next = add32 (add32 (sigma1Small w2) w7) (add32 w16 (sigma0Small w15))
+    in next :: scheduleGo (k - 1) (next :: take 15 window)
 
 -- | `ch`：`(e land f) xor ((lnot e) land g)`。
 ch32 : Int -> Int -> Int -> Int
@@ -260,8 +264,16 @@ roundsGo a b c d e f g h ((Pair w k) :: rest) =
 -- | 压缩函数：8 字状态 + 16 字块 → 8 字新状态（尚未与初值相加）。
 compress : List Int -> List Int -> List Int
 compress st w16 =
-  roundsGo (atIdx 0 st) (atIdx 1 st) (atIdx 2 st) (atIdx 3 st) (atIdx 4 st) (atIdx 5 st)
-    (atIdx 6 st) (atIdx 7 st) (zip (schedule w16) shaK)
+  roundsGo
+    (atIdx 0 st)
+    (atIdx 1 st)
+    (atIdx 2 st)
+    (atIdx 3 st)
+    (atIdx 4 st)
+    (atIdx 5 st)
+    (atIdx 6 st)
+    (atIdx 7 st)
+    (zip (schedule w16) shaK)
 
 -- | 两个 8 字状态按 32-bit 加法逐位相加。
 zipAdd : List Int -> List Int -> List Int
@@ -289,8 +301,10 @@ paddedLen n =
 -- | 填充后第 `i` 个字节（`i < total`）。
 paddedByte : String -> Int -> Int -> Int -> Int
 paddedByte s n total i =
-  if i < n then strAt s i
-  else if i == n then 128
+  if i < n then
+    strAt s i
+  else if i == n then
+    128
   else if i < total - 8 then 0 else band (shr (n * 8) (8 * (7 - (i - (total - 8))))) 255
 
 -- | 块 `b` 的第 `j` 个 32-bit 大端字。
@@ -311,9 +325,16 @@ chunkWordsString s n total b = map (\j => wordAtString s n total b j) (range 0 1
 -- | 逐块压缩（`k` 为剩余块数，守卫 Int 递减证明终止）。
 blocksGo : String -> Int -> Int -> Int -> Int -> List Int -> List Int
 blocksGo s n total k b st =
-  if k <= 0 then st
-  else blocksGo s n total (k - 1) (b + 1)
-    (zipAdd st (compress st (schedule (chunkWordsString s n total b))))
+  if k <= 0 then
+    st
+  else
+    blocksGo
+      s
+      n
+      total
+      (k - 1)
+      (b + 1)
+      (zipAdd st (compress st (schedule (chunkWordsString s n total b))))
 
 -- | 字符串 → 8 个 32-bit 大端字（语义与 `sha256Bytes (strUnpack s)` 相同）。
 sha256OfString : String -> List Int
@@ -341,11 +362,13 @@ prehashOfString s = prehashGo (strLength s) 0 1 2 3 4 s
 
 -- | 逐字节滚动（`k` 为剩余字节数，守卫 Int 递减）。
 prehashGo : Int -> Int -> Int -> Int -> Int -> Int -> String -> String
-prehashGo k i h0 h1 h2 h3 s = if k <= 0 then "${strFromInt h0},${strFromInt h1},${strFromInt h2},${strFromInt h3}"
-else
-  let
-    b = strAt s i + 1
-  in prehashGo (k - 1) (i + 1) (h0 * 131 + b) (h1 * 137 + b) (h2 * 139 + b) (h3 * 149 + b) s
+prehashGo k i h0 h1 h2 h3 s =
+  if k <= 0 then
+    "${strFromInt h0},${strFromInt h1},${strFromInt h2},${strFromInt h3}"
+  else
+    let
+      b = strAt s i + 1
+    in prehashGo (k - 1) (i + 1) (h0 * 131 + b) (h1 * 137 + b) (h2 * 139 + b) (h3 * 149 + b) s
 
 -- ---------------------------------------------------------------
 -- 十六进制渲染

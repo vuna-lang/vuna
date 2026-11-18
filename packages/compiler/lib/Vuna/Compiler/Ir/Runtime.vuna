@@ -71,7 +71,8 @@ irRtSyntheticNames =
 -- | 普通内建名符号（不需要 List 桥接）。
 irRtPlainNames : List String
 irRtPlainNames =
-  [ "+",
+  [
+    "+",
     "-",
     "*",
     "/",
@@ -336,7 +337,8 @@ irRtPlainNames =
 -- | 需要 canonical `Base.Data.List.List` 族桥接 helper 的内建名符号。
 export irRtBridgedNames : List String
 irRtBridgedNames =
-  [ "strUnpack",
+  [
+    "strUnpack",
     "strPack",
     "strConcatMany",
     "strSubstTemplate",
@@ -372,7 +374,8 @@ irRtNames = append irRtPlainNames (append irRtBridgedNames irRtSyntheticNames)
 -- | 契约本体：普通内建 + 桥接内建 + 合成符号。
 export irRtContract : List IrRtSym
 irRtContract =
-  append (map (\n => IrRtSym n False) irRtPlainNames)
+  append
+    (map (\n => IrRtSym n False) irRtPlainNames)
     (append (map (\n => IrRtSym n True) irRtBridgedNames) (map (\n => IrRtSym n False) irRtSyntheticNames))
 
 irRtLookupGo : String -> List IrRtSym -> Maybe IrRtSym
@@ -385,15 +388,17 @@ irRtLookup name = irRtLookupGo name irRtContract
 
 -- | 名字是否是契约符号。
 export irRtIsKnown : String -> Bool
-irRtIsKnown name = case irRtLookup name of
-  Just _ => True
-  Nothing => False
+irRtIsKnown name =
+  case irRtLookup name of
+    Just _ => True
+    Nothing => False
 
 -- | 该符号是否需要 List 族桥接（未声明的名字返回 False）。
 export irRtBridgesList : String -> Bool
-irRtBridgesList name = case irRtLookup name of
-  Just s => irRtSymBridgesOf s
-  Nothing => False
+irRtBridgesList name =
+  case irRtLookup name of
+    Just s => irRtSymBridgesOf s
+    Nothing => False
 
 -- ---------------------------------------------------------------
 -- IR 项的符号引用（纯结构遍历）
@@ -428,7 +433,8 @@ irSymbolsOf (IrApp f a) = append (irSymbolsOf f) (irSymbolsOf a)
 irSymbolsOf (IrIf c t e) = append (irSymbolsOf c) (append (irSymbolsOf t) (irSymbolsOf e))
 irSymbolsOf (IrCase scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)
 irSymbolsOf (IrNatCase scrut _ z s c) =
-  append (irSymbolsOf scrut)
+  append
+    (irSymbolsOf scrut)
     (append (irSymbolsOfAltMaybe z) (append (irSymbolsOfAltMaybe s) (irSymbolsOfAltMaybe c)))
 irSymbolsOf (IrConcatMany parts) = concatMap irSymbolsOf parts
 irSymbolsOf (IrEffThunk _ _ _ _ prim) = irSymbolsOf prim
@@ -445,14 +451,16 @@ irSymbolsOfAltMaybe Nothing = []
 irSymbolsOfAltMaybe (Just alt) = irSymbolsOfAlt alt
 
 irSymbolsOfDef : IrDef -> List (Pair String (Maybe Int))
-irSymbolsOfDef d = case irDefBody d of
-  Nothing => []
-  Just b => irSymbolsOf b
+irSymbolsOfDef d =
+  case irDefBody d of
+    Nothing => []
+    Just b => irSymbolsOf b
 
 -- | 一个单元的符号引用（全部定义体 + 入口展示节点）。
 export irSymbolsOfUnit : IrUnit -> List (Pair String (Maybe Int))
 irSymbolsOfUnit u =
-  append (concatMap irSymbolsOfDef (concatMap irGroupDefs u.irUnitGroups))
+  append
+    (concatMap irSymbolsOfDef (concatMap irGroupDefs u.irUnitGroups))
     (irSymbolsOfEntry u.irUnitEntry)
 
 irSymbolsOfEntry : Maybe IrEntry -> List (Pair String (Maybe Int))
@@ -483,5 +491,7 @@ irHostDirectOf _ = Nothing
 -- 不恢复续延（打印诊断后退出），所以直连时把 send 降成同样的收口序列。
 export irHostAbortOf : String -> Maybe (Pair String String)
 irHostAbortOf name =
-  if name == "Base.Effect.Fs.runFsErrorHost" then Just (Pair "fs-error" "Base.Effect.Fs.fsErrorText")
-  else Nothing
+  if name == "Base.Effect.Fs.runFsErrorHost" then
+    Just (Pair "fs-error" "Base.Effect.Fs.fsErrorText")
+  else
+    Nothing

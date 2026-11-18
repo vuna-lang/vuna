@@ -145,26 +145,29 @@ rangeFrom i k = if k <= 0 then [] else i :: rangeFrom (i + 1) (k - 1)
 -- | 映射并丢弃 `Nothing` 元素。
 export mapMaybe : (a -> Maybe b) -> List a -> List b
 mapMaybe f [] = []
-mapMaybe f (x :: xs) = case f x of
-  Nothing => mapMaybe f xs
-  Just y => y :: mapMaybe f xs
+mapMaybe f (x :: xs) =
+  case f x of
+    Nothing => mapMaybe f xs
+    Just y => y :: mapMaybe f xs
 
 -- | 首个有值的候选；全部无值即 `Nothing`。顺序决定优先级。
 export firstJust : List (Maybe a) -> Maybe a
 firstJust [] = Nothing
-firstJust (x :: rest) = case x of
-  Just v => Just v
-  Nothing => firstJust rest
+firstJust (x :: rest) =
+  case x of
+    Just v => Just v
+    Nothing => firstJust rest
 
 -- | 依次尝试候选动作，返回第一个成功的：命中即停，失败（`Nothing`）才继续。
 -- 后面的动作只构造、不执行；全部失败即 `Nothing`。
 export firstSuccess : Monad m => {m : Type -> Type} -> {a : Type} -> List (m (Maybe a)) -> m (Maybe a)
 firstSuccess [] = pure Nothing
-firstSuccess (x :: rest) = do
-  v <- x
-  case v of
-    Just found => pure (Just found)
-    Nothing => firstSuccess rest
+firstSuccess (x :: rest) =
+  do
+    v <- x
+    case v of
+      Just found => pure (Just found)
+      Nothing => firstSuccess rest
 
 -- Functor / Monad 实例（trait 来自 Base.Trait.Monad，List 定义在本模块）。
 instance Functor List where
@@ -212,9 +215,10 @@ instance Ord a => Ord (List a) where
 
 -- 哈希：`[]` = 0，非空为 head/tail 的结构组合。
 instance Hashable a => Hashable (List a) where
-  hash xs = case xs of
-    [] => 0
-    x :: rest => hashCombine (hash x) (hash rest)
+  hash xs =
+    case xs of
+      [] => 0
+      x :: rest => hashCombine (hash x) (hash rest)
 
 -- 列表拼接是自由 monoid：`Semigroup` 用 `append`，`Monoid` 单位元是 `[]`。
 instance Semigroup (List a) where
@@ -228,6 +232,7 @@ instance Foldable List where
   fold f z xs = foldr f z xs
 
 instance Applicative f => Traversable List f where
-  mapM fun xs = case xs of
-    [] => pure []
-    x :: rest => liftA2 (\y, ys => y :: ys) (fun x) (mapM fun rest)
+  mapM fun xs =
+    case xs of
+      [] => pure []
+      x :: rest => liftA2 (\y, ys => y :: ys) (fun x) (mapM fun rest)

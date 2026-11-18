@@ -50,25 +50,29 @@ instance Eq Ordering where
   (/=) a b = if a == b then False else True
 
 instance Ord Ordering where
-  (<) a b = case a of
-    LT => case b of
-      LT => False
-      EQ => True
-      GT => True
-    EQ => case b of
-      LT => False
-      EQ => False
-      GT => True
-    GT => False
+  (<) a b =
+    case a of
+      LT =>
+        case b of
+          LT => False
+          EQ => True
+          GT => True
+      EQ =>
+        case b of
+          LT => False
+          EQ => False
+          GT => True
+      GT => False
   (<=) a b = a < b || not (b < a)
   (>) a b = b < a
   (>=) a b = b <= a
 
 instance Show Ordering where
-  show o = case o of
-    LT => "LT"
-    EQ => "EQ"
-    GT => "GT"
+  show o =
+    case o of
+      LT => "LT"
+      EQ => "EQ"
+      GT => "GT"
 
 -- | 三值比较：`x < y` 为 `LT`，`y < x` 为 `GT`，否则 `EQ`（只用 `Ord.lt` 派生，不依赖 `Eq` 实例）。
 export compare : Ord a => a -> a -> Ordering
@@ -83,7 +87,8 @@ export max : Ord a => a -> a -> a
 max x y = if x <= y then y else x
 
 instance Hashable Ordering where
-  hash o = case o of
-    LT => 0
-    EQ => 1
-    GT => 2
+  hash o =
+    case o of
+      LT => 0
+      EQ => 1
+      GT => 2

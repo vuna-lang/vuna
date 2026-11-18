@@ -46,8 +46,14 @@ mkStateAt file toks last count mode = PState file toks last count mode
 -- 从起始状态 st 到结束状态 st2 的 span：起点=当前 token，终点=最后消费的 token。
 export spanOf : PState -> PState -> Span
 spanOf st st2 =
-  Span (fileOf st) (posLine (peekPos st)) (posCol (peekPos st)) (posLine (lastPos st2))
-    (posCol (lastPos st2)) (posOffset (peekPos st)) (posOffset (lastPos st2))
+  Span
+    (fileOf st)
+    (posLine (peekPos st))
+    (posCol (peekPos st))
+    (posLine (lastPos st2))
+    (posCol (lastPos st2))
+    (posOffset (peekPos st))
+    (posOffset (lastPos st2))
 
 -- | 当前 token 的完整 span（起点到 token 结束字节）。只用于单行 token（标识符 / 符号）：
 -- 列按 UTF-8 字节，所以结束列 = 起始列 + token 字节长度。
@@ -56,7 +62,13 @@ tokenSpan st =
   let
     p = peekPos st
     len = posEndOffset p - posOffset p
-  in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p + len) (posOffset p)
+  in Span
+    (fileOf st)
+    (posLine p)
+    (posCol p)
+    (posLine p)
+    (posCol p + len)
+    (posOffset p)
     (posEndOffset p)
 
 export peekTok : PState -> PTok
@@ -69,27 +81,30 @@ peekPos st = (peekTok st).ptokPos
 -- | 当前 token 的**点 span**（起点=终点，caret 宽度 1）。EOF 退到最后消费的 token：
 -- `peekTok` 对空流给出 `Pos 1 1`，直接拿它会指向文件头。
 export tokSpan : PState -> Span
-tokSpan st = case peekTok st of
-  PTok TEof _ =>
-    let
-      p = lastPos st
-    in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
-  PTok _ p =>
-    Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
+tokSpan st =
+  case peekTok st of
+    PTok TEof _ =>
+      let
+        p = lastPos st
+      in Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
+    PTok _ p =>
+      Span (fileOf st) (posLine p) (posCol p) (posLine p) (posCol p) (posOffset p) (posOffset p)
 
 export lastPos : PState -> Pos
 lastPos (PState file toks last count mode) = last
 
 export advance : PState -> PState
-advance (PState file (toks@(t :: rest)) last count mode) = case t of
-  PTok TEof p => PState file toks last count mode
-  _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0) mode
+advance (PState file (toks@(t :: rest)) last count mode) =
+  case t of
+    PTok TEof p => PState file toks last count mode
+    _ => PState file rest t.ptokPos (if count > 0 then count - 1 else 0) mode
 advance (PState file (toks@[]) last count mode) = PState file toks last count mode
 
 export isEof : PState -> Bool
-isEof st = case peekTok st of
-  PTok TEof p => True
-  _ => False
+isEof st =
+  case peekTok st of
+    PTok TEof p => True
+    _ => False
 
 -- 让下一个 token 视作「与上一 token 同一行」：do 语句块里新起一行的裸表达式
 -- 需要这一点，否则首 token 会被 canContinue 判成缩进不足。
@@ -118,13 +133,15 @@ export stateFuel : PState -> Int
 stateFuel st = 128 * st.toksLeft + 1024
 
 export sameLineState : PState -> PState
-sameLineState st = case peekPos st of
-  Pos line col _ _ => PState (fileOf st) st.toksOf (Pos line 0 0 0) st.toksLeft (pmodeOf st)
+sameLineState st =
+  case peekPos st of
+    Pos line col _ _ => PState (fileOf st) st.toksOf (Pos line 0 0 0) st.toksLeft (pmodeOf st)
 
 export atSym : PState -> String -> Bool
-atSym st s = case peekTok st of
-  PTok (TSym x) p => x == s
-  _ => False
+atSym st s =
+  case peekTok st of
+    PTok (TSym x) p => x == s
+    _ => False
 
 -- 向后看第 n 个 token（0 = 当前）。Pi binder 需要 2-token lookahead。
 export nthTok : List PTok -> Int -> Maybe PTok
@@ -138,149 +155,181 @@ peekTokAt st n = nthTok st.toksOf n
 -- 多参数 trait 的探针还写 `{a b : Type} -> ...`：同一 binder 组可含多个名字，这里返回
 -- 名字列表，`parsePiBinder` 展开成嵌套 EPi。
 export binderHead : PState -> Maybe (Pair (Maybe Qty) (List String))
-binderHead st = case peekTok st of
-  PTok (TIdent name) _ => case binderNameTail 64 st 1 [] of
-    Just names => Just (Pair Nothing (name :: names))
-    Nothing => Nothing
-  PTok (TInt 0) _ => quantifiedHead st Q0
-  PTok (TInt 1) _ => quantifiedHead st Q1
-  _ => Nothing
+binderHead st =
+  case peekTok st of
+    PTok (TIdent name) _ =>
+      case binderNameTail 64 st 1 [] of
+        Just names => Just (Pair Nothing (name :: names))
+        Nothing => Nothing
+    PTok (TInt 0) _ => quantifiedHead st Q0
+    PTok (TInt 1) _ => quantifiedHead st Q1
+    _ => Nothing
 
 -- 从第 n 个 token 起收集连续的标识符，直到 `:`（lookahead 不走状态）。
 -- fuel 只是终止性证据：每次向前看一个 token，最多走 token 数步。
 binderNameTail : Int -> PState -> Int -> List String -> Maybe (List String)
-binderNameTail fuel st n acc = if fuel <= 0 then Nothing
-else case peekTokAt st n of
-  Just (PTok (TIdent name) _) => binderNameTail (fuel - 1) st (n + 1) (name :: acc)
-  Just (PTok (TSym ":") _) => Just (reverse acc)
-  _ => Nothing
+binderNameTail fuel st n acc =
+  if fuel <= 0 then
+    Nothing
+  else
+    case peekTokAt st n of
+      Just (PTok (TIdent name) _) => binderNameTail (fuel - 1) st (n + 1) (name :: acc)
+      Just (PTok (TSym ":") _) => Just (reverse acc)
+      _ => Nothing
 
 quantifiedHead : PState -> Qty -> Maybe (Pair (Maybe Qty) (List String))
-quantifiedHead st q = case peekTokAt st 1 of
-  Just (PTok (TIdent name) _) => case binderNameTail 64 st 2 [] of
-    Just names => Just (Pair (Just q) (name :: names))
-    Nothing => Nothing
-  _ => Nothing
+quantifiedHead st q =
+  case peekTokAt st 1 of
+    Just (PTok (TIdent name) _) =>
+      case binderNameTail 64 st 2 [] of
+        Just names => Just (Pair (Just q) (name :: names))
+        Nothing => Nothing
+    _ => Nothing
 
 export atKw : PState -> String -> Bool
-atKw st k = case peekTok st of
-  PTok (TKw x) p => x == k
-  _ => False
+atKw st k =
+  case peekTok st of
+    PTok (TKw x) p => x == k
+    _ => False
 
 export canContinue : PState -> Int -> Bool
-canContinue st blockCol = case peekPos st of
-  Pos line col _ _ => case lastPos st of
-    Pos lastLine lastCol _ _ => line == lastLine || col > blockCol
+canContinue st blockCol =
+  case peekPos st of
+    Pos line col _ _ =>
+      case lastPos st of
+        Pos lastLine lastCol _ _ => line == lastLine || col > blockCol
 
 -- | 消费一个符号。返回后的状态即可继续解析（旧实现返回 `Pair Int PState` 的幽灵
 -- `Int`，恒为 0，已删）。
 export expectSym : PState -> String -> Check PState
-expectSym st s = case peekTok st of
-  PTok (TSym x) p => if x == s then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken s) s
-  _ => psErr1At (tokSpan st) (ExpectedToken s) s
+expectSym st s =
+  case peekTok st of
+    PTok (TSym x) p =>
+      if x == s then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken s) s
+    _ => psErr1At (tokSpan st) (ExpectedToken s) s
 
 export expectKw : PState -> String -> Check PState
-expectKw st k = case peekTok st of
-  PTok (TKw x) p => if x == k then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken k) k
-  _ => psErr1At (tokSpan st) (ExpectedToken k) k
+expectKw st k =
+  case peekTok st of
+    PTok (TKw x) p => if x == k then OkC (advance st) else psErr1At (tokSpan st) (ExpectedToken k) k
+    _ => psErr1At (tokSpan st) (ExpectedToken k) k
 
 export expectIdent : PState -> Check (Pair String PState)
-expectIdent st = case peekTok st of
-  PTok (TIdent x) p => OkC (Pair x (advance st))
-  _ => psErr0At (tokSpan st) ExpectedIdentifier
+expectIdent st =
+  case peekTok st of
+    PTok (TIdent x) p => OkC (Pair x (advance st))
+    _ => psErr0At (tokSpan st) ExpectedIdentifier
 
 -- 值位置名字 = 标识符或非保留符号名。用于用户符号名 def/signature 与反引号
 -- 中缀里的名字（`` a `f` b ``）。
 export expectValueName : PState -> Check (Pair String PState)
-expectValueName st = case peekTok st of
-  PTok (TIdent x) p =>
-    if isReservedValueName x then psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
-    else OkC (Pair x (advance st))
-  PTok (TSym op) p =>
-    if isReservedValueName op then psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
-    else OkC (Pair op (advance st))
-  _ => psErr0At (tokSpan st) ExpectedIdentifier
+expectValueName st =
+  case peekTok st of
+    PTok (TIdent x) p =>
+      if isReservedValueName x then
+        psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
+      else
+        OkC (Pair x (advance st))
+    PTok (TSym op) p =>
+      if isReservedValueName op then
+        psErr1At (tokSpan st) (ExpectedToken "value name") "value name"
+      else
+        OkC (Pair op (advance st))
+    _ => psErr0At (tokSpan st) ExpectedIdentifier
 
 export upperFirst : String -> Bool
-upperFirst s = case strUnpack s of
-  c :: rest => c >= 65 && c <= 90
-  [] => False
+upperFirst s =
+  case strUnpack s of
+    c :: rest => c >= 65 && c <= 90
+    [] => False
 
 -- `_` 前缀私有构造器（如 `_C`）在模式里也要能当构造器用：`_` 开头的标识符
 -- 若紧随大写字母，按构造器解析；单独的 `_` 仍是通配符，`_x` 仍是变量。
 export underscoreCtorName : String -> Bool
-underscoreCtorName s = case strUnpack s of
-  c :: rest => if c == 95 then case rest of
-    c2 :: rest2 => c2 >= 65 && c2 <= 90
+underscoreCtorName s =
+  case strUnpack s of
+    c :: rest =>
+      if c == 95 then
+        case rest of
+          c2 :: rest2 => c2 >= 65 && c2 <= 90
+          [] => False
+      else
+        False
     [] => False
-  else False
-  [] => False
 
 export ctorPatternStart : String -> Bool
 ctorPatternStart name = upperFirst name || underscoreCtorName name
 
 export startsAtom : PState -> Bool
-startsAtom st = case peekTok st of
-  PTok (TIdent x) p => True
-  PTok (TInt x) p => True
-  PTok (TFloat x) p => True
-  PTok (TStr x) p => True
-  PTok (TTmpl m parts ep) p => True
-  PTok (TKw "Type") p => True
-  PTok (TSym "(") p => True
-  PTok (TSym "[") p => True
-  PTok (TSym "?") p => case holeAtomAt st of
-    Just _ => True
-    Nothing => False
-  _ => False
+startsAtom st =
+  case peekTok st of
+    PTok (TIdent x) p => True
+    PTok (TInt x) p => True
+    PTok (TFloat x) p => True
+    PTok (TStr x) p => True
+    PTok (TTmpl m parts ep) p => True
+    PTok (TKw "Type") p => True
+    PTok (TSym "(") p => True
+    PTok (TSym "[") p => True
+    PTok (TSym "?") p =>
+      case holeAtomAt st of
+        Just _ => True
+        Nothing => False
+    _ => False
 
 -- 命名洞 `?name` 的原子：`?` 与紧随的标识符**同行且列号相邻**（`?h`）。
 -- 空格分隔的 `?` 仍是普通运算符（`a ? b`、`(? b)`），不受影响。
 -- 返回值 = 洞名（带 `?`）+ 覆盖 `?name` 的 span（end 到名字末字节，便于 hover 高亮整个洞）。
 export holeAtomAt : PState -> Maybe (Pair String Span)
-holeAtomAt st = case peekTok st of
-  PTok (TSym "?") p => case peekTokAt st 1 of
-    Just (PTok (TIdent n) p2) =>
-      if posLine p2 == posLine p && posCol p2 == posCol p + 1 then Just
-        (Pair ("?" ++ n) (Span (fileOf st) (posLine p) (posCol p) (posLine p2) (posCol p2 + strLength n) (posOffset p) (posOffset p2 + strLength n)))
-      else Nothing
+holeAtomAt st =
+  case peekTok st of
+    PTok (TSym "?") p =>
+      case peekTokAt st 1 of
+        Just (PTok (TIdent n) p2) =>
+          if posLine p2 == posLine p && posCol p2 == posCol p + 1 then
+            Just
+              (Pair ("?" ++ n) (Span (fileOf st) (posLine p) (posCol p) (posLine p2) (posCol p2 + strLength n) (posOffset p) (posOffset p2 + strLength n)))
+          else
+            Nothing
+        _ => Nothing
     _ => Nothing
-  _ => Nothing
 
 export startsPatternAtom : PState -> Bool
-startsPatternAtom st = case peekTok st of
-  PTok (TIdent x) p => True
-  PTok (TInt x) p => True
-  PTok (TStr x) p => True
-  PTok (TTmpl m parts ep) p => True
-  PTok (TSym "(") p => True
-  PTok (TSym "[") p => True
-  _ => False
+startsPatternAtom st =
+  case peekTok st of
+    PTok (TIdent x) p => True
+    PTok (TInt x) p => True
+    PTok (TStr x) p => True
+    PTok (TTmpl m parts ep) p => True
+    PTok (TSym "(") p => True
+    PTok (TSym "[") p => True
+    _ => False
 
 -- 中缀解析没有固定优先级表——`infix*` 声明随模块进入 Loader，重排时才消费。
 -- 这里只判定「哪些符号在表达式位置属于语法、遇到就停止」，其余 TSym 都当运算符。
 export isSyntaxSym : String -> Bool
-isSyntaxSym op = case op of
-  "=" => True
-  ":" => True
-  "," => True
-  ";" => True
-  "|" => True
-  "=>" => True
-  "<-" => True
-  "\\" => True
-  "." => True
-  ".." => True
-  "@" => True
-  -- 括号/分隔符：表达式位置出现时是语法边界，不是运算符（否则 `(a + b)` 的 `)` 会被
-  -- 当成中缀符号吞掉）。
-  "(" => True
-  ")" => True
-  "[" => True
-  "]" => True
-  "{" => True
-  "}" => True
-  _ => False
+isSyntaxSym op =
+  case op of
+    "=" => True
+    ":" => True
+    "," => True
+    ";" => True
+    "|" => True
+    "=>" => True
+    "<-" => True
+    "\\" => True
+    "." => True
+    ".." => True
+    "@" => True
+    -- 括号/分隔符：表达式位置出现时是语法边界，不是运算符（否则 `(a + b)` 的 `)` 会被
+    -- 当成中缀符号吞掉）。
+    "(" => True
+    ")" => True
+    "[" => True
+    "]" => True
+    "{" => True
+    "}" => True
+    _ => False
 
 -- 保留符号名不能被当作可定义名 / 反引号名字 / 原子 section 的 op。
 -- 集合 = 表达式位置的语法符号（`isSyntaxSym`）∪ {`->`, `` ` ``}。
@@ -291,28 +340,34 @@ isReservedValueName name = isSyntaxSym name || name == "->" || name == "`"
 -- 右 section 判定——当前 token 是运算符、下一个 token 是 `)`。
 -- 不消费 `)`：由外层 `(` 分支统一消费。
 export closeParenNext : PState -> Bool
-closeParenNext st = case peekTokAt st 1 of
-  Just (PTok (TSym ")") p) => True
-  _ => False
+closeParenNext st =
+  case peekTokAt st 1 of
+    Just (PTok (TSym ")") p) => True
+    _ => False
 
 -- `(` 之后的下一个 token 若是非保留符号名，则该括号是 section
 -- （`(+)` 或 `(+ e)`），返回该符号名；否则不是 section。
 -- `(?h)` 里 `?` 紧邻标识符 ⇒ 是命名洞而不是 `(? h)` section。
 export sectionOpAt : PState -> Maybe String
-sectionOpAt st = case peekTokAt st 1 of
-  Just (PTok (TSym op) p) => if isReservedValueName op then Nothing
-  else if op == "?" then case holeAtomAt (advance st) of
-    Just _ => Nothing
-    Nothing => Just op
-  else if op == "-" && minusLiteralAt p st then Nothing else Just op
-  -- `(-1)` / `(-1.5)`：`-` 与数字紧邻时是负字面量，不是 `(- 1)` section。
-  _ => Nothing
+sectionOpAt st =
+  case peekTokAt st 1 of
+    Just (PTok (TSym op) p) =>
+      if isReservedValueName op then
+        Nothing
+      else if op == "?" then
+        case holeAtomAt (advance st) of
+          Just _ => Nothing
+          Nothing => Just op
+      else if op == "-" && minusLiteralAt p st then Nothing else Just op
+    -- `(-1)` / `(-1.5)`：`-` 与数字紧邻时是负字面量，不是 `(- 1)` section。
+    _ => Nothing
 
 minusLiteralAt : Pos -> PState -> Bool
-minusLiteralAt p st = case peekTokAt st 2 of
-  Just (PTok (TInt _) q) => posLine q == posLine p && posCol q == posCol p + 1
-  Just (PTok (TFloat _) q) => posLine q == posLine p && posCol q == posCol p + 1
-  _ => False
+minusLiteralAt p st =
+  case peekTokAt st 2 of
+    Just (PTok (TInt _) q) => posLine q == posLine p && posCol q == posCol p + 1
+    Just (PTok (TFloat _) q) => posLine q == posLine p && posCol q == posCol p + 1
+    _ => False
 
 export countArrows : Expr -> Int
 countArrows (EInfix "->" _ rest _) = 1 + countArrows rest
@@ -329,9 +384,15 @@ terminatesExpression (PTok (TKw "then") p) = True
 terminatesExpression _ = False
 
 export badCaseIndent : PState -> Int -> Bool
-badCaseIndent st altCol = if isEof st then False
-else case peekPos st of
-  Pos line col _ _ => if col > altCol then case terminatesExpression (peekTok st) of
-    True => False
-    False => True
-  else False
+badCaseIndent st altCol =
+  if isEof st then
+    False
+  else
+    case peekPos st of
+      Pos line col _ _ =>
+        if col > altCol then
+          case terminatesExpression (peekTok st) of
+            True => False
+            False => True
+        else
+          False

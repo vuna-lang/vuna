@@ -39,76 +39,79 @@ f = 1.5
 """
 
 main : Eff [] Int
-main = do
-  _ <- prim_eff_print (("hash-empty " ++ digestHex (digestOfString "")) ++ "\n")
-  _ <- prim_eff_print (("hash-abc " ++ digestHex (digestOfString "abc")) ++ "\n")
-  _ <- prim_eff_print (("sha-80a " ++ digestHex (digestOfString (repeatA 80))) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("bits " ++ joinInts [bitAnd 240 204, bitOr 240 15, bitXor 255 15, bitNot 0, bitShl 1 4, bitShr 256 4, bitShr 256 63, bitShl 1 63]) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("bitslib " ++ joinInts [rotr32 1 1, add32 4294967295 2, mask32 (0 - 1), mask8 511, rol32 1 31]) ++ "\n")
-  _ <- prim_eff_print (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
-  _ <- prim_eff_print (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
-  _ <- prim_eff_print (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
-  _ <- prim_eff_print (("cst-tree " ++ verdict (treeRoundtripOk sample)) ++ "\n")
-  _ <- prim_eff_print (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
-  src <- prim_eff_getenv "INFRA_SRC"
-  pathOk <- prim_eff_fileExists src
-  raw <- if pathOk then prim_eff_readFile src else pure ""
-  _ <-
-    prim_eff_print (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
-  _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
-  _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
-  _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
-  _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
-  _ <- prim_eff_print (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
-  _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
-  _ <- prim_eff_print (("canon-fixity-target " ++ verdict fixityCovered) ++ "\n")
-  -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
-  _ <- prim_eff_print (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
-  _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
-  _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
-  _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
-  _ <- prim_eff_print (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
-  _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
-  -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
-  -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
-  _ <-
-    prim_eff_print (("toml-subtable " ++ verdict (lookupIntIs ["a"] "x" 1 "[a]\nx = 1\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-quoted " ++ verdict (lookupStrIs ["releases", "1.2.0"] "git" "g" "[releases.\"1.2.0\"]\ngit = \"g\"\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-dotted " ++ verdict (lookupIntIs ["a", "b"] "c" 7 "a.b.c = 7\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-inline " ++ verdict (lookupStrIs ["dependencies", "greet"] "path" "../greet" "[dependencies]\ngreet = { path = \"../greet\" }\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-array-len " ++ strFromInt (arrayLenOf "x" "x = [1, \"two\", true]\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-table-array " ++ verdict (lookupStrIs ["bin", "1"] "name" "b" "[[bin]]\nname = \"a\"\n[[bin]]\nname = \"b\"\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-multiline " ++ verdict (lookupStrIs [] "s" "hello\nworld" "s = \"\"\"\nhello\nworld\"\"\"\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-unicode " ++ verdict (lookupStrIs [] "s" "中" "s = \"\\u4e2d\"\n")) ++ "\n")
-  _ <-
-    prim_eff_print
-      (("toml-literal " ++ verdict (lookupStrIs [] "s" "a\\nb" "s = 'a\\nb'\n")) ++ "\n")
-  _ <- prim_eff_print (("toml-dup-key " ++ verdict (parsesNot "[a]\nx = 1\nx = 2\n")) ++ "\n")
-  _ <- prim_eff_print (("toml-float " ++ verdict (parsesNot "x = 1.5\n")) ++ "\n")
-  _ <- prim_eff_print (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
-  _ <- prim_eff_print (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
-  prim_eff_exit 0
+main =
+  do
+    _ <- prim_eff_print (("hash-empty " ++ digestHex (digestOfString "")) ++ "\n")
+    _ <- prim_eff_print (("hash-abc " ++ digestHex (digestOfString "abc")) ++ "\n")
+    _ <- prim_eff_print (("sha-80a " ++ digestHex (digestOfString (repeatA 80))) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("bits " ++ joinInts [bitAnd 240 204, bitOr 240 15, bitXor 255 15, bitNot 0, bitShl 1 4, bitShr 256 4, bitShr 256 63, bitShl 1 63]) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("bitslib " ++ joinInts [rotr32 1 1, add32 4294967295 2, mask32 (0 - 1), mask8 511, rol32 1 31]) ++ "\n")
+    _ <- prim_eff_print (("canon-int-42 " ++ encConcat (encInt 42 [])) ++ "\n")
+    _ <- prim_eff_print (("canon-str-abc " ++ encConcat (encStr "abc" [])) ++ "\n")
+    _ <- prim_eff_print (("cst-sample " ++ verdict (roundtripOk sample)) ++ "\n")
+    _ <- prim_eff_print (("cst-tree " ++ verdict (treeRoundtripOk sample)) ++ "\n")
+    _ <- prim_eff_print (("cst-tree-shape " ++ verdict treeShapeSample) ++ "\n")
+    src <- prim_eff_getenv "INFRA_SRC"
+    pathOk <- prim_eff_fileExists src
+    raw <- if pathOk then prim_eff_readFile src else pure ""
+    _ <-
+      prim_eff_print
+        (("cst-file " ++ (if pathOk then verdict (roundtripOk raw) else "skip")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
+    _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
+    _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
+    _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")
+    _ <- prim_eff_print (("canon-span " ++ verdict spanInsensitive) ++ "\n")
+    _ <- prim_eff_print (("canon-binder-span " ++ verdict binderSpanInsensitive) ++ "\n")
+    _ <- prim_eff_print (("canon-export-parent " ++ verdict parentCovered) ++ "\n")
+    _ <- prim_eff_print (("canon-fixity-target " ++ verdict fixityCovered) ++ "\n")
+    -- 包内容/语义身份的规范编码 roundtrip 与两者输入面的区分（D12）。
+    _ <- prim_eff_print (("pkg-canon-rt " ++ verdict pkgContentRT) ++ "\n")
+    _ <- prim_eff_print (("pkg-identity-rt " ++ verdict pkgIdentityRT) ++ "\n")
+    _ <- prim_eff_print (("pkg-identity-name " ++ verdict pkgIdentityName) ++ "\n")
+    _ <- prim_eff_print (("pkg-identity-deps " ++ verdict pkgIdentityDeps) ++ "\n")
+    _ <- prim_eff_print (("pkg-golden " ++ verdict pkgGolden) ++ "\n")
+    _ <- prim_eff_print (("tool-ctx-rt " ++ verdict toolContextRoundtrip) ++ "\n")
+    -- TOML 解析自检：子表 / 引号段名 / 点键 / 内联表 / 数组 / 表数组 / 多行字符串 /
+    -- unicode 转义 / literal 字符串，以及必须拒绝的重复键、浮点、重复表、点键冲突。
+    _ <-
+      prim_eff_print
+        (("toml-subtable " ++ verdict (lookupIntIs ["a"] "x" 1 "[a]\nx = 1\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-quoted " ++ verdict (lookupStrIs ["releases", "1.2.0"] "git" "g" "[releases.\"1.2.0\"]\ngit = \"g\"\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-dotted " ++ verdict (lookupIntIs ["a", "b"] "c" 7 "a.b.c = 7\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-inline " ++ verdict (lookupStrIs ["dependencies", "greet"] "path" "../greet" "[dependencies]\ngreet = { path = \"../greet\" }\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-array-len " ++ strFromInt (arrayLenOf "x" "x = [1, \"two\", true]\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-table-array " ++ verdict (lookupStrIs ["bin", "1"] "name" "b" "[[bin]]\nname = \"a\"\n[[bin]]\nname = \"b\"\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-multiline " ++ verdict (lookupStrIs [] "s" "hello\nworld" "s = \"\"\"\nhello\nworld\"\"\"\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-unicode " ++ verdict (lookupStrIs [] "s" "中" "s = \"\\u4e2d\"\n")) ++ "\n")
+    _ <-
+      prim_eff_print
+        (("toml-literal " ++ verdict (lookupStrIs [] "s" "a\\nb" "s = 'a\\nb'\n")) ++ "\n")
+    _ <- prim_eff_print (("toml-dup-key " ++ verdict (parsesNot "[a]\nx = 1\nx = 2\n")) ++ "\n")
+    _ <- prim_eff_print (("toml-float " ++ verdict (parsesNot "x = 1.5\n")) ++ "\n")
+    _ <- prim_eff_print (("toml-dup-table " ++ verdict (parsesNot "[a]\n[a]\n")) ++ "\n")
+    _ <- prim_eff_print (("toml-dotted-conflict " ++ verdict (parsesNot "a.b = 1\n[a]\n")) ++ "\n")
+    prim_eff_exit 0
 
 -- ---------------------------------------------------------------
 -- 输出辅助
@@ -122,41 +125,49 @@ verdict False = "fail"
 
 -- | 节点树结构：样例的顶层节点是文件根，children 是 7 个顶层声明。
 treeShapeSample : Bool
-treeShapeSample = case lexCst sample of
-  Nothing => False
-  Just toks =>
-    let
-      tree = buildCst toks
-    in nodeKindTag tree == "file" && listLen (nodeChildren tree) == 7
+treeShapeSample =
+  case lexCst sample of
+    Nothing => False
+    Just toks =>
+      let
+        tree = buildCst toks
+      in nodeKindTag tree == "file" && listLen (nodeChildren tree) == 7
 
 -- ---------------------------------------------------------------
 -- TOML 断言辅助
 -- ---------------------------------------------------------------
 parsesNot : String -> Bool
-parsesNot src = case parseTomlAt "t" src of
-  ErrC _ => True
-  OkC _ => False
+parsesNot src =
+  case parseTomlAt "t" src of
+    ErrC _ => True
+    OkC _ => False
 
 lookupIntIs : List String -> String -> Int -> String -> Bool
-lookupIntIs section key expected src = case parseTomlAt "t" src of
-  ErrC _ => False
-  OkC entries => case lookupEntry section key entries of
-    Just (TInt n) => n == expected
-    _ => False
+lookupIntIs section key expected src =
+  case parseTomlAt "t" src of
+    ErrC _ => False
+    OkC entries =>
+      case lookupEntry section key entries of
+        Just (TInt n) => n == expected
+        _ => False
 
 lookupStrIs : List String -> String -> String -> String -> Bool
-lookupStrIs section key expected src = case parseTomlAt "t" src of
-  ErrC _ => False
-  OkC entries => case lookupEntry section key entries of
-    Just (TStr s) => s == expected
-    _ => False
+lookupStrIs section key expected src =
+  case parseTomlAt "t" src of
+    ErrC _ => False
+    OkC entries =>
+      case lookupEntry section key entries of
+        Just (TStr s) => s == expected
+        _ => False
 
 arrayLenOf : String -> String -> Int
-arrayLenOf key src = case parseTomlAt "t" src of
-  ErrC _ => 0 - 1
-  OkC entries => case lookupEntry [] key entries of
-    Just (TArray xs) => listLen xs
-    _ => 0 - 1
+arrayLenOf key src =
+  case parseTomlAt "t" src of
+    ErrC _ => 0 - 1
+    OkC entries =>
+      case lookupEntry [] key entries of
+        Just (TArray xs) => listLen xs
+        _ => 0 - 1
 
 listLen : List a -> Int
 listLen [] = 0
@@ -167,15 +178,17 @@ listLen (_ :: rest) = 1 + listLen rest
 -- ---------------------------------------------------------------
 pkgFilesSample : List PackageFile
 pkgFilesSample =
-  [ PackageFile "lib/A.vuna" "module A where\n\nx : Int\nx = 1\n",
+  [
+    PackageFile "lib/A.vuna" "module A where\n\nx : Int\nx = 1\n",
     PackageFile "vuna.toml" "[package]\nname = \"p\"\n"
   ]
 
 -- 内容编码 roundtrip：解码后重编码逐字节一致。
 pkgContentRT : Bool
-pkgContentRT = case decPackageContent (encPackageContent pkgFilesSample) of
-  Nothing => False
-  Just files => encPackageContent files == encPackageContent pkgFilesSample
+pkgContentRT =
+  case decPackageContent (encPackageContent pkgFilesSample) of
+    Nothing => False
+    Just files => encPackageContent files == encPackageContent pkgFilesSample
 
 -- 身份编码 roundtrip。
 pkgIdentityRT : Bool
@@ -210,9 +223,12 @@ goldenSource =
 
 pkgGolden : Bool
 pkgGolden =
-  addrOf ["probe", "x"] == "3c493721c06369c776469b60bef0288f4e31b100a21c4b6267b527bc0a6f17ba"
-    && contentHashOf goldenSource == "bf65a68d17c1f6f628ed7c54d7656d188d9b8e3d7edeafb3e3258022b00156e3"
-    && identityHashOf goldenSource == "467b5763eff1f6d1914cda856b5985264d5bab96543c1eeee292ed40b67791b7"
+  addrOf ["probe", "x"]
+    == "3c493721c06369c776469b60bef0288f4e31b100a21c4b6267b527bc0a6f17ba"
+    && contentHashOf goldenSource
+    == "bf65a68d17c1f6f628ed7c54d7656d188d9b8e3d7edeafb3e3258022b00156e3"
+    && identityHashOf goldenSource
+    == "467b5763eff1f6d1914cda856b5985264d5bab96543c1eeee292ed40b67791b7"
 
 -- | 80 个 'a'（跨两个 SHA-256 块，覆盖填充的 r > 56 分支）。
 repeatA : Int -> String
@@ -243,12 +259,20 @@ spanInsensitive = encTop encTerm spanTermA == encTop encTerm spanTermB
 -- | binder 名 span（`TLam` / `CaseAlt` 的 `Binder`）同样不进编码：换位置必须同一串。
 binderSpanTermA : Term
 binderSpanTermA =
-  TLam "x" Rig1 Nothing spA
+  TLam
+    "x"
+    Rig1
+    Nothing
+    spA
     (TCase (TVar "x" 0 spA) [CaseAlt "Succ" [Binder "k" Rig1 spA] (TVar "k" 0 spA)])
 
 binderSpanTermB : Term
 binderSpanTermB =
-  TLam "x" Rig1 Nothing spB
+  TLam
+    "x"
+    Rig1
+    Nothing
+    spB
     (TCase (TVar "x" 0 spB) [CaseAlt "Succ" [Binder "k" Rig1 spB] (TVar "k" 0 spB)])
 
 binderSpanInsensitive : Bool
@@ -257,7 +281,8 @@ binderSpanInsensitive = encTop encTerm binderSpanTermA == encTop encTerm binderS
 -- | Core 项夹具：覆盖全部构造子（含 `TProj` / `TRecUpd` / `TRecord` / `TFloat`）。
 termFixtures : List Term
 termFixtures =
-  [ TVar "x" 3 spA,
+  [
+    TVar "x" 3 spA,
     TMeta 12,
     TGlobal "Base.Data.Int",
     TType (levelOfInt 2),
@@ -265,7 +290,9 @@ termFixtures =
     TApp (TGlobal "f") (TInt 7) Rig1,
     TCon "Cons" [Pair (TInt 1) RigOmega, Pair (TStr "s") Rig1],
     TMk "Point" [Pair (TInt 1) RigOmega],
-    TCase (TGlobal "n") [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [binderOfPair (Pair "k" Rig1)] (TVar "k" 0 sp0)],
+    TCase
+      (TGlobal "n")
+      [CaseAlt "Zero" [] (TInt 0), CaseAlt "Succ" [binderOfPair (Pair "k" Rig1)] (TVar "k" 0 sp0)],
     TProj (TGlobal "p") "Point" [Pair "x" RigOmega] 0 2,
     TRecUpd (TGlobal "p") "Point" [Pair "x" RigOmega] [0] (TInt 9),
     TInt 42,
@@ -278,9 +305,10 @@ termFixtures =
 
 -- | 一次「编码 → 解码 → 重编码」是否逐字节一致（span 被有意丢弃，所以比较编码而非原值）。
 termRT : Term -> Bool
-termRT t = case decTermComplete (encTop encTerm t) of
-  Nothing => False
-  Just t2 => encTop encTerm t2 == encTop encTerm t
+termRT t =
+  case decTermComplete (encTop encTerm t) of
+    Nothing => False
+    Just t2 => encTop encTerm t2 == encTop encTerm t
 
 termFixturesRT : Bool
 termFixturesRT = foldl (\acc, t => acc && termRT t) True termFixtures
@@ -288,12 +316,34 @@ termFixturesRT = foldl (\acc, t => acc && termRT t) True termFixtures
 -- | Frontend AST 夹具：覆盖 Expr / Pat / Decl 的主要构造子（span 各不相同）。
 declFixtures : List Decl
 declFixtures =
-  [ DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) spA,
+  [
+    DSig "f" [] (EApp (EVar "->" spA) [EVar "Int" spA, EVar "Int" spA] spA) spA,
     DFun "f" [PVar "x" spB] (EApp (EVar "g" spA) [EVar "x" spA] spA) spA,
-    DData "Color" [] (EVar "Type" spA) [Ctor "Red" (EVar "Color" spA) 0 spA, Ctor "Green" (EVar "Color" spA) 0 spB] [] False ReprAuto False spA,
-    DRecord "Point" [] [Field "x" (EVar "Int" spA) spA, Field "y" (EVar "Int" spB) spB] [] False ReprAuto False spA,
+    DData
+      "Color"
+      []
+      (EVar "Type" spA)
+      [Ctor "Red" (EVar "Color" spA) 0 spA, Ctor "Green" (EVar "Color" spA) 0 spB]
+      []
+      False
+      ReprAuto
+      False
+      spA,
+    DRecord
+      "Point"
+      []
+      [Field "x" (EVar "Int" spA) spA, Field "y" (EVar "Int" spB) spB]
+      []
+      False
+      ReprAuto
+      False
+      spA,
     DTrait "Show" [TraitParam "a" Nothing] [] [TraitMethod "show" (EVar "a" spA) spA] spB,
-    DInstance [] (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA) [DFun "show" [PWild spA] (EStr "c" spA) spA] spA,
+    DInstance
+      []
+      (EApp (EVar "Dict_Show" spA) [EVar "Color" spA] spA)
+      [DFun "show" [PWild spA] (EStr "c" spA) spA]
+      spA,
     DAxiom "ax" (EVar "Int" spA) spA,
     DExtern "ext" "c_ext" (EVar "Int" spA) spA,
     DFun "exprs" [] exprFixture spA
@@ -305,25 +355,29 @@ exprFixture =
   ELet
     [Pair (PVar "x" spA) (EInt 1 spA), Pair (PAs "y" (PCon "Just" [PInt 2 spB] spB) spB) (EFloat "1.5" spA)]
     (EDo [DBind (PVar "z" spA) (EField (EVar "r" spA) "field" spA) spA, DBind (PRecord "Point" [Pair "x" (PVar "px" spA)] spA) (ERecord "Point" [Pair "x" (EInt 3 spA)] spA) spA, DExpr (EIf (EVar "True" spA) (ECase (EVar "z" spA) [Pair (PStr "s" spA) (EInt 0 spA)] spA) (EBacktick "add" (EInt 1 spA) (EInt 2 spA) spA) spA) spA, DExpr (ESectL "+" (EInt 4 spA) spA) spA] spA)
-    False spA
+    False
+    spA
 
 declsRT : List Decl -> Bool
-declsRT ds = case decDeclsComplete (encTop encDecls ds) of
-  Nothing => False
-  Just ds2 => encTop encDecls ds2 == encTop encDecls ds
+declsRT ds =
+  case decDeclsComplete (encTop encDecls ds) of
+    Nothing => False
+    Just ds2 => encTop encDecls ds2 == encTop encDecls ds
 
 -- | 精化产物夹具（`DtDef` 三类）。
 defFixtures : List DtDef
 defFixtures =
-  [ DtDef "f" (TPi "x" False RigOmega (TGlobal "Int") (TGlobal "Int")) (TInt 1) (Just spA),
+  [
+    DtDef "f" (TPi "x" False RigOmega (TGlobal "Int") (TGlobal "Int")) (TInt 1) (Just spA),
     DtAxiom "ax" (TGlobal "Int") (Just spB),
     DtExtern "ext" (TGlobal "Int") "c_ext" Nothing
   ]
 
 defsRT : Bool
-defsRT = case decDtDefsComplete (encTop encDtDefs defFixtures) of
-  Nothing => False
-  Just ds2 => encTop encDtDefs ds2 == encTop encDtDefs defFixtures
+defsRT =
+  case decDtDefsComplete (encTop encDtDefs defFixtures) of
+    Nothing => False
+    Just ds2 => encTop encDtDefs ds2 == encTop encDtDefs defFixtures
 
 -- | 导出条目的 `parent` 必须进哈希（不进则依赖方可能不判脏）。
 parentCovered : Bool

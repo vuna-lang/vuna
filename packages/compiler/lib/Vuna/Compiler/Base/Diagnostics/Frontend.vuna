@@ -218,61 +218,168 @@ export record PsEntry(..) where
 
 export lexAll : List LexEntry
 lexAll =
-  [ LexEntry (lexCode UnterminatedBlockComment) (lexTemplate UnterminatedBlockComment) "块注释未闭合",
-    LexEntry (lexCode UnterminatedString) (lexTemplate UnterminatedString) "字符串字面量未闭合",
-    LexEntry (lexCode UnterminatedInterpolation) (lexTemplate UnterminatedInterpolation) "字符串插值洞未闭合",
+  [
+    LexEntry
+      (lexCode UnterminatedBlockComment)
+      (lexTemplate UnterminatedBlockComment)
+      "块注释未闭合",
+    LexEntry
+      (lexCode UnterminatedString)
+      (lexTemplate UnterminatedString)
+      "字符串字面量未闭合",
+    LexEntry
+      (lexCode UnterminatedInterpolation)
+      (lexTemplate UnterminatedInterpolation)
+      "字符串插值洞未闭合",
     LexEntry (lexCode UnknownEscape) (lexTemplate UnknownEscape) "未知转义序列",
     LexEntry (lexCode UnexpectedCharacter) (lexTemplate UnexpectedCharacter) "无法识别的字符",
-    LexEntry (lexCode IntLiteralOutOfRange) (lexTemplate IntLiteralOutOfRange) "整数字面量超出范围"
+    LexEntry
+      (lexCode IntLiteralOutOfRange)
+      (lexTemplate IntLiteralOutOfRange)
+      "整数字面量超出范围"
   ]
 
 export psAll : List PsEntry
 psAll =
-  [ PsEntry (psCode CaseAltNotIndented) (psTemplate CaseAltNotIndented) "case 分支缩进不足",
+  [
+    PsEntry (psCode CaseAltNotIndented) (psTemplate CaseAltNotIndented) "case 分支缩进不足",
     PsEntry (psCode CaseNeedsAlternative) (psTemplate CaseNeedsAlternative) "case 缺少分支",
-    PsEntry (psCode DoBlockMustEndWithExpr) (psTemplate DoBlockMustEndWithExpr) "do 块必须以表达式结尾",
+    PsEntry
+      (psCode DoBlockMustEndWithExpr)
+      (psTemplate DoBlockMustEndWithExpr)
+      "do 块必须以表达式结尾",
     PsEntry (psCode DoBindPattern) (psTemplate DoBindPattern) "do 绑定模式必须是变量或 _",
-    PsEntry (psCode DoBlockNeedsStatement) (psTemplate DoBlockNeedsStatement) "do 块至少需要一条语句",
-    PsEntry (psCode DoStatementNotIndented) (psTemplate DoStatementNotIndented) "do 语句缩进不足",
-    PsEntry (psCode ExpectedCommaOrBracket) (psTemplate ExpectedCommaOrBracket) "期望逗号或右方括号",
+    PsEntry
+      (psCode DoBlockNeedsStatement)
+      (psTemplate DoBlockNeedsStatement)
+      "do 块至少需要一条语句",
+    PsEntry
+      (psCode DoStatementNotIndented)
+      (psTemplate DoStatementNotIndented)
+      "do 语句缩进不足",
+    PsEntry
+      (psCode ExpectedCommaOrBracket)
+      (psTemplate ExpectedCommaOrBracket)
+      "期望逗号或右方括号",
     PsEntry (psCode ExpectedEndOfInput) (psTemplate ExpectedEndOfInput) "输入后有多余内容",
     PsEntry (psCode ExpectedEndOfExpr) (psTemplate ExpectedEndOfExpr) "表达式后有多余内容",
     PsEntry (psCode ExpectedExportItem) (psTemplate ExpectedExportItem) "期望导出项",
     PsEntry (psCode ExpectedExpression) (psTemplate ExpectedExpression) "期望表达式",
     PsEntry (psCode ExpectedIdentifier) (psTemplate ExpectedIdentifier) "期望标识符",
-    PsEntry (psCode ExpectedInstanceMethod) (psTemplate ExpectedInstanceMethod) "期望 instance 方法",
+    PsEntry
+      (psCode ExpectedInstanceMethod)
+      (psTemplate ExpectedInstanceMethod)
+      "期望 instance 方法",
     PsEntry (psCode ExpectedLetBinding) (psTemplate ExpectedLetBinding) "期望 let 绑定",
     PsEntry (psCode ExpectedPattern) (psTemplate ExpectedPattern) "期望模式",
-    PsEntry (psCode ExpectedRecordFieldPattern) (psTemplate ExpectedRecordFieldPattern) "期望 record 字段模式",
+    PsEntry
+      (psCode ExpectedRecordFieldPattern)
+      (psTemplate ExpectedRecordFieldPattern)
+      "期望 record 字段模式",
     PsEntry (psCode ExpectedTopLevelDecl) (psTemplate ExpectedTopLevelDecl) "期望顶层声明",
-    PsEntry (psCode RepeatedPatternBinder) (psTemplate RepeatedPatternBinder) "模式内重复绑定同名（不支持非线性格）",
+    PsEntry
+      (psCode RepeatedPatternBinder)
+      (psTemplate RepeatedPatternBinder)
+      "模式内重复绑定同名（不支持非线性格）",
     PsEntry (psCode TemplateHoleEmpty) (psTemplate TemplateHoleEmpty) "插值洞缺少表达式",
-    PsEntry (psCode TemplateInPattern) (psTemplate TemplateInPattern) "模式里不支持字符串插值",
+    PsEntry
+      (psCode TemplateInPattern)
+      (psTemplate TemplateInPattern)
+      "模式里不支持字符串插值",
     PsEntry (psCode ExprNotIndented) (psTemplate ExprNotIndented) "表达式缩进不足",
-    PsEntry (psCode LetBindingNotIndented) (psTemplate LetBindingNotIndented) "let 绑定缩进不足",
-    PsEntry (psCode PiBinderNameNotSimple) (psTemplate PiBinderNameNotSimple) "pi 绑定名必须是简单标识符",
+    PsEntry
+      (psCode LetBindingNotIndented)
+      (psTemplate LetBindingNotIndented)
+      "let 绑定缩进不足",
+    PsEntry
+      (psCode PiBinderNameNotSimple)
+      (psTemplate PiBinderNameNotSimple)
+      "pi 绑定名必须是简单标识符",
     PsEntry (psCode UnexpectedEndOfInput) (psTemplate UnexpectedEndOfInput) "输入意外结束",
-    PsEntry (psCode UnexpectedIndentAfterCaseAlt) (psTemplate UnexpectedIndentAfterCaseAlt) "case 分支后出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInData) (psTemplate UnexpectedIndentInData) "data 块内出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInDo) (psTemplate UnexpectedIndentInDo) "do 块内出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInInstance) (psTemplate UnexpectedIndentInInstance) "instance 块内出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInRecord) (psTemplate UnexpectedIndentInRecord) "record 块内出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInTrait) (psTemplate UnexpectedIndentInTrait) "trait 块内出现意外缩进",
-    PsEntry (psCode UnexpectedIndentInBinding) (psTemplate UnexpectedIndentInBinding) "let/where 绑定块内出现意外缩进",
-    PsEntry (psCode (ExpectedDeclAtColumn "")) (psTemplate (ExpectedDeclAtColumn "")) "期望在该列出现一个声明",
-    PsEntry (psCode (ExpectedToken "")) (psTemplate (ExpectedToken "")) "期望指定符号或关键字",
-    PsEntry (psCode (WhereSigBeforeClause "")) (psTemplate (WhereSigBeforeClause "")) "绑定签名必须写在对应子句之前",
-    PsEntry (psCode (WhereSigDuplicate "")) (psTemplate (WhereSigDuplicate "")) "重复的绑定签名",
-    PsEntry (psCode (WhereSigMultiClause "")) (psTemplate (WhereSigMultiClause "")) "绑定有多个子句，签名只能标注一个",
-    PsEntry (psCode (WhereSigNoDef "")) (psTemplate (WhereSigNoDef "")) "绑定签名无对应定义",
-    PsEntry (psCode ExpectedFixityLevel) (psTemplate ExpectedFixityLevel) "fixity 声明缺少优先级",
-    PsEntry (psCode FixityLevelRange) (psTemplate FixityLevelRange) "fixity 优先级必须在 0 到 9 之间",
-    PsEntry (psCode ConstraintUnsupportedHere) (psTemplate ConstraintUnsupportedHere) "trait 约束只支持在顶层签名与 trait 头上",
-    PsEntry (psCode HandleClauseNeedsCtor) (psTemplate HandleClauseNeedsCtor) "handle 操作子句必须是构造子模式后接续延绑定",
-    PsEntry (psCode HandleClauseNotIndented) (psTemplate HandleClauseNotIndented) "handle 子句缩进不足",
-    PsEntry (psCode HandleNeedsOpClause) (psTemplate HandleNeedsOpClause) "handle 块至少需要一个操作子句",
-    PsEntry (psCode HandleReturnMisplaced) (psTemplate HandleReturnMisplaced) "handle return 子句必须在最前且只出现一次",
-    PsEntry (psCode (HandleContinuationNameMismatch "" "")) (psTemplate (HandleContinuationNameMismatch "" "")) "handle 各操作子句的续延绑定名必须一致"
+    PsEntry
+      (psCode UnexpectedIndentAfterCaseAlt)
+      (psTemplate UnexpectedIndentAfterCaseAlt)
+      "case 分支后出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInData)
+      (psTemplate UnexpectedIndentInData)
+      "data 块内出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInDo)
+      (psTemplate UnexpectedIndentInDo)
+      "do 块内出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInInstance)
+      (psTemplate UnexpectedIndentInInstance)
+      "instance 块内出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInRecord)
+      (psTemplate UnexpectedIndentInRecord)
+      "record 块内出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInTrait)
+      (psTemplate UnexpectedIndentInTrait)
+      "trait 块内出现意外缩进",
+    PsEntry
+      (psCode UnexpectedIndentInBinding)
+      (psTemplate UnexpectedIndentInBinding)
+      "let/where 绑定块内出现意外缩进",
+    PsEntry
+      (psCode (ExpectedDeclAtColumn ""))
+      (psTemplate (ExpectedDeclAtColumn ""))
+      "期望在该列出现一个声明",
+    PsEntry
+      (psCode (ExpectedToken ""))
+      (psTemplate (ExpectedToken ""))
+      "期望指定符号或关键字",
+    PsEntry
+      (psCode (WhereSigBeforeClause ""))
+      (psTemplate (WhereSigBeforeClause ""))
+      "绑定签名必须写在对应子句之前",
+    PsEntry
+      (psCode (WhereSigDuplicate ""))
+      (psTemplate (WhereSigDuplicate ""))
+      "重复的绑定签名",
+    PsEntry
+      (psCode (WhereSigMultiClause ""))
+      (psTemplate (WhereSigMultiClause ""))
+      "绑定有多个子句，签名只能标注一个",
+    PsEntry
+      (psCode (WhereSigNoDef ""))
+      (psTemplate (WhereSigNoDef ""))
+      "绑定签名无对应定义",
+    PsEntry
+      (psCode ExpectedFixityLevel)
+      (psTemplate ExpectedFixityLevel)
+      "fixity 声明缺少优先级",
+    PsEntry
+      (psCode FixityLevelRange)
+      (psTemplate FixityLevelRange)
+      "fixity 优先级必须在 0 到 9 之间",
+    PsEntry
+      (psCode ConstraintUnsupportedHere)
+      (psTemplate ConstraintUnsupportedHere)
+      "trait 约束只支持在顶层签名与 trait 头上",
+    PsEntry
+      (psCode HandleClauseNeedsCtor)
+      (psTemplate HandleClauseNeedsCtor)
+      "handle 操作子句必须是构造子模式后接续延绑定",
+    PsEntry
+      (psCode HandleClauseNotIndented)
+      (psTemplate HandleClauseNotIndented)
+      "handle 子句缩进不足",
+    PsEntry
+      (psCode HandleNeedsOpClause)
+      (psTemplate HandleNeedsOpClause)
+      "handle 块至少需要一个操作子句",
+    PsEntry
+      (psCode HandleReturnMisplaced)
+      (psTemplate HandleReturnMisplaced)
+      "handle return 子句必须在最前且只出现一次",
+    PsEntry
+      (psCode (HandleContinuationNameMismatch "" ""))
+      (psTemplate (HandleContinuationNameMismatch "" ""))
+      "handle 各操作子句的续延绑定名必须一致"
   ]
 
 -- ---------------------------------------------------------------
@@ -292,11 +399,12 @@ lexErrAt sp e args = ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (
 
 -- | 带位置的语法诊断。
 export psErrAt : Span -> {n : Nat} -> PsDiag n -> Vec n String -> Check a
-psErrAt sp e args = case e of
-  ExpectedToken s =>
-    ErrC
-      (withLabel (Label (Just sp) "" LabelPrimary Nothing) (withField (FieldExpected s) (psMsg e args)))
-  _ => ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg e args))
+psErrAt sp e args =
+  case e of
+    ExpectedToken s =>
+      ErrC
+        (withLabel (Label (Just sp) "" LabelPrimary Nothing) (withField (FieldExpected s) (psMsg e args)))
+    _ => ErrC (withLabel (Label (Just sp) "" LabelPrimary Nothing) (psMsg e args))
 
 -- | 零元词法诊断（带位置）。
 export lexErr0At : Span -> LexDiag Zero -> Check a

@@ -109,41 +109,48 @@ sameSection (x :: xs) (y :: ys) = x == y && sameSection xs ys
 sameSection _ _ = False
 
 fieldLine : String -> List String -> String -> List TomlEntry -> Int
-fieldLine path section key entries = case lookupEntryLine section key entries of
-  Just line => line
-  Nothing => 1
+fieldLine path section key entries =
+  case lookupEntryLine section key entries of
+    Just line => line
+    Nothing => 1
 
 fieldLoc : String -> List String -> String -> List TomlEntry -> String
-fieldLoc path section key entries = case lookupEntryLine section key entries of
-  Just line => if path == "" then "line ${line}: " else "${path}:${line}: "
-  Nothing => if path == "" then "" else "${path}: "
+fieldLoc path section key entries =
+  case lookupEntryLine section key entries of
+    Just line => if path == "" then "line ${line}: " else "${path}:${line}: "
+    Nothing => if path == "" then "" else "${path}: "
 
 stringField : String -> List String -> String -> List TomlEntry -> Check (Maybe String)
-stringField path section key entries = case lookupEntry section key entries of
-  Nothing => OkC Nothing
-  Just (TStr s) => OkC (Just s)
-  Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedString key) key
+stringField path section key entries =
+  case lookupEntry section key entries of
+    Nothing => OkC Nothing
+    Just (TStr s) => OkC (Just s)
+    Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedString key) key
 
 stringListField : String -> List String -> String -> List TomlEntry -> Check (Maybe (List String))
-stringListField path section key entries = case lookupEntry section key entries of
-  Nothing => OkC Nothing
-  Just (TArray xs) => case arrayStrings xs of
-    Nothing => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
-    Just ys => OkC (Just ys)
-  Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
+stringListField path section key entries =
+  case lookupEntry section key entries of
+    Nothing => OkC Nothing
+    Just (TArray xs) =>
+      case arrayStrings xs of
+        Nothing => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
+        Just ys => OkC (Just ys)
+    Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedStringArray key) key
 
 -- | 读 `[section] key` 的布尔值：缺省返回 `Nothing`，类型不符报带位置的行号错误。
 intField : String -> List String -> String -> List TomlEntry -> Check (Maybe Int)
-intField path section key entries = case lookupEntry section key entries of
-  Nothing => OkC Nothing
-  Just (TInt n) => OkC (Just n)
-  Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedInt key) key
+intField path section key entries =
+  case lookupEntry section key entries of
+    Nothing => OkC Nothing
+    Just (TInt n) => OkC (Just n)
+    Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedInt key) key
 
 boolField : String -> List String -> String -> List TomlEntry -> Check (Maybe Bool)
-boolField path section key entries = case lookupEntry section key entries of
-  Nothing => OkC Nothing
-  Just (TBool b) => OkC (Just b)
-  Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedBool key) key
+boolField path section key entries =
+  case lookupEntry section key entries of
+    Nothing => OkC Nothing
+    Just (TBool b) => OkC (Just b)
+    Just value => pkgAt1 path (fieldLine path section key entries) (ExpectedBool key) key
 
 orEmptyList : Maybe (List a) -> List a
 orEmptyList Nothing = []
@@ -162,29 +169,32 @@ layerSeen name (x :: rest) = name == x || layerSeen name rest
 
 collectLayers : String -> List TomlEntry -> List String -> Check (List Layer)
 collectLayers path [] seen = OkC []
-collectLayers path ((TomlEntry section key value line) :: rest) seen = if sameSection section ["layers"] then
-  if layerSeen key seen then collectLayers path rest seen
-  else case value of
-    TArray xs => case arrayStrings xs of
-      Nothing => pkgAt1 path line (ExpectedStringArray key) key
-      Just uses =>
-        Vuna.Compiler.Base.Common.bind (collectLayers path rest (key :: seen))
-          (\ls => OkC (Layer key uses line :: ls))
-    _ => pkgAt1 path line (ExpectedStringArray key) key
-else collectLayers path rest seen
+collectLayers path ((TomlEntry section key value line) :: rest) seen =
+  if sameSection section ["layers"] then
+    if layerSeen key seen then
+      collectLayers path rest seen
+    else
+      case value of
+        TArray xs =>
+          case arrayStrings xs of
+            Nothing => pkgAt1 path line (ExpectedStringArray key) key
+            Just uses => Vuna.Compiler.Base.Common.bind (collectLayers path rest (key :: seen)) (\ls => OkC (Layer key uses line :: ls))
+        _ => pkgAt1 path line (ExpectedStringArray key) key
+  else
+    collectLayers path rest seen
 
 layerUsesOf : List Layer -> String -> List String
 layerUsesOf [] name = []
 layerUsesOf (l :: rest) name = if l.layerName == name then l.layerUses else layerUsesOf rest name
 
 reachesFrom : Int -> List Layer -> List String -> List String -> String -> Bool
-reachesFrom fuel layers todo seen target = if fuel <= 0 then False
-else case todo of
-  [] => False
-  n :: rest =>
-    if n == target then True
-    else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target
-    else reachesFrom (fuel - 1) layers (append rest (layerUsesOf layers n)) (n :: seen) target
+reachesFrom fuel layers todo seen target =
+  if fuel <= 0 then
+    False
+  else
+    case todo of
+      [] => False
+      n :: rest => if n == target then True else if layerSeen n seen then reachesFrom (fuel - 1) layers rest seen target else reachesFrom (fuel - 1) layers (append rest (layerUsesOf layers n)) (n :: seen) target
 
 layerHasCycle : List Layer -> Layer -> Bool
 layerHasCycle layers l =
@@ -192,18 +202,21 @@ layerHasCycle layers l =
 
 validateLayers : String -> List Layer -> List Layer -> Check Int
 validateLayers path all [] = OkC 0
-validateLayers path all (l :: rest) = if validModuleName l.layerName then case validateLayerTargets path l.layerUses of
-  ErrC e => ErrC e
-  OkC _ =>
-    if layerHasCycle all l then pkgAt1 path l.layerLine (LayerCycle l.layerName) l.layerName
-    else validateLayers path all rest
-else pkgAt1 path l.layerLine (LayerInvalidName l.layerName) l.layerName
+validateLayers path all (l :: rest) =
+  if validModuleName l.layerName then
+    case validateLayerTargets path l.layerUses of
+      ErrC e => ErrC e
+      OkC _ => if layerHasCycle all l then pkgAt1 path l.layerLine (LayerCycle l.layerName) l.layerName else validateLayers path all rest
+  else
+    pkgAt1 path l.layerLine (LayerInvalidName l.layerName) l.layerName
 
 validateLayerTargets : String -> List String -> Check Int
 validateLayerTargets path [] = OkC 0
 validateLayerTargets path (t :: rest) =
-  if validModuleName t then validateLayerTargets path rest
-  else pkgPath1 path (LayerInvalidTarget t) t
+  if validModuleName t then
+    validateLayerTargets path rest
+  else
+    pkgPath1 path (LayerInvalidTarget t) t
 
 -- | `Maybe Bool` 的缺省取值：`Nothing` 视为 `False`。
 orFalse : Maybe Bool -> Bool
@@ -227,47 +240,34 @@ depAliasOfSection _ = ""
 
 isDepSourceKey : String -> Bool
 isDepSourceKey key =
-  key == "path"
-    || key == "git"
-    || key == "rev"
-    || key == "url"
-    || key == "hash"
-    || key == "identity"
+  key
+    == "path" || key == "git" || key == "rev" || key == "url" || key == "hash" || key == "identity"
 
 -- 只接受约定表；未知表 / 未知 key 报带行号的错误（防止字段拼写错误被静默忽略）。
 checkOneEntry : String -> TomlEntry -> Check Int
-checkOneEntry path (TomlEntry section key value line) = if sameSection section [] then pkgAt1 path line (UnexpectedTopLevelKey key) key
-else if sameSection section ["package"] then
-  if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
-else if sameSection section ["workspace"] then
-  if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
-else if sameSection section ["export"] then
-  if key == "modules" then OkC 0 else pkgAt2 path line (UnknownKey key "export") key "export"
-else if sameSection section ["diagnostics"] then
-  if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then
-    OkC 0
-  else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
-else if sameSection section ["layers"] then case value of
-  TArray _ => OkC 0
-  _ => pkgAt1 path line (ExpectedStringArray key) key
-else if isLayersSection section then
-  pkgAt1 path line (LayerKeyMustBeQuoted (joinDots (append section [key])))
-    (joinDots (append section [key]))
-else if sameSection section ["dependencies"] then OkC 0
-else if sameSection section ["registry"] then
-  if key == "index" then OkC 0 else pkgAt2 path line (UnknownKey key "registry") key "registry"
-else if isDepTableSection section then
-  if isDepSourceKey key then OkC 0
-  else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key
-    (depAliasOfSection section)
-else if isLintSection section then OkC 0
-else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
+checkOneEntry path (TomlEntry section key value line) =
+  if sameSection section [] then
+    pkgAt1 path line (UnexpectedTopLevelKey key) key
+  else if sameSection section ["package"] then
+    if key == "name" then OkC 0 else pkgAt2 path line (UnknownKey key "package") key "package"
+  else if sameSection section ["workspace"] then
+    if key == "members" then OkC 0 else pkgAt2 path line (UnknownKey key "workspace") key "workspace"
+  else if sameSection section ["export"] then
+    if key == "modules" then OkC 0 else pkgAt2 path line (UnknownKey key "export") key "export"
+  else if sameSection section ["diagnostics"] then
+    if key == "format" || key == "warnings" || key == "max-errors" || key == "lang" || key == "deny-warnings" then OkC 0 else pkgAt2 path line (UnknownKey key "diagnostics") key "diagnostics"
+  else if sameSection section ["layers"] then
+    case value of
+      TArray _ => OkC 0
+      _ => pkgAt1 path line (ExpectedStringArray key) key
+  else if isLayersSection section then pkgAt1 path line (LayerKeyMustBeQuoted (joinDots (append section [key]))) (joinDots (append section [key])) else if sameSection section ["dependencies"] then OkC 0 else if sameSection section ["registry"] then if key == "index" then OkC 0 else pkgAt2 path line (UnknownKey key "registry") key "registry" else if isDepTableSection section then if isDepSourceKey key then OkC 0 else pkgAt2 path line (UnknownSourceKey key (depAliasOfSection section)) key (depAliasOfSection section) else if isLintSection section then OkC 0 else pkgAt1 path line (UnknownSection (joinDots section)) (joinDots section)
 
 checkEntries : String -> List TomlEntry -> Check Int
 checkEntries path [] = OkC 0
-checkEntries path (entry :: rest) = case checkOneEntry path entry of
-  ErrC e => ErrC e
-  OkC ok => checkEntries path rest
+checkEntries path (entry :: rest) =
+  case checkOneEntry path entry of
+    ErrC e => ErrC e
+    OkC ok => checkEntries path rest
 
 -- ---------------------------------------------------------------- 依赖收集
 -- 分组辅助：按别名累积（保持首次出现顺序）。
@@ -311,77 +311,108 @@ applyDepEntry path alias key value line acc =
   let
     ensured = ensureAcc alias line acc
   in case key of
-    "path" => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccPath s) ensured)
-    "git" => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccGit s) ensured)
-    "rev" => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccRev s) ensured)
-    "url" => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccUrl s) ensured)
-    "hash" => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccHash s) ensured)
-    _ => case stringValueOf path key value line of
-      ErrC e => ErrC e
-      OkC s => OkC (mapAcc alias (setAccIdentity s) ensured)
+    "path" =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccPath s) ensured)
+    "git" =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccGit s) ensured)
+    "rev" =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccRev s) ensured)
+    "url" =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccUrl s) ensured)
+    "hash" =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccHash s) ensured)
+    _ =>
+      case stringValueOf path key value line of
+        ErrC e => ErrC e
+        OkC s => OkC (mapAcc alias (setAccIdentity s) ensured)
 
 collectTables : String -> List TomlEntry -> List DepAcc -> Check (List DepAcc)
 collectTables path [] acc = OkC acc
-collectTables path ((TomlEntry section key value line) :: rest) acc = if isDepTableSection section then
-  case applyDepEntry path (depAliasOfSection section) key value line acc of
-    ErrC e => ErrC e
-    OkC acc2 => collectTables path rest acc2
-else collectTables path rest acc
+collectTables path ((TomlEntry section key value line) :: rest) acc =
+  if isDepTableSection section then
+    case applyDepEntry path (depAliasOfSection section) key value line acc of
+      ErrC e => ErrC e
+      OkC acc2 => collectTables path rest acc2
+  else
+    collectTables path rest acc
 
 -- 字符串简写：`[dependencies] name = "相对路径"`。
 collectStrings : String -> List TomlEntry -> List (Pair String (Pair String Int)) -> Check (List (Pair String (Pair String Int)))
 collectStrings path [] acc = OkC (reverse acc)
-collectStrings path ((TomlEntry section key value line) :: rest) acc = if sameSection section ["dependencies"] then case value of
-  TStr rel => collectStrings path rest (Pair key (Pair rel line) :: acc)
-  _ => pkgAt1 path line (DependencyPathNotString key) key
-else collectStrings path rest acc
+collectStrings path ((TomlEntry section key value line) :: rest) acc =
+  if sameSection section ["dependencies"] then
+    case value of
+      TStr rel => collectStrings path rest (Pair key (Pair rel line) :: acc)
+      _ => pkgAt1 path line (DependencyPathNotString key) key
+  else
+    collectStrings path rest acc
 
 -- 由累积状态构造依赖：源互斥 + git 需要 rev。
 buildDependency : String -> DepAcc -> Check Dependency
-buildDependency path acc = case acc.depAccPath of
-  Just p => case acc.depAccGit of
-    Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
-    Nothing => case acc.depAccUrl of
-      Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
-      Nothing => OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash acc.depAccIdentity)
-  Nothing => case acc.depAccGit of
-    Just url => case acc.depAccRev of
-      Nothing => pkgAt1 path acc.depAccTableLine (GitRevRequired acc.depAccAlias) acc.depAccAlias
-      Just rev => case acc.depAccUrl of
+buildDependency path acc =
+  case acc.depAccPath of
+    Just p =>
+      case acc.depAccGit of
         Just _ => pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
         Nothing =>
-          OkC (Dependency acc.depAccAlias (DepGit url rev) acc.depAccHash acc.depAccIdentity)
-    Nothing => case acc.depAccUrl of
-      Just u => OkC (Dependency acc.depAccAlias (DepUrl u) acc.depAccHash acc.depAccIdentity)
-      Nothing =>
-        pkgAt1 path acc.depAccTableLine (DependencySourceMissing acc.depAccAlias) acc.depAccAlias
+          case acc.depAccUrl of
+            Just _ =>
+              pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
+            Nothing =>
+              OkC (Dependency acc.depAccAlias (DepPath p) acc.depAccHash acc.depAccIdentity)
+    Nothing =>
+      case acc.depAccGit of
+        Just url =>
+          case acc.depAccRev of
+            Nothing =>
+              pkgAt1 path acc.depAccTableLine (GitRevRequired acc.depAccAlias) acc.depAccAlias
+            Just rev =>
+              case acc.depAccUrl of
+                Just _ =>
+                  pkgAt1 path acc.depAccTableLine (SourceConflict acc.depAccAlias) acc.depAccAlias
+                Nothing =>
+                  OkC
+                    (Dependency acc.depAccAlias (DepGit url rev) acc.depAccHash acc.depAccIdentity)
+        Nothing =>
+          case acc.depAccUrl of
+            Just u => OkC (Dependency acc.depAccAlias (DepUrl u) acc.depAccHash acc.depAccIdentity)
+            Nothing =>
+              pkgAt1
+                path
+                acc.depAccTableLine
+                (DependencySourceMissing acc.depAccAlias)
+                acc.depAccAlias
 
 buildTables : String -> List DepAcc -> List Dependency -> Check (List Dependency)
 buildTables path [] acc = OkC (reverse acc)
-buildTables path (tableAcc :: rest) acc = case buildDependency path tableAcc of
-  ErrC e => ErrC e
-  OkC dep => buildTables path rest (dep :: acc)
+buildTables path (tableAcc :: rest) acc =
+  case buildDependency path tableAcc of
+    ErrC e => ErrC e
+    OkC dep => buildTables path rest (dep :: acc)
 
 collectDependencies : String -> List TomlEntry -> Check (List Dependency)
-collectDependencies path entries = case collectStrings path entries [] of
-  ErrC e => ErrC e
-  OkC strings => case collectTables path entries [] of
+collectDependencies path entries =
+  case collectStrings path entries [] of
     ErrC e => ErrC e
-    OkC tables => case buildTables path tables [] of
-      ErrC e => ErrC e
-      OkC tableDeps =>
-        OkC
-          (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing Nothing) strings) tableDeps)
+    OkC strings =>
+      case collectTables path entries [] of
+        ErrC e => ErrC e
+        OkC tables =>
+          case buildTables path tables [] of
+            ErrC e => ErrC e
+            OkC tableDeps =>
+              OkC
+                (append (map (\p => Dependency (firstOf p) (DepPath (firstOf (secondOf p))) Nothing Nothing) strings) tableDeps)
 
 -- ---------------------------------------------------------------- 依赖校验
 isHexChar : Int -> Bool
@@ -394,8 +425,10 @@ allHex (c :: rest) = isHexChar c && allHex rest
 -- | 摘要文本：`sha256:<64 hex>` 或裸 64 位十六进制。
 export validHashText : String -> Bool
 validHashText s =
-  if startsWith "sha256:" s then strLength s == 71 && allHex (strUnpack (substring 7 64 s))
-  else strLength s == 64 && allHex (strUnpack s)
+  if startsWith "sha256:" s then
+    strLength s == 71 && allHex (strUnpack (substring 7 64 s))
+  else
+    strLength s == 64 && allHex (strUnpack s)
 
 checkHashForm : String -> String -> Maybe String -> Check Int
 checkHashForm path alias Nothing = OkC 0
@@ -408,32 +441,33 @@ checkIdentityForm path (Just i) =
   if validHashText i then OkC 0 else pkgPath1 path (IdentityMalformed i) i
 
 validateDependency : String -> Dependency -> Check Int
-validateDependency path (Dependency alias source hashArg identityArg) = if alias == "" then pkgPath0 path EmptyDependencyName
-else case checkIdentityForm path identityArg of
-  ErrC e => ErrC e
-  OkC _ => case source of
-    DepPath rel =>
-      if rel == "" then pkgPath1 path (EmptyDependencyPath alias) alias
-      else checkHashForm path alias hashArg
-    DepGit url rev => case hashArg of
-      Nothing => pkgPath1 path (MissingHash alias) alias
-      Just h =>
-        if url == "" then pkgPath1 path (DependencySourceMissing alias) alias
-        else if rev == "" then pkgPath1 path (GitRevRequired alias) alias
-        else checkHashForm path alias hashArg
-    DepUrl u => case hashArg of
-      Nothing => pkgPath1 path (MissingHash alias) alias
-      Just h =>
-        if u == "" then pkgPath1 path (DependencySourceMissing alias) alias
-        else checkHashForm path alias hashArg
+validateDependency path (Dependency alias source hashArg identityArg) =
+  if alias == "" then
+    pkgPath0 path EmptyDependencyName
+  else
+    case checkIdentityForm path identityArg of
+      ErrC e => ErrC e
+      OkC _ =>
+        case source of
+          DepPath rel => if rel == "" then pkgPath1 path (EmptyDependencyPath alias) alias else checkHashForm path alias hashArg
+          DepGit url rev =>
+            case hashArg of
+              Nothing => pkgPath1 path (MissingHash alias) alias
+              Just h => if url == "" then pkgPath1 path (DependencySourceMissing alias) alias else if rev == "" then pkgPath1 path (GitRevRequired alias) alias else checkHashForm path alias hashArg
+          DepUrl u =>
+            case hashArg of
+              Nothing => pkgPath1 path (MissingHash alias) alias
+              Just h => if u == "" then pkgPath1 path (DependencySourceMissing alias) alias else checkHashForm path alias hashArg
 
 validateDepsSeen : String -> List String -> List Dependency -> Check Int
 validateDepsSeen path seen [] = OkC 0
-validateDepsSeen path seen (dep :: rest) = if memName (depAliasOf dep) seen then
-  pkgPath1 path (DuplicateDependency (depAliasOf dep)) (depAliasOf dep)
-else case validateDependency path dep of
-  ErrC e => ErrC e
-  OkC ok => validateDepsSeen path (depAliasOf dep :: seen) rest
+validateDepsSeen path seen (dep :: rest) =
+  if memName (depAliasOf dep) seen then
+    pkgPath1 path (DuplicateDependency (depAliasOf dep)) (depAliasOf dep)
+  else
+    case validateDependency path dep of
+      ErrC e => ErrC e
+      OkC ok => validateDepsSeen path (depAliasOf dep :: seen) rest
 
 validateDependencies : String -> List Dependency -> Check Int
 validateDependencies path deps = validateDepsSeen path [] deps
@@ -442,8 +476,10 @@ validateDependencies path deps = validateDepsSeen path [] deps
 validateDiagFormat : String -> Maybe String -> Check Int
 validateDiagFormat path Nothing = OkC 0
 validateDiagFormat path (Just f) =
-  if f == "short" || f == "human" || f == "json" || f == "sarif" then OkC 0
-  else pkgPath1 path (InvalidDiagFormat f) f
+  if f == "short" || f == "human" || f == "json" || f == "sarif" then
+    OkC 0
+  else
+    pkgPath1 path (InvalidDiagFormat f) f
 
 validateDiagMax : String -> Maybe Int -> Check Int
 validateDiagMax path Nothing = OkC 0
@@ -464,40 +500,47 @@ startsWithSection (first :: rest) name = first == name
 validateRootShape : String -> List TomlEntry -> Maybe String -> List String -> Check Int
 validateRootShape path entries (Just _) members = OkC 0
 validateRootShape path entries Nothing members =
-  if not (sectionPresent entries "workspace") then pkgPath0 path MissingPackageName
-  else if members == [] then pkgPath0 path EmptyWorkspace
-  else checkRootSections path entries ["export", "layers", "dependencies"]
+  if not (sectionPresent entries "workspace") then
+    pkgPath0 path MissingPackageName
+  else if members == [] then
+    pkgPath0 path EmptyWorkspace
+  else
+    checkRootSections path entries ["export", "layers", "dependencies"]
 
 checkRootSections : String -> List TomlEntry -> List String -> Check Int
 checkRootSections path entries [] = OkC 0
 checkRootSections path entries (name :: rest) =
-  if sectionPresent entries name then pkgPath1 path (PackageSectionInWorkspaceRoot name) name
-  else checkRootSections path entries rest
+  if sectionPresent entries name then
+    pkgPath1 path (PackageSectionInWorkspaceRoot name) name
+  else
+    checkRootSections path entries rest
 
 buildManifest : String -> List TomlEntry -> Check Manifest
-buildManifest path entries = do
-  _ <- checkEntries path entries
-  layers <- collectLayers path entries []
-  name <- stringField path ["package"] "name" entries
-  members <- stringListField path ["workspace"] "members" entries
-  _ <- validateRootShape path entries name (orEmptyList members)
-  exports <- stringListField path ["export"] "modules" entries
-  deps <- collectDependencies path entries
-  diagFmt <- stringField path ["diagnostics"] "format" entries
-  diagWarns <- boolField path ["diagnostics"] "warnings" entries
-  diagMax <- intField path ["diagnostics"] "max-errors" entries
-  diagLang <- stringField path ["diagnostics"] "lang" entries
-  diagDeny <- boolField path ["diagnostics"] "deny-warnings" entries
-  regIndex <- stringField path ["registry"] "index" entries
-  _ <- validateDiagFormat path diagFmt
-  _ <- validateDiagMax path diagMax
-  _ <- validateDiagLang path diagLang
-  pure
-    (Manifest name (orEmptyList members) (sectionPresent entries "workspace") exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
+buildManifest path entries =
+  do
+    _ <- checkEntries path entries
+    layers <- collectLayers path entries []
+    name <- stringField path ["package"] "name" entries
+    members <- stringListField path ["workspace"] "members" entries
+    _ <- validateRootShape path entries name (orEmptyList members)
+    exports <- stringListField path ["export"] "modules" entries
+    deps <- collectDependencies path entries
+    diagFmt <- stringField path ["diagnostics"] "format" entries
+    diagWarns <- boolField path ["diagnostics"] "warnings" entries
+    diagMax <- intField path ["diagnostics"] "max-errors" entries
+    diagLang <- stringField path ["diagnostics"] "lang" entries
+    diagDeny <- boolField path ["diagnostics"] "deny-warnings" entries
+    regIndex <- stringField path ["registry"] "index" entries
+    _ <- validateDiagFormat path diagFmt
+    _ <- validateDiagMax path diagMax
+    _ <- validateDiagLang path diagLang
+    pure
+      (Manifest name (orEmptyList members) (sectionPresent entries "workspace") exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 export parseManifest : String -> String -> Check Manifest
 parseManifest path contents =
-  Vuna.Compiler.Base.Common.bind (parseTomlAt path contents)
+  Vuna.Compiler.Base.Common.bind
+    (parseTomlAt path contents)
     (\entries => buildManifest path entries)
 
 -- 结构校验（不检查文件存在性）。
@@ -526,8 +569,10 @@ validModuleSegmentChars (c :: rest) = isUpperAlphaChar c && validModuleTail rest
 validModuleTail : List Int -> Bool
 validModuleTail [] = True
 validModuleTail (c :: rest) =
-  if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then validModuleTail rest
-  else False
+  if isUpperAlphaChar c || isLowerAlphaChar c || isDigitChar c || c == 95 then
+    validModuleTail rest
+  else
+    False
 
 -- 包名：包目录必填；虚拟 workspace 根没有名字，校验放行（`validateRootShape` 已保证
 -- 它只有 `[workspace]` + 工具配置段）。
@@ -535,7 +580,8 @@ validateName : Bool -> List String -> String -> Maybe String -> Check Int
 validateName isWorkspace members path Nothing =
   if isWorkspace && length members > 0 then OkC 0 else pkgPath0 path MissingPackageName
 validateName isWorkspace members path (Just n) =
-  if n == "" then pkgPath0 path EmptyPackageName
+  if n == "" then
+    pkgPath0 path EmptyPackageName
   else if validPackageName n then OkC 0 else pkgPath1 path (InvalidPackageName n) n
 
 validateMembers : String -> List String -> Check Int
@@ -553,14 +599,15 @@ validateExports path Nothing = OkC 0
 validateExports path (Just modules) = validateModules path modules
 
 export validateManifest : Manifest -> Check Manifest
-validateManifest (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) = do
-  _ <- validateName isWorkspace members path name
-  _ <- validateMembers path members
-  _ <- validateExports path exports
-  _ <- validateDependencies path deps
-  _ <- validateLayers path layers layers
-  pure
-    (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
+validateManifest (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers) =
+  do
+    _ <- validateName isWorkspace members path name
+    _ <- validateMembers path members
+    _ <- validateExports path exports
+    _ <- validateDependencies path deps
+    _ <- validateLayers path layers layers
+    pure
+      (Manifest name members isWorkspace exports deps path diagFmt diagWarns diagMax diagLang diagDeny regIndex layers)
 
 -- manifest 所在目录：`a/b/vuna.toml` -> `a/b`；没有目录成分 -> "."。
 export manifestDir : String -> String

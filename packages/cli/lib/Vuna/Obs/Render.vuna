@@ -42,36 +42,45 @@ renderUsage = "usage: vuna dev obs render [--out FILE] TRACE"
 
 -- | `vuna dev obs render` 的入口；`--out` 缺失 / 未知 flag / TRACE 不存在都是退出码 2。
 export runObsRender : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runObsRender args = case parseCmdArgs ["dev", "obs", "render"] args of
-  ErrC e => renderFail 2 (diagText e)
-  OkC parsed => case parsed.positionals of
-    [path] => case flagValue parsed "out" of
-      Nothing =>
-        renderFail 2
-          "missing required flag `--out` (HTML goes to a file, not stdout): ${renderUsage}"
-      Just out =>
-        if out == "" then renderFail 2 "${renderUsage} (`--out` requires a non-empty path)"
-        else renderTrace out path
-    [] => renderFail 2 renderUsage
-    _ => renderFail 2 "${renderUsage} (exactly one TRACE)"
+runObsRender args =
+  case parseCmdArgs ["dev", "obs", "render"] args of
+    ErrC e => renderFail 2 (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [path] =>
+          case flagValue parsed "out" of
+            Nothing =>
+              renderFail
+                2
+                "missing required flag `--out` (HTML goes to a file, not stdout): ${renderUsage}"
+            Just out =>
+              if out == "" then
+                renderFail 2 "${renderUsage} (`--out` requires a non-empty path)"
+              else
+                renderTrace out path
+        [] => renderFail 2 renderUsage
+        _ => renderFail 2 "${renderUsage} (exactly one TRACE)"
 
 -- | 内部：打印 `error: ...` 并返回给定退出码。
 renderFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
-renderFail code e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure code
+renderFail code e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure code
 
 -- | 内部：读 trace、建父目录、写 HTML（`renderPage`）并打印 `wrote <path>`；读盘失败退出 2。
 renderTrace : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-renderTrace out path = do
-  traceR <- readTraceFull path
-  case traceR of
-    ErrC e => renderFail 2 (diagText e)
-    OkC trace => do
-      _ <- ensureDirPath (parentOf out)
-      _ <- fsWriteFile out (renderPage trace)
-      _ <- consolePrint "wrote ${out}\n"
-      pure 0
+renderTrace out path =
+  do
+    traceR <- readTraceFull path
+    case traceR of
+      ErrC e => renderFail 2 (diagText e)
+      OkC trace =>
+        do
+          _ <- ensureDirPath (parentOf out)
+          _ <- fsWriteFile out (renderPage trace)
+          _ <- consolePrint "wrote ${out}\n"
+          pure 0
 
 -- ---------------------------------------------------------------
 -- 数据模型（内嵌 JSON；键序固定）
@@ -113,12 +122,14 @@ renderDataJson trace =
     summary = summarizeTrace trace
     samples = cpuSamplesLenient trace.traceEvents
     flameRows = foldedRowsOf samples
-    argv = case trace.traceEvents of
-      (Pair _ (ObsMetaEvent m)) :: _ => m.metaArgv
-      _ => []
-    level = case trace.traceEvents of
-      (Pair _ (ObsMetaEvent m)) :: _ => m.metaLevel
-      _ => 0
+    argv =
+      case trace.traceEvents of
+        (Pair _ (ObsMetaEvent m)) :: _ => m.metaArgv
+        _ => []
+    level =
+      case trace.traceEvents of
+        (Pair _ (ObsMetaEvent m)) :: _ => m.metaLevel
+        _ => 0
   in JObj
     [Pair "schema" (JStr "vuna-obs-render 1"), Pair "wallUs" (JNum summary.summaryWallUs), Pair "level" (JNum level), Pair "argv" (JArr (map JStr argv)), Pair "spans" (JArr (map spanRowJson (spanRowsOf trace.traceEvents))), Pair "counters" (JArr (map counterRowJson summary.summaryCounters)), Pair "samples" (samplesJsonOf summary.summarySamples), Pair "flame" (JArr (map flameRowJson flameRows))]
 
@@ -214,24 +225,27 @@ assignDepths spans = reverse (assignGo spans [] [])
 -- | 内部：`assignDepths` 的扫描循环；`stack` 是当前打开的 span 栈（头 = 最内层）。
 assignGo : List ObsEvent -> List DepthFrame -> List (Pair ObsEvent Int) -> List (Pair ObsEvent Int)
 assignGo [] _ acc = acc
-assignGo (ev :: rest) stack acc = case spanInterval ev of
-  Nothing => assignGo rest stack acc
-  Just (Pair ts end) =>
-    let
-      popped = popUntilContained (length stack + 1) ts end stack
-      depth = case popped of
-        top :: _ => top.depthFrameDepth + 1
-        [] => 0
-    in assignGo rest (DepthFrame ts end depth :: popped) (Pair ev depth :: acc)
+assignGo (ev :: rest) stack acc =
+  case spanInterval ev of
+    Nothing => assignGo rest stack acc
+    Just (Pair ts end) =>
+      let
+        popped = popUntilContained (length stack + 1) ts end stack
+        depth =
+          case popped of
+            top :: _ => top.depthFrameDepth + 1
+            [] => 0
+      in assignGo rest (DepthFrame ts end depth :: popped) (Pair ev depth :: acc)
 
 -- | 内部：逐层弹出栈顶，直到栈顶区间包含 `[ts, end]`（或栈空）；`fuel` 是栈深 + 1。
 popUntilContained : Int -> Int -> Int -> List DepthFrame -> List DepthFrame
-popUntilContained fuel ts end stack = if fuel <= 0 then stack
-else case stack of
-  [] => []
-  top :: _ =>
-    if ts >= top.depthFrameTs && end <= top.depthFrameEnd then stack
-    else popUntilContained (fuel - 1) ts end (dropTop stack)
+popUntilContained fuel ts end stack =
+  if fuel <= 0 then
+    stack
+  else
+    case stack of
+      [] => []
+      top :: _ => if ts >= top.depthFrameTs && end <= top.depthFrameEnd then stack else popUntilContained (fuel - 1) ts end (dropTop stack)
 
 -- | 内部：弹出栈顶。
 dropTop : List DepthFrame -> List DepthFrame
@@ -286,8 +300,10 @@ scriptSafe s = scriptSafeChars (strUnpack s) ""
 scriptSafeChars : List Int -> String -> String
 scriptSafeChars [] acc = acc
 scriptSafeChars (c :: rest) acc =
-  if c == 60 then scriptSafeChars rest (acc ++ "\\u003c")
-  else scriptSafeChars rest (acc ++ strPack [c])
+  if c == 60 then
+    scriptSafeChars rest (acc ++ "\\u003c")
+  else
+    scriptSafeChars rest (acc ++ strPack [c])
 
 -- ---------------------------------------------------------------
 -- golden（`_scratch/`，不提交）

@@ -239,49 +239,116 @@ export record PkgEntry(..) where
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.pkgAll（目录/模板见 diagnostics.md）。
 export pkgAll : List PkgEntry
 pkgAll =
-  [ PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
+  [
+    PkgEntry (pkgCode EmptyDependencyName) (pkgTemplate EmptyDependencyName) "依赖名为空",
     PkgEntry (pkgCode EmptyMember) (pkgTemplate EmptyMember) "workspace 成员为空",
     PkgEntry (pkgCode EmptyPackageName) (pkgTemplate EmptyPackageName) "包名为空",
     PkgEntry (pkgCode MissingPackageName) (pkgTemplate MissingPackageName) "缺 [package] 的 name",
-    PkgEntry (pkgCode EmptyWorkspace) (pkgTemplate EmptyWorkspace) "虚拟 workspace 根没有 members",
+    PkgEntry
+      (pkgCode EmptyWorkspace)
+      (pkgTemplate EmptyWorkspace)
+      "虚拟 workspace 根没有 members",
     PkgEntry (pkgCode NotPackage) (pkgTemplate NotPackage) "workspace 根不能当包使用",
-    PkgEntry (pkgCode (DependencyPathNotString "")) (pkgTemplate (DependencyPathNotString "")) "依赖路径必须是字符串",
-    PkgEntry (pkgCode (DuplicateDependency "")) (pkgTemplate (DuplicateDependency "")) "重复依赖",
-    PkgEntry (pkgCode (EmptyDependencyPath "")) (pkgTemplate (EmptyDependencyPath "")) "依赖路径为空",
+    PkgEntry
+      (pkgCode (DependencyPathNotString ""))
+      (pkgTemplate (DependencyPathNotString ""))
+      "依赖路径必须是字符串",
+    PkgEntry
+      (pkgCode (DuplicateDependency ""))
+      (pkgTemplate (DuplicateDependency ""))
+      "重复依赖",
+    PkgEntry
+      (pkgCode (EmptyDependencyPath ""))
+      (pkgTemplate (EmptyDependencyPath ""))
+      "依赖路径为空",
     PkgEntry (pkgCode (ExpectedBool "")) (pkgTemplate (ExpectedBool "")) "布尔字段类型错误",
-    PkgEntry (pkgCode (ExpectedString "")) (pkgTemplate (ExpectedString "")) "字符串字段类型错误",
+    PkgEntry
+      (pkgCode (ExpectedString ""))
+      (pkgTemplate (ExpectedString ""))
+      "字符串字段类型错误",
     PkgEntry (pkgCode (ExpectedInt "")) (pkgTemplate (ExpectedInt "")) "整数字段类型错误",
-    PkgEntry (pkgCode (InvalidDiagFormat "")) (pkgTemplate (InvalidDiagFormat "")) "非法诊断格式",
-    PkgEntry (pkgCode (InvalidDiagMaxErrors "")) (pkgTemplate (InvalidDiagMaxErrors "")) "非法 max-errors",
+    PkgEntry
+      (pkgCode (InvalidDiagFormat ""))
+      (pkgTemplate (InvalidDiagFormat ""))
+      "非法诊断格式",
+    PkgEntry
+      (pkgCode (InvalidDiagMaxErrors ""))
+      (pkgTemplate (InvalidDiagMaxErrors ""))
+      "非法 max-errors",
     PkgEntry (pkgCode (InvalidDiagLang "")) (pkgTemplate (InvalidDiagLang "")) "非法诊断语言",
-    PkgEntry (pkgCode (ExpectedStringArray "")) (pkgTemplate (ExpectedStringArray "")) "字符串数组字段类型错误",
+    PkgEntry
+      (pkgCode (ExpectedStringArray ""))
+      (pkgTemplate (ExpectedStringArray ""))
+      "字符串数组字段类型错误",
     PkgEntry (pkgCode (Invalid "")) (pkgTemplate (Invalid "")) "通用清单与包图错误",
-    PkgEntry (pkgCode (InvalidExportModule "")) (pkgTemplate (InvalidExportModule "")) "非法导出模块名",
+    PkgEntry
+      (pkgCode (InvalidExportModule ""))
+      (pkgTemplate (InvalidExportModule ""))
+      "非法导出模块名",
     PkgEntry (pkgCode (InvalidPackageName "")) (pkgTemplate (InvalidPackageName "")) "非法包名",
     PkgEntry (pkgCode (MissingManifest "")) (pkgTemplate (MissingManifest "")) "找不到 vuna.toml",
     PkgEntry (pkgCode (MissingBase "")) (pkgTemplate (MissingBase "")) "找不到 vuna-base",
-    PkgEntry (pkgCode (LibraryWithoutEntry "")) (pkgTemplate (LibraryWithoutEntry "")) "库包缺入口或导出",
-    PkgEntry (pkgCode (NoManifestUpward "")) (pkgTemplate (NoManifestUpward "")) "向上找不到 vuna.toml",
+    PkgEntry
+      (pkgCode (LibraryWithoutEntry ""))
+      (pkgTemplate (LibraryWithoutEntry ""))
+      "库包缺入口或导出",
+    PkgEntry
+      (pkgCode (NoManifestUpward ""))
+      (pkgTemplate (NoManifestUpward ""))
+      "向上找不到 vuna.toml",
     PkgEntry (pkgCode (TomlSyntax "")) (pkgTemplate (TomlSyntax "")) "vuna.toml 语法错误",
-    PkgEntry (pkgCode (UnexpectedTopLevelKey "")) (pkgTemplate (UnexpectedTopLevelKey "")) "顶层未知 key",
+    PkgEntry
+      (pkgCode (UnexpectedTopLevelKey ""))
+      (pkgTemplate (UnexpectedTopLevelKey ""))
+      "顶层未知 key",
     PkgEntry (pkgCode (UnknownSection "")) (pkgTemplate (UnknownSection "")) "未知 section",
     PkgEntry (pkgCode (LayerInvalidName "")) (pkgTemplate (LayerInvalidName "")) "层名非法",
-    PkgEntry (pkgCode (LayerInvalidTarget "")) (pkgTemplate (LayerInvalidTarget "")) "层目标非法",
-    PkgEntry (pkgCode (LayerKeyMustBeQuoted "")) (pkgTemplate (LayerKeyMustBeQuoted "")) "层键未加引号",
+    PkgEntry
+      (pkgCode (LayerInvalidTarget ""))
+      (pkgTemplate (LayerInvalidTarget ""))
+      "层目标非法",
+    PkgEntry
+      (pkgCode (LayerKeyMustBeQuoted ""))
+      (pkgTemplate (LayerKeyMustBeQuoted ""))
+      "层键未加引号",
     PkgEntry (pkgCode (LayerCycle "")) (pkgTemplate (LayerCycle "")) "层依赖循环",
-    PkgEntry (pkgCode (PackageSectionInWorkspaceRoot "")) (pkgTemplate (PackageSectionInWorkspaceRoot "")) "虚拟根出现包语义段",
+    PkgEntry
+      (pkgCode (PackageSectionInWorkspaceRoot ""))
+      (pkgTemplate (PackageSectionInWorkspaceRoot ""))
+      "虚拟根出现包语义段",
     PkgEntry (pkgCode (UnknownKey "" "")) (pkgTemplate (UnknownKey "" "")) "section 内未知 key",
-    PkgEntry (pkgCode (UnknownSourceKey "" "")) (pkgTemplate (UnknownSourceKey "" "")) "依赖表未知 key",
-    PkgEntry (pkgCode (DependencySourceMissing "")) (pkgTemplate (DependencySourceMissing "")) "依赖未指定源",
+    PkgEntry
+      (pkgCode (UnknownSourceKey "" ""))
+      (pkgTemplate (UnknownSourceKey "" ""))
+      "依赖表未知 key",
+    PkgEntry
+      (pkgCode (DependencySourceMissing ""))
+      (pkgTemplate (DependencySourceMissing ""))
+      "依赖未指定源",
     PkgEntry (pkgCode (GitRevRequired "")) (pkgTemplate (GitRevRequired "")) "git 依赖缺修订",
-    PkgEntry (pkgCode (HashMalformed "")) (pkgTemplate (HashMalformed "")) "依赖哈希格式非法",
+    PkgEntry
+      (pkgCode (HashMalformed ""))
+      (pkgTemplate (HashMalformed ""))
+      "依赖哈希格式非法",
     PkgEntry (pkgCode (MissingHash "")) (pkgTemplate (MissingHash "")) "不可变源缺哈希",
     PkgEntry (pkgCode (SourceConflict "")) (pkgTemplate (SourceConflict "")) "依赖源冲突",
     PkgEntry (pkgCode (NotMaterialized "")) (pkgTemplate (NotMaterialized "")) "包未物化",
     PkgEntry (pkgCode (FetchFailed "")) (pkgTemplate (FetchFailed "")) "取包失败",
     PkgEntry (pkgCode (IndexMalformed "")) (pkgTemplate (IndexMalformed "")) "包索引格式非法",
-    PkgEntry (pkgCode (HashMismatch "" "")) (pkgTemplate (HashMismatch "" "")) "包内容摘要不符",
-    PkgEntry (pkgCode (IdentityMalformed "")) (pkgTemplate (IdentityMalformed "")) "依赖身份格式非法",
-    PkgEntry (pkgCode (IdentityMismatch "" "")) (pkgTemplate (IdentityMismatch "" "")) "包语义身份不符",
-    PkgEntry (pkgCode (DuplicatePackageName "" "" "")) (pkgTemplate (DuplicatePackageName "" "" "")) "依赖图内包名重复"
+    PkgEntry
+      (pkgCode (HashMismatch "" ""))
+      (pkgTemplate (HashMismatch "" ""))
+      "包内容摘要不符",
+    PkgEntry
+      (pkgCode (IdentityMalformed ""))
+      (pkgTemplate (IdentityMalformed ""))
+      "依赖身份格式非法",
+    PkgEntry
+      (pkgCode (IdentityMismatch "" ""))
+      (pkgTemplate (IdentityMismatch "" ""))
+      "包语义身份不符",
+    PkgEntry
+      (pkgCode (DuplicatePackageName "" "" ""))
+      (pkgTemplate (DuplicatePackageName "" "" ""))
+      "依赖图内包名重复"
   ]

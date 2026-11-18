@@ -10,7 +10,8 @@ import Base.Effect.Fs as EffFs
 import Base.Effect.Process as EffProcess
 
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
-main = do
-  args <- argsGetArgs
-  code <- runWebCli args
-  exitWith code
+main =
+  do
+    args <- argsGetArgs
+    code <- runWebCli args
+    exitWith code

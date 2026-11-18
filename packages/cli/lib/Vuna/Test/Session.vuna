@@ -84,80 +84,99 @@ sesEvalAuxOf s = s.sesEvalAux
 -- | 内部：用 base 目录自己的包上下文（`contextForDir`）读依赖接口——包身份、包环境、
 -- 依赖图都从它的 manifest 推出，与 `vuna check <base>` 写侧完全同口径。
 readBaseIfaces : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List ModuleIface))
-readBaseIfaces baseDir = do
-  ctxR <- contextForDir baseDir
-  case ctxR of
-    ErrC _ => pure Nothing
-    OkC ctx => ifacesForContextEff ctx
+readBaseIfaces baseDir =
+  do
+    ctxR <- contextForDir baseDir
+    case ctxR of
+      ErrC _ => pure Nothing
+      OkC ctx => ifacesForContextEff ctx
 
 -- | 内部：会话可用性——缓存目录命中就直接用，否则读一次接口并写回（读失败或为空
 -- 给 `Nothing`）。
 ensureSession : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => IORef Session -> String -> Eff r (Maybe (List ModuleIface))
-ensureSession ref baseDir = do
-  s <- readRef ref
-  if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then pure (Just (sesIfacesOf s))
-  else do
-    ifacesR <- readBaseIfaces baseDir
-    case ifacesR of
-      Nothing => pure Nothing
-      Just ifaces => if listLength ifaces == 0 then pure Nothing
-      else do
-        _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
-        pure (Just ifaces)
+ensureSession ref baseDir =
+  do
+    s <- readRef ref
+    if sesDirOf s == baseDir && listLength (sesIfacesOf s) > 0 then
+      pure (Just (sesIfacesOf s))
+    else
+      do
+        ifacesR <- readBaseIfaces baseDir
+        case ifacesR of
+          Nothing => pure Nothing
+          Just ifaces =>
+            if listLength ifaces == 0 then
+              pure Nothing
+            else
+              do
+                _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (sesEvalAuxOf s))
+                pure (Just ifaces)
 
 -- | check 样本：会话不可用返回 `Nothing`（调用方改走全量 `checkFile`）。
 export sessionCheckSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe CheckSample)
-sessionCheckSample ref baseDir source = do
-  ses <- ensureSession ref baseDir
-  case ses of
-    Nothing => pure Nothing
-    Just ifaces => do
-      ctxR <- contextForFile source
-      case ctxR of
-        ErrC e => pure (Just (CheckSample (Just e) []))
-        OkC ctx => do
-          text <- fsReadFile source
-          s <- readRef ref
-          result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
-          applyCheckResult ref s baseDir ifaces result
+sessionCheckSample ref baseDir source =
+  do
+    ses <- ensureSession ref baseDir
+    case ses of
+      Nothing => pure Nothing
+      Just ifaces =>
+        do
+          ctxR <- contextForFile source
+          case ctxR of
+            ErrC e => pure (Just (CheckSample (Just e) []))
+            OkC ctx =>
+              do
+                text <- fsReadFile source
+                s <- readRef ref
+                result <- dtCheckSourceIncremental ctx source text ifaces [] (sesAuxOf s) False
+                applyCheckResult ref s baseDir ifaces result
 
 -- | 内部：把增量 check 结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
 applyCheckResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair (List Diagnostic) (Pair (Maybe CheckedPackage) (Maybe AuxCache)))) -> Eff r (Maybe CheckSample)
-applyCheckResult ref s baseDir ifaces result = case result of
-  ErrC e => pure (Just (CheckSample (Just e) []))
-  OkC p => if not (firstOf p) then pure Nothing
-  else do
-    _ <-
-      writeRef ref
-        (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
-    pure (Just (CheckSample Nothing (firstOf (secondOf p))))
+applyCheckResult ref s baseDir ifaces result =
+  case result of
+    ErrC e => pure (Just (CheckSample (Just e) []))
+    OkC p =>
+      if not (firstOf p) then
+        pure Nothing
+      else
+        do
+          _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (secondOf (secondOf (secondOf p))) (sesEvalAuxOf s))
+          pure (Just (CheckSample Nothing (firstOf (secondOf p))))
 
 -- | interp 样本：会话不可用返回 `Nothing`（调用方改走全量 `dtEvalFile`）。
 export sessionEvalSample : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => IORef Session -> String -> String -> Eff r (Maybe EvalSample)
-sessionEvalSample ref baseDir source = do
-  ses <- ensureSession ref baseDir
-  case ses of
-    Nothing => pure Nothing
-    Just ifaces => do
-      ctxR <- contextForFile source
-      case ctxR of
-        ErrC e => pure (Just (EvalSample (Just e) ""))
-        OkC ctx => do
-          text <- fsReadFile source
-          s <- readRef ref
-          result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
-          applyEvalResult ref s baseDir ifaces result
+sessionEvalSample ref baseDir source =
+  do
+    ses <- ensureSession ref baseDir
+    case ses of
+      Nothing => pure Nothing
+      Just ifaces =>
+        do
+          ctxR <- contextForFile source
+          case ctxR of
+            ErrC e => pure (Just (EvalSample (Just e) ""))
+            OkC ctx =>
+              do
+                text <- fsReadFile source
+                s <- readRef ref
+                result <- dtEvalSourceIncremental ctx source text ifaces (sesEvalAuxOf s)
+                applyEvalResult ref s baseDir ifaces result
 
 -- | 内部：把增量求值结果写回会话并包装成样本；`applied = False` 视为会话不可用
 -- （`Nothing`）。
 applyEvalResult : {r : Row} -> IORef Session -> Session -> String -> List ModuleIface -> Check (Pair Bool (Pair String (Maybe AuxCache))) -> Eff r (Maybe EvalSample)
-applyEvalResult ref s baseDir ifaces result = case result of
-  ErrC e => pure (Just (EvalSample (Just e) ""))
-  OkC p => if not (firstOf p) then pure Nothing
-  else do
-    _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
-    pure (Just (EvalSample Nothing (firstOf (secondOf p))))
+applyEvalResult ref s baseDir ifaces result =
+  case result of
+    ErrC e => pure (Just (EvalSample (Just e) ""))
+    OkC p =>
+      if not (firstOf p) then
+        pure Nothing
+      else
+        do
+          _ <- writeRef ref (Session (sesRootOf s) baseDir ifaces (sesAuxOf s) (secondOf (secondOf p)))
+          pure (Just (EvalSample Nothing (firstOf (secondOf p))))
 
 -- | 内部：列表长度。
 listLength : List a -> Int

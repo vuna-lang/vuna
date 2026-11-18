@@ -20,6 +20,7 @@ writeRef r v = raise (@vuna@prim_eff_writeRef r v)
 
 -- | 读-改-写一次完成：读到当前值、应用 `f` 后写回，返回写入原语的 `Int` 结果。
 export modifyRef : {r : Row} -> IORef a -> (a -> a) -> Eff r Int
-modifyRef r f = do
-  x <- readRef r
-  writeRef r (f x)
+modifyRef r f =
+  do
+    x <- readRef r
+    writeRef r (f x)

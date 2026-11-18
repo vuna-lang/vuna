@@ -24,7 +24,8 @@ import Vuna.Compiler.Ir.Runtime
 
 ocamlRtTextTable : List (Pair String String)
 ocamlRtTextTable =
-  [ Pair "+" "bi_add",
+  [
+    Pair "+" "bi_add",
     Pair "-" "bi_sub",
     Pair "*" "bi_mul",
     Pair "/" "bi_div",
@@ -61,7 +62,9 @@ ocamlRtTextTable =
     Pair "arrayMake" "Array.make",
     Pair "arrayFromList" "(fun xs -> Array.of_list (dtp_ocamlOf xs))",
     Pair "arrayToList" "(fun a -> dtp_listOf (Array.to_list a))",
-    Pair "prim_effectPerform" "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))",
+    Pair
+      "prim_effectPerform"
+      "(fun key name v -> Obj.obj (Effect.perform (Perform (key, name, Obj.repr v))))",
     Pair "prim_effectHandle" "dtp_effect_handle",
     Pair "prim_effectSelf" "dtp_effect_self",
     Pair "prim_cleanupPush" "dtp_cleanup_push",
@@ -127,8 +130,12 @@ ocamlRtTextTable =
     Pair "prim_eff_print_host" "dtp_print",
     Pair "@vuna@prim_eff_print_host" "dtp_print",
     Pair "@vuna@host@print" "dtp_print",
-    Pair "prim_eff_eprint" "(fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0))",
-    Pair "@vuna@prim_eff_eprint" "(fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0))",
+    Pair
+      "prim_eff_eprint"
+      "(fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0))",
+    Pair
+      "@vuna@prim_eff_eprint"
+      "(fun s -> (try prerr_string s; flush stderr; String.length s with _ -> 0))",
     Pair "prim_eff_readFile" "dtp_readFile",
     Pair "@vuna@prim_eff_readFile" "dtp_readFile",
     Pair "prim_eff_writeFile" "dtp_writeFile",
@@ -329,18 +336,20 @@ ocamlRtHelperNames =
   ["dtp_unpack", "dtp_pack", "dtp_listOf", "dtp_ocamlOf", "dtp_concatMany", "dtp_substTemplate"]
 
 rtTextMissing : IrRtSym -> Bool
-rtTextMissing s = case ocamlRtText (irRtSymNameOf s) of
-  Just _ => False
-  Nothing => True
+rtTextMissing s =
+  case ocamlRtText (irRtSymNameOf s) of
+    Just _ => False
+    Nothing => True
 
 -- | 契约里没有 OCaml 文本的符号（空 = 后端完整）。
 export rtTextGaps : List String
 rtTextGaps = map irRtSymNameOf (filter rtTextMissing irRtContract)
 
 rtTextExtra : Pair String String -> Bool
-rtTextExtra p = case irRtLookup (firstOf p) of
-  Just _ => False
-  Nothing => True
+rtTextExtra p =
+  case irRtLookup (firstOf p) of
+    Just _ => False
+    Nothing => True
 
 -- | 表里多出来的、契约没有声明的符号（空 = 没有死表项）。
 export rtTextExtras : List String

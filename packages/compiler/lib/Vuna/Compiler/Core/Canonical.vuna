@@ -105,154 +105,217 @@ encTermBytes t = encTop encTerm t
 -- | 解析 multiplicity：tag 0/1/2。
 -- | 解析 multiplicity：tag 0/1/2。
 export decRig : Int -> Cur -> Maybe (Pair Rig Cur)
-decRig fuel bytes = if fuel <= 0 then Nothing
-else case decTag fuel bytes of
-  Nothing => Nothing
-  Just (Pair tag b1) => case tag of
-    0 => Just (Pair Rig0 b1)
-    1 => Just (Pair Rig1 b1)
-    2 => Just (Pair RigOmega b1)
-    _ => Nothing
+decRig fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decTag fuel bytes of
+      Nothing => Nothing
+      Just (Pair tag b1) =>
+        case tag of
+          0 => Just (Pair Rig0 b1)
+          1 => Just (Pair Rig1 b1)
+          2 => Just (Pair RigOmega b1)
+          _ => Nothing
 
 -- | 解析带 multiplicity 的实参：项 + multiplicity。
 decArg : Int -> Cur -> Maybe (Pair (Pair Term Rig) Cur)
-decArg fuel bytes = if fuel <= 0 then Nothing
-else case decTerm (fuel - 1) bytes of
-  Nothing => Nothing
-  Just (Pair t b1) => case decRig (fuel - 1) b1 of
-    Nothing => Nothing
-    Just (Pair r b2) => Just (Pair (Pair t r) b2)
+decArg fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decTerm (fuel - 1) bytes of
+      Nothing => Nothing
+      Just (Pair t b1) =>
+        case decRig (fuel - 1) b1 of
+          Nothing => Nothing
+          Just (Pair r b2) => Just (Pair (Pair t r) b2)
 
 -- | 解析 `(名字, multiplicity)` binder。
 decBinder : Int -> Cur -> Maybe (Pair (Pair String Rig) Cur)
-decBinder fuel bytes = if fuel <= 0 then Nothing
-else case decStr (fuel - 1) bytes of
-  Nothing => Nothing
-  Just (Pair n b1) => case decRig (fuel - 1) b1 of
-    Nothing => Nothing
-    Just (Pair r b2) => Just (Pair (Pair n r) b2)
+decBinder fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decStr (fuel - 1) bytes of
+      Nothing => Nothing
+      Just (Pair n b1) =>
+        case decRig (fuel - 1) b1 of
+          Nothing => Nothing
+          Just (Pair r b2) => Just (Pair (Pair n r) b2)
 
 -- | 解析 case 分支。
 decAlt : Int -> Cur -> Maybe (Pair CaseAlt Cur)
-decAlt fuel bytes = if fuel <= 0 then Nothing
-else case decStr (fuel - 1) bytes of
-  Nothing => Nothing
-  Just (Pair n b1) => case decList decBinder (fuel - 1) b1 of
-    Nothing => Nothing
-    Just (Pair bs b2) => case decTerm (fuel - 1) b2 of
+decAlt fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decStr (fuel - 1) bytes of
       Nothing => Nothing
-      Just (Pair body b3) => Just (Pair (CaseAlt n (bindersOfPairs bs) body) b3)
+      Just (Pair n b1) =>
+        case decList decBinder (fuel - 1) b1 of
+          Nothing => Nothing
+          Just (Pair bs b2) =>
+            case decTerm (fuel - 1) b2 of
+              Nothing => Nothing
+              Just (Pair body b3) => Just (Pair (CaseAlt n (bindersOfPairs bs) body) b3)
 
 -- | 解析 Core 项（tag 必须与 `encTerm` 一致；燃料按剩余字节上界递减）。
 export decTerm : Int -> Cur -> Maybe (Pair Term Cur)
-decTerm fuel bytes = if fuel <= 0 then Nothing
-else case decTag fuel bytes of
-  Nothing => Nothing
-  Just (Pair tag b1) => case tag of
-    0 => case decStr (fuel - 1) b1 of
+decTerm fuel bytes =
+  if fuel <= 0 then
+    Nothing
+  else
+    case decTag fuel bytes of
       Nothing => Nothing
-      Just (Pair n b2) => case decInt (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair i b3) => Just (Pair (TVar n i noSpan) b3)
-    1 => case decInt (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair m b2) => Just (Pair (TMeta m) b2)
-    2 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair g b2) => Just (Pair (TGlobal g) b2)
-    3 => case decInt (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair l b2) => Just (Pair (TType (levelOfInt l)) b2)
-    4 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair n b2) => case decBool (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair i b3) => case decRig (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair r b4) => case decTerm (fuel - 1) b4 of
-            Nothing => Nothing
-            Just (Pair d b5) => case decTerm (fuel - 1) b5 of
+      Just (Pair tag b1) =>
+        case tag of
+          0 =>
+            case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair c b6) => Just (Pair (TPi n i r d c) b6)
-    5 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair n b2) => case decRig (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair r b3) => case decTerm (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair body b4) => Just (Pair (TLam n r Nothing noSpan body) b4)
-    6 => case decTerm (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair f b2) => case decTerm (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair a b3) => case decRig (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair r b4) => Just (Pair (TApp f a r) b4)
-    7 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair args b3) => Just (Pair (TCon c args) b3)
-    8 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair args b3) => Just (Pair (TMk c args) b3)
-    9 => case decTerm (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair scrut b2) => case decList decAlt (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair alts b3) => Just (Pair (TCase scrut alts) b3)
-    10 => case decTerm (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair base b2) => case decStr (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair c b3) => case decList decBinder (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair tele b4) => case decInt (fuel - 1) b4 of
-            Nothing => Nothing
-            Just (Pair idx b5) => case decInt (fuel - 1) b5 of
+              Just (Pair n b2) =>
+                case decInt (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair i b3) => Just (Pair (TVar n i noSpan) b3)
+          1 =>
+            case decInt (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair n b6) => Just (Pair (TProj base c tele idx n) b6)
-    11 => case decTerm (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair base b2) => case decStr (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair c b3) => case decList decBinder (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair tele b4) => case decList decInt (fuel - 1) b4 of
-            Nothing => Nothing
-            Just (Pair idxs b5) => case decTerm (fuel - 1) b5 of
+              Just (Pair m b2) => Just (Pair (TMeta m) b2)
+          2 =>
+            case decStr (fuel - 1) b1 of
               Nothing => Nothing
-              Just (Pair body b6) => Just (Pair (TRecUpd base c tele idxs body) b6)
-    12 => case decInt (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair n b2) => Just (Pair (TInt n) b2)
-    13 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair s b2) => Just (Pair (TStr s) b2)
-    14 => case decBool (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair b b2) => Just (Pair (TBool b) b2)
-    15 => case decTerm (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair c b2) => case decTerm (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair t b3) => case decTerm (fuel - 1) b3 of
-          Nothing => Nothing
-          Just (Pair e b4) => Just (Pair (TIf c t e) b4)
-    16 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair f b2) => Just (Pair (TFloat f) b2)
-    17 => case decStr (fuel - 1) b1 of
-      Nothing => Nothing
-      Just (Pair c b2) => case decList decArg (fuel - 1) b2 of
-        Nothing => Nothing
-        Just (Pair args b3) => Just (Pair (TRecord c args) b3)
-    _ => Nothing
+              Just (Pair g b2) => Just (Pair (TGlobal g) b2)
+          3 =>
+            case decInt (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair l b2) => Just (Pair (TType (levelOfInt l)) b2)
+          4 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair n b2) =>
+                case decBool (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair i b3) =>
+                    case decRig (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair r b4) =>
+                        case decTerm (fuel - 1) b4 of
+                          Nothing => Nothing
+                          Just (Pair d b5) =>
+                            case decTerm (fuel - 1) b5 of
+                              Nothing => Nothing
+                              Just (Pair c b6) => Just (Pair (TPi n i r d c) b6)
+          5 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair n b2) =>
+                case decRig (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair r b3) =>
+                    case decTerm (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair body b4) => Just (Pair (TLam n r Nothing noSpan body) b4)
+          6 =>
+            case decTerm (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair f b2) =>
+                case decTerm (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair a b3) =>
+                    case decRig (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair r b4) => Just (Pair (TApp f a r) b4)
+          7 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair c b2) =>
+                case decList decArg (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair args b3) => Just (Pair (TCon c args) b3)
+          8 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair c b2) =>
+                case decList decArg (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair args b3) => Just (Pair (TMk c args) b3)
+          9 =>
+            case decTerm (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair scrut b2) =>
+                case decList decAlt (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair alts b3) => Just (Pair (TCase scrut alts) b3)
+          10 =>
+            case decTerm (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair base b2) =>
+                case decStr (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair c b3) =>
+                    case decList decBinder (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair tele b4) =>
+                        case decInt (fuel - 1) b4 of
+                          Nothing => Nothing
+                          Just (Pair idx b5) =>
+                            case decInt (fuel - 1) b5 of
+                              Nothing => Nothing
+                              Just (Pair n b6) => Just (Pair (TProj base c tele idx n) b6)
+          11 =>
+            case decTerm (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair base b2) =>
+                case decStr (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair c b3) =>
+                    case decList decBinder (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair tele b4) =>
+                        case decList decInt (fuel - 1) b4 of
+                          Nothing => Nothing
+                          Just (Pair idxs b5) =>
+                            case decTerm (fuel - 1) b5 of
+                              Nothing => Nothing
+                              Just (Pair body b6) => Just (Pair (TRecUpd base c tele idxs body) b6)
+          12 =>
+            case decInt (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair n b2) => Just (Pair (TInt n) b2)
+          13 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair s b2) => Just (Pair (TStr s) b2)
+          14 =>
+            case decBool (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair b b2) => Just (Pair (TBool b) b2)
+          15 =>
+            case decTerm (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair c b2) =>
+                case decTerm (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair t b3) =>
+                    case decTerm (fuel - 1) b3 of
+                      Nothing => Nothing
+                      Just (Pair e b4) => Just (Pair (TIf c t e) b4)
+          16 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair f b2) => Just (Pair (TFloat f) b2)
+          17 =>
+            case decStr (fuel - 1) b1 of
+              Nothing => Nothing
+              Just (Pair c b2) =>
+                case decList decArg (fuel - 1) b2 of
+                  Nothing => Nothing
+                  Just (Pair args b3) => Just (Pair (TRecord c args) b3)
+          _ => Nothing
 
 -- | 解析整串（要求恰好消费完）：roundtrip 测试入口。
 export decTermComplete : String -> Maybe Term
-decTermComplete s = case decTerm (strLength s) (curOf s) of
-  Nothing => Nothing
-  Just (Pair t rest) => if curAtEnd rest then Just t else Nothing
+decTermComplete s =
+  case decTerm (strLength s) (curOf s) of
+    Nothing => Nothing
+    Just (Pair t rest) => if curAtEnd rest then Just t else Nothing

@@ -47,23 +47,25 @@ export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProce
 parseFileWithPath = parseFileWithPathMode PmStrict
 
 export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check SourceFile)
-parseFileWithPathMode mode path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
-  ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
-  OkC toks => pure (parseWith mode path toks)
+parseFileWithPathMode mode path src =
+  case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
+    ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
+    OkC toks => pure (parseWith mode path toks)
 
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。
 -- 恢复期收集到的多条诊断挂在首条错误上（批量错误通道），全部自带位置。
 parseWith : ParseMode -> String -> List PTok -> Check SourceFile
-parseWith mode path toks = case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path mode toks) of
-  ErrC e => ErrC (withSpanFileIfEmpty path e)
-  OkC p =>
-    let
-      parsed = firstOf p
-      errs = secondOf p
-    in case errs of
-      [] => OkC parsed
-      e :: rest => ErrC (withChildren rest e)
+parseWith mode path toks =
+  case obsSpan "vuna.parse.syntax" "vuna.phase" (\_ => parseSourceRecoveringTokens path mode toks) of
+    ErrC e => ErrC (withSpanFileIfEmpty path e)
+    OkC p =>
+      let
+        parsed = firstOf p
+        errs = secondOf p
+      in case errs of
+        [] => OkC parsed
+        e :: rest => ErrC (withChildren rest e)
 
 -- fixity 是**程序级**属性：加载闭包里所有模块的声明构成一张表（import 到就全局生效），
 -- 不再按逐模块的可见闭包拼接。`Module` 里存的是该模块自己的声明。
@@ -102,30 +104,40 @@ isPrivateName name = startsWith "_" name
 
 privateExportMsg : String -> Span -> String -> Diagnostic
 privateExportMsg prefix sp name =
-  diagAt sp SevError PhLoad CatPackage ""
+  diagAt
+    sp
+    SevError
+    PhLoad
+    CatPackage
+    ""
     "${prefix}: cannot export private name ${name} (names starting with _ are module-private)"
 
 -- 本模块里与导出相关的「数据类型」信息：类型名 + 公开构造器名列表。
 -- data / record / trait 都按同一套 T / T(..) 规则导出（trait 的方法是它的「构造器」）。
 findOwnData : String -> List Decl -> Maybe (Pair String (List String))
 findOwnData name [] = Nothing
-findOwnData name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then Just (Pair dname [dname]) else findOwnData name rest
-  DTrait tname params supers methods sp =>
-    if tname == name then Just (Pair tname (map traitMethodName methods)) else findOwnData name rest
-  _ => findOwnData name rest
+findOwnData name (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      if dname == name then Just (Pair dname (map ctorName ctors)) else findOwnData name rest
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if dname == name then Just (Pair dname [dname]) else findOwnData name rest
+    DTrait tname params supers methods sp =>
+      if tname == name then
+        Just (Pair tname (map traitMethodName methods))
+      else
+        findOwnData name rest
+    _ => findOwnData name rest
 
 findOwnFn : String -> List Decl -> Maybe String
 findOwnFn name [] = Nothing
-findOwnFn name (d :: rest) = case d of
-  DFun n pats body sp => if n == name then Just name else findOwnFn name rest
-  DSig n ctx ty sp => if n == name then Just name else findOwnFn name rest
-  DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
-  DExtern n c ty sp => if n == name then Just name else findOwnFn name rest
-  _ => findOwnFn name rest
+findOwnFn name (d :: rest) =
+  case d of
+    DFun n pats body sp => if n == name then Just name else findOwnFn name rest
+    DSig n ctx ty sp => if n == name then Just name else findOwnFn name rest
+    DAxiom n ty sp => if n == name then Just name else findOwnFn name rest
+    DExtern n c ty sp => if n == name then Just name else findOwnFn name rest
+    _ => findOwnFn name rest
 
 findCtorNamed : String -> List Ctor -> Maybe String
 findCtorNamed name [] = Nothing
@@ -141,18 +153,22 @@ findMethodNamed name ((TraitMethod mname ty msp) :: rest) =
 -- | 本模块里名为 name 的**全部**构造子（不同族可同名）。裸名导出/重导出必须检测歧义。
 findOwnCtorNames : String -> List Decl -> List (Pair String String)
 findOwnCtorNames name [] = []
-findOwnCtorNames name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    append (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
-      (findOwnCtorNames name rest)
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then (::) (Pair dname dname) (findOwnCtorNames name rest)
-    else findOwnCtorNames name rest
-  DTrait tname params supers methods sp =>
-    append
-      (map (\m => Pair tname (traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
-      (findOwnCtorNames name rest)
-  _ => findOwnCtorNames name rest
+findOwnCtorNames name (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      append
+        (map (\c => Pair dname (ctorName c)) (filter (\c => ctorName c == name) ctors))
+        (findOwnCtorNames name rest)
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if dname == name then
+        (::) (Pair dname dname) (findOwnCtorNames name rest)
+      else
+        findOwnCtorNames name rest
+    DTrait tname params supers methods sp =>
+      append
+        (map (\m => Pair tname (traitMethodName m)) (filter (\m => traitMethodName m == name) methods))
+        (findOwnCtorNames name rest)
+    _ => findOwnCtorNames name rest
 
 -- record / trait 的「构造子」条目：target = parent（构造子名 = 类型名 / 方法名）。
 ownCtorEntries : String -> String -> List String -> List ExportEntry
@@ -174,55 +190,72 @@ ownDataCtorEntries prefix dname (cname :: rest) =
 -- | 本地类型名的完整导出条目（type + 其构造子/方法），供 `T(..)` 导出使用。
 ownTypeEntries : String -> List Decl -> String -> Maybe (List ExportEntry)
 ownTypeEntries prefix [] name = Nothing
-ownTypeEntries prefix (d :: rest) name = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    if dname == name then Just
-      ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
-    else ownTypeEntries prefix rest name
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then Just
-      ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
-    else ownTypeEntries prefix rest name
-  DTrait tname params supers methods sp =>
-    if tname == name then Just
-      ((::) ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
-    else ownTypeEntries prefix rest name
-  _ => ownTypeEntries prefix rest name
+ownTypeEntries prefix (d :: rest) name =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      if dname == name then
+        Just
+          ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownDataCtorEntries prefix dname (map ctorName ctors)))
+      else
+        ownTypeEntries prefix rest name
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if dname == name then
+        Just
+          ((::) ExportEntry { kind = "type", public = dname, target = mangle prefix dname, parent = "" } (ownCtorEntries prefix dname [dname]))
+      else
+        ownTypeEntries prefix rest name
+    DTrait tname params supers methods sp =>
+      if tname == name then
+        Just
+          ((::) ExportEntry { kind = "type", public = tname, target = mangle prefix tname, parent = "" } (ownCtorEntries prefix tname (map traitMethodName methods)))
+      else
+        ownTypeEntries prefix rest name
+    _ => ownTypeEntries prefix rest name
 
 -- 从某模块的导出表里取某数据类型的构造器条目：重导出 `T(..)` 时只重新公开
 -- 源模块本来就公开的构造器，从而保持源模块的抽象性。
 ctorEntriesOfType : String -> List ExportEntry -> List ExportEntry
 ctorEntriesOfType typeTarget [] = []
 ctorEntriesOfType typeTarget (e :: rest) =
-  if e.kind == "ctor" && e.parent == typeTarget then (::) e (ctorEntriesOfType typeTarget rest)
-  else ctorEntriesOfType typeTarget rest
+  if e.kind == "ctor" && e.parent == typeTarget then
+    (::) e (ctorEntriesOfType typeTarget rest)
+  else
+    ctorEntriesOfType typeTarget rest
 
 -- 裸名导出时，若名字是 **record 类型** 且与其同名构造器 target 相同，只导出类型、
 -- 不导出构造器：抽象记录必须写 T(..) 才公开构造器。（普通 data 里 ctor 与类型同名
 -- 的情形保持 v0 语义：裸名两者都导出。）
 typeRefDominates : List Module -> List Decl -> String -> Maybe ExportRef -> Maybe ExportRef -> Bool
-typeRefDominates modules decls prefix (Just (ExportRef tk tt tp)) vr = case vr of
-  Just (ExportRef vk vt vp) =>
-    if tk == "type" && vk == "ctor" && tt == vt then isRecordTarget modules decls prefix tt
-    else False
-  Nothing => False
+typeRefDominates modules decls prefix (Just (ExportRef tk tt tp)) vr =
+  case vr of
+    Just (ExportRef vk vt vp) =>
+      if tk == "type" && vk == "ctor" && tt == vt then
+        isRecordTarget modules decls prefix tt
+      else
+        False
+    Nothing => False
 typeRefDominates modules decls prefix Nothing vr = False
 
 isRecordTarget : List Module -> List Decl -> String -> String -> Bool
-isRecordTarget modules decls prefix target = case splitLastDot (splitOnDot target) of
-  Pair revPrefix base =>
-    let
-      m = joinDots revPrefix
-    in if m == prefix then isRecordDecl base decls
-    else case findModule modules m of
-      Just (Module mname mpkg mimports mimps dcs exports mfx _ _ _) => isRecordDecl base dcs
-      Nothing => False
+isRecordTarget modules decls prefix target =
+  case splitLastDot (splitOnDot target) of
+    Pair revPrefix base =>
+      let
+        m = joinDots revPrefix
+      in if m == prefix then
+        isRecordDecl base decls
+      else
+        case findModule modules m of
+          Just (Module mname mpkg mimports mimps dcs exports mfx _ _ _) => isRecordDecl base dcs
+          Nothing => False
 
 isRecordDecl : String -> List Decl -> Bool
 isRecordDecl dname [] = False
-isRecordDecl dname (d :: rest) = case d of
-  DRecord dn params fields derivings viaField repr lin sp => dn == dname || isRecordDecl dname rest
-  _ => isRecordDecl dname rest
+isRecordDecl dname (d :: rest) =
+  case d of
+    DRecord dn params fields derivings viaField repr lin sp =>
+      dn == dname || isRecordDecl dname rest
+    _ => isRecordDecl dname rest
 
 refEntryList : String -> Maybe ExportRef -> List ExportEntry
 refEntryList pub Nothing = []
@@ -230,70 +263,90 @@ refEntryList pub (Just (ExportRef k tgt parent)) =
   [ExportEntry { kind = k, public = pub, target = tgt, parent = parent }]
 
 ownOrImportedTypeRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
-ownOrImportedTypeRef modules prefix decls imports name = case findOwnData name decls of
-  Just (Pair dname ctorNames) => OkC (Just (ExportRef "type" (mangle prefix dname) ""))
-  Nothing => Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-    [] => OkC Nothing
-    _ =>
-      Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "type" name pairs)
-        (\p => OkC (Just (ExportRef "type" (secondOf p).target "")))
-  )
+ownOrImportedTypeRef modules prefix decls imports name =
+  case findOwnData name decls of
+    Just (Pair dname ctorNames) => OkC (Just (ExportRef "type" (mangle prefix dname) ""))
+    Nothing =>
+      Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (
+          \pairs =>
+            case pairs of
+              [] => OkC Nothing
+              _ => Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "type" name pairs) (\p => OkC (Just (ExportRef "type" (secondOf p).target "")))
+        )
 
 ownOrImportedValueRef : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
-ownOrImportedValueRef modules prefix decls imports name = case findOwnFn name decls of
-  Just fn => OkC (Just (ExportRef "val" (mangle prefix fn) ""))
-  Nothing => ownOrImportedValueRef2 modules prefix decls imports name
+ownOrImportedValueRef modules prefix decls imports name =
+  case findOwnFn name decls of
+    Just fn => OkC (Just (ExportRef "val" (mangle prefix fn) ""))
+    Nothing => ownOrImportedValueRef2 modules prefix decls imports name
 
 -- | 本模块值 / 构造子名字的导出引用（构造子走 `ownCtorEntriesNamed` 的歧义检测）。
 ownOrImportedValueRef2 : List Module -> String -> List Decl -> List Import -> String -> Check (Maybe ExportRef)
-ownOrImportedValueRef2 modules prefix decls imports name = case ownCtorEntriesNamed prefix name decls of
-  [e] => OkC (Just (ExportRef "ctor" e.target e.parent))
-  _ :: _ :: _ => rnNoLoc1 (AmbiguousConstructorExport name) name
-  [] => Vuna.Compiler.Base.Common.bind (modulesExportingValue modules imports name) (\pairs => case pairs of
-    [] => OkC Nothing
-    _ => Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "name" name pairs) (\p => let
-      e = secondOf p
-    in OkC (Just (ExportRef e.kind e.target e.parent))
-    )
-  )
+ownOrImportedValueRef2 modules prefix decls imports name =
+  case ownCtorEntriesNamed prefix name decls of
+    [e] => OkC (Just (ExportRef "ctor" e.target e.parent))
+    _ :: _ :: _ => rnNoLoc1 (AmbiguousConstructorExport name) name
+    [] =>
+      Vuna.Compiler.Base.Common.bind (modulesExportingValue modules imports name) (
+          \pairs =>
+            case pairs of
+              [] => OkC Nothing
+              _ =>
+                Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "name" name pairs) (
+                    \p =>
+                      let
+                        e = secondOf p
+                      in OkC (Just (ExportRef e.kind e.target e.parent))
+                  )
+        )
 
 -- | 本模块里名为 name 的构造子导出条目（data 用族限定 target；record/trait 用原名）。
 ownCtorEntriesNamed : String -> String -> List Decl -> List ExportEntry
 ownCtorEntriesNamed prefix name [] = []
-ownCtorEntriesNamed prefix name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    append
-      (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
-      (ownCtorEntriesNamed prefix name rest)
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if dname == name then
-      append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
-    else ownCtorEntriesNamed prefix name rest
-  DTrait tname params supers methods sp =>
-    append
-      (ownCtorEntries prefix tname (map traitMethodName (filter (\m => traitMethodName m == name) methods)))
-      (ownCtorEntriesNamed prefix name rest)
-  _ => ownCtorEntriesNamed prefix name rest
+ownCtorEntriesNamed prefix name (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      append
+        (ownDataCtorEntries prefix dname (map ctorName (filter (\c => ctorName c == name) ctors)))
+        (ownCtorEntriesNamed prefix name rest)
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if dname == name then
+        append (ownCtorEntries prefix dname [dname]) (ownCtorEntriesNamed prefix name rest)
+      else
+        ownCtorEntriesNamed prefix name rest
+    DTrait tname params supers methods sp =>
+      append
+        (ownCtorEntries prefix tname (map traitMethodName (filter (\m => traitMethodName m == name) methods)))
+        (ownCtorEntriesNamed prefix name rest)
+    _ => ownCtorEntriesNamed prefix name rest
 
 exportBare : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
-exportBare modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
-  Pair revPrefix base => case revPrefix of
-    [] => Vuna.Compiler.Base.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (\tr => Vuna.Compiler.Base.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (\vr => case tr of
-      Nothing => case vr of
-        Nothing => rnAt1 sp (CannotExportUnknownName name) name
-        Just _ => OkC (refEntryList name vr)
-      Just _ => case vr of
-        Nothing => OkC (refEntryList name tr)
-        Just _ =>
-          if typeRefDominates modules decls prefix tr vr then OkC (refEntryList name tr)
-          else OkC (append (refEntryList name tr) (refEntryList name vr))
-    )
-    )
-    _ =>
-      let
-        mprefix = joinDots revPrefix
-      in Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports mprefix)
-        (\m => exportSelective modules prefix m base name sp)
+exportBare modules prefix decls imports name sp =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      case revPrefix of
+        [] =>
+          Vuna.Compiler.Base.Common.bind (ownOrImportedTypeRef modules prefix decls imports name) (
+              \tr =>
+                Vuna.Compiler.Base.Common.bind (ownOrImportedValueRef modules prefix decls imports name) (
+                    \vr =>
+                      case tr of
+                        Nothing =>
+                          case vr of
+                            Nothing => rnAt1 sp (CannotExportUnknownName name) name
+                            Just _ => OkC (refEntryList name vr)
+                        Just _ =>
+                          case vr of
+                            Nothing => OkC (refEntryList name tr)
+                            Just _ => if typeRefDominates modules decls prefix tr vr then OkC (refEntryList name tr) else OkC (append (refEntryList name tr) (refEntryList name vr))
+                  )
+            )
+        _ =>
+          let
+            mprefix = joinDots revPrefix
+          in Vuna.Compiler.Base.Common.bind
+            (resolveImportPrefix imports mprefix)
+            (\m => exportSelective modules prefix m base name sp)
 
 renameExportEntry : String -> ExportEntry -> ExportEntry
 renameExportEntry public e =
@@ -305,42 +358,55 @@ renameTypeEntry public e =
 
 -- | 从指定模块按短名选择性导出：同名多 target 的条目全部保留，使用点再判定。
 exportSelective : List Module -> String -> String -> String -> String -> Span -> Check (List ExportEntry)
-exportSelective modules prefix m base name sp = Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => let
-  values = map (renameExportEntry base) (findExportValues es base)
-  types = map (renameTypeEntry base) (findExportTypes es base)
-  entries = append values types
-in if isEmptyEntries entries then rnAt1 sp (CannotExportUnknownName name) name else OkC entries
-)
+exportSelective modules prefix m base name sp =
+  Vuna.Compiler.Base.Common.bind (exportsOf modules m) (
+      \es =>
+        let
+          values = map (renameExportEntry base) (findExportValues es base)
+          types = map (renameTypeEntry base) (findExportTypes es base)
+          entries = append values types
+        in if isEmptyEntries entries then rnAt1 sp (CannotExportUnknownName name) name else OkC entries
+    )
 
 isEmptyEntries : List a -> Bool
 isEmptyEntries [] = True
 isEmptyEntries (_ :: _) = False
 
 exportTypeAll : List Module -> String -> List Decl -> List Import -> String -> Span -> Check (List ExportEntry)
-exportTypeAll modules prefix decls imports name sp = case splitLastDot (splitOnDot name) of
-  Pair revPrefix base => case revPrefix of
-    [] => case ownTypeEntries prefix decls name of
-      Just entries => OkC entries
-      Nothing => Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-        [] => rnAt1 sp (CannotExportUnknownName name) name
-        _ => Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "type" name pairs) (\p => let
-          m = firstOf p
-        in let
-          tgt = (secondOf p).target
-        in Vuna.Compiler.Base.Common.bind (exportsOf modules m)
-          (\es => OkC ((::) ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
-        )
-      )
-    _ =>
-      let
-        mprefix = joinDots revPrefix
-      in Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports mprefix) (\m => Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => case findExportType es base of
-        Just e =>
-          OkC
-            ((::) ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
-        Nothing => rnAt2 sp (TypeNotExported base m) base m
-      )
-      )
+exportTypeAll modules prefix decls imports name sp =
+  case splitLastDot (splitOnDot name) of
+    Pair revPrefix base =>
+      case revPrefix of
+        [] =>
+          case ownTypeEntries prefix decls name of
+            Just entries => OkC entries
+            Nothing =>
+              Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (
+                  \pairs =>
+                    case pairs of
+                      [] => rnAt1 sp (CannotExportUnknownName name) name
+                      _ =>
+                        Vuna.Compiler.Base.Common.bind (unifyEntryPairs prefix "type" name pairs) (
+                            \p =>
+                              let
+                                m = firstOf p
+                              in let
+                                tgt = (secondOf p).target
+                              in Vuna.Compiler.Base.Common.bind (exportsOf modules m) (\es => OkC ((::) ExportEntry { kind = "type", public = name, target = tgt, parent = "" } (ctorEntriesOfType tgt es)))
+                          )
+                )
+        _ =>
+          let
+            mprefix = joinDots revPrefix
+          in Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports mprefix) (
+              \m =>
+                Vuna.Compiler.Base.Common.bind (exportsOf modules m) (
+                    \es =>
+                      case findExportType es base of
+                        Just e => OkC ((::) ExportEntry { kind = "type", public = base, target = e.target, parent = "" } (ctorEntriesOfType e.target es))
+                        Nothing => rnAt2 sp (TypeNotExported base m) base m
+                  )
+            )
 
 -- | `export module C [as X]` 对应的 import：已 import 过 C 就复用，否则合成
 -- `import C [as X]`（保持 import 区的 open 语义；不写进 AST，Fmt 仍按 `export module` 渲染）。
@@ -350,8 +416,10 @@ namespaceImportsOf imports items = append imports (reverse (namespaceImportsGo i
 namespaceImportsGo : List Import -> List ExportItem -> List Import -> List Import
 namespaceImportsGo imports [] acc = acc
 namespaceImportsGo imports ((XNamespace target alias sp) :: rest) acc =
-  if hasImportOf imports target || hasImportOf acc target then namespaceImportsGo imports rest acc
-  else namespaceImportsGo imports rest ((::) (Import target False alias sp) acc)
+  if hasImportOf imports target || hasImportOf acc target then
+    namespaceImportsGo imports rest acc
+  else
+    namespaceImportsGo imports rest ((::) (Import target False alias sp) acc)
 namespaceImportsGo imports (_ :: rest) acc = namespaceImportsGo imports rest acc
 
 hasImportOf : List Import -> String -> Bool
@@ -360,10 +428,11 @@ hasImportOf (imp :: rest) name = importName imp == name || hasImportOf rest name
 
 -- | 导出项里的模块前缀：必须唯一（重复 alias/弱短名在导出定义处报歧义）。
 resolveImportPrefix : List Import -> String -> Check String
-resolveImportPrefix imports prefix = case qualifierCandidates imports prefix of
-  [m] => OkC m
-  [] => rnNoLoc1 (ModuleNotImported prefix) prefix
-  ms => rnNoLoc2 (AmbiguousModule prefix (joinCommaNames ms)) prefix (joinCommaNames ms)
+resolveImportPrefix imports prefix =
+  case qualifierCandidates imports prefix of
+    [m] => OkC m
+    [] => rnNoLoc1 (ModuleNotImported prefix) prefix
+    ms => rnNoLoc2 (AmbiguousModule prefix (joinCommaNames ms)) prefix (joinCommaNames ms)
 
 joinCommaNames : List String -> String
 joinCommaNames [] = ""
@@ -373,16 +442,18 @@ joinCommaNames (x :: rest) = "${x}, ${joinCommaNames rest}"
 exportItemEntries : List Module -> String -> List Decl -> List Import -> ExportItem -> Check (List ExportEntry)
 exportItemEntries modules prefix decls imports (XModule name sp) =
   Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports name) (\m => exportsOf modules m)
-exportItemEntries modules prefix decls imports (XNamespace name alias sp) = Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports name) (\m => case alias of
-  Nothing => exportsOf modules m
-  Just path =>
-    if path == name then OkC [namespaceEntry name m]
-    else OkC [namespaceEntry name m, namespaceEntry path m]
-)
+exportItemEntries modules prefix decls imports (XNamespace name alias sp) =
+  Vuna.Compiler.Base.Common.bind (resolveImportPrefix imports name) (
+      \m =>
+        case alias of
+          Nothing => exportsOf modules m
+          Just path => if path == name then OkC [namespaceEntry name m] else OkC [namespaceEntry name m, namespaceEntry path m]
+    )
 exportItemEntries modules prefix decls imports (XTypeAll name sp) =
   exportTypeAll modules prefix decls imports name sp
 exportItemEntries modules prefix decls imports (XTypeSome name members sp) =
-  Vuna.Compiler.Base.Common.bind (exportTypeAll modules prefix decls imports name sp)
+  Vuna.Compiler.Base.Common.bind
+    (exportTypeAll modules prefix decls imports name sp)
     (\es => OkC (filterExportMembers members es))
 exportItemEntries modules prefix decls imports (XBare name sp) =
   exportBare modules prefix decls imports name sp
@@ -395,8 +466,10 @@ namespaceEntry path target =
 filterExportMembers : List String -> List ExportEntry -> List ExportEntry
 filterExportMembers members [] = []
 filterExportMembers members (e :: rest) =
-  if e.kind == "ctor" && not (memName e.public members) then filterExportMembers members rest
-  else (::) e (filterExportMembers members rest)
+  if e.kind == "ctor" && not (memName e.public members) then
+    filterExportMembers members rest
+  else
+    (::) e (filterExportMembers members rest)
 
 dedupeExportEntries : List ExportEntry -> List ExportEntry
 dedupeExportEntries entries = dedupeByFullKey entries (HashMap.fromList []) []
@@ -416,7 +489,8 @@ dedupeByFullKey (e :: rest) seen acc =
 explicitExports : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
 explicitExports modules prefix decls imports [] = OkC []
 explicitExports modules prefix decls imports items =
-  Vuna.Compiler.Base.Common.bind (exportItemsAll modules prefix decls imports items)
+  Vuna.Compiler.Base.Common.bind
+    (exportItemsAll modules prefix decls imports items)
     (\es => OkC (dedupeExportEntries es))
 
 -- 逐项解析条目。整表只做一次重复检查、最后只去重一次：不在每个导出项上重查剩余
@@ -424,7 +498,8 @@ explicitExports modules prefix decls imports items =
 exportItemsAll : List Module -> String -> List Decl -> List Import -> List ExportItem -> Check (List ExportEntry)
 exportItemsAll modules prefix decls imports [] = OkC []
 exportItemsAll modules prefix decls imports (item :: rest) =
-  Vuna.Compiler.Base.Common.bind (exportItemEntries modules prefix decls imports item)
+  Vuna.Compiler.Base.Common.bind
+    (exportItemEntries modules prefix decls imports item)
     (\es => Vuna.Compiler.Base.Common.bind (exportItemsAll modules prefix decls imports rest) (\tail => OkC (append es tail)))
 
 validateModuleHeader : String -> Maybe ModDecl -> Check (List a)
@@ -434,10 +509,11 @@ validateModuleHeader label (Just (ModDecl declared hasList items _ _ _ sp)) =
 
 opaqueNamesOf : String -> List OpacitySpec -> List String
 opaqueNamesOf prefix [] = []
-opaqueNamesOf prefix (o :: rest) = case o.opacityKind of
-  OpacityOpaque => (::) (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
-  OpacityTransparent => opaqueNamesOf prefix rest
-  OpacityAbstract => (::) (":" ++ mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
+opaqueNamesOf prefix (o :: rest) =
+  case o.opacityKind of
+    OpacityOpaque => (::) (mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
+    OpacityTransparent => opaqueNamesOf prefix rest
+    OpacityAbstract => (::) (":" ++ mangle prefix (opacitySpecName o)) (opaqueNamesOf prefix rest)
 
 export abstractOpaquePrefix : String
 abstractOpaquePrefix = ":"
@@ -445,9 +521,12 @@ abstractOpaquePrefix = ":"
 export opaqueBaseName : String -> String
 opaqueBaseName name =
   if startsWith abstractOpaquePrefix name then
-    strSubstring (strLength abstractOpaquePrefix) (strLength name - strLength abstractOpaquePrefix)
+    strSubstring
+      (strLength abstractOpaquePrefix)
+      (strLength name - strLength abstractOpaquePrefix)
       name
-  else name
+  else
+    name
 
 export isAbstractOpaqueName : String -> Bool
 isAbstractOpaqueName name = startsWith abstractOpaquePrefix name
@@ -457,14 +536,14 @@ computeExports modules prefix hdr imports decls extraExports extraReexports =
   let
     newItems = append (map exportSpecToItem extraExports) extraReexports
     explicit = explicitExports modules prefix decls imports newItems
-  in if notEmpty newItems then case hdr of
-    Just (ModDecl _ hasList _ _ _ _ sp) =>
-      if hasList then rnAt1 sp (DuplicateExport "module header") "module header" else explicit
-    Nothing => explicit
-  else case hdr of
-    Just (ModDecl _ hasList items _ _ _ spHdr) =>
-      if hasList then explicitExports modules prefix decls imports items else OkC []
-    Nothing => OkC []
+  in if notEmpty newItems then
+    case hdr of
+      Just (ModDecl _ hasList _ _ _ _ sp) => if hasList then rnAt1 sp (DuplicateExport "module header") "module header" else explicit
+      Nothing => explicit
+  else
+    case hdr of
+      Just (ModDecl _ hasList items _ _ _ spHdr) => if hasList then explicitExports modules prefix decls imports items else OkC []
+      Nothing => OkC []
 
 notEmpty : List a -> Bool
 notEmpty [] = False
@@ -486,23 +565,27 @@ showCycle name stack = joinArrows (reverse (name :: stack))
 -- 没有 base 依赖的包没有候选，于是不注入。
 export implicitPrelude : Member nFs FsOp r => List Root -> String -> String -> List Import -> Eff r (Check (List Import))
 implicitPrelude roots importerPkg currentName imports =
-  if currentName == "Prelude" then pure (OkC [])
-  else if memName "Prelude" (importModuleNames imports) then pure (OkC [])
-  else implicitPreludeFrom roots importerPkg
+  if currentName == "Prelude" then
+    pure (OkC [])
+  else if memName "Prelude" (importModuleNames imports) then
+    pure (OkC [])
+  else
+    implicitPreludeFrom roots importerPkg
 
 implicitPreludeFrom : Member nFs FsOp r => List Root -> String -> Eff r (Check (List Import))
-implicitPreludeFrom roots importerPkg = do
-  collected <- collectModuleFiles roots "Prelude" importerPkg [] []
-  let
-    allowed = firstOf collected
-  in pure
-    (implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed))
+implicitPreludeFrom roots importerPkg =
+  do
+    collected <- collectModuleFiles roots "Prelude" importerPkg [] []
+    let
+      allowed = firstOf collected
+    in pure (implicitPreludeDeps importerPkg (filter (\c => rootName (secondOf c) /= importerPkg) allowed))
 
 implicitPreludeDeps : String -> List (Pair String Root) -> Check (List Import)
 implicitPreludeDeps importerPkg [] = OkC []
 implicitPreludeDeps importerPkg ([_]) = OkC [Import "Prelude" False Nothing (Span "" 0 0 0 0 0 0)]
 implicitPreludeDeps importerPkg deps =
-  onErrDiag (withAbsent NsPackageGraph)
+  onErrDiag
+    (withAbsent NsPackageGraph)
     (rnNoLoc1 (AmbiguousPrelude (joinArrows (map (\c => rootName (secondOf c)) deps))) (joinArrows (map (\c => rootName (secondOf c)) deps)))
 
 -- 导入点位置：隐式 Prelude 的合成 Import 没有真实 span（file = ""），此时不给位置。
@@ -516,21 +599,27 @@ withImportSpan imp e =
   if spanFile imp.importSpan == "" then e else withFallbackSpan imp.importSpan e
 
 loadAll : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Int -> List Root -> String -> List Module -> List String -> List Import -> Eff r (Check (List Module))
-loadAll fuel roots importerPkg modules stack imports = if fuel <= 0 then pure (icFuel "loader")
-else case imports of
-  [] => pure (OkC modules)
-  imp :: rest => do
-    modulesR <- loadModule (fuel - 1) roots importerPkg modules stack imp
-    case modulesR of
-      ErrC e => pure (ErrC e)
-      OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
+loadAll fuel roots importerPkg modules stack imports =
+  if fuel <= 0 then
+    pure (icFuel "loader")
+  else
+    case imports of
+      [] => pure (OkC modules)
+      imp :: rest =>
+        do
+          modulesR <- loadModule (fuel - 1) roots importerPkg modules stack imp
+          case modulesR of
+            ErrC e => pure (ErrC e)
+            OkC modules2 => loadAll (fuel - 1) roots importerPkg modules2 stack rest
 
 pathPrefixOf : Member nFs FsOp r => List Root -> String -> List String -> Int -> Eff r (Maybe (Pair String Int))
-pathPrefixOf roots importerPkg segs n = if n < 1 then pure Nothing
-else do
-  collected <- collectModuleFiles roots (joinDots (nsTakeLocal n segs)) importerPkg [] []
-  if notEmpty (firstOf collected) then pure (Just (Pair (joinDots (nsTakeLocal n segs)) n))
-  else pathPrefixOf roots importerPkg segs (n - 1)
+pathPrefixOf roots importerPkg segs n =
+  if n < 1 then
+    pure Nothing
+  else
+    do
+      collected <- collectModuleFiles roots (joinDots (nsTakeLocal n segs)) importerPkg [] []
+      if notEmpty (firstOf collected) then pure (Just (Pair (joinDots (nsTakeLocal n segs)) n)) else pathPrefixOf roots importerPkg segs (n - 1)
 
 nsTakeLocal : Int -> List String -> List String
 nsTakeLocal n [] = []
@@ -544,75 +633,80 @@ loadModule : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r
 loadModule fuel roots importerPkg modules stack imp =
   let
     name = importName imp
-  in if fuel <= 0 then pure (icFuel "loader")
-  else case findModule modules name of
-    Just m => pure (OkC modules)
-    Nothing => if memName name stack then pure
-      (onErrDiag (withImportSpan imp) (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)))
-    else if validModuleName name then do
-      foundR <- findModuleFile roots name importerPkg imp.importSpan
-      case foundR of
-        ErrC e => case imp.importAlias of
-          Nothing => pure (ErrC e)
-          Just alias => do
-            prefixR <-
-              pathPrefixOf roots importerPkg (splitOnDot name) (List.length (splitOnDot name) - 1)
-            case prefixR of
-              Nothing => pure (ErrC e)
-              Just (Pair prefix n) => do
-                modsR <-
-                  loadModule (fuel - 1) roots importerPkg modules stack
-                    (Import prefix False Nothing imp.importSpan)
-                case modsR of
-                  ErrC e2 => pure (ErrC e2)
-                  OkC modules1 => case findModule modules1 prefix of
-                    Nothing => pure (ErrC e)
-                    Just provider => case walkNamespaceIndex modules1 prefix (nsDropLocal n (splitOnDot name)) of
-                      Nothing => pure (ErrC e)
-                      Just target =>
-                        loadModule (fuel - 1) roots (modulePackageOf provider) modules1 stack
-                          (Import target True Nothing imp.importSpan)
-        OkC found =>
-          let
-            path = firstOf found
-            root = secondOf found
-            _ = dbg! "parse-module=${name}"
-          in do
-            text <- fsReadFile path
-            parsed <- parseFileWithPath path text
-            case parsed of
-              ErrC e => pure (ErrC e)
-              OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
+  in if fuel <= 0 then
+    pure (icFuel "loader")
+  else
+    case findModule modules name of
+      Just m => pure (OkC modules)
+      Nothing =>
+        if memName name stack then
+          pure (onErrDiag (withImportSpan imp) (ldErr1 (ImportCycle (showCycle name stack)) (showCycle name stack)))
+        else if validModuleName name then
+          do
+            foundR <- findModuleFile roots name importerPkg imp.importSpan
+            case foundR of
+              ErrC e =>
+                case imp.importAlias of
+                  Nothing => pure (ErrC e)
+                  Just alias =>
+                    do
+                      prefixR <- pathPrefixOf roots importerPkg (splitOnDot name) (List.length (splitOnDot name) - 1)
+                      case prefixR of
+                        Nothing => pure (ErrC e)
+                        Just (Pair prefix n) =>
+                          do
+                            modsR <- loadModule (fuel - 1) roots importerPkg modules stack (Import prefix False Nothing imp.importSpan)
+                            case modsR of
+                              ErrC e2 => pure (ErrC e2)
+                              OkC modules1 =>
+                                case findModule modules1 prefix of
+                                  Nothing => pure (ErrC e)
+                                  Just provider =>
+                                    case walkNamespaceIndex modules1 prefix (nsDropLocal n (splitOnDot name)) of
+                                      Nothing => pure (ErrC e)
+                                      Just target => loadModule (fuel - 1) roots (modulePackageOf provider) modules1 stack (Import target True Nothing imp.importSpan)
+              OkC found =>
                 let
-                  imports1 = imports0
-                  providers = []
-                  modules1 = modules
-                  imports = namespaceImportsOf imports1 reexports
-                in case validateModuleHeader name hdr of
-                  ErrC e => pure (ErrC e)
-                  OkC _ => case validateImports name imports of
+                  path = firstOf found
+                  root = secondOf found
+                  _ = dbg! "parse-module=${name}"
+                in do
+                  text <- fsReadFile path
+                  parsed <- parseFileWithPath path text
+                  case parsed of
                     ErrC e => pure (ErrC e)
-                    OkC _ => do
-                      implicitR <- implicitPrelude roots (rootName root) name imports
-                      case implicitR of
+                    OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
+                      let
+                        imports1 = imports0
+                        providers = []
+                        modules1 = modules
+                        imports = namespaceImportsOf imports1 reexports
+                      in case validateModuleHeader name hdr of
                         ErrC e => pure (ErrC e)
-                        OkC implicit => do
-                          modulesR <-
-                            loadAll (fuel - 1) roots (rootName root) modules1 (name :: stack)
-                              (append imports implicit)
-                          case modulesR of
+                        OkC _ =>
+                          case validateImports name imports of
                             ErrC e => pure (ErrC e)
-                            OkC modules2 =>
-                              let
-                                imports2 = normalizeImports modules2 imports
-                              in case computeExports modules2 name hdr imports2 decls exports reexports of
-                                ErrC e => pure (ErrC e)
-                                OkC exports =>
-                                  let
-                                    visible = fixities
-                                  in pure
-                                    (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
-    else pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
+                            OkC _ =>
+                              do
+                                implicitR <- implicitPrelude roots (rootName root) name imports
+                                case implicitR of
+                                  ErrC e => pure (ErrC e)
+                                  OkC implicit =>
+                                    do
+                                      modulesR <- loadAll (fuel - 1) roots (rootName root) modules1 (name :: stack) (append imports implicit)
+                                      case modulesR of
+                                        ErrC e => pure (ErrC e)
+                                        OkC modules2 =>
+                                          let
+                                            imports2 = normalizeImports modules2 imports
+                                          in case computeExports modules2 name hdr imports2 decls exports reexports of
+                                            ErrC e => pure (ErrC e)
+                                            OkC exports =>
+                                              let
+                                                visible = fixities
+                                              in pure (OkC ((::) (Module name (rootName root) imports2 implicit decls exports visible (append providers (append (reexportedImportNamesOfHeader imports2 hdr) (reexportedImportNames imports2 reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports)) modules2))
+        else
+          pure (onErrDiag (withImportSpan imp) (ldErr1 (InvalidModuleName name) name))
 
 -- 包上下文入口：ctx 给出模块根（自己 lib 在最前 + 依赖闭包）与导入方包名
 -- （决定同包/跨包导出可见性与 manifest 能力声明）。
@@ -625,39 +719,42 @@ loadProject ctx entry = loadProjectWithPreloaded ctx entry []
 -- 仍按源码加载；模块表的顺序约定与 `loadAll` 一致（新加载模块前插，dependents-first），
 -- 所以调用方应把 `preloaded` 按 reverse(topo) 传入。
 export loadProjectWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> List Module -> Eff r (Check Project)
-loadProjectWithPreloaded ctx entry preloaded = do
-  exists <- fsFileExists entry
-  if exists then do
-    text <- fsReadFile entry
-    parsed <- parseFileWithPath entry text
-    case parsed of
-      ErrC e => pure (ErrC e)
-      OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of
-        Just (ModDecl dname hasList items _ _ _ sp) =>
-          pure (onErrDiag (withFallbackSpan sp) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
-        Nothing =>
-          let
-            imports1 = imports
-            preloaded1 = preloaded
-          in case validateImports "<entry>" imports1 of
-            ErrC e => pure (ErrC e)
-            OkC _ => do
-              implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
-              case implicitR of
-                ErrC e => pure (ErrC e)
-                OkC implicit => do
-                  modulesR <-
-                    loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 []
-                      (append imports1 implicit)
-                  pure (case modulesR of
-                    ErrC e => ErrC e
-                    OkC modules =>
-                      let
-                        imports2 = normalizeImports modules imports1
-                      in withLayerCheck (contextRoots ctx)
-                        (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
-                  )
-  else pure (ldErr1 (EntryFileNotFound entry) entry)
+loadProjectWithPreloaded ctx entry preloaded =
+  do
+    exists <- fsFileExists entry
+    if exists then
+      do
+        text <- fsReadFile entry
+        parsed <- parseFileWithPath entry text
+        case parsed of
+          ErrC e => pure (ErrC e)
+          OkC (SourceFile hdr imports fixities decls exports reexports opacity) =>
+            case hdr of
+              Just (ModDecl dname hasList items _ _ _ sp) => pure (onErrDiag (withFallbackSpan sp) (ldErr1 (ModuleHeaderInEntryFile entry) entry))
+              Nothing =>
+                let
+                  imports1 = imports
+                  preloaded1 = preloaded
+                in case validateImports "<entry>" imports1 of
+                  ErrC e => pure (ErrC e)
+                  OkC _ =>
+                    do
+                      implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
+                      case implicitR of
+                        ErrC e => pure (ErrC e)
+                        OkC implicit =>
+                          do
+                            modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports1 implicit)
+                            pure (
+                                case modulesR of
+                                  ErrC e => ErrC e
+                                  OkC modules =>
+                                    let
+                                      imports2 = normalizeImports modules imports1
+                                    in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
+                              )
+    else
+      pure (ldErr1 (EntryFileNotFound entry) entry)
 
 -- 库包入口：不带 app/Main.vuna 的包，以 [export].modules 作为根模块集合。
 export loadProjectModules : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r (Check Project)
@@ -670,11 +767,11 @@ loadProjectModulesWithPreloaded ctx names preloaded =
   in do
     modulesR <-
       loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded [] entryImports
-    pure (case modulesR of
-      ErrC e => ErrC e
-      OkC modules =>
-        withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [])
-    )
+    pure (
+        case modulesR of
+          ErrC e => ErrC e
+          OkC modules => withLayerCheck (contextRoots ctx) (Project [] [] [] modules (contextPackageName ctx) [])
+      )
 
 -- 入口以**源码字符串**给出（REPL 的表达式求值）：入口不落盘（import 仍按上下文的
 -- roots 从磁盘解析）；隐式 Prelude 与文件入口同规则（ad-hoc 单文件也自动注入）。
@@ -683,35 +780,36 @@ loadProjectSource ctx label source = loadProjectSourceWithPreloaded ctx label so
 
 -- | 入口以源码字符串给出，依赖包模块可预置（零 parse）。
 export loadProjectSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
-loadProjectSourceWithPreloaded ctx label source preloaded = do
-  parsed <- parseFileWithPathMode PmTool label source
-  case parsed of
-    ErrC e => pure (ErrC e)
-    OkC (SourceFile hdr imports fixities decls exports reexports opacity) => case hdr of
-      Just (ModDecl dname hasList items _ _ _ sp) =>
-        pure (ldErr1 (ModuleHeaderInEntrySource label) label)
-      Nothing =>
-        let
-          imports1 = imports
-          preloaded1 = preloaded
-        in case validateImports "<entry>" imports1 of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
-            case implicitR of
+loadProjectSourceWithPreloaded ctx label source preloaded =
+  do
+    parsed <- parseFileWithPathMode PmTool label source
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports fixities decls exports reexports opacity) =>
+        case hdr of
+          Just (ModDecl dname hasList items _ _ _ sp) => pure (ldErr1 (ModuleHeaderInEntrySource label) label)
+          Nothing =>
+            let
+              imports1 = imports
+              preloaded1 = preloaded
+            in case validateImports "<entry>" imports1 of
               ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 []
-                    (append imports1 implicit)
-                pure (case modulesR of
-                  ErrC e => ErrC e
-                  OkC modules =>
-                    let
-                      imports2 = normalizeImports modules imports1
-                    in withLayerCheck (contextRoots ctx)
-                      (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
-                )
+              OkC _ =>
+                do
+                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports1
+                  case implicitR of
+                    ErrC e => pure (ErrC e)
+                    OkC implicit =>
+                      do
+                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports1 implicit)
+                        pure (
+                            case modulesR of
+                              ErrC e => ErrC e
+                              OkC modules =>
+                                let
+                                  imports2 = normalizeImports modules imports1
+                                in withLayerCheck (contextRoots ctx) (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
+                          )
 
 -- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
 -- 头（LSP 打开 lib/ 下的文件时就是这种形态）。模块头存在时，按 import 闭包加载后
@@ -723,40 +821,41 @@ loadModuleSource ctx label source = loadModuleSourceWithPreloaded ctx label sour
 
 -- 依赖包模块可预置（来自接口的 `Module`），只 parse 当前文件与同包源码。
 export loadModuleSourceWithPreloaded : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> List Module -> Eff r (Check Project)
-loadModuleSourceWithPreloaded ctx label source preloaded = do
-  parsed <- parseFileWithPathMode PmTool label source
-  case parsed of
-    ErrC e => pure (ErrC e)
-    OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) => case hdr of
-      Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
-      Just (ModDecl name hasList items _ _ _ sp) =>
-        let
-          imports1 = imports0
-          providers = []
-          preloaded1 = preloaded
-          imports = namespaceImportsOf imports1 reexports
-        in case validateImports name imports of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
-            case implicitR of
+loadModuleSourceWithPreloaded ctx label source preloaded =
+  do
+    parsed <- parseFileWithPathMode PmTool label source
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
+        case hdr of
+          Nothing => loadProjectSourceWithPreloaded ctx label source preloaded
+          Just (ModDecl name hasList items _ _ _ sp) =>
+            let
+              imports1 = imports0
+              providers = []
+              preloaded1 = preloaded
+              imports = namespaceImportsOf imports1 reexports
+            in case validateImports name imports of
               ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 []
-                    (append imports implicit)
-                case modulesR of
-                  ErrC e => pure (ErrC e)
-                  OkC modules =>
-                    let
-                      imports2 = normalizeImports modules imports
-                    in case computeExports modules name hdr imports2 decls exports reexports of
-                      ErrC e => pure (ErrC e)
-                      OkC exports =>
-                        let
-                          visible = fixities
-                        in pure
-                          (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
+              OkC _ =>
+                do
+                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+                  case implicitR of
+                    ErrC e => pure (ErrC e)
+                    OkC implicit =>
+                      do
+                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) preloaded1 [] (append imports implicit)
+                        case modulesR of
+                          ErrC e => pure (ErrC e)
+                          OkC modules =>
+                            let
+                              imports2 = normalizeImports modules imports
+                            in case computeExports modules name hdr imports2 decls exports reexports of
+                              ErrC e => pure (ErrC e)
+                              OkC exports =>
+                                let
+                                  visible = fixities
+                                in pure (withLayerCheck (contextRoots ctx) (Project [] imports2 implicit (Module name (contextPackageName ctx) imports2 implicit decls exports visible (append providers (reexportedImportNames imports2 (append items reexports))) (opaqueNamesOf name opacity) (exportIndexOf exports) :: modules) (contextPackageName ctx) []))
 
 -- fmt 用的「程序级 fixity」——本文件的 `infix*` 声明（在前，本地优先）
 -- ++ import 闭包可见的声明（Module 里已含各自的 import 闭包）。只 parse + 加载模块图，
@@ -768,57 +867,60 @@ loadModuleSourceWithPreloaded ctx label source preloaded = do
 -- 返回值同时带回更新后的模块表，供调用方继续复用。
 -- parse 读 lex 缓存 / 探测模块文件是宿主动作，外壳显式 `Eff r`；声明表计算保持纯。
 export fixitiesForSourceIn : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List Module -> String -> String -> Eff r (Check (Pair (List Module) (List FixityDecl)))
-fixitiesForSourceIn ctx modules0 label source = do
-  parsed <- parseFileWithPathMode PmTool label source
-  case parsed of
-    ErrC e => pure (ErrC e)
-    OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
-      let
-        imports1 = imports0
-        modules1 = modules0
-        imports = namespaceImportsOf imports1 reexports
-      in case hdr of
-        Nothing => case validateImports label imports of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
-            case implicitR of
+fixitiesForSourceIn ctx modules0 label source =
+  do
+    parsed <- parseFileWithPathMode PmTool label source
+    case parsed of
+      ErrC e => pure (ErrC e)
+      OkC (SourceFile hdr imports0 fixities decls exports reexports opacity) =>
+        let
+          imports1 = imports0
+          modules1 = modules0
+          imports = namespaceImportsOf imports1 reexports
+        in case hdr of
+          Nothing =>
+            case validateImports label imports of
               ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 []
-                    (append imports implicit)
-                pure (case modulesR of
-                  ErrC e => ErrC e
-                  OkC modules =>
-                    OkC
-                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
-                )
-        Just (ModDecl name hasList items _ _ _ sp) => case validateImports name imports of
-          ErrC e => pure (ErrC e)
-          OkC _ => do
-            implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
-            case implicitR of
+              OkC _ =>
+                do
+                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) "" imports
+                  case implicitR of
+                    ErrC e => pure (ErrC e)
+                    OkC implicit =>
+                      do
+                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
+                        pure (
+                            case modulesR of
+                              ErrC e => ErrC e
+                              OkC modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
+                          )
+          Just (ModDecl name hasList items _ _ _ sp) =>
+            case validateImports name imports of
               ErrC e => pure (ErrC e)
-              OkC implicit => do
-                modulesR <-
-                  loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 []
-                    (append imports implicit)
-                pure (case modulesR of
-                  ErrC e => ErrC e
-                  OkC modules =>
-                    OkC
-                      (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
-                )
+              OkC _ =>
+                do
+                  implicitR <- implicitPrelude (contextRoots ctx) (contextPackageName ctx) name imports
+                  case implicitR of
+                    ErrC e => pure (ErrC e)
+                    OkC implicit =>
+                      do
+                        modulesR <- loadAll 1048576 (contextRoots ctx) (contextPackageName ctx) modules1 [] (append imports implicit)
+                        pure (
+                            case modulesR of
+                              ErrC e => ErrC e
+                              OkC modules => OkC (Pair modules (dedupeFixities (append fixities (visibleFixitiesOf modules (append (normalizeImports modules imports) implicit)))))
+                          )
 
 -- 单文件便捷入口（LSP formatting / fmt 探针）：不跨调用复用模块表。
 export fixitiesForSource : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> String -> Eff r (Check (List FixityDecl))
-fixitiesForSource ctx label source = do
-  pairR <- fixitiesForSourceIn ctx [] label source
-  pure (case pairR of
-    ErrC e => ErrC e
-    OkC p => OkC (secondOf p)
-  )
+fixitiesForSource ctx label source =
+  do
+    pairR <- fixitiesForSourceIn ctx [] label source
+    pure (
+        case pairR of
+          ErrC e => ErrC e
+          OkC p => OkC (secondOf p)
+      )
 
 -- 返回逐模块已解析（未 flatten）的声明 + 本次解析产生的 warning（unused import）。
 -- warning 是显式返回值：名字解析期不维护 used-set，解析完成后按「实际引用的目标」判定。
@@ -834,17 +936,21 @@ export resolveProjectKeeping : Bool -> List String -> Project -> Check (Pair (Li
 resolveProjectKeeping release keep (Project decls imports implicit modules entryPkg entryFixes) =
   let
     projectFixities = dedupeFixities (append (concatMap moduleFixitiesOf modules) entryFixes)
-  in Vuna.Compiler.Base.Common.bind (checkUniqueFixities projectFixities)
+  in Vuna.Compiler.Base.Common.bind
+    (checkUniqueFixities projectFixities)
     (\fixes => Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls) (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveEntry release modules entryPkg (append imports implicit) decls3) (\entryDecls => Vuna.Compiler.Base.Common.bind (unusedImportWarnings modules imports entryDecls decls3 []) (\entryWarns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes modules) (\p2 => OkC (Pair (append entryWarns (secondOf p2)) (Pair entryDecls (firstOf p2)))))))))
 
 resolveModulesKeep : Bool -> List String -> List FixityDecl -> List Module -> Check (Pair (List Module) (List Diagnostic))
 resolveModulesKeep release keep fixes [] = OkC (Pair [] [])
 resolveModulesKeep release keep fixes ((Module name pkg imports implicit decls exports fixities reexports opacity idx) :: rest) =
   if memName name keep then
-    Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest)
+    Vuna.Compiler.Base.Common.bind
+      (resolveModulesKeep release keep fixes rest)
       (\p2 => OkC (Pair ((::) (Module name pkg imports implicit decls exports fixities reexports opacity idx) (firstOf p2)) (secondOf p2)))
-  else Vuna.Compiler.Base.Common.bind (reorderProgram (tableOf fixes) decls)
-    (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
+  else
+    Vuna.Compiler.Base.Common.bind
+      (reorderProgram (tableOf fixes) decls)
+      (\decls2 => Vuna.Compiler.Base.Common.bind (expandDecls decls2) (\decls3 => Vuna.Compiler.Base.Common.bind (resolveProgram (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) name name (namespacesOfWith release decls3) (append imports implicit) decls3) (\d1 => Vuna.Compiler.Base.Common.bind (unusedImportWarnings (Module name pkg imports implicit decls3 exports fixities reexports opacity idx :: rest) imports d1 decls3 reexports) (\warns => Vuna.Compiler.Base.Common.bind (resolveModulesKeep release keep fixes rest) (\p2 => OkC (Pair ((::) (Module name pkg imports implicit d1 exports fixities reexports opacity idx) (firstOf p2)) (append warns (secondOf p2))))))))
 
 -- ---------------------------------------------------------------
 -- unused import warning：显式 import 未在所属检查单元里被引用。
@@ -858,8 +964,10 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
     -- 注入的 canonical 名，不算作 import 使用。源码没有显式引用 interp 时剔除合成名，
     -- 只被模板串引用的 import 仍报 unused。
     names =
-      if interpReferencedInSource sourceDecls then names0
-      else filter (\n => n /= interpMethodName) names0
+      if interpReferencedInSource sourceDecls then
+        names0
+      else
+        filter (\n => n /= interpMethodName) names0
     nameSet = HashMap.ofNames names
   in unusedImportWarningsGo modules nameSet reexports imports
 
@@ -872,17 +980,25 @@ interpReferencedInSource decls =
 
 unusedImportWarningsGo : List Module -> HashMap String Bool -> List String -> List Import -> Check (List Diagnostic)
 unusedImportWarningsGo modules nameSet reexports [] = OkC []
-unusedImportWarningsGo modules nameSet reexports (imp :: rest) = Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (\es => let
-  used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es)
-in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet reexports rest)
-  (\more => OkC (if used then more else (::) (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
-)
+unusedImportWarningsGo modules nameSet reexports (imp :: rest) =
+  Vuna.Compiler.Base.Common.bind (exportsOf modules (importName imp)) (
+      \es =>
+        let
+          used = memName (importName imp) reexports || anyTargetIn nameSet (map exportTargetOf es)
+        in Vuna.Compiler.Base.Common.bind (unusedImportWarningsGo modules nameSet reexports rest) (\more => OkC (if used then more else (::) (warnDiagAtMod (\d => withSuggestion (Suggestion "remove unused import ${imp.importName}" MachineApplicable [DiagEdit (importRemovalSpan imp.importSpan) ""]) d) imp.importSpan (UnusedImport imp.importName) [imp.importName]) more))
+    )
 
 -- 整行删除 import 的编辑 span：从行首到下一行行首（含换行）。
 importRemovalSpan : Span -> Span
 importRemovalSpan sp =
-  Span (spanFile sp) (spanStartLine sp) 1 (spanStartLine sp + 1) 1
-    (spanStartOffset sp - (spanStartCol sp - 1)) (spanStartOffset sp - (spanStartCol sp - 1))
+  Span
+    (spanFile sp)
+    (spanStartLine sp)
+    1
+    (spanStartLine sp + 1)
+    1
+    (spanStartOffset sp - (spanStartCol sp - 1))
+    (spanStartOffset sp - (spanStartCol sp - 1))
 
 -- 已解析声明里出现的全部引用目标（值 / 类型 / 构造子位置）。解析期已把可解析的名字
 -- 换成 canonical target；`@vuna@ctor@短名@t1@t2` 形态（重载构造子）展开成它的候选目标。
@@ -894,10 +1010,13 @@ declGlobalNames d = concatMap expandGlobalName (declRefNames d)
 --   * `@vuna@do@bind@<canonical>` / `@vuna@do@ignore@<canonical>` → canonical bind 目标
 --     （do 链在 rename 后仍引用 bind 的实现模块，import 是否使用要算上它）。
 expandGlobalName : String -> List String
-expandGlobalName n = if isOverCtorName n then overCtorTargets n
-else case doSyntaxCanonical n of
-  Just canonical => (::) canonical []
-  Nothing => (::) n []
+expandGlobalName n =
+  if isOverCtorName n then
+    overCtorTargets n
+  else
+    case doSyntaxCanonical n of
+      Just canonical => (::) canonical []
+      Nothing => (::) n []
 
 -- | 导出条目的 canonical target。
 exportTargetOf : ExportEntry -> String

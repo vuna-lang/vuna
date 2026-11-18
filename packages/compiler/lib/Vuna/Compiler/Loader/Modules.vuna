@@ -117,21 +117,26 @@ allIdentChars [] = True
 allIdentChars (c :: rest) = (isIdentStart c || isDigit c) && allIdentChars rest
 
 validSegment : String -> Bool
-validSegment seg = case strUnpack seg of
-  [] => False
-  c :: rest => isUpperChar c && allIdentChars rest
+validSegment seg =
+  case strUnpack seg of
+    [] => False
+    c :: rest => isUpperChar c && allIdentChars rest
 
 allSegmentsValid : List String -> Bool
 allSegmentsValid [] = False
-allSegmentsValid (seg :: rest) = if validSegment seg then case rest of
-  [] => True
-  _ => allSegmentsValid rest
-else False
+allSegmentsValid (seg :: rest) =
+  if validSegment seg then
+    case rest of
+      [] => True
+      _ => allSegmentsValid rest
+  else
+    False
 
 export validModuleName : String -> Bool
-validModuleName name = case splitOnDot name of
-  [] => False
-  segs => allSegmentsValid segs
+validModuleName name =
+  case splitOnDot name of
+    [] => False
+    segs => allSegmentsValid segs
 
 export mangle : String -> String -> String
 mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
@@ -159,17 +164,21 @@ qualifierCandidates imports q =
     strong =
       nubNames
         (append (map importName (filter (\imp => importName imp == q) imports)) (map importName (filter (\imp => aliasIs q imp) imports)))
-  in if notEmptyList strong then strong
-  else nubNames (map importName (filter (\imp => lastSegment (importName imp) == q) imports))
+  in if notEmptyList strong then
+    strong
+  else
+    nubNames (map importName (filter (\imp => lastSegment (importName imp) == q) imports))
 
 aliasIs : String -> Import -> Bool
-aliasIs q imp = case imp.importAlias of
-  Just alias => alias == q
-  Nothing => False
+aliasIs q imp =
+  case imp.importAlias of
+    Just alias => alias == q
+    Nothing => False
 
 lastSegment : String -> String
-lastSegment name = case splitLastDot (splitOnDot name) of
-  Pair _ base => base
+lastSegment name =
+  case splitLastDot (splitOnDot name) of
+    Pair _ base => base
 
 notEmptyList : List a -> Bool
 notEmptyList [] = False
@@ -182,25 +191,33 @@ validateImports label imports = checkImportAliasSyntax imports
 
 checkImportAliasSyntax : List Import -> Check (List a)
 checkImportAliasSyntax [] = OkC []
-checkImportAliasSyntax (imp :: rest) = case imp.importAlias of
-  Nothing => checkImportAliasSyntax rest
-  Just alias =>
-    if validSegment alias then checkImportAliasSyntax rest
-    else onErrDiag (withImportSite imp.importSpan) (rnNoLoc1 (InvalidModuleAlias alias) alias)
+checkImportAliasSyntax (imp :: rest) =
+  case imp.importAlias of
+    Nothing => checkImportAliasSyntax rest
+    Just alias =>
+      if validSegment alias then
+        checkImportAliasSyntax rest
+      else
+        onErrDiag (withImportSite imp.importSpan) (rnNoLoc1 (InvalidModuleAlias alias) alias)
 
 openModuleNames : List Import -> List String
 openModuleNames [] = []
 openModuleNames (imp :: rest) =
-  if imp.importIsQualified then openModuleNames rest
-  else nubNames ((::) (importName imp) (openModuleNames rest))
+  if imp.importIsQualified then
+    openModuleNames rest
+  else
+    nubNames ((::) (importName imp) (openModuleNames rest))
 
 -- 纯查找（不标记 used）：`import X` 或 `import X as Y` 里 `name` 对应的 import 模块名。
 export findImportModule : List Import -> String -> Maybe String
 findImportModule [] _ = Nothing
-findImportModule (imp :: rest) name = if importName imp == name then Just (importName imp)
-else case imp.importAlias of
-  Just alias => if alias == name then Just (importName imp) else findImportModule rest name
-  Nothing => findImportModule rest name
+findImportModule (imp :: rest) name =
+  if importName imp == name then
+    Just (importName imp)
+  else
+    case imp.importAlias of
+      Just alias => if alias == name then Just (importName imp) else findImportModule rest name
+      Nothing => findImportModule rest name
 
 -- 模块头导出列表里 `module X` 对应的 import 名（去重、保持出现顺序）。加载期算好放进
 -- `Module.moduleReexportsOf`，resolve 期并入 used-import 集合。
@@ -209,16 +226,22 @@ reexportedImportNames imports items = reexportedImportNamesGo imports items []
 
 reexportedImportNamesGo : List Import -> List ExportItem -> List String -> List String
 reexportedImportNamesGo imports [] acc = List.reverse acc
-reexportedImportNamesGo imports ((XModule name _) :: rest) acc = case findImportModule imports name of
-  Nothing => reexportedImportNamesGo imports rest acc
-  Just m =>
-    if memName m acc then reexportedImportNamesGo imports rest acc
-    else reexportedImportNamesGo imports rest ((::) m acc)
-reexportedImportNamesGo imports ((XNamespace name _ _) :: rest) acc = case findImportModule imports name of
-  Nothing => reexportedImportNamesGo imports rest acc
-  Just m =>
-    if memName m acc then reexportedImportNamesGo imports rest acc
-    else reexportedImportNamesGo imports rest ((::) m acc)
+reexportedImportNamesGo imports ((XModule name _) :: rest) acc =
+  case findImportModule imports name of
+    Nothing => reexportedImportNamesGo imports rest acc
+    Just m =>
+      if memName m acc then
+        reexportedImportNamesGo imports rest acc
+      else
+        reexportedImportNamesGo imports rest ((::) m acc)
+reexportedImportNamesGo imports ((XNamespace name _ _) :: rest) acc =
+  case findImportModule imports name of
+    Nothing => reexportedImportNamesGo imports rest acc
+    Just m =>
+      if memName m acc then
+        reexportedImportNamesGo imports rest acc
+      else
+        reexportedImportNamesGo imports rest ((::) m acc)
 reexportedImportNamesGo imports (_ :: rest) acc = reexportedImportNamesGo imports rest acc
 
 -- | 有显式导出列表时才算重导出；无 module 头 / 隐式导出 = []。
@@ -241,9 +264,10 @@ missingModule name =
   icInternal "module ${name} is not loaded (import list and module table disagree)"
 
 export moduleDecls : List Module -> String -> Check (List Decl)
-moduleDecls modules name = case findModule modules name of
-  Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC decls
-  Nothing => missingModule name
+moduleDecls modules name =
+  case findModule modules name of
+    Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC decls
+    Nothing => missingModule name
 
 moduleCtors : List Module -> String -> Check (List String)
 moduleCtors modules name =
@@ -252,36 +276,45 @@ moduleCtors modules name =
 -- | 把 import/限定名里的路径解析成真实模块名：先查直接模块；不是真实模块时按
 -- 「最长已加载模块前缀 + 命名空间路径」解析。供 `exportsOf` / 索引查询使用。
 export resolveModuleName : List Module -> String -> Maybe String
-resolveModuleName modules name = case findModule modules name of
-  Just _ => Just name
-  Nothing => resolvePathModule modules (splitOnDot name) (List.length (splitOnDot name) - 1)
+resolveModuleName modules name =
+  case findModule modules name of
+    Just _ => Just name
+    Nothing => resolvePathModule modules (splitOnDot name) (List.length (splitOnDot name) - 1)
 
 resolvePathModule : List Module -> List String -> Int -> Maybe String
-resolvePathModule modules segs n = if n < 1 then Nothing
-else case findModule modules (joinDots (takeSegsLocal n segs)) of
-  Just _ => walkNamespaceIndex modules (joinDots (takeSegsLocal n segs)) (dropFirst n segs)
-  Nothing => resolvePathModule modules segs (n - 1)
+resolvePathModule modules segs n =
+  if n < 1 then
+    Nothing
+  else
+    case findModule modules (joinDots (takeSegsLocal n segs)) of
+      Just _ => walkNamespaceIndex modules (joinDots (takeSegsLocal n segs)) (dropFirst n segs)
+      Nothing => resolvePathModule modules segs (n - 1)
 
 export exportsOf : List Module -> String -> Check (List ExportEntry)
-exportsOf modules name = case findModule modules (resolvedName modules name) of
-  Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC exports
-  Nothing => missingModule name
+exportsOf modules name =
+  case findModule modules (resolvedName modules name) of
+    Just (Module mname mpkg imports imps decls exports fx _ _ _) => OkC exports
+    Nothing => missingModule name
 
 resolvedName : List Module -> String -> String
-resolvedName modules name = case resolveModuleName modules name of
-  Just real => real
-  Nothing => name
+resolvedName modules name =
+  case resolveModuleName modules name of
+    Just real => real
+    Nothing => name
 
 -- | 把 import 里写的路径名（`Base.Effect.Types`）归一成真实模块名
 -- （`Base.Effect.Types`）。加载后的模块表按真实模块名索引，后续按 import 名查模块表的地方
 -- （未使用 import 告警、层检查、构造子族查找）必须看到同一套名字。
 export normalizeImports : List Module -> List Import -> List Import
 normalizeImports modules [] = []
-normalizeImports modules ((Import nm q al sp) :: rest) = case resolveModuleName modules nm of
-  Nothing => Import nm q al sp :: normalizeImports modules rest
-  Just real =>
-    if real == nm then Import nm q al sp :: normalizeImports modules rest
-    else Import real q al sp :: normalizeImports modules rest
+normalizeImports modules ((Import nm q al sp) :: rest) =
+  case resolveModuleName modules nm of
+    Nothing => Import nm q al sp :: normalizeImports modules rest
+    Just real =>
+      if real == nm then
+        Import nm q al sp :: normalizeImports modules rest
+      else
+        Import real q al sp :: normalizeImports modules rest
 
 -- | 导出表的公开名索引（保持原顺序；同名的 val/ctor/type 条目并存）。
 export exportIndexOf : List ExportEntry -> HashMap String (List ExportEntry)
@@ -296,14 +329,16 @@ exportIndexOfGo (e :: rest) idx =
 
 -- | 索引里某个公开名的全部条目（无则空）。
 entriesByName : String -> HashMap String (List ExportEntry) -> List ExportEntry
-entriesByName name idx = case HashMap.lookup name idx of
-  Just es => es
-  Nothing => []
+entriesByName name idx =
+  case HashMap.lookup name idx of
+    Just es => es
+    Nothing => []
 
 export exportIndexOfModule : List Module -> String -> Check (HashMap String (List ExportEntry))
-exportIndexOfModule modules name = case findModule modules (resolvedName modules name) of
-  Just m => OkC m.moduleExportIndexOf
-  Nothing => missingModule name
+exportIndexOfModule modules name =
+  case findModule modules (resolvedName modules name) of
+    Just m => OkC m.moduleExportIndexOf
+    Nothing => missingModule name
 
 -- 按命名空间查公开名：kinds 是允许的 kind 列表（val / ctor / type）。
 lookupExport : List String -> String -> List ExportEntry -> Maybe ExportEntry
@@ -327,8 +362,10 @@ findExportModules entries name = filterKinds ["module"] name entries
 filterKinds : List String -> String -> List ExportEntry -> List ExportEntry
 filterKinds kinds name [] = []
 filterKinds kinds name (e :: rest) =
-  if memName e.kind kinds && e.public == name then (::) e (filterKinds kinds name rest)
-  else filterKinds kinds name rest
+  if memName e.kind kinds && e.public == name then
+    (::) e (filterKinds kinds name rest)
+  else
+    filterKinds kinds name rest
 
 export findExportCtor : List ExportEntry -> String -> Maybe ExportEntry
 findExportCtor entries name = lookupExport ["ctor"] name entries
@@ -341,8 +378,10 @@ findExportCtors entries name = filterCtors name entries
 filterCtors : String -> List ExportEntry -> List ExportEntry
 filterCtors name [] = []
 filterCtors name (e :: rest) =
-  if e.kind == "ctor" && e.public == name then (::) e (filterCtors name rest)
-  else filterCtors name rest
+  if e.kind == "ctor" && e.public == name then
+    (::) e (filterCtors name rest)
+  else
+    filterCtors name rest
 
 export findExportType : List ExportEntry -> String -> Maybe ExportEntry
 findExportType entries name = lookupExport ["type"] name entries
@@ -374,12 +413,13 @@ findExportTypeIn idx name = lookupExport ["type"] name (entriesByName name idx)
 
 modulesExportingValueFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValueFrom modules [] name = OkC []
-modulesExportingValueFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportValuesIn idx name of
-  [] => modulesExportingValueFrom modules rest name
-  entries =>
-    Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom modules rest name)
-      (\more => OkC (append (map (\e => Pair m e) entries) more))
-)
+modulesExportingValueFrom modules (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+      \idx =>
+        case findExportValuesIn idx name of
+          [] => modulesExportingValueFrom modules rest name
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingValueFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+    )
 
 export modulesExportingValue : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingValue modules imports name =
@@ -388,11 +428,13 @@ modulesExportingValue modules imports name =
 -- | 在给定的多个模块里找同名构造子的导出条目（每个模块可贡献多条）。
 modulesExportingCtorFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtorFrom modules [] name = OkC []
-modulesExportingCtorFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => let
-  found = findExportCtorsIn idx name
-in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom modules rest name)
-  (\more => OkC (append (map (\e => Pair m e) found) more))
-)
+modulesExportingCtorFrom modules (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+      \idx =>
+        let
+          found = findExportCtorsIn idx name
+        in Vuna.Compiler.Base.Common.bind (modulesExportingCtorFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) found) more))
+    )
 
 export modulesExportingCtor : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingCtor modules imports name =
@@ -400,12 +442,13 @@ modulesExportingCtor modules imports name =
 
 modulesExportingTypeFrom : List Module -> List String -> String -> Check (List (Pair String ExportEntry))
 modulesExportingTypeFrom modules [] name = OkC []
-modulesExportingTypeFrom modules (m :: rest) name = Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (\idx => case findExportTypesIn idx name of
-  [] => modulesExportingTypeFrom modules rest name
-  entries =>
-    Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom modules rest name)
-      (\more => OkC (append (map (\e => Pair m e) entries) more))
-)
+modulesExportingTypeFrom modules (m :: rest) name =
+  Vuna.Compiler.Base.Common.bind (exportIndexOfModule modules m) (
+      \idx =>
+        case findExportTypesIn idx name of
+          [] => modulesExportingTypeFrom modules rest name
+          entries => Vuna.Compiler.Base.Common.bind (modulesExportingTypeFrom modules rest name) (\more => OkC (append (map (\e => Pair m e) entries) more))
+    )
 
 export modulesExportingType : List Module -> List Import -> String -> Check (List (Pair String ExportEntry))
 modulesExportingType modules imports name =
@@ -419,18 +462,21 @@ sameTargetRest e ((Pair m e2) :: rest) = e.target == e2.target && sameTargetRest
 export unifyEntryPairs : String -> String -> String -> List (Pair String ExportEntry) -> Check (Pair String ExportEntry)
 unifyEntryPairs label kindLabel name [] = icInternal "unifyEntryPairs: empty candidates"
 unifyEntryPairs label kindLabel name (p :: rest) =
-  if sameTargetRest (secondOf p) rest then OkC p
-  else err
-    "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualify it"
+  if sameTargetRest (secondOf p) rest then
+    OkC p
+  else
+    err
+      "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualify it"
 
 modulePath : Root -> String -> String
 modulePath root name = "${rootDir root}/${joinSlashes (splitOnDot name)}.vuna"
 
 -- 当前导入方所在包能否看到该 root 中的模块：同包永远可见；跨包只认 [export] 列表。
 rootAllows : String -> Root -> String -> Bool
-rootAllows importerPkg root name = case root.rootExports of
-  Nothing => True
-  Just mods => rootName root == importerPkg || memName name mods
+rootAllows importerPkg root name =
+  case root.rootExports of
+    Nothing => True
+    Just mods => rootName root == importerPkg || memName name mods
 
 -- 模块根候选的**存在性探测**是宿主动作，显式在 `Eff []` 里；
 -- 可见性判定与候选分类保持纯。
@@ -445,8 +491,10 @@ collectModuleFiles (root :: rest) name importerPkg allowed hidden =
     if exists then
       if rootAllows importerPkg root name then
         collectModuleFiles rest name importerPkg (Pair path root :: allowed) hidden
-      else collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
-    else collectModuleFiles rest name importerPkg allowed hidden
+      else
+        collectModuleFiles rest name importerPkg allowed (rootName root :: hidden)
+    else
+      collectModuleFiles rest name importerPkg allowed hidden
 
 _joinRootDirs : List Root -> String
 _joinRootDirs roots = _joinNames (map rootDir roots)
@@ -459,24 +507,21 @@ withImporterSpan : Span -> Diagnostic -> Diagnostic
 withImporterSpan sp d = if spanFile sp == "" then d else withFallbackSpan sp d
 
 export findModuleFile : Member nFs FsOp r => List Root -> String -> String -> Span -> Eff r (Check (Pair String Root))
-findModuleFile roots name importerPkg importerSpan = do
-  collected <- collectModuleFiles roots name importerPkg [] []
-  let
-    allowed = firstOf collected
-    hidden = secondOf collected
-  in pure (case allowed of
-    [] => case hidden of
-      [] =>
-        onErrDiag (withImporterSpan importerSpan)
-          (ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots))
-      pkgs =>
-        onErrDiag (withImporterSpan importerSpan)
-          (ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden))
-    [only] => OkC only
-    candidates =>
-      onErrDiag (withImporterSpan importerSpan)
-        (rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name (_joinNames (map candidateDir allowed)))
-  )
+findModuleFile roots name importerPkg importerSpan =
+  do
+    collected <- collectModuleFiles roots name importerPkg [] []
+    let
+      allowed = firstOf collected
+      hidden = secondOf collected
+    in pure (
+        case allowed of
+          [] =>
+            case hidden of
+              [] => onErrDiag (withImporterSpan importerSpan) (ldErr2 (ModuleNotFound name (_joinRootDirs roots)) name (_joinRootDirs roots))
+              pkgs => onErrDiag (withImporterSpan importerSpan) (ldErr2 (ModuleNotExported name (_joinNames hidden)) name (_joinNames hidden))
+          [only] => OkC only
+          candidates => onErrDiag (withImporterSpan importerSpan) (rnNoLoc2 (AmbiguousModule name (_joinNames (map candidateDir allowed))) name (_joinNames (map candidateDir allowed)))
+      )
 
 -- | 在模块 `m` 的命名空间导出里按最长点号前缀走路径，返回最终目标模块名。
 -- 目标模块必须已加载（它是 m 的依赖）。
@@ -487,19 +532,28 @@ export moduleExportIndexOfOf : Module -> HashMap String (List ExportEntry)
 moduleExportIndexOfOf (Module _ _ _ _ _ _ _ _ _ idx) = idx
 
 walkNamespaceIndexFuel : Int -> List Module -> String -> List String -> Maybe String
-walkNamespaceIndexFuel fuel modules m segs = if fuel <= 0 then Nothing
-else case findModule modules m of
-  Nothing => Nothing
-  Just md => if List.length segs <= 0 then Just (moduleNameOf md)
-  else case longestIndexPrefix (moduleExportIndexOfOf md) segs (List.length segs) of
-    Nothing => Nothing
-    Just (Pair target k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
+walkNamespaceIndexFuel fuel modules m segs =
+  if fuel <= 0 then
+    Nothing
+  else
+    case findModule modules m of
+      Nothing => Nothing
+      Just md =>
+        if List.length segs <= 0 then
+          Just (moduleNameOf md)
+        else
+          case longestIndexPrefix (moduleExportIndexOfOf md) segs (List.length segs) of
+            Nothing => Nothing
+            Just (Pair target k) => walkNamespaceIndexFuel (fuel - 1) modules target (dropFirst k segs)
 
 longestIndexPrefix : HashMap String (List ExportEntry) -> List String -> Int -> Maybe (Pair String Int)
-longestIndexPrefix idx segs k = if k <= 0 then Nothing
-else case findExportModuleIn idx (joinDots (takeSegsLocal k segs)) of
-  Just e => Just (Pair e.target k)
-  Nothing => longestIndexPrefix idx segs (k - 1)
+longestIndexPrefix idx segs k =
+  if k <= 0 then
+    Nothing
+  else
+    case findExportModuleIn idx (joinDots (takeSegsLocal k segs)) of
+      Just e => Just (Pair e.target k)
+      Nothing => longestIndexPrefix idx segs (k - 1)
 
 takeSegsLocal : Int -> List String -> List String
 takeSegsLocal n [] = []
@@ -512,8 +566,10 @@ dropFirst n (x :: rest) = if n <= 0 then (::) x rest else dropFirst (n - 1) rest
 export findModule : List Module -> String -> Maybe Module
 findModule [] name = Nothing
 findModule ((Module mname mpkg imports imps decls exports fx reexports opacity idx) :: rest) name =
-  if mname == name then Just (Module mname mpkg imports imps decls exports fx reexports opacity idx)
-  else findModule rest name
+  if mname == name then
+    Just (Module mname mpkg imports imps decls exports fx reexports opacity idx)
+  else
+    findModule rest name
 
 -- target 是否是某个 data/record 的构造子（用于把 trait method 从“构造子重载候选”
 -- 里排除；trait method 不是族的构造子，仍按原名字解析）。
@@ -530,22 +586,26 @@ anyModuleCtorTarget [] _ _ _ = False
 anyModuleCtorTarget (m :: rest) target dprefix cname =
   let
     mname = moduleNameOf m
-  in if not (startsWith mname target) then anyModuleCtorTarget rest target dprefix cname
-  else isCtorTargetInDecls mname target dprefix cname (moduleDeclsOf m)
-    || anyModuleCtorTarget rest target dprefix cname
+  in if not (startsWith mname target) then
+    anyModuleCtorTarget rest target dprefix cname
+  else
+    isCtorTargetInDecls mname target dprefix cname (moduleDeclsOf m)
+      || anyModuleCtorTarget rest target dprefix cname
 
 -- | 单模块声明里是否存在 canonical 名为 target 的 data/record 构造子。
 -- 先按 canonical 的「数据前缀」筛一次族，再比构造子短名；不再为每个构造子拼一次
 -- `${mname}.${dname}.${cname}`（解析期这一步按名字调用，拼接量随构造子数放大）。
 isCtorTargetInDecls : String -> String -> String -> String -> List Decl -> Bool
 isCtorTargetInDecls mname target dprefix cname [] = False
-isCtorTargetInDecls mname target dprefix cname (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField repr lin sp =>
-    mangle mname dname == dprefix && anyCtorNamed cname ctors
-      || isCtorTargetInDecls mname target dprefix cname rest
-  DRecord dname params fields derivings viaField repr lin sp =>
-    mangle mname dname == target || isCtorTargetInDecls mname target dprefix cname rest
-  _ => isCtorTargetInDecls mname target dprefix cname rest
+isCtorTargetInDecls mname target dprefix cname (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      mangle mname dname
+        == dprefix
+        && anyCtorNamed cname ctors || isCtorTargetInDecls mname target dprefix cname rest
+    DRecord dname params fields derivings viaField repr lin sp =>
+      mangle mname dname == target || isCtorTargetInDecls mname target dprefix cname rest
+    _ => isCtorTargetInDecls mname target dprefix cname rest
 
 anyCtorNamed : String -> List Ctor -> Bool
 anyCtorNamed cname [] = False

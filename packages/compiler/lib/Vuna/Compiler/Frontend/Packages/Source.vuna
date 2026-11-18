@@ -22,15 +22,17 @@ import Base.Effect.Types as EffTypes
 -- | 收集时跳过的目录名（与 `Driver.Compile` 的构建扫描同源）。
 export skipSourceDir : String -> Bool
 skipSourceDir name =
-  name == ".git"
-    || name == ".local"
-    || name == ".output"
-    || name == ".direnv"
-    || name == "node_modules"
-    || name == "seed"
-    || name == "_scratch"
-    || name == "result"
-    || name == "corpus"
+  name
+    == ".git"
+    || name
+    == ".local"
+    || name
+    == ".output"
+    || name
+    == ".direnv"
+    || name
+    == "node_modules"
+    || name == "seed" || name == "_scratch" || name == "result" || name == "corpus"
 
 -- | 摘要文本归一：接受 `sha256:<64hex>` 与裸 64 位十六进制。
 export normalizeHash : String -> String
@@ -42,59 +44,78 @@ verifyHash expected actual = normalizeHash expected == normalizeHash actual
 
 -- | 包内全部文件（相对路径 + 字节），按路径升序。
 export packageFilesEff : Member nFs FsOp r => String -> Eff r (List PackageFile)
-packageFilesEff root = do
-  manifestFiles <- readManifestFile root
-  libFiles <- collectDirFiles 1048576 root "lib"
-  appFiles <- collectDirFiles 1048576 root "app"
-  testFiles <- collectDirFiles 1048576 root "test"
-  pure (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles))))
+packageFilesEff root =
+  do
+    manifestFiles <- readManifestFile root
+    libFiles <- collectDirFiles 1048576 root "lib"
+    appFiles <- collectDirFiles 1048576 root "app"
+    testFiles <- collectDirFiles 1048576 root "test"
+    pure (sortByPath (append manifestFiles (append libFiles (append appFiles testFiles))))
 
 readManifestFile : Member nFs FsOp r => String -> Eff r (List PackageFile)
-readManifestFile root = do
-  exists <- fsFileExists "${root}/vuna.toml"
-  if exists then do
-    content <- fsReadFile "${root}/vuna.toml"
-    pure [PackageFile "vuna.toml" content]
-  else pure []
+readManifestFile root =
+  do
+    exists <- fsFileExists "${root}/vuna.toml"
+    if exists then
+      do
+        content <- fsReadFile "${root}/vuna.toml"
+        pure [PackageFile "vuna.toml" content]
+    else
+      pure []
 
 collectDirFiles : Member nFs FsOp r => Int -> String -> String -> Eff r (List PackageFile)
-collectDirFiles fuel root rel = if fuel <= 0 then pure []
-else
-  let
-    dir = if rel == "" then root else "${root}/${rel}"
-  in do
-    exists <- fsFileExists dir
-    isDir <- if exists then fsIsDirectory dir else pure False
-    if exists && isDir then do
-      names <- fsReadDir dir
-      collectNames (fuel - 1) root rel names
-    else pure []
+collectDirFiles fuel root rel =
+  if fuel <= 0 then
+    pure []
+  else
+    let
+      dir = if rel == "" then root else "${root}/${rel}"
+    in do
+      exists <- fsFileExists dir
+      isDir <- if exists then fsIsDirectory dir else pure False
+      if exists && isDir then
+        do
+          names <- fsReadDir dir
+          collectNames (fuel - 1) root rel names
+      else
+        pure []
 
 collectNames : Member nFs FsOp r => Int -> String -> String -> List String -> Eff r (List PackageFile)
 collectNames fuel root rel [] = pure []
-collectNames fuel root rel (name :: rest) = if fuel <= 0 then pure []
-else do
-  here <- walkName (fuel - 1) root rel name
-  there <- collectNames (fuel - 1) root rel rest
-  pure (append here there)
+collectNames fuel root rel (name :: rest) =
+  if fuel <= 0 then
+    pure []
+  else
+    do
+      here <- walkName (fuel - 1) root rel name
+      there <- collectNames (fuel - 1) root rel rest
+      pure (append here there)
 
 walkName : Member nFs FsOp r => Int -> String -> String -> String -> Eff r (List PackageFile)
-walkName fuel root rel name = if fuel <= 0 then pure []
-else case name of
-  "." => pure []
-  ".." => pure []
-  _ => if skipSourceDir name then pure []
+walkName fuel root rel name =
+  if fuel <= 0 then
+    pure []
   else
-    let
-      childRel = if rel == "" then name else "${rel}/${name}"
-      childPath = "${root}/${childRel}"
-    in do
-      isDir <- fsIsDirectory childPath
-      if isDir then collectDirFiles (fuel - 1) root childRel
-      else if endsWith ".vuna" name then do
-        content <- fsReadFile childPath
-        pure [PackageFile childRel content]
-      else pure []
+    case name of
+      "." => pure []
+      ".." => pure []
+      _ =>
+        if skipSourceDir name then
+          pure []
+        else
+          let
+            childRel = if rel == "" then name else "${rel}/${name}"
+            childPath = "${root}/${childRel}"
+          in do
+            isDir <- fsIsDirectory childPath
+            if isDir then
+              collectDirFiles (fuel - 1) root childRel
+            else if endsWith ".vuna" name then
+              do
+                content <- fsReadFile childPath
+                pure [PackageFile childRel content]
+            else
+              pure []
 
 filePathLe : PackageFile -> PackageFile -> Bool
 filePathLe a b = a.pfPath <= b.pfPath
@@ -104,30 +125,36 @@ sortByPath files = sortBy filePathLe files
 
 -- | 由 manifest + 文件集合构造 `PackageSource`（依赖声明只取别名与摘要）。
 export packageSourceEff : Member nFs FsOp r => String -> Manifest -> Eff r PackageSource
-packageSourceEff root manifest = do
-  files <- packageFilesEff root
-  pure
-    (PackageSource (packageNameOf manifest) (exportsOf manifest) (map depKeyOf manifest.manifestDependencies) files)
+packageSourceEff root manifest =
+  do
+    files <- packageFilesEff root
+    pure
+      (PackageSource (packageNameOf manifest) (exportsOf manifest) (map depKeyOf manifest.manifestDependencies) files)
 
 packageNameOf : Manifest -> String
-packageNameOf manifest = case manifest.manifestName of
-  Nothing => ""
-  Just name => name
+packageNameOf manifest =
+  case manifest.manifestName of
+    Nothing => ""
+    Just name => name
 
 exportsOf : Manifest -> List String
-exportsOf manifest = case manifest.manifestExports of
-  Nothing => []
-  Just xs => xs
+exportsOf manifest =
+  case manifest.manifestExports of
+    Nothing => []
+    Just xs => xs
 
 -- 依赖身份优先取声明的 `identity`（分发/pin 身份）；没有就退回内容摘要。
 -- `path` 依赖两者都没有时记 `"path"`：它是可变输入，摘要不参与依赖方身份（D12）。
 depKeyOf : Dependency -> Pair String String
-depKeyOf dep = Pair (depAliasOf dep) (case depIdentityOf dep of
-  Just i => normalizeHash i
-  Nothing => case depHashOf dep of
-    Nothing => "path"
-    Just h => normalizeHash h
-)
+depKeyOf dep =
+  Pair (depAliasOf dep) (
+      case depIdentityOf dep of
+        Just i => normalizeHash i
+        Nothing =>
+          case depHashOf dep of
+            Nothing => "path"
+            Just h => normalizeHash h
+    )
 
 -- | 内容摘要：只含 `(相对路径, 字节)`。
 export contentHashOf : PackageSource -> String

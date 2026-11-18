@@ -38,7 +38,8 @@ export cpuSamplesOf : List (Pair Int ObsEvent) -> Check (List CpuSample)
 cpuSamplesOf rows =
   if hasCpuSampleMissingTs rows then
     err "cpu sample event is missing integer field `ts` (run `vuna dev obs validate` on the trace)"
-  else OkC (mapMaybe cpuSampleOf rows)
+  else
+    OkC (mapMaybe cpuSampleOf rows)
 
 -- | 内部：是否存在缺 `ts` 的 CPU 采样（严格模式据此整份报错）。
 hasCpuSampleMissingTs : List (Pair Int ObsEvent) -> Bool
@@ -48,9 +49,10 @@ hasCpuSampleMissingTs ((Pair _ ev) :: rest) =
 
 -- | 内部：该事件是 CPU 采样且缺 `ts`。
 isCpuSampleWithoutTs : ObsEvent -> Bool
-isCpuSampleWithoutTs ev = case sampleOf ev of
-  Just s => if sampleKindOfName s.sampleName == "cpu" then isNothing (eventTs ev) else False
-  Nothing => False
+isCpuSampleWithoutTs ev =
+  case sampleOf ev of
+    Just s => if sampleKindOfName s.sampleName == "cpu" then isNothing (eventTs ev) else False
+    Nothing => False
 
 -- | 供 render 用的宽松版本：缺 `ts` / 空栈的采样直接跳过（不报错）。
 export cpuSamplesLenient : List (Pair Int ObsEvent) -> List CpuSample
@@ -58,12 +60,16 @@ cpuSamplesLenient rows = mapMaybe cpuSampleOf rows
 
 -- | 内部：单个事件 -> CPU 采样；非 CPU 采样、缺 `ts`、空栈都是 `Nothing`。
 cpuSampleOf : Pair Int ObsEvent -> Maybe CpuSample
-cpuSampleOf (Pair _ ev) = case sampleOf ev of
-  Just s => if sampleKindOfName s.sampleName == "cpu" then case eventTs ev of
-    Just ts => if length s.sampleStack == 0 then Nothing else Just (CpuSample ts s.sampleStack)
+cpuSampleOf (Pair _ ev) =
+  case sampleOf ev of
+    Just s =>
+      if sampleKindOfName s.sampleName == "cpu" then
+        case eventTs ev of
+          Just ts => if length s.sampleStack == 0 then Nothing else Just (CpuSample ts s.sampleStack)
+          Nothing => Nothing
+      else
+        Nothing
     Nothing => Nothing
-  else Nothing
-  Nothing => Nothing
 
 -- | 采样 -> 折叠栈行（同名栈合并、按栈名升序）。
 export foldedRowsOf : List CpuSample -> List FoldedRow
@@ -77,8 +83,10 @@ addSampleRow rows sample = matchRow rows (join ";" (reverse sample.cpuSampleFram
 matchRow : List FoldedRow -> String -> List FoldedRow
 matchRow [] stack = [FoldedRow stack 1]
 matchRow (r :: rest) stack =
-  if r.foldedStack == stack then FoldedRow stack (r.foldedCount + 1) :: rest
-  else r :: matchRow rest stack
+  if r.foldedStack == stack then
+    FoldedRow stack (r.foldedCount + 1) :: rest
+  else
+    r :: matchRow rest stack
 
 -- | 内部：按栈名稳定升序排序。
 sortFoldedRows : List FoldedRow -> List FoldedRow

@@ -19,36 +19,42 @@ export usage : String
 usage =
   "usage: vuna-web-cli <command>\n"
     ++ "  build <app-dir> [--out DIR] [--target ocaml|native] [--release]\n"
-    ++ "  check <app-dir>\n"
-    ++ "  version\n"
+    ++ "  check <app-dir>\n" ++ "  version\n"
 
 -- | 入口：分发并返回退出码。
 export runWebCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-runWebCli args = case args of
-  "build" :: rest => buildCmd rest
-  "check" :: rest => checkCmd rest
-  "version" :: _ => do
-    _ <- consolePrint "vuna-web-cli ${Version.vunaVersion}\n"
-    pure 0
-  _ => do
-    _ <- consolePrint usage
-    pure 2
+runWebCli args =
+  case args of
+    "build" :: rest => buildCmd rest
+    "check" :: rest => checkCmd rest
+    "version" :: _ =>
+      do
+        _ <- consolePrint "vuna-web-cli ${Version.vunaVersion}\n"
+        pure 0
+    _ =>
+      do
+        _ <- consolePrint usage
+        pure 2
 
 -- | `build`：解析选项后交给 [Build.buildApp]。
 buildCmd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-buildCmd rest = case parseBuild rest of
-  ErrC e => do
-    _ <- consoleEprint "error: ${diagText e}\n"
-    pure 2
-  OkC parsed => Build.buildApp (firstOf parsed) (secondOf parsed)
+buildCmd rest =
+  case parseBuild rest of
+    ErrC e =>
+      do
+        _ <- consoleEprint "error: ${diagText e}\n"
+        pure 2
+    OkC parsed => Build.buildApp (firstOf parsed) (secondOf parsed)
 
 -- | `check`：单个位置参数。
 checkCmd : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-checkCmd rest = case rest of
-  [dir] => Build.checkApp dir
-  _ => do
-    _ <- consoleEprint "error: check requires exactly one <app-dir>\n"
-    pure 2
+checkCmd rest =
+  case rest of
+    [dir] => Build.checkApp dir
+    _ =>
+      do
+        _ <- consoleEprint "error: check requires exactly one <app-dir>\n"
+        pure 2
 
 -- | 解析 `build` 的参数：位置参数是应用目录，其余是开关。
 parseBuild : List String -> Check (Pair String Build.BuildOpts)
@@ -56,21 +62,30 @@ parseBuild args = parseBuildGo args "" "ocaml" False Nothing
 
 -- | `parseBuild` 的扫描循环。
 parseBuildGo : List String -> String -> String -> Bool -> Maybe String -> Check (Pair String Build.BuildOpts)
-parseBuildGo args out target release dir = case args of
-  [] => case dir of
-    Nothing => err "build requires <app-dir>"
-    Just d => OkC (Pair d (Build.BuildOpts out target release))
-  "--out" :: value :: rest =>
-    if strLength value > 0 then parseBuildGo rest value target release dir
-    else err "--out requires a value"
-  "--target" :: value :: rest =>
-    if validTarget value then parseBuildGo rest out value release dir
-    else err "--target requires ocaml or native (wasm is not a server target)"
-  "--release" :: rest => parseBuildGo rest out target True dir
-  a :: rest => if startsWith "-" a then err "unknown flag ${a}"
-  else case dir of
-    Nothing => parseBuildGo rest out target release (Just a)
-    Just _ => err "build takes exactly one <app-dir>"
+parseBuildGo args out target release dir =
+  case args of
+    [] =>
+      case dir of
+        Nothing => err "build requires <app-dir>"
+        Just d => OkC (Pair d (Build.BuildOpts out target release))
+    "--out" :: value :: rest =>
+      if strLength value > 0 then
+        parseBuildGo rest value target release dir
+      else
+        err "--out requires a value"
+    "--target" :: value :: rest =>
+      if validTarget value then
+        parseBuildGo rest out value release dir
+      else
+        err "--target requires ocaml or native (wasm is not a server target)"
+    "--release" :: rest => parseBuildGo rest out target True dir
+    a :: rest =>
+      if startsWith "-" a then
+        err "unknown flag ${a}"
+      else
+        case dir of
+          Nothing => parseBuildGo rest out target release (Just a)
+          Just _ => err "build takes exactly one <app-dir>"
 
 -- | 服务端可用的目标。
 validTarget : String -> Bool

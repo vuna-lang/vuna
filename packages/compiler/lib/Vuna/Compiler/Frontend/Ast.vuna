@@ -310,18 +310,20 @@ exportItemSpan (XNamespace name _ sp) = sp
 
 export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
 collectClauses [] name = []
-collectClauses (d :: rest) name = case d of
-  DFun n pats body _ =>
-    if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
-  _ => collectClauses rest name
+collectClauses (d :: rest) name =
+  case d of
+    DFun n pats body _ =>
+      if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+    _ => collectClauses rest name
 
 export clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
 clausesFor decls name = collectClauses decls name
 
 export funArity : String -> List Decl -> Maybe Int
-funArity name decls = case clausesFor decls name of
-  [] => Nothing
-  (Pair pats body) :: _ => Just (natToInt (length pats))
+funArity name decls =
+  case clausesFor decls name of
+    [] => Nothing
+    (Pair pats body) :: _ => Just (natToInt (length pats))
 
 export ctorName : Ctor -> String
 ctorName (Ctor name ty arity _) = name
@@ -336,11 +338,13 @@ ctorShortName name = lastSeg name
 -- 不用完整的 `Module.Data.Ctor`：那会把模块路径泄漏进诊断。
 -- | 诊断里显示的构造子名 `FamilyShort.Ctor`（单段名原样返回）。
 export ctorDisplayName : String -> String
-ctorDisplayName name = case splitLastDot (splitOnDot name) of
-  Pair [] base => base
-  Pair revPrefix base => case reverse revPrefix of
-    [] => base
-    fam :: rest => "${fam}.${base}"
+ctorDisplayName name =
+  case splitLastDot (splitOnDot name) of
+    Pair [] base => base
+    Pair revPrefix base =>
+      case reverse revPrefix of
+        [] => base
+        fam :: rest => "${fam}.${base}"
 
 export ctorType : Ctor -> Expr
 ctorType (Ctor name ty arity _) = ty
@@ -356,13 +360,15 @@ lookupCtorArity name (c :: rest) =
 
 export ctorArity : String -> List Decl -> Maybe Int
 ctorArity name [] = Nothing
-ctorArity name (d :: rest) = case d of
-  DData dname params kind ctors derivings viaField repr lin sp => case lookupCtorArity name ctors of
-    Just arity => Just arity
-    Nothing => ctorArity name rest
-  DRecord dname params fields derivings viaField repr lin sp =>
-    if name == dname then Just (natToInt (length fields)) else ctorArity name rest
-  _ => ctorArity name rest
+ctorArity name (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      case lookupCtorArity name ctors of
+        Just arity => Just arity
+        Nothing => ctorArity name rest
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if name == dname then Just (natToInt (length fields)) else ctorArity name rest
+    _ => ctorArity name rest
 
 export declNames : Decl -> List String
 declNames (DFun name pats body _) = [name]
@@ -420,9 +426,10 @@ export isHoleName : String -> Bool
 isHoleName name = name == "_" || holeNamed name
 
 export holeNamed : String -> Bool
-holeNamed name = case strUnpack name of
-  63 :: _ :: _ => True
-  _ => False
+holeNamed name =
+  case strUnpack name of
+    63 :: _ :: _ => True
+    _ => False
 
 -- 洞的显示名：`_` → ""（匿名）；`?name` → "?name"。
 export holeNameOf : String -> String
@@ -448,10 +455,13 @@ isInternalSyntaxName name = startsWith internalNamePrefix name
 
 -- | 丢掉列表前 n 个元素。
 export dropNChars : Int -> List Int -> List Int
-dropNChars n xs = if n <= 0 then xs
-else case xs of
-  [] => []
-  _ :: rest => dropNChars (n - 1) rest
+dropNChars n xs =
+  if n <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      _ :: rest => dropNChars (n - 1) rest
 
 -- | 去掉字符串前缀（不匹配则原样返回）。
 export dropNamePrefix : String -> String -> String
@@ -470,15 +480,17 @@ overCtorName short targets = "${overCtorPrefix}${short}@${joinWithAt targets}"
 
 -- | 重载构造子标记名里的短名（非标记名返回空串）。
 export overCtorShort : String -> String
-overCtorShort name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
-  [] => ""
-  s :: rest => s
+overCtorShort name =
+  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+    [] => ""
+    s :: rest => s
 
 -- | 重载构造子标记名里的候选 target 列表（非标记名返回空表）。
 export overCtorTargets : String -> List String
-overCtorTargets name = case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
-  [] => []
-  s :: rest => rest
+overCtorTargets name =
+  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+    [] => []
+    s :: rest => rest
 
 -- | 是否是重载构造子标记名。
 export isOverCtorName : String -> Bool
@@ -492,14 +504,16 @@ export overValueName : String -> List String -> String
 overValueName short targets = "${overValuePrefix}${short}@${joinWithAt targets}"
 
 export overValueShort : String -> String
-overValueShort name = case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
-  [] => ""
-  s :: rest => s
+overValueShort name =
+  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+    [] => ""
+    s :: rest => s
 
 export overValueTargets : String -> List String
-overValueTargets name = case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
-  [] => []
-  s :: rest => rest
+overValueTargets name =
+  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+    [] => []
+    s :: rest => rest
 
 export isOverValueName : String -> Bool
 isOverValueName name = startsWith overValuePrefix name
@@ -655,5 +669,9 @@ isDoIgnoreSyntaxName name = startsWith doIgnoreSyntaxPrefix name
 -- | do 标记头里的 canonical bind 名；不是标记头返回 `Nothing`。
 export doSyntaxCanonical : String -> Maybe String
 doSyntaxCanonical name =
-  if isDoBindSyntaxName name then Just (dropNamePrefix doBindSyntaxPrefix name)
-  else if isDoIgnoreSyntaxName name then Just (dropNamePrefix doIgnoreSyntaxPrefix name) else Nothing
+  if isDoBindSyntaxName name then
+    Just (dropNamePrefix doBindSyntaxPrefix name)
+  else if isDoIgnoreSyntaxName name then
+    Just (dropNamePrefix doIgnoreSyntaxPrefix name)
+  else
+    Nothing

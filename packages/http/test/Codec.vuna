@@ -8,12 +8,14 @@ import Http.Parse as P
 import Http.Render as R
 
 main : Eff [] String
-main = case filter (\p => not (isPassing p)) results of
-  [] => pure ""
-  bad => do
-    _ <- prim_eff_print ("http codec failed: " ++ join "; " (map nameOf bad) ++ "\n")
-    _ <- prim_eff_exit 1
-    pure ""
+main =
+  case filter (\p => not (isPassing p)) results of
+    [] => pure ""
+    bad =>
+      do
+        _ <- prim_eff_print ("http codec failed: " ++ join "; " (map nameOf bad) ++ "\n")
+        _ <- prim_eff_exit 1
+        pure ""
 
 -- | 一条检查是否通过。
 isPassing : Pair String Bool -> Bool
@@ -25,7 +27,8 @@ nameOf p = p.first
 
 results : List (Pair String Bool)
 results =
-  [ Pair "request-roundtrip" requestRoundtrip,
+  [
+    Pair "request-roundtrip" requestRoundtrip,
     Pair "chunked-body" chunkedBody,
     Pair "pipelined" pipelined,
     Pair "incomplete-head" incompleteHead,
@@ -55,9 +58,10 @@ requestRoundtrip =
 
 -- | 分块请求体被解码成完整字节。
 chunkedBody : Bool
-chunkedBody = case P.parseRequest "POST /up HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n" of
-  P.Complete p rest => rest == "" && p.body == "Wikipedia"
-  _ => False
+chunkedBody =
+  case P.parseRequest "POST /up HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n" of
+    P.Complete p rest => rest == "" && p.body == "Wikipedia"
+    _ => False
 
 -- | 流水线：第一条消息解析后剩余字节是第二条的完整文本。
 pipelined : Bool
@@ -65,41 +69,48 @@ pipelined =
   let
     msg = R.renderRequest (Req.request "GET" "/a") ++ R.renderRequest (Req.request "GET" "/b")
   in case P.parseRequest msg of
-    P.Complete p rest => p.target == "/a" && (case P.parseRequest rest of
-      P.Complete q tail' => q.target == "/b" && tail' == ""
-      _ => False
-    )
+    P.Complete p rest =>
+      p.target == "/a" && (
+          case P.parseRequest rest of
+            P.Complete q tail' => q.target == "/b" && tail' == ""
+            _ => False
+        )
     _ => False
 
 -- | 头部没结束时是 `Incomplete`，不是非法。
 incompleteHead : Bool
-incompleteHead = case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n" of
-  P.Incomplete => True
-  _ => False
+incompleteHead =
+  case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n" of
+    P.Incomplete => True
+    _ => False
 
 -- | `Content-Length` 与 `Transfer-Encoding` 并存必须拒绝。
 smuggleClTe : Bool
-smuggleClTe = case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
-  P.Invalid _ => True
-  _ => False
+smuggleClTe =
+  case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
+    P.Invalid _ => True
+    _ => False
 
 -- | 重复的 `Content-Length` 必须拒绝。
 dupContentLength : Bool
-dupContentLength = case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\nabcd" of
-  P.Invalid _ => True
-  _ => False
+dupContentLength =
+  case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\nabcd" of
+    P.Invalid _ => True
+    _ => False
 
 -- | 折叠头部行（以空格开头）必须拒绝。
 obsFold : Bool
-obsFold = case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n more\r\n\r\n" of
-  P.Invalid _ => True
-  _ => False
+obsFold =
+  case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n more\r\n\r\n" of
+    P.Invalid _ => True
+    _ => False
 
 -- | 重复的 `Transfer-Encoding` 必须拒绝。
 dupTransferEncoding : Bool
-dupTransferEncoding = case P.parseRequest "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
-  P.Invalid _ => True
-  _ => False
+dupTransferEncoding =
+  case P.parseRequest "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
+    P.Invalid _ => True
+    _ => False
 
 -- | 响应渲染再解析：状态码、原因短语与体一致。
 responseRoundtrip : Bool

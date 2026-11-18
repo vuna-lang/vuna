@@ -41,35 +41,42 @@ maybe d f (Just x) = f x
 
 -- 类型 `Maybe` 定义在本模块，因此可以写 default（匿名）实例（孤儿规则允许）。
 instance Functor Maybe where
-  fmap f m = case m of
-    Nothing => Nothing
-    Just x => Just (f x)
+  fmap f m =
+    case m of
+      Nothing => Nothing
+      Just x => Just (f x)
 
 instance Monad Maybe where
-  (>>=) m f = case m of
-    Nothing => Nothing
-    Just x => f x
+  (>>=) m f =
+    case m of
+      Nothing => Nothing
+      Just x => f x
 
 instance Applicative Maybe where
   pure x = Just x
-  ap mf mx = case mf of
-    Nothing => Nothing
-    Just g => case mx of
+  ap mf mx =
+    case mf of
       Nothing => Nothing
-      Just b => Just (g b)
-  liftA2 f ma mb = case ma of
-    Nothing => Nothing
-    Just a => case mb of
+      Just g =>
+        case mx of
+          Nothing => Nothing
+          Just b => Just (g b)
+  liftA2 f ma mb =
+    case ma of
       Nothing => Nothing
-      Just b => Just (f a b)
+      Just a =>
+        case mb of
+          Nothing => Nothing
+          Just b => Just (f a b)
 
 -- 容器 `Show` 实例；`Interp` 经 blanket `Show a => Interp a` 自动获得。
 -- 拼接用 `++` 的反引号形式：`Maybe` 不能 import `Base.Data.List`（List → Maybe 已存在），
 -- 而 `++` 是恒可见的 String intrinsic。
 instance Show a => Show (Maybe a) where
-  show m = case m of
-    Nothing => "Nothing"
-    Just x => "Just " `++` show x
+  show m =
+    case m of
+      Nothing => "Nothing"
+      Just x => "Just " `++` show x
 
 -- 相等：`Nothing` 只等于 `Nothing`，`Just` 比 payload。
 instance Eq a => Eq (Maybe a) where
@@ -89,26 +96,31 @@ instance Ord a => Ord (Maybe a) where
   (>=) m n = n <= m
 
 instance Hashable a => Hashable (Maybe a) where
-  hash m = case m of
-    Nothing => 0
-    Just x => hashCombine 1 (hash x)
+  hash m =
+    case m of
+      Nothing => 0
+      Just x => hashCombine 1 (hash x)
 
 instance Semigroup a => Semigroup (Maybe a) where
-  mappend m n = case m of
-    Nothing => Nothing
-    Just x => case n of
+  mappend m n =
+    case m of
       Nothing => Nothing
-      Just y => Just (mappend x y)
+      Just x =>
+        case n of
+          Nothing => Nothing
+          Just y => Just (mappend x y)
 
 instance Monoid a => Monoid (Maybe a) where
   mempty = Just mempty
 
 instance Foldable Maybe where
-  fold f z m = case m of
-    Nothing => z
-    Just x => f x z
+  fold f z m =
+    case m of
+      Nothing => z
+      Just x => f x z
 
 instance Applicative f => Traversable Maybe f where
-  mapM fun m = case m of
-    Nothing => pure Nothing
-    Just x => liftA2 (\y, _ => Just y) (fun x) (pure x)
+  mapM fun m =
+    case m of
+      Nothing => pure Nothing
+      Just x => liftA2 (\y, _ => Just y) (fun x) (pure x)

@@ -41,37 +41,46 @@ irDumpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r
 irDumpArgs rest = dumpGo Nothing "raw" [] rest
 
 dumpGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> List String -> List String -> Eff r Int
-dumpGo out after dirs rest = case rest of
-  "--out" :: path :: more => dumpGo (Just path) after dirs more
-  "--after" :: a :: more => dumpGo out a dirs more
-  x :: more => dumpGo out after (x :: dirs) more
-  [] => case reverse dirs of
-    [dir] => runDump out after dir
-    _ => usageErrorFor ["dev", "ir", "dump"]
+dumpGo out after dirs rest =
+  case rest of
+    "--out" :: path :: more => dumpGo (Just path) after dirs more
+    "--after" :: a :: more => dumpGo out a dirs more
+    x :: more => dumpGo out after (x :: dirs) more
+    [] =>
+      case reverse dirs of
+        [dir] => runDump out after dir
+        _ => usageErrorFor ["dev", "ir", "dump"]
 
 runDump : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> String -> Eff r Int
-runDump out after dir = do
-  pkgR <- loadPackage dir
-  case pkgR of
-    ErrC e => toolError (diagText e)
-    OkC pkg => do
-      r <- dumpIr after (packageContext pkg) (packageEntry pkg)
-      case r of
-        ErrC e => toolError (diagText e)
-        OkC text => case out of
-          Just path => do
-            _ <- fsWriteFile path text
-            _ <- consolePrint "wrote ${path}\n"
-            pure 0
-          Nothing => do
-            _ <- consolePrint (text ++ "\n")
-            pure 0
+runDump out after dir =
+  do
+    pkgR <- loadPackage dir
+    case pkgR of
+      ErrC e => toolError (diagText e)
+      OkC pkg =>
+        do
+          r <- dumpIr after (packageContext pkg) (packageEntry pkg)
+          case r of
+            ErrC e => toolError (diagText e)
+            OkC text =>
+              case out of
+                Just path =>
+                  do
+                    _ <- fsWriteFile path text
+                    _ <- consolePrint "wrote ${path}\n"
+                    pure 0
+                Nothing =>
+                  do
+                    _ <- consolePrint (text ++ "\n")
+                    pure 0
 
 -- | 内部：`vuna dev errors gen [ROOT]`——ROOT 默认 `.`。
 genErrorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
-genErrorsArgs rest = case parseCmdArgs ["dev", "errors", "gen"] rest of
-  ErrC e => toolError (diagText e)
-  OkC parsed => case parsed.positionals of
-    [] => runGenErrors "."
-    [root] => runGenErrors root
-    _ => usageErrorFor ["dev", "errors", "gen"]
+genErrorsArgs rest =
+  case parseCmdArgs ["dev", "errors", "gen"] rest of
+    ErrC e => toolError (diagText e)
+    OkC parsed =>
+      case parsed.positionals of
+        [] => runGenErrors "."
+        [root] => runGenErrors root
+        _ => usageErrorFor ["dev", "errors", "gen"]

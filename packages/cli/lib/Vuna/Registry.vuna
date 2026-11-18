@@ -67,16 +67,18 @@ findRelease version (r :: rest) =
 -- ---------------------------------------------------------------- 解析
 -- | 内部：取必需字符串键；缺失或类型不对都是 `IndexMalformed` 诊断。
 stringEntry : String -> List String -> String -> List TomlEntry -> Check String
-stringEntry path section key entries = case lookupEntry section key entries of
-  Nothing => pkgPath1 path (IndexMalformed "missing ${key} in [${joinDots section}]") key
-  Just (TStr s) => OkC s
-  Just _ => pkgPath1 path (IndexMalformed "${key} must be a string") key
+stringEntry path section key entries =
+  case lookupEntry section key entries of
+    Nothing => pkgPath1 path (IndexMalformed "missing ${key} in [${joinDots section}]") key
+    Just (TStr s) => OkC s
+    Just _ => pkgPath1 path (IndexMalformed "${key} must be a string") key
 
 -- | 内部：取可选字符串键；缺失或类型不对都当 `Nothing`（由调用方决定是缺省还是报错）。
 maybeStringEntry : String -> List String -> String -> List TomlEntry -> Maybe String
-maybeStringEntry path section key entries = case lookupEntry section key entries of
-  Just (TStr s) => Just s
-  _ => Nothing
+maybeStringEntry path section key entries =
+  case lookupEntry section key entries of
+    Just (TStr s) => Just s
+    _ => Nothing
 
 -- | 内部：构造一条发布，摘要统一归一成裸十六进制。
 mkRelease : String -> DependencySource -> String -> Maybe String -> Release
@@ -90,41 +92,54 @@ buildRelease path version entries =
     section = ["releases", version]
   in case optionalIdentity path section entries of
     ErrC e => ErrC e
-    OkC identity => case maybeStringEntry path section "git" entries of
-      Just url => case maybeStringEntry path section "rev" entries of
-        Nothing => pkgPath1 path (IndexMalformed "release ${version}: git needs rev") version
-        Just rev => case stringEntry path section "hash" entries of
-          ErrC e => ErrC e
-          OkC hash => OkC (mkRelease version (DepGit url rev) hash identity)
-      Nothing => case maybeStringEntry path section "url" entries of
-        Just url => case stringEntry path section "hash" entries of
-          ErrC e => ErrC e
-          OkC hash => OkC (mkRelease version (DepUrl url) hash identity)
-        Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
+    OkC identity =>
+      case maybeStringEntry path section "git" entries of
+        Just url =>
+          case maybeStringEntry path section "rev" entries of
+            Nothing => pkgPath1 path (IndexMalformed "release ${version}: git needs rev") version
+            Just rev =>
+              case stringEntry path section "hash" entries of
+                ErrC e => ErrC e
+                OkC hash => OkC (mkRelease version (DepGit url rev) hash identity)
+        Nothing =>
+          case maybeStringEntry path section "url" entries of
+            Just url =>
+              case stringEntry path section "hash" entries of
+                ErrC e => ErrC e
+                OkC hash => OkC (mkRelease version (DepUrl url) hash identity)
+            Nothing => pkgPath1 path (IndexMalformed "release ${version}: needs git or url") version
 
 -- | 内部：读可选的 `identity`，写进发布前先归一并用 `validHashText` 校验。
 optionalIdentity : String -> List String -> List TomlEntry -> Check (Maybe String)
-optionalIdentity path section entries = case maybeStringEntry path section "identity" entries of
-  Nothing => OkC Nothing
-  Just s =>
-    if validHashText s then OkC (Just (normalizeHash s)) else pkgPath1 path (IdentityMalformed s) s
+optionalIdentity path section entries =
+  case maybeStringEntry path section "identity" entries of
+    Nothing => OkC Nothing
+    Just s =>
+      if validHashText s then
+        OkC (Just (normalizeHash s))
+      else
+        pkgPath1 path (IdentityMalformed s) s
 
 -- | 解析索引文件文本。
 export parseRegistryEntry : String -> String -> Check RegistryEntry
-parseRegistryEntry path text = case parseTomlAt path text of
-  ErrC e => ErrC e
-  OkC entries => case stringEntry path ["package"] "name" entries of
+parseRegistryEntry path text =
+  case parseTomlAt path text of
     ErrC e => ErrC e
-    OkC name => case buildReleases path (sectionsUnder ["releases"] entries) entries [] of
-      ErrC e => ErrC e
-      OkC releases => OkC (RegistryEntry name releases)
+    OkC entries =>
+      case stringEntry path ["package"] "name" entries of
+        ErrC e => ErrC e
+        OkC name =>
+          case buildReleases path (sectionsUnder ["releases"] entries) entries [] of
+            ErrC e => ErrC e
+            OkC releases => OkC (RegistryEntry name releases)
 
 -- | 内部：按文件的发布顺序逐条解析（累积是倒序，结束处一次性 reverse）。
 buildReleases : String -> List String -> List TomlEntry -> List Release -> Check (List Release)
 buildReleases path [] entries acc = OkC (reverse acc)
-buildReleases path (version :: rest) entries acc = case buildRelease path version entries of
-  ErrC e => ErrC e
-  OkC release => buildReleases path rest entries (release :: acc)
+buildReleases path (version :: rest) entries acc =
+  case buildRelease path version entries of
+    ErrC e => ErrC e
+    OkC release => buildReleases path rest entries (release :: acc)
 
 -- ---------------------------------------------------------------- 读取
 -- | 内部：去掉索引根的尾斜杠，避免拼出 `//<name>.toml`。
@@ -146,24 +161,29 @@ loadRegistryEntryEff indexRoot name =
   let
     root = stripIndexSlash indexRoot
     fileName = "${name}.toml"
-  in if isHttpUrl root then do
-    base <- storeCacheBaseEff
-    let
-      tmp = "${base}/index-${name}.toml"
-    in do
-      _ <- ensureDirPath base
-      code <- processRunIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp]
-      if code /= 0 then pure (pkgNoLoc1 (IndexMalformed "cannot fetch ${root}/${fileName}") fileName)
-      else do
-        text <- fsReadFile tmp
-        pure (parseRegistryEntry tmp text)
+  in if isHttpUrl root then
+    do
+      base <- storeCacheBaseEff
+      let
+        tmp = "${base}/index-${name}.toml"
+      in do
+        _ <- ensureDirPath base
+        code <- processRunIn base ["curl", "-fsSL", "${root}/${fileName}", "-o", tmp]
+        if code /= 0 then
+          pure (pkgNoLoc1 (IndexMalformed "cannot fetch ${root}/${fileName}") fileName)
+        else
+          do
+            text <- fsReadFile tmp
+            pure (parseRegistryEntry tmp text)
   else
     let
       dir = if isFileUrl root then substring 7 (natFromInt (strLength root - 7)) root else root
       filePath = "${dir}/${fileName}"
     in do
       exists <- fsFileExists filePath
-      if exists then do
-        text <- fsReadFile filePath
-        pure (parseRegistryEntry filePath text)
-      else pure (pkgNoLoc1 (IndexMalformed "index entry not found: ${filePath}") fileName)
+      if exists then
+        do
+          text <- fsReadFile filePath
+          pure (parseRegistryEntry filePath text)
+      else
+        pure (pkgNoLoc1 (IndexMalformed "index entry not found: ${filePath}") fileName)

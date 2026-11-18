@@ -97,9 +97,10 @@ export packageDir : Package -> String
 packageDir (Package manifest dependencies dir) = dir
 
 export packageName : Package -> String
-packageName package = case package.packageManifest.manifestName of
-  Nothing => ""
-  Just name => name
+packageName package =
+  case package.packageManifest.manifestName of
+    Nothing => ""
+    Just name => name
 
 export packageExports : Package -> Maybe (List String)
 packageExports package = package.packageManifest.manifestExports
@@ -111,8 +112,10 @@ packageLayers package = package.packageManifest.manifestLayers
 splitSlashChars : List Int -> List String -> List Int -> List String
 splitSlashChars [] acc seg = reverse (strPack (reverse seg) :: acc)
 splitSlashChars (c :: rest) acc seg =
-  if c == 47 then splitSlashChars rest (strPack (reverse seg) :: acc) []
-  else splitSlashChars rest acc (c :: seg)
+  if c == 47 then
+    splitSlashChars rest (strPack (reverse seg) :: acc) []
+  else
+    splitSlashChars rest acc (c :: seg)
 
 splitOnSlash : String -> List String
 splitOnSlash path = splitSlashChars (strUnpack path) [] []
@@ -122,33 +125,43 @@ splitOnSlash path = splitSlashChars (strUnpack path) [] []
 -- 终止性可直接证明。
 normalizeAcc : Bool -> List String -> List String -> List String
 normalizeAcc absolute [] acc = acc
-normalizeAcc absolute (seg :: rest) acc = case seg of
-  "" => normalizeAcc absolute rest acc
-  "." => normalizeAcc absolute rest acc
-  ".." => case acc of
-    [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
-    prev :: prevRest =>
-      if prev == ".." then normalizeAcc absolute rest (".." :: acc)
-      else normalizeAcc absolute rest prevRest
-  _ => normalizeAcc absolute rest (seg :: acc)
+normalizeAcc absolute (seg :: rest) acc =
+  case seg of
+    "" => normalizeAcc absolute rest acc
+    "." => normalizeAcc absolute rest acc
+    ".." =>
+      case acc of
+        [] => if absolute then normalizeAcc absolute rest [] else normalizeAcc absolute rest [".."]
+        prev :: prevRest =>
+          if prev == ".." then
+            normalizeAcc absolute rest (".." :: acc)
+          else
+            normalizeAcc absolute rest prevRest
+    _ => normalizeAcc absolute rest (seg :: acc)
 
 -- | 目录字符串规范化（lexical，不解析符号链接）："a/./b/../c/" -> "a/c"。
 -- 相对路径空结果归一为 "."，绝对路径空结果归一为 "/"。
 export normalizeDir : String -> String
-normalizeDir path = if startsWith "/" path then case normalizeAcc True (splitOnSlash path) [] of
-  [] => "/"
-  segments => "/${joinSlashes (reverse segments)}"
-else case normalizeAcc False (splitOnSlash path) [] of
-  [] => "."
-  segments => joinSlashes (reverse segments)
+normalizeDir path =
+  if startsWith "/" path then
+    case normalizeAcc True (splitOnSlash path) [] of
+      [] => "/"
+      segments => "/${joinSlashes (reverse segments)}"
+  else
+    case normalizeAcc False (splitOnSlash path) [] of
+      [] => "."
+      segments => joinSlashes (reverse segments)
 
 -- | 相对路径按当前工作目录归一为绝对路径（向上找 manifest 前必须先绝对化，
 -- 否则 "." 这类相对路径的父目录仍是 "."，搜索在起点就停住）。
 export absolutePath : Member nEnv EnvOp r => String -> Eff r String
-absolutePath path = if startsWith "/" path then pure (normalizeDir path)
-else do
-  cwd <- envGetCwd
-  pure (normalizeDir "${cwd}/${path}")
+absolutePath path =
+  if startsWith "/" path then
+    pure (normalizeDir path)
+  else
+    do
+      cwd <- envGetCwd
+      pure (normalizeDir "${cwd}/${path}")
 
 -- 依赖路径拼接：绝对路径直接用，相对路径相对 base 目录规范化。
 export joinPath : String -> String -> String
@@ -162,23 +175,28 @@ joinPathsText (path :: rest) = "${path}, ${joinPathsText rest}"
 -- ---------------------------------------------------------------- manifest
 -- path 是 vuna.toml 的路径；缺失时报 `pkg: missing vuna.toml in <目录>`。
 export loadManifestAt : Member nFs FsOp r => String -> Eff r (Check Manifest)
-loadManifestAt path = do
-  exists <- fsFileExists path
-  if exists then do
-    text <- fsReadFile path
-    pure (case parseManifest path text of
-      ErrC e => ErrC e
-      OkC manifest => case validateManifest manifest of
-        ErrC e => ErrC e
-        OkC validated => OkC validated
-    )
-  else pure
-    (pkgPath1 path (MissingManifest (normalizeDir (manifestDir path))) (normalizeDir (manifestDir path)))
+loadManifestAt path =
+  do
+    exists <- fsFileExists path
+    if exists then
+      do
+        text <- fsReadFile path
+        pure (
+            case parseManifest path text of
+              ErrC e => ErrC e
+              OkC manifest =>
+                case validateManifest manifest of
+                  ErrC e => ErrC e
+                  OkC validated => OkC validated
+          )
+    else
+      pure (pkgPath1 path (MissingManifest (normalizeDir (manifestDir path))) (normalizeDir (manifestDir path)))
 
 manifestNameString : Manifest -> String
-manifestNameString manifest = case manifest.manifestName of
-  Nothing => ""
-  Just name => name
+manifestNameString manifest =
+  case manifest.manifestName of
+    Nothing => ""
+    Just name => name
 
 -- ---------------------------------------------------------------- 加载包
 -- 依赖链栈：每个元素是 (规范化目录, 包名)；只用于循环检测。
@@ -188,17 +206,21 @@ memStackDir dir (pair :: rest) = firstOf pair == dir || memStackDir dir rest
 
 cyclePrefix : Eq a => a -> List (Pair a b) -> Maybe (List (Pair a b))
 cyclePrefix dir [] = Nothing
-cyclePrefix dir (pair :: rest) = if firstOf pair == dir then Just [pair]
-else case cyclePrefix dir rest of
-  Nothing => Nothing
-  Just prefix => Just ((::) pair prefix)
+cyclePrefix dir (pair :: rest) =
+  if firstOf pair == dir then
+    Just [pair]
+  else
+    case cyclePrefix dir rest of
+      Nothing => Nothing
+      Just prefix => Just ((::) pair prefix)
 
 cycleMessage : String -> Maybe String -> List (Pair String String) -> String
 cycleMessage dir Nothing stack = "pkg: dependency cycle at ${dir}"
-cycleMessage dir (Just dep) stack = case cyclePrefix dir stack of
-  Nothing => "pkg: dependency cycle at ${dir}"
-  Just prefix =>
-    "pkg: dependency cycle: ${joinArrows (append (map secondOf (reverse prefix)) [dep])}"
+cycleMessage dir (Just dep) stack =
+  case cyclePrefix dir stack of
+    Nothing => "pkg: dependency cycle at ${dir}"
+    Just prefix =>
+      "pkg: dependency cycle: ${joinArrows (append (map secondOf (reverse prefix)) [dep])}"
 
 dependencyNameOk : Eq a => Maybe a -> a -> Bool
 dependencyNameOk Nothing actual = True
@@ -212,118 +234,149 @@ mismatchMessage (Just expected) actual =
 -- 不可变源依赖：定位 store 物化视图（`<store>/pkgs/<digest>`）并校验 `.complete`。
 -- 物化视图由 `vuna deps fetch` 写入；check/build 只读，缺失即 `PKG_NotMaterialized`。
 loadStoreDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> Dependency -> Eff r (Check Package)
-loadStoreDependency fuel stack dep = case depHashOf dep of
-  Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
-  Just hash => do
-    root <- storeDataRootEff
-    let
-      digest = normalizeHash hash
-      dir = "${root}/pkgs/${digest}"
-    in do
-      exists <- fsFileExists "${dir}/.complete"
-      if exists then do
-        text <- fsReadFile "${dir}/.complete"
-        if text == digest then do
-          pkgR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
-          case pkgR of
-            ErrC e => pure (ErrC e)
-            OkC pkg => do
-              idR <- verifyIdentityEff dep dir pkg.packageManifest
-              case idR of
-                ErrC e => pure (ErrC e)
-                OkC _ => pure (OkC pkg)
-        else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
-      else pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+loadStoreDependency fuel stack dep =
+  case depHashOf dep of
+    Nothing => pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+    Just hash =>
+      do
+        root <- storeDataRootEff
+        let
+          digest = normalizeHash hash
+          dir = "${root}/pkgs/${digest}"
+        in do
+          exists <- fsFileExists "${dir}/.complete"
+          if exists then
+            do
+              text <- fsReadFile "${dir}/.complete"
+              if text == digest then
+                do
+                  pkgR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+                  case pkgR of
+                    ErrC e => pure (ErrC e)
+                    OkC pkg =>
+                      do
+                        idR <- verifyIdentityEff dep dir pkg.packageManifest
+                        case idR of
+                          ErrC e => pure (ErrC e)
+                          OkC _ => pure (OkC pkg)
+              else
+                pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
+          else
+            pure (pkgNoLoc1 (NotMaterialized (depAliasOf dep)) (depAliasOf dep))
 
 -- 依赖声明了语义身份（`identity`）时校验；未声明则跳过（内容摘要负责完整性）。
 verifyIdentityEff : Member nFs FsOp r => Dependency -> String -> Manifest -> Eff r (Check Int)
-verifyIdentityEff dep dir manifest = case depIdentityOf dep of
-  Nothing => pure (OkC 0)
-  Just expected => do
-    ps <- packageSourceEff dir manifest
-    let
-      actual = identityHashOf ps
-    in if normalizeHash expected == actual then pure (OkC 0)
-    else do
-      let
-        detail = "declared ${expected}, actual ${actual}"
-      in pure (pkgNoLoc (IdentityMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+verifyIdentityEff dep dir manifest =
+  case depIdentityOf dep of
+    Nothing => pure (OkC 0)
+    Just expected =>
+      do
+        ps <- packageSourceEff dir manifest
+        let
+          actual = identityHashOf ps
+        in if normalizeHash expected == actual then
+          pure (OkC 0)
+        else
+          do
+            let
+              detail = "declared ${expected}, actual ${actual}"
+            in pure (pkgNoLoc (IdentityMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
 -- path 依赖显式写摘要时校验（不写则跳过：可变输入，D12）。
 verifyPathHashEff : Member nFs FsOp r => Dependency -> String -> Eff r (Check Int)
-verifyPathHashEff dep dir = case depHashOf dep of
-  Nothing => pure (OkC 0)
-  Just expected => do
-    files <- packageFilesEff dir
-    let
-      actual = contentHashOf (PackageSource "" [] [] files)
-    in if verifyHash expected actual then pure (OkC 0)
-    else do
-      let
-        detail = "declared ${expected}, actual ${actual}"
-      in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
+verifyPathHashEff dep dir =
+  case depHashOf dep of
+    Nothing => pure (OkC 0)
+    Just expected =>
+      do
+        files <- packageFilesEff dir
+        let
+          actual = contentHashOf (PackageSource "" [] [] files)
+        in if verifyHash expected actual then
+          pure (OkC 0)
+        else
+          do
+            let
+              detail = "declared ${expected}, actual ${actual}"
+            in pure (pkgNoLoc (HashMismatch (depAliasOf dep) detail) [depAliasOf dep, detail])
 
 loadDependencyList : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> String -> List Dependency -> Eff r (Check (List Package))
-loadDependencyList fuel stack baseDir deps = if fuel <= 0 then pure (icFuel "pkg")
-else case deps of
-  [] => pure (OkC [])
-  dep :: rest => do
-    depR <- loadOneDependency (fuel - 1) stack baseDir dep
-    case depR of
-      ErrC e => pure (ErrC e)
-      OkC dependency => do
-        restR <- loadDependencyList (fuel - 1) stack baseDir rest
-        pure (case restR of
-          ErrC e => ErrC e
-          OkC dependencies => OkC ((::) dependency dependencies)
-        )
+loadDependencyList fuel stack baseDir deps =
+  if fuel <= 0 then
+    pure (icFuel "pkg")
+  else
+    case deps of
+      [] => pure (OkC [])
+      dep :: rest =>
+        do
+          depR <- loadOneDependency (fuel - 1) stack baseDir dep
+          case depR of
+            ErrC e => pure (ErrC e)
+            OkC dependency =>
+              do
+                restR <- loadDependencyList (fuel - 1) stack baseDir rest
+                pure (
+                    case restR of
+                      ErrC e => ErrC e
+                      OkC dependencies => OkC ((::) dependency dependencies)
+                  )
 
 -- 单条依赖：path 定位工作树目录（显式摘要则校验）；git/url 定位 store 物化视图。
 loadOneDependency : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> String -> Dependency -> Eff r (Check Package)
-loadOneDependency fuel stack baseDir dep = case depSourceOf dep of
-  DepPath rel => do
-    let
-      dir = joinPath baseDir rel
-    in do
-      depR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
-      case depR of
-        ErrC e => pure (ErrC e)
-        OkC dependency => do
-          hashR <- verifyPathHashEff dep dir
-          case hashR of
+loadOneDependency fuel stack baseDir dep =
+  case depSourceOf dep of
+    DepPath rel =>
+      do
+        let
+          dir = joinPath baseDir rel
+        in do
+          depR <- loadPackageWalk fuel stack (Just (depAliasOf dep)) dir
+          case depR of
             ErrC e => pure (ErrC e)
-            OkC _ => do
-              idR <- verifyIdentityEff dep dir dependency.packageManifest
-              case idR of
-                ErrC e => pure (ErrC e)
-                OkC _ => pure (OkC dependency)
-  DepGit url rev => loadStoreDependency fuel stack dep
-  DepUrl url => loadStoreDependency fuel stack dep
+            OkC dependency =>
+              do
+                hashR <- verifyPathHashEff dep dir
+                case hashR of
+                  ErrC e => pure (ErrC e)
+                  OkC _ =>
+                    do
+                      idR <- verifyIdentityEff dep dir dependency.packageManifest
+                      case idR of
+                        ErrC e => pure (ErrC e)
+                        OkC _ => pure (OkC dependency)
+    DepGit url rev => loadStoreDependency fuel stack dep
+    DepUrl url => loadStoreDependency fuel stack dep
 
 loadPackageWalk : Member nFs FsOp r, Member nEnv EnvOp r => Int -> List (Pair String String) -> Maybe String -> String -> Eff r (Check Package)
-loadPackageWalk fuel stack depName dir = if fuel <= 0 then pure (icFuel "pkg")
-else
-  let
-    normalized = normalizeDir dir
-  in if memStackDir normalized stack then pure (pkgInvalid (cycleMessage normalized depName stack))
-  else do
-    manifestR <- loadManifestAt "${normalized}/vuna.toml"
-    case manifestR of
-      ErrC e => pure (ErrC e)
-      OkC manifest => case manifest.manifestName of
-        Nothing => pure (pkgPath0 manifest.manifestPath NotPackage)
-        Just _ =>
-          let
-            name = manifestNameString manifest
-          in if dependencyNameOk depName name then do
-            dependencyR <-
-              loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized
-                manifest.manifestDependencies
-            pure (case dependencyR of
-              ErrC e => ErrC e
-              OkC dependencies => OkC (Package manifest dependencies normalized)
-            )
-          else pure (pkgInvalid (mismatchMessage depName name))
+loadPackageWalk fuel stack depName dir =
+  if fuel <= 0 then
+    pure (icFuel "pkg")
+  else
+    let
+      normalized = normalizeDir dir
+    in if memStackDir normalized stack then
+      pure (pkgInvalid (cycleMessage normalized depName stack))
+    else
+      do
+        manifestR <- loadManifestAt "${normalized}/vuna.toml"
+        case manifestR of
+          ErrC e => pure (ErrC e)
+          OkC manifest =>
+            case manifest.manifestName of
+              Nothing => pure (pkgPath0 manifest.manifestPath NotPackage)
+              Just _ =>
+                let
+                  name = manifestNameString manifest
+                in if dependencyNameOk depName name then
+                  do
+                    dependencyR <- loadDependencyList (fuel - 1) (Pair normalized name :: stack) normalized manifest.manifestDependencies
+                    pure (
+                        case dependencyR of
+                          ErrC e => ErrC e
+                          OkC dependencies => OkC (Package manifest dependencies normalized)
+                      )
+                else
+                  pure (pkgInvalid (mismatchMessage depName name))
 
 -- ---------------------------------------------------------------- 包名唯一性
 -- 包名不是纯标签，它参与语义判定：`Loader.rootAllows` 的「同包永远可见」
@@ -348,11 +401,14 @@ lookupPackageDir name ((Pair n dir) :: rest) =
 
 checkUniqueNamesGo : List (Pair String String) -> List (Pair String String) -> Check Int
 checkUniqueNamesGo seen [] = OkC 0
-checkUniqueNamesGo seen ((Pair name dir) :: rest) = case lookupPackageDir name seen of
-  Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
-  Just prevDir =>
-    if prevDir == dir then checkUniqueNamesGo seen rest
-    else pkgNoLoc (DuplicatePackageName name prevDir dir) [name, prevDir, dir]
+checkUniqueNamesGo seen ((Pair name dir) :: rest) =
+  case lookupPackageDir name seen of
+    Nothing => checkUniqueNamesGo (Pair name dir :: seen) rest
+    Just prevDir =>
+      if prevDir == dir then
+        checkUniqueNamesGo seen rest
+      else
+        pkgNoLoc (DuplicatePackageName name prevDir dir) [name, prevDir, dir]
 
 checkUniquePackageNames : List Package -> Check Int
 checkUniquePackageNames packages = checkUniqueNamesGo [] (collectDependencyIds packages)
@@ -370,28 +426,34 @@ pkgFuelBound = 1048576
 
 -- 加载 dir/vuna.toml 及其 [dependencies] 路径依赖（递归、含循环检测）。
 export loadPackage : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check Package)
-loadPackage dir = do
-  packageR <- loadPackageWalk pkgFuelBound [] Nothing dir
-  pure (case packageR of
-    ErrC e => ErrC e
-    OkC package => case checkUniquePackageNames [package] of
-      ErrC e => ErrC e
-      OkC _ => OkC package
-  )
+loadPackage dir =
+  do
+    packageR <- loadPackageWalk pkgFuelBound [] Nothing dir
+    pure (
+        case packageR of
+          ErrC e => ErrC e
+          OkC package =>
+            case checkUniquePackageNames [package] of
+              ErrC e => ErrC e
+              OkC _ => OkC package
+      )
 
 -- ---------------------------------------------------------------- workspace
 loadMembers : Member nFs FsOp r, Member nEnv EnvOp r => String -> List String -> Eff r (Check (List Package))
 loadMembers baseDir [] = pure (OkC [])
-loadMembers baseDir (rel :: rest) = do
-  memberR <- loadPackage (joinPath baseDir rel)
-  case memberR of
-    ErrC e => pure (ErrC e)
-    OkC memberPackage => do
-      restR <- loadMembers baseDir rest
-      pure (case restR of
-        ErrC e => ErrC e
-        OkC memberPackages => OkC (memberPackage :: memberPackages)
-      )
+loadMembers baseDir (rel :: rest) =
+  do
+    memberR <- loadPackage (joinPath baseDir rel)
+    case memberR of
+      ErrC e => pure (ErrC e)
+      OkC memberPackage =>
+        do
+          restR <- loadMembers baseDir rest
+          pure (
+              case restR of
+                ErrC e => ErrC e
+                OkC memberPackages => OkC (memberPackage :: memberPackages)
+            )
 
 -- 根包 + [workspace].members（顺序同 manifest）；没有 members 时只含根包。
 -- 每个成员自己的依赖图已由 loadPackage 校验；这里再校验并集，捕获跨成员的
@@ -410,9 +472,10 @@ workspaceMembersOf workspace = workspace.workspaceMembers
 
 -- | workspace 内的全部包：有根包时在前，随后是成员（顺序同 manifest）。
 export workspaceAllPackages : Workspace -> List Package
-workspaceAllPackages workspace = case workspace.workspaceRoot of
-  Nothing => workspace.workspaceMembers
-  Just root => root :: workspace.workspaceMembers
+workspaceAllPackages workspace =
+  case workspace.workspaceRoot of
+    Nothing => workspace.workspaceMembers
+    Just root => root :: workspace.workspaceMembers
 
 -- | 加载 workspace：根 manifest 有 `[package]` 时是根包 + 成员；没有时是虚拟根
 -- （只有成员，`[workspace]` 由 manifest 层强制）。
@@ -424,48 +487,65 @@ loadWorkspace rootBaseDir =
     manifestR <- loadManifestAt "${base}/vuna.toml"
     case manifestR of
       ErrC e => pure (ErrC e)
-      OkC manifest => case manifest.manifestName of
-        Nothing => do
-          membersR <- loadMembers base manifest.manifestMembers
-          pure (case membersR of
-            ErrC e => ErrC e
-            OkC members => case checkUniquePackageNames members of
-              ErrC e => ErrC e
-              OkC _ => OkC (Workspace base Nothing members)
-          )
-        Just _ => do
-          rootR <- loadPackage base
-          case rootR of
-            ErrC e => pure (ErrC e)
-            OkC root => do
+      OkC manifest =>
+        case manifest.manifestName of
+          Nothing =>
+            do
               membersR <- loadMembers base manifest.manifestMembers
-              pure (case membersR of
-                ErrC e => ErrC e
-                OkC members => case checkUniquePackageNames (root :: members) of
-                  ErrC e => ErrC e
-                  OkC _ => OkC (Workspace base (Just root) members)
-              )
+              pure (
+                  case membersR of
+                    ErrC e => ErrC e
+                    OkC members =>
+                      case checkUniquePackageNames members of
+                        ErrC e => ErrC e
+                        OkC _ => OkC (Workspace base Nothing members)
+                )
+          Just _ =>
+            do
+              rootR <- loadPackage base
+              case rootR of
+                ErrC e => pure (ErrC e)
+                OkC root =>
+                  do
+                    membersR <- loadMembers base manifest.manifestMembers
+                    pure (
+                        case membersR of
+                          ErrC e => ErrC e
+                          OkC members =>
+                            case checkUniquePackageNames (root :: members) of
+                              ErrC e => ErrC e
+                              OkC _ => OkC (Workspace base (Just root) members)
+                      )
 
 export workspacePackages : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check (List Package))
-workspacePackages rootBaseDir = do
-  workspaceR <- loadWorkspace rootBaseDir
-  pure (case workspaceR of
-    ErrC e => ErrC e
-    OkC workspace => OkC (workspaceAllPackages workspace)
-  )
+workspacePackages rootBaseDir =
+  do
+    workspaceR <- loadWorkspace rootBaseDir
+    pure (
+        case workspaceR of
+          ErrC e => ErrC e
+          OkC workspace => OkC (workspaceAllPackages workspace)
+      )
 
 -- | 虚拟 workspace 根的工具上下文：没有单一包身份，模块根 = 各成员的 `lib`（每根按成员
 -- 自己的 `[export]` 限制）。用于 REPL / LSP / 单文件检查这类「只需要一个模块解析环境」的
 -- 场景；`workspace 根` 不是包，但也并不是 base-only。
 export workspaceContext : Workspace -> PackageContext
 workspaceContext workspace =
-  PackageContext workspace.workspaceDir Nothing
-    (map dependencyRootOf (workspaceMembersOf workspace)) "" False
+  PackageContext
+    workspace.workspaceDir
+    Nothing
+    (map dependencyRootOf (workspaceMembersOf workspace))
+    ""
+    False
 
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
-  Root "${packageDir package}/lib" (packageName package) (packageExports package)
+  Root
+    "${packageDir package}/lib"
+    (packageName package)
+    (packageExports package)
     (packageLayers package)
 
 -- DFS 后序：先深依赖、再直接依赖本体；按包名去重（首次出现保留）。
@@ -474,10 +554,14 @@ dependencyRootOf package =
 -- 返回 (更新后的 seen, 根列表)。
 dependencyRoots : List String -> List Package -> Pair (List String) (List Root)
 dependencyRoots seen [] = Pair seen []
-dependencyRoots seen (package :: rest) = if memName (packageName package) seen then dependencyRoots seen rest
-else case dependencyRoots (packageName package :: seen) (packageDependencies package) of
-  Pair seen1 transitive => case dependencyRoots seen1 rest of
-    Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
+dependencyRoots seen (package :: rest) =
+  if memName (packageName package) seen then
+    dependencyRoots seen rest
+  else
+    case dependencyRoots (packageName package :: seen) (packageDependencies package) of
+      Pair seen1 transitive =>
+        case dependencyRoots seen1 rest of
+          Pair seen2 siblings => Pair seen2 (append transitive (dependencyRootOf package :: siblings))
 
 -- 自身 lib 根在最前（exports = Nothing：本包内全部可见）；
 -- 随后是传递依赖的 lib 根（依赖优先的 DFS 后序），各自用 [export].modules 限制。
@@ -496,19 +580,27 @@ packageEntry package = "${packageDir package}/app/Main.vuna"
 -- 已知 Package 的上下文（调用方已有包对象时不必重新读盘）。
 export packageContext : Package -> PackageContext
 packageContext package =
-  PackageContext (packageDir package) (Just package) (packageRoots package) (packageName package)
+  PackageContext
+    (packageDir package)
+    (Just package)
+    (packageRoots package)
+    (packageName package)
     False
 
 -- ---------------------------------------------------------------- 查找
 findManifestUpMaybe : Member nFs FsOp r => Int -> String -> Eff r (Maybe String)
-findManifestUpMaybe fuel dir = if fuel <= 0 then pure Nothing
-else do
-  exists <- fsFileExists "${dir}/vuna.toml"
-  if exists then pure (Just dir) else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
+findManifestUpMaybe fuel dir =
+  if fuel <= 0 then
+    pure Nothing
+  else
+    do
+      exists <- fsFileExists "${dir}/vuna.toml"
+      if exists then pure (Just dir) else findManifestUpMaybeStep (fuel - 1) dir (manifestDir dir)
 
 findManifestUpMaybeStep : Member nFs FsOp r => Int -> String -> String -> Eff r (Maybe String)
 findManifestUpMaybeStep fuel dir parent =
-  if fuel <= 0 then pure Nothing
+  if fuel <= 0 then
+    pure Nothing
   else if parent == dir then pure Nothing else findManifestUpMaybe (fuel - 1) parent
 
 -- 从 startDir 向上找第一个含 vuna.toml 的目录（找不到 → Nothing）。
@@ -525,12 +617,14 @@ findManifestDirMaybe startDir =
 -- `findManifestDir` 保留给 fmt / index 这类「向上找 workspace 根」的工具；
 -- 包上下文一律走 `contextForFile` / `contextForDir`。
 export findManifestDir : Member nFs FsOp r => String -> Eff r (Check String)
-findManifestDir startDir = do
-  found <- findManifestDirMaybe startDir
-  pure (case found of
-    Just dir => OkC dir
-    Nothing => pkgNoLoc (NoManifestUpward (normalizeDir startDir)) [normalizeDir startDir]
-  )
+findManifestDir startDir =
+  do
+    found <- findManifestDirMaybe startDir
+    pure (
+        case found of
+          Just dir => OkC dir
+          Nothing => pkgNoLoc (NoManifestUpward (normalizeDir startDir)) [normalizeDir startDir]
+      )
 
 -- ---------------------------------------------------------------- base 定位
 -- base 只由两处决定：`VUNA_BASE`（显式覆盖，相对路径按 cwd 归一），或可执行文件
@@ -541,7 +635,8 @@ hasManifest dir = fsFileExists "${dir}/vuna.toml"
 
 baseCandidates : String -> List String
 baseCandidates exeDir =
-  [ joinPath exeDir "base",
+  [
+    joinPath exeDir "base",
     joinPath exeDir "../base",
     joinPath exeDir "../../base",
     joinPath exeDir "../../../base"
@@ -552,78 +647,94 @@ baseNotFound tried = pkgNoLoc1 (MissingBase (joinPathsText tried)) (joinPathsTex
 
 firstExistingBase : Member nFs FsOp r => List String -> List String -> Eff r (Check String)
 firstExistingBase original [] = pure (baseNotFound original)
-firstExistingBase original (dir :: rest) = do
-  exists <- hasManifest dir
-  if exists then pure (OkC dir) else firstExistingBase original rest
+firstExistingBase original (dir :: rest) =
+  do
+    exists <- hasManifest dir
+    if exists then pure (OkC dir) else firstExistingBase original rest
 
 -- base 定位是启动期读环境/探路径的**动作**（零参顶层值会在模块初始化时求值），
 -- 因此函数化：调用方传 dummy 0，真正用到 base-only 上下文时才解析。
 export locateBase : Member nFs FsOp r, Member nEnv EnvOp r => Int -> Eff r (Check String)
-locateBase _ = do
-  env <- envGetEnv "VUNA_BASE"
-  if env == "" then do
-    exe <- envExecPath
-    cwd <- absolutePath exe
-    let
-      candidates = baseCandidates (manifestDir cwd)
-    in firstExistingBase candidates candidates
-  else do
-    dir <- absolutePath env
-    exists <- hasManifest dir
-    if exists then pure (OkC dir) else pure (baseNotFound [dir])
+locateBase _ =
+  do
+    env <- envGetEnv "VUNA_BASE"
+    if env == "" then
+      do
+        exe <- envExecPath
+        cwd <- absolutePath exe
+        let
+          candidates = baseCandidates (manifestDir cwd)
+        in firstExistingBase candidates candidates
+    else
+      do
+        dir <- absolutePath env
+        exists <- hasManifest dir
+        if exists then pure (OkC dir) else pure (baseNotFound [dir])
 
 -- ---------------------------------------------------------------- 包上下文
 -- base-only 上下文：不属于任何包的文件（ad-hoc 入口）。包名为空串（效果内建
 -- 仍被拒绝），模块根只有 base/lib，导出限制沿用 base 的 [export].modules。
 -- 入口能力为空（base 模块根各自携带 base manifest 的能力，不受影响）。
 baseOnlyContext : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check PackageContext)
-baseOnlyContext base = do
-  packageR <- loadPackage base
-  pure (case packageR of
-    ErrC e => ErrC e
-    OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "" False)
-  )
+baseOnlyContext base =
+  do
+    packageR <- loadPackage base
+    pure (
+        case packageR of
+          ErrC e => ErrC e
+          OkC package => OkC (PackageContext "" Nothing [dependencyRootOf package] "" False)
+      )
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
 -- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。最近的 manifest 是虚拟
 -- workspace 根（没有 `[package]`）时给 workspace 上下文：成员包各自的 lib 是模块根。
 contextAt : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check PackageContext)
-contextAt start = do
-  found <- findManifestDirMaybe start
-  case found of
-    Just dir => do
-      manifestR <- loadManifestAt "${dir}/vuna.toml"
-      case manifestR of
-        ErrC e => pure (ErrC e)
-        OkC manifest => case manifest.manifestName of
-          Nothing => do
-            workspaceR <- loadWorkspace dir
-            pure (case workspaceR of
-              ErrC e => ErrC e
-              OkC workspace => OkC (workspaceContext workspace)
-            )
-          Just _ => do
-            packageR <- loadPackage dir
-            pure (case packageR of
-              ErrC e => ErrC e
-              OkC package => OkC (packageContext package)
-            )
-    Nothing => do
-      baseR <- locateBase 0
-      case baseR of
-        ErrC e => pure (ErrC e)
-        OkC base => baseOnlyContext base
+contextAt start =
+  do
+    found <- findManifestDirMaybe start
+    case found of
+      Just dir =>
+        do
+          manifestR <- loadManifestAt "${dir}/vuna.toml"
+          case manifestR of
+            ErrC e => pure (ErrC e)
+            OkC manifest =>
+              case manifest.manifestName of
+                Nothing =>
+                  do
+                    workspaceR <- loadWorkspace dir
+                    pure (
+                        case workspaceR of
+                          ErrC e => ErrC e
+                          OkC workspace => OkC (workspaceContext workspace)
+                      )
+                Just _ =>
+                  do
+                    packageR <- loadPackage dir
+                    pure (
+                        case packageR of
+                          ErrC e => ErrC e
+                          OkC package => OkC (packageContext package)
+                      )
+      Nothing =>
+        do
+          baseR <- locateBase 0
+          case baseR of
+            ErrC e => pure (ErrC e)
+            OkC base => baseOnlyContext base
 
 -- 文件入口：相对路径先按 cwd 绝对化，再从文件所在目录向上找最近 vuna.toml。
 export contextForFile : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check PackageContext)
-contextForFile path = do
-  absolute <- absolutePath path
-  contextAt (manifestDir absolute)
+contextForFile path =
+  do
+    absolute <- absolutePath path
+    contextAt (manifestDir absolute)
 
 -- 目录入口（REPL / 工具从 cwd 取上下文）：同样先绝对化再向上找 manifest。
 -- 「显式包目录」语义（check/compile/build 的目录参数）不用本函数，而是直接
 -- `loadPackage`：只认该目录自己的 vuna.toml，不向上搜索。
 export contextForDir : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check PackageContext)
-contextForDir dir = do
-  absolute <- absolutePath dir
-  contextAt absolute
+contextForDir dir =
+  do
+    absolute <- absolutePath dir
+    contextAt absolute

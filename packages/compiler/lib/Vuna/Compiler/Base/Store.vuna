@@ -79,15 +79,18 @@ storeEncodeAs tag codec digest payload = frameHeader tag codec (strLength payloa
 
 -- 头行字段拆分：恰好 5 段（magic/tag/codec/len/digest）。多一段 / 少一段都拒绝。
 headerFields : String -> Maybe (Pair String (Pair String (Pair String (Pair String String))))
-headerFields line = case split "|" line of
-  [m, t, c, l, d] => Just (Pair m (Pair t (Pair c (Pair l d))))
-  _ => Nothing
+headerFields line =
+  case split "|" line of
+    [m, t, c, l, d] => Just (Pair m (Pair t (Pair c (Pair l d))))
+    _ => Nothing
 
 breakFirstNewline : List Int -> List Int -> Maybe (Pair String String)
 breakFirstNewline [] _ = Nothing
 breakFirstNewline (c :: rest) acc =
-  if c == 10 then Just (Pair (strPack (reverse acc)) (strPack rest))
-  else breakFirstNewline rest (c :: acc)
+  if c == 10 then
+    Just (Pair (strPack (reverse acc)) (strPack rest))
+  else
+    breakFirstNewline rest (c :: acc)
 
 -- 头行 + 载荷切分：只在**前 512 字节**里找换行（头行约 160 字节，远小于上限）。
 -- 不能对整段载荷做 `strUnpack`：5 MB 载荷会建 500 万个 cons cell 再把列表拼回字符串。
@@ -107,38 +110,41 @@ frameSplit raw =
 
 -- 头行必须同时命中 magic / tag / codec / 长度；四者任一不符即拒绝（不解码任何字节）。
 headerOk : String -> String -> String -> String -> Bool
-headerOk tag codec header payload = case headerFields header of
-  Nothing => False
-  Just fields =>
-    let
-      magic = firstOf fields
-      rest1 = secondOf fields
-      gotTag = firstOf rest1
-      rest2 = secondOf rest1
-      gotCodec = firstOf rest2
-      rest3 = secondOf rest2
-      gotLen = firstOf rest3
-    in magic == storeMagic
-      && gotTag == tag
-      && gotCodec == codec
-      && gotLen == strFromInt (strLength payload)
+headerOk tag codec header payload =
+  case headerFields header of
+    Nothing => False
+    Just fields =>
+      let
+        magic = firstOf fields
+        rest1 = secondOf fields
+        gotTag = firstOf rest1
+        rest2 = secondOf rest1
+        gotCodec = firstOf rest2
+        rest3 = secondOf rest2
+        gotLen = firstOf rest3
+      in magic
+        == storeMagic
+        && gotTag == tag && gotCodec == codec && gotLen == strFromInt (strLength payload)
 
 -- 头行里的内容地址字段（未做任何校验）。
 headerDigestOf : String -> Maybe String
-headerDigestOf header = case headerFields header of
-  Nothing => Nothing
-  Just fields => Just (secondOf (secondOf (secondOf (secondOf fields))))
+headerDigestOf header =
+  case headerFields header of
+    Nothing => Nothing
+    Just fields => Just (secondOf (secondOf (secondOf (secondOf fields))))
 
 -- | 解码 + **完整校验**（含内容地址）。任一不符 ⇒ `Nothing`（调用方回退重算）。
 export storeDecode : String -> String -> String -> Maybe String
-storeDecode tag codec raw = case frameSplit raw of
-  Nothing => Nothing
-  Just p =>
-    let
-      payload = secondOf p
-    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just (Vuna.Compiler.Base.Hash.contentAddress payload) then
-      Just payload
-    else Nothing
+storeDecode tag codec raw =
+  case frameSplit raw of
+    Nothing => Nothing
+    Just p =>
+      let
+        payload = secondOf p
+      in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just (Vuna.Compiler.Base.Hash.contentAddress payload) then
+        Just payload
+      else
+        Nothing
 
 -- | 解码 + 校验「头里的内容地址 == 调用方期望值」（不重算内容地址）。
 --
@@ -146,14 +152,16 @@ storeDecode tag codec raw = case frameSplit raw of
 -- 时的载荷摘要（`mePayloadDigest`），读侧只需字符串比对——篡改 / 错位立即拒绝，且
 -- 对 9 MB 载荷不产生第二次 SHA-256（warm `check compiler` 的 36 ms 预算里没有这笔钱）。
 export storeDecodeAs : String -> String -> String -> String -> Maybe String
-storeDecodeAs tag codec digest raw = case frameSplit raw of
-  Nothing => Nothing
-  Just p =>
-    let
-      payload = secondOf p
-    in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just digest then
-      Just payload
-    else Nothing
+storeDecodeAs tag codec digest raw =
+  case frameSplit raw of
+    Nothing => Nothing
+    Just p =>
+      let
+        payload = secondOf p
+      in if headerOk tag codec (firstOf p) payload && headerDigestOf (firstOf p) == Just digest then
+        Just payload
+      else
+        Nothing
 
 -- | 存储根（唯一根：对象库 + 视图 + roots）。候选按优先级排列，首个命中者胜出：
 -- `VUNA_STORE` → `$XDG_DATA_HOME/vuna/store` → `~/.vuna/store` → `$TMPDIR/vuna-store`
@@ -178,15 +186,17 @@ dirUnder suffix Nothing = Nothing
 -- | `HOME` 可用（非空、且不是 Nix 构建沙箱的 `/homeless-shelter`）时的存储根。
 -- 沙箱里那条路径不可写，会让构建在第一次写对象时崩掉，所以这里直接不给候选。
 homeStoreRootEff : Member nEnv EnvOp r => Eff r (Maybe String)
-homeStoreRootEff = do
-  home <- envGetEnv "HOME"
-  pure (if home /= "" && home /= "/homeless-shelter" then Just "${home}/.vuna/store" else Nothing)
+homeStoreRootEff =
+  do
+    home <- envGetEnv "HOME"
+    pure (if home /= "" && home /= "/homeless-shelter" then Just "${home}/.vuna/store" else Nothing)
 
 -- | `$TMPDIR` 下的可弃存储根；沙箱构建期的兜底，也是 `storeDataRootEff` 的最后一级。
 tmpStoreRootEff : Member nEnv EnvOp r => Eff r String
-tmpStoreRootEff = do
-  found <- fmap (dirUnder "vuna-store") (envGetEnvNonEmpty "TMPDIR")
-  pure (fromMaybe "/tmp/vuna-store" found)
+tmpStoreRootEff =
+  do
+    found <- fmap (dirUnder "vuna-store") (envGetEnvNonEmpty "TMPDIR")
+    pure (fromMaybe "/tmp/vuna-store" found)
 
 -- | 缓存根 = **对象库根**：包对象、header、lex、split/unit 与 roots
 -- 都在 `$VUNA_STORE` 下，GC 与 roots 只有唯一口径。
@@ -195,22 +205,29 @@ storeCacheBaseEff = storeRootReadyEff
 
 -- | 读 + 完整校验（magic/tag/codec/长度/内容地址）。
 export storeReadEff : Member nFs FsOp r => String -> String -> String -> Eff r (Maybe String)
-storeReadEff tag codec path = do
-  exists <- fsFileExists path
-  if exists then do
-    raw <- fsReadFile path
-    pure (storeDecode tag codec raw)
-  else pure Nothing
+storeReadEff tag codec path =
+  do
+    exists <- fsFileExists path
+    if exists then
+      do
+        raw <- fsReadFile path
+        pure (storeDecode tag codec raw)
+    else
+      pure Nothing
 
 -- | 读 + 校验「头里的内容地址 == 期望值」（不重算；见 `storeDecodeAs`）。
 export storeReadAsEff : Member nFs FsOp r => String -> String -> String -> String -> Eff r (Maybe String)
-storeReadAsEff tag codec digest path = obsSpanEff "vuna.cache.lookup" "vuna.cache" (do
-  exists <- fsFileExists path
-  if exists then do
-    raw <- fsReadFile path
-    pure (storeDecodeAs tag codec digest raw)
-  else pure Nothing
-)
+storeReadAsEff tag codec digest path =
+  obsSpanEff "vuna.cache.lookup" "vuna.cache" (
+      do
+        exists <- fsFileExists path
+        if exists then
+          do
+            raw <- fsReadFile path
+            pure (storeDecodeAs tag codec digest raw)
+        else
+          pure Nothing
+    )
 
 -- | 写（原子替换）。返回写入字节数。
 export storeWriteEff : Member nFs FsOp r => String -> String -> String -> String -> Eff r Int
@@ -228,10 +245,12 @@ storeWriteIfChangedEff tag codec path payload =
     raw = storeEncode tag codec payload
   in do
     exists <- fsFileExists path
-    if exists then do
-      old <- fsReadFile path
-      if old == raw then pure 0 else fsWriteFileAtomic path raw
-    else fsWriteFileAtomic path raw
+    if exists then
+      do
+        old <- fsReadFile path
+        if old == raw then pure 0 else fsWriteFileAtomic path raw
+    else
+      fsWriteFileAtomic path raw
 
 -- | 同 `storeWriteIfChangedEff`，但内容地址由调用方给出（见 `storeEncodeAs`）。
 export storeWriteIfChangedAsEff : Member nFs FsOp r => String -> String -> String -> String -> String -> Eff r Int
@@ -240,10 +259,12 @@ storeWriteIfChangedAsEff tag codec digest path payload =
     raw = storeEncodeAs tag codec digest payload
   in do
     exists <- fsFileExists path
-    if exists then do
-      old <- fsReadFile path
-      if old == raw then pure 0 else fsWriteFileAtomic path raw
-    else fsWriteFileAtomic path raw
+    if exists then
+      do
+        old <- fsReadFile path
+        if old == raw then pure 0 else fsWriteFileAtomic path raw
+    else
+      fsWriteFileAtomic path raw
 
 export storeFileExistsEff : Member nFs FsOp r => String -> Eff r Bool
 storeFileExistsEff path = fsFileExists path
@@ -261,26 +282,32 @@ storeEnsureDirEff path = storeEnsureDirFuel 256 path
 -- 宿主 `MakeDir` 幂等（已存在返回 0），所以逐级递归创建不会因 EEXIST 失败；existence
 -- 检查只用于快速短路。
 storeEnsureDirFuel : Member nFs FsOp r, Member nProcess ProcessOp r => Int -> String -> Eff r Int
-storeEnsureDirFuel fuel path = if fuel <= 0 then pure 0
-else if path == "" || path == "." || path == "/" then pure 0
-else do
-  exists <- fsFileExists path
-  if exists then pure 0
-  else do
-    _ <- storeEnsureDirFuel (fuel - 1) (storeParentOf path)
-    fsMakeDir path
+storeEnsureDirFuel fuel path =
+  if fuel <= 0 then
+    pure 0
+  else if path == "" || path == "." || path == "/" then
+    pure 0
+  else
+    do
+      exists <- fsFileExists path
+      if exists then
+        pure 0
+      else
+        do
+          _ <- storeEnsureDirFuel (fuel - 1) (storeParentOf path)
+          fsMakeDir path
 
 storeParentOf : String -> String
 storeParentOf path =
   let
     rev = strUnpack path
     after = storeDropPastSlash (reverse rev)
-  in if length after == length (reverse rev) then "."
+  in if length after == length (reverse rev) then
+    "."
   else
     let
       p = strPack (reverse after)
-    in if p == "" then if startsWith "/" path then "/" else "."
-    else if startsWith "/" path && not (startsWith "/" p) then "/${p}" else p
+    in if p == "" then if startsWith "/" path then "/" else "." else if startsWith "/" path && not (startsWith "/" p) then "/${p}" else p
 
 -- | 文件路径的父目录（`/a/b` → `/a`；`a` → `.`；`/a` → `/`）。对外导出给缓存路径使用。
 export storeParentPathOf : String -> String
@@ -314,23 +341,29 @@ storeRootEff = storeDataRootEff
 
 -- | 解析并**确保可用**的存储根（先 `isDirectory`，再 `mkdir -p`，最后回落 `$TMPDIR`）。
 export storeRootReadyEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r String
-storeRootReadyEff = do
-  primary <- storeDataRootEff
-  ok <- dirReady primary
-  if ok then pure primary
-  else do
-    alt <- tmpStoreRootEff
-    _ <- dirReady alt
-    pure alt
+storeRootReadyEff =
+  do
+    primary <- storeDataRootEff
+    ok <- dirReady primary
+    if ok then
+      pure primary
+    else
+      do
+        alt <- tmpStoreRootEff
+        _ <- dirReady alt
+        pure alt
 
 -- 目录是否存在且是目录（`isDirectory` 在路径不存在时会抛，所以先 `fileExists`）。
 dirReady : Member nFs FsOp r, Member nProcess ProcessOp r => String -> Eff r Bool
-dirReady path = do
-  exists <- fsFileExists path
-  if not exists then do
-    code <- processRunIn "." ["mkdir", "-p", path]
-    pure (code == 0)
-  else fsIsDirectory path
+dirReady path =
+  do
+    exists <- fsFileExists path
+    if not exists then
+      do
+        code <- processRunIn "." ["mkdir", "-p", path]
+        pure (code == 0)
+    else
+      fsIsDirectory path
 
 -- | 对象的 framing tag：kind 参与，使不同载荷族不可能互读。
 export storeObjectTag : String -> String
@@ -340,48 +373,56 @@ objectPathIn : String -> String -> String -> String
 objectPathIn root kind digest = "${root}/objects/${kind}/${digest}"
 
 export storeObjectPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r String
-storeObjectPathEff kind digest = do
-  root <- storeRootReadyEff
-  pure (objectPathIn root kind digest)
+storeObjectPathEff kind digest =
+  do
+    root <- storeRootReadyEff
+    pure (objectPathIn root kind digest)
 
 -- | 命中判定：路径存在性（不做内容校验，内容校验在真正读取时做）。
 export storeObjectExistsEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Bool
-storeObjectExistsEff kind digest = do
-  path <- storeObjectPathEff kind digest
-  fsFileExists path
+storeObjectExistsEff kind digest =
+  do
+    path <- storeObjectPathEff kind digest
+    fsFileExists path
 
 -- | 读对象 + 全量校验（magic/tag/codec/长度/重算内容地址）。
 export storeObjectReadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r (Maybe String)
-storeObjectReadEff kind codec digest = obsSpanEff "vuna.cache.lookup" "vuna.cache" (do
-  path <- storeObjectPathEff kind digest
-  storeReadEff (storeObjectTag kind) codec path
-)
+storeObjectReadEff kind codec digest =
+  obsSpanEff "vuna.cache.lookup" "vuna.cache" (
+      do
+        path <- storeObjectPathEff kind digest
+        storeReadEff (storeObjectTag kind) codec path
+    )
 
 -- | 写对象（原子替换；内容不变不写）。
 export storeObjectWriteEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> String -> Eff r Int
-storeObjectWriteEff kind codec digest payload = obsSpanEff "vuna.cache.write" "vuna.cache" (do
-  root <- storeRootReadyEff
-  _ <- storeEnsureDirEff "${root}/objects/${kind}"
-  path <- storeObjectPathEff kind digest
-  storeWriteIfChangedEff (storeObjectTag kind) codec path payload
-)
+storeObjectWriteEff kind codec digest payload =
+  obsSpanEff "vuna.cache.write" "vuna.cache" (
+      do
+        root <- storeRootReadyEff
+        _ <- storeEnsureDirEff "${root}/objects/${kind}"
+        path <- storeObjectPathEff kind digest
+        storeWriteIfChangedEff (storeObjectTag kind) codec path payload
+    )
 
 -- | 列出某 kind 下的全部对象摘要（GC 用；目录不存在 ⇒ 空）。
 export storeObjectListEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List String)
-storeObjectListEff kind = do
-  root <- storeRootReadyEff
-  let
-    dir = "${root}/objects/${kind}"
-  in do
-    isDir <- dirReady dir
-    if isDir then fsReadDir dir else pure []
+storeObjectListEff kind =
+  do
+    root <- storeRootReadyEff
+    let
+      dir = "${root}/objects/${kind}"
+    in do
+      isDir <- dirReady dir
+      if isDir then fsReadDir dir else pure []
 
 -- | 删除一个对象；缺失不报错（GC 的删除是幂等的）。
 export storeObjectRemoveEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-storeObjectRemoveEff kind digest = do
-  path <- storeObjectPathEff kind digest
-  exists <- fsFileExists path
-  if exists then fsRemoveFile path else pure 0
+storeObjectRemoveEff kind digest =
+  do
+    path <- storeObjectPathEff kind digest
+    exists <- fsFileExists path
+    if exists then fsRemoveFile path else pure 0
 
 -- ---------------------------------------------------------------
 -- 目录视图（构建产物 / 物化包源码）
@@ -391,100 +432,120 @@ storeObjectRemoveEff kind digest = do
 -- 同一 inputDigest 的并发构建由 `mkdir` 原子性互斥（见 `storeScratchClaimEff`）。
 -- ---------------------------------------------------------------
 export storeViewPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r String
-storeViewPathEff kind digest = do
-  root <- storeRootReadyEff
-  pure "${root}/views/${kind}/${digest}"
+storeViewPathEff kind digest =
+  do
+    root <- storeRootReadyEff
+    pure "${root}/views/${kind}/${digest}"
 
 export storeViewValidEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Bool
-storeViewValidEff kind digest = do
-  dir <- storeViewPathEff kind digest
-  let
-    marker = "${dir}/.complete"
-  in do
-    exists <- fsFileExists marker
-    if exists then do
-      text <- fsReadFile marker
-      pure (text == digest)
-    else pure False
+storeViewValidEff kind digest =
+  do
+    dir <- storeViewPathEff kind digest
+    let
+      marker = "${dir}/.complete"
+    in do
+      exists <- fsFileExists marker
+      if exists then
+        do
+          text <- fsReadFile marker
+          pure (text == digest)
+      else
+        pure False
 
 -- | 默认视图的构建锁：`mkdir` 原子互斥；与 scratch 目录分开，避免把“构建中”误判为
 -- 已有完整视图。持锁者**直接在最终 view 路径构建**（保持 codegen 绝对路径稳定）。
 export storeViewLockEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Bool
-storeViewLockEff kind digest = do
-  root <- storeRootReadyEff
-  let
-    path = "${root}/.tmp/lock-${kind}-${digest}"
-  in do
-    _ <- storeEnsureDirEff (storeParentPathOf path)
-    claimAt path
+storeViewLockEff kind digest =
+  do
+    root <- storeRootReadyEff
+    let
+      path = "${root}/.tmp/lock-${kind}-${digest}"
+    in do
+      _ <- storeEnsureDirEff (storeParentPathOf path)
+      claimAt path
 
 claimAt : Member nFs FsOp r, Member nClock ClockOp r, Member nProcess ProcessOp r => String -> Eff r Bool
-claimAt path = do
-  ok <- fsMakeDirExclusive path
-  if ok then pure True
-  else do
-    stale <- scratchStale path
-    if not stale then pure False
-    else do
-      _ <- fsRemoveTree path
-      fsMakeDirExclusive path
+claimAt path =
+  do
+    ok <- fsMakeDirExclusive path
+    if ok then
+      pure True
+    else
+      do
+        stale <- scratchStale path
+        if not stale then
+          pure False
+        else
+          do
+            _ <- fsRemoveTree path
+            fsMakeDirExclusive path
 
 export storeViewUnlockEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-storeViewUnlockEff kind digest = do
-  root <- storeRootReadyEff
-  fsRemoveTree "${root}/.tmp/lock-${kind}-${digest}"
+storeViewUnlockEff kind digest =
+  do
+    root <- storeRootReadyEff
+    fsRemoveTree "${root}/.tmp/lock-${kind}-${digest}"
 
 -- | 视图暂存目录（同一 inputDigest 唯一）。
 storeScratchPathIn : String -> String -> String -> String
 storeScratchPathIn root kind digest = "${root}/.tmp/${kind}-${digest}"
 
 export storeScratchPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r String
-storeScratchPathEff kind digest = do
-  root <- storeRootReadyEff
-  pure (storeScratchPathIn root kind digest)
+storeScratchPathEff kind digest =
+  do
+    root <- storeRootReadyEff
+    pure (storeScratchPathIn root kind digest)
 
 -- 暂存目录过期阈值（秒）：崩溃残留不永久阻塞后来者。
 scratchStaleSec : Int
 scratchStaleSec = 600
 
 scratchStale : Member nFs FsOp r, Member nClock ClockOp r => String -> Eff r Bool
-scratchStale path = do
-  mtime <- fmap (fromMaybe 0) (fsFileMtime path)
-  us <- clockNow
-  pure (mtime + scratchStaleSec < us / 1000000)
+scratchStale path =
+  do
+    mtime <- fmap (fromMaybe 0) (fsFileMtime path)
+    us <- clockNow
+    pure (mtime + scratchStaleSec < us / 1000000)
 
 -- | 独占一个暂存目录：`mkdir` 原子成功 ⇒ True。已被占用时看是否过期，过期则强删重试一次。
 export storeScratchClaimEff : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Bool
-storeScratchClaimEff kind digest = do
-  path <- storeScratchPathEff kind digest
-  _ <- storeEnsureDirEff (storeParentPathOf path)
-  ok <- fsMakeDirExclusive path
-  if ok then pure True
-  else do
-    stale <- scratchStale path
-    if not stale then pure False
-    else do
-      _ <- fsRemoveTree path
-      fsMakeDirExclusive path
+storeScratchClaimEff kind digest =
+  do
+    path <- storeScratchPathEff kind digest
+    _ <- storeEnsureDirEff (storeParentPathOf path)
+    ok <- fsMakeDirExclusive path
+    if ok then
+      pure True
+    else
+      do
+        stale <- scratchStale path
+        if not stale then
+          pure False
+        else
+          do
+            _ <- fsRemoveTree path
+            fsMakeDirExclusive path
 
 export storeScratchPathOfClaim : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r String
 storeScratchPathOfClaim = storeScratchPathEff
 
 -- | 放弃暂存目录（构建失败或发布失败）。
 export storeScratchDropEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-storeScratchDropEff kind digest = do
-  path <- storeScratchPathEff kind digest
-  fsRemoveTree path
+storeScratchDropEff kind digest =
+  do
+    path <- storeScratchPathEff kind digest
+    fsRemoveTree path
 
 -- | 发布暂存目录：写 `.complete` 后 `mv` 到视图位置。目标已存在（并发先到者）则丢弃暂存。
 export storeViewPublishEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-storeViewPublishEff kind digest = do
-  scratch <- storeScratchPathEff kind digest
-  view <- storeViewPathEff kind digest
-  _ <- storeEnsureDirEff (storeParentPathOf view)
-  _ <- fsWriteFileAtomic "${scratch}/.complete" digest
-  _ <- fsRename scratch view
-  pure 0
+storeViewPublishEff kind digest =
+  do
+    scratch <- storeScratchPathEff kind digest
+    view <- storeViewPathEff kind digest
+    _ <- storeEnsureDirEff (storeParentPathOf view)
+    _ <- fsWriteFileAtomic "${scratch}/.complete" digest
+    _ <- fsRename scratch view
+    pure 0
 
 -- ---------------------------------------------------------------
 -- roots（GC 的保护集）
@@ -493,9 +554,10 @@ storeViewPublishEff kind digest = do
 -- 项目不需要认识别的项目：它只写自己那一行；GC 读全部 roots 取并集。
 -- ---------------------------------------------------------------
 export storeRootsPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r String
-storeRootsPathEff projectId = do
-  root <- storeRootReadyEff
-  pure "${root}/roots/${projectId}"
+storeRootsPathEff projectId =
+  do
+    root <- storeRootReadyEff
+    pure "${root}/roots/${projectId}"
 
 -- 行去重（line 已存在即返回原列表）；roots 文件很小，线性足够。
 insertRootLine : String -> List String -> List String
@@ -512,93 +574,114 @@ projectPathFileName = ".project"
 
 -- | 记录项目路径（幂等：内容相同不写）。
 export storeProjectPathRecordEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int
-storeProjectPathRecordEff projectId projectPath = do
-  dir <- storeRootsPathEff projectId
-  _ <- storeEnsureDirEff dir
-  let
-    path = "${dir}/${projectPathFileName}"
-  in do
-    exists <- fsFileExists path
-    if exists then do
-      old <- fsReadFile path
-      if trim old == projectPath then pure 0 else fsWriteFileAtomic path projectPath
-    else fsWriteFileAtomic path projectPath
+storeProjectPathRecordEff projectId projectPath =
+  do
+    dir <- storeRootsPathEff projectId
+    _ <- storeEnsureDirEff dir
+    let
+      path = "${dir}/${projectPathFileName}"
+    in do
+      exists <- fsFileExists path
+      if exists then
+        do
+          old <- fsReadFile path
+          if trim old == projectPath then pure 0 else fsWriteFileAtomic path projectPath
+      else
+        fsWriteFileAtomic path projectPath
 
 -- | 读项目路径（legacy 项目根没有 `.project` ⇒ Nothing）。
 export storeProjectPathEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe String)
-storeProjectPathEff projectId = do
-  dir <- storeRootsPathEff projectId
-  let
-    path = "${dir}/${projectPathFileName}"
-  in do
-    exists <- fsFileExists path
-    if exists then do
-      text <- fsReadFile path
-      pure (Just (trim text))
-    else pure Nothing
+storeProjectPathEff projectId =
+  do
+    dir <- storeRootsPathEff projectId
+    let
+      path = "${dir}/${projectPathFileName}"
+    in do
+      exists <- fsFileExists path
+      if exists then
+        do
+          text <- fsReadFile path
+          pure (Just (trim text))
+      else
+        pure Nothing
 
 -- | 追加受保护摘要。布局 = `roots/<project>/.project` + `roots/<project>/<digest>`：
 -- 并发追加互不覆盖（没有读-改-写），GC 仍按 digest 集合保留。读取侧同时接受
 -- `roots/<project>` 单文件布局，写侧只写目录布局。
 export storeRootAppendEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> List String -> Eff r Int
-storeRootAppendEff projectId projectPath digests = do
-  _ <- storeProjectPathRecordEff projectId projectPath
-  dir <- storeRootsPathEff projectId
-  exists <- fsFileExists dir
-  if exists then do
-    isDir <- fsIsDirectory dir
-    if isDir then writeRootFiles dir digests
-    else do
-      -- 单文件布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
-      text <- fsReadFile dir
-      _ <- fsRemoveFile dir
-      _ <- storeEnsureDirEff dir
-      _ <- writeRootFiles dir (filter (\l => strLength l > 0) (split "\n" text))
-      writeRootFiles dir digests
-  else do
-    _ <- storeEnsureDirEff dir
-    writeRootFiles dir digests
+storeRootAppendEff projectId projectPath digests =
+  do
+    _ <- storeProjectPathRecordEff projectId projectPath
+    dir <- storeRootsPathEff projectId
+    exists <- fsFileExists dir
+    if exists then
+      do
+        isDir <- fsIsDirectory dir
+        if isDir then
+          writeRootFiles dir digests
+        else
+          do
+            -- 单文件布局迁移：`roots/<project>` 是单文件时先读成 digest 列表、删文件、建目录。
+            text <- fsReadFile dir
+            _ <- fsRemoveFile dir
+            _ <- storeEnsureDirEff dir
+            _ <- writeRootFiles dir (filter (\l => strLength l > 0) (split "\n" text))
+            writeRootFiles dir digests
+    else
+      do
+        _ <- storeEnsureDirEff dir
+        writeRootFiles dir digests
 
 writeRootFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List String -> Eff r Int
 writeRootFiles _ [] = pure 0
-writeRootFiles dir (d :: rest) = do
-  _ <- storeEnsureDirEff dir
-  _ <- fsWriteFileAtomic "${dir}/${d}" ""
-  n <- writeRootFiles dir rest
-  pure (n + 1)
+writeRootFiles dir (d :: rest) =
+  do
+    _ <- storeEnsureDirEff dir
+    _ <- fsWriteFileAtomic "${dir}/${d}" ""
+    n <- writeRootFiles dir rest
+    pure (n + 1)
 
 -- | 读一个项目的 root 摘要：目录布局逐文件读（跳过 `.project` 这类点文件）；
 -- 单文件布局逐行读。
 export storeRootLoadEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (List String)
-storeRootLoadEff projectId = do
-  path <- storeRootsPathEff projectId
-  exists <- fsFileExists path
-  if exists then do
-    isDir <- fsIsDirectory path
-    if isDir then do
-      names <- fsReadDir path
-      pure (filter (\n => not (startsWith "." n)) names)
-    else do
-      text <- fsReadFile path
-      pure (filter (\l => strLength l > 0) (split "\n" text))
-  else pure []
+storeRootLoadEff projectId =
+  do
+    path <- storeRootsPathEff projectId
+    exists <- fsFileExists path
+    if exists then
+      do
+        isDir <- fsIsDirectory path
+        if isDir then
+          do
+            names <- fsReadDir path
+            pure (filter (\n => not (startsWith "." n)) names)
+        else
+          do
+            text <- fsReadFile path
+            pure (filter (\l => strLength l > 0) (split "\n" text))
+    else
+      pure []
 
 -- | 列出全部项目的 roots 文件名（GC 用）。
 export storeRootProjectListEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Eff r (List String)
-storeRootProjectListEff = do
-  root <- storeRootReadyEff
-  let
-    dir = "${root}/roots"
-  in do
-    isDir <- dirReady dir
-    if isDir then fsReadDir dir else pure []
+storeRootProjectListEff =
+  do
+    root <- storeRootReadyEff
+    let
+      dir = "${root}/roots"
+    in do
+      isDir <- dirReady dir
+      if isDir then fsReadDir dir else pure []
 
 -- | 删除一个项目的 roots（目录布局与单文件布局都清）。
 export storeRootRemoveEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r Int
-storeRootRemoveEff projectId = do
-  path <- storeRootsPathEff projectId
-  exists <- fsFileExists path
-  if exists then do
-    isDir <- fsIsDirectory path
-    if isDir then fsRemoveTree path else fsRemoveFile path
-  else pure 0
+storeRootRemoveEff projectId =
+  do
+    path <- storeRootsPathEff projectId
+    exists <- fsFileExists path
+    if exists then
+      do
+        isDir <- fsIsDirectory path
+        if isDir then fsRemoveTree path else fsRemoveFile path
+    else
+      pure 0

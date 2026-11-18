@@ -51,14 +51,30 @@ export record LdEntry(..) where
 
 export ldAll : List LdEntry
 ldAll =
-  [ LdEntry (ldCode (EntryFileNotFound "")) (ldTemplate (EntryFileNotFound "")) "入口文件不存在",
+  [
+    LdEntry
+      (ldCode (EntryFileNotFound ""))
+      (ldTemplate (EntryFileNotFound ""))
+      "入口文件不存在",
     LdEntry (ldCode (ImportCycle "")) (ldTemplate (ImportCycle "")) "导入循环",
     LdEntry (ldCode (InvalidModuleName "")) (ldTemplate (InvalidModuleName "")) "非法模块名",
-    LdEntry (ldCode (ModuleHeaderInEntryFile "")) (ldTemplate (ModuleHeaderInEntryFile "")) "入口文件不允许模块头",
-    LdEntry (ldCode (ModuleHeaderInEntrySource "")) (ldTemplate (ModuleHeaderInEntrySource "")) "入口源码不允许模块头",
+    LdEntry
+      (ldCode (ModuleHeaderInEntryFile ""))
+      (ldTemplate (ModuleHeaderInEntryFile ""))
+      "入口文件不允许模块头",
+    LdEntry
+      (ldCode (ModuleHeaderInEntrySource ""))
+      (ldTemplate (ModuleHeaderInEntrySource ""))
+      "入口源码不允许模块头",
     LdEntry (ldCode (ModuleNotFound "" "")) (ldTemplate (ModuleNotFound "" "")) "模块未找到",
-    LdEntry (ldCode (ModuleNotExported "" "")) (ldTemplate (ModuleNotExported "" "")) "模块未被包导出",
-    LdEntry (ldCode (LayerViolation "" "" "" "")) (ldTemplate (LayerViolation "" "" "" "")) "跨层导入"
+    LdEntry
+      (ldCode (ModuleNotExported "" ""))
+      (ldTemplate (ModuleNotExported "" ""))
+      "模块未被包导出",
+    LdEntry
+      (ldCode (LayerViolation "" "" "" ""))
+      (ldTemplate (LayerViolation "" "" "" ""))
+      "跨层导入"
   ]
 
 export ldMsg : {n : Nat} -> LdDiag n -> Vec n String -> Diagnostic

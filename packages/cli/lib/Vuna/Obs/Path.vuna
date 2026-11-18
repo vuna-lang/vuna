@@ -21,8 +21,10 @@ lastSegment (c :: rest) acc = if c == 47 then lastSegment rest [] else lastSegme
 -- | 去掉 `.ml` 后缀（其它后缀原样返回）。
 export dropMlSuffix : String -> String
 dropMlSuffix name =
-  if endsWith ".ml" name then substring (natFromInt 0) (natFromInt (strLength name - 3)) name
-  else name
+  if endsWith ".ml" name then
+    substring (natFromInt 0) (natFromInt (strLength name - 3)) name
+  else
+    name
 
 -- ---------------------------------------------------------------
 -- golden（`_scratch/`，不提交）

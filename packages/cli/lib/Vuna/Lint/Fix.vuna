@@ -24,9 +24,10 @@ insertEdit e (f :: rest) =
 -- | 内部：收集 finding 里带编辑的项（累加器风格，结果与输入反序）。
 collectEdits : List Finding -> List Edit -> List Edit
 collectEdits [] acc = acc
-collectEdits (f :: rest) acc = case f.findingEdit of
-  Nothing => collectEdits rest acc
-  Just e => collectEdits rest (e :: acc)
+collectEdits (f :: rest) acc =
+  case f.findingEdit of
+    Nothing => collectEdits rest acc
+    Just e => collectEdits rest (e :: acc)
 
 -- | 内部：前 n 行（n <= 0 时为空）。
 takeList : Int -> List a -> List a
@@ -35,10 +36,13 @@ takeList n (x :: rest) = if n <= 0 then [] else x :: takeList (n - 1) rest
 
 -- | 内部：去掉前 n 行。
 dropList : Int -> List a -> List a
-dropList n lines = if n <= 0 then lines
-else case lines of
-  [] => []
-  x :: rest => dropList (n - 1) rest
+dropList n lines =
+  if n <= 0 then
+    lines
+  else
+    case lines of
+      [] => []
+      x :: rest => dropList (n - 1) rest
 
 -- | 内部：把 1 基行区间 `[start, stop]` 替换成 newLines。
 replaceRange : Int -> Int -> List a -> List a -> List a
@@ -51,9 +55,13 @@ applyEditList : List Edit -> List String -> Int -> Int -> Pair Int (List String)
 applyEditList [] lines limit count = Pair count lines
 applyEditList (e :: rest) lines limit count =
   if e.editEnd < limit then
-    applyEditList rest (replaceRange e.editStart e.editEnd e.editLines lines) e.editStart
+    applyEditList
+      rest
+      (replaceRange e.editStart e.editEnd e.editLines lines)
+      e.editStart
       (count + 1)
-  else applyEditList rest lines limit count
+  else
+    applyEditList rest lines limit count
 
 -- | 内部：收集并应用全部编辑；没有可用编辑时原样返回，应用后用 `parseSource` 复验，失败即
 -- `ErrC`。返回（修复条数, 新源码）。
@@ -62,13 +70,15 @@ applyFixes source findings =
   let
     edits = sortEdits (collectEdits findings [])
   in case applyEditList edits (splitLines source) (length (splitLines source) + 1) 0 of
-    Pair count newLines => if count == 0 then OkC (Pair 0 source)
-    else
-      let
-        newSource = joinLines newLines
-      in case parseSource "<lint>" newSource of
-        ErrC e => err "parse failed after fix: ${diagText e}"
-        OkC ignored => OkC (Pair count newSource)
+    Pair count newLines =>
+      if count == 0 then
+        OkC (Pair 0 source)
+      else
+        let
+          newSource = joinLines newLines
+        in case parseSource "<lint>" newSource of
+          ErrC e => err "parse failed after fix: ${diagText e}"
+          OkC ignored => OkC (Pair count newSource)
 
 -- | 最多跑 `passes` 轮修复：每轮应用编辑、重新 lint，直到没有可应用的编辑或轮数用尽；任一
 -- 环节解析失败即整体报错。返回累计修复条数与最终源码。
@@ -76,10 +86,16 @@ applyFixes source findings =
 -- 每轮复验沿用首轮的程序级 fixity：修复只做格式与结构改写、不改 imports，换一份 fixity
 -- 重排会退化成 unknown fixity。
 export fixLoop : LintConfig -> List FixityDecl -> String -> List Finding -> Int -> Int -> Check (Pair Int String)
-fixLoop cfg programFixities source findings passes total = if passes <= 0 then OkC (Pair total source)
-else case applyFixes source findings of
-  ErrC e => ErrC e
-  OkC (Pair count newSource) => if count == 0 then OkC (Pair total source)
-  else case lintSourceWithConfig cfg programFixities newSource of
-    ErrC e => ErrC e
-    OkC remaining => fixLoop cfg programFixities newSource remaining (passes - 1) (total + count)
+fixLoop cfg programFixities source findings passes total =
+  if passes <= 0 then
+    OkC (Pair total source)
+  else
+    case applyFixes source findings of
+      ErrC e => ErrC e
+      OkC (Pair count newSource) =>
+        if count == 0 then
+          OkC (Pair total source)
+        else
+          case lintSourceWithConfig cfg programFixities newSource of
+            ErrC e => ErrC e
+            OkC remaining => fixLoop cfg programFixities newSource remaining (passes - 1) (total + count)

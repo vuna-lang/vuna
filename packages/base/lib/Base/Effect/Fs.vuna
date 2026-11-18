@@ -111,38 +111,45 @@ sortEntries xs = sortBy (\a, b => a <= b) (filter (\name => not (isDotEntry name
 
 -- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
 export fsReadFile : Member n FsOp r => String -> Eff r String
-fsReadFile p = do
-  sendCore (Named n FsOp) "fs" n (ReadFile p)
+fsReadFile p =
+  do
+    sendCore (Named n FsOp) "fs" n (ReadFile p)
 
 -- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`）。
 export fsWriteFile : Member n FsOp r => String -> String -> Eff r Nat
-fsWriteFile p s = do
-  sendCore (Named n FsOp) "fs" n (WriteFile p s)
+fsWriteFile p s =
+  do
+    sendCore (Named n FsOp) "fs" n (WriteFile p s)
 
 -- | 通过命名实例原子写（写临时文件后 rename）：并发读者只会看到完整旧内容或完整新内容。
 export fsWriteFileAtomic : Member n FsOp r => String -> String -> Eff r Int
-fsWriteFileAtomic p s = do
-  sendCore (Named n FsOp) "fs" n (WriteFileAtomic p s)
+fsWriteFileAtomic p s =
+  do
+    sendCore (Named n FsOp) "fs" n (WriteFileAtomic p s)
 
 -- | 通过命名实例列目录（真实 handler 按字符串排序；目录不存在时抛宿主异常）。
 export fsReadDir : Member n FsOp r => String -> Eff r (List String)
-fsReadDir p = do
-  sendCore (Named n FsOp) "fs" n (ReadDir p)
+fsReadDir p =
+  do
+    sendCore (Named n FsOp) "fs" n (ReadDir p)
 
 -- | 通过命名实例判断是否目录（真实 handler 对不存在的路径抛宿主异常）。
 export fsIsDirectory : Member n FsOp r => String -> Eff r Bool
-fsIsDirectory p = do
-  sendCore (Named n FsOp) "fs" n (IsDirectory p)
+fsIsDirectory p =
+  do
+    sendCore (Named n FsOp) "fs" n (IsDirectory p)
 
 -- | 通过命名实例建目录（幂等，已存在时返回 0）。
 export fsMakeDir : Member n FsOp r => String -> Eff r Int
-fsMakeDir p = do
-  sendCore (Named n FsOp) "fs" n (MakeDir p)
+fsMakeDir p =
+  do
+    sendCore (Named n FsOp) "fs" n (MakeDir p)
 
 -- | 通过命名实例删文件（幂等，不存在时返回 0）。
 export fsRemoveFile : Member n FsOp r => String -> Eff r Int
-fsRemoveFile p = do
-  sendCore (Named n FsOp) "fs" n (RemoveFile p)
+fsRemoveFile p =
+  do
+    sendCore (Named n FsOp) "fs" n (RemoveFile p)
 
 -- | 通过命名实例判断路径是否存在（不存在返回 False，不抛异常）。
 export fsFileExists : Member n FsOp r => String -> Eff r Bool
@@ -189,63 +196,82 @@ fsFailAt e = sendCore (Named "fs-error" FsErrorOp) "fs-error" "fs-error" (FsFail
 
 -- | 带 `FsOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[FsErrorOp]`。
 fsOpHIOHost : {a : Type} -> (i : Type) -> (o : FsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [FsErrorOp@"fs-error"] a) -> Eff [FsErrorOp@"fs-error"] a
-fsOpHIOHost i op k = case op of
-  ReadFile p => do
-    s <- raise (@vuna@host@tryReadFile p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "readFile ${p}" ok) else k s
-  WriteFile p s => do
-    _ <- raise (@vuna@host@tryWriteFile p s)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "writeFile ${p}" ok) else k (natFromInt (strLength s))
-  WriteFileAtomic p s => do
-    _ <- raise (@vuna@host@tryWriteFileAtomic p s)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "writeFileAtomic ${p}" ok) else k (strLength s)
-  ReadDir p => do
-    xs <- raise (@vuna@host@tryReadDir p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "readDir ${p}" ok) else k (sortEntries xs)
-  IsDirectory p => do
-    b <- raise (@vuna@host@tryIsDirectory p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "isDirectory ${p}" ok) else k b
-  MakeDir p => do
-    _ <- raise (@vuna@host@tryMakeDir p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "makeDir ${p}" ok) else k 0
-  RemoveFile p => do
-    _ <- raise (@vuna@host@tryRemoveFile p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "removeFile ${p}" ok) else k 0
-  RemoveTree p => do
-    _ <- raise (@vuna@host@tryRemoveTree p)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "removeTree ${p}" ok) else k 0
-  Rename src dst => do
-    _ <- raise (@vuna@host@tryRename src dst)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "rename ${src} -> ${dst}" ok) else k 0
-  Symlink target link => do
-    _ <- raise (@vuna@host@trySymlink target link)
-    ok <- fsHostStatus
-    if ok /= 0 then fsFailAt (fsErrorOfCode "symlink ${target} -> ${link}" ok) else k 0
-  MakeDirExclusive p => do
-    _ <- raise (@vuna@host@tryMakeDirExclusive p)
-    ok <- fsHostStatus
-    if ok == 0 then k True
-    else if ok == 6 then k False else fsFailAt (fsErrorOfCode "makeDirExclusive ${p}" ok)
-  FileExists p => do
-    b <- raise (@vuna@host@fileExists p)
-    k b
-  FileMtime p => do
-    n <- raise (@vuna@host@fileMtime p)
-    ok <- fsHostStatus
-    if ok /= 0 then k Nothing else k (Just n)
-  FileSize p => do
-    n <- fmap natFromInt (raise (@vuna@host@fileSize p))
-    ok <- fsHostStatus
-    if ok /= 0 then k Nothing else k (Just n)
+fsOpHIOHost i op k =
+  case op of
+    ReadFile p =>
+      do
+        s <- raise (@vuna@host@tryReadFile p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "readFile ${p}" ok) else k s
+    WriteFile p s =>
+      do
+        _ <- raise (@vuna@host@tryWriteFile p s)
+        ok <- fsHostStatus
+        if ok /= 0 then
+          fsFailAt (fsErrorOfCode "writeFile ${p}" ok)
+        else
+          k (natFromInt (strLength s))
+    WriteFileAtomic p s =>
+      do
+        _ <- raise (@vuna@host@tryWriteFileAtomic p s)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "writeFileAtomic ${p}" ok) else k (strLength s)
+    ReadDir p =>
+      do
+        xs <- raise (@vuna@host@tryReadDir p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "readDir ${p}" ok) else k (sortEntries xs)
+    IsDirectory p =>
+      do
+        b <- raise (@vuna@host@tryIsDirectory p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "isDirectory ${p}" ok) else k b
+    MakeDir p =>
+      do
+        _ <- raise (@vuna@host@tryMakeDir p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "makeDir ${p}" ok) else k 0
+    RemoveFile p =>
+      do
+        _ <- raise (@vuna@host@tryRemoveFile p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "removeFile ${p}" ok) else k 0
+    RemoveTree p =>
+      do
+        _ <- raise (@vuna@host@tryRemoveTree p)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "removeTree ${p}" ok) else k 0
+    Rename src dst =>
+      do
+        _ <- raise (@vuna@host@tryRename src dst)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "rename ${src} -> ${dst}" ok) else k 0
+    Symlink target link =>
+      do
+        _ <- raise (@vuna@host@trySymlink target link)
+        ok <- fsHostStatus
+        if ok /= 0 then fsFailAt (fsErrorOfCode "symlink ${target} -> ${link}" ok) else k 0
+    MakeDirExclusive p =>
+      do
+        _ <- raise (@vuna@host@tryMakeDirExclusive p)
+        ok <- fsHostStatus
+        if ok == 0 then
+          k True
+        else if ok == 6 then k False else fsFailAt (fsErrorOfCode "makeDirExclusive ${p}" ok)
+    FileExists p =>
+      do
+        b <- raise (@vuna@host@fileExists p)
+        k b
+    FileMtime p =>
+      do
+        n <- raise (@vuna@host@fileMtime p)
+        ok <- fsHostStatus
+        if ok /= 0 then k Nothing else k (Just n)
+    FileSize p =>
+      do
+        n <- fmap natFromInt (raise (@vuna@host@fileSize p))
+        ok <- fsHostStatus
+        if ok /= 0 then k Nothing else k (Just n)
 
 -- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsErrorOp]`（不导出）。
 handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n FsOp :: r) a -> Eff r (Eff [FsErrorOp@"fs-error"] a)
@@ -261,8 +287,9 @@ fsErrorRet a = Ok a
 
 -- | 内部：`runFsError` 的 op 解释——`FsFail e` 直接变 `Err (fsErrorText e)`（不恢复续延）。
 fsErrorOpHR : {a : Type} -> (i : Type) -> (o : FsErrorOp i) -> (Base.Effect.Core.resIdx i o -> Result a) -> Result a
-fsErrorOpHR i op _ = case op of
-  FsFail e => Err (fsErrorText e)
+fsErrorOpHR i op _ =
+  case op of
+    FsFail e => Err (fsErrorText e)
 
 -- | 把 fs 失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `FsErrorOp`。
 export runFsError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n FsErrorOp :: r) a -> Eff r (Result a)
@@ -270,11 +297,13 @@ runFsError n comp = handleCoreAt (Named n FsErrorOp) "fs-error" n fsErrorRet fsE
 
 -- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
 runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Named "fs-error" FsErrorOp :: r) a -> Eff r a
-runFsErrorHost comp = do
-  res <- runFsError "fs-error" comp
-  case res of
-    Ok a => pure a
-    Err msg => do
-      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise (@vuna@prim_eff_exit 1)
-      prim_fail "unreachable: fs error handler"
+runFsErrorHost comp =
+  do
+    res <- runFsError "fs-error" comp
+    case res of
+      Ok a => pure a
+      Err msg =>
+        do
+          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- raise (@vuna@prim_eff_exit 1)
+          prim_fail "unreachable: fs error handler"

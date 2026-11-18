@@ -20,29 +20,39 @@ maxConnections = 1073741824
 -- | 路由表 + 请求 → 响应：命中回 200，路径命中但方法不符回 405，其余 404。
 -- | `HEAD` 按 `GET` 匹配，但只回头部。
 export respond : List Route.Route -> Req.Request -> Res.Response
-respond routes req = if Route.sameMethod req.method "HEAD" then headOf routes req
-else case Route.matchRoute routes req.method req.target of
-  Just hit => htmlResponse 200 [] (hit.first.handler hit.second)
-  Nothing => case Route.allowedMethods routes req.target of
-    [] => htmlResponse 404 [] notFoundPage
-    methods => htmlResponse 405 [Pair "Allow" (join ", " methods)] notFoundPage
+respond routes req =
+  if Route.sameMethod req.method "HEAD" then
+    headOf routes req
+  else
+    case Route.matchRoute routes req.method req.target of
+      Just hit => htmlResponse 200 [] (hit.first.handler hit.second)
+      Nothing =>
+        case Route.allowedMethods routes req.target of
+          [] => htmlResponse 404 [] notFoundPage
+          methods => htmlResponse 405 [Pair "Allow" (join ", " methods)] notFoundPage
 
 -- | `HEAD`：按 `GET` 匹配，正文丢弃但保留 `Content-Length`。
 headOf : List Route.Route -> Req.Request -> Res.Response
-headOf routes req = case Route.matchRoute routes "GET" req.target of
-  Just hit =>
-    let
-      body = View.renderView (hit.first.handler hit.second)
-    in Res.Response 200 "OK"
-      [Pair "Content-Type" "text/html; charset=utf-8", Pair "Content-Length" (strFromInt (strLength body))]
-      ""
-  Nothing => htmlResponse 404 [] notFoundPage
+headOf routes req =
+  case Route.matchRoute routes "GET" req.target of
+    Just hit =>
+      let
+        body = View.renderView (hit.first.handler hit.second)
+      in Res.Response
+        200
+        "OK"
+        [Pair "Content-Type" "text/html; charset=utf-8", Pair "Content-Length" (strFromInt (strLength body))]
+        ""
+    Nothing => htmlResponse 404 [] notFoundPage
 
 -- | 构造 HTML 响应（额外头部在前，`Content-Type` 在后）。
 htmlResponse : Int -> List (Pair String String) -> View.View -> Res.Response
 htmlResponse code extra page =
-  Res.Response code (Res.statusText code)
-    (append extra [Pair "Content-Type" "text/html; charset=utf-8"]) (View.renderView page)
+  Res.Response
+    code
+    (Res.statusText code)
+    (append extra [Pair "Content-Type" "text/html; charset=utf-8"])
+    (View.renderView page)
 
 -- | 默认 404 页面。
 notFoundPage : View.View
@@ -51,33 +61,39 @@ notFoundPage = View.document "404" [View.Element "h1" [] [View.Text "Not Found"]
 -- | 监听地址并按连接串行服务（`tcp:127.0.0.1:PORT`；`PORT=0` 时打印实际端口）。
 -- | 返回处理的连接数。
 export serve : Member nNet NetOp r, Member nConsole ConsoleOp r, Member nFs FsOp r => List Route.Route -> String -> Eff r Int
-serve routes addr = do
-  h <- netListen addr
-  text <- readyText addr h
-  _ <- consolePrint "listening ${text}\n"
-  count <- acceptLoop routes h maxConnections 0
-  _ <- netClose h
-  _ <- cleanupAddr addr
-  pure count
+serve routes addr =
+  do
+    h <- netListen addr
+    text <- readyText addr h
+    _ <- consolePrint "listening ${text}\n"
+    count <- acceptLoop routes h maxConnections 0
+    _ <- netClose h
+    _ <- cleanupAddr addr
+    pure count
 
 -- | 就绪行文本（`PORT=0` 用实际端口替换）。
 readyText : Member nNet NetOp r => String -> Int -> Eff r String
-readyText addr h = do
-  port <- netPort h
-  pure
-    (if endsWith ":0" addr then "${substring (natFromInt 0) (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
+readyText addr h =
+  do
+    port <- netPort h
+    pure
+      (if endsWith ":0" addr then "${substring (natFromInt 0) (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 -- | 串行 accept：一个连接一个连接地服务（慢客户端会挡住其它连接，见 docs/reference/web.md）。
 acceptLoop : Member nNet NetOp r => List Route.Route -> Int -> Int -> Int -> Eff r Int
-acceptLoop routes h fuel served = if fuel <= 0 then pure served
-else do
-  conn <- netAccept h
-  page <- HttpConn.serve (HttpConn.fromNet conn) (\req => pure (respond routes req))
-  acceptLoop routes h (fuel - 1) (served + page)
+acceptLoop routes h fuel served =
+  if fuel <= 0 then
+    pure served
+  else
+    do
+      conn <- netAccept h
+      page <- HttpConn.serve (HttpConn.fromNet conn) (\req => pure (respond routes req))
+      acceptLoop routes h (fuel - 1) (served + page)
 
 -- | `unix:PATH` 退出前删监听文件；`tcp:` 无事可做。
 cleanupAddr : Member nFs FsOp r => String -> Eff r Int
 cleanupAddr addr =
   if startsWith "unix:" addr then
     fsRemoveFile (substring (natFromInt 5) (natFromInt (strLength addr - 5)) addr)
-  else pure 0
+  else
+    pure 0

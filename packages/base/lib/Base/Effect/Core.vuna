@@ -59,26 +59,41 @@ export data Eff : Row -> Type -> Type where
 
 -- `Eff r` 的 Functor / Monad / Applicative 实例：组合的统一入口。
 instance Functor (Eff r) where
-  fmap f e = MkEff (\u => case e of
-    MkEff g => f (g u)
-  )
+  fmap f e =
+    MkEff (
+        \u =>
+          case e of
+            MkEff g => f (g u)
+      )
 
 instance Monad (Eff r) where
-  (>>=) e k = MkEff (\u => case e of
-    MkEff f => case k (f u) of
-      MkEff g => g u
-  )
+  (>>=) e k =
+    MkEff (
+        \u =>
+          case e of
+            MkEff f =>
+              case k (f u) of
+                MkEff g => g u
+      )
 
 instance Applicative (Eff r) where
   pure x = MkEff (\_ => x)
-  ap mf mx = MkEff (\u => case mf of
-    MkEff fg => case mx of
-      MkEff fb => fg u (fb u)
-  )
-  liftA2 f ma mb = MkEff (\u => case ma of
-    MkEff fa => case mb of
-      MkEff fb => f (fa u) (fb u)
-  )
+  ap mf mx =
+    MkEff (
+        \u =>
+          case mf of
+            MkEff fg =>
+              case mx of
+                MkEff fb => fg u (fb u)
+      )
+  liftA2 f ma mb =
+    MkEff (
+        \u =>
+          case ma of
+            MkEff fa =>
+              case mb of
+                MkEff fb => f (fa u) (fb u)
+      )
 
 -- | 信任边界：把运行时原语 thunk 包装成 Eff 动作（dummy `Int` 只为延迟执行，没有世界令牌语义）。只供包装隐藏 intrinsic 的模块使用（如观测探针）；普通用户用 do / >>= 与 sendCore / handleCore。
 export effPrim : {r : Row} -> {a : Type} -> (Int -> a) -> Eff r a
@@ -86,13 +101,15 @@ effPrim f = MkEff (\_ => f 0)
 
 -- | 行扩宽：动作在更大的行 `label :: r` 下仍可执行（不安装也不删除 handler，运行时无操作）。
 export weaken : {label : Type} -> {r : Row} -> {a : Type} -> Eff r a -> Eff (label :: r) a
-weaken comp = case comp of
-  MkEff f => MkEff f
+weaken comp =
+  case comp of
+    MkEff f => MkEff f
 
 -- | 内部：取出 Eff 动作的底层 thunk 并应用 dummy 参数（`runPure` / `runEff` 共用）。
 runThunk : {r : Row} -> {a : Type} -> Eff r a -> EffUnit -> a
-runThunk e = case e of
-  MkEff f => f
+runThunk e =
+  case e of
+    MkEff f => f
 
 -- | 运行行已处理干净（`Nil`）的动作；仍有未处理效应时由运行时报告。行只描述用户效应：宿主原语（`@vuna@prim_eff_*`）构造的叶子不在行里，所以语义是「无未处理行效应」而非「无副作用」。
 export runPure : {a : Type} -> Eff [] a -> a
@@ -131,26 +148,37 @@ runMain e = runThunk e MkEffUnit
 -- | 展平 `Eff r (Eff t a)`：把内层动作的行并到外层（`rowAppend r t`），运行时恒等。
 -- answer 行是 Nil 的 handler 经右单位归约（`rowAppend r Nil = r`）保持原签名。
 export joinEff : {r : Row} -> {t : Row} -> {a : Type} -> Eff r (Eff t a) -> Eff (rowAppend r t) a
-joinEff m = MkEff (\u => case m of
-  MkEff f => case f u of
-    MkEff g => g u
-)
+joinEff m =
+  MkEff (
+      \u =>
+        case m of
+          MkEff f =>
+            case f u of
+              MkEff g => g u
+    )
 
 -- | 展平「外层行 Nil」的嵌套动作：`Eff [] (Eff r a) -> Eff r a`（运行时恒等）。
 -- `joinEff` 在 `rowAppend [] r` 上需要归约，而检查器在隐式参数未解时不归约；
 -- 宿主 handler 的 `runX = joinEffNilOuter (handleXHost …)` 用这个显式形式避开该限制。
 export joinEffNilOuter : {r : Row} -> {a : Type} -> Eff [] (Eff r a) -> Eff r a
-joinEffNilOuter m = MkEff (\u => case m of
-  MkEff f => case f u of
-    MkEff g => g u
-)
+joinEffNilOuter m =
+  MkEff (
+      \u =>
+        case m of
+          MkEff f =>
+            case f u of
+              MkEff g => g u
+    )
 
 -- | 行扩展：`Eff r a` 在行尾接上 `t`（`rowAppend r t`，运行时恒等）。
 -- 用于把单效应动作（`Eff [FsOp]`）提升到更宽的行。
 export weakenRow : {r : Row} -> (t : Row) -> {a : Type} -> Eff r a -> Eff (rowAppend r t) a
-weakenRow t e = MkEff (\u => case e of
-  MkEff f => f u
-)
+weakenRow t e =
+  MkEff (
+      \u =>
+        case e of
+          MkEff f => f u
+    )
 
 -- | 把行已处理干净的动作放进任意行：`Eff [] a -> Eff r a`（运行时恒等；行只是擦除索引）。
 export raise : {r : Row} -> {a : Type} -> Eff [] a -> Eff r a
@@ -159,9 +187,12 @@ raise (MkEff f) = MkEff f
 -- | 显式行提升：`raise` 的 r 由上下文推断；这里由显式行值给出，避免 do 绑定里
 -- r 未解。运行时恒等。
 export raiseTo : (r : Row) -> {a : Type} -> Eff [] a -> Eff r a
-raiseTo r e = MkEff (\u => case e of
-  MkEff f => f u
-)
+raiseTo r e =
+  MkEff (
+      \u =>
+        case e of
+          MkEff f => f u
+    )
 
 -- | 核心发送：`e` 是标签类型（宇宙域、恒擦除），key/name 是运行时 handler 实例标识，op 是操作值；运行时按 (key, name) 找到 handler。
 export sendCore : (e : Type) -> {r : Row} -> {op : Type} -> {x : Type} -> (key : String) -> (name : String) -> (o : op) -> Eff r x
@@ -193,15 +224,21 @@ performCore n key sig o = sendCore (Named n (sigOf sig)) key n o
 
 -- | 核心 handler：`ret` 处理正常返回，`opH` 处理每个操作，结果行删除标签 `e`（`rowRem e r`）；(key, name) 必须与 `sendCore` 匹配。
 export handleCore : (e : Type) -> {r : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff r a -> Eff (rowRem e r) b
-handleCore e key name ret opH comp = MkEff (\u => case comp of
-  MkEff f => prim_effectHandle key name ret opH f u
-)
+handleCore e key name ret opH comp =
+  MkEff (
+      \u =>
+        case comp of
+          MkEff f => prim_effectHandle key name ret opH f u
+    )
 
 -- | 行首条目版核心 handler：`comp` 的行首就是被处理的标签，结果行直接是 `er`，不需要 `rowRem` 归约。用于 comp 的行尚未具体化的降级路径。
 export handleCoreAt : (e : Type) -> {er : Row} -> {op : Type} -> {a : Type} -> {b : Type} -> {h : Type} -> (key : String) -> (name : String) -> (a -> b) -> h -> Eff (e :: er) a -> Eff er b
-handleCoreAt e key name ret opH comp = MkEff (\u => case comp of
-  MkEff f => prim_effectHandle key name ret opH f u
-)
+handleCoreAt e key name ret opH comp =
+  MkEff (
+      \u =>
+        case comp of
+          MkEff f => prim_effectHandle key name ret opH f u
+    )
 
 -- | 线性 continuation（一次性闭包类型）：`Cont a b` 由 `MkCont` 包装限量为 1 的函数，只能被消费一次。
 export linear data Cont a b : Type where
@@ -210,8 +247,9 @@ export linear data Cont a b : Type where
 
 -- | 消费 `Cont` 一次并应用到参数；之后该 `Cont` 值消失（一次性）。
 export resumeCont : {a : Type} -> {b : Type} -> (1 c : Cont a b) -> a -> b
-resumeCont c x = case c of
-  MkCont k => k x
+resumeCont c x =
+  case c of
+    MkCont k => k x
 
 -- | 内部适配器：把「接收线性 `Cont` 的 opH」适配成 `handleCore` 需要的普通续延回调 `i -> b`。
 contAdapter : {f : Type -> Type} -> {b : Type} -> ((i : Type) -> (o : f i) -> (1 k : Cont i b) -> b) -> (i : Type) -> (o : f i) -> (i -> b) -> b
@@ -245,13 +283,14 @@ mkCont k = MkCont k
 
 -- | 通用 bracket：acquire → use → release。cleanup 由运行时 handler 的**退出钩子**驱动——use 里任意效应 abort（`Exn` throw、自定义 abort、调度器硬中止）都会在退出时执行 release；正常返回路径在带内 pop + release。边界：release 只能访问外层 handler、自身异常被吞，硬中止路径只能做无效应清理。
 export bracket : {res : Type} -> {a : Type} -> {r : Row} -> Eff r res -> (res -> Eff r Int) -> (res -> Eff r a) -> Eff r a
-bracket acquire release use = do
-  res <- acquire
-  effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))
-  a <- use res
-  effPrim (\_ => prim_cleanupPop 0)
-  release res
-  pure a
+bracket acquire release use =
+  do
+    res <- acquire
+    effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))
+    a <- use res
+    effPrim (\_ => prim_cleanupPop 0)
+    release res
+    pure a
 
 -- | `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都执行 cleanup，最后返回 action 的结果。等价于 `bracket (pure 0) (\_ => cleanup) (\_ => comp)`。
 export finally : {a : Type} -> {r : Row} -> Eff r a -> Eff r Int -> Eff r a

@@ -31,30 +31,36 @@ handleStdin n ret opH comp = handleCore (Named n StdinOp) "stdin" n ret opH comp
 
 -- | 真实 handler 的操作解释：读 stdin 后继续。
 stdinOpHIO : {a : Type} -> (i : Type) -> (o : StdinOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-stdinOpHIO i op k = case op of
-  ReadLine => do
-    v <- @vuna@prim_eff_readLine
-    ok <- @vuna@prim_eff_hostStatus
-    if ok == 1 then k Nothing else k (Just v)
-  ReadBytes n => do
-    v <- @vuna@prim_eff_readBytes (natToInt n)
-    ok <- @vuna@prim_eff_hostStatus
-    if ok == 1 then k Nothing else k (Just v)
+stdinOpHIO i op k =
+  case op of
+    ReadLine =>
+      do
+        v <- @vuna@prim_eff_readLine
+        ok <- @vuna@prim_eff_hostStatus
+        if ok == 1 then k Nothing else k (Just v)
+    ReadBytes n =>
+      do
+        v <- @vuna@prim_eff_readBytes (natToInt n)
+        ok <- @vuna@prim_eff_hostStatus
+        if ok == 1 then k Nothing else k (Just v)
 
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `StdinOp` 行的 op 解释：宿主原语读入后按状态槽区分 EOF，再写穿继续（answer 行是 `[StdinOp]`）。
 stdinOpHIOHost : {a : Type} -> (i : Type) -> (o : StdinOp i) -> (Base.Effect.Core.resIdx i o -> Eff [StdinOp] a) -> Eff [StdinOp] a
-stdinOpHIOHost i op k = case op of
-  ReadLine => do
-    v <- raise @vuna@host@readLine
-    ok <- raise @vuna@prim_eff_hostStatus
-    if ok == 1 then k Nothing else k (Just v)
-  ReadBytes n => do
-    v <- raise (@vuna@host@readBytes (natToInt n))
-    ok <- raise @vuna@prim_eff_hostStatus
-    if ok == 1 then k Nothing else k (Just v)
+stdinOpHIOHost i op k =
+  case op of
+    ReadLine =>
+      do
+        v <- raise @vuna@host@readLine
+        ok <- raise @vuna@prim_eff_hostStatus
+        if ok == 1 then k Nothing else k (Just v)
+    ReadBytes n =>
+      do
+        v <- raise (@vuna@host@readBytes (natToInt n))
+        ok <- raise @vuna@prim_eff_hostStatus
+        if ok == 1 then k Nothing else k (Just v)
 
 -- | 带行的宿主 handler：删掉 `StdinOp`，answer 是 `Eff [StdinOp]`（不导出）。
 handleStdinHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n StdinOp :: r) a -> Eff r (Eff [StdinOp] a)

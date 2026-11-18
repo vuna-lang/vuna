@@ -24,16 +24,20 @@ documentHighlights line col text =
     lines = split "\n" text
   in case lexCst text of
     Nothing => []
-    Just toks => case identAt toks line col of
-      Nothing => []
-      Just tok =>
-        let
-          name = tok.cstText
-        in if name == "_" || reservedWord name then []
-        else if startsWith "@" name then []
-        else case bindingRenameOccurrences line col text of
-          Just occs => map (positionHighlight lines name) occs
-          Nothing => map (positionHighlight lines name) (identHits toks name)
+    Just toks =>
+      case identAt toks line col of
+        Nothing => []
+        Just tok =>
+          let
+            name = tok.cstText
+          in if name == "_" || reservedWord name then
+            []
+          else if startsWith "@" name then
+            []
+          else
+            case bindingRenameOccurrences line col text of
+              Just occs => map (positionHighlight lines name) occs
+              Nothing => map (positionHighlight lines name) (identHits toks name)
 
 -- | 内部：光标（1-based 行 / UTF-8 字节列）下的 ident token（含端点）。
 identAt : List CstToken -> Int -> Int -> Maybe CstToken
@@ -41,7 +45,8 @@ identAt [] line col = Nothing
 identAt (t :: rest) line col =
   if t.cstTag == "ident" && spanStartLine t.cstSpan == line && col >= spanStartCol t.cstSpan && col <= spanEndCol t.cstSpan then
     Just t
-  else identAt rest line col
+  else
+    identAt rest line col
 
 -- | 内部：所有同名 ident token 的 (行, 列)。
 identHits : List CstToken -> String -> List (Pair Int Int)
@@ -52,7 +57,8 @@ tokPosIfName : String -> CstToken -> Maybe (Pair Int Int)
 tokPosIfName name t =
   if t.cstTag == "ident" && t.cstText == name then
     Just (Pair (spanStartLine t.cstSpan) (spanStartCol t.cstSpan))
-  else Nothing
+  else
+    Nothing
 
 -- | 内部：(行, 列) + 名字 → 起止列按 UTF-16 换算的 `DocumentHighlight`（kind = 1，Text）。
 positionHighlight : List String -> String -> Pair Int Int -> Json

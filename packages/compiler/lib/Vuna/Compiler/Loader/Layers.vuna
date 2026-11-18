@@ -29,12 +29,13 @@ usesOfLayer [] name = []
 usesOfLayer (l :: rest) name = if l.layerName == name then l.layerUses else usesOfLayer rest name
 
 closureGo : Int -> List Layer -> List String -> List String -> List String
-closureGo fuel layers todo acc = if fuel <= 0 then acc
-else case todo of
-  [] => acc
-  n :: rest =>
-    if memName n acc then closureGo (fuel - 1) layers rest acc
-    else closureGo (fuel - 1) layers (append rest (usesOfLayer layers n)) (n :: acc)
+closureGo fuel layers todo acc =
+  if fuel <= 0 then
+    acc
+  else
+    case todo of
+      [] => acc
+      n :: rest => if memName n acc then closureGo (fuel - 1) layers rest acc else closureGo (fuel - 1) layers (append rest (usesOfLayer layers n)) (n :: acc)
 
 -- | 一行的许可集：自身层 + uses 的传递闭包（层数有限，fuel 足够）。
 allowedByRow : List Layer -> Layer -> List String
@@ -58,9 +59,10 @@ matchingLayers rules name = filter (layerMatches name) rules
 
 -- | 诊断里用的层标签：最具体的已声明层；没有声明则退回到模块名的父前缀。
 export labelOf : List Layer -> String -> String
-labelOf rules name = case matchingLayers rules name of
-  [] => prefixOfName name
-  l :: rest => labelBest l rest
+labelOf rules name =
+  case matchingLayers rules name of
+    [] => prefixOfName name
+    l :: rest => labelBest l rest
 
 labelBest : Layer -> List Layer -> String
 labelBest best [] = best.layerName
@@ -77,14 +79,18 @@ withImportSpan imp e =
 
 checkImports : List Layer -> List Layer -> String -> String -> List Module -> List Import -> Check Int
 checkImports allRules matched srcName srcPkg modules [] = OkC 0
-checkImports allRules matched srcName srcPkg modules (imp :: rest) = case findModule modules (importName imp) of
-  Nothing => checkImports allRules matched srcName srcPkg modules rest
-  Just t =>
-    if modulePackageOf t /= srcPkg then checkImports allRules matched srcName srcPkg modules rest
-    else if importAllowed allRules matched (moduleNameOf t) then
-      checkImports allRules matched srcName srcPkg modules rest
-    else onErrDiag (withImportSpan imp)
-      (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
+checkImports allRules matched srcName srcPkg modules (imp :: rest) =
+  case findModule modules (importName imp) of
+    Nothing => checkImports allRules matched srcName srcPkg modules rest
+    Just t =>
+      if modulePackageOf t /= srcPkg then
+        checkImports allRules matched srcName srcPkg modules rest
+      else if importAllowed allRules matched (moduleNameOf t) then
+        checkImports allRules matched srcName srcPkg modules rest
+      else
+        onErrDiag
+          (withImportSpan imp)
+          (ldErr4 (LayerViolation "" "" "" "") srcName (moduleNameOf t) (labelOf allRules srcName) (labelOf allRules (moduleNameOf t)))
 
 checkModules : List Root -> List Module -> List Module -> Check Int
 checkModules roots all [] = OkC 0
@@ -92,7 +98,8 @@ checkModules roots all (m :: rest) =
   let
     rules = layersOfRoot roots (modulePackageOf m)
     matched = matchingLayers rules (moduleNameOf m)
-  in if length matched == 0 then checkModules roots all rest
+  in if length matched == 0 then
+    checkModules roots all rest
   else
     case checkImports rules matched (moduleNameOf m) (modulePackageOf m) all (moduleAllImportsOf m) of
       ErrC e => ErrC e

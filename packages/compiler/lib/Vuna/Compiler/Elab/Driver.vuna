@@ -31,16 +31,18 @@ import Vuna.Compiler.Frontend.Ast
 -- 计数器渲染（仅 `--debug-perf` 的规模行使用）：稳定顺序便于逐行 diff。
 showCounters : List String -> String
 showCounters names =
-  join ","
+  join
+    ","
     (map (\p => "${firstOf p}=${secondOf p}") (Sort.sortBy (\a => \b => firstOf a < firstOf b) (HashMap.toList (countNames names (HashMap.fromList [])))))
 
 countNames : List String -> HashMap String Int -> HashMap String Int
 countNames [] acc = acc
 countNames (n :: rest) acc =
   let
-    cur = case HashMap.lookup n acc of
-      Just v => v
-      Nothing => 0
+    cur =
+      case HashMap.lookup n acc of
+        Just v => v
+        Nothing => 0
   in countNames rest (HashMap.insert n (cur + 1) acc)
 
 export unsolvedMeta : Ec -> Maybe Int
@@ -55,15 +57,15 @@ unsolvedFromRelevant i stop sols relevant goals =
   unsolvedFromRelevantGo (stop - i) stop sols relevant goals
 
 unsolvedFromRelevantGo : Int -> Int -> HashMap Int Value -> List Int -> List DtGoal -> Maybe Int
-unsolvedFromRelevantGo remaining stop sols relevant goals = if remaining <= 0 then Nothing
-else
-  let
-    i = stop - remaining
-  in case metaLookup i sols of
-    Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
-    Nothing =>
-      if memMetaId i relevant || isJust (findGoal i goals) then Just i
-      else unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
+unsolvedFromRelevantGo remaining stop sols relevant goals =
+  if remaining <= 0 then
+    Nothing
+  else
+    let
+      i = stop - remaining
+    in case metaLookup i sols of
+      Just _ => unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
+      Nothing => if memMetaId i relevant || isJust (findGoal i goals) then Just i else unsolvedFromRelevantGo (remaining - 1) stop sols relevant goals
 
 -- ---------------------------------------------------------------
 -- 精化入口
@@ -71,7 +73,10 @@ else
 -- 按源顺序精化签名：每个签名只对「prelude + 之前的签名」可见。
 export elabSigs : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> Check (Pair (List (Pair String Term)) Ec)
 elabSigs sigs globals ec =
-  elabSigsGo sigs globals (ecSetGlobalsComplete (ecPutGlobalsTbl ec (globalsTableOf globals)) True)
+  elabSigsGo
+    sigs
+    globals
+    (ecSetGlobalsComplete (ecPutGlobalsTbl ec (globalsTableOf globals)) True)
     []
 
 -- 新签名先前插到 acc（末尾一次 reverse 还原源顺序）；签名检查要看得到**已收集**的
@@ -79,16 +84,20 @@ elabSigs sigs globals ec =
 -- 逐次 `append globals [sig]` 是 O(#globals)/次 ⇒ 整程序 O(n²)；前插累积是 O(1)/次。
 elabSigsGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> Ec -> List (Pair String Term) -> Check (Pair (List (Pair String Term)) Ec)
 elabSigsGo [] globals0 ec acc = OkC (Pair (append globals0 (reverse acc)) ec)
-elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals ec acc = Vuna.Compiler.Base.Common.bind (checkType globals emptyCtx ec tyExpr) (\p => case p of
-  Pair tyTerm0 (Pair sortLvl ec1) => Vuna.Compiler.Base.Common.bind (elabSigDictBinders globals ec1 tyTerm0 ctxExprs sigSpan) (\q => case q of
-    Pair tyTerm1 ec2 =>
-      let
-        sigTy = zonkTerm ec2 0 tyTerm1
-      in elabSigsGo rest (Pair name sigTy :: globals)
-        (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2)))
-        (Pair name sigTy :: acc)
-  )
-)
+elabSigsGo ((Pair name (Pair ctxExprs (Pair tyExpr sigSpan))) :: rest) globals ec acc =
+  Vuna.Compiler.Base.Common.bind (checkType globals emptyCtx ec tyExpr) (
+      \p =>
+        case p of
+          Pair tyTerm0 (Pair sortLvl ec1) =>
+            Vuna.Compiler.Base.Common.bind (elabSigDictBinders globals ec1 tyTerm0 ctxExprs sigSpan) (
+                \q =>
+                  case q of
+                    Pair tyTerm1 ec2 =>
+                      let
+                        sigTy = zonkTerm ec2 0 tyTerm1
+                      in elabSigsGo rest (Pair name sigTy :: globals) (ecPutGlobalsTbl ec2 (HashMap.insert name sigTy (ecGlobalsTbl ec2))) (Pair name sigTy :: acc)
+              )
+    )
 
 -- 顶层签名里的前导隐式 Pi 前缀 → Ctx（`{a : Type} -> {n : Nat} -> ...`）。
 leadingImplicitCtx : Term -> Ctx
@@ -116,25 +125,33 @@ elabSigDictBinders globals ec tyTerm ctxExprs sp =
     memberExprs = firstOf split
     otherExprs = secondOf split
     leadCtx = leadingImplicitCtx tyTerm
-  in Vuna.Compiler.Base.Common.bind (constraintPartsOf sp otherExprs) (\parts => Vuna.Compiler.Base.Common.bind (elabConstraintDomains (ecClasses ec) globals leadCtx parts sp ec) (\q => Vuna.Compiler.Base.Common.bind (elabMemberConstraintDoms globals leadCtx (secondOf q) memberExprs sp) (\m => let
-    doms = firstOf q
-    ec1 = secondOf q
-    memberDoms = firstOf m
-    ec2 = secondOf m
-    ty1 = insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)
-    ty2 = insertSigMembers ty1 memberDoms (leadingImplicitCount ty1)
-  in OkC (Pair ty2 ec2)
-  )
-  )
-  )
+  in Vuna.Compiler.Base.Common.bind (constraintPartsOf sp otherExprs) (
+      \parts =>
+        Vuna.Compiler.Base.Common.bind (elabConstraintDomains (ecClasses ec) globals leadCtx parts sp ec) (
+            \q =>
+              Vuna.Compiler.Base.Common.bind (elabMemberConstraintDoms globals leadCtx (secondOf q) memberExprs sp) (
+                  \m =>
+                    let
+                      doms = firstOf q
+                      ec1 = secondOf q
+                      memberDoms = firstOf m
+                      ec2 = secondOf m
+                      ty1 = insertSigDicts tyTerm doms (leadingImplicitCount tyTerm)
+                      ty2 = insertSigMembers ty1 memberDoms (leadingImplicitCount ty1)
+                    in OkC (Pair ty2 ec2)
+                )
+          )
+    )
 
 splitMemberCtx : List Expr -> Pair (List Expr) (List Expr)
 splitMemberCtx [] = Pair [] []
 splitMemberCtx (e :: rest) =
   let
     r = splitMemberCtx rest
-  in if isMemberConstraintExpr e then Pair (e :: firstOf r) (secondOf r)
-  else Pair (firstOf r) (e :: secondOf r)
+  in if isMemberConstraintExpr e then
+    Pair (e :: firstOf r) (secondOf r)
+  else
+    Pair (firstOf r) (e :: secondOf r)
 
 isMemberConstraintExpr : Expr -> Bool
 isMemberConstraintExpr (EApp (EVar g _) args _) =
@@ -144,23 +161,33 @@ isMemberConstraintExpr _ = False
 -- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
 memberSugarExpr ec (e@(EApp (EVar g a) ([n, x, r]) sp)) =
-  if g == effMemberFamilyName then EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
-  else e
+  if g == effMemberFamilyName then
+    EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
+  else
+    e
 memberSugarExpr ec e = e
 
 elabMemberConstraintDoms : List (Pair String Term) -> Ctx -> Ec -> List Expr -> Span -> Check (Pair (List Term) Ec)
 elabMemberConstraintDoms globals ctx ec [] sp = OkC (Pair [] ec)
-elabMemberConstraintDoms globals ctx ec (e :: rest) sp = Vuna.Compiler.Base.Common.bind (checkType globals ctx ec (memberSugarExpr ec e)) (\p => case p of
-  Pair domTerm (Pair _ ec1) => Vuna.Compiler.Base.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (\q => case q of
-    Pair doms ec2 => OkC (Pair ((::) domTerm doms) ec2)
-  )
-)
+elabMemberConstraintDoms globals ctx ec (e :: rest) sp =
+  Vuna.Compiler.Base.Common.bind (checkType globals ctx ec (memberSugarExpr ec e)) (
+      \p =>
+        case p of
+          Pair domTerm (Pair _ ec1) =>
+            Vuna.Compiler.Base.Common.bind (elabMemberConstraintDoms globals ctx ec1 rest sp) (
+                \q =>
+                  case q of
+                    Pair doms ec2 => OkC (Pair ((::) domTerm doms) ec2)
+              )
+    )
 
 insertSigMembers : Term -> List Term -> Int -> Term
 insertSigMembers ty [] nImp = ty
 insertSigMembers ty doms nImp =
-  if nImp <= 0 then prependSigMembers ty doms 0
-  else insertSigMembersRev ty doms (length doms - 1) (nImp - 1)
+  if nImp <= 0 then
+    prependSigMembers ty doms 0
+  else
+    insertSigMembersRev ty doms (length doms - 1) (nImp - 1)
 
 prependSigMembers : Term -> List Term -> Int -> Term
 prependSigMembers ty [] k = ty
@@ -170,7 +197,10 @@ prependSigMembers ty (dom :: rest) k =
 insertSigMembersRev : Term -> List Term -> Int -> Int -> Term
 insertSigMembersRev ty [] k baseIdx = ty
 insertSigMembersRev ty (dom :: rest) k baseIdx =
-  insertSigMembersRev (insertImplicitBinder (sigMemberName k) baseIdx Rig0 dom ty) rest (k - 1)
+  insertSigMembersRev
+    (insertImplicitBinder (sigMemberName k) baseIdx Rig0 dom ty)
+    rest
+    (k - 1)
     baseIdx
 
 sigMemberName : Int -> String
@@ -185,8 +215,10 @@ sigMemberName k = "_member${k}"
 insertSigDicts : Term -> List Term -> Int -> Term
 insertSigDicts ty [] nImp = ty
 insertSigDicts ty doms nImp =
-  if nImp <= 0 then prependSigDicts ty doms 0
-  else insertSigDictsRev ty doms (length doms - 1) (nImp - 1)
+  if nImp <= 0 then
+    prependSigDicts ty doms 0
+  else
+    insertSigDictsRev ty doms (length doms - 1) (nImp - 1)
 
 prependSigDicts : Term -> List Term -> Int -> Term
 prependSigDicts ty [] k = ty
@@ -228,14 +260,16 @@ declaredDictBindersGo ec ctx _ acc = reverse acc
 -- 冷路径：绝大多数定义体精化后没有任何延迟字典目标，先查目标表可以省掉
 -- `declaredDictBinders` 整条隐式 Pi 前缀的求值（目标表非空时才要求值）。
 solveDeclaredDictGoals : Ec -> Term -> Term -> Pair Term Ec
-solveDeclaredDictGoals ec ty body = case ecPending ec of
-  [] => Pair body ec
-  _ => case declaredDictBinders ec ty of
+solveDeclaredDictGoals ec ty body =
+  case ecPending ec of
     [] => Pair body ec
-    binders =>
-      let
-        solved = solveDeclaredDictGoalsGo ec binders (ecPending ec) [] []
-      in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
+    _ =>
+      case declaredDictBinders ec ty of
+        [] => Pair body ec
+        binders =>
+          let
+            solved = solveDeclaredDictGoalsGo ec binders (ecPending ec) [] []
+          in Pair (applyDeclaredDictSubsts (firstOf solved) body) (secondOf solved)
 
 record DictSubst where
   dictSubstMeta : Int
@@ -243,22 +277,29 @@ record DictSubst where
   dictSubstQ : Int
 
 solveDeclaredDictGoalsGo : Ec -> List DeclDictBinder -> List Constraint -> List Constraint -> List DictSubst -> Pair (List DictSubst) Ec
-solveDeclaredDictGoalsGo ec binders goals kept acc = case goals of
-  [] => Pair (reverse acc) (ecPutPending ec (reverse kept))
-  (g@(Constraint cid kind m dom cspan cdepth)) :: rest => case metaLookup m (ecSolTbl ec) of
-    Just _ => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
-    Nothing => case firstMatchDictBinder ec binders dom of
-      Nothing => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
-      Just b =>
-        let
-          -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
-          -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
-          q = b.declDictLevel + 1
-        in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
-          OkC sols2 =>
-            solveDeclaredDictGoalsGo (ecPutSols ec (solsList sols2)) binders rest kept
-              (DictSubst m b.declDictName q :: acc)
-          ErrC e => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+solveDeclaredDictGoalsGo ec binders goals kept acc =
+  case goals of
+    [] => Pair (reverse acc) (ecPutPending ec (reverse kept))
+    (g@(Constraint cid kind m dom cspan cdepth)) :: rest =>
+      case metaLookup m (ecSolTbl ec) of
+        Just _ => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+        Nothing =>
+          case firstMatchDictBinder ec binders dom of
+            Nothing => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
+            Just b =>
+              let
+                -- q = level + 1：出现点（term 根下的 lambda 深度 depth）的 index = depth - q，正好等于
+                -- 该 binder 在「全部隐式 binder 之外再加 depth 层 λ」处的 de Bruijn index。
+                q = b.declDictLevel + 1
+              in case solveMeta (ecDefTbl ec) (ecSolsP ec) 0 m [] (VNeutral (NVar b.declDictName b.declDictLevel [])) of
+                OkC sols2 =>
+                  solveDeclaredDictGoalsGo
+                    (ecPutSols ec (solsList sols2))
+                    binders
+                    rest
+                    kept
+                    (DictSubst m b.declDictName q :: acc)
+                ErrC e => solveDeclaredDictGoalsGo ec binders rest (g :: kept) acc
 
 firstMatchDictBinder : Ec -> List DeclDictBinder -> Value -> Maybe DeclDictBinder
 firstMatchDictBinder ec [] dom = Nothing
@@ -266,9 +307,10 @@ firstMatchDictBinder ec (b :: rest) dom =
   if dictDomMatches ec b.declDictDom dom then Just b else firstMatchDictBinder ec rest dom
 
 dictDomMatches : Ec -> Value -> Value -> Bool
-dictDomMatches ec a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
-  OkC _ => True
-  ErrC _ => False
+dictDomMatches ec a b =
+  case conv (ecDefTbl ec) (ecSolsP ec) 0 (forceVal ec a) (forceVal ec b) of
+    OkC _ => True
+    ErrC _ => False
 
 applyDeclaredDictSubsts : List DictSubst -> Term -> Term
 applyDeclaredDictSubsts [] body = body
@@ -282,70 +324,81 @@ clausesTblOf decls = clausesTblGo decls (HashMap.fromList [])
 
 clausesTblGo : List Decl -> HashMap String (List (Pair (List Pat) Expr)) -> HashMap String (List (Pair (List Pat) Expr))
 clausesTblGo [] t = t
-clausesTblGo (d :: rest) t = case d of
-  DFun n pats body sp =>
-    let
-      cur = case HashMap.lookup n t of
-        Just xs => xs
-        Nothing => []
-    in clausesTblGo rest (HashMap.insert n (append cur [Pair pats body]) t)
-  _ => clausesTblGo rest t
+clausesTblGo (d :: rest) t =
+  case d of
+    DFun n pats body sp =>
+      let
+        cur =
+          case HashMap.lookup n t of
+            Just xs => xs
+            Nothing => []
+      in clausesTblGo rest (HashMap.insert n (append cur [Pair pats body]) t)
+    _ => clausesTblGo rest t
 
 clausesOfTbl : Ec -> List Decl -> String -> List (Pair (List Pat) Expr)
-clausesOfTbl ec decls name = case HashMap.lookup name ec.ecClausesTbl of
-  Just cs => cs
-  Nothing => clausesFor decls name
+clausesOfTbl ec decls name =
+  case HashMap.lookup name ec.ecClausesTbl of
+    Just cs => cs
+    Nothing => clausesFor decls name
 
 defAlreadyDone : String -> Ec -> Bool
-defAlreadyDone name ec = case HashMap.lookup name (ecDefTbl ec) of
-  Just _ => True
-  Nothing => False
+defAlreadyDone name ec =
+  case HashMap.lookup name (ecDefTbl ec) of
+    Just _ => True
+    Nothing => False
 
 -- 有体的定义（名字 → 体）：axiom 是无体顶层，不能进 delta 展开 / 求值环境。
 defBodyPairs : List DtDef -> List (Pair String Term)
 defBodyPairs defs = mapMaybe defBodyPair defs
 
 defBodyPair : DtDef -> Maybe (Pair String Term)
-defBodyPair d = case dtDefBody d of
-  Just body => Just (Pair (dtDefName d) body)
-  Nothing => Nothing
+defBodyPair d =
+  case dtDefBody d of
+    Just body => Just (Pair (dtDefName d) body)
+    Nothing => Nothing
 
 -- 之后会有定义体的 DFun 名（实例字典名由 `instHeads` 单独提供）。
 declFunNames : List Decl -> List String
 declFunNames [] = []
-declFunNames (d :: rest) = case d of
-  DFun name pats body sp => name :: declFunNames rest
-  _ => declFunNames rest
+declFunNames (d :: rest) =
+  case d of
+    DFun name pats body sp => name :: declFunNames rest
+    _ => declFunNames rest
 
 -- 单个 `DFun` 的正文：检查 → 声明的字典目标 → 自由字典目标提升 → 入 delta 表。
 elabOneDef : List Decl -> List (Pair String Term) -> String -> Term -> Span -> Ec -> Check (Pair DtDef Ec)
 elabOneDef decls globals name tyTerm sp ec =
   let
     _ = dbg! "DEF ${name}"
-  in Vuna.Compiler.Base.Common.bind (obsDefCheck "vuna.def.elab" name (\_ => elabFunDef globals ec (clausesOfTbl ec decls name) (eval [] tyTerm) sp)) (\p => let
-    _ = dbg! "FUN ${name}"
-  in obsCheck "vuna.elab.post" (\_ => case p of
-    Pair bodyTerm ec1 =>
-      let
-        -- 先把命中的延迟字典目标解到签名声明的 ctx binder（若有），剩余目标
-        -- 才由 liftFreeDictGoals 提升成新的隐式参数。
-        solvedDecl = solveDeclaredDictGoals ec1 tyTerm bodyTerm
-        bodyTerm1 = firstOf solvedDecl
-        ec1b = secondOf solvedDecl
-        lifted = liftFreeDictGoals name ec1b tyTerm bodyTerm1
-        liftedTy = firstOf lifted
-        liftedBody = firstOf (secondOf lifted)
-        liftedEc = secondOf (secondOf lifted)
-        cleanTerm =
-          if termHasAnyMeta liftedBody then substDictTerm liftedEc liftedBody else liftedBody
-        -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
-        -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
-        -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
-        ecGlobals = ecPutGlobalsTbl liftedEc (HashMap.insert name liftedTy (ecGlobalsTbl liftedEc))
-        ecWithDef = ecAddDef ecGlobals (Pair name cleanTerm)
-      in OkC (Pair (DtDef name liftedTy cleanTerm (Just sp)) ecWithDef)
-  )
-  )
+  in Vuna.Compiler.Base.Common.bind
+    (obsDefCheck "vuna.def.elab" name (\_ => elabFunDef globals ec (clausesOfTbl ec decls name) (eval [] tyTerm) sp))
+    (
+      \p =>
+        let
+          _ = dbg! "FUN ${name}"
+        in obsCheck "vuna.elab.post" (
+            \_ =>
+              case p of
+                Pair bodyTerm ec1 =>
+                  let
+                    -- 先把命中的延迟字典目标解到签名声明的 ctx binder（若有），剩余目标
+                    -- 才由 liftFreeDictGoals 提升成新的隐式参数。
+                    solvedDecl = solveDeclaredDictGoals ec1 tyTerm bodyTerm
+                    bodyTerm1 = firstOf solvedDecl
+                    ec1b = secondOf solvedDecl
+                    lifted = liftFreeDictGoals name ec1b tyTerm bodyTerm1
+                    liftedTy = firstOf lifted
+                    liftedBody = firstOf (secondOf lifted)
+                    liftedEc = secondOf (secondOf lifted)
+                    cleanTerm = if termHasAnyMeta liftedBody then substDictTerm liftedEc liftedBody else liftedBody
+                    -- 正文检查读的是哈希索引：只插表，不逐定义重建 globals list
+                    -- （replaceGlobalType 是 O(#globals)/定义 ⇒ 整程序 O(n²)；该 list 只在
+                    -- 签名阶段与最终 DtProgram 里用，正文阶段以表为准）。
+                    ecGlobals = ecPutGlobalsTbl liftedEc (HashMap.insert name liftedTy (ecGlobalsTbl liftedEc))
+                    ecWithDef = ecAddDef ecGlobals (Pair name cleanTerm)
+                  in OkC (Pair (DtDef name liftedTy cleanTerm (Just sp)) ecWithDef)
+          )
+    )
 
 -- 逐定义恢复的共用出口：错误进 `Ec.ecErrors` 并继续下一个声明；严格路径短路。
 resumeBodies : Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Diagnostic -> Check (Pair (List DtDef) Ec)
@@ -357,59 +410,85 @@ resumeBodies False rest globals doneDefs acc ec d = ErrC d
 -- （丢弃它创建的元变量与解），继续检查下一个定义；严格路径仍然首错短路。
 export elabBodies : Bool -> List Decl -> List (Pair String Term) -> List (Pair String Term) -> List DtDef -> Ec -> Check (Pair (List DtDef) Ec)
 elabBodies recover [] globals doneDefs acc ec = OkC (Pair (reverse acc) ec)
-elabBodies recover (d :: rest) globals doneDefs acc ec = case d of
-  DFun name pats body sp => case globalsLookup name globals ec of
-    Nothing => case tcErr1 sp (ExpectedSignature name) name of
-      OkC _ => elabBodies recover rest globals doneDefs acc ec
-      ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-    Just tyTerm => if defAlreadyDone name ec then elabBodies recover rest globals doneDefs acc ec
-    else case elabOneDef (d :: rest) globals name tyTerm sp ec of
-      OkC p => case p of
-        Pair def ec1 =>
-          elabBodies recover rest globals (Pair name (dtDefType def) :: doneDefs) (def :: acc) ec1
-      ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-  -- axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
-  -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
-  DAxiom name tyExpr sp => if startsWith "vuna_seal_" name then
-    let
-      target = strSubstring 10 (strLength name - 10) name
-    in elabBodies recover rest globals doneDefs acc (ecRemoveDefTbl target ec)
-  else case globalsLookup name globals ec of
-    Nothing => case tcErr1 sp (ExpectedSignature name) name of
-      OkC _ => elabBodies recover rest globals doneDefs acc ec
-      ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-    Just tyTerm =>
-      elabBodies recover rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
-  -- extern 的签名同样已在 globals；这里只做受限 FFI 类型检查并落成 DtExtern。
-  DExtern name cName tyExpr sp => case globalsLookup name globals ec of
-    Nothing => case tcErr1 sp (ExpectedSignature name) name of
-      OkC _ => elabBodies recover rest globals doneDefs acc ec
-      ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-    Just tyTerm => case checkExternTy sp tyTerm of
-      ErrC e => resumeBodies recover rest globals doneDefs acc ec e
-      OkC _ =>
-        elabBodies recover rest globals doneDefs (DtExtern name tyTerm cName (Just sp) :: acc) ec
-  _ => elabBodies recover rest globals doneDefs acc ec
+elabBodies recover (d :: rest) globals doneDefs acc ec =
+  case d of
+    DFun name pats body sp =>
+      case globalsLookup name globals ec of
+        Nothing =>
+          case tcErr1 sp (ExpectedSignature name) name of
+            OkC _ => elabBodies recover rest globals doneDefs acc ec
+            ErrC e => resumeBodies recover rest globals doneDefs acc ec e
+        Just tyTerm =>
+          if defAlreadyDone name ec then
+            elabBodies recover rest globals doneDefs acc ec
+          else
+            case elabOneDef (d :: rest) globals name tyTerm sp ec of
+              OkC p =>
+                case p of
+                  Pair def ec1 => elabBodies recover rest globals (Pair name (dtDefType def) :: doneDefs) (def :: acc) ec1
+              ErrC e => resumeBodies recover rest globals doneDefs acc ec e
+    -- axiom 只产出无体/不透明的 `DtAxiom`（类型已在签名阶段精化进 globals）；
+    -- 不进 Ec 的 defs 表（没有体可 delta 展开），也不进 doneDefs。
+    DAxiom name tyExpr sp =>
+      if startsWith "vuna_seal_" name then
+        let
+          target = strSubstring 10 (strLength name - 10) name
+        in elabBodies recover rest globals doneDefs acc (ecRemoveDefTbl target ec)
+      else
+        case globalsLookup name globals ec of
+          Nothing =>
+            case tcErr1 sp (ExpectedSignature name) name of
+              OkC _ => elabBodies recover rest globals doneDefs acc ec
+              ErrC e => resumeBodies recover rest globals doneDefs acc ec e
+          Just tyTerm => elabBodies recover rest globals doneDefs (DtAxiom name tyTerm (Just sp) :: acc) ec
+    -- extern 的签名同样已在 globals；这里只做受限 FFI 类型检查并落成 DtExtern。
+    DExtern name cName tyExpr sp =>
+      case globalsLookup name globals ec of
+        Nothing =>
+          case tcErr1 sp (ExpectedSignature name) name of
+            OkC _ => elabBodies recover rest globals doneDefs acc ec
+            ErrC e => resumeBodies recover rest globals doneDefs acc ec e
+        Just tyTerm =>
+          case checkExternTy sp tyTerm of
+            ErrC e => resumeBodies recover rest globals doneDefs acc ec e
+            OkC _ =>
+              elabBodies
+                recover
+                rest
+                globals
+                doneDefs
+                (DtExtern name tyTerm cName (Just sp) :: acc)
+                ec
+    _ => elabBodies recover rest globals doneDefs acc ec
 
 -- 每个签名都必须有定义；`axiom`（DAxiom）是无体的可擦除顶层，不要求 DFun。
 -- 冷路径：decls/globals 的成员查询走一次性建表。逐签名线性扫全部 decls
 -- （hasFunClause ×2 + axiomSpanOf）是 O(#sigs × #decls) ⇒ 整程序 O(n²)。
 export checkAllDefined : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> List (Pair String Term) -> List Decl -> Check (List String)
 checkAllDefined sigs globals decls =
-  checkAllDefinedGo sigs (HashMap.ofNames (map firstOf globals)) (funNamesTbl decls)
+  checkAllDefinedGo
+    sigs
+    (HashMap.ofNames (map firstOf globals))
+    (funNamesTbl decls)
     (axiomSpansTbl decls)
 
 checkAllDefinedGo : List (Pair String (Pair (List Expr) (Pair Expr Span))) -> HashMap String Bool -> HashMap String Bool -> HashMap String Span -> Check (List String)
 checkAllDefinedGo [] globalsTbl funTbl axiomTbl = OkC []
-checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globalsTbl funTbl axiomTbl = case HashMap.lookup name axiomTbl of
-  Just sp =>
-    if HashMap.member name funTbl then tcErr1 sp (AxiomWithDefinition name) name
-    else checkAllDefinedGo rest globalsTbl funTbl axiomTbl
-  Nothing =>
-    if HashMap.member name funTbl then
-      if HashMap.member name globalsTbl then checkAllDefinedGo rest globalsTbl funTbl axiomTbl
-      else ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
-    else ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
+checkAllDefinedGo ((Pair name (Pair ctx (Pair tyExpr sigSpan))) :: rest) globalsTbl funTbl axiomTbl =
+  case HashMap.lookup name axiomTbl of
+    Just sp =>
+      if HashMap.member name funTbl then
+        tcErr1 sp (AxiomWithDefinition name) name
+      else
+        checkAllDefinedGo rest globalsTbl funTbl axiomTbl
+    Nothing =>
+      if HashMap.member name funTbl then
+        if HashMap.member name globalsTbl then
+          checkAllDefinedGo rest globalsTbl funTbl axiomTbl
+        else
+          ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
+      else
+        ErrC (withFallbackSpan sigSpan (tcMsg (SignatureNoDef name) [name]))
 
 -- DFun 名字集合（`declFunNames` 已在前面定义；表语义 = 集合）。
 funNamesTbl : List Decl -> HashMap String Bool
@@ -422,24 +501,27 @@ axiomSpansTbl decls = HashMap.fromList (axiomSpanPairs decls)
 
 axiomSpanPairs : List Decl -> List (Pair String Span)
 axiomSpanPairs [] = []
-axiomSpanPairs (d :: rest) = case d of
-  DAxiom n ty sp => Pair n sp :: axiomSpanPairs rest
-  DExtern n c ty sp => Pair n sp :: axiomSpanPairs rest
-  _ => axiomSpanPairs rest
+axiomSpanPairs (d :: rest) =
+  case d of
+    DAxiom n ty sp => Pair n sp :: axiomSpanPairs rest
+    DExtern n c ty sp => Pair n sp :: axiomSpanPairs rest
+    _ => axiomSpanPairs rest
 
 export hasFunClause : String -> List Decl -> Bool
 hasFunClause name [] = False
-hasFunClause name (d :: rest) = case d of
-  DFun n pats body sp => n == name || hasFunClause name rest
-  _ => hasFunClause name rest
+hasFunClause name (d :: rest) =
+  case d of
+    DFun n pats body sp => n == name || hasFunClause name rest
+    _ => hasFunClause name rest
 
 -- 该名字是否由 `axiom` 声明（有则返回其 span，用于「axiom 不能有定义」诊断）。
 axiomSpanOf : String -> List Decl -> Maybe Span
 axiomSpanOf name [] = Nothing
-axiomSpanOf name (d :: rest) = case d of
-  DAxiom n ty sp => if n == name then Just sp else axiomSpanOf name rest
-  DExtern n c ty sp => if n == name then Just sp else axiomSpanOf name rest
-  _ => axiomSpanOf name rest
+axiomSpanOf name (d :: rest) =
+  case d of
+    DAxiom n ty sp => if n == name then Just sp else axiomSpanOf name rest
+    DExtern n c ty sp => if n == name then Just sp else axiomSpanOf name rest
+    _ => axiomSpanOf name rest
 
 -- ---------------------------------------------------------------
 -- 受限 FFI 类型检查。允许的类型：Int / String / Bool，以及 Array Int /
@@ -449,20 +531,30 @@ checkExternTy sp tyTerm = checkExternValue sp 64 0 (eval [] tyTerm)
 
 checkExternValue : Span -> Int -> Int -> Value -> Check Int
 checkExternValue sp fuel lvl (VPi name implicit _ dom clo) =
-  if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
-  else if implicit then tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
-  else Vuna.Compiler.Base.Common.bind (checkExternDomain sp dom)
-    (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
+  if fuel <= 0 then
+    tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
+  else if implicit then
+    tcErr1 sp (FfiTypeUnsupported "implicit parameter") "implicit parameter"
+  else
+    Vuna.Compiler.Base.Common.bind
+      (checkExternDomain sp dom)
+      (\_ => checkExternValue sp (fuel - 1) (lvl + 1) (applyClosure clo (VNeutral (NVar name lvl []))))
 checkExternValue sp fuel lvl v =
-  if fuel <= 0 then tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
-  else checkExternDomain sp v
+  if fuel <= 0 then
+    tcErr1 sp (FfiTypeUnsupported "too many parameters") "too many parameters"
+  else
+    checkExternDomain sp v
 
 checkExternDomain : Span -> Value -> Check Int
-checkExternDomain sp (VNeutral (NGlobal g args)) = if isFfiScalarName g then OkC 0
-else if g == "Array" then case args of
-  [elem] => checkExternArrayElem sp elem
-  _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
-else tcErr1 sp (FfiTypeUnsupported g) g
+checkExternDomain sp (VNeutral (NGlobal g args)) =
+  if isFfiScalarName g then
+    OkC 0
+  else if g == "Array" then
+    case args of
+      [elem] => checkExternArrayElem sp elem
+      _ => tcErr1 sp (FfiTypeUnsupported "Array needs one type argument") "Array"
+  else
+    tcErr1 sp (FfiTypeUnsupported g) g
 checkExternDomain sp (VNeutral _) = tcErr1 sp (FfiTypeUnsupported "non-global type") "non-global"
 checkExternDomain sp _ = tcErr1 sp (FfiTypeUnsupported "non-basic type") "non-basic"
 
@@ -495,30 +587,38 @@ allReplCtors [] = []
 allReplCtors (d :: rest) = append (dtDataCtors d) (allReplCtors rest)
 
 renderReplTerm : Int -> List DtCtor -> Term -> String
-renderReplTerm fuel ctors t = if fuel <= 0 then showTerm t
-else case t of
-  TCon c args => renderReplCtor (fuel - 1) ctors c args
-  TLam name rig _ _ body => "<函数>"
-  TMeta m => "_"
-  TGlobal g => replShortName g
-  TApp f a r => renderReplApp (fuel - 1) ctors (TApp f a r)
-  _ => showTerm t
+renderReplTerm fuel ctors t =
+  if fuel <= 0 then
+    showTerm t
+  else
+    case t of
+      TCon c args => renderReplCtor (fuel - 1) ctors c args
+      TLam name rig _ _ body => "<函数>"
+      TMeta m => "_"
+      TGlobal g => replShortName g
+      TApp f a r => renderReplApp (fuel - 1) ctors (TApp f a r)
+      _ => showTerm t
 
 -- 中性应用：头是全局定义时显示短名 + 实参（`Zero`、`f 1`）；其它回退 showTerm。
 renderReplApp : Int -> List DtCtor -> Term -> String
-renderReplApp fuel ctors t = if fuel <= 0 then showTerm t
-else case spineOf t of
-  Pair head args => case head of
-    TGlobal g => replShortName g ++ renderReplArgs (fuel - 1) ctors args
-    _ => showTerm t
+renderReplApp fuel ctors t =
+  if fuel <= 0 then
+    showTerm t
+  else
+    case spineOf t of
+      Pair head args =>
+        case head of
+          TGlobal g => replShortName g ++ renderReplArgs (fuel - 1) ctors args
+          _ => showTerm t
 
 replShortName : String -> String
 replShortName g = secondOf (splitLastDot (splitOnDot g))
 
 spineOf : Term -> Pair Term (List Term)
-spineOf (TApp f a r) = case spineOf f of
-  Pair head args => Pair head (appendLastTerm args a)
-  _ => Pair (TApp f a r) []
+spineOf (TApp f a r) =
+  case spineOf f of
+    Pair head args => Pair head (appendLastTerm args a)
+    _ => Pair (TApp f a r) []
 spineOf t = Pair t []
 
 appendLastTerm : List Term -> Term -> List Term
@@ -533,68 +633,93 @@ replNatSuccName : String
 replNatSuccName = "Base.Data.Nat.Nat.Succ"
 
 replNatValue : Int -> List DtCtor -> Term -> Maybe Int
-replNatValue fuel ctors t = if fuel <= 0 then Nothing
-else case t of
-  TCon c args => if c == replNatZeroName then Just 0
-  else if c == replNatSuccName then case keptCtorArgs ctors c args of
-    [arg] => case replNatValue (fuel - 1) ctors arg of
-      Just n => Just (n + 1)
-      Nothing => Nothing
-    _ => Nothing
-  else Nothing
-  _ => Nothing
+replNatValue fuel ctors t =
+  if fuel <= 0 then
+    Nothing
+  else
+    case t of
+      TCon c args =>
+        if c == replNatZeroName then
+          Just 0
+        else if c == replNatSuccName then
+          case keptCtorArgs ctors c args of
+            [arg] =>
+              case replNatValue (fuel - 1) ctors arg of
+                Just n => Just (n + 1)
+                Nothing => Nothing
+            _ => Nothing
+        else
+          Nothing
+      _ => Nothing
 
 renderReplCtor : Int -> List DtCtor -> String -> List (Pair Term Rig) -> String
-renderReplCtor fuel ctors c args = if fuel <= 0 then "<值>"
-else
-  let
-    kept = keptCtorArgs ctors c args
-  in if c == replNatZeroName then "0"
-  else if c == replNatSuccName then case kept of
-    [arg] => case replNatValue (fuel - 1) ctors arg of
-      Just n => strFromInt (n + 1)
-      Nothing => renderReplGeneric (fuel - 1) ctors "Succ" kept
-    _ => renderReplGeneric (fuel - 1) ctors "Succ" kept
-  else if c == replListNilName then "[]"
-  else if c == replListConsName then renderReplList (fuel - 1) ctors kept
-  else if c == replPairName then renderReplPair (fuel - 1) ctors kept
-  else if c == replJustName then renderReplUnary (fuel - 1) ctors "Just" kept
-  else if c == replNothingName then "Nothing"
-  else renderReplGeneric (fuel - 1) ctors (replShortName c) kept
+renderReplCtor fuel ctors c args =
+  if fuel <= 0 then
+    "<值>"
+  else
+    let
+      kept = keptCtorArgs ctors c args
+    in if c == replNatZeroName then
+      "0"
+    else if c == replNatSuccName then
+      case kept of
+        [arg] =>
+          case replNatValue (fuel - 1) ctors arg of
+            Just n => strFromInt (n + 1)
+            Nothing => renderReplGeneric (fuel - 1) ctors "Succ" kept
+        _ => renderReplGeneric (fuel - 1) ctors "Succ" kept
+    else if c == replListNilName then "[]" else if c == replListConsName then renderReplList (fuel - 1) ctors kept else if c == replPairName then renderReplPair (fuel - 1) ctors kept else if c == replJustName then renderReplUnary (fuel - 1) ctors "Just" kept else if c == replNothingName then "Nothing" else renderReplGeneric (fuel - 1) ctors (replShortName c) kept
 
 renderReplList : Int -> List DtCtor -> List Term -> String
 renderReplList fuel ctors [] = "[]"
-renderReplList fuel ctors (h :: rest) = if fuel <= 0 then "[]"
-else case rest of
-  [t] => case renderReplListTail (fuel - 1) ctors t of
-    Just tailText => "[" ++ renderReplArg (fuel - 1) ctors h ++ tailText
-    Nothing => renderReplGeneric (fuel - 1) ctors "(::)" [h, t]
-  _ => renderReplGeneric (fuel - 1) ctors "(::)" (h :: rest)
+renderReplList fuel ctors (h :: rest) =
+  if fuel <= 0 then
+    "[]"
+  else
+    case rest of
+      [t] =>
+        case renderReplListTail (fuel - 1) ctors t of
+          Just tailText => "[" ++ renderReplArg (fuel - 1) ctors h ++ tailText
+          Nothing => renderReplGeneric (fuel - 1) ctors "(::)" [h, t]
+      _ => renderReplGeneric (fuel - 1) ctors "(::)" (h :: rest)
 
 renderReplListTail : Int -> List DtCtor -> Term -> Maybe String
-renderReplListTail fuel ctors t = if fuel <= 0 then Nothing
-else case t of
-  TCon c args => if c == replListNilName then Just "]"
-  else if c == replListConsName then case keptCtorArgs ctors c args of
-    [h, t2] => case renderReplListTail (fuel - 1) ctors t2 of
-      Just tailText => Just (", " ++ renderReplArg (fuel - 1) ctors h ++ tailText)
-      Nothing => Nothing
-    _ => Nothing
-  else Nothing
-  _ => Nothing
+renderReplListTail fuel ctors t =
+  if fuel <= 0 then
+    Nothing
+  else
+    case t of
+      TCon c args =>
+        if c == replListNilName then
+          Just "]"
+        else if c == replListConsName then
+          case keptCtorArgs ctors c args of
+            [h, t2] =>
+              case renderReplListTail (fuel - 1) ctors t2 of
+                Just tailText => Just (", " ++ renderReplArg (fuel - 1) ctors h ++ tailText)
+                Nothing => Nothing
+            _ => Nothing
+        else
+          Nothing
+      _ => Nothing
 
 renderReplPair : Int -> List DtCtor -> List Term -> String
-renderReplPair fuel ctors args = if fuel <= 0 then "<值>"
-else case args of
-  [a, b] =>
-    "(" ++ renderReplArg (fuel - 1) ctors a ++ ", " ++ renderReplArg (fuel - 1) ctors b ++ ")"
-  _ => renderReplGeneric (fuel - 1) ctors "Pair" args
+renderReplPair fuel ctors args =
+  if fuel <= 0 then
+    "<值>"
+  else
+    case args of
+      [a, b] => "(" ++ renderReplArg (fuel - 1) ctors a ++ ", " ++ renderReplArg (fuel - 1) ctors b ++ ")"
+      _ => renderReplGeneric (fuel - 1) ctors "Pair" args
 
 renderReplUnary : Int -> List DtCtor -> String -> List Term -> String
-renderReplUnary fuel ctors label args = if fuel <= 0 then "<值>"
-else case args of
-  [a] => label ++ " " ++ renderReplArg (fuel - 1) ctors a
-  _ => renderReplGeneric (fuel - 1) ctors label args
+renderReplUnary fuel ctors label args =
+  if fuel <= 0 then
+    "<值>"
+  else
+    case args of
+      [a] => label ++ " " ++ renderReplArg (fuel - 1) ctors a
+      _ => renderReplGeneric (fuel - 1) ctors label args
 
 renderReplGeneric : Int -> List DtCtor -> String -> List Term -> String
 renderReplGeneric fuel ctors label args =
@@ -603,14 +728,19 @@ renderReplGeneric fuel ctors label args =
 renderReplArgs : Int -> List DtCtor -> List Term -> String
 renderReplArgs fuel ctors [] = ""
 renderReplArgs fuel ctors (a :: rest) =
-  if fuel <= 0 then ""
-  else " " ++ renderReplArg (fuel - 1) ctors a ++ renderReplArgs (fuel - 1) ctors rest
+  if fuel <= 0 then
+    ""
+  else
+    " " ++ renderReplArg (fuel - 1) ctors a ++ renderReplArgs (fuel - 1) ctors rest
 
 renderReplArg : Int -> List DtCtor -> Term -> String
 renderReplArg fuel ctors t =
-  if fuel <= 0 then "<值>"
-  else if isReplAtom ctors t then renderReplTerm (fuel - 1) ctors t
-  else "(" ++ renderReplTerm (fuel - 1) ctors t ++ ")"
+  if fuel <= 0 then
+    "<值>"
+  else if isReplAtom ctors t then
+    renderReplTerm (fuel - 1) ctors t
+  else
+    "(" ++ renderReplTerm (fuel - 1) ctors t ++ ")"
 
 isReplAtom : List DtCtor -> Term -> Bool
 isReplAtom ctors (TInt n) = True
@@ -622,17 +752,18 @@ isReplAtom ctors (TGlobal g) = True
 isReplAtom ctors (TType l) = True
 isReplAtom ctors (TMeta m) = True
 isReplAtom ctors (TCon c args) =
-  c == replListNilName
-    || c == replPairName
-    || c == replNothingName
-    || natToInt (length (keptCtorArgs ctors c args)) == 0
+  c
+    == replListNilName
+    || c
+    == replPairName || c == replNothingName || natToInt (length (keptCtorArgs ctors c args)) == 0
 isReplAtom ctors _ = False
 
 -- 按构造子 telescope 的 rig 过滤擦除实参；找不到构造子时保留全部。
 keptCtorArgs : List DtCtor -> String -> List (Pair Term Rig) -> List Term
-keptCtorArgs ctors c args = case findCtorIn c ctors of
-  Nothing => map (\p => firstOf p) args
-  Just ctor => zipKeptArgs (dtCtorTelescope ctor) args
+keptCtorArgs ctors c args =
+  case findCtorIn c ctors of
+    Nothing => map (\p => firstOf p) args
+    Just ctor => zipKeptArgs (dtCtorTelescope ctor) args
 
 zipKeptArgs : List (Pair String Rig) -> List (Pair Term Rig) -> List Term
 zipKeptArgs [] args = map (\p => firstOf p) args
@@ -671,57 +802,83 @@ dtEvalExprInInfo prog expr = dtEvalExprInInfoCore prog expr
 -- REPL：同时返回值文本与 zonk 后的类型文本（类型决定是否走效果执行）。
 -- | 在程序环境里精化并求值一条表达式，同时返回结果文本与 zonk 后的类型文本。
 dtEvalExprInInfoCore : DtProgram -> Expr -> Check (Pair String String)
-dtEvalExprInInfoCore prog expr = case prog of
-  DtProgram datas defs goals sols globals insts classes next depths warnings =>
-    let
-      -- axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
-      bodies = defBodyPairs defs
-      -- 表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
-      ec0 =
-        Ec next sols (reverse bodies) datas [] [] (instStoreOf insts) classes csEmpty
-          (HashMap.fromList bodies) (globalsTableOf globals) (solsToTbl sols) (HashMap.fromList [])
-          True (HashMap.fromList []) (ctorTblOfDatas datas) (datasHaveLinear datas) [] [] warnings
-          [] []
-    in Vuna.Compiler.Base.Common.bind (inferE globals emptyCtx ec0 expr) (\p => case p of
-      Pair term (Pair ty ec1) =>
-        let
-          ec2 = resolveDictGoalsFix globals ec1 8
-          sols2 = ecSols ec2
-          -- 顶层 `force` 只解开类型头部的元变量，spine 里已解的元变量（如
-          -- `List ?97` 的元素类型）不会被递归替换；先 quote 再 zonk 才能把类型
-          -- 文本渲染成具体类型（REPL `:type` 与自动签名写回都依赖这一点）。
-          tyText =
-            showTypeSig
-              (zonkTerm ec2 0 (quote 0 (force (HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty)))
-        in case firstUnsolvedInterpGoal ec2 of
-          Just td => case firstUnsolvedInterpGoalSpan ec2 of
-            Just sp => tcErr1 sp (InterpNoInstance td) td
-            Nothing => tcErr1NoLoc (InterpNoInstance td) td
-          Nothing => case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
-            Just m =>
-              onErrDiag (\d => withMetaCreated ec2 m d)
-                (tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m))
-            Nothing => case normalize (HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
-              VInt n => OkC (Pair (strFromInt n) tyText)
-              v => OkC (Pair (showValueRepl datas ec2 v) tyText)
-    )
+dtEvalExprInInfoCore prog expr =
+  case prog of
+    DtProgram datas defs goals sols globals insts classes next depths warnings =>
+      let
+        -- axiom 无体，不进 delta 展开 / 求值环境（只剩 globals 里的类型）。
+        bodies = defBodyPairs defs
+        -- 表达式求值与程序同一套环（构造子索引 + 定义值共享缓存）。
+        ec0 =
+          Ec
+            next
+            sols
+            (reverse bodies)
+            datas
+            []
+            []
+            (instStoreOf insts)
+            classes
+            csEmpty
+            (HashMap.fromList bodies)
+            (globalsTableOf globals)
+            (solsToTbl sols)
+            (HashMap.fromList [])
+            True
+            (HashMap.fromList [])
+            (ctorTblOfDatas datas)
+            (datasHaveLinear datas)
+            []
+            []
+            warnings
+            []
+            []
+      in Vuna.Compiler.Base.Common.bind (inferE globals emptyCtx ec0 expr) (
+          \p =>
+            case p of
+              Pair term (Pair ty ec1) =>
+                let
+                  ec2 = resolveDictGoalsFix globals ec1 8
+                  sols2 = ecSols ec2
+                  -- 顶层 `force` 只解开类型头部的元变量，spine 里已解的元变量（如
+                  -- `List ?97` 的元素类型）不会被递归替换；先 quote 再 zonk 才能把类型
+                  -- 文本渲染成具体类型（REPL `:type` 与自动签名写回都依赖这一点）。
+                  tyText = showTypeSig (zonkTerm ec2 0 (quote 0 (force (HashMap.fromList bodies) (ecSolsP ec2) defaultFuel ty)))
+                in case firstUnsolvedInterpGoal ec2 of
+                  Just td =>
+                    case firstUnsolvedInterpGoalSpan ec2 of
+                      Just sp => tcErr1 sp (InterpNoInstance td) td
+                      Nothing => tcErr1NoLoc (InterpNoInstance td) td
+                  Nothing =>
+                    case unsolvedFrom next (ecNext ec2) (ecSolTbl ec2) of
+                      Just m => onErrDiag (\d => withMetaCreated ec2 m d) (tcErr1 (exprSpan expr) (UnsolvedMetavarInfer (strFromInt m)) (strFromInt m))
+                      Nothing =>
+                        case normalize (HashMap.fromList bodies) (ecSolsP ec2) defaultFuel (eval [] term) of
+                          VInt n => OkC (Pair (strFromInt n) tyText)
+                          v => OkC (Pair (showValueRepl datas ec2 v) tyText)
+        )
 
 -- 导入 Base.Trait.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
 -- | 判断声明列表里是否出现 `HasField` trait 声明（全名或短名）。
 hasHasFieldDecls : List Decl -> Bool
 hasHasFieldDecls [] = False
-hasHasFieldDecls (d :: rest) = case d of
-  DTrait n ps supers ms sp =>
-    if n == "Base.Trait.Record.HasField" || baseNameOf n == "HasField" then True
-    else hasHasFieldDecls rest
-  _ => hasHasFieldDecls rest
+hasHasFieldDecls (d :: rest) =
+  case d of
+    DTrait n ps supers ms sp =>
+      if n == "Base.Trait.Record.HasField" || baseNameOf n == "HasField" then
+        True
+      else
+        hasHasFieldDecls rest
+    _ => hasHasFieldDecls rest
 
 -- | 只保留短名（非限定名）的记录声明，避免为依赖包的记录重复生成实例。
 shortRecordMetas : List RecordMeta -> List RecordMeta
 shortRecordMetas [] = []
 shortRecordMetas (r :: rest) =
-  if baseNameOf r.recordMetaName == r.recordMetaName then (::) r (shortRecordMetas rest)
-  else shortRecordMetas rest
+  if baseNameOf r.recordMetaName == r.recordMetaName then
+    (::) r (shortRecordMetas rest)
+  else
+    shortRecordMetas rest
 
 -- | 从声明里抽取记录信息，为当前模块的记录字段生成 `HasField` 实例。
 hasFieldInstancesOfDecls : List Decl -> List Decl
@@ -730,20 +887,25 @@ hasFieldInstancesOfDecls decls = recordHasFieldInstances (shortRecordMetas (reco
 -- | 判断声明列表里是否已有显式的 `HasField` 实例（有则不再自动生成）。
 hasExplicitHasFieldInstance : List Decl -> Bool
 hasExplicitHasFieldInstance [] = False
-hasExplicitHasFieldInstance (d :: rest) = case d of
-  DInstance ctx head methods sp => case head of
-    EApp (EVar n _) _ _ =>
-      if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
-    EVar n _ => if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+hasExplicitHasFieldInstance (d :: rest) =
+  case d of
+    DInstance ctx head methods sp =>
+      case head of
+        EApp (EVar n _) _ _ =>
+          if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+        EVar n _ => if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+        _ => hasExplicitHasFieldInstance rest
     _ => hasExplicitHasFieldInstance rest
-  _ => hasExplicitHasFieldInstance rest
 
 -- | 按需为当前模块的记录字段追加 `HasField` 实例：已有显式实例则跳过，`getField` 或 `HasField` 可见时才生成。
 export maybeAddHasFieldInstances : List (Pair String Term) -> List Decl -> List Decl
-maybeAddHasFieldInstances globals decls = if hasExplicitHasFieldInstance decls then decls
-else case globalLookup "Base.Trait.Record.getField" globals of
-  Just _ => append decls (hasFieldInstancesOfDecls decls)
-  Nothing => if hasHasFieldDecls decls then append decls (hasFieldInstancesOfDecls decls) else decls
+maybeAddHasFieldInstances globals decls =
+  if hasExplicitHasFieldInstance decls then
+    decls
+  else
+    case globalLookup "Base.Trait.Record.getField" globals of
+      Just _ => append decls (hasFieldInstancesOfDecls decls)
+      Nothing => if hasHasFieldDecls decls then append decls (hasFieldInstancesOfDecls decls) else decls
 
 -- 精化入口。先做 record 降级（`Elab.Records.prepareDecls`）——record 是纯记法。
 -- 没有 trusted/检查豁免；终止性对每个包、每个模块一致执行。
@@ -751,11 +913,11 @@ export elabProgramFull : List Decl -> Check DtProgram
 elabProgramFull decls =
   let
     decls2 = maybeAddHasFieldInstances preludeGlobals decls
-  in Vuna.Compiler.Base.Common.bind (prepareDecls decls2) (\p => case p of
-    Pair records ds =>
-      Vuna.Compiler.Base.Common.bind (expandDerivings ds)
-        (\ds2 => elabProgramGoWith ecEmpty preludeGlobals records ds2)
-  )
+  in Vuna.Compiler.Base.Common.bind (prepareDecls decls2) (
+      \p =>
+        case p of
+          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWith ecEmpty preludeGlobals records ds2)
+    )
 
 -- 单遍逐定义恢复：返回收集到的错误（源序）。空列表 = 通过。
 -- 只有「定义体 / 实例体」阶段的错误可恢复（失败声明回滚后跳过，继续下一个）；
@@ -765,17 +927,26 @@ export elabProgramErrors : List Decl -> Check (List Diagnostic)
 elabProgramErrors decls =
   let
     decls2 = maybeAddHasFieldInstances preludeGlobals decls
-  in Vuna.Compiler.Base.Common.bind (prepareDecls decls2) (\p => case p of
-    Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux True ecEmpty preludeGlobals records ds2) (\core => let
-      -- 源序：`--max-errors` 取「最早 N 条」；发射侧按新→旧打印（`emitDiagRevSeq`）。
-      errs = reverse (ecErrors core.coreEc)
-    in if nonEmpty errs then OkC errs
-    else case finishCore [] ds2 core of
-      ErrC d => OkC [d]
-      OkC _ => OkC []
+  in Vuna.Compiler.Base.Common.bind (prepareDecls decls2) (
+      \p =>
+        case p of
+          Pair records ds =>
+            Vuna.Compiler.Base.Common.bind (expandDerivings ds) (
+                \ds2 =>
+                  Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux True ecEmpty preludeGlobals records ds2) (
+                      \core =>
+                        let
+                          -- 源序：`--max-errors` 取「最早 N 条」；发射侧按新→旧打印（`emitDiagRevSeq`）。
+                          errs = reverse (ecErrors core.coreEc)
+                        in if nonEmpty errs then
+                          OkC errs
+                        else
+                          case finishCore [] ds2 core of
+                            ErrC d => OkC [d]
+                            OkC _ => OkC []
+                    )
+              )
     )
-    )
-  )
 
 export elabProgramGo : List Decl -> Check DtProgram
 elabProgramGo decls = elabProgramGoWith ecEmpty preludeGlobals [] decls
@@ -792,14 +963,19 @@ export elabProgramFullWithAux : Ec -> List (Pair String Term) -> List Decl -> Li
 elabProgramFullWithAux startEc startGlobals termAux decls =
   let
     decls2 = maybeAddHasFieldInstances startGlobals decls
-  in Vuna.Compiler.Base.Common.bind (prepareDeclsWith termAux decls2) (\p => case p of
-    Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Base.Common.bind (prepareDecls termAux) (\ap => case ap of
-      Pair _ ads =>
-        Vuna.Compiler.Base.Common.bind (expandDerivings ads)
-          (\ads2 => elabProgramGoWithAux startEc startGlobals records ads2 ds2)
+  in Vuna.Compiler.Base.Common.bind (prepareDeclsWith termAux decls2) (
+      \p =>
+        case p of
+          Pair records ds =>
+            Vuna.Compiler.Base.Common.bind (expandDerivings ds) (
+                \ds2 =>
+                  Vuna.Compiler.Base.Common.bind (prepareDecls termAux) (
+                      \ap =>
+                        case ap of
+                          Pair _ ads => Vuna.Compiler.Base.Common.bind (expandDerivings ads) (\ads2 => elabProgramGoWithAux startEc startGlobals records ads2 ds2)
+                    )
+              )
     )
-    )
-  )
 
 -- 接口摘要第一步：起始状态（依赖包的签名 globals + Ec 摘要）参数化，供
 -- 「只精化本包 decls、复用依赖包摘要」的调用方注入。行为与 elabProgramGo 完全一致。
@@ -818,73 +994,84 @@ record ElabCore where
   coreProjSpans : List (Pair String Span)
 
 elabProgramCoreWithAux : Bool -> Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> Check ElabCore
-elabProgramCoreWithAux recover startEc startGlobals records decls = Vuna.Compiler.Base.Common.bind (collectSigs decls) (\sigs => let
-  _ = dbg! "collectSigs-done"
-in Vuna.Compiler.Base.Common.bind (elabDatas (collectDataDecls decls []) records startGlobals startEc) (\pd => case pd of
-  Pair datas (Pair globals0 ec0) =>
-    let
-      -- data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
-      -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
-      ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
-      _ = dbg! "datas-done"
-    in Vuna.Compiler.Base.Common.bind (elabTraits (collectTraitDecls decls []) globals0 ec0b) (\pt => case pt of
-      Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
+elabProgramCoreWithAux recover startEc startGlobals records decls =
+  Vuna.Compiler.Base.Common.bind (collectSigs decls) (
+      \sigs =>
         let
-          globals1 = append globals0 projGlobals
-          datas1 = append datas classDatas
-          -- 接口摘要路径：起始 Ec 已带依赖包的类表；实例头/体必须看**全部**类，
-          -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
-          -- `Base.Trait.Eq.Eq` 找不到）。全量路径下两者相同。
-          classesAll = ecClasses ec1
-          _ = dbg! "traits-done"
-        in Vuna.Compiler.Base.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
-          Pair instHeads ec1b =>
-            let
-              globals2 = append globals1 instHeads
-              _ = dbg! "instheads-done"
-            in Vuna.Compiler.Base.Common.bind (elabSigs sigs globals2 ec1b) (\p => case p of
-              Pair globals ec2 =>
-                let
-                  -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
-                  ec2b =
-                    ecPutClausesTbl
-                      (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True)
-                      (clausesTblOf decls)
-                  _ = dbg! "sigs-elab-done"
-                in Vuna.Compiler.Base.Common.bind (checkAllDefined sigs globals decls) (\_ => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.bodies" (\_ => elabBodies recover decls globals [] [] ec2b)) (\q => case q of
-                  -- 观测：逐定义精化是冷 check 的最大单项（约一半），单独包一个跨度
-                  -- （`vuna.elab` 仍覆盖整段，本 span 是它的子区间；两者并存，summarize
-                  -- 分别汇总）。`obsCheck` 关闭时只付一次 `Lazy.force` + 分支。
-                  Pair defs0 ec3a =>
-                    let
-                      -- 字典目标可能在「类参数刚被解出」之后才有唯一实例，而
-                      -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
-                      -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
-                      -- 运行时位置的 TMeta）。
-                      ec3 = resolveDictGoalsFix globals ec3a 8
-                      defs = rezonkDefs ec3 defs0
-                      _ =
-                        dbg!
-                          "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
-                      -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
-                      -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
-                      _ =
-                        dbg! (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
-                    in Vuna.Compiler.Base.Common.bind (elabInstanceBodies recover decls classesAll datas1 globals ec3) (\pi => case pi of
-                      Pair instDefs0 ec4a =>
-                        let
-                          ec4 = resolveDictGoalsFix globals ec4a 8
-                          instDefs = rezonkDefs ec4 instDefs0
-                          _ = dbg! "instbodies-done"
-                        in OkC (ElabCore datas1 ec4 defs instDefs globals projSpans)
+          _ = dbg! "collectSigs-done"
+        in Vuna.Compiler.Base.Common.bind (elabDatas (collectDataDecls decls []) records startGlobals startEc) (
+            \pd =>
+              case pd of
+                Pair datas (Pair globals0 ec0) =>
+                  let
+                    -- data 精化完成后一次性建构造子索引（之后 ecAddData 增量维护）；
+                    -- 索引 miss 会回落线性扫 `ecDatas`，所以这里只影响速度。
+                    ec0b = ecPutCtorTbl ec0 (ctorTblOfDatas (ecDatas ec0))
+                    _ = dbg! "datas-done"
+                  in Vuna.Compiler.Base.Common.bind (elabTraits (collectTraitDecls decls []) globals0 ec0b) (
+                      \pt =>
+                        case pt of
+                          Pair classDatas (Pair projGlobals (Pair _ (Pair projSpans ec1))) =>
+                            let
+                              globals1 = append globals0 projGlobals
+                              datas1 = append datas classDatas
+                              -- 接口摘要路径：起始 Ec 已带依赖包的类表；实例头/体必须看**全部**类，
+                              -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
+                              -- `Base.Trait.Eq.Eq` 找不到）。全量路径下两者相同。
+                              classesAll = ecClasses ec1
+                              _ = dbg! "traits-done"
+                            in Vuna.Compiler.Base.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (
+                                \pih =>
+                                  case pih of
+                                    Pair instHeads ec1b =>
+                                      let
+                                        globals2 = append globals1 instHeads
+                                        _ = dbg! "instheads-done"
+                                      in Vuna.Compiler.Base.Common.bind (elabSigs sigs globals2 ec1b) (
+                                          \p =>
+                                            case p of
+                                              Pair globals ec2 =>
+                                                let
+                                                  -- 正文检查前的唯一一次建表：globals 此时已固定（sigs + inst heads）。
+                                                  ec2b = ecPutClausesTbl (ecSetGlobalsComplete (ecPutGlobalsTbl ec2 (globalsTableOf globals)) True) (clausesTblOf decls)
+                                                  _ = dbg! "sigs-elab-done"
+                                                in Vuna.Compiler.Base.Common.bind (checkAllDefined sigs globals decls) (
+                                                    \_ =>
+                                                      Vuna.Compiler.Base.Common.bind (obsCheck "vuna.elab.bodies" (\_ => elabBodies recover decls globals [] [] ec2b)) (
+                                                          \q =>
+                                                            case q of
+                                                              -- 观测：逐定义精化是冷 check 的最大单项（约一半），单独包一个跨度
+                                                              -- （`vuna.elab` 仍覆盖整段，本 span 是它的子区间；两者并存，summarize
+                                                              -- 分别汇总）。`obsCheck` 关闭时只付一次 `Lazy.force` + 分支。
+                                                              Pair defs0 ec3a =>
+                                                                let
+                                                                  -- 字典目标可能在「类参数刚被解出」之后才有唯一实例，而
+                                                                  -- resolveDictGoals 只在 checkByInfer 路径调用；每轮定义体之后先收敛
+                                                                  -- 一轮，定义体里的延迟字典实参要被替换成实例项（否则擦除检查会看到
+                                                                  -- 运行时位置的 TMeta）。
+                                                                  ec3 = resolveDictGoalsFix globals ec3a 8
+                                                                  defs = rezonkDefs ec3 defs0
+                                                                  _ = dbg! "bodies-done g=${length globals} sols=${length (ecSols ec3a)} defs=${length (ecDefs ec3a)} metas=${ecNext ec3a} dgoals=${length (ecPending ec3a)} datas=${length (ecDatas ec3a)} insts=${length (ecInsts ec3a)} classes=${length (ecClasses ec3a)} counters=${showCounters (ecCounters ec3a)}"
+                                                                  -- 实例表索引自检（派生索引 == 权威表）。只在 --debug-perf 下跑：
+                                                                  -- `ecInstsAudit` 会扫全实例表，生产路径不付这个成本。
+                                                                  _ = dbg! (if ecInstsAudit ec3a then "inst-index=ok" else "inst-index=MISMATCH")
+                                                                in Vuna.Compiler.Base.Common.bind (elabInstanceBodies recover decls classesAll datas1 globals ec3) (
+                                                                    \pi =>
+                                                                      case pi of
+                                                                        Pair instDefs0 ec4a =>
+                                                                          let
+                                                                            ec4 = resolveDictGoalsFix globals ec4a 8
+                                                                            instDefs = rezonkDefs ec4 instDefs0
+                                                                            _ = dbg! "instbodies-done"
+                                                                          in OkC (ElabCore datas1 ec4 defs instDefs globals projSpans)
+                                                                  )
+                                                        )
+                                                  )
+                                        )
+                              )
                     )
-                )
-                )
-            )
-        )
+          )
     )
-)
-)
 
 -- ---------------------------------------------------------------
 -- 非内建 `main` 类型的 Show 展示定义
@@ -903,9 +1090,10 @@ findDefByName name (d :: rest) = if dtDefName d == name then Just d else findDef
 -- （entry 用隐藏的 `runMain` 执行；行必须是 Nil 或内建效应行，否则入口检查报
 -- TC_UnhandledEffects）。返回 ("eff"/"other", 内层类型)；非动作 main 的内层就是它自己。
 mainActionOf : Term -> Pair String Term
-mainActionOf (ty@(TApp (TApp fn row _) arg _)) = case fn of
-  TGlobal g => if g == effTypeName then Pair "eff" arg else Pair "other" ty
-  _ => Pair "other" ty
+mainActionOf (ty@(TApp (TApp fn row _) arg _)) =
+  case fn of
+    TGlobal g => if g == effTypeName then Pair "eff" arg else Pair "other" ty
+    _ => Pair "other" ty
 mainActionOf ty = Pair "other" ty
 
 -- | 行项是否是 `Eff []`（语法上的 `Base.Effect.Core.Row.Nil`）。
@@ -922,44 +1110,57 @@ isBuiltinHostLabel _ = False
 
 -- 二元行的 Named 标签拆出真正的效应标签；其它形态原样返回。
 builtinHostLabelOf : Value -> Maybe Value
-builtinHostLabelOf (VNeutral (NGlobal g sp)) = if g == effNamedName then case sp of
-  _ :: label :: _ => Just label
-  _ => Nothing
-else Just (VNeutral (NGlobal g sp))
+builtinHostLabelOf (VNeutral (NGlobal g sp)) =
+  if g == effNamedName then
+    case sp of
+      _ :: label :: _ => Just label
+      _ => Nothing
+  else
+    Just (VNeutral (NGlobal g sp))
 builtinHostLabelOf _ = Nothing
 
 isBuiltinHostRowValue : Value -> Bool
-isBuiltinHostRowValue (VCon g args) = if g == effRowNilCtor then True
-else if g == effRowConsCtor then case args of
-  label :: tail :: _ => case builtinHostLabelOf label of
-    Just real => isBuiltinHostLabel real && isBuiltinHostRowValue tail
-    Nothing => False
-  _ => False
-else False
+isBuiltinHostRowValue (VCon g args) =
+  if g == effRowNilCtor then
+    True
+  else if g == effRowConsCtor then
+    case args of
+      label :: tail :: _ =>
+        case builtinHostLabelOf label of
+          Just real => isBuiltinHostLabel real && isBuiltinHostRowValue tail
+          Nothing => False
+      _ => False
+  else
+    False
 isBuiltinHostRowValue _ = False
 
 -- | 入口行检查：`main : Eff [] a` 或 `Eff [内建宿主效应] a`；其余行报未处理效应。
 mainEntryRowCheck : Ec -> List (Pair String Term) -> Span -> Term -> Check Int
-mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) = case fn of
-  TGlobal g => if g == effTypeName then
-    let
-      rowV = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] row)
-    in if isNilRowValue ec rowV then OkC 0
-    else if isBuiltinHostRowValue rowV then OkC 0
-    else case rowEffectLabels 64 ec rowV of
-      Just labels =>
-        if labels == [] then OkC 0
-        else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
-      Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
-  else OkC 0
-  _ => OkC 0
+mainEntryRowCheck ec bodies sp (TApp (TApp fn row _) _ _) =
+  case fn of
+    TGlobal g =>
+      if g == effTypeName then
+        let
+          rowV = force (ecDefTbl ec) (ecSolsP ec) defaultFuel (eval [] row)
+        in if isNilRowValue ec rowV then
+          OkC 0
+        else if isBuiltinHostRowValue rowV then
+          OkC 0
+        else
+          case rowEffectLabels 64 ec rowV of
+            Just labels => if labels == [] then OkC 0 else tcErr1 sp (UnhandledEffects (joinEffectLabels labels)) (joinEffectLabels labels)
+            Nothing => tcErr1 sp (UnhandledEffects (showTerm row)) (showTerm row)
+      else
+        OkC 0
+    _ => OkC 0
 mainEntryRowCheck ec bodies sp _ = OkC 0
 
 -- main 结果类型是否是内建展示类型（与 Codegen.Lower.mainShowRtIr 的集合一致）。
 mainShowBuiltinTy : Value -> Bool
-mainShowBuiltinTy (VNeutral n) = case n of
-  NGlobal g [] => memName g [intTypeName, natTypeName, strTypeName, boolTypeName, floatTypeName]
-  _ => False
+mainShowBuiltinTy (VNeutral n) =
+  case n of
+    NGlobal g [] => memName g [intTypeName, natTypeName, strTypeName, boolTypeName, floatTypeName]
+    _ => False
 mainShowBuiltinTy _ = False
 
 -- main 不能带显式/隐式参数：入口 `main` 是零参的；结果类型（拆掉动作层之后）出现
@@ -979,28 +1180,36 @@ mainArityErr sp ty =
 -- 收尾阶段合成 `@vuna@main_show`（以及 `Eff []` main 的 `@vuna@main_run`）；
 -- main 不存在、入口行、参数与 Show 的判断都在这里。
 synthMainShow : Ec -> List (Pair String Term) -> List DtDef -> Check (List DtDef)
-synthMainShow ec globals defs = case findDefByName "main" defs of
-  Nothing => OkC defs
-  Just mainDef =>
-    let
-      sp = case dtDefSpan mainDef of
-        Just s => s
-        Nothing => Span "" 0 0 0 0 0 0
-      ty = dtDefType mainDef
-      bodies = matchedBodies defs
-      p = mainActionOf ty
-      inner = secondOf p
-      kind = firstOf p
-    in if mainHasParams inner then mainArityErr sp inner
-    else Vuna.Compiler.Base.Common.bind (mainEntryRowCheck ec globals sp ty)
-      (\_ => synthMainShowInner ec globals defs bodies sp inner kind)
+synthMainShow ec globals defs =
+  case findDefByName "main" defs of
+    Nothing => OkC defs
+    Just mainDef =>
+      let
+        sp =
+          case dtDefSpan mainDef of
+            Just s => s
+            Nothing => Span "" 0 0 0 0 0 0
+        ty = dtDefType mainDef
+        bodies = matchedBodies defs
+        p = mainActionOf ty
+        inner = secondOf p
+        kind = firstOf p
+      in if mainHasParams inner then
+        mainArityErr sp inner
+      else
+        Vuna.Compiler.Base.Common.bind
+          (mainEntryRowCheck ec globals sp ty)
+          (\_ => synthMainShowInner ec globals defs bodies sp inner kind)
 
 -- 定义名 → 体的表（入口行检查与 Show 合成共用一次构造）。
 matchedBodies : List DtDef -> List (Pair String Term)
-matchedBodies defs = concatMap (\d => case dtDefBody d of
-  Just b => [Pair (dtDefName d) b]
-  Nothing => []
-) defs
+matchedBodies defs =
+  concatMap (
+      \d =>
+        case dtDefBody d of
+          Just b => [Pair (dtDefName d) b]
+          Nothing => []
+    ) defs
 
 synthMainShowInner : Ec -> List (Pair String Term) -> List DtDef -> List (Pair String Term) -> Span -> Term -> String -> Check (List DtDef)
 synthMainShowInner ec globals defs bodies sp inner kind =
@@ -1010,23 +1219,28 @@ synthMainShowInner ec globals defs bodies sp inner kind =
   in if mainShowBuiltinTy tyVal then OkC defs else synthMainShowGo ec globals defs sp tyVal
 
 synthMainShowGo : Ec -> List (Pair String Term) -> List DtDef -> Span -> Value -> Check (List DtDef)
-synthMainShowGo ec globals defs sp tyVal = case findClassByShortName "Show" (ecClasses ec) of
-  Nothing => mainShowMissing sp tyVal
-  Just cls =>
-    let
-      mname = classMethodProjection cls.dtClassMethods "show"
-      dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [tyVal])
-    in case searchInstanceIn globals emptyCtx ec dictTy sp of
-      ErrC e => mainShowMissing sp tyVal
-      OkC (Pair dictTerm _) =>
-        let
-          tyTerm = quote 0 tyVal
-          body =
-            TLam "x" Rig1 Nothing spanEmpty
-              (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0 0 0)) Rig1)
-          def =
-            DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
-        in OkC (rezonkDefs ec (append defs [def]))
+synthMainShowGo ec globals defs sp tyVal =
+  case findClassByShortName "Show" (ecClasses ec) of
+    Nothing => mainShowMissing sp tyVal
+    Just cls =>
+      let
+        mname = classMethodProjection cls.dtClassMethods "show"
+        dictTy = VNeutral (NGlobal (dictTypeName (dtClassName cls)) [tyVal])
+      in case searchInstanceIn globals emptyCtx ec dictTy sp of
+        ErrC e => mainShowMissing sp tyVal
+        OkC (Pair dictTerm _) =>
+          let
+            tyTerm = quote 0 tyVal
+            body =
+              TLam
+                "x"
+                Rig1
+                Nothing
+                spanEmpty
+                (TApp (TApp (TApp (TGlobal mname) tyTerm Rig0) dictTerm RigOmega) (TVar "x" 0 (Span "" 0 0 0 0 0 0)) Rig1)
+            def =
+              DtDef mainShowDefName (TPi "x" False Rig1 tyTerm (TGlobal strTypeName)) body (Just sp)
+          in OkC (rezonkDefs ec (append defs [def]))
 
 mainShowMissing : Span -> Value -> Check a
 mainShowMissing sp tyVal =
@@ -1045,109 +1259,135 @@ finishCore termAux decls core =
     globals = core.coreGlobals
     projSpans = core.coreProjSpans
   in case firstUnsolvedMemberGoal ec4 of
-    Just md => case firstUnsolvedMemberGoalSpan ec4 of
-      Just sp => tcErr1 sp (NoInstanceFound md) md
-      Nothing => tcErr1NoLoc (NoInstanceFound md) md
-    Nothing => case firstUnsolvedInterpGoal ec4 of
-      Just td => case firstUnsolvedInterpGoalSpan ec4 of
-        Just sp => tcErr1 sp (InterpNoInstance td) td
-        Nothing => tcErr1NoLoc (InterpNoInstance td) td
-      Nothing => case unsolvedMeta ec4 of
-        -- 延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
-        -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
-        Just m => case firstUnsolvedDictGoal ec4 of
-          Just sd =>
-            let
-              cands = dictCandidatesOf ec4 sd
-              createdOf = case firstUnsolvedDictGoalMeta ec4 of
-                Just gm => withMetaCreated ec4 gm
-                Nothing => withMetaCreated ec4 m
-            in case firstUnsolvedDictGoalSpan ec4 of
-              Just sp =>
-                onErrDiag (\d => createdOf (withField (FieldCandidates cands) d))
-                  (tcErr1 sp (NoInstanceFound sd) sd)
-              Nothing =>
-                onErrDiag (\d => createdOf (withField (FieldCandidates cands) d))
-                  (tcErr1NoLoc (NoInstanceFound sd) sd)
-          Nothing => ErrC (unsolvedMessage ec4 m)
+    Just md =>
+      case firstUnsolvedMemberGoalSpan ec4 of
+        Just sp => tcErr1 sp (NoInstanceFound md) md
+        Nothing => tcErr1NoLoc (NoInstanceFound md) md
+    Nothing =>
+      case firstUnsolvedInterpGoal ec4 of
+        Just td =>
+          case firstUnsolvedInterpGoalSpan ec4 of
+            Just sp => tcErr1 sp (InterpNoInstance td) td
+            Nothing => tcErr1NoLoc (InterpNoInstance td) td
         Nothing =>
-          let
-            extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
-            allDefs0 = rezonkDefs ec4 (append instDefs (append extra defs))
-          in Vuna.Compiler.Base.Common.bind (synthMainShow ec4 globals allDefs0) (\allDefs => let
-            -- 正文阶段不逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
-            -- 换成提升后的类型（O(n)）。
-            defsTblOut =
-              HashMap.insertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs)
-                (HashMap.fromList [])
-            globalsOut = map (\g => case HashMap.lookup (firstOf g) defsTblOut of
-              Just ty => Pair (firstOf g) ty
-              Nothing => g
-            ) globals
-            _ = dbg! "extradefs-done"
-          in Vuna.Compiler.Base.Common.bind (checkProgramUsage ec4 allDefs) (\ec5 => Vuna.Compiler.Base.Common.bind (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (\_ => let
-            -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
-            -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
-            _ = dbg! "termination-done"
-          in OkC
-            (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
-          )
-          )
-          )
+          case unsolvedMeta ec4 of
+            -- 延迟字典目标里「类参数已解出但实例搜索失败」的，优先报缺实例——
+            -- 否则用户只看到 unsolved metavariable，不知道缺的是哪个实例。
+            Just m =>
+              case firstUnsolvedDictGoal ec4 of
+                Just sd =>
+                  let
+                    cands = dictCandidatesOf ec4 sd
+                    createdOf =
+                      case firstUnsolvedDictGoalMeta ec4 of
+                        Just gm => withMetaCreated ec4 gm
+                        Nothing => withMetaCreated ec4 m
+                  in case firstUnsolvedDictGoalSpan ec4 of
+                    Just sp =>
+                      onErrDiag
+                        (\d => createdOf (withField (FieldCandidates cands) d))
+                        (tcErr1 sp (NoInstanceFound sd) sd)
+                    Nothing =>
+                      onErrDiag
+                        (\d => createdOf (withField (FieldCandidates cands) d))
+                        (tcErr1NoLoc (NoInstanceFound sd) sd)
+                Nothing => ErrC (unsolvedMessage ec4 m)
+            Nothing =>
+              let
+                extra = extraDefsOf globals ec4 projSpans (append instDefs defs)
+                allDefs0 = rezonkDefs ec4 (append instDefs (append extra defs))
+              in Vuna.Compiler.Base.Common.bind (synthMainShow ec4 globals allDefs0) (
+                  \allDefs =>
+                    let
+                      -- 正文阶段不逐定义重建 globals（O(n²)）；这里用最终定义集一次性把签名类型
+                      -- 换成提升后的类型（O(n)）。
+                      defsTblOut = HashMap.insertAll (map (\x => Pair (dtDefName x) (dtDefType x)) allDefs) (HashMap.fromList [])
+                      globalsOut =
+                        map (
+                            \g =>
+                              case HashMap.lookup (firstOf g) defsTblOut of
+                                Just ty => Pair (firstOf g) ty
+                                Nothing => g
+                          ) globals
+                      _ = dbg! "extradefs-done"
+                    in Vuna.Compiler.Base.Common.bind (checkProgramUsage ec4 allDefs) (
+                        \ec5 =>
+                          Vuna.Compiler.Base.Common.bind (checkTerminationDeclsWith (declFunNames decls) (append termAux decls)) (
+                              \_ =>
+                                let
+                                  -- 用量检查就地发射的 warning 经 checkProgramUsage 返回的新 Ec 线程到出口；
+                                  -- 丢掉这个 Ec 会静默丢失全部 UN_* 告警（warning 由 Ec 显式线程，不是全局收集器）。
+                                  _ = dbg! "termination-done"
+                                in OkC (DtProgram datas1 allDefs (ecGoals ec5) (ecSols ec5) globalsOut (ecInsts ec5) (ecClasses ec5) (ecNext ec5) (HashMap.toList (ecDepthTbl ec5)) (ecWarnings ec5))
+                            )
+                      )
+                )
 
 export elabProgramGoWithAux : Ec -> List (Pair String Term) -> List RecordMeta -> List Decl -> List Decl -> Check DtProgram
 elabProgramGoWithAux startEc startGlobals records termAux decls =
-  Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux False startEc startGlobals records decls)
+  Vuna.Compiler.Base.Common.bind
+    (elabProgramCoreWithAux False startEc startGlobals records decls)
     (\core => finishCore termAux decls core)
 
 -- 用当前解重新 zonk 定义体（延迟字典元变量 → 实例项）；axiom 无体，原样保留。
 export rezonkDefs : Ec -> List DtDef -> List DtDef
-rezonkDefs ec defs = map (\d => case dtDefBody d of
-  Just body =>
-    if termHasAnyMeta body then DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d)
-    else d
-  Nothing => d
-) defs
+rezonkDefs ec defs =
+  map (
+      \d =>
+        case dtDefBody d of
+          Just body => if termHasAnyMeta body then DtDef (dtDefName d) (dtDefType d) (substDictTerm ec body) (dtDefSpan d) else d
+          Nothing => d
+    ) defs
 
 -- 程序级字典目标收敛：反复回填直到字典目标不再减少（最多 n 轮，防振荡）。
 -- 冷路径：没有目标时不需要跑（全包在 bodies 收尾处通常只剩个位数目标）。
 export resolveDictGoalsFix : List (Pair String Term) -> Ec -> Int -> Ec
-resolveDictGoalsFix globals ec n = case ecPending ec of
-  [] => ec
-  _ => resolveDictGoalsFixGo globals ec n
+resolveDictGoalsFix globals ec n =
+  case ecPending ec of
+    [] => ec
+    _ => resolveDictGoalsFixGo globals ec n
 
 resolveDictGoalsFixGo : List (Pair String Term) -> Ec -> Int -> Ec
 resolveDictGoalsFixGo globals ec n =
   let
     ec2 = resolveDictGoals globals ec
-  in if n <= 0 then ec2
-  else if length (ecPending ec2) < length (ecPending ec) then resolveDictGoalsFixGo globals ec2 (n - 1)
-  else ec2
+  in if n <= 0 then
+    ec2
+  else if length (ecPending ec2) < length (ecPending ec) then
+    resolveDictGoalsFixGo globals ec2 (n - 1)
+  else
+    ec2
 
 -- 未解元变量若来自洞，报洞的目标（而不是光秃秃的编号）。
 export unsolvedMessage : Ec -> Int -> Diagnostic
-unsolvedMessage ec m = case findGoal m (ecGoals ec) of
-  Just g =>
-    let
-      -- 命名洞在诊断里带上名字；位置进 label（不把 `file:line:col` 拼进消息）。
-      spot = if g.dtGoalName == "" then "?" else "?" ++ g.dtGoalName
-      goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
-      detail = "${spot} with goal ${goalTy}"
-    in withMetaCreated ec g.dtGoalMeta
-      (withFallbackSpan g.dtGoalSpan (withField (FieldSpan "goal" g.dtGoalSpan) (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail]))))
-  Nothing =>
-    let
-      num = strFromInt m
-      hint = metaOwnerHint ec m
-    in withMetaCreated ec m
-      (withField (FieldName num) (withField (FieldNote hint) (tcMsg (UnsolvedMetavar num hint) [num, hint])))
+unsolvedMessage ec m =
+  case findGoal m (ecGoals ec) of
+    Just g =>
+      let
+        -- 命名洞在诊断里带上名字；位置进 label（不把 `file:line:col` 拼进消息）。
+        spot = if g.dtGoalName == "" then "?" else "?" ++ g.dtGoalName
+        goalTy = showValueAt (ctxDepthOf g) g.dtGoalType
+        detail = "${spot} with goal ${goalTy}"
+      in withMetaCreated
+        ec
+        g.dtGoalMeta
+        (withFallbackSpan g.dtGoalSpan (withField (FieldSpan "goal" g.dtGoalSpan) (withField (FieldNote "goal: ${goalTy}") (tcMsg (UnsolvedHole detail) [detail]))))
+    Nothing =>
+      let
+        num = strFromInt m
+        hint = metaOwnerHint ec m
+      in withMetaCreated
+        ec
+        m
+        (withField (FieldName num) (withField (FieldNote hint) (tcMsg (UnsolvedMetavar num hint) [num, hint])))
 
 -- 未解元变量的归属提示：扫已精化的定义体与类型，指出它出现在哪个定义里（否则只有 ?m，
 -- 在一个上万行的程序里无从定位）。
 export metaOwnerHint : Ec -> Int -> String
-metaOwnerHint ec m = case findDefWithMeta (ecDefs ec) m of
-  Just name => " (in `${name}`)"
-  Nothing => ""
+metaOwnerHint ec m =
+  case findDefWithMeta (ecDefs ec) m of
+    Just name => " (in `${name}`)"
+    Nothing => ""
 
 export findDefWithMeta : List (Pair String Term) -> Int -> Maybe String
 findDefWithMeta [] m = Nothing
@@ -1238,8 +1478,11 @@ export record DtGoalInfo(..) where
 
 export goalInfoOf : List (Pair Int Value) -> DtGoal -> DtGoalInfo
 goalInfoOf sols g =
-  DtGoalInfo g.dtGoalSpan (showValueAt (ctxDepthOf g) (zonkGoal sols g.dtGoalType))
-    (ctxEntriesOf g.dtGoalCtx) g.dtGoalName
+  DtGoalInfo
+    g.dtGoalSpan
+    (showValueAt (ctxDepthOf g) (zonkGoal sols g.dtGoalType))
+    (ctxEntriesOf g.dtGoalCtx)
+    g.dtGoalName
 
 -- 洞目标里的类型可能仍含已解元变量：用当前解表 force 一遍再 show。
 export zonkGoal : List (Pair Int Value) -> Value -> Value
@@ -1252,37 +1495,45 @@ ctxEntriesOf items = ctxEntriesAt items 0 (length items)
 export ctxEntriesAt : List (Pair String Term) -> Int -> Int -> List (Pair String String)
 ctxEntriesAt [] idx depth = []
 ctxEntriesAt ((Pair name ty) :: rest) idx depth =
-  Pair name (showValueAt depth (eval (ctxEnvAt (Pair name ty :: rest) 0 depth) (shift 0 (idx + 1) ty)))
+  Pair
+    name
+    (showValueAt depth (eval (ctxEnvAt (Pair name ty :: rest) 0 depth) (shift 0 (idx + 1) ty)))
     :: ctxEntriesAt rest (idx + 1) depth
 
 export goalsOfProgram : List Decl -> Check (List DtGoalInfo)
 goalsOfProgram decls =
-  Vuna.Compiler.Base.Common.bind (elabProgramFull decls)
+  Vuna.Compiler.Base.Common.bind
+    (elabProgramFull decls)
     (\prog => OkC (map (goalInfoOf (dtProgSols prog)) (dtProgGoals prog)))
 
 -- 工具查询的**容错**入口：洞未解（此时严格收尾会因 TC_UnsolvedHole 失败）时仍返回
 -- 洞目标与上下文快照；用量/终止性校验也跳过（它们不影响洞的显示）。
 -- 只给 `vuna goal` / LSP hover 用；check / compile / build 仍走 `elabProgramFull` 的严格收尾。
 export goalsOfProgramTolerant : List Decl -> Check (List DtGoalInfo)
-goalsOfProgramTolerant decls = Vuna.Compiler.Base.Common.bind (prepareDecls decls) (\p => case p of
-  Pair records ds =>
-    Vuna.Compiler.Base.Common.bind (expandDerivings ds)
-      (\ds2 => Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux False ecEmpty preludeGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
-)
+goalsOfProgramTolerant decls =
+  Vuna.Compiler.Base.Common.bind (prepareDecls decls) (
+      \p =>
+        case p of
+          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux False ecEmpty preludeGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
+    )
 
 -- 容错洞查询的**注入环境**版本：起始 Ec / globals / termAux 由调用方给（增量路径把
 -- 依赖包与干净同包模块的产物预置进去），只对 `decls` 做容错精化并取洞目标。
 -- 与 `goalsOfProgramTolerant` 的差别只有环境来源，语义一致（未解洞不报错）。
 export elabGoalsWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl -> Check (List DtGoalInfo)
-elabGoalsWithPrepared startEc startGlobals termAux decls = Vuna.Compiler.Base.Common.bind (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls)) (\p => case p of
-  Pair records ds =>
-    Vuna.Compiler.Base.Common.bind (expandDerivings ds)
-      (\ds2 => Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux False startEc startGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
-)
+elabGoalsWithPrepared startEc startGlobals termAux decls =
+  Vuna.Compiler.Base.Common.bind
+    (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls))
+    (
+      \p =>
+        case p of
+          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => Vuna.Compiler.Base.Common.bind (elabProgramCoreWithAux False startEc startGlobals records ds2) (\core => OkC (map (goalInfoOf (ecSols core.coreEc)) (ecGoals core.coreEc))))
+    )
 
 export elabProgram : List Decl -> Check (Pair (List DtData) (List DtDef))
 elabProgram decls =
-  Vuna.Compiler.Base.Common.bind (elabProgramFull decls)
+  Vuna.Compiler.Base.Common.bind
+    (elabProgramFull decls)
     (\prog => OkC (Pair (dtProgDatas prog) (dtProgDefs prog)))
 
 -- 接口摘要：从依赖包的缓存 DtProgram 重建精化起始状态（datas / insts / classes /
@@ -1334,7 +1585,9 @@ candidateLe (Candidate text _ _) (Candidate text2 _ _) = text <= text2
 -- | 构造实例候选（带声明 span 与头/目标拒绝原因）。
 instCandidate : String -> DtInst -> Candidate
 instCandidate shown i =
-  Candidate (dtInstName i) i.dtInstSpan
+  Candidate
+    (dtInstName i)
+    i.dtInstSpan
     (Just "instance head ${showTerm i.dtInstHead} does not match goal ${shown}")
 
 -- | 从 (Dict_Class Arg) 文本取族名。
@@ -1342,9 +1595,10 @@ dictFamilyOfShown : String -> String
 dictFamilyOfShown s =
   let
     cs = strUnpack s
-    body = case cs of
-      c :: rest => if c == 40 then rest else cs
-      [] => []
+    body =
+      case cs of
+        c :: rest => if c == 40 then rest else cs
+        [] => []
   in strPack (takeWhileDictChar body [])
 
 -- | 取到空格/右括号为止的字符。
@@ -1355,7 +1609,8 @@ takeWhileDictChar (c :: rest) acc =
 
 -- | 元变量创建点：有登记则附 `fields.span name=created` 与 note（登记表在 Ec 上）。
 withMetaCreated : Ec -> Int -> Diagnostic -> Diagnostic
-withMetaCreated ec m d = case metaSpanOf ec m of
-  Nothing => d
-  Just sp =>
-    withField (FieldSpan "created" sp) (withField (FieldNote "metavariable created here") d)
+withMetaCreated ec m d =
+  case metaSpanOf ec m of
+    Nothing => d
+    Just sp =>
+      withField (FieldSpan "created" sp) (withField (FieldNote "metavariable created here") d)

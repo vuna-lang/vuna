@@ -21,12 +21,14 @@ serve a addr = Server.serve a.appRoutes addr
 
 -- | 进程入口：第一个参数是监听地址（缺省 [defaultAddr]；`:0` 由服务端打印实际端口）。
 export main : App.App -> Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int
-main a = do
-  args <- argsGetArgs
-  serve a (addrOf args)
+main a =
+  do
+    args <- argsGetArgs
+    serve a (addrOf args)
 
 -- | 取第一个参数作为监听地址。
 addrOf : List String -> String
-addrOf args = case args of
-  a :: _ => a
-  [] => defaultAddr
+addrOf args =
+  case args of
+    a :: _ => a
+    [] => defaultAddr

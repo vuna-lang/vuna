@@ -99,9 +99,10 @@ lookupValue name ((Pair key value) :: rest) =
 
 -- | 内部：该键是否已取值（判重复用）。
 hasValue : String -> List (Pair String String) -> Bool
-hasValue name values = case lookupValue name values of
-  Just _ => True
-  Nothing => False
+hasValue name values =
+  case lookupValue name values of
+    Just _ => True
+    Nothing => False
 
 -- ---------------------------------------------------------------
 -- 解析
@@ -109,35 +110,44 @@ hasValue name values = case lookupValue name values of
 -- | 工具命令共用入口：`cmd` 只用于错误文案，`specs` 是允许的 flag 表，`args` 是去掉子命令后
 -- 的参数。
 export parseToolArgs : String -> List ArgSpec -> List String -> Check Parsed
-parseToolArgs cmd specs args = case parseGo False specs args [] [] [] of
-  POk parsed => OkC parsed
-  PErr e => err (argErrText cmd e)
+parseToolArgs cmd specs args =
+  case parseGo False specs args [] [] [] of
+    POk parsed => OkC parsed
+    PErr e => err (argErrText cmd e)
 
 -- | 与 [parseToolArgs] 相同，但对未知 flag 追加「最近候选」建议（候选即允许表本身）。
 export parseCmdArgsOf : String -> List ArgSpec -> List String -> Check Parsed
-parseCmdArgsOf cmd specs args = case parseGo False specs args [] [] [] of
-  POk parsed => OkC parsed
-  PErr e => err (argErrTextHinted cmd specs e)
+parseCmdArgsOf cmd specs args =
+  case parseGo False specs args [] [] [] of
+    POk parsed => OkC parsed
+    PErr e => err (argErrTextHinted cmd specs e)
 
 -- | 内部：错误文案；未知 flag 先查已删提示，再给候选建议。
 argErrTextHinted : String -> List ArgSpec -> ArgErr -> String
-argErrTextHinted cmd specs (UnknownFlag raw) = case removedHintFor raw of
-  Just hint => "${raw} has been removed; ${hint}"
-  Nothing => case suggestOne (map specName specs) (flagNameOf raw) of
-    Just guess => "unknown flag for `${cmd}`: ${raw}; did you mean `--${guess}`?"
-    Nothing => "unknown flag for `${cmd}`: ${raw}"
+argErrTextHinted cmd specs (UnknownFlag raw) =
+  case removedHintFor raw of
+    Just hint => "${raw} has been removed; ${hint}"
+    Nothing =>
+      case suggestOne (map specName specs) (flagNameOf raw) of
+        Just guess => "unknown flag for `${cmd}`: ${raw}; did you mean `--${guess}`?"
+        Nothing => "unknown flag for `${cmd}`: ${raw}"
 argErrTextHinted cmd specs e = argErrText cmd e
 
 -- | 内部：参数扫描主体。`literal` 为真时后续一切都当位置参数（`--` 之后）；累积器都是倒序，
 -- 结束时统一 reverse。
 parseGo : Bool -> List ArgSpec -> List String -> List String -> List (Pair String String) -> List String -> ParseOut
-parseGo literal specs args flags values items = case args of
-  [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
-  arg :: rest =>
-    if literal then parseGo True specs rest flags values (arg :: items)
-    else if arg == "--" then parseGo True specs rest flags values items
-    else if isFlagLike arg then parseFlag specs arg rest flags values items
-    else parseGo False specs rest flags values (arg :: items)
+parseGo literal specs args flags values items =
+  case args of
+    [] => POk (Parsed (reverse flags) (reverse values) (reverse items))
+    arg :: rest =>
+      if literal then
+        parseGo True specs rest flags values (arg :: items)
+      else if arg == "--" then
+        parseGo True specs rest flags values items
+      else if isFlagLike arg then
+        parseFlag specs arg rest flags values items
+      else
+        parseGo False specs rest flags values (arg :: items)
 
 -- | 内部：`-` 单独出现按位置参数（stdin 约定）；其余以 `-` 开头的都当 flag。
 isFlagLike : String -> Bool
@@ -146,8 +156,10 @@ isFlagLike arg = startsWith "-" arg && arg /= "-"
 -- | 内部：去掉 `--` / `-` 前缀得到 flag 名。
 flagNameOf : String -> String
 flagNameOf arg =
-  if startsWith "--" arg then substring 2 (byteLength arg - 2) arg
-  else substring 1 (byteLength arg - 1) arg
+  if startsWith "--" arg then
+    substring 2 (byteLength arg - 2) arg
+  else
+    substring 1 (byteLength arg - 1) arg
 
 -- | 内部：按 flag 形态消费参数——`BoolFlag` 只记名字（重复即错），`ValueFlag` 取一个值（重复
 -- 或紧跟另一个 flag 即错），`MultiValueFlag` 可重复但同样要求有值。
@@ -157,21 +169,28 @@ parseFlag specs raw rest flags values items =
     name = flagNameOf raw
   in case specOf name specs of
     Nothing => PErr (UnknownFlag raw)
-    Just spec => case spec of
-      BoolFlag _ =>
-        if memName name flags then PErr (DuplicateFlag raw)
-        else parseGo False specs rest (name :: flags) values items
-      ValueFlag _ => if hasValue name values then PErr (DuplicateFlag raw)
-      else case rest of
-        [] => PErr (MissingValue raw)
-        value :: more =>
-          if isFlagLike value then PErr (MissingValue raw)
-          else parseGo False specs more flags (Pair name value :: values) items
-      MultiValueFlag _ => case rest of
-        [] => PErr (MissingValue raw)
-        value :: more =>
-          if isFlagLike value then PErr (MissingValue raw)
-          else parseGo False specs more flags (Pair name value :: values) items
+    Just spec =>
+      case spec of
+        BoolFlag _ =>
+          if memName name flags then
+            PErr (DuplicateFlag raw)
+          else
+            parseGo False specs rest (name :: flags) values items
+        ValueFlag _ =>
+          if hasValue name values then
+            PErr (DuplicateFlag raw)
+          else
+            case rest of
+              [] => PErr (MissingValue raw)
+              value :: more => if isFlagLike value then PErr (MissingValue raw) else parseGo False specs more flags (Pair name value :: values) items
+        MultiValueFlag _ =>
+          case rest of
+            [] => PErr (MissingValue raw)
+            value :: more =>
+              if isFlagLike value then
+                PErr (MissingValue raw)
+              else
+                parseGo False specs more flags (Pair name value :: values) items
 
 -- ---------------------------------------------------------------
 -- 错误文案
@@ -184,26 +203,36 @@ dashFlag name = "--${name}"
 -- `CompilerCli.removedFlagHint`；这里只放「只属于工具命令」的条目。
 toolRemovedFlagHint : String -> Maybe String
 toolRemovedFlagHint flag =
-  if flag == dashFlag "with-comments" then Just "doc renders doc comments by default; drop the flag"
-  else if flag == dashFlag "suite" then Just "run `vuna dev suite [FILE]` instead"
-  else if flag == dashFlag "listen" then Just "run `vuna repl serve --listen ADDR` instead"
-  else if flag == dashFlag "client" then Just "run `vuna repl client --addr ADDR` instead"
-  else if flag == dashFlag "find" then Just "run `vuna map find <Module.name>` instead"
-  else if flag == dashFlag "impact" then Just "run `vuna map impact <Module.name>` instead"
-  else if flag == dashFlag "modules" then Just "run `vuna map` (module overview is the default)"
-  else Nothing
+  if flag == dashFlag "with-comments" then
+    Just "doc renders doc comments by default; drop the flag"
+  else if flag == dashFlag "suite" then
+    Just "run `vuna dev suite [FILE]` instead"
+  else if flag == dashFlag "listen" then
+    Just "run `vuna repl serve --listen ADDR` instead"
+  else if flag == dashFlag "client" then
+    Just "run `vuna repl client --addr ADDR` instead"
+  else if flag == dashFlag "find" then
+    Just "run `vuna map find <Module.name>` instead"
+  else if flag == dashFlag "impact" then
+    Just "run `vuna map impact <Module.name>` instead"
+  else if flag == dashFlag "modules" then
+    Just "run `vuna map` (module overview is the default)"
+  else
+    Nothing
 
 -- | 内部：先查工具侧 hint 表，再回落编译器包的真源。
 removedHintFor : String -> Maybe String
-removedHintFor flag = case toolRemovedFlagHint flag of
-  Just hint => Just hint
-  Nothing => removedFlagHint flag
+removedHintFor flag =
+  case toolRemovedFlagHint flag of
+    Just hint => Just hint
+    Nothing => removedFlagHint flag
 
 -- | 渲染参数错误；`cmd` 是完整命令名（如 `"vuna fmt"`），只用在不涉及已删 flag 的文案里。
 export argErrText : String -> ArgErr -> String
-argErrText cmd (UnknownFlag flag) = case removedHintFor flag of
-  Just hint => "${flag} has been removed; ${hint}"
-  Nothing => "unknown flag for `${cmd}`: ${flag}"
+argErrText cmd (UnknownFlag flag) =
+  case removedHintFor flag of
+    Just hint => "${flag} has been removed; ${hint}"
+    Nothing => "unknown flag for `${cmd}`: ${flag}"
 argErrText cmd (DuplicateFlag flag) = "duplicate flag: ${flag}"
 argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 
@@ -212,30 +241,39 @@ argErrText cmd (MissingValue flag) = "flag requires a value: ${flag}"
 -- ---------------------------------------------------------------
 -- | 读一个文本文件：先判存在、再判目录，最后才读。
 export readText : Member nFs FsOp r => String -> Eff r (Check String)
-readText path = do
-  exists <- fsFileExists path
-  if exists then do
-    isDir <- fsIsDirectory path
-    if isDir then pure (err "is a directory: ${path}")
-    else do
-      content <- fsReadFile path
-      pure (OkC content)
-  else pure (err "no such file: ${path}")
+readText path =
+  do
+    exists <- fsFileExists path
+    if exists then
+      do
+        isDir <- fsIsDirectory path
+        if isDir then
+          pure (err "is a directory: ${path}")
+        else
+          do
+            content <- fsReadFile path
+            pure (OkC content)
+    else
+      pure (err "no such file: ${path}")
 
 -- | 要求路径存在（文件或目录均可）。
 export requireExists : Member nFs FsOp r => String -> Eff r (Check Int)
-requireExists path = do
-  exists <- fsFileExists path
-  pure (if exists then OkC 0 else err "no such file: ${path}")
+requireExists path =
+  do
+    exists <- fsFileExists path
+    pure (if exists then OkC 0 else err "no such file: ${path}")
 
 -- | 要求路径存在且是目录。
 export requireDirectory : Member nFs FsOp r => String -> Eff r (Check Int)
-requireDirectory path = do
-  exists <- fsFileExists path
-  if exists then do
-    isDir <- fsIsDirectory path
-    pure (if isDir then OkC 0 else err "not a directory: ${path}")
-  else pure (err "no such directory: ${path}")
+requireDirectory path =
+  do
+    exists <- fsFileExists path
+    if exists then
+      do
+        isDir <- fsIsDirectory path
+        pure (if isDir then OkC 0 else err "not a directory: ${path}")
+    else
+      pure (err "no such directory: ${path}")
 
 -- ---------------------------------------------------------------
 -- 目录创建（fsMakeDir 只建一层）
@@ -249,15 +287,18 @@ parentOf path =
 
 -- | 内部：按最后一个 `/` 拆出父目录文本（可能为空，由 [Vuna.Cli.Args.parentOf] 兜底）。
 parentText : String -> String
-parentText path = case splitLastSlash (strUnpack path) [] [] of
-  Pair parent _ => parent
+parentText path =
+  case splitLastSlash (strUnpack path) [] [] of
+    Pair parent _ => parent
 
 -- | 内部：在最后一个 `/` 处把路径拆成 `Pair 父 名`，两段都按原字节还原。
 splitLastSlash : List Int -> List Int -> List String -> Pair String String
 splitLastSlash [] current parts = Pair (joinSlashParts parts) (strPack (reverse current))
 splitLastSlash (c :: rest) current parts =
-  if c == 47 then splitLastSlash rest [] (strPack (reverse current) :: parts)
-  else splitLastSlash rest (c :: current) parts
+  if c == 47 then
+    splitLastSlash rest [] (strPack (reverse current) :: parts)
+  else
+    splitLastSlash rest (c :: current) parts
 
 -- | 内部：把按 `/` 拆出的片段拼回。`parts` 是倒序累积的，拼接前先 reverse（否则绝对路径会
 -- 丢首斜杠）。
@@ -279,18 +320,25 @@ ensureDirPath path = ensureDirPathGo (strLength path + 2) path
 
 -- | 内部：`ensureDirPath` 的带 fuel 递归实现（`""` / `"."` / `"/"` 视为已到根）。
 ensureDirPathGo : Member nFs FsOp r => Int -> String -> Eff r Int
-ensureDirPathGo fuel path = if fuel <= 0 then pure 1
-else if path == "" || path == "." || path == "/" then pure 0
-else do
-  safe <- pathExistsDirSafe path
-  if safe then pure 0
-  else do
-    _ <- ensureDirPathGo (fuel - 1) (parentOf path)
-    safe2 <- pathExistsDirSafe path
-    if safe2 then pure 0 else fsMakeDir path
+ensureDirPathGo fuel path =
+  if fuel <= 0 then
+    pure 1
+  else if path == "" || path == "." || path == "/" then
+    pure 0
+  else
+    do
+      safe <- pathExistsDirSafe path
+      if safe then
+        pure 0
+      else
+        do
+          _ <- ensureDirPathGo (fuel - 1) (parentOf path)
+          safe2 <- pathExistsDirSafe path
+          if safe2 then pure 0 else fsMakeDir path
 
 -- | 内部：路径存在且是目录；不存在返回 `False`（不抛异常）。
 pathExistsDirSafe : Member nFs FsOp r => String -> Eff r Bool
-pathExistsDirSafe path = do
-  exists <- fsFileExists path
-  if exists then fsIsDirectory path else pure False
+pathExistsDirSafe path =
+  do
+    exists <- fsFileExists path
+    if exists then fsIsDirectory path else pure False

@@ -86,10 +86,13 @@ digStep p _ =
 -- | 内部：逆序数字串上的进位；`Nothing` 表示溢出（`9.99… → 10.00…`）。
 carryRev : List Int -> Maybe (List Int)
 carryRev [] = Nothing
-carryRev (d :: rest) = if d == 9 then case carryRev rest of
-  Nothing => Nothing
-  Just r => Just (0 :: r)
-else Just (d + 1 :: rest)
+carryRev (d :: rest) =
+  if d == 9 then
+    case carryRev rest of
+      Nothing => Nothing
+      Just r => Just (0 :: r)
+  else
+    Just (d + 1 :: rest)
 
 -- | 内部：去掉逆序数字串的前导零。
 trimZerosRev : List Int -> List Int
@@ -98,9 +101,10 @@ trimZerosRev (d :: rest) = if d == 0 then trimZerosRev rest else d :: rest
 
 -- | 内部：去掉正序数字串尾部的零；全零时保留单个 `0`。
 trimZeros : List Int -> List Int
-trimZeros ds = case reverse (trimZerosRev (reverse ds)) of
-  [] => [0]
-  r => r
+trimZeros ds =
+  case reverse (trimZerosRev (reverse ds)) of
+    [] => [0]
+    r => r
 
 -- | 内部：数字串长度。
 dsLen : List Int -> Int
@@ -125,45 +129,55 @@ expSuffix e =
 
 -- | 内部：科学计数法正文 `d.ddde±xx`（只有一位整数位；空数字串退化为 `0e+00`）。
 expForm : Int -> List Int -> String
-expForm e (d :: rest) = case rest of
-  [] => strFromInt d ++ "e" ++ expSuffix e
-  _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
+expForm e (d :: rest) =
+  case rest of
+    [] => strFromInt d ++ "e" ++ expSuffix e
+    _ => strFromInt d ++ "." ++ digitsText rest ++ "e" ++ expSuffix e
 expForm e [] = "0e+00"
 
 -- | 内部：定点正文（按指数决定小数点位置，缺位补零、多余位截断；负指数时整数部分为 `0`）。
 fixedForm : Int -> List Int -> String
-fixedForm e ds = if e >= 0 then
-  let
-    intLen = e + 1
-    len = dsLen ds
-  in if len <= intLen then digitsText ds ++ zerosText (intLen - len) ++ "."
-  else digitsText (take intLen ds) ++ "." ++ digitsText (drop intLen ds)
-else "0." ++ zerosText (0 - e - 1) ++ digitsText ds
+fixedForm e ds =
+  if e >= 0 then
+    let
+      intLen = e + 1
+      len = dsLen ds
+    in if len <= intLen then digitsText ds ++ zerosText (intLen - len) ++ "." else digitsText (take intLen ds) ++ "." ++ digitsText (drop intLen ds)
+  else
+    "0." ++ zerosText (0 - e - 1) ++ digitsText ds
 
 -- | `Float` 的规范展示文本：与 `%.12g` 对齐（12 位有效数字，指数 `e < -4` 或 `e >= 12` 时用科学计数法）；`nan` / `inf` / `-inf` / `-0.` 特判。
 export floatRender : Float -> String
-floatRender x = if x /= x then "nan"
-else
-  let
-    inf = 1.0 / 0.0
-  in if x == inf then "inf"
-  else if x == 0.0 - inf then "-inf"
-  else if x == 0.0 then if 1.0 / x < 0.0 then "-0." else "0."
+floatRender x =
+  if x /= x then
+    "nan"
   else
     let
-      neg = x < 0.0
-      a = if neg then 0.0 - x else x
-      p = foldl (\q => \i => normStep q i) (Pair 0 a) (range 0 700)
-      e0 = firstOf p
-      m0 = secondOf p
-      dp = foldl (\q => \i => digStep q i) (Pair m0 []) (range 0 12)
-      d13 = floatToInt (firstOf dp)
-      raw = secondOf dp
-      ed = if d13 >= 5 then case carryRev (reverse raw) of
-        Just r => Pair e0 (trimZeros (reverse r))
-        Nothing => Pair (e0 + 1) (trimZeros (1 :: map (\_ => 0) (range 0 11)))
-      else Pair e0 (trimZeros raw)
-      e = firstOf ed
-      ds = secondOf ed
-      body = if e < 0 - 4 || e >= 12 then expForm e ds else fixedForm e ds
-    in if neg then "-" ++ body else body
+      inf = 1.0 / 0.0
+    in if x == inf then
+      "inf"
+    else if x == 0.0 - inf then
+      "-inf"
+    else if x == 0.0 then
+      if 1.0 / x < 0.0 then "-0." else "0."
+    else
+      let
+        neg = x < 0.0
+        a = if neg then 0.0 - x else x
+        p = foldl (\q => \i => normStep q i) (Pair 0 a) (range 0 700)
+        e0 = firstOf p
+        m0 = secondOf p
+        dp = foldl (\q => \i => digStep q i) (Pair m0 []) (range 0 12)
+        d13 = floatToInt (firstOf dp)
+        raw = secondOf dp
+        ed =
+          if d13 >= 5 then
+            case carryRev (reverse raw) of
+              Just r => Pair e0 (trimZeros (reverse r))
+              Nothing => Pair (e0 + 1) (trimZeros (1 :: map (\_ => 0) (range 0 11)))
+          else
+            Pair e0 (trimZeros raw)
+        e = firstOf ed
+        ds = secondOf ed
+        body = if e < 0 - 4 || e >= 12 then expForm e ds else fixedForm e ds
+      in if neg then "-" ++ body else body

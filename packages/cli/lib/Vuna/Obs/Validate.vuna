@@ -47,9 +47,10 @@ export record ValidateReport(..) where
 
 -- | 校验一个 trace 文件：读盘 + 规则。文件不存在/是目录 = `ErrC`（调用方映射退出码 2）。
 export validateTraceFile : Member nFs FsOp r => String -> Eff r (Check ValidateReport)
-validateTraceFile path = do
-  traceR <- readTraceFull path
-  pure (fmap validateTrace traceR)
+validateTraceFile path =
+  do
+    traceR <- readTraceFull path
+    pure (fmap validateTrace traceR)
 
 -- | 纯校验入口：`ObsTrace` -> 报告（不读盘）。
 export validateTrace : ObsTrace -> ValidateReport
@@ -63,7 +64,10 @@ validateTrace trace =
     truncIssues = truncationWarnings trace.traceWarnings
   in ValidateReport
     (append schemaIssues (append fieldIssues (append nameIssues (append orderIssues truncIssues))))
-    (length evs) (countPh "X" evs) (countPh "C" evs) (countPh "i" evs)
+    (length evs)
+    (countPh "X" evs)
+    (countPh "C" evs)
+    (countPh "i" evs)
 
 -- | 内部：数某个 `ph` 的事件条数。
 countPh : String -> List (Pair Int ObsEvent) -> Int
@@ -96,13 +100,17 @@ truncationWarnings (w :: rest) = warningAt 0 w :: truncationWarnings rest
 -- | 内部：首事件必须是元数据，且 schema / 名字正确；`M` 出现在其它位置是 error。
 checkSchema : List (Pair Int ObsEvent) -> List ValidateIssue
 checkSchema [] =
-  [ errorAt 0 "empty trace: expected a metadata event (ph:\"M\", args.schema=\"vuna-obs 1\") as the first line"
+  [
+    errorAt
+      0
+      "empty trace: expected a metadata event (ph:\"M\", args.schema=\"vuna-obs 1\") as the first line"
   ]
-checkSchema ((Pair line ev) :: rest) = case ev of
-  ObsMetaEvent m => append (schemaOf m line) (strayMeta rest)
-  _ =>
-    errorAt line "first event must be metadata (ph:\"M\"), got ph:\"${eventPh ev}\""
-      :: strayMeta rest
+checkSchema ((Pair line ev) :: rest) =
+  case ev of
+    ObsMetaEvent m => append (schemaOf m line) (strayMeta rest)
+    _ =>
+      errorAt line "first event must be metadata (ph:\"M\"), got ph:\"${eventPh ev}\""
+        :: strayMeta rest
 
 -- | 内部：元数据的 `args.schema` 与事件名两项检查。
 schemaOf : ObsMetaData -> Int -> List ValidateIssue
@@ -114,10 +122,12 @@ schemaOf m line =
 -- | 内部：除首行外不允许再出现元数据事件。
 strayMeta : List (Pair Int ObsEvent) -> List ValidateIssue
 strayMeta [] = []
-strayMeta ((Pair line ev) :: rest) = append (case ev of
-  ObsMetaEvent _ => [errorAt line "metadata event (ph:\"M\") may only appear as the first line"]
-  _ => []
-) (strayMeta rest)
+strayMeta ((Pair line ev) :: rest) =
+  append (
+      case ev of
+        ObsMetaEvent _ => [errorAt line "metadata event (ph:\"M\") may only appear as the first line"]
+        _ => []
+    ) (strayMeta rest)
 
 -- ---------------------------------------------------------------
 -- 2) ~ 6) 字段与时序
@@ -139,9 +149,10 @@ fieldIssuesOf line (ev@(ObsInstantEvent _)) =
 
 -- | 内部：非元数据事件必须带 `ts`。
 tsRequired : Int -> ObsEvent -> List ValidateIssue
-tsRequired line ev = case eventTs ev of
-  Just _ => []
-  Nothing => [errorAt line "event is missing integer field `ts`"]
+tsRequired line ev =
+  case eventTs ev of
+    Just _ => []
+    Nothing => [errorAt line "event is missing integer field `ts`"]
 
 -- | 内部：span 必须带 `dur` 且非负。
 durRequired : Int -> Maybe Int -> List ValidateIssue
@@ -156,10 +167,11 @@ allocWordsIssue line ev =
 
 -- | 内部：某个 `args` 字段若存在必须是整数。
 intArgIssue : Int -> String -> ObsEvent -> List ValidateIssue
-intArgIssue line key ev = case argJson key ev of
-  Nothing => []
-  Just (JNum _) => []
-  Just _ => [errorAt line "`args.${key}` must be an integer"]
+intArgIssue line key ev =
+  case argJson key ev of
+    Nothing => []
+    Just (JNum _) => []
+    Just _ => [errorAt line "`args.${key}` must be an integer"]
 
 -- | 内部：计数器必须带 `args.value`。
 counterValueIssue : Int -> Maybe Int -> List ValidateIssue
@@ -172,13 +184,16 @@ instantArgsIssues : Int -> ObsEvent -> List ValidateIssue
 instantArgsIssues line ev =
   let
     name = eventName ev
-  in if isSampleName name then case argStack ev of
-    Just _ => []
-    Nothing => [errorAt line "sample `${name}` is missing string-array field `args.stack`"]
-  else if name == "vuna.log" then case argStr "text" ev of
-    Just _ => []
-    Nothing => [errorAt line "log event `vuna.log` is missing string field `args.text`"]
-  else []
+  in if isSampleName name then
+    case argStack ev of
+      Just _ => []
+      Nothing => [errorAt line "sample `${name}` is missing string-array field `args.stack`"]
+  else if name == "vuna.log" then
+    case argStr "text" ev of
+      Just _ => []
+      Nothing => [errorAt line "log event `vuna.log` is missing string field `args.text`"]
+  else
+    []
 
 -- | 内部：同一 `pid` / `tid` 内 `ts` 单调不减（嵌套 span 除外）。
 checkOrder : List (Pair Int ObsEvent) -> List ValidateIssue
@@ -189,23 +204,25 @@ checkOrder evs = checkOrderGo evs []
 -- 的区间落在上一条 span 的区间内（`end` 不回退），否则仍是倒挂。
 checkOrderGo : List (Pair Int ObsEvent) -> List (Pair (Pair Int Int) (Pair Int Int)) -> List ValidateIssue
 checkOrderGo [] _ = []
-checkOrderGo ((Pair line ev) :: rest) seen = case eventTs ev of
-  Nothing => checkOrderGo rest seen
-  Just ts =>
-    let
-      key = Pair (eventPid ev) (eventTid ev)
-      endTs = case eventDur ev of
-        Just d => ts + d
-        Nothing => ts
-    in case lookupPairOf key seen of
-      Nothing => checkOrderGo rest (Pair key (Pair ts endTs) :: seen)
-      Just (Pair prevTs prevEnd) =>
-        let
-          nested = ts < prevTs && endTs >= prevEnd
-          backwards = ts < prevTs && not nested
-        in append
-          (if backwards then [errorAt line "timestamp goes backwards for pid ${strFromInt (eventPid ev)} / tid ${strFromInt (eventTid ev)}: ts=${strFromInt ts} < ${strFromInt prevTs} and the event does not nest inside the previous span"] else [])
-          (checkOrderGo rest (Pair key (Pair ts endTs) :: removePairOf key seen))
+checkOrderGo ((Pair line ev) :: rest) seen =
+  case eventTs ev of
+    Nothing => checkOrderGo rest seen
+    Just ts =>
+      let
+        key = Pair (eventPid ev) (eventTid ev)
+        endTs =
+          case eventDur ev of
+            Just d => ts + d
+            Nothing => ts
+      in case lookupPairOf key seen of
+        Nothing => checkOrderGo rest (Pair key (Pair ts endTs) :: seen)
+        Just (Pair prevTs prevEnd) =>
+          let
+            nested = ts < prevTs && endTs >= prevEnd
+            backwards = ts < prevTs && not nested
+          in append
+            (if backwards then [errorAt line "timestamp goes backwards for pid ${strFromInt (eventPid ev)} / tid ${strFromInt (eventTid ev)}: ts=${strFromInt ts} < ${strFromInt prevTs} and the event does not nest inside the previous span"] else [])
+            (checkOrderGo rest (Pair key (Pair ts endTs) :: removePairOf key seen))
 
 -- | 内部：按 `(pid,tid)` 查已记录的最后一条事件区间。
 lookupPairOf : Pair Int Int -> List (Pair (Pair Int Int) (Pair Int Int)) -> Maybe (Pair Int Int)

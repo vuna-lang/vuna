@@ -50,17 +50,20 @@ symbolAt index modQuery queryLine queryCol =
   in case onLine of
     [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
     [s] => OkC s
-    _ => case filter (\s => symCol s == queryCol) onLine of
-      s :: _ => OkC s
-      [] => case onLine of
+    _ =>
+      case filter (\s => symCol s == queryCol) onLine of
         s :: _ => OkC s
-        [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
+        [] =>
+          case onLine of
+            s :: _ => OkC s
+            [] => err "no symbol at ${modQuery}:${queryLine}:${queryCol}"
 
 -- | 位置上的符号被哪些地方引用（refs 的 line/col 是引用出现处）。
 export referencesAt : Index -> String -> Int -> Int -> Check (List Ref)
-referencesAt index modQuery queryLine queryCol = case symbolAt index modQuery queryLine queryCol of
-  ErrC e => ErrC e
-  OkC sym => OkC (refsNamed (symName sym) index.indexRefs)
+referencesAt index modQuery queryLine queryCol =
+  case symbolAt index modQuery queryLine queryCol of
+    ErrC e => ErrC e
+    OkC sym => OkC (refsNamed (symName sym) index.indexRefs)
 
 -- | 内部：按名字过滤引用表。
 refsNamed : String -> List Ref -> List Ref
@@ -68,9 +71,10 @@ refsNamed name refs = filter (\r => refName r == name) refs
 
 -- | 按名/全名查引用点（LSP references 的按名视图；`referencesAt` 是先由位置找符号再按名查）。
 export findReferences : Index -> String -> Check (List Ref)
-findReferences index query = case findSymbol index query of
-  ErrC e => ErrC e
-  OkC syms => OkC (refsForNames (map symName syms) index.indexRefs)
+findReferences index query =
+  case findSymbol index query of
+    ErrC e => ErrC e
+    OkC syms => OkC (refsForNames (map symName syms) index.indexRefs)
 
 -- | 内部：留名字在给定集合里的引用。
 refsForNames : List String -> List Ref -> List Ref
@@ -84,15 +88,16 @@ refsForNames names refs = filter (\r => memName (refName r) names) refs
 -- 结果是一段文本，含 `symbol`（命中符号全名）、`readers`（引用方模块，去重保序）与
 -- `tests`（建议的测试章节）三行。
 export impactOf : Index -> String -> Check String
-impactOf index query = case findSymbol index query of
-  ErrC e => ErrC e
-  OkC syms =>
-    let
-      names = map symName syms
-      refs = filter (\r => memName (refName r) names) index.indexRefs
-      readers = distinct (map refModule refs)
-    in OkC
-      "symbol: ${join ", " (map symFullName syms)}\nreaders: ${join ", " readers}\ntests: ${testTagsFor syms}\n"
+impactOf index query =
+  case findSymbol index query of
+    ErrC e => ErrC e
+    OkC syms =>
+      let
+        names = map symName syms
+        refs = filter (\r => memName (refName r) names) index.indexRefs
+        readers = distinct (map refModule refs)
+      in OkC
+        "symbol: ${join ", " (map symFullName syms)}\nreaders: ${join ", " readers}\ntests: ${testTagsFor syms}\n"
 
 -- | 内部：由命中符号的种类得到建议测试标签。
 testTagsFor : List Sym -> String
@@ -102,7 +107,8 @@ testTagsFor syms = tagsOfKinds (map symKind syms)
 -- 其余 `run, stdlib`）。
 tagsOfKinds : List String -> String
 tagsOfKinds kinds =
-  if memName "trait" kinds then "traits, run"
+  if memName "trait" kinds then
+    "traits, run"
   else if memName "data" kinds || memName "record" kinds then "records, run" else "run, stdlib"
 
 -- | 索引里的全部符号（原样返回，顺序即扫描顺序）。

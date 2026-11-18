@@ -51,53 +51,63 @@ export data NetStep a(..) : Type where
 
 -- | 绑定并监听地址，返回句柄。
 export netListen : Member n NetOp r => String -> Eff r Int
-netListen addr = do
-  sendCore (Named n NetOp) "net" n (Listen addr)
+netListen addr =
+  do
+    sendCore (Named n NetOp) "net" n (Listen addr)
 
 -- | 取监听句柄的端口（`unix:` 地址给 0）。
 export netPort : Member n NetOp r => Int -> Eff r Int
-netPort h = do
-  sendCore (Named n NetOp) "net" n (Port h)
+netPort h =
+  do
+    sendCore (Named n NetOp) "net" n (Port h)
 
 -- | 接受连接，返回新句柄。
 export netAccept : Member n NetOp r => Int -> Eff r Int
-netAccept h = do
-  sendCore (Named n NetOp) "net" n (Accept h)
+netAccept h =
+  do
+    sendCore (Named n NetOp) "net" n (Accept h)
 
 -- | 最多接收 `n` 字节；对端关闭给 `Nothing`。
 export netRecv : Member n NetOp r => Int -> Int -> Eff r (Maybe String)
-netRecv h bytes = do
-  sendCore (Named n NetOp) "net" n (Recv h bytes)
+netRecv h bytes =
+  do
+    sendCore (Named n NetOp) "net" n (Recv h bytes)
 
 -- | 发送整个字符串，返回写入字节数。
 export netSend : Member n NetOp r => Int -> String -> Eff r Int
-netSend h s = do
-  sendCore (Named n NetOp) "net" n (Send h s)
+netSend h s =
+  do
+    sendCore (Named n NetOp) "net" n (Send h s)
 
 -- | 关闭句柄（幂等）。
 export netClose : Member n NetOp r => Int -> Eff r Int
-netClose h = do
-  sendCore (Named n NetOp) "net" n (Close h)
+netClose h =
+  do
+    sendCore (Named n NetOp) "net" n (Close h)
 
 -- | 连接地址，返回句柄。
 export netConnect : Member n NetOp r => String -> Eff r Int
-netConnect addr = do
-  sendCore (Named n NetOp) "net" n (Connect addr)
+netConnect addr =
+  do
+    sendCore (Named n NetOp) "net" n (Connect addr)
 
 -- | 带超时（微秒）接受连接：超时给 `StepTimeout`，不阻塞到对端出现。
 export netAcceptWithin : Member n NetOp r => Int -> Int -> Eff r (NetStep Int)
-netAcceptWithin h micros = do
-  sendCore (Named n NetOp) "net" n (AcceptWithin h micros)
+netAcceptWithin h micros =
+  do
+    sendCore (Named n NetOp) "net" n (AcceptWithin h micros)
 
 -- | 带超时接收：区分「读到数据 / 对端关闭 / 超时」。
 export netRecvWithin : Member n NetOp r => Int -> Int -> Int -> Eff r (NetStep String)
-netRecvWithin h bytes micros = do
-  sendCore (Named n NetOp) "net" n (RecvWithin h bytes micros)
+netRecvWithin h bytes micros =
+  do
+    sendCore (Named n NetOp) "net" n (RecvWithin h bytes micros)
 
 -- | 带超时发送整个字符串：超时给 `StepTimeout`（可能已写出前缀）。
 export netSendWithin : Member n NetOp r => Int -> String -> Int -> Eff r (NetStep Int)
-netSendWithin h s micros = do
-  sendCore (Named n NetOp) "net" n (SendWithin h s micros)
+netSendWithin h s micros =
+  do
+    sendCore (Named n NetOp) "net" n (SendWithin h s micros)
 
 -- | 宿主网络失败的种类：带上下文（地址或 `handle N`）。
 export data NetError(..) : Type where
@@ -160,52 +170,77 @@ handleContext h = "handle ${strFromInt h}"
 
 -- | 带 `NetOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[NetErrorOp]`。
 netOpHIOHost : {a : Type} -> (i : Type) -> (o : NetOp i) -> (Base.Effect.Core.resIdx i o -> Eff [NetErrorOp@"net-error"] a) -> Eff [NetErrorOp@"net-error"] a
-netOpHIOHost i op k = case op of
-  Listen addr => do
-    h <- raise (@vuna@host@tryNetListen addr)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "listen ${addr}" ok) else k h
-  Port h => do
-    p <- raise (@vuna@host@tryNetPort h)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "port ${handleContext h}" ok) else k p
-  Accept h => do
-    c <- raise (@vuna@host@tryNetAccept h)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "accept ${handleContext h}" ok) else k c
-  Recv h n => do
-    s <- raise (@vuna@host@tryNetRecv h n)
-    ok <- netHostStatus
-    if ok == 0 then k (Just s)
-    else if ok == 1 then k Nothing else netFail (netErrorOfCode "recv ${handleContext h}" ok)
-  Send h s => do
-    n <- raise (@vuna@host@tryNetSend h s)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "send ${handleContext h}" ok) else k n
-  Close h => do
-    _ <- raise (@vuna@host@tryNetClose h)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "close ${handleContext h}" ok) else k 0
-  Connect addr => do
-    c <- raise (@vuna@host@tryNetConnect addr)
-    ok <- netHostStatus
-    if ok /= 0 then netFail (netErrorOfCode "connect ${addr}" ok) else k c
-  AcceptWithin h micros => do
-    c <- raise (@vuna@host@tryNetAcceptWithin h micros)
-    ok <- netHostStatus
-    if ok == 0 then k (StepOk c)
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "acceptWithin ${handleContext h}" ok)
-  RecvWithin h bytes micros => do
-    s <- raise (@vuna@host@tryNetRecvWithin h bytes micros)
-    ok <- netHostStatus
-    if ok == 0 then k (StepOk s)
-    else if ok == 1 then k StepClosed
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "recvWithin ${handleContext h}" ok)
-  SendWithin h s micros => do
-    n <- raise (@vuna@host@tryNetSendWithin h s micros)
-    ok <- netHostStatus
-    if ok == 0 then k (StepOk n)
-    else if ok == 7 then k StepTimeout else netFail (netErrorOfCode "sendWithin ${handleContext h}" ok)
+netOpHIOHost i op k =
+  case op of
+    Listen addr =>
+      do
+        h <- raise (@vuna@host@tryNetListen addr)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "listen ${addr}" ok) else k h
+    Port h =>
+      do
+        p <- raise (@vuna@host@tryNetPort h)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "port ${handleContext h}" ok) else k p
+    Accept h =>
+      do
+        c <- raise (@vuna@host@tryNetAccept h)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "accept ${handleContext h}" ok) else k c
+    Recv h n =>
+      do
+        s <- raise (@vuna@host@tryNetRecv h n)
+        ok <- netHostStatus
+        if ok == 0 then
+          k (Just s)
+        else if ok == 1 then k Nothing else netFail (netErrorOfCode "recv ${handleContext h}" ok)
+    Send h s =>
+      do
+        n <- raise (@vuna@host@tryNetSend h s)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "send ${handleContext h}" ok) else k n
+    Close h =>
+      do
+        _ <- raise (@vuna@host@tryNetClose h)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "close ${handleContext h}" ok) else k 0
+    Connect addr =>
+      do
+        c <- raise (@vuna@host@tryNetConnect addr)
+        ok <- netHostStatus
+        if ok /= 0 then netFail (netErrorOfCode "connect ${addr}" ok) else k c
+    AcceptWithin h micros =>
+      do
+        c <- raise (@vuna@host@tryNetAcceptWithin h micros)
+        ok <- netHostStatus
+        if ok == 0 then
+          k (StepOk c)
+        else if ok == 7 then
+          k StepTimeout
+        else
+          netFail (netErrorOfCode "acceptWithin ${handleContext h}" ok)
+    RecvWithin h bytes micros =>
+      do
+        s <- raise (@vuna@host@tryNetRecvWithin h bytes micros)
+        ok <- netHostStatus
+        if ok == 0 then
+          k (StepOk s)
+        else if ok == 1 then
+          k StepClosed
+        else if ok == 7 then
+          k StepTimeout
+        else
+          netFail (netErrorOfCode "recvWithin ${handleContext h}" ok)
+    SendWithin h s micros =>
+      do
+        n <- raise (@vuna@host@tryNetSendWithin h s micros)
+        ok <- netHostStatus
+        if ok == 0 then
+          k (StepOk n)
+        else if ok == 7 then
+          k StepTimeout
+        else
+          netFail (netErrorOfCode "sendWithin ${handleContext h}" ok)
 
 -- | 带 `NetOp` 行的宿主 handler：删掉 `NetOp`，answer 是 `Eff [NetErrorOp]`（不导出）。
 handleNetHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n NetOp :: r) a -> Eff r (Eff [NetErrorOp@"net-error"] a)
@@ -221,8 +256,9 @@ netErrorRet a = Ok a
 
 -- | 内部：`runNetError` 的 op 解释——`NetFail e` 直接变 `Err (netErrorText e)`（不恢复续延）。
 netErrorOpHR : {a : Type} -> (i : Type) -> (o : NetErrorOp i) -> (Base.Effect.Core.resIdx i o -> Result a) -> Result a
-netErrorOpHR i op _ = case op of
-  NetFail e => Err (netErrorText e)
+netErrorOpHR i op _ =
+  case op of
+    NetFail e => Err (netErrorText e)
 
 -- | 把网络失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `NetErrorOp`。
 export runNetError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n NetErrorOp :: r) a -> Eff r (Result a)
@@ -230,11 +266,13 @@ runNetError n comp = handleCoreAt (Named n NetErrorOp) "net-error" n netErrorRet
 
 -- | entry 预装的失败收口：打印诊断并以退出码 1 结束（不导出）。
 runNetErrorHost : {r : Row} -> {a : Type} -> Eff (Named "net-error" NetErrorOp :: r) a -> Eff r a
-runNetErrorHost comp = do
-  res <- runNetError "net-error" comp
-  case res of
-    Ok a => pure a
-    Err msg => do
-      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
-      _ <- raise (@vuna@prim_eff_exit 1)
-      prim_fail "unreachable: net error handler"
+runNetErrorHost comp =
+  do
+    res <- runNetError "net-error" comp
+    case res of
+      Ok a => pure a
+      Err msg =>
+        do
+          _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+          _ <- raise (@vuna@prim_eff_exit 1)
+          prim_fail "unreachable: net error handler"

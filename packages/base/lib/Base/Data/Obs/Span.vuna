@@ -23,9 +23,10 @@ obsSpanP name f = @vuna@obs@span name "vuna.user" f
 -- | 包住一个 `Eff` 动作的跨度：begin → action → end，`finally` 保证 abort 路径也结束
 -- 跨度。用于对象库读写这类「动作本身就是工作单元」的边界（`Store` 的 cache span）。
 export obsSpanEff : {r : Row} -> {a : Type} -> String -> String -> Eff r a -> Eff r a
-obsSpanEff name cat action = do
-  tok <- pure (obsSpanBegin name cat)
-  finally action (pure (obsSpanEnd tok))
+obsSpanEff name cat action =
+  do
+    tok <- pure (obsSpanBegin name cat)
+    finally action (pure (obsSpanEnd tok))
 
 -- | 采样一段计算：开始、执行、停止（异常也保证停止）。典型用法是包住整个 `main` 热点
 -- 或一次基准循环。`mode` / `intervalUs` 语义同 `Base.Data.Obs.obsSampleStart`。

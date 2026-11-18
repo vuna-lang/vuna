@@ -22,9 +22,10 @@ import Vuna.Compiler.Lowering.Env
 -- 判据：main 是动作（`Eff r a`）还是普通值；动作再按行收集
 -- 内建宿主 handler（行顺序：后出现的包在外层）。
 actionResultTyIn : Term -> Maybe (Pair String Term)
-actionResultTyIn (TApp (TApp fn row _) arg _) = case fn of
-  TGlobal g => if g == effTypeName then Just (Pair "eff" arg) else Nothing
-  _ => Nothing
+actionResultTyIn (TApp (TApp fn row _) arg _) =
+  case fn of
+    TGlobal g => if g == effTypeName then Just (Pair "eff" arg) else Nothing
+    _ => Nothing
 actionResultTyIn _ = Nothing
 
 -- | 二元行的 Named 标签拆出效应标签项；其它形态原样返回。
@@ -33,57 +34,72 @@ unwrapNamedTerm (t@(TApp (TApp (TGlobal g) _ _) label _)) = if g == effNamedName
 unwrapNamedTerm t = t
 
 collectBuiltinRowTags : Term -> List String
-collectBuiltinRowTags (TCon g args) = if g == effRowConsCtor then case args of
-  label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
-  _ => []
-else []
+collectBuiltinRowTags (TCon g args) =
+  if g == effRowConsCtor then
+    case args of
+      label :: tail :: _ => tagOf label (collectBuiltinRowTags (firstOf tail))
+      _ => []
+  else
+    []
 collectBuiltinRowTags _ = []
 
 tagOf : Pair Term Rig -> List String -> List String
-tagOf label rest = case unwrapNamedTerm (firstOf label) of
-  TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
-  _ => rest
+tagOf label rest =
+  case unwrapNamedTerm (firstOf label) of
+    TGlobal tag => if isBuiltinEffectTag tag then (::) tag rest else rest
+    _ => rest
 
 mainRowTags : Term -> List String
-mainRowTags (TApp (TApp fn row _) _ _) = case fn of
-  TGlobal g => if g == effTypeName then collectBuiltinRowTags (quote 0 (eval [] row)) else []
-  _ => []
+mainRowTags (TApp (TApp fn row _) _ _) =
+  case fn of
+    TGlobal g => if g == effTypeName then collectBuiltinRowTags (quote 0 (eval [] row)) else []
+    _ => []
 mainRowTags _ = []
 
 -- 展示函数：内建类型用 runtime 展示函数；其它类型用 Elab 收尾合成的
 -- `@vuna@main_show : T -> String`。
 mainShowIr : Term -> Ir
-mainShowIr tyTerm = case force (HashMap.fromList []) solsEmpty defaultFuel (eval [] tyTerm) of
-  VNeutral n => case n of
-    NGlobal g [] => mainShowForNameIr g
+mainShowIr tyTerm =
+  case force (HashMap.fromList []) solsEmpty defaultFuel (eval [] tyTerm) of
+    VNeutral n =>
+      case n of
+        NGlobal g [] => mainShowForNameIr g
+        _ => IrGlobal mainShowDefName
     _ => IrGlobal mainShowDefName
-  _ => IrGlobal mainShowDefName
 
 mainShowForNameIr : String -> Ir
-mainShowForNameIr g = case mainShowRtIr g of
-  Just rt => rt
-  Nothing => IrGlobal mainShowDefName
+mainShowForNameIr g =
+  case mainShowRtIr g of
+    Just rt => rt
+    Nothing => IrGlobal mainShowDefName
 
 mainShowRtIr : String -> Maybe Ir
 mainShowRtIr g =
-  if g == intTypeName then Just (IrRt irRtShowInt)
-  else if g == natTypeName then Just (IrRt irRtShowNat)
-  else if g == strTypeName then Just (IrRt irRtShowStr)
-  else if g == floatTypeName then Just (IrRt irRtShowFloat)
+  if g == intTypeName then
+    Just (IrRt irRtShowInt)
+  else if g == natTypeName then
+    Just (IrRt irRtShowNat)
+  else if g == strTypeName then
+    Just (IrRt irRtShowStr)
+  else if g == floatTypeName then
+    Just (IrRt irRtShowFloat)
   else if g == boolTypeName then Just (IrRt irRtShowBool) else Nothing
 
 -- | 入口 lowering：有运行时 `main` 才产出 `IrEntry`。
 export lowerEntryOf : List DtDef -> Check (Maybe IrEntry)
-lowerEntryOf defs = case findDtDef "main" defs of
-  Nothing => OkC Nothing
-  Just mainDef => case actionResultTyIn (dtDefType mainDef) of
-    Just p =>
-      let
-        innerTy = secondOf p
-        tags = mainRowTags (dtDefType mainDef)
-        handlers = append (filterMapRunHost tags) (filterMapErrorRunHost tags)
-      in OkC (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers tags))
-    Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing [] []))
+lowerEntryOf defs =
+  case findDtDef "main" defs of
+    Nothing => OkC Nothing
+    Just mainDef =>
+      case actionResultTyIn (dtDefType mainDef) of
+        Just p =>
+          let
+            innerTy = secondOf p
+            tags = mainRowTags (dtDefType mainDef)
+            handlers = append (filterMapRunHost tags) (filterMapErrorRunHost tags)
+          in OkC
+            (Just (IrEntry (mainShowIr innerTy) "main" True (Just effMainRunName) handlers tags))
+        Nothing => OkC (Just (IrEntry (mainShowIr (dtDefType mainDef)) "main" False Nothing [] []))
 
 -- 只保留有宿主实现的内建标签（`builtinEffectImplOf` 为空则跳过）。
 filterMapRunHost : List String -> List String

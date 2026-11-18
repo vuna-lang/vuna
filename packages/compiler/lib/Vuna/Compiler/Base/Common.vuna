@@ -54,8 +54,10 @@ step (ErrC e) _ = ErrC e
 -- | 对列表逐项执行 `Check` 计算；遇到第一个 `ErrC` 立即返回。
 export traverse : (a -> Check b) -> List a -> Check (List b)
 traverse f [] = OkC []
-traverse f (x :: xs) = case f x of
-  ErrC e => ErrC e
-  OkC y => case traverse f xs of
+traverse f (x :: xs) =
+  case f x of
     ErrC e => ErrC e
-    OkC ys => OkC (y :: ys)
+    OkC y =>
+      case traverse f xs of
+        ErrC e => ErrC e
+        OkC ys => OkC (y :: ys)

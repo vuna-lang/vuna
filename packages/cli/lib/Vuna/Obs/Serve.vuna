@@ -87,37 +87,45 @@ export record ServeState(..) where
 -- ---------------------------------------------------------------
 -- | `vuna dev obs serve` 的入口；参数/输入前提错误退出码 2。
 export runObsServe : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => List String -> Eff r Int
-runObsServe args = case parseCmdArgs ["dev", "obs", "serve"] args of
-  ErrC e => serveFail 2 (diagText e)
-  OkC parsed => case flagValue parsed "cdp" of
-    Nothing => serveFail 2 serveAdvice
-    Just addr => case checkCdpAddr addr of
-      ErrC e => serveFail 2 (diagText e)
-      OkC _ => serveStart parsed.positionals addr
+runObsServe args =
+  case parseCmdArgs ["dev", "obs", "serve"] args of
+    ErrC e => serveFail 2 (diagText e)
+    OkC parsed =>
+      case flagValue parsed "cdp" of
+        Nothing => serveFail 2 serveAdvice
+        Just addr =>
+          case checkCdpAddr addr of
+            ErrC e => serveFail 2 (diagText e)
+            OkC _ => serveStart parsed.positionals addr
 
 -- | 内部：先按命令行顺序读入全部 TRACE（失败即退出 2，不进入监听），再 listen + 打印就绪行 +
 -- accept 一个连接。`--allow-slow` 没有分支读它。
 serveStart : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => List String -> String -> Eff r Int
-serveStart paths addr = do
-  tracesR <- readServeTraces paths
-  case tracesR of
-    ErrC e => serveFail 2 (diagText e)
-    OkC traces => do
-      let
-        targetPid = targetPidOf traces
-      in do
-        h <- netListen addr
-        ready <- listeningText addr h
-        _ <- consolePrint "listening ${ready}\n"
-        serveOne (ServeState (concatRows traces) False 0 0 targetPid Nothing) addr h
+serveStart paths addr =
+  do
+    tracesR <- readServeTraces paths
+    case tracesR of
+      ErrC e => serveFail 2 (diagText e)
+      OkC traces =>
+        do
+          let
+            targetPid = targetPidOf traces
+          in do
+            h <- netListen addr
+            ready <- listeningText addr h
+            _ <- consolePrint "listening ${ready}\n"
+            serveOne (ServeState (concatRows traces) False 0 0 targetPid Nothing) addr h
 
 -- | 内部：地址校验（只允许本机端点：`unix:PATH` 或 `tcp:127.0.0.1:PORT`）。
 checkCdpAddr : String -> Check String
 checkCdpAddr addr =
-  if startsWith "unix:" addr && strLength addr > 5 then OkC addr
-  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then OkC addr
-  else err
-    "ADDR must be unix:PATH or tcp:127.0.0.1:PORT (loopback / Unix socket only; a reachable endpoint = arbitrary code execution)"
+  if startsWith "unix:" addr && strLength addr > 5 then
+    OkC addr
+  else if startsWith "tcp:127.0.0.1:" addr && strLength addr > 14 then
+    OkC addr
+  else
+    err
+      "ADDR must be unix:PATH or tcp:127.0.0.1:PORT (loopback / Unix socket only; a reachable endpoint = arbitrary code execution)"
 
 -- | 内部：逐份读入 trace；任一失败即停（错误带路径前缀，不静默跳过坏输入）。空 trace
 -- （没有事件）也算前提失败：没有可换算的数据源。
@@ -127,13 +135,12 @@ readServeTraces paths = readServeTracesGo paths []
 -- | 内部：`readServeTraces` 的累积循环（逆序累积、结束时翻转）。
 readServeTracesGo : Member nFs FsOp r => List String -> List ObsTrace -> Eff r (Check (List ObsTrace))
 readServeTracesGo [] acc = pure (OkC (reverse acc))
-readServeTracesGo (path :: rest) acc = do
-  traceR <- readTraceFull path
-  case traceR of
-    ErrC e => pure (err "${path}: ${diagText e}")
-    OkC trace =>
-      if length trace.traceEvents == 0 then pure (err "${path}: empty trace (no events)")
-      else readServeTracesGo rest (trace :: acc)
+readServeTracesGo (path :: rest) acc =
+  do
+    traceR <- readTraceFull path
+    case traceR of
+      ErrC e => pure (err "${path}: ${diagText e}")
+      OkC trace => if length trace.traceEvents == 0 then pure (err "${path}: empty trace (no events)") else readServeTracesGo rest (trace :: acc)
 
 -- | 内部：多份 trace 的事件按命令行顺序拼接（不重排、不重编号）。跨机器的 `ts` 基准不可比，
 -- 因此拼出来的 profile 时间轴不可比（要合并先 `vuna dev obs merge`）。
@@ -169,31 +176,40 @@ acceptGraceMicros = 250000
 
 -- | 内部：接受连接并逐个服务。第一个 accept 阻塞（等客户端），之后用宽限超时决定退出。
 acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => Bool -> ServeState -> String -> Int -> Int -> Eff r Int
-acceptLoop first st addr h fuel = if fuel <= 0 then finishServe st addr h 0
-else do
-  step <- if first then do
-    conn0 <- netAccept h
-    pure (StepOk conn0)
-  else netAcceptWithin h acceptGraceMicros
-  case step of
-    StepTimeout => finishServe st addr h 0
-    StepClosed => finishServe st addr h 0
-    StepOk conn => do
-      wsBase <- wsBaseOf addr h
-      outcome <- serveSession (HttpConn.fromNet conn) wsBase st
-      _ <- netClose conn
-      case firstOf outcome of
-        SessionFatal msg => do
-          _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
-          finishServe (secondOf outcome) addr h 2
-        _ => acceptLoop False (secondOf outcome) addr h (fuel - 1)
+acceptLoop first st addr h fuel =
+  if fuel <= 0 then
+    finishServe st addr h 0
+  else
+    do
+      step <-
+        if first then
+          do
+            conn0 <- netAccept h
+            pure (StepOk conn0)
+        else
+          netAcceptWithin h acceptGraceMicros
+      case step of
+        StepTimeout => finishServe st addr h 0
+        StepClosed => finishServe st addr h 0
+        StepOk conn =>
+          do
+            wsBase <- wsBaseOf addr h
+            outcome <- serveSession (HttpConn.fromNet conn) wsBase st
+            _ <- netClose conn
+            case firstOf outcome of
+              SessionFatal msg =>
+                do
+                  _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
+                  finishServe (secondOf outcome) addr h 2
+              _ => acceptLoop False (secondOf outcome) addr h (fuel - 1)
 
 -- | 内部：关监听、清地址、按会话状态映射退出码（显式 `code` 优先，其次有内容性失败 1）。
 finishServe : Member nFs FsOp r, Member nNet NetOp r => ServeState -> String -> Int -> Int -> Eff r Int
-finishServe st addr h code = do
-  _ <- netClose h
-  _ <- cleanupAddr addr
-  pure (if code /= 0 then code else if st.serveFailures > 0 then 1 else 0)
+finishServe st addr h code =
+  do
+    _ <- netClose h
+    _ <- cleanupAddr addr
+    pure (if code /= 0 then code else if st.serveFailures > 0 then 1 else 0)
 
 -- ---------------------------------------------------------------
 -- HTTP / WebSocket 会话
@@ -228,67 +244,90 @@ serveSession d wsBase st = httpLoop d wsBase httpFuel "" st
 
 -- | 内部：HTTP 阶段——发现端点直接应答并继续，升级请求切到 WS，其余 404。
 httpLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> Int -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
-httpLoop d wsBase fuel buf st = if fuel <= 0 then pure (Pair (SessionFatal "http request fuel exhausted") st)
-else do
-  next <- HttpConn.readNext d buf
-  case next of
-    HttpConn.NextClosed => pure (Pair SessionClosed st)
-    HttpConn.NextMalformed e => do
-      _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 400 e))
-      pure (Pair (SessionFatal "bad HTTP request: ${e}") st)
-    HttpConn.NextRequest req rest => if isJsonPath req.target then do
-      _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (jsonEndpoint wsBase req st))
-      pure (Pair SessionRequested st)
-    else case Ws.handshake req of
-      Ws.HandshakeBad e => do
-        _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 404 e))
-        pure (Pair (SessionFatal "no websocket upgrade: ${e}") st)
-      Ws.HandshakeOk key => do
-        _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (Ws.handshakeResponse key))
-        wsStep d rest wsFuel st
+httpLoop d wsBase fuel buf st =
+  if fuel <= 0 then
+    pure (Pair (SessionFatal "http request fuel exhausted") st)
+  else
+    do
+      next <- HttpConn.readNext d buf
+      case next of
+        HttpConn.NextClosed => pure (Pair SessionClosed st)
+        HttpConn.NextMalformed e =>
+          do
+            _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 400 e))
+            pure (Pair (SessionFatal "bad HTTP request: ${e}") st)
+        HttpConn.NextRequest req rest =>
+          if isJsonPath req.target then
+            do
+              _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (jsonEndpoint wsBase req st))
+              pure (Pair SessionRequested st)
+          else
+            case Ws.handshake req of
+              Ws.HandshakeBad e =>
+                do
+                  _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 404 e))
+                  pure (Pair (SessionFatal "no websocket upgrade: ${e}") st)
+              Ws.HandshakeOk key =>
+                do
+                  _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (Ws.handshakeResponse key))
+                  wsStep d rest wsFuel st
 
 -- | 内部：WS 阶段——解析一帧、分发、按 `WsStep` 决定继续还是结束。唯一递归点。
 wsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> Int -> ServeState -> Eff r (Pair SessionExit ServeState)
-wsStep d buf fuel st = if fuel <= 0 then pure (Pair (SessionFatal "ws frame fuel exhausted") st)
-else case Ws.parseFrame True buf of
-  Ws.FrameNeedMore => do
-    chunk <- HttpConn.readSomeOf d HttpConn.readChunk
-    if strLength chunk == 0 then pure (Pair SessionClosed st)
-    else wsStep d (buf ++ chunk) (fuel - 1) st
-  Ws.FrameInvalid e => do
-    w <- cdpWarn e st
-    _ <- writeWsFrames d (secondOf w)
-    pure (Pair (SessionFatal e) (firstOf w))
-  Ws.FrameOk frame rest => do
-    step <- frameAction d rest st frame
-    case step of
-      WsAgain buf2 st2 => wsStep d buf2 (fuel - 1) st2
-      WsDone exit st2 => pure (Pair exit st2)
+wsStep d buf fuel st =
+  if fuel <= 0 then
+    pure (Pair (SessionFatal "ws frame fuel exhausted") st)
+  else
+    case Ws.parseFrame True buf of
+      Ws.FrameNeedMore =>
+        do
+          chunk <- HttpConn.readSomeOf d HttpConn.readChunk
+          if strLength chunk == 0 then pure (Pair SessionClosed st) else wsStep d (buf ++ chunk) (fuel - 1) st
+      Ws.FrameInvalid e =>
+        do
+          w <- cdpWarn e st
+          _ <- writeWsFrames d (secondOf w)
+          pure (Pair (SessionFatal e) (firstOf w))
+      Ws.FrameOk frame rest =>
+        do
+          step <- frameAction d rest st frame
+          case step of
+            WsAgain buf2 st2 => wsStep d buf2 (fuel - 1) st2
+            WsDone exit st2 => pure (Pair exit st2)
 
 -- | 内部：处理一条已解析的帧（不递归）。
 frameAction : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> ServeState -> Ws.Frame -> Eff r WsStep
-frameAction d rest st frame = case frame of
-  Ws.FrameClose code reason => do
-    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FrameClose code reason))
-    pure (WsDone SessionRequested st)
-  Ws.FramePing payload => do
-    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FramePong payload))
-    pure (WsAgain rest st)
-  Ws.FramePong _ => pure (WsAgain rest st)
-  Ws.FrameBinary _ => do
-    w <- cdpWarn "binary frame ignored" st
-    _ <- writeWsFrames d (secondOf w)
-    pure (WsAgain rest (firstOf w))
-  Ws.FrameText text => case parseJson text of
-    ErrC e => do
-      w <- cdpWarn "malformed frame: ${diagText e}" st
-      _ <- writeWsFrames d (secondOf w)
-      pure (WsAgain rest (firstOf w))
-    OkC msg => do
-      result <- handleCdp msg st
-      _ <- writeWsFrames d (secondOf (secondOf result))
-      if firstOf result then pure (WsDone SessionRequested (firstOf (secondOf result)))
-      else pure (WsAgain rest (firstOf (secondOf result)))
+frameAction d rest st frame =
+  case frame of
+    Ws.FrameClose code reason =>
+      do
+        _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FrameClose code reason))
+        pure (WsDone SessionRequested st)
+    Ws.FramePing payload =>
+      do
+        _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FramePong payload))
+        pure (WsAgain rest st)
+    Ws.FramePong _ => pure (WsAgain rest st)
+    Ws.FrameBinary _ =>
+      do
+        w <- cdpWarn "binary frame ignored" st
+        _ <- writeWsFrames d (secondOf w)
+        pure (WsAgain rest (firstOf w))
+    Ws.FrameText text =>
+      case parseJson text of
+        ErrC e =>
+          do
+            w <- cdpWarn "malformed frame: ${diagText e}" st
+            _ <- writeWsFrames d (secondOf w)
+            pure (WsAgain rest (firstOf w))
+        OkC msg =>
+          do
+            result <- handleCdp msg st
+            _ <- writeWsFrames d (secondOf (secondOf result))
+            if firstOf result then
+              pure (WsDone SessionRequested (firstOf (secondOf result)))
+            else
+              pure (WsAgain rest (firstOf (secondOf result)))
 
 -- | 内部：把一组 JSON-RPC 响应渲染成一串文本帧写出去。
 writeWsFrames : {r : Row} -> HttpConn.Duplex r -> List Json -> Eff r Int
@@ -305,14 +344,20 @@ isJsonPath t = t == "/json/version" || t == "/json/list"
 -- | 内部：发现端点的响应；其它路径 404。
 jsonEndpoint : String -> HttpReq.Request -> ServeState -> HttpResponse.Response
 jsonEndpoint wsBase req st =
-  if req.target == "/json/version" then jsonResponse versionJson
-  else if req.target == "/json/list" then jsonResponse (renderJson (JArr [targetJson wsBase st]))
-  else HttpResponse.response 404 "not found"
+  if req.target == "/json/version" then
+    jsonResponse versionJson
+  else if req.target == "/json/list" then
+    jsonResponse (renderJson (JArr [targetJson wsBase st]))
+  else
+    HttpResponse.response 404 "not found"
 
 -- | 内部：`application/json` 响应；发现端点一次性应答并关闭连接（客户端会为新请求重连）。
 jsonResponse : String -> HttpResponse.Response
 jsonResponse body =
-  HttpResponse.Response 200 "OK" [Pair "Content-Type" "application/json", Pair "Connection" "close"]
+  HttpResponse.Response
+    200
+    "OK"
+    [Pair "Content-Type" "application/json", Pair "Connection" "close"]
     body
 
 -- | 内部：`/json/version` 的响应体。
@@ -332,17 +377,19 @@ pageIdOf st = "vuna-${strFromInt st.serveTargetPid}"
 
 -- | 内部：发现端点里回报的 WebSocket 基址（tcp 用绑定的实际端口；unix 用 localhost）。
 wsBaseOf : Member nNet NetOp r => String -> Int -> Eff r String
-wsBaseOf addr h = do
-  port <- netPort h
-  pure (if startsWith "tcp:" addr then "ws://127.0.0.1:${strFromInt port}" else "ws://localhost")
+wsBaseOf addr h =
+  do
+    port <- netPort h
+    pure (if startsWith "tcp:" addr then "ws://127.0.0.1:${strFromInt port}" else "ws://localhost")
 
 -- | 内部：就绪行里显示的地址——`tcp:...:0` 换成实际绑定的临时端口，便于脚本 / 桥从就绪行
 -- 解析真实端口。
 listeningText : Member nNet NetOp r => String -> Int -> Eff r String
-listeningText addr h = do
-  port <- netPort h
-  pure
-    (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
+listeningText addr h =
+  do
+    port <- netPort h
+    pure
+      (if endsWith ":0" addr then "${substring 0 (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 -- | 内部：`unix:PATH` 里的路径部分（去掉 5 字符前缀）。
 unixPathOf : String -> String
@@ -354,9 +401,10 @@ cleanupAddr addr = if startsWith "unix:" addr then fsRemoveFile (unixPathOf addr
 
 -- | 内部：传输告警——stderr 一行诊断 + 回 `-32700`，让客户端不会空等。
 cdpWarn : Member nFs FsOp r, Member nConsole ConsoleOp r => String -> ServeState -> Eff r (Pair ServeState (List Json))
-cdpWarn m st = do
-  _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
-  pure (Pair st [responseErr JNull errParse "parse error / bad frame: ${m}"])
+cdpWarn m st =
+  do
+    _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
+    pure (Pair st [responseErr JNull errParse "parse error / bad frame: ${m}"])
 
 -- ---------------------------------------------------------------
 -- 分发
@@ -364,18 +412,21 @@ cdpWarn m st = do
 -- | 内部：按方法名分发一帧。未知名回 `-32601`（不结束进程）；本子命令没有「请求退出」的帧，
 -- 客户端断开或传输层致命错误才结束。
 handleCdp : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
-handleCdp msg st = case methodOf msg of
-  Nothing => pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
-  Just "Profiler.enable" => pure (Pair False (Pair st [responseOk (idOf msg) (JObj [])]))
-  Just "Profiler.disable" =>
-    pure (Pair False (Pair (resetStart st) [responseOk (idOf msg) (JObj [])]))
-  Just "Profiler.start" => profilerStart msg st
-  Just "Profiler.stop" => profilerStop msg st
-  Just "Profiler.setSamplingInterval" => profilerSamplingInterval msg st
-  Just "Runtime.getIsolateId" =>
-    pure (Pair False (Pair st [responseOk (idOf msg) (isolateJson st.serveTargetPid)]))
-  Just m =>
-    pure (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
+handleCdp msg st =
+  case methodOf msg of
+    Nothing =>
+      pure (Pair False (Pair st [responseErr (idOf msg) errInvalidRequest "missing method"]))
+    Just "Profiler.enable" => pure (Pair False (Pair st [responseOk (idOf msg) (JObj [])]))
+    Just "Profiler.disable" =>
+      pure (Pair False (Pair (resetStart st) [responseOk (idOf msg) (JObj [])]))
+    Just "Profiler.start" => profilerStart msg st
+    Just "Profiler.stop" => profilerStop msg st
+    Just "Profiler.setSamplingInterval" => profilerSamplingInterval msg st
+    Just "Runtime.getIsolateId" =>
+      pure (Pair False (Pair st [responseOk (idOf msg) (isolateJson st.serveTargetPid)]))
+    Just m =>
+      pure
+        (Pair False (Pair st [responseErr (idOf msg) errMethodNotFound "method not found: ${m}"]))
 
 -- | 内部：`Runtime.getIsolateId` 的响应体（`vuna-<pid>`）。
 isolateJson : Int -> Json
@@ -387,41 +438,46 @@ resetStart st = { st | serveStarted = False }
 
 -- | 内部：只记 `startTimestamp`——离线语义，不附加、不采样正在运行的进程。
 profilerStart : Member nFs FsOp r, Member nClock ClockOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
-profilerStart msg st = do
-  now <- clockNow
-  let
-    st2 = { st | serveStarted = True, serveStartTs = now }
-  in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [])]))
+profilerStart msg st =
+  do
+    now <- clockNow
+    let
+      st2 = { st | serveStarted = True, serveStartTs = now }
+    in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [])]))
 
 -- | 内部：整份 trace 的 CPU 采样换算成 CDP Profile（`Convert.cpuProfileOf`）；没 start 就
 -- stop、或 trace 里没有 CPU 采样 = 内容性失败。
 profilerStop : Member nFs FsOp r, Member nConsole ConsoleOp r => Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
-profilerStop msg st = if not st.serveStarted then
-  stopError msg st "Profiler.start was not called on this connection before Profiler.stop"
-else case cpuProfileOf st.serveRows of
-  ErrC e => stopError msg st "Profiler.stop: ${diagText e}"
-  OkC profile =>
-    let
-      st2 = resetStart st
-    in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [Pair "profile" profile])]))
+profilerStop msg st =
+  if not st.serveStarted then
+    stopError msg st "Profiler.start was not called on this connection before Profiler.stop"
+  else
+    case cpuProfileOf st.serveRows of
+      ErrC e => stopError msg st "Profiler.stop: ${diagText e}"
+      OkC profile =>
+        let
+          st2 = resetStart st
+        in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [Pair "profile" profile])]))
 
 -- | 内部：内容性失败的统一出口——stderr 诊断 + `-32000` + 计数（退出码 1 的来源），并清掉
 -- start 标记（重试需要重新 start）。
 stopError : Member nFs FsOp r, Member nConsole ConsoleOp r => Json -> ServeState -> String -> Eff r (Pair Bool (Pair ServeState (List Json)))
-stopError msg st m = do
-  _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
-  let
-    st2 = { st | serveStarted = False, serveFailures = st.serveFailures + 1 }
-  in pure (Pair False (Pair st2 [responseErr (idOf msg) errServer m]))
+stopError msg st m =
+  do
+    _ <- consoleEprint "[vuna-obs-cdp] ${m}\n"
+    let
+      st2 = { st | serveStarted = False, serveFailures = st.serveFailures + 1 }
+    in pure (Pair False (Pair st2 [responseErr (idOf msg) errServer m]))
 
 -- | 内部：接受并忽略采样间隔——离线换算用 trace 里已有的采样，参数只记下来，不影响输出；
 -- 缺 `params.interval` 或类型不对也照样回 `{}`。
 profilerSamplingInterval : {r : Row} -> Json -> ServeState -> Eff r (Pair Bool (Pair ServeState (List Json)))
 profilerSamplingInterval msg st =
   let
-    iv = case jsonGetIn ["params", "interval"] msg of
-      Just v => jsonAsInt v
-      Nothing => Nothing
+    iv =
+      case jsonGetIn ["params", "interval"] msg of
+        Just v => jsonAsInt v
+        Nothing => Nothing
     st2 = { st | serveInterval = iv }
   in pure (Pair False (Pair st2 [responseOk (idOf msg) (JObj [])]))
 
@@ -430,6 +486,7 @@ profilerSamplingInterval msg st =
 -- ---------------------------------------------------------------
 -- | 内部：打印 `error: ...` 并返回给定退出码。
 serveFail : Member nConsole ConsoleOp r => Int -> String -> Eff r Int
-serveFail code e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure code
+serveFail code e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure code

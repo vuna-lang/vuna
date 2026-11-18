@@ -91,8 +91,10 @@ typeIntrinsicArityOf name = typeIntrinsicArityOfRest name typeIntrinsicArities
 typeIntrinsicArityOfRest : String -> List TypeIntrinsic -> Int
 typeIntrinsicArityOfRest name [] = 0 - 1
 typeIntrinsicArityOfRest name (t :: rest) =
-  if typeIntrinsicCtorName t == name then typeIntrinsicCtorArity t
-  else typeIntrinsicArityOfRest name rest
+  if typeIntrinsicCtorName t == name then
+    typeIntrinsicCtorArity t
+  else
+    typeIntrinsicArityOfRest name rest
 
 -- | 所有内建类型构造子的名字列表（类型位置放行面用）。
 export typeIntrinsicCtorNames : List String
@@ -102,10 +104,8 @@ typeIntrinsicCtorNames = map typeIntrinsicCtorName typeIntrinsicArities
 -- 其它类型头（类型族 / axiom / 未知全局）在运行时不可命名，按擦除依赖类型处理。
 export isTypeConstructorName : String -> Bool
 isTypeConstructorName name =
-  name == intTypeName
-    || name == strTypeName
-    || name == floatTypeName
-    || typeIntrinsicArityOf name >= 0
+  name
+    == intTypeName || name == strTypeName || name == floatTypeName || typeIntrinsicArityOf name >= 0
 
 -- | 内建宿主效应：标签全名 → 未导出的 `runXHost`（entry 自动预装用）。
 record BuiltinEffect where
@@ -130,14 +130,39 @@ builtinEffectErrorRunHostOf _ = ""
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
 export builtinEffects : List BuiltinEffect
 builtinEffects =
-  [ BuiltinEffect "Base.Effect.Console.ConsoleOp" "@vuna@runConsoleHost" "Base.Effect.Console.runConsoleHost" "default",
+  [
+    BuiltinEffect
+      "Base.Effect.Console.ConsoleOp"
+      "@vuna@runConsoleHost"
+      "Base.Effect.Console.runConsoleHost"
+      "default",
     BuiltinEffect "Base.Effect.Fs.FsOp" "@vuna@runFsHost" "Base.Effect.Fs.runFsHost" "default",
-    BuiltinEffect "Base.Effect.Clock.ClockOp" "@vuna@runClockHost" "Base.Effect.Clock.runClockHost" "default",
+    BuiltinEffect
+      "Base.Effect.Clock.ClockOp"
+      "@vuna@runClockHost"
+      "Base.Effect.Clock.runClockHost"
+      "default",
     BuiltinEffect "Base.Effect.Env.EnvOp" "@vuna@runEnvHost" "Base.Effect.Env.runEnvHost" "default",
-    BuiltinEffect "Base.Effect.Process.ProcessOp" "@vuna@runProcessHost" "Base.Effect.Process.runProcessHost" "default",
-    BuiltinEffect "Base.Effect.Exit.ExitOp" "@vuna@runExitHost" "Base.Effect.Exit.runExitHost" "default",
-    BuiltinEffect "Base.Effect.Stdin.StdinOp" "@vuna@runStdinHost" "Base.Effect.Stdin.runStdinHost" "default",
-    BuiltinEffect "Base.Effect.Args.ArgsOp" "@vuna@runArgsHost" "Base.Effect.Args.runArgsHost" "default",
+    BuiltinEffect
+      "Base.Effect.Process.ProcessOp"
+      "@vuna@runProcessHost"
+      "Base.Effect.Process.runProcessHost"
+      "default",
+    BuiltinEffect
+      "Base.Effect.Exit.ExitOp"
+      "@vuna@runExitHost"
+      "Base.Effect.Exit.runExitHost"
+      "default",
+    BuiltinEffect
+      "Base.Effect.Stdin.StdinOp"
+      "@vuna@runStdinHost"
+      "Base.Effect.Stdin.runStdinHost"
+      "default",
+    BuiltinEffect
+      "Base.Effect.Args.ArgsOp"
+      "@vuna@runArgsHost"
+      "Base.Effect.Args.runArgsHost"
+      "default",
     BuiltinEffect "Base.Effect.Net.NetOp" "@vuna@runNetHost" "Base.Effect.Net.runNetHost" "default",
     BuiltinEffect "Base.Effect.Ref.RefOp" "" "" "default"
   ]
@@ -457,9 +482,10 @@ intrinsicVisible (Intrinsic name sig op visible) = visible
 -- | canonical 族（base 的 data 声明）必须由 vuna-base 以固定的构造子集合声明；
 -- 其它同名声明是非法伪造。
 export canonicalCtorsFor : String -> Maybe (List String)
-canonicalCtorsFor name = case findCanonicalFamily name of
-  Just f => Just (cfCtors f)
-  Nothing => Nothing
+canonicalCtorsFor name =
+  case findCanonicalFamily name of
+    Just f => Just (cfCtors f)
+    Nothing => Nothing
 
 -- | 内建的函数 arity（按 `arityOfType (intrinsicSignature i)` 计算）。
 export intrinsicArity : Intrinsic -> Int
@@ -569,7 +595,8 @@ cfRepr (CanonicalFamily _ _ repr) = repr
 -- | canonical 族表：身份、构造子与表示的唯一真源；新增族只改这里。
 export canonicalFamilies : List CanonicalFamily
 canonicalFamilies =
-  [ CanonicalFamily boolTypeName [boolTrueCtor, boolFalseCtor] FamReprBool,
+  [
+    CanonicalFamily boolTypeName [boolTrueCtor, boolFalseCtor] FamReprBool,
     CanonicalFamily natTypeName [natZeroCtor, natSuccCtor] FamReprNat,
     CanonicalFamily listFamilyName [listNilCtor, listConsCtor] FamReprBoxed
   ]
@@ -581,12 +608,14 @@ export ctorSpellingKey : String -> String
 ctorSpellingKey name =
   if endsWith ".Cons" name || endsWith ".RCons" name || endsWith ".VCons" name || endsWith ".::" name || endsWith ".(::)" name then
     "${dropLastSegment name}.CONS"
-  else name
+  else
+    name
 
 -- 去掉最后一个 `.` 之后的段。
 dropLastSegment : String -> String
-dropLastSegment name = case splitLastDot (splitOnDot name) of
-  Pair rev last => joinDots rev
+dropLastSegment name =
+  case splitLastDot (splitOnDot name) of
+    Pair rev last => joinDots rev
 
 -- | 按完整符号查 canonical 族。
 export findCanonicalFamily : String -> Maybe CanonicalFamily
@@ -599,22 +628,25 @@ findCanonicalFamilyGo name (f :: rest) =
 
 -- | 该族的运行时表示类别；非 canonical 族为 `Nothing`。
 export canonicalReprOf : String -> Maybe FamilyRepr
-canonicalReprOf name = case findCanonicalFamily name of
-  Just f => Just (cfRepr f)
-  Nothing => Nothing
+canonicalReprOf name =
+  case findCanonicalFamily name of
+    Just f => Just (cfRepr f)
+    Nothing => Nothing
 
 -- | 运行时表示不是普通 data 变体的 canonical 族（当前为 Bool / Nat）。
 export isUnboxedCanonical : String -> Bool
-isUnboxedCanonical name = case canonicalReprOf name of
-  Just FamReprBoxed => False
-  Just _ => True
-  Nothing => False
+isUnboxedCanonical name =
+  case canonicalReprOf name of
+    Just FamReprBoxed => False
+    Just _ => True
+    Nothing => False
 
 -- | 该名字是否为 canonical Bool 族。
 export isBoolCanonical : String -> Bool
-isBoolCanonical name = case canonicalReprOf name of
-  Just FamReprBool => True
-  _ => False
+isBoolCanonical name =
+  case canonicalReprOf name of
+    Just FamReprBool => True
+    _ => False
 
 -- | 比较运算符可特化的类型名：其它类型的 `<` / `<=` / `>` / `>=` 走 `Ord` 字典。
 export cmpSpecializedTyNames : List String
@@ -694,7 +726,8 @@ baseIntrinsics : List Intrinsic
 -- 换成 `Base.Trait.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
 -- 位运算（可见：库与编译器直接用；语义见 `IntrinsicOp` 的注释与 primitives.md）。
 baseIntrinsics =
-  [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd False,
+  [
+    Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd False,
     Intrinsic "-" (IFun IInt (IFun IInt IInt)) OpSub False,
     Intrinsic "*" (IFun IInt (IFun IInt IInt)) OpMul False,
     Intrinsic "/" (IFun IInt (IFun IInt IInt)) OpDiv False,
@@ -727,13 +760,29 @@ baseIntrinsics =
     Intrinsic "arrayLength" (IPi "a" (IFun (IArray (IVar "a")) IInt)) OpNone True,
     Intrinsic "arrayEmpty" (IPi "a" (IArray (IVar "a"))) OpNone True,
     Intrinsic "arrayGet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IVar "a")))) OpNone True,
-    Intrinsic "arraySet" (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a")))))) OpNone True,
+    Intrinsic
+      "arraySet"
+      (IPi "a" (IFun (IArray (IVar "a")) (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))))
+      OpNone
+      True,
     Intrinsic "arrayMake" (IPi "a" (IFun IInt (IFun (IVar "a") (IArray (IVar "a"))))) OpNone True,
     Intrinsic "arrayFromList" (IPi "a" (IFun (IList (IVar "a")) (IArray (IVar "a")))) OpNone True,
     Intrinsic "arrayToList" (IPi "a" (IFun (IArray (IVar "a")) (IList (IVar "a")))) OpNone True,
-    Intrinsic "prim_effectPerform" (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b")))))) OpNone True,
-    Intrinsic "prim_effectHandle" (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b")))))))))))) OpNone True,
-    Intrinsic "prim_effectSelf" (IPi "a" (IPi "b" (IFun (IFun IInt (IVar "a")) (IVar "b")))) OpNone True,
+    Intrinsic
+      "prim_effectPerform"
+      (IPi "a" (IPi "b" (IFun IStr (IFun IStr (IFun (IVar "a") (IVar "b"))))))
+      OpNone
+      True,
+    Intrinsic
+      "prim_effectHandle"
+      (IPi "u" (IPi "a" (IPi "b" (IPi "ret" (IPi "h" (IFun IStr (IFun IStr (IFun (IVar "ret") (IFun (IVar "h") (IFun (IFun (IVar "u") (IVar "a")) (IFun (IVar "u") (IVar "b"))))))))))))
+      OpNone
+      True,
+    Intrinsic
+      "prim_effectSelf"
+      (IPi "a" (IPi "b" (IFun (IFun IInt (IVar "a")) (IVar "b"))))
+      OpNone
+      True,
     Intrinsic "prim_cleanupPush" (IFun (IFun IInt IInt) IInt) OpNone True,
     Intrinsic "prim_cleanupPop" (IFun IInt IInt) OpNone True,
     Intrinsic "prim_schedNewScope" (IFun IInt IInt) OpNone True,
@@ -750,7 +799,11 @@ baseIntrinsics =
     Intrinsic "prim_schedScopeError" (IFun IInt IStr) OpNone True,
     Intrinsic "prim_schedScopeCount" (IFun IInt IInt) OpNone True,
     Intrinsic "prim_fail" (IPi "a" (IFun IStr (IVar "a"))) OpNone True,
-    Intrinsic assertIntrinsicName (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a"))))) OpNone True,
+    Intrinsic
+      assertIntrinsicName
+      (IPi "a" (IFun IBool (IFun IStr (IFun (IVar "a") (IVar "a")))))
+      OpNone
+      True,
     Intrinsic todoIntrinsicName (IPi "a" (IFun IStr (IVar "a"))) OpNone True,
     Intrinsic "bi_eq_int" (IFun IInt (IFun IInt IBool)) OpEqInt False,
     Intrinsic "bi_neq_int" (IFun IInt (IFun IInt IBool)) OpNeqInt False,
@@ -774,7 +827,8 @@ baseIntrinsics =
 -- 表拆分说明）；顺序上追加在基础表之后。
 floatIntrinsics : List Intrinsic
 floatIntrinsics =
-  [ Intrinsic "strFromFloat" (IFun IFloat IStr) OpStrFromFloat True,
+  [
+    Intrinsic "strFromFloat" (IFun IFloat IStr) OpStrFromFloat True,
     Intrinsic "floatFromInt" (IFun IInt IFloat) OpFloatFromInt True,
     Intrinsic "intFromFloat" (IFun IFloat IInt) OpIntFromFloat True,
     Intrinsic "floatAbs" (IFun IFloat IFloat) OpFloatAbs True,
@@ -800,16 +854,37 @@ effIntrinsics : List Intrinsic
 -- 带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
 -- Ref / Net 的带行宿主原语。
 effIntrinsics =
-  [ Intrinsic primEffBind1Name (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b")))))) OpNone True,
+  [
+    Intrinsic
+      primEffBind1Name
+      (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b"))))))
+      OpNone
+      True,
     Intrinsic "effTimeUs" (IEff IInt) OpNone True,
     Intrinsic "prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_sleep" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone True,
-    Intrinsic "@vuna@prim_eff_newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone False,
+    Intrinsic
+      "@vuna@prim_eff_newRef"
+      (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a")))))
+      OpNone
+      False,
     Intrinsic "prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone True,
-    Intrinsic "@vuna@prim_eff_readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone False,
-    Intrinsic "prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone True,
-    Intrinsic "@vuna@prim_eff_writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone False,
+    Intrinsic
+      "@vuna@prim_eff_readRef"
+      (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a"))))
+      OpNone
+      False,
+    Intrinsic
+      "prim_eff_writeRef"
+      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      True,
+    Intrinsic
+      "@vuna@prim_eff_writeRef"
+      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      False,
     Intrinsic "prim_eff_print" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_print" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_print_host" (IFun IStr (IEff IInt)) OpNone True,
@@ -923,15 +998,43 @@ effIntrinsics =
     Intrinsic "prim_eff_getArgs_host" (IEff (IList IStr)) OpNone True,
     Intrinsic "@vuna@prim_eff_getArgs_host" (IEff (IList IStr)) OpNone False,
     Intrinsic "@vuna@host@getArgs" (IEff (IList IStr)) OpNone False,
-    Intrinsic "prim_eff_newRef_host" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone True,
-    Intrinsic "@vuna@prim_eff_newRef_host" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone False,
+    Intrinsic
+      "prim_eff_newRef_host"
+      (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a")))))
+      OpNone
+      True,
+    Intrinsic
+      "@vuna@prim_eff_newRef_host"
+      (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a")))))
+      OpNone
+      False,
     Intrinsic "@vuna@host@newRef" (IPi "a" (IFun (IVar "a") (IEff (IRef (IVar "a"))))) OpNone False,
-    Intrinsic "prim_eff_readRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone True,
-    Intrinsic "@vuna@prim_eff_readRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone False,
+    Intrinsic
+      "prim_eff_readRef_host"
+      (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a"))))
+      OpNone
+      True,
+    Intrinsic
+      "@vuna@prim_eff_readRef_host"
+      (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a"))))
+      OpNone
+      False,
     Intrinsic "@vuna@host@readRef" (IPi "a" (IFun (IRef (IVar "a")) (IEff (IVar "a")))) OpNone False,
-    Intrinsic "prim_eff_writeRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone True,
-    Intrinsic "@vuna@prim_eff_writeRef_host" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone False,
-    Intrinsic "@vuna@host@writeRef" (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt)))) OpNone False,
+    Intrinsic
+      "prim_eff_writeRef_host"
+      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      True,
+    Intrinsic
+      "@vuna@prim_eff_writeRef_host"
+      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@host@writeRef"
+      (IPi "a" (IFun (IRef (IVar "a")) (IFun (IVar "a") (IEff IInt))))
+      OpNone
+      False,
     Intrinsic "prim_eff_netListen_host" (IFun IStr (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_netListen_host" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@netListen" (IFun IStr (IEff IInt)) OpNone False,
@@ -961,8 +1064,16 @@ effIntrinsics =
     Intrinsic "@vuna@host@tryNetClose" (IFun IInt (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@tryNetConnect" (IFun IStr (IEff IInt)) OpNone False,
     Intrinsic "@vuna@host@tryNetAcceptWithin" (IFun IInt (IFun IInt (IEff IInt))) OpNone False,
-    Intrinsic "@vuna@host@tryNetRecvWithin" (IFun IInt (IFun IInt (IFun IInt (IEff IStr)))) OpNone False,
-    Intrinsic "@vuna@host@tryNetSendWithin" (IFun IInt (IFun IStr (IFun IInt (IEff IInt)))) OpNone False,
+    Intrinsic
+      "@vuna@host@tryNetRecvWithin"
+      (IFun IInt (IFun IInt (IFun IInt (IEff IStr))))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@host@tryNetSendWithin"
+      (IFun IInt (IFun IStr (IFun IInt (IEff IInt))))
+      OpNone
+      False,
     Intrinsic "prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone True,
     Intrinsic "@vuna@prim_eff_spawn" (IFun (IList IStr) (IEff IInt)) OpNone False,
     Intrinsic "prim_eff_wait" (IFun IInt (IEff IInt)) OpNone True,
@@ -1008,7 +1119,8 @@ traceIntrinsicNames = [debugOnIntrinsicName, debugLineIntrinsicName]
 -- `obs` 与 `trace` 分开：`dbg!` 的程序不该为此背上事件缓冲/文件 sink 的代码，反之亦然。
 export obsIntrinsicNames : List String
 obsIntrinsicNames =
-  [ obsLevelIntrinsicName,
+  [
+    obsLevelIntrinsicName,
     obsSpanIntrinsicName,
     obsSpanLabIntrinsicName,
     obsLogIntrinsicName,
@@ -1033,7 +1145,8 @@ allIntrinsics =
 -- 求值 guard 与 codegen 的按需 runtime helper 都按它判定「程序是否使用浮点」。
 export floatIntrinsicNames : List String
 floatIntrinsicNames =
-  [ "strFromFloat",
+  [
+    "strFromFloat",
     "floatFromInt",
     "intFromFloat",
     "floatAbs",
@@ -1061,9 +1174,10 @@ findIntrinsic name = HashMap.lookup name intrinsicTbl
 
 -- | 名字是否是**对用户源码可见**的内建（内部 `bi_*` 返回 `False`）。
 export isIntrinsicName : String -> Bool
-isIntrinsicName name = case findIntrinsic name of
-  Just i => intrinsicVisible i
-  Nothing => False
+isIntrinsicName name =
+  case findIntrinsic name of
+    Just i => intrinsicVisible i
+    Nothing => False
 
 -- | 用户可见的内建声明子集（进 Loader / prelude）。
 export userIntrinsics : List Intrinsic

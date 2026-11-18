@@ -29,9 +29,10 @@ handleExn n ret opH comp = handleCoreAt (Named n ExnOp) "exn" n ret opH comp
 
 -- | 内部：handler 的操作解释——`ThrowExn` 变 `Err`；`Try` 用 `handleScoped` 在同一 handler 下运行子计算。
 exnOpH : {a : Type} -> (i : Type) -> (o : ExnOp i) -> (Base.Effect.Core.resIdx i o -> Result a) -> Result a
-exnOpH i op k = case op of
-  ThrowExn s => Err s
-  Try sub => k (handleScoped sub)
+exnOpH i op k =
+  case op of
+    ThrowExn s => Err s
+    Try sub => k (handleScoped sub)
 
 -- | 把 `ExnOp` 收成 `Result`；结果行删除 `ExnOp`。
 export runExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n ExnOp :: r) a -> Eff r (Result a)
@@ -39,21 +40,25 @@ runExn n comp = handleExn n (\a => Ok a) exnOpH comp
 
 -- | 作用域 catch：成功原样返回，`Err s` 交给 `fallback`（仍在该 exn handler 下继续）。
 export catchExn : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n ExnOp :: r) a -> (String -> Eff (Named n ExnOp :: r) a) -> Eff (Named n ExnOp :: r) a
-catchExn n comp fallback = do
-  res <- tryWith n comp
-  case res of
-    Ok a => pure a
-    Err s => fallback s
+catchExn n comp fallback =
+  do
+    res <- tryWith n comp
+    case res of
+      Ok a => pure a
+      Err s => fallback s
 
 -- | exn 版 bracket：acquire → use → release；use 成功或抛异常都会 release，异常在 release 之后重新抛出。
 export bracketExn : (n : String) -> {res : Type} -> {a : Type} -> {r : Row} -> Eff (Named n ExnOp :: r) res -> (res -> Eff (Named n ExnOp :: r) Int) -> (res -> Eff (Named n ExnOp :: r) a) -> Eff (Named n ExnOp :: r) a
-bracketExn n acquire release use = do
-  res <- acquire
-  r <- tryWith n (use res)
-  case r of
-    Ok a => do
-      _ <- release res
-      pure a
-    Err s => do
-      _ <- release res
-      throwExn n s
+bracketExn n acquire release use =
+  do
+    res <- acquire
+    r <- tryWith n (use res)
+    case r of
+      Ok a =>
+        do
+          _ <- release res
+          pure a
+      Err s =>
+        do
+          _ <- release res
+          throwExn n s

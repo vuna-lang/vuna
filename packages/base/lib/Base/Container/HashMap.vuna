@@ -56,7 +56,8 @@ insert key v (HashMap outers) =
     base =
       if Base.Container.Array.length outers == 0 then
         Base.Container.Array.make 32 (Base.Container.Array.make 32 [])
-      else outers
+      else
+        outers
     b = _bucketOf (hash key)
     qi = b / 32
     oi = natFromInt qi
@@ -68,20 +69,23 @@ insert key v (HashMap outers) =
 
 -- | 按键查找，返回 `Maybe v`；桶内命中第一个匹配即返回（该键最新值）。
 export lookup : Eq k, Hashable k => k -> HashMap k v -> Maybe v
-lookup key (HashMap outers) = if Base.Container.Array.length outers == 0 then Nothing
-else
-  let
-    b = _bucketOf (hash key)
-    qi = b / 32
-    oi = natFromInt qi
-    ii = natFromInt (b - qi * 32)
-  in _lookupAssoc key (Base.Container.Array.get (Base.Container.Array.get outers oi) ii)
+lookup key (HashMap outers) =
+  if Base.Container.Array.length outers == 0 then
+    Nothing
+  else
+    let
+      b = _bucketOf (hash key)
+      qi = b / 32
+      oi = natFromInt qi
+      ii = natFromInt (b - qi * 32)
+    in _lookupAssoc key (Base.Container.Array.get (Base.Container.Array.get outers oi) ii)
 
 -- | 键是否存在（`lookup` 后判 `Just`）。
 export member : Eq k, Hashable k => k -> HashMap k v -> Bool
-member key t = case lookup key t of
-  Just _ => True
-  Nothing => False
+member key t =
+  case lookup key t of
+    Just _ => True
+    Nothing => False
 
 -- | 批量插入 `Pair` 列表：**后面的条目覆盖前面的**（与 `fromList` 的优先顺序相反）。
 export insertAll : Hashable k => List (Pair k v) -> HashMap k v -> HashMap k v
@@ -100,7 +104,8 @@ ofNames xs = insertAll (map (\n => Pair n True) xs) (fromList [])
 -- | 按桶序展开所有键值对并去重：每个键只保留最新值；**不保证插入序**。
 export toList : Eq k => HashMap k v -> List (Pair k v)
 toList (HashMap outers) =
-  concatMap (\outer => concatMap (\inner => _dedupBucket inner) (Base.Container.Array.toList outer))
+  concatMap
+    (\outer => concatMap (\inner => _dedupBucket inner) (Base.Container.Array.toList outer))
     (Base.Container.Array.toList outers)
 
 -- | 键的个数（`Nat`，O(n)，经 `toList` 去重后计数）。

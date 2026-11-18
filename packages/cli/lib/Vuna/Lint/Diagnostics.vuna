@@ -48,10 +48,14 @@ lintRule RedundantIf = "redundant-if"
 -- | 由 `LN_` code 反查 kebab 短名（gen-errors 与输出层按 code 反查时用）；未知 code 返回空串。
 export lintRuleCode : String -> String
 lintRuleCode code =
-  if code == lintCode LiteralIfChain then lintRule LiteralIfChain
-  else if code == lintCode DispatchLift then lintRule DispatchLift
-  else if code == lintCode ListLiteral then lintRule ListLiteral
-  else if code == lintCode TodoMarker then lintRule TodoMarker
+  if code == lintCode LiteralIfChain then
+    lintRule LiteralIfChain
+  else if code == lintCode DispatchLift then
+    lintRule DispatchLift
+  else if code == lintCode ListLiteral then
+    lintRule ListLiteral
+  else if code == lintCode TodoMarker then
+    lintRule TodoMarker
   else if code == lintCode RedundantIf then lintRule RedundantIf else ""
 
 -- | 规则的消息模板；参数是被检查主体的描述，模板里用它插值。
@@ -171,9 +175,35 @@ export record LintEntry(..) where
 -- | 全部规则；新增规则必须在此登记，否则文档缺条目。
 export lintAll : List LintEntry
 lintAll =
-  [ LintEntry (lintCode LiteralIfChain) (lintRule LiteralIfChain) (lintDesc LiteralIfChain) (lintFixable LiteralIfChain) (lintEdit LiteralIfChain),
-    LintEntry (lintCode DispatchLift) (lintRule DispatchLift) (lintDesc DispatchLift) (lintFixable DispatchLift) (lintEdit DispatchLift),
-    LintEntry (lintCode ListLiteral) (lintRule ListLiteral) (lintDesc ListLiteral) (lintFixable ListLiteral) (lintEdit ListLiteral),
-    LintEntry (lintCode TodoMarker) (lintRule TodoMarker) (lintDesc TodoMarker) (lintFixable TodoMarker) (lintEdit TodoMarker),
-    LintEntry (lintCode RedundantIf) (lintRule RedundantIf) (lintDesc RedundantIf) (lintFixable RedundantIf) (lintEdit RedundantIf)
+  [
+    LintEntry
+      (lintCode LiteralIfChain)
+      (lintRule LiteralIfChain)
+      (lintDesc LiteralIfChain)
+      (lintFixable LiteralIfChain)
+      (lintEdit LiteralIfChain),
+    LintEntry
+      (lintCode DispatchLift)
+      (lintRule DispatchLift)
+      (lintDesc DispatchLift)
+      (lintFixable DispatchLift)
+      (lintEdit DispatchLift),
+    LintEntry
+      (lintCode ListLiteral)
+      (lintRule ListLiteral)
+      (lintDesc ListLiteral)
+      (lintFixable ListLiteral)
+      (lintEdit ListLiteral),
+    LintEntry
+      (lintCode TodoMarker)
+      (lintRule TodoMarker)
+      (lintDesc TodoMarker)
+      (lintFixable TodoMarker)
+      (lintEdit TodoMarker),
+    LintEntry
+      (lintCode RedundantIf)
+      (lintRule RedundantIf)
+      (lintDesc RedundantIf)
+      (lintFixable RedundantIf)
+      (lintEdit RedundantIf)
   ]

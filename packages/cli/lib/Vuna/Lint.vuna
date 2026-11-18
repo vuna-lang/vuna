@@ -96,22 +96,25 @@ renderFixReport path count = "${path}: fixed ${count} finding(s)"
 
 -- | 内部：打印一条 finding（带换行），返回 0。
 printFinding : Member nConsole ConsoleOp r => String -> Bool -> Finding -> Eff r Int
-printFinding path fixMode f = do
-  _ <- consolePrint "${renderFinding path fixMode f}\n"
-  pure 0
+printFinding path fixMode f =
+  do
+    _ <- consolePrint "${renderFinding path fixMode f}\n"
+    pure 0
 
 -- | 内部：按顺序打印全部 finding，返回 0。
 printFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
 printFindings path fixMode [] = pure 0
-printFindings path fixMode (f :: rest) = do
-  _ <- printFinding path fixMode f
-  printFindings path fixMode rest
+printFindings path fixMode (f :: rest) =
+  do
+    _ <- printFinding path fixMode f
+    printFindings path fixMode rest
 
 -- | 内部：打印 findings（兼容测试侧入口；不改变文本格式）。
 export reportFindings : Member nConsole ConsoleOp r => String -> Bool -> List Finding -> Eff r Int
-reportFindings path fixMode findings = do
-  _ <- printFindings path fixMode findings
-  pure 0
+reportFindings path fixMode findings =
+  do
+    _ <- printFindings path fixMode findings
+    pure 0
 
 -- ---------------------------------------------------------------
 -- 计数 / 严重度
@@ -158,17 +161,19 @@ visibleFinding False f = True
 -- ---------------------------------------------------------------
 -- | 内部：展开一个位置参数：目录递归收集 `.vuna`，文件原样保留。
 expandLintPath : Member nFs FsOp r => String -> Eff r (List String)
-expandLintPath path = do
-  isDir <- pathExistsDir path
-  if isDir then collectVunaFiles path else pure [path]
+expandLintPath path =
+  do
+    isDir <- pathExistsDir path
+    if isDir then collectVunaFiles path else pure [path]
 
 -- | 内部：按用户顺序展开路径。
 expandLintPaths : Member nFs FsOp r => List String -> Eff r (List String)
 expandLintPaths [] = pure []
-expandLintPaths (path :: rest) = do
-  here <- expandLintPath path
-  there <- expandLintPaths rest
-  pure (append here there)
+expandLintPaths (path :: rest) =
+  do
+    here <- expandLintPath path
+    there <- expandLintPaths rest
+    pure (append here there)
 
 -- | 内部：去重并保持首次出现顺序。
 dedupePaths : List String -> List String
@@ -182,35 +187,40 @@ packageLintTargets pkg = ["${packageDir pkg}/lib", "${packageDir pkg}/app"]
 
 -- | 内部：workspace 默认目标：各包的 lib/app 中真实存在的目录。
 defaultLintTargets : Member nFs FsOp r, Member nEnv EnvOp r => Eff r (Check (List String))
-defaultLintTargets = do
-  found <- findManifestDirMaybe "."
-  case found of
-    Nothing => pure (err "not inside a vuna workspace (no vuna.toml found); pass PATH explicitly")
-    Just dir => do
-      pkgsR <- workspacePackages dir
-      case pkgsR of
-        ErrC e => pure (ErrC e)
-        OkC pkgs => do
-          targets <- existingDirs (concatMap packageLintTargets pkgs) []
-          files <- expandLintPaths targets
-          pure (OkC (dedupePaths files))
+defaultLintTargets =
+  do
+    found <- findManifestDirMaybe "."
+    case found of
+      Nothing => pure (err "not inside a vuna workspace (no vuna.toml found); pass PATH explicitly")
+      Just dir =>
+        do
+          pkgsR <- workspacePackages dir
+          case pkgsR of
+            ErrC e => pure (ErrC e)
+            OkC pkgs =>
+              do
+                targets <- existingDirs (concatMap packageLintTargets pkgs) []
+                files <- expandLintPaths targets
+                pure (OkC (dedupePaths files))
 
 -- | 内部：保留真实存在的目录。
 existingDirs : Member nFs FsOp r => List String -> List String -> Eff r (List String)
 existingDirs [] acc = pure (reverse acc)
-existingDirs (path :: rest) acc = do
-  exists <- pathExistsDir path
-  if exists then existingDirs rest (path :: acc) else existingDirs rest acc
+existingDirs (path :: rest) acc =
+  do
+    exists <- pathExistsDir path
+    if exists then existingDirs rest (path :: acc) else existingDirs rest acc
 
 -- ---------------------------------------------------------------
 -- 配置
 -- ---------------------------------------------------------------
 -- | 内部：配置的来源（显式文件 / 默认 / 就近 manifest）。
 configForFile : Member nFs FsOp r => LintOpts -> String -> Eff r (Check LintConfig)
-configForFile opts path = case opts.lintOptConfigPath of
-  Just p => loadLintConfigAt p
-  Nothing =>
-    if opts.lintOptNoConfig then pure (OkC defaultLintConfig) else loadLintConfigForFile path
+configForFile opts path =
+  case opts.lintOptConfigPath of
+    Just p => loadLintConfigAt p
+    Nothing =>
+      if opts.lintOptNoConfig then pure (OkC defaultLintConfig) else loadLintConfigForFile path
 
 -- | 内部：命令行覆盖（select / ignore / max-warnings）。
 applyOpts : LintOpts -> LintConfig -> Check LintConfig
@@ -226,105 +236,126 @@ applyOpts opts cfg =
           if length opts.lintOptIgnore == 0 then OkC cfg1 else ignoreRules opts.lintOptIgnore cfg1
       in case ignored of
         ErrC e => ErrC e
-        OkC cfg2 => OkC (case opts.lintOptMaxWarnings of
-          Just n => withMaxWarnings n cfg2
-          Nothing => cfg2
-        )
+        OkC cfg2 =>
+          OkC (
+              case opts.lintOptMaxWarnings of
+                Just n => withMaxWarnings n cfg2
+                Nothing => cfg2
+            )
 
 -- | 内部：读完整 stdin（分块，最多 64 MiB 量级）。
 readStdinAll : Member nStdin StdinOp r => Eff r String
 readStdinAll = readStdinGo 1024 []
 
 readStdinGo : Member nStdin StdinOp r => Int -> List String -> Eff r String
-readStdinGo fuel acc = if fuel <= 0 then pure (join "" (reverse acc))
-else do
-  chunk <- stdinReadBytes 65536
-  case chunk of
-    Nothing => pure (join "" (reverse acc))
-    Just s => if s == "" then pure (join "" (reverse acc)) else readStdinGo (fuel - 1) (s :: acc)
+readStdinGo fuel acc =
+  if fuel <= 0 then
+    pure (join "" (reverse acc))
+  else
+    do
+      chunk <- stdinReadBytes 65536
+      case chunk of
+        Nothing => pure (join "" (reverse acc))
+        Just s => if s == "" then pure (join "" (reverse acc)) else readStdinGo (fuel - 1) (s :: acc)
 
 -- ---------------------------------------------------------------
 -- 单文件
 -- ---------------------------------------------------------------
 -- | 内部：对一份已知源码做 lint（配置/fixity 上下文按 configPath 解析）。
 lintText : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> FixityEnv -> String -> String -> String -> Eff r (Pair FixityEnv FileOutcome)
-lintText opts env displayPath configPath source = do
-  cfgR <- configForFile opts configPath
-  case cfgR of
-    ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
-    OkC cfg0 => case applyOpts opts cfg0 of
+lintText opts env displayPath configPath source =
+  do
+    cfgR <- configForFile opts configPath
+    case cfgR of
       ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
-      OkC cfg => if lintExcluded displayPath cfg then pure (Pair env (FileOutcome displayPath [] 0 Nothing))
-      else do
-        looked <- fixitiesForFile env configPath source
-        env2 <- pure (firstOf looked)
-        case secondOf looked of
-          ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
-          OkC programFixities => do
-            linted <- pure (lintSourceWithConfig cfg programFixities source)
-            case linted of
-              ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
-              OkC findings => do
-                fixedR <-
-                  if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings
-                  else pure (OkC (Pair findings 0))
-                pure (case fixedR of
-                  ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
-                  OkC (Pair remaining fixed) =>
-                    Pair env2 (FileOutcome displayPath remaining fixed Nothing)
-                )
+      OkC cfg0 =>
+        case applyOpts opts cfg0 of
+          ErrC e => pure (Pair env (FileOutcome displayPath [] 0 (Just (diagText e))))
+          OkC cfg =>
+            if lintExcluded displayPath cfg then
+              pure (Pair env (FileOutcome displayPath [] 0 Nothing))
+            else
+              do
+                looked <- fixitiesForFile env configPath source
+                env2 <- pure (firstOf looked)
+                case secondOf looked of
+                  ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+                  OkC programFixities =>
+                    do
+                      linted <- pure (lintSourceWithConfig cfg programFixities source)
+                      case linted of
+                        ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
+                        OkC findings =>
+                          do
+                            fixedR <- if opts.lintOptFix then fixFileWith opts cfg displayPath programFixities source findings else pure (OkC (Pair findings 0))
+                            pure (
+                                case fixedR of
+                                  ErrC e => Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e)))
+                                  OkC (Pair remaining fixed) => Pair env2 (FileOutcome displayPath remaining fixed Nothing)
+                              )
 
 -- | 内部：lint 单个目标（文件或 `-` stdin），错误也作为结果。
 lintOne : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> String -> Eff r (Pair FixityEnv FileOutcome)
-lintOne opts env path = if path == "-" then
-  if opts.lintOptFix then
-    pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
-  else do
-    source <- readStdinAll
-    lintText opts env "<stdin>" "stdin.vuna" source
-else do
-  textR <- readText path
-  case textR of
-    ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
-    OkC source => lintText opts env path path source
+lintOne opts env path =
+  if path == "-" then
+    if opts.lintOptFix then
+      pure (Pair env (FileOutcome "<stdin>" [] 0 (Just "--fix does not support stdin")))
+    else
+      do
+        source <- readStdinAll
+        lintText opts env "<stdin>" "stdin.vuna" source
+  else
+    do
+      textR <- readText path
+      case textR of
+        ErrC e => pure (Pair env (FileOutcome path [] 0 (Just (diagText e))))
+        OkC source => lintText opts env path path source
 
 -- | 内部：打印 `--diff`（外部 `diff -u`；只用于人读，不影响退出码）。
 printDiff : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> String -> Eff r Int
-printDiff path oldSource newSource = do
-  tmp0 <- envGetEnv "TMPDIR"
-  tmp <- pure (if tmp0 == "" then "/tmp" else tmp0)
-  base <- pure "${tmp}/vuna-lint-diff-${contentAddress path}"
-  oldPath <- pure "${base}.old"
-  newPath <- pure "${base}.new"
-  outPath <- pure "${base}.out"
-  cmd <- pure "diff -u '${oldPath}' '${newPath}' > '${outPath}' || true"
-  _ <- fsWriteFile oldPath oldSource
-  _ <- fsWriteFile newPath newSource
-  _ <- processRunIn "." ["sh", "-c", cmd]
-  exists <- fsFileExists outPath
-  text <- if exists then fsReadFile outPath else pure ""
-  msg <- pure (if text == "" then "" else "${text}\n")
-  _ <- consolePrint msg
-  _ <- fsRemoveFile oldPath
-  _ <- fsRemoveFile newPath
-  _ <- if exists then fsRemoveFile outPath else pure 0
-  pure 0
+printDiff path oldSource newSource =
+  do
+    tmp0 <- envGetEnv "TMPDIR"
+    tmp <- pure (if tmp0 == "" then "/tmp" else tmp0)
+    base <- pure "${tmp}/vuna-lint-diff-${contentAddress path}"
+    oldPath <- pure "${base}.old"
+    newPath <- pure "${base}.new"
+    outPath <- pure "${base}.out"
+    cmd <- pure "diff -u '${oldPath}' '${newPath}' > '${outPath}' || true"
+    _ <- fsWriteFile oldPath oldSource
+    _ <- fsWriteFile newPath newSource
+    _ <- processRunIn "." ["sh", "-c", cmd]
+    exists <- fsFileExists outPath
+    text <- if exists then fsReadFile outPath else pure ""
+    msg <- pure (if text == "" then "" else "${text}\n")
+    _ <- consolePrint msg
+    _ <- fsRemoveFile oldPath
+    _ <- fsRemoveFile newPath
+    _ <- if exists then fsRemoveFile outPath else pure 0
+    pure 0
 
 -- | 内部：fix 单文件（把 dry-run / 原子写 / 重新 lint 聚在一处）。
 fixFileWith : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> LintConfig -> String -> List FixityDecl -> String -> List Finding -> Eff r (Check (Pair (List Finding) Int))
-fixFileWith opts cfg path programFixities source findings = case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
-  ErrC e => pure (ErrC e)
-  OkC (Pair count newSource) => if count == 0 then pure (OkC (Pair findings 0))
-  else if opts.lintOptDiff then do
-    _ <- printDiff path source newSource
-    pure (OkC (Pair findings count))
-  else if opts.lintOptDry then pure (OkC (Pair findings count))
-  else do
-    _ <- fsWriteFileAtomic path newSource
-    pure (case lintSourceWithConfig cfg programFixities newSource of
-      ErrC e => ErrC e
-      OkC remaining => OkC (Pair remaining count)
-    )
+fixFileWith opts cfg path programFixities source findings =
+  case fixLoop cfg programFixities source findings opts.lintOptMaxPasses 0 of
+    ErrC e => pure (ErrC e)
+    OkC (Pair count newSource) =>
+      if count == 0 then
+        pure (OkC (Pair findings 0))
+      else if opts.lintOptDiff then
+        do
+          _ <- printDiff path source newSource
+          pure (OkC (Pair findings count))
+      else if opts.lintOptDry then
+        pure (OkC (Pair findings count))
+      else
+        do
+          _ <- fsWriteFileAtomic path newSource
+          pure (
+              case lintSourceWithConfig cfg programFixities newSource of
+                ErrC e => ErrC e
+                OkC remaining => OkC (Pair remaining count)
+            )
 
 -- ---------------------------------------------------------------
 -- 多文件 / 输出
@@ -332,45 +363,59 @@ fixFileWith opts cfg path programFixities source findings = case fixLoop cfg pro
 -- | 内部：逐文件 lint，返回全部结果（错误文件也保留）。
 lintFiles : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => LintOpts -> FixityEnv -> List String -> List FileOutcome -> Eff r (Pair FixityEnv (List FileOutcome))
 lintFiles opts env [] acc = pure (Pair env (reverse acc))
-lintFiles opts env (path :: rest) acc = do
-  stepped <- lintOne opts env path
-  lintFiles opts (firstOf stepped) rest (secondOf stepped :: acc)
+lintFiles opts env (path :: rest) acc =
+  do
+    stepped <- lintOne opts env path
+    lintFiles opts (firstOf stepped) rest (secondOf stepped :: acc)
 
 -- | 内部：文本/注解输出。
 printOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
-printOutcomes opts outcomes = case opts.lintOptFormat of
-  LintText => printTextOutcomes opts outcomes
-  LintGithub => printGithubOutcomes opts outcomes
-  LintJson => pure 0
-  LintSarif => pure 0
+printOutcomes opts outcomes =
+  case opts.lintOptFormat of
+    LintText => printTextOutcomes opts outcomes
+    LintGithub => printGithubOutcomes opts outcomes
+    LintJson => pure 0
+    LintSarif => pure 0
 
 printTextOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
 printTextOutcomes opts [] = pure 0
-printTextOutcomes opts (o :: rest) = case o.fileOutcomeError of
-  Just msg => do
-    _ <- consoleEprint "${o.fileOutcomePath}: error: ${msg}\n"
-    printTextOutcomes opts rest
-  Nothing => do
-    _ <-
-      if o.fileOutcomeFixed > 0 then fmap natToInt
-        (consolePrint "${if opts.lintOptDry then renderDryFixReport o.fileOutcomePath o.fileOutcomeFixed else renderFixReport o.fileOutcomePath o.fileOutcomeFixed}\n")
-      else pure 0
-    _ <-
-      printFindings o.fileOutcomePath (opts.lintOptFix && not opts.lintOptDry)
-        (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
-    printTextOutcomes opts rest
+printTextOutcomes opts (o :: rest) =
+  case o.fileOutcomeError of
+    Just msg =>
+      do
+        _ <- consoleEprint "${o.fileOutcomePath}: error: ${msg}\n"
+        printTextOutcomes opts rest
+    Nothing =>
+      do
+        _ <-
+          if o.fileOutcomeFixed > 0 then
+            fmap
+              natToInt
+              (consolePrint "${if opts.lintOptDry then renderDryFixReport o.fileOutcomePath o.fileOutcomeFixed else renderFixReport o.fileOutcomePath o.fileOutcomeFixed}\n")
+          else
+            pure 0
+        _ <-
+          printFindings
+            o.fileOutcomePath
+            (opts.lintOptFix && not opts.lintOptDry)
+            (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
+        printTextOutcomes opts rest
 
 printGithubOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
 printGithubOutcomes opts [] = pure 0
-printGithubOutcomes opts (o :: rest) = case o.fileOutcomeError of
-  Just msg => do
-    _ <- consoleEprint "${o.fileOutcomePath}: error: ${msg}\n"
-    printGithubOutcomes opts rest
-  Nothing => do
-    _ <-
-      printGithubFindings o.fileOutcomePath
-        (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
-    printGithubOutcomes opts rest
+printGithubOutcomes opts (o :: rest) =
+  case o.fileOutcomeError of
+    Just msg =>
+      do
+        _ <- consoleEprint "${o.fileOutcomePath}: error: ${msg}\n"
+        printGithubOutcomes opts rest
+    Nothing =>
+      do
+        _ <-
+          printGithubFindings
+            o.fileOutcomePath
+            (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
+        printGithubOutcomes opts rest
 
 printGithubFindings : Member nConsole ConsoleOp r => String -> List Finding -> Eff r Int
 printGithubFindings path [] = pure 0
@@ -385,15 +430,17 @@ printGithubFindings path (f :: rest) =
 
 -- | 内部：JSON 输出（stdout 只输出一个 JSON 对象）。
 printJsonOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
-printJsonOutcomes opts outcomes = do
-  _ <- consolePrint "${renderJson (outcomeJson opts outcomes)}\n"
-  pure 0
+printJsonOutcomes opts outcomes =
+  do
+    _ <- consolePrint "${renderJson (outcomeJson opts outcomes)}\n"
+    pure 0
 
 -- | 内部：SARIF 2.1.0 输出。
 printSarifOutcomes : Member nConsole ConsoleOp r => LintOpts -> List FileOutcome -> Eff r Int
-printSarifOutcomes opts outcomes = do
-  _ <- consolePrint "${renderJson (sarifJson opts outcomes)}\n"
-  pure 0
+printSarifOutcomes opts outcomes =
+  do
+    _ <- consolePrint "${renderJson (sarifJson opts outcomes)}\n"
+    pure 0
 
 -- | 内部：SARIF 文档。
 sarifJson : LintOpts -> List FileOutcome -> Json
@@ -408,7 +455,8 @@ sarifRule e =
 
 sarifResults : LintOpts -> FileOutcome -> List Json
 sarifResults opts o =
-  map (sarifFinding o.fileOutcomePath)
+  map
+    (sarifFinding o.fileOutcomePath)
     (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
 
 sarifFinding : String -> Finding -> Json
@@ -424,13 +472,15 @@ outcomeJson opts outcomes =
 
 outcomeFindingsJson : LintOpts -> FileOutcome -> List Json
 outcomeFindingsJson opts o =
-  map (findingJson o.fileOutcomePath)
+  map
+    (findingJson o.fileOutcomePath)
     (filter (visibleFinding opts.lintOptQuiet) o.fileOutcomeFindings)
 
 outcomeErrorJson : FileOutcome -> Maybe Json
-outcomeErrorJson o = case o.fileOutcomeError of
-  Nothing => Nothing
-  Just msg => Just (JObj [Pair "path" (JStr o.fileOutcomePath), Pair "message" (JStr msg)])
+outcomeErrorJson o =
+  case o.fileOutcomeError of
+    Nothing => Nothing
+    Just msg => Just (JObj [Pair "path" (JStr o.fileOutcomePath), Pair "message" (JStr msg)])
 
 findingJson : String -> Finding -> Json
 findingJson path f =
@@ -444,36 +494,43 @@ countFixable outcomes = foldl (\n, o => n + length (filter isFixable (fileFindin
 -- | 内部：退出码：工具错误 2 > error/超限 warning 1 > 0。
 outcomeCode : LintOpts -> LintConfig -> List FileOutcome -> Int
 outcomeCode opts cfg outcomes =
-  if anyError outcomes then 2
-  else if countErrors outcomes > 0 then 1
-  else if opts.lintOptMaxWarnings /= Nothing then warningLimitCode opts outcomes
+  if anyError outcomes then
+    2
+  else if countErrors outcomes > 0 then
+    1
+  else if opts.lintOptMaxWarnings /= Nothing then
+    warningLimitCode opts outcomes
   else if lintMaxWarnings cfg >= 0 && countWarnings outcomes > lintMaxWarnings cfg then 1 else 0
 
 warningLimitCode : LintOpts -> List FileOutcome -> Int
-warningLimitCode opts outcomes = case opts.lintOptMaxWarnings of
-  Just n => if n < 0 then 0 else if countWarnings outcomes > n then 1 else 0
-  Nothing => 0
+warningLimitCode opts outcomes =
+  case opts.lintOptMaxWarnings of
+    Just n => if n < 0 then 0 else if countWarnings outcomes > n then 1 else 0
+    Nothing => 0
 
 anyError : List FileOutcome -> Bool
 anyError outcomes = length (filter (\o => fileError o /= Nothing) outcomes) > 0
 
 -- | 内部：输出全部结果并给出退出码。
 finishLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => LintOpts -> List FileOutcome -> Eff r Int
-finishLint opts outcomes = do
-  _ <- case opts.lintOptFormat of
-    LintJson => printJsonOutcomes opts outcomes
-    LintSarif => printSarifOutcomes opts outcomes
-    _ => printOutcomes opts outcomes
-  case outcomes of
-    [] => pure 0
-    o :: _ => do
-      cfgR <- configForFile opts o.fileOutcomePath
-      case cfgR of
-        ErrC _ => pure (if anyError outcomes then 2 else 1)
-        OkC cfg0 => case applyOpts opts cfg0 of
-          ErrC _ =>
-            pure (if anyError outcomes then 2 else if countErrors outcomes > 0 then 1 else 0)
-          OkC cfg => pure (outcomeCode opts cfg outcomes)
+finishLint opts outcomes =
+  do
+    _ <-
+      case opts.lintOptFormat of
+        LintJson => printJsonOutcomes opts outcomes
+        LintSarif => printSarifOutcomes opts outcomes
+        _ => printOutcomes opts outcomes
+    case outcomes of
+      [] => pure 0
+      o :: _ =>
+        do
+          cfgR <- configForFile opts o.fileOutcomePath
+          case cfgR of
+            ErrC _ => pure (if anyError outcomes then 2 else 1)
+            OkC cfg0 =>
+              case applyOpts opts cfg0 of
+                ErrC _ => pure (if anyError outcomes then 2 else if countErrors outcomes > 0 then 1 else 0)
+                OkC cfg => pure (outcomeCode opts cfg outcomes)
 
 -- ---------------------------------------------------------------
 -- 规则信息
@@ -484,23 +541,27 @@ printRuleList = printRules lintAll
 
 printRules : Member nConsole ConsoleOp r => List LintEntry -> Eff r Int
 printRules [] = pure 0
-printRules (e :: rest) = do
-  _ <- consolePrint "${e.lintEntryCode}  ${e.lintEntryRule}  ${e.lintEntryDesc}\n"
-  printRules rest
+printRules (e :: rest) =
+  do
+    _ <- consolePrint "${e.lintEntryCode}  ${e.lintEntryRule}  ${e.lintEntryDesc}\n"
+    printRules rest
 
 -- | 内部：打印单条规则的详细信息。
 printRuleExplain : Member nConsole ConsoleOp r => String -> Eff r Int
-printRuleExplain name = case lintRuleOfName name of
-  Nothing => do
-    _ <- consoleEprint "error: unknown lint rule: ${name}\n"
-    pure 2
-  Just rule => do
-    _ <- consolePrint "${lintCode rule}\n"
-    _ <- consolePrint "  rule: ${lintRule rule}\n"
-    _ <- consolePrint "  description: ${lintDesc rule}\n"
-    _ <- consolePrint "  fixable: ${if lintFixable rule then "yes" else "no"}\n"
-    _ <- consolePrint "  edit: ${lintEdit rule}\n"
-    pure 0
+printRuleExplain name =
+  case lintRuleOfName name of
+    Nothing =>
+      do
+        _ <- consoleEprint "error: unknown lint rule: ${name}\n"
+        pure 2
+    Just rule =>
+      do
+        _ <- consolePrint "${lintCode rule}\n"
+        _ <- consolePrint "  rule: ${lintRule rule}\n"
+        _ <- consolePrint "  description: ${lintDesc rule}\n"
+        _ <- consolePrint "  fixable: ${if lintFixable rule then "yes" else "no"}\n"
+        _ <- consolePrint "  edit: ${lintEdit rule}\n"
+        pure 0
 
 -- ---------------------------------------------------------------
 -- 参数
@@ -525,17 +586,20 @@ lintUsage = """usage: vuna lint [OPTIONS] [PATH]...
 """
 
 lintUsageError : Member nConsole ConsoleOp r => Int -> Eff r Int
-lintUsageError _ = do
-  _ <- consoleEprint lintUsage
-  pure 2
+lintUsageError _ =
+  do
+    _ <- consoleEprint lintUsage
+    pure 2
 
 -- | 内部：解析非负/`-1` 整数。
 parseIntArg : String -> Maybe Int
-parseIntArg s = case strUnpack s of
-  45 :: rest => case readDigits rest of
-    Just n => Just (0 - n)
-    Nothing => Nothing
-  _ => readDigits (strUnpack s)
+parseIntArg s =
+  case strUnpack s of
+    45 :: rest =>
+      case readDigits rest of
+        Just n => Just (0 - n)
+        Nothing => Nothing
+    _ => readDigits (strUnpack s)
 
 readDigits : List Int -> Maybe Int
 readDigits [] = Nothing
@@ -548,16 +612,21 @@ readMoreDigits (c :: rest) acc =
 
 -- | 内部：解析选项；格式/整数非法给 `Nothing`。
 parseLintOpts : Parsed -> Maybe LintOpts
-parseLintOpts parsed = case formatOf (flagValue parsed "format") of
-  Nothing => Nothing
-  Just fmt => case intOf (flagValue parsed "max-warnings") (0 - 2) of
+parseLintOpts parsed =
+  case formatOf (flagValue parsed "format") of
     Nothing => Nothing
-    Just maxWarnings => case intOf (flagValue parsed "max-passes") 8 of
-      Nothing => Nothing
-      Just maxPasses =>
-        if maxPasses <= 0 || maxWarnings /= -2 && maxWarnings < -1 then Nothing
-        else Just
-          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "diff"))
+    Just fmt =>
+      case intOf (flagValue parsed "max-warnings") (0 - 2) of
+        Nothing => Nothing
+        Just maxWarnings =>
+          case intOf (flagValue parsed "max-passes") 8 of
+            Nothing => Nothing
+            Just maxPasses =>
+              if maxPasses <= 0 || maxWarnings /= -2 && maxWarnings < -1 then
+                Nothing
+              else
+                Just
+                  (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "diff"))
 
 formatOf : Maybe String -> Maybe LintFormat
 formatOf Nothing = Just LintText
@@ -573,28 +642,38 @@ intOf (Just s) d = parseIntArg s
 
 -- | `vuna lint` 的入口。
 export runLint : Member nConsole ConsoleOp r, Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nStdin StdinOp r => List String -> Eff r Int
-runLint args = case parseCmdArgs ["lint"] args of
-  ErrC e => do
-    _ <- consoleEprint "error: ${diagText e}\n"
-    pure 2
-  OkC parsed => if flagSet parsed "list" then printRuleList
-  else case flagValue parsed "explain" of
-    Just rule => printRuleExplain rule
-    Nothing => case parseLintOpts parsed of
-      Nothing => do
-        _ <- consoleEprint "error: invalid lint option value\n"
+runLint args =
+  case parseCmdArgs ["lint"] args of
+    ErrC e =>
+      do
+        _ <- consoleEprint "error: ${diagText e}\n"
         pure 2
-      Just opts => do
-        targetsR <-
-          if length parsed.positionals == 0 then defaultLintTargets
-          else fmap (\xs => OkC xs) (expandLintPaths parsed.positionals)
-        case targetsR of
-          ErrC e => do
-            _ <- consoleEprint "error: ${diagText e}\n"
-            pure 2
-          OkC targets => if length (dedupePaths targets) == 0 then do
-            _ <- consoleEprint "error: no vuna sources found\n"
-            pure 2
-          else do
-            ran <- lintFiles opts emptyFixityEnv (dedupePaths targets) []
-            finishLint opts (secondOf ran)
+    OkC parsed =>
+      if flagSet parsed "list" then
+        printRuleList
+      else
+        case flagValue parsed "explain" of
+          Just rule => printRuleExplain rule
+          Nothing =>
+            case parseLintOpts parsed of
+              Nothing =>
+                do
+                  _ <- consoleEprint "error: invalid lint option value\n"
+                  pure 2
+              Just opts =>
+                do
+                  targetsR <- if length parsed.positionals == 0 then defaultLintTargets else fmap (\xs => OkC xs) (expandLintPaths parsed.positionals)
+                  case targetsR of
+                    ErrC e =>
+                      do
+                        _ <- consoleEprint "error: ${diagText e}\n"
+                        pure 2
+                    OkC targets =>
+                      if length (dedupePaths targets) == 0 then
+                        do
+                          _ <- consoleEprint "error: no vuna sources found\n"
+                          pure 2
+                      else
+                        do
+                          ran <- lintFiles opts emptyFixityEnv (dedupePaths targets) []
+                          finishLint opts (secondOf ran)

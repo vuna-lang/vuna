@@ -36,39 +36,44 @@ modulePrefixOfName name = prefixOfName name
 -- ---------------------------------------------------------------
 export splitDeclNames : List Decl -> List String
 splitDeclNames [] = []
-splitDeclNames (d :: rest) = case d of
-  DSig name ctx ty sp => name :: splitDeclNames rest
-  DExtern name cName ty sp => name :: splitDeclNames rest
-  DFun name pats body sp => name :: splitDeclNames rest
-  DData name params kind ctors derivings viaField repr lin sp => name :: splitDeclNames rest
-  DRecord name params fields derivings viaField repr lin sp => name :: splitDeclNames rest
-  DTrait name params supers methods sp => name :: splitDeclNames rest
-  _ => splitDeclNames rest
+splitDeclNames (d :: rest) =
+  case d of
+    DSig name ctx ty sp => name :: splitDeclNames rest
+    DExtern name cName ty sp => name :: splitDeclNames rest
+    DFun name pats body sp => name :: splitDeclNames rest
+    DData name params kind ctors derivings viaField repr lin sp => name :: splitDeclNames rest
+    DRecord name params fields derivings viaField repr lin sp => name :: splitDeclNames rest
+    DTrait name params supers methods sp => name :: splitDeclNames rest
+    _ => splitDeclNames rest
 
 splitDataNames : List Decl -> List String
 splitDataNames [] = []
-splitDataNames (d :: rest) = case d of
-  DData name params kind ctors derivings viaField repr lin sp => name :: splitDataNames rest
-  DRecord name params fields derivings viaField repr lin sp => name :: splitDataNames rest
-  _ => splitDataNames rest
+splitDataNames (d :: rest) =
+  case d of
+    DData name params kind ctors derivings viaField repr lin sp => name :: splitDataNames rest
+    DRecord name params fields derivings viaField repr lin sp => name :: splitDataNames rest
+    _ => splitDataNames rest
 
 headClassName : Expr -> Maybe String
-headClassName (EApp fn args sp) = case fn of
-  EVar n fsp => Just n
-  _ => Nothing
+headClassName (EApp fn args sp) =
+  case fn of
+    EVar n fsp => Just n
+    _ => Nothing
 headClassName (EVar n sp) = Just n
 headClassName _ = Nothing
 
 -- 实例名与派生实例名用 Elab 的同一实现（`Elab.instanceName` / `Elab.instHead`），
 -- 不再复制命名逻辑：Elab 生成的 `DtDef` 名字与本表逐字一致。
 splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
-splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) = case headClassName headExpr of
-  Just c => [Pair (instanceName c headExpr) owner]
-  Nothing => []
+splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) =
+  case headClassName headExpr of
+    Just c => [Pair (instanceName c headExpr) owner]
+    Nothing => []
 splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField repr lin sp) =
   splitDerivedOwners owner dname params derivings
 splitInstanceOwnerOf owner (DRecord dname params fields derivings viaField repr lin sp) =
-  append (splitDerivedOwners owner dname params derivings)
+  append
+    (splitDerivedOwners owner dname params derivings)
     (splitHasFieldOwners owner dname params fields)
 splitInstanceOwnerOf owner _ = []
 
@@ -84,8 +89,10 @@ hasFieldOwnerOf owner dname params f =
     fty = fieldType f
     label = EApp (EVar "Base.Trait.Field.Field" splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
     head =
-      EApp (EVar "Base.Trait.Record.HasField" splitNoSpan)
-        [label, hasFieldRecordTypeExpr dname params, fty] splitNoSpan
+      EApp
+        (EVar "Base.Trait.Record.HasField" splitNoSpan)
+        [label, hasFieldRecordTypeExpr dname params, fty]
+        splitNoSpan
   in Pair (instanceName "Base.Trait.Record.HasField" head) owner
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
@@ -117,12 +124,14 @@ splitInstanceOwnersGo owner (d :: rest) =
 
 export splitOwnerEntriesOf : String -> List Decl -> List (Pair String String)
 splitOwnerEntriesOf owner decls =
-  append (map (\n => Pair n owner) (splitDeclNames decls))
+  append
+    (map (\n => Pair n owner) (splitDeclNames decls))
     (append (splitInstanceOwnersGo owner decls) (concatMap (splitTraitDefOwnerOf owner) decls))
 
 export splitDataOwnerEntriesOf : String -> List Decl -> List (Pair String String)
 splitDataOwnerEntriesOf owner decls =
-  append (map (\n => Pair n owner) (splitDataNames decls))
+  append
+    (map (\n => Pair n owner) (splitDataNames decls))
     (concatMap (splitTraitDataOwnerOf owner) decls)
 
 export splitOwnerEntriesOfModules : List (Pair String (List Decl)) -> List (Pair String String)
@@ -152,9 +161,14 @@ splitMetaOf modules entryDecls =
     defOwners =
       append (splitOwnerEntriesOfModules modules) (splitOwnerEntriesOf entryOwner entryDecls)
     dataOwners =
-      append (splitDataOwnerEntriesOfModules modules)
+      append
+        (splitDataOwnerEntriesOfModules modules)
         (splitDataOwnerEntriesOf entryOwner entryDecls)
-  in SplitMeta defOwners dataOwners knownModules (HashMap.fromList defOwners)
+  in SplitMeta
+    defOwners
+    dataOwners
+    knownModules
+    (HashMap.fromList defOwners)
     (HashMap.fromList dataOwners)
 
 export lookupModuleOf : List (Pair String String) -> String -> Maybe String
@@ -164,15 +178,20 @@ export knownModuleOrErr : List String -> String -> String -> Check String
 knownModuleOrErr knownModules what name =
   let
     prefix = modulePrefixOfName name
-  in if memName prefix knownModules then OkC prefix
-  else icInternal "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
+  in if memName prefix knownModules then
+    OkC prefix
+  else
+    icInternal "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
 
 export splitDataOwnerOf : SplitMeta -> DtData -> Check String
-splitDataOwnerOf meta d = case HashMap.lookup (dtDataName d) meta.smDataOwnerT of
-  Just o => OkC o
-  Nothing =>
-    if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
-    else icInternal "DT split: cannot determine module for data `${dtDataName d}`"
+splitDataOwnerOf meta d =
+  case HashMap.lookup (dtDataName d) meta.smDataOwnerT of
+    Just o => OkC o
+    Nothing =>
+      if containsDot (dtDataName d) then
+        knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
+      else
+        icInternal "DT split: cannot determine module for data `${dtDataName d}`"
 
 -- Elab 收尾合成的内部名字（`@vuna@` 前缀，如 `@vuna@main_show`）不属于任何源
 -- 模块、也没有模块前缀；它们由入口收尾阶段产生，归入口单元 `Main`。
@@ -181,21 +200,27 @@ isSyntheticInternalName : String -> Bool
 isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
 
 export splitDefOwnerOf : SplitMeta -> String -> Check String
-splitDefOwnerOf meta name = case HashMap.lookup name meta.smDefOwnerT of
-  Just o => OkC o
-  Nothing =>
-    if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name
-    else if isSyntheticInternalName name then OkC entryOwner
-    else icInternal "DT split: cannot determine module for definition `${name}`"
+splitDefOwnerOf meta name =
+  case HashMap.lookup name meta.smDefOwnerT of
+    Just o => OkC o
+    Nothing =>
+      if containsDot name then
+        knownModuleOrErr meta.smKnownModules "definition" name
+      else if isSyntheticInternalName name then
+        OkC entryOwner
+      else
+        icInternal "DT split: cannot determine module for definition `${name}`"
 
 export nameOwnerPairsOfDefs : SplitMeta -> List DtDef -> Check (List (Pair String String))
 nameOwnerPairsOfDefs meta [] = OkC []
 nameOwnerPairsOfDefs meta (d :: rest) =
-  Vuna.Compiler.Base.Common.bind (splitDefOwnerOf meta (dtDefName d))
+  Vuna.Compiler.Base.Common.bind
+    (splitDefOwnerOf meta (dtDefName d))
     (\o => Vuna.Compiler.Base.Common.bind (nameOwnerPairsOfDefs meta rest) (\ps => OkC (Pair (dtDefName d) o :: ps)))
 
 export nameOwnerPairsOfDatas : SplitMeta -> List DtData -> Check (List (Pair String String))
 nameOwnerPairsOfDatas meta [] = OkC []
 nameOwnerPairsOfDatas meta (d :: rest) =
-  Vuna.Compiler.Base.Common.bind (splitDataOwnerOf meta d)
+  Vuna.Compiler.Base.Common.bind
+    (splitDataOwnerOf meta d)
     (\o => Vuna.Compiler.Base.Common.bind (nameOwnerPairsOfDatas meta rest) (\ps => OkC (Pair (dtDataName d) o :: ps)))

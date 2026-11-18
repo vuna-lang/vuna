@@ -33,28 +33,35 @@ export data InstClash(..) : Type where
 
 export findInstanceClash : Ec -> String -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
 findInstanceClash ec name tele head seen =
-  if hasInstName name seen then Pair (Just ClashDuplicate) ec
-  else if anyInstanceExact ec (length tele) head seen then Pair (Just ClashDuplicate) ec
-  else anyInstanceOverlap ec (isBlanketInstHead (length tele) head) tele head seen
+  if hasInstName name seen then
+    Pair (Just ClashDuplicate) ec
+  else if anyInstanceExact ec (length tele) head seen then
+    Pair (Just ClashDuplicate) ec
+  else
+    anyInstanceOverlap ec (isBlanketInstHead (length tele) head) tele head seen
 
 export anyInstanceExact : Ec -> Int -> Term -> List DtInst -> Bool
 anyInstanceExact ec n head [] = False
 anyInstanceExact ec n head (i :: rest) =
   if length i.dtInstTele == n then
     if headsAlphaEqual ec n head i.dtInstHead then True else anyInstanceExact ec n head rest
-  else anyInstanceExact ec n head rest
+  else
+    anyInstanceExact ec n head rest
 
 -- 重叠扫描：blanket 与具体实例共存是**允许**的（blanket 是 fallback），所以任一侧是
 -- blanket 就跳过这一对；两侧都是具体头时才判重叠。
 anyInstanceOverlap : Ec -> Bool -> List (Pair String Term) -> Term -> List DtInst -> Pair (Maybe InstClash) Ec
 anyInstanceOverlap ec newBlanket [] head [] = Pair Nothing ec
 anyInstanceOverlap ec newBlanket (t :: ts) head [] = Pair Nothing ec
-anyInstanceOverlap ec newBlanket tele head (i :: rest) = if instanceExactQuiet ec (length tele) head i then anyInstanceOverlap ec newBlanket tele head rest
-else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then
-  anyInstanceOverlap ec newBlanket tele head rest
-else case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
-  Pair True ec1 => Pair (Just ClashOverlap) ec1
-  Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
+anyInstanceOverlap ec newBlanket tele head (i :: rest) =
+  if instanceExactQuiet ec (length tele) head i then
+    anyInstanceOverlap ec newBlanket tele head rest
+  else if newBlanket || isBlanketInstHead (length i.dtInstTele) i.dtInstHead then
+    anyInstanceOverlap ec newBlanket tele head rest
+  else
+    case headsOverlap ec tele head i.dtInstTele i.dtInstHead of
+      Pair True ec1 => Pair (Just ClashOverlap) ec1
+      Pair False ec1 => anyInstanceOverlap ec newBlanket tele head rest
 
 export instanceExactQuiet : Ec -> Int -> Term -> DtInst -> Bool
 instanceExactQuiet ec n head inst =
@@ -62,42 +69,50 @@ instanceExactQuiet ec n head inst =
 
 -- 同一 tele 长度下按 index 对齐的 α-等价（两个 head 的 tele 变量都映射到同一组占位 level）。
 export headsAlphaEqual : Ec -> Int -> Term -> Term -> Bool
-headsAlphaEqual ec n a b = case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
-  OkC _ => True
-  ErrC e => False
+headsAlphaEqual ec n a b =
+  case conv (ecDefTbl ec) (ecSolsP ec) 0 (eval (teleAlphaEnv n) a) (eval (teleAlphaEnv n) b) of
+    OkC _ => True
+    ErrC e => False
 
 export teleAlphaEnv : Int -> List Value
 teleAlphaEnv n = teleAlphaEnvGo n 0
 
 teleAlphaEnvGo : Int -> Int -> List Value
 teleAlphaEnvGo remaining i =
-  if remaining <= 0 then []
-  else VNeutral (NVar "#tele" i []) :: teleAlphaEnvGo (remaining - 1) (i + 1)
+  if remaining <= 0 then
+    []
+  else
+    VNeutral (NVar "#tele" i []) :: teleAlphaEnvGo (remaining - 1) (i + 1)
 
 -- 重叠判定：把一侧 tele 变量实例化成 meta、另一侧实例化成互不相同的刚性占位（global），
 -- conv 成功即「可合一」。两侧都有 tele 时只需一个方向（另一方向由对称性覆盖）。
 export headsOverlap : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
-headsOverlap ec tele1 h1 tele2 h2 = case tele1 of
-  [] => case tele2 of
-    [] => Pair (headsAlphaEqual ec 0 h1 h2) ec
-    -- 一侧无 tele：把**有 tele 的一侧**实例化成 meta（否则无法与具体头合一）。
-    _ => headsOverlapOne ec tele2 h2 tele1 h1
-  _ => headsOverlapOne ec tele1 h1 tele2 h2
+headsOverlap ec tele1 h1 tele2 h2 =
+  case tele1 of
+    [] =>
+      case tele2 of
+        [] => Pair (headsAlphaEqual ec 0 h1 h2) ec
+        -- 一侧无 tele：把**有 tele 的一侧**实例化成 meta（否则无法与具体头合一）。
+        _ => headsOverlapOne ec tele2 h2 tele1 h1
+    _ => headsOverlapOne ec tele1 h1 tele2 h2
 
 headsOverlapOne : Ec -> List (Pair String Term) -> Term -> List (Pair String Term) -> Term -> Pair Bool Ec
-headsOverlapOne ec teleA hA teleB hB = case allocTeleMetas Nothing emptyCtx ec teleA of
-  Pair ids ec1 =>
-    let
-      envA = map (\m => VMeta m []) ids
-      envB = teleGlobalEnv (length teleB)
-    in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 (eval envA hA) (eval envB hB) of
-      OkC sols2 => Pair True (ecPutSols ec1 (solsList sols2))
-      ErrC e => Pair False ec1
+headsOverlapOne ec teleA hA teleB hB =
+  case allocTeleMetas Nothing emptyCtx ec teleA of
+    Pair ids ec1 =>
+      let
+        envA = map (\m => VMeta m []) ids
+        envB = teleGlobalEnv (length teleB)
+      in case conv (ecDefTbl ec1) (ecSolsP ec1) 0 (eval envA hA) (eval envB hB) of
+        OkC sols2 => Pair True (ecPutSols ec1 (solsList sols2))
+        ErrC e => Pair False ec1
 
 teleGlobalEnv : Int -> List Value
 teleGlobalEnv n = teleGlobalEnvGo n 0
 
 teleGlobalEnvGo : Int -> Int -> List Value
 teleGlobalEnvGo remaining i =
-  if remaining <= 0 then []
-  else VNeutral (NGlobal "#ov${i}" []) :: teleGlobalEnvGo (remaining - 1) (i + 1)
+  if remaining <= 0 then
+    []
+  else
+    VNeutral (NGlobal "#ov${i}" []) :: teleGlobalEnvGo (remaining - 1) (i + 1)

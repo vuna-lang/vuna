@@ -19,20 +19,24 @@ handleExit n ret opH comp = handleCore (Named n ExitOp) "exit" n ret opH comp
 
 -- | 真实 handler 的操作解释：执行 `@vuna@prim_eff_exit code`；`k 0` 不可达，只为类型闭合。
 exitOpHIO : {a : Type} -> (i : Type) -> (o : ExitOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
-exitOpHIO i op k = case op of
-  ExitWith code => do
-    _ <- @vuna@prim_eff_exit code
-    k 0
+exitOpHIO i op k =
+  case op of
+    ExitWith code =>
+      do
+        _ <- @vuna@prim_eff_exit code
+        k 0
 
 -- ---------------------------------------------------------------
 -- 带行 handler（entry 自动预装用；不导出）
 -- ---------------------------------------------------------------
 -- | 带 `ExitOp` 行的 op 解释：执行 `@vuna@host@exitOp code`；`k 0` 不可达，只为类型闭合。
 exitOpHIOHost : {a : Type} -> (i : Type) -> (o : ExitOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ExitOp] a) -> Eff [ExitOp] a
-exitOpHIOHost i op k = case op of
-  ExitWith code => do
-    _ <- raise (@vuna@host@exitOp code)
-    k 0
+exitOpHIOHost i op k =
+  case op of
+    ExitWith code =>
+      do
+        _ <- raise (@vuna@host@exitOp code)
+        k 0
 
 -- | 带行的宿主 handler：删掉 `ExitOp`，answer 是 `Eff [ExitOp]`（不导出）。
 handleExitHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ExitOp :: r) a -> Eff r (Eff [ExitOp] a)

@@ -29,29 +29,33 @@ data SearchMode : Type where
 -- | `vuna search` 的入口：解析参数与模式，加载（或构建）当前 workspace 索引，输出命中。
 -- 用法错误、索引构建失败、查询解析失败都打印 `error: ...` 并返回 2。
 export runSearch : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
-runSearch args = case parseCmdArgs ["search"] args of
-  ErrC e => toolError (diagText e)
-  OkC parsed =>
-    let
-      query = join " " parsed.positionals
-    in if query == "" then
-      toolError
-        "usage: vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query>"
-    else case modeOf parsed query of
-      ErrC e => toolError (diagText e)
-      OkC mode => case limitOf parsed of
-        ErrC e => toolError (diagText e)
-        OkC limit => do
-          loaded <- loadOrBuild "."
-          case loaded of
-            ErrC e => toolError (diagText e)
-            OkC index => runOnIndex parsed mode query limit index
+runSearch args =
+  case parseCmdArgs ["search"] args of
+    ErrC e => toolError (diagText e)
+    OkC parsed =>
+      let
+        query = join " " parsed.positionals
+      in if query == "" then
+        toolError "usage: vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query>"
+      else
+        case modeOf parsed query of
+          ErrC e => toolError (diagText e)
+          OkC mode =>
+            case limitOf parsed of
+              ErrC e => toolError (diagText e)
+              OkC limit =>
+                do
+                  loaded <- loadOrBuild "."
+                  case loaded of
+                    ErrC e => toolError (diagText e)
+                    OkC index => runOnIndex parsed mode query limit index
 
 -- | 内部：在已加载的索引上按模式检索，再交给 `finish` 输出。
 runOnIndex : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Parsed -> SearchMode -> String -> Int -> Index -> Eff r Int
-runOnIndex parsed (mode@TypeMode) query limit index = case searchType index query of
-  ErrC e => toolError (diagText e)
-  OkC hits => finish parsed mode query (filterHits parsed limit hits)
+runOnIndex parsed (mode@TypeMode) query limit index =
+  case searchType index query of
+    ErrC e => toolError (diagText e)
+    OkC hits => finish parsed mode query (filterHits parsed limit hits)
 runOnIndex parsed (mode@(NameDocMode nameOnly docOnly)) query limit index =
   finish parsed mode query (filterHits parsed limit (searchNameDoc index query nameOnly docOnly))
 
@@ -59,9 +63,10 @@ runOnIndex parsed (mode@(NameDocMode nameOnly docOnly)) query limit index =
 filterHits : Parsed -> Int -> List SearchHit -> List SearchHit
 filterHits parsed limit hits =
   let
-    pfx = case flagValue parsed "module" of
-      Just p => p
-      Nothing => ""
+    pfx =
+      case flagValue parsed "module" of
+        Just p => p
+        Nothing => ""
   in takeHits limit (filter (\h => pfx == "" || startsWith pfx (hitModule h)) hits)
 
 -- | 内部：从 flag 组合决定模式；三个模式 flag 互斥，未指定时按查询里有没有 `->` / `=>` 判断。
@@ -72,11 +77,18 @@ modeOf parsed query =
     isName = flagSet parsed "name"
     isDoc = flagSet parsed "doc"
     count = boolInt isType + boolInt isName + boolInt isDoc
-  in if count > 1 then err "choose one of --type / --name / --doc"
-  else if isType then OkC TypeMode
-  else if isName then OkC (NameDocMode True False)
-  else if isDoc then OkC (NameDocMode False True)
-  else if contains "->" query || contains "=>" query then OkC TypeMode else OkC (NameDocMode False False)
+  in if count > 1 then
+    err "choose one of --type / --name / --doc"
+  else if isType then
+    OkC TypeMode
+  else if isName then
+    OkC (NameDocMode True False)
+  else if isDoc then
+    OkC (NameDocMode False True)
+  else if contains "->" query || contains "=>" query then
+    OkC TypeMode
+  else
+    OkC (NameDocMode False False)
 
 -- | 内部：Bool 转 0 / 1（数互斥的 flag 个数）。
 boolInt : Bool -> Int
@@ -85,11 +97,13 @@ boolInt False = 0
 
 -- | 内部：`--limit` 缺省 20，必须是正整数。
 limitOf : Parsed -> Check Int
-limitOf parsed = case flagValue parsed "limit" of
-  Nothing => OkC 20
-  Just text => case parseInt text of
-    Just n => if n > 0 then OkC n else err "--limit must be a positive integer"
-    Nothing => err "--limit is not an integer: ${text}"
+limitOf parsed =
+  case flagValue parsed "limit" of
+    Nothing => OkC 20
+    Just text =>
+      case parseInt text of
+        Just n => if n > 0 then OkC n else err "--limit must be a positive integer"
+        Nothing => err "--limit is not an integer: ${text}"
 
 -- | 内部：只接受纯十进制数字串的整数解析。
 parseInt : String -> Maybe Int
@@ -112,20 +126,25 @@ takeHits n (h :: rest) = if n <= 0 then [] else h :: takeHits (n - 1) rest
 -- | 内部：输出命中并给退出码：无命中打印 `no results for ...` 并返回 1；`--json` 输出 JSON 并
 -- 返回 0；否则逐行打印文本并返回 0。
 finish : Member nConsole ConsoleOp r => Parsed -> SearchMode -> String -> List SearchHit -> Eff r Int
-finish parsed mode query hits = if length hits == 0 then do
-  _ <- consolePrint "no results for `${query}`\n"
-  pure 1
-else if flagSet parsed "json" then do
-  _ <- consolePrint "${renderJson (hitsJson mode query hits)}\n"
-  pure 0
-else printHits hits
+finish parsed mode query hits =
+  if length hits == 0 then
+    do
+      _ <- consolePrint "no results for `${query}`\n"
+      pure 1
+  else if flagSet parsed "json" then
+    do
+      _ <- consolePrint "${renderJson (hitsJson mode query hits)}\n"
+      pure 0
+  else
+    printHits hits
 
 -- | 内部：逐行打印命中的文本形式。
 printHits : Member nConsole ConsoleOp r => List SearchHit -> Eff r Int
 printHits [] = pure 0
-printHits (h :: rest) = do
-  _ <- consolePrint "${hitText h}\n"
-  printHits rest
+printHits (h :: rest) =
+  do
+    _ <- consolePrint "${hitText h}\n"
+    printHits rest
 
 -- | 单条命中的文本形式（REPL `:search` 复用同一份渲染）。
 export renderHit : SearchHit -> String
@@ -139,9 +158,10 @@ hitText h =
 
 -- | 内部：docstring 的第一行；空串表示没有 doc。
 firstDocLine : String -> String
-firstDocLine doc = case lines doc of
-  first :: rest => first
-  [] => ""
+firstDocLine doc =
+  case lines doc of
+    first :: rest => first
+    [] => ""
 
 -- | 内部：`--json` 的顶层对象（schema `vuna-search/1`）。
 hitsJson : SearchMode -> String -> List SearchHit -> Json
@@ -163,6 +183,7 @@ hitJson h =
 
 -- | 内部：把错误打印成 `error: ...` 并返回退出码 2。
 toolError : Member nConsole ConsoleOp r => String -> Eff r Int
-toolError e = do
-  _ <- consolePrint "error: ${e}\n"
-  pure 2
+toolError e =
+  do
+    _ <- consolePrint "error: ${e}\n"
+    pure 2

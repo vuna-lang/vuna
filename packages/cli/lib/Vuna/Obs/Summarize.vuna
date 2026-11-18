@@ -127,8 +127,10 @@ insertGroup groups row =
 addToGroup : List (Pair (Pair Int Int) (List (Pair Int ObsEvent))) -> Pair Int Int -> Pair Int ObsEvent -> List (Pair (Pair Int Int) (List (Pair Int ObsEvent)))
 addToGroup [] key item = [Pair key [item]]
 addToGroup ((Pair k items) :: rest) key item =
-  if sameThread key k then Pair k (append items [item]) :: rest
-  else Pair k items :: addToGroup rest key item
+  if sameThread key k then
+    Pair k (append items [item]) :: rest
+  else
+    Pair k items :: addToGroup rest key item
 
 -- 分组只保留事件本身：行号无需保留（validate 已经报过位置）。
 -- | 内部：两个 `(pid,tid)` 键是否相同。
@@ -195,9 +197,10 @@ tsOrZero ev = fromMaybe 0 (eventTs ev)
 -- 关闭。
 foldSpans : List ObsEvent -> FoldState -> FoldState
 foldSpans [] st = drainSpans st
-foldSpans (ev :: rest) st = case spanInterval ev of
-  Nothing => foldSpans rest st
-  Just (Pair ts end) => foldSpans rest (attachSpan ev ts end st)
+foldSpans (ev :: rest) st =
+  case spanInterval ev of
+    Nothing => foldSpans rest st
+    Just (Pair ts end) => foldSpans rest (attachSpan ev ts end st)
 
 -- | 内部：先按父规则弹出，再把新 span 压入栈顶。
 attachSpan : ObsEvent -> Int -> Int -> FoldState -> FoldState
@@ -212,8 +215,10 @@ attachSpan ev ts end st =
 -- 「关闭栈顶」前进，对 DT 不是结构递归，因此用显式 fuel（栈深 + 1）。
 popForParent : Maybe String -> Int -> Int -> FoldState -> FoldState
 popForParent (Just name) ts end st =
-  if hasOpenName name st.foldStack then popUntilName (stackFuel st) name st
-  else popUntilContains (stackFuel st) ts end st
+  if hasOpenName name st.foldStack then
+    popUntilName (stackFuel st) name st
+  else
+    popUntilContains (stackFuel st) ts end st
 popForParent Nothing ts end st = popUntilContains (stackFuel st) ts end st
 
 -- | 内部：弹出循环的 fuel（栈深 + 1）。
@@ -227,29 +232,34 @@ hasOpenName name (s :: rest) = if s.openSpanName == name then True else hasOpenN
 
 -- | 内部：弹出到栈顶是同名 span 为止（`fuel` 用尽或栈空就停）。
 popUntilName : Int -> String -> FoldState -> FoldState
-popUntilName fuel name st = if fuel <= 0 then st
-else case st.foldStack of
-  [] => st
-  top :: _ => if top.openSpanName == name then st else popUntilName (fuel - 1) name (closeTop st)
+popUntilName fuel name st =
+  if fuel <= 0 then
+    st
+  else
+    case st.foldStack of
+      [] => st
+      top :: _ => if top.openSpanName == name then st else popUntilName (fuel - 1) name (closeTop st)
 
 -- | 内部：弹出到栈顶区间包含 `[ts, end]` 为止（`fuel` 用尽或栈空就停）。
 popUntilContains : Int -> Int -> Int -> FoldState -> FoldState
-popUntilContains fuel ts end st = if fuel <= 0 then st
-else case st.foldStack of
-  [] => st
-  top :: _ =>
-    if ts >= top.openSpanTs && end <= top.openSpanTs + top.openSpanDur then st
-    else popUntilContains (fuel - 1) ts end (closeTop st)
+popUntilContains fuel ts end st =
+  if fuel <= 0 then
+    st
+  else
+    case st.foldStack of
+      [] => st
+      top :: _ => if ts >= top.openSpanTs && end <= top.openSpanTs + top.openSpanDur then st else popUntilContains (fuel - 1) ts end (closeTop st)
 
 -- | 内部：关闭栈顶 span——算 self、把 `dur` 计入新栈顶的子用时、记一条样本。
 closeTop : FoldState -> FoldState
-closeTop st = case st.foldStack of
-  [] => st
-  top :: rest =>
-    let
-      selfUs = top.openSpanDur - top.openSpanChildUs
-      sample = SpanSample top.openSpanName top.openSpanDur selfUs
-    in FoldState (addTopChild top.openSpanDur rest) (sample :: st.foldSamples)
+closeTop st =
+  case st.foldStack of
+    [] => st
+    top :: rest =>
+      let
+        selfUs = top.openSpanDur - top.openSpanChildUs
+        sample = SpanSample top.openSpanName top.openSpanDur selfUs
+      in FoldState (addTopChild top.openSpanDur rest) (sample :: st.foldSamples)
 
 -- | 内部：把已关闭 span 的时长累加到新的栈顶（即它的父）。
 addTopChild : Int -> List OpenSpan -> List OpenSpan
@@ -263,10 +273,13 @@ drainSpans st = drainSpansGo (length st.foldStack + 1) st
 
 -- | 内部：`drainSpans` 的弹出循环。
 drainSpansGo : Int -> FoldState -> FoldState
-drainSpansGo fuel st = if fuel <= 0 then st
-else case st.foldStack of
-  [] => st
-  _ :: _ => drainSpansGo (fuel - 1) (closeTop st)
+drainSpansGo fuel st =
+  if fuel <= 0 then
+    st
+  else
+    case st.foldStack of
+      [] => st
+      _ :: _ => drainSpansGo (fuel - 1) (closeTop st)
 
 -- ---------------------------------------------------------------
 -- 聚合
@@ -280,9 +293,13 @@ addStage : List StageStat -> SpanSample -> List StageStat
 addStage [] s = [StageStat s.spanSampleName 1 s.spanSampleTotalUs s.spanSampleSelfUs]
 addStage (st :: rest) s =
   if st.stageName == s.spanSampleName then
-    StageStat st.stageName (st.stageCount + 1) (st.stageTotalUs + s.spanSampleTotalUs) (st.stageSelfUs + s.spanSampleSelfUs)
-      :: rest
-  else st :: addStage rest s
+    StageStat
+      st.stageName
+      (st.stageCount + 1)
+      (st.stageTotalUs + s.spanSampleTotalUs)
+      (st.stageSelfUs + s.spanSampleSelfUs) :: rest
+  else
+    st :: addStage rest s
 
 -- | 内部：阶段表排序——总用时降序、名字升序（热点在前，同值确定序）。
 sortStages : List StageStat -> List StageStat
@@ -291,7 +308,8 @@ sortStages stages = sortBy stageLt stages
 -- | 内部：阶段表的排序谓词（`totalUs` 降序 → `name` 升序）。
 stageLt : StageStat -> StageStat -> Bool
 stageLt a b =
-  if a.stageTotalUs > b.stageTotalUs then True
+  if a.stageTotalUs > b.stageTotalUs then
+    True
   else if a.stageTotalUs < b.stageTotalUs then False else a.stageName <= b.stageName
 
 -- | 内部：事件是否是计数器（`ph:"C"`）。
@@ -318,7 +336,8 @@ insertCounter [] name value = [CounterStat name value value 1]
 insertCounter (c :: rest) name value =
   if c.counterName == name then
     CounterStat name (c.counterSum + value) value (c.counterCount + 1) :: rest
-  else c :: insertCounter rest name value
+  else
+    c :: insertCounter rest name value
 
 -- | 内部：计数表按名字升序（稳定、可 diff）。
 sortCounters : List CounterStat -> List CounterStat
@@ -348,31 +367,39 @@ filterSamples kind ((row@(Pair _ ev)) :: rest) =
 
 -- | 内部：事件是否是某个种类的采样。
 isKindSample : String -> ObsEvent -> Bool
-isKindSample kind ev = case sampleOf ev of
-  Nothing => False
-  Just s => sampleKindOfName s.sampleName == kind
+isKindSample kind ev =
+  case sampleOf ev of
+    Nothing => False
+    Just s => sampleKindOfName s.sampleName == kind
 
 -- | 内部：把一条采样的栈首帧计入热点表（空栈采样忽略）。
 addHot : List SampleEntry -> Pair Int ObsEvent -> List SampleEntry
-addHot entries (Pair _ ev) = case sampleOf ev of
-  Nothing => entries
-  Just s => case s.sampleStack of
-    [] => entries
-    leaf :: _ => insertHot entries leaf
+addHot entries (Pair _ ev) =
+  case sampleOf ev of
+    Nothing => entries
+    Just s =>
+      case s.sampleStack of
+        [] => entries
+        leaf :: _ => insertHot entries leaf
 
 -- | 内部：热点表里按帧名累加命中次数。
 insertHot : List SampleEntry -> String -> List SampleEntry
 insertHot [] frame = [SampleEntry frame 1]
 insertHot (e :: rest) frame =
-  if e.sampleEntryFrame == frame then SampleEntry frame (e.sampleEntryCount + 1) :: rest
-  else e :: insertHot rest frame
+  if e.sampleEntryFrame == frame then
+    SampleEntry frame (e.sampleEntryCount + 1) :: rest
+  else
+    e :: insertHot rest frame
 
 -- | 内部：热点的排序谓词（命中次数降序 → 帧名升序）。
 hotLt : SampleEntry -> SampleEntry -> Bool
 hotLt a b =
-  if a.sampleEntryCount > b.sampleEntryCount then True
-  else if a.sampleEntryCount < b.sampleEntryCount then False
-  else a.sampleEntryFrame <= b.sampleEntryFrame
+  if a.sampleEntryCount > b.sampleEntryCount then
+    True
+  else if a.sampleEntryCount < b.sampleEntryCount then
+    False
+  else
+    a.sampleEntryFrame <= b.sampleEntryFrame
 
 -- | 内部：采样热点表按种类名升序。
 sortSampleTables : List SampleTable -> List SampleTable
@@ -390,22 +417,25 @@ wallUsOf evs =
     ends = filterMapEvents eventEnd evs
   in case starts of
     [] => 0
-    first :: _ => case ends of
-      [] => 0
-      e :: _ => max 0 (foldl max e ends - foldl min first starts)
+    first :: _ =>
+      case ends of
+        [] => 0
+        e :: _ => max 0 (foldl max e ends - foldl min first starts)
 
 -- | 内部：按给定投影取事件的时间值。
 filterMapEvents : (ObsEvent -> Maybe Int) -> List (Pair Int ObsEvent) -> List Int
 filterMapEvents f [] = []
-filterMapEvents f ((Pair _ ev) :: rest) = case f ev of
-  Just n => n :: filterMapEvents f rest
-  Nothing => filterMapEvents f rest
+filterMapEvents f ((Pair _ ev) :: rest) =
+  case f ev of
+    Just n => n :: filterMapEvents f rest
+    Nothing => filterMapEvents f rest
 
 -- | 内部：事件的结束时间（span 取 `ts + dur`，其它取 `ts`；都没有 = `Nothing`）。
 eventEnd : ObsEvent -> Maybe Int
-eventEnd ev = case spanInterval ev of
-  Just (Pair _ end) => Just end
-  Nothing => eventTs ev
+eventEnd ev =
+  case spanInterval ev of
+    Just (Pair _ end) => Just end
+    Nothing => eventTs ev
 
 -- ---------------------------------------------------------------
 -- baseline 差值（纯）
@@ -418,9 +448,10 @@ diffSummaries base new = map (deltaOf base.summaryStages) new.summaryStages
 deltaOf : List StageStat -> StageStat -> StageDelta
 deltaOf baseStages newStat =
   let
-    baseTotal = case findStage newStat.stageName baseStages of
-      Just b => b.stageTotalUs
-      Nothing => 0
+    baseTotal =
+      case findStage newStat.stageName baseStages of
+        Just b => b.stageTotalUs
+        Nothing => 0
     delta = newStat.stageTotalUs - baseTotal
     pct = pctOf delta baseTotal
   in StageDelta newStat.stageName baseTotal newStat.stageTotalUs delta pct
@@ -464,8 +495,10 @@ stageRow st =
 -- | 计数表表头 + 每行（`name count sum last`）。
 export renderCounterTable : ObsSummary -> List String
 renderCounterTable s =
-  if length s.summaryCounters == 0 then ["no counters"]
-  else counterHeader :: map counterRow s.summaryCounters
+  if length s.summaryCounters == 0 then
+    ["no counters"]
+  else
+    counterHeader :: map counterRow s.summaryCounters
 
 -- | 内部：计数表表头。
 counterHeader : String
@@ -487,8 +520,10 @@ sampleEntryLine e = "${padRight 7 (strFromInt e.sampleEntryCount)}  ${e.sampleEn
 -- | 内部：一个种类的热点小节（标题 + 每行；无条目时显示 `(none)`）。
 sampleTableLines : SampleTable -> List String
 sampleTableLines t =
-  if length t.sampleTableEntries == 0 then ["samples:${t.sampleTableKind}  (none)"]
-  else "samples:${t.sampleTableKind}" :: map sampleEntryLine t.sampleTableEntries
+  if length t.sampleTableEntries == 0 then
+    ["samples:${t.sampleTableKind}  (none)"]
+  else
+    "samples:${t.sampleTableKind}" :: map sampleEntryLine t.sampleTableEntries
 
 -- | baseline 差值表（`+` / `-` 前缀，百分比取整）。
 export renderDeltaTable : List StageDelta -> List String
