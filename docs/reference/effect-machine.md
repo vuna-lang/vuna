@@ -167,20 +167,27 @@ Control       = Done value
 
 ### 7.1 进度（现状）
 
-已落地：`@ir@m@apply`（`$rt_mApply`，`$step` tag 4）+ `Ir.Cps.mApplys` 后处理，
-mode 6 的所有 continuation 调用改为返回 `Control`；wasm 322 全绿。
+已落地：
 
-实测（`48_eff_many`，2000 次顺序 perform）：栈需求从 **1 MiB → 约 192 KiB**
-（196608 通过，163840 抛 `call stack exhausted`），约 5× 下降，但仍随次数增长，
-说明还有非 `@ir@m@apply` 的调用在累积帧。
+- `@ir@m@apply`（`$rt_mApply`，`$step` tag 4）：mode 6 的 continuation 调用一律
+  返回 `Control`，由机器循环单层派发；
+- `rtMRes2` 改成转移（返回 `@ir@m@apply`）而不是调用 resumed 段；
+- `rtMKDone` 恢复 ctx 归属：嵌套同一帧的多次 resume，answer 交回**最内层这次**
+  resume 的 `kRest`（否则中间层的组合结果被丢弃）；
+- 删除 answer-row 的嵌套 `@ir@m@run` 分支：answer 是 `Eff` 时交 `kOuter`，
+  由调用方（`joinEff`）正常求值。
 
-剩余两处（下一步）：
+实测（`48_eff_many`，2000 次顺序 perform）：栈需求 **1 MiB → 约 192 KiB**
+（196608 通过，163840 失败）；`test/steps/106` 的 `max-wasm-stack` 已降到 262144。
 
-1. **栈增长源**：`rt_apply` 已用 `return_call_ref`，但组合子管道里仍有直接
-   `IrApp`（非 continuation）在一条链上层层返回；需要把这些也纳进转移或
-   改成显式帧，才能做到与次数无关。
-2. **answer row + resume**（Fs 语料）：`rtMKDone` 现在用「嵌套 `@ir@m@run` 跑
-   answer Eff，再包成纯 Eff 交 `kOuter`」；与 `@ir@m@apply` 约定不一致——嵌套 run
-   会把 answer Eff 的值再包一层。去掉该分支又会破坏 Console 用例，说明 entry
-   host handler 的「answer 是 Eff」形状本身要一起改：宿主 `opH` 一律返回裸值
-   （见 §5 的阶段 3），answer Eff 由调用方（`joinEff`）正常求值。
+剩余（按顺序）：
+
+1. **栈仍随次数线性增长**（约 96 B/perform）：`>>=` 等组合子的 CPS 管道里还有
+   普通 `IrApp`（头部不是 continuation）在同一条链上层层返回；需要把管道本身也
+   纳入转移（或改成显式帧），才能做到与次数无关。
+2. **`opH` 的 answer 是 `Eff` 且体内 resume**（Fs 语料）：宿主 `opH` 换成裸值后
+   宿主执行路径已经正常，但 `joinEff (handleFs …)` 的最终值不是 `Int`。
+   原因在 `>>=` 的 CPS 管道会**运行** continuation 的返回值
+   （`case (k V) of MkEff a2 => a2 u V3`），而 resume 的 answer 由 `kRest` 交付——
+   两者对「这里的值是什么」的假设还不一致。这条要在 lowering 侧统一（管道也走
+   `Control` 转移），不是在 `kDone` 里再加分支。
