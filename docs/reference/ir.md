@@ -20,6 +20,8 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 - **IR 是后端唯一的输入面**：OCaml 后端不 import `Core` / `Elab` / `Intrinsics`，
   因此「后端要理解类型论」这个耦合被切断；wasm / native 只对接 IR。
   native 的支持面、ABI 与运行时子集见 [native.md](native.md)。
+  OCaml 后端没有独立的后端 IR（`IrUnit` 直接拼成文本）；wasm / native 有
+  `Model` + `Render` 两层。这条不对称记在 [debt.md](debt.md) D110。
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
 - **ANF（wasm 前置）**：`Ir.Anf` 把每条非简单表达式绑定到 `let`，binder 用单调
@@ -199,7 +201,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 已知边界 / 刻意未做
 
-- IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状。
+- IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状。项级 binder、
+  应用与定义都没有类型（签名级只有 `IrTy`），所以 `IrCast` 只能靠 Lowering 写对，
+  字典/方法投影也无法在 OCaml 侧区分 `f a` 与 `f (a -> b)`。见 [debt.md](debt.md) D109。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。
 - IR 不做内容寻址：`Canonical.Ir` 不存在，节点集变化不需要迁移哈希。
 - 现在有三个消费者：OCaml（全量参考实现）、wasm、native。两个产品后端覆盖白名单子集

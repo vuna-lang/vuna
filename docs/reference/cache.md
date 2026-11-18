@@ -1,7 +1,27 @@
 # 输入寻址对象库
 
-本文记录 vuna **唯一的缓存形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
-命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。
+本文记录 vuna **唯一对象库的形态**：一切可复用产物都是「按输入摘要寻址的对象」，存在即
+命中。没有查询图、没有会话索引、没有依赖快照比较、没有写锁。对象分为三类，判据见
+[准入判据](#准入判据)。
+
+## 准入判据
+
+**域名 = 阶段模型类型名**。一个域对应一个在编译器里已存在的类型（`ModuleIface`、
+`CheckOutcome`、`SplitUnit`、`ModuleOrder`），codec 名与类型名一致。没有对应类型的产物
+不建域——命令名、子命令名、工具入口都不是类型，不进域名。
+
+**缓存域**（派生、可删、可重建）要入 store 必须同时满足：
+
+1. 生产耗时 > 读取耗时（否则缓存是净损失：写入 + 解码 + 校验比重算贵）；
+2. 在最高频路径上净省 ≥ 1 s（`hit × (prod − read) − 写摊销`）；
+3. 重复次数是乘数，不是理由。
+
+**中间表示不入 store**：`Cst` / `Ast` / `Rast` / `Core` / `Ir` / 效应机器都不建域。
+它们只活在一次进程的编译链里，没有第二个消费者，也不值得为它们冻结 codec。
+
+**身份与决策记录**不受上面两条约束：它们承载确定性或产物身份（模块顺序、依赖身份摘要），
+删掉会改变产物或让身份漂移。当前是 `objects/order` 与 `objects/pkgiface`，永不被 GC 当作
+缓存淘汰。
 
 ## 三条正交的东西
 
@@ -41,10 +61,15 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   tmp/                              # 取包中转（可删）
 ```
 
-缓存族 = `objects/{iface,header,lex,order,check,tool,doc,test,pkgiface,splitptr}` + `blobs` + `units` +
-`views` + `.tmp`；包对象族 = `objects/pkg` + `pkgs` + `tmp`。两族生命周期不同：
-`vuna store clean --store` / `vuna store gc` 只碰缓存族，`vuna store clean --packages` 只碰包对象族
-（见 [package-store.md](package-store.md)）。
+对象按用途分三类：
+
+| 类 | 域 | 生命周期 |
+| --- | --- | --- |
+| 缓存 | `iface` `check` `tool` `doc` `test` `lex` `header` `splitptr` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
+| 身份与决策记录 | `order` / `pkgiface` | 承载确定性或产物身份；不参与缓存淘汰 |
+| 源对象 | `pkg` / `pkgs` | 取来的源；`clean --packages` 管理，删了要重新 fetch |
+
+`.tmp/` 是视图锁与暂存，`tmp/` 是取包中转，都可删。
 
 所有地址 = `addrOf [kind, ...输入摘要]`（`Vuna.Compiler.Loader.Addr`，SHA-256）。
 
@@ -160,8 +185,9 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
     布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉。它只缩小保留集，不影响正确性。
-  - 候选 = 缓存族里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
-    root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（包对象族归 `clean --packages`）；
+  - 候选 = **缓存域**里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
+    root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（源对象族归 `clean --packages`），
+    `objects/order` / `objects/pkgiface`（身份与决策记录）也永不进入候选；
   - `views/bin/` 与 `views/testbin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
     目录名参与 roots 保护；
   - `--max-size` 有值时按 mtime 从旧到新淘汰（文件与 view 目录都计入总量），直到降到上限以下。

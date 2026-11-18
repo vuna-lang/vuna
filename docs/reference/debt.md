@@ -38,6 +38,13 @@
 | D104 | 有界计数器（升序 `i + 1` 配 `i >= n` 上界）没有判定规则：只有递减构成长度证据，升序一律报 `TC_CannotProveTermination`（诊断写明「ascending counters are not supported」）；同形态只能改写成显式递减 fuel 或显式上界 | `packages/compiler/lib/Vuna/Compiler/Elab/Termination/Measure.vuna`（`arithMinusBase` / `isAddOpName`）；`test/corpus/term_err/08_up_counter.vuna`；[type-system.md](type-system.md)「定义与终止性」 | 后续（需要上界推理，不是局部规则） |
 | D105 | **显式效应机器（方案 2）的剩余覆盖**：纯用户 handler 已默认走 mode 6（`@ir@m@*` + `Return`/`Resume` + `$g_mctx`），值语义、非 tail 使用、重复 resume 均通过；主机组合仍需 answer-row frame 生命周期；栈仍 O(n)（CPS 续延在 wasm 调用栈上，2000 次 perform 需 1 MiB）。 | `packages/compiler/lib/Vuna/Compiler/Wasm/Step.vuna`、`Wasm/Module.vuna`、`Ir/Cps.vuna`；[effect-machine.md](effect-machine.md) | 后续（answer row / host handler；把 CPS 续延也搬到 trampoline） |
 
+## 中间表示
+
+| ID | 仍未成立的事实 | 证据 | 归属 |
+| --- | --- | --- | --- |
+| D109 | **擦除后 IR 没有类型标注**：`Ir.Model` 只有签名级的 `IrTy`，项级 binder / 应用 / 定义都没有类型；因此「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对；字典与方法投影无标注，OCaml 侧把 `f a` 与 `f (a -> b)` 错统一（D52 的根因） | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/Program.vuna`；[ir.md](ir.md)「已知边界」 | 后续（先做擦除规范化，再给项级加标注） |
+| D110 | **OCaml 后端没有后端 IR**：`IrUnit` 由 `Codegen.{Decl,Term,Assembly}` 直接拼成文本，名字编码、`let rec` 分组、运行时模板与布局混在字符串拼接里（`Codegen/Term.vuna` 2162 行）；wasm / native 都有 `Model` + `Render`。`check` 路径因此仍生成整套文本再丢弃 | `Codegen/{Decl,Term,Assembly}.vuna`；[ir.md](ir.md)「位置与形状」 | 后续（先做逐字节等价的搬迁） |
+
 ## 工具、构建与验证
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
