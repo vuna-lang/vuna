@@ -93,3 +93,9 @@ out-contains: vuna dev suite
 run: "$VUNA" errors nope 2>&1
 exit: 2
 out-contains: unknown `vuna errors` subcommand
+
+# `dev ir dump` 的后端视图：类型声明 + 定义的 OCaml 形状（调试面，不承诺 ABI）。
+run: sh -c '"$VUNA" dev ir dump --after ocaml corpus/packages/m34_summary/root 2>/dev/null | grep -c "^let " | grep -qv "^0$"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after ocaml corpus/packages/m34_summary/root 2>/dev/null | head -1 | grep -q "^type t_"'
+exit: 0

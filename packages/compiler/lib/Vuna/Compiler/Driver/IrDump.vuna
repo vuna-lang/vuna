@@ -5,6 +5,9 @@ module Vuna.Compiler.Driver.IrDump where
 import Base.Effect.Types as EffTypes
 import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Codegen.Decl
+import Vuna.Compiler.Codegen.Ocaml.Render
+import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Ir.Cps
@@ -31,7 +34,20 @@ dumpIr after ctx entry = do
 dumpAfter : String -> IrProgram -> Check String
 dumpAfter "cps" program = dumpCps program
 dumpAfter "machine" program = dumpMachine program
+dumpAfter "ocaml" program = dumpOcaml program
 dumpAfter _ program = OkC (renderProgram program)
+
+-- | OCaml 后端视图：类型声明 + 每个顶层的 `name = <渲染后的 OTerm>`。
+-- 名字编码与前缀是完整的（`v_` / `C_` / `f_`），check 路径的 `noQual` 因此不写跨单元限定。
+dumpOcaml : IrProgram -> Check String
+dumpOcaml program =
+  let
+    unit = program.irProgUnit
+    st = mkGenStWith (\p => p) noQual program.irProgShared
+    types = irTypeDeclsText noQual unit.irUnitTyDecls
+  in case genGroups st unit.irUnitGroups of
+    ErrC e => OkC ("OCAML ERROR: " ++ diagText e)
+    OkC (Pair bodies _) => OkC (types ++ joinWith "\n\n" bodies)
 
 dumpMachine : IrProgram -> Check String
 dumpMachine program =

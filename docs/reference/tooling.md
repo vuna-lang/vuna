@@ -361,7 +361,7 @@ dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回）�
 
 | 命令 | 行为 |
 |---|---|
-| `vuna dev ir dump [--after raw|cps|machine] [--out FILE] DIR` | 对包做检查 + lowering，输出确定性 IR 文本（默认 stdout）。`raw` = lowering 后；`cps` = 选择性 CPS；`machine` = handler/符号/trampoline 的机器化 lowering。 |
+| `vuna dev ir dump [--after raw|cps|machine|ocaml] [--out FILE] DIR` | 对包做检查 + lowering，输出确定性文本（默认 stdout）。`raw` = lowering 后；`cps` = 选择性 CPS；`machine` = handler/符号/trampoline 的机器化 lowering；`ocaml` = OCaml 后端模型渲染后的类型声明与定义。 |
 
 只用于 diff / 观测，不是稳定 ABI，也不写构建产物。
 
