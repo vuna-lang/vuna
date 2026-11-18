@@ -319,26 +319,23 @@ groupMessage ([f]) = "${f} (recursive call does not structurally decrease)"
 groupMessage comp =
   "recursive group {${joinComma comp}} (mutual recursion: no parameter position decreases on every recursive call)"
 
-cannotProveMsg : List String -> Diagnostic
-cannotProveMsg comp = cannotProveMsgEdges comp []
-
--- | 终止性失败诊断（附调用边）。
-cannotProveMsgEdges : List String -> List (Pair (Pair (Pair String String) Int) Span) -> Diagnostic
-cannotProveMsgEdges comp edges =
+-- | 终止性失败诊断（附调用边 + 被检查的形参位置）。
+cannotProveMsgEdges : List String -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> Diagnostic
+cannotProveMsgEdges comp p edges =
   let
     desc = groupMessage comp
     base = tcMsg (CannotProveTermination desc) [desc]
-  in applyCallFields edges (case edges of
+  in applyCallFields p edges (case edges of
     [] => withAbsent NsSynthetic base
     (Pair _ sp) :: _ => withFallbackSpan sp base
   )
 
--- | 把调用边逐条挂到诊断 fields.call。
-applyCallFields : List (Pair (Pair (Pair String String) Int) Span) -> Diagnostic -> Diagnostic
-applyCallFields [] d = d
-applyCallFields ((Pair (Pair (Pair caller callee) rel) sp) :: rest) d =
-  applyCallFields rest
-    (withField (FieldCall (CallInfo callee ("call at argument position " ++ strFromInt rel) "no structural decrease" (Just sp))) d)
+-- | 把调用边逐条挂到诊断 fields.call：位置是被测的形参下标，关系按编号渲染。
+applyCallFields : Int -> List (Pair (Pair (Pair String String) Int) Span) -> Diagnostic -> Diagnostic
+applyCallFields p [] d = d
+applyCallFields p ((Pair (Pair (Pair caller callee) rel) sp) :: rest) d =
+  applyCallFields p rest
+    (withField (FieldCall (CallInfo callee "argument ${strFromInt p}" (relText rel) (Just sp))) d)
 
 collectClauses : List (Pair (List Pat) Expr) -> List String -> List String -> List (Pair String (List Int)) -> Int -> String -> HashMap String (List Int) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Check (Pair Bool (List (Pair (Pair (Pair String String) Int) Span)))
 collectClauses [] comp ctors projs p caller facts acc = OkC acc
@@ -359,10 +356,10 @@ collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
 tryMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Check Int
 tryMeasure comp defTbl ctors projs facts p maxP =
-  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP []
+  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p []
 
-tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> Check Int
-tryMeasureGo comp defTbl ctors projs facts remaining maxP lastEdges = if remaining <= 0 then ErrC (cannotProveMsgEdges comp lastEdges)
+tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> Check Int
+tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges = if remaining <= 0 then ErrC (cannotProveMsgEdges comp lastP lastEdges)
 else
   let
     p = maxP - remaining
@@ -371,11 +368,11 @@ else
     OkC (Pair valid edges) => if valid then
       let
         modes = filterModes (map callMode edges)
-      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP edges
+      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
       else OkC 0
-      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP edges
-      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP edges
-    else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP edges
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
+    else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
 
 checkStrictGroup : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Check Int
 checkStrictGroup comp defTbl ctors projs facts =
