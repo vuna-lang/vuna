@@ -104,9 +104,14 @@ fi
 
 # 规则 7：IR 数据模块里的字面量只能是符号名（不含空格 / 括号 / 花括号），
 # 防止把目标表达式重新塞回 IR。
-if grep -nE '"[^"]*[ (){}][^"]*"' \
+#
+# 先 `-o` 逐个取出字面量再判字符：直接对整行匹配 `"[^"]*[ (){}][^"]*"` 会把
+# 「两个相邻字面量之间的空格」当成字面量内容（`Pair "fs" "Base.X"` 的
+# `" "` 就命中），对任何成对出现的字符串表都误报。
+if grep -noE '"[^"]*"' \
   packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna \
-  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna
+  packages/compiler/lib/Vuna/Compiler/Ir/Runtime.vuna |
+  grep -E '[ (){}]'
 then
   echo "ir-boundary: IR data module contains a text literal with spaces/brackets (target text?)"
   fail=$((fail + 1))
