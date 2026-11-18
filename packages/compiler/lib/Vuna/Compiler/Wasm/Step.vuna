@@ -56,7 +56,7 @@ rtSelHandleDone : WatFunc
 rtSelHandleDone =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals = [Pair "$f" WvAnyRef]
+    locals = [Pair "$f" WvAnyRef, Pair "$r" WvAnyRef]
     body =
       [ ILocalGet "$p0",
         IRefCast "$hframe",
@@ -70,9 +70,11 @@ rtSelHandleDone =
         IStructGet "$hframe" 2,
         ILocalGet "$p1",
         ICall "$rt_apply",
+        ILocalSet "$r",
         ILocalGet "$f",
         IRefCast "$hframe",
         IStructGet "$hframe" 4,
+        ILocalGet "$r",
         ICall "$rt_apply",
         IReturn
       ]
