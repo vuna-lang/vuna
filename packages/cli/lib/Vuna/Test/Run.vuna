@@ -46,9 +46,9 @@ import Base.Effect.Args as EffArgs
 
 -- | 一次 suite run 的执行环境：每个进程（父进程 / 各 worker）在 `runSuiteOnce` 里构造一次。
 record Env where
-  -- | 仓库（suite）根目录。
+  -- | 仓库根（含 `[workspace]` 的 `vuna.toml`）：base、`.local`、runner 夹具都在这里。
   envRoot : String
-  -- | case 的工作目录（`<root>/test`）；steps 与产物执行用它作 cwd。
+  -- | suite 的 test 根（`<pkg>/test`）；steps 的 cwd 与相对路径基准。
   envCwd : String
   -- | `runSuiteOnce` 产出本次 run 的临时根（`TMPDIR` 与子进程 cmd 输出文件都落在这里）。
   envTmp : String
@@ -343,7 +343,7 @@ runCmdMerged env tag cwd secs argv = runCmdWith True env tag cwd secs argv
 withEnv : Env -> List String -> List String
 withEnv env argv =
   append
-    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}"]
+    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}", "VUNA_TEST_ROOT=${env.envCwd}"]
     argv
 
 -- 对象库是输入寻址的：同一输入同一路径、原子写，日常 check/build 与测试共用同一根
@@ -563,25 +563,25 @@ caseSkipDiag why = diagNoLoc SevError PhDriver CatTool "case-skip" why
 -- ---------------------------------------------------------------
 -- 结构化诊断期望（`.diag.json` 唯一真源）
 -- ---------------------------------------------------------------
--- | 内部：`.diag.json` 路径 → 相对 `test/` 的目录（诊断投影用）；不是 `expected.diag.json` 时给空串。
+-- | 内部：`.diag.json` 路径 → 相对 test 根的目录（诊断投影用）；不是 `expected.diag.json` 时给空串。
 caseRelOf : Env -> String -> String
 caseRelOf env diagPath =
   if not (endsWith "expected.diag.json" diagPath) then
     ""
   else
-    relativeTo "${env.envRoot}/test" (Vuna.Cli.Args.parentOf diagPath)
+    relativeTo env.envCwd (Vuna.Cli.Args.parentOf diagPath)
 
 -- | 内部：读 `.diag.json` 并解析成期望键序列；读不到或解析失败走 `ErrC`。
 expectKeysOf : Member nFs FsOp r => Env -> String -> Eff r (Check (List String))
 expectKeysOf env diagPath =
   do
     text <- fsReadFile diagPath
-    pure (expectKeys env.envRoot env.envBase (caseRelOf env diagPath) text)
+    pure (expectKeys env.envRoot env.envCwd env.envBase (caseRelOf env diagPath) text)
 
 -- | 内部：把 check 结果投影成与期望同口径的键序列（`ErrC` 时展开其中的诊断）。
 actualKeysOf : Env -> String -> Check (List Diagnostic) -> List String
-actualKeysOf env caseRel (ErrC e) = projectDiags env.envRoot env.envBase caseRel (flattenErr e)
-actualKeysOf env caseRel (OkC ds) = projectDiags env.envRoot env.envBase caseRel ds
+actualKeysOf env caseRel (ErrC e) = projectDiags env.envCwd env.envBase caseRel (flattenErr e)
+actualKeysOf env caseRel (OkC ds) = projectDiags env.envCwd env.envBase caseRel ds
 
 -- | 内部：期望键里是否有 error 级条目。
 expectHasError : List String -> Bool
@@ -1168,11 +1168,11 @@ noErrorDiags (OkC ds) = not (any (\d => severityText (diagSeverityOf d) == "erro
 diagSeverityOf : Diagnostic -> Severity
 diagSeverityOf d = d.diagSeverity
 
--- | 内部：把 `<root>/test/` 前缀换成相对路径，lint 输出里不带机器相关前缀。
+-- | 内部：把 test 根前缀换成相对路径，lint 输出里不带机器相关前缀。
 relativeTestPath : Env -> String -> String
 relativeTestPath env source =
   let
-    prefix = "${env.envRoot}/test/"
+    prefix = "${env.envCwd}/"
   in if startsWith prefix source then
     substring (byteLength prefix) (byteLength source - byteLength prefix) source
   else
@@ -1925,14 +1925,14 @@ allDigitChars : List Int -> Bool
 allDigitChars [] = True
 allDigitChars (c :: rest) = c >= 48 && c <= 57 && allDigitChars rest
 
--- | 内部：单条过滤模式匹配：纯数字模式按 section 相等或 case id 前缀匹配，其余模式在
--- `section id tags` 拼串里做子串匹配。
+-- | 内部：单条过滤模式匹配：在 `case id + tags` 拼串里做子串匹配；纯数字模式按
+-- `<数字>/` 前缀匹配（owner 化后不再有 section，数字前缀仅供旧习惯）。
 matchPattern : String -> Case -> Bool
 matchPattern pat c =
   if allDigits pat then
-    c.caseSection == pat || startsWith "${pat}/" c.caseId
+    startsWith "${pat}/" c.caseId
   else
-    contains pat "${c.caseSection} ${c.caseId} ${join " " c.caseTags}"
+    contains pat "${c.caseId} ${join " " c.caseTags}"
 
 -- | 内部：任一模式命中；空模式列表给 False。
 matchAny : List String -> Case -> Bool
@@ -2586,35 +2586,29 @@ changedPaths env rev =
     r <- runCmd env "git-diff" env.envRoot 60 ["git", "diff", "--name-only", rev]
     pure (if r.cmdCode == 0 then Just (filter (\line => line /= "") (lines r.cmdOut)) else Nothing)
 
--- | 内部：该改动是否影响所有 case（编译器 / base / lib / app / suite 配置）。
+-- | 内部：该改动是否影响所有 case（包源码 / 执行器配置 / 示例）；测试夹具按 case 精确匹配。
 isGlobalChange : String -> Bool
 isGlobalChange path =
-  startsWith "compiler/" path
-    || startsWith "base/" path
-    || startsWith "lib/" path
-    || startsWith "app/" path
+  (startsWith "packages/" path && not (contains "/test/" path))
+    || startsWith "examples/" path
     || path == "vuna.toml" || startsWith "test/suite" path || path == "test/suite.toml"
 
--- | 内部：取路径前 `n` 段并补尾 `/`。
-takeFirstSegments : Int -> String -> String
-takeFirstSegments n s = collectSegments n (split "/" s) ""
-
--- | 内部：`takeFirstSegments` 的递归体。
-collectSegments : Int -> List String -> String -> String
-collectSegments n [] acc = acc
-collectSegments n (seg :: rest) acc =
-  if n <= 0 then
-    acc
-  else if n == 1 then
-    "${acc}${seg}/"
-  else if acc == "" then
-    collectSegments (n - 1) rest "${seg}/"
-  else
-    collectSegments (n - 1) rest "${acc}${seg}/"
-
--- | 内部：corpus 路径取前三段（`test/corpus/<族>/`），其余原样返回。
+-- | 内部：corpus 路径取 `corpus/<族>/` 前缀（`test/corpus/...` 与 `packages/*/test/corpus/...` 同口径）。
 corpusDirPrefix : String -> String
-corpusDirPrefix rel = if startsWith "test/corpus/" rel then takeFirstSegments 3 rel else rel
+corpusDirPrefix rel = if contains "corpus/" rel then corpusFamilyPrefix rel else rel
+
+-- | 内部：`<前缀>corpus/<族>/`；缺族目录时原样返回。
+corpusFamilyPrefix : String -> String
+corpusFamilyPrefix rel =
+  case split "corpus/" rel of
+    before :: rest =>
+      case rest of
+        after :: _ =>
+          case split "/" after of
+            seg :: _ => "${before}corpus/${seg}/"
+            [] => rel
+        [] => rel
+    [] => rel
 
 -- | 内部：两个路径是否互相沾到（相等、互为前缀）。
 pathTouches : String -> String -> Bool
@@ -2644,7 +2638,7 @@ claimTextTouches env path changed =
   do
     text <- fsReadFile path
     let
-      corpusChanges = filter (\p => startsWith "test/corpus/" p) changed
+      corpusChanges = filter (\p => contains "corpus/" p) changed
     in pure (any (\p => contains (corpusDirPrefix p) text) corpusChanges || any (\p => contains (stripRoot env path) p) changed)
 
 -- | 内部：`changed` 里是否有改动影响该 case：全局改动一律算；steps 走文本认领，其余按
@@ -2687,13 +2681,23 @@ listSuite env cases =
 -- ---------------------------------------------------------------
 -- --audit / --watch
 -- ---------------------------------------------------------------
--- | 内部：去掉 `test/` 前缀（审计路径比较用）。
-stripTestPrefix : String -> String
-stripTestPrefix rel = if startsWith "test/" rel then substring 5 (byteLength rel - 5) rel else rel
-
 -- | 内部：case 认领的目录根：目录型夹具（`.../app/Main.vuna`）给带尾 `/` 的包根，其余原样。
-caseRoots : Env -> Case -> List String
-caseRoots env c = map rootOfPath (casePaths env c)
+caseRootsAbs : Case -> List String
+caseRootsAbs c = map rootOfPath (casePathsAbs c)
+
+-- | 内部：case 依赖的绝对路径。
+casePathsAbs : Case -> List String
+casePathsAbs c =
+  case c.caseKind of
+    CGolden source expected _ _ _ _ _ => [source, expected]
+    CError source diagPath _ _ _ => [source, diagPath]
+    CCheck source _ expectedErr => if expectedErr == "" then [source] else [source, expectedErr]
+    CLint source expected => [source, expected]
+    CFix source expected => [source, expected]
+    CRuntime source expected _ => [source, expected]
+    CSeed source expected => [source, expected]
+    CSteps path => [path]
+    CBroken _ => []
 
 -- | 内部：`.../app/Main.vuna` → 包根目录（带尾 `/`）；其余原样。
 rootOfPath : String -> String
@@ -2715,20 +2719,17 @@ claimTextPairs (c :: rest) =
         pure (Pair path text :: more)
     _ => claimTextPairs rest
 
--- | 内部：是否有 steps 文本提到该路径（去掉 `test/` 前缀后的全路径或其 corpus 目录）。
+-- | 内部：是否有 steps 文本提到该路径（test 根相对全路径或其 corpus 目录）。
 anyText : List (Pair String String) -> String -> Bool
 anyText [] rel = False
 anyText ((Pair _ text) :: rest) rel =
-  if contains (stripTestPrefix rel) text || contains (stripTestPrefix (corpusDirPrefix rel)) text then
-    True
-  else
-    anyText rest rel
+  if contains rel text || contains (corpusDirPrefix rel) text then True else anyText rest rel
 
 -- | 内部：该路径被某个 case 的目录根覆盖，或被 steps 文本提到。
-auditClaimed : Env -> List Case -> List (Pair String String) -> String -> Bool
-auditClaimed env cases texts rel =
-  any (\c => any (\root => root == rel || startsWith root rel) (caseRoots env c)) cases
-    || anyText texts rel
+auditClaimed : String -> List Case -> List (Pair String String) -> String -> Bool
+auditClaimed testRoot cases texts path =
+  any (\c => any (\root => root == path || startsWith root path) (caseRootsAbs c)) cases
+    || anyText texts (relativeTo testRoot path)
 
 -- | 内部：逐行打印 `orphan <rel>`。
 printOrphans : Member nConsole ConsoleOp r => List String -> Eff r Int
@@ -2738,26 +2739,21 @@ printOrphans (rel :: rest) =
     _ <- printLine "orphan ${rel}"
     printOrphans rest
 
--- | 内部：`test/corpus/codegen/` 下的产物不参与审计。
+-- | 内部：`corpus/codegen/` 下的产物不参与审计。
 auditPathIgnored : String -> Bool
-auditPathIgnored path = contains "/test/corpus/codegen/" path
+auditPathIgnored path = contains "/corpus/codegen/" path
 
 -- | 内部：全量 corpus 里没有被任何 case / section 脚本认领的夹具。family 配置漏掉一整族
 -- （或期望文件改错名）时 suite 会「少跑 case 却依然全绿」；本函数只服务 `--audit`，默认
 -- 护栏是同口径但只看 family 声明目录的 `familyOrphans`。
 auditOrphans : Member nFs FsOp r => Suite -> Eff r (List String)
 auditOrphans suite =
-  let
-    root = suite.suiteRoot
-  in do
-    allFixtures <- collectVunaFiles "${root}/test/corpus"
-    ref <- newRef (sessionNew "/tmp/iface-session")
+  do
+    allFixtures <- collectVunaFiles "${suite.suiteRoot}/corpus"
     cases <- discoverCases suite
     texts <- claimTextPairs cases
-    let
-      env = Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" 0 False False False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
-      fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
-    in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
+    pure
+      (filter (\path => not (auditClaimed suite.suiteRoot cases texts path)) (filter (\path => not (auditPathIgnored path)) allFixtures))
 
 -- | 内部：取前 `n` 个元素。
 takeFirst : Int -> List a -> List a
@@ -2807,23 +2803,19 @@ noSectionTexts : List (Pair String String)
 noSectionTexts = []
 
 -- | 内部：该夹具在精确审计下是孤儿（只有目录认领算数）。
-familyOrphan : Env -> List Case -> String -> Bool
-familyOrphan env cases rel = not (auditClaimed env cases noSectionTexts rel)
+familyOrphan : String -> List Case -> String -> Bool
+familyOrphan testRoot cases path = not (auditClaimed testRoot cases noSectionTexts path)
 
 -- 精确护栏：不用 section 脚本文本做模糊认领——只看目录名会让整个 family 从 suite.toml
 -- 消失时也报 0 orphan。
--- | 精确护栏：family 声明目录里没被任何 case 认领的夹具。
+-- | 精确护栏：family 声明目录里没被任何 case 认领的夹具（绝对路径）。
 familyOrphans : Member nFs FsOp r => Suite -> Eff r (List String)
 familyOrphans suite =
-  let
-    root = suite.suiteRoot
-  in do
-    ref <- newRef (sessionNew "/tmp/iface-session")
+  do
     cases <- discoverCases suite
-    fixtures <- concatMapEff (familyFixtures root) suite.suiteFamilies
-    let
-      env = Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" 0 False False False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
-    in pure (filter (familyOrphan env cases) fixtures)
+    fixtures <- concatMapEff (familyFixtures suite.suiteRoot) suite.suiteFamilies
+    pure
+      (filter (familyOrphan suite.suiteRoot cases) (map (\rel => "${suite.suiteRoot}/${rel}") fixtures))
 
 -- | 内部：逗号拼接。
 commaJoin : List String -> String
@@ -2837,7 +2829,6 @@ auditCases paths =
   [
     Case
       "audit/orphans"
-      "audit"
       ["audit"]
       (CBroken "${strOfInt (listLength paths)} orphan fixture(s): ${commaJoin (takeFirst 12 paths)}")
       0
@@ -2850,7 +2841,7 @@ auditSuite : Member nFs FsOp r, Member nConsole ConsoleOp r => SuiteOpts -> Suit
 auditSuite opts suite =
   do
     unclaimed <- auditOrphans suite
-    _ <- printOrphans unclaimed
+    _ <- printOrphans (map (\path => relativeTo suite.suiteRoot path) unclaimed)
     _ <- printLine "audit: ${strOfInt (listLength unclaimed)} orphan fixture(s)"
     pure (
         case unclaimed of
@@ -2866,21 +2857,20 @@ maxMtime acc (path :: rest) =
     m <- fmap (fromMaybe 0) (fsFileMtime path)
     maxMtime (if m > acc then m else acc) rest
 
--- | 内部：`--watch` 的快照：corpus / suite / lib / compiler / app / base 与两个配置文件的
--- mtime 最大值。
-watchSnapshot : Member nFs FsOp r => String -> Eff r Int
-watchSnapshot root =
+-- | 内部：`--watch` 的快照：suite 根、corpus、三个包的 `lib/` 与两个配置文件的 mtime 最大值。
+watchSnapshot : Member nFs FsOp r => Suite -> Eff r Int
+watchSnapshot suite =
   do
-    corpusFiles <- collectSourceFiles "${root}/test/corpus"
-    suiteFiles <- collectSourceFiles "${root}/test/suite"
-    libFiles <- collectSourceFiles "${root}/lib"
-    compilerFiles <- collectSourceFiles "${root}/compiler"
-    appFiles <- collectSourceFiles "${root}/app"
-    baseFiles <- collectSourceFiles "${root}/base"
-    extra <- filterEff pathExistsFile ["${root}/test/suite.toml", "${root}/vuna.toml"]
+    corpusFiles <- collectSourceFiles "${suite.suiteRoot}/corpus"
+    suiteFiles <- collectSourceFiles suite.suiteRoot
+    cliFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/cli/lib"
+    compilerFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/compiler/lib"
+    baseFiles <- collectSourceFiles "${suite.suiteRepoRoot}/packages/base/lib"
+    extra <-
+      filterEff pathExistsFile ["${suite.suiteRoot}/suite.toml", "${suite.suiteRepoRoot}/vuna.toml"]
     maxMtime
       0
-      (append corpusFiles (append suiteFiles (append libFiles (append compilerFiles (append appFiles (append baseFiles extra))))))
+      (append corpusFiles (append suiteFiles (append cliFiles (append compilerFiles (append baseFiles extra)))))
 
 -- | 内部：`--watch` 的轮询体：每 500ms 取一次快照，变化就重跑整个 suite。
 watchLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Int -> SuiteOpts -> Suite -> Int -> Int -> Eff r Int
@@ -2890,7 +2880,7 @@ watchLoop fuel opts suite last rc =
   else
     do
       _ <- clockSleepMicros 500000
-      now <- watchSnapshot suite.suiteRoot
+      now <- watchSnapshot suite
       if now /= last then
         do
           _ <- printLine "watch: change detected, rerunning"
@@ -2904,7 +2894,7 @@ watchSuite : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock Clock
 watchSuite opts suite =
   do
     rc <- runSuiteOnce opts suite
-    snapshot <- watchSnapshot suite.suiteRoot
+    snapshot <- watchSnapshot suite
     watchLoop 100000000 opts suite snapshot rc
 
 -- | `vuna test` 的入口：`--audit`、`--watch`、正常跑一次三选一。
@@ -2920,7 +2910,8 @@ runSuite opts suite =
 runSuiteOnce : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => SuiteOpts -> Suite -> Eff r Int
 runSuiteOnce opts suite =
   let
-    root = suite.suiteRoot
+    root = suite.suiteRepoRoot
+    testRoot = suite.suiteRoot
     tag =
       case opts.suiteWorker of
         Just (Pair i _) => "suite-w${strOfInt i}"
@@ -2959,11 +2950,11 @@ runSuiteOnce opts suite =
     discovered <- discoverCases suite
     orphans <- familyOrphans suite
     let
-      env = Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends wasmHost
+      env = Env root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends wasmHost
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
-      minCase = if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [Case "audit/min-cases" "audit" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"] else []
+      minCase = if suite.suiteMinCases > 0 && listLength discovered < suite.suiteMinCases then [Case "audit/min-cases" ["audit"] (CBroken "only ${strOfInt (listLength discovered)} case(s) discovered, suite.toml requires >= ${strOfInt suite.suiteMinCases}") 0 "e2e" "tool"] else []
       cases0 = filterCases opts (append (append discovered (auditCases orphans)) minCase)
     in do
       -- 预热依赖接口（仅父进程、仅真正跑 case 时）：共享 store 只需预热一次；
@@ -3068,7 +3059,7 @@ blessDiagText env diagPath ds =
     raw = Vuna.Compiler.Base.Diag.Format.renderJsonList "en" ds
     dir = Vuna.Cli.Args.parentOf diagPath
     t1 = if endsWith "expected.diag.json" diagPath then replaceAllText "${dir}/" "./" raw else raw
-    t2 = replaceAllText "${env.envRoot}/test/" "" t1
+    t2 = replaceAllText "${env.envCwd}/" "" t1
     t3 = replaceAllText env.envBase "<BASE>" t2
   in replaceAllText env.envRoot "<ROOT>" t3
 

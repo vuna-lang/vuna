@@ -9,7 +9,7 @@
 nix run .#vuna -- check .                        # 自检（DT 单路径）
 nix run .#vuna -- check <pkg>                    # 只查该包入口 import 闭包
 nix run .#vuna -- fmt <改动的文件/目录>           # 代码改动后必跑
-nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（--list 看章节）
+nix run .#vuna-run-tests -- --only <owner/family>   # 按 owner/family 跑原生 suite（--list 看 id）
 ```
 
 - 默认用 `nix run .#vuna -- <subcommand>`：按当前 worktree 的源码构建，永远对应当前代码。
@@ -19,22 +19,22 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 - **改完源码要验证 `nix build` 真的重建了**：机器级 eval cache 会在副 worktree / 未提交
   改动下返回旧求值（`Output paths:` 里是同一个 store 路径、也没有 `building ...` 行）。
   加 `--option eval-cache false`；判据是产物里能看到刚加的字符串（或 store 路径变了）。
-- 测试别为验证一处改动跑全量：先 `--only <章节>`，必要时再 `--filter PAT`。
+- 测试别为验证一处改动跑全量：先 `--only <owner/family>`，必要时再 `--filter PAT`。
 - 只有纯 `Int`/`String`/`Bool` 的夹具能走核心求值（进程内 interp 阶段）；`main : Eff [] a` 走
   `compile`/`build` + 运行产物。
 
 ## 按改动面选验证
 
 完整矩阵在 [`docs/architecture.md`](../../docs/architecture.md) 的「改一处 → 跑什么」，
-按其所在链路选章节。常用对应关系：
+按其所在链路选 case（--list 看 owner/family/id）。常用对应关系：
 
 | 你改了什么 | 至少跑 |
 | --- | --- |
-| `packages/cli/`（工具链）/ `docs`/`nix` | 相关章节 suite + `vuna check .` |
+| `packages/cli/`（工具链）/ `docs`/`nix` | 相关 family + `vuna check .` |
 | `packages/base/`（含效应 monad、`dbg!`/`assert`） | `--only dt` / `dt_base` / `dt_err` + `vuna check .` |
-| `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 相关章节 + `vuna check .`；合并前 `checks.seed-selfhost` |
-| codegen / 运行时 / `#line` / 观测 | 相关章节 + `checks.vuna-obs-*` + `vuna check .` |
-| CLI（`run`/`test`/REPL/LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` |
+| `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 相关 family + `vuna check .`；合并前 `checks.seed-selfhost` |
+| codegen / 运行时 / `#line` / 观测 | 相关 family + `checks.vuna-obs-*` + `vuna check .` |
+| CLI（`run`/`test`/REPL/LSP） | `--only steps_native` 下的 `14_cli` / `42_repl` / `47_*` / `48_run_cmd` / `49_repl_debug` / `54_*` + `corpus/lsp/smoke.sh` |
 
 ## 硬门禁（改到相关面时必须确认）
 

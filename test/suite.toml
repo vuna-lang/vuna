@@ -7,29 +7,27 @@
 
 [suite]
 name = "vuna"
+owner = "vuna"
 jobs = 0          # 0 = auto（探测全部可用核）
 timeout = 300
 min_cases = 870    # case 数下限：整族从配置消失时显式失败
 
 # --- golden（interp + check + compile + run + 互证）---
 [family.dt]
-section = "34"
-dir = "test/corpus/dt"
+dir = "corpus/dt"
 matrix = "pure"
 check = true
 tags = ["dt"]
 
 [family.dt_err]
-section = "34"
-dir = "test/corpus/dt_err"
+dir = "corpus/dt_err"
 matrix = "pure"
 interp = false
 check = true
 tags = ["dt", "error"]
 
 [family.dt_base]
-section = "34"
-dir = "test/corpus/dt_base"
+dir = "corpus/dt_base"
 matrix = "pure"
 check = true
 tags = ["dt", "base"]
@@ -37,8 +35,7 @@ tags = ["dt", "base"]
 # --- 后端能力矩阵：按副作用分层（见 docs/reference/testing.md）---
 # 纯语义三端差分：ocaml 是语义 oracle，wasm / native 必须逐字一致。
 [family.pure_cross]
-section = "34"
-dir = "test/corpus/pure_cross"
+dir = "corpus/pure_cross"
 interp = false
 check = true
 compare_interp = false
@@ -47,8 +44,7 @@ tags = ["parity"]
 
 # 三端共有的宿主副作用：Console / IORef / getenv / getArgs / exit / 经标签的 FS。
 [family.effect_common]
-section = "34"
-dir = "test/corpus/effect/common"
+dir = "corpus/effect/common"
 interp = false
 check = true
 compare_interp = false
@@ -57,8 +53,7 @@ tags = ["effect"]
 
 # 系统级副作用：process / sleep / mtime / 真实 cwd（ocaml + native）。
 [family.effect_native]
-section = "34"
-dir = "test/corpus/effect/native"
+dir = "corpus/effect/native"
 interp = false
 check = true
 compare_interp = false
@@ -67,8 +62,7 @@ tags = ["effect"]
 
 # 只有 ocaml 宿主实现的系统副作用：stdin / raw net。
 [family.effect_ocaml]
-section = "34"
-dir = "test/corpus/effect/ocaml"
+dir = "corpus/effect/ocaml"
 interp = false
 check = true
 compare_interp = false
@@ -77,8 +71,7 @@ tags = ["effect"]
 
 # WASI / 浏览器能力面：preopen 根、cwd=/、execPath=""、mtime=Nothing。
 [family.effect_wasm]
-section = "34"
-dir = "test/corpus/effect/wasm"
+dir = "corpus/effect/wasm"
 interp = false
 check = true
 compare_interp = false
@@ -87,8 +80,7 @@ tags = ["effect"]
 
 # 编译器包 API 的函数级夹具（mock handler + runPure 断言；只跑 run）。
 [family.dt_compiler]
-section = "34"
-dir = "test/corpus/compiler"
+dir = "corpus/compiler"
 matrix = "pure"
 check = true
 tags = ["dt", "compiler"]
@@ -96,8 +88,7 @@ tags = ["dt", "compiler"]
 # 精化器性能回归：只跑 `vuna check`，不编译不运行；
 # 单 case 超时 15s：长 do / 长 >>= 链必须保持线性耗时，超时即失败。
 [family.elab_perf]
-section = "34"
-dir = "test/corpus/elab_perf"
+dir = "corpus/elab_perf"
 matrix = "pure"
 kind = "check-ok"
 timeout = 15
@@ -105,89 +96,77 @@ tags = ["dt", "perf"]
 
 # 声明式步进用例（run/expect 指令，见 docs/reference/testing.md）
 [family.steps_native]
-section = "90"
-dir = "test/suite/steps"
+dir = "suite/steps"
 kind = "steps"
 tags = ["declarative"]
 
 [family.run]
-section = "1"
-dir = "test/corpus/run"
+dir = "corpus/run"
 matrix = "pure"
 check = false
 tags = ["run"]
 
 [family.modules]
-section = "2"
-dir = "test/corpus/modules"
+dir = "corpus/modules"
 matrix = "pure"
 entry = "app/Main.vuna"
 check = false
 tags = ["modules"]
 
 [family.records_files]
-section = "18"
-dir = "test/corpus/records"
+dir = "corpus/records"
 matrix = "pure"
 check = false
 tags = ["records"]
 
 [family.records_dirs]
-section = "20"
-dir = "test/corpus/records"
+dir = "corpus/records"
 matrix = "pure"
 entry = "app/Main.vuna"
 check = false
 tags = ["records"]
 
 [family.traits_files]
-section = "22"
-dir = "test/corpus/traits"
+dir = "corpus/traits"
 matrix = "pure"
 check = false
 tags = ["traits"]
 
 [family.traits_dirs]
-section = "24"
-dir = "test/corpus/traits"
+dir = "corpus/traits"
 matrix = "pure"
 entry = "app/Main.vuna"
 check = false
 tags = ["traits"]
 
 [family.monad]
-section = "26"
-dir = "test/corpus/monad"
+dir = "corpus/monad"
 matrix = "pure"
 check = true
 tags = ["monad"]
 
 [family.stdlib]
-section = "27"
-dir = "test/corpus/stdlib"
+dir = "corpus/stdlib"
 matrix = "pure"
 check = false
 tags = ["stdlib"]
 
 [family.float]
-section = "60"
-dir = "test/corpus/float"
+dir = "corpus/float"
 matrix = "pure"
 check = true
 tags = ["float"]
 
 # --- check 为主（interp 不支持 / 无 golden）---
 [family.type_ok]
-section = "7"
-dir = "test/corpus/type_ok"
+dir = "corpus/type_ok"
 interp = false
 check = true
 compare_interp = false
 tags = ["types"]
 
 [family.type_err]
-section = "8"
-dir = "test/corpus/type_err"
+dir = "corpus/type_err"
 interp = false
 check = true
 run = false
@@ -195,16 +174,14 @@ compare_interp = false
 tags = ["types", "error"]
 
 [family.typed_ok]
-section = "11"
-dir = "test/corpus/typed_ok"
+dir = "corpus/typed_ok"
 interp = false
 check = true
 compare_interp = false
 tags = ["types"]
 
 [family.type_modules]
-section = "9"
-dir = "test/corpus/type_modules"
+dir = "corpus/type_modules"
 entry = "app/Main.vuna"
 interp = false
 check = true
@@ -213,27 +190,23 @@ tags = ["types", "modules"]
 
 # 只跑 check 的夹具（终止性）。
 [family.term]
-section = "37"
-dir = "test/corpus/term"
+dir = "corpus/term"
 kind = "check-ok"
 tags = ["term"]
 
 [family.term_err]
-section = "37"
-dir = "test/corpus/term_err"
+dir = "corpus/term_err"
 kind = "check-error"
 tags = ["term", "error"]
 
 # --- error（解析 / 求值负例）---
 [family.err]
-section = "4"
-dir = "test/corpus/err"
+dir = "corpus/err"
 compile = false
 tags = ["parse", "error"]
 
 [family.pkg_err]
-section = "36"
-dir = "test/corpus/pkg_err"
+dir = "corpus/pkg_err"
 entry = "lib/Main.vuna"
 check = true
 compile = false
@@ -243,28 +216,24 @@ compare_interp = false
 tags = ["pkg", "error"]
 
 [family.warn_err]
-section = "38"
-dir = "test/corpus/warn_err"
+dir = "corpus/warn_err"
 interp = false
 compile = false
 check = true
 tags = ["warning", "error"]
 
 [family.run_err]
-section = "5"
-dir = "test/corpus/run_err"
+dir = "corpus/run_err"
 check = false
 tags = ["run", "error"]
 
 # --- 工具链（lint / fix）---
 [family.lint]
-section = "15"
-dir = "test/corpus/lint"
+dir = "corpus/lint"
 kind = "lint"
 tags = ["lint"]
 
 [family.fix]
-section = "16"
-dir = "test/corpus/fix"
+dir = "corpus/fix"
 kind = "fix"
 tags = ["lint", "fix"]

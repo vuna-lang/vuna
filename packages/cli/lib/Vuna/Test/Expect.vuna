@@ -50,19 +50,22 @@ replaceText needle replacement haystack =
   if byteLength needle == 0 then haystack else join replacement (split needle haystack)
 
 -- | 唯一归一规则；两侧共用，因此期望与实际直接可比：
--- `root/` → `test/corpus/...` → `corpus/...`；`base/` → `base/lib/...`（不随 checkout
--- 变化，入库可复现）；`./x` → `<caseRel>/x`（夹具目录内的相对写法）。
+-- `<test 根>/` → `corpus/...`；base 路径记 `base/lib/...`（不随 checkout 变化，入库可复现）；
+-- `./x` → `<caseRel>/x`（夹具目录内的相对写法）。
 export projFile : String -> String -> String -> String -> String
-projFile root base caseRel file =
+projFile testRoot base caseRel file =
   let
-    underTest = stripPrefixOf (root ++ "/test/") file
+    underTest = stripPrefixOf (testRoot ++ "/") file
   in if underTest /= file then
     underTest
   else
     let
       underBase = stripPrefixOf (base ++ "/") file
+      underBaseRel = stripPrefixOf "packages/base/" file
     in if underBase /= file then
       "base/${underBase}"
+    else if underBaseRel /= file then
+      "base/${underBaseRel}"
     else
       let
         f1 = stripPrefixOf "test/" file
@@ -134,13 +137,13 @@ diagAnchor d =
 
 -- | 一条诊断的规范投影。无位置时追加 `!<absent>`，缺理由即投影为 `!`（期望文件损坏）。
 export projectDiag : String -> String -> String -> Diagnostic -> String
-projectDiag root base caseRel d =
+projectDiag testRoot base caseRel d =
   let
     head = "${severityText d.diagSeverity}|${d.diagCode}"
   in case diagAnchor d of
     Nothing => "${head}||0|0!${absentText d.diagAbsent}"
     Just sp =>
-      "${head}|${projFile root base caseRel (spanFile sp)}|${strOfInt (spanStartLine sp)}|${strOfInt (spanStartCol sp)}"
+      "${head}|${projFile testRoot base caseRel (spanFile sp)}|${strOfInt (spanStartLine sp)}|${strOfInt (spanStartCol sp)}"
 
 -- | `ErrC` 的诊断 + 其 children 平铺（与 `--json` 单文档输出同序），并按显示上限
 -- 截断。
@@ -149,14 +152,14 @@ flattenErr e = List.take maxShownDiags ((::) e e.diagChildren)
 
 -- | 批量投影：按输入顺序逐条走 `projectDiag`。
 export projectDiags : String -> String -> String -> List Diagnostic -> List String
-projectDiags root base caseRel ds = map (projectDiag root base caseRel) ds
+projectDiags testRoot base caseRel ds = map (projectDiag testRoot base caseRel) ds
 
 -- ---------------------------------------------------------------
 -- 从 `.diag.json` 读期望
 -- ---------------------------------------------------------------
 -- | 内部：把 `.diag.json` 里的一条诊断投影成与实际侧同形的一行。
 jsonDiagKey : String -> String -> String -> Json -> String
-jsonDiagKey root base caseRel d =
+jsonDiagKey testRoot base caseRel d =
   let
     head = "${strAt "severity" d}|${strAt "code" d}"
   in case firstLabel d of
@@ -167,7 +170,7 @@ jsonDiagKey root base caseRel d =
           case sp of
             JNull => "${head}||0|0!${strAt "absent" d}"
             _ =>
-              "${head}|${projFile root base caseRel (strAt "file" sp)}|${strAtInt ["start", "line"] 0 sp}|${strAtInt ["start", "column"] 0 sp}"
+              "${head}|${projFile testRoot base caseRel (strAt "file" sp)}|${strAtInt ["start", "line"] 0 sp}|${strAtInt ["start", "column"] 0 sp}"
         Nothing => "${head}||0|0!${strAt "absent" d}"
 
 -- | 内部：取字符串字段（缺失或类型不符给 `""`）。
@@ -192,13 +195,13 @@ firstLabel d =
     _ => Nothing
 
 -- | 读 `.diag.json` 文本 → 期望投影序列：先展开占位符解析 JSON，再按显示上限截断。
-export expectKeys : String -> String -> String -> String -> Check (List String)
-expectKeys root base caseRel text =
-  case parseJson (expandPlaceholders root base text) of
+export expectKeys : String -> String -> String -> String -> String -> Check (List String)
+expectKeys repoRoot testRoot base caseRel text =
+  case parseJson (expandPlaceholders repoRoot base text) of
     ErrC e => ErrC e
     OkC doc =>
       case jsonGet "diagnostics" doc of
-        Just (JArr ds) => OkC (List.take maxShownDiags (map (jsonDiagKey root base caseRel) ds))
+        Just (JArr ds) => OkC (List.take maxShownDiags (map (jsonDiagKey testRoot base caseRel) ds))
         _ => ErrC (jsonErr "missing `diagnostics` array")
 
 -- ---------------------------------------------------------------

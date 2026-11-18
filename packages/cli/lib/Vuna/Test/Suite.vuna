@@ -1,8 +1,9 @@
--- | suite 文件（`test/suite.toml`）的模型、校验与 case discovery。
+-- | suite 文件（`<test 根>/suite.toml`）的模型、校验与 case discovery。
 --
--- `[suite]` 只放全局默认（name / jobs / timeout / min_cases）；`[family.<name>]` 按
+-- `[suite]` 放全局默认（name / owner / jobs / timeout / min_cases）；`[family.<name>]` 按
 -- 目录约定展开成一批 golden / error / lint / fix / steps case，避免为每个夹具手写一段
--- TOML。
+-- TOML。family 的 `dir` 相对 suite 文件所在目录；case id 是
+-- `<owner>/<family>/<相对路径>`。
 --
 -- 本模块不做执行，只做「文件 / TOML → `List Case`」的数据转换：读盘经 Eff 效果，
 -- TOML 解析与 case 建模保持纯。对外入口是 `parseSuiteFile` / `discoverCases`。
@@ -30,7 +31,7 @@ export record SuiteOpts(..) where
   suiteFailFast : Bool
   -- | `--json`：汇总以 JSON 输出（同时抑制逐条结果行）。
   suiteJSON : Bool
-  -- | `--only`：按章节或 id 前缀过滤（可重复）。
+  -- | `--only`：按 owner / family / case id 前缀过滤（可重复）。
   suiteOnly : List String
   -- | `--filter`：对 case id / tag 做子串过滤（可重复，多值 OR）。
   suiteFilter : List String
@@ -71,9 +72,9 @@ export record SuiteOpts(..) where
 export record Family(..) where
   -- | family 名（`[family.<name>]` 的 `<name>`）。
   familyName : String
-  -- | case id 的章节前缀（`section` 键，缺省空串）。
-  familySection : String
-  -- | 夹具目录（`dir` 键，相对 suite 根，必填）。
+  -- | 该 family 的归属（`[suite].owner`，case id 的第一段）。
+  familyOwner : String
+  -- | 夹具目录（`dir` 键，相对 suite 的 test 根，必填）。
   familyDir : String
   -- | case 种类：`auto` / `golden` / `error` / `check-ok` / `check-error` / `lint` /
   -- `fix` / `steps`。
@@ -106,8 +107,12 @@ export record Family(..) where
 export record Suite(..) where
   -- | suite 名（`[suite].name`，缺省 `vuna`）。
   suiteName : String
-  -- | suite 根目录（suite 文件的上两级）。
+  -- | 归属（`[suite].owner`，缺省 `vuna`）：case id 的第一段。
+  suiteOwner : String
+  -- | suite 的 test 根（suite 文件所在目录，即 `<pkg>/test`）。
   suiteRoot : String
+  -- | 仓库根（向上找到含 `[workspace]` 的 `vuna.toml`）：base、`.local`、runner 夹具都在这里。
+  suiteRepoRoot : String
   -- | 默认并行数（`[suite].jobs`，0 = auto）。
   suiteDefaultJobs : Int
   -- | family 未设置时的默认超时秒数（`[suite].timeout`，缺省 300）。
@@ -141,10 +146,8 @@ export data CaseKind(..) : Type where
 
 -- | 一个可执行的用例。
 export record Case(..) where
-  -- | 用例 id（`<section>/<family>/<相对路径>`）。
+  -- | 用例 id（`<owner>/<family>/<相对路径>`）。
   caseId : String
-  -- | 章节（`--only` 的数字前缀与分组按它匹配）。
-  caseSection : String
   -- | tag 列表。
   caseTags : List String
   -- | 种类与参数。
@@ -180,9 +183,35 @@ readTextFile path =
     else
       pure (err "no such file: ${path}")
 
--- | 内部：suite 文件在 `<root>/test/suite.toml`；root = 上两级。
+-- | 内部：suite 文件在 `<test 根>/suite.toml`；`suiteRoot` 就是它所在目录。
 suiteFileRoot : String -> String
-suiteFileRoot path = parentOf (parentOf path)
+suiteFileRoot path = parentOf path
+
+-- | 内部：从 test 根向上找仓库根（含 `[workspace]` 的 `vuna.toml`）；找不到时退回起点。
+findRepoRoot : Member nFs FsOp r => String -> Eff r String
+findRepoRoot start = findRepoRootGo 12 start
+
+-- | 内部：`findRepoRoot` 的递归体（`fuel` 防跑飞）。
+findRepoRootGo : Member nFs FsOp r => Int -> String -> Eff r String
+findRepoRootGo fuel dir =
+  if fuel <= 0 then
+    pure dir
+  else
+    do
+      exists <- pathExistsFile "${dir}/vuna.toml"
+      if exists then
+        do
+          text <- fsReadFile "${dir}/vuna.toml"
+          if contains "[workspace]" text then pure dir else findRepoRootUp fuel dir
+      else
+        findRepoRootUp fuel dir
+
+-- | 内部：向上一级；已经到根时停在原地。
+findRepoRootUp : Member nFs FsOp r => Int -> String -> Eff r String
+findRepoRootUp fuel dir =
+  let
+    parent = parentOf dir
+  in if parent == dir || parent == "" then pure dir else findRepoRootGo (fuel - 1) parent
 
 -- ---------------------------------------------------------------
 -- TOML 取值（类型错误显式报错，不静默回落默认）
@@ -260,7 +289,6 @@ listOr d m = fromMaybe d m
 familyKeys : List String
 familyKeys =
   [
-    "section",
     "dir",
     "kind",
     "entry",
@@ -404,43 +432,40 @@ buildFamily suite entries name =
   in case checkFamilyKeys section entries of
     ErrC e => ErrC e
     OkC _ =>
-      case getStr section "section" entries of
+      case getStr section "dir" entries of
         ErrC e => ErrC e
-        OkC sectionOpt =>
-          case getStr section "dir" entries of
-            ErrC e => ErrC e
-            OkC dirOpt =>
-              case dirOpt of
-                Nothing => err "family `${name}` needs `dir`"
-                Just dir =>
-                  case readFamilyOpts section entries of
+        OkC dirOpt =>
+          case dirOpt of
+            Nothing => err "family `${name}` needs `dir`"
+            Just dir =>
+              case readFamilyOpts section entries of
+                ErrC e => ErrC e
+                OkC opts =>
+                  case readFamilyFlags section entries of
                     ErrC e => ErrC e
-                    OkC opts =>
-                      case readFamilyFlags section entries of
-                        ErrC e => ErrC e
-                        OkC flags =>
-                          let
-                            excludeList =
-                              case lookupEntry section "exclude" entries of
-                                Just (TArray xs) => fromMaybe [] (arrayStrings xs)
-                                _ => []
-                            includeList =
-                              case lookupEntry section "include" entries of
-                                Just (TArray xs) => fromMaybe [] (arrayStrings xs)
-                                _ => []
-                            kind = strOr "auto" opts.familyOptKind
-                            matrix = strOr "tool" opts.familyOptMatrix
-                            tags = append (listOr [] flags.familyFlagTags) (matrixTags matrix)
-                          in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then
-                            if memName matrix matrixClasses then
-                              OkC
-                                (Family name (strOr "" sectionOpt) dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix)
-                            else
-                              err
-                                (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
-                          else
-                            err
-                              (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
+                    OkC flags =>
+                      let
+                        excludeList =
+                          case lookupEntry section "exclude" entries of
+                            Just (TArray xs) => fromMaybe [] (arrayStrings xs)
+                            _ => []
+                        includeList =
+                          case lookupEntry section "include" entries of
+                            Just (TArray xs) => fromMaybe [] (arrayStrings xs)
+                            _ => []
+                        kind = strOr "auto" opts.familyOptKind
+                        matrix = strOr "tool" opts.familyOptMatrix
+                        tags = append (listOr [] flags.familyFlagTags) (matrixTags matrix)
+                      in if kind == "auto" || kind == "golden" || kind == "error" || kind == "check-ok" || kind == "check-error" || kind == "lint" || kind == "fix" || kind == "steps" then
+                        if memName matrix matrixClasses then
+                          OkC
+                            (Family name suite.suiteOwner dir kind opts.familyOptEntry (boolOr True flags.familyFlagInterp) (boolOr False flags.familyFlagCheck) (boolOr True flags.familyFlagCompile) (boolOr True flags.familyFlagRun) (boolOr True flags.familyFlagCompare) tags (intOr suite.suiteDefaultTimeout flags.familyFlagTimeout) excludeList includeList matrix)
+                        else
+                          err
+                            (sectionText section ++ ": matrix must be tool/pure/pure-cross/effect-common/effect-native/effect-wasm/effect-ocaml, got `${matrix}`")
+                      else
+                        err
+                          (sectionText section ++ ": kind must be auto/golden/error/check-ok/check-error/lint/fix/steps, got `${kind}`")
 
 -- | 内部：从 entries 收集 family 名（保持首次出现顺序）。
 familyNames : List TomlEntry -> List String
@@ -459,38 +484,43 @@ familyNamesGo (e :: rest) acc =
 -- suite 解析
 -- ---------------------------------------------------------------
 -- | 内部：由 TOML 条目构造 `Suite`——先取 `[suite]` 默认值，再逐个构造 family。
-buildSuiteWithEntries : String -> List TomlEntry -> Check Suite
-buildSuiteWithEntries path entries =
+buildSuiteWithEntries : String -> String -> List TomlEntry -> Check Suite
+buildSuiteWithEntries path repoRoot entries =
   let
     root = suiteFileRoot path
     section = ["suite"]
   in case getStr section "name" entries of
     ErrC e => ErrC e
     OkC nameOpt =>
-      case getInt section "jobs" entries of
+      case getStr section "owner" entries of
         ErrC e => ErrC e
-        OkC jobsOpt =>
-          case getInt section "timeout" entries of
+        OkC ownerOpt =>
+          case getInt section "jobs" entries of
             ErrC e => ErrC e
-            OkC timeoutOpt =>
-              case getInt section "min_cases" entries of
+            OkC jobsOpt =>
+              case getInt section "timeout" entries of
                 ErrC e => ErrC e
-                OkC minOpt =>
-                  let
-                    draft =
-                      Suite
-                        (strOr "vuna" nameOpt)
-                        root
-                        (intOr 0 jobsOpt)
-                        (intOr 300 timeoutOpt)
-                        []
-                        (intOr 0 minOpt)
-                  in buildFamiliesWith draft entries (familyNames entries)
-                    >>= (
-                      \families =>
-                        OkC
-                          (Suite draft.suiteName draft.suiteRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases)
-                    )
+                OkC timeoutOpt =>
+                  case getInt section "min_cases" entries of
+                    ErrC e => ErrC e
+                    OkC minOpt =>
+                      let
+                        draft =
+                          Suite
+                            (strOr "vuna" nameOpt)
+                            (strOr "vuna" ownerOpt)
+                            root
+                            repoRoot
+                            (intOr 0 jobsOpt)
+                            (intOr 300 timeoutOpt)
+                            []
+                            (intOr 0 minOpt)
+                      in buildFamiliesWith draft entries (familyNames entries)
+                        >>= (
+                          \families =>
+                            OkC
+                              (Suite draft.suiteName draft.suiteOwner draft.suiteRoot draft.suiteRepoRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases)
+                        )
 
 -- | 内部：按名列表逐个构造 family。
 buildFamiliesWith : Suite -> List TomlEntry -> List String -> Check (List Family)
@@ -620,14 +650,14 @@ wantCaseWith family source id want exitCode =
         -- 0–255 范围）= 断言恰好退出 0；n > 0 → 断言恰好 n。无 `.run.exit` 时
         -- 0 = 遗留语义（断言非 0）。
         code = if hasOpt want.fwRunExit then if exitCode == 0 then 256 else exitCode else 0
-      in OkC (Case id family.familySection family.familyTags (CRuntime source expect code) family.familyTimeout "integration" family.familyMatrix)
+      in OkC (Case id family.familyTags (CRuntime source expect code) family.familyTimeout "integration" family.familyMatrix)
   else if hasOpt want.fwDiag then
     let
       diagPath = fromMaybe "" want.fwDiag
       interpOn = family.familyInterp
       compileOn = family.familyCompile
-    in OkC (Case id family.familySection family.familyTags (CError source diagPath interpOn family.familyCheck family.familyCompile) family.familyTimeout "fast" family.familyMatrix)
-  else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then err "family does not allow compile+run" else OkC (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout "fast" family.familyMatrix) else if hasOpt want.fwSharedOut then OkC (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout "fast" family.familyMatrix) else if hasOpt want.fwInterpOut then OkC (Case id family.familySection family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast" family.familyMatrix) else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
+    in OkC (Case id family.familyTags (CError source diagPath interpOn family.familyCheck family.familyCompile) family.familyTimeout "fast" family.familyMatrix)
+  else if hasOpt want.fwRunOut then if not family.familyCompile || not family.familyRun then err "family does not allow compile+run" else OkC (Case id family.familyTags (CGolden source (fromMaybe "" want.fwRunOut) False family.familyCheck True True False) family.familyTimeout "fast" family.familyMatrix) else if hasOpt want.fwSharedOut then OkC (Case id family.familyTags (CGolden source (fromMaybe "" want.fwSharedOut) family.familyInterp family.familyCheck family.familyCompile family.familyRun family.familyCompareInterp) family.familyTimeout "fast" family.familyMatrix) else if hasOpt want.fwInterpOut then OkC (Case id family.familyTags (CGolden source (fromMaybe "" want.fwInterpOut) True family.familyCheck False False False) family.familyTimeout "fast" family.familyMatrix) else err "no expect file (need `.out` / `.interp.out` / `.run.out` / `.diag.json`)"
 
 -- | 内部：负例期望路径 `<base>.diag.json`（结构化诊断是唯一真源）。
 expectPath : Member nFs FsOp r => String -> Eff r String
@@ -657,7 +687,7 @@ oneDir family dir entry name =
   let
     caseDir = "${dir}/${name}"
     source = "${caseDir}/${entry}"
-    id = "${family.familySection}/${family.familyName}/${name}"
+    id = "${family.familyOwner}/${family.familyName}/${name}"
   in do
     isDir <- pathExistsDir caseDir
     isFile <- if isDir then pathExistsFile source else pure False
@@ -737,28 +767,28 @@ oneFile family dir name =
 fileCase : Member nFs FsOp r => Family -> String -> String -> String -> Eff r (Check Case)
 fileCase family source base rel =
   let
-    id = "${family.familySection}/${family.familyName}/${rel}"
+    id = "${family.familyOwner}/${family.familyName}/${rel}"
   in if family.familyKind == "lint" then
     let
       expected = "${base}.out"
     in do
       exists <- pathExistsFile expected
-      if exists then pure (OkC (Case id family.familySection family.familyTags (CLint source expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
+      if exists then pure (OkC (Case id family.familyTags (CLint source expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "fix" then
     let
       expected = "${base}.expected"
     in do
       exists <- pathExistsFile expected
-      if exists then pure (OkC (Case id family.familySection family.familyTags (CFix source expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
+      if exists then pure (OkC (Case id family.familyTags (CFix source expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
   else if family.familyKind == "steps" then
-    pure (OkC (Case id family.familySection family.familyTags (CSteps source) family.familyTimeout "e2e" family.familyMatrix))
+    pure (OkC (Case id family.familyTags (CSteps source) family.familyTimeout "e2e" family.familyMatrix))
   else if family.familyKind == "check-ok" then
-    pure (OkC (Case id family.familySection family.familyTags (CCheck source True "") family.familyTimeout "fast" family.familyMatrix))
+    pure (OkC (Case id family.familyTags (CCheck source True "") family.familyTimeout "fast" family.familyMatrix))
   else if family.familyKind == "check-error" then
     do
       expected <- expectPath base
       exists <- pathExistsFile expected
-      if exists then pure (OkC (Case id family.familySection family.familyTags (CCheck source False expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
+      if exists then pure (OkC (Case id family.familyTags (CCheck source False expected) family.familyTimeout "fast" family.familyMatrix)) else pure (err "expected file not found: ${expected}")
   else
     do
       want <- parseWant base
@@ -768,8 +798,7 @@ fileCase family source base rel =
 brokenFamilyCase : Family -> String -> Case
 brokenFamilyCase family msg =
   Case
-    "${family.familySection}/${family.familyName}/__missing__"
-    family.familySection
+    "${family.familyOwner}/${family.familyName}/__missing__"
     family.familyTags
     (CBroken msg)
     family.familyTimeout
@@ -800,8 +829,8 @@ stepCaseOf family dir name =
       text <- fsReadFile "${dir}/${name}"
       let
         rel = substring 0 (byteLength name - 6) name
-        id = "${family.familySection}/${family.familyName}/${rel}"
-      in pure [Case id family.familySection family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text) (stepsMatrixOf family.familyMatrix text)]
+        id = "${family.familyOwner}/${family.familyName}/${rel}"
+      in pure [Case id family.familyTags (CSteps "${dir}/${name}") family.familyTimeout (stepsTierOf text) (stepsMatrixOf family.familyMatrix text)]
 
 -- | steps 文件任意位置出现 `# tier: tools|integration|fast` 即覆盖默认 tier；没有声明则归 `e2e`。
 stepsTierOf : String -> String
@@ -860,21 +889,23 @@ parseSuiteAt absPath =
       OkC text =>
         case parseTomlAt absPath text of
           ErrC e => pure (ErrC e)
-          OkC entries => pure (buildSuiteWithEntries absPath entries)
+          OkC entries =>
+            do
+              repoRoot <- findRepoRoot (suiteFileRoot absPath)
+              pure (buildSuiteWithEntries absPath repoRoot entries)
 
--- | 对外入口：把每个 family 展开成 case；`test/corpus/run/12_fact.vuna` 存在时追加
--- 一个固定的 seed 自举 case（id `13/seed`）。
+-- | 对外入口：把每个 family 展开成 case；`corpus/run/12_fact.vuna` 存在时追加
+-- 一个固定的 seed 自举 case。
 export discoverCases : Member nFs FsOp r => Suite -> Eff r (List Case)
 discoverCases suite =
   let
-    seedPath = "${suite.suiteRoot}/test/corpus/run/12_fact.vuna"
+    seedPath = "${suite.suiteRoot}/corpus/run/12_fact.vuna"
     seed =
       [
         Case
-          "13/seed"
-          "13"
+          "${suite.suiteOwner}/seed"
           ["seed"]
-          (CSeed seedPath "${suite.suiteRoot}/test/corpus/run/12_fact.out")
+          (CSeed seedPath "${suite.suiteRoot}/corpus/run/12_fact.out")
           900
           "integration"
           "tool"

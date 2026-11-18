@@ -5,19 +5,20 @@
 
 ## 原生测试：`vuna dev suite`
 
-repo 自测由 `vuna dev suite test/suite.toml` 驱动（原生 Vuna 实现，不是 shell
+repo 自测由 `vuna dev suite <suite.toml>` 驱动（原生 Vuna 实现，不是 shell
 编排）。核心分层：
 
-- `test/suite.toml`：suite 配置。`[suite]` 放全局默认（`jobs`/`timeout`/`name`）；
-  `[family.<name>]` 按目录约定把夹具展开成 golden/error case；
-- `test/suite/steps/*.steps`：声明式步进用例（一套行式 DSL，见下）；
+- `<test 根>/suite.toml`：suite 配置。`[suite]` 放全局默认（`owner`/`jobs`/`timeout`/`name`）；
+  `[family.<name>]` 按目录约定把夹具展开成 golden/error case，`dir` 相对 suite 文件所在目录；
+  case id 是 `<owner>/<family>/<相对路径>`；
+- `<test 根>/suite/steps/*.steps`（当前 `test/suite/steps`）：声明式步进用例（一套行式 DSL，见下）；
 - 执行器在 `packages/cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
 vuna dev suite test/suite.toml                 # 全量；--jobs 默认 auto
-vuna dev suite test/suite.toml --list          # 列出章节/case
-vuna dev suite test/suite.toml --only 34       # 纯数字按 section 精确匹配
-vuna dev suite test/suite.toml --filter dt/03  # 按 case id/tag 子串
+vuna dev suite test/suite.toml --list          # 列出 case
+vuna dev suite test/suite.toml --only dt       # owner/family/case id 子串
+vuna dev suite test/suite.toml --filter vuna/dt/03  # 按 case id/tag 子串
 vuna dev suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
 vuna dev suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
 vuna dev suite test/suite.toml --backend wasm   # 只跑 matrix 允许 wasm 的 case
@@ -88,7 +89,7 @@ vuna dev suite test/suite.toml --json          # 机器可读汇总
 ### 声明式步进用例（`*.steps`）
 
 一个 `*.steps` 文件 = 一个 case，挂在 `kind = "steps"` 的 family 下
-（`[family.steps_native] dir = "test/suite/steps"`，section 90）。行式指令，`#` 注释；
+（`[family.steps_native] dir = "suite/steps"`，当前 test 根是 `test/`）。行式指令，`#` 注释；
 `run:` / `read:` 开新步，其余指令挂到当前步。每个 case 有独立 `TMPDIR` /
 `TMPDIR` / `VUNA_REPL_HISTORY`，对象库共享（`VUNA_STORE`），可安全并行。
 
@@ -107,7 +108,7 @@ end:
 
 | 指令 | 语义 |
 | --- | --- |
-| `run:` | 新起一步：`sh -c <cmd>`，cwd = `test/`，注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT` / `TMPDIR` / `VUNA_STORE` / `VUNA_REPL_HISTORY` / `XDG_CACHE_HOME` |
+| `run:` | 新起一步：`sh -c <cmd>`，cwd = suite 的 test 根（当前 `test/`），注入 `VUNA` / `VUNA_SEED` / `VUNA_BASE` / `OCAMLOPT` / `VUNA_SUITE_ROOT`（仓库根）/ `VUNA_TEST_ROOT`（suite 的 test 根）/ `TMPDIR` / `VUNA_STORE` / `VUNA_REPL_HISTORY` / `XDG_CACHE_HOME` |
 | `read:` | 读文件内容作为该步输出（不执行命令）；文件缺失即失败 |
 | `exit:` | `0` / `nonzero` / 具体值；缺省断言 0 |
 | `out-contains:` | 合并输出必须包含该片段（可多条） |
@@ -118,7 +119,7 @@ end:
 | `file-contains:` | 文件存在且包含片段：`<path> <fragment>` 在首个空格处切分（路径不能含空格） |
 | `for-each:` … `end:` | 按 shell 词列表（可 glob）逐项重复块内步骤；`{item}` = 匹配项（去尾 `/`）、`{name}` = basename、`{stem}` = 去掉结尾 `.vuna` 的匹配项；匹配为空 = 显式失败；不支持嵌套 |
 
-路径解析：`$TMPDIR` 展开成该 case 的私有临时根；相对路径按 `test/` 解析（写
+路径解析：`$TMPDIR` 展开成该 case 的私有临时根；相对路径按 suite 的 test 根解析（当前写
 `corpus/...`，不是 `test/corpus/...`）。每步额外断言没有被 timeout（超时取 case/family
 `timeout`），解析错误（未闭合 loop、指令出现在任何步骤之前等）让 case 显式失败。
 
@@ -225,7 +226,7 @@ vuna dev suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也�
 vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖测试对象库与构建桶根
 ```
 
-- `--changed REV`：`git diff --name-only REV`；compiler/base/lib/app/suite 配置变更跑全量，
+- `--changed REV`：`git diff --name-only REV`；`packages/` 源码、`examples/` 或 suite 执行器配置变更跑全量，
   夹具变更只跑对应 family case，以及 steps 文件文本里提到该目录的 case；无变更时不跑 case。
 - `--last-failed`：失败 case id 写到 `.local/test-suite/last-failed`，重跑时按 id 过滤；
   空结果不会清空已有失败列表。
@@ -238,8 +239,8 @@ vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖测试对象库与构�
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶/last-failed；verdict 在对象库）。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
-- `--audit`：扫描 `test/corpus` 的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
-  并 exit 1；`test/corpus/codegen` 是 metrics 固定输入，显式排除。
+- `--audit`：扫描 suite 的 test 根下 `corpus/`（当前 `test/corpus`）的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
+  并 exit 1；`corpus/codegen` 是 metrics 固定输入，显式排除。
 
 family discovery 对目录里每个夹具要求一个期望文件（阶段限定后缀或兼容裸后缀；目录型是
 `expected.*`）；缺期望文件或矛盾组合生成 `CBroken` case 并失败（防改名/放错目录静默
