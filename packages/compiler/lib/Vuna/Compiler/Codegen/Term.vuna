@@ -11,20 +11,20 @@ module Vuna.Compiler.Codegen.Term where
 --
 -- 没有 fuel：codegen 不按嵌套深度消耗预算（正常源码不会触发
 -- `IC_FuelExhausted (codegen)`）。
-import Base.Sort
-import Base.List
+import Base.Data.Sort as Sort
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
-import Base.EffArgs
-import Base.EffFs
-import Base.EffProcess
-import Base.EffStdin
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffStdin as EffStdin
 
 export dtRuntime : String
 dtRuntime = """let () =
@@ -2056,7 +2056,7 @@ genGroup st group = Vuna.Compiler.Base.Common.bind (genGroupBodies st (irGroupDe
 -- 分组装配：`#line` 指令在前（自成一行），`let` / `let rec` / `and` 关键字与绑定名
 -- 仍在同一行 —— 既有 `^let v_` 断言、快照 grep 与 `letrec` 口径都不受影响。
 bindGroupOf : GenSt -> IrGroup -> List String -> String
-bindGroupOf st group defs = case Base.List.zip (irGroupDefs group) defs of
+bindGroupOf st group defs = case List.zip (irGroupDefs group) defs of
   [] => ""
   p :: rest => joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
 

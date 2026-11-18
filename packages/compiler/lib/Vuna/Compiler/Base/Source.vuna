@@ -1,12 +1,6 @@
 -- | 编译器底层源码位置与路径工具（不含 `Result`；诊断结果类型在 `Diag`）。
 module Vuna.Compiler.Base.Source where
 
-export module Base.Pair
-export module Base.Bool
-export module Base.List
-export module Base.Maybe
-export module Base.String
-
 -- 位置/路径层。
 --
 -- 分层原因：`Diag` 需要 `Span` 构造诊断，`Common` 需要 `Diag` 提供

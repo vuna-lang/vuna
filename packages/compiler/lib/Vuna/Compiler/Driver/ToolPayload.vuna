@@ -13,11 +13,11 @@ module Vuna.Compiler.Driver.ToolPayload where
 --
 -- 载荷本身由 `Store` 承载（`storeWriteEff` / `storeReadAsEff`），codec 段用
 -- `toolContextCodec`；载荷落在 `objects/tool/<地址>`（输入寻址，`Store` framing）。
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface

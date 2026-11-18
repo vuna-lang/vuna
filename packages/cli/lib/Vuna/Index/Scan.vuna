@@ -14,10 +14,10 @@
 module Vuna.Index.Scan where
 
 import Vuna.Compiler.Base.Common
-import Base.Nat
-import Base.Maybe
-import Base.HashMap
-import Base.Hashable
+import Base.Data.Nat as Nat
+import Base.Data.Maybe as Maybe
+import Base.Container.HashMap as HashMap
+import Base.Trait.Hashable as Hashable
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
@@ -30,11 +30,11 @@ import Vuna.Index.Types
 import Vuna.Sig
 import Vuna.Index.Codec
 import Vuna.Tool.Session
-import Base.EffClock
-import Base.EffEnv
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffProcess
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffProcess as EffProcess
 
 -- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 indexFuelExhausted : String -> a
@@ -604,7 +604,7 @@ sourceStatOf builtSec path = do
 
 -- | 内部：内容哈希——拼接两个不同前缀的 `Base.Hashable.hashStr` 结果，依赖键用。
 contentHash : String -> String
-contentHash content = "${Base.Hashable.hashStr content}-${Base.Hashable.hashStr "v2:${content}"}"
+contentHash content = "${Hashable.hashStr content}-${Hashable.hashStr "v2:${content}"}"
 
 -- | 内部：stat 快照 → 廉价依赖键 `st:<path>:<bytes>:<mtime>:<hash>`。
 indexDepKey : SourceStat -> String

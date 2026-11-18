@@ -12,16 +12,16 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Repl
 import Vuna.Repl.Client
 import Vuna.Repl.Server
-import Base.EffArgs
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffExit
-import Base.EffFs
-import Base.EffNet
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffStdin
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffNet as EffNet
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffStdin as EffStdin
 
 -- | `vuna repl [FILE|DIR|MODULE]` 的入口；`serve` / `client` 走各自的子命令。
 export replArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int

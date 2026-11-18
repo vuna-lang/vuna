@@ -2,8 +2,8 @@ module Vuna.Compiler.Lowering.Entry where
 
 -- 入口（`main` 钩子）的已决策形态：动作 vs 值、展示函数、内建宿主 handler 序列。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -53,7 +53,7 @@ mainRowTags _ = []
 -- 展示函数：内建类型用 runtime 展示函数；其它类型用 Elab 收尾合成的
 -- `@vuna@main_show : T -> String`。
 mainShowIr : Term -> Ir
-mainShowIr tyTerm = case force (Base.HashMap.fromList []) solsEmpty defaultFuel (eval [] tyTerm) of
+mainShowIr tyTerm = case force (HashMap.fromList []) solsEmpty defaultFuel (eval [] tyTerm) of
   VNeutral n => case n of
     NGlobal g [] => mainShowForNameIr g
     _ => IrGlobal mainShowDefName

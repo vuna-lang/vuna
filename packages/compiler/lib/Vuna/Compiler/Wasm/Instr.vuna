@@ -6,10 +6,10 @@ module Vuna.Compiler.Wasm.Instr where
 -- 已渲染好的 WAT 名字（`$x`）或数字。不做二进制编码（D16：`.wasm` 由 wasm-tools 汇编）。
 --
 -- 边界：本模块只 import Base；不 import Core/Elab/Intrinsics/Ir（纯文本层）。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
 
 -- | 一条 WAT 指令。`IIf`/`IBlock`/`ILoop` 自带缩进层级，渲染器递归展开。
 export data Instr(..) : Type where

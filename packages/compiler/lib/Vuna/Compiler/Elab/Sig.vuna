@@ -3,7 +3,7 @@ module Vuna.Compiler.Elab.Sig where
 -- Vuna.Compiler.Elab.Sig：签名工具：trait 类参数的 kind 推断与顶层签名的自由名量化。
 -- 两者都只做 AST 变换，量化依赖 kind 推断，因此放在同一模块。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -237,7 +237,7 @@ zipArgKindsGo (dom :: drest) (a :: arest) = case a of
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
 export topQuantBanned : List String -> HashMap String Bool
-topQuantBanned defined = Base.HashMap.ofNames (append defined topPreludeNames)
+topQuantBanned defined = HashMap.ofNames (append defined topPreludeNames)
 
 -- banned 集按**模块作用域**计算——只排除「与签名同一模块里另有定义」的
 -- 名字。程序级 flatten 后模块边界落在名字的模块前缀（最后一段之前）上；入口文件的
@@ -267,8 +267,8 @@ modulePrefixOf name = case splitLastDot (splitOnDot name) of
 -- 分隔符取 `\t`（标识符只允许字母/数字/下划线/撇号，mangle 前缀只含点，绝不会撞）。
 export qualifiedBannedTbl : List String -> HashMap String Bool
 qualifiedBannedTbl defined =
-  Base.HashMap.insertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
-    (Base.HashMap.fromList [])
+  HashMap.insertAll (map (\n => Pair (qualifiedKey (modulePrefixOf n) n) True) defined)
+    (HashMap.fromList [])
 
 qualifiedKey : String -> String -> String
 qualifiedKey prefix name = "${prefix}\t${name}"
@@ -320,14 +320,14 @@ paramKindOf ((Pair k d) :: rest) n = if k == n then Just d else paramKindOf rest
 keepOutQualified : String -> HashMap String Bool -> HashMap String Bool -> List String -> List String
 keepOutQualified prefix banned preludeBanned [] = []
 keepOutQualified prefix banned preludeBanned (n :: rest) =
-  if Base.HashMap.member n preludeBanned then keepOutQualified prefix banned preludeBanned rest
-  else if Base.HashMap.member (qualifiedKey prefix n) banned then keepOutQualified prefix banned preludeBanned rest
+  if HashMap.member n preludeBanned then keepOutQualified prefix banned preludeBanned rest
+  else if HashMap.member (qualifiedKey prefix n) banned then keepOutQualified prefix banned preludeBanned rest
   else n :: keepOutQualified prefix banned preludeBanned rest
 
 keepOutTbl : HashMap String Bool -> List String -> List String
 keepOutTbl banned [] = []
 keepOutTbl banned (n :: rest) =
-  if Base.HashMap.member n banned then keepOutTbl banned rest else n :: keepOutTbl banned rest
+  if HashMap.member n banned then keepOutTbl banned rest else n :: keepOutTbl banned rest
 
 topPreludeNames : List String
 topPreludeNames = append ["Type", "->", "_"] (append typeIntrinsicNames preludeValueNames)

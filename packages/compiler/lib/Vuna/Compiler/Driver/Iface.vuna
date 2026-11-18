@@ -38,9 +38,9 @@ import Vuna.Compiler.Elab.Canonical
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
-import Base.Sort
-import Base.HashMap
-import Base.List
+import Base.Data.Sort as Sort
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -257,13 +257,13 @@ record CanonState where
   csMap : HashMap Int Int
 
 canonStateEmpty : CanonState
-canonStateEmpty = CanonState 0 (Base.HashMap.fromList [])
+canonStateEmpty = CanonState 0 (HashMap.fromList [])
 
 canonTerm : CanonState -> Term -> Pair Term CanonState
-canonTerm st (TMeta m) = case Base.HashMap.lookup m st.csMap of
+canonTerm st (TMeta m) = case HashMap.lookup m st.csMap of
   Just m2 => Pair (TMeta m2) st
   Nothing =>
-    Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (Base.HashMap.insert m st.csNext st.csMap))
+    Pair (TMeta st.csNext) (CanonState (st.csNext + 1) (HashMap.insert m st.csNext st.csMap))
 canonTerm st (TPi n i r d c) =
   let
     pd = canonTerm st d
@@ -451,7 +451,7 @@ record OwnerIndex where
   oiKnown : List String
 
 tblOwner : HashMap String String -> String -> Maybe String
-tblOwner t name = Base.HashMap.lookup name t
+tblOwner t name = HashMap.lookup name t
 
 prefixOwner : List String -> String -> Maybe String
 prefixOwner knownModules name =
@@ -497,8 +497,8 @@ else case defOwnerOf oi name of
 
 ownerIndexOf : SplitMeta -> List DtData -> OwnerIndex
 ownerIndexOf meta datas =
-  OwnerIndex (Base.HashMap.fromList meta.smDefOwners) (Base.HashMap.fromList meta.smDataOwners)
-    (Base.HashMap.fromList (ctorFamilyPairs datas)) meta.smKnownModules
+  OwnerIndex (HashMap.fromList meta.smDefOwners) (HashMap.fromList meta.smDataOwners)
+    (HashMap.fromList (ctorFamilyPairs datas)) meta.smKnownModules
 
 -- 按 owner **一次分桶**。让每个模块对整包 datas/defs/globals/insts/classes
 -- 各做一遍 `filter` 是 O(#模块 × #程序项)；这里整包扫一遍建五张
@@ -514,29 +514,28 @@ record ProgParts where
   ppClasses : HashMap String (List DtClass)
 
 partitionByOwner : (a -> Maybe String) -> List a -> HashMap String (List a)
-partitionByOwner ownerOf xs =
-  reverseBuckets (partitionByOwnerGo ownerOf xs (Base.HashMap.fromList []))
+partitionByOwner ownerOf xs = reverseBuckets (partitionByOwnerGo ownerOf xs (HashMap.fromList []))
 
 partitionByOwnerGo : (a -> Maybe String) -> List a -> HashMap String (List a) -> HashMap String (List a)
 partitionByOwnerGo ownerOf [] tbl = tbl
 partitionByOwnerGo ownerOf (x :: rest) tbl = case ownerOf x of
   Nothing => partitionByOwnerGo ownerOf rest tbl
-  Just o => partitionByOwnerGo ownerOf rest (Base.HashMap.insert o ((::) x (bucketOf o tbl)) tbl)
+  Just o => partitionByOwnerGo ownerOf rest (HashMap.insert o ((::) x (bucketOf o tbl)) tbl)
 
 bucketOf : String -> HashMap String (List a) -> List a
-bucketOf name tbl = case Base.HashMap.lookup name tbl of
+bucketOf name tbl = case HashMap.lookup name tbl of
   Just xs => xs
   Nothing => []
 
 reverseBuckets : HashMap String (List a) -> HashMap String (List a)
-reverseBuckets tbl = Base.HashMap.fromList (map reverseBucket (Base.HashMap.toList tbl))
+reverseBuckets tbl = HashMap.fromList (map reverseBucket (HashMap.toList tbl))
 
 reverseBucket : Pair String (List a) -> Pair String (List a)
 reverseBucket (Pair k xs) = Pair k (reverse xs)
 
 progPartsOf : OwnerIndex -> DtProgram -> ProgParts
 progPartsOf oi prog =
-  ProgParts (Base.HashMap.fromList (dtProgSols prog))
+  ProgParts (HashMap.fromList (dtProgSols prog))
     (partitionByOwner (\d => dataOwnerOf oi (dtDataName d)) (dtProgDatas prog))
     (partitionByOwner (\d => defOwnerOf oi (dtDefName d)) (dtProgDefs prog))
     (partitionByOwner (\p => globalOwnerOf oi (firstOf p)) (dtProgGlobals prog))
@@ -635,12 +634,12 @@ ownerOfAny oi name = case defOwnerOf oi name of
     Nothing => ctorOwnerOf oi name
 
 coverageIssueOf : OwnerIndex -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> HashMap String Bool -> String -> String
-coverageIssueOf oi ourNames inherited merged prelude name = if Base.HashMap.member name prelude then ""
-else if Base.HashMap.member name inherited then ""
+coverageIssueOf oi ourNames inherited merged prelude name = if HashMap.member name prelude then ""
+else if HashMap.member name inherited then ""
 else case ownerOfAny oi name of
   Just o =>
     if o == entryOwner then ""
-    else if Base.HashMap.member o ourNames then if Base.HashMap.member name merged then "" else "missing-from-iface ${name} -> ${o}"
+    else if HashMap.member o ourNames then if HashMap.member name merged then "" else "missing-from-iface ${name} -> ${o}"
     else ""
   Nothing => "unowned ${name}"
 
@@ -680,10 +679,10 @@ firstCoverageIssue : OwnerIndex -> List String -> List String -> List ModuleIfac
 firstCoverageIssue oi ourNames inherited ifaces prog =
   let
     merged = ifaceArtifactNames ifaces
-    mergedTbl = Base.HashMap.ofNames merged
-    ourTbl = Base.HashMap.ofNames ourNames
-    inhTbl = Base.HashMap.ofNames inherited
-    preludeTbl = Base.HashMap.ofNames ifacePreludeNames
+    mergedTbl = HashMap.ofNames merged
+    ourTbl = HashMap.ofNames ourNames
+    inhTbl = HashMap.ofNames inherited
+    preludeTbl = HashMap.ofNames ifacePreludeNames
     issue = coverageIssueGo oi ourTbl inhTbl mergedTbl preludeTbl (artifactNamesOf prog)
   in if issue == "" then Nothing else Just issue
 

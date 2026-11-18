@@ -52,16 +52,16 @@ import Vuna.Repl.Term
 import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
-import Base.IORef
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.EffStdin
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffExit
+import Base.Effect.Pure.IORef as IORef
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffStdin as EffStdin
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
 
 -- | 解析临时源码用的虚拟文件名（不落盘，只给 parser 与诊断提供定位）。
 replTempFile : String

@@ -12,9 +12,9 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Files
 import Vuna.Cli.Args
-import Base.EffEnv
-import Base.EffFs
-import Base.Eff.Types
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 -- | `vuna dev suite` 的选项；jobs = 0 表示 auto（由 runner 探测全部可用核）。
 export record SuiteOpts(..) where

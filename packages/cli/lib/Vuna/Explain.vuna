@@ -8,8 +8,8 @@ module Vuna.Explain where
 
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
-import Base.List
-import Base.String
+import Base.Data.List as List
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Diagnostics.Frontend
@@ -19,9 +19,9 @@ import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Lint.Diagnostics
 import Vuna.Files
-import Base.EffConsole
-import Base.Eff.Types
-import Base.EffFs
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
 
 -- | 一条错误码的展示条目。
 record Info where

@@ -7,8 +7,8 @@ module Vuna.Compiler.Base.Diagnostics.Cg where
 -- `cgAll` 是 `gen-errors` 的文档遍历源。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- ---------------------------------------------------------------
 -- CG_：codegen / 驱动诊断（Codegen / Driver；无位置）

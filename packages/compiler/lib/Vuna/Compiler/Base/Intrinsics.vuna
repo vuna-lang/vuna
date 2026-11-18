@@ -18,8 +18,8 @@ module Vuna.Compiler.Base.Intrinsics where
 --     `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Base.Common
-import Base.String
-import Base.HashMap
+import Base.Data.String as String
+import Base.Container.HashMap as HashMap
 
 -- ---------------------------------------------------------------
 -- 签名形状：只表达内建签名需要的形状（不含依赖 pi / 多态细节）
@@ -1051,12 +1051,11 @@ floatIntrinsicNames =
 -- | 名字 → 内建声明的查询表（由 `allIntrinsics` 一次性建好，供 `findIntrinsic` 用）。
 intrinsicTbl : HashMap String Intrinsic
 intrinsicTbl =
-  Base.HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics)
-    (Base.HashMap.fromList [])
+  HashMap.insertAll (map (\i => Pair (intrinsicName i) i) allIntrinsics) (HashMap.fromList [])
 
 -- | 按名字查内建声明（内部用 `HashMap` 表）；内部 `bi_*` 名也能查到。
 export findIntrinsic : String -> Maybe Intrinsic
-findIntrinsic name = Base.HashMap.lookup name intrinsicTbl
+findIntrinsic name = HashMap.lookup name intrinsicTbl
 
 -- | 名字是否是**对用户源码可见**的内建（内部 `bi_*` 返回 `False`）。
 export isIntrinsicName : String -> Bool

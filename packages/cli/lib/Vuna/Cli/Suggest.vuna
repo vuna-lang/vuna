@@ -4,9 +4,9 @@
 -- 都是短标识符，这两类覆盖实际拼写错误，且失败时只是不给建议，不影响退出码。
 module Vuna.Cli.Suggest where
 
-import Base.List
-import Base.String
-import Base.Bool
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Bool as Bool
 
 -- | 在候选里找与输入最近的一个；没有就 `Nothing`（空输入与单字符输入不建议）。
 export suggestOne : List String -> String -> Maybe String

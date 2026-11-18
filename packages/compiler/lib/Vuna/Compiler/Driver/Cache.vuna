@@ -18,7 +18,7 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Canonical
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -100,7 +100,7 @@ fixInst tbl (DtInst n tele ctxE head sp) =
   in DtInst n (fixTele tbl 0 tele) (map (fixTerm tbl nTele) ctxE) (fixTerm tbl nTele head) sp
 
 export cachedOfProgram : DtProgram -> CachedProgram
-cachedOfProgram prog = cachedOfProgramWith (Base.HashMap.fromList (dtProgSols prog)) prog
+cachedOfProgram prog = cachedOfProgramWith (HashMap.fromList (dtProgSols prog)) prog
 
 -- 整包 sols 的 HashMap Int 可能很大（数万条）。接口写侧按模块切片后仍要按**整包**
 -- sols 做一次深度 zonk；把表做成显式参数，调用方（Iface 的 `ProgParts`）整包只建一次

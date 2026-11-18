@@ -5,9 +5,9 @@ module Vuna.Compiler.Elab.Meta where
 -- 擦除判据（binderRig / isIndexDomain 等）、以及 trait/instance 的命名辅助。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Vuna.Compiler.Base.Diag
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -193,7 +193,7 @@ globalLookup name ((Pair n ty) :: rest) = if name == n then Just ty else globalL
 -- 回落是必要的：索引只在 `elabBodies` 之前从当时的 globals 建一次，之前的数据族/trait/
 -- 签名阶段索引为空（那些阶段总量小，线性扫可接受）；索引与 globals 不一致时以列表为准。
 export globalsLookup : String -> List (Pair String Term) -> Ec -> Maybe Term
-globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) of
+globalsLookup name globals ec = case HashMap.lookup name (ecGlobalsTbl ec) of
   Just ty => Just ty
   -- 表已完整（bodies 阶段）时，未命中就意味着「不是全局」：省掉线性扫全 globals
   -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
@@ -204,7 +204,7 @@ globalsLookup name globals ec = case Base.HashMap.lookup name (ecGlobalsTbl ec) 
 -- `dtDataKind`，不依赖这张表。注意 `Base.HashMap.fromList` 是**先出现获胜**，用它建
 -- 这张表会让同名值定义被族 kind 盖掉——所以这里用 `insertAll`（后出现获胜）。
 export globalsTableOf : List (Pair String Term) -> HashMap String Term
-globalsTableOf globals = Base.HashMap.insertAll globals (Base.HashMap.fromList [])
+globalsTableOf globals = HashMap.insertAll globals (HashMap.fromList [])
 
 -- ---------------------------------------------------------------
 export memSig : Eq a => List (Pair a b) -> a -> Bool
@@ -223,7 +223,7 @@ collectSigs decls =
     -- defined 重建表是 O(#sigs × #defined)。
     banned = qualifiedBannedTbl defined
     preludeBanned = topQuantBanned []
-  in collectSigsInto banned preludeBanned (dataParamKindTbl decls) (Base.HashMap.fromList []) [] decls
+  in collectSigsInto banned preludeBanned (dataParamKindTbl decls) (HashMap.fromList []) [] decls
 
 -- 声明收集（签名里的自由小写名量化为隐式类型参数，见 `Elab.Sig.quantifyTopSig`）。
 -- banned 集按**签名所属模块**作用域，且是共享缓存：
@@ -249,8 +249,8 @@ collectSigsInto banned preludeBanned paramKinds seen acc (d :: rest) = case d of
 collectSigOne : HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> HashMap String Bool -> List (Pair String (Pair (List Expr) (Pair Expr Span))) -> String -> List Expr -> Expr -> Span -> List Decl -> Check (List (Pair String (Pair (List Expr) (Pair Expr Span))))
 collectSigOne banned preludeBanned paramKinds seen acc name ctx ty sp rest =
   if memName name preludeNames then tcErr1 sp (CannotRedefineBuiltin name) name
-  else if Base.HashMap.member name seen then tcErr1 sp (DuplicateSignature name) name
-  else collectSigsInto banned preludeBanned paramKinds (Base.HashMap.insert name True seen)
+  else if HashMap.member name seen then tcErr1 sp (DuplicateSignature name) name
+  else collectSigsInto banned preludeBanned paramKinds (HashMap.insert name True seen)
     (Pair name (Pair ctx (Pair (quantifyTopSigCtxCachedKinds (modulePrefixOf name) banned preludeBanned paramKinds ctx ty sp) sp)) :: acc)
     rest
 
@@ -320,7 +320,7 @@ dtCtorLookup name (d :: rest) = case findCtorIn name (dtDataCtors d) of
 -- 线性扫族表。索引是可重建缓存（真相仍是 `ecDatas`）：建表前的阶段（data 精化中途）
 -- 或者 `ecAddData` 之外的旁路构造都会 miss，回落保证语义不变。
 export dtCtorLookupEc : Ec -> String -> Maybe DtCtor
-dtCtorLookupEc ec name = case Base.HashMap.lookup name ec.ecCtorTbl of
+dtCtorLookupEc ec name = case HashMap.lookup name ec.ecCtorTbl of
   Just c => Just c
   Nothing => if ecCtorIndexComplete ec then Nothing else dtCtorLookup name (ecDatas ec)
 
@@ -932,7 +932,7 @@ nvarOpaqueCtx ctx lvl =
 -- 只解元变量、不做 delta：判据必须与 codegen（看不到定义展开）保持同一视角，
 -- 否则「声明成 Obj.t、使用处却因 delta 归约没 cast」会错配。
 zonkValueOnly : Ec -> Value -> Value
-zonkValueOnly ec v = force (Base.HashMap.fromList []) (ecSolsP ec) defaultFuel v
+zonkValueOnly ec v = force (HashMap.fromList []) (ecSolsP ec) defaultFuel v
 
 export isOpaqueRuntimeTyIn : Ec -> Ctx -> Value -> Bool
 isOpaqueRuntimeTyIn ec ctx v =

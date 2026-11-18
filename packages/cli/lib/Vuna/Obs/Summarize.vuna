@@ -21,12 +21,12 @@
 -- 这里保持 best-effort）。规范见 `docs/reference/observability.md` §7 `summarize`。
 module Vuna.Obs.Summarize where
 
-import Base.List
-import Base.Maybe
-import Base.Ord
-import Base.Pair
-import Base.Sort
-import Base.String
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Trait.Ord as Ord
+import Base.Data.Pair as Pair
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Read

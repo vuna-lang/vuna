@@ -20,21 +20,21 @@ module Vuna.Clean where
 
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
-import Base.Maybe
+import Base.Data.Maybe as Maybe
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
-import Base.List
-import Base.Nat
-import Base.String
-import Base.EffClock
-import Base.EffConsole
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffEnv
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.String as String
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
 
 -- | `vuna store clean` 的入口：解析 flag 与位置参数，决定清哪一族。
 -- `--gc` 必须与 `--packages` 连用；`--store` / `--packages` 不带 `--gc` 时不收目录。
@@ -339,7 +339,7 @@ digitOf _ = Nothing
 -- | 内部：从 `pos` 起逐位累加；`fuel` 从长度递减到 0，遇到非数字给 `Nothing`。
 readNatFuel : Int -> Int -> String -> Int -> Maybe Int
 readNatFuel fuel pos s acc = if fuel <= 0 then Just acc
-else case digitOf (substring (Base.Nat.fromInt pos) (Base.Nat.fromInt 1) s) of
+else case digitOf (substring (Nat.fromInt pos) (Nat.fromInt 1) s) of
   Nothing => Nothing
   Just d => readNatFuel (fuel - 1) (pos + 1) s (acc * 10 + d)
 

@@ -13,10 +13,10 @@
 -- 岛」）：`build.sh`（ocamlopt 链接）、产物执行、`repl` / `lsp` / `seed` / 包管理器。
 module Vuna.Test.InProc where
 
-import Base.IORef
-import Base.List
-import Base.Maybe
-import Base.String
+import Base.Effect.Pure.IORef as IORef
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
@@ -28,14 +28,14 @@ import Vuna.Lint.Config
 import Vuna.Lint.Fix
 import Vuna.Lint.Rules
 import Vuna.Test.Session
-import Base.Eff.Types
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffExit
-import Base.EffFs
-import Base.EffProcess
-import Base.EffClock
-import Base.EffArgs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffArgs as EffArgs
 
 -- | 诊断上限：与 `CliOpts` 默认 `optMaxErrors = 20` 一致（`takeDiags` 同语义）。
 diagCap : Int
@@ -67,11 +67,11 @@ ownedByPackage pkg d =
 
 -- | 内部：单文件入口的裁剪链——去重 warning、按文件归属过滤、截断到 `diagCap`。
 fileShown : String -> List Diagnostic -> List Diagnostic
-fileShown path ds = Base.List.take diagCap (filter (ownedByFile path) (dedupeWarnings ds))
+fileShown path ds = List.take diagCap (filter (ownedByFile path) (dedupeWarnings ds))
 
 -- | 内部：包目录的裁剪链——去重 warning、按包归属过滤、截断到 `diagCap`。
 packageShown : Package -> List Diagnostic -> List Diagnostic
-packageShown pkg ds = Base.List.take diagCap (filter (ownedByPackage pkg) (dedupeWarnings ds))
+packageShown pkg ds = List.take diagCap (filter (ownedByPackage pkg) (dedupeWarnings ds))
 
 -- ---------------------------------------------------------------
 -- check

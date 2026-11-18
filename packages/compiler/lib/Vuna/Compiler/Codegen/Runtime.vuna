@@ -14,10 +14,10 @@ module Vuna.Compiler.Codegen.Runtime where
 --
 -- 改表规则：新增内建必须同时改 `Intrinsics`（语义）与 `Ir.Runtime`（契约，名字）与本表
 -- （OCaml 文本）；漏一处会在 check 路径上直接报内部错，不会静默生成坏代码。
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.Pair
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime

@@ -10,14 +10,14 @@ module Vuna.Repl.Term where
 
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.EffStdin
-import Base.Nat
-import Base.Eff.Types
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffStdin as EffStdin
+import Base.Data.Nat as Nat
+import Base.Effect.EffTypes as EffTypes
 
 -- | ESC 字节（转义序列的前缀）。
 export escCode : String

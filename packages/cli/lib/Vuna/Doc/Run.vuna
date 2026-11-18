@@ -16,11 +16,11 @@ import Vuna.Compiler.Base.Store
 import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
-import Base.EffConsole
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
 
 -- | 入口：解析参数并执行；用法错误退出 2。
 export runDoc : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int

@@ -26,13 +26,13 @@ import Vuna.Obs.Serve
 import Vuna.Obs.Summarize
 import Vuna.Obs.Symbols
 import Vuna.Obs.Validate
-import Base.EffConsole
-import Base.Eff.Types
-import Base.EffClock
-import Base.EffEnv
-import Base.EffFs
-import Base.EffNet
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffNet as EffNet
+import Base.Effect.EffProcess as EffProcess
 
 -- | `vuna dev obs <sub>` 的入口（`args` 是去掉 `obs` 之后的参数）；无子命令或未知子命令
 -- 打印用法并返回退出码 2。

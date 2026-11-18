@@ -5,9 +5,9 @@ module Vuna.Compiler.Core.Conv where
 -- 返回更新后的元变量解表。空 spine 就地检查作用域；非空 spine 走 Miller pattern
 -- unification（局部中性变量 spine → λ 抽象）；非 pattern 形状明确报错。
 -- 依赖 Core.Term（表示层）与 Core.Eval（force/quote/show）。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Base.Diagnostics

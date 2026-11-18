@@ -8,8 +8,7 @@ module Vuna.Compiler.Base.Diagnostics.Loader where
 -- `DT: internal:` 的 fuel 耗尽等内部不变量不占符号。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-export module Base.Nat
-export module Base.Vec
+export module Base.Data
 
 export data LdDiag(..) : Nat -> Type where
   -- arity 1

@@ -5,15 +5,15 @@
 -- 有效配置里）。只缓存成功 lint 的完整 finding（含 Edit），解析/抑制错误不缓存。
 module Vuna.Lint.Cache where
 
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.String
-import Base.Eff.Types
-import Base.EffFs
-import Base.EffEnv
-import Base.EffProcess
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store

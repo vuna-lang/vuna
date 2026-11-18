@@ -9,9 +9,9 @@ import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Base.Common
-import Base.List
-import Base.String
-import Base.Bool
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Bool as Bool
 
 -- | 总览帮助（`vuna help` / `vuna --help` / 无参数）。
 export overviewText : String

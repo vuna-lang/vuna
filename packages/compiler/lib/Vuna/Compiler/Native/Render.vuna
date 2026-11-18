@@ -11,11 +11,11 @@ module Vuna.Compiler.Native.Render where
 -- `.intel_syntax noprefix` 开头、`.note.GNU-stack` 结尾。
 --
 -- 边界：只 import Base 与 `Native.{Model,Abi}`。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Native.Model
 
 -- ---------------------------------------------------------------

@@ -10,8 +10,8 @@ module Vuna.Compiler.Base.Diagnostics.Warning where
 -- unused-def）直接用 `warnDiagAt*` 构造诊断并返回给驱动层；不存在进程内收集器。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Warning.WarnErr（目录/模板见 diagnostics.md）。
 export data WarnErr(..) : Nat -> Type where

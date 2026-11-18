@@ -15,10 +15,10 @@ import Vuna.Doc.Comments
 import Vuna.Doc.Types
 import Vuna.FixityEnv
 import Vuna.Sig
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- ---------------------------------------------------------------
 -- 数据模型

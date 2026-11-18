@@ -20,14 +20,14 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffExit
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
 
 -- | 求值一个入口文件：成功返回值的渲染文本，失败返回 `error: <诊断>` 文本。
 export interpretFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String

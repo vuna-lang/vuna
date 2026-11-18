@@ -22,12 +22,12 @@ import Vuna.Compiler.Frontend.Toml
 import Vuna.Cli.Args
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
-import Base.List
-import Base.String
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffEnv
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
 
 -- | 一条发布：人读版本号 + 不可变源 + 内容摘要 + 可选语义身份。
 export record Release(..) where

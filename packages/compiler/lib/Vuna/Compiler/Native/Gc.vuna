@@ -12,10 +12,10 @@ module Vuna.Compiler.Native.Gc where
 --
 -- 分配器（`Native.Runtime.alloc`）在预算或阈值处调用 `rt_gc_collect`；
 -- 空闲块按 2 的幂尺寸类复用，超过 `nativeMaxClassBytes` 的块进 `rt_huge_free`。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.String as String
 import Vuna.Compiler.Native.Abi
 import Vuna.Compiler.Native.Model
 

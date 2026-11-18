@@ -22,15 +22,15 @@ import Vuna.Compiler.Native.Audit
 import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
-import Base.EffArgs
-import Base.EffExit
-import Base.Monad
-import Base.Eff.Types
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
+import Base.Trait.Monad as Monad
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 main : Eff [FsOp, ConsoleOp, ClockOp, EnvOp, ProcessOp, ExitOp, ArgsOp] Int
 main = do

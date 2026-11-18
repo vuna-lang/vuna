@@ -12,9 +12,9 @@ module Vuna.Compiler.Base.Hash where
 --   标准的小写 64 位十六进制，`digestInt` 提供「必须落成 Int」位置的 63-bit 派生键。
 -- * 本模块只做**摘要与预哈希**；规范编码（自定界原子文法 + 解码器 roundtrip）在
 --   `Vuna.Compiler.Canonical`（D5：格式层，不随编译器或宿主序列化漂移）。
-import Base.Bits
-import Base.List
-import Base.String
+import Base.Data.Bits as Bits
+import Base.Data.List as List
+import Base.Data.String as String
 
 -- | 8 个 32-bit 摘要字（大端序；即标准 SHA-256 的 64 位十六进制）。
 export record Digest(..) where

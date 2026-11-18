@@ -18,7 +18,7 @@ module Vuna.Compiler.Loader.Fixity where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Diagnostics.Rn
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 
 export record FixityTable where
   renameMode : Bool
@@ -52,8 +52,7 @@ fixityOpOf d = d.fixityOp
 -- 全程序唯一：同一运算符只能有一处声明。同一份声明（文件 + 起始位置相同）经不同
 -- import 路径到达时不算重复。
 export checkUniqueFixities : List FixityDecl -> Check (List FixityDecl)
-checkUniqueFixities ds =
-  checkUniqueFixitiesGo ds (Base.HashMap.fromList []) (Base.HashMap.fromList [])
+checkUniqueFixities ds = checkUniqueFixitiesGo ds (HashMap.fromList []) (HashMap.fromList [])
 
 checkUniqueFixitiesGo : List FixityDecl -> HashMap String Int -> HashMap String Int -> Check (List FixityDecl)
 checkUniqueFixitiesGo [] opSeen declSeen = OkC []
@@ -62,13 +61,13 @@ checkUniqueFixitiesGo (d :: rest) opSeen declSeen =
     sp = d.fixitySpan
     declKey = "${d.fixityOp}@${spanFile sp}:${spanStartLine sp}:${spanStartCol sp}"
   in if memName d.fixityOp builtinFixityOps then onErrDiag (withFallbackSpan sp) (rnNoLoc1 (BuiltinFixity d.fixityOp) d.fixityOp)
-  else case Base.HashMap.lookup declKey declSeen of
+  else case HashMap.lookup declKey declSeen of
     Just _ => checkUniqueFixitiesGo rest opSeen declSeen
-    Nothing => case Base.HashMap.lookup d.fixityOp opSeen of
+    Nothing => case HashMap.lookup d.fixityOp opSeen of
       Just _ => onErrDiag (withFallbackSpan sp) (rnNoLoc1 (DuplicateFixity d.fixityOp) d.fixityOp)
       Nothing =>
         Vuna.Compiler.Base.Common.bind
-          (checkUniqueFixitiesGo rest (Base.HashMap.insert d.fixityOp 1 opSeen) (Base.HashMap.insert declKey 1 declSeen))
+          (checkUniqueFixitiesGo rest (HashMap.insert d.fixityOp 1 opSeen) (HashMap.insert declKey 1 declSeen))
           (\tailDecls => OkC (d :: tailDecls))
 
 -- 反向别名：方法名/构造子名（`eq`/`Cons`/`bind`）-> 运算符符号。Fmt 打印用。

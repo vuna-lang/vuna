@@ -12,12 +12,12 @@ module Vuna.Compiler.Native.Model where
 --
 -- 边界：本模块只 import Base；不 import Core/Elab/Intrinsics/Codegen（由
 -- `checks.ir-boundary` 的 native 规则守护）。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 
 -- | native 后端的可预期失败：目标能力限制/不支持的输入。驱动把它变成 CLI 普通错误。
 export data NativeErr(..) : Type where

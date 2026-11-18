@@ -2,8 +2,8 @@ module Vuna.Compiler.Lowering.Ty where
 
 -- Core → IR 的**类型表面**：类型参数槽渲染、`IrTy`、类型声明。纯函数（不进项）。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv

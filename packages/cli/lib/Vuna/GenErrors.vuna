@@ -19,14 +19,14 @@ import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Files
 import Vuna.Lint.Diagnostics
-import Base.List
-import Base.String
-import Base.EffConsole
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffExit
-import Base.EffProcess
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffProcess as EffProcess
 
 -- | 文档里的一行错误码条目（普通域与 lint 域共用一个形状）。
 record Entry where

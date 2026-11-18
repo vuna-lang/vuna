@@ -1,8 +1,8 @@
 module Vuna.Compiler.Frontend.Parser where
 
 -- vuna 源码 parser：offside layout，返回 AST 与 imports。
-import Base.List
-import Base.Nat
+import Base.Data.List as List
+import Base.Data.Nat as Nat
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Diagnostics.Frontend

@@ -15,8 +15,8 @@ import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Expr
 import Vuna.Fmt.Util
-import Base.Sort
-import Base.String
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 
 -- ---------------------------------------------------------------
 -- 声明前缀

@@ -21,4 +21,5 @@ export module Base.EffStdin as EffStdin
 export module Base.EffExit as EffExit
 export module Base.EffNet as EffNet
 export module Base.EffProcess as EffProcess
+export module Base.Effect.Core as Core
 export module Base.Effect.Pure as Pure

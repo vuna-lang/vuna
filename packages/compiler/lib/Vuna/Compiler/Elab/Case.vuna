@@ -10,7 +10,7 @@ module Vuna.Compiler.Elab.Case where
 -- 与写出一个分支（elabConAlt）都跑同一套「索引合一 + 上下文空族」判定；上下文空族又
 -- 统一落到 `allCtorsUnsatisfiable`（`isEmptyFamilyValue` 的唯一实现）。精化路径只有两条：
 -- 先降级成模式矩阵，或直接走规范形。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval

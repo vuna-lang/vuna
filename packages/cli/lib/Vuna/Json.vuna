@@ -10,10 +10,10 @@
 -- 代理对不合并）；输出把 < 0x20 的控制字符转成 `\u00XX`，其余字符原样输出。
 module Vuna.Json where
 
-import Base.List
-import Base.Maybe
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
 import Vuna.Compiler.Base.Common
-import Base.String
+import Base.Data.String as String
 
 -- ---------------------------------------------------------------
 -- 数据模型

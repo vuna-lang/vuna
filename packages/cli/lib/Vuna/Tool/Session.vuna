@@ -10,14 +10,14 @@
 -- 永远不会被当成载荷。
 module Vuna.Tool.Session where
 
-import Base.Eff.Types
-import Base.List
+import Base.Effect.EffTypes as EffTypes
+import Base.Data.List as List
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Base.Store
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- | 工具会话身份：`origin`（tool/pkg）+ `bucket`（同一进程内不同用途各占一桶）。
 export record ToolSession(..) where

@@ -2,12 +2,12 @@ module Vuna.Compiler.Ir.Render where
 
 -- IR 的确定性调试文本（`vuna dev ir dump` 用）。
 -- 只用于 diff / 观测，不是后端输入，也不承诺稳定 ABI。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 
 bNameText : IrBName -> String
@@ -21,7 +21,7 @@ binderText : IrBinder -> String
 binderText b = if b.irBinderErased then "_" else bNameText b.irBinderName
 
 binderList : List IrBinder -> String
-binderList bs = Base.String.join " " (map binderText bs)
+binderList bs = String.join " " (map binderText bs)
 
 ctorText : Maybe (Pair String String) -> String
 ctorText m = case m of
@@ -38,7 +38,7 @@ tyText t = case t of
   IrTyOpaque => "Opaque"
   IrTyArray x => "Array " ++ tyText x
   IrTyRef x => "Ref " ++ tyText x
-  IrTyData n args => n ++ " " ++ Base.String.join " " (map tyText args)
+  IrTyData n args => n ++ " " ++ String.join " " (map tyText args)
   IrTyFun a b => "(" ++ tyText a ++ " -> " ++ tyText b ++ ")"
 
 renderAlt : Int -> IrAlt -> String
@@ -123,7 +123,7 @@ else case e of
     "(case "
       ++ renderIr (fuel - 1) s
       ++ " "
-      ++ Base.String.join " " (map (renderAlt (fuel - 2)) alts)
+      ++ String.join " " (map (renderAlt (fuel - 2)) alts)
       ++ ")"
   IrNatCase s _ z su ca =>
     "(natcase "
@@ -161,13 +161,13 @@ renderTyDecl d = case d of
       ++ "/"
       ++ strFromInt p
       ++ " "
-      ++ Base.String.join " " (map (\c => firstOf c ++ "(" ++ Base.String.join "," (map tyText (secondOf c)) ++ ")") ctors)
+      ++ String.join " " (map (\c => firstOf c ++ "(" ++ String.join "," (map tyText (secondOf c)) ++ ")") ctors)
   IrRecordDecl n p _ tys =>
-    "record " ++ n ++ "/" ++ strFromInt p ++ " " ++ Base.String.join "," (map tyText tys)
+    "record " ++ n ++ "/" ++ strFromInt p ++ " " ++ String.join "," (map tyText tys)
   IrUnboxedDecl n p ty => "unboxed " ++ n ++ "/" ++ strFromInt p ++ " " ++ tyText ty
 
 export renderDefs : List IrDef -> String
-renderDefs defs = Base.String.join "\n" (map renderDef defs)
+renderDefs defs = String.join "\n" (map renderDef defs)
 
 export renderProgram : IrProgram -> String
 renderProgram p =
@@ -182,7 +182,7 @@ renderProgram p =
           ++ " action="
           ++ (if irEntryIsActionOf e then "1" else "0")
           ++ " rows=["
-          ++ Base.String.join "," (irEntryRowTagsOf e)
+          ++ String.join "," (irEntryRowTagsOf e)
           ++ "]"
-  in Base.String.join "\n"
+  in String.join "\n"
     (append (append ["-- types"] (map renderTyDecl u.irUnitTyDecls)) (append ["-- entry", entry, "-- defs"] (map renderDef defs)))

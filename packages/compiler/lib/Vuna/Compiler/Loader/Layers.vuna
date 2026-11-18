@@ -18,8 +18,8 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Loader.Modules
-import Base.List
-import Base.String
+import Base.Data.List as List
+import Base.Data.String as String
 
 isLayerPrefix : String -> String -> Bool
 isLayerPrefix prefix name = name == prefix || startsWith "${prefix}." name

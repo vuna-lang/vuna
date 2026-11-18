@@ -8,16 +8,16 @@ module Vuna.Compiler.Driver.Dt where
 -- base-only）。
 -- 唯一 codegen 入口是 `dtSplitProject`（逐模块 split 输出模型）；DT 精化器按
 -- **整程序**精化，模块边界对精化不构成约束。
-import Base.Sort
-import Base.List
-import Base.String
-import Base.Obs
+import Base.Data.Sort as Sort
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Obs as Obs
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Hash
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Frontend.Ast
@@ -46,13 +46,13 @@ import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Driver.SplitGen
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffExit
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffProcess as EffProcess
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 
@@ -767,7 +767,7 @@ dtMainKind ctx entry = do
       OkC p => case findMainDef (secondOf p) of
         Nothing => cgErr0At (Span entry 1 1 1 1 0 0) NoMain
         Just mainDef => if mainActionKind (dtDefType mainDef) == "Eff" then OkC "Eff"
-        else case force (Base.HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
+        else case force (HashMap.fromList (defTableOf (secondOf p))) solsEmpty defaultFuel (eval [] (dtDefType mainDef)) of
           VNeutral n => case n of
             NGlobal g sp => case sp of
               [] => mainKindForName g
@@ -826,8 +826,7 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
     let
       table = defTableOf (dtProgDefs program)
       sols = solsEmpty
-      mainVal =
-        normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
+      mainVal = normalize (HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal "main" []))
     in if not (mainActionKind (dtDefType mainDef) == "") then cgErr0 InterpCannotExecuteEffects
     else case mainVal of
       VInt n => OkC (strFromInt n)
@@ -843,7 +842,7 @@ evalDtMainCore program = case findMainDef (dtProgDefs program) of
 -- （`Elab.Driver.synthMainShow`），这里对 main 值应用它并打印结果字符串；与编译产物的
 -- main 钩子走同一展示（Show 字典投影）。
 interpMainShow : List (Pair String Term) -> Sols -> Value -> Check String
-interpMainShow table sols mainVal = case normalize (Base.HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal mainShowDefName [mainVal])) of
+interpMainShow table sols mainVal = case normalize (HashMap.fromList table) sols defaultFuel (VNeutral (NGlobal mainShowDefName [mainVal])) of
   -- 与非内建 main 的编译路径一致：main 钩子直接 `print_endline (show T x)`（不加引号），
   -- 所以 interp 也返回 raw 文本（内建 String main 仍走 dt_show_string 的加引号形态）。
   VStr s => OkC s
@@ -938,8 +937,8 @@ depStartOfAt next progs =
     ec2 = addInstsEc ec1 (dedupInsts (concatMap cachedInsts progs))
     ec3 = addClassesEc ec2 (dedupClasses (concatMap cachedClasses progs))
     ec4 = ecPutNext ec3 next
-    ec5 = ecPutGlobalsTbl ec4 (Base.HashMap.fromList globals)
-    ec6 = ecPutDefTbl ec5 (Base.HashMap.fromList bodies)
+    ec5 = ecPutGlobalsTbl ec4 (HashMap.fromList globals)
+    ec6 = ecPutDefTbl ec5 (HashMap.fromList bodies)
   in Pair ec6 globals
 
 depStartOf : List CachedProgram -> Pair Ec (List (Pair String Term))
@@ -972,15 +971,15 @@ cleanStartNext cps =
 -- 这里从右往左一次走完，用 `HashMap String Bool` 记已见名 ⇒ O(n)。
 -- 同名只保留**最后一次**出现，其余元素相对顺序不变。
 dedupKeepLast : (a -> String) -> List a -> List a
-dedupKeepLast key xs = dedupKeepLastGo key (reverse xs) (Base.HashMap.fromList []) []
+dedupKeepLast key xs = dedupKeepLastGo key (reverse xs) (HashMap.fromList []) []
 
 dedupKeepLastGo : (a -> String) -> List a -> HashMap String Bool -> List a -> List a
 dedupKeepLastGo key [] seen acc = acc
 dedupKeepLastGo key (x :: rest) seen acc =
   let
     k = key x
-  in if Base.HashMap.member k seen then dedupKeepLastGo key rest seen acc
-  else dedupKeepLastGo key rest (Base.HashMap.insert k True seen) (x :: acc)
+  in if HashMap.member k seen then dedupKeepLastGo key rest seen acc
+  else dedupKeepLastGo key rest (HashMap.insert k True seen) (x :: acc)
 
 -- 定义体表（delta 展开的唯一来源）：只取有体的 `DtDef`（axiom / extern 跳过）；
 -- 依赖包之间的共享声明按名字去重（后出现者胜，与 datas/insts/classes 一致）。
@@ -1803,7 +1802,7 @@ maybeTermGlobals (Just t) = termGlobalNames t
 -- `memName` 线性扫全表，`UN_UnusedDefinition` 一次几千条时是 O(n²)（合成 8000 定义
 -- 实测尾部 ~800 ms）。入口建一次名字表 ⇒ 每项 O(1)，输出顺序不变。
 warnUnusedDefsGo : List DtDef -> List String -> List Diagnostic
-warnUnusedDefsGo defs used = warnUnusedDefsTbl defs (Base.HashMap.ofNames used)
+warnUnusedDefsGo defs used = warnUnusedDefsTbl defs (HashMap.ofNames used)
 
 warnUnusedDefsTbl : List DtDef -> HashMap String Bool -> List Diagnostic
 warnUnusedDefsTbl [] usedTbl = []
@@ -1812,7 +1811,7 @@ warnUnusedDefsTbl (d :: rest) usedTbl =
     name = dtDefName d
     skip = name == "main" || startsWith "_" name || startsWith "$" name
   in if skip then warnUnusedDefsTbl rest usedTbl
-  else if Base.HashMap.member name usedTbl then warnUnusedDefsTbl rest usedTbl
+  else if HashMap.member name usedTbl then warnUnusedDefsTbl rest usedTbl
   else case dtDefSpan d of
     Just sp =>
       (::)

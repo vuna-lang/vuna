@@ -12,12 +12,12 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Search.Query
 import Vuna.Search.Types
-import Base.Eff.Types
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- | 检索模式：类型检索，或名称 / doc 检索（两个布尔分别表示只算名称分、只算 doc 分）。
 data SearchMode : Type where

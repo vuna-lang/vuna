@@ -13,11 +13,11 @@ import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Hash
-import Base.List
-import Base.Sort
-import Base.String
-import Base.EffFs
-import Base.Eff.Types
+import Base.Data.List as List
+import Base.Data.Sort as Sort
+import Base.Data.String as String
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 -- | 收集时跳过的目录名（与 `Driver.Compile` 的构建扫描同源）。
 export skipSourceDir : String -> Bool

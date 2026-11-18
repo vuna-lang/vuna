@@ -31,7 +31,7 @@ module Vuna.Compiler.Frontend.Toml where
 -- 这类 corner case 不支持，边界见文档。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Pkg
-import Base.Bits
+import Base.Data.Bits as Bits
 
 export data TomlValue(..) : Type where
   TStr : String -> TomlValue

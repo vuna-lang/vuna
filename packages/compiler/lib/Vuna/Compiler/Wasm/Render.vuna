@@ -5,12 +5,12 @@ module Vuna.Compiler.Wasm.Render where
 -- 布局规范（docs/reference/wasm.md）：最大 100 列、2 空格缩进、每条指令一行、
 -- 模块级名字稳定、section/类型/函数/data 固定顺序。生成结果不提交进 Git，
 -- 但同一输入必须逐字节相同（测试用两次渲染 cmp）。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 
@@ -27,7 +27,7 @@ fitsLine : String -> Bool
 fitsLine s = strLength s <= maxLine
 
 joinWith : String -> List String -> String
-joinWith sep xs = Base.String.join sep xs
+joinWith sep xs = String.join sep xs
 
 -- ---------------------------------------------------------------
 -- 注释换行

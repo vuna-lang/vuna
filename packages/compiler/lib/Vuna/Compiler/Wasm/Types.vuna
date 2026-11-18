@@ -10,12 +10,12 @@ module Vuna.Compiler.Wasm.Types where
 --   * 所有字段都存 `anyref`（IR 无类型标注；Int 先装箱）。
 --
 -- 命名稳定：类型名 `$t_<watName family>`，由 Vuna 全限定名派生，不按位置编号。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime

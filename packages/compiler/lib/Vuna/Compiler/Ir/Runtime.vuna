@@ -24,10 +24,10 @@ module Vuna.Compiler.Ir.Runtime where
 --
 -- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import Core/Elab/Intrinsics
 -- 与任何后端（`checks.ir-boundary` 守护）。
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.Pair
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Ir.Model
 
 -- | 契约里的一条运行时符号：名字 + 是否需要 canonical List 族桥接。

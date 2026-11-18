@@ -18,11 +18,11 @@ module Vuna.Compiler.Native.Abi where
 --     见 `Vuna.Compiler.Native.Gc`。
 --
 -- 边界：只 import Base 与 `Native.Model`。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Native.Model
 
 -- | 运行时/桥接函数所属的模块路径（渲染成根目录的 `runtime.s`）。

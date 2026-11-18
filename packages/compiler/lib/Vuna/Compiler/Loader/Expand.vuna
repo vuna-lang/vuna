@@ -21,8 +21,8 @@ module Vuna.Compiler.Loader.Expand where
 -- 后两个由 `VUNA_OBS` / `--obs` 分级开关；关闭时原语直接返回 0（实参仍求值，见
 -- `Base.Obs` 的 `obsOn` 用于自行判开销）。
 -- 用户自定义宏不在范围内。
-import Base.List
-import Base.Nat
+import Base.Data.List as List
+import Base.Data.Nat as Nat
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Vuna.Compiler.Frontend.Ast

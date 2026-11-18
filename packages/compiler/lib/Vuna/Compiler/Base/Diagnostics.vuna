@@ -29,15 +29,14 @@ module Vuna.Compiler.Base.Diagnostics where
 -- 对外名字集合是下面三个模块的并集，调用点只认本门面。
 -- 本模块是**编译器侧**真源，进 seed（被 `vuna check .` 自检）。产品 CLI 包 `Lint/Diagnostics` 与
 -- Frontend/Diagnostics 单向 import 本模块；compiler 永不 import `vuna` 包。
-import Base.String
+import Base.Data.String as String
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Frontend
 import Vuna.Compiler.Base.Diagnostics.Loader
 export module Vuna.Compiler.Base.Common
-export module Base.Nat
-export module Base.Vec
+export module Base.Data
 export module Vuna.Compiler.Base.Diagnostics.Cg
 export module Vuna.Compiler.Base.Diagnostics.Ic
 export module Vuna.Compiler.Base.Diagnostics.Tc

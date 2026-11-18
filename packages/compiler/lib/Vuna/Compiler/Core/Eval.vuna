@@ -9,7 +9,7 @@ module Vuna.Compiler.Core.Eval where
 -- 定义性相等（beta + delta + eta）在 Vuna.Compiler.Core.Conv；本模块是它的下游依赖。
 -- 依赖 Core.Term 的表示层与纯数据操作。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Base.Intrinsics
 
@@ -963,7 +963,7 @@ substSolvedMetasAtTbl sols depth t = substSolvedMetasAtTblFuel 128 sols depth t
 substSolvedMetasAtTblFuel : Int -> HashMap Int Value -> Int -> Term -> Term
 substSolvedMetasAtTblFuel fuel sols depth t = if fuel <= 0 then t
 else case t of
-  TMeta m => case Base.HashMap.lookup m sols of
+  TMeta m => case HashMap.lookup m sols of
     Nothing => t
     Just v =>
       let

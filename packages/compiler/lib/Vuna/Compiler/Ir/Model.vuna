@@ -21,11 +21,6 @@ module Vuna.Compiler.Ir.Model where
 -- 边界：本模块只 import Base 的纯数据结构与 `Vuna.Compiler.Base.Source` 的 `Span`，
 -- 不下钻 Core / Elab / Intrinsics / Codegen。
 import Vuna.Compiler.Base.Source
-export module Base.Pair
-export module Base.Bool
-export module Base.List
-export module Base.Maybe
-export module Base.String
 
 -- ---------------------------------------------------------------
 -- 签名级运行时类型表面

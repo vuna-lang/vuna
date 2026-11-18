@@ -15,7 +15,7 @@ module Vuna.Compiler.Elab.Match where
 -- （见 `subNamesFor`），否则层间同名会让外层 rename 抓到内层 binder。嵌套的矩阵降级
 -- （内层 source case 各自降级）之间靠调用方传入的位置名区分（`checkCaseMatrixFuel` 用
 -- 上下文深度做前缀）。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Elab.Coverage
 import Vuna.Compiler.Base.Diagnostics

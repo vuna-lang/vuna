@@ -26,12 +26,12 @@ module Vuna.Compiler.Frontend.Cst where
 --
 -- 位置约定与 lexer 一致：行、列从 1 开始，列 = UTF-8 字节（`strUnpack` 给字节）。
 -- 本模块的 span 文件字段统一为 `""`，由调用方在需要时注入真实路径。
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.Obs.Span
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.ObsSpan as ObsSpan
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Lexer
 

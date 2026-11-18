@@ -11,10 +11,10 @@
 -- 规则名接受 kebab 短名或 `LN_` code；未知规则是配置错误（不静默忽略）。
 module Vuna.Lint.Suppress where
 
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer

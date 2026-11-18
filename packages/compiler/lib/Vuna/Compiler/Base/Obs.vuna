@@ -12,11 +12,11 @@ module Vuna.Compiler.Base.Obs where
 -- `vuna.mark.*` 瞬时标记记录（`obsMark`），时间轴上是零宽度点。
 --
 -- 关闭时全部退化为一次 `Lazy.force` + 直接调用（见规范 §6）。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.Obs
-import Base.Obs.Span
-import Base.Eff.Types
+import Base.Data.Obs as Obs
+import Base.Data.ObsSpan as ObsSpan
+import Base.Effect.EffTypes as EffTypes
 
 -- ---------------------------------------------------------------
 -- Check 形态的阶段 span

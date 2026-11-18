@@ -11,15 +11,15 @@ module Vuna.Compiler.Base.Diag.Format where
 --
 -- 列单位沿用编译器内部约定：1-based，UTF-8 字节（见 `Source`）。JSON 同时给出
 -- 行/列；LSP 适配器负责转 UTF-16。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Source
 import Vuna.Compiler.Base.Diag
 import qualified Vuna.Compiler.Base.Diagnostics
-import Base.Nat
-import Base.String
+import Base.Data.Nat as Nat
+import Base.Data.String as String
 import Vuna.Compiler.Base.Version
-import Base.Eff.Types
-import Base.EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
 
 -- ---------------------------------------------------------------
 -- 名称

@@ -9,8 +9,8 @@ module Vuna.Compiler.Base.Diagnostics.Rn where
 -- 宏展开错误也归入本域：展开发生在名字解析之前、同样只依赖名字与 span，足够同构。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Rn.RnErr（目录/模板见 diagnostics.md）。
 export data RnErr(..) : Nat -> Type where

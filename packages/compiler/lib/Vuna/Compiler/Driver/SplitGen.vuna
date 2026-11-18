@@ -14,8 +14,8 @@ module Vuna.Compiler.Driver.SplitGen where
 -- 方法投影名与 `Dict_<trait>`）；没有按字符串前缀猜归属的表。
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Vuna.Compiler.Base.Common
-import Base.Eff.Types
-import Base.HashMap
+import Base.Effect.EffTypes as EffTypes
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Owner
 import Vuna.Compiler.Driver.Split
@@ -42,10 +42,10 @@ mainInitPrologue = "let () = Printexc.record_backtrace true\n"
 -- 名字 → 归属单元的哈希索引。对**每个**模块把全部 def/data 逐个线性扫 pairs 是
 -- O(#模块 × #def × #pairs)，大包上就是几秒。
 ownerTblOf : List (Pair String String) -> HashMap String String
-ownerTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
+ownerTblOf pairs = HashMap.insertAll pairs (HashMap.fromList [])
 
 ownerOfTbl : HashMap String String -> String -> String
-ownerOfTbl t name = case Base.HashMap.lookup name t of
+ownerOfTbl t name = case HashMap.lookup name t of
   Just o => o
   Nothing => ""
 

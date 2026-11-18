@@ -21,7 +21,7 @@ module Vuna.Compiler.Frontend.Manifest where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Base.Diagnostics.Pkg
-import Base.EffFs
+import Base.Effect.EffFs as EffFs
 
 -- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
 export data DependencySource(..) : Type where

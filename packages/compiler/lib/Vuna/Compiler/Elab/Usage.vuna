@@ -11,8 +11,8 @@ module Vuna.Compiler.Elab.Usage where
 -- 分支时向量头部就是新 binder；退出时检查并 drop。这样 de Bruijn 搬运由结构遍历本身完成。
 --
 -- 类型级定义的 body 是类型，不参与用量检查（由 `isTypeForming` 判定）。
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval

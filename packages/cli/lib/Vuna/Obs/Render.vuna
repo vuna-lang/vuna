@@ -14,11 +14,11 @@
 -- `docs/reference/observability.md` §7 `render`。
 module Vuna.Obs.Render where
 
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.Sort
-import Base.String
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
@@ -28,10 +28,10 @@ import Vuna.Obs.Flame
 import Vuna.Obs.Read
 import Vuna.Obs.Summarize
 import Vuna.Obs.Types
-import Base.EffConsole
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffProcess as EffProcess
 
 -- ---------------------------------------------------------------
 -- 入口

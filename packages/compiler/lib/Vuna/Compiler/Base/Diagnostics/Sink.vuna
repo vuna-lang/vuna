@@ -11,9 +11,9 @@ module Vuna.Compiler.Base.Diagnostics.Sink where
 -- 复杂度：按 `sameDiag` 的等价关系建**一次**键表（`HashMap String Bool`），O(n)（逐项
 -- 扫历史是 O(n²)：`UN_UnusedDefinition` 一次几千条时尾部 ~830 ms）。键必须与 `sameDiag`
 -- 等价：码 + 消息 + 严重度 + **全部 label 的 span 序列**（其余字段（建议/备注）不参与）。
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Common
-import Base.List
+import Base.Data.List as List
 
 -- | 严重度的键标签（与 `Diag.sameSeverity` 的等价类一一对应）。
 severityTag : Severity -> String
@@ -57,10 +57,10 @@ dedupeGo [] _ acc = reverse acc
 dedupeGo (d :: rest) seen acc =
   let
     key = diagKey d
-  in case Base.HashMap.lookup key seen of
+  in case HashMap.lookup key seen of
     Just _ => dedupeGo rest seen acc
-    Nothing => dedupeGo rest (Base.HashMap.insert key True seen) (d :: acc)
+    Nothing => dedupeGo rest (HashMap.insert key True seen) (d :: acc)
 
 -- | 诊断域实现：按首次出现顺序去重（与 `sameDiag` 同一等价类，O(n)）。
 export dedupeWarnings : List Diagnostic -> List Diagnostic
-dedupeWarnings ds = dedupeGo ds (Base.HashMap.fromList []) []
+dedupeWarnings ds = dedupeGo ds (HashMap.fromList []) []

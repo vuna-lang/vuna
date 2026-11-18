@@ -43,14 +43,14 @@ import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
 import Vuna.Lsp.Protocol
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffClock
-import Base.EffEnv
-import Base.EffExit
-import Base.EffProcess
-import Base.Obs
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffProcess as EffProcess
+import Base.Data.Obs as Obs
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 

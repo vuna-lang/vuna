@@ -10,12 +10,12 @@ module Vuna.Compiler.Wasm.Runtime where
 --   * String 是 `(array (mut i8))`；静态字节在 `$d0` passive data segment。
 --   * Bool 是 `i31`；Array 是 `(array (mut anyref))`。
 --   * 闭包 `$clo` = { code: (ref $ft), env: anyref }；`$ft` 是 (env, arg) -> anyref。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 

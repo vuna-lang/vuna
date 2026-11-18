@@ -2,9 +2,9 @@ module Vuna.Compiler.Elab.Termination where
 
 -- Vuna.Compiler.Elab.Termination：DT 终止性检查入口。
 -- 判据细节见 `.Measure`（size/守卫正事实/投影/关系/弱环）与 `.Scc`（size-change）。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Elab.Termination.Measure
@@ -63,33 +63,33 @@ refsOfDef clauses = dedup (concatMap (\c => exprRefsB (patsNames (firstOf c)) (s
 mapEdges : HashMap String Bool -> List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
 mapEdges names [] = []
 mapEdges names (d :: rest) =
-  Pair (firstOf d) (filter (\r => Base.HashMap.member r names) (refsOfDef (secondOf d)))
+  Pair (firstOf d) (filter (\r => HashMap.member r names) (refsOfDef (secondOf d)))
     :: mapEdges names rest
 
 callGraph : List (Pair String (List (Pair (List Pat) Expr))) -> List (Pair String (List String))
-callGraph defs = mapEdges (Base.HashMap.ofNames (defNames defs)) defs
+callGraph defs = mapEdges (HashMap.ofNames (defNames defs)) defs
 
 adjOf : String -> HashMap String (List String) -> List String
-adjOf n g = case Base.HashMap.lookup n g of
+adjOf n g = case HashMap.lookup n g of
   Just xs => xs
   Nothing => []
 
 adjTblOf : List (Pair String (List String)) -> HashMap String (List String)
-adjTblOf g = Base.HashMap.insertAll g (Base.HashMap.fromList [])
+adjTblOf g = HashMap.insertAll g (HashMap.fromList [])
 
 -- 反向邻接表：一次遍历建哈希表（逐边 lookup/replace 转置是 O(#边 × #节点)）。
 reverseAdjOf : List (Pair String (List String)) -> HashMap String (List String)
-reverseAdjOf [] = Base.HashMap.fromList []
+reverseAdjOf [] = HashMap.fromList []
 reverseAdjOf ((Pair src dsts) :: rest) = addSrcs src dsts (reverseAdjOf rest)
 
 addSrcs : String -> List String -> HashMap String (List String) -> HashMap String (List String)
 addSrcs src [] t = t
 addSrcs src (dst :: ds) t =
   let
-    cur = case Base.HashMap.lookup dst t of
+    cur = case HashMap.lookup dst t of
       Just xs => xs
       Nothing => []
-  in addSrcs src ds (Base.HashMap.insert dst ((::) src cur) t)
+  in addSrcs src ds (HashMap.insert dst ((::) src cur) t)
 
 replacePair : String -> List String -> List (Pair String (List String)) -> List (Pair String (List String))
 replacePair n v [] = []
@@ -132,33 +132,33 @@ else case steps of
   [] => Pair visited post
   (Pair n emit) :: rest =>
     if emit then dfsPost rest (fuel - 1) g visited (n :: post)
-    else if Base.HashMap.member n visited then dfsPost rest (fuel - 1) g visited post
+    else if HashMap.member n visited then dfsPost rest (fuel - 1) g visited post
     else dfsPost (append (map (\m => Pair m False) (adjOf n g)) (Pair n True :: rest)) (fuel - 1) g
-      (Base.HashMap.insert n True visited) post
+      (HashMap.insert n True visited) post
 
 dfsAll : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> List String
 dfsAll [] fuel g visited post = post
 dfsAll (n :: rest) fuel g visited post = if fuel <= 0 then post
-else if Base.HashMap.member n visited then dfsAll rest (fuel - 1) g visited post
+else if HashMap.member n visited then dfsAll rest (fuel - 1) g visited post
 else case dfsPost [Pair n False] fuel g visited post of
   Pair v2 p2 => dfsAll rest (fuel - 1) g v2 p2
 
 postOrder : HashMap String (List String) -> List (Pair String (List String)) -> List String -> List String
-postOrder gT g nodes = dfsAll nodes (graphFuel g nodes) gT (Base.HashMap.fromList []) []
+postOrder gT g nodes = dfsAll nodes (graphFuel g nodes) gT (HashMap.fromList []) []
 
 collectComp : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List String -> Pair (HashMap String Bool) (List String)
 collectComp stack fuel rg assigned comp = if fuel <= 0 then Pair assigned comp
 else case stack of
   [] => Pair assigned comp
   m :: rest =>
-    if Base.HashMap.member m assigned then collectComp rest (fuel - 1) rg assigned comp
-    else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (Base.HashMap.insert m True assigned)
+    if HashMap.member m assigned then collectComp rest (fuel - 1) rg assigned comp
+    else collectComp (append (adjOf m rg) rest) (fuel - 1) rg (HashMap.insert m True assigned)
       (m :: comp)
 
 sccOf : List String -> Int -> HashMap String (List String) -> HashMap String Bool -> List (List String) -> List (List String)
 sccOf [] fuel rg assigned comps = comps
 sccOf (n :: rest) fuel rg assigned comps = if fuel <= 0 then comps
-else if Base.HashMap.member n assigned then sccOf rest (fuel - 1) rg assigned comps
+else if HashMap.member n assigned then sccOf rest (fuel - 1) rg assigned comps
 else case collectComp [n] (fuel - 1) rg assigned [] of
   Pair assigned2 comp => sccOf rest (fuel - 1) rg assigned2 (comp :: comps)
 
@@ -437,7 +437,7 @@ computePosFactsWork : List String -> HashMap String (List (Pair (List Pat) Expr)
 computePosFactsWork names defTbl rgT fuel facts work = if fuel <= 0 then facts
 else
   let
-    namesTbl = Base.HashMap.ofNames names
+    namesTbl = HashMap.ofNames names
     scan = posScanNames namesTbl defTbl (posTblOf facts) work (Pair [] [])
     fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))
     newFacts = posFilterTbl fresh (posTblOf facts)
@@ -462,7 +462,7 @@ export checkTerminationDeclsWith : List String -> List Decl -> Check Int
 checkTerminationDeclsWith own decls =
   let
     defs = groupDefs decls
-    defTbl = Base.HashMap.fromList defs
+    defTbl = HashMap.fromList defs
     ctors = ctorNamesOf decls
     projs = projectionsOf defs
     g = callGraph defs
@@ -472,16 +472,16 @@ checkTerminationDeclsWith own decls =
     callerNames = filter (\n => notEmpty (adjOf n gT)) nodes
     facts = computePosFactsWork nodes defTbl rgT 1024 [] callerNames
     -- own 只建一次哈希表，逐 SCC 的 own 判定是 O(1) 查表（逐 SCC 线性扫是 O(n²)）。
-    ownTbl = Base.HashMap.ofNames own
+    ownTbl = HashMap.ofNames own
     _ = dbg! "term-facts"
     fuel = graphFuel g nodes
     post = postOrder gT g nodes
-    comps = sccOf post fuel rgT (Base.HashMap.fromList []) []
+    comps = sccOf post fuel rgT (HashMap.fromList []) []
   in checkSccsWith ownTbl (reverse comps) defTbl ctors projs gT facts
 
 anyOwnTbl : HashMap String Bool -> List String -> Bool
 anyOwnTbl ownTbl [] = False
-anyOwnTbl ownTbl (n :: rest) = if Base.HashMap.member n ownTbl then True else anyOwnTbl ownTbl rest
+anyOwnTbl ownTbl (n :: rest) = if HashMap.member n ownTbl then True else anyOwnTbl ownTbl rest
 
 checkSccsWith : HashMap String Bool -> List (List String) -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List String) -> List (Pair String Int) -> Check Int
 checkSccsWith ownTbl [] defTbl ctors projs g facts = OkC 0

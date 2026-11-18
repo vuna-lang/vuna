@@ -11,10 +11,10 @@
 -- （渲染是只读视图，先画出其余部分）。
 module Vuna.Obs.Flame where
 
-import Base.List
-import Base.Maybe
-import Base.Sort
-import Base.String
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Obs.Types
 

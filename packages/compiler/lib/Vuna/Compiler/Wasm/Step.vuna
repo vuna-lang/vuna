@@ -9,10 +9,10 @@ module Vuna.Compiler.Wasm.Step where
 --   3 Self      a=th b=k
 --   4 Abort     a=targetFrame b=value
 -- `$runres`：driver 的返回（0 normal a=value；1 abort a=target b=value）。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Pair
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
 

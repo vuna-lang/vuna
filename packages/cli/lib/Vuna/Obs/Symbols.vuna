@@ -14,19 +14,19 @@
 -- 规范见 `docs/reference/observability.md` §5 与 §7 `symbols`。
 module Vuna.Obs.Symbols where
 
-import Base.List
-import Base.Sort
-import Base.String
+import Base.Data.List as List
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
 import Vuna.Json
 import Vuna.Obs.Path
-import Base.EffConsole
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffProcess as EffProcess
 
 -- | 一条符号定义（`vuna-symbols 1` 的 `defs` 元素）。
 export record SymbolDef(..) where

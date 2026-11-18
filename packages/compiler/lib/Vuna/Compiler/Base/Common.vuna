@@ -15,8 +15,8 @@ module Vuna.Compiler.Base.Common where
 -- `Row(..)` 构造子），避免与 `Base.List` 的 `Cons`/`Nil` 在无期望类型的列表表达式上
 -- 产生 TC_AmbiguousCtor，也避免每个模块重复 `import Base.Eff`。需要行/续延等接口的模块
 -- 仍显式 `import Base.Eff`。
-export import Base.Eff (Eff)
-import Base.Monad
+export import Base.Effect.Core (Eff)
+import Base.Trait.Monad as Monad
 export module Vuna.Compiler.Base.Source
 export module Vuna.Compiler.Base.Diag
 

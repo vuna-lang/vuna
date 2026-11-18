@@ -19,12 +19,12 @@ module Vuna.Compiler.Native.Module where
 --   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
 --
 -- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
@@ -628,7 +628,7 @@ floatPow10 : Int -> Int
 floatPow10 n = if n <= 0 then 1 else 10 * floatPow10 (n - 1)
 
 genFloatLit : FGen -> String -> NRes (Pair (List Instr) FGen)
-genFloatLit st raw = case Base.String.split "." raw of
+genFloatLit st raw = case String.split "." raw of
   [ip, fp] =>
     let
       num = floatDigitsOf (ip ++ fp)

@@ -1,0 +1,8 @@
+-- | `Eff` 核心的扁平重导出（含 `Row(..)` 构造子）。
+--
+-- 单独一个扁平门面是为了让需要选择性重导出 `Eff` 的模块能写 `export import`
+-- （选择性 import 的目标必须是真实模块，不能是路径）。只需要类型面、且不想把
+-- `Row.Nil` / `Row.(::)` 带进作用域的代码用 [Base.Effect.EffTypes]。
+module Base.Effect.Core where
+
+export module Base.Eff

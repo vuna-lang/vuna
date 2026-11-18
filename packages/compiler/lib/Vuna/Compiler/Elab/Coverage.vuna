@@ -21,10 +21,10 @@ module Vuna.Compiler.Elab.Coverage where
 --   * 各行必须等长：`where` / `let` 允许不同 arity 的方程，矩阵算法不适用于那种组。
 --
 -- 参数个数用**显式** Pi binder 数（模式只写显式子模式，隐式族参数由精化器插入）。
-import Base.List
-import Base.Nat
-import Base.Pair
-import Base.String
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast

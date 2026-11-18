@@ -15,11 +15,11 @@ module Vuna.Compiler.Elab.Canonical where
 --   * `RecordMeta` 的字段**类型表达式**纳入编码：字段类型变化会让依赖方判脏。
 --
 -- 解码器只服务 roundtrip 自检/测试（`decXComplete` 入口）；生产写侧只编码。
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Core.Canonical

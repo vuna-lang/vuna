@@ -4,7 +4,7 @@ module Vuna.Compiler.Elab.Termination.Measure where
 -- 基础工具、定义分组、构造子名、size 表、守卫 Int 的正事实、投影分析、调用点关系、
 -- 以及弱边/环检测。入口与 SCC 判定在 `Vuna.Compiler.Elab.Termination`，SCT 在 `.Scc`。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 
 export maxInt : Int -> Int -> Int
@@ -40,16 +40,16 @@ posHas f i ((Pair g j) :: rest) =
 -- facts 的 O(1) 查找：name → 正位置列表。不动点每轮建一次表（posWalk 逐节点查 facts）；
 -- 逐实参位置线性扫整个 facts 列表会随 def 数增长呈 n²。
 export posTblOf : List (Pair String Int) -> HashMap String (List Int)
-posTblOf xs = posTblOfGo xs (Base.HashMap.fromList [])
+posTblOf xs = posTblOfGo xs (HashMap.fromList [])
 
 posTblOfGo : List (Pair String Int) -> HashMap String (List Int) -> HashMap String (List Int)
 posTblOfGo [] tbl = tbl
-posTblOfGo ((Pair f i) :: rest) tbl = case Base.HashMap.lookup f tbl of
-  Just is => posTblOfGo rest (Base.HashMap.insert f (i :: is) tbl)
-  Nothing => posTblOfGo rest (Base.HashMap.insert f [i] tbl)
+posTblOfGo ((Pair f i) :: rest) tbl = case HashMap.lookup f tbl of
+  Just is => posTblOfGo rest (HashMap.insert f (i :: is) tbl)
+  Nothing => posTblOfGo rest (HashMap.insert f [i] tbl)
 
 posHasTbl : String -> Int -> HashMap String (List Int) -> Bool
-posHasTbl f i tbl = case Base.HashMap.lookup f tbl of
+posHasTbl f i tbl = case HashMap.lookup f tbl of
   Just is => memInt i is
   Nothing => False
 
@@ -112,10 +112,10 @@ replaceGroup name cls ((Pair n olds) :: rest) =
 export groupDefs : List Decl -> List (Pair String (List (Pair (List Pat) Expr)))
 groupDefs decls =
   let
-    stepped = groupDefsGo (Base.HashMap.fromList []) [] (funDeclsOf decls)
+    stepped = groupDefsGo (HashMap.fromList []) [] (funDeclsOf decls)
     tbl = firstOf stepped
     order = secondOf stepped
-  in map (\n => Pair n (case Base.HashMap.lookup n tbl of
+  in map (\n => Pair n (case HashMap.lookup n tbl of
     Just cls => reverse cls
     Nothing => []
   )
@@ -124,9 +124,9 @@ groupDefs decls =
 -- O(1) 分组：HashMap 累积 clauses（逆序，最后 reverse），order 记录首次出现顺序。
 export groupDefsGo : HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (Pair (List Pat) Expr)) -> Pair (HashMap String (List (Pair (List Pat) Expr))) (List String)
 groupDefsGo tbl order [] = Pair tbl order
-groupDefsGo tbl order ((Pair name clause) :: rest) = case Base.HashMap.lookup name tbl of
-  Just cls => groupDefsGo (Base.HashMap.insert name (clause :: cls) tbl) order rest
-  Nothing => groupDefsGo (Base.HashMap.insert name [clause] tbl) (name :: order) rest
+groupDefsGo tbl order ((Pair name clause) :: rest) = case HashMap.lookup name tbl of
+  Just cls => groupDefsGo (HashMap.insert name (clause :: cls) tbl) order rest
+  Nothing => groupDefsGo (HashMap.insert name [clause] tbl) (name :: order) rest
 
 export defNames : List (Pair String (List (Pair (List Pat) Expr))) -> List String
 defNames defs = map firstOf defs
@@ -137,7 +137,7 @@ clausesOfDef name ((Pair n cls) :: rest) = if n == name then cls else clausesOfD
 
 -- O(1) 版：终止性检查（SCC / measure）用 name→clauses 表，避免逐 SCC 线性扫全部 defs。
 export clausesOfDefTbl : String -> HashMap String (List (Pair (List Pat) Expr)) -> List (Pair (List Pat) Expr)
-clausesOfDefTbl name tbl = case Base.HashMap.lookup name tbl of
+clausesOfDefTbl name tbl = case HashMap.lookup name tbl of
   Just cls => cls
   Nothing => []
 
@@ -282,7 +282,7 @@ posNormalize : List (Pair String Int) -> List (Pair String Int)
 posNormalize xs = posTblPairs (posTblOf xs)
 
 posTblPairs : HashMap String (List Int) -> List (Pair String Int)
-posTblPairs tbl = concatMap posEntryPairs (Base.HashMap.toList tbl)
+posTblPairs tbl = concatMap posEntryPairs (HashMap.toList tbl)
 
 posEntryPairs : Pair String (List Int) -> List (Pair String Int)
 posEntryPairs (Pair n is) = map (\i => Pair n i) (dedupInts is)
@@ -328,7 +328,7 @@ posWalkStmts namesTbl caller sizes facts region (s :: rest) st = case s of
 export posWalk : HashMap String Bool -> String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> HashMap String (List Int) -> List String -> Expr -> Pair (List (Pair String Int)) (List (Pair String Int)) -> Pair (List (Pair String Int)) (List (Pair String Int))
 posWalk namesTbl caller sizes facts region (EApp fn args sp) st = case fn of
   EVar g gsp =>
-    if Base.HashMap.member g namesTbl then posWalkArgs namesTbl caller sizes facts region args
+    if HashMap.member g namesTbl then posWalkArgs namesTbl caller sizes facts region args
       (posWalkCallee namesTbl caller sizes facts region g 0 args st)
     else posWalkArgs namesTbl caller sizes facts region args
       (posWalk namesTbl caller sizes facts region fn st)
@@ -418,7 +418,7 @@ computePosFacts defs fuel facts = if fuel <= 0 then facts else computePosFactsSt
 export computePosFactsStep : List (Pair String (List (Pair (List Pat) Expr))) -> Int -> List (Pair String Int) -> List (Pair String Int)
 computePosFactsStep defs fuel facts =
   let
-    namesTbl = Base.HashMap.ofNames (defNames defs)
+    namesTbl = HashMap.ofNames (defNames defs)
     scanned = posScanDefs namesTbl defs (posTblOf facts) defs (Pair [] [])
     scan = Pair (posNormalize (firstOf scanned)) (posNormalize (secondOf scanned))
     fresh = posFilterTbl (firstOf scan) (posTblOf (secondOf scan))

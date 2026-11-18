@@ -9,9 +9,9 @@ module Vuna.Compiler.Ir.Validate where
 --
 -- 谁 import 谁：
 -- 数据定义在 `Ir.Model`，运行时符号契约在 `Ir.Runtime`，SCC 分组在 `Ir.Analysis`。
-import Base.Maybe
-import Base.Pair
-import Base.HashMap
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
@@ -23,20 +23,20 @@ export validateUnit : IrUnit -> Check Int
 validateUnit u =
   let
     defs = concatMap irGroupDefs u.irUnitGroups
-    nameTbl = Base.HashMap.ofNames (map irDefName defs)
+    nameTbl = HashMap.ofNames (map irDefName defs)
   in Vuna.Compiler.Base.Common.bind (checkUniqueDefNames defs)
     (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => checkSymbolRefs (irSymbolsOfUnit u)))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
 checkGroupOrder : List IrGroup -> HashMap String Bool -> Check Int
-checkGroupOrder groups nameTbl = checkGroupOrderGo groups (Base.HashMap.fromList []) nameTbl
+checkGroupOrder groups nameTbl = checkGroupOrderGo groups (HashMap.fromList []) nameTbl
 
 checkGroupOrderGo : List IrGroup -> HashMap String Bool -> HashMap String Bool -> Check Int
 checkGroupOrderGo [] seen nameTbl = OkC 0
 checkGroupOrderGo (g :: rest) seen nameTbl =
   let
     members = irGroupDefs g
-    visible = foldl (\acc, d => Base.HashMap.insert (irDefName d) True acc) seen members
+    visible = foldl (\acc, d => HashMap.insert (irDefName d) True acc) seen members
   in case firstUnorderedDep nameTbl visible members of
     Nothing => checkGroupOrderGo rest visible nameTbl
     Just bad =>
@@ -55,7 +55,7 @@ firstUnorderedDepGo nameTbl visible (d :: rest) = case firstMissingDep nameTbl v
 firstMissingDep : HashMap String Bool -> HashMap String Bool -> String -> List String -> Maybe (Pair String String)
 firstMissingDep nameTbl visible self [] = Nothing
 firstMissingDep nameTbl visible self (dep :: rest) =
-  if Base.HashMap.member dep nameTbl then if Base.HashMap.member dep visible then firstMissingDep nameTbl visible self rest
+  if HashMap.member dep nameTbl then if HashMap.member dep visible then firstMissingDep nameTbl visible self rest
   else Just (Pair self dep)
   else firstMissingDep nameTbl visible self rest
 

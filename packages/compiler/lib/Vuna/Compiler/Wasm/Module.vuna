@@ -9,14 +9,14 @@ module Vuna.Compiler.Wasm.Module where
 -- 表示：统一 anyref；Int/Nat 装箱 i64；Bool i31；String `(array (mut i8))`；
 -- 变体 `(struct (field i32 tag) (field anyref...))`；record 纯字段 struct；
 -- 闭包 `{code,env}` 与数组类型留在类型表里（当前指令面还不用它们）。
-import Base.Bool
-import Base.HashMap
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.Result
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Container.HashMap as HashMap
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Result as Result
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
@@ -157,13 +157,13 @@ funcParams n = map (\i => Pair ("$p" ++ strFromInt i) WvAnyRef) (range 0 n)
 -- 按首现序收集不同字面量：查重走 HashMap，顺序表只追加一次（末尾 reverse）。
 poolAdd : String -> Pair (List String) (HashMap String Bool) -> Pair (List String) (HashMap String Bool)
 poolAdd s acc =
-  if Base.HashMap.member s (secondOf acc) then acc
-  else Pair (s :: firstOf acc) (Base.HashMap.insert s True (secondOf acc))
+  if HashMap.member s (secondOf acc) then acc
+  else Pair (s :: firstOf acc) (HashMap.insert s True (secondOf acc))
 
 poolOf : List String -> List (Pair String (Pair Int Int))
 poolOf strs =
   let
-    acc = foldlStrings (\acc => \s => poolAdd s acc) (Pair [] (Base.HashMap.fromList [])) strs
+    acc = foldlStrings (\acc => \s => poolAdd s acc) (Pair [] (HashMap.fromList [])) strs
   in poolOffsets (reverse (firstOf acc)) 0
 
 poolOffsets : List String -> Int -> List (Pair String (Pair Int Int))
@@ -172,7 +172,7 @@ poolOffsets (s :: rest) off =
   Pair s (Pair off (strLength s)) :: poolOffsets rest (off + strLength s)
 
 poolLookup : String -> HashMap String (Pair Int Int) -> Maybe (Pair Int Int)
-poolLookup s tbl = Base.HashMap.lookup s tbl
+poolLookup s tbl = HashMap.lookup s tbl
 
 poolBytes : List (Pair String (Pair Int Int)) -> String
 poolBytes pool = joinWith "" (map (\p => firstOf p) pool)
@@ -203,7 +203,7 @@ floatPow10 : Int -> Int
 floatPow10 n = if n <= 0 then 1 else 10 * floatPow10 (n - 1)
 
 genFloatLit : GenState -> String -> Result (Pair (List Instr) GenState)
-genFloatLit st raw = case Base.String.split "." raw of
+genFloatLit st raw = case String.split "." raw of
   [ip, fp] =>
     let
       num = floatDigitsOf (ip ++ fp)
@@ -272,7 +272,7 @@ genVar st b = case lookupBinder b st.gsScope of
 -- | 顶层定义引用：arity 0 读全局；arity > 0 是函数值——eta 展开成柯里化闭包。
 genGlobalRef : Int -> GenState -> String -> Result (Pair (List Instr) GenState)
 genGlobalRef fuel st name = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case Base.HashMap.lookup name st.gsDefTbl of
+else case HashMap.lookup name st.gsDefTbl of
   Just d => if irDefArity d == 0 then Ok (Pair [IGlobalGet (watGlobalNameOf name)] st)
   else
     let
@@ -393,7 +393,7 @@ else case flattenApp ir of
 
 genGlobalCall : Int -> GenState -> String -> List Ir -> Result (Pair (List Instr) GenState)
 genGlobalCall fuel st name args = if fuel <= 0 then Err "wasm codegen fuel exhausted"
-else case Base.HashMap.lookup name st.gsDefTbl of
+else case HashMap.lookup name st.gsDefTbl of
   Nothing => Err "unknown top-level definition in wasm codegen: `${name}`"
   Just d =>
     let
@@ -633,7 +633,7 @@ else case genExpr (fuel - 1) (noTail st) b of
 -- data / record
 -- ---------------------------------------------------------------
 famOrFail : GenState -> String -> Result WasmFam
-famOrFail st family = case Base.HashMap.lookup family st.gsFamTbl of
+famOrFail st family = case HashMap.lookup family st.gsFamTbl of
   Just f => Ok f
   Nothing => Err "unknown data family in wasm codegen: `${family}`"
 
@@ -1768,7 +1768,7 @@ globalsOfAltMaybe m = case m of
 -- 只在 Core 侧可见的隐式引用，纯按体扫描会漏掉它们；而 `sendCore` 这类会被改写掉的定义
 -- 必须在这里断开，否则它会把续延运行时拽回来。
 depKeeps : HashMap String IrDef -> String -> Bool
-depKeeps tbl n = case Base.HashMap.lookup n tbl of
+depKeeps tbl n = case HashMap.lookup n tbl of
   Nothing => True
   Just t => not (defUsesSyms performSyms t)
 
@@ -1782,7 +1782,7 @@ closeRefs fuel tbl work acc = if fuel <= 0 then acc
 else case work of
   [] => acc
   name :: rest => if memName name acc then closeRefs (fuel - 1) tbl rest acc
-  else case Base.HashMap.lookup name tbl of
+  else case HashMap.lookup name tbl of
     Nothing => closeRefs (fuel - 1) tbl rest (name :: acc)
     Just d => closeRefs (fuel - 1) tbl (append (refsOf d tbl) rest) (name :: acc)
 
@@ -1797,7 +1797,7 @@ closeRefsAll fuel tbl work acc = if fuel <= 0 then acc
 else case work of
   [] => acc
   name :: rest => if memName name acc then closeRefsAll (fuel - 1) tbl rest acc
-  else case Base.HashMap.lookup name tbl of
+  else case HashMap.lookup name tbl of
     Nothing => closeRefsAll (fuel - 1) tbl rest (name :: acc)
     Just d => closeRefsAll (fuel - 1) tbl (append (refsAllOf d) rest) (name :: acc)
 
@@ -1805,7 +1805,7 @@ else case work of
 reachableByRefs : Int -> List String -> List IrDef -> List IrDef
 reachableByRefs fuel roots defs =
   let
-    tbl = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
+    tbl = HashMap.fromList (map (\d => Pair (irDefName d) d) defs)
     names = closeRefs fuel tbl roots []
   in filter (\d => memName (irDefName d) names) defs
 
@@ -1836,13 +1836,13 @@ build program printResult =
     users = concatMap irStringsOfDef defs
     offsets = poolOf (append statics users)
     defsAll = append defs [pureKDef]
-    famTbl = Base.HashMap.fromList (map (\f => Pair (famNameOf f) f) fams)
-    poolTbl = Base.HashMap.fromList offsets
+    famTbl = HashMap.fromList (map (\f => Pair (famNameOf f) f) fams)
+    poolTbl = HashMap.fromList offsets
     consts = mkConsts poolTbl
     mkSt : List IrDef -> GenState
     mkSt ds =
       let
-        dt = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) ds)
+        dt = HashMap.fromList (map (\d => Pair (irDefName d) d) ds)
       in GenState fams famTbl ds dt offsets poolTbl [] [] 0 [] consts [] False 0
     st0 = mkSt defsAll
     buildAnf : List IrDef -> Int -> Maybe IrEntry -> Maybe WasmListFam -> WasmOutcome
@@ -1874,7 +1874,7 @@ build program printResult =
         rewrittenAll = map (rwDef hosts aborts runName) defs
         rewritten = reachableByRefs 100000 roots rewrittenAll
         live = rewritten
-        tblAll = Base.HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
+        tblAll = HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
         namesAll = closeRefsAll 100000 tblAll roots []
         dropNames =
           [ "Base.Eff.sendCore",
@@ -1942,4 +1942,4 @@ mkConsts offsets =
     (lenOf "/") (offOf "unhandled effect") (lenOf "unhandled effect")
 
 joinWith : String -> List String -> String
-joinWith sep xs = Base.String.join sep xs
+joinWith sep xs = String.join sep xs

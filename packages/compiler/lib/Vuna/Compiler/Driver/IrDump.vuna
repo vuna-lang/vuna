@@ -2,8 +2,8 @@ module Vuna.Compiler.Driver.IrDump where
 
 -- `vuna dev ir dump`：检查 + lowering 后输出确定性 IR 调试文本。
 -- 只服务工具链/调试，不写产物，也不进 seed。
-import Base.Eff.Types
-import Base.Pair
+import Base.Effect.EffTypes as EffTypes
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
@@ -11,9 +11,9 @@ import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Render
 import Vuna.Compiler.Lowering.Program
-import Base.EffFs
-import Base.EffEnv
-import Base.EffProcess
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
 
 export dumpIr : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> PackageContext -> String -> Eff r (Check String)
 dumpIr after ctx entry = do

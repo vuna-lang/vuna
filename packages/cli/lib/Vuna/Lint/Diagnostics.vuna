@@ -8,10 +8,10 @@
 -- compiler。
 module Vuna.Lint.Diagnostics where
 
-import Base.Bool
-import Base.Eq
-import Base.List
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Trait.Eq as Eq
+import Base.Data.List as List
+import Base.Data.String as String
 
 -- | 规则枚举，按 dispatch 源划分：`literal-if-chain` 处理 if 分派（字面量链 / Bool 变量），
 -- 提升进外层模式，字面量链提升失败时回退成 case；`dispatch-lift` 处理 case / let 分派，

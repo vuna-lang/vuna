@@ -10,8 +10,8 @@ module Vuna.Compiler.Base.Diagnostics.Tc where
 -- 约定：符号语义稳定、只增不删；一个码只承载一种语义；占位符 `<k>` 每个只出现一次。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- ---------------------------------------------------------------
 -- TC_：精化 / 终止性 / 覆盖性诊断（Elab）

@@ -11,12 +11,12 @@ import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.TestRunner
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
 
 -- | `vuna test [DIR]` 的入口：位置参数至多一个目录（缺省 `.`）。
 export testArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int

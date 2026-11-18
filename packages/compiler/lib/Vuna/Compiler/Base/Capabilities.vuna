@@ -11,7 +11,7 @@ module Vuna.Compiler.Base.Capabilities where
 --   ocaml  → `Vuna.Compiler.Codegen.Runtime` 的 `dtp_*`
 --   native → `Vuna.Compiler.Native.Runtime` 的 `nativeRtTargetHost`
 import Vuna.Compiler.Base.Common
-import Base.String
+import Base.Data.String as String
 
 -- | 目标对某个内建效应标签的可用性。
 export data Capability(..) : Type where

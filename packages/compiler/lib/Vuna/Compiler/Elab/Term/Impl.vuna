@@ -1,10 +1,10 @@
 module Vuna.Compiler.Elab.Term.Impl where
 
 -- Vuna.Compiler.Elab.Term.Impl：项检查的 fuel 版实现（组内互递归只经 *Fuel 名）。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
-import Base.Nat
+import Base.Data.Nat as Nat
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -373,7 +373,7 @@ perfShortOf : String -> Maybe String
 perfShortOf last = if endsWith "Op" last then
   let
     n = strLength last
-  in if n > 2 then Just (substring 0 (Base.Nat.fromInt (n - 2)) last) else Nothing
+  in if n > 2 then Just (substring 0 (Nat.fromInt (n - 2)) last) else Nothing
 else Nothing
 
 perfFamilyOfCanonical : String -> Maybe PerfFamily
@@ -499,8 +499,7 @@ isUniverseTerm _ = False
 
 -- | op 族参数（洞）：`?p1 … ?pk`。
 handleHoleArgs : Int -> Span -> List Expr
-handleHoleArgs k sp =
-  if k <= 0 then Base.List.Nil else (::) (EVar "_" sp) (handleHoleArgs (k - 1) sp)
+handleHoleArgs k sp = if k <= 0 then List.Nil else (::) (EVar "_" sp) (handleHoleArgs (k - 1) sp)
 
 -- | op 类型值：`<Op> ?p1 … ?pk`。
 handleOpArg : String -> Int -> Span -> Expr

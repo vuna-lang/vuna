@@ -19,15 +19,15 @@ module Vuna.Compiler.Loader.Fingerprint where
 --
 -- 为什么不用二进制内容哈希：OCaml 后端的 DWARF 会写构建目录（`DW_AT_comp_dir`），
 -- 同源两次构建的二进制字节必然不同，内容哈希因此无法表达「同源同身份」。
-import Base.Eff.Types
-import Base.Nat
-import Base.EffEnv
-import Base.EffFs
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.Sort
-import Base.String
+import Base.Effect.EffTypes as EffTypes
+import Base.Data.Nat as Nat
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Source

@@ -13,15 +13,15 @@
 -- `docs/reference/observability.md` §3（事件模型）与 §7 `validate`。
 module Vuna.Obs.Validate where
 
-import Base.List
-import Base.Pair
-import Base.String
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Read
 import Vuna.Obs.Types
-import Base.Eff.Types
-import Base.EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
 
 -- | 一条校验问题：严重级别 + 行号（0 = 与具体行无关）+ 消息。
 export record ValidateIssue(..) where

@@ -13,7 +13,7 @@ module Vuna.Compiler.Driver.Owner where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Intrinsics
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.InstName
@@ -154,8 +154,8 @@ splitMetaOf modules entryDecls =
     dataOwners =
       append (splitDataOwnerEntriesOfModules modules)
         (splitDataOwnerEntriesOf entryOwner entryDecls)
-  in SplitMeta defOwners dataOwners knownModules (Base.HashMap.fromList defOwners)
-    (Base.HashMap.fromList dataOwners)
+  in SplitMeta defOwners dataOwners knownModules (HashMap.fromList defOwners)
+    (HashMap.fromList dataOwners)
 
 export lookupModuleOf : List (Pair String String) -> String -> Maybe String
 lookupModuleOf pairs name = lookupPair name pairs
@@ -168,7 +168,7 @@ knownModuleOrErr knownModules what name =
   else icInternal "DT split: `${what}` ${name} has module prefix `${prefix}` but no such module"
 
 export splitDataOwnerOf : SplitMeta -> DtData -> Check String
-splitDataOwnerOf meta d = case Base.HashMap.lookup (dtDataName d) meta.smDataOwnerT of
+splitDataOwnerOf meta d = case HashMap.lookup (dtDataName d) meta.smDataOwnerT of
   Just o => OkC o
   Nothing =>
     if containsDot (dtDataName d) then knownModuleOrErr meta.smKnownModules "data" (dtDataName d)
@@ -181,7 +181,7 @@ isSyntheticInternalName : String -> Bool
 isSyntheticInternalName name = name == mainShowDefName || startsWith "@vuna@" name
 
 export splitDefOwnerOf : SplitMeta -> String -> Check String
-splitDefOwnerOf meta name = case Base.HashMap.lookup name meta.smDefOwnerT of
+splitDefOwnerOf meta name = case HashMap.lookup name meta.smDefOwnerT of
   Just o => OkC o
   Nothing =>
     if containsDot name then knownModuleOrErr meta.smKnownModules "definition" name

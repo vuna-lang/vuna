@@ -30,17 +30,17 @@ module Vuna.Compiler.Base.Store where
 -- 代价：写侧多一次内容地址（本机 ~2.2 ms/MB）；读侧同样。check marker 载荷为 0 字节，
 -- split/unit 载荷只在 miss 路径写。
 import Vuna.Compiler.Base.Common
-import Base.Nat
+import Base.Data.Nat as Nat
 import Vuna.Compiler.Base.Hash
-import Base.List
-import Base.Maybe
-import Base.String
-import Base.EffClock
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.Obs.Span
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Data.ObsSpan as ObsSpan
 
 -- | framing 版本串；格式变更即 bump（版本不符即拒绝，不做迁移）。
 export storeMagic : String

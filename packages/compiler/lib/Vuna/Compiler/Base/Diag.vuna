@@ -13,9 +13,9 @@ module Vuna.Compiler.Base.Diag where
 --
 -- 本模块不 import `Common`（避免 Common -> Diag -> Common 成环）：Span 来自 `Source`。
 import Vuna.Compiler.Base.Source
-import Base.Monad
-import Base.List
-import Base.Pair
+import Base.Trait.Monad as Monad
+import Base.Data.List as List
+import Base.Data.Pair as Pair
 
 -- ---------------------------------------------------------------
 -- 枚举

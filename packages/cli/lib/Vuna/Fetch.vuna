@@ -21,14 +21,14 @@ import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
 import Vuna.PackageStore
-import Base.Nat
-import Base.List
-import Base.String
-import Base.EffConsole
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffEnv
+import Base.Data.Nat as Nat
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
 
 -- | `vuna deps fetch` 的入口：解析 `--locked` 与可选目录（默认 `.`）；参数过多打印
 -- `error: ...` 并返回 2。

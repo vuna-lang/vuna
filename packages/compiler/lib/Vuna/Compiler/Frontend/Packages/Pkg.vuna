@@ -19,10 +19,10 @@ import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Frontend.Canonical.Pkg
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
-import Base.List
-import Base.EffEnv
-import Base.EffFs
-import Base.Eff.Types
+import Base.Data.List as List
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 -- 模块根：目录、包名、可选导出模块列表。
 -- exports = Nothing 表示该根不限制导出（自己包）；exports = Just mods 表示只有

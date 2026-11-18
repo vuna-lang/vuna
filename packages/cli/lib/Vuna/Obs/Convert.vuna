@@ -16,9 +16,9 @@
 -- 打到 stdout（可被 `>` 重定向）。cpu 采样为空是语义失败（退出码 1），不是「成功但空文件」。
 module Vuna.Obs.Convert where
 
-import Base.List
-import Base.Maybe
-import Base.String
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
@@ -26,10 +26,10 @@ import Vuna.Json
 import Vuna.Obs.Flame
 import Vuna.Obs.Read
 import Vuna.Obs.Types
-import Base.EffConsole
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffProcess
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffProcess as EffProcess
 
 -- ---------------------------------------------------------------
 -- 选项

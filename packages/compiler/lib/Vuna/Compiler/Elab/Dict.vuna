@@ -4,9 +4,9 @@ module Vuna.Compiler.Elab.Dict where
 -- 延迟字典元变量的回填（resolveDictGoals）、运算符特化（==、<、&& 等降到内建/方法投影）。
 -- 这一层必须在 `Elab.Term` 之前：`inferArgs` 的隐式字典插入要调用它。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -761,7 +761,7 @@ piRigsOfInstGo g (i :: rest) =
 piRigsOfGlobal : Ec -> String -> List Rig
 piRigsOfGlobal ec g = case piRigsOfInst ec g of
   Just rigs => rigs
-  Nothing => case Base.HashMap.lookup g (ecGlobalsTbl ec) of
+  Nothing => case HashMap.lookup g (ecGlobalsTbl ec) of
     Just ty => piRigs ty
     Nothing => []
 

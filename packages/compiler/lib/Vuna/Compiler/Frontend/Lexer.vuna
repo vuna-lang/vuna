@@ -16,7 +16,7 @@ module Vuna.Compiler.Frontend.Lexer where
 --     位置仍是绝对源码位置）——parser 直接拿这段 token 解析成表达式，无需二次词法。
 -- 洞内注释（`--` / `{- -}`）随洞 token 一起被 `skipTrivia` 跳过：插值洞里的注释
 -- **不进入 AST / 注释表**（fmt 会丢失它们），这是已知边界，见 docs/reference/templates.md。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Frontend
 

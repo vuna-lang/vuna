@@ -11,7 +11,7 @@ module Vuna.Compiler.Codegen.Decl where
 -- record 字段表、去装箱族）全部由 `Lowering` 在 IR 里定好。边界由
 -- `checks.ir-boundary` 守护。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
@@ -92,13 +92,13 @@ export record QualCtx(..) where
   qcDatas : HashMap String String
 
 export noQual : QualCtx
-noQual = QualCtx "" (Base.HashMap.fromList []) (Base.HashMap.fromList [])
+noQual = QualCtx "" (HashMap.fromList []) (HashMap.fromList [])
 
 export unitTblOf : List (Pair String String) -> HashMap String String
-unitTblOf pairs = Base.HashMap.insertAll pairs (Base.HashMap.fromList [])
+unitTblOf pairs = HashMap.insertAll pairs (HashMap.fromList [])
 
 export unitOfTbl : HashMap String String -> String -> String
-unitOfTbl tbl name = case Base.HashMap.lookup name tbl of
+unitOfTbl tbl name = case HashMap.lookup name tbl of
   Just u => u
   Nothing => ""
 

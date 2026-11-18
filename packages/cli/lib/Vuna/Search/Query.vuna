@@ -12,8 +12,8 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Index.Types
 import Vuna.Search.Types
-import Base.Nat
-import Base.Sort
+import Base.Data.Nat as Nat
+import Base.Data.Sort as Sort
 
 -- ---------------------------------------------------------------
 -- 名称 / doc

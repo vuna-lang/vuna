@@ -11,16 +11,16 @@
 -- 并 warning。截断永不升级成 error（`validate` 只把截断报 warning）。
 module Vuna.Obs.Read where
 
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Types
-import Base.Eff.Types
-import Base.EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
 
 -- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
 export record ObsTrace(..) where

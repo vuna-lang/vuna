@@ -17,20 +17,20 @@
 -- `docs/reference/observability.md` §2（开关）与 §7 `run`。
 module Vuna.Obs.Run where
 
-import Base.List
-import Base.Pair
-import Base.String
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Files
-import Base.Nat
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
+import Base.Data.Nat as Nat
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
 
 -- | `vuna dev obs run` 的选项（解析后的形态）。
 export record RunOpts(..) where

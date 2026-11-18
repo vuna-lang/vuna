@@ -7,8 +7,8 @@ module Vuna.Compiler.Base.Diagnostics.Pkg where
 -- 消息体与旧 `atLine/manifestErr` 输出一致（路径/行号搬到 Label，不再拼进消息）。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- | 诊断域实现：Vuna.Compiler.Base.Diagnostics.Pkg.PkgErr（目录/模板见 diagnostics.md）。
 export data PkgErr(..) : Nat -> Type where

@@ -7,18 +7,18 @@
 -- 工具链自采样只在显式设置 `VUNA_OBS_SAMPLE` 时启用（`vuna dev obs run --sample ...` 会设置它），
 -- 免得普通 `VUNA_OBS=1` 的 span 运行也背上定时器；`obsSampleStart` 在 obs 关闭时是空操作。
 import Vuna.Cli
-import Base.Monad
-import Base.Obs
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffExit
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffNet
-import Base.EffProcess
-import Base.EffStdin
+import Base.Trait.Monad as Monad
+import Base.Data.Obs as Obs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffNet as EffNet
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffStdin as EffStdin
 
 -- | 内部：环境里 `VUNA_OBS_SAMPLE` 非空才返回 True（空串与未设置都算关闭）。
 sampleWanted : Member nEnv EnvOp r => Eff r Bool

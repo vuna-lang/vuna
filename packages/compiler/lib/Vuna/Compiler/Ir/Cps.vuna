@@ -14,13 +14,13 @@ module Vuna.Compiler.Ir.Cps where
 --
 -- 边界：本模块只 import `Ir.Model` 与 Base 的纯数据结构；不 import Core / Elab /
 -- Intrinsics / 任何后端。输出仍是 `Ir`；CPS 符号只由本模块产生，后端按需实现。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.Result
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Result as Result
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 
 -- ---------------------------------------------------------------

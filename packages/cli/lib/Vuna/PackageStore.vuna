@@ -19,12 +19,12 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Frontend.Packages.Source
 import Vuna.Compiler.Base.Store
-import Base.List
-import Base.String
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffProcess
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
 
 -- | 持久 store 根（`VUNA_STORE` → XDG → `~/.vuna/store`）。
 export storeRootEff : Member nEnv EnvOp r => Eff r String

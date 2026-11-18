@@ -24,13 +24,13 @@ import Vuna.Compiler.Base.Common
 import Vuna.Repl.Complete
 import Vuna.Repl.Paste
 import Vuna.Repl.Term
-import Base.EffStdin
-import Base.Eff.Types
-import Base.EffClock
-import Base.EffConsole
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffStdin as EffStdin
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- | 一次编辑会话的配置：提示符、历史、补全池、显示宽度与模块根。
 export record EditConfig(..) where

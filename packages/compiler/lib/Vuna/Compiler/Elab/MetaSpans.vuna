@@ -8,8 +8,8 @@ module Vuna.Compiler.Elab.MetaSpans where
 --
 -- 依赖方向：`Ec` 定义在 `Elab.Types`（叶子模块），本模块在它之上做纯状态操作，
 -- 因此没有进程内可变登记表；调用方通过 Ec 把登记表穿起来。
-import Base.List
-import Base.Pair
+import Base.Data.List as List
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval

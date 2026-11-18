@@ -10,8 +10,7 @@ module Vuna.Compiler.Base.Diagnostics.Frontend where
 -- 说明：`DT: internal:` 的 fuel 耗尽等内部不变量**不占符号**，仍走裸字符串。
 import Vuna.Compiler.Base.Diagnostics.Common
 export module Vuna.Compiler.Base.Common
-export module Base.Nat
-export module Base.Vec
+export module Base.Data
 
 -- ---------------------------------------------------------------
 -- LX_：词法诊断

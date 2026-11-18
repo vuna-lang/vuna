@@ -6,8 +6,8 @@ module Vuna.Cli.Err where
 
 import Vuna.Cli.Help
 import Vuna.Cli.Suggest
-import Base.EffConsole
-import Base.Eff.Types
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffTypes as EffTypes
 
 -- | 用法 / 前提错误：打印并返回 2。
 export toolError : Member nConsole ConsoleOp r => String -> Eff r Int

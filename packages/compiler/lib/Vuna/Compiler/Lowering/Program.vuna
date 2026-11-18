@@ -18,8 +18,8 @@ module Vuna.Compiler.Lowering.Program where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Obs
 import Vuna.Compiler.Base.Diagnostics
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -33,7 +33,7 @@ import Vuna.Compiler.Ir.Validate
 import Vuna.Compiler.Lowering.Checks
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
-import Base.Eff.Types
+import Base.Effect.EffTypes as EffTypes
 export module Vuna.Compiler.Lowering.Env
 export module Vuna.Compiler.Lowering.Ty
 export module Vuna.Compiler.Lowering.Entry
@@ -100,11 +100,11 @@ else case t of
     lowerTermFuel (fuel - 1) env st binders (recordTermAsAppIn (TGlobal name) args)
   TCase scrut alts => lowerCaseFuel (fuel - 1) env st binders scrut alts
   -- R4：record 族的更新/投影直接用 OCaml record 语法；非 record 仍按 case 形状展开。
-  TRecUpd base c tele idxs body => case Base.HashMap.lookup c env.lwRecordFields of
+  TRecUpd base c tele idxs body => case HashMap.lookup c env.lwRecordFields of
     Just fields => lowerRecordUpdateFuel (fuel - 1) env st binders base c tele fields idxs body
     Nothing =>
       lowerTermFuel (fuel - 1) env st binders (TCase base [CaseAlt c (bindersOfPairs tele) body])
-  TProj base c tele i fi => case Base.HashMap.lookup c env.lwRecordFields of
+  TProj base c tele i fi => case HashMap.lookup c env.lwRecordFields of
     Just fields => Vuna.Compiler.Base.Common.bind (recordFieldNameAt fi fields) (\label => Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st binders base) (\p => case p of
       Pair baseIr st2 => OkC (Pair (IrProj baseIr c label) st2)
     )
@@ -135,7 +135,7 @@ lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == "strFromFloat" then OkC (IrGlobal floatRenderRefName)
 else if name == natSuccCtor then OkC (IrRt irRtNatSucc)
-else case Base.HashMap.lookup name env.lwCtors of
+else case HashMap.lookup name env.lwCtors of
   Just (Pair family keepFlags) => OkC (IrCtor family name [])
   Nothing => case findIntrinsic name of
     Just i =>
@@ -336,9 +336,9 @@ else if c == natSuccCtor then case alignCtorArgs c [True] args of
         _ => icInternal "Nat Succ must have exactly one runtime argument"
       [] => icInternal "Nat Succ must have exactly one runtime argument"
   )
-else case Base.HashMap.lookup c env.lwCtors of
+else case HashMap.lookup c env.lwCtors of
   Nothing => icInternal "unknown constructor ${c}"
-  Just (Pair family keepFlags) => case Base.HashMap.lookup c env.lwOpaques of
+  Just (Pair family keepFlags) => case HashMap.lookup c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Base.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st binders (ctorOpaqueKeptFlags keepFlags opqs) runtimeArgs) (\p => case p of
       Pair irs st2 => lowerConAppFinish env st2 family c irs
@@ -348,10 +348,10 @@ else case Base.HashMap.lookup c env.lwCtors of
 -- 收尾：去装箱族只保留单字段（构造子不落 OCaml 变体）；record 族生成 `IrRecord`；
 -- 其余生成 `IrCtor`。族名与字段名都是源码名（文本前缀属后端）。
 lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List Ir -> Check (Pair Ir LwSt)
-lowerConAppFinish env st family c irs = if Base.HashMap.member family env.lwUnboxed then case irs of
+lowerConAppFinish env st family c irs = if HashMap.member family env.lwUnboxed then case irs of
   [only] => OkC (Pair only st)
   _ => icInternal "unboxed constructor application does not have exactly one runtime argument"
-else case Base.HashMap.lookup family env.lwRecordFields of
+else case HashMap.lookup family env.lwRecordFields of
   Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
   Nothing => OkC (Pair (IrCtor family c irs) st)
 
@@ -445,9 +445,9 @@ lowerUnboxedCaseAlt : LwEnv -> List CaseAlt -> Maybe CaseAlt
 lowerUnboxedCaseAlt env [] = Nothing
 lowerUnboxedCaseAlt env (alt :: rest) = case caseAltName alt of
   "" => Nothing
-  name => case Base.HashMap.lookup name env.lwCtors of
+  name => case HashMap.lookup name env.lwCtors of
     Just (Pair family keepFlags) =>
-      if Base.HashMap.member family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
+      if HashMap.member family env.lwUnboxed then if allCatchAll rest then Just alt else Nothing
       else Nothing
     Nothing => Nothing
 
@@ -455,7 +455,7 @@ lowerUnboxedCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> CaseAlt 
 lowerUnboxedCaseFuel fuel env st outer scrut alt = if fuel <= 0 then icFuel "ir-lower"
 else case caseAltName alt of
   "" => icInternal "unboxed case arm has no constructor"
-  name => case Base.HashMap.lookup name env.lwCtors of
+  name => case HashMap.lookup name env.lwCtors of
     Nothing => icInternal "no shape for constructor ${name}"
     Just (Pair family keepFlags) => Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
       Pair scrutIr st1 => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st1 name outer (binderPairs (caseAltBinders alt)) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\q => case q of
@@ -473,7 +473,7 @@ else if caseAltName alt == "" then
   in Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 => OkC (Pair (IrAlt Nothing (aePatsOf bound) bodyIr) st2)
   )
-else case Base.HashMap.lookup (caseAltName alt) env.lwCtors of
+else case HashMap.lookup (caseAltName alt) env.lwCtors of
   Nothing => icInternal "unknown constructor ${caseAltName alt}"
   Just (Pair family keepFlags) => Vuna.Compiler.Base.Common.bind (altEnvCheckedIn st (caseAltName alt) outer (binderPairs (caseAltBinders alt)) keepFlags) (\bound => Vuna.Compiler.Base.Common.bind (lowerArmBodyFuel (fuel - 1) env bound (caseAltBody alt)) (\p => case p of
     Pair bodyIr st2 =>
@@ -628,9 +628,9 @@ else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer base)
 
 lowerRecordUpdateArgsFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Ir -> String -> List (Pair Int String) -> List Int -> List (Pair Term Rig) -> Check (Pair Ir LwSt)
 lowerRecordUpdateArgsFuel fuel env st binders baseIr c fields idxs args = if fuel <= 0 then icFuel "ir-lower"
-else case Base.HashMap.lookup c env.lwCtors of
+else case HashMap.lookup c env.lwCtors of
   Nothing => icInternal "no shape for constructor ${c}"
-  Just (Pair family keepFlags) => case Base.HashMap.lookup c env.lwOpaques of
+  Just (Pair family keepFlags) => case HashMap.lookup c env.lwOpaques of
     Nothing => icInternal "no opaque shape for constructor ${c}"
     Just opqs => Vuna.Compiler.Base.Common.bind (alignCtorArgs c keepFlags args) (\runtimeArgs => let
       positions = lookupRtPositionsIn fields idxs
@@ -733,13 +733,13 @@ lowerDefs env st (d :: rest) = Vuna.Compiler.Base.Common.bind (lowerDef env st d
 -- ---------------------------------------------------------------
 -- OCaml 名字单射性护栏（三族前缀 v_/t_/C_ 互不相同，只需族内校验）。
 checkNoDupOcamlNames : String -> List String -> Check Int
-checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (Base.HashMap.fromList [])
+checkNoDupOcamlNames kind names = checkNoDupOcamlNamesGo kind names (HashMap.fromList [])
 
 checkNoDupOcamlNamesGo : String -> List String -> HashMap String Bool -> Check Int
 checkNoDupOcamlNamesGo kind [] seen = OkC 0
 checkNoDupOcamlNamesGo kind (n :: rest) seen =
-  if Base.HashMap.member n seen then icInternal "OCaml name collision among ${kind}s: `${n}`"
-  else checkNoDupOcamlNamesGo kind rest (Base.HashMap.insert n True seen)
+  if HashMap.member n seen then icInternal "OCaml name collision among ${kind}s: `${n}`"
+  else checkNoDupOcamlNamesGo kind rest (HashMap.insert n True seen)
 
 ensureUniqueOcamlNamesIn : List DtData -> List DtDef -> Check Int
 ensureUniqueOcamlNamesIn datas defs =
@@ -793,7 +793,7 @@ groupDefs env defs =
   )
 
 tblLookup : HashMap String DtDef -> String -> Maybe DtDef
-tblLookup tbl name = Base.HashMap.lookup name tbl
+tblLookup tbl name = HashMap.lookup name tbl
 
 recOkOfTbl : HashMap String DtDef -> String -> Bool
 recOkOfTbl tbl name = case tblLookup tbl name of
@@ -887,10 +887,10 @@ lowerUnitAfterChecks env defNames dataNames =
     datas = env.lwDatas
     -- 保留 `env.lwDefs` 的**程序顺序**（分区/分组都按它），只把「是否属于本单元」的
     -- 判定从线性 `memName` 换成一次建表（split 路径每单元一次，原来是 O(单元数×全程序)）。
-    defNameTbl = Base.HashMap.ofNames defNames
-    defs = filter (\d => Base.HashMap.member (dtDefName d) defNameTbl) env.lwDefs
-    dataNameTbl = Base.HashMap.ofNames dataNames
-    unitDatas = filter (\d => Base.HashMap.member (dtDataName d) dataNameTbl) datas
+    defNameTbl = HashMap.ofNames defNames
+    defs = filter (\d => HashMap.member (dtDefName d) defNameTbl) env.lwDefs
+    dataNameTbl = HashMap.ofNames dataNames
+    unitDatas = filter (\d => HashMap.member (dtDataName d) dataNameTbl) datas
     runtime = partitionRuntimeDefs defs
   in Vuna.Compiler.Base.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Base.Common.bind (tyDeclsOf env.lwTyParams env.lwUnboxedInfo datas unitDatas) (\decls => let
     groups2 = map groupOfPair groups

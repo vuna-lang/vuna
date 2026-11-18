@@ -7,13 +7,13 @@ module Vuna.Compiler.Ir.Anf where
 --
 -- binder 名字用**单调 next 计数**（不是路径 depth），兄弟分支也不会撞名；这是
 -- binder 身份按 name+erased 比较时的必要条件。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.Result
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.Result as Result
+import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
 
 startFuel : Int
@@ -238,7 +238,7 @@ countBs bs = case bs of
 
 isAnfBinder : IrBinder -> Bool
 isAnfBinder b = case b.irBinderName of
-  IrBUser n => Base.String.startsWith "__anf" n
+  IrBUser n => String.startsWith "__anf" n
   _ => False
 
 countAnfList : Int -> List Ir -> Int

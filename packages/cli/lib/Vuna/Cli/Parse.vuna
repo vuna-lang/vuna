@@ -1,7 +1,7 @@
 -- | CLI 参数里的十进制整数解析（`vuna test --jobs` / `vuna dev suite --jobs` 等共用）。
 module Vuna.Cli.Parse where
 
-import Base.String
+import Base.Data.String as String
 
 -- | 解析正整数（0 视为非法）。
 export parsePositiveInt : String -> Maybe Int

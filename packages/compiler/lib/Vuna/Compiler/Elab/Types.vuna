@@ -5,8 +5,8 @@ module Vuna.Compiler.Elab.Types where
 -- 数据定义只在这里（叶子模块），其余模块只做模式匹配与访问器调用。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
 import Vuna.Compiler.Base.Common
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -201,7 +201,7 @@ instFamilyOf i = case flattenTaggedApp i.dtInstHead of
 
 -- | 空实例登记表：权威列表与族索引都为空。
 export instStoreEmpty : InstStore
-instStoreEmpty = InstStore [] (Base.HashMap.fromList [])
+instStoreEmpty = InstStore [] (HashMap.fromList [])
 
 -- 按登记序建表（`ecAddInstRaw` 每次 push；总量 ≪ 100，逐步 push 的 O(n²) 可忽略）。
 -- | 按登记序由实例列表构建登记表（逐个 push，实例总量很小）。
@@ -214,16 +214,16 @@ export instStorePush : InstStore -> DtInst -> InstStore
 instStorePush store i =
   let
     fam = instFamilyOf i
-    bucket = case Base.HashMap.lookup fam store.instsByFamily of
+    bucket = case HashMap.lookup fam store.instsByFamily of
       Just b => b
       Nothing => []
   in InstStore (append store.instsList [i])
-    (Base.HashMap.insert fam (append bucket [i]) store.instsByFamily)
+    (HashMap.insert fam (append bucket [i]) store.instsByFamily)
 
 -- 精确族桶（不回落全表；未知族 = 空表）。
 -- | 精确取某个头族的实例桶；未知族返回空表（不回落全表）。
 instStoreFamily : InstStore -> String -> List DtInst
-instStoreFamily store fam = case Base.HashMap.lookup fam store.instsByFamily of
+instStoreFamily store fam = case HashMap.lookup fam store.instsByFamily of
   Just b => b
   Nothing => []
 
@@ -266,7 +266,7 @@ export record ConstraintStore where
 
 -- | 空约束存储：无待处理约束、id 从 0 开始、无已尝试记录。
 export csEmpty : ConstraintStore
-csEmpty = ConstraintStore [] 0 (Base.HashMap.fromList []) 0 (0 - 1) (0 - 1) False
+csEmpty = ConstraintStore [] 0 (HashMap.fromList []) 0 (0 - 1) (0 - 1) False
 
 -- 末尾两个字段是**可重建缓存**（真相始终是列表 / defTbl）：
 --   - `ecCtorTbl : HashMap String DtCtor`：构造子名 → DtCtor。`elabDatas` 之后建一次
@@ -383,7 +383,7 @@ ecInstsFamily (Ec next sols defs datas depths goals insts classes dgoals deftbl 
 export ecInstsAudit : Ec -> Bool
 ecInstsAudit (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   let
-    pairs = Base.HashMap.toList insts.instsByFamily
+    pairs = HashMap.toList insts.instsByFamily
     list = insts.instsList
   in bucketCount pairs == length list && allBucketsMatch list pairs
 
@@ -466,20 +466,20 @@ ecAddConstraint ec kind meta dom span depth = case ecConstraints ec of
 -- | 查某个约束上次尝试时的 epoch（解表长度）；没试过返回 Nothing。
 export ecTriedAt : Ec -> Int -> Maybe Int
 ecTriedAt ec cid = case ecConstraints ec of
-  ConstraintStore pending next tried cnt passNext passSols ctorok => Base.HashMap.lookup cid tried
+  ConstraintStore pending next tried cnt passNext passSols ctorok => HashMap.lookup cid tried
 
 -- | 记录某个约束在给定 epoch 的尝试（epoch 通常是当时的解表长度）。
 export ecRecordTried : Ec -> Int -> Int -> Ec
 ecRecordTried ec cid epoch = case ecConstraints ec of
   ConstraintStore pending next tried cnt passNext passSols ctorok =>
     ecPutConstraints ec
-      (ConstraintStore pending next (Base.HashMap.insert cid epoch tried) cnt passNext passSols ctorok)
+      (ConstraintStore pending next (HashMap.insert cid epoch tried) cnt passNext passSols ctorok)
 
 export ecEmpty : Ec
 ecEmpty =
-  Ec 0 [] [] [] [] [] instStoreEmpty [] csEmpty (Base.HashMap.fromList [])
-    (Base.HashMap.fromList []) (Base.HashMap.fromList []) (Base.HashMap.fromList []) False
-    (Base.HashMap.fromList []) (Base.HashMap.fromList []) False [] [] [] [] []
+  Ec 0 [] [] [] [] [] instStoreEmpty [] csEmpty (HashMap.fromList []) (HashMap.fromList [])
+    (HashMap.fromList []) (HashMap.fromList []) False (HashMap.fromList []) (HashMap.fromList [])
+    False [] [] [] [] []
 
 -- 解表的哈希索引（键 = 元变量编号的十进制串）：`substDictTerm`/`rezonkDefs` 会对每个
 -- 定义体的每个元变量查解，关联表是 O(#解) 一次；索引把它降到 O(1)。
@@ -497,7 +497,7 @@ ecSolsP ec = solsOf (ecSolTbl ec) (ecSols ec) (ecDepthTbl ec)
 ecPutSols ec sols2 =
   let
     delta = solsDelta (ecSols ec) sols2
-    soltbl2 = Base.HashMap.insertAll delta (ecSolTbl ec)
+    soltbl2 = HashMap.insertAll delta (ecSolTbl ec)
     ec2 = ecPutSolsRaw ec sols2 soltbl2
   in ecPutSolsCount ec2 (ecSolsCountOf ec2 + length delta)
 
@@ -561,26 +561,25 @@ ecAddDef (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl 
   let
     delta =
       if memDataNameIn (firstOf d) datas then deftbl
-      else Base.HashMap.insert (firstOf d) (secondOf d) deftbl
+      else HashMap.insert (firstOf d) (secondOf d) deftbl
   in Ec next sols (d :: defs) datas depths goals insts classes dgoals delta gtbl soltbl dptbl gcomp
     ctbl ctortbl haslin mspans uspans warnings counters errors
 
 export ecRemoveDefTbl : String -> Ec -> Ec
 ecRemoveDefTbl name (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   Ec next sols defs datas depths goals insts classes dgoals
-    (Base.HashMap.fromList (filter (\p => not (firstOf p == name)) (Base.HashMap.toList deftbl)))
-    gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
+    (HashMap.fromList (filter (\p => not (firstOf p == name)) (HashMap.toList deftbl))) gtbl soltbl
+    dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors
 
 export ecAddData : Ec -> DtData -> Ec
 ecAddData (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) d =
   Ec next sols defs (append datas [d]) depths goals insts classes dgoals deftbl gtbl soltbl dptbl
-    gcomp ctbl (Base.HashMap.insertAll (dataCtorPairs d) ctortbl)
+    gcomp ctbl (HashMap.insertAll (dataCtorPairs d) ctortbl)
     (if dtDataLinear d then True else haslin) mspans uspans warnings counters errors
 
 -- 构造子索引：名字 → DtCtor（唯一真相仍是 `ecDatas`；表只是可重建缓存）。
 export ctorTblOfDatas : List DtData -> HashMap String DtCtor
-ctorTblOfDatas datas =
-  Base.HashMap.insertAll (concatMap dataCtorPairs datas) (Base.HashMap.fromList [])
+ctorTblOfDatas datas = HashMap.insertAll (concatMap dataCtorPairs datas) (HashMap.fromList [])
 
 dataCtorPairs : DtData -> List (Pair String DtCtor)
 dataCtorPairs d = map (\c => Pair (dtCtorName c) c) (dtDataCtors d)
@@ -768,7 +767,7 @@ errAt sp msg = rawAt sp msg
 export newMeta : Ctx -> Ec -> Pair Term Ec
 newMeta ctx (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) =
   Pair (TMeta next)
-    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (Base.HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl haslin mspans uspans warnings counters errors)
+    (Ec (next + 1) sols defs datas (Pair next (ctxDepth ctx) :: depths) goals insts classes dgoals deftbl gtbl soltbl (HashMap.insert next (ctxDepth ctx) dptbl) gcomp ctbl ctortbl haslin mspans uspans warnings counters errors)
 
 export forceVal : Ec -> Value -> Value
 forceVal ec v = force (ecDefTbl ec) (ecSolsP ec) defaultFuel v
@@ -818,7 +817,7 @@ dtProgWarnings (DtProgram datas defs goals sols globals insts classes next depth
 
 -- 解表 → 索引（键 = 元变量编号的十进制串）。解表里每个元变量最多一条解，顺序无关。
 export solsToTbl : List (Pair Int Value) -> HashMap Int Value
-solsToTbl sols = Base.HashMap.insertAll sols (Base.HashMap.fromList [])
+solsToTbl sols = HashMap.insertAll sols (HashMap.fromList [])
 
 export ecPutDefTbl : Ec -> HashMap String Term -> Ec
 ecPutDefTbl (Ec next sols defs datas depths goals insts classes dgoals deftbl gtbl soltbl dptbl gcomp ctbl ctortbl haslin mspans uspans warnings counters errors) deftbl2 =

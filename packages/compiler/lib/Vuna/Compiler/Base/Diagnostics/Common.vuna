@@ -10,8 +10,8 @@ module Vuna.Compiler.Base.Diagnostics.Common where
 -- code / 模板 / arity 仍由各域枚举唯一持有（`Diagnostics.Tc` / `Diagnostics.Cg`）。
 -- 本模块不依赖 `Elab/Types`（避免 Elab ↔ Diagnostics 成环）。
 import Vuna.Compiler.Base.Common
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 -- | 模板替换：`<0>`/`<1>` 由 `Vec n String` 按序替换，arity 编译期锁定。
 export diagBody : {n : Nat} -> String -> Vec n String -> String

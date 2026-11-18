@@ -19,9 +19,9 @@ module Vuna.Cli.Args where
 import Vuna.Cli.Suggest
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffProcess
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffProcess as EffProcess
 
 -- ---------------------------------------------------------------
 -- 参数说明表

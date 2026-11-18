@@ -12,14 +12,14 @@ module Vuna.Compiler.Driver.Split where
 --     同产物，不依赖 mtime），改一个单元只重编它的直接/传递依赖者；
 --   - 最后按依赖拓扑序链接成可执行文件。
 -- 构建脚本只用 POSIX sh + ocamlopt，可在 Nix 沙箱内复现。
-import Base.Sort
+import Base.Data.Sort as Sort
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
-import Base.HashMap
-import Base.List
-import Base.EffFs
-import Base.Eff.Types
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 export record SplitFile(..) where
   splitName : String
@@ -90,7 +90,7 @@ export splitLayers : List (Pair String (List String)) -> List (List (Pair String
 splitLayers [] = []
 splitLayers graph =
   let
-    depths = splitDepths graph (Base.HashMap.fromList [])
+    depths = splitDepths graph (HashMap.fromList [])
     maxD = graphMaxDepth graph depths 0
   in map (\d => filter (\q => depthOfUnit depths (firstOf q) == d) graph) (range 0 (maxD + 1))
 
@@ -98,7 +98,7 @@ splitLayers graph =
 splitDepths : List (Pair String (List String)) -> HashMap String Int -> HashMap String Int
 splitDepths [] depths = depths
 splitDepths ((Pair unit deps) :: rest) depths =
-  splitDepths rest (Base.HashMap.insert unit (depthOfDeps depths deps) depths)
+  splitDepths rest (HashMap.insert unit (depthOfDeps depths deps) depths)
 
 -- depth(unit) = 1 + max(depth(dep))；空依赖 = 0。
 depthOfDeps : HashMap String Int -> List String -> Int
@@ -106,7 +106,7 @@ depthOfDeps depths [] = 0
 depthOfDeps depths (dep :: rest) = maxInt (depthOfUnit depths dep + 1) (depthOfDeps depths rest)
 
 depthOfUnit : HashMap String Int -> String -> Int
-depthOfUnit depths unit = case Base.HashMap.lookup unit depths of
+depthOfUnit depths unit = case HashMap.lookup unit depths of
   Just d => d
   Nothing => 0
 
@@ -241,7 +241,7 @@ export splitGraphAcyclic : List SplitFile -> Bool
 splitGraphAcyclic files =
   let
     graph = splitGraph files
-    baseMemo = Base.HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+    baseMemo = HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
   in convergedWithin (length graph + 2) graph baseMemo
 
 convergedWithin : Int -> List (Pair String (List String)) -> HashMap String Int -> Bool
@@ -250,7 +250,7 @@ else
   let
     next = stepDepths memo graph
   in if sameDepthTable memo next then True
-  else convergedWithin (fuel - 1) graph (Base.HashMap.fromList next)
+  else convergedWithin (fuel - 1) graph (HashMap.fromList next)
 
 -- 把 split 文件列表规范化为**确定性拓扑序**（依赖在前；同层按名字哈希
 -- 排序）。单元缓存复用已生成的 `SplitFile` 后列表顺序会随命中集合变化，build.sh 的层/顺序
@@ -270,19 +270,19 @@ unitTieKey name = Vuna.Compiler.Base.Hash.contentKey "t:${name}"
 nameSetOf : List (Pair String (List String)) -> HashMap String Bool -> HashMap String Bool
 nameSetOf [] seen = seen
 nameSetOf ((Pair unit deps) :: rest) seen =
-  nameSetOf rest (markNames deps (Base.HashMap.insert unit True seen))
+  nameSetOf rest (markNames deps (HashMap.insert unit True seen))
 
 markNames : List String -> HashMap String Bool -> HashMap String Bool
 markNames [] seen = seen
-markNames (n :: rest) seen = markNames rest (Base.HashMap.insert n True seen)
+markNames (n :: rest) seen = markNames rest (HashMap.insert n True seen)
 
 tieTableOf : List (Pair String (List String)) -> HashMap String Int
 tieTableOf graph =
-  Base.HashMap.fromList
-    (map (\n => Pair n (unitTieKey n)) (map firstOf (Base.HashMap.toList (nameSetOf graph (Base.HashMap.fromList [])))))
+  HashMap.fromList
+    (map (\n => Pair n (unitTieKey n)) (map firstOf (HashMap.toList (nameSetOf graph (HashMap.fromList [])))))
 
 tieOf : HashMap String Int -> String -> Int
-tieOf ties name = case Base.HashMap.lookup name ties of
+tieOf ties name = case HashMap.lookup name ties of
   Just k => k
   Nothing => 0
 
@@ -314,7 +314,7 @@ fixDepths fuel graph memo = if fuel <= 0 then memo
 else
   let
     next = stepDepths memo graph
-  in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (Base.HashMap.fromList next)
+  in if sameDepthTable memo next then memo else fixDepths (fuel - 1) graph (HashMap.fromList next)
 
 -- 排序键 = (depth, tieKey)；预计算后比较只碰 Int。
 depthEntryLess : Pair (Pair Int Int) String -> Pair (Pair Int Int) String -> Bool
@@ -328,7 +328,7 @@ sortDepthEntries xs = sortBy depthEntryLess xs
 -- 文件名索引：查 `${unit}.ml`；非 .ml 项不参与。
 filesOfDepthEntries : HashMap String SplitFile -> List String -> List SplitFile
 filesOfDepthEntries table [] = []
-filesOfDepthEntries table (unit :: rest) = case Base.HashMap.lookup "${unit}.ml" table of
+filesOfDepthEntries table (unit :: rest) = case HashMap.lookup "${unit}.ml" table of
   Just f => f :: filesOfDepthEntries table rest
   Nothing => filesOfDepthEntries table rest
 
@@ -337,8 +337,8 @@ canonicalTopo files =
   let
     graph = splitGraph files
     ties = tieTableOf graph
-    fileTable = Base.HashMap.fromList (map (\f => Pair (splitName f) f) files)
-    baseMemo = Base.HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
+    fileTable = HashMap.fromList (map (\f => Pair (splitName f) f) files)
+    baseMemo = HashMap.fromList (map (\p => Pair (firstOf p) 0) graph)
     depths = fixDepths (length graph + 2) graph baseMemo
     keyed =
       map (\p => Pair (Pair (depthOfUnit depths (firstOf p)) (tieOf ties (firstOf p))) (firstOf p))

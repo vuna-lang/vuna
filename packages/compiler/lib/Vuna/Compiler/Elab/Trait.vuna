@@ -2,9 +2,9 @@ module Vuna.Compiler.Elab.Trait where
 
 -- Vuna.Compiler.Elab.Trait：trait/instance 声明与派生：类参数 kind、方法投影、实例头检查、
 -- 实例方法体、字典提升、实例体批量调度、定义参数模式绑定与 `elabFunDef`。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -590,7 +590,7 @@ exprFreeLower _ = []
 keepOutBanned : HashMap String Bool -> List String -> List String
 keepOutBanned tbl [] = []
 keepOutBanned tbl (n :: rest) =
-  if Base.HashMap.member n tbl then keepOutBanned tbl rest else (::) n (keepOutBanned tbl rest)
+  if HashMap.member n tbl then keepOutBanned tbl rest else (::) n (keepOutBanned tbl rest)
 
 -- tele 的局部上下文（声明顺序绑定；`TVar 0` = 最内层 tele）。
 instanceTeleCtx : List (Pair String Term) -> Ctx
@@ -1176,7 +1176,7 @@ elabInstanceBodiesGo recover (d :: rest) allDecls classes datas globals ec acc =
       let
         -- 实例生成的字典/方法定义统一挂**实例声明 span**（`d` 的 span）。
         newDefs = instanceDefsOf ec ec1 (Just (secondOf d)) gs
-        ecTbl = ecPutGlobalsTbl ec1 (Base.HashMap.insertAll gs (ecGlobalsTbl ec1))
+        ecTbl = ecPutGlobalsTbl ec1 (HashMap.insertAll gs (ecGlobalsTbl ec1))
       in elabInstanceBodiesGo recover rest allDecls classes datas (append globals gs) ecTbl
         (append newDefs acc)
 
@@ -1185,7 +1185,7 @@ elabInstanceBodiesGo recover (d :: rest) allDecls classes datas globals ec acc =
 export instanceDefsOf : Ec -> Ec -> Maybe Span -> List (Pair String Term) -> List DtDef
 instanceDefsOf ecBefore ecAfter srcSpan gs =
   map
-    (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (Base.HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
+    (\g => DtDef (firstOf g) (defTypeOrDefaultTbl (HashMap.fromList gs) (firstOf g)) (substDictTerm ecAfter (defBodyOf (ecDefTbl ecAfter) (firstOf g))) srcSpan)
     gs
 
 export defBodyOf : HashMap String Term -> String -> Term
@@ -1223,13 +1223,12 @@ elabInstancesGo (d :: rest) classes datas globals ec acc = Vuna.Compiler.Base.Co
 -- 找不到的生成项给 `Nothing`，诊断保持无位置）。
 export extraDefsOf : List (Pair String Term) -> Ec -> List (Pair String Span) -> List DtDef -> List DtDef
 extraDefsOf globals ec srcSpans sourceDefs =
-  extraDefsGo (ecGlobalsTbl ec) (Base.HashMap.ofNames (map dtDefName sourceDefs)) srcSpans
-    (ecDefs ec) []
+  extraDefsGo (ecGlobalsTbl ec) (HashMap.ofNames (map dtDefName sourceDefs)) srcSpans (ecDefs ec) []
 
 export extraDefsGo : HashMap String Term -> HashMap String Bool -> List (Pair String Span) -> List (Pair String Term) -> List DtDef -> List DtDef
 extraDefsGo globalsTbl sourceNames srcSpans [] acc = reverse acc
 extraDefsGo globalsTbl sourceNames srcSpans (d :: rest) acc =
-  if Base.HashMap.member (firstOf d) sourceNames then extraDefsGo globalsTbl sourceNames srcSpans rest acc
+  if HashMap.member (firstOf d) sourceNames then extraDefsGo globalsTbl sourceNames srcSpans rest acc
   else extraDefsGo globalsTbl sourceNames srcSpans rest
     (DtDef (firstOf d) (defTypeOrDefaultTbl globalsTbl (firstOf d)) (secondOf d) (spanOfName (firstOf d) srcSpans) :: acc)
 
@@ -1238,7 +1237,7 @@ spanOfName name [] = Nothing
 spanOfName name ((Pair n sp) :: rest) = if n == name then Just sp else spanOfName name rest
 
 export defTypeOrDefaultTbl : HashMap String Term -> String -> Term
-defTypeOrDefaultTbl tbl name = case Base.HashMap.lookup name tbl of
+defTypeOrDefaultTbl tbl name = case HashMap.lookup name tbl of
   Just ty => ty
   Nothing => TGlobal "Int"
 

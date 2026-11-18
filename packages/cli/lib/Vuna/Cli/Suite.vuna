@@ -11,15 +11,15 @@ import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Test.Suite
 import Vuna.Test.Run
-import Base.EffClock
-import Base.EffConsole
-import Base.EffArgs
-import Base.EffEnv
-import Base.EffExit
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.String
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Data.String as String
 
 -- | `vuna dev suite [FILE]` 的入口；省略 FILE 时用 `test/suite.toml`。
 export suiteArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int

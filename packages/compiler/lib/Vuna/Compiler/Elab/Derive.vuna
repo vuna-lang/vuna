@@ -19,7 +19,7 @@ module Vuna.Compiler.Elab.Derive where
 --   Show：`show (C x1 ..) = "(" ++ "C" ++ " " ++ show x1 ++ .. ++ ")"`；零参 ⇒ `"C"`。
 --   Eq  ：`eq (C x1 ..) (C y1 ..) = x1 == y1 && ..`；不同构造子 ⇒ `False`。
 --   Ord ：先按**声明顺序**比构造子索引，同构造子再逐字段比。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Diagnostics

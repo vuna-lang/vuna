@@ -13,18 +13,18 @@ module Vuna.Compiler.Loader.Addr where
 --
 -- 分段用 `Canonical.Bytes` 的 `[n:…]`/`s<len>:` 自定界编码再取 SHA-256：不用「拼字符串
 -- 再加分隔符」，因为那会 reintroduce `("a","bc")` 与 `("ab","c")` 同键的歧义。
-import Base.List
-import Base.Maybe
-import Base.Pair
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- | 地址格式版本：分段文法或摘要算法变化时递增（地址随之换代）。
 export addrSchema : String

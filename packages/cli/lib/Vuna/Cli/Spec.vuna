@@ -11,9 +11,9 @@ module Vuna.Cli.Spec where
 
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
-import Base.List
-import Base.String
-import Base.Bool
+import Base.Data.List as List
+import Base.Data.String as String
+import Base.Data.Bool as Bool
 
 -- | 帮助里的一节。
 export data Group(..) : Type where

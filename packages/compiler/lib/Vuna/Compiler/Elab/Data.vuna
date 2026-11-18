@@ -3,8 +3,8 @@ module Vuna.Compiler.Elab.Data where
 -- Vuna.Compiler.Elab.Data：data 声明与构造子/索引擦除：elabCtor/elabDataHead/elabDataHeads/elabDataBodies/elabDatas，
 -- 以及按「索引是否在字段类型里被使用」计算的擦除掩码（eraseIndexMask/indexErasureCandidates）。
 -- 对外门面是 `Vuna.Compiler.Elab`；本模块按真实调用图与其余 `Elab.*` 子模块分工。
-import Base.HashMap
-import Base.List
+import Base.Container.HashMap as HashMap
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
@@ -33,7 +33,7 @@ elabCtor globals fam arity famLevel ec c = case c of
       tyExpr2 = if hasFamParams tyExpr then tyExpr else prependFamParams famKind tyExpr csp
       -- globals 列表在这里是只读的，一次构造给两次检查复用（原先每个构造子从索引表
       -- 重建两遍，代价是 O(#globals)）。
-      gl = append globals (Base.HashMap.toList (ecGlobalsTbl ec))
+      gl = append globals (HashMap.toList (ecGlobalsTbl ec))
     in Vuna.Compiler.Base.Common.bind (checkType gl emptyCtx ec tyExpr2) (\pk => case pk of
       Pair tyTerm0 (Pair sort ec1) =>
         let

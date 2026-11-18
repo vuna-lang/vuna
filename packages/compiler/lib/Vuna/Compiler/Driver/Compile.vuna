@@ -15,9 +15,9 @@ module Vuna.Compiler.Driver.Compile where
 -- 效果显式化：扫描/读文件/写文件/建目录/删除/子进程/时钟/环境/二进制指纹全部显式在
 -- `Eff r` 里；纯逻辑（路径/哈希/序列化/缓存键计算/AST 变换）保持纯函数。下挂模块
 -- （`Driver.Split`、`Driver.Dt`、`Packages.Pkg` 的磁盘层）同样是 `Eff r`，这里直接调用。
-import Base.HashMap
-import Base.Maybe
-import Base.Obs
+import Base.Container.HashMap as HashMap
+import Base.Data.Maybe as Maybe
+import Base.Data.Obs as Obs
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
@@ -38,16 +38,16 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Manifest
 import Vuna.Compiler.Base.Version
 import Vuna.Compiler.Base.Obs
-import Base.List
-import Base.Nat
-import Base.EffArgs
-import Base.EffClock
-import Base.EffEnv
-import Base.EffFs
-import Base.EffProcess
-import Base.Eff.Types
-import Base.EffConsole
-import Base.EffExit
+import Base.Data.List as List
+import Base.Data.Nat as Nat
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffExit as EffExit
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 
@@ -871,25 +871,25 @@ moduleGraphOf mods = map modGraphEntry mods
 -- 容易踩到）。改把每个 import 的 `pkgKey|源摘要` 编进地址：与遍历顺序/图规模无关，
 -- 依赖内容一变地址就变。传递变化（依赖的依赖改了导出面）由 `ownCleanInfo` 的
 -- 重导出链传播兜住。
-depSrcOf : Base.HashMap.HashMap String String -> String -> String
-depSrcOf tbl name = case Base.HashMap.lookup name tbl of
+depSrcOf : HashMap.HashMap String String -> String -> String
+depSrcOf tbl name = case HashMap.lookup name tbl of
   Just src => src
   Nothing => "ext:${name}"
 
 -- | 模块源摘要表（模块名 → `包身份|源摘要`）：地址解析用。
-srcTblOf : List ClosureMod -> Base.HashMap.HashMap String String
-srcTblOf mods = Base.HashMap.fromList (map srcPairOf mods)
+srcTblOf : List ClosureMod -> HashMap.HashMap String String
+srcTblOf mods = HashMap.fromList (map srcPairOf mods)
 
 srcPairOf : ClosureMod -> Pair String String
 srcPairOf m = Pair (modNameOf m) "${m.cmPkgKey}|${m.cmSrc}"
 
 -- | 模块接口地址：包身份 / 模块名 / 自身源摘要 / 包环境 / 每个直接依赖的源摘要。
-ifaceAddrOf : Base.HashMap.HashMap String String -> ClosureMod -> String
+ifaceAddrOf : HashMap.HashMap String String -> ClosureMod -> String
 ifaceAddrOf srcTbl m =
   addrOf
     (append ["iface", ifaceObjectCodec, m.cmPkgKey, m.cmName, m.cmSrc, m.cmPkgEnv] (map (depSrcOf srcTbl) m.cmImports))
 
-withAddr : Base.HashMap.HashMap String String -> ClosureMod -> ClosureMod
+withAddr : HashMap.HashMap String String -> ClosureMod -> ClosureMod
 withAddr srcTbl m =
   ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc m.cmImports
     (ifaceAddrOf srcTbl m)

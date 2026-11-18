@@ -16,8 +16,8 @@
 module Vuna.Repl.Complete where
 
 import Vuna.Compiler.Base.Common
-import Base.EffFs
-import Base.Eff.Types
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）

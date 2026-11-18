@@ -9,15 +9,15 @@
 -- `max-warnings`；2 表示用法错误、配置/读盘/解析/fixity 上下文错误。
 module Vuna.Lint where
 
-import Base.List
-import Base.Maybe
-import Base.String
-import Base.EffFs
-import Base.EffConsole
-import Base.Eff.Types
-import Base.EffEnv
-import Base.EffProcess
-import Base.EffStdin
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.String as String
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffProcess as EffProcess
+import Base.Effect.EffStdin as EffStdin
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Ast

@@ -5,13 +5,13 @@
 -- 外层（workspace 根）先应用，内层（包/manifest）覆盖，最后才是命令行 flag。
 module Vuna.Lint.Config where
 
-import Base.Bool
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
-import Base.Eff.Types
-import Base.EffFs
+import Base.Data.Bool as Bool
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffFs as EffFs
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml

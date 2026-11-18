@@ -12,8 +12,8 @@ module Vuna.Lsp.Protocol where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json
-import Base.EffFs
-import Base.Eff.Types
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
 export module Vuna.Json.Frame
 export module Vuna.Json.Rpc
 

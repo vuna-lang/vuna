@@ -28,12 +28,12 @@ module Vuna.Compiler.Base.Bytes where
 -- 燃料（显式 `Int`）仍然保留并逐原子递减：光标前进不体现在参数结构上，`Nat`/结构递归
 -- 无法证明终止（与 `storeEnsureDirEff` 的 fuel 同级惯例）。每次进入递归组 fuel 严格下降。
 -- 解析只在**载荷读回**与 roundtrip 自检里用；写侧只编码。
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 
 -- | 解析光标：`curS` 是尚未消费的**整个**字节串（不切片），`curI` 是已消费偏移。
 --

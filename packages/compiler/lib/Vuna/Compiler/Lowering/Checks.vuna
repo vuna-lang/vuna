@@ -11,9 +11,9 @@ module Vuna.Compiler.Lowering.Checks where
 --     （`termUseInto`：运行时依赖 + float / tracing / obs 旗标，一次遍历）。
 -- SCC 分组已迁到 `Vuna.Compiler.Ir.Analysis`（IR 层，不依赖 Core 的具体含义之外的东西）；
 -- 本模块只提供输入它的「名字级」分析。不产生 OCaml 文本。
-import Base.List
+import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Base.HashMap
+import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -75,7 +75,7 @@ isTypeLevelDef tbl d = isTypeForming (force tbl solsEmpty defaultFuel (eval [] (
 -- 都进类型级分区（没有运行时定义体，不能被 codegen 生成）；它的运行时使用由
 -- `checkNoAxiomRuntime` 报专门诊断。
 export partitionDefs : List (Pair String Term) -> List DtDef -> Pair (List DtDef) (List String)
-partitionDefs table defs = partitionDefsGo (Base.HashMap.fromList table) defs [] []
+partitionDefs table defs = partitionDefsGo (HashMap.fromList table) defs [] []
 
 partitionDefsGo : HashMap String Term -> List DtDef -> List DtDef -> List String -> Pair (List DtDef) (List String)
 partitionDefsGo table [] runtime typeNames = Pair (reverse runtime) (reverse typeNames)
@@ -93,7 +93,7 @@ defLocDiag d e = withContext (dtDefSpan d) (dtDefName d) e
 -- axiom 只在擦除/类型层可用；运行时位置（非擦除实参/非类型层）的使用报
 -- `CG_AxiomAtRuntime`。用运行时依赖遍历（跳过擦除实参）找名字，类型层引用不报。
 export checkNoAxiomRuntime : List String -> List DtDef -> Check Int
-checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (Base.HashMap.ofNames axiomNames) defs
+checkNoAxiomRuntime axiomNames defs = checkNoAxiomRuntimeGo (HashMap.ofNames axiomNames) defs
 
 checkNoAxiomRuntimeGo : HashMap String Bool -> List DtDef -> Check Int
 checkNoAxiomRuntimeGo axiomTbl [] = OkC 0
@@ -192,7 +192,7 @@ binderAt i (b :: rest) = if i <= 0 then Just b else binderAt (i - 1) rest
 termDepsIntoFuel : Int -> HashMap String Bool -> List String -> Term -> List String
 termDepsIntoFuel fuel runtimeNames acc t = if fuel <= 0 then acc
 else case t of
-  TGlobal name => if Base.HashMap.member name runtimeNames then addName name acc else acc
+  TGlobal name => if HashMap.member name runtimeNames then addName name acc else acc
   TVar name i _ => acc
   TMeta m => acc
   TType l => acc
@@ -278,7 +278,7 @@ useBudgetFor size = 512 + 4 * size
 
 addRuntimeDep : HashMap String Bool -> Bool -> String -> TermUse -> TermUse
 addRuntimeDep names live n u =
-  if live && Base.HashMap.member n names then TermUse (addName n u.termUseDeps) u.termUseFlags u.termUseFloatLit
+  if live && HashMap.member n names then TermUse (addName n u.termUseDeps) u.termUseFlags u.termUseFloatLit
   else u
 
 withFlags : UseFlags -> TermUse -> TermUse

@@ -26,9 +26,9 @@ import Vuna.Json
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Sig
-import Base.EffFs
-import Base.Eff.Types
-import Base.EffEnv
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffEnv as EffEnv
 
 -- ---------------------------------------------------------------
 -- 小工具

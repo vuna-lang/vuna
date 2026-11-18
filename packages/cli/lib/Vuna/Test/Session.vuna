@@ -14,20 +14,20 @@
 -- `EvalSample`，`Check` 的构造与解构只发生在 [Vuna.Test.InProc]。
 module Vuna.Test.Session where
 
-import Base.IORef
+import Base.Effect.Pure.IORef as IORef
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.Eff.Types
-import Base.EffArgs
-import Base.EffClock
-import Base.EffEnv
-import Base.EffExit
-import Base.EffFs
-import Base.EffProcess
+import Base.Effect.EffTypes as EffTypes
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffProcess as EffProcess
 
 -- | 进程内精化会话：依赖接口、包目录与两条路径的 termAux 缓存。
 export record Session where

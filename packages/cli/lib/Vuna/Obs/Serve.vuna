@@ -27,9 +27,9 @@
 -- 命令行形状。规范见 `docs/reference/observability.md` §7 `serve --cdp`。
 module Vuna.Obs.Serve where
 
-import Base.List
-import Base.Pair
-import Base.String
+import Base.Data.List as List
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
@@ -39,11 +39,11 @@ import Vuna.Json.Server
 import Vuna.Obs.Convert
 import Vuna.Obs.Read
 import Vuna.Obs.Types
-import Base.EffClock
-import Base.EffConsole
-import Base.EffFs
-import Base.EffNet
-import Base.Eff.Types
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffNet as EffNet
+import Base.Effect.EffTypes as EffTypes
 
 -- | JSON-RPC 2.0 保留的 server-error 区间起点：内容性失败（没有采样 / 没 start 就 stop）。
 errServer : Int
