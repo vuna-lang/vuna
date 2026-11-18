@@ -143,11 +143,11 @@ checkModuleDeclName knownModules mname name =
     if memName (modulePrefixOfName name) knownModules then
       OkC 0
     else
-      err
-        "DT: internal: module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
+      icInternal
+        "module ${mname} declares `${name}` whose module prefix `${modulePrefixOfName name}` is not a known module (codegen requires Loader-resolved decls)"
   else
-    err
-      "DT: internal: module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
+    icInternal
+      "module ${mname} has an unresolved declaration name `${name}` (codegen requires Loader-resolved decls)"
 
 checkModuleDeclNames : List String -> String -> List String -> Check Int
 checkModuleDeclNames knownModules mname [] = OkC 0
@@ -192,8 +192,8 @@ checkEntryDeclName seen identity =
   in if name == "" then
     icInternal "entry declaration has an empty name"
   else if containsDot name then
-    err
-      "DT: internal: entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
+    icInternal
+      "entry declaration `${name}` must not contain a module prefix (codegen requires Loader-resolved decls)"
   else if memName key seen then icInternal "duplicate entry declaration `${name}`" else OkC 0
 
 checkEntryDeclsGo : List String -> List (Pair Bool String) -> Check Int

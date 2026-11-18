@@ -465,8 +465,8 @@ unifyEntryPairs label kindLabel name (p :: rest) =
   if sameTargetRest (secondOf p) rest then
     OkC p
   else
-    err
-      "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualify it"
+    icInternal
+      "${label}: ambiguous ${kindLabel} ${name} (imported from ${_joinNames (map firstOf (p :: rest))}); qualifying at the use site is the supported path"
 
 modulePath : Root -> String -> String
 modulePath root name = "${rootDir root}/${joinSlashes (splitOnDot name)}.vuna"

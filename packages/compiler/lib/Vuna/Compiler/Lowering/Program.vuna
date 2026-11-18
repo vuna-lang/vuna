@@ -544,8 +544,8 @@ altEnvCheckedIn st label outer binders flags =
   else if listLength binders == countKept flags then
     altEnvKeptIn st label outer binders []
   else
-    err
-      "DT: internal: constructor ${label}: case branch binder count matches neither full telescope nor kept fields"
+    icInternal
+      "constructor ${label}: case branch binder count matches neither full telescope nor kept fields"
 
 altEnvFullIn : LwSt -> String -> List IrBinder -> List (Pair String Rig) -> List Bool -> List IrBinder -> Check AltEnvIn
 altEnvFullIn st label outer [] flags pats =
