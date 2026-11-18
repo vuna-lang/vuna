@@ -202,3 +202,76 @@ Control       = Done value
 
 native / OCaml 仍走各自的 handler 实现（native 是栈拷贝，O(N²) 见 D89）；
 三端统一到同一 `Control` 协议是后续工作。
+
+## 9. 方案 B：把机器下沉为库代码（三端统一）
+
+> 现状：`Ir.Cps` 只被 `Wasm/Module.vuna` 引用——**只有 wasm 走 CPS + 显式机器**；
+> OCaml 直接用 `Effect.Deep.match_with/continue`，native 用栈拷贝
+> （`effAllocCapture`/`effResume`，O(N²) 见 debt D89）。handler 语义因此有**三份实现**。
+
+目标：机器只实现一次（用 vuna 写在 base 里），三端只提供「闭包应用 + 分配」。
+
+### 9.1 前置：一个「任意值」载体
+
+机器帧要装异质值（任意 `a`、续延、opH、ret），所以需要源码级的不透明值类型：
+
+```vuna
+-- base：运行时类型不可命名 => IrTyOpaque（wasm anyref / OCaml Obj.t / native boxed）
+axiom Obj : Type
+
+-- 信任边界原语（identity；仅机器模块使用）
+@vuna@prim@toObj   : {a : Type} -> a -> Obj
+@vuna@prim@fromObj : {a : Type} -> Obj -> a
+```
+
+落地清单（一轮内完成，逐项可验收）：
+
+1. `Base/Intrinsics.vuna`：`IType` 增 `IObj`（追加在末尾，保持既有 tag 顺序），
+   两个 intrinsic 条目；
+2. `Lowering/Ty.vuna` 的 `renderTyIntrinsic`：`IObj -> IrTyOpaque`；
+3. wasm：`RtFunc 1 "$rt_erase"`（identity）；OCaml：`Obj.repr` / `Obj.obj`；
+   native：identity（现有 `eraseFn`）；
+4. 夹具：一个把 `Int`/`String`/闭包经 `Obj` 往返的程序，三端输出一致。
+
+### 9.2 机器的库实现（`Base/Effect/Machine.vuna`）
+
+```text
+Control = Done Obj
+        | Apply (Obj -> Control) Obj
+        | Perform String String Obj (Obj -> Control)
+        | Handle String String (Obj -> Obj) OpH (Obj -> Control) (Obj -> Control)
+
+HandlerFrame = { key, name, ret, opH, kOuter, base }      -- base = cleanup 深度
+ContCtx      = { prompt, kRest, prev }
+
+run : Control -> Obj
+```
+
+`run` 是一层 `while` 循环：
+
+- `Done v` → 返回；
+- `Apply k v` → `k v`（一次调用，单帧）；
+- `Perform` → 找帧、`opH op k kDone`；
+- `Handle` → 装帧、跑 comp；
+- `Return(f, v)`（由 `kOuter` 表达）→ 弹帧前跑 `base` 之上的 cleanup，`ret v` 交 `kOuter`。
+
+一次性续延用 `Cont`（已有线性类型）或 `selK` 式的 used 位。
+
+### 9.3 后端义务与迁移顺序
+
+| 步 | 内容 | 验收 |
+|---|---|---|
+| 1 | `Obj` + 两个 coercion 三端打通 | 往返夹具三端一致 |
+| 2 | `Eff.Machine` 写出来（vuna），先用 `Done/Apply` 跑一个手搭的 Control | native 上跑通 |
+| 3 | **native** 接机器：`prim_effectPerform/Handle/Self` 改成构造 `Control`，入口跑一次 `run`；删栈拷贝路径 | `pure-cross` + `effect-common` 全绿；D89 的 O(N²) 读数消失 |
+| 4 | **OCaml** 接机器（先保留 `Effect.Deep` 作为差分 oracle 跑同一组夹具，再切库机器） | 同上 |
+| 5 | **wasm** 用机器替换 `Wasm/Step.vuna` 里的手写 wat 机器（`@ir@m@*` 变成对库函数的 `IrGlobal` 调用） | `106` 默认栈；`114/115` 冒烟 |
+
+### 9.4 风险与边界
+
+- `Obj` 放宽了擦除面：`toObj/fromObj` 是信任边界原语，只允许机器模块调用；
+  加一条检查（或 allowlist）避免扩散到用户面。
+- 机器的 `Control` 用闭包承载续延：与 wasm 现状同构，所以**常量栈**仍取决于
+  「每次转移都是一次循环迭代」（`apply` 用尾调用），这一点在 native/OCaml 上更容易做到。
+- 已完成的部分可直接复用：closure/CPS lowering（`mCps`、`mEffContLambda`、
+  `mStripErase`）、cleanup 退出钩子、answer/frame 生命周期规则。
