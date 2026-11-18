@@ -2,7 +2,7 @@ module Vuna.Compiler.Ir.Anf where
 
 -- Vuna.Compiler.Ir.Anf：把 IR 规范成 ANF（A-normal form）。
 --
--- 给后续全片段 CPS/Step 变换提供一阶输入：每条非简单表达式先绑定到 `IrLet`，
+-- 给效应 thunk 的 CPS/Step 变换与直接风格 codegen 提供一阶输入：每条非简单表达式先绑定到 `IrLet`，
 -- 调用/构造/运行时操作只消费简单值。变换保持求值顺序与作用域，只增加 let。
 --
 -- binder 名字用**单调 next 计数**（不是路径 depth），兄弟分支也不会撞名；这是

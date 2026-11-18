@@ -23,7 +23,7 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
 - **ANF（wasm 前置）**：`Ir.Anf` 把每条非简单表达式绑定到 `let`，binder 用单调
-  `next` 编号（不是路径深度）；它保持求值顺序与作用域，给全片段 CPS/Step 变换提供
+  `next` 编号（不是路径深度）；它保持求值顺序与作用域，给效应 thunk 的 CPS/Step 变换提供
   一阶输入。wasm 在 codegen 前跑一次 ANF。
 - **CPS lowering（wasm）**：`Ir.Cps` 是 `Ir -> Ir` 的后端内变换（不改变 Lowering 产物）：
   只把 `MkEff` / `MkScoped` / `IrEffThunk` 的 thunk 改成显式 `k`，并把

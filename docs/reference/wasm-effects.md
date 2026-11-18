@@ -1,8 +1,9 @@
 # wasm 效应 handler（CPS lowering）
 
-> 状态：**纯用户 handler 已走选择性 CPS lowering，默认引擎可跑**。路线是
+> 状态：**纯用户 handler 仍走选择性 CPS lowerng（mode 3），Step driver（mode 5）
+> 已接线但未收敛（debt D105），默认不启用**。路线是
 > 「选择性 CPS + Step trampoline」：只 CPS 化效应 thunk 与 handler clause，
-> `Eff` 仍是数据；全片段 CPS 暂停（见 debt D104）。带内建宿主 handler 行、同时又出现
+> `Eff` 仍是数据；全片段 CPS 不是路线（相关代码已删除）。带内建宿主 handler 行、同时又出现
 > 用户 handler 的程序仍回落到 stack switching（见 §4）。
 
 ## 0. 当前路线与目标（选择性 CPS）
