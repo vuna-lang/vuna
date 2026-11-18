@@ -374,6 +374,30 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
   外面留了 `let`，使调用不在尾位置），所以每 perform 仍留一帧。下一步让 ANF 不在
   **尾表达式**外包 let（或让 codegen 识别 `let x = e in x`），106 即可通过。
 
+### 9.2.3 wasm 已切到库机器（2026-11）
+
+`cpsDefsMachine` 已接上 `mStepsDef`，rs/cleanup lowering 同批启用：wasm 的
+`@ir@m@done/apply/perform/handle/run` 全部改写成 `Base.Effect.Core.Control.*` /
+`machineRun`，handler clause 带 `runScoped` 第 4 参，`bracket` 的 push/pop 走
+`MkPushCleanup`/`MkPopCleanup`。
+
+读数（同一套件）：
+
+```text
+wasm: vuna tests passed (337 checks)   # 含 08/09/52/53/56/57/106
+全量: vuna tests passed (7209 checks)
+```
+
+打通 106 的最后两处都是 **ANF** 的尾位置问题：`prim_erase`（`IrRtApp` 与
+`IrApp (IrRt …)` 两种形态）被当成普通表达式绑成 let，导致机器自递归与续延转移
+拿不到 `return_call`。现在 `runGo` 的自调用在 wat 里是 `return_call $f_runGo`，
+effdepth 的 2000 次顺序 perform 在引擎默认栈下输出 2000。
+
+剩余：`Wasm/Step.vuna` 的 `$rt_m*` 仍是静态发射的运行时表（程序已不再调用其中大部分，
+只 `$rt_mRunEff` 还在用）——下一步删掉死表并把 `@ir@m@runEff` 收敛成一个普通 helper；
+之后按 native（`prim_effectPerform/Handle/Self` → `Control` + `machineRun`，D89 消失）
+→ OCaml（保留 `Effect.Deep` 作差分 oracle）推进。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
