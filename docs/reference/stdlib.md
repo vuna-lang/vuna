@@ -23,6 +23,8 @@
 | `Base.Data.Unit` | 单元素类型 `Unit(..)`（`MkUnit`）+ `Eq` / `Ord` / `Show` / `Semigroup` / `Monoid` / `Hashable` 实例 |
 | `Base.Trait.Hashable` | 通用哈希 trait：`hash : a -> Int`、`hashStr`（String 的 0..1023 哈希）、`hashCombine`；`String`/`Int`/`Bool`/`Nat`/`Unit`/`List`/`Maybe`/`Pair`/`Result`/`Ordering` 实例，用户类型可 `deriving (Hashable)` |
 | `Base.Data.Bits` | 位运算命名库 + 32-bit 固定宽度包装：`band` / `bor` / `bxor` / `bnot` / `shl` / `shr`（63-bit 语义，移位越界 = 0）+ `mask8` / `mask32` / `shl32` / `shr32` / `add32` / `rotr32` / `rol32`；SHA-256 / 编码类算法使用 |
+| `Base.Data.Sha1` | SHA-1（RFC 3174）：`sha1` 给 40 字符小写十六进制摘要，`sha1Raw` 给 20 字节；输入按 UTF-8 字节串处理 |
+| `Base.Data.Base64` | Base64（RFC 4648 标准字母表、带 padding）：`base64Encode` / `base64EncodeString` / `base64Decode`；解码严格（长度、字母表、padding 位置），失败是 `Nothing` |
 | `Base.Container.Array` | 不可变数组（内建类型构造子 `Array`；`fromList` / `toList` / `length` / `get` / `set` / `make`，长度与下标是 `Nat`；`set` 返回新数组） |
 | `Base.Effect.Pure.IORef` | 可变引用（`newRef` / `readRef` / `writeRef` / `modifyRef`，公开操作与实现都是 `Eff []`） |
 | `Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error` | 库级效应 monad：纯函数表示 + `Functor`/`Applicative`/`Monad` 实例（`do` 可用）；`State` 是 `s -> Pair a s`、`Reader` 是 `e -> a`、`Error` 是泛型 `Ok`/`Err` 和；handler 是 `runState` / `evalState` / `execState`、`runReader` / `ask` / `local`、`runError` / `throwError` / `catchError`。通用运行时效应见 `Base.Effect.Core`（[effects.md](effects.md) §8） |

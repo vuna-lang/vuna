@@ -1,0 +1,20 @@
+-- `Base.Data.Base64` 的 RFC 4648 向量、字节往返与严格解码（长度、字母表、padding 位置）。
+import Base
+import Base.Data.Base64 as Base64
+
+main : String
+main =
+  join " "
+    [if Base64.base64EncodeString "" == "" then "empty-ok" else "empty-bad", Base64.base64EncodeString "f", Base64.base64EncodeString "fo", Base64.base64EncodeString "foo", Base64.base64EncodeString "foob", Base64.base64EncodeString "fooba", Base64.base64EncodeString "foobar", roundtrip "foobar", roundtrip "hello world", roundtrip "é", verdict "Zg==", verdict "Zm9v!", verdict "Zm9v=", verdict "Zg=", verdict "====", verdict "AA=A"]
+
+-- | 编码再解码后与原始字节一致。
+roundtrip : String -> String
+roundtrip x = case Base64.base64Decode (Base64.base64EncodeString x) of
+  Nothing => "bad"
+  Just bs => if bs == strUnpack x then "ok" else "bad"
+
+-- | 严格解码的判定：`accept` 表示被接受。
+verdict : String -> String
+verdict x = case Base64.base64Decode x of
+  Nothing => "reject"
+  Just _ => "accept"

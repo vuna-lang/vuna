@@ -17,6 +17,8 @@ export module Base.Data.List
 export module Base.Trait.Monoid
 export module Base.Trait.Num
 export module Base.Data.Maybe
+export module Base.Data.Sha1
+export module Base.Data.Base64
 export module Base.Data.Nat
 export module Base.Data.Result
 export module Base.Data.String

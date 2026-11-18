@@ -1,0 +1,130 @@
+-- | SHA-1 摘要（RFC 3174）。`String` 是字节串，输入按字节直接处理；输出是 20 字节。
+-- | 32-bit 固定宽度算术全部经 [Base.Data.Bits]；消息扩展与压缩轮用 `range` + `foldl` 展开，
+-- | 没有数值递归，因此不需要 fuel。
+module Base.Data.Sha1 where
+
+import Base.Data.Bits
+import Base.Data.Int
+import Base.Data.List
+import Base.Data.Pair
+import Base.Internal.Operator
+import Base.Trait.Num
+import Base.Trait.Ord
+
+-- | 小写十六进制摘要（40 字符）。
+export sha1 : String -> String
+sha1 s = strConcatMany (map hexByte (sha1Raw s))
+
+-- | 原始摘要：20 个字节（每项 0..255）。
+export sha1Raw : String -> List Int
+sha1Raw s =
+  let
+    n = strLength s
+    body = padMessage (strUnpack s) n
+    blocks = map (\i => take 64 (drop (i * 64) body)) (range 0 ((n + 9 + 63) / 64))
+  in wordsToBytes (foldl compressBlock sha1Init blocks)
+
+-- | 初始链接变量（h0..h4）。
+sha1Init : List Int
+sha1Init = [1732584193, 4023233417, 2562383102, 271733878, 3285377520]
+
+-- | 填充：`0x80` + 若干 `0x00` + 64-bit 大端比特长度，使总长为 64 的倍数。
+padMessage : List Int -> Int -> List Int
+padMessage bs n =
+  let
+    padded = (n + 9 + 63) / 64 * 64
+    zeros = padded - n - 9
+  in append bs (append [128] (append (zeroBytes zeros) (bigEndian64 (n * 8))))
+
+-- | `k` 个零字节。
+zeroBytes : Int -> List Int
+zeroBytes k = map (\_ => 0) (range 0 k)
+
+-- | 64-bit 大端编码（h0 在前）。
+bigEndian64 : Int -> List Int
+bigEndian64 bits =
+  let
+    hi = bits / 4294967296
+    lo = bits - hi * 4294967296
+  in append (bigEndian32 hi) (bigEndian32 lo)
+
+-- | 32-bit 大端编码（每项 0..255）。
+bigEndian32 : Int -> List Int
+bigEndian32 x = [mask8 (shr32 x 24), mask8 (shr32 x 16), mask8 (shr32 x 8), mask8 x]
+
+-- | 一个 64 字节块：消息扩展 + 80 轮压缩，结果与链接变量按 32-bit 相加。
+compressBlock : List Int -> List Int -> List Int
+compressBlock hs blk = case hs of
+  [h0, h1, h2, h3, h4] =>
+    let
+      st = foldl sha1Round (Pair (expand (wordsOf blk)) [h0, h1, h2, h3, h4]) (range 0 80)
+    in case st of
+      Pair _ regs => case regs of
+        [a, b, c, d, e] => [add32 h0 a, add32 h1 b, add32 h2 c, add32 h3 d, add32 h4 e]
+        _ => hs
+  _ => hs
+
+-- | 把 64 字节块切成 16 个大端 32-bit 字。
+wordsOf : List Int -> List Int
+wordsOf blk = map (\i => pack4 (drop (i * 4) blk)) (range 0 16)
+
+-- | 四个字节合成一个大端 32-bit 字。
+pack4 : List Int -> Int
+pack4 xs = case xs of
+  a :: b :: c :: d :: _ => a * 16777216 + b * 65536 + c * 256 + d
+  _ => 0
+
+-- | 消息扩展：16 个字扩到 80 个（`w[t] = rotl(w[t-3] ^ w[t-8] ^ w[t-14] ^ w[t-16], 1)`）。
+expand : List Int -> List Int
+expand w = foldl expandStep w (range 0 64)
+
+-- | 扩展一步：从已累积的字尾部取四个参与异或。
+expandStep : List Int -> Int -> List Int
+expandStep w _ =
+  let
+    rev = reverse w
+    x = bxor (bxor (bxor (headAfter 2 rev) (headAfter 7 rev)) (headAfter 13 rev)) (headAfter 15 rev)
+  in append w [rol32 x 1]
+
+-- | 跳过前 `k` 项后取首项；越界返回 0。
+headAfter : Int -> List Int -> Int
+headAfter k xs = case drop k xs of
+  x :: _ => x
+  [] => 0
+
+-- | 单轮：位移寄存器并写回新的 a。
+sha1Round : Pair (List Int) (List Int) -> Int -> Pair (List Int) (List Int)
+sha1Round st t = case st of
+  Pair w regs => case w of
+    [] => Pair w regs
+    wt :: rest => case regs of
+      [a, b, c, d, e] =>
+        let
+          tmp = add32 (add32 (add32 (add32 (rol32 a 5) (roundF t b c d)) e) (roundK t)) wt
+        in Pair rest [tmp, a, rol32 b 30, c, d]
+      _ => Pair w regs
+
+-- | 轮函数 `f`（按轮次区间选择）。
+roundF : Int -> Int -> Int -> Int -> Int
+roundF t b c d =
+  if t < 20 then bor (band b c) (band (bnot b) d)
+  else if t < 40 then bxor b (bxor c d)
+  else if t < 60 then bor (bor (band b c) (band b d)) (band c d) else bxor b (bxor c d)
+
+-- | 轮常数 `k`（按轮次区间选择）。
+roundK : Int -> Int
+roundK t =
+  if t < 20 then 1518500249
+  else if t < 40 then 1859775393 else if t < 60 then 2400959708 else 3395469782
+
+-- | 链接变量按大端展开成 20 个字节。
+wordsToBytes : List Int -> List Int
+wordsToBytes hs = concatMap bigEndian32 hs
+
+-- | 一个字节的两位小写十六进制。
+hexByte : Int -> String
+hexByte b = strConcatMany [hexDigit (b / 16), hexDigit (b - b / 16 * 16)]
+
+-- | 0..15 → `0..9a..f`。
+hexDigit : Int -> String
+hexDigit d = if d < 10 then strPack [48 + d] else strPack [87 + d]

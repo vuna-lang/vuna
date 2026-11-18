@@ -1,0 +1,8 @@
+-- `Base.Data.Sha1` 的 RFC 3174 向量、55/56/64 字节填充边界与多字节输入（`String` 是字节串）。
+import Base
+import Base.Data.Sha1 as Sha1
+
+main : String
+main =
+  join " "
+    [Sha1.sha1 "", Sha1.sha1 "abc", Sha1.sha1 "The quick brown fox jumps over the lazy dog", Sha1.sha1 (repeat (natFromInt 55) "a"), Sha1.sha1 (repeat (natFromInt 56) "a"), Sha1.sha1 (repeat (natFromInt 64) "a"), Sha1.sha1 "é"]
