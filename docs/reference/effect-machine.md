@@ -231,7 +231,18 @@ axiom Obj : Type
 2. `Lowering/Ty.vuna` 的 `renderTyIntrinsic`：`IObj -> IrTyOpaque`；
 3. wasm：`RtFunc 1 "$rt_erase"`（identity）；OCaml：`Obj.repr` / `Obj.obj`；
    native：identity（现有 `eraseFn`）；
-4. 夹具：一个把 `Int`/`String`/闭包经 `Obj` 往返的程序，三端输出一致。
+4. 夹具：一个把 `Int`/`闭包`/数据值经 `Obj` 往返的程序，三端输出一致
+   （`pure_cross/54_obj_roundtrip`）。
+
+写机器时会撞到的两条语言侧约束（都已验证）：
+
+1. 把**隐式多态值**（如 `fromObj : {a} -> Obj -> a`）实例化到**函数类型**时必须有期望
+   类型（实参位置或注解）；否则 `fromObj o x` 在 `?a` 未解前先按「非函数」报
+   `TC_TooManyArgs`。把拆箱放在实参位置即可。
+2. **`axiom` 类型不能直接作构造子字段类型**（`data Box where MkBox : Obj -> Box` 报
+   `TC_UnknownName`，同模块 axiom 也一样）。绕法：机器类型**参数化**并在签名里实例化
+   —— `data Control v : Type where MkDone : v -> Control v …`，用到处写 `Control Obj`。
+   已在 native 上用 `Ctl Eff.Obj` + Apply 循环验证跑通。
 
 ### 9.2 机器的库实现（`Base/Effect/Machine.vuna`）
 
