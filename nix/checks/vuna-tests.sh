@@ -54,6 +54,14 @@ for suite in $SUITES; do
   "$VUNA" dev suite "$suite" --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS || rc=1
 done
 
+# 包内单测（`vuna test <pkg>`：顶层 test/*.vuna）；http/web 的行为面不在 suite corpus 里。
+for pkg in packages/*; do
+  [ -d "$pkg/test" ] || continue
+  set -- "$pkg"/test/*.vuna
+  [ -e "$1" ] || continue
+  "$VUNA" test "$pkg" --jobs "$JOBS" || rc=1
+done
+
 # e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in

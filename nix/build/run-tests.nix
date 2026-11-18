@@ -39,6 +39,13 @@ pkgs.writeShellScriptBin "vuna-run-tests" ''
     [ -f "$repo/$suite" ] || continue
     "${vuna}/bin/vuna" dev suite "$repo/$suite" "$@" || failed=1
   done
+  # 包内单测（顶层 test/*.vuna）。
+  for pkg in "$repo"/packages/*; do
+    [ -d "$pkg/test" ] || continue
+    set -- "$pkg"/test/*.vuna
+    [ -e "$1" ] || continue
+    "${vuna}/bin/vuna" test "$pkg" || failed=1
+  done
   exit "$failed"
 ''
 // {

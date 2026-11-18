@@ -5,6 +5,6 @@ set -eu
 
 OUT=${1:?usage: static.sh OUT}
 
-for s in diag-raw ir-boundary store-domains steps-inproc eff-boundary product-boundary name-prefixes; do
+for s in diag-raw ir-boundary store-domains steps-inproc eff-boundary product-boundary name-prefixes suite-inventory; do
   sh "nix/checks/lib/$s.sh" "$OUT"
 done

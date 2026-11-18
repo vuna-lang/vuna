@@ -361,7 +361,7 @@ main = case failuresOf n written of
 
 `prim_eff_print` / `prim_eff_exit` 是 `Eff []` 的宿主原语（D62：无 manifest 门控，任何包可直调）。
 `packages/http/test/` 是这套写法的实例（编解码、连接循环、WebSocket、客户端回环），
-失败原因只打到 stderr，判定看退出码。
+失败原因只打到 stderr，判定看退出码。`checks.vuna-tests*` 会跑所有包顶层的 `test/*.vuna`。
 
 ## corpus 的包上下文与 `VUNA_BASE`
 
@@ -534,9 +534,12 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、
   行为抽查与 seed 滞后报告（不阻塞）；
-- `vuna-tests-wasm` / `vuna-tests-native`：同一份 suite 在 `--backend wasm|native` 下跑
+- `vuna-tests-wasm` / `vuna-tests-native`：各包 suite 在 `--backend wasm|native` 下跑
   `fast integration`，只覆盖 matrix 允许该目标的 case（`pure-cross` + 对应 `effect-*`）；
-  ocaml 的完整门禁仍由 `vuna-tests-gate` 承担。
+  ocaml 的完整门禁仍由 `vuna-tests-gate` 逐份调用各包 suite 承担。
+- `vuna-static`：结构守卫（诊断码 / IR 边界 / 进程绑定岛 / 隐藏效果 / **suite 清单**）——
+  `test/suite.toml` 的 driver 清单必须覆盖所有 `packages/*/test/suite.toml`，且每个 suite
+  带 `owner` 与正的 `min_cases`。
 - `vuna-tests-wasm-js`：同一份 wasm matrix 在 **Node（V8）+ JS 宿主**上跑
   （`VUNA_WASM_HOST=js`），是「浏览器可跑面」的行为门禁。用户自定义 handler 的用例
   （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计

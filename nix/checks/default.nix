@@ -388,10 +388,13 @@ in
     srcs = [
       src.compiler
       src.cli
+      src.base
+      src.webCli
       src.stepsCli
       src.stepsCompiler
       src.stepsWebCli
       src.processBound
+      ../../test/suite.toml
       ./lib
       ../../nix/checks/data/eff-boundary.allowlist
       ../../nix/checks/data/steps-inproc.max
