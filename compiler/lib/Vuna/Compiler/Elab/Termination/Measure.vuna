@@ -489,6 +489,10 @@ arithRel p _ sizes caller facts region = Nothing
 export isSubOpName : String -> Bool
 isSubOpName op = op == "-" || op == "Base.Num.sub" || op == "Base.Num.-"
 
+-- | `+` 的两种写法：升序计数器不构成下降证据，但失败诊断要能指出来。
+export isAddOpName : String -> Bool
+isAddOpName op = op == "+" || op == "Base.Num.add" || op == "Base.Num.+"
+
 export arithMinus : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinus p ([base, EInt k ksp]) sizes caller facts region =
   if k > 0 then arithMinusBase p base k sizes caller facts region else Nothing
@@ -530,6 +534,33 @@ export argRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List 
 argRel p args sizes ctors projs caller facts region = case nthExpr args p of
   Nothing => Nothing
   Just a => relOfArg p a sizes ctors projs caller facts region
+
+-- | 位置 p 的实参**为什么**证不出关系：只服务失败诊断，不参与判定。
+-- 返回值是 `relMissingGuard` / `relAscending` / `relUnknownSize` / `relOtherPosition` / `relNoRelation`。
+export argRelHint : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Maybe Int
+argRelHint p args sizes ctors = case nthExpr args p of
+  Nothing => Nothing
+  Just a => case a of
+    EVar n sp => if memName n ctors then Just relNoRelation
+    else case sizeOfVarStrict n sizes of
+      Just sz => case sz of
+        Pair base (Pair depth path) =>
+          if base == p then Just relNoRelation else Just relOtherPosition
+      Nothing => Just relUnknownSize
+    EApp (EVar op osp) xs sp =>
+      if isSubOpName op then hintArith p xs sizes relMissingGuard
+      else if isAddOpName op then hintArith p xs sizes relAscending else Just relNoRelation
+    _ => Just relNoRelation
+
+hintArith : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
+hintArith p ([EVar x xsp, EInt k ksp]) sizes mode = if k <= 0 then Just relNoRelation
+else case sizeOfVarStrict x sizes of
+  Just sz => case sz of
+    Pair base (Pair depth path) =>
+      if base == p then if depth == 0 then Just mode else Just relNoRelation
+      else Just relOtherPosition
+  Nothing => Just relUnknownSize
+hintArith p _ sizes mode = Just relNoRelation
 
 export markInvalid : Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 markInvalid acc = Pair False (secondOf acc)
@@ -634,15 +665,20 @@ relNoRelation = -3
 export relOtherPosition : Int
 relOtherPosition = -4
 
+export relAscending : Int
+relAscending = -5
+
 -- | 关系编号 → 诊断文案（human 视图与 `fields.call` 共用）。
 export relText : Int -> String
 relText m =
   if m == relStrictSub then "strict subterm"
   else if m == relStrictMinus then "decreases by a constant, with the non-negativity guard proven"
   else if m == relMissingGuard then "decreases by a constant, but the non-negativity guard is missing"
-  else if m == relUnknownSize then "no known size (value comes from a call result or a let binding)"
+  else if m == relUnknownSize then "no known size (not a subterm of a parameter)"
   else if m == relOtherPosition then "decreases a different parameter"
-  else if m == relEqual then "unchanged" else "no size relation"
+  else if m == relEqual then "unchanged"
+  else if m == relAscending then "increases instead of decreasing (ascending counters are not supported)"
+  else "no size relation"
 
 export isDescent : Int -> Bool
 isDescent m = m > 0

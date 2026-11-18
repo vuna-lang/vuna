@@ -210,12 +210,19 @@ localClauseBinds [] = []
 localClauseBinds ((Pair pats body) :: rest) =
   Pair (PWild (exprSpan body)) body :: localClauseBinds rest
 
+-- 关系证不出来时记一条诊断边：位置 p 的实参为什么拿不到尺寸关系。
+hintEdge : String -> String -> Int -> List Expr -> List String -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
+hintEdge caller callee p args ctors sizes sp acc = case argRelHint p args sizes ctors of
+  Nothing => acc
+  Just m => addEdgeMode caller callee m sp acc
+
 strWalkEApp : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Span -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
 strWalkEApp fuel comp ctors projs p sizes caller facts region fn args sp acc = if fuel <= 0 then acc
 else case groupHead comp fn of
   Just callee => case argRel p args sizes ctors projs caller facts region of
     Nothing =>
-      markInvalid (strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc)
+      markInvalid
+        (strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args (hintEdge caller callee p args ctors sizes sp acc))
     Just rel =>
       strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args
         (addEdgeMode caller callee rel sp acc)
@@ -344,7 +351,7 @@ collectClauses (cl :: rest) comp ctors projs p caller facts acc = case firstOf a
   True => case strClause comp ctors projs p caller facts cl of
     Pair True edges =>
       collectClauses rest comp ctors projs p caller facts (Pair True (append (secondOf acc) edges))
-    Pair False edges => OkC (Pair False (secondOf acc))
+    Pair False edges => OkC (Pair False (append (secondOf acc) edges))
 
 collectMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> Int -> HashMap String (List Int) -> List String -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Check (Pair Bool (List (Pair (Pair (Pair String String) Int) Span)))
 collectMeasure comp defTbl ctors projs p facts [] acc = OkC acc
@@ -353,13 +360,44 @@ collectMeasure comp defTbl ctors projs p facts (n :: rest) acc =
     (collectClauses (clausesOfDefTbl n defTbl) comp ctors projs p n facts acc)
     (\acc2 => collectMeasure comp defTbl ctors projs p facts rest acc2)
 
+-- | 失败诊断的候选：越可操作越优先（缺非负证明 > 无尺寸来源 > 别的形参 > 无关系）。
+record FailCandidate where
+  fcRank : Int
+  fcPos : Int
+  fcEdges : List (Pair (Pair (Pair String String) Int) Span)
+
+emptyFail : Int -> FailCandidate
+emptyFail p = FailCandidate 0 p []
+
+-- | 诊断边 → 可操作程度：正数是「已证出的关系」，不参与排序。
+hintRankOf : Int -> Int
+hintRankOf m =
+  if m == relMissingGuard then 4
+  else if m == relAscending then 4
+  else if m == relUnknownSize then 3
+  else if m == relOtherPosition then 2 else if m == relNoRelation then 1 else 0
+
+edgeRankOf : Pair (Pair (Pair String String) Int) Span -> Int
+edgeRankOf (Pair (Pair (Pair c g) m) sp) = hintRankOf m
+
+edgesRankOf : List (Pair (Pair (Pair String String) Int) Span) -> Int
+edgesRankOf [] = 0
+edgesRankOf (e :: rest) = maxInt (edgeRankOf e) (edgesRankOf rest)
+
+betterFail : Int -> List (Pair (Pair (Pair String String) Int) Span) -> FailCandidate -> FailCandidate
+betterFail p edges best =
+  let
+    rank = edgesRankOf edges
+  in if rank > best.fcRank then FailCandidate rank p edges else best
+
 -- 同一对 (caller, callee) 的所有调用点都非零 ⇒ 该边严格。
 tryMeasure : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Check Int
 tryMeasure comp defTbl ctors projs facts p maxP =
-  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p []
+  tryMeasureGo comp defTbl ctors projs facts (maxP - p) maxP p [] (emptyFail p)
 
-tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> Check Int
-tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges = if remaining <= 0 then ErrC (cannotProveMsgEdges comp lastP lastEdges)
+tryMeasureGo : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> HashMap String (List Int) -> Int -> Int -> Int -> List (Pair (Pair (Pair String String) Int) Span) -> FailCandidate -> Check Int
+tryMeasureGo comp defTbl ctors projs facts remaining maxP lastP lastEdges best = if remaining <= 0 then if best.fcRank > 0 then ErrC (cannotProveMsgEdges comp best.fcPos best.fcEdges)
+else ErrC (cannotProveMsgEdges comp lastP lastEdges)
 else
   let
     p = maxP - remaining
@@ -368,11 +406,12 @@ else
     OkC (Pair valid edges) => if valid then
       let
         modes = filterModes (map callMode edges)
-      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
+      in if notEmpty modes then if allSame modes then if hasWeakCycle comp edges then tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
       else OkC 0
-      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
-      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
+      else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges best
     else tryMeasureGo comp defTbl ctors projs facts (remaining - 1) maxP p edges
+      (betterFail p edges best)
 
 checkStrictGroup : List String -> HashMap String (List (Pair (List Pat) Expr)) -> List String -> List (Pair String (List Int)) -> List (Pair String Int) -> Check Int
 checkStrictGroup comp defTbl ctors projs facts =
