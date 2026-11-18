@@ -12,5 +12,6 @@ modules = [
   "Http.Request",
   "Http.Response",
   "Http.Parse",
-  "Http.Render"
+  "Http.Render",
+  "Http.Connection"
 ]

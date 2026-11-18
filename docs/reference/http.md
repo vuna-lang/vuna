@@ -62,9 +62,15 @@ TLS 将来若自持，只是第三个 duplex 实现，`Http.*` 不需要改。
 
 ## 6. 现状与测试
 
-已落地：消息模型、双向编解码、严格解析规则、包内测试
-（`packages/http/test/Codec.vuna`，`vuna test packages/http`）。
-连接循环、WebSocket 握手与帧、客户端循环按后续提交落地。
+已落地：消息模型、双向编解码、严格解析规则、单连接服务循环
+（`Http.Connection`：duplex 抽象、请求预算、keep-alive / HTTP/1.0 关闭策略、非法输入回
+400 后关闭）与包内测试（`packages/http/test/{Codec,Connection}.vuna`，
+`vuna test packages/http`）。
+WebSocket 握手与帧、客户端循环按后续提交落地。
+
+服务循环的预算是显式的：`messageBudget` = 头部上限 + 体上限 + 余量（单条消息），
+`readIterations` = 读循环轮数兜底，`defaultMaxRequests` = 每连接 100 条请求。
+三者都是常量，循环靠它们满足终止性检查——没有「无限循环」这种形状。
 
 基础算法在 `vuna-base`：`Base.Data.Sha1`（RFC 3174，十六进制与原始字节两种输出）与
 `Base.Data.Base64`（RFC 4648，严格解码）。它们放在 base 是因为属于通用算法，

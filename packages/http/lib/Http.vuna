@@ -12,3 +12,5 @@ export module Http.Parse
 export module Http.Parse as Parse
 export module Http.Render
 export module Http.Render as Render
+export module Http.Connection
+export module Http.Connection as Connection

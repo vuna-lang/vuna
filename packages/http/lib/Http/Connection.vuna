@@ -1,0 +1,120 @@
+-- | 传输无关的 HTTP/1.1 服务循环：读字节 → 解析 → handler → 渲染 → 写回。
+-- | 传输由调用方以 duplex 记录提供（内存流 / TCP / 将来的 TLS），本模块不持有 socket 句柄。
+module Http.Connection where
+
+import Base
+import Base.Effect.Core
+import Http.Header as Hdr
+import Http.Parse as P
+import Http.Render as R
+import Http.Request as Req
+import Http.Response as Res
+
+-- | 传输抽象：`r` 是调用方的效应行（内存流用 `[]`，TCP 用网络行）。
+-- | 用索引数据类型而不是 record：`r` 的 kind 必须在类型头里显式写成 `Row -> Type`。
+export data Duplex(..) : Row -> Type where
+  -- | 构造：读 / 写 / 关闭三条操作。
+  Dup : {r : Row} -> (Int -> Eff r String) -> (String -> Eff r Int) -> Eff r Int -> Duplex r
+
+-- | 最多读 `n` 字节；空串表示对端已关闭。
+export readSomeOf : Duplex r -> Int -> Eff r String
+readSomeOf (Dup rd _ _) = rd
+
+-- | 写完整段字节，返回写入字节数。
+export writeAllOf : Duplex r -> String -> Eff r Int
+writeAllOf (Dup _ wr _) = wr
+
+-- | 关闭连接。
+export closeOf : Duplex r -> Eff r Int
+closeOf (Dup _ _ cl) = cl
+
+-- | 读循环的返回值。
+export data Next(..) : Type where
+  -- | 解析出一条请求与尚未消费的字节（流水线的下一条）。
+  NextRequest : Req.Request -> String -> Next
+  -- | 输入非法，原因即诊断。
+  NextMalformed : String -> Next
+  -- | 对端关闭。
+  NextClosed : Next
+
+-- | 单条消息的字节预算：头部上限 + 体上限 + 余量。
+export messageBudget : Int
+messageBudget = Hdr.maxHeaderBytes + P.maxBodyBytes + 16
+
+-- | 每次读的块大小。
+export readChunk : Int
+readChunk = 8192
+
+-- | 读循环的最大轮数（每轮最多 `readChunk` 字节，作为字节预算之外的兜底）。
+export readIterations : Int
+readIterations = 4096
+
+-- | 每连接默认最多处理的请求条数（超过即关闭，作为慢速/滥用连接的兜底）。
+export defaultMaxRequests : Int
+defaultMaxRequests = 100
+
+-- | 从 `buf` 起继续读，直到解析出一条完整请求、输入非法、预算耗尽或对端关闭。
+export readNext : Duplex r -> String -> Eff r Next
+readNext d buf = readLoop d buf readIterations
+
+-- | `readNext` 的读循环：`fuel` 每轮减一保证终止，字节预算另行检查。
+readLoop : Duplex r -> String -> Int -> Eff r Next
+readLoop d buf fuel = if fuel <= 0 then pure (NextMalformed "message too large")
+else if strLength buf > messageBudget then pure (NextMalformed "message too large")
+else case P.parseRequest buf of
+  P.Complete req rest => pure (NextRequest req rest)
+  P.Invalid e => pure (NextMalformed e)
+  P.Incomplete => do
+    chunk <- readSomeOf d readChunk
+    if strLength chunk == 0 then pure NextClosed else readLoop d (buf ++ chunk) (fuel - 1)
+
+-- | 服务连接：最多处理 `maxRequests` 条请求，返回实际处理的条数。
+export serveWith : Duplex r -> Int -> (Req.Request -> Eff r Res.Response) -> Eff r Int
+serveWith d maxRequests handler = serveLoop d handler maxRequests "" 0
+
+-- | 默认预算（`defaultMaxRequests`）下的服务循环。
+export serve : Duplex r -> (Req.Request -> Eff r Res.Response) -> Eff r Int
+serve d handler = serveWith d defaultMaxRequests handler
+
+-- | 服务循环：每条已处理的请求消耗一格预算。
+serveLoop : Duplex r -> (Req.Request -> Eff r Res.Response) -> Int -> String -> Int -> Eff r Int
+serveLoop d handler fuel buf served = if fuel <= 0 then closeAnd d served
+else do
+  next <- readNext d buf
+  case next of
+    NextClosed => closeAnd d served
+    NextMalformed e => do
+      _ <- writeAllOf d (R.renderResponse (Res.response 400 e))
+      closeAnd d served
+    NextRequest req rest => do
+      resp <- handler req
+      _ <- writeAllOf d (R.renderResponse resp)
+      if shouldClose req resp then closeAnd d (served + 1)
+      else serveLoop d handler (fuel - 1) rest (served + 1)
+
+-- | 关闭连接并返回已处理条数。
+closeAnd : Duplex r -> Int -> Eff r Int
+closeAnd d n = do
+  _ <- closeOf d
+  pure n
+
+-- | 这条请求/响应之后是否必须关闭连接。
+export shouldClose : Req.Request -> Res.Response -> Bool
+shouldClose req resp =
+  if hasClose req.headers then True
+  else if hasClose resp.headers then True
+  else if req.version == "HTTP/1.0" then not (hasKeepAlive req.headers) else False
+
+-- | 头部里是否声明 `Connection: close`。
+hasClose : List (Pair String String) -> Bool
+hasClose hs = isConnectionValue "close" hs
+
+-- | 头部里是否声明 `Connection: keep-alive`。
+hasKeepAlive : List (Pair String String) -> Bool
+hasKeepAlive hs = isConnectionValue "keep-alive" hs
+
+-- | `Connection` 头是否等于给定值（大小写不敏感）。
+isConnectionValue : String -> List (Pair String String) -> Bool
+isConnectionValue v hs = case Hdr.headerValue "connection" hs of
+  Just got => Hdr.lowerString got == v
+  Nothing => False

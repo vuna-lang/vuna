@@ -1,0 +1,62 @@
+-- 单连接服务循环的包内测试：内存 duplex 喂一段流水线输入，检查响应与计数。
+import Base
+import Base.Effect.Core
+import Base.Effect.Pure as Pure
+import Http.Connection as C
+import Http.Request as Req
+import Http.Response as Res
+import Http.Render as R
+
+main : Eff [] String
+main = do
+  input <-
+    Pure.IORef.newRef
+      (R.renderRequest (Req.request "GET" "/a") ++ R.renderRequest (Req.request "GET" "/b"))
+  out <- Pure.IORef.newRef ""
+  n <- C.serveWith (C.Dup (readSomeFn input) (writeAllFn out) (pure 0)) 10 (handlerOf "body:")
+  written <- Pure.IORef.readRef out
+  case failuresOf n written of
+    [] => pure ""
+    bad => do
+      _ <- prim_eff_print ("http connection failed: " ++ join "; " bad ++ "\n")
+      _ <- prim_eff_exit 1
+      pure ""
+
+-- | 断言：两条请求都被服务、输出里两条响应体都在。
+failuresOf : Int -> String -> List String
+failuresOf n written =
+  append (append (check "count" (n == 2)) (check "first" (contains "body:/a" written)))
+    (check "second" (contains "body:/b" written))
+
+-- | 响应体带上请求目标，便于断言两条请求都被服务。
+handlerOf : String -> Req.Request -> Eff [] Res.Response
+handlerOf prefix req = pure (Res.response 200 (prefix ++ req.target))
+
+-- | 从引用里取至多 `n` 字节，余量写回。
+readSomeFn : IORef String -> Int -> Eff [] String
+readSomeFn ref n = do
+  s <- Pure.IORef.readRef ref
+  _ <- Pure.IORef.writeRef ref (dropBytes n s)
+  pure (takeBytes n s)
+
+-- | 取前 `n` 字节（不足则整串）。
+takeBytes : Int -> String -> String
+takeBytes n s = strSubstring 0 (if strLength s > n then n else strLength s) s
+
+-- | 去掉前 `n` 字节（不足则空串）。
+dropBytes : Int -> String -> String
+dropBytes n s =
+  let
+    k = if strLength s > n then n else strLength s
+  in strSubstring k (strLength s - k) s
+
+-- | 把整段字节追加到输出引用。
+writeAllFn : IORef String -> String -> Eff [] Int
+writeAllFn ref s = do
+  cur <- Pure.IORef.readRef ref
+  _ <- Pure.IORef.writeRef ref (cur ++ s)
+  pure (strLength s)
+
+-- | 一条命名检查。
+check : String -> Bool -> List String
+check name ok = if ok then [] else [name]
