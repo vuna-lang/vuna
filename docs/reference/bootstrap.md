@@ -113,6 +113,39 @@ fixed point → 全部通过后才替换 `seed/` 并写入 `nix/seed/rotation.tx
 源码路径保持一致。如果改的是**现有语法的语义**（而非新增语法），种子会按旧语义编译新
 编译器，因此需要确认没有 seed 语义偏差；必要时先 rotate，再让编译器源码依赖新语义。
 
+## 锚点演进（中远期）
+
+OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，用 native 后端的产物
+（`vuna build --no-compile --target native` 写出的 `.s` 文件集）承担下一段信任链；OCaml
+后端在 native 自举稳定后可以作为远期退役目标。两者都不是当前行为，切换前必须先满足下面
+的前提，并把代价写清楚。
+
+**为什么是 `.s` 文件集。** 它只需要 `cc` / `as` / `ld`，不再需要 `ocamlopt`；同一 IR 的
+输出逐字节确定（两次构建 `diff -r` 一致）；形状与现在的多文件种子同构（`runtime.s` +
+每模块一个 `.s`），rotation diff 可以按模块审。`.L` / `.Llit_` 是文件局部符号、编号在模块
+内累加，改一个模块不会让其它模块重编号。
+
+**前提（未满足就不能切换）：**
+
+1. native 自举通过：native 产物能编译编译器自身并通过行为验收（`backend-check --compiler
+   native --scope selfhost`，现状见 [debt.md](debt.md) D89）；
+2. `stage1 == stage2` 的判据改写：两个 stage 都由同一 codegen 产生，固定点从此只证明
+   **自洽回归**，不再有「两条独立实现互证」的成分；
+3. 自举链的平台锁定被显式接受：`.s` 是 x86-64 Linux SysV 汇编，其它平台要么用发布的
+   二进制锚点，要么不参与从零构建；
+4. 若同时退役 OCaml 后端，跨后端语义差分只剩 suite + wasm 交叉 + Core 语义，oracle 缺口
+   必须作为开放债务登记（[debt.md](debt.md)）。
+
+**规模边界。** 编译器自身的 `.s` 文件集实测约 143 个文件 / 49 MB / 203 万行（其中 lambda
+体约 96 万行）；同口径 OCaml 种子是 158 个文件 / 9.5 MB / 5.4 万行。因此 `.s` 种子适合作为
+**发布资产 + 哈希 pin**（或独立目录），不适合逐次提交进工作树；把它当「可读信任根」也不
+成立，它买到的是「只依赖 cc 的可重建性」，不是可审计性。
+
+**OCaml 后退的收尾。** 最后一份 OCaml 种子归档到 tag / release（对应
+[architecture-target.md](../architecture-target.md) 不变量 8 的「历史源码级信任根保留归档」），
+工作树里的 `seed/` 由 `.s` 文件集替代；`seed/` 的 TCB 黑名单、闭包断言与 rotation 脚本
+随之改成对 `.s` 文件集的检查。
+
 ## 硬不变量
 
 1. **当前 seed 必须能编译当前源码**——`checks.seed-selfhost` 守；不要求与源码逐字节同步；

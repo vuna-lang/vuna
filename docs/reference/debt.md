@@ -85,6 +85,9 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
+| D106 | `.s` 文件集还没有承担自举锚点：native 自举尚未成为阻塞门禁，`seed-selfhost` 仍只认 OCaml 种子，也没有发布资产 + 哈希 pin 的获取路径。目标形态与前提见 [bootstrap.md](bootstrap.md)「锚点演进」 | `nix/checks/seed-selfhost.sh`（只读 `seed/`）；`nix/run-tests.nix` 的 backend-check 非阻塞；`vuna build --no-compile --target native` 产物 | 后续（前置：native selfhost 通过 + 平台锁定决策） |
+| D107 | OCaml 后端退役后没有替代的独立语义 oracle：固定点只剩同一 codegen 的自洽回归，跨后端差分由 suite + wasm 交叉承担；退役前需要把这些覆盖写成可执行门禁 | [architecture-target.md](../architecture-target.md) D7、[bootstrap.md](bootstrap.md)「锚点演进」；`test/suite.toml` 的 `pure_cross` 与 `effect_native` 家族 | 后续（与 D106 同批决策） |
+| D108 | native 产物没有 peephole / 槽清零优化：编译器自身约 203 万行汇编，其中 `mov qword ptr [rbp-N], 0`（保守 GC 的槽清零）占 ~19.7%，`vuna_<owner>_lam<n>` 的 lambda 体占 ~48%；tree-shaking 已由 `Ir.Analysis.reachableDefs` 做完，剩余空间在指令选择与清零策略 | `packages/compiler/lib/Vuna/Compiler/Native/Module.vuna`（`clearDeadSlots` / `clearSlotsInstrs`）、`Native/Render.vuna`；[performance.md](performance.md)「产物规模」 | 后续 |
 
 ## wasm 后端
 

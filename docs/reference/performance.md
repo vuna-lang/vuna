@@ -43,6 +43,25 @@
 [`bench/compiler-baseline.txt`](../../bench/compiler-baseline.txt) 的
 同机口径比较；跨机器只比 §5 的增长率。**该基线是旧口径，尚未按本轮修复重标。**
 
+### 产物规模（native `.s` 文件集）
+
+`vuna build packages/compiler --target native --out <dir> --no-compile`，编译器自身：
+
+| 指标 | 读数 |
+| --- | --- |
+| 文件数 | 143（`runtime.s` + 每模块一个） |
+| 总体积 | 49 MB |
+| 总行数 | 约 203 万行 |
+| 其中 lambda 体 | 约 96 万行（5,976 个，占 ~48%） |
+| 其中 `mov qword ptr [rbp-N], 0` 槽清零 | 约 39.6 万行（~19.7%） |
+| 最大单文件 | `Vuna/Compiler/Native/Runtime.s` 约 5.2 MB |
+| 构建（`build.sh`，143 个 `cc -c` + 链接） | ~4.7 s |
+
+对照：OCaml 种子 158 个文件 / 9.5 MB / 5.4 万行。tree-shaking 已由
+`Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；剩余体积空间
+在指令选择与槽清零策略，见 [debt.md](debt.md) D108。产物作为自举锚点的取舍见
+[bootstrap.md](bootstrap.md)「锚点演进」。
+
 ### 冷 / 热必须分开报
 
 §1 的「典型值」是**热 store** 口径（默认根 `~/.vuna/store` 已预热），同一源码在**空
