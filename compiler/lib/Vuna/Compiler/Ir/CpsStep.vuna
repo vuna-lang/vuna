@@ -12,6 +12,7 @@ import Base.Pair
 import Base.Result
 import Base.String
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Classify
 
 export irStepDoneName : String
 irStepDoneName = "@ir@cps@done"
@@ -104,7 +105,10 @@ isCpsApp arities externs e =
   in case head of
     IrGlobal name =>
       if externLookup externs name then False
-      else arityLookup arities name > 0 && argc == arityLookup arities name
+      else
+        let
+          n = arityLookup arities name
+        in if n == -1 then argc == 0 else n > 0 && argc == n
     IrVar _ => True
     IrLam bs _ => argc > 0 && argc == listLen (runtimeBinders bs)
     IrRt sym => isEffPrim sym
@@ -170,7 +174,9 @@ cpsRhs fuel arities externs e k =
           let
             n = arityLookup arities name
             a = transformList (fuel - 1) arities externs args
-          in if n > 0 && argc == n then
+          in if n == -1 && argc == 0 then
+            Pair (IrApp (IrGlobal name) k) (secondOf a)
+          else if n > 0 && argc == n then
             Pair (applyAll (IrGlobal name) (append (firstOf a) [k])) (secondOf a)
           else Pair (IrApp k (applyAll (IrGlobal name) (firstOf a))) (secondOf a)
       IrVar _ =>
@@ -391,6 +397,8 @@ externsOf defs = case defs of
 export cpsStepDefs : List IrDef -> Result (List IrDef)
 cpsStepDefs defs =
   let
-    arities = Base.HashMap.fromList (map (\d => Pair (irDefName d) (irDefArity d)) defs)
-    externs = Base.HashMap.fromList (externsOf defs)
-  in Ok (cpsDefsList startFuel arities externs defs)
+    classified = classifyAndPrepare defs
+    prepared = firstOf classified
+    arities = secondOf classified
+    externs = Base.HashMap.fromList (externsOf prepared)
+  in Ok (cpsDefsList startFuel arities externs prepared)
