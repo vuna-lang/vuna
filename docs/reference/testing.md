@@ -455,10 +455,10 @@ main = case failuresOf n written of
   `corpus/pure_cross/`（family `pure-cross`）是三端**共享语义**的唯一来源：每份程序配一个
   `.out`，`--backend all` 时对拍 OCaml / wasm / native 的输出；新增共享能力先加夹具，再
   实现两个后端（一侧缺失即失败）。`35_eff_*`–`50_eff_*` 覆盖 resume / abort / 嵌套
-  handler / return 改类型 / 宿主 console / 深递归；wasm 侧需要 `-W stack-switching=y`。`105_native_backend.steps` 只保留 native 机制
+  handler / return 改类型 / 宿主 console / 深递归；`105_native_backend.steps` 只保留 native 机制
   （产物形状、label 唯一性、确定性、trap 文本、arena、栈传参、拒绝面、`--no-compile`）；
   `106_wasm_backend.steps` 只保留 wasm 机制（WAT 产物形状、`elem declare`、WAT 确定性 +
-  行宽、trap、拒绝面、`--target` 校验、stack-switching 探针与 2000 次 perform）；
+  行宽、trap、拒绝面、`--target` 校验、2000 次 perform 与能力拒绝面）；
   wasm 不自举（浏览器能力矩阵见 [wasm.md](wasm.md) §8）。`corpus/dt_err/*` 是对应负例
   （kind / 宇宙、冗余 / 不可达分支、axiom 运行时、命名空间、隐式参数、泛型 Σ、无 Eq 证据
   等）。`corpus/dt_base/`、`corpus/pure_cross/`、`corpus/effect/*`、`corpus/dt_pkg/`、`corpus/dt_ad_hoc/` 是 DT
@@ -518,9 +518,9 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
   （`VUNA_WASM_HOST=js`），是「浏览器可跑面」的行为门禁。用户自定义 handler 的用例
   （参考通道独有）登记在 `test/suite/wasm-js-allow-fail.txt`，命中且失败按 `allow` 计
   （不算 skip，`--strict-skips` 不抓），见 [wasm.md](wasm.md) §8.5。
-- `vuna-wasm-browser`：产物在**默认 wasm 特性**（`--features=-stack-switching`）下必须
-  validate 通过；宿主效应与用户 handler 的组合产物必须仍被拒绝（纯用户 handler 已由 CPS
-  lowering 覆盖，不再需要 stack switching）。默认不跑浏览器（保持 `nix flake check` 秒级）。
+- `vuna-wasm-browser`：产物在**默认 wasm 特性**下必须 validate 通过——所有效应形态都走
+  显式效应机器，不含 `cont` / `$eff`，不依赖任何提案特性。默认不跑浏览器（保持
+  `nix flake check` 秒级）。
 - `vuna-wasm-browser-smoke`（**package，不在 `nix flake check` 里**）：用 Playwright 驱动
   `pkgs.playwright-driver` 的 chromium（revision 与 `pkgs.playwright` 对齐，约 356 MB）做
   headless 实跑，跑法与本地一致：

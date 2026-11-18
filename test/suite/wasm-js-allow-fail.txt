@@ -2,10 +2,6 @@
 # 一行一条、按 case id 子串匹配；命中且失败的结果按状态 `allow` 计（不算 skip，
 # `--strict-skips` 不抓）。
 #
-# 只放**参考通道（wasmtime）独有**的用例：宿主效应与用户 handler **同时出现**时
-# （命名实例 mock handler 覆盖宿主家族）仍走续延路径，默认引擎拒绝编译。
-# 证据与边界见 docs/reference/wasm.md §8.5 与 debt D102/D103。
-# 清空这张表 = wasm 上不再需要 stack switching。
-effect_common/18_eff_fs_io
-effect_common/26_eff_console
-effect_common/40_eff_fs_named
+# 现在为空：所有效应形态（宿主家族、用户 handler、作用域 handler）都走显式效应机器，
+# 产物不含 `cont` / `$eff`，在引擎默认配置下直接可编译。协议与边界见
+# docs/reference/effect-machine.md；这里再出现条目说明引入了新的未覆盖面。

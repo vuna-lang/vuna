@@ -4,7 +4,7 @@
 > `let` / `if` / 用户 `data` / record / 通用 `case`；饱和顶层调用、eta 展开与多参柯里化
 > 闭包（`$clo` + `(elem declare func ...)`，应用逐实参 `call $rt_apply`）；内建饱和应用；
 > 结构化比较 `bi_lt/le/gt/ge_str` / `bi_lt/le/gt/ge_bool`（`$rt_compare`）；
-> `main : Eff r a` 与 handler（纯用户 handler 走 CPS lowering；宿主+用户组合暂回落 stack switching，见 [wasm-effects.md](wasm-effects.md)）；
+> `main : Eff r a` 与 handler（全部走显式效应机器 `@ir@m@*`：续延只返回 Control，见 [effect-machine.md](effect-machine.md)）；
 > WASI preview1 宿主层（fs / env / args / clock），能力上限是浏览器 WASI 可提供的子集。
 > 未实现的宿主操作在运行期显式失败（不伪造结果）；符号表外的原语（extern、网络等）
 > 在引用点拒绝。实现入口：`Vuna.Compiler.Wasm.{Model,Instr,Types,Runtime,Module,Render}`，
@@ -20,12 +20,11 @@
   不静默留半成品）；`--no-compile` 只写 WAT + `build.sh`。
 - `--target` 取值校验在 CLI 解析层（`ocaml|wasm|native`），未知目标是用法错误（exit 2），
   不回落到 OCaml。
-- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：纯用户 handler 产物走 CPS，
-  不含 `cont`，默认配置的引擎即可直接运行；入口行同时带内建宿主 handler 的程序暂回落
-  stack switching，仍用
-  `wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm`（见 §8.5）。
-  handler 运行时走尾调用（`return_call` / `return_call_ref`），effect 次数本身不累积
-  调用栈。
+- 运行时（本地 nixpkgs 是 wasmtime 50 / wasm-tools 1.262）：产物不含 wasm stack-switching
+  类型与指令，默认配置的引擎即可直接运行：
+  `wasmtime run -W gc=y -W function-references=y main.wasm`（见 §8.5）。
+  handler 运行时由显式效应机器的一个循环派发续延；栈增长与 perform 次数仍线性
+  （约 96 B/次），默认栈足够跑 2000 次（见 [effect-machine.md](effect-machine.md) §7.1）。
 - **栈要按输入配**：默认 `max-wasm-stack`（512 KiB）对长列表不够，会以
   `call stack exhausted` 失败。长列表上的**非尾递归**辅助函数（`map` / `append` /
   `Bytes.lenOf` 这类 `1 + f rest` 形状）让栈深与输入规模成正比；按实际输入给
@@ -196,9 +195,8 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 - `test/suite/steps/106_wasm_backend.steps`（section 90 / `steps_native`，e2e）：
   wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
   WAT 确定性 + 每行 ≤100 列、除零 / 数组越界 / `assert` / `prim_fail` / `todo` 的错误
-  文本、`--no-compile`、拒绝面、`--target` 取值校验；stack-switching 探针验证
-  `cont`/`resume`/`suspend` 与 handler 转发；另有 2000 次 perform（默认栈不增长）与
-  重复 resume 的 one-shot trap（`continuation already resumed`）。浏览器能力裁剪由同一
+  文本、`--no-compile`、拒绝面、`--target` 取值校验；另有 2000 次 perform（引擎默认栈）
+  与重复 resume 的 one-shot trap（`continuation already resumed`）。浏览器能力裁剪由同一
   文件锁住：`path_symlink` 不出现在 import、symlink/sleep 运行期 trap、mtime 得
   `Nothing`、cwd 恒 `/`、stdin 能力告警。
 - 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
@@ -303,7 +301,7 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | 能力 | 状态 | 构建期 / 运行期 |
 | --- | --- | --- |
 | 纯计算、WasmGC 值、结构化比较 | 支持 | — |
-| `Eff` 的 handler | 纯用户 handler 走 CPS；宿主+用户组合暂回落 cont/resume/suspend | CPS 产物默认引擎可跑；回落产物需要 wasmtime 开 stack-switching |
+| `Eff` 的 handler | 全部走显式效应机器（`@ir@m@*`），宿主家族与用户/作用域 handler 同一套帧 | 产物默认引擎可跑；`bracket`/`finally` 的清理钩子尚未实现（显式拒绝） |
 | `FsOp` 核心（经 `@vuna@host@try*` + fd 3 preopen） | 支持 | 需 preopen + mutate 权限；失败经 errno 走 `FsOp` 错误通道 |
 | `ConsoleOp` / `ExitOp` / `ArgsOp` / `EnvOp` / `RefOp` | 支持 | `getcwd` 恒 `/`、`execPath` 空串、`isTty` 恒 `False` |
 | `ClockOp.Now` | 支持 | monotonic clock |
@@ -353,38 +351,35 @@ WASI preview1，宿主侧逐函数实现。下表的「允许」指浏览器平�
 | typed function references | `ref.func` + 直接调用（`$ft` 闭包） | 随 WasmGC 进入 Baseline（Safari 18.0 起） |
 | tail calls | `return_call` / `return_call_ref`（handler 运行时） | Chrome 112、Firefox 121、Safari 18.2 起默认 |
 | exception handling | `tag $abort` / `throw` / `try_table`（CPS abort） | Chrome 137、Firefox 147、Safari 26.2 起（legacy EH 从 2022 起已可用） |
-| **stack switching** | `cont` / `resume` / `suspend`（`$ct` / `$eff` / `$rt_eff*`） | **提案仍处 Phase 3，无引擎默认开启**：Chrome 需 `--js-flags=--experimental-wasm-wasmfx`；Firefox 是 pref；JSC 未实现 |
+| **stack switching** | 不再发射（后端已删除 `$ct` / `$eff` / `$rt_eff*`） | 与本产物无关；需求由显式效应机器覆盖 |
 
-前五项共同覆盖浏览器可跑面；stack switching 只服务「入口行有内建宿主 handler、同时有用户
-handler」的回落路径（见 [wasm-effects.md](wasm-effects.md) §4）。三条降低路径：
+前五项共同覆盖浏览器可跑面；不再依赖任何 wasm 提案特性（见
+[effect-machine.md](effect-machine.md) §7）。三条降低路径：
 
-- **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应（Console /
-  Clock / Env / Args / Exit / Stdin）在「可达代码没有用户 handler」时被降成
-  `MkEff (\_ => runMain (opH op pureK))`——`opH` 是该族的宿主解释器，`pureK` 是模块生成的
-  纯动作续延（`\r => MkEff (\_ => r)`）。入口也不再预装这些家族，产物不含 `$ct`。
-- **CPS lowering**（`Ir.Cps`）：入口行是 `[]` 的用户 handler 程序，thunk 带显式 `k`；
-  运行时用 `$hframe` handler 栈 + `$abort`。产物不含 `cont`。
-- **续延回落**：入口行同时有内建宿主 handler 与用户 handler 时，opH 内的外层宿主 effect
-  仍需要可恢复的 handler 帧；暂走 `$ct` / `$eff` / `$rt_eff*`（需要 stack switching）。
+- **宿主效应直连**（`Wasm.Module` 的 `sendCore` 改写）：入口行里的内建宿主效应在
+  「可达代码没有用户 handler」时被降成 `MkEff (\_ => runMain (opH op pureK))`——`opH`
+  是该族的宿主解释器，`pureK` 是模块生成的纯动作续延。入口也不再预装这些家族。
+- **显式效应机器**（`Ir.Cps` + `Wasm.Step`）：其余程序整片走 `@ir@m@*`——续延只返回
+  `Control`（`Done`/`Apply`/`Perform`/`Handle`），机器循环单层派发；handler 帧在链上，
+  answer 是 `Eff` 时 resume 会把帧装回去。宿主家族、用户 handler、作用域 handler 同一套帧。
+- **清理钩子**：`bracket`/`finally` 依赖的 `prim_cleanupPush/Pop` 还没在机器上实现，
+  wasm 侧显式拒绝并给出诊断（debt D42）。
 
 实测读数（`test/suite/fixtures/wasm_engine_probe/probe.sh`，node 24.22 / Chromium 145）：
 
-| 引擎配置 | 纯程序 / 只有宿主效应 | 纯用户 handler（CPS） | 宿主+用户回落（stack switching） |
-| --- | --- | --- | --- |
-| Node 默认 | 编译 + 运行通过 | 编译 + 运行通过 | 拒绝（`core stack switching not enabled`） |
-| Chromium 默认 | 编译 + 运行通过 | 编译 + 运行通过 | 拒绝 |
-| Node / Chromium + wasmfx | 通过 | 通过 | 报告用，不判定 |
+| 引擎配置 | 纯程序 / 宿主效应 / 用户 handler / 作用域 handler |
+| --- | --- |
+| Node 默认 | 编译 + 运行通过 |
+| Chromium 默认 | 编译 + 运行通过 |
+| Node / Chromium + wasmfx | 通过（本产物不需要它） |
 
-`114_wasm_engine_probe.steps` 锁默认列；`115_wasm_js_host.steps` 用 Node 锁 CPS 用户
-handler 的 stdout/exit 与「无 cont」。
+`114_wasm_engine_probe.steps` 锁默认列；`115_wasm_js_host.steps` 用 Node 锁用户 handler
+的 stdout/exit。
 
-- 只有宿主效应的产物与**纯用户 handler（CPS）** 产物已是"浏览器可跑"的；
-- 入口行同时有内建宿主 handler 与用户 handler 的产物仍需要 stack switching（见 §8.6 的
-  加载契约与 [debt.md](debt.md) D102）；
-- Wasmtime 是参考/差分执行器，也是上述回落路径的运行器；它不是产品运行时；
-- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`）：CPS 每次 resume 会保留
-  `perform`/`opH` 帧，2000 次顺序 perform 在 wasmtime 上需要约 4 MiB；长列表上的非尾
-  辅助函数仍按输入规模吃栈。
+- 所有效应形态的产物都不含 `cont` / `$eff`，**浏览器默认配置即可运行**；
+- 栈深由引擎决定（浏览器没有 `-W max-wasm-stack`）：2000 次顺序 perform 约需 192 KiB
+  （wasmtime 默认栈 512 KiB 足够，`106` 已按默认栈验收）；
+- Wasmtime 是参考/差分执行器，不是产品运行时。
 
 ## 8.6 engine / host / loader 分层
 
@@ -420,12 +415,12 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
 宿主效应直连的判据与边界（`Wasm.Module`）：
 
 - 入口的每个 handler 都要在 `Ir.Runtime.irHostDirectOf` 表里（表给出 `run*Host` 定义名 →
-  send key + 该族 `opH` 定义名）；缺一个就整体回落到续延路径。
+  send key + 该族 `opH` 定义名）；缺一个就整体走显式效应机器。
 - 改写按 `sendCore` 的应用脊椎匹配：实参末尾三元组是 (key 字面量, name, op)，key 命中即改写。
 - 改写后按**体引用**重算可达集（静态依赖表会漏掉字典实例等隐式引用，因此保留集用「全依赖
   闭包 ∩ 不含续延原语」）；`genStartBody` 的初始化列表用同一份集合。
 - 若改写后仍有可达到的 `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`，说明
-  存在用户 handler 或未覆盖的族，整体回落续延路径（不静默改语义）。
+  存在用户 handler 或未覆盖的族，整体走显式效应机器（不静默改语义）。
 
 当前落地：JS 宿主在 `test/suite/fixtures/wasm_js_host/`（`host.mjs` + `fs-node.mjs` + `run.mjs`，
 测试资产、不进 seed），suite 用 `VUNA_WASM_HOST=js` 把 wasm 执行器从 Wasmtime 切到
@@ -441,7 +436,7 @@ GC / 尾调用，包体与性能双输），也**不引 preview2-shim / jco**（
 ## 9. 相关阅读
 
 - [ir.md](ir.md)：IR 节点、运行时契约、后端义务。
-- [wasm-effects.md](wasm-effects.md)：stack-switching 探针、handler 运行时（尾调用）与已知边界。
+- [effect-machine.md](effect-machine.md)：显式效应机器的协议、控制栈与已知边界。
 - [native.md](native.md)：另一个产品后端（同样的「文本 canonical + 外部工具」策略；
   支持字符串与 bump 堆）。
 - [architecture.md](../architecture.md)：子系统地图与改动定位。
