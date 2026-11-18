@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 178.45 40" width="357" height="80">
-  <g transform="translate(-9.15 -9.5)"><path d="M13 12.4 L32 44.5 L51 12.4" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/><path d="M40.55 30.06 L51 12.4" fill="none" stroke="#2ED3A8" stroke-width="9" stroke-linecap="butt"/></g>
-  <g transform="translate(60.20 -9.5)"><path d="M0 10 L0 34 A11 11 0 0 0 22 34 L22 10" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
-  <g transform="translate(104.20 -9.5)"><path d="M0 49 L0 10 M0 25 A11 11 0 0 1 22 25 L22 49" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
-  <g transform="translate(141.95 -9.5)"><path d="M32 10 L32 49 M32 20 A15.5 15.5 0 1 0 32 39" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 173.25 40" width="347" height="80">
+  <g transform="translate(-11.75 -9.5)"><path d="M15.80 12.01 L32.00 44.5 L48.20 12.01" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/><path d="M39.29 29.88 L48.20 12.01" fill="none" stroke="#2ED3A8" stroke-width="9" stroke-linecap="butt"/></g>
+  <g transform="translate(55.00 -9.5)"><path d="M0 10 L0 34 A11 11 0 0 0 22 34 L22 10" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+  <g transform="translate(99.00 -9.5)"><path d="M0 49 L0 10 M0 25 A11 11 0 0 1 22 25 L22 49" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
+  <g transform="translate(136.75 -9.5)"><path d="M32 10 L32 49 M32 20 A15.5 15.5 0 1 0 32 39" fill="none" stroke="#FAFAF8" stroke-width="9" stroke-linecap="butt" stroke-linejoin="round"/></g>
 </svg>
