@@ -1334,34 +1334,6 @@ baseTypes =
     WatStructType "$clean" [WatField False WvAnyRef, WatField False WvAnyRef]
   ]
 
--- | 续延相关的类型：只有需要 stack switching 的产物才发射。
-effTypes : List WatType
-effTypes =
-  [ WatFuncType "$cft" [WvAnyRef] [WvAnyRef],
-    WatContType "$ct" "$cft",
-    WatStructType "$effK" [WatField False (WvRef "$ct"), WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField True WvI32]
-  ]
-
--- | handler 链节点：key、name、ret、opH、旧链。直连与续延两种模式共用。
-selfNodeType : WatType
-selfNodeType =
-  WatStructType "$selfNode"
-    [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
-
--- | CPS 效应运行时类型：一次性续延、handler frame、abort payload。
-cpsTypes : List WatType
-cpsTypes =
-  [ WatStructType "$cpsK" [WatField False WvAnyRef, WatField True WvI32],
-    WatStructType "$hframe" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvI32, WatField False WvAnyRef],
-    WatStructType "$abortMsg" [WatField False WvAnyRef, WatField False WvAnyRef]
-  ]
-
-baseTags : List WatTag
-baseTags = [WatTag "$eff" [WvAnyRef] [WvAnyRef]]
-
-cpsTags : List WatTag
-cpsTags = [WatTag "$abort" [WvAnyRef] []]
-
 baseImports : List WatImport
 baseImports =
   [ WatImport "wasi_snapshot_preview1" "fd_write" "$fd_write" [WvI32, WvI32, WvI32, WvI32] [WvI32],
@@ -1486,11 +1458,6 @@ defsUseSyms : List String -> List IrDef -> Bool
 defsUseSyms syms [] = False
 defsUseSyms syms (d :: rest) = if defUsesSyms syms d then True else defsUseSyms syms rest
 
--- | handler 运行时模式：0 = 不发射，2 = stack switching。
--- 判定保守（宁可多发）：可达代码引用任一续延原语（perform / handle / self）就发射。
-effModeOf : Maybe IrEntry -> List IrDef -> Int
-effModeOf entry ordered = if defsUseSyms performSyms ordered then 2 else 0
-
 consoleOnly : List String -> Bool
 consoleOnly [] = True
 consoleOnly (t :: rest) = t == "Base.Effect.Console.ConsoleOp" && consoleOnly rest
@@ -1557,53 +1524,23 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
           lamFuncs = reverse startState.gsFuncs
           elems = reverse startState.gsElems
-          elemNames = case effMode of
-            2 => append elems ["$rt_effThunk", "$rt_effResumeClo"]
-            3 => append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
-            5 => append elems ["$rt_selKComp", "$rt_selKValue"]
-            6 =>
-              append elems
-                ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns"]
-            _ => elems
+          elemNames =
+            if effMode == 6 then append elems
+              ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns", "$rt_mApply", "$rt_mInChain", "$rt_mSelf", "$rt_mRunEff"]
+            else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
-          rtSelected = case effMode of
-            2 => filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
-            3 => selectRtFuncsCps (rtFunctions st.gsConsts)
-            5 => selectRtFuncsSel (rtFunctions st.gsConsts)
-            6 => selectRtFuncsM (rtFunctions st.gsConsts)
-            _ => rtBase0
+          rtSelected = if effMode == 6 then selectRtFuncsM (rtFunctions st.gsConsts) else rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
           famTypes = concatMapType st.gsFams
-          allTypes = case effMode of
-            2 => append baseTypes (append effTypes (selfNodeType :: famTypes))
-            3 => append baseTypes (append cpsTypes famTypes)
-            5 => append baseTypes (append stepTypes famTypes)
-            6 => append baseTypes (append stepTypes famTypes)
-            _ => append baseTypes famTypes
-          tags = case effMode of
-            2 => baseTags
-            3 => cpsTags
-            _ => []
+          allTypes =
+            if effMode == 6 then append baseTypes (append stepTypes famTypes)
+            else append baseTypes famTypes
+          tags = []
           baseGlobals =
-            if effMode == 0 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0]
-            ]
-            else if effMode == 3 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
-              WatGlobal "$g_self" WvAnyRef [IRefNull],
-              WatGlobal "$g_handlers" WvAnyRef [IRefNull]
-            ]
-            else if effMode == 5 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
-              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
-              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
-              WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull]
-            ]
-            else if effMode == 6 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+            if effMode == 6 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
               WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
               WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull],
@@ -1905,18 +1842,15 @@ build program printResult =
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
-        noStepUnsupported =
-          not (defsUseSyms ["prim_cleanupPush", "prim_cleanupPop"] ordered)
-        fallbackEff = if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
-          Err msg => WasmRejected (WasmUnsupported msg)
-          Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
-        else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
+        -- 清理钩子（bracket/finally）还没有机器实现：宿主帧的 release 槽未接，
+        -- 显式拒绝而不是回落 stack switching（见 debt D42/D105）。
+        cleanupUnsupported = defsUseSyms ["prim_cleanupPush", "prim_cleanupPop"] ordered
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if noStepUnsupported then
-        case cpsDefsMachine ordered of
-          Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
-          Err _ => fallbackEff
-      else fallbackEff
+      else if cleanupUnsupported then WasmRejected
+        (WasmUnsupported "bracket/finally cleanup is not implemented on the effect machine")
+      else case cpsDefsMachine ordered of
+        Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
+        Err msg => WasmRejected (WasmUnsupported msg)
 
 -- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
