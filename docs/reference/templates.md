@@ -78,7 +78,7 @@ line1 ${interp n}
 - 文本里的 `$` 紧跟 `{` 写成 `\$`（如 `"插值 \${...} 需要表达式"`）；生成 shell/OCaml
   源码的块尤其注意。
 - 链内/洞内有注释时不要机械替换：把注释移到链外，不丢注释。
-- base 模块用模板要显式 `import Base.Interp`：`check` 能过，但 split 依赖序需要这条 import。
+- base 模块用模板要显式 `import Base.Trait.Interp as Interp`：`check` 能过，但 split 依赖序需要这条 import。
 - 洞内表达式类型必须有 `Interp`（或 `Show`）实例。编译器对 **String / Int / Nat** 洞有
   静态快捷路径（`Elab.Term.Impl.specializeInterpPrimApp`：恒等 / `strFromInt` /
   `strFromInt (toInt ...)`），不建字典；String 由 base 的具体实例固定为恒等（重复实例

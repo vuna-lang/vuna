@@ -85,7 +85,6 @@
 | D90 | 宿主失败通道已完整：fs / process / net 都是 typed error 效应 + entry 收口（诊断 + exit 1），`runFsError`/`runProcessError`/`runNetError` 可局部收成 `Result`；无值统一走 `Maybe`；net 有单次超时变体（`NetStep`）与 `NetBadHandle`。**已知取舍**：(a) 收口文本只有操作上下文（`fs: writeFile /x: …`），没有源码位置帧——typed error 在 handler 里抛，用户 `Eff` 闭包经尾调用链执行，调用栈里没有用户 def 帧（崩溃路径仍有帧）；(b) net 仍是阻塞式单连接，无全局 deadline / 异步 / TLS（非目标）；(c) 事件循环在 accept/recv 上阻塞时无法同时服务其它连接 | `packages/base/lib/Base/{EffFs,EffProcess,EffNet}.vuna`；`packages/compiler/lib/Vuna/Compiler/Codegen/{Runtime,Term}.vuna` | 后续（源码帧需要 per-send 调用点元数据；并发/超时语义另立设计） |
 
 | D94 | 类型定向重载值消歧只覆盖非应用位置（`x : T; x = name`）：`check` 位比较候选签名与期望类型；应用头（`name arg`）本身歧义时仍报 `TC_AmbiguousName`，没有做候选应用回溯（在 `Elab/Term/Impl` 的互递归组里回溯会触发终止性检查爆炸） | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`resolveOverValueTarget`）、`Loader/Resolve.vuna`（`pickValueOrOver`）；`test/corpus/modules/103_type_directed_value`、`104_ambiguous_value` | 后续（需要独立的候选应用检查入口，避免加入现有互递归组） |
-| D95 | 命名空间门面只增加路径，不缩减公开模块面：`packages/base/vuna.toml` 仍列全部叶子模块；路径 import 必须写 `as`（裸 `import A.X` 报 `LD_ModuleNotFound`），且没有 `import A.X` 的短名自动绑定 | `packages/base/vuna.toml`、`packages/compiler/lib/Vuna/Compiler/Loader/Flatten.vuna`（`pathPrefixOf`）、`parser`（路径 import） | 后续（是否剪 `[export]` / 支持裸路径 import 另立决策） |
 
 
 ## native 后端

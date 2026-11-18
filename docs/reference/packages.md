@@ -171,28 +171,20 @@ name = "vuna-base"
 [export]
 modules = [
   "Base",
-  "Base.Pair",
-  "Base.Bool",
-  "Base.Show",
-  "Base.Eq",
-  "Base.Ord",
-  "Base.List",
-  "Base.Nat",
-  "Base.Vec",
-  "Base.Maybe",
-  "Base.Result",
-  "Base.String",
-  "Base.Sort",
-  "Base.Map",
-  "Base.Monad",
-
+  "Base.Data",
+  "Base.Trait",
+  "Base.Container",
+  "Base.Effect",
+  "Base.Effect.Core",
+  "Base.Effect.Pure",
   "Prelude"
 ]
 ```
 
 （`vuna-base` 不在 `[dependencies]` 里依赖别的包；上例的 `[dependencies]` 段从略。
 成员包 manifest 只有 `[package]` + `[export]`（可选 `[diagnostics]`、`[dependencies]`）：
-没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`，没有别名模块。）
+没有能力 / 特权 / 信任 section。宿主层直接调用 `prim_eff_*`；`Base.Effect` 只是效应模块的
+命名空间门面，不包原语。）
 
 `[export]` 的每个名字都是模块全名；`[dependencies]` 的值是相对该包目录的路径（lexical
 规范化，不做 realpath）。manifest 只被解析与校验（`Vuna.Compiler.Frontend.Manifest`），

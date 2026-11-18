@@ -36,7 +36,7 @@ intFromFloat : Float -> Int     -- 向零截断
 
 `Base.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
 `intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
-import（显式 `import Base.Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`
+import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`
 一致（`%.12g`：12 位有效数字、去掉尾随零、定点范围 `[-4, 12)`、整数值保留结尾 `.`）：
 
 | 值 | 文本 |
@@ -114,8 +114,8 @@ inference 位置仍默认 `Int`。`Nat` 的整数字面量特例优先于 `FromI
 字段类型就是对应内建类型**的包装类型（记录在降级后同样适用）：
 
 ```vuna
-import Base.FromString
-import Base.FromInt
+import Base.Trait.FromString as FromString
+import Base.Trait.FromInt as FromInt
 
 data Email : Type where
   MkEmail : String -> Email

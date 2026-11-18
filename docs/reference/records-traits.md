@@ -194,7 +194,7 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ prett
 且与字段位置无关：
 
 ```vuna
-import Base.Record
+import Base.Trait.Record as Record
 
 getId : HasField (Field "id") a String => a -> String
 getId p = p.id
@@ -371,8 +371,8 @@ main = case (MkEmail "x@y") of MkEmail s => s
   还原 do 语法）：
 
   ```vuna
-  import Base.Monad
-  import Base.Maybe
+  import Base.Trait.Monad as Monad
+  import Base.Data.Maybe as Maybe
 
   safeDiv : Int -> Int -> Maybe Int
   safeDiv a b = if b == 0 then Nothing else Just (a / b)

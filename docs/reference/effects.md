@@ -77,10 +77,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 3. 没有 transformer 栈
 
-状态 / 环境 / 错误用 `Base.EffState` / `Base.Eff.Reader` / `Base.EffError`（高阶作用域错误
-用 `Base.EffExn`），并发用 `Base.EffSched`；没有 `Base.Effect`（`MonadIO`）、
-`Base.StateT` / `Base.ReaderT` / `Base.ErrorT`，也没有 `Base.EffAsync`。纯 monad 版本
-`Base.State` / `Base.Reader` / `Base.Error` 与 handler 版并存，二者不互相派生。
+状态 / 环境 / 错误用 `Base.Effect.EffState` / `Base.Effect.EffReader` / `Base.Effect.EffError`（高阶作用域错误
+用 `Base.Effect.EffExn`）；没有 `MonadIO` 式的 `Base.Effect` 能力类、
+`Base.StateT` / `Base.ReaderT` / `Base.ErrorT`，也没有 `Base.EffAsync`。纯表示版本
+`Base.Effect.Pure.State` / `.Reader` / `.Error` 与 handler 版并存，二者不互相派生。
 
 ## 4. 没有局部可变 / region 入口
 

@@ -29,7 +29,7 @@
 | `Base.Nat` | 非负整数（`Zero` / `Succ`）；运行时是 OCaml `int`。`plus` / `minus` / `mult` / `toInt` / `fromInt` / `fromIntMaybe` / `pred` / `isZero` + `Num`（除法经 `Num.div` / `/`）+ `Eq` / `Ord` / `Show` / `Hashable` / `Semigroup` / `Monoid` 实例 |
 | `Base.Num` | 数值算术 trait：`add` / `sub` / `mul` / `div`；`+` / `-` / `*` / `/` 是它们的中缀别名（fixity 与别名声明在本模块）。`Int` / `Nat` / `Float` 实例在类型模块并由精化器特化回内建原语；用户类型实现 `Num`（配 `FromInt`）即可重载四则（见 [operators.md](operators.md)） |
 | `Base.Vec` | `Vec(..)` 与 `substTemplate` / `vhead` / `vlen` / `vtail` |
-| `Base.Monad` | `Monad` trait（只有 `bind`；父类 `Applicative`）；重导出 `Base.Applicative`（进而重导出 `Base.Functor`），既有 `import Base.Monad` 仍看到 `fmap` / `pure` / `liftA2` / `ap` |
+| `Base.Monad` | `Monad` trait（只有 `bind`；父类 `Applicative`）；重导出 `Base.Applicative`（进而重导出 `Base.Functor`），路径 `import Base.Trait.Monad as Monad` 与扁平 `import Base.Trait` 都能看到 `fmap` / `pure` / `liftA2` / `ap` |
 | `Base.Applicative` | `Applicative` trait（`pure` / `ap` / `liftA2` 三个方法，各实例显式实现；父类 `Functor`，重导出 `Base.Functor`）；`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` / `Eff` 实例 |
 | `Base.Functor` | `Functor` trait（`fmap`）；`Applicative` 的父类 |
 | `Base.Monoid` | `Semigroup`（`mappend`）与 `Monoid`（`mempty`）trait（无父类，泛型代码同时约束两者）；`List` / `String` / `Maybe` / `Nat` / `Unit` 实例 |
@@ -59,68 +59,46 @@
 | `Base.EffStdin` | 标准输入标签 `StdinOp`：`ReadLine`/`ReadBytes`；`stdinReadLine`/`stdinReadBytes`（返回 `Maybe String`，EOF = `Nothing`）/`handleStdin`/`handleStdinHost`（真实 handler 用 `prim_eff_readLine`/`prim_eff_readBytes`）；`runStdin n` |
 | `Base.EffExit` | 退出标签：`ExitWith`；`exitWith`/`handleExit`/`handleExitHost`（真实 handler 用 `prim_eff_exit`）；`runExit n` |
 | `Base.EffProcess` | process 标签（命名实例，如 `"mock"`/`"real"`）：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`（`ProcessError`，`processErrorText` 渲染），`runProcessError n` 收成 `Result`，entry 预装的 `runProcessErrorHost` 打印 `vuna: process: …` 并 exit 1；**子进程非零退出码仍是值** |
-| `Base.Data` | 数据门面：`Base.Data.List.map` / `Base.Data.Maybe` / `Base.Data.Nat` 等命名空间路径；不改变各模块的导出面 |
-| `Base.Trait` | trait 门面：`Base.Trait.Eq.eq` / `Base.Trait.Monad.bind` 等命名空间路径 |
-| `Base.Container` | 容器门面：`Base.Container.Map` / `HashMap` / `HashSet` / `Array` / `Sort` 用路径区分同名操作 |
-| `Base.Pure` | 纯 monad 门面：`Base.Pure.State` / `Reader` / `Error` / `IORef` |
-| `Base.Host` | 宿主效应门面：`Base.Host.Fs` / `Console` / `Process` / `Net` 等 |
+| `Base.Data` | 数据门面：扁平重导出 `Pair` / `Bool` / `List` / `Maybe` / `Result` / `String` / `Unit` / `Vec` / `Nat` / `Int` / `Float` / `Bits` / `Sort` / `Obs` / `Obs.Span`；也可写路径（`import Base.Data.List as List`）。叶子模块本身不跨包导出 |
+| `Base.Trait` | trait 门面：扁平重导出 `Eq` / `Ord` / `Show` / `Interp` / `Hashable` / `Monoid` / `Foldable` / `Traversable` / `Monad`（含 `Applicative` / `Functor`）/ `Record`（含 `Field`）/ `Num` / `Neg` / `FromInt` / `FromString`；也可写路径（`import Base.Trait.Monad as Monad`） |
+| `Base.Container` | 容器门面（只提供路径）：`import Base.Container.Map as Map` / `...HashMap` / `...HashSet` / `...Array` / `...Sort`，用路径区分 `insert` / `fromList` / `toList` / `size` 等同名操作 |
+| `Base.Effect` | 效应门面（只提供路径）：`Base.Effect.Eff`（核心）/ `EffTypes`（纯类型面）/ `EffState` / `EffReader` / `EffError` / `EffExn` / `EffRef` / `EffFs` / `EffConsole` / `EffClock` / `EffEnv` / `EffArgs` / `EffStdin` / `EffExit` / `EffNet` / `EffProcess`，以及 `Pure` 子树 |
+| `Base.Effect.Pure` | 纯效应表示门面（只提供路径，无运行时 handler）：`Base.Effect.Pure.State` / `Reader` / `Error` / `IORef` |
+| `Base.Effect.Core` | `Eff` 核心的扁平重导出（含 `Row(..)` 构造子），供 `export import` 选择性重导出 `Eff` |
 | `Base` | 包门面：整模块重导出核心模块（含 `Base.Nat` / `Base.Num` / `Base.Unit` / `Base.Applicative`(经 Monad) / `Base.Monoid` / `Base.Foldable` / `Base.Traversable` / `Base.Hashable`；不含 `Vec` 与哈希容器；`import Base` 即可用） |
 | `Prelude` | 顶层模块（`packages/base/lib/Prelude.vuna`）：重导出 `Base.Pair` / `Bool` / `Eq` / `Ord` / `Num` / `Show` / `Interp` / `List` / `Maybe` / `Result` / `String` / `Monad`(含 `Applicative`) / `Unit` / `Monoid` / `Foldable` / `Traversable` / `Hashable`，按包上下文自动导入（规则见下节「Prelude 自动导入」）；显式 `import` 时不再重复注入；刻意不重导出 `Base.Eff`（效果 API 需显式 import；Prelude 仅 import 加载）与 `Base.Nat` |
 
-推荐入口层：应用默认 `import Base`（或依赖自动 `Prelude`）；需要 effect / 容器 / host
-时用 `Base.Container.Map.insert` 这类门面路径，或 `import Base.Container as C` 后写
-`C.Map.insert`。门面只导出路径，不改变叶子模块仍在 `[export]` 里的现状。
+推荐入口层：应用默认依赖自动 `Prelude`（或显式 `import Base`）；数据用 `Base.Data.X`、
+trait 用 `Base.Trait.X`、容器用 `Base.Container.X`、效应用 `Base.Effect.X`，统一写
+`import <门面>.<路径> as <别名>`。别名 import 同时绑定限定名与非限定名。
 
 抽象类型（`Map`、`HashMap`、`HashSet`）的构造器保持私有。`Map` / `Sort` / `HashMap` / `HashSet` 都不在 `Prelude` 里；`Base` 门面重导出 `Base.Map` / `Base.Sort`，但**不**含 HashMap / HashSet——它们与 `Map` 在 `insert` / `fromList` / `toList` / `size` 上同名（`HashMap` 还有 `lookup` / `member`，`HashSet` 有 `member` 与 `empty`），同时重导出会让 `insert` 等名字在使用点产生歧义（同名条目允许共存，按候选集解析）。
-用哈希容器时显式 `import Base.HashMap` / `Base.HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
-跨包使用时只可见 `packages/base/vuna.toml` `[export]` 列出的模块。
+用哈希容器时显式 `import Base.Container.HashMap as HashMap` / `...HashSet as HashSet`；同文件使用多个容器时写完整限定名（`HashMap.insert` / `HashSet.member`）。
 
-模块导出清单（`packages/base/lib/*.vuna`、`packages/base/lib/Base/*.vuna` 的模块头）：
+`packages/base/vuna.toml` 的 `[export]` 只列门面；叶子模块（`Base.EffFs` / `Base.HashMap` / …）
+不跨包可见，跨包 `import Base.EffFs` 会报 `LD_ModuleNotFound`。包内模块之间仍按真实模块名互相 import。
 
-```vuna
-module Base (module Base.Pair, module Base.Bool, module Base.List, module Base.Maybe,
-             module Base.Result, module Base.String, module Base.Sort, module Base.Map,
-             module Base.Monad, module Base.Float, module Base.Show, module Base.Eq,
-             module Base.Interp, module Base.Ord, module Base.Nat, module Base.Unit,
-             module Base.Monoid, module Base.Foldable, module Base.Traversable,
-             module Base.Hashable) where
-module Base.Bool (Bool(..), not, and, or, xor, bool) where
-module Base.Show (Show(..)) where
-module Base.Interp (Interp(..)) where
-module Base.Eq (Eq(..)) where
-module Base.Ord (Ord(..), Ordering(..), compare, max, min) where
-module Base.Int where
-module Base.List (List(..), append, reverse, length, map, filter, foldl, foldr, concatMap,
-                  mem, memName, lookupPair, zip, take, drop, range, mapMaybe,
-                  firstJust, firstSuccess, nubNames, allMem, anyMem, hasDupNames) where
-module Base.Maybe (Maybe(..), fromMaybe, isJust, isNothing, maybe) where
-module Base.Pair (Pair(..), firstOf, secondOf) where
-module Base.Field (Field(..)) where
-module Base.Record (module Base.Field, HasField(..)) where
-module Base.Result (Result(..), traverse, step, mapError, withDefault) where
-module Base.String (split, join, lines, unlines, trim, trimLeft, trimRight, contains,
-                    startsWith, endsWith, repeat, substring, byteLength) where
-module Base.Sort (mergeSort, sortBy) where
-module Base.Map (Map, empty, insert, lookup, remove, keys, values, size, fromList, toList) where
-module Base.HashMap (HashMap, fromList, insert, insertAll, lookup, member, ofNames, size, toList) where
-module Base.HashSet (HashSet, empty, fromList, insert, member, size, toList) where
-module Base.Unit (Unit(..)) where
-module Base.Hashable (Hashable(..), hashCombine, hashStr) where
-module Base.Functor (Functor(..)) where
-module Base.Applicative (Applicative(..), module Base.Functor) where
-module Base.Monoid (Monoid(..), Semigroup(..)) where
-module Base.Foldable (Foldable(..), foldMap) where
-module Base.Traversable (Traversable(..)) where
-module Base.Nat (Nat(..), plus, minus, mult, toInt, fromInt, fromIntMaybe,
-                 pred, isZero) where
-module Base.Num (Num(..)) where
-module Base.Vec (Vec(..), substTemplate, vhead, vlen, vtail) where
-module Base.Monad (Monad(..), module Base.Applicative) where
-module Base.Error (Error, catchError, ok, runError, throwError) where
+模块导出清单（`packages/base/vuna.toml`）：
+
+```toml
+[export]
+modules = [
+  "Base",
+  "Base.Data",
+  "Base.Trait",
+  "Base.Container",
+  "Base.Effect",
+  "Base.Effect.Core",
+  "Base.Effect.Pure",
+  "Prelude"
+]
 ```
 
-导出清单里没有宿主层别名模块，宿主操作直接调用 `prim_eff_*`；
-`Eff` / `runPure` / `joinEff` / `raise` / `runEff` 统一从 `Base.Eff` 显式 import。
+各门面内部的模块清单以 `packages/base/lib/Base/{Data,Trait,Container,Effect,Effect/Core,Effect/Pure}.vuna`
+与 `Prelude.vuna` 的模块头为真源。
+
+宿主操作直接调用 `prim_eff_*`；`Eff` / `runPure` / `joinEff` / `raise` / `runEff`
+从 `Base.Effect.Eff`（或扁平门面 `Base.Effect.Core`）显式 import。
 `Prelude` 的导出列表见 `packages/base/lib/Prelude.vuna`。
 
 ## 度量与 Nat
@@ -155,14 +133,14 @@ module Base.Error (Error, catchError, ok, runError, throwError) where
   `unknown fixity for operator ==`（fixity 的唯一来源是库模块里的 `infixl` / `infixr` 声明）。
 - 显式 `import Prelude` 时不再重复注入；同一上下文出现多个候选 `Prelude` 报 ambiguous。
 - `Base.Nat` **不在** `Prelude`：用 `Nat` 类型，或 `Eq` / `Ord` / `Show Nat` 实例，都要显式
-  `import Base.Nat`（或经 `Base` 门面，它重导出 `Base.Nat`）。
+  `import Base.Data.Nat as Nat`（或经 `Base` 门面，它重导出 `Base.Nat`）。
 
 ## 标准库与自举的关系
 
 - `packages/base/lib/` 是 vuna 模块根，不是 OCaml 库目录；
 - 自动注入只看包上下文（有 base 依赖才注入 `Prelude`），矩阵见上节；没有第二套加载模式；
-- `Base.Eff` 刻意不重导出：动作类型与 handler 需要显式 `import Base.Eff`（`Prelude` 只
-  `import Base.Eff` 以加载类型/原语闭包，不进自动导出面），效果面不随自动注入进入每个源文件；
+- `Base.Effect.Eff` 刻意不重导出到 `Prelude`：动作类型与 handler 需要显式 `import Base.Effect.Eff as Eff`（`Prelude` 只
+  `import Base.Effect.Eff` 以加载类型/原语闭包，不进自动导出面），效果面不随自动注入进入每个源文件；
 - `packages/base/` 在 seed 闭包内：修改 seed 闭包内的源码需要 seed rotation，见
   [bootstrap.md](bootstrap.md)。
 
