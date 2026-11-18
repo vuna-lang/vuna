@@ -1,0 +1,79 @@
+module Vuna.Compiler.Wasm.Step where
+
+-- wasm 全片段 CPS 的 Step 表示（Stage 2 运行时）。
+--
+-- `$step` 的 tag：
+--   0 Done      a=value
+--   1 Perform   a=key b=name c=op d=k
+--   2 Handle    a=key b=name c=ret d=opH e=comp f=u g=kOuter
+--   3 Self      a=th b=k
+--   4 Abort     a=targetFrame b=value
+-- `$runres`：driver 的返回（0 normal a=value；1 abort a=target b=value）。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Pair
+import Vuna.Compiler.Wasm.Instr
+import Vuna.Compiler.Wasm.Model
+
+-- | Step 协议类型；由 wasm 模块在 full-CPS 模式发射。
+export stepTypes : List WatType
+stepTypes =
+  [ WatStructType "$step"
+      [ WatField False WvI32,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef,
+        WatField False WvAnyRef
+      ],
+    WatStructType "$runres" [WatField False WvI32, WatField False WvAnyRef, WatField False WvAnyRef]
+  ]
+
+-- | `@ir@step@done v`
+rtStepDone : WatFunc
+rtStepDone =
+  rtFunc "$rt_stepDone" [Pair "$p0" WvAnyRef] [WvAnyRef] []
+    [IConstI32 0, ILocalGet "$p0", IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IStructNew "$step"]
+
+-- | `@ir@step@perform key name op k`
+rtStepPerform : WatFunc
+rtStepPerform =
+  rtFunc "$rt_stepPerform"
+    [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef, Pair "$p3" WvAnyRef]
+    [WvAnyRef] []
+    [ IConstI32 1, ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", ILocalGet "$p3",
+      IRefNull, IRefNull, IRefNull, IStructNew "$step"
+    ]
+
+-- | `@ir@step@handle key name ret opH comp u kOuter`
+rtStepHandle : WatFunc
+rtStepHandle =
+  rtFunc "$rt_stepHandle"
+    [ Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef, Pair "$p3" WvAnyRef,
+      Pair "$p4" WvAnyRef, Pair "$p5" WvAnyRef, Pair "$p6" WvAnyRef
+    ]
+    [WvAnyRef] []
+    [ IConstI32 2, ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", ILocalGet "$p3",
+      ILocalGet "$p4", ILocalGet "$p5", ILocalGet "$p6", IStructNew "$step"
+    ]
+
+-- | `@ir@step@self th k`
+rtStepSelf : WatFunc
+rtStepSelf =
+  rtFunc "$rt_stepSelf" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [IConstI32 3, ILocalGet "$p0", ILocalGet "$p1", IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IStructNew "$step"]
+
+-- | `@ir@step@abort target value`
+rtStepAbort : WatFunc
+rtStepAbort =
+  rtFunc "$rt_stepAbort" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [IConstI32 4, ILocalGet "$p0", ILocalGet "$p1", IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IStructNew "$step"]
+
+export stepFunctions : List WatFunc
+stepFunctions = [rtStepDone, rtStepPerform, rtStepHandle, rtStepSelf, rtStepAbort]
+
+rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
+rtFunc name params results locals body = WatFunc name "" params results locals body
