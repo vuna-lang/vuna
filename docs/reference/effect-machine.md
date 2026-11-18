@@ -291,6 +291,11 @@ run : Control -> Obj
   机器锥里某个定义把 dict 当函数应用（擦除实参残留）。下一步：在 IR 里 grep 该名字的
   `IrApp` 出现点，确认是哪个定义发的，再决定是补发射还是消掉那次应用。
 
+- **下一步缺口（编译已通，运行时 trap）**：修掉「0 元定义被应用」的 codegen 缺陷后
+  （提交 8cc1bb4：先 `global.get` 再逐个 `rt_apply`），`mSteps` 接线的产物**能组装**；
+  `wasmtime` 跑起来在 `_start → rt_apply` 处 cast failure，说明入口/续延交接处还有一处
+  形状不匹配（`runMain` 被改写成 `machineRun` 之后，入口仍按旧约定把某值当闭包应用）。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
