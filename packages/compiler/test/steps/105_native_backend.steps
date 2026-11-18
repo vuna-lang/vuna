@@ -172,12 +172,8 @@ exit: 0
 run: "$TMPDIR/effnested-out/bin/effnested" 2>&1
 out-equals: 211
 
-# 9l) 续延栈段越界：恢复后的深递归超过 slack 时 trap（exit 2），不踩堆。
-run: sh -c 'd="$TMPDIR/effovf"; mkdir -p "$d/app"; printf "[package]\nname = \"effovf\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Data.Nat as Nat\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nsum : Nat -> Eff [POp] Int\nsum n = case n of\n  Zero => pure 0\n  Succ m => do\n    y <- sum m\n    pure (y + 1)\n\nprog : Eff [POp] Int\nprog = do\n  x <- perform (P 1)\n  y <- sum (natFromInt 400000)\n  pure (x + y)\n\nmain : Int\nmain = runPure (handle prog { P n k -> k n })\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/effovf-out" "$d"'
-exit: 0
-run: "$TMPDIR/effovf-out/bin/effovf" 2>&1
-exit: 2
-out-contains: continuation stack overflow
+# 9l) （已删除）续延栈段不再存在：库机器没有捕获/迁移栈段，深 CPS 递归只受
+#     native 栈大小限制；深递归的正向覆盖见 9m（20000 层）。
 
 # 9m) 单次捕获超过堆初始段（1 MiB）：perform 在 20000 帧深处，捕获缓冲必须按
 #     请求放大 mmap，而不是落进 1 MiB 段尾。
@@ -380,12 +376,12 @@ exit: 0
 run: sh -c 'd="$TMPDIR/inc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"inc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 3 of 3
+out-contains: native-build: compiled 8 of 8
 run: sh -c 'cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 0 of 3
+out-contains: native-build: compiled 0 of 8
 run: "$TMPDIR/inc-out/bin/inc" 2>&1
 out-equals: 42
 run: sh -c 'd="$TMPDIR/inc"; printf "module Util where\n\nexport answer : Int\nanswer = if 1 == 1 then 41 else 0\n" > "$d/lib/Util.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/inc-out" "$d" && cd "$TMPDIR/inc-out" && sh build.sh'
-out-contains: native-build: compiled 1 of 3
+out-contains: native-build: compiled 1 of 8
 run: "$TMPDIR/inc-out/bin/inc" 2>&1
 out-equals: 42

@@ -26,6 +26,7 @@ import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Native.Abi
@@ -1865,14 +1866,18 @@ build program printResult =
                 let
                   seeds =
                     case runMainM of
-                      Just rm => append [mainName, rm] (irEntryHandlersOf e)
-                      Nothing => append [mainName] (irEntryHandlersOf e)
+                      Just rm => append ["Base.Effect.Core.machineRun", mainName, rm] (irEntryHandlersOf e)
+                      Nothing => append ["Base.Effect.Core.machineRun", mainName] (irEntryHandlersOf e)
                   ordered = if kind == "float" then reachableDefs (floatRenderName :: seeds) defs else reachableDefs seeds defs
-                  pools = modulePools ordered
-                in case genDefs defs pools unit.irUnitTyDecls [] ordered [] of
-                  NFail err => NativeRejected (nativeAuditEnrich err ordered)
-                  NOk pair =>
+                in case cpsDefsMachine ordered of
+                  Err msg => NativeRejected (NativeUnsupported msg)
+                  Ok cpsOrdered =>
                     let
-                      start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)
-                      moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
-                    in NativeOk (NativeProgram nativeRodata nativeBss (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)
+                      pools = modulePools cpsOrdered
+                    in case genDefs cpsOrdered pools unit.irUnitTyDecls [] cpsOrdered [] of
+                      NFail err => NativeRejected (nativeAuditEnrich err cpsOrdered)
+                      NOk pair =>
+                        let
+                          start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)
+                          moduleLits = map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
+                        in NativeOk (NativeProgram nativeRodata nativeBss (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)
