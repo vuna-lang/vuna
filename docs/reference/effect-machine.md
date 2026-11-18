@@ -284,6 +284,13 @@ run : Control -> Obj
      的可达根，一行）；
   2. 让 base 的公开面 import 机器模块，并在 lowering 里给 IR unit 补上它的 tyDecls。
   取 1（无循环依赖：Core 已经 import 了需要的 Data/Trait 模块）。
+- **下一个缺口（0 元字典定义不发射）**：接上 `mStepsDef` 后 wasm 走到组装阶段报
+  `unknown func: failed to find name $f_Applicative_Base_Effect_Core_Eff_r`。IR dump 里这个
+  `def Applicative_Base_Effect_Core_Eff_r` 是存在的，说明不是 DCE 漏名（把它加进两个可达
+  根后错误依旧），而是「0 元 dict 定义 vs 调用点写成 `call $f_…`」的形状不匹配——很可能是
+  机器锥里某个定义把 dict 当函数应用（擦除实参残留）。下一步：在 IR 里 grep 该名字的
+  `IrApp` 出现点，确认是哪个定义发的，再决定是补发射还是消掉那次应用。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
