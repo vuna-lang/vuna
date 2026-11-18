@@ -79,7 +79,8 @@ chunkBytes bytes = chunkBytesGo bytes 24 []
 
 chunkBytesGo : List Int -> Int -> List Int -> List (List Int)
 chunkBytesGo [] _ acc = if acc == [] then [] else [reverse acc]
-chunkBytesGo (b :: rest) 0 acc = reverse acc :: chunkBytesGo (b :: rest) 24 []
+-- 换块时把当前元素放进新块（容量 23），递归仍在 `rest` 上，结构下降可证。
+chunkBytesGo (b :: rest) 0 acc = reverse acc :: chunkBytesGo rest 23 [b]
 chunkBytesGo (b :: rest) n acc = chunkBytesGo rest (n - 1) (b :: acc)
 
 -- ---------------------------------------------------------------

@@ -145,7 +145,7 @@ collectChain t (EBacktick name l r sp) = Vuna.Compiler.Base.Common.bind (reorder
   Pair first rest => OkC (Pair l2 (ChainOp name True first sp :: rest))
 )
 )
-collectChain t e = Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => OkC (Pair e2 []))
+collectChain t e = Vuna.Compiler.Base.Common.bind (reorderNonChain t e) (\e2 => OkC (Pair e2 []))
 
 -- precedence climbing：`rest` 里同级/更高级的运算符继续被消费。
 -- 显式 fuel 计步（`more` 是列表模式变量，SCT 对「tuple 列表」的递减度量
@@ -182,91 +182,96 @@ foldApps : Expr -> List Expr -> Span -> Expr
 foldApps base [] sp = base
 foldApps base (a :: rest) sp = foldApps (EApp base [a] sp) rest sp
 
-export reorderExpr : FixityTable -> Expr -> Check Expr
-reorderExpr t (EVar name sp) = OkC (EVar name sp)
-reorderExpr t (EInt n sp) = OkC (EInt n sp)
-reorderExpr t (EStr s sp) = OkC (EStr s sp)
-reorderExpr t (EFloat raw sp) = OkC (EFloat raw sp)
-reorderExpr t (EInfix op l r sp) = reorderChain t (EInfix op l r sp)
-reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
+-- | 非中缀链的表达式：递归到子表达式时重新走 `reorderExpr`（链节点在入口展开）。
+reorderNonChain : FixityTable -> Expr -> Check Expr
+reorderNonChain t (EVar name sp) = OkC (EVar name sp)
+reorderNonChain t (EInt n sp) = OkC (EInt n sp)
+reorderNonChain t (EStr s sp) = OkC (EStr s sp)
+reorderNonChain t (EFloat raw sp) = OkC (EFloat raw sp)
 -- section：rename 模式在名字解析前展开成 `EVar` / lambda（别名已替换）；keep 模式保留原形
 -- 供 fmt 打印。
-reorderExpr t (ESectOp op sp) =
+reorderNonChain t (ESectOp op sp) =
   if renameMode t then OkC (EVar (aliasOf t op) sp) else OkC (ESectOp op sp)
-reorderExpr t (ESectL op e sp) =
+reorderNonChain t (ESectL op e sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t e)
     (\e2 => if renameMode t then OkC (ELam [Pair "vuna_section" spanEmpty] (EApp (EVar (aliasOf t op) sp) [EVar "vuna_section" sp, e2] sp) sp) else OkC (ESectL op e2 sp))
-reorderExpr t (ESectR e op sp) =
+reorderNonChain t (ESectR e op sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t e)
     (\e2 => if renameMode t then OkC (ELam [Pair "vuna_section" spanEmpty] (EApp (EVar (aliasOf t op) sp) [e2, EVar "vuna_section" sp] sp) sp) else OkC (ESectR e2 op sp))
-reorderExpr t (EParen inner sp) = reorderExpr t inner
-reorderExpr t (ELam names body sp) =
+reorderNonChain t (EParen inner sp) = reorderExpr t inner
+reorderNonChain t (ELam names body sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\b => OkC (ELam names b sp))
 -- section 出现在函数位置且被直接应用：`(+ e) a` ⇒ `a + e`，不生成 lambda
 -- （否则 `(+ 1) 2` 撞「lambda 缺签名」）。section 当值用仍走下面的 lambda 展开。
-reorderExpr t (EApp (ESectL op e secSp) args sp) = if renameMode t then case args of
+reorderNonChain t (EApp (ESectL op e secSp) args sp) = if renameMode t then case args of
   [] => icInternal "section application without arguments"
   a :: rest =>
     Vuna.Compiler.Base.Common.bind (reorderExpr t a)
       (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar (aliasOf t op) sp) [a2, e2] sp) rest2 sp))))
 else Vuna.Compiler.Base.Common.bind (reorderExpr t e)
   (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectL op e2 secSp) args2 sp)))
-reorderExpr t (EApp (EParen (ESectL op e secSp) pSp) args sp) = if renameMode t then case args of
+reorderNonChain t (EApp (EParen (ESectL op e secSp) pSp) args sp) = if renameMode t then case args of
   [] => icInternal "section application without arguments"
   a :: rest =>
     Vuna.Compiler.Base.Common.bind (reorderExpr t a)
       (\a2 => Vuna.Compiler.Base.Common.bind (reorderExpr t e) (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar (aliasOf t op) sp) [a2, e2] sp) rest2 sp))))
 else Vuna.Compiler.Base.Common.bind (reorderExpr t e)
   (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (EParen (ESectL op e2 secSp) pSp) args2 sp)))
-reorderExpr t (EApp (ESectR e op secSp) args sp) = if renameMode t then case args of
+reorderNonChain t (EApp (ESectR e op secSp) args sp) = if renameMode t then case args of
   [] => icInternal "section application without arguments"
   a :: rest =>
     Vuna.Compiler.Base.Common.bind (reorderExpr t e)
       (\e2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar (aliasOf t op) sp) [e2, a2] sp) rest2 sp))))
 else Vuna.Compiler.Base.Common.bind (reorderExpr t e)
   (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (ESectR e2 op secSp) args2 sp)))
-reorderExpr t (EApp (EParen (ESectR e op secSp) pSp) args sp) = if renameMode t then case args of
+reorderNonChain t (EApp (EParen (ESectR e op secSp) pSp) args sp) = if renameMode t then case args of
   [] => icInternal "section application without arguments"
   a :: rest =>
     Vuna.Compiler.Base.Common.bind (reorderExpr t e)
       (\e2 => Vuna.Compiler.Base.Common.bind (reorderExpr t a) (\a2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => reorderExpr t x) rest) (\rest2 => OkC (foldApps (EApp (EVar (aliasOf t op) sp) [e2, a2] sp) rest2 sp))))
 else Vuna.Compiler.Base.Common.bind (reorderExpr t e)
   (\e2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp (EParen (ESectR e2 op secSp) pSp) args2 sp)))
-reorderExpr t (EApp fn args sp) =
+reorderNonChain t (EApp fn args sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t fn)
     (\fn2 => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\a => reorderExpr t a) args) (\args2 => OkC (EApp fn2 args2 sp)))
-reorderExpr t (EPi name implicit qty dom cod sp) =
+reorderNonChain t (EPi name implicit qty dom cod sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t dom)
     (\dom2 => Vuna.Compiler.Base.Common.bind (reorderExpr t cod) (\cod2 => OkC (EPi name implicit qty dom2 cod2 sp)))
-reorderExpr t (ELet binds body rec_ sp) =
+reorderNonChain t (ELet binds body rec_ sp) =
   Vuna.Compiler.Base.Common.bind (reorderBinds t binds)
     (\binds2 => Vuna.Compiler.Base.Common.bind (reorderExpr t body) (\body2 => OkC (ELet binds2 body2 rec_ sp)))
-reorderExpr t (ELocalFun clauses sp) =
+reorderNonChain t (ELocalFun clauses sp) =
   Vuna.Compiler.Base.Common.bind (reorderClauses t clauses) (\cs => OkC (ELocalFun cs sp))
-reorderExpr t (ECase scrut alts sp) =
+reorderNonChain t (ECase scrut alts sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t scrut)
     (\scrut2 => Vuna.Compiler.Base.Common.bind (reorderAlts t alts) (\alts2 => OkC (ECase scrut2 alts2 sp)))
-reorderExpr t (EIf c th el sp) =
+reorderNonChain t (EIf c th el sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t c)
     (\c2 => Vuna.Compiler.Base.Common.bind (reorderExpr t th) (\th2 => Vuna.Compiler.Base.Common.bind (reorderExpr t el) (\el2 => OkC (EIf c2 th2 el2 sp))))
-reorderExpr t (EField base fname sp) =
+reorderNonChain t (EField base fname sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t base) (\b => OkC (EField b fname sp))
-reorderExpr t (ERecord rname fields sp) =
+reorderNonChain t (ERecord rname fields sp) =
   Vuna.Compiler.Base.Common.bind (reorderFields t fields) (\fs => OkC (ERecord rname fs sp))
-reorderExpr t (ERecUpdate base fields sp) =
+reorderNonChain t (ERecUpdate base fields sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t base)
     (\b => Vuna.Compiler.Base.Common.bind (reorderFields t fields) (\fs => OkC (ERecUpdate b fs sp)))
-reorderExpr t (EDo stmts sp) =
+reorderNonChain t (EDo stmts sp) =
   Vuna.Compiler.Base.Common.bind
     (Vuna.Compiler.Base.Common.traverse (\v => reorderDoStmt t v) stmts) (\ss => OkC (EDo ss sp))
-reorderExpr t (EAnn inner ty sp) =
+reorderNonChain t (EAnn inner ty sp) =
   Vuna.Compiler.Base.Common.bind (reorderExpr t inner)
     (\i2 => Vuna.Compiler.Base.Common.bind (reorderExpr t ty) (\t2 => OkC (EAnn i2 t2 sp)))
 -- 模板字面量是 parser 的**保留语法**（fmt/lint/index/doc 要看原形），重排只递归洞内
 -- 表达式；降级为 `interp` 调用发生在 `Loader.Resolve`（rename 之后）。
-reorderExpr t (EInterp multi parts sp) =
+reorderNonChain t (EInterp multi parts sp) =
   Vuna.Compiler.Base.Common.bind (reorderInterpParts t parts) (\ps => OkC (EInterp multi ps sp))
-reorderExpr t other = icInternal "Fixity.reorderExpr: unexpected expression form"
+reorderNonChain t other = icInternal "Fixity.reorderNonChain: unexpected expression form"
+
+-- | 表达式重排入口：中缀 / backtick 链交给 `reorderChain`，其余交给 `reorderNonChain`。
+export reorderExpr : FixityTable -> Expr -> Check Expr
+reorderExpr t (EInfix op l r sp) = reorderChain t (EInfix op l r sp)
+reorderExpr t (EBacktick name l r sp) = reorderChain t (EBacktick name l r sp)
+reorderExpr t e = reorderNonChain t e
 
 -- 模板片段列表（`EInterp` 的洞内表达式同样要按 fixity 重排）。
 reorderInterpParts : FixityTable -> List InterpPart -> Check (List InterpPart)
