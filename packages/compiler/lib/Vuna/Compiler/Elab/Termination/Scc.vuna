@@ -4,7 +4,8 @@ module Vuna.Compiler.Elab.Termination.Scc where
 -- 参数级 size-change 图、传递闭包、幂等图严格边判定（SCT 定理）。
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Elab.Termination.Measure
 
 record Site where
@@ -134,7 +135,7 @@ siteWalkC fuel comp ctors projs caller facts sizes region e acc =
       -- where/let 多 clause 局部函数：各 clause body 的调用点同样要收集
       -- （否则 `where` 绑定体里调外层递归函数会漏检）。
       ELocalFun clauses sp => siteCollectBinds (fuel - 1) comp ctors projs caller facts sizes region (localClauseBinds clauses) acc
-      EVar n sp => if memName n comp then Site caller n [] sizes region :: acc else acc
+      EVar n sp => if memName (rnameKey n) comp then Site caller (rnameKey n) [] sizes region :: acc else acc
       _ => acc
 
 -- 把局部函数的 clause 列表转成 `siteCollectBinds` 能吃的 binds（模式仅占位）。
@@ -152,7 +153,7 @@ siteWalkEApp fuel comp ctors projs caller facts sizes region fn args acc =
       Just callee => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (Site caller callee args sizes region :: acc)
       Nothing =>
         case fn of
-          EVar nm nsp => if isMapLike nm then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
+          EVar nm nsp => if isMapLike (rnameKey nm) then siteWalkEAppMap (fuel - 1) comp ctors projs caller facts sizes region fn args acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args (siteWalkC (fuel - 1) comp ctors projs caller facts sizes region fn acc)
 
 siteWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> Expr -> List Expr -> List Site -> List Site
@@ -168,8 +169,8 @@ siteWalkEAppMap fuel comp ctors projs caller facts sizes region fn args acc =
         in siteWalkC (fuel - 1) comp ctors projs caller facts sizes2 region body acc1
       [cb, lst] =>
         case cb of
-          EApp (EVar g gsp) pargs cbsp => if memName g comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g pargs lst cbsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
-          EVar g gsp => if memName g comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region g [] lst gsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
+          EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (rnameKey g) pargs lst cbsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
+          EVar g gsp => if memName (rnameKey g) comp then siteWalkMapPartialInline (fuel - 1) comp ctors projs caller facts sizes region (rnameKey g) [] lst gsp acc else siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
           _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
       _ => siteCollectList (fuel - 1) comp ctors projs caller facts sizes region args acc
 
@@ -181,7 +182,7 @@ siteWalkMapPartialInline fuel comp ctors projs caller facts sizes region g pargs
     let
       acc1 = siteWalkC (fuel - 1) comp ctors projs caller facts sizes region lst acc
       elems = extendElemSizes sizes lst "$elem"
-      fullArgs = append pargs [EVar "$elem" cbsp]
+      fullArgs = append pargs [EVar (classifyName "$elem") cbsp]
       acc2 = siteCollectList (fuel - 1) comp ctors projs caller facts sizes region pargs acc1
     in Site caller g fullArgs elems region :: acc2
 
@@ -549,11 +550,11 @@ siteFuelStrict callerFuel site =
     Nothing => Nothing
     Just a =>
       case a of
-        EVar n sp => if n == callerFuel then Just False else Nothing
+        EVar n sp => if rnameKey n == callerFuel then Just False else Nothing
         EApp (EVar op osp) xs sp =>
-          if isSubOpName op then
+          if isSubOpName (rnameKey op) then
             case xs of
-              [EVar n nsp, EInt k ksp] => if n == callerFuel then if k > 0 then Just True else Nothing else Nothing
+              [EVar n nsp, EInt k ksp] => if rnameKey n == callerFuel then if k > 0 then Just True else Nothing else Nothing
               _ => Nothing
           else
             Nothing

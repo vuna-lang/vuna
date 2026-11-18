@@ -12,7 +12,8 @@ module Vuna.Compiler.Elab.Records where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Tc
 import Vuna.Compiler.Base.Diagnostics.Common
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- | 一条 record 字段的结构化元数据。`recordFieldIndex` 是声明序号（也是降级后
 -- 构造子里的位置参数序号）；`recordFieldType` 仍带源码 span，供 `HasField` 实例生成。
@@ -101,10 +102,11 @@ recordFieldsOf (f :: rest) i =
 
 -- 族参数变量表达式：每个族参数引用一次（构造子返回类型用）。
 recordParamVarExprs : List String -> Span -> List Expr
-recordParamVarExprs params sp = map (\p => EVar p sp) params
+recordParamVarExprs params sp = map (\p => EVar (classifyName p) sp) params
 
 export recordRetType : String -> List String -> Span -> Expr
-recordRetType dname params sp = EApp (EVar dname sp) (recordParamVarExprs params sp) sp
+recordRetType dname params sp =
+  EApp (EVar (classifyName dname) sp) (recordParamVarExprs params sp) sp
 
 -- 构造子类型用一等的 `EPi` 表示（不是 `EVar "->"` 的语法编码）：这是记录降级的
 -- **输出**，交给下游检查器，不应当依赖某个检查器对箭头语法的特殊处理。
@@ -123,7 +125,7 @@ recordArrowTypeGo i (f :: fs) ret sp =
 export recordParamPis : List String -> Expr -> Span -> Expr
 recordParamPis [] ret sp = ret
 recordParamPis (p :: rest) ret sp =
-  EPi p True Nothing (EVar "Type" sp) (recordParamPis rest ret sp) sp
+  EPi p True Nothing (EVar (classifyName "Type") sp) (recordParamPis rest ret sp) sp
 
 -- | 组装记录合成构造子的完整类型：族参数 Pi + 字段箭头 + 返回记录类型。
 export recordCtorType : List String -> List Field -> Expr -> Span -> Expr
@@ -169,9 +171,9 @@ desugarPatternFuel fuel records pat =
       PStr s sp => OkC (PStr s sp)
       PCon name pats sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (\x => desugarPatternFuel (fuel - 1) records x) pats) (\ps => OkC (PCon name ps sp))
       PRecord name fields sp =>
-        case lookupRecord name records of
-          Nothing => tcErr1 sp (UnknownRecord name) name
-          Just r => if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp) else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields) else Vuna.Compiler.Base.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp) (\ps => OkC (PCon r.recordMetaCtor ps sp))
+        case lookupRecord (rnameKey name) records of
+          Nothing => tcErr1 sp (UnknownRecord (rnameKey name)) (rnameKey name)
+          Just r => if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp) else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields) else Vuna.Compiler.Base.Common.bind (desugarRecordPatternFieldsFuel (fuel - 1) records r.recordMetaFields fields sp) (\ps => OkC (PCon (classifyName r.recordMetaCtor) ps sp))
 
 desugarRecordPatternFieldsFuel : Int -> List RecordMeta -> List RecordFieldMeta -> List (Pair String Pat) -> Span -> Check (List Pat)
 desugarRecordPatternFieldsFuel fuel records fdefs provided sp =
@@ -205,9 +207,9 @@ desugarExprFuel fuel records e =
       -- 字段访问/更新的消歧需要 base 的类型，留给精化期按结构化字段表查表。
       EField base fname sp => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records base) (\b => OkC (EField b fname sp))
       ERecord name fields sp =>
-        case lookupRecord name records of
-          Nothing => tcErr1 sp (UnknownRecord name) name
-          Just r => if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp) else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields) else Vuna.Compiler.Base.Common.bind (desugarRecordValuesFuel (fuel - 1) records r.recordMetaFields fields sp) (\vs => OkC (EApp (EVar r.recordMetaCtor sp) vs sp))
+        case lookupRecord (rnameKey name) records of
+          Nothing => tcErr1 sp (UnknownRecord (rnameKey name)) (rnameKey name)
+          Just r => if hasDuplicateFieldNames fields then ErrC (duplicateFieldMsg sp) else if hasUnknownFields (recordFieldNames r.recordMetaFields) fields then ErrC (firstUnknownFieldMsg sp (recordFieldNames r.recordMetaFields) fields) else Vuna.Compiler.Base.Common.bind (desugarRecordValuesFuel (fuel - 1) records r.recordMetaFields fields sp) (\vs => OkC (EApp (EVar (classifyName r.recordMetaCtor) sp) vs sp))
       ERecUpdate base fields sp => Vuna.Compiler.Base.Common.bind (desugarExprFuel (fuel - 1) records base) (\b => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarFieldValueFuel (fuel - 1) records) fields) (\fs => OkC (ERecUpdate b fs sp)))
       EDo stmts sp => Vuna.Compiler.Base.Common.bind (Vuna.Compiler.Base.Common.traverse (desugarDoStmtFuel (fuel - 1) records) stmts) (\s2 => OkC (EDo s2 sp))
       -- EPi 的可用性由各自的检查器判定（HM 报错、DT 支持），降级这里只做结构递归。
@@ -321,12 +323,16 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
     fsp = exprSpan fty
     recType =
       case params of
-        [] => EVar rname fsp
-        _ => EApp (EVar rname fsp) (map (\p => EVar p fsp) params) fsp
-    label = EApp (EVar "Base.Trait.Field.Field" fsp) [EStr fname fsp] fsp
-    head = EApp (EVar "Base.Trait.Record.HasField" fsp) [label, recType, fty] fsp
+        [] => EVar (classifyName rname) fsp
+        _ => EApp (EVar (classifyName rname) fsp) (map (\p => EVar (classifyName p) fsp) params) fsp
+    label = EApp (EVar (classifyName "Base.Trait.Field.Field") fsp) [EStr fname fsp] fsp
+    head = EApp (EVar (classifyName "Base.Trait.Record.HasField") fsp) [label, recType, fty] fsp
     pats = recordInstancePats n fsp
-    body = ECase (EVar "p" fsp) [Pair (PCon ctor pats fsp) (EVar (recordInstanceVar fi) fsp)] fsp
+    body =
+      ECase
+        (EVar (classifyName "p") fsp)
+        [Pair (PCon (classifyName ctor) pats fsp) (EVar (classifyName (recordInstanceVar fi)) fsp)]
+        fsp
     meth = DFun "getField" [PVar "p" fsp] body fsp
   in DInstance [] head [meth] fsp
 

@@ -5,7 +5,8 @@ module Vuna.Compiler.Elab.Termination.Measure where
 -- 以及弱边/环检测。入口与 SCC 判定在 `Vuna.Compiler.Elab.Termination`，SCT 在 `.Scc`。
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 export maxInt : Int -> Int -> Int
 maxInt a b = if a >= b then a else b
@@ -199,7 +200,7 @@ strSizeEntriesGo (p :: rest) i = append (patSizeStrict p i [] []) (strSizeEntrie
 
 export extendSizesStrict : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> Pat -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendSizesStrict sizes (EVar vname vsp) pat =
-  case sizeOfVarStrict vname sizes of
+  case sizeOfVarStrict (rnameKey vname) sizes of
     Just sz =>
       case sz of
         Pair base (Pair depth path) =>
@@ -230,7 +231,7 @@ export guardPosVar : Expr -> Maybe String
 guardPosVar e =
   case e of
     EApp (EVar op osp) args sp =>
-      case opBaseName op of
+      case opBaseName (rnameKey op) of
         -- `<=` / `>=` / `<` 在 Loader 被解析成 `le` / `ge` / `lt` 方法调用，
         -- 终止性守卫按方法短名识别；裸运算符名保留（Loader 之前的内部生成物）。
         "le" => guardLE args
@@ -268,7 +269,7 @@ guardLT ([lhs, rhs]) =
 guardLT _ = Nothing
 
 export varOfExpr : Expr -> Maybe String
-varOfExpr (EVar n sp) = Just n
+varOfExpr (EVar n sp) = Just (rnameKey n)
 varOfExpr _ = Nothing
 
 -- 一个实参是否「已知为正」：字面量 >0，或变量处于守卫区 / 调用方同位置形参已有正事实。
@@ -280,10 +281,10 @@ argPositive args i sizes caller facts region =
       case a of
         EInt k sp => k > 0
         EVar n sp =>
-          if memName n region then
+          if memName (rnameKey n) region then
             True
           else
-            case sizeOfVarStrict n sizes of
+            case sizeOfVarStrict (rnameKey n) sizes of
               Just sz =>
                 case sz of
                   Pair base (Pair depth path) => depth == 0 && posHasTbl caller base facts
@@ -389,7 +390,7 @@ export posWalk : HashMap String Bool -> String -> List (Pair String (Pair Int (P
 posWalk namesTbl caller sizes facts region (EApp fn args sp) st =
   case fn of
     EVar g gsp =>
-      if HashMap.member g namesTbl then
+      if HashMap.member (rnameKey g) namesTbl then
         posWalkArgs
           namesTbl
           caller
@@ -397,7 +398,7 @@ posWalk namesTbl caller sizes facts region (EApp fn args sp) st =
           facts
           region
           args
-          (posWalkCallee namesTbl caller sizes facts region g 0 args st)
+          (posWalkCallee namesTbl caller sizes facts region (rnameKey g) 0 args st)
       else
         posWalkArgs
           namesTbl
@@ -569,7 +570,7 @@ projectionOfDef d =
         [pat] =>
           case secondOf cl of
             EVar v vsp =>
-              case pathInPat v pat [] of
+              case pathInPat (rnameKey v) pat [] of
                 Just path => if notEmpty path then Just (Pair (firstOf d) path) else Nothing
                 Nothing => Nothing
             _ => Nothing
@@ -597,7 +598,7 @@ sameCtorGo p [] sizes k = k > 0
 sameCtorGo p (a :: rest) sizes k =
   case a of
     EVar n sp =>
-      case sizeOfVarStrict n sizes of
+      case sizeOfVarStrict (rnameKey n) sizes of
         Just sz =>
           case sz of
             Pair base (Pair depth path) => sameCtorField base depth path p rest sizes k
@@ -624,7 +625,7 @@ findWrapField p [] sizes k = Nothing
 findWrapField p (a :: rest) sizes k =
   case a of
     EVar n sp =>
-      case sizeOfVarStrict n sizes of
+      case sizeOfVarStrict (rnameKey n) sizes of
         Just sz =>
           case sz of
             Pair base (Pair depth path) =>
@@ -655,7 +656,7 @@ posVarIn x p caller facts region = memName x region || posHasTbl caller p facts
 
 export arithRel : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithRel p (EApp (EVar op osp) args sp) sizes caller facts region =
-  if isSubOpName op then arithMinus p args sizes caller facts region else Nothing
+  if isSubOpName (rnameKey op) then arithMinus p args sizes caller facts region else Nothing
 arithRel p _ sizes caller facts region = Nothing
 
 -- `-` 是 `Base.Trait.Num.sub` 的方法别名（Loader 在名字解析前替换），
@@ -675,13 +676,13 @@ arithMinus p _ sizes caller facts region = Nothing
 
 export arithMinusBase : Int -> Expr -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 arithMinusBase p (EVar x xsp) k sizes caller facts region =
-  case sizeOfVarStrict x sizes of
+  case sizeOfVarStrict (rnameKey x) sizes of
     Just sz =>
       case sz of
         Pair baseIdx (Pair depth path) =>
           if baseIdx == p then
             if depth == 0 then
-              if posVarIn x p caller facts region then Just 4 else Nothing
+              if posVarIn (rnameKey x) p caller facts region then Just 4 else Nothing
             else
               Nothing
           else
@@ -694,7 +695,7 @@ export projRel : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List
 projRel p ([v]) sizes =
   case v of
     EVar x xsp =>
-      case sizeOfVarStrict x sizes of
+      case sizeOfVarStrict (rnameKey x) sizes of
         Just sz =>
           case sz of
             Pair base (Pair depth path) => if base == p then Just 1 else Nothing
@@ -704,7 +705,7 @@ projRel p _ sizes = Nothing
 
 export relOfArg : Int -> Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> List String -> List (Pair String (List Int)) -> String -> HashMap String (List Int) -> List String -> Maybe Int
 relOfArg p (EVar n sp) sizes ctors projs caller facts region =
-  case sizeOfVarStrict n sizes of
+  case sizeOfVarStrict (rnameKey n) sizes of
     Just sz =>
       case sz of
         Pair base (Pair depth path) =>
@@ -713,11 +714,11 @@ relOfArg p (EVar n sp) sizes ctors projs caller facts region =
 relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region =
   case fn of
     EVar c csp =>
-      if memName c ctors then
+      if memName (rnameKey c) ctors then
         case findWrapField p cargs sizes 0 of
           Just m => Just m
           Nothing => if sameCtorApp p cargs sizes then Just relEqual else Nothing
-      else if projHas c projs then projRel p cargs sizes else arithRel p a sizes caller facts region
+      else if projHas (rnameKey c) projs then projRel p cargs sizes else arithRel p a sizes caller facts region
     _ => arithRel p a sizes caller facts region
 relOfArg p _ sizes ctors projs caller facts region = Nothing
 
@@ -736,18 +737,21 @@ argRelHint p args sizes ctors =
     Just a =>
       case a of
         EVar n sp =>
-          if memName n ctors then
+          if memName (rnameKey n) ctors then
             Just relNoRelation
           else
-            case sizeOfVarStrict n sizes of
+            case sizeOfVarStrict (rnameKey n) sizes of
               Just sz =>
                 case sz of
                   Pair base (Pair depth path) => if base == p then Just relNoRelation else Just relOtherPosition
               Nothing => Just relUnknownSize
         EApp (EVar op osp) xs sp =>
-          if isSubOpName op then
+          if isSubOpName (rnameKey op) then
             hintArith p xs sizes relMissingGuard
-          else if isAddOpName op then hintArith p xs sizes relAscending else Just relNoRelation
+          else if isAddOpName (rnameKey op) then
+            hintArith p xs sizes relAscending
+          else
+            Just relNoRelation
         _ => Just relNoRelation
 
 hintArith : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
@@ -755,7 +759,7 @@ hintArith p ([EVar x xsp, EInt k ksp]) sizes mode =
   if k <= 0 then
     Just relNoRelation
   else
-    case sizeOfVarStrict x sizes of
+    case sizeOfVarStrict (rnameKey x) sizes of
       Just sz =>
         case sz of
           Pair base (Pair depth path) => if base == p then if depth == 0 then Just mode else Just relNoRelation else Just relOtherPosition
@@ -770,7 +774,7 @@ addEdgeMode caller callee m sp acc =
   Pair (firstOf acc) (Pair (Pair (Pair caller callee) m) sp :: secondOf acc)
 
 export groupHead : List String -> Expr -> Maybe String
-groupHead comp (EVar n sp) = if memName n comp then Just n else Nothing
+groupHead comp (EVar n sp) = if memName (rnameKey n) comp then Just (rnameKey n) else Nothing
 groupHead comp _ = Nothing
 
 export nthExpr : List Expr -> Int -> Maybe Expr
@@ -789,7 +793,7 @@ isMapLike n =
 
 export extendElemSizes : List (Pair String (Pair Int (Pair Int (List Int)))) -> Expr -> String -> List (Pair String (Pair Int (Pair Int (List Int))))
 extendElemSizes sizes (EVar n sp) v =
-  case sizeOfVarStrict n sizes of
+  case sizeOfVarStrict (rnameKey n) sizes of
     Just sz =>
       case sz of
         Pair base (Pair depth path) =>

@@ -71,7 +71,8 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
  → Frontend.Parser.parseSource   （offside layout → AST + imports；工具用 parseSourceWithComments）
  → Frontend.Packages.Pkg.contextForFile   （最近 vuna.toml + 依赖闭包 → PackageContext；无则 base-only）
  → Loader.Flatten.loadProject    （import 图 → 名字解析 → flatten；ad-hoc 自动注入 Prelude；随后 `Loader.Expand` 展开内置宏）
- → Elab.Driver.elabProgramFull   （Records/Derive 展开 → 精化；record 不再降级）
+ → Frontend.Rast.Bridge.toRastDecls （解析后的 Ast → RAst：引用名换成 RName；Elab 的唯一输入层）
+ → Elab.Driver.elabProgramFull   （只读 RAst；Records/Derive 展开 → 精化）
  → Lowering.Program               （Core → Ir：擦除/表示/形态/入口分类，程序级检查）
  → Codegen.Assembly              （IrUnit 的装配：open 头/类型/桥接/正文/依赖表）
  → Driver.SplitGen.generateDtSplitProgram  （唯一生成器：runtime + 各模块 + Main，带直接依赖）

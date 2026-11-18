@@ -27,6 +27,7 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Base.Source
 import Vuna.Compiler.Loader.Modules
 
@@ -150,7 +151,7 @@ encImports is acc = encList encImport is acc
 -- | record 字段元数据：字段名 / 声明序号 / **字段类型表达式**。
 encRecordFieldMeta : RecordFieldMeta -> List String -> List String
 encRecordFieldMeta f acc =
-  encStr f.recordFieldName (encInt f.recordFieldIndex (encExpr f.recordFieldType acc))
+  encStr f.recordFieldName (encInt f.recordFieldIndex (encExpr (toAstExpr f.recordFieldType) acc))
 
 -- | `RecordMeta`：名字 / 参数 / 字段表 / 派生 / via / 档位 / 合成构造子 / 线性。
 export encRecordMeta : RecordMeta -> List String -> List String
@@ -290,7 +291,7 @@ decRecordFieldMeta : Int -> Cur -> Maybe (Pair RecordFieldMeta Cur)
 decRecordFieldMeta fuel bytes =
   thenPair
     (decStr (fuel - 1) bytes)
-    (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decExpr (fuel - 1) b2) (\ty, b3 => Just (Pair (RecordFieldMeta name ty idx) b3))))
+    (\name, b1 => thenPair (decInt (fuel - 1) b1) (\idx, b2 => thenPair (decExpr (fuel - 1) b2) (\ty, b3 => Just (Pair (RecordFieldMeta name (toRastExpr ty) idx) b3))))
 
 -- | 解析 `RecordMeta`。
 export decRecordMeta : Int -> Cur -> Maybe (Pair RecordMeta Cur)

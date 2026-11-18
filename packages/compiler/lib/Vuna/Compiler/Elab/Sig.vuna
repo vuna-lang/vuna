@@ -4,7 +4,8 @@ module Vuna.Compiler.Elab.Sig where
 -- 两者都只做 AST 变换，量化依赖 kind 推断，因此放在同一模块。
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
@@ -34,7 +35,7 @@ maxIntList (x :: rest) = if x >= maxIntList rest then x else maxIntList rest
 
 export exprMaxAppArity : String -> Expr -> Int
 exprMaxAppArity pname (EApp (EVar f fsp) args sp) =
-  if f == pname then
+  if rnameKey f == pname then
     maxIntList (natToInt (length args) :: map (exprMaxAppArity pname) args)
   else
     maxIntList (map (exprMaxAppArity pname) args)
@@ -86,7 +87,8 @@ keepOut inScope (n :: rest) = if inScope n then keepOut inScope rest else n :: k
 
 quantify : List String -> Expr -> Span -> Expr
 quantify [] e sp = e
-quantify (n :: rest) e sp = EPi n True Nothing (EVar "Type" sp) (quantify rest e sp) sp
+quantify (n :: rest) e sp =
+  EPi n True Nothing (EVar (classifyName "Type") sp) (quantify rest e sp) sp
 
 -- 顶层签名的自由名按**用法**给 kind：名字在签名里被应用了 k 个实参 ⇒ `Type -> ... -> Type`
 -- （`bindPair : m a -> m b -> m (Pair a b)` 的 `m`）。一律绑 `Type` 会让 `m a`
@@ -123,15 +125,15 @@ memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberD
 
 memberDomainOverridesOne : Expr -> List (Pair String Expr)
 memberDomainOverridesOne (EApp (EVar g _) ([nExpr, _, rExpr]) sp) =
-  if g == effMemberFamilyName then
+  if rnameKey g == effMemberFamilyName then
     let
       nPart =
         case nExpr of
-          EVar n nsp => [Pair n (EVar strTypeName nsp)]
+          EVar n nsp => [Pair (rnameKey n) (EVar (classifyName strTypeName) nsp)]
           _ => []
       rPart =
         case rExpr of
-          EVar r rsp => [Pair r (EVar effRowFamilyName rsp)]
+          EVar r rsp => [Pair (rnameKey r) (EVar (classifyName effRowFamilyName) rsp)]
           _ => []
     in append nPart rPart
   else
@@ -145,9 +147,9 @@ memberDomainOf ((Pair k v) :: rest) n = if k == n then Just v else memberDomainO
 kindArrowExpr : Int -> Span -> Expr
 kindArrowExpr k sp =
   if k <= 0 then
-    EVar "Type" sp
+    EVar (classifyName "Type") sp
   else
-    EPi "_" False Nothing (EVar "Type" sp) (kindArrowExpr (k - 1) sp) sp
+    EPi "_" False Nothing (EVar (classifyName "Type") sp) (kindArrowExpr (k - 1) sp) sp
 
 piBoundNames : Expr -> List String
 piBoundNames (EPi n implicit _ dom cod sp) = n :: piBoundNames cod
@@ -157,7 +159,7 @@ lowerVarNames : Expr -> List String
 lowerVarNames e = nubNames (exprLowerVars e)
 
 exprLowerVars : Expr -> List String
-exprLowerVars (EVar n sp) = if isLowerIdent n then [n] else []
+exprLowerVars (EVar n sp) = if isLowerIdent (rnameKey n) then [rnameKey n] else []
 exprLowerVars (EApp fn args sp) = append (exprLowerVars fn) (concatMap exprLowerVars args)
 exprLowerVars (ELam names body sp) = exprLowerVars body
 exprLowerVars (EPi n implicit _ dom cod sp) = append (exprLowerVars dom) (exprLowerVars cod)
@@ -208,7 +210,7 @@ kindDomains : Expr -> List Expr
 kindDomains (EPi n implicit _ dom cod sp) = dom :: kindDomains cod
 kindDomains (EApp fn args sp) =
   case fn of
-    EVar "->" _ =>
+    EVar (RIntrinsic "->") _ =>
       case args of
         dom :: cod :: rest => dom :: kindDomains cod
         _ => []
@@ -220,7 +222,7 @@ kindDomains _ = []
 -- 交给「按应用次数」的规则。
 export argParamKinds : List (Pair String (List Expr)) -> Expr -> List (Pair String Expr)
 argParamKinds tbl (EApp (EVar t _) args sp) =
-  append (zipArgKinds (lookupParamKinds tbl t) args) (concatMap (argParamKinds tbl) args)
+  append (zipArgKinds (lookupParamKinds tbl (rnameKey t)) args) (concatMap (argParamKinds tbl) args)
 argParamKinds tbl (EApp fn args sp) =
   append (argParamKinds tbl fn) (concatMap (argParamKinds tbl) args)
 argParamKinds tbl (ELam names body sp) = argParamKinds tbl body
@@ -251,7 +253,7 @@ zipArgKindsGo [] args = []
 zipArgKindsGo doms [] = []
 zipArgKindsGo (dom :: drest) (a :: arest) =
   case a of
-    EVar n nsp => Pair n dom :: zipArgKindsGo drest arest
+    EVar n nsp => Pair (rnameKey n) dom :: zipArgKindsGo drest arest
     _ => zipArgKindsGo drest arest
 
 -- 顶层量化要排除的名字集合（本程序定义名 + 内建 prelude 名），哈希集合 O(1) 判定。
@@ -311,7 +313,7 @@ quantifyTopSigCached prefix banned preludeBanned ty sp =
 export quantifyTopSigCtxCached : String -> HashMap String Bool -> HashMap String Bool -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
   let
-    combined = EApp (EVar "#sig" sp) (append ctx [ty]) sp
+    combined = EApp (EVar (classifyName "#sig") sp) (append ctx [ty]) sp
     -- 约束实参与返回类型一起参与自由名扫描；但 `#sig` 把 ty 包进了 EApp，
     -- `piBoundNames`（只看顶层 EPi 链）看不到 ty 的 binder，必须手动扣除，
     -- 否则显式 `{a : Type} -> a -> a` 里的 a 会被当成自由名再量化一次
@@ -326,7 +328,7 @@ quantifyTopSigCtxCached prefix banned preludeBanned ctx ty sp =
 export quantifyTopSigCtxCachedKinds : String -> HashMap String Bool -> HashMap String Bool -> List (Pair String (List Expr)) -> List Expr -> Expr -> Span -> Expr
 quantifyTopSigCtxCachedKinds prefix banned preludeBanned paramKinds ctx ty sp =
   let
-    combined = EApp (EVar "#sig" sp) (append ctx [ty]) sp
+    combined = EApp (EVar (classifyName "#sig") sp) (append ctx [ty]) sp
     lower = nubNames (append (concatMap exprLowerVars ctx) (exprLowerVars ty))
     names = keepOutQualified prefix banned preludeBanned (dropPiBound lower (piBoundNames ty))
     memberOverrides = memberDomainOverrides ctx

@@ -6,7 +6,8 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Elab.Termination.Measure
 import Vuna.Compiler.Elab.Termination.Scc
 
@@ -36,7 +37,7 @@ refsOfStmts bound (st :: rest) =
 exprRefsB : List String -> Expr -> List String
 exprRefsB bound e =
   case e of
-    EVar n sp => if memName n bound then [] else [n]
+    EVar n sp => if memName (rnameKey n) bound then [] else [rnameKey n]
     EInt n sp => []
     EStr s sp => []
     ELam ns b sp => exprRefsB (append (map firstOf ns) bound) b
@@ -208,7 +209,7 @@ strWalk fuel comp ctors projs p sizes caller facts region e acc =
       -- 调用外层递归函数，兜底跳过会漏检）。借用 `strWalkBinds`（参数表与 `strWalk`
       -- 完全一致，SCT 可证下降）；模式列表只用来定位，不参与 STR。
       ELocalFun clauses sp => strWalkBinds (fuel - 1) comp ctors projs p sizes caller facts region (localClauseBinds clauses) acc
-      EVar n sp => if memName n comp then markInvalid acc else acc
+      EVar n sp => if memName (rnameKey n) comp then markInvalid acc else acc
       _ => acc
 
 localClauseBinds : List (Pair (List Pat) Expr) -> List (Pair Pat Expr)
@@ -235,7 +236,7 @@ strWalkEApp fuel comp ctors projs p sizes caller facts region fn args sp acc =
           Just rel => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args (addEdgeMode caller callee rel sp acc)
       Nothing =>
         case fn of
-          EVar nm nsp => if isMapLike nm then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
+          EVar nm nsp => if isMapLike (rnameKey nm) then strWalkEAppMap (fuel - 1) comp ctors projs p sizes caller facts region fn args acc else strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
           _ => strWalkApp (fuel - 1) comp ctors projs p sizes caller facts region fn args acc
 
 strWalkEAppMap : Int -> List String -> List String -> List (Pair String (List Int)) -> Int -> List (Pair String (Pair Int (Pair Int (List Int)))) -> String -> HashMap String (List Int) -> List String -> Expr -> List Expr -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span)) -> Pair Bool (List (Pair (Pair (Pair String String) Int) Span))
@@ -251,8 +252,8 @@ strWalkEAppMap fuel comp ctors projs p sizes caller facts region fn args acc =
         in strWalk (fuel - 1) comp ctors projs p sizes2 caller facts region body acc1
       [cb, lst] =>
         case cb of
-          EApp (EVar g gsp) pargs cbsp => if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g pargs lst cbsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
-          EVar g gsp => if memName g comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region g [] lst gsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+          EApp (EVar g gsp) pargs cbsp => if memName (rnameKey g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (rnameKey g) pargs lst cbsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
+          EVar g gsp => if memName (rnameKey g) comp then strWalkMapPartialInline (fuel - 1) comp ctors projs p sizes caller facts region (rnameKey g) [] lst gsp acc else strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
           _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
       _ => strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region args acc
 
@@ -264,7 +265,7 @@ strWalkMapPartialInline fuel comp ctors projs p sizes caller facts region g parg
     let
       acc1 = strWalk (fuel - 1) comp ctors projs p sizes caller facts region lst acc
       elems = extendElemSizes sizes lst "$elem"
-      fullArgs = append pargs [EVar "$elem" cbsp]
+      fullArgs = append pargs [EVar (classifyName "$elem") cbsp]
       acc2 = strWalkArgs (fuel - 1) comp ctors projs p sizes caller facts region pargs acc1
     in case argRel p fullArgs elems ctors projs caller facts region of
       Nothing => markInvalid acc2

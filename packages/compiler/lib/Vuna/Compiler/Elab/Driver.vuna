@@ -26,7 +26,8 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.MetaSpans
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Base.Obs
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- 计数器渲染（仅 `--debug-perf` 的规模行使用）：稳定顺序便于逐行 diff。
 showCounters : List String -> String
@@ -155,14 +156,14 @@ splitMemberCtx (e :: rest) =
 
 isMemberConstraintExpr : Expr -> Bool
 isMemberConstraintExpr (EApp (EVar g _) args _) =
-  g == effMemberFamilyName && (length args == 3 || length args == 2)
+  rnameKey g == effMemberFamilyName && (length args == 3 || length args == 2)
 isMemberConstraintExpr _ = False
 
 -- `Member n e r` 表面糖展开为 `Member (Named n e) r`。
 memberSugarExpr : Ec -> Expr -> Expr
 memberSugarExpr ec (e@(EApp (EVar g a) ([n, x, r]) sp)) =
-  if g == effMemberFamilyName then
-    EApp (EVar g a) [EApp (EVar effNamedName sp) [n, x] sp, r] sp
+  if rnameKey g == effMemberFamilyName then
+    EApp (EVar g a) [EApp (EVar (classifyName effNamedName) sp) [n, x] sp, r] sp
   else
     e
 memberSugarExpr ec e = e
@@ -892,8 +893,9 @@ hasExplicitHasFieldInstance (d :: rest) =
     DInstance ctx head methods sp =>
       case head of
         EApp (EVar n _) _ _ =>
-          if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
-        EVar n _ => if baseNameOf n == "HasField" then True else hasExplicitHasFieldInstance rest
+          if baseNameOf (rnameKey n) == "HasField" then True else hasExplicitHasFieldInstance rest
+        EVar n _ =>
+          if baseNameOf (rnameKey n) == "HasField" then True else hasExplicitHasFieldInstance rest
         _ => hasExplicitHasFieldInstance rest
     _ => hasExplicitHasFieldInstance rest
 

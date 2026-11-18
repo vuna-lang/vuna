@@ -20,7 +20,8 @@ import Vuna.Compiler.Elab.Records
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Term.Support
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- 规范形分支的单一精化入口。分支可达性统一问 `branchAfterUnify`（与覆盖率的
 -- `branchVerdict` 用同一个判据）：不可达分支在精化分支体**之前**就报稳定诊断；可达分支
@@ -104,7 +105,7 @@ elabCaseAltsFuel fuel globals ctx ec scrutTy dd idxs scrutVal expected (alt :: r
       Pair pat body =>
         case pat of
           PCon cname args psp =>
-            Vuna.Compiler.Base.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec dd idxs scrutVal expected cname args psp body) (
+            Vuna.Compiler.Base.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec dd idxs scrutVal expected (rnameKey cname) args psp body) (
                 \p =>
                   case p of
                     Pair altTerm ec1 => elabCaseAltsFuel (fuel - 1) globals ctx ec1 scrutTy dd idxs scrutVal expected rest (altTerm :: acc)
@@ -246,7 +247,7 @@ boolAltGoFuel fuel globals ctx ec (alt :: rest) target expected sp catchAll =
       Pair pat body =>
         case pat of
           PCon cname args psp =>
-            if cname == target then
+            if rnameKey cname == target then
               Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx ec body expected) (
                   \p =>
                     case p of
@@ -520,25 +521,25 @@ perfFamilyOfValue ec v =
 -- `perform` 标记：`EApp (EVar @vuna@perform sp) [op] sp`。
 performOperand : Expr -> Maybe (Pair Expr Span)
 performOperand (EApp (EVar name sp) ([op]) asp) =
-  if isPerformSyntax name then Just (Pair op asp) else Nothing
+  if isPerformSyntax (rnameKey name) then Just (Pair op asp) else Nothing
 performOperand _ = Nothing
 
 -- `@` 降级后的隐式实参标记：`EApp (EVar @vuna@inst@arg sp) [payload] sp`。
 instArgOperand : Expr -> Maybe Expr
 instArgOperand (EApp (EVar name _) ([payload]) _) =
-  if isInstArgSyntax name then Just payload else Nothing
+  if isInstArgSyntax (rnameKey name) then Just payload else Nothing
 instArgOperand _ = Nothing
 
 -- `@` 调用标记：`EApp (EVar @vuna@app@at sp) (f :: name :: args) sp`。
 appAtOperand : Expr -> Maybe (Pair Expr (Pair Expr (List Expr)))
 appAtOperand (EApp (EVar name _) (f :: nm :: rest) sp) =
-  if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
+  if isAppAtSyntax (rnameKey name) then Just (Pair f (Pair nm rest)) else Nothing
 appAtOperand _ = Nothing
 
 -- `f@name args` 的 Elab 重写（纯函数）：`f (@vuna@inst@arg name) args`。
 appAtCallExpr : Expr -> Check Expr
 appAtCallExpr (EApp (EVar _ _) (f :: nm :: rest) sp) =
-  OkC (EApp f (EApp (EVar instArgSyntax sp) [nm] sp :: rest) sp)
+  OkC (EApp f (EApp (EVar (RIntrinsic instArgSyntax) sp) [nm] sp :: rest) sp)
 appAtCallExpr _ = icInternal "malformed @ marker"
 
 -- 由 op 的类型值构造降级调用表达式：`performCore <n=洞> "<key>" <sig> <op>`。
@@ -552,7 +553,7 @@ performCallExpr globals ec opTy op sp =
     Just (PerfFamily canon _ _) =>
       Vuna.Compiler.Base.Common.bind
         (opFamilyArityOf globals ec canon sp)
-        (\k => OkC (EApp (EVar "Base.Effect.Core.performCore" sp) [EVar "_" sp, EStr canon sp, handleSigArg canon k sp, op] sp))
+        (\k => OkC (EApp (EVar (classifyName "Base.Effect.Core.performCore") sp) [EVar (classifyName "_") sp, EStr canon sp, handleSigArg canon k sp, op] sp))
 
 -- ---------------------------------------------------------------
 -- 标记：`EApp (EVar "@vuna@handle") [comp, ret, opH]`（Ast.handleSyntax）。`opH` 是
@@ -566,7 +567,7 @@ performCallExpr globals ec opTy op sp =
 -- 标签/签名按 k 补洞，结果索引由构造子匹配收窄）。
 handleOperand : Expr -> Maybe (Pair Expr (Pair Expr Expr))
 handleOperand (EApp (EVar name _) ([comp, ret, opH]) _) =
-  if isHandleSyntax name then Just (Pair comp (Pair ret opH)) else Nothing
+  if isHandleSyntax (rnameKey name) then Just (Pair comp (Pair ret opH)) else Nothing
 handleOperand _ = Nothing
 
 -- | op 子句构造子 → op 族：Loader 已把 pattern 里的构造子名解析成规范名或 over 名。
@@ -588,7 +589,7 @@ handleFamilyOfCtor ec cname sp =
 
 -- | op 子句 pattern → op 族。
 handleClauseFamilyOfPat : Ec -> Pat -> Check String
-handleClauseFamilyOfPat ec (PCon cname _ psp) = handleClauseFamily ec cname psp
+handleClauseFamilyOfPat ec (PCon cname _ psp) = handleClauseFamily ec (rnameKey cname) psp
 handleClauseFamilyOfPat ec _ = icInternal "handle mirror case pattern is not a constructor"
 
 -- | 所有 op 子句必须同族，跨族报 TC_HandleClauseFamilyMismatch。
@@ -642,12 +643,16 @@ isUniverseTerm _ = False
 
 -- | op 族参数（洞）：`?p1 … ?pk`。
 handleHoleArgs : Int -> Span -> List Expr
-handleHoleArgs k sp = if k <= 0 then List.Nil else (::) (EVar "_" sp) (handleHoleArgs (k - 1) sp)
+handleHoleArgs k sp =
+  if k <= 0 then List.Nil else (::) (EVar (classifyName "_") sp) (handleHoleArgs (k - 1) sp)
 
 -- | op 类型值：`<Op> ?p1 … ?pk`。
 handleOpArg : String -> Int -> Span -> Expr
 handleOpArg canon k sp =
-  if k <= 0 then EVar canon sp else EApp (EVar canon sp) (handleHoleArgs k sp) sp
+  if k <= 0 then
+    EVar (classifyName canon) sp
+  else
+    EApp (EVar (classifyName canon) sp) (handleHoleArgs k sp) sp
 
 -- | 效应签名 λ 的 binder 名（保留名，用户写不出）。
 handleSigBinder : String
@@ -658,8 +663,8 @@ handleSigBinder = "@vuna@handle@sig"
 handleSigArg : String -> Int -> Span -> Expr
 handleSigArg canon k sp =
   EApp
-    (EVar "Base.Effect.Core.sigFn" sp)
-    [ELam [Pair handleSigBinder spanEmpty] (EApp (handleOpArg canon k sp) [EVar handleSigBinder sp] sp) sp]
+    (EVar (classifyName "Base.Effect.Core.sigFn") sp)
+    [ELam [Pair handleSigBinder spanEmpty] (EApp (handleOpArg canon k sp) [EVar (RIntrinsic handleSigBinder) sp] sp) sp]
     sp
 
 -- | 降级调用构造：`headMode` 选 `handleWith`（rowRem 版）或 `handleWithAt`（行首条目版）；
@@ -669,7 +674,7 @@ handleCall headMode nameArg canon k comp ret opH sp =
   let
     fnName = if headMode then "Base.Effect.Core.handleWithAt" else "Base.Effect.Core.handleWith"
   in EApp
-    (EVar fnName sp)
+    (EVar (classifyName fnName) sp)
     [nameArg, EStr canon sp, handleSigArg canon k sp, comp, handleRetArg ret, opH]
     sp
 
@@ -687,8 +692,8 @@ handleDefaultRetBinder = "@vuna@handle@ret"
 -- | ret 实参：无 return 子句的哨兵换成恒等 λ，其余原样。
 handleRetArg : Expr -> Expr
 handleRetArg (EVar nm rsp) =
-  if isHandleNoRetSyntax nm then
-    ELam [Pair handleDefaultRetBinder spanEmpty] (EVar handleDefaultRetBinder rsp) rsp
+  if isHandleNoRetSyntax (rnameKey nm) then
+    ELam [Pair handleDefaultRetBinder spanEmpty] (EVar (RLocal handleDefaultRetBinder) rsp) rsp
   else
     EVar nm rsp
 handleRetArg e = e
@@ -724,7 +729,8 @@ handleCallExprWith globals ec expr sp headMode nameArg =
 
 -- | rowRem 版降级入口（infer 路径与 check 的首选）。
 handleCallExpr : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
-handleCallExpr globals ec expr sp = handleCallExprWith globals ec expr sp False (EVar "_" sp)
+handleCallExpr globals ec expr sp =
+  handleCallExprWith globals ec expr sp False (EVar (classifyName "_") sp)
 
 -- | 行首条目版降级入口：名字用默认值（comp 的行尚未具体化时用）。
 handleCallExprAt : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
@@ -733,7 +739,8 @@ handleCallExprAt globals ec expr sp =
 
 -- | 行首条目版 + 名字洞：comp 的行首实例名已知时由合一解出。
 handleCallExprAtHole : List (Pair String Term) -> Ec -> Expr -> Span -> Check Expr
-handleCallExprAtHole globals ec expr sp = handleCallExprWith globals ec expr sp True (EVar "_" sp)
+handleCallExprAtHole globals ec expr sp =
+  handleCallExprWith globals ec expr sp True (EVar (classifyName "_") sp)
 
 export inferEFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Check (Pair Term (Pair Value Ec))
 inferEFuel fuel globals ctx ec expr =
@@ -802,15 +809,15 @@ inferEFuelCorePlain fuel globals ctx ec expr =
   else
     case expr of
       EVar name sp =>
-        case name of
+        case rnameKey name of
           "Type" => OkC (Pair (TType levelZero) (Pair (VType (levelSucc levelZero)) ec))
           -- `_` 与 `?name` 都必须有期望类型（inference 位无法给洞定类型）。
-          _ => if isHoleName name then tcErr0 sp HoleNoExpectedType else if isOverCtorName name then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp Nothing (overCtorShort name) (overCtorTargets name)) (\t => inferVarRef globals ctx ec t sp) else if isOverValueName name then tcErr2 sp (AmbiguousName (overValueShort name) (joinWithAt (overValueTargets name))) (overValueShort name) (joinWithAt (overValueTargets name)) else inferVarRef globals ctx ec name sp
+          _ => if isHoleName (rnameKey name) then tcErr0 sp HoleNoExpectedType else if isOverCtorName (rnameKey name) then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp Nothing (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => inferVarRef globals ctx ec t sp) else if isOverValueName (rnameKey name) then tcErr2 sp (AmbiguousName (overValueShort (rnameKey name)) (joinWithAt (overValueTargets (rnameKey name)))) (overValueShort (rnameKey name)) (joinWithAt (overValueTargets (rnameKey name))) else inferVarRef globals ctx ec (rnameKey name) sp
       EInt n sp => OkC (Pair (TInt n) (Pair (VNeutral (NGlobal "Int" [])) ec))
       EStr s sp => OkC (Pair (TStr s) (Pair (VNeutral (NGlobal "String" [])) ec))
       EFloat raw sp => OkC (Pair (TFloat raw) (Pair (VNeutral (NGlobal floatTypeName [])) ec))
       EPi name implicit qty dom cod sp => inferPiFuel (fuel - 1) globals ctx ec name implicit qty dom cod sp
-      EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
+      EApp (EVar n fsp) args sp => if isInstArgSyntax (rnameKey n) then tcErr0 sp NoInstParam else inferAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args sp Nothing
       EApp fn args sp => inferAppFuel (fuel - 1) globals ctx ec fn args sp Nothing
       ELam names body sp => tcErr0 sp LambdaNoSignature
       EIf c t e sp =>
@@ -927,7 +934,7 @@ recordUpdateArg : Int -> DtFieldMeta -> List (Pair String Expr) -> Span -> Expr
 recordUpdateArg i f provided sp =
   case recordUpdateValueFor f.dtFieldName provided of
     Just e => e
-    Nothing => EVar (recordFieldVarName i) sp
+    Nothing => EVar (classifyName (recordFieldVarName i)) sp
 
 -- | 按字段表顺序生成全部字段的更新实参，未提供的字段沿用原 binder。
 recordUpdateArgs : Int -> List DtFieldMeta -> List (Pair String Expr) -> Span -> List Expr
@@ -1099,7 +1106,7 @@ elabERecUpdateFuel fuel globals ctx ec base fields sp =
                     Vuna.Compiler.Base.Common.bind (recordUpdatePlan ec1 baseTy fields sp) (
                         \plan =>
                           let
-                            body = EApp (EVar (dtCtorName plan.upCtor) sp) plan.upBodyArgs sp
+                            body = EApp (EVar (classifyName (dtCtorName plan.upCtor)) sp) plan.upBodyArgs sp
                           in Vuna.Compiler.Base.Common.bind (elabConAltFuel (fuel - 1) globals ctx ec1 plan.upData plan.upIdxs (evalCtx ctx baseTerm) baseTy (dtCtorName plan.upCtor) (recordFieldPats plan.upFieldCount sp) sp body) (
                               \q =>
                                 case q of
@@ -1198,47 +1205,47 @@ inferAppFuel fuel globals ctx ec fn args sp hint =
     icFuel "inference"
   else
     case fn of
-      EVar "->" _ =>
+      EVar (RIntrinsic "->") _ =>
         case args of
           [a, b] => inferPiFuel (fuel - 1) globals ctx ec "_" False Nothing a b sp
           _ => tcErr0 sp InvalidArrowType
-      EVar "Type" tsp =>
+      EVar (RIntrinsic "Type") tsp =>
         case args of
           [EInt n nsp] => if n < 0 then tcErr0 nsp UniverseLevelNonNegative else OkC (Pair (TType (levelOfInt n)) (Pair (VType (levelSucc (levelOfInt n))) ec))
           _ => tcErr0 tsp TypeLevelArg
       _ =>
         case fn of
           EVar name vsp =>
-            if isOverCtorName name then
-              Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp Nothing (overCtorShort name) (overCtorTargets name)) (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args sp hint)
+            if isOverCtorName (rnameKey name) then
+              Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp Nothing (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => inferAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) vsp) args sp hint)
             else
-              case ctxLookup name ctx of
+              case ctxLookup (rnameKey name) ctx of
                 Just _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
                 -- 与类型同名的构造子（`data Pair a b where Pair : a -> b -> ...`）在
                 -- 推断位置按**构造子**解释（推断位置是值位置；类型位置由 checkTypeFuel (fuel - 1) / checkAppFuel (fuel - 1)
                 -- 的「期望是宇宙」分支先走类型应用，不会到这里）。构造子表优先于 globals：
                 -- globals 里同名项先登记的是族的 kind，直接查会拿到 `Type -> ... -> Type`。
                 Nothing =>
-                  case dtCtorLookupEc ec name of
+                  case dtCtorLookupEc ec (rnameKey name) of
                     Just ctor =>
                       Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] (dtCtorType ctor)) args sp hint) (
                           \pa =>
                             case pa of
-                              Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
+                              Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal (rnameKey name)) argTerms) (Pair resTy ec2))
                         )
                     Nothing =>
-                      case globalsLookup name globals ec of
+                      case globalsLookup (rnameKey name) globals ec of
                         -- 推断位置也要走 `==` / `/=` / 比较运算符的特化，否则 term 里留下裸
                         -- `==`（codegen 默认映射成 bi_eq_int，字符串比较会生成类型错误的 OCaml）。
                         Just tyTerm =>
-                          if skipArithSpecForHint ec name hint then
+                          if skipArithSpecForHint ec (rnameKey name) hint then
                             Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (
                                 \pa =>
                                   case pa of
-                                    Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
+                                    Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal (rnameKey name)) argTerms) (Pair resTy ec2))
                               )
                           else
-                            Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (
+                            Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec (rnameKey name) args sp) (
                                 \mspec =>
                                   case mspec of
                                     Just pair => OkC pair
@@ -1246,7 +1253,7 @@ inferAppFuel fuel globals ctx ec fn args sp hint =
                                       Vuna.Compiler.Base.Common.bind (inferArgsFuel (fuel - 1) globals ctx ec (eval [] tyTerm) args sp hint) (
                                           \pa =>
                                             case pa of
-                                              Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal name) argTerms) (Pair resTy ec2))
+                                              Pair argTerms (Pair resTy ec2) => OkC (Pair (ctorAppTermEc ec2 (TGlobal (rnameKey name)) argTerms) (Pair resTy ec2))
                                         )
                               )
                         -- `==` / `<` 等已不是 prelude globals（用户源码的运算符在 Loader 被
@@ -1254,11 +1261,11 @@ inferAppFuel fuel globals ctx ec fn args sp hint =
                         -- 模式）仍直接构造 `EVar "=="` 这类内部生成名，且实例方法体没有签名、走推断。
                         -- 因此推断位置在没有 globals 项时也要先试运算符特化，再报 UnknownName。
                         Nothing =>
-                          Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (
+                          Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec (rnameKey name) args sp) (
                               \mspec =>
                                 case mspec of
                                   Just pair => OkC pair
-                                  Nothing => tcErr1 vsp (UnknownName name) name
+                                  Nothing => tcErr1 vsp (UnknownName (rnameKey name)) (rnameKey name)
                             )
           _ => inferAppGeneralFuel (fuel - 1) globals ctx ec fn args sp hint
 
@@ -1269,7 +1276,7 @@ inferAppGeneralFuel fuel globals ctx ec fn args sp hint =
   else
     case fn of
       EVar name vsp =>
-        Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (
+        Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec (rnameKey name) args sp) (
             \mspec =>
               case mspec of
                 Just pair => OkC pair
@@ -1301,9 +1308,9 @@ inferArgsFuel fuel globals ctx ec ty args sp hint =
 -- `Base.Data.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
 -- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/Cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
 listLitElems : Expr -> Maybe (List Expr)
-listLitElems (EVar name sp) = if isListNilSyntax name then Just [] else Nothing
+listLitElems (EVar name sp) = if isListNilSyntax (rnameKey name) then Just [] else Nothing
 listLitElems (EApp (EVar name csp) ([h, t]) sp) =
-  if isListConsSyntax name then listLitConsTail h t else Nothing
+  if isListConsSyntax (rnameKey name) then listLitConsTail h t else Nothing
 
 -- | 在元素列表前插入一个元素（列表字面量拆解用）。
 listLitConsTail : Expr -> Expr -> Maybe (List Expr)
@@ -1329,11 +1336,11 @@ litFamilyCtor ec fam short =
 
 -- | 按给定 Nil/Cons 全名把元素列表折成构造子应用表达式。
 expandListLitGo : String -> String -> List Expr -> Span -> Check Expr
-expandListLitGo nilName consName [] sp = OkC (EVar nilName sp)
+expandListLitGo nilName consName [] sp = OkC (EVar (classifyName nilName) sp)
 expandListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Base.Common.bind
     (expandListLitGo nilName consName rest sp)
-    (\t => OkC (EApp (EVar consName sp) [e, t] sp))
+    (\t => OkC (EApp (EVar (classifyName consName) sp) [e, t] sp))
 
 -- 命名行：行字面量的条目形状是 `Cons <name> <label> <tail>`。
 --   * 裸标签（`Fetch`、`ConsoleOp`、`StateOp Nat`）→ 名字取 `defaultInstance`；
@@ -1341,12 +1348,13 @@ expandListLitGo nilName consName (e :: rest) sp =
 --     parser 已把裸标识符名字转成字符串字面量（`[Op@audit]` → 名字 "audit"），
 --     变量名必须写 `Cons n label tail`。
 rowAtParts : Expr -> Maybe (Pair Expr Expr)
-rowAtParts (EApp (EVar name _) ([e, n]) _) = if isRowAtSyntax name then Just (Pair e n) else Nothing
+rowAtParts (EApp (EVar name _) ([e, n]) _) =
+  if isRowAtSyntax (rnameKey name) then Just (Pair e n) else Nothing
 rowAtParts _ = Nothing
 
 appAtParts : Expr -> Maybe (Pair Expr (Pair Expr (List Expr)))
 appAtParts (EApp (EVar name _) (f :: nm :: rest) _) =
-  if isAppAtSyntax name then Just (Pair f (Pair nm rest)) else Nothing
+  if isAppAtSyntax (rnameKey name) then Just (Pair f (Pair nm rest)) else Nothing
 appAtParts _ = Nothing
 
 -- 行条目（rowAt 或 appAt）：`Pair label name`。appAt 的多余实参是标签应用
@@ -1384,11 +1392,11 @@ rowLitNameExpr e sp =
     Nothing => EStr effDefaultInstance sp
 
 expandRowListLitGo : String -> String -> List Expr -> Span -> Check Expr
-expandRowListLitGo nilName consName [] sp = OkC (EVar nilName sp)
+expandRowListLitGo nilName consName [] sp = OkC (EVar (classifyName nilName) sp)
 expandRowListLitGo nilName consName (e :: rest) sp =
   Vuna.Compiler.Base.Common.bind
     (expandRowListLitGo nilName consName rest sp)
-    (\t => OkC (EApp (EVar consName sp) (rowConsArgs e t sp) sp))
+    (\t => OkC (EApp (EVar (classifyName consName) sp) (rowConsArgs e t sp) sp))
 
 -- | 行 cons 的实参：条目已经是显式 `Named <name> <label>` 时原样使用（列表字面量不再
 -- 包一层默认名，`[Named "audit" Op]` 与 `Named "audit" Op :: []` 等价）；否则把实例名
@@ -1398,11 +1406,12 @@ rowConsArgs e t sp = [rowConsEntry e sp, t]
 
 rowConsEntry : Expr -> Span -> Expr
 rowConsEntry (e@(EApp (EVar n _) ([_, _]) _)) sp =
-  if n == effNamedName then e else wrapRowEntry e sp
+  if rnameKey n == effNamedName then e else wrapRowEntry e sp
 rowConsEntry e sp = wrapRowEntry e sp
 
 wrapRowEntry : Expr -> Span -> Expr
-wrapRowEntry e sp = EApp (EVar effNamedName sp) [rowLitNameExpr e sp, rowLitLabel e] sp
+wrapRowEntry e sp =
+  EApp (EVar (classifyName effNamedName) sp) [rowLitNameExpr e sp, rowLitLabel e] sp
 
 -- | 列表族的 cons 构造子：新库里叫 `::`，旧库里叫 `Cons`（过渡期双认）。
 litFamilyCons : Ec -> String -> Maybe DtCtor
@@ -1926,7 +1935,7 @@ literalTraitLower globals ctx ec traitName methodName lit expected sp =
     dictDom = VNeutral (NGlobal (dictTypeName traitName) [forceVal ec expected])
   in case searchInstanceIn globals ctx ec dictDom sp of
     ErrC _ => Nothing
-    OkC (Pair _ ec1) => Just (Pair (EApp (EVar methodName sp) [lit] sp) ec1)
+    OkC (Pair _ ec1) => Just (Pair (EApp (EVar (classifyName methodName) sp) [lit] sp) ec1)
 
 -- 诊断标签：check 核心按表达式形态分桶（只在 level >= 2 的逐节点 span 上用）。
 exprFormName : Expr -> String
@@ -1996,12 +2005,12 @@ checkEFuelNoRowPlain fuel globals ctx ec expr expected =
   else
     case expr of
       EVar name sp =>
-        if isHoleName name then
+        if isHoleName (rnameKey name) then
           let
-            pmeta = newHoleMeta ctx ec sp expected (holeNameOf name)
+            pmeta = newHoleMeta ctx ec sp expected (holeNameOf (rnameKey name))
           in case pmeta of
             Pair metaTerm ec1 => OkC (Pair metaTerm ec1)
-        else if isOverCtorName name then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp (Just expected) (overCtorShort name) (overCtorTargets name)) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t sp) [] expected sp) else if isOverValueName name then Vuna.Compiler.Base.Common.bind (resolveOverValueTarget globals ctx ec (overValueShort name) (overValueTargets name) expected sp) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t sp) [] expected sp) else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
+        else if isOverCtorName (rnameKey name) then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp (Just expected) (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) sp) [] expected sp) else if isOverValueName (rnameKey name) then Vuna.Compiler.Base.Common.bind (resolveOverValueTarget globals ctx ec (overValueShort (rnameKey name)) (overValueTargets (rnameKey name)) expected sp) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) sp) [] expected sp) else checkAppFuel (fuel - 1) globals ctx ec (EVar name sp) [] expected sp
       EInt n sp =>
         case forceVal ec expected of
           VNeutral (NGlobal g []) =>
@@ -2047,9 +2056,9 @@ checkEFuelNoRowPlain fuel globals ctx ec expr expected =
               Just (Pair lower ec1) => checkEFuel (fuel - 1) globals ctx ec1 lower expected
               Nothing => checkByInferFuel (fuel - 1) globals ctx ec expr expected
       ELam names body sp => checkLamFuel (fuel - 1) globals ctx ec names body expected sp
-      EApp (EVar "->" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-      EApp (EVar "Type" _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
-      EApp (EVar n fsp) args sp => if isInstArgSyntax n then tcErr0 sp NoInstParam else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
+      EApp (EVar (RIntrinsic "->") _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+      EApp (EVar (RIntrinsic "Type") _) args sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
+      EApp (EVar n fsp) args sp => if isInstArgSyntax (rnameKey n) then tcErr0 sp NoInstParam else checkAppFuel (fuel - 1) globals ctx ec (EVar n fsp) args expected sp
       EApp fn args sp => checkAppFuel (fuel - 1) globals ctx ec fn args expected sp
       EPi name implicit qty dom cod sp => checkByInferFuel (fuel - 1) globals ctx ec expr expected
       -- D51 补：check 位的 `if` 先用期望类型检查两个分支（矩阵降级产生的 `if` 体不会
@@ -2122,7 +2131,7 @@ checkLetFuel fuel globals ctx ec binds body rec_ expected sp =
 -- | 模式里是否含重载构造子引用（Loader 的候选集编码）。
 patHasOverCtor : Pat -> Bool
 patHasOverCtor (PCon name args sp) =
-  if isInternalSyntaxName name then True else anyPatHasOverCtor args
+  if isInternalSyntaxName (rnameKey name) then True else anyPatHasOverCtor args
 patHasOverCtor (PAs name inner sp) = patHasOverCtor inner
 patHasOverCtor (PRecord name fields sp) = anyFieldHasOverCtor fields
 patHasOverCtor _ = False
@@ -2736,26 +2745,26 @@ checkTypeFuel fuel globals ctx ec expr =
   else
     case expr of
       EVar name sp =>
-        case ctxLookup name ctx of
+        case ctxLookup (rnameKey name) ctx of
           Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
           Nothing =>
-            case typeLookup globals ec name of
+            case typeLookup globals ec (rnameKey name) of
               Just tyTerm =>
                 case typeLevelOf (forceVal ec (eval [] tyTerm)) of
-                  Just lvl => OkC (Pair (typeHeadTerm ec name) (Pair lvl ec))
+                  Just lvl => OkC (Pair (typeHeadTerm ec (rnameKey name)) (Pair lvl ec))
                   Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
               Nothing => checkTypeInferFuel (fuel - 1) globals ctx ec expr
       -- 族应用在类型位置按该名字在类型命名空间里的 kind 应用（`Pair` 这类与族同名的构造子
       -- 不能在类型位置被当成值构造子）。`->` / `Type` 是内建形式，仍走常规推断。
       EApp (EVar name sp) args asp =>
-        if name == "->" || name == "Type" then
+        if rnameKey name == "->" || rnameKey name == "Type" then
           checkTypeInferFuel (fuel - 1) globals ctx ec expr
         else
-          case ctxLookup name ctx of
+          case ctxLookup (rnameKey name) ctx of
             Just _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
             Nothing =>
-              if isTypeName globals ec name then
-                case inferAppUnderTypeFuel (fuel - 1) globals ctx ec name args sp of
+              if isTypeName globals ec (rnameKey name) then
+                case inferAppUnderTypeFuel (fuel - 1) globals ctx ec (rnameKey name) args sp of
                   ErrC _ => checkTypeInferFuel (fuel - 1) globals ctx ec expr
                   OkC p => OkC p
               else
@@ -2787,10 +2796,10 @@ checkAppFuel fuel globals ctx ec fn args expected sp =
   else
     case fn of
       EVar name vsp =>
-        if isOverCtorName name then
-          Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp (Just expected) (overCtorShort name) (overCtorTargets name)) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args expected sp)
+        if isOverCtorName (rnameKey name) then
+          Vuna.Compiler.Base.Common.bind (resolveOverCtor ec vsp (Just expected) (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar (classifyName t) vsp) args expected sp)
         else
-          case ctxLookup name ctx of
+          case ctxLookup (rnameKey name) ctx of
             -- 局部 binder 不可能是运算符方法（`+` / `==` / `Base.Trait.Num.x` 这类名字都要么是
             -- 全局、要么是运算符语法），直接走推断即可，省掉每处引用一次的运算符特化链。
             Just _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
@@ -2801,11 +2810,11 @@ checkAppFuel fuel globals ctx ec fn args expected sp =
             -- checkAppFuel (fuel - 1) 里，而不只是 checkTypeFuel (fuel - 1)。
             Nothing =>
               if isSortVal ec expected then
-                case typeNameOfDualCtor ec name of
+                case typeNameOfDualCtor ec (rnameKey name) of
                   Just fam => checkAppUnderTypeFuel (fuel - 1) globals ctx ec fam args expected vsp
-                  Nothing => if isTypeName globals ec name then checkAppUnderTypeFuel (fuel - 1) globals ctx ec name args expected vsp else checkAppByValueFuel fuel globals ctx ec fn name args expected sp vsp
+                  Nothing => if isTypeName globals ec (rnameKey name) then checkAppUnderTypeFuel (fuel - 1) globals ctx ec (rnameKey name) args expected vsp else checkAppByValueFuel fuel globals ctx ec fn (rnameKey name) args expected sp vsp
               else
-                checkAppByValueFuel fuel globals ctx ec fn name args expected sp vsp
+                checkAppByValueFuel fuel globals ctx ec fn (rnameKey name) args expected sp vsp
       _ => checkAppGeneralFuel (fuel - 1) globals ctx ec fn args expected sp
 
 -- 值位置的名称应用（非「类型作为项」）：构造子走 ctor 专用检查，其余走通用应用。
@@ -2868,23 +2877,23 @@ checkTypeAtKind globals ctx ec expr expected sp =
     _ =>
       case expr of
         EVar name _ =>
-          if isTypeName globals ec name then
-            case typeHeadLookup globals ec name of
-              Nothing => tcErr1 sp (UnknownName name) name
-              Just kindTerm => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (convEc ec (ctxDepth ctx) expected (eval [] kindTerm))) (\ec1 => OkC (Pair (typeHeadTerm ec1 name) ec1))
+          if isTypeName globals ec (rnameKey name) then
+            case typeHeadLookup globals ec (rnameKey name) of
+              Nothing => tcErr1 sp (UnknownName (rnameKey name)) (rnameKey name)
+              Just kindTerm => Vuna.Compiler.Base.Common.bind (onErrDiag (withFallbackSpan sp) (convEc ec (ctxDepth ctx) expected (eval [] kindTerm))) (\ec1 => OkC (Pair (typeHeadTerm ec1 (rnameKey name)) ec1))
           else
             onErrDiag (withFallbackSpan sp) (checkEFuel 256 globals ctx ec expr expected)
         EApp (EVar name _) args _ =>
-          if isTypeName globals ec name then
-            case typeHeadLookup globals ec name of
-              Nothing => tcErr1 sp (UnknownName name) name
+          if isTypeName globals ec (rnameKey name) then
+            case typeHeadLookup globals ec (rnameKey name) of
+              Nothing => tcErr1 sp (UnknownName (rnameKey name)) (rnameKey name)
               Just kindTerm =>
                 Vuna.Compiler.Base.Common.bind (inferArgsFuel 256 globals ctx ec (eval [] kindTerm) args sp Nothing) (
                     \pa =>
                       case pa of
                         Pair argTerms (Pair resTy ec1) =>
                           case convEc ec1 (ctxDepth ctx) expected resTy of
-                            OkC ec2 => OkC (Pair (typeAppTerm ec2 name argTerms) ec2)
+                            OkC ec2 => OkC (Pair (typeAppTerm ec2 (rnameKey name) argTerms) ec2)
                             ErrC e => tcTypeMismatch sp (showValue expected) (showValue resTy)
                   )
           else
@@ -3046,15 +3055,15 @@ checkAppGeneralFuel fuel globals ctx ec fn args expected sp =
   else
     case fn of
       EVar name vsp =>
-        Vuna.Compiler.Base.Common.bind (specializeArithCheckFuel (fuel - 1) globals ctx ec name args expected sp) (
+        Vuna.Compiler.Base.Common.bind (specializeArithCheckFuel (fuel - 1) globals ctx ec (rnameKey name) args expected sp) (
             \arith =>
               case arith of
                 Just (Pair term ec2) => OkC (Pair term ec2)
                 Nothing =>
-                  if skipArithSpecForExpected ec name expected then
+                  if skipArithSpecForExpected ec (rnameKey name) expected then
                     checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
                   else
-                    Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec name args sp) (
+                    Vuna.Compiler.Base.Common.bind (specializeOpAppFuel (fuel - 1) globals ctx ec (rnameKey name) args sp) (
                         \mspec =>
                           case mspec of
                             Just (Pair term (Pair termTy ec1)) =>
@@ -3165,15 +3174,15 @@ resolveOverPatFuel Zero ec ctx expected pat = icFuel "pattern resolve"
 resolveOverPatFuel (Succ k) ec ctx expected pat =
   case pat of
     PCon name args sp =>
-      if isListNilSyntax name then
+      if isListNilSyntax (rnameKey name) then
         case litFamilyCtor ec (listLitFamily ec expected) "Nil" of
           Just c => resolveCtorPatFuel k ec ctx expected (dtCtorName c) args sp
-          Nothing => OkC (Pair (PCon "__list_literal__" args sp) ec)
-      else if isListConsSyntax name then
+          Nothing => OkC (Pair (PCon (classifyName "__list_literal__") args sp) ec)
+      else if isListConsSyntax (rnameKey name) then
         case litFamilyCons ec (listLitFamily ec expected) of
           Just c => resolveCtorPatFuel k ec ctx expected (dtCtorName c) args sp
-          Nothing => OkC (Pair (PCon "__list_literal__" args sp) ec)
-      else if isOverCtorName name then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp (Just expected) (overCtorShort name) (overCtorTargets name)) (\target => resolveCtorPatFuel k ec ctx expected target args sp) else resolveCtorPatFuel k ec ctx expected name args sp
+          Nothing => OkC (Pair (PCon (classifyName "__list_literal__") args sp) ec)
+      else if isOverCtorName (rnameKey name) then Vuna.Compiler.Base.Common.bind (resolveOverCtor ec sp (Just expected) (overCtorShort (rnameKey name)) (overCtorTargets (rnameKey name))) (\target => resolveCtorPatFuel k ec ctx expected target args sp) else resolveCtorPatFuel k ec ctx expected (rnameKey name) args sp
     PRecord name fields sp => OkC (Pair pat ec)
     _ => OkC (Pair pat ec)
 
@@ -3182,15 +3191,15 @@ resolveCtorPatFuel : Nat -> Ec -> Ctx -> Value -> String -> List Pat -> Span -> 
 resolveCtorPatFuel Zero ec ctx expected cname args sp = icFuel "pattern resolve"
 resolveCtorPatFuel (Succ k) ec ctx expected cname args sp =
   case dtCtorLookupEc ec cname of
-    Nothing => OkC (Pair (PCon cname args sp) ec)
+    Nothing => OkC (Pair (PCon (classifyName cname) args sp) ec)
     Just ctor =>
       case ctorFamilyArgs ec ctx ctor expected of
-        Nothing => OkC (Pair (PCon cname args sp) ec)
+        Nothing => OkC (Pair (PCon (classifyName cname) args sp) ec)
         Just (Pair seedArgs (Pair ty2 ec1)) =>
           Vuna.Compiler.Base.Common.bind (resolvePatArgsFuel k ec1 ctx ty2 args) (
               \q =>
                 case q of
-                  Pair args2 ec2 => OkC (Pair (PCon cname args2 sp) ec2)
+                  Pair args2 ec2 => OkC (Pair (PCon (classifyName cname) args2 sp) ec2)
             )
 
 -- | 沿构造子 telescope 逐个解析实参模式（隐式 binder 直接跳过）。
@@ -3351,7 +3360,7 @@ checkAppCtorFuel fuel globals ctx ec name args expected sp =
 -- | 判断表达式头部是否是 do 块标记（`@vuna@do@bind` / `@vuna@do@ignore`）应用。
 doMarkerHead : Expr -> Bool
 doMarkerHead (EApp (EVar name sp) args asp) =
-  case doSyntaxCanonical name of
+  case doSyntaxCanonical (rnameKey name) of
     Just _ => True
     Nothing => False
 doMarkerHead _ = False
@@ -3379,7 +3388,7 @@ decodeDoChain fuel canonical acc expr =
   else
     case expr of
       EApp (EVar name sp) args asp =>
-        case doSyntaxCanonical name of
+        case doSyntaxCanonical (rnameKey name) of
           Nothing => Just (Pair (reverse acc) expr)
           Just canonical2 =>
             if canonical /= canonical2 then
@@ -3393,7 +3402,7 @@ decodeDoChain fuel canonical acc expr =
 -- | 把整个表达式解析成 DoChain；头部不是 do 标记或链形状不合法时返回 Nothing。
 decodeDoBlock : Expr -> Maybe DoChain
 decodeDoBlock (expr@(EApp (EVar name sp) args asp)) =
-  case doSyntaxCanonical name of
+  case doSyntaxCanonical (rnameKey name) of
     Just canonical =>
       case decodeDoChain 4096 canonical [] expr of
         Just (Pair steps last) => Just (DoChain canonical steps last sp)
@@ -3407,7 +3416,7 @@ doChainBuild : String -> List DoChainStep -> Expr -> Span -> Expr
 doChainBuild canonical [] last lastSp = last
 doChainBuild canonical ((DoChainStep binder e sp binderSp) :: rest) last lastSp =
   EApp
-    (EVar canonical sp)
+    (EVar (classifyName canonical) sp)
     [e, ELam [Pair binder binderSp] (doChainBuild canonical rest last lastSp) sp]
     sp
 

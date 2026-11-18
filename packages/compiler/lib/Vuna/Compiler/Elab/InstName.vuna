@@ -6,14 +6,15 @@ module Vuna.Compiler.Elab.InstName where
 -- 纯函数、无状态；Trait 与 Driver.SplitGen 共用 `instanceName` / `derivedInstName`。
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Elab.Meta
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- | 实例头 `Show Int` 的类名与实参。
 export instanceHeadName : Expr -> Maybe String
-instanceHeadName (EVar n sp) = Just n
+instanceHeadName (EVar n sp) = Just (rnameKey n)
 instanceHeadName (EApp fn args sp) =
   case fn of
-    EVar n fsp => Just n
+    EVar n fsp => Just (rnameKey n)
     _ => Nothing
 instanceHeadName _ = Nothing
 
@@ -57,7 +58,7 @@ argSuffix (a :: rest) = "_${exprNameFor a}${argSuffix rest}"
 export exprNameFor : Expr -> String
 exprNameFor e =
   case e of
-    EVar n sp => n
+    EVar n sp => rnameKey n
     EInt n sp => strFromInt n
     EStr s sp => s
     -- 参数化实例名要能区分 `Box a` / `Pair a b`（一律取 "X" 会让 `Eq_X` 撞名）。
@@ -66,5 +67,5 @@ exprNameFor e =
 
 -- | 实例头实参的名字（`Pretty Color` 里的 `Color`）。
 export argNameOf : Expr -> String
-argNameOf (EVar n sp) = n
+argNameOf (EVar n sp) = rnameKey n
 argNameOf _ = "Int"

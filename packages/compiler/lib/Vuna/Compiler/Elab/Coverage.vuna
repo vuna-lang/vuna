@@ -27,7 +27,8 @@ import Base.Data.Pair as Pair
 import Base.Data.String as String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 emptyPatSpan : Span
 emptyPatSpan = Span "" 0 0 0 0 0 0
@@ -45,7 +46,7 @@ headCtorName : List Pat -> Maybe String
 headCtorName [] = Nothing
 headCtorName (p :: _) =
   case patHead p of
-    PCon c _ _ => Just c
+    PCon c _ _ => Just (rnameKey c)
     _ => Nothing
 
 -- 该列出现的构造子名（保序、去重）。
@@ -80,7 +81,7 @@ specializeRow : Int -> String -> List Pat -> List (List Pat)
 specializeRow ar cname [] = []
 specializeRow ar cname (p :: ps) =
   case patHead p of
-    PCon c subs _ => if c == cname then [append subs ps] else []
+    PCon c subs _ => if rnameKey c == cname then [append subs ps] else []
     PVar _ _ => [append (wilds ar) ps]
     PWild _ => [append (wilds ar) ps]
     _ => []
@@ -151,7 +152,9 @@ coverageWitness table fuel pending rows qs =
                 deeper = coverageWitness table fuel2 Nothing specialized (append (wilds ar) qs)
               in case deeper of
                 Nothing => coverageWitness table fuel2 (Just rest) rows qs
-                Just w => Just (PCon (firstOf entry) (takePats ar w) emptyPatSpan :: dropPats ar w)
+                Just w =>
+                  Just
+                    (PCon (classifyName (firstOf entry)) (takePats ar w) emptyPatSpan :: dropPats ar w)
         Nothing =>
           case qs of
             [] => if hasNilRow rows then Nothing else Just []
@@ -240,16 +243,16 @@ renderPatIn fuel paren p =
     case patHead p of
       PCon c subs _ =>
         if natToInt (length subs) == 0 then
-          c
+          rnameKey c
         else
           let
-            body = "${c} ${join " " (map (renderPatIn (fuel - 1) True) subs)}"
+            body = "${rnameKey c} ${join " " (map (renderPatIn (fuel - 1) True) subs)}"
           in if paren then "(${body})" else body
       PVar _ _ => "_"
       PWild _ => "_"
       PInt n _ => strFromInt n
       PStr s _ => "\"${s}\""
-      PRecord rn fields _ => "{ ${rn} }"
+      PRecord rn fields _ => "{ ${rnameKey rn} }"
       PAs _ inner _ => renderPatIn (fuel - 1) paren inner
 
 export renderWitness : List Pat -> String

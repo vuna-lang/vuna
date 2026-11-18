@@ -10,7 +10,8 @@ import Base.Data.List as List
 import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Core.Eval
 import Vuna.Compiler.Core.Conv
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- 一个 DT 定义：名字、类型项、体项（均为闭项；体带擦除标志）。
 -- `DtAxiom` 是**无体/不透明**的顶层（`axiom name : Ty`）：它只有类型，没有

@@ -9,6 +9,7 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast as Ast
 import Vuna.Compiler.Frontend.Rast.Name
+export import Vuna.Compiler.Frontend.Ast (Qty, Q0, Q1, qtyIsZero, ReprTier, ReprAuto, ReprAlias, ReprBoxed, reprPrefix, FixityDecl, fixitySpan, Import, ExportItem, XBare, XTypeAll, XTypeSome, XModule, XNamespace, ExportMembers, EMNone, EMAll, EMOnly, ExportSpec, ESValue, ESType, exportSpecName, exportSpecSpan, Opacity, OpacityOpaque, OpacityTransparent, OpacityAbstract, OpacitySpec, opacitySpecName, opacitySpecSpan, ModDecl)
 
 -- 记录字段：字段名 + 类型表达式 + span。
 export record Field(..) where
@@ -41,31 +42,6 @@ export data Pat(..) : Type where
 export data InterpPart(..) : Type where
   IPText : String -> InterpPart
   IPHole : Expr -> InterpPart
-
--- 显式 binder quantity。源码写法 `(0 x : A)` / `(1 x : A)`；不写 = ω。
--- 只列可写出的两档；`RigOmega` 由「没有 Qty」表示，不引入 ω 字形。
-export data Qty(..) : Type where
-  Q0 : Qty
-  Q1 : Qty
-
-export qtyIsZero : Qty -> Bool
-qtyIsZero Q0 = True
-qtyIsZero Q1 = False
-
--- | 记录表示三档声明（`alias record` / `record` / `boxed record`）。
--- `ReprAuto` = 未声明：回落到底层自动去装箱推断。
--- `ReprAlias` = 声明去装箱别名：构造/投影定义性恒等，要求擦除后恰好一个运行时字段。
--- `ReprBoxed` = 声明强制装箱（FFI/ABI 稳定）。档位进 DtData 与 iface（D7：声明优先）。
-export data ReprTier(..) : Type where
-  ReprAuto : ReprTier
-  ReprAlias : ReprTier
-  ReprBoxed : ReprTier
-
--- | 档位的源码前缀（Fmt 用；`ReprAuto` 无前缀）。
-export reprPrefix : ReprTier -> String
-reprPrefix ReprAuto = ""
-reprPrefix ReprAlias = "alias "
-reprPrefix ReprBoxed = "boxed "
 
 export data Expr(..) : Type where
   EVar : RName -> Span -> Expr
@@ -113,19 +89,6 @@ export data Expr(..) : Type where
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
   EFloat : String -> Span -> Expr
 
--- fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
--- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
--- Decl 匹配点扩散。
-export record FixityDecl(..) where
-  fixityOp : String
-  fixityLevel : Int
-  fixityAssoc : Int
-  fixityTarget : Maybe String
-  fixitySpan : Span
-
-export fixitySpan : FixityDecl -> Span
-fixitySpan (FixityDecl op level assoc target sp) = sp
-
 -- do 语句：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
 export data DoStmt(..) : Type where
   DBind : Pat -> Expr -> Span -> DoStmt
@@ -161,65 +124,7 @@ export data Decl(..) : Type where
   DTrait : String -> List TraitParam -> List Expr -> List TraitMethod -> Span -> Decl
   DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
 
--- 模块头与导出项。
--- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
--- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
--- XNamespace 是 `export module C [as X]`：不带 alias 时平铺重导出 C，带 alias 时只导出命名空间路径。
-export data ExportItem(..) : Type where
-  XBare : String -> Span -> ExportItem
-  XTypeAll : String -> Span -> ExportItem
-  XTypeSome : String -> List String -> Span -> ExportItem
-  XModule : String -> Span -> ExportItem
-  XNamespace : String -> Maybe String -> Span -> ExportItem
-
--- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
-export data ExportMembers(..) : Type where
-  EMNone : ExportMembers
-  EMAll : ExportMembers
-  EMOnly : List String -> ExportMembers
-
--- D11：一条逐定义导出声明。
--- `ESValue` = 值/axiom/extern/用户符号；`ESType` = data/record/trait + 成员面。
-export data ExportSpec(..) : Type where
-  ESValue : String -> Span -> ExportSpec
-  ESType : String -> ExportMembers -> Span -> ExportSpec
-
-export exportSpecName : ExportSpec -> String
-exportSpecName (ESValue name sp) = name
-exportSpecName (ESType name members sp) = name
-
-export exportSpecSpan : ExportSpec -> Span
-exportSpecSpan (ESValue name sp) = sp
-exportSpecSpan (ESType name members sp) = sp
-
--- D11：定义归约修饰符。
-export data Opacity(..) : Type where
-  OpacityOpaque : Opacity
-  OpacityTransparent : Opacity
-  OpacityAbstract : Opacity
-
-export record OpacitySpec(..) where
-  opacityName : String
-  opacityKind : Opacity
-  opacitySpan : Span
-
-export opacitySpecName : OpacitySpec -> String
-opacitySpecName (OpacitySpec name kind sp) = name
-
-export opacitySpecSpan : OpacitySpec -> Span
-opacitySpecSpan (OpacitySpec name kind sp) = sp
-
--- 模块头：模块名、是否写了显式导出列表、导出项、span；
 -- D11：逐定义导出/重导出/归约修饰符也挂在模块头（入口文件没有模块头，不需要它们）。
-export record ModDecl(..) where
-  modDeclName : String
-  modDeclHasExportList : Bool
-  modDeclExportItems : List ExportItem
-  modDeclExports : List ExportSpec
-  modDeclReexports : List ExportItem
-  modDeclOpacity : List OpacitySpec
-  modDeclSpan : Span
-
 -- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
 export record SourceFile(..) where
   sourceFileModDecl : Maybe ModDecl
@@ -301,12 +206,6 @@ traitMethodName (TraitMethod name ty sp) = name
 
 export traitMethodSpan : TraitMethod -> Span
 traitMethodSpan (TraitMethod name ty sp) = sp
-
-export record Import(..) where
-  importName : String
-  importIsQualified : Bool
-  importAlias : Maybe String
-  importSpan : Span
 
 export exportItemSpan : ExportItem -> Span
 exportItemSpan (XBare name sp) = sp
@@ -698,7 +597,7 @@ export ofDecls : List Ast.Decl -> List Decl
 ofDecls decls = map (ofDecl []) decls
 
 -- | 单条声明。
-ofDecl : List String -> Ast.Decl -> Decl
+export ofDecl : List String -> Ast.Decl -> Decl
 ofDecl scope d =
   case d of
     Ast.DData name params kind ctors derivings via repr lin sp =>
@@ -709,7 +608,7 @@ ofDecl scope d =
         (map (ofCtor (append params scope)) ctors)
         derivings
         via
-        (ofRepr repr)
+        repr
         lin
         sp
     Ast.DAxiom name ty sp => DAxiom name (ofExpr scope ty) sp
@@ -720,15 +619,7 @@ ofDecl scope d =
         bound = append (bindersOfPats pats) scope
       in DFun name (map (ofPat scope) pats) (ofExpr bound body) sp
     Ast.DRecord name params fields derivings via repr lin sp =>
-      DRecord
-        name
-        params
-        (map (ofField (append params scope)) fields)
-        derivings
-        via
-        (ofRepr repr)
-        lin
-        sp
+      DRecord name params (map (ofField (append params scope)) fields) derivings via repr lin sp
     Ast.DTrait name params supers methods sp =>
       let
         bound = append (map astTraitParamName params) scope
@@ -781,7 +672,7 @@ bindersOfPats : List Ast.Pat -> List String
 bindersOfPats pats = concatMap patBinders pats
 
 -- | 表达式转换。
-ofExpr : List String -> Ast.Expr -> Expr
+export ofExpr : List String -> Ast.Expr -> Expr
 ofExpr scope e =
   case e of
     Ast.EVar name sp => EVar (nameOf scope name) sp
@@ -792,7 +683,7 @@ ofExpr scope e =
     Ast.ELam params body sp => ELam params (ofExpr (append (map firstOf params) scope) body) sp
     Ast.EApp fn args sp => EApp (ofExpr scope fn) (map (ofExpr scope) args) sp
     Ast.EPi name implicit qty dom cod sp =>
-      EPi name implicit (ofMaybeQty qty) (ofExpr scope dom) (ofExpr (name :: scope) cod) sp
+      EPi name implicit qty (ofExpr scope dom) (ofExpr (name :: scope) cod) sp
     Ast.ELet binds body rec_ sp =>
       let
         bound = append (concatMap bindingBinders binds) scope
@@ -857,21 +748,8 @@ bindingBinders (Pair pat value) = patBinders pat
 astTraitParamName : Ast.TraitParam -> String
 astTraitParamName p = p.traitParamName
 
-ofRepr : Ast.ReprTier -> ReprTier
-ofRepr Ast.ReprAuto = ReprAuto
-ofRepr Ast.ReprAlias = ReprAlias
-ofRepr Ast.ReprBoxed = ReprBoxed
-
-ofQty : Ast.Qty -> Qty
-ofQty Ast.Q0 = Q0
-ofQty Ast.Q1 = Q1
-
 ofTraitParam : List String -> Ast.TraitParam -> TraitParam
 ofTraitParam scope (Ast.TraitParam name kind) = TraitParam name (ofMaybeExpr scope kind)
-
-ofMaybeQty : Maybe Ast.Qty -> Maybe Qty
-ofMaybeQty Nothing = Nothing
-ofMaybeQty (Just q) = Just (ofQty q)
 
 ofMaybeExpr : List String -> Maybe Ast.Expr -> Maybe Expr
 ofMaybeExpr scope Nothing = Nothing

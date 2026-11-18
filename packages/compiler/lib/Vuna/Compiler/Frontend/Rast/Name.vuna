@@ -75,7 +75,7 @@ classifyName name =
       Nothing => RIntrinsic name
   else if isInternalSyntaxName name then
     RIntrinsic name
-  else if hasIntrinsic name then
+  else if hasIntrinsic name || isPreludeName name then
     RIntrinsic name
   else
     case splitGlobalKey name of

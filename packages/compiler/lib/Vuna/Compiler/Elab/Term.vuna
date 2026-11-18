@@ -14,7 +14,8 @@ import Vuna.Compiler.Elab.Prelude
 import Vuna.Compiler.Elab.Types
 export import Vuna.Compiler.Elab.Term.Impl (checkTypeAtKind)
 import Vuna.Compiler.Elab.Term.Support
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 export deferDictBinder : List (Pair String Term) -> Ctx -> Ec -> Value -> Closure -> List Expr -> Span -> Check (Pair (List (Pair Term Rig)) (Pair Value Ec))
 deferDictBinder globals ctx ec dom clo args sp =

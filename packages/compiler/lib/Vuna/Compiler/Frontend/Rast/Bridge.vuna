@@ -1,0 +1,149 @@
+-- | RAst → Ast 的桥：只服务仍以 Ast 为输入的消费者（iface 规范编码 / 工具）。
+--
+-- 桥模块同时导入两套类型，因此内部只用限定名；对外只暴露 `toAstExpr` 等函数名，
+-- 不会把两套同名构造子带进调用方。
+module Vuna.Compiler.Frontend.Rast.Bridge where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast as Ast
+import Vuna.Compiler.Frontend.Rast as Rast
+import Vuna.Compiler.Frontend.Rast.Name as RastName
+
+-- | RAst 表达式 → Ast 表达式（名字还原为解析后的字符串）。
+export toAstExpr : Rast.Expr -> Ast.Expr
+toAstExpr e =
+  case e of
+    Rast.EVar n sp => Ast.EVar (RastName.rnameKey n) sp
+    Rast.EInt n sp => Ast.EInt n sp
+    Rast.EStr s sp => Ast.EStr s sp
+    Rast.EFloat raw sp => Ast.EFloat raw sp
+    Rast.EInterp multi parts sp => Ast.EInterp multi (map toAstInterpPart parts) sp
+    Rast.ELam params body sp => Ast.ELam params (toAstExpr body) sp
+    Rast.EApp fn args sp => Ast.EApp (toAstExpr fn) (map toAstExpr args) sp
+    Rast.EPi name implicit qty dom cod sp =>
+      Ast.EPi name implicit qty (toAstExpr dom) (toAstExpr cod) sp
+    Rast.ELet binds body rec_ sp => Ast.ELet (map toAstBinding binds) (toAstExpr body) rec_ sp
+    Rast.ELocalFun clauses sp => Ast.ELocalFun (map toAstLocalClause clauses) sp
+    Rast.ECase scrut alts sp => Ast.ECase (toAstExpr scrut) (map toAstAlt alts) sp
+    Rast.EIf c t f sp => Ast.EIf (toAstExpr c) (toAstExpr t) (toAstExpr f) sp
+    Rast.EField base fname sp => Ast.EField (toAstExpr base) fname sp
+    Rast.ERecord name fields sp =>
+      Ast.ERecord (RastName.rnameKey name) (map toAstFieldValue fields) sp
+    Rast.ERecUpdate base fields sp =>
+      Ast.ERecUpdate (toAstExpr base) (map toAstFieldValue fields) sp
+    Rast.EDo stmts sp => Ast.EDo (map toAstStmt stmts) sp
+    Rast.EInfix op l r sp => Ast.EInfix op (toAstExpr l) (toAstExpr r) sp
+    Rast.EParen inner sp => Ast.EParen (toAstExpr inner) sp
+    Rast.EBacktick name l r sp => Ast.EBacktick name (toAstExpr l) (toAstExpr r) sp
+    Rast.ESectOp op sp => Ast.ESectOp op sp
+    Rast.ESectL op r sp => Ast.ESectL op (toAstExpr r) sp
+    Rast.ESectR l op sp => Ast.ESectR (toAstExpr l) op sp
+    Rast.EAnn value ty sp => Ast.EAnn (toAstExpr value) (toAstExpr ty) sp
+
+toAstInterpPart : Rast.InterpPart -> Ast.InterpPart
+toAstInterpPart part =
+  case part of
+    Rast.IPText s => Ast.IPText s
+    Rast.IPHole e => Ast.IPHole (toAstExpr e)
+
+toAstBinding : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
+toAstBinding (Pair pat value) = Pair (toAstPat pat) (toAstExpr value)
+
+toAstLocalClause : Pair (List Rast.Pat) Rast.Expr -> Pair (List Ast.Pat) Ast.Expr
+toAstLocalClause (Pair pats body) = Pair (map toAstPat pats) (toAstExpr body)
+
+toAstAlt : Pair Rast.Pat Rast.Expr -> Pair Ast.Pat Ast.Expr
+toAstAlt (Pair pat body) = Pair (toAstPat pat) (toAstExpr body)
+
+toAstFieldValue : Pair String Rast.Expr -> Pair String Ast.Expr
+toAstFieldValue (Pair fname value) = Pair fname (toAstExpr value)
+
+toAstStmt : Rast.DoStmt -> Ast.DoStmt
+toAstStmt stmt =
+  case stmt of
+    Rast.DBind pat value sp => Ast.DBind (toAstPat pat) (toAstExpr value) sp
+    Rast.DExpr value sp => Ast.DExpr (toAstExpr value) sp
+
+toAstPat : Rast.Pat -> Ast.Pat
+toAstPat p =
+  case p of
+    Rast.PVar name sp => Ast.PVar name sp
+    Rast.PAs name inner sp => Ast.PAs name (toAstPat inner) sp
+    Rast.PWild sp => Ast.PWild sp
+    Rast.PCon name pats sp => Ast.PCon (RastName.rnameKey name) (map toAstPat pats) sp
+    Rast.PInt n sp => Ast.PInt n sp
+    Rast.PStr s sp => Ast.PStr s sp
+    Rast.PRecord name fields sp =>
+      Ast.PRecord (RastName.rnameKey name) (map toAstPatField fields) sp
+
+toAstPatField : Pair String Rast.Pat -> Pair String Ast.Pat
+toAstPatField (Pair fname pat) = Pair fname (toAstPat pat)
+
+-- | Ast 表达式 → RAst（解码路径用；名字按无作用域分类）。
+export toRastExpr : Ast.Expr -> Rast.Expr
+toRastExpr e = Rast.ofExpr [] e
+
+-- | Ast 声明列表 → RAst（Loader → Elab 的边界）。
+export toRastDecls : List Ast.Decl -> List Rast.Decl
+toRastDecls decls = Rast.ofDecls decls
+
+-- | 单条 Ast 声明 → RAst。
+export toRastDecl : Ast.Decl -> Rast.Decl
+toRastDecl d = Rast.ofDecl [] d
+
+-- | RAst 声明列表 → Ast（iface / 规范编码等仍以 Ast 为输入的消费者）。
+export toAstDecls : List Rast.Decl -> List Ast.Decl
+toAstDecls decls = map toAstDecl decls
+
+export toAstDecl : Rast.Decl -> Ast.Decl
+toAstDecl d =
+  case d of
+    Rast.DData name params kind ctors derivings via repr lin sp =>
+      Ast.DData name params (toAstExpr kind) (map toAstCtor ctors) derivings via repr lin sp
+    Rast.DAxiom name ty sp => Ast.DAxiom name (toAstExpr ty) sp
+    Rast.DExtern name cName ty sp => Ast.DExtern name cName (toAstExpr ty) sp
+    Rast.DSig name ctx ty sp => Ast.DSig name (map toAstExpr ctx) (toAstExpr ty) sp
+    Rast.DFun name pats body sp => Ast.DFun name (map toAstPat pats) (toAstExpr body) sp
+    Rast.DRecord name params fields derivings via repr lin sp =>
+      Ast.DRecord name params (map toAstField fields) derivings via repr lin sp
+    Rast.DTrait name params supers methods sp =>
+      Ast.DTrait
+        name
+        (map toAstTraitParam params)
+        (map toAstExpr supers)
+        (map toAstTraitMethod methods)
+        sp
+    Rast.DInstance ctx head methods sp =>
+      Ast.DInstance (map toAstExpr ctx) (toAstExpr head) (map toAstDecl methods) sp
+
+toAstCtor : Rast.Ctor -> Ast.Ctor
+toAstCtor (Rast.Ctor name ty arity sp) = Ast.Ctor name (toAstExpr ty) arity sp
+
+toAstField : Rast.Field -> Ast.Field
+toAstField (Rast.Field name ty sp) = Ast.Field name (toAstExpr ty) sp
+
+toAstTraitParam : Rast.TraitParam -> Ast.TraitParam
+toAstTraitParam (Rast.TraitParam name kind) = Ast.TraitParam name (maybeMap toAstExpr kind)
+
+toAstTraitMethod : Rast.TraitMethod -> Ast.TraitMethod
+toAstTraitMethod (Rast.TraitMethod name ty sp) = Ast.TraitMethod name (toAstExpr ty) sp
+
+maybeMap : (a -> b) -> Maybe a -> Maybe b
+maybeMap f Nothing = Nothing
+maybeMap f (Just x) = Just (f x)
+
+-- | Ast 模式 → RAst。
+export toRastPat : Ast.Pat -> Rast.Pat
+toRastPat p =
+  case p of
+    Ast.PVar name sp => Rast.PVar name sp
+    Ast.PAs name inner sp => Rast.PAs name (toRastPat inner) sp
+    Ast.PWild sp => Rast.PWild sp
+    Ast.PCon name pats sp => Rast.PCon (RastName.classifyName name) (map toRastPat pats) sp
+    Ast.PInt n sp => Rast.PInt n sp
+    Ast.PStr s sp => Rast.PStr s sp
+    Ast.PRecord name fields sp =>
+      Rast.PRecord (RastName.classifyName name) (map toRastPatField fields) sp
+
+toRastPatField : Pair String Ast.Pat -> Pair String Rast.Pat
+toRastPatField (Pair fname pat) = Pair fname (toRastPat pat)

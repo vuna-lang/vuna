@@ -35,6 +35,7 @@ import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Core.Canonical
 import Vuna.Compiler.Elab.Canonical
+import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Store
@@ -190,12 +191,12 @@ preparedForModule modules entryDecls name =
   in if length modules <= 1 then
     Nothing
   else
-    case prepareDeclsWith auxDecls own of
+    case prepareDeclsWith (toRastDecls auxDecls) (toRastDecls own) of
       ErrC _ => Nothing
       OkC p =>
         case expandDerivings (secondOf p) of
           ErrC _ => Nothing
-          OkC ds2 => Just ds2
+          OkC ds2 => Just (toAstDecls ds2)
 
 setPrepared : List Decl -> ModuleIface -> ModuleIface
 setPrepared prepared mi =
@@ -636,7 +637,7 @@ mkIfaceBase pkg parts prog sources clean m =
       let
         name = moduleNameOf m
         cp = cpOfModule parts prog name (moduleOpaqueOf m)
-        records = recordsOfDecls m.moduleDeclsOf
+        records = recordsOfDecls (toRastDecls m.moduleDeclsOf)
         h =
           hashOfParts
             name

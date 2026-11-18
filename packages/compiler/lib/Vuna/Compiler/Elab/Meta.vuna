@@ -17,7 +17,8 @@ import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 
 -- 引用零参（无显式参数）构造子时，其隐式类型/族参数必须实例化成元变量；
 -- 否则 `inferE (EVar "Nil")` 会给出 `{a}->List a`（函数类型），而 `Nil` 是值。
@@ -624,7 +625,8 @@ hasOutOfScopeVarAlts alts = anyNegativeVarAlts alts
 export prependFamParams : Term -> Expr -> Span -> Expr
 prependFamParams (TPi n implicit rigB dom cod) tyExpr sp =
   case dom of
-    TType l => EPi n True Nothing (EVar "Type" sp) (prependFamParams cod tyExpr sp) sp
+    TType l =>
+      EPi n True Nothing (EVar (classifyName "Type") sp) (prependFamParams cod tyExpr sp) sp
     _ => tyExpr
 prependFamParams _ tyExpr sp = tyExpr
 
@@ -1393,8 +1395,8 @@ hasFamParams _ = False
 
 -- 语法层的宇宙判定：`Type` / `Type 1`（`Type` 的层级是应用实参）。
 isSortExpr : Expr -> Bool
-isSortExpr (EVar "Type" sp) = True
-isSortExpr (EApp (EVar "Type" sp) args sp2) = True
+isSortExpr (EVar (RIntrinsic "Type") sp) = True
+isSortExpr (EApp (EVar (RIntrinsic "Type") sp) args sp2) = True
 isSortExpr _ = False
 
 -- 模块限定名的最后一段（`Base.Trait.Monad.fmap` → `fmap`）；实现收敛到 `Source.lastSeg`。

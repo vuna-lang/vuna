@@ -425,9 +425,11 @@ nameIdentityOk =
     intrinsicOk =
       rnameIsIntrinsic (classifyName "bi_eq_int")
         && rnameIsIntrinsic (classifyName "@vuna@host@isTty")
+        && rnameIsIntrinsic (classifyName "->") && rnameKey (classifyName "->") == "->"
     macroOk =
       case classifyName "@vuna@macro@dbg" of
         RMacro n => n == "dbg" && rnameKey (RMacro n) == "@vuna@macro@dbg"
         _ => False
     holeOk = rnameIsHole (classifyName "?h") && rnameIsHole (classifyName "_")
   in localOk && globalOk && intrinsicOk && macroOk && holeOk
+

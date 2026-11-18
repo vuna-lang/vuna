@@ -10,6 +10,7 @@ import Vuna.Cli.Err
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Parser
@@ -183,7 +184,7 @@ goalRun file =
                   case reorderProgram (tableOfKeepOps (append programFixities fx)) decls0 of
                     ErrC e => toolFailure (diagText e)
                     OkC decls =>
-                      case goalsOfProgramTolerant decls of
+                      case goalsOfProgramTolerant (toRastDecls decls) of
                         ErrC e => toolFailure (diagText e)
                         OkC infos =>
                           do

@@ -20,7 +20,8 @@ import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Usage
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Base.Intrinsics
 
 -- ---------------------------------------------------------------
@@ -466,7 +467,8 @@ ctorHeadCovered : String -> List (Pair Pat Expr) -> Bool
 ctorHeadCovered cname [] = False
 ctorHeadCovered cname ((Pair pat body) :: rest) =
   case pat of
-    PCon cn subps psp => cn == cname && patsAllIrrefutable subps || ctorHeadCovered cname rest
+    PCon cn subps psp =>
+      rnameKey cn == cname && patsAllIrrefutable subps || ctorHeadCovered cname rest
     _ => ctorHeadCovered cname rest
 
 litHeadCovered : Pat -> List (Pair Pat Expr) -> Bool
@@ -513,9 +515,9 @@ checkCaseAltsGo ec prevs alts =
     (Pair pat body) :: rest =>
       case pat of
         PCon cname args psp =>
-          if ctorHeadCovered cname prevs then
+          if ctorHeadCovered (rnameKey cname) prevs then
             let
-              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant constructor branch" psp body) psp (WarnRedundantCtorBranch cname) cname
+              ec1 = warnAt1Mod ec (removeBranchSuggest "remove redundant constructor branch" psp body) psp (WarnRedundantCtorBranch (rnameKey cname)) (rnameKey cname)
             in checkCaseAltsGo ec1 (Pair pat body :: prevs) rest
           else
             checkCaseAltsGo ec (Pair pat body :: prevs) rest
@@ -566,7 +568,7 @@ export altNames : List (Pair Pat Expr) -> List String
 altNames [] = []
 altNames ((Pair pat body) :: rest) =
   case pat of
-    PCon cname args psp => cname :: altNames rest
+    PCon cname args psp => rnameKey cname :: altNames rest
     _ => altNames rest
 
 export hasCatchAll : List (Pair Pat Expr) -> Bool

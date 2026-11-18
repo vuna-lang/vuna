@@ -19,7 +19,8 @@ import Vuna.Compiler.Elab.Meta
 import Vuna.Compiler.Elab.Sig
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Base.Obs
 
 -- 类参数绑成隐式 binder 后的局部上下文。
@@ -292,7 +293,7 @@ declNamedInFile ((Pair d sp) :: rest) name file =
     Nothing => declNamedInFile rest name file
 
 headTypeNameOf : Expr -> Maybe String
-headTypeNameOf (EVar n sp) = Just n
+headTypeNameOf (EVar n sp) = Just (rnameKey n)
 headTypeNameOf (EApp fn args sp) = headTypeNameOf fn
 headTypeNameOf _ = Nothing
 
@@ -411,10 +412,10 @@ elabInstance instDecls allDecls globals classes datas ec (Pair d dsp) =
 
 -- 实例头/上下文的语法拆分：头是 `C arg`，约束是 `C arg`。
 instanceHeadParts : Expr -> Maybe (Pair String (List Expr))
-instanceHeadParts (EVar n sp) = Just (Pair n [])
+instanceHeadParts (EVar n sp) = Just (Pair (rnameKey n) [])
 instanceHeadParts (EApp fn args sp) =
   case fn of
-    EVar n fsp => Just (Pair n args)
+    EVar n fsp => Just (Pair (rnameKey n) args)
     _ => Nothing
 instanceHeadParts _ = Nothing
 
@@ -429,9 +430,9 @@ constraintPartsOf sp (e :: rest) =
 instanceConstraintParts : Expr -> Maybe (Pair String (List Expr))
 instanceConstraintParts (EApp fn args sp) =
   case fn of
-    EVar n fsp => Just (Pair n args)
+    EVar n fsp => Just (Pair (rnameKey n) args)
     _ => Nothing
-instanceConstraintParts (EVar n sp) = Just (Pair n [])
+instanceConstraintParts (EVar n sp) = Just (Pair (rnameKey n) [])
 instanceConstraintParts _ = Nothing
 
 -- 实例 signatrue 的精化结果：类名、tele、ctx 字典域、头实参（tele 内）、结果头。
@@ -498,7 +499,7 @@ elabInstanceConstrained classes globals defined ec0 sp cls argExprs ctxParts =
   let
     ctxArgs = concatMap (\p => secondOf p) ctxParts
     banned = topQuantBanned defined
-    combined = EApp (EVar "#inst" sp) (append argExprs ctxArgs) sp
+    combined = EApp (EVar (classifyName "#inst") sp) (append argExprs ctxArgs) sp
     kindMaybe = dictArgKinds ec0 (VNeutral (NGlobal (dictTypeName (dtClassName cls)) []))
   in case kindMaybe of
     Nothing => tcErr0 sp InstanceHeadNotApp
@@ -556,7 +557,7 @@ closedTypeTerms (a :: rest) =
         Just ts => Just (t :: ts)
 
 closedTypeTerm : Expr -> Maybe Term
-closedTypeTerm (EVar n sp) = Just (TGlobal n)
+closedTypeTerm (EVar n sp) = Just (TGlobal (rnameKey n))
 closedTypeTerm (EApp fn args sp) =
   case closedTypeTerm fn of
     Nothing => Nothing
@@ -624,8 +625,8 @@ bareTeleSeeds [] kinds = []
 bareTeleSeeds (e :: rest) (k :: ks) =
   case e of
     EVar n sp =>
-      if isLowerStart n then
-        (::) (Pair n (quote 0 k)) (bareTeleSeeds rest ks)
+      if isLowerStart (rnameKey n) then
+        (::) (Pair (rnameKey n) (quote 0 k)) (bareTeleSeeds rest ks)
       else
         bareTeleSeeds rest ks
     _ => bareTeleSeeds rest ks
@@ -662,7 +663,7 @@ fallbackTeleKind : Expr -> String -> Term
 fallbackTeleKind combined v = arityFun (exprMaxAppArity v combined) (TType levelZero)
 
 exprFreeLower : Expr -> List String
-exprFreeLower (EVar n sp) = if isLowerStart n then [n] else []
+exprFreeLower (EVar n sp) = if isLowerStart (rnameKey n) then [rnameKey n] else []
 exprFreeLower (EApp fn args sp) = append (exprFreeLower fn) (concatMap exprFreeLower args)
 exprFreeLower (EPi n i _ dom cod sp) = append (exprFreeLower dom) (exprFreeLower cod)
 exprFreeLower (EAnn v ty sp) = append (exprFreeLower v) (exprFreeLower ty)
@@ -763,7 +764,7 @@ instTypeTele body ((Pair n k) :: rest) = TPi n True Rig0 k (instTypeTele body re
 -- 实例头的实参项：`Pretty Color` → `TGlobal "Color"`（每个类参数一个实参项）。
 export instanceHeadTerm : Expr -> Term
 instanceHeadTerm (EApp fn (a :: rest) sp) = TGlobal (argNameOf a)
-instanceHeadTerm (EVar n sp) = TGlobal n
+instanceHeadTerm (EVar n sp) = TGlobal (rnameKey n)
 instanceHeadTerm _ = TGlobal "Int"
 
 -- 实例里出现 trait 没声明的方法 ⇒ 硬错误（不得静默忽略多余方法）。
@@ -1478,7 +1479,7 @@ checkBodyAtEndFuel fuel globals ctx ec body expected sp =
                 etaName = "_arity${lvl}"
                 v = freshVarValue etaName lvl
                 ctx2 = ctxBindValue etaName dom ctx
-                body2 = EApp body [EVar etaName sp] sp
+                body2 = EApp body [EVar (classifyName etaName) sp] sp
               in Vuna.Compiler.Base.Common.bind (rigForLinearDomain ec sp etaName rig dom) (
                   \etaRig =>
                     Vuna.Compiler.Base.Common.bind (checkBodyAtEndFuel (fuel - 1) globals ctx2 ec body2 (applyClosure clo v) sp) (

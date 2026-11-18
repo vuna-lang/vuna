@@ -16,6 +16,7 @@ import Vuna.Compiler.Base.Intrinsics
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Elab.Derive
 import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.InstName
 import Vuna.Compiler.Elab.Term
 import Vuna.Compiler.Elab.Types
@@ -67,7 +68,7 @@ headClassName _ = Nothing
 splitInstanceOwnerOf : String -> Decl -> List (Pair String String)
 splitInstanceOwnerOf owner (DInstance ctxE headExpr methods sp) =
   case headClassName headExpr of
-    Just c => [Pair (instanceName c headExpr) owner]
+    Just c => [Pair (instanceName c (toRastExpr headExpr)) owner]
     Nothing => []
 splitInstanceOwnerOf owner (DData dname params kind ctors derivings viaField repr lin sp) =
   splitDerivedOwners owner dname params derivings
@@ -93,7 +94,7 @@ hasFieldOwnerOf owner dname params f =
         (EVar "Base.Trait.Record.HasField" splitNoSpan)
         [label, hasFieldRecordTypeExpr dname params, fty]
         splitNoSpan
-  in Pair (instanceName "Base.Trait.Record.HasField" head) owner
+  in Pair (instanceName "Base.Trait.Record.HasField" (toRastExpr head)) owner
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
 splitHasFieldOwners owner dname params [] = []

@@ -54,6 +54,7 @@ import Base.Effect.Args as EffArgs
 import Base.Effect.Exit as EffExit
 import Base.Effect.Process as EffProcess
 import Vuna.Compiler.Elab.Driver
+import Vuna.Compiler.Frontend.Rast.Bridge
 import Vuna.Compiler.Elab.Term
 
 -- 模块级接口：一次成功 check 的**完整输入面**。接口摘要要按模块归属切
@@ -143,7 +144,7 @@ checkDeclsWithWarns loaderWarns decls =
     _ = dbg! "decls-ready"
   in obsCheck "vuna.elab" (
       \_ =>
-        case elabProgramFull decls of
+        case elabProgramFull (toRastDecls decls) of
           ErrC e => ErrC e
           OkC program =>
             let
@@ -184,7 +185,7 @@ dtCheckPartsWithProgram pkg loaded =
               decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
             in obsCheck "vuna.elab" (
                 \_ =>
-                  case elabProgramFull decls of
+                  case elabProgramFull (toRastDecls decls) of
                     ErrC e => ErrC e
                     OkC program =>
                       let
@@ -305,7 +306,7 @@ dtEvalFile ctx entry =
             let
               parts = secondOf resolved
               decls = sealOpaqueDecls (secondOf parts) (firstOf parts)
-            in Vuna.Compiler.Base.Common.bind (elabProgramFull decls) evalDtMain
+            in Vuna.Compiler.Base.Common.bind (elabProgramFull (toRastDecls decls)) evalDtMain
       )
 
 -- REPL 的表达式求值：上下文 + program 源码 + 表达式源码。
@@ -332,7 +333,7 @@ replProgramFull ctx program exprSource =
                 case splitReplExpr (sealOpaqueDecls (secondOf (secondOf resolved)) (firstOf (secondOf resolved))) of
                   ErrC e => ErrC e
                   OkC p =>
-                    case elabProgramFull (firstOf p) of
+                    case elabProgramFull (toRastDecls (firstOf p)) of
                       ErrC e => ErrC e
                       OkC prog => OkC (Pair prog (secondOf p))
       )
@@ -344,7 +345,7 @@ dtEvalExpr ctx program exprSource =
     pure (
         case pR of
           ErrC e => ErrC e
-          OkC p => dtEvalExprIn (firstOf p) (secondOf p)
+          OkC p => dtEvalExprIn (firstOf p) (toRastExpr (secondOf p))
       )
 
 -- REPL：表达式求值 + 类型文本。REPL 用类型判断是否为 `Eff [] a`（决定是否走
@@ -357,7 +358,7 @@ dtEvalExprInfo ctx program exprSource =
     pure (
         case pR of
           ErrC e => ErrC e
-          OkC p => dtEvalExprInInfo (firstOf p) (secondOf p)
+          OkC p => dtEvalExprInInfo (firstOf p) (toRastExpr (secondOf p))
       )
 
 -- LSP：把内存里的源码当入口（无模块头）或库模块（有模块头）加载并精化。
@@ -373,7 +374,7 @@ dtCheckSource ctx label source =
             case resolveProjectWith (contextRelease ctx) project of
               ErrC e => ErrC e
               OkC resolved =>
-                case elabProgramFull (sealOpaqueDecls (secondOf (secondOf resolved)) (firstOf (secondOf resolved))) of
+                case elabProgramFull (toRastDecls (sealOpaqueDecls (secondOf (secondOf resolved)) (firstOf (secondOf resolved)))) of
                   ErrC e => ErrC e
                   OkC prog => OkC (append (firstOf resolved) (dtProgWarnings prog))
       )
@@ -525,7 +526,7 @@ dtEvalExprInfoWithAuxCache ctx program exprSource ifaces cache =
         case pR of
           ErrC e => ErrC e
           OkC p =>
-            case dtEvalExprInInfo (firstOf (firstOf p)) (secondOf (firstOf p)) of
+            case dtEvalExprInInfo (firstOf (firstOf p)) (toRastExpr (secondOf (firstOf p))) of
               ErrC e => ErrC e
               OkC info => OkC (Pair info (secondOf p))
       )
@@ -538,7 +539,7 @@ dtEvalExprWithAuxCache ctx program exprSource ifaces cache =
         case pR of
           ErrC e => ErrC e
           OkC p =>
-            case dtEvalExprIn (firstOf (firstOf p)) (secondOf (firstOf p)) of
+            case dtEvalExprIn (firstOf (firstOf p)) (toRastExpr (secondOf (firstOf p))) of
               ErrC e => ErrC e
               OkC out => OkC (Pair out (secondOf p))
       )
@@ -550,7 +551,7 @@ dtEvalExprInfoWithIfaces ctx program exprSource ifaces =
     pure (
         case pR of
           ErrC e => ErrC e
-          OkC p => dtEvalExprInInfo (firstOf p) (secondOf p)
+          OkC p => dtEvalExprInInfo (firstOf p) (toRastExpr (secondOf p))
       )
 
 export dtEvalExprWithIfaces : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> List ModuleIface -> Eff r (Check String)
@@ -560,7 +561,7 @@ dtEvalExprWithIfaces ctx program exprSource ifaces =
     pure (
         case pR of
           ErrC e => ErrC e
-          OkC p => dtEvalExprIn (firstOf p) (secondOf p)
+          OkC p => dtEvalExprIn (firstOf p) (toRastExpr (secondOf p))
       )
 
 -- ---------------------------------------------------------------
@@ -603,7 +604,7 @@ dtInferDefTypes ctx program targets defSource =
                       case allDeclsR of
                         ErrC e => ErrC e
                         OkC allDecls =>
-                          case elabProgramFullWith ecStart startGlobals allDecls of
+                          case elabProgramFullWith ecStart startGlobals (toRastDecls allDecls) of
                             ErrC e => ErrC e
                             OkC prog =>
                               let
@@ -691,7 +692,7 @@ dtBindingTypes ctx program =
         case declsR of
           ErrC e => ErrC e
           OkC decls =>
-            case elabProgramFull decls of
+            case elabProgramFull (toRastDecls decls) of
               ErrC e => ErrC e
               OkC prog =>
                 let
@@ -832,7 +833,7 @@ dtGoalsSource ctx label source =
           OkC project =>
             case resolveProjectWith (contextRelease ctx) project of
               ErrC e => ErrC e
-              OkC resolved => goalsOfProgram (dtProjectDecls (secondOf resolved))
+              OkC resolved => goalsOfProgram (toRastDecls (dtProjectDecls (secondOf resolved)))
       )
 
 -- 容错版：未解洞也会让严格收尾失败，但 hover 仍要显示目标与上下文。
@@ -846,7 +847,7 @@ dtGoalsSourceTolerant ctx label source =
           OkC project =>
             case resolveProjectWith (contextRelease ctx) project of
               ErrC e => ErrC e
-              OkC resolved => goalsOfProgramTolerant (dtProjectDecls (secondOf resolved))
+              OkC resolved => goalsOfProgramTolerant (toRastDecls (dtProjectDecls (secondOf resolved)))
       )
 
 -- `vuna test`：main 的返回类别，决定执行路径。
@@ -863,7 +864,7 @@ dtMainKind ctx entry =
         case declsR of
           ErrC e => ErrC e
           OkC loaded =>
-            case elabProgram (firstOf loaded) of
+            case elabProgram (toRastDecls (firstOf loaded)) of
               ErrC e => ErrC e
               OkC p =>
                 case findMainDef (secondOf p) of
@@ -1024,7 +1025,7 @@ dtCheckOursParts ctx resolved deps =
     termAux = concatMap moduleDeclsOf depsOnly
     start = depStartOf deps
   in Vuna.Compiler.Base.Common.bind
-    (elabProgramFullWithAux (firstOf start) (secondOf start) termAux decls)
+    (elabProgramFullWithAux (firstOf start) (secondOf start) (toRastDecls termAux) (toRastDecls decls))
     (
       \prog =>
         let
@@ -1232,7 +1233,9 @@ dtLoadPartsIncremental ctx entry depIfaces cleanIfaces =
 -- 终止性 SCT 上下文）。
 export dtPrepareTermAux : List Decl -> Check (List Decl)
 dtPrepareTermAux aux =
-  Vuna.Compiler.Base.Common.bind (prepareDecls aux) (\p => expandDerivings (secondOf p))
+  Vuna.Compiler.Base.Common.bind
+    (prepareDecls (toRastDecls aux))
+    (\p => Vuna.Compiler.Base.Common.bind (expandDerivings (secondOf p)) (\ds => OkC (toAstDecls ds)))
 
 -- 终止性 SCT 的 termAux 裁剪：依赖包 / 干净模块的终止性已在写它们自己的
 -- 接口时验过，本路径只报告当前模块函数的失败。import 图无环 ⇒ 调用图无跨模块环 ⇒
@@ -1244,7 +1247,7 @@ dtAuxForTermination [] = []
 dtAuxForTermination (d :: rest) =
   case d of
     DFun n pats body sp =>
-      case projectionOfDef (Pair n [Pair pats body]) of
+      case projectionOfDef (Pair n [Pair (map toRastPat pats) (toRastExpr body)]) of
         Just _ => d :: dtAuxForTermination rest
         Nothing => dtAuxForTermination rest
     _ => d :: dtAuxForTermination rest
@@ -1255,11 +1258,11 @@ dtElabFullWithPrepared : Ec -> List (Pair String Term) -> List Decl -> List Decl
 -- `TC_NoInstanceFound`（夹具 18/records_files/10_has_field 就是这条用例）。
 dtElabFullWithPrepared startEc startGlobals termAux preparedAux decls =
   Vuna.Compiler.Base.Common.bind
-    (prepareDeclsWith termAux (maybeAddHasFieldInstances startGlobals decls))
+    (prepareDeclsWith (toRastDecls termAux) (maybeAddHasFieldInstances startGlobals (toRastDecls decls)))
     (
       \p =>
         case p of
-          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWithAux startEc startGlobals records (dtAuxForTermination preparedAux) ds2)
+          Pair records ds => Vuna.Compiler.Base.Common.bind (expandDerivings ds) (\ds2 => elabProgramGoWithAux startEc startGlobals records (toRastDecls (dtAuxForTermination preparedAux)) ds2)
     )
 
 -- 工具链增量会话缓存：一次请求的**固定开销**按 iface 集合缓存。
@@ -1387,7 +1390,7 @@ dtGoalsIncrementalCore : PackageContext -> Pair (List Diagnostic) (Pair (List De
 dtGoalsIncrementalCore ctx resolved depIfaces cleanIfaces cache =
   Vuna.Compiler.Base.Common.bind
     (obsCheck "vuna.lsp.goals.setup" (\_ => dtIncrementalSetup ctx resolved depIfaces cleanIfaces cache))
-    (\s => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.lsp.goals.elab" (\_ => elabGoalsWithPrepared s.dsStartEc s.dsStartGlobals s.dsTermAux s.dsDecls)) (\gs => OkC (Pair gs s.dsNext)))
+    (\s => Vuna.Compiler.Base.Common.bind (obsCheck "vuna.lsp.goals.elab" (\_ => elabGoalsWithPrepared s.dsStartEc s.dsStartGlobals (toRastDecls s.dsTermAux) (toRastDecls s.dsDecls))) (\gs => OkC (Pair gs s.dsNext)))
 
 -- 需要整包产物（写接口 / build）：组装 DtProgram + 整包 codegen 检查。
 dtFinishPackage : List Diagnostic -> List CachedProgram -> List CachedProgram -> DtProgram -> Pair (List Decl) (List Module) -> Maybe AuxCache -> Check (Pair (Maybe CheckedPackage) (Maybe AuxCache))
@@ -1965,7 +1968,7 @@ dtSplitPartsOursWith ctx entry parts deps printResult extraDefLocs =
     allDecls = append (concatMap moduleDeclsOf ours) (firstOf parts)
     termAux = concatMap moduleDeclsOf depsOnly
     start = depStartOf deps
-  in case elabProgramFullWithAux (firstOf start) (secondOf start) termAux allDecls of
+  in case elabProgramFullWithAux (firstOf start) (secondOf start) (toRastDecls termAux) (toRastDecls allDecls) of
     ErrC e => pure (ErrC e)
     OkC prog =>
       let
@@ -2024,7 +2027,7 @@ dtSplitProjectParts ctx entry printResult =
           -- 依赖序校验失败。`topoModules` 直接吃 `moduleImports` 求 DAG 序。
           modules = topoModules (secondOf parts)
           allDecls = append (concatMap moduleDeclsOf modules) (firstOf parts)
-        in case elabProgramFull allDecls of
+        in case elabProgramFull (toRastDecls allDecls) of
           ErrC e => pure (ErrC e)
           OkC prog =>
             do
@@ -2093,7 +2096,7 @@ dtCheckRecovering ctx entry =
     pure (
         case declsR of
           ErrC e => ErrC e
-          OkC loaded => elabProgramErrors (firstOf loaded)
+          OkC loaded => elabProgramErrors (toRastDecls (firstOf loaded))
       )
 
 -- | 库包（[export].modules）的恢复式检查：加载模块后对汇总声明做单遍逐定义恢复。
@@ -2104,7 +2107,7 @@ dtCheckLibraryRecovering ctx names =
     pure (
         case partsR of
           ErrC e => ErrC e
-          OkC resolved => elabProgramErrors (dtProjectDecls (secondOf resolved))
+          OkC resolved => elabProgramErrors (toRastDecls (dtProjectDecls (secondOf resolved)))
       )
 
 -- `vuna check` 的整包 codegen 检查：Lowering（擦除 / 表示决策 / SCC）+ 装配（丢弃文本），
