@@ -221,8 +221,57 @@ emitClears idx tbl [] = []
 emitClears idx tbl (i :: rest) =
   append [i] (append (clearsAt idx tbl) (emitClears (idx + 1) tbl rest))
 
+-- | 清除指令：把槽写 0。生成体里的 `[rbp-N] = 0` 只由清除产生（值 0 走 `rax`），
+--   所以这里可以把它和「写入值 0」区分开。
+clearSlotOf : Instr -> Maybe Int
+clearSlotOf (IMov (OpMem Rbp off) (OpImm 0)) = Just off
+clearSlotOf _ = Nothing
+
+slotWriteOf : Instr -> Maybe Int
+slotWriteOf (IMov (OpMem Rbp off) _) = Just off
+slotWriteOf _ = Nothing
+
+isCallInstr : Instr -> Bool
+isCallInstr (ICall _) = True
+isCallInstr (ICallReg _) = True
+isCallInstr _ = False
+
+-- | 最后一次 `call` 的下标（没有 call 时是 -1）。只有 call 能进入会触发 GC 的运行时。
+lastCallIndex : List Instr -> Int
+lastCallIndex instrs = lastCallGo 0 (0 - 1) instrs
+
+lastCallGo : Int -> Int -> List Instr -> Int
+lastCallGo _ last [] = last
+lastCallGo i last (x :: rest) = lastCallGo (i + 1) (if isCallInstr x then i else last) rest
+
+memInt : Int -> List Int -> Bool
+memInt _ [] = False
+memInt n (x :: rest) = n == x || memInt n rest
+
+delInt : Int -> List Int -> List Int
+delInt _ [] = []
+delInt n (x :: rest) = if n == x then rest else x :: delInt n rest
+
+-- | 去掉多余的清除：`call` 之后的清除不会再有 GC 点（帧即将结束），同一基本块里
+--   已经清过且之后没被写入的槽也不需要再清。清除只影响保守 GC 的保留量，不做这层
+--   裁剪只会多留对象，不会漏根；这里去掉的都是已经从 0 再写 0 或永不再被扫描的槽。
+pruneClears : List Instr -> List Instr
+pruneClears instrs = pruneGo 0 (lastCallIndex instrs) [] instrs
+
+pruneGo : Int -> Int -> List Int -> List Instr -> List Instr
+pruneGo _ _ _ [] = []
+pruneGo i last cleared (x :: rest) = case x of
+  ILabel _ => x :: pruneGo (i + 1) last [] rest
+  _ => case clearSlotOf x of
+    Just off =>
+      if i > last || memInt off cleared then pruneGo (i + 1) last cleared rest
+      else x :: pruneGo (i + 1) last (off :: cleared) rest
+    Nothing => case slotWriteOf x of
+      Just off => x :: pruneGo (i + 1) last (delInt off cleared) rest
+      Nothing => x :: pruneGo (i + 1) last cleared rest
+
 clearDeadSlots : List Instr -> List Instr
-clearDeadSlots instrs = emitClears 0 (buildSlotUse 0 [] instrs) instrs
+clearDeadSlots instrs = pruneClears (emitClears 0 (buildSlotUse 0 [] instrs) instrs)
 
 -- | 调用点：实参 / 被调闭包的槽在调用返回后一定死，直接清零。
 clearSlotsInstrs : List Int -> List Instr
