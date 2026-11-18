@@ -661,7 +661,7 @@ else case args of
     in mCps (fuel - 1) r (IrLam [v] (mCpsApplyArgs (fuel - 1) r k rest (IrVar v :: acc) headV)) a
 
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
-mCps fuel r k e = if fuel <= 0 then IrApp k (transformDirect (fuel - 1) e)
+mCps fuel r k e = if fuel <= 0 then IrApp k e
 else if mIsResumeApp r e then IrApp e k
 else case e of
   IrLet bs rhs body =>
@@ -692,7 +692,7 @@ else case e of
     let
       p = flattenApp e
     in mCpsApply (fuel - 1) r k (append [firstOf p] (secondOf p))
-  _ => IrApp k (transformDirect (fuel - 1) e)
+  _ => IrApp k e
 
 mHandlerLam : Int -> List IrBinder -> Ir -> Ir
 mHandlerLam fuel bs body = case mResumption bs of

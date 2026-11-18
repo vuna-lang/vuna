@@ -41,21 +41,17 @@ consoleOpHIO i op k = case op of
 -- ---------------------------------------------------------------
 -- 带行的真实 handler（entry 自动预装用；不导出，用户拿不到）
 -- ---------------------------------------------------------------
--- | 带 `ConsoleOp` 行的 op 解释：真实打印后写穿继续（answer 行是 `[ConsoleOp]`）。
-consoleOpHIOHost : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Eff [ConsoleOp] a) -> Eff [ConsoleOp] a
+-- | entry 的 op 解释：宿主原语同步执行，answer 是裸值。
+consoleOpHIOHost : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> a) -> a
 consoleOpHIOHost i op k = case op of
-  Print s => do
-    r <- raise (@vuna@host@print s)
-    k (natFromInt r)
-  EPrint s => do
-    r <- raise (@vuna@prim_eff_eprint s)
-    k r
+  Print s => k (natFromInt (runPure (@vuna@host@print s)))
+  EPrint s => k (runPure (@vuna@prim_eff_eprint s))
 
--- | 带行的宿主 handler：删掉 `ConsoleOp n`，answer 是 `Eff [ConsoleOp]`（不导出）。
-handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ConsoleOp :: r) a -> Eff r (Eff [ConsoleOp] a)
+-- | entry 宿主 handler：删掉 ConsoleOp 标签，结果是裸值。
+handleConsoleHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ConsoleOp :: r) a -> Eff r a
 handleConsoleHostHost n comp =
-  handleCoreAt (Named n ConsoleOp) "console" n (\a => pure a) consoleOpHIOHost comp
+  handleCoreAt (Named n ConsoleOp) "console" n (\a => a) consoleOpHIOHost comp
 
--- | entry 自动预装用（泛化 r）：把行头 `ConsoleOp` 的 send 翻译成宿主 intrinsic，并把该标签移到行尾（`rowAppend r [ConsoleOp]`）。
-runConsoleHost : {r : Row} -> {a : Type} -> Eff (Named "default" ConsoleOp :: r) a -> Eff (rowAppend r [ConsoleOp]) a
-runConsoleHost comp = joinEff (handleConsoleHostHost "default" comp)
+-- | entry 自动预装用：把行头 ConsoleOp 的 send 翻译成宿主 intrinsic，并把该标签删掉。
+runConsoleHost : {r : Row} -> {a : Type} -> Eff (Named "default" ConsoleOp :: r) a -> Eff r a
+runConsoleHost comp = handleConsoleHostHost "default" comp

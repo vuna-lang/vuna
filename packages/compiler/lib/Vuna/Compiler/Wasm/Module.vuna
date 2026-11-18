@@ -1486,6 +1486,11 @@ defsUseSyms syms (d :: rest) = if defUsesSyms syms d then True else defsUseSyms 
 effModeOf : Maybe IrEntry -> List IrDef -> Int
 effModeOf entry ordered = if defsUseSyms performSyms ordered then 2 else 0
 
+consoleOnly : List String -> Bool
+consoleOnly ts = case ts of
+  [] => True
+  t :: rest => t == "Base.EffConsole.ConsoleOp" && consoleOnly rest
+
 listNull : List a -> Bool
 listNull [] = True
 listNull (_ :: _) = False
@@ -1552,7 +1557,8 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
             2 => append elems ["$rt_effThunk", "$rt_effResumeClo"]
             3 => append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
             5 => append elems ["$rt_selKComp", "$rt_selKValue"]
-            6 => append elems ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2"]
+            6 => append elems
+              ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns"]
             _ => elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
@@ -1901,7 +1907,7 @@ build program printResult =
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
         else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if listNull (irEntryRowTagsOf e) && noStepUnsupported then case cpsDefsMachine ordered of
+      else if (listNull (irEntryRowTagsOf e) || consoleOnly (irEntryRowTagsOf e)) && noStepUnsupported then case cpsDefsMachine ordered of
         Ok cpsOrdered => buildAnf cpsOrdered 6 (Just e) listFamM
         Err _ => fallbackEff
       else fallbackEff
