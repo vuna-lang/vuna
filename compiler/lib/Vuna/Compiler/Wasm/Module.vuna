@@ -21,7 +21,6 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Anf
-import Vuna.Compiler.Ir.Classify
 import Vuna.Compiler.Ir.CpsStep
 import Vuna.Compiler.Wasm.Step
 import Vuna.Compiler.Ir.Runtime
@@ -1544,15 +1543,15 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           elemNames =
             if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
             else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
-            else if effMode == 4 then append elems ["$rt_stepIdentity", "$rt_stepKClo", "$rt_stepKClo2", "$rt_stepKDone", "$rt_stepHandleDone"]
+            else if effMode == 4 then append elems
+              ["$rt_stepIdentity", "$rt_stepKClo", "$rt_stepKClo2", "$rt_stepKDone", "$rt_stepHandleDone"]
             else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
           rtSelected =
             if effMode == 2 then filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
             else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts)
-            else if effMode == 4 then selectRtFuncsStep (rtFunctions st.gsConsts)
-            else rtBase0
+            else if effMode == 4 then selectRtFuncsStep (rtFunctions st.gsConsts) else rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
@@ -1879,23 +1878,23 @@ build program printResult =
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
-        classified = classifyAndPrepare defs
-        mainArity = case Base.HashMap.lookup (irEntryMainOf e) (secondOf classified) of
-          Just n => n
-          Nothing => 0
         noStepUnsupported =
           not (defsUseSyms ["prim_effectSelf", "prim_cleanupPush", "prim_cleanupPop"] ordered)
+        -- 纯入口（行 []、非 action、无 Step 未覆盖原语）在表示层改造完成后走全片段 CPS；
+        -- 当前 `prog : Eff ...` 会被 CPS 成函数，而 `handleCoreAt` 仍按 MkEff 数据 case，
+        -- 运行期 cast 失败，因此暂不启用（见 docs/reference/debt.md）。
         fullCpsOk = False
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
       else if fullCpsOk then case anfProgramDefs ordered of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
-        Ok anfDefs => case cpsStepDefsWith unit.irUnitTyDecls anfDefs of
+        Ok anfDefs => case cpsStepDefsWith unit.irUnitTyDecls (wrapEntryThunk (irEntryMainOf e) anfDefs) of
           Err msg => WasmRejected (WasmInternal ("CPS: " ++ msg))
           Ok stepDefs =>
             let
               idB = mkIrBinder "__cpsMainId"
               identity = IrLam [idB] (IrApp (IrRt "@ir@step@done") (IrVar idB))
-              launcherBody = IrApp (IrRt "@ir@step@run") (IrApp (IrGlobal (irEntryMainOf e)) identity)
+              launcherBody =
+                IrApp (IrRt "@ir@step@run") (IrApp (IrGlobal (irEntryMainOf e)) identity)
               launcher = IrDef "@cps@main" 0 [irEntryMainOf e] launcherBody False False Nothing
               allStep = launcher :: stepDefs
               orderedStep = reachableDefs ["@cps@main"] allStep
