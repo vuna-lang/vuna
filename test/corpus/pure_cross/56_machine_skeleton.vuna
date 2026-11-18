@@ -2,22 +2,21 @@
 -- 状态，不依赖宿主原语）。手搭 `handle (perform "po"/"po" 1) { po op k -> k 2 }`：
 -- resume 交 2，answer 是 2。
 import Base.Effect.Core as Eff
-import Base.Effect.Machine as M
 
 ret : Eff.Obj -> Eff.Obj
 ret x = x
 
 opH : Eff.Obj ->
-      (Eff.Obj -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj) ->
-      (Eff.Obj -> M.Control Eff.Obj) ->
-      M.Control Eff.Obj
+      (Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) ->
+      (Eff.Obj -> Eff.Control Eff.Obj) ->
+      Eff.Control Eff.Obj
 opH _ k kdone = k (Eff.toObj 2) kdone
 
-comp : Eff.Obj -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj
-comp _ k = M.MkPerform "po" "po" (Eff.toObj 1) (\v => M.MkApply k v)
+comp : Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj
+comp _ k = Eff.MkPerform "po" "po" (Eff.toObj 1) (\v => Eff.MkApply k v)
 
-kOuter : Eff.Obj -> M.Control Eff.Obj
-kOuter v = M.MkDone v
+kOuter : Eff.Obj -> Eff.Control Eff.Obj
+kOuter v = Eff.MkDone v
 
 main : Int
-main = Eff.fromObj (M.run (M.MkHandle "po" "po" ret opH comp kOuter))
+main = Eff.fromObj (Eff.machineRun (Eff.MkHandle "po" "po" ret opH comp kOuter))

@@ -17,6 +17,14 @@
 module Base.Effect.Core where
 
 import Base.Trait.Monad
+import Base.Data.Bool
+import Base.Data.Int
+import Base.Data.List
+import Base.Data.Maybe
+import Base.Data.String
+import Base.Trait.Eq
+import Base.Trait.Num
+import Base.Trait.Ord
 import Base.Internal.Operator
 
 -- | 命名标签：把实例名与效应签名并进标签类型（`Named "audit" ConsoleOp`，其中 `ConsoleOp : Type -> Type` 以结果类型为索引）。行条目只是这个类型；运行时实例名仍作为隐式 String 传给 send/handle。
@@ -313,3 +321,167 @@ bracket acquire release use =
 -- | `finally action cleanup`：action 正常返回 / 异常 / 其它效应 abort 都执行 cleanup，最后返回 action 的结果。等价于 `bracket (pure 0) (\_ => cleanup) (\_ => comp)`。
 export finally : {a : Type} -> {r : Row} -> Eff r a -> Eff r Int -> Eff r a
 finally comp cleanup = bracket (pure 0) (\_ => cleanup) (\_ => comp)
+
+ObjTy : Type
+ObjTy = Obj
+
+export data Control v(..) : Type where
+  MkDone : v -> Control v
+  MkApply : (v -> Control v) -> v -> Control v
+  MkPerform : String -> String -> v -> (v -> Control v) -> Control v
+  MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
+  MkReturn : Frame v -> v -> Control v
+  MkKDone : Frame v -> v -> Control v
+  MkResume : Frame v -> (v -> Control v) -> Int -> v -> (v -> Control v) -> Control v
+
+-- | handler frame：key、name、ret、opH、comp、kOuter、prev。
+export data Frame v(..) : Type where
+  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Frame v
+
+-- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文。
+export data Ctx v(..) : Type where
+  MkCtx : Frame v -> (v -> Control v) -> Maybe (Ctx v) -> Ctx v
+
+-- | 机器状态。
+export record MSt v where
+  msFrames : Maybe (Frame v)
+  msCtx : Maybe (Ctx v)
+  msUsed : List Int
+  msNext : Int
+
+export emptySt : MSt v
+emptySt = MSt Nothing Nothing [] 0
+
+frameKey : Frame v -> String
+frameKey f =
+  case f of
+    MkFrame key _ _ _ _ _ _ => key
+
+frameName : Frame v -> String
+frameName f =
+  case f of
+    MkFrame _ name _ _ _ _ _ => name
+
+frameRet : Frame v -> (v -> v)
+frameRet f =
+  case f of
+    MkFrame _ _ ret _ _ _ _ => ret
+
+frameOpH : Frame v -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v)
+frameOpH f =
+  case f of
+    MkFrame _ _ _ opH _ _ _ => opH
+
+frameComp : Frame v -> (v -> (v -> Control v) -> Control v)
+frameComp f =
+  case f of
+    MkFrame _ _ _ _ comp _ _ => comp
+
+frameKOuter : Frame v -> (v -> Control v)
+frameKOuter f =
+  case f of
+    MkFrame _ _ _ _ _ kOuter _ => kOuter
+
+framePrev : Frame v -> Maybe (Frame v)
+framePrev f =
+  case f of
+    MkFrame _ _ _ _ _ _ prev => prev
+
+ctxPrompt : Ctx v -> Frame v
+ctxPrompt c =
+  case c of
+    MkCtx prompt _ _ => prompt
+
+ctxKRest : Ctx v -> (v -> Control v)
+ctxKRest c =
+  case c of
+    MkCtx _ kRest _ => kRest
+
+ctxPrev : Ctx v -> Maybe (Ctx v)
+ctxPrev c =
+  case c of
+    MkCtx _ _ prev => prev
+
+samePrompt : Frame v -> Frame v -> Bool
+samePrompt a b = frameKey a == frameKey b && frameName a == frameName b
+
+depth : Int -> Maybe (Frame v) -> Int
+depth n chain =
+  if n <= 0 then
+    0
+  else
+    case chain of
+      Nothing => 0
+      Just g => 1 + depth (n - 1) (framePrev g)
+
+inChain : Int -> Frame v -> Maybe (Frame v) -> Bool
+inChain fuel f chain =
+  if fuel <= 0 then
+    False
+  else
+    case chain of
+      Nothing => False
+      Just g => if samePrompt f g then True else inChain (fuel - 1) f (framePrev g)
+
+-- | 把 frame 重新装到链头（resume 时帧已被弹掉的情形）。
+reinstall : Frame v -> Maybe (Frame v) -> Frame v
+reinstall f chain =
+  case f of
+    MkFrame key name ret opH comp kOuter _ => MkFrame key name ret opH comp kOuter chain
+
+reinstallIfMissing : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
+reinstallIfMissing fuel f chain = if inChain fuel f chain then chain else Just (reinstall f chain)
+
+findFrame : Int -> String -> String -> Maybe (Frame v) -> Maybe (Frame v)
+findFrame fuel key name chain =
+  if fuel <= 0 then
+    Nothing
+  else
+    case chain of
+      Nothing => Nothing
+      Just f => if frameKey f == key && frameName f == name then Just f else findFrame (fuel - 1) key name (framePrev f)
+
+-- | 驱动到 `Done`。`fuel` 是终止性证书（同时也是保护，见 debt）。
+export runGo : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
+runGo fuel st c =
+  if fuel <= 0 then prim_fail "vuna: effect machine: fuel exhausted" else step fuel st c
+
+step : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
+step fuel st c =
+  if fuel <= 0 then
+    prim_fail "vuna: effect machine: fuel exhausted"
+  else
+    case c of
+      MkDone v => v
+      MkApply k v => step (fuel - 1) st (k v)
+      MkKDone frame r => finish (fuel - 1) st frame r
+      MkReturn frame v =>
+        case st.msCtx of
+          Just c1 => if samePrompt (ctxPrompt c1) frame then step (fuel - 1) (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext) ((ctxKRest c1) ((frameRet frame) v)) else finish (fuel - 1) st frame ((frameRet frame) v)
+          Nothing => finish (fuel - 1) st frame ((frameRet frame) v)
+      MkResume frame k id v krest => if memInt id st.msUsed then prim_fail "vuna: runtime error: continuation already resumed" else step (fuel - 1) (MSt st.msFrames (Just (MkCtx frame krest st.msCtx)) (id :: st.msUsed) st.msNext) (k v)
+      MkPerform key name op k =>
+        case findFrame (fuel - 1) key name st.msFrames of
+          Nothing => prim_fail "vuna: runtime error: unhandled effect"
+          Just frame =>
+            let
+              id = st.msNext
+            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r))
+      MkHandle key name ret opH comp kOuter =>
+        let
+          frame = MkFrame key name ret opH comp kOuter st.msFrames
+        in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((comp (toObj 0)) (\x => MkReturn frame x))
+
+finish : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> ObjTy
+finish fuel st frame r =
+  step fuel (MSt (framePrev frame) st.msCtx st.msUsed st.msNext) ((frameKOuter frame) r)
+
+memInt : Int -> List Int -> Bool
+memInt x xs =
+  case xs of
+    [] => False
+    y :: rest => if x == y then True else memInt x rest
+
+-- | 入口：空状态跑到 Done。
+export machineRun : Control ObjTy -> ObjTy
+machineRun c = runGo 10000000 (MSt Nothing Nothing [] 0) c

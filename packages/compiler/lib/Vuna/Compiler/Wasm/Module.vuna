@@ -2103,7 +2103,7 @@ build program printResult =
           case irEntryRunMainOf e of
             Just rm => rm
             Nothing => ""
-        roots = append [irEntryMainOf e] runSeeds
+        roots = append ["Base.Effect.Core.machineRun", irEntryMainOf e] runSeeds
         rewrittenAll = map (rwDef hosts aborts runName) defs
         rewritten = reachableByRefs 100000 roots rewrittenAll
         live = rewritten

@@ -17,8 +17,6 @@ modules = [
   "Base.Container",
   "Base.Effect",
   "Base.Effect.Core",
-  # 显式效应机器的库实现（方案 B：三端共用的唯一一份语义）。
-  "Base.Effect.Machine",
   "Base.Effect.Pure",
   "Prelude"
 ]
