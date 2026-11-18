@@ -143,6 +143,16 @@ if [ -f "$NATIVE_MODULE" ]; then
   fi
 fi
 
+# 规则 11（后端模型层）：`Codegen/Ocaml/Model.vuna` 与 `Ir/Model.vuna` 的代码行（去注释）
+# 不得出现目标文本前缀（`v_` / `t_` / `C_` / `f_` / `Unit.`）：模型只装形状。
+for model in packages/compiler/lib/Vuna/Compiler/Codegen/Ocaml/Model.vuna packages/compiler/lib/Vuna/Compiler/Ir/Model.vuna; do
+  [ -f "$model" ] || continue
+  if sed -e "s/--.*//" "$model" | grep -qE "\"(v_|t_|C_|f_|Unit\.)"; then
+    echo "ir-boundary: $model contains target text (model layer must stay shape-only)"
+    fail=$((fail + 1))
+  fi
+done
+
 # 规则 10（wasm 后端）：`Wasm.Module` 必须消费 IR。
 WASM_MODULE=packages/compiler/lib/Vuna/Compiler/Wasm/Module.vuna
 if [ -f "$WASM_MODULE" ]; then

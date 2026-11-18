@@ -10,6 +10,7 @@ import Vuna.Compiler.Codegen.Ocaml.Render
 import Vuna.Compiler.Codegen.Term
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Ir.Anf
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Render
@@ -34,6 +35,8 @@ dumpIr after ctx entry = do
 dumpAfter : String -> IrProgram -> Check String
 dumpAfter "cps" program = dumpCps program
 dumpAfter "machine" program = dumpMachine program
+dumpAfter "anf" program = dumpAnf 1 program
+dumpAfter "anf2" program = dumpAnf 2 program
 dumpAfter "ocaml" program = dumpOcaml program
 dumpAfter _ program = OkC (renderProgram program)
 
@@ -64,3 +67,19 @@ dumpCps program = case cpsUnit program.irProgUnit of
     let
       shared = program.irProgShared
     in OkC (renderProgram (IrProgram shared u1))
+
+-- | ANF 幂等门禁的调试面：`--after anf` / `--after anf2` 分别对定义做 1 / 2 次
+-- `anfProgramDefs`，两份文本逐字节相同才算幂等。
+dumpAnf : Int -> IrProgram -> Check String
+dumpAnf times program =
+  let
+    defs = concatMap irGroupDefs program.irProgUnit.irUnitGroups
+  in case anfTimes times defs of
+    Err msg => OkC ("ANF ERROR: " ++ msg)
+    Ok ds => OkC (renderDefs ds)
+
+anfTimes : Int -> List IrDef -> Result (List IrDef)
+anfTimes n defs = if n <= 0 then Ok defs
+else case anfProgramDefs defs of
+  Err msg => Err msg
+  Ok ds => anfTimes (n - 1) ds

@@ -99,3 +99,4 @@ run: sh -c '"$VUNA" dev ir dump --after ocaml corpus/packages/m34_summary/root 2
 exit: 0
 run: sh -c '"$VUNA" dev ir dump --after ocaml corpus/packages/m34_summary/root 2>/dev/null | head -1 | grep -q "^type t_"'
 exit: 0
+
