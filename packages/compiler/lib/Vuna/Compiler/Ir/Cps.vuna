@@ -633,6 +633,58 @@ mIsControl (IrIf _ _ _) = True
 mIsControl (IrNatCase _ _ _ _ _) = True
 mIsControl _ = False
 
+-- | 表达式里是否用到 resumption `r`（只看值层；嵌套的 `MkEff` thunk 由 `transformDirect`
+-- 自带 continuation，不在这里计入）。
+usesResumption : Int -> IrBinder -> Ir -> Bool
+usesResumption fuel r e = if fuel <= 0 then False
+else if mIsResumeApp r e then True
+else case e of
+  IrCtor family ctor args =>
+    if isThunkCtor family ctor then False else usesResList (fuel - 1) r args
+  IrRecord _ fs => usesResFields (fuel - 1) r fs
+  IrProj b _ _ => usesResumption (fuel - 1) r b
+  IrRecUpd b _ fs => usesResumption (fuel - 1) r b || usesResFields (fuel - 1) r fs
+  IrRtApp _ args => usesResList (fuel - 1) r args
+  IrCast x => usesResumption (fuel - 1) r x
+  IrLet bs rhs body => usesResumption (fuel - 1) r rhs || usesResumption (fuel - 1) r body
+  IrLam _ body => usesResumption (fuel - 1) r body
+  IrApp f a => usesResumption (fuel - 1) r f || usesResumption (fuel - 1) r a
+  IrIf c t el =>
+    usesResumption (fuel - 1) r c || usesResumption (fuel - 1) r t || usesResumption (fuel - 1) r el
+  IrCase s alts => usesResumption (fuel - 1) r s || usesResAlts (fuel - 1) r alts
+  IrNatCase s _ z su ca =>
+    usesResumption (fuel - 1) r s
+      || usesResAltM (fuel - 1) r z
+      || usesResAltM (fuel - 1) r su
+      || usesResAltM (fuel - 1) r ca
+  IrConcatMany xs => usesResList (fuel - 1) r xs
+  IrEffThunk _ _ _ _ prim => usesResumption (fuel - 1) r prim
+  _ => False
+
+usesResList : Int -> IrBinder -> List Ir -> Bool
+usesResList fuel r xs = if fuel <= 0 then False
+else case xs of
+  [] => False
+  x :: rest => usesResumption (fuel - 1) r x || usesResList (fuel - 1) r rest
+
+usesResFields : Int -> IrBinder -> List (Pair String Ir) -> Bool
+usesResFields fuel r fs = if fuel <= 0 then False
+else case fs of
+  [] => False
+  p :: rest => usesResumption (fuel - 1) r (secondOf p) || usesResFields (fuel - 1) r rest
+
+usesResAlts : Int -> IrBinder -> List IrAlt -> Bool
+usesResAlts fuel r alts = if fuel <= 0 then False
+else case alts of
+  [] => False
+  a :: rest => usesResumption (fuel - 1) r a.irAltBody || usesResAlts (fuel - 1) r rest
+
+usesResAltM : Int -> IrBinder -> Maybe IrAlt -> Bool
+usesResAltM fuel r m = if fuel <= 0 then False
+else case m of
+  Nothing => False
+  Just a => usesResumption (fuel - 1) r a.irAltBody
+
 -- | 逐个 CPS 实参，最后把运行时符号应用交给 k。
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
 mCpsArgs fuel r k sym args acc = if fuel <= 0 then IrApp k (IrRtApp sym (reverse acc))
@@ -691,6 +743,11 @@ else case e of
     in mCps (fuel - 1) r cont scrut
   IrCast x => IrCast (mCps (fuel - 1) r k x)
   IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
+  IrLam bs body => if usesResumption (fuel - 1) r body then
+    let
+      kd = mFreshK fuel
+    in IrApp k (IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) body))
+  else IrApp k e
   IrApp _ _ =>
     let
       p = flattenApp e

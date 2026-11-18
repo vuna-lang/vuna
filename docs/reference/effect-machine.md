@@ -72,6 +72,9 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 - `opH op kDone`，其中 `kDone` 把 handler 结果直接交 `f.kOuter`（不经过 ret）；
 - handler 内调用 resumption：`@ir@m@resume cont v`，恢复后正常结束的值先交回
   当前 handler 的 `kDone`，而不是直接交 `kOuter`。
+- lowering 约定：resumption 一律**饱和**成 `k v kRest`；handler 体内部嵌的 lambda
+  （如 `>>=` 的实参 `\n -> k n`）若用到 resumption，会多接一个 continuation 参数
+  （`Ir.Cps.usesResumption`），否则 `k v` 的半应用会作为值泄漏出去。
 
 **Answer row（宿主 handler）**
 
@@ -96,6 +99,15 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
      续延上下文与 `$rt_mRun` 已接通，纯用户 handler 默认走 mode 6；
    - 1c（待做）：宿主+用户组合（answer row 的 frame 生命周期）与常量栈
      （当前 CPS 续延仍在 wasm 调用栈上，2000 次 perform 需 1 MiB）。
+     - 已能工作：Console 宿主行（裸值 `opH`）、`opH` 执行效应后返回 **Eff answer**
+       （answer 里不含 resumption）。
+     - 未通：`opH` 在 answer 里 **resume**（`do { s <- op; k s }`，Fs 语料即此形状）。
+       `@ir@m@resume` 返回的是 resumed 段的 `Control`（Step），而该值周围的 CPS 代码
+       把它当 answer 值（`Eff`）继续 `case`，于是 cast 失败。
+     - 试过并在 `41/42/48`、`26_eff_console` 上验证不可行：resume 用嵌套
+       `@ir@m@run` 驱动到值（每次 resume 一层 wasm 帧 → 栈耗尽）。因此
+       「resume 返回值」与「常量栈」是同一件事：**先把续延做成显式控制栈（trampoline），
+       再让 resume 直接返回 answer 值**，然后再转 Fs 及其余宿主家族。
 2. **native**：实现同一组原语（显式帧 + 续延栈，替代栈拷贝路径的 handler 部分）；
    用 `effect-common` 三端矩阵验收。
 3. **OCaml**：用同一协议映射到 `Effect.Deep` 或显式 trampoline；验收同矩阵。
