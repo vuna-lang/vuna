@@ -50,6 +50,19 @@ record AnfAltM where
   anfAltM : Maybe IrAlt
   anfNext : Int
 
+spineOfIr : Ir -> Pair Ir (List Ir)
+spineOfIr (IrApp f a) =
+  let
+    p = spineOfIr f
+  in Pair (firstOf p) (append (secondOf p) [a])
+spineOfIr x = Pair x []
+
+applyIrs : Ir -> List Ir -> Ir
+applyIrs f xs =
+  case xs of
+    [] => f
+    a :: rest => applyIrs (IrApp f a) rest
+
 isSimple : Ir -> Bool
 isSimple (IrVar _) = True
 isSimple (IrGlobal _) = True
@@ -130,13 +143,13 @@ anf fuel next e =
           bScrut = bindSimple s.anfNext s.anfLets s.anfExpr
           b = anf (fuel - 1) bScrut.boundNext body
         in mkAnf bScrut.boundLets (IrLet bs bScrut.boundExpr (letsIn b.anfLets b.anfExpr)) b.anfNext
-      IrApp f a =>
+      IrApp _ _ =>
         let
-          fa = anf (fuel - 1) next f
-          aa = anf (fuel - 1) fa.anfNext a
-          bf = bindSimple aa.anfNext (append fa.anfLets aa.anfLets) fa.anfExpr
-          ba = bindSimple bf.boundNext bf.boundLets aa.anfExpr
-        in mkAnf ba.boundLets (IrApp bf.boundExpr ba.boundExpr) ba.boundNext
+          p = spineOfIr e
+          h = anf (fuel - 1) next (firstOf p)
+          xs = anfList (fuel - 1) h.anfNext (secondOf p)
+          bf = bindSimple xs.anfNext (append h.anfLets xs.anfLets) h.anfExpr
+        in mkAnf bf.boundLets (applyIrs bf.boundExpr xs.anfExprs) bf.boundNext
       IrIf c t el =>
         let
           ca = anf (fuel - 1) next c
