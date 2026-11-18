@@ -213,31 +213,24 @@ rtMApply =
   rtFunc "$rt_mApply" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
     [IConstI32 4, ILocalGet "$p0", ILocalGet "$p1", IRefNull, IRefNull, IRefNull, IRefNull, IRefNull, IStructNew "$step"]
 
+-- | handler 的 answer 落地：在 resume 期间（ctx 命中同一帧）交回该次 resume 的
+-- kRest，让外层 perform 的日志/handler 链继续；否则弹帧交 kOuter。
 rtMKDone : WatFunc
 rtMKDone =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
-    locals =
-      [ Pair "$f" WvAnyRef,
-        Pair "$th" WvAnyRef,
-        Pair "$kans" WvAnyRef,
-        Pair "$step" WvAnyRef,
-        Pair "$v" WvAnyRef,
-        Pair "$eff" WvAnyRef,
-        Pair "$ctx" WvAnyRef
-      ]
-    popKOuter =
-      [ ILocalGet "$f",
-        IRefCast "$hframe",
-        IStructGet "$hframe" 5,
-        IGlobalSet "$g_stepHandlers",
-        ILocalGet "$f",
-        IRefCast "$hframe",
-        IStructGet "$hframe" 4
-      ]
+    locals = [Pair "$f" WvAnyRef, Pair "$ctx" WvAnyRef]
     body =
-      cat
-        [[ILocalGet "$p0", IRefCast "$hframe", ILocalSet "$f", IGlobalGet "$g_mctx", ILocalSet "$ctx", ILocalGet "$ctx", IPlain "ref.is_null", IIf "" [INop] [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 0, IRefCast "$hframe", ILocalGet "$f", IRefCast "$hframe", IPlain "ref.eq", IIf "" [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 2, IGlobalSet "$g_mctx", ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 1, ILocalGet "$p1", ICall "$rt_apply", IReturn] [INop]], ILocalGet "$p1", IRefTest "$t_Base_x46_Effect_x46_Core_x46_Eff"], [IIf "anyref" (cat [[ILocalGet "$p1", IRefCast "$t_Base_x46_Effect_x46_Core_x46_Eff", IStructGet "$t_Base_x46_Effect_x46_Core_x46_Eff" 1, ILocalSet "$th", IRefFunc "$rt_mKAns", IRefNull, IStructNew "$clo", ILocalSet "$kans", ILocalGet "$th", IConstI32 0, IStructNew "$t_Base_x46_Effect_x46_Core_x46_EffUnit", ICall "$rt_apply", ILocalGet "$kans", ICall "$rt_apply", ILocalSet "$step", ILocalGet "$step", ICall "$rt_mRun", ILocalSet "$v"], [IConstI32 0, IRefFunc "$rt_mPureThunk1", ILocalGet "$v", IStructNew "$clo", IStructNew "$t_Base_x46_Effect_x46_Core_x46_Eff", ILocalSet "$eff"], popKOuter, [ILocalGet "$eff", ICall "$rt_apply", IReturn]]) (cat [popKOuter, [ILocalGet "$p1", ICall "$rt_apply", IReturn]])], [IReturn]]
+      [ ILocalGet "$p0",
+        IRefCast "$hframe",
+        ILocalSet "$f",
+        IGlobalGet "$g_mctx",
+        ILocalSet "$ctx",
+        ILocalGet "$ctx",
+        IPlain "ref.is_null",
+        IIf "" [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$p1", ICall "$rt_apply", IReturn] [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 0, IRefCast "$hframe", ILocalGet "$f", IRefCast "$hframe", IPlain "ref.eq", IIf "" [ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 2, IGlobalSet "$g_mctx", ILocalGet "$ctx", IRefCast "$mctx", IStructGet "$mctx" 1, ILocalGet "$p1", ICall "$rt_apply", IReturn] [ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$p1", ICall "$rt_apply", IReturn]],
+        IUnreachable
+      ]
   in rtFunc "$rt_mKDone" params [WvAnyRef] locals body
 
 rtMPureThunk1 : WatFunc
