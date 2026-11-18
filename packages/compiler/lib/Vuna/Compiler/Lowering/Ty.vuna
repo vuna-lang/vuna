@@ -154,6 +154,91 @@ maxIntListIn [] = 0
 maxIntListIn (x :: rest) = if x >= maxIntListIn rest then x else maxIntListIn rest
 
 -- ---------------------------------------------------------------
+-- λ binder 的运行时类型（选择性标注）
+-- ---------------------------------------------------------------
+--
+-- binder 类型槽是 Core 侧的派生项。只有整条类型都能落到**可命名**的 `IrTy` 时
+-- 才返回 `Just`：变量取外层 binder 已解析的运行时类型，primitive / 数据族要求
+-- 类型实参全部可解析；其余（类型参数、别名、卡住的类型族应用、隐式 Pi）一律
+-- `Nothing`，后端因此不会渲染可能错配的注解。
+export annotTyOf : LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotTyOf env binders t = annotTyOfFuel 256 env binders t
+
+annotTyOfFuel : Int -> LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotTyOfFuel fuel env binders t = if fuel <= 0 then Nothing
+else case t of
+  TVar _ i _ => binderTyAtIn i binders
+  TGlobal g => annotHeadTy (fuel - 1) env binders g []
+  TApp _ _ _ => case flattenAnnotApp t of
+    Pair head args => case head of
+      TGlobal g => annotHeadTy (fuel - 1) env binders g args
+      _ => Nothing
+  TRecord g args => annotHeadTy (fuel - 1) env binders g (map firstOf args)
+  TPi name implicit rig dom cod => if rigIsErased rig then Nothing
+  else case annotTyOfFuel (fuel - 1) env binders dom of
+    Nothing => Nothing
+    Just domTy => case annotTyOfFuel (fuel - 1) env (mkIrBinderTyped name domTy :: binders) cod of
+      Nothing => Nothing
+      Just codTy => Just (IrTyFun domTy codTy)
+  _ => Nothing
+
+-- 外层 binder 的运行时类型（de Bruijn 下标；最近绑定在前）。
+-- 擦除占位只占槽位、运行时类型不可命名，因此恒返回 `Nothing`。
+binderTyAtIn : Int -> List IrBinder -> Maybe IrTy
+binderTyAtIn i [] = Nothing
+binderTyAtIn i (b :: rest) =
+  if i <= 0 then if b.irBinderErased then Nothing else b.irBinderTy else binderTyAtIn (i - 1) rest
+
+-- 应用脊展平（类型项：`TRecord` 等价于它的 `TGlobal` 应用脊）。
+flattenAnnotApp : Term -> Pair Term (List Term)
+flattenAnnotApp t = flattenAnnotAppGo t []
+
+flattenAnnotAppGo : Term -> List Term -> Pair Term (List Term)
+flattenAnnotAppGo (TApp f a _) acc = flattenAnnotAppGo f (a :: acc)
+flattenAnnotAppGo (TRecord name args) acc = Pair (TGlobal name) (append (map firstOf args) acc)
+flattenAnnotAppGo t acc = Pair t acc
+
+annotHeadTy : Int -> LwEnv -> List IrBinder -> String -> List Term -> Maybe IrTy
+annotHeadTy fuel env binders g args = if fuel <= 0 then Nothing
+else if g == "Array" then case args of
+  [a] => case annotTyOfFuel (fuel - 1) env binders a of
+    Nothing => Nothing
+    Just t => Just (IrTyArray t)
+  _ => Nothing
+else if g == "IORef" then case args of
+  [a] => case annotTyOfFuel (fuel - 1) env binders a of
+    Nothing => Nothing
+    Just t => Just (IrTyRef t)
+  _ => Nothing
+else case reprTyIr g of
+  Just t => case args of
+    [] => Just t
+    _ => Nothing
+  Nothing => case findDtData g env.lwDatas of
+    Nothing => Nothing
+    Just dd => case annotFamilyArgs (fuel - 1) env binders (lookupTyParamsIn env.lwTyParams g) args of
+      Nothing => Nothing
+      Just tys => Just (IrTyData g tys)
+
+-- 数据族的运行时类型实参：按族的**运行时参数槽**（`usedPats` 是族 telescope 的 level）
+-- 选实参，因此注解的实参个数与声明的类型参数个数逐位一致。
+annotFamilyArgs : Int -> LwEnv -> List IrBinder -> List Int -> List Term -> Maybe (List IrTy)
+annotFamilyArgs fuel env binders usedPats args = if fuel <= 0 then Nothing
+else case usedPats of
+  [] => Just []
+  i :: rest => case nthTermIn args i of
+    Nothing => Nothing
+    Just a => case annotTyOfFuel (fuel - 1) env binders a of
+      Nothing => Nothing
+      Just t => case annotFamilyArgs (fuel - 1) env binders rest args of
+        Nothing => Nothing
+        Just ts => Just (t :: ts)
+
+nthTermIn : List Term -> Int -> Maybe Term
+nthTermIn [] i = Nothing
+nthTermIn (t :: rest) i = if i <= 0 then Just t else nthTermIn rest (i - 1)
+
+-- ---------------------------------------------------------------
 -- 类型声明（IR）
 -- ---------------------------------------------------------------
 --

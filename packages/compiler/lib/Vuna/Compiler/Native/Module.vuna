@@ -653,10 +653,11 @@ applyAllIr f [] = f
 applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
 
 effUnitBinder : IrBinder
-effUnitBinder = IrBinder (IrBUser "effUnitArg") False
+effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
 
 effArgBinders : Int -> List IrBinder
-effArgBinders n = map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False) (range 0 n)
+effArgBinders n =
+  map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False Nothing) (range 0 n)
 
 genEffThunk : Int -> FGen -> String -> String -> Int -> Ir -> NRes (Pair (List Instr) FGen)
 genEffThunk fuel st family ctor arity prim = if fuel <= 0 then internal "native codegen fuel exhausted"

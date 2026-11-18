@@ -72,26 +72,32 @@ export record IrBinder(..) where
   irBinderName : IrBName
   -- | 擦除占位：占 de Bruijn 槽位，但不进运行时表示（不渲染参数 / pattern）。
   irBinderErased : Bool
+  -- | binder 的运行时类型（选择性标注）：`Nothing` = 未记录或运行时类型不可命名。
+  irBinderTy : Maybe IrTy
 
 -- | 源码名 binder。
 export mkIrBinder : String -> IrBinder
-mkIrBinder name = IrBinder (IrBUser name) False
+mkIrBinder name = IrBinder (IrBUser name) False Nothing
+
+-- | 带运行时类型标注的源码名 binder。
+export mkIrBinderTyped : String -> IrTy -> IrBinder
+mkIrBinderTyped name ty = IrBinder (IrBUser name) False (Just ty)
 
 -- | 擦除占位 binder。
 export mkIrBinderErased : IrBinder
-mkIrBinderErased = IrBinder IrBWild True
+mkIrBinderErased = IrBinder IrBWild True Nothing
 
 -- | case 分支 fresh binder。
 export mkIrBinderArm : Int -> IrBinder
-mkIrBinderArm n = IrBinder (IrBArm n) False
+mkIrBinderArm n = IrBinder (IrBArm n) False Nothing
 
 -- | Nat case scrutinee binder。
 export mkIrBinderNat : Int -> IrBinder
-mkIrBinderNat n = IrBinder (IrBNat n) False
+mkIrBinderNat n = IrBinder (IrBNat n) False Nothing
 
 -- | 丢弃 binder（`let _ = e in ...` 的 `_`）。
 export mkIrBinderWild : IrBinder
-mkIrBinderWild = IrBinder IrBWild False
+mkIrBinderWild = IrBinder IrBWild False Nothing
 
 -- ---------------------------------------------------------------
 -- case 分支

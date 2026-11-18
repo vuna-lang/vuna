@@ -1936,8 +1936,8 @@ genAssignedFields st family (f :: rest) = Vuna.Compiler.Base.Common.bind (genIr 
 )
 
 nonErasedBinderText : IrBinder -> String
-nonErasedBinderText (IrBinder nm True) = ""
-nonErasedBinderText (IrBinder nm False) = irBinderText (IrBinder nm False)
+nonErasedBinderText (IrBinder nm True _) = ""
+nonErasedBinderText (IrBinder nm False _) = irBinderText (IrBinder nm False Nothing)
 
 hasCatchAll : List IrAlt -> Bool
 hasCatchAll [] = False

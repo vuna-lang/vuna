@@ -53,10 +53,10 @@ record GenState where
   gsNextLam : Int
 
 binderNameOf : IrBinder -> IrBName
-binderNameOf (IrBinder nm _) = nm
+binderNameOf (IrBinder nm _ _) = nm
 
 binderErasedOf : IrBinder -> Bool
-binderErasedOf (IrBinder _ erased) = erased
+binderErasedOf (IrBinder _ erased _) = erased
 
 bNameEq : IrBName -> IrBName -> Bool
 bNameEq (IrBUser x) b = case b of
@@ -223,10 +223,11 @@ applyAllIr f [] = f
 applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
 
 effUnitBinder : IrBinder
-effUnitBinder = IrBinder (IrBUser "effUnitArg") False
+effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
 
 effArgBinders : Int -> List IrBinder
-effArgBinders n = map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False) (range 0 n)
+effArgBinders n =
+  map (\i => IrBinder (IrBUser ("effArg" ++ strFromInt i)) False Nothing) (range 0 n)
 
 genEffThunk : Int -> GenState -> String -> String -> Int -> Ir -> Result (Pair (List Instr) GenState)
 genEffThunk fuel st family ctor arity prim = if fuel <= 0 then Err "wasm codegen fuel exhausted"
@@ -292,7 +293,7 @@ else case rtImplOf sym of
     in genLamValue (fuel - 1) st bs (IrRtApp sym (map (\b => IrVar b) bs))
 
 etaBinders : Int -> List IrBinder
-etaBinders n = map (\i => IrBinder (IrBUser ("__eta" ++ strFromInt i)) False) (range 0 n)
+etaBinders n = map (\i => IrBinder (IrBUser ("__eta" ++ strFromInt i)) False Nothing) (range 0 n)
 
 splitAt : Int -> List a -> Pair (List a) (List a)
 splitAt n xs = if n <= 0 then Pair [] xs

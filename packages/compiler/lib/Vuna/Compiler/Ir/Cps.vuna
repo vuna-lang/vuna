@@ -114,14 +114,14 @@ bNameEq IrBWild IrBWild = True
 bNameEq _ _ = False
 
 binderEq : IrBinder -> IrBinder -> Bool
-binderEq (IrBinder na ea) (IrBinder nb eb) = bNameEq na nb && ea == eb
+binderEq (IrBinder na ea ta) (IrBinder nb eb tb) = bNameEq na nb && ea == eb
 
 memBinder : IrBinder -> List IrBinder -> Bool
 memBinder _ [] = False
 memBinder b (x :: rest) = binderEq b x || memBinder b rest
 
 binderErased : IrBinder -> Bool
-binderErased (IrBinder _ erased) = erased
+binderErased (IrBinder _ erased _) = erased
 
 -- | 运行时 binder（擦除占位不进作用域）。
 runtimeBinders : List IrBinder -> List IrBinder

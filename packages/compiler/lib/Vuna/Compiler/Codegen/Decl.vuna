@@ -200,10 +200,10 @@ ocamlBinderName name =
 -- primitive、内建类型构造子、程序数据族、显式函数、不可命名值（`Obj.t`）。这里只
 -- 做文本渲染与跨单元限定，**不含**任何表示判据。
 export irBinderText : IrBinder -> String
-irBinderText (IrBinder (IrBUser name) erased) = ocamlBinderName name
-irBinderText (IrBinder (IrBArm n) erased) = "dtb__${strFromInt n}"
-irBinderText (IrBinder (IrBNat n) erased) = "dtnat__${strFromInt n}"
-irBinderText (IrBinder IrBWild erased) = "_"
+irBinderText (IrBinder (IrBUser name) erased _) = ocamlBinderName name
+irBinderText (IrBinder (IrBArm n) erased _) = "dtb__${strFromInt n}"
+irBinderText (IrBinder (IrBNat n) erased _) = "dtnat__${strFromInt n}"
+irBinderText (IrBinder IrBWild erased _) = "_"
 
 export irTyText : QualCtx -> IrTy -> String
 irTyText qc ty = Render.renderTy (qualFamOf qc) (toOTy ty)

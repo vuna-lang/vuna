@@ -50,7 +50,7 @@ export record LwSt where
 
 -- record 字段访问器（vuna 不为 record 生成字段函数，统一用位置模式）。
 binderErasedOf : IrBinder -> Bool
-binderErasedOf (IrBinder nm erased) = erased
+binderErasedOf (IrBinder nm erased ty) = erased
 
 -- ---------------------------------------------------------------
 -- 项 → IR
@@ -92,7 +92,7 @@ else case t of
       )
     )
   )
-  TLam name rig _ sp body => lowerLamFuel (fuel - 1) env st binders name rig sp body
+  TLam name rig mty sp body => lowerLamFuel (fuel - 1) env st binders name rig mty sp body
   TApp f a rig => lowerAppFuel (fuel - 1) env st binders f a rig
   TCon c args => lowerConAppFuel (fuel - 1) env st binders c args
   TMk c args => lowerConAppFuel (fuel - 1) env st binders c args
@@ -160,28 +160,47 @@ effUnitTyIn = IrTyData effUnitTypeName []
 
 -- 多参数 lambda 链合并。
 -- 擦除 binder 只占 de Bruijn 位置、不作为 OCaml 参数。
+-- 每个参数的 binder 类型槽（派生信息）随链一起带下来，供 IR 的选择性标注使用。
+record LamParam where
+  lamParamName : String
+  lamParamRig : Rig
+  lamParamTy : Maybe Term
+
 record LamChainIn where
-  lamChainBinders : List (Pair String Rig)
+  lamChainBinders : List LamParam
   lamChainBody : Term
 
 collectLamChainIn : Term -> LamChainIn
-collectLamChainIn (TLam name rig _ _ body) = case collectLamChainIn body of
-  LamChainIn rest inner => LamChainIn (Pair name rig :: rest) inner
+collectLamChainIn (TLam name rig mty _ body) = case collectLamChainIn body of
+  LamChainIn rest inner => LamChainIn (LamParam name rig mty :: rest) inner
 collectLamChainIn t = LamChainIn [] t
 
-lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Span -> Term -> Check (Pair Ir LwSt)
-lowerLamFuel fuel env st binders name rig sp body = if fuel <= 0 then icFuel "ir-lower"
-else case collectLamChainIn (TLam name rig Nothing sp body) of
+lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Maybe Term -> Span -> Term -> Check (Pair Ir LwSt)
+lowerLamFuel fuel env st binders name rig mty sp body = if fuel <= 0 then icFuel "ir-lower"
+else case collectLamChainIn (TLam name rig mty sp body) of
   LamChainIn params inner =>
     let
-      bs = map binderOfParam params
+      bs = bindersOfParams env binders params
       envB = append (reverse bs) binders
     in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (\p => case p of
       Pair b st2 => OkC (Pair (IrLam bs b) st2)
     )
 
-binderOfParam : Pair String Rig -> IrBinder
-binderOfParam (Pair name rig) = if rigIsErased rig then mkIrBinderErased else mkIrBinder name
+-- lambda 链的 binder 表（外→内）：每个 binder 的注解按它自己的外层上下文解析。
+bindersOfParams : LwEnv -> List IrBinder -> List LamParam -> List IrBinder
+bindersOfParams env outer [] = []
+bindersOfParams env outer (p :: rest) =
+  let
+    b = binderOfParam env outer p
+  in b :: bindersOfParams env (b :: outer) rest
+
+binderOfParam : LwEnv -> List IrBinder -> LamParam -> IrBinder
+binderOfParam env outer p = if rigIsErased p.lamParamRig then mkIrBinderErased
+else case p.lamParamTy of
+  Nothing => mkIrBinder p.lamParamName
+  Just ty => case annotTyOf env outer ty of
+    Nothing => mkIrBinder p.lamParamName
+    Just irTy => mkIrBinderTyped p.lamParamName irTy
 
 -- 应用：先按构造子折叠（多维变体构造子是 tupled 的），再试内建内联 / `++` 展平 / 普通应用。
 lowerAppFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
