@@ -475,6 +475,25 @@ wasm：337 checks 全绿
 
 剩余：OCaml 仍用 `Effect.Deep`；`Wasm/Step.vuna` 的 `$rt_m*` 死表仍静态发射。
 
+### 9.2.6 wasm 的 wat 机器已停止发射
+
+库机器接管后，wasm 生成代码只用到 `@ir@m@runEff`（普通应用 helper）。因此：
+
+- `Wasm/Step.vuna` 的 `mFunctions` 只剩 `rtMRunEff`（`$rt_mDone/$rt_mPerform/
+  $rt_mHandle/$rt_mApply/$rt_mSelf/$rt_mRun/$rt_mKDone/$rt_mRes1/$rt_mRes2/
+  $rt_mKComp/$rt_mInChain/$rt_mRunCleanups/$rt_mPureThunk*/$rt_mKAns` 都不再发射）；
+- `Wasm/Runtime.vuna` 移除 `@ir@m@done/perform/handle/apply/self/run` 的符号映射
+  （残留用法会变成 hard error）；
+- `Wasm/Module.vuna` 的 elem-declare 名单只保留 `$rt_mRunEff`。
+
+产物实测（48_eff_many 的 main.wat）只剩：
+
+```text
+$rt_mRunEff  ×4   （定义 + elem + 调用）
+```
+
+读数：wasm 337 / native 445 / 全量 7207 全绿。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |

@@ -1767,13 +1767,7 @@ buildModule fuel st ordered entry printResult effMode listFamM =
             startFunc = WatFunc "$_start" "" [] [] startState.gsLocals (firstOf p)
             lamFuncs = reverse startState.gsFuncs
             elems = reverse startState.gsElems
-            elemNames =
-              if effMode == 6 then
-                append
-                  elems
-                  ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns", "$rt_mApply", "$rt_mInChain", "$rt_mSelf", "$rt_mRunEff"]
-              else
-                elems
+            elemNames = if effMode == 6 then append elems ["$rt_mRunEff"] else elems
             rtSelected =
               if effMode == 6 then
                 append (rtFunctions st.gsConsts) mFunctions

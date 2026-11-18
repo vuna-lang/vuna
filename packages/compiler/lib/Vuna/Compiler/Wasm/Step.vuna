@@ -344,26 +344,11 @@ rtMRun =
       ]
   in rtFunc "$rt_mRun" params [WvAnyRef] locals body
 
+-- | 库机器接管后只余 `runEff`（thunk 应用 unit 再交 k）仍需发射；
+-- 其余 wat 机器函数（`$rt_mDone/$rt_mPerform/$rt_mHandle/$rt_mApply/$rt_mSelf/$rt_mRun…`）
+-- 已随方案 B 的接线不再被任何生成代码引用。
 export mFunctions : List WatFunc
-mFunctions =
-  [
-    rtMDone,
-    rtMPerform,
-    rtMHandle,
-    rtMKComp,
-    rtMApply,
-    rtMInChain,
-    rtMRunCleanups,
-    rtMSelf,
-    rtMRunEff,
-    rtMKDone,
-    rtMRes1,
-    rtMRes2,
-    rtMPureThunk1,
-    rtMPureThunk2,
-    rtMKAns,
-    rtMRun
-  ]
+mFunctions = [rtMRunEff]
 
 rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
 rtFunc name params results locals body = WatFunc name "" params results locals body
