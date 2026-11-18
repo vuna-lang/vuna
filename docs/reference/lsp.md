@@ -183,9 +183,11 @@ Content-Length: <字节数>\r\n
 `test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），真的把帧从 stdin
 喂给 `vuna lsp` 并断言 stdout 上的 JSON；覆盖两模块临时包、含 import 的类型错误、
 formatting、documentSymbol、definition、references、completion、lint 诊断、URI 解码与
-退出码：
+退出码。跑之前先构建固定的二进制（`result` 是共享 out-link，可能指向旧二进制或别的
+产物），再调用脚本：
 
 ```console
+nix build .#vuna --out-link result
 sh test/corpus/lsp/smoke.sh ./result/bin/vuna
 ```
 

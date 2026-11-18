@@ -202,9 +202,11 @@ obsSampleStop  : Int -> Int
 
 ## 6.1 工具链自采样
 
-`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `app/Main.vuna` 在
+`vuna` 自己就是被观测程序：结构化 span 走 `VUNA_OBS`，CPU 采样由 `cli/app/Main.vuna` 在
 `VUNA_OBS_SAMPLE` 非空时调用 `obsSampleStart` / `obsSampleStop`（普通 `VUNA_OBS=1`
-不启动定时器）。所以可以直接 profile 工具链：
+不启动定时器）。所以可以直接 profile 工具链。下面的命令固定用 `./result/bin/vuna`（同一个
+二进制反复采样，避免 `nix run` 的每次求值开销影响读数）；先 `nix build .#vuna --out-link result`
+——`result` 是共享 out-link，可能指向旧二进制或别的产物（例如 `vuna-wasm-browser`）：
 
 ```console
 d=$(mktemp -d); VUNA_STORE="$d/store" ./result/bin/vuna obs run --level 1 --sample cpu \
@@ -358,7 +360,9 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
   - **确定性**：同一 trace 两次 `Profiler.stop` 的 `profile` JSON **逐字节一致**（与
     `convert --to cpuprofile` 同一构造点；`startTime`/`endTime` 来自 trace 采样，不含墙钟）。
     与 `--out` 无关（serve 不写文件，profile 只出现在 JSON-RPC 响应里）。
-  - **怎么从 Chrome 用**（可复现步骤，需要 Node；`nix shell nixpkgs#nodejs`）：
+  - **怎么从 Chrome 用**（可复现步骤，需要 Node；`nix shell nixpkgs#nodejs`）。下面的
+    `./result/bin/vuna` 需先 `nix build .#vuna --out-link result`（`result` 是共享 out-link，
+    可能指向旧二进制或别的产物）：
 
     ```sh
     # 1) 先产一份带 CPU 采样的 trace（level 3 + cpu 采样）；`obs run` 会打印 trace 路径
@@ -434,7 +438,8 @@ vuna obs serve --cdp ADDR [--allow-slow] [TRACE...]
 
 回归面（每次改动后）：`vuna fmt <改动>`、`vuna check .`、`sh nix/checks/lib/eff-boundary.sh`、
 `sh nix/checks/lib/ir-boundary.sh`、`vuna test --suite test/suite.toml --only 90/steps_native/107_observability --only 90/steps_native/108_obs_cdp`、
-`checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（`sh nix/seed/rotate.sh ./result/bin/vuna`）。
+`checks.vuna-metrics`；`#line` 定稿后**一次** seed rotation（先 `nix build .#vuna --out-link result`，
+再 `sh nix/seed/rotate.sh ./result/bin/vuna`——轮换要固定的二进制，而 `result` 可能指向旧二进制或别的产物）。
 
 ## 10. 已知边界（开放项）
 

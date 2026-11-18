@@ -19,38 +19,39 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 
 ```console
 nix develop                                    # OCaml 工具链 + vuna-seed
-nix build .#vuna --out-link result             # 产品 CLI（stage 1）
-./result/bin/vuna help
+nix run .#vuna -- help                         # 产品 CLI（stage 1，按当前源码构建）
 
 # ad-hoc 单文件：无 manifest 时只有 base 上下文，自动注入 Prelude
 cat > hello.vuna <<'EOF'
 main : Int
 main = 1 + 2 * 3
 EOF
-./result/bin/vuna check hello.vuna               # 类型检查
-./result/bin/vuna interp hello.vuna              # -> 7
-./result/bin/vuna compile hello.vuna hello-out   # 逐模块 .ml + build.sh 写到 hello-out/
+nix run .#vuna -- check hello.vuna               # 类型检查
+nix run .#vuna -- interp hello.vuna              # -> 7
+nix run .#vuna -- compile hello.vuna hello-out   # 逐模块 .ml + build.sh 写到 hello-out/
 sh hello-out/build.sh hello && ./hello-out/hello # -> 7
 
 # 包模式：入口 main : Eff [] a，构建产出 DIR/bin/<包名>
-./result/bin/vuna build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
+nix run .#vuna -- build examples/multi         # 现成的多包示例（根包 + greet + base 依赖）
 examples/multi/.output/bin/multi               # -> hi hi hi|n2 n1（--out 可覆盖输出目录）
-./result/bin/vuna check examples/multi         # 包级类型检查
-./result/bin/vuna test examples/multi          # 纯 String/Int/Bool 走 interp；main : Eff [] ... 走 compile+运行
+nix run .#vuna -- check examples/multi         # 包级类型检查
+nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走 interp；main : Eff [] ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
 nix run .#vuna-run-tests                            # 原生 suite（vuna test --suite test/suite.toml）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
-./result/bin/vuna fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
-./result/bin/vuna lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
-./result/bin/vuna doc                          # 生成 docs/api.html（gitignored）
+nix run .#vuna -- fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
+nix run .#vuna -- lint compiler/lib/Vuna/Compiler/Elab/Term.vuna   # 风格检查（文件或目录）
+nix run .#vuna -- doc                          # 生成 docs/api.html（gitignored）
 ```
 
 自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层直调 `prim_eff_*`，别名模块已删，任何包都可直调）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
-编译器选取：优先本地 `./result/bin/vuna`；否则 `nix run vuna -- <subcommand>`（注册表别名）。
+编译器选取：默认 `nix run .#vuna -- <subcommand>`（按当前源码构建）；需要固定二进制时先
+`nix build .#vuna --out-link result`，再用 `./result/bin/vuna`（`result` 是共享 out-link，可能
+指向别的产物或旧二进制）；远端稳定版是 `nix run vuna -- <subcommand>`（注册表别名）。
 
 ## 工具与自举链
 

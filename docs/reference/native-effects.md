@@ -183,7 +183,7 @@ handle comp {
 
 ### 3.4 bootstrap 要求
 
-改这套降级逻辑时：`./result/bin/vuna check .` 必须过；新 seed 由 stage1 重新生成后
+改这套降级逻辑时：`nix run .#vuna -- check .` 必须过；新 seed 由 stage1 重新生成后
 stage1 == stage2（97 文件）；seed 闭包不变（`nix/seed/tcb-check.sh`）。新关键字对 bootstrap 无
 压力——编译器源码本身不写效应程序，降级逻辑也不需要用 `perform`/`handle` 写
 （[bootstrap.md](bootstrap.md)）。

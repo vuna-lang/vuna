@@ -95,7 +95,7 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 
 ```console
 # 前提：当前 seed 能编译当前源码（否则先按「旧种子能编译新源码」规则把源码落到旧语法）
-nix build .#vuna --out-link result
+nix build .#vuna --out-link result         # 固定二进制：result 是共享 out-link，可能指向旧二进制或别的产物
 sh nix/seed/rotate.sh ./result/bin/vuna   # 生成 → TCB + fixed point 校验 → 替换 seed/ 并写元数据
 nix flake check                           # seed-selfhost 等全部通过
 git diff seed/                            # 确认变化可解释（文件集 + 路径/代码变化）

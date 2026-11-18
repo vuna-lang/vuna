@@ -23,7 +23,8 @@ Vuna 语言的 VS Code 支持：TextMate 语法高亮、语言配置、代码片
 
 1. 设置 `vuna.server.path`（显式指定，最高优先级）；
 2. `PATH` 里的 `vuna`；
-3. `<workspace>/result/bin/vuna`（本仓库 `nix build .#vuna --out-link result` 的产物）；
+3. `<workspace>/result/bin/vuna`（本仓库 `nix build .#vuna --out-link result` 的产物；没构建过时
+   它不存在或可能指向别的产物，先跑这条命令）；
 4. `<workspace>/../result/bin/vuna`。
 
 每个候选在启动前都会用 `vuna --version`（不支持时退回 `vuna version`）探测；两者都不支持
@@ -79,7 +80,8 @@ npm run package        # vsce package --no-dependencies -> vuna-0.1.0.vsix（可
    ```
 
 3. 按 `F5`（Run Extension）：扩展开发宿主窗口打开仓库根目录（`${workspaceFolder}/..`），
-   这样自动探测能命中 `<repo>/result/bin/vuna`；
+   这样自动探测能命中 `<repo>/result/bin/vuna`（没构建过时先在仓库根跑
+   `nix build .#vuna --out-link result`）；
 4. 打开的宿主窗口里打开任意 `.vuna` 文件（例如 `cli/lib/Vuna/Lsp.vuna`）验证高亮/诊断；
 5. 输出面板选 **Vuna** 看服务器日志，选 **Vuna Language Server Trace** 看 LSP 帧
    （需把 `vuna.trace.server` 设为 `messages`）。

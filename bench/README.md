@@ -58,7 +58,8 @@ nix run .#vuna-perf -- --target all --runs 5 --warmup 2 \
   --json bench/wasm-baseline.json                      # 重新生成 wasm 基线（提交入库）
 ```
 
-本地已有 `./result/bin/vuna` 时可直接：
+本地已有固定二进制时可直接复用（先 `nix build .#vuna --out-link result`；`result` 是共享
+out-link，可能指向旧二进制或别的产物，基准读数要求同一二进制、同一口径）：
 
 ```console
 VUNA=$PWD/result/bin/vuna ./bench/run.sh --runs 3

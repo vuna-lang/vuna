@@ -475,7 +475,9 @@ token 一次 `Pair`）的初版实测让 `vuna.parse.lex` 慢 ~20%，已放弃�
 - **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
   不再按 worktree 分 store（统一到默认根 `~/.vuna/store`，已预热）；换新 `TMPDIR` 对命中率没有影响
   （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。要冷就显式给空目录：
-  `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。
+  `d=$(mktemp -d); VUNA_STORE=$d/store TMPDIR=$d ./result/bin/vuna ...`。这里固定用
+  `./result/bin/vuna`，先 `nix build .#vuna --out-link result`；`result` 是共享 out-link，
+  可能指向旧二进制或别的产物，测量前确认它对应本次构建。
   `VUNA_STORE` 未设/空串会回退 `~/.vuna/store`（回退链见 `Store.storeDataRootEff`），
   只读 HOME 下直接 `Sys_error ... Read-only file system`。
 - **入库的增长率门禁只隔离 `TMPDIR`、复用调用方 `VUNA_STORE`**：devShell 里本地跑时各档

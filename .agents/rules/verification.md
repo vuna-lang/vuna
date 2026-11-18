@@ -6,14 +6,16 @@
 ## 本地口径
 
 ```console
-./result/bin/vuna check .                        # 自检（DT 单路径）
-./result/bin/vuna check <pkg>                    # 只查该包入口 import 闭包
-./result/bin/vuna fmt <改动的文件/目录>           # 代码改动后必跑
+nix run .#vuna -- check .                        # 自检（DT 单路径）
+nix run .#vuna -- check <pkg>                    # 只查该包入口 import 闭包
+nix run .#vuna -- fmt <改动的文件/目录>           # 代码改动后必跑
 nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（--list 看章节）
 ```
 
-- 编译器优先用**当前 worktree 自己**的 `./result/bin/vuna`；没有或版本可疑时
-  `nix build .#vuna --out-link result`（缓存命中约 10–15s）。
+- 默认用 `nix run .#vuna -- <subcommand>`：按当前 worktree 的源码构建，永远对应当前代码。
+- 需要固定二进制（反复调用、传给脚本、性能读数）时先 `nix build .#vuna --out-link result`
+  （缓存命中约 10–15s），再用 `./result/bin/vuna`；`result` 是共享 out-link，可能指向别的
+  产物（例如 `vuna-wasm-browser`）或旧二进制，用之前确认刚构建过。
 - **改完源码要验证 `nix build` 真的重建了**：机器级 eval cache 会在副 worktree / 未提交
   改动下返回旧求值（`Output paths:` 里是同一个 store 路径、也没有 `building ...` 行）。
   加 `--option eval-cache false`；判据是产物里能看到刚加的字符串（或 store 路径变了）。
@@ -50,7 +52,8 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 
 ## 跨后端变更（原语 / 运行时）
 
-- **顺序**：OCaml 驱动 → 需要时 `sh nix/seed/rotate.sh ./result/bin/vuna`（独立
+- **顺序**：OCaml 驱动 → 需要时 `sh nix/seed/rotate.sh ./result/bin/vuna`（先用 `nix build
+  .#vuna --out-link result` 固定二进制；独立
   `chore(seed)`）→ WASM → Native。OCaml 落地后才能用新原语改 `base/`（seed 闭包）。
 - **验收**：三个后端各自的 effect/run 章节 + 对应 native/wasm 对拍；只落一个后端不算完成。
 - 原语登记点：`Base/Intrinsics.vuna`、`Ir/Runtime.vuna`、`Wasm/Runtime.vuna`

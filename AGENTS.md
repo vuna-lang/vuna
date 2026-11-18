@@ -28,10 +28,13 @@
 
 ## 编译器选取规则
 
-1. **优先**本地当前 worktree 的 `./result/bin/vuna`（`nix build .#vuna --out-link result` 的产物）；
-2. 本地不存在或编译不过：**一律** `nix run vuna -- <subcommand>`（`nix registry list`
-   里的别名，即远端稳定版）；
-3. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
+1. **默认**用 `nix run .#vuna -- <subcommand>`：按当前 worktree 的源码构建（store 缓存命中时很快），
+   永远对应你手里的代码；
+2. `./result/bin/vuna` 只在**刚跑过** `nix build .#vuna --out-link result` 之后用。`result` 是共享
+   out-link，可能指向别的产物（例如 `vuna-wasm-browser`）或几天前的二进制；
+   需要固定二进制（性能读数、反复调用、传给别的脚本）时**先显式重建**；
+3. 远端稳定版（`nix registry list` 的别名）：`nix run vuna -- <subcommand>`；
+4. 测试：`nix run .#vuna-run-tests`（`nix/run-tests.nix`；`--list` / `--only <章节>` 过滤，
    无参数等价 `vuna test --suite test/suite.toml`；`--jobs auto` 用全部可用核）。
 
 `vuna-seed`（stage 0）来自 `nix build .#vuna-seed`，stage 1 是 `nix build .#vuna-compiler`；
@@ -74,9 +77,10 @@
   （`~/.local/share/opencode/worktree/…` 或 `.local/worktrees/…`）内完成，主工作区只用于读取、
   rebase 与 cherry-pick；收尾按技能 `worktree` 的脚本把提交带回主仓并 teardown
   （[workflow.md](.agents/rules/workflow.md)）。
-- **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换，且独立成
+- **禁止手改 `seed/`**：只能 `sh nix/seed/rotate.sh ./result/bin/vuna` 轮换（先用
+  `nix build .#vuna --out-link result` 固定二进制），且独立成
   `chore(seed): ...` 提交（[workflow.md](.agents/rules/workflow.md)）。
-- **改完代码跑 `./result/bin/vuna fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量
+- **改完代码跑 `nix run .#vuna -- fmt <改动的文件/目录>`**；验证按改动面选，别为自测跑全量
   `nix build` / `nix flake check`（[verification.md](.agents/rules/verification.md)）。
 - **改 `compiler/` 后先验证「旧种子能编译新源码」**（`nix build .#vuna-seed` 或 CI 的
   `checks.seed-selfhost`）；要用的新语法先以旧语法落地 → rotate → 再用新语法
@@ -99,20 +103,20 @@
 ## 高频命令
 
 ```console
-nix build .#vuna --out-link result        # 产品 CLI；.#vuna-compiler / .#vuna-seed 同理
-./result/bin/vuna check .                 # 包级类型检查（自检）；check <pkg> 只查该包闭包
-./result/bin/vuna fmt <改动的文件/目录>     # 格式化；--check 只检查
-./result/bin/vuna run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
+nix run .#vuna -- check .                 # 包级类型检查（自检）；check <pkg> 只查该包闭包
+nix run .#vuna -- fmt <改动的文件/目录>     # 格式化；--check 只检查
+nix run .#vuna -- run <pkg> -- ARGS...    # 增量 build + 执行入口（透传参数/退出码）
 nix run .#vuna-run-tests -- --only <章节> # 按章节跑 suite（--list 看章节；用 ~/.vuna/test-store）
 nix run .#vuna-run-tests -- --backend wasm # 后端矩阵：只跑 matrix 允许 wasm 的 case
-sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed
-./result/bin/vuna store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
+nix build .#vuna --out-link result        # 需要固定二进制时才构建（result 可能指向别的产物）
+sh nix/seed/rotate.sh ./result/bin/vuna   # 仅当需要轮换 seed；上面那条先跑过
+nix run .#vuna -- store gc --dry-run      # 缓存族 GC：先裁剪已消失的项目根，再按 roots+宽限淘汰
                                           # 对象库是单一根（默认 ~/.vuna/store，VUNA_STORE 覆盖）
 nix flake check                           # 3 packages + 24 checks（清单见 testing.md）
-./result/bin/vuna map --find <Module.name> # 定位符号；另有 --impact / api
+nix run .#vuna -- map --find <Module.name> # 定位符号；另有 --impact / api
 ```
 
-全部命令与 flag 以 `./result/bin/vuna help` 为准；完整清单见
+全部命令与 flag 以 `nix run .#vuna -- help` 为准；完整清单见
 [README.md](README.md) 的「工具与自举链」、[tooling.md](docs/reference/tooling.md)、
 [packages.md](docs/reference/packages.md)。编译后端用 `compile/build --target ocaml|wasm|native`。
 

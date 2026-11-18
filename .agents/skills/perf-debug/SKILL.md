@@ -38,9 +38,12 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
 
 1. **`./result/bin/vuna` 可能过期**。新建副 worktree 没有 `result`；主仓的也可能是几天前的
    构建——过期二进制会在自检时报**源码里已修复**的错误（实测旧二进制报
-   `TC_UnknownName @vuna@obs@level`，HEAD 源码本身是好的）。开工先
+   `TC_UnknownName @vuna@obs@level`，HEAD 源码本身是好的）。而且 `result` 是共享 out-link，
+   可能指向别的产物（例如 `vuna-wasm-browser`，那里根本没有 `bin/vuna`）。开工先
    `nix build .#vuna --out-link result`，再 `./result/bin/vuna check base`（~0.4 s）确认可用。
    构建时间（缓存命中 ~10–15 s）不算进任何读数。
+   下面所有读数片段都用固定二进制：**测量用固定二进制是对的**（`nix run` 会掺进 nix 求值），
+   但要保持同一个二进制跨档比较；非测量的临时检查用 `nix run .#vuna -- <subcommand>` 即可。
 2. **冷 / 热由 `VUNA_STORE` 决定，不由 `TMPDIR` 决定**。devShell 会
    使用默认根 `~/.vuna/store`（单一根，多 worktree 共享）且已预热；换新 `TMPDIR` 对命中率**没有影响**
    （实测同一热 store 换 TMPDIR，`check compiler` 仍 73–75 ms）。真冷写法：
@@ -68,7 +71,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    阶段**比例**可用 debug，但 A/B 必须同窗口交替；读数行同时记 `user+sys`。
 6. **`vuna fmt --check`（省略 PATH）在本仓库必然 exit 2**：会扫 `test/suite/fixtures`
    （有依赖不存在模块的夹具）。CI 的 `nix/checks/vuna-fmt.sh` 只覆盖各包 + `examples`；
-   本地只查改动的包：`./result/bin/vuna fmt --check <目录>`。
+   本地只查改动的包：`nix run .#vuna -- fmt --check <目录>`。
 
 ## 骨架
 
@@ -165,7 +168,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
 - 真实阶段读数成对给。`vuna check .` 是**三段收敛**而非冷/热两档（实测空 store：
   21.2 s → 5.9 s → 5.8 s → 57 ms：冷精化 → 重写接口/单元 → 全命中），只报「热 57 ms」或
   「冷 21 s」都会误导；
-- 按面跑闸门：`nix run .#vuna-run-tests -- --only dt`、`./result/bin/vuna check .`
+- 按面跑闸门：`nix run .#vuna-run-tests -- --only dt`、`nix run .#vuna -- check .`
   （唯一 DT 自检）、必要时全量 + `nix flake check`（CI 口径）；
 - 修好标准是**增长率变了**（例如 n²→线性），不是「这次快了几秒」。
 
