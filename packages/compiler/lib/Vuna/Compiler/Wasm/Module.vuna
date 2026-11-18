@@ -456,7 +456,7 @@ genGlobalCall fuel st name args =
         in if arity == 0 then
           case genGlobalRef (fuel - 1) st name of
             Err e => Err e
-            Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) args
+            Ok p => genApplyArgs (fuel - 1) st.gsTail (secondOf p) (firstOf p) args
         else if argc == arity then
           genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
         else if argc < arity then
@@ -466,7 +466,7 @@ genGlobalCall fuel st name args =
             Pair headArgs rest =>
               case genArgsThen (fuel - 1) st headArgs (ICall (watFuncNameOf name)) of
                 Err e => Err e
-                Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) rest
+                Ok p => genApplyArgs (fuel - 1) st.gsTail (secondOf p) (firstOf p) rest
 
 -- ---------------------------------------------------------------
 -- 闭包
@@ -558,17 +558,25 @@ genApplyValue fuel st head args =
   else
     case genExpr (fuel - 1) (noTail st) head of
       Err e => Err e
-      Ok p => genApplyArgs (fuel - 1) (withTail st.gsTail (secondOf p)) (firstOf p) args
+      Ok p => genApplyArgs (fuel - 1) st.gsTail (withTail st.gsTail (secondOf p)) (firstOf p) args
 
-genApplyArgs : Int -> GenState -> List Instr -> List Ir -> Result (Pair (List Instr) GenState)
-genApplyArgs _ st acc [] = Ok (Pair acc st)
-genApplyArgs fuel st acc (a :: rest) =
+-- | 闭包应用；`tail` 决定最后一次应用是否用 `return_call`（续延转移不占调用者帧，
+-- 顺序 perform 的 CPS 链因此保持常量栈深度）。
+genApplyArgs : Int -> Bool -> GenState -> List Instr -> List Ir -> Result (Pair (List Instr) GenState)
+genApplyArgs _ _ st acc [] = Ok (Pair acc st)
+genApplyArgs fuel tail st acc (a :: rest) =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
     case genExpr (fuel - 1) (noTail st) a of
       Err e => Err e
-      Ok p => genApplyArgs (fuel - 1) (withTail st.gsTail (secondOf p)) (append acc (append (firstOf p) [ICall "$rt_apply"])) rest
+      Ok p =>
+        let
+          callInstr =
+            case rest of
+              [] => if tail then IReturnCall "$rt_apply" else ICall "$rt_apply"
+              _ => ICall "$rt_apply"
+        in genApplyArgs (fuel - 1) tail (withTail st.gsTail (secondOf p)) (append acc (append (firstOf p) [callInstr])) rest
 
 -- | 立即 lambda 应用：运行时 binder 必须恰好一个、实参恰好一个（`let` 的降级形态）。
 genLamApp : Int -> GenState -> List IrBinder -> Ir -> List Ir -> Result (Pair (List Instr) GenState)
@@ -633,7 +641,7 @@ genRtApp fuel st sym args =
             Pair headArgs rest =>
               case genArgsThen (fuel - 1) st headArgs (ICall name) of
                 Err e => Err e
-                Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) rest
+                Ok p => genApplyArgs (fuel - 1) st.gsTail (secondOf p) (firstOf p) rest
 
 -- ---------------------------------------------------------------
 -- Nat case / 字符串拼接
