@@ -699,10 +699,11 @@ runRepl ctx start = do
         _ <- replEmit st1 "${msg}\n"
         replLoop replFuelBound st1
 
--- | 内部：启动横幅（版本、包标签与一行帮助提示）。
+-- | 内部：启动横幅（ASCII 标记、版本、包标签与一行帮助提示）。
 bannerText : ReplState -> String
-bannerText st = """vuna repl ${vunaVersion} · ${packageLabel st}
-${c st "2" ":help 查看命令；定义可直接输入（自动推断签名）；Ctrl-D 退出"}
+bannerText st = """##        ${c st "36" "##"}   vuna repl ${vunaVersion} · ${packageLabel st}
+  ##    ${c st "36" "##"}     ${c st "2" ":help 查看命令；定义可直接输入（自动推断签名）；Ctrl-D 退出"}
+    ##${c st "36" "##"}
 """
 
 -- | 内部：`包: <名字>` 形式的标签。
