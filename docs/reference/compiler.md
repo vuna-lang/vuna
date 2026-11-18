@@ -109,7 +109,7 @@
 | `Ir.Model` | IR 数据模型（纯数据，无 `Term`/`Value`/`DtDef`）：节点、binder、分支、类型声明、定义/分组、入口形态、共享元数据、内联 arity 表 | `Ir`、`IrBinder`、`IrTy`、`IrTyDecl`、`IrDef`、`IrShared`、`IrUnit`、`IrEntry` |
 | `Ir.Analysis` | SCC 分组（Kosaraju、依赖就绪排序、递归值形状护栏、覆盖自证）+ 入口可达性（native / wasm 共用） | `assembleGroups`、`assembleGroupNames`、`groupNames`、`reachableDefs` |
 | `Ir.Runtime` | **IR ↔ 运行时契约**（唯一真源）：符号清单（普通内建名/桥接内建名/`@ir@*` 合成符号）+ 桥接标记 + `Ir` 项符号遍历；IR 节点里没有目标文本 | `irRtContract`、`irRtNames`、`irRtLookup`、`irRtBridgesList`、`irSymbolsOfUnit` |
-| `Ir.Validate` | 单元 / 程序级校验：定义名唯一、分组自洽、入口 `main` 存在、符号已声明且 arity 一致 | `validateUnit`、`validateProgram` |
+| `Ir.Validate` | 单元 / 程序级校验：定义名唯一、分组自洽、入口 `main` 存在、符号已声明且 arity 一致、每个 `IrVar` 在作用域内且不引用擦除占位 | `validateUnit`、`validateProgram`、`checkScopedUnit` |
 
 ### Codegen / Lowering / 两个后端
 

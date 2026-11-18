@@ -25,7 +25,7 @@ validateUnit u =
     defs = concatMap irGroupDefs u.irUnitGroups
     nameTbl = HashMap.ofNames (map irDefName defs)
   in Vuna.Compiler.Base.Common.bind (checkUniqueDefNames defs)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => checkSymbolRefs (irSymbolsOfUnit u)))
+    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => checkScopedUnit u)))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
 checkGroupOrder : List IrGroup -> HashMap String Bool -> Check Int
@@ -85,3 +85,120 @@ validateProgram p =
     Just e =>
       if memName e.irEntryMain (map irDefName defs) then validateUnit u
       else icInternal "IR entry references an undefined main: `${e.irEntryMain}`"
+
+-- ---------------------------------------------------------------
+-- 作用域校验
+-- ---------------------------------------------------------------
+-- `IrVar` 携带 binder 身份，所以「每个变量都在语法作用域里」可以逐节点检查；
+-- 另外擦除占位 binder 不得出现在运行时 IR 的变量位置（Lowering 的擦除判据若漏一处，
+-- 这里会报内部错，而不是生成一条引用 `_` 的 OCaml）。
+--
+-- 用显式工作队列而不是互递归：每个节点出队时把自己的子节点按**扩展后的作用域**压回，
+-- 预算按节点规模派生（与 `Lowering` 的 `lowerBudgetFor` 同思路）。
+export checkScopedUnit : IrUnit -> Check Int
+checkScopedUnit u = checkScopedDefs (concatMap irGroupDefs u.irUnitGroups)
+
+checkScopedDefs : List IrDef -> Check Int
+checkScopedDefs [] = OkC 0
+checkScopedDefs (d :: rest) = case irDefBody d of
+  Nothing => checkScopedDefs rest
+  Just body =>
+    Vuna.Compiler.Base.Common.bind (checkScopedWork (scopedFuelOf body + 1) [Pair [] body])
+      (\_ => checkScopedDefs rest)
+
+scopedFuelOf : Ir -> Int
+scopedFuelOf body = 8 * irSize body + 64
+
+checkScopedWork : Int -> List (Pair (List IrBinder) Ir) -> Check Int
+checkScopedWork fuel work = if fuel <= 0 then icFuel "ir-scope"
+else case work of
+  [] => OkC 0
+  (Pair scope ir) :: rest => case ir of
+    IrVar b =>
+      if b.irBinderErased then icInternal "erased binder reached runtime IR"
+      else if memBinder b scope then checkScopedWork (fuel - 1) rest
+      else icInternal "IR variable references a binder outside its scope"
+    _ => checkScopedWork (fuel - 1) (append (scopedChildren scope ir) rest)
+
+-- 子节点 + 它们的作用域：只有 `IrLam` / `IrLet` / `IrCase` / `IrNatCase` 引入 binder。
+scopedChildren : List IrBinder -> Ir -> List (Pair (List IrBinder) Ir)
+scopedChildren scope ir = case ir of
+  IrCtor family ctor args => map (\a => Pair scope a) args
+  IrRecord family fields => map (\p => Pair scope (secondOf p)) fields
+  IrProj base family field => [Pair scope base]
+  IrRecUpd base family fields => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
+  IrRtApp sym args => map (\a => Pair scope a) args
+  IrCast inner => [Pair scope inner]
+  IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
+  IrLam bs body => [Pair (append bs scope) body]
+  IrApp f a => [Pair scope f, Pair scope a]
+  IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
+  IrCase scrut alts => Pair scope scrut :: altWork scope alts
+  IrNatCase scrut fresh zero succ catch =>
+    append [Pair scope scrut]
+      (append (altWork scope (maybeAlts zero)) (append (altWork scope (maybeAlts succ)) (altWork scope (maybeAlts catch))))
+  IrConcatMany parts => map (\a => Pair scope a) parts
+  IrEffThunk family ctor unitTy arity prim => [Pair scope prim]
+  _ => []
+
+maybeAlts : Maybe IrAlt -> List IrAlt
+maybeAlts Nothing = []
+maybeAlts (Just alt) = [alt]
+
+altWork : List IrBinder -> List IrAlt -> List (Pair (List IrBinder) Ir)
+altWork scope [] = []
+altWork scope (alt :: rest) =
+  Pair (append (irAltBindersOf alt) scope) (irAltBodyOf alt) :: altWork scope rest
+
+memBinder : IrBinder -> List IrBinder -> Bool
+memBinder b [] = False
+memBinder b (x :: rest) = if sameBinder b x then True else memBinder b rest
+
+sameBinder : IrBinder -> IrBinder -> Bool
+sameBinder b1 b2 =
+  b1.irBinderErased == b2.irBinderErased && sameBName b1.irBinderName b2.irBinderName
+
+sameBName : IrBName -> IrBName -> Bool
+sameBName (IrBUser a) (IrBUser b) = a == b
+sameBName (IrBArm a) (IrBArm b) = a == b
+sameBName (IrBNat a) (IrBNat b) = a == b
+sameBName IrBWild IrBWild = True
+sameBName a b = False
+
+irSize : Ir -> Int
+irSize ir = 1 + irSizeChildren ir
+
+irSizeChildren : Ir -> Int
+irSizeChildren ir = case ir of
+  IrCtor family ctor args => irSizeList args
+  IrRecord family fields => irSizeFields fields
+  IrProj base family field => irSize base
+  IrRecUpd base family fields => irSize base + irSizeFields fields
+  IrRtApp sym args => irSizeList args
+  IrCast inner => irSize inner
+  IrLet bs scrut body => irSize scrut + irSize body
+  IrLam bs body => irSize body
+  IrApp f a => irSize f + irSize a
+  IrIf c th el => irSize c + irSize th + irSize el
+  IrCase scrut alts => irSize scrut + irSizeAlts alts
+  IrNatCase scrut fresh zero succ catch =>
+    irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
+  IrConcatMany parts => irSizeList parts
+  IrEffThunk family ctor unitTy arity prim => irSize prim
+  _ => 0
+
+irSizeList : List Ir -> Int
+irSizeList [] = 0
+irSizeList (ir :: rest) = irSize ir + irSizeList rest
+
+irSizeFields : List (Pair String Ir) -> Int
+irSizeFields [] = 0
+irSizeFields ((Pair label ir) :: rest) = irSize ir + irSizeFields rest
+
+irSizeAlts : List IrAlt -> Int
+irSizeAlts [] = 0
+irSizeAlts (alt :: rest) = irSize (irAltBodyOf alt) + irSizeAlts rest
+
+irSizeAlt : Maybe IrAlt -> Int
+irSizeAlt Nothing = 0
+irSizeAlt (Just alt) = irSize (irAltBodyOf alt)

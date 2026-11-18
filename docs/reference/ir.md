@@ -185,6 +185,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
   （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
   `Lowering.Program.lowerUnitChecked` 逐单元跑一次。
+- **作用域**：`checkScopedUnit` 逐节点检查每个 `IrVar` 指向语法作用域内的 binder，
+  且擦除占位 binder 不得出现在变量位置（Lowering 的擦除判据漏一处就报内部错）；
+  它把「well-scoped」从约定变成门禁。
 - 擦除检查、作用域护栏、axiom 运行时护栏**仍在 Core 侧**（`Lowering.Checks`，由
   `Lowering.Program` 调用），因此诊断文本与顺序不变。
 
