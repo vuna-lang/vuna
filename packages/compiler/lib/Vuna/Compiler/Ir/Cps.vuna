@@ -736,6 +736,9 @@ mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
 mFreshK : Int -> IrBinder
 mFreshK n = mkBinder ("__mchK" ++ strFromInt n)
 
+mFreshR : Int -> IrBinder
+mFreshR n = mkBinder ("__mchR" ++ strFromInt n)
+
 -- | do 块续延 λ 的标记（精化期打，见 `Elab.Meta.effContBinderName`）：lowering
 -- 据此把「a -> Eff r b」与普通函数区分开（IR 无类型，debt D110）。
 export effContMark : String
@@ -1163,6 +1166,114 @@ collectHandleOpsDefsGo fuel arities ds =
 memName : String -> List String -> Bool
 memName x [] = False
 memName x (y :: rest) = if x == y then True else memName x rest
+
+-- | handler clause 内对 `handleScoped` / `handleSelf` 的调用：改成机器给的
+-- runScoped 参数（当前帧上的嵌套运行），`Scoped` 值直接交给它。
+scopedName : String
+scopedName = "Base.Effect.Core.handleScoped"
+
+selfName : String
+selfName = "Base.Effect.Core.handleSelf"
+
+scopeName : String
+scopeName = "Base.Effect.Core.scope"
+
+cleanupPushName : String
+cleanupPushName = "Base.Effect.Core.pushCleanup"
+
+cleanupPopName : String
+cleanupPopName = "Base.Effect.Core.popCleanup"
+
+mScopedCalls : Int -> IrBinder -> Ir -> Ir
+mScopedCalls fuel rs e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      IrApp f a =>
+        let
+          f1 = mScopedCalls (fuel - 1) rs f
+          a1 = mScopedCalls (fuel - 1) rs a
+        in case f1 of
+          IrGlobal n => if n == scopedName then IrApp (IrVar rs) a1 else if n == selfName then IrApp (IrVar rs) (IrApp (IrGlobal scopeName) a1) else IrApp f1 a1
+          _ => IrApp f1 a1
+      IrRtApp sym args => IrRtApp sym (mScopedList (fuel - 1) rs args)
+      IrCtor fam ctor args => IrCtor fam ctor (mScopedList (fuel - 1) rs args)
+      IrRecord fam fs => IrRecord fam (mScopedFields (fuel - 1) rs fs)
+      IrProj b fam x => IrProj (mScopedCalls (fuel - 1) rs b) fam x
+      IrRecUpd b fam fs => IrRecUpd (mScopedCalls (fuel - 1) rs b) fam (mScopedFields (fuel - 1) rs fs)
+      IrCast x => IrCast (mScopedCalls (fuel - 1) rs x)
+      IrLet bs rhs body => IrLet bs (mScopedCalls (fuel - 1) rs rhs) (mScopedCalls (fuel - 1) rs body)
+      IrLam bs body => IrLam bs (mScopedCalls (fuel - 1) rs body)
+      IrIf c t el => IrIf (mScopedCalls (fuel - 1) rs c) (mScopedCalls (fuel - 1) rs t) (mScopedCalls (fuel - 1) rs el)
+      IrCase sc alts => IrCase (mScopedCalls (fuel - 1) rs sc) (mScopedAlts (fuel - 1) rs alts)
+      IrNatCase sc fr z su ca => IrNatCase (mScopedCalls (fuel - 1) rs sc) fr (mScopedAltM (fuel - 1) rs z) (mScopedAltM (fuel - 1) rs su) (mScopedAltM (fuel - 1) rs ca)
+      IrConcatMany xs => IrConcatMany (mScopedList (fuel - 1) rs xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mScopedCalls (fuel - 1) rs prim)
+      _ => e
+
+mScopedList : Int -> IrBinder -> List Ir -> List Ir
+mScopedList fuel rs xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => mScopedCalls (fuel - 1) rs x :: mScopedList (fuel - 1) rs rest
+
+mScopedFields : Int -> IrBinder -> List (Pair String Ir) -> List (Pair String Ir)
+mScopedFields fuel rs fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => Pair (firstOf p) (mScopedCalls (fuel - 1) rs (secondOf p)) :: mScopedFields (fuel - 1) rs rest
+
+mScopedAlts : Int -> IrBinder -> List IrAlt -> List IrAlt
+mScopedAlts fuel rs alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (mScopedCalls (fuel - 1) rs a.irAltBody) :: mScopedAlts (fuel - 1) rs rest
+
+mScopedAltM : Int -> IrBinder -> Maybe IrAlt -> Maybe IrAlt
+mScopedAltM fuel rs m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mScopedCalls (fuel - 1) rs a.irAltBody))
+
+lastBinderOf : List IrBinder -> Maybe IrBinder
+lastBinderOf bs =
+  case bs of
+    [] => Nothing
+    b :: rest =>
+      case rest of
+        [] => Just b
+        _ => lastBinderOf rest
+
+-- | `pushCleanup` / `popCleanup` 的机器形态：thunk 直接变成 Control 步骤
+-- （CPS 层无法用类型语言构造 Control，所以按名字在 lowering 里落）。
+mCleanupDef : String -> Ir -> Maybe Ir
+mCleanupDef n body =
+  if n == cleanupPushName then
+    case body of
+      IrLam bs _ =>
+        case lastBinderOf bs of
+          Just th => Just (IrLam bs (IrCtor irEffTypeName irEffMkCtor [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" [IrVar th], IrVar (mkBinder "__mCleanK")])]))
+          Nothing => Nothing
+      _ => Nothing
+  else if n == cleanupPopName then
+    case body of
+      IrLam bs _ => Just (IrLam bs (IrCtor irEffTypeName irEffMkCtor [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") [IrVar (mkBinder "__mCleanK")])]))
+      _ => Nothing
+  else
+    Nothing
 
 mHandlerFun : Int -> Ir -> Ir
 mHandlerFun fuel body =

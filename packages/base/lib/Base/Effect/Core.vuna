@@ -22,6 +22,7 @@ import Base.Data.Bool
 import Base.Data.Int
 import Base.Data.List
 import Base.Data.Maybe
+import Base.Data.Pair
 import Base.Data.String
 import Base.Trait.Eq
 import Base.Trait.Num
@@ -309,13 +310,21 @@ export mkCont : {a : Type} -> {b : Type} -> (1 k : a -> b) -> Cont a b
 mkCont k = MkCont k
 
 -- | 通用 bracket：acquire → use → release。cleanup 由运行时 handler 的**退出钩子**驱动——use 里任意效应 abort（`Exn` throw、自定义 abort、调度器硬中止）都会在退出时执行 release；正常返回路径在带内 pop + release。边界：release 只能访问外层 handler、自身异常被吞，硬中止路径只能做无效应清理。
+-- | 机器 cleanup 登记：CPS lowering 把这两个入口改写成 Control 步骤
+-- （`MkPushCleanup`/`MkPopCleanup`），弹帧时按帧深度跑。类型层面的实现只是宿主原语。
+pushCleanup : {r : Row} -> (Int -> Int) -> Eff r Int
+pushCleanup th = effPrim (\_ => prim_cleanupPush th)
+
+popCleanup : {r : Row} -> Eff r Int
+popCleanup = effPrim (\_ => prim_cleanupPop 0)
+
 export bracket : {res : Type} -> {a : Type} -> {r : Row} -> Eff r res -> (res -> Eff r Int) -> (res -> Eff r a) -> Eff r a
 bracket acquire release use =
   do
     res <- acquire
-    effPrim (\_ => prim_cleanupPush (\_ => runEff (release res)))
+    _ <- pushCleanup (\_ => runEff (release res))
     a <- use res
-    effPrim (\_ => prim_cleanupPop 0)
+    _ <- popCleanup
     release res
     pure a
 
@@ -326,19 +335,25 @@ finally comp cleanup = bracket (pure 0) (\_ => cleanup) (\_ => comp)
 ObjTy : Type
 ObjTy = Obj
 
+-- | 登记的 cleanup（宿主直调 thunk；结果丢弃）。
+export data Cleanup(..) : Type where
+  MkCleanup : (Int -> Int) -> Cleanup
+
 export data Control v(..) : Type where
   MkDone : v -> Control v
   MkApply : (v -> Control v) -> v -> Control v
   MkPerform : String -> String -> v -> (v -> Control v) -> Control v
   MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkSelf : (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
+  MkPushCleanup : Cleanup -> (v -> Control v) -> Control v
+  MkPopCleanup : (v -> Control v) -> Control v
   MkReturn : Frame v -> v -> Control v
   MkKDone : Frame v -> v -> Control v
   MkResume : Frame v -> (v -> Control v) -> Int -> v -> (v -> Control v) -> Control v
 
 -- | handler frame：key、name、ret、opH、comp、kOuter、prev。
 export data Frame v(..) : Type where
-  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Frame v
+  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Int -> Frame v
 
 -- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文。
 export data Ctx v(..) : Type where
@@ -350,44 +365,51 @@ export record MSt v where
   msCtx : Maybe (Ctx v)
   msUsed : HashMap Int Bool
   msNext : Int
+  msCleanups : List Cleanup
+  msCleanDepth : Int
 
 export emptySt : MSt v
-emptySt = MSt Nothing Nothing (HashMap arrayEmpty) 0
+emptySt = MSt Nothing Nothing (HashMap arrayEmpty) 0 [] 0
 
 frameKey : Frame v -> String
 frameKey f =
   case f of
-    MkFrame key _ _ _ _ _ _ => key
+    MkFrame key _ _ _ _ _ _ _ => key
 
 frameName : Frame v -> String
 frameName f =
   case f of
-    MkFrame _ name _ _ _ _ _ => name
+    MkFrame _ name _ _ _ _ _ _ => name
 
 frameRet : Frame v -> (v -> v)
 frameRet f =
   case f of
-    MkFrame _ _ ret _ _ _ _ => ret
+    MkFrame _ _ ret _ _ _ _ _ => ret
 
 frameOpH : Frame v -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v)
 frameOpH f =
   case f of
-    MkFrame _ _ _ opH _ _ _ => opH
+    MkFrame _ _ _ opH _ _ _ _ => opH
 
 frameComp : Frame v -> (v -> (v -> Control v) -> Control v)
 frameComp f =
   case f of
-    MkFrame _ _ _ _ comp _ _ => comp
+    MkFrame _ _ _ _ comp _ _ _ => comp
 
 frameKOuter : Frame v -> (v -> Control v)
 frameKOuter f =
   case f of
-    MkFrame _ _ _ _ _ kOuter _ => kOuter
+    MkFrame _ _ _ _ _ kOuter _ _ => kOuter
 
 framePrev : Frame v -> Maybe (Frame v)
 framePrev f =
   case f of
-    MkFrame _ _ _ _ _ _ prev => prev
+    MkFrame _ _ _ _ _ _ prev _ => prev
+
+frameCleanDepth : Frame v -> Int
+frameCleanDepth f =
+  case f of
+    MkFrame _ _ _ _ _ _ _ d => d
 
 ctxPrompt : Ctx v -> Frame v
 ctxPrompt c =
@@ -429,7 +451,7 @@ inChain fuel f chain =
 reinstall : Frame v -> Maybe (Frame v) -> Frame v
 reinstall f chain =
   case f of
-    MkFrame key name ret opH comp kOuter _ => MkFrame key name ret opH comp kOuter chain
+    MkFrame key name ret opH comp kOuter _ d => MkFrame key name ret opH comp kOuter chain d
 
 reinstallIfMissing : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
 reinstallIfMissing fuel f chain = if inChain fuel f chain then chain else Just (reinstall f chain)
@@ -461,9 +483,10 @@ machineScoped fuel st f sc =
             (\_ => th 0)
             (\x => MkDone x)
             (Just f)
+            st.msCleanDepth
       in runGo
         (fuel - 1)
-        (MSt (Just frame) Nothing st.msUsed st.msNext)
+        (MSt (Just frame) Nothing st.msUsed st.msNext st.msCleanups st.msCleanDepth)
         ((th 0) (\x => MkReturn frame x))
 
 -- | 驱动到 `Done`。`fuel` 是终止性证书（同时也是保护，见 debt）。
@@ -478,27 +501,32 @@ step fuel st c =
     case c of
       MkDone v => v
       MkApply k v => step (fuel - 1) st (k v)
+      MkPushCleanup c k => step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed st.msNext (c :: st.msCleanups) (st.msCleanDepth + 1)) (k (toObj 0))
+      MkPopCleanup k =>
+        case st.msCleanups of
+          [] => step (fuel - 1) st (k (toObj 0))
+          _ :: rest => step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed st.msNext rest (st.msCleanDepth - 1)) (k (toObj 0))
       MkKDone frame r => unwind (fuel - 1) st frame r
       MkReturn frame v => unwind (fuel - 1) st frame ((frameRet frame) v)
-      MkResume frame k id v krest => if HashMap.member id st.msUsed then prim_fail "continuation already resumed" else step (fuel - 1) (MSt (reinstallIfMissing (fuel - 1) frame st.msFrames) (Just (MkCtx frame krest st.msCtx)) (HashMap.insert id True st.msUsed) st.msNext) (k v)
+      MkResume frame k id v krest => if HashMap.member id st.msUsed then prim_fail "continuation already resumed" else step (fuel - 1) (MSt (reinstallIfMissing (fuel - 1) frame st.msFrames) (Just (MkCtx frame krest st.msCtx)) (HashMap.insert id True st.msUsed) st.msNext st.msCleanups st.msCleanDepth) (k v)
       MkPerform key name op k =>
         case findFrame (fuel - 1) key name st.msFrames of
           Nothing => prim_fail "unhandled effect"
           Just frame =>
             let
               id = st.msNext
-            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r) (\th => machineScoped (fuel - 1) st frame th))
+            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1) st.msCleanups st.msCleanDepth) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r) (\th => machineScoped (fuel - 1) st frame th))
       MkSelf th k =>
         case st.msFrames of
           Nothing => prim_fail "handleScoped outside handler"
           Just f =>
             let
-              frame = MkFrame (frameKey f) (frameName f) (frameRet f) (frameOpH f) th k st.msFrames
-            in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((th (toObj 0)) (\x => MkReturn frame x))
+              frame = MkFrame (frameKey f) (frameName f) (frameRet f) (frameOpH f) th k st.msFrames st.msCleanDepth
+            in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext st.msCleanups st.msCleanDepth) ((th (toObj 0)) (\x => MkReturn frame x))
       MkHandle key name ret opH comp kOuter =>
         let
-          frame = MkFrame key name ret opH comp kOuter st.msFrames
-        in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((comp (toObj 0)) (\x => MkReturn frame x))
+          frame = MkFrame key name ret opH comp kOuter st.msFrames st.msCleanDepth
+        in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext st.msCleanups st.msCleanDepth) ((comp (toObj 0)) (\x => MkReturn frame x))
 
 -- | 交出一个答案：resume 期间（ctx 命中同一帧）先回到该次 resume 的 kRest，
 -- 让外层 handler 链继续；否则弹帧交 kOuter。
@@ -507,15 +535,40 @@ unwind fuel st frame r =
   case st.msCtx of
     Just c1 =>
       if samePrompt (ctxPrompt c1) frame then
-        step (fuel - 1) (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext) ((ctxKRest c1) r)
+        step
+          (fuel - 1)
+          (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext st.msCleanups st.msCleanDepth)
+          ((ctxKRest c1) r)
       else
         finish (fuel - 1) st frame r
     Nothing => finish (fuel - 1) st frame r
 
 finish : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> ObjTy
 finish fuel st frame r =
-  step fuel (MSt (framePrev frame) st.msCtx st.msUsed st.msNext) ((frameKOuter frame) r)
+  case dropCleanups fuel (frameCleanDepth frame) st.msCleanups st.msCleanDepth of
+    Pair cs d =>
+      step fuel (MSt (framePrev frame) st.msCtx st.msUsed st.msNext cs d) ((frameKOuter frame) r)
+
+cleanupRun : Cleanup -> Int
+cleanupRun c =
+  case c of
+    MkCleanup th => th 0
+
+-- | 弹帧前跑掉该帧之上登记的 cleanup（LIFO；thunk 是宿主直调，结果丢弃）。
+dropCleanups : Int -> Int -> List Cleanup -> Int -> Pair (List Cleanup) Int
+dropCleanups fuel depth cs d =
+  if fuel <= 0 then
+    Pair cs d
+  else if d <= depth then
+    Pair cs d
+  else
+    case cs of
+      [] => Pair cs d
+      c :: rest =>
+        let
+          _ = cleanupRun c
+        in dropCleanups (fuel - 1) depth rest (d - 1)
 
 -- | 入口：空状态跑到 Done。
 export machineRun : Control ObjTy -> ObjTy
-machineRun c = runGo 10000000 (MSt Nothing Nothing (HashMap arrayEmpty) 0) c
+machineRun c = runGo 10000000 (MSt Nothing Nothing (HashMap arrayEmpty) 0 [] 0) c

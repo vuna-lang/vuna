@@ -1,0 +1,25 @@
+-- 方案 B 的 cleanup 栈：帧退出（这里走正常返回）时按帧深度跑登记的 cleanup。
+-- 手搭：handle 的 comp 先登记一个写 ref 的 cleanup，再走 continuation（answer 0）；
+-- cleanup 在帧退出时写入 7，所以 0 + 7 = 7。
+import Base.Effect.Core as Eff
+import Base.Effect.Pure.IORef as IORef
+
+ret : Eff.Obj -> Eff.Obj
+ret x = x
+
+kOuter : Eff.Obj -> Eff.Control Eff.Obj
+kOuter v = Eff.MkDone v
+
+opH : Eff.Obj -> (Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> (Eff.Obj -> Eff.Control Eff.Obj) -> (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) -> Eff.Control Eff.Obj
+opH _ _ kd _ = kd (Eff.toObj 0)
+
+go : IORef Int -> Int
+go ref =
+  let
+    v =
+      Eff.fromObj
+        (Eff.machineRun (Eff.MkHandle "k" "n" ret opH (\_ => \k => Eff.MkPushCleanup (Eff.MkCleanup (\_ => Eff.runPure (IORef.writeRef ref 7))) k) kOuter))
+  in v + Eff.runPure (IORef.readRef ref)
+
+main : Int
+main = go (Eff.runPure (IORef.newRef 0))
