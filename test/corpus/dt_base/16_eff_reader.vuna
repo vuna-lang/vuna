@@ -1,6 +1,6 @@
 -- Layer 1：运行时续延 + 行 + 命名实例（两个 Reader Int 实例，按实例名区分）。
-import Base.Eff
-import Base.Eff.Reader
+import Base.Effect.Eff as Eff
+import Base.Effect.EffReader as EffReader
 
 prog : Eff [ReaderOp Int@counter, ReaderOp Int@config] Int
 prog = do
@@ -8,11 +8,11 @@ prog = do
   y <- ask "config" Int
   pure (x * 10 + y)
 
-op1 : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+op1 : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
 op1 i op k = case op of
   Ask => k 3
 
-op2 : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+op2 : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
 op2 i op k = case op of
   Ask => k 4
 

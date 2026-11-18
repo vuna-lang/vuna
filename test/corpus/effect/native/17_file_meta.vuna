@@ -1,8 +1,8 @@
 -- 文件元数据走 typed effects（entry 自动预装 handler）：取不到时是 `Nothing`（无值），
 -- 不是 0；存在时 `Just` 才是值。
-import Base.Eff
-import Base.EffFs
-import Base.Maybe
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
+import Base.Data.Maybe as Maybe
 
 prog : Eff [FsOp] Int
 prog = do

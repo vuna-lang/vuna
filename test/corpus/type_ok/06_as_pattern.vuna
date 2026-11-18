@@ -1,5 +1,5 @@
 -- as-pattern（`x@pat`）：匹配内层模式并绑定整个值，支持子模式位置。
-import Base.List
+import Base.Data.List as List
 
 data PState : Type where
   PState : List Int -> Int -> PState

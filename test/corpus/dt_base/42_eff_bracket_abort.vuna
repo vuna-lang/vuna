@@ -1,9 +1,9 @@
 -- 通用 bracket 对「非 Exn abort」的 cleanup。
 -- Abort handler 丢弃续延（不 resume）时，运行时在 handler 退出点执行 release；
 -- release 里的 State 写入由外层 State handler 处理（经 State 观察 42）。
-import Base.Eff
-import Base.EffState
-import Base.Pair
+import Base.Effect.Eff as Eff
+import Base.Effect.EffState as EffState
+import Base.Data.Pair as Pair
 
 data AbortE : Type -> Type where
 
@@ -13,10 +13,10 @@ data AbortOp : Type -> Type where
 abort : {r : Row} -> Eff (Named "default" AbortE :: r) Int
 abort = sendCore (Named "default" AbortE) "abort" "default" Abort
 
-handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : AbortOp i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff (Named "default" AbortE :: r) a -> Eff r b
+handleAbort : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : AbortOp i) -> (Eff.resIdx i o -> b) -> b) -> Eff (Named "default" AbortE :: r) a -> Eff r b
 handleAbort ret opH comp = handleCore (Named "default" AbortE) "abort" "default" ret opH comp
 
-abortH : (i : Type) -> (o : AbortOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+abortH : (i : Type) -> (o : AbortOp i) -> (Eff.resIdx i o -> Int) -> Int
 abortH i Abort k = 7
 
 prog : Eff [AbortE, StateOp Int@counter] Int
@@ -31,7 +31,7 @@ prog = bracket (do
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
 
-opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH : (i : Type) -> (o : StateOp Int i) -> (Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
 opH i op k s = case op of
   Get => k s s
   Put x => k 0 x

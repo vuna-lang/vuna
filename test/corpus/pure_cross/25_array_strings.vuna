@@ -1,5 +1,5 @@
-import Base.Array
-import Base.String
+import Base.Container.Array as Array
+import Base.Data.String as String
 
 main : String
 main = join "," (toList (fromList ["a", "b", "c"]))

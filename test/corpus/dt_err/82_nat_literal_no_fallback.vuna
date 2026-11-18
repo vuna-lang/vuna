@@ -1,5 +1,5 @@
 -- 负例：Nat 字面量 case 需要变量/通配兜底（Nat 是无限的）。
-import Base.Nat
+import Base.Data.Nat as Nat
 
 f : Nat -> Int
 f n = case n of

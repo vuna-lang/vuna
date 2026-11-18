@@ -1,8 +1,8 @@
 -- | 示例包：生成问候语。
 module Greet where
 
-import Base.List
-import Base.String
+import Base.Data.List as List
+import Base.Data.String as String
 
 -- | 生成 `n` 次 `hi` 的问候语。
 export greeting : Int -> String

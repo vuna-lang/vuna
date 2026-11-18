@@ -1,5 +1,5 @@
 -- stdlib 反例：instance 少实现 trait 方法 bind。
-import Base.Monad
+import Base.Trait.Monad as Monad
 
 data Box a : Type where
   MkBox : a -> Box a

@@ -3,7 +3,7 @@
 -- Row（当成 Type 会报 "expected Row, got Type"）。这正是 `Monad (Eff r)`
 -- 实例头需要的推断能力。
 import Prelude
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 trait Unary m where
   u : m Int -> Int

@@ -2,8 +2,8 @@
 #     工作区夹具写在 case 私有 $TMPDIR（包上下文只依赖 $VUNA_BASE），不改工作树。
 run: sh -c 'rm -rf "$TMPDIR/repl-ws"; mkdir -p "$TMPDIR/repl-ws/lib"; printf "[package]\nname = \"replws\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$TMPDIR/repl-ws/vuna.toml"; printf "module Foo where\n\nexport greeting : String\ngreeting = \"hi\"\n" > "$TMPDIR/repl-ws/lib/Foo.vuna"; printf "answer : Int\nanswer = 42\n" > "$TMPDIR/repl-entry.vuna"'
 # 模块加载 / 模块名错误。
-run: printf ':load Base.Nat\nZero\n:q\n' | "$VUNA" repl 2>&1
-out-contains: 已导入模块 Base.Nat
+run: printf ':load Base.Data\nZero\n:q\n' | "$VUNA" repl 2>&1
+out-contains: 已导入模块 Base.Data
 out-contains: 0
 run: printf ':load Does.Not.Exist\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 找不到模块
@@ -21,8 +21,8 @@ out-contains: Foo.vuna
 run: printf 'answer\n:q\n' | "$VUNA" repl "$TMPDIR/repl-entry.vuna" 2>&1
 out-contains: 已加载
 out-contains: 42
-run: printf 'Zero\n:q\n' | "$VUNA" repl Base.Nat 2>&1
-out-contains: 已导入模块 Base.Nat
+run: printf 'Zero\n:q\n' | "$VUNA" repl Base.Data 2>&1
+out-contains: 已导入模块 Base.Data
 run: printf ':q\n' | "$VUNA" repl Does.Not.Exist
 exit: 2
 # 历史持久化：单行单元写入文件，下一次会话恢复。

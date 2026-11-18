@@ -1,9 +1,9 @@
 -- op 携带子计算（Try），scoped handler 在嵌套 handler 里运行子计算；
 -- 子计算里的 Reader 效应继续由外层 handler 处理。
-import Base.Eff
-import Base.Eff.Reader
-import Base.EffExn
-import Base.Result
+import Base.Effect.Eff as Eff
+import Base.Effect.EffReader as EffReader
+import Base.Effect.EffExn as EffExn
+import Base.Data.Result as Result
 
 prog : Eff [ExnOp@default, ReaderOp Int@counter] Int
 prog = do
@@ -18,7 +18,7 @@ prog = do
       x <- ask "counter" Int
       pure (x + 100)
 
-opH : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+opH : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
 opH i op k = case op of
   Ask => k 7
 

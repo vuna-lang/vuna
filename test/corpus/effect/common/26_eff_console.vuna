@@ -1,8 +1,8 @@
 -- console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实 handler
 -- 下各跑一次；mock 收集日志（纯 answer），real 走 entry 自动预装的 handler。
-import Base.Eff
-import Base.EffConsole
-import Base.Pair
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.Pair as Pair
 
 prog : (n : String) -> Eff (Named n ConsoleOp :: []) Int
 prog n = do
@@ -21,7 +21,7 @@ progReal = do
 mret : Int -> Pair Int String
 mret a = Pair a ""
 
-mopH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Pair Int String) -> Pair Int String
+mopH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Pair Int String) -> Pair Int String
 mopH i op k = case op of
   Print s => case k 0 of
     Pair a log => Pair a (("out:" ++ s ++ ";") ++ log)

@@ -2,11 +2,11 @@
 -- `HOME` 为空或是 Nix 构建沙箱的 `/homeless-shelter` 时不参与；空串一律算「无值」。
 -- 全部走 mock Env handler（runPure），不依赖真实环境变量与文件系统。
 import Prelude
-import Base.Eff
-import Base.EffEnv
+import Base.Effect.Eff as Eff
+import Base.Effect.EffEnv as EffEnv
 import Vuna.Compiler.Base.Store
 
-mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> String) -> String
+mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Eff.resIdx i o -> String) -> String
 mockOpH table i op k = case op of
   GetEnv name => k (fromMaybe "" (lookupPair name table))
   GetCwd => k "/mock/cwd"

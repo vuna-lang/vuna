@@ -1,9 +1,9 @@
 -- bracket 基础；use 抛 Exn 时 release 仍执行（经 State 观察）。
-import Base.Eff
-import Base.EffExn
-import Base.EffState
-import Base.Result
-import Base.Pair
+import Base.Effect.Eff as Eff
+import Base.Effect.EffExn as EffExn
+import Base.Effect.EffState as EffState
+import Base.Data.Result as Result
+import Base.Data.Pair as Pair
 
 prog : Eff [ExnOp@default, StateOp Int@counter] Int
 prog = bracketExn "default" (pure 0) (\_ => put "counter" Int 99) (\_ => do
@@ -11,15 +11,15 @@ prog = bracketExn "default" (pure 0) (\_ => put "counter" Int 99) (\_ => do
   pure 1
 )
 
-ret : Base.Result.Result Int -> Int -> Pair (Base.Result.Result Int) Int
+ret : Result.Result Int -> Int -> Pair (Result.Result Int) Int
 ret a s = Pair a s
 
-opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair (Base.Result.Result Int) Int) -> Int -> Pair (Base.Result.Result Int) Int
+opH : (i : Type) -> (o : StateOp Int i) -> (Eff.resIdx i o -> Int -> Pair (Result.Result Int) Int) -> Int -> Pair (Result.Result Int) Int
 opH i op k s = case op of
   Get => k s s
   Put x => k 0 x
 
-run : Pair (Base.Result.Result Int) Int
+run : Pair (Result.Result Int) Int
 run = runPure (handleState "counter" Int ret opH (runExn "default" prog)) 3
 
 main : Int

@@ -2,8 +2,8 @@
 module Vuna.Demo where
 
 -- import 前置注释
-import Base.Bool -- import 行尾注释
-import qualified Base.List as L
+import Base.Data.Bool as Bool -- import 行尾注释
+import qualified Base.Data.List as L
 
 -- 声明前置注释
 export exported : Int

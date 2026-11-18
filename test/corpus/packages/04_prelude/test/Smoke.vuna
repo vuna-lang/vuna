@@ -1,4 +1,4 @@
-import Base.List
+import Base.Data.List as List
 
 main : String
 main = if length ((::) 1 ((::) 2 [])) == 2 then "" else "bad"

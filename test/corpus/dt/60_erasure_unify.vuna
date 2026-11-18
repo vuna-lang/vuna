@@ -2,7 +2,7 @@
 -- 1) 显式高阶类型参数（域 `Type -> Type`）按「域在类型层」擦除：单判据 binderRig。
 -- 2) 显式索引 `(n : Nat)` 保留运行时表示（可被读回）。
 -- 3) `>>=` / `fromMaybe` 的隐式类型参数走元变量求解（含非空 spine 的 head 提取兜底）。
-import Base.Maybe
+import Base.Data.Maybe as Maybe
 
 data Nat : Type where
   Zero : Nat

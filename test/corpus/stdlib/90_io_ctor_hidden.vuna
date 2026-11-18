@@ -1,5 +1,5 @@
 -- stdlib 反例：`Base.Eff` 的构造子 `MkEff` 不导出（直接引用 = unbound variable）。
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 main : Eff [] Int
 main = MkEff (\_ => 1)

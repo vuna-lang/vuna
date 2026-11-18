@@ -1,7 +1,7 @@
 -- DT 产物真正执行宿主原语（@vuna@prim_eff_*）的效果；用户面经 `Eff` + handler，
 -- main 直接带行，entry 自动预装 handler。输出见同名 .out。
-import Base.Eff
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
 
 prog : Eff [ConsoleOp] Int
 prog = do

@@ -1,4 +1,4 @@
-import Base.String
+import Base.Data.String as String
 
 main : String
 main = unlines ["a", "b"]

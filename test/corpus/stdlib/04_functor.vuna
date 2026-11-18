@@ -1,7 +1,7 @@
 -- stdlib：Functor 实例（Maybe / List）与 fmap。
-import Base.Monad
-import Base.Maybe
-import Base.List
+import Base.Trait.Monad as Monad
+import Base.Data.Maybe as Maybe
+import Base.Data.List as List
 
 showMaybe : Maybe Int -> String
 showMaybe m = case m of

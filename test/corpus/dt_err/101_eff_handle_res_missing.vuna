@@ -1,8 +1,8 @@
 -- 负例：handle 的 op 族没有结果索引（kind 是 `Type`，不是 `params… -> Type -> Type`）。
-import Base.Eff
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 data BoomOp : Type where
   BoomIt : BoomOp

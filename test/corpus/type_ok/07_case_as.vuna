@@ -1,5 +1,5 @@
 -- case 分支左端的 as-pattern（`y@pat => ...`）：匹配内层模式并绑定整个值。
-import Base.List
+import Base.Data.List as List
 
 f : List Int -> Int
 f xs = case xs of

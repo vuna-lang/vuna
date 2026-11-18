@@ -2,7 +2,7 @@ module Core where
 
 -- codegen 夹具：record（声明/构造/更新/字段访问/模式）、List 结构递归（letrec）、
 -- where 多 clause、Int 相等（eqint）。这些形状都直接体现在生成的 .ml 里。
-import Base.List
+import Base.Data.List as List
 
 export record Point(..) where
   x : Int

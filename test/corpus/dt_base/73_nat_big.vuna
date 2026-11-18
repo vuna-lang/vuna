@@ -4,8 +4,8 @@
 -- 结构递归遍历，没有固定 fuel：这个深度既不报 `erasure fuel exhausted`，也不会在求值
 -- 中途截断链。这里同时覆盖：链折回、Nat 字面量模式、`show` / `toInt` / `<` 的运行时
 -- 表示（OCaml int）。
-import Base.Nat
-import Base.String
+import Base.Data.Nat as Nat
+import Base.Data.String as String
 
 n : Nat
 n = 300

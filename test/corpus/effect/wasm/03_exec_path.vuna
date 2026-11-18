@@ -1,7 +1,7 @@
 -- execPath 在 WASI 上恒为空串（没有可执行文件路径的概念），宿主目标非空。
-import Base.Eff
-import Base.EffEnv
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffEnv as EffEnv
+import Base.Effect.EffConsole as EffConsole
 
 main : Eff [EnvOp, ConsoleOp] Int
 main = do

@@ -1,7 +1,6 @@
 module Facade where
 
-export module Base.List
-export module Base.Maybe
+export module Base.Data
 
--- 跨包重导出夹具：facade 包把 vuna-base 的 List/Maybe 门面化；
+-- 跨包重导出夹具：facade 包扁平重导出 vuna-base 的数据门面；
 -- 只依赖 facade 的包应当能拿到这些名字（对应 compiler 包 Vuna.Compiler.Base.Common 的场景）。

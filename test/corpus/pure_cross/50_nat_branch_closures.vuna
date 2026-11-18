@@ -1,4 +1,4 @@
-import Base.Nat
+import Base.Data.Nat as Nat
 
 -- Nat 分支的两臂各自返回一个闭包：编号必须互不相同（否则 succ 臂的 ref.func
 -- 指向 zero 臂的函数体）。

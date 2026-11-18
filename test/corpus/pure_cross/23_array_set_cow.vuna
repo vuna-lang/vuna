@@ -1,4 +1,4 @@
-import Base.Array
+import Base.Container.Array as Array
 
 a : Array Int
 a = fromList [1, 2, 3]

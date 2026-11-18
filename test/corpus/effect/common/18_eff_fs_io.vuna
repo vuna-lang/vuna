@@ -1,8 +1,8 @@
 -- 宿主-backed Fs 效应：命名实例 "real" 的 handler 把操作转给入口预装的标签 handler。
 -- 路径是相对的，三端都以 case 私有目录为 cwd。
-import Base.Eff
-import Base.EffFs
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
+import Base.Data.Nat as Nat
 
 prog : Eff [FsOp@real] Int
 prog = do
@@ -13,7 +13,7 @@ prog = do
 ret : Int -> Eff [FsOp] Int
 ret a = pure a
 
-opH : (i : Type) -> (o : FsOp i) -> (Base.Eff.resIdx i o -> Eff [FsOp] Int) -> Eff [FsOp] Int
+opH : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> Eff [FsOp] Int) -> Eff [FsOp] Int
 opH i op k = case op of
   ReadFile p => do
     s <- fsReadFile p

@@ -1,6 +1,6 @@
 -- `Eff []` 内的 IORef（newRef / writeRef / readRef）。
-import Base.IORef
-import Base.Eff
+import Base.Effect.Pure.IORef as IORef
+import Base.Effect.Eff as Eff
 
 main : Eff [] Int
 main = do

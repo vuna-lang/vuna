@@ -1,6 +1,6 @@
 -- 负例：用户构造的一次性闭包（Cont）resume 两次 → 用量检查拒绝
 -- （与 75_linear_resume_twice 的 handler 续延版本对应）。
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 contI : (1 k : Int -> Int) -> Cont Int Int
 contI k = mkCont k

@@ -1,10 +1,10 @@
 -- State 效应栈（`Base.EffState`）。
 -- 标签 `State "counter" Int`；handler 以 `s -> Pair a s` 为 answer 线程状态。
-import Base.EffExit
-import Base.EffConsole
-import Base.Eff
-import Base.EffState
-import Base.Pair
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffState as EffState
+import Base.Data.Pair as Pair
 
 prog : Eff [StateOp Int@counter] Int
 prog = do
@@ -15,7 +15,7 @@ prog = do
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
 
-opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH : (i : Type) -> (o : StateOp Int i) -> (Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
 opH i op k s = case op of
   Get => k s s
   Put x => k 0 x

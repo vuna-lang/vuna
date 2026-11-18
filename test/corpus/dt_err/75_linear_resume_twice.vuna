@@ -1,6 +1,6 @@
 -- 负例：线性续延 resume 两次 → 用量检查拒绝。
-import Base.Eff
-import Base.Eff.Reader
+import Base.Effect.Eff as Eff
+import Base.Effect.EffReader as EffReader
 
 prog : Eff [ReaderOp Int@counter] Int
 prog = ask "counter" Int

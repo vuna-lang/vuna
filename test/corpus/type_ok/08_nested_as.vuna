@@ -1,5 +1,5 @@
 -- case 分支字段位置的嵌套模式 + as-pattern：匹配内层模式并绑定整个值。
-import Base.List
+import Base.Data.List as List
 
 data Wrap : Type where
   Wrap : List Int -> Int -> Wrap

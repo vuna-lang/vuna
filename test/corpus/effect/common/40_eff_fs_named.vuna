@@ -1,12 +1,12 @@
 -- fs 命名实例（"mock" / 入口行 handler）——同一程序在 mock（纯 answer）与
 -- 真实（入口自动预装）下各跑一次；证明 mock/real handler 可以在同一程序里并存。
 -- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
-import Base.Eff
-import Base.Nat
-import Base.Maybe
-import Base.EffFs
-import Base.EffConsole
-import Base.List
+import Base.Effect.Eff as Eff
+import Base.Data.Nat as Nat
+import Base.Data.Maybe as Maybe
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
 
 dir : String
 dir = "vuna_w10_fs_named"
@@ -42,7 +42,7 @@ progReal = do
 mret : String -> String
 mret a = a
 
-mopH : (i : Type) -> (o : FsOp i) -> (Base.Eff.resIdx i o -> String) -> String
+mopH : (i : Type) -> (o : FsOp i) -> (Eff.resIdx i o -> String) -> String
 mopH i op k = case op of
   ReadFile p => k "M"
   WriteFile p s => k 5

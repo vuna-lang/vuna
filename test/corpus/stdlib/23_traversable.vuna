@@ -1,11 +1,11 @@
 -- stdlib：Traversable 的 mapM（双参数 trait：t 与 Applicative 的 f）。
-import Base.Applicative
-import Base.Eq
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Ord
-import Base.Result
+import Base.Trait.Monad as Monad
+import Base.Trait.Eq as Eq
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Trait.Ord as Ord
+import Base.Data.Result as Result
 
 positive : List Int -> Maybe (List Int)
 positive xs = mapM (\n => if n > 0 then Just n else Nothing) xs

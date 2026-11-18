@@ -1,10 +1,10 @@
 -- comp 的行还没有具体化（行多态表达式）时，handle 降级到
 -- 行首条目版（`handleWithAt`）：名字取默认实例名 `main`，结果行由期望类型定。
-import Base.Eff
-import Base.EffConsole
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 fortyOne : Nat
 fortyOne = 41

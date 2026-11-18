@@ -1,5 +1,5 @@
 -- D48：纯 `Eff Nil` 的 20 步 do 链（每步 `pure (x_i + 1)`），精化应保持线性。
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 prog : Eff [] Int
 prog = do

@@ -11,7 +11,7 @@ run: printf '[package]\nname = "warn-reexp"\n[export]\nmodules = ["Direct", "Fac
 run: printf 'module App where\n\nexport thing : Int\nthing = 41\n' > "$TMPDIR/warn-reexp/lib/App.vuna"
 run: printf 'module Facade where\n\nexport module App as A\n' > "$TMPDIR/warn-reexp/lib/Facade.vuna"
 run: printf 'module Direct where\n\nexport module App\n' > "$TMPDIR/warn-reexp/lib/Direct.vuna"
-run: printf 'module Other where\n\nimport Base.Bool\nexport module App\n\nother : Int\nother = 1\n' > "$TMPDIR/warn-reexp/lib/Other.vuna"
+run: printf 'module Other where\n\nimport Base.Data.Bool as Bool\nexport module App\n\nother : Int\nother = 1\n' > "$TMPDIR/warn-reexp/lib/Other.vuna"
 run: "$VUNA" check -W "$TMPDIR/warn-reexp" 2>&1
 out-contains: lib/Other.vuna:3:8
 out-contains: [UN_UnusedImport]
@@ -22,7 +22,7 @@ out-not-contains: lib/Direct.vuna
 run: mkdir -p "$TMPDIR/warn-cache/lib"
 run: printf '[package]\nname = "warn-cache"\n[export]\nmodules = ["A", "DoOk", "TraitTwo", "UserWarn"]\n\n[dependencies]\nvuna-base = "%s"\n' "$VUNA_BASE" > "$TMPDIR/warn-cache/vuna.toml"
 run: printf 'module A where\n\na : Int -> Int\na x = let\n  x = 1\n  in x\n' > "$TMPDIR/warn-cache/lib/A.vuna"
-run: printf 'module DoOk where\n\nimport Base.Eff\nimport Base.Monad\n\ngen : Eff [] Int\ngen = do\n  _ <- pure 1\n  pure 2\n' > "$TMPDIR/warn-cache/lib/DoOk.vuna"
+run: printf 'module DoOk where\n\nimport Base.Effect.Eff as Eff\nimport Base.Trait.Monad as Monad\n\ngen : Eff [] Int\ngen = do\n  _ <- pure 1\n  pure 2\n' > "$TMPDIR/warn-cache/lib/DoOk.vuna"
 run: printf 'module TraitTwo where\n\ntrait Two f where\n  m1 : a -> f a\n  m2 : a -> f a\n' > "$TMPDIR/warn-cache/lib/TraitTwo.vuna"
 run: printf 'module UserWarn where\n\nu : Int -> Int\nu x = 1\n' > "$TMPDIR/warn-cache/lib/UserWarn.vuna"
 # 冷跑：建 check 缓存 + 模块接口。

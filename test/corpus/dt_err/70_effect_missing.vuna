@@ -1,6 +1,6 @@
 -- send 的效应不在行里 → 编译期报 row membership（而不是运行时未处理效应）。
-import Base.Eff
-import Base.EffState
+import Base.Effect.Eff as Eff
+import Base.Effect.EffState as EffState
 
 bad : Eff [StateOp Int@handled] Int
 bad = get "wanted" Int

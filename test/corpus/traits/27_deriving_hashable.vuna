@@ -1,6 +1,6 @@
 -- `deriving (Hashable)`（参数化 data + 记录）。
-import Base.Hashable
-import Base.Int
+import Base.Trait.Hashable as Hashable
+import Base.Data.Int as Int
 
 data Key a : Type where
   MkKey : a -> a -> Key a

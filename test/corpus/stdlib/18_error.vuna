@@ -1,6 +1,6 @@
 -- Base.Error 的 Monad/do + catchError 路径（interp 可归约）。
-import Base.Error
-import Base.Int
+import Base.Effect.Pure.Error as Error
+import Base.Data.Int as Int
 
 safeDiv : Int -> Int -> Error String Int
 safeDiv a b = if b == 0 then throwError "div0" else pure (a / b)

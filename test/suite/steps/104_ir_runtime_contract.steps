@@ -10,7 +10,7 @@ exit: 0
 out-not-contains: IC_InvariantViolated
 
 # 入口展示：Int/Nat 共用 string_of_int，String/Bool/Float 各自独立（合成符号）。
-run: sh -c 'rm -rf "$TMPDIR/p"; mkdir -p "$TMPDIR/p"; printf "%s\n" "main : Int" "main = 7" > "$TMPDIR/p/int.vuna"; printf "%s\n" "import Base.Nat" "" "main : Nat" "main = 3" > "$TMPDIR/p/nat.vuna"; printf "%s\n" "main : String" "main = \"hi\"" > "$TMPDIR/p/str.vuna"; printf "%s\n" "main : Bool" "main = True" > "$TMPDIR/p/bool.vuna"; printf "%s\n" "main : Float" "main = 1.5" > "$TMPDIR/p/float.vuna"'
+run: sh -c 'rm -rf "$TMPDIR/p"; mkdir -p "$TMPDIR/p"; printf "%s\n" "main : Int" "main = 7" > "$TMPDIR/p/int.vuna"; printf "%s\n" "import Base.Data.Nat as Nat" "" "main : Nat" "main = 3" > "$TMPDIR/p/nat.vuna"; printf "%s\n" "main : String" "main = \"hi\"" > "$TMPDIR/p/str.vuna"; printf "%s\n" "main : Bool" "main = True" > "$TMPDIR/p/bool.vuna"; printf "%s\n" "main : Float" "main = 1.5" > "$TMPDIR/p/float.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/int.vuna" "$TMPDIR/p/out-int"
 file-contains: $TMPDIR/p/out-int/Main.ml print_endline (string_of_int (v_main))
 run: "$VUNA" compile "$TMPDIR/p/nat.vuna" "$TMPDIR/p/out-nat"
@@ -51,7 +51,7 @@ run: "$VUNA" compile "$TMPDIR/p/bridge.vuna" "$TMPDIR/p/out-bridge"
 file-contains: $TMPDIR/p/out-bridge/Main.ml (Base_dList.dtp_unpack "ab")
 
 # 动作 main：宿主原语走 thunk（`IrEffThunk`），entry 走 runMain/sched 钩子。
-run: sh -c 'printf "%s\n" "import Base.Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
+run: sh -c 'printf "%s\n" "import Base.Effect.Eff as Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/eff.vuna" "$TMPDIR/p/out-eff"
 file-contains: $TMPDIR/p/out-eff/Main.ml dtp_print
 file-contains: $TMPDIR/p/out-eff/Main.ml dtp_sched_main

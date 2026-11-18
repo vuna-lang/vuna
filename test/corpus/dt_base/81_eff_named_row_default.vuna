@@ -1,8 +1,8 @@
 -- D2/D3/D6：裸标签行 = 默认实例名 "default"；perform / handle 都不写实例名。
-import Base.Eff
-import Base.EffConsole
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 prog : Eff [ConsoleOp] Nat
 prog = do

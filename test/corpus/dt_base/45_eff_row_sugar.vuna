@@ -1,8 +1,8 @@
 -- 行语法糖：`[Fetch]` / `[Fetch, Log]` / `[]` 在期望 Row 的位置展开为
 -- Cons/Nil（命名行：裸标签补默认名 "default"）；普通列表字面量（List Int）不受影响。
-import Base.Eff
-import Base.List
-import Base.String
+import Base.Effect.Eff as Eff
+import Base.Data.List as List
+import Base.Data.String as String
 
 data Fetch : Type -> Type where
   FetchUrl : String -> Fetch String
@@ -39,10 +39,10 @@ xs = [1, 2, 3]
 getPage : String -> Eff [Fetch] String
 getPage url = fetch url
 
-handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : Fetch i) -> (Base.Eff.resIdx i o -> b) -> b) -> Eff (Named "default" Fetch :: r) a -> Eff r b
+handleFetch : {a : Type} -> {b : Type} -> {r : Row} -> (a -> b) -> ((i : Type) -> (o : Fetch i) -> (Eff.resIdx i o -> b) -> b) -> Eff (Named "default" Fetch :: r) a -> Eff r b
 handleFetch ret opH comp = handleCore (Named "default" Fetch) "fetch" "default" ret opH comp
 
-opH : (i : Type) -> (o : Fetch i) -> (Base.Eff.resIdx i o -> String) -> String
+opH : (i : Type) -> (o : Fetch i) -> (Eff.resIdx i o -> String) -> String
 opH i op k = case op of
   FetchUrl url => k ("body of " ++ url)
 

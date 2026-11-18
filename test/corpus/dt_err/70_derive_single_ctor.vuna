@@ -1,4 +1,4 @@
-import Base.FromString
+import Base.Trait.FromString as FromString
 
 data X : Type where
   A : Int -> X

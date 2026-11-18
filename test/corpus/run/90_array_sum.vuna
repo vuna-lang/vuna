@@ -1,10 +1,10 @@
 -- 不可变 Array（fromList / get / set 返回新数组 / length）。
 -- Array 原语在 interp 不归约（OpNone），只 compile + 运行。
-import Base.Array
+import Base.Container.Array as Array
 
 main : Int
 main =
   let
-    a = Base.Array.fromList [1, 2, 3, 4]
-    b = Base.Array.set a 1 40
-  in Base.Array.get b 1 + Base.Array.length b + Base.Array.get a 1
+    a = Array.fromList [1, 2, 3, 4]
+    b = Array.set a 1 40
+  in Array.get b 1 + Array.length b + Array.get a 1

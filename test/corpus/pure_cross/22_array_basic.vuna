@@ -1,8 +1,8 @@
-import Base.Array
-import Base.Nat
+import Base.Container.Array as Array
+import Base.Data.Nat as Nat
 
 xs : Array Int
 xs = fromList [10, 20, 30]
 
 main : Int
-main = natToInt (Base.Array.length xs) * 100 + arrayGet xs 1
+main = natToInt (Array.length xs) * 100 + arrayGet xs 1

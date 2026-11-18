@@ -2,13 +2,13 @@
 -- （`[ConsoleOp@audit]` → 名字 "audit"），结果类型走上下文。
 -- handler 侧也按同一 key 取名；base 的 wrapper 仍手写 "console"，两边 key 不配对
 -- （见 debt D57）。
-import Base.Eff
-import Base.EffConsole
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
-mockOpH : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> a) -> a
+mockOpH : {a : Type} -> (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> a) -> a
 mockOpH i op k = case op of
   Print s => k 5
   EPrint s => k 0

@@ -87,7 +87,7 @@ exit: 2
 out-equals: vuna: runtime error: TODO: later
 
 # 9) 数组越界：trap 文本与 OCaml 报告器首行一致（wasm 没有位置行），exit 2。
-run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arr-out" "$d"'
+run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Container.Array as Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arr-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/arr-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
@@ -107,7 +107,7 @@ exit: 0
 out-equals: 101
 
 # 13) one-shot：同一续延第二次 resume 在运行期 trap（exit 2，文本与 native 一致）。
-run: sh -c 'd="$TMPDIR/efftwice"; mkdir -p "$d/app"; printf "[package]\nname = \"efftwice\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nmain : Int\nmain = runPure (handle (perform (P 3)) { P n k -> k (n + 1) + k 0 })\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/efftwice-out" "$d"'
+run: sh -c 'd="$TMPDIR/efftwice"; mkdir -p "$d/app"; printf "[package]\nname = \"efftwice\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nmain : Int\nmain = runPure (handle (perform (P 3)) { P n k -> k (n + 1) + k 0 })\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/efftwice-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/efftwice-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
@@ -121,24 +121,24 @@ exit: 0
 out-equals: 2000
 
 # 14) 目标能力告警：入口行含 wasm 不实现的效应（进程）→ 产物照常生成，`-W` 下告警。
-run: sh -c 'd="$TMPDIR/cap"; mkdir -p "$d/app"; printf "[package]\nname = \"cap\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-out" "$d" 2>&1'
+run: sh -c 'd="$TMPDIR/cap"; mkdir -p "$d/app"; printf "[package]\nname = \"cap\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffProcess as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-out" "$d" 2>&1'
 exit: 0
 out-contains: [UN_TargetEffectUnavailable]
 file-exists: $TMPDIR/cap-out/main.wasm
 
 # 15) 同一程序不加 `-W`：告警默认静默，构建照常成功。
-run: sh -c 'printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cap-quiet" "$TMPDIR/cap" 2>&1'
+run: sh -c 'printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffProcess as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cap-quiet" "$TMPDIR/cap" 2>&1'
 exit: 0
 out-not-contains: UN_TargetEffectUnavailable
 
 # 16) `--deny-warnings` 把能力告警提升为失败，且不留产物。
-run: sh -c 'printf "import Base.Eff\nimport Base.EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --deny-warnings --out "$TMPDIR/cap-deny" "$TMPDIR/cap" 2>&1'
+run: sh -c 'printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffProcess as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --deny-warnings --out "$TMPDIR/cap-deny" "$TMPDIR/cap" 2>&1'
 exit: 1
 out-contains: [UN_TargetEffectUnavailable]
 file-absent: $TMPDIR/cap-deny/main.wasm
 
 # 17) 可用的效应（console）不产生能力告警。
-run: sh -c 'd="$TMPDIR/cap-ok"; mkdir -p "$d/app"; printf "[package]\nname = \"capok\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffConsole\nimport Base.Nat\n\nmain : Eff [ConsoleOp] Nat\nmain = consolePrint \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-ok-out" "$d" 2>&1'
+run: sh -c 'd="$TMPDIR/cap-ok"; mkdir -p "$d/app"; printf "[package]\nname = \"capok\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffConsole as EffConsole\nimport Base.Data.Nat as Nat\n\nmain : Eff [ConsoleOp] Nat\nmain = consolePrint \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-ok-out" "$d" 2>&1'
 exit: 0
 out-not-contains: UN_TargetEffectUnavailable
 
@@ -148,34 +148,34 @@ exit: 0
 out-equals: 0
 
 # 19) symlink 不在浏览器契约内：产物可生成，执行到叶子时显式失败。
-run: sh -c 'd="$TMPDIR/symlink"; mkdir -p "$d/app"; printf "[package]\nname = \"symlink\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\n\nmain : Eff [FsOp] Int\nmain = fsSymlink \"target\" \"link\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/symlink-out" "$d"'
+run: sh -c 'd="$TMPDIR/symlink"; mkdir -p "$d/app"; printf "[package]\nname = \"symlink\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffFs as EffFs\n\nmain : Eff [FsOp] Int\nmain = fsSymlink \"target\" \"link\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/symlink-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/symlink-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: wasm host operation is not implemented
 
 # 20) 阻塞 sleep 不在浏览器契约内：执行时显式失败。
-run: sh -c 'd="$TMPDIR/sleep"; mkdir -p "$d/app"; printf "[package]\nname = \"sleep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffClock\n\nmain : Eff [ClockOp] Int\nmain = clockSleepMicros 1000\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sleep-out" "$d"'
+run: sh -c 'd="$TMPDIR/sleep"; mkdir -p "$d/app"; printf "[package]\nname = \"sleep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffClock as EffClock\n\nmain : Eff [ClockOp] Int\nmain = clockSleepMicros 1000\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sleep-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/sleep-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 2
 out-equals: vuna: runtime error: wasm host operation is not implemented
 
 # 21) cwd 是虚拟 preopen 根，不读 PWD。
-run: sh -c 'd="$TMPDIR/cwd"; mkdir -p "$d/app"; printf "[package]\nname = \"cwd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetCwd\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cwd-out" "$d"'
+run: sh -c 'd="$TMPDIR/cwd"; mkdir -p "$d/app"; printf "[package]\nname = \"cwd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffEnv as EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetCwd\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cwd-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/cwd-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y main.wasm 2>&1'
 exit: 0
 out-equals: "/"
 
 # 22) mtime 在浏览器契约内不可靠：写文件后仍得到 Nothing。
-run: sh -c 'd="$TMPDIR/mtime"; mkdir -p "$d/app" "$TMPDIR/mtime-root"; printf "[package]\nname = \"mtime\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffFs\nimport Base.Maybe\nimport Base.String\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsWriteFile \"mtime-probe\" \"x\"\n  m <- fsFileMtime \"mtime-probe\"\n  pure (case m of\\n    Nothing => \"none\"\\n    Just _ => \"some\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/mtime-out" "$d"'
+run: sh -c 'd="$TMPDIR/mtime"; mkdir -p "$d/app" "$TMPDIR/mtime-root"; printf "[package]\nname = \"mtime\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffFs as EffFs\nimport Base.Data.Maybe as Maybe\nimport Base.Data.String as String\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsWriteFile \"mtime-probe\" \"x\"\n  m <- fsFileMtime \"mtime-probe\"\n  pure (case m of\\n    Nothing => \"none\"\\n    Just _ => \"some\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/mtime-out" "$d"'
 exit: 0
 run: sh -c 'cd "$TMPDIR/mtime-out" && wasmtime run -W stack-switching=y -W gc=y -W function-references=y --dir "$TMPDIR/mtime-root" main.wasm 2>&1'
 exit: 0
 out-equals: "none"
 
 # 23) stdin 仍不可用：入口行产生能力告警。
-run: sh -c 'd="$TMPDIR/cap-stdin"; mkdir -p "$d/app"; printf "[package]\nname = \"capstdin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Eff\nimport Base.EffStdin\n\nmain : Eff [StdinOp] Int\nmain = do\n  _ <- stdinReadLine\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-stdin-out" "$d" 2>&1'
+run: sh -c 'd="$TMPDIR/cap-stdin"; mkdir -p "$d/app"; printf "[package]\nname = \"capstdin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Eff as Eff\nimport Base.Effect.EffStdin as EffStdin\n\nmain : Eff [StdinOp] Int\nmain = do\n  _ <- stdinReadLine\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-stdin-out" "$d" 2>&1'
 exit: 0
 out-contains: [UN_TargetEffectUnavailable]

@@ -1,6 +1,6 @@
 -- stdlib：Base.String 常用操作。
-import Base.String
-import Base.List
+import Base.Data.String as String
+import Base.Data.List as List
 
 showBool : Bool -> String
 showBool b = if b then "True" else "False"

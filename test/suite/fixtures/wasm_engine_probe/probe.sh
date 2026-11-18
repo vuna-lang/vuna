@@ -79,9 +79,9 @@ main = 42
   fail=$((fail + 1))
 }
 
-build_pkg "$tmp/console" "console" 'import Base.Eff
-import Base.EffConsole
-import Base.Nat
+build_pkg "$tmp/console" "console" 'import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.Nat as Nat
 
 main : Eff [ConsoleOp] Nat
 main = consolePrint "hello"
@@ -91,7 +91,7 @@ main = consolePrint "hello"
   fail=$((fail + 1))
 }
 
-build_pkg "$tmp/user" "user" 'import Base.Eff
+build_pkg "$tmp/user" "user" 'import Base.Effect.Eff as Eff
 
 data POp : Type -> Type where
   P : Int -> POp Int

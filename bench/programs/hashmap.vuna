@@ -1,20 +1,20 @@
 -- 哈希基准：vuna-base 的 HashMap（1024 桶持久哈希表）。
 -- 手写 OCaml 对照用 Hashtbl（标准库上限，见 hashmap.ml 的说明）。
-import Base.HashMap
-import Base.Nat
+import Base.Container.HashMap as HashMap
+import Base.Data.Nat as Nat
 
 keysFrom : Int -> Int -> List String
 keysFrom i k = if k <= 0 then [] else strFromInt i :: keysFrom (i + 1) (k - 1)
 
 fill : List String -> Int -> HashMap String Int
 fill ks i = case ks of
-  [] => Base.HashMap.fromList []
-  k :: rest => Base.HashMap.insert k (i * 3) (fill rest (i + 1))
+  [] => HashMap.fromList []
+  k :: rest => HashMap.insert k (i * 3) (fill rest (i + 1))
 
 total : List String -> HashMap String Int -> Int
 total ks t = case ks of
   [] => 0
-  k :: rest => case Base.HashMap.lookup k t of
+  k :: rest => case HashMap.lookup k t of
     Nothing => total rest t
     Just v => v + total rest t
 
@@ -23,4 +23,4 @@ main =
   let
     ks = keysFrom 0 5000
     t = fill ks 0
-  in total ks t + natToInt (Base.HashMap.size t)
+  in total ks t + natToInt (HashMap.size t)

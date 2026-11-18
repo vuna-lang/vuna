@@ -1,7 +1,7 @@
 -- stdlib：`>>=` / `>>` 运算符使用 stdlib Monad bind（Maybe / List 实例）。
-import Base.Monad
-import Base.Maybe
-import Base.List
+import Base.Trait.Monad as Monad
+import Base.Data.Maybe as Maybe
+import Base.Data.List as List
 
 showMaybe : Maybe Int -> String
 showMaybe m = case m of

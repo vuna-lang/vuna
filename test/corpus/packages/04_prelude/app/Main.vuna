@@ -1,7 +1,7 @@
 -- Prelude 自动导入：不写 import 也能使用 List/String 的常用名。
 -- 宿主 console 走 Eff [ConsoleOp]（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
-import Base.Eff
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
 
 prog : Eff [ConsoleOp] Int
 prog = do

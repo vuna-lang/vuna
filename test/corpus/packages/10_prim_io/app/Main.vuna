@@ -1,10 +1,10 @@
 -- Eff 是唯一动作类型；宿主原语是 `Eff []` 叶子。
 -- `@vuna@prim_eff_sleep`（微秒，原生阻塞睡眠）探针断言真实推进时间；`exitWith 0`
 -- 让 golden 只含业务输出。
-import Base.EffClock
-import Base.EffExit
-import Base.EffConsole
-import Base.Eff
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Eff as Eff
 
 main : Eff [ConsoleOp, ClockOp, ExitOp] Int
 main = do

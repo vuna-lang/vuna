@@ -1,7 +1,7 @@
 -- `main : Eff [] a` 入口（行已处理干净的动作）；纯 handler 在入口前把行消掉。
-import Base.Eff
-import Base.EffState
-import Base.Pair
+import Base.Effect.Eff as Eff
+import Base.Effect.EffState as EffState
+import Base.Data.Pair as Pair
 
 prog : Eff [StateOp Int@n] Int
 prog = do
@@ -12,7 +12,7 @@ prog = do
 ret : Int -> Int -> Pair Int Int
 ret a s = Pair a s
 
-opH : (i : Type) -> (o : StateOp Int i) -> (Base.Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
+opH : (i : Type) -> (o : StateOp Int i) -> (Eff.resIdx i o -> Int -> Pair Int Int) -> Int -> Pair Int Int
 opH i op k s = case op of
   Get => k s s
   Put x => k 0 x

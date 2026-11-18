@@ -1,7 +1,7 @@
 -- 多效应 main（FsOp + ConsoleOp）；entry 自动装两个 handler。
-import Base.Eff
-import Base.EffConsole
-import Base.EffFs
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffFs as EffFs
 
 main : Eff [FsOp, ConsoleOp] Int
 main = do

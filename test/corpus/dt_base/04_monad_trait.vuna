@@ -1,7 +1,7 @@
 -- trait 方法投影经 `import Base.Monad` 可用（fmap / bind / pure），
 -- 具体实例来自 `import Base.Maybe`；do 块走同一套投影。
-import Base.Monad
-import Base.Maybe
+import Base.Trait.Monad as Monad
+import Base.Data.Maybe as Maybe
 
 mapProbe : Maybe Int
 mapProbe = fmap (\x => x + 1) (Just 41)

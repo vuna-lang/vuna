@@ -1,4 +1,4 @@
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 data POp : Type -> Type where
   P : Int -> POp Int

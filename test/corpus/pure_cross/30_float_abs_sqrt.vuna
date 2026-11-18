@@ -1,4 +1,4 @@
-import Base.Float
+import Base.Data.Float as Float
 
 main : Int
 main = intFromFloat (abs (0.0 - 3.5)) + intFromFloat (sqrt 16.0)

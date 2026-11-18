@@ -1,6 +1,6 @@
 -- Ref 内建行（带行宿主原语 + entry 允许 RefOp 行，无需 handler）。
-import Base.Eff
-import Base.EffRef
+import Base.Effect.Eff as Eff
+import Base.Effect.EffRef as EffRef
 
 main : Eff [RefOp] Int
 main = do

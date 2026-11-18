@@ -1,7 +1,7 @@
 -- 单效应便捷入口已内建到 entry，用户直接写带行 main。
 -- 用户面只经 `Eff` + handler，不需要 import 宿主层。
-import Base.Eff
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
 
 prog : Eff [ConsoleOp] Int
 prog = do

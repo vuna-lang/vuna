@@ -1,5 +1,5 @@
 -- warning：别名 import 未使用（UN_UnusedImport；.deny 下按失败断言）
-import Base.List as L
+import Base.Data.List as L
 
 f : Int
 f = 1

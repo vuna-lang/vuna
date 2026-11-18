@@ -1,6 +1,6 @@
 -- `Base.Sort`（Ord 泛型比较的实例搜索）与 `Base.Map` 可用。
-import Base.Sort
-import Base.Map
+import Base.Data.Sort as Sort
+import Base.Container.Map as Map
 
 main : Int
 main =

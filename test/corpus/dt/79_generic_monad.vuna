@@ -1,7 +1,7 @@
 -- 泛型实例在刚性上下文里的解析（`Monad (State s)`，s 隐式量化）。
 -- 刚性上下文同样要搜实例：跳过搜索会留下解不出的字典参数。
-import Base.State
-import Base.Int
+import Base.Effect.Pure.State as State
+import Base.Data.Int as Int
 
 pair : {s : Type} -> State s Int
 pair = pure 41

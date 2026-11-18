@@ -1,6 +1,6 @@
 -- 用户 `data List` 与 base 的 canonical `Base.List.List` 并存；
 -- `str*` 的桥接只认 canonical 族；用户族的构造子名不参与 runtime helper 生成。
-import Base.List
+import Base.Data.List as List
 
 data List a : Type where
   Empty : List a
@@ -11,9 +11,9 @@ sumOwn xs = case xs of
   Empty => 0
   Link x rest => x + sumOwn rest
 
-sumBase : Base.List.List Int -> Int
+sumBase : List.List Int -> Int
 sumBase xs = case xs of
-  Base.List.Nil => 0
+  List.Nil => 0
   (::) x rest => x + sumBase rest
 
 main : Int

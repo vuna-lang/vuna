@@ -1,5 +1,5 @@
-import Base.List
-import Base.Nat
+import Base.Data.List as List
+import Base.Data.Nat as Nat
 
 -- 同一 case 里深度不同的 Cons 分支：深分支部分匹配失败时要回退到浅分支，
 -- 且浅分支的变量绑到自己那一层的元素（不是深分支已匹配的部分）。

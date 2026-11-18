@@ -1,6 +1,6 @@
 -- Eff [] 的纯动作经 raise 自动 lift 到带行上下文（Eff [FsOp]）。
-import Base.Eff
-import Base.EffFs
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
 
 main : Eff [FsOp] Int
 main =

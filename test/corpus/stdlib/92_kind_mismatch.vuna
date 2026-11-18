@@ -1,5 +1,5 @@
 -- stdlib 反例：Monad 的参数要求 kind * -> *，Int 是 *。
-import Base.Monad
+import Base.Trait.Monad as Monad
 
 instance Monad Int where
   (>>=) n f = n

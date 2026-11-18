@@ -1,10 +1,10 @@
 -- `vuna run` 参数透传夹具：无参数时输出 "no args"（供包夹具循环比对）；
 -- 有参数时输出第一个参数（`vuna run <pkg> -- a b` 应输出 "a"）。
-import Base.EffExit
-import Base.EffArgs
-import Base.EffConsole
-import Base.Monad
-import Base.Eff
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffConsole as EffConsole
+import Base.Trait.Monad as Monad
+import Base.Effect.Eff as Eff
 
 firstArg : List String -> String
 firstArg [] = "no args"

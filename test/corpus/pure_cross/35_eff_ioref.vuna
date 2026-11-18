@@ -1,5 +1,5 @@
-import Base.Eff
-import Base.IORef
+import Base.Effect.Eff as Eff
+import Base.Effect.Pure.IORef as IORef
 
 main : Eff [] Int
 main = do

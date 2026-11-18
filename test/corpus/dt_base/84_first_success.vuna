@@ -1,8 +1,8 @@
 -- 候选选择组合子：`firstJust` / `firstSuccess`（顺序即优先级，首个成功者胜出），
 -- 以及 `envGetEnvNonEmpty`（未设置与空串都算无值）。
 import Prelude
-import Base.Eff
-import Base.EffEnv
+import Base.Effect.Eff as Eff
+import Base.Effect.EffEnv as EffEnv
 
 firstOfNone : Maybe Int
 firstOfNone = firstJust []
@@ -24,7 +24,7 @@ picksNone = firstSuccess [pure Nothing, pure Nothing]
 mockEnv : List (Pair String String) -> String -> String
 mockEnv table name = fromMaybe "" (lookupPair name table)
 
-mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+mockOpH : List (Pair String String) -> (i : Type) -> (o : EnvOp i) -> (Eff.resIdx i o -> Int) -> Int
 mockOpH table i op k = case op of
   GetEnv name => k (mockEnv table name)
   GetCwd => k "/mock/cwd"

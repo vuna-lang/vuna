@@ -1,4 +1,4 @@
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 main : Int
 main = runPure (pure 1)

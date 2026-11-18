@@ -1,7 +1,7 @@
 -- 约束实例 `instance Eq a => Eq (Box a)`；`mem (Box Int)` 需要 Eq 字典，
 -- 由「参数化实例 + ctx 递归求解（Eq Int）」提供。
 import Prelude
-import Base.List
+import Base.Data.List as List
 
 data Box a : Type where
   MkBox : a -> Box a

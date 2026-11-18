@@ -1,6 +1,6 @@
 module Vuna.OpSample where
 
-import Base.Int
+import Base.Data.Int as Int
 
 -- 自定义运算符：声明 + 符号名函数定义 + 中缀/前缀两种使用。
 infixl 6 <+>

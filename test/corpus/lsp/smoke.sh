@@ -1202,7 +1202,7 @@ printf '[package]\nname = "modtokws"\n\n[dependencies]\nvuna-base = "%s/packages
 cat >"$tmp/modtokws/lib/Tok.vuna" <<'VEOF'
 module Tok where
 
-import Base.Maybe
+import Base.Data.Maybe as Maybe
 
 v : Base.Maybe.Maybe Int
 v = Base.Maybe.Nothing
@@ -1210,7 +1210,7 @@ VEOF
 tokdoc_uri="file://$tmp/modtokws/lib/Tok.vuna"
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
   # line4 char9 = `Base.Maybe.Maybe` 的 Maybe（模块名是 token 的前缀）
   frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
   frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
@@ -1231,7 +1231,7 @@ check_contains "值里 Base.Maybe.Nothing 的模块段 hover 出模块名" "$t4"
 # Base.List。光标在这些位置时不该报模块（否则同一行的 hover 在相邻两格跳变）。
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
   # line4 char14 = Base.Maybe 后面的 `.`（属于限定名，不是模块名的最后一格）
   frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":14}}}'
   frame_line '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'

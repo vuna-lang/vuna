@@ -1,10 +1,10 @@
 -- Error 效应栈（`Base.EffError`）。
 -- `throw` 被作用域 `catch` 恢复；结果用 `Result` 观察。
-import Base.EffExit
-import Base.EffConsole
-import Base.Eff
-import Base.EffError
-import Base.Result
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffError as EffError
+import Base.Data.Result as Result
 
 prog : Eff [ErrorOp@e] Int
 prog = throw@e "boom"

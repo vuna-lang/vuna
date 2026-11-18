@@ -1,7 +1,7 @@
 -- 没有 manifest 门控：任何包都可以直调 `prim_*` / `@vuna@prim_eff_*`（显式接受的行为）。
 -- 原语返回 `Eff []` 动作，使用点放在未求值的定义里：`vuna test` 只 interp main（纯），检查仍覆盖全文件。
-import Base.EffFs
-import Base.Eff
+import Base.Effect.EffFs as EffFs
+import Base.Effect.Eff as Eff
 
 probe : Eff [FsOp] Bool
 probe = fsFileExists "/"

@@ -1,5 +1,5 @@
 -- D24：Nat 字面量模式降成 Int 比较的 if 链；变量兜底绑定原始 Nat。
-import Base.Nat
+import Base.Data.Nat as Nat
 
 f : Nat -> Int
 f n = case n of

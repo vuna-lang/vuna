@@ -1,5 +1,5 @@
 -- list-literal：表达式/类型位置的闭合 cons 链与裸 Nil 应写成列表字面量。
-import Base.List
+import Base.Data.List as List
 
 f : Int -> List Int
 f n = n :: 1 :: 2 :: []

@@ -1,10 +1,10 @@
 -- 负例：同一 handle 块的 clause 构造子必须同族。
-import Base.Eff
-import Base.EffClock
-import Base.EffConsole
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 prog : Eff [ConsoleOp@audit] Nat
 prog = do

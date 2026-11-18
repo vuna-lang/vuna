@@ -1,5 +1,5 @@
 -- deriving (FromInt) 拒绝多字段构造子（只接受单字段包装）。
-import Base.FromInt
+import Base.Trait.FromInt as FromInt
 
 data Bad : Type where
   MkBad : Int -> Int -> Bad

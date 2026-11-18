@@ -1,5 +1,5 @@
 import Dep
-import Base.Maybe
+import Base.Data.Maybe as Maybe
 
 -- 接口摘要夹具（根包侧）：
 --   * `x == ""` 走 primitive `Eq String` 特化——摘要路径的 deftbl 若混入签名

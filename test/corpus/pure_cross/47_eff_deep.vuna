@@ -1,5 +1,5 @@
-import Base.Eff
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Data.Nat as Nat
 
 data POp : Type -> Type where
   P : Int -> POp Int

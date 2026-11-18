@@ -1,4 +1,4 @@
-import Base.List as A.B
+import Base.Data.List as A.B
 
 main : Int
 main = 0

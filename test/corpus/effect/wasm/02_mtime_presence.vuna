@@ -1,7 +1,7 @@
 -- mtime 是 per-target 能力：WASI 适配层不返回时间（`Nothing`），宿主目标返回 `Just`。
-import Base.Eff
-import Base.EffFs
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
+import Base.Effect.EffConsole as EffConsole
 
 main : Eff [FsOp, ConsoleOp] Int
 main = do

@@ -2,8 +2,8 @@
 --
 -- `Vec 32 Int` 的索引在类型层展开成 32 层 Succ 链；`w = v` 要 conv 两条索引链，
 -- conv 按结构递归比较，与链长无关（没有固定步数预算）。
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 v : Vec 32 Int
 v =

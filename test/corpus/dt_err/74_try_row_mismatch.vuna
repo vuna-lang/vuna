@@ -1,7 +1,7 @@
 -- 负例：tryWith 要求行首是 Exn n。
-import Base.Eff
-import Base.EffExn
-import Base.Result
+import Base.Effect.Eff as Eff
+import Base.Effect.EffExn as EffExn
+import Base.Data.Result as Result
 
 bad : Eff [] (Result Int)
 bad = tryWith "default" (pure 1)

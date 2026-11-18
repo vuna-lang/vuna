@@ -1,8 +1,8 @@
 -- Named 标签与 (::)：显式 `Named "audit" Op :: []` 与行字面量 `[Op@audit]` 等价。
-import Base.Eff
-import Base.EffConsole
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 prog : Eff (Named "audit" ConsoleOp :: []) Nat
 prog = do

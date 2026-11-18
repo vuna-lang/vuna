@@ -11,7 +11,7 @@ for-each: corpus/run/01_arithmetic.vuna corpus/run/03_data_case.vuna corpus/fmt/
 end:
 # 行字面量的非标识符实例名：`@"fs-error"` 的引号不能被 fmt 吃掉（`@fs-error` 无法再解析），
 # 格式化后仍可 check，且二次 fmt 幂等。
-run: sh -c 'printf "%s\n" "import Base.Eff" "import Base.EffFs" "" "r : Row" "r = [FsErrorOp@\"fs-error\"]" "" "main : Int" "main = 0" > "$TMPDIR/fmt-pkg/label.vuna"'
+run: sh -c 'printf "%s\n" "import Base.Effect.Eff as Eff" "import Base.Effect.EffFs as EffFs" "" "r : Row" "r = [FsErrorOp@\"fs-error\"]" "" "main : Int" "main = 0" > "$TMPDIR/fmt-pkg/label.vuna"'
 run: "$VUNA" fmt "$TMPDIR/fmt-pkg/label.vuna" >/dev/null 2>&1
 exit: 0
 file-contains: $TMPDIR/fmt-pkg/label.vuna FsErrorOp@"fs-error"

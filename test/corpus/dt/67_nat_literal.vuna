@@ -1,6 +1,6 @@
 -- Nat 零开销表示：字面量构造、Nat 字段、Vec 字面量索引、Zero/Succ 模式。
-import Base.Nat
-import Base.Vec
+import Base.Data.Nat as Nat
+import Base.Data.Vec as Vec
 
 toInt : Nat -> Int
 toInt n = case n of

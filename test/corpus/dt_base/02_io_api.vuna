@@ -2,13 +2,13 @@
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
 -- `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
 -- 直接调用原语得到 `Int`。
-import Base.EffStdin
-import Base.EffExit
-import Base.EffArgs
-import Base.EffFs
-import Base.Eff
-import Base.List
-import Base.Nat
+import Base.Effect.EffStdin as EffStdin
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffFs as EffFs
+import Base.Effect.Eff as Eff
+import Base.Data.List as List
+import Base.Data.Nat as Nat
 
 readProbe : Eff [FsOp] String
 readProbe = fsReadFile "x"

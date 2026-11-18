@@ -1,6 +1,6 @@
 -- 负例：op 族的显式参数不是类型（含 Row），handle 语法仍不支持。
-import Base.Eff
-import Base.List
+import Base.Effect.Eff as Eff
+import Base.Data.List as List
 
 data Boom : Row -> Type -> Type where
   BoomIt : {r : Row} -> Boom r Int

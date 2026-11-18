@@ -1,7 +1,7 @@
 -- Layer 2：Error 的作用域 catch（嵌套 catch；fallback 在 handler 之外执行）。
-import Base.Eff
-import Base.EffError
-import Base.Result
+import Base.Effect.Eff as Eff
+import Base.Effect.EffError as EffError
+import Base.Data.Result as Result
 
 prog : Eff [ErrorOp@default] Int
 prog = catch "default" (throw "boom") (\_ => pure 42)

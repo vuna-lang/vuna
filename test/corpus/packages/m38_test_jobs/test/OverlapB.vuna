@@ -1,7 +1,7 @@
 
-import Base.EffClock
-import Base.EffConsole
-import Base.Eff
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Eff as Eff
 -- 重叠探针 B：打印 START-B 后睡 2s 再打印 END-B（比 A 的 3s 早结束，用来区分
 -- 「并行时 B 的 END 早于 A 的 END」与「串行时 B 根本没在 A 结束前启动」）。
 -- 睡眠取秒级：全量 suite 在 `--jobs auto` 下会同时跑几十个 case，并行 worker 的进程

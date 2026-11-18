@@ -1,7 +1,7 @@
 -- 行 lift 只放宽行，不掩盖结果类型：动作结果 Nat 配期望 Int 必须报类型不匹配，
 -- 而不是把行元变量解成空行后报 row membership。
-import Base.EffConsole
-import Base.Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Eff as Eff
 
 main : Eff [ConsoleOp] Int
 main = consolePrint "boom\n"

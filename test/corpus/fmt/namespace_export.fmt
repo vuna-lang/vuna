@@ -1,4 +1,4 @@
 module NamespaceExport where
 
-export module Base.Map as Map
-export module Base.List
+export module Base.Data as Data
+export module Base.Trait

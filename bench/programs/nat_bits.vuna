@@ -1,12 +1,12 @@
 -- Nat 饱和算术与位运算：Nat 结构递归 + 63-bit 逻辑移位 / 异或。
 -- 手写 OCaml 对照见 nat_bits.ml（同算法）。
-import Base.Bits
-import Base.Nat
+import Base.Data.Bits as Bits
+import Base.Data.Nat as Nat
 
 loop : Nat -> Nat -> Nat
 loop acc n = case n of
   Zero => acc
-  Succ k => loop (Base.Nat.plus acc (Base.Nat.mult k (Base.Nat.fromInt 3))) k
+  Succ k => loop (Nat.plus acc (Nat.mult k (Nat.fromInt 3))) k
 
 rotr : Int -> Int -> Int
 rotr x k = if k <= 0 then x else rotr (bxor (shr x 1) (shl (band x 1) 62)) (k - 1)
@@ -14,6 +14,6 @@ rotr x k = if k <= 0 then x else rotr (bxor (shr x 1) (shl (band x 1) 62)) (k - 
 main : Int
 main =
   let
-    n = Base.Nat.toInt (loop Zero (Base.Nat.fromInt 800000))
+    n = Nat.toInt (loop Zero (Nat.fromInt 800000))
     r = rotr 123456789 64
   in n + band r 65535

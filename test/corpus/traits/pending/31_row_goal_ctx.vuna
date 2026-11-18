@@ -2,8 +2,8 @@
 -- `{w : Member (Named "r" (ReaderOp Int)) r}`（刚性行 `r`）；body 的两次 `ask` 需要同一份证明，
 -- 必须在定义收尾时用 ctx 里的 binder 解出，不能当作程序级 depth 0 的未解目标。
 import Prelude
-import Base.Eff
-import Base.Eff.Reader
+import Base.Effect.Eff as Eff
+import Base.Effect.EffReader as EffReader
 
 askTwice : {r : Row} -> {w : Member (Named "r" (ReaderOp Int)) r} -> Eff r Int
 askTwice = do
@@ -14,7 +14,7 @@ askTwice = do
 prog : Eff [ReaderOp Int@r] Int
 prog = askTwice
 
-opH : (i : Type) -> (o : ReaderOp Int i) -> (Base.Eff.resIdx i o -> Int) -> Int
+opH : (i : Type) -> (o : ReaderOp Int i) -> (Eff.resIdx i o -> Int) -> Int
 opH i op k = case op of
   Ask => k 21
 

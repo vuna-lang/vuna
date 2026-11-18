@@ -3,10 +3,10 @@ module Effects where
 -- codegen 夹具：动作/do（Monad bind/pure）、效果原语直接调用（prim_* 本身是 `Eff []` 动作，
 -- ioPrim 包装路径）与零参定义（zeroarg 应为 0）。
 -- program / probe 不被求值，只要求它们进入 codegen 产物，覆盖 `Eff []` 动作的生成形状。
-import Base.EffConsole
-import Base.Monad
-import Base.Eff
-import Base.Nat
+import Base.Effect.EffConsole as EffConsole
+import Base.Trait.Monad as Monad
+import Base.Effect.Eff as Eff
+import Base.Data.Nat as Nat
 
 export program : Eff [ConsoleOp] Int
 program = do

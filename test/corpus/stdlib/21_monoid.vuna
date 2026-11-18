@@ -1,12 +1,12 @@
 -- Semigroup / Monoid / foldMap。
-import Base.Eq
-import Base.Foldable
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Monoid
-import Base.String
-import Base.Unit
+import Base.Trait.Eq as Eq
+import Base.Trait.Foldable as Foldable
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Trait.Monoid as Monoid
+import Base.Data.String as String
+import Base.Data.Unit as Unit
 
 emptyString : String
 emptyString = mempty

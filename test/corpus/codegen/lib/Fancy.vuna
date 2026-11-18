@@ -2,7 +2,7 @@ module Fancy where
 
 -- codegen 夹具：多构造子 data + 大 case（ctorcount/maxline）、as-pattern（多 clause）、
 -- let 多 clause。
-import Base.List
+import Base.Data.List as List
 
 export data Shape(..) : Type where
   Circle : Int -> Shape

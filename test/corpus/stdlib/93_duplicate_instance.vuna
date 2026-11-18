@@ -1,5 +1,5 @@
 -- stdlib 反例：本地 head type 上重复声明同一实例（非孤儿）。
-import Base.Monad
+import Base.Trait.Monad as Monad
 
 data Box a : Type where
   MkBox : a -> Box a

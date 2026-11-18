@@ -1,9 +1,9 @@
 -- `handle` 语法直接写 Exn：`Try` 子句用 `handleScoped` 在同一 handler 下重跑子计算。
 -- 用 `perform` 发送（key = op 族规范名，与 `handle` 语法一致；wrapper 的 "exn" key 见 D57）。
-import Base.Eff
-import Base.EffExn
-import Base.Nat
-import Base.Result
+import Base.Effect.Eff as Eff
+import Base.Effect.EffExn as EffExn
+import Base.Data.Nat as Nat
+import Base.Data.Result as Result
 
 sub : Eff [ExnOp@boom] Nat
 sub = perform ThrowExn "inner"

@@ -1,7 +1,7 @@
 -- fs 查询走 typed effects（entry 自动预装 handler），不直接调用宿主原语。
 -- 路径是相对的：ocaml / native 用真实 cwd，wasm 用 preopen 根，语义一致。
-import Base.Eff
-import Base.EffFs
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
 
 main : Eff [FsOp] Int
 main = do

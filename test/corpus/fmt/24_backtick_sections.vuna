@@ -1,6 +1,6 @@
 module Vuna.BacktickSample where
 
-import Base.Int
+import Base.Data.Int as Int
 
 plus : Int -> Int -> Int
 plus a b = a + b

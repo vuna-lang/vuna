@@ -1,4 +1,4 @@
-import Base.Nat
+import Base.Data.Nat as Nat
 
 fact : Nat -> Nat
 fact n = case n of

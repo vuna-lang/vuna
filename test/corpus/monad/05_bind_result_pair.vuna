@@ -3,9 +3,9 @@
 -- 收敛到 `Result (Pair Int String)`（不能因为结果类型仍是 meta 而选错构造子命名空间）。
 -- `Result` 的错误类型固定是 String（`Base.Result`），所以签名的信息量与
 -- `Result String (Pair Int String)` 等价。
-import Base.Pair
-import Base.Result
-import Base.String
+import Base.Data.Pair as Pair
+import Base.Data.Result as Result
+import Base.Data.String as String
 
 showPair : Pair Int String -> String
 showPair (Pair n s) = strFromInt n ++ ":" ++ s

@@ -1,6 +1,6 @@
 -- 参数化 op 族（Reader 的 k = 1）；结果行删除 Reader 条目。
-import Base.Eff
-import Base.Eff.Reader
+import Base.Effect.Eff as Eff
+import Base.Effect.EffReader as EffReader
 
 askEnv : Eff [ReaderOp String@env] String
 askEnv = perform Ask

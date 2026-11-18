@@ -1,4 +1,4 @@
-import Base.Pair
+import Base.Data.Pair as Pair
 
 data Wrap : Type where
   Wrap : Bool -> Int -> Wrap

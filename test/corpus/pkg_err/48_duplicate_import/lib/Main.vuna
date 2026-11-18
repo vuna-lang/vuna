@@ -1,7 +1,7 @@
 module Main where
 
-import Base.List
-import Base.Array
+import Base.Data.List as List
+import Base.Container.Array as Array
 
 main : Int
 main = length []

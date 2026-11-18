@@ -5,13 +5,13 @@
 --   serve-tcp   —— 绑 127.0.0.1:0（临时端口），打印 `port:<N>`，accept 一个连接后同样 echo；
 --   client ADDR —— 连接、发 "ping\n"、打印回包、退出。
 -- main 带具体宿主行，entry 自动预装 Console/Args/Exit handler；net 走带行 API。
-import Base.Monad
-import Base.Eff
-import Base.EffArgs
-import Base.EffConsole
-import Base.EffExit
-import Base.EffNet
-import Base.Maybe
+import Base.Trait.Monad as Monad
+import Base.Effect.Eff as Eff
+import Base.Effect.EffArgs as EffArgs
+import Base.Effect.EffConsole as EffConsole
+import Base.Effect.EffExit as EffExit
+import Base.Effect.EffNet as EffNet
+import Base.Data.Maybe as Maybe
 
 serve : String -> Eff [ConsoleOp, ExitOp, ArgsOp, NetOp] Int
 serve path = do

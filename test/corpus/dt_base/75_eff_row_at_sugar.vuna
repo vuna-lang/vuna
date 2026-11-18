@@ -1,12 +1,12 @@
 -- 行字面量的显式实例名 `X@name` 展开成
 -- `(Named "name" (X "name") :: Nil)`，等价于 `[X "name"]`。
-import Base.Eff
-import Base.EffConsole
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
-mockH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Nat) -> Nat
+mockH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Nat) -> Nat
 mockH i op k = case op of
   Print s => k 5
   EPrint s => k 0

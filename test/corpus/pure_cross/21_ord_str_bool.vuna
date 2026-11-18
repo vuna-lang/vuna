@@ -1,9 +1,9 @@
-import Base.Bool
-import Base.Int
-import Base.List
-import Base.Ord
-import Base.Sort
-import Base.String
+import Base.Data.Bool as Bool
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Trait.Ord as Ord
+import Base.Data.Sort as Sort
+import Base.Data.String as String
 
 flag : Bool -> String
 flag b = if b then "1" else "0"

@@ -1,10 +1,10 @@
 -- Applicative 的 pure / liftA2 / ap。
-import Base.Applicative
-import Base.Eq
-import Base.Int
-import Base.List
-import Base.Maybe
-import Base.Result
+import Base.Trait.Monad as Monad
+import Base.Trait.Eq as Eq
+import Base.Data.Int as Int
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Result as Result
 
 liftMaybe : Maybe Int
 liftMaybe = liftA2 (\a, b => a + b) (Just 1) (Just 2)

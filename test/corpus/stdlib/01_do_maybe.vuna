@@ -1,6 +1,6 @@
 -- stdlib：do 语法 + Maybe 的 Monad 实例（bind/pure）。
-import Base.Monad
-import Base.Maybe
+import Base.Trait.Monad as Monad
+import Base.Data.Maybe as Maybe
 
 showMaybe : Maybe Int -> String
 showMaybe m =

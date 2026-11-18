@@ -1,5 +1,5 @@
-import Base.List
-import Base.Nat
+import Base.Data.List as List
+import Base.Data.Nat as Nat
 
 il : List String -> List String
 il [] = []

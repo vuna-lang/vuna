@@ -1,5 +1,5 @@
 -- 负例：op 族没有同名模块的 `res<族短名>` 结果族。
-import Base.Eff
+import Base.Effect.Eff as Eff
 
 data BoomOp : Type where
   Boom : BoomOp

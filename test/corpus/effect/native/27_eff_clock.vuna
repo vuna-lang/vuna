@@ -1,8 +1,8 @@
 -- clock 效应标签（命名实例）——mock handler 固定时间（elapsed = 0）；
 -- real handler 走入口自动预装的行 handler，同程序验证 sleep 确实推进时间。
-import Base.Eff
-import Base.EffClock
-import Base.EffConsole
+import Base.Effect.Eff as Eff
+import Base.Effect.EffClock as EffClock
+import Base.Effect.EffConsole as EffConsole
 
 prog : (n : String) -> Eff (Named n ClockOp :: []) Int
 prog n = do
@@ -21,7 +21,7 @@ progReal = do
 mret : Int -> Int
 mret a = a
 
-mopH : (i : Type) -> (o : ClockOp i) -> (Base.Eff.resIdx i o -> Int) -> Int
+mopH : (i : Type) -> (o : ClockOp i) -> (Eff.resIdx i o -> Int) -> Int
 mopH i op k = case op of
   Now => k 1000
   SleepMicros us => k 0

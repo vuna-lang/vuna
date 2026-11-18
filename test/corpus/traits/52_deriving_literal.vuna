@@ -1,6 +1,6 @@
 -- deriving (FromString / FromInt)：单构造子单字段包装类型的自动派生。
-import Base.FromString
-import Base.FromInt
+import Base.Trait.FromString as FromString
+import Base.Trait.FromInt as FromInt
 
 data Email : Type where
   MkEmail : String -> Email

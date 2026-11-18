@@ -1,10 +1,10 @@
 -- `handle` 语法。省略 return（答案类型 = comp 结果类型）、
 -- 显式 return（b 与 a 不同）、开放尾行 wrapper 与 infer 位置的 let 绑定。
-import Base.Eff
-import Base.EffConsole
-import Base.List
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.List as List
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 prog : Eff [ConsoleOp@audit] Nat
 prog = do

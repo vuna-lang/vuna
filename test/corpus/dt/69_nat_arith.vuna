@@ -1,5 +1,5 @@
 -- Nat 的 + - * /：减法截断到 0，其余饱和；interp 与产物必须一致。
-import Base.Nat
+import Base.Data.Nat as Nat
 
 toInt : Nat -> Int
 toInt n = case n of

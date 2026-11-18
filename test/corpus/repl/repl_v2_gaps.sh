@@ -146,9 +146,9 @@ else
   check_contains "pty paste: 换行渲染标记" "$out" "↵"
 
   # 3) 参数位补全：模块名（仓库上下文里 base 经 workspace 可见）与文件路径。
-  out=$( (sleep 0.8; printf ':load Base.May\t'; sleep 0.4; printf '\n'; sleep 0.3; printf ':q\n') |
+  out=$( (sleep 0.8; printf ':load Base.Da\t'; sleep 0.4; printf '\n'; sleep 0.3; printf ':q\n') |
     run_pty "$REPO" "$tmp/pty-comp-mod" | tr -d '\r')
-  check_contains "pty complete: :load 模块名补全" "$out" "已导入模块 Base.Maybe"
+  check_contains "pty complete: :load 模块名补全" "$out" "已导入模块 Base.Data"
 
   ws=$tmp/ws
   mkdir -p "$ws/lib/Sub"

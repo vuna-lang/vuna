@@ -1,9 +1,9 @@
 -- D2/D6：单实例裸标签 perform 自动解出唯一名字；多实例行用带 (n : String) 的
 -- wrapper 指定实例（裸标签在多实例上会报 TC_AmbiguousInstance，见 dt_err/108）。
-import Base.Eff
-import Base.EffConsole
-import Base.Monad
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Trait.Monad as Monad
+import Base.Data.Nat as Nat
 
 progA : Eff [ConsoleOp@a] Nat
 progA = perform Print "a"
@@ -18,12 +18,12 @@ runA = runPure (handle progA {
 multi : Eff [ConsoleOp@a, ConsoleOp@b] Nat
 multi = consolePrint@a "b"
 
-aH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Nat) -> Nat
+aH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Nat) -> Nat
 aH i op k = case op of
   Print s => k 5
   EPrint s => k 6
 
-bH : (i : Type) -> (o : ConsoleOp i) -> (Base.Eff.resIdx i o -> Nat) -> Nat
+bH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Nat) -> Nat
 bH i op k = case op of
   Print s => k 7
   EPrint s => k 8

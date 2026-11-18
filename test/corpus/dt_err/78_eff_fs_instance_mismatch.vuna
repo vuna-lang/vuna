@@ -1,7 +1,7 @@
 -- fs 命名实例：程序需要 `Fs "real"` 行，但 entry 默认实例是 `"default"` → 行不匹配，
 -- 不能静默过：实例名必须一致。
-import Base.Eff
-import Base.EffFs
+import Base.Effect.Eff as Eff
+import Base.Effect.EffFs as EffFs
 
 prog : Eff [FsOp@real] String
 prog = fsReadFile@real "/tmp/vuna_w10_fs_err.txt"

@@ -1,4 +1,4 @@
-import Base.List
+import Base.Data.List as List
 
 data PState : Type where
   PState : List Int -> Int -> PState

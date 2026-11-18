@@ -1,5 +1,5 @@
 -- 实例方法体的构造子形参（走与普通多 clause 相同的模式矩阵）。
-import Base.Monad
+import Base.Trait.Monad as Monad
 
 data Box a : Type where
   MkBox : a -> Box a

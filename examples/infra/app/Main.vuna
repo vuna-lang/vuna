@@ -1,8 +1,8 @@
-import Base.Bits
-import Base.List
-import Base.Maybe
-import Base.Pair
-import Base.String
+import Base.Data.Bits as Bits
+import Base.Data.List as List
+import Base.Data.Maybe as Maybe
+import Base.Data.Pair as Pair
+import Base.Data.String as String
 import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Frontend.Canonical.Ast
 import Vuna.Compiler.Frontend.Canonical.Lex

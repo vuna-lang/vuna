@@ -1,8 +1,8 @@
 -- 实例名可选：`Member n e r =>` 签名糖 + 隐式 String 名从行解；`@name` 显式覆盖。
 -- 本地 wrapper 的 body 直接引用隐式 n（resolver 把 String 隐式名加进子句作用域）。
-import Base.Eff
-import Base.EffConsole
-import Base.Nat
+import Base.Effect.Eff as Eff
+import Base.Effect.EffConsole as EffConsole
+import Base.Data.Nat as Nat
 
 consoleTest : Member n ConsoleOp r => String -> Eff r Nat
 consoleTest s = sendCore (Named n ConsoleOp) "console" n (Print s)

@@ -1,7 +1,7 @@
 -- `[]` / `[a, b]` 按期望类型/scrutinee 族通用展开：List / Vec / Row 同形；
 -- 用户自定义的 `Nil`/`Cons` 族也能直接用列表语法。
-import Base.Vec
-import Base.Eff
+import Base.Data.Vec as Vec
+import Base.Effect.Eff as Eff
 
 data Tree : Type where
   Leaf : Tree
