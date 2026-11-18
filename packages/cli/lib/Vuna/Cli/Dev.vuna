@@ -11,6 +11,8 @@ import Vuna.Cli.Err
 import Vuna.Cli.Spec
 import Vuna.Cli.Suite
 import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.IrDump
+import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.GenErrors
 import Vuna.Obs
 import Base.EffArgs
@@ -27,11 +29,43 @@ import Base.Eff.Types
 export devArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int
 devArgs ("suite" :: more) = suiteArgs more
 devArgs ("obs" :: more) = runObs more
+devArgs ("ir" :: "dump" :: more) = irDumpArgs more
 devArgs ("errors" :: "gen" :: genArgs) = genErrorsArgs genArgs
 devArgs (["errors"]) = usageErrorFor ["dev", "errors"]
 devArgs ("errors" :: bad :: _) = unknownSubcommand ["dev", "errors"] bad ["gen"]
 devArgs [] = usageErrorFor ["dev"]
-devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors"]
+devArgs (bad :: _) = unknownSubcommand ["dev"] bad ["suite", "obs", "errors", "ir"]
+
+-- | `vuna dev ir dump [--out FILE] DIR`：检查 + lowering 后打印确定性 IR。
+irDumpArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int
+irDumpArgs rest = dumpGo Nothing "raw" [] rest
+
+dumpGo : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> List String -> List String -> Eff r Int
+dumpGo out after dirs rest = case rest of
+  "--out" :: path :: more => dumpGo (Just path) after dirs more
+  "--after" :: a :: more => dumpGo out a dirs more
+  x :: more => dumpGo out after (x :: dirs) more
+  [] => case reverse dirs of
+    [dir] => runDump out after dir
+    _ => usageErrorFor ["dev", "ir", "dump"]
+
+runDump : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Maybe String -> String -> String -> Eff r Int
+runDump out after dir = do
+  pkgR <- loadPackage dir
+  case pkgR of
+    ErrC e => toolError (diagText e)
+    OkC pkg => do
+      r <- dumpIr after (packageContext pkg) (packageEntry pkg)
+      case r of
+        ErrC e => toolError (diagText e)
+        OkC text => case out of
+          Just path => do
+            _ <- fsWriteFile path text
+            _ <- consolePrint "wrote ${path}\n"
+            pure 0
+          Nothing => do
+            _ <- consolePrint (text ++ "\n")
+            pure 0
 
 -- | 内部：`vuna dev errors gen [ROOT]`——ROOT 默认 `.`。
 genErrorsArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int

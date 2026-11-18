@@ -53,6 +53,21 @@ irSelRunName = "@ir@sel@run"
 export irSelDoneName : String
 irSelDoneName = "@ir@sel@done"
 
+export irMPerformName : String
+irMPerformName = "@ir@m@perform"
+
+export irMHandleName : String
+irMHandleName = "@ir@m@handle"
+
+export irMSelfName : String
+irMSelfName = "@ir@m@self"
+
+export irMRunName : String
+irMRunName = "@ir@m@run"
+
+export irMDoneName : String
+irMDoneName = "@ir@m@done"
+
 -- | `Scoped` 的运行时类型 / 构造子名（`Base.Eff.Scoped`）。
 export irScopedTypeName : String
 irScopedTypeName = "Base.Eff.Scoped"
@@ -571,12 +586,10 @@ mResumption bs = mResumeGo (runtimeBinders bs)
 mResumeGo : List IrBinder -> Maybe IrBinder
 mResumeGo xs = case xs of
   [] => Nothing
-  b :: rest =>
-    if mIsOp b then
-      case rest of
-        r :: _ => Just r
-        [] => Nothing
-    else mResumeGo rest
+  b :: rest => if mIsOp b then case rest of
+    r :: _ => Just r
+    [] => Nothing
+  else mResumeGo rest
 
 mEraseHead : Ir -> Ir
 mEraseHead e = case e of
@@ -587,7 +600,8 @@ mEraseHead e = case e of
 mIsResumeApp : IrBinder -> Ir -> Bool
 mIsResumeApp r e = case e of
   IrApp _ _ =>
-    let p = flattenApp e
+    let
+      p = flattenApp e
     in case mEraseHead (firstOf p) of
       IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
       _ => case secondOf p of
@@ -601,14 +615,18 @@ mFreshV : Int -> IrBinder
 mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
 
 mCpsAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
-mCpsAlts fuel r k alts = if fuel <= 0 then alts else case alts of
+mCpsAlts fuel r k alts = if fuel <= 0 then alts
+else case alts of
   [] => []
-  a :: rest => IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k (a.irAltBody)) :: mCpsAlts (fuel - 1) r k rest
+  a :: rest =>
+    IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k a.irAltBody)
+      :: mCpsAlts (fuel - 1) r k rest
 
 mCpsAltM : Int -> IrBinder -> Ir -> Maybe IrAlt -> Maybe IrAlt
-mCpsAltM fuel r k m = if fuel <= 0 then m else case m of
+mCpsAltM fuel r k m = if fuel <= 0 then m
+else case m of
   Nothing => Nothing
-  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k (a.irAltBody)))
+  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k a.irAltBody))
 
 mIsControl : Ir -> Bool
 mIsControl e = case e of
@@ -621,16 +639,18 @@ mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e = if fuel <= 0 then IrApp k (transformDirect (fuel - 1) e)
 else if mIsResumeApp r e then IrApp e k
 else case e of
-  IrLet bs rhs body =>
-    if mIsControl rhs then
-      let v = mFreshV fuel
-          cont = IrLam [v] (IrLet bs (IrVar v) (mCps (fuel - 1) r k body))
-      in mCps (fuel - 1) r cont rhs
-    else IrLet bs (transformDirect (fuel - 1) rhs) (mCps (fuel - 1) r k body)
+  IrLet bs rhs body => if mIsControl rhs then
+    let
+      v = mFreshV fuel
+      cont = IrLam [v] (IrLet bs (IrVar v) (mCps (fuel - 1) r k body))
+    in mCps (fuel - 1) r cont rhs
+  else IrLet bs (transformDirect (fuel - 1) rhs) (mCps (fuel - 1) r k body)
   IrCase scrut alts => IrCase (transformDirect (fuel - 1) scrut) (mCpsAlts (fuel - 2) r k alts)
-  IrIf c t el => IrIf (transformDirect (fuel - 1) c) (mCps (fuel - 2) r k t) (mCps (fuel - 2) r k el)
+  IrIf c t el =>
+    IrIf (transformDirect (fuel - 1) c) (mCps (fuel - 2) r k t) (mCps (fuel - 2) r k el)
   IrNatCase scrut fr z su ca =>
-    IrNatCase (transformDirect (fuel - 1) scrut) fr (mCpsAltM (fuel - 2) r k z) (mCpsAltM (fuel - 2) r k su) (mCpsAltM (fuel - 2) r k ca)
+    IrNatCase (transformDirect (fuel - 1) scrut) fr (mCpsAltM (fuel - 2) r k z)
+      (mCpsAltM (fuel - 2) r k su) (mCpsAltM (fuel - 2) r k ca)
   IrCast x => IrCast (mCps (fuel - 1) r k x)
   _ => IrApp k (transformDirect (fuel - 1) e)
 
@@ -638,11 +658,13 @@ mHandlerLam : Int -> List IrBinder -> Ir -> Ir
 mHandlerLam fuel bs body = case mResumption bs of
   Nothing => IrLam bs (mHandlers (fuel - 1) body)
   Just r =>
-    let kd = freshK fuel
+    let
+      kd = freshK fuel
     in IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) body)
 
 mHandlers : Int -> Ir -> Ir
-mHandlers fuel e = if fuel <= 0 then e else case e of
+mHandlers fuel e = if fuel <= 0 then e
+else case e of
   IrLam bs body => mHandlerLam (fuel - 1) bs body
   IrCtor fam ctor args => IrCtor fam ctor (mapDirect (fuel - 1) args)
   IrRecord fam fs => IrRecord fam (mapFieldsDirect (fuel - 1) fs)
@@ -654,28 +676,113 @@ mHandlers fuel e = if fuel <= 0 then e else case e of
   IrApp f a => IrApp (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
   IrIf c t el => IrIf (mHandlers (fuel - 1) c) (mHandlers (fuel - 1) t) (mHandlers (fuel - 1) el)
   IrCase s alts => IrCase (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
-  IrNatCase s fr z su ca => IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su) (mHandlersAltM (fuel - 1) ca)
+  IrNatCase s fr z su ca =>
+    IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su)
+      (mHandlersAltM (fuel - 1) ca)
   IrConcatMany xs => IrConcatMany (mapDirect (fuel - 1) xs)
   IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (mHandlers (fuel - 1) prim)
   _ => e
 
 mHandlersAlts : Int -> List IrAlt -> List IrAlt
-mHandlersAlts fuel alts = if fuel <= 0 then alts else case alts of
+mHandlersAlts fuel alts = if fuel <= 0 then alts
+else case alts of
   [] => []
-  a :: rest => IrAlt a.irAltCtor a.irAltBinders (mHandlers (fuel - 1) a.irAltBody) :: mHandlersAlts (fuel - 1) rest
+  a :: rest =>
+    IrAlt a.irAltCtor a.irAltBinders (mHandlers (fuel - 1) a.irAltBody)
+      :: mHandlersAlts (fuel - 1) rest
 
 mHandlersAltM : Int -> Maybe IrAlt -> Maybe IrAlt
-mHandlersAltM fuel m = if fuel <= 0 then m else case m of
+mHandlersAltM fuel m = if fuel <= 0 then m
+else case m of
   Nothing => Nothing
   Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mHandlers (fuel - 1) a.irAltBody))
 
+mSym : String -> String
+mSym x =
+  if x == irCpsPerformName then irMPerformName
+  else if x == irCpsHandleName then irMHandleName else if x == irCpsSelfName then irMSelfName else x
+
+mSyms : Int -> Ir -> Ir
+mSyms fuel e = if fuel <= 0 then e
+else case e of
+  IrRt x => IrRt (mSym x)
+  IrRtApp x args => IrRtApp (mSym x) (mListS (fuel - 1) args)
+  IrCtor f c args => IrCtor f c (mListS (fuel - 1) args)
+  IrRecord f fs => IrRecord f (mFieldsS (fuel - 1) fs)
+  IrProj b f x => IrProj (mSyms (fuel - 1) b) f x
+  IrRecUpd b f fs => IrRecUpd (mSyms (fuel - 1) b) f (mFieldsS (fuel - 1) fs)
+  IrCast x => IrCast (mSyms (fuel - 1) x)
+  IrLet bs r b => IrLet bs (mSyms (fuel - 1) r) (mSyms (fuel - 1) b)
+  IrLam bs b => IrLam bs (mSyms (fuel - 1) b)
+  IrApp f a => IrApp (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
+  IrIf c t el => IrIf (mSyms (fuel - 1) c) (mSyms (fuel - 1) t) (mSyms (fuel - 1) el)
+  IrCase sc alts => IrCase (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
+  IrNatCase sc fr z su ca =>
+    IrNatCase (mSyms (fuel - 1) sc) fr (mSymsAltMM (fuel - 1) z) (mSymsAltMM (fuel - 1) su)
+      (mSymsAltMM (fuel - 1) ca)
+  IrConcatMany xs => IrConcatMany (mListS (fuel - 1) xs)
+  IrEffThunk f c u a pr => IrEffThunk f c u a (mSyms (fuel - 1) pr)
+  _ => e
+
+mListS : Int -> List Ir -> List Ir
+mListS fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => mSyms (fuel - 1) x :: mListS (fuel - 1) rest
+
+mFieldsS : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mFieldsS fuel fs = if fuel <= 0 then fs
+else case fs of
+  [] => []
+  p :: rest => Pair (firstOf p) (mSyms (fuel - 1) (secondOf p)) :: mFieldsS (fuel - 1) rest
+
+mSymsAltsM : Int -> List IrAlt -> List IrAlt
+mSymsAltsM fuel alts = if fuel <= 0 then alts
+else case alts of
+  [] => []
+  a :: rest =>
+    IrAlt a.irAltCtor a.irAltBinders (mSyms (fuel - 1) a.irAltBody) :: mSymsAltsM (fuel - 1) rest
+
+mSymsAltMM : Int -> Maybe IrAlt -> Maybe IrAlt
+mSymsAltMM fuel m = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mSyms (fuel - 1) a.irAltBody))
+
+mDoneCont : Ir
+mDoneCont =
+  let
+    v = mkBinder "__mDoneV"
+  in IrLam [v] (IrApp (IrRt irMDoneName) (IrVar v))
+
+mTrampolineBody : String -> Ir -> Result Ir
+mTrampolineBody name body = case body of
+  IrLam bs inner => case mTrampolineBody name inner of
+    Err msg => Err msg
+    Ok b => Ok (IrLam bs b)
+  IrCast inner => case mTrampolineBody name inner of
+    Err msg => Err msg
+    Ok b => Ok (IrCast b)
+  IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc =>
+    if g == runThunkName then Ok (IrApp (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
+    else Err ("machine CPS: unexpected trampoline shape: " ++ name)
+  _ => Err ("machine CPS: unexpected trampoline shape: " ++ name)
+
 mDef : Int -> IrDef -> IrDef
-mDef fuel d = if fuel <= 0 then d else case d of
+mDef fuel d = if fuel <= 0 then d
+else case d of
   IrExternDef _ _ _ _ => d
-  IrDef n ar deps body r g sp => IrDef n ar deps (mHandlers (fuel - 1) body) r g sp
+  IrDef n ar deps body r g sp =>
+    let
+      b = mSyms (fuel - 1) (mHandlers (fuel - 1) body)
+    in if n == runPureName || n == runEffName || n == runMainName then case mTrampolineBody n b of
+      Ok b1 => IrDef n ar deps b1 r g sp
+      Err _ => IrDef n ar deps b r g sp
+    else IrDef n ar deps b r g sp
 
 mDefs : Int -> List IrDef -> List IrDef
-mDefs fuel ds = if fuel <= 0 then ds else case ds of
+mDefs fuel ds = if fuel <= 0 then ds
+else case ds of
   [] => []
   d :: rest => mDef (fuel - 1) d :: mDefs (fuel - 1) rest
 

@@ -353,6 +353,14 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成
 `\$`，`${...}` 内的注释丢弃（词法不进 AST）。
 
+## 6. `vuna dev ir dump`（IR 调试）
+
+| 命令 | 行为 |
+|---|---|
+| `vuna dev ir dump [--after raw|cps|machine] [--out FILE] DIR` | 对包做检查 + lowering，输出确定性 IR 文本（默认 stdout）。`raw` = lowering 后；`cps` = 选择性 CPS；`machine` = handler/符号/trampoline 的机器化 lowering。 |
+
+只用于 diff / 观测，不是稳定 ABI，也不写构建产物。
+
 ## 6. `vuna dev obs`（可观测性工具链）
 
 规范见 [observability.md](observability.md)（本页只说命令面）：

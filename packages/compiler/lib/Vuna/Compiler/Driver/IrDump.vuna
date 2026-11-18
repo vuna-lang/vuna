@@ -1,0 +1,50 @@
+module Vuna.Compiler.Driver.IrDump where
+
+-- `vuna dev ir dump`：检查 + lowering 后输出确定性 IR 调试文本。
+-- 只服务工具链/调试，不写产物，也不进 seed。
+import Base.Eff.Types
+import Base.Pair
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Driver.Dt
+import Vuna.Compiler.Frontend.Packages.Pkg
+import Vuna.Compiler.Ir.Cps
+import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Render
+import Vuna.Compiler.Lowering.Program
+import Base.EffFs
+import Base.EffEnv
+import Base.EffProcess
+
+export dumpIr : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> PackageContext -> String -> Eff r (Check String)
+dumpIr after ctx entry = do
+  checked <- dtCheckWithProgramParts ctx entry
+  pure (case checked of
+    ErrC e => ErrC e
+    OkC pair =>
+      let
+        pkg = secondOf pair
+      in case lowerProgramOf pkg.checkedProgram.dtProgDatas pkg.checkedProgram.dtProgDefs of
+        ErrC e => ErrC e
+        OkC program => dumpAfter after program
+  )
+
+dumpAfter : String -> IrProgram -> Check String
+dumpAfter after program =
+  if after == "cps" then dumpCps program
+  else if after == "machine" then dumpMachine program else OkC (renderProgram program)
+
+dumpMachine : IrProgram -> Check String
+dumpMachine program =
+  let
+    defs = concatMap irGroupDefs program.irProgUnit.irUnitGroups
+  in case cpsDefsMachine defs of
+    Err msg => OkC ("MACHINE ERROR: " ++ msg)
+    Ok ds => OkC (renderDefs ds)
+
+dumpCps : IrProgram -> Check String
+dumpCps program = case cpsUnit program.irProgUnit of
+  Err msg => OkC ("CPS ERROR: " ++ msg)
+  Ok u1 =>
+    let
+      shared = program.irProgShared
+    in OkC (renderProgram (IrProgram shared u1))

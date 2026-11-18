@@ -1,0 +1,188 @@
+module Vuna.Compiler.Ir.Render where
+
+-- IR 的确定性调试文本（`vuna dev ir dump` 用）。
+-- 只用于 diff / 观测，不是后端输入，也不承诺稳定 ABI。
+import Base.Bool
+import Base.Int
+import Base.List
+import Base.Maybe
+import Base.Pair
+import Base.String
+import Vuna.Compiler.Ir.Model
+
+bNameText : IrBName -> String
+bNameText n = case n of
+  IrBUser s => s
+  IrBArm i => "a" ++ strFromInt i
+  IrBNat i => "n" ++ strFromInt i
+  IrBWild => "_"
+
+binderText : IrBinder -> String
+binderText b = if b.irBinderErased then "_" else bNameText b.irBinderName
+
+binderList : List IrBinder -> String
+binderList bs = Base.String.join " " (map binderText bs)
+
+ctorText : Maybe (Pair String String) -> String
+ctorText m = case m of
+  Nothing => "*"
+  Just p => firstOf p ++ "." ++ secondOf p
+
+tyText : IrTy -> String
+tyText t = case t of
+  IrTyVar i => "'" ++ strFromInt i
+  IrTyInt => "Int"
+  IrTyStr => "String"
+  IrTyBool => "Bool"
+  IrTyFloat => "Float"
+  IrTyOpaque => "Opaque"
+  IrTyArray x => "Array " ++ tyText x
+  IrTyRef x => "Ref " ++ tyText x
+  IrTyData n args => n ++ " " ++ Base.String.join " " (map tyText args)
+  IrTyFun a b => "(" ++ tyText a ++ " -> " ++ tyText b ++ ")"
+
+renderAlt : Int -> IrAlt -> String
+renderAlt fuel a =
+  if fuel <= 0 then "..."
+  else "("
+    ++ ctorText a.irAltCtor
+    ++ "["
+    ++ binderList a.irAltBinders
+    ++ "] "
+    ++ renderIr (fuel - 1) a.irAltBody
+    ++ ")"
+
+renderAltM : Int -> Maybe IrAlt -> String
+renderAltM fuel m = if fuel <= 0 then "..."
+else case m of
+  Nothing => "-"
+  Just a => renderAlt (fuel - 1) a
+
+renderList : Int -> List Ir -> String
+renderList fuel xs = if fuel <= 0 then "..."
+else case xs of
+  [] => ""
+  [x] => renderIr (fuel - 1) x
+  x :: rest => renderIr (fuel - 1) x ++ " " ++ renderList (fuel - 1) rest
+
+renderFields : Int -> List (Pair String Ir) -> String
+renderFields fuel fs = if fuel <= 0 then "..."
+else case fs of
+  [] => ""
+  p :: rest =>
+    firstOf p ++ "=" ++ renderIr (fuel - 1) (secondOf p) ++ " " ++ renderFields (fuel - 1) rest
+
+renderApp : Int -> Ir -> Pair String String
+renderApp fuel e = if fuel <= 0 then Pair "..." ""
+else case e of
+  IrApp f a =>
+    let
+      p = renderApp (fuel - 1) f
+    in Pair (firstOf p) (secondOf p ++ " " ++ renderIr (fuel - 1) a)
+  _ => Pair (renderIr (fuel - 1) e) ""
+
+renderIr : Int -> Ir -> String
+renderIr fuel e = if fuel <= 0 then "..."
+else case e of
+  IrVar b => "v:" ++ binderText b
+  IrGlobal n => "g:" ++ n
+  IrCtor fam ctor args => "(ctor " ++ fam ++ "." ++ ctor ++ " " ++ renderList (fuel - 1) args ++ ")"
+  IrRecord fam fs => "(record " ++ fam ++ " " ++ renderFields (fuel - 1) fs ++ ")"
+  IrProj b fam f => "(proj " ++ renderIr (fuel - 1) b ++ " " ++ fam ++ "." ++ f ++ ")"
+  IrRecUpd b fam fs =>
+    "(upd " ++ renderIr (fuel - 1) b ++ " " ++ fam ++ " " ++ renderFields (fuel - 1) fs ++ ")"
+  IrRt s => "rt:" ++ s
+  IrRtApp s args => "(rtapp " ++ s ++ " " ++ renderList (fuel - 1) args ++ ")"
+  IrCast x => "(cast " ++ renderIr (fuel - 1) x ++ ")"
+  IrInt n => "i" ++ strFromInt n
+  IrStr s => "s:" ++ s
+  IrBool b => if b then "true" else "false"
+  IrFloatLit s => "f:" ++ s
+  IrLet bs rhs body =>
+    "(let ["
+      ++ binderList bs
+      ++ "] "
+      ++ renderIr (fuel - 1) rhs
+      ++ " "
+      ++ renderIr (fuel - 2) body
+      ++ ")"
+  IrLam bs body => "(lam [" ++ binderList bs ++ "] " ++ renderIr (fuel - 1) body ++ ")"
+  IrApp _ _ =>
+    let
+      p = renderApp (fuel - 1) e
+    in "(app " ++ firstOf p ++ " " ++ secondOf p ++ ")"
+  IrIf c t el =>
+    "(if "
+      ++ renderIr (fuel - 1) c
+      ++ " "
+      ++ renderIr (fuel - 2) t
+      ++ " "
+      ++ renderIr (fuel - 3) el
+      ++ ")"
+  IrCase s alts =>
+    "(case "
+      ++ renderIr (fuel - 1) s
+      ++ " "
+      ++ Base.String.join " " (map (renderAlt (fuel - 2)) alts)
+      ++ ")"
+  IrNatCase s _ z su ca =>
+    "(natcase "
+      ++ renderIr (fuel - 1) s
+      ++ " "
+      ++ renderAltM (fuel - 2) z
+      ++ " "
+      ++ renderAltM (fuel - 2) su
+      ++ " "
+      ++ renderAltM (fuel - 2) ca
+      ++ ")"
+  IrConcatMany xs => "(cat " ++ renderList (fuel - 1) xs ++ ")"
+  IrEffThunk fam ctor _ arity prim =>
+    "(effthunk "
+      ++ fam
+      ++ "."
+      ++ ctor
+      ++ "/"
+      ++ strFromInt arity
+      ++ " "
+      ++ renderIr (fuel - 1) prim
+      ++ ")"
+  IrEffBind fam ctor _ => "(effbind " ++ fam ++ "." ++ ctor ++ ")"
+
+export renderDef : IrDef -> String
+renderDef d = case d of
+  IrExternDef n ty c _ => "extern " ++ n ++ " : " ++ tyText ty ++ " = " ++ c
+  IrDef n ar _ body _ _ _ => "def " ++ n ++ "/" ++ strFromInt ar ++ " = " ++ renderIr 2000 body
+
+renderTyDecl : IrTyDecl -> String
+renderTyDecl d = case d of
+  IrVariantDecl n p ctors =>
+    "variant "
+      ++ n
+      ++ "/"
+      ++ strFromInt p
+      ++ " "
+      ++ Base.String.join " " (map (\c => firstOf c ++ "(" ++ Base.String.join "," (map tyText (secondOf c)) ++ ")") ctors)
+  IrRecordDecl n p _ tys =>
+    "record " ++ n ++ "/" ++ strFromInt p ++ " " ++ Base.String.join "," (map tyText tys)
+  IrUnboxedDecl n p ty => "unboxed " ++ n ++ "/" ++ strFromInt p ++ " " ++ tyText ty
+
+export renderDefs : List IrDef -> String
+renderDefs defs = Base.String.join "\n" (map renderDef defs)
+
+export renderProgram : IrProgram -> String
+renderProgram p =
+  let
+    u = irProgUnitOf p
+    defs = concatMap irGroupDefs u.irUnitGroups
+    entry = case u.irUnitEntry of
+      Nothing => "entry none"
+      Just e =>
+        "entry main="
+          ++ irEntryMainOf e
+          ++ " action="
+          ++ (if irEntryIsActionOf e then "1" else "0")
+          ++ " rows=["
+          ++ Base.String.join "," (irEntryRowTagsOf e)
+          ++ "]"
+  in Base.String.join "\n"
+    (append (append ["-- types"] (map renderTyDecl u.irUnitTyDecls)) (append ["-- entry", entry, "-- defs"] (map renderDef defs)))
