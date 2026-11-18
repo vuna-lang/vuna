@@ -1,6 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // 仓库级留档：本仓的 shell/terminal 依赖 flake devshell（OCaml 工具链）。
-  // 全局配置已指向同一个 wrapper，这里重复一遍是为了在仓库内可见该依赖。
-  "shell": "/home/grass/.config/opencode/shell/nix-devshell",
+  // 本仓自持的 shell wrapper：进 flake 仓库自动套 nix develop devshell，
+  // 没有 flake.nix 的目录退化为普通 zsh（脚本不引用任何本机路径）。
+  //
+  // 注意：OpenCode V2 目前只从全局配置读取 `shell`，项目级这一项会被忽略；
+  // 全局入口 ~/.config/opencode/shell/nix-devshell 会优先选中本仓的这一份，
+  // 所以这里的声明保持相对路径、不依赖本机目录，同时留档说明依赖关系。
+  "shell": "./.opencode/shell/nix-devshell",
 }
