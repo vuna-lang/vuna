@@ -243,10 +243,9 @@ modules = [
 - 抽象类型（`Map`、`HashMap`、`HashSet`）跨包不可构造、不可模式匹配，只能经 API 使用；
 - **`Applicative` 有 `pure` / `ap` / `liftA2` 三个方法**（vuna 无 default method，实例
   全部显式实现）：实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match；
-  `liftA2` 不作派生顶层函数——codegen 的字典投影在 OCaml 侧无类型标注（`dliftA2` 推断出
-  `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`），泛型派生体会破坏
-  `f a` / `f (a -> b)` 的类型关系（见 [records-traits.md](records-traits.md)、
-  [debt.md](debt.md) D52）；
+  `liftA2` 也可以写成从 `ap` 派生的顶层函数——字典方法字段是不透明值，访问器在方法签名上
+  cast 一次，`pure` / `ap` 各自按调用点实例化（回归夹具
+  `test/corpus/dt/95_lifta2_derive.vuna`，见 [records-traits.md](records-traits.md)）；
 - `Array` 的 `Show` / `Eq` 实例在 `Base.Container.Array`（`Array` 是内建类型构造子、没有
   定义模块；孤儿规则对 `Array` / `IORef` 放宽）。实例体经 `toList`
   复用 `List`：`show (fromList [1, 2, 3]) == "[1, 2, 3]"`；`Eq` 逐元素比较。

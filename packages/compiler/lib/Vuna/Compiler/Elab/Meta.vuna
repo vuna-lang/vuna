@@ -879,6 +879,18 @@ export valueOpaqueScoped : (Int -> Bool) -> (String -> Bool) -> Int -> List Int 
 valueOpaqueScoped outerNVar headOpaque depth famLevels v =
   valueOpaqueGo 128 outerNVar headOpaque depth famLevels v
 
+-- | 类型里是否出现**隐式 Pi**：这种值（类方法）在 OCaml 记录里没有单一类型，
+-- 只能按不透明字段（`Obj.t`）+ 使用点 cast 表示。判定只看形状，不看取值。
+export valueHasImplicitPi : Value -> Bool
+valueHasImplicitPi v = valueHasImplicitPiFuel 64 v
+
+valueHasImplicitPiFuel : Int -> Value -> Bool
+valueHasImplicitPiFuel fuel v = if fuel <= 0 then False
+else case v of
+  VPi nm implicit rig dom clo =>
+    implicit || valueHasImplicitPiFuel (fuel - 1) (applyClosure clo (VNeutral (NVar nm 0 [])))
+  _ => False
+
 valueOpaqueGo : Int -> (Int -> Bool) -> (String -> Bool) -> Int -> List Int -> Value -> Bool
 valueOpaqueGo fuel outerNVar headOpaque depth famLevels v = if fuel <= 0 then True
 else case v of

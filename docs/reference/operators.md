@@ -108,10 +108,9 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 必须由本模块声明或 import 闭包可见。
 
 `pure` 在 `Base.Trait.Applicative`（`Base.Trait.Monad` 重导出）；`Applicative` 的三个方法 `pure` / `ap` /
-`liftA2` 都由实例显式
-实现——`ap` 可作为实例方法，但**不能**把 `liftA2` 写成从 `ap` 派生的泛型函数：
-codegen 的字典投影没有类型标注，派生体在 OCaml 侧会把 `f a` 与 `f (a -> b)` 错误统一（见
-[debt.md](debt.md) D52）。
+`liftA2` 都由实例显式实现（trait 没有默认实现）。把 `liftA2` 写成从 `ap` 派生的顶层函数
+也可以：字典方法字段是不透明值，访问器在方法签名上 cast 一次，`pure` / `ap` 各自按调用点
+实例化（见 [records-traits.md](records-traits.md)）。
 
 ## 反引号中缀、section、用户符号名
 

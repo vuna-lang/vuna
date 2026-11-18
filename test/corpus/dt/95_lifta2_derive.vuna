@@ -1,0 +1,15 @@
+-- Applicative 的 `liftA2` 从 `ap` / `pure` 派生：字典方法字段是不透明值，访问器
+-- 在方法签名上 cast 一次，因此同一字典可以按不同实例化使用（debt D52 的回归夹具）。
+import Base.Trait
+import Base.Data
+
+add2 : Int -> Int -> Int
+add2 a b = a + b
+
+liftA2Derived : Applicative f => (a -> b -> c) -> f a -> f b -> f c
+liftA2Derived f x y = ap (ap (pure f) x) y
+
+main : Int
+main = case liftA2Derived add2 (Just 1) (Just 2) of
+  Just n => n
+  Nothing => 0

@@ -104,7 +104,9 @@ elabTraitFinal globals ec tname paramNames superParts methods methodsP pKinds fi
         -- 字段（方法类型）在运行时不可表示 ⇒ 该方法的投影体里字典字段的使用要包 cast。
         fieldCtx = bindClassParams paramsKinds emptyCtx
         opaqueFields =
-          map (\t => isOpaqueRuntimeTyIn ecSup fieldCtx (eval (ctxEnv fieldCtx) t)) fieldTys
+          map
+            (\t => isOpaqueRuntimeTyIn ecSup fieldCtx (eval (ctxEnv fieldCtx) t) || valueHasImplicitPi (eval (ctxEnv fieldCtx) t))
+            fieldTys
         projBodies =
           projectionDefsOpaque opaqueFields tname (length paramNames) methodsP fieldTys nFields
         cls = DtClass tname paramNames superTys projs fieldTys projSpans

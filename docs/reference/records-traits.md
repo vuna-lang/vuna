@@ -235,7 +235,9 @@ main = pretty Red ++ "/" ++ show Red
 ```
 
 - **trait 支持 N>=1 个参数**：字典类型是 `Dict_C p1 .. pn`，构造子字段仍是方法；
-  默认方法、关联类型未实现（见 [debt.md](debt.md)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
+  方法字段在运行时是**不透明值**（`Obj.t`）——OCaml 记录字段承载不了 `∀a` 的方法签名，
+  访问器在方法签名上 cast 一次，因此同一字典可以按不同实例化使用。默认方法、关联类型
+  未实现（见 [debt.md](debt.md)）；**父类约束可用**：`trait Functor f => Applicative f where ...`。
   每个参数的 kind 可显式写：`trait C (a : Type) (r : Row) where ...`；未写时从方法签名
   推断（参数被应用 k 次即 `Type -> ... -> Type`，否则 `Type`；显式 kind 里的中缀如 `Type -> Type` 也会被 Loader 重排）。空参数表报
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
@@ -410,10 +412,9 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - `Applicative`：三个方法 `pure : a -> f a`、`ap : f (a -> b) -> f a -> f b`、
   `liftA2 : (a -> b -> c) -> f a -> f b -> f c`，实例全部显式实现（vuna 无 default
   method）。实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match。
-  `liftA2` **不**作派生顶层函数：当前 codegen 的字典投影在 OCaml 侧没有类型标注
-  （`dliftA2` 会被推断成 `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
-  这类签名），`pure` 的返回与 `ap` 的首参被错误统一，派生体在调用点直接 OCaml 类型错误
-  （[debt.md](debt.md) D52）。
+  派生写法 `liftA2Derived f x y = ap (ap (pure f) x) y` 作为顶层函数可用：字典方法字段
+  是不透明值（`Obj.t`），访问器在方法签名上 cast 一次，`pure` / `ap` 各自按调用点实例化。
+  回归夹具 `test/corpus/dt/95_lifta2_derive.vuna`。
   `Base.Trait.Monad` 重导出 `Base.Trait.Applicative`，`import Base.Trait.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 - `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
   `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。

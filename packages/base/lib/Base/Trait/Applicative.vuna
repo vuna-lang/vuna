@@ -5,11 +5,9 @@ module Base.Trait.Applicative where
 
 export module Base.Trait.Functor
 
--- `liftA2` 是 trait 方法而不是由 `ap` 派生的顶层函数：字典投影在生成的 OCaml 里是无类型
--- 标注的元组字段，`pure` 的返回类型与 `ap` 的首参会被错误统一，派生体
--- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误（debt D52），
--- 因此逐实例手写、不提供默认方法。`ap` 的高阶签名本身可以作为实例方法（精化器不会误报
--- `TC_ImpossibleBranchIndex`）。
+-- `liftA2` 是 trait 方法：trait 没有默认实现，实例必须逐个提供。派生写法
+-- `liftA2Derived f x y = ap (ap (pure f) x) y` 作为顶层函数可用：字典方法字段是不透明值，
+-- 访问器在方法签名上 cast 一次，`pure` / `ap` 各自按调用点实例化。
 -- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。实例同时提供 `Functor f` 的字典，`Applicative f =>` 的泛型代码可直接用 `fmap`。
 export trait Functor f => Applicative f(..) where
   -- | 把纯值提升为动作。

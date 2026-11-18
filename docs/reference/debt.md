@@ -28,7 +28,6 @@
 | D41 | 无 Domain 并行、父 fiber handler 继承 | `Base.EffSched`；[effects.md](effects.md) §8.5 | 后续 |
 | D42 | 无通用线性箭头类型 / multiplicity 多态；`bracket` 的 cleanup 只能访问外层 handler、自身异常被吞、调度器硬中止路径无 handler 栈；线性值可经非线性 data 字段被复制 | `Base.Effect.Core`（`Cont`/`bracket`/`finally`）、`Base/Intrinsics.vuna`（`prim_cleanupPush/Pop`）；[effects-layers.md](effects-layers.md) | 后续 |
 | D44 | 协作式取消只在挂起点生效；超时硬中止丢弃续延、未执行的清理不跑；超时是逻辑步数（无真实时钟）；任务体只能 `Eff Nil a`、无法继承父 handler 栈；Mutex/Semaphore/Channel 是忙等实现 | `Base.EffSched`；`packages/compiler/lib/Vuna/Compiler/Codegen/Term.vuna`（`dtSchedRuntime`）；[effects.md](effects.md) §8.5 | 后续 |
-| D52 | 生成的字典/方法投影无类型标注：OCaml 侧会把 `f a` 与 `f (a -> b)` 错误统一（`Applicative.liftA2` 从 `ap` 派生即失败），只能逐实例手写；codegen 加类型标注后才能恢复派生 | `packages/compiler/lib/Vuna/Compiler/Codegen/{Decl,Term}.vuna` | 后续 |
 | D54 | `handle`/`perform` 语法支持结果索引族（`<Op> : params… -> Type -> Type`），包括 scope 族：`ExnOp : Type -> Type` + `Scoped a` 字段，`handle` 块可直接写 `Try sub k -> k (handleScoped sub)`。**剩余限制**：显式参数不是类型的族（如 `Boom : Row -> Type -> Type`）仍报 `TC_HandleFamilyUnsupported`；完整高阶效应类型（对子计算的行/answer 做 rank-2 量化、multi-shot）不做，scope 子计算的行在 `scope` 构造点检查、之后擦除 | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`opFamilyArityOf`/`handleOpArity`/`handleCallExprWith`）、`packages/base/lib/Base/Effect/Core.vuna`（`Scoped`/`scope`/`handleScoped`/`EffSig`）、`packages/base/lib/Base/Effect/Exn.vuna`；夹具 `dt_err/100_eff_handle_family_unsupported`、`pure_cross/08_scoped_exn`、`pure_cross/09_handle_exn`；[native-effects.md](native-effects.md) §9 | 剩余仅非类型参数族（无当前用例）；完整高阶类型另行设计 |
 | D57 | `handle` 语法与 base 的手写 wrapper（`get`/`put`/`ask`/`runConsole`…）**key 不配对**：语法降级的 key 是 op 族规范名，wrapper 手写 `"state"`/`"console"` 等；语法程序只能用 `perform` 写、wrapper 程序只能手写 handler | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCallExprWith`）、`packages/base/lib/Base/Effect/*.vuna`；[native-effects.md](native-effects.md) §9 第 5 条 | 后续（统一 key） |
 | D60 | `perform`/`handle` 语法本身仍没有显式实例名：多实例行上裸标签（条目 `Named ?n Op` 的名字 meta）必然 `TC_AmbiguousInstance`；**wrapper 调用**支持 `f@name`（`Member n e r =>` 签名糖展开成 `Member (Named n e) r` + 隐式 String 名），但语法内联的 `perform`/`handle` 仍只能用行解/默认名，指定实例需用 wrapper 或 `sendCore`/`handleCore` | `packages/compiler/lib/Vuna/Compiler/Elab/Term/Impl.vuna`（`performCallExpr`/`handleCall`）、`packages/base/lib/Base/Effect/*.vuna`；夹具 `dt_base/82`、`dt_err/108`、`dt_err/109`；[native-effects.md](native-effects.md) §9/§10 | 后续（若语法内联也需要，加 `perform @name`） |
@@ -42,7 +41,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D109 | **擦除后 IR 没有类型标注**：`Ir.Model` 只有签名级的 `IrTy`，项级 binder / 应用 / 定义都没有类型；因此「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对；字典与方法投影无标注，OCaml 侧把 `f a` 与 `f (a -> b)` 错统一（D52 的根因） | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/Program.vuna`；[ir.md](ir.md)「已知边界」 | 后续（先做擦除规范化，再给项级加标注） |
+| D109 | **擦除后 IR 没有类型标注**：`Ir.Model` 只有签名级的 `IrTy`，项级 binder / 应用 / 定义都没有类型；因此「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对 | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/Program.vuna`；[ir.md](ir.md)「已知边界」 | 后续（先做擦除规范化，再给项级加标注） |
 
 ## 工具、构建与验证
 
