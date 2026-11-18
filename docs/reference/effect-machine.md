@@ -167,139 +167,31 @@ Control       = Done value
 
 ### 7.1 进度（现状）
 
-已落地：
+已落地（wasm）：
 
 - `@ir@m@apply`（`$rt_mApply`，`$step` tag 4）：mode 6 的 continuation 调用一律
-  返回 `Control`，由机器循环单层派发；
-- `rtMRes2` 改成转移（返回 `@ir@m@apply`）而不是调用 resumed 段；
-- `rtMKDone` 恢复 ctx 归属：嵌套同一帧的多次 resume，answer 交回**最内层这次**
-  resume 的 `kRest`（否则中间层的组合结果被丢弃）；
-- 删除 answer-row 的嵌套 `@ir@m@run` 分支：answer 是 `Eff` 时交 `kOuter`，
-  由调用方（`joinEff`）正常求值。
+  返回 `Control`，机器循环单层派发；
+- `rtMRes2` 改成转移；`rtMKDone` 在 resume 期间把 answer 交回最内层 `kRest`；
+  若 frame 已被 `kDone` 弹出（answer 是 `Eff`），resume 时按 `$rt_mInChain` 判断
+  重新装回，段结束时按 mctx 记下的链还原；
+- do 块续延 λ 由**精化期标记**识别（`@vuna@effK…`），降成「返回一个 Eff，其 thunk
+  以 `(u, K)` 运行」（`mEffContLambda`）；`prim_erase` 包一层的 resumption 调用由
+  `mStripErase` 剥壳；
+- `handleScoped`：`@ir@m@self` 把当前最内层 handler 帧重新装到子计算上跑
+  （复用 `Handle` 步骤），值语义边界降成 `run (self th doneCont)`；
+- handler clause 收集改成**按 arity 判定**（≥ 2 个运行时参数），`runExn`/`handleExn`
+  这类包装层里的 opH 也能被机器化；
+- 门控只保留 **mode 6 / 直连（mode 0）**：`effTypes`、`selfNodeType`、`cpsTypes`、
+  `$eff`/`$abort` tag、`$rt_eff*`、`$rt_cps*`、`$rt_sel*` 与 mode 2/3/5 的选择逻辑
+  全部删除——**wasm 不再有 stack switching**；
+- `106` 的 2000 次顺序 perform 用**引擎默认栈**（此前依次是 4 MiB → 1 MiB → 256 KiB）。
 
-实测（`48_eff_many`，2000 次顺序 perform）：栈需求 **1 MiB → 约 192 KiB**
-（196608 通过，163840 失败）；`test/steps/106` 的 `max-wasm-stack` 已降到 262144。
+仍然成立的两条限制：
 
-剩余（按顺序）：
+1. **栈仍随 perform 次数线性增长**（约 96 B/次）：组合子的 CPS 管道里还有普通
+   `IrApp` 在同一条链上层层返回；默认栈足够跑 `106`，但还不是常量栈。
+2. **`bracket`/`finally`**（`prim_cleanupPush/Pop`）的清理钩子还没有机器实现：
+   wasm 侧**显式拒绝**并给出诊断，不再回落 stack switching（debt D42）。
 
-1. **栈仍随次数线性增长**（约 96 B/perform）：`>>=` 等组合子的 CPS 管道里还有
-   普通 `IrApp`（头部不是 continuation）在同一条链上层层返回；需要把管道本身也
-   纳入转移（或改成显式帧），才能做到与次数无关。
-2. **`opH` 的 answer 是 `Eff` 且体内 resume**（Fs 语料）：宿主 `opH` 换成裸值后
-   宿主执行路径已经正常，但 `joinEff (handleFs …)` 的最终值不是 `Int`。
-   原因在 `>>=` 的 CPS 管道会**运行** continuation 的返回值
-   （`case (k V) of MkEff a2 => a2 u V3`），而 resume 的 answer 由 `kRest` 交付——
-   两者对「这里的值是什么」的假设还不一致。这条要在 lowering 侧统一（管道也走
-   `Control` 转移），不是在 `kDone` 里再加分支。
-
-### 7.2 最小复现：`Eff` answer + resume（不需要宿主，纯 Console）
-
-```vuna
-prog : Eff [ConsoleOp@real] Int
-prog = do
-  _ <- consolePrint@real "a"
-  pure 1
-
-ret : Int -> Eff [ConsoleOp] Int
-ret a = pure a
-
-opH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Eff [ConsoleOp] Int) -> Eff [ConsoleOp] Int
-opH i op k = case op of
-  Print s => do
-    _ <- consolePrint ("log:" ++ s ++ "\n")
-    k 0
-  EPrint s => k 0
-
-main : Eff [ConsoleOp] Int
-main = joinEff (handleConsole "real" ret opH prog)
-```
-
-期望：打印 `log:a`，最终值 `1`。现状：打印了 `log:a`，然后在机器循环派出的一次
-continuation 调用里 cast 失败（该 continuation 把收到的值当 `Eff` 做 `case`，
-拿到的却不是 `Eff`）。定位结果：
-
-- `kDone`/`Return` 两侧都正常（`Return` 甚至没被走到）；
-- 失败点在 `Monad (Eff r)` 的 `>>=` 体里：它把 continuation 的**返回值**再当 `Eff`
-  继续 `case`（`case (k V) of MkEff a2 => a2 u K`），而 mode 6 里这个 continuation
-  已经被降成 `\v kRest -> …`（饱和后返回 `Control`），于是「半应用」与「Eff 值」
-  两种形状混在了一起。
-
-结论：这不是再加一个运行时分支能解决的，而是 `>>=` / `pure` / `fmap` 这一层
-**组合子本身**还在「拿值、返回值」的约定里。下一步的最小可行改法是把 bind 变成
-机器原语（见 §7.3），让 `Eff` 的组合子不再依赖 CPS 后的库代码互相猜测形状。
-
-### 7.3 根因（已用 IR 证据确认）：`a -> Eff` 函数与 resumption 的续延约定不一致
-
-`>>=` 的 CPS 体是：
-
-```lisp
-(case (k V) (MkEff a2) (a2 u K))     -- 把 k 的返回值当 Eff 继续运行
-```
-
-即它假设 **do 块续延 lambda 是 1 个参数**（`a -> Eff r b`）。
-
-但 §7.2 的 handler 体 `do { consolePrint "log:a"; k 0 }` 里，那个 lambda 的尾位置是
-resumption，被 CPS 成 **2 个参数**：
-
-```lisp
-(lam [_ __mchK199588] (prim_erase k i0 __mchK199588))    -- \_ K -> k 0 K
-```
-
-于是 `k V` 得到的是一个**半应用（闭包）**，而 `>>=` 立刻把它当 `Eff` 去 `case` —
-这就是 cast 失败的确切来源（`Return` 甚至没被走到）。
-
-两侧都"对"，冲突在于约定：
-
-- resumption 必须饱和成 `k v kRest`（否则 `k v` 的半应用会作为值泄漏出去）；
-- `>>=` 的续延必须只吃一个值（返回一个 `Eff`）。
-
-`kRest` 只能由 `>>=` 在运行时提供（它就是 `>>=` 的 K），所以这不是改一个运行时分支
-能解决的：**do 块续延 lambda 必须统一成 2 参数**，由 bind 在运行期把 K 传进去。
-
-### 7.4 下一步：标记 + 统一 CPS（A1）
-
-1. **elaborator 打标（已落地）**：`Eff` do 块的续延 λ binder 改成保留名
-   `@vuna@effK_<line>_<col>_<depth>:<原名>`（`Elab.Meta.effContBinderName`，
-   只对 `m` 头是 `Eff` 的块；手写 `>>=` 的 λ 暂不含标记）。标记当前是惰性的：
-   还没有 lowering 读它。见 debt D110。
-2. **machine CPS（已落地）**：带标记的 λ 仍保持**一个参数**，返回一个 Eff，其 thunk
-   以 `(u, K)` 运行（`mEffContLambda`）——这样 `>>=` 的 1 参假设与 resumption 的
-   `k v kRest` 同时成立。resumption 调用前可能被 `prim_erase` 包一层，`mStripErase`
-   负责剥掉。
-3. **bind（已不需要改动）**：因为续延 λ 仍按 1 参调用并返回 Eff，`>>=` 的现有
-   实现可以直接运行它；先前设想的"bind 传 K / 绑定帧"不再必要。
-4. **验收**：§7.2 复现已锁成夹具 `test/corpus/effect/common/98_eff_answer_resume`
-   （三端矩阵 3 checks 通过）；`106` 仍用 256 KiB。全行 mode 6 的 Fs 待下一步
-   （卡在 Fs 宿主 `opH` 的 `let`/`if`/`runPure` 形状，见下）。
-
-之所以要走标记而不是"在变换里猜"：IR 没有类型，`a -> Eff` 与 `a -> b` 形状相同；
-现在的 `MkEff` 能识别是因为它有自己的构造子。do 块续延需要等价的句柄。
-
-### 7.5 剩余：Fs 宿主 `opH` 的形状
-
-把 Fs 宿主换成裸值、入口去掉错误收口行、全行开 mode 6 后，宿主执行路径已经正常，
-但 `joinEff (handleFs …)` 的最终值仍不对。用最小包（单个 Fs handler + 一个
-`fsWriteFile`）定位到**宿主 `opH` 自己的体**：
-
-```vuna
-fsOpHIOHost i op k = case op of
-  WriteFile p s =>
-    let s' = runPure (@vuna@host@tryWriteFile p s)
-        ok = runPure fsHostStatus
-    in if ok /= 0 then fsFailEntry (…) else k (natFromInt (strLength s'))
-```
-
-机器 IR 里这个 `if` 的**两个分支都没有被 CPS**：then 分支是裸的
-`fsFailEntry …`（没有交给 `K`），else 分支是 `prim_erase k v`（没有饱和成
-`k v K`）。于是 `k v` 的半应用被当成值交给了 `K`，最后 `_start` 的
-`strFromInt` 收到闭包。
-
-对比：Console 的宿主 `opH` 体是单层 `k (… runPure …)`，同样走 `runPure` 却是通的。
-差别在 `let` 链 + `if` 是否让 `mCps` 走到了分支体——这是下一步要查的点
-（`mCps` 的 `IrLet`/`IrIf` 组合，或 ANF 之后 `let` 变 λ 的形态）。
-
-两条候选修法（都不需要再改协议）：
-
-1. 修 `mCps` 对 `let` 链 + `if` 的处理（首选，影响面小）；
-2. 把宿主 `opH` 写成单层表达式（需要**纯**的状态读取原语，例如
-   `@vuna@host@pStatus : Int`，避免 `runPure` 嵌在 handler 体里）。
+native / OCaml 仍走各自的 handler 实现（native 是栈拷贝，O(N²) 见 D89）；
+三端统一到同一 `Control` 协议是后续工作。

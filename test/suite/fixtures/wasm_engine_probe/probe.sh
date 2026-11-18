@@ -4,11 +4,9 @@
 # 用法：sh probe.sh <path-to-vuna>
 #   环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）
 #
-# 事实口径：产物只在可达代码需要 handler（perform / handle / self）时才发射
-# stack-switching 类型与运行时（`$ct` / `$eff` / `$rt_eff*`）。所以：
-#   - 纯程序与只有内建宿主效应的程序（send 直连）在默认配置的引擎上直接可编译；
-#   - 用户自定义 handler 的产物仍带 stack switching，被默认配置拒绝。
-# 本脚本断言这两条，并把「开给 V8 的实验特性后走到哪一步」作为报告打印（不参与判定，
+# 事实口径：产物用显式效应机器（`@ir@m@*`），不含 wasm stack-switching 类型与指令，
+# 所以纯程序、内建宿主效应、用户自定义 handler 在引擎默认配置下都直接可编译。
+# 本脚本断言这些面，并把「开给 V8 的实验特性后走到哪一步」作为报告打印（不参与判定，
 # 因为引擎侧进展与 Node 版本相关）。
 #
 # 缺 Node 时打印 SKIP，摘要行照常输出（与 108 的桥接冒烟同风格）。

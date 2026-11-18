@@ -1368,24 +1368,6 @@ concatMapType (f :: rest) = case wasmFamType f of
   Nothing => concatMapType rest
   Just t => t :: concatMapType rest
 
--- ---------------------------------------------------------------
--- 续延运行时是否发射
--- ---------------------------------------------------------------
--- stack switching 是浏览器支持的唯一闸门：不需要 handler 的产物不发射 `$ct` /
--- `$eff` / `$rt_eff*`，模块因此在默认配置的引擎上可编译。判定保守（宁可多发）：
--- 入口预装了 handler，或可达代码引用任一续延原语 / 装箱动作，就必须发射。
--- | 只用 handler 的运行时函数名。
-effRuntimeFuncs : List String
-effRuntimeFuncs =
-  [ "$rt_effPerform",
-    "$rt_effThunk",
-    "$rt_resumeTwice",
-    "$rt_effResumeClo",
-    "$rt_handleLoop",
-    "$rt_effHandle",
-    "$rt_effSelf"
-  ]
-
 -- | 需要续延的运行时符号。
 effSymbols : List String
 effSymbols = ["prim_effectPerform", "prim_effectHandle", "prim_effectSelf"]
@@ -1466,49 +1448,6 @@ listNull : List a -> Bool
 listNull [] = True
 listNull (_ :: _) = False
 
--- | CPS 效应运行时的函数名（与 stack-switching 那组互斥）。
-cpsRuntimeFuncs : List String
-cpsRuntimeFuncs =
-  [ "$rt_cpsUnhandled",
-    "$rt_cpsUnhandled2",
-    "$rt_cpsResumeClo",
-    "$rt_cpsRet",
-    "$rt_cpsCleanup",
-    "$rt_cpsPerform",
-    "$rt_cpsHandle",
-    "$rt_cpsSelf"
-  ]
-
--- | 无续延时从固定运行时函数表里剔掉 handler 那几个。
-isEffRtFunc : WatFunc -> Bool
-isEffRtFunc f = memName f.watFuncName effRuntimeFuncs
-
-isCpsRtFunc : WatFunc -> Bool
-isCpsRtFunc f = memName f.watFuncName cpsRuntimeFuncs
-
-selectRtFuncs : Bool -> List WatFunc -> List WatFunc
-selectRtFuncs True funcs = funcs
-selectRtFuncs False funcs = filter (\f => not (isEffRtFunc f)) funcs
-
--- | CPS 模式：去掉旧的 stack-switching 函数，保留 CPS 组；`$rt_resumeTwice` 是
--- CPS 一次性续延复用的 trap，不能删。
-selectRtFuncsCps : List WatFunc -> List WatFunc
-selectRtFuncsCps funcs =
-  filter (\f => not (isEffRtFunc f) || f.watFuncName == "$rt_resumeTwice") funcs
-
-selectRtFuncsM : List WatFunc -> List WatFunc
-selectRtFuncsM funcs =
-  append
-    (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f) || f.watFuncName == "$rt_resumeTwice" || f.watFuncName == "$rt_cpsUnhandled2") funcs)
-    mFunctions
-
--- | 选择性 CPS：base 运行时 + 选择性 Step driver。
-selectRtFuncsSel : List WatFunc -> List WatFunc
-selectRtFuncsSel funcs =
-  append
-    (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f) || f.watFuncName == "$rt_resumeTwice" || f.watFuncName == "$rt_cpsUnhandled2") funcs)
-    selFunctions
-
 buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
 buildModule fuel st ordered entry printResult effMode listFamM = case genDefFuncs fuel st ordered of
   Err msg => Err msg
@@ -1528,9 +1467,9 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
             if effMode == 6 then append elems
               ["$rt_mKComp", "$rt_mKDone", "$rt_mRes1", "$rt_mRes2", "$rt_mPureThunk1", "$rt_mPureThunk2", "$rt_mKAns", "$rt_mApply", "$rt_mInChain", "$rt_mSelf", "$rt_mRunEff"]
             else elems
-          rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
-          rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
-          rtSelected = if effMode == 6 then selectRtFuncsM (rtFunctions st.gsConsts) else rtBase0
+          rtSelected =
+            if effMode == 6 then append (rtFunctions st.gsConsts) mFunctions
+            else rtFunctions st.gsConsts
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
