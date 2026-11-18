@@ -1,4 +1,4 @@
--- | `Ord` trait 的声明（声明与实例分离），外加三值比较 `Ordering` 与 `compare` / `min` / `max`。`<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名；fixity 与别名声明集中在 [Base.Operator]。
+-- | `Ord` trait 的声明（声明与实例分离），外加三值比较 `Ordering` 与 `compare` / `min` / `max`。`<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名；fixity 与别名声明集中在 [Base.Internal.Operator]。
 --
 -- 实例落点同 `Base.Eq`：`Int` / `String` 的实例在 `Base.Int` / `Base.String`；`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随 trait 留本模块（放 `Base.Bool` 会成环）。
 --
@@ -8,10 +8,10 @@ module Base.Ord where
 import Base.Bool
 import Base.Eq
 import Base.Hashable
-import Base.Operator
+import Base.Internal.Operator
 import Base.Show
 
--- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 在 [Base.Operator]。
+-- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 在 [Base.Internal.Operator]。
 export trait Ord a(..) where
   -- | 严格小于。
   (<) : a -> a -> Bool

@@ -1,12 +1,12 @@
--- | `Eq` trait 的声明（声明与实例分离）：`eq` / `neq`，`==` / `/=` 是它们的别名；fixity 与别名声明集中在 [Base.Operator]。
+-- | `Eq` trait 的声明（声明与实例分离）：`eq` / `neq`，`==` / `/=` 是它们的别名；fixity 与别名声明集中在 [Base.Internal.Operator]。
 --
 -- 实例跟类型模块走：`Int` / `String` 是 language primitive 类型，实例在 `Base.Int` / `Base.String`。`Bool` 是例外，实例随 trait 留本模块——`eq` 返回 `Bool`，放 `Base.Bool` 会形成 `Base.Bool ↔ Base.Eq` 的 import 环（Loader 报 ImportCycle）。
 module Base.Eq where
 
 import Base.Bool
-import Base.Operator
+import Base.Internal.Operator
 
--- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 在 [Base.Operator]。
+-- | 可判定相等性的 trait：`eq` / `neq` 两个方法；`==` / `/=` 是它们的别名，fixity 在 [Base.Internal.Operator]。
 export trait Eq a(..) where
   -- | 相等判定：`eq x y` 为真当且仅当两者表示同一个值。
   (==) : a -> a -> Bool

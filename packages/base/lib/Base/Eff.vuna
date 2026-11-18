@@ -17,7 +17,7 @@
 module Base.Eff where
 
 import Base.Monad
-import Base.Operator
+import Base.Internal.Operator
 
 -- | 命名标签：把实例名与效应签名并进标签类型（`Named "audit" ConsoleOp`，其中 `ConsoleOp : Type -> Type` 以结果类型为索引）。行条目只是这个类型；运行时实例名仍作为隐式 String 传给 send/handle。
 export data Named : String -> (Type -> Type) -> Type where

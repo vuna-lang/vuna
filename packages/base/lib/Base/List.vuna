@@ -8,14 +8,14 @@ import Base.Bool
 import Base.Foldable
 import Base.Monad
 import Base.Monoid
-import Base.Operator
+import Base.Internal.Operator
 import Base.Traversable
 -- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import 保证类存在与 split 单元顺序。
 import Base.Eq
 import Base.Hashable
 -- `==` / `<=` 是 Eq / Ord 的方法名别名，base 模块不自动注入 Prelude，需要它们可见。
 import Base.Ord
--- 算术运算符的 fixity 在 Base.Operator（经 Base.Int 进入闭包）；range 需要它。
+-- 算术运算符的 fixity 在 Base.Internal.Operator（经 Base.Int 进入闭包）；range 需要它。
 import Base.Int
 import Base.Show
 import Base.Num

@@ -2,7 +2,7 @@
 --
 -- `->` / `&&` / `||` 的 fixity 由编译器固定（`Loader.Fixity.builtinFixityDecls`），
 -- 源码里再声明会报 `RN_BuiltinFixity`，因此不在这里。
-module Base.Operator where
+module Base.Internal.Operator where
 
 infixl 4 ==
 infixl 4 /=
