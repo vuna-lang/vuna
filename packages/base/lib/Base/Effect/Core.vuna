@@ -17,6 +17,7 @@
 module Base.Effect.Core where
 
 import Base.Trait.Monad
+import Base.Container.HashMap as HashMap
 import Base.Data.Bool
 import Base.Data.Int
 import Base.Data.List
@@ -330,6 +331,7 @@ export data Control v(..) : Type where
   MkApply : (v -> Control v) -> v -> Control v
   MkPerform : String -> String -> v -> (v -> Control v) -> Control v
   MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
+  MkSelf : (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkReturn : Frame v -> v -> Control v
   MkKDone : Frame v -> v -> Control v
   MkResume : Frame v -> (v -> Control v) -> Int -> v -> (v -> Control v) -> Control v
@@ -346,11 +348,11 @@ export data Ctx v(..) : Type where
 export record MSt v where
   msFrames : Maybe (Frame v)
   msCtx : Maybe (Ctx v)
-  msUsed : List Int
+  msUsed : HashMap Int Bool
   msNext : Int
 
 export emptySt : MSt v
-emptySt = MSt Nothing Nothing [] 0
+emptySt = MSt Nothing Nothing (HashMap arrayEmpty) 0
 
 frameKey : Frame v -> String
 frameKey f =
@@ -443,45 +445,54 @@ findFrame fuel key name chain =
 
 -- | 驱动到 `Done`。`fuel` 是终止性证书（同时也是保护，见 debt）。
 export runGo : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
-runGo fuel st c =
-  if fuel <= 0 then prim_fail "vuna: effect machine: fuel exhausted" else step fuel st c
+runGo fuel st c = if fuel <= 0 then prim_fail "effect machine: fuel exhausted" else step fuel st c
 
 step : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
 step fuel st c =
   if fuel <= 0 then
-    prim_fail "vuna: effect machine: fuel exhausted"
+    prim_fail "effect machine: fuel exhausted"
   else
     case c of
       MkDone v => v
       MkApply k v => step (fuel - 1) st (k v)
-      MkKDone frame r => finish (fuel - 1) st frame r
-      MkReturn frame v =>
-        case st.msCtx of
-          Just c1 => if samePrompt (ctxPrompt c1) frame then step (fuel - 1) (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext) ((ctxKRest c1) ((frameRet frame) v)) else finish (fuel - 1) st frame ((frameRet frame) v)
-          Nothing => finish (fuel - 1) st frame ((frameRet frame) v)
-      MkResume frame k id v krest => if memInt id st.msUsed then prim_fail "vuna: runtime error: continuation already resumed" else step (fuel - 1) (MSt st.msFrames (Just (MkCtx frame krest st.msCtx)) (id :: st.msUsed) st.msNext) (k v)
+      MkKDone frame r => unwind (fuel - 1) st frame r
+      MkReturn frame v => unwind (fuel - 1) st frame ((frameRet frame) v)
+      MkResume frame k id v krest => if HashMap.member id st.msUsed then prim_fail "continuation already resumed" else step (fuel - 1) (MSt (reinstallIfMissing (fuel - 1) frame st.msFrames) (Just (MkCtx frame krest st.msCtx)) (HashMap.insert id True st.msUsed) st.msNext) (k v)
       MkPerform key name op k =>
         case findFrame (fuel - 1) key name st.msFrames of
-          Nothing => prim_fail "vuna: runtime error: unhandled effect"
+          Nothing => prim_fail "unhandled effect"
           Just frame =>
             let
               id = st.msNext
             in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r))
+      MkSelf th k =>
+        case st.msFrames of
+          Nothing => prim_fail "handleScoped outside handler"
+          Just f =>
+            let
+              frame = MkFrame (frameKey f) (frameName f) (frameRet f) (frameOpH f) th k st.msFrames
+            in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((th (toObj 0)) (\x => MkReturn frame x))
       MkHandle key name ret opH comp kOuter =>
         let
           frame = MkFrame key name ret opH comp kOuter st.msFrames
         in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((comp (toObj 0)) (\x => MkReturn frame x))
 
+-- | 交出一个答案：resume 期间（ctx 命中同一帧）先回到该次 resume 的 kRest，
+-- 让外层 handler 链继续；否则弹帧交 kOuter。
+unwind : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> ObjTy
+unwind fuel st frame r =
+  case st.msCtx of
+    Just c1 =>
+      if samePrompt (ctxPrompt c1) frame then
+        step (fuel - 1) (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext) ((ctxKRest c1) r)
+      else
+        finish (fuel - 1) st frame r
+    Nothing => finish (fuel - 1) st frame r
+
 finish : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> ObjTy
 finish fuel st frame r =
   step fuel (MSt (framePrev frame) st.msCtx st.msUsed st.msNext) ((frameKOuter frame) r)
 
-memInt : Int -> List Int -> Bool
-memInt x xs =
-  case xs of
-    [] => False
-    y :: rest => if x == y then True else memInt x rest
-
 -- | 入口：空状态跑到 Done。
 export machineRun : Control ObjTy -> ObjTy
-machineRun c = runGo 10000000 (MSt Nothing Nothing [] 0) c
+machineRun c = runGo 10000000 (MSt Nothing Nothing (HashMap arrayEmpty) 0) c
