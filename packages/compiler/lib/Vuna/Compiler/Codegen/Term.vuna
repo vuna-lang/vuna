@@ -1844,7 +1844,7 @@ genIrNode st (IrRt sym) =
         in OkC (Pair (ORaw (firstOf p)) (secondOf p))
       else
         OkC (Pair (ORaw text) st)
-genIrNode st (IrCast inner) =
+genIrNode st (IrCast cFrom cTo inner) =
   Vuna.Compiler.Base.Common.bind (genIr st inner) (
       \p =>
         case p of
@@ -1871,7 +1871,7 @@ genIrNode st (IrLet bs scrut body) =
                             _ => icInternal "unboxed case arm has more than one runtime binder"
               )
     )
-genIrNode st (IrLam bs body) =
+genIrNode st (IrLam bs _ body) =
   Vuna.Compiler.Base.Common.bind (genLamParams st bs) (
       \p =>
         case p of

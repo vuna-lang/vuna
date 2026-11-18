@@ -174,12 +174,13 @@ Control       = Done value
 - `rtMRes2` 改成转移；`rtMKDone` 在 resume 期间把 answer 交回最内层 `kRest`；
   若 frame 已被 `kDone` 弹出（answer 是 `Eff`），resume 时按 `$rt_mInChain` 判断
   重新装回，段结束时按 mctx 记下的链还原；
-- do 块续延 λ 由**精化期标记**识别（`@vuna@effK…`），降成「返回一个 Eff，其 thunk
-  以 `(u, K)` 运行」（`mEffContLambda`）；`prim_erase` 包一层的 resumption 调用由
-  `mStripErase` 剥壳；
+- do 块续延 λ 由 **λ 结果类型**识别：`IrLam` 携带体类型，`Eff` 结果降成「返回一个
+  Eff，其 thunk 以 `(u, K)` 运行」（`mEffContLambda`）；手写 `>>=` 的续延 λ 走同一
+  判据。`prim_erase` 包一层的 resumption 调用由 `mStripErase` 剥壳；
 - `handleScoped`：`@ir@m@self` 把当前最内层 handler 帧重新装到子计算上跑
   （复用 `Handle` 步骤），值语义边界降成 `run (self th doneCont)`；
-- handler clause 收集改成**按 arity 判定**（≥ 2 个运行时参数），`runExn`/`handleExn`
+- handler clause 收集按**签名类型**判定（`IrDef` 的运行时签名：结果行是 `Eff`，且某个
+  参数是「op → 续延 → 结果」的 clause），签名不可用时回退到 arity；`runExn`/`handleExn`
   这类包装层里的 opH 也能被机器化；
 - 门控只保留 **mode 6 / 直连（mode 0）**：`effTypes`、`selfNodeType`、`cpsTypes`、
   `$eff`/`$abort` tag、`$rt_eff*`、`$rt_cps*`、`$rt_sel*` 与 mode 2/3/5 的选择逻辑
@@ -445,12 +446,10 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   clause 实参（剩余运行时参数仍有 `(o, k)` 两个），例如
   `handleProcessHostWith … (processOpHIOWith onExit)`——之前只认裸全局，导致该 def
   没补 kDone/runScoped，机器 4 参调用打爆。
-- **41 的下一层（未解）**：修完 clause 收集后 41 仍在 `Exit c => do r <- onExit c; k r`
-  处 `impossible branch`：`onExit : Int -> Eff [] Int` 是「返回 Eff 的函数值」，mCps 对
-  未知变量的应用一律按 thunk 调用补续延（`onExit c k`），而运行时值是 1 参 λ
-  （`\c => MkEff …`）→ 过应用。修法方向：给这类参数在精化期打 `effContMark`（或有类型
-  信息时按 Eff 返回处理），或在 `processOpHIOWith` 里把 `onExit` 的调用改成显式
-  `runEff` 形式。
+- **41 的过应用（已修）**：`Exit c => do r <- onExit c; k r` 里
+  `onExit : Int -> Eff [] Int` 是「返回 Eff 的函数值」。旧 lowering 只能给 do 块的
+  续延 λ 打名字标记，未知变量的应用一律当普通调用（`onExit c k`）→ 过应用。现在
+  λ 携带结果类型，mCps 按 `Eff` 结果判定续延，`onExit c` 走 thunk 运行路径。
 
 ### 9.2.5 native 已切到库机器（D89 栈拷贝删除）
 

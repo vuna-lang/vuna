@@ -17,7 +17,13 @@ bNameText (IrBNat i) = "n" ++ strFromInt i
 bNameText IrBWild = "_"
 
 binderText : IrBinder -> String
-binderText b = if b.irBinderErased then "_" else bNameText b.irBinderName
+binderText b =
+  if b.irBinderErased then
+    "_"
+  else
+    case b.irBinderTy of
+      Nothing => bNameText b.irBinderName
+      Just ty => bNameText b.irBinderName ++ ":" ++ tyTextMaybe (Just ty)
 
 binderList : List IrBinder -> String
 binderList bs = String.join " " (map binderText bs)
@@ -37,6 +43,10 @@ tyText (IrTyArray x) = "Array " ++ tyText x
 tyText (IrTyRef x) = "Ref " ++ tyText x
 tyText (IrTyData n args) = n ++ " " ++ String.join " " (map tyText args)
 tyText (IrTyFun a b) = "(" ++ tyText a ++ " -> " ++ tyText b ++ ")"
+
+tyTextMaybe : Maybe IrTy -> String
+tyTextMaybe Nothing = "?"
+tyTextMaybe (Just ty) = tyText ty
 
 renderAlt : Int -> IrAlt -> String
 renderAlt fuel a =
@@ -101,13 +111,13 @@ renderIr fuel e =
       IrRecUpd b fam fs => "(upd " ++ renderIr (fuel - 1) b ++ " " ++ fam ++ " " ++ renderFields (fuel - 1) fs ++ ")"
       IrRt s => "rt:" ++ s
       IrRtApp s args => "(rtapp " ++ s ++ " " ++ renderList (fuel - 1) args ++ ")"
-      IrCast x => "(cast " ++ renderIr (fuel - 1) x ++ ")"
+      IrCast cFrom cTo x => "(cast " ++ tyTextMaybe cFrom ++ "->" ++ tyTextMaybe cTo ++ " " ++ renderIr (fuel - 1) x ++ ")"
       IrInt n => "i" ++ strFromInt n
       IrStr s => "s:" ++ s
       IrBool b => if b then "true" else "false"
       IrFloatLit s => "f:" ++ s
       IrLet bs rhs body => "(let [" ++ binderList bs ++ "] " ++ renderIr (fuel - 1) rhs ++ " " ++ renderIr (fuel - 2) body ++ ")"
-      IrLam bs body => "(lam [" ++ binderList bs ++ "] " ++ renderIr (fuel - 1) body ++ ")"
+      IrLam bs rt body => "(lam [" ++ binderList bs ++ "]:" ++ tyTextMaybe rt ++ " " ++ renderIr (fuel - 1) body ++ ")"
       IrApp _ _ =>
         let
           p = renderApp (fuel - 1) e
@@ -121,8 +131,13 @@ renderIr fuel e =
 
 export renderDef : IrDef -> String
 renderDef (IrExternDef n ty c _) = "extern " ++ n ++ " : " ++ tyText ty ++ " = " ++ c
-renderDef (IrDef n ar _ body _ _ _) =
-  "def " ++ n ++ "/" ++ strFromInt ar ++ " = " ++ renderIr 2000 body
+
+defSigText : Maybe IrTy -> String
+defSigText Nothing = ""
+defSigText (Just t) = " : " ++ tyText t
+
+renderDef (IrDef n ar _ ty body _ _ _) =
+  "def " ++ n ++ "/" ++ strFromInt ar ++ defSigText ty ++ " = " ++ renderIr 2000 body
 
 renderTyDecl : IrTyDecl -> String
 renderTyDecl (IrVariantDecl n p ctors) =

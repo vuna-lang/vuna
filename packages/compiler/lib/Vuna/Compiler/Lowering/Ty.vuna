@@ -86,10 +86,13 @@ renderFamilyArgs fuel levels table datas usedPats args =
       i :: rest =>
         case nthValueIn args i of
           Just arg => renderTyFuel (fuel - 1) levels table datas arg :: renderFamilyArgs (fuel - 1) levels table datas rest args
-          Nothing => renderFamilyArgs (fuel - 1) levels table datas rest args
+          -- 高阶/部分应用：族头出现时实参可能少于运行时参数槽（例如
+          -- `Dict_Functor Maybe` 里的 `Maybe`）。保留槽位，用不透明值占位，
+          -- 保证 `IrTyData` 的 arity 与声明一致。
+          Nothing => IrTyOpaque :: renderFamilyArgs (fuel - 1) levels table datas rest args
 
 -- 显式 Pi 结构化渲染（`(Int -> a)` 这类）；带隐式量词的 Pi 整体不透明。
-renderPiTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
+export renderPiTy : List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy
 renderPiTy levels table datas lvl v = renderPiTyFuel 256 levels table datas lvl v
 
 renderPiTyFuel : Int -> List Int -> HashMap String (List Int) -> List DtData -> Int -> Value -> IrTy

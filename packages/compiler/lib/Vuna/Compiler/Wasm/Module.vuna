@@ -250,8 +250,8 @@ genEffThunk fuel st family ctor arity prim =
     let
       bs = effArgBinders arity
       applied = applyAllIr prim (map (\b => IrVar b) bs)
-      mkEff = IrCtor family ctor [IrLam [effUnitBinder] applied]
-      outer = if arity <= 0 then mkEff else IrLam bs mkEff
+      mkEff = IrCtor family ctor [IrLam [effUnitBinder] Nothing applied]
+      outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
     in genExpr (fuel - 1) st outer
 
 genExpr : Int -> GenState -> Ir -> Result (Pair (List Instr) GenState)
@@ -265,7 +265,7 @@ genExpr fuel st ir =
       IrInt n => Ok (Pair [IConstI64 n, IStructNew "$int"] st)
       IrBool b => Ok (Pair (boolI31 b) st)
       IrStr s => genStr st s
-      IrCast inner => genExpr (fuel - 1) st inner
+      IrCast cFrom cTo inner => genExpr (fuel - 1) st inner
       IrLet bs scrut body => genLet (fuel - 1) st bs scrut body
       IrIf c th el => genIf (fuel - 1) st c th el
       IrRtApp sym args => genRtApp (fuel - 1) st sym args
@@ -277,7 +277,7 @@ genExpr fuel st ir =
       IrProj base family field => genProj (fuel - 1) st base family field
       IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
       IrCase scrut alts => genCase (fuel - 1) st scrut alts
-      IrLam bs body => genLamValue (fuel - 1) st bs body
+      IrLam bs rt body => genLamValue (fuel - 1) st bs rt body
       IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
       IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
       IrFloatLit raw => genFloatLit st raw
@@ -302,7 +302,7 @@ genGlobalRef fuel st name =
         else
           let
             bs = etaBinders (irDefArity d)
-          in genLamValue (fuel - 1) st bs (applyAllIr (IrGlobal name) (map (\b => IrVar b) bs))
+          in genLamValue (fuel - 1) st bs Nothing (applyAllIr (IrGlobal name) (map (\b => IrVar b) bs))
       Nothing => Err "unknown top-level definition in wasm codegen: `${name}`"
 
 -- | 运行时符号作为值：`RtValue` 直接内联；`RtFunc` eta 展开成闭包。
@@ -317,7 +317,7 @@ genRtValue fuel st sym =
       RtFunc n _ =>
         let
           bs = etaBinders n
-        in genLamValue (fuel - 1) st bs (IrRtApp sym (map (\b => IrVar b) bs))
+        in genLamValue (fuel - 1) st bs Nothing (IrRtApp sym (map (\b => IrVar b) bs))
 
 etaBinders : Int -> List IrBinder
 etaBinders n = map (\i => IrBinder (IrBUser ("__eta" ++ strFromInt i)) False Nothing) (range 0 n)
@@ -426,7 +426,7 @@ genApp fuel st ir =
       Pair head args =>
         case head of
           IrGlobal name => genGlobalCall (fuel - 1) st name args
-          IrLam bs body =>
+          IrLam bs _ body =>
             case runtimeBinders bs of
               [b] =>
                 case args of
@@ -510,8 +510,8 @@ restoreFuncScope outer inner =
 -- | `IrLam` 作为值：生成单参闭包函数并构造 `$clo`。
 --   多参 lambda 在创建时柯里化成嵌套的单参闭包（与 `$ft` / `$rt_apply` 的单参形状一致）；
 --   应用侧逐实参左结合，因此 `\x => \y => ...` 与多 binder lambda 都成立。
-genLamValue : Int -> GenState -> List IrBinder -> Ir -> Result (Pair (List Instr) GenState)
-genLamValue fuel st bs body =
+genLamValue : Int -> GenState -> List IrBinder -> Maybe IrTy -> Ir -> Result (Pair (List Instr) GenState)
+genLamValue fuel st bs rt body =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
@@ -528,7 +528,7 @@ genLamValue fuel st bs body =
       [] => genExpr (fuel - 1) st body
       b :: rest =>
         if listLengthB rest > 0 then
-          genLamValue (fuel - 1) st [b] (IrLam rest body)
+          genLamValue (fuel - 1) st [b] rt (IrLam rest rt body)
         else
           case bindEnvLocals (beginFuncScope st1) caps 0 of
             Err e => Err e
@@ -1452,7 +1452,7 @@ rtTryReadDirF lf =
 genDefFunc : Int -> GenState -> IrDef -> Result (Pair (List WatFunc) GenState)
 genDefFunc fuel st (IrExternDef name _ _ _) =
   Err "wasm target: extern definition `${name}` is not supported yet"
-genDefFunc fuel st (IrDef name arity _deps body _recOk _initGuard _span) =
+genDefFunc fuel st (IrDef name arity _deps _ty body _recOk _initGuard _span) =
   if arity == 0 then Ok (Pair [] st) else genDefFuncBody fuel st name arity body
 
 genDefFuncBody : Int -> GenState -> String -> Int -> Ir -> Result (Pair (List WatFunc) GenState)
@@ -1463,7 +1463,7 @@ genDefFuncBody fuel st name arity body =
     savedScope = st.gsScope
     st1 = beginFuncScope st
   in case body of
-    IrLam bs inner =>
+    IrLam bs _ inner =>
       case runtimeBinders bs of
         rbs =>
           if listLengthB rbs /= arity then
@@ -1510,7 +1510,7 @@ genDefFuncs fuel st (d :: rest) =
 -- ---------------------------------------------------------------
 genDefInit : Int -> GenState -> IrDef -> Result (Pair (List Instr) GenState)
 genDefInit fuel st (IrExternDef _ _ _ _) = Err "extern definition reached wasm codegen"
-genDefInit fuel st (IrDef name arity _deps body _recOk _initGuard _span) =
+genDefInit fuel st (IrDef name arity _deps _ty body _recOk _initGuard _span) =
   if arity /= 0 then
     Ok (Pair [] st)
   else
@@ -1714,13 +1714,13 @@ irUsesSyms fuel syms ir =
       IrRecUpd b _ fields => if irUsesSyms (fuel - 1) syms b then True else fieldSym fuel syms fields
       IrRt name => memName name syms
       IrRtApp name args => if memName name syms then True else anyIrSym fuel syms args
-      IrCast e => irUsesSyms (fuel - 1) syms e
+      IrCast cFrom cTo e => irUsesSyms (fuel - 1) syms e
       IrInt _ => False
       IrStr _ => False
       IrBool _ => False
       IrFloatLit _ => False
       IrLet _ v body => if irUsesSyms (fuel - 1) syms v then True else irUsesSyms (fuel - 1) syms body
-      IrLam _ body => irUsesSyms (fuel - 1) syms body
+      IrLam _ _ body => irUsesSyms (fuel - 1) syms body
       IrApp f a => if irUsesSyms (fuel - 1) syms f then True else irUsesSyms (fuel - 1) syms a
       IrIf c t e => if irUsesSyms (fuel - 1) syms c then True else if irUsesSyms (fuel - 1) syms t then True else irUsesSyms (fuel - 1) syms e
       IrCase s alts => if irUsesSyms (fuel - 1) syms s then True else anyAltSym fuel syms alts
@@ -1844,7 +1844,7 @@ directSend runName opHName op =
     u = mkIrBinder "hostUnit"
     applied = IrApp (IrApp (IrGlobal opHName) op) (IrGlobal hcPureK)
     ran = IrApp (IrGlobal runName) applied
-  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] ran]
+  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] Nothing ran]
 
 -- | 收口式错误族：`eprint ("vuna: " ++ text e ++ "\n"); exit 1`（不返回）。
 abortSend : String -> Ir -> Ir
@@ -1855,7 +1855,10 @@ abortSend textName op =
     msg = IrConcatMany [IrStr "vuna: ", IrApp (IrGlobal textName) (opFieldOf op), IrStr "\n"]
     eprinted = IrRtApp "@vuna@prim_eff_eprint" [msg]
     exited = IrRtApp "@vuna@prim_eff_exit" [IrInt 1]
-  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] (IrApp (IrLam [dead] exited) eprinted)]
+  in IrCtor
+    irEffTypeName
+    irEffMkCtor
+    [IrLam [u] Nothing (IrApp (IrLam [dead] Nothing exited) eprinted)]
 
 -- | 一个节点：先改写子项，再把脊椎是 `sendCore` 的节点换成直连调用。
 rw : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
@@ -1865,9 +1868,9 @@ rw h ab n (IrProj b f fd) = rwSpine h ab n (IrProj (rw h ab n b) f fd)
 rw h ab n (IrRecUpd b f fields) =
   rwSpine h ab n (IrRecUpd (rw h ab n b) f (map (rwField h ab n) fields))
 rw h ab n (IrRtApp sym args) = rwSpine h ab n (IrRtApp sym (map (rw h ab n) args))
-rw h ab n (IrCast e) = rwSpine h ab n (IrCast (rw h ab n e))
+rw h ab n (IrCast cFrom cTo e) = rwSpine h ab n (IrCast cFrom cTo (rw h ab n e))
 rw h ab n (IrLet bs v body) = rwSpine h ab n (IrLet bs (rw h ab n v) (rw h ab n body))
-rw h ab n (IrLam bs body) = rwSpine h ab n (IrLam bs (rw h ab n body))
+rw h ab n (IrLam bs rt body) = rwSpine h ab n (IrLam bs rt (rw h ab n body))
 rw h ab n (IrApp f a) = rwSpine h ab n (IrApp (rw h ab n f) (rw h ab n a))
 rw h ab n (IrIf c t e) = rwSpine h ab n (IrIf (rw h ab n c) (rw h ab n t) (rw h ab n e))
 rw h ab n (IrCase sc alts) = rwSpine h ab n (IrCase (rw h ab n sc) (map (rwAlt h ab n) alts))
@@ -1893,7 +1896,7 @@ sendTailOf args =
 
 -- | 剥掉表现层 cast（运行时无操作），让 `sendCore` 的应用脊椎可见。
 stripIrCasts : Ir -> Ir
-stripIrCasts (IrCast inner) = stripIrCasts inner
+stripIrCasts (IrCast _ _ inner) = stripIrCasts inner
 stripIrCasts ir = ir
 
 rwSpine : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
@@ -1935,6 +1938,7 @@ rwDef h ab n d =
         (irDefName d)
         (irDefArity d)
         (irDefDeps d)
+        (irDefTy d)
         (rw h ab n b)
         (irDefRecValueOk d)
         (irDefInitGuard d)
@@ -1950,7 +1954,8 @@ pureKDef =
     hcPureK
     1
     []
-    (IrLam [r] (IrCtor irEffTypeName irEffMkCtor [IrLam [u] (IrVar r)]))
+    Nothing
+    (IrLam [r] Nothing (IrCtor irEffTypeName irEffMkCtor [IrLam [u] Nothing (IrVar r)]))
     True
     False
     Nothing
@@ -1963,9 +1968,9 @@ irGlobalsOf (IrRecord _ fields) = concatMap globalsOfField fields
 irGlobalsOf (IrProj b _ _) = irGlobalsOf b
 irGlobalsOf (IrRecUpd b _ fields) = append (irGlobalsOf b) (concatMap globalsOfField fields)
 irGlobalsOf (IrRtApp _ args) = concatMap irGlobalsOf args
-irGlobalsOf (IrCast e) = irGlobalsOf e
+irGlobalsOf (IrCast _ _ e) = irGlobalsOf e
 irGlobalsOf (IrLet _ v body) = append (irGlobalsOf v) (irGlobalsOf body)
-irGlobalsOf (IrLam _ body) = irGlobalsOf body
+irGlobalsOf (IrLam _ _ body) = irGlobalsOf body
 irGlobalsOf (IrApp f a) = append (irGlobalsOf f) (irGlobalsOf a)
 irGlobalsOf (IrIf c t e) = append (irGlobalsOf c) (append (irGlobalsOf t) (irGlobalsOf e))
 irGlobalsOf (IrCase sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)

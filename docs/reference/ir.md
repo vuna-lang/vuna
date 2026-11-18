@@ -58,10 +58,10 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 | `IrRecUpd base family fields` | record 更新 | 只含被改字段 |
 | `IrRt sym` | 运行时符号引用 | 符号必须在 `Ir.Runtime` 契约里；目标文本由后端映射（不记依赖） |
 | `IrRtApp sym args` | 运行时符号的饱和应用 | 内建名 + 实参；OCaml 运算符模板在后端；arity 由 `irInlineArity` 定 |
-| `IrCast ir` | 表现层转换 | 表示改变、运行时不产生操作；后端渲染成自己的转换形式 |
+| `IrCast from to ir` | 表现层转换 | 表示改变、运行时不产生操作；`from` / `to` 是可选运行时类型（未知时 `Nothing`），后端渲染成自己的转换形式 |
 | `IrInt` / `IrStr` / `IrBool` / `IrFloatLit` | 字面量 | `IrInt` 也承载折叠后的 Nat 字面量；`IrStr` 未转义 |
 | `IrLet binders e body` | `let` | unboxed case 降级用；binder 表是完整 telescope（含擦除占位） |
-| `IrLam binders body` | lambda 链 | 擦除 binder 占位不渲染；无运行时 binder 时退化成体 |
+| `IrLam binders resultTy body` | lambda 链 | 擦除 binder 占位不渲染；无运行时 binder 时退化成体；`resultTy` 是体的运行时类型（未知时 `Nothing`） |
 | `IrApp f a` | 应用 | 擦除实参已丢弃 |
 | `IrIf c t e` | `if` | |
 | `IrCase scrut alts` | 通用 `match` | 无 catch-all 时后端补不可达兜底臂 |
@@ -84,8 +84,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 `irBinderErased = True` 只占 de Bruijn 槽位、不进 pattern / 参数表。
 `irBinderTy` 是可选的运行时类型（`IrTy`）：Lowering 只在外层 binder 与类型实参都能
 落到可命名的运行时类型时填入，擦除占位与类型参数保持 `Nothing`；后端渲染成
-`fun (x : ty)` 的参数注解，`Ir.Validate` 校验「擦除 binder 不带注解」与 `IrTyData`
-的实参个数（本单元声明的族）。没有注解的 binder 仍照旧渲染。
+`fun (x : ty)` 的参数注解。`IrLam` 另带体的结果类型（`Maybe IrTy`），由 Core 的 λ
+类型槽下传；`Ir.Validate` 校验「擦除 binder 不带注解」、`IrTyData` 的实参个数（本单元
+声明的族）、以及 `IrLam` 结果类型与 `IrDef` 签名。没有注解的 binder 仍照旧渲染。
 
 ### 类型表面 `IrTy`
 
@@ -98,9 +99,11 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 - `IrTyDecl`：`IrVariantDecl`（变体族）/ `IrRecordDecl`（OCaml record）/ `IrUnboxedDecl`
   （去装箱别名）。参数槽分配、不透明字段、record 字段表都在 Lowering 定好。
-- `IrDef`：`IrDef name arity deps body recOk initGuard span`（运行时定义）或
-  `IrExternDef name ty cSym span`（受限 FFI）。`irDefDeps` 是运行时引用到的顶层定义
-  （Core 遍历顺序的去重表），SCC 分组吃它。
+- `IrDef`：`IrDef name arity deps sig body recOk initGuard span`（运行时定义）或
+  `IrExternDef name ty cSym span`（受限 FFI）。`sig` 是 `renderPiTy` 产出的运行时签名
+  （隐式/擦除 binder 已剥掉，不可命名的部分落 `IrTyOpaque`）；`arity` 仍是调用约定里的
+  运行时参数个数。`irDefDeps` 是运行时引用到的顶层定义（Core 遍历顺序的去重表），
+  SCC 分组吃它。
 - `IrGroup`：`irGroupIsRec` + 成员（SCC 序）。
 - `IrUnit`：类型声明 + 分组 + `hasListFamily` + `typeRefs` + 可选 `IrEntry`。
 - `IrProgram`：`IrShared` + 一个 `IrUnit`（check 路径的整程序装配）。
@@ -198,6 +201,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
   或同组，线性扫描，不重跑 SCC）+ 入口引用的 `main` 存在 + 运行时符号已声明且 arity 一致
   （见上节）。check 路径在 `lowerProgramOf` 末尾跑，split 路径经
   `Lowering.Program.lowerUnitChecked` 逐单元跑一次。
+- **类型形状**：`checkDefTy` 校验 `IrDef` 的运行时签名；`checkNodeBinderTys` 校验 λ binder
+  注解、`IrLam` 结果类型与 `IrCast` 的源/目标类型（`IrTyData` 实参个数按本单元声明核对）。
+  跨单元类型只做递归形状检查；这不是第二套精化器，只守 IR 的结构不变量。
 - **作用域**：`checkScopedUnit` 逐节点检查每个 `IrVar` 指向语法作用域内的 binder，
   且擦除占位 binder 不得出现在变量位置（Lowering 的擦除判据漏一处就报内部错）；
   它把「well-scoped」从约定变成门禁。
@@ -217,9 +223,13 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 已知边界 / 刻意未做
 
-- IR 的类型信息是**选择性**的：λ binder 可带 `irBinderTy`（`IrTy`，见上），但应用、
-  定义与 case 分支没有类型，也没有类型检查器。`IrCast` 位点仍靠 Lowering 写对；
-  注解只用于让生成的 OCaml 更容易排错，不参与表示决策。
+- IR 的类型信息仍是**选择性**的：λ binder 可带 `irBinderTy`，`IrLam` 带结果类型，
+  `IrDef` 带运行时签名（`renderPiTy`，不可命名部分为 `IrTyOpaque`），`IrCast` 带源/目标；
+  但 `IrApp`、`IrCase` 的 scrutinee/结果、`IrCtor` 的类型实参仍没有类型，也没有 IR 级
+  类型检查器。`IrCast` 位点仍靠 Lowering 写对；结构化校验只查签名/注解的形状与 arity，
+  不复刻精化器（见 [architecture-target.md](../architecture-target.md) 非目标）。
+- CPS 的续延判定按 `IrLam` 结果类型（`Eff`）；handler clause 收集按 `IrDef` 签名
+  （结果是 `Eff` 且参数是 `op -> k -> b` 形状），签名不可用时回退到 arity。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。
 - IR 不做内容寻址：`Canonical.Ir` 不存在，节点集变化不需要迁移哈希。
 - 现在有三个消费者：OCaml（全量参考实现）、wasm、native。两个产品后端覆盖白名单子集

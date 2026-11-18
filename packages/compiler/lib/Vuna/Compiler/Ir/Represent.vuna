@@ -26,8 +26,8 @@ representGroup shared g = IrGroup g.irGroupIsRec (map (representDef shared) g.ir
 representDef : IrShared -> IrDef -> IrDef
 representDef shared d =
   case d of
-    IrDef name arity deps body recOk initGuard span =>
-      IrDef name arity deps (representIr shared body) recOk initGuard span
+    IrDef name arity deps ty body recOk initGuard span =>
+      IrDef name arity deps ty (representIr shared body) recOk initGuard span
     IrExternDef name ty cName span => d
 
 representIr : IrShared -> Ir -> Ir
@@ -51,9 +51,9 @@ representIr shared ir =
         (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
     IrProj base family field => IrProj (representIr shared base) family field
     IrRtApp sym args => IrRtApp sym (map (representIr shared) args)
-    IrCast inner => IrCast (representIr shared inner)
+    IrCast cFrom cTo inner => IrCast cFrom cTo (representIr shared inner)
     IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
-    IrLam bs body => IrLam bs (representIr shared body)
+    IrLam bs rt body => IrLam bs rt (representIr shared body)
     IrApp f a => IrApp (representIr shared f) (representIr shared a)
     IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
     IrCase scrut alts => representCase shared scrut alts

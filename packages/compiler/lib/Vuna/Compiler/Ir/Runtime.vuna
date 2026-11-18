@@ -424,13 +424,13 @@ irSymbolsOf (IrRecUpd base _ fields) = append (irSymbolsOf base) (concatMap irSy
 irSymbolsOf (IrRt sym) = [Pair sym Nothing]
 irSymbolsOf (IrRtApp sym args) =
   append [Pair sym (Just (irListLength args))] (concatMap irSymbolsOf args)
-irSymbolsOf (IrCast inner) = irSymbolsOf inner
+irSymbolsOf (IrCast cFrom cTo inner) = irSymbolsOf inner
 irSymbolsOf (IrInt _) = []
 irSymbolsOf (IrStr _) = []
 irSymbolsOf (IrBool _) = []
 irSymbolsOf (IrFloatLit _) = []
 irSymbolsOf (IrLet _ scrut body) = append (irSymbolsOf scrut) (irSymbolsOf body)
-irSymbolsOf (IrLam _ body) = irSymbolsOf body
+irSymbolsOf (IrLam _ _ body) = irSymbolsOf body
 irSymbolsOf (IrApp f a) = append (irSymbolsOf f) (irSymbolsOf a)
 irSymbolsOf (IrIf c t e) = append (irSymbolsOf c) (append (irSymbolsOf t) (irSymbolsOf e))
 irSymbolsOf (IrCase scrut alts) = append (irSymbolsOf scrut) (concatMap irSymbolsOfAlt alts)

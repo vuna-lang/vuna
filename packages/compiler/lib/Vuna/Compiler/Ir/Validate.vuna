@@ -104,12 +104,19 @@ validateProgram p =
 checkBinderTys : List IrTyDecl -> List IrDef -> Check Int
 checkBinderTys decls [] = OkC 0
 checkBinderTys decls (d :: rest) =
-  case irDefBody d of
-    Nothing => checkBinderTys decls rest
-    Just body =>
-      Vuna.Compiler.Base.Common.bind
-        (checkBinderTysWork (8 * irSize body + 64) decls [body])
-        (\_ => checkBinderTys decls rest)
+  Vuna.Compiler.Base.Common.bind (checkDefTy decls (irDefName d) (irDefTy d)) (
+      \_ =>
+        case irDefBody d of
+          Nothing => checkBinderTys decls rest
+          Just body => Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body]) (\_ => checkBinderTys decls rest)
+    )
+
+checkDefTy : List IrTyDecl -> String -> Maybe IrTy -> Check Int
+checkDefTy decls _ Nothing = OkC 0
+checkDefTy decls name (Just ty) =
+  case checkTyArity decls ty of
+    ErrC _ => icInternal "definition `${name}` has an invalid runtime signature"
+    OkC n => OkC n
 
 checkBinderTysWork : Int -> List IrTyDecl -> List Ir -> Check Int
 checkBinderTysWork fuel decls work =
@@ -123,14 +130,21 @@ checkBinderTysWork fuel decls work =
 checkNodeBinderTys : List IrTyDecl -> Ir -> Check Int
 checkNodeBinderTys decls ir =
   case ir of
-    IrLam bs body => checkBinderTysOf decls bs
+    IrLam bs resultTy _ =>
+      Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
     IrLet bs scrut body => checkBinderTysOf decls bs
     IrCase scrut alts => checkAltBinderTys decls alts
     IrNatCase scrut fresh zero succ catch =>
       Vuna.Compiler.Base.Common.bind
         (checkAltBinderTysM decls zero)
         (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
+    IrCast from to _ =>
+      Vuna.Compiler.Base.Common.bind (checkIrTyM decls from) (\_ => checkIrTyM decls to)
     _ => OkC 0
+
+checkIrTyM : List IrTyDecl -> Maybe IrTy -> Check Int
+checkIrTyM decls Nothing = OkC 0
+checkIrTyM decls (Just ty) = checkTyArity decls ty
 
 checkBinderTysOf : List IrTyDecl -> List IrBinder -> Check Int
 checkBinderTysOf decls [] = OkC 0
@@ -173,7 +187,8 @@ checkTyArity decls (IrTyData fam args) =
       if listLength args == n then
         checkTyArityList decls args
       else
-        icInternal "binder type annotation has the wrong type argument count for `${fam}`"
+        icInternal
+          "binder type annotation has the wrong type argument count for `${fam}` (expected ${strFromInt n}, got ${strFromInt (listLength args)})"
     Nothing => checkTyArityList decls args
 
 checkTyArityList : List IrTyDecl -> List IrTy -> Check Int
@@ -240,9 +255,9 @@ scopedChildren scope ir =
     IrProj base family field => [Pair scope base]
     IrRecUpd base family fields => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
     IrRtApp sym args => map (\a => Pair scope a) args
-    IrCast inner => [Pair scope inner]
+    IrCast cFrom cTo inner => [Pair scope inner]
     IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
-    IrLam bs body => [Pair (append bs scope) body]
+    IrLam bs _ body => [Pair (append bs scope) body]
     IrApp f a => [Pair scope f, Pair scope a]
     IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
     IrCase scrut alts => Pair scope scrut :: altWork scope alts
@@ -289,9 +304,9 @@ irSizeChildren ir =
     IrProj base family field => irSize base
     IrRecUpd base family fields => irSize base + irSizeFields fields
     IrRtApp sym args => irSizeList args
-    IrCast inner => irSize inner
+    IrCast cFrom cTo inner => irSize inner
     IrLet bs scrut body => irSize scrut + irSize body
-    IrLam bs body => irSize body
+    IrLam bs _ body => irSize body
     IrApp f a => irSize f + irSize a
     IrIf c th el => irSize c + irSize th + irSize el
     IrCase scrut alts => irSize scrut + irSizeAlts alts

@@ -134,7 +134,8 @@ export data Ir(..) : Type where
   -- | 运行时符号的饱和应用（内建名 + 实参；模板在后端，arity 由 `irInlineArity` 定）。
   IrRtApp : String -> List Ir -> Ir
   -- | 表现层转换（表示改变、运行时不产生操作；后端渲染成自己的转换形式）。
-  IrCast : Ir -> Ir
+  -- 两个 `Maybe IrTy` 是源/目标运行时类型（未知时 `Nothing`）。
+  IrCast : Maybe IrTy -> Maybe IrTy -> Ir -> Ir
   -- | 整数字面量（含折叠后的 Nat 字面量）。
   IrInt : Int -> Ir
   -- | 字符串字面量（未转义）。
@@ -147,7 +148,8 @@ export data Ir(..) : Type where
   -- 因此体的 de Bruijn 下标不变；只有非擦除 binder 进渲染的 pattern。
   IrLet : List IrBinder -> Ir -> Ir -> Ir
   -- | lambda 链（擦除 binder 占位不渲染；无运行时 binder 时退化成体）。
-  IrLam : List IrBinder -> Ir -> Ir
+  -- 第二个字段是体（链的最终结果）的运行时类型；未知时 `Nothing`。
+  IrLam : List IrBinder -> Maybe IrTy -> Ir -> Ir
   -- | 应用（擦除实参已在 Lowering 丢弃）。
   IrApp : Ir -> Ir -> Ir
   -- | `if`。
@@ -193,43 +195,47 @@ export data IrTyDecl(..) : Type where
 -- `irDefDeps` 是运行时引用到的顶层定义（Core 遍历顺序的去重表）：SCC 分组吃它，
 -- 分组结果与迁移前逐项一致。
 export data IrDef(..) : Type where
-  -- | 运行时定义：名字、运行时参数个数、依赖、体、递归值形状合法、入口期求值守卫、span。
-  IrDef : String -> Int -> List String -> Ir -> Bool -> Bool -> Maybe Span -> IrDef
+  -- | 运行时定义：名字、运行时参数个数、依赖、签名类型、体、递归值形状合法、入口期求值守卫、span。
+  IrDef : String -> Int -> List String -> Maybe IrTy -> Ir -> Bool -> Bool -> Maybe Span -> IrDef
   -- | 受限 FFI 定义：名字、`external` 运行时类型、C 符号名、span。
   IrExternDef : String -> IrTy -> String -> Maybe Span -> IrDef
 
 export irDefName : IrDef -> String
-irDefName (IrDef name arity deps body recOk initGuard span) = name
+irDefName (IrDef name arity deps ty body recOk initGuard span) = name
 irDefName (IrExternDef name ty cName span) = name
 
 export irDefArity : IrDef -> Int
-irDefArity (IrDef name arity deps body recOk initGuard span) = arity
+irDefArity (IrDef name arity deps ty body recOk initGuard span) = arity
 irDefArity (IrExternDef name ty cName span) = 0
 
 export irDefDeps : IrDef -> List String
-irDefDeps (IrDef name arity deps body recOk initGuard span) = deps
+irDefDeps (IrDef name arity deps ty body recOk initGuard span) = deps
 irDefDeps (IrExternDef name ty cName span) = []
 
+export irDefTy : IrDef -> Maybe IrTy
+irDefTy (IrDef name arity deps ty body recOk initGuard span) = ty
+irDefTy (IrExternDef name ty cName span) = Just ty
+
 export irDefBody : IrDef -> Maybe Ir
-irDefBody (IrDef name arity deps body recOk initGuard span) = Just body
+irDefBody (IrDef name arity deps ty body recOk initGuard span) = Just body
 irDefBody (IrExternDef name ty cName span) = Nothing
 
 export irDefExtern : IrDef -> Maybe (Pair IrTy String)
-irDefExtern (IrDef name arity deps body recOk initGuard span) = Nothing
+irDefExtern (IrDef name arity deps ty body recOk initGuard span) = Nothing
 irDefExtern (IrExternDef name ty cName span) = Just (Pair ty cName)
 
 -- | 零参定义作为 `let rec` 右值是否合法（`let rec` 只接受函数 / 构造子应用）。
 export irDefRecValueOk : IrDef -> Bool
-irDefRecValueOk (IrDef name arity deps body recOk initGuard span) = recOk
+irDefRecValueOk (IrDef name arity deps ty body recOk initGuard span) = recOk
 irDefRecValueOk (IrExternDef name ty cName span) = True
 
 -- | 定义体是否要包运行时报告器（入口单元零参 `main`：模块初始化期求值）。
 export irDefInitGuard : IrDef -> Bool
-irDefInitGuard (IrDef name arity deps body recOk initGuard span) = initGuard
+irDefInitGuard (IrDef name arity deps ty body recOk initGuard span) = initGuard
 irDefInitGuard (IrExternDef name ty cName span) = False
 
 export irDefSpan : IrDef -> Maybe Span
-irDefSpan (IrDef name arity deps body recOk initGuard span) = span
+irDefSpan (IrDef name arity deps ty body recOk initGuard span) = span
 irDefSpan (IrExternDef name ty cName span) = span
 
 -- | 分组：SCC 序 + 该组是否需要 `let rec`。

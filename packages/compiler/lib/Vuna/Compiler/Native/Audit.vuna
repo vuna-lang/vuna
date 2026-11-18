@@ -57,7 +57,7 @@ auditKeys defs (IrInt _) = []
 auditKeys defs (IrStr _) = []
 auditKeys defs (IrBool _) = []
 auditKeys defs (IrFloatLit _) = []
-auditKeys defs (IrCast inner) = auditKeys defs inner
+auditKeys defs (IrCast cFrom cTo inner) = auditKeys defs inner
 auditKeys defs (IrLet bs scrut body) =
   append
     (append (if auditRuntimeBinders bs > 1 then ["multi-binder-let"] else []) (auditKeys defs scrut))
@@ -76,7 +76,7 @@ auditKeys defs (IrNatCase scrut _ z s c) =
     (auditKeys defs scrut)
     (append (auditAltMaybeKeys defs z) (append (auditAltMaybeKeys defs s) (auditAltMaybeKeys defs c)))
 auditKeys defs (IrConcatMany parts) = concatMap (auditKeys defs) parts
-auditKeys defs (IrLam _ body) = auditKeys defs body
+auditKeys defs (IrLam _ _ body) = auditKeys defs body
 auditKeys defs (IrApp f a) = append (auditKeys defs f) (auditKeys defs a)
 auditKeys defs (IrRtApp sym args) =
   append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)

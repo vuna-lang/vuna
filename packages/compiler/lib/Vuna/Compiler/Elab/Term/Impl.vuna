@@ -3565,8 +3565,6 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
     binderName =
       if ctxHasLinear ecLinear ctx then
         if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
-      else if isEffMonadValue ecPaper plan.planMVal then
-        effContBinderName binderSp depth binder
       else
         binder
     lamTerm =
@@ -3589,17 +3587,6 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
 
 -- 逐条语句的检查与链装配：`bind e_i (\binder -> <后缀>)`。后缀的 monad 与结果类型整块共享
 -- （`planAVal`），所以每个 bind 的 b 实参都直接用块结果类型 a。
--- | `m` 的头是不是 `Eff`：do 块续延标记只给 `Eff` 的 do 块（见 `effContBinderName`）。
-isEffMonadValue : Ec -> Value -> Bool
-isEffMonadValue ec v =
-  case forceVal ec v of
-    VNeutral n =>
-      case n of
-        NGlobal g _ => g == effTypeName
-        _ => False
-    _ => False
-
--- | 逐条检查 do 语句并装配 bind 链：所有语句共享整块的 monad、字典与结果类型。
 elabDoChain : Int -> List (Pair String Term) -> Ctx -> Ec -> DoPlan -> List DoChainStep -> Expr -> Check (Pair Term Ec)
 elabDoChain fuel globals ctx ec plan steps last =
   if fuel <= 0 then

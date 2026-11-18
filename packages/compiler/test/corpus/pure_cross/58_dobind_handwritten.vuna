@@ -1,0 +1,9 @@
+-- 手写 `>>=` 的续延 λ 不带 do 块标记；mCps 必须按 λ 结果类型（Eff）识别它，
+-- 否则会把 `x` 的续延当成普通值应用。三端（OCaml / wasm / native）同结果。
+import Base.Effect.Core as Eff
+
+prog : Eff [] Int
+prog = pure 1 >>= (\x => pure (x + 41))
+
+main : Int
+main = runPure prog

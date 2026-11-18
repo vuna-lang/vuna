@@ -211,10 +211,14 @@ lowerLamFuel fuel env st binders name rig slot sp body =
         let
           bs = bindersOfParams env binders params
           envB = append (reverse bs) binders
+          resultIr =
+            case resultTy of
+              Nothing => Nothing
+              Just t => annotTyOf env envB t
         in Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st envB inner) (
             \p =>
               case p of
-                Pair b st2 => OkC (Pair (IrLam bs b) st2)
+                Pair b st2 => OkC (Pair (IrLam bs resultIr b) st2)
           )
 
 -- lambda 链的 binder 表（外→内）：每个 binder 的注解按它自己的外层上下文解析。
@@ -423,14 +427,14 @@ lowerConArgsFuel fuel env st binders (opq :: opqs) ((Pair arg rig) :: rest) =
               Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st2 binders opqs rest) (
                   \q =>
                     case q of
-                      Pair irs st3 => OkC (Pair ((::) (ctorArgIr opq ir) irs) st3)
+                      Pair irs st3 => OkC (Pair ((::) (ctorArgIr (annotTyOf env binders arg) opq ir) irs) st3)
                 )
       )
 
 -- 运行时不可命名的擦除依赖字段：表现层转换。
-ctorArgIr : Bool -> Ir -> Ir
-ctorArgIr True ir = IrCast ir
-ctorArgIr False ir = ir
+ctorArgIr : Maybe IrTy -> Bool -> Ir -> Ir
+ctorArgIr src True ir = IrCast src (Just IrTyOpaque) ir
+ctorArgIr src False ir = ir
 
 -- 只保留运行时字段位置的不透明标志。
 ctorOpaqueKeptFlags : List Bool -> List Bool -> List Bool
@@ -929,8 +933,10 @@ lowerDef env st d =
           case lowerTerm env st [] body of
             ErrC e => ErrC (withContext (dtDefSpan d) (dtDefName d) e)
             OkC (Pair bodyIr st2) =>
-              OkC
-                (Pair (IrDef (dtDefName d) (runtimeArityIn body) (factsDepsOf env (dtDefName d)) bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
+              let
+                defTy = Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+              in OkC
+                (Pair (IrDef (dtDefName d) (runtimeArityIn body) (factsDepsOf env (dtDefName d)) defTy bodyIr (recursiveValueAllowedIn body) (initGuardOf env False (dtDefName d) body) (dtDefSpan d)) st2)
         Nothing =>
           ErrC
             (withContext (dtDefSpan d) (dtDefName d) (diagNoLoc SevError PhInternal CatInternal "IC_AxiomRuntime" "axiom reached runtime code generation (partition must erase it)"))

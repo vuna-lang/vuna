@@ -651,11 +651,9 @@ export lamTyWithResult : Maybe Term -> Maybe (Pair (Maybe Term) (Maybe Term))
 lamTyWithResult resultTy = lamTyOf Nothing resultTy
 
 export lamTyMap : (Int -> Term -> Term) -> Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Maybe (Pair (Maybe Term) (Maybe Term))
-lamTyMap f depth slot =
-  case slot of
-    Nothing => Nothing
-    Just p =>
-      lamTyOf (mapTermMaybe (f depth) (firstOf p)) (mapTermMaybe (f (depth + 1)) (secondOf p))
+lamTyMap f depth Nothing = Nothing
+lamTyMap f depth (Just p) =
+  lamTyOf (mapTermMaybe (f depth) (firstOf p)) (mapTermMaybe (f (depth + 1)) (secondOf p))
 
 -- ---------------------------------------------------------------
 -- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。

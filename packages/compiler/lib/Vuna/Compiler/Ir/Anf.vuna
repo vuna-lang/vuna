@@ -104,14 +104,14 @@ anf fuel next e =
       IrBool _ => mkAnf [] e next
       IrFloatLit _ => mkAnf [] e next
       IrEffBind _ _ _ => mkAnf [] e next
-      IrLam bs body =>
+      IrLam bs rt body =>
         let
           b = anf (fuel - 1) next body
-        in mkAnf [] (IrLam bs (letsIn b.anfLets b.anfExpr)) b.anfNext
-      IrCast inner =>
+        in mkAnf [] (IrLam bs rt (letsIn b.anfLets b.anfExpr)) b.anfNext
+      IrCast cFrom cTo inner =>
         let
           a = anf (fuel - 1) next inner
-        in mkAnf a.anfLets (IrCast a.anfExpr) a.anfNext
+        in mkAnf a.anfLets (IrCast cFrom cTo a.anfExpr) a.anfNext
       IrProj base family field =>
         let
           a = anf (fuel - 1) next base
@@ -253,9 +253,9 @@ countAnfBinders fuel e =
       IrProj b _ _ => countAnfBinders (fuel - 1) b
       IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
       IrRtApp _ args => countAnfList (fuel - 1) args
-      IrCast x => countAnfBinders (fuel - 1) x
+      IrCast cFrom cTo x => countAnfBinders (fuel - 1) x
       IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
-      IrLam bs body => countBs bs + countAnfBinders (fuel - 1) body
+      IrLam bs _ body => countBs bs + countAnfBinders (fuel - 1) body
       IrApp f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
       IrIf c t el => countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
       IrCase s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
@@ -312,10 +312,10 @@ countAltM fuel m =
 
 anfDef : Int -> IrDef -> IrDef
 anfDef fuel (d@(IrExternDef _ _ _ _)) = d
-anfDef fuel (IrDef name arity deps body recOk initGuard span) =
+anfDef fuel (IrDef name arity deps ty body recOk initGuard span) =
   let
     b = anf (fuel - 1) (fuel + countAnfBinders (fuel - 1) body) body
-  in IrDef name arity deps (letsIn b.anfLets b.anfExpr) recOk initGuard span
+  in IrDef name arity deps ty (letsIn b.anfLets b.anfExpr) recOk initGuard span
 
 anfDefs : Int -> List IrDef -> List IrDef
 anfDefs fuel defs =

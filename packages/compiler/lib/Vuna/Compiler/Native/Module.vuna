@@ -723,8 +723,8 @@ genEffThunk fuel st family ctor arity prim =
     let
       bs = effArgBinders arity
       applied = applyAllIr prim (map (\b => IrVar b) bs)
-      mkEff = IrCtor family ctor [IrLam [effUnitBinder] applied]
-      outer = if arity <= 0 then mkEff else IrLam bs mkEff
+      mkEff = IrCtor family ctor [IrLam [effUnitBinder] Nothing applied]
+      outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
     in genExpr (fuel - 1) st outer
 
 -- | 值位置生成：结果留在 `rax`，任何调用都正常返回。
@@ -754,7 +754,7 @@ genExprAt fuel st isTail ir =
           Nothing => internal "string literal missing from native pool"
           Just label => NOk (Pair [ILea Rax label] st)
       IrBool b => NOk (Pair [IMov (OpReg Rax) (OpImm (if b then 1 else 0))] st)
-      IrCast inner => genExprAt (fuel - 1) st isTail inner
+      IrCast cFrom cTo inner => genExprAt (fuel - 1) st isTail inner
       IrLet bs scrut body =>
         nbind (genExpr (fuel - 1) st scrut) (
             \p =>
@@ -800,7 +800,7 @@ genExprAt fuel st isTail ir =
       IrRtApp sym args => genRtApp (fuel - 1) st sym args
       IrConcatMany parts => genConcatMany (fuel - 1) st parts
       IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st isTail scrut zero succ catch
-      IrLam bs body => genLamValue (fuel - 1) st isTail bs body
+      IrLam bs _ body => genLamValue (fuel - 1) st isTail bs body
       IrRt sym =>
         let
           arity = rtValueArityOf sym
@@ -1417,7 +1417,7 @@ bindArgsGo (b :: rest) i st =
 genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) Int)
 genDefFunc _defs _pools _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pools fams nextLabel (IrDef name arity _ body _ _ _) =
+genDefFunc defs pools fams nextLabel (IrDef name arity _ _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
@@ -1436,7 +1436,7 @@ genDefFunc defs pools fams nextLabel (IrDef name arity _ body _ _ _) =
       )
   else
     case body of
-      IrLam bs inner =>
+      IrLam bs _ inner =>
         let
           rbs = runtimeBinders bs
         in if length rbs /= arity then

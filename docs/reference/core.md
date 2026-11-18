@@ -16,8 +16,8 @@ data Term where
   TGlobal : String -> Term
   TType   : Level -> Term
   TPi     : String -> Bool -> Rig -> Term -> Term -> Term
-  TLam    : String -> Rig -> Maybe Term -> Span -> Term -> Term
-  -- binder 名 / multiplicity / binder 类型（派生的 `Maybe`）/ binder 名 span（合成用 spanEmpty）
+  TLam    : String -> Rig -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Span -> Term -> Term
+  -- binder 名 / multiplicity / 类型槽（binder 类型 + 结果类型，均可缺）/ binder 名 span
   TApp    : Term -> Term -> Rig -> Term
   TCon    : String -> List (Pair Term Rig) -> Term   -- 构造子应用（实参自携 Rig）
   TCase   : Term -> List CaseAlt -> Term
@@ -26,9 +26,10 @@ data Term where
 
 - `CaseAlt` 是「构造子名 + 绑定子（`Binder`：名字 / `Rig` / 名 span）+ 体」；`VCaseAlt`
   把体换成闭包并把 binder 压成（名字 / `Rig`）。binder span 只服务诊断，编码与哈希里丢弃。
-- `TLam` 的 binder 类型槽写在外层上下文里（不引用该 binder 自己），`Nothing` 表示未记录：
-  精化 λ 检查时填入，`shift` / `substVarAt` / `zonkTerm` 一并搬移类型槽；它只是派生信息，
-  `Canonical` 编码、iface 哈希、缓存载荷都不含它，求值与转换（`quote`）忽略它。
+- `TLam` 的类型槽是 `Pair binderTy resultTy`：binder 类型写在外层上下文里（不引用该
+  binder 自己），结果类型写在 binder 作用域里；两项都可缺，`Nothing` 表示未记录。
+  精化 λ 检查时填入，`shift` / `substVarAt` / `zonkTerm` 按各自的 cutoff 搬移；它只是
+  派生信息，`Canonical` 编码、iface 哈希、缓存载荷都不含它，求值与转换（`quote`）忽略它。
 - 值：`VType` / `VPi` / `VLam`（闭包）/ `VNeutral` / `VMeta` / `VCon` / `VCase` /
   `VApp`（卡住的应用，禁止静默丢实参）/ 字面量 / `VIf`；neutral 头是
   `NVar name level spine` 或 `NGlobal name spine`。
