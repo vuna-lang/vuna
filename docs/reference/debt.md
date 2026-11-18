@@ -42,7 +42,7 @@
 
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
-| D109 | **擦除后 IR 没有类型标注**：`Ir.Model` 只有签名级的 `IrTy`，项级 binder / 应用 / 定义都没有类型；因此「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对 | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/Program.vuna`；[ir.md](ir.md)「已知边界」 | 后续（类型随 `lowerTerm` 下传） |
+| D109 | **擦除后 IR 的类型信息是选择性的**：`Ir.Model` 的 `IrBinder` 可带运行时类型注解，但应用、定义与 case 分支仍无类型，也没有类型检查器；「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对 | `Ir/Model.vuna`（`irBinderTy`）、`Ir/Validate.vuna`（注解 arity）、`Lowering/Ty.vuna`（`annotTyOf`）；[ir.md](ir.md)「已知边界」 | 后续（应用/定义的签名随 `lowerTerm` 下传） |
 | D111 | **ANF 不是幂等规范化**：二次 ANF 会给已经 `let` 绑定的非简单右值再插一层 `let`（`__anf<n>` 编号递增），结构因此变化；wasm 的 CPS 路径恰好依赖「二次 ANF 从更高编号开始」来避免撞名，所以幂等门禁不成立 | `Ir/Anf.vuna`（`anfProgramDefs` / `next` 计数）；复现：`vuna dev ir dump --after anf` 与 `--after anf2` 的首个定义不同 | 后续（若要幂等：已 ANF 的右值不再 hoist，或把二次 ANF 换成显式命名空间） |
 
 ## 工具、构建与验证

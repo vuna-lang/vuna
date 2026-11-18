@@ -1841,12 +1841,11 @@ genIrNode st (IrLet bs scrut body) = Vuna.Compiler.Base.Common.bind (genIr st sc
         _ => icInternal "unboxed case arm has more than one runtime binder"
   )
 )
-genIrNode st (IrLam bs body) =
-  let
-    params = filter (\n => n /= "") (map nonErasedBinderText bs)
-  in Vuna.Compiler.Base.Common.bind (genIr st body) (\p => case p of
-    Pair bodyTerm st1 => OkC (Pair (OLam (map (\n => Pair n Nothing) params) bodyTerm) st1)
+genIrNode st (IrLam bs body) = Vuna.Compiler.Base.Common.bind (genLamParams st bs) (\p => case p of
+  Pair params st1 => Vuna.Compiler.Base.Common.bind (genIr st1 body) (\q => case q of
+    Pair bodyTerm st2 => OkC (Pair (OLam params bodyTerm) st2)
   )
+)
 genIrNode st (IrApp f a) = Vuna.Compiler.Base.Common.bind (genIr st f) (\p => case p of
   Pair fTerm st1 => Vuna.Compiler.Base.Common.bind (genIr st1 a) (\q => case q of
     Pair aTerm st2 => OkC (Pair (OApp fTerm aTerm) st2)
@@ -1938,6 +1937,27 @@ genAssignedFields st family (f :: rest) = Vuna.Compiler.Base.Common.bind (genIr 
 nonErasedBinderText : IrBinder -> String
 nonErasedBinderText (IrBinder nm True _) = ""
 nonErasedBinderText (IrBinder nm False _) = irBinderText (IrBinder nm False Nothing)
+
+-- | λ 参数表：擦除占位不渲染；有运行时类型的 binder 渲染成 `(x : ty)`。
+-- 注解里的跨单元类型引用记成依赖（与构造子 / record 引用同一条通道）。
+genLamParams : GenSt -> List IrBinder -> Check (Pair (List (Pair String (Maybe String))) GenSt)
+genLamParams st [] = OkC (Pair [] st)
+genLamParams st (b :: rest) = if b.irBinderErased then genLamParams st rest
+else case b.irBinderTy of
+  Nothing => Vuna.Compiler.Base.Common.bind (genLamParams st rest) (\p => case p of
+    Pair params st1 => OkC (Pair (Pair (irBinderText b) Nothing :: params) st1)
+  )
+  Just ty =>
+    let
+      st1 = gsWithTyDeps st ty
+      annotation = Just (irTyText st.gsQual ty)
+    in Vuna.Compiler.Base.Common.bind (genLamParams st1 rest) (\p => case p of
+      Pair params st2 => OkC (Pair (Pair (irBinderText b) annotation :: params) st2)
+    )
+
+-- | 注解类型引用到的运行时族归属单元（去重后记录）。
+gsWithTyDeps : GenSt -> IrTy -> GenSt
+gsWithTyDeps st ty = List.foldl (\acc, unit => gsAddDep acc unit) st (irTyDeclDeps st.gsQual [ty])
 
 hasCatchAll : List IrAlt -> Bool
 hasCatchAll [] = False

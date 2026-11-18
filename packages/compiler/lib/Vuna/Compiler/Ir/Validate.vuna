@@ -25,7 +25,7 @@ validateUnit u =
     defs = concatMap irGroupDefs u.irUnitGroups
     nameTbl = HashMap.ofNames (map irDefName defs)
   in Vuna.Compiler.Base.Common.bind (checkUniqueDefNames defs)
-    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => checkScopedUnit u)))
+    (\_ => Vuna.Compiler.Base.Common.bind (checkGroupOrder u.irUnitGroups nameTbl) (\_ => Vuna.Compiler.Base.Common.bind (checkSymbolRefs (irSymbolsOfUnit u)) (\_ => Vuna.Compiler.Base.Common.bind (checkScopedUnit u) (\_ => checkBinderTys u.irUnitTyDecls defs))))
 
 -- 依赖可见性：组内成员可以互引；跨组引用只能指向已经产出的组。
 checkGroupOrder : List IrGroup -> HashMap String Bool -> Check Int
@@ -85,6 +85,93 @@ validateProgram p =
     Just e =>
       if memName e.irEntryMain (map irDefName defs) then validateUnit u
       else icInternal "IR entry references an undefined main: `${e.irEntryMain}`"
+
+-- ---------------------------------------------------------------
+-- binder 类型槽校验
+-- ---------------------------------------------------------------
+-- 注解只能挂在运行时 binder 上（擦除占位必须 `Nothing`）；`IrTyData` 的实参个数
+-- 要与本单元声明的运行时类型参数个数一致。跨单元类型只递归检查实参，不检查 arity。
+checkBinderTys : List IrTyDecl -> List IrDef -> Check Int
+checkBinderTys decls [] = OkC 0
+checkBinderTys decls (d :: rest) = case irDefBody d of
+  Nothing => checkBinderTys decls rest
+  Just body =>
+    Vuna.Compiler.Base.Common.bind (checkBinderTysWork (8 * irSize body + 64) decls [body])
+      (\_ => checkBinderTys decls rest)
+
+checkBinderTysWork : Int -> List IrTyDecl -> List Ir -> Check Int
+checkBinderTysWork fuel decls work = if fuel <= 0 then icFuel "ir-binder-ty"
+else case work of
+  [] => OkC 0
+  ir :: rest =>
+    Vuna.Compiler.Base.Common.bind (checkNodeBinderTys decls ir)
+      (\_ => checkBinderTysWork (fuel - 1) decls (append (map secondOf (scopedChildren [] ir)) rest))
+
+checkNodeBinderTys : List IrTyDecl -> Ir -> Check Int
+checkNodeBinderTys decls ir = case ir of
+  IrLam bs body => checkBinderTysOf decls bs
+  IrLet bs scrut body => checkBinderTysOf decls bs
+  IrCase scrut alts => checkAltBinderTys decls alts
+  IrNatCase scrut fresh zero succ catch =>
+    Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls zero)
+      (\_ => Vuna.Compiler.Base.Common.bind (checkAltBinderTysM decls succ) (\_ => checkAltBinderTysM decls catch))
+  _ => OkC 0
+
+checkBinderTysOf : List IrTyDecl -> List IrBinder -> Check Int
+checkBinderTysOf decls [] = OkC 0
+checkBinderTysOf decls (b :: rest) = if b.irBinderErased then case b.irBinderTy of
+  Nothing => checkBinderTysOf decls rest
+  Just _ => icInternal "erased binder carries a runtime type annotation"
+else case b.irBinderTy of
+  Nothing => checkBinderTysOf decls rest
+  Just ty =>
+    Vuna.Compiler.Base.Common.bind (checkTyArity decls ty) (\_ => checkBinderTysOf decls rest)
+
+checkAltBinderTys : List IrTyDecl -> List IrAlt -> Check Int
+checkAltBinderTys decls [] = OkC 0
+checkAltBinderTys decls (alt :: rest) =
+  Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls (irAltBindersOf alt))
+    (\_ => checkAltBinderTys decls rest)
+
+checkAltBinderTysM : List IrTyDecl -> Maybe IrAlt -> Check Int
+checkAltBinderTysM decls Nothing = OkC 0
+checkAltBinderTysM decls (Just alt) = checkBinderTysOf decls (irAltBindersOf alt)
+
+checkTyArity : List IrTyDecl -> IrTy -> Check Int
+checkTyArity decls (IrTyVar i) =
+  if i >= 0 then OkC 0 else icInternal "negative runtime type parameter slot"
+checkTyArity decls IrTyInt = OkC 0
+checkTyArity decls IrTyStr = OkC 0
+checkTyArity decls IrTyBool = OkC 0
+checkTyArity decls IrTyFloat = OkC 0
+checkTyArity decls IrTyOpaque = OkC 0
+checkTyArity decls (IrTyArray a) = checkTyArity decls a
+checkTyArity decls (IrTyRef a) = checkTyArity decls a
+checkTyArity decls (IrTyFun d c) =
+  Vuna.Compiler.Base.Common.bind (checkTyArity decls d) (\_ => checkTyArity decls c)
+checkTyArity decls (IrTyData fam args) = case tyDeclArityOf decls fam of
+  Just n =>
+    if listLength args == n then checkTyArityList decls args
+    else icInternal "binder type annotation has the wrong type argument count for `${fam}`"
+  Nothing => checkTyArityList decls args
+
+checkTyArityList : List IrTyDecl -> List IrTy -> Check Int
+checkTyArityList decls [] = OkC 0
+checkTyArityList decls (t :: rest) =
+  Vuna.Compiler.Base.Common.bind (checkTyArity decls t) (\_ => checkTyArityList decls rest)
+
+tyDeclArityOf : List IrTyDecl -> String -> Maybe Int
+tyDeclArityOf [] fam = Nothing
+tyDeclArityOf ((IrVariantDecl name n ctors) :: rest) fam =
+  if name == fam then Just n else tyDeclArityOf rest fam
+tyDeclArityOf ((IrRecordDecl name n fields tys) :: rest) fam =
+  if name == fam then Just n else tyDeclArityOf rest fam
+tyDeclArityOf ((IrUnboxedDecl name n ty) :: rest) fam =
+  if name == fam then Just n else tyDeclArityOf rest fam
+
+listLength : List a -> Int
+listLength [] = 0
+listLength (x :: rest) = 1 + listLength rest
 
 -- ---------------------------------------------------------------
 -- 作用域校验

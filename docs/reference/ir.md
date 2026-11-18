@@ -82,6 +82,10 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 | `IrBWild` | `_` | 丢弃 |
 
 `irBinderErased = True` 只占 de Bruijn 槽位、不进 pattern / 参数表。
+`irBinderTy` 是可选的运行时类型（`IrTy`）：Lowering 只在外层 binder 与类型实参都能
+落到可命名的运行时类型时填入，擦除占位与类型参数保持 `Nothing`；后端渲染成
+`fun (x : ty)` 的参数注解，`Ir.Validate` 校验「擦除 binder 不带注解」与 `IrTyData`
+的实参个数（本单元声明的族）。没有注解的 binder 仍照旧渲染。
 
 ### 类型表面 `IrTy`
 
@@ -213,9 +217,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 
 ## 已知边界 / 刻意未做
 
-- IR 没有类型标注、没有类型检查器：它承载的是**已验证**的运行时形状。项级 binder、
-  应用与定义都没有类型（签名级只有 `IrTy`），所以 `IrCast` 只能靠 Lowering 写对，
-  字典/方法投影也无法在 OCaml 侧区分 `f a` 与 `f (a -> b)`。见 [debt.md](debt.md) D109。
+- IR 的类型信息是**选择性**的：λ binder 可带 `irBinderTy`（`IrTy`，见上），但应用、
+  定义与 case 分支没有类型，也没有类型检查器。`IrCast` 位点仍靠 Lowering 写对；
+  注解只用于让生成的 OCaml 更容易排错，不参与表示决策。
 - IR 没有 fuel：需要「结构上限」的地方改成按项规模派生（与 `Core.termSize` 同思路）。
 - IR 不做内容寻址：`Canonical.Ir` 不存在，节点集变化不需要迁移哈希。
 - 现在有三个消费者：OCaml（全量参考实现）、wasm、native。两个产品后端覆盖白名单子集
