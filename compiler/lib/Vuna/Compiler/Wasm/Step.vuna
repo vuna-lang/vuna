@@ -116,7 +116,8 @@ rtStepKClo2 =
         IIf ""
           [ ILocalGet "$p1", ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, ICall "$rt_apply", IReturn ]
           [ ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1,
-            ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 2, ICall "$rt_stepAbort", IReturn ]
+            ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 2, ICall "$rt_stepAbort", IReturn ],
+        IUnreachable
       ]
   in rtFunc "$rt_stepKClo2" params [WvAnyRef] locals body
 
@@ -127,9 +128,9 @@ rtStepHandleDone =
     locals = [Pair "$f" WvAnyRef]
     body =
       [ ILocalGet "$p0", IRefCast "$hframe", ILocalSet "$f",
-        ILocalGet "$f", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers",
-        ILocalGet "$f", IStructGet "$hframe" 2, ILocalGet "$p1", ICall "$rt_apply",
-        ILocalGet "$f", IStructGet "$hframe" 4, ICall "$rt_apply", IReturn
+        ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers",
+        ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 2, ILocalGet "$p1", ICall "$rt_apply",
+        ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ICall "$rt_apply", IReturn
       ]
   in rtFunc "$rt_stepHandleDone" params [WvAnyRef] locals body
 
@@ -144,7 +145,7 @@ rtStepWithin =
           [ ILoop "$l" ""
               [ ILocalGet "$cur", IPlain "ref.is_null",
                 IIf "" [IConstI32 0, IReturn] [INop],
-                ILocalGet "$cur", ILocalGet "$p0", IPlain "ref.eq",
+                ILocalGet "$cur", IRefCast "$hframe", ILocalGet "$p0", IRefCast "$hframe", IPlain "ref.eq",
                 IIf "" [IConstI32 1, IReturn] [INop],
                 ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur",
                 IBr "$l"
@@ -173,7 +174,8 @@ rtStepDrive =
             ILocalGet "$tag", IConstI32 0, IBinop "i32.eq",
             IIf ""
               [ IConstI32 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IRefNull,
-                IStructNew "$runres", IReturn
+                IStructNew "$runres", IReturn,
+                IUnreachable
               ]
               [INop],
             ILocalGet "$tag", IConstI32 4, IBinop "i32.eq",
@@ -207,7 +209,8 @@ rtStepDrive =
                 ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$step2",
                 ILocalGet "$step2", ILocalGet "$f", ICall "$rt_stepDrive", ILocalSet "$res",
                 ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0, IConstI32 0, IBinop "i32.eq",
-                IIf "" [ILocalGet "$res", IReturn] [ILocalGet "$res", IReturn]
+                IIf "" [ILocalGet "$res", IReturn] [ILocalGet "$res", IReturn],
+                IUnreachable
               ]
               [INop],
             ILocalGet "$tag", IConstI32 1, IBinop "i32.eq",
@@ -233,7 +236,7 @@ rtStepDrive =
                 ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalSet "$kctx",
                 IRefFunc "$rt_stepKClo", ILocalGet "$kctx", IStructNew "$clo", ILocalSet "$kclo",
                 IRefFunc "$rt_stepKDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kdone",
-                ILocalGet "$f", IStructGet "$hframe" 3,
+                ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 3,
                 ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3,
                 ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalGet "$kdone", ICall "$rt_apply",
                 ILocalSet "$s",
@@ -241,7 +244,8 @@ rtStepDrive =
               ]
               [INop],
             IUnreachable
-          ]
+          ],
+        IUnreachable
       ]
   in rtFunc "$rt_stepDrive" params [WvAnyRef] locals body
 
@@ -253,7 +257,8 @@ rtStepRun =
     body =
       [ ILocalGet "$p0", IRefNull, ICall "$rt_stepDrive", ILocalSet "$res",
         ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0, IConstI32 0, IBinop "i32.eq",
-        IIf "" [ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, IReturn] [IUnreachable]
+        IIf "" [ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, IReturn] [IUnreachable],
+        IUnreachable
       ]
   in rtFunc "$rt_stepRun" params [WvAnyRef] locals body
 

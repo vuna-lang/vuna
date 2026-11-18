@@ -21,6 +21,9 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Cps
 import Vuna.Compiler.Ir.Anf
+import Vuna.Compiler.Ir.Classify
+import Vuna.Compiler.Ir.CpsStep
+import Vuna.Compiler.Wasm.Step
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Wasm.Instr
 import Vuna.Compiler.Wasm.Model
@@ -1518,6 +1521,11 @@ selectRtFuncsCps : List WatFunc -> List WatFunc
 selectRtFuncsCps funcs =
   filter (\f => not (isEffRtFunc f) || f.watFuncName == "$rt_resumeTwice") funcs
 
+-- | full-CPS：base 运行时 + Step 函数；不要旧 eff/cps 组。
+selectRtFuncsStep : List WatFunc -> List WatFunc
+selectRtFuncsStep funcs =
+  append (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f)) funcs) stepFunctions
+
 buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
 buildModule fuel st ordered entry printResult effMode listFamM = case genDefFuncs fuel st ordered of
   Err msg => Err msg
@@ -1535,12 +1543,16 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           elems = reverse startState.gsElems
           elemNames =
             if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
-            else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"] else elems
+            else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
+            else if effMode == 4 then append elems ["$rt_stepIdentity", "$rt_stepKClo", "$rt_stepKClo2", "$rt_stepKDone", "$rt_stepHandleDone"]
+            else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
           rtSelected =
             if effMode == 2 then filter (\f => not (isCpsRtFunc f)) (rtFunctions st.gsConsts)
-            else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts) else rtBase0
+            else if effMode == 3 then selectRtFuncsCps (rtFunctions st.gsConsts)
+            else if effMode == 4 then selectRtFuncsStep (rtFunctions st.gsConsts)
+            else rtBase0
           funcs =
             append rtSelected
               (append (wasmCompareFuncs st.gsConsts st.gsFams) (append (wasmBridgeFuncs listFamM) (append userFuncs (append lamFuncs [startFunc]))))
@@ -1548,6 +1560,7 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           allTypes =
             if effMode == 2 then append baseTypes (append effTypes (selfNodeType :: famTypes))
             else if effMode == 3 then append baseTypes (append cpsTypes famTypes)
+            else if effMode == 4 then append baseTypes (append stepTypes famTypes)
             else append baseTypes famTypes
           tags = if effMode == 2 then baseTags else if effMode == 3 then cpsTags else []
           baseGlobals =
@@ -1560,6 +1573,11 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
               WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
               WatGlobal "$g_self" WvAnyRef [IRefNull],
               WatGlobal "$g_handlers" WvAnyRef [IRefNull]
+            ]
+            else if effMode == 4 then [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
+              WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
+              WatGlobal "$g_cleanDepth" WvI32 [IConstI32 0],
+              WatGlobal "$g_stepHandlers" WvAnyRef [IRefNull]
             ]
             else [ WatGlobal "$g_cleanups" WvAnyRef [IRefNull],
               WatGlobal "$g_hostStatus" WvI32 [IConstI32 0],
@@ -1861,7 +1879,28 @@ build program printResult =
         entryClean =
           IrEntry (irEntryShowOf e) (irEntryMainOf e) (irEntryIsActionOf e) (irEntryRunMainOf e) []
             (irEntryRowTagsOf e)
+        classified = classifyAndPrepare defs
+        mainArity = case Base.HashMap.lookup (irEntryMainOf e) (secondOf classified) of
+          Just n => n
+          Nothing => 0
+        noStepUnsupported =
+          not (defsUseSyms ["prim_effectSelf", "prim_cleanupPush", "prim_cleanupPop"] ordered)
+        fullCpsOk = False
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
+      else if fullCpsOk then case anfProgramDefs ordered of
+        Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
+        Ok anfDefs => case cpsStepDefs anfDefs of
+          Err msg => WasmRejected (WasmInternal ("CPS: " ++ msg))
+          Ok stepDefs =>
+            let
+              idB = mkIrBinder "__cpsMainId"
+              identity = IrLam [idB] (IrApp (IrRt "@ir@step@done") (IrVar idB))
+              launcherBody = IrApp (IrRt "@ir@step@run") (IrApp (IrGlobal (irEntryMainOf e)) identity)
+              launcher = IrDef "@cps@main" 0 [irEntryMainOf e] launcherBody False False Nothing
+              allStep = launcher :: stepDefs
+              orderedStep = reachableDefs ["@cps@main"] allStep
+              entryStep = IrEntry (irEntryShowOf e) "@cps@main" False Nothing [] []
+            in buildAnf orderedStep 4 (Just entryStep) listFamM
       else if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
         -- 纯用户 handler（入口行 []）走 CPS；入口行还有内建宿主 handler 时，opH 内的
         -- 外层 perform 需要可恢复的内层 frame，暂回落 stack switching（见 debt D102）。
