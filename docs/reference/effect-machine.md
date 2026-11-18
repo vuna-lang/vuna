@@ -258,8 +258,10 @@ resumption，被 CPS 成 **2 个参数**：
 
 ### 7.4 下一步：标记 + 统一 CPS（A1）
 
-1. **elaborator 打标**：do 块降级时把续延 lambda 的 binder 标成保留名
-   （如 `@vuna@effK`），与 `@vuna@handle@o` 同一手法；不改变类型，只给 lowering 一个句柄。
+1. **elaborator 打标（已落地）**：`Eff` do 块的续延 λ binder 改成保留名
+   `@vuna@effK_<line>_<col>_<depth>:<原名>`（`Elab.Meta.effContBinderName`，
+   只对 `m` 头是 `Eff` 的块；手写 `>>=` 的 λ 暂不含标记）。标记当前是惰性的：
+   还没有 lowering 读它。见 debt D110。
 2. **machine CPS**：mode 6 里，带 `@vuna@effK` 标记的 lambda 一律降成
    `\v K -> <body with continuation K>`（纯值是 `run eff K`，尾 resumption 是 `k v K`）。
 3. **bind**：`>>=` 的体改为 `case (k V) of ...` 之前先 `k V K`——即 K 作为第二个实参传入。

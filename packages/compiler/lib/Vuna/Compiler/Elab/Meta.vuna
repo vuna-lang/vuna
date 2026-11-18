@@ -698,6 +698,21 @@ export linClosureName : Span -> Int -> String -> String
 linClosureName sp depth name =
   "${linClosureMark}${strFromInt sp.spanStartLine}_${strFromInt sp.spanStartCol}_${strFromInt depth}:${name}"
 
+-- ---------------------------------------------------------------
+-- do 块续延标记（binder 名编码）
+-- ---------------------------------------------------------------
+-- IR 没有类型，机器化 CPS 无法区分 `a -> Eff r b` 与 `a -> b`；但 do 块续延的
+-- 参数个数必须与 `>>=` 的假设一致（见 docs/reference/effect-machine.md §7.4）。
+-- 精化期知道 do 块的 monad 是不是 `Eff`，于是给这类续延 λ 的 binder 名打标记，
+-- lowering 按名字识别。名字同样要唯一（codegen 用 binder 名渲染 OCaml 变量）。
+-- 这是**临时句柄**：typed IR 落地后改为类型驱动（debt D106）。
+effContMark : String
+effContMark = "@vuna@effK"
+
+export effContBinderName : Span -> Int -> String -> String
+effContBinderName sp depth name =
+  "${effContMark}_${strFromInt sp.spanStartLine}_${strFromInt sp.spanStartCol}_${strFromInt depth}:${name}"
+
 export isLinClosureName : String -> Bool
 isLinClosureName name = startsWith linClosureMark name
 
