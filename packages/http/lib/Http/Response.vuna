@@ -1,0 +1,42 @@
+-- | HTTP/1.1 响应消息模型与常见状态码文本。
+module Http.Response where
+
+import Base
+import Http.Header as Header
+
+-- | 一条响应：状态码 + 原因短语 + 头部 + 体（`String` 是字节串）。
+export record Response(..) where
+  -- | 状态码。
+  status : Int
+  -- | 原因短语（渲染时使用；解析时保留原样）。
+  reason : String
+  -- | 头部（顺序即发送顺序）。
+  headers : List (Pair String String)
+  -- | 消息体。
+  body : String
+
+-- | 按状态码取原因短语；未知码给空串（渲染仍合法）。
+export statusText : Int -> String
+statusText code =
+  if code == 200 then "OK"
+  else if code == 201 then "Created"
+  else if code == 204 then "No Content"
+  else if code == 301 then "Moved Permanently"
+  else if code == 302 then "Found"
+  else if code == 304 then "Not Modified"
+  else if code == 400 then "Bad Request"
+  else if code == 404 then "Not Found"
+  else if code == 405 then "Method Not Allowed"
+  else if code == 408 then "Request Timeout"
+  else if code == 413 then "Payload Too Large"
+  else if code == 431 then "Request Header Fields Too Large"
+  else if code == 500 then "Internal Server Error"
+  else if code == 501 then "Not Implemented" else if code == 503 then "Service Unavailable" else ""
+
+-- | 用状态码与其标准原因短语构造响应。
+export response : Int -> String -> Response
+response code body = Response code (statusText code) [] body
+
+-- | 取同名头部的值（大小写不敏感）。
+export header : String -> Response -> Maybe String
+header name r = Header.headerValue name r.headers

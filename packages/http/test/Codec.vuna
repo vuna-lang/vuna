@@ -1,0 +1,134 @@
+-- vuna-http 消息编解码的包内测试：`main` 正常返回即通过，失败时打印原因并以 1 退出。
+import Base
+import Base.Effect.Core
+import Http.Header as Hdr
+import Http.Request as Req
+import Http.Response as Res
+import Http.Parse as P
+import Http.Render as R
+
+main : Eff [] String
+main = case filter (\p => not (isPassing p)) results of
+  [] => pure ""
+  bad => do
+    _ <- prim_eff_print ("http codec failed: " ++ join "; " (map nameOf bad) ++ "\n")
+    _ <- prim_eff_exit 1
+    pure ""
+
+-- | 一条检查是否通过。
+isPassing : Pair String Bool -> Bool
+isPassing p = p.second
+
+-- | 检查名。
+nameOf : Pair String Bool -> String
+nameOf p = p.first
+
+results : List (Pair String Bool)
+results =
+  [ Pair "request-roundtrip" requestRoundtrip,
+    Pair "chunked-body" chunkedBody,
+    Pair "pipelined" pipelined,
+    Pair "incomplete-head" incompleteHead,
+    Pair "smuggle-cl-te" smuggleClTe,
+    Pair "dup-content-length" dupContentLength,
+    Pair "obs-fold" obsFold,
+    Pair "dup-transfer-encoding" dupTransferEncoding,
+    Pair "response-roundtrip" responseRoundtrip,
+    Pair "no-content-length-on-204" noLengthOn204,
+    Pair "header-case-insensitive" headerCaseInsensitive,
+    Pair "index-of" indexOfCheck,
+    Pair "hex-value" hexValueCheck,
+    Pair "decimal" decimalCheck
+  ]
+
+-- | 渲染再解析：字段一致、无剩余字节。
+requestRoundtrip : Bool
+requestRoundtrip =
+  let
+    r = Req.Request "POST" "/a/b?x=1" "HTTP/1.1" [Pair "Host" "ex.com"] "hello"
+  in case P.parseRequest (R.renderRequest r) of
+    P.Complete p rest =>
+      rest == "" && p.method == "POST" && p.target == r.target && p.body == "hello"
+    _ => False
+
+-- | 分块请求体被解码成完整字节。
+chunkedBody : Bool
+chunkedBody = case P.parseRequest "POST /up HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n" of
+  P.Complete p rest => rest == "" && p.body == "Wikipedia"
+  _ => False
+
+-- | 流水线：第一条消息解析后剩余字节是第二条的完整文本。
+pipelined : Bool
+pipelined =
+  let
+    msg = R.renderRequest (Req.request "GET" "/a") ++ R.renderRequest (Req.request "GET" "/b")
+  in case P.parseRequest msg of
+    P.Complete p rest => p.target == "/a" && (case P.parseRequest rest of
+      P.Complete q tail' => q.target == "/b" && tail' == ""
+      _ => False
+    )
+    _ => False
+
+-- | 头部没结束时是 `Incomplete`，不是非法。
+incompleteHead : Bool
+incompleteHead = case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n" of
+  P.Incomplete => True
+  _ => False
+
+-- | `Content-Length` 与 `Transfer-Encoding` 并存必须拒绝。
+smuggleClTe : Bool
+smuggleClTe = case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
+  P.Invalid _ => True
+  _ => False
+
+-- | 重复的 `Content-Length` 必须拒绝。
+dupContentLength : Bool
+dupContentLength = case P.parseRequest "POST / HTTP/1.1\r\nContent-Length: 4\r\nContent-Length: 4\r\n\r\nabcd" of
+  P.Invalid _ => True
+  _ => False
+
+-- | 折叠头部行（以空格开头）必须拒绝。
+obsFold : Bool
+obsFold = case P.parseRequest "GET / HTTP/1.1\r\nHost: x\r\n more\r\n\r\n" of
+  P.Invalid _ => True
+  _ => False
+
+-- | 重复的 `Transfer-Encoding` 必须拒绝。
+dupTransferEncoding : Bool
+dupTransferEncoding = case P.parseRequest "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n" of
+  P.Invalid _ => True
+  _ => False
+
+-- | 响应渲染再解析：状态码、原因短语与体一致。
+responseRoundtrip : Bool
+responseRoundtrip =
+  let
+    r = Res.Response 404 "Not Found" [Pair "Content-Type" "text/plain"] "missing"
+  in case P.parseResponse (R.renderResponse r) of
+    P.Complete p rest =>
+      rest == "" && p.status == 404 && p.reason == "Not Found" && p.body == "missing"
+    _ => False
+
+-- | 204 不补 `Content-Length`。
+noLengthOn204 : Bool
+noLengthOn204 = not (contains "Content-Length" (R.renderResponse (Res.response 204 "")))
+
+-- | 头部查找大小写不敏感。
+headerCaseInsensitive : Bool
+headerCaseInsensitive =
+  let
+    r = Req.Request "GET" "/" "HTTP/1.1" [Pair "Host" "Example.com"] ""
+  in Req.header "host" r == Just "Example.com" && Hdr.countHeader "HOST" r.headers == 1
+
+-- | 子串定位。
+indexOfCheck : Bool
+indexOfCheck = P.indexOf "\r\n" "ab\r\ncd" == 2 && P.indexOf "\r\n" "abcd" == -1
+
+-- | 十六进制解析。
+hexValueCheck : Bool
+hexValueCheck = P.hexValue "ff" == Just 255 && P.hexValue "xyz" == Nothing
+
+-- | 十进制解析。
+decimalCheck : Bool
+decimalCheck =
+  P.decimal "1234" == Just 1234 && P.decimal "12a" == Nothing && P.decimal "" == Nothing

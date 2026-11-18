@@ -1,0 +1,26 @@
+-- | HTTP/1.1 请求消息模型（目标保留原始 request-target 形态，不在这里归一化）。
+module Http.Request where
+
+import Base
+import Http.Header as Header
+
+-- | 一条请求：请求行三个分量 + 头部 + 已解码的体（`String` 是字节串）。
+export record Request(..) where
+  -- | 方法（如 `GET`）。
+  method : String
+  -- | 请求目标（origin-form / absolute-form 原样保留）。
+  target : String
+  -- | 协议版本（`HTTP/1.1` 或 `HTTP/1.0`）。
+  version : String
+  -- | 头部（顺序即发送顺序）。
+  headers : List (Pair String String)
+  -- | 消息体（已按分块或长度解码）。
+  body : String
+
+-- | 构造一条无体请求。
+export request : String -> String -> Request
+request method target = Request method target "HTTP/1.1" [] ""
+
+-- | 取同名头部的值（大小写不敏感）。
+export header : String -> Request -> Maybe String
+header name r = Header.headerValue name r.headers

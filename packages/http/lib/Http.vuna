@@ -1,0 +1,14 @@
+-- | vuna-http：HTTP/1.1 消息模型、编解码与传输无关的连接循环。
+-- | 传输由调用方以 duplex 记录提供（内存流 / TCP / 将来的 TLS），本包不持有 socket 句柄。
+module Http where
+
+export module Http.Header
+export module Http.Header as Header
+export module Http.Request
+export module Http.Request as Request
+export module Http.Response
+export module Http.Response as Response
+export module Http.Parse
+export module Http.Parse as Parse
+export module Http.Render
+export module Http.Render as Render

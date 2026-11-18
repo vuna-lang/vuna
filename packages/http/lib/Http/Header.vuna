@@ -1,0 +1,79 @@
+-- | HTTP/1.1 头部：大小写不敏感查找、token 校验与渲染。
+-- | 名字按 ASCII 折叠比较，值保留原样（解析时只裁掉首尾 OWS）。
+module Http.Header where
+
+import Base
+
+-- | 头部块字节上限（请求行 + 所有头 + 结束符）。
+export maxHeaderBytes : Int
+maxHeaderBytes = 16384
+
+-- | 大小写不敏感的取值：返回第一个同名头部的值。
+export headerValue : String -> List (Pair String String) -> Maybe String
+headerValue name hs =
+  firstJust (map (\h => if isNamed name h then Just (valueOf h) else Nothing) hs)
+
+-- | 头部名字是否等价（大小写不敏感）。
+isNamed : String -> Pair String String -> Bool
+isNamed name h = sameName h.first name
+
+-- | 头部的值。
+valueOf : Pair String String -> String
+valueOf h = h.second
+
+-- | 是否存在同名头部（大小写不敏感）。
+export hasHeader : String -> List (Pair String String) -> Bool
+hasHeader name hs = isJust (headerValue name hs)
+
+-- | 同名头部的个数（大小写不敏感）。
+export countHeader : String -> List (Pair String String) -> Int
+countHeader name hs = natToInt (length (filter (isNamed name) hs))
+
+-- | 渲染头部块：每个头一行 `name: value\r\n`，不含结尾空行。
+export renderHeaders : List (Pair String String) -> String
+renderHeaders hs = strConcatMany (map renderHeader hs)
+
+-- | 渲染一个头部行。
+renderHeader : Pair String String -> String
+renderHeader h = h.first ++ ": " ++ h.second ++ "\r\n"
+
+-- | 解析一行 `name: value`。名字必须是 RFC 7230 token；冒号后的首尾 OWS 被裁掉。
+export parseHeaderLine : String -> Maybe (Pair String String)
+parseHeaderLine line = case split ":" line of
+  name :: rest =>
+    if isToken name && rest /= [] then Just (Pair name (trim (join ":" rest))) else Nothing
+  [] => Nothing
+
+-- | RFC 7230 token：非空，且只含可见字符中除去分隔符的那些。
+export isToken : String -> Bool
+isToken s = strLength s > 0 && allBytes isTokenChar (strUnpack s)
+
+-- | token 允许的字节。
+export isTokenChar : Int -> Bool
+isTokenChar c = c > 32 && c < 127 && not (mem c separators)
+
+-- | 分隔符字节（RFC 7230 `tchar` 的补集里出现在头部名字中的那些）。
+separators : List Int
+separators = [40, 41, 60, 62, 64, 44, 59, 58, 92, 34, 47, 91, 93, 63, 61, 123, 125, 32, 9]
+
+-- | 两个名字是否等价（ASCII 大小写折叠）。
+export sameName : String -> String -> Bool
+sameName a b = mapBytes lowerAscii (strUnpack a) == mapBytes lowerAscii (strUnpack b)
+
+-- | ASCII 小写化（其它字节原样）。
+export lowerAscii : Int -> Int
+lowerAscii c = if c >= 65 && c <= 90 then c + 32 else c
+
+-- | 整串按 ASCII 小写化（用于协议关键字比较）。
+export lowerString : String -> String
+lowerString s = strPack (map lowerAscii (strUnpack s))
+
+-- | 逐字节映射 String。
+export mapBytes : (Int -> Int) -> List Int -> List Int
+mapBytes f xs = map f xs
+
+-- | 全部字节满足谓词。
+export allBytes : (Int -> Bool) -> List Int -> Bool
+allBytes p xs = case xs of
+  [] => True
+  c :: rest => if p c then allBytes p rest else False

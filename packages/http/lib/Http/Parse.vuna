@@ -1,0 +1,174 @@
+-- | HTTP/1.1 消息解析（请求与响应共用头部与体规则）。解析是增量的：数据不够返回
+-- | `Incomplete`，调用方继续读；非法输入返回 `Invalid` 并带原因。
+-- | 请求走私相关形态一律拒绝：`Content-Length` 与 `Transfer-Encoding` 并存、重复的
+-- | `Content-Length`、重复的 `Transfer-Encoding`、折叠头部行、分块尾部字段。
+module Http.Parse where
+
+import Base
+import Http.Header as Header
+import Http.Request as Request
+import Http.Response as Response
+
+-- | 解析结果。
+export data Parsed a(..) : Type where
+  -- | 完整消息与剩余字节。
+  Complete : a -> String -> Parsed a
+  -- | 数据不足，需要更多字节。
+  Incomplete : Parsed a
+  -- | 非法输入（诊断即原因）。
+  Invalid : String -> Parsed a
+
+-- | 消息体上限（与工具链 JSON 帧同口径）。
+export maxBodyBytes : Int
+maxBodyBytes = 16777216
+
+-- | 解析请求。
+export parseRequest : String -> Parsed Request
+parseRequest msg = case splitHead msg of
+  Incomplete => Incomplete
+  Invalid e => Invalid e
+  Complete head rest => case split "\r\n" head of
+    [] => Invalid "empty request"
+    line :: headerLines => case split " " line of
+      [method, target, version] => if not (isHttpVersion version) then Invalid "bad version"
+      else case parseHeaders headerLines of
+        Nothing => Invalid "bad header"
+        Just hs => case parseBody hs rest of
+          Incomplete => Incomplete
+          Invalid e => Invalid e
+          Complete body tail' => Complete (Request method target version hs body) tail'
+      _ => Invalid "bad request line"
+
+-- | 解析响应。
+export parseResponse : String -> Parsed Response
+parseResponse msg = case splitHead msg of
+  Incomplete => Incomplete
+  Invalid e => Invalid e
+  Complete head rest => case split "\r\n" head of
+    [] => Invalid "empty response"
+    line :: headerLines => case split " " line of
+      version :: status :: reasonParts => if not (isHttpVersion version) then Invalid "bad version"
+      else case decimal status of
+        Nothing => Invalid "bad status"
+        Just code => case parseHeaders headerLines of
+          Nothing => Invalid "bad header"
+          Just hs => case parseBody hs rest of
+            Incomplete => Incomplete
+            Invalid e => Invalid e
+            Complete body tail' => Complete (Response code (join " " reasonParts) hs body) tail'
+      _ => Invalid "bad response line"
+
+-- | 协议版本只接受 1.0 / 1.1。
+export isHttpVersion : String -> Bool
+isHttpVersion v = v == "HTTP/1.1" || v == "HTTP/1.0"
+
+-- | 切出头部块与体的原始字节（体可能是任意字节，因此只在头部结束符处切分）。
+splitHead : String -> Parsed String
+splitHead msg =
+  let
+    parts = split "\r\n\r\n" msg
+  in case parts of
+    head :: rest =>
+      if rest == [] then Incomplete
+      else if strLength head > Header.maxHeaderBytes then Invalid "header too large"
+      else Complete head (join "\r\n\r\n" rest)
+    [] => Incomplete
+
+-- | 逐行解析头部；折叠行（以空格或制表符开头）非法。
+parseHeaders : List String -> Maybe (List (Pair String String))
+parseHeaders lines = case lines of
+  [] => Just []
+  line :: rest => if startsWith " " line || startsWith "\t" line then Nothing
+  else case Header.parseHeaderLine line of
+    Nothing => Nothing
+    Just h => case parseHeaders rest of
+      Nothing => Nothing
+      Just hs => Just (h :: hs)
+
+-- | 按头部决定体框架：分块、`Content-Length` 或空体。
+parseBody : List (Pair String String) -> String -> Parsed String
+parseBody hs rest =
+  let
+    teCount = Header.countHeader "transfer-encoding" hs
+    clCount = Header.countHeader "content-length" hs
+  in if teCount > 0 && clCount > 0 then Invalid "both transfer-encoding and content-length"
+  else if teCount > 1 then Invalid "duplicate transfer-encoding"
+  else if teCount == 1 then case Header.headerValue "transfer-encoding" hs of
+    Just te =>
+      if Header.lowerString te == "chunked" then decodeChunked rest
+      else Invalid "unsupported transfer-encoding"
+    Nothing => Invalid "missing transfer-encoding"
+  else if clCount > 1 then Invalid "duplicate content-length"
+  else case Header.headerValue "content-length" hs of
+    Nothing => Complete "" rest
+    Just v => case decimal v of
+      Nothing => Invalid "bad content-length"
+      Just n =>
+        if n > maxBodyBytes then Invalid "body too large"
+        else if strLength rest < n then Incomplete
+        else Complete (strSubstring 0 n rest) (strSubstring n (strLength rest - n) rest)
+
+-- | 十进制解析（非空、只含 0..9，长度上限 10）。
+export decimal : String -> Maybe Int
+decimal s = if strLength s == 0 || strLength s > 10 then Nothing else decimalGo (strUnpack s) 0
+
+-- | `decimal` 的扫描循环。
+decimalGo : List Int -> Int -> Maybe Int
+decimalGo xs acc = case xs of
+  [] => Just acc
+  c :: rest => if c >= 48 && c <= 57 then decimalGo rest (acc * 10 + c - 48) else Nothing
+
+-- | 分块解码：返回已解码的体与剩余字节。零长度块之后只接受空行（尾部字段不支持，显式拒绝）。
+export decodeChunked : String -> Parsed String
+decodeChunked s = chunkLoop s [] (strLength s + 1)
+
+-- | `decodeChunked` 的主循环；`fuel` 保证终止。
+chunkLoop : String -> List String -> Int -> Parsed String
+chunkLoop cur acc fuel = if fuel <= 0 then Invalid "chunked decode overflow"
+else
+  let
+    i = indexOf "\r\n" cur
+  in if i < 0 then Incomplete
+  else case hexValue (strSubstring 0 i cur) of
+    Nothing => Invalid "bad chunk size"
+    Just size =>
+      if size == 0 then
+        if strLength cur < i + 4 then Incomplete
+        else if strSubstring (i + 2) 2 cur == "\r\n" then
+          Complete (strConcatMany acc) (strSubstring (i + 4) (strLength cur - i - 4) cur)
+        else Invalid "unsupported chunk trailers"
+      else if strLength cur < i + size + 4 then Incomplete
+      else if strSubstring (i + 2 + size) 2 cur == "\r\n" then
+        chunkLoop (strSubstring (i + size + 4) (strLength cur - i - size - 4) cur)
+          (append acc [strSubstring (i + 2) size cur]) (fuel - 1)
+      else Invalid "bad chunk terminator"
+
+-- | 从 `hay` 起点查找 `needle` 的下标；找不到返回 -1。
+export indexOf : String -> String -> Int
+indexOf needle hay = indexGo needle hay 0 (strLength hay - strLength needle + 1)
+
+-- | `indexOf` 的扫描循环。
+indexGo : String -> String -> Int -> Int -> Int
+indexGo needle hay i fuel =
+  if fuel <= 0 then -1
+  else if strSubstring i (strLength needle) hay == needle then i
+  else indexGo needle hay (i + 1) (fuel - 1)
+
+-- | 十六进制解析（非空、只含 0..9a..fA..F，长度上限 8）。
+export hexValue : String -> Maybe Int
+hexValue s = if strLength s == 0 || strLength s > 8 then Nothing else hexGo (strUnpack s) 0
+
+-- | `hexValue` 的扫描循环。
+hexGo : List Int -> Int -> Maybe Int
+hexGo xs acc = case xs of
+  [] => Just acc
+  c :: rest => case hexDigit c of
+    Nothing => Nothing
+    Just v => hexGo rest (acc * 16 + v)
+
+-- | 单个十六进制字节值。
+hexDigit : Int -> Maybe Int
+hexDigit c =
+  if c >= 48 && c <= 57 then Just (c - 48)
+  else if c >= 97 && c <= 102 then Just (c - 87)
+  else if c >= 65 && c <= 70 then Just (c - 55) else Nothing

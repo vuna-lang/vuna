@@ -1,0 +1,48 @@
+-- | HTTP/1.1 消息渲染。`Content-Length` 由这里按体字节数补齐（调用方显式给出时不覆盖）；
+-- | 无体状态码（1xx / 204 / 304）不补。
+module Http.Render where
+
+import Base
+import Http.Header as Header
+import Http.Request as Request
+import Http.Response as Response
+
+-- | 渲染请求（客户端方向）。
+export renderRequest : Request -> String
+renderRequest r =
+  let
+    hs = withLength r.headers r.body
+  in r.method
+    ++ " "
+    ++ r.target
+    ++ " "
+    ++ r.version
+    ++ "\r\n"
+    ++ Header.renderHeaders hs
+    ++ "\r\n"
+    ++ r.body
+
+-- | 渲染响应（服务端方向）。
+export renderResponse : Response -> String
+renderResponse r =
+  let
+    hs = if statusHasBody r.status then withLength r.headers r.body else r.headers
+  in "HTTP/1.1 "
+    ++ strFromInt r.status
+    ++ " "
+    ++ r.reason
+    ++ "\r\n"
+    ++ Header.renderHeaders hs
+    ++ "\r\n"
+    ++ (if statusHasBody r.status then r.body else "")
+
+-- | 该状态码是否携带体。
+export statusHasBody : Int -> Bool
+statusHasBody code =
+  if code < 200 then False else if code == 204 then False else if code == 304 then False else True
+
+-- | 缺 `Content-Length` 时按体字节数补一个（保序追加在末尾）。
+export withLength : List (Pair String String) -> String -> List (Pair String String)
+withLength hs body =
+  if Header.hasHeader "content-length" hs then hs
+  else append hs [Pair "Content-Length" (strFromInt (strLength body))]

@@ -1,0 +1,16 @@
+# vuna-http：HTTP/1.1 消息编解码与传输无关的连接循环（工具链与 vuna-web 共用）。
+[package]
+name = "vuna-http"
+
+[dependencies]
+vuna-base = "../base"
+
+[export]
+modules = [
+  "Http",
+  "Http.Header",
+  "Http.Request",
+  "Http.Response",
+  "Http.Parse",
+  "Http.Render"
+]
