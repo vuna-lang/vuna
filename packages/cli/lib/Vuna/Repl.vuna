@@ -1153,10 +1153,12 @@ ioTypeImports st tyText =
   let
     prog = bufferProgram st
     effImp =
-      if contains "Base.Effect.Core." tyText && not (contains "import Base.Effect.Core" prog) then "import Base.Effect.Core\n"
+      if contains "Base.Effect.Core." tyText && not (contains "import Base.Effect.Core" prog) then
+        "import Base.Effect.Core\n"
       else ""
     natImp =
-      if contains "Base.Data.Nat." tyText && not (contains "import Base.Data.Nat" prog) then "import Base.Data.Nat\n"
+      if contains "Base.Data.Nat." tyText && not (contains "import Base.Data.Nat" prog) then
+        "import Base.Data.Nat\n"
       else ""
   in effImp ++ natImp
 

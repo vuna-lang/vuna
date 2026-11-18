@@ -54,7 +54,8 @@ export insert : Hashable k => k -> v -> HashMap k v -> HashMap k v
 insert key v (HashMap outers) =
   let
     base =
-      if Base.Container.Array.length outers == 0 then Base.Container.Array.make 32 (Base.Container.Array.make 32 [])
+      if Base.Container.Array.length outers == 0 then
+        Base.Container.Array.make 32 (Base.Container.Array.make 32 [])
       else outers
     b = _bucketOf (hash key)
     qi = b / 32
