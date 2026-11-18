@@ -1,0 +1,215 @@
+-- | 宽度感知的文档代数：先构造 `Doc`，再由 `render` 一次性决定换行与缩进。
+--
+-- 三个水平分隔符的语义（与常见 pretty-printer 一致）：
+--   * `line`：组内展平时输出一个空格，断行时换行；
+--   * `soft`：组内展平时不输出，断行时换行；
+--   * `hard`：无论展平与否都换行（硬边界，外层组无法把它压回单行）。
+--
+-- `group` 是唯一的决策点：整组能在当前行剩余宽度内展平就展平，否则组内所有
+-- `line` / `soft` 断行。`nest` 只影响断行后的缩进基准，`align` 把缩进基准设为
+-- 当前位置（用于 `[` 之后对齐）。嵌套 `group` 各自决策；已展平区域内的组不再断行。
+module Vuna.Fmt.Doc where
+
+import Base.Data.List as List
+import Vuna.Compiler.Base.Common
+import Vuna.Fmt.Util
+
+-- ---------------------------------------------------------------
+-- 文档树
+-- ---------------------------------------------------------------
+-- | 文档节点。构造请走下面的组合子；模式匹配只在 `render` 内部使用。
+export data Doc(..) : Type where
+  -- | 空文档。
+  DEmpty : Doc
+  -- | 一段文本（不含换行；需要换行请用 `line` / `soft` / `hard`）。
+  DText : String -> Doc
+  -- | 硬换行。
+  DHard : Doc
+  -- | 展平为空格、断行为换行。
+  DLine : Doc
+  -- | 展平为什么都不输出、断行为换行。
+  DSoft : Doc
+  -- | 原样文本：逐字节输出，可含换行（列号按最后一行的宽度续算）。
+  -- 只用于字符串 / 模板字面量与「不折行」的类型文本。
+  DVerbatim : String -> Doc
+  -- | 顺序拼接。
+  DConcat : Doc -> Doc -> Doc
+  -- | 把内部断行的缩进增加 `n` 列（相对外层缩进基准）。
+  DNest : Int -> Doc -> Doc
+  -- | 把内部断行的缩进设为「本节点开始处的列」。
+  DAlign : Doc -> Doc
+  -- | 一个可整体展平的组。
+  DGroup : Doc -> Doc
+
+-- ---------------------------------------------------------------
+-- 构造组合子
+-- ---------------------------------------------------------------
+-- | 文本；空串等价于空文档。
+export text : String -> Doc
+text s = if s == "" then DEmpty else DText s
+
+-- | 空文档。
+export empty : Doc
+empty = DEmpty
+
+-- | 一个空格。
+export space : Doc
+space = DText " "
+
+-- | 展平为空格，断行为换行。
+export line : Doc
+line = DLine
+
+-- | 展平为空，断行为换行。
+export soft : Doc
+soft = DSoft
+
+-- | 硬换行。
+export hard : Doc
+hard = DHard
+
+-- | 原样文本（可含换行；不参与组展平判断）。
+export verbatim : String -> Doc
+verbatim s = if s == "" then DEmpty else DVerbatim s
+
+-- | 文档是否为空。
+export isDocEmpty : Doc -> Bool
+isDocEmpty DEmpty = True
+isDocEmpty _ = False
+
+-- | 顺序拼接；空文档吸收。
+export appendDoc : Doc -> Doc -> Doc
+appendDoc DEmpty b = b
+appendDoc a DEmpty = a
+appendDoc a b = DConcat a b
+
+-- | 列表顺序拼接。
+export hcat : List Doc -> Doc
+hcat [] = DEmpty
+hcat (d :: rest) = DConcat d (hcat rest)
+
+-- | 用 `line` 分隔的列表（组内单行时是空格分隔）。
+export hsep : List Doc -> Doc
+hsep [] = DEmpty
+hsep (d :: rest) = hcat (d :: map (\x => DConcat DLine x) rest)
+
+-- | 用 `hard` 分隔的列表（每项一行）。
+export vsep : List Doc -> Doc
+vsep [] = DEmpty
+vsep (d :: rest) = hcat (d :: map (\x => DConcat DHard x) rest)
+
+-- | 用空行分隔的列表（每项之间两个硬换行）。
+export vsepBlank : List Doc -> Doc
+vsepBlank [] = DEmpty
+vsepBlank (d :: rest) = hcat (d :: map (\x => DConcat DHard (DConcat DHard x)) rest)
+
+-- | 增加断行缩进。
+export nest : Int -> Doc -> Doc
+nest n d = DNest n d
+
+-- | 断行缩进对齐到本节点开始的列。
+export align : Doc -> Doc
+align d = DAlign d
+
+-- | 标记一个可展平的组。
+export group : Doc -> Doc
+group d = DGroup d
+
+-- ---------------------------------------------------------------
+-- 渲染
+-- ---------------------------------------------------------------
+-- | 渲染模式：展平（不再断行）或允许断行。
+data Mode : Type where
+  MFlat : Mode
+  MBreak : Mode
+
+-- | 模式是否为展平（避免对 `Mode` 依赖自动派生相等）。
+modeIsFlat : Mode -> Bool
+modeIsFlat MFlat = True
+modeIsFlat MBreak = False
+
+-- | 待处理的文档 + 该文档的缩进基准与模式。
+record Work where
+  workIndent : Int
+  workMode : Mode
+  workDoc : Doc
+
+-- | 文档节点数（渲染与探测的 fuel 上界；结构递归）。
+docSize : Doc -> Int
+docSize DEmpty = 1
+docSize (DText _) = 1
+docSize DHard = 1
+docSize DLine = 1
+docSize DSoft = 1
+docSize (DVerbatim _) = 1
+docSize (DConcat a b) = 1 + docSize a + docSize b
+docSize (DNest _ d) = 1 + docSize d
+docSize (DAlign d) = 1 + docSize d
+docSize (DGroup d) = 1 + docSize d
+
+-- | 展平探测：从剩余宽度 `room` 起，当前行放得下这段文档（遇到硬换行即认为放得下，
+-- 因为后续内容在下一行）。`fuel` 只是终止性证据。
+fits : Int -> Int -> List Work -> Bool
+fits fuel room work =
+  if fuel <= 0 then
+    False
+  else if room < 0 then
+    False
+  else
+    case work of
+      [] => True
+      w :: rest =>
+        case w.workDoc of
+          DEmpty => fits (fuel - 1) room rest
+          DText s => fits (fuel - 1) (room - strWidth s) rest
+          DHard => True
+          DLine => if modeIsFlat w.workMode then fits (fuel - 1) (room - 1) rest else True
+          DSoft => if modeIsFlat w.workMode then fits (fuel - 1) room rest else True
+          DVerbatim s => if containsNewline s then True else fits (fuel - 1) (room - strWidth s) rest
+          DConcat a b => fits (fuel - 1) room (Work w.workIndent w.workMode a :: Work w.workIndent w.workMode b :: rest)
+          DNest n d => fits (fuel - 1) room (Work (w.workIndent + n) w.workMode d :: rest)
+          DAlign d => fits (fuel - 1) room (Work w.workIndent w.workMode d :: rest)
+          DGroup d => fits (fuel - 1) room (Work w.workIndent MFlat d :: rest)
+
+-- | 渲染主循环：`col` 是当前列，`work` 是待处理栈，`acc` 是逆序输出片段。
+renderGo : Int -> Int -> Int -> List Work -> List String -> String
+renderGo fuel width col work acc =
+  if fuel <= 0 then
+    strConcatMany (reverse acc)
+  else
+    case work of
+      [] => strConcatMany (reverse acc)
+      w :: rest =>
+        case w.workDoc of
+          DEmpty => renderGo (fuel - 1) width col rest acc
+          DText s => renderGo (fuel - 1) width (col + strWidth s) rest (s :: acc)
+          DHard => renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
+          DLine => if modeIsFlat w.workMode then renderGo (fuel - 1) width (col + 1) rest (" " :: acc) else renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
+          DSoft => if modeIsFlat w.workMode then renderGo (fuel - 1) width col rest acc else renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
+          DVerbatim s => renderGo (fuel - 1) width (verbatimEndCol col s) rest (s :: acc)
+          DConcat a b => renderGo (fuel - 1) width col (Work w.workIndent w.workMode a :: Work w.workIndent w.workMode b :: rest) acc
+          DNest n d => renderGo (fuel - 1) width col (Work (w.workIndent + n) w.workMode d :: rest) acc
+          DAlign d => renderGo (fuel - 1) width col (Work col w.workMode d :: rest) acc
+          DGroup d => if modeIsFlat w.workMode then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else if fits (docSize d + 64) (width - col) (Work w.workIndent MFlat d :: rest) then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else renderGo (fuel - 1) width col (Work w.workIndent MBreak d :: rest) acc
+
+-- | 以最大宽度 `width` 渲染文档（`width` 是绝对列数，从第 0 列起算）。
+export render : Int -> Doc -> String
+render width doc = renderGo (docSize doc * 4 + 64) width 0 [Work 0 MBreak doc] []
+
+-- | 原样文本结束后的列：无换行时累加宽度，有换行时取最后一行的宽度。
+verbatimEndCol : Int -> String -> Int
+verbatimEndCol col s = lastLineWidth (strUnpack s) col
+
+-- | 逐字节扫描，`cur` 是当前行宽（初值含起始列）。
+lastLineWidth : List Int -> Int -> Int
+lastLineWidth [] cur = cur
+lastLineWidth (c :: rest) cur =
+  if c == 10 then lastLineWidth rest 0 else lastLineWidth rest (cur + 1)
+
+-- | 文本是否含换行。
+containsNewline : String -> Bool
+containsNewline s = hasNewline (strUnpack s)
+
+hasNewline : List Int -> Bool
+hasNewline [] = False
+hasNewline (c :: rest) = c == 10 || hasNewline rest

@@ -13,12 +13,20 @@ longLet n =
 
 longApp : Int
 longApp =
-  someVeryLongFunctionName alphaValue betaValue gammaValue deltaValue epsilonValue zetaValue
-    etaValue thetaValue
+  someVeryLongFunctionName
+    alphaValue
+    betaValue
+    gammaValue
+    deltaValue
+    epsilonValue
+    zetaValue
+    etaValue
+    thetaValue
 
 longList : List Int
 longList =
-  [ 100000,
+  [
+    100000,
     200000,
     300000,
     400000,
@@ -34,19 +42,24 @@ longList =
 
 longIf : Int -> Int
 longIf n =
-  if n > 0 then someVeryLongFunctionName n n n n n n n n
-  else anotherVeryLongFunctionName n n n n n n n n
+  if n > 0 then
+    someVeryLongFunctionName n n n n n n n n
+  else
+    anotherVeryLongFunctionName n n n n n n n n
 
 longCase : Int -> Int
-longCase n = case n of
-  0 => 100
-  _ => longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n
+longCase n =
+  case n of
+    0 => 100
+    _ =>
+      longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n + longSum n n n n n n n
 
 longDo : Int -> Int
-longDo n = do
-  aVeryLongVariableName <-
-    someVeryLongFunctionName n n n n n n n n n n n n n n n n n n n n n n n n n
-  pure aVeryLongVariableName
+longDo n =
+  do
+    aVeryLongVariableName <-
+      someVeryLongFunctionName n n n n n n n n n n n n n n n n n n n n n n n n n
+    pure aVeryLongVariableName
 
 longString : String
 longString =

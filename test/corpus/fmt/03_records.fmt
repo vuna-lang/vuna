@@ -14,8 +14,9 @@ q : Point
 q = { p | x = 3, y = 4 }
 
 sumPt : Point -> Int
-sumPt point = case point of
-  Point { x, y } => x + y
+sumPt point =
+  case point of
+    Point { x, y } => x + y
 
 main : Int
 main = sumPt q + p.x

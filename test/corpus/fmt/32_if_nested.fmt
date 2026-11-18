@@ -6,25 +6,31 @@ longName someLongParameterName anotherLongParameterName =
   if someLongParameterName > anotherLongParameterName then
     if someLongParameterName > 1000 + anotherLongParameterName then
       someLongParameterName - anotherLongParameterName
-    else anotherLongParameterName - someLongParameterName
-  else 0
+    else
+      anotherLongParameterName - someLongParameterName
+  else
+    0
 
 -- `else if` 链保持同一列（不随嵌套加深）。
 chain : Int -> Int -> Int
 chain someLongParameterName anotherLongParameterName =
-  if someLongParameterName < anotherLongParameterName then 0 - 1
-  else if someLongParameterName == anotherLongParameterName then 0
+  if someLongParameterName < anotherLongParameterName then
+    0 - 1
+  else if someLongParameterName == anotherLongParameterName then
+    0
   else if someLongParameterName < 10 + anotherLongParameterName then 1 else 2
 
 -- 块结构分支：`case` 跟在关键字后；`let` 的 `in` 对齐到 `let` 自己。
 mixed : Int -> Int
-mixed x = if x > 0 then case x of
-  1 => 10
-  _ => 20
-else
-  let
-    y = 0 - x
-  in y * 2
+mixed x =
+  if x > 0 then
+    case x of
+      1 => 10
+      _ => 20
+  else
+    let
+      y = 0 - x
+    in y * 2
 
 -- 能单行就单行（含嵌套 if）。
 short : Int -> Int -> Int

@@ -16,24 +16,28 @@ nestedUpd : Seg -> Int -> Seg
 nestedUpd s n = { { s | start = n } | finish = n }
 
 treeSum : Tree -> Int
-treeSum t = case t of
-  Leaf => 0
-  Node l v r => treeSum l + v + treeSum r
+treeSum t =
+  case t of
+    Leaf => 0
+    Node l v r => treeSum l + v + treeSum r
 
 useCaseArg : Int -> Int
-useCaseArg n = (\x => x + 1) (case n of
-  0 => 1
-  _ => 2
-)
+useCaseArg n = (\x => x + 1) (
+      case n of
+        0 => 1
+        _ => 2
+    )
 
 choose : Bool -> Int -> Int
-choose b n = if b then
-  let
-    m = n + 1
-  in m
-else case n of
-  0 => 0
-  _ => 1
+choose b n =
+  if b then
+    let
+      m = n + 1
+    in m
+  else
+    case n of
+      0 => 0
+      _ => 1
 
 bodyCase : Int -> Int
 bodyCase n =

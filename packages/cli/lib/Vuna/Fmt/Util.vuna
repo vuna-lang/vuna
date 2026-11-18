@@ -69,11 +69,13 @@ isNilList (x :: rest) = False
 -- | 逐项做 `Maybe` 映射，全部成功才得到 `Just`（保持顺序）。
 export mapMaybeStrings : (Expr -> Maybe String) -> List Expr -> Maybe (List String)
 mapMaybeStrings f [] = Just []
-mapMaybeStrings f (x :: rest) = case f x of
-  Nothing => Nothing
-  Just s => case mapMaybeStrings f rest of
+mapMaybeStrings f (x :: rest) =
+  case f x of
     Nothing => Nothing
-    Just ss => Just (s :: ss)
+    Just s =>
+      case mapMaybeStrings f rest of
+        Nothing => Nothing
+        Just ss => Just (s :: ss)
 
 -- ---------------------------------------------------------------
 -- 位置 / 行宽

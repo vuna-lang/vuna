@@ -7,7 +7,7 @@ data Color : Type where
   Blue : Color
 
 {- 记录前置多行
-   块注释 -}
+   块注释-}
 record Point where
   -- 字段前置
   x : Int -- 字段行尾

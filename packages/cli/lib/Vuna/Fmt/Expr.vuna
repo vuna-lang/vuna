@@ -1,9 +1,9 @@
 -- | 表达式 / 模式 / 块级布局的打印。
 --
--- 单行形式（`inlinePrecGo` 按运算符优先级补括号；case/let/do 等块结构返回 `Nothing`）与
--- 块级形式（`renderExprGo` 选 `renderWideGo` / `renderBlockGo`，按 `maxWidth` 折行）共用
--- 同一份模式与中缀表。注释锚点由 [Vuna.Fmt.Comment] 的 `attachAt` 提供；递归用显式 fuel
--- 守卫，对外入口以 `formatFuelBound` 作为固定预算。
+-- 单行形式（`inlinePrecGo` 按运算符优先级补括号）与 `Doc` 形式共用同一份模式与中缀表；
+-- `group` 按当前列一次决定展平还是换行，缩进由 `nest` 承担。注释锚点由
+-- [Vuna.Fmt.Comment] 的 `attachAt` 提供；递归用显式 fuel 守卫，对外入口以
+-- `formatFuelBound` 作为固定预算。
 module Vuna.Fmt.Expr where
 
 import Vuna.Compiler.Base.Common
@@ -11,7 +11,20 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Comment
+import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
+
+-- | 内部：绑定体与 `=` 的分隔：块结构强制另起一行，其余交给 group。
+bodySep : Expr -> Doc
+bodySep value = if multilineExpr value then hard else line
+
+-- | 内部：表达式是否必须多行（块结构，或任一分支多行的 `if`）。
+multilineExpr : Expr -> Bool
+multilineExpr (ELet binds body recFlag sp) = True
+multilineExpr (ECase scrut alts sp) = True
+multilineExpr (EDo stmts sp) = True
+multilineExpr (EIf c t el sp) = multilineExpr t || multilineExpr el
+multilineExpr _ = False
 
 -- ---------------------------------------------------------------
 -- 字符串字面量：按 lexer 支持的转义重新编码
@@ -47,72 +60,46 @@ renderTemplateText multi s = strPack (reverse (renderTemplateTextGo multi (strUn
 -- | 内部：`renderTemplateText` 的字符级累加器（逆序输出）。
 renderTemplateTextGo : Bool -> List Int -> List Int -> List Int
 renderTemplateTextGo multi [] acc = acc
-renderTemplateTextGo multi (c :: rest) acc = if c == 92 then renderTemplateTextGo multi rest (92 :: 92 :: acc)
-else if c == 34 then renderTemplateTextGo multi rest (34 :: 92 :: acc)
-else if c == 10 then
-  if multi then renderTemplateTextGo multi rest (10 :: acc)
-  else renderTemplateTextGo multi rest (110 :: 92 :: acc)
-else if c == 9 then
-  if multi then renderTemplateTextGo multi rest (9 :: acc)
-  else renderTemplateTextGo multi rest (116 :: 92 :: acc)
-else if c == 13 then
-  if multi then renderTemplateTextGo multi rest (13 :: acc)
-  else renderTemplateTextGo multi rest (114 :: 92 :: acc)
-else if c == 36 then case rest of
-  c2 :: rest2 =>
-    if c2 == 123 then renderTemplateTextGo multi rest2 (123 :: 36 :: 92 :: acc)
-    else renderTemplateTextGo multi rest (36 :: acc)
-  [] => renderTemplateTextGo multi rest (36 :: acc)
-else renderTemplateTextGo multi rest (c :: acc)
+renderTemplateTextGo multi (c :: rest) acc =
+  if c == 92 then
+    renderTemplateTextGo multi rest (92 :: 92 :: acc)
+  else if c == 34 then
+    renderTemplateTextGo multi rest (34 :: 92 :: acc)
+  else if c == 10 then
+    if multi then renderTemplateTextGo multi rest (10 :: acc) else renderTemplateTextGo multi rest (110 :: 92 :: acc)
+  else if c == 9 then
+    if multi then renderTemplateTextGo multi rest (9 :: acc) else renderTemplateTextGo multi rest (116 :: 92 :: acc)
+  else if c == 13 then
+    if multi then renderTemplateTextGo multi rest (13 :: acc) else renderTemplateTextGo multi rest (114 :: 92 :: acc)
+  else if c == 36 then
+    case rest of
+      c2 :: rest2 => if c2 == 123 then renderTemplateTextGo multi rest2 (123 :: 36 :: 92 :: acc) else renderTemplateTextGo multi rest (36 :: acc)
+      [] => renderTemplateTextGo multi rest (36 :: acc)
+  else
+    renderTemplateTextGo multi rest (c :: acc)
 
 -- | 内部：文本是否以换行开头。
 startsWithNewline : String -> Bool
-startsWithNewline s = case strUnpack s of
-  10 :: rest => True
-  _ => False
+startsWithNewline s =
+  case strUnpack s of
+    10 :: rest => True
+    _ => False
 
 -- | 内部：开引号；多行形式下首块以换行开头时补一个换行（与 lexer「丢掉紧跟开引号的
 -- 一个换行」互逆）。
 interpOpen : Bool -> List InterpPart -> String
-interpOpen multi parts = if multi then case parts of
-  (IPText s) :: rest => if startsWithNewline s then "\"\"\"\n" else "\"\"\""
-  _ => "\"\"\""
-else "\""
+interpOpen multi parts =
+  if multi then
+    case parts of
+      (IPText s) :: rest => if startsWithNewline s then "\"\"\"\n" else "\"\"\""
+      _ => "\"\"\""
+  else
+    "\""
 
 -- | 内部：闭引号（多行形式 `"""`，否则 `"`）。
 interpClose : Bool -> String
 interpClose True = "\"\"\""
 interpClose False = "\""
-
--- | 内部：块布局洞的续行缩进（`lineInd + 2`）；不递归调用格式化器。
-joinHoleLines : Int -> List String -> String
-joinHoleLines lineInd [] = ""
-joinHoleLines lineInd (first :: rest) =
-  first ++ concatStrings (map (\l => "\n${spaces (lineInd + 2)}${l}") rest)
-
--- | 内部：模板片段的单行渲染；文本块转义，洞能单行就写 `${...}`，否则放
--- `interpBlockMarker`（调用方据此改走块布局）。
-interpPiecesInline : Int -> List FixityDecl -> Bool -> List InterpPart -> List String
-interpPiecesInline fuel env multi parts = if fuel <= 0 then []
-else case parts of
-  [] => []
-  (IPText s) :: rest => renderTemplateText multi s :: interpPiecesInline (fuel - 1) env multi rest
-  (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
-    Just s => "\${${s}}" :: interpPiecesInline (fuel - 1) env multi rest
-    Nothing => interpBlockMarker :: interpPiecesInline (fuel - 1) env multi rest
-
--- | 内部：模板片段的块级渲染；洞能单行就写 `${...}`，否则按块布局展开并缩进。
-interpPiecesBlock : Int -> List FixityDecl -> Int -> Bool -> List InterpPart -> List String
-interpPiecesBlock fuel env lineInd multi parts = if fuel <= 0 then []
-else case parts of
-  [] => []
-  (IPText s) :: rest =>
-    renderTemplateText multi s :: interpPiecesBlock (fuel - 1) env lineInd multi rest
-  (IPHole e) :: rest => case inlinePrecGo (fuel - 1) env 0 e of
-    Just s => "\${${s}}" :: interpPiecesBlock (fuel - 1) env lineInd multi rest
-    Nothing =>
-      "\${${joinHoleLines lineInd (renderExprGo (fuel - 1) env [] lineInd e)}}"
-        :: interpPiecesBlock (fuel - 1) env lineInd multi rest
 
 -- | 内部：按换行切行（内容换行是字面量内容，不参与外层布局）。
 splitOnNewline : String -> List String
@@ -122,12 +109,30 @@ splitOnNewline s = splitOnNewlineGo (strUnpack s) []
 splitOnNewlineGo : List Int -> List Int -> List String
 splitOnNewlineGo [] acc = [strPack (reverse acc)]
 splitOnNewlineGo (c :: rest) acc =
-  if c == 10 then strPack (reverse acc) :: splitOnNewlineGo rest []
-  else splitOnNewlineGo rest (c :: acc)
+  if c == 10 then
+    strPack (reverse acc) :: splitOnNewlineGo rest []
+  else
+    splitOnNewlineGo rest (c :: acc)
 
--- | 内部：单行渲染里洞无法内联时的哨兵（源码字符串不可能含 NUL）。
-interpBlockMarker : String
-interpBlockMarker = strPack [0]
+-- | 内部：模板片段的单行渲染；任一洞需要块布局时整体返回 `Nothing`。
+interpPiecesInline : Int -> List FixityDecl -> Bool -> List InterpPart -> Maybe (List String)
+interpPiecesInline fuel env multi parts =
+  if fuel <= 0 then
+    Nothing
+  else
+    case parts of
+      [] => Just []
+      (IPText s) :: rest =>
+        case interpPiecesInline (fuel - 1) env multi rest of
+          Nothing => Nothing
+          Just ss => Just (renderTemplateText multi s :: ss)
+      (IPHole e) :: rest =>
+        case inlinePrecGo (fuel - 1) env 0 e of
+          Nothing => Nothing
+          Just s =>
+            case interpPiecesInline (fuel - 1) env multi rest of
+              Nothing => Nothing
+              Just ss => Just ("\${${s}}" :: ss)
 
 -- ---------------------------------------------------------------
 -- 模式（模式没有块结构，统一输出单行，必要时加括号）
@@ -138,13 +143,18 @@ consPatName name = name == "Cons" || name == "::" || isListConsSyntax name
 
 -- | 内部：把 cons / `Nil` 形式展开成元素列表（不是列表形式则为 `Nothing`）。
 patListElemsOf : String -> List Pat -> Maybe (List Pat)
-patListElemsOf name pats = if name == "Nil" || isListNilSyntax name then if isNilList pats then Just [] else Nothing
-else if consPatName name then case pats of
-  [a, rest] => case patListElems rest of
-    Just elems => Just (a :: elems)
-    Nothing => Nothing
-  _ => Nothing
-else Nothing
+patListElemsOf name pats =
+  if name == "Nil" || isListNilSyntax name then
+    if isNilList pats then Just [] else Nothing
+  else if consPatName name then
+    case pats of
+      [a, rest] =>
+        case patListElems rest of
+          Just elems => Just (a :: elems)
+          Nothing => Nothing
+      _ => Nothing
+  else
+    Nothing
 
 -- | 内部：模式若是列表形式则展开成元素列表。
 patListElems : Pat -> Maybe (List Pat)
@@ -154,92 +164,122 @@ patListElems _ = Nothing
 -- 显式结构递归：`map renderPatGo` 的 λ 没有 size 关系，SCT 会判成无下降环。
 -- | 内部：列表元素逐个渲染并逗号连接。
 renderPatElemsGo : Int -> List Pat -> String
-renderPatElemsGo fuel pats = if fuel <= 0 then ""
-else case pats of
-  [] => ""
-  [p] => renderPatGo (fuel - 1) p
-  p :: rest => "${renderPatGo (fuel - 1) p}, ${renderPatElemsGo (fuel - 1) rest}"
+renderPatElemsGo fuel pats =
+  if fuel <= 0 then
+    ""
+  else
+    case pats of
+      [] => ""
+      [p] => renderPatGo (fuel - 1) p
+      p :: rest => "${renderPatGo (fuel - 1) p}, ${renderPatElemsGo (fuel - 1) rest}"
 
 -- | 内部：构造子实参逐个前置空格拼接（原子位置）。
 renderPatAtomsSpacedGo : Int -> List Pat -> String
-renderPatAtomsSpacedGo fuel pats = if fuel <= 0 then ""
-else case pats of
-  [] => ""
-  p :: rest => " ${renderPatAtomGo (fuel - 1) p}${renderPatAtomsSpacedGo (fuel - 1) rest}"
+renderPatAtomsSpacedGo fuel pats =
+  if fuel <= 0 then
+    ""
+  else
+    case pats of
+      [] => ""
+      p :: rest => " ${renderPatAtomGo (fuel - 1) p}${renderPatAtomsSpacedGo (fuel - 1) rest}"
 
 -- | 内部：记录模式字段逗号连接。
 renderRecPatFieldsGo : Int -> List (Pair String Pat) -> String
-renderRecPatFieldsGo fuel fields = if fuel <= 0 then ""
-else case fields of
-  [] => ""
-  [f] => renderRecPatFieldGo (fuel - 1) f
-  f :: rest => "${renderRecPatFieldGo (fuel - 1) f}, ${renderRecPatFieldsGo (fuel - 1) rest}"
+renderRecPatFieldsGo fuel fields =
+  if fuel <= 0 then
+    ""
+  else
+    case fields of
+      [] => ""
+      [f] => renderRecPatFieldGo (fuel - 1) f
+      f :: rest => "${renderRecPatFieldGo (fuel - 1) f}, ${renderRecPatFieldsGo (fuel - 1) rest}"
 
 -- | 内部：模式的单行渲染（顶层位置，不加外层括号）。
 renderPatGo : Int -> Pat -> String
-renderPatGo fuel pat = if fuel <= 0 then ""
-else case pat of
-  PVar name sp => name
-  PAs name inner sp => "${name}@${renderPatAtomGo (fuel - 1) inner}"
-  PWild sp => "_"
-  PInt n sp => strFromInt n
-  PStr s sp => renderStr s
-  PCon name pats sp => renderConPatGo (fuel - 1) name pats
-  PRecord name fields sp => renderRecPatGo (fuel - 1) name fields
+renderPatGo fuel pat =
+  if fuel <= 0 then
+    ""
+  else
+    case pat of
+      PVar name sp => name
+      PAs name inner sp => "${name}@${renderPatAtomGo (fuel - 1) inner}"
+      PWild sp => "_"
+      PInt n sp => strFromInt n
+      PStr s sp => renderStr s
+      PCon name pats sp => renderConPatGo (fuel - 1) name pats
+      PRecord name fields sp => renderRecPatGo (fuel - 1) name fields
 
 -- | 内部：构造子模式（`[a, b]` 列表形式 / 中缀 cons / 前缀应用）。
 renderConPatGo : Int -> String -> List Pat -> String
-renderConPatGo fuel name pats = if fuel <= 0 then ""
-else case patListElemsOf name pats of
-  Just elems => "[${renderPatElemsGo (fuel - 1) elems}]"
-  Nothing =>
-    if consPatName name then renderConsPatGo (fuel - 1) pats
-    else if (name == "Nil" || isListNilSyntax name) && isNilList pats then "[]"
-    else if isNilList pats then name else name ++ renderPatAtomsSpacedGo (fuel - 1) pats
+renderConPatGo fuel name pats =
+  if fuel <= 0 then
+    ""
+  else
+    case patListElemsOf name pats of
+      Just elems => "[${renderPatElemsGo (fuel - 1) elems}]"
+      Nothing => if consPatName name then renderConsPatGo (fuel - 1) pats else if (name == "Nil" || isListNilSyntax name) && isNilList pats then "[]" else if isNilList pats then name else name ++ renderPatAtomsSpacedGo (fuel - 1) pats
 
 -- | 内部：cons 模式 `a :: b`（两个实参）；其它实参数按前缀形式渲染。
 renderConsPatGo : Int -> List Pat -> String
-renderConsPatGo fuel pats = if fuel <= 0 then ""
-else case pats of
-  [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
-  _ => "Cons${renderPatAtomsSpacedGo (fuel - 1) pats}"
+renderConsPatGo fuel pats =
+  if fuel <= 0 then
+    ""
+  else
+    case pats of
+      [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
+      _ => "Cons${renderPatAtomsSpacedGo (fuel - 1) pats}"
 
 -- | 内部：cons 链的尾部（右结合，继续展开成 `a :: b :: ...`）。
 renderPatConsTailGo : Int -> Pat -> String
-renderPatConsTailGo fuel pat = if fuel <= 0 then ""
-else case pat of
-  PCon name pats sp => if consPatName name then case pats of
-    [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
-    _ => renderPatAtomGo (fuel - 1) pat
-  else renderPatAtomGo (fuel - 1) pat
-  _ => renderPatAtomGo (fuel - 1) pat
+renderPatConsTailGo fuel pat =
+  if fuel <= 0 then
+    ""
+  else
+    case pat of
+      PCon name pats sp =>
+        if consPatName name then
+          case pats of
+            [a, b] => "${renderPatAtomGo (fuel - 1) a} :: ${renderPatConsTailGo (fuel - 1) b}"
+            _ => renderPatAtomGo (fuel - 1) pat
+        else
+          renderPatAtomGo (fuel - 1) pat
+      _ => renderPatAtomGo (fuel - 1) pat
 
 -- | 内部：原子位置的模式（需要时加括号）。
 renderPatAtomGo : Int -> Pat -> String
-renderPatAtomGo fuel pat = if fuel <= 0 then ""
-else case pat of
-  PVar name sp => name
-  PAs name inner sp => "(${name}@${renderPatAtomGo (fuel - 1) inner})"
-  PWild sp => "_"
-  PInt n sp => strFromInt n
-  PStr s sp => renderStr s
-  PCon name [] sp => if name == "Nil" || isListNilSyntax name then "[]" else name
-  PCon name pats sp => "(${renderConPatGo (fuel - 1) name pats})"
-  PRecord name fields sp => "(${renderRecPatGo (fuel - 1) name fields})"
+renderPatAtomGo fuel pat =
+  if fuel <= 0 then
+    ""
+  else
+    case pat of
+      PVar name sp => name
+      PAs name inner sp => "(${name}@${renderPatAtomGo (fuel - 1) inner})"
+      PWild sp => "_"
+      PInt n sp => strFromInt n
+      PStr s sp => renderStr s
+      PCon name [] sp => if name == "Nil" || isListNilSyntax name then "[]" else name
+      PCon name pats sp => "(${renderConPatGo (fuel - 1) name pats})"
+      PRecord name fields sp => "(${renderRecPatGo (fuel - 1) name fields})"
 
 -- | 内部：记录模式 `Name { f = p }`（无字段时 `Name { }`）。
 renderRecPatGo : Int -> String -> List (Pair String Pat) -> String
 renderRecPatGo fuel name fields =
-  if fuel <= 0 then ""
-  else if isNilList fields then "${name} { }"
-  else "${name} { ${renderRecPatFieldsGo (fuel - 1) fields} }"
+  if fuel <= 0 then
+    ""
+  else if isNilList fields then
+    "${name} { }"
+  else
+    "${name} { ${renderRecPatFieldsGo (fuel - 1) fields} }"
 
 -- | 内部：记录模式字段 `f = p`（模式就是同名变量时只写名字）。
 renderRecPatFieldGo : Int -> Pair String Pat -> String
-renderRecPatFieldGo fuel (Pair fname pat) = if fuel <= 0 then ""
-else case pat of
-  PVar n sp => if n == fname then fname else "${fname} = ${renderPatGo (fuel - 1) pat}"
-  _ => "${fname} = ${renderPatGo (fuel - 1) pat}"
+renderRecPatFieldGo fuel (Pair fname pat) =
+  if fuel <= 0 then
+    ""
+  else
+    case pat of
+      PVar n sp => if n == fname then fname else "${fname} = ${renderPatGo (fuel - 1) pat}"
+      _ => "${fname} = ${renderPatGo (fuel - 1) pat}"
 
 -- ---------------------------------------------------------------
 -- 单行表达式：inlineExprGo / inlinePrecGo / inlineAtomGo
@@ -248,24 +288,7 @@ else case pat of
 -- | 内部：符号字符码（与 lexer 的 `isOpChar` 一致）。
 isOpCharCode : Int -> Bool
 isOpCharCode c =
-  c == 33
-    || c == 36
-    || c == 37
-    || c == 38
-    || c == 42
-    || c == 43
-    || c == 45
-    || c == 46
-    || c == 47
-    || c == 60
-    || c == 61
-    || c == 62
-    || c == 63
-    || c == 64
-    || c == 92
-    || c == 94
-    || c == 124
-    || c == 126
+  c == 33 || c == 36 || c == 37 || c == 38 || c == 42 || c == 43 || c == 45 || c == 46 || c == 47 || c == 60 || c == 61 || c == 62 || c == 63 || c == 64 || c == 92 || c == 94 || c == 124 || c == 126
     || c == 58
 
 -- | 内部：字符码是否全是符号字符。
@@ -280,49 +303,57 @@ allOpChars (c :: rest) = isOpCharCode c && allOpChars rest
 -- canonical 别名目标（`bind` / `eq`）在原子 / 前缀位置同样按 `(op)` 打印；两参应用会被还原
 -- 成中缀（`bind a f` → `a >>= f`），单参 / 多于两参仍按应用形式。
 isSymbolName : String -> Bool
-isSymbolName name = case strUnpack name of
-  [] => False
-  cs => allOpChars cs
+isSymbolName name =
+  case strUnpack name of
+    [] => False
+    cs => allOpChars cs
 
 -- | 内部：运算符的可见声明：直接查名字，未命中再按反向别名（`eq` → `==`）查一次。
 opDeclOf : List FixityDecl -> String -> Maybe FixityDecl
-opDeclOf env op = case lookupFixityDecl (tableOfKeepOps env) op of
-  Just d => Just d
-  Nothing => case symbolOfTargetIn env op of
-    Just sym => lookupFixityDecl (tableOfKeepOps env) sym
-    Nothing => Nothing
+opDeclOf env op =
+  case lookupFixityDecl (tableOfKeepOps env) op of
+    Just d => Just d
+    Nothing =>
+      case symbolOfTargetIn env op of
+        Just sym => lookupFixityDecl (tableOfKeepOps env) sym
+        Nothing => Nothing
 
 -- | 内部：名字是否是声明表里的 canonical 别名目标（`Cons` → `::`、`bind` → `>>=`）。
 -- 只有声明表里真的有这个反向别名才成立，所以不会误伤同名的普通函数。
 hasOpAlias : List FixityDecl -> String -> Bool
-hasOpAlias env name = case symbolOfTargetIn env name of
-  Just sym => True
-  Nothing => False
+hasOpAlias env name =
+  case symbolOfTargetIn env name of
+    Just sym => True
+    Nothing => False
 
 -- | 内部：中缀打印用的 (优先级, 结合性)：1 = 右，0 = 左/未知。
 infixPrecOf : List FixityDecl -> String -> Maybe (Pair Int Int)
-infixPrecOf env op = case opDeclOf env op of
-  Just d => Just (Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0))
-  Nothing => if isSymbolName op then Just (Pair 9 0) else Nothing
+infixPrecOf env op =
+  case opDeclOf env op of
+    Just d => Just (Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0))
+    Nothing => if isSymbolName op then Just (Pair 9 0) else Nothing
 
 -- | 内部：打印侧优先级查询。Loader 的 keep 模式已对未知符号运算符报错，所以正常路径这里
 -- 总有声明；剩下的 9 左只是打印侧兜底（反引号名字走 `backtickPrec` 的 9 左）。
 infixPrec : List FixityDecl -> String -> Pair Int Int
-infixPrec env op = case infixPrecOf env op of
-  Just fx => fx
-  Nothing => Pair 9 0
+infixPrec env op =
+  case infixPrecOf env op of
+    Just fx => fx
+    Nothing => Pair 9 0
 
 -- | 内部：反引号中缀的 fixity：普通名字无声明时按 9 左（与 Haskell 一致），符号名查声明表。
 backtickPrec : List FixityDecl -> String -> Pair Int Int
-backtickPrec env name = case opDeclOf env name of
-  Just d => Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0)
-  Nothing => Pair 9 0
+backtickPrec env name =
+  case opDeclOf env name of
+    Just d => Pair d.fixityLevel (if d.fixityAssoc == 2 then 1 else 0)
+    Nothing => Pair 9 0
 
 -- | 内部：打印用的运算符文本：canonical 名字经反向别名还原（keep 模式下通常是原样）。
 opText : List FixityDecl -> String -> String
-opText env op = case symbolOfTargetIn env op of
-  Just sym => sym
-  Nothing => op
+opText env op =
+  case symbolOfTargetIn env op of
+    Just sym => sym
+    Nothing => op
 
 -- | 内部：反引号中缀的运算符标签 `` `name` ``。
 backtickLabel : String -> String
@@ -346,9 +377,10 @@ instanceNameText s = if identNameOk s then s else renderStr s
 
 -- | 实例名是否能作为标识符 token 写出（与 lexer 的 `collectIdent` 同规则，允许 `.` 分段）。
 identNameOk : String -> Bool
-identNameOk s = case strUnpack s of
-  [] => False
-  c :: rest => if isIdentStart c then identNameOkGo rest else False
+identNameOk s =
+  case strUnpack s of
+    [] => False
+    c :: rest => if isIdentStart c then identNameOkGo rest else False
 
 identNameOkGo : List Int -> Bool
 identNameOkGo [] = True
@@ -393,71 +425,6 @@ renderHandlePatsTail : Int -> List Pat -> String
 renderHandlePatsTail fuel [] = ""
 renderHandlePatsTail fuel (p :: rest) = " ${renderPatGo fuel p}${renderHandlePatsTail fuel rest}"
 
--- | 内部：`return x -> body` 子句（放得下一行就一行，否则体另起一行缩进 `ind + 2`）。
-renderHandleRetGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderHandleRetGo fuel env at ind x body = if fuel <= 0 then []
-else
-  let
-    prefix = "${spaces ind}return ${x} -> "
-  in case inlinePrecGo formatFuelBound env 0 body of
-    Just s =>
-      if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-      else "${spaces ind}return ${x} ->"
-        :: prefixFirst (spaces (ind + 2)) (renderExprGo (fuel - 1) env at (ind + 2) body)
-    Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at ind body)
-
--- | 内部：operator handler 子句 `Op p1 p2 k -> body`（放不下一行就折行）。
-renderHandleAltGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Pair Pat Expr -> List String
-renderHandleAltGo fuel env at ind k (Pair pat body) = if fuel <= 0 then []
-else
-  let
-    parts = case pat of
-      PCon c ps _ => Pair c (renderHandlePats formatFuelBound ps)
-      _ => Pair "_" ""
-    cname = firstOf parts
-    patsTxt = secondOf parts
-    prefix =
-      if patsTxt == "" then "${spaces ind}${cname} ${k} -> "
-      else "${spaces ind}${cname} ${patsTxt} ${k} -> "
-  in case inlinePrecGo formatFuelBound env 0 body of
-    Just s =>
-      if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-      else "${spaces ind}${cname} ${k} ->"
-        :: prefixFirst (spaces (ind + 2)) (renderExprGo (fuel - 1) env at (ind + 2) body)
-    Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at ind body)
-
--- | 内部：handle 的 comp：`{` 紧跟其后，裸应用 / 复杂表达式必须加括号（否则
--- `handle pure x { ... }` 会被解析成记录字面量 `x { ... }`）；原子形态保持原样。
-renderHandleCompGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderHandleCompGo fuel env at lineInd comp = if fuel <= 0 then []
-else case comp of
-  EVar _ _ => renderScrutGo (fuel - 1) env at lineInd comp
-  EInt _ _ => renderScrutGo (fuel - 1) env at lineInd comp
-  EStr _ _ => renderScrutGo (fuel - 1) env at lineInd comp
-  EFloat _ _ => renderScrutGo (fuel - 1) env at lineInd comp
-  EParen _ _ => renderScrutGo (fuel - 1) env at lineInd comp
-  _ => case renderBlockGo (fuel - 1) env at lineInd comp of
-    [single] => ["(" ++ single ++ ")"]
-    lines => append (prefixFirst "(" lines) ["${spaces lineInd})"]
-
--- | 内部：完整 `handle <comp> { return ... ; Op ... }` 块。
-renderHandleGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
-renderHandleGo fuel env at lineInd comp ret op = if fuel <= 0 then []
-else
-  let
-    headLines =
-      appendLast " {" (prefixFirst "handle " (renderHandleCompGo (fuel - 1) env at lineInd comp))
-    clauseInd = lineInd + 2
-    retLines = case ret of
-      ELam ([Pair x _]) body _ => renderHandleRetGo (fuel - 1) env at clauseInd x body
-      _ => []
-    opLines = case op of
-      ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) _ =>
-        concatMap (\alt => renderHandleAltGo (fuel - 1) env at clauseInd k alt) alts
-      _ => []
-  in append headLines (append retLines (append opLines ["${spaces lineInd}}"]))
-
--- | 内部：`[..]` 语法糖还原成元素列表（不是该形态则为 `Nothing`）。
 listExprElems : Expr -> Maybe (List Expr)
 listExprElems (EVar name sp) = if name == "Nil" || isListNilSyntax name then Just [] else Nothing
 listExprElems (EApp (EVar name csp) ([a, rest]) sp) =
@@ -465,9 +432,10 @@ listExprElems (EApp (EVar name csp) ([a, rest]) sp) =
 
 -- | 内部：cons 链展开的辅助：把 `a : rest` 接在 `rest` 展开出的元素前面。
 listExprCons : Expr -> Expr -> Maybe (List Expr)
-listExprCons a rest = case listExprElems rest of
-  Just elems => Just (a :: elems)
-  Nothing => Nothing
+listExprCons a rest =
+  case listExprElems rest of
+    Just elems => Just (a :: elems)
+    Nothing => Nothing
 
 listExprElems _ = Nothing
 
@@ -478,107 +446,140 @@ inlineExprGo fuel env e = if fuel <= 0 then Nothing else inlinePrecGo (fuel - 1)
 -- | 内部：单行渲染并按上下文优先级补括号；`minPrec` 是外层要求的最低优先级。
 -- case / let / do / handle / 局部函数等块结构返回 `Nothing`（交给块级布局）。
 inlinePrecGo : Int -> List FixityDecl -> Int -> Expr -> Maybe String
-inlinePrecGo fuel env minPrec e = if fuel <= 0 then Nothing
-else case e of
-  EVar name sp => case macroNameOf name of
-    -- 内置宏标记回渲染成 `name!`（编码见 `Frontend/Ast.macroSyntaxName`）。
-    Just macroName => Just "${macroName}!"
-    Nothing =>
-      if name == "Nil" || isListNilSyntax name then Just "[]"
-      else if isSymbolName name then Just "(${name})" else Just name
-  EInt n sp => Just (strFromInt n)
-  EStr s sp => Just (renderStr s)
-  EFloat raw sp => Just raw
-  -- 模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
-  EInterp multi parts sp =>
-    let
-      body = concatStrings (interpPiecesInline (fuel - 1) env multi parts)
-      text = interpOpen multi parts ++ body ++ interpClose multi
-    in if contains interpBlockMarker text then Nothing
-    else if contains "\n" text then Nothing else Just text
-  ELam ps body sp => case inlinePrecGo (fuel - 1) env 0 body of
-    Nothing => Nothing
-    Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma (map firstOf ps)} => ${b}")
-  EApp fn args sp => case appAtParts (EApp fn args sp) of
-    Just (Pair f (Pair nm rest)) => case inlineExprGo (fuel - 1) env f of
-      Nothing => Nothing
-      Just fs => case nm of
-        EStr s _ => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
+inlinePrecGo fuel env minPrec e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case e of
+      EVar name sp =>
+        case macroNameOf name of
+          -- 内置宏标记回渲染成 `name!`（编码见 `Frontend/Ast.macroSyntaxName`）。
+          Just macroName => Just "${macroName}!"
+          Nothing => if name == "Nil" || isListNilSyntax name then Just "[]" else if isSymbolName name then Just "(${name})" else Just name
+      EInt n sp => Just (strFromInt n)
+      EStr s sp => Just (renderStr s)
+      EFloat raw sp => Just raw
+      -- 模板字面量。文本块转义；洞优先单行内联，洞需要块布局时放弃（交给块渲染）。
+      EInterp multi parts sp =>
+        case interpPiecesInline (fuel - 1) env multi parts of
           Nothing => Nothing
-          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@" ++ instanceNameText s ++ joinSpace ss))
-        EParen e _ => case inlineExprGo (fuel - 1) env e of
+          Just pieces =>
+            let
+              body = concatStrings pieces
+              text = interpOpen multi parts ++ body ++ interpClose multi
+            in if textHasNewline text then Nothing else Just text
+      ELam ps body sp =>
+        case inlinePrecGo (fuel - 1) env 0 body of
           Nothing => Nothing
-          Just ps => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
-            Nothing => Nothing
-            Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ ps ++ ")" ++ joinSpace ss))
-        EVar vn _ => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
-          Nothing => Nothing
-          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ vn ++ ")" ++ joinSpace ss))
-        _ => case inlineExprGo (fuel - 1) env nm of
-          Nothing => Nothing
-          Just ns => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
-            Nothing => Nothing
-            Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ ns ++ ")" ++ joinSpace ss))
-    Nothing => case handleParts (EApp fn args sp) of
-      Just _ => Nothing
-      Nothing => case rowAtParts (EApp fn args sp) of
-        Just (Pair lbl nm) => case inlineExprGo (fuel - 1) env lbl of
-          Nothing => Nothing
-          Just ls => case rowAtNameText nm of
-            Just ns => Just "${ls}@${ns}"
-            Nothing => Nothing
-        Nothing => case performOperand (EApp fn args sp) of
-          Just op => case inlineExprGo (fuel - 1) env op of
-            Nothing => Nothing
-            Just os => Just (wrapPrec (minPrec > 0) "perform ${os}")
-          Nothing => case listExprElems (EApp fn args sp) of
-            Just elems => case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) elems of
+          Just b => Just (wrapPrec (minPrec > 0) "\\${joinComma (map firstOf ps)} => ${b}")
+      EApp fn args sp =>
+        case appAtParts (EApp fn args sp) of
+          Just (Pair f (Pair nm rest)) =>
+            case inlineExprGo (fuel - 1) env f of
               Nothing => Nothing
-              Just ss => Just "[${joinComma ss}]"
-            Nothing => inlineAppGo (fuel - 1) env minPrec fn args
-  EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
-  ELet binds body rec_ sp => Nothing
-  ECase scrut alts sp => Nothing
-  EIf c t el sp => case inlinePrecGo (fuel - 1) env 0 c of
-    Nothing => Nothing
-    Just cs => case inlinePrecGo (fuel - 1) env 0 t of
-      Nothing => Nothing
-      Just ts => case inlinePrecGo (fuel - 1) env 0 el of
-        Nothing => Nothing
-        Just es => Just (wrapPrec (minPrec > 0) "if ${cs} then ${ts} else ${es}")
-  EField base f sp => case inlineAtomGo (fuel - 1) env base of
-    Nothing => Nothing
-    Just b => Just "${b}.${f}"
-  ERecord name fields sp => case inlineFieldsGo (fuel - 1) env fields of
-    Nothing => Nothing
-    Just ss => case fields of
-      [] => Just "${name} { }"
-      _ => Just "${name} { ${joinComma ss} }"
-  ERecUpdate base fields sp => case inlinePrecGo (fuel - 1) env 0 base of
-    Nothing => Nothing
-    Just b => case inlineFieldsGo (fuel - 1) env fields of
-      Nothing => Nothing
-      Just ss => case fields of
-        [] => Just "{ ${b} }"
-        _ => Just "{ ${b} | ${joinComma ss} }"
-  EDo stmts sp => Nothing
-  -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
-  ELocalFun clauses sp => Nothing
-  -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
-  -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
-  EAnn value ty sp => inlinePrecGo (fuel - 1) env minPrec value
-  -- 反引号中缀 / section 是 parse 后中间产物；keep 模式保留原形按此打印。
-  EBacktick name l r sp => inlineBacktickGo (fuel - 1) env minPrec name l r
-  ESectOp op sp => Just "(${op})"
-  ESectL op inner sp => case inlinePrecGo (fuel - 1) env 0 inner of
-    Nothing => Nothing
-    Just s => Just "(${op} ${s})"
-  -- 右 section 的 inner 必须按**原子**打印：`((a + b) +)` 才能重新 parse 成
-  -- `ESectR (a + b) +`（否则最后一个 `+` 会被解析成更内层的右 section）。
-  ESectR inner op sp => case inlineAtomGo (fuel - 1) env inner of
-    Nothing => Nothing
-    Just s => Just "(${s} ${op})"
-  _ => Nothing
+              Just fs =>
+                case nm of
+                  EStr s _ =>
+                    case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
+                      Nothing => Nothing
+                      Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@" ++ instanceNameText s ++ joinSpace ss))
+                  EParen e _ =>
+                    case inlineExprGo (fuel - 1) env e of
+                      Nothing => Nothing
+                      Just ps =>
+                        case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
+                          Nothing => Nothing
+                          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ ps ++ ")" ++ joinSpace ss))
+                  EVar vn _ =>
+                    case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
+                      Nothing => Nothing
+                      Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ vn ++ ")" ++ joinSpace ss))
+                  _ =>
+                    case inlineExprGo (fuel - 1) env nm of
+                      Nothing => Nothing
+                      Just ns =>
+                        case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) rest of
+                          Nothing => Nothing
+                          Just ss => Just (wrapPrec (minPrec > 0) (fs ++ "@(" ++ ns ++ ")" ++ joinSpace ss))
+          Nothing =>
+            case handleParts (EApp fn args sp) of
+              Just _ => Nothing
+              Nothing =>
+                case rowAtParts (EApp fn args sp) of
+                  Just (Pair lbl nm) =>
+                    case inlineExprGo (fuel - 1) env lbl of
+                      Nothing => Nothing
+                      Just ls =>
+                        case rowAtNameText nm of
+                          Just ns => Just "${ls}@${ns}"
+                          Nothing => Nothing
+                  Nothing =>
+                    case performOperand (EApp fn args sp) of
+                      Just op =>
+                        case inlineExprGo (fuel - 1) env op of
+                          Nothing => Nothing
+                          Just os => Just (wrapPrec (minPrec > 0) "perform ${os}")
+                      Nothing =>
+                        case listExprElems (EApp fn args sp) of
+                          Just elems =>
+                            case mapMaybeStrings (\x => inlineExprGo (fuel - 1) env x) elems of
+                              Nothing => Nothing
+                              Just ss => Just "[${joinComma ss}]"
+                          Nothing => inlineAppGo (fuel - 1) env minPrec fn args
+      EPi name implicit qty dom cod sp => inlinePiGo (fuel - 1) env minPrec qty name implicit dom cod
+      ELet binds body rec_ sp => Nothing
+      ECase scrut alts sp => Nothing
+      EIf c t el sp =>
+        case inlinePrecGo (fuel - 1) env 0 c of
+          Nothing => Nothing
+          Just cs =>
+            case inlinePrecGo (fuel - 1) env 0 t of
+              Nothing => Nothing
+              Just ts =>
+                case inlinePrecGo (fuel - 1) env 0 el of
+                  Nothing => Nothing
+                  Just es => Just (wrapPrec (minPrec > 0) "if ${cs} then ${ts} else ${es}")
+      EField base f sp =>
+        case inlineAtomGo (fuel - 1) env base of
+          Nothing => Nothing
+          Just b => Just "${b}.${f}"
+      ERecord name fields sp =>
+        case inlineFieldsGo (fuel - 1) env fields of
+          Nothing => Nothing
+          Just ss =>
+            case fields of
+              [] => Just "${name} { }"
+              _ => Just "${name} { ${joinComma ss} }"
+      ERecUpdate base fields sp =>
+        case inlinePrecGo (fuel - 1) env 0 base of
+          Nothing => Nothing
+          Just b =>
+            case inlineFieldsGo (fuel - 1) env fields of
+              Nothing => Nothing
+              Just ss =>
+                case fields of
+                  [] => Just "{ ${b} }"
+                  _ => Just "{ ${b} | ${joinComma ss} }"
+      EDo stmts sp => Nothing
+      -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
+      ELocalFun clauses sp => Nothing
+      -- 非 where 位置（例如 `let` 绑定值）的 `EAnn` 透明渲染内部表达式：
+      -- 表达式位置没有 `: Ty` 语法，输出标注会让 fmt 产物无法重新 parse。
+      EAnn value ty sp => inlinePrecGo (fuel - 1) env minPrec value
+      -- 反引号中缀 / section 是 parse 后中间产物；keep 模式保留原形按此打印。
+      EBacktick name l r sp => inlineBacktickGo (fuel - 1) env minPrec name l r
+      ESectOp op sp => Just "(${op})"
+      ESectL op inner sp =>
+        case inlinePrecGo (fuel - 1) env 0 inner of
+          Nothing => Nothing
+          Just s => Just "(${op} ${s})"
+      -- 右 section 的 inner 必须按**原子**打印：`((a + b) +)` 才能重新 parse 成
+      -- `ESectR (a + b) +`（否则最后一个 `+` 会被解析成更内层的右 section）。
+      ESectR inner op sp =>
+        case inlineAtomGo (fuel - 1) env inner of
+          Nothing => Nothing
+          Just s => Just "(${s} ${op})"
+      _ => Nothing
 
 -- | 内部：`needParen` 为真时把文本包进一对括号。
 wrapPrec : Bool -> String -> String
@@ -587,28 +588,35 @@ wrapPrec False s = s
 
 -- | 内部：记录字段 `f = e` 的单行列表（任一字段渲不出则为 `Nothing`）。
 inlineFieldsGo : Int -> List FixityDecl -> List (Pair String Expr) -> Maybe (List String)
-inlineFieldsGo fuel env fields = if fuel <= 0 then Nothing
-else case fields of
-  [] => Just []
-  (Pair fname value) :: rest => case inlinePrecGo (fuel - 1) env 0 value of
-    Nothing => Nothing
-    Just v => case inlineFieldsGo (fuel - 1) env rest of
-      Nothing => Nothing
-      Just ss => Just ("${fname} = ${v}" :: ss)
+inlineFieldsGo fuel env fields =
+  if fuel <= 0 then
+    Nothing
+  else
+    case fields of
+      [] => Just []
+      (Pair fname value) :: rest =>
+        case inlinePrecGo (fuel - 1) env 0 value of
+          Nothing => Nothing
+          Just v =>
+            case inlineFieldsGo (fuel - 1) env rest of
+              Nothing => Nothing
+              Just ss => Just ("${fname} = ${v}" :: ss)
 
 -- | 内部：Pi 类型 `(x : A) -> B` / 隐式 `{x : A} -> B`；`->` 右结合。
 inlinePiGo : Int -> List FixityDecl -> Int -> Maybe Qty -> String -> Bool -> Expr -> Expr -> Maybe String
-inlinePiGo fuel env minPrec qty name implicit dom cod = if fuel <= 0 then Nothing
-else case inlinePrecGo (fuel - 1) env 0 dom of
-  Nothing => Nothing
-  Just d => case inlinePrecGo (fuel - 1) env 1 cod of
-    Nothing => Nothing
-    Just c =>
-      let
-        binder =
-          if implicit then "{${qtyPrefix qty}${name} : ${d}}"
-          else "(${qtyPrefix qty}${name} : ${d})"
-      in Just (wrapPrec (minPrec > 1) "${binder} -> ${c}")
+inlinePiGo fuel env minPrec qty name implicit dom cod =
+  if fuel <= 0 then
+    Nothing
+  else
+    case inlinePrecGo (fuel - 1) env 0 dom of
+      Nothing => Nothing
+      Just d =>
+        case inlinePrecGo (fuel - 1) env 1 cod of
+          Nothing => Nothing
+          Just c =>
+            let
+              binder = if implicit then "{${qtyPrefix qty}${name} : ${d}}" else "(${qtyPrefix qty}${name} : ${d})"
+            in Just (wrapPrec (minPrec > 1) "${binder} -> ${c}")
 
 -- | 内部：quantity 前缀（`0 ` / `1 `）；缺省不打印。
 qtyPrefix : Maybe Qty -> String
@@ -616,79 +624,85 @@ qtyPrefix Nothing = ""
 qtyPrefix (Just Q0) = "0 "
 qtyPrefix (Just Q1) = "1 "
 
--- | 内部：Pi 的块级布局（域 / 余域含块结构时）。DT 类型一般走 `inlinePiGo`，
--- 这里只保证不丢字符。
-renderPiBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Maybe Qty -> Bool -> String -> Expr -> Expr -> List String
-renderPiBlockGo fuel env at lineInd qty implicit name dom cod = if fuel <= 0 then []
-else
-  let
-    openTxt = if implicit then "{${qtyPrefix qty}${name} : " else "(${qtyPrefix qty}${name} : "
-    closeTxt = if implicit then "}" else ")"
-    domLines =
-      appendLast " ${closeTxt} ->"
-        (prefixFirst openTxt (renderExprGo (fuel - 1) env at lineInd dom))
-  in append domLines
-    (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) cod))
-
 -- | 内部：应用的单行渲染：符号名 / canonical 别名的两参应用还原成中缀 `a op b`
 -- （哪怕无声明也按 9 左打印），其余按应用形式。
 inlineAppGo : Int -> List FixityDecl -> Int -> Expr -> List Expr -> Maybe String
-inlineAppGo fuel env minPrec fn args = if fuel <= 0 then Nothing
-else case fn of
-  -- 符号名/canonical 别名（`Cons`->`::`、`bind`->`>>=`）当作中缀运算符：两参应用还原成
-  -- `a op b`（哪怕无声明也按 9 左打印）。普通标识符保持应用形式。
-  EVar op sp => if isSymbolName op || hasOpAlias env op then case args of
-    [a, b] =>
-      let
-        fx = infixPrec env op
-      in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) (opText env op) a b
-    _ => inlineApplyGo (fuel - 1) env minPrec fn args
-  else inlineApplyGo (fuel - 1) env minPrec fn args
-  _ => inlineApplyGo (fuel - 1) env minPrec fn args
+inlineAppGo fuel env minPrec fn args =
+  if fuel <= 0 then
+    Nothing
+  else
+    case fn of
+      -- 符号名/canonical 别名（`Cons`->`::`、`bind`->`>>=`）当作中缀运算符：两参应用还原成
+      -- `a op b`（哪怕无声明也按 9 左打印）。普通标识符保持应用形式。
+      EVar op sp =>
+        if isSymbolName op || hasOpAlias env op then
+          case args of
+            [a, b] =>
+              let
+                fx = infixPrec env op
+              in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) (opText env op) a b
+            _ => inlineApplyGo (fuel - 1) env minPrec fn args
+        else
+          inlineApplyGo (fuel - 1) env minPrec fn args
+      _ => inlineApplyGo (fuel - 1) env minPrec fn args
 
 -- | 内部：中缀 `a op b` 的单行渲染；按结合性给两侧最低优先级，优先级不足时加括号。
 inlineInfixGo : Int -> List FixityDecl -> Int -> Int -> Int -> String -> Expr -> Expr -> Maybe String
-inlineInfixGo fuel env minPrec p assoc label a b = if fuel <= 0 then Nothing
-else
-  let
-    leftMin = if assoc == 0 then p else p + 1
-    rightMin = if assoc == 0 then p + 1 else p
-  in case inlinePrecGo (fuel - 1) env leftMin a of
-    Nothing => Nothing
-    Just lhsText => case inlinePrecGo (fuel - 1) env rightMin b of
+inlineInfixGo fuel env minPrec p assoc label a b =
+  if fuel <= 0 then
+    Nothing
+  else
+    let
+      leftMin = if assoc == 0 then p else p + 1
+      rightMin = if assoc == 0 then p + 1 else p
+    in case inlinePrecGo (fuel - 1) env leftMin a of
       Nothing => Nothing
-      Just rhsText => Just (wrapPrec (p < minPrec) "${lhsText} ${label} ${rhsText}")
+      Just lhsText =>
+        case inlinePrecGo (fuel - 1) env rightMin b of
+          Nothing => Nothing
+          Just rhsText => Just (wrapPrec (p < minPrec) "${lhsText} ${label} ${rhsText}")
 
 -- | 内部：反引号中缀 `` l `name` r ``（优先级查 name，未知按 9 左）。
 inlineBacktickGo : Int -> List FixityDecl -> Int -> String -> Expr -> Expr -> Maybe String
-inlineBacktickGo fuel env minPrec name l r = if fuel <= 0 then Nothing
-else
-  let
-    fx = backtickPrec env name
-  in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) (backtickLabel name) l r
+inlineBacktickGo fuel env minPrec name l r =
+  if fuel <= 0 then
+    Nothing
+  else
+    let
+      fx = backtickPrec env name
+    in inlineInfixGo (fuel - 1) env minPrec (firstOf fx) (secondOf fx) (backtickLabel name) l r
 
 -- | 内部：普通应用 `f a b` 的单行渲染（实参按原子位置打印，整体优先级 9）。
 inlineApplyGo : Int -> List FixityDecl -> Int -> Expr -> List Expr -> Maybe String
-inlineApplyGo fuel env minPrec fn args = if fuel <= 0 then Nothing
-else case inlineApplyHeadGo (fuel - 1) env fn of
-  Nothing => Nothing
-  Just headText => case mapMaybeStrings (\a => inlineAtomGo (fuel - 1) env a) args of
-    Nothing => Nothing
-    Just argTexts =>
-      Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " ${a}") argTexts)))
+inlineApplyGo fuel env minPrec fn args =
+  if fuel <= 0 then
+    Nothing
+  else
+    case inlineApplyHeadGo (fuel - 1) env fn of
+      Nothing => Nothing
+      Just headText =>
+        case mapMaybeStrings (\a => inlineAtomGo (fuel - 1) env a) args of
+          Nothing => Nothing
+          Just argTexts => Just (wrapPrec (9 < minPrec) (headText ++ concatStrings (map (\a => " ${a}") argTexts)))
 
 -- | 内部：应用头按原子位置渲染（`f a` 里的 `f`）。
 inlineApplyHeadGo : Int -> List FixityDecl -> Expr -> Maybe String
-inlineApplyHeadGo fuel env fn = if fuel <= 0 then Nothing
-else case fn of
-  _ => inlineAtomGo (fuel - 1) env fn
+inlineApplyHeadGo fuel env fn =
+  if fuel <= 0 then
+    Nothing
+  else
+    case fn of
+      _ => inlineAtomGo (fuel - 1) env fn
 
 -- | 内部：原子位置的渲染：本身是原子形式就用原文本，否则加括号。
 inlineAtomGo : Int -> List FixityDecl -> Expr -> Maybe String
-inlineAtomGo fuel env e = if fuel <= 0 then Nothing
-else case inlinePrecGo (fuel - 1) env 0 e of
-  Nothing => Nothing
-  Just s => if atomForm e then Just s else Just "(${s})"
+inlineAtomGo fuel env e =
+  if fuel <= 0 then
+    Nothing
+  else
+    case inlinePrecGo (fuel - 1) env 0 e of
+      Nothing => Nothing
+      Just s => if atomForm e then Just s else Just "(${s})"
 
 -- | 内部：该表达式本身是否已是原子形式（原子位置无需再加括号）。
 atomForm : Expr -> Bool
@@ -700,9 +714,10 @@ atomForm (EInterp multi parts sp) = True
 atomForm (EField base f sp) = True
 atomForm (ERecord name fields sp) = True
 atomForm (ERecUpdate base fields sp) = True
-atomForm (EApp fn args sp) = case listExprElems (EApp fn args sp) of
-  Just elems => True
-  Nothing => False
+atomForm (EApp fn args sp) =
+  case listExprElems (EApp fn args sp) of
+    Just elems => True
+    Nothing => False
 -- section 自带括号，永远是原子；反引号中缀是运算符形式（最低优先级）。
 atomForm (ESectOp op sp) = True
 atomForm (ESectL op inner sp) = True
@@ -710,567 +725,485 @@ atomForm (ESectR inner op sp) = True
 atomForm _ = False
 
 -- ---------------------------------------------------------------
--- 块级表达式（含 case/let/do 或含块结构的子表达式）；
--- lineInd = 该表达式起始物理行的缩进（0 基），块内缩进 = lineInd + 2。
--- 返回 List String：首行不含缩进，续行是绝对缩进。
+-- 块级表达式：Doc
+--
+-- 缩进由 `nest` / `align` 承担；换行与否由最近的 `group` 按当前列一次决定。
+-- 不再有「单行版 + 块版」两套渲染，也没有 `lineInd` 参数。
+--
+-- 每个递归函数都带显式 fuel：渲染既沿 AST 子项下降，也经 `map` / `concatMap`
+-- 的 λ 前进，SCT 看不到结构下降。
 -- ---------------------------------------------------------------
--- | 内部：块级入口：能单行且放得下就返回单行，否则折行（`renderWideGo`）或块布局
--- （`renderBlockGo`）。
-renderExprGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderExprGo fuel env at lineInd e = if fuel <= 0 then []
-else case inlinePrecGo formatFuelBound env 0 e of
-  Just s => if fitsLine lineInd s then [s] else renderWideGo (fuel - 1) env at lineInd e
-  Nothing => renderBlockGo (fuel - 1) env at lineInd e
+-- | 内部：可展平的文本；渲不出时为空文档。
+flatDoc : List FixityDecl -> Expr -> Doc
+flatDoc env e =
+  case inlinePrecGo formatFuelBound env 0 e of
+    Just s => verbatim s
+    Nothing => empty
 
--- | 渲染类型表达式：不折行（保持签名 / 字段类型紧凑，避免 `->` 链被打断）。
-export renderTypeExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderTypeExpr env at lineInd e = renderTypeExprFuel formatFuelBound env at lineInd e
+-- | 内部：括号包块布局（块结构必须整体另起一行，闭合括号也独占一行）。
+blockParenDoc : Doc -> Doc
+blockParenDoc d =
+  appendDoc (text "(") (appendDoc (nest 2 (appendDoc hard d)) (appendDoc hard (text ")")))
 
--- | 内部：`renderTypeExpr` 的显式 fuel 版本（绑定块里的签名行要把 fuel 串下去）。
-renderTypeExprFuel : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderTypeExprFuel fuel env at lineInd e = if fuel <= 0 then []
-else case inlinePrecGo (fuel - 1) env 0 e of
-  Just s => [s]
-  Nothing => renderBlockGo (fuel - 1) env at lineInd e
+-- | 内部：能单行就写 `(s)`，否则括号独占行。
+parenInlineOrBlock : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+parenInlineOrBlock fuel env at e =
+  if fuel <= 0 then
+    empty
+  else
+    case inlineExprGo formatFuelBound env e of
+      Just s => text "(${s})"
+      Nothing => blockParenDoc (exprDoc (fuel - 1) env at e)
 
--- | 内部：行内放不下时的折行形式（`if`、列表字面量、应用）。
-renderWideGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderWideGo fuel env at lineInd e = if fuel <= 0 then []
-else case e of
-  EIf c t el sp => renderIfGo (fuel - 1) env at lineInd c t el
-  EApp fn args sp => case listExprElems (EApp fn args sp) of
-    Just elems => case mapMaybeStrings (\x => inlineExprGo formatFuelBound env x) elems of
-      Just ss => renderListBlock at lineInd ss
-      Nothing => renderAppBlockGo (fuel - 1) env at lineInd fn args
-    Nothing => renderAppBlockGo (fuel - 1) env at lineInd fn args
-  _ => [renderExprInline env e]
+-- | 内部：原子位置的文档（需要时加括号）。
+atomDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+atomDoc fuel env at e =
+  if fuel <= 0 then
+    empty
+  else
+    case inlineAtomGo formatFuelBound env e of
+      Just s => verbatim s
+      Nothing => blockParenDoc (exprDoc (fuel - 1) env at e)
 
--- | 内部：单行文本；渲不出时为空串。
-renderExprInline : List FixityDecl -> Expr -> String
-renderExprInline env e = case inlinePrecGo formatFuelBound env 0 e of
-  Just s => s
-  Nothing => ""
+-- | 内部：`case` / `if` 的被检查表达式：优先单行，否则括号包块布局。
+scrutDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+scrutDoc fuel env at e =
+  if fuel <= 0 then
+    empty
+  else
+    case inlineExprGo formatFuelBound env e of
+      Just s => verbatim s
+      Nothing => blockParenDoc (exprDoc (fuel - 1) env at e)
 
--- | 内部：列表字面量折行：`[ a,` / `  b` / `]`（最后一个元素后不加逗号）。
-renderListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
-renderListBlock at lineInd [] = ["[]"]
-renderListBlock at lineInd (first :: rest) =
-  append ["[ ${first}${if isNilList rest then "" else ","}"] (renderListBlockRest at lineInd rest)
+-- | 内部：类型文本（签名 / 字段 / kind）：保持单行；渲不出时把块布局压成原样文本。
+typeText : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> String
+typeText fuel env at e =
+  if fuel <= 0 then
+    ""
+  else
+    case inlinePrecGo formatFuelBound env 0 e of
+      Just s => s
+      Nothing => render maxWidth (exprDoc (fuel - 1) env at e)
 
--- | 内部：列表折行的余项与收尾 `]`。
-renderListBlockRest : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List String
-renderListBlockRest at lineInd [] = ["${spaces lineInd}]"]
-renderListBlockRest at lineInd ([s]) = [spaces (lineInd + 2) ++ s, "${spaces lineInd}]"]
-renderListBlockRest at lineInd (s :: rest) =
-  "${spaces (lineInd + 2)}${s}," :: renderListBlockRest at lineInd rest
+-- | 内部：按上下文最低优先级渲染操作数（优先级不足时括号保持单行）。
+operandDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Doc
+operandDoc fuel env at minPrec e =
+  if fuel <= 0 then
+    empty
+  else if minPrec > 0 then
+    case inlinePrecGo formatFuelBound env minPrec e of
+      Just s => verbatim s
+      Nothing => blockParenDoc (exprDoc (fuel - 1) env at e)
+  else
+    exprDoc (fuel - 1) env at e
 
--- | 内部：原子位置渲染；渲不出单行就用括号把块布局包起来。
-renderAtomExprGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderAtomExprGo fuel env at lineInd e = if fuel <= 0 then []
-else case inlineAtomGo formatFuelBound env e of
-  Just s => [s]
-  Nothing => parenWrapIndGo (fuel - 1) env at lineInd e
+-- | 内部：逗号分隔的文档列表（展平时 `, `，断行时逗号留在行尾）。
+commaDocs : List Doc -> Doc
+commaDocs [] = empty
+commaDocs ([d]) = d
+commaDocs (d :: rest) = appendDoc d (appendDoc (text ",") (appendDoc line (commaDocs rest)))
 
--- | 内部：块布局结果外包一对括号（首行前置 `(`，末行补 `)`）。
-parenWrapIndGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-parenWrapIndGo fuel env at lineInd e =
-  if fuel <= 0 then []
-  else append (prefixFirst "(" (renderBlockGo (fuel - 1) env at lineInd e)) ["${spaces lineInd})"]
-
--- | 内部：按表达式种类分发块布局（case / let / if / do / handle / 记录 / λ / Pi …）。
-renderBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderBlockGo fuel env at lineInd e = if fuel <= 0 then []
-else case e of
-  ECase scrut alts sp => renderCaseGo (fuel - 1) env at lineInd scrut alts
-  ELet binds body rec_ sp => renderLetGo (fuel - 1) env at lineInd binds body
-  EIf c t el sp => renderIfGo (fuel - 1) env at lineInd c t el
-  EApp fn args sp => case appAtParts (EApp fn args sp) of
-    Just (Pair f (Pair nm rest)) => case inlinePrecGo (fuel - 1) env 0 (EApp fn args sp) of
-      Just s => [s]
-      Nothing => case nm of
-        EStr s _ => case renderApplyHeadGo (fuel - 1) env at lineInd f of
-          [] => []
-          heads =>
-            appendApplyArgsGo (fuel - 1) env at lineInd
-              (appendLast ("@" ++ instanceNameText s) heads) rest
-        EParen e _ => case inlineExprGo (fuel - 1) env e of
-          Just ns => case renderApplyHeadGo (fuel - 1) env at lineInd f of
-            [] => []
-            heads =>
-              appendApplyArgsGo (fuel - 1) env at lineInd (appendLast ("@(" ++ ns ++ ")") heads)
-                rest
-          Nothing => []
-        EVar vn _ => case renderApplyHeadGo (fuel - 1) env at lineInd f of
-          [] => []
-          heads =>
-            appendApplyArgsGo (fuel - 1) env at lineInd (appendLast ("@(" ++ vn ++ ")") heads) rest
-        _ => case inlineExprGo (fuel - 1) env nm of
-          Just ns => case renderApplyHeadGo (fuel - 1) env at lineInd f of
-            [] => []
-            heads =>
-              appendApplyArgsGo (fuel - 1) env at lineInd (appendLast ("@(" ++ ns ++ ")") heads)
-                rest
-          Nothing => []
-    Nothing => case handleParts (EApp fn args sp) of
-      Just (Pair comp (Pair ret opH)) => renderHandleGo (fuel - 1) env at lineInd comp ret opH
-      Nothing => case performOperand (EApp fn args sp) of
-        Just op => prefixFirst "perform " (renderExprGo (fuel - 1) env at lineInd op)
-        Nothing => renderAppBlockGo (fuel - 1) env at lineInd fn args
-  EPi name implicit qty dom cod sp =>
-    renderPiBlockGo (fuel - 1) env at lineInd qty implicit name dom cod
-  ELam ps body sp =>
-    prefixFirst "\\${joinComma (map firstOf ps)} => " (renderExprGo (fuel - 1) env at lineInd body)
-  EField base f sp => appendLast ".${f}" (renderAtomExprGo (fuel - 1) env at lineInd base)
-  ERecord name fields sp => renderRecordBlockGo (fuel - 1) env at lineInd name fields
-  ERecUpdate base fields sp => renderRecUpdateBlockGo (fuel - 1) env at lineInd base fields
-  EDo stmts sp => renderDoGo (fuel - 1) env at lineInd stmts
-  -- 局部函数组只作为 let/where 绑定值出现，由 `renderLetBindingGo` 展开成多子句。
-  ELocalFun clauses sp => []
-  EAnn value ty sp => renderExprGo (fuel - 1) env at lineInd value
-  EVar name sp => case macroNameOf name of
-    Just macroName => ["${macroName}!"]
-    Nothing => if isSymbolName name then ["(${name})"] else [name]
-  EInt n sp => [strFromInt n]
-  EStr s sp => [renderStr s]
-  EFloat raw sp => [raw]
-  -- 模板字面量（块布局）。文本块转义；洞可单行则单行，否则块渲染 + 缩进。
-  EInterp multi parts sp =>
-    let
-      body = concatStrings (interpPiecesBlock (fuel - 1) env lineInd multi parts)
-    in splitOnNewline (interpOpen multi parts ++ body ++ interpClose multi)
-  -- 反引号中缀沿用中缀折行布局；section 自带宽括号，尽量单行。
-  EBacktick name l r sp =>
-    let
-      fx = backtickPrec env name
-    in renderInfixBlockGo (fuel - 1) env at lineInd (firstOf fx) (secondOf fx) (backtickLabel name) l r
-  ESectOp op sp => ["(${op})"]
-  ESectL op inner sp =>
-    append (prefixFirst "(${op} " (renderExprGo (fuel - 1) env at lineInd inner))
-      ["${spaces lineInd})"]
-  ESectR inner op sp =>
-    appendLast " ${op})" (prefixFirst "(" (renderExprGo (fuel - 1) env at lineInd inner))
-  _ => []
-
--- | 内部：scrutinee 位置（`case` / `if` 的被检查表达式）：单行优先，否则括号包块布局。
-renderScrutGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderScrutGo fuel env at lineInd e = if fuel <= 0 then []
-else case inlineExprGo formatFuelBound env e of
-  Just s => [s]
-  Nothing => parenWrapIndGo (fuel - 1) env at lineInd e
-
--- | 内部：`case <scrut> of` + 逐分支（分支缩进 `lineInd + 2`）。
-renderCaseGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair Pat Expr) -> List String
-renderCaseGo fuel env at lineInd scrut alts = if fuel <= 0 then []
-else
-  let
-    headLines =
-      appendLast " of" (prefixFirst "case " (renderScrutGo (fuel - 1) env at lineInd scrut))
-    altInd = lineInd + 2
-    altLines = concatMap (\alt => renderAltGo (fuel - 1) env at altInd alt) alts
-  in append headLines altLines
-
--- | 内部：单个 case 分支（渲染后贴上该分支模式的注释）。
-renderAltGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderAltGo fuel env at altInd (Pair pat body) =
-  if fuel <= 0 then []
-  else attachAt at (patSpan pat) altInd (renderAltBodyGo (fuel - 1) env at altInd pat body)
-
--- | 内部：分支体 `pat => body`（放得下一行就一行，否则体缩进 `altInd + 2`；
--- `let` 体直接另起一行）。
-renderAltBodyGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> Expr -> List String
-renderAltBodyGo fuel env at altInd pat body = if fuel <= 0 then []
-else case body of
-  ELet binds inner recFlag sp =>
-    "${spaces altInd}${renderPatGo formatFuelBound pat} =>"
-      :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) env at (altInd + 2) body)
-  _ =>
-    let
-      prefix = "${spaces altInd}${renderPatGo formatFuelBound pat} => "
-    in case inlinePrecGo formatFuelBound env 0 body of
-      Just s =>
-        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else "${spaces altInd}${renderPatGo formatFuelBound pat} =>"
-          :: prefixFirst (spaces (altInd + 2)) (renderExprGo (fuel - 1) env at (altInd + 2) body)
-      Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at altInd body)
-
--- | 内部：`then` / `else` 之后必须独占一行的结构。
---
--- `ELet` 的 `in` 对齐到 `let`，跟在 `else` / `then` 后面会把 `in` 拉到关键字缩进。
--- `if` 视情况处理（见 [renderThenPart]）：能单行就单行，否则按 `lineInd + 2` 换行。
-ownLineAfterKeyword : Expr -> Bool
-ownLineAfterKeyword (ELet _ _ _ _) = True
-ownLineAfterKeyword _ = False
-
--- | 内部：`if ... then ... else ...` 的块布局。
---
--- 判据：
--- - `then` / `else` 后的首行放不下（超过 `maxWidth`）就在 `lineInd + 2` 另起一行，
---   体也按 `lineInd + 2` 渲染，因此嵌套 `if` 的 `else` 与外层 `else` 不同缩进。
--- - `then` 分支直接是 `if` 时强制换行；`else` 分支直接是 `if` 时写成 `else if`，
---   但嵌套 `if` 按 `lineInd + 2` 渲染（它的 `else` 落在 `lineInd + 2`）。
-renderIfGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> Expr -> Expr -> List String
-renderIfGo fuel env at lineInd c t el = if fuel <= 0 then []
-else
-  let
-    condLines = appendLast " then" (prefixFirst "if " (renderScrutGo (fuel - 1) env at lineInd c))
-  in append (renderThenPart (fuel - 1) env at lineInd condLines t)
-    (renderElsePart (fuel - 1) env at lineInd el)
-
--- | 内部：`then` 分支；`condLines` 已含 `if ... then`。
-renderThenPart : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> Expr -> List String
-renderThenPart fuel env at lineInd condLines t = if fuel <= 0 then []
-else
-  let
-    ls = renderExprGo (fuel - 1) env at lineInd t
-    fitsHere = strWidth (lastLineOf condLines) + 1 + strWidth (firstLine ls) <= maxWidth
-    broken =
-      append condLines
-        (prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) t))
-  in if ownLineAfterKeyword t then broken
-  else if nestedIf t then
-    if fitsHere && isNilList (restLines ls) then appendLast (" " ++ firstLine ls) condLines
-    else broken
-  else if fitsHere then append (appendLast (" " ++ firstLine ls) condLines) (restLines ls) else broken
-
--- | 内部：多行 `if` 作为 `then` 体时必须按 `lineInd + 2` 渲染，否则它的 `else` 会与
--- 外层 `else` 同缩进；单行形式由 `renderExprGo` 的 inline 路径给出，不受影响。
-nestedIf : Expr -> Bool
-nestedIf (EIf _ _ _ _) = True
-nestedIf _ = False
-
--- | 内部：`else` 分支，`else` 始终从 `lineInd` 开始。
-renderElsePart : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderElsePart fuel env at lineInd el = if fuel <= 0 then []
-else
-  let
-    broken =
-      (spaces lineInd ++ "else")
-        :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) el)
-  in case el of
-    EIf _ _ _ _ =>
-      prefixFirst (spaces lineInd ++ "else ") (renderExprGo (fuel - 1) env at lineInd el)
-    ELet _ _ _ _ => broken
-    _ =>
-      let
-        ls = renderExprGo (fuel - 1) env at lineInd el
-      in if lineInd + 5 + strWidth (firstLine ls) <= maxWidth then prefixFirst (spaces lineInd ++ "else ") ls
-      else broken
-
--- | 内部：`let` 绑定块 + `in`（绑定缩进 `lineInd + 2`）。
-renderLetGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List (Pair Pat Expr) -> Expr -> List String
-renderLetGo fuel env at lineInd binds body = if fuel <= 0 then []
-else case binds of
-  [] => "let" :: prefixFirst "${spaces lineInd}in " (renderExprGo (fuel - 1) env at lineInd body)
-  first :: rest =>
-    let
-      bindInd = lineInd + 2
-      bindingLines =
-        append (renderLetBindingGo (fuel - 1) env at bindInd first)
-          (concatMap (\b => renderLetBindingGo (fuel - 1) env at bindInd b) rest)
-    in append ("let" :: bindingLines)
-      (prefixFirst "${spaces lineInd}in " (renderExprGo (fuel - 1) env at lineInd body))
-
--- | 内部：单条 `let` 绑定；绑定支持可选签名行（与 where 共用绑定块模型）。解析器把
--- 签名降级成 `EAnn value ty`，这里按「签名行 + 绑定」还原，否则产物会丢掉类型标注。
-renderLetBindingGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair Pat Expr -> List String
-renderLetBindingGo fuel env at bindInd (Pair pat value) = if fuel <= 0 then []
-else case value of
-  EAnn inner ty annSp => case inner of
-    ELocalFun clauses lsp =>
-      append
-        (attachAt at annSp bindInd (prefixFirst "${spaces bindInd}${renderPatGo formatFuelBound pat} : " (renderTypeExprFuel (fuel - 1) env at bindInd ty)))
-        (renderLocalFunGo (fuel - 1) env at bindInd pat clauses)
-    _ => case pat of
-      PVar name psp =>
+-- | 表达式文档；调用方决定是否用 `group` 把整段当作可展平区域。
+exprDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+exprDoc fuel env at e =
+  if fuel <= 0 then
+    empty
+  else
+    case e of
+      ECase scrut alts sp => appendDoc (text "case ") (appendDoc (scrutDoc (fuel - 1) env at scrut) (appendDoc (text " of") (nest 2 (appendDoc hard (altsDoc (fuel - 1) env at alts)))))
+      ELet binds body recFlag sp => letDoc (fuel - 1) env at binds body
+      EIf c t el sp => ifDoc (fuel - 1) env at c t el
+      EApp fn args sp => appDoc (fuel - 1) env at (EApp fn args sp) fn args
+      EPi name implicit qty dom cod sp => piDoc (fuel - 1) env at qty implicit name dom cod
+      ELam ps body sp => group (appendDoc (text ("\\" ++ joinComma (map firstOf ps) ++ " =>")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
+      EField base f sp => appendDoc (atomDoc (fuel - 1) env at base) (text ".${f}")
+      ERecord name fields sp => recordDoc (fuel - 1) env at name fields
+      ERecUpdate base fields sp => recUpdateDoc (fuel - 1) env at base fields
+      EDo stmts sp => appendDoc (text "do") (nest 2 (appendDoc hard (stmtsDoc (fuel - 1) env at stmts)))
+      -- 局部函数组只作为 let / where 绑定值出现，由 `bindingBodyDoc` 展开成多子句。
+      ELocalFun clauses sp => empty
+      -- 表达式位置的 `EAnn` 没有 `: Ty` 语法，透明渲染内部表达式。
+      EAnn value ty sp => exprDoc (fuel - 1) env at value
+      EBacktick name l r sp =>
         let
-          sigLines =
-            prefixFirst "${spaces bindInd}${name} : "
-              (renderTypeExprFuel (fuel - 1) env at bindInd ty)
-        in append (attachAt at annSp bindInd sigLines)
-          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" inner))
-      _ =>
-        let
-          sigLines =
-            prefixFirst "${spaces bindInd}${renderPatGo formatFuelBound pat} : "
-              (renderTypeExprFuel (fuel - 1) env at bindInd ty)
-        in append (attachAt at annSp bindInd sigLines)
-          (attachAt at (patSpan pat) bindInd (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" inner))
-  ELocalFun clauses lsp => renderLocalFunGo (fuel - 1) env at bindInd pat clauses
-  _ =>
-    attachAt at (patSpan pat) bindInd
-      (renderBindingValueGo (fuel - 1) env at bindInd "${renderPatGo formatFuelBound pat} =" value)
+          fx = backtickPrec env name
+        in infixDoc (fuel - 1) env at (firstOf fx) (secondOf fx) (backtickLabel name) l r
+      ESectOp op sp => text "(${op})"
+      ESectL op inner sp => group (appendDoc (text "(${op} ") (appendDoc (exprDoc (fuel - 1) env at inner) (text ")")))
+      ESectR inner op sp => group (appendDoc (text "(") (appendDoc (exprDoc (fuel - 1) env at inner) (text " ${op})")))
+      EInterp multi parts sp => verbatim (interpText (fuel - 1) env multi parts)
+      _ => flatDoc env e
 
--- | 内部：where / let 的多 clause 局部函数：`name p1 p2 = body` 逐 clause 渲染。
-renderLocalFunGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pat -> List (Pair (List Pat) Expr) -> List String
-renderLocalFunGo fuel env at bindInd pat clauses = if fuel <= 0 then []
-else case clauses of
-  [] => []
-  (Pair pats body) :: rest =>
+-- | 内部：`case` 分支序列。
+altsDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair Pat Expr) -> Doc
+altsDoc fuel env at alts = if fuel <= 0 then empty else vsep (map (altDoc (fuel - 1) env at) alts)
+
+-- | 内部：单个 case 分支 `pat => body`。
+altDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pair Pat Expr -> Doc
+altDoc fuel env at (Pair pat body) =
+  if fuel <= 0 then
+    empty
+  else
     let
-      headText = "${renderPatGo formatFuelBound pat}${joinSpace (map renderPatAtom pats)} ="
-      lines = renderBindingValueGo (fuel - 1) env at bindInd headText body
-    in append (attachAt at (patSpan pat) bindInd lines)
-      (renderLocalFunGo (fuel - 1) env at bindInd pat rest)
+      headD = text (renderPatGo formatFuelBound pat ++ " =>")
+      bodyD = exprDoc (fuel - 1) env at body
+    in attachAt at (patSpan pat) (if multilineExpr body then appendDoc headD (nest 2 (appendDoc hard bodyD)) else group (appendDoc headD (nest 2 (appendDoc line bodyD))))
 
--- | 内部：绑定体 `prefixText value`：能一行且放得下就一行，否则体缩进 `lineInd + 2`；
--- `let` 体直接另起一行。
-renderBindingValueGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderBindingValueGo fuel env at lineInd prefixText value = if fuel <= 0 then []
-else case value of
-  ELet binds inner recFlag sp =>
-    (spaces lineInd ++ prefixText)
-      :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
-  _ => case inlinePrecGo formatFuelBound env 0 value of
-    Just s =>
-      if strWidth "${spaces lineInd}${prefixText} ${s}" <= maxWidth then
-        ["${spaces lineInd}${prefixText} ${s}"]
-      else (spaces lineInd ++ prefixText)
-        :: prefixFirst (spaces (lineInd + 2)) (renderExprGo (fuel - 1) env at (lineInd + 2) value)
-    Nothing =>
-      prefixFirst "${spaces lineInd}${prefixText} " (renderExprGo (fuel - 1) env at lineInd value)
-
--- | 内部：`do` + 语句序列（语句缩进 `lineInd + 2`）。
-renderDoGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List DoStmt -> List String
-renderDoGo fuel env at lineInd stmts =
-  if fuel <= 0 then []
-  else "do" :: concatMap (\s => renderDoStmtGo (fuel - 1) env at (lineInd + 2) s) stmts
-
--- | 内部：单条 do 语句（渲染后贴上该语句的注释）。
-renderDoStmtGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
-renderDoStmtGo fuel env at stmtInd stmt =
-  if fuel <= 0 then []
-  else attachAt at (doStmtSpan stmt) stmtInd (renderDoStmtBodyGo (fuel - 1) env at stmtInd stmt)
-
--- | 内部：do 语句体：`pat <- value`（放不下就折行）或裸表达式。
-renderDoStmtBodyGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> DoStmt -> List String
-renderDoStmtBodyGo fuel env at stmtInd stmt = if fuel <= 0 then []
-else case stmt of
-  DBind pat value sp =>
+-- | 内部：`let` 绑定块 + `in`。
+letDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair Pat Expr) -> Expr -> Doc
+letDoc fuel env at binds body =
+  if fuel <= 0 then
+    empty
+  else
     let
-      prefix = "${spaces stmtInd}${renderPatGo formatFuelBound pat} <- "
-    in case inlinePrecGo formatFuelBound env 0 value of
-      Just s =>
-        if strWidth (prefix ++ s) <= maxWidth then [prefix ++ s]
-        else "${spaces stmtInd}${renderPatGo formatFuelBound pat} <-"
-          :: prefixFirst (spaces (stmtInd + 2)) (renderExprGo (fuel - 1) env at (stmtInd + 2) value)
-      Nothing => prefixFirst prefix (renderExprGo (fuel - 1) env at stmtInd value)
-  DExpr value sp => prefixFirst (spaces stmtInd) (renderExprGo (fuel - 1) env at stmtInd value)
+      bindsD = if isNilList binds then empty else appendDoc hard (vsep (map (bindingDoc (fuel - 1) env at) binds))
+    in appendDoc (text "let") (appendDoc (nest 2 bindsD) (appendDoc hard (appendDoc (text "in ") (exprDoc (fuel - 1) env at body))))
 
--- | 内部：应用的块布局；符号名 / canonical 别名的两参应用走中缀块布局。
-renderAppBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
-renderAppBlockGo fuel env at lineInd fn args = if fuel <= 0 then []
-else case fn of
-  EVar op sp => if isSymbolName op || hasOpAlias env op then case args of
-    [a, b] =>
-      let
-        fx = infixPrec env op
-      in renderInfixBlockGo (fuel - 1) env at lineInd (firstOf fx) (secondOf fx) (opText env op) a b
-    _ => renderApplyBlockGo (fuel - 1) env at lineInd fn args
-  else renderApplyBlockGo (fuel - 1) env at lineInd fn args
-  _ => renderApplyBlockGo (fuel - 1) env at lineInd fn args
+-- | 内部：`if ... then ... else ...`；整段能放下时展平成一行。
+ifDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Expr -> Expr -> Doc
+ifDoc fuel env at c t el =
+  if fuel <= 0 then
+    empty
+  else
+    let
+      blocky = multilineExpr t || multilineExpr el
+      thenBreak = if blocky then hard else bodySep t
+      elseBreak = if blocky then hard else line
+    in group (appendDoc (text "if ") (appendDoc (scrutDoc (fuel - 1) env at c) (appendDoc (text " then") (appendDoc (nest 2 (appendDoc thenBreak (exprDoc (fuel - 1) env at t))) (appendDoc elseBreak (elsePartDoc blocky (fuel - 1) env at el))))))
 
--- | 内部：中缀块布局；放不下单行就把运算符放到续行行首组成链。
-renderInfixBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> Expr -> Expr -> List String
-renderInfixBlockGo fuel env at lineInd p assoc label a b = if fuel <= 0 then []
-else case inlineInfixGo formatFuelBound env 0 p assoc label a b of
-  Just s =>
-    if fitsLine lineInd s then [s]
-    else renderInfixChainGo (fuel - 1) env at lineInd p assoc label
-      (infixChainOperands env p assoc label a b)
-  Nothing =>
+-- | 内部：`else` 分支；`else if` 紧接在同一行。
+elsePartDoc : Bool -> Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+elsePartDoc blocky fuel env at el =
+  if fuel <= 0 then
+    empty
+  else
+    case el of
+      EIf c t el2 sp => appendDoc (text "else ") (exprDoc (fuel - 1) env at el)
+      _ => appendDoc (text "else") (nest 2 (appendDoc (if blocky then hard else bodySep el) (exprDoc (fuel - 1) env at el)))
+
+-- | 内部：应用 / 语法糖 / 中缀的分发。
+appDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Expr -> List Expr -> Doc
+appDoc fuel env at whole fn args =
+  if fuel <= 0 then
+    empty
+  else
+    case appAtParts whole of
+      Just (Pair f (Pair nm rest)) => appAtDoc (fuel - 1) env at whole f nm rest
+      Nothing =>
+        case handleParts whole of
+          Just (Pair comp (Pair ret opH)) => handleDoc (fuel - 1) env at comp ret opH
+          Nothing =>
+            case rowAtParts whole of
+              Just (Pair lbl nm) => flatDoc env whole
+              Nothing =>
+                case performOperand whole of
+                  Just op => group (appendDoc (text "perform ") (atomDoc (fuel - 1) env at op))
+                  Nothing =>
+                    case listExprElems whole of
+                      Just elems => listDoc (fuel - 1) env at elems
+                      Nothing => infixOrApply (fuel - 1) env at fn args
+
+-- | 内部：两参符号名 / canonical 别名走中缀，其余走应用形式。
+infixOrApply : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> List Expr -> Doc
+infixOrApply fuel env at fn args =
+  if fuel <= 0 then
+    empty
+  else
+    case fn of
+      EVar op sp =>
+        if isSymbolName op || hasOpAlias env op then
+          case args of
+            [a, b] =>
+              let
+                fx = infixPrec env op
+              in infixDoc (fuel - 1) env at (firstOf fx) (secondOf fx) (opText env op) a b
+            _ => applyDoc (fuel - 1) env at fn args
+        else
+          applyDoc (fuel - 1) env at fn args
+      _ => applyDoc (fuel - 1) env at fn args
+
+-- | 内部：普通应用；断行时每个实参一行（缩进 2）。
+applyDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> List Expr -> Doc
+applyDoc fuel env at fn args =
+  if fuel <= 0 then
+    empty
+  else
+    group
+      (appendDoc (atomDoc (fuel - 1) env at fn) (nest 2 (hcat (map (\a => appendDoc line (atomDoc (fuel - 1) env at a)) args))))
+
+-- | 内部：中缀；断行时运算符在续行行首。
+infixDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> Expr -> Doc
+infixDoc fuel env at p assoc label a b =
+  if fuel <= 0 then
+    empty
+  else
     let
       leftMin = if assoc == 0 then p else p + 1
       rightMin = if assoc == 0 then p + 1 else p
-      lhsLines = renderOperandGo (fuel - 1) env at lineInd leftMin a
-      rhsLines = renderOperandGo (fuel - 1) env at lineInd rightMin b
-    in case rhsLines of
-      [] => lhsLines
-      r :: rest => append (appendLast " ${label} ${r}" lhsLines) rest
+    in group (appendDoc (operandDoc (fuel - 1) env at leftMin a) (nest 2 (appendDoc line (appendDoc (text (label ++ " ")) (operandDoc (fuel - 1) env at rightMin b)))))
 
--- | 内部：把同优先级、同运算符的结合链摊平成操作数列表（左结合由外向内、右结合反之）。
-infixChainOperands : List FixityDecl -> Int -> Int -> String -> Expr -> Expr -> List Expr
-infixChainOperands env p assoc label a b =
-  if assoc == 1 then a :: flattenInfixRight env p label b
-  else append (flattenInfixLeft env p label a) [b]
+-- | 内部：实例名调用的后缀（`@name` / `@(expr)`）。
+instanceSuffix : List FixityDecl -> Expr -> Maybe String
+instanceSuffix env nm =
+  case nm of
+    EStr s sp => Just ("@" ++ instanceNameText s)
+    EParen e sp =>
+      case inlineExprGo formatFuelBound env e of
+        Just ps => Just ("@(" ++ ps ++ ")")
+        Nothing => Nothing
+    EVar vn sp => Just ("@(" ++ vn ++ ")")
+    _ =>
+      case inlineExprGo formatFuelBound env nm of
+        Just ns => Just ("@(" ++ ns ++ ")")
+        Nothing => Nothing
 
--- | 内部：左结合链摊平：`a op b op c` 的左子树继续展开。
-flattenInfixLeft : List FixityDecl -> Int -> String -> Expr -> List Expr
-flattenInfixLeft env p op (e@(EApp (EVar name sp) ([l, r]) sp2)) =
-  let
-    fx = infixPrec env name
-    p2 = firstOf fx
-  in if isSymbolName name && p2 == p && name == op then append (flattenInfixLeft env p op l) [r]
-  else [e]
-flattenInfixLeft env p op e = [e]
+-- | 内部：实例名调用 `f@name args`。
+appAtDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Expr -> Expr -> List Expr -> Doc
+appAtDoc fuel env at whole f nm rest =
+  if fuel <= 0 then
+    empty
+  else
+    case instanceSuffix env nm of
+      Just sfx => group (appendDoc (atomDoc (fuel - 1) env at f) (appendDoc (text sfx) (nest 2 (hcat (map (\a => appendDoc line (atomDoc (fuel - 1) env at a)) rest)))))
+      Nothing => flatDoc env whole
 
--- | 内部：右结合链摊平：`a op b op c` 的右子树继续展开。
-flattenInfixRight : List FixityDecl -> Int -> String -> Expr -> List Expr
-flattenInfixRight env p op (e@(EApp (EVar name sp) ([l, r]) sp2)) =
-  let
-    fx = infixPrec env name
-    p2 = firstOf fx
-  in if isSymbolName name && p2 == p && name == op then l :: flattenInfixRight env p op r else [e]
-flattenInfixRight env p op e = [e]
+-- | 内部：列表字面量。
+listDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Expr -> Doc
+listDoc fuel env at elems =
+  if fuel <= 0 then
+    empty
+  else
+    case elems of
+      [] => text "[]"
+      _ => group (appendDoc (text "[") (appendDoc (nest 2 (appendDoc soft (commaDocs (map (exprDoc (fuel - 1) env at) elems)))) (appendDoc soft (text "]"))))
 
--- | 内部：中缀链折行：首个操作数一行，后续每行 `op operand`
--- （续行缩进 `lineInd + 2`，满足 parser 的 offside 约束）。
-renderInfixChainGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Int -> String -> List Expr -> List String
-renderInfixChainGo fuel env at lineInd p assoc label operands = if fuel <= 0 then []
-else case operands of
-  [] => []
-  first :: rest =>
-    append (renderChainFirstGo (fuel - 1) env at lineInd (p + 1) first)
-      (concatMap (\o => renderChainRestGo (fuel - 1) env at lineInd (p + 1) label o) rest)
+-- | 内部：记录字面量 `Name { f = e, ... }`。
+recordDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List (Pair String Expr) -> Doc
+recordDoc fuel env at name fields =
+  if fuel <= 0 then
+    empty
+  else
+    case fields of
+      [] => text "${name} { }"
+      _ => group (appendDoc (text "${name} {") (appendDoc (nest 2 (appendDoc line (fieldDocs (fuel - 1) env at fields))) (appendDoc line (text "}"))))
 
--- | 内部：链首操作数：单行放得下就一行，否则优先折行，最后才括号包块布局。
-renderChainFirstGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderChainFirstGo fuel env at lineInd minPrec e = if fuel <= 0 then []
-else case inlinePrecGo formatFuelBound env minPrec e of
-  Just s =>
-    if fitsLine lineInd s then [s] else renderWideOperandGo (fuel - 1) env at lineInd minPrec e
-  Nothing => parenWrapIndGo (fuel - 1) env at lineInd e
+-- | 内部：记录字段 `f = e`（逗号分隔）。
+fieldDocs : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List (Pair String Expr) -> Doc
+fieldDocs fuel env at fields =
+  if fuel <= 0 then empty else commaDocs (map (fieldDoc (fuel - 1) env at) fields)
 
--- | 内部：链中操作数：需要括号时保持单行，否则走折行布局。
-renderWideOperandGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderWideOperandGo fuel env at lineInd minPrec e =
-  if fuel <= 0 then []
-  else if minPrec > 0 then [renderExprInlineOperand env minPrec e]
-  else renderWideGo (fuel - 1) env at lineInd e
+-- | 内部：单个记录字段。
+fieldDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pair String Expr -> Doc
+fieldDoc fuel env at (Pair fname value) =
+  if fuel <= 0 then
+    empty
+  else
+    group
+      (appendDoc (text "${fname} =") (nest 2 (appendDoc line (exprDoc (fuel - 1) env at value))))
 
--- | 内部：按给定最低优先级单行渲染；渲不出时为空串。
-renderExprInlineOperand : List FixityDecl -> Int -> Expr -> String
-renderExprInlineOperand env minPrec e = case inlinePrecGo formatFuelBound env minPrec e of
-  Just s => s
-  Nothing => ""
+-- | 内部：记录更新 `{ base | f = e, ... }`。
+recUpdateDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> List (Pair String Expr) -> Doc
+recUpdateDoc fuel env at base fields =
+  if fuel <= 0 then
+    empty
+  else
+    case fields of
+      [] => group (appendDoc (text "{ ") (appendDoc (atomDoc (fuel - 1) env at base) (text " }")))
+      _ => group (appendDoc (text "{ ") (appendDoc (atomDoc (fuel - 1) env at base) (appendDoc (nest 2 (appendDoc line (appendDoc (text "| ") (fieldDocs (fuel - 1) env at fields)))) (appendDoc line (text "}")))))
 
--- | 内部：链的后续操作数（行前为运算符 `op operand`）。
-renderChainRestGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> String -> Expr -> List String
-renderChainRestGo fuel env at lineInd minPrec label e = if fuel <= 0 then []
-else case inlinePrecGo formatFuelBound env minPrec e of
-  Just s => ["${spaces (lineInd + 2)}${label} ${s}"]
-  Nothing =>
-    prefixFirst "${spaces (lineInd + 2)}${label} "
-      (parenWrapIndGo (fuel - 1) env at (lineInd + 2) e)
+-- | 内部：`do` 语句序列。
+stmtsDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List DoStmt -> Doc
+stmtsDoc fuel env at stmts =
+  if fuel <= 0 then empty else vsep (map (stmtDoc (fuel - 1) env at) stmts)
 
--- | 内部：操作数按最低优先级单行渲染，渲不出就括号包块布局。
-renderOperandGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Int -> Expr -> List String
-renderOperandGo fuel env at lineInd minPrec e = if fuel <= 0 then []
-else case inlinePrecGo formatFuelBound env minPrec e of
-  Just s => [s]
-  Nothing => parenWrapIndGo (fuel - 1) env at lineInd e
+-- | 内部：单条 do 语句（`pat <- value` 或裸表达式）。
+stmtDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> DoStmt -> Doc
+stmtDoc fuel env at stmt =
+  if fuel <= 0 then
+    empty
+  else
+    case stmt of
+      DBind pat value sp =>
+        let
+          headD = text (renderPatGo formatFuelBound pat ++ " <-")
+          valueD = exprDoc (fuel - 1) env at value
+        in attachAt at sp (if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD))))
+      DExpr value sp => attachAt at sp (group (exprDoc (fuel - 1) env at value))
 
--- | 内部：应用的块布局（头 + 实参，实参贪心折行）。
-renderApplyBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List Expr -> List String
-renderApplyBlockGo fuel env at lineInd fn args = if fuel <= 0 then []
-else
-  let
-    headLines = renderApplyHeadGo (fuel - 1) env at lineInd fn
-  in case mapMaybeStrings (\a => inlineAtomGo formatFuelBound env a) args of
-    Nothing => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
-    Just texts => case headLines of
-      [h] =>
-        if fitsLine lineInd (h ++ concatStrings (map (\t => " ${t}") texts)) then
-          appendApplyArgsGo (fuel - 1) env at lineInd headLines args
-        else packApplyArgs lineInd [h] texts
-      _ => appendApplyArgsGo (fuel - 1) env at lineInd headLines args
+-- | 内部：绑定（`name = value`，可带签名行 / 局部函数 clause）。
+bindingDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pair Pat Expr -> Doc
+bindingDoc fuel env at (Pair pat value) =
+  if fuel <= 0 then
+    empty
+  else
+    case value of
+      EAnn inner ty annSp =>
+        let
+          sigD = attachAt at annSp (text (renderPatGo formatFuelBound pat ++ " : " ++ typeText (fuel - 1) env at ty))
+          defD = attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat inner)
+        in vsep [sigD, defD]
+      _ => attachAt at (patSpan pat) (bindingBodyDoc (fuel - 1) env at pat value)
 
--- | 内部：贪心折行：尽量把实参放在当前行，放不下就新起一行（缩进 `lineInd + 2`）。
-packApplyArgs : Int -> List String -> List String -> List String
-packApplyArgs lineInd lines [] = lines
-packApplyArgs lineInd lines (t :: rest) =
-  if fitsLineWidth (lastLineWidth lineInd lines) t then
-    packApplyArgs lineInd (appendLast " ${t}" lines) rest
-  else packApplyArgs lineInd (append lines [spaces (lineInd + 2) ++ t]) rest
+-- | 内部：绑定体的形态（局部函数 / λ 还原成子句 / 普通值）。
+bindingBodyDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pat -> Expr -> Doc
+bindingBodyDoc fuel env at pat value =
+  if fuel <= 0 then
+    empty
+  else
+    case value of
+      ELocalFun clauses lsp => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) clauses
+      ELam ps inner lsp => localFunDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) [Pair (map (\p => PVar (firstOf p) (secondOf p)) ps) inner]
+      _ => bindingValueDoc (fuel - 1) env at (renderPatGo formatFuelBound pat) value
 
--- | 内部：已经渲染出的行的最后一行的绝对列宽（首行要算上 `lineInd`）。
-lastLineWidth : Int -> List String -> Int
-lastLineWidth lineInd lines =
-  if isNilList (restLines lines) then lineInd + strWidth (lastLineOf lines)
-  else strWidth (lastLineOf lines)
-
--- | 内部：当前列宽再加一个空格与 `t` 是否不超过 `maxWidth`。
-fitsLineWidth : Int -> String -> Bool
-fitsLineWidth currentWidth t = currentWidth + 1 + strWidth t <= maxWidth
-
--- | 内部：应用头按原子位置渲染（需要时括号包块布局）。
-renderApplyHeadGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderApplyHeadGo fuel env at lineInd fn = if fuel <= 0 then []
-else case fn of
-  _ => renderAtomExprGo (fuel - 1) env at lineInd fn
-
--- | 内部：逐个实参接到 `lines` 的最后一行之后（前置一个空格）。
-appendApplyArgsGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List Expr -> List String
-appendApplyArgsGo fuel env at lineInd lines args = if fuel <= 0 then []
-else case args of
-  [] => lines
-  a :: rest =>
-    appendApplyArgsGo (fuel - 1) env at lineInd
-      (appendBefore " " lines (renderAtomExprGo (fuel - 1) env at lineInd a)) rest
-
--- | 内部：记录字面量块布局 `Name { f = e, ... }`（无字段时 `Name { }`）。
-renderRecordBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> List (Pair String Expr) -> List String
-renderRecordBlockGo fuel env at lineInd name fields = if fuel <= 0 then []
-else case fields of
-  [] => ["${name} { }"]
-  first :: rest =>
+-- | 内部：`lhs = value`（能一行就一行，否则值缩进 2）。
+bindingValueDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> Expr -> Doc
+bindingValueDoc fuel env at lhs value =
+  if fuel <= 0 then
+    empty
+  else
     let
-      start = appendBefore " " ["${name} {"] (renderFieldBlockGo (fuel - 1) env at lineInd first)
-      withRest = appendFieldBlocksGo (fuel - 1) env at lineInd start rest
-    in appendLast " }" withRest
+      headD = text (lhs ++ " =")
+      valueD = exprDoc (fuel - 1) env at value
+    in if multilineExpr value then appendDoc headD (nest 2 (appendDoc hard valueD)) else group (appendDoc headD (nest 2 (appendDoc line valueD)))
 
--- | 内部：追加后续记录字段（前置 `, `）。
-appendFieldBlocksGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> List String -> List (Pair String Expr) -> List String
-appendFieldBlocksGo fuel env at lineInd lines fields = if fuel <= 0 then []
-else case fields of
-  [] => lines
-  f :: rest =>
-    appendFieldBlocksGo (fuel - 1) env at lineInd
-      (appendBefore ", " lines (renderFieldBlockGo (fuel - 1) env at lineInd f)) rest
+-- | 内部：where / let 的多 clause 局部函数。
+localFunDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List (Pair (List Pat) Expr) -> Doc
+localFunDoc fuel env at headText clauses =
+  if fuel <= 0 then empty else vsep (map (localClauseDoc (fuel - 1) env at headText) clauses)
 
--- | 内部：单个记录字段 `f = e`（值按原子位置渲染）。
-renderFieldBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Pair String Expr -> List String
-renderFieldBlockGo fuel env at lineInd (Pair fname value) =
-  if fuel <= 0 then []
-  else prefixFirst "${fname} = " (renderAtomExprGo (fuel - 1) env at lineInd value)
+-- | 内部：单条局部函数 clause。
+localClauseDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> Pair (List Pat) Expr -> Doc
+localClauseDoc fuel env at headText (Pair pats body) =
+  if fuel <= 0 then
+    empty
+  else
+    bindingValueDoc (fuel - 1) env at (headText ++ joinSpace (map renderPatAtom pats)) body
 
--- | 内部：记录更新块布局 `{ base | f = e, ... }`（无字段时 `{ base }`）。
-renderRecUpdateBlockGo : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List (Pair String Expr) -> List String
-renderRecUpdateBlockGo fuel env at lineInd base fields = if fuel <= 0 then []
-else
-  let
-    start = appendBefore " " ["{"] (renderAtomExprGo (fuel - 1) env at lineInd base)
-  in case fields of
-    [] => appendLast " }" start
-    first :: rest =>
-      let
-        start2 = appendBefore " | " start (renderFieldBlockGo (fuel - 1) env at lineInd first)
-        withRest = appendFieldBlocksGo (fuel - 1) env at lineInd start2 rest
-      in appendLast " }" withRest
+-- | 内部：`handle comp { ... }`。
+handleDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Expr -> Expr -> Doc
+handleDoc fuel env at comp ret op =
+  if fuel <= 0 then
+    empty
+  else
+    let
+      headD = appendDoc (text "handle ") (appendDoc (handleCompDoc (fuel - 1) env at comp) (text " {"))
+      retDs =
+        case ret of
+          ELam ([Pair x _]) body sp => [handleRetDoc (fuel - 1) env at x body]
+          _ => []
+      opDs =
+        case op of
+          ELam (_ :: _ :: (Pair k _) :: _) (ECase _ alts _) sp => map (handleAltDoc (fuel - 1) env at k) alts
+          _ => []
+      clauses = append retDs opDs
+    in appendDoc headD (appendDoc (nest 2 (appendDoc hard (vsep clauses))) (appendDoc hard (text "}")))
 
--- | 内部：显式递归预算的上界。块级布局既沿 AST 子项下降、也沿同一表达式的不同缩进 /
--- 模式前进，且大量递归经 `concatMap` / `map` 的 λ（无 size 关系）；用 fuel 守卫加同参数位
--- 递减来满足 SCT。取值远大于任何实际 AST 的渲染调用数。
+-- | 内部：handle 的 comp：原子保持原样，复杂表达式加括号。
+handleCompDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+handleCompDoc fuel env at comp =
+  if fuel <= 0 then
+    empty
+  else
+    case comp of
+      EVar name sp => verbatim name
+      EInt n sp => verbatim (strFromInt n)
+      EStr s sp => verbatim (renderStr s)
+      EFloat raw sp => verbatim raw
+      EParen e sp => parenInlineOrBlock (fuel - 1) env at e
+      _ => parenInlineOrBlock (fuel - 1) env at comp
+
+-- | 内部：`return x -> body` 子句。
+handleRetDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> Expr -> Doc
+handleRetDoc fuel env at x body =
+  if fuel <= 0 then
+    empty
+  else
+    group
+      (appendDoc (text ("return " ++ x ++ " ->")) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
+
+-- | 内部：operator handler 子句 `Op p1 p2 k -> body`。
+handleAltDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> Pair Pat Expr -> Doc
+handleAltDoc fuel env at k (Pair pat body) =
+  if fuel <= 0 then
+    empty
+  else
+    let
+      parts =
+        case pat of
+          PCon c ps sp => Pair c (renderHandlePats formatFuelBound ps)
+          _ => Pair "_" ""
+      cname = firstOf parts
+      patsTxt = secondOf parts
+      headText = if patsTxt == "" then "${cname} ${k} ->" else "${cname} ${patsTxt} ${k} ->"
+    in group (appendDoc (text headText) (nest 2 (appendDoc line (exprDoc (fuel - 1) env at body))))
+
+-- | 内部：Pi 类型 `(x : A) -> B` / 隐式 `{x : A} -> B`。
+piDoc : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe Qty -> Bool -> String -> Expr -> Expr -> Doc
+piDoc fuel env at qty implicit name dom cod =
+  if fuel <= 0 then
+    empty
+  else
+    let
+      openTxt = if implicit then "{" else "("
+      closeTxt = if implicit then "}" else ")"
+    in group (appendDoc (text (openTxt ++ qtyPrefix qty ++ name ++ " : ")) (appendDoc (verbatim (typeText (fuel - 1) env at dom)) (appendDoc (text (closeTxt ++ " ->")) (nest 2 (appendDoc line (verbatim (typeText (fuel - 1) env at cod)))))))
+
+-- | 内部：模板字面量原文；洞优先单行，块结构按缩进 2 拼进字面量。
+interpText : Int -> List FixityDecl -> Bool -> List InterpPart -> String
+interpText fuel env multi parts =
+  interpOpen multi parts
+    ++ concatStrings (map (interpPieceText (fuel - 1) env multi) parts) ++ interpClose multi
+
+-- | 内部：单个模板片段。
+interpPieceText : Int -> List FixityDecl -> Bool -> InterpPart -> String
+interpPieceText fuel env multi part =
+  if fuel <= 0 then
+    ""
+  else
+    case part of
+      IPText s => renderTemplateText multi s
+      IPHole e =>
+        case inlinePrecGo formatFuelBound env 0 e of
+          Just s => "\${${s}}"
+          Nothing => "\${${indentContinuation 2 (render maxWidth (exprDoc (fuel - 1) env emptyAt e))}}"
+
+-- | 内部：把文本的续行统一缩进 `n` 个空格。
+indentContinuation : Int -> String -> String
+indentContinuation n s = join "\n" (indentLines n (splitOnNewline s))
+
+indentLines : Int -> List String -> List String
+indentLines n [] = []
+indentLines n (l :: rest) = (spaces n ++ l) :: indentLines n rest
+
+-- | 内部：无注释附件表（模板洞等没有条目锚点的位置）。
+emptyAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
+emptyAt = []
+
+-- | 内部：显式递归预算的上界（块布局经 `map` / `concatMap` 的 λ 前进，SCT 看不到下降）。
 formatFuelBound : Int
 formatFuelBound = 1073741824
 
--- | 把表达式按块布局渲染并用一对括号包起来（首行前置 `(`，末行补 `)`）。
-export parenWrapInd : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-parenWrapInd env at lineInd e = parenWrapIndGo formatFuelBound env at lineInd e
+-- | 把表达式渲染成可断行的文档（整体是一个可展平的组）。
+export renderExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+renderExpr env at e = group (exprDoc formatFuelBound env at e)
 
--- | 渲染绑定体 `prefixText value`（能一行且放得下就一行）。
-export renderBindingValue : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> String -> Expr -> List String
-renderBindingValue env at lineInd prefixText value =
-  renderBindingValueGo formatFuelBound env at lineInd prefixText value
+-- | 渲染类型表达式：保持单行（签名 / 字段类型不折行）。
+export renderTypeExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> String
+renderTypeExpr env at e = typeText formatFuelBound env at e
 
--- | 渲染表达式：能单行且放得下就一行，否则折行或块布局。
-export renderExpr : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String
-renderExpr env at lineInd e = renderExprGo formatFuelBound env at lineInd e
+-- | 渲染绑定体 `lhs = value`。
+export renderBindingValue : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> Expr -> Doc
+renderBindingValue env at lhs value = bindingValueDoc formatFuelBound env at lhs value
+
+-- | 把表达式按块布局渲染并用一对括号包起来。
+export parenWrap : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Expr -> Doc
+parenWrap env at e = blockParenDoc (exprDoc formatFuelBound env at e)
 
 -- | 单行渲染；含块结构（case / let / do 等）时返回 `Nothing`。
 export inlineExpr : List FixityDecl -> Expr -> Maybe String
 inlineExpr env e = inlineExprGo formatFuelBound env e
 
--- | 按上下文最低优先级 `minPrec` 单行渲染；渲不出时返回 `Nothing`。
+-- | 按上下文最低优先级单行渲染；渲不出时返回 `Nothing`。
 export inlinePrec : List FixityDecl -> Int -> Expr -> Maybe String
 inlinePrec env minPrec e = inlinePrecGo formatFuelBound env minPrec e
 
@@ -1281,3 +1214,15 @@ renderPat pat = renderPatGo formatFuelBound pat
 -- | 渲染原子位置的模式（带实参的构造子 / 记录模式 / `as` 模式加括号）。
 export renderPatAtom : Pat -> String
 renderPatAtom pat = renderPatAtomGo formatFuelBound pat
+
+-- | 渲染 let / where 绑定（带签名行时先输出签名，局部函数展开成多 clause）。
+export renderBinding : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Pair Pat Expr -> Doc
+renderBinding env at binding = bindingDoc formatFuelBound env at binding
+
+-- | 内部：字符串是否含换行。
+textHasNewline : String -> Bool
+textHasNewline s = scanNewline (strUnpack s)
+
+scanNewline : List Int -> Bool
+scanNewline [] = False
+scanNewline (c :: rest) = c == 10 || scanNewline rest

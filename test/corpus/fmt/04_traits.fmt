@@ -8,9 +8,10 @@ trait Pretty a where
   shout : a -> String
 
 instance Pretty Color where
-  pretty c = case c of
-    Red => "red"
-    Blue => "blue"
+  pretty c =
+    case c of
+      Red => "red"
+      Blue => "blue"
   shout c = pretty c ++ "!"
 
 main : String
