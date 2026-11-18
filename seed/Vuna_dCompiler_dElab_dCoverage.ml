@@ -111,7 +111,7 @@ let rec v_Vuna_dCompiler_dElab_dCoverage_ddropPats = (fun n xs -> (if (n <= 0) t
 )))
 
 # 126 "Vuna/Compiler/Elab/Coverage.vuna"
-let rec v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness = (fun table fuel pending rows qs -> (let dtnat__37 = fuel in (if dtnat__37 = 0 then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (let dtb__38 = (dtnat__37 - 1) in (match pending with
+let rec v_Vuna_dCompiler_dElab_dCoverage_dcoverageWitness = (fun table fuel pending rows qs -> (let dtnat__37 = fuel in (if (dtnat__37 = 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (let dtb__38 = (dtnat__37 - 1) in (match pending with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__39) -> (match dtb__39 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__40, dtb__41) -> ((fun ar -> ((fun specialized -> ((fun deeper -> (match deeper with
