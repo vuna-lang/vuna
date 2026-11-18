@@ -1,0 +1,6 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // 仓库级留档：本仓的 shell/terminal 依赖 flake devshell（OCaml 工具链）。
+  // 全局配置已指向同一个 wrapper，这里重复一遍是为了在仓库内可见该依赖。
+  "shell": "/home/grass/.config/opencode/shell/nix-devshell",
+}
