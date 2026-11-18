@@ -26,4 +26,4 @@ let v_Vuna_dCompiler_dCodegen_dRuntime_drtTextExtra = (fun p -> (match (Vuna_dCo
 ))
 
 # 347 "Vuna/Compiler/Codegen/Runtime.vuna"
-let v_Vuna_dCompiler_dCodegen_dRuntime_drtTextExtras = ((Base_dData_dList.v_Base_dData_dList_dmap (fun p -> (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) ((Base_dData_dList.v_Base_dData_dList_dfilter v_Vuna_dCompiler_dCodegen_dRuntime_drtTextExtra) v_Vuna_dCompiler_dCodegen_dRuntime_docamlRtTextTable))
+let v_Vuna_dCompiler_dCodegen_dRuntime_drtTextExtras = ((Base_dData_dList.v_Base_dData_dList_dmap (fun (p : (string, string) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) ((Base_dData_dList.v_Base_dData_dList_dfilter v_Vuna_dCompiler_dCodegen_dRuntime_drtTextExtra) v_Vuna_dCompiler_dCodegen_dRuntime_docamlRtTextTable))

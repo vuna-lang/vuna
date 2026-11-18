@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr = C_Vuna_dCompiler_dBase_dDi
 and t_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnEntry_rnEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnEntry_rnEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnEntry_rnEntryDesc : string }
 
 # 56 "Vuna/Compiler/Base/Diagnostics/Rn.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_MacroArity (dtb__0, dtb__1, dtb__2) -> "RN_MacroArity"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_ValueNotExported (dtb__3, dtb__4) -> "RN_ValueNotExported"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_TypeNotExported (dtb__5, dtb__6) -> "RN_TypeNotExported"
@@ -36,7 +36,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnCode = (fun mc0 -> (match mc0 wit
 ))
 
 # 87 "Vuna/Compiler/Base/Diagnostics/Rn.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dRn_drnTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_MacroArity (dtb__35, dtb__36, dtb__37) -> "macro <0> expects <1> argument(s), got <2>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_ValueNotExported (dtb__38, dtb__39) -> "<0> is not exported by <1>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dRn_dRnErr_TypeNotExported (dtb__40, dtb__41) -> "type <0> is not exported by <1>"

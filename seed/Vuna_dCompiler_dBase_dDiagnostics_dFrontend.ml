@@ -5,7 +5,7 @@ and t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexEntry = { f_Vuna_dCompiler
 and t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsEntry_psEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsEntry_psEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsEntry_psEntryDesc : string }
 
 # 30 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_IntLiteralOutOfRange -> "LX_IntLiteralOutOfRange"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_UnexpectedCharacter -> "LX_UnexpectedCharacter"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_UnknownEscape -> "LX_UnknownEscape"
@@ -16,7 +16,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexCode = (fun mc0 -> (match 
 ))
 
 # 38 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_IntLiteralOutOfRange -> "integer literal is out of range (max is 4611686018427387903)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_UnexpectedCharacter -> "unexpected character"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dLexDiag_UnknownEscape -> "unknown escape sequence"
@@ -27,7 +27,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dlexTemplate = (fun mc0 -> (ma
 ))
 
 # 108 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dpsCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dpsCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigNoDef (dtb__0) -> "PS_WhereSigNoDef"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigMultiClause (dtb__1) -> "PS_WhereSigMultiClause"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigDuplicate (dtb__2) -> "PS_WhereSigDuplicate"
@@ -77,7 +77,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dpsCode = (fun mc0 -> (match m
 ))
 
 # 155 "Vuna/Compiler/Base/Diagnostics/Frontend.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dpsTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dpsTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigNoDef (dtb__8) -> "binding signature for <0> has no definition"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigMultiClause (dtb__9) -> "binding <0> has more than one clause (a signature can annotate only one)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dFrontend_dPsDiag_WhereSigDuplicate (dtb__10) -> "duplicate binding signature for <0>"

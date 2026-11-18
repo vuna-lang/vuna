@@ -15,7 +15,7 @@ let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsAlphaEqual = (fun ec n a b -> (m
 ))
 
 # 41 "Vuna/Compiler/Elab/InstCoherence.vuna"
-let rec v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceExact = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
+let rec v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceExact = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : int) (mc2 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (mc3 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtInst Base_dData_dList.t_Base_dData_dList_dList) -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, dtb__3) -> (if ((Base_dData_dList.v_Base_dData_dList_dlength (dtb__2).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstTele) = mc1) then (if ((((v_Vuna_dCompiler_dElab_dInstCoherence_dheadsAlphaEqual mc0) mc1) mc2) (dtb__2).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstHead) then true else ((((v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceExact mc0) mc1) mc2) dtb__3)) else ((((v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceExact mc0) mc1) mc2) dtb__3))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
@@ -36,7 +36,7 @@ let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsOverlapOne = (fun ec teleA hA te
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__6) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = true; Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutSols dtb__5) (Vuna_dCompiler_dCore_dTerm.v_Vuna_dCompiler_dCore_dTerm_dsolsList dtb__6)) }
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__7) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = false; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__5 }
   | _ -> failwith "DT: impossible branch"
-)) (v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnv (Base_dData_dList.v_Base_dData_dList_dlength teleB)))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun m -> (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VMeta (m, Base_dData_dList.C_Base_dData_dList_dList_Nil)))) dtb__4))
+)) (v_Vuna_dCompiler_dElab_dInstCoherence_dteleGlobalEnv (Base_dData_dList.v_Base_dData_dList_dlength teleB)))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (m : int) -> (Vuna_dCompiler_dCore_dTerm.C_Vuna_dCompiler_dCore_dTerm_dValue_VMeta (m, Base_dData_dList.C_Base_dData_dList_dList_Nil)))) dtb__4))
   | _ -> failwith "DT: impossible branch"
 ))
 
@@ -50,7 +50,7 @@ let v_Vuna_dCompiler_dElab_dInstCoherence_dheadsOverlap = (fun ec tele1 h1 tele2
 ))
 
 # 50 "Vuna/Compiler/Elab/InstCoherence.vuna"
-let rec v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceOverlap = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
+let rec v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceOverlap = (fun (mc0 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dEc) (mc1 : bool) (mc2 : (string, Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc3 : Vuna_dCompiler_dCore_dTerm.t_Vuna_dCompiler_dCore_dTerm_dTerm) (mc4 : Vuna_dCompiler_dElab_dTypes.t_Vuna_dCompiler_dElab_dTypes_dDtInst Base_dData_dList.t_Base_dData_dList_dList) -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, dtb__9) -> (match mc4 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__10, dtb__11) -> (if ((((v_Vuna_dCompiler_dElab_dInstCoherence_dinstanceExactQuiet mc0) (Base_dData_dList.v_Base_dData_dList_dlength mc2)) mc3) dtb__10) then (((((v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else (if (if mc1 then true else ((Vuna_dCompiler_dElab_dMeta.v_Vuna_dCompiler_dElab_dMeta_disBlanketInstHead (Base_dData_dList.v_Base_dData_dList_dlength (dtb__10).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstTele)) (dtb__10).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtInst_dtInstHead)) then (((((v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11) else ((fun nd_uscrut11 -> (match nd_uscrut11 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__12; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__13 } -> (if dtb__12 then { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (C_Vuna_dCompiler_dElab_dInstCoherence_dInstClash_ClashOverlap)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__13 } else (((((v_Vuna_dCompiler_dElab_dInstCoherence_danyInstanceOverlap mc0) mc1) mc2) mc3) dtb__11))

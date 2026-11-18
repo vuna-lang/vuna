@@ -101,7 +101,7 @@ let v_Base_dData_dResult_dstep = (fun mc0 mc1 -> (match mc0 with
 ))
 
 # 61 "Base/Data/Result.vuna"
-let v_Base_dData_dResult_dmapError = (fun mc0 mc1 -> (match mc1 with
+let v_Base_dData_dResult_dmapError = (fun (mc0 : (string) -> string) mc1 -> (match mc1 with
   | C_Base_dData_dResult_dResult_Err (dtb__34) -> (C_Base_dData_dResult_dResult_Err ((mc0 dtb__34)))
   | C_Base_dData_dResult_dResult_Ok (dtb__35) -> (C_Base_dData_dResult_dResult_Ok (dtb__35))
   | _ -> failwith "DT: impossible branch"

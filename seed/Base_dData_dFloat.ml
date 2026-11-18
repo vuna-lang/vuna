@@ -41,7 +41,7 @@ let v_Base_dData_dFloat_dnormStep = (fun p _u -> ((fun e -> ((fun m -> (if (m >=
 let v_Base_dData_dFloat_ddigStep = (fun p _u -> ((fun m -> ((fun ds -> ((fun d -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((m -. (v_Base_dData_dFloat_dintToFloat d)) *. 10.0); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((Base_dData_dList.v_Base_dData_dList_dappend ds) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (d, Base_dData_dList.C_Base_dData_dList_dList_Nil))) }) (v_Base_dData_dFloat_dfloatToInt m))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p)))
 
 # 88 "Base/Data/Float.vuna"
-let rec v_Base_dData_dFloat_dcarryRev = (fun mc0 -> (match mc0 with
+let rec v_Base_dData_dFloat_dcarryRev = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__1, dtb__2) -> (if (dtb__1 = 9) then (match (v_Base_dData_dFloat_dcarryRev dtb__2) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__3) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (0, dtb__3))))
@@ -52,7 +52,7 @@ let rec v_Base_dData_dFloat_dcarryRev = (fun mc0 -> (match mc0 with
 ))
 
 # 96 "Base/Data/Float.vuna"
-let rec v_Base_dData_dFloat_dtrimZerosRev = (fun mc0 -> (match mc0 with
+let rec v_Base_dData_dFloat_dtrimZerosRev = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (if (dtb__4 = 0) then (v_Base_dData_dFloat_dtrimZerosRev dtb__5) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -65,23 +65,23 @@ let v_Base_dData_dFloat_dtrimZeros = (fun ds -> (match (Base_dData_dList.v_Base_
 ))
 
 # 107 "Base/Data/Float.vuna"
-let rec v_Base_dData_dFloat_ddsLen = (fun mc0 -> (match mc0 with
+let rec v_Base_dData_dFloat_ddsLen = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__7, dtb__8) -> (1 + (v_Base_dData_dFloat_ddsLen dtb__8))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 112 "Base/Data/Float.vuna"
-let v_Base_dData_dFloat_ddigitsText = (fun ds -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun acc d -> (acc ^ (bi_strFromInt d)))) "") ds))
+let v_Base_dData_dFloat_ddigitsText = (fun ds -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (acc : string) (d : int) -> (acc ^ (bi_strFromInt d)))) "") ds))
 
 # 116 "Base/Data/Float.vuna"
-let v_Base_dData_dFloat_dzerosText = (fun n -> (v_Base_dData_dFloat_ddigitsText ((Base_dData_dList.v_Base_dData_dList_dmap (fun _u -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
+let v_Base_dData_dFloat_dzerosText = (fun n -> (v_Base_dData_dFloat_ddigitsText ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
 
 # 120 "Base/Data/Float.vuna"
 let v_Base_dData_dFloat_dexpSuffix = (fun e -> ((fun n -> ((fun sign -> (sign ^ (if (n < 10) then ("0" ^ (bi_strFromInt n)) else (bi_strFromInt n)))) (if (e < 0) then "-" else "+"))) (if (e < 0) then (0 - e) else e)))
 
 # 128 "Base/Data/Float.vuna"
-let v_Base_dData_dFloat_dexpForm = (fun mc0 mc1 -> (match mc1 with
+let v_Base_dData_dFloat_dexpForm = (fun (mc0 : int) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> "0e+00"
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__9, dtb__10) -> (match dtb__10 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (String.concat "" [(bi_strFromInt dtb__9); "e"; (v_Base_dData_dFloat_dexpSuffix mc0)])
@@ -96,9 +96,9 @@ let v_Base_dData_dFloat_dfixedForm = (fun e ds -> (if (e >= 0) then ((fun intLen
 # 145 "Base/Data/Float.vuna"
 let v_Base_dData_dFloat_dfloatRender = (fun x -> (if (x <> x) then "nan" else ((fun inf -> (if (x = inf) then "inf" else (if (x = (0.0 -. inf)) then "-inf" else (if (x = 0.0) then (if ((1.0 /. x) < 0.0) then "-0." else "0.") else ((fun neg -> ((fun a -> ((fun p -> ((fun e0 -> ((fun m0 -> ((fun dp -> ((fun d13 -> ((fun raw -> ((fun ed -> ((fun e -> ((fun ds -> ((fun body -> (if neg then ("-" ^ body) else body)) (if (if (e < (0 - 4)) then true else (e >= 12)) then ((v_Base_dData_dFloat_dexpForm e) ds) else ((v_Base_dData_dFloat_dfixedForm e) ds)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf ed))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf ed))) (if (d13 >= 5) then (match (v_Base_dData_dFloat_dcarryRev (Base_dData_dList.v_Base_dData_dList_dreverse raw)) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__11) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = e0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Base_dData_dFloat_dtrimZeros (Base_dData_dList.v_Base_dData_dList_dreverse dtb__11)) }
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (e0 + 1); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Base_dData_dFloat_dtrimZeros (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (1, ((Base_dData_dList.v_Base_dData_dList_dmap (fun _u -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) 11))))) }
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (e0 + 1); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Base_dData_dFloat_dtrimZeros (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (1, ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) 11))))) }
   | _ -> failwith "DT: impossible branch"
-) else { Base_dData_dPair.f_Base_dData_dPair_dPair_first = e0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Base_dData_dFloat_dtrimZeros raw) }))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dp))) (v_Base_dData_dFloat_dfloatToInt (Base_dData_dPair.v_Base_dData_dPair_dfirstOf dp)))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun q i -> ((v_Base_dData_dFloat_ddigStep q) i))) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = m0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dList.C_Base_dData_dList_dList_Nil }) ((Base_dData_dList.v_Base_dData_dList_drange 0) 12)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun q i -> ((v_Base_dData_dFloat_dnormStep q) i))) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = a }) ((Base_dData_dList.v_Base_dData_dList_drange 0) 700)))) (if neg then (0.0 -. x) else x))) (x < 0.0)))))) (1.0 /. 0.0))))
+) else { Base_dData_dPair.f_Base_dData_dPair_dPair_first = e0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (v_Base_dData_dFloat_dtrimZeros raw) }))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dp))) (v_Base_dData_dFloat_dfloatToInt (Base_dData_dPair.v_Base_dData_dPair_dfirstOf dp)))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (q : (float, int Base_dData_dList.t_Base_dData_dList_dList) Base_dData_dPair.t_Base_dData_dPair_dPair) (i : int) -> ((v_Base_dData_dFloat_ddigStep q) i))) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = m0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dList.C_Base_dData_dList_dList_Nil }) ((Base_dData_dList.v_Base_dData_dList_drange 0) 12)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p))) (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun (q : (int, float) Base_dData_dPair.t_Base_dData_dPair_dPair) (i : int) -> ((v_Base_dData_dFloat_dnormStep q) i))) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = a }) ((Base_dData_dList.v_Base_dData_dList_drange 0) 700)))) (if neg then (0.0 -. x) else x))) (x < 0.0)))))) (1.0 /. 0.0))))
 
 # 46 "Base/Data/Float.vuna"
 let v_Show_uFloat = (Base_dTrait_dShow.C_Dict_uBase_dTrait_dShow_dShow_Show ((fun x -> (v_Base_dData_dFloat_dfloatRender x))))

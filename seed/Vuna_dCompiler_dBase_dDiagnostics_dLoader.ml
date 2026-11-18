@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag = C_Vuna_dCompiler_dBas
 and t_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdEntry_ldEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdEntry_ldEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdEntry_ldEntryDesc : string }
 
 # 27 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_LayerViolation (dtb__0, dtb__1, dtb__2, dtb__3) -> "LD_LayerViolation"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_ModuleNotExported (dtb__4, dtb__5) -> "LD_ModuleNotExported"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_ModuleNotFound (dtb__6, dtb__7) -> "LD_ModuleNotFound"
@@ -16,7 +16,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldCode = (fun mc0 -> (match mc0
 ))
 
 # 37 "Vuna/Compiler/Base/Diagnostics/Loader.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dldTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_LayerViolation (dtb__13, dtb__14, dtb__15, dtb__16) -> "module <0> (layer <2>) cannot import <1> (layer <3>)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_ModuleNotExported (dtb__17, dtb__18) -> "module <0> is not exported by package <1>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dLoader_dLdDiag_ModuleNotFound (dtb__19, dtb__20) -> "cannot find module <0> (roots: <1>)"

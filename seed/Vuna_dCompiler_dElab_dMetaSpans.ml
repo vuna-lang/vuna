@@ -3,7 +3,7 @@ open Vuna_runtime
 let v_Vuna_dCompiler_dElab_dMetaSpans_drecordMetaSpan = (fun ec m sp -> ((Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decPutMetaSpans ec) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = m; Base_dData_dPair.f_Base_dData_dPair_dPair_second = sp }, (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_decMetaSpans ec)))))
 
 # 29 "Vuna/Compiler/Elab/MetaSpans.vuna"
-let rec v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta = (fun mc0 mc1 -> (match mc1 with
+let rec v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta = (fun (mc0 : int) (mc1 : (int, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__2; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__3 } -> (if (dtb__2 = mc0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__3)) else ((v_Vuna_dCompiler_dElab_dMetaSpans_dlookupMeta mc0) dtb__1))
   | _ -> failwith "DT: impossible branch"

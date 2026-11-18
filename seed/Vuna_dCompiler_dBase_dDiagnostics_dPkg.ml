@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr = C_Vuna_dCompiler_dBase_d
 and t_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgEntry_pkgEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgEntry_pkgEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgEntry_pkgEntryDesc : string }
 
 # 67 "Vuna/Compiler/Base/Diagnostics/Pkg.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_DuplicatePackageName (dtb__0, dtb__1, dtb__2) -> "PKG_DuplicatePackageName"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_IdentityMismatch (dtb__3, dtb__4) -> "PKG_IdentityMismatch"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_HashMismatch (dtb__5, dtb__6) -> "PKG_HashMismatch"
@@ -53,7 +53,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgCode = (fun mc0 -> (match mc0 w
 ))
 
 # 115 "Vuna/Compiler/Base/Diagnostics/Pkg.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_DuplicatePackageName (dtb__45, dtb__46, dtb__47) -> "duplicate package name \"<0>\" in <1> and <2> (package names must be unique within a dependency graph)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_IdentityMismatch (dtb__48, dtb__49) -> "package \"<0>\" identity mismatch: <1>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dPkgErr_HashMismatch (dtb__50, dtb__51) -> "package \"<0>\" content hash mismatch: <1>"
@@ -109,7 +109,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgMsg = (fun e args -> (((((Vuna_
 let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_dpkgSpan = (fun path line -> (if (path = "") then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = path; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = line; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = line; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = 0; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = 0 }))))
 
 # 186 "Vuna/Compiler/Base/Diagnostics/Pkg.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_datSpan = (fun mc0 mc1 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dPkg_datSpan = (fun (mc0 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) (mc1 : Vuna_dCompiler_dBase_dDiag.t_Vuna_dCompiler_dBase_dDiag_dDiagnostic) -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__90) -> ((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dwithLabel { Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__90)); Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelText = ""; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelStyle = Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dLabelStyle_LabelPrimary; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelProvenance = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing }) mc1)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> mc1
   | _ -> failwith "DT: impossible branch"

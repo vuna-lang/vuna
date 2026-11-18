@@ -13,7 +13,7 @@ let v_Vuna_dCompiler_dIr_dAnf_dstartFuel = 200000
 let v_Vuna_dCompiler_dIr_dAnf_dmkAnf = (fun lets e n -> { f_Vuna_dCompiler_dIr_dAnf_dAnf_anfLets = lets; f_Vuna_dCompiler_dIr_dAnf_dAnf_anfExpr = e; f_Vuna_dCompiler_dIr_dAnf_dAnf_anfNext = n })
 
 # 54 "Vuna/Compiler/Ir/Anf.vuna"
-let v_Vuna_dCompiler_dIr_dAnf_disSimple = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dIr_dAnf_disSimple = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrCtor (dtb__0, dtb__1, dtb__2) -> (match dtb__2 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> true
   | _ -> false
@@ -35,7 +35,7 @@ let v_Vuna_dCompiler_dIr_dAnf_dfreshBinder = (fun n -> (Vuna_dCompiler_dIr_dMode
 let v_Vuna_dCompiler_dIr_dAnf_dbindSimple = (fun next lets e -> (if (v_Vuna_dCompiler_dIr_dAnf_disSimple e) then { f_Vuna_dCompiler_dIr_dAnf_dBound_boundLets = lets; f_Vuna_dCompiler_dIr_dAnf_dBound_boundExpr = e; f_Vuna_dCompiler_dIr_dAnf_dBound_boundNext = next } else ((fun b -> { f_Vuna_dCompiler_dIr_dAnf_dBound_boundLets = ((Base_dData_dList.v_Base_dData_dList_dappend lets) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = b; Base_dData_dPair.f_Base_dData_dPair_dPair_second = e }, Base_dData_dList.C_Base_dData_dList_dList_Nil))); f_Vuna_dCompiler_dIr_dAnf_dBound_boundExpr = (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrVar (b)); f_Vuna_dCompiler_dIr_dAnf_dBound_boundNext = (next + 1) }) (v_Vuna_dCompiler_dIr_dAnf_dfreshBinder next))))
 
 # 75 "Vuna/Compiler/Ir/Anf.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnf_dletsIn = (fun mc0 mc1 -> (match mc0 with
+let rec v_Vuna_dCompiler_dIr_dAnf_dletsIn = (fun (mc0 : (Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder, Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) Base_dData_dPair.t_Base_dData_dPair_dPair Base_dData_dList.t_Base_dData_dList_dList) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIr) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__10, dtb__11) -> (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIr_IrLet ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf dtb__10), Base_dData_dList.C_Base_dData_dList_dList_Nil)), (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dtb__10), ((v_Vuna_dCompiler_dIr_dAnf_dletsIn dtb__11) mc1)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
@@ -99,7 +99,7 @@ let v_Vuna_dCompiler_dIr_dAnf_disAnfBinder = (fun b -> (match (b).Vuna_dCompiler
 ))
 
 # 234 "Vuna/Compiler/Ir/Anf.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnf_dcountBs = (fun mc0 -> (match mc0 with
+let rec v_Vuna_dCompiler_dIr_dAnf_dcountBs = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrBinder Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__67, dtb__68) -> ((if (v_Vuna_dCompiler_dIr_dAnf_disAnfBinder dtb__67) then 1 else 0) + (v_Vuna_dCompiler_dIr_dAnf_dcountBs dtb__68))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
@@ -157,7 +157,7 @@ and v_Vuna_dCompiler_dIr_dAnf_dcountAltM = (fun fuel m -> (if (fuel <= 0) then 0
 )))
 
 # 268 "Vuna/Compiler/Ir/Anf.vuna"
-let v_Vuna_dCompiler_dIr_dAnf_danfDef = (fun mc0 mc1 -> (match mc1 with
+let v_Vuna_dCompiler_dIr_dAnf_danfDef = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrDef) -> (match mc1 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrDef_IrDef (dtb__123, dtb__124, dtb__125, dtb__126, dtb__127, dtb__128, dtb__129) -> ((fun b -> (Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrDef_IrDef (dtb__123, dtb__124, dtb__125, ((v_Vuna_dCompiler_dIr_dAnf_dletsIn (b).f_Vuna_dCompiler_dIr_dAnf_dAnf_anfLets) (b).f_Vuna_dCompiler_dIr_dAnf_dAnf_anfExpr), dtb__127, dtb__128, dtb__129))) (((v_Vuna_dCompiler_dIr_dAnf_danf (mc0 - 1)) (mc0 + ((v_Vuna_dCompiler_dIr_dAnf_dcountAnfBinders (mc0 - 1)) dtb__126))) dtb__126))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrDef_IrExternDef (dtb__130, dtb__131, dtb__132, dtb__133) -> mc1
   | _ -> failwith "DT: impossible branch"
@@ -174,7 +174,7 @@ let rec v_Vuna_dCompiler_dIr_dAnf_danfDefs = (fun fuel defs -> (if (fuel <= 0) t
 let v_Vuna_dCompiler_dIr_dAnf_danfGroup = (fun g -> { Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec = (g).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupIsRec; Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs = ((v_Vuna_dCompiler_dIr_dAnf_danfDefs v_Vuna_dCompiler_dIr_dAnf_dstartFuel) (g).Vuna_dCompiler_dIr_dModel.f_Vuna_dCompiler_dIr_dModel_dIrGroup_irGroupDefs) })
 
 # 284 "Vuna/Compiler/Ir/Anf.vuna"
-let rec v_Vuna_dCompiler_dIr_dAnf_danfGroupsList = (fun mc0 -> (match mc0 with
+let rec v_Vuna_dCompiler_dIr_dAnf_danfGroupsList = (fun (mc0 : Vuna_dCompiler_dIr_dModel.t_Vuna_dCompiler_dIr_dModel_dIrGroup Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__136, dtb__137) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dIr_dAnf_danfGroup dtb__136), (v_Vuna_dCompiler_dIr_dAnf_danfGroupsList dtb__137)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"

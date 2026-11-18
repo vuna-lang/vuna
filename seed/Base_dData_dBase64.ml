@@ -3,7 +3,7 @@ open Vuna_runtime
 let v_Base_dData_dBase64_dlistLen = (fun xs -> (Base_dData_dList.v_Base_dData_dList_dlength xs))
 
 # 47 "Base/Data/Base64.vuna"
-let v_Base_dData_dBase64_dgroups = (fun k xs -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun i -> ((Base_dData_dList.v_Base_dData_dList_dtake k) ((Base_dData_dList.v_Base_dData_dList_ddrop (i * k)) xs)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) (if k = 0 then failwith "division by zero" else (((v_Base_dData_dBase64_dlistLen xs) + k) - 1) / k))))
+let v_Base_dData_dBase64_dgroups = (fun k xs -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : int) -> ((Base_dData_dList.v_Base_dData_dList_dtake k) ((Base_dData_dList.v_Base_dData_dList_ddrop (i * k)) xs)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) (if k = 0 then failwith "division by zero" else (((v_Base_dData_dBase64_dlistLen xs) + k) - 1) / k))))
 
 # 55 "Base/Data/Base64.vuna"
 let v_Base_dData_dBase64_dat = (fun xs i -> (match ((Base_dData_dList.v_Base_dData_dList_ddrop i) xs) with
@@ -16,7 +16,7 @@ let v_Base_dData_dBase64_dat = (fun xs i -> (match ((Base_dData_dList.v_Base_dDa
 let v_Base_dData_dBase64_dpaddingCount = (fun bs n -> (if (n = 0) then 0 else (if (((v_Base_dData_dBase64_dat bs) (n - 1)) = 61) then (if (if (n >= 2) then (((v_Base_dData_dBase64_dat bs) (n - 2)) = 61) else false) then 2 else 1) else 0)))
 
 # 61 "Base/Data/Base64.vuna"
-let v_Base_dData_dBase64_dzeroBytes = (fun k -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun _u -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) k)))
+let v_Base_dData_dBase64_dzeroBytes = (fun k -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) k)))
 
 # 78 "Base/Data/Base64.vuna"
 let v_Base_dData_dBase64_dencodeDigit = (fun n -> (if (n < 26) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((65 + n), Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (if (n < 52) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((71 + n), Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (if (n < 62) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((48 + n) - 52), Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (if (n = 62) then "+" else "/")))))
@@ -89,7 +89,7 @@ let v_Base_dData_dBase64_dbase64Decode = (fun s -> ((fun bs -> ((fun n -> ((fun 
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__19) -> (match (v_Base_dData_dBase64_dsequenceMaybe ((Base_dData_dList.v_Base_dData_dList_dmap v_Base_dData_dBase64_ddecodeGroup) ((v_Base_dData_dBase64_dgroups 4) ((Base_dData_dList.v_Base_dData_dList_dappend dtb__19) (v_Base_dData_dBase64_dzeroBytes pads))))) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
-  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__20) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_ddrop pads) (Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun c -> c)) dtb__20))))))
+  | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__20) -> (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ((Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_ddrop pads) (Base_dData_dList.v_Base_dData_dList_dreverse ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (c : int Base_dData_dList.t_Base_dData_dList_dList) -> c)) dtb__20))))))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"

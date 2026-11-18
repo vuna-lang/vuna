@@ -3,10 +3,10 @@ type t_Base_dTrait_dOrd_dOrdering = C_Base_dTrait_dOrd_dOrdering_LT | C_Base_dTr
 and 'a0 t_Dict_uBase_dTrait_dOrd_dOrd = C_Dict_uBase_dTrait_dOrd_dOrd_Ord of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
 # 26 "Base/Trait/Ord.vuna"
-let v_Ord_uBase_uData_uBool_uBool = (C_Dict_uBase_dTrait_dOrd_dOrd_Ord ((fun mc0 mc1 -> (if mc0 then false else (if mc1 then true else false))), (fun mc0 mc1 -> (if mc0 then mc1 else true)), (fun mc0 mc1 -> (if mc0 then (if mc1 then false else true) else false)), (fun mc0 mc1 -> (if mc0 then true else mc1))))
+let v_Ord_uBase_uData_uBool_uBool = (C_Dict_uBase_dTrait_dOrd_dOrd_Ord ((fun (mc0 : bool) (mc1 : bool) -> (if mc0 then false else (if mc1 then true else false))), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then mc1 else true)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then (if mc1 then false else true) else false)), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then true else mc1))))
 
 # 45 "Base/Trait/Ord.vuna"
-let rec v_Eq_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dEq.C_Dict_uBase_dTrait_dEq_dEq_Eq ((fun mc0 mc1 -> (match mc0 with
+let rec v_Eq_uBase_uTrait_uOrd_uOrdering = (Base_dTrait_dEq.C_Dict_uBase_dTrait_dEq_dEq_Eq ((fun (mc0 : t_Base_dTrait_dOrd_dOrdering) (mc1 : t_Base_dTrait_dOrd_dOrdering) -> (match mc0 with
   | C_Base_dTrait_dOrd_dOrdering_GT -> (match mc1 with
   | C_Base_dTrait_dOrd_dOrdering_GT -> true
   | _ -> false

@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr = C_Vuna_dCompiler_dB
 and t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnEntry_warnEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnEntry_warnEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnEntry_warnEntryDesc : string }
 
 # 32 "Vuna/Compiler/Base/Diagnostics/Warning.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_TargetEffectUnavailable (dtb__0, dtb__1) -> "UN_TargetEffectUnavailable"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_ShadowedBinder (dtb__2) -> "UN_ShadowedBinder"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_UnusedImport (dtb__3) -> "UN_UnusedImport"
@@ -16,7 +16,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnCode = (fun mc0 -> (match 
 ))
 
 # 43 "Vuna/Compiler/Base/Diagnostics/Warning.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dwarnTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_TargetEffectUnavailable (dtb__8, dtb__9) -> "target <0> does not fully implement effect <1>: unsupported operations trap at runtime"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_ShadowedBinder (dtb__10) -> "binder <0> shadows an outer binder"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dWarning_dWarnErr_UnusedImport (dtb__11) -> "module <0> is imported but never used"

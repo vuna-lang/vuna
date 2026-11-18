@@ -25,7 +25,7 @@ let v_Vuna_dCompiler_dFrontend_dLexer_dcharsPeek = (fun cs -> ((dtp_strAt (cs).f
 let v_Vuna_dCompiler_dFrontend_dLexer_dcharsPeekAt = (fun k cs -> ((dtp_strAt (cs).f_Vuna_dCompiler_dFrontend_dLexer_dChars_charsSource) ((cs).f_Vuna_dCompiler_dFrontend_dLexer_dChars_charsOffset + k)))
 
 # 89 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_dsetTokEnd = (fun mc0 mc1 -> (match mc1 with
+let v_Vuna_dCompiler_dFrontend_dLexer_dsetTokEnd = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dLexer_dChars) (mc1 : t_Vuna_dCompiler_dFrontend_dLexer_dPTok) -> (match mc1 with
   | { f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokTok = dtb__0; f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokPos = dtb__1 } -> { f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokTok = dtb__0; f_Vuna_dCompiler_dFrontend_dLexer_dPTok_ptokPos = { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine dtb__1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol dtb__1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset dtb__1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (v_Vuna_dCompiler_dFrontend_dLexer_dcharsOffset mc0) } }
   | _ -> failwith "DT: impossible branch"
 ))
@@ -34,13 +34,13 @@ let v_Vuna_dCompiler_dFrontend_dLexer_dsetTokEnd = (fun mc0 mc1 -> (match mc1 wi
 let v_Vuna_dCompiler_dFrontend_dLexer_dposWithEnd = (fun p end_ -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposLine p); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposCol p); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dposOffset p); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = end_ })
 
 # 96 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_dlexSpanAt = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dFrontend_dLexer_dlexSpanAt = (fun (mc0 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos) -> (match mc0 with
   | { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = dtb__2; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = dtb__3; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = dtb__4; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = dtb__5 } -> { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile = ""; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine = dtb__2; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartCol = dtb__3; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndLine = dtb__2; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndCol = dtb__3; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartOffset = dtb__4; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanEndOffset = dtb__4 }
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 99 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar = (fun mc0 mc1 -> (match mc1 with
+let v_Vuna_dCompiler_dFrontend_dLexer_dadvanceChar = (fun (mc0 : int) (mc1 : Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dPos) -> (match mc1 with
   | { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = dtb__6; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = dtb__7; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = dtb__8; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = dtb__9 } -> (if (mc0 = 10) then { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = (dtb__6 + 1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = 1; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (dtb__8 + 1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (dtb__8 + 1) } else { Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posLine = dtb__6; Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posCol = (dtb__7 + 1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posOffset = (dtb__8 + 1); Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dPos_posEndOffset = (dtb__8 + 1) })
   | _ -> failwith "DT: impossible branch"
 ))
@@ -85,13 +85,13 @@ let v_Vuna_dCompiler_dFrontend_dLexer_disKeyword = (fun s -> (if (if (if (if (if
 let v_Vuna_dCompiler_dFrontend_dLexer_dclassifyIdent = (fun s -> (if (v_Vuna_dCompiler_dFrontend_dLexer_disKeyword s) then (C_Vuna_dCompiler_dFrontend_dLexer_dTok_TKw (s)) else (C_Vuna_dCompiler_dFrontend_dLexer_dTok_TIdent (s))))
 
 # 195 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpan = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dFrontend_dLexer_dcommentSpan = (fun (mc0 : t_Vuna_dCompiler_dFrontend_dLexer_dComment) -> (match mc0 with
   | { f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentKind = dtb__10; f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentText = dtb__11; f_Vuna_dCompiler_dFrontend_dLexer_dComment_commentSpan = dtb__12 } -> dtb__12
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 201 "Vuna/Compiler/Frontend/Lexer.vuna"
-let rec v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace = (fun mc0 -> (match mc0 with
+let rec v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__13, dtb__14) -> (if (if (if (dtb__13 = 32) then true else (dtb__13 = 9)) then true else (dtb__13 = 13)) then (v_Vuna_dCompiler_dFrontend_dLexer_ddropTrailingSpace dtb__14) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__13, dtb__14)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -180,19 +180,19 @@ let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectFloat = (fun fuel cs acc -> (i
 let rec v_Vuna_dCompiler_dFrontend_dLexer_dcollectOp = (fun fuel cs acc -> (if (fuel <= 0) then (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicFuel "lexer") else (if (v_Vuna_dCompiler_dFrontend_dLexer_dcharsEmpty cs) then (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse acc)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = cs })) else ((fun c -> (if (v_Vuna_dCompiler_dFrontend_dLexer_disOpChar c) then (((v_Vuna_dCompiler_dFrontend_dLexer_dcollectOp (fuel - 1)) ((v_Vuna_dCompiler_dFrontend_dLexer_dcharsStep c) cs)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, acc))) else (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse acc)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = cs })))) (v_Vuna_dCompiler_dFrontend_dLexer_dcharsPeek cs)))))
 
 # 429 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_ddecodeEscape = (fun mc0 -> (if (mc0 = 110) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (10)) else (if (mc0 = 116) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (9)) else (if (mc0 = 114) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (13)) else (if (mc0 = 34) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (34)) else (if (mc0 = 92) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (92)) else (if (mc0 = 39) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (39)) else (if (mc0 = 36) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (36)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))))))))
+let v_Vuna_dCompiler_dFrontend_dLexer_ddecodeEscape = (fun (mc0 : int) -> (if (mc0 = 110) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (10)) else (if (mc0 = 116) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (9)) else (if (mc0 = 114) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (13)) else (if (mc0 = 34) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (34)) else (if (mc0 = 92) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (92)) else (if (mc0 = 39) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (39)) else (if (mc0 = 36) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (36)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))))))))
 
 # 439 "Vuna/Compiler/Frontend/Lexer.vuna"
 let v_Vuna_dCompiler_dFrontend_dLexer_ddropOpeningNewline = (fun cs -> (if (v_Vuna_dCompiler_dFrontend_dLexer_dcharsEmpty cs) then cs else ((fun c -> (if (c = 10) then ((v_Vuna_dCompiler_dFrontend_dLexer_dcharsStep c) cs) else cs)) (v_Vuna_dCompiler_dFrontend_dLexer_dcharsPeek cs))))
 
 # 446 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_dflushText = (fun mc0 mc1 -> (match mc0 with
+let v_Vuna_dCompiler_dFrontend_dLexer_dflushText = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : t_Vuna_dCompiler_dFrontend_dLexer_dTmplPart Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc1
   | _ -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((C_Vuna_dCompiler_dFrontend_dLexer_dTmplPart_TPText ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc0)))), mc1))
 ))
 
 # 503 "Vuna/Compiler/Frontend/Lexer.vuna"
-let v_Vuna_dCompiler_dFrontend_dLexer_ddepthAfter = (fun mc0 mc1 -> (match mc1 with
+let v_Vuna_dCompiler_dFrontend_dLexer_ddepthAfter = (fun (mc0 : int) (mc1 : t_Vuna_dCompiler_dFrontend_dLexer_dTok) -> (match mc1 with
   | C_Vuna_dCompiler_dFrontend_dLexer_dTok_TSym (dtb__31) -> (if (dtb__31 = "{") then (mc0 + 1) else (if (dtb__31 = "}") then (if (mc0 > 0) then (mc0 - 1) else 0) else mc0))
   | _ -> mc0
 ))

@@ -3,7 +3,7 @@ open Vuna_runtime
 let v_Base_dData_dSha1_dsha1Init = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (1732584193, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (4023233417, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (2562383102, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (271733878, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (3285377520, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))))))
 
 # 41 "Base/Data/Sha1.vuna"
-let v_Base_dData_dSha1_dzeroBytes = (fun k -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun _u -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) k)))
+let v_Base_dData_dSha1_dzeroBytes = (fun k -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> 0)) ((Base_dData_dList.v_Base_dData_dList_drange 0) k)))
 
 # 53 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dbigEndian32 = (fun x -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dBits.v_Base_dData_dBits_dmask8 ((Base_dData_dBits.v_Base_dData_dBits_dshr32 x) 24)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dBits.v_Base_dData_dBits_dmask8 ((Base_dData_dBits.v_Base_dData_dBits_dshr32 x) 16)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dBits.v_Base_dData_dBits_dmask8 ((Base_dData_dBits.v_Base_dData_dBits_dshr32 x) 8)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dBits.v_Base_dData_dBits_dmask8 x), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))))))
@@ -30,7 +30,7 @@ let v_Base_dData_dSha1_dpack4 = (fun xs -> ((fun nd_uscrut1 -> (match nd_uscrut1
 )) xs))
 
 # 69 "Base/Data/Sha1.vuna"
-let v_Base_dData_dSha1_dwordsOf = (fun blk -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun i -> (v_Base_dData_dSha1_dpack4 ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 4)) blk)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) 16)))
+let v_Base_dData_dSha1_dwordsOf = (fun blk -> ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : int) -> (v_Base_dData_dSha1_dpack4 ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 4)) blk)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) 16)))
 
 # 91 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dheadAfter = (fun k xs -> (match ((Base_dData_dList.v_Base_dData_dList_ddrop k) xs) with
@@ -125,7 +125,7 @@ let v_Base_dData_dSha1_dcompressBlock = (fun hs blk -> ((fun nd_uscrut2 -> (matc
 let v_Base_dData_dSha1_dwordsToBytes = (fun hs -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Base_dData_dSha1_dbigEndian32) hs))
 
 # 20 "Base/Data/Sha1.vuna"
-let v_Base_dData_dSha1_dsha1Raw = (fun s -> ((fun n -> ((fun body -> ((fun blocks -> (v_Base_dData_dSha1_dwordsToBytes (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Base_dData_dSha1_dcompressBlock) v_Base_dData_dSha1_dsha1Init) blocks))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun i -> ((Base_dData_dList.v_Base_dData_dList_dtake 64) ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 64)) body)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) (if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64))))) ((v_Base_dData_dSha1_dpadMessage (Base_dData_dList.dtp_unpack s)) n))) (bi_strLength s)))
+let v_Base_dData_dSha1_dsha1Raw = (fun s -> ((fun n -> ((fun body -> ((fun blocks -> (v_Base_dData_dSha1_dwordsToBytes (((Base_dData_dList.v_Base_dData_dList_dfoldl v_Base_dData_dSha1_dcompressBlock) v_Base_dData_dSha1_dsha1Init) blocks))) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (i : int) -> ((Base_dData_dList.v_Base_dData_dList_dtake 64) ((Base_dData_dList.v_Base_dData_dList_ddrop (i * 64)) body)))) ((Base_dData_dList.v_Base_dData_dList_drange 0) (if 64 = 0 then failwith "division by zero" else ((n + 9) + 63) / 64))))) ((v_Base_dData_dSha1_dpadMessage (Base_dData_dList.dtp_unpack s)) n))) (bi_strLength s)))
 
 # 130 "Base/Data/Sha1.vuna"
 let v_Base_dData_dSha1_dhexDigit = (fun d -> (if (d < 10) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((48 + d), Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((87 + d), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))

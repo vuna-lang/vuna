@@ -71,7 +71,7 @@ let rec v_Base_dContainer_dHashMap_dfromList = (fun _uctx0 mc0 -> (match mc0 wit
 ))
 
 # 98 "Base/Container/HashMap.vuna"
-let v_Base_dContainer_dHashMap_dofNames = (fun xs -> (((v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun n -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = true })) xs)) ((v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Base_dContainer_dHashMap_dofNames = (fun xs -> (((v_Base_dContainer_dHashMap_dinsertAll Base_dData_dString.v_Hashable_uString) ((Base_dData_dList.v_Base_dData_dList_dmap (fun (n : string) -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = n; Base_dData_dPair.f_Base_dData_dPair_dPair_second = true })) xs)) ((v_Base_dContainer_dHashMap_dfromList Base_dData_dString.v_Hashable_uString) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 102 "Base/Container/HashMap.vuna"
 let v_Base_dContainer_dHashMap_dtoList = (fun _uctx0 mc0 -> (let dtb__23 = mc0 in ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun outer -> ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun inner -> ((v_Base_dContainer_dHashMap_d_udedupBucket _uctx0) inner))) (Base_dContainer_dArray.v_Base_dContainer_dArray_dtoList outer)))) (Base_dContainer_dArray.v_Base_dContainer_dArray_dtoList dtb__23))))

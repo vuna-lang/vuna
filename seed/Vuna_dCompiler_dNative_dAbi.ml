@@ -111,7 +111,7 @@ let v_Vuna_dCompiler_dNative_dAbi_dnativePrologue = (fun frame -> ((Base_dData_d
 let v_Vuna_dCompiler_dNative_dAbi_dnativeEpilogue = (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IMov ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rsp)), (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dOperand_OpReg (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IPop (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dReg_Rbp)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRet, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))
 
 # 202 "Vuna/Compiler/Native/Abi.vuna"
-let rec v_Vuna_dCompiler_dNative_dAbi_dmapRetTo = (fun mc0 mc1 -> (match mc1 with
+let rec v_Vuna_dCompiler_dNative_dAbi_dmapRetTo = (fun (mc0 : string) (mc1 : Vuna_dCompiler_dNative_dModel.t_Vuna_dCompiler_dNative_dModel_dInstr Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__0 with
   | Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IRet -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Vuna_dCompiler_dNative_dModel.C_Vuna_dCompiler_dNative_dModel_dInstr_IJmp (mc0)), ((v_Vuna_dCompiler_dNative_dAbi_dmapRetTo mc0) dtb__1)))
   | _ -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, ((v_Vuna_dCompiler_dNative_dAbi_dmapRetTo mc0) dtb__1)))
@@ -127,7 +127,7 @@ let v_Vuna_dCompiler_dNative_dAbi_disNativeNameChar = (fun c -> (if (if (if (if 
 let v_Vuna_dCompiler_dNative_dAbi_dnativeNameChar = (fun c -> (if (v_Vuna_dCompiler_dNative_dAbi_disNativeNameChar c) then (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))) else (String.concat "" ["_x"; (bi_strFromInt c); "_"])))
 
 # 231 "Vuna/Compiler/Native/Abi.vuna"
-let v_Vuna_dCompiler_dNative_dAbi_dnativeName = (fun name -> (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun c -> (Base_dData_dList.dtp_unpack (v_Vuna_dCompiler_dNative_dAbi_dnativeNameChar c)))) (Base_dData_dList.dtp_unpack name))))
+let v_Vuna_dCompiler_dNative_dAbi_dnativeName = (fun name -> (Base_dData_dList.dtp_pack ((Base_dData_dList.v_Base_dData_dList_dconcatMap (fun (c : int) -> (Base_dData_dList.dtp_unpack (v_Vuna_dCompiler_dNative_dAbi_dnativeNameChar c)))) (Base_dData_dList.dtp_unpack name))))
 
 # 235 "Vuna/Compiler/Native/Abi.vuna"
 let v_Vuna_dCompiler_dNative_dAbi_dnativeFuncLabel = (fun name -> ("vuna_" ^ (v_Vuna_dCompiler_dNative_dAbi_dnativeName name)))

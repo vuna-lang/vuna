@@ -3,14 +3,14 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr = C_Vuna_dCompiler_dBase_dDi
 and t_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcEntry_icEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcEntry_icEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcEntry_icEntryDesc : string }
 
 # 16 "Vuna/Compiler/Base/Diagnostics/Ic.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dIc_dicCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dIc_dicCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr_InvariantViolated (dtb__0) -> "IC_InvariantViolated"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr_FuelExhausted (dtb__1) -> "IC_FuelExhausted"
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 20 "Vuna/Compiler/Base/Diagnostics/Ic.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dIc_dicTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dIc_dicTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr_InvariantViolated (dtb__2) -> "internal invariant violated: <0>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dIc_dIcErr_FuelExhausted (dtb__3) -> "<0> ran out of fuel (compiler invariant: the phase must make progress)"
   | _ -> failwith "DT: impossible branch"

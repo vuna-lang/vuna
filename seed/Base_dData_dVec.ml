@@ -21,7 +21,7 @@ let rec v_Base_dData_dVec_dvlen = (fun xs -> (match xs with
 ))
 
 # 45 "Base/Data/Vec.vuna"
-let rec v_Base_dData_dVec_dvecToList = (fun mc0 -> (match mc0 with
+let rec v_Base_dData_dVec_dvecToList = (fun (mc0 : string t_Base_dData_dVec_dVec) -> (match mc0 with
   | C_Base_dData_dVec_dVec_VCons (dtb__6, dtb__7) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__6, (v_Base_dData_dVec_dvecToList dtb__7)))
   | C_Base_dData_dVec_dVec_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"

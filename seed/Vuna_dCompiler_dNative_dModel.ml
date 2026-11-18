@@ -11,14 +11,14 @@ and t_Vuna_dCompiler_dNative_dModel_dNativeProgram = { f_Vuna_dCompiler_dNative_
 and t_Vuna_dCompiler_dNative_dModel_dNativeOutcome = C_Vuna_dCompiler_dNative_dModel_dNativeOutcome_NativeOk of (t_Vuna_dCompiler_dNative_dModel_dNativeProgram) | C_Vuna_dCompiler_dNative_dModel_dNativeOutcome_NativeRejected of (t_Vuna_dCompiler_dNative_dModel_dNativeErr)
 
 # 28 "Vuna/Compiler/Native/Model.vuna"
-let v_Vuna_dCompiler_dNative_dModel_dnativeErrText = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dNative_dModel_dnativeErrText = (fun (mc0 : t_Vuna_dCompiler_dNative_dModel_dNativeErr) -> (match mc0 with
   | C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeInternal (dtb__0) -> ("internal native backend error: " ^ dtb__0)
   | C_Vuna_dCompiler_dNative_dModel_dNativeErr_NativeUnsupported (dtb__1) -> dtb__1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 50 "Vuna/Compiler/Native/Model.vuna"
-let v_Vuna_dCompiler_dNative_dModel_dregText = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dNative_dModel_dregText = (fun (mc0 : t_Vuna_dCompiler_dNative_dModel_dReg) -> (match mc0 with
   | C_Vuna_dCompiler_dNative_dModel_dReg_R15 -> "r15"
   | C_Vuna_dCompiler_dNative_dModel_dReg_R11 -> "r11"
   | C_Vuna_dCompiler_dNative_dModel_dReg_R10 -> "r10"
@@ -35,7 +35,7 @@ let v_Vuna_dCompiler_dNative_dModel_dregText = (fun mc0 -> (match mc0 with
 ))
 
 # 65 "Vuna/Compiler/Native/Model.vuna"
-let v_Vuna_dCompiler_dNative_dModel_dreg8Text = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dNative_dModel_dreg8Text = (fun (mc0 : t_Vuna_dCompiler_dNative_dModel_dReg) -> (match mc0 with
   | C_Vuna_dCompiler_dNative_dModel_dReg_R15 -> "r15b"
   | C_Vuna_dCompiler_dNative_dModel_dReg_R11 -> "r11b"
   | C_Vuna_dCompiler_dNative_dModel_dReg_R10 -> "r10b"

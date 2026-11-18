@@ -13,21 +13,21 @@ and t_Vuna_dCompiler_dWasm_dModel_dWatData = { f_Vuna_dCompiler_dWasm_dModel_dWa
 and t_Vuna_dCompiler_dWasm_dModel_dWasmModule = { f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmTypes : t_Vuna_dCompiler_dWasm_dModel_dWatType Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmTags : t_Vuna_dCompiler_dWasm_dModel_dWatTag Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmImports : t_Vuna_dCompiler_dWasm_dModel_dWatImport Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmGlobals : t_Vuna_dCompiler_dWasm_dModel_dWatGlobal Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmFuncs : t_Vuna_dCompiler_dWasm_dModel_dWatFunc Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmElems : string Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmData : t_Vuna_dCompiler_dWasm_dModel_dWatData Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmExports : t_Vuna_dCompiler_dWasm_dModel_dWatExport Base_dData_dList.t_Base_dData_dList_dList; f_Vuna_dCompiler_dWasm_dModel_dWasmModule_wmMemPages : int }
 
 # 23 "Vuna/Compiler/Wasm/Model.vuna"
-let v_Vuna_dCompiler_dWasm_dModel_dtargetText = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dWasm_dModel_dtargetText = (fun (mc0 : t_Vuna_dCompiler_dWasm_dModel_dTarget) -> (match mc0 with
   | C_Vuna_dCompiler_dWasm_dModel_dTarget_TargetWasm -> "wasm"
   | C_Vuna_dCompiler_dWasm_dModel_dTarget_TargetOcaml -> "ocaml"
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 32 "Vuna/Compiler/Wasm/Model.vuna"
-let v_Vuna_dCompiler_dWasm_dModel_dwasmErrText = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dWasm_dModel_dwasmErrText = (fun (mc0 : t_Vuna_dCompiler_dWasm_dModel_dWasmErr) -> (match mc0 with
   | C_Vuna_dCompiler_dWasm_dModel_dWasmErr_WasmInternal (dtb__0) -> ("internal wasm backend error: " ^ dtb__0)
   | C_Vuna_dCompiler_dWasm_dModel_dWasmErr_WasmUnsupported (dtb__1) -> dtb__1
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 51 "Vuna/Compiler/Wasm/Model.vuna"
-let v_Vuna_dCompiler_dWasm_dModel_dwatValTyText = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dWasm_dModel_dwatValTyText = (fun (mc0 : t_Vuna_dCompiler_dWasm_dModel_dWatValTy) -> (match mc0 with
   | C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvRefNull (dtb__2) -> (String.concat "" ["(ref null "; dtb__2; ")"])
   | C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvRef (dtb__3) -> (String.concat "" ["(ref "; dtb__3; ")"])
   | C_Vuna_dCompiler_dWasm_dModel_dWatValTy_WvI31Ref -> "i31ref"

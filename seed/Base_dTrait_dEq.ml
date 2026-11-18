@@ -2,7 +2,7 @@ open Vuna_runtime
 type 'a0 t_Dict_uBase_dTrait_dEq_dEq = C_Dict_uBase_dTrait_dEq_dEq_Eq of (('a0) -> ('a0) -> bool) * (('a0) -> ('a0) -> bool)
 
 # 17 "Base/Trait/Eq.vuna"
-let v_Eq_uBase_uData_uBool_uBool = (C_Dict_uBase_dTrait_dEq_dEq_Eq ((fun mc0 mc1 -> (if mc0 then (if mc1 then true else false) else (if mc1 then false else true))), (fun mc0 mc1 -> (if mc0 then (if mc1 then false else true) else (if mc1 then true else false)))))
+let v_Eq_uBase_uData_uBool_uBool = (C_Dict_uBase_dTrait_dEq_dEq_Eq ((fun (mc0 : bool) (mc1 : bool) -> (if mc0 then (if mc1 then true else false) else (if mc1 then false else true))), (fun (mc0 : bool) (mc1 : bool) -> (if mc0 then (if mc1 then false else true) else (if mc1 then true else false)))))
 
 # 12 "Base/Trait/Eq.vuna"
 let v_Base_dTrait_dEq_d_x61__x61_ = (fun _ud x0 x1 -> (match _ud with

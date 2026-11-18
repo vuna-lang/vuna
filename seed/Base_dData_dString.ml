@@ -18,7 +18,7 @@ let v_Monoid_uString = (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dMonoid_
 let v_Base_dData_dString_dbyteLength = (fun s -> (bi_natFromInt (bi_strLength s)))
 
 # 52 "Base/Data/String.vuna"
-let rec v_Base_dData_dString_d_uinterleave = (fun mc0 mc1 -> (match mc1 with
+let rec v_Base_dData_dString_d_uinterleave = (fun (mc0 : string) (mc1 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, dtb__1) -> (match dtb__1 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__0, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (mc0, ((v_Base_dData_dString_d_uinterleave mc0) dtb__1)))))
@@ -31,13 +31,13 @@ let rec v_Base_dData_dString_d_uinterleave = (fun mc0 mc1 -> (match mc1 with
 let v_Base_dData_dString_djoin = (fun sep xs -> (Base_dData_dList.dtp_concatMany ((v_Base_dData_dString_d_uinterleave sep) xs)))
 
 # 62 "Base/Data/String.vuna"
-let v_Base_dData_dString_dunlines = (fun mc0 -> (match mc0 with
+let v_Base_dData_dString_dunlines = (fun (mc0 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
-  | _ -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun x -> (((Base_dTrait_dInterp.v_Base_dTrait_dInterp_dinterp Base_dTrait_dInterp.v_Interp_uString) x) ^ "\n"))) mc0))
+  | _ -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun (x : string) -> (((Base_dTrait_dInterp.v_Base_dTrait_dInterp_dinterp Base_dTrait_dInterp.v_Interp_uString) x) ^ "\n"))) mc0))
 ))
 
 # 97 "Base/Data/String.vuna"
-let v_Base_dData_dString_drepeat = (fun n s -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun _u -> s)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
+let v_Base_dData_dString_drepeat = (fun n s -> (Base_dData_dList.dtp_concatMany ((Base_dData_dList.v_Base_dData_dList_dmap (fun (_u : int) -> s)) ((Base_dData_dList.v_Base_dData_dList_drange 0) n))))
 
 # 101 "Base/Data/String.vuna"
 let v_Base_dData_dString_dsubstring = (fun start len s -> (((dtp_substring start) len) s))
@@ -46,7 +46,7 @@ let v_Base_dData_dString_dsubstring = (fun start len s -> (((dtp_substring start
 let v_Base_dData_dString_d_uisSpace = (fun c -> (if (if (if (c = 32) then true else (c = 9)) then true else (c = 10)) then true else (c = 13)))
 
 # 109 "Base/Data/String.vuna"
-let rec v_Base_dData_dString_d_udropSpace = (fun mc0 -> (match mc0 with
+let rec v_Base_dData_dString_d_udropSpace = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, dtb__3) -> (if (v_Base_dData_dString_d_uisSpace dtb__2) then (v_Base_dData_dString_d_udropSpace dtb__3) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__2, dtb__3)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
@@ -62,7 +62,7 @@ let v_Base_dData_dString_dtrimRight = (fun s -> (Base_dData_dList.dtp_pack (Base
 let v_Base_dData_dString_dtrim = (fun s -> (v_Base_dData_dString_dtrimLeft (v_Base_dData_dString_dtrimRight s)))
 
 # 114 "Base/Data/String.vuna"
-let rec v_Base_dData_dString_d_ustartsWithChars = (fun mc0 mc1 -> (match mc0 with
+let rec v_Base_dData_dString_d_ustartsWithChars = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__4, dtb__5) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__6, dtb__7) -> (if (dtb__4 = dtb__6) then ((v_Base_dData_dString_d_ustartsWithChars dtb__5) dtb__7) else false)
@@ -73,20 +73,20 @@ let rec v_Base_dData_dString_d_ustartsWithChars = (fun mc0 mc1 -> (match mc0 wit
 ))
 
 # 31 "Base/Data/String.vuna"
-let rec v_Base_dData_dString_dsplitAcc = (fun mc0 mc1 mc2 mc3 mc4 -> (match mc1 with
+let rec v_Base_dData_dString_dsplitAcc = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) (mc2 : int) (mc3 : int Base_dData_dList.t_Base_dData_dList_dList) (mc4 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, dtb__9) -> (if (mc2 <= 0) then (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc3)), mc4))) else (if ((v_Base_dData_dString_d_ustartsWithChars mc0) mc1) then ((((((v_Base_dData_dString_dskipSep mc0) mc1) (mc2 - 1)) (Base_dData_dList.v_Base_dData_dList_dlength mc0)) Base_dData_dList.C_Base_dData_dList_dList_Nil) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc3)), mc4))) else (((((v_Base_dData_dString_dsplitAcc mc0) dtb__9) (mc2 - 1)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__8, mc3))) mc4)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc3)), mc4)))
   | _ -> failwith "DT: impossible branch"
 ))
 # 40 "Base/Data/String.vuna"
-and v_Base_dData_dString_dskipSep = (fun mc0 mc1 mc2 mc3 mc4 mc5 -> (match mc1 with
+and v_Base_dData_dString_dskipSep = (fun (mc0 : int Base_dData_dList.t_Base_dData_dList_dList) (mc1 : int Base_dData_dList.t_Base_dData_dList_dList) (mc2 : int) (mc3 : int) (mc4 : int Base_dData_dList.t_Base_dData_dList_dList) (mc5 : string Base_dData_dList.t_Base_dData_dList_dList) -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__10, dtb__11) -> (if (mc2 <= 0) then (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc4)), mc5))) else (if (mc3 <= 0) then (((((v_Base_dData_dString_dsplitAcc mc0) mc1) (mc2 - 1)) mc4) mc5) else ((((((v_Base_dData_dString_dskipSep mc0) dtb__11) (mc2 - 1)) (mc3 - 1)) mc4) mc5)))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc4)), mc5)))
   | _ -> failwith "DT: impossible branch"
 ))
 
 # 25 "Base/Data/String.vuna"
-let v_Base_dData_dString_dsplit = (fun sep text -> (if ((bi_strLength sep) = 0) then ((Base_dData_dList.v_Base_dData_dList_dmap (fun c -> (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))))) (Base_dData_dList.dtp_unpack text)) else (((((v_Base_dData_dString_dsplitAcc (Base_dData_dList.dtp_unpack sep)) (Base_dData_dList.dtp_unpack text)) (((2 * (bi_strLength text)) + (bi_strLength sep)) + 2)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
+let v_Base_dData_dString_dsplit = (fun sep text -> (if ((bi_strLength sep) = 0) then ((Base_dData_dList.v_Base_dData_dList_dmap (fun (c : int) -> (Base_dData_dList.dtp_pack (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (c, Base_dData_dList.C_Base_dData_dList_dList_Nil))))) (Base_dData_dList.dtp_unpack text)) else (((((v_Base_dData_dString_dsplitAcc (Base_dData_dList.dtp_unpack sep)) (Base_dData_dList.dtp_unpack text)) (((2 * (bi_strLength text)) + (bi_strLength sep)) + 2)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
 # 58 "Base/Data/String.vuna"
 let v_Base_dData_dString_dlines = (fun s -> ((v_Base_dData_dString_dsplit "\n") s))

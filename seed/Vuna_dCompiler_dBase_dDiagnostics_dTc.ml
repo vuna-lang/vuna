@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr = C_Vuna_dCompiler_dBase_dDi
 and t_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcEntry_tcEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcEntry_tcEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcEntry_tcEntryDesc : string }
 
 # 147 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_DeriveUnsupportedKind (dtb__0) -> "TC_DeriveUnsupportedKind"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_DeriveSingleCtor (dtb__1) -> "TC_DeriveSingleCtor"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_DeriveFieldType (dtb__2, dtb__3, dtb__4) -> "TC_DeriveFieldType"
@@ -112,7 +112,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcCode = (fun mc0 -> (match mc0 wit
 ))
 
 # 257 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_MainArity (dtb__82) -> "main must not take parameters (got <0>)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_DebugConstructInRelease (dtb__83) -> "<0> is only available in debug builds (remove it before a release build)"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dTc_dTcErr_UnhandledEffects (dtb__84) -> "row must be Nil here (the action still has unhandled effects: <0>)"
@@ -296,7 +296,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcTypeMismatchNoLoc = (fun expected
 let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcErr3 = (fun sp e a0 a1 a2 -> (((v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dtcErr sp) e) (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a0, (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a1, (Base_dData_dVec.C_Base_dData_dVec_dVec_VCons (a2, Base_dData_dVec.C_Base_dData_dVec_dVec_Nil))))))))
 
 # 632 "Vuna/Compiler/Base/Diagnostics/Tc.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dcoverageCandidate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dTc_dcoverageCandidate = (fun (mc0 : (string, Vuna_dCompiler_dBase_dSource.t_Vuna_dCompiler_dBase_dSource_dSpan Base_dData_dMaybe.t_Base_dData_dMaybe_dMaybe) Base_dData_dPair.t_Base_dData_dPair_dPair) -> (match mc0 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__164; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__165 } -> { Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCandidate_candidateText = dtb__164; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCandidate_candidateSpan = dtb__165; Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCandidate_candidateReason = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("not covered by any branch")) }
   | _ -> failwith "DT: impossible branch"
 ))

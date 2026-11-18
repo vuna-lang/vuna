@@ -3,7 +3,7 @@ type t_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr = C_Vuna_dCompiler_dBase_dDi
 and t_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgEntry = { f_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgEntry_cgEntryCode : string; f_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgEntry_cgEntryTemplate : string; f_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgEntry_cgEntryDesc : string }
 
 # 32 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgCode = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgCode = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_UnsolvedMetavarRuntime (dtb__0) -> "CG_UnsolvedMetavarRuntime"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_TypeLevelNameRuntime (dtb__1) -> "CG_TypeLevelNameRuntime"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_TypeLevelBindingRuntime (dtb__2) -> "CG_TypeLevelBindingRuntime"
@@ -19,7 +19,7 @@ let v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgCode = (fun mc0 -> (match mc0 wit
 ))
 
 # 45 "Vuna/Compiler/Base/Diagnostics/Cg.vuna"
-let v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgTemplate = (fun mc0 -> (match mc0 with
+let v_Vuna_dCompiler_dBase_dDiagnostics_dCg_dcgTemplate = (fun (mc0 : t_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr) -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_UnsolvedMetavarRuntime (dtb__6) -> "unsolved metavariable in runtime code<0>"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_TypeLevelNameRuntime (dtb__7) -> "type-level name <0> is used at runtime"
   | C_Vuna_dCompiler_dBase_dDiagnostics_dCg_dCgErr_TypeLevelBindingRuntime (dtb__8) -> "type-level binding <0> is used at runtime"
