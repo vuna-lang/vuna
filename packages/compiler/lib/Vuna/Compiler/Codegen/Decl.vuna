@@ -213,33 +213,31 @@ qualFamOf : QualCtx -> String -> String
 qualFamOf qc fam = firstOf (qualTypeText qc fam)
 
 toOTy : IrTy -> OTy
-toOTy ty = case ty of
-  IrTyVar i => OTVar i
-  IrTyInt => OTInt
-  IrTyStr => OTStr
-  IrTyBool => OTBool
-  IrTyFloat => OTFloat
-  IrTyOpaque => OTOpaque
-  IrTyArray a => OTArray (toOTy a)
-  IrTyRef a => OTRef (toOTy a)
-  IrTyFun d c => OTFun (toOTy d) (toOTy c)
-  IrTyData fam args => OTData fam (map toOTy args)
+toOTy (IrTyVar i) = OTVar i
+toOTy IrTyInt = OTInt
+toOTy IrTyStr = OTStr
+toOTy IrTyBool = OTBool
+toOTy IrTyFloat = OTFloat
+toOTy IrTyOpaque = OTOpaque
+toOTy (IrTyArray a) = OTArray (toOTy a)
+toOTy (IrTyRef a) = OTRef (toOTy a)
+toOTy (IrTyFun d c) = OTFun (toOTy d) (toOTy c)
+toOTy (IrTyData fam args) = OTData fam (map toOTy args)
 
 toODecl : IrTyDecl -> ODecl
-toODecl decl = case decl of
-  IrVariantDecl name n ctors => ODVariant n (typeName name) (map (toOCtor name) ctors)
-  IrRecordDecl name n fields tys => ODRecord n (typeName name) (recordFieldsOf name fields tys)
-  IrUnboxedDecl name n ty => ODAlias n (typeName name) (toOTy ty)
+toODecl (IrVariantDecl name n ctors) = ODVariant n (typeName name) (map (toOCtor name) ctors)
+toODecl (IrRecordDecl name n fields tys) =
+  ODRecord n (typeName name) (recordFieldsOf name fields tys)
+toODecl (IrUnboxedDecl name n ty) = ODAlias n (typeName name) (toOTy ty)
 
 toOCtor : String -> Pair String (List IrTy) -> OCtor
 toOCtor family (Pair ctor tys) = OCtor (ctorOcamlName family ctor) (map toOTy tys)
 
 recordFieldsOf : String -> List (Pair Int String) -> List IrTy -> List (Pair String OTy)
-recordFieldsOf family fields tys = case fields of
+recordFieldsOf family [] tys = []
+recordFieldsOf family (f :: fs) tys = case tys of
   [] => []
-  f :: fs => case tys of
-    [] => []
-    t :: ts => Pair (recordFieldLabel family (secondOf f)) (toOTy t) :: recordFieldsOf family fs ts
+  t :: ts => Pair (recordFieldLabel family (secondOf f)) (toOTy t) :: recordFieldsOf family fs ts
 
 -- | 一个单元的类型声明块：空表 → ""；否则 `type ... \nand ...\n\n`（末尾空行固定，保证产物逐字节稳定）。
 export irTypeDeclsText : QualCtx -> List IrTyDecl -> String

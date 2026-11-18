@@ -1491,9 +1491,8 @@ effModeOf : Maybe IrEntry -> List IrDef -> Int
 effModeOf entry ordered = if defsUseSyms performSyms ordered then 2 else 0
 
 consoleOnly : List String -> Bool
-consoleOnly ts = case ts of
-  [] => True
-  t :: rest => t == "Base.Effect.Console.ConsoleOp" && consoleOnly rest
+consoleOnly [] = True
+consoleOnly (t :: rest) = t == "Base.Effect.Console.ConsoleOp" && consoleOnly rest
 
 listNull : List a -> Bool
 listNull [] = True

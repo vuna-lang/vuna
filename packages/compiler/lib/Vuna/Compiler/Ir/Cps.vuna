@@ -1060,9 +1060,8 @@ else case m of
   Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mApplys (fuel - 1) a.irAltBody))
 
 mApplysDef : IrDef -> IrDef
-mApplysDef d = case d of
-  IrDef n ar deps body r g sp => IrDef n ar deps (mApplys startFuel body) r g sp
-  _ => d
+mApplysDef (IrDef n ar deps body r g sp) = IrDef n ar deps (mApplys startFuel body) r g sp
+mApplysDef d = d
 
 -- | 方案 2 第一层：选择性 CPS 后把 handler clause 改成 (o, k, kDone)，resumption 为 (v, kRest)。
 export cpsDefsMachine : List IrDef -> Result (List IrDef)

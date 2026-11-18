@@ -1977,13 +1977,12 @@ genArm st alt =
 
 -- record 模式字段表（字段表与运行时 binder 按序对齐）。
 recordPatFields : GenSt -> String -> List (Pair Int String) -> List String -> List (Pair String OPat)
-recordPatFields st family fields pats = case fields of
+recordPatFields st family [] pats = []
+recordPatFields st family (f :: fs) pats = case pats of
   [] => []
-  f :: fs => case pats of
-    [] => []
-    p :: ps =>
-      Pair (recordLabelOf st family (recordFieldLabel family (secondOf f))) (OPVar p)
-        :: recordPatFields st family fs ps
+  p :: ps =>
+    Pair (recordLabelOf st family (recordFieldLabel family (secondOf f))) (OPVar p)
+      :: recordPatFields st family fs ps
 
 -- ---------------------------------------------------------------
 -- Nat case 降级：Nat 运行时是 int，不能生成变体 match。
@@ -2015,9 +2014,8 @@ genNatBranches st fresh zero succ catch =
   )
 
 termOrImpossible : Maybe OTerm -> OTerm -> OTerm
-termOrImpossible term fallback = case term of
-  Just t => t
-  Nothing => fallback
+termOrImpossible (Just t) fallback = t
+termOrImpossible Nothing fallback = fallback
 
 genNatAlt : GenSt -> Maybe IrAlt -> Maybe String -> Check (Pair (Maybe OTerm) GenSt)
 genNatAlt st Nothing bindExpr = OkC (Pair Nothing st)
@@ -2056,9 +2054,9 @@ genGroup st group = Vuna.Compiler.Base.Common.bind (genGroupDefs st (irGroupDefs
 -- 分组装配：`#line` 指令在前（自成一行），`let` / `let rec` / `and` 关键字与绑定名
 -- 仍在同一行 —— 既有 `^let v_` 断言、快照 grep 与 `letrec` 口径都不受影响。
 bindGroupOf : GenSt -> IrGroup -> List (Pair IrDef ODef) -> String
-bindGroupOf st group defs = case defs of
-  [] => ""
-  p :: rest => joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
+bindGroupOf st group [] = ""
+bindGroupOf st group (p :: rest) =
+  joinWith "\n" ((::) (bindFirstOf st group p) (map (bindAndOf st) rest))
 
 bindFirstOf : GenSt -> IrGroup -> Pair IrDef ODef -> String
 bindFirstOf st group (Pair d def) = lineDirectiveOf st d ++ bindKeywordOf group ++ renderDefOf def
@@ -2112,9 +2110,8 @@ genDef st d = case irDefExtern d of
 
 -- 定义文本：值绑定 `name = body`；受限 FFI `external name : ty = "c"`。
 renderDefOf : ODef -> String
-renderDefOf def = case def of
-  ODValue name body => "${name} = ${renderTerm body}"
-  ODExternal name ty cName => "external ${name} : ${ty} = ${ocamlString cName}"
+renderDefOf (ODValue name body) = "${name} = ${renderTerm body}"
+renderDefOf (ODExternal name ty cName) = "external ${name} : ${ty} = ${ocamlString cName}"
 
 -- ---------------------------------------------------------------
 -- main 钩子

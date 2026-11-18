@@ -898,9 +898,8 @@ else case body of
 -- `ELet` 的 `in` 对齐到 `let`，跟在 `else` / `then` 后面会把 `in` 拉到关键字缩进。
 -- `if` 视情况处理（见 [renderThenPart]）：能单行就单行，否则按 `lineInd + 2` 换行。
 ownLineAfterKeyword : Expr -> Bool
-ownLineAfterKeyword e = case e of
-  ELet _ _ _ _ => True
-  _ => False
+ownLineAfterKeyword (ELet _ _ _ _) = True
+ownLineAfterKeyword _ = False
 
 -- | 内部：`if ... then ... else ...` 的块布局。
 --
@@ -936,9 +935,8 @@ else
 -- | 内部：多行 `if` 作为 `then` 体时必须按 `lineInd + 2` 渲染，否则它的 `else` 会与
 -- 外层 `else` 同缩进；单行形式由 `renderExprGo` 的 inline 路径给出，不受影响。
 nestedIf : Expr -> Bool
-nestedIf e = case e of
-  EIf _ _ _ _ => True
-  _ => False
+nestedIf (EIf _ _ _ _) = True
+nestedIf _ = False
 
 -- | 内部：`else` 分支，`else` 始终从 `lineInd` 开始。
 renderElsePart : Int -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Int -> Expr -> List String

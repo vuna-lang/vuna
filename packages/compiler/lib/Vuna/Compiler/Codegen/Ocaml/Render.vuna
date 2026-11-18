@@ -33,17 +33,16 @@ familyTy name args = "(${joinWith ", " args}) ${name}"
 
 -- | 渲染类型表达式；`qualFamily` 把族名映射成已限定的类型名。
 export renderTy : (String -> String) -> OTy -> String
-renderTy qual ty = case ty of
-  OTVar i => typeParamName i
-  OTInt => "int"
-  OTStr => "string"
-  OTBool => "bool"
-  OTFloat => "float"
-  OTOpaque => "Obj.t"
-  OTArray a => "(${renderTy qual a} array)"
-  OTRef a => "(${renderTy qual a} ref)"
-  OTFun d c => "(${renderTy qual d}) -> ${renderTy qual c}"
-  OTData fam args => familyTy (qual fam) (map (renderTy qual) args)
+renderTy qual (OTVar i) = typeParamName i
+renderTy qual OTInt = "int"
+renderTy qual OTStr = "string"
+renderTy qual OTBool = "bool"
+renderTy qual OTFloat = "float"
+renderTy qual OTOpaque = "Obj.t"
+renderTy qual (OTArray a) = "(${renderTy qual a} array)"
+renderTy qual (OTRef a) = "(${renderTy qual a} ref)"
+renderTy qual (OTFun d c) = "(${renderTy qual d}) -> ${renderTy qual c}"
+renderTy qual (OTData fam args) = familyTy (qual fam) (map (renderTy qual) args)
 
 ctorDecl : (String -> String) -> OCtor -> String
 ctorDecl qual c = case c.ocFields of
@@ -53,22 +52,20 @@ ctorDecl qual c = case c.ocFields of
 
 -- | 单条声明（不带 `type ` 前缀与 `and ` 连接符）。
 export renderDecl : (String -> String) -> ODecl -> String
-renderDecl qual d = case d of
-  ODVariant n name [] => "${typeParamDecl n}${name} = |"
-  ODVariant n name ctors =>
-    "${typeParamDecl n}${name} = ${joinWith " | " (map (ctorDecl qual) ctors)}"
-  ODRecord n name fields =>
-    "${typeParamDecl n}${name} = { ${joinWith "; " (map (fieldDecl qual) fields)} }"
-  ODAlias n name ty => "${typeParamDecl n}${name} = ${renderTy qual ty}"
+renderDecl qual (ODVariant n name []) = "${typeParamDecl n}${name} = |"
+renderDecl qual (ODVariant n name ctors) =
+  "${typeParamDecl n}${name} = ${joinWith " | " (map (ctorDecl qual) ctors)}"
+renderDecl qual (ODRecord n name fields) =
+  "${typeParamDecl n}${name} = { ${joinWith "; " (map (fieldDecl qual) fields)} }"
+renderDecl qual (ODAlias n name ty) = "${typeParamDecl n}${name} = ${renderTy qual ty}"
 
 fieldDecl : (String -> String) -> Pair String OTy -> String
 fieldDecl qual (Pair label ty) = "${label} : ${renderTy qual ty}"
 
 -- | 一个单元的类型声明块：空表 → `""`；否则 `type ... \nand ...\n\n`（末尾空行固定）。
 export renderDecls : (String -> String) -> List ODecl -> String
-renderDecls qual decls = case decls of
-  [] => ""
-  _ => "type ${joinWith "\nand " (map (renderDecl qual) decls)}\n\n"
+renderDecls qual [] = ""
+renderDecls qual decls = "type ${joinWith "\nand " (map (renderDecl qual) decls)}\n\n"
 
 -- ---------------------------------------------------------------
 -- 项面
@@ -76,44 +73,43 @@ renderDecls qual decls = case decls of
 -- 括号策略与既有产物一致：应用、λ、let、if、match、cast、投影都自带括号，因此
 -- 调用方不需要再关心优先级。
 export renderPat : OPat -> String
-renderPat p = case p of
-  OPVar n => n
-  OPWild => "_"
-  OPCtorPat c [] => c
-  OPCtorPat c ps => "${c} (${joinWith ", " (map renderPat ps)})"
-  OPRecordPat fields => "{ ${joinWith "; " (map fieldAssign fields)} }"
+renderPat (OPVar n) = n
+renderPat OPWild = "_"
+renderPat (OPCtorPat c []) = c
+renderPat (OPCtorPat c ps) = "${c} (${joinWith ", " (map renderPat ps)})"
+renderPat (OPRecordPat fields) = "{ ${joinWith "; " (map fieldAssign fields)} }"
 
 fieldAssign : Pair String OPat -> String
 fieldAssign (Pair label p) = "${label} = ${renderPat p}"
 
 binderText : Pair String (Maybe String) -> String
-binderText (Pair name ty) = case ty of
-  Nothing => name
-  Just t => "(${name} : ${t})"
+binderText (Pair name Nothing) = name
+binderText (Pair name (Just t)) = "(${name} : ${t})"
 
 export renderTerm : OTerm -> String
-renderTerm t = case t of
-  OName s => s
-  ORaw s => s
-  OApp f a => "(${renderTerm f} ${renderTerm a})"
-  OLam [] body => renderTerm body
-  OLam ps body => "(fun ${joinWith " " (map binderText ps)} -> ${renderTerm body})"
-  OLet pat scrut body => "(let ${renderPat pat} = ${renderTerm scrut} in ${renderTerm body})"
-  OIf c th el => "(if ${renderTerm c} then ${renderTerm th} else ${renderTerm el})"
-  OMatch scrut arms fallback =>
-    let
-      body = joinWith "" (map renderArm arms)
-      fb = if fallback then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
-    in "(match ${renderTerm scrut} with\n${body}${fb})"
-  OCtorApp c [] => c
-  OCtorApp c ([a]) => "(${c} (${renderTerm a}))"
-  OCtorApp c args => "(${c} (${joinWith ", " (map renderTerm args)}))"
-  ORecordCon fields => "{ ${joinWith "; " (recordFields fields)} }"
-  ORecordUpd base fields => "{ ${renderTerm base} with ${joinWith "; " (recordFields fields)} }"
-  OProj base label => "(${renderTerm base}).${label}"
-  OConcatStr parts => "(String.concat \"\" [${joinWith "; " (map renderTerm parts)}])"
-  OCast e => "(Obj.magic ${renderTerm e})"
-  OAnnot e ty => "(${renderTerm e} : ${ty})"
+renderTerm (OName s) = s
+renderTerm (ORaw s) = s
+renderTerm (OApp f a) = "(${renderTerm f} ${renderTerm a})"
+renderTerm (OLam [] body) = renderTerm body
+renderTerm (OLam ps body) = "(fun ${joinWith " " (map binderText ps)} -> ${renderTerm body})"
+renderTerm (OLet pat scrut body) =
+  "(let ${renderPat pat} = ${renderTerm scrut} in ${renderTerm body})"
+renderTerm (OIf c th el) = "(if ${renderTerm c} then ${renderTerm th} else ${renderTerm el})"
+renderTerm (OMatch scrut arms fallback) =
+  let
+    body = joinWith "" (map renderArm arms)
+    fb = if fallback then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
+  in "(match ${renderTerm scrut} with\n${body}${fb})"
+renderTerm (OCtorApp c []) = c
+renderTerm (OCtorApp c ([a])) = "(${c} (${renderTerm a}))"
+renderTerm (OCtorApp c args) = "(${c} (${joinWith ", " (map renderTerm args)}))"
+renderTerm (ORecordCon fields) = "{ ${joinWith "; " (recordFields fields)} }"
+renderTerm (ORecordUpd base fields) =
+  "{ ${renderTerm base} with ${joinWith "; " (recordFields fields)} }"
+renderTerm (OProj base label) = "(${renderTerm base}).${label}"
+renderTerm (OConcatStr parts) = "(String.concat \"\" [${joinWith "; " (map renderTerm parts)}])"
+renderTerm (OCast e) = "(Obj.magic ${renderTerm e})"
+renderTerm (OAnnot e ty) = "(${renderTerm e} : ${ty})"
 
 renderArm : Pair OPat OTerm -> String
 renderArm (Pair pat body) = "  | ${renderPat pat} -> ${renderTerm body}\n"
