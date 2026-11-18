@@ -796,13 +796,22 @@ substDictTermGo ec depth (t@(TMeta m)) =
           in if hasFreeTermVar depth soln0 || hasNegativeVar soln0 then t else soln0
 substDictTermGo ec depth (TPi n i r dom cod) =
   TPi n i r (substDictTermGo ec depth dom) (substDictTermGo ec (depth + 1) cod)
-substDictTermGo ec depth (TLam n r mty sp b) =
+substDictTermGo ec depth (TLam n r slot sp b) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (substDictTermGo ec depth ty)
-  in TLam n r mty2 sp (substDictTermGo ec (depth + 1) b)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (substDictTermGo ec depth t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (substDictTermGo ec (depth + 1) t)
+            )
+  in TLam n r slot2 sp (substDictTermGo ec (depth + 1) b)
 substDictTermGo ec depth (TApp f a r) =
   TApp (substDictTermGo ec depth f) (substDictTermGo ec depth a) r
 substDictTermGo ec depth (TCon c args) =

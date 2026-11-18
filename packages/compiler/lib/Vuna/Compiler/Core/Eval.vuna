@@ -997,13 +997,22 @@ substSolvedMetas sols (t@(TMeta m)) =
     Nothing => t
 substSolvedMetas sols (TPi n i r d c) =
   TPi n i r (substSolvedMetas sols d) (substSolvedMetas sols c)
-substSolvedMetas sols (TLam n r mty sp b) =
+substSolvedMetas sols (TLam n r slot sp b) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (substSolvedMetas sols ty)
-  in TLam n r mty2 sp (substSolvedMetas sols b)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (substSolvedMetas sols t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (substSolvedMetas sols t)
+            )
+  in TLam n r slot2 sp (substSolvedMetas sols b)
 substSolvedMetas sols (TApp f a r) = TApp (substSolvedMetas sols f) (substSolvedMetas sols a) r
 substSolvedMetas sols (TCon c args) =
   TCon c (map (\p => Pair (substSolvedMetas sols (firstOf p)) (secondOf p)) args)
@@ -1040,13 +1049,22 @@ substSolvedMetasAtGo depth sols (t@(TMeta m)) =
     Nothing => t
 substSolvedMetasAtGo depth sols (TPi n i r d c) =
   TPi n i r (substSolvedMetasAtGo depth sols d) (substSolvedMetasAtGo depth sols c)
-substSolvedMetasAtGo depth sols (TLam n r mty sp b) =
+substSolvedMetasAtGo depth sols (TLam n r slot sp b) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (substSolvedMetasAtGo depth sols ty)
-  in TLam n r mty2 sp (substSolvedMetasAtGo depth sols b)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (substSolvedMetasAtGo depth sols t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (substSolvedMetasAtGo (depth + 1) sols t)
+            )
+  in TLam n r slot2 sp (substSolvedMetasAtGo depth sols b)
 substSolvedMetasAtGo depth sols (TApp f a r) =
   TApp (substSolvedMetasAtGo depth sols f) (substSolvedMetasAtGo depth sols a) r
 substSolvedMetasAtGo depth sols (TCon c args) =
@@ -1134,7 +1152,22 @@ substSolvedMetasAtTblFuel fuel sols depth t =
               q = quote depth v
             in if hasNegativeVar q then t else substSolvedMetasAtTblFuel (fuel - 1) sols depth q
       TPi n i r d c => TPi n i r (substSolvedMetasAtTblFuel (fuel - 1) sols depth d) (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) c)
-      TLam n r mty sp b => TLam n r (mapTermMaybe (substSolvedMetasAtTblFuel (fuel - 1) sols depth) mty) sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
+      TLam n r slot sp b =>
+        let
+          slot2 =
+            case slot of
+              Nothing => Nothing
+              Just (Pair bt rt) =>
+                lamTyOf (
+                    case bt of
+                      Nothing => Nothing
+                      Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols depth t)
+                  ) (
+                    case rt of
+                      Nothing => Nothing
+                      Just t => Just (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) t)
+                  )
+        in TLam n r slot2 sp (substSolvedMetasAtTblFuel (fuel - 1) sols (depth + 1) b)
       TApp f a r => TApp (substSolvedMetasAtTblFuel (fuel - 1) sols depth f) (substSolvedMetasAtTblFuel (fuel - 1) sols depth a) r
       TCon c args => TCon c (map (\p => Pair (substSolvedMetasAtTblFuel (fuel - 1) sols depth (firstOf p)) (secondOf p)) args)
       TCase sc alts => TCase (substSolvedMetasAtTblFuel (fuel - 1) sols depth sc) (map (substSolvedAltAtTbl (fuel - 1) sols depth) alts)

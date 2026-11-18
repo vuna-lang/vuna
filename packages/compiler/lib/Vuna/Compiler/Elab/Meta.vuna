@@ -193,7 +193,13 @@ termMetasAll (TVar n i _) = []
 termMetasAll (TGlobal g) = []
 termMetasAll (TType l) = []
 termMetasAll (TPi n implicit rig dom cod) = append (termMetasAll dom) (termMetasAll cod)
-termMetasAll (TLam n rig mty _ body) = append (termMetasAllMaybe mty) (termMetasAll body)
+termMetasAll (TLam n rig slot _ body) =
+  let
+    tys =
+      case slot of
+        Nothing => []
+        Just (Pair b r) => append (termMetasAllMaybe b) (termMetasAllMaybe r)
+  in append tys (termMetasAll body)
 termMetasAll (TApp f a rig) = append (termMetasAll f) (termMetasAll a)
 termMetasAll (TCon c args) = concatMap (\p => termMetasAll (firstOf p)) args
 termMetasAll (TMk c args) = concatMap (\p => termMetasAll (firstOf p)) args
@@ -584,7 +590,13 @@ zonkTermFuel fuel ec depth t =
             in if hasOutOfScopeVar q then t else zonkTermFuel (fuel - 1) ec depth q
           Nothing => t
       TPi n i r d c => TPi n i r (zonkTermFuel (fuel - 1) ec depth d) (zonkTermFuel (fuel - 1) ec (depth + 1) c)
-      TLam n r mty sp b => TLam n r (mapTermMaybe (zonkTermFuel (fuel - 1) ec depth) mty) sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
+      TLam n r slot sp b =>
+        let
+          slot2 =
+            case slot of
+              Nothing => Nothing
+              Just (Pair bt rt) => lamTyOf (mapTermMaybe (zonkTermFuel (fuel - 1) ec depth) bt) (mapTermMaybe (zonkTermFuel (fuel - 1) ec (depth + 1)) rt)
+        in TLam n r slot2 sp (zonkTermFuel (fuel - 1) ec (depth + 1) b)
       TApp f a r => TApp (zonkTermFuel (fuel - 1) ec depth f) (zonkTermFuel (fuel - 1) ec depth a) r
       TCon c args => TCon c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
       TMk c args => TMk c (map (\p => Pair (zonkTermFuel (fuel - 1) ec depth (firstOf p)) (secondOf p)) args)
@@ -1100,7 +1112,13 @@ wrapOpaqueUsesFuel fuel depth idxs t =
       TFloat raw => TFloat raw
       TBool b => TBool b
       TPi name implicit rig dom cod => TPi name implicit rig (wrapOpaqueUsesFuel (fuel - 1) depth idxs dom) (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs cod)
-      TLam name rig mty sp body => TLam name rig (mapTermMaybe (wrapOpaqueUsesFuel (fuel - 1) depth idxs) mty) sp (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
+      TLam name rig slot sp body =>
+        let
+          slot2 =
+            case slot of
+              Nothing => Nothing
+              Just (Pair bt rt) => lamTyOf (mapTermMaybe (wrapOpaqueUsesFuel (fuel - 1) depth idxs) bt) (mapTermMaybe (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs) rt)
+        in TLam name rig slot2 sp (wrapOpaqueUsesFuel (fuel - 1) (depth + 1) idxs body)
       TApp f a rig => TApp (wrapOpaqueUsesFuel (fuel - 1) depth idxs f) (wrapOpaqueUsesFuel (fuel - 1) depth idxs a) rig
       TCon c args => TCon c (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)
       TMk c args => TMk c (map (\p => Pair (wrapOpaqueUsesFuel (fuel - 1) depth idxs (firstOf p)) (secondOf p)) args)

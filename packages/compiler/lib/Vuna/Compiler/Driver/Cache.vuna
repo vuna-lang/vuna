@@ -367,7 +367,7 @@ shiftTermFuel fuel off t =
       TGlobal g => OkC (TGlobal g)
       TType l => OkC (TType l)
       TPi n i r d c => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off d) (\d2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
-      TLam n r mty sp b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel (fuel - 1) off mty) (\mty2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r mty2 sp b2)))
+      TLam n r slot sp b => Vuna.Compiler.Base.Common.bind (shiftLamTyFuel (fuel - 1) off slot) (\slot2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r slot2 sp b2)))
       TApp f a r => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off f) (\f2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))
       TCon c args => Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TCon c args2))
       TMk c args => Vuna.Compiler.Base.Common.bind (shiftArgs (fuel - 1) off args) (\args2 => OkC (TMk c args2))
@@ -380,6 +380,14 @@ shiftTermFuel fuel off t =
       TBool b => OkC (TBool b)
       TIf c th el => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off th) (\th2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off el) (\el2 => OkC (TIf c2 th2 el2))))
       TFloat raw => OkC (TFloat raw)
+
+-- λ 类型槽（binder 类型 + 结果类型）的 meta 移位。
+shiftLamTyFuel : Int -> Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Check (Maybe (Pair (Maybe Term) (Maybe Term)))
+shiftLamTyFuel fuel off Nothing = OkC Nothing
+shiftLamTyFuel fuel off (Just p) =
+  Vuna.Compiler.Base.Common.bind
+    (shiftTermMaybeFuel fuel off (firstOf p))
+    (\b => Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel fuel off (secondOf p)) (\r => OkC (lamTyOf b r)))
 
 -- λ binder 类型槽的 meta 移位（`Nothing` 不动）。
 shiftTermMaybeFuel : Int -> Int -> Maybe Term -> Check (Maybe Term)

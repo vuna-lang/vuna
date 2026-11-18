@@ -2698,7 +2698,7 @@ checkLamFuel fuel globals ctx ec ((Pair name nameSp) :: rest) body expected sp =
                           -- 检查它是否落在「立即按 quantity 1 消费」的位置；不落则报
                           -- TC_LinearCaptureEscapes（诊断码不变）。
                           binderName = if ctxHasLinear ec ctx then if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name else name else name
-                        in OkC (Pair (TLam binderName lamRig (Just (quote lvl dom)) nameSp inner2) ec1)
+                        in OkC (Pair (TLam binderName lamRig (lamTyOf (Just (quote lvl dom)) (Just (quote (lvl + 1) expected2))) nameSp inner2) ec1)
                 )
           )
       -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
@@ -3569,7 +3569,13 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
         effContBinderName binderSp depth binder
       else
         binder
-    lamTerm = TLam binderName lamRig Nothing binderSp inner2
+    lamTerm =
+      TLam
+        binderName
+        lamRig
+        (lamTyOf Nothing (Just (shift 0 1 (quote depth (applyValue plan.planMVal plan.planAVal)))))
+        binderSp
+        inner2
     args =
       [
         Pair plan.planMTerm Rig0,

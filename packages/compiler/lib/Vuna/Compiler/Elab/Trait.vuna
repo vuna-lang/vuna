@@ -885,13 +885,22 @@ substInstParamsGo n args depth (t@(TVar nm i sp)) =
     t
 substInstParamsGo n args depth (TPi nm i r dom cod) =
   TPi nm i r (substInstParamsGo n args depth dom) (substInstParamsGo n args (depth + 1) cod)
-substInstParamsGo n args depth (TLam nm r mty sp body) =
+substInstParamsGo n args depth (TLam nm r slot sp body) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (substInstParamsGo n args depth ty)
-  in TLam nm r mty2 sp (substInstParamsGo n args (depth + 1) body)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (substInstParamsGo n args depth t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (substInstParamsGo n args (depth + 1) t)
+            )
+  in TLam nm r slot2 sp (substInstParamsGo n args (depth + 1) body)
 substInstParamsGo n args depth (TApp f a r) =
   TApp (substInstParamsGo n args depth f) (substInstParamsGo n args depth a) r
 substInstParamsGo n args depth (TCon c cs) =
@@ -1042,13 +1051,22 @@ substMetaTermGo : Int -> Term -> Int -> Term -> Term
 substMetaTermGo m rep depth (t@(TMeta n)) = if n == m then shift 0 depth rep else t
 substMetaTermGo m rep depth (TPi n i r dom cod) =
   TPi n i r (substMetaTermGo m rep depth dom) (substMetaTermGo m rep (depth + 1) cod)
-substMetaTermGo m rep depth (TLam n r mty sp b) =
+substMetaTermGo m rep depth (TLam n r slot sp b) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (substMetaTermGo m rep depth ty)
-  in TLam n r mty2 sp (substMetaTermGo m rep (depth + 1) b)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (substMetaTermGo m rep depth t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (substMetaTermGo m rep (depth + 1) t)
+            )
+  in TLam n r slot2 sp (substMetaTermGo m rep (depth + 1) b)
 substMetaTermGo m rep depth (TApp f a r) =
   TApp (substMetaTermGo m rep depth f) (substMetaTermGo m rep depth a) r
 substMetaTermGo m rep depth (TCon c args) =
@@ -1205,7 +1223,13 @@ injectDictGoFuel fuel defName dName appPos depth t =
     t
   else
     case t of
-      TLam n r mty sp b => TLam n r (mapTermMaybe (injectDictGoFuel (fuel - 1) defName dName appPos depth) mty) sp (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
+      TLam n r slot sp b =>
+        let
+          slot2 =
+            case slot of
+              Nothing => Nothing
+              Just (Pair bt rt) => lamTyOf (mapTermMaybe (injectDictGoFuel (fuel - 1) defName dName appPos depth) bt) (mapTermMaybe (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1)) rt)
+        in TLam n r slot2 sp (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) b)
       TPi n i r d c => TPi n i r (injectDictGoFuel (fuel - 1) defName dName appPos depth d) (injectDictGoFuel (fuel - 1) defName dName appPos (depth + 1) c)
       TApp f a r =>
         case flattenTaggedApp t of

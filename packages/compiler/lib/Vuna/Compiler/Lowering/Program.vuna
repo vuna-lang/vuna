@@ -103,7 +103,7 @@ lowerTermFuel fuel env st binders t =
                               )
                     )
           )
-      TLam name rig mty sp body => lowerLamFuel (fuel - 1) env st binders name rig mty sp body
+      TLam name rig slot sp body => lowerLamFuel (fuel - 1) env st binders name rig slot sp body
       TApp f a rig => lowerAppFuel (fuel - 1) env st binders f a rig
       TCon c args => lowerConAppFuel (fuel - 1) env st binders c args
       TMk c args => lowerConAppFuel (fuel - 1) env st binders c args
@@ -188,20 +188,26 @@ record LamParam where
 record LamChainIn where
   lamChainBinders : List LamParam
   lamChainBody : Term
+  lamChainResultTy : Maybe Term
 
 collectLamChainIn : Term -> LamChainIn
-collectLamChainIn (TLam name rig mty _ body) =
-  case collectLamChainIn body of
-    LamChainIn rest inner => LamChainIn (LamParam name rig mty :: rest) inner
-collectLamChainIn t = LamChainIn [] t
+collectLamChainIn (TLam name rig slot _ body) =
+  let
+    p = collectLamChainIn body
+    result =
+      case p.lamChainResultTy of
+        Just _ => p.lamChainResultTy
+        Nothing => lamResultTyOf slot
+  in LamChainIn (LamParam name rig (lamBinderTyOf slot) :: p.lamChainBinders) p.lamChainBody result
+collectLamChainIn t = LamChainIn [] t Nothing
 
-lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Maybe Term -> Span -> Term -> Check (Pair Ir LwSt)
-lowerLamFuel fuel env st binders name rig mty sp body =
+lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Span -> Term -> Check (Pair Ir LwSt)
+lowerLamFuel fuel env st binders name rig slot sp body =
   if fuel <= 0 then
     icFuel "ir-lower"
   else
-    case collectLamChainIn (TLam name rig mty sp body) of
-      LamChainIn params inner =>
+    case collectLamChainIn (TLam name rig slot sp body) of
+      LamChainIn params inner resultTy =>
         let
           bs = bindersOfParams env binders params
           envB = append (reverse bs) binders

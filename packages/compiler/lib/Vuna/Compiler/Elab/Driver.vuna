@@ -1402,7 +1402,13 @@ termHasMeta m (TVar n i _) = False
 termHasMeta m (TGlobal n) = False
 termHasMeta m (TType l) = False
 termHasMeta m (TPi n implicit rig dom cod) = termHasMeta m dom || termHasMeta m cod
-termHasMeta m (TLam n rig mty _ body) = termHasMetaMaybe m mty || termHasMeta m body
+termHasMeta m (TLam n rig slot _ body) =
+  let
+    tys =
+      case slot of
+        Nothing => False
+        Just (Pair b r) => termHasMetaMaybe m b || termHasMetaMaybe m r
+  in tys || termHasMeta m body
 termHasMeta m (TApp f a rig) = termHasMeta m f || termHasMeta m a
 termHasMeta m (TCon c args) = anyArgHasMeta m args
 termHasMeta m (TMk c args) = anyArgHasMeta m args
@@ -1436,7 +1442,13 @@ termHasAnyMeta (TVar n i _) = False
 termHasAnyMeta (TGlobal n) = False
 termHasAnyMeta (TType l) = False
 termHasAnyMeta (TPi n implicit rig dom cod) = termHasAnyMeta dom || termHasAnyMeta cod
-termHasAnyMeta (TLam n rig mty _ body) = termHasAnyMetaMaybe mty || termHasAnyMeta body
+termHasAnyMeta (TLam n rig slot _ body) =
+  let
+    tys =
+      case slot of
+        Nothing => False
+        Just (Pair b r) => termHasAnyMetaMaybe b || termHasAnyMetaMaybe r
+  in tys || termHasAnyMeta body
 termHasAnyMeta (TApp f a rig) = termHasAnyMeta f || termHasAnyMeta a
 termHasAnyMeta (TCon c args) = anyArgHasAnyMeta args
 termHasAnyMeta (TMk c args) = anyArgHasAnyMeta args

@@ -385,9 +385,9 @@ checkTermScopes depth (TApp f a rig) =
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TMk c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TRecord c args) = checkTermScopesArgs depth args
-checkTermScopes depth (TLam name rig mty _ body) =
+checkTermScopes depth (TLam name rig slot _ body) =
   Vuna.Compiler.Base.Common.bind
-    (checkTermScopesMaybe depth mty)
+    (checkTermScopesSlot depth slot)
     (\_ => checkTermScopes (depth + 1) body)
 checkTermScopes depth (TPi name implicit rig dom cod) =
   Vuna.Compiler.Base.Common.bind (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
@@ -406,6 +406,13 @@ checkTermScopes depth (TCase scrut alts) =
 checkTermScopesMaybe : Int -> Maybe Term -> Check Int
 checkTermScopesMaybe depth Nothing = OkC 0
 checkTermScopesMaybe depth (Just t) = checkTermScopes depth t
+
+checkTermScopesSlot : Int -> Maybe (Pair (Maybe Term) (Maybe Term)) -> Check Int
+checkTermScopesSlot depth Nothing = OkC 0
+checkTermScopesSlot depth (Just p) =
+  Vuna.Compiler.Base.Common.bind
+    (checkTermScopesMaybe depth (firstOf p))
+    (\_ => checkTermScopesMaybe (depth + 1) (secondOf p))
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Check Int
 checkTermScopesArgs depth [] = OkC 0

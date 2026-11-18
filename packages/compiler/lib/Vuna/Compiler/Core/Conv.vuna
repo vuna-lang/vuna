@@ -508,13 +508,16 @@ termScopedTo created depth extra levels (TGlobal g) = True
 termScopedTo created depth extra levels (TType l) = True
 termScopedTo created depth extra levels (TPi name implicit rig dom cod) =
   termScopedTo created depth extra levels dom && termScopedTo created depth (extra + 1) levels cod
-termScopedTo created depth extra levels (TLam name rig mty _ body) =
+termScopedTo created depth extra levels (TLam name rig slot _ body) =
   let
-    mtyOk =
-      case mty of
+    slotOk =
+      case slot of
         Nothing => True
-        Just ty => termScopedTo created depth extra levels ty
-  in mtyOk && termScopedTo created depth (extra + 1) levels body
+        Just (Pair bt _) =>
+          case bt of
+            Nothing => True
+            Just ty => termScopedTo created depth extra levels ty
+  in slotOk && termScopedTo created depth (extra + 1) levels body
 termScopedTo created depth extra levels (TApp f a rig) =
   termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
 termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
@@ -604,13 +607,22 @@ absPatternBody n created depth extra levels (TPi name implicit rig dom cod) =
     rig
     (absPatternBody n created depth extra levels dom)
     (absPatternBody n created depth (extra + 1) levels cod)
-absPatternBody n created depth extra levels (TLam name rig mty sp body) =
+absPatternBody n created depth extra levels (TLam name rig slot sp body) =
   let
-    mty2 =
-      case mty of
+    slot2 =
+      case slot of
         Nothing => Nothing
-        Just ty => Just (absPatternBody n created depth extra levels ty)
-  in TLam name rig mty2 sp (absPatternBody n created depth (extra + 1) levels body)
+        Just (Pair bt rt) =>
+          lamTyOf (
+              case bt of
+                Nothing => Nothing
+                Just t => Just (absPatternBody n created depth extra levels t)
+            ) (
+              case rt of
+                Nothing => Nothing
+                Just t => Just (absPatternBody n created depth (extra + 1) levels t)
+            )
+  in TLam name rig slot2 sp (absPatternBody n created depth (extra + 1) levels body)
 absPatternBody n created depth extra levels (TApp f a rig) =
   TApp
     (absPatternBody n created depth extra levels f)
