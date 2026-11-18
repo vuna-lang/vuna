@@ -62,6 +62,11 @@ irMHandleName = "@ir@m@handle"
 export irMSelfName : String
 irMSelfName = "@ir@m@self"
 
+-- | 机器转移：mode 6 里 continuation 调用一律 `@ir@m@apply`（返回 Control），
+-- 由机器循环单层派发；这是「续延不返回值」的唯一形态。
+export irMApplyName : String
+irMApplyName = "@ir@m@apply"
+
 export irMRunName : String
 irMRunName = "@ir@m@run"
 
@@ -994,11 +999,76 @@ else case ds of
   [] => []
   d :: rest => mDef handlers (fuel - 1) d :: mDefs handlers (fuel - 1) rest
 
+-- ---------------------------------------------------------------
+-- continuation 调用 → `@ir@m@apply`（Control 转移）
+-- ---------------------------------------------------------------
+-- | mode 6 生成代码里的 continuation binder（`__cpsK*` / `__mchK*`）。
+isContBinder : IrBinder -> Bool
+isContBinder b =
+  let
+    n = mBNameText b.irBinderName
+  in String.startsWith "__cpsK" n || String.startsWith "__mchK" n
+
+mApplys : Int -> Ir -> Ir
+mApplys fuel e = if fuel <= 0 then e
+else case e of
+  IrApp f a => case f of
+    IrVar b =>
+      if isContBinder b then IrRtApp irMApplyName [IrVar b, mApplys (fuel - 1) a]
+      else IrApp (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+    _ => IrApp (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+  IrRtApp sym args => IrRtApp sym (mApplysList (fuel - 1) args)
+  IrCtor fam ctor args => IrCtor fam ctor (mApplysList (fuel - 1) args)
+  IrRecord fam fs => IrRecord fam (mApplysFields (fuel - 1) fs)
+  IrProj b fam x => IrProj (mApplys (fuel - 1) b) fam x
+  IrRecUpd b fam fs => IrRecUpd (mApplys (fuel - 1) b) fam (mApplysFields (fuel - 1) fs)
+  IrCast x => IrCast (mApplys (fuel - 1) x)
+  IrLet bs rhs body => IrLet bs (mApplys (fuel - 1) rhs) (mApplys (fuel - 1) body)
+  IrLam bs body => IrLam bs (mApplys (fuel - 1) body)
+  IrIf c t el => IrIf (mApplys (fuel - 1) c) (mApplys (fuel - 1) t) (mApplys (fuel - 1) el)
+  IrCase sc alts => IrCase (mApplys (fuel - 1) sc) (mApplysAlts (fuel - 1) alts)
+  IrNatCase sc fr z su ca =>
+    IrNatCase (mApplys (fuel - 1) sc) fr (mApplysAltM (fuel - 1) z) (mApplysAltM (fuel - 1) su)
+      (mApplysAltM (fuel - 1) ca)
+  IrConcatMany xs => IrConcatMany (mApplysList (fuel - 1) xs)
+  IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mApplys (fuel - 1) prim)
+  _ => e
+
+mApplysList : Int -> List Ir -> List Ir
+mApplysList fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => mApplys (fuel - 1) x :: mApplysList (fuel - 1) rest
+
+mApplysFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mApplysFields fuel fs = if fuel <= 0 then fs
+else case fs of
+  [] => []
+  p :: rest => Pair (firstOf p) (mApplys (fuel - 1) (secondOf p)) :: mApplysFields (fuel - 1) rest
+
+mApplysAlts : Int -> List IrAlt -> List IrAlt
+mApplysAlts fuel alts = if fuel <= 0 then alts
+else case alts of
+  [] => []
+  a :: rest =>
+    IrAlt a.irAltCtor a.irAltBinders (mApplys (fuel - 1) a.irAltBody) :: mApplysAlts (fuel - 1) rest
+
+mApplysAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+mApplysAltM fuel m = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mApplys (fuel - 1) a.irAltBody))
+
+mApplysDef : IrDef -> IrDef
+mApplysDef d = case d of
+  IrDef n ar deps body r g sp => IrDef n ar deps (mApplys startFuel body) r g sp
+  _ => d
+
 -- | 方案 2 第一层：选择性 CPS 后把 handler clause 改成 (o, k, kDone)，resumption 为 (v, kRest)。
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs = case cpsDefs defs of
   Err msg => Err msg
-  Ok ds => Ok (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds)
+  Ok ds => Ok (map mApplysDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds))
 
 export cpsDefsStep : List IrDef -> Result (List IrDef)
 cpsDefsStep defs = case cpsDefs defs of

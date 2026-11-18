@@ -120,3 +120,67 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 - `106` 的顺序 perform 用默认栈通过（`-W max-wasm-stack` 不再需要放大）；
 - `efftwice` 仍报 continuation already resumed；
 - 三端 `effect-common` 输出一致，浏览器 smoke `114` / `115` 通过。
+
+## 7. 采用方案 A：控制栈 + 统一 `Control` 返回
+
+> 决策：放弃「续延是闭包、但调用约定各不相同」的半 CPS，改成**机器独占控制流**。
+> 一次性续延在 `Eff` 仍是 thunk 的前提下已经天然是堆上闭包，因此 A 的实质不是
+> 「把续延搬到堆上」，而是**让每一处续延调用都变成一次机器转移**：
+
+```text
+Continuation  = value -> Control        -- 堆上闭包，永远只返回 Control
+Control       = Done value
+              | Apply cont value        -- 唯一的续延调用形态
+              | Perform key name op cont
+              | Handle key name ret opH comp unit cont
+```
+
+- 续延**不再返回值**：任何 `k v` 都是 `Apply k v`，由机器循环派发（一次循环迭代 = 一次
+  wasm 调用，返回后立刻回到循环）。这是常量栈的充分条件。
+- `mCps` 里所有 `IrApp k …`（k 是 CPS 续延）改写为 `@ir@m@apply k …`；thunk 运行点
+  `f u k` 改写为 `@ir@m@runThunk f u k`。两者都只出现在尾位置，由 `mCps` 的结构保证。
+- 这条约定必须在**整条 lowering 链**上成立：`cpsExpr`（`>>=` / `pure` / `fmap` 等
+  组合子的 thunk 体）也要按 Step 续延生成，否则库代码里会留下「返回值」的续延。
+  实现上给 CPS 变换加一个 `machine` 开关，mode 6 走 Step 约定，mode 2/3/5 保持原样。
+- **段边界**：`ContCtx = { prompt, kRest, mark }`，`mark` 是 resume 时的控制深度。
+  `Return(f, v)` 命中 `prompt` 时刻即段边界 → `Apply kRest (ret v)`，仍然只返回
+  Control，所以不需要嵌套 `@ir@m@run`，也不需要「返回值」。
+- answer row（`opH` 的 `b = Eff`）不再是特例：`opH` 返回的 Eff 由 `Apply` 走正常
+  求值路径，resume 在其中的段边界仍然成立。
+- 一次性：`Cont` 带 `used` 位，重复 resume 在机器层拒绝。
+
+**迁移顺序（每步单独验收）**
+
+1. 给 CPS 变换加 `machine` 开关，mode 6 全链走 Step 约定；让现有 mode 6 用例
+   （纯行 + Console）继续绿（wasm 322）；
+2. `48_eff_many` / `106` 在**默认栈**下通过（验证常量栈）；
+3. Fs 宿主家族（`18` / `40`）；
+4. Clock / Env / Args / Stdin / Exit / Process / Net；
+5. 删除 wasm 的 `$rt_cps*`、`$rt_eff*` 与 stack switching，`effModeOf`/mode 2；
+6. native / OCaml 按同一 `Control` 协议重写 handler 部分，跑三端矩阵。
+
+**不变量（防回退）**
+
+- mode 6 产物里不存在「把续延当普通函数调用」的 `IrApp`（只有 `@ir@m@apply`）；
+- 不存在嵌套 `@ir@m@run`（只有入口一次）；
+- 栈深与 perform 次数无关：`106` 默认栈即可。
+
+### 7.1 进度（现状）
+
+已落地：`@ir@m@apply`（`$rt_mApply`，`$step` tag 4）+ `Ir.Cps.mApplys` 后处理，
+mode 6 的所有 continuation 调用改为返回 `Control`；wasm 322 全绿。
+
+实测（`48_eff_many`，2000 次顺序 perform）：栈需求从 **1 MiB → 约 192 KiB**
+（196608 通过，163840 抛 `call stack exhausted`），约 5× 下降，但仍随次数增长，
+说明还有非 `@ir@m@apply` 的调用在累积帧。
+
+剩余两处（下一步）：
+
+1. **栈增长源**：`rt_apply` 已用 `return_call_ref`，但组合子管道里仍有直接
+   `IrApp`（非 continuation）在一条链上层层返回；需要把这些也纳进转移或
+   改成显式帧，才能做到与次数无关。
+2. **answer row + resume**（Fs 语料）：`rtMKDone` 现在用「嵌套 `@ir@m@run` 跑
+   answer Eff，再包成纯 Eff 交 `kOuter`」；与 `@ir@m@apply` 约定不一致——嵌套 run
+   会把 answer Eff 的值再包一层。去掉该分支又会破坏 Console 用例，说明 entry
+   host handler 的「answer 是 Eff」形状本身要一起改：宿主 `opH` 一律返回裸值
+   （见 §5 的阶段 3），answer Eff 由调用方（`joinEff`）正常求值。
