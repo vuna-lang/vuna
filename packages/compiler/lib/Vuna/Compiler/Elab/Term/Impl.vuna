@@ -272,7 +272,8 @@ else
   in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\p => case p of
     -- 兜底变量必须真的绑到 scrutinee 上，否则体里对它的引用会指向不存在的 binder
     -- （擦除检查：index 落到别的 binder 上，报 type-level binding used at runtime）。
-    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig binderSp bodyTerm) scrutTerm Rig1) ec2)
+    Pair bodyTerm ec2 =>
+      OkC (Pair (TApp (TLam name rig Nothing binderSp bodyTerm) scrutTerm Rig1) ec2)
   )
 
 -- Nat 字面量模式（`case n of 0 => ...; 1 => ...; _ => ...`）。
@@ -331,7 +332,8 @@ else
     ctx2 = ctxBindValue name binderTy ctx
     rig = binderRig False binderTy
   in Vuna.Compiler.Base.Common.bind (checkEFuel (fuel - 1) globals ctx2 ec body expected) (\p => case p of
-    Pair bodyTerm ec2 => OkC (Pair (TApp (TLam name rig binderSp bodyTerm) bindTerm Rig1) ec2)
+    Pair bodyTerm ec2 =>
+      OkC (Pair (TApp (TLam name rig Nothing binderSp bodyTerm) bindTerm Rig1) ec2)
   )
 
 export checkCaseOfFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Term -> Value -> String -> List Value -> List (Pair Pat Expr) -> Value -> Span -> Check (Pair Term Ec)
@@ -1821,7 +1823,8 @@ else case firstOf bnd of
               bodyTerm2 =
                 if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm
                 else bodyTerm
-            in OkC (Pair (TApp (TLam name rig (spanAtName name psp) bodyTerm2) valueTerm Rig1) ec2)
+            in OkC
+              (Pair (TApp (TLam name rig Nothing (spanAtName name psp) bodyTerm2) valueTerm Rig1) ec2)
         )
     )
   PWild psp =>
@@ -1835,7 +1838,7 @@ else case firstOf bnd of
           -- 通配 let 的体是在**不 bind 名字**的上下文里检查的，但落项时仍套一层 TLam "_"：
           -- 体的 de Bruijn 索引必须整体 shift 1，否则所有外层引用都会指向错 binder。
           Pair bodyTerm ec2 =>
-            OkC (Pair (TApp (TLam "_" rig psp (shift 0 1 bodyTerm)) valueTerm Rig1) ec2)
+            OkC (Pair (TApp (TLam "_" rig Nothing psp (shift 0 1 bodyTerm)) valueTerm Rig1) ec2)
         )
     )
   -- let 模式解构（`let (MkPoint x y) = p in ...`）等价单分支 case：
@@ -1872,7 +1875,8 @@ else Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value)
         let
           bodyTerm2 =
             if isOpaqueRuntimeTyIn ec2 ctx valueTy then wrapOpaqueUses [0] bodyTerm else bodyTerm
-        in OkC (Pair (TApp (TLam name rig binderSp bodyTerm2) valueTerm Rig1) (Pair bodyTy ec2))
+        in OkC
+          (Pair (TApp (TLam name rig Nothing binderSp bodyTerm2) valueTerm Rig1) (Pair bodyTy ec2))
     )
 )
 
@@ -1885,7 +1889,7 @@ else Vuna.Compiler.Base.Common.bind (inferEFuel (fuel - 1) globals ctx ec value)
     in Vuna.Compiler.Base.Common.bind (inferLetFuel (fuel - 1) globals ctx ec1 rest body rec_ sp) (\pb => case pb of
       Pair bodyTerm (Pair bodyTy ec2) =>
         OkC
-          (Pair (TApp (TLam "_" rig binderSp (shift 0 1 bodyTerm)) valueTerm Rig1) (Pair bodyTy ec2))
+          (Pair (TApp (TLam "_" rig Nothing binderSp (shift 0 1 bodyTerm)) valueTerm Rig1) (Pair bodyTy ec2))
     )
 )
 
@@ -2187,7 +2191,7 @@ else
                 if termHasOuterLinear ec ctx2 inner then linClosureName sp (ctxDepth ctx) name
                 else name
               else name
-          in OkC (Pair (TLam binderName lamRig nameSp inner2) ec1)
+          in OkC (Pair (TLam binderName lamRig (Just (quote lvl dom)) nameSp inner2) ec1)
       )
       )
     -- case 在推断位置时结果类型先是元变量；分支体是 λ 没有现成 Pi 可查。
@@ -2894,7 +2898,7 @@ doBindAppTerm ecLinear ecPaper ctx sp binderSp plan binder aVal eTerm argRig lam
         if termHasOuterLinear ecLinear ctx2 inner then linClosureName sp depth binder else binder
       else if isEffMonadValue ecPaper plan.planMVal then effContBinderName binderSp depth binder
       else binder
-    lamTerm = TLam binderName lamRig binderSp inner2
+    lamTerm = TLam binderName lamRig Nothing binderSp inner2
     args =
       [ Pair plan.planMTerm Rig0,
         Pair plan.planDictTerm RigOmega,

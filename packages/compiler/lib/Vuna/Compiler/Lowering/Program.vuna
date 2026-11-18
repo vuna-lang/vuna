@@ -92,7 +92,7 @@ else case t of
       )
     )
   )
-  TLam name rig sp body => lowerLamFuel (fuel - 1) env st binders name rig sp body
+  TLam name rig _ sp body => lowerLamFuel (fuel - 1) env st binders name rig sp body
   TApp f a rig => lowerAppFuel (fuel - 1) env st binders f a rig
   TCon c args => lowerConAppFuel (fuel - 1) env st binders c args
   TMk c args => lowerConAppFuel (fuel - 1) env st binders c args
@@ -165,13 +165,13 @@ record LamChainIn where
   lamChainBody : Term
 
 collectLamChainIn : Term -> LamChainIn
-collectLamChainIn (TLam name rig _ body) = case collectLamChainIn body of
+collectLamChainIn (TLam name rig _ _ body) = case collectLamChainIn body of
   LamChainIn rest inner => LamChainIn (Pair name rig :: rest) inner
 collectLamChainIn t = LamChainIn [] t
 
 lowerLamFuel : Int -> LwEnv -> LwSt -> List IrBinder -> String -> Rig -> Span -> Term -> Check (Pair Ir LwSt)
 lowerLamFuel fuel env st binders name rig sp body = if fuel <= 0 then icFuel "ir-lower"
-else case collectLamChainIn (TLam name rig sp body) of
+else case collectLamChainIn (TLam name rig Nothing sp body) of
   LamChainIn params inner =>
     let
       bs = map binderOfParam params
@@ -659,12 +659,12 @@ else case nthOpqArgIn (secondOf p) opqs args of
 -- ---------------------------------------------------------------
 -- 运行时参数个数：擦除 lambda 不计入。
 runtimeArityIn : Term -> Int
-runtimeArityIn (TLam n r _ b) = if rigIsErased r then runtimeArityIn b else 1 + runtimeArityIn b
+runtimeArityIn (TLam n r _ _ b) = if rigIsErased r then runtimeArityIn b else 1 + runtimeArityIn b
 runtimeArityIn _ = 0
 
 -- `let rec` 右值形状护栏。
 recursiveValueAllowedIn : Term -> Bool
-recursiveValueAllowedIn (TLam n rig _ b) =
+recursiveValueAllowedIn (TLam n rig _ _ b) =
   if rigIsErased rig then recursiveValueAllowedIn b else True
 recursiveValueAllowedIn (TCon c args) = True
 recursiveValueAllowedIn _ = False

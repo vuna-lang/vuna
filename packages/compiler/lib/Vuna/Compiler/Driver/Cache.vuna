@@ -340,8 +340,9 @@ else case t of
   TPi n i r d c =>
     Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off d)
       (\d2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c) (\c2 => OkC (TPi n i r d2 c2)))
-  TLam n r sp b =>
-    Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r sp b2))
+  TLam n r mty sp b =>
+    Vuna.Compiler.Base.Common.bind (shiftTermMaybeFuel (fuel - 1) off mty)
+      (\mty2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off b) (\b2 => OkC (TLam n r mty2 sp b2)))
   TApp f a r =>
     Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off f)
       (\f2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off a) (\a2 => OkC (TApp f2 a2 r)))
@@ -367,6 +368,12 @@ else case t of
     Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off c)
       (\c2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off th) (\th2 => Vuna.Compiler.Base.Common.bind (shiftTermFuel (fuel - 1) off el) (\el2 => OkC (TIf c2 th2 el2))))
   TFloat raw => OkC (TFloat raw)
+
+-- λ binder 类型槽的 meta 移位（`Nothing` 不动）。
+shiftTermMaybeFuel : Int -> Int -> Maybe Term -> Check (Maybe Term)
+shiftTermMaybeFuel fuel off Nothing = OkC Nothing
+shiftTermMaybeFuel fuel off (Just t) =
+  Vuna.Compiler.Base.Common.bind (shiftTermFuel fuel off t) (\t2 => OkC (Just t2))
 
 -- 实参表 / case 分支表：元素项是 Term 的子项（不是结构子项，SCT 证不了终止 ⇒ 走 fuel）。
 shiftArgs : Int -> Int -> List (Pair Term Rig) -> Check (List (Pair Term Rig))

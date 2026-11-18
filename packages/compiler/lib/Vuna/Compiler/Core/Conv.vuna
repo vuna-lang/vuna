@@ -429,8 +429,12 @@ termScopedTo created depth extra levels (TGlobal g) = True
 termScopedTo created depth extra levels (TType l) = True
 termScopedTo created depth extra levels (TPi name implicit rig dom cod) =
   termScopedTo created depth extra levels dom && termScopedTo created depth (extra + 1) levels cod
-termScopedTo created depth extra levels (TLam name rig _ body) =
-  termScopedTo created depth (extra + 1) levels body
+termScopedTo created depth extra levels (TLam name rig mty _ body) =
+  let
+    mtyOk = case mty of
+      Nothing => True
+      Just ty => termScopedTo created depth extra levels ty
+  in mtyOk && termScopedTo created depth (extra + 1) levels body
 termScopedTo created depth extra levels (TApp f a rig) =
   termScopedTo created depth extra levels f && termScopedTo created depth extra levels a
 termScopedTo created depth extra levels (TCon c args) = argsScopedTo created depth extra levels args
@@ -510,8 +514,12 @@ else
 absPatternBody n created depth extra levels (TPi name implicit rig dom cod) =
   TPi name implicit rig (absPatternBody n created depth extra levels dom)
     (absPatternBody n created depth (extra + 1) levels cod)
-absPatternBody n created depth extra levels (TLam name rig sp body) =
-  TLam name rig sp (absPatternBody n created depth (extra + 1) levels body)
+absPatternBody n created depth extra levels (TLam name rig mty sp body) =
+  let
+    mty2 = case mty of
+      Nothing => Nothing
+      Just ty => Just (absPatternBody n created depth extra levels ty)
+  in TLam name rig mty2 sp (absPatternBody n created depth (extra + 1) levels body)
 absPatternBody n created depth extra levels (TApp f a rig) =
   TApp (absPatternBody n created depth extra levels f)
     (absPatternBody n created depth extra levels a) rig
@@ -531,7 +539,7 @@ absPatternBody n created depth extra levels t = t
 wrapPatternLams : List (Pair String Int) -> Term -> Term
 wrapPatternLams [] body = body
 wrapPatternLams ((Pair name lvl) :: rest) body =
-  TLam name RigOmega spanEmpty (wrapPatternLams rest body)
+  TLam name RigOmega Nothing spanEmpty (wrapPatternLams rest body)
 
 -- 闭包环境：按 level 复原创建点的上下文变量。第一个条目对应 level `depth-1`；创建深度
 -- 之后的 level 在作用域检查后不可能被引用（占位 0，避免 levelEscapes 误判）。

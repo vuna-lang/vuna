@@ -79,7 +79,7 @@ encTerm (TMeta m) acc = encTag 1 (encInt m acc)
 encTerm (TGlobal g) acc = encTag 2 (encStr g acc)
 encTerm (TType l) acc = encTag 3 (encInt (levelToInt l) acc)
 encTerm (TPi n i r d c) acc = encTag 4 (encStr n (encBool i (encRig r (encTerm d (encTerm c acc)))))
-encTerm (TLam n r _ b) acc = encTag 5 (encStr n (encRig r (encTerm b acc)))
+encTerm (TLam n r _ _ b) acc = encTag 5 (encStr n (encRig r (encTerm b acc)))
 encTerm (TApp f a r) acc = encTag 6 (encTerm f (encTerm a (encRig r acc)))
 encTerm (TCon c args) acc = encTag 7 (encStr c (encArgs args acc))
 encTerm (TMk c args) acc = encTag 8 (encStr c (encArgs args acc))
@@ -180,7 +180,7 @@ else case decTag fuel bytes of
         Nothing => Nothing
         Just (Pair r b3) => case decTerm (fuel - 1) b3 of
           Nothing => Nothing
-          Just (Pair body b4) => Just (Pair (TLam n r noSpan body) b4)
+          Just (Pair body b4) => Just (Pair (TLam n r Nothing noSpan body) b4)
     6 => case decTerm (fuel - 1) b1 of
       Nothing => Nothing
       Just (Pair f b2) => case decTerm (fuel - 1) b2 of

@@ -162,7 +162,7 @@ checkTerm ec sp env t = case t of
   TType l => OkC (Pair (uZeroOf (natToInt (length env))) ec)
   -- 类型：0-fragment，里面的 binder 不产生运行时用量。
   TPi name implicit rig dom cod => OkC (Pair (uZeroOf (natToInt (length env))) ec)
-  TLam name rig binderSp body =>
+  TLam name rig _ binderSp body =>
     let
       bsp = resolvedBinderSpan binderSp sp
       mEdit = binderEditSpan name binderSp
@@ -279,7 +279,7 @@ else case t of
   TType l => OkC 0
   -- 类型层项不产生运行时闭包（λ 只在值层出现）。
   TPi name implicit rig dom cod => OkC 0
-  TLam name rig _ body =>
+  TLam name rig _ _ body =>
     if isLinClosureName name then
       if allowed then capCheckFuel (fuel - 1) ec sp body False
       else tcErr1 sp (LinearCaptureEscapes (linClosureOrigName name)) (linClosureOrigName name)

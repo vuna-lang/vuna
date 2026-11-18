@@ -677,12 +677,16 @@ kindArrows (_ :: rest) = TPi "_" False RigOmega (TType levelZero) (kindArrows re
 metaIdsOf : Term -> List Int
 metaIdsOf (TMeta m) = [m]
 metaIdsOf (TPi _ _ _ dom cod) = append (metaIdsOf dom) (metaIdsOf cod)
-metaIdsOf (TLam _ _ _ body) = metaIdsOf body
+metaIdsOf (TLam _ _ mty _ body) = append (metaIdsOfMaybe mty) (metaIdsOf body)
 metaIdsOf (TApp f a _) = append (metaIdsOf f) (metaIdsOf a)
 metaIdsOf (TCon _ args) = metaIdsOfArgs args
 metaIdsOf (TCase scrut alts) = append (metaIdsOf scrut) (concatMap metaIdsOfAlt alts)
 metaIdsOf (TIf c th el) = append (metaIdsOf c) (append (metaIdsOf th) (metaIdsOf el))
 metaIdsOf _ = []
+
+metaIdsOfMaybe : Maybe Term -> List Int
+metaIdsOfMaybe Nothing = []
+metaIdsOfMaybe (Just t) = metaIdsOf t
 
 metaIdsOfArgs : List (Pair Term Rig) -> List Int
 metaIdsOfArgs [] = []
@@ -700,12 +704,16 @@ maxMetaArity : Int -> Term -> Int
 maxMetaArity m (TApp f a r) =
   imax (applyArity m (TApp f a r)) (imax (maxMetaArity m f) (maxMetaArity m a))
 maxMetaArity m (TPi _ _ _ dom cod) = imax (maxMetaArity m dom) (maxMetaArity m cod)
-maxMetaArity m (TLam _ _ _ body) = maxMetaArity m body
+maxMetaArity m (TLam _ _ mty _ body) = imax (maxMetaArityMaybe m mty) (maxMetaArity m body)
 maxMetaArity m (TCon _ args) = maxMetaArityArgs m args
 maxMetaArity m (TCase scrut alts) = imax (maxMetaArity m scrut) (maxMetaArityAlts m alts)
 maxMetaArity m (TIf c th el) =
   imax (maxMetaArity m c) (imax (maxMetaArity m th) (maxMetaArity m el))
 maxMetaArity m _ = 0
+
+maxMetaArityMaybe : Int -> Maybe Term -> Int
+maxMetaArityMaybe m Nothing = 0
+maxMetaArityMaybe m (Just t) = maxMetaArity m t
 
 maxMetaArityArgs : Int -> List (Pair Term Rig) -> Int
 maxMetaArityArgs m [] = 0

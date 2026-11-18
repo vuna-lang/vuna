@@ -269,10 +269,10 @@ canonTerm st (TPi n i r d c) =
     pd = canonTerm st d
     pc = canonTerm (secondOf pd) c
   in Pair (TPi n i r (firstOf pd) (firstOf pc)) (secondOf pc)
-canonTerm st (TLam n r _ b) =
+canonTerm st (TLam n r _ _ b) =
   let
     pb = canonTerm st b
-  in Pair (TLam n r spanEmpty (firstOf pb)) (secondOf pb)
+  in Pair (TLam n r Nothing spanEmpty (firstOf pb)) (secondOf pb)
 canonTerm st (TApp f a r) =
   let
     pf = canonTerm st f

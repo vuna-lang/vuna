@@ -137,7 +137,7 @@ else case t of
   TType l => cgErr0 TypeUsedAtRuntime
   TPi name implicit rig dom cod => cgErr0 TypeUsedAtRuntime
   TMeta m => cgErr1 (UnsolvedMetavarRuntime (showMetaHint m)) (showMetaHint m)
-  TLam name rig _ body => checkErasureFuel (fuel - 1) typeNames (Pair name rig :: binders) body
+  TLam name rig _ _ body => checkErasureFuel (fuel - 1) typeNames (Pair name rig :: binders) body
   TApp f a rig => case flattenConApp t of
     -- 嵌套在构造子上的应用按构造子实参检查（实参自带擦除标志，比 TApp 的更准）。
     Just (Pair c args) => checkConArgsErasureFuel (fuel - 1) typeNames binders args
@@ -197,7 +197,7 @@ else case t of
   TMeta m => acc
   TType l => acc
   TPi name implicit rig dom cod => acc
-  TLam name rig _ body => termDepsIntoFuel (fuel - 1) runtimeNames acc body
+  TLam name rig _ _ body => termDepsIntoFuel (fuel - 1) runtimeNames acc body
   TApp f a rig => case flattenConApp t of
     Just (Pair c args) => termDepsArgsFuel (fuel - 1) runtimeNames acc args
     Nothing =>
@@ -301,7 +301,7 @@ else case t of
   TPi n implicit rig dom cod =>
     termUseFuel (fuel - 1) names flagOf False (termUseFuel (fuel - 1) names flagOf False acc dom)
       cod
-  TLam n rig _ body => termUseFuel (fuel - 1) names flagOf live acc body
+  TLam n rig _ _ body => termUseFuel (fuel - 1) names flagOf live acc body
   TApp f a rig =>
     termUseFuel (fuel - 1) names flagOf (live && not (rigIsErased rig))
       (termUseFuel (fuel - 1) names flagOf live acc f) a
@@ -362,7 +362,9 @@ checkTermScopes depth (TApp f a rig) =
 checkTermScopes depth (TCon c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TMk c args) = checkTermScopesArgs depth args
 checkTermScopes depth (TRecord c args) = checkTermScopesArgs depth args
-checkTermScopes depth (TLam name rig _ body) = checkTermScopes (depth + 1) body
+checkTermScopes depth (TLam name rig mty _ body) =
+  Vuna.Compiler.Base.Common.bind (checkTermScopesMaybe depth mty)
+    (\_ => checkTermScopes (depth + 1) body)
 checkTermScopes depth (TPi name implicit rig dom cod) =
   Vuna.Compiler.Base.Common.bind (checkTermScopes depth dom) (\_ => checkTermScopes (depth + 1) cod)
 checkTermScopes depth (TIf c th el) =
@@ -374,6 +376,10 @@ checkTermScopes depth (TRecUpd base c tele idxs body) =
     (\_ => checkTermScopes (depth + length tele) body)
 checkTermScopes depth (TCase scrut alts) =
   Vuna.Compiler.Base.Common.bind (checkTermScopes depth scrut) (\_ => checkAltScopes depth alts)
+
+checkTermScopesMaybe : Int -> Maybe Term -> Check Int
+checkTermScopesMaybe depth Nothing = OkC 0
+checkTermScopesMaybe depth (Just t) = checkTermScopes depth t
 
 checkTermScopesArgs : Int -> List (Pair Term Rig) -> Check Int
 checkTermScopesArgs depth [] = OkC 0

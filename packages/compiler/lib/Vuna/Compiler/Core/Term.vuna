@@ -126,9 +126,11 @@ export data Term(..) : Type where
   TType : Level -> Term
   -- Pi：名字、是否隐式、binder 的 multiplicity、域、codomain。
   TPi : String -> Bool -> Rig -> Term -> Term -> Term
-  -- Lambda：名字、multiplicity、binder 自身的源码位置（合成 binder 用 `spanEmpty`）、体。
-  -- binder span 只服务诊断（未使用/遮蔽/线性用量），不参与语义与编码。
-  TLam : String -> Rig -> Span -> Term -> Term
+  -- Lambda：名字、multiplicity、binder 类型（派生信息，`Nothing` 表示未记录）、
+  -- binder 自身的源码位置（合成 binder 用 `spanEmpty`）、体。
+  -- binder 类型在外层上下文里（不引用该 binder 自己）；binder span 只服务诊断
+  -- （未使用/遮蔽/线性用量），不参与语义与编码。
+  TLam : String -> Rig -> Maybe Term -> Span -> Term -> Term
   TApp : Term -> Term -> Rig -> Term
   -- 构造子应用（自携每个实参的 multiplicity，与 TApp 一致）。
   TCon : String -> List (Pair Term Rig) -> Term
@@ -298,7 +300,7 @@ termSize (TMeta _) = 1
 termSize (TGlobal _) = 1
 termSize (TType _) = 1
 termSize (TPi _ _ _ dom cod) = 1 + termSize dom + termSize cod
-termSize (TLam _ _ _ body) = 1 + termSize body
+termSize (TLam _ _ mty _ body) = 1 + termSizeMaybe mty + termSize body
 termSize (TApp f a _) = 1 + termSize f + termSize a
 termSize (TCon _ args) = 1 + termSizeArgs args
 termSize (TMk _ args) = 1 + termSizeArgs args
@@ -311,6 +313,10 @@ termSize (TStr _) = 1
 termSize (TFloat _) = 1
 termSize (TBool _) = 1
 termSize (TIf c th el) = 1 + termSize c + termSize th + termSize el
+
+termSizeMaybe : Maybe Term -> Int
+termSizeMaybe Nothing = 0
+termSizeMaybe (Just t) = termSize t
 
 termSizeArgs : List (Pair Term Rig) -> Int
 termSizeArgs [] = 0
@@ -383,7 +389,8 @@ termHasUnsolvedMeta sols (TGlobal g) = False
 termHasUnsolvedMeta sols (TType l) = False
 termHasUnsolvedMeta sols (TPi name implicit rig dom cod) =
   termHasUnsolvedMeta sols dom || termHasUnsolvedMeta sols cod
-termHasUnsolvedMeta sols (TLam name rig _ body) = termHasUnsolvedMeta sols body
+termHasUnsolvedMeta sols (TLam name rig mty _ body) =
+  termHasUnsolvedMetaMaybe sols mty || termHasUnsolvedMeta sols body
 termHasUnsolvedMeta sols (TApp f a rig) = termHasUnsolvedMeta sols f || termHasUnsolvedMeta sols a
 termHasUnsolvedMeta sols (TCon c args) = termHasUnsolvedMetaArgs sols args
 termHasUnsolvedMeta sols (TMk c args) = termHasUnsolvedMetaArgs sols args
@@ -399,6 +406,10 @@ termHasUnsolvedMeta sols (TFloat raw) = False
 termHasUnsolvedMeta sols (TBool b) = False
 termHasUnsolvedMeta sols (TIf c th el) =
   termHasUnsolvedMeta sols c || termHasUnsolvedMeta sols th || termHasUnsolvedMeta sols el
+
+termHasUnsolvedMetaMaybe : Sols -> Maybe Term -> Bool
+termHasUnsolvedMetaMaybe sols Nothing = False
+termHasUnsolvedMetaMaybe sols (Just t) = termHasUnsolvedMeta sols t
 
 termHasUnsolvedMetaArgs : Sols -> List (Pair Term Rig) -> Bool
 termHasUnsolvedMetaArgs sols [] = False
@@ -419,7 +430,7 @@ termUsesFloat names (TVar n i _) = False
 termUsesFloat names (TMeta m) = False
 termUsesFloat names (TType l) = False
 termUsesFloat names (TPi n i r dom cod) = termUsesFloat names dom || termUsesFloat names cod
-termUsesFloat names (TLam n r _ b) = termUsesFloat names b
+termUsesFloat names (TLam n r _ _ b) = termUsesFloat names b
 termUsesFloat names (TApp f a r) = termUsesFloat names f || termUsesFloat names a
 termUsesFloat names (TCon c args) = anyArgUsesFloat names args
 termUsesFloat names (TMk c args) = anyArgUsesFloat names args
@@ -453,7 +464,7 @@ termGlobalNames (TVar n i _) = []
 termGlobalNames (TMeta m) = []
 termGlobalNames (TType l) = []
 termGlobalNames (TPi n i r dom cod) = append (termGlobalNames dom) (termGlobalNames cod)
-termGlobalNames (TLam n r _ b) = termGlobalNames b
+termGlobalNames (TLam n r _ _ b) = termGlobalNames b
 termGlobalNames (TApp f a r) = append (termGlobalNames f) (termGlobalNames a)
 termGlobalNames (TCon c args) = concatMap (\p => termGlobalNames (firstOf p)) args
 termGlobalNames (TMk c args) = concatMap (\p => termGlobalNames (firstOf p)) args
@@ -509,7 +520,8 @@ hasFreeVar depth (TGlobal g) = False
 hasFreeVar depth (TType l) = False
 hasFreeVar depth (TPi name implicit rig dom cod) =
   hasFreeVar depth dom || hasFreeVar (depth + 1) cod
-hasFreeVar depth (TLam name rig _ body) = hasFreeVar (depth + 1) body
+hasFreeVar depth (TLam name rig mty _ body) =
+  hasFreeVarMaybe depth mty || hasFreeVar (depth + 1) body
 hasFreeVar depth (TApp f a rig) = hasFreeVar depth f || hasFreeVar depth a
 hasFreeVar depth (TCon c args) = hasFreeVarArgs depth args
 hasFreeVar depth (TMk c args) = hasFreeVarArgs depth args
@@ -524,7 +536,11 @@ hasFreeVar depth (TFloat raw) = False
 hasFreeVar depth (TBool b) = False
 hasFreeVar depth (TIf c th el) = hasFreeVar depth c || hasFreeVar depth th || hasFreeVar depth el
 
-export hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
+export hasFreeVarMaybe : Int -> Maybe Term -> Bool
+hasFreeVarMaybe depth Nothing = False
+hasFreeVarMaybe depth (Just t) = hasFreeVar depth t
+
+hasFreeVarArgs : Int -> List (Pair Term Rig) -> Bool
 hasFreeVarArgs depth [] = False
 hasFreeVarArgs depth ((Pair a rig) :: rest) = hasFreeVar depth a || hasFreeVarArgs depth rest
 
@@ -539,7 +555,7 @@ hasMeta m depth (TVar name i _) = False
 hasMeta m depth (TGlobal g) = False
 hasMeta m depth (TType l) = False
 hasMeta m depth (TPi name implicit rig dom cod) = hasMeta m depth dom || hasMeta m (depth + 1) cod
-hasMeta m depth (TLam name rig _ body) = hasMeta m (depth + 1) body
+hasMeta m depth (TLam name rig mty _ body) = hasMetaMaybe m depth mty || hasMeta m (depth + 1) body
 hasMeta m depth (TApp f a rig) = hasMeta m depth f || hasMeta m depth a
 hasMeta m depth (TCon c args) = hasMetaArgs m depth args
 hasMeta m depth (TMk c args) = hasMetaArgs m depth args
@@ -554,7 +570,11 @@ hasMeta m depth (TFloat raw) = False
 hasMeta m depth (TBool b) = False
 hasMeta m depth (TIf c th el) = hasMeta m depth c || hasMeta m depth th || hasMeta m depth el
 
-export hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
+export hasMetaMaybe : Int -> Int -> Maybe Term -> Bool
+hasMetaMaybe m depth Nothing = False
+hasMetaMaybe m depth (Just t) = hasMeta m depth t
+
+hasMetaArgs : Int -> Int -> List (Pair Term Rig) -> Bool
 hasMetaArgs m depth [] = False
 hasMetaArgs m depth ((Pair a rig) :: rest) = hasMeta m depth a || hasMetaArgs m depth rest
 
@@ -562,6 +582,11 @@ export hasMetaAlts : Int -> Int -> List CaseAlt -> Bool
 hasMetaAlts m depth [] = False
 hasMetaAlts m depth (alt :: rest) =
   hasMeta m (depth + length (caseAltBinders alt)) (caseAltBody alt) || hasMetaAlts m depth rest
+
+-- | 对 λ binder 类型槽做项变换（`Nothing` 保持不动）。
+export mapTermMaybe : (Term -> Term) -> Maybe Term -> Maybe Term
+mapTermMaybe f Nothing = Nothing
+mapTermMaybe f (Just t) = Just (f t)
 
 -- ---------------------------------------------------------------
 -- de Bruijn 移动：把项从深度 depth 的上下文嵌入到更深上下文（自由变量 +amount）。
@@ -574,7 +599,12 @@ shift depth amount (t@(TGlobal g)) = t
 shift depth amount (t@(TType l)) = t
 shift depth amount (TPi name implicit rig dom cod) =
   TPi name implicit rig (shift depth amount dom) (shift (depth + 1) amount cod)
-shift depth amount (TLam name rig sp body) = TLam name rig sp (shift (depth + 1) amount body)
+shift depth amount (TLam name rig mty sp body) =
+  let
+    mty2 = case mty of
+      Nothing => Nothing
+      Just ty => Just (shift depth amount ty)
+  in TLam name rig mty2 sp (shift (depth + 1) amount body)
 shift depth amount (TApp f a rig) = TApp (shift depth amount f) (shift depth amount a) rig
 shift depth amount (TCon c args) = TCon c (shiftArgs depth amount args)
 shift depth amount (TMk c args) = TMk c (shiftArgs depth amount args)
@@ -612,7 +642,12 @@ substVarAt idx arg (t@(TGlobal g)) = t
 substVarAt idx arg (t@(TType l)) = t
 substVarAt idx arg (TPi n implicit rig dom cod) =
   TPi n implicit rig (substVarAt idx arg dom) (substVarAt (idx + 1) arg cod)
-substVarAt idx arg (TLam n erased sp body) = TLam n erased sp (substVarAt (idx + 1) arg body)
+substVarAt idx arg (TLam n erased mty sp body) =
+  let
+    mty2 = case mty of
+      Nothing => Nothing
+      Just ty => Just (substVarAt idx arg ty)
+  in TLam n erased mty2 sp (substVarAt (idx + 1) arg body)
 substVarAt idx arg (TApp f a erased) = TApp (substVarAt idx arg f) (substVarAt idx arg a) erased
 substVarAt idx arg (TCon c cargs) =
   TCon c (map (\p => Pair (substVarAt idx arg (firstOf p)) (secondOf p)) cargs)
@@ -645,7 +680,12 @@ substMetaVarGo m name q depth (t@(TMeta n)) =
   if n == m then TVar name (depth - q) (Span "" 0 0 0 0 0 0) else t
 substMetaVarGo m name q depth (TPi n i r d c) =
   TPi n i r (substMetaVarGo m name q depth d) (substMetaVarGo m name q (depth + 1) c)
-substMetaVarGo m name q depth (TLam n r sp b) = TLam n r sp (substMetaVarGo m name q (depth + 1) b)
+substMetaVarGo m name q depth (TLam n r mty sp b) =
+  let
+    mty2 = case mty of
+      Nothing => Nothing
+      Just ty => Just (substMetaVarGo m name q depth ty)
+  in TLam n r mty2 sp (substMetaVarGo m name q (depth + 1) b)
 substMetaVarGo m name q depth (TApp f a r) =
   TApp (substMetaVarGo m name q depth f) (substMetaVarGo m name q depth a) r
 substMetaVarGo m name q depth (TCon c args) =
@@ -708,20 +748,20 @@ export insertLamBinder : String -> Int -> Term -> Term
 insertLamBinder name idx t = insertLamBinderGo name idx 0 t
 
 export insertLamBinderGo : String -> Int -> Int -> Term -> Term
-insertLamBinderGo name idx depth (TLam n r sp b) =
-  if depth == idx then TLam n r sp (TLam name RigOmega spanEmpty (shift 0 1 b))
-  else TLam n r sp (insertLamBinderGo name idx (depth + 1) b)
+insertLamBinderGo name idx depth (TLam n r mty sp b) =
+  if depth == idx then TLam n r mty sp (TLam name RigOmega Nothing spanEmpty (shift 0 1 b))
+  else TLam n r mty sp (insertLamBinderGo name idx (depth + 1) b)
 insertLamBinderGo name idx depth t = t
 
 export countLams : Term -> Int
-countLams (TLam n r _ b) = 1 + countLams b
+countLams (TLam n r _ _ b) = 1 + countLams b
 countLams _ = 0
 
 -- 项里是否有自由变量（`i >= depth` 的 `TVar`）。闭项无自由变量。
 export hasFreeTermVar : Int -> Term -> Bool
 hasFreeTermVar d (TVar n i _) = i >= d
 hasFreeTermVar d (TPi n i r dm cd) = hasFreeTermVar d dm || hasFreeTermVar (d + 1) cd
-hasFreeTermVar d (TLam n r _ b) = hasFreeTermVar (d + 1) b
+hasFreeTermVar d (TLam n r mty _ b) = hasFreeTermVarMaybe d mty || hasFreeTermVar (d + 1) b
 hasFreeTermVar d (TApp f a r) = hasFreeTermVar d f || hasFreeTermVar d a
 hasFreeTermVar d (TCon c args) = anyPairFree d args
 hasFreeTermVar d (TMk c args) = anyPairFree d args
@@ -734,6 +774,10 @@ hasFreeTermVar d (TRecUpd base c tele idxs body) =
 hasFreeTermVar d (TCase s alts) = hasFreeTermVar d s || anyAltFree d alts
 hasFreeTermVar d (TIf c th el) = hasFreeTermVar d c || hasFreeTermVar d th || hasFreeTermVar d el
 hasFreeTermVar d _ = False
+
+hasFreeTermVarMaybe : Int -> Maybe Term -> Bool
+hasFreeTermVarMaybe d Nothing = False
+hasFreeTermVarMaybe d (Just t) = hasFreeTermVar d t
 
 export anyPairFree : Int -> List (Pair Term Rig) -> Bool
 anyPairFree d [] = False
@@ -749,7 +793,7 @@ anyAltFree d ((CaseAlt n bs b) :: rest) = hasFreeTermVar (d + length bs) b || an
 export hasNegativeVar : Term -> Bool
 hasNegativeVar (TVar n i _) = i < 0
 hasNegativeVar (TPi n i r d c) = hasNegativeVar d || hasNegativeVar c
-hasNegativeVar (TLam n r _ b) = hasNegativeVar b
+hasNegativeVar (TLam n r mty _ b) = hasNegativeVarMaybe mty || hasNegativeVar b
 hasNegativeVar (TApp f a r) = hasNegativeVar f || hasNegativeVar a
 hasNegativeVar (TCon c args) = anyNegativeVarArgs args
 hasNegativeVar (TMk c args) = anyNegativeVarArgs args
@@ -759,6 +803,10 @@ hasNegativeVar (TRecUpd base c tele idxs body) = hasNegativeVar base || hasNegat
 hasNegativeVar (TCase s alts) = hasNegativeVar s || anyNegativeVarAlts alts
 hasNegativeVar (TIf c th el) = hasNegativeVar c || hasNegativeVar th || hasNegativeVar el
 hasNegativeVar _ = False
+
+hasNegativeVarMaybe : Maybe Term -> Bool
+hasNegativeVarMaybe Nothing = False
+hasNegativeVarMaybe (Just t) = hasNegativeVar t
 
 export anyNegativeVarArgs : List (Pair Term Rig) -> Bool
 anyNegativeVarArgs [] = False
@@ -864,7 +912,7 @@ showTerm (TPi name implicit rig dom cod) =
   if name == "_" then "${showTerm dom} -> ${showTerm cod}"
   else if implicit then "{${name} : ${showTerm dom}} -> ${showTerm cod}"
   else "(${name} : ${showTerm dom}) -> ${showTerm cod}"
-showTerm (TLam name rig _ body) = "\\${name} => ${showTerm body}"
+showTerm (TLam name rig _ _ body) = "\\${name} => ${showTerm body}"
 showTerm (TApp f a rig) = "(${showTerm f} ${showTerm a})"
 showTerm (TCon c args) = "(${c}${showArgTerms args})"
 showTerm (TMk c args) = "(${c}${showArgTerms args})"
