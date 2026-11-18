@@ -81,6 +81,8 @@ TLS 将来若自持，只是第三个 duplex 实现，`Http.*` 不需要改。
 工具链侧的消费者：`vuna dev obs serve --cdp` 直接用本包的 HTTP 编解码 + `Http.WebSocket`
 （发现端点 `/json/version` / `/json/list` + `/devtools/page/<id>` 的 WS 升级），
 `packages/cli` 依赖本包，Node 桥 `test/corpus/obs-cdp/bridge.mjs` 已删除。
+ 生态层的消费者是 `vuna-web`（[web.md](web.md)）：`Web.Server` 用 `Http.Connection.serve`
+ 做连接循环，路由命中后把 `View` 渲染成 `Http.Response`。
 
 基础算法在 `vuna-base`：`Base.Data.Sha1`（RFC 3174，十六进制与原始字节两种输出）与
 `Base.Data.Base64`（RFC 4648，严格解码）。它们放在 base 是因为属于通用算法，

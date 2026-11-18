@@ -110,7 +110,8 @@ manifest，不向上找。命令语义与包格式
 │   ├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + lib/Vuna/Compiler/
 │   ├── base/      # 标准库包 vuna-base：lib/Base.*、Prelude.vuna
 │   ├── cli/       # 产品 CLI 包 vuna：lib/Vuna.*（工具链）+ app/Main.vuna（入口）
-│   └── http/      # 中立 HTTP/1.1 库 vuna-http：消息编解码 + 传输无关连接层
+│   ├── http/      # 中立 HTTP/1.1 库 vuna-http：消息编解码 + 传输无关连接层
+│   └── web/       # 生态层 vuna-web：HTML 视图 + 路由 + 串行服务驱动
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
@@ -119,14 +120,15 @@ manifest，不向上找。命令语义与包格式
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
-├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli,http}
+├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli,http,web}
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
 （虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `packages/cli/lib/`）、
-`vuna-compiler`（模块根 `packages/compiler/lib/`）、`vuna-base`（模块根 `packages/base/lib/`）
-与 `vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）。四者都是
+`vuna-compiler`（模块根 `packages/compiler/lib/`）、`vuna-base`（模块根 `packages/base/lib/`）、
+`vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）与 `vuna-web`（模块根
+`packages/web/lib/`，生态层：视图 + 路由 + 服务驱动）。五者都是
 vuna 模块根，不是 OCaml 库目录；`packages/cli/app/`、`packages/compiler/app/` 是纯入口目录。仓库里没有任何
 dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
@@ -165,6 +167,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/cli.md](docs/reference/cli.md) | CLI 命令树、flag 词汇、帮助与建议、退出码、产品面与 `vuna dev` 的边界 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/http.md](docs/reference/http.md) | 中立库 `vuna-http`：HTTP/1.1 消息模型、严格解析规则（走私防御/上限）、渲染与 duplex 传输接缝 |
+| [docs/reference/web.md](docs/reference/web.md) | 生态层 `vuna-web`：HTML 视图（默认转义/void/属性过滤）、路由（静态段 + `:param`、405 的 `Allow`、HEAD）、串行服务驱动与并发限制 |
 | [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna deps fetch` / `store clean --packages`、内容摘要与语义身份 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
