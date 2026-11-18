@@ -363,6 +363,10 @@ initialTableGo (s :: rest) ctors projs facts acc =
 -- ---------------------------------------------------------------
 -- 判定
 -- ---------------------------------------------------------------
+-- 闭包迭代上限：每轮把路径长度翻倍，实际上限来自 `tableGraphCap`（每对函数的图数）。
+sctClosureFuel : Int
+sctClosureFuel = 240
+
 sctCheckTable : List (Pair (Pair String String) (List (List ScEdge))) -> Bool
 sctCheckTable [] = True
 sctCheckTable ((Pair (Pair f g) gs) :: rest) =
@@ -409,11 +413,13 @@ sctCheck comp defTbl ctors projs facts msg =
   let
     sites = siteCollect comp ctors projs defTbl facts
     table0 = initialTable sites ctors projs facts
-  in case closureLoop table0 240 of
+  in case closureLoop table0 sctClosureFuel of
     Pair table1 True =>
       if sctCheckTable table1 then OkC 0
       else ErrC (appendMessage " [SCT 无下降环：${sctDiag table1}]" msg)
-    Pair table1 False => ErrC msg
+    Pair table1 False =>
+      ErrC
+        (appendMessage " [SCT 放弃：size-change 图闭包未收敛（每对函数上限 ${strFromInt tableGraphCap} 张图，${strFromInt sctClosureFuel} 轮）]" msg)
 
 -- ===============================================================
 -- 12. fuel 线程判据：整组函数的第 0 个形参是 Int fuel，函数体以
