@@ -105,17 +105,6 @@ membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
 -- ---------------------------------------------------------------
 -- 声明渲染
 -- ---------------------------------------------------------------
--- | 内部：声明名（渲染侧前缀查找用）；instance 不参与导出，返回空串。
-declFmtName : Decl -> String
-declFmtName (DData name params kind ctors derivings viaField repr lin sp) = name
-declFmtName (DAxiom name ty sp) = name
-declFmtName (DExtern name cName ty sp) = name
-declFmtName (DSig name ctx ty sp) = name
-declFmtName (DFun name pats body sp) = name
-declFmtName (DRecord name params fields derivings viaField repr lin sp) = name
-declFmtName (DTrait name params supers methods sp) = name
-declFmtName (DInstance ctxE head methods sp) = ""
-
 -- | 内部：渲染单个声明并贴上它的注释。
 renderDeclAt : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> Doc
 renderDeclAt mods env at decl = attachAt at (declSpan decl) (renderDeclBody mods env at decl)
