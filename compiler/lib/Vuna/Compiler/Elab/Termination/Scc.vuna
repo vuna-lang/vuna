@@ -234,6 +234,8 @@ hasStrict (e :: rest) = e.scStrictEdge || hasStrict rest
 graphIdempotent : List ScEdge -> Bool
 graphIdempotent edges = edgesEq (composeEdges edges edges) edges
 
+-- `closureLoop` 收敛后，表是传递闭包的超集：非幂等图还会在闭包里继续合成，所以
+-- 只在幂等图上要求严格边（SCT 定理）。未收敛的闭包不进这里判定。
 graphOK : List ScEdge -> Bool
 graphOK edges = if graphIdempotent edges then hasStrict edges else True
 
@@ -367,6 +369,7 @@ initialTableGo (s :: rest) ctors projs facts acc =
 sctClosureFuel : Int
 sctClosureFuel = 240
 
+-- 幂等图的起点必然等于终点（幂等即自合成），所以只检查 `f == g` 的配对。
 sctCheckTable : List (Pair (Pair String String) (List (List ScEdge))) -> Bool
 sctCheckTable [] = True
 sctCheckTable ((Pair (Pair f g) gs) :: rest) =
