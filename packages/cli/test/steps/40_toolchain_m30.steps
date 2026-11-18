@@ -1,0 +1,15 @@
+# store-isolated: 断言缓存/对象库/发布旗标行为，使用 case 私有 store。
+# 40) 工具链回归：CLI 错误矩阵 + Index v3 自检 + doc [export] + search
+run: sh $VUNA_SUITE_ROOT/packages/cli/test/corpus/cli/check.sh "$VUNA"
+exit: 0
+run: sh $VUNA_SUITE_ROOT/packages/cli/test/corpus/index/check.sh "$VUNA"
+exit: 0
+run: sh $VUNA_SUITE_ROOT/packages/cli/test/corpus/search/check.sh "$VUNA"
+exit: 0
+run: mkdir -p "$TMPDIR/doc-m30"
+run: "$VUNA" doc $VUNA_SUITE_ROOT/packages/cli/test/corpus/doc/01_export "$TMPDIR/doc-m30/api.html"
+exit: 0
+run: grep -q "id='visible'" "$TMPDIR/doc-m30/api.html"
+exit: 0
+run: sh -c '! grep -q "## Hidden" "$TMPDIR/doc-m30/api.html"'
+exit: 0

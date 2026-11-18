@@ -28,7 +28,7 @@ trap 'rm -rf "$tmp"' EXIT
 awk -F'\t' '!/^#/ && NF > 0 { print $1 }' "$registry" | sort -u > "$tmp/registered.txt"
 
 # 实际仍 spawn `vuna` 的 steps 文件。
-grep -l '"$VUNA"' test/suite/steps/*.steps 2>/dev/null | sed 's|test/suite/steps/||' | sort -u > "$tmp/found.txt" || true
+grep -l '"$VUNA"' packages/*/test/steps/*.steps 2>/dev/null | sed 's|.*/||' | sort -u > "$tmp/found.txt" || true
 
 unregistered=$(comm -23 "$tmp/found.txt" "$tmp/registered.txt" || true)
 if [ -n "$unregistered" ]; then

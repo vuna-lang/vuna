@@ -32,9 +32,14 @@ let
     test = ../../test;
     examples = ../../examples;
     docs = ../../docs;
-    corpus = ../../test/corpus;
-    codegenCorpus = ../../test/corpus/codegen;
-    steps = ../../test/suite/steps;
+    corpus = ../../packages/compiler/test/corpus;
+    corpusBase = ../../packages/base/test/corpus;
+    corpusCli = ../../packages/cli/test/corpus;
+    corpusWebCli = ../../packages/web-cli/test/corpus;
+    codegenCorpus = ../../packages/compiler/test/corpus/codegen;
+    stepsCli = ../../packages/cli/test/steps;
+    stepsCompiler = ../../packages/compiler/test/steps;
+    stepsWebCli = ../../packages/web-cli/test/steps;
     processBound = ../../test/suite/process-bound.txt;
     manifest = ../../vuna.toml;
     agents = ../../AGENTS.md;
@@ -151,8 +156,8 @@ let
       src.web
       src.webCli
       src.manifest
-      ../../test/corpus/run/12_fact.vuna
-      ../../test/corpus/dt/01_id.vuna
+      ../../packages/compiler/test/corpus/run/12_fact.vuna
+      ../../packages/compiler/test/corpus/dt/01_id.vuna
       ../../nix/seed/tcb-check.sh
       ../../nix/seed/tcb-allowlist.sh
       ../../nix/seed/forbidden.txt
@@ -356,7 +361,12 @@ in
     name = "vuna-diag";
     srcs = [
       src.corpus
-      src.steps
+      src.corpusBase
+      src.corpusCli
+      src.corpusWebCli
+      src.stepsCli
+      src.stepsCompiler
+      src.stepsWebCli
       ./lib
       ../../nix/checks/data/diag-coverage-allow.txt
       ../../nix/checks/data/diag-coverage.min
@@ -378,7 +388,9 @@ in
     srcs = [
       src.compiler
       src.cli
-      src.steps
+      src.stepsCli
+      src.stepsCompiler
+      src.stepsWebCli
       src.processBound
       ./lib
       ../../nix/checks/data/eff-boundary.allowlist

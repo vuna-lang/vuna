@@ -1,5 +1,0 @@
-[package]
-name = "fix-101-namespace-reexport"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

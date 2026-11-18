@@ -386,7 +386,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 
 ## 7. 验证
 
-- `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
+- `packages/compiler/test/steps/105_native_backend.steps`（`steps_native`，e2e）：
   native 机制——产物形状（`.s` 文件集 / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
   效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
@@ -401,7 +401,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。
 - 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
-  suite 的 `pure-cross` 分类（`test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
+  suite 的 `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`）对拍三端，OCaml 是语义 oracle。
 - 效应语义（handler / resume / abort / 嵌套 / return 改类型 / 宿主 console / 深递归）
   已并入 suite `pure-cross` 分类的三端对拍。
 - 工具链：`cc` 缺失时 steps 首步明确失败；e2e 的 `nativeBuildInputs` 含
@@ -417,7 +417,7 @@ env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败�
 - FFI / extern；stdin 的 `readLine` / `readBytes` 与 net。
 - **自举运行**：`vuna build packages/compiler --target native` 产出可链接的 `bin/vuna-compiler`
   （`version` / 帮助可用）；`check <小包>` 能跑完并给出正常诊断。冷 store 上
-  `check test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
+  `check packages/cli/test/corpus/packages/m34_summary/root` **整包通过**（exit 0）。
   整仓 selfhost 的现状按 [debt.md](debt.md) D89 跟踪：尾调用（§3）只覆盖**直接饱和直调**，
   非尾递归、被闭包包住的递归仍按帧吃宿主栈，续延里的深递归还受固定的 32 MiB 迁移窗口限制。
   CI 的 `nix run .#backend-check -- --compiler native` 因此仍是非阻塞任务（口径见

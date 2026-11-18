@@ -48,8 +48,10 @@ import Base.Effect.Args as EffArgs
 record Env where
   -- | 仓库根（含 `[workspace]` 的 `vuna.toml`）：base、`.local`、runner 夹具都在这里。
   envRoot : String
-  -- | suite 的 test 根（`<pkg>/test`）；steps 的 cwd 与相对路径基准。
+  -- | steps 与产物执行的 cwd（仓库根；跨包工具链用例都在这一层）。
   envCwd : String
+  -- | suite 的 test 根（`<pkg>/test`）；夹具路径、诊断投影与 lint 相对路径的基准。
+  envTestRoot : String
   -- | `runSuiteOnce` 产出本次 run 的临时根（`TMPDIR` 与子进程 cmd 输出文件都落在这里）。
   envTmp : String
   -- | 被测 `vuna` 可执行文件路径。
@@ -343,7 +345,7 @@ runCmdMerged env tag cwd secs argv = runCmdWith True env tag cwd secs argv
 withEnv : Env -> List String -> List String
 withEnv env argv =
   append
-    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}", "VUNA_TEST_ROOT=${env.envCwd}"]
+    ["env", "VUNA=${env.envVuna}", "VUNA_SEED=${env.envSeed}", "VUNA_BASE=${env.envBase}", "OCAMLOPT=${env.envOcamlopt}", "VUNA_SUITE_ROOT=${env.envRoot}", "VUNA_TEST_ROOT=${env.envTestRoot}"]
     argv
 
 -- 对象库是输入寻址的：同一输入同一路径、原子写，日常 check/build 与测试共用同一根
@@ -569,19 +571,19 @@ caseRelOf env diagPath =
   if not (endsWith "expected.diag.json" diagPath) then
     ""
   else
-    relativeTo env.envCwd (Vuna.Cli.Args.parentOf diagPath)
+    relativeTo env.envTestRoot (Vuna.Cli.Args.parentOf diagPath)
 
 -- | 内部：读 `.diag.json` 并解析成期望键序列；读不到或解析失败走 `ErrC`。
 expectKeysOf : Member nFs FsOp r => Env -> String -> Eff r (Check (List String))
 expectKeysOf env diagPath =
   do
     text <- fsReadFile diagPath
-    pure (expectKeys env.envRoot env.envCwd env.envBase (caseRelOf env diagPath) text)
+    pure (expectKeys env.envRoot env.envTestRoot env.envBase (caseRelOf env diagPath) text)
 
 -- | 内部：把 check 结果投影成与期望同口径的键序列（`ErrC` 时展开其中的诊断）。
 actualKeysOf : Env -> String -> Check (List Diagnostic) -> List String
-actualKeysOf env caseRel (ErrC e) = projectDiags env.envCwd env.envBase caseRel (flattenErr e)
-actualKeysOf env caseRel (OkC ds) = projectDiags env.envCwd env.envBase caseRel ds
+actualKeysOf env caseRel (ErrC e) = projectDiags env.envTestRoot env.envBase caseRel (flattenErr e)
+actualKeysOf env caseRel (OkC ds) = projectDiags env.envTestRoot env.envBase caseRel ds
 
 -- | 内部：期望键里是否有 error 级条目。
 expectHasError : List String -> Bool
@@ -1172,7 +1174,7 @@ diagSeverityOf d = d.diagSeverity
 relativeTestPath : Env -> String -> String
 relativeTestPath env source =
   let
-    prefix = "${env.envCwd}/"
+    prefix = "${env.envTestRoot}/"
   in if startsWith prefix source then
     substring (byteLength prefix) (byteLength source - byteLength prefix) source
   else
@@ -1667,11 +1669,14 @@ substStep item name st =
     (map s st.stAbsent)
     (map (substFileContains item name) st.stFileContains)
 
--- | 内部：步骤路径展开：`$TMPDIR` 换成 case 临时根；相对路径按 `env.envCwd` 解析成绝对路径。
+-- | 内部：步骤路径展开：`$TMPDIR` / `$VUNA_SUITE_ROOT` / `$VUNA_TEST_ROOT` 换成实际路径；
+-- 相对路径按 `env.envCwd` 解析成绝对路径。
 stepPath : Env -> String -> String -> String
 stepPath env caseTmp path =
   let
-    expanded = replaceAll "$TMPDIR" caseTmp path
+    t1 = replaceAll "$VUNA_SUITE_ROOT" env.envRoot path
+    t2 = replaceAll "$VUNA_TEST_ROOT" env.envTestRoot t1
+    expanded = replaceAll "$TMPDIR" caseTmp t2
   in if startsWith "/" expanded then expanded else "${env.envCwd}/${expanded}"
 
 -- | 内部：按 `exit:` 规格生成退出码断言（空或 `0` = 必须 0，`nonzero` = 必须非 0，
@@ -2950,7 +2955,7 @@ runSuiteOnce opts suite =
     discovered <- discoverCases suite
     orphans <- familyOrphans suite
     let
-      env = Env root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends wasmHost
+      env = Env root root testRoot tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends wasmHost
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：
       --   ① 已声明 family 目录里的孤儿夹具（精确 source 认领）；
       --   ② case 总数下限——整族从 suite.toml 消失时，①会连目录一起看不到。
@@ -3059,7 +3064,7 @@ blessDiagText env diagPath ds =
     raw = Vuna.Compiler.Base.Diag.Format.renderJsonList "en" ds
     dir = Vuna.Cli.Args.parentOf diagPath
     t1 = if endsWith "expected.diag.json" diagPath then replaceAllText "${dir}/" "./" raw else raw
-    t2 = replaceAllText "${env.envCwd}/" "" t1
+    t2 = replaceAllText "${env.envTestRoot}/" "" t1
     t3 = replaceAllText env.envBase "<BASE>" t2
   in replaceAllText env.envRoot "<ROOT>" t3
 

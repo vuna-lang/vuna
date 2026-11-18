@@ -1,0 +1,23 @@
+# store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
+# 44a) 接口对象库：base → dep（夹具）预热；接口按**输入摘要**寻址落在
+#      `$VUNA_STORE/objects/module-iface`，模块顺序落在 `objects/module-order`；损坏的对象被读侧
+#      framing 拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**。
+run: sh -c 'rm -rf "$TMPDIR/44a-store" "$TMPDIR/44a-cache"'
+run: sh -c 'VUNA_STORE="$TMPDIR/44a-store" TMPDIR="$TMPDIR/44a-cache" "$VUNA" check "$VUNA_BASE" --debug-perf'
+exit: 0
+out-contains: iface-write=
+run: sh -c 'test -d "$TMPDIR/44a-store/objects/module-iface" && test -d "$TMPDIR/44a-store/objects/module-order"'
+exit: 0
+# 依赖包消费 base 的接口（摘要路径），而不是重新精化 base。
+run: sh -c 'VUNA_STORE="$TMPDIR/44a-store" TMPDIR="$TMPDIR/44a-cache" "$VUNA" check $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/dep --debug-perf'
+exit: 0
+out-contains: cache-path=summary
+# 全量损坏：把所有接口对象截断成垃圾，清掉包级判定后重算 —— 坏字节必须被读侧拒绝
+# （按 miss 重算），进程不崩、check 仍然通过。
+run: sh -c 'for f in $(find "$TMPDIR/44a-store/objects/module-iface" -type f); do printf "junk" > "$f"; done; rm -rf "$TMPDIR/44a-cache"; VUNA_STORE="$TMPDIR/44a-store" TMPDIR="$TMPDIR/44a-cache" "$VUNA" check "$VUNA_BASE" > "$TMPDIR/44a-corrupt.log" 2>&1'
+exit: 0
+run: sh -c 'grep -qiE "runtime error|Sys_error" "$TMPDIR/44a-corrupt.log" && exit 1 || exit 0'
+exit: 0
+# 损坏后仍可继续使用：再来一遍 check 通过。
+run: sh -c 'VUNA_STORE="$TMPDIR/44a-store" TMPDIR="$TMPDIR/44a-cache" "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1'
+exit: 0

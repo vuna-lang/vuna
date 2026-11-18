@@ -1,6 +1,0 @@
-[package]
-name = "summary-root"
-
-[dependencies]
-dep = "../dep"
-vuna-base = "../../../../../packages/base"

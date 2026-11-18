@@ -146,7 +146,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
 ## 9. 边界
 
 - 无依赖 multiplicity、multiplicity 变量/多态：`Rig` 只有 `0 / 1 / ω` 三值，签名里
-  写不出 multiplicity 变量（`(p : Qty) -> …` 不可写）。探针：`test/corpus/dt/80_qtt_usage`
+  写不出 multiplicity 变量（`(p : Qty) -> …` 不可写）。探针：`packages/compiler/test/corpus/dt/80_qtt_usage`
   只覆盖三值；多态 multiplicity 需要 `Rig` 变成项层/类型层数据 + 依赖 Pi
   （[debt.md](debt.md) D22）。
 - 无「函数值线性」的通用箭头类型与借用（`&`）、region 推断；一次性闭包只有

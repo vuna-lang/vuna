@@ -3,8 +3,8 @@
 #
 # 三个 scope（口径见 docs/reference/testing.md「后端自举 conformance」）：
 #   selfhost  用该编译器检查整个仓库（workspace 根；机器格式诊断走进程内顺序检查）
-#   parity    test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
-#   corpus    test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
+#   parity    packages/compiler/test/corpus/pure_cross/*.vuna 在 ocaml / wasm / native 三个输出目标上对拍
+#   corpus    packages/*/test/corpus 的每个夹具：负例比结构化诊断，正例要求零 error
 #
 # 用法:
 #   backend-check --compiler native [--scope selfhost,parity,corpus] [--jobs N]
@@ -164,7 +164,7 @@ run_selfhost() {
 # ---------------------------------------------------------------------------
 parity_one() {
   local stem=$1 target=$2
-  local fixture="$repo/test/corpus/pure_cross/$stem.vuna"
+  local fixture="$repo/packages/compiler/test/corpus/pure_cross/$stem.vuna"
   local outdir="$work/parity/$stem-$target" want got status=0 wantfile
   if should_stop; then
     printf 'skip\t-\t-\tstopped:parity/%s [%s]\n' "$stem" "$target"
@@ -172,8 +172,8 @@ parity_one() {
   fi
   # 期望输出：`.out` 是 interp/run 共享 golden，`.run.out` 是仅 run 的 golden
   # （与 suite 的 Expect 同口径）。
-  wantfile="$repo/test/corpus/pure_cross/$stem.out"
-  [ -f "$wantfile" ] || wantfile="$repo/test/corpus/pure_cross/$stem.run.out"
+  wantfile="$repo/packages/compiler/test/corpus/pure_cross/$stem.out"
+  [ -f "$wantfile" ] || wantfile="$repo/packages/compiler/test/corpus/pure_cross/$stem.run.out"
   if [ ! -f "$wantfile" ]; then
     printf 'FAIL parity/%s [%s]: no expected output (.out / .run.out)\n' "$stem" "$target" >&2
     printf 'bad\tparity/%s [%s]\n' "$stem" "$target"
@@ -326,16 +326,24 @@ corpus_skip_family() {
   return 1
 }
 
+corpus_roots() {
+  printf '%s\n' \
+    "$repo/packages/compiler/test/corpus" \
+    "$repo/packages/base/test/corpus" \
+    "$repo/packages/cli/test/corpus" \
+    "$repo/packages/web-cli/test/corpus"
+}
+
 corpus_family() {
-  local rel=${1#"$repo/test/corpus/"}
+  local rel
+  rel=$(printf '%s\n' "$1" | sed -E 's|^.*/test/corpus/||')
   printf '%s\n' "${rel%%/*}"
 }
 
 collect_jobs() {
-  local exp dir entry stem name rel family mode
+  local exp dir entry stem name family mode
   while IFS= read -r exp; do
     matches_filter "$exp" || continue
-    rel=${exp#"$repo/test/corpus/"}
     family=$(corpus_family "$exp")
     if corpus_skip_family "$family"; then
       printf 'skip\t-\t-\tfamily:%s/%s\t-\t-\n' "$family" "${exp#"$repo/"}"
@@ -352,7 +360,7 @@ collect_jobs() {
       mode="file"
     fi
     printf 'negative\t%s\t%s\t%s\t%s\t%s\n' "$entry" "$exp" "${exp#"$repo/"}" "$mode" "$dir"
-  done < <(find "$repo/test/corpus" -name '*.diag.json' | sort)
+  done < <(find $(corpus_roots) -name '*.diag.json' | sort)
 
   while IFS= read -r exp; do
     matches_filter "$exp" || continue
@@ -375,7 +383,7 @@ collect_jobs() {
       mode="file"
     fi
     printf 'positive\t%s\t%s\t%s\t%s\t%s\n' "$entry" "$exp" "${exp#"$repo/"}" "$mode" "$dir"
-  done < <(find "$repo/test/corpus" -name '*.out' | sort)
+  done < <(find $(corpus_roots) -name '*.out' | sort)
 }
 
 export repo base suite alt compiler targets work filter cmd_timeout
@@ -397,8 +405,8 @@ if needs selfhost; then
 fi
 
 if needs parity; then
-  printf '== parity: %s x target(s) %s\n' "$(find "$repo/test/corpus/pure_cross" -name '*.vuna' | wc -l)" "$targets"
-  for fixture in "$repo"/test/corpus/pure_cross/*.vuna; do
+  printf '== parity: %s x target(s) %s\n' "$(find "$repo/packages/compiler/test/corpus/pure_cross" -name '*.vuna' | wc -l)" "$targets"
+  for fixture in "$repo"/packages/compiler/test/corpus/pure_cross/*.vuna; do
     matches_filter "$fixture" || continue
     stem=$(basename "$fixture" .vuna)
     for target in ${targets//,/ }; do printf '%s\t%s\n' "$stem" "$target"; done

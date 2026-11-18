@@ -1,0 +1,5 @@
+[package]
+name = "fix-102-duplicate-import-merge"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

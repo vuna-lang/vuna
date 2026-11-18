@@ -1,0 +1,10 @@
+# codegen 预算夹具：单个 150 层嵌套应用的定义体。
+#
+# 后端只渲染 IR 节点（每个节点一次结构递归，无固定步数预算），与嵌套深度无关，
+# 因此这个深度的定义体能编译通过。`checks.ir-boundary` 与 steps 用例
+# `103_ir_lowering.steps` 一起把这件事钉成门禁。
+[package]
+name = "dt-deep"
+
+[dependencies]
+vuna-base = "../../../../../packages/base"

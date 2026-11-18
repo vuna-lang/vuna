@@ -367,7 +367,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 ## codegen 夹具基线
 
-codegen 健康由**固定夹具**度量：`test/corpus/codegen/` 是冻结的包（data/多构造子、case、
+codegen 健康由**固定夹具**度量：`packages/compiler/test/corpus/codegen/` 是冻结的包（data/多构造子、case、
 record、trait/instance/deriving、as-pattern、where/let 多 clause、List 结构递归、Int 相等、
 零参定义、动作/do、`prim_*` 的 `Eff` 包装、跨模块 split）。`checks.vuna-metrics` 用
 `vuna build --no-compile` 生成它，剔除 `Base_*.ml` / `Prelude.ml` / `Vuna_runtime.ml` 后，

@@ -1,0 +1,13 @@
+# web-cli suite；schema 见 docs/reference/testing.md。
+
+[suite]
+name = "vuna-web-cli"
+owner = "web-cli"
+jobs = 0
+timeout = 300
+min_cases = 1
+
+[family.steps_native]
+dir = "steps"
+kind = "steps"
+tags = ["declarative"]

@@ -21,16 +21,43 @@ import Base.Effect.Process as EffProcess
 import Base.Effect.Types as EffTypes
 import Base.Data.String as String
 
--- | `vuna dev suite [FILE]` 的入口；省略 FILE 时用 `test/suite.toml`。
+-- | `vuna dev suite [FILE] [--all]` 的入口；省略 FILE 或 `--all` 时按
+-- `test/suite.toml` 的 driver 清单依次跑各包 suite。
 export suiteArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => List String -> Eff r Int
 suiteArgs rest =
   case parseCmdArgs ["dev", "suite"] rest of
     ErrC e => toolError (diagText e)
     OkC parsed =>
       case parsed.positionals of
-        [] => suiteRun parsed "test/suite.toml"
-        [path] => suiteRun parsed path
+        [] => suiteAll parsed
+        [path] =>
+          if flagSet parsed "all" then
+            toolError "--all 不接受 FILE 参数"
+          else
+            suiteRun parsed path
         _ => usageErrorFor ["dev", "suite"]
+
+-- | 内部：`--all`：读 driver 清单，逐个独立 suite 调用（共享 store 与预热由调用方负责）。
+suiteAll : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> Eff r Int
+suiteAll parsed =
+  case suiteWorkerOf parsed of
+    ErrC e => toolError (diagText e)
+    OkC (Just _) => toolError "--worker 不能与 --all 同用"
+    OkC Nothing =>
+      do
+        loaded <- parseSuiteFile "test/suite.toml"
+        case loaded of
+          ErrC e => toolError (diagText e)
+          OkC driver => runSuites parsed driver.suiteSuites
+
+-- | 内部：依次跑清单里的 suite；任一失败整体非 0，其余仍跑完。
+runSuites : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> List String -> Eff r Int
+runSuites parsed [] = pure 0
+runSuites parsed (path :: rest) =
+  do
+    rc <- suiteRun parsed path
+    more <- runSuites parsed rest
+    pure (if rc /= 0 then rc else more)
 
 -- | 内部：校验 `--jobs` / `--timeout` / `--worker`，再解析 suite 文件并运行。
 suiteRun : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Parsed -> String -> Eff r Int

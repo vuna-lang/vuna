@@ -189,7 +189,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 ## 8. 测试与门禁
 
-- `test/corpus/lsp/smoke.sh`：结构化诊断 smoke（0-based range、UTF-16、全部诊断、
+- `packages/cli/test/corpus/lsp/smoke.sh`：结构化诊断 smoke（0-based range、UTF-16、全部诊断、
   quick fix、relatedInformation）。
 - `nix/checks/lib/diag-raw.sh`：compiler 内源码/清单诊断不得走裸 `err`（工具/构建白名单：`CompilerCli`/`Compile`/`Dt`），
   `showSpanLoc` 只能出现在渲染器/目标消息组装处。
@@ -213,7 +213,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 | 渲染/LSP/CLI | short/human/JSON/SARIF + LSP push/pull + `[diagnostics]` 配置；human 视图展示 fields/trace/suggestions（与 JSON 同源）；SARIF rules 带目录 shortDescription/help/defaultConfiguration/tags；i18n（`--lang zh` 与 `[diagnostics] lang` 的 human 消息本地化 + `= message:` 英文原文；机器 JSON 保留英文 `message` 并附 `localizedMessage`） |
 | 多错误 + Cascade | 默认上限 20；级联默认折叠，`--show-cascade` 显示；parser 顶层 resync；elab `--continue-on-error`：单遍精化，失败的定义体/实例体回滚后跳过（丢弃它创建的元变量与解），错误按源序收集、条数只受 `--max-errors` 约束；不再重跑整程序，也不再有「移除声明后的级联」；`--max-errors` 同时约束恢复结果 |
 | warnings（未使用/冗余/不可达/跨目标能力） | `UN_UnusedBinder`/`UN_ShadowedBinder`/`UN_RedundantCtorBranch`/`UN_RedundantLiteralBranch`/`UN_BranchAfterCatchAll`/`UN_UnusedImport`（限定/别名/open import/`module X` 重导出统一追踪）/`UN_UnusedDefinition`；`-W`/`--deny-warnings` 已接且绕过 check 缓存/干净模块复用以保证不漏报。`UN_TargetEffectUnavailable` 在 `build`/`compile` 的入口行检查里发出（目标不实现该内建效应，执行到叶子会 trap；见 [wasm.md](wasm.md) §8） |
-| 建议引擎 + Fix | `Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`test/corpus/lsp/quickfix.sh` 集成测试 |
+| 建议引擎 + Fix | `Candidate`/`Suggestion` 模型；所有可安全自动修复的 warning 附 machine-applicable 编辑（unused binder/definition/import、冗余构造子/字面量分支、catch-all 后分支）；LSP codeAction 应用诊断 suggestions，`packages/cli/test/corpus/lsp/quickfix.sh` 集成测试 |
 | 类型不匹配 expected/found | fields expected/found + PhUnify trace 帧；期望类型无源 span，以 fields 而非双端 label 表达 |
 | 实例搜索 trace | `TC_NoInstanceFound` 附失败目标族桶的候选实例 `fields.candidates`，每个候选带 instance 声明 span 与拒绝原因「实例头 vs 目标」 |
 | 终止性 call matrix | `TC_CannotProveTermination` 附 `fields.call` 边：callee、被测形参位置（`arg`）、关系（`relation`：严格子项 / 守卫减法 / 缺非负证明 / 升序计数器 / 无尺寸来源 / 关系落在别的形参 / 无关系）、调用点 span；human 行尾显示文件:行号。SCT 失败在 message 后缀给出幂等图，闭包放弃时后缀改为「闭包未收敛 + 上限」 |

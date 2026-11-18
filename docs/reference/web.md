@@ -91,7 +91,7 @@ myapp/.vuna-web/bin/myapp tcp:127.0.0.1:8080
 
 - 纯：`packages/web/test/{View,Route}.vuna`（`vuna test packages/web`）——转义、void 元素、
   属性过滤、切段、百分号解码、参数匹配、405 的 `Allow`。
-- e2e：`test/suite/steps/109_web_static.steps` 跑 `test/corpus/web/static-smoke.sh`：
+- e2e：`packages/web-cli/test/steps/109_web_static.steps` 跑 `packages/web-cli/test/corpus/web/static-smoke.sh`：
   `vuna-web-cli build examples/web-static` → `tcp:127.0.0.1:0` → `curl` 断言状态码 / 正文 /
   `Content-Type` / `Allow` / HEAD 的 `Content-Length` / 尾斜杠归一 / 百分号解码 + 转义
   （与手写入口时的断言完全一致：同样的服务端契约，换的是构建器）。

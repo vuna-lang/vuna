@@ -1,6 +1,0 @@
-# 受限 FFI 夹具包。包根 ffi/*.c 由生成的 build.sh 编译并链接。
-[package]
-name = "ffi-add"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

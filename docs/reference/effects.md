@@ -121,7 +121,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 `resIdx i o` 是类型级、按擦除纪律 0 用量、在 OCaml 里不可命名；QTT 只把 0/1/ω 用量写精确，
 不会让 OCaml 写出它的静态类型。表示轴用「不透明值 + 恒等 cast」绕开它。
 
-依赖擦除类型的旧 CPS 编码仍由 `test/corpus/dt/82_eff_cps.vuna` / `83_eff_cps_two_instances.vuna` /
+依赖擦除类型的旧 CPS 编码仍由 `packages/compiler/test/corpus/dt/82_eff_cps.vuna` / `83_eff_cps_two_instances.vuna` /
 `84_eff_cps_result.vuna` 覆盖；它们验证同一套不透明值机制。
 
 **结论**：表示层的阻塞已消除；剩余边界见 §9 与 [debt.md](debt.md)。
@@ -276,7 +276,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   在定义体结束时即可求出（见 type-system.md「延迟字典目标」）。
 - **长 do 链**：程序级字典目标求解是单趟 worklist（`Dict.resolveDictGoals` 每个目标
   每趟只处理一次），指数已消除：20 步纯 `Eff []` do 约 100ms、10 层 `Result >>=` 约 77ms、
-  20 层 `>>=` 约 77ms（`test/corpus/elab_perf/` 夹具）。期望结果类型定向走前导隐式前缀后
+  20 层 `>>=` 约 77ms（`packages/compiler/test/corpus/elab_perf/` 夹具）。期望结果类型定向走前导隐式前缀后
   early solve 残余结果；do 块按块共享一个 monad/字典。编译器内部用限定 `Base.Common.bind`
   （固定类型的内部选择，不是兼容层）。行多态 `Eff r` 的 `do` 不受影响。
 - **一阶效应核**：普通 send op 不含子计算；`Base.Effect.Exn.Try` 支持携带子计算，
@@ -289,7 +289,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   `load` 处 `joinEff`/`runPure` 要求行 `Nil`，因此入口处的未处理效应是**类型错误**，并报专门的
   `TC_UnhandledEffects`（列出具体标签；负例 `dt_err/82_unhandled_effect_entry`）。
   运行时兜底保留：main 钩子识别 `Effect.Unhandled (Perform (key,name,_))`，报告
-  `unhandled effect key (instance name)`（`name` 是 String 实例名；`test/corpus/run_err/04_unhandled_effect`）；任务内
+  `unhandled effect key (instance name)`（`name` 是 String 实例名；`packages/compiler/test/corpus/run_err/04_unhandled_effect`）；任务内
   的未处理效应经 `awaitTask` 的 `Err` 返回同一条消息。剩余：`runEff` 内部信任入口
   （库内路径）接受任意行（[debt.md](debt.md) D37）。
 

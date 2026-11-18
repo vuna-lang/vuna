@@ -1,8 +1,0 @@
-[package]
-name = "wmlib"
-
-[export]
-modules = ["WmLib"]
-
-[dependencies]
-vuna-base = "../../../../../packages/base"

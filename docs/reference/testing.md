@@ -11,23 +11,38 @@ repo 自测由 `vuna dev suite <suite.toml>` 驱动（原生 Vuna 实现，不�
 - `<test 根>/suite.toml`：suite 配置。`[suite]` 放全局默认（`owner`/`jobs`/`timeout`/`name`）；
   `[family.<name>]` 按目录约定把夹具展开成 golden/error case，`dir` 相对 suite 文件所在目录；
   case id 是 `<owner>/<family>/<相对路径>`；
-- `<test 根>/suite/steps/*.steps`（当前 `test/suite/steps`）：声明式步进用例（一套行式 DSL，见下）；
+- `<test 根>/steps/*.steps`（当前 `packages/*/test/steps`）：声明式步进用例（一套行式 DSL，见下）；
 - 执行器在 `packages/cli/lib/Vuna/Test/{Suite,Run}.vuna`，由 `Vuna.Cli.testArgs` 分派。
 
 ```console
-vuna dev suite test/suite.toml                 # 全量；--jobs 默认 auto
-vuna dev suite test/suite.toml --list          # 列出 case
-vuna dev suite test/suite.toml --only dt       # owner/family/case id 子串
-vuna dev suite test/suite.toml --filter vuna/dt/03  # 按 case id/tag 子串
-vuna dev suite test/suite.toml --tier fast      # 只跑 fast 层（golden/error/lint/fix）
-vuna dev suite test/suite.toml --tier e2e       # 只跑 e2e 层（steps）
-vuna dev suite test/suite.toml --backend wasm   # 只跑 matrix 允许 wasm 的 case
-vuna dev suite test/suite.toml --matrix pure-cross        # 只跑三端差分精选集
-vuna dev suite test/suite.toml --filter layer:effect      # 按层次 tag 筛选
-vuna dev suite test/suite.toml --jobs 16       # 显式并行度（覆盖 auto）
-vuna dev suite test/suite.toml --json          # 机器可读汇总
+vuna dev suite --all                      # 全部独立 suite（读 test/suite.toml 的清单）
+vuna dev suite --all --list               # 列出所有 case（id 带 owner 前缀）
+vuna dev suite packages/compiler/test/suite.toml --only dt   # 只跑一个 suite 的 owner/family/id 子串
+vuna dev suite --all --filter compiler/dt/03  # 按 case id/tag 子串（跨 suite）
+vuna dev suite --all --tier fast          # 只跑 fast 层（golden/error/lint/fix）
+vuna dev suite --all --tier e2e           # 只跑 e2e 层（steps）
+vuna dev suite --all --backend wasm       # 只跑 matrix 允许 wasm 的 case
+vuna dev suite --all --matrix pure-cross  # 只跑三端差分精选集
+vuna dev suite --all --filter layer:effect  # 按层次 tag 筛选
+vuna dev suite --all --jobs 16            # 显式并行度（覆盖 auto）
+vuna dev suite --all --json               # 机器可读汇总（每个 suite 一行）
 ```
 
+### suite 归属
+
+每个包在自己的 `test/` 下拥有独立 suite；`vuna dev suite --all` 读 `test/suite.toml`
+的 driver 清单，**逐个调用**（共享 `VUNA_STORE`，预热由调用方做一次）：
+
+| owner | suite 文件 | 内容 |
+| --- | --- | --- |
+| `compiler` | `packages/compiler/test/suite.toml` | 语言 / 精化 / DT / IR / 后端 + 后端机制 steps |
+| `base` | `packages/base/test/suite.toml` | `Base.*` / `Prelude` 公开面语义 |
+| `cli` | `packages/cli/test/suite.toml` | fmt / lint / fix / doc / 包管理 / store / LSP / REPL + 工具链 steps |
+| `web-cli` | `packages/web-cli/test/suite.toml` | `vuna-web-cli` 静态服务 e2e |
+| `http` / `web` | `packages/*/test/*.vuna` | `vuna test <pkg>` 的包 API 单测（不经过 suite） |
+
+case id = `<owner>/<family>/<相对路径>`；`--only dt` / `--only compiler/` 都是子串匹配。
+fixture 与 steps 的相对路径以**所属包的 `test/`** 为根（见 `[family] dir`）。
 `--jobs auto`（默认）= 探测到的全部可用核（`VUNA_TEST_JOBS` 可覆盖，`--jobs N` 显式）。
 每个子进程仍有独立 `TMPDIR`；但 `VUNA_STORE` 由父进程解析一次、所有 worker/case 共享
 （对象库是输入寻址的，见「共享对象库」）。
@@ -184,8 +199,8 @@ end:
 - 语言/corpus 夹具由 family 覆盖（§1–§34 的 dt/dt_err/dt_base/dt_compiler、pure_cross 与 effect/*、run/modules/
   records/traits/monad/stdlib/lint/fix/term 等）。`dt_compiler` 是编译器包 API 的函数级夹具
   （mock handler + `runPure`，不碰真实文件系统），只跑 run。
-- 工具链/包/REPL/LSP/net/缓存/iface 段是 `test/suite/steps/*.steps` 声明式用例。
-- suite 入口只有 `vuna dev suite test/suite.toml`。
+- 工具链/包/REPL/LSP/net/缓存/iface 段是 `packages/*/test/steps/*.steps` 声明式用例。
+- suite 入口是 `vuna dev suite --all`（driver 清单）或单个 `packages/<owner>/test/suite.toml`。
 
 ### iface 判据回归（§44m–§44q）
 
@@ -215,15 +230,15 @@ end:
 ### 产品化过滤与更新
 
 ```console
-vuna dev suite test/suite.toml --changed HEAD   # 仅跑 git diff 影响到的 case
-vuna dev suite test/suite.toml --last-failed    # 重跑上次失败
-vuna dev suite test/suite.toml --bless          # 更新 golden .out（只写 golden）
-vuna dev suite test/suite.toml --bless-diag     # 生成/更新 .diag.json 结构化诊断期望
-vuna dev suite test/suite.toml --watch          # 改文件后自动重跑
-vuna dev suite test/suite.toml --audit          # 孤儿 fixture 审计
-vuna dev suite test/suite.toml --timings        # 最慢 10 个 case
-vuna dev suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也算失败
-vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖测试对象库与构建桶根
+vuna dev suite --all --changed HEAD   # 仅跑 git diff 影响到的 case
+vuna dev suite --all --last-failed    # 重跑上次失败
+vuna dev suite --all --bless          # 更新 golden .out（只写 golden）
+vuna dev suite --all --bless-diag     # 生成/更新 .diag.json 结构化诊断期望
+vuna dev suite --all --watch          # 改文件后自动重跑
+vuna dev suite --all --audit          # 孤儿 fixture 审计
+vuna dev suite --all --timings        # 最慢 10 个 case
+vuna dev suite --all --strict-skips   # fail-fast 产生的 skip 也算失败
+vuna dev suite --all --cache-dir DIR   # 覆盖测试对象库与构建桶根
 ```
 
 - `--changed REV`：`git diff --name-only REV`；`packages/` 源码、`examples/` 或 suite 执行器配置变更跑全量，
@@ -235,11 +250,11 @@ vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖测试对象库与构�
 - 目录型夹具根部的 `.package-dir` 标记：check/compile 以该目录为 cwd 运行 `vuna <cmd> .`，用于包级诊断（`PKG_`/`LD_`），对应 family `pkg_err`（`entry = "lib/Main.vuna"`）。
 - `nix/checks/lib/diag-coverage.sh` 对比码集合（`.diag.json` + lint `.out` + steps 侧车
   `*.diagcodes`；缺口与不可达审计在 `nix/checks/data/diag-coverage-allow.txt`，覆盖数不低于
-  `nix/checks/data/diag-coverage.min`）；`nix/checks/lib/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/checks/data/diag-style-allow.txt`）；LSP quick fix 集成在 `test/corpus/lsp/quickfix.sh`。
+  `nix/checks/data/diag-coverage.min`）；`nix/checks/lib/diag-style.sh` 查消息列文案规范（句号/大小写/空白/占位符，例外在 `nix/checks/data/diag-style-allow.txt`）；LSP quick fix 集成在 `corpus/lsp/quickfix.sh`。
 - `--watch`：首次跑完后每 500ms 比较 suite/corpus/工具链源码 mtime，变化即重跑。
 - `--cache-dir DIR`：覆盖 `.local/test-cache`（构建桶/last-failed；verdict 在对象库）。
 - `--strict-skips`：`--fail-fast` 跳过的 case 计为失败（CI 使用）。
-- `--audit`：扫描 suite 的 test 根下 `corpus/`（当前 `test/corpus`）的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
+- `--audit`：扫描 suite 的 test 根下 `corpus/`（当前 `packages/*/test/corpus`）的 `.vuna`，未被 family case 或 steps 文件文本引用的夹具列出
   并 exit 1；`corpus/codegen` 是 metrics 固定输入，显式排除。
 
 family discovery 对目录里每个夹具要求一个期望文件（阶段限定后缀或兼容裸后缀；目录型是
@@ -251,9 +266,10 @@ family discovery 对目录里每个夹具要求一个期望文件（阶段限定
 - `audit/orphans`：已声明 family 目录里的每个夹具必须与某个 case 的 source 精确对应，
   否则注入一个失败 case。`--audit` 另有全 corpus 的宽松报告（steps 文件里
   提到目录名就算认领），两者互不替代。
-- `audit/min-cases`：`[suite] min_cases = 870` 是 case 总数下限。整族从 `suite.toml`
-  消失时，孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
-  新增夹具无需调整；批量删除夹具时同步下调。
+- `audit/min-cases`：每个 suite 的 `[suite] min_cases` 是该 suite 的 case 总数下限
+  （compiler 730 / base 31 / cli 142 / web-cli 1）。整族从 `suite.toml` 消失时，
+  孤儿审计连目录都看不到了，只有总数骤降能兜住这类「少跑 case 却全绿」。
+  新增夹具无需调整；批量删除夹具时同步下调对应 suite 的数字。
 
 局部运行（`--only` / `--filter`）会把这两个审计 case 一起过滤掉，符合预期。
 
@@ -294,8 +310,8 @@ steps 里，用于「摘要路径 vs 全量路径逐字节一致」的对拍。
 （`repl` / `lsp`）、执行产物（`build.sh` / `prog` / `vuna run` / `vuna test`）、另一个二进制
 （`seed`）、多进程 store 互斥（`fetch` / `add` / `pin` / `store` / `clean`）、CLI 渲染文本与
 `--json` / SARIF 文档形状。这些逐个登记在 `test/suite/process-bound.txt`（
-`文件<TAB>子命令<TAB>原因`），由 `nix/checks/lib/steps-inproc.sh` 校验：steps 里出现未登记的
-文件名就失败；登记数超过 `nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。
+`文件<TAB>子命令<TAB>原因`），由 `nix/checks/lib/steps-inproc.sh` 校验：`packages/*/test/steps`
+里出现未登记的文件名就失败；登记数超过 `nix/checks/data/steps-inproc.max` 也失败（ratchet 只降）。
 
 已知边界：增量会话的 `dtIncrementalCheckedCore` 只汇总 loader + `dtProgWarnings`，
 **不跑**全量尾部的 `warnUnusedDefsIn`；所以负例的 check 一律走全量（`InProc.checkFile`），
@@ -319,7 +335,9 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 [test-architecture.md](test-architecture.md)）。
 ### 包内测试（`packages/<pkg>/test/`）
 
-`vuna test <包目录>` 逐个跑 `test/*.vuna`，每个文件的 `main` 决定是否通过：
+`vuna test <包目录>` 逐个跑 `test/*.vuna`（只认顶层，不递归），每个文件的 `main` 决定是否通过。
+同一个 `test/` 目录还放该包的 suite 配置与夹具（`suite.toml` / `corpus/` / `steps/`）；
+两者互不干扰。
 
 | `main` 形态 | 执行路径 | 通过条件 |
 | --- | --- | --- |
@@ -328,7 +346,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 纯形态走核心求值，因此**只能用核心求值器实现的原语**：`strUnpack` / `strPack` /
 `strConcatMany` / `strSubstring` 这类 List 桥接原语不在其中，用了会得到
-`CG_MainNotValue: main does not reduce to a value`（语言夹具同理，`corpus/stdlib/07_string`
+`CG_MainNotValue: main does not reduce to a value`（语言夹具同理，`packages/base/test/corpus/stdlib/07_string`
 因此用 `.run.out`）。需要这些原语时把测试写成 `Eff` 入口，失败自己收口：
 
 ```vuna
@@ -347,26 +365,30 @@ main = case failuresOf n written of
 
 ## corpus 的包上下文与 `VUNA_BASE`
 
-`test/corpus/vuna.toml` 给整个 corpus 一个**独立包上下文**（`name = "vuna-corpus"`，
-`[dependencies] vuna-base = "../../base"`，没有 `[export]` / `[workspace]` 成员）：
+每个包的 `test/corpus/vuna.toml` 给它自己的 corpus 一个**独立包上下文**
+（`name = "vuna-<owner>-corpus"`，只依赖 `vuna-base`，没有 `[export]` / `[workspace]` 成员）：
 
-- corpus 下的夹具文件**没有自己的 manifest** 时，向上找最近 manifest 即
-  `test/corpus/vuna.toml`：**单文件夹具也是 corpus 包内的 ad-hoc 入口**（包上下文，
+- corpus 下的夹具文件**没有自己的 manifest** 时，向上找最近 manifest 即该包的
+  `test/corpus/vuna.toml`：**单文件夹具也是该 corpus 包内的 ad-hoc 入口**（包上下文，
   import 可见范围 = 本包 `lib/` + `vuna-base` 依赖闭包）；真正的 base-only 上下文只出现在
   runner 写进 `$tmp`、没有任何 manifest 祖先的临时夹具；
 - 需要跨模块 / 需要多包语义的模块夹具（`corpus/modules/*`、`records/`、`traits/`、
-  `type_modules/`、`packages/*`）各自补 `vuna.toml`（默认只依赖 `vuna-base`）；
+  `type_modules/`、`corpus/packages/*`）各自补 `vuna.toml`（默认只依赖 `vuna-base`）；
 - `VUNA_BASE` 由脚本导出给无 manifest 的临时夹具；corpus 内的夹具通过 `vuna-base` 依赖
   获得 base；
 - 两类上下文都**自动注入 `Prelude`**，因此夹具需要 `show` / `==` / 比较 / `deriving` 时
   直接可用；显式 `import Prelude` 仍合法；
 - 夹具 manifest 只有 `[package]` / `[export]` / `[dependencies]`（没有能力 / 信任 /
   特权 section）：corpus 代码可直接调用 `prim_*` / `prim_eff_*` 使用效果，没有门控；
-  原语直调正例是 `packages/07_prim_direct`（直调 `prim_eff_*`）；
-- `test/corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
+  原语直调正例是 `corpus/packages/07_prim_direct`（直调 `prim_eff_*`）；
+- `corpus/fmt/check.sh` 与主 runner 用同一套约定（`VUNA_BASE` + 目录化 compile），
   不接受模块根参数。
 
 ## corpus 分类
+
+下面路径都相对**所属包的 `test/corpus/`**（stdlib → `packages/base`；fmt/lint/fix/doc/cli/
+pkg_err/packages/test-m30 → `packages/cli`；web → `packages/web-cli`；其余 → `packages/compiler`）。
+`vuna test` 的单元测试仍在各包 `test/*.vuna`。
 
 语言夹具只走 DT：`interp`（DT 精化 + 核心求值）、`check`、`compile` + ocamlopt。
 「只 compile+run、不做 interp 对拍」的夹具（效果程序 `main : Eff [] a`，以及核心求值器不可
@@ -410,7 +432,7 @@ main = case failuresOf n written of
   interp / compile+运行三路全过；错误例覆盖 kind 不符、无 Monad、do 结尾 / 绑定模式非法；
 - `corpus/stdlib/`：`Base.*` 与 do/动作正例、错误例；效果夹具 `03_do_io`、`09_io`、
   `10_package` 与 `strUnpack`/`strPack` 的 `07_string` 用 `.run.out`；另有
-  `test/corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、模块头导出列表排序、
+  `corpus/fmt/check.sh` 覆盖格式化 golden、注释保留、行宽折行、模块头导出列表排序、
   `where` 签名行与幂等；
 - `corpus/packages/`：`build` / `test` 的 workspace 正例与缺依赖、依赖环、隐藏模块错误例；
   包构建走 DT，`vuna test` 走 DT 核心求值；`03_reexport` 覆盖 facade 重导出；
@@ -552,7 +574,7 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
   `vuna.parse.syntax` 的 `totalUs`，再加 `fmt --check` 墙钟，相邻档 ≤2.5×；与
   `vuna-compiler-growth` 互补（整条 check 里前端只占几个百分点，n² 会被精化成本掩盖）。
   读数见 [performance.md](performance.md) §6.1；
-- `vuna-metrics`：冻结夹具（`test/corpus/codegen`）的 codegen 产物对
+- `vuna-metrics`：冻结夹具（`corpus/codegen`）的 codegen 产物对
   `nix/checks/data/codegen.baseline` 的精确基线；种子尺寸不设门槛（见 [compiler.md](compiler.md)
   §codegen 夹具基线）；
 - `context-budget`：入口文档字节数与单模块行数对 `nix/checks/data/context.budget`（预算按实测 ×1.5
@@ -581,7 +603,7 @@ runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 | scope | 断言 |
 | --- | --- |
 | `selfhost` | `check . --error-format json` 在整仓（workspace 根）零 error 诊断、exit 0；机器格式走进程内顺序检查，避开文本格式对成员包的 `processSpawn` |
-| `parity` | `test/corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
+| `parity` | `corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
 | `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
 
 `--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`

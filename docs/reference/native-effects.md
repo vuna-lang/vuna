@@ -395,5 +395,5 @@ OCaml 后端用 `Effect.Deep`；native 后端没有运行时调度器，`prim_ef
   （[debt.md](debt.md) D89）。
 
 wasm 后端用 stack switching 实现了 handler（见 [wasm-effects.md](wasm-effects.md)）；
-效应语义的三端对拍在 suite `pure-cross` 分类（`test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的
+效应语义的三端对拍在 suite `pure-cross` 分类（`packages/compiler/test/corpus/pure_cross/`，`35_eff_*`–`50_eff_*`），native 的
 机制用例在 `105_native_backend.steps`。

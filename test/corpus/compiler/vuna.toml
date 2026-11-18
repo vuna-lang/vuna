@@ -1,8 +1,0 @@
-# 目录型夹具的独立包上下文：编译器包 API 的函数级夹具。
-# 只做纯断言（mock handler + runPure），不碰真实文件系统与网络。
-[package]
-name = "fix-compiler"
-
-[dependencies]
-vuna-base = "../../../packages/base"
-vuna-compiler = "../../../packages/compiler"

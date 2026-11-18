@@ -378,7 +378,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
     #    Configure → 127.0.0.1:9229；Profiler 面板的 Start/Stop 即 start/stop。
     ```
 
-    e2e 客户端 `test/corpus/obs-cdp/ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并校验。
+    e2e 客户端 `packages/cli/test/corpus/obs-cdp/ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并校验。
     该脚本**不进** `nix flake check`（需要 Node + 端口，沙箱不保证）。
 
 ## 8. 外部生态
@@ -431,7 +431,7 @@ vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]
 | `nix/checks/vuna-obs-dwarf.sh` | split 产物每个绑定前有 `# <行> "<包相对>.vuna"` 指令（不含绝对/`../` 路径）；`build` 出的可执行文件在 `readelf --debug-dump=decodedline` 里有 `.vuna` 文件且行号 > 0。**不依赖** gdb/perf（CI 里不保证有） |
 | `nix/checks/vuna-obs-overhead.sh` | `VUNA_OBS=0` 与不设观测的产物**逐字节一致**（关闭路径不得改变任何输出）；关闭时不写 trace 文件；打开时必须产出（反证）；生成运行时的 `dtp_obs_log/counter/mark/span` 都以关闭快速路径开头（不在关闭路径读时钟/分配）。**不设墙钟门槛**——绝对性能不可跨机器比，那属于 benchmark |
 | `checks.eff-boundary` | 新增探针全部走隐藏原语（`runPure` 基线仍为空） |
-| 手动（`obs serve --cdp` 原生 WS） | 起 `vuna dev obs serve --cdp tcp:127.0.0.1:0 TRACE`，用 WS 客户端连：`Runtime.getIsolateId` / `Profiler.enable` / `Profiler.start` / `Profiler.stop` 都有合法响应、`profile.samples` 数 == trace 的 `vuna.sample.cpu` 数、未知方法回 `-32601`、同一 trace 两次 stop 的 profile JSON 逐字节一致、无 cpu 采样的 trace 在 stop 上回 `-32000` 且进程退出码 1、参数错误退出码 2；`node test/corpus/obs-cdp/ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并断言 `/json/version`、`/json/list`、握手、`Profiler.*`、ping/pong。**不进 `nix flake check`**（需要 Node + 端口，沙箱不保证） |
+| 手动（`obs serve --cdp` 原生 WS） | 起 `vuna dev obs serve --cdp tcp:127.0.0.1:0 TRACE`，用 WS 客户端连：`Runtime.getIsolateId` / `Profiler.enable` / `Profiler.start` / `Profiler.stop` 都有合法响应、`profile.samples` 数 == trace 的 `vuna.sample.cpu` 数、未知方法回 `-32601`、同一 trace 两次 stop 的 profile JSON 逐字节一致、无 cpu 采样的 trace 在 stop 上回 `-32000` 且进程退出码 1、参数错误退出码 2；`node packages/cli/test/corpus/obs-cdp/ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并断言 `/json/version`、`/json/list`、握手、`Profiler.*`、ping/pong。**不进 `nix flake check`**（需要 Node + 端口，沙箱不保证） |
 | 手动（本批，`obs convert/render/merge/symbols`） | 同一 trace 两次 `convert --to cpuprofile\|speedscope\|folded\|jsonl` 的 md5 相同；`--to jsonl` 产物过 `validate`；两次 `render --out` 的 HTML md5 相同且 `grep -c 'https?://'` = 0；`merge` 两份 trace 的产物过 `validate`；`symbols` 对 `build --no-compile --out` 的 compiler 产物抽出的 def 数 > 1000、两次运行 md5 相同。**不进 `nix flake check`**（需要 split 产物，成本高）；suite 覆盖见下一行 |
 | `checks.vuna-metrics` + `nix/checks/data/codegen.baseline` | `#line` 后按实测重标定（`bytes`/`lines`/`maxline`/`letrec` 精确基线） |
 | suite `107_observability.steps` | 关闭零输出、`dbg!` stderr 协议逐字节不变而 `obs!`/`mark!` 走结构化事件、`validate` 拒绝倒挂、`#line` 包相对 + 产物可跑、DWARF 指向 `.vuna`、回栈落到 `.vuna` 行、`VUNA_OBS=3` 的 cpu/mem 采样、`summarize --json` 单行、非 OCaml 后端的桩与编译期拒绝、`convert`/`render` 的确定性 |

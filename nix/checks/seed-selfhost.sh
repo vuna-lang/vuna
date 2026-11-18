@@ -67,13 +67,13 @@ sh nix/seed/tcb-check.sh nix/seed/forbidden.txt s2
 
 # 行为抽查：stage1 编译器（DT split codegen）编译并运行一个程序。
 # compile 产目录（Main.ml + build.sh），用 build.sh 链接出可执行文件。
-cp test/corpus/run/12_fact.vuna fact.vuna
+cp packages/compiler/test/corpus/run/12_fact.vuna fact.vuna
 ./vuna-stage1 compile fact.vuna "$OUT/fact"
 sh "$OUT/fact/build.sh" fact
 test "$("$OUT/fact/fact")" = "120"
 
 # DT 行为抽查：Pi 类型与擦除 codegen（唯一 codegen 路径）在 seed 构建的 stage1 上可用。
-cp test/corpus/dt/01_id.vuna dt_id.vuna
+cp packages/compiler/test/corpus/dt/01_id.vuna dt_id.vuna
 ./vuna-stage1 compile dt_id.vuna "$OUT/dt_id"
 sh "$OUT/dt_id/build.sh" dt_id
 test "$("$OUT/dt_id/dt_id")" = "42"

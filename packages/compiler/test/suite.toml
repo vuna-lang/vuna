@@ -1,0 +1,208 @@
+# 由仓库 suite 拆出的 compiler suite；schema 见 docs/reference/testing.md。
+
+[suite]
+name = "vuna-compiler"
+owner = "compiler"
+jobs = 0
+timeout = 300
+min_cases = 730
+
+[family.dt]
+dir = "corpus/dt"
+matrix = "pure"
+check = true
+tags = ["dt"]
+
+[family.dt_err]
+dir = "corpus/dt_err"
+matrix = "pure"
+interp = false
+check = true
+tags = ["dt", "error"]
+
+[family.dt_base]
+dir = "corpus/dt_base"
+matrix = "pure"
+check = true
+tags = ["dt", "base"]
+
+# --- 后端能力矩阵：按副作用分层（见 docs/reference/testing.md）---
+# 纯语义三端差分：ocaml 是语义 oracle，wasm / native 必须逐字一致。
+[family.pure_cross]
+dir = "corpus/pure_cross"
+interp = false
+check = true
+compare_interp = false
+matrix = "pure-cross"
+tags = ["parity"]
+
+# 三端共有的宿主副作用：Console / IORef / getenv / getArgs / exit / 经标签的 FS。
+[family.effect_common]
+dir = "corpus/effect/common"
+interp = false
+check = true
+compare_interp = false
+matrix = "effect-common"
+tags = ["effect"]
+
+# 系统级副作用：process / sleep / mtime / 真实 cwd（ocaml + native）。
+[family.effect_native]
+dir = "corpus/effect/native"
+interp = false
+check = true
+compare_interp = false
+matrix = "effect-native"
+tags = ["effect"]
+
+# 只有 ocaml 宿主实现的系统副作用：stdin / raw net。
+[family.effect_ocaml]
+dir = "corpus/effect/ocaml"
+interp = false
+check = true
+compare_interp = false
+matrix = "effect-ocaml"
+tags = ["effect"]
+
+# WASI / 浏览器能力面：preopen 根、cwd=/、execPath=""、mtime=Nothing。
+[family.effect_wasm]
+dir = "corpus/effect/wasm"
+interp = false
+check = true
+compare_interp = false
+matrix = "effect-wasm"
+tags = ["effect"]
+
+# 编译器包 API 的函数级夹具（mock handler + runPure 断言；只跑 run）。
+[family.dt_compiler]
+dir = "corpus/compiler"
+matrix = "pure"
+check = true
+tags = ["dt", "compiler"]
+
+# 精化器性能回归：只跑 `vuna check`，不编译不运行；
+# 单 case 超时 15s：长 do / 长 >>= 链必须保持线性耗时，超时即失败。
+[family.elab_perf]
+dir = "corpus/elab_perf"
+matrix = "pure"
+kind = "check-ok"
+timeout = 15
+tags = ["dt", "perf"]
+
+# 声明式步进用例（run/expect 指令，见 docs/reference/testing.md）
+[family.run]
+dir = "corpus/run"
+matrix = "pure"
+check = false
+tags = ["run"]
+
+[family.modules]
+dir = "corpus/modules"
+matrix = "pure"
+entry = "app/Main.vuna"
+check = false
+tags = ["modules"]
+
+[family.records_files]
+dir = "corpus/records"
+matrix = "pure"
+check = false
+tags = ["records"]
+
+[family.records_dirs]
+dir = "corpus/records"
+matrix = "pure"
+entry = "app/Main.vuna"
+check = false
+tags = ["records"]
+
+[family.traits_files]
+dir = "corpus/traits"
+matrix = "pure"
+check = false
+tags = ["traits"]
+
+[family.traits_dirs]
+dir = "corpus/traits"
+matrix = "pure"
+entry = "app/Main.vuna"
+check = false
+tags = ["traits"]
+
+[family.monad]
+dir = "corpus/monad"
+matrix = "pure"
+check = true
+tags = ["monad"]
+
+[family.float]
+dir = "corpus/float"
+matrix = "pure"
+check = true
+tags = ["float"]
+
+# --- check 为主（interp 不支持 / 无 golden）---
+[family.type_ok]
+dir = "corpus/type_ok"
+interp = false
+check = true
+compare_interp = false
+tags = ["types"]
+
+[family.type_err]
+dir = "corpus/type_err"
+interp = false
+check = true
+run = false
+compare_interp = false
+tags = ["types", "error"]
+
+[family.typed_ok]
+dir = "corpus/typed_ok"
+interp = false
+check = true
+compare_interp = false
+tags = ["types"]
+
+[family.type_modules]
+dir = "corpus/type_modules"
+entry = "app/Main.vuna"
+interp = false
+check = true
+compare_interp = false
+tags = ["types", "modules"]
+
+# 只跑 check 的夹具（终止性）。
+[family.term]
+dir = "corpus/term"
+kind = "check-ok"
+tags = ["term"]
+
+[family.term_err]
+dir = "corpus/term_err"
+kind = "check-error"
+tags = ["term", "error"]
+
+# --- error（解析 / 求值负例）---
+[family.err]
+dir = "corpus/err"
+compile = false
+tags = ["parse", "error"]
+
+[family.warn_err]
+dir = "corpus/warn_err"
+interp = false
+compile = false
+check = true
+tags = ["warning", "error"]
+
+[family.run_err]
+dir = "corpus/run_err"
+check = false
+tags = ["run", "error"]
+
+# --- 工具链（lint / fix）---
+
+[family.steps_native]
+dir = "steps"
+kind = "steps"
+tags = ["declarative"]

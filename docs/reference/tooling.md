@@ -12,8 +12,8 @@ DT 里 `_` 是匿名洞，`?name` 是命名洞（`?` 与标识符紧邻）。`vu
 每个洞的位置、目标类型与上下文：
 
 ```console
-$ vuna goal test/corpus/dt/15_goal.vuna
-test/corpus/dt/15_goal.vuna:7:11: goal Type
+$ vuna goal packages/compiler/test/corpus/dt/15_goal.vuna
+packages/compiler/test/corpus/dt/15_goal.vuna:7:11: goal Type
 
 $ vuna goal Holes.vuna        # 未解洞同样列出（容错查询）
 Holes.vuna:6:6: goal Int

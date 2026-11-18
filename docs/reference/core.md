@@ -116,7 +116,7 @@ data Term where
   `ctxEnvRefined` 才是取用侧（类型求值享受分支等式）。不透明判定
   （`isOpaqueRuntimeTyIn` / 分支 binder / 字段）必须用前者：把精化塞进 `ctxEnv` 会让
   `res x` 在具体索引下归约成 `Int`，擦除决定与生成的 `Obj.t` 表示错配（回归夹具
-  `test/corpus/dt/74_ctor_check_index.vuna`，ocamlopt 报类型错）。
+  `packages/compiler/test/corpus/dt/74_ctor_check_index.vuna`，ocamlopt 报类型错）。
 - **表现层 cast**：`prim_erase` 是隐藏 intrinsic，`IntrinsicOp.OpIdentity`
   让求值期把它归约为唯一实参；`Core.Eval.applyValueFuel` 另外在**函数位置**直接消去，
   避免 `(prim_erase h) k` 累积成多实参中性项。因此 cast 对定义性相等 / 正规化 / 核心求值

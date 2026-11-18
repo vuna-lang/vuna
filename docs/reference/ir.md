@@ -210,9 +210,9 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 - Lowering 的预算按项规模派生（`lowerBudgetFor size = 8 * size + 512`，只防项本身有病），
   因此深层嵌套的单定义体（如 150 层嵌套应用）不会误报 `IC_FuelExhausted (codegen)`；
   字面量展开成本见 [debt.md](debt.md) D24。
-- 回归夹具：`test/corpus/dt_deep`（150 层嵌套应用），由
-  `test/suite/steps/103_ir_lowering.steps`（深层项）与
-  `test/suite/steps/104_ir_runtime_contract.steps`（符号 → 文本映射）以及
+- 回归夹具：`packages/compiler/test/corpus/dt_deep`（150 层嵌套应用），由
+  `packages/compiler/test/steps/103_ir_lowering.steps`（深层项）与
+  `packages/compiler/test/steps/104_ir_runtime_contract.steps`（符号 → 文本映射）以及
   `checks.ir-boundary` 一起守住。
 
 ## 已知边界 / 刻意未做

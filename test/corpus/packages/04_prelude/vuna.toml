@@ -1,5 +1,0 @@
-[package]
-name = "prelude"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

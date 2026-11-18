@@ -32,7 +32,7 @@ fail() {
 }
 
 # ---------------------------------------------------------------- 1) 关闭路径产物逐字节一致
-fixture=test/corpus/codegen
+fixture=packages/compiler/test/corpus/codegen
 "$VUNA" build --no-compile --out "$OUT/out-unset" "$fixture" >"$OUT/build-unset.out" 2>&1 || {
   cat "$OUT/build-unset.out" >&2
   fail "build (VUNA_OBS unset) failed"

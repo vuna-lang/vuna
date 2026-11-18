@@ -1,0 +1,102 @@
+# 14) 统一 CLI：help、退出码、子命令要求、已移除参数（`--dt` 不属于任何命令，DT 是唯一路径；
+#     `--root` / `--split` / `seed` 子命令已移除：都报 exit 2 + 明确提示；
+#     `interp` 子命令已移除：核心求值只在 `vuna test` / REPL 内部使用）。
+#     用例认领 $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna、$VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_pkg/01_exec 等路径（14b 见
+#     14b_binary_fingerprint.steps）。
+run: "$VUNA" help 2>&1
+out-contains: usage:
+run: sh -c '"$VUNA" >/dev/null 2>&1'
+exit: 2
+run: "$VUNA" compile $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna "$TMPDIR/cli-ok" >/dev/null 2>&1
+run: "$VUNA" compile $VUNA_SUITE_ROOT/packages/compiler/test/corpus/err/01_case_indent.vuna "$TMPDIR/cli-err" >/dev/null 2>&1
+exit: nonzero
+run: "$VUNA" $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: nonzero
+out-contains: unknown command
+run: "$VUNA" interp $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: unknown command
+run: "$VUNA" compile --no-typecheck $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: has been removed
+run: "$VUNA" --typed $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: has been removed
+# `--dt` 不属于任何命令（DT 是唯一路径）。
+run: sh -c 'for cmd in compile check build; do out=$("$VUNA" "$cmd" --dt 2>&1); code=$?; [ "$code" = 2 ] || { printf "%s: expected exit 2, got %s\n" "$cmd" "$code"; exit 1; }; case "$out" in *removed*) ;; *) printf "%s: missing removed hint: %s\n" "$cmd" "$out"; exit 1 ;; esac; done'
+run: "$VUNA" compile --package $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: nonzero
+out-contains: error
+# 已移除参数（--root / --split / seed）都必须是 exit 2 + 明确提示。
+run: "$VUNA" compile --root lib $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna "$TMPDIR/removed-1" 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" check --root lib $VUNA_SUITE_ROOT/packages/compiler/test/corpus/run/01_arithmetic.vuna 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" compile --split "$TMPDIR/removed-2" $VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" build --split "$TMPDIR/removed-3" $VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" seed "$TMPDIR/removed-4" $VUNA_SUITE_ROOT/packages/compiler/test/corpus/dt_pkg/01_exec 2>&1
+exit: 2
+out-contains: removed
+run: "$VUNA" seed 2>&1
+exit: 2
+out-contains: removed
+run: sh -c 'mkdir -p "$TMPDIR/nolint"; cd "$TMPDIR/nolint" && "$VUNA" lint >/dev/null 2>&1'
+exit: 2
+# 命令面：帮助从命令表派生，每条命令都要有 --help（含分组总览与选项小节）。
+run: sh -c '"$VUNA" help | grep -q "核心循环"'
+run: sh -c '"$VUNA" help | grep -q "开发与维护"'
+run: sh -c '"$VUNA" help lint | grep -q -- "--fix"'
+run: sh -c '"$VUNA" lint --help | grep -q -- "--max-warnings"'
+run: sh -c '"$VUNA" map find --help | grep -q "vuna map find"'
+run: sh -c '"$VUNA" help dev | grep -q "vuna dev suite"'
+run: sh -c '"$VUNA" help errors | grep -q "errors explain"'
+# 未知命令 / flag 给最近候选。
+run: "$VUNA" chek 2>&1
+exit: 2
+out-contains: unknown command
+out-contains: did you mean `check`?
+run: "$VUNA" lint --fi 2>&1
+exit: 2
+out-contains: unknown flag
+out-contains: did you mean `--fix`?
+# 已改名的命令与模式 flag 给迁移提示。
+run: "$VUNA" explain TC_TypeMismatch 2>&1
+exit: 2
+out-contains: has been removed
+out-contains: vuna errors explain
+run: "$VUNA" test --suite test/suite.toml 2>&1
+exit: 2
+out-contains: vuna dev suite
+run: "$VUNA" map --find Vuna.Cli 2>&1
+exit: 2
+out-contains: vuna map find
+run: "$VUNA" repl --listen tcp:127.0.0.1:7878 2>&1
+exit: 2
+out-contains: vuna repl serve --listen
+# 分组命令缺子命令时给用法行。
+run: "$VUNA" deps 2>&1
+exit: 2
+out-contains: usage:
+out-contains: vuna deps add
+run: "$VUNA" store 2>&1
+exit: 2
+out-contains: vuna store gc
+run: "$VUNA" dev 2>&1
+exit: 2
+out-contains: vuna dev suite
+run: "$VUNA" errors nope 2>&1
+exit: 2
+out-contains: unknown `vuna errors` subcommand
+
+# `dev ir dump` 的后端视图：类型声明 + 定义的 OCaml 形状（调试面，不承诺 ABI）。
+run: sh -c '"$VUNA" dev ir dump --after ocaml $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root 2>/dev/null | grep -c "^let " | grep -qv "^0$"'
+exit: 0
+run: sh -c '"$VUNA" dev ir dump --after ocaml $VUNA_SUITE_ROOT/packages/cli/test/corpus/packages/m34_summary/root 2>/dev/null | head -1 | grep -q "^type t_"'
+exit: 0
+

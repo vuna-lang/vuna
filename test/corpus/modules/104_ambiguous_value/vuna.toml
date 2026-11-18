@@ -1,5 +1,0 @@
-[package]
-name = "fix-104-ambiguous-value"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

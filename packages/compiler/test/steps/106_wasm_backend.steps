@@ -1,0 +1,173 @@
+# matrix: effect-wasm
+# 106) wasm 后端机制：IR -> WAT（main.wat）-> wasm-tools parse -> wasmtime。
+#
+# 共享语义（算术 / 字符串 / data / record / List 桥接 / 闭包 / 高阶 API）由
+# `109_backend_parity.steps` 对拍三端；这里只保留 wasm 特有的机制性用例：产物形状、
+# WAT 确定性 + 行宽、`elem declare`、trap、拒绝面与 `--target` 校验。依赖 PATH 里的
+# wasm-tools / wasmtime（devShell 与 e2e 的 nativeBuildInputs 已提供）。
+
+# 0) 工具链探针：缺工具时明确失败，而不是让后续步报 127。
+run: command -v wasm-tools
+exit: 0
+run: command -v wasmtime
+exit: 0
+
+# 1) 最小可执行：WAT 是 canonical 产物，.wasm 由 wasm-tools 汇编。
+run: sh -c 'd="$TMPDIR/min"; mkdir -p "$d/app"; printf "[package]\nname = \"min\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/min-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/min-out/main.wat
+file-exists: $TMPDIR/min-out/build.sh
+file-exists: $TMPDIR/min-out/main.wasm
+file-contains: $TMPDIR/min-out/main.wat (module
+file-contains: $TMPDIR/min-out/main.wat (func $_start
+file-contains: $TMPDIR/min-out/main.wat wasi_snapshot_preview1
+run: sh -c 'cd "$TMPDIR/min-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 0
+out-equals: 42
+
+# 2) 顶层函数落成 `$f_<name>`；闭包函数必须进 `(elem declare func ...)`（`ref.func`
+#    的前置条件，缺了 wasmtime 直接拒绝模块）。
+run: sh -c 'd="$TMPDIR/shape"; mkdir -p "$d/app"; printf "[package]\nname = \"shape\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "apply : (Int -> Int) -> Int -> Int\napply f x = f x\n\nmain : Int\nmain = apply (\x => x + 1) 41\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shape-out" "$d"'
+exit: 0
+file-contains: $TMPDIR/shape-out/main.wat (func $f_apply
+file-contains: $TMPDIR/shape-out/main.wat (elem declare func
+file-contains: $TMPDIR/shape-out/main.wat ref.func
+
+# 3) let 遮蔽：作用域必须在分支结束时恢复（否则读到最后一次 binder 的 local）。
+run: sh -c 'd="$TMPDIR/shadow"; mkdir -p "$d/app"; printf "[package]\nname = \"shadow\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = let x = 10 in (let x = 1 in x) + x\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/shadow-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/shadow-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+out-equals: 11
+
+# 4) 除零 trap：非 0 退出 + 明确错误文本（不是静默 0）。
+run: sh -c 'd="$TMPDIR/dz"; mkdir -p "$d/app"; printf "[package]\nname = \"dz\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1 / 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/dz-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/dz-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: nonzero
+out-contains: division by zero
+
+# 5) 确定性：同一 IR 两次编译的 main.wat 逐字节相同；且每行 ≤100 列（稳定 diff）。
+run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ \"b\" ++ \"c\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target wasm; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target wasm; cmp "$TMPDIR/det-a/main.wat" "$TMPDIR/det-b/main.wat"'
+exit: 0
+run: sh -c 'awk "length(\$0) > 100 { bad = 1 } END { exit bad }" "$TMPDIR/det-a/main.wat"'
+exit: 0
+
+# 6) `--no-compile` 只写 main.wat + build.sh（不产 .wasm），build.sh 可独立汇编。
+run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --no-compile --out "$TMPDIR/nc-out" "$d"'
+exit: 0
+file-exists: $TMPDIR/nc-out/main.wat
+file-exists: $TMPDIR/nc-out/build.sh
+file-absent: $TMPDIR/nc-out/main.wasm
+run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && wasmtime run -W gc=y -W function-references=y main.wasm'
+exit: 0
+out-equals: 7
+
+# 7) 拒绝面：编译期显式拒绝（exit 1 + `wasm target:` 前缀），不生成坏产物。
+#    FFI extern 仍被拒绝（宿主效应叶子正在补齐）。
+run: sh -c 'd="$TMPDIR/rej"; mkdir -p "$d/app"; printf "[package]\nname = \"rej\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "extern c_add \"c_add\" : Int -> Int -> Int\n\nmain : Int\nmain = c_add 1 2\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/rej-out" "$d" 2>&1'
+exit: 1
+out-contains: wasm target: extern definition
+file-absent: $TMPDIR/rej-out/main.wasm
+
+# 8) 运行时错误文本：assert / prim_fail / todo 与 native 逐字一致。
+run: sh -c 'd="$TMPDIR/traps"; mkdir -p "$d/app"; printf "[package]\nname = \"traps\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = assert False \"bad\" 9\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-as" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/traps-as" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: assertion failed: bad
+run: sh -c 'printf "main : Int\nmain = prim_fail \"boom\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-pf" "$TMPDIR/traps"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/traps-pf" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: boom
+run: sh -c 'printf "main : Int\nmain = todo \"later\"\n" > "$TMPDIR/traps/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/traps-todo" "$TMPDIR/traps"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/traps-todo" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: TODO: later
+
+# 9) 数组越界：trap 文本与 OCaml 报告器首行一致（wasm 没有位置行），exit 2。
+run: sh -c 'd="$TMPDIR/arr"; mkdir -p "$d/app"; printf "[package]\nname = \"arr\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Container.Array as Array\n\nmain : Int\nmain = arrayGet (fromList [1, 2]) 5\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/arr-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/arr-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: Invalid_argument("index out of bounds")
+
+# 10) `--target` 取值校验：未知目标是用法错误（exit 2），不得静默回落到 OCaml。
+run: sh -c 'd="$TMPDIR/bogus"; mkdir -p "$d/app"; printf "[package]\nname = \"bogus\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasmm --out "$TMPDIR/bogus-out" "$d" 2>&1'
+exit: 2
+out-contains: --target ocaml|wasm|native
+
+# 13) one-shot：同一续延第二次 resume 在运行期 trap（exit 2，文本与 native 一致）。
+run: sh -c 'd="$TMPDIR/efftwice"; mkdir -p "$d/app"; printf "[package]\nname = \"efftwice\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\n\ndata POp : Type -> Type where\n  P : Int -> POp Int\n\nmain : Int\nmain = runPure (handle (perform (P 3)) { P n k -> k (n + 1) + k 0 })\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/efftwice-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/efftwice-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: continuation already resumed
+
+# 12) 效应深度：2000 次顺序 perform 在引擎默认栈（512 KiB）下跑完。
+run: sh -c 'd="$TMPDIR/effdepth"; mkdir -p "$d/app"; printf "[package]\nname = \"effdepth\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; sed "s/natFromInt 200/natFromInt 2000/" "$VUNA_SUITE_ROOT/packages/compiler/test/corpus/pure_cross/48_eff_many.vuna" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/effdepth-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/effdepth-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 0
+out-equals: 2000
+
+# 14) 目标能力告警：入口行含 wasm 不实现的效应（进程）→ 产物照常生成，`-W` 下告警。
+run: sh -c 'd="$TMPDIR/cap"; mkdir -p "$d/app"; printf "[package]\nname = \"cap\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-out" "$d" 2>&1'
+exit: 0
+out-contains: [UN_TargetEffectUnavailable]
+file-exists: $TMPDIR/cap-out/main.wasm
+
+# 15) 同一程序不加 `-W`：告警默认静默，构建照常成功。
+run: sh -c 'printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cap-quiet" "$TMPDIR/cap" 2>&1'
+exit: 0
+out-not-contains: UN_TargetEffectUnavailable
+
+# 16) `--deny-warnings` 把能力告警提升为失败，且不留产物。
+run: sh -c 'printf "import Base.Effect.Core as Eff\nimport Base.Effect.Process as EffProcess\n\nmain : Eff [ProcessOp] Int\nmain = processRunIn \".\" [\"true\"]\n" > "$TMPDIR/cap/app/Main.vuna"; "$VUNA" build --target wasm --deny-warnings --out "$TMPDIR/cap-deny" "$TMPDIR/cap" 2>&1'
+exit: 1
+out-contains: [UN_TargetEffectUnavailable]
+file-absent: $TMPDIR/cap-deny/main.wasm
+
+# 17) 可用的效应（console）不产生能力告警。
+run: sh -c 'd="$TMPDIR/cap-ok"; mkdir -p "$d/app"; printf "[package]\nname = \"capok\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Console as EffConsole\nimport Base.Data.Nat as Nat\n\nmain : Eff [ConsoleOp] Nat\nmain = consolePrint \"hi\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-ok-out" "$d" 2>&1'
+exit: 0
+out-not-contains: UN_TargetEffectUnavailable
+
+# 18) 浏览器安全 import 面：不引入 path_symlink。
+run: sh -c 'grep -c path_symlink "$TMPDIR/min-out/main.wat" || true'
+exit: 0
+out-equals: 0
+
+# 19) symlink 不在浏览器契约内：产物可生成，执行到叶子时显式失败。
+run: sh -c 'd="$TMPDIR/symlink"; mkdir -p "$d/app"; printf "[package]\nname = \"symlink\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\n\nmain : Eff [FsOp] Int\nmain = fsSymlink \"target\" \"link\"\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/symlink-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/symlink-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: wasm host operation is not implemented
+
+# 20) 阻塞 sleep 不在浏览器契约内：执行时显式失败。
+run: sh -c 'd="$TMPDIR/sleep"; mkdir -p "$d/app"; printf "[package]\nname = \"sleep\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Clock as EffClock\n\nmain : Eff [ClockOp] Int\nmain = clockSleepMicros 1000\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/sleep-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/sleep-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 2
+out-equals: vuna: runtime error: wasm host operation is not implemented
+
+# 21) cwd 是虚拟 preopen 根，不读 PWD。
+run: sh -c 'd="$TMPDIR/cwd"; mkdir -p "$d/app"; printf "[package]\nname = \"cwd\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Env as EffEnv\n\nmain : Eff [EnvOp] String\nmain = envGetCwd\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/cwd-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/cwd-out" && wasmtime run -W gc=y -W function-references=y main.wasm 2>&1'
+exit: 0
+out-equals: "/"
+
+# 22) mtime 在浏览器契约内不可靠：写文件后仍得到 Nothing。
+run: sh -c 'd="$TMPDIR/mtime"; mkdir -p "$d/app" "$TMPDIR/mtime-root"; printf "[package]\nname = \"mtime\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Fs as EffFs\nimport Base.Data.Maybe as Maybe\nimport Base.Data.String as String\n\nmain : Eff [FsOp] String\nmain = do\n  _ <- fsWriteFile \"mtime-probe\" \"x\"\n  m <- fsFileMtime \"mtime-probe\"\n  pure (case m of\\n    Nothing => \"none\"\\n    Just _ => \"some\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm --out "$TMPDIR/mtime-out" "$d"'
+exit: 0
+run: sh -c 'cd "$TMPDIR/mtime-out" && wasmtime run -W gc=y -W function-references=y --dir "$TMPDIR/mtime-root" main.wasm 2>&1'
+exit: 0
+out-equals: "none"
+
+# 23) stdin 仍不可用：入口行产生能力告警。
+run: sh -c 'd="$TMPDIR/cap-stdin"; mkdir -p "$d/app"; printf "[package]\nname = \"capstdin\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Effect.Core as Eff\nimport Base.Effect.Stdin as EffStdin\n\nmain : Eff [StdinOp] Int\nmain = do\n  _ <- stdinReadLine\n  pure 0\n" > "$d/app/Main.vuna"; "$VUNA" build --target wasm -W --out "$TMPDIR/cap-stdin-out" "$d" 2>&1'
+exit: 0
+out-contains: [UN_TargetEffectUnavailable]

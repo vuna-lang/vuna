@@ -1,0 +1,5 @@
+[package]
+name = "absapp"
+
+[dependencies]
+vuna-base = "../../../../../../packages/base"

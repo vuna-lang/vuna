@@ -44,7 +44,7 @@ nix run .#vuna -- check examples/multi         # 包级类型检查
 nix run .#vuna -- test examples/multi          # 纯 String/Int/Bool 走核心求值；main : Eff [] ... 走 compile+运行
 
 # 测试 / 格式化 / 文档
-nix run .#vuna-run-tests                            # 原生 suite（vuna dev suite test/suite.toml）
+nix run .#vuna-run-tests                            # 原生 suite（vuna dev suite --all）
 nix run .#vuna-run-tests -- --list                  # 列出章节/case（--only <章节>/--filter PAT）
 nix run .#backend-check -- --compiler native --scope parity  # 自举编译器跑 parity（CI 同款；见 testing.md）
 nix run .#vuna -- fmt --check examples/multi   # 格式化检查（也可逐个给文件/目录）
@@ -114,7 +114,7 @@ manifest，不向上找。命令语义与包格式
 │   ├── web/       # 生态层 vuna-web：HTML 视图 + 路由 + 串行服务驱动
 │   └── web-cli/   # vuna-web-cli：全栈应用的服务端产物编排（依赖编译器，不进 seed）
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
-├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
+├── test/      # suite driver 清单 + runner 夹具/全局名单（各包 test/ 有自己的 suite）
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
 ├── examples/  # 多包示例
 ├── .agents/   # AI 规则（rules/）与场景技能（skills/）

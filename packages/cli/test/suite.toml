@@ -1,0 +1,33 @@
+# 由仓库 suite 拆出的 cli suite；schema 见 docs/reference/testing.md。
+
+[suite]
+name = "vuna-cli"
+owner = "cli"
+jobs = 0
+timeout = 300
+min_cases = 142
+
+[family.pkg_err]
+dir = "corpus/pkg_err"
+entry = "lib/Main.vuna"
+check = true
+compile = false
+interp = false
+run = false
+compare_interp = false
+tags = ["pkg", "error"]
+
+[family.lint]
+dir = "corpus/lint"
+kind = "lint"
+tags = ["lint"]
+
+[family.fix]
+dir = "corpus/fix"
+kind = "fix"
+tags = ["lint", "fix"]
+
+[family.steps_native]
+dir = "steps"
+kind = "steps"
+tags = ["declarative"]

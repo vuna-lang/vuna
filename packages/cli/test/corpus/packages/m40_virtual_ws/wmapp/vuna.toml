@@ -1,0 +1,6 @@
+[package]
+name = "wmapp"
+
+[dependencies]
+vuna-base = "../../../../../../../packages/base"
+wmlib = "../wmlib"

@@ -1,7 +1,0 @@
-# 包上下文夹具：Main.vuna 是包根上的 **ad-hoc 单文件入口**（不在 lib/app 里），
-# 依赖模块走同包 lib/ 模块根，import 解析从最近的 vuna.toml（本目录）开始。
-[package]
-name = "fix-dt-ad-hoc"
-
-[dependencies]
-vuna-base = "../../../packages/base"

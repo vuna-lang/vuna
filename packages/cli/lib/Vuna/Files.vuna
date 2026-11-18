@@ -149,19 +149,49 @@ pathExistsFile path = fsFileExists path
 -- ---------------------------------------------------------------
 -- 诊断码 → 示例夹具（`explain`/`gen-errors` 共用；生成物不参与门禁）
 -- ---------------------------------------------------------------
--- | 在 test/corpus（及 test/ 工作目录下的 corpus）找第一个包含该码的 `.diag.json`。
+-- | 内部：各包的 suite corpus 目录（相对仓库根）。
+corpusDirs : List String
+corpusDirs =
+  [
+    "packages/compiler/test/corpus",
+    "packages/base/test/corpus",
+    "packages/cli/test/corpus",
+    "packages/web-cli/test/corpus"
+  ]
+
+-- | 在包 suite 的 corpus（及旧 `test/corpus` / cwd 下的 `corpus`）找第一个包含该码的
+-- `.diag.json`；返回路径按 `corpus/...` 归一，`explain` / `gen-errors` 输出不随仓库布局变化。
 export exampleOf : Member n FsOp r => String -> Eff r (Maybe String)
 exampleOf code =
   do
-    here <- findDiagExample 512 "test/corpus" code
-    case here of
+    found <-
+      firstDiagExample
+        (append (append corpusDirs (map (\d => "../${d}") corpusDirs)) (append (map (\d => "../../${d}") corpusDirs) (append (map (\d => "../../../${d}") corpusDirs) ["test/corpus", "corpus", "../test/corpus"])))
+        code
+    pure (fmap corpusRelPath found)
+
+-- | 内部：按顺序找第一个命中的目录。
+firstDiagExample : Member n FsOp r => List String -> String -> Eff r (Maybe String)
+firstDiagExample [] code = pure Nothing
+firstDiagExample (dir :: rest) code =
+  do
+    found <- findDiagExample 512 dir code
+    case found of
       Just p => pure (Just p)
-      Nothing =>
-        do
-          cwdHere <- findDiagExample 512 "corpus" code
-          case cwdHere of
-            Just p => pure (Just p)
-            Nothing => findDiagExample 512 "../test/corpus" code
+      Nothing => firstDiagExample rest code
+
+-- | 内部：绝对/仓库相对路径 → `corpus/...`（已经是该形状时原样返回）。
+corpusRelPath : String -> String
+corpusRelPath path =
+  if startsWith "test/" path then
+    substring 5 (byteLength path - 5) path
+  else
+    case split "/test/" path of
+      before :: rest =>
+        case rest of
+          after :: _ => after
+          [] => path
+      [] => path
 
 -- | 内部：带 fuel 的递归搜索；每个条目按字典序展开，先命中的先返回。
 findDiagExample : Member n FsOp r => Int -> String -> String -> Eff r (Maybe String)

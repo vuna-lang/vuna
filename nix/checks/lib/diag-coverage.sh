@@ -4,8 +4,8 @@
 #
 # 数据源：
 #   - 目录：`vuna errors list`（与 `gen-errors` 同源）
-#   - 夹具：test/corpus/**/*.diag.json（`vuna dev suite ... --bless-diag` 生成）
-#   - lint 规则夹具：test/corpus/lint/*.out（LN_ 码在 lint 输出里逐条断言；
+#   - 夹具：packages/*/test/corpus/**/*.diag.json（`vuna dev suite ... --bless-diag` 生成）
+#   - lint 规则夹具：packages/cli/test/corpus/lint/*.out（LN_ 码在 lint 输出里逐条断言；
 #     本门禁只要求「每个码至少有一个夹具」，不限定载体）
 set -eu
 
@@ -21,16 +21,16 @@ trap 'rm -rf "$tmp"' EXIT
 "$VUNA" errors list > "$tmp/codes.txt"
 grep -E '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+' "$tmp/codes.txt" | awk '{print $1}' | sort -u > "$tmp/catalog.txt"
 
-grep -rho '"code":"[A-Z][A-Za-z0-9]*_[A-Za-z0-9]*"' test/corpus --include='*.diag.json' \
+grep -rho '"code":"[A-Z][A-Za-z0-9]*_[A-Za-z0-9]*"' packages/*/test/corpus --include='*.diag.json' \
   | sed -E 's/.*"code":"([^"]+)"/\1/' | sort -u > "$tmp/covered.txt" || true
 
 # lint 规则夹具：从 `[LN_xxx]` 前缀提取码（不加会让 LN_ 规则被误判成缺口）。
-grep -rho '\[LN_[A-Za-z0-9]*\]' test/corpus/lint --include='*.out' 2>/dev/null \
+grep -rho '\[LN_[A-Za-z0-9]*\]' packages/cli/test/corpus/lint --include='*.out' 2>/dev/null \
   | sed -E 's/^\[([^]]+)\]$/\1/' >> "$tmp/covered.txt" || true
 
 # steps 侧车 `*.diagcodes`：CLI 类诊断（fetch/add 等）没有 corpus 流水线，由 steps 断言
 # 输出片段 + 侧车登记码；门禁仍要求码在目录里、其余来源不重复。
-grep -rhoE '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+$' test/suite/steps --include='*.diagcodes' 2>/dev/null \
+grep -rhoE '^[A-Z][A-Za-z0-9]*_[A-Za-z0-9]+$' packages/*/test/steps --include='*.diagcodes' 2>/dev/null \
   >> "$tmp/covered.txt" || true
 sort -u -o "$tmp/covered.txt" "$tmp/covered.txt"
 

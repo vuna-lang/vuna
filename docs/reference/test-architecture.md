@@ -10,6 +10,11 @@
 测试 runner 因此不维护第二套缓存：**一次 run 只有一个 store root**，父进程预热一次，
 worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显式隔离。
 
+suite 按包拆成独立文件（`packages/<owner>/test/suite.toml`），`test/suite.toml` 只是 driver
+清单：`vuna dev suite --all` 逐份调用。**分批调用不改变 store 语义**——调用方（`vuna-run-tests`
+/ CI check）预热一次并导出同一个 `VUNA_STORE`，各 suite 只做本包的发现与调度；每个 suite
+自己的 `min_cases` 兜住「整族消失」，driver 清单兜住「整个 suite 没被调用」。
+
 冷启动重复劳动的代价是为什么共享的根据：每个 worker 各跑一次 `vuna check packages/base`
 （冷 store 约 7 s）会在 16 个 worker 上乘 16；同一夹具空 store 编译 2.9–5.5 s，
 暖 store 7 ms（本机 16 核实测）。所以先让测试成为对象库的普通客户端，再谈调度。
@@ -133,7 +138,7 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 ## 7. 验收与测量
 
 - 同一 store 连续 `check packages/compiler`：第二次 `cache-path=hit`、`iface-write=0/N`、< 100 ms。
-- 单 dt golden case：< 2 s；section 90：< 60 s；全量：< 2 min。
+- 单 dt golden case：< 2 s；单 suite 的 steps 层：< 60 s；全量：< 2 min。
 - 测量必须在静默树上重录，记录 HEAD、CPU、`VUNA_STORE` 是否为空、`--cache-dir`。
 
 ## 相关阅读

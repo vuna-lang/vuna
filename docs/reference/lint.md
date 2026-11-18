@@ -217,15 +217,15 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
 
 原生 suite 的 `lint` / `fix` family（`test/suite.toml`，kind `lint` / `fix`）：
 
-- `test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，05–14 覆盖
+- `packages/cli/test/corpus/lint/*.vuna` + `.out`：报告 golden 与退出码（01–04 为回归基线，05–14 覆盖
   dispatch 两条规则与「不报」形态；15–18 覆盖 Bool 变量 if 的 clause/alt 报告、不报形态与
   模板字符串分支；19 覆盖 `list-literal`：`::` / `Cons` / 裸 `Nil` / 类型位置报告，
   以及 pattern、开放链、注释行、既有字面量不误报）。
-- `test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
+- `packages/cli/test/corpus/fix/*.vuna` + `.expected`：`--fix` 产物与二次运行幂等（01–06 回归基线，
   07–15 覆盖 dispatch 两条规则与 let 解构；16–19 覆盖 Bool if 的 clause/alt/链提升、
   as-pattern 与模板字符串分支；20 覆盖 `list-literal`：表达式/类型位置、括号剥离、
   `Cons` / 裸 `Nil`、注释行不修、幂等）。
-- `test/suite/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
+- `packages/cli/test/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
   （含结束位置与 fixable）、以及「未知规则只由 lint 认领、`vuna check` 仍通过」。
 - `nix/checks/vuna-lint.sh`：workspace 默认目标 + `--max-warnings 0`。
 

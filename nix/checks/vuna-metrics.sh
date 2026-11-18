@@ -1,5 +1,5 @@
 #!/bin/sh
-# checks.vuna-metrics：固定夹具 test/corpus/codegen 的 codegen 产物对
+# checks.vuna-metrics：固定夹具 packages/compiler/test/corpus/codegen 的 codegen 产物对
 # nix/checks/data/codegen.baseline 的精确基线。
 #
 # 输入固定，所以任何指标漂移都是 codegen 输出变化；剔除 base/Prelude/runtime，
@@ -11,7 +11,7 @@ set -eu
 OUT=${1:?usage: vuna-metrics.sh OUT}
 : "${VUNA:?VUNA 未设置}"
 
-FIXTURE=test/corpus/codegen
+FIXTURE=packages/compiler/test/corpus/codegen
 
 "$VUNA" build --no-compile --out "$OUT/fixture" "$FIXTURE"
 

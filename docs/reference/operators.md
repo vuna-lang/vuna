@@ -74,7 +74,7 @@ trait 方法、instance 方法与 data 构造子都可以用符号名声明。
   （`Num a =>` 泛型代码）。
 - **用户类型可重载四则**：实现 `Num`（并配 `FromInt` 让字面量在期望类型位置降级）后
   `1 + 2 : MyNum` 可用；期望结果类型经 hint 先解出类参数，实参字面量再按该类型 check
-  （夹具 `test/corpus/traits/53_user_num`）。推断位置（没有期望类型）仍按 Int 字面量，
+  （夹具 `packages/compiler/test/corpus/traits/53_user_num`）。推断位置（没有期望类型）仍按 Int 字面量，
   与既有「字面量默认 Int」一致。
 - 终止性检查的 fuel 递减规则认 `-` 与 `Base.Trait.Num.-` 投影
   （`Elab/Termination/Measure.isSubOpName`）。
@@ -206,12 +206,12 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 
 ## 测试
 
-- `test/corpus/traits/16_eq_ord_alias.vuna`：`==` 与 `eq`、`<` 与 `lt` 一致；Int/String
+- `packages/compiler/test/corpus/traits/16_eq_ord_alias.vuna`：`==` 与 `eq`、`<` 与 `lt` 一致；Int/String
   特化、Bool 模式匹配实例、`deriving (Eq, Ord)`、`mem` 的字典穿参。
-- `test/corpus/dt/64_backtick_infix`：反引号中缀与默认 9 左结合、与 `+` / `*` 混排。
-- `test/corpus/dt/65_section`：`(+)` / `(+ e)` / `(e +)`、`(::)` / `(==)` 别名、与普通括号混用。
-- `test/corpus/dt/66_user_symbol_fn`：用户符号名定义 + `infixl` / `infixr` + 反引号 + section。
-- `test/corpus/dt_err/53_unknown_fixity`：未知符号运算符报 `unknown fixity`。
-- `test/corpus/fmt/23_fixity_decls` / `24_backtick_sections` / `25_custom_ops`：声明打印与
+- `packages/compiler/test/corpus/dt/64_backtick_infix`：反引号中缀与默认 9 左结合、与 `+` / `*` 混排。
+- `packages/compiler/test/corpus/dt/65_section`：`(+)` / `(+ e)` / `(e +)`、`(::)` / `(==)` 别名、与普通括号混用。
+- `packages/compiler/test/corpus/dt/66_user_symbol_fn`：用户符号名定义 + `infixl` / `infixr` + 反引号 + section。
+- `packages/compiler/test/corpus/dt_err/53_unknown_fixity`：未知符号运算符报 `unknown fixity`。
+- `packages/cli/test/corpus/fmt/23_fixity_decls` / `24_backtick_sections` / `25_custom_ops`：声明打印与
   fmt 新语法往返。
 - `nix run .#vuna-run-tests` 全量；`sh nix/seed/rotate.sh <vuna>` 验证自举 fixed point。

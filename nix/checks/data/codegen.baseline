@@ -1,6 +1,6 @@
 # codegen 夹具基线（精确值；任何漂移 = codegen 输出变化，必须复核后更新）。
 #
-# 夹具：test/corpus/codegen（冻结包；改夹具、base 接口或 codegen 后重跑
+# 夹具：packages/compiler/test/corpus/codegen（冻结包；改夹具、base 接口或 codegen 后重跑
 #       checks.vuna-metrics 取新值并复核 diff）。
 # 口径：`vuna build --no-compile --out` 后剔除 Base_*.ml / Prelude.ml /
 #       Vuna_runtime.ml，只量夹具自有模块——base/runtime 随功能增长，纳入会重新

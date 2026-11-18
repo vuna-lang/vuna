@@ -1,0 +1,9 @@
+[package]
+name = "app"
+
+[workspace]
+members = ["facade"]
+
+[dependencies]
+facade = "facade"
+vuna-base = "../../../../../../packages/base"

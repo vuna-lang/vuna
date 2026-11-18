@@ -127,8 +127,9 @@ nix run .#vuna -- map find <Module.name> # 定位符号；另有 map impact / ap
 `Base` / `Base.Data` / `Base.Trait` / `Base.Container` / `Base.Effect(.Core/.Pure)` / `Prelude`）；`packages/cli/` = 产品 CLI 包
 `vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `packages/cli/lib/`，
 入口 `packages/cli/app/Main.vuna`；**不进 seed**）；
-`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` +
-`suite/`（原生 runner + steps 用例）+ `corpus/` 夹具；`bench/`（仓库根）= 生成程序与编译器基准；
+`seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = driver 清单
+（`suite.toml`）+ runner 夹具/全局名单（`suite/`）；各包 `test/` = 独立 suite（`suite.toml` +
+`corpus/` + `steps/`）与 `vuna test` 单元测试；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +
 lint/fmt/check/build，`dist/` 提交）；`nix/` = 构建图（`build/`）+ CI 门禁（`checks/`）+
 seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。

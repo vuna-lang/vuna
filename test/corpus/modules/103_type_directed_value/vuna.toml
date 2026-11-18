@@ -1,5 +1,0 @@
-[package]
-name = "fix-103-type-directed-value"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

@@ -1,6 +1,0 @@
-# net 原语夹具（Unix domain socket echo + TCP 临时端口变体）。
-[package]
-name = "net-echo"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

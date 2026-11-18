@@ -122,6 +122,8 @@ export record Suite(..) where
   -- | case 数下限：family 整族从配置里消失时，孤儿审计（只看已声明目录）也看不到它，
   -- 用总数下限兜底。0 = 不检查。
   suiteMinCases : Int
+  -- | driver 清单（`[suite].suites`）：`--all` 依次调用的独立 suite 文件（相对仓库根）。
+  suiteSuites : List String
 
 -- | 一个 case 的种类与参数（`source` 是夹具源文件路径）。
 export data CaseKind(..) : Type where
@@ -504,23 +506,27 @@ buildSuiteWithEntries path repoRoot entries =
                   case getInt section "min_cases" entries of
                     ErrC e => ErrC e
                     OkC minOpt =>
-                      let
-                        draft =
-                          Suite
-                            (strOr "vuna" nameOpt)
-                            (strOr "vuna" ownerOpt)
-                            root
-                            repoRoot
-                            (intOr 0 jobsOpt)
-                            (intOr 300 timeoutOpt)
-                            []
-                            (intOr 0 minOpt)
-                      in buildFamiliesWith draft entries (familyNames entries)
-                        >>= (
-                          \families =>
-                            OkC
-                              (Suite draft.suiteName draft.suiteOwner draft.suiteRoot draft.suiteRepoRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases)
-                        )
+                      case getList section "suites" entries of
+                        ErrC e => ErrC e
+                        OkC suitesOpt =>
+                          let
+                            draft =
+                              Suite
+                                (strOr "vuna" nameOpt)
+                                (strOr "vuna" ownerOpt)
+                                root
+                                repoRoot
+                                (intOr 0 jobsOpt)
+                                (intOr 300 timeoutOpt)
+                                []
+                                (intOr 0 minOpt)
+                                (listOr [] suitesOpt)
+                          in buildFamiliesWith draft entries (familyNames entries)
+                            >>= (
+                              \families =>
+                                OkC
+                                  (Suite draft.suiteName draft.suiteOwner draft.suiteRoot draft.suiteRepoRoot draft.suiteDefaultJobs draft.suiteDefaultTimeout families draft.suiteMinCases draft.suiteSuites)
+                            )
 
 -- | 内部：按名列表逐个构造 family。
 buildFamiliesWith : Suite -> List TomlEntry -> List String -> Check (List Family)

@@ -440,7 +440,7 @@ main = case (MkEmail "x@y") of MkEmail s => s
   method）。实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match。
   派生写法 `liftA2Derived f x y = ap (ap (pure f) x) y` 作为顶层函数可用：字典方法字段
   是不透明值（`Obj.t`），访问器在方法签名上 cast 一次，`pure` / `ap` 各自按调用点实例化。
-  回归夹具 `test/corpus/dt/95_lifta2_derive.vuna`。
+  回归夹具 `packages/compiler/test/corpus/dt/95_lifta2_derive.vuna`。
   `Base.Trait.Monad` 重导出 `Base.Trait.Applicative`，`import Base.Trait.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 - `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
   `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。

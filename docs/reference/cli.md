@@ -15,7 +15,7 @@
 | `Vuna.Cli` | 顶层分发表 + `help` / `version` / 未知命令 |
 
 命令实现只调用 `Vuna.Cli.Spec.parseCmdArgs`：flag 表来自命令表，未知 flag 的校验与
-帮助文本不会各写一份。新增命令 = 命令表一条 + 顶层分发表一条；`test/suite/steps/14_cli.steps`
+帮助文本不会各写一份。新增命令 = 命令表一条 + 顶层分发表一条；`packages/cli/test/steps/14_cli.steps`
 逐条跑 `vuna help <path>` 与分组命令，漏接线会红。
 
 ## 1. 命令树

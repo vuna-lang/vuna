@@ -1,9 +1,0 @@
-[package]
-name = "app"
-
-[workspace]
-members = ["dep"]
-
-[dependencies]
-dep = "dep"
-vuna-base = "../../../../packages/base"

@@ -184,7 +184,7 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   （`resumeArm` 只把作用域回到条件后的基线）。`gsNextLam` 与函数表单调累加，
   `mergeArmState` 按名字取并集。若两臂都从条件后的状态起步，两臂各自的 lambda 会拿到
   同一个 `$lamN`，后一臂的闭包函数在按名去重时被丢掉，else 臂的 `ref.func` 便指向 then
-  臂的函数体。回归夹具：`test/corpus/pure_cross/49_if_branch_closures.vuna`
+  臂的函数体。回归夹具：`packages/compiler/test/corpus/pure_cross/49_if_branch_closures.vuna`
   （期望 `11110`），由 suite 的 `pure-cross` 分类对拍三端。
 - 闭包函数先插到 `gsFuncs` 头部、装配时 reverse；elem 名字同样 reverse 后追加固定的
   `$rt_effThunk` / `$rt_effResumeClo`。`$lam<n>` 只由生成顺序决定且不复用，所以生成顺序
@@ -192,7 +192,7 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
 
 ## 7. 验证
 
-- `test/suite/steps/106_wasm_backend.steps`（section 90 / `steps_native`，e2e）：
+- `packages/compiler/test/steps/106_wasm_backend.steps`（`steps_native`，e2e）：
   wasm 机制——WAT 产物形状、顶层函数 `$f_<name>`、闭包函数进 `(elem declare func ...)`、
   WAT 确定性 + 每行 ≤100 列、除零 / 数组越界 / `assert` / `prim_fail` / `todo` 的错误
   文本、`--no-compile`、拒绝面、`--target` 取值校验；另有 2000 次 perform（引擎默认栈）
@@ -201,7 +201,7 @@ stdout/stderr 大输出不受线性内存大小限制）；读按 `filestat` 的
   `Nothing`、cwd 恒 `/`、stdin 能力告警。
 - 共享语义（含 handler / 续延 / abort / 嵌套 / 宿主 console / 高阶 API）由
   suite 的 `pure-cross` 分类对拍三端（OCaml 是语义 oracle）；
-  新增共享能力先加 `test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
+  新增共享能力先加 `packages/compiler/test/corpus/pure_cross/` 夹具，再实现两个后端。生成器的两臂顺序约束由
   `49_if_branch_closures.vuna` 锁住（见 §6）。
 - 引擎支持矩阵由 `114_wasm_engine_probe.steps` 锁住：不需要 handler 的产物必须在默认配置
   下可编译运行，需要 handler 的产物在默认配置下被拒绝（§8.5）；开启 V8 实验特性后的读数

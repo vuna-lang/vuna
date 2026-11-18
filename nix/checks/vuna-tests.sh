@@ -45,13 +45,25 @@ MATRIX_ARGS=""
 for matrix in ${VUNA_TEST_MATRICES:-}; do
   MATRIX_ARGS="$MATRIX_ARGS --matrix $matrix"
 done
-# shellcheck disable=SC2086
-"$VUNA" dev suite test/suite.toml --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS
+# 每个包的 suite 独立调用；共享上面那一次预热与同一个 VUNA_STORE。
+SUITES="packages/compiler/test/suite.toml packages/base/test/suite.toml packages/cli/test/suite.toml packages/web-cli/test/suite.toml"
+rc=0
+for suite in $SUITES; do
+  [ -f "$suite" ] || continue
+  # shellcheck disable=SC2086
+  "$VUNA" dev suite "$suite" --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS || rc=1
+done
 
 # e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
-    "$VUNA" dev suite test/suite.toml --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS
+    for suite in $SUITES; do
+      [ -f "$suite" ] || continue
+      # shellcheck disable=SC2086
+      "$VUNA" dev suite "$suite" --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS || rc=1
+    done
     ;;
 esac
+
+exit "$rc"

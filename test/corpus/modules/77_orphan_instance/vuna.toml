@@ -1,5 +1,0 @@
-[package]
-name = "fix-77-orphan-instance"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

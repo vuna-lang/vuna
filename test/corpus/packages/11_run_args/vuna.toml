@@ -1,5 +1,0 @@
-[package]
-name = "run-args"
-
-[dependencies]
-vuna-base = "../../../../packages/base"

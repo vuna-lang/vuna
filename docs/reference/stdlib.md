@@ -247,7 +247,7 @@ modules = [
   全部显式实现）：实例方法体可以直接对 `f (a -> b)` 做 `case` / pattern match；
   `liftA2` 也可以写成从 `ap` 派生的顶层函数——字典方法字段是不透明值，访问器在方法签名上
   cast 一次，`pure` / `ap` 各自按调用点实例化（回归夹具
-  `test/corpus/dt/95_lifta2_derive.vuna`，见 [records-traits.md](records-traits.md)）；
+  `packages/compiler/test/corpus/dt/95_lifta2_derive.vuna`，见 [records-traits.md](records-traits.md)）；
 - `Array` 的 `Show` / `Eq` 实例在 `Base.Container.Array`（`Array` 是内建类型构造子、没有
   定义模块；孤儿规则对 `Array` / `IORef` 放宽）。实例体经 `toList`
   复用 `List`：`show (fromList [1, 2, 3]) == "[1, 2, 3]"`；`Eq` 逐元素比较。

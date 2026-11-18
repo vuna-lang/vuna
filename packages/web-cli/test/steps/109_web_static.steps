@@ -1,0 +1,7 @@
+# 109) vuna-web：静态页面 + 路由（HTTP/1.1，纯页面）。
+#     `vuna-web-cli build` examples/web-static → 起 tcp:127.0.0.1:0 → curl 断言状态码 / 正文 /
+#     Content-Type / 405 的 Allow / HEAD 保留 Content-Length / 尾斜杠归一 / 百分号解码 + 文本转义。
+#     无 curl 时打印 SKIP（不进 nix flake check：需要端口）。
+run: sh $VUNA_SUITE_ROOT/packages/web-cli/test/corpus/web/static-smoke.sh "$VUNA_WEB_CLI"
+exit: 0
+out-contains: passed, 0 failed

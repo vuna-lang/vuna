@@ -1,5 +1,5 @@
 #!/bin/sh
-# 诊断位置门禁：每条结构化诊断（test/corpus/**/*.diag.json）必须有主 span；
+# 诊断位置门禁：每条结构化诊断（packages/*/test/corpus/**/*.diag.json）必须有主 span；
 # 没有主 span 的必须带显式 `absent` 理由，且该码登记在 nix/checks/data/diag-located.allow
 # （逐码审计，只减不增）。
 #
@@ -16,7 +16,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 # 无主 span 的诊断：(code, absent 理由)。有 span 的 judged located。
-find test/corpus -name '*.diag.json' -print0 \
+find packages -path '*/test/corpus/*' -name '*.diag.json' -print0 \
   | xargs -0 -r jq -r '
       .diagnostics[]?
       | select(([.labels[]? | select(.span != null)] | length) == 0)
@@ -34,7 +34,7 @@ fi
 cut -f1 "$tmp/unlocated.txt" | sort -u > "$tmp/codes.txt" || true
 
 # located / unlocated 计数，给日志一个可追踪的分母。
-find test/corpus -name '*.diag.json' -print0 \
+find packages -path '*/test/corpus/*' -name '*.diag.json' -print0 \
   | xargs -0 -r jq -r '.diagnostics[]?
       | (if ([.labels[]? | select(.span != null)] | length) > 0 then "located" else "unlocated" end)' \
   | sort | uniq -c > "$tmp/counts.txt" 2>/dev/null || true

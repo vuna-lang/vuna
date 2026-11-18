@@ -153,7 +153,7 @@ Prelude 的是 trait、实例与 helper。取舍：
 
 ## 测试
 
-`test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
+`packages/compiler/test/corpus/float`（`[family.float]`，章节 60）覆盖字面量/算术、比较/相等、转换、
 模板插值、`Show/Eq/Ord` 实例、`FromFloat` + `deriving`、`main : Float`、Prelude 默认
 可见性（`10_prelude_float`）与两条负例（隐式混用、类型表达式里的浮点字面量）。浮点夹具
 同时走核心求值与 run，二者都与同一份 golden 逐字节比较。

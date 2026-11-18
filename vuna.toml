@@ -8,4 +8,4 @@ members = ["packages/compiler", "packages/base", "packages/cli", "packages/http"
 [lint]
 preset = "recommended"
 max-warnings = 0
-exclude = ["test/**", "examples/**"]
+exclude = ["test/**", "packages/*/test/**", "examples/**"]

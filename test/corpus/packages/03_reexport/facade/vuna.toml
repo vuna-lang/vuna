@@ -1,8 +1,0 @@
-[package]
-name = "facade"
-
-[export]
-modules = ["Facade"]
-
-[dependencies]
-vuna-base = "../../../../../packages/base"

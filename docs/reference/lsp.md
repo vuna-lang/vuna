@@ -101,8 +101,8 @@ Content-Length: <字节数>\r\n
   didOpen/didChange/didClose 不发 `publishDiagnostics`；未声明的客户端（含
   `capabilities: {}` 的冒烟脚本）继续走 push。`serverCapabilities` 始终声明
   `diagnosticProvider`（客户端据此决定用哪条通道）。回归测试：
-  `test/suite/steps/64_lsp_pull.steps`（pull 客户端 0 条 push）与
-  `test/suite/steps/44l1_lsp_inc.steps`（push 客户端）。
+  `packages/cli/test/steps/64_lsp_pull.steps`（pull 客户端 0 条 push）与
+  `packages/cli/test/steps/44l1_lsp_inc.steps`（push 客户端）。
 - 错误串 `<file>:<line>:<col>: message` 转成 LSP 的 0-based range；依赖模块的错误按
   `spanFile` 过滤（只发当前文件），无位置的错误归当前文件。
 - lint findings 合并进同一 `publishDiagnostics`：severity 按 `vuna.toml [lint]` 的有效规则
@@ -180,7 +180,7 @@ Content-Length: <字节数>\r\n
 
 ### 编辑器冒烟
 
-`test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），真的把帧从 stdin
+`packages/cli/test/corpus/lsp/smoke.sh` 是自包含脚本（只依赖 POSIX sh + 传入的 vuna），真的把帧从 stdin
 喂给 `vuna lsp` 并断言 stdout 上的 JSON；覆盖两模块临时包、含 import 的类型错误、
 formatting、documentSymbol、definition、references、completion、lint 诊断、URI 解码与
 退出码。跑之前先构建固定的二进制（`result` 是共享 out-link，可能指向旧二进制或别的
@@ -188,7 +188,7 @@ formatting、documentSymbol、definition、references、completion、lint 诊断
 
 ```console
 nix build .#vuna --out-link result
-sh test/corpus/lsp/smoke.sh ./result/bin/vuna
+sh packages/cli/test/corpus/lsp/smoke.sh ./result/bin/vuna
 ```
 
 它校验：stdout 只含协议帧、每帧 `Content-Length` 与正文长度一致、诊断范围 0-based、
@@ -196,7 +196,7 @@ shutdown/exit 退出码，以及**交互式帧读取**（第 18 项：body 后�
 立刻响应）、**符号 hover 的 range 落点**（第 19 项）、**codeAction quick fix**（第 21 项：
 `kind`/`title`/`newText`/0-based range、fix all 的 Command 形式、`context.only` 过滤）与
 **rename/prepareRename**（第 29 项：顶层函数改名、遮蔽下的局部变量、记录字段、关键字/内建
-拒绝）。`test/suite/steps/35_goal_lsp.steps` 的 LSP 段调用它。
+拒绝）。`packages/cli/test/steps/35_goal_lsp.steps` 的 LSP 段调用它。
 
 还覆盖：模块名 hover/definition（import 名字、导出项 `module B`、
 模块头、模块 docstring；同一模块在引用处与自身文件里取**同一版本**的文档）、局部绑定
@@ -205,7 +205,7 @@ hover/definition（参数类型、λ、`let` 值、遮蔽：body 指向 `let` bi
 `completion` 的 `documentation`（缓冲优先）与 `detail`、未解 `_` 洞的目标+上下文（容错查询）、
 命名洞 `?goal` 的名字/目标/上下文与 range 覆盖；传输层边界（坏 JSON 帧 / 无
 `Content-Length` / 超大帧声明 / 半帧 EOF）在第 22–25 项。CLI 侧的目标查询与 `?name` 的
-fmt/lint/check 行为在 `test/suite/steps/35_goal_lsp.steps` 的 35b 段。
+fmt/lint/check 行为在 `packages/cli/test/steps/35_goal_lsp.steps` 的 35b 段。
 
 再覆盖：**case split**（洞 + 上下文 data / record binder →
 `refactor.rewrite`；构造子顺序 / `Box _` 参数通配 / 隐式构造子参数不进模式 / 分支缩进 =
@@ -223,6 +223,6 @@ message）在第 21 项断言。
 （构造子 / 函数 / 字段 / 关键字 / 宏 / 洞 modifier）、`documentHighlight` 的局部 binder
 定义 + 使用两处与关键字回空、`foldingRange` 的 `let` 块与顶层函数体范围。语义 token 的
 legend 与 `vscode/package.json` 的 `contributes.semanticTokenScopes` 按名字对应；改 legend
-顺序必须两边同步（`test/suite/steps/83_vscode_grammar.steps` 锁关键字表同源，smoke 锁
+顺序必须两边同步（`packages/cli/test/steps/83_vscode_grammar.steps` 锁关键字表同源，smoke 锁
 legend 的形状与覆盖）。
 

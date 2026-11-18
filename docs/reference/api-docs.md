@@ -186,5 +186,5 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 | `Vuna.Search.Run` | `vuna search` 参数与输出 |
 | `Vuna.Index.*` | 符号索引 v3、`symDoc` / `symType` / `modDoc`（模块文档） |
 
-测试：`test/corpus/doc/check.sh`、`test/corpus/search/check.sh`、`test/corpus/index/check.sh`；
-LSP hover 见 `test/corpus/lsp/smoke.sh`。
+测试：`packages/cli/test/corpus/doc/check.sh`、`packages/cli/test/corpus/search/check.sh`、`packages/cli/test/corpus/index/check.sh`；
+LSP hover 见 `packages/cli/test/corpus/lsp/smoke.sh`。

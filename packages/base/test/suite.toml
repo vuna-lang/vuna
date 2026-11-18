@@ -1,0 +1,15 @@
+# 由仓库 suite 拆出的 base suite；schema 见 docs/reference/testing.md。
+
+[suite]
+name = "vuna-base"
+owner = "base"
+jobs = 0
+timeout = 300
+min_cases = 31
+
+[family.stdlib]
+dir = "corpus/stdlib"
+matrix = "pure"
+check = false
+tags = ["stdlib"]
+

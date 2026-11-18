@@ -165,7 +165,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   - `dt_base/41_eff_process_exit`：`Exit` 在 mock（`"mock"`）与观察 handler（`"observed"`）下可观察、不退出；
   - 负例 `dt_err/78_eff_fs_instance_mismatch`：程序需要 `FsOp`、handler 处理 `FsOp`
     → `TC_TypeMismatch`（实例名必须一致）；
-  - 原语探针夹具 `test/corpus/packages/10_prim_io`：直调 `prim_eff_sleep` 并断言真实推进时间
+  - 原语探针夹具 `packages/cli/test/corpus/packages/10_prim_io`：直调 `prim_eff_sleep` 并断言真实推进时间
     （native sleep 的正向探针；没有 manifest 门控）。
 - **没有包级能力声明**：`[capabilities] effects` 这类声明不存在——任何包都可直调
   `prim_*` / `prim_eff_*`，也没有类型级能力行（见 [effects.md](effects.md) §8.6）。

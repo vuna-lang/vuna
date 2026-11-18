@@ -1,8 +1,0 @@
-# 入口文件（app/Main.vuna）里同时声明 data + trait + instance + deriving，
-# 验证「入口声明可 build」：入口的 data/trait/实例要发进 Main.ml 并参与归属表
-# （单文件与 split 走同一套装配计划）。
-[package]
-name = "entry-trait"
-
-[dependencies]
-vuna-base = "../../../../packages/base"
