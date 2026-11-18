@@ -194,7 +194,7 @@ function spawnServe(opts, onReady, onFail) {
     onFail('cannot find vuna: pass --vuna PATH or build with `nix build .#vuna --out-link result` (node: `nix shell nixpkgs#nodejs`)');
     return null;
   }
-  const argv = ['obs', 'serve', '--cdp', 'tcp:127.0.0.1:0'];
+  const argv = ['dev', 'obs', 'serve', '--cdp', 'tcp:127.0.0.1:0'];
   if (opts.allowSlow) argv.push('--allow-slow');
   argv.push(...opts.traces);
   let child;
