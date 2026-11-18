@@ -46,12 +46,12 @@ for matrix in ${VUNA_TEST_MATRICES:-}; do
   MATRIX_ARGS="$MATRIX_ARGS --matrix $matrix"
 done
 # shellcheck disable=SC2086
-"$VUNA" dev suite test/suite.toml --jobs "$JOBS" --timeout 240 --no-cache --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS
+"$VUNA" dev suite test/suite.toml --jobs "$JOBS" --timeout 240 --strict-skips $TIER_ARGS $BACKEND_ARGS $MATRIX_ARGS
 
 # e2e check 内再跑 tools 层（47c/54b 等 25 s 级工具 case）：固定 2 worker，
 # 与 e2e 的 8 worker 串行，避免它们在 gate/e2e 的大并发里被拖到 30 s+。
 case " $VUNA_TEST_TIERS " in
   *" e2e "*)
-    "$VUNA" dev suite test/suite.toml --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --no-cache --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS
+    "$VUNA" dev suite test/suite.toml --jobs "${VUNA_TOOL_JOBS:-2}" --timeout 240 --strict-skips --tier tools $BACKEND_ARGS $MATRIX_ARGS
     ;;
 esac

@@ -4,7 +4,7 @@
 #     --packages  清包对象族（objects/pkg、pkgs、tmp），保留缓存族与 roots
 #     --gc        与 --packages 连用：只删未被工作区/项目 roots 引用的包对象
 #     不带 flag 时只清缓存族；--dry-run 只报数量。
-run: sh -c 'rm -rf "$TMPDIR/clean-store"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/iface"; mkdir -p "$VUNA_STORE/objects/pkg" "$VUNA_STORE/pkgs/fake"; printf x >"$VUNA_STORE/objects/pkg/fake"; printf fake >"$VUNA_STORE/pkgs/fake/.complete"'
+run: sh -c 'rm -rf "$TMPDIR/clean-store"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/module-iface"; mkdir -p "$VUNA_STORE/objects/pkg" "$VUNA_STORE/pkgs/fake"; printf x >"$VUNA_STORE/objects/pkg/fake"; printf fake >"$VUNA_STORE/pkgs/fake/.complete"'
 exit: 0
 run: sh -c 'printf "user note\n" >"$TMPDIR/keep.txt"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --store --dry-run'
 exit: 0
@@ -13,22 +13,22 @@ run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --store
 exit: 0
 out-contains: removed
 # 缓存族清空；包对象族、物化视图、roots 必须存活。
-run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/iface" && test -f "$TMPDIR/clean-store/objects/pkg/fake" && test -f "$TMPDIR/clean-store/pkgs/fake/.complete" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/module-iface" && test -f "$TMPDIR/clean-store/objects/pkg/fake" && test -f "$TMPDIR/clean-store/pkgs/fake/.complete" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
 exit: 0
 file-exists: $TMPDIR/keep.txt
 # 恢复缓存族，再清包对象族：缓存族与 roots 必须存活。
-run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/iface"'
+run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" check "$VUNA_BASE" >/dev/null 2>&1; test -d "$VUNA_STORE/objects/module-iface"'
 exit: 0
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --packages'
 exit: 0
 out-contains: removed
-run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/pkg" && test ! -d "$TMPDIR/clean-store/pkgs" && test -d "$TMPDIR/clean-store/objects/iface" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
+run: sh -c 'test ! -d "$TMPDIR/clean-store/objects/pkg" && test ! -d "$TMPDIR/clean-store/pkgs" && test -d "$TMPDIR/clean-store/objects/module-iface" && test -n "$(ls "$TMPDIR/clean-store/roots" 2>/dev/null)"'
 exit: 0
 # 裸 `vuna store clean` 只清缓存族：包对象族不动。
 run: sh -c 'mkdir -p "$TMPDIR/clean-store/objects/pkg"; printf x >"$TMPDIR/clean-store/objects/pkg/fake2"; export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean'
 exit: 0
 out-contains: removed
-run: sh -c 'test -f "$TMPDIR/clean-store/objects/pkg/fake2" && test ! -d "$TMPDIR/clean-store/objects/iface"'
+run: sh -c 'test -f "$TMPDIR/clean-store/objects/pkg/fake2" && test ! -d "$TMPDIR/clean-store/objects/module-iface"'
 exit: 0
 run: sh -c 'export VUNA_STORE="$TMPDIR/clean-store"; "$VUNA" store clean --store'
 exit: 0

@@ -814,9 +814,8 @@ decDeclsComplete s = case decDecls (strLength s) (curOf s) of
 -- 载荷层：整文件 `SourceFile`
 -- ---------------------------------------------------------------
 -- 这是 **load 阶段的 parse 产物**，不是哈希输入：载荷只需自描述、可无损还原。
--- span 不参与编码（`dec*` 只能还原 `noSpan`），与 hash 输入口径一致。
--- lex 缓存（`Loader.Flatten`）走 `Canonical.Lex` 的 token 流而非本编码：token 带位置，
--- 重放 parse 得到的 AST 与冷路径逐字节相同，诊断位置因此保真。
+-- span 不参与编码（`dec*` 只能还原 `noSpan`），与 hash 输入口径一致；因此它不能当
+-- 缓存载荷——命中时诊断位置会全变 `:0:0`。parse 一律从源文本 lex。
 --
 -- | `ExportItem`：模块头/重导出的一条导出项（`XBare` / `XTypeAll` / `XTypeSome` / `XModule`）。
 export encExportItem : ExportItem -> List String -> List String

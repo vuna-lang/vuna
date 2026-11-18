@@ -146,7 +146,7 @@ vuna search [--type|--name|--doc] [--module PFX] [--limit N] [--json] <query...>
 ## 4. 索引 v3
 
 `vuna doc` 直接按源码构建 DocBook；`vuna search` / `vuna api` / LSP 用索引（会话载荷在
-`$VUNA_STORE/objects/tool/`，按输入摘要判定）。
+`$VUNA_STORE/objects/tool-context/`，按输入摘要判定）。
 
 索引载荷（schema `vuna-index 3`）：
 

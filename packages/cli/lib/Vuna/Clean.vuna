@@ -3,8 +3,8 @@
 --
 -- 一个 store 根、两类生命周期：
 --
--- - `--store`：**缓存族** —— `objects/<kind>/`（iface / header / lex / order / check / tool /
---   doc / mods / test / pkgiface / splitptr）、`blobs/`、`units/`、`views/{bin,testbin}/`、
+-- - `--store`：**缓存族** —— `objects/<kind>/`（module-iface / check-outcome / tool-context /
+--   splitptr，以及身份记录 module-order / pkg-iface）、`blobs/`、`units/`、`views/{bin,testbin}/`、
 --   `.tmp/`。保留 `objects/pkg/`、`pkgs/`、`roots/`、`tmp/`。
 -- - `--packages`：**取包对象族** —— `objects/pkg/`、物化视图 `pkgs/`、取包中转 `tmp/`。
 --   保留缓存族与 roots。
@@ -62,7 +62,7 @@ runClean args = case parseCmdArgs ["store", "clean"] args of
       _ => cleanError "too many arguments; expected at most one directory"
 
 -- | 内部：依次清理被选中的族：先清缓存族，成功后再清包对象族；前一步失败即返回其退出码。
--- 接口缓存在对象库（`$VUNA_STORE/objects/iface`），树内没有 `*.iface`，因此没有 `--iface`。
+-- 接口缓存在对象库（`$VUNA_STORE/objects/module-iface`），树内没有 `*.iface`，因此没有 `--iface`。
 cleanTargets : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Bool -> Bool -> String -> Eff r Int
 cleanTargets wantStore wantPackages wantGc dry dir = do
   storeCode <- if wantStore then cleanStore dry else pure 0
@@ -71,26 +71,18 @@ cleanTargets wantStore wantPackages wantGc dry dir = do
 
 -- | 内部：缓存族按 kind 分目录的对象子目录名（`objects/<kind>`）。
 cacheKindNames : List String
-cacheKindNames =
-  [ "iface",
-    "header",
-    "lex",
-    "order",
-    "check",
-    "tool",
-    "doc",
-    "mods",
-    "test",
-    "lint",
-    "pkgiface",
-    "splitptr"
-  ]
+cacheKindNames = ["module-iface", "check-outcome", "tool-context", "splitptr"]
+
+-- | 内部：身份与决策记录（`objects/<kind>`）。它们不是缓存：GC 不淘汰（删了会让模块顺序
+-- 或依赖身份漂移），只有显式 `clean --store` 才清理。
+identityKindNames : List String
+identityKindNames = ["module-order", "pkg-iface"]
 
 -- | 内部：缓存族的清理作用域：各 kind 目录 + `blobs` / `units` / 两类视图产物 / `.tmp`。
 -- 不碰包对象族（`objects/pkg`）、`pkgs` 与 `roots`。
 cacheScopesOf : String -> List String
 cacheScopesOf root =
-  append (map (\k => "${root}/objects/${k}") cacheKindNames)
+  append (map (\k => "${root}/objects/${k}") (append cacheKindNames identityKindNames))
     ["${root}/blobs", "${root}/units", "${root}/views/bin", "${root}/views/testbin", "${root}/.tmp"]
 
 -- | 内部：清缓存族（`--store`）：作用域见 [Vuna.Clean.cacheScopesOf]，`dry` 时只统计不删。
@@ -384,8 +376,9 @@ gcFilesOf root = do
   blobs <- walkFiles 1048576 "${root}/blobs"
   units <- walkFiles 1048576 "${root}/units"
   let
-    pkgPrefix = "${root}/objects/pkg/"
-    cacheObjs = filter (\p => not (startsWith pkgPrefix p)) objs
+    excluded =
+      ["${root}/objects/pkg/", "${root}/objects/module-order/", "${root}/objects/pkg-iface/"]
+    cacheObjs = filter (\p => not (anyLine (\pre => startsWith pre p) excluded)) objs
   in pure (append cacheObjs (append blobs units))
 
 -- | 内部：目录下的直接子目录（不存在或不是目录给空列表）。

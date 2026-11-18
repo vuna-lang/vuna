@@ -5,7 +5,7 @@
 -- parse 级签名就是工具链需要的语义面（语义问题由 LSP 的 DT 检查消费，不在这里重复）。
 --
 -- 缓存走 [Vuna.Tool.Session] 的输入寻址对象：会话身份 = `(origin, bucket, nodeKey, 依赖摘要…)`，
--- 对象落在 `$VUNA_STORE/objects/tool/<addr>`，命中即读载荷，未命中才重建。载荷是
+-- 对象落在 `$VUNA_STORE/objects/tool-context/<addr>`，命中即读载荷，未命中才重建。载荷是
 -- `Vuna.Index.Codec.encIndex` 的规范字节（codec `index-payload 2`，`Store` framing）。
 -- 依赖表有两条路径：CLI 用逐源文件内容哈希 `f:<path>:<hash>`（同 size + 同 mtime 的内容
 -- 变更也必须失效）；REPL 用 stat 键 `st:<path>:<bytes>:<mtime>:<hash>`，只对安全窗内的

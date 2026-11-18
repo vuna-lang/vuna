@@ -39,27 +39,28 @@ run: sh -c 'for f in $(find "$VUNA_STORE"/blobs -type f); do off=$(( $(stat -c %
 run: diff -r "$TMPDIR/c32-clean" "$TMPDIR/c32-out2"
 run: sh -c 'blob=$(cat "$TMPDIR/c32-blob-path"); head -c 18 "$blob"'
 out-equals: vuna-cache-frame 2
-# 52d) check 判定：**输入寻址对象的存在性**（`objects/check/<checkIn>`，空载荷）。
+# 52d) check 判定：**输入寻址对象的存在性**（`objects/check-outcome/<checkIn>`，空载荷）。
 #      判过就写一个 marker；删掉它必须视为未命中（重算并重新写回），不能静默当成功。
 run: sh -c 'rm -rf "$TMPDIR/c32-check-cache"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/dep" >/dev/null 2>&1; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" "$VUNA" check "$TMPDIR/c32-pkg/root" >/dev/null 2>&1'
-run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f | wc -l)" -ge 2'
+run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check-outcome" -type f | wc -l)" -ge 2'
 # 命中：再 check 一次必须直接判过（不再精化）。
 run: sh -c 'VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check.log"'
 out-contains: cache-path=hit
 # 删掉全部 check marker ⇒ 下一次必须重算并重新写回。
-run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
+run: sh -c 'rm -rf "$TMPDIR/c32-check-cache/store/objects/check-outcome"; VUNA_STORE="$TMPDIR/c32-check-cache/store" TMPDIR="$TMPDIR/c32-check-cache" VUNA_DEBUG_PERF=1 "$VUNA" check "$TMPDIR/c32-pkg/dep" 2>&1 | tee "$TMPDIR/c32-check-miss.log"'
 out-contains: cache-path=miss
-run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check" -type f | wc -l)" -ge 1'
-# 52e) lex 缓存：全部截断后照常 lex 并重写（载荷不是 OCaml Marshal，截断按 framing 拒绝）。
-#      载荷落在输入寻址对象库 `<VUNA_STORE>/objects/lex/<输入摘要>`（路径 = 输入摘要，
-#      截断或 codec 不符 ⇒ 读侧拒绝 ⇒ 按 miss 重算并覆盖写**同一路径**）。
-#      用独立夹具副本 + 独立 store，避免依赖本 case 前面步骤留下的 iface 缓存。
-run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$S"; mkdir -p "$S"; cp -r corpus/packages/m34_summary "$S/pkg"; for mf in "$S/pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; list=$(find "$S/store/objects/lex" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/lex-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done'
-run: sh -c 'S="$TMPDIR/lexc"; rm -rf "$S/store/objects/iface" "$S/store/objects/order" "$S/store/objects/check" "$S/store/objects/mods" "$S/store/objects/pkgiface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
-run: sh -c 'S="$TMPDIR/lexc"; total=0; framed=0; for f in $(find "$S/store/objects/lex" -type f 2>/dev/null); do total=$((total + 1)); if [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ]; then framed=$((framed + 1)); [ -f "$TMPDIR/lex-framed-path" ] || printf "%s" "$f" > "$TMPDIR/lex-framed-path"; fi; done; [ "$total" -gt 0 ] && [ "$framed" -gt 0 ]'
-# 52f) codec 不符：把**刚被重写过**的 lex 条目（确保它在本轮被读）codec 改成别的名字
-#     （tag/len/内容地址都不动）⇒ 读侧必须拒绝、重新 lex 并重写同一个文件（路径 = 输入摘要）。
-#     codec 名（含版本号）从文件头读，不硬编码——lex 载荷形状变化只改 codec 版本一处。
-run: sh -c 'S="$TMPDIR/lexc"; f=$(cat "$TMPDIR/lex-framed-path"); printf "%s" "$f" > "$TMPDIR/lex-codec-path"; codec=$(head -1 "$f" | cut -d"|" -f3); printf "%s" "$codec" > "$TMPDIR/lex-codec-name"; sed -i "1s/|${codec}|/|bogus-codec 9|/" "$f"; rm -rf "$S/store/objects/iface" "$S/store/objects/order" "$S/store/objects/check" "$S/store/objects/mods" "$S/store/objects/pkgiface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1'
-run: sh -c 'f=$(cat "$TMPDIR/lex-codec-path"); [ "$(head -1 "$f" | cut -d"|" -f3)" = "$(cat "$TMPDIR/lex-codec-name")" ] && echo restored'
+run: sh -c 'test "$(find "$TMPDIR/c32-check-cache/store/objects/check-outcome" -type f | wc -l)" -ge 1'
+# 52e) 接口载荷：全部截断后照常重新精化并重写（载荷不是 OCaml Marshal，截断按 framing 拒绝）。
+#      载荷落在输入寻址对象库 `<VUNA_STORE>/objects/module-iface/<输入摘要>`（路径 = 输入摘要，
+#      截断或 codec 不符 ⇒ 读侧拒绝 ⇒ 按 miss 精化并覆盖写**同一路径**）。
+#      用独立夹具副本 + 独立 store，避免依赖本 case 前面步骤留下的接口；`dep` 有 `[export]`，
+#      入口-only 包（root）不写接口。
+run: sh -c 'S="$TMPDIR/ifacec"; rm -rf "$S"; mkdir -p "$S"; cp -r corpus/packages/m34_summary "$S/pkg"; for mf in "$S/pkg"/*/vuna.toml; do sed -i "s|^vuna-base = .*|vuna-base = \"$VUNA_BASE\"|" "$mf"; done; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/dep" >/dev/null 2>&1; TMPDIR="$S/c" VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/root" >/dev/null 2>&1; list=$(find "$S/store/objects/module-iface" -type f 2>/dev/null); [ -n "$list" ] || exit 1; printf "%s\n" "$list" | wc -l | tr -d " " > "$TMPDIR/iface-count"; for f in $list; do head -c 8 "$f" > "$f.part"; mv "$f.part" "$f"; done'
+run: sh -c 'S="$TMPDIR/ifacec"; rm -rf "$S/store/objects/module-order" "$S/store/objects/check-outcome" "$S/store/objects/pkg-iface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/dep" >/dev/null 2>&1'
+run: sh -c 'S="$TMPDIR/ifacec"; total=0; framed=0; for f in $(find "$S/store/objects/module-iface" -type f 2>/dev/null); do total=$((total + 1)); if [ "$(head -c 18 "$f")" = "vuna-cache-frame 2" ]; then framed=$((framed + 1)); [ -f "$TMPDIR/iface-framed-path" ] || printf "%s" "$f" > "$TMPDIR/iface-framed-path"; fi; done; [ "$total" -gt 0 ] && [ "$framed" -gt 0 ]'
+# 52f) codec 不符：把**刚被重写过**的接口条目（确保它在本轮被读）codec 改成别的名字
+#     （tag/len/内容地址都不动）⇒ 读侧必须拒绝、重新精化并重写同一个文件（路径 = 输入摘要）。
+#     codec 名（含版本号）从文件头读，不硬编码——载荷形状变化只改 codec 版本一处。
+run: sh -c 'S="$TMPDIR/ifacec"; f=$(cat "$TMPDIR/iface-framed-path"); printf "%s" "$f" > "$TMPDIR/iface-codec-path"; codec=$(head -1 "$f" | cut -d"|" -f3); printf "%s" "$codec" > "$TMPDIR/iface-codec-name"; sed -i "1s/|${codec}|/|bogus-codec 9|/" "$f"; rm -rf "$S/store/objects/module-order" "$S/store/objects/check-outcome" "$S/store/objects/pkg-iface"; TMPDIR="$S/c" VUNA_ELAB_FULL=1 VUNA_STORE="$S/store" "$VUNA" check "$S/pkg/dep" >/dev/null 2>&1'
+run: sh -c 'f=$(cat "$TMPDIR/iface-codec-path"); [ "$(head -1 "$f" | cut -d"|" -f3)" = "$(cat "$TMPDIR/iface-codec-name")" ] && echo restored'
 out-equals: restored

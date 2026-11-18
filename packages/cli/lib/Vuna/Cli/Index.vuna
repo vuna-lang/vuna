@@ -1,6 +1,6 @@
 -- | 源码索引类命令：`vuna map`（模块总览 / 符号定位 / 影响面）、`vuna api`、`vuna goal`。
 --
--- 索引会话对象落在 `$VUNA_STORE/objects/tool/`，每次调用按输入摘要判定新鲜度，没有
+-- 索引会话对象落在 `$VUNA_STORE/objects/tool-context/`，每次调用按输入摘要判定新鲜度，没有
 -- 「刷新索引」命令（详见 `Vuna.Index` / `Vuna.Tool.Session`）。`goal` 走容错入口，
 -- 未解洞不让查询失败。
 module Vuna.Cli.Index where

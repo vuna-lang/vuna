@@ -122,7 +122,7 @@ end:
 `corpus/...`，不是 `test/corpus/...`）。每步额外断言没有被 timeout（超时取 case/family
 `timeout`），解析错误（未闭合 loop、指令出现在任何步骤之前等）让 case 显式失败。
 
-断言走统一计数器，失败信息带步骤与 item 名；`*.steps` 不进入本地结果缓存。
+断言走统一计数器，失败信息带步骤与 item 名。
 
 ### case 类型与语义
 
@@ -161,22 +161,19 @@ end:
   `<id> (no result)`（崩溃 / OOM / 被杀），并还原真实 case 名而不是 `unknown-<index>`。
   `run:` 步的退出码/超时失败额外附**该步命令**与**捕获输出尾部**（脚本自己打印的
   `FAIL: ...` 就在里面），否则只能看到 `exit: exit 1`。
-- 本地结果判定：成功的 golden/error case 写成 `objects/test/<testIn>`（输入寻址，
-  key 含 schema、case id、kind、source/expected **内容**哈希、编译器身份、base 树哈希、
-  语义 env；不含 mtime/size）；命中打印 `(cached)`。通过后登记 roots。
-  `--no-cache` 关闭读写，CI check 固定 `--no-cache`；`*.steps` 不缓存。
+- 本地结果判定：没有。每次 suite 都真正执行 golden / error / steps，结果不落对象库，
+  也没有 `(cached)` 行；`--cache-dir` 只决定构建桶与测试对象库的位置。
 
 ### 共享对象库（`VUNA_STORE`）
 
 - 默认根：**测试专用** `~/.vuna/test-store`（`nix run .#vuna-run-tests` 导出；
   `VUNA_STORE` 可覆盖）。子进程的 `TMPDIR` 仍按 worker/case 隔离，但对象库共用。
 - 父进程只预热一次 `vuna check packages/base`（需要时 `check .`），worker 不各自 warmIfaces。
-- 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface|splitptr`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节，日常 `check`/`build` 与测试共用不会互相覆盖。
 - 目录视图 `views/bin` 与 `roots/` 的并发边界见 [cache.md](cache.md)；断言缓存布局/GC/
   冷命中的 steps 在文件头写 `# store-isolated`，用 `${caseTmp}/store` 私有库。
-- `--no-cache` 只影响 test verdict 对象（`objects/test`），不关闭对象库；
-  `*.steps` 仍不缓存。对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
+- 对象库的 GC 用 `vuna store gc`（roots + 宽限窗口 + 容量上限）。
 - **warning 不持久化**：共享 store 命中会跳过精化。fixture 负例走进程内全量精化
   （`InProc.checkFile`），warning 必然重算，不需要 `-W` / 私有 store；`warning`
   的「让退出码变 1」语义由 steps 的 `--deny-warnings` 覆盖。
@@ -225,7 +222,7 @@ vuna dev suite test/suite.toml --watch          # 改文件后自动重跑
 vuna dev suite test/suite.toml --audit          # 孤儿 fixture 审计
 vuna dev suite test/suite.toml --timings        # 最慢 10 个 case
 vuna dev suite test/suite.toml --strict-skips   # fail-fast 产生的 skip 也算失败
-vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖本地结果缓存目录
+vuna dev suite test/suite.toml --cache-dir DIR   # 覆盖测试对象库与构建桶根
 ```
 
 - `--changed REV`：`git diff --name-only REV`；compiler/base/lib/app/suite 配置变更跑全量，
@@ -317,7 +314,7 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 实测（本机 16 核）：空 store 下同一夹具 compile 2.9–5.5s，暖 store 7ms；
 `vuna check packages/base` 7.25s → 13ms。对象库的 split-unit 缓存在 `$VUNA_STORE/units`；
-`--cache-dir` 只放结果缓存（build 桶走 store 视图，见
+`--cache-dir` 只放构建桶与测试临时根（split-unit 与视图见 store，
 [test-architecture.md](test-architecture.md)）。
 ## corpus 的包上下文与 `VUNA_BASE`
 

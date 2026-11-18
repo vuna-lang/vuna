@@ -508,7 +508,7 @@ buildIdForEff ctx = do
 -- ---------------------------------------------------------------
 -- 依赖身份：依赖方只消费依赖包的**接口身份**，不是源字节闭包。
 --
--- 依赖包 check/build 成功后写一个稳定对象 `objects/pkgiface/<key>`，key = 包名 + 该包
+-- 依赖包 check/build 成功后写一个稳定对象 `objects/pkg-iface/<key>`，key = 包名 + 该包
 -- lib 根源闭包摘要 + 编译器 tag，载荷 = `pkgIfaceHashOfModules`。依赖方按同样的 key 读取：
 --   * 命中 ⇒ `iface:<pkgIfaceHash>`（注释 / 诊断配置 / opaque 体变化不脏依赖方）；
 --   * 缺失（依赖还没 check、或源码变了还没重跑）⇒
@@ -518,13 +518,13 @@ buildIdForEff ctx = do
 -- 没有读依赖接口对象，因此不会回到 `ifaceModsEff`（env）形成环。
 -- ---------------------------------------------------------------
 pkgIfaceSummaryKind : String
-pkgIfaceSummaryKind = "pkgiface"
+pkgIfaceSummaryKind = "pkg-iface"
 
 pkgIfaceSummaryCodec : String
 pkgIfaceSummaryCodec = "pkg-iface-summary 1"
 
 pkgIfaceSummaryKeyOf : String -> String -> String -> String
-pkgIfaceSummaryKeyOf pkg srcClosure tag = addrOf ["pkgiface", pkg, srcClosure, tag]
+pkgIfaceSummaryKeyOf pkg srcClosure tag = addrOf ["pkg-iface", pkg, srcClosure, tag]
 
 -- | 依赖根的接口身份（或 manifest 回退）。
 depRootIdentityEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Root -> Eff r (Pair String String)
@@ -745,7 +745,7 @@ depPackageCount ctx = length (depPackageList ctx)
 -- 输入寻址的 iface 层
 --
 -- 模块接口的**地址**由输入摘要决定 —— 源码摘要 + 包身份 + 包环境 + 直接依赖模块的地址（+ 隐式 Prelude）。
--- 落盘是 `objects/iface/<地址>`，「模块干净」因此退化为一次路径存在性检查。
+-- 落盘是 `objects/module-iface/<地址>`，「模块干净」因此退化为一次路径存在性检查。
 --
 -- 依赖图从 **header 对象**得到（按源摘要寻址，热路径只读每个模块一个几百字节的对象），
 -- 缺失时现 parse 一次并写回 —— 冷启动只付一次 parse，之后不再 parse 依赖包。
@@ -813,34 +813,21 @@ closureModsEff ctx pkgs = do
   ) (contextRoots ctx)
   pure (concatMap (\xs => xs) per)
 
--- header 地址：包身份 + 模块名 + 源摘要（同一份源在不同包里是不同模块）。
-headerAddrOfMod : ClosureMod -> String
-headerAddrOfMod m = headerAddrOf m.cmPkgKey m.cmName m.cmSrc
-
 -- 尾接隐式 Prelude（作为**普通图边**）：不这样做的话，Prelude 会作为「每个模块的额外依赖」
 -- 后置在地址里，而它在拓扑序里没有前驱 ⇒ 早于 Prelude 的模块算地址时它还没分配，
 -- 退化成 `ext:Prelude` 哨兵。哨兵/真实地址混用会让地址依赖遍历顺序（跨上下文不稳定，
 -- 实测 `check compiler` 与 `check .` 算出两套地址）。写进 header 后它就是正常边。
 loadHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> ClosureMod -> Eff r ClosureMod
 loadHeaderEff hasPrelude m = do
-  cached <- readHeaderEff (headerAddrOfMod m)
-  case cached of
-    Just h =>
-      pure
-        (ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc (withPrelude hasPrelude m h) "")
-    Nothing => do
-      raw <- fsReadFile m.cmPath
-      parsed <- parseFileWithPath m.cmPath raw
-      case parsed of
-        ErrC _ => pure m
-        OkC sf => do
-          let
-            h = headerOfSource m.cmName sf
-            imports = withPrelude hasPrelude m h
-            h2 = ModHeader h.mhName imports h.mhFixities
-          in do
-            _ <- writeHeaderEff (headerAddrOfMod m) h2
-            pure (ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc imports "")
+  raw <- fsReadFile m.cmPath
+  parsed <- parseFileWithPath m.cmPath raw
+  case parsed of
+    ErrC _ => pure m
+    OkC sf => do
+      let
+        h = headerOfSource m.cmName sf
+        imports = withPrelude hasPrelude m h
+      in pure (ClosureMod m.cmPkg m.cmPkgKey m.cmPkgEnv m.cmName m.cmPath m.cmSrc imports "")
 
 withPrelude : Bool -> ClosureMod -> ModHeader -> List String
 withPrelude hasPrelude m h =
@@ -887,7 +874,7 @@ srcPairOf m = Pair (modNameOf m) "${m.cmPkgKey}|${m.cmSrc}"
 ifaceAddrOf : HashMap.HashMap String String -> ClosureMod -> String
 ifaceAddrOf srcTbl m =
   addrOf
-    (append ["iface", ifaceObjectCodec, m.cmPkgKey, m.cmName, m.cmSrc, m.cmPkgEnv] (map (depSrcOf srcTbl) m.cmImports))
+    (append ["module-iface", ifaceObjectCodec, m.cmPkgKey, m.cmName, m.cmSrc, m.cmPkgEnv] (map (depSrcOf srcTbl) m.cmImports))
 
 withAddr : HashMap.HashMap String String -> ClosureMod -> ClosureMod
 withAddr srcTbl m =
@@ -955,7 +942,7 @@ ifacesForRootsEff ctx = do
 -- | 按地址读一个模块接口（载荷自证：解码失败即 `Nothing`）。
 export readIfaceAtEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe ModuleIface)
 readIfaceAtEff a = do
-  payload <- storeObjectReadEff "iface" ifaceObjectCodec a
+  payload <- storeObjectReadEff "module-iface" ifaceObjectCodec a
   pure (case payload of
     Nothing => Nothing
     Just bytes => decModuleIfaceComplete bytes
@@ -1026,7 +1013,7 @@ depIfacesOf ctx = case ctx.contextPackage of
 -- 所以写侧把「这次写全的模块名顺序」单独存一个极小对象，读侧照它排列；缺失 ⇒ 回退全量。
 -- ---------------------------------------------------------------
 orderKind : String
-orderKind = "order"
+orderKind = "module-order"
 
 orderCodec : String
 orderCodec = "module-order 1"
@@ -1049,7 +1036,7 @@ orderKeyOfEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessO
 orderKeyOfEff root = do
   h <- rootHash root
   tag <- compilerTagEff
-  pure (addrOf ["order", rootName root, strFromInt h, tag])
+  pure (addrOf ["module-order", rootName root, strFromInt h, tag])
 
 -- | 写某包的模块顺序（完整模块面写全后调用）。
 writeOrderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> List String -> Eff r Int
@@ -1507,7 +1494,7 @@ else do
   mods <- ifaceModsEff ctx
   case findClosureMod (miNameOf mi) mods of
     Nothing => pure 0
-    Just m => storeObjectWriteEff "iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
+    Just m => storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
 
 -- 冷启动（没有工具会话）：依赖哈希从磁盘接口汇总，干净模块按现有判定重算；
 -- 写回尽力而为（LSP-only 会话逐步变热），失败不影响诊断。
@@ -1529,7 +1516,7 @@ toolWriteModuleIfaceCold ctx checked name si = do
 export toolCompilerFingerprint : Member nFs FsOp r, Member nEnv EnvOp r => Eff r Int
 toolCompilerFingerprint = compilerFingerprint
 
--- | 包级 check 的判定入口：命中 = `objects/check/<checkIn>` 存在 → 未命中则跑精化，
+-- | 包级 check 的判定入口：命中 = `objects/check-outcome/<checkIn>` 存在 → 未命中则跑精化，
 -- 成功后写 marker 并把摘要登记进本项目 roots。
 --
 -- 命中时**完全跳过**精化；`-W` / `--deny-warnings`（warning 不持久化）、
@@ -1599,7 +1586,7 @@ replayFailure (d :: rest) = ErrC (withChildren rest d)
 
 storeCheckPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> CheckOutcome -> Eff r Int
 storeCheckPayload ctx dig outcome = do
-  _ <- storeObjectWriteEff "check" checkResultCodec dig (encCheckOutcome outcome)
+  _ <- storeObjectWriteEff "check-outcome" checkResultCodec dig (encCheckOutcome outcome)
   rootKeepEff ctx [dig]
 
 -- 包级缓存判定的输入摘要（纯数据；key 由 `checkInOf` / `splitInOf` 换算成对象地址）。
@@ -1652,7 +1639,7 @@ checkViaGraph ctx mods run = do
     let
       dig = checkInOf mods
     in do
-      payload <- storeObjectReadEff "check" checkResultCodec dig
+      payload <- storeObjectReadEff "check-outcome" checkResultCodec dig
       case payload of
         Just raw => case decCheckOutcome raw of
           Just (CheckPassed ds) => do
@@ -1959,7 +1946,7 @@ cleanHashOf (m :: rest) name =
   if miNameOf m == name then Just (miIfaceHashOf m) else cleanHashOf rest name
 
 -- 接口摘要的**影子写**。整包 check / build 成功后按声明归属把 DtProgram
--- 切成每模块一份 `ModuleIface`，按地址写 `objects/iface/` + `objects/order/`（依赖侧的
+-- 切成每模块一份 `ModuleIface`，按地址写 `objects/module-iface/` + `objects/module-order/`（依赖侧的
 -- 接口加载与失效判定读它）；写失败/归属缺口只打 note（不影响 check 结果），缺口存在时
 -- **不写**（避免依赖方拿到不完整接口）。
 ifaceSchemaTag : String
@@ -2106,7 +2093,7 @@ writeIfaceObjects _ [] = pure 0
 writeIfaceObjects mods (mi :: rest) = case findClosureMod (miNameOf mi) mods of
   Nothing => writeIfaceObjects mods rest
   Just m => do
-    bytes <- storeObjectWriteEff "iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
+    bytes <- storeObjectWriteEff "module-iface" ifaceObjectCodec m.cmAddr (encModuleIface mi)
     n <- writeIfaceObjects mods rest
     pure (if bytes > 0 then n + 1 else n)
 
@@ -2355,7 +2342,8 @@ buildViewAddrOf ctx entry printResult = do
 -- | check 的判定摘要：四个输入摘要 + 包 + kind。存在即「判过」。
 checkInOf : CheckMods -> String
 checkInOf m =
-  addrOf ["check", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
+  addrOf
+    ["check-outcome", m.cmPkg, m.cmKind, m.cmManifest, m.cmSources, m.cmDeps, m.cmVer, m.cmFlags]
 
 -- | 写 blob（内容不变就不写：同一产物被多次构建复用时零写放大）。
 -- 调用方传入**已规范化**的列表：digest 与产物顺序都按规范序取，原始 codegen 顺序不落盘。

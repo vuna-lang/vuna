@@ -3,7 +3,7 @@
 -- 缓存走 [Vuna.Tool.Session] 的输入寻址对象：依赖表两条路径——CLI / LSP / `search` 用逐源文件
 -- 内容哈希 `f:<path>:<hash>`（同 size + 同 mtime 的内容变更也必须失效），REPL 用 stat 键
 -- `st:<path>:<bytes>:<mtime>:<hash>`（安全窗内回落内容哈希，见 `indexStatsOf`）。命中 ⇒ 读
--- `objects/tool/<addr>` 载荷解码（[Vuna.Index.Codec]）；未命中 ⇒ 全量重建 + 写载荷对象
+-- `objects/tool-context/<addr>` 载荷解码（[Vuna.Index.Codec]）；未命中 ⇒ 全量重建 + 写载荷对象
 -- （同一输入同一地址），每次 miss 只提交调用方选定的一个 key。
 --
 -- 没有「刷新索引」命令：`vuna map` / `vuna api` / REPL 自己判新鲜度。`Store` 是唯一写盘层，

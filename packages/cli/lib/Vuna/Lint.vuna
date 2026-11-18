@@ -27,7 +27,6 @@ import Vuna.Cli.Spec
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Json
-import Vuna.Lint.Cache
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Fix
@@ -64,11 +63,10 @@ record LintOpts where
   lintOptSelect : List String
   lintOptIgnore : List String
   lintOptMaxWarnings : Maybe Int
-  lintOptNoCache : Bool
   lintOptDiff : Bool
 
 defaultLintOpts : LintOpts
-defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing False False
+defaultLintOpts = LintOpts False False False LintText 8 False Nothing [] [] Nothing False
 
 -- | 单个文件的结果。
 record FileOutcome where
@@ -263,9 +261,7 @@ lintText opts env displayPath configPath source = do
         case secondOf looked of
           ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
           OkC programFixities => do
-            linted <-
-              if opts.lintOptFix || opts.lintOptNoCache then pure (lintSourceWithConfig cfg programFixities source)
-              else lintSourceWithCache cfg programFixities source
+            linted <- pure (lintSourceWithConfig cfg programFixities source)
             case linted of
               ErrC e => pure (Pair env2 (FileOutcome displayPath [] 0 (Just (diagText e))))
               OkC findings => do
@@ -521,7 +517,6 @@ lintUsage = """usage: vuna lint [OPTIONS] [PATH]...
   --ignore RULE         关闭给定规则（可重复）
   --config PATH         使用显式 vuna.toml 的 [lint]
   --no-config           不读 vuna.toml，使用默认配置
-  --no-cache            不读/写 lint 结果缓存
   --max-passes N        --fix 最多迭代 N 轮（默认 8）
   --list                列出规则
   --explain RULE        解释单条规则
@@ -560,7 +555,7 @@ parseLintOpts parsed = case formatOf (flagValue parsed "format") of
       Just maxPasses =>
         if maxPasses <= 0 || maxWarnings /= -2 && maxWarnings < -1 then Nothing
         else Just
-          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "no-cache") (flagSet parsed "diff"))
+          (LintOpts (flagSet parsed "fix") (flagSet parsed "dry-run") (flagSet parsed "quiet") fmt maxPasses (flagSet parsed "no-config") (flagValue parsed "config") (flagValues parsed "select") (flagValues parsed "ignore") (if maxWarnings == -2 then Nothing else Just maxWarnings) (flagSet parsed "diff"))
 
 formatOf : Maybe String -> Maybe LintFormat
 formatOf Nothing = Just LintText

@@ -4,9 +4,9 @@
 # 用法: sh corpus/index/check.sh <vuna>
 #
 # 缓存形状：
-#   `index:<dir>` 节点（会话索引落在 `$VUNA_STORE/objects/tool/<输入摘要>`，codec
+#   `index:<dir>` 节点（会话索引落在 `$VUNA_STORE/objects/tool-context/<输入摘要>`，codec
 #   `query-index 1`），值 = 载荷内容地址（`QRef`）；载荷 = `Index.Codec.encIndex` 的规范
-#   字节，落同一个 `objects/tool/<输入摘要>`（codec `index-payload 2`，`Store` framing）。
+#   字节，落同一个 `objects/tool-context/<输入摘要>`（codec `index-payload 2`，`Store` framing）。
 #
 # 在一个临时 workspace 里验证（不依赖仓库自身缓存，避免并行测试互相干扰）：
 #   1) 首次 map：exit 0、blob 的 framing tag/codec 正确；
@@ -49,7 +49,7 @@ check_contains() {
 check_ne() {
   if [ "$2" != "$3" ]; then ok; else bad "$1 (unexpected [$2])"; fi
 }
-blobs() { find "$VUNA_STORE/objects/tool" -type f 2>/dev/null; }
+blobs() { find "$VUNA_STORE/objects/tool-context" -type f 2>/dev/null; }
 
 ws="$tmp/ws"
 mkdir -p "$ws/lib/Demo"

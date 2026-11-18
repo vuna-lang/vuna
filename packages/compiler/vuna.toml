@@ -83,7 +83,6 @@ modules = [
   "Vuna.Compiler.Elab.Usage",
   "Vuna.Compiler.Frontend.Ast",
   "Vuna.Compiler.Frontend.Canonical.Ast",
-  "Vuna.Compiler.Frontend.Canonical.Lex",
   "Vuna.Compiler.Frontend.Canonical.Pkg",
   "Vuna.Compiler.Frontend.Cst",
   "Vuna.Compiler.Frontend.Lexer",

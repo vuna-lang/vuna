@@ -1,6 +1,6 @@
 # store-isolated: 断言缓存/对象库行为，使用 case 私有 store。
 # 44p) 工具写回与整包写共用同一对象地址：LSP 冷启动的单模块写回落在
-#      `objects/iface/<输入摘要>`，随后命令行 check 直接复用（零重写、无 miss）。
+#      `objects/module-iface/<输入摘要>`，随后命令行 check 直接复用（零重写、无 miss）。
 #      对象地址由输入决定，谁写的都一样（LSP 与整包写共用同一地址）。
 #      夹具 corpus/packages/m34_iface_audit 复制到 $TMPDIR，vuna.toml 的 base 改到本仓库。
 run: sh -c 'rm -rf "$TMPDIR/org-pkg" "$TMPDIR/org-store" "$TMPDIR/org-cache"; cp -R corpus/packages/m34_iface_audit "$TMPDIR/org-pkg"'
@@ -15,7 +15,7 @@ run: pkg="$TMPDIR/org-pkg/mid"; src="$pkg/lib/Mid.vuna"; { jq -cn --arg uri "fil
 run: sh -c 'VUNA_STORE="$TMPDIR/org-store" TMPDIR="$TMPDIR/org-lsp-cache" "$VUNA" lsp < "$TMPDIR/lsp-org.frames" > /dev/null 2>&1'
 exit: 0
 # LSP 写回产生了对象。
-run: sh -c 'test -d "$TMPDIR/org-store/objects/iface"'
+run: sh -c 'test -d "$TMPDIR/org-store/objects/module-iface"'
 exit: 0
 # 命令行 check 复用这些对象：包级判定若命中则直接通过；未命中时也不应出现
 # 「依赖接口缺件 ⇒ 全量回退」的信号。

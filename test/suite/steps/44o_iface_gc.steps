@@ -9,5 +9,5 @@ run: sh -c 'find "$TMPDIR/44o-pkg" -name "*.iface" -o -name ".vuna-iface" | wc -
 out-equals: 0
 run: sh -c 'test ! -d "$TMPDIR/44o-pkg/dep/.output/iface"; echo ok'
 out-equals: ok
-run: sh -c 'test -d "$TMPDIR/44o-store/objects/iface" && test -d "$TMPDIR/44o-store/objects/header"'
+run: sh -c 'test -d "$TMPDIR/44o-store/objects/module-iface"'
 exit: 0

@@ -99,7 +99,7 @@ tests: run, stdlib
 | `api` 空签名 | `map find` 或读该行 |
 | 索引只到 parse 级，签名是源码里写的、非推断 | 同上 |
 | 短名静默取第一个 | 用完全限定名 |
-| 索引缓存 `$VUNA_STORE/objects/tool/`（会话对象，按输入摘要自动判新鲜度） | 怀疑过期就 `vuna store clean --store`（对象库根 = `$VUNA_STORE`；会自动重建） |
+| 索引缓存 `$VUNA_STORE/objects/tool-context/`（会话对象，按输入摘要自动判新鲜度） | 怀疑过期就 `vuna store clean --store`（对象库根 = `$VUNA_STORE`；会自动重建） |
 
 **没有「读一段实现」的命令**——这是当前工具链最明显的缺口。只能
 `map find` 拿行号 + `read --offset/--limit`。

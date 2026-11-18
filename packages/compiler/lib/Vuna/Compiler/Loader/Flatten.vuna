@@ -7,16 +7,10 @@ module Vuna.Compiler.Loader.Flatten where
 -- 入口统一吃 `PackageContext`（最近 manifest 的包 + 依赖闭包 roots）；DT 精化由
 -- `Driver.Dt` 按「依赖序列 + 入口声明」拼接。
 import Base.Data.List as List
-import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Loader.Layers
-import Vuna.Compiler.Base.Bytes
-import Vuna.Compiler.Frontend.Canonical.Lex
-import Vuna.Compiler.Loader.Fingerprint
-import Vuna.Compiler.Base.Store
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Loader.Expand
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Compiler.Base.Diagnostics.Rn
 import Base.Container.HashMap as HashMap
@@ -39,70 +33,23 @@ import Base.Effect.EffProcess as EffProcess
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
 -- parse 错误带文件名（前端诊断无位置，加载器知道路径）。
 --
--- **lex 缓存**。parse = lex + 语法分析，lexer 占大头（实测 40 KB 文件 lex 3.96 ms /
--- 全程 4.59 ms）；缓存 token 流后命中路径只跑语法分析。
+-- 不做 AST / token 缓存：`Canonical.Ast` 的编码口径**故意丢 span**（它是 iface 哈希输入，
+-- 移动代码不能改依赖方摘要），用它当缓存载荷会让进程里所有诊断位置退化成 `:0:0`、
+-- codegen 的 `dt_def_locs` 整表变成 `":0"`；tokens 缓存的净收益在整包 check 上不到 0.1 s，
+-- 不值得为它冻结一份载荷 schema。所有加载路径都从源文本 lex。
 --
--- 不做 AST 缓存：`Canonical.Ast` 的编码口径**故意丢 span**（它是 iface 哈希输入，
--- 移动代码不能改依赖方摘要），AST 缓存命中时进程里所有诊断位置会退化成 `:0:0`、
--- codegen 的 `dt_def_locs` 整表变成 `":0"`——缓存改变用户可见行为，不可接受。
--- token 流带位置，重放 parse 得到的 AST 与冷路径逐字节相同。
---
--- key = `contentAddress(schema + 编译器 tag + 路径 + 源文本)`（含编译器指纹，
--- AST/Token 布局不同的二进制各占一套 key 空间）；载荷 = `Canonical.Lex` 的显式编码 +
--- `Store` framing（magic/tag/codec/len/内容地址），坏字节在读侧变成 miss、不会进解码器。
-lexCacheSchema : String
-lexCacheSchema = "vuna-lex-cache 3"
-
--- | lex 载荷编码版本（`Store` 的 codec 段）。
-lexCacheCodec : String
-lexCacheCodec = "lex-tokens 3"
-
 -- 缓存读写、模块文件探测与读盘都是宿主动作，显式在 `Eff r` 里；
 -- 导出表计算、flatten 与 resolve 保持纯函数。
---
--- 寻址：`objects/lex/<输入摘要>`，输入摘要 = schema + codec + **源内容地址**。
--- 路径与编译器指纹都不进 key：同一份源在任何路径/任何二进制下都是同一份 token 流，
--- 跨项目、跨二进制自然复用。
-lexAddrOf : String -> String
-lexAddrOf src = addrOf ["lex", lexCacheSchema, lexCacheCodec, contentAddress src]
-
--- | 读 lex 缓存：`Store` framing 全量校验通过才解码；任何不符 ⇒ `Nothing`（重新 lex）。
-readLexCache : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe (List PTok))
-readLexCache addr = do
-  payload <- storeObjectReadEff "lex" lexCacheCodec addr
-  pure (case payload of
-    Nothing => Nothing
-    Just bytes => decPTokListComplete bytes
-  )
-
--- | 写 lex 缓存（目录由 `Store` 建；原子写由 `Store` 负责）。
-storeLexCache : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> List PTok -> Eff r Int
-storeLexCache addr toks = storeObjectWriteEff "lex" lexCacheCodec addr (encTop encPTokList toks)
-
--- | 解析一个源文件（带 lex 缓存）。所有加载路径都走这里。
+-- | 解析一个源文件：lex 一次，再走语法分析。所有加载路径都走这里。
 -- 编译器路径用 `PmStrict`（语义级语法错误致命）；只需要 AST 的工具（fixity 解析）用
 -- `parseFileWithPathMode PmTool`，别让「重复 binder」把整个文件挡在门外。
 export parseFileWithPath : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Check SourceFile)
 parseFileWithPath = parseFileWithPathMode PmStrict
 
 export parseFileWithPathMode : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> Eff r (Check SourceFile)
-parseFileWithPathMode mode path src = do
-  let
-    addr = lexAddrOf src
-  in do
-    cached <- readLexCache addr
-    case cached of
-      Just toks => pure (parseWith mode path toks)
-      Nothing => lexAndStore mode addr path src
-
--- | 缓存未命中：lex → 落盘 → 解析。落盘**无条件**（即使语法有错）：token 流只依赖源文本，
--- 与 parse 是否成功无关，错文件下次也能省掉 lex。
-lexAndStore : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ParseMode -> String -> String -> String -> Eff r (Check SourceFile)
-lexAndStore mode addr path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
+parseFileWithPathMode mode path src = case obsSpan "vuna.parse.lex" "vuna.phase" (\_ => lexSource src) of
   ErrC e => pure (ErrC (withSpanFileIfEmpty path e))
-  OkC toks => do
-    _ <- storeLexCache addr toks
-    pure (parseWith mode path toks)
+  OkC toks => pure (parseWith mode path toks)
 
 -- | 由 token 流得到 parse 结果。Lexer/Parser 都已在产生点给出 span；这里只给词法诊断
 -- 那个 file 为空的 span 注入真实路径（parser 的 span 从 PState 拿文件名）。

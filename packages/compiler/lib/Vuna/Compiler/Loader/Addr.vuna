@@ -9,7 +9,7 @@ module Vuna.Compiler.Loader.Addr where
 -- 载荷完整性仍由 `Store` framing 头里的内容地址兜底（读侧重算）。
 --
 -- 本模块只提供**通用构造器**与模块依赖图（header）。每个载荷族在自己的模块里定义
--- 输入分段（`addrOf ["lex", codec, …]`），避免与 `Store`/`Driver` 成环。
+-- 输入分段（`addrOf ["module-iface", codec, …]`），避免与 `Store`/`Driver` 成环。
 --
 -- 分段用 `Canonical.Bytes` 的 `[n:…]`/`s<len>:` 自定界编码再取 SHA-256：不用「拼字符串
 -- 再加分隔符」，因为那会 reintroduce `("a","bc")` 与 `("ab","c")` 同键的歧义。
@@ -20,11 +20,6 @@ import Vuna.Compiler.Base.Bytes
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Hash
-import Vuna.Compiler.Base.Store
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffProcess as EffProcess
 
 -- | 地址格式版本：分段文法或摘要算法变化时递增（地址随之换代）。
 export addrSchema : String
@@ -44,22 +39,15 @@ export projectIdAddrOf : String -> String
 projectIdAddrOf dir = addrOf ["project", dir]
 
 -- ---------------------------------------------------------------
--- 模块头（header）对象
+-- 模块头（header）
 --
--- 要算模块的输入摘要必须知道它 import 了谁，而 import 名单是 parse 的产物。header 对象
--- 把这份「便宜的事实」按**源摘要**寻址存起来：热路径只读每个模块一个 ~200 字节对象，
--- 不必 parse。它同时携带 fixity 表（依赖方按 import 解析运算符需要）。
+-- import 名单与 fixity 表是 parse 的产物。它们是纯函数（`headerOfSource`），不落盘：
+-- 算模块输入摘要时现 parse 一次，比维护一份独立载荷的 schema 更便宜，也不会与 parser 漂移。
 --
--- 隐式导入（Prelude）不落进 header：它依赖包上下文，落进去会让同一份源文件在两个包里
--- 得到两个 header。依赖方在算输入摘要时**无条件**并入 `Prelude` 的输入摘要（过近似，
+-- 隐式导入（Prelude）不进 header：它依赖包上下文，同一份源文件在两个包里应得到不同的
+-- 依赖边。依赖方在算输入摘要时**无条件**并入 `Prelude` 的输入摘要（过近似，
 -- 只多失效不漏失效）。
 -- ---------------------------------------------------------------
-export headerKind : String
-headerKind = "header"
-
-export headerCodec : String
-headerCodec = "module-header 2"
-
 export record FixRow(..) where
   frOp : String
   frLevel : Int
@@ -70,60 +58,6 @@ export record ModHeader(..) where
   mhName : String
   mhImports : List String
   mhFixities : List FixRow
-
-encFixRow : FixRow -> List String -> List String
-encFixRow f acc =
-  encStr f.frOp (encInt f.frLevel (encInt f.frAssoc (encMaybe encStr f.frTarget acc)))
-
-encHeader : ModHeader -> List String -> List String
-encHeader h acc = encStr h.mhName (encList encStr h.mhImports (encList encFixRow h.mhFixities acc))
-
--- | header 载荷的规范字节。
-export encModHeader : ModHeader -> String
-encModHeader h = encTop encHeader h
-
-decFixRow : Int -> Cur -> Maybe (Pair FixRow Cur)
-decFixRow fuel cur = case decStr fuel cur of
-  Nothing => Nothing
-  Just (Pair op rest1) => case decInt (fuel - 1) rest1 of
-    Nothing => Nothing
-    Just (Pair level rest2) => case decInt (fuel - 1) rest2 of
-      Nothing => Nothing
-      Just (Pair assoc rest3) => case decMaybe decStr (fuel - 1) rest3 of
-        Nothing => Nothing
-        Just (Pair target rest4) => Just (Pair (FixRow op level assoc target) rest4)
-
-decHeader : Int -> Cur -> Maybe (Pair ModHeader Cur)
-decHeader fuel cur = case decStr fuel cur of
-  Nothing => Nothing
-  Just (Pair name rest1) => case decList decStr (fuel - 1) rest1 of
-    Nothing => Nothing
-    Just (Pair imports rest2) => case decList decFixRow (fuel - 1) rest2 of
-      Nothing => Nothing
-      Just (Pair fixities rest3) => Just (Pair (ModHeader name imports fixities) rest3)
-
--- | 解码 header；尾部有多余字节即拒绝。
-export decModHeaderComplete : String -> Maybe ModHeader
-decModHeaderComplete s = case decHeader 65536 (curOf s) of
-  Nothing => Nothing
-  Just (Pair h rest) => if curAtEnd rest then Just h else Nothing
-
--- | header 的输入摘要：源摘要 + 包身份 + 模块名（同一份源在包内是哪个模块，也决定隐式导入）。
-export headerAddrOf : String -> String -> String -> String
-headerAddrOf pkgKey moduleName srcAddr = addrOf ["header", headerCodec, pkgKey, moduleName, srcAddr]
-
--- | 读 header（缺失/损坏 ⇒ `Nothing`，调用方现 parse 后写回）。
-export readHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Eff r (Maybe ModHeader)
-readHeaderEff addr = do
-  payload <- storeObjectReadEff headerKind headerCodec addr
-  pure (case payload of
-    Nothing => Nothing
-    Just bytes => decModHeaderComplete bytes
-  )
-
--- | 写 header（幂等）。
-export writeHeaderEff : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> ModHeader -> Eff r Int
-writeHeaderEff addr h = storeObjectWriteEff headerKind headerCodec addr (encModHeader h)
 
 -- ---------------------------------------------------------------
 -- 模块依赖图的拓扑序

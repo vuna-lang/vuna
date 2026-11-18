@@ -25,7 +25,7 @@
 | `fmt --check`（各包 + examples） | ~1.4 s |
 | `map`（热缓存命中） | ~0.13 s |
 | `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256） |
-| `lint`（workspace，冷 / 结果缓存热） | ~1.9 s / ~1.2 s（本机；`--no-cache` 强制冷路径；4000 条合成 finding ~5 s） |
+| `lint`（workspace） | ~1.9 s（本机；无结果缓存；4000 条合成 finding ~5 s） |
 | `doc` / `api` / `gen-errors` | 均 <1 s |
 | LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（cli 包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
@@ -452,7 +452,7 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 ### 6.1 前端（lex / 语法分析）的占比与增长率
 
 `VUNA_OBS=1` 的三个 span 把前端拆开（`observability.md` §3.3）：`vuna.parse.lex` 是一次
-全文词法（命中 lex 缓存时不出现）、`vuna.parse.syntax` 是 token 流 → AST、`vuna.parse.cst`
+全文词法（每次 check 都跑）、`vuna.parse.syntax` 是 token 流 → AST、`vuna.parse.cst`
 是无损 CST 组装（工具侧）。
 
 冷 store、`VUNA_ELAB_FULL=1` 单次采样：
@@ -460,13 +460,13 @@ defs / globals / sols 三张索引表。要继续压，先看 bodies（逐定义
 | 目标 | `vuna.parse.lex` | `vuna.parse.syntax` | 参考：elab |
 | --- | --- | --- | --- |
 | `check packages/base` | 57 次 / ~11 ms | 114 次 / ~4.6 ms | ~127 ms |
-| `check packages/compiler` | 165 次 / ~135 ms | 461 次 / ~158 ms | ~19.7 s（全量口径） |
+| `check packages/compiler` | 180 次 / ~92 ms | 496 次 / ~220 ms | 冷 check 总墙钟 ~21 s（两遍口径） |
 
 三条结论：
 
-* lex : syntax ≈ 2:1（与「lex 占 parse 的 86%」的旧注释一致），词法是前端里值得优化的那一半；
-* `syntax` 次数 = 模块数的 **2.8 倍**（461 / 164）：同一份源码在一次 check 里被反复
-  `parseSourceRecoveringTokens`（加载、fixity 表、header 扫描各走一遍）。减少**次数**比加快
+* lex : syntax ≈ 1:2.4，词法不再是前端里更贵的那一半；
+* `syntax` 次数 = 模块数的 **4.4 倍**（496 / 114）：同一份源码在一次 check 里被反复
+  `parseSourceRecoveringTokens`（加载、fixity 表、header 各走一遍）。减少**次数**比加快
   单次解析收益更直接（债 D88）；
 * 前端整体在冷 `check` 里只有 ~1.5%：lex/parse 不再是瓶颈，工具链（fmt / lint / map / LSP）
   才是它的主要消费者。

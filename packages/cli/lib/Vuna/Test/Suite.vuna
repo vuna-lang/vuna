@@ -42,8 +42,6 @@ export record SuiteOpts(..) where
   suiteResultsDir : Maybe String
   -- | `--quiet`：抑制逐条结果行。
   suiteQuiet : Bool
-  -- | `--no-cache`：不读也不写结果缓存。
-  suiteNoCache : Bool
   -- | `--last-failed`：只跑上次失败的 case。
   suiteLastFailed : Bool
   -- | `--bless`：把实际输出写回 golden 期望文件。

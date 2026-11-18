@@ -52,7 +52,7 @@ description: vuna 仓库里命令/阶段慢、几分钟不返回或打超时时�
    ```
 3. **`VUNA_STORE` 未设或为空串 ⇒ 回退 `~/.vuna/store`**（回退链
    `VUNA_STORE → $XDG_DATA_HOME/vuna/store → ~/.vuna/store → $TMPDIR/vuna-store`）；只读
-   HOME/沙箱下会直接 `Sys_error("...objects/lex/....tmp: Read-only file system")`。
+   HOME/沙箱下会直接 `Sys_error("...objects/module-iface/....tmp: Read-only file system")`。
    **不要 `unset`、不要传空值**，一律显式给空目录。
 4. **入库的增长率门禁现在自己隔离 store，但「探针测的是不是你要守的那条路径」仍要自己验**。
    `compiler-growth.sh` / `compiler-growth-pkg.sh` 每档用 `VUNA_STORE=$(mktemp -d)/store`

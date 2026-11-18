@@ -20,15 +20,15 @@
 它们只活在一次进程的编译链里，没有第二个消费者，也不值得为它们冻结 codec。
 
 **身份与决策记录**不受上面两条约束：它们承载确定性或产物身份（模块顺序、依赖身份摘要），
-删掉会改变产物或让身份漂移。当前是 `objects/order` 与 `objects/pkgiface`，永不被 GC 当作
+删掉会改变产物或让身份漂移。当前是 `objects/module-order` 与 `objects/pkg-iface`，永不被 GC 当作
 缓存淘汰。
 
 ## 三条正交的东西
 
 | 层 | 是什么 | 在哪 |
 | --- | --- | --- |
-| **payload** | 对象字节（接口载荷、lex tokens、split 产物、工具会话载荷） | `objects/<kind>/<摘要>`、`blobs/<splitIdentity>` |
-| **judgment** | 「这个输入算过了吗」= 输入摘要的地址是否存在 | `objects/check/<checkIn>`、`objects/splitptr/<splitIn>` |
+| **payload** | 对象字节（接口载荷、check 判定、split 产物、工具会话载荷） | `objects/<kind>/<摘要>`、`blobs/<splitIdentity>` |
+| **judgment** | 「这个输入算过了吗」= 输入摘要的地址是否存在 | `objects/check-outcome/<checkIn>`、`objects/splitptr/<splitIn>` |
 | **path / view** | 给人看的渲染，不是身份 | `views/bin/<splitIn>/`、`views/testbin/<testBin>/`、`<pkg>/.output` 符号链接 |
 
 路径可以变（视图、`.output`、`--out DIR`），身份不变（摘要）。
@@ -37,17 +37,13 @@
 
 ```
 $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/store → $TMPDIR/vuna-store
-  objects/iface/<模块接口地址>      # 模块接口（codec module-iface 4；带实例/方法 span）。
+  objects/module-iface/<模块接口地址>  # 模块接口（codec module-iface 4；带实例/方法 span）。
                                     # 入口包（`[export]` 为空）也写：模块面 = 入口闭包，
                                     # 供 LSP/REPL 把本包模块当干净模块预置
-  objects/header/<头地址>           # 模块 header（imports + fixities），冷启动快路径
-  objects/lex/<源摘要>              # lex tokens
-  objects/order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
-  objects/check/<checkIn>           # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
-  objects/tool/<工具会话地址>       # LSP / REPL / vuna map 的会话载荷
-  objects/doc/<doc 输入摘要>         # vuna doc 的渲染产物（codec doc-html 1）
-  objects/test/<测试判定 key>       # test verdict（通过/失败计数）
-  objects/pkgiface/<key>            # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
+  objects/module-order/<包源闭包+tag 摘要>  # 该包的模块顺序（split 串接要精化顺序，不是拓扑序）
+  objects/check-outcome/<checkIn>   # 包级结果：Pass/Fail + 诊断列表（codec check-result 1）
+  objects/tool-context/<工具会话地址>  # LSP / REPL / vuna map 的会话载荷
+  objects/pkg-iface/<key>           # 依赖接口身份摘要（key = 包名 + lib 源闭包 + 编译器 tag）
   objects/splitptr/<快 splitIn>     # 产物快指针：源输入 → 语义产物身份（注释复用 codegen）
   objects/pkg/<64hex>               # 取包对象族（`pkg-source 1`，见 package-store.md）
   blobs/<splitIdentity>             # 构建产物（split 文件集，规范拓扑序）
@@ -65,8 +61,8 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 类 | 域 | 生命周期 |
 | --- | --- | --- |
-| 缓存 | `iface` `check` `tool` `doc` `test` `lex` `header` `splitptr` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
-| 身份与决策记录 | `order` / `pkgiface` | 承载确定性或产物身份；不参与缓存淘汰 |
+| 缓存 | `module-iface` `check-outcome` `tool-context` `splitptr` + `blobs` `units` `views` | 派生、可删、可重建；`clean --store` / `gc` 管理 |
+| 身份与决策记录 | `module-order` / `pkg-iface` | 承载确定性或产物身份；GC 不淘汰，仅显式 `clean --store` 清理 |
 | 源对象 | `pkg` / `pkgs` | 取来的源；`clean --packages` 管理，删了要重新 fetch |
 
 `.tmp/` 是视图锁与暂存，`tmp/` 是取包中转，都可删。
@@ -77,14 +73,12 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 | 场景 | 判据 | 未命中的代价 |
 | --- | --- | --- |
-| 包级 `check` | `objects/check/<checkIn>` 存在且可解码 | 精化一次；结果（含**失败**与诊断列表）写回 + 登记 roots |
+| 包级 `check` | `objects/check-outcome/<checkIn>` 存在且可解码 | 精化一次；结果（含**失败**与诊断列表）写回 + 登记 roots |
 | 包级 `build`（快路径） | `objects/splitptr/<splitIn>` → 语义 blob | 精化一次再按语义 key 判 |
 | 包级 `build`（语义产物） | `blobs/<splitIdentity>` 存在 | codegen + 规范排序；成功后写 blob + 快指针 |
-| 依赖模块接口 | 按地址读 `objects/iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
-| 依赖身份 | `objects/pkgiface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
-| 工具会话（LSP/REPL/`map`） | `objects/tool/<addr>` 存在 | 重建会话载荷 |
-| `vuna doc` | `objects/doc/<key>` 存在 | 重新解析 + 渲染 |
-| 模块 header | `objects/header/<addr>` 存在 | 解析源码取 header |
+| 依赖模块接口 | 按地址读 `objects/module-iface/<addr>` | 缺任一个依赖模块 ⇒ 回退全量（宁可慢，不用错） |
+| 依赖身份 | `objects/pkg-iface/<key>` 存在 | 回退 `manifest:<toml 摘要>` 身份 |
+| 工具会话（LSP/REPL/`map`） | `objects/tool-context/<addr>` 存在 | 重建会话载荷 |
 | 单元级 codegen（`units`） | 文件名存在 + framing 通过 + 载荷依赖 ⊆ 本次单元集 | 重跑该单元 codegen |
 
 `checkIn` / `splitIn` 的输入（缺一不可）：
@@ -139,7 +133,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | --- | --- | --- |
 | seed rotation 两遍 | 各自全新的临时根 | 共享缓存会让 runtime 位置表路径归一不同、fixed point 假失败 |
 | growth / bench 探针 | 每档空根 | 预热根会把读数磨平 |
-| suite（`vuna-run-tests`） | `~/.vuna/test-store` | `52_cache_framing` 会故意截断 blob/lex 对象；共用会打回所有开发缓存 |
+| suite（`vuna-run-tests`） | `~/.vuna/test-store` | `52_cache_framing` 会故意截断 blob/接口对象；共用会打回所有开发缓存 |
 | nix 沙箱（checks / packages） | `$TMPDIR` | 宿主 store 不可见，`HOME=/homeless-shelter` 天然回落 |
 
 ## 哈希命名（定稿）
@@ -180,14 +174,13 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
   摘要）+ 一个 `.project`（项目绝对目录，只写一次）。项目**只追加**；没有读-改-写，并发
   check/build 不会丢 root。GC 扫所有项目目录里 digest 文件名的并集——A 不需要知道 B
   的存在。读取侧也接受单文件布局（`roots/<项目>` 是文件时先读 digest 列表）。
-- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna deps fetch` 取到包后、
-  test verdict 提交后。
+- 登记的时机：check 判定 marker 提交后、build 的 split blob 提交后、`vuna deps fetch` 取到包后。
 - `vuna store gc [--dry-run] [--older-than SEC] [--max-size BYTES]`：
   - **先裁剪项目根**：`.project` 记录的目录已不存在（临时包、删掉的 worktree）或 legacy
     布局没有 `.project` ⇒ 整个 `roots/<项目摘要>/` 丢掉。它只缩小保留集，不影响正确性。
   - 候选 = **缓存域**里名字不在保留集合、且 mtime 早于宽限窗口（默认 3600s，覆盖「对象已写、
     root 还没写」的崩溃窗口）；`objects/pkg/` 永不进入候选（源对象族归 `clean --packages`），
-    `objects/order` / `objects/pkgiface`（身份与决策记录）也永不进入候选；
+    `objects/module-order` / `objects/pkg-iface`（身份与决策记录）也永不进入候选；
   - `views/bin/` 与 `views/testbin/` 只能**整目录**淘汰（`.complete` 还在时删单文件会让半截视图看起来完整），
     目录名参与 roots 保护；
   - `--max-size` 有值时按 mtime 从旧到新淘汰（文件与 view 目录都计入总量），直到降到上限以下。
@@ -217,11 +210,11 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 | `check-cache=skip volatile` | 结果含 Volatile/绝对路径诊断 ⇒ 不落盘，下次重算 |
 | `split-pointer-hit` | build 命中快指针（源码未改动，零精化） |
 | `split-identity-hit` | 精化后命中语义产物 blob（注释类改动复用 codegen） |
-| `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `objects/pkgiface` 还是 manifest 回退 |
+| `dep-identity=<pkg> verdict=iface|manifest` | 依赖身份取自 `objects/pkg-iface` 还是 manifest 回退 |
 | `iface-write=N/M` | 本次真的写盘的接口对象数（内容未变的写入不计） |
 | `iface-skip partial` | 这次 check 没覆盖 `[export].modules` 的全部模块（判据只看导出面，见 `writeIfaceShadow.exportedOwnOf`；日志带 `closure=`/`required=`/`covered=`/`missing=`），不写接口，等库面那遍写全 |
 | `check-lib-skip covered=N` | 入口闭包已写全 N 个导出模块（order 覆盖）⇒ 不再补跑第二遍 lib check |
-| `iface-reject=module-order` | 依赖包缺 `objects/order`，无法确定模块顺序 ⇒ 回退全量 |
+| `iface-reject=module-order` | 依赖包缺 `objects/module-order`，无法确定模块顺序 ⇒ 回退全量 |
 | `cache-own-clean=N` | 本包可复用的干净模块数 |
 | `tool-closure modules=N` | 工具会话的 import 闭包规模 |
 | `store-gc candidates=… delete=… total=…` | GC 决策 |
@@ -237,7 +230,7 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 
 ## 诊断载荷与重放
 
-- **载荷就是结果**：`objects/check/<checkIn>` 存 `CheckPassed ds` / `CheckFailed ds` + 诊断列表
+- **载荷就是结果**：`objects/check-outcome/<checkIn>` 存 `CheckPassed ds` / `CheckFailed ds` + 诊断列表
   （`Base.Diag.Codec` 规范编码）。命中时直接重放：Pass 返回诊断（通常是 warning），Fail 用首条
   诊断 + children 重建错误通道。失败检查因此也是 O(读对象)，不是每次全量精化。
 - **载荷是输入的纯函数**：落盘前把 label 路径规范化为**包相对**路径；含绝对路径或
@@ -266,14 +259,14 @@ $VUNA_STORE/                       # 唯一根：VUNA_STORE → XDG → ~/.vuna/
 - **warning 可能不完整**：诊断列表会随 Pass 一起落盘，但「干净模块复用」的那次运行只拿到
   被精化模块的 warning；`-W` / `--deny-warnings` 仍直接绕过判定（不判命中也不提交），
   以保证热缓存下告警完整。普通 `vuna check` 的命中/失败重放不受影响。
-- **依赖未重跑时回退身份含源闭包**：`objects/pkgiface` 缺失（依赖还没 check，或依赖源码
+- **依赖未重跑时回退身份含源闭包**：`objects/pkg-iface` 缺失（依赖还没 check，或依赖源码
   变了还没重跑）时，回退值是 `manifest:<toml 摘要>:<根源闭包摘要>`。源闭包在回退里，
   所以依赖方先跑也不会复用旧判定；代价是依赖**未重跑**时注释变更也会多一次 miss。
   依赖重跑后身份回到 `iface:<pkgIfaceHash>`，注释不敏感的增量性质恢复。
 - **入口-only 包不写接口**：单文件夹具没有可复用的库模块面，写接口会让之后的阶段命中缓存而
   跳过精化，`UN_UnusedImport` 这类只在精化期产生的诊断会静默消失。
 - **模块顺序是显式对象**：split 串接要精化顺序，而 import 图有环（`base`/`compiler` 都有），
-  拓扑排序给不出唯一顺序 ⇒ 写侧把顺序存成 `objects/order`，读侧照它排列。顺序对象的 key =
+  拓扑排序给不出唯一顺序 ⇒ 写侧把顺序存成 `objects/module-order`，读侧照它排列。顺序对象的 key =
   包名 + 该包源闭包 + 编译器 tag；读侧还要求顺序里的模块名仍存在于当前闭包，不相容即当
   缺失处理（回退全量，不产错序）。
 - `VUNA_ELAB_FULL=1` 强制全量精化（排障 / A-B 对拍）；`VUNA_IFACE_AUDIT=1` 在同一进程跑

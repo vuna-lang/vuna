@@ -15,8 +15,7 @@
 -- `vuna-seed` 真实编译，steps 与产物执行在跑真实产物，进程内无法替代。子进程输出捕获不新增编译器原语：把一段固定的 shell helper 写入临时
 -- 目录，由 helper 做 `timeout ... >out 2>err`，Vuna 侧只读文件与退出码。
 --
--- 结果缓存：golden / error 的成功结果写成对象库里的 test verdict（输入是内容摘要），
--- steps 不缓存；`--no-cache` / `--bless*` 时整体关闭。
+-- 结果缓存：没有。golden / error / steps 每次都真正执行，结果不落对象库。
 module Vuna.Test.Run where
 
 import Vuna.Compiler.Base.Common
@@ -65,9 +64,7 @@ record Env where
   envHelper : String
   -- | 结果缓存与构建桶的根（`--cache-dir`，默认 `<root>/.local/test-cache`）。
   envCacheDir : String
-  -- | 是否允许读写结果缓存（`--no-cache` / `--bless` / `--bless-diag` 时关）。
-  envCacheEnabled : Bool
-  -- | base 源码树的内容哈希（结果缓存 key 与构建桶名的一部分）。
+  -- | base 源码树的内容哈希（构建桶名的一部分）。
   envBaseHash : Int
   -- | 是否把失败 golden 的期望输出回写为实际输出。
   envBless : Bool
@@ -419,7 +416,7 @@ finishCase id start assertions =
 -- golden / error case
 -- ---------------------------------------------------------------
 -- | 预热依赖接口：`vuna check <base>` 把 base 的模块接口写进对象库
--- （`$VUNA_STORE/objects/iface`），worker 共用同一根，因此后续 check/interp 只精化自己的
+-- （`$VUNA_STORE/objects/module-iface`），worker 共用同一根，因此后续 check/interp 只精化自己的
 -- 入口。只在父进程跑一次；失败只降级（会话回退 CLI），不影响用例结果。返回退出码。
 warmIfaces : Member nFs FsOp r, Member nProcess ProcessOp r => Env -> Eff r Int
 warmIfaces env = do
@@ -878,9 +875,8 @@ parseDigits (c :: rest) acc count =
 -- 单 case 分派
 -- ---------------------------------------------------------------
 -- ---------------------------------------------------------------
--- 结果缓存（本地增量；CI 用 --no-cache）
+-- 内容摘要（参与构建桶命名与失败定位）
 -- ---------------------------------------------------------------
--- 只缓存 golden / error case 的成功结果。section / 脚本一律不缓存。
 -- | 内部：读文件内容；不存在时给空串（参与哈希）。
 hashFileText : Member nFs FsOp r => String -> Eff r String
 hashFileText path = do
@@ -920,57 +916,6 @@ fileTreeHash source expected = do
   sourceText <- hashFileText source
   expectedText <- hashFileText expected
   pure (hashTextStrong "${sourceText}|${expectedText}|${strOfInt stamp}|${strOfInt size}")
-
--- ---------------------------------------------------------------
--- test verdict 对象（objects/test/<testInput>）
---
--- 通过 = 对象存在；载荷 = checks 数。输入只含**内容**摘要，不含 mtime / size；steps 不
--- 缓存（输入不可声明）。warning 不持久化，负例仍靠 `-W` / 私有 store 绕过命中。
--- ---------------------------------------------------------------
--- | 内部：test verdict 输入串的 schema 前缀（改格式时与 codec 一并改）。
-testVerdictSchema : String
-testVerdictSchema = "vuna-test-verdict 2"
-
--- | 内部：对象库 codec 标签。
-testVerdictCodec : String
-testVerdictCodec = "test-verdict 2"
-
--- | 内部：哈希取绝对值（对象 key 用非负数）。
-absHash : Int -> Int
-absHash n = if n < 0 then 0 - n else n
-
--- | 内部：对象库里的项目根 id（仓库根哈希的绝对值）。
-testProjectId : Env -> String
-testProjectId env = strOfInt (absHash (hashTextStrong env.envRoot))
-
--- | 结果缓存 key：不缓存时给空串；只有 golden / error 有 key。
-verdictKey : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Case -> Eff r String
-verdictKey env c = if not env.envCacheEnabled then pure ""
-else case c.caseKind of
-  CGolden source expected _ _ _ _ _ => verdictKeyOf env c source expected
-  CError source diagPath _ _ _ => verdictKeyOf env c source diagPath
-  _ => pure ""
-
--- | 内部：拼出 verdict 输入串（schema、case id、kind、source / expected 内容哈希、编译器
--- 指纹、base 哈希）再取哈希。
-verdictKeyOf : Member nFs FsOp r, Member nEnv EnvOp r => Env -> Case -> String -> String -> Eff r String
-verdictKeyOf env c source expected = do
-  srcText <- hashFileText source
-  targets <- pure (selectedTargets env c)
-  expPaths <- mapEff (\b => expectedForBackend b expected) targets
-  expTexts <- mapEff hashFileText expPaths
-  fp <- toolCompilerFingerprint
-  let
-    kindTag = case c.caseKind of
-      CGolden _ _ _ _ _ _ _ => "golden"
-      CError _ _ _ _ _ => "error"
-      _ => "other"
-    srcHash = strOfInt (absHash (hashTextStrong srcText))
-    expHash = strOfInt (absHash (hashTextStrong (join "|" expTexts)))
-    input =
-      join "|"
-        [testVerdictSchema, c.caseId, kindTag, srcHash, expHash, c.caseMatrix, join "," targets, env.envWasmHost, strOfInt fp, strOfInt env.envBaseHash]
-  in pure (strOfInt (absHash (hashTextStrong input)))
 
 -- ---------------------------------------------------------------
 -- --last-failed
@@ -1020,43 +965,9 @@ caseIdIn ids c = memName c.caseId ids
 resIdOf : CaseResult -> String
 resIdOf r = r.resId
 
--- | 内部：解析缓存载荷里的 checks 数（缺失或非数字按 0）。
-cachedChecks : String -> Int
-cachedChecks text = fromMaybe 0 (parseLeadingInt (trim text))
-
--- | 内部：按 key 读 test verdict；命中返回状态为 `cached` 的结果（checks 数取自载荷，
--- 断言数视为全通过），未命中给 `Nothing`。
-readCached : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> Eff r (Maybe CaseResult)
-readCached env c = do
-  key <- verdictKey env c
-  if key == "" then pure Nothing
-  else do
-    raw <- storeObjectReadEff "test" testVerdictCodec key
-    case raw of
-      Nothing => pure Nothing
-      Just text => do
-        n <- pure (cachedChecks text)
-        pure (Just (CaseResult c.caseId "cached" n 0 n 0 []))
-
--- | 内部：只缓存 `pass` 结果：把 checks 数写进对象，并把 key 挂到项目根；返回写入字节数。
-writeCached : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Env -> Case -> CaseResult -> Eff r Int
-writeCached env c r = do
-  key <- verdictKey env c
-  if key == "" || r.resStatus /= "pass" then pure 0
-  else do
-    _ <- storeObjectWriteEff "test" testVerdictCodec key "${strOfInt r.resChecks}\n"
-    storeRootAppendEff (testProjectId env) env.envRoot [key]
-
--- | 单个 case 的执行入口：先查结果缓存，未命中才真正执行，成功时把结果写回缓存。
+-- | 单个 case 的执行入口。每次运行都真正执行；结果不落对象库。
 runCase : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => Env -> Case -> Eff r CaseResult
-runCase env c = do
-  cached <- readCached env c
-  case cached of
-    Just r => pure r
-    Nothing => do
-      r <- runCaseGo env c
-      _ <- writeCached env c r
-      pure r
+runCase env c = runCaseGo env c
 
 -- ---------------------------------------------------------------
 -- check（`kind = "check-ok" / "check-error"` 的纯 check 用例）
@@ -2097,7 +2008,7 @@ else
       Nothing => []
     flagArgs =
       append (if opts.suiteFailFast then ["--fail-fast"] else [])
-        (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteNoCache then ["--no-cache"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs))))))
+        (append (if opts.suiteJSON then ["--quiet"] else []) (append (if opts.suiteLastFailed then ["--last-failed"] else []) (append (if opts.suiteBless then ["--bless"] else []) (append (if opts.suiteBlessDiag then ["--bless-diag"] else []) (append cacheArgs changedArgs)))))
     args =
       append ["dev", "suite", opts.suitePath, "--worker", workerArg, "--results-dir", resultsDir]
         (append filters flagArgs)
@@ -2483,8 +2394,8 @@ auditOrphans suite =
     texts <- claimTextPairs cases
     let
       env =
-        Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
+        Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" 0 False False False
+          "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
       fixtures = filter (\path => not (auditPathIgnored path)) allFixtures
     in pure (filter (\path => not (auditClaimed env cases texts (stripRoot env path))) fixtures)
 
@@ -2546,8 +2457,8 @@ familyOrphans suite =
     fixtures <- concatMapEff (familyFixtures root) suite.suiteFamilies
     let
       env =
-        Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" False 0 False False
-          False "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
+        Env root "${root}/test" "/tmp" "" "" "${root}/base" "ocamlopt" "" "" 0 False False False
+          "/tmp/vuna-store" "/tmp/vuna-build" ref [] "wasmtime"
     in pure (filter (familyOrphan env cases) fixtures)
 
 -- | 内部：逗号拼接。
@@ -2661,8 +2572,7 @@ runSuiteOnce opts suite =
     orphans <- familyOrphans suite
     let
       env =
-        Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir
-          (not opts.suiteNoCache && not opts.suiteBless && not opts.suiteBlessDiag) baseHash
+        Env root "${root}/test" tmp vuna vunaSeed baseDir ocamlopt helper cacheDir baseHash
           opts.suiteBless opts.suiteBlessDiag workerMode store buildDir ref opts.suiteBackends
           wasmHost
       -- 两层默认护栏（局部 --only/--filter 时被过滤掉，符合预期）：

@@ -10,5 +10,5 @@ exit: 0
 # 44b-2) 对象库冷/热：删掉整个 store 后重跑根包，仍然通过（对象全部按 miss 重建）。
 run: sh -c 'rm -rf "$TMPDIR/44b-store2" "$TMPDIR/44b-cache2"; export VUNA_STORE="$TMPDIR/44b-store2" TMPDIR="$TMPDIR/44b-cache2"; "$VUNA" check "$VUNA_BASE" && "$VUNA" check corpus/packages/m34_summary/dep && "$VUNA" check corpus/packages/m34_summary/root'
 exit: 0
-run: sh -c 'n=$(ls "$TMPDIR/44b-store2/objects/iface" 2>/dev/null | wc -l); [ "$n" -gt 0 ]'
+run: sh -c 'n=$(ls "$TMPDIR/44b-store2/objects/module-iface" 2>/dev/null | wc -l); [ "$n" -gt 0 ]'
 exit: 0

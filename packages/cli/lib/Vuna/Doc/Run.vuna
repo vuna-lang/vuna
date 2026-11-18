@@ -7,12 +7,8 @@ module Vuna.Doc.Run where
 
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
-import Vuna.Compiler.Loader.Addr
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Loader.Fingerprint
-import Vuna.Compiler.Base.Hash
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Vuna.Compiler.Base.Store
 import Vuna.Doc.Html
 import Vuna.Doc.Model
 import Vuna.Files
@@ -76,7 +72,7 @@ docRun dir out check pkgFilter = do
             ErrC e => docError (diagText e)
             OkC files => docWithFiles out check scopes files
 
--- | 内部：没有源文件时报错；`--check` 走缺失检查，否则查缓存、渲染并写出。
+-- | 内部：没有源文件时报错；`--check` 走缺失检查，否则渲染并写出。
 docWithFiles : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> Bool -> List DocScope -> List (Pair DocScope (List String)) -> Eff r Int
 docWithFiles out check scopes files = if length (filesOf files) == 0 then docError "no vuna sources found under the given directory; pass a package or source directory"
 else if check then do
@@ -85,53 +81,16 @@ else if check then do
     ErrC e => docError (diagText e)
     OkC book => runCheck book
 else do
-  key <- docCacheKey scopes files
-  cached <- storeObjectReadEff "doc" "doc-html 1" key
-  case cached of
-    Just content => do
-      _ <- writeDocFile out content
-      _ <- consolePrint "doc-cache=hit\n"
-      pure 0
-    Nothing => do
-      bookR <- buildBook scopes files
-      case bookR of
-        ErrC e => docError (diagText e)
-        OkC book =>
-          let
-            content = renderPage book
-          in do
-            _ <- storeObjectWriteEff "doc" "doc-html 1" key content
-            _ <- writeDocFile out content
-            _ <- consolePrint "doc-cache=miss\n"
-            _ <- consolePrint "wrote ${out} (${length (bookModules book)} modules)\n"
-            pure 0
-
--- | 内部：缓存键 = 编译器 tag + 各 scope 身份 + 每个源文件的内容地址。
---
--- 只有写文件的 `vuna doc` 走这个缓存；`--check` 需要逐项 docstring，不缓存判定。
-docCacheKey : Member nFs FsOp r, Member nEnv EnvOp r => List DocScope -> List (Pair DocScope (List String)) -> Eff r String
-docCacheKey scopes files = do
-  tag <- compilerTagEff
-  fileKeys <- docFileKeys (filesOf files) []
-  let
-    keys = append (map scopeKey scopes) fileKeys
-  in pure (addrOf (append ["doc", tag] keys))
-
--- | 内部：scope 身份文本（名字 / 目录 / 导出列表）。
-scopeKey : DocScope -> String
-scopeKey s = "${scopeName s}|${scopeDir s}|${exportsText (scopeExports s)}"
-
--- | 内部：导出列表的规范文本；`Nothing` 为空串。
-exportsText : Maybe (List String) -> String
-exportsText Nothing = ""
-exportsText (Just xs) = join "," xs
-
--- | 内部：每个源文件的 `路径:内容地址` 键。
-docFileKeys : Member nFs FsOp r => List String -> List String -> Eff r (List String)
-docFileKeys [] acc = pure (reverse acc)
-docFileKeys (path :: rest) acc = do
-  raw <- fsReadFile path
-  docFileKeys rest ("${path}:${contentAddress raw}" :: acc)
+  bookR <- buildBook scopes files
+  case bookR of
+    ErrC e => docError (diagText e)
+    OkC book =>
+      let
+        content = renderPage book
+      in do
+        _ <- writeDocFile out content
+        _ <- consolePrint "wrote ${out} (${length (bookModules book)} modules)\n"
+        pure 0
 
 -- | 内部：建父目录后写文件。
 writeDocFile : Member nFs FsOp r, Member nProcess ProcessOp r => String -> String -> Eff r Int

@@ -87,7 +87,7 @@
     `*.iface`，也没有 `--iface`。见 [cache.md](cache.md) / [package-store.md](package-store.md)；
   - `vuna map` / `vuna map find <Module.name>` / `vuna map impact
     <Module.name>` / `vuna api <Module.name>`：`Vuna.Index` 的源码符号索引，用于定位定义、
-    引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool/`，按输入摘要判定
+    引用者与建议测试标签；索引会话对象在 `$VUNA_STORE/objects/tool-context/`，按输入摘要判定
     新鲜度，refs 带行 / 列位置，没有刷新命令；
   - `vuna version` / `vuna --version`：打印 `vuna <版本>`；版本唯一真源是
     `packages/compiler/lib/Vuna/Compiler/Base/Version.vuna`。

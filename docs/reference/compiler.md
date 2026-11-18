@@ -12,7 +12,7 @@
 代码按**目录即层**组织：`Base → Frontend → Loader → Core → Elab → Ir`，`Codegen` /
 `Lowering` / `Native` / `Wasm` 各自独立成层，`Driver` 在最上；依赖方向由
 `packages/compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
-[packages.md](packages.md)「层约束」）。全包 **104 个模块，全部在 `[export]` 里**——
+[packages.md](packages.md)「层约束」）。全包 **114 个模块，全部在 `[export]` 里**——
 没有内部模块，纯门面模块（原 `Core.vuna` / `Elab.vuna` / `Loader.vuna` / `Codegen.vuna`；
 `Ir` 的校验入口拆到 `Ir.Validate`）已删除，
 消费方直接 import 具体子模块；`Elab` 的选择性重导出也一并消失，子模块即公开面
@@ -52,7 +52,6 @@
 | `Frontend.Packages.Pkg` | 包 / workspace 解析层：manifest 图、依赖 DAG、**每个文件的包上下文**（最近 manifest + 依赖闭包）、base 定位（不碰 Loader / CLI） | `loadPackage`、`workspacePackages`、`contextForFile`、`contextForDir`、`locateBase` |
 | `Frontend.Packages.Source` | 包内容收集与摘要：`vuna.toml` + `lib/`/`app/`/`test/` 源文件 → `PackageSource` → 内容摘要 / 语义身份 | `packageSourceEff`、`contentHashOf`、`identityHashOf`、`skipSourceDir` |
 | `Frontend.Canonical.Ast` | Frontend `Expr` / `Pat` / `Decl` / `SourceFile` 的规范编码 / 解析（**全部 span 丢弃**：它只服务 iface 哈希输入、codegen 单元 key 与 roundtrip 自检；**不要**拿它当缓存载荷，缓存命中会丢诊断位置） | `encExpr`、`encDecl`、`encDecls`、`encSourceFile`、`decDeclsComplete`、`decSourceFileComplete` |
-| `Frontend.Canonical.Lex` | 词法 token 流（`List PTok`）的规范编码 / 解析：**位置逐字节保真**，只服务 lex 缓存载荷（`Base.Store` 承载），不进任何哈希输入 | `encPTokList`、`decPTokListComplete`、`encTok`、`decTok` |
 | `Frontend.Canonical.Pkg` | 包内容编码（codec `pkg-source 1`）：文件集合 → 规范字节，服务内容摘要与语义身份 | `encPackageContent`、`decPackageContent`、`identityOfSource`、`encPackageIdentity` |
 
 ### Loader（模块图、名字解析、地址、层约束）
@@ -61,7 +60,7 @@
 | --- | --- | --- |
 | `Loader.Modules` | 加载器的数据与模块图（叶子）：模块根、import 边、导出表结构 | `collectModuleFiles`、`moduleAllImportsOf` |
 | `Loader.Resolve` | 名字解析：把 parse 后声明/表达式解析成带模块前缀的名字；内建 arity / prelude 放行消费 `Base.Intrinsics` | `resolveProgram` |
-| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；lex 缓存 `parseFileWithPath`（key = `contentAddress(lexCacheSchema + 编译器 tag + 路径 + 源内容)`，载荷 = `Frontend.Canonical.Lex.encPTokList` + `Base.Store` framing；命中后只跑语法分析，**token 流带位置**所以诊断 / codegen 位置表与冷路径一致；**改 `Frontend.Lexer` 的 `Tok` / `PTok` 布局要 bump `lexCacheSchema` 与 `lexCacheCodec`**，编译器 tag 保证新旧二进制不互读）；加载完成后调 `Loader.Layers` 跑一次层约束检查 | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
+| `Loader.Flatten` | 模块导出表计算、加载流程与 flatten（`Prelude` 自动导入——含 ad-hoc 单文件、`[export]` 可见性）；内存源码的**库模块**入口（LSP）；`parseFileWithPath` 每次从源文本 lex + 语法分析（不做 token/AST 缓存）；加载完成后调 `Loader.Layers` 跑一次层约束检查 | `loadProject`、`loadProjectModules`、`loadProjectSource`、`loadModuleSource`、`visibleFixitiesOf` / `dedupeFixities`、`fixitiesForSource` / `fixitiesForSourceIn`（fmt/LSP/lint 的程序级 fixity） |
 | `Loader.Expand` | 内置宏展开 pass：parser 把 `name!` 编码成保留名 `@vuna@macro@name`，这里在 fixity 重排后、名字解析前做 AST→AST 展开（当前唯一内置宏 `dbg!`，展开到隐藏 runtime 原语；插入节点 span = 调用点） | `expandDecls` |
 | `Loader.Fixity` | 按每模块可见表重排中缀 / 换别名 / 展开 section（`->` 恒可见；未知符号运算符报错） | `reorderProgram` |
 | `Loader.Addr` | **输入摘要（地址）唯一构造器**：`addrOf`（域分隔 + 规范编码 + SHA-256）、header 地址、项目身份 `projectIdAddrOf`；所有对象路径都由这里的纯函数决定 | `addrOf`、`headerAddrOf`、`projectIdAddrOf` |
@@ -136,15 +135,15 @@
 | `Driver.Split` | 输出文件模型与构建脚本生成：`SplitFile`、依赖序、按内容哈希增量的 `build.sh` | `SplitFile`、`buildScript`、`writeSplitFiles`、`writeSplitFilesIfChanged` |
 | `Driver.Owner` | **声明归属表**（从 `Driver.SplitGen` 抽出）：声明名 / 实例名 / 派生实例名 / trait 投影名 / `Dict_` → 模块；codegen 与接口切分共用 | `splitMetaOf`、`splitOwnerEntriesOfModules`、`splitDefOwnerOf` |
 | `Driver.Cache` | 接口摘要载体（TTC 思路）：`CachedProgram` = 闭合 datas / defs（含 body）/ globals / insts / classes（**不含 sols/next**）；写侧按出现点深度 zonk（class 字段类型的深度 = 类参数个数，多参数 trait 不是固定 1），读侧 `cachedProgramValid` 校验（无 meta/负索引/自由变量；body 擦除位置的未解 meta 允许并按包段重编号） | `cachedOfProgram`、`cachedProgramValid`、`shiftCachedProgram`、`summaryMetaSegment` |
-| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miImplHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；包级视图 `PackageIface`（`piEnv` = 包环境指纹）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf`、`pkgImplHashOf` |
+| `Driver.Iface` | **模块级接口**（TTC 思路）：`ModuleIface`（闭合产物 + 已解析 decls + exports/fixities/imports + `miIfaceHash`/`miImplHash`/`miDepHashes`/`miSource`/`miDefLocs`），按地址写 `objects/module-iface/<addr>`（`Base.Store` framing、codec 见 `ifaceSchema`）；包级视图 `PackageIface`（`piEnv` = 包环境指纹）；按归属把 `DtProgram` 切成每模块摘要 | `ifaceOfPackage`、`readIfaceAtEff`、`writeIfaceShadow`、`pkgIfaceHashOf`、`pkgImplHashOf` |
 | `Driver.Dt` | DT 路径 facade（供 `Compile` / `CompilerCli` / `Interp` / LSP 使用）：单一 `PackageContext` 加载形状；内存源码检查/洞目标、`dtMainKind`、`dtEvalExprInfo`；接口摘要路径的起始 Ec 组装（`depStartOf`）与接口/预置模块入口 | `dtCheck`、`dtCheckWithProgramParts`、`dtCheckPackageWithIfacesParts`、`dtSplitProjectParts`、`dtSplitProjectWithIfaces`、`CheckedPackage` |
-| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 判定 = `objects/check/<checkIn>` 存在性，build 判定 = `objects/splitptr/<splitIn>` → `blobs/<splitIdentity>`（没有查询图/会话索引）；依赖接口按地址读（缺任一个 ⇒ 回退全量）、依赖身份取 `objects/pkgiface`、接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；`checkIn`/`splitIn`/`splitIdentity` 的输入见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`checkViaGraph`、`splitIdentityOf`、`buildMetaText`、`metaUpToDate` |
+| `Driver.Compile` | 编译入口：`PackageContext` 检查/编译、目录式 codegen、构建脚本执行；包级 check 判定 = `objects/check-outcome/<checkIn>` 存在性，build 判定 = `objects/splitptr/<splitIn>` → `blobs/<splitIdentity>`（没有查询图/会话索引）；依赖接口按地址读（缺任一个 ⇒ 回退全量）、依赖身份取 `objects/pkg-iface`、接口影子写、`VUNA_ELAB_FULL=1` 强制全量、`VUNA_IFACE_AUDIT=1` 双路径对拍；`checkIn`/`splitIn`/`splitIdentity` 的输入见 [cache.md](cache.md) | `checkPackage`、`compileToDir`、`depIfacesOf`、`checkViaGraph`、`splitIdentityOf`、`buildMetaText`、`metaUpToDate` |
 | `Driver.PerfCache` | codegen 单元缓存（按单元 key 复用生成的 `SplitFile`） | `unitCacheRead`、`unitCacheWrite`、`unitCacheCodec` |
-| `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），落在 `objects/tool/<addr>`；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContext`、`toolContextSchema`、`toolContextCodec` |
+| `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），落在 `objects/tool-context/<addr>`；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContext`、`toolContextSchema`、`toolContextCodec` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
 | `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `.s` 文件集 / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
 
-`packages/compiler/vuna.toml` 的 `[export]` 列出全部 104 个模块（模块即公开面，没有内部模块）；
+`packages/compiler/vuna.toml` 的 `[export]` 列出全部 114 个模块（模块即公开面，没有内部模块）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
 ## 产品 CLI 工具链模块（`packages/cli/lib/`，不进 seed）
@@ -160,7 +159,7 @@
 | `Vuna.Doc`（+ `Doc.Types`/`Comments`/`Model`/`Prose`/`Html`/`Run`） | docstring 提取 + 单文件交互 HTML（`vuna doc`）；见 [api-docs.md](api-docs.md) |
 | `Vuna.Sig` | 语法级类型打印单一真源（api / doc / search 共用） |
 | `Vuna.Search`（+ `Search.Types`/`Query`/`Run`） | 名称 / docstring / 类型检索（`vuna search`） |
-| `Vuna.Index`（+ `Index.Types`/`Scan`/`Query`/`Render`） | 源码符号索引（`vuna map` / `vuna api`；parse 级，会话载荷在 `objects/tool/`） |
+| `Vuna.Index`（+ `Index.Types`/`Scan`/`Query`/`Render`） | 源码符号索引（`vuna map` / `vuna api`；parse 级，会话载荷在 `objects/tool-context/`） |
 | `Vuna.Lsp`（+ `Lsp.Protocol`/`Diagnostics`/`Query`） | LSP 服务端（JSON-RPC over stdio；方法见 [tooling.md](tooling.md)） |
 | `Vuna.Json` | 最小 JSON 读写（LSP 用） |
 | `Vuna.TestRunner` | 包内测试运行器（`vuna test`） |
@@ -206,8 +205,8 @@ elab 状态**（没有跨包 `sols` / `next` / dict goals）。
 - **包级摘要**：`Driver.Cache.CachedProgram`，一个包一份 datas / defs / globals /
   insts / classes；
 - **模块级接口**：`Driver.Iface.ModuleIface`，每模块一个对象
-  `objects/iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
-  装载、逐项校验；模块顺序单独存 `objects/order/<包摘要>`。设计、字段、失效判定与
+  `objects/module-iface/<模块接口地址>`（Store framing，写侧只写内容变化的模块），依赖侧按地址
+  装载、逐项校验；模块顺序单独存 `objects/module-order/<包摘要>`。设计、字段、失效判定与
   `ifaceHash`/`implHash` 口径见 [cache.md](cache.md)。
 
 ### 数据流
@@ -217,7 +216,7 @@ check / build pkg
   ├─ 包级 check 缓存命中（key = 源哈希 + 依赖哈希 + manifest + 编译器指纹 + schema）→ Ok
   └─ 未命中
       ├─ VUNA_ELAB_FULL=1 → 全量：loadProject + elabProgramFull（整闭包）
-      └─ depIfacesOf：逐依赖包按地址读 `objects/iface/`（缺任一模块 ⇒ 回退全量）
+      └─ depIfacesOf：逐依赖包按地址读 `objects/module-iface/`（缺任一模块 ⇒ 回退全量）
             ├─ schema/编译器/包名、模块源哈希、miDepHashes 链、源码模块集合 任一失败
             │     → 全量回退（并重写本包接口）
             └─ 全部可用 → 接口路径（无干净模块 = 包内全量；有干净模块 = 只精化脏模块）：

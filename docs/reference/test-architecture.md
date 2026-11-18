@@ -18,7 +18,7 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
 
 ```text
                     ~/.vuna/test-store（测试专用根；VUNA_STORE 可覆盖）
-   objects/iface|header|lex|order|check|tool|test|pkgiface|splitptr
+   objects/module-iface|check-outcome|tool-context|module-order|pkg-iface|splitptr
    blobs/<splitIdentity>   units/<pkg>   views/bin/<splitIn>   roots/<project>/<digest>
                               ▲
         ┌─────────────────────┴──────────────────────┐
@@ -27,8 +27,8 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
         └───────┬───────────────────────┬────────────┘
                 │                       │
    golden/error/check 语义 case      steps 工具/仓库 case
-   verdict = objects/test/<testIn>   共享 store；长 case 拆分/并行
-   存在 = 通过；roots 保护；GC       只有 store 语义用例用私有 store
+   每次都真正执行，不落 verdict     共享 store；长 case 拆分/并行
+   共享 store（接口 / 产物命中）     只有 store 语义用例用私有 store
 ```
 
 ### 2.1 共享规则
@@ -39,12 +39,12 @@ worker 与 case 共享；只有断言缓存布局 / GC / 冷命中的用例显�
 2. **父进程只预热一次**：`vuna check packages/base`（需要时 `check .`）；worker 不各自 warmup。
 3. **默认共享，隔离显式**：steps 文件头写 `# store-isolated` 的 case 用 `${caseTmp}/store`；
    其余共享。断言缓存布局、GC、冷命中、只读语义的用例必须隔离。
-4. **`--no-cache` 只忽略结果判定**（golden/error 的本地结果缓存），不关闭对象库；
-   真正的冷跑用显式空 `VUNA_STORE`。
+4. **没有结果判定缓存**：golden / error / steps 每次都真正执行；真正的冷跑仍用显式空
+   `VUNA_STORE`（对象库本身有接口与产物缓存，不能靠它"假装冷"）。
 
 ### 2.2 为什么可以共用
 
-- 单文件对象（`objects/iface|header|lex|order|check|split|tool`）是输入寻址 + 原子写：
+- 单文件对象（`objects/module-iface|module-order|check-outcome|tool-context|pkg-iface|splitptr`）是输入寻址 + 原子写：
   同一输入同一路径、同一份字节；日常 `check`/`build` 与测试并发写不会互相覆盖。
 - 编译器身份在 `ver` 输入里：身份取自产物 `build-id` 的内容，同源同身份——日常 CLI 与测试
   用**不同源码**构建的二进制地址不同，不会读错；同源的不同副本则共享对象。
@@ -110,12 +110,11 @@ LSP/REPL/包管理器/seed 是 ocaml 宿主的工具链面，不跨目标。
 `check packages/base` / `check packages/compiler` / `check .`，再跑 suite），长 case 的根因是冷编译而不是
 断言数量，所以拆 case 必须共享已预热 store。
 
-## 4. 结果判定：verdict 对象
+## 4. 结果判定：没有 verdict 对象
 
-- `objects/test/<testIn>`，`testIn = addrOf ["test", caseId, kind, srcHash, expectedHash,
-  compilerFp, depsHash, toolHash]`；存在 = 上次通过。
-- 只缓存输入可声明的 golden/error/check；steps 先共享 store 但不缓存。
-- 通过后写对象并 `storeRootAppendEff` 登记；`vuna store gc` 直接复用。
+- golden / error / steps 每次都真正执行；不写 `objects/test`，也不登记 roots。
+- 判定的可复用性靠输入寻址的**接口与产物**对象（`module-iface` / `check-outcome` / `views`），
+  不是"上次这个 case 过了"。
 
 ## 5. 产物：走 store 视图
 

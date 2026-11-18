@@ -50,11 +50,11 @@ suiteOptsOf parsed jobs timeout worker suitePath =
   SuiteOpts suitePath jobs (flagSet parsed "list") (flagSet parsed "verbose")
     (flagSet parsed "fail-fast") (flagSet parsed "json") (flagValues parsed "only")
     (flagValues parsed "filter") timeout worker (flagValue parsed "results-dir")
-    (flagSet parsed "quiet") (flagSet parsed "no-cache") (flagSet parsed "last-failed")
-    (flagSet parsed "bless") (flagSet parsed "bless-diag") (flagValue parsed "changed")
-    (flagValue parsed "cache-dir") (flagSet parsed "watch") (flagSet parsed "timings")
-    (flagSet parsed "strict-skips") (flagSet parsed "audit") (flagValues parsed "tier")
-    (flagValues parsed "matrix") (flagValues parsed "backend")
+    (flagSet parsed "quiet") (flagSet parsed "last-failed") (flagSet parsed "bless")
+    (flagSet parsed "bless-diag") (flagValue parsed "changed") (flagValue parsed "cache-dir")
+    (flagSet parsed "watch") (flagSet parsed "timings") (flagSet parsed "strict-skips")
+    (flagSet parsed "audit") (flagValues parsed "tier") (flagValues parsed "matrix")
+    (flagValues parsed "backend")
 
 -- | 内部：suite 的 `--jobs`——缺省 0（auto）；`auto` 也映射到 0。
 suiteJobsOf : Parsed -> Check Int

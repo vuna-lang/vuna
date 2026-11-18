@@ -29,7 +29,7 @@ exit: 0
 out-contains: cache-path=hit
 
 # 接口身份摘要缺失（依赖还没写 summary）⇒ 回退 manifest 身份，仍能检查成功；依赖重跑后恢复命中。
-run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkgiface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
+run: sh -c 'S="$TMPDIR/di"; rm -rf "$S/store/objects/pkg-iface"; VUNA_STORE="$S/store" "$VUNA" check "$S/mid" >/dev/null 2>&1 && VUNA_STORE="$S/store" "$VUNA" check "$S/dep" >/dev/null 2>&1; VUNA_DEBUG_PERF=1 VUNA_STORE="$S/store" "$VUNA" check "$S/mid" 2>&1'
 exit: 0
 out-contains: cache-path=hit
 

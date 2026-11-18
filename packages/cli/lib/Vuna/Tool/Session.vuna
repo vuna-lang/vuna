@@ -4,7 +4,7 @@
 -- 摘要就是对象地址：存在即命中，不存在即重算后写回。没有 `Db`、没有查询图、没有依赖快照比较，
 -- 跨进程天然一致，坏字节由 `Store` framing 拒绝。
 --
--- 载荷分两类，共用同一个 `objects/tool/` 空间：marker 是空载荷（codec `tool-marker 1`），表示
+-- 载荷分两类，共用同一个 `objects/tool-context/` 空间：marker 是空载荷（codec `tool-marker 1`），表示
 -- 「命中、但记录在调用方手里」（如 REPL 的状态）；另一类是调用方自己的载荷字节（各自的 codec，
 -- 如 `indexPayloadCodec`）。读侧 codec 不符即 `Nothing`，调用方按未命中重算，因此 marker
 -- 永远不会被当成载荷。
@@ -49,13 +49,13 @@ toolHitValue ts key deps = do
   let
     addr = toolSessionAddrOf ts key deps
   in do
-    exists <- storeObjectExistsEff "tool" addr
+    exists <- storeObjectExistsEff "tool-context" addr
     pure (if exists then Just (Just addr) else Nothing)
 
 -- | 提交 marker 节点（成功但载荷在调用方手里）。
 export toolCommitValue : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => ToolSession -> String -> List String -> Eff r ToolSession
 toolCommitValue ts key deps = do
-  _ <- storeObjectWriteEff "tool" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
+  _ <- storeObjectWriteEff "tool-context" toolMarkerCodec (toolSessionAddrOf ts key deps) ""
   pure ts
 
 -- | 写载荷对象（同一输入同一地址；内容未变则不写盘），返回地址。
@@ -64,9 +64,9 @@ toolStorePayload ts key deps codec payload = do
   let
     addr = toolSessionAddrOf ts key deps
   in do
-    _ <- storeObjectWriteEff "tool" codec addr payload
+    _ <- storeObjectWriteEff "tool-context" codec addr payload
     pure (Pair ts addr)
 
 -- | 读载荷（codec 不符 / 坏字节 ⇒ `Nothing` ⇒ 调用方重算）。
 export toolLoadPayload : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => String -> String -> Eff r (Maybe String)
-toolLoadPayload addr codec = storeObjectReadEff "tool" codec addr
+toolLoadPayload addr codec = storeObjectReadEff "tool-context" codec addr

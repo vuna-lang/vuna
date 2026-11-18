@@ -38,7 +38,6 @@ import Vuna.FixityEnv
 import Vuna.Compiler.Loader.Fixity
 import Vuna.Json
 import Vuna.Tool.Session
-import Vuna.Lint.Cache
 import Vuna.Lint.Config
 import Vuna.Lint.Diagnostics
 import Vuna.Lint.Rules
@@ -525,7 +524,7 @@ lintWithEnv env label text = do
   case looked of
     Pair env2 (ErrC _) => pure (Pair env2 [])
     Pair env2 (OkC fx) => do
-      linted <- lintSourceWithCache cfg fx text
+      linted <- pure (lintSourceWithConfig cfg fx text)
       pure (Pair env2 (case linted of
         ErrC _ => []
         OkC findings => map findingToDiagnostic findings

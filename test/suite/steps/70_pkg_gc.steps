@@ -33,7 +33,7 @@ exit: 0
 
 # 70d) gc 不动缓存族：check 一个有导出面的包产生接口对象，--gc 之后仍在；
 #      git 依赖仍能从物化视图加载。
-run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" check "$TMPDIR/g70/greet" >/dev/null 2>&1; test -d "$TMPDIR/g70/store/objects/iface"; VUNA_STORE="$TMPDIR/g70/store" "$VUNA" store clean --packages --gc "$TMPDIR/g70/app" >/dev/null 2>&1; test -d "$TMPDIR/g70/store/objects/iface"'
+run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" check "$TMPDIR/g70/greet" >/dev/null 2>&1; test -d "$TMPDIR/g70/store/objects/module-iface"; VUNA_STORE="$TMPDIR/g70/store" "$VUNA" store clean --packages --gc "$TMPDIR/g70/app" >/dev/null 2>&1; test -d "$TMPDIR/g70/store/objects/module-iface"'
 exit: 0
 run: sh -c 'VUNA_STORE="$TMPDIR/g70/store" "$VUNA" check "$TMPDIR/g70/app"'
 exit: 0

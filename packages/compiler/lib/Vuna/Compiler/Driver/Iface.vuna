@@ -24,9 +24,9 @@ module Vuna.Compiler.Driver.Iface where
 --     「载荷变了、哈希没变」的陈旧复用。摘要算法是 **SHA-256**（D5）；
 --     `siHash` 是源内容摘要，同一函数。
 --
--- 物理布局：每模块一个对象 `objects/iface/<地址>`
+-- 物理布局：每模块一个对象 `objects/module-iface/<地址>`
 -- （`Store` framing + `Canonical.*` 显式编码；schema 见 `ifaceSchema`，布局/字段语义变化
--- 必须 bump），模块顺序单独存 `objects/order/<包摘要>`。写侧只写内容变化的模块；读侧
+-- 必须 bump），模块顺序单独存 `objects/module-order/<包摘要>`。写侧只写内容变化的模块；读侧
 -- 按地址逐模块读并校验（语义自证 + 调用方哈希链）。
 --
 -- 效果显式化：接口对象的读、写、存在性探测全部显式在 `Eff r` 里；纯构造

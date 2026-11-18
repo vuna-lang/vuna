@@ -4,7 +4,7 @@
 `packages/cli/lib/Vuna/Lint/Rules.vuna`（dispatch 判定、提升渲染、列表链检测、源码切片）、
 `packages/cli/lib/Vuna/Lint/Fix.vuna`（应用 Edit 的多轮循环）、`packages/cli/lib/Vuna/Lint.vuna`（CLI 与输出）、
 `packages/cli/lib/Vuna/Lint/Config.vuna`（`vuna.toml [lint]`）、`packages/cli/lib/Vuna/Lint/Suppress.vuna`（源码抑制）、
-`packages/cli/lib/Vuna/Lint/Cache.vuna`（结果缓存）、`packages/cli/lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
+`packages/cli/lib/Vuna/Lint/Diagnostics.vuna`（规则枚举：
 code / rule / 消息的唯一真源）。
 
 ## 1. 用法与输出
@@ -28,7 +28,7 @@ vuna lint --list | --explain <RULE>
   配置、读盘、解析或 fixity 上下文错误。error/warning 由规则配置决定。
 - 目录会递归收集 `.vuna`（跳过生成物 / corpus）；重复路径去重，顺序保持用户/目录顺序。
 - `--fix` 原子写盘，只应用可安全修复的 finding（被替换行含注释 / tab / CR 时跳过），每轮
-  复验后余下的 finding 照常报告。`--no-cache` 关闭结果缓存。
+  复验后余下的 finding 照常报告。
 
 ## 1.1 配置（`vuna.toml` 的 `[lint]`）
 
@@ -71,11 +71,11 @@ probe x = if x == 1 then 1 else if x == 2 then 2 else 3
 `disable-next-line` 只作用于单行；未知规则是配置错误（exit 2）。抑制在 CLI 与 LSP 同一条
 `lintSourceWithConfig` 路径上生效。
 
-## 1.3 结果缓存
+## 1.3 不做结果缓存
 
-`vuna lint` 把成功 lint 的完整 finding（含 Edit）写入对象库 `objects/lint`，键覆盖
-`lint-cache schema + 编译器指纹 + 源内容 + 程序级 fixity 闭包 + 有效规则配置`。解析/抑制
-错误不缓存；`--fix` 不读缓存；`--no-cache` 完全关闭；`vuna store clean --store` 会清理该 kind。
+`vuna lint` 每次都重新跑规则：单文件 lint 的生产耗时与读回一份 finding 载荷是同一量级
+（workspace 整体 ~0.7 s），缓存是净损失且要多冻结一份 schema。finding 不落对象库，
+`--fix` 的每轮复验也直接重算。
 
 ## 2. 实现模型
 
@@ -227,7 +227,7 @@ clause（多 alt 拆分）；外层是嵌套 alt 时该 alt 是父 case 的最�
   `Cons` / 裸 `Nil`、注释行不修、幂等）。
 - `test/suite/steps/39_lint_cli.steps`：`vuna.toml [lint]`、源码抑制、`--format json`
   （含结束位置与 fixable）、以及「未知规则只由 lint 认领、`vuna check` 仍通过」。
-- `nix/checks/vuna-lint.sh`：workspace 默认目标 + `--max-warnings 0 --no-cache`。
+- `nix/checks/vuna-lint.sh`：workspace 默认目标 + `--max-warnings 0`。
 
 ## 5. as-pattern 生成
 
@@ -275,7 +275,7 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   通过 `vuna check` 的程序（DT 已强制 `case` 穷尽）。把 case 拆成多 clause 会改变 SCT 的
   分析形态；若某个递归函数拆分后 SCT 找不到下降环，应改进 SCT 或收窄规则，不能靠 lint 层
   豁免（CI 门禁要求零 finding）。
-- **CI 门禁**：`nix/checks/vuna-lint.sh` 执行 `vuna lint --max-warnings 0 --no-cache`，
+- **CI 门禁**：`nix/checks/vuna-lint.sh` 执行 `vuna lint --max-warnings 0`，
   扫 workspace 各包的 lib/app，要求零 finding；配置来自根 `vuna.toml`，没有按文件的过滤豁免。
 - `--fix` 产物保证可重新 parse；不保证 `vuna fmt` 幂等（部分既有语料的期望产物保留
   lift 的换行体形态）。新增 fix 语料按 fmt 规范形态设计并验证幂等。
