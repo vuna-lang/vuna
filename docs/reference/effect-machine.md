@@ -365,6 +365,15 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
      下一步查 `genGlobalCall` 为何把该自引用走 `genGlobalRef` 闭包路径（arity 在表里
      看起来是 0/偏小），修掉后 106 应可通过。
 
+- **106 再收窄（call 帧）**：两处 codegen 缺陷修掉后，机器调用已从「柯里化闭包 +
+  每实参一次 `rt_apply`」变成直接 `call $f_..._step` / `call $f_..._runGo`：
+  1. `anf` 现在按 flatten 后的 (head, args) 整体处理，保持应用脊扁平（之前逐层
+     `IrApp` 把中间节点绑成 let，头部变变量 → `genApplyValue` 的 eta 闭包路径）；
+  2. `genRtApp` 对 `prim_erase` 恒等直通，保住尾位置（之前被当实参用 `noTail` 生成）。
+  剩余：`runGo` 的自调用 wat 里仍是 `call runGo; set; get; set; get`（ANF 在递归调用
+  外面留了 `let`，使调用不在尾位置），所以每 perform 仍留一帧。下一步让 ANF 不在
+  **尾表达式**外包 let（或让 codegen 识别 `let x = e in x`），106 即可通过。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
