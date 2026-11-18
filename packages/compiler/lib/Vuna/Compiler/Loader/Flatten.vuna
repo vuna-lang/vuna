@@ -703,8 +703,10 @@ loadProjectWithPreloaded ctx entry preloaded = do
                   pure (case modulesR of
                     ErrC e => ErrC e
                     OkC modules =>
-                      withLayerCheck (contextRoots ctx)
-                        (Project decls imports1 implicit modules (contextPackageName ctx) fixities)
+                      let
+                        imports2 = normalizeImports modules imports1
+                      in withLayerCheck (contextRoots ctx)
+                        (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
                   )
   else pure (ldErr1 (EntryFileNotFound entry) entry)
 
@@ -756,8 +758,10 @@ loadProjectSourceWithPreloaded ctx label source preloaded = do
                 pure (case modulesR of
                   ErrC e => ErrC e
                   OkC modules =>
-                    withLayerCheck (contextRoots ctx)
-                      (Project decls imports1 implicit modules (contextPackageName ctx) fixities)
+                    let
+                      imports2 = normalizeImports modules imports1
+                    in withLayerCheck (contextRoots ctx)
+                      (Project decls imports2 implicit modules (contextPackageName ctx) fixities)
                 )
 
 -- 以**源码字符串**给出一个**库模块**：源码允许带 `module ... where`
