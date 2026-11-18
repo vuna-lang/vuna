@@ -1522,7 +1522,9 @@ selectRtFuncsCps funcs =
 -- | 选择性 CPS：base 运行时 + 选择性 Step driver。
 selectRtFuncsSel : List WatFunc -> List WatFunc
 selectRtFuncsSel funcs =
-  append (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f)) funcs) selFunctions
+  append
+    (filter (\f => not (isEffRtFunc f) && not (isCpsRtFunc f) || f.watFuncName == "$rt_resumeTwice") funcs)
+    selFunctions
 
 buildModule : Int -> GenState -> List IrDef -> Maybe IrEntry -> Bool -> Int -> Maybe WasmListFam -> Result WasmModule
 buildModule fuel st ordered entry printResult effMode listFamM = case genDefFuncs fuel st ordered of
@@ -1542,7 +1544,7 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
           elemNames =
             if effMode == 2 then append elems ["$rt_effThunk", "$rt_effResumeClo"]
             else if effMode == 3 then append elems ["$rt_cpsResumeClo", "$rt_cpsRet"]
-            else if effMode == 5 then append elems ["$rt_selHandleDone", "$rt_selKDone"] else elems
+            else if effMode == 5 then append elems ["$rt_selKComp", "$rt_selKValue"] else elems
           rtBase = selectRtFuncs False (rtFunctions st.gsConsts)
           rtBase0 = filter (\f => not (isCpsRtFunc f)) rtBase
           rtSelected =
@@ -1877,16 +1879,15 @@ build program printResult =
             (irEntryRowTagsOf e)
         noStepUnsupported =
           not (defsUseSyms ["prim_effectSelf", "prim_cleanupPush", "prim_cleanupPop"] ordered)
-      in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
-      else if listNull (irEntryRowTagsOf e) then if noStepUnsupported then case cpsDefsStep ordered of
-        Ok cpsOrdered => buildAnf cpsOrdered 5 (Just e) listFamM
-        Err _ => case cpsDefs ordered of
+        fallbackEff = if listNull (irEntryRowTagsOf e) then case cpsDefs ordered of
           Err msg => WasmRejected (WasmUnsupported msg)
           Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
-      else case cpsDefs ordered of
-        Err msg => WasmRejected (WasmUnsupported msg)
-        Ok cpsOrdered => buildAnf cpsOrdered 3 (Just e) listFamM
-      else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
+        else buildAnf ordered (effModeOf (Just e) ordered) (Just e) listFamM
+      in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
+      else if listNull (irEntryRowTagsOf e) && noStepUnsupported then case cpsDefsStep ordered of
+        Ok cpsOrdered => buildAnf cpsOrdered 5 (Just e) listFamM
+        Err _ => fallbackEff
+      else fallbackEff
 
 -- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String

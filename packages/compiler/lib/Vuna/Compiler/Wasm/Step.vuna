@@ -24,6 +24,7 @@ export stepTypes : List WatType
 stepTypes =
   [ WatStructType "$step" [WatField False WvI32, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$runres" [WatField False WvI32, WatField False WvAnyRef, WatField False WvAnyRef],
+    WatStructType "$selK" [WatField False WvAnyRef, WatField True WvI32],
     WatStructType "$hframe" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$kctx" [WatField False WvAnyRef, WatField False WvAnyRef],
     WatStructType "$kctx2" [WatField False WvAnyRef, WatField False WvAnyRef, WatField False WvAnyRef]
@@ -42,7 +43,7 @@ rtSelPerform =
   rtFunc "$rt_selPerform"
     [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef, Pair "$p2" WvAnyRef, Pair "$p3" WvAnyRef] [WvAnyRef]
     []
-    [IConstI32 1, ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", ILocalGet "$p3", IRefNull, IRefNull, IRefNull, IStructNew "$step"]
+    [IConstI32 1, ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", ILocalGet "$p3", IConstI32 0, IStructNew "$selK", IRefNull, IRefNull, IRefNull, IStructNew "$step"]
 
 rtSelHandle : WatFunc
 rtSelHandle =
@@ -51,9 +52,9 @@ rtSelHandle =
     [WvAnyRef] []
     [IConstI32 2, ILocalGet "$p0", ILocalGet "$p1", ILocalGet "$p2", ILocalGet "$p3", ILocalGet "$p4", ILocalGet "$p5", ILocalGet "$p6", IStructNew "$step"]
 
--- | Handle 正常返回：弹 frame（g_stepHandlers = prev），执行 ret，再把结果交给 kOuter。
-rtSelHandleDone : WatFunc
-rtSelHandleDone =
+-- | comp 正常结束：执行 ret，再包成 Done（值 b）。
+rtSelKComp : WatFunc
+rtSelKComp =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
     locals = [Pair "$f" WvAnyRef, Pair "$r" WvAnyRef]
@@ -63,24 +64,15 @@ rtSelHandleDone =
         ILocalSet "$f",
         ILocalGet "$f",
         IRefCast "$hframe",
-        IStructGet "$hframe" 5,
-        IGlobalSet "$g_stepHandlers",
-        ILocalGet "$f",
-        IRefCast "$hframe",
         IStructGet "$hframe" 2,
         ILocalGet "$p1",
         ICall "$rt_apply",
-        ILocalSet "$r",
-        ILocalGet "$f",
-        IRefCast "$hframe",
-        IStructGet "$hframe" 4,
-        ILocalGet "$r",
-        ICall "$rt_apply",
+        ICall "$rt_selDone",
         IReturn
       ]
-  in rtFunc "$rt_selHandleDone" params [WvAnyRef] locals body
+  in rtFunc "$rt_selKComp" params [WvAnyRef] locals body
 
--- | Perform 不 resume 时：弹到 frame，直接交 kOuter（不经过 ret）。
+-- | Perform 不 resume / handler 结束时：弹 frame，直接交 kOuter。
 rtSelKDone : WatFunc
 rtSelKDone =
   let
@@ -103,10 +95,46 @@ rtSelKDone =
       ]
   in rtFunc "$rt_selKDone" params [WvAnyRef] locals body
 
+-- | 值语义 resumption：env 是 perform 点的 k。应用 k，把剩余的 Step 驱动到 Done，
+--   返回该值（handler 里可以对它继续运算）。
+rtSelKValue : WatFunc
+rtSelKValue =
+  let
+    params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
+    locals = [Pair "$ctx" (WvRef "$selK"), Pair "$step" WvAnyRef, Pair "$res" WvAnyRef]
+    body =
+      [ ILocalGet "$p0",
+        IRefCast "$selK",
+        ILocalSet "$ctx",
+        ILocalGet "$ctx",
+        IStructGet "$selK" 1,
+        IIf "" [ICall "$rt_resumeTwice"] [INop],
+        ILocalGet "$ctx",
+        IConstI32 1,
+        IStructSet "$selK" 1,
+        ILocalGet "$ctx",
+        IStructGet "$selK" 0,
+        ILocalGet "$p1",
+        ICall "$rt_apply",
+        ILocalSet "$step",
+        ILocalGet "$step",
+        IGlobalGet "$g_stepHandlers",
+        ICall "$rt_selDrive",
+        ILocalSet "$res",
+        ILocalGet "$res",
+        IRefCast "$runres",
+        IStructGet "$runres" 0,
+        IConstI32 0,
+        IBinop "i32.eq",
+        IIf "anyref" [ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1] [IUnreachable],
+        IReturn
+      ]
+  in rtFunc "$rt_selKValue" params [WvAnyRef] locals body
+
 rtSelDrive : WatFunc
 -- Done
--- Handle
--- Perform
+-- Handle: push frame, comp u kComp, drive to Done(ret v), then kOuter v
+-- Perform: opH op kValue -> b, then selKDone(f, b)
 rtSelDrive =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
@@ -115,14 +143,16 @@ rtSelDrive =
         Pair "$tag" WvI32,
         Pair "$cur" WvAnyRef,
         Pair "$f" WvAnyRef,
-        Pair "$k" WvAnyRef,
         Pair "$kclo" WvAnyRef,
-        Pair "$res" WvAnyRef
+        Pair "$res" WvAnyRef,
+        Pair "$step0" WvAnyRef,
+        Pair "$b" WvAnyRef,
+        Pair "$v" WvAnyRef
       ]
     body =
       [ ILocalGet "$p0",
         ILocalSet "$s",
-        ILoop "$l" "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 0, ILocalSet "$tag", ILocalGet "$tag", IConstI32 0, IBinop "i32.eq", IIf "" [IConstI32 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IRefNull, IStructNew "$runres", IReturn, IUnreachable] [INop], ILocalGet "$tag", IConstI32 2, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 7, IGlobalGet "$g_stepHandlers", IStructNew "$hframe", ILocalSet "$f", ILocalGet "$f", IGlobalSet "$g_stepHandlers", IRefFunc "$rt_selHandleDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 5, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 6, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], ILocalGet "$tag", IConstI32 1, IBinop "i32.eq", IIf "" [IGlobalGet "$g_stepHandlers", ILocalSet "$cur", IBlock "$found" "" [ILoop "$j" "" [ILocalGet "$cur", IPlain "ref.is_null", IIf "" [IUnreachable] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ICall "$rt_eqStr", IRefCast "i31", II31GetU, ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_eqStr", IRefCast "i31", II31GetU, IBinop "i32.and", IIf "" [IBr "$found"] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$j"]], ILocalGet "$cur", ILocalSet "$f", IRefFunc "$rt_selKDone", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ICall "$rt_apply", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$s", IBr "$l"] [INop], IUnreachable],
+        ILoop "$l" "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 0, ILocalSet "$tag", ILocalGet "$tag", IConstI32 0, IBinop "i32.eq", IIf "" [IConstI32 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, IRefNull, IStructNew "$runres", IReturn, IUnreachable] [INop], ILocalGet "$tag", IConstI32 2, IBinop "i32.eq", IIf "" [ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 7, IGlobalGet "$g_stepHandlers", IStructNew "$hframe", ILocalSet "$f", ILocalGet "$f", IGlobalSet "$g_stepHandlers", IRefFunc "$rt_selKComp", ILocalGet "$f", IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 5, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 6, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$step0", ILocalGet "$step0", ILocalGet "$f", ICall "$rt_selDrive", ILocalSet "$res", ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 0, IConstI32 0, IBinop "i32.eq", IIf "" [ILocalGet "$res", IRefCast "$runres", IStructGet "$runres" 1, ILocalSet "$v", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 5, IGlobalSet "$g_stepHandlers", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 4, ILocalGet "$v", ICall "$rt_apply", ILocalSet "$s"] [IUnreachable], IBr "$l"] [INop], ILocalGet "$tag", IConstI32 1, IBinop "i32.eq", IIf "" [IGlobalGet "$g_stepHandlers", ILocalSet "$cur", IBlock "$found" "" [ILoop "$j" "" [ILocalGet "$cur", IPlain "ref.is_null", IIf "" [IUnreachable] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 0, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 1, ICall "$rt_eqStr", IRefCast "i31", II31GetU, ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 1, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 2, ICall "$rt_eqStr", IRefCast "i31", II31GetU, IBinop "i32.and", IIf "" [IBr "$found"] [INop], ILocalGet "$cur", IRefCast "$hframe", IStructGet "$hframe" 5, ILocalSet "$cur", IBr "$j"]], ILocalGet "$cur", ILocalSet "$f", IRefFunc "$rt_selKValue", ILocalGet "$s", IRefCast "$step", IStructGet "$step" 4, IStructNew "$clo", ILocalSet "$kclo", ILocalGet "$f", IRefCast "$hframe", IStructGet "$hframe" 3, ILocalGet "$s", IRefCast "$step", IStructGet "$step" 3, ICall "$rt_apply", ILocalGet "$kclo", ICall "$rt_apply", ILocalSet "$b", ILocalGet "$f", ILocalGet "$b", ICall "$rt_selKDone", ILocalSet "$s", IBr "$l"] [INop], IUnreachable],
         IUnreachable
       ]
   in rtFunc "$rt_selDrive" params [WvAnyRef] locals body
@@ -149,7 +179,7 @@ rtSelRun =
 
 export selFunctions : List WatFunc
 selFunctions =
-  [rtSelDone, rtSelPerform, rtSelHandle, rtSelHandleDone, rtSelKDone, rtSelDrive, rtSelRun]
+  [rtSelDone, rtSelPerform, rtSelHandle, rtSelKComp, rtSelKDone, rtSelKValue, rtSelDrive, rtSelRun]
 
 rtFunc : String -> List (Pair String WatValTy) -> List WatValTy -> List (Pair String WatValTy) -> List Instr -> WatFunc
 rtFunc name params results locals body = WatFunc name "" params results locals body

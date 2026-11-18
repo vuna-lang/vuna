@@ -1,7 +1,7 @@
 # wasm 效应 handler（CPS lowering）
 
-> 状态：**纯用户 handler 默认走选择性 CPS + Step driver（mode 5，tail-resume）；
-> 非 tail resume 自动回落 mode 3（debt D105）**。路线是
+> 状态：**纯用户 handler 默认走选择性 CPS + Step driver（mode 5，值语义 resumption）；
+> 宿主+用户组合仍走旧路径（debt D105）**。路线是
 > 「选择性 CPS + Step trampoline」：只 CPS 化效应 thunk 与 handler clause，
 > `Eff` 仍是数据；全片段 CPS 不是路线（相关代码已删除）。带内建宿主 handler 行、同时又出现
 > 用户 handler 的程序仍回落到 stack switching（见 §4）。
@@ -22,7 +22,7 @@ stack-switching 回落。
      Step，不追加 k），其余结果/控制流交给 `kDone`；`ret` 保持原样（driver 先 `ret`
      再 `kOuter`）；
    - 入口是 `Ir.Cps.cpsDefsStep`，默认不切换，先锁 IR 形状与编译自检。
-2. **Step 选择性模式（effMode = 5，已完成 tail-resume 子集）**
+2. **Step 选择性模式（effMode = 5，纯用户 handler 已完成）**
    - `@ir@cps@perform` / `@ir@cps@handle` 与 Step 构造器同 arity（4 / 7），直接映射；
    - trampoline：`runPure = stepRun (runThunk e unit stepDone)`；
    - driver：Perform 用 `opH op k kDone`（`k` 为 perform 点续延），Handle 用
