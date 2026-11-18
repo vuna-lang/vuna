@@ -1,10 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // 本仓的 shell / terminal 依赖 flake devshell（OCaml 工具链），脚本在
-  // `.opencode/shell/nix-devshell`（不引用任何本机路径，向上找 flake.nix）。
-  //
-  // 这里刻意不写 `shell`：OpenCode V2 只从全局配置取 `shell`，项目级的值要么被忽略，
-  // 要么（写成相对路径时）被判为无效而退回 bash。全局入口
-  // `~/.config/opencode/shell/nix-devshell` 会优先选中本仓的这一份，因此依赖关系
-  // 仍然由仓库自持，换机器只需把全局 `shell` 指向该脚本。
+  "shell": "marker-shell",
 }
