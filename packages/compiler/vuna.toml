@@ -94,6 +94,7 @@ modules = [
   "Vuna.Compiler.Frontend.Parser",
   "Vuna.Compiler.Frontend.Parser.Support",
   "Vuna.Compiler.Frontend.Rast",
+  "Vuna.Compiler.Frontend.Rast.Name",
   "Vuna.Compiler.Frontend.Toml",
   "Vuna.Compiler.Ir.Analysis",
   "Vuna.Compiler.Ir.Anf",

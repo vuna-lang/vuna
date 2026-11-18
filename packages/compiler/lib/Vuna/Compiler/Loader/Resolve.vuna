@@ -14,7 +14,7 @@ import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
-import Vuna.Compiler.Frontend.Rast
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Base.Intrinsics
 import Base.Effect.Types as EffTypes

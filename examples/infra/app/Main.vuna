@@ -14,7 +14,8 @@ import Vuna.Compiler.Core.Term
 import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Cst
-import Vuna.Compiler.Frontend.Rast
+import RastCheck
+import Vuna.Compiler.Frontend.Rast.Name
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Driver.Compile
 import Vuna.Compiler.Driver.ToolPayload
@@ -66,6 +67,7 @@ main =
       prim_eff_print
         (("cst-tree-file " ++ (if pathOk then verdict (treeRoundtripOk raw) else "skip")) ++ "\n")
     _ <- prim_eff_print (("name-identity " ++ verdict nameIdentityOk) ++ "\n")
+    _ <- prim_eff_print (("rast-convert " ++ verdict rastConvertOk) ++ "\n")
     _ <- prim_eff_print (("canon-term-rt " ++ verdict termFixturesRT) ++ "\n")
     _ <- prim_eff_print (("canon-decl-rt " ++ verdict (declsRT declFixtures)) ++ "\n")
     _ <- prim_eff_print (("canon-defs-rt " ++ verdict defsRT) ++ "\n")

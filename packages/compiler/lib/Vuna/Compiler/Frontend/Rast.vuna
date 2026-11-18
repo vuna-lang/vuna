@@ -1,109 +1,878 @@
--- | 解析后语法层（RAst）的名字身份：名字只有局部 / 全局 / 内建 / 宏 / 洞五种，
--- 不再靠字符串前缀区分来源。
+-- | 解析后语法层（RAst）：名字是身份（`RName`），糖已由 Loader 去掉。
 --
--- 本模块先固定名字层（`RName` + 分类 / 还原），表达式与声明的 RAst 形状在后续阶段接入；
--- 名字的字符串还原必须与解析器 / Loader 现有编码逐字节一致，保证诊断与 iface 不变。
+-- 形状与 [Vuna.Compiler.Frontend.Ast] 一一对应（便于 Elab 逐步迁移），但所有**引用**
+-- 位置（变量、构造子、记录类型）都用 `RName`；binder 与声明名仍是源码短名。
+-- `RName` 与字符串分类在 [Vuna.Compiler.Frontend.Rast.Name]（本模块重导出）。
 module Vuna.Compiler.Frontend.Rast where
 
 import Base.Data.List as List
 import Vuna.Compiler.Base.Common
-import Vuna.Compiler.Base.Intrinsics
-import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Ast as Ast
+import Vuna.Compiler.Frontend.Rast.Name
 
--- | 解析后的名字：
---   * `RLocal`：局部 binder（源码里的短名）；
---   * `RGlobal`：模块导出的名字（模块名 + 基名，还原为 `Module.name`）；
---   * `RIntrinsic`：内建原语与编译器合成名（`@vuna@...`）；
---   * `RMacro`：宏调用标记（`@vuna@macro@name` 的 `name`）；
---   * `RHole`：`_` 与 `?name`。
-export data RName(..) : Type where
-  RLocal : String -> RName
-  RGlobal : String -> String -> RName
-  RIntrinsic : String -> RName
-  RMacro : String -> RName
-  RHole : String -> RName
+-- 记录字段：字段名 + 类型表达式 + span。
+export record Field(..) where
+  fieldName : String
+  fieldType : Expr
+  fieldSpan : Span
 
--- | 还原成解析器 / Loader 使用的字符串编码（逐字节兼容）。
-export rnameKey : RName -> String
-rnameKey (RLocal name) = name
-rnameKey (RGlobal moduleName base) = "${moduleName}.${base}"
-rnameKey (RIntrinsic name) = name
-rnameKey (RMacro name) = macroSyntaxName name
-rnameKey (RHole name) = name
+-- trait 方法签名：方法名 + 类型表达式 + span（span 覆盖「方法名到类型结束」，
+-- 让方法级诊断/符号/注释锚点能落到方法行，而不是整条 trait 声明行）。
+export record TraitMethod(..) where
+  traitMethodName : String
+  traitMethodType : Expr
+  traitMethodSpan : Span
 
--- | 名字是否是全局引用（模块名 + 基名）。
-export rnameIsGlobal : RName -> Bool
-rnameIsGlobal (RGlobal moduleName base) = True
-rnameIsGlobal _ = False
+-- 多参数 trait 的显式 kind 参数：`trait C (a : Type) (r : Row)`；裸参数 kind = Nothing。
+export record TraitParam(..) where
+  traitParamName : String
+  traitParamKind : Maybe Expr
 
--- | 名字是否是内建 / 编译器合成名。
-export rnameIsIntrinsic : RName -> Bool
-rnameIsIntrinsic (RIntrinsic name) = True
-rnameIsIntrinsic _ = False
+export data Pat(..) : Type where
+  PVar : String -> Span -> Pat
+  -- as-pattern（`x@pat` / `(pat)@x`）：匹配内层模式，并把整个匹配值绑定到 x。
+  PAs : String -> Pat -> Span -> Pat
+  PWild : Span -> Pat
+  PCon : RName -> List Pat -> Span -> Pat
+  PInt : Int -> Span -> Pat
+  PStr : String -> Span -> Pat
+  PRecord : RName -> List (Pair String Pat) -> Span -> Pat
 
--- | 名字是否是宏调用标记。
-export rnameIsMacro : RName -> Bool
-rnameIsMacro (RMacro name) = True
-rnameIsMacro _ = False
+export data InterpPart(..) : Type where
+  IPText : String -> InterpPart
+  IPHole : Expr -> InterpPart
 
--- | 名字是否是洞（`_` / `?name`）。
-export rnameIsHole : RName -> Bool
-rnameIsHole (RHole name) = True
-rnameIsHole _ = False
+-- 显式 binder quantity。源码写法 `(0 x : A)` / `(1 x : A)`；不写 = ω。
+-- 只列可写出的两档；`RigOmega` 由「没有 Qty」表示，不引入 ω 字形。
+export data Qty(..) : Type where
+  Q0 : Qty
+  Q1 : Qty
 
--- | 全局名字的模块部分（非全局给空串）。
-export rnameModule : RName -> String
-rnameModule (RGlobal moduleName _) = moduleName
-rnameModule _ = ""
+export qtyIsZero : Qty -> Bool
+qtyIsZero Q0 = True
+qtyIsZero Q1 = False
 
--- | 全局名字的基名（非全局给空串）。
-export rnameBase : RName -> String
-rnameBase (RGlobal _ base) = base
-rnameBase _ = ""
+-- | 记录表示三档声明（`alias record` / `record` / `boxed record`）。
+-- `ReprAuto` = 未声明：回落到底层自动去装箱推断。
+-- `ReprAlias` = 声明去装箱别名：构造/投影定义性恒等，要求擦除后恰好一个运行时字段。
+-- `ReprBoxed` = 声明强制装箱（FFI/ABI 稳定）。档位进 DtData 与 iface（D7：声明优先）。
+export data ReprTier(..) : Type where
+  ReprAuto : ReprTier
+  ReprAlias : ReprTier
+  ReprBoxed : ReprTier
 
--- | 当前模块的包前缀是否属于编译器 / 标准库（这些包可以使用 `@vuna@...` 内部名）。
--- 源码层写不出这些名字；放行判定按**模块前缀**，不是按名字前缀。
-export isCompilerModulePrefix : String -> Bool
-isCompilerModulePrefix prefix =
-  startsWith "Base." prefix
-    || startsWith "Vuna." prefix || startsWith "Base_d" prefix || startsWith "Vuna_d" prefix
+-- | 档位的源码前缀（Fmt 用；`ReprAuto` 无前缀）。
+export reprPrefix : ReprTier -> String
+reprPrefix ReprAuto = ""
+reprPrefix ReprAlias = "alias "
+reprPrefix ReprBoxed = "boxed "
 
--- | 已解析名字的字符串 → 身份。顺序即优先级：洞 / 宏 / 编译器内部名 / 内建 / 全局 / 局部。
-export classifyName : String -> RName
-classifyName name =
-  if isHoleName name then
-    RHole name
-  else if isMacroSyntaxName name then
-    case macroNameOf name of
-      Just macro => RMacro macro
-      Nothing => RIntrinsic name
-  else if isInternalSyntaxName name then
-    RIntrinsic name
-  else if hasIntrinsic name then
-    RIntrinsic name
+export data Expr(..) : Type where
+  EVar : RName -> Span -> Expr
+  EInt : Int -> Span -> Expr
+  EStr : String -> Span -> Expr
+  -- λ：参数名 + 参数名自身的源码位置（`spanEmpty` = 合成 binder），体与整体 span。
+  ELam : List (Pair String Span) -> Expr -> Span -> Expr
+  EApp : Expr -> List Expr -> Span -> Expr
+  -- 命名 Pi：`(x : A) -> B` 与隐式 `{x : A} -> B`；第三个字段是显式 quantity
+  -- （`Nothing` = 默认 ω）。
+  -- 匿名 `A -> B` 仍沿用 `EApp (EVar "->") [A, B]` 编码（默认 ω）。
+  EPi : String -> Bool -> Maybe Qty -> Expr -> Expr -> Span -> Expr
+  ELet : List (Pair Pat Expr) -> Expr -> Bool -> Span -> Expr
+  -- 局部函数组（where/let 内的多 clause 函数）。
+  -- 只作为 `ELet` 绑定值出现：每个 clause 是「参数模式列表 + body」。
+  -- 由 Elab 用 `Elab.Match.multiToExpr` 降级成 lambda + 模式矩阵（与顶层 DFun 同一路径）。
+  ELocalFun : List (Pair (List Pat) Expr) -> Span -> Expr
+  ECase : Expr -> List (Pair Pat Expr) -> Span -> Expr
+  EIf : Expr -> Expr -> Expr -> Span -> Expr
+  EField : Expr -> String -> Span -> Expr
+  ERecord : RName -> List (Pair String Expr) -> Span -> Expr
+  ERecUpdate : Expr -> List (Pair String Expr) -> Span -> Expr
+  EDo : List DoStmt -> Span -> Expr
+  -- 中缀链与括号。parser 的**中间产物**：Loader 按 fixity 表重排并消除它们
+  -- （`Loader.Resolve.reorderProgram`），Elab / codegen 永远不应看到（残留即 internal
+  -- error）；Fmt / Index / Lsp 在 parse 后处理它们。
+  EInfix : String -> Expr -> Expr -> Span -> Expr
+  EParen : Expr -> Span -> Expr
+  -- 反引号中缀 `` a `f` b ``（f 是普通值名或符号名；Loader 按名字查 fixity）。
+  -- 与 EInfix/EParen 同属 parser 中间产物：rename 模式（Loader 正常路径）后不存在。
+  EBacktick : String -> Expr -> Expr -> Span -> Expr
+  -- section：op 值 / 左 section / 右 section。同样是 parser 中间产物，
+  -- Loader 在名字解析前消除成 EVar / lambda。
+  ESectOp : String -> Span -> Expr
+  ESectL : String -> Expr -> Span -> Expr
+  ESectR : Expr -> String -> Span -> Expr
+  -- 表达式类型标注。只由 parser 的 where 绑定签名生成（`g : Int -> Int` 行
+  -- 绑定到随后的 `g ... = ...` 子句），Elab 精化时据此把 where 组按签名递归提升；
+  -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
+  EAnn : Expr -> Expr -> Span -> Expr
+  -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
+  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
+  -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
+  EInterp : Bool -> List InterpPart -> Span -> Expr
+  -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
+  EFloat : String -> Span -> Expr
+
+-- fixity / 别名声明（`infixl 6 +`、`infixr 5 :: = Cons`、`infix 4 == = eq`）。
+-- 只进入 `SourceFile.fixities`，由 Loader 在中缀重排时消费；**不进入 `Decl`**，避免所有
+-- Decl 匹配点扩散。
+export record FixityDecl(..) where
+  fixityOp : String
+  fixityLevel : Int
+  fixityAssoc : Int
+  fixityTarget : Maybe String
+  fixitySpan : Span
+
+export fixitySpan : FixityDecl -> Span
+fixitySpan (FixityDecl op level assoc target sp) = sp
+
+-- do 语句：`pat <- expr` 或裸表达式；最后一条必须是裸表达式。
+export data DoStmt(..) : Type where
+  DBind : Pat -> Expr -> Span -> DoStmt
+  DExpr : Expr -> Span -> DoStmt
+
+export record Ctor(..) where
+  ctorName : String
+  ctorType : Expr
+  ctorArity : Int
+  ctorSpan : Span
+
+export data Decl(..) : Type where
+  -- `data Name params : kind where`；kind 是索引族的类型表达式（只接受 `Type`）。
+  -- 末位 `Bool` 是 `lin data` 标记。
+  -- `derivings` 后的 `Bool` 是 `deriving via field` 标记（仅 record 允许）。
+  -- `viaField` 后的 `ReprTier` 是表示档位（data 恒为 `ReprAuto`，record 由
+  -- `alias`/`boxed` 前缀给出）；降级与 DtData 都要携带它。
+  DData : String -> List String -> Expr -> List Ctor -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
+  -- `axiom name : Ty` —— 无体的可擦除/不透明顶层（D10）。
+  -- 它是**类型层**定义：类型层引用合法，运行时使用由擦除检查报错。
+  DAxiom : String -> Expr -> Span -> Decl
+  -- 受限 FFI：`extern "c_name" : Ty`（无体；运行时由 C 链接提供）。
+  DExtern : String -> String -> Expr -> Span -> Decl
+  -- 顶层签名可带 trait 约束上下文（`f : Eq a, Show b => τ`）；ctx 是约束表达式
+  -- （每个形如 `C arg`，都是单参数 trait 应用）。空 ctx = 无显式约束。
+  DSig : String -> List Expr -> Expr -> Span -> Decl
+  DFun : String -> List Pat -> Expr -> Span -> Decl
+  -- 末位 `Bool` 是 `lin record` 标记（降级成 DData 时透传）。
+  -- `derivings` 后的 `Bool` 是 `deriving via field` 标记。
+  -- `viaField` 后的 `ReprTier` 是表示档位（`alias`/`boxed` 前缀，缺省 `ReprAuto`）。
+  DRecord : String -> List String -> List Field -> List String -> Bool -> ReprTier -> Bool -> Span -> Decl
+  -- `supers` 是父类约束（`Functor f => Applicative f` 的前缀），放在参数与方法之间。
+  DTrait : String -> List TraitParam -> List Expr -> List TraitMethod -> Span -> Decl
+  DInstance : List Expr -> Expr -> List Decl -> Span -> Decl
+
+-- 模块头与导出项。
+-- XBare 是裸名导出，XTypeAll 是 `T(..)`，XModule 是 `module B` 整模块重导出。
+-- XTypeSome 是 `T(A, B)`（D11：data 构造子 / trait 方法子集；顺序无语义）。
+-- XNamespace 是 `export module C [as X]`：不带 alias 时平铺重导出 C，带 alias 时只导出命名空间路径。
+export data ExportItem(..) : Type where
+  XBare : String -> Span -> ExportItem
+  XTypeAll : String -> Span -> ExportItem
+  XTypeSome : String -> List String -> Span -> ExportItem
+  XModule : String -> Span -> ExportItem
+  XNamespace : String -> Maybe String -> Span -> ExportItem
+
+-- D11：逐定义 `export` 的成员集合（`T` / `T(..)` / `T(A, B)`）。
+export data ExportMembers(..) : Type where
+  EMNone : ExportMembers
+  EMAll : ExportMembers
+  EMOnly : List String -> ExportMembers
+
+-- D11：一条逐定义导出声明。
+-- `ESValue` = 值/axiom/extern/用户符号；`ESType` = data/record/trait + 成员面。
+export data ExportSpec(..) : Type where
+  ESValue : String -> Span -> ExportSpec
+  ESType : String -> ExportMembers -> Span -> ExportSpec
+
+export exportSpecName : ExportSpec -> String
+exportSpecName (ESValue name sp) = name
+exportSpecName (ESType name members sp) = name
+
+export exportSpecSpan : ExportSpec -> Span
+exportSpecSpan (ESValue name sp) = sp
+exportSpecSpan (ESType name members sp) = sp
+
+-- D11：定义归约修饰符。
+export data Opacity(..) : Type where
+  OpacityOpaque : Opacity
+  OpacityTransparent : Opacity
+  OpacityAbstract : Opacity
+
+export record OpacitySpec(..) where
+  opacityName : String
+  opacityKind : Opacity
+  opacitySpan : Span
+
+export opacitySpecName : OpacitySpec -> String
+opacitySpecName (OpacitySpec name kind sp) = name
+
+export opacitySpecSpan : OpacitySpec -> Span
+opacitySpecSpan (OpacitySpec name kind sp) = sp
+
+-- 模块头：模块名、是否写了显式导出列表、导出项、span；
+-- D11：逐定义导出/重导出/归约修饰符也挂在模块头（入口文件没有模块头，不需要它们）。
+export record ModDecl(..) where
+  modDeclName : String
+  modDeclHasExportList : Bool
+  modDeclExportItems : List ExportItem
+  modDeclExports : List ExportSpec
+  modDeclReexports : List ExportItem
+  modDeclOpacity : List OpacitySpec
+  modDeclSpan : Span
+
+-- parser 的产物：可选模块头 + imports + fixity/别名声明 + 顶层声明。
+export record SourceFile(..) where
+  sourceFileModDecl : Maybe ModDecl
+  sourceFileImports : List Import
+  sourceFileFixities : List FixityDecl
+  sourceFileDecls : List Decl
+  -- 无模块头的模块文件也要能逐定义 export（入口文件在 Flatten 丢弃这些字段）。
+  sourceFileExports : List ExportSpec
+  sourceFileReexports : List ExportItem
+  sourceFileOpacity : List OpacitySpec
+
+-- 各节点的源码 span 访问器。
+export patSpan : Pat -> Span
+patSpan (PVar name sp) = sp
+patSpan (PAs name inner sp) = sp
+patSpan (PWild sp) = sp
+patSpan (PCon name pats sp) = sp
+patSpan (PInt n sp) = sp
+patSpan (PStr s sp) = sp
+patSpan (PRecord name fields sp) = sp
+
+export exprSpan : Expr -> Span
+exprSpan (EVar name sp) = sp
+exprSpan (EInfix op lhs rhs sp) = sp
+exprSpan (EParen inner sp) = exprSpan inner
+exprSpan (EBacktick name lhs rhs sp) = sp
+exprSpan (ESectOp op sp) = sp
+exprSpan (ESectL op rhs sp) = sp
+exprSpan (ESectR lhs op sp) = sp
+exprSpan (EInt n sp) = sp
+exprSpan (EStr s sp) = sp
+exprSpan (EFloat raw sp) = sp
+exprSpan (ELam ps body sp) = sp
+exprSpan (EApp fn args sp) = sp
+exprSpan (EPi name implicit qty dom cod sp) = sp
+exprSpan (ELet binds body _ sp) = sp
+exprSpan (ELocalFun clauses sp) = sp
+exprSpan (ECase scrut alts sp) = sp
+exprSpan (EIf c t e sp) = sp
+exprSpan (EField base f sp) = sp
+exprSpan (ERecord name fields sp) = sp
+exprSpan (ERecUpdate base fields sp) = sp
+exprSpan (EDo stmts sp) = sp
+exprSpan (EAnn inner ty sp) = sp
+exprSpan (EInterp multi parts sp) = sp
+
+export doStmtSpan : DoStmt -> Span
+doStmtSpan (DBind pat expr sp) = sp
+doStmtSpan (DExpr expr sp) = sp
+
+export doStmtExpr : DoStmt -> Expr
+doStmtExpr (DBind pat expr sp) = expr
+doStmtExpr (DExpr expr sp) = expr
+
+export declSpan : Decl -> Span
+declSpan (DData name params kind ctors derivings viaField repr lin sp) = sp
+declSpan (DAxiom name ty sp) = sp
+declSpan (DExtern name cName ty sp) = sp
+declSpan (DSig name ctx ty sp) = sp
+declSpan (DFun name pats body sp) = sp
+declSpan (DRecord name params fields derivings viaField repr lin sp) = sp
+declSpan (DTrait name params supers methods sp) = sp
+declSpan (DInstance ctxE head methods sp) = sp
+
+export ctorSpan : Ctor -> Span
+ctorSpan (Ctor name ty arity sp) = sp
+
+export fieldSpan : Field -> Span
+fieldSpan (Field name ty sp) = sp
+
+export fieldName : Field -> String
+fieldName (Field name ty sp) = name
+
+export fieldType : Field -> Expr
+fieldType (Field name ty sp) = ty
+
+export traitMethodName : TraitMethod -> String
+traitMethodName (TraitMethod name ty sp) = name
+
+export traitMethodSpan : TraitMethod -> Span
+traitMethodSpan (TraitMethod name ty sp) = sp
+
+export record Import(..) where
+  importName : String
+  importIsQualified : Bool
+  importAlias : Maybe String
+  importSpan : Span
+
+export exportItemSpan : ExportItem -> Span
+exportItemSpan (XBare name sp) = sp
+exportItemSpan (XTypeAll name sp) = sp
+exportItemSpan (XTypeSome name members sp) = sp
+exportItemSpan (XModule name sp) = sp
+exportItemSpan (XNamespace name _ sp) = sp
+
+export collectClauses : List Decl -> String -> List (Pair (List Pat) Expr)
+collectClauses [] name = []
+collectClauses (d :: rest) name =
+  case d of
+    DFun n pats body _ =>
+      if n == name then Pair pats body :: collectClauses rest name else collectClauses rest name
+    _ => collectClauses rest name
+
+export clausesFor : List Decl -> String -> List (Pair (List Pat) Expr)
+clausesFor decls name = collectClauses decls name
+
+export funArity : String -> List Decl -> Maybe Int
+funArity name decls =
+  case clausesFor decls name of
+    [] => Nothing
+    (Pair pats body) :: _ => Just (natToInt (length pats))
+
+export ctorName : Ctor -> String
+ctorName (Ctor name ty arity _) = name
+
+-- canonical 构造子名的最后一段（短名）。data 构造子的 canonical 形如
+-- `Module.Data.Ctor`（entry 文件是 `Data.Ctor`），短名用于族内查找/OCaml 名字/诊断。
+-- | 短名（canonical 名的最后一段）；族内查找 / OCaml 名字 / 诊断用。
+export ctorShortName : String -> String
+ctorShortName name = lastSeg name
+
+-- 用户可见的构造子名：`FamilyShort.Ctor`（单段名原样返回）。
+-- 不用完整的 `Module.Data.Ctor`：那会把模块路径泄漏进诊断。
+-- | 诊断里显示的构造子名 `FamilyShort.Ctor`（单段名原样返回）。
+export ctorDisplayName : String -> String
+ctorDisplayName name =
+  case splitLastDot (splitOnDot name) of
+    Pair [] base => base
+    Pair revPrefix base =>
+      case reverse revPrefix of
+        [] => base
+        fam :: rest => "${fam}.${base}"
+
+export ctorType : Ctor -> Expr
+ctorType (Ctor name ty arity _) = ty
+
+export typeArity : Expr -> Int
+typeArity (EApp (EVar (RIntrinsic "->") _) ([x, rest]) _) = 1 + typeArity rest
+typeArity _ = 0
+
+export lookupCtorArity : String -> List Ctor -> Maybe Int
+lookupCtorArity name [] = Nothing
+lookupCtorArity name (c :: rest) =
+  if ctorName c == name then Just c.ctorArity else lookupCtorArity name rest
+
+export ctorArity : String -> List Decl -> Maybe Int
+ctorArity name [] = Nothing
+ctorArity name (d :: rest) =
+  case d of
+    DData dname params kind ctors derivings viaField repr lin sp =>
+      case lookupCtorArity name ctors of
+        Just arity => Just arity
+        Nothing => ctorArity name rest
+    DRecord dname params fields derivings viaField repr lin sp =>
+      if name == dname then Just (natToInt (length fields)) else ctorArity name rest
+    _ => ctorArity name rest
+
+export declNames : Decl -> List String
+declNames (DFun name pats body _) = [name]
+declNames (DAxiom name ty _) = [name]
+declNames (DExtern name cName ty _) = [name]
+declNames (DSig name ctx ty _) = [name]
+declNames (DData dname params kind ctors derivings viaField repr lin _) = map ctorName ctors
+declNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
+declNames (DTrait tname params supers methods _) = map traitMethodName methods
+declNames (DInstance ctxE head methods _) = []
+
+-- 顶层可见名字（把 data / record / trait 的**类型名**也算进来）。
+-- Loader 用它判断「是不是本模块声明的名字」；DT 的类型名可以在值层位置出现
+-- （`Vec n Nat` 的 `Nat`），所以必须一并认出来。语义仍由下游检查器决定。
+export topNames : List Decl -> List String
+topNames decls = concatMap declNames decls
+
+export declAllNames : Decl -> List String
+declAllNames (DData dname params kind ctors derivings viaField repr lin _) =
+  dname :: map ctorName ctors
+declAllNames (DRecord dname params fields derivings viaField repr lin _) = [dname]
+declAllNames (DTrait tname params supers methods _) = tname :: map traitMethodName methods
+declAllNames d = declNames d
+
+_declCtors : Decl -> List String
+_declCtors (DData dname params kind ctors derivings viaField repr lin _) = map ctorName ctors
+_declCtors (DRecord dname params fields derivings viaField repr lin _) = [dname]
+_declCtors (DTrait tname params supers methods _) = map traitMethodName methods
+_declCtors _ = []
+
+export ctorsOf : List Decl -> List String
+ctorsOf decls = concatMap _declCtors decls
+
+export declTypeNames : Decl -> List String
+declTypeNames (DData name params kind ctors derivings viaField repr lin _) = [name]
+declTypeNames (DRecord name params fields derivings viaField repr lin _) = [name]
+declTypeNames (DTrait name params supers methods _) = [name]
+declTypeNames _ = []
+
+export typeNamesOf : List Decl -> List String
+typeNamesOf decls = concatMap declTypeNames decls
+
+export declDerivings : Decl -> List String
+declDerivings (DData name params kind ctors derivings viaField repr lin _) = derivings
+declDerivings (DRecord name params fields derivings viaField repr lin _) = derivings
+declDerivings _ = []
+
+-- ---------------------------------------------------------------
+-- 洞名：匿名洞是 `_`；命名洞写成 `?name`。
+-- parser 把 `?name` 编码成 `EVar "?name"`（**不新增 AST 构造子**，Fmt/Lint/Doc/Usage/
+-- Termination/Codegen 的结构遍历因此零改动）；洞名判定是唯一真源，Loader 放行、
+-- 精化器建 goal、索引引用过滤都走这里。
+-- ---------------------------------------------------------------
+export isHoleName : String -> Bool
+isHoleName name = name == "_" || holeNamed name
+
+export holeNamed : String -> Bool
+holeNamed name =
+  case strUnpack name of
+    63 :: _ :: _ => True
+    _ => False
+
+-- 洞的显示名：`_` → ""（匿名）；`?name` → "?name"。
+export holeNameOf : String -> String
+holeNameOf name = if holeNamed name then name else ""
+
+-- ---------------------------------------------------------------
+-- Loader → Elab 的内部引用编码
+-- ---------------------------------------------------------------
+-- 与 `?hole` 同一先例：不新增 AST 构造子，用保留名编码，Fmt/Lint/Doc/Index 等
+-- parse 阶段的结构遍历因此零改动（这些名字只在 Loader 之后出现，且不参与用户符号）。
+--   `@vuna@ctor@<短名>@<候选 canonical 1>@<候选 canonical 2>...`
+-- | 内部保留名的前缀（`@vuna@`）；用户源码写不出以它开头的标识符。
+export internalNamePrefix : String
+internalNamePrefix = "@vuna@"
+
+-- | 重载构造子标记前缀（`@vuna@ctor@`）。
+export overCtorPrefix : String
+overCtorPrefix = "@vuna@ctor@"
+
+-- | 是否是内部保留名（以 `@vuna@` 开头）。
+export isInternalSyntaxName : String -> Bool
+isInternalSyntaxName name = startsWith internalNamePrefix name
+
+-- | 丢掉列表前 n 个元素。
+export dropNChars : Int -> List Int -> List Int
+dropNChars n xs =
+  if n <= 0 then
+    xs
   else
-    case splitGlobalKey name of
-      Just parts => RGlobal (firstOf parts) (secondOf parts)
-      Nothing => RLocal name
+    case xs of
+      [] => []
+      _ :: rest => dropNChars (n - 1) rest
 
--- | 名字是否是内建声明（含内部可见的 `bi_*`）。
-hasIntrinsic : String -> Bool
-hasIntrinsic name =
-  case findIntrinsic name of
-    Just _ => True
-    Nothing => False
+-- | 去掉字符串前缀（不匹配则原样返回）。
+export dropNamePrefix : String -> String -> String
+dropNamePrefix p name =
+  if startsWith p name then strPack (dropNChars (strLength p) (strUnpack name)) else name
 
--- | 全局编码 `Module.name` → `(Module, name)`：按**最后一个**点切分（模块名本身含点）。
-export splitGlobalKey : String -> Maybe (Pair String String)
-splitGlobalKey name =
+-- | 用 `@` 连接多个名字。
+export joinWithAt : List String -> String
+joinWithAt [] = ""
+joinWithAt ([x]) = x
+joinWithAt (x :: rest) = "${x}@${joinWithAt rest}"
+
+-- | 由短名与候选 target 生成重载构造子标记名。
+export overCtorName : String -> List String -> String
+overCtorName short targets = "${overCtorPrefix}${short}@${joinWithAt targets}"
+
+-- | 重载构造子标记名里的短名（非标记名返回空串）。
+export overCtorShort : String -> String
+overCtorShort name =
+  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+    [] => ""
+    s :: rest => s
+
+-- | 重载构造子标记名里的候选 target 列表（非标记名返回空表）。
+export overCtorTargets : String -> List String
+overCtorTargets name =
+  case splitOnChar 64 (dropNamePrefix overCtorPrefix name) of
+    [] => []
+    s :: rest => rest
+
+-- | 是否是重载构造子标记名。
+export isOverCtorName : String -> Bool
+isOverCtorName name = startsWith overCtorPrefix name
+
+-- | 重载值标记前缀（`@vuna@value@`）：多个不同 target 的值候选，由精化器按期望类型选择。
+export overValuePrefix : String
+overValuePrefix = "@vuna@value@"
+
+export overValueName : String -> List String -> String
+overValueName short targets = "${overValuePrefix}${short}@${joinWithAt targets}"
+
+export overValueShort : String -> String
+overValueShort name =
+  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+    [] => ""
+    s :: rest => s
+
+export overValueTargets : String -> List String
+overValueTargets name =
+  case splitOnChar 64 (dropNamePrefix overValuePrefix name) of
+    [] => []
+    s :: rest => rest
+
+export isOverValueName : String -> Bool
+isOverValueName name = startsWith overValuePrefix name
+
+-- 列表字面量的保留名（parser 产出；Loader 原样放行；Elab 按期望族的 Nil/Cons
+-- 通用展开）。不借裸 `Nil`/`Cons` 走构造子名字解析。
+-- | 列表字面量展开出的 nil 保留名。
+export listNilSyntax : String
+listNilSyntax = "@vuna@list@nil"
+
+-- | 列表字面量展开出的 cons 保留名。
+export listConsSyntax : String
+listConsSyntax = "@vuna@list@cons"
+
+-- | 是否是列表 nil 保留名。
+export isListNilSyntax : String -> Bool
+isListNilSyntax name = name == listNilSyntax
+
+-- | 是否是列表 cons 保留名。
+export isListConsSyntax : String -> Bool
+isListConsSyntax name = name == listConsSyntax
+
+-- ---------------------------------------------------------------
+-- do 块的内部标记链
+-- ---------------------------------------------------------------
+-- 与 `@vuna@ctor@...` 同一先例：不新增 AST 构造子，用保留名编码。`Resolver` 把 do 降级
+-- 成嵌套的 `EApp+ELam` 链（语句边界 / binder 名 / 语句 span 都仍编码在这条链上），但把每个
+-- 节点的头部换成携带 **块作用域里解析出的 bind canonical 名** 的内部标记：
+--
+--   `@vuna@do@bind@<canonical>`    —— `pat <- e`（binder 是用户变量名）
+--   `@vuna@do@ignore@<canonical>`  —— `_ <- e` / 裸语句 `e`（binder 是丢弃名）
+--
+-- 标记名只由 Loader 在 rename 之后产生，用户源码无法写出 `@vuna@` 开头的标识符；于是
+-- Elab 可以把整块按「一个 monad / 一个字典」精化，而不必逐个节点重新做名字解析。不认识
+-- 标记的精化器（以及任何形状不符/回退路径）可以剥掉标记、用 canonical 名还原成普通
+-- `bind` 应用——语义与今天的降级逐字一致。
+-- `perform <op>` 的保留名编码。parser 产出
+-- `EApp (EVar "@vuna@perform") [op]`；Elab 按 op 族推导 key（族规范名）、实例名
+-- （行解 / 默认名）与效应签名（`sigFn (\i => <Op> <params…> i)`），再降级到 `Base.Effect.Core.performCore`。
+-- 用户源码写不出 `@vuna@` 开头的标识符，所以标记不会与用户名字冲突。
+-- | `perform <op>` 的保留名（parser 产出、Elab 展开）。
+export performSyntax : String
+performSyntax = "@vuna@perform"
+
+-- | 是否是 `perform` 保留名。
+export isPerformSyntax : String -> Bool
+isPerformSyntax name = name == performSyntax
+
+-- `handle <comp> { ... }` 的保留名编码。parser 产出
+-- `EApp (EVar "@vuna@handle") [comp, ret, opH]`：
+--   * `comp` 是被 handler 包裹的动作；
+--   * `ret` 是 `ELam [x] body`；没有 return 子句时是哨兵 `EVar "@vuna@handle@noret"`
+--     （Fmt 据此不打印 return 子句）；
+--   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参，
+--     续延 binder `k` 是 λ 的第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
+-- Elab 从 clause 构造子推 op 族，再降级到 `Base.Effect.Core.handleWith`。
+-- | `handle <comp> { ... }` 的保留名（parser 产出、Elab 展开）。
+export handleSyntax : String
+handleSyntax = "@vuna@handle"
+
+-- | 是否是 `handle` 保留名。
+export isHandleSyntax : String -> Bool
+isHandleSyntax name = name == handleSyntax
+
+-- | 无 return 子句时的哨兵名（Fmt 据此不打印 return 子句）。
+export handleNoRetSyntax : String
+handleNoRetSyntax = "@vuna@handle@noret"
+
+-- | 是否是无 return 子句的哨兵名。
+export isHandleNoRetSyntax : String -> Bool
+isHandleNoRetSyntax name = name == handleNoRetSyntax
+
+-- 行字面量里的显式实例名 `X@name`，编码成
+-- `EApp (EVar "@vuna@row@at") [X, name]`；只在行字面量展开时被解释。
+-- | 行字面量里 `X@name` 的保留名（Elab 在行展开时解释）。
+export rowAtSyntax : String
+rowAtSyntax = "@vuna@row@at"
+
+-- | 是否是行实例名标记名。
+export isRowAtSyntax : String -> Bool
+isRowAtSyntax name = name == rowAtSyntax
+
+-- 实例名调用糖：`f@name args` 编码成
+-- `EApp (EVar "@vuna@app@at") (f :: name :: args)`。Elab 把它重写成
+-- `f (@vuna@inst@arg name) args`，由 `inferArgsGo` 在隐式 `String` 实例名 binder
+-- 处消费 `@vuna@inst@arg`。
+export appAtSyntax : String
+appAtSyntax = "@vuna@app@at"
+
+-- | 是否是实例名调用标记（`@vuna@app@at`）。
+export isAppAtSyntax : String -> Bool
+isAppAtSyntax name = name == appAtSyntax
+
+-- `@` 降级后插入的隐式实参标记：`EApp (EVar "@vuna@inst@arg") [payload]`。
+-- 只在 `inferArgsGo` 的隐式 String binder 分支被消费；用户源码写不出。
+export instArgSyntax : String
+instArgSyntax = "@vuna@inst@arg"
+
+-- | 是否是实例名实参标记（`@vuna@inst@arg`）。
+export isInstArgSyntax : String -> Bool
+isInstArgSyntax name = name == instArgSyntax
+
+-- ---------------------------------------------------------------
+-- 内置宏：`name!` 调用的保留名编码
+-- ---------------------------------------------------------------
+-- 与 `@vuna@perform` / `@vuna@handle` 同一先例：**不新增 AST 构造子**，parser 把
+-- `name! args` 编码成 `EApp (EVar "@vuna@macro@name") args`（无参时是裸 `EVar`）。
+-- Loader 在名字解析前把标记展开成真正表达式，所以 Elab / Codegen / 缓存 / 无损 CST
+-- 都看不到标记；Fmt 反向把标记渲染回 `name!`，Index 过滤标记引用。用户源码写不出
+-- `@vuna@` 开头的标识符，标记不会与用户名字冲突。
+-- | 宏调用标记的前缀（parser 产出、Loader 展开、Fmt 回渲染共用的唯一真源）。
+export macroSyntaxPrefix : String
+macroSyntaxPrefix = "@vuna@macro@"
+
+-- | 由宏名生成 parser / Loader 之间的标记名。
+export macroSyntaxName : String -> String
+macroSyntaxName name = "${macroSyntaxPrefix}${name}"
+
+-- | 是否是宏调用标记名（`@vuna@macro@<name>`）。
+export isMacroSyntaxName : String -> Bool
+isMacroSyntaxName name = startsWith macroSyntaxPrefix name
+
+-- | 宏调用标记名 → 用户书写的宏名（非标记返回 `Nothing`）。
+export macroNameOf : String -> Maybe String
+macroNameOf name =
+  if isMacroSyntaxName name then Just (dropNamePrefix macroSyntaxPrefix name) else Nothing
+
+-- | do 链里 `pat <- e` 标记头的前缀。
+export doBindSyntaxPrefix : String
+doBindSyntaxPrefix = "@vuna@do@bind@"
+
+-- | do 链里丢弃绑定（`_ <- e` / 裸语句）标记头的前缀。
+export doIgnoreSyntaxPrefix : String
+doIgnoreSyntaxPrefix = "@vuna@do@ignore@"
+
+-- | 由 bind 的 canonical 名生成 `pat <- e` 标记头。
+export doBindSyntaxName : String -> String
+doBindSyntaxName canonical = "${doBindSyntaxPrefix}${canonical}"
+
+-- | 由 bind 的 canonical 名生成丢弃绑定标记头。
+export doIgnoreSyntaxName : String -> String
+doIgnoreSyntaxName canonical = "${doIgnoreSyntaxPrefix}${canonical}"
+
+-- | 是否是 `pat <- e` 标记头。
+export isDoBindSyntaxName : String -> Bool
+isDoBindSyntaxName name = startsWith doBindSyntaxPrefix name
+
+-- | 是否是丢弃绑定标记头。
+export isDoIgnoreSyntaxName : String -> Bool
+isDoIgnoreSyntaxName name = startsWith doIgnoreSyntaxPrefix name
+
+-- 标记头里的 canonical bind 名；不是 do 标记头返回 `Nothing`。
+-- | do 标记头里的 canonical bind 名；不是标记头返回 `Nothing`。
+export doSyntaxCanonical : String -> Maybe String
+doSyntaxCanonical name =
+  if isDoBindSyntaxName name then
+    Just (dropNamePrefix doBindSyntaxPrefix name)
+  else if isDoIgnoreSyntaxName name then
+    Just (dropNamePrefix doIgnoreSyntaxPrefix name)
+  else
+    Nothing
+
+-- ---------------------------------------------------------------
+-- 解析后的 Ast → RAst
+--
+-- Loader.Resolve 产出的 Ast 已经完成名字解析与去糖；这里只把**引用**名字换成
+-- `RName`。作用域只用于区分「局部 binder 恰好与内建同名」的边缘情况。
+-- ---------------------------------------------------------------
+-- | 名字 → RName（在 binder 作用域里的一律是局部）。
+nameOf : List String -> String -> RName
+nameOf scope name = if memName name scope then RLocal name else classifyName name
+
+-- | 转换一组顶层声明。
+export ofDecls : List Ast.Decl -> List Decl
+ofDecls decls = map (ofDecl []) decls
+
+-- | 单条声明。
+ofDecl : List String -> Ast.Decl -> Decl
+ofDecl scope d =
+  case d of
+    Ast.DData name params kind ctors derivings via repr lin sp =>
+      DData
+        name
+        params
+        (ofExpr (append params scope) kind)
+        (map (ofCtor (append params scope)) ctors)
+        derivings
+        via
+        (ofRepr repr)
+        lin
+        sp
+    Ast.DAxiom name ty sp => DAxiom name (ofExpr scope ty) sp
+    Ast.DExtern name cName ty sp => DExtern name cName (ofExpr scope ty) sp
+    Ast.DSig name ctx ty sp => DSig name (map (ofExpr scope) ctx) (ofExpr scope ty) sp
+    Ast.DFun name pats body sp =>
+      let
+        bound = append (bindersOfPats pats) scope
+      in DFun name (map (ofPat scope) pats) (ofExpr bound body) sp
+    Ast.DRecord name params fields derivings via repr lin sp =>
+      DRecord
+        name
+        params
+        (map (ofField (append params scope)) fields)
+        derivings
+        via
+        (ofRepr repr)
+        lin
+        sp
+    Ast.DTrait name params supers methods sp =>
+      let
+        bound = append (map astTraitParamName params) scope
+      in DTrait
+        name
+        (map (ofTraitParam bound) params)
+        (map (ofExpr bound) supers)
+        (map (ofTraitMethod bound) methods)
+        sp
+    Ast.DInstance ctx head methods sp =>
+      DInstance (map (ofExpr scope) ctx) (ofExpr scope head) (map (ofDecl scope) methods) sp
+
+ofCtor : List String -> Ast.Ctor -> Ctor
+ofCtor scope (Ast.Ctor name ty arity sp) = Ctor name (ofExpr scope ty) arity sp
+
+ofField : List String -> Ast.Field -> Field
+ofField scope (Ast.Field name ty sp) = Field name (ofExpr scope ty) sp
+
+ofTraitMethod : List String -> Ast.TraitMethod -> TraitMethod
+ofTraitMethod scope (Ast.TraitMethod name ty sp) = TraitMethod name (ofExpr scope ty) sp
+
+-- | 模式：引用名（构造子 / 记录）换成 RName；binder 名保持短名。
+ofPat : List String -> Ast.Pat -> Pat
+ofPat scope p =
+  case p of
+    Ast.PVar name sp => PVar name sp
+    Ast.PAs name inner sp => PAs name (ofPat scope inner) sp
+    Ast.PWild sp => PWild sp
+    Ast.PCon name pats sp => PCon (nameOf scope name) (map (ofPat scope) pats) sp
+    Ast.PInt n sp => PInt n sp
+    Ast.PStr s sp => PStr s sp
+    Ast.PRecord name fields sp => PRecord (nameOf scope name) (map (ofPatField scope) fields) sp
+
+ofPatField : List String -> Pair String Ast.Pat -> Pair String Pat
+ofPatField scope (Pair fname pat) = Pair fname (ofPat scope pat)
+
+-- | 模式引入的 binder 名。
+patBinders : Ast.Pat -> List String
+patBinders p =
+  case p of
+    Ast.PVar name sp => [name]
+    Ast.PAs name inner sp => name :: patBinders inner
+    Ast.PWild sp => []
+    Ast.PCon name pats sp => concatMap patBinders pats
+    Ast.PInt n sp => []
+    Ast.PStr s sp => []
+    Ast.PRecord name fields sp => concatMap patFieldBinders fields
+
+bindersOfPats : List Ast.Pat -> List String
+bindersOfPats pats = concatMap patBinders pats
+
+-- | 表达式转换。
+ofExpr : List String -> Ast.Expr -> Expr
+ofExpr scope e =
+  case e of
+    Ast.EVar name sp => EVar (nameOf scope name) sp
+    Ast.EInt n sp => EInt n sp
+    Ast.EStr s sp => EStr s sp
+    Ast.EFloat raw sp => EFloat raw sp
+    Ast.EInterp multi parts sp => EInterp multi (map (ofInterpPart scope) parts) sp
+    Ast.ELam params body sp => ELam params (ofExpr (append (map firstOf params) scope) body) sp
+    Ast.EApp fn args sp => EApp (ofExpr scope fn) (map (ofExpr scope) args) sp
+    Ast.EPi name implicit qty dom cod sp =>
+      EPi name implicit (ofMaybeQty qty) (ofExpr scope dom) (ofExpr (name :: scope) cod) sp
+    Ast.ELet binds body rec_ sp =>
+      let
+        bound = append (concatMap bindingBinders binds) scope
+      in ELet (map (ofBinding bound scope) binds) (ofExpr bound body) rec_ sp
+    Ast.ELocalFun clauses sp => ELocalFun (map (ofLocalClause scope) clauses) sp
+    Ast.ECase scrut alts sp => ECase (ofExpr scope scrut) (map (ofAlt scope) alts) sp
+    Ast.EIf c t f sp => EIf (ofExpr scope c) (ofExpr scope t) (ofExpr scope f) sp
+    Ast.EField base fname sp => EField (ofExpr scope base) fname sp
+    Ast.ERecord name fields sp => ERecord (nameOf scope name) (map (ofFieldValue scope) fields) sp
+    Ast.ERecUpdate base fields sp =>
+      ERecUpdate (ofExpr scope base) (map (ofFieldValue scope) fields) sp
+    Ast.EDo stmts sp => EDo (ofStmts scope stmts) sp
+    -- 中缀 / 括号 / 反引号 / section 在 Resolve 之后不应出现；保留同形转换以免转换层
+    -- 自身成为失败点（出现即由下游的 internal error 诊断）。
+    Ast.EInfix op l r sp => EInfix op (ofExpr scope l) (ofExpr scope r) sp
+    Ast.EParen inner sp => EParen (ofExpr scope inner) sp
+    Ast.EBacktick name l r sp => EBacktick name (ofExpr scope l) (ofExpr scope r) sp
+    Ast.ESectOp op sp => ESectOp op sp
+    Ast.ESectL op r sp => ESectL op (ofExpr scope r) sp
+    Ast.ESectR l op sp => ESectR (ofExpr scope l) op sp
+    Ast.EAnn value ty sp => EAnn (ofExpr scope value) (ofExpr scope ty) sp
+
+ofBinding : List String -> List String -> Pair Ast.Pat Ast.Expr -> Pair Pat Expr
+ofBinding bound scope (Pair pat value) =
   let
-    cs = strUnpack name
-    at = lastDotAt 0 cs (0 - 1)
-  in if at < 0 then Nothing else Just (Pair (strPack (take at cs)) (strPack (drop (at + 1) cs)))
+    valueScope = append (patBinders pat) bound
+  in Pair (ofPat scope pat) (ofExpr valueScope value)
 
--- | 最后一个点的下标（没有则 -1）。
-lastDotAt : Int -> List Int -> Int -> Int
-lastDotAt index cs found =
-  case cs of
-    [] => found
-    c :: rest => lastDotAt (index + 1) rest (if c == 46 then index else found)
+ofLocalClause : List String -> Pair (List Ast.Pat) Ast.Expr -> Pair (List Pat) Expr
+ofLocalClause scope (Pair pats body) =
+  Pair (map (ofPat scope) pats) (ofExpr (append (bindersOfPats pats) scope) body)
+
+ofAlt : List String -> Pair Ast.Pat Ast.Expr -> Pair Pat Expr
+ofAlt scope (Pair pat body) = Pair (ofPat scope pat) (ofExpr (append (patBinders pat) scope) body)
+
+ofFieldValue : List String -> Pair String Ast.Expr -> Pair String Expr
+ofFieldValue scope (Pair fname value) = Pair fname (ofExpr scope value)
+
+ofInterpPart : List String -> Ast.InterpPart -> InterpPart
+ofInterpPart scope part =
+  case part of
+    Ast.IPText s => IPText s
+    Ast.IPHole e => IPHole (ofExpr scope e)
+
+ofStmts : List String -> List Ast.DoStmt -> List DoStmt
+ofStmts scope stmts =
+  case stmts of
+    [] => []
+    stmt :: rest =>
+      case stmt of
+        Ast.DBind pat value sp =>
+          DBind (ofPat scope pat) (ofExpr scope value) sp
+            :: ofStmts (append (patBinders pat) scope) rest
+        Ast.DExpr value sp => DExpr (ofExpr scope value) sp :: ofStmts scope rest
+
+patFieldBinders : Pair String Ast.Pat -> List String
+patFieldBinders (Pair fname pat) = patBinders pat
+
+bindingBinders : Pair Ast.Pat Ast.Expr -> List String
+bindingBinders (Pair pat value) = patBinders pat
+
+astTraitParamName : Ast.TraitParam -> String
+astTraitParamName p = p.traitParamName
+
+ofRepr : Ast.ReprTier -> ReprTier
+ofRepr Ast.ReprAuto = ReprAuto
+ofRepr Ast.ReprAlias = ReprAlias
+ofRepr Ast.ReprBoxed = ReprBoxed
+
+ofQty : Ast.Qty -> Qty
+ofQty Ast.Q0 = Q0
+ofQty Ast.Q1 = Q1
+
+ofTraitParam : List String -> Ast.TraitParam -> TraitParam
+ofTraitParam scope (Ast.TraitParam name kind) = TraitParam name (ofMaybeExpr scope kind)
+
+ofMaybeQty : Maybe Ast.Qty -> Maybe Qty
+ofMaybeQty Nothing = Nothing
+ofMaybeQty (Just q) = Just (ofQty q)
+
+ofMaybeExpr : List String -> Maybe Ast.Expr -> Maybe Expr
+ofMaybeExpr scope Nothing = Nothing
+ofMaybeExpr scope (Just e) = Just (ofExpr scope e)

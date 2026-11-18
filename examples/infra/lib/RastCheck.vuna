@@ -1,0 +1,30 @@
+-- | RAst 转换自检：已解析的 Ast 引用名换成 RName（全局 / 局部 / 构造子）。
+module RastCheck where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Frontend.Ast as Ast
+import Vuna.Compiler.Frontend.Rast as Rast
+import Vuna.Compiler.Frontend.Rast.Name as RastName
+
+sp : Span
+sp = Span "" 1 1 1 1 0 0
+
+fixture : Ast.Decl
+fixture =
+  Ast.DFun
+    "f"
+    [Ast.PCon "Base.Data.Maybe.Just" [Ast.PVar "x" sp] sp]
+    (Ast.EApp (Ast.EVar "Base.Data.Int.add" sp) [Ast.EVar "x" sp] sp)
+    sp
+
+-- | 转换后：全局引用变 `RGlobal module name`，binder 保持 `RLocal`。
+export rastConvertOk : Bool
+rastConvertOk =
+  case Rast.ofDecls [fixture] of
+    [Rast.DFun name ([Rast.PCon (RastName.RGlobal m c) ([Rast.PVar x _]) _]) (Rast.EApp (Rast.EVar (RastName.RGlobal m2 b) _) ([Rast.EVar (RastName.RLocal x2) _]) _) _] =>
+      name
+        == "f"
+        && m
+        == "Base.Data.Maybe"
+        && c == "Just" && x == "x" && m2 == "Base.Data.Int" && b == "add" && x2 == "x"
+    _ => False
