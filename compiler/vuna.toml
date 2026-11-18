@@ -95,6 +95,7 @@ modules = [
   "Vuna.Compiler.Ir.Analysis",
   "Vuna.Compiler.Ir.Anf",
   "Vuna.Compiler.Ir.Cps",
+  "Vuna.Compiler.Ir.CpsStep",
   "Vuna.Compiler.Ir.Model",
   "Vuna.Compiler.Ir.Runtime",
   "Vuna.Compiler.Ir.Validate",
