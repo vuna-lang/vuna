@@ -233,7 +233,7 @@ genFloatLit st raw =
 -- ---------------------------------------------------------------
 applyAllIr : Ir -> List Ir -> Ir
 applyAllIr f [] = f
-applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
+applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
 
 effUnitBinder : IrBinder
 effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
@@ -250,7 +250,7 @@ genEffThunk fuel st family ctor arity prim =
     let
       bs = effArgBinders arity
       applied = applyAllIr prim (map (\b => IrVar b) bs)
-      mkEff = IrCtor family ctor [IrLam [effUnitBinder] Nothing applied]
+      mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
       outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
     in genExpr (fuel - 1) st outer
 
@@ -269,14 +269,14 @@ genExpr fuel st ir =
       IrLet bs scrut body => genLet (fuel - 1) st bs scrut body
       IrIf c th el => genIf (fuel - 1) st c th el
       IrRtApp sym args => genRtApp (fuel - 1) st sym args
-      IrApp _ _ => genApp (fuel - 1) st ir
+      IrApp _ _ _ => genApp (fuel - 1) st ir
       IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st scrut zero succ catch
       IrConcatMany parts => genConcatMany (fuel - 1) st parts
-      IrCtor family ctor args => genCtor (fuel - 1) st family ctor args
+      IrCtor family ctor _ args => genCtor (fuel - 1) st family ctor args
       IrRecord family fields => genRecord (fuel - 1) st family fields
       IrProj base family field => genProj (fuel - 1) st base family field
       IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
-      IrCase scrut alts => genCase (fuel - 1) st scrut alts
+      IrCase caseTy scrut alts => genCase (fuel - 1) st caseTy scrut alts
       IrLam bs rt body => genLamValue (fuel - 1) st bs rt body
       IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
       IrEffBind _ _ _ => Err "wasm target: effect bindings are not supported yet"
@@ -411,7 +411,7 @@ listLengthB (_ :: rest) = 1 + listLengthB rest
 -- 应用
 -- ---------------------------------------------------------------
 flattenApp : Ir -> Pair Ir (List Ir)
-flattenApp (IrApp f a) =
+flattenApp (IrApp _ f a) =
   let
     p = flattenApp f
   in Pair (firstOf p) (append (secondOf p) [a])
@@ -875,8 +875,8 @@ lookupFieldIr name (p :: rest) =
 
 -- | 通用 case：变体族按 tag 分派；record 族没有 tag，直接绑字段。
 --   先把 scrutinee 求值到 `scLocal`，再拼上分支体（分支生成器只负责 tag/字段读取）。
-genCase : Int -> GenState -> Ir -> List IrAlt -> Result (Pair (List Instr) GenState)
-genCase fuel st scrut alts =
+genCase : Int -> GenState -> Maybe IrTy -> Ir -> List IrAlt -> Result (Pair (List Instr) GenState)
+genCase fuel st caseTy scrut alts =
   if fuel <= 0 then
     Err "wasm codegen fuel exhausted"
   else
@@ -885,7 +885,7 @@ genCase fuel st scrut alts =
       Ok p =>
         let
           st1 = ensureLocal scrutSlot WvAnyRef (withTail st.gsTail (secondOf p))
-        in case caseFamilyOf alts of
+        in case caseFamilyOf caseTy alts of
           Nothing => prepend (scrutInstrs p) (restoreTail st (genCatchAllOnly (fuel - 1) st1 scrutSlot alts))
           Just family =>
             case famOrFail st1 family of
@@ -921,11 +921,15 @@ restoreTail : GenState -> Result (Pair (List Instr) GenState) -> Result (Pair (L
 restoreTail _ (Err e) = Err e
 restoreTail st (Ok q) = Ok (Pair (firstOf q) (withTail st.gsTail (secondOf q)))
 
-caseFamilyOf : List IrAlt -> Maybe String
-caseFamilyOf [] = Nothing
-caseFamilyOf (alt :: rest) =
+caseFamilyOf : Maybe IrTy -> List IrAlt -> Maybe String
+caseFamilyOf (Just (IrTyData family _)) _ = Just family
+caseFamilyOf _ alts = caseFamilyOfAlts alts
+
+caseFamilyOfAlts : List IrAlt -> Maybe String
+caseFamilyOfAlts [] = Nothing
+caseFamilyOfAlts (alt :: rest) =
   case irAltCtorOf alt of
-    Nothing => caseFamilyOf rest
+    Nothing => caseFamilyOfAlts rest
     Just p => Just (firstOf p)
 
 -- 全是 catch-all：只绑 scrutinee 本身，求值第一臂。
@@ -1708,7 +1712,7 @@ irUsesSyms fuel syms ir =
     case ir of
       IrVar _ => False
       IrGlobal _ => False
-      IrCtor _ _ args => anyIrSym fuel syms args
+      IrCtor _ _ _ args => anyIrSym fuel syms args
       IrRecord _ fields => fieldSym fuel syms fields
       IrProj b _ _ => irUsesSyms (fuel - 1) syms b
       IrRecUpd b _ fields => if irUsesSyms (fuel - 1) syms b then True else fieldSym fuel syms fields
@@ -1721,9 +1725,9 @@ irUsesSyms fuel syms ir =
       IrFloatLit _ => False
       IrLet _ v body => if irUsesSyms (fuel - 1) syms v then True else irUsesSyms (fuel - 1) syms body
       IrLam _ _ body => irUsesSyms (fuel - 1) syms body
-      IrApp f a => if irUsesSyms (fuel - 1) syms f then True else irUsesSyms (fuel - 1) syms a
+      IrApp _ f a => if irUsesSyms (fuel - 1) syms f then True else irUsesSyms (fuel - 1) syms a
       IrIf c t e => if irUsesSyms (fuel - 1) syms c then True else if irUsesSyms (fuel - 1) syms t then True else irUsesSyms (fuel - 1) syms e
-      IrCase s alts => if irUsesSyms (fuel - 1) syms s then True else anyAltSym fuel syms alts
+      IrCase caseTy s alts => if irUsesSyms (fuel - 1) syms s then True else anyAltSym fuel syms alts
       IrNatCase s _ z su c => if irUsesSyms (fuel - 1) syms s then True else if altMaybeSym fuel syms z then True else if altMaybeSym fuel syms su then True else altMaybeSym fuel syms c
       IrConcatMany xs => anyIrSym fuel syms xs
       IrEffThunk _ _ _ _ e => False
@@ -1822,7 +1826,7 @@ hcPureK = "@vuna@host@pureK"
 
 -- | `f a b c` 的应用脊椎：头 + 实参表。
 spineOf : Ir -> Pair Ir (List Ir)
-spineOf (IrApp f a) =
+spineOf (IrApp _ f a) =
   case spineOf f of
     Pair h args => Pair h (append args [a])
 spineOf ir = Pair ir []
@@ -1834,7 +1838,7 @@ opHOf key ((Pair k v) :: rest) = if key == k then Just v else opHOf key rest
 
 -- | 单构造子 op 的字段：`FsFail e` 的 `e`。
 opFieldOf : Ir -> Ir
-opFieldOf (IrCtor _ _ ([x])) = x
+opFieldOf (IrCtor _ _ _ ([x])) = x
 opFieldOf ir = ir
 
 -- | 纯动作续延：`MkEff (\\_ => runMain (opH op pureK))`。
@@ -1842,9 +1846,9 @@ directSend : String -> String -> Ir -> Ir
 directSend runName opHName op =
   let
     u = mkIrBinder "hostUnit"
-    applied = IrApp (IrApp (IrGlobal opHName) op) (IrGlobal hcPureK)
-    ran = IrApp (IrGlobal runName) applied
-  in IrCtor irEffTypeName irEffMkCtor [IrLam [u] Nothing ran]
+    applied = IrApp Nothing (IrApp Nothing (IrGlobal opHName) op) (IrGlobal hcPureK)
+    ran = IrApp Nothing (IrGlobal runName) applied
+  in IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u] Nothing ran]
 
 -- | 收口式错误族：`eprint ("vuna: " ++ text e ++ "\n"); exit 1`（不返回）。
 abortSend : String -> Ir -> Ir
@@ -1852,17 +1856,19 @@ abortSend textName op =
   let
     u = mkIrBinder "hostUnit"
     dead = mkIrBinder "hostDead"
-    msg = IrConcatMany [IrStr "vuna: ", IrApp (IrGlobal textName) (opFieldOf op), IrStr "\n"]
+    msg =
+      IrConcatMany [IrStr "vuna: ", IrApp Nothing (IrGlobal textName) (opFieldOf op), IrStr "\n"]
     eprinted = IrRtApp "@vuna@prim_eff_eprint" [msg]
     exited = IrRtApp "@vuna@prim_eff_exit" [IrInt 1]
   in IrCtor
     irEffTypeName
     irEffMkCtor
-    [IrLam [u] Nothing (IrApp (IrLam [dead] Nothing exited) eprinted)]
+    Nothing
+    [IrLam [u] Nothing (IrApp Nothing (IrLam [dead] Nothing exited) eprinted)]
 
 -- | 一个节点：先改写子项，再把脊椎是 `sendCore` 的节点换成直连调用。
 rw : List (Pair String String) -> List (Pair String String) -> String -> Ir -> Ir
-rw h ab n (IrCtor f c args) = rwSpine h ab n (IrCtor f c (map (rw h ab n) args))
+rw h ab n (IrCtor f c _ args) = rwSpine h ab n (IrCtor f c Nothing (map (rw h ab n) args))
 rw h ab n (IrRecord f fields) = rwSpine h ab n (IrRecord f (map (rwField h ab n) fields))
 rw h ab n (IrProj b f fd) = rwSpine h ab n (IrProj (rw h ab n b) f fd)
 rw h ab n (IrRecUpd b f fields) =
@@ -1871,9 +1877,10 @@ rw h ab n (IrRtApp sym args) = rwSpine h ab n (IrRtApp sym (map (rw h ab n) args
 rw h ab n (IrCast cFrom cTo e) = rwSpine h ab n (IrCast cFrom cTo (rw h ab n e))
 rw h ab n (IrLet bs v body) = rwSpine h ab n (IrLet bs (rw h ab n v) (rw h ab n body))
 rw h ab n (IrLam bs rt body) = rwSpine h ab n (IrLam bs rt (rw h ab n body))
-rw h ab n (IrApp f a) = rwSpine h ab n (IrApp (rw h ab n f) (rw h ab n a))
+rw h ab n (IrApp _ f a) = rwSpine h ab n (IrApp Nothing (rw h ab n f) (rw h ab n a))
 rw h ab n (IrIf c t e) = rwSpine h ab n (IrIf (rw h ab n c) (rw h ab n t) (rw h ab n e))
-rw h ab n (IrCase sc alts) = rwSpine h ab n (IrCase (rw h ab n sc) (map (rwAlt h ab n) alts))
+rw h ab n (IrCase caseTy sc alts) =
+  rwSpine h ab n (IrCase caseTy (rw h ab n sc) (map (rwAlt h ab n) alts))
 rw h ab n (IrNatCase sc i z su c) =
   rwSpine
     h
@@ -1955,7 +1962,7 @@ pureKDef =
     1
     []
     Nothing
-    (IrLam [r] Nothing (IrCtor irEffTypeName irEffMkCtor [IrLam [u] Nothing (IrVar r)]))
+    (IrLam [r] Nothing (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u] Nothing (IrVar r)]))
     True
     False
     Nothing
@@ -1963,7 +1970,7 @@ pureKDef =
 -- | 表达式里引用的顶层定义名（按体计算，改写后用它重算可达集）。
 irGlobalsOf : Ir -> List String
 irGlobalsOf (IrGlobal n) = [n]
-irGlobalsOf (IrCtor _ _ args) = concatMap irGlobalsOf args
+irGlobalsOf (IrCtor _ _ _ args) = concatMap irGlobalsOf args
 irGlobalsOf (IrRecord _ fields) = concatMap globalsOfField fields
 irGlobalsOf (IrProj b _ _) = irGlobalsOf b
 irGlobalsOf (IrRecUpd b _ fields) = append (irGlobalsOf b) (concatMap globalsOfField fields)
@@ -1971,9 +1978,9 @@ irGlobalsOf (IrRtApp _ args) = concatMap irGlobalsOf args
 irGlobalsOf (IrCast _ _ e) = irGlobalsOf e
 irGlobalsOf (IrLet _ v body) = append (irGlobalsOf v) (irGlobalsOf body)
 irGlobalsOf (IrLam _ _ body) = irGlobalsOf body
-irGlobalsOf (IrApp f a) = append (irGlobalsOf f) (irGlobalsOf a)
+irGlobalsOf (IrApp _ f a) = append (irGlobalsOf f) (irGlobalsOf a)
 irGlobalsOf (IrIf c t e) = append (irGlobalsOf c) (append (irGlobalsOf t) (irGlobalsOf e))
-irGlobalsOf (IrCase sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)
+irGlobalsOf (IrCase caseTy sc alts) = append (irGlobalsOf sc) (concatMap globalsOfAlt alts)
 irGlobalsOf (IrNatCase sc _ z su c) =
   append
     (irGlobalsOf sc)

@@ -64,12 +64,12 @@ auditKeys defs (IrLet bs scrut body) =
     (auditKeys defs body)
 auditKeys defs (IrIf c t e) =
   append (auditKeys defs c) (append (auditKeys defs t) (auditKeys defs e))
-auditKeys defs (IrCtor _ _ args) = concatMap (auditKeys defs) args
+auditKeys defs (IrCtor _ _ _ args) = concatMap (auditKeys defs) args
 auditKeys defs (IrRecord _ fields) = concatMap (\p => auditKeys defs (secondOf p)) fields
 auditKeys defs (IrProj base _ _) = auditKeys defs base
 auditKeys defs (IrRecUpd base _ fields) =
   append (auditKeys defs base) (concatMap (\p => auditKeys defs (secondOf p)) fields)
-auditKeys defs (IrCase scrut alts) =
+auditKeys defs (IrCase _ scrut alts) =
   append (auditKeys defs scrut) (concatMap (auditAltKeys defs) alts)
 auditKeys defs (IrNatCase scrut _ z s c) =
   append
@@ -77,7 +77,7 @@ auditKeys defs (IrNatCase scrut _ z s c) =
     (append (auditAltMaybeKeys defs z) (append (auditAltMaybeKeys defs s) (auditAltMaybeKeys defs c)))
 auditKeys defs (IrConcatMany parts) = concatMap (auditKeys defs) parts
 auditKeys defs (IrLam _ _ body) = auditKeys defs body
-auditKeys defs (IrApp f a) = append (auditKeys defs f) (auditKeys defs a)
+auditKeys defs (IrApp _ f a) = append (auditKeys defs f) (auditKeys defs a)
 auditKeys defs (IrRtApp sym args) =
   append (auditRtAppKeys sym args) (concatMap (auditKeys defs) args)
 auditKeys defs (IrRt sym) = if auditSymSupported sym then [] else ["symbol " ++ sym]

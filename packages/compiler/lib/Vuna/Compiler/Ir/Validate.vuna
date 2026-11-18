@@ -133,7 +133,10 @@ checkNodeBinderTys decls ir =
     IrLam bs resultTy _ =>
       Vuna.Compiler.Base.Common.bind (checkBinderTysOf decls bs) (\_ => checkIrTyM decls resultTy)
     IrLet bs scrut body => checkBinderTysOf decls bs
-    IrCase scrut alts => checkAltBinderTys decls alts
+    IrCase caseTy _ alts =>
+      Vuna.Compiler.Base.Common.bind (checkIrTyM decls caseTy) (\_ => checkAltBinderTys decls alts)
+    IrApp appTy _ _ => checkAppTyM decls appTy
+    IrCtor family _ tys _ => checkCtorTys decls family tys
     IrNatCase scrut fresh zero succ catch =>
       Vuna.Compiler.Base.Common.bind
         (checkAltBinderTysM decls zero)
@@ -141,6 +144,23 @@ checkNodeBinderTys decls ir =
     IrCast from to _ =>
       Vuna.Compiler.Base.Common.bind (checkIrTyM decls from) (\_ => checkIrTyM decls to)
     _ => OkC 0
+
+checkAppTyM : List IrTyDecl -> Maybe (Pair IrTy IrTy) -> Check Int
+checkAppTyM decls Nothing = OkC 0
+checkAppTyM decls (Just p) =
+  Vuna.Compiler.Base.Common.bind
+    (checkIrTyM decls (Just (firstOf p)))
+    (\_ => checkIrTyM decls (Just (secondOf p)))
+
+checkCtorTys : List IrTyDecl -> String -> Maybe (List IrTy) -> Check Int
+checkCtorTys decls family Nothing = OkC 0
+checkCtorTys decls family (Just tys) =
+  Vuna.Compiler.Base.Common.bind (checkTyArityList decls tys) (
+      \_ =>
+        case tyDeclArityOf decls family of
+          Just n => if listLength tys == n then OkC 0 else icInternal "constructor application has the wrong runtime type argument count for `${family}`"
+          Nothing => OkC 0
+    )
 
 checkIrTyM : List IrTyDecl -> Maybe IrTy -> Check Int
 checkIrTyM decls Nothing = OkC 0
@@ -250,7 +270,7 @@ checkScopedWork fuel work =
 scopedChildren : List IrBinder -> Ir -> List (Pair (List IrBinder) Ir)
 scopedChildren scope ir =
   case ir of
-    IrCtor family ctor args => map (\a => Pair scope a) args
+    IrCtor family ctor _ args => map (\a => Pair scope a) args
     IrRecord family fields => map (\p => Pair scope (secondOf p)) fields
     IrProj base family field => [Pair scope base]
     IrRecUpd base family fields => Pair scope base :: map (\p => Pair scope (secondOf p)) fields
@@ -258,9 +278,9 @@ scopedChildren scope ir =
     IrCast cFrom cTo inner => [Pair scope inner]
     IrLet bs scrut body => [Pair scope scrut, Pair (append bs scope) body]
     IrLam bs _ body => [Pair (append bs scope) body]
-    IrApp f a => [Pair scope f, Pair scope a]
+    IrApp _ f a => [Pair scope f, Pair scope a]
     IrIf c th el => [Pair scope c, Pair scope th, Pair scope el]
-    IrCase scrut alts => Pair scope scrut :: altWork scope alts
+    IrCase _ scrut alts => Pair scope scrut :: altWork scope alts
     IrNatCase scrut fresh zero succ catch =>
       append
         [Pair scope scrut]
@@ -299,7 +319,7 @@ irSize ir = 1 + irSizeChildren ir
 irSizeChildren : Ir -> Int
 irSizeChildren ir =
   case ir of
-    IrCtor family ctor args => irSizeList args
+    IrCtor family ctor _ args => irSizeList args
     IrRecord family fields => irSizeFields fields
     IrProj base family field => irSize base
     IrRecUpd base family fields => irSize base + irSizeFields fields
@@ -307,9 +327,9 @@ irSizeChildren ir =
     IrCast cFrom cTo inner => irSize inner
     IrLet bs scrut body => irSize scrut + irSize body
     IrLam bs _ body => irSize body
-    IrApp f a => irSize f + irSize a
+    IrApp _ f a => irSize f + irSize a
     IrIf c th el => irSize c + irSize th + irSize el
-    IrCase scrut alts => irSize scrut + irSizeAlts alts
+    IrCase _ scrut alts => irSize scrut + irSizeAlts alts
     IrNatCase scrut fresh zero succ catch =>
       irSize scrut + irSizeAlt zero + irSizeAlt succ + irSizeAlt catch
     IrConcatMany parts => irSizeList parts

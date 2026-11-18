@@ -51,7 +51,7 @@ record AnfAltM where
   anfNext : Int
 
 spineOfIr : Ir -> Pair Ir (List Ir)
-spineOfIr (IrApp f a) =
+spineOfIr (IrApp _ f a) =
   let
     p = spineOfIr f
   in Pair (firstOf p) (append (secondOf p) [a])
@@ -61,7 +61,7 @@ applyIrs : Ir -> List Ir -> Ir
 applyIrs f xs =
   case xs of
     [] => f
-    a :: rest => applyIrs (IrApp f a) rest
+    a :: rest => applyIrs (IrApp Nothing f a) rest
 
 isSimple : Ir -> Bool
 isSimple (IrVar _) = True
@@ -71,7 +71,7 @@ isSimple (IrInt _) = True
 isSimple (IrStr _) = True
 isSimple (IrBool _) = True
 isSimple (IrFloatLit _) = True
-isSimple (IrCtor _ _ []) = True
+isSimple (IrCtor _ _ _ []) = True
 isSimple _ = False
 
 freshBinder : Int -> IrBinder
@@ -120,10 +120,10 @@ anf fuel next e =
         let
           p = anfList (fuel - 1) next parts
         in mkAnf p.anfLets (IrConcatMany p.anfExprs) p.anfNext
-      IrCtor family ctor args =>
+      IrCtor family ctor tys args =>
         let
           p = anfList (fuel - 1) next args
-        in mkAnf p.anfLets (IrCtor family ctor p.anfExprs) p.anfNext
+        in mkAnf p.anfLets (IrCtor family ctor tys p.anfExprs) p.anfNext
       IrRecord family fields =>
         let
           p = anfFields (fuel - 1) next fields
@@ -149,8 +149,8 @@ anf fuel next e =
           bScrut = bindSimple s.anfNext s.anfLets s.anfExpr
           b = anf (fuel - 1) bScrut.boundNext body
         in mkAnf bScrut.boundLets (IrLet bs bScrut.boundExpr (letsIn b.anfLets b.anfExpr)) b.anfNext
-      IrApp (IrRt "prim_erase") x => anf (fuel - 1) next x
-      IrApp _ _ =>
+      IrApp _ (IrRt "prim_erase") x => anf (fuel - 1) next x
+      IrApp _ _ _ =>
         let
           p = spineOfIr e
           h = anf (fuel - 1) next (firstOf p)
@@ -163,11 +163,11 @@ anf fuel next e =
           ta = anf (fuel - 1) ca.anfNext t
           ea = anf (fuel - 1) ta.anfNext el
         in mkAnf ca.anfLets (IrIf ca.anfExpr (letsIn ta.anfLets ta.anfExpr) (letsIn ea.anfLets ea.anfExpr)) ea.anfNext
-      IrCase scrut alts =>
+      IrCase caseTy scrut alts =>
         let
           s = anf (fuel - 1) next scrut
           alts1 = anfAlts (fuel - 1) s.anfNext alts
-        in mkAnf s.anfLets (IrCase s.anfExpr alts1.anfAlts) alts1.anfNext
+        in mkAnf s.anfLets (IrCase caseTy s.anfExpr alts1.anfAlts) alts1.anfNext
       IrNatCase scrut fresh zero succ catch =>
         let
           s = anf (fuel - 1) next scrut
@@ -248,7 +248,7 @@ countAnfBinders fuel e =
       IrStr _ => 0
       IrBool _ => 0
       IrFloatLit _ => 0
-      IrCtor _ _ args => countAnfList (fuel - 1) args
+      IrCtor _ _ _ args => countAnfList (fuel - 1) args
       IrRecord _ fs => countAnfFields (fuel - 1) fs
       IrProj b _ _ => countAnfBinders (fuel - 1) b
       IrRecUpd b _ fs => countAnfBinders (fuel - 1) b + countAnfFields (fuel - 1) fs
@@ -256,9 +256,9 @@ countAnfBinders fuel e =
       IrCast cFrom cTo x => countAnfBinders (fuel - 1) x
       IrLet bs rhs body => countBs bs + countAnfBinders (fuel - 1) rhs + countAnfBinders (fuel - 1) body
       IrLam bs _ body => countBs bs + countAnfBinders (fuel - 1) body
-      IrApp f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
+      IrApp _ f a => countAnfBinders (fuel - 1) f + countAnfBinders (fuel - 1) a
       IrIf c t el => countAnfBinders (fuel - 1) c + countAnfBinders (fuel - 1) t + countAnfBinders (fuel - 1) el
-      IrCase s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
+      IrCase _ s alts => countAnfBinders (fuel - 1) s + countAnfAlts (fuel - 1) alts
       IrNatCase s _ z su ca => countAnfBinders (fuel - 1) s + countAltM (fuel - 1) z + countAltM (fuel - 1) su + countAltM (fuel - 1) ca
       IrConcatMany xs => countAnfList (fuel - 1) xs
       IrEffThunk _ _ _ _ p => countAnfBinders (fuel - 1) p

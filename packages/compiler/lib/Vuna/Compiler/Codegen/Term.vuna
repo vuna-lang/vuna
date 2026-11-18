@@ -1798,7 +1798,7 @@ genIrNode st (IrGlobal name) =
   let
     p = genValueRef st name
   in OkC (Pair (OName (firstOf p)) (secondOf p))
-genIrNode st (IrCtor family ctor args) =
+genIrNode st (IrCtor family ctor _ args) =
   Vuna.Compiler.Base.Common.bind (genIrArgs st args) (
       \p =>
         case p of
@@ -1882,7 +1882,7 @@ genIrNode st (IrLam bs _ body) =
                     Pair bodyTerm st2 => OkC (Pair (OLam params bodyTerm) st2)
               )
     )
-genIrNode st (IrApp f a) =
+genIrNode st (IrApp _ f a) =
   Vuna.Compiler.Base.Common.bind (genIr st f) (
       \p =>
         case p of
@@ -1909,7 +1909,7 @@ genIrNode st (IrIf c th el) =
                         )
               )
     )
-genIrNode st (IrCase scrut alts) =
+genIrNode st (IrCase _ scrut alts) =
   Vuna.Compiler.Base.Common.bind (genIr st scrut) (
       \p =>
         case p of

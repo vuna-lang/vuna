@@ -706,7 +706,7 @@ genFloatLit st raw =
 -- ---------------------------------------------------------------
 applyAllIr : Ir -> List Ir -> Ir
 applyAllIr f [] = f
-applyAllIr f (a :: rest) = applyAllIr (IrApp f a) rest
+applyAllIr f (a :: rest) = applyAllIr (IrApp Nothing f a) rest
 
 effUnitBinder : IrBinder
 effUnitBinder = IrBinder (IrBUser "effUnitArg") False Nothing
@@ -723,7 +723,7 @@ genEffThunk fuel st family ctor arity prim =
     let
       bs = effArgBinders arity
       applied = applyAllIr prim (map (\b => IrVar b) bs)
-      mkEff = IrCtor family ctor [IrLam [effUnitBinder] Nothing applied]
+      mkEff = IrCtor family ctor Nothing [IrLam [effUnitBinder] Nothing applied]
       outer = if arity <= 0 then mkEff else IrLam bs Nothing mkEff
     in genExpr (fuel - 1) st outer
 
@@ -791,12 +791,12 @@ genExprAt fuel st isTail ir =
                       )
                 )
           )
-      IrCtor family ctor args => genCtor (fuel - 1) st family ctor args
+      IrCtor family ctor _ args => genCtor (fuel - 1) st family ctor args
       IrRecord family fields => genRecord (fuel - 1) st family fields
       IrProj base family field => genProj (fuel - 1) st base family field
       IrRecUpd base family fields => genRecUpd (fuel - 1) st base family fields
-      IrCase scrut alts => genCase (fuel - 1) st isTail scrut alts
-      IrApp _ _ => genApp (fuel - 1) st isTail ir
+      IrCase caseTy scrut alts => genCase (fuel - 1) st isTail caseTy scrut alts
+      IrApp _ _ _ => genApp (fuel - 1) st isTail ir
       IrRtApp sym args => genRtApp (fuel - 1) st sym args
       IrConcatMany parts => genConcatMany (fuel - 1) st parts
       IrNatCase scrut _fresh zero succ catch => genNatCase (fuel - 1) st isTail scrut zero succ catch
@@ -832,7 +832,7 @@ genBoolChain fuel st args isAnd =
 
 -- 应用：flatten 左脊，支持饱和顶层调用、`@ir@natSucc`、运行时值函数。
 flattenApp : Ir -> Pair Ir (List Ir)
-flattenApp (IrApp f a) =
+flattenApp (IrApp _ f a) =
   let
     p = flattenApp f
   in Pair (firstOf p) (append (secondOf p) [a])
@@ -1182,8 +1182,8 @@ lookupFieldIr name (p :: rest) =
 -- 通用 case
 -- ---------------------------------------------------------------
 -- | 变体按 tag 分派（线性 compare 链）；record 没有 tag，直接按字段序绑定。
-genCase : Int -> FGen -> Bool -> Ir -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genCase fuel st isTail scrut alts =
+genCase : Int -> FGen -> Bool -> Maybe IrTy -> Ir -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCase fuel st isTail caseTy scrut alts =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
@@ -1192,15 +1192,15 @@ genCase fuel st isTail scrut alts =
           let
             scP = freshSlot (secondOf p)
             sc = firstOf scP
-          in nbind (genCaseAlts (fuel - 1) (secondOf scP) isTail sc alts) (\q => NOk (Pair (cat [firstOf p, setLocal sc, firstOf q]) (secondOf q)))
+          in nbind (genCaseAlts (fuel - 1) (secondOf scP) isTail caseTy sc alts) (\q => NOk (Pair (cat [firstOf p, setLocal sc, firstOf q]) (secondOf q)))
       )
 
-genCaseAlts : Int -> FGen -> Bool -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
-genCaseAlts fuel st isTail sc alts =
+genCaseAlts : Int -> FGen -> Bool -> Maybe IrTy -> Int -> List IrAlt -> NRes (Pair (List Instr) FGen)
+genCaseAlts fuel st isTail caseTy sc alts =
   if fuel <= 0 then
     internal "native codegen fuel exhausted"
   else
-    case caseFamilyOf alts of
+    case caseFamilyOf caseTy alts of
       Nothing => genDefault fuel st isTail sc alts
       Just family =>
         case declOf family st.fgFams of
@@ -1209,11 +1209,15 @@ genCaseAlts fuel st isTail sc alts =
           Just (IrRecordDecl _ _ _ _) => genRecordAlts fuel st isTail sc alts
           _ => internal "case on an unboxed family is not supported yet"
 
-caseFamilyOf : List IrAlt -> Maybe String
-caseFamilyOf [] = Nothing
-caseFamilyOf (alt :: rest) =
+caseFamilyOf : Maybe IrTy -> List IrAlt -> Maybe String
+caseFamilyOf (Just (IrTyData family _)) _ = Just family
+caseFamilyOf _ alts = caseFamilyOfAlts alts
+
+caseFamilyOfAlts : List IrAlt -> Maybe String
+caseFamilyOfAlts [] = Nothing
+caseFamilyOfAlts (alt :: rest) =
   case irAltCtorOf alt of
-    Nothing => caseFamilyOf rest
+    Nothing => caseFamilyOfAlts rest
     Just p => Just (firstOf p)
 
 findCatchAll : List IrAlt -> Maybe IrAlt

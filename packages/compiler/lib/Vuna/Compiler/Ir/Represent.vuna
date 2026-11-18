@@ -33,15 +33,15 @@ representDef shared d =
 representIr : IrShared -> Ir -> Ir
 representIr shared ir =
   case ir of
-    IrCtor family ctor args =>
+    IrCtor family ctor tys args =>
       let
         args2 = map (representIr shared) args
       in case irSharedUnboxedOf family shared.irSharedUnboxed of
         Just _ =>
           case args2 of
             [only] => only
-            _ => IrCtor family ctor args2
-        Nothing => IrCtor family ctor args2
+            _ => IrCtor family ctor tys args2
+        Nothing => IrCtor family ctor tys args2
     IrRecord family fields =>
       IrRecord family (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
     IrRecUpd base family fields =>
@@ -54,9 +54,9 @@ representIr shared ir =
     IrCast cFrom cTo inner => IrCast cFrom cTo (representIr shared inner)
     IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
     IrLam bs rt body => IrLam bs rt (representIr shared body)
-    IrApp f a => IrApp (representIr shared f) (representIr shared a)
+    IrApp appTy f a => IrApp appTy (representIr shared f) (representIr shared a)
     IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
-    IrCase scrut alts => representCase shared scrut alts
+    IrCase caseTy scrut alts => representCase shared caseTy scrut alts
     IrNatCase scrut fresh zero succ catch =>
       IrNatCase
         (representIr shared scrut)
@@ -70,8 +70,8 @@ representIr shared ir =
     _ => ir
 
 -- 单构造子去装箱族的 case → `let`：分支 binder 表就是完整 telescope，体的下标不变。
-representCase : IrShared -> Ir -> List IrAlt -> Ir
-representCase shared scrut alts =
+representCase : IrShared -> Maybe IrTy -> Ir -> List IrAlt -> Ir
+representCase shared caseTy scrut alts =
   let
     scrut2 = representIr shared scrut
   in case alts of
@@ -83,10 +83,10 @@ representCase shared scrut alts =
               if allCatchAll rest then
                 IrLet (irAltBindersOf alt) scrut2 (representIr shared (irAltBodyOf alt))
               else
-                IrCase scrut2 (map (representAltIr shared) alts)
-            Nothing => IrCase scrut2 (map (representAltIr shared) alts)
-        Nothing => IrCase scrut2 (map (representAltIr shared) alts)
-    [] => IrCase scrut2 []
+                IrCase caseTy scrut2 (map (representAltIr shared) alts)
+            Nothing => IrCase caseTy scrut2 (map (representAltIr shared) alts)
+        Nothing => IrCase caseTy scrut2 (map (representAltIr shared) alts)
+    [] => IrCase caseTy scrut2 []
 
 allCatchAll : List IrAlt -> Bool
 allCatchAll [] = True

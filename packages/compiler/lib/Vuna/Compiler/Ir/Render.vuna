@@ -48,6 +48,14 @@ tyTextMaybe : Maybe IrTy -> String
 tyTextMaybe Nothing = "?"
 tyTextMaybe (Just ty) = tyText ty
 
+tyListText : Maybe (List IrTy) -> String
+tyListText Nothing = "?"
+tyListText (Just tys) = "[" ++ String.join "," (map tyText tys) ++ "]"
+
+appTyText : Maybe (Pair IrTy IrTy) -> String
+appTyText Nothing = "?"
+appTyText (Just p) = tyText (firstOf p) ++ "->" ++ tyText (secondOf p)
+
 renderAlt : Int -> IrAlt -> String
 renderAlt fuel a =
   if fuel <= 0 then
@@ -91,7 +99,7 @@ renderApp fuel e =
     Pair "..." ""
   else
     case e of
-      IrApp f a =>
+      IrApp _ f a =>
         let
           p = renderApp (fuel - 1) f
         in Pair (firstOf p) (secondOf p ++ " " ++ renderIr (fuel - 1) a)
@@ -105,7 +113,7 @@ renderIr fuel e =
     case e of
       IrVar b => "v:" ++ binderText b
       IrGlobal n => "g:" ++ n
-      IrCtor fam ctor args => "(ctor " ++ fam ++ "." ++ ctor ++ " " ++ renderList (fuel - 1) args ++ ")"
+      IrCtor fam ctor tys args => "(ctor " ++ fam ++ "." ++ ctor ++ " " ++ tyListText tys ++ " " ++ renderList (fuel - 1) args ++ ")"
       IrRecord fam fs => "(record " ++ fam ++ " " ++ renderFields (fuel - 1) fs ++ ")"
       IrProj b fam f => "(proj " ++ renderIr (fuel - 1) b ++ " " ++ fam ++ "." ++ f ++ ")"
       IrRecUpd b fam fs => "(upd " ++ renderIr (fuel - 1) b ++ " " ++ fam ++ " " ++ renderFields (fuel - 1) fs ++ ")"
@@ -118,12 +126,12 @@ renderIr fuel e =
       IrFloatLit s => "f:" ++ s
       IrLet bs rhs body => "(let [" ++ binderList bs ++ "] " ++ renderIr (fuel - 1) rhs ++ " " ++ renderIr (fuel - 2) body ++ ")"
       IrLam bs rt body => "(lam [" ++ binderList bs ++ "]:" ++ tyTextMaybe rt ++ " " ++ renderIr (fuel - 1) body ++ ")"
-      IrApp _ _ =>
+      IrApp appTy _ _ =>
         let
           p = renderApp (fuel - 1) e
-        in "(app " ++ firstOf p ++ " " ++ secondOf p ++ ")"
+        in "(app " ++ appTyText appTy ++ " " ++ firstOf p ++ " " ++ secondOf p ++ ")"
       IrIf c t el => "(if " ++ renderIr (fuel - 1) c ++ " " ++ renderIr (fuel - 2) t ++ " " ++ renderIr (fuel - 3) el ++ ")"
-      IrCase s alts => "(case " ++ renderIr (fuel - 1) s ++ " " ++ String.join " " (map (renderAlt (fuel - 2)) alts) ++ ")"
+      IrCase caseTy s alts => "(case " ++ tyTextMaybe caseTy ++ " " ++ renderIr (fuel - 1) s ++ " " ++ String.join " " (map (renderAlt (fuel - 2)) alts) ++ ")"
       IrNatCase s _ z su ca => "(natcase " ++ renderIr (fuel - 1) s ++ " " ++ renderAltM (fuel - 2) z ++ " " ++ renderAltM (fuel - 2) su ++ " " ++ renderAltM (fuel - 2) ca ++ ")"
       IrConcatMany xs => "(cat " ++ renderList (fuel - 1) xs ++ ")"
       IrEffThunk fam ctor _ arity prim => "(effthunk " ++ fam ++ "." ++ ctor ++ "/" ++ strFromInt arity ++ " " ++ renderIr (fuel - 1) prim ++ ")"

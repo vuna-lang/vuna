@@ -278,6 +278,20 @@ annotHeadTy fuel env binders g args =
               Nothing => Nothing
               Just tys => Just (IrTyData g tys)
 
+-- | 应用头的运行时类型：局部变量/数据族仍走 `annotTyOf`；全局**函数**从定义表
+-- 取 `renderPiTy` 签名。只用于 `IrApp` 的节点类型，不参与 binder 注解。
+export annotCalleeTy : LwEnv -> List IrBinder -> Term -> Maybe IrTy
+annotCalleeTy env binders t =
+  case t of
+    TGlobal g =>
+      case findDtData g env.lwDatas of
+        Just _ => annotTyOf env binders t
+        Nothing =>
+          case HashMap.lookup g env.lwDefTbl of
+            Just d => Just (renderPiTy [] env.lwTyParams env.lwDatas 0 (eval [] (dtDefType d)))
+            Nothing => annotTyOf env binders t
+    _ => annotTyOf env binders t
+
 -- 数据族的运行时类型实参：按族的**运行时参数槽**（`usedPats` 是族 telescope 的 level）
 -- 选实参，因此注解的实参个数与声明的类型参数个数逐位一致。
 annotFamilyArgs : Int -> LwEnv -> List IrBinder -> List Int -> List Term -> Maybe (List IrTy)
@@ -301,6 +315,17 @@ annotFamilyArgs fuel env binders usedPats args =
 nthTermIn : List Term -> Int -> Maybe Term
 nthTermIn [] i = Nothing
 nthTermIn (t :: rest) i = if i <= 0 then Just t else nthTermIn rest (i - 1)
+
+-- | 构造子应用的运行时类型实参（按族的运行时参数槽选实参）。
+export ctorTypeArgsOf : LwEnv -> String -> List (Pair Term Rig) -> Maybe (List IrTy)
+ctorTypeArgsOf env ctor args =
+  case HashMap.lookup ctor env.lwCtors of
+    Just (Pair family _) =>
+      case findDtData family env.lwDatas of
+        Nothing => Nothing
+        Just _ =>
+          annotFamilyArgs 256 env [] (lookupTyParamsIn env.lwTyParams family) (map firstOf args)
+    Nothing => Nothing
 
 -- ---------------------------------------------------------------
 -- 类型声明（IR）

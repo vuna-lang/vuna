@@ -146,10 +146,10 @@ freshA fuel i = mkBinder ("__cpsA" ++ strFromInt fuel ++ "_" ++ strFromInt i)
 
 applyAll : Ir -> List Ir -> Ir
 applyAll f [] = f
-applyAll f (a :: rest) = applyAll (IrApp f a) rest
+applyAll f (a :: rest) = applyAll (IrApp Nothing f a) rest
 
 flattenApp : Ir -> Pair Ir (List Ir)
-flattenApp (IrApp f a) =
+flattenApp (IrApp _ f a) =
   let
     p = flattenApp f
   in Pair (firstOf p) (append (secondOf p) [a])
@@ -223,14 +223,14 @@ identityCont =
 cpsExpr : Int -> List IrBinder -> Ir -> Ir -> Ir
 cpsExpr fuel env e k =
   if fuel <= 0 then
-    IrApp k (transformDirect (fuel - 1) e)
+    IrApp Nothing k (transformDirect (fuel - 1) e)
   else
     case e of
-      IrApp _ _ => cpsApp (fuel - 1) env e k
-      IrCase scrut alts =>
+      IrApp _ _ _ => cpsApp (fuel - 1) env e k
+      IrCase caseTy scrut alts =>
         let
           v = freshV fuel
-          kCase = IrLam [v] Nothing (IrCase (IrVar v) (mapAltCps (fuel - 1) env alts k))
+          kCase = IrLam [v] Nothing (IrCase caseTy (IrVar v) (mapAltCps (fuel - 1) env alts k))
         in cpsExpr (fuel - 1) env scrut kCase
       IrNatCase scrut fresh zero succ catch =>
         let
@@ -248,7 +248,7 @@ cpsExpr fuel env e k =
           kLet = IrLam [v] Nothing (IrLet bs (IrVar v) (cpsExpr (fuel - 1) env body k))
         in cpsExpr (fuel - 1) env scrut kLet
       IrCast cFrom cTo inner => IrCast cFrom cTo (cpsExpr (fuel - 1) env inner k)
-      _ => IrApp k (transformDirect (fuel - 1) e)
+      _ => IrApp Nothing k (transformDirect (fuel - 1) e)
 
 cpsAlt : Int -> List IrBinder -> IrAlt -> Ir -> IrAlt
 cpsAlt fuel env alt k =
@@ -272,10 +272,10 @@ cpsAltMaybe fuel env m k =
 cpsArgs : Int -> List IrBinder -> List Ir -> Ir -> List Ir -> Ir -> Ir
 cpsArgs fuel env args head acc k =
   if fuel <= 0 then
-    IrApp k (applyAll head (reverse acc))
+    IrApp Nothing k (applyAll head (reverse acc))
   else
     case args of
-      [] => IrApp k (applyAll head (reverse acc))
+      [] => IrApp Nothing k (applyAll head (reverse acc))
       a :: rest =>
         let
           v = freshV fuel
@@ -293,7 +293,7 @@ cpsThunkCall fuel head args k =
 cpsApp : Int -> List IrBinder -> Ir -> Ir -> Ir
 cpsApp fuel env e k =
   if fuel <= 0 then
-    IrApp k e
+    IrApp Nothing k e
   else
     let
       p = flattenApp e
@@ -320,24 +320,24 @@ transformDirect fuel e =
     e
   else
     case e of
-      IrCtor family ctor args =>
+      IrCtor family ctor _ args =>
         if isThunkCtor family ctor then
           case args of
             [IrLam bs _ body] =>
               let
                 k = freshK fuel
                 body1 = cpsExpr (fuel - 1) [] body (IrVar k)
-              in IrCtor family ctor [IrLam (append bs [k]) Nothing body1]
-            _ => IrCtor family ctor (mapDirect (fuel - 1) args)
+              in IrCtor family ctor Nothing [IrLam (append bs [k]) Nothing body1]
+            _ => IrCtor family ctor Nothing (mapDirect (fuel - 1) args)
         else
-          IrCtor family ctor (mapDirect (fuel - 1) args)
+          IrCtor family ctor Nothing (mapDirect (fuel - 1) args)
       IrEffThunk family ctor _unitTy arity prim =>
         let
           u = freshU fuel
           k = freshK fuel
           argBs = map (\i => freshA fuel i) (range 0 arity)
           applied = applyAll (transformDirect (fuel - 1) prim) (map IrVar argBs)
-          inner = IrCtor family ctor [IrLam [u, k] Nothing (IrApp (IrVar k) applied)]
+          inner = IrCtor family ctor Nothing [IrLam [u, k] Nothing (IrApp Nothing (IrVar k) applied)]
         in if arity <= 0 then inner else IrLam argBs Nothing inner
       IrRecord family fields => IrRecord family (mapFieldsDirect (fuel - 1) fields)
       IrProj base family field => IrProj (transformDirect (fuel - 1) base) family field
@@ -346,9 +346,9 @@ transformDirect fuel e =
       IrCast cFrom cTo inner => IrCast cFrom cTo (transformDirect (fuel - 1) inner)
       IrLet bs scrut body => IrLet bs (transformDirect (fuel - 1) scrut) (transformDirect (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (transformDirect (fuel - 1) body)
-      IrApp g a => IrApp (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
+      IrApp _ g a => IrApp Nothing (transformDirect (fuel - 1) g) (transformDirect (fuel - 1) a)
       IrIf c t el => IrIf (transformDirect (fuel - 1) c) (transformDirect (fuel - 1) t) (transformDirect (fuel - 1) el)
-      IrCase scrut alts => IrCase (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
+      IrCase caseTy scrut alts => IrCase caseTy (transformDirect (fuel - 1) scrut) (mapAltDirect (fuel - 1) alts)
       IrNatCase scrut fresh zero succ catch => IrNatCase (transformDirect (fuel - 1) scrut) fresh (transformAltMaybe (fuel - 1) zero) (transformAltMaybe (fuel - 1) succ) (transformAltMaybe (fuel - 1) catch)
       IrConcatMany parts => IrConcatMany (mapDirect (fuel - 1) parts)
       IrVar _ => e
@@ -390,7 +390,7 @@ trampolineBody name (IrCast cFrom cTo inner) =
   case trampolineBody name inner of
     Err msg => Err msg
     Ok inner1 => Ok (IrCast cFrom cTo inner1)
-trampolineBody name (IrApp (IrApp (IrGlobal g) e) u) =
+trampolineBody name (IrApp _ (IrApp _ (IrGlobal g) e) u) =
   if g == runThunkName then
     Ok (applyAll (IrGlobal g) [e, u, identityCont])
   else
@@ -436,11 +436,11 @@ selfBody fuel body name =
         case selfBody (fuel - 1) inner name of
           Err msg => Err msg
           Ok inner1 => Ok (IrCast cFrom cTo inner1)
-      IrCase scrut alts =>
+      IrCase caseTy scrut alts =>
         case selfAlts (fuel - 1) alts name of
           Err msg => Err msg
-          Ok alts1 => Ok (IrCase scrut alts1)
-      IrApp (IrRt sym) th => if sym == "prim_effectSelf" then Ok (applyAll (IrRt irCpsSelfName) [th, identityCont]) else Err ("CPS: unexpected handleScoped shape: " ++ name)
+          Ok alts1 => Ok (IrCase caseTy scrut alts1)
+      IrApp _ (IrRt sym) th => if sym == "prim_effectSelf" then Ok (applyAll (IrRt irCpsSelfName) [th, identityCont]) else Err ("CPS: unexpected handleScoped shape: " ++ name)
       _ => Err ("CPS: unexpected handleScoped shape: " ++ name)
 
 transformDef : Int -> IrDef -> Result IrDef
@@ -524,16 +524,16 @@ selSyms fuel e =
     case e of
       IrRt s => IrRt (selSym s)
       IrRtApp s args => IrRtApp (selSym s) (selSList (fuel - 1) args)
-      IrCtor fam ctor args => IrCtor fam ctor (selSList (fuel - 1) args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (selSList (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (selSFields (fuel - 1) fs)
       IrProj b fam f => IrProj (selSyms (fuel - 1) b) fam f
       IrRecUpd b fam fs => IrRecUpd (selSyms (fuel - 1) b) fam (selSFields (fuel - 1) fs)
       IrCast cFrom cTo x => IrCast cFrom cTo (selSyms (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (selSyms (fuel - 1) rhs) (selSyms (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (selSyms (fuel - 1) body)
-      IrApp f a => IrApp (selSyms (fuel - 1) f) (selSyms (fuel - 1) a)
+      IrApp _ f a => IrApp Nothing (selSyms (fuel - 1) f) (selSyms (fuel - 1) a)
       IrIf c t el => IrIf (selSyms (fuel - 1) c) (selSyms (fuel - 1) t) (selSyms (fuel - 1) el)
-      IrCase s alts => IrCase (selSyms (fuel - 1) s) (selSymsAlt (fuel - 1) alts)
+      IrCase caseTy s alts => IrCase caseTy (selSyms (fuel - 1) s) (selSymsAlt (fuel - 1) alts)
       IrNatCase s fr z su ca => IrNatCase (selSyms (fuel - 1) s) fr (selSymsAltM (fuel - 1) z) (selSymsAltM (fuel - 1) su) (selSymsAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (selSList (fuel - 1) xs)
       IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (selSyms (fuel - 1) prim)
@@ -580,7 +580,7 @@ stepDoneCont : Ir
 stepDoneCont =
   let
     v = mkBinder "__selId"
-  in IrLam [v] Nothing (IrApp (IrRt irSelDoneName) (IrVar v))
+  in IrLam [v] Nothing (IrApp Nothing (IrRt irSelDoneName) (IrVar v))
 
 selTrampolineBody : String -> Ir -> Result Ir
 selTrampolineBody name (IrLam bs rt inner) =
@@ -591,9 +591,9 @@ selTrampolineBody name (IrCast cFrom cTo inner) =
   case selTrampolineBody name inner of
     Err msg => Err msg
     Ok b => Ok (IrCast cFrom cTo b)
-selTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
+selTrampolineBody name (IrApp _ (IrApp _ (IrApp _ (IrGlobal g) e) u) _idc) =
   if g == runThunkName then
-    Ok (IrApp (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
+    Ok (IrApp Nothing (IrRt irSelRunName) (applyAll (IrGlobal g) [e, u, stepDoneCont]))
   else
     Err ("selective CPS: unexpected trampoline shape: " ++ name)
 selTrampolineBody name _ = Err ("selective CPS: unexpected trampoline shape: " ++ name)
@@ -613,11 +613,11 @@ selSelfBody fuel body =
         case selSelfBody (fuel - 1) inner of
           Err msg => Err msg
           Ok b => Ok (IrCast cFrom cTo b)
-      IrCase s alts =>
+      IrCase caseTy s alts =>
         case selSelfAlts (fuel - 1) alts of
           Err msg => Err msg
-          Ok a => Ok (IrCase s a)
-      IrApp (IrApp (IrRt s) th) idc => if s == irSelSelfName then Ok (IrApp (IrApp (IrRt s) th) stepDoneCont) else Err "selective CPS: unexpected handleScoped shape"
+          Ok a => Ok (IrCase caseTy s a)
+      IrApp _ (IrApp _ (IrRt s) th) idc => if s == irSelSelfName then Ok (IrApp Nothing (IrApp Nothing (IrRt s) th) stepDoneCont) else Err "selective CPS: unexpected handleScoped shape"
       _ => Err "selective CPS: unexpected handleScoped shape"
 
 selSelfAlts : Int -> List IrAlt -> Result (List IrAlt)
@@ -701,7 +701,7 @@ mResumeGo (b :: rest) =
     mResumeGo rest
 
 mEraseHead : Ir -> Ir
-mEraseHead (e@(IrApp (IrRt s) x)) = if s == "prim_erase" then mEraseHead x else e
+mEraseHead (e@(IrApp _ (IrRt s) x)) = if s == "prim_erase" then mEraseHead x else e
 mEraseHead (IrCast cFrom cTo x) = mEraseHead x
 mEraseHead e = e
 
@@ -709,14 +709,15 @@ mEraseHead e = e
 -- resumption 调用因此可能是 `prim_erase (k v)` 而不是 `k v`。
 mStripErase : Ir -> Ir
 mStripErase (IrCast cFrom cTo x) = mStripErase x
-mStripErase (IrApp (IrRt s) x) = if s == "prim_erase" then mStripErase x else IrApp (IrRt s) x
+mStripErase (IrApp _ (IrRt s) x) =
+  if s == "prim_erase" then mStripErase x else IrApp Nothing (IrRt s) x
 mStripErase x = x
 
 mIsResumeApp : IrBinder -> Ir -> Bool
 mIsResumeApp r e0 = mIsResumeAppGo r (mStripErase e0)
 
 mIsResumeAppGo : IrBinder -> Ir -> Bool
-mIsResumeAppGo r (e@(IrApp _ _)) =
+mIsResumeAppGo r (e@(IrApp _ _ _)) =
   let
     p = flattenApp e
   in case mEraseHead (firstOf p) of
@@ -750,7 +751,8 @@ isEffContLambda = isEffResultTy
 
 -- | λ 体已经是 `MkEff (\u K -> …)`（mCps 已包过），避免后处理重复包一层。
 isEffThunkBody : Ir -> Bool
-isEffThunkBody (IrCtor family ctor ([IrLam _ _ _])) = family == irEffTypeName && ctor == irEffMkCtor
+isEffThunkBody (IrCtor family ctor _ ([IrLam _ _ _])) =
+  family == irEffTypeName && ctor == irEffMkCtor
 isEffThunkBody _ = False
 
 -- | 用续延 K 跑一个 Eff 值：`case eff of MkEff th => runEff th K`。
@@ -759,6 +761,7 @@ mRunEffTerm eff k =
   let
     th = mkBinder "__mEffTh"
   in IrCase
+    Nothing
     eff
     [IrAlt (Just (Pair irEffTypeName irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
 
@@ -776,7 +779,7 @@ mEffContLambda fuel r bs rt body =
   in IrLam
     bs
     rt
-    (IrCtor irEffTypeName irEffMkCtor [IrLam [u, kd] Nothing (mCps (fuel - 1) r (IrLam [v] Nothing (mRunEffTerm (IrVar v) (IrVar kd))) body)])
+    (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [u, kd] Nothing (mCps (fuel - 1) r (IrLam [v] Nothing (mRunEffTerm (IrVar v) (IrVar kd))) body)])
 
 mCpsAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
 mCpsAlts fuel r k alts =
@@ -797,7 +800,7 @@ mCpsAltM fuel r k m =
       Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mCps (fuel - 1) r k a.irAltBody))
 
 mIsControl : Ir -> Bool
-mIsControl (IrCase _ _) = True
+mIsControl (IrCase caseTy _ _) = True
 mIsControl (IrIf _ _ _) = True
 mIsControl (IrNatCase _ _ _ _ _) = True
 mIsControl _ = False
@@ -806,10 +809,10 @@ mIsControl _ = False
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
 mCpsArgs fuel r k sym args acc =
   if fuel <= 0 then
-    IrApp k (IrRtApp sym (reverse acc))
+    IrApp Nothing k (IrRtApp sym (reverse acc))
   else
     case args of
-      [] => IrApp k (IrRtApp sym (reverse acc))
+      [] => IrApp Nothing k (IrRtApp sym (reverse acc))
       a :: rest =>
         let
           v = mFreshV fuel
@@ -819,10 +822,10 @@ mCpsArgs fuel r k sym args acc =
 mCpsApply : Int -> IrBinder -> Ir -> List Ir -> Ir
 mCpsApply fuel r k parts =
   if fuel <= 0 then
-    IrApp k (IrGlobal "?")
+    IrApp Nothing k (IrGlobal "?")
   else
     case parts of
-      [] => IrApp k (IrGlobal "?")
+      [] => IrApp Nothing k (IrGlobal "?")
       [x] => mCps (fuel - 1) r k x
       x :: rest =>
         let
@@ -832,10 +835,10 @@ mCpsApply fuel r k parts =
 mCpsApplyArgs : Int -> IrBinder -> Ir -> List Ir -> List Ir -> IrBinder -> Ir
 mCpsApplyArgs fuel r k args acc headV =
   if fuel <= 0 then
-    IrApp k (IrGlobal "?")
+    IrApp Nothing k (IrGlobal "?")
   else
     case args of
-      [] => IrApp k (applyAll (IrVar headV) (reverse acc))
+      [] => IrApp Nothing k (applyAll (IrVar headV) (reverse acc))
       a :: rest =>
         let
           v = mFreshV fuel
@@ -844,9 +847,9 @@ mCpsApplyArgs fuel r k args acc headV =
 mCps : Int -> IrBinder -> Ir -> Ir -> Ir
 mCps fuel r k e =
   if fuel <= 0 then
-    IrApp k e
+    IrApp Nothing k e
   else if mIsResumeApp r e then
-    IrApp e k
+    IrApp Nothing e k
   else
     case e of
       IrLet bs rhs body =>
@@ -854,10 +857,10 @@ mCps fuel r k e =
           v = mFreshV fuel
           cont = IrLam [v] Nothing (IrLet bs (IrVar v) (mCps (fuel - 1) r k body))
         in mCps (fuel - 1) r cont rhs
-      IrCase scrut alts =>
+      IrCase caseTy scrut alts =>
         let
           v = mFreshV fuel
-          cont = IrLam [v] Nothing (IrCase (IrVar v) (mCpsAlts (fuel - 2) r k alts))
+          cont = IrLam [v] Nothing (IrCase caseTy (IrVar v) (mCpsAlts (fuel - 2) r k alts))
         in mCps (fuel - 1) r cont scrut
       IrIf c t el =>
         let
@@ -871,12 +874,12 @@ mCps fuel r k e =
         in mCps (fuel - 1) r cont scrut
       IrCast cFrom cTo x => IrCast cFrom cTo (mCps (fuel - 1) r k x)
       IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
-      IrLam bs rt body => if isEffContLambda rt then IrApp k (mEffContLambda (fuel - 1) r bs rt body) else IrApp k e
-      IrApp _ _ =>
+      IrLam bs rt body => if isEffContLambda rt then IrApp Nothing k (mEffContLambda (fuel - 1) r bs rt body) else IrApp Nothing k e
+      IrApp _ _ _ =>
         let
           p = flattenApp e
         in mCpsApply (fuel - 1) r k (append [firstOf p] (secondOf p))
-      _ => IrApp k e
+      _ => IrApp Nothing k e
 
 mHandlerLam : Int -> List IrBinder -> Ir -> Ir
 mHandlerLam fuel bs body =
@@ -916,16 +919,16 @@ mHandlers fuel e =
   else
     case e of
       IrLam bs _ body => mHandlerLam (fuel - 1) bs body
-      IrCtor fam ctor args => IrCtor fam ctor (mListH (fuel - 1) args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mListH (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (mFieldsH (fuel - 1) fs)
       IrProj b fam f => IrProj (mHandlers (fuel - 1) b) fam f
       IrRecUpd b fam fs => IrRecUpd (mHandlers (fuel - 1) b) fam (mFieldsH (fuel - 1) fs)
       IrRtApp sym args => IrRtApp sym (mListH (fuel - 1) args)
       IrCast cFrom cTo x => IrCast cFrom cTo (mHandlers (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mHandlers (fuel - 1) rhs) (mHandlers (fuel - 1) body)
-      IrApp f a => IrApp (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
+      IrApp _ f a => IrApp Nothing (mHandlers (fuel - 1) f) (mHandlers (fuel - 1) a)
       IrIf c t el => IrIf (mHandlers (fuel - 1) c) (mHandlers (fuel - 1) t) (mHandlers (fuel - 1) el)
-      IrCase s alts => IrCase (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
+      IrCase caseTy s alts => IrCase caseTy (mHandlers (fuel - 1) s) (mHandlersAlts (fuel - 1) alts)
       IrNatCase s fr z su ca => IrNatCase (mHandlers (fuel - 1) s) fr (mHandlersAltM (fuel - 1) z) (mHandlersAltM (fuel - 1) su) (mHandlersAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListH (fuel - 1) xs)
       IrEffThunk fam ctor u arity prim => IrEffThunk fam ctor u arity (mHandlers (fuel - 1) prim)
@@ -963,16 +966,16 @@ mSyms fuel e =
     case e of
       IrRt x => IrRt (mSym x)
       IrRtApp x args => IrRtApp (mSym x) (mListS (fuel - 1) args)
-      IrCtor f c args => IrCtor f c (mListS (fuel - 1) args)
+      IrCtor f c _ args => IrCtor f c Nothing (mListS (fuel - 1) args)
       IrRecord f fs => IrRecord f (mFieldsS (fuel - 1) fs)
       IrProj b f x => IrProj (mSyms (fuel - 1) b) f x
       IrRecUpd b f fs => IrRecUpd (mSyms (fuel - 1) b) f (mFieldsS (fuel - 1) fs)
       IrCast cFrom cTo x => IrCast cFrom cTo (mSyms (fuel - 1) x)
       IrLet bs r b => IrLet bs (mSyms (fuel - 1) r) (mSyms (fuel - 1) b)
       IrLam bs rt b => IrLam bs rt (mSyms (fuel - 1) b)
-      IrApp f a => IrApp (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
+      IrApp _ f a => IrApp Nothing (mSyms (fuel - 1) f) (mSyms (fuel - 1) a)
       IrIf c t el => IrIf (mSyms (fuel - 1) c) (mSyms (fuel - 1) t) (mSyms (fuel - 1) el)
-      IrCase sc alts => IrCase (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
+      IrCase caseTy sc alts => IrCase caseTy (mSyms (fuel - 1) sc) (mSymsAltsM (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mSyms (fuel - 1) sc) fr (mSymsAltMM (fuel - 1) z) (mSymsAltMM (fuel - 1) su) (mSymsAltMM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mListS (fuel - 1) xs)
       IrEffThunk f c u a pr => IrEffThunk f c u a (mSyms (fuel - 1) pr)
@@ -1018,7 +1021,7 @@ mDoneCont : Ir
 mDoneCont =
   let
     v = mkBinder "__mDoneV"
-  in IrLam [v] Nothing (IrApp (IrRt irMDoneName) (IrVar v))
+  in IrLam [v] Nothing (IrApp Nothing (IrRt irMDoneName) (IrVar v))
 
 mTrampolineBody : String -> Ir -> Result Ir
 mTrampolineBody name (IrLam bs rt inner) =
@@ -1029,9 +1032,9 @@ mTrampolineBody name (IrCast cFrom cTo inner) =
   case mTrampolineBody name inner of
     Err msg => Err msg
     Ok b => Ok (IrCast cFrom cTo b)
-mTrampolineBody name (IrApp (IrApp (IrApp (IrGlobal g) e) u) _idc) =
+mTrampolineBody name (IrApp _ (IrApp _ (IrApp _ (IrGlobal g) e) u) _idc) =
   if g == runThunkName then
-    Ok (IrApp (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
+    Ok (IrApp Nothing (IrRt irMRunName) (applyAll (IrGlobal g) [e, u, mDoneCont]))
   else
     Err ("machine CPS: unexpected trampoline shape: " ++ name)
 mTrampolineBody name _ = Err ("machine CPS: unexpected trampoline shape: " ++ name)
@@ -1163,7 +1166,7 @@ collectHandlerGlobals t fuel e =
     []
   else
     case e of
-      IrApp _ _ =>
+      IrApp _ _ _ =>
         let
           p = flattenApp e
           head = firstOf p
@@ -1173,7 +1176,7 @@ collectHandlerGlobals t fuel e =
               IrGlobal n => if isHandleCombinator t n then clauseGlobals t args else []
               _ => []
         in append here (append (collectHandlerGlobals t (fuel - 1) head) (collectHandlerGlobalsList t (fuel - 1) args))
-      IrCtor _ _ args => collectHandlerGlobalsList t (fuel - 1) args
+      IrCtor _ _ _ args => collectHandlerGlobalsList t (fuel - 1) args
       IrRecord _ fs => collectHandlerGlobalsFields t (fuel - 1) fs
       IrProj b _ _ => collectHandlerGlobals t (fuel - 1) b
       IrRecUpd b _ fs => append (collectHandlerGlobals t (fuel - 1) b) (collectHandlerGlobalsFields t (fuel - 1) fs)
@@ -1182,7 +1185,7 @@ collectHandlerGlobals t fuel e =
       IrLet _ a b => append (collectHandlerGlobals t (fuel - 1) a) (collectHandlerGlobals t (fuel - 1) b)
       IrLam _ _ b => collectHandlerGlobals t (fuel - 1) b
       IrIf c t1 el => append (collectHandlerGlobals t (fuel - 1) c) (append (collectHandlerGlobals t (fuel - 1) t1) (collectHandlerGlobals t (fuel - 1) el))
-      IrCase s alts => append (collectHandlerGlobals t (fuel - 1) s) (collectHandlerGlobalsAlts t (fuel - 1) alts)
+      IrCase caseTy s alts => append (collectHandlerGlobals t (fuel - 1) s) (collectHandlerGlobalsAlts t (fuel - 1) alts)
       IrNatCase s _ z su ca => append (collectHandlerGlobals t (fuel - 1) s) (append (collectHandlerGlobalsAltM t (fuel - 1) z) (append (collectHandlerGlobalsAltM t (fuel - 1) su) (collectHandlerGlobalsAltM t (fuel - 1) ca)))
       IrConcatMany xs => collectHandlerGlobalsList t (fuel - 1) xs
       IrEffThunk _ _ _ _ pr => collectHandlerGlobals t (fuel - 1) pr
@@ -1266,15 +1269,15 @@ mScopedCalls fuel rs e =
     e
   else
     case e of
-      IrApp f a =>
+      IrApp _ f a =>
         let
           f1 = mScopedCalls (fuel - 1) rs f
           a1 = mScopedCalls (fuel - 1) rs a
         in case f1 of
-          IrGlobal n => if n == scopedName then IrApp (IrVar rs) a1 else if n == selfName then IrApp (IrVar rs) (IrApp (IrGlobal scopeName) a1) else IrApp f1 a1
-          _ => IrApp f1 a1
+          IrGlobal n => if n == scopedName then IrApp Nothing (IrVar rs) a1 else if n == selfName then IrApp Nothing (IrVar rs) (IrApp Nothing (IrGlobal scopeName) a1) else IrApp Nothing f1 a1
+          _ => IrApp Nothing f1 a1
       IrRtApp sym args => IrRtApp sym (mScopedList (fuel - 1) rs args)
-      IrCtor fam ctor args => IrCtor fam ctor (mScopedList (fuel - 1) rs args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mScopedList (fuel - 1) rs args)
       IrRecord fam fs => IrRecord fam (mScopedFields (fuel - 1) rs fs)
       IrProj b fam x => IrProj (mScopedCalls (fuel - 1) rs b) fam x
       IrRecUpd b fam fs => IrRecUpd (mScopedCalls (fuel - 1) rs b) fam (mScopedFields (fuel - 1) rs fs)
@@ -1282,7 +1285,7 @@ mScopedCalls fuel rs e =
       IrLet bs rhs body => IrLet bs (mScopedCalls (fuel - 1) rs rhs) (mScopedCalls (fuel - 1) rs body)
       IrLam bs rt body => IrLam bs rt (mScopedCalls (fuel - 1) rs body)
       IrIf c t el => IrIf (mScopedCalls (fuel - 1) rs c) (mScopedCalls (fuel - 1) rs t) (mScopedCalls (fuel - 1) rs el)
-      IrCase sc alts => IrCase (mScopedCalls (fuel - 1) rs sc) (mScopedAlts (fuel - 1) rs alts)
+      IrCase caseTy sc alts => IrCase caseTy (mScopedCalls (fuel - 1) rs sc) (mScopedAlts (fuel - 1) rs alts)
       IrNatCase sc fr z su ca => IrNatCase (mScopedCalls (fuel - 1) rs sc) fr (mScopedAltM (fuel - 1) rs z) (mScopedAltM (fuel - 1) rs su) (mScopedAltM (fuel - 1) rs ca)
       IrConcatMany xs => IrConcatMany (mScopedList (fuel - 1) rs xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mScopedCalls (fuel - 1) rs prim)
@@ -1341,12 +1344,12 @@ mCleanupDef n body =
     case body of
       IrLam bs _ _ =>
         case lastBinderOf bs of
-          Just th => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" [IrVar th], IrVar (mkBinder "__mCleanK")])]))
+          Just th => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPushCleanup") Nothing [IrCtor "Base.Effect.Core.Cleanup" "Base.Effect.Core.Cleanup.MkCleanup" Nothing [IrVar th], IrVar (mkBinder "__mCleanK")])]))
           Nothing => Nothing
       _ => Nothing
   else if n == cleanupPopName then
     case body of
-      IrLam bs _ _ => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") [IrVar (mkBinder "__mCleanK")])]))
+      IrLam bs _ _ => Just (IrLam bs Nothing (IrCtor irEffTypeName irEffMkCtor Nothing [IrLam [mkBinder "__mCleanU", mkBinder "__mCleanK"] Nothing (IrCtor machineCtl (machineCtl ++ ".MkPopCleanup") Nothing [IrVar (mkBinder "__mCleanK")])]))
       _ => Nothing
   else
     Nothing
@@ -1415,12 +1418,12 @@ mApplys fuel e =
     e
   else
     case e of
-      IrApp f a =>
+      IrApp _ f a =>
         case f of
-          IrVar b => if isContBinder b then IrRtApp irMApplyName [IrVar b, mApplys (fuel - 1) a] else IrApp (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
-          _ => IrApp (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+          IrVar b => if isContBinder b then IrRtApp irMApplyName [IrVar b, mApplys (fuel - 1) a] else IrApp Nothing (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
+          _ => IrApp Nothing (mApplys (fuel - 1) f) (mApplys (fuel - 1) a)
       IrRtApp sym args => IrRtApp sym (mApplysList (fuel - 1) args)
-      IrCtor fam ctor args => IrCtor fam ctor (mApplysList (fuel - 1) args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mApplysList (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (mApplysFields (fuel - 1) fs)
       IrProj b fam x => IrProj (mApplys (fuel - 1) b) fam x
       IrRecUpd b fam fs => IrRecUpd (mApplys (fuel - 1) b) fam (mApplysFields (fuel - 1) fs)
@@ -1428,7 +1431,7 @@ mApplys fuel e =
       IrLet bs rhs body => IrLet bs (mApplys (fuel - 1) rhs) (mApplys (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (mApplys (fuel - 1) body)
       IrIf c t el => IrIf (mApplys (fuel - 1) c) (mApplys (fuel - 1) t) (mApplys (fuel - 1) el)
-      IrCase sc alts => IrCase (mApplys (fuel - 1) sc) (mApplysAlts (fuel - 1) alts)
+      IrCase caseTy sc alts => IrCase caseTy (mApplys (fuel - 1) sc) (mApplysAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mApplys (fuel - 1) sc) fr (mApplysAltM (fuel - 1) z) (mApplysAltM (fuel - 1) su) (mApplysAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mApplysList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mApplys (fuel - 1) prim)
@@ -1484,17 +1487,17 @@ mMarked fuel e =
     case e of
       IrLam bs rt body => if isEffContLambda rt && not (isEffThunkBody body) then mEffContLambda (fuel - 1) mNoResumption bs rt body else IrLam bs rt (mMarked (fuel - 1) body)
       -- `handleScoped`：`self th id` 的值语义边界 => `run (self th doneCont)`
-      IrApp (IrApp (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp (IrRt irMRunName) (IrApp (IrApp (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
+      IrApp _ (IrApp _ (IrRt "@ir@m@self") th) (IrLam ([_]) _ _) => IrApp Nothing (IrRt irMRunName) (IrApp Nothing (IrApp Nothing (IrRt "@ir@m@self") (mMarked (fuel - 1) th)) mDoneCont)
       IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
-      IrCtor fam ctor args => IrCtor fam ctor (mMarkedList (fuel - 1) args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mMarkedList (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (mMarkedFields (fuel - 1) fs)
       IrProj b fam x => IrProj (mMarked (fuel - 1) b) fam x
       IrRecUpd b fam fs => IrRecUpd (mMarked (fuel - 1) b) fam (mMarkedFields (fuel - 1) fs)
       IrCast cFrom cTo x => IrCast cFrom cTo (mMarked (fuel - 1) x)
       IrLet bs rhs body => IrLet bs (mMarked (fuel - 1) rhs) (mMarked (fuel - 1) body)
-      IrApp f a => IrApp (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
+      IrApp _ f a => IrApp Nothing (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
       IrIf c t el => IrIf (mMarked (fuel - 1) c) (mMarked (fuel - 1) t) (mMarked (fuel - 1) el)
-      IrCase sc alts => IrCase (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
+      IrCase caseTy sc alts => IrCase caseTy (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mMarked (fuel - 1) sc) fr (mMarkedAltM (fuel - 1) z) (mMarkedAltM (fuel - 1) su) (mMarkedAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mMarkedList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mMarked (fuel - 1) prim)
@@ -1585,15 +1588,15 @@ mSteps fuel e =
     case e of
       IrRtApp sym args =>
         case machineCtorOf sym of
-          Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
+          Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) Nothing (mStepsList (fuel - 1) (machineArgsOf sym args))
           Nothing =>
             if sym == irMRunName then
               case args of
-                [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                [a] => IrApp Nothing (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
                 _ => IrRtApp sym (mStepsList (fuel - 1) args)
             else
               IrRtApp sym (mStepsList (fuel - 1) args)
-      IrApp _ _ =>
+      IrApp _ _ _ =>
         let
           p = flattenApp e
           head = firstOf p
@@ -1601,16 +1604,16 @@ mSteps fuel e =
         in case head of
           IrRt sym =>
             case machineCtorOf sym of
-              Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
+              Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) Nothing (mStepsList (fuel - 1) (machineArgsOf sym args))
               Nothing =>
                 if sym == irMRunName then
                   case args of
-                    [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                    [a] => IrApp Nothing (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
                     _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
                 else
                   foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
           _ => foldAppMap (fuel - 1) (mSteps (fuel - 1) head) args
-      IrCtor fam ctor args => IrCtor fam ctor (mStepsList (fuel - 1) args)
+      IrCtor fam ctor _ args => IrCtor fam ctor Nothing (mStepsList (fuel - 1) args)
       IrRecord fam fs => IrRecord fam (mStepsFields (fuel - 1) fs)
       IrProj b fam x => IrProj (mSteps (fuel - 1) b) fam x
       IrRecUpd b fam fs => IrRecUpd (mSteps (fuel - 1) b) fam (mStepsFields (fuel - 1) fs)
@@ -1618,7 +1621,7 @@ mSteps fuel e =
       IrLet bs rhs body => IrLet bs (mSteps (fuel - 1) rhs) (mSteps (fuel - 1) body)
       IrLam bs rt body => IrLam bs rt (mSteps (fuel - 1) body)
       IrIf c t el => IrIf (mSteps (fuel - 1) c) (mSteps (fuel - 1) t) (mSteps (fuel - 1) el)
-      IrCase sc alts => IrCase (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
+      IrCase caseTy sc alts => IrCase caseTy (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
       IrNatCase sc fr z su ca => IrNatCase (mSteps (fuel - 1) sc) fr (mStepsAltM (fuel - 1) z) (mStepsAltM (fuel - 1) su) (mStepsAltM (fuel - 1) ca)
       IrConcatMany xs => IrConcatMany (mStepsList (fuel - 1) xs)
       IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mSteps (fuel - 1) prim)
@@ -1668,7 +1671,7 @@ foldAppMap fuel acc xs =
   else
     case xs of
       [] => acc
-      x :: rest => foldAppMap (fuel - 1) (IrApp acc (mSteps (fuel - 1) x)) rest
+      x :: rest => foldAppMap (fuel - 1) (IrApp Nothing acc (mSteps (fuel - 1) x)) rest
 
 mStepsDef : IrDef -> IrDef
 mStepsDef (IrDef n ar deps _ body r g sp) = IrDef n ar deps Nothing (mSteps startFuel body) r g sp

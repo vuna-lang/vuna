@@ -158,7 +158,7 @@ lowerGlobalRef env name =
     OkC (IrRt irRtNatSucc)
   else
     case HashMap.lookup name env.lwCtors of
-      Just (Pair family keepFlags) => OkC (IrCtor family name [])
+      Just (Pair family keepFlags) => OkC (IrCtor family name Nothing [])
       Nothing =>
         case findIntrinsic name of
           Just i => if name == primEffBind1Name then OkC (IrEffBind effTypeName effMkCtor effUnitTyIn) else if intrinsicReturnsEff i then lowerBridgeGuard env name (IrEffThunk effTypeName effMkCtor effUnitTyIn (intrinsicArity i) (IrRt (intrinsicName i))) else lowerBridgeGuard env name (IrRt (intrinsicName i))
@@ -284,6 +284,12 @@ lowerPlainAppFuel fuel env st binders t =
           Nothing => lowerAppFallbackFuel (fuel - 1) env st binders f a rig
       _ => icInternal "lowerPlainApp expects an application"
 
+appTyOf : LwEnv -> List IrBinder -> Term -> Maybe (Pair IrTy IrTy)
+appTyOf env binders f =
+  case annotCalleeTy env binders f of
+    Just (fn@(IrTyFun _ cod)) => Just (Pair fn cod)
+    _ => Nothing
+
 lowerAppFallbackFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> Term -> Rig -> Check (Pair Ir LwSt)
 lowerAppFallbackFuel fuel env st binders f a rig =
   if fuel <= 0 then
@@ -296,7 +302,7 @@ lowerAppFallbackFuel fuel env st binders f a rig =
               Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st1 binders a) (
                   \pa =>
                     case pa of
-                      Pair irA st2 => OkC (Pair (IrApp irF irA) st2)
+                      Pair irA st2 => OkC (Pair (IrApp (appTyOf env binders f) irF irA) st2)
                 )
       )
 
@@ -474,7 +480,7 @@ lowerConAppNonChainFuel fuel env st binders c args =
                   case irs of
                     ir :: rest =>
                       case rest of
-                        [] => OkC (Pair (IrApp (IrRt irRtNatSucc) ir) st2)
+                        [] => OkC (Pair (IrApp Nothing (IrRt irRtNatSucc) ir) st2)
                         _ => icInternal "Nat Succ must have exactly one runtime argument"
                     [] => icInternal "Nat Succ must have exactly one runtime argument"
           )
@@ -490,17 +496,17 @@ lowerConAppNonChainFuel fuel env st binders c args =
                   Vuna.Compiler.Base.Common.bind (lowerConArgsFuel (fuel - 1) env st binders (ctorOpaqueKeptFlags keepFlags opqs) runtimeArgs) (
                       \p =>
                         case p of
-                          Pair irs st2 => lowerConAppFinish env st2 family c irs
+                          Pair irs st2 => lowerConAppFinish env st2 family c args irs
                     )
               )
 
 -- 收尾：去装箱族只保留单字段（构造子不落 OCaml 变体）；record 族生成 `IrRecord`；
 -- 其余生成 `IrCtor`。族名与字段名都是源码名（文本前缀属后端）。
-lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List Ir -> Check (Pair Ir LwSt)
-lowerConAppFinish env st family c irs =
+lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List (Pair Term Rig) -> List Ir -> Check (Pair Ir LwSt)
+lowerConAppFinish env st family c args irs =
   case HashMap.lookup family env.lwRecordFields of
     Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
-    Nothing => OkC (Pair (IrCtor family c irs) st)
+    Nothing => OkC (Pair (IrCtor family c (ctorTypeArgsOf env c args) irs) st)
 
 -- record 构造：运行时节数（与降级后的实参逐位对齐）→ 字段表给出字段源码名。
 zipFieldNames : List (Pair Int String) -> List Ir -> List (Pair String Ir)
@@ -779,7 +785,7 @@ lowerCaseFuel fuel env st outer scrut alts =
               Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st1 outer alts) (
                   \q =>
                     case q of
-                      Pair arms st2 => OkC (Pair (IrCase scrutIr arms) st2)
+                      Pair arms st2 => OkC (Pair (IrCase (annotTyOf env outer scrut) scrutIr arms) st2)
                 )
       )
 
