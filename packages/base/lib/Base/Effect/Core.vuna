@@ -583,11 +583,29 @@ unwind fuel st frame r =
         finish fuel st frame r
     Nothing => finish fuel st frame r
 
+-- | 从链上摘掉一帧（保留它之后安装的帧）：弹帧不能只看 `framePrev`，
+-- 因为 answer 是 Eff 的 handler 会在 inner 帧仍安装时先收口（wat 的链式弹法会连带丢掉）。
+removeFrame : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
+removeFrame fuel f chain =
+  if fuel <= 0 then
+    chain
+  else
+    case chain of
+      Nothing => Nothing
+      Just g =>
+        if samePrompt g f then
+          framePrev g
+        else
+          case g of
+            MkFrame key name ret opH comp kOuter _ d i => Just (MkFrame key name ret opH comp kOuter (removeFrame (fuel - 1) f (framePrev g)) d i)
+
 finish : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> Pair (MSt ObjTy) (Control ObjTy)
 finish fuel st frame r =
   case dropCleanups fuel (frameCleanDepth frame) st.msCleanups st.msCleanDepth of
     Pair cs d =>
-      Pair (MSt (framePrev frame) st.msCtx st.msUsed st.msNext cs d) ((frameKOuter frame) r)
+      Pair
+        (MSt (removeFrame fuel frame st.msFrames) st.msCtx st.msUsed st.msNext cs d)
+        ((frameKOuter frame) r)
 
 cleanupRun : Cleanup -> Int
 cleanupRun c =

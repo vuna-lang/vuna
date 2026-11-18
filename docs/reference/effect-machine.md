@@ -429,6 +429,18 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   下一步：给 `finish` 与 `unwind` 加临时日志（帧 id + 来源），确认是哪次返回把 console
   弹掉的（怀疑与嵌套 `runPure` 后 `progReal` 的 resume/unwind 交互）。
 
+- **弹帧语义修正（已落地）**：`finish` 不再直接取 `framePrev`，而是 `removeFrame`
+  ——从链上**摘掉该帧本身**、保留它之后安装的帧。answer 是 Eff 的 handler（如 clock 的
+  `clockOpHIOHost`：`Now => do t <- …; k t`）会在 inner 帧仍安装时先收口；wat 式的
+  `framePrev` 弹法会连带丢掉 inner 帧（native 复现：console 帧被 clock 的收口弹掉，
+  `unhandled console/default | clock/default#0`）。修好后 native 的
+  `console+clock` 复现通过（`mock 0 / real 1 / 0`），wasm 337 / 全量 7209 仍绿。
+- **native 切换的剩余失败**（接线试跑 `--backend native`：448 checks / 3 失败）：
+  `30_eff_process`（未接线时也失败，既有）、`41_eff_process_exit`（接线后
+  `impossible branch`）、`105_native_backend`（含为栈拷贝机器写的期望，如
+  `continuation stack overflow`，需按库机器改写）。下一步：修 41 的 impossible branch、
+  改写 105 的栈溢出用例，再删 native 的栈拷贝路径。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
