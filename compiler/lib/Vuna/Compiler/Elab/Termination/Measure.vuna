@@ -465,6 +465,31 @@ export projHas : String -> List (Pair String (List Int)) -> Bool
 projHas f [] = False
 projHas f ((Pair g path) :: rest) = f == g || projHas f rest
 
+-- | 实参 `Ctor x0..xn` 恰好把形参同一构造子的各字段**原样**拼回：`xk` 的路径正好
+-- 是 `[k]`（该字段本身）。成立时实参与形参相等 —— 弱边，不是下降。
+export sameCtorApp : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Bool
+sameCtorApp p args sizes = sameCtorGo p args sizes 0
+
+sameCtorGo : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Bool
+sameCtorGo p [] sizes k = k > 0
+sameCtorGo p (a :: rest) sizes k = case a of
+  EVar n sp => case sizeOfVarStrict n sizes of
+    Just sz => case sz of
+      Pair base (Pair depth path) => sameCtorField base depth path p rest sizes k
+    Nothing => False
+  _ => False
+
+sameCtorField : Int -> Int -> List Int -> Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Bool
+sameCtorField base depth path p rest sizes k = case base == p of
+  True => case depth == 1 of
+    True => case path of
+      first :: restPath => case restPath of
+        [] => if first == k then sameCtorGo p rest sizes (k + 1) else False
+        _ => False
+      [] => False
+    False => False
+  False => False
+
 export findWrapField : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Maybe Int
 findWrapField p [] sizes k = Nothing
 findWrapField p (a :: rest) sizes k = case a of
@@ -476,10 +501,14 @@ findWrapField p (a :: rest) sizes k = case a of
     Nothing => findWrapField p rest sizes (k + 1)
   _ => findWrapField p rest sizes (k + 1)
 
+-- | 重建同一个构造子时，第 k 个字段必须换成原第 k 个字段的**真**子项：
+-- `path = k :: restPath` 且 `restPath` 非空；`path = [k]` 是字段本身（相等），不是下降。
 export wrapCheck : Int -> List Expr -> List (Pair String (Pair Int (Pair Int (List Int)))) -> Int -> Int -> List Int -> Maybe Int
 wrapCheck p rest sizes k depth path = case depth > 0 of
   True => case path of
-    first :: restPath => if first == k then Just (k + 2) else findWrapField p rest sizes (k + 1)
+    first :: restPath =>
+      if first == k then if notEmpty restPath then Just (k + 2) else findWrapField p rest sizes (k + 1)
+      else findWrapField p rest sizes (k + 1)
     [] => findWrapField p rest sizes (k + 1)
   False => findWrapField p rest sizes (k + 1)
 
@@ -532,9 +561,10 @@ relOfArg p (EVar n sp) sizes ctors projs caller facts region = case sizeOfVarStr
       if base == p then if depth > 0 then Just 1 else Just 0 else Nothing
   Nothing => Nothing
 relOfArg p (a@(EApp fn cargs sp)) sizes ctors projs caller facts region = case fn of
-  EVar c csp =>
-    if memName c ctors then findWrapField p cargs sizes 0
-    else if projHas c projs then projRel p cargs sizes else arithRel p a sizes caller facts region
+  EVar c csp => if memName c ctors then case findWrapField p cargs sizes 0 of
+    Just m => Just m
+    Nothing => if sameCtorApp p cargs sizes then Just relEqual else Nothing
+  else if projHas c projs then projRel p cargs sizes else arithRel p a sizes caller facts region
   _ => arithRel p a sizes caller facts region
 relOfArg p _ sizes ctors projs caller facts region = Nothing
 

@@ -1,0 +1,12 @@
+-- 负例：把匹配到的构造子原样拼回去再递归——实参与形参**相等**，不是下降。
+-- 字段必须是形参对应字段的真子项才算严格下降。
+data Lst : Type where
+  Stop : Lst
+  Nxt : Int -> Lst -> Lst
+
+same : Int -> Lst -> Lst
+same x (Nxt y ys) = same x (Nxt y ys)
+same x Stop = Stop
+
+main : Int
+main = 0
