@@ -1,4 +1,4 @@
--- 方案 B 的机器骨架：`Base.Effect.Machine` 的 Control 循环在 vuna 里跑通（纯函数式
+-- 方案 B 的机器骨架：`Base.Effect.Core` 的 Control 循环在 vuna 里跑通（纯函数式
 -- 状态，不依赖宿主原语）。手搭 `handle (perform "po"/"po" 1) { po op k -> k 2 }`：
 -- resume 交 2，answer 是 2。
 import Base.Effect.Core as Eff
@@ -6,11 +6,13 @@ import Base.Effect.Core as Eff
 ret : Eff.Obj -> Eff.Obj
 ret x = x
 
+-- opH 的第 4 个参数是机器给的 runScoped（当前帧上的嵌套运行）；这个骨架用不到。
 opH : Eff.Obj ->
       (Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) ->
       (Eff.Obj -> Eff.Control Eff.Obj) ->
+      (Eff.Scoped ((Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj) -> Eff.Obj) ->
       Eff.Control Eff.Obj
-opH _ k kdone = k (Eff.toObj 2) kdone
+opH _ k kdone _ = k (Eff.toObj 2) kdone
 
 comp : Eff.Obj -> (Eff.Obj -> Eff.Control Eff.Obj) -> Eff.Control Eff.Obj
 comp _ k = Eff.MkPerform "po" "po" (Eff.toObj 1) (\v => Eff.MkApply k v)

@@ -330,7 +330,7 @@ export data Control v(..) : Type where
   MkDone : v -> Control v
   MkApply : (v -> Control v) -> v -> Control v
   MkPerform : String -> String -> v -> (v -> Control v) -> Control v
-  MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
+  MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkSelf : (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkReturn : Frame v -> v -> Control v
   MkKDone : Frame v -> v -> Control v
@@ -338,7 +338,7 @@ export data Control v(..) : Type where
 
 -- | handler frame：key、name、ret、opH、comp、kOuter、prev。
 export data Frame v(..) : Type where
-  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Frame v
+  MkFrame : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Maybe (Frame v) -> Frame v
 
 -- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文。
 export data Ctx v(..) : Type where
@@ -369,7 +369,7 @@ frameRet f =
   case f of
     MkFrame _ _ ret _ _ _ _ => ret
 
-frameOpH : Frame v -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v)
+frameOpH : Frame v -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> (Scoped ((v -> Control v) -> Control v) -> v) -> Control v)
 frameOpH f =
   case f of
     MkFrame _ _ _ opH _ _ _ => opH
@@ -443,6 +443,29 @@ findFrame fuel key name chain =
       Nothing => Nothing
       Just f => if frameKey f == key && frameName f == name then Just f else findFrame (fuel - 1) key name (framePrev f)
 
+-- | handler clause 里的 `handleScoped`：在**当前帧**上跑嵌套机器，返回该计算的答案值。
+-- 嵌套循环沿用当前 used/next，但 ctx 从空开始（与 wat 的 `$rt_mRun` 一致）。
+-- `Scoped` 的载荷是「延迟 thunk」：`scope comp = MkScoped (\_ => runThunk comp MkEffUnit)`，
+-- 运行时已带 CPS 续延参数，所以这里按 `Int -> (k -> Control)` 实例化。
+machineScoped : Int -> MSt ObjTy -> Frame ObjTy -> Scoped ((ObjTy -> Control ObjTy) -> Control ObjTy) -> ObjTy
+machineScoped fuel st f sc =
+  case sc of
+    MkScoped th =>
+      let
+        frame =
+          MkFrame
+            (frameKey f)
+            (frameName f)
+            (frameRet f)
+            (frameOpH f)
+            (\_ => th 0)
+            (\x => MkDone x)
+            (Just f)
+      in runGo
+        (fuel - 1)
+        (MSt (Just frame) Nothing st.msUsed st.msNext)
+        ((th 0) (\x => MkReturn frame x))
+
 -- | 驱动到 `Done`。`fuel` 是终止性证书（同时也是保护，见 debt）。
 export runGo : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
 runGo fuel st c = if fuel <= 0 then prim_fail "effect machine: fuel exhausted" else step fuel st c
@@ -464,7 +487,7 @@ step fuel st c =
           Just frame =>
             let
               id = st.msNext
-            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r))
+            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r) (\th => machineScoped (fuel - 1) st frame th))
       MkSelf th k =>
         case st.msFrames of
           Nothing => prim_fail "handleScoped outside handler"
