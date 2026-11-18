@@ -1,4 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "shell": "marker-shell",
+  // 本仓的 shell / terminal 依赖 flake devshell（OCaml 工具链）。
+  // 入口是 PATH 上的 `nix-devshell`（实现见 nixos-config 的 packages/nix-devshell.nix）：
+  // 在 flake 仓库内自动 `nix develop --command zsh`，没有 flake.nix 的目录退回普通 zsh。
+  "shell": "nix-devshell",
 }
