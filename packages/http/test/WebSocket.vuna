@@ -1,0 +1,120 @@
+-- WebSocket 握手与帧编解码的包内测试。
+import Base
+import Base.Effect.Core
+import Http.WebSocket as Ws
+import Http.Request as Req
+import Http.Response as Res
+import Http.Render as R
+
+main : Eff [] String
+main = case filter (\p => not (isPassing p)) results of
+  [] => pure ""
+  bad => do
+    _ <- prim_eff_print ("http websocket failed: " ++ join "; " (map nameOf bad) ++ "\n")
+    _ <- prim_eff_exit 1
+    pure ""
+
+-- | 一条检查是否通过。
+isPassing : Pair String Bool -> Bool
+isPassing p = p.second
+
+-- | 检查名。
+nameOf : Pair String Bool -> String
+nameOf p = p.first
+
+results : List (Pair String Bool)
+results =
+  [ Pair "accept-key" acceptKeyCheck,
+    Pair "handshake-ok" handshakeOk,
+    Pair "handshake-missing-upgrade" handshakeMissingUpgrade,
+    Pair "handshake-bad-version" handshakeBadVersion,
+    Pair "text-roundtrip" textRoundtrip,
+    Pair "ping-pong" pingPong,
+    Pair "close-code" closeCodeCheck,
+    Pair "two-frames" twoFrames,
+    Pair "need-more" needMore,
+    Pair "unmasked-rejected" unmaskedRejected,
+    Pair "fragmented-rejected" fragmentedRejected,
+    Pair "handshake-response" handshakeResponseCheck
+  ]
+
+-- | RFC 6455 §1.3 的标准握手向量。
+acceptKeyCheck : Bool
+acceptKeyCheck = Ws.acceptKey "dGhlIHNhbXBsZSBub25jZQ==" == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+
+-- | 合法升级请求。
+wsRequest : Req.Request
+wsRequest =
+  Req.Request "GET" "/ws" "HTTP/1.1"
+    [Pair "Upgrade" "websocket", Pair "Connection" "keep-alive, Upgrade", Pair "Sec-WebSocket-Version" "13", Pair "Sec-WebSocket-Key" "dGhlIHNhbXBsZSBub25jZQ=="]
+    ""
+
+handshakeOk : Bool
+handshakeOk = case Ws.handshake wsRequest of
+  Ws.HandshakeOk key => key == "dGhlIHNhbXBsZSBub25jZQ=="
+  Ws.HandshakeBad _ => False
+
+handshakeMissingUpgrade : Bool
+handshakeMissingUpgrade = case Ws.handshake (Req.Request "GET" "/ws" "HTTP/1.1" [Pair "Connection" "Upgrade"] "") of
+  Ws.HandshakeBad _ => True
+  Ws.HandshakeOk _ => False
+
+handshakeBadVersion : Bool
+handshakeBadVersion = case Ws.handshake (Req.Request "GET" "/ws" "HTTP/1.1" [Pair "Upgrade" "websocket", Pair "Connection" "Upgrade", Pair "Sec-WebSocket-Version" "8"] "") of
+  Ws.HandshakeBad _ => True
+  Ws.HandshakeOk _ => False
+
+-- | 客户端掩码文本帧往返。
+textRoundtrip : Bool
+textRoundtrip = case Ws.parseFrame True (Ws.renderFrameMasked "abcd" (Ws.FrameText "Hello")) of
+  Ws.FrameOk (Ws.FrameText s) rest => s == "Hello" && rest == ""
+  _ => False
+
+pingPong : Bool
+pingPong = case Ws.parseFrame True (Ws.renderFrameMasked "abcd" (Ws.FramePing "p")) of
+  Ws.FrameOk (Ws.FramePing s) _ => s == "p"
+  _ => False
+
+closeCodeCheck : Bool
+closeCodeCheck = case Ws.parseFrame True (Ws.renderFrameMasked "abcd" (Ws.FrameClose 1000 "bye")) of
+  Ws.FrameOk (Ws.FrameClose code reason) _ => code == 1000 && reason == "bye"
+  _ => False
+
+-- | 一条读里有两帧：第二帧留在剩余字节里。
+twoFrames : Bool
+twoFrames =
+  let
+    msg =
+      Ws.renderFrameMasked "abcd" (Ws.FrameText "a")
+        ++ Ws.renderFrameMasked "abcd" (Ws.FrameText "b")
+  in case Ws.parseFrame True msg of
+    Ws.FrameOk (Ws.FrameText first) rest => first == "a" && (case Ws.parseFrame True rest of
+      Ws.FrameOk (Ws.FrameText second) tail' => second == "b" && tail' == ""
+      _ => False
+    )
+    _ => False
+
+-- | 只有一字节时是 `FrameNeedMore`。
+needMore : Bool
+needMore = case Ws.parseFrame True (strSubstring 0 1 (Ws.renderFrame (Ws.FrameText "hi"))) of
+  Ws.FrameNeedMore => True
+  _ => False
+
+-- | 服务端拒绝未掩码的客户端帧。
+unmaskedRejected : Bool
+unmaskedRejected = case Ws.parseFrame True (Ws.renderFrame (Ws.FrameText "hi")) of
+  Ws.FrameInvalid _ => True
+  _ => False
+
+-- | 分片（opcode 0）暂不支持，显式拒绝。原始帧：fin=1 + opcode 0 + 掩码 + 1 字节载荷。
+fragmentedRejected : Bool
+fragmentedRejected = case Ws.parseFrame True (strPack [128, 129, 97, 98, 99, 100, 25]) of
+  Ws.FrameInvalid _ => True
+  _ => False
+
+-- | 101 响应带 accept 头、不带 Content-Length。
+handshakeResponseCheck : Bool
+handshakeResponseCheck =
+  let
+    rendered = R.renderResponse (Ws.handshakeResponse "dGhlIHNhbXBsZSBub25jZQ==")
+  in contains "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" rendered && not (contains "Content-Length" rendered)

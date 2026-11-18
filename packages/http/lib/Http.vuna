@@ -14,3 +14,7 @@ export module Http.Render
 export module Http.Render as Render
 export module Http.Connection
 export module Http.Connection as Connection
+export module Http.WebSocket
+export module Http.WebSocket as WebSocket
+export module Http.Client
+export module Http.Client as Client

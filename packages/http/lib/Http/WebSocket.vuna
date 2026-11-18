@@ -1,0 +1,217 @@
+-- | WebSocket（RFC 6455）：服务端握手应答、帧编解码与掩码。
+-- | 只做消息层：握手跑在 HTTP/1.1 之上，`ws` 与 `wss` 只差传输（duplex 决定）。
+module Http.WebSocket where
+
+import Base
+import Base.Data.Sha1 as Sha1
+import Base.Data.Base64 as Base64
+import Http.Header as Hdr
+import Http.Request as Req
+import Http.Response as Res
+
+-- | RFC 6455 握手固定 GUID。
+export guid : String
+guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+-- | 单手最大字节数。
+export maxFrameBytes : Int
+maxFrameBytes = 16777216
+
+-- | `Sec-WebSocket-Accept`：`base64(sha1(key ++ GUID))`。
+export acceptKey : String -> String
+acceptKey key = Base64.base64Encode (Sha1.sha1Raw (key ++ guid))
+
+-- | 握手判定结果。
+export data Handshake(..) : Type where
+  -- | 握手成立，带客户端 key。
+  HandshakeOk : String -> Handshake
+  -- | 握手不成立，带诊断。
+  HandshakeBad : String -> Handshake
+
+-- | 校验一条升级请求。
+export handshake : Req.Request -> Handshake
+handshake req = if req.method /= "GET" then HandshakeBad "method must be GET"
+else if req.version /= "HTTP/1.1" then HandshakeBad "version must be HTTP/1.1"
+else if not (isUpgrade req.headers) then HandshakeBad "missing Upgrade: websocket"
+else if not (connectionUpgrade req.headers) then HandshakeBad "missing Connection: Upgrade"
+else if not (version13 req.headers) then HandshakeBad "unsupported Sec-WebSocket-Version"
+else case Hdr.headerValue "sec-websocket-key" req.headers of
+  Nothing => HandshakeBad "missing Sec-WebSocket-Key"
+  Just key => if isValidKey key then HandshakeOk key else HandshakeBad "bad Sec-WebSocket-Key"
+
+-- | `Upgrade` 头是 `websocket`（大小写不敏感）。
+isUpgrade : List (Pair String String) -> Bool
+isUpgrade hs = case Hdr.headerValue "upgrade" hs of
+  Just v => Hdr.lowerString v == "websocket"
+  Nothing => False
+
+-- | `Connection` 头里含 `upgrade` 记号。
+connectionUpgrade : List (Pair String String) -> Bool
+connectionUpgrade hs = case Hdr.headerValue "connection" hs of
+  Just v => contains "upgrade" (Hdr.lowerString v)
+  Nothing => False
+
+-- | 版本必须是 13。
+version13 : List (Pair String String) -> Bool
+version13 hs = case Hdr.headerValue "sec-websocket-version" hs of
+  Just v => v == "13"
+  Nothing => False
+
+-- | key 必须解码成 16 字节。
+isValidKey : String -> Bool
+isValidKey key = case Base64.base64Decode key of
+  Just bytes => strLength key == 24 && natToInt (length bytes) == 16
+  Nothing => False
+
+-- | 握手成功的 101 响应。
+export handshakeResponse : String -> Res.Response
+handshakeResponse key =
+  Res.Response 101 "Switching Protocols"
+    [Pair "Upgrade" "websocket", Pair "Connection" "Upgrade", Pair "Sec-WebSocket-Accept" (acceptKey key)]
+    ""
+
+-- | 一条帧。
+export data Frame(..) : Type where
+  -- | 文本帧。
+  FrameText : String -> Frame
+  -- | 二进制帧。
+  FrameBinary : String -> Frame
+  -- | ping（控制帧）。
+  FramePing : String -> Frame
+  -- | pong（控制帧）。
+  FramePong : String -> Frame
+  -- | close：状态码 + 原因。
+  FrameClose : Int -> String -> Frame
+
+-- | 解析结果：帧 + 剩余字节 / 需要更多 / 非法。
+export data FrameParsed(..) : Type where
+  -- | 解析出一条帧与剩余字节。
+  FrameOk : Frame -> String -> FrameParsed
+  -- | 需要更多字节。
+  FrameNeedMore : FrameParsed
+  -- | 非法帧（诊断即原因）。
+  FrameInvalid : String -> FrameParsed
+
+-- | 解析一帧。`requireMask` 在服务端为 `True`（客户端帧必须掩码）。
+export parseFrame : Bool -> String -> FrameParsed
+parseFrame requireMask buf = if strLength buf < 2 then FrameNeedMore
+else
+  let
+    b0 = byteAt buf 0
+    b1 = byteAt buf 1
+    fin = band b0 128
+    rsv = band b0 112
+    op = band b0 15
+    masked = band b1 128
+    len7 = band b1 127
+  in if rsv /= 0 then FrameInvalid "reserved bits set"
+  else if requireMask && masked == 0 then FrameInvalid "client frame must be masked"
+  else if len7 == 127 then FrameInvalid "64-bit length unsupported"
+  else if len7 == 126 then
+    if strLength buf < 4 then FrameNeedMore
+    else finishFrame op fin buf 4 (byteAt buf 2 * 256 + byteAt buf 3) masked
+  else finishFrame op fin buf 2 len7 masked
+
+-- | 帧头已解析后取载荷。
+finishFrame : Int -> Int -> String -> Int -> Int -> Int -> FrameParsed
+finishFrame op fin buf off len masked =
+  let
+    keyLen = if masked == 128 then 4 else 0
+    total = off + keyLen + len
+  in if len > maxFrameBytes then FrameInvalid "frame too large"
+  else if strLength buf < total then FrameNeedMore
+  else
+    let
+      key = if masked == 128 then strSubstring off 4 buf else ""
+      raw = strSubstring (off + keyLen) len buf
+      payload = if masked == 128 then unmask key raw else raw
+      rest = strSubstring total (strLength buf - total) buf
+    in if op >= 8 then
+      if fin == 0 then FrameInvalid "fragmented control frame"
+      else if len > 125 then FrameInvalid "control frame too large"
+      else if op == 8 then FrameOk (FrameClose (closeCode payload) (closeReason payload)) rest
+      else if op == 9 then FrameOk (FramePing payload) rest
+      else if op == 10 then FrameOk (FramePong payload) rest else FrameInvalid "unknown control opcode"
+    else if op == 0 then FrameInvalid "fragmentation unsupported"
+    else if op == 1 then FrameOk (FrameText payload) rest
+    else if op == 2 then FrameOk (FrameBinary payload) rest else FrameInvalid "unknown opcode"
+
+-- | close 帧的状态码（不足两字节按 0）。
+closeCode : String -> Int
+closeCode payload = if strLength payload < 2 then 0 else byteAt payload 0 * 256 + byteAt payload 1
+
+-- | close 帧的原因短语。
+closeReason : String -> String
+closeReason payload =
+  if strLength payload <= 2 then "" else strSubstring 2 (strLength payload - 2) payload
+
+-- | 渲染一帧（服务端方向，不掩码）。
+export renderFrame : Frame -> String
+renderFrame f = renderWith "" False f
+
+-- | 渲染一帧并按给定 4 字节 key 掩码（客户端 / 测试方向）。
+export renderFrameMasked : String -> Frame -> String
+renderFrameMasked key f = renderWith key True f
+
+-- | 渲染实现：`key` 为空串表示不掩码。
+renderWith : String -> Bool -> Frame -> String
+renderWith key mask f =
+  let
+    op = opcodeOf f
+    payload = payloadOf f
+    n = strLength payload
+    maskedPayload = if mask then unmask key payload else payload
+    b1 = (if mask then 128 else 0) + lenMarker n
+  in strPack (append [128 + op, b1] (lenExtra n)) ++ (if mask then key else "") ++ maskedPayload
+
+-- | 帧的 opcode。
+opcodeOf : Frame -> Int
+opcodeOf f = case f of
+  FrameText _ => 1
+  FrameBinary _ => 2
+  FrameClose _ _ => 8
+  FramePing _ => 9
+  FramePong _ => 10
+
+-- | 帧的载荷（close 帧拼上状态码）。
+payloadOf : Frame -> String
+payloadOf f = case f of
+  FrameText s => s
+  FrameBinary s => s
+  FramePing s => s
+  FramePong s => s
+  FrameClose code reason =>
+    strPack (append [code / 256, code - code / 256 * 256] (strUnpack reason))
+
+-- | 长度字段的低 7 位标记。
+lenMarker : Int -> Int
+lenMarker n = if n < 126 then n else if n <= 65535 then 126 else 127
+
+-- | 长度字段的扩展字节。
+lenExtra : Int -> List Int
+lenExtra n =
+  if n < 126 then []
+  else if n <= 65535 then [n / 256, n - n / 256 * 256]
+  else [0, 0, 0, 0, mask8 (shr32 n 24), mask8 (shr32 n 16), mask8 (shr32 n 8), mask8 n]
+
+-- | 按 4 字节 key 逐字节异或（`key` 循环使用）。
+export unmask : String -> String -> String
+unmask key payload =
+  strPack (unmaskGo (strUnpack key) (strUnpack key) [] (strUnpack payload) (strLength payload + 1))
+
+-- | `unmask` 的单遍循环（`fuel` 保证终止）。
+unmaskGo : List Int -> List Int -> List Int -> List Int -> Int -> List Int
+unmaskGo key cur acc rest fuel = if fuel <= 0 then reverse acc
+else case rest of
+  [] => reverse acc
+  b :: tail => case cur of
+    k :: ks => unmaskGo key ks (bxor b k :: acc) tail (fuel - 1)
+    [] => case key of
+      k0 :: ks0 => unmaskGo key ks0 (bxor b k0 :: acc) tail (fuel - 1)
+      [] => reverse acc
+
+-- | 第 `i` 个字节；越界返回 0。
+byteAt : String -> Int -> Int
+byteAt s i = case drop i (strUnpack s) of
+  b :: _ => b
+  [] => 0
