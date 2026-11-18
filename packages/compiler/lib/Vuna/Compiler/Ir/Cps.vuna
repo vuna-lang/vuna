@@ -1077,7 +1077,19 @@ clauseGlobals arities args =
       a :: rest =>
         case a of
           IrGlobal h => if arityOf arities h >= 2 then h :: clauseGlobals arities rest else clauseGlobals arities rest
-          _ => clauseGlobals arities rest
+          _ =>
+            -- 部分应用的 clause（如 `processOpHIOWith onExit`）：剩余运行时参数仍是
+            -- (o, k)，同样要按 clause 补 kDone/runScoped。
+            case flattenApp a of
+              Pair (IrGlobal h) prefixArgs =>
+                if arityOf arities h - lenOf prefixArgs >= 2 then h :: clauseGlobals arities rest else clauseGlobals arities rest
+              _ => clauseGlobals arities rest
+
+lenOf : List a -> Int
+lenOf xs =
+  case xs of
+    [] => 0
+    _ :: rest => 1 + lenOf rest
 
 fuelOf : List Ir -> Int
 fuelOf _ = 1

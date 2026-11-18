@@ -441,6 +441,17 @@ ume 后按需重装）。下一步：把 `inChain` 改成帧引用/身份比较�
   `continuation stack overflow`，需按库机器改写）。下一步：修 41 的 impossible branch、
   改写 105 的栈溢出用例，再删 native 的栈拷贝路径。
 
+- **部分应用 clause（已落地）**：`collectHandleOpsDefs` 现在也识别 `f x` 形态的
+  clause 实参（剩余运行时参数仍有 `(o, k)` 两个），例如
+  `handleProcessHostWith … (processOpHIOWith onExit)`——之前只认裸全局，导致该 def
+  没补 kDone/runScoped，机器 4 参调用打爆。
+- **41 的下一层（未解）**：修完 clause 收集后 41 仍在 `Exit c => do r <- onExit c; k r`
+  处 `impossible branch`：`onExit : Int -> Eff [] Int` 是「返回 Eff 的函数值」，mCps 对
+  未知变量的应用一律按 thunk 调用补续延（`onExit c k`），而运行时值是 1 参 λ
+  （`\c => MkEff …`）→ 过应用。修法方向：给这类参数在精化期打 `effContMark`（或有类型
+  信息时按 Eff 返回处理），或在 `processOpHIOWith` 里把 `onExit` 的调用改成显式
+  `runEff` 形式。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
