@@ -354,6 +354,17 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
   纯机器要等价，需要把转移做成尾路径（work item 队列 / `return_call_ref` 级别的改造），
   或让续延调用不再保留 `step` 帧。
 
+- **106 继续收窄（栈深度）**：
+  1. 机器改成**单层循环**：`step` 只做一次派发、返回 `Pair MSt Control`，`runGo` 用循环消费
+     （之前的 `step → unwind → finish → step` 递归每 perform 留一帧）。接线实测：2000 次
+     perform 的回溯里 `runGo` 只剩 2 帧（之前是上千帧），说明机器自身已经平坦。
+  2. wasm codegen 的**尾位置闭包应用**改用 `return_call $rt_apply`（`genApplyArgs`），
+     续延链（CPS 的 `\x => …` 转移）不再保留调用者帧。
+  3. 仍然爆栈的那一段定位到：机器自身的**自引用被物化成柯里化闭包**再应用
+     （`lam124 → lam125 → lam126 → return_call runGo`，即每个 perform 仍留一帧）。
+     下一步查 `genGlobalCall` 为何把该自引用走 `genGlobalRef` 闭包路径（arity 在表里
+     看起来是 0/偏小），修掉后 106 应可通过。
+
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
