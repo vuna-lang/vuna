@@ -28,7 +28,7 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
 
 | 你改了什么 | 至少跑 |
 | --- | --- |
-| `lib/`（工具链）/ `docs`/`nix` | 相关章节 suite + `vuna check .` |
+| `cli/`（工具链）/ `docs`/`nix` | 相关章节 suite + `vuna check .` |
 | `base/`（含效应 monad、`dbg!`/`assert`） | `--only dt` / `dt_base` / `dt_err` + `vuna check .` |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 相关章节 + `vuna check .`；合并前 `checks.seed-selfhost` |
 | codegen / 运行时 / `#line` / 观测 | 相关章节 + `checks.vuna-obs-*` + `vuna check .` |
@@ -45,7 +45,7 @@ nix run .#vuna-run-tests -- --only <章节>        # 按章节跑原生 suite（
   （`test/corpus/` 夹具跳过）。
 - **层方向**：`compiler/vuna.toml` 的 `[layers]` 由 loader 在 `vuna check .` 时强制（越层报
   `LD_LayerViolation`）；`checks.ir-boundary` 只留正向断言与 IR 形状断言。
-- **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `lib/`、`app/`）不进 seed，
+- **TCB 边界**：`seed/` 只含 compiler 包入口闭包；工具链（整个 `cli/`）不进 seed，
   黑名单见 `nix/seed/forbidden.txt`。
 
 ## 跨后端变更（原语 / 运行时）

@@ -80,7 +80,7 @@ npm run package        # vsce package --no-dependencies -> vuna-0.1.0.vsix（可
 
 3. 按 `F5`（Run Extension）：扩展开发宿主窗口打开仓库根目录（`${workspaceFolder}/..`），
    这样自动探测能命中 `<repo>/result/bin/vuna`；
-4. 打开的宿主窗口里打开任意 `.vuna` 文件（例如 `lib/Vuna/Lsp.vuna`）验证高亮/诊断；
+4. 打开的宿主窗口里打开任意 `.vuna` 文件（例如 `cli/lib/Vuna/Lsp.vuna`）验证高亮/诊断；
 5. 输出面板选 **Vuna** 看服务器日志，选 **Vuna Language Server Trace** 看 LSP 帧
    （需把 `vuna.trace.server` 设为 `messages`）。
 

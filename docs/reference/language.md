@@ -385,7 +385,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **抽象类型**：导出项 `T` 只导出类型、不导出构造器，跨模块既不能构造也不能模式匹配；
   要公开构造器必须写 `T(..)`；
 - **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
-  因此 `lib/Vuna.vuna`（模块 `Vuna`）与 `lib/Vuna/Compiler/Frontend/Parser.vuna`（模块
+  因此 `cli/lib/Vuna.vuna`（模块 `Vuna`）与 `cli/lib/Vuna/Compiler/Frontend/Parser.vuna`（模块
   `Vuna.Compiler.Frontend.Parser`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义 / 签名 / 实例名）→ 本模块

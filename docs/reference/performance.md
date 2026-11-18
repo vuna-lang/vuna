@@ -27,13 +27,13 @@
 | `map` 冷启动全量重建 | ~2.1 s（清 query store 后整仓重扫 + 编码/SHA-256） |
 | `lint`（workspace，冷 / 结果缓存热） | ~1.9 s / ~1.2 s（本机；`--no-cache` 强制冷路径；4000 条合成 finding ~5 s） |
 | `doc` / `api` / `gen-errors` | 均 <1 s |
-| LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（根包普通文件） |
+| LSP 单次编辑（会话热，重文件） | ~0.12 s（compiler 最大文件）/ ~0.02 s（cli 包普通文件） |
 | LSP 首次请求（建会话 + 首轮增量） | ~1.1–1.5 s |
-| LSP hover 非洞行（`bench/lsp-probe.py`，根包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–2.5 s） |
+| LSP hover 非洞行（`bench/lsp-probe.py`，cli 包 1124 行文件） | ~60–80 ms（冷进程首次含 Index 构建 ~0.2–2.5 s） |
 | LSP hover 洞上（会话热，同文件） | 首次 ~0.45 s（只精化入口模块），同内容重复 ~1 ms；无会话时走单文件精化 ~0.4 s |
 | LSP codeAction quickfix（同文件） | 首次 ~1.7 s，同内容重复 ~0.3 s |
 | LSP pull 诊断（同文件） | 首次 ~0.45 s，同内容重复 0 ms |
-| 根包（入口包）`check .` | 冷 ~14 s（含 base/compiler 闭包）/ 热 ~0.1 s（模块接口与导出面同口径落对象库） |
+| cli 包（入口包）`check .` | 冷 ~14 s（含 base/compiler 闭包）/ 热 ~0.1 s（模块接口与导出面同口径落对象库） |
 | REPL 重 import（4 次求值） | ~4.2 s |
 
 `fmt --check` 省略 PATH 会扫 `test/suite/fixtures` 并因夹具缺 manifest 退出 2（不是格式
@@ -265,7 +265,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 6. **`genGroups`**：OCaml 文本生成，没有一眼可去的 O(n²)；codegen 并行的**逐单元可并
    部分只有 ~7–8%**，fork+序列化 DtProgram 的净收益 ~6–7%（不划算，不做；
    `build.sh` 的层内并行已覆盖链接侧）。
-7. **分配**：冷 `check compiler` minor_words ≈1.1e9、根包子进程 ≈1.55e9；elab 占分配
+7. **分配**：冷 `check compiler` minor_words ≈1.1e9、cli 包子进程 ≈1.55e9；elab 占分配
    ~92%，活数据仅 ~2.5MB，瓶颈是 `quote`/`zonk`/`applySpine` 的瞬时 churn，不是表示重复。
    hash-consing 需要全局 intern 表、改变 Marshal 布局、与纯精化/元变量/摘要三处不变量
    冲突；预计收益 2–4%，不做。

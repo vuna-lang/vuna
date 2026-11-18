@@ -20,7 +20,9 @@
   `vuna.toml`。虚拟根只允许 `[workspace]` 与工具配置段（`[lint]` / `[diagnostics]` /
   `[registry]`）；`[package]` / `[export]` / `[layers]` / `[dependencies]` 是包语义段，出现在
   虚拟根是结构错误（不静默忽略）。虚拟根不是包：`run` / `test` / 代码生成按成员展开，
-  `compile <虚拟根>` 报 `PKG_NotPackage`。
+  `compile <虚拟根>` 报 `PKG_NotPackage`。REPL / LSP / 单文件检查在虚拟根上使用
+  **workspace 上下文**：模块根 = 各成员包的 `lib`（每根按该成员自己的 `[export]` 限制），
+  没有单一包身份（`contextPackageName` 为空串）；成员目录内的文件仍用最近的包上下文。
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
   DAG（循环依赖报错）。
@@ -35,7 +37,7 @@
   目录的 diamond 依赖合法；同名不同目录在加载期报 `duplicate package name ...`。
 - 编译器 CLI（`compiler/lib/Vuna/Compiler/Driver/CompilerCli.vuna`）：`vuna-compiler` 提供
   `compile/check/build`，入口 `compiler/app/Main.vuna`；**seed 只由这个入口的闭包生成**。
-  产品 CLI（`lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
+  产品 CLI（`cli/lib/Vuna/Cli.vuna`）通过 in-process 调库实现同样的命令（单一二进制，不 fork
   `vuna-compiler`），并追加工具命令：
 
   - `vuna compile [--no-print] (<entry.vuna> | <package-dir>) OUTDIR`：DT 精化 → 擦除型
@@ -49,7 +51,7 @@
   - `vuna build [--no-compile] [--out DIR] [--package NAME] [PKG-DIR]`：默认输出到
     `<PKG-DIR>/.output`（PKG-DIR 缺省 `.`，`--out` 覆盖）；目录是 workspace 根时构建所有
     **可执行**成员（库成员只检查并打印 `skipped (library)`），`--out DIR` 时按
-    `DIR/<包名>` 分目录；`--package NAME` 只构建指定包（Nix 构建根包用）；`--no-compile`
+    `DIR/<包名>` 分目录；`--package NAME` 只构建指定包（Nix 构建产品包用）；`--no-compile`
     只生成源码目录、不调 `ocamlopt`（非 `--no-compile` 时生成的 `build.sh` 需要 PATH 里有
     `ocamlopt`）；
   - `vuna test [DIR]`：纯测试（`main : String` 空串 / `Int` 0 / `Bool` True 通过）走

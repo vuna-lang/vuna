@@ -60,7 +60,7 @@ rotation 是**按需**事件；`seed-selfhost` 在 seed 落后时只输出滞后
 - **修改现有语义**：旧 seed 会按旧语义翻译新编译器，可能产生语义偏差；先以旧语义可正确
   编译的形式落地 → rotation → 再让源码依赖新语义；
 - **发布前**：发布流程必须 rotation 并跑完整 `nix flake check`；
-- 日常新增 / 修改功能、只改 `lib/`、`app/`、`test/` 等工具链 / 夹具时，都不需要 rotation。
+- 日常新增 / 修改功能、只改 `cli/`、`test/` 等工具链 / 夹具时，都不需要 rotation。
 
 取舍：信任锚点因此可能落后于源码。这是明确接受的代价，换来的是不再为每次 `compiler/`
 或 `base/` 改动产生 3–4k 行生成物 diff、避免 feature 分支与 rebase 的 seed 冲突。fixed point

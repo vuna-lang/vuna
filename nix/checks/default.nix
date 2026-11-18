@@ -25,8 +25,7 @@ let
     seed = ../../seed;
     compiler = ../../compiler;
     base = ../../base;
-    lib = ../../lib;
-    app = ../../app;
+    cli = ../../cli;
     test = ../../test;
     examples = ../../examples;
     docs = ../../docs;
@@ -44,8 +43,7 @@ let
   workspace = [
     src.base
     src.compiler
-    src.lib
-    src.app
+    src.cli
     src.manifest
   ];
 
@@ -141,8 +139,7 @@ let
       src.seed
       src.compiler
       src.base
-      src.lib
-      src.app
+      src.cli
       src.manifest
       ../../test/corpus/run/12_fact.vuna
       ../../test/corpus/dt/01_id.vuna
@@ -370,7 +367,7 @@ in
     name = "vuna-static";
     srcs = [
       src.compiler
-      src.lib
+      src.cli
       src.steps
       src.processBound
       ./lib

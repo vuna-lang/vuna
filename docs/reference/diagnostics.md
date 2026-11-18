@@ -81,7 +81,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 | `CG_` | codegen/驱动 | `Base/Diagnostics/Cg.vuna` |
 | `IC_` | 编译器内部错误 | `Base/Diagnostics/Ic.vuna` |
 | `UN_` | 告警（未使用/冗余/遮蔽），severity = warning | `Base/Diagnostics/Warning.vuna` |
-| `LN_`/`FX_` | lint 规则/修复 | `lib/Vuna/Lint/Diagnostics.vuna` |
+| `LN_`/`FX_` | lint 规则/修复 | `cli/lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号语义稳定；一个码一种语义。**没有「诊断码只增不删」的约定**：vuna 未发布、
 无兼容义务，删改码允许（同步目录、`explain` 与夹具）。`vuna explain CODE` 与
@@ -165,7 +165,7 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 ## 6. LSP 映射
 
-实现：`lib/Vuna/Lsp/Diagnostics.vuna`。
+实现：`cli/lib/Vuna/Lsp/Diagnostics.vuna`。
 
 - 直接消费 `Diagnostic`：不从文本扫位置；依赖文件诊断按 span 文件过滤。
 - range 用完整 span（起止），UTF-16 换算；无位置诊断落到 0:0。

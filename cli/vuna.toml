@@ -1,0 +1,7 @@
+# 产品 CLI 包（vuna）：工具链模块根 cli/lib，入口 cli/app/Main.vuna。
+[package]
+name = "vuna"
+
+[dependencies]
+vuna-compiler = "../compiler"
+vuna-base = "../base"

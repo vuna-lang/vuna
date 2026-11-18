@@ -1,15 +1,8 @@
-# vuna 仓库自身是一个 workspace（Cargo 风格：根目录同时是包）。
-# 根包 = 产品 CLI（vuna）；compiler/ 是编译器包（vuna-compiler），
-# 它的入口闭包就是 seed/ 的内容。
-[package]
-name = "vuna"
-
+# vuna 仓库自身是 workspace 根：只有 [workspace] 与工具配置，没有 [package]。
+# 成员包：cli/（产品 CLI，vuna）、compiler/（编译器，vuna-compiler）、
+# base/（标准库，vuna-base）。
 [workspace]
-members = ["compiler", "base"]
-
-[dependencies]
-vuna-compiler = "compiler"
-vuna-base = "base"
+members = ["compiler", "base", "cli"]
 
 # lint 配置由 `vuna lint` 消费；编译器只做 TOML 结构解析，不校验规则语义。
 [lint]

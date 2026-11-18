@@ -11,10 +11,10 @@
 # 的增长率门槛。
 #
 # **范围（不可直接互比）**：
-#   check-all            workspace 根包（`lib/Vuna/*` + compiler/base 闭包）+ 成员子进程并行
+#   check-all            workspace 全部包（`cli/lib/Vuna/*` + compiler/base 闭包）+ 成员子进程并行
 #   check-compiler       仅 compiler 包（base 只是依赖）
 #   check-warm           同 check-all，但缓存已预热
-#   build-all            workspace 全部（根包 + compiler 成员，串行；= check 全部 + codegen）
+#   build-all            workspace 全部包（cli + compiler + base，串行；= check 全部 + codegen）
 #   build-compiler       仅 compiler 包（= check-compiler + codegen）
 #   build-warm           同 build-compiler，但 split 缓存已预热
 #   map-cold / map-hot   `vuna map` 索引冷（清 query store）/ 热

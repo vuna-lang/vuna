@@ -42,8 +42,8 @@
 1. **当前 seed 必须能编译当前源码**（rotation 按需，触发条件见 bootstrap.md）——`seed/` 是提交入库的信任锚点；
 2. **seed rotation 后 stage1 == stage2**（文件集逐字节一致，fixed point）；
 3. **`seed/` 只含 compiler 包入口闭包**（`compiler/app/Main.vuna` 的 import 闭包）；
-4. **工具链不进 TCB**：整个 `lib/` 与 `app/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
-   obs/package manager 等都在 `lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
+4. **工具链不进 TCB**：整个 `cli/` 永不进入 seed 闭包（fmt/lint/repl/doc/test/Index/LSP/
+   obs/package manager 等都在 `cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
    执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
@@ -119,8 +119,9 @@ nix flake check                           # 3 packages + 24 checks（清单见 t
 ## 目录速览
 
 `compiler/` = 编译器包（`Vuna.Compiler.*`，入口 `app/Main.vuna`，**进 seed**）；`base/` =
-标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`lib/` = 根包工具链（Cli/Interp/
-Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 等，**不进 seed**）；`app/` = 产品 CLI 入口；
+标准库 `vuna-base`（`Base.*` + `Prelude`，**进 seed**）；`cli/` = 产品 CLI 包
+`vuna`（工具链 Cli/Interp/Files/Fmt/Lint/Repl/Run/Doc/Index/Lsp/TestRunner/Obs 在 `cli/lib/`，
+入口 `cli/app/Main.vuna`；**不进 seed**）；
 `seed/` = 提交入库的 OCaml 信任锚点（生成物，禁止手改、别读）；`test/` = `suite.toml` +
 `suite/`（原生 runner + steps 用例）+ `corpus/` 夹具；`bench/`（仓库根）= 生成程序与编译器基准；
 `examples/` = 多包示例；`.agents/` = AI 规则与技能；`vscode/` = VSCode 扩展（高亮 + LSP +

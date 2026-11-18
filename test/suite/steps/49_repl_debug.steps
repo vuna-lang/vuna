@@ -8,7 +8,7 @@ run: sh -c 'printf ":load %s\nanswer\n:reload\nanswer\n:q\n" "$TMPDIR/m38-scratc
 out-contains: 已加载
 out-contains: 已重新加载
 out-contains: 42
-run: sh -c 'printf ":load %s/../lib/Vuna/Repl.vuna\n:q\n" "$VUNA_BASE" | "$VUNA" repl 2>&1'
+run: sh -c 'printf ":load %s/../cli/lib/Vuna/Repl.vuna\n:q\n" "$VUNA_BASE" | "$VUNA" repl 2>&1'
 out-contains: 是模块文件
 run: sh -c 'printf ":reload\n:q\n" | "$VUNA" repl 2>&1'
 out-contains: 还没有 :load

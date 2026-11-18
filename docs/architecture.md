@@ -34,11 +34,11 @@ compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖�
 ├─ Wasm/        Instr Model Module Render Runtime Types   wasm 后端（WAT）
 └─ Driver/      Dt Compile Cache Iface Owner PerfCache ToolPayload CompilerCli
                 Split SplitGen Native Wasm                  输出模型 / facade / 后端驱动 / CLI
-根包 vuna（模块根 lib/，入口 app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
+cli 包 vuna（模块根 cli/lib/，入口 cli/app/Main.vuna）：Cli/Interp/Fmt/Lint/Index（门面+子模块）、
   Obs（+子模块 Types/Read/Validate/Summarize/Run；可观测性工具链，见
   [reference/observability.md](reference/observability.md)）、
   Repl/Run/Doc（+子模块）/Search（+子模块）/Sig/Lsp/Json/TestRunner/Files；suite 执行器在 Test/{Suite,Run}
-依赖图：vuna → vuna-compiler → vuna-base（根包也直接依赖 base）
+依赖图：vuna → vuna-compiler → vuna-base（vuna 也直接依赖 base）
 ```
 
 **目录即层，方向由 manifest 声明**：层 = 模块前缀（目录），`compiler/vuna.toml` 的
@@ -50,7 +50,7 @@ compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀；依赖�
 `Codegen.Assembly`、`Elab.*`）；`Ir` 的校验入口在 `Ir.Validate`。数据定义只在叶子
 （`Core.Term`、`Elab.Types` 等）。目标每模块 ≤~800 行（当前最大 `Elab/Trait.vuna`，约 1.2k）。
 `compiler/` 是 seed 唯一来源（`compiler/app/Main.vuna` 的 import 闭包，数量以 `seed/` 与
-`nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`lib/` 工具链与 `app/` 在 TCB 之外；`base/` 模块名即 API。
+`nix/seed/files.txt` 与 `nix/seed/rotation.txt` 为准）；`cli/` 工具链在 TCB 之外；`base/` 模块名即 API。
 
 ## 1. 编译链：Frontend → Loader → Elab → Codegen
 
@@ -179,7 +179,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 布局见 [package-store.md](reference/package-store.md)，决策见 D12–D15。
 测试：第 28–29、33、39 段 + steps §67/§68。
 
-## 3. 根包工具链与 TCB 边界
+## 3. 产品 CLI 工具链（`cli/`）与 TCB 边界
 
 **何时该看这里**：改 `vuna` 子命令、fmt/lint/repl/doc/test/map、解释器 facade。
 
@@ -191,8 +191,8 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   fail-fast）、`Vuna.Doc.runDoc`（docstring -> 单文件 HTML；`Vuna.Doc.{Comments,Model,Prose,Html,Run}`）、
   `Vuna.Search.runSearch`、`Vuna.Files.collectVunaFiles`；fmt/lint 见 `Fmt.formatSourceWith` /
   `Lint.runLint`；诊断渲染（short/human/JSON）见 `Base.Diag.Format`（模型见
-  [diagnostics.md](reference/diagnostics.md)）；效果显式化：`lib` 与 compiler 壳层都是显式
-  `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
+  [diagnostics.md](reference/diagnostics.md)）；效果显式化：`cli/lib` 与 compiler 壳层都是显式
+  `Eff`——`runCompilerCliFor : … -> Eff [] Int`，`cli/lib/Vuna/Cli.vuna` / `Run.vuna` 与两个
   `app/Main.vuna` 直接 bind；`Driver/CompilerCli` 的打印/诊断/子进程/recovery 全部显式，
   `CliOpts` 是显式参数；`Base.Diag.Format` 语言也是显式 `lang` 参数。
   API 文档与检索见
@@ -260,7 +260,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 ## 改一处 → 跑什么
 | 你改了什么 | 最小验证 |
 | --- | --- |
-| `lib/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
+| `cli/` / `base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
 | `base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |

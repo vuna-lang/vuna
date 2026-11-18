@@ -6,10 +6,10 @@ vuna 是一个函数式编程语言，本仓库是它的编译器与工具链。
 > **任何设计、接口、命令、实现、哲学都允许被推翻**。终态是**单一依赖类型路径**（唯一
 > 检查器与 codegen）。
 
-编译器完全用 vuna 自己写：编译器包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
-+ 根包 `vuna`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp）+ 成员包 `base/`（`vuna-base`）。
-`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与产品工具链明确分开**；
-仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器。
+编译器完全用 vuna 自己写：成员包 `compiler/`（`vuna-compiler`，模块 `Vuna.Compiler.*`）
++ 成员包 `cli/`（产品 CLI 与工具链 fmt/lint/repl/doc/test/lsp，包名 `vuna`）+ 成员包
+`base/`（`vuna-base`）。`seed/` 只由 compiler 包的入口闭包生成——**可固化成种子的部分与
+产品工具链明确分开**；仓库通过提交入库的 OCaml 种子自举，不依赖外部编译器。
 
 > **AI agent 请先读 [AGENTS.md](AGENTS.md)**；架构与改动定位见
 > [docs/architecture.md](docs/architecture.md)。本 README 只保留定位、上手、目录、
@@ -102,10 +102,9 @@ manifest，不向上找。命令语义与包格式
 
 ```text
 .
-├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + lib/Vuna/Compiler/
+├── compiler/  # 编译器包 vuna-compiler（seed 唯一来源）：app/Main.vuna + cli/lib/Vuna/Compiler/
 ├── base/      # 成员包 vuna-base：lib/Base.*、Prelude.vuna
-├── lib/       # 产品 CLI 包 vuna 的模块根（工具链 Vuna.*）
-├── app/       # 产品 CLI 入口 main : Eff [] Int
+├── cli/       # 产品 CLI 包 vuna：cli/lib/Vuna.*（工具链）+ app/Main.vuna（入口）
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
@@ -114,15 +113,15 @@ manifest，不向上找。命令语义与包格式
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
-├── vuna.toml  # workspace 根（同时是产品 CLI 包）；members: compiler/base
+├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: compiler/base/cli
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
-（Cargo 风格：根目录同时是包）：根包 `vuna` 依赖成员包 `vuna-compiler`（模块根
-`compiler/lib/`）与 `vuna-base`（模块根 `base/lib/`）。三者都是 vuna 模块根，不是 OCaml
-库目录；`app/` 是纯入口目录。仓库里没有任何 dune/OCaml 项目，只用 `ocamlopt` 编译生成的
-种子和程序。
+（虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `cli/lib/`）、
+`vuna-compiler`（模块根 `compiler/lib/`）与 `vuna-base`（模块根 `base/lib/`）。三者都是
+vuna 模块根，不是 OCaml 库目录；`cli/app/`、`compiler/app/` 是纯入口目录。仓库里没有任何
+dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 
 ## 硬约束（改坏了 CI 会失败）
 

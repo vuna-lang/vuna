@@ -22,7 +22,7 @@ trap 'rm -f "$tmp" "$excTmp"' EXIT
 : >"$excTmp"
 # 显式例外：设计上保留的 tracing/调试通道（nix/eff-boundary.exceptions，每行一个路径；当前不存在）。
 is_exempt() { [ -f "$exc" ] && grep -qxF -- "$1" "$exc"; }
-for f in $(cd "$root" && find compiler/lib lib -name '*.vuna' 2>/dev/null | sort); do
+for f in $(cd "$root" && find compiler/lib cli/lib -name '*.vuna' 2>/dev/null | sort); do
   # 跨行也算：`runPure` 与 `(` 被 fmt 拆成两行时，逐行 grep 会漏计。
   n=$(tr '\n' ' ' <"$root/$f" | grep -oE '\brunPure[[:space:]]*\(' | wc -l | tr -d ' ')
   if is_exempt "$f"; then

@@ -5,7 +5,7 @@
 
 
 `vuna lsp` 是一个 **JSON-RPC 2.0 over stdio** 的语言服务：从 stdin 读帧、向 stdout 写帧，
-日志一律走 stderr。它是根包工具链模块（`lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
+日志一律走 stderr。它是产品 CLI 工具链模块（`cli/lib/Vuna/Lsp.vuna` + `Lsp.Protocol` /
 `Lsp.Diagnostics` / `Lsp.Query` / `Lsp.Bindings`），**永不进入 seed 闭包**。
 
 ### 帧格式
@@ -164,7 +164,7 @@ Content-Length: <字节数>\r\n
 - **会话（`DiagCache`）**：诊断 / codeAction 会建立（或复用）工具会话；hover **不**主动建会话
   （建会话要算依赖接口闭包，冷 store 上秒级），已有会话时直接复用。
 - **本包干净模块**（增量的预置集合）：`[export]` 为空的入口包也会写模块接口（模块面 =
-  入口闭包），所以根包不需要 `[export]` 就能复用。判定分两步：逐模块自身判据（接口自证 /
+  入口闭包），所以产品包不需要 `[export]` 就能复用。判定分两步：逐模块自身判据（接口自证 /
   源新鲜 / 缓存程序可用 / 无缺失依赖）→ 依赖链**定点**（本包模块的依赖必须命中依赖表或已收
   干净模块；枚举顺序不保证拓扑序，单遍会连锁误判）。缺一个模块的接口只跳过它自己，不让整组
   作废。每个请求还会对本包干净模块做 stat/内容校验，外部改同包模块后同一进程下次请求即失效。

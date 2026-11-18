@@ -8,7 +8,7 @@
 
 `compiler/` 是编译器包（seed 的唯一来源）。入口 `compiler/app/Main.vuna` 的 import 闭包
 就是 `seed/` 的内容（规模以 `seed/` 与 `nix/seed/files.txt` 为准）；工具链
-（fmt/lint/repl/doc/test/lsp）在根包 `lib/`，不在闭包里。
+（fmt/lint/repl/doc/test/lsp）在 `cli/lib/`，不在闭包里。
 代码按**目录即层**组织：`Base → Frontend → Loader → Core → Elab → Ir`，`Codegen` /
 `Lowering` / `Native` / `Wasm` 各自独立成层，`Driver` 在最上；依赖方向由
 `compiler/vuna.toml` 的 `[layers]` 声明、由 loader 强制（语义见
@@ -147,7 +147,7 @@
 `compiler/vuna.toml` 的 `[export]` 列出全部 104 个模块（模块即公开面，没有内部模块）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
 
-## 根包工具链模块（`lib/`，不进 seed）
+## 产品 CLI 工具链模块（`cli/lib/`，不进 seed）
 
 | 模块 | 职责 |
 | --- | --- |

@@ -2,7 +2,7 @@
 """LSP 请求耗时探针（hover / codeAction / documentSymbol / pull diagnostics）。
 
 用法：
-  python3 bench/lsp-probe.py [--bin ./result/bin/vuna] [--file lib/Vuna/Lsp/Query.vuna]
+  python3 bench/lsp-probe.py [--bin ./result/bin/vuna] [--file cli/lib/Vuna/Lsp/Query.vuna]
                              [--obs-out /tmp/lsp-obs.jsonl] [--json]
 
 起一个真实的 `vuna lsp` 进程，按 LSP 帧协议发请求并计时。同一请求发两次，用来区分
@@ -87,7 +87,7 @@ def find_line(lines, predicate):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="./result/bin/vuna")
-    ap.add_argument("--file", default="lib/Vuna/Lsp/Query.vuna")
+    ap.add_argument("--file", default="cli/lib/Vuna/Lsp/Query.vuna")
     ap.add_argument("--obs-out", default="")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()

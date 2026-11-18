@@ -80,8 +80,8 @@ $ vuna search --type "a -> a"
 | `LD_` | Loader / 包 / 加载诊断 | `Base/Diagnostics/Loader.vuna` |
 | `IC_` | 编译器内部错误（不变量/燃料耗尽；internal compiler error，exit 2） | `Base/Diagnostics/Ic.vuna` |
 | `UN_` | 告警（未使用/冗余/遮蔽；severity = warning） | `Base/Diagnostics/Warning.vuna` |
-| `LN_` | lint 规则 | `lib/Vuna/Lint/Diagnostics.vuna` |
-| `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `lib/Vuna/Lint/Diagnostics.vuna` |
+| `LN_` | lint 规则 | `cli/lib/Vuna/Lint/Diagnostics.vuna` |
+| `FX_` | 错误修复规则（从可修复 `LN_` 推导，`FX_` + 规则名去 `-`） | `cli/lib/Vuna/Lint/Diagnostics.vuna` |
 
 约定：符号**语义稳定**；同语义消息**共享**一个符号；**一个码只承载一种语义**。没有
 「诊断码只增不删」约定：vuna 未发布、无兼容义务，允许删除/重命名码（同步目录
@@ -179,6 +179,11 @@ in-process 走与 `vuna build` 同一条增量构建，然后执行 `<包目录>
 REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编辑在
 `Vuna.Repl.Edit` / 终端层在 `Vuna.Repl.Term`；server / 客户端在 `Vuna.Repl.Server` /
 `Vuna.Repl.Client`。工具链模块都不进 seed 闭包）：
+
+启动上下文按「最近的 vuna.toml」决定：包目录 → 包上下文；虚拟 workspace 根（只有
+`[workspace]`）→ workspace 上下文（模块根 = 各成员的 `lib`，按各自 `[export]` 限制，
+没有单一包身份）；没有 manifest → base-only。因此仓库根可以直接 `vuna repl`，`import`
+解析到全部成员包。
 
 | 命令 | 行为 |
 | --- | --- |

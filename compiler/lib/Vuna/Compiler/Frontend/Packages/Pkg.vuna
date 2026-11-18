@@ -454,6 +454,14 @@ workspacePackages rootBaseDir = do
     OkC workspace => OkC (workspaceAllPackages workspace)
   )
 
+-- | 虚拟 workspace 根的工具上下文：没有单一包身份，模块根 = 各成员的 `lib`（每根按成员
+-- 自己的 `[export]` 限制）。用于 REPL / LSP / 单文件检查这类「只需要一个模块解析环境」的
+-- 场景；`workspace 根` 不是包，但也并不是 base-only。
+export workspaceContext : Workspace -> PackageContext
+workspaceContext workspace =
+  PackageContext workspace.workspaceDir Nothing
+    (map dependencyRootOf (workspaceMembersOf workspace)) "" False
+
 -- ---------------------------------------------------------------- 模块根
 dependencyRootOf : Package -> Root
 dependencyRootOf package =
@@ -577,17 +585,29 @@ baseOnlyContext base = do
   )
 
 -- 从 start（已绝对化的目录）向上找最近 manifest；找不到 → base-only。
--- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。
+-- manifest 非法（解析/校验失败）必须报错，不回退到 base-only。最近的 manifest 是虚拟
+-- workspace 根（没有 `[package]`）时给 workspace 上下文：成员包各自的 lib 是模块根。
 contextAt : Member nFs FsOp r, Member nEnv EnvOp r => String -> Eff r (Check PackageContext)
 contextAt start = do
   found <- findManifestDirMaybe start
   case found of
     Just dir => do
-      packageR <- loadPackage dir
-      pure (case packageR of
-        ErrC e => ErrC e
-        OkC package => OkC (packageContext package)
-      )
+      manifestR <- loadManifestAt "${dir}/vuna.toml"
+      case manifestR of
+        ErrC e => pure (ErrC e)
+        OkC manifest => case manifest.manifestName of
+          Nothing => do
+            workspaceR <- loadWorkspace dir
+            pure (case workspaceR of
+              ErrC e => ErrC e
+              OkC workspace => OkC (workspaceContext workspace)
+            )
+          Just _ => do
+            packageR <- loadPackage dir
+            pure (case packageR of
+              ErrC e => ErrC e
+              OkC package => OkC (packageContext package)
+            )
     Nothing => do
       baseR <- locateBase 0
       case baseR of

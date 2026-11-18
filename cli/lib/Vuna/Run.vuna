@@ -201,7 +201,10 @@ selectTarget parsed dir workspace = case flagValue parsed "package" of
   Nothing => case workspace.workspaceRoot of
     Just root => do
       executable <- isExecutable root
-      if executable then pure (OkC root) else selectExecutable dir (workspaceMembersOf workspace)
+      if executable then pure (OkC root)
+      else case workspace.workspaceMembers of
+        [] => pure (OkC root)
+        _ => selectExecutable dir (workspaceMembersOf workspace)
     Nothing => selectExecutable dir (workspaceMembersOf workspace)
 
 -- | 内部：没有可执行根包时，要求成员里恰好一个可执行包。

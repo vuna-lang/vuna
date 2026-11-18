@@ -67,24 +67,23 @@ let
     '';
   };
 
-  # 产品 CLI：由 stage 1 编译器构建根包（compiler + 工具链）。
+  # 产品 CLI：由 stage 1 编译器构建 cli 包（compiler + 工具链）。
   vuna = mkStage {
     name = "vuna-${version}";
     description = "vuna CLI (stage 1, tools + compiler library)";
     mainProgram = "vuna";
     build = ''
       mkdir -p "$out/bin"
-      cp -r ${../../lib} lib
-      cp -r ${../../app} app
+      cp -r ${../../cli} cli
       cp -r ${../../compiler} compiler
       cp -r ${../../base} base
       cp ${../../vuna.toml} vuna.toml
       chmod -R u+w .
       export VUNA_STORE="$TMPDIR/vuna-store"
       ${vuna-compiler}/bin/vuna-compiler build --package vuna .
-      cp .output/bin/vuna "$out/bin/vuna"
+      cp cli/.output/bin/vuna "$out/bin/vuna"
       cp -r base "$out/base"
-      if [ -f .output/build-id ]; then cp .output/build-id "$out/build-id"; fi
+      if [ -f cli/.output/build-id ]; then cp cli/.output/build-id "$out/build-id"; fi
     '';
   };
 
