@@ -30,7 +30,7 @@
   模块可见 fixity 表重排。fixity / 别名的**唯一来源**是 `infixl N op` / `infixr N op` /
   `infix N op` 声明（可选 `= 目标名`，如 `infixl 4 == = eq`），优先级 0–9。没有内建运算符表：
   符号运算符用于中缀却无声明是**错误**；`->` 是语法，由 Loader 语法表恒可见。库声明表、
-  可见闭包去重与 fmt 程序级 fixity 见 [operators.md](operators.md)；
+  可见闭包去重见 [operators.md](operators.md)（fmt 按源码顺序打印，不需要 fixity）；
 - **`record` / `data` 派生**：都可跟 `deriving (C...)` 或 `deriving via field (C...)`。
   后者要求包装是自动去装箱的单字段类型，并在实例搜索期把 `Dict_C Wrapper` 委托给
   `Dict_C Field`；class 集合是开放的，由底层类型有没有该实例决定，不限于 Show/Eq/Ord。

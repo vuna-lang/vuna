@@ -109,7 +109,7 @@ CLI 统一使用 0 / 1 / 2 三档：
 | --- | --- | --- |
 | 0 | 成功 | 命令完成；`--check` 无差异；lint 无 finding；测试全过 |
 | 1 | 源码 / 诊断错误 | `check` / `compile` / `build` 的一切失败（解析、精化、覆盖性、终止性、codegen，以及入口路径不存在；**解析错误也是 1**）；`lint` 有 error finding 或 warning 超过 `max-warnings`；`fmt --check` 有需重排文件；`doc --check` 缺 docstring；`test` 有失败 |
-| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败、取不到程序级 fixity 上下文） |
+| 2 | 用法 / 工具错误 | 未知命令或 flag、缺值、参数个数不对；工具命令的宿主操作 / 上下文错误（`lint` / `fmt` / `test` / `goal` / `doc` 的路径不存在、配置非法、非 workspace、包或依赖加载失败） |
 
 约定之外：`vuna check` 的 warning（`UN_` 域）默认静默：`-W`/`--warnings` 打开显示，`--deny-warnings` 显示并把退出码提升为 1（源码检查本身仍成功）。`vuna build` / `vuna compile` 的入口能力告警（`UN_TargetEffectUnavailable`）走同一条显示与退出码策略；`--deny-warnings` 失败时按「编译失败不留产物」删除输出目录。warning 只报当前检查单元自己的文件（依赖包不重复刷屏）。**warning 可能不完整**：诊断列表会随 check 结果（Pass/Fail）一起落盘并在命中时重放；但「干净模块复用」的那次运行只拿到被精化模块的 warning，所以 `-W` / `--deny-warnings`（以及 manifest `[diagnostics] warnings/deny-warnings`）仍跳过 check 结果缓存、并让**本包**模块全部重新精化（依赖包仍复用接口摘要）——热缓存下告警完整，代价是该次 check 从「缓存命中 ~ms」回到「本包精化秒级」。普通 `vuna check` 的命中/失败重放照常（不显示 warning）。
 
@@ -328,19 +328,18 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 `vuna fmt [--check] [PATH]...` 把源码按规范形重排：PATH 可为文件或目录；省略 PATH 时
 格式化 workspace 内各成员包的 `lib` / `app` / `test`。目录扫描跳过隐藏项、生成物与
 `corpus` 夹具。`--check` 只报告差异（`would reformat: <path>`，exit 1）；不带 `--check`
-时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在、取不到
-程序级 fixity 上下文都是工具错误（exit 2）。
+时原地改写并打印 `formatted <path>`。非 workspace 且省略 PATH、路径不存在都是工具错误
+（exit 2）。
 
 **基础排版**：2 空格缩进、顶层声明之间一个空行、文件末尾一个换行、无行尾空白；
 `format(parse(x))` 可重新 parse，且格式化幂等（`format(format(x)) == format(x)`）。
 行宽 100（按码点计）；行内放不下时在表达式内部折行，但**类型签名与字段类型不折行**
 （避免 `->` 链被打断），超长字符串字面量也保持单行。
 
-**`if` / `else`**：`then` / `else` 后的首行放不下时在下一行开始，分支体缩进一级；
-`then` 分支本身是多行 `if` 时同样换行，因此嵌套 `if` 的 `else` 与外层 `else` 不同缩进；
-`else if` 链保持同一列；`then` / `else` 后直接跟 `let` 时 `let` 另起一行（`in` 对齐 `let`）。
+**`if` / `else`**：整段 `if` 是一个组，放得下就展平成一行；放不下时 `then` / `else`
+分支各缩进一级。任一分支以块结构（`case` / `let` / `do` / 多行 `if`）开头时，`if`
+本身在 `=` 后另起一行，`else` 与 `if` 同列，`else if` 保持同一行。
 `corpus/fmt/check.sh` 对每个 golden 断言「非字符串字面量的行 ≤ 100 列」。
-
 
 **注释**：单独成行的注释成为下一条目的前置注释，写在同一行末尾的注释成为该条目的行尾
 注释；多行块注释只作前置注释。表达式内部的注释前移到最内层包含它的条目（没有则前移到
@@ -348,10 +347,9 @@ printf '%s' '{"jsonrpc":"2.0","id":2,"method":"shutdown"}' | vuna repl client --
 
 **`where` 与 `infix*`**：`where` 块的绑定按源码顺序输出，带签名的绑定先输出签名行；
 `infix*` 声明打印在 imports 之后、第一个声明之前，保持源码顺序、每条一行
-（`infixl 6 +` / `infixr 5 ::`）。fixity 是**程序级**属性：调用方传入程序可见
-的 fixity 闭包（`Loader.Flatten.fixitiesForSource`：本文件声明 + import 闭包的去重
-表）；取不到上下文（依赖加载失败）或遇到未知**符号**运算符时 fmt 报错并停止，不静默按
-默认优先级重排；未知反引号名字按 9 左结合（Haskell 默认）。
+（`infixl 6 +` / `infixr 5 ::`）。中缀链与反引号中缀按**源码顺序**打印，源码括号
+（`EParen`）原样保留：fmt 不重排中缀、不按优先级补括号，因此不需要程序级 fixity 闭包，
+未知运算符也不会让格式化失败。
 
 **模板字面量**按 [templates.md](templates.md) 的规范形重写：`"""` 内容逐字（不
 dedent，开引号后的首个换行由 lexer 丢弃、渲染时按需补回），文本里的 `$` 紧跟 `{` 写成

@@ -509,7 +509,7 @@ handleHoverFallback msg state uri line col text = do
         (Pair False (Pair state1 [responseOk (idOf msg) (symbolHoverResult (bufferTexts state) uri line col text midx)]))
 
 -- | formatting：`formatSourceWith` 成功且内容有变化 ⇒ 全文 `TextEdit`，否则空数组；
--- fixity 是程序级的，所以永远整文档替换。
+-- 格式化不需要 fixity 闭包（中缀按源码顺序打印），失败时返回空 edits。
 handleFormatting : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Json -> LspState -> Eff r (Pair Bool (Pair LspState (List Json)))
 handleFormatting msg state =
   let

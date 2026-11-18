@@ -22,7 +22,8 @@ treeSum t =
     Node l v r => treeSum l + v + treeSum r
 
 useCaseArg : Int -> Int
-useCaseArg n = (\x => x + 1) (
+useCaseArg n =
+  (\x => x + 1) (
       case n of
         0 => 1
         _ => 2

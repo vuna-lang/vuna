@@ -129,15 +129,13 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
   集合，不能当可定义名。codegen 把非 `[A-Za-z0-9]` 字符转义成 `_x<code>_`
   （`<+>` → `_x60__x43__x62_`），`ensureUniqueOcamlNames` 仍是单射性护栏。
 
-## fmt 与程序级 fixity
+## fmt 与 fixity
 
-- `Vuna.Fmt.formatSourceWith : List FixityDecl -> String -> Result String`：第一个参数是调用方
-  给的**程序可见** fixity 闭包；fmt 内部把本文件的本地声明放最前（本地优先）。
-- 打印用 **keep 表**（`tableOfKeepOps`）：不替换别名、保留反引号 / section 原形；未知符号运算符
-  与 check 路径同样**报错**（fmt 宁可拒绝格式化，也不按错优先级重排改变语义）。
+- `Vuna.Fmt.formatSourceWith : String -> Result String`：无需 fixity 闭包。
+- 中缀链（`EInfix`）/ 反引号 / section 按**源码顺序与源码括号**打印：fmt 不重排中缀、
+  不按优先级补括号，未知运算符也不会让格式化失败。
 - fmt 会**打印 `infix*` 声明**（imports 之后、源码顺序，每条一行），声明的 span 参与注释锚点。
-- 调用方（`vuna fmt` CLI 与 LSP formatting）用 `Loader.Flatten.fixitiesForSource` 取闭包；
-  取不到（上下文/依赖加载失败）时 fmt 报错并**不格式化**该文件，不静默按默认优先级处理。
+- 需要按 fixity 重排的消费者（Elab、lint、index、doc）仍走 `Loader.Fixity.reorderProgram`。
 
 ## 算术运算符的特化
 
@@ -199,7 +197,7 @@ import 之后、第一个声明之前（fmt 的规范位置），每条一行。
 | 中缀重排 / 别名替换 / section 展开 / 严格/保留模式 | `Loader.Fixity`（`reorderProgram` / `lookupFixity` / `lookupFixityDecl` / `syntaxFixityDecls` / `tableOf` / `tableOfKeepOps` / `symbolOfTargetIn`） |
 | fixity 声明语法与收集 | `Frontend.Parser`（`parseFixityDecl` / `parseSectionAtom` / `parseInfix`）+ `Frontend.Ast`（`FixityDecl` / `Source.fixities`） |
 | 模块可见 fixity 闭包与去重 | `Loader.Modules.Module.fixities` + `Loader.Flatten.visibleFixitiesOf` / `dedupeFixities` |
-| 程序级 fixity（fmt / LSP） | `Loader.Flatten.fixitiesForSource` + `Vuna.Fmt.formatSourceWith` |
+| 程序级 fixity（lint / index / doc / 符号排序） | `Loader.Flatten.fixitiesForSource` + `Loader.Fixity.reorderProgram` |
 | 方法投影判定 / 特化 | `Elab.Dict.isEqMethod` / `isCmpMethod` / `specializeEqTy` / `specializeCmpTy` |
 | 内建 runtime 名 | `Vuna.Compiler.Base.Intrinsics.allIntrinsics`（`bi_*` 仅内部可见） |
 | trait 声明 / 库声明表 | `packages/base/lib/Base/{Eq,Ord,Bool,Int,String,List,Monad,Applicative,Monoid,Foldable,Traversable,Hashable}.vuna` |

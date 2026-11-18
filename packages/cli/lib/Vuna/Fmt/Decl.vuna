@@ -7,7 +7,7 @@
 -- where 块按 parser 的 `ELet .. True` 形态还原成 where 写法（带签名绑定先输出签名行）。
 --
 -- 渲染全部返回 `Doc`：缩进由 `nest` 承担，换行由最近的 `group` 决定；文件只渲染一次。
--- `env` 是程序可见的 fixity 闭包（本地声明在最前），只用于打印侧的优先级 / 别名判定。
+-- `env` 只用于应用位置符号名的兜底打印；fmt 门面传空表（中缀按源码顺序打印）。
 module Vuna.Fmt.Decl where
 
 import Vuna.Compiler.Base.Common
@@ -488,8 +488,10 @@ renderNamespaceReexport _ = ""
 renderImportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List Import -> Doc
 renderImportLines at hdr imports =
   let
-    importDocs = map (
-          \imp => case itemsForImport imp (headerReexports hdr) of
+    importDocs =
+      map (
+          \imp =>
+            case itemsForImport imp (headerReexports hdr) of
               [] => renderImportLine at imp
               items => attachAt at imp.importSpan (text (renderReexportLine imp items))
         ) imports

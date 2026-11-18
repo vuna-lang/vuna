@@ -11,12 +11,8 @@
 -- import / `infix*` 声明 / 构造器 / 记录字段 / trait 方法 / let 与 where 绑定 / case 分支 /
 -- do 语句）；实现见 [Vuna.Fmt.Comment]。
 --
--- fixity 是**程序级**属性——同一个运算符在 A 模块的优先级可能来自它 import 的库模块，
--- 因此调用方必须给出「程序可见的 fixity 闭包」（[Vuna.Fmt.formatSourceWith] 的第一个参数，
--- 来源见 `Vuna.Compiler.Loader.Flatten.fixitiesForSource`）。fmt 内部把本文件的本地 `infix*`
--- 声明放在最前（本地优先），并用 keep 表（`tableOfKeepOps`）重排/打印：未知**符号**运算符
--- 由 Loader 报错（不静默改语义，调用方据此拒绝格式化）；未知反引号名字按 9 左结合
--- （Haskell 默认）。本模块不引用固定兜底表。
+-- 中缀与括号按**源码顺序与源码括号**打印：不重排中缀链、不按优先级补括号，因此
+-- 格式化不需要程序级 fixity 闭包（`infix*` 声明原样保留）。
 --
 -- 本模块只是门面：表达式/模式打印在 Vuna.Fmt.Expr，声明/模块头在 Vuna.Fmt.Decl，
 -- 注释挂载在 Vuna.Fmt.Comment，共用小工具在 Vuna.Fmt.Util，文档代数在 Vuna.Fmt.Doc。
@@ -24,7 +20,6 @@ module Vuna.Fmt where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Loader.Fixity
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Fmt.Comment
@@ -32,30 +27,27 @@ import Vuna.Fmt.Decl
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
 
--- | 用给定的程序级 fixity 闭包格式化一段源码：解析（带注释）、按 fixity 重排程序、挂载
--- 注释、重写模块头，最后组装成一份 `Doc` 渲染。任何一步失败都是 `Err`，调用方据此拒绝写盘。
-export formatSourceWith : List FixityDecl -> String -> Check String
-formatSourceWith programFixities source =
+-- | 格式化一段源码：解析（带注释）、挂载注释、重写模块头，最后组装成一份 `Doc` 渲染。
+-- 任何一步失败都是 `Err`，调用方据此拒绝写盘。
+export formatSourceWith : String -> Check String
+formatSourceWith source =
   case parseSourceWithComments "<fmt>" source of
     ErrC e => ErrC e
-    OkC (Pair (SourceFile hdr imports fx decls0 exports reexports opacity) comments) =>
-      case reorderProgram (tableOfKeepOps (append fx programFixities)) decls0 of
-        ErrC e => ErrC e
-        OkC decls =>
-          case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
-            Pair at eof =>
-              let
-                hdr2 =
-                  case hdr of
-                    Just m =>
-                      Just
-                        (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
-                    Nothing =>
-                      case exports of
-                        [] =>
-                          case reexports of
-                            [] => Nothing
-                            _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+    OkC (Pair (SourceFile hdr imports fx decls exports reexports opacity) comments) =>
+      case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
+        Pair at eof =>
+          let
+            hdr2 =
+              case hdr of
+                Just m =>
+                  Just
+                    (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+                Nothing =>
+                  case exports of
+                    [] =>
+                      case reexports of
+                        [] => Nothing
                         _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
-                doc = renderSourceSections (append fx programFixities) hdr2 imports fx decls at eof
-              in if isDocEmpty doc then OkC "" else OkC (render maxWidth doc ++ "\n")
+                    _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+            doc = renderSourceSections [] hdr2 imports fx decls at eof
+          in if isDocEmpty doc then OkC "" else OkC (render maxWidth doc ++ "\n")

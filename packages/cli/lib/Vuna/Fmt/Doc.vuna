@@ -190,7 +190,7 @@ renderGo fuel width col work acc =
           DConcat a b => renderGo (fuel - 1) width col (Work w.workIndent w.workMode a :: Work w.workIndent w.workMode b :: rest) acc
           DNest n d => renderGo (fuel - 1) width col (Work (w.workIndent + n) w.workMode d :: rest) acc
           DAlign d => renderGo (fuel - 1) width col (Work col w.workMode d :: rest) acc
-          DGroup d => if modeIsFlat w.workMode then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else if fits (docSize d + 64) (width - col) (Work w.workIndent MFlat d :: rest) then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else renderGo (fuel - 1) width col (Work w.workIndent MBreak d :: rest) acc
+          DGroup d => if modeIsFlat w.workMode then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else if fits (docSize d + 64) (width - col) [Work w.workIndent MFlat d] then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else renderGo (fuel - 1) width col (Work w.workIndent MBreak d :: rest) acc
 
 -- | 以最大宽度 `width` 渲染文档（`width` 是绝对列数，从第 0 列起算）。
 export render : Int -> Doc -> String

@@ -7,4 +7,4 @@ g : (n : String) -> Int -> Int
 g n x = x
 
 h : Int
-h = g@audit 1
+h = g@("audit") 1

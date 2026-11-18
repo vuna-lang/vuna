@@ -5,7 +5,7 @@ import Base.Data.Int as Int
 plus : Int -> Int -> Int
 plus a b = a + b
 
--- 反引号中缀：`plus` 没有 fixity 声明，按 9 左结合决定括号。
+-- 反引号中缀：按源码顺序打印，不需要 fixity 声明。
 backtickUse : Int
 backtickUse = 3 `plus` 4
 
