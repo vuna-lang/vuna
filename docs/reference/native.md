@@ -24,15 +24,16 @@
   - 默认 `OUT = <pkg>/.output`；显式 `--out` 且在 workspace（多包）时按 `<OUT>/<pkg>`；
   - 写 `.s` 文件集 + `<OUT>/build.sh`，并调用 `build.sh`（系统 `cc`）产出 `<OUT>/bin/<pkg>`；
   - `--no-compile` 只写 `.s` 文件集 + `build.sh`，不链接。
-- `build.sh` 逐文件 `cc -c` 到 `build/`，再链接（对象顺序由生成的文件列表固定）：
+- `build.sh` 逐文件 `cc -c` 到 `build/`，再链接（对象顺序由生成的文件列表固定）；按内容哈希
+  （`cksum`）判增量，内容没变的 `.s` 不重编：
   ```sh
-  cc -c -o build/Main.s.o Main.s
-  cc -static -nostdlib -no-pie -Wl,--build-id=none -o bin/<pkg> build/*.o
+  sh build.sh                      # native-build: compiled 143 of 143
+  sh build.sh                      # native-build: compiled 0 of 143（只链接）
   ```
   依赖 `cc` / `as` / `ld`（Nix devShell 与测试环境的 `ocamlTools` 已提供）。它们是
   **构建期外部工具，不进 TCB、不进 seed**，与 wasm 侧 `wasm-tools parse` 同构。
 - ELF 字节依赖链接工具版本，只保证**行为**；`.s` 文件集保证字节确定。
-- 不接对象库/增量缓存；每次重编。
+- 不接对象库：每次重新生成 `.s` 文件集，只有 `cc` 层按内容哈希增量。
 
 ## 2. 平台与值表示
 

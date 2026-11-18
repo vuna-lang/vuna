@@ -1015,12 +1015,14 @@ buildNativeOne noCompile multiOut outM pkg o =
             _ <- consolePrint "native link failed: cc exited ${strFromInt code}\n"
             pure (Pair 1 o)
 
--- | native 的多对象构建脚本：逐文件 `cc -c` 到 `build/`，再链接；顺序由文件列表固定。
+-- | native 的多对象构建脚本：内容哈希判增量（`cksum`），只重编变化的 `.s`，然后链接。
+--   对象与哈希都放在 `build/`；文件顺序由生成的文件列表固定。
 nativeBuildScript : String -> List String -> String
 nativeBuildScript name files =
   let
     sources = join " " files
-  in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  mkdir -p \"$(dirname \"$obj\")\"\n  cc -c -o \"$obj\" \"$src\"\n  OBJECTS=\"$OBJECTS $obj\"\ndone\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
+    total = strFromInt (length files)
+  in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nCOMPILED=0\nTOTAL=${total}\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  hf=\"build/$src.hash\"\n  h=$(cksum < \"$src\")\n  old=\"\"\n  if [ -f \"$hf\" ]; then old=$(cat \"$hf\"); fi\n  if [ -f \"$obj\" ] && [ \"$old\" = \"$h\" ]; then :; else\n    mkdir -p \"$(dirname \"$obj\")\"\n    cc -c -o \"$obj\" \"$src\"\n    printf '%s\\n' \"$h\" > \"$hf\"\n    COMPILED=$((COMPILED + 1))\n  fi\n  OBJECTS=\"$OBJECTS $obj\"\ndone\necho \"native-build: compiled $COMPILED of $TOTAL\"\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
 
 -- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时调 `wasm-tools` 汇编。
 -- 与 native 分支同构：外部工具是构建期依赖，缺失即明确失败（不静默产半成品）。

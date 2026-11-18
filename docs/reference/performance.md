@@ -55,7 +55,7 @@
 | 其中 lambda 体 | 约 96 万行（5,976 个，占 ~48%） |
 | 其中 `mov qword ptr [rbp-N], 0` 槽清零 | 约 39.6 万行（~19.7%） |
 | 最大单文件 | `Vuna/Compiler/Native/Runtime.s` 约 5.2 MB |
-| 构建（`build.sh`，143 个 `cc -c` + 链接） | ~4.7 s |
+| 构建（`build.sh`，143 个 `cc -c` + 链接） | ~6.9 s（冷）/ ~0.75 s（内容哈希命中，`compiled 0 of 143`，只链接） |
 
 对照：OCaml 种子 158 个文件 / 9.5 MB / 5.4 万行。tree-shaking 已由
 `Ir.Analysis.reachableDefs` 做完（编译器自身只有 13 个函数 / 240 行未被引用）；剩余体积空间
