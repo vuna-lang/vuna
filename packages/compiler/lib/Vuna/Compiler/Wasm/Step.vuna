@@ -278,6 +278,7 @@ rtMRes1 =
   in rtFunc "$rt_mRes1" params [WvAnyRef] locals body
 
 rtMRes2 : WatFunc
+-- 转移而不是调用：resume 之后的计算由循环派发，resume 链不占 wasm 帧
 rtMRes2 =
   let
     params = [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef]
@@ -309,9 +310,7 @@ rtMRes2 =
         ILocalGet "$e",
         IRefCast "$mres2",
         IStructGet "$mres2" 2,
-        ICall "$rt_apply",
-        ILocalSet "$step",
-        ILocalGet "$step",
+        ICall "$rt_mApply",
         IReturn
       ]
   in rtFunc "$rt_mRes2" params [WvAnyRef] locals body
