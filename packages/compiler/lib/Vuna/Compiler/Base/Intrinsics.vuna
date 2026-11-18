@@ -854,11 +854,19 @@ effIntrinsics : List Intrinsic
 -- 带内建 FsOp 行的宿主原语（entry 自动预装用）。
 -- 带内建效应行的宿主原语（Clock/Env/Process/Exit/Stdin/Args）。
 -- Ref / Net 的带行宿主原语。
+-- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
 effIntrinsics =
   [
-    -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
-    Intrinsic "@vuna@prim@toObj" (IPi "a" (IFun (IVar "a") (IGlobal "Base.Effect.Core.Obj"))) OpNone False,
-    Intrinsic "@vuna@prim@fromObj" (IPi "a" (IFun (IGlobal "Base.Effect.Core.Obj") (IVar "a"))) OpNone False,
+    Intrinsic
+      "@vuna@prim@toObj"
+      (IPi "a" (IFun (IVar "a") (IGlobal "Base.Effect.Core.Obj")))
+      OpNone
+      False,
+    Intrinsic
+      "@vuna@prim@fromObj"
+      (IPi "a" (IFun (IGlobal "Base.Effect.Core.Obj") (IVar "a")))
+      OpNone
+      False,
     Intrinsic
       primEffBind1Name
       (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b"))))))

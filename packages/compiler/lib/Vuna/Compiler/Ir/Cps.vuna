@@ -1365,98 +1365,126 @@ machineCtl = "Base.Effect.Core.Control"
 
 machineCtorOf : String -> Maybe String
 machineCtorOf sym =
-  if sym == irMDoneName then Just "MkDone"
-  else if sym == irMApplyName then Just "MkApply"
-  else if sym == irMPerformName then Just "MkPerform"
-  else if sym == irMHandleName then Just "MkHandle"
-  else if sym == irMSelfName then Just "MkSelf"
-  else Nothing
+  if sym == irMDoneName then
+    Just "MkDone"
+  else if sym == irMApplyName then
+    Just "MkApply"
+  else if sym == irMPerformName then
+    Just "MkPerform"
+  else if sym == irMHandleName then
+    Just "MkHandle"
+  else if sym == irMSelfName then Just "MkSelf" else Nothing
 
 -- | `@ir@m@handle` 的实参是 key,name,ret,opH,comp,unit,kOuter；机器里 comp 自带
 -- unit（循环里传），所以丢掉第 6 个。
 machineArgsOf : String -> List Ir -> List Ir
 machineArgsOf sym args =
-  if sym == irMHandleName then case args of
-    a :: b :: c :: d :: e :: _ :: rest => append [a, b, c, d, e] rest
-    _ => args
-  else args
+  if sym == irMHandleName then
+    case args of
+      a :: b :: c :: d :: e :: _ :: rest => append [a, b, c, d, e] rest
+      _ => args
+  else
+    args
 
 mSteps : Int -> Ir -> Ir
-mSteps fuel e = if fuel <= 0 then e
-else case e of
-  IrRtApp sym args =>
-    case machineCtorOf sym of
-      Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
-      Nothing => if sym == irMRunName then case args of
-        [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
-        _ => IrRtApp sym (mStepsList (fuel - 1) args)
-      else IrRtApp sym (mStepsList (fuel - 1) args)
-  IrApp _ _ =>
-    let
-      p = flattenApp e
-      head = firstOf p
-      args = secondOf p
-    in case head of
-      IrRt sym => case machineCtorOf sym of
-        Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
-        Nothing => if sym == irMRunName then case args of
-          [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+mSteps fuel e =
+  if fuel <= 0 then
+    e
+  else
+    case e of
+      IrRtApp sym args =>
+        case machineCtorOf sym of
+          Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
+          Nothing =>
+            if sym == irMRunName then
+              case args of
+                [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                _ => IrRtApp sym (mStepsList (fuel - 1) args)
+            else
+              IrRtApp sym (mStepsList (fuel - 1) args)
+      IrApp _ _ =>
+        let
+          p = flattenApp e
+          head = firstOf p
+          args = secondOf p
+        in case head of
+          IrRt sym =>
+            case machineCtorOf sym of
+              Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
+              Nothing =>
+                if sym == irMRunName then
+                  case args of
+                    [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
+                    _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
+                else
+                  IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
           _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
-        else IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
-      _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
-  IrCtor fam ctor args => IrCtor fam ctor (mStepsList (fuel - 1) args)
-  IrRecord fam fs => IrRecord fam (mStepsFields (fuel - 1) fs)
-  IrProj b fam x => IrProj (mSteps (fuel - 1) b) fam x
-  IrRecUpd b fam fs => IrRecUpd (mSteps (fuel - 1) b) fam (mStepsFields (fuel - 1) fs)
-  IrCast x => IrCast (mSteps (fuel - 1) x)
-  IrLet bs rhs body => IrLet bs (mSteps (fuel - 1) rhs) (mSteps (fuel - 1) body)
-  IrLam bs body => IrLam bs (mSteps (fuel - 1) body)
-  IrIf c t el => IrIf (mSteps (fuel - 1) c) (mSteps (fuel - 1) t) (mSteps (fuel - 1) el)
-  IrCase sc alts => IrCase (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
-  IrNatCase sc fr z su ca =>
-    IrNatCase (mSteps (fuel - 1) sc) fr (mStepsAltM (fuel - 1) z) (mStepsAltM (fuel - 1) su)
-      (mStepsAltM (fuel - 1) ca)
-  IrConcatMany xs => IrConcatMany (mStepsList (fuel - 1) xs)
-  IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mSteps (fuel - 1) prim)
-  _ => e
+      IrCtor fam ctor args => IrCtor fam ctor (mStepsList (fuel - 1) args)
+      IrRecord fam fs => IrRecord fam (mStepsFields (fuel - 1) fs)
+      IrProj b fam x => IrProj (mSteps (fuel - 1) b) fam x
+      IrRecUpd b fam fs => IrRecUpd (mSteps (fuel - 1) b) fam (mStepsFields (fuel - 1) fs)
+      IrCast x => IrCast (mSteps (fuel - 1) x)
+      IrLet bs rhs body => IrLet bs (mSteps (fuel - 1) rhs) (mSteps (fuel - 1) body)
+      IrLam bs body => IrLam bs (mSteps (fuel - 1) body)
+      IrIf c t el => IrIf (mSteps (fuel - 1) c) (mSteps (fuel - 1) t) (mSteps (fuel - 1) el)
+      IrCase sc alts => IrCase (mSteps (fuel - 1) sc) (mStepsAlts (fuel - 1) alts)
+      IrNatCase sc fr z su ca => IrNatCase (mSteps (fuel - 1) sc) fr (mStepsAltM (fuel - 1) z) (mStepsAltM (fuel - 1) su) (mStepsAltM (fuel - 1) ca)
+      IrConcatMany xs => IrConcatMany (mStepsList (fuel - 1) xs)
+      IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mSteps (fuel - 1) prim)
+      _ => e
 
 mStepsList : Int -> List Ir -> List Ir
-mStepsList fuel xs = if fuel <= 0 then xs
-else case xs of
-  [] => []
-  x :: rest => mSteps (fuel - 1) x :: mStepsList (fuel - 1) rest
+mStepsList fuel xs =
+  if fuel <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      x :: rest => mSteps (fuel - 1) x :: mStepsList (fuel - 1) rest
 
 mStepsFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
-mStepsFields fuel fs = if fuel <= 0 then fs
-else case fs of
-  [] => []
-  p :: rest => Pair (firstOf p) (mSteps (fuel - 1) (secondOf p)) :: mStepsFields (fuel - 1) rest
+mStepsFields fuel fs =
+  if fuel <= 0 then
+    fs
+  else
+    case fs of
+      [] => []
+      p :: rest => Pair (firstOf p) (mSteps (fuel - 1) (secondOf p)) :: mStepsFields (fuel - 1) rest
 
 mStepsAlts : Int -> List IrAlt -> List IrAlt
-mStepsAlts fuel alts = if fuel <= 0 then alts
-else case alts of
-  [] => []
-  a :: rest => IrAlt a.irAltCtor a.irAltBinders (mSteps (fuel - 1) a.irAltBody) :: mStepsAlts (fuel - 1) rest
+mStepsAlts fuel alts =
+  if fuel <= 0 then
+    alts
+  else
+    case alts of
+      [] => []
+      a :: rest => IrAlt a.irAltCtor a.irAltBinders (mSteps (fuel - 1) a.irAltBody) :: mStepsAlts (fuel - 1) rest
 
 mStepsAltM : Int -> Maybe IrAlt -> Maybe IrAlt
-mStepsAltM fuel m = if fuel <= 0 then m
-else case m of
-  Nothing => Nothing
-  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mSteps (fuel - 1) a.irAltBody))
+mStepsAltM fuel m =
+  if fuel <= 0 then
+    m
+  else
+    case m of
+      Nothing => Nothing
+      Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mSteps (fuel - 1) a.irAltBody))
 
 foldAppArgs : List Ir -> Ir
-foldAppArgs xs = case xs of
-  [] => IrGlobal "?"
-  x :: rest => foldAppArgsGo x rest
+foldAppArgs xs =
+  case xs of
+    [] => IrGlobal "?"
+    x :: rest => foldAppArgsGo x rest
 
 foldAppArgsGo : Ir -> List Ir -> Ir
-foldAppArgsGo acc xs = case xs of
-  [] => acc
-  x :: rest => foldAppArgsGo (IrApp acc x) rest
+foldAppArgsGo acc xs =
+  case xs of
+    [] => acc
+    x :: rest => foldAppArgsGo (IrApp acc x) rest
 
 mStepsDef : IrDef -> IrDef
 mStepsDef (IrDef n ar deps body r g sp) = IrDef n ar deps (mSteps startFuel body) r g sp
 mStepsDef d = d
+
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs =
   case cpsDefs defs of
