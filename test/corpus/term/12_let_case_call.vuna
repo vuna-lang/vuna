@@ -1,0 +1,27 @@
+-- 正例：互递归组 + `let ... in case <组内调用> of`。调用在 let 作用域内的
+-- case scrutinee 位置时，arity 判定必须按被调方的签名走，不能按剩余实参推断。
+import Prelude
+
+data Maybe2 a : Type where
+  Nope : Maybe2 a
+  Yep : a -> Maybe2 a
+
+f : List Int -> Int -> List Int -> Maybe2 Int
+f table fuel qs = if fuel <= 0 then Nope
+else case qs of
+  [] => Nope
+  x :: rest => g table (fuel - 1) qs
+
+g : List Int -> Int -> List Int -> Maybe2 Int
+g table fuel qs = if fuel <= 0 then Nope
+else case qs of
+  [] => Nope
+  x :: rest =>
+    let
+      dummy = 0
+    in case f table (fuel - 1) qs of
+      Nope => Nope
+      Yep v => Yep v
+
+main : Int
+main = 0
