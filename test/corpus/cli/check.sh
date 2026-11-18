@@ -169,19 +169,11 @@ if [ -f "$tmp/errroot/docs/.generated/errors.md" ]; then ok; else bad "gen-error
 check_contains "gen-errors content" "$(cat "$tmp/errroot/docs/.generated/errors.md" 2>/dev/null)" "TC_"
 
 # ---------------------------------------------------------------
-# 5) test / interp / goal / lint：坏路径给可读错误
+# 5) test / goal / lint：坏路径给可读错误
 # ---------------------------------------------------------------
 run "test missing dir" "$tmp" test "$tmp/no-such-dir"
 check_eq "test missing dir exit" "2" "$code"
 check_contains "test missing dir error" "$out" "no such directory"
-
-run "interp missing file" "$tmp" interp "$tmp/no-such-file.vuna"
-check_eq "interp missing file exit" "2" "$code"
-check_contains "interp missing file error" "$out" "no such file"
-
-run "interp directory" "$tmp" interp "$tmp/notws"
-check_eq "interp directory exit" "2" "$code"
-check_contains "interp directory error" "$out" "takes a single file"
 
 run "goal missing file" "$tmp" goal "$tmp/no-such-file.vuna"
 check_eq "goal missing file exit" "2" "$code"
@@ -210,9 +202,9 @@ run "value flag missing value" "$tmp" map --find
 check_eq "value flag missing value exit" "2" "$code"
 check_contains "value flag missing value error" "$out" "requires a value"
 
-run "removed --dt" "$tmp" interp --dt "$tmp/fmtws/lib/A.vuna"
-check_eq "removed --dt exit" "2" "$code"
-check_contains "removed --dt hint" "$out" "has been removed"
+run "interp removed" "$tmp" interp "$tmp/fmtws/lib/A.vuna"
+check_eq "interp removed exit" "2" "$code"
+check_contains "interp removed error" "$out" "unknown command"
 
 run "removed --with-comments" "$tmp" doc --with-comments
 check_eq "removed --with-comments exit 2" "2" "$code"
