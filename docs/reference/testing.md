@@ -474,6 +474,10 @@ CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除
 构建。代价是 job 状态不再表示门禁结论，因此单独有 `ci-status` job 汇总三个 job 的
 结果（`needs.<job>.result` + `flake-check` 的 step outcome），它才是唯一失败点。
 
+保存前还有一个 `Drop builder lock files` 步：Nix 在 store 里留下 `<out>.lock`
+（root 0600），非 root 的 tar 读不动会让整次保存失败。purge 窗口是 `P1D`——purge
+在保存失败时也会执行，窗口为 0 会把旧 cache 全删光（配额归零、下一次全冷构建）。
+
 语义项：
 
 - `seed-selfhost`：seed→stage0→stage1→stage2 逐字节一致、TCB 黑名单、seed 完整 allowlist、闭包数量、增量构建、

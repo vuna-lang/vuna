@@ -60,7 +60,10 @@ jobs:
           save: ${{ github.event_name == 'push' }}
           purge: ${{ github.event_name == 'push' }}
           purge-prefixes: nix-${{ runner.os }}-
-          purge-created: 0
+          # 只清一天之前的 cache：purge 在保存失败时也会执行，窗口为 0 会把所有
+          # 旧 cache 删光（实测发生过一次，配额直接归零、下一次 run 全冷构建）。
+          # 一天内的几份加起来仍在 10 GB 配额内。
+          purge-created: P1D
           purge-primary-key: never
       - name: flake 求值
         run: env NIX_CONFIG='eval-cache = false' nix flake check --no-build
@@ -73,6 +76,12 @@ jobs:
         env:
           CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e"
         run: sh nix/ci.sh
+      # Nix 每次构建都会在 store 里留下 `<out>.lock`（root 0600）。cache 保存用
+      # 非 root 的 tar 打包 /nix，读到这些锁就整体失败（Failed to save），随后
+      # 的 purge 还会删掉旧 cache。收尾前清掉；此时没有正在跑的构建。
+      - name: Drop builder lock files
+        if: always()
+        run: sudo rm -f /nix/store/*.lock
 
   # suite 长尾 1：ocaml 全量门禁（fast + integration）。CI_JOBS=1 让这个 job 的
   # 4 个核全部给 suite 的 --jobs。
