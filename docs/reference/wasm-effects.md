@@ -1,7 +1,7 @@
 # wasm 效应 handler（CPS lowering）
 
 > 状态：**纯用户 handler 默认走选择性 CPS + Step driver（mode 5，值语义 resumption）；
-> 宿主+用户组合仍走旧路径（debt D105）**。路线是
+> 宿主+用户组合仍走旧路径（debt D105）**。终态机器见 [effect-machine.md](effect-machine.md)（显式帧/续延栈，三端共用协议）。路线是
 > 「选择性 CPS + Step trampoline」：只 CPS 化效应 thunk 与 handler clause，
 > `Eff` 仍是数据；全片段 CPS 不是路线（相关代码已删除）。带内建宿主 handler 行、同时又出现
 > 用户 handler 的程序仍回落到 stack switching（见 §4）。
@@ -98,6 +98,7 @@ stack-switching 回落。
 
 - [wasm.md](wasm.md)：wasm 后端现状、浏览器能力范围、宿主符号与栈口径。
 - [native-effects.md](native-effects.md)：native 的栈拷贝续延实现。
+- [effect-machine.md](effect-machine.md)：目标态的显式效应机器（三端协议、answer row、常量栈）。
 - [effects.md](effects.md)：效应语义与 one-shot 约束。
 - `Ir.Cps`：`packages/compiler/lib/Vuna/Compiler/Ir/Cps.vuna`；wasm 运行时：
   `packages/compiler/lib/Vuna/Compiler/Wasm/Runtime.vuna`。
