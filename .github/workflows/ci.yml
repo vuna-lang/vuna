@@ -74,7 +74,7 @@ jobs:
         # cache 冷构建（实测 3 min → 17 min）。门禁结论由 ci-status 汇总。
         continue-on-error: true
         env:
-          CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e"
+          CI_EXCLUDE: "vuna-tests-gate vuna-tests-e2e vuna-tests-wasm vuna-tests-wasm-js vuna-tests-native vuna-typecheck"
         run: sh nix/ci.sh
       # Nix 每次构建都会在 store 里留下 `<out>.lock`（root 0600）。cache 保存用
       # 非 root 的 tar 打包 /nix，读到这些锁就整体失败（Failed to save），随后
@@ -82,6 +82,31 @@ jobs:
       - name: Drop builder lock files
         if: always()
         run: sudo rm -f /nix/store/*.lock
+
+  # 后端 suite + 自检：wasm / wasm-js / native 三个矩阵 check 与 `vuna-typecheck`
+  # 放一个 job，`CI_JOBS=1` 让它们**串行**独占 4 核。串行是为了读时长：
+  # 构建日志里相邻两条 `building '...'` 的时间差就是上一个 check 的墙钟，
+  # 并行时无法归属。它们都不依赖彼此，串行只多花这些 check 各自的运行时间。
+  tests-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Restore Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ github.sha }}-matrix
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          save: false
+      - name: vuna-tests-{wasm,wasm-js,native} + typecheck
+        env:
+          CI_JOBS: 1
+          CI_CHECKS: "vuna-tests-wasm vuna-tests-wasm-js vuna-tests-native vuna-typecheck"
+        run: sh nix/ci.sh
 
   # suite 长尾 1：ocaml 全量门禁（fast + integration）。CI_JOBS=1 让这个 job 的
   # 4 个核全部给 suite 的 --jobs。
@@ -132,7 +157,7 @@ jobs:
   # continue-on-error 保住 store cache，所以它的失败不会体现在 job 状态上，
   # 必须由本 job 读 step outcome 才能表达「红」。
   ci-status:
-    needs: [flake-check, tests-gate, tests-e2e]
+    needs: [flake-check, tests-matrix, tests-gate, tests-e2e]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -141,6 +166,7 @@ jobs:
         env:
           FLAKE_JOB: ${{ needs.flake-check.result }}
           FLAKE_CHECKS: ${{ needs.flake-check.outputs.checks }}
+          MATRIX_JOB: ${{ needs.tests-matrix.result }}
           GATE_JOB: ${{ needs.tests-gate.result }}
           E2E_JOB: ${{ needs.tests-e2e.result }}
         run: |
@@ -149,6 +175,7 @@ jobs:
             echo "flake-check: job=$FLAKE_JOB checks=$FLAKE_CHECKS"
             rc=1
           fi
+          [ "$MATRIX_JOB" = success ] || { echo "tests-matrix: $MATRIX_JOB"; rc=1; }
           [ "$GATE_JOB" = success ] || { echo "tests-gate: $GATE_JOB"; rc=1; }
           [ "$E2E_JOB" = success ] || { echo "tests-e2e: $E2E_JOB"; rc=1; }
           exit "$rc"

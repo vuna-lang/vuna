@@ -460,11 +460,15 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 CI 把它拆成三个 job（`.github/workflows/ci.yml`）：`flake-check` 跑除 suite 长尾之外的
 全部 check（外加 `nix flake check --no-build` 求值），`tests-gate` 与 `tests-e2e` 各占
-一个 runner、`CI_JOBS=1` 把自己的 4 核全给 suite。单 job 只有 4 核（`--max-jobs 2
---cores 2`），而 gate / e2e 各自就能吃满 4 核，拆开后长尾不再共享核、其余 check 也不再
-排在它们后面。只有 `flake-check` 写 Nix store cache，另外两个 job 只读（`save: false`），
-避免同一 sha 上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` /
-`CI_EXCLUDE`（按 flake 求值枚举，新增 check 不用手工同步列表）。
+一个 runner、`CI_JOBS=1` 把自己的 4 核全给 suite；`tests-matrix` 装三个后端矩阵 check
+与 `vuna-typecheck`，同样用一个 runner。单 job 只有 4 核（`--max-jobs 2 --cores 2`），
+而 gate / e2e 各自就能吃满 4 核，拆开后长尾不再共享核、其余 check 也不再排在它们后面。
+只有 `flake-check` 写 Nix store cache，另外三个 job 只读（`save: false`），避免同一 sha
+上多份同样的 store 挤占配额。分组用 `nix/ci.sh` 的 `CI_CHECKS` / `CI_EXCLUDE`（按 flake
+求值枚举，新增 check 不用手工同步列表）。
+
+`tests-matrix` 里用 `CI_JOBS=1` 串行是**为了读时长**：构建日志里相邻两条
+`building '<drv>'` 的时间差就是上一个 check 的墙钟；并行时无法归属到具体 check。
 
 `flake-check` 的 checks 步是 `continue-on-error`，失败也按成功收尾：cache action 的
 保存是 `post-if: success()`，job 一红就不存 store，下一次 push 只能从更旧的 cache 冷
