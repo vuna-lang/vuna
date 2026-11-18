@@ -281,31 +281,31 @@ let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonTraceFuel = (fun fuel t -> (if
 # 364 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonTrace = (fun t -> ((v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonTraceFuel 64) t))
 
-# 372 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 373 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonIce = (fun i -> (String.concat "" ["{\"phase\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dphaseName (i).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dIceInfo_icePhase)); ",\"function\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (i).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dIceInfo_iceFunction); ",\"invariant\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (i).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dIceInfo_iceInvariant); ",\"fingerprint\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (i).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dIceInfo_iceFingerprint); ",\"hint\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (i).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dIceInfo_iceHint); "}"]))
 
-# 376 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 377 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dmaybeJsonIce = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__47) -> (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonIce dtb__47)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> "null"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 384 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 385 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dmaybeParent = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__48) -> (bi_strFromInt dtb__48)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> "null"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 380 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 381 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_doriginJson = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dOrigin_OriginCascade (dtb__49) -> (String.concat "" ["{\"kind\":\"cascade\",\"parent\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dmaybeParent dtb__49); "}"])
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dOrigin_OriginDirect -> "{\"kind\":\"direct\"}"
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 389 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 390 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dabsentName = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dNoSourceReason_NsInternal -> "internal"
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dNoSourceReason_NsPackageGraph -> "package-graph"
@@ -314,17 +314,17 @@ let v_Vuna_dCompiler_dBase_dDiag_dFormat_dabsentName = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 395 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 396 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonAbsent = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__50) -> (",\"absent\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dabsentName dtb__50)))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 419 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 420 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonSource = (fun s -> (String.concat "" ["{\"file\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (s).f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcFile); ",\"package\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (s).f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcPackage); ",\"module\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (s).f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcModule); ",\"relPath\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (s).f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcRelPath); ",\"digest\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (s).f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcDigest); "}"]))
 
-# 430 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 431 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLevel = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dSeverity_SevHelp -> "note"
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dSeverity_SevNote -> "note"
@@ -333,65 +333,65 @@ let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLevel = (fun mc0 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 436 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 437 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRuleId = (fun d -> (if ((d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode = "") then "vuna" else (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode))
 
-# 439 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 440 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRegion = (fun sp -> (String.concat "" ["{\"startLine\":"; (bi_strFromInt (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartLine sp)); ",\"startColumn\":"; (bi_strFromInt (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanStartCol sp)); ",\"endLine\":"; (bi_strFromInt (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndLine sp)); ",\"endColumn\":"; (bi_strFromInt (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanEndCol sp)); "}"]))
 
-# 443 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 444 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLocation = (fun file sp -> (String.concat "" ["{\"physicalLocation\":{\"artifactLocation\":{\"uri\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr file); "},\"region\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRegion sp); "}}"]))
 
-# 447 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 448 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRelated = (fun file l -> (match (l).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelSpan with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (String.concat "" ["{\"message\":{\"text\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (l).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelText); "}}"])
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__51) -> (String.concat "" ["{\"message\":{\"text\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (l).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelText); "},\"physicalLocation\":{\"artifactLocation\":{\"uri\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile dtb__51)); "},\"region\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRegion dtb__51); "}}"])
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 467 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 468 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_disPrimaryLabel = (fun l -> (match (l).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dLabel_labelStyle with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dLabelStyle_LabelPrimary -> true
   | _ -> false
 ))
 
-# 453 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 454 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifResult = (fun d -> ((fun primary -> ((fun related -> ((fun relJson -> ((fun notesText -> ((fun msg -> (String.concat "" ["{\"ruleId\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRuleId d)); ",\"level\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLevel (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity)); ",\"message\":{\"text\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr msg); "}"; primary; relJson; ",\"properties\":{\"vuna.origin\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_doriginName (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagOrigin)); "}}"])) (if (notesText = "") then (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage else (String.concat "" [(d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage; "\n"; notesText])))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((Base_dData_dList.v_Base_dData_dList_dmap (fun n -> ("note: " ^ ((Base_dTrait_dInterp.v_Base_dTrait_dInterp_dinterp Base_dTrait_dInterp.v_Interp_uString) n)))) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagNotes)))) (if ((Base_dData_dList.v_Base_dData_dList_dlength related) = 0) then "" else (String.concat "" [",\"relatedLocations\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRelated (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagFileOf d))) related)); "]"])))) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun l -> (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Vuna_dCompiler_dBase_dDiag_dFormat_disPrimaryLabel l)))) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels))) (match (v_Vuna_dCompiler_dBase_dDiag_dFormat_dprimarySpan (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ""
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__52) -> (String.concat "" [",\"locations\":["; ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLocation (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dspanFile dtb__52)) dtb__52); "]"])
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 481 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 482 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dmemCode = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__53, dtb__54) -> (if (mc0 = dtb__53) then true else ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dmemCode mc0) dtb__54))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 476 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 477 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_duniqueCodes = (fun ds -> (((Base_dData_dList.v_Base_dData_dList_dfoldl (fun acc d -> (if ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dmemCode (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRuleId d)) acc) then acc else ((Base_dData_dList.v_Base_dData_dList_dappend acc) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRuleId d), Base_dData_dList.C_Base_dData_dList_dList_Nil)))))) Base_dData_dList.C_Base_dData_dList_dList_Nil) ds))
 
-# 499 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 500 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLevelName = (fun mc0 -> (if (mc0 = "error") then "error" else (if (mc0 = "warning") then "warning" else "note")))
 
-# 485 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 486 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_druleJson = (fun code -> ((fun desc -> ((fun sev -> ((fun phase -> ((fun cat -> (String.concat "" ["{\"id\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr code); ",\"shortDescription\":{\"text\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr desc); "},\"help\":{\"text\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr desc); "},\"defaultConfiguration\":{\"level\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifLevelName sev)); "},\"properties\":{\"tags\":["; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr phase); ","; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr cat); "]}}"])) (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_ddiagCategoryOf (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_dcodeDomain code)))) (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_ddiagPhaseOf (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_dcodeDomain code)))) (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_ddiagSeverityOf (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_dcodeDomain code)))) (match (Vuna_dCompiler_dBase_dDiagnostics.v_Vuna_dCompiler_dBase_dDiagnostics_ddiagDescOf code) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__55) -> dtb__55
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> code
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 473 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 474 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRules = (fun ds -> ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_druleJson) (v_Vuna_dCompiler_dBase_dDiag_dFormat_duniqueCodes ds))))
 
-# 505 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 506 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderSarif = (fun ds -> (String.concat "" ["{\"$schema\":\"https://json.schemastore.org/sarif-2.1.0.json\",\"version\":\"2.1.0\",\"runs\":[{\"tool\":{\"driver\":{\"name\":\"vuna\",\"version\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr Vuna_dCompiler_dBase_dVersion.v_Vuna_dCompiler_dBase_dVersion_dvunaVersion); ",\"rules\":["; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifRules ds); "]}},\"results\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dsarifResult) ds)); "]}]}"]))
 
-# 513 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 514 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_ddiagDescLine = (fun d -> "")
 
-# 544 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 545 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__56, dtb__57) -> (match dtb__56 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldCall (dtb__58) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__56, (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf dtb__57)))
@@ -401,33 +401,33 @@ let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf = (fun mc0 -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 550 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 551 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__59, dtb__60) -> ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" ["  = trace["; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dphaseName (dtb__59).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_tracePhase); "]: "; (dtb__59).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dTraceFrame_traceText]), Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines mc0) dtb__60))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 555 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 556 "Vuna/Compiler/Base/Diag/Format.vuna"
 let rec v_Vuna_dCompiler_dBase_dDiag_dFormat_dindent = (fun n -> (if (n <= 0) then "" else ("  " ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_dindent (n - 1)))))
 
-# 558 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 559 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dsuggestionLine = (fun s -> (String.concat "" ["  = help: "; (s).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dSuggestion_suggestionTitle; " ("; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dapplicabilityName (s).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dSuggestion_suggestionApplicability); ")"]))
 
-# 561 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 562 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dshowInt = (fun n -> (bi_strFromInt n))
 
-# 564 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 565 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcandidateTextOf = (fun c -> (c).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dCandidate_candidateText)
 
-# 568 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 569 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallSpanSuffix = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__61) -> (String.concat "" [" at "; (dtb__61).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanFile; ":"; (bi_strFromInt (dtb__61).Vuna_dCompiler_dBase_dSource.f_Vuna_dCompiler_dBase_dSource_dSpan_spanStartLine)])
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ""
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 519 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 520 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldNote (dtb__62) -> ("  = note: " ^ dtb__62)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dDiagField_FieldSpan (dtb__63, dtb__64) -> (String.concat "" ["  = span: "; dtb__63; " at "; (Vuna_dCompiler_dBase_dSource.v_Vuna_dCompiler_dBase_dSource_dshowSpanLoc dtb__64)])
@@ -449,26 +449,26 @@ let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderHuman = (fun nFs lang d -> ((fun
   | _ -> failwith "DT: impossible branch"
 )) (fun snippet -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderRelated nFs) primary) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)) (fun related -> ((fun labelNote -> ((fun notes -> ((fun descLine -> ((fun origLine -> ((fun fieldBlock -> ((fun traceBlock -> ((fun helpBlock -> ((fun block -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dData_dString.v_Base_dData_dString_dtrim block))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (((v_Vuna_dCompiler_dBase_dDiag_dFormat_dheaderOf lang) d), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (snippet, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (related, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (labelNote, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (origLine, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (notes, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (fieldBlock, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (traceBlock, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (helpBlock, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (descLine, Base_dData_dList.C_Base_dData_dList_dList_Nil))))))))))))))))))))))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dsuggestionLine) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSuggestions)))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dtraceLines 0) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagTrace)))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagFields)))) (if (((v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedMessage lang) d) = (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage) then "" else ("  = message: " ^ (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage)))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_ddiagDescLine d))) ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((Base_dData_dList.v_Base_dData_dList_dmap (fun n -> ("  = note: " ^ ((Base_dTrait_dInterp.v_Base_dTrait_dInterp_dinterp Base_dTrait_dInterp.v_Interp_uString) n)))) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagNotes)))) (if (ptext = "") then "" else ("  = note: " ^ ptext)))))))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dprimaryText (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels))) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dprimarySpan (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)))
 
-# 535 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 536 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldBlock = (fun ds -> ((Base_dData_dString.v_Base_dData_dString_djoin "\n") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_dfieldLine) (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf ds))))
 
-# 539 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 540 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldSuffix = (fun ds -> (match (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldsOf ds) with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ""
   | _ -> ("\n" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldBlock ds))
 ))
 
-# 572 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 573 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedJsonField = (fun lang d -> ((fun lm -> (if (lm = (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage) then "" else (",\"localizedMessage\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr lm)))) ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedMessage lang) d)))
 
-# 399 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 400 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonDiag = (fun lang d -> ((Base_dData_dString.v_Base_dData_dString_djoin "") (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (("{\"code\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((",\"severity\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dseverityName (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((",\"phase\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dphaseName (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagPhase))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((",\"category\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (v_Vuna_dCompiler_dBase_dDiag_dFormat_dcategoryName (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCategory))), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"message\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage); ((v_Vuna_dCompiler_dBase_dDiag_dFormat_dlocalizedJsonField lang) d)]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"labels\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonLabel) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels)); "]"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"fields\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonField) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagFields)); "]"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"trace\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonTrace) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagTrace)); "]"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"notes\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonStr) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagNotes)); "]"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"suggestions\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonSuggestion) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSuggestions)); "]"]), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((",\"origin\":" ^ (v_Vuna_dCompiler_dBase_dDiag_dFormat_doriginJson (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagOrigin)), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((",\"internal\":" ^ (if (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagInternal then "true" else "false")), (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((String.concat "" [",\"ice\":"; (v_Vuna_dCompiler_dBase_dDiag_dFormat_dmaybeJsonIce (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagIce); (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonAbsent (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagAbsent); "}"]), Base_dData_dList.C_Base_dData_dList_dList_Nil))))))))))))))))))))))))))))
 
-# 404 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 405 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderJson = (fun lang d -> ((v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonDiag lang) d))
 
-# 407 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 408 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderJsonList = (fun lang ds -> (String.concat "" ["{\"version\":1,\"tool\":\"vuna\",\"diagnostics\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonDiag lang)) ds)); "]}"]))
 
-# 423 "Vuna/Compiler/Base/Diag/Format.vuna"
+# 424 "Vuna/Compiler/Base/Diag/Format.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderJsonListWithSources = (fun lang ds sources -> (String.concat "" ["{\"version\":1,\"tool\":\"vuna\",\"sources\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonSource) sources)); "],\"diagnostics\":["; ((Base_dData_dString.v_Base_dData_dString_djoin ",") ((Base_dData_dList.v_Base_dData_dList_dmap (v_Vuna_dCompiler_dBase_dDiag_dFormat_djsonDiag lang)) ds)); "]}"]))

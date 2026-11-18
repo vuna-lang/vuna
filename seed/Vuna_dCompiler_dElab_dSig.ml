@@ -301,7 +301,7 @@ let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSigCtxCached = (fun prefix banned pr
 # 301 "Vuna/Compiler/Elab/Sig.vuna"
 let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSigCtxCachedKinds = (fun prefix banned preludeBanned paramKinds ctx ty sp -> ((fun combined -> ((fun lower -> ((fun names -> ((fun memberOverrides -> ((fun argOverrides -> (((((v_Vuna_dCompiler_dElab_dSig_dquantifyTopKindsWith ((v_Vuna_dCompiler_dElab_dSig_dkindOverrideOf memberOverrides) argOverrides)) names) combined) ty) sp)) ((v_Vuna_dCompiler_dElab_dSig_dargParamKinds paramKinds) combined))) (v_Vuna_dCompiler_dElab_dSig_dmemberDomainOverrides ctx))) ((((v_Vuna_dCompiler_dElab_dSig_dkeepOutQualified prefix) banned) preludeBanned) ((v_Vuna_dCompiler_dElab_dSig_ddropPiBound lower) (v_Vuna_dCompiler_dElab_dSig_dpiBoundNames ty))))) (Base_dData_dList.v_Base_dData_dList_dnubNames ((Base_dData_dList.v_Base_dData_dList_dappend ((Base_dData_dList.v_Base_dData_dList_dconcatMap v_Vuna_dCompiler_dElab_dSig_dexprLowerVars) ctx)) (v_Vuna_dCompiler_dElab_dSig_dexprLowerVars ty))))) (Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EApp ((Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dExpr_EVar ("#sig", sp)), ((Base_dData_dList.v_Base_dData_dList_dappend ctx) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (ty, Base_dData_dList.C_Base_dData_dList_dList_Nil))), sp))))
 
-# 328 "Vuna/Compiler/Elab/Sig.vuna"
+# 329 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__202, dtb__203) -> (if ((((Base_dContainer_dHashMap.v_Base_dContainer_dHashMap_dmember Base_dData_dString.v_Hashable_uString) Base_dData_dString.v_Eq_uString) dtb__202) mc0) then ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl mc0) dtb__203) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__202, ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl mc0) dtb__203))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dList.C_Base_dData_dList_dList_Nil
@@ -311,7 +311,7 @@ let rec v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl = (fun mc0 mc1 -> (match mc1 wit
 # 176 "Vuna/Compiler/Elab/Sig.vuna"
 let v_Vuna_dCompiler_dElab_dSig_dquantifyTopSig = (fun banned ty sp -> ((((v_Vuna_dCompiler_dElab_dSig_dquantifyTopKinds ((v_Vuna_dCompiler_dElab_dSig_dkeepOutTbl banned) ((v_Vuna_dCompiler_dElab_dSig_dfreeNames (fun n -> false)) ty))) ty) ty) sp))
 
-# 333 "Vuna/Compiler/Elab/Sig.vuna"
+# 334 "Vuna/Compiler/Elab/Sig.vuna"
 let v_Vuna_dCompiler_dElab_dSig_dtopPreludeNames = ((Base_dData_dList.v_Base_dData_dList_dappend (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("Type", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("->", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("_", Base_dData_dList.C_Base_dData_dList_dList_Nil))))))) ((Base_dData_dList.v_Base_dData_dList_dappend Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dtypeIntrinsicNames) Vuna_dCompiler_dBase_dIntrinsics.v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeValueNames))
 
 # 240 "Vuna/Compiler/Elab/Sig.vuna"
@@ -320,7 +320,7 @@ let v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned = (fun defined -> (Base_dContain
 # 246 "Vuna/Compiler/Elab/Sig.vuna"
 let v_Vuna_dCompiler_dElab_dSig_dbannedForModule = (fun sigName defined -> (v_Vuna_dCompiler_dElab_dSig_dtopQuantBanned ((v_Vuna_dCompiler_dElab_dSig_dfilterNamesInModule sigName) defined)))
 
-# 337 "Vuna/Compiler/Elab/Sig.vuna"
+# 338 "Vuna/Compiler/Elab/Sig.vuna"
 let rec v_Vuna_dCompiler_dElab_dSig_ddefinedNames = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__204, dtb__205) -> (match dtb__204 with
   | Vuna_dCompiler_dFrontend_dAst.C_Vuna_dCompiler_dFrontend_dAst_dDecl_DFun (dtb__206, dtb__207, dtb__208, dtb__209) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__206, (v_Vuna_dCompiler_dElab_dSig_ddefinedNames dtb__205)))

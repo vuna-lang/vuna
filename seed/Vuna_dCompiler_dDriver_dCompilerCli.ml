@@ -175,20 +175,20 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_ddirOf = (fun path -> ((fun n -> (if (
 # 259 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripPathPrefix = (fun base file -> (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith (base ^ "/")) file) then (((Base_dData_dString.v_Base_dData_dString_dsubstring (bi_natFromInt ((bi_strLength base) + 1))) (bi_natFromInt (((bi_strLength file) - (bi_strLength base)) - 1))) file) else file))
 
-# 268 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 269 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlashGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__35, dtb__36) -> (if (dtb__35 = 47) then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlashGo dtb__36) Base_dData_dList.C_Base_dData_dList_dList_Nil) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc1)), mc2))) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlashGo dtb__36) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__35, mc1))) mc2))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((Base_dData_dList.dtp_pack (Base_dData_dList.v_Base_dData_dList_dreverse mc1)), mc2)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 265 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 266 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlash = (fun s -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlashGo (Base_dData_dList.dtp_unpack s)) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dList.C_Base_dData_dList_dList_Nil))
 
-# 274 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 275 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dmoduleOfRel = (fun rel -> ((fun rel1 -> ((fun rel2 -> ((Base_dData_dString.v_Base_dData_dString_djoin ".") (v_Vuna_dCompiler_dDriver_dCompilerCli_dsplitSlash rel2))) (if ((Base_dData_dString.v_Base_dData_dString_dendsWith ".vuna") rel1) then (((Base_dData_dString.v_Base_dData_dString_dsubstring 0) (bi_natFromInt ((bi_strLength rel1) - 5))) rel1) else rel1))) (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "lib/") rel) then (((Base_dData_dString.v_Base_dData_dString_dsubstring (bi_natFromInt 4)) (bi_natFromInt ((bi_strLength rel) - 4))) rel) else (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "app/") rel) then (((Base_dData_dString.v_Base_dData_dString_dsubstring (bi_natFromInt 4)) (bi_natFromInt ((bi_strLength rel) - 4))) rel) else rel))))
 
-# 285 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 286 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPkgRootGo = (fun nFs fuel dir -> (if (fuel <= 0) then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ""; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "" }) else ((fun candidate -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) candidate)) (fun exists -> (if exists then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsReadFile nFs) candidate)) (fun text -> ((fun name -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dir; Base_dData_dPair.f_Base_dData_dPair_dPair_second = name })) (match ((Vuna_dCompiler_dFrontend_dManifest.v_Vuna_dCompiler_dFrontend_dManifest_dparseManifest candidate) text) with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__37) -> (match (dtb__37).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestName with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ""
@@ -199,10 +199,10 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPkgRootGo = (fun nFs fuel dir
   | _ -> failwith "DT: impossible branch"
 )))) else (if (if (dir = "/") then true else (dir = ".")) then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ""; Base_dData_dPair.f_Base_dData_dPair_dPair_second = "" }) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPkgRootGo nFs) (fuel - 1)) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddirOf dir))))))) (if (dir = "/") then "/vuna.toml" else (dir ^ "/vuna.toml")))))
 
-# 303 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 304 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dsourceRefEff = (fun nFs nEnv file -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dabsolutePath nEnv) file)) (fun abs -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) abs)) (fun exists -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if exists then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsReadFile nFs) abs)) (fun text -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (bi_strFromInt (Vuna_dCompiler_dLoader_dFingerprint.v_Vuna_dCompiler_dLoader_dFingerprint_dtextHashOf text))))) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ""))) (fun digest -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPkgRootGo nFs) 12) (v_Vuna_dCompiler_dDriver_dCompilerCli_ddirOf abs))) (fun root -> ((fun pkgDir -> ((fun pkgName -> ((fun rel -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Vuna_dCompiler_dBase_dDiag_dFormat.f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcFile = file; Vuna_dCompiler_dBase_dDiag_dFormat.f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcDigest = digest; Vuna_dCompiler_dBase_dDiag_dFormat.f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcPackage = pkgName; Vuna_dCompiler_dBase_dDiag_dFormat.f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcModule = (v_Vuna_dCompiler_dDriver_dCompilerCli_dmoduleOfRel rel); Vuna_dCompiler_dBase_dDiag_dFormat.f_Vuna_dCompiler_dBase_dDiag_dFormat_dSourceRef_srcRelPath = rel })) (if (pkgDir = "") then file else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripPathPrefix pkgDir) abs)))) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf root))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf root)))))))))))
 
-# 318 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 319 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dsourcePairsEff = (fun nFs nEnv mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__40, dtb__41) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsourcePairsEff nFs) nEnv) dtb__41)) (fun more -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsourceRefEff nFs) nEnv) dtb__40)) (fun ref -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (ref, more)))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) Base_dData_dList.C_Base_dData_dList_dList_Nil)
@@ -212,34 +212,34 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dsourcePairsEff = (fun nFs nEnv mc
 # 124 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dflushSarif = (fun nFs nConsole nEnv code o -> ((fun shown -> (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "sarif") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) ((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderSarif shown) ^ "\n"))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) code))) else (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "json") then (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optWithSources then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dsourcePairsEff nFs) nEnv) (Base_dData_dList.v_Base_dData_dList_dreverse ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcollectLabelFiles shown) Base_dData_dList.C_Base_dData_dList_dList_Nil)))) (fun sources -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) ((((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderJsonListWithSources (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagLang) shown) sources) ^ "\n"))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) code))))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderJsonList (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagLang) shown) ^ "\n"))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) code)))) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) code)))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dtakeDiags (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors) (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optSarifItems)))
 
-# 325 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 326 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disCascadeDiag = (fun d -> (match (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagOrigin with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dOrigin_OriginCascade (dtb__42) -> true
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dOrigin_OriginDirect -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 331 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 332 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disTextDiagFormat = (fun f -> (if (f = "short") then true else (f = "human")))
 
-# 334 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 335 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dvisibleDiags = (fun o ds -> (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowCascade then true else (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Vuna_dCompiler_dDriver_dCompilerCli_disTextDiagFormat (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat))) then ds else ((fun kept -> (if (if ((Base_dData_dList.v_Base_dData_dList_dlength kept) = 0) then ((Base_dData_dList.v_Base_dData_dList_dlength ds) > 0) else false) then ds else kept)) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun d -> (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Vuna_dCompiler_dDriver_dCompilerCli_disCascadeDiag d)))) ds))))
 
-# 342 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 343 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dhasShowWarnings = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__43, dtb__44) -> (if (if (dtb__43 = "--warnings") then true else (dtb__43 = "-W")) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasShowWarnings dtb__44))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 348 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 349 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dhasFormatFlag = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__45, dtb__46) -> (if (if (if (dtb__45 = "--json") then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "--error-format") dtb__45)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "--message-format") dtb__45)) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasFormatFlag dtb__46))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 359 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 360 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormatGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__47, dtb__48) -> (if (dtb__47 = "--json") then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormatGo dtb__48) mc1) (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("json"))) else (if (dtb__47 = "--error-format") then (match dtb__48 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__49, dtb__50) -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormatGo dtb__50) mc1) (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__49)))
@@ -250,23 +250,23 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormatGo = (fun mc0 mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 355 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 356 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormat = (fun args -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDiagFormatGo args) Base_dData_dList.C_Base_dData_dList_dList_Nil) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing))
 
-# 373 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 374 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstdoutIsTty = (Base_dEffect_dCore.v_Base_dEffect_dCore_draise (Base_dEffect_dCore.C_Base_dEffect_dCore_dEff_MkEff (fun (_ : Base_dEffect_dCore.t_Base_dEffect_dCore_dEffUnit) -> (dtp_isTty ()))))
 
-# 411 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 412 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dparseIntChars = (fun mc0 mc1 mc2 mc3 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__51, dtb__52) -> (if (if (dtb__51 >= 48) then (dtb__51 <= 57) else false) then ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dparseIntChars dtb__52) ((mc1 * 10) + (dtb__51 - 48))) (mc2 + 1)) mc3) else (if (mc2 = 0) then mc3 else mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (if (mc2 = 0) then mc3 else mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 407 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 408 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dparseIntOr = (fun s fallback -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dparseIntChars (Base_dData_dList.dtp_unpack s)) 0) 0) fallback))
 
-# 422 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 423 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripMaxErrorsGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__53, dtb__54) -> (if (dtb__53 = "--max-errors") then (match dtb__54 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__55, dtb__56) -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripMaxErrorsGo dtb__56) mc1) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dparseIntOr dtb__55) mc2))
@@ -277,48 +277,48 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripMaxErrorsGo = (fun mc0 mc1 m
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 418 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 419 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripMaxErrors = (fun args -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripMaxErrorsGo args) Base_dData_dList.C_Base_dData_dList_dList_Nil) 20))
 
-# 448 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 449 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintVersion = (fun nConsole _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["vuna-compiler "; Vuna_dCompiler_dBase_dVersion.v_Vuna_dCompiler_dBase_dVersion_dvunaVersion; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))))
 
-# 454 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 455 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__57, dtb__58) -> (if (if (dtb__57 = "-h") then true else (dtb__57 = "--help")) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp dtb__58))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 459 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 460 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor = (fun nConsole prog -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))))
 
-# 465 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 466 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr = (fun nConsole prog -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilerUsage prog))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 2))))
 
-# 471 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 472 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand = (fun nConsole prog arg -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["error: unknown command "; arg; "\nrun "; prog; " help for the command list\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 2))))
 
-# 476 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 477 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand = (fun nConsole prog cmd hint -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["error: "; cmd; " has been removed; "; hint; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 2))))
 
-# 483 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 484 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag = (fun name -> ("--" ^ name))
 
-# 486 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 487 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlagHint = (fun flag -> (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "dt")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("DT is the only path; drop the flag")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "package")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("use build or compile")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "split")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("split is the only output model; use build --out OUT [DIR] or compile <pkg-dir> OUT")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "root")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("module resolution is decided by the nearest vuna.toml; set VUNA_BASE for standalone files")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "out")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("pass OUTDIR positionally to compile; build accepts --out DIR")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "no-typecheck")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("checking is always enabled")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "typecheck")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("checking is always enabled")) else (if (flag = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddashFlag "typed")) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ("DT is the only path")) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))))))))
 
-# 498 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 501 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag = (fun nConsole prog flag -> (match (v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlagHint flag) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr nConsole) prog)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__59) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["error: "; flag; " has been removed; "; dtb__59; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 2)))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 508 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 511 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText = (fun nConsole e -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) e)) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 1))))
 
-# 514 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 517 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dseverityLabelOf = (fun d -> (match (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dSeverity_SevError -> "error"
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dSeverity_SevWarning -> "warning"
@@ -327,88 +327,88 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dseverityLabelOf = (fun d -> (match (d
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 542 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 545 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcollectSarifIn = (fun o d -> { o with f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optSarifItems = ((Base_dData_dList.v_Base_dData_dList_dappend (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optSarifItems) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (d, Base_dData_dList.C_Base_dData_dList_dList_Nil))) })
 
-# 522 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 525 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiag = (fun nFs nConsole o extra d -> (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "json") then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcollectSarifIn o) d) }) else (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "human") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderHuman nFs) (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagLang) d)) (fun msg -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText nConsole) (msg ^ "\n"))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))) else (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "sarif") then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcollectSarifIn o) d) }) else (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "github") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText nConsole) ((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderGithub d) ^ "\n"))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderShortSnippetEff nFs) d)) (fun snippet -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText nConsole) (String.concat "" [(v_Vuna_dCompiler_dDriver_dCompilerCli_dseverityLabelOf d); ": "; extra; (Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_drenderShort d); snippet; (Vuna_dCompiler_dBase_dDiag_dFormat.v_Vuna_dCompiler_dBase_dDiag_dFormat_dcallFieldSuffix (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagFields); "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))))))))
 
-# 547 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 550 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiagRevSeq = (fun nFs nConsole mc0 mc1 mc2 -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__60, dtb__61) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiagRevSeq nFs) nConsole) mc0) mc1) dtb__61)) (fun o1 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiag nFs) nConsole) o1) mc1) dtb__60)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) mc0)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 554 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 557 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagWithPrefix = (fun nFs nConsole o extra d -> (match (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagChildren with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiag nFs) nConsole) o) extra) d)
   | _ -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiagRevSeq nFs) nConsole) o) extra) shown)) (fun o1 -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (v_Vuna_dCompiler_dDriver_dCompilerCli_ddiagExitFor d); Base_dData_dPair.f_Base_dData_dPair_dPair_second = o1 })))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dtakeDiags (v_Vuna_dCompiler_dDriver_dCompilerCli_dmaxErrorsOf o)) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (d, ((v_Vuna_dCompiler_dDriver_dCompilerCli_dvisibleDiags o) (d).Vuna_dCompiler_dBase_dDiag.f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagChildren)))))
 ))
 
-# 565 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 568 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag = (fun nFs nConsole o d -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagWithPrefix nFs) nConsole) o) "") d))
 
-# 569 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 572 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr = (fun nConsole e -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErrText nConsole) (String.concat "" ["error: "; e; "\n"])))
 
-# 573 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 576 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList = (fun nFs nConsole o extra ds -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_demitDiagRevSeq nFs) nConsole) o) extra) shown)) (fun o1 -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o1 })))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dtakeDiags (v_Vuna_dCompiler_dDriver_dCompilerCli_dmaxErrorsOf o)) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dvisibleDiags o) ds))))
 
-# 581 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 584 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_ddefaultDir = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> "."
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__62) -> dtb__62
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 588 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 591 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr = (fun nConsole path -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr nConsole) ("no such file or package directory: " ^ path)))
 
-# 601 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 604 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt = (fun nFs nEnv label dir -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dloadPackage nFs) nEnv) dir)) (fun pkgR -> (match pkgR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__63) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__63)))
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__64) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry dtb__64))) (fun exists -> (if exists then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__64))) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_derr (String.concat "" [label; ": library package "; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName dtb__64); " has no app/Main.vuna (an executable package is required)"]))))))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 592 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 595 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackage = (fun nFs nEnv label dir -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) dir)) (fun exists -> (if exists then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsIsDirectory nFs) dir)) (fun isDir -> (if isDir then ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackageAt nFs) nEnv) label) dir) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_derr (String.concat "" [label; ": expected a package directory, not a file: "; dir])))))) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_derr ("no such file or package directory: " ^ dir)))))))
 
-# 636 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 639 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disKnownTarget = (fun t -> (if (if (t = "ocaml") then true else (t = "wasm")) then true else (t = "native")))
 
-# 655 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 658 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileToTarget = (fun nFs nConsole nClock nEnv nProcess ctx entry printResult outDir target -> (if (target = "wasm") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((Vuna_dCompiler_dDriver_dWasm.v_Vuna_dCompiler_dDriver_dWasm_dcompileWasm nFs) nEnv) nProcess) ctx) entry) printResult) outDir)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) r))) else (if (target = "native") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((Vuna_dCompiler_dDriver_dNative.v_Vuna_dCompiler_dDriver_dNative_dcompileNative nFs) nEnv) nProcess) ctx) entry) printResult) outDir)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__65) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__65))
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__66) -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = Base_dData_dList.C_Base_dData_dList_dList_Nil }))
   | _ -> failwith "DT: impossible branch"
 )))) else (((((((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) printResult) outDir))))
 
-# 733 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 736 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckSpawnArgs = (fun o dir -> ((fun head0 -> ((fun base -> ((fun base2 -> ((fun base3 -> ((fun langArgs -> ((fun cascadeArgs -> ((fun sourceArgs -> ((fun failFastArgs -> ((fun maxArgs -> ((Base_dData_dList.v_Base_dData_dList_dappend base3) ((Base_dData_dList.v_Base_dData_dList_dappend langArgs) ((Base_dData_dList.v_Base_dData_dList_dappend maxArgs) ((Base_dData_dList.v_Base_dData_dList_dappend cascadeArgs) ((Base_dData_dList.v_Base_dData_dList_dappend sourceArgs) failFastArgs)))))) (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors > 0) then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--max-errors", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((bi_strFromInt (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors), Base_dData_dList.C_Base_dData_dList_dList_Nil)))) else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optFailFast then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--fail-fast", Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optWithSources then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--with-sources", Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowCascade then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--show-cascade", Base_dData_dList.C_Base_dData_dList_dList_Nil)) else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optLangExplicit then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--lang", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagLang, Base_dData_dList.C_Base_dData_dList_dList_Nil)))) else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings then ((Base_dData_dList.v_Base_dData_dList_dappend base2) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--deny-warnings", Base_dData_dList.C_Base_dData_dList_dList_Nil))) else base2))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then ((Base_dData_dList.v_Base_dData_dList_dappend base) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--warnings", Base_dData_dList.C_Base_dData_dList_dList_Nil))) else base))) (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = "short") then ((Base_dData_dList.v_Base_dData_dList_dappend head0) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dir, Base_dData_dList.C_Base_dData_dList_dList_Nil))) else ((Base_dData_dList.v_Base_dData_dList_dappend head0) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--error-format", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat, (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dir, Base_dData_dList.C_Base_dData_dList_dList_Nil)))))))))) (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease then (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("check", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("--release", Base_dData_dList.C_Base_dData_dList_dList_Nil)))) else (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("check", Base_dData_dList.C_Base_dData_dList_dList_Nil)))))
 
-# 752 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 755 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disMachineFormat = (fun f -> (if (f = "json") then true else (f = "sarif")))
 
-# 792 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 795 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disWorkspaceRoot = (fun pkg -> ((pkg).Vuna_dCompiler_dFrontend_dPackages_dPkg.f_Vuna_dCompiler_dFrontend_dPackages_dPkg_dPackage_packageManifest).Vuna_dCompiler_dFrontend_dManifest.f_Vuna_dCompiler_dFrontend_dManifest_dManifest_manifestIsWorkspace)
 
-# 829 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 832 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcountFailures = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__67, dtb__68) -> (if (dtb__67 = 0) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcountFailures mc0) dtb__68) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcountFailures 1) dtb__68))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 948 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 951 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dworkspaceMultiOut = (fun workspace -> (match (workspace).Vuna_dCompiler_dFrontend_dPackages_dPkg.f_Vuna_dCompiler_dFrontend_dPackages_dPkg_dWorkspace_workspaceRoot with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__69) -> (v_Vuna_dCompiler_dDriver_dCompilerCli_disWorkspaceRoot dtb__69)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> true
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 955 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 958 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage = (fun nFs mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__70, dtb__71) -> (match dtb__71 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry dtb__70))) (fun exists -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Base_dData_dBool.v_Base_dData_dBool_dnot exists))))
@@ -417,21 +417,21 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage = (fun nFs mc0
   | _ -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false)
 ))
 
-# 961 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 964 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dlibraryOnlyMessage = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> "no package to build"
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__72, dtb__73) -> (String.concat "" ["library package "; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName dtb__72); " has no app/Main.vuna (an executable package is required; use check for libraries)"])
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 972 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 975 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__74, dtb__75) -> (if ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName dtb__74) = mc0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__74)) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName mc0) dtb__75))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 966 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 969 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dselectBuildTargets = (fun mc0 mc1 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__76) -> (match ((v_Vuna_dCompiler_dDriver_dCompilerCli_dfindPackageByName dtb__76) mc1) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_derr ("no such package in workspace: " ^ dtb__76))
@@ -442,10 +442,10 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dselectBuildTargets = (fun mc0 mc1 -> 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1021 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1024 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dnativeBuildScript = (fun name files -> ((fun sources -> ((fun total -> (String.concat "" ["#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\""; sources; "\"\nOBJECTS=\"\"\nCOMPILED=0\nTOTAL="; total; "\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  hf=\"build/$src.hash\"\n  h=$(cksum < \"$src\")\n  old=\"\"\n  if [ -f \"$hf\" ]; then old=$(cat \"$hf\"); fi\n  if [ -f \"$obj\" ] && [ \"$old\" = \"$h\" ]; then :; else\n    mkdir -p \"$(dirname \"$obj\")\"\n    cc -c -o \"$obj\" \"$src\"\n    printf '%s\\n' \"$h\" > \"$hf\"\n    COMPILED=$((COMPILED + 1))\n  fi\n  OBJECTS=\"$OBJECTS $obj\"\ndone\necho \"native-build: compiled $COMPILED of $TOTAL\"\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/"; name; "\" $OBJECTS\n"])) (bi_strFromInt (Base_dData_dList.v_Base_dData_dList_dlength files)))) ((Base_dData_dString.v_Base_dData_dString_djoin " ") files)))
 
-# 988 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 991 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildNativeOne = (fun nFs nConsole nEnv nProcess noCompile multiOut outM pkg o -> ((fun name -> ((fun outDir -> ((fun scriptPath -> ((fun binDir -> ((fun binPath -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((Vuna_dCompiler_dDriver_dNative.v_Vuna_dCompiler_dDriver_dNative_dcompileNative nFs) nEnv) nProcess) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageContext pkg))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry pkg)) true) outDir)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__78) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__78)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__79) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsWriteFile nFs) scriptPath) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dnativeBuildScript name) dtb__79))) (fun _u -> (if noCompile then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["wrote "; scriptPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_densureDirPath nFs) nProcess) binDir)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Base_dEffect_dProcess.v_Base_dEffect_dProcess_dprocessRunIn nProcess) outDir) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("sh", (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ ("build.sh", Base_dData_dList.C_Base_dData_dList_dList_Nil)))))) (fun code -> (if (code = 0) then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["wrote "; binPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["native link failed: cc exited "; (bi_strFromInt code); "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o })))))))))))
@@ -456,71 +456,71 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildNativeOne = (fun nFs nConsole nE
   | _ -> failwith "DT: impossible branch"
 ))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg)))
 
-# 1158 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1161 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dwaitView = (fun nFs nClock nEnv nProcess kind digest fuel -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewLockEff nFs) nClock) nEnv) nProcess) kind) digest)) (fun ok -> (if ok then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) "locked") else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewValidEff nFs) nEnv) nProcess) kind) digest)) (fun valid -> (if valid then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) "ready") else (if (fuel <= 0) then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) "timeout") else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dClock.v_Base_dEffect_dClock_dclockSleepMicros nClock) 100000)) (fun _u -> (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dwaitView nFs) nClock) nEnv) nProcess) kind) digest) (fuel - 1))))))))))))
 
-# 1170 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1173 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkViewComplete = (fun nFs dir digest -> (((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsWriteFileAtomic nFs) (dir ^ "/.complete")) digest))
 
-# 1176 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1179 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dlinkDefaultOutput = (fun nFs mc0 mc1 mc2 mc3 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((fun link -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsRemoveTree nFs) link)) (fun _u -> (((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsSymlink nFs) mc2) link)))) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageDir mc1) ^ "/.output"))
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__81) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1185 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1188 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen = (fun nFs nConsole nClock nEnv nProcess ctx entry outDir o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) true) outDir)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__82) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__82)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__83) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o })
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 1194 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1197 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildLinked = (fun nFs nConsole nProcess ctx entry outDir name o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_densureDirPath nFs) nProcess) (outDir ^ "/bin"))) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_drunBuildScript nProcess) outDir) ("bin/" ^ name)) name)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__84) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__84)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__85) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dwriteBuildMeta nFs) outDir) ctx) entry) true)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["built "; outDir; "/bin/"; name; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o })))))
   | _ -> failwith "DT: impossible branch"
 ))))))
 
-# 1091 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1094 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildExplicit = (fun nFs nConsole nClock nEnv nProcess out multiOut pkg ctx entry o -> ((fun name -> ((fun outDir -> ((fun binPath -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate nFs) outDir) ctx) entry) binPath)) (fun fresh -> (if fresh then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["up to date: "; binPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) true) outDir)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__86) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__86)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__87) -> ((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildLinked nFs) nConsole) nProcess) ctx) entry) outDir) name) o)
   | _ -> failwith "DT: impossible branch"
 ))))))) (String.concat "" [outDir; "/bin/"; name]))) (if multiOut then (String.concat "" [out; "/"; name]) else out))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg)))
 
-# 1110 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1113 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildDefaultView = (fun nFs nConsole nClock nEnv nProcess ctx pkg name entry viewDigest o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewPathEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun view -> ((fun binPath -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewValidEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun valid -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if valid then (((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate nFs) view) ctx) entry) binPath) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false))) (fun fresh -> (if fresh then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dlinkDefaultOutput nFs) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) pkg) view) viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["up to date: "; binPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dwaitView nFs) nClock) nEnv) nProcess) "bin") viewDigest) 600)) (fun state -> (if (state = "locked") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewValidEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun valid2 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if valid2 then (((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dmetaUpToDate nFs) view) ctx) entry) binPath) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false))) (fun fresh2 -> (if fresh2 then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dlinkDefaultOutput nFs) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) pkg) view) viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewUnlockEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["up to date: "; binPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcompileToDir nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) true) view)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__88) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsRemoveTree nFs) view)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewUnlockEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun _u -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__88)))))
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__89) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildLinked nFs) nConsole) nProcess) ctx) entry) view) name) o)) (fun br -> (if ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf br) = 0) then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkViewComplete nFs) view) viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dlinkDefaultOutput nFs) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) pkg) view) viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewUnlockEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) br))))))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dBase_dStore.v_Vuna_dCompiler_dBase_dStore_dstoreViewUnlockEff nFs) nEnv) nProcess) "bin") viewDigest)) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) br))))))
   | _ -> failwith "DT: impossible branch"
 )))))))) else (if (state = "ready") then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dlinkDefaultOutput nFs) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) pkg) view) viewDigest)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["up to date: "; binPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["error: timed out waiting for view "; viewDigest; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))))))))))) (String.concat "" [view; "/bin/"; name])))))
 
-# 1209 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1212 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash = (fun s -> (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "./") s) then (((Base_dData_dString.v_Base_dData_dString_dsubstring (bi_natFromInt 2)) (bi_natFromInt ((bi_strLength s) - 2))) s) else s))
 
-# 853 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 856 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disPackageEntryPath = (fun nEnv ctx path -> (match (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextPackageOf ctx) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__90) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dabsolutePath nEnv) path)) (fun abs -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash abs) = (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry dtb__90))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 848 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 851 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_disModuleFileEntry = (fun nFs nEnv nProcess ctx path -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((v_Vuna_dCompiler_dDriver_dCompilerCli_disPackageEntryPath nEnv) ctx) path)) (fun pkgEntry -> (if pkgEntry then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) false) else ((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtFileHasModuleHeader nFs) nEnv) nProcess) path)))))
 
-# 1214 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1217 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_downedByFile = (fun path d -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagFileOf d)) = (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash path)))
 
-# 862 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 865 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckModuleFileEntry = (fun nFs nConsole nEnv nProcess ctx path o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheckModuleFile nFs) nEnv) nProcess) ctx) path)) (fun checked -> (match checked with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__91) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__91)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__92) -> ((fun ws -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) "") shown)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings then ((Base_dData_dList.v_Base_dData_dList_dlength ws) > 0) else false) then 1 else 0); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) })))) (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then true else (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings) then ws else Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dDriver_dCompilerCli_downedByFile path)) (Vuna_dCompiler_dBase_dDiagnostics_dSink.v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings dtb__92)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 876 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 879 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEntryFile = (fun nFs nConsole nEnv nProcess ctx path o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheck nFs) nEnv) nProcess) ctx) path)) (fun checked -> (match checked with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__93) -> (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optContinueOnError then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheckRecovering nFs) nEnv) nProcess) ctx) path)) (fun recovered -> (match recovered with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__94) -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) "") shown)) (fun r -> (if ((Base_dData_dList.v_Base_dData_dList_dlength shown) = 0) then ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r)) dtb__93) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) }))))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dtakeDiags (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors) dtb__94))
@@ -531,23 +531,23 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEntryFile = (fun nFs nConsole nE
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 833 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 836 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry = (fun nFs nConsole nEnv nProcess path o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextForFile nFs) nEnv) path)) (fun ctxR -> (match ctxR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__97) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__97)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__98) -> ((fun ctx -> ((fun o1 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_disModuleFileEntry nFs) nEnv) nProcess) ctx) path)) (fun moduleEntry -> (if moduleEntry then (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckModuleFileEntry nFs) nConsole) nEnv) nProcess) ctx) path) o1) else (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEntryFile nFs) nConsole) nEnv) nProcess) ctx) path) o1))))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dapplyDiagConfig (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextPackageOf ctx)) o))) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) dtb__98))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 1218 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1221 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_downedByPackage = (fun pkg d -> ((fun dir -> ((fun file -> ((fun prefix -> (if (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith (prefix ^ "lib/")) file) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith (prefix ^ "app/")) file)) then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith (prefix ^ "test/")) file))) (if (if (dir = ".") then true else (dir = "")) then "" else (dir ^ "/")))) (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagFileOf d)))) (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripDotSlash (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageDir pkg))))
 
-# 1230 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1233 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dfinishWarnings = (fun nFs nConsole warns code o -> ((fun ws -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) "") shown)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings then ((Base_dData_dList.v_Base_dData_dList_dlength ws) > 0) else false) then 1 else code); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) })))) (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then true else (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings) then ws else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (Vuna_dCompiler_dBase_dDiagnostics_dSink.v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings warns)))
 
-# 1241 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1244 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dfinishWarningsDir = (fun nFs nConsole nProcess warns o dir code -> ((fun ws -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) "") shown)) (fun r -> (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings then ((Base_dData_dList.v_Base_dData_dList_dlength ws) > 0) else false) then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsRemoveTree nFs) dir)) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) }))) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = code; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) }))))) (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then true else (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings) then ws else Base_dData_dList.C_Base_dData_dList_dList_Nil))) (Vuna_dCompiler_dBase_dDiagnostics_dSink.v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings warns)))
 
-# 667 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 670 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry = (fun nFs nConsole nClock nEnv nProcess printResult entry outDir o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextForFile nFs) nEnv) entry)) (fun ctxR -> (match ctxR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__99) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__99)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__100) -> ((fun ctx -> ((fun o1 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileToTarget nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) printResult) outDir) (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optTarget)) (fun r -> (match r with
@@ -558,7 +558,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry = (fun nFs nConsole 
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 682 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 685 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir = (fun nFs nConsole nClock nEnv nProcess printResult dir outDir o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dexecutablePackage nFs) nEnv) "compile") dir)) (fun pkgR -> (match pkgR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__103) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__103)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__104) -> ((fun o1 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileToTarget nFs) nConsole) nClock) nEnv) nProcess) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageContext dtb__104))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry dtb__104)) printResult) outDir) (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optTarget)) (fun r -> (match r with
@@ -569,10 +569,10 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir = (fun nFs nConsole nCl
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 645 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 648 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileRun = (fun nFs nConsole nClock nEnv nProcess printResult entry outDir o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) entry)) (fun exists -> (if exists then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsIsDirectory nFs) entry)) (fun isDir -> (if isDir then (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompilePkgDir nFs) nConsole) nClock) nEnv) nProcess) printResult) entry) outDir) o) else (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFileEntry nFs) nConsole) nClock) nEnv) nProcess) printResult) entry) outDir) o)))) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr nConsole) entry))))))
 
-# 639 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 642 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun nFs nConsole nClock nEnv nProcess mc0 mc1 mc2 mc3 mc4 -> (match mc2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__107) -> (match mc3 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts mc4) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr nConsole) mc0))
@@ -583,7 +583,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileFinish = (fun nFs nConsole nCl
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 620 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 623 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse = (fun nFs nConsole nClock nEnv nProcess prog printResult entry outDir args o -> ((fun nd_uscrut17 -> (match nd_uscrut17 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__109, dtb__110) -> (if (dtb__109 = "--no-print") then (((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse nFs) nConsole) nClock) nEnv) nProcess) prog) false) entry) outDir) dtb__110) o) else (if (dtb__109 = "--release") then (((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse nFs) nConsole) nClock) nEnv) nProcess) prog) printResult) entry) outDir) dtb__110) (v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkRelease o)) else (if (dtb__109 = "--target") then (match dtb__110 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__111, dtb__112) -> (if (v_Vuna_dCompiler_dDriver_dCompilerCli_disKnownTarget dtb__111) then (((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse nFs) nConsole) nClock) nEnv) nProcess) prog) printResult) entry) outDir) dtb__112) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkTarget dtb__111) o)) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr nConsole) prog)))
@@ -609,10 +609,10 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse = (fun nFs nConsole 
   | _ -> failwith "DT: impossible branch"
 )) args))
 
-# 617 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 620 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileArgs = (fun nFs nConsole nClock nEnv nProcess prog args o -> (((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileParse nFs) nConsole) nClock) nEnv) nProcess) prog) true) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) args) o))
 
-# 1030 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1033 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildWasmOne = (fun nFs nConsole nEnv nProcess noCompile outM pkg o -> ((fun outDir -> ((fun watPath -> ((fun wasmPath -> ((fun script -> ((fun args -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((Vuna_dCompiler_dDriver_dWasm.v_Vuna_dCompiler_dDriver_dWasm_dcompileWasm nFs) nEnv) nProcess) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageContext pkg))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry pkg)) true) outDir)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__117) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__117)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__118) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsWriteFile nFs) (outDir ^ "/build.sh")) script)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (if noCompile then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["wrote "; watPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Base_dEffect_dProcess.v_Base_dEffect_dProcess_dprocessRunIn nProcess) outDir) args)) (fun c -> (if (c = 0) then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["wrote "; wasmPath; "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 0))) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dConsole.v_Base_dEffect_dConsole_dconsolePrint nConsole) (String.concat "" ["wasm assembly failed: wasm-tools exited "; (bi_strFromInt c); "\n"]))) (fun _u -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) 1)))))))) (fun code -> (if (code = 0) then (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dfinishWarningsDir nFs) nConsole) nProcess) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf dtb__118)) o) outDir) 0) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = o }))))))
@@ -623,7 +623,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildWasmOne = (fun nFs nConsole nEnv
   | _ -> failwith "DT: impossible branch"
 )))
 
-# 1062 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1065 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildOne = (fun nFs nConsole nClock nEnv nProcess nExit nArgs noCompile multiOut outM pkg o -> (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optTarget = "wasm") then ((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildWasmOne nFs) nConsole) nEnv) nProcess) noCompile) outM) pkg) o) else (if ((o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optTarget = "native") then (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildNativeOne nFs) nConsole) nEnv) nProcess) noCompile) multiOut) outM) pkg) o) else ((fun name -> ((fun entry -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) entry)) (fun exists -> (if exists then ((fun ctx -> (if noCompile then (match outM with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__120) -> (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) (if multiOut then (String.concat "" [dtb__120; "/"; name]) else dtb__120)) o)
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileCodegen nFs) nConsole) nClock) nEnv) nProcess) ctx) entry) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageDir pkg) ^ "/.output")) o)
@@ -638,14 +638,14 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildOne = (fun nFs nConsole nClock n
   | _ -> failwith "DT: impossible branch"
 ))))))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry pkg))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg)))))
 
-# 978 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 981 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildTargets = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 mc3 mc4 mc5 -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__124, dtb__125) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildOne nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) mc0) mc1) mc2) dtb__124) mc5)) (fun r -> ((fun next -> (((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildTargets nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) mc0) mc1) mc2) dtb__125) next) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r))) (if ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf r) > mc4) then (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r) else mc4))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc4; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc5 })
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 935 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 938 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildRun = (fun nFs nConsole nClock nEnv nProcess nExit nArgs noCompile dir outM pkgM o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dloadWorkspace nFs) nEnv) dir)) (fun workspaceR -> (match workspaceR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__126) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__126)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__127) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_disSingleLibraryPackage nFs) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dworkspaceAllPackages dtb__127))) (fun libOnly -> (if libOnly then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintErr nConsole) (v_Vuna_dCompiler_dDriver_dCompilerCli_dlibraryOnlyMessage (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dworkspaceAllPackages dtb__127)))) else (match ((v_Vuna_dCompiler_dDriver_dCompilerCli_dselectBuildTargets pkgM) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dworkspaceAllPackages dtb__127)) with
@@ -656,7 +656,7 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildRun = (fun nFs nConsole nClock n
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 910 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 913 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse = (fun nFs nConsole nClock nEnv nProcess nExit nArgs prog noCompile out dir pkg args o -> ((fun nd_uscrut22 -> (match nd_uscrut22 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__130, dtb__131) -> (if (dtb__130 = "--no-compile") then ((((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) true) out) dir) pkg) dtb__131) o) else (if (dtb__130 = "--release") then ((((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) noCompile) out) dir) pkg) dtb__131) (v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkRelease o)) else (if (dtb__130 = "--target") then (match dtb__131 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__132, dtb__133) -> (if (v_Vuna_dCompiler_dDriver_dCompilerCli_disKnownTarget dtb__132) then ((((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) noCompile) out) dir) pkg) dtb__133) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkTarget dtb__132) o)) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr nConsole) prog)))
@@ -690,10 +690,10 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse = (fun nFs nConsole nC
   | _ -> failwith "DT: impossible branch"
 )) args))
 
-# 907 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 910 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildArgs = (fun nFs nConsole nClock nEnv nProcess nExit nArgs prog args o -> ((((((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildParse nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) false) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing) args) o))
 
-# 1259 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1262 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripLangGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__142, dtb__143) -> (if (dtb__142 = "--lang") then (match dtb__143 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__144, dtb__145) -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripLangGo dtb__145) mc1) dtb__144)
@@ -704,37 +704,37 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripLangGo = (fun mc0 mc1 mc2 ->
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1255 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1258 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripLang = (fun args -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripLangGo args) Base_dData_dList.C_Base_dData_dList_dList_Nil) "en"))
 
-# 1269 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1273 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dhasLangFlag = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__146, dtb__147) -> (if (if (dtb__146 = "--lang") then true else ((Base_dData_dString.v_Base_dData_dString_dstartsWith "--lang=") dtb__146)) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasLangFlag dtb__147))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1277 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1281 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dstripContinueGo = (fun mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__148, dtb__149) -> (if (dtb__148 = "--continue-on-error") then (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripContinueGo dtb__149) mc1) true) else (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripContinueGo dtb__149) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__148, mc1))) mc2))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.v_Base_dData_dList_dreverse mc1); Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc2 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1274 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1278 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dstripContinueOnError = (fun args -> (((v_Vuna_dCompiler_dDriver_dCompilerCli_dstripContinueGo args) Base_dData_dList.C_Base_dData_dList_dList_Nil) false))
 
-# 1315 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1319 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dprintRecovered = (fun nFs nConsole pkg e ds o -> ((fun shown -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) (String.concat "" ["["; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg); "] "])) shown)) (fun r -> (if ((Base_dData_dList.v_Base_dData_dList_dlength shown) = 0) then (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagWithPrefix nFs) nConsole) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r)) (String.concat "" ["["; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg); "] "])) e) else ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = 1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) }))))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dtakeDiags (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors) ds)))
 
-# 1295 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1299 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecoverExe = (fun nFs nConsole nEnv nProcess pkg e o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheckRecovering nFs) nEnv) nProcess) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageContext pkg))) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry pkg))) (fun recovered -> (match recovered with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__150) -> ((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintRecovered nFs) nConsole) pkg) e) dtb__150) o)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__151) -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagWithPrefix nFs) nConsole) o) (String.concat "" ["["; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg); "] "])) dtb__151)
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 1304 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1308 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecoverLib = (fun nFs nConsole nEnv nProcess pkg e o -> (match (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageExports pkg) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__152) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheckLibraryRecovering nFs) nEnv) nProcess) ((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dcontextWithRelease (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageContext pkg))) dtb__152)) (fun recovered -> (match recovered with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__153) -> ((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintRecovered nFs) nConsole) pkg) e) dtb__153) o)
@@ -745,43 +745,43 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecoverLib = (fun nFs nConsole
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1289 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1293 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecover = (fun nFs nConsole nEnv nProcess pkg e o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageEntry pkg))) (fun exists -> (if exists then (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecoverExe nFs) nConsole) nEnv) nProcess) pkg) e) o) else (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecoverLib nFs) nConsole) nEnv) nProcess) pkg) e) o)))))
 
-# 1282 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 1286 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageErr = (fun nFs nConsole nEnv nProcess pkg e o -> (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optContinueOnError then (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dpackageRecover nFs) nConsole) nEnv) nProcess) pkg) e) o) else (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagWithPrefix nFs) nConsole) o) (String.concat "" ["["; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg); "] "])) e)))
 
-# 815 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 818 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageCode = (fun nFs nConsole nClock nEnv nProcess nExit nArgs pkg wantWarnings o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((((((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_dcheckPackage nFs) nClock) nEnv) nProcess) nExit) nArgs) (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease) wantWarnings) pkg)) (fun r -> (match r with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__155) -> (((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageErr nFs) nConsole) nEnv) nProcess) pkg) dtb__155) o)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__156) -> ((fun ws -> ((fun shown -> ((fun failed -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiagList nFs) nConsole) o) (String.concat "" ["["; (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageName pkg); "] "])) shown)) (fun r1 -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = failed; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r1) })))) (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings then ((Base_dData_dList.v_Base_dData_dList_dlength ws) > 0) else false) then 1 else 0))) (if (if (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then true else (o).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings) then ws else Base_dData_dList.C_Base_dData_dList_dList_Nil))) ((Base_dData_dList.v_Base_dData_dList_dfilter (v_Vuna_dCompiler_dDriver_dCompilerCli_downedByPackage pkg)) (Vuna_dCompiler_dBase_dDiagnostics_dSink.v_Vuna_dCompiler_dBase_dDiagnostics_dSink_ddedupeWarnings dtb__156)))
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 804 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 807 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageSeq = (fun nFs nConsole nClock nEnv nProcess nExit nArgs pkg code o -> ((fun o1 -> ((fun wantWarnings -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageCode nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) pkg) wantWarnings) o1)) (fun r -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (if ((Base_dData_dPair.v_Base_dData_dPair_dfirstOf r) > code) then (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r) else code); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) })))) (if (o1).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings then true else (o1).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings))) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dapplyDiagConfig (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (pkg))) o)))
 
-# 784 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 787 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgsInProcess = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__157, dtb__158) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageSeq nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__157) mc1) mc2)) (fun r -> ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgsInProcess nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__158) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r)) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc2 })
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 795 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 798 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckRootsSeq = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__159, dtb__160) -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageSeq nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__159) mc1) mc2)) (fun r -> ((fun code1 -> (if (if (mc2).f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optFailFast then (code1 <> 0) else false) then ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = code1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r) }) else ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckRootsSeq nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__160) code1) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r)))) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc2 })
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 768 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 771 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackagesSpawn = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc2 })
   | _ -> ((fun members -> ((fun roots -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dmapEff (fun pkg -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dProcess.v_Base_dEffect_dProcess_dprocessSpawn nProcess) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckSpawnArgs mc2) (Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dpackageDir pkg)))) (fun pid -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = pkg; Base_dData_dPair.f_Base_dData_dPair_dPair_second = pid }))))) members)) (fun started -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckRootsSeq nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) roots) mc1) mc2)) (fun r1 -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dmapEff (fun pr -> ((Base_dEffect_dProcess.v_Base_dEffect_dProcess_dprocessWait nProcess) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf pr)))) started)) (fun codes -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((v_Vuna_dCompiler_dDriver_dCompilerCli_dcountFailures (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r1)) codes); Base_dData_dPair.f_Base_dData_dPair_dPair_second = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r1) })))))))) ((Base_dData_dList.v_Base_dData_dList_dfilter v_Vuna_dCompiler_dDriver_dCompilerCli_disWorkspaceRoot) mc0))) ((Base_dData_dList.v_Base_dData_dList_dfilter (fun p -> (Base_dData_dBool.v_Base_dData_dBool_dnot (v_Vuna_dCompiler_dDriver_dCompilerCli_disWorkspaceRoot p)))) mc0))
 ))
 
-# 755 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 758 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackages = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__161, dtb__162) -> (match dtb__162 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackageSeq nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__161) mc1) mc2)
@@ -791,17 +791,17 @@ let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackages = (fun nFs nConsole nCl
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 719 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 722 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir = (fun nFs nConsole nClock nEnv nProcess nExit nArgs dir o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dFrontend_dPackages_dPkg.v_Vuna_dCompiler_dFrontend_dPackages_dPkg_dworkspacePackages nFs) nEnv) dir)) (fun pkgsR -> (match pkgsR with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__163) -> ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintDiag nFs) nConsole) o) dtb__163)
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__164) -> ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPackages nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__164) 0) o)
   | _ -> failwith "DT: impossible branch"
 ))))
 
-# 711 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 714 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit = (fun nFs nConsole nClock nEnv nProcess nExit nArgs path o -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsFileExists nFs) path)) (fun exists -> (if exists then (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dFs.v_Base_dEffect_dFs_dfsIsDirectory nFs) path)) (fun isDir -> (if isDir then (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckPkgDir nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) path) o) else ((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckFileEntry nFs) nConsole) nEnv) nProcess) path) o)))) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_ddtPathErr nConsole) path))))))
 
-# 702 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 705 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun nFs nConsole nClock nEnv nProcess nExit nArgs mc0 mc1 mc2 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__165, dtb__166) -> (if (dtb__165 = "--release") then ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) mc0) dtb__166) (v_Vuna_dCompiler_dDriver_dCompilerCli_dmarkRelease mc2)) else (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "-") dtb__165) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts mc2) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag nConsole) mc0) dtb__165)) else (match dtb__166 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckEmit nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) dtb__165) mc2)
@@ -811,14 +811,14 @@ let rec v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs = (fun nFs nConsole nCl
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 433 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 434 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCliFor1 = (fun nFs nConsole nClock nEnv nProcess nExit nArgs prog args o -> (match args with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dusageErr nConsole) prog))
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__167, dtb__168) -> (if (dtb__167 = "compile") then ((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcompileArgs nFs) nConsole) nClock) nEnv) nProcess) prog) dtb__168) o) else (if (dtb__167 = "check") then ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dcheckArgs nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) dtb__168) o) else (if (dtb__167 = "build") then ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_dbuildArgs nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) dtb__168) o) else (if (dtb__167 = "version") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintVersion nConsole) 0)) else (if (dtb__167 = "--version") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dprintVersion nConsole) 0)) else (if (dtb__167 = "seed") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedCommand nConsole) prog) "seed") "use build --out OUT [DIR] or compile DIR OUT")) else (if (dtb__167 = "help") then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) ((v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor nConsole) prog)) else (if ((Base_dData_dString.v_Base_dData_dString_dstartsWith "-") dtb__167) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dremovedFlag nConsole) prog) dtb__167)) else ((v_Vuna_dCompiler_dDriver_dCompilerCli_dwithOpts o) (((v_Vuna_dCompiler_dDriver_dCompilerCli_dunknownCommand nConsole) prog) dtb__167))))))))))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 377 "Vuna/Compiler/Driver/CompilerCli.vuna"
+# 378 "Vuna/Compiler/Driver/CompilerCli.vuna"
 let v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCliFor = (fun nFs nConsole nClock nEnv nProcess nExit nArgs prog args -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((Base_dEffect_dEnv.v_Base_dEffect_dEnv_denvGetEnv nEnv) "VUNA_RELEASE")) (fun envRel -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) v_Vuna_dCompiler_dDriver_dCompilerCli_dstdoutIsTty) (fun tty -> ((fun stripped -> ((fun strippedLang -> ((fun strippedMax -> ((fun kept -> ((fun strippedContinue -> ((fun detectedLang -> ((fun fmt -> ((fun opts -> (if (v_Vuna_dCompiler_dDriver_dCompilerCli_danyHelp (Base_dData_dPair.v_Base_dData_dPair_dfirstOf strippedContinue)) then ((v_Vuna_dCompiler_dDriver_dCompilerCli_dhelpFor nConsole) prog) else (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) ((((((((((v_Vuna_dCompiler_dDriver_dCompilerCli_drunCompilerCliFor1 nFs) nConsole) nClock) nEnv) nProcess) nExit) nArgs) prog) (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripFailFast (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripWithSources (v_Vuna_dCompiler_dDriver_dCompilerCli_dstripShowCascade (Base_dData_dPair.v_Base_dData_dPair_dfirstOf strippedContinue))))) opts)) (fun r -> (((((v_Vuna_dCompiler_dDriver_dCompilerCli_dflushSarif nFs) nConsole) nEnv) (Base_dData_dPair.v_Base_dData_dPair_dfirstOf r)) (Base_dData_dPair.v_Base_dData_dPair_dsecondOf r)))))) { f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagFormat = fmt; f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDiagLang = detectedLang; f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optLangExplicit = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasLangFlag args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyWarnings = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasDenyWarnings args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowWarnings = (if (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasDenyWarnings args) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasShowWarnings args)); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optFormatExplicit = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasFormatFlag args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optWarningsExplicit = (if (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasDenyWarnings args) then true else (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasShowWarnings args)); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optDenyExplicit = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasDenyWarnings args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optMaxErrors = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf strippedMax); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optContinueOnError = (Base_dData_dPair.v_Base_dData_dPair_dsecondOf strippedContinue); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optSarifItems = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optRelease = (envRel = "1"); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optShowCascade = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasShowCascade args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optWithSources = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasWithSources args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optFailFast = (v_Vuna_dCompiler_dDriver_dCompilerCli_dhasFailFast args); f_Vuna_dCompiler_dDriver_dCompilerCli_dCliOpts_optTarget = "ocaml" })) (match (Base_dData_dPair.v_Base_dData_dPair_dsecondOf stripped) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__169) -> dtb__169
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (if (detectedLang = "en") then (if tty then "human" else "short") else "human")

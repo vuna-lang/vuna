@@ -225,7 +225,7 @@ let v_Vuna_dCompiler_dBase_dDiag_dCodec_dencTrace = (fun mc0 mc1 -> (match mc0 w
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 366 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 367 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dmtAbsent = (fun mc0 -> (match mc0 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__32) -> (match (v_Vuna_dCompiler_dBase_dDiag_dCodec_dabsentOfTag dtb__32) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
@@ -258,7 +258,7 @@ let rec v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiag = (fun fuel c -> (if (fuel 
 )))
   | _ -> failwith "DT: impossible branch"
 )))))))
-# 353 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 354 "Vuna/Compiler/Base/Diag/Codec.vuna"
 and v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagList = (fun fuel c -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__39) -> (match dtb__39 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__40; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__41 } -> ((((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagItems (fuel - 1)) dtb__40) dtb__41) Base_dData_dList.C_Base_dData_dList_dList_Nil)
@@ -267,7 +267,7 @@ and v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagList = (fun fuel c -> (if (fuel 
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecCount (fuel - 1)) c))))
-# 359 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 360 "Vuna/Compiler/Base/Diag/Codec.vuna"
 and v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagItems = (fun fuel n c acc -> (if (fuel <= 0) then Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing else (if (n <= 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (Base_dData_dList.v_Base_dData_dList_dreverse acc); Base_dData_dPair.f_Base_dData_dPair_dPair_second = c })) else ((fun nd_uscrut4 -> (match nd_uscrut4 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__42) -> (match dtb__42 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__43; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__44 } -> ((((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagItems (fuel - 1)) (n - 1)) dtb__44) (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__43, acc)))
@@ -277,7 +277,7 @@ and v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagItems = (fun fuel n c acc -> (if
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiag (fuel - 1)) c)))))
 
-# 373 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 374 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dabsentEnc = (fun r acc -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTag (v_Vuna_dCompiler_dBase_dDiag_dCodec_dabsentTag r)) acc))
 
 # 302 "Vuna/Compiler/Base/Diag/Codec.vuna"
@@ -294,10 +294,10 @@ and v_Vuna_dCompiler_dBase_dDiag_dCodec_dencDiag = (fun mc0 mc1 -> (match mc0 wi
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 380 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 381 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dencDiagnostics = (fun ds -> (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencConcat ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dencDiagList ds) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
-# 383 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 384 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagnostics = (fun payload -> ((fun fuel -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__64) -> (match dtb__64 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__65; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__66 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__66) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__65)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)
@@ -307,26 +307,26 @@ let v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagnostics = (fun payload -> ((fun 
   | _ -> failwith "DT: impossible branch"
 )) ((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagList fuel) (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurOf payload)))) ((bi_strLength payload) + 1)))
 
-# 396 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 397 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dcheckOutcomeCodec = "check-result 1"
 
-# 399 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 400 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dencOutcome = (fun mc0 mc1 -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiag_dCodec_dCheckOutcome_CheckFailed (dtb__67) -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTag 1) ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dencDiagList dtb__67) mc1))
   | C_Vuna_dCompiler_dBase_dDiag_dCodec_dCheckOutcome_CheckPassed (dtb__68) -> ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencTag 0) ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dencDiagList dtb__68) mc1))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 403 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 404 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecOutcome = (fun fuel c -> ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dthenPair ((Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_ddecTag (fuel - 1)) c)) (fun tg b1 -> ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dthenPair ((v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecDiagList (fuel - 1)) b1)) (fun ds b2 -> (if (tg = 0) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (C_Vuna_dCompiler_dBase_dDiag_dCodec_dCheckOutcome_CheckPassed (ds)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = b2 })) else (if (tg = 1) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just ({ Base_dData_dPair.f_Base_dData_dPair_dPair_first = (C_Vuna_dCompiler_dBase_dDiag_dCodec_dCheckOutcome_CheckFailed (ds)); Base_dData_dPair.f_Base_dData_dPair_dPair_second = b2 })) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)))))))
 
-# 412 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 413 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dcheckResultCodec = v_Vuna_dCompiler_dBase_dDiag_dCodec_dcheckOutcomeCodec
 
-# 415 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 416 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_dencCheckOutcome = (fun o -> (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dencConcat ((v_Vuna_dCompiler_dBase_dDiag_dCodec_dencOutcome o) Base_dData_dList.C_Base_dData_dList_dList_Nil)))
 
-# 418 "Vuna/Compiler/Base/Diag/Codec.vuna"
+# 419 "Vuna/Compiler/Base/Diag/Codec.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_dCodec_ddecCheckOutcome = (fun payload -> ((fun fuel -> ((fun nd_uscrut2 -> (match nd_uscrut2 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__69) -> (match dtb__69 with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__70; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__71 } -> (if (Vuna_dCompiler_dBase_dBytes.v_Vuna_dCompiler_dBase_dBytes_dcurAtEnd dtb__71) then (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (dtb__70)) else Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing)

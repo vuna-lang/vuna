@@ -84,6 +84,8 @@ Vuna_dCompiler_dBase_dStore.ml
 Vuna_dCompiler_dBase_dVersion.ml
 Vuna_dCompiler_dCodegen_dAssembly.ml
 Vuna_dCompiler_dCodegen_dDecl.ml
+Vuna_dCompiler_dCodegen_dOcaml_dModel.ml
+Vuna_dCompiler_dCodegen_dOcaml_dRender.ml
 Vuna_dCompiler_dCodegen_dRuntime.ml
 Vuna_dCompiler_dCodegen_dTerm.ml
 Vuna_dCompiler_dCore_dCanonical.ml

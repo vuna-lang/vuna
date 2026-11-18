@@ -563,17 +563,17 @@ let v_Vuna_dCompiler_dCodegen_dTerm_dbindGroupOf = (fun st group defs -> (match 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2145 "Vuna/Compiler/Codegen/Term.vuna"
+# 2146 "Vuna/Compiler/Codegen/Term.vuna"
 let rec v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers = (fun mc0 mc1 mc2 -> (match mc2 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__192, dtb__193) -> ((fun p -> (((v_Vuna_dCompiler_dCodegen_dTerm_dfoldHandlers (Base_dData_dPair.v_Base_dData_dPair_dsecondOf p)) (String.concat "" ["("; (Base_dData_dPair.v_Base_dData_dPair_dfirstOf p); " "; mc1; ")"])) dtb__193)) ((v_Vuna_dCompiler_dCodegen_dTerm_dgenValueRef mc0) dtb__192))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = mc1; Base_dData_dPair.f_Base_dData_dPair_dPair_second = mc0 }
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2152 "Vuna/Compiler/Codegen/Term.vuna"
+# 2153 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dhookText = (fun showText body printResult -> ((fun action -> (String.concat "" ["\nlet () =\n  Printexc.record_backtrace true;\n  try "; action; "\n  with e -> dt_report_exn e (Printexc.get_raw_backtrace ()); exit 2\n"])) (if printResult then (String.concat "" ["print_endline ("; showText; " ("; body; "))"]) else (String.concat "" ["ignore ("; body; ")"]))))
 
-# 2160 "Vuna/Compiler/Codegen/Term.vuna"
+# 2161 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dconAppText = (fun mc0 mc1 -> (match mc1 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__194, dtb__195) -> (match dtb__195 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (String.concat "" ["("; mc0; " ("; dtb__194; "))"])
@@ -854,7 +854,7 @@ let rec v_Vuna_dCompiler_dCodegen_dTerm_dgenGroups = (fun mc0 mc1 -> (match mc1 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 2122 "Vuna/Compiler/Codegen/Term.vuna"
+# 2123 "Vuna/Compiler/Codegen/Term.vuna"
 let v_Vuna_dCompiler_dCodegen_dTerm_dgenEntryHook = (fun st entry printResult -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((v_Vuna_dCompiler_dCodegen_dTerm_dgenIr st) (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryShowOf entry))) (fun sp -> (match sp with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__354; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__355 } -> (if (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryIsActionOf entry) then (match (Vuna_dCompiler_dIr_dModel.v_Vuna_dCompiler_dIr_dModel_dirEntryRunMainOf entry) with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_dicInternal "action entry has no runMain")

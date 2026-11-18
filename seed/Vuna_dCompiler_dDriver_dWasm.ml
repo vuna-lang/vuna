@@ -2,7 +2,7 @@ open Vuna_runtime
 # 28 "Vuna/Compiler/Driver/Wasm.vuna"
 let v_Vuna_dCompiler_dDriver_dWasm_dwasmErrDiag = (fun err -> (((((Vuna_dCompiler_dBase_dDiag.v_Vuna_dCompiler_dBase_dDiag_ddiagNoLoc Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dSeverity_SevError) Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dPhase_PhCodegen) Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCategory_CatCodegen) "") (Vuna_dCompiler_dWasm_dModel.v_Vuna_dCompiler_dWasm_dModel_dwasmErrText err)))
 
-# 44 "Vuna/Compiler/Driver/Wasm.vuna"
+# 45 "Vuna/Compiler/Driver/Wasm.vuna"
 let v_Vuna_dCompiler_dDriver_dWasm_disUnavailable = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dBase_dCapabilities.C_Vuna_dCompiler_dBase_dCapabilities_dCapability_CapAvailable -> false
   | Vuna_dCompiler_dBase_dCapabilities.C_Vuna_dCompiler_dBase_dCapabilities_dCapability_CapUnavailable -> true
@@ -23,7 +23,7 @@ let v_Vuna_dCompiler_dDriver_dWasm_dentryCapabilityWarnings = (fun target progra
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 48 "Vuna/Compiler/Driver/Wasm.vuna"
+# 49 "Vuna/Compiler/Driver/Wasm.vuna"
 let v_Vuna_dCompiler_dDriver_dWasm_dcompileWasm = (fun nFs nEnv nProcess ctx entry printResult outDir -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((Vuna_dCompiler_dDriver_dCompile.v_Vuna_dCompiler_dDriver_dCompile_densureDirPath nFs) nProcess) outDir)) (fun _u -> (((Base_dTrait_dMonad.v_Base_dTrait_dMonad_d_x62__x62__x61_ Base_dEffect_dCore.v_Monad_uBase_uEffect_uCore_uEff_ur) (((((Vuna_dCompiler_dDriver_dDt.v_Vuna_dCompiler_dDriver_dDt_ddtCheckWithProgramParts nFs) nEnv) nProcess) ctx) entry)) (fun checked -> (match checked with
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__3) -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure Base_dEffect_dCore.v_Applicative_uBase_uEffect_uCore_uEff_ur) (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__3)))
   | Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__4) -> ((fun pkg -> (match ((Vuna_dCompiler_dLowering_dProgram.v_Vuna_dCompiler_dLowering_dProgram_dlowerProgramOf ((pkg).Vuna_dCompiler_dDriver_dDt.f_Vuna_dCompiler_dDriver_dDt_dCheckedPackage_checkedProgram).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDatas) ((pkg).Vuna_dCompiler_dDriver_dDt.f_Vuna_dCompiler_dDriver_dDt_dCheckedPackage_checkedProgram).Vuna_dCompiler_dElab_dTypes.f_Vuna_dCompiler_dElab_dTypes_dDtProgram_dtProgDefs) with

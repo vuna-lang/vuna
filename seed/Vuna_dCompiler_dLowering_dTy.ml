@@ -149,20 +149,20 @@ let rec v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys = (fun mc0 mc1 mc2 mc3 mc4 
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 139 "Vuna/Compiler/Lowering/Ty.vuna"
+# 141 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dctorArityNeed = (fun levels table datas c -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind (((((((((v_Vuna_dCompiler_dLowering_dTy_dctorFieldTys levels) table) datas) (Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dctorKeepFlags c)) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dctorOpaqueFlagsOf datas) c)) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorTelescope c)) 0) ((Vuna_dCompiler_dCore_dEval.v_Vuna_dCompiler_dCore_dEval_deval Base_dData_dList.C_Base_dData_dList_dList_Nil) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtCtorType c))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) (fun p -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Base_dData_dPair.v_Base_dData_dPair_dsecondOf p) - (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels)))))))
 
-# 151 "Vuna/Compiler/Lowering/Ty.vuna"
+# 153 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn = (fun mc0 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__63, dtb__64) -> (if (dtb__63 >= (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn dtb__64)) then dtb__63 else (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn dtb__64))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> 0
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 145 "Vuna/Compiler/Lowering/Ty.vuna"
+# 147 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_ddataArityNeed = (fun levels table datas ctors -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dtraverse (((v_Vuna_dCompiler_dLowering_dTy_dctorArityNeed levels) table) datas)) ctors)) (fun ns -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels) + (v_Vuna_dCompiler_dLowering_dTy_dmaxIntListIn ns)))))))
 
-# 170 "Vuna/Compiler/Lowering/Ty.vuna"
+# 172 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf = (fun table allDatas unboxed d -> ((fun levels -> ((fun arity -> ((fun nd_uscrut6 -> (match nd_uscrut6 with
   | Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing -> (if (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dhasRecordRepr d) then ((fun nd_uscrut8 -> (match nd_uscrut8 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__65, dtb__66) -> (match dtb__66 with
@@ -184,17 +184,17 @@ let v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf = (fun table allDatas unboxed d -> 
   | _ -> failwith "DT: impossible branch"
 )) ((Vuna_dCompiler_dElab_dRepresentation.v_Vuna_dCompiler_dElab_dRepresentation_dlookupUnboxedInfo (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d)) unboxed))) (Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlistLength levels))) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dlookupTyParamsIn table) (Vuna_dCompiler_dElab_dTypes.v_Vuna_dCompiler_dElab_dTypes_ddtDataName d))))
 
-# 164 "Vuna/Compiler/Lowering/Ty.vuna"
+# 166 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo = (fun mc0 mc1 mc2 mc3 -> (match mc3 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__72, dtb__73) -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclOf mc0) mc1) mc2) dtb__72)) (fun decl -> ((Vuna_dCompiler_dBase_dCommon.v_Vuna_dCompiler_dBase_dCommon_dbind ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo mc0) mc1) mc2) dtb__73)) (fun tail -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (decl, tail))))))))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Vuna_dCompiler_dBase_dDiag.C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 161 "Vuna/Compiler/Lowering/Ty.vuna"
+# 163 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclsOf = (fun tyParams unboxed allDatas subset -> ((((v_Vuna_dCompiler_dLowering_dTy_dtyDeclsGo tyParams) allDatas) unboxed) subset))
 
-# 193 "Vuna/Compiler/Lowering/Ty.vuna"
+# 195 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys = (fun mc0 -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrUnboxedDecl (dtb__74, dtb__75, dtb__76) -> (Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__76, Base_dData_dList.C_Base_dData_dList_dList_Nil))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTyDecl_IrRecordDecl (dtb__77, dtb__78, dtb__79, dtb__80) -> dtb__80
@@ -202,13 +202,13 @@ let v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys = (fun mc0 -> (match mc0 with
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 202 "Vuna/Compiler/Lowering/Ty.vuna"
+# 204 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames = (fun mc0 mc1 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__84, dtb__85) -> ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__85) ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__84) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> mc1
   | _ -> failwith "DT: impossible branch"
 ))
-# 206 "Vuna/Compiler/Lowering/Ty.vuna"
+# 208 "Vuna/Compiler/Lowering/Ty.vuna"
 and v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto = (fun mc0 mc1 -> (match mc0 with
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyData (dtb__86, dtb__87) -> ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__87) ((Vuna_dCompiler_dLowering_dEnv.v_Vuna_dCompiler_dLowering_dEnv_dpushDep dtb__86) mc1))
   | Vuna_dCompiler_dIr_dModel.C_Vuna_dCompiler_dIr_dModel_dIrTy_IrTyFun (dtb__88, dtb__89) -> ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__89) ((v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto dtb__88) mc1))
@@ -223,12 +223,12 @@ and v_Vuna_dCompiler_dLowering_dTy_dtyNamesInto = (fun mc0 mc1 -> (match mc0 wit
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 198 "Vuna/Compiler/Lowering/Ty.vuna"
+# 200 "Vuna/Compiler/Lowering/Ty.vuna"
 let rec v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo = (fun mc0 mc1 -> (match mc0 with
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__93, dtb__94) -> ((v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo dtb__94) ((v_Vuna_dCompiler_dLowering_dTy_dfoldlTyNames dtb__93) mc1))
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (Base_dData_dList.v_Base_dData_dList_dreverse mc1)
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 190 "Vuna/Compiler/Lowering/Ty.vuna"
+# 192 "Vuna/Compiler/Lowering/Ty.vuna"
 let v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefs = (fun decls -> ((v_Vuna_dCompiler_dLowering_dTy_dtyDeclRefsGo ((Base_dData_dList.v_Base_dData_dList_dmap v_Vuna_dCompiler_dLowering_dTy_dtyDeclTys) decls)) Base_dData_dList.C_Base_dData_dList_dList_Nil))
