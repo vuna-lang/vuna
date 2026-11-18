@@ -1070,7 +1070,16 @@ checkCase env c source expectPass expectedErr = do
   r <- probeCheckInFull env source
   expectedR <- if expectPass then pure (OkC []) else expectKeysOf env expectedErr
   end <- clockNow
-  finishCase c.caseId start (checkCaseAsserts env expectedErr expectPass start end r expectedR)
+  base <-
+    finishCase c.caseId start (checkCaseAsserts env expectedErr expectPass start end r expectedR)
+  if env.envBlessDiag then if expectPass then pure base
+  else case diagsOfCheck r of
+    [] => pure base
+    ds => do
+      _ <- fsWriteFile expectedErr "${blessDiagText env expectedErr ds}\n"
+      pure
+        (CaseResult c.caseId "blessed" base.resChecks 0 base.resChecks base.resMs ["blessed ${expectedErr}"])
+  else pure base
 
 -- | 内部：check 用例的断言：超时；通过路径要求 check 成功且无 error 级诊断，负例路径要求
 -- 键序列匹配且 check 必须报错。
