@@ -27,6 +27,7 @@ import Vuna.Compiler.Elab.Types
 import Vuna.Compiler.Elab.Representation
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Ir.Model
+import Vuna.Compiler.Ir.Represent
 import Vuna.Compiler.Ir.Analysis
 import Vuna.Compiler.Ir.Runtime
 import Vuna.Compiler.Ir.Validate
@@ -352,10 +353,7 @@ else case HashMap.lookup c env.lwCtors of
 -- 收尾：去装箱族只保留单字段（构造子不落 OCaml 变体）；record 族生成 `IrRecord`；
 -- 其余生成 `IrCtor`。族名与字段名都是源码名（文本前缀属后端）。
 lowerConAppFinish : LwEnv -> LwSt -> String -> String -> List Ir -> Check (Pair Ir LwSt)
-lowerConAppFinish env st family c irs = if HashMap.member family env.lwUnboxed then case irs of
-  [only] => OkC (Pair only st)
-  _ => icInternal "unboxed constructor application does not have exactly one runtime argument"
-else case HashMap.lookup family env.lwRecordFields of
+lowerConAppFinish env st family c irs = case HashMap.lookup family env.lwRecordFields of
   Just fields => OkC (Pair (IrRecord family (zipFieldNames fields irs)) st)
   Nothing => OkC (Pair (IrCtor family c irs) st)
 
@@ -561,13 +559,11 @@ else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut
 lowerCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> List CaseAlt -> Check (Pair Ir LwSt)
 lowerCaseFuel fuel env st outer scrut alts = if fuel <= 0 then icFuel "ir-lower"
 else if natCaseApplies alts then lowerNatCaseFuel (fuel - 1) env st outer scrut alts
-else case lowerUnboxedCaseAlt env alts of
-  Just alt => lowerUnboxedCaseFuel (fuel - 1) env st outer scrut alt
-  Nothing => Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
-    Pair scrutIr st1 => Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st1 outer alts) (\q => case q of
-      Pair arms st2 => OkC (Pair (IrCase scrutIr arms) st2)
-    )
+else Vuna.Compiler.Base.Common.bind (lowerTermFuel (fuel - 1) env st outer scrut) (\p => case p of
+  Pair scrutIr st1 => Vuna.Compiler.Base.Common.bind (lowerArmsFuel (fuel - 1) env st1 outer alts) (\q => case q of
+    Pair arms st2 => OkC (Pair (IrCase scrutIr arms) st2)
   )
+)
 
 -- 非 record 族的投影按 `case` 形状展开（产物形状逐字节确定）。
 lowerProjAsCaseFuel : Int -> LwEnv -> LwSt -> List IrBinder -> Term -> String -> List (Pair String Rig) -> Int -> Int -> Check (Pair Ir LwSt)
@@ -904,7 +900,7 @@ lowerUnitAfterChecks env defNames dataNames =
   in Vuna.Compiler.Base.Common.bind (groupDefs env runtime) (\groups => Vuna.Compiler.Base.Common.bind (tyDeclsOf env.lwTyParams env.lwUnboxedInfo datas unitDatas) (\decls => let
     groups2 = map groupOfPair groups
     hasList = hasDataNamed listFamilyName unitDatas
-  in OkC (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing)
+  in OkC (representUnit (lwEnvShared env) (IrUnit decls groups2 hasList (tyDeclRefs decls) Nothing))
   )
   )
 

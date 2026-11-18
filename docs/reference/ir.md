@@ -146,6 +146,15 @@ binder 的**身份**在 Lowering 分配，前缀与编号渲染属后端：
 `Codegen.Runtime`（OCaml 文本）。漏任一处会在下一次 `vuna check` 直接报内部错，不会静默
 生成坏代码。
 
+## 表示选择（`Vuna.Compiler.Ir.Represent`）
+
+去装箱族的**项形态**由单独的 pass 决定：`Lowering` 对它们只生成装箱形态（`IrCtor`、
+`IrCase`），`representUnit` 再按 `IrShared.irSharedUnboxed`（族 → 构造子 + 字段号）与
+`irSharedCtorShapes`（构造子 → 族 + keep flags）改写成「直接返回字段」/`IrLet`。
+类型声明侧仍在 `Lowering.Ty`（字段类型与 arity 需要 Elab 的 telescope 信息），
+因此这一步只动项、不碰声明；产物与 pass 之前逐字节一致。
+
+
 ## 分析与分组（`Vuna.Compiler.Ir.Analysis`）
 
 从 `Lowering.Checks` 的同一套算法原样沿用（Kosaraju：完成序 → 反向图收集 → 依赖就绪

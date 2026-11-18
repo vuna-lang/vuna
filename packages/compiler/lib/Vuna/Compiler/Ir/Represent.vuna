@@ -1,0 +1,86 @@
+-- | 表示选择 pass：把 Lowering 产出的「装箱形态」IR 改写成去装箱形态。
+--
+-- Lowering 现在对去装箱族也生成 `IrCtor` / `IrCase`（单构造子、单运行时字段）；
+-- 本 pass 按 `IrShared` 里的去装箱表把它们改写成「直接返回字段」/`let`。
+-- 类型声明侧仍在 `Lowering.Ty`（字段类型与 arity 需要 Elab 的 telescope 信息），
+-- 这里只动项。
+--
+-- 纯函数、确定性：同一输入逐字节同一输出；不做燃料预算（每个节点一次结构递归）。
+module Vuna.Compiler.Ir.Represent where
+
+import Vuna.Compiler.Base.Common
+import Vuna.Compiler.Ir.Model
+
+export representUnit : IrShared -> IrUnit -> IrUnit
+representUnit shared u =
+  IrUnit u.irUnitTyDecls (map (representGroup shared) u.irUnitGroups) u.irUnitHasListFamily
+    u.irUnitTypeRefs u.irUnitEntry
+
+representGroup : IrShared -> IrGroup -> IrGroup
+representGroup shared g = IrGroup g.irGroupIsRec (map (representDef shared) g.irGroupDefs)
+
+representDef : IrShared -> IrDef -> IrDef
+representDef shared d = case d of
+  IrDef name arity deps body recOk initGuard span =>
+    IrDef name arity deps (representIr shared body) recOk initGuard span
+  IrExternDef name ty cName span => d
+
+representIr : IrShared -> Ir -> Ir
+representIr shared ir = case ir of
+  IrCtor family ctor args =>
+    let
+      args2 = map (representIr shared) args
+    in case irSharedUnboxedOf family shared.irSharedUnboxed of
+      Just _ => case args2 of
+        [only] => only
+        _ => IrCtor family ctor args2
+      Nothing => IrCtor family ctor args2
+  IrRecord family fields =>
+    IrRecord family (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+  IrRecUpd base family fields =>
+    IrRecUpd (representIr shared base) family
+      (map (\p => Pair (firstOf p) (representIr shared (secondOf p))) fields)
+  IrProj base family field => IrProj (representIr shared base) family field
+  IrRtApp sym args => IrRtApp sym (map (representIr shared) args)
+  IrCast inner => IrCast (representIr shared inner)
+  IrLet bs scrut body => IrLet bs (representIr shared scrut) (representIr shared body)
+  IrLam bs body => IrLam bs (representIr shared body)
+  IrApp f a => IrApp (representIr shared f) (representIr shared a)
+  IrIf c th el => IrIf (representIr shared c) (representIr shared th) (representIr shared el)
+  IrCase scrut alts => representCase shared scrut alts
+  IrNatCase scrut fresh zero succ catch =>
+    IrNatCase (representIr shared scrut) fresh (representAlt shared zero) (representAlt shared succ)
+      (representAlt shared catch)
+  IrConcatMany parts => IrConcatMany (map (representIr shared) parts)
+  IrEffThunk family ctor unitTy arity prim =>
+    IrEffThunk family ctor unitTy arity (representIr shared prim)
+  _ => ir
+
+-- 单构造子去装箱族的 case → `let`：分支 binder 表就是完整 telescope，体的下标不变。
+representCase : IrShared -> Ir -> List IrAlt -> Ir
+representCase shared scrut alts =
+  let
+    scrut2 = representIr shared scrut
+  in case alts of
+    alt :: rest => case irAltCtorOf alt of
+      Just (Pair family _) => case irSharedUnboxedOf family shared.irSharedUnboxed of
+        Just _ =>
+          if allCatchAll rest then IrLet (irAltBindersOf alt) scrut2 (representIr shared (irAltBodyOf alt))
+          else IrCase scrut2 (map (representAltIr shared) alts)
+        Nothing => IrCase scrut2 (map (representAltIr shared) alts)
+      Nothing => IrCase scrut2 (map (representAltIr shared) alts)
+    [] => IrCase scrut2 []
+
+allCatchAll : List IrAlt -> Bool
+allCatchAll [] = True
+allCatchAll (alt :: rest) = case irAltCtorOf alt of
+  Nothing => allCatchAll rest
+  Just _ => False
+
+representAlt : IrShared -> Maybe IrAlt -> Maybe IrAlt
+representAlt shared alt = case alt of
+  Nothing => Nothing
+  Just x => Just (representAltIr shared x)
+
+representAltIr : IrShared -> IrAlt -> IrAlt
+representAltIr shared (IrAlt ctor bs body) = IrAlt ctor bs (representIr shared body)

@@ -99,6 +99,7 @@ modules = [
   "Vuna.Compiler.Ir.Cps",
   "Vuna.Compiler.Ir.Model",
   "Vuna.Compiler.Ir.Render",
+  "Vuna.Compiler.Ir.Represent",
   "Vuna.Compiler.Ir.Runtime",
   "Vuna.Compiler.Ir.Validate",
   "Vuna.Compiler.Loader.Addr",

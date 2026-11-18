@@ -3,6 +3,7 @@
 import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Compiler.Codegen.Ocaml.Model
 import Vuna.Compiler.Codegen.Ocaml.Render
+import Vuna.Compiler.Ir.Represent
 -- 包接口面：下面这些模块不在编译器的运行路径上，但属于 compiler 包的导出面
 -- （工具链与 examples/infra 消费）。显式 import 让它们进入入口闭包：seed 与包 iface
 -- 都按入口闭包生成。

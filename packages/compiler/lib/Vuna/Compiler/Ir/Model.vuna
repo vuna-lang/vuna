@@ -287,6 +287,21 @@ export record IrShared(..) where
   -- | 运行时定义的位置行：定义名 → (文件, 起始行)。只有带 span 的定义在这里；
   -- 跨单元的 `extraDefLocs` 由调用方与这里合并（顺序无关，落盘前统一排序）。
   irSharedDefLocs : List (Pair String (Pair String Int))
+  -- | 去装箱族：族名 → (唯一构造子名, 保留字段序号)。表示选择 pass 的输入。
+  irSharedUnboxed : List (Pair String (Pair String Int))
+  -- | 构造子形状：构造子名 → (族名, keep flags)。pass 把构造子应用/分支 pattern
+  -- 改写成去装箱形式时需要它；Lowering 仍在项生成期用它做擦除与实参对齐。
+  irSharedCtorShapes : List (Pair String (Pair String (List Bool)))
+
+export irSharedUnboxedOf : String -> List (Pair String (Pair String Int)) -> Maybe (Pair String Int)
+irSharedUnboxedOf family [] = Nothing
+irSharedUnboxedOf family (p :: rest) =
+  if firstOf p == family then Just (secondOf p) else irSharedUnboxedOf family rest
+
+export irSharedCtorShapeOf : String -> List (Pair String (Pair String (List Bool))) -> Maybe (Pair String (List Bool))
+irSharedCtorShapeOf ctor [] = Nothing
+irSharedCtorShapeOf ctor (p :: rest) =
+  if firstOf p == ctor then Just (secondOf p) else irSharedCtorShapeOf ctor rest
 
 export irSharedRecordFieldsOf : String -> List (Pair String (List (Pair Int String))) -> List (Pair Int String)
 irSharedRecordFieldsOf family [] = []
