@@ -228,19 +228,44 @@ continuation 调用里 cast 失败（该 continuation 把收到的值当 `Eff` �
 **组合子本身**还在「拿值、返回值」的约定里。下一步的最小可行改法是把 bind 变成
 机器原语（见 §7.3），让 `Eff` 的组合子不再依赖 CPS 后的库代码互相猜测形状。
 
-### 7.3 下一步：把 bind 作为机器原语
+### 7.3 根因（已用 IR 证据确认）：`a -> Eff` 函数与 resumption 的续延约定不一致
 
-```text
-Control = Done value | Apply cont value | Perform key name op cont
-        | Handle key name ret opH comp unit cont
-        | Bind thunk k cont          -- 新的：压一帧，跑 thunk，再把值交 k
+`>>=` 的 CPS 体是：
+
+```lisp
+(case (k V) (MkEff a2) (a2 u K))     -- 把 k 的返回值当 Eff 继续运行
 ```
 
-- base 侧：`Monad (Eff r)` 的 `>>=` 降成 `MkEff (\u K -> @ir@m@bind e k u K)`
-  （新增信任边界原语；OCaml/native 仍可映射成现在的展开，行为不变）；
-- wasm：`$rt_mBind` 只构造一个 `Bind` step；循环里 `Bind` 帧入堆栈，
-  跑 `thunk unit (cont = \v -> push k 帧)`；
-- 好处：组合子不再「运行 continuation 的返回值」，`Eff` answer + resume 的形状
-  与普通 handler 一致，`>>=` 也不再是栈增长的来源（每一层是堆帧）。
-- 验收：上面的 §7.2 复现打印 `log:a` 且返回 `1`；`106` 用默认栈；
-  `18_eff_fs_io` / `40_eff_fs_named` 在打开全行 mode 6 后通过。
+即它假设 **do 块续延 lambda 是 1 个参数**（`a -> Eff r b`）。
+
+但 §7.2 的 handler 体 `do { consolePrint "log:a"; k 0 }` 里，那个 lambda 的尾位置是
+resumption，被 CPS 成 **2 个参数**：
+
+```lisp
+(lam [_ __mchK199588] (prim_erase k i0 __mchK199588))    -- \_ K -> k 0 K
+```
+
+于是 `k V` 得到的是一个**半应用（闭包）**，而 `>>=` 立刻把它当 `Eff` 去 `case` —
+这就是 cast 失败的确切来源（`Return` 甚至没被走到）。
+
+两侧都"对"，冲突在于约定：
+
+- resumption 必须饱和成 `k v kRest`（否则 `k v` 的半应用会作为值泄漏出去）；
+- `>>=` 的续延必须只吃一个值（返回一个 `Eff`）。
+
+`kRest` 只能由 `>>=` 在运行时提供（它就是 `>>=` 的 K），所以这不是改一个运行时分支
+能解决的：**do 块续延 lambda 必须统一成 2 参数**，由 bind 在运行期把 K 传进去。
+
+### 7.4 下一步：标记 + 统一 CPS（A1）
+
+1. **elaborator 打标**：do 块降级时把续延 lambda 的 binder 标成保留名
+   （如 `@vuna@effK`），与 `@vuna@handle@o` 同一手法；不改变类型，只给 lowering 一个句柄。
+2. **machine CPS**：mode 6 里，带 `@vuna@effK` 标记的 lambda 一律降成
+   `\v K -> <body with continuation K>`（纯值是 `run eff K`，尾 resumption 是 `k v K`）。
+3. **bind**：`>>=` 的体改为 `case (k V) of ...` 之前先 `k V K`——即 K 作为第二个实参传入。
+   这一步与"bind 作为机器原语"（绑定帧）可以合并：原语拿到 K，直接压帧，不必再 `case`。
+4. **验收**：§7.2 复现打印 `log:a` 且返回 `1`；`106` 默认栈；全行 mode 6 下
+   `18_eff_fs_io` / `40_eff_fs_named` 通过。
+
+之所以要走标记而不是"在变换里猜"：IR 没有类型，`a -> Eff` 与 `a -> b` 形状相同；
+现在的 `MkEff` 能识别是因为它有自己的构造子。do 块续延需要等价的句柄。
