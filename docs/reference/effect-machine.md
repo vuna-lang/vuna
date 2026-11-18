@@ -296,6 +296,47 @@ run : Control -> Obj
   `wasmtime` 跑起来在 `_start → rt_apply` 处 cast failure，说明入口/续延交接处还有一处
   形状不匹配（`runMain` 被改写成 `machineRun` 之后，入口仍按旧约定把某值当闭包应用）。
 
+### 9.2.2 进度（机器已驱动 wasm 的 329/334 检查，仍有 3 个缺口）
+
+把 `cpsDefsMachine` 临时接上 `mStepsDef` 后，wasm 后端**确实跑在库机器上**：334 个
+checks 里 329 个通过，只有下面 3 类共 5 个 case 红（08/09/52/53/106）。修掉的协议
+问题（都是库机器与旧 wat 语义不一致，与 lowering 无关）：
+
+1. **`MkKDone` 也要走 ctx 回退**：旧实现直接 `finish`（弹帧交 kOuter）。wat 的
+   `$rt_mKDone` 在 ctx 命中同一帧时先弹 ctx 再交该次 resume 的 `kRest`；否则外层
+   handler 的日志/handler 链会丢一层（`effect/common/26_eff_console` 的
+   `out:hello` 整条丢失）。现在 `MkReturn`/`MkKDone` 共用 `unwind`。
+2. **resume 要重装被弹掉的帧**：pure answer 的 handler（如
+   `joinEff (handleFs "real" …)`）先把答案（一个 Eff）交给 kOuter、帧被弹掉，之后
+   才 resume；wat 用 `$rt_mInChain` + 重装帧处理这条路径。缺了它，`fs / real`
+   在其后变成 `unhandled effect`（`effect/common/18_eff_fs_io`、`40_eff_fs_named`）。
+3. **one-shot 集合用 HashMap**：`List Int` 线性查在 2000 次顺序 perform 下把
+   wasm 默认栈打爆（递归 `memInt`）；`MSt.msUsed` 改成 `HashMap Int Bool`。
+4. 顺带：`prim_fail` 自带 `vuna: runtime error: ` 前缀，机器里的文本改为裸消息
+   （`106` 的 `continuation already resumed` 曾双前缀）。
+
+lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之前被折成
+`runThunk ((e u) k)`（多参调用把实参塞成单个实参，`_start` 处 cast failure 的直接
+原因），现在用 `foldAppMap` 保持左结合。
+
+剩余 3 个缺口（都已在同一轮里定位到机制，不是猜测）：
+
+- **`handleScoped` / `handleSelf`（08、09）**：`handleScoped` 是纯代码里的
+  `prim_effectSelf`，lowering 把它包成 `machineRun (MkSelf th doneCont)`；嵌套
+  `machineRun` 从空状态起跑，看不到当前帧。wat 靠全局 `$g_stepHandlers` 躲过这点。
+  纯机器需要把「当前帧上的嵌套运行」当作 opH 的**第四个参数**（`runScoped`）传进去，
+  并把 handler clause 体里对 `handleScoped`/`handleSelf` 的调用改写成该 binder。
+- **cleanup（52、53）**：`bracket` 用 `prim_cleanupPush/Pop` 维护宿主 LIFO，
+  机器弹帧时按帧深度跑 cleanup。库机器需要 `MSt` 带 cleanup 栈 + 帧深度，并把这两个
+  原语在 CPS 里降成 `Control` 步骤（现在的 `prim_fail` 文本/宿主栈都在 wat runtime）。
+- **栈深度（106 的 effdepth）**：2000 次顺序 perform 在引擎默认栈下仍
+  `call stack exhausted`；回溯是 `step → 续延闭包 → step` 的嵌套（wat 的
+  `$rt_mRun` 是循环，resume 链不占 wasm 帧）。需要在机器里把「续延转移」做成
+  tail 路径（显式 work item / 队列），否则只能靠 `return_call_ref` 级别的改造。
+
+在 3 个缺口关闭前，wasm 仍走 `Wasm/Step.vuna` 的 wat 机器（`$rt_m*`），
+`cpsDefsMachine` 里的 `map mStepsDef` 保持关闭；上面 4 条协议修复与 lowering 的应用脊
+修复都已在库里，接入时直接生效。
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
