@@ -4,7 +4,9 @@ module Web.Server where
 
 import Base
 import Base.Effect.Core
+import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Net as EffNet
 import Http.Connection as HttpConn
@@ -18,32 +20,41 @@ export maxConnections : Int
 maxConnections = 1073741824
 
 -- | 路由表 + 请求 → 响应：命中回 200，路径命中但方法不符回 405，其余 404。
+-- | handler 在服务端行里运行，因此每次请求都会重新执行它（真 SSR）。
 -- | `HEAD` 按 `GET` 匹配，但只回头部。
-export respond : List Route.Route -> Req.Request -> Res.Response
+export respond : List Route.Route -> Req.Request -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Res.Response
 respond routes req =
   if Route.sameMethod req.method "HEAD" then
     headOf routes req
   else
     case Route.matchRoute routes req.method req.target of
-      Just hit => htmlResponse 200 [] (hit.first.handler hit.second)
+      Just hit =>
+        do
+          page <- hit.first.handler hit.second
+          pure (htmlResponse 200 [] page)
       Nothing =>
         case Route.allowedMethods routes req.target of
-          [] => htmlResponse 404 [] notFoundPage
-          methods => htmlResponse 405 [Pair "Allow" (join ", " methods)] notFoundPage
+          [] => pure (htmlResponse 404 [] notFoundPage)
+          methods => pure (htmlResponse 405 [Pair "Allow" (join ", " methods)] notFoundPage)
 
 -- | `HEAD`：按 `GET` 匹配，正文丢弃但保留 `Content-Length`。
-headOf : List Route.Route -> Req.Request -> Res.Response
+headOf : List Route.Route -> Req.Request -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Res.Response
 headOf routes req =
   case Route.matchRoute routes "GET" req.target of
     Just hit =>
-      let
-        body = View.renderView (hit.first.handler hit.second)
-      in Res.Response
-        200
-        "OK"
-        [Pair "Content-Type" "text/html; charset=utf-8", Pair "Content-Length" (strFromInt (strLength body))]
-        ""
-    Nothing => htmlResponse 404 [] notFoundPage
+      do
+        page <- hit.first.handler hit.second
+        pure (headResponse (View.renderView page))
+    Nothing => pure (htmlResponse 404 [] notFoundPage)
+
+-- | 只回头部的 200（`Content-Length` 按完整正文算）。
+headResponse : String -> Res.Response
+headResponse body =
+  Res.Response
+    200
+    "OK"
+    [Pair "Content-Type" "text/html; charset=utf-8", Pair "Content-Length" (strFromInt (strLength body))]
+    ""
 
 -- | 构造 HTML 响应（额外头部在前，`Content-Type` 在后）。
 htmlResponse : Int -> List (Pair String String) -> View.View -> Res.Response
@@ -59,8 +70,8 @@ notFoundPage : View.View
 notFoundPage = View.document "404" [View.Element "h1" [] [View.Text "Not Found"]]
 
 -- | 监听地址并按连接串行服务（`tcp:127.0.0.1:PORT`；`PORT=0` 时打印实际端口）。
--- | 返回处理的连接数。
-export serve : Member nNet NetOp r, Member nConsole ConsoleOp r, Member nFs FsOp r => List Route.Route -> String -> Eff r Int
+-- | 返回处理的连接数。行就是服务端行（与 handler 同一行，见 `Web.Route`）。
+export serve : List Route.Route -> String -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Int
 serve routes addr =
   do
     h <- netListen addr
@@ -80,14 +91,14 @@ readyText addr h =
       (if endsWith ":0" addr then "${substring (natFromInt 0) (natFromInt (strLength addr - 1)) addr}${strFromInt port}" else addr)
 
 -- | 串行 accept：一个连接一个连接地服务（慢客户端会挡住其它连接，见 docs/reference/web.md）。
-acceptLoop : Member nNet NetOp r => List Route.Route -> Int -> Int -> Int -> Eff r Int
+acceptLoop : List Route.Route -> Int -> Int -> Int -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Int
 acceptLoop routes h fuel served =
   if fuel <= 0 then
     pure served
   else
     do
       conn <- netAccept h
-      page <- HttpConn.serve (HttpConn.fromNet conn) (\req => pure (respond routes req))
+      page <- HttpConn.serve (HttpConn.fromNet conn) (\req => respond routes req)
       acceptLoop routes h (fuel - 1) (served + page)
 
 -- | `unix:PATH` 退出前删监听文件；`tcp:` 无事可做。

@@ -1,9 +1,15 @@
--- | 路由：方法 + 段模式（静态段 / `:name` 参数段）+ handler。匹配是纯函数。
--- | 路径在匹配前做三件事：去查询串、按 `/` 切段并丢弃空段（尾斜杠与重复斜杠归一）、
--- | 段内百分号解码。
+-- | 路由：方法 + 段模式（静态段 / `:name` 参数段）+ handler。匹配是纯函数；
+-- | handler 在**服务端行**（见 `Web.Main` 的说明）里运行，因此可以读文件、环境与时钟——
+-- | 这就是 SSR：每次请求重新执行 handler，而不是渲染一个提前算好的 `View`。
 module Web.Route where
 
 import Base
+import Base.Effect.Core
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
 import Web.View as View
 
 -- | 一条路由。`segments` 里的 `:name` 是参数段，其余按字面比较。
@@ -12,11 +18,11 @@ export record Route(..) where
   method : String
   -- | 段模式。
   segments : List String
-  -- | 命中后的页面。
-  handler : List (Pair String String) -> View.View
+  -- | 命中后的页面（在服务端行里运行）。
+  handler : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 
 -- | 构造一条路由（路径在这里切成段）。
-export route : String -> String -> (List (Pair String String) -> View.View) -> Route
+export route : String -> String -> (List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View) -> Route
 route method path handler = Route method (splitPath path) handler
 
 -- | 路径 → 段：去查询串、丢弃空段、逐段百分号解码。

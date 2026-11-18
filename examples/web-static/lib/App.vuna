@@ -1,6 +1,12 @@
--- 静态页面 + 路由：应用就是一张路由表。
--- 三条 GET 路由、一条 POST 路由与一条回显路由；入口由 `vuna-web-cli` 生成。
+-- 静态页面 + 路由：应用就是一张路由表；handler 在服务端行里运行（真 SSR）。
+-- 纯页面用 `pure` 包一层；`/env` 与 `/time` 每次请求都重新读取环境 / 时钟。
 import Base
+import Base.Effect.Core
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
 import Web.App as WebApp
 import Web.Route as Route
 import Web.View as View
@@ -8,27 +14,43 @@ import Web.View as View
 export app : WebApp.App
 app =
   WebApp.app
-    [Route.route "GET" "/" home, Route.route "GET" "/about" about, Route.route "GET" "/users/:id" userPage, Route.route "POST" "/users/:id" createUser, Route.route "GET" "/echo/:msg" echo]
+    [Route.route "GET" "/" home, Route.route "GET" "/about" about, Route.route "GET" "/users/:id" userPage, Route.route "POST" "/users/:id" createUser, Route.route "GET" "/echo/:msg" echo, Route.route "GET" "/env" envPage, Route.route "GET" "/time" timePage]
 
-home : List (Pair String String) -> View.View
+home : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 home _ =
-  page
-    "Home"
-    [View.Element "h1" [] [View.Text "Home"], View.Element "p" [] [View.Text "静态页面 + 路由"]]
+  pure
+    (page "Home" [View.Element "h1" [] [View.Text "Home"], View.Element "p" [] [View.Text "静态页面 + 路由"]])
 
-about : List (Pair String String) -> View.View
-about _ = page "About" [View.Element "h1" [] [View.Text "About"]]
+about : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+about _ = pure (page "About" [View.Element "h1" [] [View.Text "About"]])
 
-userPage : List (Pair String String) -> View.View
-userPage params = page "User" [View.Element "h1" [] [View.Text ("user " ++ paramOf "id" params)]]
+userPage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+userPage params =
+  pure (page "User" [View.Element "h1" [] [View.Text ("user " ++ paramOf "id" params)]])
 
-createUser : List (Pair String String) -> View.View
+createUser : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
 createUser params =
-  page "Created" [View.Element "h1" [] [View.Text ("created " ++ paramOf "id" params)]]
+  pure (page "Created" [View.Element "h1" [] [View.Text ("created " ++ paramOf "id" params)]])
 
 -- | 回显路径参数（验证百分号解码 + 文本转义）。
-echo : List (Pair String String) -> View.View
-echo params = View.Text (paramOf "msg" params)
+echo : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+echo params = pure (View.Text (paramOf "msg" params))
+
+-- | 每次请求读一次环境变量 `VUNA_WEB_DEMO`（SSR：不是启动时算好的）。
+envPage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+envPage _ =
+  do
+    v <- envGetEnv "VUNA_WEB_DEMO"
+    pure
+      (page "Env" [View.Element "h1" [] [View.Text "Env"], View.Element "p" [] [View.Text ("env=" ++ v)]])
+
+-- | 每次请求读一次时钟（SSR：每请求重新执行 handler）。
+timePage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View.View
+timePage _ =
+  do
+    t <- clockNow
+    pure
+      (page "Time" [View.Element "h1" [] [View.Text "Time"], View.Element "p" [] [View.Text ("t=" ++ strFromInt t)]])
 
 -- | 取命名参数的值；缺参数时为空串。
 paramOf : String -> List (Pair String String) -> String

@@ -42,8 +42,8 @@ myapp/.vuna-web/bin/myapp tcp:127.0.0.1:8080
 | 模块 | 职责 |
 | --- | --- |
 | `Web.View` | HTML 数据（`Text` / `Element` / `Fragment` / `Raw`）+ 纯渲染 |
-| `Web.Route` | 方法 + 段模式（静态段 / `:name`）+ 匹配与 `Allow` |
-| `Web.Server` | 路由表 → 响应（200 / 405 / 404 / HEAD）+ 串行 accept 驱动 |
+| `Web.Route` | 方法 + 段模式（静态段 / `:name`）+ 匹配与 `Allow`；handler 是服务端行里的效应动作 |
+| `Web.Server` | 路由表 → 响应（200 / 405 / 404 / HEAD，handler 每请求执行）+ 串行 accept 驱动 |
 | `Web.App` | 应用值：`App { appRoutes }` |
 | `Web.Main` | 服务端根：`main : App -> Eff [...]` 与 `serve : App -> String -> Eff [...]` |
 
@@ -62,12 +62,24 @@ myapp/.vuna-web/bin/myapp tcp:127.0.0.1:8080
 - 方法比较大小写不敏感；`HEAD` 按 `GET` 匹配但只回头部（保留 `Content-Length`）。
 - 命中 → 200；路径命中但方法不符 → 405 + `Allow`（去重、保序）；都不命中 → 404。
 - 查询串 v1 不解析（只做路径匹配）；`Web.Url` 等有真实需求再加。
+- **handler 是效应动作，不是预先算好的 `View`**：类型是
+  `Params -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] View`，每次请求都会重新执行。
+  纯页面写 `pure (...)`；要读环境 / 时钟 / 文件就直接 `do`（`/env`、`/time` 是示例）。
+  这就是真 SSR：页面在服务端按请求生成，而不是启动时渲染一次。
 
 ## 4. 服务驱动与并发
 
-`Web.Server.serve : List Route -> String -> Eff r Int`：`netListen` → 打印
-`listening <addr>`（`:0` 回填实际端口）→ 串行 accept → 每个连接交给
-`Http.Connection.serve`（keep-alive、400 收口、请求预算都在那里）。
+服务端行 = handler 的行：`[FsOp, EnvOp, ClockOp, NetOp, ConsoleOp]`；入口再多一个 `ArgsOp`
+（读 argv）。所以 `Web.Server.respond : List Route -> Request -> Eff <服务端行> Response`，
+`Web.Main.serve : App -> String -> Eff <服务端行> Int`，
+`Web.Main.main : App -> Eff <服务端行 + ArgsOp> Int`。
+
+`Web.Server.serve`：`netListen` → 打印 `listening <addr>`（`:0` 回填实际端口）→ 串行 accept →
+每个连接交给 `Http.Connection.serve`（keep-alive、400 收口、请求预算都在那里）。
+
+**行的一次性选择**：app 代码与服务端驱动共用同一行（v1 简化）。真正的按效应切分（哪些页面
+只需 client / 共享）等分类器落地后再收窄；届时 handler 会变成对行参数化，`Route`/`App`
+也要换成索引数据类型（record 不吃 `Row` kind）。
 
 **限制（明确）**：v1 是串行 accept，一个慢客户端会挡住其它连接。并发模型（同进程 fiber +
 非阻塞 socket）与效果机器的 `Wait` 一起做；换掉 accept 循环即可，`respond` 与 `Route` 不变。
@@ -88,9 +100,12 @@ myapp/.vuna-web/bin/myapp tcp:127.0.0.1:8080
 
 ## 6. 与 SSR 的关系
 
-这一步只有「静态页面 + 路由」：每条路由返回一个固定的 `View`，没有状态、没有水合、
-没有浏览器侧代码。水合、交互与 HMR 需要浏览器侧（wasm）与效果机器的 `Wait`，
-不在这一层；`respond` 的形状（请求 → 响应）在那之前不需要改。
+已经有 **SSR**：handler 是效应动作，每次请求在服务端重新执行（读环境 / 时钟 / 文件），
+渲染出 HTML 再回给客户端——不是启动时渲染一次、也不是客户端渲染。
+
+还没有的是 **水合与客户端**：服务端生成的 HTML 不带状态快照与事件绑定，页面没有客户端
+路由与响应式。这些需要浏览器侧（wasm 产物、导出 ABI、效果机器的 `Wait`），以及按效应行
+推断切分的分类器；`respond` 的形状（请求 → 响应）在那之前不需要改。
 
 ## 7. `vuna-web-cli`（编排工具）
 

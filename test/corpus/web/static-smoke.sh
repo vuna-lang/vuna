@@ -47,7 +47,7 @@ if ! "$WEB_CLI" build --out "$tmp/out" "$APP" >"$tmp/build.log" 2>&1; then
   exit 2
 fi
 
-"$tmp/out/bin/web-static" "tcp:127.0.0.1:0" >"$tmp/serve.log" 2>"$tmp/serve.err" &
+VUNA_WEB_DEMO=hello "$tmp/out/bin/web-static" "tcp:127.0.0.1:0" >"$tmp/serve.log" 2>"$tmp/serve.err" &
 srv_pid=$!
 i=0
 while [ "$i" -lt 400 ]; do
@@ -96,6 +96,12 @@ else
 
   body=$(curl -sS "$base/echo/%3Cscript%3E" 2>/dev/null)
   printf '%s' "$body" | grep -q '&lt;script&gt;' && ok "percent-decode + escape" || no "percent-decode + escape" "$body"
+
+  body=$(curl -sS "$base/env" 2>/dev/null)
+  printf '%s' "$body" | grep -q 'env=hello' && ok "SSR reads env per request" || no "SSR reads env per request" "$body"
+
+  body=$(curl -sS "$base/time" 2>/dev/null)
+  printf '%s' "$body" | grep -q 't=[0-9]' && ok "SSR runs handler per request" || no "SSR runs handler per request" "$body"
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

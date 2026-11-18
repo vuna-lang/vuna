@@ -5,7 +5,9 @@ module Web.Main where
 import Base
 import Base.Effect.Core
 import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
 import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
 import Base.Effect.Fs as EffFs
 import Base.Effect.Net as EffNet
 import Web.App as App
@@ -15,12 +17,13 @@ import Web.Server as Server
 export defaultAddr : String
 defaultAddr = "tcp:127.0.0.1:8080"
 
--- | 在给定地址上服务应用。
-export serve : App.App -> String -> Eff [NetOp, ConsoleOp, FsOp] Int
+-- | 在给定地址上服务应用（handler 与服务端同一行，见 `Web.Route`）。
+export serve : App.App -> String -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Int
 serve a addr = Server.serve a.appRoutes addr
 
 -- | 进程入口：第一个参数是监听地址（缺省 [defaultAddr]；`:0` 由服务端打印实际端口）。
-export main : App.App -> Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int
+-- | 行里多出 `ArgsOp`（读 argv），其余与 [serve] 相同。
+export main : App.App -> Eff [ArgsOp, FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Int
 main a =
   do
     args <- argsGetArgs

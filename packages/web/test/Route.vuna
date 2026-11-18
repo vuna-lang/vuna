@@ -1,6 +1,11 @@
 -- Web.Route 的包内测试：切段、百分号解码、参数匹配、方法与 405 的 Allow。
 import Base
 import Base.Effect.Core
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
 import Web.Route as R
 import Web.View as V
 
@@ -30,11 +35,11 @@ routes =
     R.route "POST" "/users/:id" userPost
   ]
 
-home : List (Pair String String) -> V.View
-home _ = V.Text "home"
+home : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] V.View
+home _ = pure (V.Text "home")
 
-userPage : List (Pair String String) -> V.View
-userPage params = V.Text (paramOf params)
+userPage : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] V.View
+userPage params = pure (V.Text (paramOf params))
 
 -- | 第一个参数的值（没有参数时为空串）。
 paramOf : List (Pair String String) -> String
@@ -43,8 +48,8 @@ paramOf params =
     p :: _ => p.second
     [] => ""
 
-userPost : List (Pair String String) -> V.View
-userPost _ = V.Text "post"
+userPost : List (Pair String String) -> Eff [FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] V.View
+userPost _ = pure (V.Text "post")
 
 results : List (Pair String Bool)
 results =

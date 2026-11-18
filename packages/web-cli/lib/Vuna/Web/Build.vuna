@@ -159,12 +159,15 @@ adapterSource =
     ++ "import Base\n"
     ++ "import Base.Effect.Core\n"
     ++ "import Base.Effect.Args as EffArgs\n"
+    ++ "import Base.Effect.Clock as EffClock\n"
     ++ "import Base.Effect.Console as EffConsole\n"
+    ++ "import Base.Effect.Env as EffEnv\n"
     ++ "import Base.Effect.Fs as EffFs\n"
     ++ "import Base.Effect.Net as EffNet\n"
     ++ "import App\n"
     ++ "import Web.Main\n\n"
-    ++ "main : Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int\n" ++ "main = Web.Main.main App.app\n"
+    ++ "main : Eff [ArgsOp, FsOp, EnvOp, ClockOp, NetOp, ConsoleOp] Int\n"
+    ++ "main = Web.Main.main App.app\n"
 
 -- | 交给编译器的参数（与 `vuna build` 同一套口径）。
 compilerArgs : Layout -> BuildOpts -> List String
