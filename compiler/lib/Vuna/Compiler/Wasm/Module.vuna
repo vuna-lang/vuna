@@ -1889,7 +1889,7 @@ build program printResult =
       in if directable then buildAnf (append rewritten [pureKDef]) 0 (Just entryClean) listFamM
       else if fullCpsOk then case anfProgramDefs ordered of
         Err msg => WasmRejected (WasmInternal ("ANF: " ++ msg))
-        Ok anfDefs => case cpsStepDefs anfDefs of
+        Ok anfDefs => case cpsStepDefsWith unit.irUnitTyDecls anfDefs of
           Err msg => WasmRejected (WasmInternal ("CPS: " ++ msg))
           Ok stepDefs =>
             let

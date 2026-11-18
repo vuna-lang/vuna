@@ -74,6 +74,226 @@ arityLookup tbl name = case Base.HashMap.lookup name tbl of
   Just n => n
   Nothing => 0
 
+-- | binder 名（只处理源码 binder；arm/nat/wild 不需要 arity）。
+binderKey : IrBinder -> Maybe String
+binderKey b = case b.irBinderName of
+  IrBUser n => Just ("u:" ++ n)
+  IrBArm n => Just ("a:" ++ strFromInt n)
+  IrBNat n => Just ("n:" ++ strFromInt n)
+  IrBWild => Nothing
+
+-- | -2 = 未知 arity（lambda 参数 / 分支 binder）：应用时沿用「argc > 0 即 CPS 调用」。
+unknownArity : Int
+unknownArity = 0 - 2
+
+-- | 查 binder 的**源码层剩余 arity**。
+--   Just -1 = 零参 CPS 计算；Just 0 = 普通值；Just n > 0 = 还差 n 个源码实参。
+--   Just -2 = 未知；Nothing = 未绑定（按未知处理）。
+lookupBinderArity : HashMap String Int -> IrBinder -> Int
+lookupBinderArity arities b = case binderKey b of
+  Nothing => unknownArity
+  Just n => case Base.HashMap.lookup n arities of
+    Just a => a
+    Nothing => unknownArity
+
+globalArityOf : HashMap String Int -> String -> Int
+globalArityOf arities name = case Base.HashMap.lookup name arities of
+  Just a => a
+  Nothing => 0
+
+-- | 源码层饱和：函数还差的实参数正好等于实参个数。
+saturatedArity : Int -> Int -> Bool
+saturatedArity a argc =
+  if a == unknownArity then argc > 0 else if a == 0 - 1 then argc == 0 else a > 0 && argc == a
+
+-- | 应用 argc 个实参后，结果作为值还剩多少源码 arity。
+remainingArity : Int -> Int -> Int
+remainingArity a argc =
+  if a == unknownArity then unknownArity
+  else if a == 0 - 1 then if argc == 0 then 0 else unknownArity else if a > argc then a - argc else 0
+
+rhsArity : HashMap String Int -> Ir -> Int
+rhsArity arities e =
+  let
+    p = flattenApp e
+    head = firstOf p
+    argc = listLen (secondOf p)
+  in case head of
+    IrGlobal name => remainingArity (globalArityOf arities name) argc
+    IrVar b => remainingArity (lookupBinderArity arities b) argc
+    IrLam bs _ => remainingArity (listLen (runtimeBinders bs)) argc
+    IrRt sym => remainingArity (effPrimArity sym) argc
+    _ => remainingArity 0 argc
+
+-- | 把本 let 的运行时 binder 以 rhs 的剩余 arity 写进环境。
+bindLetArities : HashMap String Int -> List IrBinder -> Ir -> HashMap String Int
+bindLetArities arities bs rhs =
+  let
+    a = rhsArity arities rhs
+  in foldl (\acc => \b => if binderErased b then acc
+  else case binderKey b of
+    Just n => Base.HashMap.insert n a acc
+    Nothing => acc
+  ) arities bs
+
+-- | lambda 参数与分支 binder 一律覆盖成「未知」，避免外层同名 binder 干扰。
+bindUnknownArities : HashMap String Int -> List IrBinder -> HashMap String Int
+bindUnknownArities arities bs = foldl (\acc => \b => if binderErased b then acc
+else case binderKey b of
+  Just n => Base.HashMap.insert n unknownArity acc
+  Nothing => acc
+) arities bs
+
+-- | 源码层的类型箭头个数 = 运行时函数值的源码 arity。未知类型返回 unknownArity。
+tyArity : IrTy -> Int
+tyArity t = case t of
+  IrTyFun _ rest =>
+    let
+      r = tyArity rest
+    in if r == unknownArity then unknownArity else 1 + r
+  IrTyData _ _ => 0
+  IrTyInt => 0
+  IrTyStr => 0
+  IrTyBool => 0
+  IrTyFloat => 0
+  IrTyOpaque => unknownArity
+  IrTyArray _ => 0
+  IrTyRef _ => 0
+  IrTyVar _ => unknownArity
+
+ctorKey : String -> String -> String
+ctorKey _fam ctor = ctor
+
+ctorArityMap : List IrTyDecl -> HashMap String (List Int)
+ctorArityMap decls = Base.HashMap.fromList (concatMap ctorEntries decls)
+
+ctorEntries : IrTyDecl -> List (Pair String (List Int))
+ctorEntries d = case d of
+  IrVariantDecl fam _ ctors =>
+    map (\p => Pair (ctorKey fam (firstOf p)) (map tyArity (secondOf p))) ctors
+  _ => []
+
+-- | 从构造点推导 ctor 字段的源码 arity（类型变量字段如字典方法拿不到签名）。
+--   多个构造点冲突时退化为 unknown。
+ctorUses : Int -> HashMap String Int -> Ir -> List (Pair String (List Int))
+ctorUses fuel env e = if fuel <= 0 then []
+else case e of
+  IrCtor fam ctor args =>
+    append [Pair (ctorKey fam ctor) (map (exprSrcArity (fuel - 1) env) args)]
+      (ctorUsesList (fuel - 1) env args)
+  IrRecord _ fs => ctorUsesFields (fuel - 1) env fs
+  IrProj b _ _ => ctorUses (fuel - 1) env b
+  IrRecUpd b _ fs => append (ctorUses (fuel - 1) env b) (ctorUsesFields (fuel - 1) env fs)
+  IrRtApp _ args => ctorUsesList (fuel - 1) env args
+  IrCast x => ctorUses (fuel - 1) env x
+  IrLet bs rhs body =>
+    let
+      a = exprSrcArity (fuel - 1) env rhs
+      env2 = bindBinderArities env bs a
+    in append (ctorUses (fuel - 1) env rhs) (ctorUses (fuel - 1) env2 body)
+  IrLam bs body => ctorUses (fuel - 1) (bindUnknownArities env bs) body
+  IrApp f a => append (ctorUses (fuel - 1) env f) (ctorUses (fuel - 1) env a)
+  IrIf c t el =>
+    append (ctorUses (fuel - 1) env c)
+      (append (ctorUses (fuel - 1) env t) (ctorUses (fuel - 1) env el))
+  IrCase s alts => append (ctorUses (fuel - 1) env s) (ctorUsesAlts (fuel - 1) env alts)
+  IrNatCase s _ z su ca =>
+    append (ctorUses (fuel - 1) env s)
+      (append (ctorUsesAltM (fuel - 1) env z) (append (ctorUsesAltM (fuel - 1) env su) (ctorUsesAltM (fuel - 1) env ca)))
+  IrConcatMany xs => ctorUsesList (fuel - 1) env xs
+  IrEffThunk _ _ _ _ p => ctorUses (fuel - 1) env p
+  _ => []
+
+bindBinderArities : HashMap String Int -> List IrBinder -> Int -> HashMap String Int
+bindBinderArities env bs a = foldl (\acc => \b => if binderErased b then acc
+else case binderKey b of
+  Just n => Base.HashMap.insert n a acc
+  Nothing => acc
+) env bs
+
+exprSrcArity : Int -> HashMap String Int -> Ir -> Int
+exprSrcArity fuel env e = if fuel <= 0 then unknownArity
+else case e of
+  IrLam bs _ => listLen (runtimeBinders bs)
+  IrGlobal n => remainingArity (globalArityOf env n) 0
+  IrVar b => lookupBinderArity env b
+  IrApp _ _ =>
+    let
+      p = flattenApp e
+      head = firstOf p
+      argc = listLen (secondOf p)
+      a = case head of
+        IrLam bs _ => listLen (runtimeBinders bs)
+        IrGlobal n => globalArityOf env n
+        IrVar b => lookupBinderArity env b
+        _ => unknownArity
+    in remainingArity a argc
+  IrRt _ => 0
+  _ => 0
+
+ctorUsesList : Int -> HashMap String Int -> List Ir -> List (Pair String (List Int))
+ctorUsesList fuel env xs = if fuel <= 0 then []
+else case xs of
+  [] => []
+  x :: rest => append (ctorUses (fuel - 1) env x) (ctorUsesList (fuel - 1) env rest)
+
+ctorUsesFields : Int -> HashMap String Int -> List (Pair String Ir) -> List (Pair String (List Int))
+ctorUsesFields fuel env xs = if fuel <= 0 then []
+else case xs of
+  [] => []
+  p :: rest => append (ctorUses (fuel - 1) env (secondOf p)) (ctorUsesFields (fuel - 1) env rest)
+
+ctorUsesAlts : Int -> HashMap String Int -> List IrAlt -> List (Pair String (List Int))
+ctorUsesAlts fuel env alts = if fuel <= 0 then []
+else case alts of
+  [] => []
+  a :: rest =>
+    append (ctorUses (fuel - 1) (bindUnknownArities env a.irAltBinders) a.irAltBody)
+      (ctorUsesAlts (fuel - 1) env rest)
+
+ctorUsesAltM : Int -> HashMap String Int -> Maybe IrAlt -> List (Pair String (List Int))
+ctorUsesAltM fuel env m = if fuel <= 0 then []
+else case m of
+  Nothing => []
+  Just a => ctorUses (fuel - 1) (bindUnknownArities env a.irAltBinders) a.irAltBody
+
+mergeArityLists : List Int -> List Int -> List Int
+mergeArityLists xs ys = case xs of
+  [] => ys
+  x :: rest => case ys of
+    [] => xs
+    y :: more =>
+      let
+        z =
+          if x == unknownArity then y
+          else if y == unknownArity then x else if x == y then x else unknownArity
+      in z :: mergeArityLists rest more
+
+mergeCtorUses : HashMap String (List Int) -> List (Pair String (List Int)) -> HashMap String (List Int)
+mergeCtorUses tbl uses = case uses of
+  [] => tbl
+  p :: rest => case Base.HashMap.lookup (firstOf p) tbl of
+    Nothing => mergeCtorUses (Base.HashMap.insert (firstOf p) (secondOf p) tbl) rest
+    Just old =>
+      mergeCtorUses (Base.HashMap.insert (firstOf p) (mergeArityLists old (secondOf p)) tbl) rest
+
+-- | 分支 binder：优先用构造点推导的字段 arity，缺失时退回类型/未知。
+bindAltArities : HashMap String (List Int) -> HashMap String Int -> Maybe (Pair String String) -> List IrBinder -> HashMap String Int
+bindAltArities ctors arities ctor bs = case ctor of
+  Just p => case Base.HashMap.lookup (ctorKey (firstOf p) (secondOf p)) ctors of
+    Just tys => bindCtorArities arities (runtimeBinders bs) tys
+    Nothing => bindUnknownArities arities bs
+  Nothing => bindUnknownArities arities bs
+
+bindCtorArities : HashMap String Int -> List IrBinder -> List Int -> HashMap String Int
+bindCtorArities arities bs tys = case bs of
+  [] => arities
+  b :: rest => case tys of
+    [] => bindUnknownArities arities (b :: rest)
+    t :: more => case binderKey b of
+      Just n => bindCtorArities (Base.HashMap.insert n t arities) rest more
+      Nothing => bindCtorArities arities rest more
+
 externLookup : HashMap String Bool -> String -> Bool
 externLookup tbl name = case Base.HashMap.lookup name tbl of
   Just b => b
@@ -82,12 +302,17 @@ externLookup tbl name = case Base.HashMap.lookup name tbl of
 isEffPrim : String -> Bool
 isEffPrim s = s == "prim_effectPerform" || s == "prim_effectHandle" || s == "prim_effectSelf"
 
+-- | 效应原语的源码 arity（不含末位 k）。
+effPrimArity : String -> Int
+effPrimArity s =
+  if s == "prim_effectPerform" then 3
+  else if s == "prim_effectHandle" then 6 else if s == "prim_effectSelf" then 1 else 0
+
 cpsPrimName : String -> String
 cpsPrimName s =
   if s == "prim_effectPerform" then irStepPerformName
   else if s == "prim_effectHandle" then irStepHandleName
-  else if s == "prim_effectSelf" then irStepSelfName
-  else s
+  else if s == "prim_effectSelf" then irStepSelfName else s
 
 isControl : Ir -> Bool
 isControl e = case e of
@@ -96,296 +321,323 @@ isControl e = case e of
   IrNatCase _ _ _ _ _ => True
   _ => False
 
-isCpsApp : HashMap String Int -> HashMap String Bool -> Ir -> Bool
-isCpsApp arities externs e =
+isCpsApp : HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Bool
+isCpsApp arities externs ctors e =
   let
     p = flattenApp e
     head = firstOf p
     argc = listLen (secondOf p)
   in case head of
-    IrGlobal name =>
-      if externLookup externs name then False
-      else
-        let
-          n = arityLookup arities name
-        in if n == -1 then argc == 0 else n > 0 && argc == n
-    IrVar _ => True
+    IrGlobal name => if externLookup externs name then False
+    else
+      let
+        n = arityLookup arities name
+      in if n == -1 then argc == 0 else n > 0 && argc == n
+    IrVar b => saturatedArity (lookupBinderArity arities b) argc
     IrLam bs _ => argc > 0 && argc == listLen (runtimeBinders bs)
-    IrRt sym => isEffPrim sym
+    IrRt sym => isEffPrim sym && argc == effPrimArity sym
     _ => False
 
-isCpsRhs : HashMap String Int -> HashMap String Bool -> Ir -> Bool
-isCpsRhs arities externs e = case e of
-  IrApp _ _ => isCpsApp arities externs e
+isCpsRhs : HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Bool
+isCpsRhs arities externs ctors e = case e of
+  IrApp _ _ => isCpsApp arities externs ctors e
   _ => False
 
-cpsBody : Int -> HashMap String Int -> HashMap String Bool -> Ir -> Ir -> Pair Ir Int
-cpsBody fuel arities externs e k =
-  if fuel <= 0 then Pair (IrApp k (IrInt 0)) fuel
-  else case e of
-    IrLet bs rhs body =>
-      let
-        v = freshV fuel
-        b = cpsBody (fuel - 2) arities externs body k
-        cont = IrLam [v] (IrLet bs (IrVar v) (firstOf b))
-      in if isControl rhs then cpsBody (fuel - 1) arities externs rhs cont
-        else if isCpsRhs arities externs rhs then
-          cpsRhs (fuel - 1) arities externs rhs cont
-        else
-          let
-            r = transformDirect (fuel - 1) arities externs rhs
-          in Pair (IrLet bs (firstOf r) (firstOf b)) (secondOf b)
-    IrCase scrut alts =>
-      let
-        s = transformDirect (fuel - 1) arities externs scrut
-        a = cpsAlts (fuel - 2) arities externs alts k
-      in Pair (IrCase (firstOf s) (firstOf a)) (secondOf a)
-    IrIf c t el =>
-      let
-        cc = transformDirect (fuel - 1) arities externs c
-        tt = cpsBody (fuel - 2) arities externs t k
-        ee = cpsBody (fuel - 3) arities externs el k
-      in Pair (IrIf (firstOf cc) (firstOf tt) (firstOf ee)) (secondOf ee)
-    IrNatCase scrut fresh zero succ catch =>
-      let
-        s = transformDirect (fuel - 1) arities externs scrut
-        z = cpsAltMaybe (fuel - 2) arities externs zero k
-        su = cpsAltMaybe (fuel - 3) arities externs succ k
-        ca = cpsAltMaybe (fuel - 4) arities externs catch k
-      in Pair (IrNatCase (firstOf s) fresh (firstOf z) (firstOf su) (firstOf ca)) (secondOf ca)
-    _ => cpsRhs (fuel - 1) arities externs e k
+isPartialEffPrim : HashMap String Bool -> Ir -> Bool
+isPartialEffPrim externs e =
+  let
+    p = flattenApp e
+    head = firstOf p
+    argc = listLen (secondOf p)
+  in case head of
+    IrRt sym => isEffPrim sym && argc > 0 && argc < effPrimArity sym
+    _ => False
 
-cpsRhs : Int -> HashMap String Int -> HashMap String Bool -> Ir -> Ir -> Pair Ir Int
-cpsRhs fuel arities externs e k =
-  if fuel <= 0 then Pair (IrApp k (IrInt 0)) fuel
-  else
+-- | `f a1 .. ak`（k < arity）作为值：直接做成「剩余源码参数 + k」的 CPS lambda，
+--   避免把 `prim_effectPerform` 的偏应用泄漏成旧的 `$rt_eff*` 运行时调用。
+effPrimPartial : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Pair Ir Int
+effPrimPartial fuel arities externs ctors e = if fuel <= 0 then Pair e fuel
+else
+  let
+    p = flattenApp e
+    head = firstOf p
+    args = secondOf p
+    argc = listLen args
+    a = transformList (fuel - 1) arities externs ctors args
+    sym = case head of
+      IrRt s => s
+      _ => ""
+    rem = effPrimArity sym - argc
+    rbs = map (\i => freshA fuel i) (range 0 rem)
+    kb = freshK (fuel - 1)
+    body =
+      applyAll (IrRt (cpsPrimName sym)) (append (firstOf a) (append (map IrVar rbs) [IrVar kb]))
+  in Pair (IrLam (append rbs [kb]) body) (secondOf a)
+
+cpsBody : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Ir -> Pair Ir Int
+cpsBody fuel arities externs ctors e k = if fuel <= 0 then Pair (IrApp k (IrInt 0)) fuel
+else case e of
+  IrLet bs rhs body =>
     let
-      p = flattenApp e
-      head = firstOf p
-      args = secondOf p
-      argc = listLen args
-    in case head of
-      IrGlobal name =>
-        if externLookup externs name then
-          let
-            a = transformList (fuel - 1) arities externs args
-          in Pair (IrApp k (applyAll (IrGlobal name) (firstOf a))) (secondOf a)
-        else
-          let
-            n = arityLookup arities name
-            a = transformList (fuel - 1) arities externs args
-          in if n == -1 && argc == 0 then
-            Pair (IrApp (IrGlobal name) k) (secondOf a)
-          else if n > 0 && argc == n then
-            Pair (applyAll (IrGlobal name) (append (firstOf a) [k])) (secondOf a)
-          else Pair (IrApp k (applyAll (IrGlobal name) (firstOf a))) (secondOf a)
-      IrVar _ =>
-        let
-          a = transformList (fuel - 1) arities externs args
-        in Pair (applyAll head (append (firstOf a) [k])) (secondOf a)
-      IrLam bs body =>
-        let
-          l = cpsLam (fuel - 1) arities externs bs body
-          a = transformList (fuel - 2) arities externs args
-        in if argc == listLen (runtimeBinders bs) then
-          Pair (applyAll (firstOf l) (append (firstOf a) [k])) (secondOf a)
-        else Pair (IrApp k (applyAll (firstOf l) (firstOf a))) (secondOf a)
-      IrRt sym =>
-        if isEffPrim sym then
-          let
-            a = transformList (fuel - 1) arities externs args
-          in Pair (applyAll (IrRt (cpsPrimName sym)) (append (firstOf a) [k])) (secondOf a)
-        else
-          let
-            a = transformList (fuel - 1) arities externs args
-          in Pair (IrApp k (applyAll (IrRt sym) (firstOf a))) (secondOf a)
-      _ =>
-        let
-          a = transformList (fuel - 1) arities externs args
-        in Pair (IrApp k (applyAll head (firstOf a))) (secondOf a)
-
-transformDirect : Int -> HashMap String Int -> HashMap String Bool -> Ir -> Pair Ir Int
-transformDirect fuel arities externs e =
-  if fuel <= 0 then Pair e fuel
-  else case e of
-    IrLam bs body => cpsLam (fuel - 1) arities externs bs body
-    IrCtor family ctor args =>
+      v = freshV fuel
+      innerArities = bindLetArities arities bs rhs
+      b = cpsBody (fuel - 2) innerArities externs ctors body k
+      cont = IrLam [v] (IrLet bs (IrVar v) (firstOf b))
+    in if isControl rhs then cpsBody (fuel - 1) arities externs ctors rhs cont
+    else if isCpsRhs arities externs ctors rhs then cpsRhs (fuel - 1) arities externs ctors rhs cont
+    else
       let
-        a = transformList (fuel - 1) arities externs args
-      in Pair (IrCtor family ctor (firstOf a)) (secondOf a)
-    IrRecord family fields =>
-      let
-        f = transformFields (fuel - 1) arities externs fields
-      in Pair (IrRecord family (firstOf f)) (secondOf f)
-    IrProj base family field =>
-      let
-        b = transformDirect (fuel - 1) arities externs base
-      in Pair (IrProj (firstOf b) family field) (secondOf b)
-    IrRecUpd base family fields =>
-      let
-        b = transformDirect (fuel - 1) arities externs base
-        f = transformFields (fuel - 2) arities externs fields
-      in Pair (IrRecUpd (firstOf b) family (firstOf f)) (secondOf f)
-    IrRtApp sym args =>
-      let
-        a = transformList (fuel - 1) arities externs args
-      in Pair (IrRtApp sym (firstOf a)) (secondOf a)
-    IrCast inner =>
-      let
-        a = transformDirect (fuel - 1) arities externs inner
-      in Pair (IrCast (firstOf a)) (secondOf a)
-    IrLet bs rhs body =>
-      let
-        r = transformDirect (fuel - 1) arities externs rhs
-        b = transformDirect (fuel - 2) arities externs body
+        r =
+          if isPartialEffPrim externs rhs then effPrimPartial (fuel - 1) arities externs ctors rhs
+          else transformDirect (fuel - 1) arities externs ctors rhs
       in Pair (IrLet bs (firstOf r) (firstOf b)) (secondOf b)
-    IrApp f a =>
-      let
-        ff = transformDirect (fuel - 1) arities externs f
-        aa = transformDirect (fuel - 2) arities externs a
-      in Pair (IrApp (firstOf ff) (firstOf aa)) (secondOf aa)
-    IrIf c t el =>
-      let
-        cc = transformDirect (fuel - 1) arities externs c
-        tt = transformDirect (fuel - 2) arities externs t
-        ee = transformDirect (fuel - 3) arities externs el
-      in Pair (IrIf (firstOf cc) (firstOf tt) (firstOf ee)) (secondOf ee)
-    IrCase scrut alts =>
-      let
-        s = transformDirect (fuel - 1) arities externs scrut
-        a = transformAlts (fuel - 2) arities externs alts
-      in Pair (IrCase (firstOf s) (firstOf a)) (secondOf a)
-    IrNatCase scrut fresh zero succ catch =>
-      let
-        s = transformDirect (fuel - 1) arities externs scrut
-      in Pair
-        (IrNatCase (firstOf s) fresh (transformAltMaybe (fuel - 2) arities externs zero)
-          (transformAltMaybe (fuel - 3) arities externs succ)
-          (transformAltMaybe (fuel - 4) arities externs catch))
-        (fuel - 5)
-    IrConcatMany parts =>
-      let
-        a = transformList (fuel - 1) arities externs parts
-      in Pair (IrConcatMany (firstOf a)) (secondOf a)
-    IrEffThunk family ctor _unitTy arity prim =>
-      let
-        u = freshU fuel
-        k = freshK (fuel - 1)
-        argBs = map (\i => freshA (fuel - 2) i) (range 0 arity)
-        applied = applyAll (firstOf (transformDirect (fuel - 3) arities externs prim)) (map IrVar argBs)
-        effVal = IrCtor family ctor [IrLam [u, k] (IrApp (IrVar k) applied)]
-      in if arity <= 0 then Pair effVal (fuel - 4)
-        else
-          let
-            kOuter = freshK (fuel - 4)
-          in Pair (IrLam (append argBs [kOuter]) (IrApp (IrVar kOuter) effVal)) (fuel - 4)
-    IrVar _ => Pair e fuel
-    IrGlobal _ => Pair e fuel
-    IrRt _ => Pair e fuel
-    IrInt _ => Pair e fuel
-    IrStr _ => Pair e fuel
-    IrBool _ => Pair e fuel
-    IrFloatLit _ => Pair e fuel
-    IrEffBind _ _ _ => Pair e fuel
-
-cpsLam : Int -> HashMap String Int -> HashMap String Bool -> List IrBinder -> Ir -> Pair Ir Int
-cpsLam fuel arities externs bs body =
-  if fuel <= 0 then Pair (IrLam bs body) fuel
-  else
+  IrCase scrut alts =>
     let
-      k = freshK fuel
-      b = cpsBody (fuel - 1) arities externs body (IrVar k)
-    in Pair (IrLam (append bs [k]) (firstOf b)) (secondOf b)
+      s = transformDirect (fuel - 1) arities externs ctors scrut
+      a = cpsAlts (fuel - 2) arities externs ctors alts k
+    in Pair (IrCase (firstOf s) (firstOf a)) (secondOf a)
+  IrIf c t el =>
+    let
+      cc = transformDirect (fuel - 1) arities externs ctors c
+      tt = cpsBody (fuel - 2) arities externs ctors t k
+      ee = cpsBody (fuel - 3) arities externs ctors el k
+    in Pair (IrIf (firstOf cc) (firstOf tt) (firstOf ee)) (secondOf ee)
+  IrNatCase scrut fresh zero succ catch =>
+    let
+      s = transformDirect (fuel - 1) arities externs ctors scrut
+      z = cpsAltMaybe (fuel - 2) arities externs ctors zero k
+      su = cpsAltMaybe (fuel - 3) arities externs ctors succ k
+      ca = cpsAltMaybe (fuel - 4) arities externs ctors catch k
+    in Pair (IrNatCase (firstOf s) fresh (firstOf z) (firstOf su) (firstOf ca)) (secondOf ca)
+  _ => cpsRhs (fuel - 1) arities externs ctors e k
 
-transformList : Int -> HashMap String Int -> HashMap String Bool -> List Ir -> Pair (List Ir) Int
-transformList fuel arities externs xs =
-  if fuel <= 0 then Pair xs fuel
-  else case xs of
-    [] => Pair [] fuel
-    x :: rest =>
+cpsRhs : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Ir -> Pair Ir Int
+cpsRhs fuel arities externs ctors e k = if fuel <= 0 then Pair (IrApp k (IrInt 0)) fuel
+else
+  let
+    p = flattenApp e
+    head = firstOf p
+    args = secondOf p
+    argc = listLen args
+  in case head of
+    IrGlobal name => if externLookup externs name then
       let
-        a = transformDirect (fuel - 1) arities externs x
-        r = transformList (fuel - 2) arities externs rest
-      in Pair (firstOf a :: firstOf r) (secondOf r)
-
-transformFields : Int -> HashMap String Int -> HashMap String Bool -> List (Pair String Ir) -> Pair (List (Pair String Ir)) Int
-transformFields fuel arities externs xs =
-  if fuel <= 0 then Pair xs fuel
-  else case xs of
-    [] => Pair [] fuel
-    p :: rest =>
+        a = transformList (fuel - 1) arities externs ctors args
+      in Pair (IrApp k (applyAll (IrGlobal name) (firstOf a))) (secondOf a)
+    else
       let
-        a = transformDirect (fuel - 1) arities externs (secondOf p)
-        r = transformFields (fuel - 2) arities externs rest
-      in Pair (Pair (firstOf p) (firstOf a) :: firstOf r) (secondOf r)
-
-cpsAlts : Int -> HashMap String Int -> HashMap String Bool -> List IrAlt -> Ir -> Pair (List IrAlt) Int
-cpsAlts fuel arities externs alts k =
-  if fuel <= 0 then Pair alts fuel
-  else case alts of
-    [] => Pair [] fuel
-    a :: rest =>
+        n = arityLookup arities name
+        a = transformList (fuel - 1) arities externs ctors args
+      in if n == -1 && argc == 0 then Pair (IrApp (IrGlobal name) k) (secondOf a)
+      else if n > 0 && argc == n then Pair (applyAll (IrGlobal name) (append (firstOf a) [k])) (secondOf a)
+      else Pair (IrApp k (applyAll (IrGlobal name) (firstOf a))) (secondOf a)
+    IrVar b =>
       let
-        b = cpsBody (fuel - 1) arities externs a.irAltBody k
-        r = cpsAlts (fuel - 2) arities externs rest k
-      in Pair (IrAlt a.irAltCtor a.irAltBinders (firstOf b) :: firstOf r) (secondOf r)
-
-cpsAltMaybe : Int -> HashMap String Int -> HashMap String Bool -> Maybe IrAlt -> Ir -> Pair (Maybe IrAlt) Int
-cpsAltMaybe fuel arities externs m k =
-  if fuel <= 0 then Pair m fuel
-  else case m of
-    Nothing => Pair Nothing fuel
-    Just a =>
+        ar = lookupBinderArity arities b
+        a = transformList (fuel - 1) arities externs ctors args
+      in if saturatedArity ar argc then Pair (applyAll head (append (firstOf a) [k])) (secondOf a)
+      else Pair (IrApp k (applyAll head (firstOf a))) (secondOf a)
+    IrLam bs body =>
       let
-        b = cpsBody (fuel - 1) arities externs a.irAltBody k
-      in Pair (Just (IrAlt a.irAltCtor a.irAltBinders (firstOf b))) (secondOf b)
-
-transformAlts : Int -> HashMap String Int -> HashMap String Bool -> List IrAlt -> Pair (List IrAlt) Int
-transformAlts fuel arities externs alts =
-  if fuel <= 0 then Pair alts fuel
-  else case alts of
-    [] => Pair [] fuel
-    a :: rest =>
+        l = cpsLam (fuel - 1) arities externs ctors bs body
+        a = transformList (fuel - 2) arities externs ctors args
+      in if argc == 0 then Pair (IrApp k (firstOf l)) (secondOf a)
+      else if argc == listLen (runtimeBinders bs) then Pair (applyAll (firstOf l) (append (firstOf a) [k])) (secondOf a)
+      else Pair (IrApp k (applyAll (firstOf l) (firstOf a))) (secondOf a)
+    IrRt sym => if isEffPrim sym then
       let
-        b = transformDirect (fuel - 1) arities externs a.irAltBody
-        r = transformAlts (fuel - 2) arities externs rest
-      in Pair (IrAlt a.irAltCtor a.irAltBinders (firstOf b) :: firstOf r) (secondOf r)
-
-transformAltMaybe : Int -> HashMap String Int -> HashMap String Bool -> Maybe IrAlt -> Maybe IrAlt
-transformAltMaybe fuel arities externs m =
-  if fuel <= 0 then m
-  else case m of
-    Nothing => Nothing
-    Just a =>
+        a = transformList (fuel - 1) arities externs ctors args
+      in if argc == effPrimArity sym then Pair (applyAll (IrRt (cpsPrimName sym)) (append (firstOf a) [k])) (secondOf a)
+      else Pair (IrApp k (applyAll (IrRt (cpsPrimName sym)) (firstOf a))) (secondOf a)
+    else
       let
-        b = transformDirect (fuel - 1) arities externs a.irAltBody
-      in Just (IrAlt a.irAltCtor a.irAltBinders (firstOf b))
-
-cpsDef : Int -> HashMap String Int -> HashMap String Bool -> IrDef -> Pair IrDef Int
-cpsDef fuel arities externs d =
-  if fuel <= 0 then Pair d fuel
-  else case d of
-    IrExternDef _ _ _ _ => Pair d fuel
-    IrDef name arity deps body recOk initGuard span =>
-      case body of
-        IrLam bs inner =>
-          let
-            l = cpsLam (fuel - 1) arities externs bs inner
-          in Pair (IrDef name (arity + 1) deps (firstOf l) recOk initGuard span) (secondOf l)
-        _ =>
-          let
-            b = transformDirect (fuel - 1) arities externs body
-          in Pair (IrDef name arity deps (firstOf b) recOk initGuard span) (secondOf b)
-
-cpsDefsList : Int -> HashMap String Int -> HashMap String Bool -> List IrDef -> List IrDef
-cpsDefsList fuel arities externs defs =
-  if fuel <= 0 then defs
-  else case defs of
-    [] => []
-    d :: rest =>
+        a = transformList (fuel - 1) arities externs ctors args
+      in Pair (IrApp k (applyAll (IrRt sym) (firstOf a))) (secondOf a)
+    _ =>
       let
-        x = cpsDef (fuel - 1) arities externs d
-      in firstOf x :: cpsDefsList (fuel - 1) arities externs rest
+        a = transformList (fuel - 1) arities externs ctors args
+      in Pair (IrApp k (applyAll head (firstOf a))) (secondOf a)
+
+transformDirect : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Ir -> Pair Ir Int
+transformDirect fuel arities externs ctors e = if fuel <= 0 then Pair e fuel
+else case e of
+  IrLam bs body => cpsLam (fuel - 1) arities externs ctors bs body
+  IrCtor family ctor args =>
+    let
+      a = transformList (fuel - 1) arities externs ctors args
+    in Pair (IrCtor family ctor (firstOf a)) (secondOf a)
+  IrRecord family fields =>
+    let
+      f = transformFields (fuel - 1) arities externs ctors fields
+    in Pair (IrRecord family (firstOf f)) (secondOf f)
+  IrProj base family field =>
+    let
+      b = transformDirect (fuel - 1) arities externs ctors base
+    in Pair (IrProj (firstOf b) family field) (secondOf b)
+  IrRecUpd base family fields =>
+    let
+      b = transformDirect (fuel - 1) arities externs ctors base
+      f = transformFields (fuel - 2) arities externs ctors fields
+    in Pair (IrRecUpd (firstOf b) family (firstOf f)) (secondOf f)
+  IrRtApp sym args =>
+    let
+      a = transformList (fuel - 1) arities externs ctors args
+    in Pair (IrRtApp sym (firstOf a)) (secondOf a)
+  IrCast inner =>
+    let
+      a = transformDirect (fuel - 1) arities externs ctors inner
+    in Pair (IrCast (firstOf a)) (secondOf a)
+  IrLet bs rhs body =>
+    let
+      r = transformDirect (fuel - 1) arities externs ctors rhs
+      b = transformDirect (fuel - 2) arities externs ctors body
+    in Pair (IrLet bs (firstOf r) (firstOf b)) (secondOf b)
+  IrApp f a =>
+    let
+      ff = transformDirect (fuel - 1) arities externs ctors f
+      aa = transformDirect (fuel - 2) arities externs ctors a
+    in Pair (IrApp (firstOf ff) (firstOf aa)) (secondOf aa)
+  IrIf c t el =>
+    let
+      cc = transformDirect (fuel - 1) arities externs ctors c
+      tt = transformDirect (fuel - 2) arities externs ctors t
+      ee = transformDirect (fuel - 3) arities externs ctors el
+    in Pair (IrIf (firstOf cc) (firstOf tt) (firstOf ee)) (secondOf ee)
+  IrCase scrut alts =>
+    let
+      s = transformDirect (fuel - 1) arities externs ctors scrut
+      a = transformAlts (fuel - 2) arities externs ctors alts
+    in Pair (IrCase (firstOf s) (firstOf a)) (secondOf a)
+  IrNatCase scrut fresh zero succ catch =>
+    let
+      s = transformDirect (fuel - 1) arities externs ctors scrut
+    in Pair
+      (IrNatCase (firstOf s) fresh (transformAltMaybe (fuel - 2) arities externs ctors zero) (transformAltMaybe (fuel - 3) arities externs ctors succ) (transformAltMaybe (fuel - 4) arities externs ctors catch))
+      (fuel - 5)
+  IrConcatMany parts =>
+    let
+      a = transformList (fuel - 1) arities externs ctors parts
+    in Pair (IrConcatMany (firstOf a)) (secondOf a)
+  IrEffThunk family ctor _unitTy arity prim =>
+    let
+      u = freshU fuel
+      k = freshK (fuel - 1)
+      argBs = map (\i => freshA (fuel - 2) i) (range 0 arity)
+      applied =
+        applyAll (firstOf (transformDirect (fuel - 3) arities externs ctors prim)) (map IrVar argBs)
+      effVal = IrCtor family ctor [IrLam [u, k] (IrApp (IrVar k) applied)]
+    in if arity <= 0 then Pair effVal (fuel - 4)
+    else
+      let
+        kOuter = freshK (fuel - 4)
+      in Pair (IrLam (append argBs [kOuter]) (IrApp (IrVar kOuter) effVal)) (fuel - 4)
+  IrVar _ => Pair e fuel
+  IrGlobal _ => Pair e fuel
+  IrRt _ => Pair e fuel
+  IrInt _ => Pair e fuel
+  IrStr _ => Pair e fuel
+  IrBool _ => Pair e fuel
+  IrFloatLit _ => Pair e fuel
+  IrEffBind _ _ _ => Pair e fuel
+
+cpsLam : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List IrBinder -> Ir -> Pair Ir Int
+cpsLam fuel arities externs ctors bs body = if fuel <= 0 then Pair (IrLam bs body) fuel
+else
+  let
+    k = freshK fuel
+    innerArities = bindUnknownArities arities bs
+    b = cpsBody (fuel - 1) innerArities externs ctors body (IrVar k)
+  in Pair (IrLam (append bs [k]) (firstOf b)) (secondOf b)
+
+transformList : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List Ir -> Pair (List Ir) Int
+transformList fuel arities externs ctors xs = if fuel <= 0 then Pair xs fuel
+else case xs of
+  [] => Pair [] fuel
+  x :: rest =>
+    let
+      a = transformDirect (fuel - 1) arities externs ctors x
+      r = transformList (fuel - 2) arities externs ctors rest
+    in Pair (firstOf a :: firstOf r) (secondOf r)
+
+transformFields : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List (Pair String Ir) -> Pair (List (Pair String Ir)) Int
+transformFields fuel arities externs ctors xs = if fuel <= 0 then Pair xs fuel
+else case xs of
+  [] => Pair [] fuel
+  p :: rest =>
+    let
+      a = transformDirect (fuel - 1) arities externs ctors (secondOf p)
+      r = transformFields (fuel - 2) arities externs ctors rest
+    in Pair (Pair (firstOf p) (firstOf a) :: firstOf r) (secondOf r)
+
+cpsAlts : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List IrAlt -> Ir -> Pair (List IrAlt) Int
+cpsAlts fuel arities externs ctors alts k = if fuel <= 0 then Pair alts fuel
+else case alts of
+  [] => Pair [] fuel
+  a :: rest =>
+    let
+      altArities = bindAltArities ctors arities a.irAltCtor a.irAltBinders
+      b = cpsBody (fuel - 1) altArities externs ctors a.irAltBody k
+      r = cpsAlts (fuel - 2) arities externs ctors rest k
+    in Pair (IrAlt a.irAltCtor a.irAltBinders (firstOf b) :: firstOf r) (secondOf r)
+
+cpsAltMaybe : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Maybe IrAlt -> Ir -> Pair (Maybe IrAlt) Int
+cpsAltMaybe fuel arities externs ctors m k = if fuel <= 0 then Pair m fuel
+else case m of
+  Nothing => Pair Nothing fuel
+  Just a =>
+    let
+      altArities = bindAltArities ctors arities a.irAltCtor a.irAltBinders
+      b = cpsBody (fuel - 1) altArities externs ctors a.irAltBody k
+    in Pair (Just (IrAlt a.irAltCtor a.irAltBinders (firstOf b))) (secondOf b)
+
+transformAlts : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List IrAlt -> Pair (List IrAlt) Int
+transformAlts fuel arities externs ctors alts = if fuel <= 0 then Pair alts fuel
+else case alts of
+  [] => Pair [] fuel
+  a :: rest =>
+    let
+      altArities = bindAltArities ctors arities a.irAltCtor a.irAltBinders
+      b = transformDirect (fuel - 1) altArities externs ctors a.irAltBody
+      r = transformAlts (fuel - 2) arities externs ctors rest
+    in Pair (IrAlt a.irAltCtor a.irAltBinders (firstOf b) :: firstOf r) (secondOf r)
+
+transformAltMaybe : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> Maybe IrAlt -> Maybe IrAlt
+transformAltMaybe fuel arities externs ctors m = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just a =>
+    let
+      altArities = bindAltArities ctors arities a.irAltCtor a.irAltBinders
+      b = transformDirect (fuel - 1) altArities externs ctors a.irAltBody
+    in Just (IrAlt a.irAltCtor a.irAltBinders (firstOf b))
+
+cpsDef : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> IrDef -> Pair IrDef Int
+cpsDef fuel arities externs ctors d = if fuel <= 0 then Pair d fuel
+else case d of
+  IrExternDef _ _ _ _ => Pair d fuel
+  IrDef name arity deps body recOk initGuard span => case body of
+    IrLam bs inner =>
+      let
+        l = cpsLam (fuel - 1) arities externs ctors bs inner
+      in Pair (IrDef name (arity + 1) deps (firstOf l) recOk initGuard span) (secondOf l)
+    _ =>
+      let
+        b = transformDirect (fuel - 1) arities externs ctors body
+      in Pair (IrDef name arity deps (firstOf b) recOk initGuard span) (secondOf b)
+
+cpsDefsList : Int -> HashMap String Int -> HashMap String Bool -> HashMap String (List Int) -> List IrDef -> List IrDef
+cpsDefsList fuel arities externs ctors defs = if fuel <= 0 then defs
+else case defs of
+  [] => []
+  d :: rest =>
+    let
+      x = cpsDef (fuel - 1) arities externs ctors d
+    in firstOf x :: cpsDefsList (fuel - 1) arities externs ctors rest
+
+irDefBodyOrUnit : IrDef -> Ir
+irDefBodyOrUnit d = case irDefBody d of
+  Just b => b
+  Nothing => IrInt 0
 
 externsOf : List IrDef -> List (Pair String Bool)
 externsOf defs = case defs of
@@ -394,11 +646,16 @@ externsOf defs = case defs of
     IrExternDef name _ _ _ => Pair name True :: externsOf rest
     _ => externsOf rest
 
-export cpsStepDefs : List IrDef -> Result (List IrDef)
-cpsStepDefs defs =
+export cpsStepDefsWith : List IrTyDecl -> List IrDef -> Result (List IrDef)
+cpsStepDefsWith decls defs =
   let
     classified = classifyAndPrepare defs
     prepared = firstOf classified
     arities = secondOf classified
     externs = Base.HashMap.fromList (externsOf prepared)
-  in Ok (cpsDefsList startFuel arities externs prepared)
+    uses = concatMap (ctorUses 100000 arities) (map irDefBodyOrUnit prepared)
+    ctors = mergeCtorUses (ctorArityMap decls) uses
+  in Ok (cpsDefsList startFuel arities externs ctors prepared)
+
+export cpsStepDefs : List IrDef -> Result (List IrDef)
+cpsStepDefs defs = cpsStepDefsWith [] defs
