@@ -133,6 +133,12 @@ anf fuel next e =
           b = anf (fuel - 1) next base
           p = anfFields (fuel - 1) b.anfNext fields
         in mkAnf (append b.anfLets p.anfLets) (IrRecUpd b.anfExpr family p.anfValues) p.anfNext
+      IrRtApp "prim_erase" args =>
+        case args of
+          -- 擦除包装是恒等（首实参即被擦的值，其余照常应用）：直接透传，避免把尾位置的
+          -- 调用绑成 let（否则机器自递归/续延转移拿不到 return_call）。
+          [] => mkAnf [] e next
+          x :: rest => anf (fuel - 1) next (applyIrs x rest)
       IrRtApp sym args =>
         let
           p = anfList (fuel - 1) next args
@@ -143,6 +149,7 @@ anf fuel next e =
           bScrut = bindSimple s.anfNext s.anfLets s.anfExpr
           b = anf (fuel - 1) bScrut.boundNext body
         in mkAnf bScrut.boundLets (IrLet bs bScrut.boundExpr (letsIn b.anfLets b.anfExpr)) b.anfNext
+      IrApp (IrRt "prim_erase") x => anf (fuel - 1) next x
       IrApp _ _ =>
         let
           p = spineOfIr e
