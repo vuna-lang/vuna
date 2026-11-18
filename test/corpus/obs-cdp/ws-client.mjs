@@ -121,7 +121,7 @@ async function main() {
   const wsPath = new URL(wsUrl).pathname;
 
   // 用固定 key 做握手，自己算一遍 acccept 再与服务端比较。
-  const key = 'dGVsdGUtb2Nkcy1jb2RldGVzdA==';
+  const key = 'dGhlIHNhbXBsZSBub25jZQ==';
   const expectedAccept = crypto
     .createHash('sha1')
     .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)

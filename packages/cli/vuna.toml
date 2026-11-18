@@ -5,3 +5,4 @@ name = "vuna"
 [dependencies]
 vuna-compiler = "../compiler"
 vuna-base = "../base"
+vuna-http = "../http"

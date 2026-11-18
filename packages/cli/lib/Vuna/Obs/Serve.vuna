@@ -1,11 +1,10 @@
 -- | `vuna dev obs serve --cdp ADDR [--allow-slow] [TRACE...]`：一个 CDP Profiler 子集 server，
 -- 把离线 trace 里的 CPU 采样换算成 CDP Profile 交给客户端。
 --
--- 传输是 Content-Length JSON-RPC over socket（`Vuna.Json.Server.serveConnection`，与 REPL
--- server / LSP 共用帧层）。ADDR 只接受 `tcp:127.0.0.1:PORT`（`PORT=0` 用临时端口）或
--- `unix:PATH`：能连上端点就等于能驱动这个进程，任意地址等于任意代码执行。vuna 侧不做
--- WebSocket，CDP 握手（`Sec-WebSocket-Accept`）由工具侧资产 `test/corpus/obs-cdp/bridge.mjs`
--- 完成。
+-- 传输就是 CDP 客户端要的那一套：HTTP/1.1 上先应答 `/json/version` / `/json/list`
+-- （发现端点），再用 WebSocket 承载 JSON-RPC（`vuna-http` 的编解码与 `Http.WebSocket`）。
+-- ADDR 只接受 `tcp:127.0.0.1:PORT`（`PORT=0` 用临时端口）或 `unix:PATH`：能连上端点就等于
+-- 能驱动这个进程，任意地址等于任意代码执行。
 --
 -- 语义是离线的：数据源是启动时读入的 TRACE 文件（0..N 份）；`Profiler.start` 只记一个
 -- `startTimestamp`（进程内记账，不采样正在运行的进程），`Profiler.stop` 把 trace 里
@@ -19,23 +18,29 @@
 -- 时为 0）。其余方法一律 `-32601`；内容性失败（没配 trace、没 start 就 stop、trace 里没有
 -- CPU 采样）回 `-32000` 并在 stderr 记一行诊断。
 --
--- 生命周期：单连接、串行——listen → stdout 一行 `listening <ADDR>`（`PORT=0` 时打印实际
--- 端口）→ accept 一个连接 → 逐帧分发直到客户端断开或传输层致命错误 → 关连接与监听、清理
--- unix socket → 退出；不做并发连接。退出码：0 = 正常结束；1 = 会话里出现过内容性失败；
--- 2 = 用法 / 参数 / 输入前提错误（flag、ADDR 格式、TRACE 不存在或结构坏、空 trace、
--- 传输层致命错误）。`--allow-slow` 接受并忽略：本子命令没有墙钟阈值，保留 flag 只为固定
--- 命令行形状。规范见 `docs/reference/observability.md` §7 `serve --cdp`。
+-- 生命周期：串行 accept（最多 8 个连接，连接间空闲 250ms 即退出）——listen → stdout 一行
+-- `listening <ADDR>`（`PORT=0` 时打印实际端口）→ 每个连接先走 HTTP 阶段（发现端点
+-- `/json/version` / `/json/list`，应答后关闭），升级后走 WS 帧循环直到客户端 close 帧 /
+-- 断开或传输层致命错误 → 关连接与监听、清理 unix socket → 退出；不做并发连接。
+-- 退出码：0 = 正常结束；1 = 会话里出现过内容性失败；2 = 用法 / 参数 / 输入前提错误
+-- （flag、ADDR 格式、TRACE 不存在或结构坏、空 trace、传输层致命错误）。`--allow-slow` 接受
+-- 并忽略：本子命令没有墙钟阈值，保留 flag 只为固定命令行形状。规范见
+-- `docs/reference/observability.md` §7 `serve --cdp`。
 module Vuna.Obs.Serve where
 
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.String as String
+import Http.Connection as HttpConn
+import Http.Render as HttpRender
+import Http.Request as HttpReq
+import Http.Response as HttpResponse
+import Http.WebSocket as Ws
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Json.Rpc
-import Vuna.Json.Server
 import Vuna.Obs.Convert
 import Vuna.Obs.Read
 import Vuna.Obs.Types
@@ -153,22 +158,196 @@ eventPidOf ((Pair _ ev) :: _) = eventPid ev
 -- ---------------------------------------------------------------
 -- 单连接循环
 -- ---------------------------------------------------------------
--- | 内部：accept 一个连接 → `serveConnection` 逐帧分发 → 关连接与监听、清理地址 →
--- 按会话状态映射退出码（传输层致命错误 2，有内容性失败 1，否则 0）。
+-- | 内部：accept 循环的入口（最多 8 个连接；每个连接先 HTTP 后发现端点、升级后 WS）。
 serveOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => ServeState -> String -> Int -> Eff r Int
-serveOne st0 addr h = do
-  conn <- netAccept h
-  outcome <- serveConnection (netRecv conn) (\s => netSend conn s) cdpWarn handleCdp st0
-  _ <- netClose conn
+serveOne st0 addr h = acceptLoop True st0 addr h 8
+
+-- | 内部：accept 的空闲宽限（微秒）——第一个连接之后的每个连接之间，没有新连接就退出，
+-- 让 `serve` 在客户端断开后自行结束。
+acceptGraceMicros : Int
+acceptGraceMicros = 250000
+
+-- | 内部：接受连接并逐个服务。第一个 accept 阻塞（等客户端），之后用宽限超时决定退出。
+acceptLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nNet NetOp r => Bool -> ServeState -> String -> Int -> Int -> Eff r Int
+acceptLoop first st addr h fuel = if fuel <= 0 then finishServe st addr h 0
+else do
+  step <- if first then do
+    conn0 <- netAccept h
+    pure (StepOk conn0)
+  else netAcceptWithin h acceptGraceMicros
+  case step of
+    StepTimeout => finishServe st addr h 0
+    StepClosed => finishServe st addr h 0
+    StepOk conn => do
+      wsBase <- wsBaseOf addr h
+      outcome <- serveSession (netRecv conn) (\s => netSend conn s) wsBase st
+      _ <- netClose conn
+      case firstOf outcome of
+        SessionFatal msg => do
+          _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
+          finishServe (secondOf outcome) addr h 2
+        _ => acceptLoop False (secondOf outcome) addr h (fuel - 1)
+
+-- | 内部：关监听、清地址、按会话状态映射退出码（显式 `code` 优先，其次有内容性失败 1）。
+finishServe : Member nFs FsOp r, Member nNet NetOp r => ServeState -> String -> Int -> Int -> Eff r Int
+finishServe st addr h code = do
   _ <- netClose h
   _ <- cleanupAddr addr
-  let
-    final = secondOf outcome
-  in case firstOf outcome of
-    ExitFatal msg => do
-      _ <- consoleEprint "[vuna-obs-cdp] ${msg}\n"
-      pure 2
-    _ => pure (if final.serveFailures > 0 then 1 else 0)
+  pure (if code /= 0 then code else if st.serveFailures > 0 then 1 else 0)
+
+-- ---------------------------------------------------------------
+-- HTTP / WebSocket 会话
+-- ---------------------------------------------------------------
+-- | 内部：会话结束原因；退出码由 [serveOne] 映射。
+data SessionExit : Type where
+  -- | 客户端发了 close 帧，或分发要求退出。
+  SessionRequested : SessionExit
+  -- | 对端在消息边界前关闭。
+  SessionClosed : SessionExit
+  -- | 传输层 / 协议致命错误（带原因）。
+  SessionFatal : String -> SessionExit
+
+-- | 内部：单帧分发之后要做的事（不在这里递归，保证 `wsStep` 是唯一的递归点）。
+data WsStep : Type where
+  -- | 换缓冲与状态后继续下一帧。
+  WsAgain : String -> ServeState -> WsStep
+  -- | 结束会话。
+  WsDone : SessionExit -> ServeState -> WsStep
+
+-- | 内部：HTTP 阶段最多接受的请求数（发现端点 + 余量）。
+httpFuel : Int
+httpFuel = 1024
+
+-- | 内部：WS 阶段最多处理的帧数。
+wsFuel : Int
+wsFuel = 1073741824
+
+-- | 内部：把 `readN`（`Maybe`，`Nothing` = EOF）包成 duplex 的读操作。
+duplexOf : (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> HttpConn.Duplex r
+duplexOf readN writeS = HttpConn.Dup (\n => eofToEmpty readN n) writeS (pure 0)
+
+-- | 内部：EOF 映射成空串（`Duplex` 的约定），其余原样。
+eofToEmpty : (Int -> Eff r (Maybe String)) -> Int -> Eff r String
+eofToEmpty readN n = do
+  m <- readN n
+  pure (case m of
+    Nothing => ""
+    Just s => s
+  )
+
+-- | 内部：会话入口——先 HTTP，升级后进 WS。
+serveSession : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => (Int -> Eff r (Maybe String)) -> (String -> Eff r Int) -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
+serveSession readN writeS wsBase st = httpLoop (duplexOf readN writeS) wsBase httpFuel "" st
+
+-- | 内部：HTTP 阶段——发现端点直接应答并继续，升级请求切到 WS，其余 404。
+httpLoop : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> Int -> String -> ServeState -> Eff r (Pair SessionExit ServeState)
+httpLoop d wsBase fuel buf st = if fuel <= 0 then pure (Pair (SessionFatal "http request fuel exhausted") st)
+else do
+  next <- HttpConn.readNext d buf
+  case next of
+    HttpConn.NextClosed => pure (Pair SessionClosed st)
+    HttpConn.NextMalformed e => do
+      _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 400 e))
+      pure (Pair (SessionFatal "bad HTTP request: ${e}") st)
+    HttpConn.NextRequest req rest => if isJsonPath req.target then do
+      _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (jsonEndpoint wsBase req st))
+      pure (Pair SessionRequested st)
+    else case Ws.handshake req of
+      Ws.HandshakeBad e => do
+        _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (HttpResponse.response 404 e))
+        pure (Pair (SessionFatal "no websocket upgrade: ${e}") st)
+      Ws.HandshakeOk key => do
+        _ <- HttpConn.writeAllOf d (HttpRender.renderResponse (Ws.handshakeResponse key))
+        wsStep d rest wsFuel st
+
+-- | 内部：WS 阶段——解析一帧、分发、按 `WsStep` 决定继续还是结束。唯一递归点。
+wsStep : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> Int -> ServeState -> Eff r (Pair SessionExit ServeState)
+wsStep d buf fuel st = if fuel <= 0 then pure (Pair (SessionFatal "ws frame fuel exhausted") st)
+else case Ws.parseFrame True buf of
+  Ws.FrameNeedMore => do
+    chunk <- HttpConn.readSomeOf d HttpConn.readChunk
+    if strLength chunk == 0 then pure (Pair SessionClosed st)
+    else wsStep d (buf ++ chunk) (fuel - 1) st
+  Ws.FrameInvalid e => do
+    w <- cdpWarn e st
+    _ <- writeWsFrames d (secondOf w)
+    pure (Pair (SessionFatal e) (firstOf w))
+  Ws.FrameOk frame rest => do
+    step <- frameAction d rest st frame
+    case step of
+      WsAgain buf2 st2 => wsStep d buf2 (fuel - 1) st2
+      WsDone exit st2 => pure (Pair exit st2)
+
+-- | 内部：处理一条已解析的帧（不递归）。
+frameAction : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r => HttpConn.Duplex r -> String -> ServeState -> Ws.Frame -> Eff r WsStep
+frameAction d rest st frame = case frame of
+  Ws.FrameClose code reason => do
+    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FrameClose code reason))
+    pure (WsDone SessionRequested st)
+  Ws.FramePing payload => do
+    _ <- HttpConn.writeAllOf d (Ws.renderFrame (Ws.FramePong payload))
+    pure (WsAgain rest st)
+  Ws.FramePong _ => pure (WsAgain rest st)
+  Ws.FrameBinary _ => do
+    w <- cdpWarn "binary frame ignored" st
+    _ <- writeWsFrames d (secondOf w)
+    pure (WsAgain rest (firstOf w))
+  Ws.FrameText text => case parseJson text of
+    ErrC e => do
+      w <- cdpWarn "malformed frame: ${diagText e}" st
+      _ <- writeWsFrames d (secondOf w)
+      pure (WsAgain rest (firstOf w))
+    OkC msg => do
+      result <- handleCdp msg st
+      _ <- writeWsFrames d (secondOf (secondOf result))
+      if firstOf result then pure (WsDone SessionRequested (firstOf (secondOf result)))
+      else pure (WsAgain rest (firstOf (secondOf result)))
+
+-- | 内部：把一组 JSON-RPC 响应渲染成一串文本帧写出去。
+writeWsFrames : {r : Row} -> HttpConn.Duplex r -> List Json -> Eff r Int
+writeWsFrames d jsons = HttpConn.writeAllOf d (strConcatMany (map textFrameOf jsons))
+
+-- | 内部：一条 JSON-RPC 响应 → 一个文本帧。
+textFrameOf : Json -> String
+textFrameOf j = Ws.renderFrame (Ws.FrameText (renderJson j))
+
+-- | 内部：CDP 的 HTTP 发现端点。
+isJsonPath : String -> Bool
+isJsonPath t = t == "/json/version" || t == "/json/list"
+
+-- | 内部：发现端点的响应；其它路径 404。
+jsonEndpoint : String -> HttpReq.Request -> ServeState -> HttpResponse.Response
+jsonEndpoint wsBase req st =
+  if req.target == "/json/version" then jsonResponse versionJson
+  else if req.target == "/json/list" then jsonResponse (renderJson (JArr [targetJson wsBase st]))
+  else HttpResponse.response 404 "not found"
+
+-- | 内部：`application/json` 响应；发现端点一次性应答并关闭连接（客户端会为新请求重连）。
+jsonResponse : String -> HttpResponse.Response
+jsonResponse body =
+  HttpResponse.Response 200 "OK" [Pair "Content-Type" "application/json", Pair "Connection" "close"]
+    body
+
+-- | 内部：`/json/version` 的响应体。
+versionJson : String
+versionJson =
+  renderJson (JObj [Pair "Browser" (JStr "vuna-obs"), Pair "Protocol-Version" (JStr "1.3")])
+
+-- | 内部：`/json/list` 的单条目——一个可连的 page 目标。
+targetJson : String -> ServeState -> Json
+targetJson wsBase st =
+  JObj
+    [Pair "id" (JStr (pageIdOf st)), Pair "type" (JStr "page"), Pair "title" (JStr "vuna trace profile"), Pair "description" (JStr "vuna-obs offline CPU profile"), Pair "webSocketDebuggerUrl" (JStr "${wsBase}/devtools/page/${pageIdOf st}")]
+
+-- | 内部：page 目标 id（带数据源 trace 的 pid）。
+pageIdOf : ServeState -> String
+pageIdOf st = "vuna-${strFromInt st.serveTargetPid}"
+
+-- | 内部：发现端点里回报的 WebSocket 基址（tcp 用绑定的实际端口；unix 用 localhost）。
+wsBaseOf : Member nNet NetOp r => String -> Int -> Eff r String
+wsBaseOf addr h = do
+  port <- netPort h
+  pure (if startsWith "tcp:" addr then "ws://127.0.0.1:${strFromInt port}" else "ws://localhost")
 
 -- | 内部：就绪行里显示的地址——`tcp:...:0` 换成实际绑定的临时端口，便于脚本 / 桥从就绪行
 -- 解析真实端口。

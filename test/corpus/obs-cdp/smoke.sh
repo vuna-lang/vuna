@@ -1,20 +1,20 @@
 #!/bin/sh
-# `vuna dev obs serve --cdp` + `test/corpus/obs-cdp/bridge.mjs` 的冒烟（suite e2e tier 用）。
+# `vuna dev obs serve --cdp` 的冒烟（suite e2e tier 用）。
 #
 # 用法：sh test/corpus/obs-cdp/smoke.sh <path-to-vuna>
-#   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/base）；SKIP_BRIDGE=1 只测 serve。
+#   可选环境：VUNA_BASE（vuna-base 目录，默认 <repo>/packages/base）；SKIP_BRIDGE=1 只测 serve 的 CDP 部分。
 #
 # 覆盖：
 #   1) 造一份带 `vuna.sample.cpu` 的 trace（小包 + obsSample + VUNA_OBS=3）；
 #   2) `serve --cdp unix:PATH`：就绪行、六条请求（getIsolateId/enable/setSamplingInterval/
 #      start/stop/未知方法）、`Profiler.stop` 的 `samples` 数 == trace 里的 cpu 采样数、
-#      未知方法 `-32601`、退出时删 socket；
+#      未知方法 `-32601`、退出时删 socket；客户端走 WebSocket 文本帧；
 #   3) 同一 trace 两次独立 serve 的 `profile` 逐字节一致（CAPTURE_DIR + cmp）；
 #   4) 内容性失败（没 start 就 stop / 无 cpu 采样的 trace）= `-32000` + 退出码 1；
 #      参数错误（缺 `--cdp`、坏 ADDR、TRACE 不存在）= 退出码 2；
-#   5) 有 Node 时：桥的 `/json/version` `/json/list` + WS 握手 + 三条 Profiler 方法 +
-#      ping/pong（`ws-client.mjs` 独立算 `Sec-WebSocket-Accept` 并校验）。
-#      没有 Node 就打印 SKIP（与 `56_repl_server.steps` 的 TCP 沙箱 SKIP 同风格）。
+#   5) 有 Node 时：`tcp:127.0.0.1:0` 上的 `/json/version` `/json/list` + WS 握手 +
+#      三条 Profiler 方法 + ping/pong（`ws-client.mjs` 独立算 `Sec-WebSocket-Accept`
+#      并校验）。没有 Node 就打印 SKIP（与 `56_repl_server.steps` 的 TCP 沙箱 SKIP 同风格）。
 #
 # 为什么不进 `nix flake check`：需要 Node + 端口（沙箱不保证）；serve 本身无外部依赖，
 # 由 suite 的 e2e tier 覆盖。
@@ -31,8 +31,7 @@ VUNA=$1
 }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../../.." && pwd)
-VUNA_BASE=${VUNA_BASE:-$REPO/base}
-BRIDGE=$REPO/test/corpus/obs-cdp/bridge.mjs
+VUNA_BASE=${VUNA_BASE:-$REPO/packages/base}
 
 # socket 路径要短（sun_path 上限 108 字节）。
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/ocdp.XXXXXX") || exit 1
@@ -87,6 +86,16 @@ stop_serve() {
   fi
 }
 
+wait_exit() { # 等 serve 在宽限窗口内自行退出（最多约 5s）
+  i=0
+  while [ "$i" -lt 100 ]; do
+    kill -0 "$srv_pid" 2>/dev/null || return 0
+    i=$((i + 1))
+    sleep 0.05
+  done
+  return 1
+}
+
 # ---------------------------------------------------------------- 1) 造采样 trace
 pkg=$tmp/app
 mkdir -p "$pkg/app"
@@ -131,6 +140,7 @@ if start_serve "$trace" "$tmp/serve-a.log"; then
   samples=$(sed -n 's/.*result.profile nodes=[0-9]* samples=\([0-9]*\).*/\1/p' "$tmp/client-a.log" | head -1)
   [ "$samples" = "$cpu" ] && ok "serve: profile samples == cpu samples ($cpu)" \
     || no "serve: profile samples == cpu samples" "expected $cpu, got $samples"
+  wait_exit || no "serve: exits after client disconnect"
   stop_serve
   [ -e "$sock" ] && no "serve: unix socket removed on exit" || ok "serve: unix socket removed on exit"
 else
@@ -199,40 +209,39 @@ fi
 "$VUNA" dev obs serve --cdp "unix:$sock" "$tmp/nope.jsonl" >"$tmp/arg3.log" 2>&1
 [ "$?" = "2" ] && ok "serve: missing TRACE exits 2" || no "serve: missing TRACE exits 2"
 
-# ---------------------------------------------------------------- 5) WS 桥（可选）
+# ---------------------------------------------------------------- 5) 原生 WS 端点（可选）
 if [ "${SKIP_BRIDGE:-0}" = "1" ]; then
-  echo "SKIP bridge (SKIP_BRIDGE=1)"
+  echo "SKIP ws endpoint (SKIP_BRIDGE=1)"
 else
   if ! command -v node >/dev/null 2>&1; then
-    echo "SKIP bridge (node not on PATH)"
-  elif [ ! -f "$BRIDGE" ]; then
-    echo "SKIP bridge (missing $BRIDGE)"
+    echo "SKIP ws endpoint (node not on PATH)"
   else
-    node "$BRIDGE" --port 0 "$trace" >"$tmp/bridge.log" 2>"$tmp/bridge.err" &
-    bridge_pid=$!
+    "$VUNA" dev obs serve --cdp "tcp:127.0.0.1:0" "$trace" >"$tmp/ws-serve.log" 2>"$tmp/ws-serve.err" &
+    ws_pid=$!
     i=0
     while [ "$i" -lt 400 ]; do
-      grep -q '^bridge listening ' "$tmp/bridge.log" 2>/dev/null && break
+      grep -q '^listening ' "$tmp/ws-serve.log" 2>/dev/null && break
       i=$((i + 1))
       sleep 0.05
     done
-    if grep -q '^bridge listening ' "$tmp/bridge.log" 2>/dev/null; then
-      base=$(sed -n 's/^bridge listening \(http[^ ]*\).*/\1/p' "$tmp/bridge.log" | head -1)
-      if node "$HERE/ws-client.mjs" "$base" "$tmp" >"$tmp/ws.log" 2>&1; then
-        ok "bridge: WS handshake + Profiler.* + ping/pong"
+    addr=$(sed -n 's/^listening //p' "$tmp/ws-serve.log" | head -1)
+    if [ -n "$addr" ]; then
+      port=${addr##*:}
+      if node "$HERE/ws-client.mjs" "http://127.0.0.1:$port" "$tmp" >"$tmp/ws.log" 2>&1; then
+        ok "ws: /json/version + /json/list + handshake + Profiler.* + ping/pong"
       else
-        no "bridge: WS handshake + Profiler.* + ping/pong" "$(cat "$tmp/ws.log")"
+        no "ws: /json/version + /json/list + handshake + Profiler.* + ping/pong" "$(cat "$tmp/ws.log")"
       fi
       if [ -f "$tmp/ws-profile.json" ] && [ -f "$tmp/cap-a/frame-4.json" ] && cmp -s "$tmp/ws-profile.json" "$tmp/cap-a/frame-4.json"; then
-        ok "bridge: profile matches serve profile"
+        ok "ws: profile matches serve profile"
       else
-        no "bridge: profile matches serve profile"
+        no "ws: profile matches serve profile"
       fi
     else
-      no "bridge: startup" "$(cat "$tmp/bridge.err" 2>/dev/null)"
+      no "ws: startup" "$(cat "$tmp/ws-serve.err" 2>/dev/null)"
     fi
-    kill "$bridge_pid" 2>/dev/null || true
-    wait "$bridge_pid" 2>/dev/null || true
+    kill "$ws_pid" 2>/dev/null || true
+    wait "$ws_pid" 2>/dev/null || true
   fi
 fi
 
