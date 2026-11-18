@@ -69,3 +69,57 @@ export renderDecls : (String -> String) -> List ODecl -> String
 renderDecls qual decls = case decls of
   [] => ""
   _ => "type ${joinWith "\nand " (map (renderDecl qual) decls)}\n\n"
+
+-- ---------------------------------------------------------------
+-- 项面
+-- ---------------------------------------------------------------
+-- 括号策略与既有产物一致：应用、λ、let、if、match、cast、投影都自带括号，因此
+-- 调用方不需要再关心优先级。
+export renderPat : OPat -> String
+renderPat p = case p of
+  OPVar n => n
+  OPWild => "_"
+  OPCtorPat c [] => c
+  OPCtorPat c ps => "${c} (${joinWith ", " (map renderPat ps)})"
+  OPRecordPat fields => "{ ${joinWith "; " (map fieldAssign fields)} }"
+
+fieldAssign : Pair String OPat -> String
+fieldAssign (Pair label p) = "${label} = ${renderPat p}"
+
+binderText : Pair String (Maybe String) -> String
+binderText (Pair name ty) = case ty of
+  Nothing => name
+  Just t => "(${name} : ${t})"
+
+export renderTerm : OTerm -> String
+renderTerm t = case t of
+  OName s => s
+  ORaw s => s
+  OApp f a => "(${renderTerm f} ${renderTerm a})"
+  OLam [] body => renderTerm body
+  OLam ps body => "(fun ${joinWith " " (map binderText ps)} -> ${renderTerm body})"
+  OLet pat scrut body => "(let ${renderPat pat} = ${renderTerm scrut} in ${renderTerm body})"
+  OIf c th el => "(if ${renderTerm c} then ${renderTerm th} else ${renderTerm el})"
+  OMatch scrut arms fallback =>
+    let
+      body = joinWith "" (map renderArm arms)
+      fb = if fallback then "" else "  | _ -> failwith \"DT: impossible branch\"\n"
+    in "(match ${renderTerm scrut} with\n${body}${fb})"
+  OCtorApp c [] => c
+  OCtorApp c ([a]) => "(${c} (${renderTerm a}))"
+  OCtorApp c args => "(${c} (${joinWith ", " (map renderTerm args)}))"
+  ORecordCon fields => "{ ${joinWith "; " (recordFields fields)} }"
+  ORecordUpd base fields => "{ ${renderTerm base} with ${joinWith "; " (recordFields fields)} }"
+  OProj base label => "(${renderTerm base}).${label}"
+  OConcatStr parts => "(String.concat \"\" [${joinWith "; " (map renderTerm parts)}])"
+  OCast e => "(Obj.magic ${renderTerm e})"
+  OAnnot e ty => "(${renderTerm e} : ${ty})"
+
+renderArm : Pair OPat OTerm -> String
+renderArm (Pair pat body) = "  | ${renderPat pat} -> ${renderTerm body}\n"
+
+recordField : Pair String OTerm -> String
+recordField (Pair label v) = "${label} = ${renderTerm v}"
+
+recordFields : List (Pair String OTerm) -> List String
+recordFields fields = map recordField fields

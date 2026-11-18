@@ -20,8 +20,8 @@ Loader → Elab → Core ──Lowering──> IR ──Codegen.{Decl,Term,Assem
 - **IR 是后端唯一的输入面**：OCaml 后端不 import `Core` / `Elab` / `Intrinsics`，
   因此「后端要理解类型论」这个耦合被切断；wasm / native 只对接 IR。
   native 的支持面、ABI 与运行时子集见 [native.md](native.md)。
-  OCaml 后端没有独立的后端 IR（`IrUnit` 直接拼成文本）；wasm / native 有
-  `Model` + `Render` 两层。这条不对称记在 [debt.md](debt.md) D110。
+  三个后端都是 `Model` + `Render` 两层：OCaml 的模型是 `Codegen.Ocaml.{Model,Render}`
+  （运行时模板与内联内建展开是显式的 `ORaw`），wasm / native 各自有自己的模型。
 - **Lowering 是 Core 唯一的消费者**：擦除、表示决策、入口分类都发生在这一步，
   后端只做文本（名字编码、跨单元限定、fresh 名字、布局、`let rec` 分组、运行时模板）。
 - **ANF（wasm 前置）**：`Ir.Anf` 把每条非简单表达式绑定到 `let`，binder 用单调

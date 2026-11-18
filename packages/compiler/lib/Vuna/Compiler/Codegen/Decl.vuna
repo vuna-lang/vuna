@@ -192,11 +192,6 @@ ocamlBinderName name =
     oc = sanitizeName name
   in if memName oc ocamlReservedWords then "${oc}_" else oc
 
--- 一次性线性拼接：先插分隔符成列表，再用运行时 `String.concat` 单遍拼出。
--- `x ++ sep ++ joinWith sep rest` 在千级片段上是 O(n²) 字节拷贝。
-export joinWith : String -> List String -> String
-joinWith = Render.joinWith
-
 -- ---------------------------------------------------------------
 -- IR 类型 / 类型声明 → OCaml 文本
 -- ---------------------------------------------------------------

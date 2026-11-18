@@ -43,7 +43,6 @@
 | ID | 仍未成立的事实 | 证据 | 归属 |
 | --- | --- | --- | --- |
 | D109 | **擦除后 IR 没有类型标注**：`Ir.Model` 只有签名级的 `IrTy`，项级 binder / 应用 / 定义都没有类型；因此「well-scoped、带类型」不是结构保证，`IrCast` 位点只能靠 Lowering 写对；字典与方法投影无标注，OCaml 侧把 `f a` 与 `f (a -> b)` 错统一（D52 的根因） | `Ir/Model.vuna`、`Ir/Validate.vuna`、`Lowering/Program.vuna`；[ir.md](ir.md)「已知边界」 | 后续（先做擦除规范化，再给项级加标注） |
-| D110 | **OCaml 后端没有后端 IR**：`IrUnit` 由 `Codegen.{Decl,Term,Assembly}` 直接拼成文本，名字编码、`let rec` 分组、运行时模板与布局混在字符串拼接里（`Codegen/Term.vuna` 2162 行）；wasm / native 都有 `Model` + `Render`。`check` 路径因此仍生成整套文本再丢弃 | `Codegen/{Decl,Term,Assembly}.vuna`；[ir.md](ir.md)「位置与形状」 | 后续（先做逐字节等价的搬迁） |
 
 ## 工具、构建与验证
 

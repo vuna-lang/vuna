@@ -30,3 +30,38 @@ export data ODecl(..) : Type where
   ODVariant : Int -> String -> List OCtor -> ODecl
   ODRecord : Int -> String -> List (Pair String OTy) -> ODecl
   ODAlias : Int -> String -> OTy -> ODecl
+
+-- ---------------------------------------------------------------
+-- 项面
+-- ---------------------------------------------------------------
+-- `OName` 是已渲染好的名字/字面量（变量、构造子、整数、字符串、浮点字面量）；
+-- `ORaw` 是运行时模板或内联内建展开的整段表达式（`Codegen.Runtime` / `inlineText`）：
+-- 这两处本来就是目标文本，模型只负责把它们放回结构位置。
+-- | 模式。
+export data OPat(..) : Type where
+  OPVar : String -> OPat
+  OPWild : OPat
+  OPCtorPat : String -> List OPat -> OPat
+  OPRecordPat : List (Pair String OPat) -> OPat
+
+-- | 表达式。多实参构造子是 OCaml 的 tupled 变体（`C (a, b)`）。
+export data OTerm(..) : Type where
+  OName : String -> OTerm
+  ORaw : String -> OTerm
+  OApp : OTerm -> OTerm -> OTerm
+  OLam : List (Pair String (Maybe String)) -> OTerm -> OTerm
+  OLet : OPat -> OTerm -> OTerm -> OTerm
+  OIf : OTerm -> OTerm -> OTerm -> OTerm
+  OMatch : OTerm -> List (Pair OPat OTerm) -> Bool -> OTerm
+  OCtorApp : String -> List OTerm -> OTerm
+  ORecordCon : List (Pair String OTerm) -> OTerm
+  ORecordUpd : OTerm -> List (Pair String OTerm) -> OTerm
+  OProj : OTerm -> String -> OTerm
+  OConcatStr : List OTerm -> OTerm
+  OCast : OTerm -> OTerm
+  OAnnot : OTerm -> String -> OTerm
+
+-- | 一条顶层定义：值绑定（`name = body`）或受限 FFI（`external name : ty = "c"`）。
+export data ODef(..) : Type where
+  ODValue : String -> OTerm -> ODef
+  ODExternal : String -> String -> String -> ODef
