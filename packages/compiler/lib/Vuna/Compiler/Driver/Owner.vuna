@@ -82,11 +82,11 @@ hasFieldOwnerOf owner dname params f =
   let
     fname = fieldName f
     fty = fieldType f
-    label = EApp (EVar "Base.Field.Field" splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
+    label = EApp (EVar "Base.Trait.Field.Field" splitNoSpan) [EStr fname splitNoSpan] splitNoSpan
     head =
-      EApp (EVar "Base.Record.HasField" splitNoSpan)
+      EApp (EVar "Base.Trait.Record.HasField" splitNoSpan)
         [label, hasFieldRecordTypeExpr dname params, fty] splitNoSpan
-  in Pair (instanceName "Base.Record.HasField" head) owner
+  in Pair (instanceName "Base.Trait.Record.HasField" head) owner
 
 splitHasFieldOwners : String -> String -> List String -> List Field -> List (Pair String String)
 splitHasFieldOwners owner dname params [] = []
@@ -140,7 +140,7 @@ export record SplitMeta(..) where
   smDataOwners : List (Pair String String)
   smKnownModules : List String
   -- 同一份归属表的哈希索引。清单保留给 `Driver.Iface.ownerIndexOf`（它按
-  -- `Base.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不用线性扫清单
+  -- `Base.Container.HashMap.fromList` 建自己的表），但 codegen 侧逐 def/data 查归属不用线性扫清单
   -- （那是 O(#def × #owner-pairs)）。
   smDefOwnerT : HashMap String String
   smDataOwnerT : HashMap String String

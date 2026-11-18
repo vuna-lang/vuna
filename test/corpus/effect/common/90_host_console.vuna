@@ -1,6 +1,6 @@
 -- main 的行是内建 ConsoleOp；entry 自动装 runConsoleHost（用户不写 handler）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 
 main : Eff [ConsoleOp] Int
 main = do

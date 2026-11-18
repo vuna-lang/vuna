@@ -2,8 +2,8 @@
 
 **现状**：效应系统是**语言内建语义**——`perform` / `handle` 是语法，标签是 op 族应用，
 实例名并进标签（条目形如 `Named n e`）并由行解出名字，key 由编译器按 op 族规范名推导。运行时不动：OCaml 5
-`Effect.Deep`、one-shot 续延、`(key, name)` 路由。语法降级到 `Base.Eff.performCore` /
-`Base.Eff.handleWith`（以及行首条目版 `handleWithAt`），降级点不新增 `Expr` 构造子。
+`Effect.Deep`、one-shot 续延、`(key, name)` 路由。语法降级到 `Base.Effect.Core.performCore` /
+`Base.Effect.Core.handleWith`（以及行首条目版 `handleWithAt`），降级点不新增 `Expr` 构造子。
 
 ## 1. 为什么内建
 
@@ -12,8 +12,8 @@
 1. **双轨制**：内建动作类型（特权基座）与 `Eff`（用户面库级效应）平行，两者靠转换函数
    桥接。今天只有 `Eff` 一个动作类型，宿主 op 构造器不导出、`prim_eff_*` 只作宿主层
    逃生口。
-2. **三重表示**：同一抽象三副面孔（纯 monad `Base.State`/`Reader`/`Error`、效应行
-   `Base.Eff.*`、宿主 handler）会把库 API 与文档面乘三倍。今天库 API 只剩 handler 一种
+2. **三重表示**：同一抽象三副面孔（纯 monad `Base.Effect.Pure.State`/`Reader`/`Error`、效应行
+   `Base.Effect.Core.*`、宿主 handler）会把库 API 与文档面乘三倍。今天库 API 只剩 handler 一种
    写法，`transformer` 与 `MonadIO` 不存在。
 3. **协议蔓延**：`Row`/`Member`/`rowRem` 名义是库、实为语言机制。编译器介入四处：
    `Base/Intrinsics.vuna` 的效果协议常量、`Core/Eval.rowRemReduce`（公理归约）、
@@ -22,8 +22,8 @@
 4. **描述/权威分离**：类型层 `Row` 说「程序经过哪些效应」，「被允许做什么」只剩运行时
    `(key, name)` 路由 + 约定（没有包级特权与能力声明，见 [effects.md](effects.md) §8.6）。
 
-**seed 约束**：`Base.Eff` 在 seed 闭包里（`Vuna.Compiler.Base.Common` import 它；
-`nix/seed/files.txt` 含 `Base_dEff.ml`），base 的其余效应模块不在 seed。改标签形状而不
+**seed 约束**：`Base.Effect.Core` 在 seed 闭包里（`Vuna.Compiler.Base.Common` import 它；
+`nix/seed/files.txt` 含 `Base_dEffect_dCore.ml`），base 的其余效应模块不在 seed。改标签形状而不
 引入新语法时，旧 seed 仍能编译新源码；rotation 按需触发（规则见
 [bootstrap.md](bootstrap.md)）。
 
@@ -73,14 +73,14 @@ main : Eff [] Nat
 - **效应定义不出现 `String`**：标签 = op 族应用（`ConsoleOp`、`StateOp Nat`、
   `ReaderOp Int`…）；scope 族用 `Scoped a` 一等子计算（`ExnOp : Type -> Type`，
   `Try : {a} -> Scoped a -> ExnOp (Result a)`），不再有标记类型或 `Row` 参数。
-- **裸标签 = 默认名 `"default"`**：单点定义 `Base.Eff.defaultInstance`。
+- **裸标签 = 默认名 `"default"`**：单点定义 `Base.Effect.Core.defaultInstance`。
 - **多实例显式 `[ConsoleOp@audit]`**：行条目即 `Named "audit" ConsoleOp`；`@` 右侧裸标识符是
   **名字字面量**（字符串原样）。**实例名都是静态的**：要么由行解出，要么是字面量。
 - **同一行重复 `Named "a" Op` = `TC_AmbiguousInstance`**：候选显示条目**实例名**（不是标签）。
 - **隐式名只从行解**：探测计数 + 唯一候选才提交；**拒绝贪婪 Here**（必须全扫描）。
 - **默认兜底不发明行**：默认名只在行字面量与 `handleWithAt` 两个显式点产生；没有「最终化
   把名字 meta 解成 default」的兜底（当前形状下那也救不回来，见 §3.2）。
-- **key = op 族规范名**：`perform (Print s)` 的 key = `"Base.EffConsole.ConsoleOp"`（op
+- **key = op 族规范名**：`perform (Print s)` 的 key = `"Base.Effect.Console.ConsoleOp"`（op
   数据族的规范名）；handle 侧同规则推导。运行时 `(key, name)` 路由不变，只换 key 的取值
   来源。
 - **结果索引协议**：op 族必须以结果类型为最后索引（`<Op> : params… -> Type -> Type`）；
@@ -102,8 +102,8 @@ main : Eff [] Nat
 
 | 写法 | 降级目标 |
 | --- | --- |
-| `perform (Print s)` | `Base.Eff.performCore <n=洞> "<op族规范名>" (Base.Eff.sigFn (\i => ConsoleOp i)) (Print s)`，结果类型 = op 的索引 |
-| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Eff.handleWith <n=洞> "<op族规范名>" (Base.Eff.sigFn (\i => <Op> <族参数洞…> i)) comp (\x => e1) (\i, o, k => case o of { C p => e2 })` |
+| `perform (Print s)` | `Base.Effect.Core.performCore <n=洞> "<op族规范名>" (Base.Effect.Core.sigFn (\i => ConsoleOp i)) (Print s)`，结果类型 = op 的索引 |
+| `handle comp { return x -> e1  C p k -> e2 }` | `Base.Effect.Core.handleWith <n=洞> "<op族规范名>" (Base.Effect.Core.sigFn (\i => <Op> <族参数洞…> i)) comp (\x => e1) (\i, o, k => case o of { C p => e2 })` |
 | `[ConsoleOp]` | `Named "default" ConsoleOp :: Nil`（裸标签补默认名） |
 | `[ConsoleOp@audit]` | `Named "audit" ConsoleOp :: Nil` |
 | `[StateOp Nat@counter]` | `Named "counter" (StateOp Nat) :: Nil`（参数化标签的 `@` 作用于完整标签表达式） |
@@ -129,7 +129,7 @@ handle comp {
   `<Op> : <params…> -> Type -> Type`；标签 = `Named n (<Op> <params…>)`，降级点按 `k` 给
   族参数补洞；结果索引由构造子匹配收窄。
 - **行多态 comp**（`handle (pure e) { … }`、内联 do 块）：`handleWith` 的 `r` 仍未解、
-  结果行 `rowRem (Named n e) r` 归约不了，check 位置失败后改降级到 `Base.Eff.handleWithAt`：
+  结果行 `rowRem (Named n e) r` 归约不了，check 位置失败后改降级到 `Base.Effect.Core.handleWithAt`：
   comp 的行被定成 `Named n e :: er`（条目在行首）、名字取默认实例名（`"default"`）、结果行就是
   `er`（与期望类型合一）。正常 handler 完全体（comp 是参数或行首已有的具体行）仍走
   `handleWith`，支持条目在行中任意位置。
@@ -172,11 +172,11 @@ handle comp {
 | `Loader` | 无专门分支：parser 已把 handle 降到 markers + 普通 λ/case，Loader 只做常规名字解析（构造子解析成规范名/over 名，供族推断） |
 | `Base/Intrinsics.vuna` 效果协议常量 | `Row.Nil` / `Row.(::)` 二元、`Named`、`Member` 2 参（条目 + 行）、`effDefaultInstance = "default"`；`perform`/`handle` 的 key 由降级点生成 |
 | `Elab/Dict.vuna` `memberLookupRow`/`resolveRowGoalsCtx`/`resolveDictGoals` | 条目索引（`Named n e` 或裸标签）+ §3.2 探测计数求解（无贪婪匹配；候选文本用实例名；无最终化默认兜底） |
-| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Eff.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（跨族报 `TC_HandleClauseFamilyMismatch`）、构造 `sigFn (\i => <Op> ?p… i)`、按 op 族 kind 的显式参数个数 `k` 补洞（State/Reader `k = 1`；非宇宙域参数如 `ExnOp` 的 `Row` 报 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
+| `Elab/Term/Impl.vuna` | `@vuna@perform` → `performCore`；`@vuna@handle` → `Base.Effect.Core.handleWith`（rowRem 版）/ `handleWithAt`（行首条目版，check 失败后重试）：从 clause 构造子推 op 族（跨族报 `TC_HandleClauseFamilyMismatch`）、构造 `sigFn (\i => <Op> ?p… i)`、按 op 族 kind 的显式参数个数 `k` 补洞（State/Reader `k = 1`；非宇宙域参数如 `ExnOp` 的 `Row` 报 `TC_HandleFamilyUnsupported`）；`handleOperand` 在 `inferEFuel`/`checkEFuel`/`inferEFuelHint` 三处内联拦截 |
 | `Core/Eval.vuna` `rowRemReduce` | `VCon consName (h :: t :: _)` 匹配条目与尾行；比较前对条目（含 `Named` 的名字与 label 一层 spine 实参）做 `force`——已解 meta 在值里仍是 `VMeta` 节点，不 force 就永远比较不出相等（`handle` 的结果行依赖这一点） |
 | `Elab/Term/Impl.vuna` `rowEffectLabels` | 行条目展示默认名省略（`ConsoleOp`）、显式名写 `<短标签>@<名字>`（`ConsoleOp@audit`、`StateOp Nat@counter`）；歧义候选显示实例名 |
 | `Base/Diagnostics/{Tc,Frontend}.vuna` | `TC_AmbiguousInstance`、`TC_EffResFamilyMissing`、`TC_HandleClauseFamilyMismatch`、`TC_HandleFamilyUnsupported`（族形状）；PS 侧 `PS_Handle{NeedsOpClause,ClauseNotIndented,ClauseNeedsCtor,ContinuationNameMismatch,ReturnMisplaced}` |
-| `Base.Eff`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`EffSig`/`sigFn`/`sigOf`/`resIdx`、`performCore`/`handleWith`/`handleWithAt`（`sig` 擦除量、`{w : Member (Named n (sigOf sig)) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用「结果类型索引」的 op 族 |
+| `Base.Effect.Core`（在 seed 闭包里） | `defaultInstance = "default"`、`Named`、`Row.Nil`/`Row.(::)`、`Member` 2 参、`EffSig`/`sigFn`/`sigOf`/`resIdx`、`performCore`/`handleWith`/`handleWithAt`（`sig` 擦除量、`{w : Member (Named n (sigOf sig)) r}` 移到 comp 之后先解名字；行首条目版把条目放在 comp 的行首、结果行即剩余行）；12 个效应模块用「结果类型索引」的 op 族 |
 
 不改：`Eff` 本体、`runPure`/`joinEff`、`prim_effectPerform`/`prim_effectHandle` 语义、
 `Codegen/Term.dtPrimRuntime` 的运行时块、`Eff` 的私有 `MkEff` 表示。
@@ -303,12 +303,12 @@ Core `TPi`（增加效应域或引入新形式）、行合一半路（row variab
   6. **族形状与参数个数**：base 全体一致——`<Op> : <params…> -> Type -> Type`。
      降级点按 op 族 kind 数**显式参数个数 `k`**（不含末尾结果索引）：`k` 给族参数补洞，
      签名用 `sigFn (\i => <Op> ?p1 … ?pk i)` 现场解族参数（State/Reader `k = 1`，
-     Console 等 `k = 0`）。scope op 用 `Base.Eff.Scoped a`（一等擦除子计算）作为字段：
+     Console 等 `k = 0`）。scope op 用 `Base.Effect.Core.Scoped a`（一等擦除子计算）作为字段：
      `ExnOp : Type -> Type`、`Try : {a} -> Scoped a -> ExnOp (Result a)`；`handle` 块里
      `Try sub k -> k (handleScoped sub)`，标签就是 `Named n ExnOp`，不再需要标记类型或
      `Row` 参数。族形状不符（显式参数不是类型，如 `Boom : Row -> Type -> Type`）仍报
      `TC_HandleFamilyUnsupported`（[debt.md](debt.md) D54）。`handleScoped` 三端
-     （OCaml/WASM/Native）同语义，`Base.EffExn` 不再需要 fuel。`perform` 走同一套族推导
+     （OCaml/WASM/Native）同语义，`Base.Effect.Exn` 不再需要 fuel。`perform` 走同一套族推导
      （`perfFamilyOfValue` 允许族参数是中性 spine）。
   7. **语法边界**：`comp` 是裸标识符且紧跟 `{` 时按 handle 块解析；其它形态（应用、do 块、
      记录字面量）在源里建议加括号，`fmt` 回渲染时会自动补（`renderHandleCompGo`），否则
@@ -345,7 +345,7 @@ consolePrint@audit "hi"    -- 行 [ConsoleOp@audit] ⇒ 显式选 audit
 - **实例名是静态的**：名字要么由行解出（`Named n e` 的 `n`），要么是 `@` 后的名字字面量；
   没有运行时计算的实例名。参数化名字把 `n` 放进行类型（`Named n ConsoleOp`），调用点由
   行解，不需要另传一次。
-- **签名糖**：顶层签名的 `Member n e r` 约束（canonical `Base.Eff.Member`）不是 trait；
+- **签名糖**：顶层签名的 `Member n e r` 约束（canonical `Base.Effect.Core.Member`）不是 trait；
   不参与实例搜索，生成隐式 **Rig0** 证明 binder `{_memberK : Member (Named n e) r}`，插在前导隐式
   binder 之后。`n`/`r` 的域由参数位置量化为 `String`/`Row`；标签 `e` 的其它自由名仍按
   现有 kind 规则量化。只在顶层签名生效（local/trait/extern 仍拒 `=>`）。

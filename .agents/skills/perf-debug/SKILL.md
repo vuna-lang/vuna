@@ -150,7 +150,7 @@ grep '"name":"vuna.def.elab"' _scratch/trace/*.jsonl \                # level 2 
       「每个 def 各调一次」的循环里就是 n²（codegen 分组 `Lowering.Program.appendGroups` 对每级 SCC
       线性过滤全体定义：同一探针 `termination-done → cg-typedecls-done` = 89/284/1083 ms
       （N=2000/4000/8000，逐档 ×3.2/×3.8），而 `bodies` 段是 75/89/127 ms 的线性）。
-   5. **插入排序**：`Base.Sort.sortBy` 与 `Driver.Iface.insertByText` 都是插入排序（DT 只接受
+   5. **插入排序**：`Base.Data.Sort.sortBy` 与 `Driver.Iface.insertByText` 都是插入排序（DT 只接受
       结构递归）；单模块数千项才退化（合成 2→4k def 模块 iface `compute` 376→1203 ms），
       真实包每模块几十项时收益低——改前先量折叠点。
    6. **「集合成员」却用了线性扫描**：`memName x used` / `memList x members` 出现在

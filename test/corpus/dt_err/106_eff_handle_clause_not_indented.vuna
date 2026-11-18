@@ -1,6 +1,6 @@
 -- 负例：op 子句必须缩进到 handle 块内。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat

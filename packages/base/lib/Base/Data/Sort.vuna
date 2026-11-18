@@ -1,0 +1,21 @@
+-- | 稳定排序。`mergeSort` 用 `Ord` 的 `<=`；`sortBy` 接受自定义比较函数，参数 `le` 表示 `<=`（`insertBy` 体里的 `<=` 经 fixity 解析到该参数）。实现是插入排序：递归吃 tail，满足 DT 的结构递归检查（归并排序的 `sortBy le (take half xs)` 不满足），稳定性与排序结果不变。
+module Base.Data.Sort where
+
+import Base.Data.List
+import Base.Data.Bool
+-- `mergeSort` 的 `<=` 在刚性类型上提升成 Dict_Ord；显式 import 保证类存在与 split 单元顺序。
+import Base.Trait.Ord
+
+-- | 内部：插入步骤——按 `le` 把 `y` 插到已排序列表的第一个「不小于它」的位置之前，保持稳定。
+insertBy : (a -> a -> Bool) -> a -> List a -> List a
+insertBy cmp y [] = [y]
+insertBy cmp y (x :: xs) = if cmp y x then y :: x :: xs else x :: insertBy cmp y xs
+
+-- | 自定义比较函数的**稳定**升序排序（实现是插入排序，递归吃 tail，满足 DT 的结构递归检查）。`le` 表示 `<=`。
+export sortBy : (a -> a -> Bool) -> List a -> List a
+sortBy cmp [] = []
+sortBy cmp (y :: ys) = insertBy cmp y (sortBy cmp ys)
+
+-- | 用 `Ord` 的 `<=` 排序的稳定升序排序；等价于 `sortBy (\x, y => x <= y)`。
+export mergeSort : Ord a => List a -> List a
+mergeSort xs = sortBy (\x, y => x <= y) xs

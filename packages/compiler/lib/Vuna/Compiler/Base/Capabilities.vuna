@@ -25,7 +25,7 @@ capabilityOf target tag = if target == "wasm" then wasmCapabilityOf tag else Cap
 -- wasm 的不可用面：进程派生 / stdin / raw 网络没有浏览器宿主实现；`ProcessOp` 的
 -- Args / Exit 可用，但家族按 spawn/wait/runIn 判为不可用。
 wasmCapabilityOf : String -> Capability
-wasmCapabilityOf "Base.EffProcess.ProcessOp" = CapUnavailable
-wasmCapabilityOf "Base.EffStdin.StdinOp" = CapUnavailable
-wasmCapabilityOf "Base.EffNet.NetOp" = CapUnavailable
+wasmCapabilityOf "Base.Effect.Process.ProcessOp" = CapUnavailable
+wasmCapabilityOf "Base.Effect.Stdin.StdinOp" = CapUnavailable
+wasmCapabilityOf "Base.Effect.Net.NetOp" = CapUnavailable
 wasmCapabilityOf _ = CapAvailable

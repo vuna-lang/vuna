@@ -34,16 +34,16 @@ import Vuna.Lsp
 import Vuna.Run
 import Vuna.Search
 import Base.Data.Pair as Pair
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffNet as EffNet
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffStdin as EffStdin
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Types as EffTypes
 
 -- | CLI 总入口：去掉隐藏的性能旗标，`-h` / `--help` 优先，其余交给命令分发。
 export runCli : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nStdin StdinOp r, Member nArgs ArgsOp r, Member nNet NetOp r => List String -> Eff r Int

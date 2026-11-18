@@ -1,7 +1,7 @@
 -- 效果入口只接受已处理干净的行（`Eff []`）。直接 `runPure` 一个仍有未处理效应的
 -- 动作是**类型错误**，不会拖到运行时报 `unhandled effect`。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffState as EffState
+import Base.Effect.Core as Eff
+import Base.Effect.State as EffState
 
 prog : Eff [StateOp Int@n] Int
 prog = get "n" Int

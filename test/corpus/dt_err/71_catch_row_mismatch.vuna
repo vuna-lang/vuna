@@ -1,6 +1,6 @@
 -- 负例：catch 要求行首是 Error n。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffError as EffError
+import Base.Effect.Core as Eff
+import Base.Effect.Error as EffError
 
 bad : Eff [] Int
 bad = catch "default" (pure 1) (\_ => pure 2)

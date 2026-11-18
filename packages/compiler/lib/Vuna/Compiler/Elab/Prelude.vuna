@@ -4,8 +4,8 @@ module Vuna.Compiler.Elab.Prelude where
 -- DT 的 prelude globals（签名项）。这里是内建名字/签名表的唯一消费点：
 --
 --   - `Int` / `String` 是语言 primitive 类型；`Bool` 是 base 的普通 data 声明
---     （canonical `Base.Bool.Bool`，`True`/`False` 精化成 `TBool`）；
---   - `List` 的签名参数固定绑定 base 的普通 data 声明 `Base.List.List`（完整符号，
+--     （canonical `Base.Data.Bool.Bool`，`True`/`False` 精化成 `TBool`）；
+--   - `List` 的签名参数固定绑定 base 的普通 data 声明 `Base.Data.List.List`（完整符号，
 --     固定为 canonical，不按短名挑选）；
 --   - 效果原语只有 `prim_*` 名，签名与能力位都在 Intrinsics 表里。
 --

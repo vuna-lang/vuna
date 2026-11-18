@@ -1,4 +1,4 @@
--- stdlib：Base.Sort + 抽象 Base.Map（跨模块只能通过 API 使用）。
+-- stdlib：Base.Data.Sort + 抽象 Base.Container.Map（跨模块只能通过 API 使用）。
 import Base.Data.Sort as Sort
 import Base.Container.Map as Map
 import Base.Data.List as List

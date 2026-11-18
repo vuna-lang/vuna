@@ -26,10 +26,10 @@ import Vuna.Json
 import Vuna.Obs.Flame
 import Vuna.Obs.Read
 import Vuna.Obs.Types
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Process as EffProcess
 
 -- ---------------------------------------------------------------
 -- 选项

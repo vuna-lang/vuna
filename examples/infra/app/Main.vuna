@@ -243,7 +243,7 @@ termFixtures : List Term
 termFixtures =
   [ TVar "x" 3 spA,
     TMeta 12,
-    TGlobal "Base.Int",
+    TGlobal "Base.Data.Int",
     TType (levelOfInt 2),
     TPi "a" True RigOmega (TType (levelOfInt 0)) (TLam "x" Rig1 spB (TVar "x" 0 spB)),
     TApp (TGlobal "f") (TInt 7) Rig1,
@@ -325,7 +325,7 @@ fixityCovered =
 -- 真实上下文含 iface 列表（`encModuleIfaceAt`），这里只验证字段顺序 / Maybe / 列表 / 尾部
 -- 检查这条骨架——载荷结构变了（schema bump）这条断言会立刻失败。
 toolContextSample : ToolContext
-toolContextSample = ToolContext [] [] ["Base.Int"] ["Main"] []
+toolContextSample = ToolContext [] [] ["Base.Data.Int"] ["Main"] []
 
 toolContextRoundtrip : Bool
 toolContextRoundtrip =

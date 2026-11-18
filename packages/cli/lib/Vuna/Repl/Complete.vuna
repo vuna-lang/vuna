@@ -2,7 +2,7 @@
 --
 -- 两类候选（只在按下 Tab 时枚举，编辑器每读一行不做目录访问）。模块名：包上下文模块根（自身
 -- lib + 依赖闭包；base-only 时只有 base）下递归扫描 `*.vuna`，相对路径 `Base/Nat.vuna` →
--- `Base.Nat`（与 Loader 的 `modulePath` 一致）。文件路径：token 按最后一个 `/` 拆成目录 +
+-- `Base.Data.Nat`（与 Loader 的 `modulePath` 一致）。文件路径：token 按最后一个 `/` 拆成目录 +
 -- 末段，列出该目录项、只保留匹配末段前缀的条目，目录补尾随 `/`（cwd 相对路径与绝对路径都
 -- 支持）。
 --
@@ -16,8 +16,8 @@
 module Vuna.Repl.Complete where
 
 import Vuna.Compiler.Base.Common
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
 
 -- ---------------------------------------------------------------
 -- 参数位判定（纯）

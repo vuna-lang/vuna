@@ -51,7 +51,7 @@ vuna map find lookupEnv                        # 短名也行，但见下方警�
 不必先确认它在不在 `module` 导出列表里。
 
 > **警告：短名只取第一个匹配，不报歧义。** 实测 `vuna map find lookup` 直接返回
-> `Base.Map.lookup`，退出码 0。拿不准时用**完全限定名** `Module.name`。
+> `Base.Container.Map.lookup`，退出码 0。拿不准时用**完全限定名** `Module.name`。
 
 **（b）要一个模块的接口面** → `vuna api <Module>`
 

@@ -19,8 +19,8 @@ import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Types
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 
 -- | 一份读入的 trace：按文件顺序的 `(行号, 事件)` + 读入阶段产生的 warning（截断恢复等）。
 export record ObsTrace(..) where

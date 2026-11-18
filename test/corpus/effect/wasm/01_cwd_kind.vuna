@@ -1,8 +1,8 @@
 -- cwd 在 WASI 上是 "/"，ocaml / native 宿主返回真实路径。夹具只断言分类，
 -- 不打印机器相关的绝对路径。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Env as EffEnv
+import Base.Effect.Console as EffConsole
 
 main : Eff [EnvOp, ConsoleOp] Int
 main = do

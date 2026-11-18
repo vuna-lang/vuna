@@ -104,7 +104,7 @@ out-contains: [PKG_InvalidDiagFormat]
 run: sh -c 'printf "import Base.Data.List as L\n\nmain : Int\nmain = 1\n" > "$TMPDIR/m38-impbad.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m38-impbad.vuna" 2>&1
 out-contains: [UN_UnusedImport]
-out-contains: module Base.List is imported but never used
+out-contains: module Base.Data.List is imported but never used
 run: sh -c 'printf "import Base.Data.List as L\n\nmain : Int\nmain = L.length [1,2]\n" > "$TMPDIR/m38-impok.vuna"'
 run: "$VUNA" check -W "$TMPDIR/m38-impok.vuna" 2>&1
 out-not-contains: UN_UnusedImport

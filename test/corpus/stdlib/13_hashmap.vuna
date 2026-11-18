@@ -1,4 +1,4 @@
--- stdlib：Base.HashMap / Base.HashSet（String 键的持久哈希容器）。
+-- stdlib：Base.Container.HashMap / Base.Container.HashSet（String 键的持久哈希容器）。
 import Base.Container.HashMap as HashMap
 import Base.Container.HashSet as HashSet
 import Base.Data.List as List

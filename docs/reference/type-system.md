@@ -32,7 +32,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - `Nat` 是 `Int` 的数值子集；精化器只在**检查点**（函数实参、返回、构造子字段、`if`
   分支汇合、`==`/比较、算术特化）把 `Nat` 项包装成 `natToInt` 当 `Int` 用。运行时
   `natToInt` 恒等，类型规则仍是定义性相等（`Nat` 与 `Int` 不相等，包装后的项才是 `Int`）。
-- 反向没有隐式：`Int → Nat` 必须显式 `Base.Nat.fromInt`（负数 clamp 0）或 `fromIntMaybe`。
+- 反向没有隐式：`Int → Nat` 必须显式 `Base.Data.Nat.fromInt`（负数 clamp 0）或 `fromIntMaybe`。
 - 这与宇宙/一般子类型无关：`Vec 3 Nat` 与 `Vec 3 Int` 仍不相等。
 
 ## data 与索引归纳族
@@ -58,8 +58,8 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   提取，提取不到才报 `TC_CannotSolveHigherOrder`。完整高阶合一未实现（debt B07）。
 - 族的类型级应用（`Vec n a`）保持中性（`TGlobal` / `NGlobal` spine），只在 unification
   时按定义性相等比较，不做类型级求值。
-- 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Eq` 是 trait。`Nat` / `Vec` /
-  `Fin` 也是用户（或 `Base.Nat`、`Base.Vec`）声明的普通族。`Bool` / `List` 的
+- 没有内置的归纳相等族 `Eq`（DT 用来做证明的 `data Eq`）；`Base.Trait.Eq` 是 trait。`Nat` / `Vec` /
+  `Fin` 也是用户（或 `Base.Data.Nat`、`Base.Data.Vec`）声明的普通族。`Bool` / `List` 的
   canonical 身份见 [primitives.md](primitives.md)。
 - 索引 binder 的擦除：隐式索引恒擦除（无运行时字段）；显式索引未标注时是 `RigOmega`，
   保留运行时字段（`Vec n a` 的 `(n : Nat)` 可被读回）；要擦除显式索引就写
@@ -110,11 +110,11 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
   其它类型必须有 `Ord` 证据，无实例 / 无类在 `check` 期报错。
 - 相等发生在**刚性类型变量**上时，搜不到实例会提升成隐式字典参数（延迟到调用点），
   实例（含 `deriving` 生成的）仍优先。`Eq` / `Ord` / `Show` 的**声明**在
-  `Base.Eq` / `Base.Ord` / `Base.Show`；实例按**落点规则**分布：`Int` → `Base.Int`、
-  `String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`（String 经 Interp 依赖
-  Show，成环）；`Show Bool` → `Base.Bool`，`Eq/Ord Bool` 随 trait 留在 `Base.Eq` /
-  `Base.Ord`（Bool 是方法返回类型）；容器 `Show` 实例在各自类型模块。包上下文内所有源文件
-  （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Int` 以加载
+  `Base.Trait.Eq` / `Base.Trait.Ord` / `Base.Trait.Show`；实例按**落点规则**分布：`Int` → `Base.Data.Int`、
+  `String` 的 Eq/Ord → `Base.Data.String`、`Show String` → `Base.Trait.Show`（String 经 Interp 依赖
+  Show，成环）；`Show Bool` → `Base.Data.Bool`，`Eq/Ord Bool` 随 trait 留在 `Base.Trait.Eq` /
+  `Base.Trait.Ord`（Bool 是方法返回类型）；容器 `Show` 实例在各自类型模块。包上下文内所有源文件
+  （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Data.Int` 以加载
   Int 实例）；trait 与实例语义见 [records-traits.md](records-traits.md)。
 - **延迟字典目标的诊断**：类参数已解出但实例搜索失败的延迟目标在收尾时报
   `TC_NoInstanceFound`（带字典目标）；类参数仍含未解元变量、或类参数是刚性类型变量时
@@ -200,7 +200,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 - **零参顶层定义求值一次**：生成 `let v_x = body`；递归组里的零参非构造子 RHS 报
   `CG_RecursiveValueDefinition`。
 - **`main`**：`check` 不要求 `main`，`compile` / `build` 要求；`main` 可为
-  `Int` / `Nat` / `String` / `Bool` 或 `Eff [] a`（`Eff` 是 `Base.Eff` 的动作类型）。
+  `Int` / `Nat` / `String` / `Bool` 或 `Eff [] a`（`Eff` 是 `Base.Effect.Core` 的动作类型）。
   核心求值路径（`vuna test` 纯测试 / REPL）是纯核心求值，只展示 `Int` / `Nat` /
   `String` / `Bool`，任何 `main : Eff [] a` 一律明确报错。
 - 洞 `_` / 命名洞 `?name` 未解时报 `TC_UnsolvedHole`（带位置与目标类型，命名洞带洞名）；
@@ -216,7 +216,7 @@ quantity / 线性规则见 [qtt.md](qtt.md)（quantity 与擦除口径以该页�
 
 | 站点 | measure / 上界 |
 | --- | --- |
-| `Base.String.split` | `2*len(text)+len(sep)+2`；每步消费 1 字符或跳过 ≤`len(sep)` 字符 |
+| `Base.Data.String.split` | `2*len(text)+len(sep)+2`；每步消费 1 字符或跳过 ≤`len(sep)` 字符 |
 | `Frontend.Lexer` | `4*len(source)+64`；每个递归调用消费 ≥1 字符，trivia / token 不重叠 |
 | `Frontend.Parser` | `128*剩余 token 数+1024`；每个循环至少消费 1 token（offside 状态机保留守卫） |
 | `Frontend.Toml` | 逐字符状态机 `2*len+16`；逐行主循环 `4*lines+16` |

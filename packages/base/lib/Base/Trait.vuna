@@ -2,31 +2,34 @@
 -- 也提供命名空间路径（`import Base.Trait.Monad as Monad`）。
 module Base.Trait where
 
-export module Base.Eq
-export module Base.Eq as Eq
-export module Base.Ord
-export module Base.Ord as Ord
-export module Base.Show
-export module Base.Show as Show
-export module Base.Interp
-export module Base.Interp as Interp
-export module Base.Hashable
-export module Base.Hashable as Hashable
-export module Base.Monoid
-export module Base.Monoid as Monoid
-export module Base.Foldable
-export module Base.Foldable as Foldable
-export module Base.Traversable
-export module Base.Traversable as Traversable
-export module Base.Monad
-export module Base.Monad as Monad
-export module Base.Record
-export module Base.Record as Record
-export module Base.Num
-export module Base.Num as Num
-export module Base.Neg
-export module Base.Neg as Neg
-export module Base.FromInt
-export module Base.FromInt as FromInt
-export module Base.FromString
-export module Base.FromString as FromString
+export module Base.Trait.Eq
+export module Base.Trait.Eq as Eq
+export module Base.Trait.Ord
+export module Base.Trait.Ord as Ord
+export module Base.Trait.Show
+export module Base.Trait.Show as Show
+export module Base.Trait.Interp
+export module Base.Trait.Interp as Interp
+export module Base.Trait.Hashable
+export module Base.Trait.Hashable as Hashable
+export module Base.Trait.Monoid
+export module Base.Trait.Monoid as Monoid
+export module Base.Trait.Foldable
+export module Base.Trait.Foldable as Foldable
+export module Base.Trait.Traversable
+export module Base.Trait.Traversable as Traversable
+export module Base.Trait.Functor as Functor
+export module Base.Trait.Applicative as Applicative
+export module Base.Trait.Monad
+export module Base.Trait.Monad as Monad
+export module Base.Trait.Field as Field
+export module Base.Trait.Record
+export module Base.Trait.Record as Record
+export module Base.Trait.Num
+export module Base.Trait.Num as Num
+export module Base.Trait.Neg
+export module Base.Trait.Neg as Neg
+export module Base.Trait.FromInt
+export module Base.Trait.FromInt as FromInt
+export module Base.Trait.FromString
+export module Base.Trait.FromString as FromString

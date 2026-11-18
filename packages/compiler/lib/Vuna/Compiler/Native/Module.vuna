@@ -607,9 +607,9 @@ listHasStr : String -> List String -> Bool
 listHasStr _ [] = False
 listHasStr x (y :: rest) = if x == y then True else listHasStr x rest
 
--- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
+-- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
-floatRenderName = "Base.Float.floatRender"
+floatRenderName = "Base.Data.Float.floatRender"
 
 -- ---------------------------------------------------------------
 -- 浮点字面量
@@ -1396,13 +1396,13 @@ startFunc printResult kind mainName runMainM handlers =
       Nothing => []
     hostHandlerFlags : List String
     hostHandlerFlags =
-      [ "Base.EffConsole.runConsoleHost",
-        "Base.EffFs.runFsHost",
-        "Base.EffClock.runClockHost",
-        "Base.EffEnv.runEnvHost",
-        "Base.EffArgs.runArgsHost",
-        "Base.EffExit.runExitHost",
-        "Base.EffStdin.runStdinHost"
+      [ "Base.Effect.Console.runConsoleHost",
+        "Base.Effect.Fs.runFsHost",
+        "Base.Effect.Clock.runClockHost",
+        "Base.Effect.Env.runEnvHost",
+        "Base.Effect.Args.runArgsHost",
+        "Base.Effect.Exit.runExitHost",
+        "Base.Effect.Stdin.runStdinHost"
       ]
     markHost : String -> List Instr
     markHost h =

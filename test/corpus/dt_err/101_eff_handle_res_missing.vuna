@@ -1,5 +1,5 @@
 -- 负例：handle 的 op 族没有结果索引（kind 是 `Type`，不是 `params… -> Type -> Type`）。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat

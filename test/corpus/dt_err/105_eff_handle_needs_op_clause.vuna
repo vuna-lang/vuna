@@ -1,6 +1,6 @@
 -- 负例：handle 块至少要有一个 op 子句。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat

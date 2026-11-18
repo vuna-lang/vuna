@@ -1,4 +1,4 @@
--- `Base.String` 在 DT 下可用（str* 的 `List` 短名绑定到 `Base.List.List`）。
+-- `Base.Data.String` 在 DT 下可用（str* 的 `List` 短名绑定到 `Base.Data.List.List`）。
 import Base.Data.String as String
 
 main : String

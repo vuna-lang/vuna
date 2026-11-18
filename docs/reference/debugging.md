@@ -70,7 +70,7 @@ vuna: runtime error: division by zero
 
 `dbg!` 是**门控调试行**的内置宏（不是库函数；任何包可用，不需要 import）。要**结构化**
 事件（span / 计数 / 采样 / 可换算到 Chrome Trace），用语言层的可观测性 API
-（`Base.Obs` / `Base.Obs.Span` 与 `obs!` / `mark!` 宏，见
+（`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `obs!` / `mark!` 宏，见
 [observability.md](observability.md)）：
 
 | 名字 | 签名 | 行为 |
@@ -87,7 +87,7 @@ vuna: runtime error: division by zero
 所以源码里没有“假纯值”；核心求值路径（`vuna test` 纯测试 / REPL）不执行 tracing / 观测（都归约为 no-op），
 输出只发生在 compile+run 的 runtime。
 
-`DebugShow` 在 `Base.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
+`DebugShow` 在 `Base.Trait.Show` 里声明，并有一个 blanket instance `Show a => DebugShow a`，
 所以**所有 `Show` 实例自动获得 `dbgShow`**；需要不同调试格式的类型可另写实例。
 
 ```console
@@ -130,7 +130,7 @@ vuna: runtime error: assertion failed: broken invariant
 - `prim_fail : String -> a`：抛 `Failure <msg>`，可被报告器渲染。
 
 普通程序用 §3 的构造即可；需要直接调用原语时可直接引用 `prim_*` / `prim_eff_*`
-（没有 manifest 门控；用户面**应**经 `Base.Eff` + handler）。
+（没有 manifest 门控；用户面**应**经 `Base.Effect.Core` + handler）。
 
 编译器的性能/诊断探针分两层：
 

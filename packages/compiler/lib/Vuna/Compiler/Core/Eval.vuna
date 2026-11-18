@@ -420,7 +420,7 @@ strPrim3 sp f = Nothing
 
 -- 内建归约：唯一真源是 `Vuna.Compiler.Base.Intrinsics` 的名字表 + 归约标签。
 -- 表查找是 O(1) 哈希（不再需要首字符预筛）。
--- 行删除：`Base.Eff.rowRem` 是公理；这里按标签的类型值做结构相等
+-- 行删除：`Base.Effect.Core.rowRem` 是公理；这里按标签的类型值做结构相等
 -- 判断后再移除。类型族里重复变量（`rowRem e (Cons e r)`）不会强制相等，不能用于此。
 export valueEqFuel : Int -> Value -> Value -> Maybe Bool
 valueEqFuel fuel a b = if fuel <= 0 then Nothing
@@ -572,7 +572,7 @@ else case findIntrinsic g of
       [VFloat raw] => Just (VInt (intFromFloat (floatOfRaw raw)))
       _ => Nothing
     -- interp 边界（显式分类，见 docs/reference/primitives.md）：List 桥接依赖 base 的
-    -- `Base.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
+    -- `Base.Data.List.List` 构造子表示，核心求值器无法安全构造；除零/运行期失败同理。
     OpStrUnpack => Nothing
     OpStrPack => Nothing
     OpStrConcatMany => Nothing
@@ -641,7 +641,7 @@ nthByte : List Int -> Int -> Int
 nthByte [] i = 0 - 1
 nthByte (c :: rest) i = if i <= 0 then c else nthByte rest (i - 1)
 
--- `strSubstring start len s`：与 runtime `dtp_substring` / `Base.String.substring` 同语义
+-- `strSubstring start len s`：与 runtime `dtp_substring` / `Base.Data.String.substring` 同语义
 -- （start/len 按字节 clamp：负 start 视为 0、负 len 视为 0、越界截断到末尾）。
 substringPrim : List Value -> Maybe Value
 substringPrim ([startV, lenV, strV]) = case asInt startV of

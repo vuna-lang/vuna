@@ -1,5 +1,5 @@
 # 夹具隔离：本夹具自定义 `data List`（Nil/Cons）验证跨模块 data。
-# 若依赖 vuna-base，隐式 Prelude 会把 `Base.List` 的 Nil/Cons 带进程序，
+# 若依赖 vuna-base，隐式 Prelude 会把 `Base.Data.List` 的 Nil/Cons 带进程序，
 # 本地构造子与基名同名会互相干扰。因此本包**故意**不依赖 vuna-base（无 Prelude
 # 注入），只验证跨模块 data 本身。
 [package]

@@ -18,8 +18,8 @@ import qualified Vuna.Compiler.Base.Diagnostics
 import Base.Data.Nat as Nat
 import Base.Data.String as String
 import Vuna.Compiler.Base.Version
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 
 -- ---------------------------------------------------------------
 -- 名称

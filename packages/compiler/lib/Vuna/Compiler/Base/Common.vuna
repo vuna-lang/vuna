@@ -12,9 +12,9 @@ module Vuna.Compiler.Base.Common where
 -- **不再重导出 `Base.Check`**；仍需要字符串错误的代码应显式 import `Base.Check`。
 --
 -- `Eff` 类型：编译器/工具链大量签名写 `Eff [] a`；这里只重导出类型名 `Eff`（不重导出
--- `Row(..)` 构造子），避免与 `Base.List` 的 `Cons`/`Nil` 在无期望类型的列表表达式上
--- 产生 TC_AmbiguousCtor，也避免每个模块重复 `import Base.Eff`。需要行/续延等接口的模块
--- 仍显式 `import Base.Eff`。
+-- `Row(..)` 构造子），避免与 `Base.Data.List` 的 `Cons`/`Nil` 在无期望类型的列表表达式上
+-- 产生 TC_AmbiguousCtor，也避免每个模块重复 `import Base.Effect.Core`。需要行/续延等接口的模块
+-- 仍显式 `import Base.Effect.Core`。
 export import Base.Effect.Core (Eff)
 import Base.Trait.Monad as Monad
 export module Vuna.Compiler.Base.Source

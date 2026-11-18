@@ -4,7 +4,7 @@
 run: "$VUNA" compile corpus/dt/73_nat_repr.vuna "$TMPDIR/nat-repr" 2>&1
 exit: 0
 out-equals:
-run: sh -c 'grep -qE "t_Base_dNat_dNat|C_Base_dNat_dNat_" "$TMPDIR/nat-repr"/*.ml'
+run: sh -c 'grep -qE "t_Base_dData_dNat_dNat|C_Base_dData_dNat_dNat_" "$TMPDIR/nat-repr"/*.ml'
 exit: nonzero
 read: $TMPDIR/nat-repr/Main.ml
 out-contains: bi_natAdd

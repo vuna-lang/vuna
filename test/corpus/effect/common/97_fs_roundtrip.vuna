@@ -1,8 +1,8 @@
 -- 经标签的相对路径 FS：写 → 读 → 判存在 → 取大小。三端都走 case 私有目录，
 -- 因此在 ocaml / wasm / native 上输出一致。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
 
 main : Eff [FsOp, ConsoleOp] Int
 main = do

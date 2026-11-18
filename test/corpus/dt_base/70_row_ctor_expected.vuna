@@ -1,7 +1,7 @@
--- 推断位不默认 Base.List——同名构造子（Row 的 `Nil` / `Cons` 与 List 的
+-- 推断位不默认 Base.Data.List——同名构造子（Row 的 `Nil` / `Cons` 与 List 的
 -- `Nil` / `(::)`）必须由期望类型消歧。这里两种形态都用期望 `Row` 固定到 Row 族：
 -- 顶层签名的 RHS 与 `let` 的签名绑定；`[...]` 行糖仍按期望 Row 展开。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.List as List
 
 data Fs : Type -> Type where

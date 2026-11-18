@@ -31,7 +31,6 @@ modules = [
   "Vuna.Compiler.Base.Diagnostics.Warning",
   "Vuna.Compiler.Base.Hash",
   "Vuna.Compiler.Base.Intrinsics",
-  "Vuna.Compiler.Base.NameAlias",
   "Vuna.Compiler.Base.Obs",
   "Vuna.Compiler.Base.Source",
   "Vuna.Compiler.Base.Store",

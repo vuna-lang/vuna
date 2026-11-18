@@ -1,0 +1,89 @@
+-- | `Ord` trait 的声明（声明与实例分离），外加三值比较 `Ordering` 与 `compare` / `min` / `max`。`<` / `<=` / `>` / `>=` 是 `lt` / `le` / `gt` / `ge` 的别名；fixity 与别名声明集中在 [Base.Internal.Operator]。
+--
+-- 实例落点同 `Base.Trait.Eq`：`Int` / `String` 的实例在 `Base.Data.Int` / `Base.Data.String`；`Bool` 是 `Ord` 方法签名的一部分（返回类型），实例随 trait 留本模块（放 `Base.Data.Bool` 会成环）。
+--
+-- `Ordering` 定义在本模块而不是独立模块：`compare` 的签名依赖它，独立模块会与本模块形成 import 环。`compare` 只用 `lt` 派生、不新增 `Ord` 方法，因此 `deriving (Ord)` 的展开面不变。
+module Base.Trait.Ord where
+
+import Base.Data.Bool
+import Base.Trait.Eq
+import Base.Trait.Hashable
+import Base.Internal.Operator
+import Base.Trait.Show
+
+-- | 全序比较的 trait：`lt` / `le` / `gt` / `ge` 四个方法；`<` / `<=` / `>` / `>=` 是它们的别名，fixity 在 [Base.Internal.Operator]。
+export trait Ord a(..) where
+  -- | 严格小于。
+  (<) : a -> a -> Bool
+  -- | 小于或相等。
+  (<=) : a -> a -> Bool
+  -- | 严格大于。
+  (>) : a -> a -> Bool
+  -- | 大于或相等。
+  (>=) : a -> a -> Bool
+
+-- `Bool` 的顺序用模式匹配直接表达：`False < True`。
+instance Ord Bool where
+  (<) False True = True
+  (<) _ _ = False
+  (<=) False _ = True
+  (<=) True x = x
+  (>) True False = True
+  (>) _ _ = False
+  (>=) True _ = True
+  (>=) False x = x
+
+-- | 三值比较结果：`LT`（小于）/ `EQ`（相等）/ `GT`（大于）；顺序即 `LT < EQ < GT`。
+export data Ordering(..) : Type where
+  -- | 小于。
+  LT : Ordering
+  -- | 相等。
+  EQ : Ordering
+  -- | 大于。
+  GT : Ordering
+
+instance Eq Ordering where
+  (==) LT LT = True
+  (==) EQ EQ = True
+  (==) GT GT = True
+  (==) _ _ = False
+  (/=) a b = if a == b then False else True
+
+instance Ord Ordering where
+  (<) a b = case a of
+    LT => case b of
+      LT => False
+      EQ => True
+      GT => True
+    EQ => case b of
+      LT => False
+      EQ => False
+      GT => True
+    GT => False
+  (<=) a b = a < b || not (b < a)
+  (>) a b = b < a
+  (>=) a b = b <= a
+
+instance Show Ordering where
+  show o = case o of
+    LT => "LT"
+    EQ => "EQ"
+    GT => "GT"
+
+-- | 三值比较：`x < y` 为 `LT`，`y < x` 为 `GT`，否则 `EQ`（只用 `Ord.lt` 派生，不依赖 `Eq` 实例）。
+export compare : Ord a => a -> a -> Ordering
+compare x y = if x < y then LT else if y < x then GT else EQ
+
+-- | 两值中较小者（用 `le` 判定，相等时返回第一个）。
+export min : Ord a => a -> a -> a
+min x y = if x <= y then x else y
+
+-- | 两值中较大者（用 `le` 判定，相等时返回第二个）。
+export max : Ord a => a -> a -> a
+max x y = if x <= y then y else x
+
+instance Hashable Ordering where
+  hash o = case o of
+    LT => 0
+    EQ => 1
+    GT => 2

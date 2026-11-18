@@ -1,9 +1,0 @@
--- | `Base.Eff` 的**类型面**选择性重导出（编译器与工具链共用）。
---
--- 为什么单独一个模块：`import Base.Eff` 会把 `Row.Nil` / `Row.(::)` 构造子也带进作用域，
--- 与 `Base.List` 的 `Nil` / `(::)` 在无期望族的表达式上产生 `TC_AmbiguousCtor`。这里只导出
--- 动作类型、行类型、行成员约束与组合子，需要显式行构造（`Op@n :: r` / `Nil`）的代码
--- 仍导入 `Base.Eff`。
-module Base.Eff.Types where
-
-export import Base.Eff (Eff, Row, Named, Member, rowRem, rowAppend, defaultInstance, effPrim, weaken, weakenRow, raise, raiseTo, Scoped, scope, handleScoped, handleSelf, sendCore, performCore, handleCore, handleCoreLin, Cont, resumeCont, EffSig, sigFn, sigOf, handleWith, handleWithAt, mkCont, bracket, finally, runPure, runEff, joinEff, joinEffNilOuter)

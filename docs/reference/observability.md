@@ -1,7 +1,7 @@
 # 可观测性（observability）
 
 本页是 **vuna 全语言层**的性能/资源观测规范：编译器与**任何 vuna 应用**共用同一套事件
-模型、同一套开关、同一套格式。落地范围：编译器自身的内建探针、`Base.Obs` 库层、
+模型、同一套开关、同一套格式。落地范围：编译器自身的内建探针、`Base.Data.Obs` 库层、
 隐藏原语与生成运行时、`vuna dev obs` 工具链、DWARF 行号、以及与外部生态的换算。
 
 读数方法学（怎么量、量什么、否决过的优化）在 [performance.md](performance.md)；本页只管
@@ -143,7 +143,7 @@ span / 计数 / 日志 / 采样栈写成 **Chrome Trace Event JSONL**；关闭�
 `VInt 0`，`span` 归约成「把 thunk 应用到 0」——核心求值永远静默（同 `dbg!`）。wasm/native
 后端：叶子原语为 no-op，`span` 编译期 `unsupported`（O12）。
 
-### 4.2 库层 `Base.Obs`（所有 vuna 应用）
+### 4.2 库层 `Base.Data.Obs`（所有 vuna 应用）
 
 ```text
 obsLevel      : Int -> Int
@@ -157,7 +157,7 @@ obsSampleStart : String -> Int -> Int
 obsSampleStop  : Int -> Int
 ```
 
-薄包装（无 `Eff`、无 `runPure`，满足隐藏效果守卫）；`Base.Show` 的 `dbgShow` 走同一日志原语
+薄包装（无 `Eff`、无 `runPure`，满足隐藏效果守卫）；`Base.Trait.Show` 的 `dbgShow` 走同一日志原语
 （stderr 文本协议不变）。
 
 ### 4.3 内置宏（无需 import）

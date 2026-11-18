@@ -1,0 +1,58 @@
+-- | 库级 State monad：表示是 `s -> Pair a s` 的纯函数，没有语言级效应；`do` 依赖本模块的 `Functor` / `Monad` 实例。
+--
+-- 运行入口是 `runState`（唯一 handler），`evalState` / `execState` 只取结果或最终状态。
+module Base.Effect.Pure.State where
+
+import Base.Data.Pair
+import Base.Data.Int
+import Base.Trait.Monad
+
+-- | 库级 State monad：把状态 `s` 映射到「结果 `a` + 新状态 `s`」。
+export record State s a where
+  -- | 在给定初始状态下执行，返回结果与最终状态。
+  stateRun : s -> Pair a s
+
+-- | 运行 State 并返回「结果 + 最终状态」的 `Pair`；是唯一 handler，其余运行函数都基于它。
+export runState : State s a -> s -> Pair a s
+runState (State f) s = f s
+
+-- | 运行 State 并只取结果（丢弃最终状态）。
+export evalState : State s a -> s -> a
+evalState st s = firstOf (runState st s)
+
+-- | 运行 State 并只取最终状态（丢弃结果）。
+export execState : State s a -> s -> s
+execState st s = secondOf (runState st s)
+
+instance Functor (State s) where
+  fmap f st = State (\s => case st.stateRun s of
+    Pair a s2 => Pair (f a) s2
+  )
+
+instance Monad (State s) where
+  (>>=) st k = State (\s => case st.stateRun s of
+    Pair a s2 => (k a).stateRun s2
+  )
+
+instance Applicative (State s) where
+  pure a = State (\s => Pair a s)
+  ap mf mx = State (\s => case mf.stateRun s of
+    Pair g s1 => case mx.stateRun s1 of
+      Pair b s2 => Pair (g b) s2
+  )
+  liftA2 f sa sb = State (\s => case sa.stateRun s of
+    Pair a s1 => case sb.stateRun s1 of
+      Pair b s2 => Pair (f a b) s2
+  )
+
+-- | 取当前状态（结果与状态相同）。
+export get : State s s
+get = State (\s => Pair s s)
+
+-- | 替换状态，返回占位结果 `0`（签名 `State s Int`）。
+export put : s -> State s Int
+put s = State (\_ => Pair 0 s)
+
+-- | 用 `f` 变换状态，返回占位结果 `0`。
+export modify : (s -> s) -> State s Int
+modify f = State (\s => Pair 0 (f s))

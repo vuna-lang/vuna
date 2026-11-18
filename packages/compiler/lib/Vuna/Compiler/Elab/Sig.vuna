@@ -108,7 +108,7 @@ quantifyTopKindsWith domOf (n :: rest) sigExpr e sp =
   in EPi n True Nothing dom (quantifyTopKindsWith domOf rest sigExpr e sp) sp
 
 -- 签名约束里的 `Member n e r`：收集 n/r 的域覆盖（String/Row），供量化使用。
--- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Eff 的 data family，不是 trait。
+-- 只有顶层签名 ctx 走这里；`Member` 本身仍是 Base.Effect.Core 的 data family，不是 trait。
 memberDomainOverrides : List Expr -> List (Pair String Expr)
 memberDomainOverrides [] = []
 memberDomainOverrides (e :: rest) = append (memberDomainOverridesOne e) (memberDomainOverrides rest)
@@ -251,7 +251,7 @@ filterNamesInModule sigName (n :: rest) =
   if modulePrefixOf n == modulePrefixOf sigName then n :: filterNamesInModule sigName rest
   else filterNamesInModule sigName rest
 
--- 名字的模块前缀（`Base.Nat.succ` → `Base.Nat`；入口顶层的 `main` → ""）。
+-- 名字的模块前缀（`Base.Data.Nat.succ` → `Base.Data.Nat`；入口顶层的 `main` → ""）。
 export modulePrefixOf : String -> String
 modulePrefixOf name = case splitLastDot (splitOnDot name) of
   Pair rev base => joinDots rev

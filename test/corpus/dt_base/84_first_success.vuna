@@ -1,8 +1,8 @@
 -- 候选选择组合子：`firstJust` / `firstSuccess`（顺序即优先级，首个成功者胜出），
 -- 以及 `envGetEnvNonEmpty`（未设置与空串都算无值）。
 import Prelude
-import Base.Effect.Eff as Eff
-import Base.Effect.EffEnv as EffEnv
+import Base.Effect.Core as Eff
+import Base.Effect.Env as EffEnv
 
 firstOfNone : Maybe Int
 firstOfNone = firstJust []

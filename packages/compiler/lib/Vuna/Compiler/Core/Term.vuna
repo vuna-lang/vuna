@@ -470,7 +470,7 @@ termGlobalNames (TIf c th el) =
   append (termGlobalNames c) (append (termGlobalNames th) (termGlobalNames el))
 
 -- | 从 term 出发沿定义引用做可达性扫描：是否真的触达浮点字面量/浮点内建。
--- interp/REPL 的浮点求值 guard 用它（不能只看程序里“有没有 Base.Float 定义”，否则
+-- interp/REPL 的浮点求值 guard 用它（不能只看程序里“有没有 Base.Data.Float 定义”，否则
 -- `import Base` 的正常程序会被误拒）；工作列表 + fuel 限深（不做 visited：defs 环由
 -- fuel 兜底）。
 export termReachesFloat : List (Pair String Term) -> List String -> Term -> Bool

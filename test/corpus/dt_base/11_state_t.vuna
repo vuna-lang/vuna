@@ -1,9 +1,9 @@
--- State 效应栈（`Base.EffState`）。
+-- State 效应栈（`Base.Effect.State`）。
 -- 标签 `State "counter" Int`；handler 以 `s -> Pair a s` 为 answer 线程状态。
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.Eff as Eff
-import Base.Effect.EffState as EffState
+import Base.Effect.Exit as EffExit
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.State as EffState
 import Base.Data.Pair as Pair
 
 prog : Eff [StateOp Int@counter] Int

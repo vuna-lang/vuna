@@ -14,7 +14,7 @@ module Vuna.Compiler.Driver.SplitGen where
 -- 方法投影名与 `Dict_<trait>`）；没有按字符串前缀猜归属的表。
 -- 推导不到的带点名字回落到「模块前缀必须是已知模块」，否则报错。
 import Vuna.Compiler.Base.Common
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 import Base.Container.HashMap as HashMap
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Driver.Owner

@@ -1,0 +1,34 @@
+-- | 库级 Reader monad：表示是 `e -> a` 的纯函数，`do` 依赖本模块的 `Functor` / `Monad` 实例。
+--
+-- handler 是 `runReader`；`local` 在局部改写环境。
+module Base.Effect.Pure.Reader where
+
+import Base.Trait.Monad
+
+-- | 库级 Reader monad：在只读环境 `e` 下求值得到 `a`（构造器不导出，用 `runReader` 运行）。
+export record Reader e a where
+  -- | 把环境 `e` 喂给该 Reader 得到结果。
+  readerRun : e -> a
+
+-- | handler：把环境 `e` 喂给 Reader 得到结果。
+export runReader : Reader e a -> e -> a
+runReader (Reader f) e = f e
+
+instance Functor (Reader e) where
+  fmap f r = Reader (\e => f (r.readerRun e))
+
+instance Monad (Reader e) where
+  (>>=) r k = Reader (\e => (k (r.readerRun e)).readerRun e)
+
+instance Applicative (Reader e) where
+  pure a = Reader (\e => a)
+  ap mf mx = Reader (\e => (mf.readerRun e) (mx.readerRun e))
+  liftA2 f ra rb = Reader (\e => f (ra.readerRun e) (rb.readerRun e))
+
+-- | 取当前环境（结果与环境相同）。
+export ask : Reader e e
+ask = Reader (\e => e)
+
+-- | 在 `f` 修改后的环境下运行 `r`；改写只作用于该动作，不逃逸。
+export local : (e -> e) -> Reader e a -> Reader e a
+local f r = Reader (\e => r.readerRun (f e))

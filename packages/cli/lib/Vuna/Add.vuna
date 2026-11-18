@@ -18,11 +18,11 @@ import Vuna.Fetch
 import Vuna.Registry
 import Base.Data.List as List
 import Base.Data.String as String
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
 
 -- | `vuna deps add` 的入口：解析 `--dry-run` / `--no-fetch` 与位置参数（`<name>[@<version>]`，
 -- 可选 `DIR`，默认 `.`）；参数个数或用法错误打印 `error: ...` 并返回 2。

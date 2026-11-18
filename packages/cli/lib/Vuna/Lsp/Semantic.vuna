@@ -130,7 +130,7 @@ declTableOf sf =
     (concatMap declFunsOf sf.sourceFileDecls) (concatMap declMethodsOf sf.sourceFileDecls)
     (concatMap declParamsOf sf.sourceFileDecls)
 
--- | 内部：模块头 + import + import alias 的全部点分前缀（`Base.List.map` 的 `Base` / `Base.List`）。
+-- | 内部：模块头 + import + import alias 的全部点分前缀（`Base.Data.List.map` 的 `Base` / `Base.Data.List`）。
 namespaceNames : SourceFile -> List String
 namespaceNames sf =
   let

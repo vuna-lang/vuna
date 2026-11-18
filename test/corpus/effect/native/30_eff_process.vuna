@@ -1,8 +1,8 @@
 -- process 效应标签（命名实例）——mock handler 给固定 args/退出码；
 -- real 路径走入口自动预装的行 handler（含 argv 与 runIn 的退出码 0）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Process as EffProcess
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 
 prog : (n : String) -> Eff (Named n ProcessOp :: []) String

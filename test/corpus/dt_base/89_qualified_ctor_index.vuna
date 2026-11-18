@@ -1,5 +1,5 @@
--- 类型位置里的限定构造子（`Base.Eff.Row.Nil`）：类型命名空间查找失败后回退到构造子。
-import Base.Effect.Eff as Eff
+-- 类型位置里的限定构造子（`Base.Effect.Core.Row.Nil`）：类型命名空间查找失败后回退到构造子。
+import Base.Effect.Core as Eff
 import Base.Data.Nat as Nat
 
 prog : Eff.Eff Eff.Row.Nil Nat

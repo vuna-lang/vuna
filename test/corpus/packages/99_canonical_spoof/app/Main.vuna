@@ -1,4 +1,4 @@
-import Base.Bool
+import Base.Data.Bool
 
 main : Int
 main = if Yes then 1 else 2

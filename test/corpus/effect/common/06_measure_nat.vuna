@@ -1,10 +1,10 @@
--- 宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.EffConsole.Print`、
--- `Base.EffFs.WriteFile`/`FileSize`）；直调 `@vuna@prim_eff_*` 原语得到 `Int`。
+-- 宿主度量在 Eff 标签的 result 族里是 `Nat`（`Base.Effect.Console.Print`、
+-- `Base.Effect.Fs.WriteFile`/`FileSize`）；直调 `@vuna@prim_eff_*` 原语得到 `Int`。
 -- 本夹具用 entry 自动预装的行 handler 取 `Nat`、做 `Nat` 算术，并由 main 展示。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.Maybe as Maybe
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
 import Base.Data.Nat as Nat
 
 prog : Eff [FsOp, ConsoleOp] Nat

@@ -1,0 +1,24 @@
+-- | 通用哈希 trait：`hash : a -> Int`，是 `HashMap` / `HashSet` 这类泛型哈希容器的键约束。
+--
+-- 约定：`eq x y` 为真时必须 `hash x == hash y`，否则相等的键会散到不同桶。`hash` 可返回任意 `Int`，容器在内部归一化到 0..1023 桶（负数与 `min_int` 都安全）。
+--
+-- `hashStr` 是 `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式），也是公开给需要采样键的工具（`Debug` / `Index.Scan`）的入口；`hashCombine` 供复合键与 `deriving (Hashable)` 组合子哈希使用。
+module Base.Trait.Hashable where
+
+-- import `Base.Trait.Num` 让 `hashCombine` 的内建算术 `a * 31 + b` 有效：`*` / `+` 是 `Num` 方法别名，
+-- 由精化器特化成 Int 原语。`Base.Trait.Num` 是叶模块（不 import 任何模块），因此不会形成
+-- `Base.Trait.Hashable ↔ Base.Data.Int` 的环，`String` / `Int` 等实例仍在各自类型模块。
+import Base.Trait.Num
+
+-- | 可哈希的 trait：`hash : a -> Int`。约定：`eq x y` 为真时必须 `hash x == hash y`。
+export trait Hashable a(..) where
+  -- | 值的哈希码；只要求满足「相等 ⇒ 同哈希」，分布质量影响容器性能。
+  hash : a -> Int
+
+-- | `String` 的 0..1023 哈希（intrinsic `strHash` 的同一公式）；也供需要采样键的工具使用。
+export hashStr : String -> Int
+hashStr s = strHash s
+
+-- | 组合两个哈希（复合键与 `deriving (Hashable)` 使用）；溢出按 Int 回绕，容器自行归一化。
+export hashCombine : Int -> Int -> Int
+hashCombine a b = a * 31 + b

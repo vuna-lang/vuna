@@ -18,12 +18,12 @@ import Vuna.Compiler.Loader.Fixity
 import Vuna.Files
 import Vuna.FixityEnv
 import Vuna.Index
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
 
 -- | `vuna map` 的入口：`find` / `impact` 是子命令，无子命令时打印模块总览。
 export mapArgs : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => List String -> Eff r Int

@@ -3,7 +3,7 @@
 name = "vuna-base"
 
 
-# 公开面只有门面：叶子模块（Base.EffFs / Base.HashMap / …）不跨包可见。
+# 公开面只有门面：叶子模块（Base.Effect.Fs / Base.Container.HashMap / …）不跨包可见。
 # - Base：扁平核心门面（import Base 即可用）
 # - Base.Data / Base.Trait：扁平 + 命名空间路径
 # - Base.Container / Base.Effect：只提供命名空间路径

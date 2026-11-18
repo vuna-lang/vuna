@@ -1,8 +1,8 @@
 -- 网络失败的类型化通道：`netFail` 抛到行里，`runNetError` 折叠成 `Result`。
 -- 「对端关闭」不是错误（`netRecv` 给 `Nothing`），所以这里只测 typed error 本身。
 import Prelude
-import Base.Effect.Eff as Eff
-import Base.Effect.EffNet as EffNet
+import Base.Effect.Core as Eff
+import Base.Effect.Net as EffNet
 import Base.Data.Result as Result
 
 prog : Eff ([NetErrorOp@"net-error"]) Int

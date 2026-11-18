@@ -35,14 +35,14 @@ import Vuna.Files
 import Vuna.Json
 import Vuna.Lint
 import Base.Effect.Pure.IORef as IORef
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffArgs as EffArgs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Clock as EffClock
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
+import Base.Effect.Exit as EffExit
+import Base.Effect.Args as EffArgs
 
 -- | 一次 suite run 的执行环境：每个进程（父进程 / 各 worker）在 `runSuiteOnce` 里构造一次。
 record Env where
@@ -2643,7 +2643,7 @@ relativeTo base path =
       path
   else path
 
--- 诊断 JSON 归一化用（`Base.String` 没有 replace）。
+-- 诊断 JSON 归一化用（`Base.Data.String` 没有 replace）。
 -- | 内部：把 `haystack` 里所有 `needle` 换成 `replacement`。
 replaceAllText : String -> String -> String -> String
 replaceAllText needle replacement haystack =

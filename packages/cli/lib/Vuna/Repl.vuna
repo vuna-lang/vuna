@@ -20,7 +20,7 @@
 --
 -- `:load` 接受三种形式（存在性优先）：目录 → 切换包上下文（重置缓冲 / 索引，保留设置与
 -- 历史）；文件 → 整段源码替换 imports / defs，带 `module ... where` 头拒绝；模块名
--- （如 `Base.Nat`）→ 立即校验后追加 `import`。
+-- （如 `Base.Data.Nat`）→ 立即校验后追加 `import`。
 --
 -- 实现结构：只有主循环（`replLoop` / 本模块外的 `editLoop`）是尾递归循环；其余步骤函数返回新状态
 -- （`ReplState` / `ReplOutcome`）。主循环用显式 fuel（`replFuelBound`）防失控。
@@ -53,15 +53,15 @@ import Vuna.Search.Query
 import Vuna.Search.Run
 import Vuna.Search.Types
 import Base.Effect.Pure.IORef as IORef
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffStdin as EffStdin
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffExit as EffExit
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Exit as EffExit
 
 -- | 解析临时源码用的虚拟文件名（不落盘，只给 parser 与诊断提供定位）。
 replTempFile : String
@@ -1124,7 +1124,7 @@ else if hasMainDef (bufferProgram st) then do
 else if hasUnsolvedMeta tyText then do
   _ <-
     printError st
-      "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Eff.Eff Base.Eff.Row.Nil Int` + `prog = ...`）"
+      "无法确定动作表达式的完整类型（${tyText}）；先定义成带签名的值再求值（如 `prog : Base.Effect.Core.Eff Base.Effect.Core.Row.Nil Int` + `prog = ...`）"
   pure 0
 else
   let
@@ -1144,19 +1144,19 @@ else
 hasUnsolvedMeta : String -> Bool
 hasUnsolvedMeta tyText = contains "?" tyText
 
--- 动作结果类型可能是 `Base.Nat.Nat` 这类跨模块 canonical 名（`Base.EffConsole.Print` 在
+-- 动作结果类型可能是 `Base.Data.Nat.Nat` 这类跨模块 canonical 名（`Base.Effect.Console.Print` 在
 -- result 族里返回 `Nat`），生成的入口文件必须补对应 `import` 才能解析限定名。
--- | 内部：为生成的入口文件补 `Base.Eff` / `Base.Nat` 的 import（已显式 import 时跳过，
+-- | 内部：为生成的入口文件补 `Base.Effect.Core` / `Base.Data.Nat` 的 import（已显式 import 时跳过，
 -- 重复 import 是硬错误）。
 ioTypeImports : ReplState -> String -> String
 ioTypeImports st tyText =
   let
     prog = bufferProgram st
     effImp =
-      if contains "Base.Eff." tyText && not (contains "import Base.Eff" prog) then "import Base.Eff\n"
+      if contains "Base.Effect.Core." tyText && not (contains "import Base.Effect.Core" prog) then "import Base.Effect.Core\n"
       else ""
     natImp =
-      if contains "Base.Nat." tyText && not (contains "import Base.Nat" prog) then "import Base.Nat\n"
+      if contains "Base.Data.Nat." tyText && not (contains "import Base.Data.Nat" prog) then "import Base.Data.Nat\n"
       else ""
   in effImp ++ natImp
 
@@ -1166,14 +1166,14 @@ hasMainDef program = case parseSource replTempFile program of
   ErrC e => False
   OkC (SourceFile _ _ _ decls _ _ _) => memName "main" (topNames decls)
 
--- `showTypeSig` 把 `Eff [] a` 渲染成 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`。
+-- `showTypeSig` 把 `Eff [] a` 渲染成 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`。
 -- | 顶层类型文本是否是 canonical 动作类型（`Eff [] a` 的渲染形式）。
 isIOTypeText : String -> Bool
 isIOTypeText tyText =
   let
     t = trim tyText
-  in startsWith "((Base.Eff.Eff Base.Eff.Row.Nil) " t
-    || startsWith "(Base.Eff.Eff Base.Eff.Row.Nil) " t
+  in startsWith "((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) " t
+    || startsWith "(Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) " t
 
 -- | 内部：动作结果类型是否可直接打印（`Int` / `String` / `Bool` / `Nat`）。
 ioPrintResult : String -> Bool
@@ -1184,14 +1184,14 @@ ioPrintResult tyText = case ioInnerType (trim tyText) of
       || inner == "String"
       || inner == "Bool"
       || inner == "Nat"
-      || inner == "Base.Nat.Nat"
+      || inner == "Base.Data.Nat.Nat"
 
 -- | 内部：从 canonical 动作类型文本里取出结果类型。
 ioInnerType : String -> Maybe String
 ioInnerType t =
   let
-    effHead = "((Base.Eff.Eff Base.Eff.Row.Nil) "
-    effHeadBare = "(Base.Eff.Eff Base.Eff.Row.Nil) "
+    effHead = "((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) "
+    effHeadBare = "(Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) "
   in if startsWith effHead t then Just
     (stripTrailingParen (trim (substring (byteLength effHead) (byteLength t - byteLength effHead) t)))
   else if startsWith effHeadBare t then Just
@@ -1222,7 +1222,7 @@ takeTypeIdent (char :: rest) acc =
   if typeIdentChar char then takeTypeIdent rest (char :: acc)
   else Pair (strPack (reverse acc)) (char :: rest)
 
--- | 内部：按 token 分类着色——`Type` 洋红、大写 / 带点的全局名（`Base.List.List`、`Int`）
+-- | 内部：按 token 分类着色——`Type` 洋红、大写 / 带点的全局名（`Base.Data.List.List`、`Int`）
 -- 青色、其余（小写类型变量）黄色。
 classifyTypeIdent : ReplState -> String -> String
 classifyTypeIdent st tok = if tok == "Type" then c st "1;35" tok

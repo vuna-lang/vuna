@@ -50,7 +50,7 @@ cgTemplate NoMain = "no main definition"
 cgTemplate TypeUsedAtRuntime = "a type is used at runtime"
 cgTemplate (AxiomAtRuntime _) = "axiom <0> cannot be used at runtime (it has no runtime definition)"
 cgTemplate (ListBridgeRequired _) =
-  "builtin <0> requires the canonical Base.List.List declaration from vuna-base (no base dependency in this package)"
+  "builtin <0> requires the canonical Base.Data.List.List declaration from vuna-base (no base dependency in this package)"
 cgTemplate (RecursiveValueDefinition _) =
   "top-level value definition <0> cannot be recursive, so make it a function or remove the cycle"
 cgTemplate (TypeLevelBindingRuntime _) = "type-level binding <0> is used at runtime"
@@ -73,7 +73,7 @@ cgChunk0 =
     CgEntry (cgCode NoMain) (cgTemplate NoMain) "入口缺少 main 定义",
     CgEntry (cgCode TypeUsedAtRuntime) (cgTemplate TypeUsedAtRuntime) "类型出现在运行时",
     CgEntry (cgCode (AxiomAtRuntime "")) (cgTemplate (AxiomAtRuntime "")) "axiom 出现在运行时（它没有运行时定义）",
-    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 vuna-base 的 Base.List.List 声明才能桥接，但包内没有 base 依赖"
+    CgEntry (cgCode (ListBridgeRequired "")) (cgTemplate (ListBridgeRequired "")) "内建需要 vuna-base 的 Base.Data.List.List 声明才能桥接，但包内没有 base 依赖"
   ]
 
 cgChunk1 : List CgEntry

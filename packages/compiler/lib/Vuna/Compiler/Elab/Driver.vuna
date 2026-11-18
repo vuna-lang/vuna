@@ -524,13 +524,13 @@ spineOf t = Pair t []
 appendLastTerm : List Term -> Term -> List Term
 appendLastTerm xs x = append xs [x]
 
--- | `Base.Nat.Zero` 的构造子全名（REPL 把 Nat 值渲染成十进制时识别它）。
+-- | `Base.Data.Nat.Zero` 的构造子全名（REPL 把 Nat 值渲染成十进制时识别它）。
 replNatZeroName : String
-replNatZeroName = "Base.Nat.Nat.Zero"
+replNatZeroName = "Base.Data.Nat.Nat.Zero"
 
--- | `Base.Nat.Succ` 的构造子全名（REPL 沿 Succ 链把 Nat 值渲染成十进制）。
+-- | `Base.Data.Nat.Succ` 的构造子全名（REPL 沿 Succ 链把 Nat 值渲染成十进制）。
 replNatSuccName : String
-replNatSuccName = "Base.Nat.Nat.Succ"
+replNatSuccName = "Base.Data.Nat.Nat.Succ"
 
 replNatValue : Int -> List DtCtor -> Term -> Maybe Int
 replNatValue fuel ctors t = if fuel <= 0 then Nothing
@@ -640,24 +640,24 @@ zipKeptArgs (b :: bs) [] = []
 zipKeptArgs (b :: bs) ((Pair a rig) :: rest) =
   if rigIsErased (secondOf b) then zipKeptArgs bs rest else (::) a (zipKeptArgs bs rest)
 
--- | `Base.List.Nil` 的构造子全名（REPL 列表显示用）。
+-- | `Base.Data.List.Nil` 的构造子全名（REPL 列表显示用）。
 replListNilName : String
-replListNilName = "Base.List.List.Nil"
+replListNilName = "Base.Data.List.List.Nil"
 
 -- | `(::)` 的构造子全名（REPL 列表显示用）。
 replListConsName : String
-replListConsName = "Base.List.List.::"
+replListConsName = "Base.Data.List.List.::"
 
 replPairName : String
-replPairName = "Base.Pair.Pair"
+replPairName = "Base.Data.Pair.Pair"
 
--- | `Base.Maybe.Just` 的构造子全名（REPL 显示 `Just 1` 用）。
+-- | `Base.Data.Maybe.Just` 的构造子全名（REPL 显示 `Just 1` 用）。
 replJustName : String
-replJustName = "Base.Maybe.Maybe.Just"
+replJustName = "Base.Data.Maybe.Maybe.Just"
 
--- | `Base.Maybe.Nothing` 的构造子全名（REPL 显示 `Nothing` 用）。
+-- | `Base.Data.Maybe.Nothing` 的构造子全名（REPL 显示 `Nothing` 用）。
 replNothingName : String
-replNothingName = "Base.Maybe.Maybe.Nothing"
+replNothingName = "Base.Data.Maybe.Maybe.Nothing"
 
 export dtEvalExprIn : DtProgram -> Expr -> Check String
 dtEvalExprIn prog expr =
@@ -706,13 +706,13 @@ dtEvalExprInInfoCore prog expr = case prog of
               v => OkC (Pair (showValueRepl datas ec2 v) tyText)
     )
 
--- 导入 Base.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
+-- 导入 Base.Trait.Record 的模块：为当前模块的 record 字段追加 HasField 实例。
 -- | 判断声明列表里是否出现 `HasField` trait 声明（全名或短名）。
 hasHasFieldDecls : List Decl -> Bool
 hasHasFieldDecls [] = False
 hasHasFieldDecls (d :: rest) = case d of
   DTrait n ps supers ms sp =>
-    if n == "Base.Record.HasField" || baseNameOf n == "HasField" then True
+    if n == "Base.Trait.Record.HasField" || baseNameOf n == "HasField" then True
     else hasHasFieldDecls rest
   _ => hasHasFieldDecls rest
 
@@ -741,7 +741,7 @@ hasExplicitHasFieldInstance (d :: rest) = case d of
 -- | 按需为当前模块的记录字段追加 `HasField` 实例：已有显式实例则跳过，`getField` 或 `HasField` 可见时才生成。
 export maybeAddHasFieldInstances : List (Pair String Term) -> List Decl -> List Decl
 maybeAddHasFieldInstances globals decls = if hasExplicitHasFieldInstance decls then decls
-else case globalLookup "Base.Record.getField" globals of
+else case globalLookup "Base.Trait.Record.getField" globals of
   Just _ => append decls (hasFieldInstancesOfDecls decls)
   Nothing => if hasHasFieldDecls decls then append decls (hasFieldInstancesOfDecls decls) else decls
 
@@ -834,7 +834,7 @@ in Vuna.Compiler.Base.Common.bind (elabDatas (collectDataDecls decls []) records
           datas1 = append datas classDatas
           -- 接口摘要路径：起始 Ec 已带依赖包的类表；实例头/体必须看**全部**类，
           -- 不能只看本包 `elabTraits` 新声明的那些（否则 `deriving (Eq)` 解析出的
-          -- `Base.Eq.Eq` 找不到）。全量路径下两者相同。
+          -- `Base.Trait.Eq.Eq` 找不到）。全量路径下两者相同。
           classesAll = ecClasses ec1
           _ = dbg! "traits-done"
         in Vuna.Compiler.Base.Common.bind (checkInstanceHeads (collectInstDecls decls []) classesAll globals1 ec1) (\pih => case pih of
@@ -908,14 +908,14 @@ mainActionOf (ty@(TApp (TApp fn row _) arg _)) = case fn of
   _ => Pair "other" ty
 mainActionOf ty = Pair "other" ty
 
--- | 行项是否是 `Eff []`（语法上的 `Base.Eff.Row.Nil`）。
+-- | 行项是否是 `Eff []`（语法上的 `Base.Effect.Core.Row.Nil`）。
 isNilRowTerm : Term -> Bool
 isNilRowTerm (TGlobal g) = g == effRowNilCtor
 isNilRowTerm (TCon g []) = g == effRowNilCtor
 isNilRowTerm _ = False
 
 -- 内建宿主效应行（表见 `Intrinsics.builtinEffects`）。entry 允许这类行，
--- 用隐藏的 `Base.Eff.runMain` 执行；用户自定义的未处理效应仍报 TC_UnhandledEffects。
+-- 用隐藏的 `Base.Effect.Core.runMain` 执行；用户自定义的未处理效应仍报 TC_UnhandledEffects。
 isBuiltinHostLabel : Value -> Bool
 isBuiltinHostLabel (VNeutral (NGlobal g _)) = isBuiltinEffectTag g
 isBuiltinHostLabel _ = False

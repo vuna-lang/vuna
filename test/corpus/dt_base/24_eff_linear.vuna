@@ -1,6 +1,6 @@
 -- 线性 handler；续延是 quantity 1 的 Cont，resume 一次通过。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffReader as EffReader
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
 
 prog : Eff [ReaderOp Int@counter] Int
 prog = ask "counter" Int

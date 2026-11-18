@@ -1,5 +1,5 @@
 -- Prelude 自动注入 → 直接用 base 的 `List`；辅助函数取名 `mapList`，
--- 避免与 base `Base.List.map` 同名。
+-- 避免与 base `Base.Data.List.map` 同名。
 mapList : (a -> b) -> List a -> List b
 mapList f [] = []
 mapList f (x :: xs) = (::) (f x) (mapList f xs)

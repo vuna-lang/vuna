@@ -1,6 +1,6 @@
 -- 负例：参数化 op 族的标签探测计数（StateOp Nat 两个实例）同样报歧义。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffState as EffState
+import Base.Effect.Core as Eff
+import Base.Effect.State as EffState
 import Base.Data.Nat as Nat
 
 prog : Eff [StateOp Nat@a, StateOp Nat@b] Nat

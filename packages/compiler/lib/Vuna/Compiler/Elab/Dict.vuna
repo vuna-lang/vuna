@@ -388,27 +388,27 @@ solveDictCtxs globals ctx fuel ec sp (cv :: rest) acc = case searchInstFuel glob
   OkC (Pair t ec1) => solveDictCtxs globals ctx fuel ec1 sp rest (Pair t RigOmega :: acc)
 
 -- 行成员约束：把 `rowMem e r` 的隐式证明当作一个特殊的延迟目标。
--- 这些名字来自受信任的 Base.Eff（见 effects.md §8）；编译器只认这三个头名。
+-- 这些名字来自受信任的 Base.Effect.Core（见 effects.md §8）；编译器只认这三个头名。
 data RowProofKind : Type where
   RowProofYes : RowProofKind
   RowProofNo : RowProofKind
   RowProofUnknown : RowProofKind
 
 rowMemDomName : String
-rowMemDomName = "Base.Eff.rowMem"
+rowMemDomName = "Base.Effect.Core.rowMem"
 
 rowYesDomName : String
-rowYesDomName = "Base.Eff.Yes"
+rowYesDomName = "Base.Effect.Core.Yes"
 
 rowNoDomName : String
-rowNoDomName = "Base.Eff.No"
+rowNoDomName = "Base.Effect.Core.No"
 
--- | 行成员证明（`Member e r`）成立分支的构造子全名（`Base.Eff.Yes.MkYes`）。
+-- | 行成员证明（`Member e r`）成立分支的构造子全名（`Base.Effect.Core.Yes.MkYes`）。
 rowYesCtorName : String
-rowYesCtorName = "Base.Eff.Yes.MkYes"
+rowYesCtorName = "Base.Effect.Core.Yes.MkYes"
 
 -- 行成员证明：`Member e r` 是 Type-1 归纳族；精化器按行结构
--- 构造 `Here`/`There` 证明。只认 Base.Eff 的族/构造子名
+-- 构造 `Here`/`There` 证明。只认 Base.Effect.Core 的族/构造子名
 -- （名字集中在 `Vuna.Compiler.Base.Intrinsics` 的效果协议常量）。
 memberDomName : String
 memberDomName = effMemberFamilyName
@@ -880,14 +880,14 @@ anyValueHasRigidNVar ec fuel (v :: rest) =
   valueHasRigidNVar ec fuel v || anyValueHasRigidNVar ec fuel rest
 
 -- `==` / `/=` / `<` 等已由 Loader 解析成 Eq / Ord 的**方法名**，Elab 看到的
--- 是方法投影的完整名（如 `Base.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
+-- 是方法投影的完整名（如 `Base.Trait.Eq.eq`）。特化入口按「名字是否为该类的方法投影」
 -- 判定（从类表取投影名，不硬编码模块前缀），没有运算符名判断。
 classHasProjection : String -> String -> String -> Ec -> Bool
 classHasProjection className short name ec = case findClassByShortName className (ecClasses ec) of
   Nothing => False
   Just cls => classMethodProjection cls.dtClassMethods short == name
 
--- 投影名/符号名的最后一段（`Base.Eq.==` → `==`）。
+-- 投影名/符号名的最后一段（`Base.Trait.Eq.==` → `==`）。
 opShortOf : String -> String
 opShortOf name = lastSeg name
 
@@ -932,12 +932,12 @@ isCmpMethod ec name =
     || name == "gt"
     || name == "ge"
 
--- `Base.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
+-- `Base.Trait.Num.add/sub/mul/div` 的方法投影（四则运算符的方法形态）。
 -- 与 `isEqMethod` / `isCmpMethod` 同一套「从类表取投影名」判定，不硬编码模块前缀。
 -- 返回规范运算符名（`+` / `-` / `*` / `/`）：`+` 在 Loader 被别名到 `add` 之后，精化器的
 -- 算术特化靠它把方法投影映射回内建原语名；泛型 `Num a =>` 代码在具体类型未知时由
 -- 调用方回落到普通 trait 应用。
--- | 把 `Base.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
+-- | 把 `Base.Trait.Num` 的方法投影映射回规范运算符名（`+` / `-` / `*` / `/`）；不是 Num 方法时返回 `Nothing`。
 export numMethodOpName : Ec -> String -> Maybe String
 numMethodOpName ec name =
   if baseNameOf name == "+" || baseNameOf name == "add" || classHasProjection "Num" "add" name ec || classHasProjection "Num" "+" name ec then
@@ -947,7 +947,7 @@ numMethodOpName ec name =
   else if classHasProjection "Num" "div" name ec || classHasProjection "Num" "/" name ec then Just "/"
   else Nothing
 
--- 方法投影的**短名**（`Base.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
+-- 方法投影的**短名**（`Base.Trait.Eq.eq` → `eq`）：特化只按短名选 runtime 函数。
 methodShortOf : String -> String
 methodShortOf name = secondOf (splitLastDot (splitOnDot name))
 
@@ -1001,8 +1001,8 @@ else case methodNameAliases short of
 -- `eq` / `neq` 的饱和应用（运算符是方法别名）：`Int` / `String`
 -- 特化成具体运行时函数；其它类型解析成 `Eq` 字典的方法投影（手写实例、`deriving (Eq)`、
 -- 约束实例都算证据）。
--- 方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Eq.Eq`），不用硬编码 `Dict_Eq`。
--- `name` 已是被解析成方法投影的完整名（`Base.Eq.eq` / `.neq`），因此字典分支
+-- 方法投影名与字典名从库里短名 `Eq` 的类表项取（`Base.Trait.Eq.Eq`），不用硬编码 `Dict_Eq`。
+-- `name` 已是被解析成方法投影的完整名（`Base.Trait.Eq.eq` / `.neq`），因此字典分支
 -- 直接用它，没有 `==` → `eq` 的映射。
 --
 -- **没有泛型结构比较兜底**——程序里没有 `Eq` 类、或具体类型搜不到实例时
@@ -1056,7 +1056,7 @@ deferEqDict globals ctx mname tyTerm aTerm bTerm sp dictTy ec =
 -- `{d : Dict_Ord a}`。
 -- 每个类型一个符号族：`String` 是指针、`Bool` 是 0/1 裸字，共享一个「泛型比较」符号时
 -- 后端在运行时无法区分（native 的值没有类型标签）。
--- `name` 是方法投影完整名（`Base.Ord.lt` 等），特化只按短名选 runtime 名。
+-- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），特化只按短名选 runtime 名。
 cmpRuntimeName : Span -> String -> String -> Check String
 cmpRuntimeName sp method "Int" =
   if isLtShort method then OkC "bi_lt_int"
@@ -1102,8 +1102,8 @@ anyUnsolvedMetaArg ec (arg :: rest) =
   hasUnsolvedMetaValue (ecSolsP ec) (forceVal ec arg) || anyUnsolvedMetaArg ec rest
 
 export specializeCmpTy : List (Pair String Term) -> Ctx -> String -> Term -> Term -> Span -> Value -> Ec -> Check (Maybe (Pair Term (Pair Value Ec)))
--- `Ord` 类/实例在库（`Base.Ord`），按短名查类并用真实字典名/方法投影名。
--- `name` 是方法投影完整名（`Base.Ord.lt` 等），字典分支直接使用。
+-- `Ord` 类/实例在库（`Base.Trait.Ord`），按短名查类并用真实字典名/方法投影名。
+-- `name` 是方法投影完整名（`Base.Trait.Ord.lt` 等），字典分支直接使用。
 -- **没有「无 Ord 类 → 任意类型泛型比较」兜底**——没有 `Ord` 证据时在 check 期报错
 -- （`Ord instance required`），不生成 `bi_lt_str` / `bi_lt_bool` 等对用户 data 的 `compare`。
 specializeCmpTy globals ctx name aTerm bTerm sp aTy ec = case cmpBuiltinTyName (forceVal ec aTy) of

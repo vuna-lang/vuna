@@ -83,7 +83,7 @@ linear data Token : Type where
 - 线性值的 case：`_` 丢弃因分支 binder 用量为 0 报 `TC_LinearUnused`；as-pattern 别名
   暂未单独区分（同样会落成未用/多次用）。变量模式正常绑定。
 - 线性箭头 binder `(1 x : A) -> B` 是既有语法：`x` 在体内恰好用一次。它**不是**
-  「函数值本身线性」的箭头类型；要让一个闭包只能被消费一次，用 `Base.Eff.Cont`
+  「函数值本身线性」的箭头类型；要让一个闭包只能被消费一次，用 `Base.Effect.Core.Cont`
   （见 §6）。
 - **没有**依赖 multiplicity / multiplicity 多态；线性多态与泛型容器见
   [debt.md](debt.md) D22。
@@ -109,7 +109,7 @@ linear data Token : Type where
 - `Elab/Usage.checkDefCapture`：沿项结构检查标记 λ 的位置，只有上面三种「立即消费」
   放行；构造子字段还要求族本身是 `linear data`（否则族值可复制，一次性承诺不可靠）。
 
-配套的库 API（`Base.Eff`）：`Cont a b` 是线性数据包装的**一次性闭包**
+配套的库 API（`Base.Effect.Core`）：`Cont a b` 是线性数据包装的**一次性闭包**
 （`(1 k : a -> b)` 字段）；`mkCont : (1 k : a -> b) -> Cont a b` 装入，
 `resumeCont : (1 c : Cont a b) -> a -> b` 消费一次。handler 续延 API
 （`handleCoreLin`）就是用它表达 resume-once。
@@ -150,7 +150,7 @@ mk t = mkContI (\x => useToken t + x)   -- 捕获 t；rig-1 实参位置 → 允
   只覆盖三值；多态 multiplicity 需要 `Rig` 变成项层/类型层数据 + 依赖 Pi
   （[debt.md](debt.md) D22）。
 - 无「函数值线性」的通用箭头类型与借用（`&`）、region 推断；一次性闭包只有
-  `Base.Eff.Cont` 这一种库级包装（`mkCont`/`resumeCont`），不是语言级箭头。
+  `Base.Effect.Core.Cont` 这一种库级包装（`mkCont`/`resumeCont`），不是语言级箭头。
   线性箭头 binder `(1 x : A) -> B` 本身可用（§1）。
 - 捕获规则是**保守近似**：只会出现「该放行的被拒」，不会出现「该拒的被放行」；
   嵌套/curried 线性闭包、`if`/`case` 里的捕获一律拒绝。

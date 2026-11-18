@@ -2,33 +2,33 @@
 -- 也提供命名空间路径（`import Base.Data.List as List`，按模块名区分同名操作）。
 module Base.Data where
 
-export module Base.Pair
-export module Base.Pair as Pair
-export module Base.Bool
-export module Base.Bool as Bool
-export module Base.List
-export module Base.List as List
-export module Base.Maybe
-export module Base.Maybe as Maybe
-export module Base.Result
-export module Base.Result as Result
-export module Base.String
-export module Base.String as String
-export module Base.Unit
-export module Base.Unit as Unit
-export module Base.Vec
-export module Base.Vec as Vec
-export module Base.Nat
-export module Base.Nat as Nat
-export module Base.Int
-export module Base.Int as Int
-export module Base.Float
-export module Base.Float as Float
-export module Base.Bits
-export module Base.Bits as Bits
-export module Base.Sort
-export module Base.Sort as Sort
-export module Base.Obs
-export module Base.Obs as Obs
-export module Base.Obs.Span
-export module Base.Obs.Span as ObsSpan
+export module Base.Data.Pair
+export module Base.Data.Pair as Pair
+export module Base.Data.Bool
+export module Base.Data.Bool as Bool
+export module Base.Data.List
+export module Base.Data.List as List
+export module Base.Data.Maybe
+export module Base.Data.Maybe as Maybe
+export module Base.Data.Result
+export module Base.Data.Result as Result
+export module Base.Data.String
+export module Base.Data.String as String
+export module Base.Data.Unit
+export module Base.Data.Unit as Unit
+export module Base.Data.Vec
+export module Base.Data.Vec as Vec
+export module Base.Data.Nat
+export module Base.Data.Nat as Nat
+export module Base.Data.Int
+export module Base.Data.Int as Int
+export module Base.Data.Float
+export module Base.Data.Float as Float
+export module Base.Data.Bits
+export module Base.Data.Bits as Bits
+export module Base.Data.Sort
+export module Base.Data.Sort as Sort
+export module Base.Data.Obs
+export module Base.Data.Obs as Obs
+export module Base.Data.Obs.Span
+export module Base.Data.Obs.Span as ObsSpan

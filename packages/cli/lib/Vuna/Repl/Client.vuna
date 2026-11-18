@@ -10,11 +10,11 @@ module Vuna.Repl.Client where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json.Frame
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffNet as EffNet
-import Base.Effect.EffStdin as EffStdin
+import Base.Effect.Console as EffConsole
+import Base.Effect.Net as EffNet
+import Base.Effect.Stdin as EffStdin
 import Base.Data.Nat as Nat
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 
 -- | 单次读 stdin / 读 socket 的字节上限。
 clientChunkSize : Int

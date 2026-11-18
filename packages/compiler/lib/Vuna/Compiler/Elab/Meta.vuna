@@ -63,7 +63,7 @@ zipTeleRigs [] bs = []
 zipTeleRigs ms [] = []
 zipTeleRigs (m :: ms) (b :: bs) = Pair m (secondOf b) :: zipTeleRigs ms bs
 
--- Bool 是 base 的普通 data 声明，身份 = 完整符号 `Base.Bool.Bool`；canonical 族的
+-- Bool 是 base 的普通 data 声明，身份 = 完整符号 `Base.Data.Bool.Bool`；canonical 族的
 -- `True` / `False` 精化成核心 `TBool`（OCaml bool），用户 `data Bool` 是普通 data。
 boolCtorValue : String -> Maybe Bool
 boolCtorValue name =
@@ -198,12 +198,12 @@ export globalsLookup : String -> List (Pair String Term) -> Ec -> Maybe Term
 globalsLookup name globals ec = case HashMap.lookup name (ecGlobalsTbl ec) of
   Just ty => Just ty
   -- 表已完整（bodies 阶段）时，未命中就意味着「不是全局」：省掉线性扫全 globals
-  -- 的回落（未命中的绝大多数是数据族名，如 Base.List.List / String / Int）。
+  -- 的回落（未命中的绝大多数是数据族名，如 Base.Data.List.List / String / Int）。
   Nothing => if ec.ecGlobalsComplete then Nothing else globalLookup name globals
 
 -- 全局签名表的构造：同名条目**后出现的获胜**。globals 的顺序是「数据族 kind 先登记、
 -- 值签名后追加」，因此值位置取到值签名；类型位置由 `typeHeadLookup` 走
--- `dtDataKind`，不依赖这张表。注意 `Base.HashMap.fromList` 是**先出现获胜**，用它建
+-- `dtDataKind`，不依赖这张表。注意 `Base.Container.HashMap.fromList` 是**先出现获胜**，用它建
 -- 这张表会让同名值定义被族 kind 盖掉——所以这里用 `insertAll`（后出现获胜）。
 export globalsTableOf : List (Pair String Term) -> HashMap String Term
 globalsTableOf globals = HashMap.insertAll globals (HashMap.fromList [])
@@ -646,7 +646,7 @@ fieldBinderGoGo remaining n acc =
   if remaining <= 0 then reverse acc
   else fieldBinderGoGo (remaining - 1) n (Pair (fieldVarName (n - remaining)) RigOmega :: acc)
 
--- 按**短名**查类（库里的类名带模块前缀，如 `Base.Eq.Eq`；`==` / `<` 的字典
+-- 按**短名**查类（库里的类名带模块前缀，如 `Base.Trait.Eq.Eq`；`==` / `<` 的字典
 -- 查找从 `ecClasses` 按最后一段反查，找不到时调用方退回泛型运行时兜底）。
 export findClassByShortName : String -> List DtClass -> Maybe DtClass
 findClassByShortName short [] = Nothing
@@ -1105,7 +1105,7 @@ freshVarValue name level = VNeutral (NVar name level [])
 -- ---------------------------------------------------------------
 -- 双向检查
 -- ---------------------------------------------------------------
--- `if` 条件 / `Bool` 判定：只认 canonical `Base.Bool.Bool`（`NGlobal boolTypeName`）。
+-- `if` 条件 / `Bool` 判定：只认 canonical `Base.Data.Bool.Bool`（`NGlobal boolTypeName`）。
 export isBoolType : Value -> Bool
 isBoolType (VNeutral n) = isBoolGlobal (neutralHeadName n)
 isBoolType _ = False
@@ -1238,7 +1238,7 @@ isSortExpr (EVar "Type" sp) = True
 isSortExpr (EApp (EVar "Type" sp) args sp2) = True
 isSortExpr _ = False
 
--- 模块限定名的最后一段（`Base.Monad.fmap` → `fmap`）；实现收敛到 `Source.lastSeg`。
+-- 模块限定名的最后一段（`Base.Trait.Monad.fmap` → `fmap`）；实现收敛到 `Source.lastSeg`。
 export baseNameOf : String -> String
 baseNameOf name = lastSeg name
 

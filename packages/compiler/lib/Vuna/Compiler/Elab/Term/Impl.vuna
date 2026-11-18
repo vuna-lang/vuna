@@ -359,7 +359,7 @@ else
 
 -- `if` 条件：先按 prelude `Bool` 检查——保住 `==`/`/=` 的 Int/String **特化**
 -- （推断位会把隐式类型实参留在 spine 上，运行时的 primReduce 归约不了）；失败再按
--- 推断收下真实 `Base.Bool.Bool` 条件（`Base.List.filter` 的 `if p x`）。
+-- 推断收下真实 `Base.Data.Bool.Bool` 条件（`Base.Data.List.filter` 的 `if p x`）。
 export checkCondBoolFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Span -> Check (Pair Term Ec)
 checkCondBoolFuel fuel globals ctx ec c sp = if fuel <= 0 then icFuel "inference"
 else case checkEFuel (fuel - 1) globals ctx ec c boolTyValue of
@@ -371,13 +371,13 @@ else case checkEFuel (fuel - 1) globals ctx ec c boolTyValue of
   )
 
 -- 变量解析顺序：局部上下文 → 本程序的数据构造子 → 全局签名。构造子必须排在全局之前：
--- 本程序数据构造子（canonical Bool 的 `Base.Bool.True/False` 精化成 `TBool`）先于全局签名。
+-- 本程序数据构造子（canonical Bool 的 `Base.Data.Bool.True/False` 精化成 `TBool`）先于全局签名。
 -- ---------------------------------------------------------------
 -- `perform <op>` 降级
 -- ---------------------------------------------------------------
 -- 族约定：op 族 `M.XxxOp : <params…> -> Type -> Type`（最后一个是结果索引）；标签 =
 -- `Named n (<M.Xxx> <params…>)`（按 kind 的显式参数个数 k 补洞）；key = op 族规范名。
--- 降级目标：`Base.Eff.performCore <n=洞> "<key>" (sigFn (\i => <M.Xxx> <params…> i)) <op>`；
+-- 降级目标：`Base.Effect.Core.performCore <n=洞> "<key>" (sigFn (\i => <M.Xxx> <params…> i)) <op>`；
 -- 结果类型 = op 的索引。名字洞由 `{w : Member (Named n (sigOf sig)) r}` 从行条目解出。
 data PerfFamily : Type where
   PerfFamily : String -> String -> String -> PerfFamily
@@ -395,7 +395,7 @@ perfFamilyOfCanonical canon = case perfShortOf (lastSeg canon) of
   Just short => Just (PerfFamily canon (prefixOfName canon) short)
   Nothing => Nothing
 
--- op 的类型值必须是全局 data 族的应用（`Base.EffConsole.ConsoleOp`、`StateOp Nat`）；
+-- op 的类型值必须是全局 data 族的应用（`Base.Effect.Console.ConsoleOp`、`StateOp Nat`）；
 -- 族参数允许是中性 spine（State/Reader 的 s 由行/期望类型解），族名取 spine head。
 perfFamilyOfValue : Ec -> Value -> Maybe PerfFamily
 perfFamilyOfValue ec v = case forceVal ec v of
@@ -435,7 +435,7 @@ performCallExpr globals ec opTy op sp = case perfFamilyOfValue ec opTy of
   Nothing => tcErr1 sp (EffResFamilyMissing (showValueAt 6 opTy)) (showValueAt 6 opTy)
   Just (PerfFamily canon _ _) =>
     Vuna.Compiler.Base.Common.bind (opFamilyArityOf globals ec canon sp)
-      (\k => OkC (EApp (EVar "Base.Eff.performCore" sp) [EVar "_" sp, EStr canon sp, handleSigArg canon k sp, op] sp))
+      (\k => OkC (EApp (EVar "Base.Effect.Core.performCore" sp) [EVar "_" sp, EStr canon sp, handleSigArg canon k sp, op] sp))
 
 -- ---------------------------------------------------------------
 -- 标记：`EApp (EVar "@vuna@handle") [comp, ret, opH]`（Ast.handleSyntax）。`opH` 是
@@ -528,7 +528,7 @@ handleSigBinder = "@vuna@handle@sig"
 -- （`StateOp s` 的 `s` 由 `o` 的类型定），不能直接传多态族名。
 handleSigArg : String -> Int -> Span -> Expr
 handleSigArg canon k sp =
-  EApp (EVar "Base.Eff.sigFn" sp)
+  EApp (EVar "Base.Effect.Core.sigFn" sp)
     [ELam [Pair handleSigBinder spanEmpty] (EApp (handleOpArg canon k sp) [EVar handleSigBinder sp] sp) sp]
     sp
 
@@ -537,7 +537,7 @@ handleSigArg canon k sp =
 handleCall : Bool -> Expr -> String -> Int -> Expr -> Expr -> Expr -> Span -> Expr
 handleCall headMode nameArg canon k comp ret opH sp =
   let
-    fnName = if headMode then "Base.Eff.handleWithAt" else "Base.Eff.handleWith"
+    fnName = if headMode then "Base.Effect.Core.handleWithAt" else "Base.Effect.Core.handleWith"
   in EApp (EVar fnName sp)
     [nameArg, EStr canon sp, handleSigArg canon k sp, comp, handleRetArg ret, opH] sp
 
@@ -818,9 +818,9 @@ recordUpdatePlan ec baseTy fields sp = case recordTypeOf ec baseTy of
       in OkC
         (UpdateAccessPlan dd ctor idxs dd.dtDataName (length fs) (recordUpdatedIndices dd fields) bodyArgs)
 
--- | `Base.Record.HasField` 字典族的 canonical 名，供上下文查找字段约束使用。
+-- | `Base.Trait.Record.HasField` 字典族的 canonical 名，供上下文查找字段约束使用。
 hasFieldDictName : String
-hasFieldDictName = dictTypeName "Base.Record.HasField"
+hasFieldDictName = dictTypeName "Base.Trait.Record.HasField"
 
 -- 在局部上下文里找签名约束提供的 HasField 字典（`{d : Dict_HasField (MkField "f") a t}`）。
 -- 类参数顺序固定为 f / a / t；标签按 Field 构造子里的 String 比较。
@@ -836,7 +836,7 @@ ctxHasFieldDictGo ((Pair name ty) :: rest) idx ctx ec fname baseTy = case forceV
     False => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
     True => case args of
       fVal :: aVal :: tVal :: _ => case forceVal ec fVal of
-        VNeutral (NGlobal "Base.Field.Field" (label :: _)) => case label of
+        VNeutral (NGlobal "Base.Trait.Field.Field" (label :: _)) => case label of
           VStr nm => case nm == fname of
             False => ctxHasFieldDictGo rest (idx + 1) ctx ec fname baseTy
             True => case convEc ec (ctxDepth ctx) aVal baseTy of
@@ -860,10 +860,10 @@ hasFieldAccessFuel fuel globals ctx ec baseTerm baseTy fname sp = case forceVal 
     Just (Pair dictTerm (Pair fieldTy ec2)) =>
       let
         d = ctxDepth ctx
-        labelTerm = TApp (TGlobal "Base.Field.Field") (TStr fname) Rig0
+        labelTerm = TApp (TGlobal "Base.Trait.Field.Field") (TStr fname) Rig0
         proj =
           TApp
-            (TApp (TApp (TApp (TApp (TGlobal "Base.Record.getField") labelTerm Rig0) (quote d baseTy) Rig0) (quote d fieldTy) Rig0) dictTerm RigOmega)
+            (TApp (TApp (TApp (TApp (TGlobal "Base.Trait.Record.getField") labelTerm Rig0) (quote d baseTy) Rig0) (quote d fieldTy) Rig0) dictTerm RigOmega)
             baseTerm RigOmega
       in OkC (Pair proj (Pair fieldTy ec2))
 
@@ -942,11 +942,11 @@ else Vuna.Compiler.Base.Common.bind (checkTypeFuel (fuel - 1) globals ctx ec dom
       )
 )
 
--- 期望结果类型已知（带 hint）且名字是 `Base.Num` 方法投影、期望类型又不是内建
+-- 期望结果类型已知（带 hint）且名字是 `Base.Trait.Num` 方法投影、期望类型又不是内建
 -- Int/Nat/Float 时，跳过运算符特化、直接走带 hint 的通用推断：hint 先解出类参数与
 -- 结果类型，实参（字面量）随后按该类型 check（可经 FromInt 降级）。否则运算符特化会
 -- 先把字面量推成 Int，`1 + 2 : MyNum` 会报 expected MyNum got Int。
--- | 检查/推断方向的跳过判据：`name` 是 `Base.Num` 方法投影、期望类型是**刚性非内建**类型。
+-- | 检查/推断方向的跳过判据：`name` 是 `Base.Trait.Num` 方法投影、期望类型是**刚性非内建**类型。
 -- 期望是元变量（未知）时不跳过：那属于推断位置，走「先推断实参、Nat/Int 混合提升」
 -- （如 `length xs + maxIntList ys`：Nat + Int → Int）。
 skipArithSpecForExpected : Ec -> String -> Value -> Bool
@@ -1040,7 +1040,7 @@ inferArgsFuel fuel globals ctx ec ty args sp hint =
   if fuel <= 0 then icFuel "inference" else inferArgsGo 64 globals ctx ec ty args sp hint
 
 -- 列表字面量（parser 保留名）按期望族的 Nil/Cons 通用展开；期望未知时默认
--- `Base.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
+-- `Base.Data.List.List`。族内按短名 `Nil`/`Cons` 找构造子（Row/Vec 改名后自然生效）。
 -- | 把列表字面量语法（`[]` / `[h, ..]` 的 Nil/Cons 编码）拆成元素列表；不是列表字面量时返回 Nothing。
 listLitElems : Expr -> Maybe (List Expr)
 listLitElems (EVar name sp) = if isListNilSyntax name then Just [] else Nothing
@@ -1160,7 +1160,7 @@ else case litFamilyCtor ec fam "Nil" of
     Nothing => tcErr1 sp (UnknownName fam) fam
     Just consC => expandListLitGo (dtCtorName nilC) (dtCtorName consC) elems sp
 
--- | 列表字面量的目标族：期望类型能推出族名就用它，否则默认 `Base.List.List`。
+-- | 列表字面量的目标族：期望类型能推出族名就用它，否则默认 `Base.Data.List.List`。
 listLitFamily : Ec -> Value -> String
 listLitFamily ec expected = case expectedFamilyOf ec expected of
   Just fam => fam
@@ -1383,12 +1383,12 @@ coerceNatOperands ec aTy bTy aTerm bTerm =
     Just (Pair (Pair aTy intTyValue) (Pair aTerm (natToIntTerm bTerm)))
   else Nothing
 
--- 算术运算符名。内建 `+ - * /` 与 `Base.Num` 的方法投影（`add/sub/mul/div`）映射回
+-- 算术运算符名。内建 `+ - * /` 与 `Base.Trait.Num` 的方法投影（`add/sub/mul/div`）映射回
 -- 规范运算符名后复用同一套特化——`+` 在 Loader 被别名到 `add` 之后，实例体
 -- `add x y = x + y` 仍降级成内建原语，不会退化成（自递归的）普通字典方法调用。
 -- 具体类型不是 Int/Nat/Float 时特化返回 Nothing，
 -- 调用方回落到普通 trait 应用（泛型 `Num a =>` 代码走这条）。
--- 只有限定名（方法投影 `Base.Num.add`，含 `.`）才需要查类表；裸运算符名在上面直接
+-- 只有限定名（方法投影 `Base.Trait.Num.add`，含 `.`）才需要查类表；裸运算符名在上面直接
 -- 返回，避免给每个普通应用都加 4 次类表扫描。
 arithOpNameOf : Ec -> String -> Maybe String
 arithOpNameOf ec "+" = Just "+"
@@ -1427,7 +1427,7 @@ isEIntExpr _ = Nothing
 
 -- check 模式的算术：期望类型直接决定结果域；期望 Nat 时实参也按 Nat 检查（字面量因此
 -- 能写字面量），期望 Int 时 Nat 实参经隐式提升。
--- | 算术特化的 check 入口：先把 `Base.Num` 方法投影规范化成运算符名，再交给具体类型分支。
+-- | 算术特化的 check 入口：先把 `Base.Trait.Num` 方法投影规范化成运算符名，再交给具体类型分支。
 specializeArithCheckFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Value -> Span -> Check (Maybe (Pair Term Ec))
 specializeArithCheckFuel fuel globals ctx ec name args expected sp = if fuel <= 0 then icFuel "inference"
 else case arithOpNameOf ec name of
@@ -1460,7 +1460,7 @@ else case args of
   _ => OkC Nothing
 
 -- infer 模式的算术：两侧都 Nat（或 Nat + 整数字面量）→ Nat；任一真正 Int → Int（Nat 提升）。
--- | 算术特化的 infer 入口：先把 `Base.Num` 方法投影规范化成运算符名，再交给具体类型分支。
+-- | 算术特化的 infer 入口：先把 `Base.Trait.Num` 方法投影规范化成运算符名，再交给具体类型分支。
 specializeArithAppFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> String -> List Expr -> Span -> Check (Maybe (Pair Term (Pair Value Ec)))
 specializeArithAppFuel fuel globals ctx ec name args sp = if fuel <= 0 then icFuel "inference"
 else case arithOpNameOf ec name of
@@ -2044,7 +2044,7 @@ else case forceVal ec row of
   else Nothing
   _ => Nothing
 
--- | 标签列表拼成逗号分隔（不引入 Base.String 依赖）。
+-- | 标签列表拼成逗号分隔（不引入 Base.Data.String 依赖）。
 export joinEffectLabels : List String -> String
 joinEffectLabels [] = ""
 joinEffectLabels (x :: rest) = case rest of
@@ -2063,7 +2063,7 @@ unhandledEffectLabel ec expected actual = case effRowOfValue (forceVal ec expect
   else Nothing
 
 -- 自动 Effect 行 lift。conv 失配时若「期望 = `Eff (Cons e tail) a`」且「实际的行与
--- tail 相等」，就用 `Base.Eff.weaken` 把实际动作提升到更大的行（运行时是恒等，只是类型
+-- tail 相等」，就用 `Base.Effect.Core.weaken` 把实际动作提升到更大的行（运行时是恒等，只是类型
 -- 层面的行扩宽）。**不调用 `checkEFuel`**（只构造项，避免与 checkByInferFuel 形成 SCT
 -- 互递归）；weaken 不在作用域时不触发，由调用方回退常规诊断（`TC_UnhandledEffects` 或
 -- 普通 mismatch）。期望是 `Eff []` 时也不触发：那是未处理效应，必须报 `TC_UnhandledEffects`。
@@ -2095,10 +2095,10 @@ else case forceVal ec actual of
   _ => False
 
 -- | 自动行 lift：`actual : Eff r a` 遇到期望 `Eff (Cons e r) a` 时返回插入
--- `Base.Eff.weaken` 的项与 conv 解出的 Ec；条件不满足 / weaken 不可见 / 期望为空行时
+-- `Base.Effect.Core.weaken` 的项与 conv 解出的 Ec；条件不满足 / weaken 不可见 / 期望为空行时
 -- 返回 Nothing。
 tryEffLift : Ctx -> List (Pair String Term) -> Ec -> Value -> Value -> Term -> Maybe (Pair Term Ec)
-tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.weaken" globals ec of
+tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Effect.Core.weaken" globals ec of
   Nothing => Nothing
   Just _ =>
     let
@@ -2124,12 +2124,12 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
                 let
                   actualRow = firstOf actualP
                 in if rowSubValue ecR 64 actualRow (firstOf p) then Just (Pair term ecR)
-                else if isNilRowValue ecR actualRow then case globalsLookup "Base.Eff.raise" globals ecR of
+                else if isNilRowValue ecR actualRow then case globalsLookup "Base.Effect.Core.raise" globals ecR of
                   -- 行包含 lift（actual 行 ⊆ expected 行）：运行时恒等，直接返回项。
                   Nothing => Nothing
                   Just _ =>
                     Just
-                      (Pair (TApp (TApp (TApp (TGlobal "Base.Eff.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ecR)
+                      (Pair (TApp (TApp (TApp (TGlobal "Base.Effect.Core.raise") (quote d (firstOf p)) Rig0) (quote d (secondOf p)) Rig0) term RigOmega) ecR)
                 else case convEc ecR d actualRow tailF of
                   ErrC _ => Nothing
                   OkC ec2 => Just (Pair (weakenLabelTerm d label tailF (secondOf p) term) ec2)
@@ -2138,7 +2138,7 @@ tryEffLift ctx globals ec expected actual term = case globalsLookup "Base.Eff.we
 weakenLabelTerm : Int -> Value -> Value -> Value -> Term -> Term
 weakenLabelTerm d label tailF result term =
   TApp
-    (TApp (TApp (TApp (TGlobal "Base.Eff.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0)
+    (TApp (TApp (TApp (TGlobal "Base.Effect.Core.weaken") (quote d label) Rig0) (quote d tailF) Rig0) (quote d result) Rig0)
     term RigOmega
 
 export checkByInferFuel : Int -> List (Pair String Term) -> Ctx -> Ec -> Expr -> Value -> Check (Pair Term Ec)
@@ -2271,7 +2271,7 @@ else case fn of
     (resolveOverCtor ec vsp (Just expected) (overCtorShort name) (overCtorTargets name))
     (\t => checkAppFuel (fuel - 1) globals ctx ec (EVar t vsp) args expected sp)
   else case ctxLookup name ctx of
-    -- 局部 binder 不可能是运算符方法（`+` / `==` / `Base.Num.x` 这类名字都要么是
+    -- 局部 binder 不可能是运算符方法（`+` / `==` / `Base.Trait.Num.x` 这类名字都要么是
     -- 全局、要么是运算符语法），直接走推断即可，省掉每处引用一次的运算符特化链。
     Just _ => checkByInferFuel (fuel - 1) globals ctx ec (EApp fn args sp) expected
     -- **类型位置 = 期望是宇宙且名字在类型命名空间**。位置本身不能单独决定
@@ -2405,7 +2405,7 @@ else
     )
   )
 
--- 模板洞 `${e}` 由 Loader 降级成 `Base.Interp.interp e`。对**原始类型**可以按
+-- 模板洞 `${e}` 由 Loader 降级成 `Base.Trait.Interp.interp e`。对**原始类型**可以按
 -- base 里的实例定义直接降级，省掉每个洞的字典目标与实例搜索（模板密集的源码自检会因此
 -- 退化到分钟级）：
 --   * String：具体实例 `interp s = s`（恒等）；

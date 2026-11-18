@@ -1,5 +1,5 @@
 -- 用户 `data Bool` 是普通 data（声明身份是 `Bool`，与 canonical
--- `Base.Bool.Bool` 不同）；`if` 只接受 canonical Bool。`==` 需要 Eq 证据，
+-- `Base.Data.Bool.Bool` 不同）；`if` 只接受 canonical Bool。`==` 需要 Eq 证据，
 -- 这里用 `deriving (Eq)` 走字典（没有泛型结构比较兜底）。
 data Bool : Type where
   Yes : Bool

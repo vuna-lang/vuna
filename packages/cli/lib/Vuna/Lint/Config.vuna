@@ -10,8 +10,8 @@ import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.Pair as Pair
 import Base.Data.String as String
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 import Vuna.Cli.Args
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml

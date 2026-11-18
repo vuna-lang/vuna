@@ -1,4 +1,4 @@
--- Array 的 Show / Eq 实例（落点 Base.Array；实例体经 toList 复用 List）。
+-- Array 的 Show / Eq 实例（落点 Base.Container.Array；实例体经 toList 复用 List）。
 import Base.Container.Array as Array
 
 main : String

@@ -1,7 +1,7 @@
 -- stdlib：do 在 Eff 上（含 `_ <-` 丢弃结果）；main : Eff [ConsoleOp] Int 由运行器执行。
 -- 用户面直接带行（entry 自动预装 Console handler），不显式 runConsole。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 
 program : Eff [ConsoleOp] Int
 program = do

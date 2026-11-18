@@ -5,8 +5,8 @@
 -- 非限定名与 `HashMap.` 限定名。
 module Base.Container where
 
-export module Base.Map as Map
-export module Base.HashMap as HashMap
-export module Base.HashSet as HashSet
-export module Base.Array as Array
-export module Base.Sort as Sort
+export module Base.Container.Map as Map
+export module Base.Container.HashMap as HashMap
+export module Base.Container.HashSet as HashSet
+export module Base.Container.Array as Array
+export module Base.Data.Sort as Sort

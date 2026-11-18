@@ -6,11 +6,11 @@
 --   client ADDR —— 连接、发 "ping\n"、打印回包、退出。
 -- main 带具体宿主行，entry 自动预装 Console/Args/Exit handler；net 走带行 API。
 import Base.Trait.Monad as Monad
-import Base.Effect.Eff as Eff
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffNet as EffNet
+import Base.Effect.Core as Eff
+import Base.Effect.Args as EffArgs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Exit as EffExit
+import Base.Effect.Net as EffNet
 import Base.Data.Maybe as Maybe
 
 serve : String -> Eff [ConsoleOp, ExitOp, ArgsOp, NetOp] Int

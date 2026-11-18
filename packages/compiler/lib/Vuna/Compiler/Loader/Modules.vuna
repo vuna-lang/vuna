@@ -8,15 +8,14 @@ module Vuna.Compiler.Loader.Modules where
 import Vuna.Compiler.Base.Diagnostics.Loader
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diagnostics.Rn
-import Vuna.Compiler.Base.NameAlias as NameAlias
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Base.Trait.Eq as Eq
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
 
 -- 显式 import 与自动注入的 Prelude（隐式 import）分开保存：
 -- 名字解析与 codegen 拓扑序用 all；模块重导出/include 只认显式 import。
@@ -135,7 +134,7 @@ validModuleName name = case splitOnDot name of
   segs => allSegmentsValid segs
 
 export mangle : String -> String -> String
-mangle prefix name = if prefix == "" then name else "${NameAlias.canonicalModule prefix}.${name}"
+mangle prefix name = if prefix == "" then name else "${prefix}.${name}"
 
 -- | 构造子 canonical 名 = `Module.Data.Ctor`（entry 文件 `Data.Ctor`）。
 -- 不同数据类型的同名构造子因此天然不冲突；裸名按期望类型在候选里选（见 Resolve/Elab）。
@@ -273,8 +272,8 @@ resolvedName modules name = case resolveModuleName modules name of
   Just real => real
   Nothing => name
 
--- | 把 import 里写的路径名（`Base.Effect.EffTypes`）归一成真实模块名
--- （`Base.Eff.Types`）。加载后的模块表按真实模块名索引，后续按 import 名查模块表的地方
+-- | 把 import 里写的路径名（`Base.Effect.Types`）归一成真实模块名
+-- （`Base.Effect.Types`）。加载后的模块表按真实模块名索引，后续按 import 名查模块表的地方
 -- （未使用 import 告警、层检查、构造子族查找）必须看到同一套名字。
 export normalizeImports : List Module -> List Import -> List Import
 normalizeImports modules [] = []

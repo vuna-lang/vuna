@@ -1,0 +1,44 @@
+-- | 一阶命令行参数效应：标签 = `ArgsOp`（实例名在行的 `Named n ArgsOp :: r` 条目里），操作只有 `GetArgs`，返回 `List String`；真实 handler 用 `@vuna@prim_eff_getArgs`。
+module Base.Effect.Args where
+
+import Base.Effect.Core
+import Base.Trait.Monad
+import Base.Data.List
+
+-- | 参数操作：`GetArgs`（不含 argv[0] 的命令行参数）。
+export data ArgsOp(..) : Type -> Type where
+  -- | 取命令行参数（不含 argv[0]）。
+  GetArgs : ArgsOp (List String)
+
+-- | 通过命名实例取命令行参数。
+export argsGetArgs : Member n ArgsOp r => Eff r (List String)
+argsGetArgs = sendCore (Named n ArgsOp) "args" n GetArgs
+
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `ArgsOp`。
+export handleArgs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n ArgsOp) r} -> (a -> b) -> ((i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n ArgsOp) r) b
+handleArgs n ret opH comp = handleCore (Named n ArgsOp) "args" n ret opH comp
+
+-- | 真实 handler 的操作解释：取 `@vuna@prim_eff_getArgs` 后继续。
+argsOpHIO : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [] a) -> Eff [] a
+argsOpHIO i op k = case op of
+  GetArgs => do
+    xs <- @vuna@prim_eff_getArgs
+    k xs
+
+-- ---------------------------------------------------------------
+-- 带行 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+-- | 带 `ArgsOp` 行的 op 解释：宿主原语取参数后写穿继续（answer 行是 `[ArgsOp]`）。
+argsOpHIOHost : {a : Type} -> (i : Type) -> (o : ArgsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [ArgsOp] a) -> Eff [ArgsOp] a
+argsOpHIOHost i op k = case op of
+  GetArgs => do
+    xs <- raise @vuna@host@getArgs
+    k xs
+
+-- | 带行的宿主 handler：删掉 `ArgsOp`，answer 是 `Eff [ArgsOp]`（不导出）。
+handleArgsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n ArgsOp :: r) a -> Eff r (Eff [ArgsOp] a)
+handleArgsHostHost n comp = handleCoreAt (Named n ArgsOp) "args" n (\a => pure a) argsOpHIOHost comp
+
+-- | entry 自动预装用（泛化 r）：把行头 `ArgsOp` 的 send 翻译成宿主 intrinsic。
+runArgsHost : {r : Row} -> {a : Type} -> Eff (Named "default" ArgsOp :: r) a -> Eff (rowAppend r [ArgsOp]) a
+runArgsHost comp = joinEff (handleArgsHostHost "default" comp)

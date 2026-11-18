@@ -19,7 +19,7 @@ module Vuna.Compiler.Loader.Expand where
 --     开观测时同格式写 stderr；
 --   * `mark! name` → `@vuna@obs@mark name`：瞬时标记事件。
 -- 后两个由 `VUNA_OBS` / `--obs` 分级开关；关闭时原语直接返回 0（实参仍求值，见
--- `Base.Obs` 的 `obsOn` 用于自行判开销）。
+-- `Base.Data.Obs` 的 `obsOn` 用于自行判开销）。
 -- 用户自定义宏不在范围内。
 import Base.Data.List as List
 import Base.Data.Nat as Nat
@@ -265,7 +265,7 @@ macroArityMismatch name expected args sp =
 --   * `mark! name`  → `@vuna@obs@mark name`（瞬时标记事件）。
 -- 三个宏都不求值副作用以外的东西：`obs!` / `mark!` 的实参在关闭级别下**仍会求值**
 -- （与 `dbg!` 不同）——它们没有布尔门控形态，因为原语本身关闭时只返回 0；要避免实参
--- 开销，用 `Base.Obs.obsOn 0` 自己判。
+-- 开销，用 `Base.Data.Obs.obsOn 0` 自己判。
 expandMacro : String -> List Expr -> Span -> Check Expr
 expandMacro name args sp = if name == "dbg" then case args of
   [msg] =>

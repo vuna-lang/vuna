@@ -160,10 +160,10 @@ export data Ir(..) : Type where
 
 -- | `Eff` 的运行时类型名与构造子名：宿主效应直连时后端构造纯动作（`MkEff (\\u => r)`）用。
 export irEffTypeName : String
-irEffTypeName = "Base.Eff.Eff"
+irEffTypeName = "Base.Effect.Core.Eff"
 
 export irEffMkCtor : String
-irEffMkCtor = "Base.Eff.Eff.MkEff"
+irEffMkCtor = "Base.Effect.Core.Eff.MkEff"
 
 -- ---------------------------------------------------------------
 -- 类型声明
@@ -260,7 +260,7 @@ export record IrEntry(..) where
 -- ---------------------------------------------------------------
 -- 共享元数据 / 单元 / 程序
 -- ---------------------------------------------------------------
--- | canonical `Base.List.List` 族的三个源码名（程序没声明时没有）。
+-- | canonical `Base.Data.List.List` 族的三个源码名（程序没声明时没有）。
 export record IrListFam(..) where
   irListFamily : String
   irListNil : String
@@ -299,7 +299,7 @@ export record IrUnit(..) where
   irUnitTyDecls : List IrTyDecl
   -- | 本单元运行时定义（SCC 序分组）。
   irUnitGroups : List IrGroup
-  -- | 本单元是否声明 canonical `Base.List.List` 族（决定是否写桥接 helper）。
+  -- | 本单元是否声明 canonical `Base.Data.List.List` 族（决定是否写桥接 helper）。
   irUnitHasListFamily : Bool
   -- | 本单元类型声明里出现过的全局名（`typeDepsOf` 的输入，含擦除位置引用）。
   irUnitTypeRefs : List String

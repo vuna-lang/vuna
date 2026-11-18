@@ -528,7 +528,7 @@ hasCatchAll ((Pair pat body) :: rest) = case pat of
   PCon cname args psp => hasCatchAll rest
   _ => True
 
--- 重复名判定统一用 `Base.List.hasDupNames`（本模块曾有一份逐字相同的私有实现）。
+-- 重复名判定统一用 `Base.Data.List.hasDupNames`（本模块曾有一份逐字相同的私有实现）。
 -- 带**嵌套模式**的 case（`[y]` = `Cons y Nil`）走 `Elab.Match` 的模式矩阵降级：
 -- 直接在精化器里把嵌套模式折成内层 case 时，兜底分支的体会被内联到更深的 binder
 -- 作用域，体里引用外层绑定会错位。矩阵降级生成的是**表达式**，名字在重新精化时

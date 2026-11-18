@@ -2,10 +2,10 @@ module Vuna.Compiler.Base.Obs where
 
 -- Vuna.Compiler.Base.Obs：编译器自身的观测插桩（阶段 span / 计数 / 标记）。
 --
--- 只是 `Base.Obs` / `Base.Obs.Span` 的**编译器侧适配层**：给 `Check a` 加跨度、给
+-- 只是 `Base.Data.Obs` / `Base.Data.Obs.Span` 的**编译器侧适配层**：给 `Check a` 加跨度、给
 -- `Eff r` 阶段打瞬时标记。规范见 `docs/reference/observability.md`。
 --
--- 为什么需要适配层：`Base.Obs.obsSpan` 吃 `Int -> a` thunk，而编译器内部的阶段返回
+-- 为什么需要适配层：`Base.Data.Obs.obsSpan` 吃 `Int -> a` thunk，而编译器内部的阶段返回
 -- `Check a`（`OkC` / `ErrC`）。这里把「求值 + 构造 Check」整体放进跨度的 thunk 里，
 -- 错误路径也照样写出带 `args.error` 的 `X` 事件。
 -- `Eff r` 的动作不能被纯跨度包住（执行发生在 runner 里），那些边界用
@@ -16,7 +16,7 @@ import Base.Data.List as List
 import Vuna.Compiler.Base.Common
 import Base.Data.Obs as Obs
 import Base.Data.ObsSpan as ObsSpan
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 
 -- ---------------------------------------------------------------
 -- Check 形态的阶段 span

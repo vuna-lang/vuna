@@ -1,7 +1,7 @@
 -- 超时夹具（通过路径）：1ms 睡眠在短超时内照常通过。
 -- 睡眠走 Clock 效应（entry 自动预装 handler），不直接调用宿主原语。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffClock as EffClock
+import Base.Effect.Core as Eff
+import Base.Effect.Clock as EffClock
 
 main : Eff ([ClockOp]) Int
 main = clockSleepMicros 1000

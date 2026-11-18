@@ -83,8 +83,8 @@ else
 fi
 
 # 2) 入口行只有内建宿主效应：send 直连宿主原语，产物无续延，默认引擎可跑。
-build_pkg "$tmp/host" "host" 'import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+build_pkg "$tmp/host" "host" 'import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.Nat as Nat
 
 main : Eff [ConsoleOp] Nat
@@ -101,7 +101,7 @@ else
 fi
 
 # 3) 用户自定义 handler：仍需要 stack switching，默认引擎拒绝编译。
-build_pkg "$tmp/user" "user" 'import Base.Effect.Eff as Eff
+build_pkg "$tmp/user" "user" 'import Base.Effect.Core as Eff
 
 data POp : Type -> Type where
   P : Int -> POp Int

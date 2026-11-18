@@ -14,7 +14,7 @@ out-contains: hash-abc ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f
 out-contains: sha-80a 0f45e858fbc4176cdf4e411f88281edefc390ae5afe7df0f44cd9297f0a64580
 # 位运算原语：63-bit 补码；移位计数越界 = 0（含 1 << 63 与 256 >> 63）。
 out-contains: bits 192,255,240,-1,16,16,0,0
-# Base.Bits 的 32-bit 包装：rotr32 / add32 模 2^32 / mask32 / mask8 / rol32。
+# Base.Data.Bits 的 32-bit 包装：rotr32 / add32 模 2^32 / mask32 / mask8 / rol32。
 out-contains: bitslib 2147483648,1,4294967295,255,2147483648
 # canonical encoding：42 = 符号字节 0 + 8 字节大端。
 out-contains: canon-int-42 i42;

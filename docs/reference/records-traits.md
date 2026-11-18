@@ -188,7 +188,7 @@ main = show (UserId { uid = 3 }) ++ "/" ++ show (Wrap { w = 5 }) ++ "/" ++ prett
   codegen 去装箱），对依赖表示委托的 `show` 等程序不适用；这些夹具用
   compile + run 验证。
 
-### `HasField`：nominal 记录的泛型读访问（`Base.Record`）
+### `HasField`：nominal 记录的泛型读访问（`Base.Trait.Record`）
 
 行类型记录没有落地；只读的泛型字段访问用类型类约束表达，对任意 nominal record 都成立，
 且与字段位置无关：
@@ -203,14 +203,14 @@ getCreated : HasField (Field "created") a Timestamp => a -> Timestamp
 getCreated p = p.created
 ```
 
-- `Field` 是**类型级**标签（`Field "id"`，见 `Base.Field`）；`HasField (l : Type) (a : Type) (t : Type)` 是
+- `Field` 是**类型级**标签（`Field "id"`，见 `Base.Trait.Field`）；`HasField (l : Type) (a : Type) (t : Type)` 是
   trait，方法 `getField : a -> t`。标签做成类型 `Field "id"` 而不是 `String` 值索引：
   隐式参数不能是 `String` 值，类型级标签可以正常参与字典匹配。
-- 编译器为导入了 `Base.Record` 的模块中的 record 字段自动生成实例；显式 `instance HasField ...` 也可用，两者混用时自动生成会跳过。
+- 编译器为导入了 `Base.Trait.Record` 的模块中的 record 字段自动生成实例；显式 `instance HasField ...` 也可用，两者混用时自动生成会跳过。
 - 具体 record 的 `p.f` 仍是内联投影（零字典）；只有 base 类型是刚性类型变量时，`p.f`
   使用签名里的 `HasField` 约束字典（调用点由自动生成或显式实例填充）。
-- 没有运行时按标签查找；没有行类型 / 结构子类型 / 字段重排。自动实例只生成在定义 record 的模块且该模块需 `import Base.Record`；其他模块的 record 需要显式实例。
-- **状态**：具体 record 的 `p.f`、泛型函数体里的约束字典、自动生成实例在核心求值与 compile 路径都可用；归属表按 record 声明为生成的实例补了模块归属，`10_has_field` 已回到 `records_files`（compile + 核心求值对比）。限制：自动实例只覆盖定义 record 且 `import Base.Record` 的模块；显式实例存在时跳过自动生成；仍未支持行类型 / 跨包自动实例。
+- 没有运行时按标签查找；没有行类型 / 结构子类型 / 字段重排。自动实例只生成在定义 record 的模块且该模块需 `import Base.Trait.Record`；其他模块的 record 需要显式实例。
+- **状态**：具体 record 的 `p.f`、泛型函数体里的约束字典、自动生成实例在核心求值与 compile 路径都可用；归属表按 record 声明为生成的实例补了模块归属，`10_has_field` 已回到 `records_files`（compile + 核心求值对比）。限制：自动实例只覆盖定义 record 且 `import Base.Trait.Record` 的模块；显式实例存在时跳过自动生成；仍未支持行类型 / 跨包自动实例。
 - `{ p | f = ... }` 更新仍要求具体 record 类型（未知行的更新没有 `SetField` 支持）。
 
 
@@ -241,7 +241,7 @@ main = pretty Red ++ "/" ++ show Red
   `[TC_InterfaceNoParam]`。非 Type 类参数（如 `Row`）的实例搜索已支持；但**头可合一的重叠实例
   仍被 coherence 拒绝**（`Member e (e :: r)` 与 `Member e r => Member e (x :: r)`），
   因此 trait 版 `Member e r` 不可用。**这不是待修债务**：行成员约束用 Type-1 归纳族
-  `Base.Eff.Member` 实现（精化器按行结构构造 `Here`/`There`），不需要 trait 重叠实例。
+  `Base.Effect.Core.Member` 实现（精化器按行结构构造 `Here`/`There`），不需要 trait 重叠实例。
   实例头的 tele 变量 kind 按实参推断：裸变量取对应类参数的 kind，嵌套变量从
   构造子的参数 kind 反推（`instance Pretty (T n)` 配 `T : N -> Type` ⇒ `n : N`，
   `instance Monad (Eff r)` 配 `Eff : Row -> Type -> Type` ⇒ `r : Row`）；
@@ -273,9 +273,9 @@ main = pretty Red ++ "/" ++ show Red
   不到才试 blanket。**具体实例覆盖 blanket**（`instance Interp String` 赢过 blanket），
   具体实例之间仍禁止重叠；两个 blanket 仍报 `TC_DuplicateInstance`（见 [templates.md](templates.md)）。
 - **实例落点**：实例跟类型模块走；trait 签名直接依赖该类型、放类型模块会成 import 环时
-  例外（`Eq` / `Ord` 的 `eq : a -> a -> Bool` 返回 Bool，Bool 实例随 trait 留在 `Base.Eq` /
-  `Base.Ord`；`Show String` 留在 `Base.Show`，因为 String 经 Interp 依赖 Show。`Show Bool`
-  的签名不依赖 Bool，按规则放 `Base.Bool`）。精化器**强制孤儿检查**：实例必须声明在
+  例外（`Eq` / `Ord` 的 `eq : a -> a -> Bool` 返回 Bool，Bool 实例随 trait 留在 `Base.Trait.Eq` /
+  `Base.Trait.Ord`；`Show String` 留在 `Base.Trait.Show`，因为 String 经 Interp 依赖 Show。`Show Bool`
+  的签名不依赖 Bool，按规则放 `Base.Data.Bool`）。精化器**强制孤儿检查**：实例必须声明在
   定义 trait 的文件，或定义 head 类型（任一类型参数）的文件；`Int` / `String` 是
   全局可见的内建类型，允许在任意模块声明实例（如 `Show Int`）。违反报 `TC_OrphanInstance`。
   规则与理由见 [operators.md](operators.md)。
@@ -300,14 +300,14 @@ main = pretty Red ++ "/" ++ show Red
   不写约束的形态仍按推断提升（`{a} -> {d : Dict_Eq a} -> ...`）；三包源码
   统一写显式约束。语法与边界见 [language.md](language.md) §签名的 trait 约束。
 - **`Show` / `Eq` / `Ord` 是库里的普通 trait（声明与实例分离）**：声明在
-  `Base.Show` / `Base.Eq` / `Base.Ord`；实例按**落点规则**分布：`Int` → `Base.Int`、
-  `String` 的 Eq/Ord → `Base.String`、`Show String` → `Base.Show`、`Show Bool` →
-  `Base.Bool`、`Eq/Ord Bool` → `Base.Eq` / `Base.Ord`；容器 `Show` 实例在各自类型模块。
+  `Base.Trait.Show` / `Base.Trait.Eq` / `Base.Trait.Ord`；实例按**落点规则**分布：`Int` → `Base.Data.Int`、
+  `String` 的 Eq/Ord → `Base.Data.String`、`Show String` → `Base.Trait.Show`、`Show Bool` →
+  `Base.Data.Bool`、`Eq/Ord Bool` → `Base.Trait.Eq` / `Base.Trait.Ord`；容器 `Show` 实例在各自类型模块。
   运算符 `==` / `/=` / `<` 等是这些方法的解析期别名（见 [type-system.md](type-system.md)）。
   包上下文内所有源文件
-  （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Int`
+  （含 ad-hoc 单文件）随自动注入的 `Prelude` 可用（`Prelude` 显式 `import Base.Data.Int`
   以加载 Int 实例）；`show` / `eq` / `lt` 等短名不由编译器放行，必须经 import 解析。
-  `deriving` 的展开使用 Loader 解析后的完整类名（如 `Base.Show.Show`）。详见
+  `deriving` 的展开使用 Loader 解析后的完整类名（如 `Base.Trait.Show.Show`）。详见
   [operators.md](operators.md)。
 - **没有结构性自动回退**：`List a` / `Box a` 这类要能比较 / 展示，必须有约束实例或
   具体实例；Base 带 `Int` / `String` / `Bool` 与 `List` / `Maybe` / `Pair` / `Result` 的
@@ -347,7 +347,7 @@ checking 位置的 `"..."` / `42` / `1.5` 在期望类型不是对应内建类�
 `Float`；`Nat` 字面量仍展开成 `Zero`/`Succ` 链）时，会搜索 `FromString` / `FromInt` /
 `FromFloat` 实例，命中就把字面量降级成 `fromString "..."` / `fromInt 42` /
 `fromFloat 1.5`（找不到则回退，报通常的类型错误）。三者都是单方法 trait，且都随
-`Prelude` 自动可见（`FromFloat` 由 `Base.Float` 导出）。
+`Prelude` 自动可见（`FromFloat` 由 `Base.Data.Float` 导出）。
 
 ```vuna
 data Email : Type where
@@ -385,8 +385,8 @@ main = case (MkEmail "x@y") of MkEmail s => s
   ```
 
 - `Functor`（`fmap`）在 `packages/base/lib/Base/Functor.vuna`；`pure` / `liftA2` / `ap` 在
-  `Base.Applicative`；`Monad`（`bind`）在 `Base.Monad`（重导出 `Base.Applicative` /
-  `Base.Functor`）。`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` 各有
+  `Base.Trait.Applicative`；`Monad`（`bind`）在 `Base.Trait.Monad`（重导出 `Base.Trait.Applicative` /
+  `Base.Trait.Functor`）。`Maybe` / `List` / `Result` / `State` / `Reader` / `Error` 各有
   `Functor` / `Applicative` / `Monad` 三个实例（`Eff r` 也有，见 [effects.md](effects.md) §8）。
   `Monad m` 的 `m` 是 kind `* -> *`：trait 声明的类型参数可以当类型构造器应用（`m a`），
   实例 head 是类型构造器本身（`instance Monad Maybe`），kind 不符（如 `instance Monad Int`）在
@@ -397,11 +397,11 @@ main = case (MkEmail "x@y") of MkEmail s => s
 - **`Eff`** 是 `packages/base/lib/Base/Eff.vuna` 的抽象动作类型（构造子 `MkEff` 不导出）；组合统一用
   `Functor` / `Applicative` / `Monad` trait 的 `fmap` / `bind` / `pure` / `liftA2`、`>>=` 与 `do`。动作只在 `main`
   由运行时经 `runPure` 执行。
-  参数化效应 monad（`Base.State` / `Base.Reader` / `Base.Error`）见
+  参数化效应 monad（`Base.Effect.Pure.State` / `Base.Effect.Pure.Reader` / `Base.Effect.Pure.Error`）见
   [effects.md](effects.md)。
 - **库内组合约定**：类型已有实例时，组合统一写 `do` / `>>=` / `>>` / `bind` / `pure` /
   `fmap` / `liftA2` / `ap` / `foldMap` / `mapM`，没有 `pureX` / `bindX` / `andThen` 这类重复入口
-  （`Base.Result.andThen`/`mapResult`、`Base.Maybe.mapJust`、`Base.List.flatMap` 不存在）。
+  （`Base.Data.Result.andThen`/`mapResult`、`Base.Data.Maybe.mapJust`、`Base.Data.List.flatMap` 不存在）。
   编译器内部 `Vuna.Compiler.Base.Common.bind` 是固定类型的 `Result` 绑定（限定名调用，
   不是 base 公开 API；固定类型是内部实现选择）。`Eff` 的 `do` 全面可用；长 do 链的精化
   走单趟字典求解（20 步约 100ms）；期望类型定向与 do 块单 monad 都生效。
@@ -414,24 +414,24 @@ main = case (MkEmail "x@y") of MkEmail s => s
   （`dliftA2` 会被推断成 `('a, 'b -> 'c, 'c -> 'd -> 'c) t_Dict -> 'b -> 'd -> 'd -> 'c`
   这类签名），`pure` 的返回与 `ap` 的首参被错误统一，派生体在调用点直接 OCaml 类型错误
   （[debt.md](debt.md) D52）。
-  `Base.Monad` 重导出 `Base.Applicative`，`import Base.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
+  `Base.Trait.Monad` 重导出 `Base.Trait.Applicative`，`import Base.Trait.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
 - `Semigroup`（`mappend`）/ `Monoid`（`mempty`）：无父类，泛型代码同时写
   `Monoid m, Semigroup m =>`；方法名避开 `List.append` / `Map.empty`。
 - `Foldable`（方法 `fold`）+ 顶层 `foldMap : Foldable t, Monoid m, Semigroup m => ...`；
-  方法名不用 `foldr`，以免与自动注入的 `Base.List.foldr` 短名歧义。
+  方法名不用 `foldr`，以免与自动注入的 `Base.Data.List.foldr` 短名歧义。
 - `Traversable t f`（双参数：容器 + Applicative）方法 `mapM : (a -> f b) -> t a -> f (t b)`；
   实例形如 `instance Applicative f => Traversable List f`。方法名不用 `traverse`，
-  保留 `Base.Result.traverse`（List + Result 的具体组合子）。
+  保留 `Base.Data.Result.traverse`（List + Result 的具体组合子）。
 - `Hashable`：`hash : a -> Int`，泛型 `HashMap` / `HashSet` 的键约束；用户类型可
   `deriving (Hashable)`（与 Show/Eq/Ord 同一套展开，复合字段用 `hashCombine`）。
 
-- 效果 API 直接返回 `Eff []`：用户面经 `Base.Eff.*` 标签 + handler（如 `consolePrint` /
+- 效果 API 直接返回 `Eff []`：用户面经 `Base.Effect.Core.*` 标签 + handler（如 `consolePrint` /
   `fsReadFile`）；handler 内部直接调用 `prim_eff_*` 原语（`print`/`readFile`/`writeFile`/
   `readLine` 这类别名不存在；也没有 `println`，换行写
   `prim_eff_print (s ++ "\n")`），原语返回 `Eff []`（例如
   `prim_eff_getArgs : Eff [] (List String)`、`prim_eff_print : String -> Eff [] Int`）。
   宿主层对任何包可见：源码里可直接调用 `prim_*` / `prim_eff_*`（没有 manifest 能力声明；
-  用户面**应**经 `Base.Eff.*` + handler，见 [primitives.md](primitives.md)）。
+  用户面**应**经 `Base.Effect.Core.*` + handler，见 [primitives.md](primitives.md)）。
 - 可执行包 / `vuna build` 要求 `main : Eff [] a`；核心求值路径（`vuna test` 纯测试 /
   REPL）是纯核心求值，任何 `main : Eff [] a` 一律报错。`vuna test` 的纯 `String` / `Int` / `Bool` 测试走核心求值，
   `main : Eff [] ...` 走 compile + 运行；REPL 的动作表达式经临时包 compile + 运行。

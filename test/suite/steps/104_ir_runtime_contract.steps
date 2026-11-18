@@ -48,10 +48,10 @@ file-contains: $TMPDIR/p/out-cat/Main.ml (String.concat "" ["a"; "b"; "c"])
 # List 桥接：契约里的桥接符号在引用点按 List 族单元限定 helper。
 run: sh -c 'printf "%s\n" "main : List Int" "main = strUnpack \"ab\"" > "$TMPDIR/p/bridge.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/bridge.vuna" "$TMPDIR/p/out-bridge"
-file-contains: $TMPDIR/p/out-bridge/Main.ml (Base_dList.dtp_unpack "ab")
+file-contains: $TMPDIR/p/out-bridge/Main.ml (Base_dData_dList.dtp_unpack "ab")
 
 # 动作 main：宿主原语走 thunk（`IrEffThunk`），entry 走 runMain/sched 钩子。
-run: sh -c 'printf "%s\n" "import Base.Effect.Eff as Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
+run: sh -c 'printf "%s\n" "import Base.Effect.Core as Eff" "" "main : Eff [] Int" "main = do" "  _ <- prim_eff_print \"x\"" "  pure 0" > "$TMPDIR/p/eff.vuna"'
 run: "$VUNA" compile "$TMPDIR/p/eff.vuna" "$TMPDIR/p/out-eff"
 file-contains: $TMPDIR/p/out-eff/Main.ml dtp_print
 file-contains: $TMPDIR/p/out-eff/Main.ml dtp_sched_main

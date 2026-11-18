@@ -20,14 +20,14 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Packages.Pkg
 import Vuna.Compiler.Driver.Dt
 import Vuna.Compiler.Driver.Compile
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffExit as EffExit
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Exit as EffExit
 
 -- | 求值一个入口文件：成功返回值的渲染文本，失败返回 `error: <诊断>` 文本。
 export interpretFile : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Eff r String
@@ -39,7 +39,7 @@ interpretFile ctx entry = do
   )
 
 -- | 值文本 + zonk 后的类型文本（`showTerm` 渲染，可直接写回合成签名），并带回可复用的
--- `AuxCache`。类型文本形如 `((Base.Eff.Eff Base.Eff.Row.Nil) Int)`（canonical 全名）；
+-- `AuxCache`。类型文本形如 `((Base.Effect.Core.Eff Base.Effect.Core.Row.Nil) Int)`（canonical 全名）；
 -- REPL 据此决定是否走效果执行。缓存复用依赖包 decls 的 record / deriving 预处理结果，
 -- key 由接口哈希决定（依赖接口不变时一直命中），失败路径不缓存。
 export evalExprInfoWithAux : Member nFs FsOp r, Member nClock ClockOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r, Member nExit ExitOp r, Member nArgs ArgsOp r => PackageContext -> String -> String -> Maybe AuxCache -> Eff r (Check (Pair (Pair String String) (Maybe AuxCache)))

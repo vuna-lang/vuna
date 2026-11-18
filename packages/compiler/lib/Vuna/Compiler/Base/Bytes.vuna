@@ -63,7 +63,7 @@ curSkip c = Cur c.curS (c.curI + 1)
 export curSlice : Cur -> Int -> Int -> String
 curSlice c start len = strSubstring start len c.curS
 
--- | `List` 长度（`Base.List.length` 返回 `Nat`；编码要 `Int`）。
+-- | `List` 长度（`Base.Data.List.length` 返回 `Nat`；编码要 `Int`）。
 export lenOf : List a -> Int
 lenOf [] = 0
 lenOf (_ :: rest) = 1 + lenOf rest

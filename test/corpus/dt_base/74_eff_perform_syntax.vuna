@@ -2,8 +2,8 @@
 -- （`[ConsoleOp@audit]` → 名字 "audit"），结果类型走上下文。
 -- handler 侧也按同一 key 取名；base 的 wrapper 仍手写 "console"，两边 key 不配对
 -- （见 debt D57）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat
@@ -21,7 +21,7 @@ prog = do
 runAudit : {a : Type} -> Eff [ConsoleOp@audit] a -> a
 runAudit comp =
   runPure
-    (handleCore (Named "audit" ConsoleOp) "Base.EffConsole.ConsoleOp" "audit" (\x => x) mockOpH comp)
+    (handleCore (Named "audit" ConsoleOp) "Base.Effect.Console.ConsoleOp" "audit" (\x => x) mockOpH comp)
 
 main : Nat
 main = runAudit prog

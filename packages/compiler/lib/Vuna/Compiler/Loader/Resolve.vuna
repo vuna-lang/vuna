@@ -16,7 +16,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Base.Intrinsics
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 
 -- 解析器递归的显式 fuel（保留 1G，逐点写清楚 measure 与上界）。
 --
@@ -55,7 +55,7 @@ isBuiltinName name = case builtinArity name of
 -- 解析。这里只放行**纯解析**，语义仍由 `Elab` 的 prelude 决定。
 --
 -- `show` / `eq` / `neq` / `lt` / `le` / `gt` / `ge` 不在放行表里：trait 与
--- 实例在库（`Base.Show` / `Base.Eq` / `Base.Ord`），裸名必须经 import 的导出表解析。
+-- 实例在库（`Base.Trait.Show` / `Base.Trait.Eq` / `Base.Trait.Ord`），裸名必须经 import 的导出表解析。
 isDtPreludeName : String -> Bool
 isDtPreludeName name = memName name dtPreludeNames
 
@@ -67,16 +67,16 @@ dtPreludeNames = append ["Type", "->", "_"] (append preludeTypeNames preludeValu
 -- trait 在库里定义，缺 import 是最常见的错误来源。除了常规的
 -- unbound/unknown 诊断，再给一条可操作提示（单文件 / 未 import 的场景）。
 traitImportHint : String -> String
-traitImportHint "Show" = " (trait Show is not in scope; add `import Base.Show`)"
-traitImportHint "Eq" = " (trait Eq is not in scope; add `import Base.Eq`)"
-traitImportHint "Ord" = " (trait Ord is not in scope; add `import Base.Ord`)"
-traitImportHint "show" = " (trait method show; add `import Base.Show`)"
-traitImportHint "eq" = " (trait method eq; add `import Base.Eq`)"
-traitImportHint "neq" = " (trait method neq; add `import Base.Eq`)"
-traitImportHint "lt" = " (trait method lt; add `import Base.Ord`)"
-traitImportHint "le" = " (trait method le; add `import Base.Ord`)"
-traitImportHint "gt" = " (trait method gt; add `import Base.Ord`)"
-traitImportHint "ge" = " (trait method ge; add `import Base.Ord`)"
+traitImportHint "Show" = " (trait Show is not in scope; add `import Base.Trait.Show`)"
+traitImportHint "Eq" = " (trait Eq is not in scope; add `import Base.Trait.Eq`)"
+traitImportHint "Ord" = " (trait Ord is not in scope; add `import Base.Trait.Ord`)"
+traitImportHint "show" = " (trait method show; add `import Base.Trait.Show`)"
+traitImportHint "eq" = " (trait method eq; add `import Base.Trait.Eq`)"
+traitImportHint "neq" = " (trait method neq; add `import Base.Trait.Eq`)"
+traitImportHint "lt" = " (trait method lt; add `import Base.Trait.Ord`)"
+traitImportHint "le" = " (trait method le; add `import Base.Trait.Ord`)"
+traitImportHint "gt" = " (trait method gt; add `import Base.Trait.Ord`)"
+traitImportHint "ge" = " (trait method ge; add `import Base.Trait.Ord`)"
 traitImportHint _ = ""
 
 -- ---------------------------------------------------------------
@@ -188,7 +188,7 @@ else if notEmptyList segs then
   )
 else OkC (Pair m segs)
 
--- | 在导出表里找最长匹配的点号路径前缀（`Map` / `Base.Map`），返回 target 与消费的段数。
+-- | 在导出表里找最长匹配的点号路径前缀（`Map` / `Base.Container.Map`），返回 target 与消费的段数。
 longestNamespaceEntry : List ExportEntry -> List String -> Maybe (Pair String Int)
 longestNamespaceEntry es segs = longestNamespaceEntryGo es segs (List.length segs)
 
@@ -204,7 +204,7 @@ resolvePathPrefixes : List Module -> List Import -> List String -> Check (List (
 resolvePathPrefixes modules imports segs =
   resolvePathPrefixesTry modules imports segs (List.length segs - 1)
 
--- | 构造子族查找拿到的前缀可能是路径 import 名（`Base.Effect.EffFs`），
+-- | 构造子族查找拿到的前缀可能是路径 import 名（`Base.Effect.Fs`），
 -- 先归一成真实模块名再用导出表/声明表。
 realModuleName : List Module -> String -> String
 realModuleName modules name = case resolveModuleName modules name of
@@ -739,12 +739,12 @@ resolveRecValues fuel modules label prefix ns imports scope ((Pair pat value) ::
 -- 模板字符串降级（rename 之后、Elab 之前）。
 --
 --   * 文本块 → `EStr`（空文本块跳过）；
---   * 洞 → `EApp (EVar "Base.Interp.interp") [e]`：转换语义**完全由 base 的 `Interp`
+--   * 洞 → `EApp (EVar "Base.Trait.Interp.interp") [e]`：转换语义**完全由 base 的 `Interp`
 --     实例决定**（blanket `Show a => Interp a` / `Interp String` / 用户实例），编译器
 --     只负责这一步纯语法糖；
 --   * 整体用 `++` 左结合链串起来（1 块直接返回；模板通常只有少量块）。
 --
--- 生成的名字已是 canonical（`Base.Interp.interp` 由 `Intrinsics` 唯一给出，`++` 是内建名），
+-- 生成的名字已是 canonical（`Base.Trait.Interp.interp` 由 `Intrinsics` 唯一给出，`++` 是内建名），
 -- 不再走二次名字解析。
 lowerTemplate : Span -> List InterpPart -> Expr
 lowerTemplate sp parts = case templateChunks sp parts of
@@ -963,9 +963,9 @@ startsUpperName name = case strUnpack name of
 
 -- 类型名解析（本模块声明的类型名**优先于**内建名；只查类型命名空间）。
 --
--- `Base.Bool` 会重新声明 `data Bool`，此时 `Bool` 应解析成 `Base.Bool.Bool`（mangled），
+-- `Base.Data.Bool` 会重新声明 `data Bool`，此时 `Bool` 应解析成 `Base.Data.Bool.Bool`（mangled），
 -- 而不是内建 `Bool`——否则构造子检查会报 `constructor False does not return
--- Base.Bool.Bool`（族名对不上）。因此 `nsTypes` 的判定必须排在内建名之前。
+-- Base.Data.Bool.Bool`（族名对不上）。因此 `nsTypes` 的判定必须排在内建名之前。
 --
 -- 类型位置**只查类型命名空间**；找不到时按既有约定退化：
 --   1. 小写名是类型变量（隐式量化），但本模块同名的**值定义**（类型层 def，
@@ -1020,7 +1020,7 @@ resolveNonLowerTypeName modules label prefix ns imports name = Vuna.Compiler.Bas
   Nothing => if containsDot name then resolveDottedTypeName modules label prefix ns imports name
   else
     Vuna.Compiler.Base.Common.bind (modulesExportingType modules imports name) (\pairs => case pairs of
-      -- 类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Nat`
+      -- 类型位置也可能出现**跨模块 import 的构造子**（依赖类型索引，如 `import Base.Data.Nat`
       -- 后 `Vec Zero a` 的 `Zero`）。`modulesExportingType` 只查 `"type"` entry，找不到构造子，
       -- 故退化到 `resolveCtor`（认 `"ctor"` entry；本地构造子已在上面处理）。
       [] => case resolveCtor modules label prefix ns imports name of
@@ -1038,7 +1038,7 @@ resolveDottedTypeName modules label prefix ns imports name = Vuna.Compiler.Base.
 else
   Vuna.Compiler.Base.Common.bind (entryHits pickTypeEntries modules ps (memberLabel name ps)) (\hits => case hits of
     [] => case resolveCtorDotted modules label prefix ns imports name of
-      -- 依赖类型索引里的限定构造子（`Base.Eff.Row.Nil`）：类型查找失败后退化到构造子命名空间。
+      -- 依赖类型索引里的限定构造子（`Base.Effect.Core.Row.Nil`）：类型查找失败后退化到构造子命名空间。
       OkC t => OkC t
       ErrC _ =>
         rnNoLoc2 (TypeNotExported (memberLabel name ps) (firstModuleOf name ps))
@@ -1254,5 +1254,5 @@ ctorPairTargets modules ((Pair m e) :: rest) =
 
 isStringDomainExpr : Expr -> Bool
 isStringDomainExpr (EVar "String" _) = True
-isStringDomainExpr (EVar "Base.String.String" _) = True
+isStringDomainExpr (EVar "Base.Data.String.String" _) = True
 isStringDomainExpr _ = False

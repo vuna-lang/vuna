@@ -5,7 +5,7 @@ module Vuna.Compiler.Base.Hash where
 --
 -- 用途：缓存键、包身份（Merkle 根）、产物地址。不用于任何安全用途的密钥派生。
 --
--- * 摘要 = **SHA-256**（FIPS 180-4），在本模块用 `Base.Bits` 的 32-bit 包装实现：
+-- * 摘要 = **SHA-256**（FIPS 180-4），在本模块用 `Base.Data.Bits` 的 32-bit 包装实现：
 --   因此 OCaml 后端、wasm 后端与 `interp` 都能算出同一份内容地址——这是
 --   D2（两端语义一致）与 D5（内容寻址）共同要求的。
 -- * `Digest` 的 8 条 lane 就是 SHA-256 的 8 个 32-bit 大端字；`digestHex` 渲染成
@@ -143,7 +143,7 @@ shaK =
     3329325298
   ]
 
--- | 列表长度（`Base.List.length` 返回 `Nat`；这里需要 `Int`）。
+-- | 列表长度（`Base.Data.List.length` 返回 `Nat`；这里需要 `Int`）。
 lenInt : List a -> Int
 lenInt [] = 0
 lenInt (_ :: rest) = 1 + lenInt rest

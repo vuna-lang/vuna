@@ -57,7 +57,7 @@ name = "obs-overhead"
 vuna-base = "${VUNA_BASE:?VUNA_BASE 未设置}"
 EOF
 cat >"$app/app/Main.vuna" <<'EOF'
-import Base.Obs.Span
+import Base.Data.Obs.Span
 
 main : Int
 main = obsSpan "app.work" "vuna.user" (\_ => 7)

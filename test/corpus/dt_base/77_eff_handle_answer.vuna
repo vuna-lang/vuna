@@ -1,7 +1,7 @@
 -- 答案本身是 Eff 动作（`return x -> pure x`，两层 runPure），
 -- 以及丢弃续延（abort，续延 binder 用 `_`）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat

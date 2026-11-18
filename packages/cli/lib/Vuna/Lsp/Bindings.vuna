@@ -1,7 +1,7 @@
 -- | 光标处「绑定」的解析：模块引用与局部绑定，都是 parse 级（不跑精化、不依赖 Index）。
 --
 -- 模块引用：`import` 的模块名 / alias、导出项 `module B`（B 可全名或 alias）、模块头名字、
--- 限定名的模块前缀（`Base.List.map` 里的 `Base.List`）。模块路径按包上下文模块根探测
+-- 限定名的模块前缀（`Base.Data.List.map` 里的 `Base.Data.List`）。模块路径按包上下文模块根探测
 -- （`contextForDoc` 的 roots），因此依赖包（workspace 外，如 `vuna-base`）也能定位；docstring
 -- 走 `Doc.Comments.docTableOf`，服务器里打开过的模块一律以缓冲为准（`buffers` 参数），其余读盘。
 --
@@ -26,9 +26,9 @@ import Vuna.Json
 import Vuna.Lsp.Diagnostics
 import Vuna.Lsp.Protocol
 import Vuna.Sig
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffEnv as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Env as EffEnv
 
 -- ---------------------------------------------------------------
 -- 小工具
@@ -443,8 +443,8 @@ prefixGo (s :: rest) acc out =
     [] => reverse out
     _ => prefixGo rest p (p :: out)
 
--- | 内部：光标可能指向的模块名候选：前缀（`Base.List.map` 里的 `Base` / `Base.List`）加整个
--- token（`Base.Maybe Int` 这种 token 本身就是模块名的类型写法）。全部候选都不成立才落到
+-- | 内部：光标可能指向的模块名候选：前缀（`Base.Data.List.map` 里的 `Base` / `Base.Data.List`）加整个
+-- token（`Base.Data.Maybe Int` 这种 token 本身就是模块名的类型写法）。全部候选都不成立才落到
 -- Index 符号。
 moduleCandidates : String -> List String
 moduleCandidates token = append (prefixCandidates token) [token]
@@ -456,7 +456,7 @@ else do
   p <- modulePathOf uri name
   pure (p /= "")
 
--- | 内部：限定名里的模块前缀：`Base.List.map` 光标在 `List` ⇒ `Base.List`；在 `map` ⇒ 不命中。
+-- | 内部：限定名里的模块前缀：`Base.Data.List.map` 光标在 `List` ⇒ `Base.Data.List`；在 `map` ⇒ 不命中。
 qualifiedRef : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> Eff r (Maybe ModuleRef)
 qualifiedRef buffers uri line col text sf tokStart token =
   firstSuccess
@@ -464,7 +464,7 @@ qualifiedRef buffers uri line col text sf tokStart token =
 
 -- | 内部：单个前缀候选的命中判定。光标必须落在候选名字的字符范围内（`tokStart` 与 `col` 都是
 -- 1-based，名字占列 `tokStart .. tokStart+len-1`）；落在名字外面（含紧跟其后的 `.`）不算命中，
--- 否则 `Base.List.map` 光标停在 `.` 上会误报 `module Base`，`Base.Maybe Int` 的空格处也会误报。
+-- 否则 `Base.Data.List.map` 光标停在 `.` 上会误报 `module Base`，`Base.Data.Maybe Int` 的空格处也会误报。
 tryPrefix : Member nFs FsOp r, Member nEnv EnvOp r => List (Pair String String) -> String -> Int -> Int -> String -> SourceFile -> Int -> String -> String -> Eff r (Maybe ModuleRef)
 tryPrefix buffers uri line col text sf tokStart token prefix = if not (upperStart prefix) then pure Nothing
 else if col < tokStart || col > tokStart + strLength prefix - 1 then pure Nothing

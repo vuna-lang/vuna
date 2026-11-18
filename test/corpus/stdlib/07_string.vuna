@@ -1,4 +1,4 @@
--- stdlib：Base.String 常用操作。
+-- stdlib：Base.Data.String 常用操作。
 import Base.Data.String as String
 import Base.Data.List as List
 

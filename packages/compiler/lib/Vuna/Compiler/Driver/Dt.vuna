@@ -46,13 +46,13 @@ import Vuna.Compiler.Driver.Iface
 import Vuna.Compiler.Driver.PerfCache
 import Vuna.Compiler.Driver.Split
 import Vuna.Compiler.Driver.SplitGen
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Exit as EffExit
+import Base.Effect.Process as EffProcess
 import Vuna.Compiler.Elab.Driver
 import Vuna.Compiler.Elab.Term
 
@@ -284,8 +284,8 @@ dtEvalFile ctx entry = do
 -- （globals / 实例 / 字典解表）里精化，再求值并 show。program 的 import 按上下文
 -- 的 roots 从磁盘解析（`loadProjectSource`），所以 REPL 可以把 import 行一起缓冲进来。
 --
--- 表达式的名字解析**必须**经过 Loader（`import Base.List` 后写 `length xs` 得到的是
--- `Base.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
+-- 表达式的名字解析**必须**经过 Loader（`import Base.Data.List` 后写 `length xs` 得到的是
+-- `Base.Data.List.length`）：因此把表达式拼成一条合成定义 `vuna_repl_expr = <expr>` 一起
 -- 加载，取回解析/限定后的体，再把这条合成定义从声明表里摘掉、交给 DT 精化。
 -- 全量加载 REPL program + 合成表达式定义，并取出 (DtProgram, Expr)。
 -- 接口路径不可用/闭包不完整时的回退目标（与 dtEvalExpr* 共用，避免两套加载语义）。
@@ -861,7 +861,7 @@ mainActionKind (TApp (TApp fn row _) _ _) = case fn of
   _ => ""
 mainActionKind _ = ""
 
--- | `Base.Eff.Row.Nil` 的语法形态（与 Elab/codegen 同形）。
+-- | `Base.Effect.Core.Row.Nil` 的语法形态（与 Elab/codegen 同形）。
 isNilRowTermDt : Term -> Bool
 isNilRowTermDt (TGlobal g) = g == effRowNilCtor
 isNilRowTermDt (TCon g []) = g == effRowNilCtor
@@ -1037,7 +1037,7 @@ shiftedDepPrograms ifaces =
   else shiftedDepProgramsGo (nameSlotTbl names 0) ifaces
 
 -- 模块名排序（插入排序；依赖模块数 ~几十，与哈希表相比更省常数）。
--- 字符串升序（稳定）：与 `Driver/Compile` 的同名函数收敛到 `Base.Sort.sortBy`。
+-- 字符串升序（稳定）：与 `Driver/Compile` 的同名函数收敛到 `Base.Data.Sort.sortBy`。
 sortNames : List String -> List String
 sortNames = sortBy (\a, b => a <= b)
 

@@ -100,7 +100,7 @@ export data Expr(..) : Type where
   -- 普通表达式位置不产生它，Fmt 在非 where 位置把它当透明括号渲染。
   EAnn : Expr -> Expr -> Span -> Expr
   -- 模板字符串字面量。`multi` = 是否 `"""` 形式（Fmt 用它保留书写形式；单行
-  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Interp.interp`
+  -- 字面量保持单行转义形式）。`Loader.Resolve` 把它降级成 `Base.Trait.Interp.interp`
   -- 调用 + `++` 链；Fmt / Lint / Index / Doc 在 parse 后处理它。
   EInterp : Bool -> List InterpPart -> Span -> Expr
   -- `Float` 字面量：原始十进制文本（放末尾以保持既有构造子 tag 顺序）。
@@ -538,7 +538,7 @@ isListConsSyntax name = name == listConsSyntax
 -- `bind` 应用——语义与今天的降级逐字一致。
 -- `perform <op>` 的保留名编码。parser 产出
 -- `EApp (EVar "@vuna@perform") [op]`；Elab 按 op 族推导 key（族规范名）、实例名
--- （行解 / 默认名）与效应签名（`sigFn (\i => <Op> <params…> i)`），再降级到 `Base.Eff.performCore`。
+-- （行解 / 默认名）与效应签名（`sigFn (\i => <Op> <params…> i)`），再降级到 `Base.Effect.Core.performCore`。
 -- 用户源码写不出 `@vuna@` 开头的标识符，所以标记不会与用户名字冲突。
 -- | `perform <op>` 的保留名（parser 产出、Elab 展开）。
 export performSyntax : String
@@ -555,7 +555,7 @@ isPerformSyntax name = name == performSyntax
 --     （Fmt 据此不打印 return 子句）；
 --   * `opH` 是 `ELam [o, k] (ECase (EVar o) alts)`：每个 alt 的 pattern 只含构造子实参，
 --     续延 binder `k` 是 λ 的第二个参数（同一 handle 块的所有 op 子句共用这个名字）。
--- Elab 从 clause 构造子推 op 族，再降级到 `Base.Eff.handleWith`。
+-- Elab 从 clause 构造子推 op 族，再降级到 `Base.Effect.Core.handleWith`。
 -- | `handle <comp> { ... }` 的保留名（parser 产出、Elab 展开）。
 export handleSyntax : String
 handleSyntax = "@vuna@handle"

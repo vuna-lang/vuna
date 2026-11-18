@@ -1,7 +1,7 @@
 -- stdlib：包门面 `import Base` 覆盖多个模块（List/Sort/Map/String/Monad）。
 -- 宿主 console 走 Eff [ConsoleOp]（entry 自动预装 handler）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base
 
 sum : List Int -> Int

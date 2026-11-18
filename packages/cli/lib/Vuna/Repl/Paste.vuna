@@ -13,9 +13,9 @@ module Vuna.Repl.Paste where
 import Vuna.Compiler.Base.Common
 import Vuna.Repl.Paste.Decode
 import Vuna.Repl.Term
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffStdin as EffStdin
+import Base.Effect.Types as EffTypes
+import Base.Effect.Console as EffConsole
+import Base.Effect.Stdin as EffStdin
 
 -- | 读粘贴体（调用时已在 `\e[200~` 之后）：逐字节喂状态机，读到 `\e[201~`、EOF 或超时
 -- （`termReadByte` 返回 -1）为止，返回粘贴内容（`\r` 已规范化为 `\n`）。fuel 是 1 MiB 的

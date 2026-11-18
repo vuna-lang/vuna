@@ -68,28 +68,28 @@ irMRunName = "@ir@m@run"
 export irMDoneName : String
 irMDoneName = "@ir@m@done"
 
--- | `Scoped` 的运行时类型 / 构造子名（`Base.Eff.Scoped`）。
+-- | `Scoped` 的运行时类型 / 构造子名（`Base.Effect.Core.Scoped`）。
 export irScopedTypeName : String
-irScopedTypeName = "Base.Eff.Scoped"
+irScopedTypeName = "Base.Effect.Core.Scoped"
 
 export irScopedMkCtor : String
-irScopedMkCtor = "Base.Eff.Scoped.MkScoped"
+irScopedMkCtor = "Base.Effect.Core.Scoped.MkScoped"
 
 -- | trampoline 边界的定义名。
 runThunkName : String
-runThunkName = "Base.Eff.runThunk"
+runThunkName = "Base.Effect.Core.runThunk"
 
 runPureName : String
-runPureName = "Base.Eff.runPure"
+runPureName = "Base.Effect.Core.runPure"
 
 runEffName : String
-runEffName = "Base.Eff.runEff"
+runEffName = "Base.Effect.Core.runEff"
 
 runMainName : String
-runMainName = "Base.Eff.runMain"
+runMainName = "Base.Effect.Core.runMain"
 
 handleScopedName : String
-handleScopedName = "Base.Eff.handleScoped"
+handleScopedName = "Base.Effect.Core.handleScoped"
 
 -- | 燃料：固定预算 + `fuel <= 0` 守卫是终止性证书。
 startFuel : Int
@@ -831,13 +831,13 @@ else case e of
       head = firstOf p
       args = secondOf p
       here = case head of
-        IrGlobal n => if n == "Base.Eff.handleWithAt" then case args of
+        IrGlobal n => if n == "Base.Effect.Core.handleWithAt" then case args of
           _ :: _ :: _ :: _ :: (IrGlobal h) :: _ => [h]
           _ => []
-        else if n == "Base.Eff.handleCoreAt" || n == "Base.Eff.handleCore" then case args of
+        else if n == "Base.Effect.Core.handleCoreAt" || n == "Base.Effect.Core.handleCore" then case args of
           _ :: _ :: _ :: (IrGlobal h) :: _ => [h]
           _ => []
-        else if n == "Base.EffConsole.handleConsole" || n == "Base.EffFs.handleFs" || n == "Base.EffClock.handleClock" then
+        else if n == "Base.Effect.Console.handleConsole" || n == "Base.Effect.Fs.handleFs" || n == "Base.Effect.Clock.handleClock" then
           case args of
             _ :: _ :: (IrGlobal h) :: _ => [h]
             _ => []

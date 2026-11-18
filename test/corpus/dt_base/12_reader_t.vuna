@@ -1,9 +1,9 @@
--- Reader 效应栈（`Base.Eff.Reader`）。
+-- Reader 效应栈（`Base.Effect.Reader`）。
 -- `ask` 读环境，`local` 在临时 handler 里改写；handler 的 answer 用 Int。
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.Eff as Eff
-import Base.Effect.EffReader as EffReader
+import Base.Effect.Exit as EffExit
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
 
 prog : Eff [ReaderOp Int@counter] Int
 prog = do

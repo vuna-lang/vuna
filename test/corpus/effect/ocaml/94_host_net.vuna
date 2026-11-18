@@ -1,6 +1,6 @@
 -- Net 效应（listen/close）：entry 自动预装真实 handler + 失败收口。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffNet as EffNet
+import Base.Effect.Core as Eff
+import Base.Effect.Net as EffNet
 
 main : Eff [NetOp] Int
 main = do

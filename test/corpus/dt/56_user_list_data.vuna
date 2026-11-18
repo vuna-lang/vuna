@@ -1,4 +1,4 @@
--- 用户 `data List` 与 base 的 canonical `Base.List.List` 并存；
+-- 用户 `data List` 与 base 的 canonical `Base.Data.List.List` 并存；
 -- `str*` 的桥接只认 canonical 族；用户族的构造子名不参与 runtime helper 生成。
 import Base.Data.List as List
 

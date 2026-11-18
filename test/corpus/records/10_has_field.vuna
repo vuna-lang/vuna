@@ -1,4 +1,4 @@
--- HasField：泛型读访问；实例由编译器为导入 Base.Record 的模块的 record 字段生成。
+-- HasField：泛型读访问；实例由编译器为导入 Base.Trait.Record 的模块的 record 字段生成。
 import Base.Trait.Record as Record
 
 record User where

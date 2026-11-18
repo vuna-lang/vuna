@@ -1,6 +1,6 @@
 -- 负例：local 要求行首是 Reader n s。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffReader as EffReader
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
 
 bad : Eff [] Int
 bad = local "counter" Int (\v => v) (pure 1)

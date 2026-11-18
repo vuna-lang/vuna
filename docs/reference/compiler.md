@@ -28,15 +28,15 @@
 | `Base.Diag.Format` | 诊断渲染唯一入口：short/human/JSON | `renderShort`、`renderHuman`、`renderJsonList` |
 | `Base.Diag.Codec` | `Diagnostic` / 检查结果的规范字节编码（`Base.Store` 对象载荷） | `encDiagnostics`、`decDiagnostics`、`encCheckOutcome`、`checkResultCodec` |
 | `Base.Common` | 编译器门面：重导出 `Base.Source` + `Base.Diag`，并保留固定类型的 `bind`/`step`/`traverse` | `bind`、`showSpanLoc`、`suggest`、`splitPath` |
-| `Base.Diagnostics`（门面） | 错误码体系入口：重导出 `Base.Diagnostics.Tc`/`Cg`/`Ic`、`Base.Common` 与 `Base.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
+| `Base.Diagnostics`（门面） | 错误码体系入口：重导出 `Base.Diagnostics.Tc`/`Cg`/`Ic`、`Base.Common` 与 `Base.Data.Nat`/`Vec` | `tcErr0`、`cgErr0`、`icFuel`、`tcAll`、`cgAll` |
 | `Base.Diagnostics.Tc` / `Cg` | `TcErr : Nat -> Type` / `CgErr : Nat -> Type` 域枚举（构造子携带模板、arity 由索引锁定）；`tcAll`/`cgAll` 按 arity 分块（避免单行巨表） | `tcCode`、`tcTemplate`、`cgCode`、`cgTemplate` |
 | `Base.Diagnostics.{Rn,Pkg,Loader,Frontend,Warning,Sink,Ic,Common}` | 各阶段错误码域（`RN_` / `PKG_` / `LD_` / `LX_` / `UN_` / `IC_`）与告警去重入口 | `rnCode`、`pkgCode`、`ldCode`、`dedupeWarnings` |
 | `Base.Bytes` | 规范字节编码的原子层：自定界文法 `#tag;` / `i<n>;` / `s<len>:<bytes>` / `b0\|b1` / `[<n>:…]` / `0\|1…`，累积器编码 + 游标解码器（`Cur` = 原串 + 偏移，避免 `strUnpack` 整串拷贝） | `encConcat`、`encTag`、`encInt`、`encStr`、`encMaybe`、`decStr`、`curOf`、`thenPair` |
-| `Base.Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Bits` 的 32-bit 包装在语言内实现：OCaml / wasm / 核心求值同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
+| `Base.Hash` | 内容寻址摘要原语：**SHA-256**（用 `Base.Data.Bits` 的 32-bit 包装在语言内实现：OCaml / wasm / 核心求值同摘要）；`digestHex`（64 位十六进制）/ `digestInt`（63-bit 派生键）/ `prehashOfString`（MB 级载荷折叠）/ `contentKey`·`contentAddress`（大输入：预折叠 + SHA，缓存 key 与内容地址） | `digestOfString`、`digestHex`、`digestIntOf`、`contentKey`、`contentAddress`、`prehashOfString` |
 | `Base.Version` | 版本号唯一真源；产品 CLI / `vuna-compiler` / build meta / VSCode 探测共用 | `vunaVersion` |
 | `Base.Store` | **唯一**缓存载荷落盘层：`vuna-cache-frame 2\|<tag>\|<codec>\|<len>\|<内容地址>\n<payload>` 的编解码（纯）、读侧三层校验（framing → 头内内容地址 → 调用方语义自证）、原子写、去抖写、缓存根探测、对象族读写（`objects/<kind>/`）、roots 与视图锁 | `storeEncode`、`storeDecode`、`storeReadEff`、`storeReadAsEff`、`storeWriteEff`、`storeWriteIfChangedEff`、`storeObjectWriteEff`、`storeRootAppendEff`、`storeCacheBaseEff` |
-| `Base.Obs` | 观测插桩适配层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
-| `Base.Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
+| `Base.Data.Obs` | 观测插桩适配层（`obsCheck` / `obsDefCheck` / `obsMarkEff`；规范见 [observability.md](observability.md)） | `obsCheck`、`obsDefCheck`、`obsMarkEff` |
+| `Base.Intrinsics` | **内建语义唯一真源**：名字/签名形状（`IType`）/arity/归约标签（`IntrinsicOp`）/用户可见性（没有 `Capability` 能力位）；运行时文本不在本模块（`Ir.Runtime` 契约 + `Codegen.Runtime` 实现）；内置身份按声明 symbol（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`） | `findIntrinsic`、`intrinsicName`、`intrinsicArity` |
 
 ### Frontend（词法、语法、manifest、包图、规范编码）
 
@@ -97,7 +97,7 @@
 | `Elab.Prelude` | 把 `Base.Intrinsics` 表翻译成 DT prelude globals（签名）；没有第二份名字/签名表 | `preludeGlobals`、`builtinTyName`、`cmpBuiltinTyName` |
 | `Elab.Match` | 多 clause 模式矩阵降级：构造子列 → `case`、字面量列 → `if` 链（纯 Ast→Ast） | `multiToExpr`、`buildColumnExpr` |
 | `Elab.Records` | `record` 的语法与结构化元数据：收集 `RecordMeta`、把 record 表达式/模式降级成**合成位置构造子**的引用（不降级成 `DData`）；`prepareDecls*` 返回的 decls 保留 `DRecord` | `desugarRecords`、`recordsOfDecls`、`prepareDecls` |
-| `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Hashable.hashCombine`） | `expandDerivings` |
+| `Elab.Derive` | `deriving (Show, Eq, Ord, Hashable)` 的实例生成（展开成等价 `instance`，交给既有实例精化；`Hashable` 的字段哈希用 `Base.Trait.Hashable.hashCombine`） | `expandDerivings` |
 | `Elab.Coverage` | 覆盖性见证构造（缺失模式 / 冗余分支）与诊断渲染 | `improveExhaustive`、`coverageWitness`、`renderWitness` |
 | `Elab.Usage` | 整程序用量检查（QTT 0/1/ω，见 [qtt.md](qtt.md)） | `checkProgramUsage`、`checkDefUsage` |
 | `Elab.Canonical` | 接口载荷与哈希输入域：`DtDef` / `DtData` / `DtInst` / `DtClass` / `RecordMeta` / `ExportEntry` / `FixityDecl` / `Import`（span 丢弃、字段全覆盖；`DtCtor` 随 `DtData` 编码） | `encDtDef`、`encDtData`、`encDtInst`、`encDtClass`、`encExportEntry`、`encRecordMeta`、`encFixity`、`encImport` |
@@ -273,9 +273,9 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
 
 擦除型 codegen 用 `Core` 的 `Term` 视图生成原生 OCaml：用户 `data` 编译成 OCaml 变体
 （每个族一个 `type 'a t_F = ...`）；`Int`/`String` 是语言 primitive（OCaml `int`/`string`），
-`Bool`/`List` 是 base 的普通 data：canonical `Base.Bool.Bool` 精化成 OCaml `bool`
+`Bool`/`List` 是 base 的普通 data：canonical `Base.Data.Bool.Bool` 精化成 OCaml `bool`
 （`TBool`），`List` 按完整符号生成普通变体；`case` 编译成 OCaml `match`、构造器直接
-构造变体。`Base.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
+构造变体。`Base.Data.Nat.Nat` 同样不进运行时变体：零/后继、字面量与 `case` 降成 OCaml `int`
 与 `if`/`let`（表示类别来自 `Base.Intrinsics.canonicalFamilies` 的 `FamilyRepr`；
 `Lowering.Program` 过滤族、折叠 Succ 链、降级 Nat case，后端只渲染），
 算术走 `bi_nat*`。运行时表示由 `Core.rigIsErased` 判定（0 擦除，1/ω 保留）；
@@ -327,7 +327,7 @@ fixities / imports、`miSource`、`miIfaceHash`、`miDepHashes`。
    `Vuna_dCompiler_dFrontend_dParser.ml`；拓扑序）。文件头**只** `open Vuna_runtime`，
    没有 open 链；跨单元引用（值 `v_*` / 构造子 `C_*` / 类型 `t_*`）一律渲染成 OCaml
    限定名 `Unit.name`（`Unit` = 定义该名字的编译单元，如
-   `Base_dList.C_Base_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
+   `Base_dData_dList.C_Base_dData_dList_dList_Cons`），同单元内仍是裸名；`List` 桥接放在声明 `List`
    族的模块文件里；
 3. `Main.ml`：entry decls 的 datas + defs + `main` 钩子（入口文件里的 `data` 也必须发进来）；
    首行是 `Printexc.record_backtrace` 序言，钩子在 `try` 内执行入口动作；

@@ -1,7 +1,7 @@
 -- Clock 内建行（sleep + Console 打印），entry 自动装两个 handler。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
 
 main : Eff [ClockOp, ConsoleOp] Int
 main = do

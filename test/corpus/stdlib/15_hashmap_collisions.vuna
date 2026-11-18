@@ -1,4 +1,4 @@
--- stdlib：Base.HashMap 的碰撞覆盖（1024 个键铺满全部桶，必然出现哈希碰撞）。
+-- stdlib：Base.Container.HashMap 的碰撞覆盖（1024 个键铺满全部桶，必然出现哈希碰撞）。
 -- 规模超出核心求值的默认燃料（512）：只 check + compile + run（.run.out）。
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List

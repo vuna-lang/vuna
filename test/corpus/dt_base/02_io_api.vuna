@@ -1,12 +1,12 @@
 -- 宿主原语（`@vuna@prim_eff_*`）在 DT 下的类型面。效果不在这条夹具里执行
 -- （纯核心求值器不跑效果），运行时效果见 corpus/dt_io/。
--- `Nat` 边界在 Eff 标签的 result 族（`Base.EffConsole.Print`、`Base.EffFs.WriteFile`/`FileSize`），
+-- `Nat` 边界在 Eff 标签的 result 族（`Base.Effect.Console.Print`、`Base.Effect.Fs.WriteFile`/`FileSize`），
 -- 直接调用原语得到 `Int`。
-import Base.Effect.EffStdin as EffStdin
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffFs as EffFs
-import Base.Effect.Eff as Eff
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Exit as EffExit
+import Base.Effect.Args as EffArgs
+import Base.Effect.Fs as EffFs
+import Base.Effect.Core as Eff
 import Base.Data.List as List
 import Base.Data.Nat as Nat
 

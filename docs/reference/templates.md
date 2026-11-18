@@ -9,7 +9,7 @@
 `"text ${e} rest"` 中每个 `${e}` 求值后转成字符串拼进结果：
 
 1. 文本块保持原样（转义按 §「转义」解码）；
-2. 洞 → `Base.Interp.interp e`；
+2. 洞 → `Base.Trait.Interp.interp e`；
 3. 整体用 `++` 左结合链起（空文本块跳过；只有洞时直接返回该洞）。
 
 转换语义**完全由 base 的 `Interp` 实例决定**（`packages/base/lib/Base/Interp.vuna`）：
@@ -94,6 +94,6 @@ line1 ${interp n}
 ## 已知边界
 
 - `${...}` 里的注释由词法跳过、不进 AST，`fmt` 会丢失它们；
-- 插值要求 base 在包依赖里（`Base.Interp` 由 `Prelude` 自动注入）；
+- 插值要求 base 在包依赖里（`Base.Trait.Interp` 由 `Prelude` 自动注入）；
 - 模板节点只活到 `Loader.Resolve`：Lint / Index / Doc / LSP 在 parse 后看到 `EInterp`，
   `vuna lint` 会照常遍历洞内表达式；`vuna doc` 的类型签名里不会出现模板。

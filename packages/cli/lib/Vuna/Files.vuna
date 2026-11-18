@@ -11,8 +11,8 @@
 -- （`skipGenerated` 等）保持纯函数。
 module Vuna.Files where
 
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 import Vuna.Compiler.Base.Common
 
 -- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。

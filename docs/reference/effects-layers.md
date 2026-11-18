@@ -7,16 +7,16 @@
 
 **Layer 2（作用域/高阶组合）**：
 
-- `Base.Eff.Reader.local`：先 `ask` 取外层 env，在临时 handler 中回答 Ask，再用
+- `Base.Effect.Reader.local`：先 `ask` 取外层 env，在临时 handler 中回答 Ask，再用
   `weaken` 把结果行扩宽回 `e :: r`；外层 handler 仍在，所以 local 之后该效应仍可用。
-- `Base.EffError`：`throw`/`handleError`/`runError` + `catch`。catch 在 comp 内安装临时
+- `Base.Effect.Error`：`throw`/`handleError`/`runError` + `catch`。catch 在 comp 内安装临时
   Error handler；Throw 丢弃一次性续延并返回 `Result`；fallback 在 handler **之外**执行，
   因此嵌套 catch 的 fallback 抛错可被外层 catch 捕获。
 - 夹具 `dt_base/20_eff_local`（877）、`21_eff_catch`（4207）。
 
 **高阶操作 / scoped handler**：
 
-- `Base.EffExn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
+- `Base.Effect.Exn`：`ExnOp.Try` 携带一个 `Eff` 子计算；`handleExn` 的 op handler 用
   `runEff (runExn sub)` 在**嵌套 handler** 下运行子计算，外层运行时 handler 继续处理
   子计算里的其它效应；`catchExn` 在 `tryWith` 上组合。
 - `runEff` 是信任边界内的作用域运行入口（任意行；仅供库内 handler 实现使用）；普通用户用
@@ -89,7 +89,7 @@ API（`packages/base/lib/Base/EffSched.vuna`）：
 
 夹具（均关闭 interp 阶段，只 `check` + `compile` + 运行）：
 
-- `dt_base/42_eff_bracket_abort`：自定义 Abort handler 丢弃续延，`Base.Eff.bracket` 的 release 写入被外层 State handler 看到（4207）。
+- `dt_base/42_eff_bracket_abort`：自定义 Abort handler 丢弃续延，`Base.Effect.Core.bracket` 的 release 写入被外层 State handler 看到（4207）。
 - `dt_base/43_eff_sched_bracket`：调度器取消后 `use` 正常返回，带内 release（`acquire/release/3`）。
 - `dt_base/44_eff_linear_fn`：线性资源被一次性闭包捕获、装进 `Cont` rig-1 字段、resume 一次（13）。
 - 负例 `dt_err/79_linear_closure_escape`、`80_linear_nonlinear_field`、`81_linear_cont_twice`。
@@ -120,11 +120,11 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
 
 | 模块 | 标签（行条目） | 操作 | 真实 handler | mock 方式 |
 | --- | --- | --- | --- | --- |
-| `Base.EffConsole` | `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`） | `Print String` / `EPrint String` | `handleConsoleHost` → `prim_eff_print`/`prim_eff_eprint`（`Print` 在 result 族转 `Nat`） | 自定义 `handleConsole`（如收集日志） |
-| `Base.EffClock` | `ClockOp`（实例名并进标签，`Named "mock" ClockOp :: r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `effTimeUs` + **原生 `prim_eff_sleep`** | 固定时间戳 / 忽略 sleep |
-| `Base.EffEnv` | `EnvOp`（实例名并进标签） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath` | 固定字符串 |
-| `Base.EffProcess` | `ProcessOp`（实例名并进标签） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
-| `Base.EffFs` | `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`） | 自定义 `handleFs n`（纯 answer 内存表） |
+| `Base.Effect.Console` | `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`） | `Print String` / `EPrint String` | `handleConsoleHost` → `prim_eff_print`/`prim_eff_eprint`（`Print` 在 result 族转 `Nat`） | 自定义 `handleConsole`（如收集日志） |
+| `Base.Effect.Clock` | `ClockOp`（实例名并进标签，`Named "mock" ClockOp :: r`） | `Now`（微秒）/`SleepMicros Int` | `handleClockHost` → `effTimeUs` + **原生 `prim_eff_sleep`** | 固定时间戳 / 忽略 sleep |
+| `Base.Effect.Env` | `EnvOp`（实例名并进标签） | `GetEnv String`/`GetCwd`/`ExecPath` | `handleEnvHost` → `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath` | 固定字符串 |
+| `Base.Effect.Process` | `ProcessOp`（实例名并进标签） | `Args`/`Exit Int`/`RunIn String (List String)` | `handleProcessHost`（真实退出）/ `handleProcessHostWith`（自定义 onExit）/ `handleProcessHostObserved`（观察退出码） | 自定义 `handleProcess`（`Exit c` 作为操作结果） |
+| `Base.Effect.Fs` | `FsOp`（实例名并进标签，如 `FsOp@mock`/`FsOp@real`） | `ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize` | `handleFsHost n` → `prim_eff_*`（`WriteFile`/`FileSize` 在 result 族转 `Nat`） | 自定义 `handleFs n`（纯 answer 内存表） |
 
  - **命名实例**：console/clock/env/process/fs 的标签都是 op 族应用（`ConsoleOp`/`FsOp`…），
   实例名并进标签（`Named "mock" FsOp` 与 `Named "real" FsOp` 是不同条目），因此同一个
@@ -135,7 +135,7 @@ main 结束时统一取消清理（最外层兜底）；跨域 handler / Domain 
   返回 `Eff r (Eff [] a)`，由 `joinEff` 执行（真实 handler 的 op 解释返回 `Eff []` 动作）。
 - **原生 sleep**：编译器原语 `prim_eff_sleep : Int -> Eff [] Int`（微秒；运行时
   `dtp_sleep` 用 `Unix.sleepf`，阻塞睡眠；`OpNone`，核心求值不归约）。
-  `Base.EffClock` 的 `SleepMicros` 直接走 `prim_eff_sleep`。
+  `Base.Effect.Clock` 的 `SleepMicros` 直接走 `prim_eff_sleep`。
 - **可控 `Exit`**：`handleProcessHost` 保留真实语义（`onExit = prim_eff_exit`，调用即
   结束进程）；`handleProcessHostWith n onExit` 让调用方替换退出行为，`handleProcessHostObserved n`
   是现成实例：`Exit c` 不退出、把 `c` 交给续延，程序继续执行。mock handler 本来就能

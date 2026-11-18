@@ -45,7 +45,7 @@ Content-Length: <字节数>\r\n
 | `textDocument/prepareRename` | 光标 token 的 range + placeholder；关键字 / base 标准库（`Int` 等）/ 未知符号 / 洞 / 非法新名 → `result: null`，不崩溃 |
 | `textDocument/rename` | 局部绑定（参数 / λ / `let` / `where` / `case` / `do` / `as` / 记录字段 binder，当前文档）+ 顶层符号（函数/类型/构造子/记录字段/trait 方法/axiom/extern，含导出列表）；跨文件按 Index refs 跟进直接 import 目标模块的候选模块；返回 `WorkspaceEdit {changes}`，去重、cap 1000。边界：运算符/deriving/fixity/模块名不改，类型名在其它模块**签名**里的跨文件使用不跟进 |
 | `textDocument/completion` | 关键字 + 当前缓冲顶层符号 + Index 符号；`.` 后按模块过滤；Index 项带 `detail`（签名）与 `documentation`（Markdown docstring，文本来源与 hover 一致：打开中的缓冲 > 磁盘），`label` 去重时 Index 优先 |
-| `textDocument/codeAction` | 两类动作（cap 20，case split 在前、fix all 占最后一格）：<br>(1) lint finding 的 **quick fix**：只对可自动修复（`findingEdit`）且行范围与请求 range 相交的 finding 生成 `{title:"fix: <rule>", kind:"quickfix", diagnostics:[<diagnostic>], edit:{changes}}`；内嵌诊断复用 `Vuna.Lsp.Diagnostics` 的 finding→diagnostic 转换（与 `publishDiagnostics` 同一条 JSON：`range` / `severity` / `source` / `code` / `message`），客户端可按 `code` 关联到已有诊断；另给 `fix all lint findings`（**`Command` 形式**：`{kind:"quickfix", command:{command:"vuna.fixAllLint", arguments:[uri]}}`，不内嵌 edit）。<br>(2) **case split**（核心）：光标在洞（`_` / `?name`）上时，对洞上下文里**类型头可解析到非索引 data / record** 的每个 binder 生成 `{title:"case split on <name>", kind:"refactor.rewrite", edit}`：非索引 data 的 newText 为 `case <name> of` + 每构造子一行 `<Ctor> _... => _`（构造子参数用 `_` 占位；隐式构造子参数不进模式）；record 是单构造器（构造器名 = 类型名），只生成**一条** record 模式分支 `<Type> { <field> = _, ... } => _`（字段写全）。分支缩进 = 洞所在行行首缩进 + 2。构造子来源是 parse 级：当前缓冲 AST + 按包上下文模块根读依赖模块（`import qualified` 时写限定名 `Mod.Ctor` / `Mod.Type`，open import / 经 Prelude 重导出的 base 类型写短名）；类型头的应用文本按精化器 show 的左结合全括号递归剥括号（多参数 data 的 `((Base.Pair.Pair Int) Bool)` 也能解析）。<br>`context.only`：quickfix 只在未限制或含 `quickfix` 时给；case split 只在未限制或含 `refactor` / `refactor.rewrite` 时给；不含对应 kind → 空数组。 |
+| `textDocument/codeAction` | 两类动作（cap 20，case split 在前、fix all 占最后一格）：<br>(1) lint finding 的 **quick fix**：只对可自动修复（`findingEdit`）且行范围与请求 range 相交的 finding 生成 `{title:"fix: <rule>", kind:"quickfix", diagnostics:[<diagnostic>], edit:{changes}}`；内嵌诊断复用 `Vuna.Lsp.Diagnostics` 的 finding→diagnostic 转换（与 `publishDiagnostics` 同一条 JSON：`range` / `severity` / `source` / `code` / `message`），客户端可按 `code` 关联到已有诊断；另给 `fix all lint findings`（**`Command` 形式**：`{kind:"quickfix", command:{command:"vuna.fixAllLint", arguments:[uri]}}`，不内嵌 edit）。<br>(2) **case split**（核心）：光标在洞（`_` / `?name`）上时，对洞上下文里**类型头可解析到非索引 data / record** 的每个 binder 生成 `{title:"case split on <name>", kind:"refactor.rewrite", edit}`：非索引 data 的 newText 为 `case <name> of` + 每构造子一行 `<Ctor> _... => _`（构造子参数用 `_` 占位；隐式构造子参数不进模式）；record 是单构造器（构造器名 = 类型名），只生成**一条** record 模式分支 `<Type> { <field> = _, ... } => _`（字段写全）。分支缩进 = 洞所在行行首缩进 + 2。构造子来源是 parse 级：当前缓冲 AST + 按包上下文模块根读依赖模块（`import qualified` 时写限定名 `Mod.Ctor` / `Mod.Type`，open import / 经 Prelude 重导出的 base 类型写短名）；类型头的应用文本按精化器 show 的左结合全括号递归剥括号（多参数 data 的 `((Base.Data.Pair.Pair Int) Bool)` 也能解析）。<br>`context.only`：quickfix 只在未限制或含 `quickfix` 时给；case split 只在未限制或含 `refactor` / `refactor.rewrite` 时给；不含对应 kind → 空数组。 |
 | `workspace/executeCommand` | `vuna.fixAllLint`（arguments = `[uri]`）：按当前缓冲重算 lint + `Lint.Fix.fixLoop`，回 `result: null` 并发一条**服务器 → 客户端**的 `workspace/applyEdit` 请求（整文档替换 `WorkspaceEdit`；客户端应用，服务器不写文件、不等响应）。无改动时只回 null；未知 command → `-32602`。 |
 | `workspace/symbol` | Index 符号过滤（有上限） |
 | `shutdown` / `exit` | 正常退出语义：收到 shutdown 后 exit 退 0，否则退 1 |
@@ -56,9 +56,9 @@ Content-Length: <字节数>\r\n
 索引构建；Index 查询失败或未命中就退回原路径）：
 
 - **模块引用**：`import` 的模块名 / alias、导出项 `module B`（全名或 alias）、模块头自身、
-  限定名的模块前缀（`Base.List.map` 光标落在 `List` ⇒ 模块 `Base.List`；落在 `map` ⇒ 不命中）。
-  token 本身也作为候选（`Base.Maybe Int` 这种「token 就是模块名」的类型/值写法，光标落在
-  `Maybe` 也命中 `Base.Maybe`）；但名字**外侧**的一格（`.` / 空格）不算模块名的一部分。
+  限定名的模块前缀（`Base.Data.List.map` 光标落在 `List` ⇒ 模块 `Base.Data.List`；落在 `map` ⇒ 不命中）。
+  token 本身也作为候选（`Base.Data.Maybe Int` 这种「token 就是模块名」的类型/值写法，光标落在
+  `Maybe` 也命中 `Base.Data.Maybe`）；但名字**外侧**的一格（`.` / 空格）不算模块名的一部分。
   模块名 → 文件按**包上下文模块根**探测（`Pkg.contextForFile` 的 roots：本包 `lib/` 在前、
   依赖闭包在后，workspace 外的依赖包也能定位）；模块 docstring 走 `Doc.Comments.docTableOf`，
   文本来源是**打开中的缓冲 > 磁盘**——服务器把 didOpen/didChange 维护的文档表交给 Bindings，

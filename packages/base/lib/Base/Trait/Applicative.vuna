@@ -1,0 +1,20 @@
+-- | `Applicative` trait（`pure` / `ap` / `liftA2`）。父类是 `Functor`；本模块重导出 `Base.Trait.Functor`，`import Base.Trait.Applicative` 也能看到 `fmap`。
+--
+-- `pure` 归本模块而不是 `Base.Trait.Monad`：`do` 只依赖 `bind`，而 `pure` 是 Applicative 的能力。`Base.Trait.Monad` 重导出本模块，`import Base.Trait.Monad` 仍能看到 `pure` / `ap` / `liftA2`。
+module Base.Trait.Applicative where
+
+export module Base.Trait.Functor
+
+-- `liftA2` 是 trait 方法而不是由 `ap` 派生的顶层函数：字典投影在生成的 OCaml 里是无类型
+-- 标注的元组字段，`pure` 的返回类型与 `ap` 的首参会被错误统一，派生体
+-- `liftA2 f x y = ap (ap (pure f) x) y` 会在调用点直接 OCaml 类型错误（debt D52），
+-- 因此逐实例手写、不提供默认方法。`ap` 的高阶签名本身可以作为实例方法（精化器不会误报
+-- `TC_ImpossibleBranchIndex`）。
+-- | 应用函子 trait：`pure` 提升纯值，`ap` 在动作上应用函数，`liftA2` 在动作上应用二元函数。实例同时提供 `Functor f` 的字典，`Applicative f =>` 的泛型代码可直接用 `fmap`。
+export trait Functor f => Applicative f(..) where
+  -- | 把纯值提升为动作。
+  pure : a -> f a
+  -- | 应用动作里的函数：把 `f (a -> b)` 应用到 `f a` 得到 `f b`。
+  ap : f (a -> b) -> f a -> f b
+  -- | 提升二元函数并在两个动作上应用（逐实例显式实现，不由 `ap` 派生）。
+  liftA2 : (a -> b -> c) -> f a -> f b -> f c

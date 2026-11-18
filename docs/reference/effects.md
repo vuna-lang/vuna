@@ -1,15 +1,15 @@
 # 效应：Eff 统一动作、handler 与宿主层
 
-**现状**：用户面唯一动作类型是 `Eff r a`（`Base.Eff`，构造子不导出；`MkEff` 是内部表示），
-入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Eff.runPure`。宿主原语只有
+**现状**：用户面唯一动作类型是 `Eff r a`（`Base.Effect.Core`，构造子不导出；`MkEff` 是内部表示），
+入口是 `main : Eff [] a`（行必须为 `Nil`），执行入口是 `Base.Effect.Core.runPure`。宿主原语只有
 `prim_eff_*`（`Eff []`）；宿主层就是直接调用这些原语（任何包都可直调），
-Int/Nat 归一化只留在 `Base.Eff.*` handler 的结果索引（`Print`、`WriteFile`/`FileSize` 返回
+Int/Nat 归一化只留在 `Base.Effect.Core.*` handler 的结果索引（`Print`、`WriteFile`/`FileSize` 返回
 `Nat`，直接调用原语得到 `Int`）。所有宿主 handler 的 answer 是 `Eff []`，入口组合是
 `runX = joinEff (handleXHost …)`。用户面
 执行一个已处理干净的动作用 `runPure`；`IORef` 的实现也是 `Eff []`。
 
 运行时核心（§8）：OCaml 5 一次性 delimited continuations + 开放行 + 命名实例 +
-一阶效应（`Base.Eff` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
+一阶效应（`Base.Effect.Core` / Reader / State / Fs / Console / Clock / Env / Process / Stdin /
 Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续延与一次性闭包
 （`mkCont`/`resumeCont`）、通用 `bracket`（含非 `Exn` abort cleanup）、单线程 fiber
 调度器（`Base.EffSched`：`forkTask`/`awaitTask`/`yieldNow`/`cancelTask`/`cancelScope`/
@@ -21,7 +21,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 - **本页覆盖**：`Eff` 统一动作的表示/执行、handler 与 `Eff []` answer、宿主层（直接调用 `prim_eff_*`）、
   宿主层直调纪律、通用 Eff 的边界。
 - **不覆盖**：原语/宿主层的逐条语义（[primitives.md](primitives.md) §7）；纯效应 monad
-  （`Base.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
+  （`Base.Effect.Pure.State` / `Reader` / `Error`，它们不碰宿主，见 [stdlib.md](stdlib.md)）；
   并行/多核与 Domain 内存模型（只有单线程调度器，见 §8.5）；完整 QTT。
 
 ## 2. 动作类型与宿主层
@@ -30,9 +30,9 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 | 项 | 值 |
 | --- | --- |
-| 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Eff` 的 data；行是 Type-1 擦除索引） |
+| 用户面动作类型 | `Eff : Row -> Type -> Type`（`Base.Effect.Core` 的 data；行是 Type-1 擦除索引） |
 | 表示 | 装箱 data：`MkEff : (EffUnit -> a) -> Eff r a`；`MkEff` 不导出，用户经 `pure`/`do`/`>>=`/handler 构造与消解 |
-| main 入口 | `main : Eff [] a`；钩子 `dtp_sched_main (fun () -> Base.Eff.runPure v_main)` |
+| main 入口 | `main : Eff [] a`；钩子 `dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)` |
 | 执行 | `runPure : Eff [] a -> a`（行必须 Nil；运行时 `runThunk` 应用 dummy 令牌） |
 | 行 | `Row` / `(::)` / `Nil` + `Member`；实例名并进标签 `Named`；handler 用 `rowRem` 删行，运行时按 `(key, name)` 路由 |
 
@@ -41,25 +41,25 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `[CG_InterpCannotExecuteEffects]`（纯核心求值器只跑纯 main）。
 - `Eff []` 不表示「无副作用」：它表示「无未处理的行效应」；宿主层构造的叶子里可以
   有真实宿主操作。宿主副作用没有 manifest 能力/特权门控；用户面应经
-  `Base.Eff.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
+  `Base.Effect.Core.*` 标签 + handler 使用效果（纪律/文档约定，见 §8.6）。
 - **动作入口**：`IEffRow`/`IRowCons`/`IGlobal` 行 IType、隐藏
-  `Base.Eff.runMain`、`rowAppend` 行拼接与 `joinEff` 泛化、`builtinEffects` 表、entry
+  `Base.Effect.Core.runMain`、`rowAppend` 行拼接与 `joinEff` 泛化、`builtinEffects` 表、entry
   按 main 行自动嵌套 `runXHost`；Console/Fs/Clock/Env/Process/Exit/Stdin/Args 有带行
   handler，Ref/Net 直调带行原语（`beRunHost=""`）；夹具 90–94。`runPure` 只收 Nil
   （纯性负例：`runPure (consolePrint ...)` → `TC_UnhandledEffects`）。
-- **编译器与工具链的 IO 走 labeled 效应**：叶子统一用 `Base.Eff.*` labeled sender
+- **编译器与工具链的 IO 走 labeled 效应**：叶子统一用 `Base.Effect.Core.*` labeled sender
   （`consolePrint` / `fsReadFile` / `processSpawn` / `clockNow` / `envGetEnv` …），签名按
   实际用到的标签写 `Member nX XOp r`（`nX` 可省略，由精化器补隐式实例名）；纯逻辑保持纯，
   `Eff []` 只用于确需空行的动作，`main` 写具体行字面量（`Eff [FsOp, ConsoleOp, …] Int`）。
-  `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Eff.Types` 只重导出
+  `forkTask` 行泛化、任务体 `runEff` 执行（Sched 仍是 `Eff []`）。`Base.Effect.Types` 只重导出
   类型面（`Eff` / `Row` / `Named` / `Member` / `EffUnit`，不含 `Row(..)` 构造子），避开与
-  `List` 的 `(::)` 重载；`Base.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
+  `List` 的 `(::)` 重载；`Base.Effect.Pure.IORef` 是行多态的本地可变存储（调用方不需要 `RefOp`）。
 - **宿主原语**：`@vuna@prim_eff_*`（隐藏，`visible = False` + Lexer 的 `@vuna@` 内部名规则，
   源码写不出可见名），eff-boundary 守卫检查「可见宿主原语名不得出现在源码」。
 
 | 层 | 类型/入口 | 说明 |
 | --- | --- | --- |
-| 用户面 | `Eff r a` + `Base.Eff.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
+| 用户面 | `Eff r a` + `Base.Effect.Core.*` 标签/handler | 用户包与 ad-hoc 的唯一动作类型；`main : Eff [] a` |
 | handler 层 | entry 自动预装的行 handler（`@vuna@` 内部名） | 用户面写不出 handler 名字；`main` 行有内建标签时由编译器嵌套预装 |
 | 宿主层 | `@vuna@prim_eff_*`（隐藏 intrinsic，源码写不出） | 直接调用即得 `Eff []` 动作；Int/Nat 归一化只在 Eff handler 的结果索引；没有 manifest 能力/信任门控 |
 
@@ -67,7 +67,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   `>>=` / `fmap`，动作的构造入口只有这些实例方法。
 - **宿主层边界（无 manifest 门控）**：`vuna.toml` 没有 `[capabilities]` / `[trust]` /
   `[privileged]`；任何包（用户包、ad-hoc 文件）都可以直接调用
-  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。用户面**应**经 `Base.Eff.*` 标签 + handler 使用
+  `prim_*` / `prim_eff_*`（`Eff []` 叶子）。用户面**应**经 `Base.Effect.Core.*` 标签 + handler 使用
   效果——这是纪律/文档约定，不是编译器强制。`prim_*` / `prim_eff_*` 是宿主层/底层原语，
   base 的 Eff handler、编译器与根工具链内部直接使用它们。显式接受的损失见 §8.6
   （登记在 [debt.md](debt.md) D62）。
@@ -77,8 +77,8 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 ## 3. 没有 transformer 栈
 
-状态 / 环境 / 错误用 `Base.Effect.EffState` / `Base.Effect.EffReader` / `Base.Effect.EffError`（高阶作用域错误
-用 `Base.Effect.EffExn`）；没有 `MonadIO` 式的 `Base.Effect` 能力类、
+状态 / 环境 / 错误用 `Base.Effect.State` / `Base.Effect.Reader` / `Base.Effect.Error`（高阶作用域错误
+用 `Base.Effect.Exn`）；没有 `MonadIO` 式的 `Base.Effect` 能力类、
 `Base.StateT` / `Base.ReaderT` / `Base.ErrorT`，也没有 `Base.EffAsync`。纯表示版本
 `Base.Effect.Pure.State` / `.Reader` / `.Error` 与 handler 版并存，二者不互相派生。
 
@@ -147,7 +147,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 3. **可变数据边界**：`IORef` 的公开操作与实现都是 `Eff []`；没有局部可变的 region 形式
    （重建约束见 [debt.md](debt.md) D63）。
 4. **宿主层是底层原语面，不是类型豁免**：`prim_effectPerform` / `prim_effectHandle` /
-   cleanup/sched 是宿主层原语，常规用户面经 `Base.Eff.*` 标签 + handler 使用效果；没有
+   cleanup/sched 是宿主层原语，常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果；没有
    `unsafe` 能力位或 `[trust]` 定义级清单（[debt.md](debt.md) D62）。
 5. **效应组合显式**：transformer 的 handler 必须显式调用；没有自动 lift 到任意深度。
 6. **不透明擦除值的表示与 cast 由同一份判据驱动**：`Elab.Meta.valueOpaqueScoped` 与
@@ -171,10 +171,10 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
   （`Named "audit" ConsoleOp`）。
 - **列表字面量通用展开**：parser 把 `[]` / `[e1, e2]` 解析成保留名
   `@vuna@list@nil` / `@vuna@list@cons`（不是构造子名字解析）；精化器按**期望族**的短名
-  `Nil` / `(::)` 展开（`List`、`Vec`、`Base.Eff.Row` 与用户自定义同形族都走这一条），
-  期望族未知时默认 `Base.List.List`。因此在**期望 kind 为 `Row`** 的位置 `[Fetch]` 展开为
+  `Nil` / `(::)` 展开（`List`、`Vec`、`Base.Effect.Core.Row` 与用户自定义同形族都走这一条），
+  期望族未知时默认 `Base.Data.List.List`。因此在**期望 kind 为 `Row`** 的位置 `[Fetch]` 展开为
   `Named "default" Fetch :: Nil`（裸标签补默认名），`[]` 展开为
-  `Base.Eff.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`(::)` 族同样适用。模式
+  `Base.Effect.Core.Row.Nil`；`Vec n a` / 用户自定义的 `Nil`/`(::)` 族同样适用。模式
   `[]` / `[a, b]` 按 scrutinee 族逐层展开（`Elab/Term/Impl` 的
   `listLitElems`/`expandListLit` 与模式解析器），parser/AST 不需要区分类型/项位置。
   夹具 `dt_base/45_eff_row_sugar`、`dt_base/54_list_literal_families`。
@@ -201,7 +201,7 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 - `Vuna_runtime` 声明 `type _ Effect.t += Perform : string * string * Obj.t -> Obj.t Effect.t`。
 - 隐藏 intrinsic `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf`（宿主层原语，常规只由
-  `Base.Eff` 包装使用；没有 `unsafe` 门控）：
+  `Base.Effect.Core` 包装使用；没有 `unsafe` 门控）：
   - `perform` → `Effect.perform`；
   - `handle` → `Vuna_runtime.dtp_effect_handle`：`Effect.Deep.match_with`，按
     `(key, name)` 过滤；不匹配返回 `None` 交给外层 handler；`retc` 应用 handler 的
@@ -209,11 +209,11 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
     extent 内未弹出的 bracket cleanup。
   - `self` → `Vuna_runtime.dtp_effect_self`：在 opH 执行期间把当前
     `(key, name, ret, opH)` 压进 Domain 局部的 self 栈；它用同一 handler 重跑子计算。
-    `Base.Eff.Scoped a` 是 op 里的一等子计算值（行只在 `scope` 处检查一次，之后擦除），
+    `Base.Effect.Core.Scoped a` 是 op 里的一等子计算值（行只在 `scope` 处检查一次，之后擦除），
     handler 用 `handleScoped` 运行它（`handleSelf` 是 `handleScoped ∘ scope` 的便捷形式）。
     三端同语义（OCaml/WASM/Native）。
 - cleanup 机制：`prim_cleanupPush` / `prim_cleanupPop`（隐藏）登记/
-  弹出每纤程 cleanup 栈（`dtp_cleanup_*`）；`Base.Eff.bracket`/`finally` 用它保证
+  弹出每纤程 cleanup 栈（`dtp_cleanup_*`）；`Base.Effect.Core.bracket`/`finally` 用它保证
   非 `Exn` abort 也跑 release（细节见 [effects-layers.md](effects-layers.md)）。
 - 语义是**一次性（one-shot）**：resume 两次抛 `Continuation_already_resumed`；
   多射续延不做。
@@ -225,16 +225,16 @@ Args / Exit）；`Member` 行约束、`local`/`catch`/scoped `Exn`、线性续�
 
 | 模块 | 内容 |
 | --- | --- |
-| `Base.Eff` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
-| `Base.Eff.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
-| `Base.EffState` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
-| `Base.EffFs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
-| `Base.EffConsole` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
-| `Base.EffClock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
-| `Base.EffEnv` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
-| `Base.EffProcess` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
-| `Base.EffError` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
-| `Base.EffExn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
+| `Base.Effect.Core` | `Row(..)`、`Named`、`Eff`、`Member(..)`/`rowRem`、内建 `Functor`/`Applicative`/`Monad (Eff r)`（`do`/`>>=`/`>>`，不提供 `bindEff`/`pureEff`）、`sendCore`/`handleCore`/`handleCoreLin`、`handleWith`/`handleWithAt` + `EffSig`/`sigFn`/`sigOf`/`resIdx`（`handle` 语法的两个降级目标：handler 类型显式、效应签名作擦除量；行首条目版用于 comp 行未具体化）、`Cont`/`mkCont`/`resumeCont`、`bracket`/`finally`、`weaken`、`joinEff`/`raise`、`runPure` |
+| `Base.Effect.Reader` | `ReaderOp s` + `Ask`；`ask`/`handleReader`；实例名并进标签（`Named "counter" (ReaderOp Int)`） |
+| `Base.Effect.State` | `StateOp s` + `Get`/`Put`；`get`/`put`/`handleState`（answer `s -> Pair a s` 线程状态） |
+| `Base.Effect.Fs` | 宿主-backed Fs 效应（完整 fs 面；标签 `FsOp`，实例名并进标签，如 `Named "real" FsOp`）：`ReadFile`/`WriteFile`/`WriteFileAtomic`/`ReadDir`/`IsDirectory`/`MakeDir`/`RemoveFile`/`FileExists`/`FileMtime`/`FileSize`（结果索引在构造子上）；`fsReadFile n`/`fsWriteFile n`/…/`handleFs n`（泛型）/`handleFsHost n`（answer `Eff []`，`runFs = joinEff ∘ handleFsHost`）；真实 handler 用 `@vuna@host@try*` 原语（`WriteFile` 的结果索引是 `Nat`），宿主失败抛 `FsErrorOp`，`runFsError` 可局部收成 `Result`；`fsFileSize`/`fsFileMtime` 返回 `Maybe`（取不到 = 无值，不是 0）；mock/real 可并存（`dt_base/40`） |
+| `Base.Effect.Console` | console 标签 `ConsoleOp`（实例名并进标签，如 `ConsoleOp@mock`/`ConsoleOp@real`）：`Print`/`EPrint`；`consolePrint`/`consoleEprint`/`handleConsole`/`handleConsoleHost`（真实 handler 用 `prim_eff_print`/`prim_eff_eprint`，`Print` 的结果索引是 `Nat`）；写失败（EPIPE 等）返回 0、不崩进程 |
+| `Base.Effect.Clock` | clock 标签 `ClockOp`：`Now`（微秒时间戳）/`SleepMicros`；`clockNow`/`clockSleepMicros`/`handleClock`/`handleClockHost`（真实 handler 用 `effTimeUs` 与编译器原生 `prim_eff_sleep`） |
+| `Base.Effect.Env` | env 标签 `EnvOp`：`GetEnv`/`GetCwd`/`ExecPath`；`envGetEnv`/`envGetCwd`/`envExecPath`/`handleEnv`/`handleEnvHost`（真实 handler 用 `prim_eff_getenv`/`prim_eff_getcwd`/`prim_eff_execPath`） |
+| `Base.Effect.Process` | process 标签 `ProcessOp`：`Args`/`Exit`/`RunIn`；`processArgs`/`processExit`/`processRunIn`/`handleProcess`/`handleProcessHost`（真实 handler 用 `prim_eff_getArgs`/`prim_eff_exit`/`prim_eff_runIn`）/`handleProcessHostWith`（自定义 `onExit`）/`handleProcessHostObserved`（`Exit` 可观察、不退出）；启动失败（cwd 不存在 / 权限）抛 `ProcessErrorOp`，`runProcessError` 可局部收成 `Result`；子进程非零退出码仍是**值** |
+| `Base.Effect.Error` | `ErrorOp` + `throw`/`handleError`/`runError`/`catch`（作用域 catch） |
+| `Base.Effect.Exn` | scoped Error：`ExnOp : Type -> Type`，`Try` 携带 `Scoped a`；`tryWith`/`runExn`/`catchExn`/`bracketExn`；`handle` 语法可直接写 Exn（`Try sub k -> k (handleScoped sub)`） |
 | `Base.EffMutex` | Mutex/Semaphore（IORef + yield 忙等）：`acquire`/`release`/`semWait`/`semSignal` |
 | `Base.EffChannel` | cooperative Channel：`send`/`tryRecv`/`recvWait` |
 | `Base.EffSched` | 单线程 fiber 调度器：`Task`/`Scope`/`TaskLin` + `forkTask`/`forkTaskWith`/`forkTaskLin`/`awaitTask`/`awaitTaskLin`/`yieldNow`/`cancelTask`/`cancelTaskLin`/`cancelScope`/`scopeWait`/`scopeWaitTimeout`/`withScope`/`withScopeTimeout`/`isCancelled`/`raise`；任务行 `Nil`，超时按逻辑步数 |
@@ -250,7 +250,7 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
 
 ### 8.4 已知边界
 
-- **行成员约束**：`Base.Eff.Member` 是 Type-1 归纳族（`Member e r`，索引 `e` 是行条目，
+- **行成员约束**：`Base.Effect.Core.Member` 是 Type-1 归纳族（`Member e r`，索引 `e` 是行条目，
   可为 `Named n e0`）；effect wrapper 可用 `Member n e r =>` 签名糖（内部即
   `Member (Named n e) r`；定义里也可写显式 `{w : Member (Named n e) r}`）；精化器在应用处按行结构构造 `Here`/`There`，无法当场判定的目标
   延迟到**定义体结束**、用定义级 ctx 收尾（可命中 wrapper 的局部证明 binder），缺效应
@@ -260,15 +260,15 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   `handleCore` 本身不带证明，属于信任边界内的核心原语。
 - **自动行 lift**：`checkByInferFuel` 在 conv 失配时调用独立 `tryEffLift`：
   期望形如 `Eff (label :: tail) a`、实际结果行与 `tail` 相等时，直接合成
-  `Base.Eff.weaken {label}{r}{a}` 应用（不 re-check，避免与 `checkByInferFuel` 形成 SCT
+  `Base.Effect.Core.weaken {label}{r}{a}` 应用（不 re-check，避免与 `checkByInferFuel` 形成 SCT
   互递归）；`weaken` 不在作用域或期望是 `Eff []` 时不触发（后者仍报 `TC_UnhandledEffects`）。
   夹具 `dt_base/72_eff_auto_lift`。只在 check 方向；不会自动重排/合并行。
 - **行删除**：`rowRem` 是公理 + 编译器按标签类型值结构相等归约；
   不能写成类型族（重复绑定名的模式会被 parser 以 `PS_RepeatedPatternBinder` 拒绝，
   见 language.md）。归约前对条目（含 `Named` 的名字与 label 一层 spine 实参）先 `force`，
   让已解 meta 参与比较；未解 meta 仍卡住（`Core/Eval.rowRemReduce`）。
-- **`Monad (Eff r)`**：`Base.Eff` 声明 `instance Monad (Eff r)`，实例方法直接构造
-  私有 `MkEff`（实例 tele `r : Row` 由 `Eff` 构造子 kind 推断）；import `Base.Eff` 后可直接用
+- **`Monad (Eff r)`**：`Base.Effect.Core` 声明 `instance Monad (Eff r)`，实例方法直接构造
+  私有 `MkEff`（实例 tele `r : Row` 由 `Eff` 构造子 kind 推断）；import `Base.Effect.Core` 后可直接用
   `do` / `>>=` / `>>`，不提供 `bindEff` / `pureEff` 专用组合子。`do` 在行 `r` 上单子化，
   handler 仍显式解释；纯行用 `runPure` 收尾（夹具 `dt_base/19_eff_monad` 覆盖
   `do`/`>>=`/`>>`/`bind`）。行多态实现（`bracket`/`withScope`）同样用 `do`：延迟字典目标
@@ -279,8 +279,8 @@ process 可控 Exit）、`42–44`（通用 bracket abort cleanup、调度器 br
   20 层 `>>=` 约 77ms（`test/corpus/elab_perf/` 夹具）。期望结果类型定向走前导隐式前缀后
   early solve 残余结果；do 块按块共享一个 monad/字典。编译器内部用限定 `Base.Common.bind`
   （固定类型的内部选择，不是兼容层）。行多态 `Eff r` 的 `do` 不受影响。
-- **一阶效应核**：普通 send op 不含子计算；`Base.EffExn.Try` 支持携带子计算，
-  `bracketExn` 提供 Exn 路径的 cleanup；通用 `Base.Eff.bracket`/`finally` 用运行时
+- **一阶效应核**：普通 send op 不含子计算；`Base.Effect.Exn.Try` 支持携带子计算，
+  `bracketExn` 提供 Exn 路径的 cleanup；通用 `Base.Effect.Core.bracket`/`finally` 用运行时
   cleanup 栈覆盖**任意效应 abort**（handler 丢弃续延），见 §8.5 与 effects-layers.md。
 - **并发/async**：单线程调度器见 `Base.EffSched`（§8.5）：协作式
   `forkTask`/`awaitTask`/`yieldNow`、取消（含清理宽限）、结构化 `withScope`、步数超时；
@@ -306,7 +306,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 行只描述、不授权：没有类型级能力行；宿主层对任何包可见，用户面经 handler（约定）。
 续延是一次性（one-shot）。
 
-- **协议集中**：`Base.Eff.{Row,Nil,(::),Named,Member,Here,There,rowRem}` 的名字集中在
+- **协议集中**：`Base.Effect.Core.{Row,Nil,(::),Named,Member,Here,There,rowRem}` 的名字集中在
   `Vuna.Compiler.Base.Intrinsics` 的效果协议常量（`effRowFamilyName` / `effNamedName` /
   `effMemberFamilyName` 等）；`Core/Eval`、
   `Elab/Dict` 的行删除归约与 `Member` 证明构造只引用常量，不再各自硬编码名字。
@@ -318,11 +318,11 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
 - **宿主层无门控（显式接受的损失）**：没有 `[capabilities]` / `[trust]` / `[privileged]`
   与宿主模块 import 门控——任何包（用户包、ad-hoc 文件）都可以直调
   `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
-  REPL `--privileged`。用户面仍**应**经 `Base.Eff.*` 标签 + handler（`runX =
+  REPL `--privileged`。用户面仍**应**经 `Base.Effect.Core.*` 标签 + handler（`runX =
   joinEff (handleXHost …)`）；这是纪律/文档约定，不是强制门控。缺口见
   [debt.md](debt.md) D62。
 - **base 宿主层直接使用点（安全审计参考，不是强制约束）**：13 处——
-  `Base.Eff.sendCore`、`Base.Eff.handleCore`、`Base.Eff.bracket`、
+  `Base.Effect.Core.sendCore`、`Base.Effect.Core.handleCore`、`Base.Effect.Core.bracket`、
   `Base.EffSched.yieldNow`、`Base.EffSched.isCancelled`、`Base.EffSched.newScope`、
   `Base.EffSched.forkTask`、`Base.EffSched.awaitTask`、`Base.EffSched.cancelTask`、
   `Base.EffSched.cancelScope`、`Base.EffSched.scopeWait`、`Base.EffSched.scopeWaitTimeout`、
@@ -331,7 +331,7 @@ fork/await/yield/cancel/结构化 scope；console/clock/env/process/fs 标签（
   组合子；check 方向的自动 lift 见 §8.4（`tryEffLift`）。
 
 高阶效应类型是非目标（见 §10）。语言级 `perform`/`handle` 语法在
-`Base.Eff.performCore` / `handleWith`/`handleWithAt`（参数化 op 族 State/Reader 两种语法
+`Base.Effect.Core.performCore` / `handleWith`/`handleWithAt`（参数化 op 族 State/Reader 两种语法
 都支持），语法与边界见 [native-effects.md](native-effects.md)。
 
 ### 8.7 宿主失败：typed error + 入口收口
@@ -377,7 +377,7 @@ console 的写失败（典型 EPIPE：`vuna … | head`）不是宿主错误：�
 `steps/111_host_error`（真实 handler：fs 缺失 / process cwd 缺失 → exit 1 + 诊断；
 `false` 的非零退出码仍是值）。
 
-net 走同一套：`Base.EffNet` 的 `NetOp` 是普通命名实例效应（可 mock、entry 预装
+net 走同一套：`Base.Effect.Net` 的 `NetOp` 是普通命名实例效应（可 mock、entry 预装
 `runNetHost`），失败抛 `NetErrorOp`（`NetRefused/Timeout/Closed/AddrInUse/BadAddr/Io`），
 `runNetError n` 可局部收成 `Result`；`netRecv` 的对端关闭是 `Nothing`（无值）。
 

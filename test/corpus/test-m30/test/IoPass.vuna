@@ -1,5 +1,5 @@
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.Eff as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core as Eff
 
 -- 效果测试（通过）：main : Eff [] a 走临时包编译+运行，进程退出码 0 通过。
 -- 效果输出直接到终端；`consolePrint` 走 labeled 发送 + entry 预装 handler。

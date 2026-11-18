@@ -21,12 +21,12 @@ import Vuna.Files
 import Vuna.Lint.Diagnostics
 import Base.Data.List as List
 import Base.Data.String as String
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Exit as EffExit
+import Base.Effect.Process as EffProcess
 
 -- | 文档里的一行错误码条目（普通域与 lint 域共用一个形状）。
 record Entry where

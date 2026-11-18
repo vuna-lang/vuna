@@ -1,7 +1,7 @@
 -- | Demo search module.
 module Demo.Search where
 
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.List as List
 
 -- | Identity.

@@ -1,7 +1,7 @@
 
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.Eff as Eff
+import Base.Effect.Clock as EffClock
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core as Eff
 -- 重叠探针 A：打印 START-A 后睡 3s 再打印 END-A。
 -- 与 OverlapB 一起用 `--filter Overlap --jobs 2` 驱动：并行时两个 START 都出现在
 -- 第一个 END 之前；串行时第一个 END 出现在第二个 START 之前。

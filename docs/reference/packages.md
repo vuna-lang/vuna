@@ -30,7 +30,7 @@
 - 每包固定三目录：`lib/`（模块根）、`app/`（入口，恒为 `app/Main.vuna`）、`test/`
   （测试模块）。依赖只向下流：`app`/`test` 可用本包 `lib` + 依赖包 `lib`；依赖包之间是
   DAG（循环依赖报错）。
-- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`packages/base/lib/Base/List.vuna` ⇔ `Base.List`）；
+- **包名 ≠ 模块命名空间**：模块名仍由路径决定（`packages/base/lib/Base/List.vuna` ⇔ `Base.Data.List`）；
   每个源文件按**包上下文**解析 import——向上找最近的 `vuna.toml`，可用模块根 = 本包 `lib/`
   + 依赖闭包的 `lib/`（DFS 后序、按包名去重），跨包只认依赖包 `[export]` 列表，隐藏模块报
   `is not exported by package ...`。无 manifest 的文件只有 base 上下文（`VUNA_BASE` 覆盖，
@@ -94,9 +94,9 @@
 - 示例：`examples/multi/` 是多包 workspace（根包 + 成员包 `greet` + `base` 路径依赖），
   本地用 `vuna build examples/multi` / `vuna test examples/multi` 验证包管理路径；
   CI 侧该冒烟目前没有独立 check（见 [debt.md](debt.md) D84）。
-- 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.EffExit`）。
+- 可执行入口：`vuna build` 要求入口 `main : Eff [] a`（运行时执行动作，退出码用 `prim_eff_exit` / `Base.Effect.Exit`）。
   没有 manifest 级能力/特权/信任门控：effectful `prim_*` / `prim_eff_*` 宿主层
-  对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Eff.*` 标签 +
+  对任何包（用户包、ad-hoc 文件）都可见（直接调用即可）。用户面**应**经 `Base.Effect.Core.*` 标签 +
   handler 使用效果——这是约定与文档纪律，不是强制门控。纯测试的核心求值不执行效果；
   效果程序用 `compile` + 运行产物。
 
@@ -107,7 +107,7 @@
 - 任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` / `prim_eff_*`
   （效果原语是 `Eff []` 叶子）。编译器没有包级原语白名单、宿主模块 import 门控、`unsafe` 的
   定义级审计，也没有 `REPL --privileged`。
-- **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Eff.*` 标签 + handler 使用效果
+- **用户面纪律（非门控）**：标准库与用户代码**应**经 `Base.Effect.Core.*` 标签 + handler 使用效果
   （入口执行点 `runPure : Eff [] a -> a`）；`prim_*` / `prim_eff_*` 是宿主层 / 底层原语，
   base 的 Eff handler、编译器与根工具链内部直接使用它们——不由编译器强制，只是约定。
 - **显式接受的损失**（[debt.md](debt.md) D62）：宿主层 import 门控、

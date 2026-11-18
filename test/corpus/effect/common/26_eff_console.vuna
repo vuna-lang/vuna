@@ -1,7 +1,7 @@
 -- console 效应标签（命名实例）——同一程序在 mock（"mock"）与真实 handler
 -- 下各跑一次；mock 收集日志（纯 answer），real 走 entry 自动预装的 handler。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.Pair as Pair
 
 prog : (n : String) -> Eff (Named n ConsoleOp :: []) Int

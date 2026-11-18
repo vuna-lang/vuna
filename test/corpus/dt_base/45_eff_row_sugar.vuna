@@ -1,6 +1,6 @@
 -- 行语法糖：`[Fetch]` / `[Fetch, Log]` / `[]` 在期望 Row 的位置展开为
 -- Cons/Nil（命名行：裸标签补默认名 "default"）；普通列表字面量（List Int）不受影响。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.List as List
 import Base.Data.String as String
 

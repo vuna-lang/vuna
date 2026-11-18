@@ -1,4 +1,4 @@
--- Base.Reader 的 Functor/Monad 路径（纯函数表示，interp 可归约）。
+-- Base.Effect.Pure.Reader 的 Functor/Monad 路径（纯函数表示，interp 可归约）。
 import Base.Effect.Pure.Reader as Reader
 import Base.Data.Int as Int
 

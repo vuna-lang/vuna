@@ -23,16 +23,16 @@ build_pkg() {
 build_pkg "$tmp/pure" "pure" 'main : Int
 main = 42
 '
-build_pkg "$tmp/host" "host" 'import Base.Eff
-import Base.EffConsole
-import Base.Nat
+build_pkg "$tmp/host" "host" 'import Base.Effect.Core
+import Base.Effect.Console
+import Base.Data.Nat
 
 main : Eff [ConsoleOp] Nat
 main = consolePrint "hi"
 '
-build_pkg "$tmp/mixed" "mixed" 'import Base.Eff
-import Base.EffConsole
-import Base.Nat
+build_pkg "$tmp/mixed" "mixed" 'import Base.Effect.Core
+import Base.Effect.Console
+import Base.Data.Nat
 
 data POp : Type -> Type where
   P : Int -> POp Int

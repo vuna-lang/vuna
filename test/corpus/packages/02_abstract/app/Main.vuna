@@ -1,6 +1,6 @@
 import Vuna.Box
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 
 -- 宿主 console 走 Eff [ConsoleOp]（entry 自动预装 handler）；main 返回 0，golden 含尾随 0。
 prog : Eff [ConsoleOp] Int

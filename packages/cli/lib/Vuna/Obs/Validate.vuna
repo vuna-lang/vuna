@@ -20,8 +20,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Json
 import Vuna.Obs.Read
 import Vuna.Obs.Types
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 
 -- | 一条校验问题：严重级别 + 行号（0 = 与具体行无关）+ 消息。
 export record ValidateIssue(..) where

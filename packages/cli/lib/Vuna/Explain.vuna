@@ -19,9 +19,9 @@ import Vuna.Compiler.Base.Diagnostics.Pkg
 import Vuna.Compiler.Base.Diagnostics.Warning
 import Vuna.Lint.Diagnostics
 import Vuna.Files
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
 
 -- | 一条错误码的展示条目。
 record Info where

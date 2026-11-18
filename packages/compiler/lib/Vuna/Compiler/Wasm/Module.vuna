@@ -1493,7 +1493,7 @@ effModeOf entry ordered = if defsUseSyms performSyms ordered then 2 else 0
 consoleOnly : List String -> Bool
 consoleOnly ts = case ts of
   [] => True
-  t :: rest => t == "Base.EffConsole.ConsoleOp" && consoleOnly rest
+  t :: rest => t == "Base.Effect.Console.ConsoleOp" && consoleOnly rest
 
 listNull : List a -> Bool
 listNull [] = True
@@ -1629,7 +1629,7 @@ buildModule fuel st ordered entry printResult effMode listFamM = case genDefFunc
 -- 其中 `pureK = \\r => MkEff (\\_ => r)`。续延参数因此是模块自己的纯动作，不再需要
 -- stack switching；入口也不再预装这些家族。
 hcSendCore : String
-hcSendCore = "Base.Eff.sendCore"
+hcSendCore = "Base.Effect.Core.sendCore"
 
 hcPureK : String
 hcPureK = "@vuna@host@pureK"
@@ -1889,13 +1889,13 @@ build program printResult =
         tblAll = HashMap.fromList (map (\d => Pair (irDefName d) d) rewrittenAll)
         namesAll = closeRefsAll 100000 tblAll roots []
         dropNames =
-          [ "Base.Eff.sendCore",
-            "Base.Eff.handleCore",
-            "Base.Eff.handleCoreAt",
-            "Base.Eff.handleCoreLin",
-            "Base.Eff.performCore",
-            "Base.Eff.handleScoped",
-            "Base.Eff.handleSelf"
+          [ "Base.Effect.Core.sendCore",
+            "Base.Effect.Core.handleCore",
+            "Base.Effect.Core.handleCoreAt",
+            "Base.Effect.Core.handleCoreLin",
+            "Base.Effect.Core.performCore",
+            "Base.Effect.Core.handleScoped",
+            "Base.Effect.Core.handleSelf"
           ]
         kept = filter (\d => not (defUsesSyms performSyms d)) rewrittenAll
         directable =
@@ -1918,9 +1918,9 @@ build program printResult =
           Err _ => fallbackEff
       else fallbackEff
 
--- | `Show Float` 的实现（`Base.Float.floatRender`）；入口展示与用户 `show` 共用。
+-- | `Show Float` 的实现（`Base.Data.Float.floatRender`）；入口展示与用户 `show` 共用。
 floatRenderName : String
-floatRenderName = "Base.Float.floatRender"
+floatRenderName = "Base.Data.Float.floatRender"
 
 famNameOf : WasmFam -> String
 famNameOf f = f.wasmFamName

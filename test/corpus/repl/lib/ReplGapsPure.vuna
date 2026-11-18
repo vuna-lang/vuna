@@ -116,8 +116,8 @@ splitLastSlashOk =
 
 moduleNameOk : Int
 moduleNameOk =
-  expect (moduleNameOf "/r/lib" "/r/lib/Base/Nat.vuna" == "Base.Nat")
-    + expect (moduleNameOf "/r/lib/" "/r/lib/Base/Nat.vuna" == "Base.Nat")
+  expect (moduleNameOf "/r/lib" "/r/lib/Base/Nat.vuna" == "Base.Data.Nat")
+    + expect (moduleNameOf "/r/lib/" "/r/lib/Base/Nat.vuna" == "Base.Data.Nat")
     + expect (moduleNameOf "/r/lib" "/other/Base/Nat.vuna" == "")
     + expect (moduleNameOf "/r/lib" "/r/lib/NotVuna.txt" == "")
 

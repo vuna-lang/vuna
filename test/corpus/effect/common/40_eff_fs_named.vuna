@@ -1,11 +1,11 @@
 -- fs 命名实例（"mock" / 入口行 handler）——同一程序在 mock（纯 answer）与
 -- 真实（入口自动预装）下各跑一次；证明 mock/real handler 可以在同一程序里并存。
 -- mock 的 WriteFile/ReadFile 是固定答案（与 clock/env mock 同一风格）。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Data.Nat as Nat
 import Base.Data.Maybe as Maybe
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 
 dir : String

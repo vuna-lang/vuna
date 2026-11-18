@@ -3,7 +3,7 @@ module Util where
 import Answer
 
 -- 本包**不加 vuna-base 依赖**（整包会被拷贝到 $tmp 构建，相对路径依赖会失效）。
--- `+` 是 `Base.Num` 的方法别名、内建 `+` 对源码不可见，无 base 的包不能做算术；
+-- `+` 是 `Base.Trait.Num` 的方法别名、内建 `+` 对源码不可见，无 base 的包不能做算术；
 -- 本夹具只验证跨模块引用，因此直接返回底层值。
 export incAnswer : Int
 incAnswer = answer

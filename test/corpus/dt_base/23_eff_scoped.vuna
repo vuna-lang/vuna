@@ -1,8 +1,8 @@
 -- op 携带子计算（Try），scoped handler 在嵌套 handler 里运行子计算；
 -- 子计算里的 Reader 效应继续由外层 handler 处理。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffReader as EffReader
-import Base.Effect.EffExn as EffExn
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
+import Base.Effect.Exn as EffExn
 import Base.Data.Result as Result
 
 prog : Eff [ExnOp@default, ReaderOp Int@counter] Int

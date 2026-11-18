@@ -1,7 +1,7 @@
 -- bracket 基础；use 抛 Exn 时 release 仍执行（经 State 观察）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffExn as EffExn
-import Base.Effect.EffState as EffState
+import Base.Effect.Core as Eff
+import Base.Effect.Exn as EffExn
+import Base.Effect.State as EffState
 import Base.Data.Result as Result
 import Base.Data.Pair as Pair
 

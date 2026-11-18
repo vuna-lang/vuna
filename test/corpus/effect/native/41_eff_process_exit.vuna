@@ -1,9 +1,9 @@
 -- process 的 `Exit` 可控——mock handler（"mock"）与可选参数 handler
 -- （"observed" 的 `handleProcessHostWith` 现成实例）都能观察退出码并继续执行；真实路径
 -- （`handleProcessHost` 的 `@vuna@prim_eff_exit`）保留，但本夹具不触发它（否则测试进程退出）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Process as EffProcess
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 
 prog : (n : String) -> Eff (Named n ProcessOp :: []) Int

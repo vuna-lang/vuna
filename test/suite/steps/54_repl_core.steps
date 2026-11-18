@@ -15,10 +15,10 @@ out-contains: 已删除 x
 out-contains: unbound variable x
 run: printf ':{\n  x = 1 + 1\n  f y = x + y\n:}\nf 40\n:q\n' | "$VUNA" repl 2>&1
 out-contains: 42
-run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.Effect.Eff as Eff\n:imports\n:q\n' | "$VUNA" repl 2>&1
+run: printf 'x = 1\nf y = x + y\n:defs\n:imports\nimport Base.Effect.Core as Eff\n:imports\n:q\n' | "$VUNA" repl 2>&1
 out-contains: x : Int
 out-contains: f : Int -> Int
-out-contains: import Base.Effect.Eff as Eff
+out-contains: import Base.Effect.Core as Eff
 # 显式隐式 binder 不被重复量化；类型文本 zonk。
 run: printf 'm : {a : Type} -> a -> a\nm x = x\n:type m\n:type [1, 2, 3]\nid z = z\n:type id 1\n:q\n' | "$VUNA" repl 2>&1
 out-contains: m : {a : Type} -> a -> a
@@ -43,7 +43,7 @@ out-contains: 隐式参数
 out-contains: {t0 : Type}
 out-contains: id : t0 -> t0
 out-contains: id : t0 -> t0
-out-contains: + : {a : Type} -> (Dict_Base.Num.Num a) -> a -> a -> a
+out-contains: + : {a : Type} -> (Dict_Base.Trait.Num.Num a) -> a -> a -> a
 out-contains: do 派生
 out-contains: 可选值
 run: printf ':typeinfo\n:q\n' | "$VUNA" repl 2>&1
@@ -51,7 +51,7 @@ out-contains: 用法: :typeinfo
 # `:type` 的类型文本按 token 类别着色（universe / 箭头 / 全局名）；ANSI 转义由 printf 生成。
 run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[1;35mType"'
 run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[34m->"'
-run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[36mBase.Maybe.Maybe"'
+run: sh -c 'printf ":set color on\n:type Just\n:q\n" | "$VUNA" repl 2>&1 | grep -qF "$(printf "\033")[36mBase.Data.Maybe.Maybe"'
 # 值显示：列表 / 元组 / Maybe / 函数 / 构造子短名。
 run: printf ':load Base.Data\nSucc Zero\nimport Base.Data.List as List\nimport Base.Data.Maybe as Maybe\nimport Base.Data.Pair as Pair\n[1, 2, 3]\nJust 1\nPair 1 2\nfun x = x\nfun\n:q\n' | "$VUNA" repl 2>&1
 out-contains: [1, 2, 3]

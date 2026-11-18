@@ -6,14 +6,14 @@ module Vuna.Compiler.Elab.Derive where
 -- 的构造子骨架机械生成。因此这里把它展开成 `DInstance`，交给既有的实例精化（字典编码
 -- + 实例搜索）处理。
 --
--- trait 声明、方法投影与内建类型实例的权威定义都在 `Base.Show` / `Base.Eq` /
--- `Base.Ord`（编译器不注入内建 trait/实例）。本模块拿到的 derivings 名字已经由
--- Loader 解析过：包模式经 `Prelude` 重导出得到完整类名（`Base.Show.Show`），单文件里
+-- trait 声明、方法投影与内建类型实例的权威定义都在 `Base.Trait.Show` / `Base.Trait.Eq` /
+-- `Base.Trait.Ord`（编译器不注入内建 trait/实例）。本模块拿到的 derivings 名字已经由
+-- Loader 解析过：包模式经 `Prelude` 重导出得到完整类名（`Base.Trait.Show.Show`），单文件里
 -- 自己声明的 trait 则保持无前缀（`Show`）。因此：
 --   - 实例头用**解析后的完整类名**；
 --   - 构造子的分派按类名**最后一段**（`Show` / `Eq` / `Ord`）；
 --   - 方法体里对同类方法的递归调用（`show` / `eq` / `lt` / `le`）必须用解析后的
---     **投影全局名**（`Base.Show.show` …）：Loader 不复写裸方法名，裸名解析不到投影。
+--     **投影全局名**（`Base.Trait.Show.show` …）：Loader 不复写裸方法名，裸名解析不到投影。
 --
 -- 生成规则（`test/corpus/traits/0{3,4,5}_*` 覆盖）：
 --   Show：`show (C x1 ..) = "(" ++ "C" ++ " " ++ show x1 ++ .. ++ ")"`；零参 ⇒ `"C"`。
@@ -25,7 +25,7 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Base.Diagnostics
 import Vuna.Compiler.Elab.Records
 
--- 类名最后一段：`Base.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
+-- 类名最后一段：`Base.Trait.Show.Show` → `Show`；派生规则按它分派（找不到的类报不支持）。
 traitShortName : String -> String
 traitShortName tname = secondOf (splitLastDot (splitOnDot tname))
 
@@ -259,7 +259,7 @@ showOne proj v sp = EApp (EVar proj sp) [EVar v sp] sp
 -- Hashable
 -- ---------------------------------------------------------------
 -- 每个构造子一个分支：`hash (C f0 .. fn) = hashCombine ctorIndex (hashCombine (hash f0) ..)`；
--- 零字段 = 构造子下标。`hashCombine` 由 `Base.Hashable` 导出（完全限定）。
+-- 零字段 = 构造子下标。`hashCombine` 由 `Base.Trait.Hashable` 导出（完全限定）。
 -- | `deriving (Hashable)` 的方法体：对 `sx` 按构造子分派。
 hashBody : String -> String -> List Ctor -> Span -> Expr
 hashBody proj combineProj ctors sp = ECase (EVar "sx" sp) (hashAlts proj combineProj ctors 0 sp) sp
@@ -274,7 +274,7 @@ hashAlts proj combineProj ((Ctor cn ty ar cnsp) :: rest) i sp =
     body = hashFields proj combineProj vs (EInt i sp) sp
   in Pair pat body :: hashAlts proj combineProj rest (i + 1) sp
 
--- | 逐字段把 `hash field` 折进累加器（用完全限定的 `Base.Hashable.hashCombine`）。
+-- | 逐字段把 `hash field` 折进累加器（用完全限定的 `Base.Trait.Hashable.hashCombine`）。
 hashFields : String -> String -> List String -> Expr -> Span -> Expr
 hashFields proj combineProj [] acc sp = acc
 hashFields proj combineProj (v :: rest) acc sp =
@@ -388,7 +388,7 @@ geBody leProj sp = EApp (EVar leProj sp) [EVar "sy" sp, EVar "sx" sp] sp
 -- 派生体里产生 Bool 的辅助
 -- ---------------------------------------------------------------
 -- 派生方法体不引用源码里的 `True` / `False`（它们没有 prelude 值桩，权威定义在
--- `Base.Bool`，而派生实例可能出现在不 import Base.Bool 的程序里）。
+-- `Base.Data.Bool`，而派生实例可能出现在不 import Base.Data.Bool 的程序里）。
 -- 用 Int 上的 `==`（精化期特化成 `bi_eq_int`）产生 Bool：`1 == 1` / `0 == 1`。
 -- 这样派生 Eq/Ord 与源码是否声明 Bool 构造子无关。
 boolTrue : Span -> Expr

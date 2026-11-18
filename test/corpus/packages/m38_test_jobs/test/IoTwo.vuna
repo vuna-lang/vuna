@@ -1,6 +1,6 @@
 
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.Eff as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Core as Eff
 -- 效果测试（通过）：第二个效果测试，验证多个效果测试文件并行时各自独立编译运行。
 main : Eff [ConsoleOp] Int
 main = do

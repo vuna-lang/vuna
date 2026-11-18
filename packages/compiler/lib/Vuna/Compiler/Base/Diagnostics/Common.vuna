@@ -4,7 +4,7 @@ module Vuna.Compiler.Base.Diagnostics.Common where
 -- Vuna.Compiler.Base.Diagnostics.Common：与具体域枚举无关的机械逻辑。
 --
 -- 诊断重设计后这里只做三件事：
---   1. 模板替换（`diagBody`，占位符 `<0>`/`<1>` 经 `Base.Vec.substTemplate`）；
+--   1. 模板替换（`diagBody`，占位符 `<0>`/`<1>` 经 `Base.Data.Vec.substTemplate`）；
 --   2. 用「severity/phase/category/code/消息」构造无位置诊断（`mkDiag`）；
 --   3. 给诊断补位置/定义级上下文（`withDiagSpan` / `withDiagDef`）。
 -- code / 模板 / arity 仍由各域枚举唯一持有（`Diagnostics.Tc` / `Diagnostics.Cg`）。

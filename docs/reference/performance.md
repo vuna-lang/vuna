@@ -176,7 +176,7 @@ Vuna.Compiler.Driver.ToolPayload`），于是每轮都补一遍 lib check（`col
 
 冷构建（全量精化 + codegen + ocamlopt）不走增量收尾，收益主要来自 (2) 与 (3)，见上表。
 
-容器改造（私有 `HashTbl` → `Base.HashMap`；元变量解表合并为 `HashMap Int`）的实测对比：
+容器改造（私有 `HashTbl` → `Base.Container.HashMap`；元变量解表合并为 `HashMap Int`）的实测对比：
 同一 worktree、同一份源码、独立进程各 3 次取中位数（本机绝对值与上表读数不可直接
 比较；改造前 = 编译器内部哈希表 + 解表 String 键，改造后 = 标准库容器 + Int 键索引）：
 
@@ -229,7 +229,7 @@ vuna dev obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 [observability.md](observability.md) §6；那里也有 `#line` 让 `perf`/`gdb` 直接看到
 `.vuna` 的配方（本仓库的 `perf`/`gdb` 不进 devShell，属于手动验证路径）。
 
-## 3. 查找表：泛型 `Base.HashMap k v`
+## 3. 查找表：泛型 `Base.Container.HashMap k v`
 
 容器在标准库（`packages/base/lib/Base/HashMap.vuna`）：键与值都泛型的 1024 桶（两层 32 叉）持久哈希表、桶内前插、同键新值优先。键需 `Eq` + `Hashable`：String 走 `strHash`，Int 走恒等哈希 + 归一化，元变量编号这类稠密小整数几乎不冲突。String/Int 共用这一个 `HashMap k v`，编译器没有私有 `HashTbl`、也没有 `IntMap`。
 
@@ -237,7 +237,7 @@ vuna dev obs convert --to folded --out f.folded trace/*.jsonl   # 火焰图
 HashMap.fromList / insert / insertAll / lookup / member / toList / size / ofNames
 ```
 
-单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次比较；泛型容器的键比较与哈希经 `Eq` / `Hashable` 字典（具体 String/Int 类型下是静态派发）。`Base.Map` **不是**可用的替代：它是关联列表（assoc list），换过去复杂度不变。
+单次查找 ≈ 32 步列表遍历 + 桶内 1–2 次比较；泛型容器的键比较与哈希经 `Eq` / `Hashable` 字典（具体 String/Int 类型下是静态派发）。`Base.Container.Map` **不是**可用的替代：它是关联列表（assoc list），换过去复杂度不变。
 
 `Sols` 里有两张表：解表（`solsTbl`）与元变量创建深度表（`solsDepth`），键都是元变量
 编号，均用 `HashMap Int`；`metaLookup` 查 `ecSolTbl`（O(1)），`metaLookupList` 只保留给
@@ -356,7 +356,7 @@ iface 影子写 **~1.2 s**（compute 0.78 s + write 0.35 s，单遍 `iface-write
 `Elab.Meta.dtCtorLookup`；`Core.Eval.quote` 与 `List` 的 `unpack` 次之。
 
 据此落地的两条改动：
-- 局部 binder 的引用不再走运算符特化链（`+` / `==` / `Base.Num.*` 只可能是全局名）：
+- 局部 binder 的引用不再走运算符特化链（`+` / `==` / `Base.Trait.Num.*` 只可能是全局名）：
   `EVar` 自用时间 4.6 s → 3.6 s；
 - check 路径用 `Codegen.Assembly.checkUnitParts` 只校验「运行时定义有体」，不拼产物文本
   （文本生成是纯渲染，`Codegen.Term` 唯一的 `ErrC` 已保留）：`codegen.check` 1.7 s → 1.4 s。

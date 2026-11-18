@@ -1,8 +1,8 @@
 -- 单效应 helper（Eff [FsOp]）在多效应 main（Eff [FsOp, ConsoleOp]）里
 -- 经行包含 lift 自动提升。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
 
 fsHelper : Eff [FsOp] Int
 fsHelper = do

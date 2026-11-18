@@ -5,7 +5,7 @@ module Vuna.Compiler.Driver.Wasm where
 -- 复用 DT 检查 + `Lowering.lowerProgramOf` 得到整程序 IR，再交给
 -- `Wasm.Module.build` / `Wasm.Render.render`，写到 `OUT/main.wat`。
 -- 边界：不 import Core/Elab/Intrinsics；只经由 Driver.Dt 与 Lowering。
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 import Base.Data.Int as Int
 import Base.Data.Pair as Pair
 import Vuna.Compiler.Base.Capabilities
@@ -20,9 +20,9 @@ import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Wasm.Model
 import Vuna.Compiler.Wasm.Module
 import Vuna.Compiler.Wasm.Render
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Fs as EffFs
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
 
 wasmErrDiag : WasmErr -> Diagnostic
 wasmErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (wasmErrText err)

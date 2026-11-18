@@ -1,0 +1,81 @@
+-- | 非负整数。类型层是普通归纳族 `Zero` / `Succ`（`Vec` 索引、覆盖性、终止性、索引合一全部复用）。算术语义：`plus` / `mult` 饱和到 max_int，`minus` 截断到 0（永不产生负数），`div` 向下取整，除零与 `Int` 的 `/` 一样在运行期失败。[Base.Data.Nat.toInt] 是无损提升，[Base.Data.Nat.fromInt] 有损（负数 clamp 成 0），需要区分时用 [Base.Data.Nat.fromIntMaybe]。`+ - * /` 在 Nat 上下文由精化器按 `Num` 方法特化到同一组原语。
+module Base.Data.Nat where
+
+import Base.Data.Bool
+import Base.Trait.Eq
+import Base.Data.Int
+import Base.Trait.Monoid
+import Base.Data.Maybe
+import Base.Trait.Hashable
+import Base.Trait.Num
+import Base.Trait.Ord
+import Base.Trait.Show
+
+-- codegen：运行时表示是 OCaml int（`Zero = 0`、`Succ n = n + 1`，饱和到 max_int），没有变体分配，模式匹配降成整数比较。
+-- | 非负整数（归纳族 `Zero` / `Succ`）。类型层是普通归纳族，供 `Vec` 索引、覆盖性与终止性复用；构造子导出，可结构递归。
+export data Nat(..) : Type where
+  -- | 零。
+  Zero : Nat
+  -- | 后继。
+  Succ : Nat -> Nat
+
+-- | 加法，结果饱和到 max_int；`+` 在 Nat 上下文由精化器特化到同一原语。
+export plus : Nat -> Nat -> Nat
+plus = natAdd
+
+-- | 截断减法：结果小于 0 时取 0，永不产生负数。
+export minus : Nat -> Nat -> Nat
+minus = natSub
+
+-- | 乘法，结果饱和到 max_int。
+export mult : Nat -> Nat -> Nat
+mult = natMul
+
+-- | 无损提升到 `Int`（运行时恒等）。
+export toInt : Nat -> Int
+toInt = natToInt
+
+-- | 有损转换：负数 clamp 成 0；需要区分时用 `fromIntMaybe`。
+export fromInt : Int -> Nat
+fromInt = natFromInt
+
+-- | `fromInt` 的可失败版：负数返回 `Nothing`，否则 `Just`。
+export fromIntMaybe : Int -> Maybe Nat
+fromIntMaybe n = if n < 0 then Nothing else Just (fromInt n)
+
+-- | 前驱 `minus n 1`：零的前驱仍是零。
+export pred : Nat -> Nat
+pred n = minus n 1
+
+-- | 是否为 `Zero`（运行时判 `toInt n == 0`）。
+export isZero : Nat -> Bool
+isZero n = toInt n == 0
+
+instance Eq Nat where
+  (==) x y = toInt x == toInt y
+  (/=) x y = toInt x /= toInt y
+
+instance Ord Nat where
+  (<) x y = toInt x < toInt y
+  (<=) x y = toInt x <= toInt y
+  (>) x y = toInt x > toInt y
+  (>=) x y = toInt x >= toInt y
+
+-- 方法体写内建运算符，由精化器特化成 `natAdd` / `natSub` / `natMul` / `natDiv`（不自递归）。
+instance Num Nat where
+  (+) x y = x + y
+  (-) x y = x - y
+  (*) x y = x * y
+  (/) x y = x / y
+
+instance Show Nat where
+  show n = strFromInt (toInt n)
+
+instance Hashable Nat where
+  hash n = toInt n
+
+instance Semigroup Nat where
+  mappend = plus
+
+instance Monoid Nat where
+  mempty = 0

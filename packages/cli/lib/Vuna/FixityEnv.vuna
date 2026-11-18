@@ -19,10 +19,10 @@ import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Loader.Flatten
 import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Types as EffTypes
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Process as EffProcess
 
 -- | per-file fixity 解析的缓存。表示抽象：只有 [Vuna.FixityEnv.emptyFixityEnv] 与
 -- [Vuna.FixityEnv.fixitiesForFile] 能构造与推进它。

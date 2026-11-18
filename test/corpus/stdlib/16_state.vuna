@@ -1,4 +1,4 @@
--- Base.State 的 Monad/do 路径（纯函数表示，interp 可归约）。
+-- Base.Effect.Pure.State 的 Monad/do 路径（纯函数表示，interp 可归约）。
 import Base.Effect.Pure.State as State
 import Base.Data.Int as Int
 

@@ -1,0 +1,280 @@
+-- | 一阶文件系统效应（宿主-backed 的完整 fs 面）：标签 `FsOp` 是命名实例，`n` 是 String 实例名，与 Console / Clock / Env / Process 一致。
+--
+-- 操作是描述；真实 handler 直调 `@vuna@host@try*` 原语实现语义。带行 handler 的 answer 是
+-- `Eff [FsErrorOp] a`，由 `runFsHost` 用 `joinEff` 把失败收口行接到行尾。
+-- 同一程序因此可以同时装 mock handler（如纯 answer 的内存表）与真实宿主 handler，或用两个
+-- mock 实例做对照；行条目按实例名区分，所有操作与 handler 都显式带实例名。
+module Base.Effect.Fs where
+
+import Base.Effect.Core
+import Base.Trait.Eq
+import Base.Data.Maybe
+import Base.Data.Nat
+import Base.Trait.Monad
+import Base.Trait.Ord
+import Base.Data.Bool
+import Base.Data.List
+import Base.Data.Result
+import Base.Data.Sort
+import Base.Data.String
+
+-- | fs 操作描述：读 / 写 / 原子写 / 列目录 / 判目录 / 建目录 / 删文件 / 存在性 / mtime / size，各带路径参数。
+export data FsOp(..) : Type -> Type where
+  -- | 读整个文件。
+  ReadFile : String -> FsOp String
+  -- | 把整串写入文件。
+  WriteFile : String -> String -> FsOp Nat
+  -- | 原子写：写临时文件后 rename。
+  WriteFileAtomic : String -> String -> FsOp Int
+  -- | 列目录（真实 handler 按字符串排序）。
+  ReadDir : String -> FsOp (List String)
+  -- | 判断路径是否目录。
+  IsDirectory : String -> FsOp Bool
+  -- | 建目录（幂等）。
+  MakeDir : String -> FsOp Int
+  -- | 删文件（幂等）。
+  RemoveFile : String -> FsOp Int
+  -- | 判断路径是否存在（不抛异常）。
+  FileExists : String -> FsOp Bool
+  -- | 取 mtime（秒级；取不到给 `Nothing`）。
+  FileMtime : String -> FsOp (Maybe Int)
+  -- | 取文件字节数（取不到给 `Nothing`）。
+  FileSize : String -> FsOp (Maybe Nat)
+  -- | 递归删除文件/目录树；不跟随符号链接（= `rm -rf`，缺失也算成功）。
+  RemoveTree : String -> FsOp Int
+  -- | `rename(2)`：同文件系统内移动/覆盖。
+  Rename : String -> String -> FsOp Int
+  -- | `symlink(target, link)`。
+  Symlink : String -> String -> FsOp Int
+  -- | 原子建目录：已存在返回 False（与幂等 `MakeDir` 区分，锁用）。
+  MakeDirExclusive : String -> FsOp Bool
+
+-- | 宿主 fs 失败的种类：带出错路径；文本由 `fsErrorText` 统一渲染。
+--
+-- 失败是**控制流**（动作没有结果），因此走效应而不是返回值：调用点照旧写
+-- `fsReadFile p : Eff r String`，不需要解包；真实 handler 在执行失败时抛
+-- `FsErrorOp`，entry 预装的 `runFsErrorHost` 把它收口成诊断 + 退出码 1。
+export data FsError(..) : Type where
+  -- | 路径不存在。
+  FsMissing : String -> FsError
+  -- | 权限不足。
+  FsDenied : String -> FsError
+  -- | 设备 / 配额已满。
+  FsNoSpace : String -> FsError
+  -- | 路径前缀不是目录。
+  FsNotDir : String -> FsError
+  -- | 期望文件却是目录。
+  FsIsDir : String -> FsError
+  -- | 目录已存在（需要创建时）。
+  FsExists : String -> FsError
+  -- | 其它宿主错误。
+  FsIo : String -> FsError
+
+-- | fs 错误效应：单操作 `FsFail`（abort，不恢复续延；`res` 只是占位）。
+export data FsErrorOp(..) : Type -> Type where
+  -- | 抛出 fs 失败。
+  FsFail : {a : Type} -> FsError -> FsErrorOp a
+
+-- | 抛出一个 fs 失败（由真实 handler 使用；想局部恢复的调用方 catch 它）。
+export fsFail : Member n FsErrorOp r => FsError -> Eff r a
+fsFail e = sendCore (Named n FsErrorOp) "fs-error" n (FsFail e)
+
+-- | 宿主状态码 → 失败种类（0 = 成功；码表见 `@vuna@prim_eff_hostStatus` 的运行时实现）。
+export fsErrorOfCode : String -> Int -> FsError
+fsErrorOfCode path 1 = FsMissing path
+fsErrorOfCode path 2 = FsDenied path
+fsErrorOfCode path 3 = FsNoSpace path
+fsErrorOfCode path 4 = FsNotDir path
+fsErrorOfCode path 5 = FsIsDir path
+fsErrorOfCode path 6 = FsExists path
+fsErrorOfCode path _ = FsIo path
+
+-- | 失败种类的人类可读文本（诊断输出用）。
+export fsErrorText : FsError -> String
+fsErrorText (FsMissing p) = "fs: ${p}: no such file or directory"
+fsErrorText (FsDenied p) = "fs: ${p}: permission denied"
+fsErrorText (FsNoSpace p) = "fs: ${p}: no space left on device"
+fsErrorText (FsNotDir p) = "fs: ${p}: not a directory"
+fsErrorText (FsIsDir p) = "fs: ${p}: is a directory"
+fsErrorText (FsExists p) = "fs: ${p}: already exists"
+fsErrorText (FsIo p) = "fs: ${p}: host I/O error"
+
+-- | 目录项规范化：去掉 `.` / `..` 并按字典序排序。
+--
+-- WASI `fd_readdir` 会原样返回这两个伪项，ocaml 的 `Sys.readdir` 与 native 的
+-- `dir_names` 不返回；这里统一在标签 handler 收口，三端 `fsReadDir` 语义一致。
+isDotEntry : String -> Bool
+isDotEntry name = name == "." || name == ".."
+
+sortEntries : List String -> List String
+sortEntries xs = sortBy (\a, b => a <= b) (filter (\name => not (isDotEntry name)) xs)
+
+-- | 通过命名实例读整个文件为 String；真实 handler 走 `@vuna@prim_eff_readFile`。
+export fsReadFile : Member n FsOp r => String -> Eff r String
+fsReadFile p = do
+  sendCore (Named n FsOp) "fs" n (ReadFile p)
+
+-- | 通过命名实例把整串写入文件，返回写入字节数（`Nat`）。
+export fsWriteFile : Member n FsOp r => String -> String -> Eff r Nat
+fsWriteFile p s = do
+  sendCore (Named n FsOp) "fs" n (WriteFile p s)
+
+-- | 通过命名实例原子写（写临时文件后 rename）：并发读者只会看到完整旧内容或完整新内容。
+export fsWriteFileAtomic : Member n FsOp r => String -> String -> Eff r Int
+fsWriteFileAtomic p s = do
+  sendCore (Named n FsOp) "fs" n (WriteFileAtomic p s)
+
+-- | 通过命名实例列目录（真实 handler 按字符串排序；目录不存在时抛宿主异常）。
+export fsReadDir : Member n FsOp r => String -> Eff r (List String)
+fsReadDir p = do
+  sendCore (Named n FsOp) "fs" n (ReadDir p)
+
+-- | 通过命名实例判断是否目录（真实 handler 对不存在的路径抛宿主异常）。
+export fsIsDirectory : Member n FsOp r => String -> Eff r Bool
+fsIsDirectory p = do
+  sendCore (Named n FsOp) "fs" n (IsDirectory p)
+
+-- | 通过命名实例建目录（幂等，已存在时返回 0）。
+export fsMakeDir : Member n FsOp r => String -> Eff r Int
+fsMakeDir p = do
+  sendCore (Named n FsOp) "fs" n (MakeDir p)
+
+-- | 通过命名实例删文件（幂等，不存在时返回 0）。
+export fsRemoveFile : Member n FsOp r => String -> Eff r Int
+fsRemoveFile p = do
+  sendCore (Named n FsOp) "fs" n (RemoveFile p)
+
+-- | 通过命名实例判断路径是否存在（不存在返回 False，不抛异常）。
+export fsFileExists : Member n FsOp r => String -> Eff r Bool
+fsFileExists p = sendCore (Named n FsOp) "fs" n (FileExists p)
+
+-- | 通过命名实例取 mtime（秒级）；取不到（不存在 / 权限）给 `Nothing`，不把「未知」伪装成 0。
+export fsFileMtime : Member n FsOp r => String -> Eff r (Maybe Int)
+fsFileMtime p = sendCore (Named n FsOp) "fs" n (FileMtime p)
+
+-- | 通过命名实例取文件字节数（`Nat`）；取不到（不存在 / 权限）给 `Nothing`。
+export fsFileSize : Member n FsOp r => String -> Eff r (Maybe Nat)
+fsFileSize p = sendCore (Named n FsOp) "fs" n (FileSize p)
+
+-- | 递归删除文件/目录树（不跟随符号链接；不存在也算成功）。
+export fsRemoveTree : Member n FsOp r => String -> Eff r Int
+fsRemoveTree p = sendCore (Named n FsOp) "fs" n (RemoveTree p)
+
+-- | 重命名（同文件系统；目标覆盖由宿主语义决定）。
+export fsRename : Member n FsOp r => String -> String -> Eff r Int
+fsRename src dst = sendCore (Named n FsOp) "fs" n (Rename src dst)
+
+-- | 建符号链接（target 是链接内容，link 是链接路径）。
+export fsSymlink : Member n FsOp r => String -> String -> Eff r Int
+fsSymlink target link = sendCore (Named n FsOp) "fs" n (Symlink target link)
+
+-- | 原子建目录：成功 `True`，已存在 `False`，其它失败按 typed error。
+export fsMakeDirExclusive : Member n FsOp r => String -> Eff r Bool
+fsMakeDirExclusive p = sendCore (Named n FsOp) "fs" n (MakeDirExclusive p)
+
+-- | 一阶 handler：`ret` / `opH` 由调用方给出，结果行删除 `FsOp`。
+export handleFs : {a : Type} -> {b : Type} -> {r : Row} -> (n : String) -> {w : Member (Named n FsOp) r} -> (a -> b) -> ((i : Type) -> (o : FsOp i) -> (Base.Effect.Core.resIdx i o -> b) -> b) -> Eff r a -> Eff (rowRem (Named n FsOp) r) b
+handleFs n ret opH comp = handleCore (Named n FsOp) "fs" n ret opH comp
+
+-- ---------------------------------------------------------------
+-- 带行的真实 handler（entry 自动预装用；不导出）
+-- ---------------------------------------------------------------
+-- | 宿主状态槽（`@vuna@prim_eff_hostStatus`）：try 原语把失败码留在这里，0 = 成功。
+fsHostStatus : {r : Row} -> Eff r Int
+fsHostStatus = raise @vuna@prim_eff_hostStatus
+
+-- | 带行解释内部用的 typed 失败：标签已是行首的固定实例，直接 send，不经过 Member 求解。
+fsFailAt : {a : Type} -> FsError -> Eff [FsErrorOp@"fs-error"] a
+fsFailAt e = sendCore (Named "fs-error" FsErrorOp) "fs-error" "fs-error" (FsFail e)
+
+-- | 带 `FsOp` 行的 op 解释：try 原语失败时读状态槽抛 typed error，答案行是 `[FsErrorOp]`。
+fsOpHIOHost : {a : Type} -> (i : Type) -> (o : FsOp i) -> (Base.Effect.Core.resIdx i o -> Eff [FsErrorOp@"fs-error"] a) -> Eff [FsErrorOp@"fs-error"] a
+fsOpHIOHost i op k = case op of
+  ReadFile p => do
+    s <- raise (@vuna@host@tryReadFile p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "readFile ${p}" ok) else k s
+  WriteFile p s => do
+    _ <- raise (@vuna@host@tryWriteFile p s)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "writeFile ${p}" ok) else k (natFromInt (strLength s))
+  WriteFileAtomic p s => do
+    _ <- raise (@vuna@host@tryWriteFileAtomic p s)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "writeFileAtomic ${p}" ok) else k (strLength s)
+  ReadDir p => do
+    xs <- raise (@vuna@host@tryReadDir p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "readDir ${p}" ok) else k (sortEntries xs)
+  IsDirectory p => do
+    b <- raise (@vuna@host@tryIsDirectory p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "isDirectory ${p}" ok) else k b
+  MakeDir p => do
+    _ <- raise (@vuna@host@tryMakeDir p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "makeDir ${p}" ok) else k 0
+  RemoveFile p => do
+    _ <- raise (@vuna@host@tryRemoveFile p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "removeFile ${p}" ok) else k 0
+  RemoveTree p => do
+    _ <- raise (@vuna@host@tryRemoveTree p)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "removeTree ${p}" ok) else k 0
+  Rename src dst => do
+    _ <- raise (@vuna@host@tryRename src dst)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "rename ${src} -> ${dst}" ok) else k 0
+  Symlink target link => do
+    _ <- raise (@vuna@host@trySymlink target link)
+    ok <- fsHostStatus
+    if ok /= 0 then fsFailAt (fsErrorOfCode "symlink ${target} -> ${link}" ok) else k 0
+  MakeDirExclusive p => do
+    _ <- raise (@vuna@host@tryMakeDirExclusive p)
+    ok <- fsHostStatus
+    if ok == 0 then k True
+    else if ok == 6 then k False else fsFailAt (fsErrorOfCode "makeDirExclusive ${p}" ok)
+  FileExists p => do
+    b <- raise (@vuna@host@fileExists p)
+    k b
+  FileMtime p => do
+    n <- raise (@vuna@host@fileMtime p)
+    ok <- fsHostStatus
+    if ok /= 0 then k Nothing else k (Just n)
+  FileSize p => do
+    n <- fmap natFromInt (raise (@vuna@host@fileSize p))
+    ok <- fsHostStatus
+    if ok /= 0 then k Nothing else k (Just n)
+
+-- | 带行的宿主 handler：删掉 `FsOp`，answer 是 `Eff [FsErrorOp]`（不导出）。
+handleFsHostHost : {a : Type} -> {r : Row} -> (n : String) -> Eff (Named n FsOp :: r) a -> Eff r (Eff [FsErrorOp@"fs-error"] a)
+handleFsHostHost n comp = handleCoreAt (Named n FsOp) "fs" n (\a => pure a) fsOpHIOHost comp
+
+-- | entry 自动预装用（泛化 r）：把行头 `FsOp` 的 send 翻译成宿主 intrinsic，并把失败收口行 `FsErrorOp` 接到行尾。
+runFsHost : {r : Row} -> {a : Type} -> Eff (Named "default" FsOp :: r) a -> Eff (rowAppend r [FsErrorOp@"fs-error"]) a
+runFsHost comp = joinEff (handleFsHostHost "default" comp)
+
+-- | 内部：`runFsError` 的成功侧 `ret`——值包装成 `Ok`。
+fsErrorRet : {a : Type} -> a -> Result a
+fsErrorRet a = Ok a
+
+-- | 内部：`runFsError` 的 op 解释——`FsFail e` 直接变 `Err (fsErrorText e)`（不恢复续延）。
+fsErrorOpHR : {a : Type} -> (i : Type) -> (o : FsErrorOp i) -> (Base.Effect.Core.resIdx i o -> Result a) -> Result a
+fsErrorOpHR i op _ = case op of
+  FsFail e => Err (fsErrorText e)
+
+-- | 把 fs 失败折叠成 `Result`：`Ok a` / `Err` 携带渲染后的文本；结果行删除 `FsErrorOp`。
+export runFsError : (n : String) -> {a : Type} -> {r : Row} -> Eff (Named n FsErrorOp :: r) a -> Eff r (Result a)
+runFsError n comp = handleCoreAt (Named n FsErrorOp) "fs-error" n fsErrorRet fsErrorOpHR comp
+
+-- | entry 预装的失败收口：把 fs 失败打印成诊断并以退出码 1 结束（不导出）。
+runFsErrorHost : {r : Row} -> {a : Type} -> Eff (Named "fs-error" FsErrorOp :: r) a -> Eff r a
+runFsErrorHost comp = do
+  res <- runFsError "fs-error" comp
+  case res of
+    Ok a => pure a
+    Err msg => do
+      _ <- raise (@vuna@prim_eff_eprint "vuna: ${msg}\n")
+      _ <- raise (@vuna@prim_eff_exit 1)
+      prim_fail "unreachable: fs error handler"

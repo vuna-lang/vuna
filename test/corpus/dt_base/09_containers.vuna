@@ -1,4 +1,4 @@
--- 泛型 Base.HashMap 在 DT 包上下文的可用性（与 Base.Sort/Map 同层）。
+-- 泛型 Base.Container.HashMap 在 DT 包上下文的可用性（与 Base.Data.Sort/Map 同层）。
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List
 import Base.Data.Pair as Pair

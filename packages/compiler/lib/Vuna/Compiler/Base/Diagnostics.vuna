@@ -10,7 +10,7 @@ module Vuna.Compiler.Base.Diagnostics where
 --    长度由类型 unify 锁定——arity 拼错**编译失败**。`n` 隐式（Rig0），运行时零开销。
 -- 2. **构造子 = 唯一真源**：每个构造子携带自己的模板（String payload，占位符 `<0>` `<1>`…）
 --    + arity（类型索引）+ code（`tcCode` 派生）。模板/arity/code 一处声明，永不漂移。
---    渲染用 `Base.Vec.substTemplate`。
+--    渲染用 `Base.Data.Vec.substTemplate`。
 -- 3. **`tcAll`/`cgAll` = 文档遍历源**：同构 `List TcEntry`/`CgEntry`（code + 模板 + 说明），
 --    `gen-errors` 遍历它渲染 `docs/.generated/errors.md`，不再扫 `-- @code` 注释。
 --

@@ -1,7 +1,7 @@
 -- `firstSuccess` 命中即停：命中之后的候选动作只构造、不执行；
 -- 全部失败时才会逐个执行。用 IORef 记录「候选是否跑过」。
 import Prelude
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 import Base.Effect.Pure.IORef as IORef
 
 afterHit : IORef Int -> Eff [] (Maybe Int)

@@ -12,8 +12,8 @@ module Vuna.Json.Frame where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json
-import Base.Effect.EffStdin as EffStdin
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Stdin as EffStdin
+import Base.Effect.Types as EffTypes
 
 -- | 每次 `readChunk` 请求的字节数；帧 body 可能跨多块，缓冲里拼够 `Content-Length` 再切帧。
 export frameChunkSize : Int

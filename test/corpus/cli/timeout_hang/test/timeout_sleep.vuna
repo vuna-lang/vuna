@@ -1,8 +1,8 @@
 -- 超时夹具（失败路径）：长睡眠 30s。`VUNA_TEST_TIMEOUT=8` 时必须被超时判 FAIL
 -- （"timed out after 8s"），而不是真的等 30s；若超时机制失效，47b_test_timeout 的断言失败。
 -- 睡眠走 Clock 效应（entry 自动预装 handler）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffClock as EffClock
+import Base.Effect.Core as Eff
+import Base.Effect.Clock as EffClock
 
 main : Eff ([ClockOp]) Int
 main = clockSleepMicros 30000000

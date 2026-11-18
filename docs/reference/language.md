@@ -23,7 +23,7 @@
   `vuna lint --fix` 的 `list-literal` 规则会把表达式/类型位置的闭合 `::` 链
   与裸 `Nil` 归一为列表字面量；模式匹配里的 `::` 保持原样。
 - **模板字符串与多行字面量**："hi ${name}" 插值、"""...""" 多行（内容逐字，
-  只丢开引号后的一个换行）；洞降级成 `Base.Interp.interp` 调用，转换语义由 `Interp`
+  只丢开引号后的一个换行）；洞降级成 `Base.Trait.Interp.interp` 调用，转换语义由 `Interp`
   实例决定。规则、转义 `\$`、边界见 [templates.md](templates.md)；
 - **运算符 = 有 fixity 的普通名字**：`a op b` 与 `op a b` 同义，`` a `f` b `` 与 `f a b` 同义，
   运算符不拥有独立语义；parser 不做优先级（中缀链收成右嵌套中间节点），`Loader.Fixity` 按
@@ -42,7 +42,7 @@
 - layout：offside 规则；顶层声明、`data` 构造器块、`case` 分支、`let` 绑定按块列对齐，
   表达式跨行必须缩进超过所在块列；
 - `main` 必须是零参数定义；展示由编译器钩子完成（`Int` / `Nat` → 十进制、`String` →
-  `strShow`、`Bool` → `True` / `False`）。`show` 是 `Base.Show` 的 trait 方法，不是 `main`
+  `strShow`、`Bool` → `True` / `False`）。`show` 是 `Base.Trait.Show` 的 trait 方法，不是 `main`
   的展示钩子。核心求值路径只展示 `Int` / `Nat` / `String` / `Bool` 的 `main` 值
   （精化后的纯核心求值，归约边界见 [primitives.md](primitives.md)）；
 - 内建值（`Vuna.Compiler.Base.Intrinsics.allIntrinsics` 里用户可见的项）：`+ - * /`、
@@ -50,7 +50,7 @@
   `strLength` / `strConcatMany` / `strSubstTemplate` / `strHash` / `strAt` / `strShow`、
   `timeUs`。宽度、编码、转义与核心求值边界见 [primitives.md](primitives.md)；
 - **运算符 = 方法别名**：`==` / `/=` / `<` / `<=` / `>` / `>=` 不是内建值，
-  而是 `Base.Eq` / `Base.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
+  而是 `Base.Trait.Eq` / `Base.Trait.Ord` 的方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的
   **别名**（fixity 与别名由库模块里的 `infixl ... = ...` 声明提供，`Loader.Fixity` 在重排时
   替换）。`a == b` 与 `eq a b` 同义，Int / String 上由内建实例特化，其它类型走 `Eq` / `Ord`
   字典。trait 声明与实例的落点规则见 [operators.md](operators.md)；
@@ -63,7 +63,7 @@
 - `where` 子句：函数体后可跟缩进的 `where` 块；绑定块（`let` 与 `where` 同一套模型）是
   **顺序作用域 + 可选签名**，其中 `where` 块要求每个绑定写显式签名；见下节；
 - 类型身份：`Int` / `String` 是语言 primitive 类型；`Bool` / `List` / `Nat` 是 base 的
-  普通 `data` 声明（canonical 身份 `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`，
+  普通 `data` 声明（canonical 身份 `Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`，
   经自动注入的 `Prelude` 可见）。用户写同名 `data` 是普通声明，不与 canonical 冲突。
   `True` / `False` / `(::)` / `Nil` 与其他构造子一样**按声明身份**解析，没有「内建全局
   构造子放行」；身份规则见 [primitives.md](primitives.md)。
@@ -220,7 +220,7 @@ consolePrint s = sendCore (Named n ConsoleOp) "console" n (Print s)
 - 调用点不写实例名：裸标签行取默认 `"default"`，命名行按行解；多实例行用 `f@name`
   显式选（裸标识符是名字字面量）。实例名是静态的（行解或字面量），`@` 是可选的隐式实参
   覆盖，不参与位置实参。
-- `Member` 仍是 `Base.Eff` 的 Type-1 data family（`Member e r`，`e` 是行条目，可为
+- `Member` 仍是 `Base.Effect.Core` 的 Type-1 data family（`Member e r`，`e` 是行条目，可为
   `Named n e0`）；约束只允许在顶层签名。
 
 ## 源码写法惯例（现代形态）
@@ -232,7 +232,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **trait 约束显式**：泛型函数依赖 Eq/Ord/Show 字典时在顶层签名写 `Eq a =>`，
   不依赖 body 里 `==` 的隐式字典提升；
 - **Bool 不做字面量搬运**：`if c then True else False` 写 `c`，`if c then e else False` 写
-  `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Bool.not`；
+  `c && e`，`not (a == b)` 写 `a /= b`；单簇 helper 用 `Base.Data.Bool.not`；
 - **单构造器类型用 `record` + 字段访问**：位置访问器在有高阶使用（`map acc`）或终止性
   投影处保留为函数，其余调用点写 `x.field`；
 - **模块头显式导出列表**：不写「省略 = 全导出」的 v0 形态（空导出写 `()`）。
@@ -366,8 +366,8 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 
   export module Vuna.Compiler.Base.Common       -- 导入 + 整模块重导出
   export import B (x, T(..))              -- 选择性重导出
-  export module Base.Map                  -- 导入 + 平铺重导出 Base.Map 的全部导出项
-  export module Base.Map as Map           -- 导入 + 只导出命名空间路径 Map（A.Map.* / A.Base.Map.*）
+  export module Base.Container.Map                  -- 导入 + 平铺重导出 Base.Container.Map 的全部导出项
+  export module Base.Container.Map as Map           -- 导入 + 只导出命名空间路径 Map（A.Map.* / A.Base.Map.*）
   ```
 
   `export data T` 只导出类型（抽象，构造器不可见）；`T(..)` 导出全部公开构造器，
@@ -386,7 +386,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
   要公开构造器必须写 `T(..)`；
 - **模块路径不变式**：模块路径的最后一段是文件名、中间段是目录，目录本身不是模块。
   因此 `packages/base/lib/Base.vuna`（模块 `Base`）与 `packages/base/lib/Base/List.vuna`（模块
-  `Base.List`）能在同一个根下共存、没有歧义，包门面可以直接命名为
+  `Base.Data.List`）能在同一个根下共存、没有歧义，包门面可以直接命名为
   `Base` 或 `Vuna`；
 - 非限定名的查找顺序（值位置）：局部绑定 → 本模块值定义（定义 / 签名 / 实例名）→ 本模块
   构造子 → 内建（intrinsic）/ 精化器 prelude → 已自动 open 的 import 导出（先值项、再
@@ -401,15 +401,15 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 - **构造子名重载**：裸构造子名在解析期收集候选（本模块 data/record 构造子 + 所有
   open import 的 data/record 构造子），多于一个候选时不立即报歧义，而是交给精化器按
   **期望类型 / scrutinee 族**选 canonical 构造子（值位置、应用实参、类型位置、`case`
-  分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.List`
+  分支、多子句函数、实例方法、局部函数都参与）。期望族未知时，候选里含 `Base.Data.List`
   的 `Nil`/`(::)` 则默认 List（与 `[]`/`Nil` 的写法一致），否则报
   `[TC_AmbiguousCtor]`。显式 `Data.Ctor`（如 `Vec.Nil`）永远无歧义；与本地**类型名**
   同名的 record / 双命名空间构造子仍保持本地词法遮蔽。
 - **列表字面量按族通用展开**：parser 把 `[]` / `[a, b]` 解析成保留名
   `@vuna@list@nil` / `@vuna@list@cons`，精化器按期望族的短名 `Nil` / `(::)` 展开
-  （`List` / `Vec` / `Base.Eff.Row` / 用户自定义同形族都可用）；期望未知时默认
-  `Base.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
-- **`::` 的家族定向解析**：`::` 是普通构造子名，`List` 与 `Base.Eff.Row` 都声明了它；
+  （`List` / `Vec` / `Base.Effect.Core.Row` / 用户自定义同形族都可用）；期望未知时默认
+  `Base.Data.List.List`。模式 `[]` / `[a, b]` 同样按 scrutinee 族展开。
+- **`::` 的家族定向解析**：`::` 是普通构造子名，`List` 与 `Base.Effect.Core.Row` 都声明了它；
   写 `x :: xs` 时按期望族 / scrutinee 族选 canonical 构造子（`Row` 位置选 `Row.(::)`，
   `List` 位置选 `List.(::)`），期望族未知时默认 `List`，多候选且无法定向时报
   `[TC_AmbiguousCtor]`。这也是 `Eff [..]` 行字面量与普通列表字面量能共用同一套糖的原因。
@@ -434,7 +434,7 @@ vuna/base/compiler 三包源码统一按当前语言能力书写，新增/修改
 | 构造子 | data 构造子、record 名、trait 方法 | `ctor` |
 | 类型 | data / record / trait 的类型名 | `type` |
 
-- **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Bool` 重新
+- **类型位置只查类型命名空间**：先本模块声明的类型名（**优先于内建名**——`Base.Data.Bool` 重新
   声明 `Bool` 就靠这条），再内建类型名；小写名保持为隐式类型变量（未被本模块值定义占用
   时）。都没有再查 import 导出的类型。退化约定：非小写名找不到类型时按**索引构造子**解析
   （`Vec Zero a` 的 `Zero`），最后才退到本模块值定义（类型层 def，如 `sel : Nat -> Type`）。

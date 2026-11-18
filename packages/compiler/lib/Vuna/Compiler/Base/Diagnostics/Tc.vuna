@@ -77,7 +77,7 @@ export data TcErr(..) : Nat -> Type where
   InstanceUnknownMethod : String -> TcErr (Succ Zero)
   NeedsTwoArgs : String -> TcErr (Succ Zero)
   NoInstanceFound : String -> TcErr (Succ Zero)
-  -- 模板字符串插值（`${e}` → `Base.Interp.interp e`）找不到 `Interp`/`Show` 实例。
+  -- 模板字符串插值（`${e}` → `Base.Trait.Interp.interp e`）找不到 `Interp`/`Show` 实例。
   InterpNoInstance : String -> TcErr (Succ Zero)
   NotExhaustive : String -> TcErr (Succ Zero)
   SignatureNoDef : String -> TcErr (Succ Zero)

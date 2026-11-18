@@ -1,6 +1,6 @@
 -- Layer 1：运行时续延 + 行 + 命名实例（两个 Reader Int 实例，按实例名区分）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffReader as EffReader
+import Base.Effect.Core as Eff
+import Base.Effect.Reader as EffReader
 
 prog : Eff [ReaderOp Int@counter, ReaderOp Int@config] Int
 prog = do

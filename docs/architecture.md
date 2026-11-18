@@ -97,7 +97,7 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 `fixitiesForSource(In)` 取程序级闭包。详见 [operators.md](reference/operators.md)。
 
 **模板字符串**：lexer 产出 `TTmpl`（洞内 token 原位保留），parser 组成 `EInterp`；
-`Loader.Resolve` 在名字解析后**降级**成 `Base.Interp.interp` 调用 + `++` 链（纯语法糖，
+`Loader.Resolve` 在名字解析后**降级**成 `Base.Trait.Interp.interp` 调用 + `++` 链（纯语法糖，
 Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp` 处理。详见
 [templates.md](reference/templates.md)。
 
@@ -118,7 +118,7 @@ Elab/codegen 看不到模板）。fmt/lint/index/doc 只 parse，仍按 `EInterp
 可见性的唯一真源；`Loader.Resolve`（arity、放行）、`Elab.Prelude`（签名）、
 `Core.Eval`（归约）、`Lowering.Program`（名字 → IR 符号）都消费它；OCaml 运行时文本在
 `Codegen.Runtime`（契约 `Ir.Runtime` 的唯一 OCaml 实现）。内置身份按声明 symbol 判定：`Bool` / `List` / `Nat` 是 base 普通
-data（`Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`），不按短名。
+data（`Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`），不按短名。
 
 擦除检查由 `Lowering.Program.checkProgramOf` 负责（判据 `Core.rigIsErased`）；不透明字段的
 判定也在 Lowering（`ctorOpaqueFlagsOf`），后端只把 `IrTyOpaque` / `IrCast` 渲染成
@@ -204,7 +204,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   `Content-Length` 帧 + 16 MiB 上界）、`Vuna.Json.Rpc`（JSON-RPC 信封与错误码）、
   `Vuna.Json.Server.serveConnection`（读帧 → 分发 → 发帧的连接循环）；LSP 与 REPL server
   共用这一层，传输与退出策略由各自传入。
-- 网络：用户面是 `Base.EffNet` 的 `NetOp` 效应（命名实例、可 mock、entry 自动预装真实
+- 网络：用户面是 `Base.Effect.Net` 的 `NetOp` 效应（命名实例、可 mock、entry 自动预装真实
   handler）；宿主失败抛 `NetErrorOp`（typed，`vuna: net: <op> …` + exit 1），`netRecv` 的
   对端关闭是 `Nothing`；`netAcceptWithin` / `netRecvWithin` / `netSendWithin` 用 `select`
   提供单次超时（`NetStep`：ok / closed / timeout）。底层 `net` 原语（`prim_netListen/Accept/Recv/Send/Close/Port/Connect`，
@@ -212,11 +212,11 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
   当前已落地 loopback TCP 与 Unix domain socket（异步/取消/TLS/HTTP 为非目标，见
   [tooling.md](reference/tooling.md) §5）。
 - **运行时效应（Layer 1–3）**：`prim_effectPerform` / `prim_effectHandle`
-  把 OCaml 5 一次性续延接入 `Base.Eff`（开放行 + 命名实例 + 一阶效应）；
+  把 OCaml 5 一次性续延接入 `Base.Effect.Core`（开放行 + 命名实例 + 一阶效应）；
   `Vuna_runtime` 声明通用 `Perform (key, name, payload)`（key/name 都是 String），handler 按 key/name 过滤并
   `continue` 一次；handler 壳是 `dtp_effect_handle`，它在 handler 退出时执行
   每纤程 cleanup 栈（`prim_cleanupPush`/`prim_cleanupPop` → `dtp_cleanup_*`），
-  `Base.Eff.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
+  `Base.Effect.Core.bracket`/`finally` 的 release 因此在非 `Exn` abort（续延被丢弃）时也会跑；
   运行时还包含单线程 fiber 调度器 `dtSchedRuntime`（隐藏
   `prim_sched*`；`Base.EffSched` 的 fork/yield/await/取消/结构化 scope/步数超时，main
   钩子经 `dtp_sched_main` 把 main 跑成纤程 0）；核心求值路径不执行运行时效应（见
@@ -224,7 +224,7 @@ vuna.toml → Frontend.{Toml.parseToml, Manifest.parseManifest/validateManifest}
 - **TCB**：工具链永不进 seed（`packages/compiler/app/Main.vuna` 闭包不含 `Vuna.*` 工具模块；
   `nix/seed/forbidden.txt` 黑名单）；效应边界**不由 manifest 门控**：没有
   `[capabilities]` / `[trust]` / `[privileged]`，宿主层 `prim_*` / `prim_eff_*` 对任何包
-  可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Eff.*` 标签 + handler
+  可见（用户包/ad-hoc 也可直调）。用户面**应**经 `Base.Effect.Core.*` 标签 + handler
   使用效果——纪律/文档约定，不是强制门控；原语返回 `Eff []` 动作（只在 `main` 执行，
   钩子是 `v_main 0`）。显式接受的损失见 [effects.md](reference/effects.md) §8.6
   （缺口编号见 [debt.md](reference/debt.md) D62）。
@@ -266,7 +266,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
-| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
+| 观测（`Codegen/Term.dtObsRuntime` / `#line` 注入 / `Base.Data.Obs` / `vuna dev obs`） | 第 107 段 + `checks.vuna-obs-schema` / `vuna-obs-dwarf` / `vuna-obs-overhead` + `vuna check .`（[observability.md](reference/observability.md)） |
 | CLI 工具（`run` / `test` 选项 / REPL / LSP） | 第 40、42、47–49 段 + `corpus/lsp/smoke.sh` + `vuna check .` |
 | split 输出 / `vuna.toml` | 第 28–29、33–34、38–39 段 |
 | Nix | `nix flake check` + `nix build .#vuna` |

@@ -30,8 +30,8 @@ import Vuna.Index
 import Vuna.Json
 import Vuna.Lsp.Bindings
 import Vuna.Lsp.Protocol
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
 
 -- ---------------------------------------------------------------
 -- 数据与常量

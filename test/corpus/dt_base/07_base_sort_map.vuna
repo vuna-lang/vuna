@@ -1,4 +1,4 @@
--- `Base.Sort`（Ord 泛型比较的实例搜索）与 `Base.Map` 可用。
+-- `Base.Data.Sort`（Ord 泛型比较的实例搜索）与 `Base.Container.Map` 可用。
 import Base.Data.Sort as Sort
 import Base.Container.Map as Map
 

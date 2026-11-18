@@ -1,8 +1,8 @@
 -- 宿主 fs 失败的类型化通道：`fsFail` 抛到行里，`runFsError` 折叠成 `Result`。
 -- 失败是控制流而不是返回值：`fsReadFile` 一类操作的签名不变，只有想恢复的地方才 catch。
 import Prelude
-import Base.Effect.Eff as Eff
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
 import Base.Data.Result as Result
 
 failProg : Eff ([FsErrorOp@"fs-error"]) Int

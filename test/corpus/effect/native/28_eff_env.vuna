@@ -1,8 +1,8 @@
 -- env 效应标签（命名实例）——同一程序在 mock（"mock"）与入口行 handler 下
 -- 各跑一次；两边都断言「缺失变量为空 / cwd 非空 / execPath 非空」。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Env as EffEnv
+import Base.Effect.Console as EffConsole
 
 prog : (n : String) -> Eff (Named n EnvOp :: []) Int
 prog n = do

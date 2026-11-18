@@ -1,6 +1,6 @@
 -- `ap` 可以作为 Applicative 实例方法；`liftA2` 仍是显式方法
 -- （当前 codegen 的字典投影在 OCaml 侧无类型标注，泛型派生体会破坏
--- `f a` / `f (a -> b)` 的类型关系，见 Base.Applicative 头注释）。本夹具验证两者
+-- `f a` / `f (a -> b)` 的类型关系，见 Base.Trait.Applicative 头注释）。本夹具验证两者
 -- 在自定义实例上语义一致：`ap (pure (\x => x + 1)) (Opt 2)` 与
 -- `liftA2 (\a, b => a + b) (Opt 1) (Opt 2)` 都是 `Opt 3`。
 import Prelude

@@ -1,4 +1,4 @@
--- stdlib：Base.List 常用操作。
+-- stdlib：Base.Data.List 常用操作。
 import Base.Data.List as List
 import Base.Data.Pair as Pair
 import Base.Data.Maybe as Maybe

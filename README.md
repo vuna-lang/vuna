@@ -52,7 +52,7 @@ nix run .#vuna -- lint packages/compiler/lib/Vuna/Compiler/Elab/Term.vuna   # �
 nix run .#vuna -- doc                          # 生成 docs/api.html（gitignored）
 ```
 
-自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Eff`（宿主层直调 `prim_eff_*`，别名模块已删，任何包都可直调）。
+自己新建包：`vuna.toml` + `app/Main.vuna`，入口 `main : Eff [] a`，效果 API 来自 `Base.Effect.Core`（宿主层直调 `prim_eff_*`，别名模块已删，任何包都可直调）。
 格式见 [packages.md](docs/reference/packages.md)，示例见 `examples/multi/`。
 
 编译器选取：默认 `nix run .#vuna -- <subcommand>`（按当前源码构建）；需要固定二进制时先
@@ -133,7 +133,7 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 1. **当前 seed 必须能编译当前源码**，rotation 后 stage1 == stage2（fixed point）；
 2. **`seed/` 只含 compiler 包入口闭包**：工具链不进 TCB（`nix/seed/forbidden.txt`）；
 3. **效果原语返回 `Eff []` 动作**：effectful `prim_*`（含 `prim_eff_*`）没有 manifest
-   门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Eff` +
+   门控——任何包都可直接调用 `prim_*` / `prim_eff_*`；用户面**应**经 `Base.Effect.Core` +
    handler 使用效果（约定，非强制）。动作只在 `main` 执行（唯一动作类型 `Eff r a`，
    入口 `main : Eff [] a`）；
 4. **唯一路径**：语言夹具、纯测试求值、包构建与 seed 全部走 DT；没有第二套
@@ -159,13 +159,13 @@ dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 | [docs/reference/stdlib.md](docs/reference/stdlib.md) | 标准库 `vuna-base` 模块清单与 `Prelude` 自动导入 |
 | [docs/reference/operators.md](docs/reference/operators.md) | 运算符=方法别名、`Eq`/`Ord` 真源、实例落点规则 |
 | [docs/reference/floats.md](docs/reference/floats.md) | `Float` 原语、字面量转换 trait（FromString/FromInt/FromFloat）、`deriving`、Prelude/产物影响与核心求值限制 |
-| [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Eff.*` handler 用法 |
+| [docs/reference/primitives.md](docs/reference/primitives.md) | 内建/原语唯一声明面、Int/String 语义、宿主层原语与推荐的 `Base.Effect.Core.*` handler 用法 |
 | [docs/reference/cli.md](docs/reference/cli.md) | CLI 命令树、flag 词汇、帮助与建议、退出码、产品面与 `vuna dev` 的边界 |
 | [docs/reference/packages.md](docs/reference/packages.md) | `vuna.toml` 包格式（含依赖声明）、workspace / 依赖 DAG、工具链命令一览 |
 | [docs/reference/package-store.md](docs/reference/package-store.md) | 持久包 store、`vuna deps fetch` / `store clean --packages`、内容摘要与语义身份 |
 | [docs/reference/core.md](docs/reference/core.md) | Core TT / NbE / 合一 / 精化器 / 擦除 / codegen 护栏的实现参考 |
 | [docs/reference/api-docs.md](docs/reference/api-docs.md) | API 文档：docstring、单文件 HTML、`vuna search` / 类型检索 |
-| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Obs` / `Base.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna dev obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
+| [docs/reference/observability.md](docs/reference/observability.md) | 可观测性（语言层，任何 vuna 应用可用）：事件模型（Chrome Trace Event JSONL `vuna-obs 1`）、`VUNA_OBS=0..3` 分级与关闭快速路径、`Base.Data.Obs` / `Base.Data.Obs.Span` 与 `obs!`/`mark!` 宏、生成运行时（span/计数/日志/CPU 采样/分配栈）、`#line` → DWARF、`vuna dev obs run/summarize/validate/convert/render/merge/symbols`、成本纪律与门禁 |
 | [docs/reference/tooling.md](docs/reference/tooling.md) | 工具链：`vuna goal`、LSP（含 codeAction quick fix）、`vuna doc`（单文件 HTML）、`vuna run` / REPL 调试命令、**REPL server / client（`repl serve --listen` / `repl client --addr`，JSON-RPC over socket）**、错误码体系与代表性错误索引 |
 | [docs/reference/debugging.md](docs/reference/debugging.md) | 调试：诊断源码片段、运行时错误报告（`vuna: runtime error` + 定义级帧 + exit 2）、语言级调试构造（`dbg!`/`dbgShow`/`assert`/`todo`）、`vuna run` / `test --verbose` / REPL `:type` |
 | [docs/reference/diagnostics.md](docs/reference/diagnostics.md) | 诊断系统：结构化 `Diagnostic`/`Check` 通道、错误码域、short/human/JSON 渲染、LSP 映射 |

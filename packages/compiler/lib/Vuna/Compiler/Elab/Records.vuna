@@ -336,8 +336,8 @@ hasFieldInstanceDecl rname params ctor n fi fname fty =
     recType = case params of
       [] => EVar rname fsp
       _ => EApp (EVar rname fsp) (map (\p => EVar p fsp) params) fsp
-    label = EApp (EVar "Base.Field.Field" fsp) [EStr fname fsp] fsp
-    head = EApp (EVar "Base.Record.HasField" fsp) [label, recType, fty] fsp
+    label = EApp (EVar "Base.Trait.Field.Field" fsp) [EStr fname fsp] fsp
+    head = EApp (EVar "Base.Trait.Record.HasField" fsp) [label, recType, fty] fsp
     pats = recordInstancePats n fsp
     body = ECase (EVar "p" fsp) [Pair (PCon ctor pats fsp) (EVar (recordInstanceVar fi) fsp)] fsp
     meth = DFun "getField" [PVar "p" fsp] body fsp

@@ -201,7 +201,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 （`:imports` 会标为隐式，显式 `import Prelude` 时不再重复）；`:type` 直接走表达式精化，
 而导入模块的类型名与本地 `data` 名一样可以作为项，所以 `:type Maybe` 打印 kind
 （`Maybe : (a : Type) -> Type`）、`:type Maybe Int` 打印 `Type`；限定名需先 import
-（`:load Base.Maybe` 后 `:type Base.Maybe.Maybe`）。裸运算符会按值形式自动补括号
+（`:load Base.Data.Maybe` 后 `:type Base.Data.Maybe.Maybe`）。裸运算符会按值形式自动补括号
 （`:type +` ≡ `:type (+)`）；`>>` 是 do 派生语法、不是值，`:type >>` / `:type (>>)`
 会给出提示。
 
@@ -226,7 +226,7 @@ REPL（`vuna repl [FILE|DIR|MODULE]`，实现入口 `Vuna.Repl.runRepl`；行编
 | --- | --- | --- |
 | `path/to/entry.vuna` | 整段源码替换 imports/defs | `已加载 …（N 个定义）` |
 | `path/to/module.vuna`（含 `module` 头） | 拒绝，提示用模块名 | `是模块文件` |
-| `Base.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Nat` |
+| `Base.Data.Nat`（模块名） | 立即校验后追加 `import` | `已导入模块 Base.Data.Nat` |
 | `path/to/pkg`（目录） | 切换包上下文并重置缓冲/索引（保留设置/历史） | `已切换包 …` |
 | `vuna repl FILE` / `vuna repl DIR` / `vuna repl MODULE` | 启动即加载 / 切换上下文 / 导入；加载失败报错退出（exit 2） | 同上 |
 

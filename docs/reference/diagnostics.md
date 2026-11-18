@@ -50,8 +50,8 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 
 - `Vuna.Compiler.Base.Common` 重导出 `Source` + `Diag`；`Err` 载荷是 `Diagnostic`。
 - `Common.bind/step/traverse` 固定作用于 `Check`（`packages/compiler/lib/Vuna/Compiler/Base/Common.vuna`）；
-  `OkC/ErrC` 构造子避免与 `Prelude` 的 `Base.Result` 冲突。
-- `Base.Result`（字符串错误）只留给 `packages/base/` 标准库内部；compiler 与根工具链统一 `Check`。
+  `OkC/ErrC` 构造子避免与 `Prelude` 的 `Base.Data.Result` 冲突。
+- `Base.Data.Result`（字符串错误）只留给 `packages/base/` 标准库内部；compiler 与根工具链统一 `Check`。
 - 构造函数：
   - `err : String -> Check a`：工具错误（phase = Tool，无码）；根工具链 CLI 错误用它。
   - `rawAt` / `rawNoLoc`：未分类的源码裸消息（新代码不要使用）。
@@ -96,7 +96,7 @@ Diagnostic = { id, severity, phase, category, code, message, labels, fields, tra
 命名 `_`、trait 字典字段 `_f<n>`）同样不参与 `UN_UnusedBinder` / `UN_ShadowedBinder`。
 `UN_UnusedImport` 按「解析结果里实际引用的 canonical target（含重载构造子候选、do 链的
 bind 目标）+ 模块头 `module X` 重导出」判定（alias 归一到 import 名；模板字符串降级合成的
-`Base.Interp.interp` 不算使用）；warning 不写进 iface；check 结果缓存会带上 warning，但「干净模块复用」的运行可能不完整，
+`Base.Trait.Interp.interp` 不算使用）；warning 不写进 iface；check 结果缓存会带上 warning，但「干净模块复用」的运行可能不完整，
 `-W` / `--deny-warnings` 因此强制本包模块重新精化以避免漏报（见
 [tooling.md](tooling.md) 退出码一节）。
 
@@ -238,5 +238,5 @@ JSON 字段是机器契约：`code/severity/phase/category/message/labels[]/fiel
 
 - 列单位是 UTF-8 字节（不是码点）；渲染宽字符按字节/显示字符混合处理，LSP 边界换算
   UTF-16。
-- `packages/base/` 标准库仍用 `Base.Result`（字符串错误）；不要把 `Check` 扩散进 base。
+- `packages/base/` 标准库仍用 `Base.Data.Result`（字符串错误）；不要把 `Check` 扩散进 base。
 - 消息模板为英文（机器格式稳定）；`--lang zh` / `[diagnostics].lang` 的 human 视图用目录中文说明替代消息，并附 `= message: <英文原文>`。

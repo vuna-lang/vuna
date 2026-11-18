@@ -7,7 +7,7 @@ module Vuna.Compiler.Driver.Native where
 -- 链接由 CLI 的 `build` 分支调系统 `cc` 完成（`Native` 模块本身不 spawn）。
 --
 -- 边界：不 import Core/Elab/Intrinsics；只经由 Driver.Dt 与 Lowering。
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 import Base.Data.Int as Int
 import Base.Data.List as List
 import Base.Data.Pair as Pair
@@ -21,9 +21,9 @@ import Vuna.Compiler.Lowering.Program
 import Vuna.Compiler.Native.Model
 import Vuna.Compiler.Native.Module
 import Vuna.Compiler.Native.Render
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Fs as EffFs
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
 
 nativeErrDiag : NativeErr -> Diagnostic
 nativeErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (nativeErrText err)

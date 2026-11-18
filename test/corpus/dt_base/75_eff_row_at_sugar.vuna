@@ -1,7 +1,7 @@
 -- 行字面量的显式实例名 `X@name` 展开成
 -- `(Named "name" (X "name") :: Nil)`，等价于 `[X "name"]`。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffConsole as EffConsole
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
 import Base.Data.List as List
 import Base.Trait.Monad as Monad
 import Base.Data.Nat as Nat

@@ -82,7 +82,7 @@ test "$("$OUT/dt_id/dt_id")" = "42"
 ( cd b1 && sh build.sh ../vuna-stage1 ) >build2.log
 ! grep -q '^compile ' build2.log
 # build.sh 按内容哈希（不是 mtime）判增量——touch 不触发重编，改内容才触发。
-printf "\n(* seed-selfhost incremental probe *)\n" >> b1/Base_dList.ml
+printf "\n(* seed-selfhost incremental probe *)\n" >> b1/Base_dData_dList.ml
 ( cd b1 && sh build.sh ../vuna-stage1 ) >build3.log
-grep -q '^compile Base_dList' build3.log
+grep -q '^compile Base_dData_dList' build3.log
 ! grep -q '^compile Vuna_runtime' build3.log

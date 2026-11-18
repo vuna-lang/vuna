@@ -1,0 +1,7 @@
+-- | `HasField` 的类型级字段标签 `Field "id"`。
+--
+-- 空归纳族（与 `Base.Effect.Console.ConsoleOp` 等效应标签同形）：`Field "id" : Type` 是没有值的类型，只按 String 索引区分字段。这样 `trait HasField (l : Type) ...` 用普通 `Type` 参数即可（避开自定义 kind 的 trait 参数在包/接口摘要路径下的限制），用户写 `HasField (Field "id") a t` 时 `Field "id"` 就是普通类型应用。
+module Base.Trait.Field where
+
+-- | 类型级字段标签 `Field "id"`：空归纳族，只做 `HasField` 的索引，没有值 / 运行时语义。
+export data Field : String -> Type where

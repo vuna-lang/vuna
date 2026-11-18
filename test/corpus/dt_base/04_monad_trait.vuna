@@ -1,5 +1,5 @@
--- trait 方法投影经 `import Base.Monad` 可用（fmap / bind / pure），
--- 具体实例来自 `import Base.Maybe`；do 块走同一套投影。
+-- trait 方法投影经 `import Base.Trait.Monad` 可用（fmap / bind / pure），
+-- 具体实例来自 `import Base.Data.Maybe`；do 块走同一套投影。
 import Base.Trait.Monad as Monad
 import Base.Data.Maybe as Maybe
 

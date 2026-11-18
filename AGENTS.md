@@ -49,12 +49,12 @@
    obs/package manager 等都在 `packages/cli/lib/`）；黑名单与断言见 `nix/seed/forbidden.txt`；
 5. **动作入口与宿主层**：唯一动作类型是 `Eff r a`；用户面入口是 `main : Eff [] a`（行必须
    Nil，入口处未处理效应是类型错误；也允许内建宿主效应行，见 debt D65），
-   执行入口是 `Base.Eff.runPure : Eff [] a -> a`。
+   执行入口是 `Base.Effect.Core.runPure : Eff [] a -> a`。
    宿主层 = 直接调用 `prim_eff_*`（`Base.Host` 已删除）；Int/Nat 归一化只在
-   `Base.Eff.*` handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
+   `Base.Effect.Core.*` handler 的结果索引（`Print`/`WriteFile`/`FileSize` 返回 `Nat`）。
    `IORef` 实现全是 `Eff []`。
    **无 manifest 门控**：没有能力/特权/信任机制；任何包（含 ad-hoc 文件）都可直调
-   `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Eff.*` 标签 + handler（纪律，不是门控，
+   `prim_*` / `prim_eff_*`。用户面**应**仍经 `Base.Effect.Core.*` 标签 + handler（纪律，不是门控，
    见 [effects.md](docs/reference/effects.md) §8.6）。
    **隐藏效果守卫**：编译器/工具链不得用 `runPure` 在纯签名里隐藏 Eff 执行；
    `checks.eff-boundary` 基线为 0（`nix/checks/data/eff-boundary.allowlist` 为空），无例外；
@@ -88,7 +88,7 @@
 - **探索按场景选工具**：要改的模块整篇 `read`；只引用的用 `vuna map` / `vuna api`，
   **不要 grep**；探索完把结论落盘（技能 `repo-navigation` + [docs.md](.agents/rules/docs.md)）。
 - **Monad/Functor 组合**：类型有实例时统一用 `do` / `>>=` / `bind` / `pure` / `fmap` /
-  `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Applicative`，`Base.Monad` 重导出），
+  `liftA2` / `ap` / `foldMap` / `mapM`（`pure` 在 `Base.Trait.Applicative`，`Base.Trait.Monad` 重导出），
   不新增 `pureX` / `bindX` / `andThen` 这类重复入口；例外与长 do 链性能边界见
   [records-traits.md](docs/reference/records-traits.md)、[effects.md](docs/reference/effects.md) §8.4。
 - **注释与说明文字只写当下**：源码 / 夹具 / 脚本 / 主题页的注释不写阶段编号、里程碑、
@@ -144,7 +144,7 @@ seed 工具（`seed/`）+ 开发工具（`tools/`）；`docs/` = 分层文档。
 - 编译器实现：compiler、core、ir、diagnostics、wasm、native、cache（同在 `docs/reference/`）
 - 工具链 / 测试 / 自举：tooling、testing、test-architecture、bootstrap（同在 `docs/reference/`）
 - 性能与观测：[performance.md](docs/reference/performance.md)（量什么/读数）、
-  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Obs` / `vuna dev obs` / `#line` → DWARF）
+  [observability.md](docs/reference/observability.md)（`VUNA_OBS` 分级 / `Base.Data.Obs` / `vuna dev obs` / `#line` → DWARF）
 - AI 规则与技能：[`.agents/README.md`](.agents/README.md)（规则 `rules/`、技能 `skills/`）
 - 债务 / 已知缺口：[debt.md](docs/reference/debt.md)（只含开放项，带证据）
 

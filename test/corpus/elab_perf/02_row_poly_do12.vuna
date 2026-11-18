@@ -1,5 +1,5 @@
 -- D48：行多态 `{r : Row}` 的 12 步 do 链；`Monad (Eff r)` 字典应从期望类型早解。
-import Base.Effect.Eff as Eff
+import Base.Effect.Core as Eff
 
 chain : {r : Row} -> Eff r Int
 chain = do

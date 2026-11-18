@@ -1446,7 +1446,7 @@ rowAtNameExpr (EVar nm sp) = EStr nm sp
 rowAtNameExpr e = e
 
 -- `perform <expr>`：保留名单实参应用；Elab 侧按 op 族
--- 推导 key / 实例名 / 效应签名后降级到 `Base.Eff.performCore`，不新增 AST 构造子。
+-- 推导 key / 实例名 / 效应签名后降级到 `Base.Effect.Core.performCore`，不新增 AST 构造子。
 parsePerform : Int -> PState -> Int -> Check (Pair Expr PState)
 parsePerform fuel st blockCol =
   if fuel <= 0 then icFuel "parser"

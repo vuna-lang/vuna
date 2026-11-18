@@ -33,16 +33,16 @@ import Vuna.Compiler.Ir.Validate
 import Vuna.Compiler.Lowering.Checks
 import Vuna.Compiler.Codegen.Decl
 import Vuna.Compiler.Codegen.Runtime
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Types as EffTypes
 export module Vuna.Compiler.Lowering.Env
 export module Vuna.Compiler.Lowering.Ty
 export module Vuna.Compiler.Lowering.Entry
 
 -- 小工具
 -- ---------------------------------------------------------------
--- 小名字列表用 `Base.List` 的 `memName` / `lookupPair`；程序级大表（构造子、族、
+-- 小名字列表用 `Base.Data.List` 的 `memName` / `lookupPair`；程序级大表（构造子、族、
 -- 类型参数槽）在 `LwEnv` 里建一次哈希索引，热路径只查表。
--- 小名字列表用 `Base.List` 的 `memName`；程序级大表在 `LwEnv` 里建一次哈希索引。
+-- 小名字列表用 `Base.Data.List` 的 `memName`；程序级大表在 `LwEnv` 里建一次哈希索引。
 -- | 单元内生成状态（唯一可变量：case / Nat case 的 fresh binder 计数）。
 export record LwSt where
   lwNext : Int
@@ -130,7 +130,7 @@ recordTermAsAppIn t ((Pair a rig) :: rest) = recordTermAsAppIn (TApp t a rig) re
 
 -- | 顶层名引用：Nat 构造子 / 程序构造子 / 内建 / 普通运行时定义。
 -- 分支顺序固定（Nat Zero → `0`；Succ → `@ir@natSucc`）：交换顺序会让产物与诊断漂移。
--- 需要 List 桥接的内建在没有 canonical `Base.List.List` 族时报 `CG_ListBridgeRequired`。
+-- 需要 List 桥接的内建在没有 canonical `Base.Data.List.List` 族时报 `CG_ListBridgeRequired`。
 lowerGlobalRef : LwEnv -> String -> Check Ir
 lowerGlobalRef env name = if name == natZeroCtor then OkC (IrInt 0)
 else if name == "strFromFloat" then OkC (IrGlobal floatRenderRefName)
@@ -145,7 +145,7 @@ else case HashMap.lookup name env.lwCtors of
       else lowerBridgeGuard env name (IrRt (intrinsicName i))
     Nothing => OkC (IrGlobal name)
 
--- 需要 List 桥接的内建：程序必须声明 canonical `Base.List.List` 族，
+-- 需要 List 桥接的内建：程序必须声明 canonical `Base.Data.List.List` 族，
 -- 否则报 `CG_ListBridgeRequired`。
 -- 桥接标记来自契约（`Ir.Runtime`，单一来源）。
 lowerBridgeGuard : LwEnv -> String -> Ir -> Check Ir

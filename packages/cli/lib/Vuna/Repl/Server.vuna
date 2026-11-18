@@ -26,15 +26,15 @@ import Vuna.Json.Rpc
 import Vuna.Json.Server
 import Vuna.Repl
 import Base.Effect.Pure.IORef as IORef
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffNet as EffNet
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffArgs as EffArgs
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Base.Effect.Types as EffTypes
+import Base.Effect.Args as EffArgs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Env as EffEnv
+import Base.Effect.Exit as EffExit
+import Base.Effect.Process as EffProcess
 
 -- | 地址校验（CLI 层）：只接受 `unix:PATH` 或 `tcp:127.0.0.1:PORT`，其余给带说明的错误。
 export checkReplAddr : String -> Check String

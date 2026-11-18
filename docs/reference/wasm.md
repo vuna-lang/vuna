@@ -91,7 +91,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
 | `IrConcatMany` | 支持 | 左折叠到 `$rt_strConcat` |
 | `IrRt` | 支持 | `RtValue` 直接内联；`RtFunc` 作值 eta 展开成闭包；符号表外的符号在引用点拒绝 |
 | `IrCtor` / `IrRecord` / `IrProj` / `IrRecUpd` / `IrCase` | 支持 | WasmGC struct：变体 `(field i32 tag) (field anyref...)`；record 纯字段 |
-| Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Float.floatRender` |
+| Float | 支持 | `$float` struct + f64 指令；比较按 IEEE 语义；展示走 `Base.Data.Float.floatRender` |
 | Eff thunk / IORef | 支持 | `MkEff` 包装原语；`IORef` 是长度 1 的 `$arr` |
 | Effect handlers | 支持 | 泛型 tag + `resume`/`suspend`；key/name 不匹配时转发外层；见 [wasm-effects.md](wasm-effects.md) |
 | `IrEffBind` | 拒绝 | effect 的 bind 降级；与 native 同一限制 |
@@ -101,7 +101,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   预装 base 内建效应的 `run*Host`（清单见 `Vuna.Compiler.Base.Intrinsics.builtinEffects`），
   再用 `runMain` 执行后展示。入口 show 接受 `@ir@showInt` / `@ir@showNat` /
   `@ir@showBool` / `@ir@showStr` / `@ir@showFloat`（Float 走
-  `Base.Float.floatRender`）；其它自定义 Show 在生成期拒绝。`--no-print` 不打印，仍求值。
+  `Base.Data.Float.floatRender`）；其它自定义 Show 在生成期拒绝。`--no-print` 不打印，仍求值。
 - **零参定义**在 `_start` 里按依赖序初始化进全局（每次引用读全局，不重算）；
   **饱和函数**（arity > 0）生成 `$f_<name>` 并被 `call`。
 
@@ -127,7 +127,7 @@ binder 全量拷进 `$env` 数组（与 native 同策略），闭包应用经 `$
   `TODO: ` 前缀。`rt_failStr` 是唯一的失败出口（拼前缀后走 `rt_write`）。
 - 位运算是 `IrRtApp`（`irInlineArity` 用内建名 `bitAnd`…）：`bitShr` 按 OCaml `lsr` 语义
   （63-bit 值先 `shl`+`shr_u` 清掉符号扩展位，再逻辑右移）。
-- 浮点展示不是运行时符号，走 `Base.Float.floatRender`（三端共用）：Lowering 把
+- 浮点展示不是运行时符号，走 `Base.Data.Float.floatRender`（三端共用）：Lowering 把
   `strFromFloat` 改写成该定义，入口 `@ir@showFloat` 也直接调到它。
 - 浮点：`$rt_floatFromInt` / `$rt_intFromFloat`（`i64.trunc_f64_s`）/ `$rt_floatAbs` /
   `$rt_floatSqrt`，`$rt_floatAdd/Sub/Mul/Div` 与 `$rt_floatEq/Neq/Lt/Le/Gt/Ge`（`f64.*`）。

@@ -201,7 +201,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 | `IrEffThunk` | 支持 | 生成 `MkEff (fun _ => prim args)`；效应原语作为值出现时用 |
 | `IrEffBind` | 拒绝 | 只服务 `prim_eff_bind1`，base 不用 |
 | `IrRt` | 支持白名单值形态 | `@ir@natSucc`（调用 head）与入口 show 由 Module 特化；作为值同样生成 wrapper 闭包 |
-| Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Float.floatRender` |
+| Float | 支持 | 堆对象 `[f64]`；比较按 OCaml 语义；展示走 `Base.Data.Float.floatRender` |
 | Effect handler | 支持 | `perform` / `handle` 的一次性续延；§3.4 |
 | extern / 其余宿主原语 | 拒绝 | `native target: ... not supported yet` |
 
@@ -284,7 +284,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
   `rt_eff_resume` / `rt_eff_kdone`；设计与限制见 §3.4。其余 `prim_eff_*` 宿主原语仍未实现。
 - 浮点：`float_from_int` / `int_from_float`（截断）/ `float_abs` / `float_sqrt`、
   `float_add/sub/mul/div`、`float_eq/neq/lt/le/gt/ge`；展示不是运行时符号，
-  走 `Base.Float.floatRender`（Vuna 实现，三端共用）。
+  走 `Base.Data.Float.floatRender`（Vuna 实现，三端共用）。
 - 数组：`array_length` / `array_get` / `array_set`（COW）/ `array_make`，以及
   `array_from_list` / `array_to_list`（走 canonical `List` 族，与 List 桥接同一批生成）。
 - 只读数据：`True` / `False` / 换行 / 除零信息 / OOM 信息 / 错误报告前缀（`vuna: runtime
@@ -459,7 +459,7 @@ List / record / 用户 `data` 共用同一套对象布局（`[tag]` + 8 字节�
 - 门禁在 Lowering（`CG_ListBridgeRequired`）：没有 canonical `List` 族的程序根本走不到
   桥接符号，后端不需要再判一次。
 
-**不要用索引扫描（`strAt` + fuel）自写 native 文本函数绕过桥接**：那会与 `Base.String`
+**不要用索引扫描（`strAt` + fuel）自写 native 文本函数绕过桥接**：那会与 `Base.Data.String`
 语义分叉，不进终态。
 
 ## 10. 相关阅读

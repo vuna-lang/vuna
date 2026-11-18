@@ -4,7 +4,7 @@ module Vuna.Compiler.Frontend.Manifest where
 -- 表约定：
 --   [package]     name（包目录必填；workspace 根可省略形成虚拟根）
 --   [workspace]   members = ["stdlib", "app"]（可选）
---   [export]      modules = ["Base.List"]（可选；值必须是字符串数组）
+--   [export]      modules = ["Base.Data.List"]（可选；值必须是字符串数组）
 --   [diagnostics] format / warnings / max-errors / lang / deny-warnings（可选）
 --   [dependencies] 两种等价写法（可混用，但同一别名只能一种）：
 --       greet = "../greet"                                  -- 字符串 = path 简写
@@ -21,7 +21,7 @@ module Vuna.Compiler.Frontend.Manifest where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Toml
 import Vuna.Compiler.Base.Diagnostics.Pkg
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Fs as EffFs
 
 -- | 依赖来源：相对路径（可变输入）/ git（url + rev）/ 单个 url。
 export data DependencySource(..) : Type where

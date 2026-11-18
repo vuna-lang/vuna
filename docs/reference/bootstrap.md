@@ -164,12 +164,12 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 
 - **seed 闭包不变**：seed 只含 compiler 包入口闭包；编译器与 base 的 Eff handler 直调
   `prim_*` / `prim_eff_*`（`Eff []` 叶子）。动作类型是唯一的 `Eff r a`，入口 `main : Eff [] a`，
-  执行入口 `Base.Eff.runPure`。
+  执行入口 `Base.Effect.Core.runPure`。
 - **任何包都可见宿主层**：用户包、`test/corpus` 夹具、ad-hoc 文件都可以直接调用
   `prim_*` / `prim_eff_*`；没有每包原语白名单、`unsafe` 定义级审计，也没有
   REPL `--privileged`。编译器不检查内建的能力位。
-- **用户面纪律（非门控）**：用户面**应**经 `Base.Eff.*` 标签 + handler 使用效果；宿主层
-  细节留在 `prim_eff_*` / `Base.Eff*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
+- **用户面纪律（非门控）**：用户面**应**经 `Base.Effect.Core.*` 标签 + handler 使用效果；宿主层
+  细节留在 `prim_eff_*` / `Base.Effect.Core*` handler 内部（没有宿主别名模块）。见 [effects.md](effects.md) §8.6 与
   [primitives.md](primitives.md) §7。
 - **显式接受的损失**：宿主层 import 门控、每包原语白名单、`unsafe` 定义级审计、网络仅
   根包可用（[debt.md](debt.md) D62）。
@@ -184,9 +184,9 @@ OCaml 种子是**当前唯一**锚点。方向是让 native 自举成熟后，�
 
 ```text
 Vuna_runtime
-Base_dPair ... Base_dString          （vuna-base 模块，依赖序）
+Base_dData_dPair ... Base_dData_dString          （vuna-base 模块，依赖序）
 Prelude
-Vuna_dCompiler_dBase_dCommon ... Vuna_dCompiler_dBase_dIntrinsics ...
+Vuna_dCompiler_dBase_dCommon ... Vuna_dCompiler_dBase_dData_dIntrinsics ...
   ... Vuna_dCompiler_dElab_dTerm ... Vuna_dCompiler_dDriver_dCompilerCli
                                      （编译器模块，依赖序；点转 _d）
 Main
@@ -196,7 +196,7 @@ Main
 - 每个源码模块一个 `<Module>.ml`（依赖序；OCaml 编译单元名 = 模块名点转 `_d`），文件头
   **只** `open Vuna_runtime`（没有 open 链），跨单元引用写成 OCaml 限定名 `Unit.name`
   （值 / 构造子 / 类型一致）；`List` 桥接（`dtp_unpack/pack`）放在声明 `List` 族的模块
-  文件里；`Vuna_dCompiler_dBase_dIntrinsics.ml` 是内建声明的唯一真源。
+  文件里；`Vuna_dCompiler_dBase_dData_dIntrinsics.ml` 是内建声明的唯一真源。
 - `Main.ml`：entry decls 的 datas + defs 与 `main` 钩子（入口文件里声明的 `data` 也必须发进
   `Main.ml`）。**不生成 `.mli`**。
 - 没有只为形状稳定而保留的空编译单元。

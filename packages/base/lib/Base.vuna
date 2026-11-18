@@ -2,30 +2,30 @@
 module Base where
 
 -- 加载 `Int` 的 Eq / Ord 实例（跟类型模块走；仅加载实例，不重导出名字）。
-import Base.Int
-export module Base.Pair
-export module Base.Bits
-export module Base.Bool
-export module Base.Show
-export module Base.Eq
-export module Base.Ord
-export module Base.Interp
-export module Base.Foldable
-export module Base.Float
-export module Base.Hashable
-export module Base.List
-export module Base.Monoid
-export module Base.Num
-export module Base.Maybe
-export module Base.Nat
-export module Base.Result
-export module Base.String
-export module Base.Sort
-export module Base.Traversable
-export module Base.Unit
-export module Base.Map
-export module Base.Monad
-export module Base.Obs
-export module Base.Obs.Span
+import Base.Data.Int
+export module Base.Data.Pair
+export module Base.Data.Bits
+export module Base.Data.Bool
+export module Base.Trait.Show
+export module Base.Trait.Eq
+export module Base.Trait.Ord
+export module Base.Trait.Interp
+export module Base.Trait.Foldable
+export module Base.Data.Float
+export module Base.Trait.Hashable
+export module Base.Data.List
+export module Base.Trait.Monoid
+export module Base.Trait.Num
+export module Base.Data.Maybe
+export module Base.Data.Nat
+export module Base.Data.Result
+export module Base.Data.String
+export module Base.Data.Sort
+export module Base.Trait.Traversable
+export module Base.Data.Unit
+export module Base.Container.Map
+export module Base.Trait.Monad
+export module Base.Data.Obs
+export module Base.Data.Obs.Span
 
--- 算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Num）。
+-- 算术运算符 `+ - * /` 是 `Num` 方法的别名（fixity/别名真源在 Base.Trait.Num）。

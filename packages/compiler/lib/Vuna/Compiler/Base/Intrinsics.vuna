@@ -13,9 +13,9 @@ module Vuna.Compiler.Base.Intrinsics where
 --   - `Core.Eval`：按 IntrinsicOp 归约。
 --
 -- 身份规则：内置实体按**声明的 symbol**判定，不按短名/lastName：
---   - Int / String 是语言 primitive 类型；动作类型由 base 的 `Base.Eff.Eff` 承载；
+--   - Int / String 是语言 primitive 类型；动作类型由 base 的 `Base.Effect.Core.Eff` 承载；
 --   - Bool / List / Nat 是 base 的普通 data，身份 = 完整限定名
---     `Base.Bool.Bool` / `Base.List.List` / `Base.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
+--     `Base.Data.Bool.Bool` / `Base.Data.List.List` / `Base.Data.Nat.Nat`（见 `Loader`/`Codegen` 的常量）；
 --   - 隐藏的内部名（`bi_*`）只供 codegen 映射，不对用户源码可见。
 import Vuna.Compiler.Base.Common
 import Base.Data.String as String
@@ -31,11 +31,11 @@ export data IType(..) : Type where
   IInt : IType
   IStr : IType
   IBool : IType
-  -- `Base.Nat.Nat`：canonical 归纳族，运行时表示是 OCaml `int`（见 Codegen）。
+  -- `Base.Data.Nat.Nat`：canonical 归纳族，运行时表示是 OCaml `int`（见 Codegen）。
   INat : IType
-  -- `Base.List.List <arg>`：族身份固定为 base 的普通 data 声明
+  -- `Base.Data.List.List <arg>`：族身份固定为 base 的普通 data 声明
   IList : IType -> IType
-  -- `Base.Eff.Eff Base.Eff.Row.Nil arg`：统一动作类型；codegen 包一层 `MkEff`。
+  -- `Base.Effect.Core.Eff Base.Effect.Core.Row.Nil arg`：统一动作类型；codegen 包一层 `MkEff`。
   IEff : IType -> IType
   IFun : IType -> IType -> IType
   -- 参数 binder 为 1 的函数（线性 continuation）；只给底层原语用。
@@ -120,25 +120,26 @@ record BuiltinEffect where
 
 -- | 内建宿主效应的失败收口 handler（entry 追加在最外层；空串 = 该家族没有失败通道）。
 export builtinEffectErrorRunHostOf : String -> String
-builtinEffectErrorRunHostOf "Base.EffFs.FsOp" = "Base.EffFs.runFsErrorHost"
-builtinEffectErrorRunHostOf "Base.EffProcess.ProcessOp" = "Base.EffProcess.runProcessErrorHost"
-builtinEffectErrorRunHostOf "Base.EffNet.NetOp" = "Base.EffNet.runNetErrorHost"
+builtinEffectErrorRunHostOf "Base.Effect.Fs.FsOp" = "Base.Effect.Fs.runFsErrorHost"
+builtinEffectErrorRunHostOf "Base.Effect.Process.ProcessOp" =
+  "Base.Effect.Process.runProcessErrorHost"
+builtinEffectErrorRunHostOf "Base.Effect.Net.NetOp" = "Base.Effect.Net.runNetErrorHost"
 builtinEffectErrorRunHostOf _ = ""
 
 -- | 全部内建宿主效应（标签 + runXHost）。未实现的条目先占位，entry 只对已实现的
 -- 表项自动预装；用户自定义效应仍须自己 handle 成 Nil。
 export builtinEffects : List BuiltinEffect
 builtinEffects =
-  [ BuiltinEffect "Base.EffConsole.ConsoleOp" "@vuna@runConsoleHost" "Base.EffConsole.runConsoleHost" "default",
-    BuiltinEffect "Base.EffFs.FsOp" "@vuna@runFsHost" "Base.EffFs.runFsHost" "default",
-    BuiltinEffect "Base.EffClock.ClockOp" "@vuna@runClockHost" "Base.EffClock.runClockHost" "default",
-    BuiltinEffect "Base.EffEnv.EnvOp" "@vuna@runEnvHost" "Base.EffEnv.runEnvHost" "default",
-    BuiltinEffect "Base.EffProcess.ProcessOp" "@vuna@runProcessHost" "Base.EffProcess.runProcessHost" "default",
-    BuiltinEffect "Base.EffExit.ExitOp" "@vuna@runExitHost" "Base.EffExit.runExitHost" "default",
-    BuiltinEffect "Base.EffStdin.StdinOp" "@vuna@runStdinHost" "Base.EffStdin.runStdinHost" "default",
-    BuiltinEffect "Base.EffArgs.ArgsOp" "@vuna@runArgsHost" "Base.EffArgs.runArgsHost" "default",
-    BuiltinEffect "Base.EffNet.NetOp" "@vuna@runNetHost" "Base.EffNet.runNetHost" "default",
-    BuiltinEffect "Base.EffRef.RefOp" "" "" "default"
+  [ BuiltinEffect "Base.Effect.Console.ConsoleOp" "@vuna@runConsoleHost" "Base.Effect.Console.runConsoleHost" "default",
+    BuiltinEffect "Base.Effect.Fs.FsOp" "@vuna@runFsHost" "Base.Effect.Fs.runFsHost" "default",
+    BuiltinEffect "Base.Effect.Clock.ClockOp" "@vuna@runClockHost" "Base.Effect.Clock.runClockHost" "default",
+    BuiltinEffect "Base.Effect.Env.EnvOp" "@vuna@runEnvHost" "Base.Effect.Env.runEnvHost" "default",
+    BuiltinEffect "Base.Effect.Process.ProcessOp" "@vuna@runProcessHost" "Base.Effect.Process.runProcessHost" "default",
+    BuiltinEffect "Base.Effect.Exit.ExitOp" "@vuna@runExitHost" "Base.Effect.Exit.runExitHost" "default",
+    BuiltinEffect "Base.Effect.Stdin.StdinOp" "@vuna@runStdinHost" "Base.Effect.Stdin.runStdinHost" "default",
+    BuiltinEffect "Base.Effect.Args.ArgsOp" "@vuna@runArgsHost" "Base.Effect.Args.runArgsHost" "default",
+    BuiltinEffect "Base.Effect.Net.NetOp" "@vuna@runNetHost" "Base.Effect.Net.runNetHost" "default",
+    BuiltinEffect "Base.Effect.Ref.RefOp" "" "" "default"
   ]
 
 -- | 标签对应的 `runXHost` 全名；不是内建宿主效应时返回空串。
@@ -185,14 +186,14 @@ primEraseName = "prim_erase"
 export mainShowDefName : String
 mainShowDefName = "@vuna@main_show"
 
--- | 关闭动作入口（`Base.Eff.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
+-- | 关闭动作入口（`Base.Effect.Core.runPure : Eff [] a -> a`）的 canonical 名（协议常量）。
 export effRunName : String
-effRunName = "Base.Eff.runPure"
+effRunName = "Base.Effect.Core.runPure"
 
--- | main 入口的隐藏执行名（`Base.Eff.runMain`，未导出）：codegen 的 main 钩子引用它，
+-- | main 入口的隐藏执行名（`Base.Effect.Core.runMain`，未导出）：codegen 的 main 钩子引用它，
 -- 用于执行带内建宿主效应行的 `main`（`runPure` 只收 Nil）。
 export effMainRunName : String
-effMainRunName = "Base.Eff.runMain"
+effMainRunName = "Base.Effect.Core.runMain"
 
 -- ---------------------------------------------------------------
 -- 调试构造：语言级 debug 名字
@@ -202,7 +203,7 @@ effMainRunName = "Base.Eff.runMain"
 --     构建由 `Loader.Resolve` 拒绝；
 --   * `todo "msg"`：debug-only 的未实现占位，语义同 assert(False, msg)。
 -- 用户面调试输出统一走内置宏 `dbg!`（见下方编译器 tracing 段）；`DebugShow` / `dbgShow`
--- 是 `Base.Show` 里基于 `dbg!` 的库层。
+-- 是 `Base.Trait.Show` 里基于 `dbg!` 的库层。
 -- ---------------------------------------------------------------
 -- 编译器 tracing（内置宏 `dbg!` 的隐藏后端）
 -- ---------------------------------------------------------------
@@ -293,57 +294,57 @@ isDebugOnlyName name = name == assertIntrinsicName || name == todoIntrinsicName
 -- 形状：`Row : Type 1`（`Nil`/`Cons`；二元行的标签可包 `Named`），
 -- `Member` 3 索引（实例名、标签、行）或 2 索引（标签、行），
 -- `rowRem : Type -> Row -> Row`（axiom，由编译器按标签值结构相等归约）。
--- | 效应行族 `Base.Eff.Row`（Type-1 数据）。
+-- | 效应行族 `Base.Effect.Core.Row`（Type-1 数据）。
 export effRowFamilyName : String
-effRowFamilyName = "Base.Eff.Row"
+effRowFamilyName = "Base.Effect.Core.Row"
 
--- | 空行构造子 `Base.Eff.Row.Nil`。
+-- | 空行构造子 `Base.Effect.Core.Row.Nil`。
 export effRowNilCtor : String
-effRowNilCtor = "Base.Eff.Row.Nil"
+effRowNilCtor = "Base.Effect.Core.Row.Nil"
 
--- | 行扩展构造子 `Base.Eff.Row.(::)`（标签 + 尾行）。
+-- | 行扩展构造子 `Base.Effect.Core.Row.(::)`（标签 + 尾行）。
 export effRowConsCtor : String
-effRowConsCtor = "Base.Eff.Row.::"
+effRowConsCtor = "Base.Effect.Core.Row.::"
 
--- | 命名标签 `Base.Eff.Named`（二元行）：`Named n e` 把实例名并进标签类型。
+-- | 命名标签 `Base.Effect.Core.Named`（二元行）：`Named n e` 把实例名并进标签类型。
 export effNamedName : String
-effNamedName = "Base.Eff.Named"
+effNamedName = "Base.Effect.Core.Named"
 
--- | 行删除 `Base.Eff.rowRem`（axiom，由编译器归约）。
+-- | 行删除 `Base.Effect.Core.rowRem`（axiom，由编译器归约）。
 export effRowRemName : String
-effRowRemName = "Base.Eff.rowRem"
+effRowRemName = "Base.Effect.Core.rowRem"
 
--- | 行拼接 `Base.Eff.rowAppend`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
+-- | 行拼接 `Base.Effect.Core.rowAppend`（axiom，由编译器归约：Nil 单位 + Cons 递归）。
 export effRowAppendName : String
-effRowAppendName = "Base.Eff.rowAppend"
+effRowAppendName = "Base.Effect.Core.rowAppend"
 
--- | 行成员证明族 `Base.Eff.Member`（Type-1 归纳族）。
+-- | 行成员证明族 `Base.Effect.Core.Member`（Type-1 归纳族）。
 export effMemberFamilyName : String
-effMemberFamilyName = "Base.Eff.Member"
+effMemberFamilyName = "Base.Effect.Core.Member"
 
--- | 行成员证明构造子 `Base.Eff.Member.Here`（头部命中）。
+-- | 行成员证明构造子 `Base.Effect.Core.Member.Here`（头部命中）。
 export effMemberHereCtor : String
-effMemberHereCtor = "Base.Eff.Member.Here"
+effMemberHereCtor = "Base.Effect.Core.Member.Here"
 
--- | 行成员证明构造子 `Base.Eff.Member.There`（跳过头部）。
+-- | 行成员证明构造子 `Base.Effect.Core.Member.There`（跳过头部）。
 export effMemberThereCtor : String
-effMemberThereCtor = "Base.Eff.Member.There"
+effMemberThereCtor = "Base.Effect.Core.Member.There"
 
--- | 效应动作类型 `Base.Eff.Eff`（`Eff : Row -> Type -> Type`，用户面效果类型）。
+-- | 效应动作类型 `Base.Effect.Core.Eff`（`Eff : Row -> Type -> Type`，用户面效果类型）。
 export effTypeName : String
-effTypeName = "Base.Eff.Eff"
+effTypeName = "Base.Effect.Core.Eff"
 
--- | `Base.Eff.EffUnit`：Eff 的 dummy thunk 参数类型（codegen 包 `MkEff` 时用作
+-- | `Base.Effect.Core.EffUnit`：Eff 的 dummy thunk 参数类型（codegen 包 `MkEff` 时用作
 -- `fun (_ : EffUnit) -> ...` 的标注；不进求值语义）。
 export effUnitTypeName : String
-effUnitTypeName = "Base.Eff.EffUnit"
+effUnitTypeName = "Base.Effect.Core.EffUnit"
 
--- | `Base.Eff.Eff.MkEff`：Eff 的唯一构造子（codegen 构造宿主原语动作时引用）。
+-- | `Base.Effect.Core.Eff.MkEff`：Eff 的唯一构造子（codegen 构造宿主原语动作时引用）。
 export effMkCtor : String
-effMkCtor = "Base.Eff.Eff.MkEff"
+effMkCtor = "Base.Effect.Core.Eff.MkEff"
 
 -- | 默认实例名：裸标签条目 `Cons "default" e Nil` 与 `handleWithAt` 共用；
--- 单点定义在 `Base.Eff.defaultInstance`，此处是编译器侧的镜像常量。
+-- 单点定义在 `Base.Effect.Core.defaultInstance`，此处是编译器侧的镜像常量。
 export effDefaultInstance : String
 effDefaultInstance = "default"
 
@@ -494,30 +495,30 @@ strTypeName = "String"
 export floatTypeName : String
 floatTypeName = "Float"
 
--- | Bool 的完整符号身份：它是 base 里的普通 data 声明，身份 = `Base.Bool.Bool`。
+-- | Bool 的完整符号身份：它是 base 里的普通 data 声明，身份 = `Base.Data.Bool.Bool`。
 export boolTypeName : String
-boolTypeName = "Base.Bool.Bool"
+boolTypeName = "Base.Data.Bool.Bool"
 
 -- | canonical `True` 构造子的完整符号。
 export boolTrueCtor : String
-boolTrueCtor = "Base.Bool.Bool.True"
+boolTrueCtor = "Base.Data.Bool.Bool.True"
 
 -- | canonical `False` 构造子的完整符号。
 export boolFalseCtor : String
-boolFalseCtor = "Base.Bool.Bool.False"
+boolFalseCtor = "Base.Data.Bool.Bool.False"
 
--- | Nat 的完整符号身份（`Base.Nat.Nat`）；运行时表示固定为 OCaml `int`
+-- | Nat 的完整符号身份（`Base.Data.Nat.Nat`）；运行时表示固定为 OCaml `int`
 -- （Zero=0、Succ n=n+1 饱和），所以**不生成**变体类型（见 Codegen.Decl）。
 export natTypeName : String
-natTypeName = "Base.Nat.Nat"
+natTypeName = "Base.Data.Nat.Nat"
 
 -- | canonical `Zero` 构造子的完整符号。
 export natZeroCtor : String
-natZeroCtor = "Base.Nat.Nat.Zero"
+natZeroCtor = "Base.Data.Nat.Nat.Zero"
 
 -- | canonical `Succ` 构造子的完整符号。
 export natSuccCtor : String
-natSuccCtor = "Base.Nat.Nat.Succ"
+natSuccCtor = "Base.Data.Nat.Nat.Succ"
 
 -- | 类型位置的放行面：primitive 类型名 + 内建类型构造子。
 export isIntrinsicTypeName : String -> Bool
@@ -525,15 +526,15 @@ isIntrinsicTypeName name = memName name preludeTypeNames
 
 -- | List 的完整符号身份（base 里普通 data 声明，不是短名）：List 的判定只认它。
 export listFamilyName : String
-listFamilyName = "Base.List.List"
+listFamilyName = "Base.Data.List.List"
 
 -- | canonical `Nil` 构造子的完整符号。
 export listNilCtor : String
-listNilCtor = "Base.List.List.Nil"
+listNilCtor = "Base.Data.List.List.Nil"
 
 -- | canonical `Cons` 构造子的完整符号。
 export listConsCtor : String
-listConsCtor = "Base.List.List.::"
+listConsCtor = "Base.Data.List.List.::"
 
 -- ---------------------------------------------------------------
 -- canonical 族表
@@ -574,8 +575,8 @@ canonicalFamilies =
   ]
 
 -- | 构造子拼写的等价键：列表/行族的 cons 在库里可能叫 `Cons`、`::` 或 `(::)`，
--- 过渡期按「最后一段是这三种之一」归一（`Base.List.List.Cons` / `Base.List.List.::`
--- / `Base.List.List.(::)` 同键），其余名字原样。
+-- 过渡期按「最后一段是这三种之一」归一（`Base.Data.List.List.Cons` / `Base.Data.List.List.::`
+-- / `Base.Data.List.List.(::)` 同键），其余名字原样。
 export ctorSpellingKey : String -> String
 ctorSpellingKey name =
   if endsWith ".Cons" name || endsWith ".RCons" name || endsWith ".VCons" name || endsWith ".::" name || endsWith ".(::)" name then
@@ -630,47 +631,47 @@ isFfiScalarName name = memName name ffiScalarNames
 -- | 模板字符串插值的 trait 的 canonical 名。编译器把 `${e}` 降级成对
 -- `interp` 方法投影的调用（`Loader.Resolve`），转换语义完全由 base 里的实例决定。
 export interpTypeName : String
-interpTypeName = "Base.Interp.Interp"
+interpTypeName = "Base.Trait.Interp.Interp"
 
 -- | 模板插值 trait 的 `interp` 方法的 canonical 名。
 export interpMethodName : String
-interpMethodName = "Base.Interp.interp"
+interpMethodName = "Base.Trait.Interp.interp"
 
 -- | 字面量转换：`FromString` trait 的 canonical 名（checking 位置的字符串字面量按
--- 期望类型降级时用；声明在 base 的 `Base.FromString`）。
+-- 期望类型降级时用；声明在 base 的 `Base.Trait.FromString`）。
 export fromStringTypeName : String
-fromStringTypeName = "Base.FromString.FromString"
+fromStringTypeName = "Base.Trait.FromString.FromString"
 
 -- | `FromString` 的方法投影 canonical 名。
 export fromStringMethodName : String
-fromStringMethodName = "Base.FromString.fromString"
+fromStringMethodName = "Base.Trait.FromString.fromString"
 
--- | 字面量转换：`FromInt` trait 的 canonical 名（声明在 base 的 `Base.FromInt`）。
+-- | 字面量转换：`FromInt` trait 的 canonical 名（声明在 base 的 `Base.Trait.FromInt`）。
 export fromIntTypeName : String
-fromIntTypeName = "Base.FromInt.FromInt"
+fromIntTypeName = "Base.Trait.FromInt.FromInt"
 
 -- | `FromInt` 的方法投影 canonical 名。
 export fromIntMethodName : String
-fromIntMethodName = "Base.FromInt.fromInt"
+fromIntMethodName = "Base.Trait.FromInt.fromInt"
 
--- | 字面量转换：`FromFloat` trait 的 canonical 名（声明在 base 的 `Base.Float`）。
+-- | 字面量转换：`FromFloat` trait 的 canonical 名（声明在 base 的 `Base.Data.Float`）。
 export fromFloatTypeName : String
-fromFloatTypeName = "Base.Float.FromFloat"
+fromFloatTypeName = "Base.Data.Float.FromFloat"
 
 -- | `FromFloat` 的方法投影 canonical 名。
 export fromFloatMethodName : String
-fromFloatMethodName = "Base.Float.fromFloat"
+fromFloatMethodName = "Base.Data.Float.fromFloat"
 
 -- | 所有内建声明（基础表；浮点表另立，见 `floatIntrinsics`）。用户可见项进 Loader/prelude；
 -- 内部 `bi_*` 只服务 codegen。分成两张表是为了让每段列表字面量的项大小留在
 -- seed 擦除检查的 fuel 内（bootstrap 约束，见 docs/reference/bootstrap.md）。
 baseIntrinsics : List Intrinsic
--- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 `Base.Eff` 标签 + handler）。
+-- 效果原语（`prim_*` 名；任何包可直接使用，推荐经 `Base.Effect.Core` 标签 + handler）。
 -- 精化器合成的比较/相等特化名（内部：不对用户源码可见）。
 -- 内建类型构造子 Array / IORef 的原语。
 -- 纯 Array 原语不触碰外部世界；IORef 是 `Eff []` 动作。
 -- 空数组字面量：non-expansive 的 OCaml `[||]`，让 `HashMap` 的空表这类零参多态值可泛化。
--- 字节切片（clamp 语义与 Base.String.substring 一致），避免 List 桥接。
+-- 字节切片（clamp 语义与 Base.Data.String.substring 一致），避免 List 桥接。
 -- 编译器内部缓存原语（Marshal 纯数据；含闭包会在运行期失败）。
 -- 异步子进程（workspace 并行 check）。spawn 返回 pid，wait 返回退出码。
 -- Nat 度量/算术：运行时表示是 OCaml int（Zero=0、Succ 饱和 +1）。
@@ -680,17 +681,17 @@ baseIntrinsics : List Intrinsic
 -- 供工具链的 stderr 报告使用；`prim_fail` 供工具链的 fuel 耗尽路径使用。
 -- 内部 cast（`visible = False`）：只由精化器插入，runtime 是 OCaml 的 `%identity`；
 -- 运行时位置的不透明擦除依赖值靠它进出（见 docs/reference/effects.md §5/§6）。
--- 运行时续延：一次性 effect handler，只供 `Base.Eff` 的包装使用；类型在源码层由 Base.Eff 的 API 收紧，
+-- 运行时续延：一次性 effect handler，只供 `Base.Effect.Core` 的包装使用；类型在源码层由 Base.Effect.Core 的 API 收紧，
 -- 运行时表达式用 Obj.magic 桥接（与不透明 cast 同一套表示）。
 -- 最小并发（OCaml 5 Domain）。只允许在 main 域 fork/await；任务体应是
 -- 行已被处理干净的 Eff（Base.EffAsync 的 API 强制 Nil）。
 -- 单线程 fiber 调度器原语（Base.EffSched 的信任边界；runtime = dtp_sched_*）。
 -- 原生睡眠：微秒；真实实现是 `Unix.sleepf`（阻塞，非忙等）。
 -- clock 族（与 effTimeUs 同族）；interp 不归约（OpNone），效果程序只 compile+run。
--- `Base.EffClock` 与工具链的 sleep 都直接使用它。
+-- `Base.Effect.Clock` 与工具链的 sleep 都直接使用它。
 -- 语言级调试构造（不经过宿主层；assert/todo 由 Resolve 在 release 构建拒绝）。
 -- `+ - * /` 只作为 codegen / interp 的映射目标（源码里的 `+` 等由 Loader
--- 换成 `Base.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
+-- 换成 `Base.Trait.Num` 的方法别名，精化期再特化回这四个内建），因此不再对用户源码可见。
 -- 位运算（可见：库与编译器直接用；语义见 `IntrinsicOp` 的注释与 primitives.md）。
 baseIntrinsics =
   [ Intrinsic "+" (IFun IInt (IFun IInt IInt)) OpAdd False,
@@ -989,7 +990,7 @@ effIntrinsics =
   ]
 
 -- | 编译器 tracing + 可观测性的隐藏原语（`visible = False`）：只由内置宏
--- `dbg!` / `obs!` / `mark!` 展开与 `Base.Obs` 引用，用户源码不可写。签名在此表；
+-- `dbg!` / `obs!` / `mark!` 展开与 `Base.Data.Obs` 引用，用户源码不可写。签名在此表；
 -- `Elab.Prelude` 会把它们补进 prelude globals（不进用户可见名单），`Core.Eval`
 -- 在 interp 里归约为 no-op。
 export internalIntrinsics : List Intrinsic

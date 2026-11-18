@@ -24,10 +24,10 @@ import Vuna.Compiler.Loader.Modules
 import Vuna.Compiler.Loader.Resolve
 import Vuna.Compiler.Base.Intrinsics
 import Vuna.Compiler.Frontend.Packages.Pkg
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
 
 -- imports 模块的**可见 fixity 表**（Module 里已含各自的 import 闭包）。
 -- 本模块声明由调用方放在返回列表最前，查找时第一处匹配生效。
@@ -854,7 +854,7 @@ unusedImportWarnings : List Module -> List Import -> List Decl -> List Decl -> L
 unusedImportWarnings modules imports decls sourceDecls reexports =
   let
     names0 = concatMap declGlobalNames decls
-    -- 模板字符串降级会合成 `Base.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
+    -- 模板字符串降级会合成 `Base.Trait.Interp.interp`（Resolve.lowerTemplate）：它是解析**之后**
     -- 注入的 canonical 名，不算作 import 使用。源码没有显式引用 interp 时剔除合成名，
     -- 只被模板串引用的 import 仍报 unused。
     names =
@@ -863,7 +863,7 @@ unusedImportWarnings modules imports decls sourceDecls reexports =
     nameSet = HashMap.ofNames names
   in unusedImportWarningsGo modules nameSet reexports imports
 
--- | 源码里是否显式提到 `interp` / `Base.Interp.interp`（未解析 AST 的名字扫描）。
+-- | 源码里是否显式提到 `interp` / `Base.Trait.Interp.interp`（未解析 AST 的名字扫描）。
 interpReferencedInSource : List Decl -> Bool
 interpReferencedInSource decls =
   let

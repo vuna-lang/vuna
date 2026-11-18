@@ -12,8 +12,8 @@ module Vuna.Lsp.Protocol where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Json
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
 export module Vuna.Json.Frame
 export module Vuna.Json.Rpc
 
@@ -57,7 +57,7 @@ export dropDotCodes : List Int -> List Int
 dropDotCodes [] = []
 dropDotCodes (c :: rest) = if c == 46 then dropDotCodes rest else c :: rest
 
--- | 去掉字符串末尾的连续 `.`（`Base.List.` → `Base.List`）。
+-- | 去掉字符串末尾的连续 `.`（`Base.Data.List.` → `Base.Data.List`）。
 export stripTrailingDots : String -> String
 stripTrailingDots s = strPack (reverse (dropDotCodes (reverse (strUnpack s))))
 
@@ -68,7 +68,7 @@ lastElem (x :: rest) = case rest of
   [] => Just x
   _ => lastElem rest
 
--- | 点分名的最后一段（`Base.List.map` → `map`）。
+-- | 点分名的最后一段（`Base.Data.List.map` → `map`）。
 export lastSegment : String -> String
 lastSegment token = case lastElem (splitOnDot token) of
   Nothing => token
@@ -191,7 +191,7 @@ export lineAt1 : List String -> Int -> String
 lineAt1 [] n = ""
 lineAt1 (x :: rest) n = if n <= 1 then x else lineAt1 rest (n - 1)
 
--- | 光标（1-based 行 / 列）处的名字：允许限定名（`Base.List.map`）并去掉尾部 `.`；
+-- | 光标（1-based 行 / 列）处的名字：允许限定名（`Base.Data.List.map`）并去掉尾部 `.`；
 -- 返回 (起始列, 名字)，不在名字上给 `Nothing`。
 export tokenAtCursor : String -> Int -> Int -> Maybe (Pair Int String)
 tokenAtCursor text line col =

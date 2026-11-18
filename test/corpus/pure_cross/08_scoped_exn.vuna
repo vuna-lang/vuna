@@ -1,6 +1,6 @@
--- `Base.Eff.handleSelf`：`Try` 的子计算在同一 exn handler 下重跑（无 fuel）。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffExn as EffExn
+-- `Base.Effect.Core.handleSelf`：`Try` 的子计算在同一 exn handler 下重跑（无 fuel）。
+import Base.Effect.Core as Eff
+import Base.Effect.Exn as EffExn
 import Base.Data.Nat as Nat
 import Base.Data.Result as Result
 

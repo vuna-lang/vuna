@@ -18,8 +18,8 @@ import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Hash
 import Base.Container.HashMap as HashMap
 import Base.Data.List as List
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
 
 export record SplitFile(..) where
   splitName : String

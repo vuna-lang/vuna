@@ -1,4 +1,4 @@
--- 基库 `Base.String.split` 同形态（跨函数 fuel 传递 + 守卫）。
+-- 基库 `Base.Data.String.split` 同形态（跨函数 fuel 传递 + 守卫）。
 import Base.Data.List as List
 import Base.Data.String as String
 

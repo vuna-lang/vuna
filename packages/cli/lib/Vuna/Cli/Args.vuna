@@ -19,9 +19,9 @@ module Vuna.Cli.Args where
 import Vuna.Cli.Suggest
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Driver.CompilerCli
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Process as EffProcess
 
 -- ---------------------------------------------------------------
 -- 参数说明表
@@ -64,7 +64,7 @@ export record Parsed(..) where
   -- | 位置参数，保持用户给的出现顺序。
   positionals : List String
 
--- | 内部：结构化解析结果（`Base.Result` 的错误固定是 `String`，不能携带结构化
+-- | 内部：结构化解析结果（`Base.Data.Result` 的错误固定是 `String`，不能携带结构化
 -- [Vuna.Cli.Args.ArgErr]）。
 data ParseOut : Type where
   -- | 解析成功。

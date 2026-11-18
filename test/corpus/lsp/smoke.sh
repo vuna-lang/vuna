@@ -58,7 +58,7 @@
 #      约束，枚举会生成不可达分支）不给动作（安全降级）。
 #  33. 模块 docstring 的唯一真源：打开中的缓冲优先——同一模块的模块 hover 与符号 hover
 #      在「它自己的文件」与「引用它的文件」两处必须是同一版本（修复前一处缓冲、一处读盘）。
-#  34. 模块名本身是完整 token（`Base.Maybe Int` / `P.Sub.T`）：中间段也能 hover/definition；
+#  34. 模块名本身是完整 token（`Base.Data.Maybe Int` / `P.Sub.T`）：中间段也能 hover/definition；
 #      但名字后面的 `.` / 空格不算模块名的一部分（相邻两格不会跳变）。
 #  35. documentSymbol 节点带 `detail`（函数 / 类型头 / ctor / field 各自的签名文本）；
 #      成员（ctor/field）hover 的 docstring 不被缓冲覆盖清空。
@@ -1193,10 +1193,10 @@ check_not_contains "引用已打开模块时不回落到磁盘 docstring" "$b3" 
 check_contains "打开着的模块里符号 hover 的 docstring 用缓冲" "$b4" '缓冲版函数文档'
 check_not_contains "打开着的模块里符号 hover 不回落到 Index 的磁盘 docstring" "$b4" '磁盘版函数文档'
 
-# ---- 26c) 模块名本身是完整 token（Base.Maybe Int）：中间段 / 末段都要命中 ----
-# 回归点（本次修复）：前缀候选只含「更长的 token 的前缀」，t : Base.Maybe Int 光标落在
-# Maybe 时被当成普通 token → hover/definition 都 null（而 `Base.List.map` 里的 List 正常）。
-# 修复后候选里加了整个 token，Base.Maybe 这种「token 就是模块名」的写法也能解析。
+# ---- 26c) 模块名本身是完整 token（Base.Data.Maybe Int）：中间段 / 末段都要命中 ----
+# 回归点（本次修复）：前缀候选只含「更长的 token 的前缀」，t : Base.Data.Maybe Int 光标落在
+# Maybe 时被当成普通 token → hover/definition 都 null（而 `Base.Data.List.map` 里的 List 正常）。
+# 修复后候选里加了整个 token，Base.Data.Maybe 这种「token 就是模块名」的写法也能解析。
 mkdir -p "$tmp/modtokws/lib"
 printf '[package]\nname = "modtokws"\n\n[dependencies]\nvuna-base = "%s/packages/base"\n' "$repo" >"$tmp/modtokws/vuna.toml"
 cat >"$tmp/modtokws/lib/Tok.vuna" <<'VEOF'
@@ -1204,36 +1204,36 @@ module Tok where
 
 import Base.Data.Maybe as Maybe
 
-v : Base.Maybe.Maybe Int
-v = Base.Maybe.Nothing
+v : Base.Data.Maybe.Maybe Int
+v = Base.Data.Maybe.Nothing
 VEOF
 tokdoc_uri="file://$tmp/modtokws/lib/Tok.vuna"
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
-  # line4 char9 = `Base.Maybe.Maybe` 的 Maybe（模块名是 token 的前缀）
-  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
-  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":9}}}'
-  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":5,"character":9}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Data.Maybe.Maybe Int\nv = Base.Data.Maybe.Nothing\n"}}}'
+  # line4 char9 = `Base.Data.Maybe.Maybe` 的 Maybe（模块名是 token 的前缀）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":14}}}'
+  frame_line '{"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":14}}}'
+  frame_line '{"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":5,"character":14}}}'
   frame_line '{"jsonrpc":"2.0","id":5,"method":"shutdown","params":null}'
   frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
 } | "$VUNA" lsp >"$tmp/modtok.out" 2>/dev/null
 t2=$(lsp_frame_id "$tmp/modtok.out" 2)
 t3=$(lsp_frame_id "$tmp/modtok.out" 3)
 t4=$(lsp_frame_id "$tmp/modtok.out" 4)
-check_contains "类型里 Base.Maybe.Maybe 的模块段 hover 出模块名" "$t2" 'module Base.Maybe'
+check_contains "类型里 Base.Data.Maybe.Maybe 的模块段 hover 出模块名" "$t2" 'module Base.Data.Maybe'
 check_contains "类型里的模块段 hover 带模块 docstring" "$t2" '可选值类型'
-check_contains "类型里的模块段 definition 跳到 Maybe.vuna" "$t3" '/Base/Maybe.vuna'
-check_contains "值里 Base.Maybe.Nothing 的模块段 hover 出模块名" "$t4" 'module Base.Maybe'
+check_contains "类型里的模块段 definition 跳到 Maybe.vuna" "$t3" '/Base/Data/Maybe.vuna'
+check_contains "值里 Base.Data.Maybe.Nothing 的模块段 hover 出模块名" "$t4" 'module Base.Data.Maybe'
 
 # ---- 26d) 模块名候选不吃「名字后面的分隔点」----
-# Base.Maybe Int 里 Base.Maybe 之后的空格不属于模块名；Base.List.map 的 . 也不属于
-# Base.List。光标在这些位置时不该报模块（否则同一行的 hover 在相邻两格跳变）。
+# Base.Data.Maybe Int 里 Base.Data.Maybe 之后的空格不属于模块名；Base.Data.List.map 的 . 也不属于
+# Base.Data.List。光标在这些位置时不该报模块（否则同一行的 hover 在相邻两格跳变）。
 {
   frame_line '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}'
-  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Maybe.Maybe Int\nv = Base.Maybe.Nothing\n"}}}'
-  # line4 char14 = Base.Maybe 后面的 `.`（属于限定名，不是模块名的最后一格）
-  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":14}}}'
+  frame_line '{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"'"$tokdoc_uri"'","languageId":"vuna","version":1,"text":"module Tok where\n\nimport Base.Data.Maybe as Maybe\n\nv : Base.Data.Maybe.Maybe Int\nv = Base.Data.Maybe.Nothing\n"}}}'
+  # line4 char19 = Base.Data.Maybe 后面的 `.`（属于限定名，不是模块名的最后一格）
+  frame_line '{"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"'"$tokdoc_uri"'"},"position":{"line":4,"character":19}}}'
   frame_line '{"jsonrpc":"2.0","id":3,"method":"shutdown","params":null}'
   frame_line '{"jsonrpc":"2.0","method":"exit","params":null}'
 } | "$VUNA" lsp >"$tmp/modsep.out" 2>/dev/null

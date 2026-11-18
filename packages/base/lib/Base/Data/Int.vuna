@@ -1,0 +1,39 @@
+-- | `Int` 的实例宿主。`Int` 是 language primitive 类型（没有 data 声明）：类型身份、字面量、表示与算术/比较原语都由编译器提供。本模块按「实例跟类型模块走」的落点规则承载 `Int` 的 `Eq` / `Ord` / `Num` / `Show` / `Hashable` 实例，`Int` 相关辅助函数也放这里。
+module Base.Data.Int where
+
+import Base.Trait.Eq
+import Base.Trait.Hashable
+import Base.Trait.Neg
+import Base.Trait.Num
+import Base.Trait.Ord
+-- `Show` 实例跟类型模块走（Int 是 primitive，无 data 声明）。
+import Base.Trait.Show
+
+-- primitive 没有构造子可匹配：实例体写内建运算符，由编译器特化，不会自递归。
+instance Eq Int where
+  (==) x y = x == y
+  (/=) x y = x /= y
+
+instance Ord Int where
+  (<) x y = x < y
+  (<=) x y = x <= y
+  (>) x y = x > y
+  (>=) x y = x >= y
+
+-- 方法体写内建运算符，由精化器特化成 `bi_*_int` 原语（`+` 是 `add` 别名，不自递归）。
+instance Num Int where
+  (+) x y = x + y
+  (-) x y = x - y
+  (*) x y = x * y
+  (/) x y = x / y
+
+-- `Int` 的展示走内建 `strFromInt`（primitive 类型没有构造子可模式匹配）。
+instance Neg Int where
+  negate x = 0 - x
+
+instance Show Int where
+  show x = strFromInt x
+
+-- 哈希：Int 直接用自身值（容器内部归一化到 0..1023 桶）。
+instance Hashable Int where
+  hash n = n

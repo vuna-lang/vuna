@@ -26,14 +26,14 @@ import Vuna.Compiler.Driver.CompilerCli
 import Vuna.Cli.Args
 import Vuna.Cli.Spec
 import Vuna.Files
-import Base.Effect.EffConsole as EffConsole
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffProcess as EffProcess
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffExit as EffExit
-import Base.Effect.EffArgs as EffArgs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Env as EffEnv
+import Base.Effect.Process as EffProcess
+import Base.Effect.Types as EffTypes
+import Base.Effect.Fs as EffFs
+import Base.Effect.Clock as EffClock
+import Base.Effect.Exit as EffExit
+import Base.Effect.Args as EffArgs
 
 -- | 内部：按第一个 `--` 切分：前段是自身参数，后段原样透传。
 splitPassthrough : List String -> Pair (List String) (List String)

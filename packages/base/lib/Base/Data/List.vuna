@@ -1,0 +1,233 @@
+-- | 列表类型与常用操作。`List(..)` 导出构造子（`Nil` / `(::)`），可直接模式匹配与结构递归；所有操作都是持久、不可变的，返回新列表而不修改入参。`Semigroup` / `Monoid` 以 `append` 为拼接、`[]` 为单位元；`Eq` / `Ord`（字典序）/ `Show` / `Hashable` / `Foldable` / `Traversable` / `Monad` 实例落在本模块。
+module Base.Data.List where
+
+import Base.Data.Pair
+import Base.Data.Maybe
+import Base.Data.Nat
+import Base.Data.Bool
+import Base.Trait.Foldable
+import Base.Trait.Monad
+import Base.Trait.Monoid
+import Base.Internal.Operator
+import Base.Trait.Traversable
+-- `mem` 的 `==` 在刚性类型上提升成 Dict_Eq；显式 import 保证类存在与 split 单元顺序。
+import Base.Trait.Eq
+import Base.Trait.Hashable
+-- `==` / `<=` 是 Eq / Ord 的方法名别名，base 模块不自动注入 Prelude，需要它们可见。
+import Base.Trait.Ord
+-- 算术运算符的 fixity 在 Base.Internal.Operator（经 Base.Data.Int 进入闭包）；range 需要它。
+import Base.Data.Int
+import Base.Trait.Show
+import Base.Trait.Num
+
+-- | 单链表：`Nil` 为空，`(::)` 持有头 `a` 与尾 `List a`。构造子导出，`(::)` 是构造子名（表达式与 pattern 通用）；长度与元素个数不受类型层约束。
+export data List a(..) : Type where
+  -- | 空列表。
+  Nil : List a
+  -- | 非空列表：头 `a` 与尾 `List a`。
+  (::) : a -> List a -> List a
+
+-- | 拼接两个列表：复制 `xs` 的全部 cons 单元、共享 `ys`（代价 O(xs 的长度)）。
+export append : List a -> List a -> List a
+append [] ys = ys
+append (x :: xs) ys = x :: append xs ys
+
+-- | 内部：把 `xs` 逆序前插到 `acc` 上（尾递归，供 `reverse` / `concatMapGo` 复用）。
+reverseOnto : List a -> List a -> List a
+reverseOnto [] acc = acc
+reverseOnto (x :: xs) acc = reverseOnto xs (x :: acc)
+
+-- | 反转列表。
+export reverse : List a -> List a
+reverse xs = reverseOnto xs []
+
+-- 度量是 Nat；内部用 Int 累加，末尾一次 `natFromInt`，避免逐元素 Nat 加法。
+-- | 列表长度（`Nat`，线性）。
+export length : List a -> Nat
+length xs = natFromInt (lengthInt xs)
+
+-- | 内部：以 `Int` 累加的列表长度（`length` 的实现，末尾一次 `natFromInt`，避免逐元素 Nat 加法）。
+lengthInt : List a -> Int
+lengthInt [] = 0
+lengthInt (x :: xs) = 1 + lengthInt xs
+
+-- | 对每个元素应用函数。
+export map : (a -> b) -> List a -> List b
+map f [] = []
+map f (x :: xs) = f x :: map f xs
+
+-- | 保留满足谓词的元素。
+export filter : (a -> Bool) -> List a -> List a
+filter p [] = []
+filter p (x :: xs) = if p x then x :: filter p xs else filter p xs
+
+-- | 左折叠。
+export foldl : (b -> a -> b) -> b -> List a -> b
+foldl f acc [] = acc
+foldl f acc (x :: xs) = foldl f (f acc x) xs
+
+-- | 右折叠。
+export foldr : (a -> b -> b) -> b -> List a -> b
+foldr f acc [] = acc
+foldr f acc (x :: xs) = f x (foldr f acc xs)
+
+-- 尾递归 accumulator + 末尾 reverse：每段只复制一次，总代价 O(所有段长之和)。
+-- | 对每个元素执行返回列表的函数并按序拼接。
+export concatMap : (a -> List b) -> List a -> List b
+concatMap f xs = concatMapGo f xs []
+
+-- | 内部：`concatMap` 的尾递归 accumulator 实现。每段逆序前插进 `acc`，最后整体 `reverse`，总代价 O(所有段长之和)。
+concatMapGo : (a -> List b) -> List a -> List b -> List b
+concatMapGo f [] acc = reverse acc
+concatMapGo f (x :: rest) acc = concatMapGo f rest (append (reverse (f x)) acc)
+
+-- | 列表成员判断（`Eq` 字典）。
+export mem : Eq a => a -> List a -> Bool
+mem x [] = False
+mem x (y :: rest) = x == y || mem x rest
+
+-- | 字符串列表成员判断（`Eq` 的 String 特化）。
+export memName : String -> List String -> Bool
+memName name [] = False
+memName name (x :: rest) = x == name || memName name rest
+
+-- | 按键查找 `Pair` 列表中的值。
+export lookupPair : String -> List (Pair String v) -> Maybe v
+lookupPair name [] = Nothing
+lookupPair name (p :: rest) = if firstOf p == name then Just (secondOf p) else lookupPair name rest
+
+-- 名字去重/包含判定都是字符串列表上的线性扫描：调用点分布在预精化热路径，
+-- 常数比建表更重要。
+-- | 保序字符串去重：重复的名字只保留**最后一次**出现（`[a, b, a]` → `[b, a]`）。
+export nubNames : List String -> List String
+nubNames [] = []
+nubNames (x :: rest) = if memName x rest then nubNames rest else x :: nubNames rest
+
+-- | `allMem xs ys`：`xs` 里每个名字都在 `ys` 里。
+export allMem : List String -> List String -> Bool
+allMem [] ys = True
+allMem (x :: rest) ys = memName x ys && allMem rest ys
+
+-- | `anyMem xs ys`：`xs` 里至少有一个名字在 `ys` 里。
+export anyMem : List String -> List String -> Bool
+anyMem [] ys = False
+anyMem (x :: rest) ys = memName x ys || anyMem rest ys
+
+-- | 字符串列表里是否有重复名字。
+export hasDupNames : List String -> Bool
+hasDupNames [] = False
+hasDupNames (x :: rest) = memName x rest || hasDupNames rest
+
+-- | 把两个列表逐项配对；长度取较短者。
+export zip : List a -> List b -> List (Pair a b)
+zip (x :: xs) (y :: ys) = Pair x y :: zip xs ys
+zip _ _ = []
+
+-- | 取前 `n` 个元素（不足则返回全部）。
+export take : Int -> List a -> List a
+take n [] = []
+take n (x :: xs) = if n <= 0 then [] else x :: take (n - 1) xs
+
+-- | 丢弃前 `n` 个元素。
+export drop : Int -> List a -> List a
+drop n [] = []
+drop n (x :: xs) = if n <= 0 then x :: xs else drop (n - 1) xs
+
+-- 按「剩余个数」倒计数（`k = n - i`，`k <= 0` 守卫），终止性由「守卫 Int」判据直接可证。
+-- | 从 `from` 到 `to`（不含 `to`）的整数列表；`to <= from` 时为空。
+export range : Int -> Int -> List Int
+range i n = rangeFrom i (n - i)
+
+-- | 内部：从 `i` 开始、长度为 `k` 的整数列表；`k <= 0` 时为空。
+rangeFrom : Int -> Int -> List Int
+rangeFrom i k = if k <= 0 then [] else i :: rangeFrom (i + 1) (k - 1)
+
+-- | 映射并丢弃 `Nothing` 元素。
+export mapMaybe : (a -> Maybe b) -> List a -> List b
+mapMaybe f [] = []
+mapMaybe f (x :: xs) = case f x of
+  Nothing => mapMaybe f xs
+  Just y => y :: mapMaybe f xs
+
+-- | 首个有值的候选；全部无值即 `Nothing`。顺序决定优先级。
+export firstJust : List (Maybe a) -> Maybe a
+firstJust [] = Nothing
+firstJust (x :: rest) = case x of
+  Just v => Just v
+  Nothing => firstJust rest
+
+-- | 依次尝试候选动作，返回第一个成功的：命中即停，失败（`Nothing`）才继续。
+-- 后面的动作只构造、不执行；全部失败即 `Nothing`。
+export firstSuccess : Monad m => {m : Type -> Type} -> {a : Type} -> List (m (Maybe a)) -> m (Maybe a)
+firstSuccess [] = pure Nothing
+firstSuccess (x :: rest) = do
+  v <- x
+  case v of
+    Just found => pure (Just found)
+    Nothing => firstSuccess rest
+
+-- Functor / Monad 实例（trait 来自 Base.Trait.Monad，List 定义在本模块）。
+instance Functor List where
+  fmap f xs = map f xs
+
+instance Monad List where
+  (>>=) xs f = concatMap f xs
+
+instance Applicative List where
+  pure x = [x]
+  ap mf mx = concatMap (\g => map g mx) mf
+  liftA2 f xs ys = concatMap (\a => map (\b => f a b) ys) xs
+
+-- | 内部：把已 `show` 的元素拼接成 `[a, b, c]` 的正文（不含方括号），供 `Show` 实例使用。
+showElems : List String -> String
+showElems [] = ""
+showElems (x :: rest) = x `++` showElemsTail rest
+
+-- | 内部：`showElems` 的尾部拼接，每个元素前加 `, `。
+showElemsTail : List String -> String
+showElemsTail [] = ""
+showElemsTail (x :: rest) = ", " `++` x `++` showElemsTail rest
+
+-- 容器 `Show` 实例：元素逐个 `show`，拼接只用 `++` intrinsic（`strConcatMany` 会触发
+-- split 自依赖）；`List` 不能 import `Base.Data.String`，故用反引号形式。
+instance Show a => Show (List a) where
+  show xs = "[" `++` showElems (map (\x => show x) xs) `++` "]"
+
+-- 逐元素相等；`[]` 只等于 `[]`。
+instance Eq a => Eq (List a) where
+  (==) [] [] = True
+  (==) (x :: xs) (y :: ys) = x == y && xs == ys
+  (==) _ _ = False
+  (/=) xs ys = if xs == ys then False else True
+
+-- 字典序：`[]` 最小，同头再比尾。
+instance Ord a => Ord (List a) where
+  (<) [] [] = False
+  (<) [] (_ :: _) = True
+  (<) (_ :: _) [] = False
+  (<) (x :: xs) (y :: ys) = if x < y then True else if y < x then False else xs < ys
+  (<=) xs ys = xs < ys || not (ys < xs)
+  (>) xs ys = ys < xs
+  (>=) xs ys = ys <= xs
+
+-- 哈希：`[]` = 0，非空为 head/tail 的结构组合。
+instance Hashable a => Hashable (List a) where
+  hash xs = case xs of
+    [] => 0
+    x :: rest => hashCombine (hash x) (hash rest)
+
+-- 列表拼接是自由 monoid：`Semigroup` 用 `append`，`Monoid` 单位元是 `[]`。
+instance Semigroup (List a) where
+  mappend = append
+
+instance Monoid (List a) where
+  mempty = []
+
+-- 右折叠与可遍历：`fold` 直接复用 `foldr`；`mapM` 用 Applicative 的 `liftA2`。
+instance Foldable List where
+  fold f z xs = foldr f z xs
+
+instance Applicative f => Traversable List f where
+  mapM fun xs = case xs of
+    [] => pure []
+    x :: rest => liftA2 (\y, ys => y :: ys) (fun x) (mapM fun rest)

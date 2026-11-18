@@ -30,11 +30,11 @@ token 并报语法错误。
 * **没有隐式 Int↔Float 转换**：`1 + 1.5` 是类型错误。显式转换：
 
 ```vuna
-floatFromInt : Int -> Float     -- 见 Base.Float.intToFloat（更可读的别名）
+floatFromInt : Int -> Float     -- 见 Base.Data.Float.intToFloat（更可读的别名）
 intFromFloat : Float -> Int     -- 向零截断
 ```
 
-`Base.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
+`Base.Data.Float` 随 `Prelude` 自动导出：`abs`、`sqrt`、
 `intToFloat`、`floatToInt`、`FromFloat` 字面量转换与 `Eq` / `Ord` / `Show` 实例都不需要
 import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文本规则与 OCaml `string_of_float`
 一致（`%.12g`：12 位有效数字、去掉尾随零、定点范围 `[-4, 12)`、整数值保留结尾 `.`）：
@@ -46,7 +46,7 @@ import（显式 `import Base.Data.Float as Float` 仍允许）。`show` 的文�
 | `1000000000000.0` | `1e+12` |
 | `1.0 / 0.0` / `0.0 / 0.0` | `inf` / `nan` |
 
-实现是 `Base.Float.floatRender`（只用 Float / Int 运算与字符串拼接），三个后端
+实现是 `Base.Data.Float.floatRender`（只用 Float / Int 运算与字符串拼接），三个后端
 （OCaml / wasm / native）与模板插值共用这一份代码。NaN 不区分符号位：`0.0 / 0.0`
 在 x86 上是负 NaN，OCaml 的 `string_of_float` 会打印 `-nan`，这里统一打印 `nan`。
 
@@ -88,17 +88,17 @@ REPL 的 `:type` 仍只做类型检查，不等价于求值。**类型表达式�
 trait 定义：
 
 ```vuna
--- Base.FromString（Prelude 导出）
+-- Base.Trait.FromString（Prelude 导出）
 trait FromString a where
   fromString : String -> a
 instance FromString String where fromString s = s
 
--- Base.FromInt（Prelude 导出）
+-- Base.Trait.FromInt（Prelude 导出）
 trait FromInt a where
   fromInt : Int -> a
 instance FromInt Int where fromInt n = n
 
--- Base.Float（Prelude 导出）
+-- Base.Data.Float（Prelude 导出）
 trait FromFloat a where
   fromFloat : Float -> a
 instance FromFloat Float where fromFloat x = x
@@ -106,7 +106,7 @@ instance FromFloat Float where fromFloat x = x
 
 只有 **checking 位置**会降级（注解、函数实参、返回类型已知的分支等）；`let x = 42` 这类
 inference 位置仍默认 `Int`。`Nat` 的整数字面量特例优先于 `FromInt`（`x : Nat` 时 `42`
-是 `Succ` 链，不会调用 `fromInt`）；显式 Int→Nat 用 `Base.Nat.fromInt`。
+是 `Succ` 链，不会调用 `fromInt`）；显式 Int→Nat 用 `Base.Data.Nat.fromInt`。
 
 ### deriving
 
@@ -138,13 +138,13 @@ main = case (MkEmail "x@y") of
 
 ## Prelude 与产物影响
 
-`Base.Float` 进入 `Prelude`（`module Base.Float` + `import Base.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
+`Base.Data.Float` 进入 `Prelude`（`module Base.Data.Float` + `import Base.Data.Float`）。Float 语法/类型/运算符/`main` 支持一直在编译器里，不需要库导入；进
 Prelude 的是 trait、实例与 helper。取舍：
 
 * `FromFloat`、`abs` / `sqrt` / `intToFloat` / `floatToInt` 与 `Show/Eq/Ord Float`
   随 Prelude 自动可见；`deriving (Show, Eq, Ord)` 的包装类型字段是 Float 时也不需要
   额外 import。
-* 代价：Prelude 闭包包含 `Base.Float`，`Driver.SplitGen` 按**全部定义**扫描浮点用法，
+* 代价：Prelude 闭包包含 `Base.Data.Float`，`Driver.SplitGen` 按**全部定义**扫描浮点用法，
   因此所有程序的 `Vuna_runtime.ml` 都会追加浮点 helper；没有「no-float 程序不追加」的
   逐字节约定（seed 固定点 / 模块缓存仍由 rotation 保证）。
 * `Driver/Dt.programUsesFloat` / `Elab/Driver.exprHasFloat` 这两个「核心求值见浮点就拒绝」

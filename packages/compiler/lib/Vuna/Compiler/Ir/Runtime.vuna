@@ -16,7 +16,7 @@ module Vuna.Compiler.Ir.Runtime where
 --   * `Ir.validateUnit`：校验 IR 里每个符号已声明、饱和应用 arity 与 `irInlineArity` 一致；
 --   * 后端：对契约实现「符号 → 目标文本/目标代码」，不得自己猜名字。
 --
--- 桥接（`irRtBridgesList = True`）：该符号的运行时模板引用 canonical `Base.List.List`
+-- 桥接（`irRtBridgesList = True`）：该符号的运行时模板引用 canonical `Base.Data.List.List`
 -- 族的 `dtp_*` helper；只有程序声明了该族时才能使用（诊断 `CG_ListBridgeRequired`），
 -- 且渲染时 helper 名要按 List 族的归属单元限定（机制在 OCaml 后端）。
 --
@@ -333,7 +333,7 @@ irRtPlainNames =
     "@vuna@obs@spanLab"
   ]
 
--- | 需要 canonical `Base.List.List` 族桥接 helper 的内建名符号。
+-- | 需要 canonical `Base.Data.List.List` 族桥接 helper 的内建名符号。
 export irRtBridgedNames : List String
 irRtBridgedNames =
   [ "strUnpack",
@@ -467,19 +467,21 @@ irSymbolsOfEntry (Just e) = irSymbolsOf (irEntryShowOf e)
 -- 自定义 handler」时把 send 直接降成宿主调用（不需要续延）。答案行仍是同一族
 -- （`[ConsoleOp]` 等）的家族才在表内；Fs / Process / Net 的 opH 会转投别的族，暂不列入。
 export irHostDirectOf : String -> Maybe (Pair String String)
-irHostDirectOf "Base.EffConsole.runConsoleHost" =
-  Just (Pair "console" "Base.EffConsole.consoleOpHIOHost")
-irHostDirectOf "Base.EffFs.runFsHost" = Just (Pair "fs" "Base.EffFs.fsOpHIOHost")
-irHostDirectOf "Base.EffClock.runClockHost" = Just (Pair "clock" "Base.EffClock.clockOpHIOHost")
-irHostDirectOf "Base.EffEnv.runEnvHost" = Just (Pair "env" "Base.EffEnv.envOpHIOHost")
-irHostDirectOf "Base.EffArgs.runArgsHost" = Just (Pair "args" "Base.EffArgs.argsOpHIOHost")
-irHostDirectOf "Base.EffExit.runExitHost" = Just (Pair "exit" "Base.EffExit.exitOpHIOHost")
-irHostDirectOf "Base.EffStdin.runStdinHost" = Just (Pair "stdin" "Base.EffStdin.stdinOpHIOHost")
+irHostDirectOf "Base.Effect.Console.runConsoleHost" =
+  Just (Pair "console" "Base.Effect.Console.consoleOpHIOHost")
+irHostDirectOf "Base.Effect.Fs.runFsHost" = Just (Pair "fs" "Base.Effect.Fs.fsOpHIOHost")
+irHostDirectOf "Base.Effect.Clock.runClockHost" =
+  Just (Pair "clock" "Base.Effect.Clock.clockOpHIOHost")
+irHostDirectOf "Base.Effect.Env.runEnvHost" = Just (Pair "env" "Base.Effect.Env.envOpHIOHost")
+irHostDirectOf "Base.Effect.Args.runArgsHost" = Just (Pair "args" "Base.Effect.Args.argsOpHIOHost")
+irHostDirectOf "Base.Effect.Exit.runExitHost" = Just (Pair "exit" "Base.Effect.Exit.exitOpHIOHost")
+irHostDirectOf "Base.Effect.Stdin.runStdinHost" =
+  Just (Pair "stdin" "Base.Effect.Stdin.stdinOpHIOHost")
 irHostDirectOf _ = Nothing
 
 -- | 只做「诊断 + 退出」的错误族：send key → 渲染错误文本的定义名。入口的这类 handler
 -- 不恢复续延（打印诊断后退出），所以直连时把 send 降成同样的收口序列。
 export irHostAbortOf : String -> Maybe (Pair String String)
 irHostAbortOf name =
-  if name == "Base.EffFs.runFsErrorHost" then Just (Pair "fs-error" "Base.EffFs.fsErrorText")
+  if name == "Base.Effect.Fs.runFsErrorHost" then Just (Pair "fs-error" "Base.Effect.Fs.fsErrorText")
   else Nothing

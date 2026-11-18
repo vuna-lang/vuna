@@ -23,15 +23,15 @@
 - **`Int` / `String` / `Float` 是语言 primitive 类型**（`Base.Intrinsics.typeIntrinsicNames =
   [Int, String, Float]`）：prelude 直接提供对应 `Type`；入口 / 未限定名处的 `data Int` /
   `data String` / `data Float` 报 `CannotRedefineBuiltin`（模块内声明会 mangle 成 `M.Int`，
-  属于不同符号）。它们的 **Eq / Ord / Show 实例宿主模块**是 `Base.Int` /
-  `Base.String` / `Base.Float`（实例跟类型模块走；primitive 无构造子，实例体走内建特化）。
-  类型身份仍由本文件的内建表提供，`Base.Int` 不声明类型。**这是设计选择而非欠账**：把
+  属于不同符号）。它们的 **Eq / Ord / Show 实例宿主模块**是 `Base.Data.Int` /
+  `Base.Data.String` / `Base.Data.Float`（实例跟类型模块走；primitive 无构造子，实例体走内建特化）。
+  类型身份仍由本文件的内建表提供，`Base.Data.Int` 不声明类型。**这是设计选择而非欠账**：把
   `Int`/`String`/`Float` 上移成源码 `primitive type` 声明需要两阶段 bootstrap、改大量身份
   比较与 `Base` 叶模块拆分，功能零增益；用户自定义 primitive 类型的需求归受限 FFI
   （[debt.md](debt.md) D21）。
   实例落点规则见 [operators.md](operators.md)。
-- **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Eq` /
-  `Base.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
+- **比较/相等运算符不是内建值**：`==` `/=` `<` `<=` `>` `>=` 是 `Base.Trait.Eq` /
+  `Base.Trait.Ord` 方法（`eq` / `neq` / `lt` / `le` / `gt` / `ge`）的解析期别名；Int/String 上的
   `bi_eq_int` / `bi_eq_str` / `bi_*_int` / `bi_*_str` / `bi_*_bool` 是这两个类的**内建实例实现**
   （不是运算符的独立语义）。详见 [operators.md](operators.md)。
 - **`Eff` 是唯一动作类型**，`Bool` / `List` / `Nat` 是 base 的
@@ -40,16 +40,16 @@
 
   | 声明 | canonical 符号 | 来源 | 常量 |
   | --- | --- | --- | --- |
-  | `Bool` | `Base.Bool.Bool` | `packages/base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
-  | `True` / `False` | `Base.Bool.True` / `Base.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
-  | `List` | `Base.List.List`（`(::)` / `Nil`） | `Base.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
-  | `Nat` | `Base.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
+  | `Bool` | `Base.Data.Bool.Bool` | `packages/base/lib/Base/Bool.vuna` | `Base.Intrinsics.boolTypeName` |
+  | `True` / `False` | `Base.Data.Bool.True` / `Base.Data.Bool.False` | 同上 | `boolTrueCtor` / `boolFalseCtor` |
+  | `List` | `Base.Data.List.List`（`(::)` / `Nil`） | `Base.Data.List` | `listFamilyName` / `listConsCtor` / `listNilCtor` |
+  | `Nat` | `Base.Data.Nat.Nat`（`Zero` / `Succ` 同理） | `Base.Data.Nat` | `natTypeName` / `natZeroCtor` / `natSuccCtor` |
 
   三族的身份、固定构造子与运行时表示类别在 `Base.Intrinsics.canonicalFamilies` 单点声明
   （`FamilyRepr` = `FamReprBool` / `FamReprNat` / `FamReprBoxed`）：表示判定、IR 类型、
   展示与 FFI 白名单都查这张表，新增 canonical 族只改这里。
 
-- `Eff`（`Base.Eff.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
+- `Eff`（`Base.Effect.Core.Eff`）：`Row -> Type -> Type` 的 base data，装箱表示 `MkEff`（不导出）；
   行是擦除索引。入口 `main : Eff [] a`，执行 `runPure`（[effects.md](effects.md) §2）。
 
 
@@ -57,19 +57,19 @@
   族**不生成变体声明**（`Codegen.Lower.rtDatasOf` 按 canonical 族表剔除 `FamReprBool` /
   `FamReprNat`）。
 - **没有短名 / `lastName` 判定，也没有「全局构造子放行」**：`True` / `False` / `Cons` /
-  `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Bool` /
-  `Base.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
+  `Nil` 与其他构造子一样经 import 的导出表解析（`Prelude` 自动注入 `Base.Data.Bool` /
+  `Base.Data.List`，所以裸名可用）。类型位置按 `resolveTypeName` 判定：`Int` / `String` /
   `Type` / `->` 等是内建，其余（含 `Bool`）查导出表。
 - 用户写的 `data Bool` / `data List` 是**普通 data**、不与 canonical 冲突：模块内名字被
   mangle 成 `<Module>.Bool`；入口文件（不做 mangle）里声明 `data Bool` 时族名就是
-  `Bool`，与 `Base.Bool.Bool` 是两个族。`if` / 字面量 `case` 等只认 canonical。
+  `Bool`，与 `Base.Data.Bool.Bool` 是两个族。`if` / 字面量 `case` 等只认 canonical。
 
 ## 3. Int
 
 - 表示：宿主 OCaml `int`，**固定 63 位**：`max_int = 4611686018427387903`、
   `min_int = -4611686018427387904`。类型层没有宽度 / 区间信息，`Int` 就是 `Type`。
 - 算术：`+` `-` `*` 在溢出时按**二进制补码回绕**（`max_int + 1 = min_int`），不报错、
-  不饱和、不提升为大整数。**无大整数计划**。`+ - * /` 是 `Base.Num` 方法
+  不饱和、不提升为大整数。**无大整数计划**。`+ - * /` 是 `Base.Trait.Num` 方法
   （`add` / `sub` / `mul` / `div`）的中缀别名，Int 实例的方法体由精化器特化回
   `bi_*` 内建原语；下面的数值语义不变。
 - `/`：整数除法向零截断；`a / 0` 在产物运行期抛宿主 `Failure "division by zero"`
@@ -88,7 +88,7 @@
 - **移位计数越界返回 0**：`n < 0 || n >= 63` ⇒ 结果 0（OCaml 原生越界移位是未定义行为，
   不暴露给用户）。
 - 没有 `bitRor` 原语：32-bit 固定宽度算术（`mask8` / `mask32` / `add32` / `rotr32` /
-  `rol32` / `shl32` / `shr32`）在 `Base.Bits` 库层；宽度策略留在库里，不进原语。
+  `rol32` / `shl32` / `shr32`）在 `Base.Data.Bits` 库层；宽度策略留在库里，不进原语。
 - 没有运算符形式（`&` / `|` / `^` / `<<` / `>>`）：需要时用命名函数，或自己声明 `infixl`。
 - 核心求值与 runtime 同语义（`Core.Eval.primReduce` 委托给同名原语；codegen 生成
   `bi_bit*`，and/or/xor/not 的饱和应用直接内联成 OCaml 位运算符）。三个后端都走
@@ -97,7 +97,7 @@
 
 ## 3.1 Nat
 
-- **身份**：`Base.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
+- **身份**：`Base.Data.Nat.Nat` 是 canonical data（固定 `Zero` / `Succ`），类型层仍是普通归纳族；
   运行时表示是 OCaml `int`，值域 `0..max_int`（4611686018427387903）：`Zero = 0`、
   `Succ n = min(n + 1, max_int)`，**不生成变体类型**。
 - **字面量**：期望类型为 Nat 时 `3` 展开成 `Succ (Succ (Succ Zero))`（类型层可合一），
@@ -109,15 +109,15 @@
   同文案）、`natToInt`（恒等）、`natFromInt`（负数 clamp 0）。核心求值与产物同语义；
   `+ - * /` 在 Nat 上下文由精化器特化到这些名字（见 [operators.md](operators.md)）。
 - **提升**：只允许 `Nat → Int`（精化期插入 `natToInt`，零成本）；`Int → Nat` 必须显式
-  `Base.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
+  `Base.Data.Nat.fromInt`（负数 clamp 0，有损）/ `fromIntMaybe`。混合算术的结果由操作数决定：
   两侧 Nat（或 Nat 与字面量）→ Nat；出现真正的 `Int` → `Int`（Nat 侧经 `natToInt` 提升）。
   低层原语（`strLength` / `arrayLength` 等）仍是 Int，Base 负责暴露 Nat 度量。
-- **算术 = `Num` 方法**：`+ - * /` 是 `Base.Num` 方法 `add` / `sub` / `mul` / `div`
+- **算术 = `Num` 方法**：`+ - * /` 是 `Base.Trait.Num` 方法 `add` / `sub` / `mul` / `div`
   的中缀别名；`Int` / `Nat` / `Float` 实例由精化器按期望类型/实参类型特化回内建原语，
   其它类型走普通 trait 方法应用。用户类型实现 `Num`（并配 `FromInt` 收字面量）即可重载
   四则（`1 + 2 : MyNum`），见 [operators.md](operators.md)「`Num` 的唯一真源」。
-- **度量返回 Nat（只留在 Eff handler 的 result 族）**：`Base.EffConsole.Print` 与
-  `Base.EffFs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）；
+- **度量返回 Nat（只留在 Eff handler 的 result 族）**：`Base.Effect.Console.Print` 与
+  `Base.Effect.Fs.WriteFile` / `FileSize` 的结果是 `Nat`（handler 在边界从原语的 `Int` 转 `Nat`）；
   直接调用 `prim_eff_print` / `prim_eff_writeFile` / `prim_eff_fileSize` 得到 `Eff [] Int`。
   `prim_eff_eprint` / `prim_eff_writeFileAtomic` 与编译器内部计数器（level/meta/fuel/span/arity、
   字节计数中间量）保留 `Int`。
@@ -146,7 +146,7 @@
 实现：加双引号，并转义 `"` → `\"`、`\` → `\\`、LF → `\n`、TAB → `\t`、CR → `\r`；
 其余字节原样输出（不走 OCaml 源码发射时的 `\ddd` 转义——那是 `Codegen.Decl` 的内部细节）。
 
-- `Base.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
+- `Base.Trait.Show` 的 `String` 实例委托给它：`show s = strShow s`，因此 `show` 与
   `main : String` 的展示一致。
 - `main` 展示钩子（`Codegen.Term.mainShow`）：`Int` / `Nat` → `string_of_int`、
   `String` → `dt_show_string`（即 `strShow`）、`Bool` → `dt_show_bool`（输出 `True` /
@@ -176,9 +176,9 @@
 | `strFromInt` | `Int -> String` | 十进制，负数带 `-`（OCaml `string_of_int`） |
 | `strHash` | `String -> Int` | 固定 1024 桶：`h` 初值 0，逐字节 `h = (h*33 + byte) mod 1024`，结果 0..1023 |
 | `strAt` | `String -> Int -> Int` | 见 §4（越界 `-1`） |
-| `strSubstring` | `Int -> Int -> String -> String` | 字节切片：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.String.substring` 同语义 |
+| `strSubstring` | `Int -> Int -> String -> String` | 字节切片：start/len 按字节 clamp——负 start 视为 0、负 len 视为 0、越界截断到末尾；与 `Base.Data.String.substring` 同语义 |
 | `strConcatMany` | `List String -> String` | 一次性拼接（OCaml `String.concat ""`） |
-| `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Vec.substTemplate`） |
+| `strSubstTemplate` | `String -> List String -> String` | `<N>` 占位符按序号替换；非数字 `<`、越界序号原样保留（`Base.Data.Vec.substTemplate`） |
 | `effTimeUs` | `Eff [] Int` | 微秒时间戳（`Unix.gettimeofday`）；效果原语（clock 组） |
 | `prim_eff_sleep` | `Int -> Eff [] Int` | 阻塞睡眠 n 微秒（runtime `dtp_sleep` = `Unix.sleepf`；n <= 0 立即返回 0）；效果原语（clock 组）；核心求值不归约 |
 
@@ -208,7 +208,7 @@
 | `arrayFromList` | `List a -> Array a` | `Array.of_list`（经 List 桥接 `dtp_ocamlOf`） |
 | `arrayToList` | `Array a -> List a` | `Array.to_list`（经 `dtp_listOf`） |
 
-**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.IORef` 的公开操作返回 `Eff []`）：
+**可变数据原语**（`prim_eff_*` 返回 `Eff []`；不触碰外部世界；`Base.Effect.Pure.IORef` 的公开操作返回 `Eff []`）：
 
 | 原语 | 签名 | runtime |
 | --- | --- | --- |
@@ -216,7 +216,7 @@
 
 - 效果原语的 runtime 表达仍是「立即算完的 OCaml 表达式」，由 `effThunkText` 按 arity
   包成 `MkEff` thunk（`fun args -> fun (_ : int) -> rt args`；零参 `fun (_ : int) -> rt`）。
-- `arrayFromList` / `arrayToList` 依赖 canonical `Base.List.List` 桥接（契约里
+- `arrayFromList` / `arrayToList` 依赖 canonical `Base.Data.List.List` 桥接（契约里
   `irRtBridgesList = True`，实现见 `Codegen.Runtime`）；完整的桥接清单与缺失时的诊断见 §9。
 - **核心求值不归约**全部容器原语（`OpNone`）：夹具关闭 interp 阶段，只 compile + 运行。
 - 越界行为：`arrayGet` 越界是宿主 `Invalid_argument`（不是 `strAt` 的
@@ -227,8 +227,8 @@
 
 ## 7. 效果原语、Eff 动作与宿主层
 
-**动作类型**：唯一动作类型是 `Eff r a`（`Base.Eff`，装箱 data；行是擦除索引），入口
-`main : Eff [] a`，执行 `Base.Eff.runPure`。
+**动作类型**：唯一动作类型是 `Eff r a`（`Base.Effect.Core`，装箱 data；行是擦除索引），入口
+`main : Eff [] a`，执行 `Base.Effect.Core.runPure`。
 
 **宿主原语单表**：
 
@@ -236,16 +236,16 @@
 | --- | --- | --- | --- |
 | Eff 表 | `prim_eff_*`（如 `prim_eff_print`、`prim_eff_readFile`、`effTimeUs`） | 返回 `Eff [] a` | 宿主层（直接调用） |
 
-原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；Int/Nat 归一化只在 `Base.Eff.*` handler
+原语在 codegen 里包成 `MkEff (fun _ -> rt args)`；Int/Nat 归一化只在 `Base.Effect.Core.*` handler
 的 result 族（`Print`、`WriteFile`/`FileSize`）里做，原语本身返回 `Int`。
 
 **Eff 代数不是原语**：`pure` / `>>=` / `do` / `fmap` 来自 `Functor`/`Applicative`/`Monad (Eff r)`
-实例（`Base.Eff` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Eff` 的库函数。
+实例（`Base.Effect.Core` 内建）；`runPure` / `joinEff` / `raise` / `weaken` 是 `Base.Effect.Core` 的库函数。
 `prim_effectPerform` / `prim_effectHandle` / `prim_cleanupPush` / `prim_cleanupPop` 是隐藏的
-运行时效应核心，常规只由 `Base.Eff` 包装使用（没有 `unsafe` 门控）。
+运行时效应核心，常规只由 `Base.Effect.Core` 包装使用（没有 `unsafe` 门控）。
 
 **效果原语类型**（`prim_eff_*`，全部返回 `Eff []`）：`prim_eff_print : String -> Eff [] Int`
-（`Base.EffConsole.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
+（`Base.Effect.Console.Print` 在 handler 边界转 `Nat`）、`prim_eff_readFile : String -> Eff [] String`、
 `prim_eff_readLine : Eff [] String`（EOF 时写状态槽 1、返回 `""`）、`prim_eff_readDir : String -> Eff [] (List String)`、
 `prim_eff_isDirectory` / `prim_eff_fileExists : String -> Eff [] Bool`、
 `prim_eff_makeDir` / `prim_eff_removeFile` / `prim_eff_fileMtime : String -> Eff [] Int`、
@@ -268,7 +268,7 @@
   **隐藏 runtime 原语**（`visible = False`，源码不可写；只由 `dbg!` 展开引用；
   核心求值归约为 no-op）；
 - 观测原语 7 条（同样是隐藏 runtime 原语，`visible = False`；只由 `obs!` / `mark!` 或
-  `Base.Obs` / `Base.Obs.Span` 引用；核心求值归约为 no-op，wasm/native 是 no-op 桩）：
+  `Base.Data.Obs` / `Base.Data.Obs.Span` 引用；核心求值归约为 no-op，wasm/native 是 no-op 桩）：
   `@vuna@obs@level`（读当前级别，`Int -> Int`）、`@vuna@obs@log`（结构化日志 →
   `vuna.log`）、`@vuna@obs@counter`（计数事件 `ph:"C"`，`String -> Int -> Int`）、
   `@vuna@obs@mark`（瞬时标记 `ph:"i"`）、`@vuna@obs@span`（`String -> String ->
@@ -283,7 +283,7 @@
 `dbg!` 作为调试输出在两种构建都可用（受 `--debug-perf` 门控）。
 
 `net` 原语 7 条 socket（工具链 server 与测试用；任何包都可直调）。用户面走
-`Base.EffNet` 的 `NetOp` 效应（可 mock；entry 自动预装真实 handler）；宿主失败由
+`Base.Effect.Net` 的 `NetOp` 效应（可 mock；entry 自动预装真实 handler）；宿主失败由
 `@vuna@host@tryNet*` + 状态槽转成 `NetErrorOp`（typed），`recv` 的对端关闭是
 `Nothing`（`Maybe String`），不是错误：
 
@@ -304,7 +304,7 @@
 `prim_eff_*`，得到 `Eff []` 动作（不需要 alias、不需要任何声明）。
 
 **执行入口**：动作只在 `main` 处由运行时执行；`main : Eff [] a` 的产物钩子是
-`dtp_sched_main (fun () -> Base.Eff.runPure v_main)`。没有 main 之外的通用执行入口：
+`dtp_sched_main (fun () -> Base.Effect.Core.runPure v_main)`。没有 main 之外的通用执行入口：
 需要重复执行的部分用 handler 显式解释。
 
 **内部 cast（不可见）**：`prim_erase` 是隐藏 intrinsic（`visible = False`），只由精化器在
@@ -322,13 +322,13 @@
 | `env` | `prim_eff_getenv`、`prim_eff_getcwd`、`prim_eff_execPath` |
 | `clock` | `effTimeUs`、`prim_eff_sleep` |
 | `net` | `prim_eff_netListen`、`prim_eff_netPort`、`prim_eff_netAccept`、`prim_eff_netRecv`、`prim_eff_netSend`、`prim_eff_netClose`、`prim_eff_netConnect`；宿主 handler 用 `@vuna@host@tryNet*` + `@vuna@prim_eff_hostStatus`（0 = 成功、1 = 对端关闭、2 = refused、3 = timeout、4 = closed、5 = addr-in-use、6 = bad-addr、7 = timeout(带超时变体)、8 = bad-handle、其它 = io）；带超时的变体是 `@vuna@host@tryNetAcceptWithin` / `tryNetRecvWithin` / `tryNetSendWithin` |
-| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Eff` 包装使用） |
+| 运行时核心（隐藏） | `prim_effectPerform` / `prim_effectHandle` / `prim_effectSelf` / `prim_cleanupPush` / `prim_cleanupPop`（运行时续延、scoped handler 重装与 bracket cleanup，常规仅 `Base.Effect.Core` 包装使用） |
 
 - **原语是普通内建**：任何包（用户包、ad-hoc 文件）都可以直接调用 `prim_*` /
   `prim_eff_*`。没有 manifest `[capabilities]` /
   `[trust]`、每包原语白名单、宿主模块 import 门控，也没有 REPL `--privileged`。
-- **推荐用法（纪律，非强制）**：常规用户面经 `Base.Eff.*` 标签 + handler 使用效果
-  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Eff*` handler 内部（需要直调时
+- **推荐用法（纪律，非强制）**：常规用户面经 `Base.Effect.Core.*` 标签 + handler 使用效果
+  （入口 `runPure : Eff [] a -> a`），宿主层细节留在 `Base.Effect.Core*` handler 内部（需要直调时
   调用 `prim_eff_*`）；base 的 Eff handler、编译器与根工具链内部直接使用原语。原语不改变类型检查、擦除或 codegen 语义，
   只是底层叶子。
 - 显式接受的损失（宿主层 import 门控、每包原语白名单、网络仅根包可用等）见
@@ -348,8 +348,8 @@
 
 | 原语 | runtime 契约 |
 | --- | --- |
-| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.EffConsole.Print` 在 handler 边界转 `Nat`） |
-| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.EffFs.WriteFile` 在 handler 边界转 `Nat`）；写失败抛宿主异常 |
+| `prim_eff_print` | 写 stdout 并 flush，返回**字节数**（签名 `Eff [] Int`；`Base.Effect.Console.Print` 在 handler 边界转 `Nat`） |
+| `prim_eff_writeFile` | 二进制写整串，返回**字节数**（签名 `Eff [] Int`；`Base.Effect.Fs.WriteFile` 在 handler 边界转 `Nat`）；写失败抛宿主异常 |
 | `prim_eff_writeFileAtomic` | 同 `prim_eff_writeFile`，但写 `<path>.<pid>.tmp` 后 `Sys.rename` 原子替换：并发读者只会看到完整旧内容或完整新内容（workspace 并行 check 的子进程共享缓存目录，必须原子写） |
 | `prim_eff_readFile` | 读整个文件为字节串；读失败抛宿主异常。宿主 handler 走 `@vuna@host@tryReadFile`：失败不抛，写状态槽并返回 `""`，由 base 抛 `FsErrorOp`（typed，entry 收口成诊断 + exit 1） |
 | `prim_eff_readLine` | 读一行；EOF 返回 `""`（与空行不可区分） |
@@ -358,7 +358,7 @@
 | `prim_eff_makeDir` / `prim_eff_removeFile` | **幂等**：已存在 / 不存在时直接返回 `0` |
 | `prim_eff_fileExists` | 路径不存在时为 `False` |
 | `prim_eff_isDirectory` | 普通路径检查；**不存在**的路径抛宿主异常（`Sys_error` → `failwith`） |
-| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.EffFs.FileSize` 的结果索引是 `Nat`） |
+| `prim_eff_fileMtime` / `prim_eff_fileSize` | 秒级 mtime / 字节数；取不到时**静默返回 0**（两个原语都返回 `Int`；`Base.Effect.Fs.FileSize` 的结果索引是 `Nat`） |
 | `prim_eff_getenv` | 变量未设置或为空串都返回 `""`（两者不可区分） |
 | `prim_eff_getcwd` | 失败时返回 `"."` |
 | `prim_eff_execPath` | 先读 `/proc/self/exe`（**Linux 假设**），失败回落 `Sys.executable_name` |
@@ -397,7 +397,7 @@
 | `bitAnd` / `bitOr` / `bitXor` / `bitNot` / `bitShl` / `bitShr` | 是 | 63-bit 补码语义，与 runtime `bi_bit*` 同公式（移位越界 = 0） |
 | `strFromInt` / `strLength` / `strHash` / `strAt` / `strSubstring` / `strShow` | 是 | 与 runtime **同语义同公式** |
 | `natAdd` / `natSub` / `natMul` / `natDiv` / `natToInt` / `natFromInt` | 是 | 与 runtime 同饱和 / 截断语义 |
-| `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
+| `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate` | **否** | 结果依赖 `Base.Data.List.List` 的构造子表示（List 桥接），核心求值器不构造该表示 |
 | 全部 `OpNone` 原语：效果原语（`prim_eff_*`）、容器原语、`prim_fail` | **否** | 纯求值器不执行效果 / 不构造内建容器表示 |
 | `a / 0` | **否** | 核心求值器表达不了运行期异常；显式分类，不返回 0 |
 
@@ -409,8 +409,8 @@
   `dtp_pack` / `dtp_concatMany` / `dtp_substTemplate` / `dtp_listOf` / `dtp_ocamlOf`）：
   `strUnpack` / `strPack` / `strConcatMany` / `strSubstTemplate`、`prim_eff_getArgs` /
   `prim_eff_readDir` / `prim_eff_runIn` / `prim_eff_spawn`、`arrayFromList` / `arrayToList`。桥接只为
-  canonical `Base.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
-  ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.List.List` declaration ...``。
+  canonical `Base.Data.List.List` 声明生成；包内没有该族时（例如没有 base 依赖）codegen 报
+  ``[CG_ListBridgeRequired] builtin `<name>` requires the canonical `Base.Data.List.List` declaration ...``。
 - 相关夹具关闭 interp 阶段，只做 `compile` + 运行产物。
 
 ## 10. 受限 FFI

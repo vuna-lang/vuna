@@ -261,11 +261,11 @@ Bool / 字面量分派同样适用：`keep b = if b then b else b` → `keep b@T
   因此 `if` / `case` 的 clause 拆分都要求 `countFunClauses == 1`；多 clause 函数的 Bool
   if 保持 `if`。alt 拆分 / 替换要求该 alt 是最后一个。
 - **签名含隐式 Pi 的函数跳过 clause 级改写**：`{n : Nat} -> ...` 这类隐式参数由精化器
-  插入，把 dispatch 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Vec.vhead`
+  插入，把 dispatch 折叠进 clause 模式会改变模式矩阵与隐式 Pi 的对齐（`Base.Data.Vec.vhead`
   实测会把 `Cons` 错配到 `n : Nat`）；`literal-if-chain` / `dispatch-lift` 都跳过这类声明。
   `list-literal` 不改变 clause 结构，因此这类函数的体仍会扫描。
 - **Bool 名字解析**：Bool if 提升按源码名字生成 `True` / `False` 模式；vuna 包内它们就是
-  canonical `Base.Bool` 构造子。用户自定义同名构造子的极端情况不由 lint 判定，`vuna check`
+  canonical `Base.Data.Bool` 构造子。用户自定义同名构造子的极端情况不由 lint 判定，`vuna check`
   是最终裁决（与现有 case 拆分边界一致）。
 - **只做提升，不做 Bool 化简**：`if c then True else False` 在定义级会被提升成
   `f True = True` / `f False = False`，而不会化到 `f c = c`（后者需要作用域/名字解析，

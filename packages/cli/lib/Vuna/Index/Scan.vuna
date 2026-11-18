@@ -30,11 +30,11 @@ import Vuna.Index.Types
 import Vuna.Sig
 import Vuna.Index.Codec
 import Vuna.Tool.Session
-import Base.Effect.EffClock as EffClock
-import Base.Effect.EffEnv as EffEnv
-import Base.Effect.EffFs as EffFs
-import Base.Effect.EffTypes as EffTypes
-import Base.Effect.EffProcess as EffProcess
+import Base.Effect.Clock as EffClock
+import Base.Effect.Env as EffEnv
+import Base.Effect.Fs as EffFs
+import Base.Effect.Types as EffTypes
+import Base.Effect.Process as EffProcess
 
 -- | 内部：工具链 fuel 耗尽不是「空结果」，而是内部不变量被破坏；与编译器一致硬失败。
 indexFuelExhausted : String -> a
@@ -602,7 +602,7 @@ sourceStatOf builtSec path = do
     else pure (SourceStat path bytes mtime "")
   else pure (SourceStat path 0 0 "")
 
--- | 内部：内容哈希——拼接两个不同前缀的 `Base.Hashable.hashStr` 结果，依赖键用。
+-- | 内部：内容哈希——拼接两个不同前缀的 `Base.Trait.Hashable.hashStr` 结果，依赖键用。
 contentHash : String -> String
 contentHash content = "${Hashable.hashStr content}-${Hashable.hashStr "v2:${content}"}"
 

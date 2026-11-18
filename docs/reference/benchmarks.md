@@ -51,12 +51,12 @@ sorting,float_math,text_scan,nat_bits,tco_mutual,tco_wide,gc_low_live,gc_array_c
    2. **多参数 lambda 链**：连续 `TLam` 合并成 `(fun x y -> body)`，擦除 binder 只占 de Bruijn
       位置；消除 curried 递归的每轮闭包分配。
    3. **`++` 链展平**：`a ++ b ++ c` 生成 `(String.concat "" [a; b; c])`；`strPack` / `dtp_pack`
-      改 `Array.of_list`；`Base.List.concatMap` 改尾递归 accumulator；`Base.String.join` /
+      改 `Array.of_list`；`Base.Data.List.concatMap` 改尾递归 accumulator；`Base.Data.String.join` /
       `unlines` 改一次 `strConcatMany`。
    4. **GC 统计**：生成 runtime 支持 `VN_PERF_STATS=1`（退出打印 `Gc.quick_stat` 的
       minor/major words、collections、top_heap_words），`bench/run.sh` 采集进 JSON。
 2. **字符串与可变数据**：`strSubstring` 原语（runtime `String.sub` + clamp 语义；核心求值也
-   归约 `OpStrSubstring`），`Base.String.substring` 不走 List 桥接；`Base.String.repeat` 改一次
+   归约 `OpStrSubstring`），`Base.Data.String.substring` 不走 List 桥接；`Base.Data.String.repeat` 改一次
    `strConcatMany`；可变数据（`IORef`）保持 `Eff []` 隔离，不引入线性
    类型（见 [qtt.md](qtt.md) / [effects.md](effects.md) 与 debt D22）。
 3. **容器与表示**：

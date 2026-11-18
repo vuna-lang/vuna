@@ -1,7 +1,7 @@
 -- 宿主-backed Fs 效应：命名实例 "real" 的 handler 把操作转给入口预装的标签 handler。
 -- 路径是相对的，三端都以 case 私有目录为 cwd。
-import Base.Effect.Eff as Eff
-import Base.Effect.EffFs as EffFs
+import Base.Effect.Core as Eff
+import Base.Effect.Fs as EffFs
 import Base.Data.Nat as Nat
 
 prog : Eff [FsOp@real] Int
