@@ -89,9 +89,12 @@ ContFrame    = { k, prompt }   -- prompt = 所属 handler frame（delimited）
 
 ## 5. 迁移阶段
 
-1. **wasm 先行**：在 `Wasm` 内实现 `@ir@m@*` 与单层 trampoline；选择性 CPS
-   lowering 改发 `@ir@m@*`。先用 `26_eff_console` / `18_eff_fs_io` / `40_eff_fs_named`
-   的宿主组合验收，再跑 `106` 的常量栈（去掉大栈旗标）。
+1. **wasm 先行**：
+   - 1a（已落地，休眠）：`Ir.Cps.cpsDefsMachine` 把 handler clause 改成
+     `\o k kDone -> ...`，resumption 调用追加 `kRest`；
+   - 1b（待做）：`Wasm` 内实现 `@ir@m@*` 原语、显式 ContStack 与单层 trampoline，
+     并改发 `@ir@m@*`。先用 `26_eff_console` / `18_eff_fs_io` / `40_eff_fs_named`
+     的宿主组合验收，再跑 `106` 的常量栈（去掉大栈旗标）。
 2. **native**：实现同一组原语（显式帧 + 续延栈，替代栈拷贝路径的 handler 部分）；
    用 `effect-common` 三端矩阵验收。
 3. **OCaml**：用同一协议映射到 `Effect.Deep` 或显式 trampoline；验收同矩阵。
