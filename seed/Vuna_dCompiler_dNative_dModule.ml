@@ -760,7 +760,7 @@ and v_Vuna_dCompiler_dNative_dModule_dgenApp = (fun fuel st isTail ir -> (if (fu
   | _ -> (v_Vuna_dCompiler_dNative_dModule_dinternal "Nat Succ must have exactly one argument")
 )
   | _ -> (v_Vuna_dCompiler_dNative_dModule_dinternal "Nat Succ must have exactly one argument")
-)) dtb__249) else (if (dtb__251 = "prim_erase") then (match dtb__249 with
+)) dtb__249) else (if (if (if (dtb__251 = "prim_erase") then true else (dtb__251 = "@vuna@prim@toObj")) then true else (dtb__251 = "@vuna@prim@fromObj")) then (match dtb__249 with
   | Base_dData_dList.C_Base_dData_dList_dList_Nil -> (v_Vuna_dCompiler_dNative_dModule_dinternal "prim_erase needs an argument")
   | Base_dData_dList.C_Base_dData_dList_dList__x58__x58_ (dtb__254, dtb__255) -> ((((v_Vuna_dCompiler_dNative_dModule_dgenExprAt (fuel - 1)) st) isTail) ((v_Vuna_dCompiler_dNative_dModule_dapplyAllIr dtb__254) dtb__255))
   | _ -> failwith "DT: impossible branch"
