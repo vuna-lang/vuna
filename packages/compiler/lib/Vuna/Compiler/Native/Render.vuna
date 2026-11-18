@@ -1,14 +1,14 @@
 module Vuna.Compiler.Native.Render where
 
--- Vuna.Compiler.Native.Render：NativeProgram -> Intel 语法汇编文本（`main.s`）。
+-- Vuna.Compiler.Native.Render：NativeProgram -> Intel 语法汇编文件集。
 --
 -- 输出是 canonical 的（D16 同构）：段顺序、缩进、指令文本固定；不嵌入时间戳/
--- 绝对路径，同一 IR 的 `main.s` 逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
+-- 绝对路径，同一 IR 的文件集逐字节确定。`.wasm` 之于 wasm 相当于这里的 ELF：
 -- 二进制只保证行为（链接工具版本由 Nix 提供）。
 --
--- 版面：`.intel_syntax noprefix` → `.rodata`（运行时常量 + 带长度头的字符串
--- 字面量）→ `.bss`（bump 堆 + 堆指针）→ `.text`（Runtime 函数 → 用户函数 → `_start`）
--- → `.note.GNU-stack`。
+-- 版面：`runtime.s`（`.rodata` 运行时常量 → `.bss` → `.text` 运行时函数），每个模块一个
+-- `<Module/Path>.s`（自己的 `.rodata` 字面量池 + `.text` 函数）；每个文件以
+-- `.intel_syntax noprefix` 开头、`.note.GNU-stack` 结尾。
 --
 -- 边界：只 import Base 与 `Native.{Model,Abi}`。
 import Base.Bool
@@ -16,7 +16,6 @@ import Base.Int
 import Base.List
 import Base.Pair
 import Base.String
-import Vuna.Compiler.Native.Abi
 import Vuna.Compiler.Native.Model
 
 -- ---------------------------------------------------------------
@@ -130,7 +129,7 @@ asmString : String -> String
 asmString s = strPack (concatMap (\c => strUnpack (asmEscapeChar c)) (strUnpack s))
 
 renderRodata : NativeRodata -> List String
-renderRodata d = ["${d.nrLabel}:", indent ".ascii \"${asmString d.nrText}\""]
+renderRodata d = [".globl ${d.nrLabel}", "${d.nrLabel}:", indent ".ascii \"${asmString d.nrText}\""]
 
 -- | 字符串字面量：长度头（`.quad` 字节数）+ `.ascii` 体；运行时值是头地址。
 renderStrLit : NativeStrLit -> List String
@@ -145,25 +144,62 @@ renderBss b =
   let
     alignLine = if b.nbAlign > 0 then [".align ${strFromInt b.nbAlign}"] else []
     dataLine = if b.nbSize > 0 then [indent ".zero ${strFromInt b.nbSize}"] else []
-  in append alignLine (append ["${b.nbLabel}:"] dataLine)
+  in append [".globl ${b.nbLabel}"] (append alignLine (append ["${b.nbLabel}:"] dataLine))
 
+-- | 函数标签跨文件可见（模块之间的调用、`_start` 调 `main`），所以全部 `.globl`。
 renderFunc : NativeFunc -> List String
 renderFunc f =
-  let
-    global = if f.nfLabel == nativeEntryLabel then [".globl ${nativeEntryLabel}"] else []
-  in append (append global ["${f.nfLabel}:"]) (map (\i => indent (renderInstr i)) f.nfBody)
+  append [".globl ${f.nfLabel}", "${f.nfLabel}:"] (map (\i => indent (renderInstr i)) f.nfBody)
 
 -- ---------------------------------------------------------------
 -- 程序
 -- ---------------------------------------------------------------
-export renderProgram : NativeProgram -> String
-renderProgram p =
+-- | 非空判断（避免输出空的 `.section .rodata` / `.section .bss`）。
+isEmpty : List a -> Bool
+isEmpty [] = True
+isEmpty _ = False
+
+memString : String -> List String -> Bool
+memString _ [] = False
+memString s (x :: rest) = s == x || memString s rest
+
+moduleKeyOfFunc : NativeFunc -> String
+moduleKeyOfFunc f = join "." f.nfModule
+
+pushModuleKey : List String -> String -> List String
+pushModuleKey keys k = if memString k keys then keys else append keys [k]
+
+-- | 模块按首次出现顺序；runtime 函数的 `nfModule` 是 `["runtime"]`，所以 `runtime.s` 排第一。
+moduleKeysOf : List NativeFunc -> List String
+moduleKeysOf fs = foldl pushModuleKey [] (map moduleKeyOfFunc fs)
+
+funcsOfKey : String -> List NativeFunc -> List NativeFunc
+funcsOfKey key = filter (\f => moduleKeyOfFunc f == key)
+
+litsOfKey : String -> List (Pair (List String) (List NativeStrLit)) -> List NativeStrLit
+litsOfKey _ [] = []
+litsOfKey key (p :: rest) = if join "." (firstOf p) == key then secondOf p else litsOfKey key rest
+
+-- | 模块 key -> 相对文件路径：`runtime` -> `runtime.s`，`A.B` -> `A/B.s`。
+fileOfKey : String -> String
+fileOfKey key = join "/" (split "." key) ++ ".s"
+
+renderProgramFile : NativeProgram -> String -> String
+renderProgramFile p key =
   let
-    rodataLines = concatMap renderStrLit p.npStrLits
-    rodataConstLines = concatMap renderRodata p.npRodata
-    bssLines = concatMap renderBss p.npBss
-    funcLines = concatMap renderFunc p.npFuncs
-    sections =
-      append [".intel_syntax noprefix", ".section .rodata"]
-        (append rodataConstLines (append rodataLines (append [".section .bss"] (append bssLines (append [".section .text"] (append funcLines [".section .note.GNU-stack,\"\",@progbits"]))))))
-  in join "\n" sections ++ "\n"
+    isRuntime = key == "runtime"
+    funcs = funcsOfKey key p.npFuncs
+    rodataLits = concatMap renderStrLit (litsOfKey key p.npModuleLits)
+    rodataConsts = if isRuntime then concatMap renderRodata p.npRodata else []
+    rodataPart = append rodataConsts rodataLits
+    rodataSection = if isEmpty rodataPart then [] else ".section .rodata" :: rodataPart
+    bssPart = if isRuntime then concatMap renderBss p.npBss else []
+    bssSection = if isEmpty bssPart then [] else ".section .bss" :: bssPart
+    textSection = ".section .text" :: concatMap renderFunc funcs
+    body = append [".intel_syntax noprefix"] (append rodataSection (append bssSection textSection))
+  in join "\n" (append body [".section .note.GNU-stack,\"\",@progbits"]) ++ "\n"
+
+-- | 程序 -> 文件集（相对路径, 文本）。`runtime.s` 携带 `.rodata` 常量、`.bss` 与
+--   运行时函数；每个模块文件携带自己的字面量池与函数。同一 IR 的输出逐字节确定。
+export renderFiles : NativeProgram -> List (Pair String String)
+renderFiles p = map (\k => Pair (fileOfKey k) (renderProgramFile p k)) (moduleKeysOf p.npFuncs)

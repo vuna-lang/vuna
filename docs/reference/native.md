@@ -16,20 +16,22 @@
 
 ## 1. 产物与工具链
 
-- **canonical 产物是 Intel 语法汇编文本**（`main.s`）：可审查、可 diff，不嵌入时间戳/
-  绝对路径；同一 IR 的 `main.s` 逐字节确定。
-- `vuna compile <ENTRY|PKG> <OUT> --target native` → `<OUT>/main.s`（不产 `build.sh`）。
+- **canonical 产物是按模块切分的 Intel 语法汇编文件集**：`runtime.s`（运行时常量 / `.bss` /
+  `rt_*` 函数）加每模块一个 `<Module/Path>.s`（`Main.s` 是入口模块，含 `_start`）。
+  文本可审查、可 diff，不嵌入时间戳/绝对路径；同一 IR 的文件集逐字节确定。
+- `vuna compile <ENTRY|PKG> <OUT> --target native` → 写出上述 `.s` 文件集（不产 `build.sh`）。
 - `vuna build <PKG> --target native [--out OUT] [--no-compile]`：
   - 默认 `OUT = <pkg>/.output`；显式 `--out` 且在 workspace（多包）时按 `<OUT>/<pkg>`；
-  - 写 `<OUT>/main.s` + `<OUT>/build.sh`，并调用系统 `cc` 产出 `<OUT>/bin/<pkg>`；
-  - `--no-compile` 只写 `main.s` + `build.sh`，不链接。
-- 链接命令（`build.sh` 与 CLI 同一条）：
+  - 写 `.s` 文件集 + `<OUT>/build.sh`，并调用 `build.sh`（系统 `cc`）产出 `<OUT>/bin/<pkg>`；
+  - `--no-compile` 只写 `.s` 文件集 + `build.sh`，不链接。
+- `build.sh` 逐文件 `cc -c` 到 `build/`，再链接（对象顺序由生成的文件列表固定）：
   ```sh
-  cc -static -nostdlib -no-pie -Wl,--build-id=none -o bin/<pkg> main.s
+  cc -c -o build/Main.s.o Main.s
+  cc -static -nostdlib -no-pie -Wl,--build-id=none -o bin/<pkg> build/*.o
   ```
   依赖 `cc` / `as` / `ld`（Nix devShell 与测试环境的 `ocamlTools` 已提供）。它们是
   **构建期外部工具，不进 TCB、不进 seed**，与 wasm 侧 `wasm-tools parse` 同构。
-- ELF 字节依赖链接工具版本，只保证**行为**；`main.s` 保证字节确定。
+- ELF 字节依赖链接工具版本，只保证**行为**；`.s` 文件集保证字节确定。
 - 不接对象库/增量缓存；每次重编。
 
 ## 2. 平台与值表示
@@ -292,7 +294,7 @@ effect bind、extern），每类给计数与最多三个例子，避免「一次
 ### 5.1 资源限制（内存 / 核数 / 超时）
 
 `_start` 在 `vuna_main` 之前调用 `init_mem` / `init_gc` / `init_cpus` / `init_timeout`；配置全部来自
-env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失败一律回落缺省，不阻断启动。
+env，**不进 codegen**（同一 IR 的产物逐字节确定）。解析失败一律回落缺省，不阻断启动。
 
 | env | 缺省 | 语义 |
 | --- | --- | --- |
@@ -359,17 +361,18 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
   回收、`GC_LOG` 诊断行；`alloc` 在预算/阈值处调 `rt_gc_collect`。
 - `Native.Runtime`：`rt_*` 汇编模板、只读数据、`.bss` 布局、IR 符号 → 运行时标签白名单
   与值形态 arity。
-- `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、字面量池、
-  **全程序唯一 label 编号**、fuel）。
-- `Native.Render`：`NativeProgram` → `main.s`（固定段顺序、缩进、一条指令一行、八进制
-  转义字节）。
-- `Driver.Native`：检查 + lowering + 写 `main.s`；不 import Core/Elab/Intrinsics。
+- `Native.Module`：`IrProgram` → `NativeProgram`（可达性、入口、栈槽、**按模块切分的
+  字面量池**、**模块内 `.L` label 编号**、fuel）。
+- `Native.Render`：`NativeProgram` → `.s` 文件集（`runtime.s` + 每模块一个文件；固定段
+  顺序、缩进、一条指令一行、八进制转义字节）。
+- `Driver.Native`：检查 + lowering + 写 `.s` 文件集；不 import Core/Elab/Intrinsics。
 
-固定布局：`.intel_syntax noprefix` → `.rodata`（运行时常量 → 字符串字面量）→ `.bss`
-（堆缓冲 → 堆尾 → 堆指针）→ `.text`（Runtime 函数 → 用户函数（按定义生成顺序）→
-`_start`）→ `.note.GNU-stack`。名字由 Vuna 全限定名派生（`vuna_<escaped>`、
-`rt_<name>`、`rt_lit_<n>`、`.L<n>`），不按位置编号；`.L<n>` 的编号**跨定义连续**，
-因为每个函数都重新从 0 起会让两个函数撞名（汇编器报 `symbol .L0 is already defined`）。
+每个文件固定布局：`.intel_syntax noprefix` → `.rodata`（runtime：运行时常量；模块：自己的
+字面量池）→ `.bss`（只在 runtime）→ `.text` → `.note.GNU-stack`。名字由 Vuna 全限定名派生
+（`vuna_<escaped>`、`rt_<name>`、`vuna_<owner>_lam<n>`），不按位置编号；`.L<n>` 与
+`.Llit_<n>` 是**文件局部**符号（GNU as 的 `.L` 前缀），编号在模块内累加——模块文件之间
+可以重号，改动一个模块不会让其它模块的标签重编号。跨文件引用的函数/数据标签一律
+`.globl`。
 
 依赖方向由 `packages/compiler/vuna.toml` 的 `[layers]` 强制（`"Vuna.Compiler.Native" =
 ["Vuna.Compiler.Ir"]`，见 [packages.md](packages.md)「层约束」）：`Native.*` 不得 import
@@ -380,16 +383,16 @@ env，**不进 codegen**（同一 IR 的 `main.s` 逐字节确定）。解析失
 ## 7. 验证
 
 - `test/suite/steps/105_native_backend.steps`（section 90 / `steps_native`，e2e）：
-  native 机制——产物形状（`main.s` / `build.sh` / 链接）、多函数 label 不撞名、确定性、
+  native 机制——产物形状（`.s` 文件集 / `build.sh` / 链接）、多函数 label 不撞名、确定性、
   除零与 `assert` / `todo` / `prim_fail` 的错误文本、可增长 arena、arity > 6 的栈传参、
   效应入口 / 宿主 handler / 续延恢复 / abort、`--no-compile`。
 - GC：9y 高 churn 低存活集在 1 MiB live 预算下跑完（GC 前后输出一致、`GC_LOG` 有诊断行）、
-  9z `GC_STRESS` 下续延 + List + 字符串输出不变、9aa GC 的 env 开关不影响 `main.s`；
+  9z `GC_STRESS` 下续延 + List + 字符串输出不变、9aa GC 的 env 开关不影响产物；
   9t 仍锁「live 超限才 trap」。
 - 尾调用：9ab 互递归 400 万层、9ac 9 参自递归（3 个栈实参）100 万层、9ad `if` / `case` /
   `natCase` 三种尾位置各 30 万层，都在默认 8 MiB 栈上跑完；9ae 断言「来参区不够」时
-  `main.s` 里是 `call` 而不是 `jmp`（回退正确）；9af 续延 resume 后的尾递归循环在
-  `GC_STRESS` 下输出一致；9ag 带尾调用的 `main.s` 两次编译逐字节一致；9ah 闭包体按
+  `Main.s` 里是 `call` 而不是 `jmp`（回退正确）；9af 续延 resume 后的尾递归循环在
+  `GC_STRESS` 下输出一致；9ag 带尾调用的产物两次编译逐字节一致；9ah 闭包体按
   闭包 ABI（`rdi` 占掉一个寄存器）算来参区——8 参 lambda 尾调 10 参函数正好用满 32 字节。
 - 宿主层（fs 写读/原子写/目录排序/stat/rename/symlink/递归删除、argv/env/cwd/execPath、
   clock/tty、bracket、runIn/spawn/wait）由 105 的 9o–9s 覆盖。

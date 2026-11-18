@@ -13,8 +13,9 @@ module Vuna.Compiler.Native.Module where
 --     定义不检查（与 wasm 的 `collectNeeded` 同策略）；
 --   * 不做寄存器分配：binder 与中间值都走 `[rbp - 8*(slot+1)]`；
 --   * 调用约定在 `Native.Abi`；运行时符号在 `Native.Runtime`；
---   * 字符串字面量按**内容去重**进 `.rodata`（首现顺序编号），`IrStr` 求值成 `lea`；
---   * 内部 label 全程序唯一（编号跨定义累加；按函数重置会让两个函数撞名）；
+--   * 每个模块一个汇编文件（`runtime.s` + 模块路径目录）；字符串字面量按模块池
+--     内容去重进该文件的 `.rodata`（首现顺序编号），`IrStr` 求值成 `lea`；
+--   * 内部 label（`.L<n>`）是文件局部符号，编号在模块内跨定义累加；
 --   * 生成器带 fuel，越界报 `NativeInternal`，不 panic。
 --
 -- 边界：只 import Base、`Vuna.Compiler.Ir` 与 `Native.*`。
@@ -50,6 +51,23 @@ internal : String -> NRes a
 internal msg = NFail (NativeInternal msg)
 
 -- ---------------------------------------------------------------
+-- 模块归属
+-- -----------------------------------------------------------
+-- | 定义的全限定名 -> 模块路径。无模块头的定义（ad-hoc 文件）归入入口模块 `Main`。
+modulePathOf : String -> List String
+modulePathOf name =
+  let
+    parts = split "." name
+  in case dropLast parts of
+    [] => ["Main"]
+    ms => ms
+
+dropLast : List a -> List a
+dropLast [] = []
+dropLast ([_]) = []
+dropLast (x :: rest) = x :: dropLast rest
+
+-- ---------------------------------------------------------------
 -- 生成状态与栈槽
 -- -----------------------------------------------------------
 record FGen where
@@ -64,6 +82,10 @@ record FGen where
   -- | 本函数**来参区**可复用的字节数（调用方压的栈实参 + 对齐洞）。
   --   尾调用把新实参写回 `[rbp+16...]`，超过这段就会踩调用者的帧，只能回退普通调用。
   fgTailRoom : Int
+  -- | 当前生成所属的模块路径（闭包函数继承它）。
+  fgModule : List String
+  -- | 当前定义的全限定名（闭包标签由它派生，跨定义稳定）。
+  fgOwner : String
 
 freshSlot : FGen -> Pair Int FGen
 freshSlot st =
@@ -228,6 +250,31 @@ addLit pool s =
 poolOfDefs : List IrDef -> List (Pair String String)
 poolOfDefs defs = foldl addLit [] (concatMap irStringsOfDef defs)
 
+-- | 模块 key（用 `.` 连接路径段；`modulePathOf` 的逆）。
+moduleKeyOf : String -> String
+moduleKeyOf name = join "." (modulePathOf name)
+
+-- | 每个模块一份字面量池（模块按首现顺序；池内首现顺序固定）。`.Llit_<n>` 是文件局部
+--   标签，所以字面量池按模块切分，新增字面量不会重编号其它模块。
+modulePools : List IrDef -> List (Pair String (List (Pair String String)))
+modulePools defs = foldl addDefToPools [] defs
+
+addDefToPools : List (Pair String (List (Pair String String))) -> IrDef -> List (Pair String (List (Pair String String)))
+addDefToPools pools d =
+  let
+    k = moduleKeyOf (irDefName d)
+    pool = foldl addLit (modulePoolOf k pools) (irStringsOfDef d)
+  in putPool k pool pools
+
+putPool : String -> List (Pair String String) -> List (Pair String (List (Pair String String))) -> List (Pair String (List (Pair String String)))
+putPool key pool [] = [Pair key pool]
+putPool key pool (p :: rest) =
+  if firstOf p == key then Pair key pool :: rest else p :: putPool key pool rest
+
+modulePoolOf : String -> List (Pair String (List (Pair String String))) -> List (Pair String String)
+modulePoolOf _ [] = []
+modulePoolOf key (p :: rest) = if firstOf p == key then secondOf p else modulePoolOf key rest
+
 poolLabelOf : String -> List (Pair String String) -> Maybe String
 poolLabelOf _ [] = Nothing
 poolLabelOf s (p :: rest) = if firstOf p == s then Just (secondOf p) else poolLabelOf s rest
@@ -361,8 +408,8 @@ closureArgLoad i = case argRegAt (i + 1) of
 
 -- | 函数值 wrapper：把闭包实参搬进本帧槽，再按标准 ABI 调目标函数。
 --   每个（函数 / 运行时符号）只生成一次，标签由 `Native.Abi` 的命名派生。
-valueWrapperFunc : String -> Int -> String -> NativeFunc
-valueWrapperFunc label arity target =
+valueWrapperFunc : List String -> String -> Int -> String -> NativeFunc
+valueWrapperFunc modPath label arity target =
   let
     slots = range 0 arity
     loads =
@@ -371,14 +418,15 @@ valueWrapperFunc label arity target =
     frame = nativeFrameBytes arity
   in NativeFunc label frame
     (append (nativePrologue frame) (append stackGuardInstrs (append loads (append (callSlotsInstrs target slots) nativeEpilogue))))
+    modPath
 
 -- | 把「顶层函数 / 运行时符号」求值成闭包对象：`[code][arity]`（无捕获）。
-genValueClosure : FGen -> String -> Int -> String -> NRes (Pair (List Instr) FGen)
-genValueClosure st label arity target =
+genValueClosure : FGen -> List String -> String -> Int -> String -> NRes (Pair (List Instr) FGen)
+genValueClosure st modPath label arity target =
   let
     st1 =
       if hasFuncLabel label st.fgLams then st
-      else { st | fgLams = append st.fgLams [valueWrapperFunc label arity target] }
+      else { st | fgLams = append st.fgLams [valueWrapperFunc modPath label arity target] }
     body =
       [ IMov (OpReg Rdi) (OpImm 16),
         ICall (nativeRtLabel "alloc"),
@@ -588,7 +636,8 @@ else case ir of
     Just d =>
       if irDefArity d == 0 then if isTail then NOk (Pair (tailCallSlotsInstrs (nativeFuncLabel name) []) st)
       else NOk (Pair [ICall (nativeFuncLabel name)] st)
-      else genValueClosure st (nativeGlobalValueLabel name) (irDefArity d) (nativeFuncLabel name)
+      else genValueClosure st (modulePathOf name) (nativeGlobalValueLabel name) (irDefArity d)
+        (nativeFuncLabel name)
   IrInt n =>
     if n < 0 - 4611686018427387903 - 1 || n > 4611686018427387903 then unsupported "native target: integer literal outside the 63-bit range"
     else NOk (Pair [IMov (OpReg Rax) (OpImm n)] st)
@@ -645,7 +694,7 @@ else case ir of
       Nothing => unsupported "native target: runtime symbol `${sym}` is not supported yet"
       Just label =>
         if arity <= 0 then NOk (Pair [ICall label] st)
-        else genValueClosure st (nativeRtValueLabel sym) arity label
+        else genValueClosure st nativeRuntimeModule (nativeRtValueLabel sym) arity label
   IrFloatLit raw => genFloatLit st raw
   IrEffThunk family ctor _unitTy arity prim => genEffThunk (fuel - 1) st family ctor arity prim
   IrEffBind _ _ _ => unsupported "native target: effect bindings are not supported yet"
@@ -743,17 +792,19 @@ else
     caps = reverse st.fgSlots
     ncap = length caps
     idx = st.fgNextLabel
-    lamName = "vuna_lam_${strFromInt idx}"
+    lamName = "vuna_${nativeName st.fgOwner}_lam${strFromInt idx}"
     st1 = { st | fgNextLabel = idx + 1 }
     -- 闭包体自己的来参区由闭包 ABI 决定（`rdi` 是闭包自身，实参从 `rsi` 起）。
     lamRoom = nativeTailRoomBytes (nativeStackArgCount (length rbs) (length closureArgRegs))
-    stBody = FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom
+    stBody =
+      FGen st1.fgDefs st1.fgPool [] st1.fgFams 0 st1.fgNextLabel [] lamRoom st1.fgModule st1.fgOwner
   in nbind (bindCaptures stBody caps 0) (\cp => nbind (bindArgsGo rbs 1 (secondOf cp)) (\bp => nbind (genExprAt (fuel - 1) (secondOf bp) True body) (\q => let
     stF = secondOf q
     frame = nativeFrameBytes stF.fgNextSlot
     lamFunc =
       NativeFunc lamName frame
         (append (nativePrologue frame) (append stackGuardInstrs (append (firstOf cp) (append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)))))
+        st.fgModule
     allocP = genAlloc st1 (2 + ncap)
     obj = firstOf (secondOf allocP)
     st2 = secondOf (secondOf allocP)
@@ -1168,23 +1219,25 @@ bindArgsGo (b :: rest) i st =
   in nbind (bindArgsGo rest (i + 1) (pushBinder b slot st1))
     (\q => NOk (Pair (append store (firstOf q)) (secondOf q)))
 
--- | 生成一个定义；返回函数与该定义之后**全局** label/slot 计数（label 必须跨定义
---   累加，否则两个函数会撞同名 `.L`）。
-genDefFunc : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) Int)
-genDefFunc _defs _pool _fams _nextLabel (IrExternDef name _ _ _) =
+-- | 生成一个定义；返回函数与该定义之后**模块内** label/slot 计数（`.L` 是文件局部
+--   符号，计数按模块保存；重编号不会跨模块扩散）。
+genDefFunc : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> Int -> IrDef -> NRes (Pair (List NativeFunc) Int)
+genDefFunc _defs _pools _fams _nextLabel (IrExternDef name _ _ _) =
   unsupported "native target: extern definition `${name}` is not supported yet"
-genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
+genDefFunc defs pools fams nextLabel (IrDef name arity _ body _ _ _) =
   let
     -- 本函数来参区：零参定义没有调用者压的栈实参，其余按标准 ABI 推算。
     room = nativeTailRoomBytes (nativeStackArgCount arity nativeMaxArgs)
-    st0 = FGen defs pool [] fams 0 nextLabel [] room
+    modPath = modulePathOf name
+    pool = modulePoolOf (moduleKeyOf name) pools
+    st0 = FGen defs pool [] fams 0 nextLabel [] room modPath name
   in if arity == 0 then nbind (genExprAt 100000 st0 True body) (\p => let
     st1 = secondOf p
     frame = nativeFrameBytes st1.fgNextSlot
     instrs = append (clearDeadSlots (firstOf p)) nativeEpilogue
     mainF =
       NativeFunc (nativeFuncLabel name) frame
-        (append (nativePrologue frame) (append stackGuardInstrs instrs))
+        (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
   in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
   )
   else case body of
@@ -1198,17 +1251,31 @@ genDefFunc defs pool fams nextLabel (IrDef name arity _ body _ _ _) =
         instrs = append (firstOf bp) (append (clearDeadSlots (firstOf q)) nativeEpilogue)
         mainF =
           NativeFunc (nativeFuncLabel name) frame
-            (append (nativePrologue frame) (append stackGuardInstrs instrs))
+            (append (nativePrologue frame) (append stackGuardInstrs instrs)) modPath
       in NOk (Pair (append st1.fgLams [mainF]) st1.fgNextLabel)
       )
       )
     _ => internal "function body is not a lambda: ${name}"
 
-genDefs : List IrDef -> List (Pair String String) -> List IrTyDecl -> Int -> List IrDef -> List (List NativeFunc) -> NRes (Pair (List NativeFunc) Int)
-genDefs _all _pool _fams next [] acc = NOk (Pair (concatMap (\x => x) (reverse acc)) next)
-genDefs all pool fams next (d :: rest) acc =
-  nbind (genDefFunc all pool fams next d)
-    (\p => genDefs all pool fams (secondOf p) rest (firstOf p :: acc))
+-- | 每个模块的 `.L` 编号计数（`.L` 是文件局部符号，编号在模块内累加；同一模块的定义可能
+--   在可达性顺序里不连续，所以计数必须按模块保存而不是靠「上一个定义」判断）。
+labelCountOf : String -> List (Pair String Int) -> Int
+labelCountOf _ [] = 0
+labelCountOf key (p :: rest) = if firstOf p == key then secondOf p else labelCountOf key rest
+
+putLabelCount : String -> Int -> List (Pair String Int) -> List (Pair String Int)
+putLabelCount key n [] = [Pair key n]
+putLabelCount key n (p :: rest) =
+  if firstOf p == key then Pair key n :: rest else p :: putLabelCount key n rest
+
+genDefs : List IrDef -> List (Pair String (List (Pair String String))) -> List IrTyDecl -> List (Pair String Int) -> List IrDef -> List (List NativeFunc) -> NRes (Pair (List NativeFunc) Int)
+genDefs _all _pools _fams _labels [] acc = NOk (Pair (concatMap (\x => x) (reverse acc)) 0)
+genDefs all pools fams labels (d :: rest) acc =
+  let
+    key = moduleKeyOf (irDefName d)
+    start = labelCountOf key labels
+  in nbind (genDefFunc all pools fams start d)
+    (\p => genDefs all pools fams (putLabelCount key (secondOf p) labels) rest (firstOf p :: acc))
 
 -- | 按标签去重（函数值 wrapper 可能被多个定义分别登记；同标签体相同）。
 dedupeFuncs : List NativeFunc -> List NativeFunc
@@ -1314,6 +1381,7 @@ startFunc printResult kind mainName runMainM handlers =
     exitInstrs = [IMov (OpReg Rax) (OpImm 60), IMov (OpReg Rdi) (OpImm 0), ISyscall]
   in NativeFunc nativeEntryLabel 0
     (append captureArgs (append initHeap (append initLimits (append callMain (append printer exitInstrs)))))
+    (modulePathOf mainName)
 
 -- ---------------------------------------------------------------
 -- List 桥接：strUnpack / strPack / strConcatMany / strSubstTemplate
@@ -1357,6 +1425,7 @@ bridgeFn name slots body =
     frame = nativeFrameBytes slots
   in NativeFunc (nativeRtLabel name) frame
     (append (nativePrologue frame) (append stackGuardInstrs (append body nativeEpilogue)))
+    nativeRuntimeModule
 
 nlistCellBytes : NListDesc -> Int
 nlistCellBytes d = 8 * (1 + d.nlMaxArity)
@@ -1561,11 +1630,13 @@ build program printResult =
                 ordered =
                   if kind == "float" then reachableDefs (floatRenderName :: seeds) defs
                   else reachableDefs seeds defs
-                pool = poolOfDefs ordered
-              in case genDefs defs pool unit.irUnitTyDecls 0 ordered [] of
+                pools = modulePools ordered
+              in case genDefs defs pools unit.irUnitTyDecls [] ordered [] of
                 NFail err => NativeRejected (nativeAuditEnrich err ordered)
                 NOk pair =>
                   let
                     start = startFunc printResult kind mainName runMainM (irEntryHandlersOf e)
+                    moduleLits =
+                      map (\p => Pair (split "." (firstOf p)) (poolItems (secondOf p))) pools
                   in NativeOk
-                    (NativeProgram nativeRodata (poolItems pool) nativeBss (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))))
+                    (NativeProgram nativeRodata nativeBss (dedupeFuncs (append (nativeBridgeFuncs (irProgSharedOf program).irSharedListFam unit.irUnitTyDecls) (append nativeRtFuncs (append (firstOf pair) [start])))) moduleLits)

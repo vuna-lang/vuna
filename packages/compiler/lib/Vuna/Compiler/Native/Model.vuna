@@ -2,8 +2,9 @@ module Vuna.Compiler.Native.Model where
 
 -- native 后端的汇编数据模型。
 --
--- 产物是 canonical 的 Intel 语法汇编 `main.s`；本模块只描述程序结构，渲染在
--- `Native.Render`，IR -> 程序在 `Native.Module`。模型覆盖 Int/Nat/Bool 的纯切片，
+-- 产物是按模块切分的 Intel 语法汇编文件集（`runtime.s` + 每模块一个 `.s`）；本模块
+-- 只描述程序结构，渲染在 `Native.Render`，IR -> 程序在 `Native.Module`。模型覆盖
+-- Int/Nat/Bool 的纯切片，
 -- 加**字符串**（堆对象 = 长度头 + 字节）与最小 bump 堆，因此有：
 --   * `.bss` 段（堆缓冲 + 堆指针）；
 --   * 带长度头的只读字符串字面量（`NativeStrLit`）；
@@ -168,11 +169,14 @@ export data Instr(..) : Type where
 -- ---------------------------------------------------------------
 -- 程序
 -- ---------------------------------------------------------------
--- | 一个函数：标签、帧大小（字节，16 倍数）、指令体。
+-- | 一个函数：标签、帧大小（字节，16 倍数）、指令体、所属模块路径。
+--   `nfModule` 是模块路径段（如 `["Vuna", "Compiler", "Native", "Render"]`）；
+--   `["runtime"]` 是运行时/桥接文件，`["Main"]` 是入口（含无模块头的 ad-hoc 文件）。
 export record NativeFunc(..) where
   nfLabel : String
   nfFrame : Int
   nfBody : List Instr
+  nfModule : List String
 
 -- | 只读数据：标签 + 原始文本（无长度头；只用于运行时常量）。
 export record NativeRodata(..) where
@@ -193,12 +197,14 @@ export record NativeBss(..) where
   nbAlign : Int
 
 -- | 一个 native 程序（渲染前的结构）。
---   `npFuncs` 的顺序固定：runtime 函数 → 用户函数（按生成顺序）→ `_start`。
+--   `npFuncs` 的顺序固定：runtime 函数 → 用户函数（按生成顺序）→ `_start`；
+--   `npModuleLits` 是每个模块自己的字符串字面量池（`.Llit_<n>` 是文件局部标签，
+--   所以字面量池按模块切分，新增字面量不会重编号其它模块）。
 export record NativeProgram(..) where
   npRodata : List NativeRodata
-  npStrLits : List NativeStrLit
   npBss : List NativeBss
   npFuncs : List NativeFunc
+  npModuleLits : List (Pair (List String) (List NativeStrLit))
 
 export data NativeOutcome(..) : Type where
   NativeOk : NativeProgram -> NativeOutcome

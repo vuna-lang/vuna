@@ -26,6 +26,7 @@ import Vuna.Compiler.Base.Diag.Format
 import Vuna.Compiler.Frontend.Manifest
 import Base.Nat
 import Base.List
+import Base.String
 import Base.EffClock
 import Base.EffConsole
 import Base.EffEnv
@@ -658,7 +659,7 @@ else if target == "native" then do
   r <- compileNative ctx entry printResult outDir
   pure (case r of
     ErrC e => ErrC e
-    OkC n => OkC (Pair n [])
+    OkC _ => OkC (Pair 1 [])
   )
 else compileToDir ctx entry printResult outDir
 
@@ -982,7 +983,7 @@ buildTargets noCompile multiOut outM (pkg :: rest) code o = do
   in buildTargets noCompile multiOut outM rest next (secondOf r)
 
 -- 单包：可执行包 build；库包只 check（workspace 构建单元覆盖所有成员）。
--- | native 目标的 build：compile 产 main.s，再调系统 cc 链接成静态可执行。
+-- | native 目标的 build：compile 产按模块切分的 `.s` 文件集，再调 `build.sh`（cc）链接。
 buildNativeOne : Member nFs FsOp r, Member nConsole ConsoleOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => Bool -> Bool -> Maybe String -> Package -> CliOpts -> Eff r (Pair Int CliOpts)
 buildNativeOne noCompile multiOut outM pkg o =
   let
@@ -990,32 +991,36 @@ buildNativeOne noCompile multiOut outM pkg o =
     outDir = case outM of
       Just out => if multiOut then "${out}/${name}" else out
       Nothing => "${packageDir pkg}/.output"
-    sPath = "${outDir}/main.s"
+    scriptPath = "${outDir}/build.sh"
     binDir = "${outDir}/bin"
     binPath = "${binDir}/${name}"
-    script =
-      "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" main.s\n"
-    ccArgs = ["cc", "-static", "-nostdlib", "-no-pie", "-Wl,--build-id=none", "-o", binPath, sPath]
   in do
     r <-
       compileNative (contextWithRelease o.optRelease (packageContext pkg)) (packageEntry pkg) True
         outDir
     case r of
       ErrC e => printDiag o e
-      OkC _ => do
-        _ <- fsWriteFile "${outDir}/build.sh" script
+      OkC files => do
+        _ <- fsWriteFile scriptPath (nativeBuildScript name files)
         if noCompile then do
-          _ <- consolePrint "wrote ${sPath}\n"
+          _ <- consolePrint "wrote ${scriptPath}\n"
           pure (Pair 0 o)
         else do
           _ <- ensureDirPath binDir
-          code <- processRunIn "." ccArgs
+          code <- processRunIn outDir ["sh", "build.sh"]
           if code == 0 then do
             _ <- consolePrint "wrote ${binPath}\n"
             pure (Pair 0 o)
           else do
             _ <- consolePrint "native link failed: cc exited ${strFromInt code}\n"
             pure (Pair 1 o)
+
+-- | native 的多对象构建脚本：逐文件 `cc -c` 到 `build/`，再链接；顺序由文件列表固定。
+nativeBuildScript : String -> List String -> String
+nativeBuildScript name files =
+  let
+    sources = join " " files
+  in "#!/bin/sh\nset -eu\ncd \"$(dirname \"$0\")\"\nmkdir -p bin\nSOURCES=\"${sources}\"\nOBJECTS=\"\"\nfor src in $SOURCES; do\n  obj=\"build/$src.o\"\n  mkdir -p \"$(dirname \"$obj\")\"\n  cc -c -o \"$obj\" \"$src\"\n  OBJECTS=\"$OBJECTS $obj\"\ndone\ncc -static -nostdlib -no-pie -Wl,--build-id=none -o \"bin/${name}\" $OBJECTS\n"
 
 -- | wasm 目标的 build：产 main.wat（+ build.sh）；非 `--no-compile` 时调 `wasm-tools` 汇编。
 -- 与 native 分支同构：外部工具是构建期依赖，缺失即明确失败（不静默产半成品）。

@@ -158,7 +158,7 @@ parity_one() {
     native)
       "$alt" compile "$outdir/src.vuna" "$outdir/n" --target native >"$outdir/build.log" 2>&1 || status=$?
       if [ "$status" = 0 ]; then
-        cc -static -nostdlib -no-pie -Wl,--build-id=none -o "$outdir/n/prog" "$outdir/n/main.s" >>"$outdir/build.log" 2>&1 || status=$?
+        cc -static -nostdlib -no-pie -Wl,--build-id=none -o "$outdir/n/prog" $(find "$outdir/n" -name '*.s' | sort) >>"$outdir/build.log" 2>&1 || status=$?
       fi
       if [ "$status" = 0 ]; then got=$("$outdir/n/prog" 2>&1) || status=$?; fi
       ;;

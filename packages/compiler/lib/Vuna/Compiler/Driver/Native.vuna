@@ -3,13 +3,15 @@ module Vuna.Compiler.Driver.Native where
 -- native 目标驱动。
 --
 -- 复用 DT 检查 + `Lowering.lowerProgramOf` 得到整程序 IR，再交给
--- `Native.Module.build` / `Native.Render.renderProgram`，写到 `OUT/main.s`。
+-- `Native.Module.build` / `Native.Render.renderFiles`，写出按模块切分的汇编文件集。
 -- 链接由 CLI 的 `build` 分支调系统 `cc` 完成（`Native` 模块本身不 spawn）。
 --
 -- 边界：不 import Core/Elab/Intrinsics；只经由 Driver.Dt 与 Lowering。
 import Base.Eff.Types
 import Base.Int
+import Base.List
 import Base.Pair
+import Base.String
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Base.Diag
 import Vuna.Compiler.Driver.Compile
@@ -26,7 +28,27 @@ import Base.EffProcess
 nativeErrDiag : NativeErr -> Diagnostic
 nativeErrDiag err = diagNoLoc SevError PhCodegen CatCodegen "" (nativeErrText err)
 
-export compileNative : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check Int)
+dropLast : List a -> List a
+dropLast [] = []
+dropLast ([_]) = []
+dropLast (x :: rest) = x :: dropLast rest
+
+parentDirOf : String -> String
+parentDirOf path =
+  let
+    parts = split "/" path
+  in case dropLast parts of
+    [] => "."
+    ps => join "/" ps
+
+writeFiles : Member nFs FsOp r, Member nProcess ProcessOp r => String -> List (Pair String String) -> Eff r Int
+writeFiles _ [] = pure 0
+writeFiles outDir (f :: rest) = do
+  _ <- ensureDirPath (parentDirOf "${outDir}/${firstOf f}")
+  _ <- fsWriteFile "${outDir}/${firstOf f}" (secondOf f)
+  writeFiles outDir rest
+
+export compileNative : Member nFs FsOp r, Member nEnv EnvOp r, Member nProcess ProcessOp r => PackageContext -> String -> Bool -> String -> Eff r (Check (List String))
 compileNative ctx entry printResult outDir = do
   _ <- ensureDirPath outDir
   checked <- dtCheckWithProgramParts ctx entry
@@ -39,6 +61,9 @@ compileNative ctx entry printResult outDir = do
         ErrC e => pure (ErrC e)
         OkC program => case build program printResult of
           NativeRejected err => pure (ErrC (nativeErrDiag err))
-          NativeOk m => do
-            _ <- fsWriteFile "${outDir}/main.s" (renderProgram m)
-            pure (OkC 1)
+          NativeOk m =>
+            let
+              files = renderFiles m
+            in do
+              _ <- writeFiles outDir files
+              pure (OkC (map firstOf files))

@@ -25,6 +25,10 @@ import Base.Pair
 import Base.String
 import Vuna.Compiler.Native.Model
 
+-- | 运行时/桥接函数所属的模块路径（渲染成根目录的 `runtime.s`）。
+export nativeRuntimeModule : List String
+nativeRuntimeModule = ["runtime"]
+
 -- | 参数寄存器（SysV AMD64 的整型前六个）。
 export nativeArgRegs : List Reg
 nativeArgRegs = [Rdi, Rsi, Rdx, Rcx, R8, R9]
@@ -207,10 +211,11 @@ rtFunc name frame body =
     endLabel = "${nativeRtLabel name}_end"
   in NativeFunc (nativeRtLabel name) frame
     (append (nativePrologue frame) (append stackGuardInstrs (append (mapRetTo endLabel body) (append [ILabel endLabel] nativeEpilogue))))
+    nativeRuntimeModule
 
 -- | 直接以 ret/exit 结束、无 prologue 的入口/陷阱。
 export rtRawFunc : String -> List Instr -> NativeFunc
-rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body
+rtRawFunc name body = NativeFunc (nativeRtLabel name) 0 body nativeRuntimeModule
 
 -- ---------------------------------------------------------------
 -- 稳定命名
@@ -245,8 +250,8 @@ nativeRtValueLabel sym = "rt_gv_${nativeName sym}"
 export nativeEntryLabel : String
 nativeEntryLabel = "_start"
 
--- | 内部 label：按生成顺序编号（同一 IR 的编号稳定）。**全程序唯一**：运行时模板
--- 与用户函数共享同一个编号空间（见 `Native.Module` 里 `_start` 之前的重新编号）。
+-- | 内部 label：按模块内生成顺序编号（同一 IR 的编号稳定）。`.L` 前缀是 GNU as 的
+-- **文件局部**符号：不同模块文件可以重号，标签重编号也不会跨文件扩散。
 export nativeJumpLabel : Int -> String
 nativeJumpLabel n = ".L${strFromInt n}"
 
@@ -254,6 +259,6 @@ nativeJumpLabel n = ".L${strFromInt n}"
 export nativeDataLabel : String -> String
 nativeDataLabel name = "rt_data_${nativeName name}"
 
--- | 字符串字面量标签（带长度头）。
+-- | 字符串字面量标签（带长度头）。字面量池按模块切分，标签是文件局部的 `.Llit_<n>`。
 export nativeStrLitLabel : Int -> String
-nativeStrLitLabel n = "rt_lit_${strFromInt n}"
+nativeStrLitLabel n = ".Llit_${strFromInt n}"

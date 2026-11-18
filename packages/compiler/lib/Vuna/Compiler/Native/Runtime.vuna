@@ -1148,7 +1148,7 @@ exitWithFn = rtFunc "exit_with" 0 [IMov (OpReg Rax) (OpImm 60), ISyscall]
 -- 资源限制：内存预算 / 核数（亲和性）/ 总超时
 -- ---------------------------------------------------------------
 -- `_start` 在 `vuna_main` 之前调用三个 `init_*`（见 `Native.Module.startFunc`）。
--- 配置全部来自 env，不进 codegen：同一 IR 的 `main.s` 逐字节确定。
+-- 配置全部来自 env，不进 codegen：同一 IR 的产物逐字节确定。
 --
 --   * `VUNA_NATIVE_MEM_LIMIT`（字节，0 = 不限，缺省 1 GiB）
 --   * `VUNA_NATIVE_CPUS`（`auto` 缺省 / `0` 不限 / N）

@@ -9,19 +9,20 @@
 run: command -v cc
 exit: 0
 
-# 1) 最小可执行：产物形状（main.s / build.sh / 可链接二进制）与入口打印。
+# 1) 最小可执行：产物形状（runtime.s + Main.s / build.sh / 可链接二进制）与入口打印。
 run: sh -c 'd="$TMPDIR/min"; mkdir -p "$d/app"; printf "[package]\nname = \"min\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : Int\nmain = 42\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/min-out" "$d"'
 exit: 0
-file-exists: $TMPDIR/min-out/main.s
+file-exists: $TMPDIR/min-out/Main.s
+file-exists: $TMPDIR/min-out/runtime.s
 file-exists: $TMPDIR/min-out/build.sh
-file-contains: $TMPDIR/min-out/main.s .intel_syntax noprefix
-file-contains: $TMPDIR/min-out/main.s .globl _start
-file-contains: $TMPDIR/min-out/main.s .section .bss
+file-contains: $TMPDIR/min-out/Main.s .intel_syntax noprefix
+file-contains: $TMPDIR/min-out/Main.s .globl _start
+file-contains: $TMPDIR/min-out/runtime.s .section .bss
 run: "$TMPDIR/min-out/bin/min" 2>&1
 exit: 0
 out-equals: 42
 
-# 2) 多个函数各自的内部 label 不得撞名（label 编号跨定义累加）。
+# 2) 多个函数各自的内部 label 不得撞名（label 编号在模块内累加；模块文件之间可重号）。
 run: sh -c 'd="$TMPDIR/labels"; mkdir -p "$d/app"; printf "[package]\nname = \"labels\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "f : Int -> Int\nf x = if x > 0 then 1 else 0\n\ng : Int -> Int\ng x = if x > 5 then 2 else 0\n\nmain : Int\nmain = f 1 + g 6\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/labels-out" "$d"'
 exit: 0
 run: "$TMPDIR/labels-out/bin/labels" 2>&1
@@ -34,8 +35,8 @@ run: sh -c '"$TMPDIR/dz-out/bin/dz" 2>&1'
 exit: 2
 out-contains: vuna: runtime error: division by zero
 
-# 4) 确定性：同一程序两次 compile 的 main.s 逐字节一致（含字符串字面量池）。
-run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ strFromInt 42 ++ \"b\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; cmp "$TMPDIR/det-a/main.s" "$TMPDIR/det-b/main.s"'
+# 4) 确定性：同一程序两次 compile 的文件集逐字节一致（含字符串字面量池）。
+run: sh -c 'd="$TMPDIR/det"; mkdir -p "$d/app"; printf "[package]\nname = \"det\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"a\" ++ strFromInt 42 ++ \"b\"\n" > "$d/app/Main.vuna"; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-a" --target native; "$VUNA" compile "$d/app/Main.vuna" "$TMPDIR/det-b" --target native; diff -r "$TMPDIR/det-a" "$TMPDIR/det-b"'
 exit: 0
 
 # 5) 可增长 arena：超过初始 1 MiB 时 mmap 新段，不再 OOM。
@@ -191,10 +192,11 @@ exit: 0
 run: "$TMPDIR/obsspan-out/bin/obsspan" 2>&1
 out-equals: 42
 
-# 10) --no-compile：只写 main.s + build.sh；build.sh 可独立链接并运行。
+# 10) --no-compile：只写汇编文件集 + build.sh；build.sh 可独立链接并运行。
 run: sh -c 'd="$TMPDIR/nc"; mkdir -p "$d/app"; printf "[package]\nname = \"nc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "main : String\nmain = \"n\" ++ strFromInt 7\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/nc-out" "$d"'
 exit: 0
-file-exists: $TMPDIR/nc-out/main.s
+file-exists: $TMPDIR/nc-out/Main.s
+file-exists: $TMPDIR/nc-out/runtime.s
 file-exists: $TMPDIR/nc-out/build.sh
 file-absent: $TMPDIR/nc-out/bin/nc
 run: sh -c 'cd "$TMPDIR/nc-out" && sh build.sh && ./bin/nc'
@@ -237,11 +239,11 @@ run: sh -c '"$TMPDIR/fsmiss-out/bin/fsmiss" 2>&1'
 exit: 1
 out-contains: fs: readFile
 
-# 9t) 内存预算：缺省 1 GiB（`main.s` 里的常量），`VUNA_NATIVE_MEM_LIMIT` 生效时
+# 9t) 内存预算：缺省 1 GiB（`runtime.s` 里的常量），`VUNA_NATIVE_MEM_LIMIT` 生效时
 #     trap `memory limit exceeded` + exit 2；未超限时输出不变。
 run: sh -c 'd="$TMPDIR/memlim"; mkdir -p "$d/app"; printf "[package]\nname = \"memlim\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\nrep : Nat -> String -> String\nrep n s = case n of\n  Zero => \"\"\n  Succ k => s ++ rep k s\n\nmain : Int\nmain = strLength (rep (natFromInt 5000) \"0123456789abcdef\")\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/memlim-out" "$d"'
 exit: 0
-file-contains: $TMPDIR/memlim-out/main.s 1073741824
+file-contains: $TMPDIR/memlim-out/runtime.s 1073741824
 run: "$TMPDIR/memlim-out/bin/memlim" 2>&1
 out-equals: 80000
 run: sh -c 'VUNA_NATIVE_MEM_LIMIT=1000 "$TMPDIR/memlim-out/bin/memlim" 2>&1'
@@ -269,8 +271,8 @@ out-equals: 1
 run: sh -c 'VUNA_NATIVE_MEM_LIMIT=12345 VUNA_NATIVE_INHERIT=1 "$TMPDIR/envinh-out/bin/envinh"'
 out-equals: 0
 
-# 9x) 限制只在启动时读 env：设与不设生成的 `main.s` 逐字节一致。
-run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; cmp "$TMPDIR/detlim-a/main.s" "$TMPDIR/detlim-b/main.s"'
+# 9x) 限制只在启动时读 env：设与不设生成的文件集逐字节一致。
+run: sh -c '"$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-a" --target native; VUNA_NATIVE_MEM_LIMIT=1 VUNA_NATIVE_CPUS=1 "$VUNA" compile "$TMPDIR/memlim/app/Main.vuna" "$TMPDIR/detlim-b" --target native; diff -r "$TMPDIR/detlim-a" "$TMPDIR/detlim-b"'
 exit: 0
 
 # 9y) GC 回收：高 churn、低存活集的程序在 1 MiB live 预算下跑完（累计分配约 3.8 MB），
@@ -296,8 +298,8 @@ run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/gcstress-out/bin/gcstress" 2>&1'
 exit: 0
 out-equals: 156
 
-# 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响 `main.s`。
-run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; cmp "$TMPDIR/detgc-a/main.s" "$TMPDIR/detgc-b/main.s"'
+# 9aa) GC 的 env 开关也不进 codegen：`GC_MIN` / `GC_LOG` / `GC_STRESS` 不影响产物。
+run: sh -c '"$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-a" --target native; VUNA_NATIVE_GC_MIN=4096 VUNA_NATIVE_GC_LOG=1 VUNA_NATIVE_GC_STRESS=1 "$VUNA" compile "$TMPDIR/gcgrow/app/Main.vuna" "$TMPDIR/detgc-b" --target native; diff -r "$TMPDIR/detgc-a" "$TMPDIR/detgc-b"'
 exit: 0
 
 # 9ab) 尾调用：互递归（even/odd）400 万层在默认 8 MiB 栈上跑完（不尾调用会栈溢出）。
@@ -306,7 +308,7 @@ exit: 0
 run: "$TMPDIR/tcomutual-out/bin/tcomutual" 2>&1
 exit: 0
 out-equals: 1
-file-contains: $TMPDIR/tcomutual-out/main.s jmp vuna_odd
+file-contains: $TMPDIR/tcomutual-out/Main.s jmp vuna_odd
 
 # 9ac) 尾调用的栈传参：9 参自递归（3 个栈参数）每层重写来参区，常量栈跑完 100 万层。
 run: sh -c 'd="$TMPDIR/tcowide"; mkdir -p "$d/app"; printf "[package]\nname = \"tcowide\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "step : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nstep a b c d e f g h n =\n  if n <= 0 then a + b + c + d + e + f + g + h\n  else step (a + 1) b c d e f g h (n - 1)\n\nmain : Int\nmain = step 0 0 0 0 0 0 0 1 1000000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcowide-out" "$d"'
@@ -314,7 +316,7 @@ exit: 0
 run: "$TMPDIR/tcowide-out/bin/tcowide" 2>&1
 exit: 0
 out-equals: 1000001
-file-contains: $TMPDIR/tcowide-out/main.s jmp vuna_step
+file-contains: $TMPDIR/tcowide-out/Main.s jmp vuna_step
 
 # 9ad) 尾位置穿透 `if` / `case` / `natCase`：三种形状的深递归都在常量栈上跑完。
 run: sh -c 'd="$TMPDIR/tcopos"; mkdir -p "$d/app"; printf "[package]\nname = \"tcopos\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "import Base.Nat\n\ndata Chain : Type where\n  Nil2 : Chain\n  Cons2 : Chain -> Chain\n\nbuild : Int -> Chain -> Chain\nbuild n acc = if n <= 0 then acc else build (n - 1) (Cons2 acc)\n\nifTail : Int -> Int\nifTail n = if n <= 0 then 0 else ifTail (n - 1)\n\nchainTail : Chain -> Int\nchainTail c = case c of\n  Nil2 => 0\n  Cons2 k => chainTail k\n\nnatTail : Nat -> Int\nnatTail n = case n of\n  Zero => 0\n  Succ k => natTail k\n\nmain : Int\nmain = ifTail 300000 + chainTail (build 300000 Nil2) + natTail (natFromInt 300000)\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcopos-out" "$d"'
@@ -324,17 +326,17 @@ exit: 0
 out-equals: 0
 
 # 9ae) 来参区不够时不发尾调用：窄函数尾调 8 参宽函数回退普通 `call`，语义不变；
-#      `main.s` 里该调用点是 `call`，而宽函数尾调窄函数（够用）仍是 `jmp`。
+#      `Main.s` 里该调用点是 `call`，而宽函数尾调窄函数（够用）仍是 `jmp`。
 run: sh -c 'd="$TMPDIR/tcofb"; mkdir -p "$d/app"; printf "[package]\nname = \"tcofb\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "narrow : Int -> Int\nnarrow n = if n <= 0 then 42 else wide8 (n - 1) 1 2 3 4 5 6 n\n\nwide8 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int\nwide8 n a b c d e f g = narrow n\n\nmain : Int\nmain = narrow 50000\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --out "$TMPDIR/tcofb-out" "$d"'
 exit: 0
 run: "$TMPDIR/tcofb-out/bin/tcofb" 2>&1
 exit: 0
 out-equals: 42
-run: sh -c 'grep -q "call vuna_wide8" "$TMPDIR/tcofb-out/main.s"'
+run: sh -c 'grep -q "call vuna_wide8" "$TMPDIR/tcofb-out/Main.s"'
 exit: 0
-run: sh -c '! grep -q "jmp vuna_wide8" "$TMPDIR/tcofb-out/main.s"'
+run: sh -c '! grep -q "jmp vuna_wide8" "$TMPDIR/tcofb-out/Main.s"'
 exit: 0
-run: sh -c 'grep -q "jmp vuna_narrow" "$TMPDIR/tcofb-out/main.s"'
+run: sh -c 'grep -q "jmp vuna_narrow" "$TMPDIR/tcofb-out/Main.s"'
 exit: 0
 
 # 9af) 尾调用 × 续延 × GC：resume 之后的尾递归循环在 `GC_STRESS` 下输出一致。
@@ -347,8 +349,8 @@ run: sh -c 'VUNA_NATIVE_GC_STRESS=1 "$TMPDIR/tcoeff-out/bin/tcoeff" 2>&1'
 exit: 0
 out-equals: 88891
 
-# 9ag) 尾调用不影响确定性：带尾调用的程序两次 compile 的 `main.s` 逐字节一致。
-run: sh -c '"$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-a" --target native; "$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-b" --target native; cmp "$TMPDIR/dettco-a/main.s" "$TMPDIR/dettco-b/main.s"'
+# 9ag) 尾调用不影响确定性：带尾调用的程序两次 compile 的文件集逐字节一致。
+run: sh -c '"$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-a" --target native; "$VUNA" compile "$TMPDIR/tcowide/app/Main.vuna" "$TMPDIR/dettco-b" --target native; diff -r "$TMPDIR/dettco-a" "$TMPDIR/dettco-b"'
 exit: 0
 
 # 9ah) 闭包体的来参区按闭包 ABI 算（`rdi` 占掉一个寄存器）：8 参 lambda 尾调 10 参函数
@@ -358,5 +360,18 @@ exit: 0
 run: "$TMPDIR/tcolam-out/bin/tcolam" 2>&1
 exit: 0
 out-equals: 36
-run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/main.s"'
+run: sh -c 'grep -c "jmp vuna_wide10" "$TMPDIR/tcolam-out/Main.s"'
 out-equals: 2
+
+# 11) 文件集按模块切分：改一个模块只重写该模块的 `.s`，其它模块与 runtime 逐字节不变。
+run: sh -c 'd="$TMPDIR/loc"; mkdir -p "$d/app" "$d/lib"; printf "[package]\nname = \"loc\"\n\n[dependencies]\nvuna-base = \"%s\"\n" "$VUNA_BASE" > "$d/vuna.toml"; printf "module Util where\n\nexport answer : Int\nanswer = 41\n" > "$d/lib/Util.vuna"; printf "import Util\n\nmain : Int\nmain = answer + 1\n" > "$d/app/Main.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-a" "$d"'
+exit: 0
+file-exists: $TMPDIR/loc-a/Util.s
+file-exists: $TMPDIR/loc-a/Main.s
+file-exists: $TMPDIR/loc-a/runtime.s
+run: sh -c 'd="$TMPDIR/loc"; printf "module Util where\n\nexport answer : Int\nanswer = if 1 == 1 then 42 else 0\n" > "$d/lib/Util.vuna"; "$VUNA" build --target native --no-compile --out "$TMPDIR/loc-b" "$d"'
+exit: 0
+run: sh -c 'cmp "$TMPDIR/loc-a/Main.s" "$TMPDIR/loc-b/Main.s" && cmp "$TMPDIR/loc-a/runtime.s" "$TMPDIR/loc-b/runtime.s"'
+exit: 0
+run: sh -c '! cmp -s "$TMPDIR/loc-a/Util.s" "$TMPDIR/loc-b/Util.s"'
+exit: 0

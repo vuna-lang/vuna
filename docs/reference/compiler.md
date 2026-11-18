@@ -142,7 +142,7 @@
 | `Driver.PerfCache` | codegen 单元缓存（按单元 key 复用生成的 `SplitFile`） | `unitCacheRead`、`unitCacheWrite`、`unitCacheCodec` |
 | `Driver.ToolPayload` | 工具会话载荷编码：`ToolContext` → 规范字节（codec `tool-context 1`），落在 `objects/tool/<addr>`；字段顺序 = record 声明顺序，解码要求恰好消费完 | `encToolContext`、`decToolContext`、`toolContextSchema`、`toolContextCodec` |
 | `Driver.CompilerCli` | 编译器自己的 CLI（`vuna-compiler`）；含受限进程执行入口 `runIn`；workspace check/build 单元、`build --package`、`version` | `runCompilerCli`、`compilerUsageLines`、`runIn` |
-| `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `main.s` / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
+| `Driver.Native` / `Driver.Wasm` | 后端驱动：检查 + lowering + 写 `.s` 文件集 / `main.wat`；不 import Core/Elab/Intrinsics | `compileNative`、`compileWasm` |
 
 `packages/compiler/vuna.toml` 的 `[export]` 列出全部 104 个模块（模块即公开面，没有内部模块）；
 编译器直接使用 `prim_*`（无 manifest 能力/特权声明）。工具链模块不在此包。
