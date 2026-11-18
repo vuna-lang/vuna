@@ -171,7 +171,27 @@ fits fuel room work =
           DAlign d => fits (fuel - 1) room (Work w.workIndent w.workMode d :: rest)
           DGroup d => fits (fuel - 1) room (Work w.workIndent MFlat d :: rest)
 
--- | 渲染主循环：`col` 是当前列，`work` 是待处理栈，`acc` 是逆序输出片段。
+-- | 当前有效列：行首延迟缩进时（负数）取缩进值。
+effCol : Int -> Int
+effCol col = if col < 0 then 0 - col - 1 else col
+
+-- | 发射文本；行首若还有未发出的缩进，先补空格（空行不产生行尾空白）。
+renderText : Int -> Int -> String -> List Work -> List String -> Int -> String
+renderText fuel width s rest acc col =
+  if col < 0 then
+    let
+      ind = 0 - col - 1
+    in renderGo (fuel - 1) width (ind + strWidth s) rest (s :: spaces ind :: acc)
+  else
+    renderGo (fuel - 1) width (col + strWidth s) rest (s :: acc)
+
+-- | 发射换行；缩进延迟到下一段文本时再写（连续换行 = 无行尾空白的空行）。
+renderBreak : Int -> Int -> Int -> List Work -> List String -> String
+renderBreak fuel width indent rest acc =
+  renderGo (fuel - 1) width (0 - indent - 1) rest ("\n" :: acc)
+
+-- | 渲染主循环：`col` 是当前列（负数 = 行首、缩进尚未写出），`work` 是待处理栈，
+-- `acc` 是逆序输出片段。
 renderGo : Int -> Int -> Int -> List Work -> List String -> String
 renderGo fuel width col work acc =
   if fuel <= 0 then
@@ -182,15 +202,21 @@ renderGo fuel width col work acc =
       w :: rest =>
         case w.workDoc of
           DEmpty => renderGo (fuel - 1) width col rest acc
-          DText s => renderGo (fuel - 1) width (col + strWidth s) rest (s :: acc)
-          DHard => renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
-          DLine => if modeIsFlat w.workMode then renderGo (fuel - 1) width (col + 1) rest (" " :: acc) else renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
-          DSoft => if modeIsFlat w.workMode then renderGo (fuel - 1) width col rest acc else renderGo (fuel - 1) width w.workIndent rest ("\n${spaces w.workIndent}" :: acc)
-          DVerbatim s => renderGo (fuel - 1) width (verbatimEndCol col s) rest (s :: acc)
+          DText s => renderText fuel width s rest acc col
+          DHard => renderBreak fuel width w.workIndent rest acc
+          DLine => if modeIsFlat w.workMode then renderText fuel width " " rest acc col else renderBreak fuel width w.workIndent rest acc
+          DSoft => if modeIsFlat w.workMode then renderGo (fuel - 1) width col rest acc else renderBreak fuel width w.workIndent rest acc
+          DVerbatim s =>
+            if col < 0 then
+              let
+                ind = 0 - col - 1
+              in renderGo (fuel - 1) width (verbatimEndCol ind s) rest (s :: spaces ind :: acc)
+            else
+              renderGo (fuel - 1) width (verbatimEndCol col s) rest (s :: acc)
           DConcat a b => renderGo (fuel - 1) width col (Work w.workIndent w.workMode a :: Work w.workIndent w.workMode b :: rest) acc
           DNest n d => renderGo (fuel - 1) width col (Work (w.workIndent + n) w.workMode d :: rest) acc
-          DAlign d => renderGo (fuel - 1) width col (Work col w.workMode d :: rest) acc
-          DGroup d => if modeIsFlat w.workMode then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else if fits (docSize d + 64) (width - col) [Work w.workIndent MFlat d] then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else renderGo (fuel - 1) width col (Work w.workIndent MBreak d :: rest) acc
+          DAlign d => renderGo (fuel - 1) width col (Work (effCol col) w.workMode d :: rest) acc
+          DGroup d => if modeIsFlat w.workMode then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else if fits (docSize d + 64) (width - effCol col) [Work w.workIndent MFlat d] then renderGo (fuel - 1) width col (Work w.workIndent MFlat d :: rest) acc else renderGo (fuel - 1) width col (Work w.workIndent MBreak d :: rest) acc
 
 -- | 以最大宽度 `width` 渲染文档（`width` 是绝对列数，从第 0 列起算）。
 export render : Int -> Doc -> String

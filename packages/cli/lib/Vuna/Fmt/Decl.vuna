@@ -13,6 +13,7 @@ module Vuna.Fmt.Decl where
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
 import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Expr
@@ -106,8 +107,8 @@ membersSuffix (Just (EMOnly ms)) = "(${joinComma ms})"
 -- 声明渲染
 -- ---------------------------------------------------------------
 -- | 内部：渲染单个声明并贴上它的注释。
-renderDeclAt : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> Doc
-renderDeclAt mods env at decl = attachAt at (declSpan decl) (renderDeclBody mods env at decl)
+renderDeclAt : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> Doc
+renderDeclAt mods env at decl = attachAtTop at (declSpan decl) (renderDeclBody mods env at decl)
 
 -- | 内部：声明头 + 缩进 2 的体（空体只输出头）。
 bodyBlock : String -> List Doc -> Doc
@@ -122,7 +123,7 @@ derivingBlock : List Doc -> Doc
 derivingBlock docs = if isNilList docs then empty else appendDoc hard (vsep docs)
 
 -- | 内部：按声明种类分发到具体渲染。
-renderDeclBody : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> Doc
+renderDeclBody : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> Doc
 renderDeclBody mods env at (DData name params kind ctors derivings viaField repr lin sp) =
   let
     prefix = lookupText name mods.fdmPrefix ++ declPrefix repr lin
@@ -184,7 +185,7 @@ isNameStart : Int -> Bool
 isNameStart c = c >= 65 && c <= 90 || c >= 97 && c <= 122 || c == 95
 
 -- | 内部：构造器行 `Ctor : Ty`（缩进 2）并贴上其注释。
-renderCtorDecl : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Ctor -> Doc
+renderCtorDecl : List FixityDecl -> TriviaCtx -> Ctor -> Doc
 renderCtorDecl env at (Ctor cname ty arity sp) =
   attachAt at sp (text "${declNameText cname} : ${renderTypeExpr env at ty}")
 
@@ -198,17 +199,17 @@ renderDerivings viaField names =
     [text "deriving (${joinComma names})"]
 
 -- | 内部：字段行 `name : Ty`（缩进 2）并贴上其注释。
-renderRecordField : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Field -> Doc
+renderRecordField : List FixityDecl -> TriviaCtx -> Field -> Doc
 renderRecordField env at f =
   attachAt at (fieldSpan f) (text "${fieldName f} : ${renderTypeExpr env at (fieldType f)}")
 
 -- | 内部：trait 参数文本（无 kind 时只写名字，有 kind 时 `(a : K)`）。
-traitParamText : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitParam -> String
+traitParamText : List FixityDecl -> TriviaCtx -> TraitParam -> String
 traitParamText env at (TraitParam n Nothing) = n
 traitParamText env at (TraitParam n (Just k)) = "(${n} : ${renderTypeExpr env at k})"
 
 -- | 内部：trait 方法签名行 `name : Ty`（缩进 2）并贴上其注释。
-renderMethodSig : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> TraitMethod -> Doc
+renderMethodSig : List FixityDecl -> TriviaCtx -> TraitMethod -> Doc
 renderMethodSig env at m =
   attachAt
     at
@@ -235,7 +236,7 @@ renderOneCtx env e =
 
 -- | 内部：函数子句（顶层 / instance 方法 / where 绑定共用）；body 是 `ELet .. True`
 -- 时按 where 形式还原。
-renderClause : List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List Pat -> Expr -> Doc
+renderClause : List FixityDecl -> TriviaCtx -> String -> List Pat -> Expr -> Doc
 renderClause env at name pats body =
   let
     header = "${declNameText name}${joinSpace (map renderPatAtom pats)}"
@@ -254,13 +255,13 @@ renderClause env at name pats body =
 -- 顶层声明序列
 -- ---------------------------------------------------------------
 -- | 内部：顶层声明序列：不同函数之间一个空行；类型签名紧贴同名函数子句。
-renderTopDecls : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Decl -> Doc
+renderTopDecls : FmtDeclMods -> List FixityDecl -> TriviaCtx -> List Decl -> Doc
 renderTopDecls mods env at [] = empty
 renderTopDecls mods env at (d :: rest) =
   appendDoc (renderDeclAt mods env at d) (renderTopRest mods env at d rest)
 
 -- | 内部：渲染余下声明，按 `attachDecl` 决定是否与上一条之间空行。
-renderTopRest : FmtDeclMods -> List FixityDecl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Decl -> List Decl -> Doc
+renderTopRest : FmtDeclMods -> List FixityDecl -> TriviaCtx -> Decl -> List Decl -> Doc
 renderTopRest mods env at prev [] = empty
 renderTopRest mods env at prev (d :: rest) =
   let
@@ -282,13 +283,13 @@ declNamed _ n = False
 -- 模块头 / import / `infix*` 声明 / 文件组装
 -- ---------------------------------------------------------------
 -- | 内部：模块头：显式导出列表（排序后输出）或 `module M where`。
-renderModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ModDecl -> Doc
+renderModDecl : TriviaCtx -> ModDecl -> Doc
 renderModDecl at (ModDecl name True items _ _ _ sp) =
   renderExplicitModDecl at name (sortExports items)
 renderModDecl at (ModDecl name False items _ _ _ sp) = text "module ${name} where"
 
 -- | 内部：显式导出列表：空列表与短列表保持单行；超宽或含项注释时逐项一行。
-renderExplicitModDecl : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> Doc
+renderExplicitModDecl : TriviaCtx -> String -> List ExportItem -> Doc
 renderExplicitModDecl at name [] = text "module ${name} () where"
 renderExplicitModDecl at name sorted =
   if anyItemHasComments at sorted then
@@ -297,7 +298,7 @@ renderExplicitModDecl at name sorted =
     group (appendDoc (text "module ${name} (") (appendDoc (commaItems at sorted) (text ") where")))
 
 -- | 内部：导出项逐个用 `, ` 连接（展平用）。
-commaItems : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Doc
+commaItems : TriviaCtx -> List ExportItem -> Doc
 commaItems at [] = empty
 commaItems at ([item]) = renderExportItemDoc at item
 commaItems at (item :: rest) =
@@ -306,7 +307,7 @@ commaItems at (item :: rest) =
     (appendDoc (text ",") (appendDoc line (commaItems at rest)))
 
 -- | 内部：多行导出列表（逗号前置）：首项 `( a`，其余 `, b`，收尾 `) where`。
-renderExportListBlock : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> String -> List ExportItem -> Doc
+renderExportListBlock : TriviaCtx -> String -> List ExportItem -> Doc
 renderExportListBlock at name items =
   case items of
     [] => text "module ${name} () where"
@@ -316,7 +317,7 @@ renderExportListBlock at name items =
         (nest 2 (appendDoc hard (appendDoc (appendDoc (text "( ") (renderExportItemDoc at first)) (appendDoc (hcat (map (\item => appendDoc hard (appendDoc (text ", ") (renderExportItemDoc at item))) rest)) (appendDoc hard (text ") where"))))))
 
 -- | 内部：单条导出项（贴上该项的注释）。
-renderExportItemDoc : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ExportItem -> Doc
+renderExportItemDoc : TriviaCtx -> ExportItem -> Doc
 renderExportItemDoc at item = attachAt at (exportItemSpan item) (text (renderExportItem item))
 
 -- | 内部：导出项文本（`name` / `name(..)` / `name(a, b)` / `module M`）。
@@ -384,18 +385,18 @@ targetSuffix Nothing = ""
 targetSuffix (Just t) = " = ${t}"
 
 -- | 内部：单条 `infix*` 声明行（贴上该声明的注释）。
-renderFixityLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> FixityDecl -> Doc
-renderFixityLine at d = attachAt at (fixitySpan d) (text (renderFixityDecl d))
+renderFixityLine : TriviaCtx -> FixityDecl -> Doc
+renderFixityLine at d = attachAtTop at (fixitySpan d) (text (renderFixityDecl d))
 
 -- | 内部：模块头 section（匿名 / 无名模块不输出）。
-renderHeader : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> Doc
+renderHeader : TriviaCtx -> Maybe ModDecl -> Doc
 renderHeader at Nothing = empty
 renderHeader at (Just m) =
-  if m.modDeclName == "" then empty else attachAt at m.modDeclSpan (renderModDecl at m)
+  if m.modDeclName == "" then empty else attachAtTop at m.modDeclSpan (renderModDecl at m)
 
 -- | 内部：单条 import 行（贴上该 import 的注释）。
-renderImportLine : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Import -> Doc
-renderImportLine at imp = attachAt at imp.importSpan (text (renderImport imp))
+renderImportLine : TriviaCtx -> Import -> Doc
+renderImportLine at imp = attachAtTop at imp.importSpan (text (renderImport imp))
 
 -- | 内部：模块头里的 `export import` 重导出项（`export import` 行由它派生）。
 headerReexports : Maybe ModDecl -> List ExportItem
@@ -485,7 +486,7 @@ renderNamespaceReexport _ = ""
 
 -- | 内部：import section；带重导出项的 import 渲染成 `export import` 行，
 -- `export module` 行单独追加在 import 之后。
-renderImportLines : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Maybe ModDecl -> List Import -> Doc
+renderImportLines : TriviaCtx -> Maybe ModDecl -> List Import -> Doc
 renderImportLines at hdr imports =
   let
     importDocs =
@@ -493,21 +494,21 @@ renderImportLines at hdr imports =
           \imp =>
             case itemsForImport imp (headerReexports hdr) of
               [] => renderImportLine at imp
-              items => attachAt at imp.importSpan (text (renderReexportLine imp items))
+              items => attachAtTop at imp.importSpan (text (renderReexportLine imp items))
         ) imports
     nsDocs =
       map
-        (\item => attachAt at (exportItemSpan item) (text (renderNamespaceReexport item)))
+        (\item => attachAtTop at (exportItemSpan item) (text (renderNamespaceReexport item)))
         (filter isNamespaceReexport (headerReexports hdr))
   in vsep (append importDocs nsDocs)
 
 -- | 内部：文件末尾的注释（顶格）。
 renderEofComments : List Comment -> Doc
-renderEofComments comments = vsep (map commentLeadDoc comments)
+renderEofComments comments = eofCommentsDoc comments
 
 -- | 文件组装的五个 section：模块头 / imports / `infix*` 声明 / 声明 / 文件末尾注释；
 -- 非空 section 之间空一行。
-export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Doc
+export renderSourceSections : List FixityDecl -> Maybe ModDecl -> List Import -> List FixityDecl -> List Decl -> TriviaCtx -> List Comment -> Doc
 renderSourceSections env hdr imports fixities decls at eof =
   sectionsDoc
     [renderHeader at hdr, renderImportLines at hdr imports, vsep (map (renderFixityLine at) fixities), renderTopDecls (buildFmtDeclMods hdr) env at decls, renderEofComments eof]

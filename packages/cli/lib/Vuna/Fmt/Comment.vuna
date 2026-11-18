@@ -1,16 +1,19 @@
--- | 注释保留：注释不在 AST 里，格式化器单独 lex 出注释，按源码位置挂到最近的「条目」上。
+-- | 注释保留：注释不在 AST 里，格式化器从 CST 的 token trivia 取注释，按源码位置挂到
+-- 最近的「条目」上。
 --
 -- 可挂注释的条目：顶部声明 / import / `infix*` 声明 / 构造器 / 记录字段 / trait 方法 /
 -- let 与 where 绑定 / case 分支 / do 语句。单独成行的注释成为下一条目的前置注释，
--- 写在同一行末尾的注释成为该条目的行尾注释；表达式内部的注释前移到最内层包含它的
--- 条目（没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
+-- 写在同一行末尾的注释成为该条目的行尾注释；多行块注释只作前置注释。
+-- 前置注释之间的源码空行保留（至多一级）；表达式内部的注释前移到最内层包含它的条目
+-- （没有则前移到下一条目；文件末尾的注释保留在文件末尾）。
 --
--- 对外提供 `anchorSpans` / `assignComments` / `attachAt`，供门面 [Vuna.Fmt] 与
--- [Vuna.Fmt.Expr] / [Vuna.Fmt.Decl] 使用。
+-- 注释列表在 `formatSourceWith` 里按 `anchorSpans` 做一次归属分配（行尾优先、否则下一条目），
+-- 渲染时按条目 span 直接查 `TriviaCtx`。
 module Vuna.Fmt.Comment where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Lexer
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
@@ -103,18 +106,24 @@ blockCommentLines c =
     [] => ["{- -}"]
     first :: rest => "{-${trimRightSpaces first}" :: commentTailLines stripN rest
 
+-- | 内部：空行标记（`commentText` 为 NUL；源码里不可能出现）。
+isBlankMarker : Comment -> Bool
+isBlankMarker c = c.commentText == strPack [0]
+
 -- | 注释作为前置文档：行注释 `--...`；单行块注释 `{-...-}`；多行块注释逐行输出，
--- 缩进由调用方的 `nest` 承担。
+-- 缩进由调用方的 `nest` 承担；空行标记输出空行。
 export commentLeadDoc : Comment -> Doc
-commentLeadDoc c = vsep (map text (commentLeadLines c))
+commentLeadDoc c = if isBlankMarker c then empty else vsep (map text (commentLeadLines c))
 
 -- | 内部：注释的前置文本行（无缩进）。
 commentLeadLines : Comment -> List String
 commentLeadLines c =
-  case c.commentKind of
-    CLine => ["--${c.commentText}"]
-    CBlock =>
-      if containsNewline c.commentText then blockCommentLines c else ["{-${c.commentText}-}"]
+  if isBlankMarker c then
+    [""]
+  else
+    case c.commentKind of
+      CLine => ["--${c.commentText}"]
+      CBlock => if containsNewline c.commentText then blockCommentLines c else ["{-${c.commentText}-}"]
 
 -- 位置比较与附件表 ------------------------------------------------
 -- | 内部：(行, 列) 严格先后比较。
@@ -240,12 +249,14 @@ nextFold best (sp :: rest) csp =
 
 -- | 把注释分配到条目附件表：单行注释优先挂行尾锚点，否则走前置路径；
 -- 返回 (附件表, 文件末尾注释)。
-export assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
+assignComments : List Span -> List Comment -> List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List Comment -> Pair (List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))) (List Comment)
 assignComments anchors [] at eof = Pair at eof
 assignComments anchors (c :: rest) at eof =
   let
     csp = commentSpan c
-  in if isSingleLineComment c then
+  in if isBlankMarker c then
+    assignNextComment anchors c rest at eof
+  else if isSingleLineComment c then
     case bestTrailAnchor anchors csp of
       Just sp => assignComments anchors rest (addToSlot (Pair (spanStartLine sp) (spanStartCol sp)) True c at) eof
       Nothing => assignNextComment anchors c rest at eof
@@ -405,8 +416,8 @@ trailingDoc at sp doc =
     cs => foldl (\acc, c => acc `appendDoc` (text " ${inlineCommentText c}")) doc cs
 
 -- | 把条目的注释贴到渲染结果上：前置注释在上，行尾注释追加到最后一行。
-export attachAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Doc -> Doc
-attachAt at sp doc = trailingDoc at sp (leadingDoc at sp `appendDoc` doc)
+attachAtTable : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> Span -> Doc -> Doc
+attachAtTable at sp doc = trailingDoc at sp (leadingDoc at sp `appendDoc` doc)
 
 -- | 内部：导出项是否挂了注释（前置或行尾）。
 itemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> ExportItem -> Bool
@@ -418,6 +429,124 @@ itemHasComments at item =
     Just slot => not (isNilList (firstOf slot)) || not (isNilList (secondOf slot))
 
 -- | 任一导出项挂了注释：有则导出列表强制多行，避免单行把后续项注释掉。
-export anyItemHasComments : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
-anyItemHasComments at [] = False
-anyItemHasComments at (item :: rest) = itemHasComments at item || anyItemHasComments at rest
+anyItemHasCommentsTable : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment))) -> List ExportItem -> Bool
+anyItemHasCommentsTable at [] = False
+anyItemHasCommentsTable at (item :: rest) =
+  itemHasComments at item || anyItemHasCommentsTable at rest
+
+-- | 去掉列表开头的空行标记（空行只保留在两条注释之间）。
+stripLeadingBlanks : List Comment -> List Comment
+stripLeadingBlanks [] = []
+stripLeadingBlanks (c :: rest) = if isBlankMarker c then stripLeadingBlanks rest else c :: rest
+
+-- ---------------------------------------------------------------
+-- CST trivia → 注释计划
+-- ---------------------------------------------------------------
+-- | 注释计划：附件表（与条目起点对齐）+ 文件末尾注释。渲染时按条目 span 查表。
+export record TriviaCtx where
+  ctxAt : List (Pair (Pair Int Int) (Pair (List Comment) (List Comment)))
+
+-- | 空计划（模板洞等没有源码位置的位置）。
+export emptyTrivia : TriviaCtx
+emptyTrivia = TriviaCtx []
+
+-- | 去掉注释原文的定界符（`--` / `{- -}`），得到旧注释模型的正文。
+stripLineDelim : String -> String
+stripLineDelim s = trimRightSpaces (strPack (dropN 2 (strUnpack s)))
+
+stripBlockDelim : String -> String
+stripBlockDelim s =
+  let
+    cs = strUnpack s
+    inner = dropN 2 cs
+    withoutTail = dropLastN 2 inner
+  in strPack withoutTail
+
+dropN : Int -> List Int -> List Int
+dropN n xs =
+  if n <= 0 then
+    xs
+  else
+    case xs of
+      [] => []
+      _ :: rest => dropN (n - 1) rest
+
+dropLastN : Int -> List Int -> List Int
+dropLastN n xs = reverse (dropN n (reverse xs))
+
+-- | 一条 trivia 注释 → 旧注释模型；不是注释给 `Nothing`。
+triviaComment : Trivia -> Maybe Comment
+triviaComment tr =
+  case tr.triviaKind of
+    TrivLineComment => Just (Comment CLine (stripLineDelim tr.triviaText) tr.triviaSpan)
+    TrivBlockComment => Just (Comment CBlock (stripBlockDelim tr.triviaText) tr.triviaSpan)
+    TrivSpace => Nothing
+
+-- | trivia → 注释列表（含空行标记）；`nl` 是距上一 token / 注释的换行数。
+triviaComments : List Trivia -> List Comment
+triviaComments trivs = reverse (triviaCommentsGo trivs 0 [])
+
+triviaCommentsGo : List Trivia -> Int -> List Comment -> List Comment
+triviaCommentsGo [] nl acc = acc
+triviaCommentsGo (tr :: rest) nl acc =
+  case tr.triviaKind of
+    TrivSpace => triviaCommentsGo rest (nl + countNewlines tr.triviaText) acc
+    _ =>
+      case triviaComment tr of
+        Nothing => triviaCommentsGo rest nl acc
+        Just c =>
+          if nl >= 2 then
+            triviaCommentsGo rest 0 (c :: blankComment tr :: acc)
+          else
+            triviaCommentsGo rest 0 (c :: acc)
+
+-- | 空行标记（NUL 文本；源码里不出现）。
+blankComment : Trivia -> Comment
+blankComment tr = Comment CLine (strPack [0]) tr.triviaSpan
+
+-- | 换行数。
+countNewlines : String -> Int
+countNewlines s = countNewlinesChars (strUnpack s)
+
+countNewlinesChars : List Int -> Int
+countNewlinesChars [] = 0
+countNewlinesChars (c :: rest) = (if c == 10 then 1 else 0) + countNewlinesChars rest
+
+-- | 从 CST trivia 建注释计划：先按锚点分配（行尾优先、否则下一条目），再返回附件表与文件末尾注释。
+export triviaCtxOf : List Span -> List CstToken -> Pair TriviaCtx (List Comment)
+triviaCtxOf anchors toks =
+  let
+    assigned = assignComments anchors (concatMap tokComments toks) [] []
+  in Pair (TriviaCtx (firstOf assigned)) (stripLeadingBlanks (secondOf assigned))
+
+-- | 把条目的注释贴到渲染结果上。
+export attachAt : TriviaCtx -> Span -> Doc -> Doc
+attachAt ctx sp doc = attachAtTable ctx.ctxAt sp doc
+
+-- | 该条目是否挂了注释（前置或行尾）；导出列表据此强制多行。
+export spanHasComments : TriviaCtx -> Span -> Bool
+spanHasComments ctx sp =
+  case lookupSlot ctx.ctxAt (spanStartLine sp) (spanStartCol sp) of
+    Nothing => False
+    Just slot =>
+      not (isNilList (stripLeadingBlanks (firstOf slot))) || not (isNilList (secondOf slot))
+
+-- | 任一导出项挂了注释。
+export anyItemHasComments : TriviaCtx -> List ExportItem -> Bool
+anyItemHasComments ctx items = anyItemHasCommentsTable ctx.ctxAt items
+
+-- | 文件末尾注释的文档（顶格）。
+export eofCommentsDoc : List Comment -> Doc
+eofCommentsDoc comments = vsep (map commentLeadDoc (stripLeadingBlanks comments))
+
+-- | 单个 token 的前置 trivia 里的注释（每个 token 单独计数空行，避免跨 token 累加）。
+export tokComments : CstToken -> List Comment
+tokComments t = triviaComments t.cstLeading
+
+-- | 顶层条目的前置注释（丢掉最前面的空行标记，顶层空行由 section / 声明间距负责）。
+export attachAtTop : TriviaCtx -> Span -> Doc -> Doc
+attachAtTop ctx sp doc =
+  let
+    cs = stripLeadingBlanks (leadOf ctx.ctxAt (spanStartLine sp) (spanStartCol sp))
+    lead = if isNilList cs then empty else vsep (map commentLeadDoc cs) `appendDoc` hard
+  in trailingDoc ctx.ctxAt sp (lead `appendDoc` doc)

@@ -7,9 +7,8 @@
 -- 空白与换行由 [Vuna.Fmt.Doc] 的 `group` 一次决定（`maxWidth` 列预算），
 -- 缩进由 `nest` 承担。项级注释随项移动。
 --
--- 注释不在 AST 里：格式化器单独 lex 出注释，按源码位置挂到最近的「条目」（顶部声明 /
--- import / `infix*` 声明 / 构造器 / 记录字段 / trait 方法 / let 与 where 绑定 / case 分支 /
--- do 语句）；实现见 [Vuna.Fmt.Comment]。
+-- 注释不在 AST 里：格式化器从 CST 的 token trivia 取前置 / 行尾注释（含注释间空行），
+-- 按条目 span 直接挂载；实现见 [Vuna.Fmt.Comment]。
 --
 -- 中缀与括号按**源码顺序与源码括号**打印：不重排中缀链、不按优先级补括号，因此
 -- 格式化不需要程序级 fixity 闭包（`infix*` 声明原样保留）。
@@ -20,34 +19,45 @@ module Vuna.Fmt where
 
 import Vuna.Compiler.Base.Common
 import Vuna.Compiler.Frontend.Ast
-import Vuna.Compiler.Frontend.Lexer
+import Vuna.Compiler.Frontend.Cst
 import Vuna.Compiler.Frontend.Parser
 import Vuna.Fmt.Comment
 import Vuna.Fmt.Decl
 import Vuna.Fmt.Doc
 import Vuna.Fmt.Util
+import Base.Data.String as String
 
--- | 格式化一段源码：解析（带注释）、挂载注释、重写模块头，最后组装成一份 `Doc` 渲染。
+-- | 格式化一段源码：解析、从 CST trivia 取注释、重写模块头，最后组装成一份 `Doc` 渲染。
 -- 任何一步失败都是 `Err`，调用方据此拒绝写盘。
 export formatSourceWith : String -> Check String
 formatSourceWith source =
   case parseSourceWithComments "<fmt>" source of
     ErrC e => ErrC e
-    OkC (Pair (SourceFile hdr imports fx decls exports reexports opacity) comments) =>
-      case assignComments (anchorSpans hdr imports fx decls) comments [] [] of
-        Pair at eof =>
-          let
-            hdr2 =
-              case hdr of
-                Just m =>
-                  Just
-                    (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
-                Nothing =>
-                  case exports of
-                    [] =>
-                      case reexports of
-                        [] => Nothing
-                        _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+    OkC (Pair (SourceFile hdr imports fx decls exports reexports opacity) __) =>
+      let
+        toksM = lexCst source
+        plan =
+          case toksM of
+            Nothing => Pair emptyTrivia []
+            Just toks => triviaCtxOf (anchorSpans hdr imports fx decls) toks
+        ctx = firstOf plan
+        eofComments = secondOf plan
+        hdr2 =
+          case hdr of
+            Just m =>
+              Just
+                (ModDecl m.modDeclName m.modDeclHasExportList m.modDeclExportItems exports reexports opacity m.modDeclSpan)
+            Nothing =>
+              case exports of
+                [] =>
+                  case reexports of
+                    [] => Nothing
                     _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
-            doc = renderSourceSections [] hdr2 imports fx decls at eof
-          in if isDocEmpty doc then OkC "" else OkC (render maxWidth doc ++ "\n")
+                _ => Just (ModDecl "" False [] exports reexports opacity dummySpan)
+        doc = renderSourceSections [] hdr2 imports fx decls ctx eofComments
+      in if isDocEmpty doc then
+        OkC ""
+      else
+        let
+          rendered = render maxWidth doc
+        in OkC (if endsWith "\n" rendered then rendered else rendered ++ "\n")
