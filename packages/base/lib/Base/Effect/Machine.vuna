@@ -1,36 +1,35 @@
 -- | 显式效应机器（方案 B）：用 vuna 写的唯一一份效应执行语义。
 --
--- 协议与 wasm 后端现在那套 wat 机器（`Wasm/Step.vuna`）一致，只是搬进库：
+-- 协议与 wasm 后端原先那套 wat 机器（`Wasm/Step.vuna`）一致，只是搬进库：
 --
 --   Control = Done v | Apply k v | Perform key name op k | Handle …
---           | Return frame v | KDone frame v | Resume frame k used v kRest
+--           | Return frame v | KDone frame v | Resume frame k id v kRest
 --
 -- continuation 一律饱和成 `k v kRest`：`k` 吃一个值和一个续延，返回 Control。
 --
--- 状态（handler 帧链、续延上下文）放在 `IORef` 里——续延是纯函数，循环需要可变栈；
--- `Eff []` 的 IORef 原语三端都是宿主叶子，不参与行。
+-- 机器状态（handler 帧链、续延上下文、已 resume 过的 id 集合）**纯函数式**穿在循环里：
+-- 这样机器本身完全纯（不依赖 IORef / 宿主原语），三端把它当普通代码编译即可。
 --
 -- 边界：只给「CPS lowering 产出的 Control」和入口的 `run` 用。cleanup 的退出钩子
--- （`bracket`）还没接到这里（见 debt D42）；帧的 prompt 比较用 (key,name)。
+-- （`bracket`）还没接到这里（见 debt D42）；prompt 比较用 (key,name)。
 module Base.Effect.Machine where
 
 import Base.Effect.Core
-import Base.Effect.Pure.IORef as IORef
 import Base.Data.Bool as Bool
 import Base.Data.Int as Int
+import Base.Data.List as List
 import Base.Data.Maybe as Maybe
 import Base.Data.String as String
 import Base.Internal.Operator
 import Base.Trait.Eq
-import Base.Trait.Ord
 import Base.Trait.Monad
 import Base.Trait.Num
+import Base.Trait.Ord
 
 -- | 机器里引用 `Obj` 的统一写法（axiom 直接在部分类型位置解析不稳）。
 ObjTy : Type
 ObjTy = Obj
 
--- | 机器控制流。
 export data Control v(..) : Type where
   MkDone : v -> Control v
   MkApply : (v -> Control v) -> v -> Control v
@@ -38,7 +37,7 @@ export data Control v(..) : Type where
   MkHandle : String -> String -> (v -> v) -> (v -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v) -> (v -> (v -> Control v) -> Control v) -> (v -> Control v) -> Control v
   MkReturn : Frame v -> v -> Control v
   MkKDone : Frame v -> v -> Control v
-  MkResume : Frame v -> (v -> Control v) -> IORef Int -> v -> (v -> Control v) -> Control v
+  MkResume : Frame v -> (v -> Control v) -> Int -> v -> (v -> Control v) -> Control v
 
 -- | handler frame：key、name、ret、opH、comp、kOuter、prev。
 export data Frame v(..) : Type where
@@ -47,6 +46,16 @@ export data Frame v(..) : Type where
 -- | 续延上下文：本次 resume 的 prompt、交付续延、外层上下文。
 export data Ctx v(..) : Type where
   MkCtx : Frame v -> (v -> Control v) -> Maybe (Ctx v) -> Ctx v
+
+-- | 机器状态。
+export record MSt v where
+  msFrames : Maybe (Frame v)
+  msCtx : Maybe (Ctx v)
+  msUsed : List Int
+  msNext : Int
+
+export emptySt : MSt v
+emptySt = MSt Nothing Nothing [] 0
 
 frameKey : Frame v -> String
 frameKey f =
@@ -101,6 +110,15 @@ ctxPrev c =
 samePrompt : Frame v -> Frame v -> Bool
 samePrompt a b = frameKey a == frameKey b && frameName a == frameName b
 
+depth : Int -> Maybe (Frame v) -> Int
+depth n chain =
+  if n <= 0 then
+    0
+  else
+    case chain of
+      Nothing => 0
+      Just g => 1 + depth (n - 1) (framePrev g)
+
 inChain : Int -> Frame v -> Maybe (Frame v) -> Bool
 inChain fuel f chain =
   if fuel <= 0 then
@@ -116,7 +134,10 @@ reinstall f chain =
   case f of
     MkFrame key name ret opH comp kOuter _ => MkFrame key name ret opH comp kOuter chain
 
-findFrame : Int -> String -> String -> Maybe (Frame ObjTy) -> Maybe (Frame ObjTy)
+reinstallIfMissing : Int -> Frame v -> Maybe (Frame v) -> Maybe (Frame v)
+reinstallIfMissing fuel f chain = if inChain fuel f chain then chain else Just (reinstall f chain)
+
+findFrame : Int -> String -> String -> Maybe (Frame v) -> Maybe (Frame v)
 findFrame fuel key name chain =
   if fuel <= 0 then
     Nothing
@@ -125,73 +146,47 @@ findFrame fuel key name chain =
       Nothing => Nothing
       Just f => if frameKey f == key && frameName f == name then Just f else findFrame (fuel - 1) key name (framePrev f)
 
--- | 驱动到 `Done`：一次转移一次尾递归，帧/上下文都在 IORef 里。
-runFuel : Int -> IORef (Maybe (Frame ObjTy)) -> IORef (Maybe (Ctx ObjTy)) -> Control ObjTy -> Eff [] ObjTy
-runFuel fuel fs ctx c =
-  if fuel <= 0 then prim_fail "vuna: effect machine: fuel exhausted" else runStep fuel fs ctx c
+-- | 驱动到 `Done`。`fuel` 是终止性证书（同时也是保护，见 debt）。
+export runGo : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
+runGo fuel st c =
+  if fuel <= 0 then prim_fail "vuna: effect machine: fuel exhausted" else step fuel st c
 
-runStep : Int -> IORef (Maybe (Frame ObjTy)) -> IORef (Maybe (Ctx ObjTy)) -> Control ObjTy -> Eff [] ObjTy
-runStep fuel fs ctx c =
-  case c of
-    MkDone v => pure v
-    MkApply k v => runFuel (fuel - 1) fs ctx (k v)
-    MkKDone frame r => finishFrame (fuel - 1) fs ctx frame r
-    MkReturn frame v =>
-      do
-        cur <- IORef.readRef ctx
-        case cur of
-          Just c1 =>
-            if samePrompt (ctxPrompt c1) frame then
-              do
-                IORef.writeRef ctx (ctxPrev c1)
-                runFuel (fuel - 1) fs ctx ((ctxKRest c1) ((frameRet frame) v))
-            else
-              finishFrame (fuel - 1) fs ctx frame ((frameRet frame) v)
-          Nothing => finishFrame (fuel - 1) fs ctx frame ((frameRet frame) v)
-    MkResume frame k used v krest =>
-      do
-        u <- IORef.readRef used
-        if u /= 0 then
-          prim_fail "vuna: runtime error: continuation already resumed"
-        else
-          do
-            IORef.writeRef used 1
-            cur <- IORef.readRef ctx
-            IORef.writeRef ctx (Just (MkCtx frame krest cur))
-            chain <- IORef.readRef fs
-            if inChain fuel frame chain then pure 0 else IORef.writeRef fs (Just (reinstall frame chain))
-            runFuel (fuel - 1) fs ctx (k v)
-    MkPerform key name op k =>
-      do
-        chain <- IORef.readRef fs
-        case findFrame fuel key name chain of
+step : Int -> MSt ObjTy -> Control ObjTy -> ObjTy
+step fuel st c =
+  if fuel <= 0 then
+    prim_fail "vuna: effect machine: fuel exhausted"
+  else
+    case c of
+      MkDone v => v
+      MkApply k v => step (fuel - 1) st (k v)
+      MkKDone frame r => finish (fuel - 1) st frame r
+      MkReturn frame v =>
+        case st.msCtx of
+          Just c1 => if samePrompt (ctxPrompt c1) frame then step (fuel - 1) (MSt st.msFrames (ctxPrev c1) st.msUsed st.msNext) ((ctxKRest c1) ((frameRet frame) v)) else finish (fuel - 1) st frame ((frameRet frame) v)
+          Nothing => finish (fuel - 1) st frame ((frameRet frame) v)
+      MkResume frame k id v krest => if memInt id st.msUsed then prim_fail "vuna: runtime error: continuation already resumed" else step (fuel - 1) (MSt st.msFrames (Just (MkCtx frame krest st.msCtx)) (id :: st.msUsed) st.msNext) (k v)
+      MkPerform key name op k =>
+        case findFrame (fuel - 1) key name st.msFrames of
           Nothing => prim_fail "vuna: runtime error: unhandled effect"
           Just frame =>
-            do
-              used <- IORef.newRef 0
-              runFuel (fuel - 1) fs ctx ((frameOpH frame) op (\v => \krest => MkResume frame k used v krest) (\r => MkKDone frame r))
-    MkHandle key name ret opH comp kOuter =>
-      do
-        parent <- IORef.readRef fs
-        IORef.writeRef fs (Just (MkFrame key name ret opH comp kOuter parent))
-        runFuel
-          (fuel - 1)
-          fs
-          ctx
-          ((comp (toObj 0)) (\x => MkReturn (MkFrame key name ret opH comp kOuter parent) x))
+            let
+              id = st.msNext
+            in step (fuel - 1) (MSt st.msFrames st.msCtx st.msUsed (id + 1)) ((frameOpH frame) op (\v => \krest => MkResume frame k id v krest) (\r => MkKDone frame r))
+      MkHandle key name ret opH comp kOuter =>
+        let
+          frame = MkFrame key name ret opH comp kOuter st.msFrames
+        in step (fuel - 1) (MSt (Just frame) st.msCtx st.msUsed st.msNext) ((comp (toObj 0)) (\x => MkReturn frame x))
 
--- | 弹帧并交 kOuter（`KDone` 与「别层 frame 的 Return」共用）。
-finishFrame : Int -> IORef (Maybe (Frame ObjTy)) -> IORef (Maybe (Ctx ObjTy)) -> Frame ObjTy -> ObjTy -> Eff [] ObjTy
-finishFrame fuel fs ctx frame r =
-  do
-    IORef.writeRef fs (framePrev frame)
-    runFuel fuel fs ctx ((frameKOuter frame) r)
+finish : Int -> MSt ObjTy -> Frame ObjTy -> ObjTy -> ObjTy
+finish fuel st frame r =
+  step fuel (MSt (framePrev frame) st.msCtx st.msUsed st.msNext) ((frameKOuter frame) r)
 
--- | 入口：建三个状态单元，跑到 Done。
--- | 入口：建三个状态单元，跑到 Done。
-export run : Control ObjTy -> Eff [] ObjTy
-run c =
-  do
-    fs <- IORef.newRef Nothing
-    ctx <- IORef.newRef Nothing
-    runFuel 10000000 fs ctx c
+memInt : Int -> List Int -> Bool
+memInt x xs =
+  case xs of
+    [] => False
+    y :: rest => if x == y then True else memInt x rest
+
+-- | 入口：空状态跑到 Done。
+export run : Control ObjTy -> ObjTy
+run c = runGo 10000000 emptySt c

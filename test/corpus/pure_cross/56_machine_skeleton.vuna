@@ -1,12 +1,16 @@
--- 方案 B 的机器骨架：`Base.Effect.Machine` 的 Control 循环在 vuna 里跑通。
--- 手搭 `handle (perform "po"/"po" 1) { po op k -> k 2 }`：resume 交 2，answer 是 2。
+-- 方案 B 的机器骨架：`Base.Effect.Machine` 的 Control 循环在 vuna 里跑通（纯函数式
+-- 状态，不依赖宿主原语）。手搭 `handle (perform "po"/"po" 1) { po op k -> k 2 }`：
+-- resume 交 2，answer 是 2。
 import Base.Effect.Core as Eff
 import Base.Effect.Machine as M
 
 ret : Eff.Obj -> Eff.Obj
 ret x = x
 
-opH : Eff.Obj -> (Eff.Obj -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj) -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj
+opH : Eff.Obj ->
+      (Eff.Obj -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj) ->
+      (Eff.Obj -> M.Control Eff.Obj) ->
+      M.Control Eff.Obj
 opH _ k kdone = k (Eff.toObj 2) kdone
 
 comp : Eff.Obj -> (Eff.Obj -> M.Control Eff.Obj) -> M.Control Eff.Obj
@@ -15,11 +19,5 @@ comp _ k = M.MkPerform "po" "po" (Eff.toObj 1) (\v => M.MkApply k v)
 kOuter : Eff.Obj -> M.Control Eff.Obj
 kOuter v = M.MkDone v
 
-runIt : Eff [] Int
-runIt =
-  do
-    v <- M.run (M.MkHandle "po" "po" ret opH comp kOuter)
-    pure (Eff.fromObj v)
-
 main : Int
-main = Eff.runPure runIt
+main = Eff.fromObj (M.run (M.MkHandle "po" "po" ret opH comp kOuter))
