@@ -111,7 +111,8 @@ manifest，不向上找。命令语义与包格式
 │   ├── base/      # 标准库包 vuna-base：lib/Base.*、Prelude.vuna
 │   ├── cli/       # 产品 CLI 包 vuna：lib/Vuna.*（工具链）+ app/Main.vuna（入口）
 │   ├── http/      # 中立 HTTP/1.1 库 vuna-http：消息编解码 + 传输无关连接层
-│   └── web/       # 生态层 vuna-web：HTML 视图 + 路由 + 串行服务驱动
+│   ├── web/       # 生态层 vuna-web：HTML 视图 + 路由 + 串行服务驱动
+│   └── web-cli/   # vuna-web-cli：全栈应用的服务端产物编排（依赖编译器，不进 seed）
 ├── seed/      # compiler 闭包的多文件自举信任锚点（生成物，禁止手改）
 ├── test/      # suite.toml + suite/（原生 runner）+ corpus/ 夹具
 ├── bench/     # 生成程序与编译器基准（nix run .#vuna-bench / .#vuna-perf）
@@ -120,15 +121,16 @@ manifest，不向上找。命令语义与包格式
 ├── vscode/    # VSCode 扩展（语法高亮 + LSP 客户端 + lint/fmt/check/build；提交 dist/）
 ├── nix/       # 构建图（build/）+ CI 门禁（checks/）+ seed 工具 + 开发工具
 ├── docs/      # 分层文档（见 AGENTS.md 导航）
-├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli,http,web}
+├── vuna.toml  # workspace 根（只有 [workspace] + [lint]）；members: packages/{compiler,base,cli,http,web,web-cli}
 └── flake.nix  # 输入与 outputs 委托（构建图在 nix/）
 ```
 
 逐模块职责见 [docs/architecture.md](docs/architecture.md)。仓库本身是一个 workspace
 （虚拟根：根目录只有 `[workspace]`，不是包）：成员包 `vuna`（模块根 `packages/cli/lib/`）、
 `vuna-compiler`（模块根 `packages/compiler/lib/`）、`vuna-base`（模块根 `packages/base/lib/`）、
-`vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）与 `vuna-web`（模块根
-`packages/web/lib/`，生态层：视图 + 路由 + 服务驱动）。五者都是
+`vuna-http`（模块根 `packages/http/lib/`，中立 HTTP/1.1 库）、`vuna-web`（模块根
+`packages/web/lib/`，生态层：视图 + 路由 + 服务驱动）与 `vuna-web-cli`（模块根
+`packages/web-cli/lib/`，编排工具：生成适配包并复用编译器构建）。六者都是
 vuna 模块根，不是 OCaml 库目录；`packages/cli/app/`、`packages/compiler/app/` 是纯入口目录。仓库里没有任何
 dune/OCaml 项目，只用 `ocamlopt` 编译生成的种子和程序。
 

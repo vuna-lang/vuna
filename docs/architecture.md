@@ -44,8 +44,10 @@ packages/compiler/lib/Vuna/Compiler/   （目录即层：层名 = 模块前缀�
 中立库 vuna-http（模块根 packages/http/lib/）：Http.{Header,Request,Response,Parse,Render}，
   HTTP/1.1 消息编解码、严格解析规则与传输无关连接层；依赖 vuna-base，不进 seed
   （见 [reference/http.md](reference/http.md)）；依赖图 vuna-http → vuna-base。
-生态层 vuna-web（模块根 packages/web/lib/）：Web.{View,Route,Server}，HTML 视图 + 路由匹配 +
-  串行服务驱动；依赖 vuna-base / vuna-http，不进 seed（见 [reference/web.md](reference/web.md)）。
+生态层 vuna-web（模块根 packages/web/lib/）：Web.{View,Route,Server,App,Main}，HTML 视图 +
+  路由匹配 + 应用值 + 服务端根；依赖 vuna-base / vuna-http，不进 seed（见 [reference/web.md](reference/web.md)）。
+编排工具 vuna-web-cli（模块根 packages/web-cli/lib/，二进制 vuna-web-cli）：读应用包上下文、
+  生成适配包、复用 Driver.CompilerCli 构出服务端二进制；依赖编译器包，不进 seed，不属于产品 CLI。
 ```
 
 **目录即层，方向由 manifest 声明**：层 = 模块前缀（目录），`packages/compiler/vuna.toml` 的
@@ -270,6 +272,7 @@ stage1 == stage2；seed 只含 compiler 包入口闭包。
 | `packages/cli/` / `packages/base/` | 第 14–16、26–27、30–32 段 + `vuna check .` |
 | `packages/http/` | `vuna test packages/http` + `vuna check .`（[http.md](reference/http.md)） |
 | `packages/web/` | `vuna test packages/web` + 第 109 段 steps + `vuna check .`（[web.md](reference/web.md)） |
+| `packages/web-cli/` | `vuna-web-cli build examples/web-static` + 第 109 段 steps + `vuna check .`（[web.md](reference/web.md) §7） |
 | `packages/base/` 的效应 monad / 调试构造（`dbg!`/`dbgShow`/`assert`） | 第 27 段 + `dt` / `dt_base` / `dt_err` 夹具 + `vuna check .`（见 [effects.md](reference/effects.md)、[debugging.md](reference/debugging.md)） |
 | `packages/compiler/`（语法 / 类型 / 精化 / 擦除） | 全量测试 + `flake check`（至少 seed-selfhost） |
 | codegen 运行时 / main 钩子 / 位置表 | 第 6、13、38 段 + 第 45–46 段 + seed rotation（[debugging.md](reference/debugging.md)） |
