@@ -15,19 +15,19 @@ import Vuna.Compiler.Ir.Model
 import Vuna.Compiler.Ir.Classify
 
 export irStepDoneName : String
-irStepDoneName = "@ir@cps@done"
+irStepDoneName = "@ir@step@done"
 
 export irStepPerformName : String
-irStepPerformName = "@ir@cps@perform"
+irStepPerformName = "@ir@step@perform"
 
 export irStepHandleName : String
-irStepHandleName = "@ir@cps@handle"
+irStepHandleName = "@ir@step@handle"
 
 export irStepSelfName : String
-irStepSelfName = "@ir@cps@self"
+irStepSelfName = "@ir@step@self"
 
 export irStepRunName : String
-irStepRunName = "@ir@cps@run"
+irStepRunName = "@ir@step@run"
 
 startFuel : Int
 startFuel = 200000
