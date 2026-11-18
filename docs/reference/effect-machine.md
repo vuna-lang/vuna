@@ -262,12 +262,44 @@ resumption，被 CPS 成 **2 个参数**：
    `@vuna@effK_<line>_<col>_<depth>:<原名>`（`Elab.Meta.effContBinderName`，
    只对 `m` 头是 `Eff` 的块；手写 `>>=` 的 λ 暂不含标记）。标记当前是惰性的：
    还没有 lowering 读它。见 debt D110。
-2. **machine CPS**：mode 6 里，带 `@vuna@effK` 标记的 lambda 一律降成
-   `\v K -> <body with continuation K>`（纯值是 `run eff K`，尾 resumption 是 `k v K`）。
-3. **bind**：`>>=` 的体改为 `case (k V) of ...` 之前先 `k V K`——即 K 作为第二个实参传入。
-   这一步与"bind 作为机器原语"（绑定帧）可以合并：原语拿到 K，直接压帧，不必再 `case`。
-4. **验收**：§7.2 复现打印 `log:a` 且返回 `1`；`106` 默认栈；全行 mode 6 下
-   `18_eff_fs_io` / `40_eff_fs_named` 通过。
+2. **machine CPS（已落地）**：带标记的 λ 仍保持**一个参数**，返回一个 Eff，其 thunk
+   以 `(u, K)` 运行（`mEffContLambda`）——这样 `>>=` 的 1 参假设与 resumption 的
+   `k v kRest` 同时成立。resumption 调用前可能被 `prim_erase` 包一层，`mStripErase`
+   负责剥掉。
+3. **bind（已不需要改动）**：因为续延 λ 仍按 1 参调用并返回 Eff，`>>=` 的现有
+   实现可以直接运行它；先前设想的"bind 传 K / 绑定帧"不再必要。
+4. **验收**：§7.2 复现已锁成夹具 `test/corpus/effect/common/98_eff_answer_resume`
+   （三端矩阵 3 checks 通过）；`106` 仍用 256 KiB。全行 mode 6 的 Fs 待下一步
+   （卡在 Fs 宿主 `opH` 的 `let`/`if`/`runPure` 形状，见下）。
 
 之所以要走标记而不是"在变换里猜"：IR 没有类型，`a -> Eff` 与 `a -> b` 形状相同；
 现在的 `MkEff` 能识别是因为它有自己的构造子。do 块续延需要等价的句柄。
+
+### 7.5 剩余：Fs 宿主 `opH` 的形状
+
+把 Fs 宿主换成裸值、入口去掉错误收口行、全行开 mode 6 后，宿主执行路径已经正常，
+但 `joinEff (handleFs …)` 的最终值仍不对。用最小包（单个 Fs handler + 一个
+`fsWriteFile`）定位到**宿主 `opH` 自己的体**：
+
+```vuna
+fsOpHIOHost i op k = case op of
+  WriteFile p s =>
+    let s' = runPure (@vuna@host@tryWriteFile p s)
+        ok = runPure fsHostStatus
+    in if ok /= 0 then fsFailEntry (…) else k (natFromInt (strLength s'))
+```
+
+机器 IR 里这个 `if` 的**两个分支都没有被 CPS**：then 分支是裸的
+`fsFailEntry …`（没有交给 `K`），else 分支是 `prim_erase k v`（没有饱和成
+`k v K`）。于是 `k v` 的半应用被当成值交给了 `K`，最后 `_start` 的
+`strFromInt` 收到闭包。
+
+对比：Console 的宿主 `opH` 体是单层 `k (… runPure …)`，同样走 `runPure` 却是通的。
+差别在 `let` 链 + `if` 是否让 `mCps` 走到了分支体——这是下一步要查的点
+（`mCps` 的 `IrLet`/`IrIf` 组合，或 ANF 之后 `let` 变 λ 的形态）。
+
+两条候选修法（都不需要再改协议）：
+
+1. 修 `mCps` 对 `let` 链 + `if` 的处理（首选，影响面小）；
+2. 把宿主 `opH` 写成单层表达式（需要**纯**的状态读取原语，例如
+   `@vuna@host@pStatus : Int`，避免 `runPure` 嵌在 handler 体里）。

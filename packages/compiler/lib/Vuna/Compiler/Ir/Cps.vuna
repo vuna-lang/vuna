@@ -67,6 +67,9 @@ irMSelfName = "@ir@m@self"
 export irMApplyName : String
 irMApplyName = "@ir@m@apply"
 
+export irMRunEffName : String
+irMRunEffName = "@ir@m@runEff"
+
 export irMRunName : String
 irMRunName = "@ir@m@run"
 
@@ -599,8 +602,18 @@ mEraseHead (e@(IrApp (IrRt s) x)) = if s == "prim_erase" then mEraseHead x else 
 mEraseHead (IrCast x) = mEraseHead x
 mEraseHead e = e
 
+-- | 去掉外包的擦除包装（`prim_erase` / cast）：精化器会在运行时位置插一层，
+-- resumption 调用因此可能是 `prim_erase (k v)` 而不是 `k v`。
+mStripErase : Ir -> Ir
+mStripErase (IrCast x) = mStripErase x
+mStripErase (IrApp (IrRt s) x) = if s == "prim_erase" then mStripErase x else IrApp (IrRt s) x
+mStripErase x = x
+
 mIsResumeApp : IrBinder -> Ir -> Bool
-mIsResumeApp r (e@(IrApp _ _)) =
+mIsResumeApp r e0 = mIsResumeAppGo r (mStripErase e0)
+
+mIsResumeAppGo : IrBinder -> Ir -> Bool
+mIsResumeAppGo r (e@(IrApp _ _)) =
   let
     p = flattenApp e
   in case mEraseHead (firstOf p) of
@@ -610,13 +623,49 @@ mIsResumeApp r (e@(IrApp _ _)) =
         IrVar b => mBNameText b.irBinderName == mBNameText r.irBinderName
         _ => False
       [] => False
-mIsResumeApp r _ = False
+mIsResumeAppGo r _ = False
 
 mFreshV : Int -> IrBinder
 mFreshV n = mkBinder ("__mchV" ++ strFromInt n)
 
 mFreshK : Int -> IrBinder
 mFreshK n = mkBinder ("__mchK" ++ strFromInt n)
+
+-- | do 块续延 λ 的标记（精化期打，见 `Elab.Meta.effContBinderName`）：lowering
+-- 据此把「a -> Eff r b」与普通函数区分开（IR 无类型，debt D110）。
+export effContMark : String
+effContMark = "@vuna@effK"
+
+isEffContBinder : IrBinder -> Bool
+isEffContBinder b = String.startsWith effContMark (mBNameText b.irBinderName)
+
+-- | λ 的最后一个 binder 带 do 块续延标记。
+isEffContLambda : List IrBinder -> Bool
+isEffContLambda bs = case reverse bs of
+  b :: _ => isEffContBinder b
+  [] => False
+
+-- | 用续延 K 跑一个 Eff 值：`case eff of MkEff th => runEff th K`。
+mRunEffTerm : Ir -> Ir -> Ir
+mRunEffTerm eff k =
+  let
+    th = mkBinder "__mEffTh"
+  in IrCase eff
+    [IrAlt (Just (Pair irEffTypeName irEffMkCtor)) [th] (IrRtApp irMRunEffName [IrVar th, k])]
+
+mNoResumption : IrBinder
+mNoResumption = mkBinder "@vuna@noresume"
+
+-- | do 块续延 λ：保持一个参数（`>>=` 仍按 1 参调用），返回一个 Eff，其 thunk
+-- 以 (u, K) 运行；resumption 的 kRest 接成 K。
+mEffContLambda : Int -> IrBinder -> List IrBinder -> Ir -> Ir
+mEffContLambda fuel r bs body =
+  let
+    kd = mFreshK fuel
+    u = mkBinder "__mEffU"
+    v = mFreshV fuel
+  in IrLam bs
+    (IrCtor irEffTypeName irEffMkCtor [IrLam [u, kd] (mCps (fuel - 1) r (IrLam [v] (mRunEffTerm (IrVar v) (IrVar kd))) body)])
 
 mCpsAlts : Int -> IrBinder -> Ir -> List IrAlt -> List IrAlt
 mCpsAlts fuel r k alts = if fuel <= 0 then alts
@@ -637,58 +686,6 @@ mIsControl (IrCase _ _) = True
 mIsControl (IrIf _ _ _) = True
 mIsControl (IrNatCase _ _ _ _ _) = True
 mIsControl _ = False
-
--- | 表达式里是否用到 resumption `r`（只看值层；嵌套的 `MkEff` thunk 由 `transformDirect`
--- 自带 continuation，不在这里计入）。
-usesResumption : Int -> IrBinder -> Ir -> Bool
-usesResumption fuel r e = if fuel <= 0 then False
-else if mIsResumeApp r e then True
-else case e of
-  IrCtor family ctor args =>
-    if isThunkCtor family ctor then False else usesResList (fuel - 1) r args
-  IrRecord _ fs => usesResFields (fuel - 1) r fs
-  IrProj b _ _ => usesResumption (fuel - 1) r b
-  IrRecUpd b _ fs => usesResumption (fuel - 1) r b || usesResFields (fuel - 1) r fs
-  IrRtApp _ args => usesResList (fuel - 1) r args
-  IrCast x => usesResumption (fuel - 1) r x
-  IrLet bs rhs body => usesResumption (fuel - 1) r rhs || usesResumption (fuel - 1) r body
-  IrLam _ body => usesResumption (fuel - 1) r body
-  IrApp f a => usesResumption (fuel - 1) r f || usesResumption (fuel - 1) r a
-  IrIf c t el =>
-    usesResumption (fuel - 1) r c || usesResumption (fuel - 1) r t || usesResumption (fuel - 1) r el
-  IrCase s alts => usesResumption (fuel - 1) r s || usesResAlts (fuel - 1) r alts
-  IrNatCase s _ z su ca =>
-    usesResumption (fuel - 1) r s
-      || usesResAltM (fuel - 1) r z
-      || usesResAltM (fuel - 1) r su
-      || usesResAltM (fuel - 1) r ca
-  IrConcatMany xs => usesResList (fuel - 1) r xs
-  IrEffThunk _ _ _ _ prim => usesResumption (fuel - 1) r prim
-  _ => False
-
-usesResList : Int -> IrBinder -> List Ir -> Bool
-usesResList fuel r xs = if fuel <= 0 then False
-else case xs of
-  [] => False
-  x :: rest => usesResumption (fuel - 1) r x || usesResList (fuel - 1) r rest
-
-usesResFields : Int -> IrBinder -> List (Pair String Ir) -> Bool
-usesResFields fuel r fs = if fuel <= 0 then False
-else case fs of
-  [] => False
-  p :: rest => usesResumption (fuel - 1) r (secondOf p) || usesResFields (fuel - 1) r rest
-
-usesResAlts : Int -> IrBinder -> List IrAlt -> Bool
-usesResAlts fuel r alts = if fuel <= 0 then False
-else case alts of
-  [] => False
-  a :: rest => usesResumption (fuel - 1) r a.irAltBody || usesResAlts (fuel - 1) r rest
-
-usesResAltM : Int -> IrBinder -> Maybe IrAlt -> Bool
-usesResAltM fuel r m = if fuel <= 0 then False
-else case m of
-  Nothing => False
-  Just a => usesResumption (fuel - 1) r a.irAltBody
 
 -- | 逐个 CPS 实参，最后把运行时符号应用交给 k。
 mCpsArgs : Int -> IrBinder -> Ir -> String -> List Ir -> List Ir -> Ir
@@ -748,11 +745,8 @@ else case e of
     in mCps (fuel - 1) r cont scrut
   IrCast x => IrCast (mCps (fuel - 1) r k x)
   IrRtApp sym args => mCpsArgs (fuel - 1) r k sym args []
-  IrLam bs body => if usesResumption (fuel - 1) r body then
-    let
-      kd = mFreshK fuel
-    in IrApp k (IrLam (append bs [kd]) (mCps (fuel - 1) r (IrVar kd) body))
-  else IrApp k e
+  IrLam bs body =>
+    if isEffContLambda bs then IrApp k (mEffContLambda (fuel - 1) r bs body) else IrApp k e
   IrApp _ _ =>
     let
       p = flattenApp e
@@ -1059,6 +1053,65 @@ else case m of
   Nothing => Nothing
   Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mApplys (fuel - 1) a.irAltBody))
 
+-- ---------------------------------------------------------------
+-- do 块续延：`\v -> <Eff>` → `\v K -> runEff <Eff> K`
+-- ---------------------------------------------------------------
+-- handler 体里的续延 λ 由 `mCps` 负责（那里能拿到 resumption binder）；其余 def
+-- 走这里。已经带 K 的（`mCps` 处理过的）不会再次命中，因为最后一个 binder 换成
+-- 了构造名。
+mMarked : Int -> Ir -> Ir
+mMarked fuel e = if fuel <= 0 then e
+else case e of
+  IrLam bs body =>
+    if isEffContLambda bs then mEffContLambda (fuel - 1) mNoResumption bs body
+    else IrLam bs (mMarked (fuel - 1) body)
+  IrRtApp sym args => IrRtApp sym (mMarkedList (fuel - 1) args)
+  IrCtor fam ctor args => IrCtor fam ctor (mMarkedList (fuel - 1) args)
+  IrRecord fam fs => IrRecord fam (mMarkedFields (fuel - 1) fs)
+  IrProj b fam x => IrProj (mMarked (fuel - 1) b) fam x
+  IrRecUpd b fam fs => IrRecUpd (mMarked (fuel - 1) b) fam (mMarkedFields (fuel - 1) fs)
+  IrCast x => IrCast (mMarked (fuel - 1) x)
+  IrLet bs rhs body => IrLet bs (mMarked (fuel - 1) rhs) (mMarked (fuel - 1) body)
+  IrApp f a => IrApp (mMarked (fuel - 1) f) (mMarked (fuel - 1) a)
+  IrIf c t el => IrIf (mMarked (fuel - 1) c) (mMarked (fuel - 1) t) (mMarked (fuel - 1) el)
+  IrCase sc alts => IrCase (mMarked (fuel - 1) sc) (mMarkedAlts (fuel - 1) alts)
+  IrNatCase sc fr z su ca =>
+    IrNatCase (mMarked (fuel - 1) sc) fr (mMarkedAltM (fuel - 1) z) (mMarkedAltM (fuel - 1) su)
+      (mMarkedAltM (fuel - 1) ca)
+  IrConcatMany xs => IrConcatMany (mMarkedList (fuel - 1) xs)
+  IrEffThunk fam ctor u ar prim => IrEffThunk fam ctor u ar (mMarked (fuel - 1) prim)
+  _ => e
+
+mMarkedList : Int -> List Ir -> List Ir
+mMarkedList fuel xs = if fuel <= 0 then xs
+else case xs of
+  [] => []
+  x :: rest => mMarked (fuel - 1) x :: mMarkedList (fuel - 1) rest
+
+mMarkedFields : Int -> List (Pair String Ir) -> List (Pair String Ir)
+mMarkedFields fuel fs = if fuel <= 0 then fs
+else case fs of
+  [] => []
+  p :: rest => Pair (firstOf p) (mMarked (fuel - 1) (secondOf p)) :: mMarkedFields (fuel - 1) rest
+
+mMarkedAlts : Int -> List IrAlt -> List IrAlt
+mMarkedAlts fuel alts = if fuel <= 0 then alts
+else case alts of
+  [] => []
+  a :: rest =>
+    IrAlt a.irAltCtor a.irAltBinders (mMarked (fuel - 1) a.irAltBody) :: mMarkedAlts (fuel - 1) rest
+
+mMarkedAltM : Int -> Maybe IrAlt -> Maybe IrAlt
+mMarkedAltM fuel m = if fuel <= 0 then m
+else case m of
+  Nothing => Nothing
+  Just a => Just (IrAlt a.irAltCtor a.irAltBinders (mMarked (fuel - 1) a.irAltBody))
+
+mMarkedDef : IrDef -> IrDef
+mMarkedDef (IrDef n ar deps body r g sp) = IrDef n ar deps (mMarked startFuel body) r g sp
+mMarkedDef d = d
+
+-- ---------------------------------------------------------------
 mApplysDef : IrDef -> IrDef
 mApplysDef (IrDef n ar deps body r g sp) = IrDef n ar deps (mApplys startFuel body) r g sp
 mApplysDef d = d
@@ -1067,7 +1120,8 @@ mApplysDef d = d
 export cpsDefsMachine : List IrDef -> Result (List IrDef)
 cpsDefsMachine defs = case cpsDefs defs of
   Err msg => Err msg
-  Ok ds => Ok (map mApplysDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds))
+  Ok ds =>
+    Ok (map mApplysDef (map mMarkedDef (mDefs (collectHandleOpsDefs 100000 ds) startFuel ds)))
 
 export cpsDefsStep : List IrDef -> Result (List IrDef)
 cpsDefsStep defs = case cpsDefs defs of

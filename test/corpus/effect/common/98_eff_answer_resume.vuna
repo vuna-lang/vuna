@@ -1,0 +1,24 @@
+-- handler 的 answer 是 `Eff` 且体内 resume：opH 先做一次效应，再把续延接回去。
+-- 锁住「do 块续延 λ 的续延约定」（effect-machine.md §7.4）。
+import Base.Effect.Core as Eff
+import Base.Effect.Console as EffConsole
+
+prog : Eff [ConsoleOp@real] Int
+prog = do
+  _ <- consolePrint@real "a"
+  pure 1
+
+ret : Int -> Eff [ConsoleOp] Int
+ret a = pure a
+
+opH : (i : Type) -> (o : ConsoleOp i) -> (Eff.resIdx i o -> Eff [ConsoleOp] Int) -> Eff [ConsoleOp] Int
+opH i op k = case op of
+  Print s => do
+    _ <- consolePrint ("log:" ++ s ++ "\n")
+    k 0
+  EPrint s => do
+    _ <- consoleEprint ("elog:" ++ s ++ "\n")
+    k 0
+
+main : Eff [ConsoleOp] Int
+main = joinEff (handleConsole "real" ret opH prog)

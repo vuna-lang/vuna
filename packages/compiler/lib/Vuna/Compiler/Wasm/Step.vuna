@@ -215,6 +215,12 @@ rtMApply =
 
 -- | handler 的 answer 落地：在 resume 期间（ctx 命中同一帧）交回该次 resume 的
 -- kRest，让外层 perform 的日志/handler 链继续；否则弹帧交 kOuter。
+-- | 用续延 K 跑一个 Eff 的 thunk（dummy 单元取 null：thunk 体不看它）。
+rtMRunEff : WatFunc
+rtMRunEff =
+  rtFunc "$rt_mRunEff" [Pair "$p0" WvAnyRef, Pair "$p1" WvAnyRef] [WvAnyRef] []
+    [ILocalGet "$p0", IRefNull, ICall "$rt_apply", ILocalGet "$p1", ICall "$rt_apply"]
+
 rtMKDone : WatFunc
 rtMKDone =
   let
@@ -339,6 +345,7 @@ mFunctions =
     rtMHandle,
     rtMKComp,
     rtMApply,
+    rtMRunEff,
     rtMKDone,
     rtMRes1,
     rtMRes2,
