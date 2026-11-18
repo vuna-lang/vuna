@@ -9,34 +9,34 @@ and t_Base_dEffect_dCore_dEffSig = C_Base_dEffect_dCore_dEffSig_MkEffSig
 and ('a0, 'a1) t_Base_dEffect_dCore_dCont = C_Base_dEffect_dCore_dCont_MkCont of (('a0) -> 'a1)
 
 # 61 "Base/Effect/Core.vuna"
-let v_Functor_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((fun f e -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match e with
+let v_Functor_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun f e -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__0) -> (f (dtb__0 u))
   | _ -> failwith "DT: impossible branch"
-)))))))
+))))))))
 
 # 66 "Base/Effect/Core.vuna"
-let v_Monad_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((fun e k -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match e with
+let v_Monad_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun e k -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match e with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__1) -> (match (k (dtb__1 u)) with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__2) -> (dtb__2 u)
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))))
+))))))))
 
 # 72 "Base/Effect/Core.vuna"
-let v_Applicative_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dEffect_dCore_dEff_MkEff ((fun _u -> x)))), (fun mf mx -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match mf with
+let v_Applicative_uBase_uEffect_uCore_uEff_ur = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun x -> (C_Base_dEffect_dCore_dEff_MkEff ((fun _u -> x))))), (Obj.magic (fun mf mx -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match mf with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__3) -> (match mx with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__4) -> ((dtb__3 u) (dtb__4 u))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-))))), (fun f ma mb -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match ma with
+)))))), (Obj.magic (fun f ma mb -> (C_Base_dEffect_dCore_dEff_MkEff ((fun u -> (match ma with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__5) -> (match mb with
   | C_Base_dEffect_dCore_dEff_MkEff (dtb__6) -> ((f (dtb__5 u)) (dtb__6 u))
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)))))))
+))))))))
 
 # 48 "Base/Effect/Core.vuna"
 let v_Base_dEffect_dCore_ddefaultInstance = "default"

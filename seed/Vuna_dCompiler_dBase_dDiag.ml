@@ -19,21 +19,21 @@ and t_Vuna_dCompiler_dBase_dDiag_dDiagnostic = { f_Vuna_dCompiler_dBase_dDiag_dD
 and 'a0 t_Vuna_dCompiler_dBase_dDiag_dCheck = C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC of ('a0) | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC of (t_Vuna_dCompiler_dBase_dDiag_dDiagnostic)
 
 # 365 "Vuna/Compiler/Base/Diag.vuna"
-let v_Functor_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((fun mc0 mc1 -> (match mc1 with
+let v_Functor_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun mc0 mc1 -> (match mc1 with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__0) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__0))
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__1) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((mc0 dtb__1)))
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 369 "Vuna/Compiler/Base/Diag.vuna"
-let v_Monad_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((fun mc0 mc1 -> (match mc0 with
+let v_Monad_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun mc0 mc1 -> (match mc0 with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__2) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__2))
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__3) -> (mc1 dtb__3)
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 373 "Vuna/Compiler/Base/Diag.vuna"
-let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((fun _uarity1 -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (_uarity1))), (fun mf mx -> (match mf with
+let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun _uarity1 -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (_uarity1)))), (Obj.magic (fun mf mx -> (match mf with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__4) -> (match mx with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__5) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC ((dtb__4 dtb__5)))
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__6) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__6))
@@ -41,7 +41,7 @@ let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dApplicative
 )
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__7) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__7))
   | _ -> failwith "DT: impossible branch"
-)), (fun mc0 mc1 mc2 -> (match mc1 with
+))), (Obj.magic (fun mc0 mc1 mc2 -> (match mc1 with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__8) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__8))
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_OkC (dtb__9) -> (match mc2 with
   | C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__10) -> (C_Vuna_dCompiler_dBase_dDiag_dCheck_ErrC (dtb__10))
@@ -49,7 +49,7 @@ let v_Applicative_uVuna_uCompiler_uBase_uDiag_uCheck = (Base_dTrait_dApplicative
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 192 "Vuna/Compiler/Base/Diag.vuna"
 let v_Vuna_dCompiler_dBase_dDiag_ddiagNoLoc = (fun sev phase cat code msg -> { f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagId = 0; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSeverity = sev; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagPhase = phase; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCategory = cat; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagCode = code; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagMessage = msg; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagLabels = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagFields = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagTrace = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagNotes = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagSuggestions = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagOrigin = C_Vuna_dCompiler_dBase_dDiag_dOrigin_OriginDirect; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagChildren = Base_dData_dList.C_Base_dData_dList_dList_Nil; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagInternal = false; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagIce = Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Nothing; f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagAbsent = (Base_dData_dMaybe.C_Base_dData_dMaybe_dMaybe_Just (C_Vuna_dCompiler_dBase_dDiag_dNoSourceReason_NsSynthetic)); f_Vuna_dCompiler_dBase_dDiag_dDiagnostic_diagStability = C_Vuna_dCompiler_dBase_dDiag_dStability_Volatile })

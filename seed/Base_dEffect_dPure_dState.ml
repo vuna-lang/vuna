@@ -2,31 +2,31 @@ open Vuna_runtime
 type ('a0, 'a1) t_Base_dEffect_dPure_dState_dState = { f_Base_dEffect_dPure_dState_dState_stateRun : ('a0) -> ('a1, 'a0) Base_dData_dPair.t_Base_dData_dPair_dPair }
 
 # 27 "Base/Effect/Pure/State.vuna"
-let v_Functor_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((fun f st -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((st).f_Base_dEffect_dPure_dState_dState_stateRun s) with
+let v_Functor_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun f st -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((st).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__0; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__1 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (f dtb__0); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__1 }
   | _ -> failwith "DT: impossible branch"
-)) })))
+)) }))))
 
 # 32 "Base/Effect/Pure/State.vuna"
-let v_Monad_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((fun st k -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((st).f_Base_dEffect_dPure_dState_dState_stateRun s) with
+let v_Monad_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun st k -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((st).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__2; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__3 } -> (((k dtb__2)).f_Base_dEffect_dPure_dState_dState_stateRun dtb__3)
   | _ -> failwith "DT: impossible branch"
-)) })))
+)) }))))
 
 # 37 "Base/Effect/Pure/State.vuna"
-let v_Applicative_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((fun a -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = a; Base_dData_dPair.f_Base_dData_dPair_dPair_second = s }) }), (fun mf mx -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((mf).f_Base_dEffect_dPure_dState_dState_stateRun s) with
+let v_Applicative_uBase_uEffect_uPure_uState_uState_us = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun a -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = a; Base_dData_dPair.f_Base_dData_dPair_dPair_second = s }) })), (Obj.magic (fun mf mx -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((mf).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__4; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__5 } -> (match ((mx).f_Base_dEffect_dPure_dState_dState_stateRun dtb__5) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__6; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__7 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = (dtb__4 dtb__6); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__7 }
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) }), (fun f sa sb -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((sa).f_Base_dEffect_dPure_dState_dState_stateRun s) with
+)) })), (Obj.magic (fun f sa sb -> { f_Base_dEffect_dPure_dState_dState_stateRun = (fun s -> (match ((sa).f_Base_dEffect_dPure_dState_dState_stateRun s) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__8; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__9 } -> (match ((sb).f_Base_dEffect_dPure_dState_dState_stateRun dtb__9) with
   | { Base_dData_dPair.f_Base_dData_dPair_dPair_first = dtb__10; Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 } -> { Base_dData_dPair.f_Base_dData_dPair_dPair_first = ((f dtb__8) dtb__10); Base_dData_dPair.f_Base_dData_dPair_dPair_second = dtb__11 }
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)) })))
+)) }))))
 
 # 17 "Base/Effect/Pure/State.vuna"
 let v_Base_dEffect_dPure_dState_drunState = (fun mc0 mc1 -> (match mc0 with

@@ -2,21 +2,21 @@ open Vuna_runtime
 type 'a0 t_Base_dData_dMaybe_dMaybe = C_Base_dData_dMaybe_dMaybe_Nothing | C_Base_dData_dMaybe_dMaybe_Just of ('a0)
 
 # 43 "Base/Data/Maybe.vuna"
-let v_Functor_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((fun f m -> (match m with
+let v_Functor_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dFunctor.C_Dict_uBase_dTrait_dFunctor_dFunctor_Functor ((Obj.magic (fun f m -> (match m with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__0) -> (C_Base_dData_dMaybe_dMaybe_Just ((f dtb__0)))
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 48 "Base/Data/Maybe.vuna"
-let v_Monad_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((fun m f -> (match m with
+let v_Monad_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dMonad.C_Dict_uBase_dTrait_dMonad_dMonad_Monad ((Obj.magic (fun m f -> (match m with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__1) -> (f dtb__1)
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 53 "Base/Data/Maybe.vuna"
-let v_Applicative_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((fun x -> (C_Base_dData_dMaybe_dMaybe_Just (x))), (fun mf mx -> (match mf with
+let v_Applicative_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dApplicative.C_Dict_uBase_dTrait_dApplicative_dApplicative_Applicative ((Obj.magic (fun x -> (C_Base_dData_dMaybe_dMaybe_Just (x)))), (Obj.magic (fun mf mx -> (match mf with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__2) -> (match mx with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
@@ -24,7 +24,7 @@ let v_Applicative_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dApplicative.C_Dict_u
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-)), (fun f ma mb -> (match ma with
+))), (Obj.magic (fun f ma mb -> (match ma with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__4) -> (match mb with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> C_Base_dData_dMaybe_dMaybe_Nothing
@@ -32,7 +32,7 @@ let v_Applicative_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dApplicative.C_Dict_u
   | _ -> failwith "DT: impossible branch"
 )
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 69 "Base/Data/Maybe.vuna"
 let v_Show_uBase_uData_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dTrait_dShow.C_Dict_uBase_dTrait_dShow_dShow_Show ((fun m -> (match m with
@@ -91,18 +91,18 @@ let v_Semigroup_uBase_uData_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dTrait_dMono
 let v_Monoid_uBase_uData_uMaybe_uMaybe_ua = (fun _uctx0 -> (Base_dTrait_dMonoid.C_Dict_uBase_dTrait_dMonoid_dMonoid_Monoid ((C_Base_dData_dMaybe_dMaybe_Just ((Base_dTrait_dMonoid.v_Base_dTrait_dMonoid_dmempty _uctx0))))))
 
 # 106 "Base/Data/Maybe.vuna"
-let v_Foldable_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable ((fun f z m -> (match m with
+let v_Foldable_uBase_uData_uMaybe_uMaybe = (Base_dTrait_dFoldable.C_Dict_uBase_dTrait_dFoldable_dFoldable_Foldable ((Obj.magic (fun f z m -> (match m with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> z
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__15) -> ((f dtb__15) z)
   | _ -> failwith "DT: impossible branch"
-))))
+)))))
 
 # 111 "Base/Data/Maybe.vuna"
-let v_Traversable_uBase_uData_uMaybe_uMaybe_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable ((fun fun_ m -> (match m with
+let v_Traversable_uBase_uData_uMaybe_uMaybe_uf = (fun _uctx0 -> (Base_dTrait_dTraversable.C_Dict_uBase_dTrait_dTraversable_dTraversable_Traversable ((Obj.magic (fun fun_ m -> (match m with
   | C_Base_dData_dMaybe_dMaybe_Nothing -> ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure _uctx0) C_Base_dData_dMaybe_dMaybe_Nothing)
   | C_Base_dData_dMaybe_dMaybe_Just (dtb__16) -> ((((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dliftA2 _uctx0) (fun y _u -> (C_Base_dData_dMaybe_dMaybe_Just (y)))) (fun_ dtb__16)) ((Base_dTrait_dApplicative.v_Base_dTrait_dApplicative_dpure _uctx0) dtb__16))
   | _ -> failwith "DT: impossible branch"
-)))))
+))))))
 
 # 24 "Base/Data/Maybe.vuna"
 let v_Base_dData_dMaybe_dfromMaybe = (fun mc0 mc1 -> (match mc1 with
