@@ -241,7 +241,8 @@ out-contains: "reason":"instance head
 # 终止性 call matrix：每条调用边带参数位置 + 调用点 span。
 run: "$VUNA" check corpus/dt_err/16_nonterm.vuna --json 2>&1
 exit: 1
-out-contains: "arg":"call at argument position
+out-contains: "arg":"argument 0"
+out-contains: "relation":"unchanged"
 out-contains: "kind":"call"
 # QTT 使用点：线性重复使用错误附每个使用点的 fields.span（name=use）。
 run: "$VUNA" check corpus/dt_err/59_linear_twice.vuna --json 2>&1
