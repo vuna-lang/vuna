@@ -395,18 +395,18 @@ let v_Vuna_dCompiler_dBase_dIntrinsics_dfloatIntrinsicNames = (Base_dList.C_Base
 # 1053 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicTbl = (((Base_dHashMap.v_Base_dHashMap_dinsertAll Base_dString.v_Hashable_uString) ((Base_dList.v_Base_dList_dmap (fun i -> { Base_dPair.f_Base_dPair_dPair_first = (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicName i); Base_dPair.f_Base_dPair_dPair_second = i })) v_Vuna_dCompiler_dBase_dIntrinsics_dallIntrinsics)) ((Base_dHashMap.v_Base_dHashMap_dfromList Base_dString.v_Hashable_uString) Base_dList.C_Base_dList_dList_Nil))
 
-# 1059 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1058 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic = (fun name -> ((((Base_dHashMap.v_Base_dHashMap_dlookup Base_dString.v_Hashable_uString) Base_dString.v_Eq_uString) name) v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicTbl))
 
-# 1063 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1062 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_disIntrinsicName = (fun name -> (match (v_Vuna_dCompiler_dBase_dIntrinsics_dfindIntrinsic name) with
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Just (dtb__54) -> (v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicVisible dtb__54)
   | Base_dMaybe.C_Base_dMaybe_dMaybe_Nothing -> false
   | _ -> failwith "DT: impossible branch"
 ))
 
-# 1069 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1068 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_duserIntrinsics = ((Base_dList.v_Base_dList_dfilter v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicVisible) v_Vuna_dCompiler_dBase_dIntrinsics_dallIntrinsics)
 
-# 1073 "Vuna/Compiler/Base/Intrinsics.vuna"
+# 1072 "Vuna/Compiler/Base/Intrinsics.vuna"
 let v_Vuna_dCompiler_dBase_dIntrinsics_dpreludeValueNames = ((Base_dList.v_Base_dList_dmap v_Vuna_dCompiler_dBase_dIntrinsics_dintrinsicName) v_Vuna_dCompiler_dBase_dIntrinsics_duserIntrinsics)

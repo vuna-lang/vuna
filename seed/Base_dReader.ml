@@ -1,0 +1,23 @@
+open Vuna_runtime
+type ('a0, 'a1) t_Base_dReader_dReader = { f_Base_dReader_dReader_readerRun : ('a0) -> 'a1 }
+
+# 17 "Base/Reader.vuna"
+let v_Functor_uBase_uReader_uReader_ue = (Base_dFunctor.C_Dict_uBase_dFunctor_dFunctor_Functor ((fun f r -> { f_Base_dReader_dReader_readerRun = (fun e -> (f ((r).f_Base_dReader_dReader_readerRun e))) })))
+
+# 20 "Base/Reader.vuna"
+let v_Monad_uBase_uReader_uReader_ue = (Base_dMonad.C_Dict_uBase_dMonad_dMonad_Monad ((fun r k -> { f_Base_dReader_dReader_readerRun = (fun e -> (((k ((r).f_Base_dReader_dReader_readerRun e))).f_Base_dReader_dReader_readerRun e)) })))
+
+# 23 "Base/Reader.vuna"
+let v_Applicative_uBase_uReader_uReader_ue = (Base_dApplicative.C_Dict_uBase_dApplicative_dApplicative_Applicative ((fun a -> { f_Base_dReader_dReader_readerRun = (fun e -> a) }), (fun mf mx -> { f_Base_dReader_dReader_readerRun = (fun e -> (((mf).f_Base_dReader_dReader_readerRun e) ((mx).f_Base_dReader_dReader_readerRun e))) }), (fun f ra rb -> { f_Base_dReader_dReader_readerRun = (fun e -> ((f ((ra).f_Base_dReader_dReader_readerRun e)) ((rb).f_Base_dReader_dReader_readerRun e))) })))
+
+# 15 "Base/Reader.vuna"
+let v_Base_dReader_drunReader = (fun mc0 mc1 -> (match mc0 with
+  | { f_Base_dReader_dReader_readerRun = dtb__0 } -> (dtb__0 mc1)
+  | _ -> failwith "DT: impossible branch"
+))
+
+# 30 "Base/Reader.vuna"
+let v_Base_dReader_dask = { f_Base_dReader_dReader_readerRun = (fun e -> e) }
+
+# 34 "Base/Reader.vuna"
+let v_Base_dReader_dlocal = (fun f r -> { f_Base_dReader_dReader_readerRun = (fun e -> ((r).f_Base_dReader_dReader_readerRun (f e))) })
