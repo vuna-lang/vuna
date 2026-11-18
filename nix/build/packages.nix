@@ -188,6 +188,7 @@ let
           ++ e2eTools
           ++ [
             pkgs.bash
+            pkgs.coreutils
             vuna-native
           ]
         )

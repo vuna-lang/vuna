@@ -516,8 +516,12 @@ golden/runtime case 的 codegen 产物按「生成模块集」分桶（`set-<key
 
 `vuna-native` 把「编译器编译自己」固化成可执行入口，CI 用它跑与 OCaml 版同规格的检查。
 wasm 不自举（浏览器/边缘受限后端的契约见 [wasm.md](wasm.md)），因此没有 wasm 侧的
-自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁，
-只在 push 与带 `backend` 标签的 PR 上跑（`.github/workflows/ci.yml` 的 `backend-native`）。
+自举产物与 runner。该 package **不进 `nix flake check`**：整轮成本远高于日常门禁。
+它在 `.github/workflows/ci.yml` 的 `backend-native` job 里只跑**定时（每晚）、手动
+dispatch 与带 `backend` 标签的 PR**——D89 未关时 native 后端在部分夹具上会挂住，
+放在每次 push 上只会占满 runner 又被下一次 push 取消（`cancel-in-progress`），
+既拿不到读数也拖慢反馈。push 路径上的 native 覆盖由 flake check 的
+`vuna-tests-native`（fast+integration 矩阵）承担。
 
 | 包 | 产物 | 说明 |
 | --- | --- | --- |
@@ -528,11 +532,17 @@ runner 是 `nix run .#backend-check -- --compiler native`，三个 scope：
 | scope | 断言 |
 | --- | --- |
 | `selfhost` | `check . --error-format json` 在整仓（workspace 根）零 error 诊断、exit 0；机器格式走进程内顺序检查，避开文本格式对成员包的 `processSpawn` |
-| `parity` | `test/corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out` 逐字相等（与 suite 的 `pure-cross` 分类同源） |
+| `parity` | `test/corpus/pure_cross/*.vuna` 每个夹具在 `ocaml` / `wasm` / `native` 三个输出目标上 `build --target` + 宿主执行，输出与 `.out`（或仅 run 的 `.run.out`）逐字相等（与 suite 的 `pure-cross` 分类同源） |
 | `corpus` | `test/corpus` 的每个夹具各一条断言：有 `*.diag.json`（目录夹具是 `expected.diag.json`）的比 `(severity, code, file, line, col)` 多重集（`file` 只比 basename）；其余有 `.out` / `.run.out` / `expected.out` 的要求零 error 诊断；无期望文件的不计入。工具链家族（`fmt` / `lint` / `fix` / `doc` / `cli` / `repl` / `search` / `lsp` / `codegen` / `cst`）的 `.out` 是工具输出、`packages` 是多包/workspace 语义，这两类跳过并计数 |
 
 `--scope all` = 三个都跑，默认 `selfhost,parity`。`--jobs N` 控制并行度，`--filter PAT`
 只跑匹配的夹具，`--target` 收窄 parity 的输出目标。
+
+每条外部命令（编译器、`cc`、`wasmtime`、生成的程序）默认 240 s 上限
+（`VUNA_BACKEND_TIMEOUT=<秒>`，`0` = 不限）。超时的夹具按失败计入清单，其余夹具继续跑：
+D89 未关时挂住的是单条命令，没有超时整轮会被拖到 job 级 timeout 而丢掉失败面。
+失败达到 `VUNA_BACKEND_MAX_FAILS`（默认 `0` = 不限；CI 设 20）后停止派发剩余夹具，
+其余记为 skip——编译器整体坏掉时清单已经很说明问题。
 
 ```console
 nix run .#backend-check -- --compiler native --scope parity --jobs 8

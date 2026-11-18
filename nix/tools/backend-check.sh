@@ -11,7 +11,10 @@
 #                 [--target ocaml,wasm,native] [--filter PAT] [--compiler-bin PATH]
 #                 [--keep] [--list]
 #
-# 依赖 PATH：wasm-tools / wasmtime / cc / ocamlopt / jq（由 `nix run .#backend-check` 注入）。
+# 依赖 PATH：wasm-tools / wasmtime / cc / ocamlopt / jq / timeout（由 `nix run .#backend-check` 注入）。
+# 单条命令默认 240 s 上限（VUNA_BACKEND_TIMEOUT，0 = 不限）；超时按失败计。
+# 失败达到 VUNA_BACKEND_MAX_FAILS（默认 0 = 不限）后停止派发剩余夹具：
+# 编译器整体坏掉时（D89）跑完几百条夹具没有额外信息，只会把 job 拖到超时。
 set -euo pipefail
 
 compiler=
@@ -19,6 +22,7 @@ compiler_bin=
 scopes=
 targets=ocaml,wasm,native
 jobs=${VUNA_BACKEND_JOBS:-8}
+max_fails=${VUNA_BACKEND_MAX_FAILS:-0}
 filter=
 keep=0
 list=0
@@ -84,7 +88,35 @@ alt=$compiler_bin
 
 export VUNA_BASE="$base"
 
+# 单条外部命令上限（秒，VUNA_BACKEND_TIMEOUT 覆盖，0 = 不限）：native 后端在部分
+# 夹具上会挂住（D89 的续延栈复制），没有超时整轮会被拖到 job 级 timeout，拿不到
+# 失败清单。超时的夹具按 FAIL 计，其它夹具继续跑。
+cmd_timeout=${VUNA_BACKEND_TIMEOUT:-240}
+run_limited() {
+  if [ "$cmd_timeout" = 0 ]; then
+    "$@"
+  else
+    timeout "$cmd_timeout" "$@"
+  fi
+}
+
+# 失败熔断：达到 max_fails 后立 stop 标记，剩余夹具直接记 skip（不再启动命令）。
+# 计数文件用单行 append，多 worker 并发写是安全的。
+fail_count_file=
+stop_file=
+note_fail() {
+  [ "$max_fails" -gt 0 ] || return 0
+  printf 'x\n' >>"$fail_count_file" 2>/dev/null || true
+  if [ "$(wc -l <"$fail_count_file" 2>/dev/null || echo 0)" -ge "$max_fails" ]; then
+    : >"$stop_file"
+  fi
+}
+should_stop() { [ -n "$stop_file" ] && [ -e "$stop_file" ]; }
+
 work=$(mktemp -d "${TMPDIR:-/tmp}/vuna-backend-check.XXXXXX")
+fail_count_file="$work/fails"
+stop_file="$work/stop"
+: >"$fail_count_file"
 cleanup() {
   if [ "$keep" = 1 ]; then
     printf 'backend-check: work dir kept at %s\n' "$work"
@@ -106,7 +138,7 @@ matches_filter() {
 run_selfhost() {
   printf '== selfhost: %s check . (workspace root)\n' "$compiler"
   local out="$work/selfhost.json" err="$work/selfhost.err" status=0 errors
-  ( cd "$repo" && "$alt" check "$repo" --error-format json >"$out" 2>"$err" ) || status=$?
+  ( cd "$repo" && run_limited "$alt" check "$repo" --error-format json >"$out" 2>"$err" ) || status=$?
   if [ ! -s "$out" ]; then
     printf 'FAIL selfhost: no json document (exit %s)\n' "$status" >&2
     sed -n '1,20p' "$err" >&2 || true
@@ -133,47 +165,67 @@ run_selfhost() {
 parity_one() {
   local stem=$1 target=$2
   local fixture="$repo/test/corpus/pure_cross/$stem.vuna"
-  local outdir="$work/parity/$stem-$target" want got status=0
-  want=$(cat "$repo/test/corpus/pure_cross/$stem.out")
+  local outdir="$work/parity/$stem-$target" want got status=0 wantfile
+  if should_stop; then
+    printf 'skip\t-\t-\tstopped:parity/%s [%s]\n' "$stem" "$target"
+    return 0
+  fi
+  # 期望输出：`.out` 是 interp/run 共享 golden，`.run.out` 是仅 run 的 golden
+  # （与 suite 的 Expect 同口径）。
+  wantfile="$repo/test/corpus/pure_cross/$stem.out"
+  [ -f "$wantfile" ] || wantfile="$repo/test/corpus/pure_cross/$stem.run.out"
+  if [ ! -f "$wantfile" ]; then
+    printf 'FAIL parity/%s [%s]: no expected output (.out / .run.out)\n' "$stem" "$target" >&2
+    printf 'bad\tparity/%s [%s]\n' "$stem" "$target"
+    note_fail
+    return 0
+  fi
+  want=$(cat "$wantfile")
   mkdir -p "$outdir"
   cp "$fixture" "$outdir/src.vuna"
 
   case $target in
     ocaml)
-      "$alt" compile "$outdir/src.vuna" "$outdir/o" --target ocaml >"$outdir/build.log" 2>&1 || status=$?
+      run_limited "$alt" compile "$outdir/src.vuna" "$outdir/o" --target ocaml >"$outdir/build.log" 2>&1 || status=$?
       if [ "$status" = 0 ]; then
-        ( cd "$outdir/o" && sh build.sh prog ) >>"$outdir/build.log" 2>&1 || status=$?
+        ( cd "$outdir/o" && run_limited sh build.sh prog ) >>"$outdir/build.log" 2>&1 || status=$?
       fi
-      if [ "$status" = 0 ]; then got=$("$outdir/o/prog" 2>&1) || status=$?; fi
+      if [ "$status" = 0 ]; then got=$(run_limited "$outdir/o/prog" 2>&1) || status=$?; fi
       ;;
     wasm)
-      "$alt" compile "$outdir/src.vuna" "$outdir/w" --target wasm >"$outdir/build.log" 2>&1 || status=$?
+      run_limited "$alt" compile "$outdir/src.vuna" "$outdir/w" --target wasm >"$outdir/build.log" 2>&1 || status=$?
       if [ "$status" = 0 ]; then
-        wasm-tools parse "$outdir/w/main.wat" -o "$outdir/w/main.wasm" >>"$outdir/build.log" 2>&1 || status=$?
+        run_limited wasm-tools parse "$outdir/w/main.wat" -o "$outdir/w/main.wasm" >>"$outdir/build.log" 2>&1 || status=$?
       fi
       if [ "$status" = 0 ]; then
-        got=$(wasmtime run -W stack-switching=y -W gc=y -W function-references=y "$outdir/w/main.wasm" 2>&1) || status=$?
+        got=$(run_limited wasmtime run -W stack-switching=y -W gc=y -W function-references=y "$outdir/w/main.wasm" 2>&1) || status=$?
       fi
       ;;
     native)
-      "$alt" compile "$outdir/src.vuna" "$outdir/n" --target native >"$outdir/build.log" 2>&1 || status=$?
+      run_limited "$alt" compile "$outdir/src.vuna" "$outdir/n" --target native >"$outdir/build.log" 2>&1 || status=$?
       if [ "$status" = 0 ]; then
-        cc -static -nostdlib -no-pie -Wl,--build-id=none -o "$outdir/n/prog" $(find "$outdir/n" -name '*.s' | sort) >>"$outdir/build.log" 2>&1 || status=$?
+run_limited cc -static -nostdlib -no-pie -Wl,--build-id=none -o "$outdir/n/prog" $(find "$outdir/n" -name '*.s' | sort) >>"$outdir/build.log" 2>&1 || status=$?
       fi
-      if [ "$status" = 0 ]; then got=$("$outdir/n/prog" 2>&1) || status=$?; fi
+      if [ "$status" = 0 ]; then got=$(run_limited "$outdir/n/prog" 2>&1) || status=$?; fi
       ;;
     *) printf 'backend-check: unknown target %s\n' "$target" >&2; return 0 ;;
   esac
 
   if [ "$status" != 0 ]; then
-    printf 'FAIL parity/%s [%s]: exit %s\n' "$stem" "$target" "$status" >&2
+    if [ "$status" = 124 ]; then
+      printf 'FAIL parity/%s [%s]: timeout after %ss\n' "$stem" "$target" "$cmd_timeout" >&2
+    else
+      printf 'FAIL parity/%s [%s]: exit %s\n' "$stem" "$target" "$status" >&2
+    fi
     sed -n '1,10p' "$outdir/build.log" >&2 || true
     printf 'bad\tparity/%s [%s]\n' "$stem" "$target"
+    note_fail
     return 0
   fi
   if [ "$got" != "$want" ]; then
     printf 'FAIL parity/%s [%s]: expected [%s] got [%s]\n' "$stem" "$target" "$want" "$got" >&2
     printf 'bad\tparity/%s [%s]\n' "$stem" "$target"
+    note_fail
     return 0
   fi
   printf 'ok\tparity/%s [%s]\n' "$stem" "$target"
@@ -206,6 +258,10 @@ corpus_entry() {
 corpus_one() {
   local entry=$1 expect=$2 kind=$3 label=$4 mode=$5 root=$6
   local out err status=0 got want errors use_compile=0 target
+  if should_stop; then
+    printf 'skip\t-\t-\tstopped:corpus/%s\n' "$label"
+    return 0
+  fi
   out="$work/corpus.$BASHPID.json"
   err="$work/corpus.$BASHPID.err"
   # 包模式交目录（ad-hoc 单文件与包语义不同：lib/ 模块、包诊断码）；单文件夹具交文件。
@@ -217,15 +273,20 @@ corpus_one() {
   fi
 
   if [ "$use_compile" = 1 ]; then
-    ( cd "$repo" && "$alt" compile "$target" "$work/out.$BASHPID" --error-format json --warnings >"$out" 2>"$err" ) || status=$?
+    ( cd "$repo" && run_limited "$alt" compile "$target" "$work/out.$BASHPID" --error-format json --warnings >"$out" 2>"$err" ) || status=$?
   else
-    ( cd "$repo" && "$alt" check "$target" --error-format json --warnings >"$out" 2>"$err" ) || status=$?
+    ( cd "$repo" && run_limited "$alt" check "$target" --error-format json --warnings >"$out" 2>"$err" ) || status=$?
   fi
 
   if [ ! -s "$out" ]; then
-    printf 'FAIL corpus/%s: no json document (exit %s)\n' "$label" "$status" >&2
+    if [ "$status" = 124 ]; then
+      printf 'FAIL corpus/%s: timeout after %ss\n' "$label" "$cmd_timeout" >&2
+    else
+      printf 'FAIL corpus/%s: no json document (exit %s)\n' "$label" "$status" >&2
+    fi
     sed -n '1,10p' "$err" >&2 || true
     printf 'bad\tcorpus/%s\n' "$label"
+    note_fail
     return 0
   fi
 
@@ -236,6 +297,7 @@ corpus_one() {
       printf 'FAIL corpus/%s: diagnostics differ\n  expected: %s\n  actual:   %s\n' \
         "$label" "$want" "$got" >&2
       printf 'bad\tcorpus/%s\n' "$label"
+      note_fail
       return 0
     fi
   else
@@ -246,6 +308,7 @@ corpus_one() {
              | "  \(.labels[0].span.file // "?"):\(.labels[0].span.start.line // 0): [\(.code)] \(.message)"' \
         "$out" | head -10 >&2
       printf 'bad\tcorpus/%s\n' "$label"
+      note_fail
       return 0
     fi
   fi
@@ -315,8 +378,9 @@ collect_jobs() {
   done < <(find "$repo/test/corpus" -name '*.out' | sort)
 }
 
-export repo base suite alt compiler targets work filter
-export -f parity_one corpus_one corpus_entry jq_project matches_filter
+export repo base suite alt compiler targets work filter cmd_timeout
+export max_fails fail_count_file stop_file
+export -f run_limited note_fail should_stop parity_one corpus_one corpus_entry jq_project matches_filter
 
 if [ "$list" = 1 ]; then
   printf 'compiler: %s (%s)\nscopes: %s\ntargets: %s\n' "$compiler" "$alt" "$scopes" "$targets"
@@ -359,6 +423,10 @@ failed=$(grep -c '^bad' "$results" || true)
 skipped=$(grep -c '^skip' "$results" || true)
 printf '\nbackend-check[%s]: %s passed, %s failed, %s skipped\n' \
   "$compiler" "$passed" "$failed" "$skipped"
+if should_stop; then
+  printf 'backend-check: stopped after %s failure(s) (VUNA_BACKEND_MAX_FAILS); 剩余夹具未运行\n' \
+    "$max_fails" >&2
+fi
 if [ "$failed" != 0 ]; then
   printf 'failed:\n'
   grep '^bad' "$results" | cut -f2- | sed 's/^/  /'
