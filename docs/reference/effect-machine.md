@@ -268,6 +268,22 @@ run : Control -> Obj
 
 一次性续延用 `Cont`（已有线性类型）或 `selK` 式的 used 位。
 
+### 9.2.1 进度（现状）
+
+- `Base/Effect/Machine.vuna` 已有：`Control v`（Done/Apply/Perform/Handle/Return/
+  KDone/Resume）+ `Frame`/`Ctx` + **纯函数式**状态（`MSt`，不依赖 IORef）+ `run`；
+  一次性约束用 used id 列表，遍历都带 fuel。夹具 `pure_cross/56_machine_skeleton`
+  手搭 `handle (perform) {k 2}`，三端 6 checks 绿。
+- lowering 侧已写好「机器步骤 → 库构造函数」的改写（`Ir.Cps.mSteps`）并验证会触发：
+  接上流水线后 wasm codegen 报 ``unknown data family `Base.Effect.Machine.Control` ``，
+  即改写确实生效、`@ir@m@*` 已被替换成 `Machine.*` 构造子。
+- **卡点**：机器模块不在程序的「已加载 + DCE 可达」集合里（没有任何源码引用它，
+  只有 lowering 生成引用），所以它的 `Control/Frame/Ctx` 声明和 `run` 等定义进不了
+  IR unit。两条路：
+  1. 把机器搬进 `Base.Effect.Core`（`Eff` 所在模块必然被加载；再把 `run` 加进各后端
+     的可达根，一行）；
+  2. 让 base 的公开面 import 机器模块，并在 lowering 里给 IR unit 补上它的 tyDecls。
+  取 1（无循环依赖：Core 已经 import 了需要的 Data/Trait 模块）。
 ### 9.3 后端义务与迁移顺序
 
 | 步 | 内容 | 验收 |
