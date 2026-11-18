@@ -321,11 +321,13 @@ lowering 侧同时修了 `mSteps` 的**应用脊重建**：`runThunk e u k` 之�
 
 剩余 3 个缺口（都已在同一轮里定位到机制，不是猜测）：
 
-- **`handleScoped` / `handleSelf`（08、09）**：`handleScoped` 是纯代码里的
-  `prim_effectSelf`，lowering 把它包成 `machineRun (MkSelf th doneCont)`；嵌套
-  `machineRun` 从空状态起跑，看不到当前帧。wat 靠全局 `$g_stepHandlers` 躲过这点。
-  纯机器需要把「当前帧上的嵌套运行」当作 opH 的**第四个参数**（`runScoped`）传进去，
-  并把 handler clause 体里对 `handleScoped`/`handleSelf` 的调用改写成该 binder。
+- ~~**`handleScoped` / `handleSelf`（08、09）**~~：已按「opH 第四个参数」落地——`Frame`/
+  `MkPerform` 的 opH 多一个 `runScoped : Scoped ((v -> Control v) -> Control v) -> v`，
+  `step` 派发时传入 `machineScoped`（当前 `MSt`/帧上跑嵌套循环，ctx 从空开始，
+  used/next 沿用）；夹具 56 手搭的 opH 也带上并忽略该参数。lowering 侧的一版实现
+  （clause 增第 4 个 binder + 把 `handleScoped`/`handleSelf` 调用改写过去）在接线状态
+  下让 08、09 在库机器上通过，但**与 `mSteps` 接线是一体**（wat 路径的 clause 仍是 3 参），
+  所以先不落地；接上机器时同批打开。
 - **cleanup（52、53）**：`bracket` 用 `prim_cleanupPush/Pop` 维护宿主 LIFO，
   机器弹帧时按帧深度跑 cleanup。库机器需要 `MSt` 带 cleanup 栈 + 帧深度，并把这两个
   原语在 CPS 里降成 `Control` 步骤（现在的 `prim_fail` 文本/宿主栈都在 wat runtime）。
