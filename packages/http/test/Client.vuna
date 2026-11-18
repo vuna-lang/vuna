@@ -1,0 +1,69 @@
+-- 回环 e2e：客户端渲染请求 → 内存 duplex → 服务循环 → 客户端读响应。
+import Base
+import Base.Effect.Core
+import Base.Effect.Pure as Pure
+import Http.Client as C
+import Http.Connection as Conn
+import Http.Request as Req
+import Http.Response as Res
+import Http.Render as R
+
+main : Eff [] String
+main = do
+  toServer <- Pure.IORef.newRef ""
+  toClient <- Pure.IORef.newRef ""
+  _ <- Conn.writeAllOf (duplex toClient toServer) (R.renderRequest (Req.request "GET" "/x"))
+  served <- Conn.serveWith (duplex toServer toClient) 1 (handlerOf "got ")
+  exchange <- C.readResponse (duplex toClient toServer) ""
+  case failuresOf served exchange of
+    [] => pure ""
+    bad => do
+      _ <- prim_eff_print ("http client failed: " ++ join "; " bad ++ "\n")
+      _ <- prim_eff_exit 1
+      pure ""
+
+-- | 两个方向各一个缓冲：读 `inRef`、写 `outRef`。
+duplex : IORef String -> IORef String -> Conn.Duplex []
+duplex inRef outRef = Conn.Dup (readSomeFn inRef) (writeAllFn outRef) (pure 0)
+
+-- | 从引用里取至多 `n` 字节，余量写回。
+readSomeFn : IORef String -> Int -> Eff [] String
+readSomeFn ref n = do
+  s <- Pure.IORef.readRef ref
+  _ <- Pure.IORef.writeRef ref (dropBytes n s)
+  pure (takeBytes n s)
+
+-- | 把整段字节追加到引用。
+writeAllFn : IORef String -> String -> Eff [] Int
+writeAllFn ref s = do
+  cur <- Pure.IORef.readRef ref
+  _ <- Pure.IORef.writeRef ref (cur ++ s)
+  pure (strLength s)
+
+-- | 取前 `n` 字节（不足则整串）。
+takeBytes : Int -> String -> String
+takeBytes n s = strSubstring 0 (if strLength s > n then n else strLength s) s
+
+-- | 去掉前 `n` 字节（不足则空串）。
+dropBytes : Int -> String -> String
+dropBytes n s =
+  let
+    k = if strLength s > n then n else strLength s
+  in strSubstring k (strLength s - k) s
+
+-- | 回声 handler：把请求目标写进响应体。
+handlerOf : String -> Req.Request -> Eff [] Res.Response
+handlerOf prefix req = pure (Res.response 200 (prefix ++ req.target))
+
+-- | 断言：一条请求被服务，客户端拿到同一响应体。
+failuresOf : Int -> C.Exchange -> List String
+failuresOf served exchange = append (check "served" (served == 1)) (case exchange of
+  C.GotResponse resp rest =>
+    append (check "status" (resp.status == 200))
+      (append (check "body" (resp.body == "got /x")) (check "rest" (rest == "")))
+  _ => ["response"]
+)
+
+-- | 一条命名检查。
+check : String -> Bool -> List String
+check name ok = if ok then [] else [name]

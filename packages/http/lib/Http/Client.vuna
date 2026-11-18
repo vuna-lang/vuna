@@ -1,0 +1,41 @@
+-- | 客户端方向的 HTTP/1.1 交换：渲染请求 → 写 → 读到完整响应。
+-- | 与 `Http.Connection` 共用 duplex 抽象与预算常量，因此同一段编解码在两侧对称。
+module Http.Client where
+
+import Base
+import Base.Effect.Core
+import Http.Connection as Conn
+import Http.Parse as P
+import Http.Render as R
+import Http.Request as Req
+import Http.Response as Res
+
+-- | 一次交换的结果。
+export data Exchange(..) : Type where
+  -- | 收到响应与剩余字节（流水线的下一条）。
+  GotResponse : Res.Response -> String -> Exchange
+  -- | 响应非法，原因即诊断。
+  BadResponse : String -> Exchange
+  -- | 对端在响应完成前关闭。
+  PeerClosed : Exchange
+
+-- | 发一条请求并读到完整响应。
+export request : Conn.Duplex r -> Req.Request -> Eff r Exchange
+request d req = do
+  _ <- Conn.writeAllOf d (R.renderRequest req)
+  readResponse d ""
+
+-- | 从 `buf` 起继续读，直到解析出一条完整响应。
+export readResponse : Conn.Duplex r -> String -> Eff r Exchange
+readResponse d buf = readLoop d buf Conn.readIterations
+
+-- | `readResponse` 的读循环：`fuel` 每轮减一保证终止，字节预算另行检查。
+readLoop : Conn.Duplex r -> String -> Int -> Eff r Exchange
+readLoop d buf fuel = if fuel <= 0 then pure (BadResponse "response too large")
+else if strLength buf > Conn.messageBudget then pure (BadResponse "response too large")
+else case P.parseResponse buf of
+  P.Complete resp rest => pure (GotResponse resp rest)
+  P.Invalid e => pure (BadResponse e)
+  P.Incomplete => do
+    chunk <- Conn.readSomeOf d Conn.readChunk
+    if strLength chunk == 0 then pure PeerClosed else readLoop d (buf ++ chunk) (fuel - 1)
