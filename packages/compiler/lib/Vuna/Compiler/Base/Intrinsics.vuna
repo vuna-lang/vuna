@@ -752,8 +752,6 @@ baseIntrinsics =
     Intrinsic "strSubstring" (IFun IInt (IFun IInt (IFun IStr IStr))) OpStrSubstring True,
     Intrinsic "strShow" (IFun IStr IStr) OpStrShow True,
     Intrinsic primEraseName (IPi "a" (IFun (IVar "a") (IVar "a"))) OpIdentity False,
-    Intrinsic "@vuna@prim@toObj" (IPi "a" (IFun (IVar "a") (IGlobal "Base.Effect.Core.Obj"))) OpNone False,
-    Intrinsic "@vuna@prim@fromObj" (IPi "a" (IFun (IGlobal "Base.Effect.Core.Obj") (IVar "a"))) OpNone False,
     Intrinsic "natAdd" (IFun INat (IFun INat INat)) OpNatAdd True,
     Intrinsic "natSub" (IFun INat (IFun INat INat)) OpNatSub True,
     Intrinsic "natMul" (IFun INat (IFun INat INat)) OpNatMul True,
@@ -858,6 +856,9 @@ effIntrinsics : List Intrinsic
 -- Ref / Net 的带行宿主原语。
 effIntrinsics =
   [
+    -- 显式效应机器的装箱/拆箱（运行时恒等；见 Base.Effect.Core.Obj）。
+    Intrinsic "@vuna@prim@toObj" (IPi "a" (IFun (IVar "a") (IGlobal "Base.Effect.Core.Obj"))) OpNone False,
+    Intrinsic "@vuna@prim@fromObj" (IPi "a" (IFun (IGlobal "Base.Effect.Core.Obj") (IVar "a"))) OpNone False,
     Intrinsic
       primEffBind1Name
       (IPi "a" (IPi "b" (IFun1 (IEff (IVar "a")) (IFun1 (IFun1 (IVar "a") (IEff (IVar "b"))) (IEff (IVar "b"))))))
