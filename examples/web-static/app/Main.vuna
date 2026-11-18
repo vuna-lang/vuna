@@ -1,0 +1,60 @@
+-- 静态页面 + 路由：三条 GET 路由、一条 POST 路由，`tcp:127.0.0.1:PORT` 串行服务。
+-- 参数是监听地址（缺省 `tcp:127.0.0.1:8080`；`:0` 由服务端打印实际端口）。
+import Base
+import Base.Effect.Core
+import Base.Effect.Args as EffArgs
+import Base.Effect.Console as EffConsole
+import Base.Effect.Fs as EffFs
+import Base.Effect.Net as EffNet
+import Web.Route as Route
+import Web.Server as Server
+import Web.View as View
+
+main : Eff [ArgsOp, ConsoleOp, FsOp, NetOp] Int
+main = do
+  args <- argsGetArgs
+  Server.serve routes (addrOf args)
+
+-- | 第一个参数是监听地址。
+addrOf : List String -> String
+addrOf args = case args of
+  a :: _ => a
+  [] => "tcp:127.0.0.1:8080"
+
+routes : List Route.Route
+routes =
+  [ Route.route "GET" "/" home,
+    Route.route "GET" "/about" about,
+    Route.route "GET" "/users/:id" userPage,
+    Route.route "POST" "/users/:id" createUser,
+    Route.route "GET" "/echo/:msg" echo
+  ]
+
+home : List (Pair String String) -> View.View
+home _ =
+  page "Home"
+    [View.Element "h1" [] [View.Text "Home"], View.Element "p" [] [View.Text "静态页面 + 路由"]]
+
+about : List (Pair String String) -> View.View
+about _ = page "About" [View.Element "h1" [] [View.Text "About"]]
+
+userPage : List (Pair String String) -> View.View
+userPage params = page "User" [View.Element "h1" [] [View.Text ("user " ++ paramOf "id" params)]]
+
+createUser : List (Pair String String) -> View.View
+createUser params =
+  page "Created" [View.Element "h1" [] [View.Text ("created " ++ paramOf "id" params)]]
+
+-- | 回显路径参数（验证百分号解码 + 文本转义）。
+echo : List (Pair String String) -> View.View
+echo params = View.Text (paramOf "msg" params)
+
+-- | 取命名参数的值；缺参数时为空串。
+paramOf : String -> List (Pair String String) -> String
+paramOf name params = case params of
+  p :: rest => if p.first == name then p.second else paramOf name rest
+  [] => ""
+
+-- | 页面骨架。
+page : String -> List View.View -> View.View
+page title body = View.document title body

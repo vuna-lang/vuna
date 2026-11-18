@@ -1,0 +1,10 @@
+# vuna-web：HTML 视图 + 路由 + 串行服务驱动（生态层，不进 seed）。
+[package]
+name = "vuna-web"
+
+[dependencies]
+vuna-base = "../base"
+vuna-http = "../http"
+
+[export]
+modules = ["Web", "Web.View", "Web.Route", "Web.Server"]

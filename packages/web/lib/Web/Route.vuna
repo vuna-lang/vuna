@@ -1,0 +1,129 @@
+-- | 路由：方法 + 段模式（静态段 / `:name` 参数段）+ handler。匹配是纯函数。
+-- | 路径在匹配前做三件事：去查询串、按 `/` 切段并丢弃空段（尾斜杠与重复斜杠归一）、
+-- | 段内百分号解码。
+module Web.Route where
+
+import Base
+import Web.View as View
+
+-- | 一条路由。`segments` 里的 `:name` 是参数段，其余按字面比较。
+export record Route(..) where
+  -- | 方法（大写，如 `GET`）。
+  method : String
+  -- | 段模式。
+  segments : List String
+  -- | 命中后的页面。
+  handler : List (Pair String String) -> View.View
+
+-- | 构造一条路由（路径在这里切成段）。
+export route : String -> String -> (List (Pair String String) -> View.View) -> Route
+route method path handler = Route method (splitPath path) handler
+
+-- | 路径 → 段：去查询串、丢弃空段、逐段百分号解码。
+export splitPath : String -> List String
+splitPath path =
+  let
+    bare = case split "?" path of
+      first :: _ => first
+      [] => path
+  in map decodeSegment (filter nonEmpty (split "/" bare))
+
+-- | 非空段。
+nonEmpty : String -> Bool
+nonEmpty s = strLength s > 0
+
+-- | 百分号解码；非法 / 截断的 `%XX` 原样保留。
+export decodeSegment : String -> String
+decodeSegment s = strPack (decodeBytes (strUnpack s) [])
+
+-- | `decodeSegment` 的字节扫描（逆序累积）。
+decodeBytes : List Int -> List Int -> List Int
+decodeBytes xs acc = case xs of
+  [] => reverse acc
+  37 :: h :: l :: rest => case hexPair h l of
+    Just b => decodeBytes rest (b :: acc)
+    Nothing => decodeBytes rest (l :: h :: 37 :: acc)
+  c :: rest => decodeBytes rest (c :: acc)
+
+-- | 两位十六进制字节值。
+hexPair : Int -> Int -> Maybe Int
+hexPair h l = case hexNibble h of
+  Nothing => Nothing
+  Just hi => case hexNibble l of
+    Nothing => Nothing
+    Just lo => Just (hi * 16 + lo)
+
+-- | 单个十六进制位。
+hexNibble : Int -> Maybe Int
+hexNibble c =
+  if c >= 48 && c <= 57 then Just (c - 48)
+  else if c >= 97 && c <= 102 then Just (c - 87)
+  else if c >= 65 && c <= 70 then Just (c - 55) else Nothing
+
+-- | 段模式是否参数段。
+isParam : String -> Bool
+isParam p = startsWith ":" p
+
+-- | 参数名（去掉前导 `:`）。
+paramName : String -> String
+paramName p = substring (natFromInt 1) (natFromInt (strLength p - 1)) p
+
+-- | 段模式匹配；成功时返回捕获的参数（按出现顺序）。
+export matchSegments : List String -> List String -> Maybe (List (Pair String String))
+matchSegments pat actual = case pat of
+  [] => if actual == [] then Just [] else Nothing
+  p :: ps => case actual of
+    [] => Nothing
+    a :: ar => if isParam p then case matchSegments ps ar of
+      Nothing => Nothing
+      Just rest => Just (Pair (paramName p) a :: rest)
+    else if p == a then matchSegments ps ar else Nothing
+
+-- | 按方法 + 路径匹配路由（方法大小写不敏感）。
+export matchRoute : List Route -> String -> String -> Maybe (Pair Route (List (Pair String String)))
+matchRoute routes method path = matchGo routes method (splitPath path)
+
+-- | `matchRoute` 的线性扫描。
+matchGo : List Route -> String -> List String -> Maybe (Pair Route (List (Pair String String)))
+matchGo routes method segs = case routes of
+  [] => Nothing
+  r :: rest => if sameMethod r.method method then case matchSegments r.segments segs of
+    Just params => Just (Pair r params)
+    Nothing => matchGo rest method segs
+  else matchGo rest method segs
+
+-- | 路径命中、但方法可能不符时，用于 405 的 `Allow` 列表（去重、保序）。
+export allowedMethods : List Route -> String -> List String
+allowedMethods routes path = dedupe (map methodOf (filter (matchesSegs (splitPath path)) routes))
+
+-- | 路由的方法。
+methodOf : Route -> String
+methodOf r = r.method
+
+-- | 路由的段模式是否匹配给定路径段。
+matchesSegs : List String -> Route -> Bool
+matchesSegs segs r = isJust (matchSegments r.segments segs)
+
+-- | 去重（保留首次出现顺序）。
+dedupe : List String -> List String
+dedupe xs = dedupeGo xs [] (natToInt (length xs) + 1)
+
+-- | `dedupe` 的累积循环；`fuel` 保证终止。
+dedupeGo : List String -> List String -> Int -> List String
+dedupeGo xs seen fuel = case xs of
+  [] => reverse seen
+  x :: rest =>
+    if fuel <= 0 then reverse seen
+    else if mem x seen then dedupeGo rest seen (fuel - 1) else dedupeGo rest (x :: seen) (fuel - 1)
+
+-- | 方法比较（ASCII 大写归一）。
+export sameMethod : String -> String -> Bool
+sameMethod a b = upper a == upper b
+
+-- | ASCII 大写化。
+upper : String -> String
+upper s = strPack (map upperByte (strUnpack s))
+
+-- | 单个字节大写化。
+upperByte : Int -> Int
+upperByte c = if c >= 97 && c <= 122 then c - 32 else c

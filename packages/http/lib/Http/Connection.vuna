@@ -31,6 +31,8 @@ closeOf (Dup _ _ cl) = cl
 
 -- | 从 net 句柄构造 duplex：`Nothing`（EOF）映射成空串，`close` 关句柄。
 -- | 地址 / TLS 仍在调用方手里，本包只消费句柄。
+-- | 注意：`Http.Connection.serve` 结束时会调用 duplex 的 `close`，因此用 `fromNet` 的调用方
+-- | 不要再重复 `netClose` 同一个句柄（重复关闭是 `net: close handle …: invalid handle`）。
 export fromNet : Member nNet NetOp r => Int -> Duplex r
 fromNet conn =
   Dup (\size => eofToEmpty (EffNet.netRecv conn) size) (\s => EffNet.netSend conn s)

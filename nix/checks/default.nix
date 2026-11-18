@@ -27,6 +27,7 @@ let
     base = ../../packages/base;
     cli = ../../packages/cli;
     http = ../../packages/http;
+    web = ../../packages/web;
     test = ../../test;
     examples = ../../examples;
     docs = ../../docs;
@@ -46,6 +47,7 @@ let
     src.compiler
     src.cli
     src.http
+    src.web
     src.manifest
   ];
 

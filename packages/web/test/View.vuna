@@ -1,0 +1,34 @@
+-- Web.View 的包内测试：转义、属性、void 元素、片段与文档骨架。
+import Base
+import Base.Effect.Core
+import Web.View as V
+
+main : Eff [] String
+main = case filter (\p => not (isPassing p)) results of
+  [] => pure ""
+  bad => do
+    _ <- prim_eff_print ("web view failed: " ++ join "; " (map nameOf bad) ++ "\n")
+    _ <- prim_eff_exit 1
+    pure ""
+
+-- | 一条检查是否通过。
+isPassing : Pair String Bool -> Bool
+isPassing p = p.second
+
+-- | 检查名。
+nameOf : Pair String Bool -> String
+nameOf p = p.first
+
+results : List (Pair String Bool)
+results =
+  [ Pair "text-escaped" (V.renderView (V.Text "<b>&\"'") == "&lt;b&gt;&amp;&quot;&#39;"),
+    Pair "attr-escaped" (V.renderView (V.Element "a" [Pair "href" "/x?a=1&b=2"] [V.Text "x"]) == "<a href=\"/x?a=1&amp;b=2\">x</a>"),
+    Pair "void-no-close" (V.renderView (V.Element "br" [] []) == "<br>"),
+    Pair "void-with-attrs" (V.renderView (V.Element "img" [Pair "src" "a.png"] []) == "<img src=\"a.png\">"),
+    Pair "nesting" (V.renderView (V.Element "div" [] [V.Element "p" [] [V.Text "hi"]]) == "<div><p>hi</p></div>"),
+    Pair "fragment" (V.renderView (V.Fragment [V.Text "a", V.Text "b"]) == "ab"),
+    Pair "raw-passthrough" (V.renderView (V.Raw "<br>") == "<br>"),
+    Pair "bad-attr-dropped" (V.renderView (V.Element "div" [Pair "on click" "x"] []) == "<div></div>"),
+    Pair "attr-order" (V.renderView (V.Element "a" [Pair "b" "2", Pair "a" "1"] []) == "<a b=\"2\" a=\"1\"></a>"),
+    Pair "document" (contains "<!doctype html>" (V.renderView (V.document "t" [V.Text "x"])) && contains "<title>t</title>" (V.renderView (V.document "t" [V.Text "x"])))
+  ]

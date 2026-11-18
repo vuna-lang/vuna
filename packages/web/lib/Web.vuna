@@ -1,0 +1,10 @@
+-- | vuna-web：页面是数据、路由是纯函数、服务端是 `vuna-http` 之上的薄驱动。
+-- | 生态层，不进 seed；依赖 `vuna-base` 与 `vuna-http`。
+module Web where
+
+export module Web.View
+export module Web.View as View
+export module Web.Route
+export module Web.Route as Route
+export module Web.Server
+export module Web.Server as Server

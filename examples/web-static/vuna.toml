@@ -1,0 +1,8 @@
+# vuna-web 的静态页面 + 路由示例：`vuna run examples/web-static -- tcp:127.0.0.1:8080`。
+[package]
+name = "web-static"
+
+[dependencies]
+vuna-base = "../../packages/base"
+vuna-http = "../../packages/http"
+vuna-web = "../../packages/web"
