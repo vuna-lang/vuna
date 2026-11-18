@@ -236,7 +236,7 @@ modules = [
   语法见 [native-effects.md](native-effects.md)，通用签名索引效应
   （用户自定义 op + 深 handler + 行/重排）未实现（见 [debt.md](debt.md) / [effects.md](effects.md)）；
   **效应标签在库层**：`Base.Effect.Fs` 是完整 fs 面并带命名实例（`Named "mock" FsOp` / `Named "real" FsOp`），
-  `Base.Effect.Console`/`EffClock`/`EffEnv`/`EffProcess` 是命名实例 + 宿主 handler，宿主层仍可
+  `Base.Effect.Console` / `Base.Effect.Clock` / `Base.Effect.Env` / `Base.Effect.Process` 是命名实例 + 宿主 handler，宿主层仍可
   直接调用 `prim_eff_*`；原生 `prim_eff_sleep`（`Base.Effect.Clock` 与直接调用路径都用）、可控
   `Exit`（`handleProcessHostWith`/`…Observed`）与工具链一条 console 路径（`vuna version`）都在；
   见 [effects.md](effects.md) §8.6；
