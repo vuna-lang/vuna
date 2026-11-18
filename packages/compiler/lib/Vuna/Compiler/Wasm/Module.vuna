@@ -453,7 +453,11 @@ genGlobalCall fuel st name args =
         let
           arity = irDefArity d
           argc = listLengthB args
-        in if argc == arity then
+        in if arity == 0 then
+          case genGlobalRef (fuel - 1) st name of
+            Err e => Err e
+            Ok p => genApplyArgs (fuel - 1) (secondOf p) (firstOf p) args
+        else if argc == arity then
           genArgsThen (fuel - 1) st args (if st.gsTail then IReturnCall (watFuncNameOf name) else ICall (watFuncNameOf name))
         else if argc < arity then
           genApplyValue (fuel - 1) st (IrGlobal name) args
