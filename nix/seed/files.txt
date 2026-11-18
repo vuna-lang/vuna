@@ -141,6 +141,9 @@ Vuna_dCompiler_dFrontend_dPackages_dPkg.ml
 Vuna_dCompiler_dFrontend_dPackages_dSource.ml
 Vuna_dCompiler_dFrontend_dParser.ml
 Vuna_dCompiler_dFrontend_dParser_dSupport.ml
+Vuna_dCompiler_dFrontend_dRast.ml
+Vuna_dCompiler_dFrontend_dRast_dBridge.ml
+Vuna_dCompiler_dFrontend_dRast_dName.ml
 Vuna_dCompiler_dFrontend_dToml.ml
 Vuna_dCompiler_dIr_dAnalysis.ml
 Vuna_dCompiler_dIr_dAnf.ml
