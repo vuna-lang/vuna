@@ -1,0 +1,17 @@
+-- 正例：互递归的字典序下降。`down` 的环靠第 0 位（`Succ m` → `m`），
+-- `step` 的环靠第 1 位（`Succ n` → `n`）；两个位置各自都不能覆盖全部环，
+-- 也没有 fuel 形参 ⇒ 只有 SCT 能证。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+down : Nat -> Nat -> Nat
+down Zero n = step n
+down (Succ m) n = down m n
+
+step : Nat -> Nat
+step Zero = Zero
+step (Succ n) = down Zero n
+
+main : Int
+main = 0

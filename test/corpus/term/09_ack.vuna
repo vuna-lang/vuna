@@ -1,0 +1,14 @@
+-- 正例：Ackermann。单测度位置判据过不了——第 0 位在 `ack (Succ m) Zero` 下降，
+-- 第 1 位在 `ack (Succ m) (Succ n) = ack (Succ m) n` 下降，没有哪个位置在所有
+-- 环上都严格；没有 fuel 形参 ⇒ 只有 SCT 能证。
+data Nat : Type where
+  Zero : Nat
+  Succ : Nat -> Nat
+
+ack : Nat -> Nat -> Nat
+ack Zero n = Succ n
+ack (Succ m) Zero = ack m (Succ Zero)
+ack (Succ m) (Succ n) = ack m (ack (Succ m) n)
+
+main : Int
+main = 0
