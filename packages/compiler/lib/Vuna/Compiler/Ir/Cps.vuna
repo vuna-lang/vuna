@@ -1400,7 +1400,7 @@ else case e of
       IrRt sym => case machineCtorOf sym of
         Just ctor => IrCtor machineCtl (machineCtl ++ "." ++ ctor) (mStepsList (fuel - 1) (machineArgsOf sym args))
         Nothing => if sym == irMRunName then case args of
-          [a] => IrApp (IrGlobal "Base.Effect.Machine.run") (mSteps (fuel - 1) a)
+          [a] => IrApp (IrGlobal "Base.Effect.Core.machineRun") (mSteps (fuel - 1) a)
           _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
         else IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))
       _ => IrApp (mSteps (fuel - 1) head) (mSteps (fuel - 1) (foldAppArgs args))

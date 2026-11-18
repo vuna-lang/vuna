@@ -2095,7 +2095,10 @@ build program printResult =
               reachableDefs
                 (append [irEntryMainOf e, floatRenderName] (append runSeeds handlerSeeds))
                 defs
-            _ => reachableDefs (append [irEntryMainOf e] (append runSeeds handlerSeeds)) defs
+            _ =>
+              reachableDefs
+                (append ["Base.Effect.Core.machineRun"] (append [irEntryMainOf e] (append runSeeds handlerSeeds)))
+                defs
         listFamM = wasmListFamFromFams (irProgSharedOf program).irSharedListFam fams
         hosts = mapMaybe irHostDirectOf handlerSeeds
         aborts = mapMaybe irHostAbortOf handlerSeeds
