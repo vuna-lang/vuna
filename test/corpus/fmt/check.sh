@@ -13,6 +13,10 @@
 #   OCAMLOPT   OCaml 编译器，默认 ocamlopt
 #   VUNA_BASE  base 包目录（本脚本的临时包与无 manifest 文件用它定位 base）
 set -u
+# 行宽按字节计数（与 fmt 的 strWidth 一致）；固定 locale，避免本地 UTF-8 与 CI
+# POSIX 下 awk 的 length 一个按字符、一个按字节。
+LC_ALL=C
+export LC_ALL
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1
 REPO=$(CDPATH= cd -- "$HERE/../../.." && pwd) || exit 1
@@ -91,11 +95,13 @@ for file in "$HERE"/*.vuna; do
   fi
 done
 
-# ---- 1b) 行宽契约：golden 每一行都不超过 maxWidth（100 列）。
-#      长字符串字面量按约定保持单行（拆开会改变内容），带 `"` 的行不参与断言。
+# ---- 1b) 行宽契约：golden 的代码行都不超过 maxWidth（100 列）。
+#      例外与 1a 同理，都是「fmt 不决定内容」的行：
+#        - 长字符串字面量按约定保持单行（拆开会改变内容），带 `"` 的行不参与；
+#        - 注释行：fmt 只重排缩进、不回折正文，CJK 注释按字节算很容易越过 100。
 for file in "$HERE"/*.fmt; do
   [ -f "$file" ] || continue
-  over=$(awk 'length($0) > 100 && index($0, "\"") == 0 { print NR; exit }' "$file")
+  over=$(awk 'length($0) > 100 && index($0, "\"") == 0 && $0 !~ /^[[:space:]]*--/ { print NR; exit }' "$file")
   if [ -n "$over" ]; then
     bad "$(basename "$file") (line $over exceeds 100 columns)"
   else
